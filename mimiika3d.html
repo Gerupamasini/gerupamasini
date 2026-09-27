@@ -15,6 +15,7 @@ canvas{display:block;touch-action:none}
 <script type="module">
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 
 // ---------- 基本 ----------
 const renderer=new THREE.WebGLRenderer({antialias:true});
@@ -23,6 +24,7 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x07090c);
+{const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromScene(new RoomEnvironment(),0.04).texture;scene.environmentIntensity=0.35;}
 const camera=new THREE.PerspectiveCamera(40,innerWidth/innerHeight,0.05,50);
 camera.position.set(0.7,1.15,3.5);
 const controls=new OrbitControls(camera,renderer.domElement);
@@ -185,44 +187,95 @@ let pIdx=0;function puff(x,z,str=1){const i=pIdx++%NP;pp[i*3]=x+(Math.random()-.
  const a=Math.random()*6.28;pv[i].v.set(Math.cos(a)*0.12*str,(0.1+Math.random()*0.25)*str,Math.sin(a)*0.12*str);pv[i].life=1;}
 
 // ---------- ミミイカ ----------
-function chromTex(seed){const c=document.createElement('canvas');c.width=512;c.height=256;const g=c.getContext('2d');
- const gr=g.createLinearGradient(0,0,0,256);gr.addColorStop(0,'#e7a86a');gr.addColorStop(.5,'#f1c79c');gr.addColorStop(1,'#f6e2cc');g.fillStyle=gr;g.fillRect(0,0,512,256);
- for(let i=0;i<420;i++){const y=Math.pow(Math.random(),1.6)*256;const r=1+Math.random()*4*(1-y/256);const hue=10+Math.random()*25;
-  g.fillStyle=`hsla(${hue},75%,${22+Math.random()*20}%,${.35+Math.random()*.5})`;g.beginPath();g.arc(Math.random()*512,y,r,0,7);g.fill();}
- // 虹色の反射（イリドフォア）
- for(let i=0;i<40;i++){g.fillStyle=`hsla(${160+Math.random()*80},80%,70%,.12)`;g.beginPath();g.arc(Math.random()*512,Math.random()*256,4+Math.random()*10,0,7);g.fill();}
- const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;}
+// 皮膚：半透明の乳白色＋伸縮する色素胞（クロマトフォア）＋虹色素胞の干渉色＋砂まぶし
+function makeSkin(opt){
+ const m=new THREE.MeshPhysicalMaterial({color:0xecd2bf,roughness:0.32,clearcoat:0.7,clearcoatRoughness:0.25,transparent:true,opacity:opt.alpha,side:opt.side||THREE.FrontSide,
+  emissive:0x3b2418,emissiveIntensity:0.6,sheen:0.4,sheenColor:new THREE.Color(0x7fd8ff),depthWrite:true});
+ const U={uExp:{value:0.45},uSand:{value:0},uDens:{value:opt.dens},uScale:{value:opt.scale}};m.userData.U=U;
+ m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,U);sh.uniforms.uTime=uTime;
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vOP;varying vec3 vWP;')
+   .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvOP=position;vWP=(modelMatrix*vec4(transformed,1.0)).xyz;');
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>',`#include <common>
+   varying vec3 vOP;varying vec3 vWP;uniform float uTime,uExp,uSand,uDens,uScale;${CAUSTIC}
+   vec3 h3(vec3 p){p=vec3(dot(p,vec3(127.1,311.7,74.7)),dot(p,vec3(269.5,183.3,246.1)),dot(p,vec3(113.5,271.9,124.6)));return fract(sin(p)*43758.5453);}
+   // 色素胞：ボロノイの各セルが独立に拡張・収縮
+   vec4 chrom(vec3 p){vec3 i=floor(p),f=fract(p);float cov=0.0;vec3 col=vec3(0.0);
+    for(int z=-1;z<=1;z++)for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec3 g=vec3(x,y,z);vec3 r=h3(i+g);vec3 d=g+r-f;float dist=length(d);
+     float kind=fract(r.x*7.13+r.z*3.1);float ph=r.y*6.283;float pulse=0.5+0.5*sin(uTime*(0.6+r.z*1.4)+ph);
+     float rad=(0.16+0.42*uExp*(0.3+0.7*pulse))*(0.55+0.7*r.z);
+     float a=1.0-smoothstep(rad*0.55,rad,dist);
+     vec3 c=kind<0.6?vec3(0.22,0.07,0.04):kind<0.85?vec3(0.50,0.22,0.05):vec3(0.16,0.06,0.13); // 茶・黄・紫
+     if(a>cov){cov=a;col=c;}}
+    return vec4(col,cov);}`)
+  .replace('#include <map_fragment>',`#include <map_fragment>
+   float dors=smoothstep(-0.55,0.75,normalize(vOP).y);           // 背側ほど色素胞が密
+   vec4 ch=chrom(vOP*uScale);vec4 ch2=chrom(vOP*uScale*2.3+11.0);
+   float cov=max(ch.a*mix(0.3,1.0,dors),ch2.a*0.8*mix(0.2,1.0,dors))*uDens*1.35;
+   vec3 cc=ch.a>ch2.a?ch.rgb:ch2.rgb;
+   diffuseColor.rgb=mix(diffuseColor.rgb,cc,clamp(cov,0.0,0.95));
+   diffuseColor.a=mix(diffuseColor.a,1.0,cov*0.8);
+   // 砂をまぶした状態（潜砂時）
+   float sandy=uSand*smoothstep(-0.2,0.4,normalize(vOP).y)*step(0.35,h3(floor(vOP*420.0)).x);
+   diffuseColor.rgb=mix(diffuseColor.rgb,vec3(0.80,0.72,0.56)*(0.8+0.4*h3(floor(vOP*300.0)).y),sandy);`)
+  .replace('#include <opaque_fragment>',`
+   vec3 V=normalize(cameraPosition-vWP);float fr=pow(1.0-abs(dot(normal,vec3(0.0,0.0,1.0))),3.0);
+   vec3 irid=0.5+0.5*cos(6.283*(fr*1.2+vec3(0.0,0.33,0.67))+2.0);   // 薄膜干渉っぽい虹色
+   outgoingLight+=irid*fr*0.28*(1.0-uSand)+vec3(1.0,0.75,0.6)*fr*0.12;   // 縁が透けて明るい
+   float under=step(vWP.y,${WATER.toFixed(3)});
+   outgoingLight+=diffuseColor.rgb*vec3(0.8,0.97,1.0)*causticRGB(vWP,uTime,0.0)*under*0.9;
+   #include <opaque_fragment>`);
+ };return m;}
+
 const food=[];
 class Squid{
  constructor(i){
-  const s=this.s=0.11;this.g=new THREE.Group();scene.add(this.g);
-  const skin=this.skin=new THREE.MeshPhysicalMaterial({map:chromTex(i),roughness:0.45,clearcoat:0.5,clearcoatRoughness:0.35,emissive:0x3a1e0c,sheen:0.6,sheenColor:new THREE.Color(0x9fe0ff),transmission:0.0,transparent:true,opacity:0.97});
-  addCaustics(skin,0.5,false);
-  const fleshT=new THREE.MeshPhysicalMaterial({color:0xf0c49a,emissive:0x40220e,roughness:0.4,transparent:true,opacity:0.8,sheen:0.5,side:THREE.DoubleSide});
-  // 外套膜（丸い胴）
-  const mantle=new THREE.Mesh(new THREE.SphereGeometry(1,40,28),skin);mantle.scale.set(0.62*s*1.6,0.5*s*1.6,0.52*s*1.6);mantle.position.x=-0.25*s;this.mantle=mantle;
-  // 頭
-  const head=new THREE.Mesh(new THREE.SphereGeometry(1,32,20),skin);head.scale.set(0.42*s*1.6,0.38*s*1.6,0.45*s*1.6);head.position.x=0.55*s;
-  this.g.add(mantle,head);
-  // 目（大きく左右に）
-  this.eyes=[];for(const z of[-1,1]){const eg=new THREE.Group();eg.position.set(0.6*s,0.12*s,z*0.5*s);
-   const w=new THREE.Mesh(new THREE.SphereGeometry(0.26*s,24,16),new THREE.MeshPhysicalMaterial({color:0x3a4146,metalness:0.4,roughness:0.12,clearcoat:1}));
-   const pu=new THREE.Mesh(new THREE.SphereGeometry(0.2*s,20,12),new THREE.MeshStandardMaterial({color:0x05080a,roughness:0.05}));pu.position.z=z*0.1*s;pu.scale.set(1,0.8,1);
-   const gl=new THREE.Mesh(new THREE.SphereGeometry(0.04*s,8,6),new THREE.MeshBasicMaterial({color:0xffffff}));gl.position.set(0.05*s,0.07*s,z*0.24*s);
-   eg.add(w,pu,gl);this.g.add(eg);this.eyes.push(eg);}
-  // 耳ヒレ（左右）
-  this.fins=[];for(const z of[-1,1]){const pv=new THREE.Group();pv.position.set(-0.3*s,0.15*s,z*0.62*s);
-   const shape=new THREE.Shape();shape.moveTo(-0.4*s,0);shape.bezierCurveTo(-0.55*s,0.95*s,0.45*s,1.0*s,0.35*s,0);shape.lineTo(-0.4*s,0);
-   const f=new THREE.Mesh(new THREE.ShapeGeometry(shape,16),fleshT);f.rotation.x=z>0?Math.PI/2:-Math.PI/2;f.position.z=0;
-   pv.add(f);this.g.add(pv);pv.userData.z=z;this.fins.push(pv);}
-  // 腕 8本
-  this.arms=[];const armMat=new THREE.MeshStandardMaterial({color:0xf2c9a0,emissive:0x3a2210,roughness:0.5,transparent:true,opacity:0.95});
-  for(let k=0;k<8;k++){const a=k/8*Math.PI*2;const piv=new THREE.Group();piv.position.set(0.85*s,Math.sin(a)*0.18*s,Math.cos(a)*0.2*s);
-   const len=(k%4===0?1.1:0.85)*s;const cg=new THREE.CylinderGeometry(0.02*s*1.6,0.075*s*1.6,len,8,4);cg.rotateZ(-Math.PI/2);cg.translate(len/2,0,0);
-   const m=new THREE.Mesh(cg,armMat);piv.add(m);piv.userData={a,len};this.g.add(piv);this.arms.push(piv);}
+  const s=this.s=0.12;this.g=new THREE.Group();scene.add(this.g);this.body=new THREE.Group();this.g.add(this.body);
+  const skin=this.skin=makeSkin({alpha:0.96,dens:1.0,scale:1/(s*0.2)});
+  const finSkin=this.finSkin=makeSkin({alpha:0.62,dens:0.55,scale:1/(s*0.16),side:THREE.DoubleSide});
+  const armSkin=this.armSkin=makeSkin({alpha:0.85,dens:0.8,scale:1/(s*0.12)});
+  // 胴＋頭：一続きの回転体（丸い外套膜 → くびれ → 幅広の頭）
+  const prof=[[0,-1.0],[0.22,-0.98],[0.42,-0.9],[0.56,-0.76],[0.65,-0.55],[0.69,-0.3],[0.68,-0.05],[0.63,0.14],[0.57,0.24],[0.5,0.28],[0.53,0.34],[0.57,0.45],[0.55,0.58],[0.46,0.7],[0.3,0.8],[0.12,0.86],[0,0.87]];
+  const lg=new THREE.LatheGeometry(prof.map(([r,y])=>new THREE.Vector2(r*s,y*s)),48);lg.rotateZ(-Math.PI/2);
+  {const p=lg.attributes.position;for(let k=0;k<p.count;k++){const x=p.getX(k);let y=p.getY(k),z=p.getZ(k);
+    y*=0.86;z*=1.06;if(y<0)y*=0.92;                           // 背腹にやや扁平、腹側はより平ら
+    if(x>0.25*s)z*=1.08;                                      // 頭は横に広い
+    p.setXYZ(k,x,y,z);}lg.computeVertexNormals();}
+  const mantle=this.mantle=new THREE.Mesh(lg,skin);this.body.add(mantle);
+  // 外套膜の縁（襟）
+  
+  // 目：大きく張り出し、金緑の虹色＋黒い瞳＋透明な角膜
+  this.eyes=[];
+  const irisM=new THREE.MeshPhysicalMaterial({color:0x4a4418,metalness:0.8,roughness:0.22,iridescence:1,iridescenceIOR:1.8,iridescenceThicknessRange:[300,700],clearcoat:1});
+  const pupM=new THREE.MeshStandardMaterial({color:0x020304,roughness:0.2});
+  const corM=new THREE.MeshPhysicalMaterial({color:0xffffff,transparent:true,opacity:0.12,roughness:0,clearcoat:1,depthWrite:false});
+  for(const z of[-1,1]){const eg=new THREE.Group();eg.position.set(0.48*s,0.1*s,z*0.45*s);eg.rotation.y=z*-0.25;
+   const iris=new THREE.Mesh(new THREE.SphereGeometry(0.25*s,32,20),irisM);iris.scale.set(1.15,0.95,0.8);
+   const pup=new THREE.Mesh(new THREE.SphereGeometry(0.17*s,24,16),pupM);pup.scale.set(1.25,0.9,0.5);pup.position.z=z*0.13*s;
+   const cor=new THREE.Mesh(new THREE.SphereGeometry(0.265*s,32,20),corM);cor.scale.set(1.15,0.97,0.86);
+   eg.add(iris,pup,cor);this.body.add(eg);this.eyes.push({g:eg});}
+  // 耳ヒレ：外套膜中央の左右から生える丸い半透明のヒレ
+  this.fins=[];for(const z of[-1,1]){const pv=new THREE.Group();pv.position.set(-0.4*s,0.2*s,z*0.54*s);
+   const sh=new THREE.Shape();sh.moveTo(-0.3*s,0);sh.bezierCurveTo(-0.52*s,0.42*s,-0.28*s,0.78*s,0.02*s,0.74*s);sh.bezierCurveTo(0.36*s,0.7*s,0.42*s,0.3*s,0.26*s,0);sh.lineTo(-0.3*s,0);
+   const fg=new THREE.ShapeGeometry(sh,24);const p=fg.attributes.position;for(let k=0;k<p.count;k++){const yy=p.getY(k);p.setZ(k,-yy*yy/(s)*0.35);}fg.computeVertexNormals(); // 少しカップ状
+   const f=new THREE.Mesh(fg,finSkin);f.rotation.x=z*Math.PI/2;pv.add(f);this.body.add(pv);pv.userData.z=z;this.fins.push(pv);}
+  // 腕 8本（4節で曲がる）＋触腕2本（ほぼ収納）
+  this.arms=[];
+  const armDef=[[0.55,0.62],[0.66,0.72],[0.74,0.8],[0.66,0.72]];
+  for(let k=0;k<10;k++){const tent=k>=8;const a=tent?(k===8?-0.5:0.5):((k+0.5)/8)*Math.PI*2;
+   const len=tent?0.95*s:armDef[k<4?k:7-k][0]*s*0.85;const base=new THREE.Group();
+   const ry=tent?0.05:Math.cos(a)*0.2,rz=tent?-0.04:Math.sin(a)*0.17;base.position.set(0.8*s,rz*s,ry*s);
+   base.userData={a,len,tent,segs:[]};let parent=base;const n=4;
+   for(let j=0;j<n;j++){const r0=(tent?0.035:0.085)*s*(1-j/n*0.7),r1=(tent?0.03:0.085)*s*(1-(j+1)/n*0.7);const sl=len/n;
+    const cg=new THREE.CylinderGeometry(r1,r0,sl,12,1);cg.rotateZ(-Math.PI/2);cg.translate(sl/2,0,0);
+    const seg=new THREE.Group();seg.position.x=j?len/n:0;const m=new THREE.Mesh(cg,armSkin);seg.add(m);
+    const jt=new THREE.Mesh(new THREE.SphereGeometry(r1,12,8),armSkin);jt.position.x=sl;seg.add(jt);
+    // 吸盤（腕の内側の白い点）
+    if(false)for(let q=0;q<2;q++){const su=new THREE.Mesh(new THREE.SphereGeometry(r1*0.35,5,4),new THREE.MeshStandardMaterial({color:0xf6ece0,roughness:0.6}));su.position.set(sl*(0.3+q*0.4),-Math.sin(a)*r1*0.8,-Math.cos(a)*r1*0.8);seg.add(su);}
+    parent.add(seg);base.userData.segs.push(seg);parent=seg;}
+   this.body.add(base);this.arms.push(base);}
   this.g.traverse(o=>{if(o.isMesh){o.castShadow=true;o.renderOrder=2;}});
   this.pos=new THREE.Vector3((i?0.6:-0.6),0.8,(i?-0.2:0.2));this.vel=new THREE.Vector3();this.target=this.pos.clone();
-  this.yaw=i?Math.PI:0;this.t=Math.random()*10;this.state='swim';this.timer=6+Math.random()*6;this.bury=0;this.excite=0;this.blink=0;this.pick();
+  this.yaw=i?Math.PI:0;this.t=Math.random()*10;this.state='swim';this.timer=6+Math.random()*6;this.bury=0;this.excite=0;this.blink=0;this.sand=0;this.mood=Math.random();this.pick();
  }
  pick(){this.target.set((Math.random()-.5)*(TW-0.5),SAND+0.2+Math.random()*(WATER-SAND-0.45),(Math.random()-.5)*(TD-0.45));}
  update(dt){const s=this.s;this.t+=dt;this.timer-=dt;this.blink-=dt;if(this.blink<-3-Math.random()*5)this.blink=0.14;
@@ -231,7 +284,7 @@ class Squid{
    if(f){this.target.copy(f.m.position);speed=0.42;if(this.pos.distanceTo(f.m.position)<s*1.4){f.eaten=true;scene.remove(f.m);this.excite=1;}}
    else if(this.pos.distanceTo(this.target)<0.08||Math.random()<dt*0.12)this.pick();
    if(this.timer<0&&!f){this.state='descend';this.target.set(this.pos.x+(Math.random()-.5)*0.3,0,this.pos.z+(Math.random()-.5)*0.2);}
-  }else if(this.state==='descend'){this.target.y=sandH(this.target.x,this.target.z)+s*0.45;speed=0.12;
+  }else if(this.state==='descend'){this.target.y=sandH(this.target.x,this.target.z)+s*0.5;speed=0.12;
    if(this.pos.distanceTo(this.target)<0.03){this.state='burying';this.timer=2.4;}
   }else if(this.state==='burying'){this.vel.multiplyScalar(0.9);this.bury=Math.min(1,this.bury+dt*0.42);if(Math.random()<dt*40)puff(this.pos.x,this.pos.z,1);
    if(this.timer<0){this.state='buried';this.timer=7+Math.random()*7;}
@@ -245,21 +298,30 @@ class Squid{
   this.pos.addScaledVector(this.vel,dt);
   // 境界
   const mx=TW/2-G-0.12,mz=TD/2-G-0.1;this.pos.x=THREE.MathUtils.clamp(this.pos.x,-mx,mx);this.pos.z=THREE.MathUtils.clamp(this.pos.z,-mz,mz);
-  const floor=sandH(this.pos.x,this.pos.z)+s*0.45-this.bury*s*0.95;this.pos.y=THREE.MathUtils.clamp(this.pos.y,floor,WATER-0.1);
+  const floor=sandH(this.pos.x,this.pos.z)+s*0.5-this.bury*s*0.42;this.pos.y=THREE.MathUtils.clamp(this.pos.y,floor,WATER-0.1);
   // 向き（ゆっくり旋回）
   const hv=Math.hypot(this.vel.x,this.vel.z);if(hv>0.03){const want=Math.atan2(-this.vel.z,this.vel.x);let d=want-this.yaw;d=Math.atan2(Math.sin(d),Math.cos(d));this.yaw+=d*Math.min(1,dt*2.5);}
-  const pitch=THREE.MathUtils.clamp(this.vel.y*2.2,-0.5,0.5);
+  const pitch=THREE.MathUtils.clamp(this.vel.y*2.2,-0.4,0.4)+(this.bury>0?0.05:0);
   this.g.position.copy(this.pos);this.g.rotation.set(0,this.yaw,pitch,'YXZ');
-  // ヒレのはばたき・腕のゆらぎ・呼吸
-  const flap=(this.state==='swim'?Math.sin(this.t*10)*0.55:Math.sin(this.t*3)*0.2)*(1-this.bury);
-  for(const fn of this.fins)fn.rotation.x=fn.userData.z*(0.25+flap);
-  for(let k=0;k<8;k++){const a=this.arms[k];const ph=this.t*2.4+k;a.rotation.set(0,Math.sin(a.userData.a)*0.0+Math.cos(a.userData.a)*-0.2+Math.sin(ph)*0.1,Math.sin(a.userData.a)*0.2+Math.cos(ph*0.8)*0.12);}
-  const br=1+Math.sin(this.t*3.2)*0.035;this.mantle.scale.y=0.5*s*1.6*br;this.mantle.scale.z=0.52*s*1.6*br;
-  for(const e of this.eyes)e.scale.y=this.blink>0?0.25:1;
-  // 体色変化（興奮すると濃く）
-  this.excite=Math.max(0,this.excite-dt*0.25);const k=1.1+0.6*this.excite+0.1*Math.sin(this.t*0.7);this.skin.color.setRGB(k*1.05,k*0.8,k*0.62);
+  // ヒレのはばたき（耳のようにパタパタ）
+  const swim=this.state==='swim'||this.state==='descend';
+  const flap=(swim?Math.sin(this.t*11)*0.6:Math.sin(this.t*2.5)*0.12)*(1-this.bury);
+  for(const fn of this.fins){fn.rotation.x=-fn.userData.z*(0.6+flap);fn.rotation.y=Math.sin(this.t*11+0.8)*0.12*(swim?1:0.2);}
+  // 腕：束ねて前に伸ばし、先端がゆるく波打つ。着底時は下向きに
+  const rest=this.bury>0.01||this.state==='burying';
+  for(const b of this.arms){const u=b.userData;const spread=u.tent?0:0.07;
+   b.rotation.set(0,-Math.cos(u.a)*spread,Math.sin(u.a)*spread+(rest?-0.35:-0.08));
+   u.segs.forEach((sg,j)=>{if(!j)return;const ph=this.t*2.2+u.a*1.7+j*0.9;sg.rotation.set(0,-Math.cos(u.a)*0.05+Math.sin(ph)*0.07,Math.sin(u.a)*0.04+Math.cos(ph)*0.09-(rest?0.12:0.02));});}
+  // 呼吸（外套膜のポンプ）
+  const br=1+Math.sin(this.t*(swim?5:2.6))*0.04;this.mantle.scale.set(1,br,br);
+  // まばたき（瞼が下りる）
+  // 体色：気分と興奮で色素胞が開閉。潜ると砂をまぶす
+  this.excite=Math.max(0,this.excite-dt*0.25);this.mood+=(Math.sin(this.t*0.13)*0.5+0.5-this.mood)*dt*0.2;
+  const exp=0.5+0.4*this.mood+0.5*this.excite-(this.state==='buried'?0.1:0);
+  for(const m of[this.skin,this.finSkin,this.armSkin]){m.userData.U.uExp.value=exp;m.userData.U.uSand.value=this.sand;}
+  this.sand=THREE.MathUtils.clamp(this.sand+(this.bury>0.5?dt*0.4:-dt*0.08),0,1);
  }}
-const squids=[new Squid(0),new Squid(1)];
+const squids=[new Squid(0),new Squid(1)];window.__aq={squids,camera,controls};
 
 // ---------- 餌（タップ） ----------
 const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();let down=null;
