@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ミミイカの水槽</title>
+<style>
+:root{--bg:#0b0f14;--fg:#cfd8e3}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;overflow:hidden}
+canvas{display:block;width:100vw;height:100vh}
+#info{position:fixed;left:0;right:0;text-align:center;bottom:10px;font-size:12px;opacity:.6;pointer-events:none}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="info">ミミイカ（Euprymna）— クリックで餌 / 放っておくと砂に潜る</div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let W,H,DPR,tank,sandGrains=[],sandProfile=[];
+function resize(){DPR=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+ const tw=Math.min(W-48,(H-80)*1.6),th=tw/1.6;tank={x:(W-tw)/2,y:(H-th)/2-14,w:tw,h:th,water:0,sand:0};tank.water=tank.y+th*0.07;tank.sand=tank.y+th*0.84;
+ sandProfile=[];for(let i=0;i<=120;i++){const u=i/120;sandProfile.push(Math.sin(u*5.3)*0.012+Math.sin(u*13+1)*0.005+(u-0.5)*0.03);}
+ sandGrains=[];let n=Math.floor(tw*th*0.004);for(let i=0;i<n;i++){const x=Math.random();sandGrains.push({x,y:Math.random(),r:Math.random()*1.3+0.3,c:Math.random()});}
+}
+addEventListener('resize',resize);resize();
+function sandY(x){const u=Math.max(0,Math.min(1,(x-tank.x)/tank.w))*120,i=Math.floor(u),f=u-i;const a=sandProfile[i],b=sandProfile[Math.min(120,i+1)];return tank.sand+(a+(b-a)*f)*tank.h;}
+// 泡・浮遊物
+const motes=Array.from({length:70},()=>({x:Math.random(),y:Math.random(),v:Math.random()*0.004+0.001,r:Math.random()*1.2+0.3,p:Math.random()*6}));
+const bubbles=[];const puffs=[];const food=[];
+// ミミイカ
+function Squid(i){this.x=tank.x+tank.w*(0.3+0.4*i);this.y=tank.y+tank.h*0.5;this.vx=0;this.vy=0;this.dir=i?-1:1;this.s=tank.w/22;this.t=Math.random()*10;
+ this.state='swim';this.timer=4+Math.random()*4;this.bury=0;this.tx=this.x;this.ty=this.y;this.col=0.5;this.blink=0;}
+Squid.prototype.pick=function(){this.tx=tank.x+tank.w*(0.12+Math.random()*0.76);this.ty=tank.water+ (tank.sand-tank.water)*(0.25+Math.random()*0.6);};
+Squid.prototype.update=function(dt){this.t+=dt;this.timer-=dt;this.blink-=dt;if(this.blink<-3-Math.random()*4)this.blink=0.15;
+ const sy=sandY(this.x);
+ if(this.state==='swim'){
+  let f=food.find(f=>!f.eaten);if(f){this.tx=f.x;this.ty=f.y;if(Math.hypot(f.x-this.x,f.y-this.y)<this.s*1.2){f.eaten=true;this.col=1;}}
+  else if(Math.hypot(this.tx-this.x,this.ty-this.y)<this.s||Math.random()<dt*0.15)this.pick();
+  const dx=this.tx-this.x,dy=this.ty-this.y,d=Math.hypot(dx,dy)||1,sp=(f?2.2:0.9)*this.s;
+  this.vx+=(dx/d*sp-this.vx)*dt*1.2;this.vy+=(dy/d*sp*0.7-this.vy)*dt*1.2;
+  if(Math.abs(this.vx)>this.s*0.15)this.dir=Math.sign(this.vx);
+  if(this.timer<0&&!f){this.state='descend';this.tx=this.x+(Math.random()-.5)*this.s*4;}
+ }else if(this.state==='descend'){
+  this.vx+=((this.tx-this.x)*0.8-this.vx)*dt;this.vy+=((sy-this.s*0.55-this.y)*1.5-this.vy)*dt*2;
+  if(Math.abs(sy-this.s*0.55-this.y)<this.s*0.15){this.state='burying';this.timer=2.2;}
+ }else if(this.state==='burying'){
+  this.vx*=0.9;this.vy*=0.9;this.bury=Math.min(1,this.bury+dt*0.45);
+  if(Math.random()<dt*14)puffs.push({x:this.x+(Math.random()-.5)*this.s*1.6,y:sy,vx:(Math.random()-.5)*this.s*1.5,vy:-Math.random()*this.s*2,life:1});
+  if(this.timer<0){this.state='buried';this.timer=6+Math.random()*6;}
+ }else if(this.state==='buried'){
+  this.vx=0;this.vy=0;if(this.timer<0||food.some(f=>!f.eaten)){this.state='emerge';}
+ }else if(this.state==='emerge'){
+  this.bury=Math.max(0,this.bury-dt*1.2);this.vy=-this.s*0.8;
+  if(Math.random()<dt*10)puffs.push({x:this.x+(Math.random()-.5)*this.s,y:sy,vx:(Math.random()-.5)*this.s,vy:-Math.random()*this.s*1.5,life:1});
+  if(this.bury<=0){this.state='swim';this.timer=8+Math.random()*8;this.pick();}
+ }
+ // 泳ぎのヒレ推進によるふわふわ
+ if(this.state==='swim')this.vy+=Math.sin(this.t*2.3)*this.s*0.3*dt;
+ this.x+=this.vx*dt;this.y+=this.vy*dt;
+ const m=this.s*1.2;this.x=Math.max(tank.x+m,Math.min(tank.x+tank.w-m,this.x));this.y=Math.max(tank.water+m,Math.min(sandY(this.x)-this.s*0.5+this.bury*this.s*0.9,this.y));
+ this.col+=(0.45-this.col)*dt*0.3;
+};
+Squid.prototype.draw=function(){const s=this.s,sy=sandY(this.x);
+ const hgt=Math.max(0,sy-this.y),al=Math.max(0,0.28-hgt/(tank.h*1.2))*(1-this.bury);ctx.fillStyle=`rgba(40,30,15,${al})`;ctx.beginPath();ctx.ellipse(this.x,sy+2,s*0.6*(1+hgt/tank.h),s*0.1,0,0,7);ctx.fill();
+ ctx.save();
+ // 砂より下はクリップ
+ ctx.beginPath();ctx.rect(tank.x,tank.y,tank.w,sy-tank.y+s*0.1);ctx.clip();
+ ctx.translate(this.x,this.y);ctx.scale(this.dir,1);
+ const tilt=Math.max(-0.35,Math.min(0.35,this.vy/(s*4)));ctx.rotate(tilt);
+ const fin=Math.sin(this.t*(this.state==='swim'?9:3))*0.35;
+ const c=this.col, base=`hsl(${28+c*6},${45+c*25}%,${58-c*14}%)`;
+ // 腕（前方=右）
+ ctx.strokeStyle=`hsla(30,40%,70%,.85)`;ctx.lineCap='round';
+ for(let k=0;k<8;k++){ctx.lineWidth=s*(0.09-k*0.005);ctx.beginPath();const oy=(k-3.5)*s*0.055;ctx.moveTo(s*0.45,oy);
+  const w=Math.sin(this.t*2+k)*s*0.08;ctx.quadraticCurveTo(s*0.8,oy+w+(k-3.5)*s*0.04,s*(1.0+ (k%3)*0.05),oy*1.8+w);ctx.stroke();}
+ // 耳ヒレ
+ for(const sg of[-1,1]){ctx.save();ctx.translate(-s*0.02,sg*s*0.32);ctx.rotate(sg*(0.35+fin)-0.2);
+  const fg=ctx.createRadialGradient(0,0,0,0,sg*s*0.18,s*0.3);fg.addColorStop(0,base);fg.addColorStop(1,'hsla(32,50%,80%,.55)');ctx.fillStyle=fg;
+  ctx.beginPath();ctx.moveTo(-s*0.14,0);ctx.bezierCurveTo(-s*0.2,sg*s*0.35,s*0.18,sg*s*0.38,s*0.14,0);ctx.closePath();ctx.fill();ctx.restore();}
+ // 外套膜（丸い胴）
+ const g=ctx.createRadialGradient(-s*0.15,-s*0.2,s*0.05,0,0,s*0.6);g.addColorStop(0,`hsl(35,60%,85%)`);g.addColorStop(1,base);
+ ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(-s*0.05,0,s*0.55,s*0.45,0,0,Math.PI*2);ctx.fill();
+ // 色素胞
+ const rnd=i=>(Math.sin(i*91.3)*43758.5)%1;
+ for(let i=0;i<34;i++){const a=Math.abs(rnd(i))*Math.PI*2,r=Math.sqrt(Math.abs(rnd(i+50)))*s*0.48;const px=-s*0.05+Math.cos(a)*r*1.1,py=Math.sin(a)*r*0.9;
+  const pulse=0.5+0.5*Math.sin(this.t*1.5+i);ctx.fillStyle=`hsla(${15+i%3*8},70%,${30+pulse*10}%,${0.35+c*0.4})`;ctx.beginPath();ctx.arc(px,py,s*(0.02+0.03*pulse*c+0.01),0,7);ctx.fill();}
+ // 頭
+ ctx.fillStyle=base;ctx.beginPath();ctx.ellipse(s*0.38,0,s*0.2,s*0.25,0,0,Math.PI*2);ctx.fill();
+ // 目（大きい）
+ for(const sg of[-1,1]){ctx.save();ctx.translate(s*0.38,sg*s*0.02-s*0.06);ctx.fillStyle='#e7eef0';ctx.beginPath();ctx.ellipse(0,0,s*0.15,s*(this.blink>0?0.03:0.13),0,0,7);ctx.fill();
+  if(this.blink<=0){ctx.fillStyle='#10161c';ctx.beginPath();ctx.arc(s*0.02,0,s*0.09,0,7);ctx.fill();ctx.fillStyle='rgba(180,230,255,.9)';ctx.beginPath();ctx.arc(s*0.05,-s*0.04,s*0.03,0,7);ctx.fill();}
+  ctx.restore();break;}
+ ctx.restore();
+};
+let squids=[new Squid(0),new Squid(1)];
+cv.addEventListener('click',e=>{const x=e.clientX,y=e.clientY;if(x>tank.x&&x<tank.x+tank.w&&y>tank.water&&y<sandY(x))for(let i=0;i<3;i++)food.push({x:x+(Math.random()-.5)*20,y:y+(Math.random()-.5)*10,eaten:false});});
+function drawTank(t){const {x,y,w,h}=tank;
+ // 背景壁
+ ctx.fillStyle='#0b0f14';ctx.fillRect(0,0,W,H);
+ // 空気部分
+ ctx.fillStyle='rgba(120,150,170,.05)';ctx.fillRect(x,y,w,tank.water-y);
+ // 水
+ const wg=ctx.createLinearGradient(0,tank.water,0,tank.sand);wg.addColorStop(0,'#2a6b86');wg.addColorStop(1,'#123b52');ctx.fillStyle=wg;
+ ctx.beginPath();ctx.moveTo(x,tank.water);for(let i=0;i<=60;i++){const px=x+w*i/60;ctx.lineTo(px,tank.water+Math.sin(i*0.5+t*1.5)*1.5);}ctx.lineTo(x+w,y+h);ctx.lineTo(x,y+h);ctx.fill();
+ // 光条（コースティクス）
+ ctx.save();ctx.globalCompositeOperation='lighter';
+ for(let i=0;i<7;i++){const cx=x+w*((i+0.5)/7)+Math.sin(t*0.3+i)*w*0.03;const lg=ctx.createLinearGradient(0,tank.water,0,tank.sand);lg.addColorStop(0,'rgba(170,230,255,.07)');lg.addColorStop(1,'rgba(170,230,255,0)');ctx.fillStyle=lg;
+  ctx.beginPath();ctx.moveTo(cx-w*0.02,tank.water);ctx.lineTo(cx+w*0.02,tank.water);ctx.lineTo(cx+w*0.06,tank.sand);ctx.lineTo(cx-w*0.01,tank.sand);ctx.fill();}
+ ctx.restore();
+ // 水面の反射線
+ ctx.strokeStyle='rgba(200,240,255,.5)';ctx.lineWidth=1.5;ctx.beginPath();for(let i=0;i<=60;i++){const px=x+w*i/60;const py=tank.water+Math.sin(i*0.5+t*1.5)*1.5;i?ctx.lineTo(px,py):ctx.moveTo(px,py);}ctx.stroke();
+}
+function drawSand(t){const {x,y,w,h}=tank;
+ const sg=ctx.createLinearGradient(0,tank.sand-h*0.03,0,y+h);sg.addColorStop(0,'#cdb88f');sg.addColorStop(1,'#8a7552');ctx.fillStyle=sg;
+ ctx.beginPath();ctx.moveTo(x,y+h);for(let i=0;i<=120;i++){const px=x+w*i/120;ctx.lineTo(px,sandY(px));}ctx.lineTo(x+w,y+h);ctx.fill();
+ // 粒
+ for(const g of sandGrains){const px=x+g.x*w,top=sandY(px),py=top+g.y*(y+h-top);ctx.fillStyle=g.c<.5?'rgba(90,70,40,.35)':'rgba(255,245,220,.35)';ctx.fillRect(px,py,g.r,g.r);}
+ // コースティクス模様（砂表面）
+ ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();ctx.globalCompositeOperation='lighter';for(let i=0;i<40;i++){const px=x+w*(((i*0.137+Math.sin(t*0.4+i)*0.01)%1+1)%1);ctx.fillStyle='rgba(255,250,210,.06)';ctx.beginPath();ctx.ellipse(px,sandY(px)+3,w*0.02,2,0,0,7);ctx.fill();}ctx.restore();
+}
+function drawGlass(){const {x,y,w,h}=tank;
+ ctx.strokeStyle='rgba(200,230,240,.35)';ctx.lineWidth=3;ctx.strokeRect(x,y,w,h);
+ const gg=ctx.createLinearGradient(x,0,x+w,0);gg.addColorStop(0,'rgba(255,255,255,.06)');gg.addColorStop(.15,'rgba(255,255,255,0)');gg.addColorStop(.85,'rgba(255,255,255,0)');gg.addColorStop(1,'rgba(255,255,255,.05)');ctx.fillStyle=gg;ctx.fillRect(x,y,w,h);
+ ctx.fillStyle='#1a2027';ctx.fillRect(x-8,y-10,w+16,10);ctx.fillRect(x-8,y+h,w+16,14);
+}
+let last=performance.now();
+function frame(now){const dt=Math.min(0.05,(now-last)/1000);last=now;const t=now/1000;
+ drawTank(t);
+ // 浮遊物
+ for(const m of motes){m.y-=m.v*dt*10;if(m.y<0)m.y=1;const px=tank.x+tank.w*(m.x+Math.sin(t*0.5+m.p)*0.005),py=tank.water+(tank.sand-tank.water)*m.y;ctx.fillStyle='rgba(220,240,255,.25)';ctx.beginPath();ctx.arc(px,py,m.r,0,7);ctx.fill();}
+ drawSand(t);
+ for(const f of food){if(f.eaten)continue;f.y+=tank.h*0.02*dt;if(f.y>sandY(f.x)-3)f.y=sandY(f.x)-3;ctx.fillStyle='#e9d6b3';ctx.beginPath();ctx.arc(f.x,f.y,2.5,0,7);ctx.fill();}
+ for(let i=food.length-1;i>=0;i--)if(food[i].eaten)food.splice(i,1);
+ for(const q of squids){q.update(dt);q.draw();}
+ for(let i=puffs.length-1;i>=0;i--){const p=puffs[i];p.life-=dt*0.8;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=tank.h*0.08*dt;if(p.life<=0||p.y>sandY(p.x)+1){puffs.splice(i,1);continue;}ctx.fillStyle=`rgba(210,190,150,${p.life*.7})`;ctx.fillRect(p.x,p.y,2,2);}
+ drawGlass();requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+</script></body></html>
