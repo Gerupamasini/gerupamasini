@@ -25,6 +25,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createButterflyfish, loadPattern } from './src/fish.js';
+import { createFireGoby } from './src/goby.js';
+import { createStrawberryConch } from './src/conch.js';
 
 const Q = new URLSearchParams(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -54,8 +56,8 @@ scene.add(key);
 const rim = new THREE.DirectionalLight(0xbfdcff, 2.0); rim.position.set(-2, 1.0, -2.5); scene.add(rim);
 const fill = new THREE.DirectionalLight(0xdfe8ff, 0.5); fill.position.set(-1, -0.6, 2); scene.add(fill);
 
-const pattern = await loadPattern();
-const fish = createButterflyfish(renderer, { texSize: +(Q.get('tex') || 4096), pattern });
+const species = Q.get('species') || 'auriga';
+const fish = species === 'conch' ? (() => { const c = createStrawberryConch({ live: +(Q.get('live') ?? 1) }); c.group.position.set(-0.5, 0, 0); const g = new THREE.Group(); g.add(c.group); return { group: g, update: (dt, t) => c.update(dt, t), uniforms: { uPhase: { value: 0 }, uAmp: { value: 0 }, uTurn: { value: 0 } } }; })() : species === 'goby' ? createFireGoby() : createButterflyfish(renderer, { texSize: +(Q.get('tex') || 4096), pattern: await loadPattern() });
 scene.add(fish.group);
 
 const camera = new THREE.PerspectiveCamera(+(Q.get('fov') || 30), innerWidth / innerHeight, 0.01, 50);

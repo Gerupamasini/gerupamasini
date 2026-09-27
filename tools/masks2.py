@@ -69,16 +69,31 @@ for y0,x0 in zip(eys,exs):
     d=np.array([x0-xs.mean(),y0-ys.mean()]); n=np.linalg.norm(d)
     if n<3: continue
     d/=n; p=np.array([x0,y0],float)
+    q=(p+d*30).astype(int)
+    if not (0<=q[0]<W and 0<=q[1]<H) or warmD[q[1],q[0]]>=warmD[y0,x0]-5: continue   # must head into the yellow
     for k in range(0,700):
         p+=d; xi,yi=int(p[0]),int(p[1])
         if not (0<=xi<W and 0<=yi<H) or not sil[yi,xi] or edge[yi,xi]<30: break
         if ss[yi,xi]>0.97: break
         ext[yi,xi]=True
 EXT=ext.copy()
-dsk=ndi.distance_transform_edt(~sk)
+skw=sk&~(warm&(ndi.distance_transform_edt(warm)/W*(S1-S0)>0.012))
+dsk=ndi.distance_transform_edt(~skw)
 HALF=7.5   # px in the 2048-wide painting (spacing ~55 px)
 st=dsk<HALF
-STRIPE_SOFT=np.clip((HALF+1.2-dsk)/2.4,0,1)
+# distance field to stripe centre lines (1 on the line, 0 at 27 px ~ half the spacing); the
+# shader thresholds it: thin stripes on the white, wide ones in the brown zone
+# inside the yellow field the front stripes carry on parallel to the white/yellow boundary
+# (the dark bands of the dusky zone, with thin yellow gaps between them)
+pxu=W/(S1-S0)
+_ws=sil&~warm&(ss<0.93)&(edge>15)
+bds=cv2.GaussianBlur((ndi.distance_transform_edt(~_ws)/W*(S1-S0)).astype(np.float32),(0,0),45)
+dc=np.full_like(bds,1e9)
+for k in range(4):
+    dc=np.minimum(dc,np.abs(bds-(0.03+0.045*k))*pxu+ (k*6.0))    # later bands fainter (pushed away)
+dc=np.where(warm&(edge>18)&(yy>-0.14),dc,1e9)
+dsk=np.minimum(dsk,dc)
+STRIPE_SOFT=np.clip(1-dsk/36.0,0,1)*np.clip((ss-0.245)/0.02,0,1)*np.clip((1.0-ss)/0.06,0,1)
 # --- brown amount inside the warm region (smooth), and the bright yellow lines inside it
 lum=cv2.GaussianBlur(v,(0,0),7)
 brown=np.clip((0.6-lum)/0.33,0,1)*warm
@@ -93,7 +108,12 @@ white_side=sil&~warm&(ss<0.93)&(edge>15)
 bd=ndi.distance_transform_edt(~white_side)/W*(S1-S0)      # distance to the white region
 # brown: darkest along the white boundary, fading to orange ~0.3 body lengths behind it
 brown=np.clip(1-(bd-0.06)/0.3,0,1)**0.9*warm*np.clip((yy+0.16)/0.06,0,1)*np.clip((0.93-ss)/0.22,0,1)
-R=soft(warm,3); G=soft(brown,30); B=STRIPE_SOFT; A=soft(blk,2.0)
+# thin yellow lines midway between the dusky bands, encoded in the upper half of R
+GL=np.zeros_like(bds)
+for k in range(3):
+    GL=np.maximum(GL,np.clip(1-np.abs(bds-(0.03+0.045*(k+0.5)))*pxu/3.6,0,1)*(1-0.12*k))
+GL*=warm*(edge>22)*(yy>-0.14)
+R=soft(warm,3)*0.5+0.5*soft(GL,1.0); G=soft(brown,30); B=STRIPE_SOFT; A=soft(blk,2.0)
 # pack: R warm, G brown, B stripes, A black; yellow lines in a second tiny channel via G sign trick -> store separately
 out=np.stack([R,G,B,A],-1)
 # RGB only (browsers drop colour under zero alpha): r = yellow, g = brown (s > 0.32) or eye band (s < 0.32), b = stripes
@@ -106,7 +126,7 @@ for k,(d0,a) in enumerate([(0.028,0.9),(0.07,0.75),(0.112,0.55),(0.154,0.35)]):
 YL*=warm*(edge>22)*np.clip((0.97-ss)/0.05,0,1)*np.clip((yy+0.12)/0.05,0,1)
 YL=soft(YL>0.35,1.2)
 zone=(soft(warm,3)>0.5)&(G>0.3)
-B=np.where(zone,0.53+0.47*np.clip(YL,0,1),B*0.46)   # stripes 0..0.46, yellow lines 0.53..1 (gap avoids 8-bit rounding)   # b<0.5: stripe strength; b>0.5: yellow line (brown zone)
+B=B   # stripe distance field   # b<0.5: stripe strength; b>0.5: yellow line (brown zone)
 rgb=np.stack([R,Gp,B],-1)
 cv2.imwrite('auriga_pattern.png',(np.clip(rgb,0,1)*255).astype(np.uint8)[...,::-1])
 cv2.imwrite('auriga_ylines.png',(np.clip(soft(ylines,1.5),0,1)*255).astype(np.uint8))
