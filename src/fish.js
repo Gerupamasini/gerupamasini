@@ -27,14 +27,17 @@ function spline(pts) {
 }
 
 // Dorsal and ventral body outline (without fins), half width.
+// Landmarks measured from side-view photographs (iNaturalist, CC) and normalised so the
+// snout tip is s = 0 and the caudal peduncle s = 1. Body + median fins together form a
+// rounded trapezoid that is tallest at the rear corner of the soft dorsal.
 export const ANATOMY = {
-  top: spline([[0, 0.012], [0.03, 0.028], [0.06, 0.05], [0.09, 0.083], [0.12, 0.122], [0.16, 0.175], [0.23, 0.245], [0.32, 0.3],
-    [0.42, 0.33], [0.5, 0.325], [0.6, 0.295], [0.7, 0.24], [0.8, 0.17], [0.88, 0.115], [0.95, 0.085], [1.0, 0.075]]),
-  bottom: spline([[0, -0.01], [0.03, -0.021], [0.06, -0.038], [0.1, -0.072], [0.14, -0.112], [0.2, -0.168], [0.28, -0.228],
-    [0.37, -0.27], [0.46, -0.28], [0.55, -0.265], [0.65, -0.225], [0.75, -0.165], [0.85, -0.11], [0.93, -0.08], [1.0, -0.07]]),
-  width: spline([[0, 0.0065], [0.03, 0.011], [0.06, 0.016], [0.1, 0.025], [0.15, 0.037], [0.25, 0.052], [0.38, 0.056], [0.5, 0.052],
-    [0.65, 0.045], [0.8, 0.03], [0.9, 0.021], [0.95, 0.016], [0.985, 0.008], [1.0, 0.003]]),
-  eye: { s: 0.155, y: 0.066, r: 0.033 },
+  top: spline([[0, 0.012], [0.025, 0.03], [0.05, 0.054], [0.1, 0.11], [0.14, 0.168], [0.18, 0.222], [0.22, 0.262],
+    [0.27, 0.29], [0.35, 0.302], [0.45, 0.298], [0.55, 0.283], [0.65, 0.252], [0.75, 0.208], [0.85, 0.15], [0.93, 0.095], [1.0, 0.05]]),
+  bottom: spline([[0, -0.012], [0.03, -0.04], [0.07, -0.08], [0.11, -0.122], [0.18, -0.18], [0.25, -0.228],
+    [0.34, -0.268], [0.43, -0.288], [0.52, -0.284], [0.62, -0.254], [0.72, -0.21], [0.82, -0.155], [0.92, -0.095], [1.0, -0.05]]),
+  width: spline([[0, 0.008], [0.03, 0.013], [0.06, 0.018], [0.1, 0.024], [0.15, 0.036], [0.25, 0.05], [0.38, 0.055], [0.5, 0.051],
+    [0.65, 0.043], [0.8, 0.03], [0.9, 0.021], [0.95, 0.015], [0.985, 0.008], [1.0, 0.003]]),
+  eye: { s: 0.155, y: 0.062, r: 0.033 },
 };
 
 // painting space
@@ -165,20 +168,20 @@ function polyline(pts, n) {
 
 function finLayouts() {
   const { top, bottom } = ANATOMY;
-  // Dorsal: XIII spines + ~23 soft rays. Base runs along the back; the outline grows from
-  // the short first spine to the tall rounded soft portion, which trails back past the peduncle.
+  // Dorsal: XII-XIII spines + ~23 soft rays; the outer edge runs almost level from the nape
+  // back to a square-ish rear corner that overhangs the peduncle.
   const nD = 37;
-  const dBase = [], dTip = polyline([[0.29, 0.335], [0.36, 0.4], [0.45, 0.445], [0.55, 0.47], [0.65, 0.47],
-    [0.75, 0.44], [0.85, 0.39], [0.95, 0.325], [1.035, 0.262], [1.02, 0.19], [0.97, 0.11]], nD);
-  for (let i = 0; i < nD; i++) { const s = 0.27 + (0.93 - 0.27) * (i / (nD - 1)); dBase.push([s, top(s) - 0.004]); }
-  // Anal: III spines + ~20 soft rays
-  const nA = 24;
-  const aBase = [], aTip = polyline([[0.53, -0.305], [0.6, -0.36], [0.69, -0.39], [0.79, -0.375], [0.89, -0.33],
-    [0.98, -0.265], [1.03, -0.2], [1.0, -0.13], [0.96, -0.09]], nA);
-  for (let i = 0; i < nA; i++) { const s = 0.5 + (0.93 - 0.5) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.004]); }
-  // Caudal: 17 principal rays, truncate to slightly rounded
+  const dBase = [], dTip = polyline([[0.245, 0.282], [0.3, 0.322], [0.4, 0.343], [0.5, 0.349], [0.6, 0.349], [0.7, 0.344],
+    [0.8, 0.335], [0.9, 0.322], [0.99, 0.306], [1.06, 0.292], [1.095, 0.265], [1.103, 0.21], [1.08, 0.14], [1.0, 0.058]], nD);
+  for (let i = 0; i < nD; i++) { const s = 0.235 + (0.97 - 0.235) * (i / (nD - 1)); dBase.push([s, top(s) - 0.004]); }
+  // Anal: III spines + ~20 soft rays; flat bottom edge and a rounded rear corner
+  const nA = 26;
+  const aBase = [], aTip = polyline([[0.46, -0.298], [0.53, -0.322], [0.63, -0.33], [0.73, -0.328], [0.83, -0.316],
+    [0.93, -0.296], [1.02, -0.268], [1.075, -0.232], [1.098, -0.18], [1.075, -0.112], [1.0, -0.058]], nA);
+  for (let i = 0; i < nA; i++) { const s = 0.45 + (0.97 - 0.45) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.004]); }
+  // Caudal: short and truncate
   const nC = 19;
-  const cBase = [], cTip = polyline([[1.2, 0.175], [1.225, 0.1], [1.232, 0.0], [1.225, -0.1], [1.2, -0.175]], nC);
+  const cBase = [], cTip = polyline([[1.17, 0.152], [1.188, 0.08], [1.194, 0.0], [1.188, -0.08], [1.17, -0.152]], nC);
   for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.955 + 0.02 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.006 - f * (top(s) - bottom(s) - 0.012)]); }
   return { dorsal: { base: dBase, tip: dTip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
@@ -245,26 +248,38 @@ float scales(vec2 p, out float sid, out float rim){
   return h;
 }
 
-// signed chevron coordinate: two families of fine lines at right angles meeting on a diagonal
-float chevrons(vec2 p, out float side){
-  vec2 p0 = vec2(0.50, 0.0);
-  vec2 bd = normalize(vec2(-0.38, 1.0));   // boundary runs from lower-rear up to the front of the soft dorsal
-  vec2 bn = vec2(bd.y, -bd.x);
-  float along = dot(p - p0, bd), across = dot(p - p0, bn);
-  side = across;
-  float a = (along + abs(across)) * 0.70710678;
-  float sp = 0.034;
-  float d = abs(fract(a / sp) - 0.5) * sp;   // distance to nearest line
-  return d;
+// ---- stripe field, fitted to photographs -------------------------------------------
+// Two families of dark stripes at ~right angles. "B" covers the lower and middle body and
+// rises toward the head (flattening near the belly); "A" fills the upper front and turns
+// vertical near the eye band. They meet along a line running from low behind the gill cover
+// up and back to the soft dorsal, where they form rounded arches.
+uniform float uSpB; uniform float uSpA; uniform float uSlopeB; uniform float uSlopeA;
+uniform vec4 uLocus;      // two points of the A/B meeting line
+uniform vec2 uYellowP;    // a point on the B stripe that bounds the yellow field
+uniform vec4 uYellowL;    // the white/yellow boundary crosses the stripes along this line
+float fieldB(vec2 p){ float m = uSlopeB * mix(0.45, 1.0, smoothstep(-0.25, 0.05, p.y)); return (p.y + m * p.x) / uSpB; }
+// A stripes continue the B stripes across the meeting line: follow the A direction from p
+// back to that line and take the B stripe arriving there. With the line close to the
+// bisector of the two directions the stripes join in rounded arches of equal spacing.
+float fieldA(vec2 p){
+  vec2 a = uLocus.xy, d = normalize(uLocus.zw - uLocus.xy), nL = vec2(-d.y, d.x);
+  float ang = radians(mix(74.0, uSlopeA, smoothstep(0.19, 0.3, p.x)));
+  vec2 dA = vec2(cos(ang), sin(ang));
+  float n = dot(p - a, nL);
+  return fieldB(p - dA * (n / dot(dA, nL)));
 }
+float locusSide(vec2 p){ vec2 a = uLocus.xy, d = normalize(uLocus.zw - uLocus.xy); vec2 n = vec2(-d.y, d.x); return dot(p - a, n); }
 
-// eye band centre line: nape -> eye -> lower edge of the gill cover
-float eyeBand(vec2 p){
-  vec2 a = vec2(0.105, 0.2), b = vec2(0.155, 0.066), c = vec2(0.19, -0.06), d = vec2(0.21, -0.2);
-  return min(min(sdSeg(p,a,b), sdSeg(p,b,c)), sdSeg(p,c,d));
-}
+// eye band: a short, broad capsule from just above the eye to below the cheek
+float eyeBand(vec2 p){ float d = sdSeg(p, vec2(0.163, 0.115), vec2(0.18, -0.14)); return d + 0.004 - 0.006 * smoothstep(0.08, -0.1, p.y); }
 
 struct Paint { vec3 col; float alpha; float h; float rough; float metal; float ao; };
+
+float stripe(float f, float w){          // 1 on a stripe (width w in stripe units), antialiased
+  float d = abs(fract(f) - 0.5);
+  float aa = fwidth(f) * 0.0 + 0.02;
+  return smoothstep(0.5 - w * 0.5 - aa, 0.5 - w * 0.5 + aa, d);
+}
 
 Paint paint(vec2 p){
   Paint o;
@@ -272,135 +287,104 @@ Paint paint(vec2 p){
   vec2 ol = outline(s);
   float top = ol.x, bot = ol.y;
   bool inBody = s >= 0. && s <= 1.0 && y <= top && y >= bot;
+  bool behind = s > 0.985 && abs(y) < 0.06 + (s - 0.985) * 0.55;          // the caudal fan
+  bool dorsal = !inBody && y > 0.0 && s < 1.12 && !behind;
+  bool anal = !inBody && y < 0.0 && s < 1.12 && s > 0.3 && !behind;
+  bool caudal = !inBody && !dorsal && !anal;
   float yn = clamp((y - (top+bot)*.5) / max((top-bot)*.5, 1e-3), -1., 1.);
 
-  // base palette (sRGB)
-  vec3 white  = vec3(0.88, 0.875, 0.845);
-  vec3 cream  = vec3(0.93, 0.90, 0.80);
-  vec3 yellow = vec3(1.00, 0.77, 0.02);
-  vec3 orange = vec3(0.99, 0.56, 0.0);
-  vec3 black  = vec3(0.035, 0.03, 0.03);
-  vec3 lineW  = vec3(0.23, 0.21, 0.21);
-  vec3 lineY  = vec3(0.62, 0.33, 0.06);
+  vec3 white  = vec3(0.9, 0.89, 0.93);
+  vec3 yellow = vec3(1.0, 0.78, 0.0);
+  vec3 orange = vec3(1.0, 0.62, 0.0);
+  vec3 brown  = vec3(0.36, 0.2, 0.06);
+  vec3 ink    = vec3(0.14, 0.12, 0.13);
 
-  // yellow field: posterior body, soft dorsal, anal, caudal base
-  float yb = smoothstep(0.6, 0.8, s - 0.38*y + 0.03*(fbm(p*14.)-.5));
-  float yDors = smoothstep(0.52, 0.66, s) * step(top, y);        // soft dorsal region
-  float yAnal = smoothstep(0.52, 0.58, s) * step(y, bot);
-  float yCaud = step(1.0, s);
-  float Y = max(yb, max(yDors, max(yAnal, yCaud)));
-  if (inBody) Y = yb;
+  // --- stripe coordinate: B behind/below the meeting line, A in front, rounded where they join
+  float side = locusSide(p);
+  float fB = fieldB(p), fA = fieldA(p);
+  float blend = smoothstep(-0.03, 0.03, side) * smoothstep(-0.2, -0.02, y);
+  float f = mix(fB, fA, blend);
 
-  vec3 col = mix(white, cream, smoothstep(0.2, 1.0, yn)*0.25);
-  col = mix(col, vec3(0.91,0.905,0.89), smoothstep(0.1, -0.9, yn)*0.6);   // pale belly
-  col = mix(col, mix(yellow, orange, smoothstep(0.85, 1.05, s)*0.6), Y);
+  // --- yellow field: behind a boundary that crosses the stripes obliquely
+  vec2 ya = uYellowL.xy, yd = normalize(uYellowL.zw - uYellowL.xy);
+  float inY = dot(p - ya, vec2(-yd.y, yd.x)) / uSpB * 1.25;     // in stripe spacings, >0 toward the rear
+  inY += 0.35 * (fbm(p * 9.0) - 0.5);
+  float Yt = smoothstep(-0.15, 0.35, inY);
+  // anal fin: white in front like the body, yellow toward the rear and along its margin
+  float analY = smoothstep(0.52, 0.68, s) + smoothstep(-0.302, -0.316, y) * smoothstep(0.5, 0.62, s);
+  float Yfin = max(float(anal) * clamp(analY, 0.0, 1.0), float(caudal));
+  float Y = max(Yt, Yfin);
+  if (dorsal) Y = max(Yt, smoothstep(0.66, 0.8, s));
+  vec3 yel = mix(yellow, orange, smoothstep(0.6, 1.05, s) * 0.55);
 
-  float h = 0.0, rough = 0.42, metal = 0.18, ao = 1.0, alpha = 1.0;
+  // stripes keep their width into the yellow, turning brown there and fading out; just inside
+  // the boundary a brown shadow band carries thin bright yellow lines between the stripes
+  float w = mix(0.28, 0.46, smoothstep(-0.6, 0.6, inY));
+  float st = stripe(f, w);
+  float eb = eyeBand(p);
+  float headMask = smoothstep(0.035, 0.075, eb - 0.03) * smoothstep(0.17, 0.24, s);
+  float stripeMask = headMask * (1.0 - smoothstep(2.6, 4.0, inY));
+  if (!inBody && !dorsal) stripeMask = 0.0;
+  if (dorsal) stripeMask *= 1.0 - smoothstep(0.62, 0.74, s);
+  if (caudal) stripeMask = 0.0;
+
+  vec3 bg = mix(white, yel, Y);
+  float shadowBand = smoothstep(-0.35, 0.2, inY) * (1.0 - smoothstep(1.6, 3.2, inY)) * (1.0 - Yfin) * headMask;
+  bg = mix(bg, mix(brown, yel, 0.12), shadowBand * 0.92);
+  float yLine = (1.0 - smoothstep(0.03, 0.09, abs(abs(fract(f) - 0.5) - w * 0.5 - 0.1))) * shadowBand;
+  bg = mix(bg, vec3(1.0, 0.9, 0.2), yLine * 0.8);
+  vec3 lineCol = mix(ink, brown * 0.8, smoothstep(-0.3, 0.5, inY));
+  vec3 col = mix(bg, lineCol, st * stripeMask);
+
+  float h = 0.0, rough = 0.4, metal = 0.12, ao = 1.0, alpha = 1.0;
 
   if (inBody) {
-    // --- scales (none on the snout, fine on the head behind the eye band)
+    // subtle scales: visible mostly as sheen, not relief
     float sid, rim;
-    float scaleMask = smoothstep(0.23, 0.30, s) * (1. - smoothstep(0.82, 1.0, abs(yn)));
+    float scaleMask = smoothstep(0.22, 0.3, s) * (1. - smoothstep(0.85, 1.0, abs(yn)));
     float sh = scales(p, sid, rim);
-    h = sh * scaleMask;
-    col *= mix(1.0, 0.965 + 0.06*sid, scaleMask);
-    col = mix(col, col*0.93, rim*scaleMask*0.6);
-    ao = mix(1.0, 0.86 + 0.14*smoothstep(0.1, 0.9, sh), scaleMask);
-    metal = mix(0.08, 0.35 + 0.2*sid, scaleMask) * (1.-Y*0.5);
-    rough = mix(0.5, 0.28 + 0.15*sid, scaleMask);
-
-    // --- chevron lines, fading out toward the head and the dorsal/ventral keels
-    float side; float d = chevrons(p, side);
-    float lw = 0.0023 + 0.0008*vnoise(p*60.);
-    float ln = 1. - smoothstep(lw - uTexel.x, lw + uTexel.x, d);
-    float lineMask = smoothstep(0.27, 0.34, s) * (1. - smoothstep(0.86, 0.99, abs(yn))) * (1. - smoothstep(0.93, 1.0, s));
-    // lines are rows of pigment on the scales: modulate slightly by scale
-    ln *= lineMask * (0.62 + 0.38*sid) * (0.75 + 0.25*smoothstep(0.25, 0.7, vnoise(p*95.)));
-    col = mix(col, mix(lineW, lineY, Y), ln*0.95);
-
-    // --- lateral line: high arch under the dorsal fin
-    float ll = abs(y - (top - 0.055 - 0.02*s));
-    col *= 1. - 0.08*(1.-smoothstep(0.0, 0.003, ll))*smoothstep(0.28,0.35,s)*(1.-smoothstep(0.8,0.9,s));
-
-    // --- head: forehead/snout greyish-cream, mouth, gill cover edge
-    float snout = 1. - smoothstep(0.02, 0.13, s);
-    col = mix(col, vec3(0.82, 0.80, 0.74), snout*smoothstep(-0.2, 0.8, yn)*0.6);
-    col = mix(col, vec3(0.9, 0.87, 0.74), smoothstep(0.3, 0.95, yn)*(1.-smoothstep(0.05, 0.25, s))*0.35);
-    // lips: slightly pinkish-grey rim, mouth corner crease
-    col = mix(col, vec3(0.78, 0.72, 0.68), 1. - smoothstep(0.004, 0.012, s));
-    float mouth = 1. - smoothstep(0.001, 0.0026, sdSeg(p, vec2(0.004, -0.002), vec2(0.013, -0.004)));
-    col = mix(col, vec3(0.35,0.3,0.28), mouth*0.8); h -= 0.5*mouth;
-    // operculum: curved rim behind the eye band
-    float opR = length((p - vec2(0.15, 0.0)) * vec2(1.0, 0.72));
-    float op = 1. - smoothstep(0.0, 0.006, abs(opR - 0.125));
-    op *= smoothstep(0.2, -0.1, y) * smoothstep(-0.25, -0.05, y + 0.0);
-    h += -0.4 * op * (1.-scaleMask*0.5);
-    col *= 1. - 0.12*op;
-    // nostrils: two tiny pits in front of the eye
-    for (int k = 0; k < 2; k++) {
-      vec2 nc = vec2(0.112 + 0.012*float(k), 0.078 + 0.004*float(k));
-      float nd = length((p - nc) * vec2(1.0, 1.3));
-      float pit = 1. - smoothstep(0.0022, 0.0042, nd);
-      h -= 0.9 * pit; col = mix(col, vec3(0.3, 0.28, 0.26), pit*0.7);
+    h = sh * scaleMask * 0.5;
+    col *= mix(1.0, 0.975 + 0.05*sid, scaleMask);
+    metal = mix(0.05, 0.3 + 0.15*sid, scaleMask) * (1. - Y*0.6) * (1. - st*stripeMask);
+    rough = mix(0.45, 0.3 + 0.1*sid, scaleMask);
+    // lavender-grey shading of the white in the shadowed belly and around the gill cover
+    col = mix(col, col * vec3(0.93, 0.93, 0.98), smoothstep(0.2, -0.9, yn) * 0.5 * (1.0 - Y));
+    // head: snout white-grey, darker tip; lips; gill cover rim
+    float snout = 1. - smoothstep(0.02, 0.1, s);
+    col = mix(col, vec3(0.8, 0.79, 0.78), snout * 0.7);
+    col = mix(col, vec3(0.62, 0.6, 0.6), 1. - smoothstep(0.004, 0.02, s));
+    float opR = length((p - vec2(0.14, 0.0)) * vec2(1.0, 0.75));
+    float op = (1. - smoothstep(0.0, 0.005, abs(opR - 0.115))) * smoothstep(0.12, -0.05, y) * step(0.15, s);
+    h -= 0.35 * op; col *= 1. - 0.06 * op;
+    for (int k = 0; k < 2; k++) {   // nostrils
+      vec2 nc = vec2(0.105 + 0.012*float(k), 0.075 + 0.004*float(k));
+      float pit = 1. - smoothstep(0.002, 0.004, length((p - nc) * vec2(1.0, 1.3)));
+      h -= 0.9 * pit; col = mix(col, vec3(0.35, 0.33, 0.32), pit * 0.7);
     }
-    // preopercle: fine curved groove behind and below the eye
-    float pr = length((p - vec2(0.13, 0.03)) * vec2(1.0, 0.8));
-    float pre = (1. - smoothstep(0.0, 0.0035, abs(pr - 0.082))) * smoothstep(0.06, -0.04, y) * step(0.15, s);
-    h -= 0.35 * pre;
-    // pectoral-fin base shadow
-    ao *= 1. - 0.25*exp(-pow(length((p - vec2(0.3, -0.05))*vec2(1.3, 1.0))/0.03, 2.));
-
-    // --- eye band (black, narrow white borders), goes through the eye
-    float eb = eyeBand(p);
-    float bw = 0.031 + 0.004*smoothstep(0.1, -0.15, y);
-    float band = 1. - smoothstep(bw - uTexel.x*1.5, bw + uTexel.x*1.5, eb);
-    float border = (1. - smoothstep(bw, bw + 0.012, eb)) * (1.-band);
-    col = mix(col, vec3(0.98), border*0.5);
-    col = mix(col, black, band);
-    metal = mix(metal, 0.0, band); rough = mix(rough, 0.35, band);
-
-    // subtle mottling
-    col *= 0.97 + 0.06*fbm(p*40.);
-  } else {
-    // --- fins: base colour, soft rays get their own shading in the fin material
-    bool dorsal = y > top && s < 1.02;
-    bool anal = y < bot && s < 1.02;
-    alpha = 0.5;
+    // eye band
+    float band = 1. - smoothstep(0.036 - uTexel.x*1.5, 0.036 + uTexel.x*1.5, eb);
+    col = mix(col, ink * 0.6, band);
+    metal = mix(metal, 0.0, band); rough = mix(rough, 0.32, band);
+    // faint pale sheen along the back of the white field
+    col *= 0.975 + 0.05 * fbm(p * 30.);
+  } else if (dorsal) {
+    // spinous part carries the white + stripes, soft part is yellow
+    float r = length(((p - uOcellus) * mat2(0.96, 0.28, -0.28, 0.96)) * vec2(1.0, 2.1));
+    float spot = 1. - smoothstep(0.047 - uTexel.x, 0.047 + uTexel.x, r);
+    col = mix(col, ink * 0.5, spot);
+    alpha = 0.5 + 0.5 * spot;
     rough = 0.45; metal = 0.0;
-    if (dorsal) {
-      // spinous part white-translucent, soft part yellow with a subtle dark submarginal zone
-      col = mix(vec3(0.92, 0.92, 0.9), yellow, smoothstep(0.5, 0.66, s));
-      col = mix(col, orange, smoothstep(0.75, 1.0, s)*0.4);
-      // ocellus: black eyespot with a thin pale ring
-      float r = length((p - uOcellus) * vec2(1.0, 1.1));
-      float ring = 1. - smoothstep(0.0, 0.004, abs(r - 0.031));
-      float spot = 1. - smoothstep(0.026 - uTexel.x, 0.026 + uTexel.x, r);
-      col = mix(col, vec3(1.0, 0.97, 0.85), ring*0.9);
-      col = mix(col, black, spot);
-      alpha = 0.5 + 0.5*max(spot, ring*0.6);
-    } else if (anal) {
-      col = mix(vec3(0.95, 0.93, 0.88), yellow, smoothstep(0.52, 0.6, s));
-      col = mix(col, orange, smoothstep(0.7, 0.95, s)*0.35);
-    } else {
-      // caudal
-      col = mix(yellow, vec3(0.95,0.9,0.7), smoothstep(1.06, 1.14, s));
-    }
-    col *= 0.96 + 0.08*fbm(p*50.);
-    // scaled sheath over the fin bases, as on the real fish: small scales, opaque, silvery
-    float sheath = dorsal ? 1. - smoothstep(0.003, 0.024, y - top)
-                 : anal   ? 1. - smoothstep(0.003, 0.022, bot - y)
-                 :          1. - smoothstep(0.99, 1.04, s);
-    if (sheath > 0.0) {
-      float sid2, rim2;
-      float sh2 = scales(p * 1.7 + 3.0, sid2, rim2);
-      vec3 bodyC = col * (0.965 + 0.06*sid2) * mix(1.0, 0.92, rim2);
-      col = mix(col, bodyC, sheath);
-      h = sh2 * sheath * 0.8;
-      alpha = mix(alpha, 1.0, sheath);
-      metal = mix(metal, 0.3, sheath); rough = mix(rough, 0.32, sheath);
-    }
+  } else if (anal) {
+    rough = 0.45; metal = 0.0; alpha = 0.5;
+  } else {
+    col = mix(yel, vec3(1.0, 0.85, 0.3), smoothstep(1.08, 1.16, s));
+    rough = 0.45; metal = 0.0; alpha = 0.5;
   }
-
+  if (!inBody) {
+    col *= 0.97 + 0.06 * fbm(p * 50.);
+    float sheath = dorsal ? 1. - smoothstep(0.003, 0.02, y - top) : anal ? 1. - smoothstep(0.003, 0.02, bot - y) : 1. - smoothstep(0.99, 1.03, s);
+    if (sheath > 0.0) { float a2, b2; h = scales(p * 1.7 + 3.0, a2, b2) * sheath * 0.4; alpha = mix(alpha, 1.0, sheath); }
+  }
   o.col = col; o.alpha = alpha; o.h = h; o.rough = rough; o.metal = metal; o.ao = ao;
   return o;
 }
@@ -413,6 +397,9 @@ function bakeTextures(renderer, W, H, ocellus) {
   const texel = new THREE.Vector2((S1 - S0) / W, (Y1 - Y0) / H);
   const common = {
     uOutline: { value: outline }, uOcellus: { value: new THREE.Vector2(...ocellus) }, uTexel: { value: texel },
+    // stripe field measured from photographs (see PAINT_GLSL)
+    uSpB: { value: 0.086 }, uSpA: { value: 0.06 }, uSlopeB: { value: 0.75 }, uSlopeA: { value: 62.0 },
+    uLocus: { value: new THREE.Vector4(0.41, -0.2, 0.33, 0.36) }, uYellowP: { value: new THREE.Vector2(0.5, 0.33) }, uYellowL: { value: new THREE.Vector4(0.47, 0.35, 0.86, -0.23) },
   };
   const vert = `varying vec2 vP; void main(){ vP = vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)}) + uv * vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}); gl_Position = vec4(position.xy, 0., 1.); }`;
   const passes = {
@@ -500,7 +487,7 @@ export function createButterflyfish(renderer, opts = {}) {
   // ocellus sits in the soft dorsal near its posterior margin
   const oi = Math.round(layouts.dorsal.base.length * 0.8);
   const ob = layouts.dorsal.base[oi], ot = layouts.dorsal.tip[oi];
-  const ocellus = [ob[0] + (ot[0] - ob[0]) * 0.66, ob[1] + (ot[1] - ob[1]) * 0.66];
+  const ocellus = [1.0, 0.262];   // black oval near the rear corner of the soft dorsal (from photos)
   const tex = opts.textures || bakeTextures(renderer, texW, texH, ocellus);
 
   const uniforms = { uPhase: { value: 0 }, uAmp: { value: 0.0 }, uTurn: { value: 0 }, uFlap: { value: 0 }, uGlow: { value: 1.0 } };
@@ -544,67 +531,62 @@ export function createButterflyfish(renderer, opts = {}) {
           ray *= 0.85 + 0.15 * step(0.5, fract(t * 22.0 + rh));   // segmented joints
           bool spine = r < uSpines + 0.01;
           float kind = uKind;
-          // membrane translucency: thinner toward the edge
-          float memA = mix(0.88, 0.55, smoothstep(0.1, 1.0, t));
-          if (kind < 0.5) {             // dorsal
-            if (spine) { memA = mix(0.72, 0.35, t); }
-          } else if (kind < 1.5) {       // anal
-            if (spine) { memA = mix(0.75, 0.4, t); }
-          } else if (kind < 2.5) {       // caudal: yellow base, clear distal half, dark submarginal bar
-            memA = mix(0.95, 0.5, smoothstep(0.35, 0.8, t));
-          } else {                       // pectoral (clear) / pelvic (white)
-            memA = kind < 3.5 ? mix(0.1, 0.03, t) : mix(0.92, 0.75, t);
-          }
-          vec3 c = diffuseColor.rgb;
+          // median fins are nearly opaque in life; spines show only faintly through the membrane
+          float memA = 0.96;
+          if (kind < 1.5 && spine) memA = mix(0.95, 0.8, t);
+          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.5, smoothstep(0.86, 0.98, t));      // caudal: clear margin
+          if (kind > 2.5) memA = kind < 3.5 ? mix(0.1, 0.03, t) : mix(0.92, 0.75, t);             // pectoral / pelvic
+          vec3 c = diffuseColor.rgb * (kind < 2.5 ? 0.9 : 1.0);
           #ifdef USE_MAP
           float opaque = clamp((diffuseColor.a - 0.5) * 2.0, 0.0, 1.0);
           #else
           float opaque = 0.0;
           #endif
-          // soft-ray fins: dark submarginal line and pale translucent margin
-          if (kind < 1.5 && !spine) {
-            float sub = smoothstep(0.845, 0.86, t) * (1.0 - smoothstep(0.878, 0.892, t));
-            c = mix(c, vec3(0.03, 0.02, 0.015), sub * 0.95);
-            memA = mix(memA, 0.95, sub);
-            float mar = smoothstep(0.895, 0.93, t);
-            c = mix(c, vec3(0.95, 0.95, 0.9), mar * 0.8); memA = mix(memA, 0.35, mar);
+          if (kind < 0.5) {
+            // thin dark line along the whole dorsal edge; black margin down the soft dorsal's rear edge
+            c = mix(c, vec3(0.06, 0.05, 0.05), smoothstep(0.93, 0.965, t) * 0.9);
+            c = mix(c, vec3(0.05, 0.04, 0.04), smoothstep(uRays - 4.6, uRays - 3.4, r) * smoothstep(0.3, 0.55, t));
+          }
+          if (kind > 0.5 && kind < 1.5 && !spine) {
+            // anal: dark submarginal line and a pale margin
+            float sub = smoothstep(0.86, 0.88, t) * (1.0 - smoothstep(0.9, 0.92, t));
+            c = mix(c, vec3(0.08, 0.05, 0.03), sub * 0.9);
+            c = mix(c, vec3(0.97, 0.95, 0.85), smoothstep(0.925, 0.95, t) * 0.9);
           }
           if (kind > 1.5 && kind < 2.5) {
-            float bar = smoothstep(0.66, 0.7, t) * (1.0 - smoothstep(0.76, 0.8, t));
-            c = mix(c, vec3(0.06, 0.05, 0.05), bar * 0.9);
-            memA = mix(memA, 0.92, bar);
-            c = mix(c, vec3(0.92, 0.92, 0.9), smoothstep(0.8, 0.9, t) * 0.7);
+            // caudal: pale yellow submarginal line, then clear
+            c = mix(c, vec3(0.95, 0.93, 0.85), smoothstep(0.84, 0.94, t) * 0.8);
           }
-          if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.88, 0.55), vec3(0.9), t); ray *= 0.6; }
+          if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.9, 0.6), vec3(0.9), t); ray *= 0.6; }
           if (kind > 3.5) c = vec3(0.96, 0.96, 0.94);
-          // rays are denser and lighter; spines are white and stiff
-          vec3 rayC = spine ? vec3(0.97) : mix(c, c * 1.12 + 0.04, 0.8);
-          c = mix(c, rayC, ray * (spine ? 0.9 : 0.4));
-          float a = mix(memA, spine ? 0.98 : (kind > 2.5 && kind < 3.5 ? 0.16 : 0.93), ray);
+          // rays: faint ridges only (the membrane is thick)
+          vec3 rayC = spine ? c * 1.06 + 0.02 : c * 1.05 + 0.015;
+          c = mix(c, rayC, ray * 0.07);
+          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : 0.98, ray);
           a = mix(a, 1.0, opaque);
-          a *= smoothstep(0.0, 0.03, 1.0 - t + 0.02);        // feather the very edge
-          if (kind > 2.5 && kind < 3.5) a *= smoothstep(0.05, 0.45, abs(dot(normalize(vNormal), normalize(vViewPosition))));   // clear fin vanishes edge-on
+          a *= smoothstep(0.0, 0.03, 1.0 - t + 0.02);
+          if (kind > 2.5 && kind < 3.5) a *= smoothstep(0.05, 0.45, abs(dot(normalize(vNormal), normalize(vViewPosition))));
           diffuseColor = vec4(c, a);
           vFinGlow = c * (1.0 - a) * 0.35;
         }`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vFinGlow * uGlow;')
-      .replace('varying vec2 vFin; uniform float uKind;', 'varying vec2 vFin; vec3 vFinGlow; uniform float uGlow; uniform float uKind;');
+      .replace('varying vec2 vFin; uniform float uKind;', 'varying vec2 vFin; vec3 vFinGlow; uniform float uGlow; uniform float uRays; uniform float uKind;');
   };
-  const mkFinMat = (kind, spines) => {
+  const mkFinMat = (kind, spines, rays = 0) => {
     const m = new THREE.MeshPhysicalMaterial({
       map: kind < 3 ? tex.albedo : null, color: 0xffffff,
-      roughness: 0.42, metalness: 0.0, transparent: true, side: THREE.DoubleSide,
-      clearcoat: kind === 3 ? 0.0 : 0.3, clearcoatRoughness: 0.25, depthWrite: true,
-      sheen: kind === 3 ? 0.0 : 0.15, sheenColor: new THREE.Color(1, 1, 1), sheenRoughness: 0.6,
+      roughness: 0.55, metalness: 0.0, transparent: true, side: THREE.DoubleSide,
+      clearcoat: kind === 3 ? 0.0 : 0.08, clearcoatRoughness: 0.25, depthWrite: true,
+      sheen: 0.0, sheenColor: new THREE.Color(1, 1, 1), sheenRoughness: 0.6,
     });
-    const u = { uKind: { value: kind }, uSpines: { value: spines }, uGlow: uniforms.uGlow };
+    const u = { uKind: { value: kind }, uSpines: { value: spines }, uGlow: uniforms.uGlow, uRays: { value: rays } };
     addSwim(m, { ...uniforms, ...u }, { key: 'fin' + kind, frag: finFrag(kind), noBend: kind >= 3 });
     return m;
   };
 
-  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, sub: 4, segs: 18, pleat: 0.004, scallop: 0.012, spines: 12, spineScallop: 0.16, bow: -0.04 }), mkFinMat(0, 12));
-  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, sub: 4, segs: 16, pleat: 0.004, scallop: 0.012, spines: 2, spineScallop: 0.15, bow: 0.04 }), mkFinMat(1, 2));
-  const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, sub: 4, segs: 16, pleat: 0.003, scallop: 0.01 }), mkFinMat(2, -1));
+  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, sub: 4, segs: 18, pleat: 0.001, scallop: 0.004, spines: 12, spineScallop: 0.04, bow: -0.02 }), mkFinMat(0, 12, 37));
+  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, sub: 4, segs: 16, pleat: 0.001, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02 }), mkFinMat(1, 2));
+  const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, sub: 4, segs: 16, pleat: 0.0012, scallop: 0.006 }), mkFinMat(2, -1));
   for (const m of [dorsal, anal, caudal]) { m.renderOrder = 2; group.add(m); }
 
   // -- stout dorsal & anal spines as real geometry
@@ -623,19 +605,19 @@ export function createButterflyfish(renderer, opts = {}) {
       spineGeos.push(g);
     }
   };
-  addSpines(layouts.dorsal, 13, 0.0032);
-  addSpines(layouts.anal, 3, 0.0036);
+  // spines are sheathed in thick membrane in this species; no separate geometry
 
   // -- filament: the "thread" trailing from the soft dorsal
-  let fi = 0; layouts.dorsal.tip.forEach((p, i) => { if (p[0] > layouts.dorsal.tip[fi][0]) fi = i; });
+  // the thread grows from the dorsal edge just ahead of the rear corner
+  let fi = 0; layouts.dorsal.tip.forEach((p, i) => { if (Math.hypot(p[0] - 1.04, p[1] - 0.296) < Math.hypot(layouts.dorsal.tip[fi][0] - 1.04, layouts.dorsal.tip[fi][1] - 0.296)) fi = i; });
   const fb0 = layouts.dorsal.base[fi], fb1 = layouts.dorsal.tip[fi];
   const fm = [fb0[0] + (fb1[0] - fb0[0]) * 0.9, fb0[1] + (fb1[1] - fb0[1]) * 0.9];
   const fb = fb1;
   const filCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(sx(fm[0]), fm[1], 0), new THREE.Vector3(sx(fb[0]), fb[1], 0),
-    new THREE.Vector3(sx(fb[0] + 0.06), fb[1] - 0.02, 0.003), new THREE.Vector3(sx(fb[0] + 0.13), fb[1] - 0.03, 0.006),
-    new THREE.Vector3(sx(fb[0] + 0.21), fb[1] - 0.06, 0.002), new THREE.Vector3(sx(fb[0] + 0.29), fb[1] - 0.07, -0.004)]);
-  const filGeo = new THREE.TubeGeometry(filCurve, 96, 0.0048, 6, false);
+    new THREE.Vector3(sx(fb[0] + 0.1), fb[1] - 0.03, 0.003), new THREE.Vector3(sx(fb[0] + 0.2), fb[1] - 0.07, 0.006),
+    new THREE.Vector3(sx(fb[0] + 0.3), fb[1] - 0.12, 0.002), new THREE.Vector3(sx(fb[0] + 0.4), fb[1] - 0.17, -0.004)]);
+  const filGeo = new THREE.TubeGeometry(filCurve, 96, 0.0062, 6, false);
   // taper
   const fp = filGeo.attributes.position;
   for (let i = 0; i < fp.count; i++) {
@@ -648,7 +630,7 @@ export function createButterflyfish(renderer, opts = {}) {
   filGeo.computeVertexNormals();
   {  // yellow at the base fading to translucent white at the tip
     const fc = [];
-    for (let i = 0; i < fp.count; i++) { const f = Math.min(1, Math.floor(i / 7) / 96); fc.push(1.0, 0.8 + 0.18 * f, 0.35 + 0.6 * f); }
+    for (let i = 0; i < fp.count; i++) { const f = Math.min(1, Math.floor(i / 7) / 96); fc.push(1.0, 0.62 + 0.25 * f, 0.08 + 0.4 * f); }
     filGeo.setAttribute('color', new THREE.Float32BufferAttribute(fc, 3));
   }
   const filMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.45, clearcoat: 0.3, sheen: 0.4, sheenColor: new THREE.Color(1, 1, 0.9) });
@@ -656,10 +638,6 @@ export function createButterflyfish(renderer, opts = {}) {
   const fil = new THREE.Mesh(filGeo, filMat);
   group.add(fil);
 
-  // merge spines
-  const spineGeo = mergeGeos(spineGeos);
-  const spines = new THREE.Mesh(spineGeo, spineMat);
-  group.add(spines);
 
   // -- eyes: dark globe with a thin golden-brown iris ring and a glossy cornea
   const { eye } = ANATOMY;
@@ -674,7 +652,7 @@ export function createButterflyfish(renderer, opts = {}) {
     const w = ANATOMY.width(eye.s) * 1.18 * lensZN(eye.y);
     const g = new THREE.SphereGeometry(eye.r, 48, 32);
     g.rotateY(side > 0 ? 0 : Math.PI);   // texture pupil faces +z (outward)
-    g.scale(1, 1, 0.3);
+    g.scale(1, 1, 0.26);
     g.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.24));
 
     const m = new THREE.Mesh(g, eyeMat);
@@ -723,7 +701,7 @@ export function createButterflyfish(renderer, opts = {}) {
     pelPivot.position.set(sx(0.31), ANATOMY.bottom(0.31) + 0.012, side * 0.01);
     pel.position.set(-0.5, 0, 0);
     pelPivot.add(pel);
-    pelPivot.rotation.set(side * 0.18, side * 0.12, 0.9);
+    pelPivot.rotation.set(side * 0.12, side * 0.08, 0.35);
     pelPivot.userData = { side, kind: 'pel' };
     group.add(pelPivot);
     pairs.push(pelPivot);
@@ -745,7 +723,7 @@ export function createButterflyfish(renderer, opts = {}) {
         p.rotation.set(side * (-0.15 + 0.35 * f), side * (0.35 + 0.35 * f), -0.25 + 0.1 * f);
       } else {
         const f = Math.sin(t * 1.3 + side);
-        p.rotation.set(side * (0.18 + 0.05 * f), side * 0.12, 0.9 + 0.06 * f);
+        p.rotation.set(side * (0.12 + 0.04 * f), side * 0.08, 0.35 + 0.05 * f);
       }
     }
   }
@@ -781,7 +759,7 @@ function makeEyeTexture() {
       const f = (r - pupil) / (iris - pupil);
       const fib = 0.75 + 0.25 * Math.sin(a * 60 + rnd(Math.floor(a * 30)) * 6) * rnd(Math.floor(a * 90) + 7);
       // thin bright golden collar next to the pupil, darker bronze outward
-      const collar = 0.7 * Math.exp(-Math.pow((f - 0.1) / 0.06, 2));
+      const collar = 0.12 * Math.exp(-Math.pow((f - 0.1) / 0.06, 2));
       const base = [72, 52, 26].map((v) => v * (1 - 0.65 * f));
       col = base.map((v, i) => v * fib + collar * [150, 115, 55][i]);
     } else {
