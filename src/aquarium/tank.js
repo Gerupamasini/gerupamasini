@@ -79,7 +79,7 @@ function glassMaterial(env, thinAxis) {
         bool edge = abs(vON.${thinAxis}) < 0.5;
         vec3 col; float a;
         if (edge) {
-          col = vec3(0.10, 0.2, 0.16) + refl * 0.25; a = 0.85;
+          col = vec3(0.04, 0.08, 0.065) + refl * 0.25; a = 0.6;
         } else {
           // path through the glass grows at grazing angles -> greener, more absorbing
           float path = 1.0 / max(cosi, 0.15);

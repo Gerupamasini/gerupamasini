@@ -298,11 +298,11 @@ Paint paint(vec2 p){
   bool caudal = !inBody && !dorsal && !anal;
   float yn = clamp((y - (top+bot)*.5) / max((top-bot)*.5, 1e-3), -1., 1.);
 
-  vec3 white  = vec3(0.89, 0.915, 0.935);    // pearly bluish white
+  vec3 white  = vec3(0.84, 0.855, 0.86);     // pearl grey-white
   vec3 yellow = vec3(1.0, 0.78, 0.0);
   vec3 orange = vec3(1.0, 0.62, 0.0);
   vec3 brown  = vec3(0.46, 0.25, 0.05);
-  vec3 ink    = vec3(0.2, 0.195, 0.21);      // dark grey, as in photographs
+  vec3 ink    = vec3(0.3, 0.29, 0.285);      // soft grey-brown
 
   // --- pattern masks traced from a photograph of a real fish (see tools/masks2.py):
   //     r = yellow field (+ gap lines), g = brown zone (s > 0.32) or eye band (s < 0.32), b = stripe distance
@@ -312,18 +312,19 @@ Paint paint(vec2 p){
   float Br = s < 0.32 ? 0.0 : pm.g;
   // b = distance field to stripe centre lines: thin stripes on the white, widening into
   // dark bands in the dusky zone so that only thin yellow gaps remain between them
-  float thr = 0.815;   // half-width 7.5 px of the 36 px field
-  float stV = smoothstep(thr - 0.035, thr + 0.035, pm.b);
+  float thr = 0.7;    // stripes ~40% of the spacing, as in photographs   // half-width 7.5 px of the 36 px field
+  float stV = smoothstep(thr - 0.07, thr + 0.07, pm.b);
   float ylV = 0.0;
   float st = stV * (0.85 + 0.15 * vnoise(p * 70.0));
   float yl = smoothstep(0.3, 0.7, ylV);
   float bandM = s < 0.32 ? smoothstep(0.5 - aa, 0.5 + aa, pm.g) : 0.0;
   if (caudal) { Y = 1.0; st = 0.0; bandM = 0.0; }
+  if (anal && s > 0.45) Y = max(Y, smoothstep(0.45, 0.6, s));   // anal fin yellow
   vec3 yel = mix(yellow, orange, clamp(smoothstep(0.55, 1.05, s) * 0.45 + Br * 0.5 + smoothstep(0.0, 0.3, y) * 0.25, 0.0, 1.0));
   yel = mix(yel, vec3(1.0, 0.86, 0.3), smoothstep(-0.05, -0.25, y) * 0.5);
   // dusky zone: dark brown, with thin bright yellow lines along the middle of each gap
   float Brn = smoothstep(0.04, 0.45, Br);
-  vec3 warmCol = mix(yel, brown * mix(0.62, 0.42, smoothstep(0.1, 0.3, y)), Brn * 0.95);
+  vec3 warmCol = mix(yel, brown * mix(0.7, 0.5, smoothstep(0.1, 0.3, y)), Brn * 0.8);
   float gapLine = clamp((pm.r - 0.52) * 2.2, 0.0, 1.0) * smoothstep(0.15, 0.5, Brn);
   warmCol = mix(warmCol, vec3(1.0, 0.86, 0.1), gapLine);   // gaps in the dusky zone stay yellow-orange
   vec3 col = mix(white, warmCol, Y);
@@ -335,7 +336,7 @@ Paint paint(vec2 p){
   if (inBody) {
     // subtle scales: visible mostly as sheen, not relief
     float sid, rim;
-    float scaleMask = smoothstep(0.27, 0.36, s) * (1. - smoothstep(0.8, 1.0, abs(yn)));
+    float scaleMask = 0.6 * smoothstep(0.27, 0.36, s) * (1. - smoothstep(0.8, 1.0, abs(yn)));
     float sh = scales(p, sid, rim);
     h = sh * scaleMask * 0.16;
     col *= mix(1.0, 0.985 + 0.03*sid, scaleMask);
@@ -552,7 +553,7 @@ export function createButterflyfish(renderer, opts = {}) {
           // median fins are nearly opaque in life; spines show only faintly through the membrane
           float memA = 0.96;
           if (kind < 1.5 && spine) memA = mix(0.95, 0.8, t);
-          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.5, smoothstep(0.86, 0.98, t));      // caudal: clear margin
+          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.35, smoothstep(0.84, 0.95, t));     // caudal: clear margin
           if (kind > 2.5) memA = kind < 3.5 ? mix(0.06, 0.02, t) : mix(0.92, 0.75, t);             // pectoral / pelvic
           vec3 c = diffuseColor.rgb * (kind < 2.5 ? 0.9 : 1.0);
           #ifdef USE_MAP
@@ -572,8 +573,10 @@ export function createButterflyfish(renderer, opts = {}) {
             c = mix(c, vec3(0.97, 0.95, 0.85), smoothstep(0.925, 0.95, t) * 0.9);
           }
           if (kind > 1.5 && kind < 2.5) {
-            // caudal: pale yellow submarginal line, then clear
-            c = mix(c, vec3(0.95, 0.93, 0.85), smoothstep(0.84, 0.94, t) * 0.8);
+            // caudal: yellow, a thin dark submarginal bar, then a clear margin
+            float bar = smoothstep(0.76, 0.79, t) * (1.0 - smoothstep(0.81, 0.84, t));
+            c = mix(c, vec3(0.12, 0.08, 0.05), bar * 0.85);
+            c = mix(c, vec3(0.95, 0.93, 0.85), smoothstep(0.84, 0.9, t) * 0.8);
           }
           if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.9, 0.6), vec3(0.9), t); ray *= 0.6; }
           if (kind > 3.5) c = mix(vec3(0.97, 0.93, 0.78), vec3(0.98, 0.97, 0.92), t);   // pelvics: white with a yellowish base

@@ -12,9 +12,9 @@ export const GOBY = {
     [0.4, 0.146], [0.6, 0.122], [0.8, 0.09], [0.93, 0.066], [1.0, 0.054]]),
   bottom: spline([[0, -0.012], [0.012, -0.026], [0.04, -0.042], [0.09, -0.056], [0.16, -0.066], [0.25, -0.071],
     [0.4, -0.072], [0.6, -0.064], [0.8, -0.054], [0.93, -0.044], [1.0, -0.04]]),
-  width: spline([[0, 0.012], [0.03, 0.028], [0.08, 0.041], [0.16, 0.047], [0.3, 0.045], [0.5, 0.037], [0.7, 0.028],
+  width: spline([[0, 0.01], [0.03, 0.022], [0.08, 0.032], [0.16, 0.036], [0.3, 0.034], [0.5, 0.028], [0.7, 0.021],
     [0.9, 0.02], [1.0, 0.014]]),
-  eye: { s: 0.062, y: 0.045, r: 0.032 },
+  eye: { s: 0.062, y: 0.045, r: 0.026 },
 };
 
 function buildBody() {
@@ -55,13 +55,13 @@ function finLayouts() {
   const flagBase = even(0.24, 0.36, 7, (s) => top(s) - 0.003);
   // spine 0 runs along the leading edge to the tip; the others end on the trailing edge,
   // which runs from just behind the last spine up to meet the tip
-  const trail = polyline([[0.6, 0.522], [0.53, 0.47], [0.46, 0.4], [0.415, 0.32], [0.395, 0.24], [0.385, 0.17]], 6);
-  const flagTip = [[0.615, 0.535], ...trail];
+  const trail = polyline([[0.5, 0.545], [0.46, 0.49], [0.42, 0.41], [0.395, 0.32], [0.385, 0.24], [0.38, 0.17]], 6);
+  const flagTip = [[0.5, 0.56], ...trail];
   // second dorsal and anal: long, low, running almost to the caudal
   const d2Base = even(0.43, 0.985, 24, (s) => top(s) - 0.003);
-  const d2Tip = polyline([[0.44, 0.165], [0.55, 0.172], [0.72, 0.152], [0.87, 0.128], [0.98, 0.098], [1.04, 0.078], [1.07, 0.06], [1.0, 0.046]], 24);
+  const d2Tip = polyline([[0.45, 0.2], [0.56, 0.215], [0.72, 0.195], [0.87, 0.165], [0.98, 0.13], [1.05, 0.1], [1.08, 0.07], [1.0, 0.05]], 24);
   const aBase = even(0.5, 0.985, 22, (s) => bottom(s) + 0.003);
-  const aTip = polyline([[0.51, -0.07], [0.6, -0.078], [0.79, -0.088], [0.95, -0.088], [1.04, -0.08], [1.07, -0.064], [1.0, -0.034]], 22);
+  const aTip = polyline([[0.51, -0.1], [0.6, -0.115], [0.79, -0.125], [0.95, -0.12], [1.05, -0.1], [1.08, -0.075], [1.0, -0.04]], 22);
   // caudal: rounded / slightly lanceolate
   const cBase = even(0, 1, 17, (f) => 0).map(([f]) => { const s = 0.97; return [s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]; });
   const cTip = polyline([[1.1, 0.07], [1.17, 0.045], [1.205, 0.005], [1.2, -0.035], [1.16, -0.068], [1.1, -0.084]], 17);
@@ -78,17 +78,18 @@ varying vec2 vFinG;
 vec4 gobyColor(vec2 p){
   float s = p.x, y = p.y;
   vec3 pearl = vec3(0.8, 0.83, 0.85);
-  vec3 lemon = vec3(0.78, 0.84, 0.46);
+  vec3 lemon = vec3(0.82, 0.86, 0.3);
   vec3 orange = vec3(0.72, 0.26, 0.12), red = vec3(0.42, 0.08, 0.04), maroon = vec3(0.2, 0.035, 0.03);
   // body gradient: pearl -> orange -> red -> maroon toward the tail
   vec3 c = pearl;
-  c = mix(c, orange, smoothstep(0.34, 0.54, s + 0.2 * y));
-  c = mix(c, red, smoothstep(0.5, 0.78, s + 0.1 * y));
+  c = mix(c, vec3(0.91, 0.38, 0.12), smoothstep(0.44, 0.66, s + 0.15 * y));
+  c = mix(c, red, smoothstep(0.62, 0.85, s + 0.1 * y));
+  c = mix(c, maroon, smoothstep(0.85, 1.05, s));
   c = mix(c, maroon, smoothstep(0.9, 1.12, s));
   float a = 1.0;
   if (uGKind < 0.5) {
     // head: lemon-chartreuse snout and cheeks, fading back over the gill cover
-    float head = (1.0 - smoothstep(0.06, 0.17, s + 0.3 * max(-y, 0.0))) * smoothstep(-0.06, 0.0, y);
+    float head = (1.0 - smoothstep(0.1, 0.22, s + 0.35 * max(-y, 0.0))) * smoothstep(-0.05, 0.01, y);
     c = mix(c, lemon, head * 0.85);
     c = mix(c, vec3(0.93, 0.93, 0.95), smoothstep(-0.02, -0.05, y) * (1.0 - smoothstep(0.3, 0.5, s)) * 0.5);   // pale belly
     // violet line along the top of the head from the snout to the flag
@@ -120,7 +121,7 @@ vec4 gobyColor(vec2 p){
       c = mix(c, maroon * 0.6, max(l1 * 0.85, l2 * 0.9));
       c = mix(c, maroon, smoothstep(0.7, 1.0, s) * 0.6);
       c = mix(c, vec3(1.0, 0.55, 0.3), (smoothstep(0.76, 0.8, t) - smoothstep(0.84, 0.88, t)) * 0.4);   // bright band between
-      a = mix(0.92, 0.7, t);
+      a = mix(0.85, 0.5, t);
     } else if (uGKind < 4.5) {
       // caudal: red with blackish streaks along the upper and lower lobes, dark centre
       float band = smoothstep(0.08, 0.02, abs(r / 16.0 - 0.18)) + smoothstep(0.08, 0.02, abs(r / 16.0 - 0.82));

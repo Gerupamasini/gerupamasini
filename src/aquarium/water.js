@@ -91,7 +91,7 @@ export function createCaustics(renderer, { size = 1024, grid = 300 } = {}) {
   const scene = new THREE.Scene();
   scene.add(mesh);
   const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
-  const iors = [1.329, 1.333, 1.338];   // dispersion: red bends least
+  const iors = [1.3315, 1.333, 1.3348];   // dispersion: red bends least (subtle)
   const chans = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
 
   function update(time, light, waveAmp = 1) {

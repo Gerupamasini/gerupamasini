@@ -60,7 +60,7 @@ function createSand() {
     color: /* glsl */`{
       vec3 q = vObjP * 900.0;
       float g = vn3(q), g2 = vn3(q * 0.37 + 11.0), g3 = h13(floor(q * 0.5));
-      vec3 base = mix(vec3(0.42, 0.38, 0.31), vec3(0.56, 0.51, 0.43), g);
+      vec3 base = mix(vec3(0.38, 0.35, 0.29), vec3(0.5, 0.46, 0.39), g);
       base = mix(base, vec3(0.62, 0.55, 0.47), smoothstep(0.82, 0.95, g2) * 0.7);   // darker grains
       base = mix(base, vec3(0.9, 0.62, 0.62), step(0.985, g3) * 0.6);               // pink shell bits
       base = mix(base, vec3(0.3, 0.28, 0.26), step(0.995, h13(floor(q * 0.8) + 3.0)) * 0.8);
@@ -100,7 +100,7 @@ function rockGeometry(seed, r, stretch = [1, 0.7, 1], detail = 6) {
     const pits = Math.max(0, perlin3(v.x * 9 + o, v.y * 9, v.z * 9) - 0.2);
     // terraces: limestone ledges
     let d = 1 + 0.55 * big + 0.28 * crag - 0.35 * pits;
-    d = d + 0.04 * Math.sin(d * 28);
+    d = d + 0.015 * Math.sin(d * 28);
     v.multiplyScalar(r * d);
     v.set(v.x * stretch[0], v.y * stretch[1], v.z * stretch[2]);
     if (v.y < -r * 0.3 * stretch[1]) v.y = -r * 0.3 * stretch[1] + (v.y + r * 0.3 * stretch[1]) * 0.25;   // flattened base sits on the sand
@@ -270,9 +270,12 @@ function seaFan(seed, { size = 0.22, color = 0xd0452a }) {
 function anemone(seed, { r = 0.035, color = [0.95, 0.55, 0.7], tipCol = [1, 0.9, 0.95], count = 260 }) {
   const rnd = mulberry32(seed);
   const group = new THREE.Group();
-  const col = new THREE.CylinderGeometry(r * 0.95, r * 0.8, r * 0.5, 24, 1);
-  col.translate(0, r * 0.25, 0);
-  const cm = new THREE.MeshStandardMaterial({ color: new THREE.Color(...color).multiplyScalar(0.7), roughness: 0.6 });
+  // column: soft, slightly waisted, flaring into the oral disc; buried base
+  const prof = [[0.7, -0.15], [0.78, 0.0], [0.72, 0.18], [0.7, 0.32], [0.86, 0.44], [1.0, 0.5], [0.95, 0.53], [0.5, 0.55], [0.0, 0.52]]
+    .map(([a, b]) => new THREE.Vector2(a * r, b * r));
+  const col = new THREE.LatheGeometry(prof, 48);
+  { const pa = col.attributes.position; for (let i = 0; i < pa.count; i++) { const a = Math.atan2(pa.getZ(i), pa.getX(i)); const k = 1 + 0.06 * Math.sin(a * 5 + seed) + 0.03 * Math.sin(a * 11); pa.setX(i, pa.getX(i) * k); pa.setZ(i, pa.getZ(i) * k); } col.computeVertexNormals(); }
+  const cm = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(...color).multiplyScalar(0.75), roughness: 0.5, sheen: 0.5, sheenColor: new THREE.Color(...tipCol), clearcoat: 0.3 });
   group.add(new THREE.Mesh(col, cm));
   const tg = new THREE.CylinderGeometry(0.0016, 0.0019, 0.045, 8, 8, false);   // bubble-tip tentacles
   tg.translate(0, 0.0225, 0);
@@ -290,7 +293,7 @@ function anemone(seed, { r = 0.035, color = [0.95, 0.55, 0.7], tipCol = [1, 0.9,
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3();
   for (let i = 0; i < count; i++) {
     const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * r * 0.95;
-    const pos = new THREE.Vector3(Math.cos(a) * rr, r * 0.5, Math.sin(a) * rr);
+    const pos = new THREE.Vector3(Math.cos(a) * rr, r * 0.53, Math.sin(a) * rr);
     const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)).multiplyScalar(0.3 + 1.4 * rr / r);
     const dir = new THREE.Vector3(out.x, 1, out.z).normalize();
     q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
@@ -453,7 +456,7 @@ export function createReef() {
   const rockMat = rockMaterial();
   const obstacles = [];   // spheres the fish keep clear of
   const rock = (seed, x, z, r, st, rotY = 0, yOff = 0) => {
-    const m = new THREE.Mesh(rockGeometry(seed, r, st, r > 0.07 ? 7 : 6), rockMat);
+    const m = new THREE.Mesh(rockGeometry(seed, r, st, 7), rockMat);
     const y = sandHeight(x, z) + r * st[1] * 0.35 + yOff;
     m.position.set(x, y, z);
     m.rotation.y = rotY;
