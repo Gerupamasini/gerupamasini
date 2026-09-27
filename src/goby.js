@@ -121,9 +121,14 @@ vec4 gobyColor(vec2 p){
     float ray = 1.0 - smoothstep(0.03, 0.12, abs(fract(r + 0.5) - 0.5));
     if (uGKind < 1.5) {
       // flag: translucent white with a faint yellow wash and a red leading edge near the tip
-      c = mix(vec3(0.86, 0.9, 0.88), vec3(0.95, 0.94, 0.86), t);
-      c = mix(c, vec3(0.8, 0.3, 0.2), (1.0 - smoothstep(0.0, 0.6, r)) * smoothstep(0.4, 0.9, t) * 0.6);   // reddish leading edge toward the tip
-      a = mix(0.85, 0.6, t);
+      // colours sampled from the side-view photos: pearly cream, lemon at the root, fine
+      // spine striations, a thin red line along the rear edge low down, clearer toward the tip
+      c = mix(vec3(0.9, 0.9, 0.83), vec3(0.94, 0.93, 0.86), t);
+      c = mix(c, vec3(0.9, 0.88, 0.55), (1.0 - smoothstep(0.0, 0.28, t)) * 0.7);
+      float stri = 0.5 + 0.5 * sin(r * 6.2832);
+      c *= 0.94 + 0.06 * stri;
+      c = mix(c, vec3(0.72, 0.18, 0.1), smoothstep(5.2, 5.8, r) * (1.0 - smoothstep(0.35, 0.65, t)) * 0.8);
+      a = mix(0.9, 0.55, smoothstep(0.3, 1.0, t));
     } else if (uGKind < 3.5) {
       // second dorsal / anal: the body colour continues into the fin (they read as one wedge),
       // translucent toward the edge with a fine dark margin
@@ -138,9 +143,9 @@ vec4 gobyColor(vec2 p){
       c = mix(c, vec3(0.08, 0.03, 0.03), band * 0.5);
       a = mix(0.95, 0.7, t);
     } else if (uGKind < 5.5) {
-      c = vec3(0.95, 0.93, 0.85); a = mix(0.07, 0.02, t); a = mix(a, 0.14, ray * 0.4);
+      c = vec3(0.95, 0.94, 0.88); a = mix(0.12, 0.03, t); a = mix(a, 0.3, ray * 0.6);   // clear pectoral with visible rays
     } else {
-      c = vec3(0.97, 0.97, 0.95); a = mix(0.9, 0.55, t);
+      c = mix(vec3(0.92, 0.92, 0.66), vec3(0.97, 0.97, 0.94), smoothstep(0.0, 0.35, t)); c *= 0.95 + 0.05 * ray; a = mix(0.92, 0.6, t);   // white pelvic, lemon root
     }
     c = mix(c, c * 1.02, ray * 0.04);
     a *= smoothstep(0.0, 0.04, 1.0 - t + 0.02);
