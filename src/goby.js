@@ -12,9 +12,10 @@ export const GOBY = {
     [0.4, 0.146], [0.6, 0.122], [0.8, 0.09], [0.93, 0.066], [1.0, 0.054]]),
   bottom: spline([[0, -0.012], [0.012, -0.026], [0.04, -0.042], [0.09, -0.056], [0.16, -0.066], [0.25, -0.071],
     [0.4, -0.072], [0.6, -0.064], [0.8, -0.054], [0.93, -0.044], [1.0, -0.04]]),
-  width: spline([[0, 0.01], [0.03, 0.022], [0.08, 0.032], [0.16, 0.036], [0.3, 0.034], [0.5, 0.028], [0.7, 0.021],
-    [0.9, 0.02], [1.0, 0.014]]),
-  eye: { s: 0.062, y: 0.045, r: 0.026 },
+  // laterally compressed behind the head, tapering to a thin peduncle that runs into the tail
+  width: spline([[0, 0.011], [0.03, 0.024], [0.08, 0.034], [0.16, 0.037], [0.3, 0.032], [0.5, 0.024], [0.7, 0.016],
+    [0.88, 0.01], [0.96, 0.006], [1.0, 0.002]]),
+  eye: { s: 0.06, y: 0.046, r: 0.033 },
 };
 
 function buildBody() {
@@ -26,7 +27,9 @@ function buildBody() {
     for (let j = 0; j < NR; j++) {
       const th = (j / NR) * Math.PI * 2, yn = Math.cos(th);
       // rounder cross-section than the butterflyfish; flattened belly
-      let z = Math.sign(Math.sin(th)) * w * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(yn), 2.4)), 0.5) * (1 + 0.1 * yn);
+      // head rounded, body behind it a compressed lens that feeds the fin bases
+      const lensK = THREE.MathUtils.smoothstep(s, 0.15, 0.45);
+      let z = Math.sign(Math.sin(th)) * w * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(yn), 2.4 - 0.4 * lensK)), 0.5 + 0.15 * lensK) * (1 + 0.1 * yn);
       pos.push(sx(s), c + hh * yn, z);
       uv.push((s - S0) / (S1 - S0), (c + hh * yn - Y0) / (Y1 - Y0));
     }
@@ -52,18 +55,18 @@ function finLayouts() {
   // first dorsal: the "flag" — 6 long spines, the front ones longest, curving back
   // The flag is a narrow blade: spines packed together, the front one longest; the fin's
   // leading edge sweeps up and back in one curve (traced), the trailing edge runs close behind.
-  const flagBase = even(0.24, 0.36, 7, (s) => top(s) - 0.003);
+  const flagBase = even(0.25, 0.33, 7, (s) => top(s) - 0.003);   // narrow base
   // spine 0 runs along the leading edge to the tip; the others end on the trailing edge,
   // which runs from just behind the last spine up to meet the tip
-  const trail = polyline([[0.5, 0.545], [0.46, 0.49], [0.42, 0.41], [0.395, 0.32], [0.385, 0.24], [0.38, 0.17]], 6);
-  const flagTip = [[0.5, 0.56], ...trail];
+  const trail = polyline([[0.6, 0.562], [0.53, 0.52], [0.46, 0.45], [0.405, 0.36], [0.37, 0.26], [0.345, 0.17]], 6);
+  const flagTip = [[0.615, 0.572], ...trail];
   // second dorsal and anal: long, low, running almost to the caudal
   const d2Base = even(0.43, 0.985, 24, (s) => top(s) - 0.003);
   const d2Tip = polyline([[0.45, 0.2], [0.56, 0.215], [0.72, 0.195], [0.87, 0.165], [0.98, 0.13], [1.05, 0.1], [1.08, 0.07], [1.0, 0.05]], 24);
   const aBase = even(0.5, 0.985, 22, (s) => bottom(s) + 0.003);
   const aTip = polyline([[0.51, -0.1], [0.6, -0.115], [0.79, -0.125], [0.95, -0.12], [1.05, -0.1], [1.08, -0.075], [1.0, -0.04]], 22);
   // caudal: rounded / slightly lanceolate
-  const cBase = even(0, 1, 17, (f) => 0).map(([f]) => { const s = 0.97; return [s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]; });
+  const cBase = even(0, 1, 17, (f) => 0).map(([f]) => { const s = 0.94 + 0.03 * Math.sin(Math.PI * f); return [s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]; });
   const cTip = polyline([[1.1, 0.07], [1.17, 0.045], [1.205, 0.005], [1.2, -0.035], [1.16, -0.068], [1.1, -0.084]], 17);
   return { flag: { base: flagBase, tip: flagTip }, d2: { base: d2Base, tip: d2Tip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
@@ -77,25 +80,28 @@ uniform float uGKind;   // 0 body, 1 flag, 2 second dorsal, 3 anal, 4 caudal, 5 
 varying vec2 vFinG;
 vec4 gobyColor(vec2 p){
   float s = p.x, y = p.y;
-  vec3 pearl = vec3(0.8, 0.83, 0.85);
-  vec3 lemon = vec3(0.82, 0.86, 0.3);
-  vec3 orange = vec3(0.72, 0.26, 0.12), red = vec3(0.42, 0.08, 0.04), maroon = vec3(0.2, 0.035, 0.03);
-  // body gradient: pearl -> orange -> red -> maroon toward the tail
+  // palette sampled along the body in side-view photos (white-balanced)
+  vec3 pearl = vec3(0.74, 0.78, 0.82);
+  vec3 lemon = vec3(0.8, 0.86, 0.38);
+  vec3 tan_ = vec3(0.84, 0.66, 0.54), orange = vec3(0.86, 0.45, 0.26), red = vec3(0.62, 0.22, 0.12), maroon = vec3(0.26, 0.09, 0.08);
+  // one long soft gradient: pearl -> tan -> orange -> brick red -> maroon at the tail
+  float g = s + 0.12 * y;
   vec3 c = pearl;
-  c = mix(c, vec3(0.91, 0.38, 0.12), smoothstep(0.44, 0.66, s + 0.15 * y));
-  c = mix(c, red, smoothstep(0.62, 0.85, s + 0.1 * y));
-  c = mix(c, maroon, smoothstep(0.85, 1.05, s));
-  c = mix(c, maroon, smoothstep(0.9, 1.12, s));
+  c = mix(c, tan_,   smoothstep(0.34, 0.5, g));
+  c = mix(c, orange, smoothstep(0.46, 0.64, g));
+  c = mix(c, red,    smoothstep(0.6, 0.82, g));
+  c = mix(c, maroon, smoothstep(0.8, 1.02, g));
   float a = 1.0;
   if (uGKind < 0.5) {
     // head: lemon-chartreuse snout and cheeks, fading back over the gill cover
-    float head = (1.0 - smoothstep(0.1, 0.22, s + 0.35 * max(-y, 0.0))) * smoothstep(-0.05, 0.01, y);
-    c = mix(c, lemon, head * 0.85);
+    // lemon-lime around the eye and over the snout, fading into the pearl body behind the eye
+    float head = (1.0 - smoothstep(0.08, 0.16, length((p - vec2(0.03, 0.035)) * vec2(1.0, 1.25)))) ;
+    c = mix(c, lemon, head * 0.9);
     c = mix(c, vec3(0.93, 0.93, 0.95), smoothstep(-0.02, -0.05, y) * (1.0 - smoothstep(0.3, 0.5, s)) * 0.5);   // pale belly
     // violet line along the top of the head from the snout to the flag
     float topY = mix(0.03, 0.14, smoothstep(0.0, 0.25, s));
     float vl = (1.0 - smoothstep(0.004, 0.009, abs(y - (topY - 0.004)))) * (1.0 - smoothstep(0.22, 0.26, s));
-    c = mix(c, vec3(0.62, 0.52, 0.82), vl * 0.6);
+    c = mix(c, vec3(0.66, 0.5, 0.86), vl * 0.75);
     // violet-blue speckles on the head and gill cover
     vec2 q = p * 90.0; float sp = step(0.93, gh(floor(q))) * (1.0 - smoothstep(0.18, 0.32, length(fract(q) - 0.5) * 2.0 * 0.5));
     c = mix(c, vec3(0.55, 0.65, 1.0), sp * (1.0 - smoothstep(0.1, 0.3, s)) * 0.8);
@@ -110,31 +116,28 @@ vec4 gobyColor(vec2 p){
     float ray = 1.0 - smoothstep(0.03, 0.12, abs(fract(r + 0.5) - 0.5));
     if (uGKind < 1.5) {
       // flag: translucent white with a faint yellow wash and a red leading edge near the tip
-      c = mix(vec3(0.95, 0.95, 0.9), vec3(1.0, 0.96, 0.8), 0.4 * t);
-      c = mix(c, vec3(0.85, 0.2, 0.1), smoothstep(0.82, 0.95, t) * smoothstep(0.3, 1.2, r) * 0.9);   // red line along the trailing edge
-      a = mix(0.62, 0.45, t);
-      a = mix(a, 0.75, ray * 0.3);
+      c = mix(vec3(0.86, 0.9, 0.88), vec3(0.95, 0.94, 0.86), t);
+      c = mix(c, vec3(0.8, 0.3, 0.2), (1.0 - smoothstep(0.0, 0.6, r)) * smoothstep(0.4, 0.9, t) * 0.6);   // reddish leading edge toward the tip
+      a = mix(0.85, 0.6, t);
     } else if (uGKind < 3.5) {
-      // second dorsal / anal: body colour with dark submarginal lines and a dark edge
-      float l1 = smoothstep(0.62, 0.66, t) * (1.0 - smoothstep(0.7, 0.74, t));
-      float l2 = smoothstep(0.9, 0.95, t);
-      c = mix(c, maroon * 0.6, max(l1 * 0.85, l2 * 0.9));
-      c = mix(c, maroon, smoothstep(0.7, 1.0, s) * 0.6);
-      c = mix(c, vec3(1.0, 0.55, 0.3), (smoothstep(0.76, 0.8, t) - smoothstep(0.84, 0.88, t)) * 0.4);   // bright band between
-      a = mix(0.85, 0.5, t);
+      // second dorsal / anal: the body colour continues into the fin (they read as one wedge),
+      // translucent toward the edge with a fine dark margin
+      c = mix(c, c * 0.85, smoothstep(0.5, 1.0, t));
+      c = mix(c, maroon * 0.5, smoothstep(0.9, 0.97, t) * 0.8);
+      a = mix(0.92, 0.55, smoothstep(0.2, 1.0, t));
     } else if (uGKind < 4.5) {
       // caudal: red with blackish streaks along the upper and lower lobes, dark centre
-      float band = smoothstep(0.08, 0.02, abs(r / 16.0 - 0.18)) + smoothstep(0.08, 0.02, abs(r / 16.0 - 0.82));
-      c = mix(red, maroon, 0.5 + 0.3 * t);
-      c = mix(c, vec3(0.08, 0.03, 0.03), band * 0.85);
-      c = mix(c, vec3(0.1, 0.03, 0.03), smoothstep(0.85, 0.97, t));
-      a = mix(0.95, 0.75, t);
+      // caudal: maroon-brown, darkening outward, faint dark streaks near the upper and lower edges
+      float band = smoothstep(0.08, 0.02, abs(r / 16.0 - 0.12)) + smoothstep(0.08, 0.02, abs(r / 16.0 - 0.88));
+      c = mix(vec3(0.34, 0.12, 0.09), vec3(0.2, 0.07, 0.06), t);
+      c = mix(c, vec3(0.08, 0.03, 0.03), band * 0.5);
+      a = mix(0.95, 0.7, t);
     } else if (uGKind < 5.5) {
       c = vec3(0.95, 0.93, 0.85); a = mix(0.07, 0.02, t); a = mix(a, 0.14, ray * 0.4);
     } else {
       c = vec3(0.97, 0.97, 0.95); a = mix(0.9, 0.55, t);
     }
-    c = mix(c, c * 1.04 + 0.01, ray * (uGKind < 1.5 ? 0.1 : 0.25));
+    c = mix(c, c * 1.02, ray * 0.04);
     a *= smoothstep(0.0, 0.04, 1.0 - t + 0.02);
   }
   c *= 0.97 + 0.06 * gn(p * 60.0);
@@ -172,11 +175,12 @@ function eyeTexture() {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const cx = x < W / 2 ? W * 0.25 : W * 0.75, dx = x - cx, dy = y - H / 2, r = Math.hypot(dx, dy);
     let col;
-    if (r < 17) col = [4, 4, 6];                                   // pupil
-    else if (r < 33) {                                             // iris: pale gold-white with a violet upper rim
-      const f = (r - 17) / 16, up = Math.max(0, -dy / r);
-      col = [225 - 60 * f, 220 - 50 * f, 170 - 40 * f].map((v, i) => v * (1 - up * 0.55) + up * 0.55 * [175, 120, 230][i]);
-    } else col = [150, 120, 190];
+    // large black pupil, a broad silvery-white iris flushed pink-violet above, lemon skin around
+    if (r < 21) col = [5, 5, 8];
+    else if (r < 38) {
+      const f = (r - 21) / 17, up = Math.max(0, -dy / r);
+      col = [232 - 30 * f, 236 - 30 * f, 238 - 40 * f].map((v, i) => v * (1 - up * 0.6) + up * 0.6 * [215, 150, 215][i]);
+    } else col = [205, 220, 100];
     const o = (y * W + x) * 4; img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
   }
   g.putImageData(img, 0, 0);
@@ -189,9 +193,9 @@ export function createFireGoby() {
   group.add(new THREE.Mesh(buildBody(), gobyMaterial(0, uniforms)));
   const L = finLayouts();
   const flagMesh = new THREE.Mesh(buildFin({ ...L.flag, sub: 4, segs: 20, pleat: 0.0008, scallop: 0.01, bow: 0.16 }), gobyMaterial(1, uniforms));
-  const d2 = new THREE.Mesh(buildFin({ ...L.d2, sub: 3, segs: 10, pleat: 0.0015, scallop: 0.02 }), gobyMaterial(2, uniforms));
-  const an = new THREE.Mesh(buildFin({ ...L.anal, sub: 3, segs: 10, pleat: 0.0015, scallop: 0.02 }), gobyMaterial(3, uniforms));
-  const cd = new THREE.Mesh(buildFin({ ...L.caudal, sub: 3, segs: 14, pleat: 0.0015, scallop: 0.015 }), gobyMaterial(4, uniforms));
+  const d2 = new THREE.Mesh(buildFin({ ...L.d2, sub: 3, segs: 10, pleat: 0.0004, scallop: 0.008 }), gobyMaterial(2, uniforms));
+  const an = new THREE.Mesh(buildFin({ ...L.anal, sub: 3, segs: 10, pleat: 0.0004, scallop: 0.008 }), gobyMaterial(3, uniforms));
+  const cd = new THREE.Mesh(buildFin({ ...L.caudal, sub: 3, segs: 14, pleat: 0.0005, scallop: 0.006 }), gobyMaterial(4, uniforms));
   for (const m of [flagMesh, d2, an, cd]) m.renderOrder = 2;
   group.add(d2, an, cd);
   const flagPivot = new THREE.Group();          // hinge at the front of the flag's base
@@ -202,9 +206,9 @@ export function createFireGoby() {
   const { eye } = GOBY, eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTexture(), roughness: 0.3, clearcoat: 0.5, clearcoatRoughness: 0.1, envMapIntensity: 0.4 });
   addSwim(eyeMat, uniforms, { key: 'gobyeye' });
   for (const side of [1, -1]) {
-    const w = GOBY.width(eye.s) * 0.85;
-    const g = new THREE.SphereGeometry(eye.r, 32, 24); g.rotateY(side > 0 ? 0 : Math.PI); g.scale(1, 1, 0.4);
-    g.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.15));
+    const w = GOBY.width(eye.s) * 0.9;
+    const g = new THREE.SphereGeometry(eye.r, 32, 24); g.rotateY(side > 0 ? 0 : Math.PI); g.scale(1, 1, 0.45);
+    g.translate(sx(eye.s), eye.y, side * (w * 1.02 - eye.r * 0.05));   // large, bulging eye set high on the head
     group.add(new THREE.Mesh(g, eyeMat));
   }
   // paired fins: clear rounded pectorals, long thread-like white pelvics

@@ -224,25 +224,25 @@ export function createStrawberryConch({ live = 1 } = {}) {
 
   // Behaviour: sits, looks about with its eyestalks, and now and then "leaps": the operculum
   // digs into the sand and the shell is heaved forward and rocks back down.
-  let leapT = -1, next = 3 + Math.random() * 6;
+  let leapT = -1, next = 20 + Math.random() * 30;
   const state = { heading: Math.random() * Math.PI * 2, pos: new THREE.Vector3() };
   function update(dt, t) {
     for (const s of stalks) {
       const sd = s.userData.side;
-      s.rotation.set(0.25 * Math.sin(t * 0.7 + sd), 0.35 * Math.sin(t * 0.43 + sd * 2), 0.15 * Math.sin(t * 0.9 + sd));
+      s.rotation.set(0.12 * Math.sin(t * 0.35 + sd), 0.2 * Math.sin(t * 0.22 + sd * 2), 0.08 * Math.sin(t * 0.45 + sd));
     }
     next -= dt;
-    if (leapT < 0 && next <= 0) { leapT = 0; next = 6 + Math.random() * 10; }
+    if (leapT < 0 && next <= 0) { leapT = 0; next = 40 + Math.random() * 60; }   // a small shuffle now and then
     if (leapT >= 0) {
-      leapT += dt / 1.3;
+      leapT += dt / 2.5;
       const k = Math.min(leapT, 1);
       const push = Math.sin(Math.min(k / 0.3, 1) * Math.PI / 2);          // operculum swings down and back
-      opPiv.rotation.z = -1.2 * push * (1 - Math.max(0, (k - 0.6) / 0.4));
+      opPiv.rotation.z = -0.4 * push * (1 - Math.max(0, (k - 0.6) / 0.4));
       const lift = Math.sin(Math.min(Math.max((k - 0.15) / 0.5, 0), 1) * Math.PI);
-      body.rotation.z = 0.35 * lift;                                     // shell rears up at the front
-      body.position.y = 0.08 * lift;
+      body.rotation.z = 0.06 * lift;                                     // shell lifts slightly at the front
+      body.position.y = 0.01 * lift;
       const fwd = Math.min(Math.max((k - 0.15) / 0.6, 0), 1);
-      group.userData.stepDist = 0.3 * dt / 1.3 * (fwd > 0 && fwd < 1 ? 1.6 : 0);
+      group.userData.stepDist = 0.05 * dt / 2.5 * (fwd > 0 && fwd < 1 ? 1.6 : 0);
       if (leapT >= 1) { leapT = -1; body.rotation.z = 0; body.position.y = 0; }
     } else { group.userData.stepDist = 0; opPiv.rotation.z = 0; }
   }
