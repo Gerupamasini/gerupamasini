@@ -102,3 +102,61 @@ export class Butterflyfish {
     });
   }
 }
+
+// Fire goby: hovers head-into-the-current a little above its bolt hole, darting briefly and
+// flicking its flag; retreats toward the hole when it strays.
+export class HoveringGoby {
+  constructor(model, { home, scale = 0.075, seed = 5 }) {
+    this.model = model; this.rnd = mulberry32(seed);
+    this.obj = new THREE.Group(); this.obj.add(model.group); model.group.scale.setScalar(scale);
+    model.group.position.x = -0.3 * scale;
+    this.home = home.clone(); this.p = home.clone().add(new THREE.Vector3(0, 0.03, 0));
+    this.v = new THREE.Vector3(); this.yaw = this.rnd() * 6.28; this.t = 0; this.next = 1;
+    this.target = this.p.clone(); this.turnRate = 0; this.scale = scale;
+  }
+  update(dt) {
+    this.t += dt; this.next -= dt;
+    let flick = 0;
+    if (this.next <= 0) {
+      const r = this.rnd;
+      this.target = this.home.clone().add(new THREE.Vector3((r() - 0.5) * 0.08, 0.015 + r() * 0.05, (r() - 0.5) * 0.06));
+      this.next = 1.5 + r() * 3.5; if (r() < 0.5) flick = 1;
+    }
+    const to = this.target.clone().sub(this.p);
+    this.v.addScaledVector(to, dt * 3.0).multiplyScalar(Math.exp(-dt * 2.5));
+    this.p.addScaledVector(this.v, dt);
+    // mostly faces the front glass / current, turns toward the move when darting
+    const sp = this.v.length();
+    const want = sp > 0.02 ? Math.atan2(-this.v.z, this.v.x) : Math.PI * 0.5 + 0.6 * Math.sin(this.t * 0.2);
+    let dy = Math.atan2(Math.sin(want - this.yaw), Math.cos(want - this.yaw));
+    const prev = this.turnRate;
+    this.turnRate += (THREE.MathUtils.clamp(dy * 2.5, -3, 3) - this.turnRate) * Math.min(1, dt * 4);
+    this.yaw += this.turnRate * dt;
+    this.obj.position.copy(this.p);
+    this.obj.rotation.set(0, this.yaw, 0);
+    this.obj.rotateZ(THREE.MathUtils.clamp(this.v.y * 4, -0.4, 0.4));
+    this.model.update(dt, this.t, { amp: 0.01 + Math.min(sp / this.scale, 2) * 0.03, freq: 1.2 + sp / this.scale * 1.5, turn: THREE.MathUtils.clamp(-this.turnRate * 0.25, -0.5, 0.5), flick });
+  }
+}
+
+// Strawberry conch: rests on the sand and makes the occasional leap along its heading.
+export class SandConch {
+  constructor(model, { pos, heading = 0, scale = 0.06, sandHeight, bounds = 0.45 }) {
+    this.model = model; this.sandHeight = sandHeight; this.bounds = bounds;
+    this.obj = new THREE.Group(); this.obj.add(model.group); model.group.scale.setScalar(scale);
+    model.group.position.set(-0.55 * scale, 0.235 * scale, 0);
+    this.p = pos.clone(); this.heading = heading; this.t = 0;
+  }
+  update(dt) {
+    this.t += dt;
+    this.model.update(dt, this.t);
+    const step = this.model.group.userData.stepDist || 0;
+    if (step > 0) {
+      this.p.x += Math.cos(this.heading) * step * 0.06; this.p.z -= Math.sin(this.heading) * step * 0.06;
+      if (Math.abs(this.p.x) > this.bounds || this.p.z > 0.22 || this.p.z < 0.02) this.heading += Math.PI * 0.6;
+    }
+    this.p.y = this.sandHeight(this.p.x, this.p.z);
+    this.obj.position.copy(this.p);
+    this.obj.rotation.set(0, this.heading, 0);
+  }
+}

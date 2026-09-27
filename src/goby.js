@@ -12,7 +12,7 @@ export const GOBY = {
     [0.4, 0.146], [0.6, 0.122], [0.8, 0.09], [0.93, 0.066], [1.0, 0.054]]),
   bottom: spline([[0, -0.012], [0.012, -0.026], [0.04, -0.042], [0.09, -0.056], [0.16, -0.066], [0.25, -0.071],
     [0.4, -0.072], [0.6, -0.064], [0.8, -0.054], [0.93, -0.044], [1.0, -0.04]]),
-  width: spline([[0, 0.014], [0.03, 0.034], [0.08, 0.05], [0.16, 0.058], [0.3, 0.056], [0.5, 0.047], [0.7, 0.035],
+  width: spline([[0, 0.012], [0.03, 0.028], [0.08, 0.041], [0.16, 0.047], [0.3, 0.045], [0.5, 0.037], [0.7, 0.028],
     [0.9, 0.02], [1.0, 0.014]]),
   eye: { s: 0.062, y: 0.045, r: 0.032 },
 };
@@ -78,12 +78,12 @@ varying vec2 vFinG;
 vec4 gobyColor(vec2 p){
   float s = p.x, y = p.y;
   vec3 pearl = vec3(0.8, 0.83, 0.85);
-  vec3 lemon = vec3(0.8, 0.84, 0.4);
-  vec3 orange = vec3(0.8, 0.32, 0.15), red = vec3(0.48, 0.1, 0.05), maroon = vec3(0.22, 0.04, 0.035);
+  vec3 lemon = vec3(0.78, 0.84, 0.46);
+  vec3 orange = vec3(0.72, 0.26, 0.12), red = vec3(0.42, 0.08, 0.04), maroon = vec3(0.2, 0.035, 0.03);
   // body gradient: pearl -> orange -> red -> maroon toward the tail
   vec3 c = pearl;
-  c = mix(c, orange, smoothstep(0.4, 0.68, s + 0.2 * y));
-  c = mix(c, red, smoothstep(0.62, 0.9, s + 0.1 * y));
+  c = mix(c, orange, smoothstep(0.34, 0.54, s + 0.2 * y));
+  c = mix(c, red, smoothstep(0.5, 0.78, s + 0.1 * y));
   c = mix(c, maroon, smoothstep(0.9, 1.12, s));
   float a = 1.0;
   if (uGKind < 0.5) {
@@ -94,7 +94,7 @@ vec4 gobyColor(vec2 p){
     // violet line along the top of the head from the snout to the flag
     float topY = mix(0.03, 0.14, smoothstep(0.0, 0.25, s));
     float vl = (1.0 - smoothstep(0.004, 0.009, abs(y - (topY - 0.004)))) * (1.0 - smoothstep(0.22, 0.26, s));
-    c = mix(c, vec3(0.62, 0.45, 0.9), vl * 0.85);
+    c = mix(c, vec3(0.62, 0.52, 0.82), vl * 0.6);
     // violet-blue speckles on the head and gill cover
     vec2 q = p * 90.0; float sp = step(0.93, gh(floor(q))) * (1.0 - smoothstep(0.18, 0.32, length(fract(q) - 0.5) * 2.0 * 0.5));
     c = mix(c, vec3(0.55, 0.65, 1.0), sp * (1.0 - smoothstep(0.1, 0.3, s)) * 0.8);
@@ -109,15 +109,16 @@ vec4 gobyColor(vec2 p){
     float ray = 1.0 - smoothstep(0.03, 0.12, abs(fract(r + 0.5) - 0.5));
     if (uGKind < 1.5) {
       // flag: translucent white with a faint yellow wash and a red leading edge near the tip
-      c = mix(vec3(0.9, 0.93, 0.92), vec3(0.98, 0.96, 0.82), 0.4 * t);
-      c = mix(c, vec3(0.9, 0.25, 0.12), (1.0 - smoothstep(0.0, 0.9, r)) * smoothstep(0.35, 0.8, t) * 0.8);
-      a = mix(0.8, 0.6, t);
-      a = mix(a, 0.9, ray * 0.5);
+      c = mix(vec3(0.95, 0.95, 0.9), vec3(1.0, 0.96, 0.8), 0.4 * t);
+      c = mix(c, vec3(0.85, 0.2, 0.1), smoothstep(0.82, 0.95, t) * smoothstep(0.3, 1.2, r) * 0.9);   // red line along the trailing edge
+      a = mix(0.62, 0.45, t);
+      a = mix(a, 0.75, ray * 0.3);
     } else if (uGKind < 3.5) {
       // second dorsal / anal: body colour with dark submarginal lines and a dark edge
       float l1 = smoothstep(0.62, 0.66, t) * (1.0 - smoothstep(0.7, 0.74, t));
       float l2 = smoothstep(0.9, 0.95, t);
       c = mix(c, maroon * 0.6, max(l1 * 0.85, l2 * 0.9));
+      c = mix(c, maroon, smoothstep(0.7, 1.0, s) * 0.6);
       c = mix(c, vec3(1.0, 0.55, 0.3), (smoothstep(0.76, 0.8, t) - smoothstep(0.84, 0.88, t)) * 0.4);   // bright band between
       a = mix(0.92, 0.7, t);
     } else if (uGKind < 4.5) {
@@ -132,7 +133,7 @@ vec4 gobyColor(vec2 p){
     } else {
       c = vec3(0.97, 0.97, 0.95); a = mix(0.9, 0.55, t);
     }
-    c = mix(c, c * 1.08 + 0.02, ray * 0.25);
+    c = mix(c, c * 1.04 + 0.01, ray * (uGKind < 1.5 ? 0.1 : 0.25));
     a *= smoothstep(0.0, 0.04, 1.0 - t + 0.02);
   }
   c *= 0.97 + 0.06 * gn(p * 60.0);
@@ -197,11 +198,11 @@ export function createFireGoby() {
   flagPivot.position.set(hx, hy, 0); flagMesh.position.set(-hx, -hy, 0);
   flagPivot.add(flagMesh); group.add(flagPivot);
   // eyes: large, high on the head
-  const { eye } = GOBY, eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTexture(), roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.03 });
+  const { eye } = GOBY, eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTexture(), roughness: 0.3, clearcoat: 0.5, clearcoatRoughness: 0.1, envMapIntensity: 0.4 });
   addSwim(eyeMat, uniforms, { key: 'gobyeye' });
   for (const side of [1, -1]) {
     const w = GOBY.width(eye.s) * 0.85;
-    const g = new THREE.SphereGeometry(eye.r, 32, 24); g.rotateY(side > 0 ? 0 : Math.PI); g.scale(1, 1, 0.55);
+    const g = new THREE.SphereGeometry(eye.r, 32, 24); g.rotateY(side > 0 ? 0 : Math.PI); g.scale(1, 1, 0.4);
     g.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.15));
     group.add(new THREE.Mesh(g, eyeMat));
   }

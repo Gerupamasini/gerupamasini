@@ -49,7 +49,9 @@ import { createReef } from './src/aquarium/reef.js';
 import { buildEnvironment, buildUnderwaterEnvironment, createTank, createRoom } from './src/aquarium/tank.js';
 import { createBubbles, createSpecks } from './src/aquarium/fx.js';
 import { createPipeline, LAYER_TRANSPARENT } from './src/aquarium/pipeline.js';
-import { Butterflyfish } from './src/aquarium/school.js';
+import { Butterflyfish, HoveringGoby, SandConch } from './src/aquarium/school.js';
+import { createFireGoby } from './src/goby.js';
+import { createStrawberryConch } from './src/conch.js';
 import { createButterflyfish, loadPattern } from './src/fish.js';
 
 const Q = new URLSearchParams(location.search);
@@ -90,6 +92,7 @@ scene.add(roomLight, roomLight.target);
 // --- water
 const caustics = createCaustics(renderer, { size: +(Q.get('cs') || 1024), grid: +(Q.get('cg') || 320) });
 const cu = causticUniforms(caustics);
+cu.uCausticStrength.value = 0.8;
 cu.uCausticDir.value.copy(meanRefracted(sun.target.position.clone().sub(sun.position)));
 
 const reef = createReef();
@@ -108,9 +111,17 @@ const f1 = new Butterflyfish(m1, { scale: 0.15, seed: 3, start: new THREE.Vector
 const f2 = new Butterflyfish(m2, { seed: 8, start: new THREE.Vector3(0.05, 0.28, -0.02), leader: f1, obstacles: reef.obstacles, scale: 0.14 });
 fishModels.push(f1, f2);
 for (const f of fishModels) scene.add(f.obj);
+// fire gobies hovering over the rubble in front of the right-hand rock, strawberry conches on the sand
+const critters = [
+  new HoveringGoby(createFireGoby(), { home: new THREE.Vector3(0.24, reef.sandHeight(0.24, 0.12) + 0.03, 0.12), seed: 11 }),
+  new HoveringGoby(createFireGoby(), { home: new THREE.Vector3(0.3, reef.sandHeight(0.3, 0.08) + 0.05, 0.08), seed: 17, scale: 0.068 }),
+  new SandConch(createStrawberryConch(), { pos: new THREE.Vector3(-0.2, 0, 0.16), heading: 0.3, sandHeight: reef.sandHeight }),
+  new SandConch(createStrawberryConch(), { pos: new THREE.Vector3(0.05, 0, 0.19), heading: 2.6, scale: 0.055, sandHeight: reef.sandHeight }),
+];
+for (const c of critters) scene.add(c.obj);
 
 // everything under water is lit through the caustics
-const submerged = [reef.group, f1.obj, f2.obj];
+const submerged = [reef.group, f1.obj, f2.obj, ...critters.map((c) => c.obj)];
 for (const g of submerged) g.traverse((o) => {
   if (o.isMesh && o.material && !o.material.isShaderMaterial && !o.material.userData.caustic) {
     o.material.userData.caustic = true;
@@ -127,6 +138,9 @@ const VIEWS = {
   hero: { pos: [0.78, 0.46, 1.12], target: [0.0, 0.25, 0] },
   front: { pos: [0, 0.3, 1.25], target: [0, 0.29, 0] },
   close: { pos: [0.25, 0.32, 0.62], target: [0.0, 0.3, 0] },
+  floor: { pos: [0.05, 0.16, 0.62], target: [0.12, 0.1, 0.1] },
+  goby: { pos: [0.3, 0.13, 0.38], target: [0.27, 0.11, 0.1] },
+  conch: { pos: [-0.1, 0.12, 0.4], target: [-0.18, 0.07, 0.16] },
   top: { pos: [0.3, 1.5, 0.7], target: [0, 0.25, 0] },
   wide: { pos: [1.6, 0.6, 2.4], target: [0, 0.1, 0] },
 };
@@ -191,7 +205,7 @@ if (Q.has('pose')) {   // evaluation pose: fish side-on to the front glass
   f2.p.set(-0.3, 0.38, -0.12);
 }
 // warm up the fish behaviour so a still frame shows them mid-swim
-for (let i = 0; i < +(Q.get('warm') || 0) * 30; i++) { for (const f of fishModels) f.update(1 / 30); t += 1 / 30; }
+for (let i = 0; i < +(Q.get("warm") || 0) * 30; i++) { for (const f of fishModels) f.update(1 / 30); for (const c of critters) c.update(1 / 30); t += 1 / 30; }
 const followPos = new THREE.Vector3();
 // adaptive resolution: keep the frame rate up by trading pixel density
 const maxPR = renderer.getPixelRatio();
@@ -216,6 +230,7 @@ renderer.setAnimationLoop(() => {
   const dt = paused ? 0 : Math.min(raw, 1 / 20);
   t += dt;
   for (const f of fishModels) f.update(dt);
+  for (const c of critters) c.update(dt);
   reef.update(t);
   bubbles.update(dt, t);
   specks.update(t);

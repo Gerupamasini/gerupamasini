@@ -60,7 +60,7 @@ function createSand() {
     color: /* glsl */`{
       vec3 q = vObjP * 900.0;
       float g = vn3(q), g2 = vn3(q * 0.37 + 11.0), g3 = h13(floor(q * 0.5));
-      vec3 base = mix(vec3(0.56, 0.53, 0.46), vec3(0.7, 0.67, 0.6), g);
+      vec3 base = mix(vec3(0.5, 0.46, 0.39), vec3(0.64, 0.6, 0.52), g);
       base = mix(base, vec3(0.62, 0.55, 0.47), smoothstep(0.82, 0.95, g2) * 0.7);   // darker grains
       base = mix(base, vec3(0.9, 0.62, 0.62), step(0.985, g3) * 0.6);               // pink shell bits
       base = mix(base, vec3(0.3, 0.28, 0.26), step(0.995, h13(floor(q * 0.8) + 3.0)) * 0.8);
@@ -120,8 +120,8 @@ function rockMaterial() {
       vec3 stone = mix(vec3(0.3, 0.26, 0.22), vec3(0.52, 0.47, 0.4), n);
       // coralline algae: pink / purple crusts, strongest on lit faces
       float up = clamp(vWorldN.y * 0.5 + 0.5, 0.0, 1.0);
-      float cor = smoothstep(0.52, 0.66, m + up * 0.12);
-      vec3 coralline = mix(vec3(0.5, 0.22, 0.38), vec3(0.72, 0.36, 0.52), s);
+      float cor = smoothstep(0.58, 0.72, m + up * 0.1);
+      vec3 coralline = mix(vec3(0.55, 0.3, 0.38), vec3(0.7, 0.42, 0.5), s);
       vec3 c = mix(stone, coralline, cor * 0.8);
       c = mix(c, vec3(0.62, 0.58, 0.5), smoothstep(0.6, 0.75, fbmS(q * 0.6 + 3.0)) * 0.5);   // bleached calcareous patches
       c = mix(c, vec3(0.42, 0.3, 0.16), smoothstep(0.55, 0.7, fbmS(q * 0.8 + 21.0)) * 0.55);  // brown sponge / diatom film
@@ -499,10 +499,20 @@ export function createReef() {
   place(seagrass(72, { count: 36, h: 0.16, color: 0x5a8a2c }), -0.52, -0.22, 0);
   place(seagrass(73, { count: 24, h: 0.12, color: 0x2f6a3a }), -0.18, -0.22, 0);
   // mushroom corals on the sand
-  const mush = new THREE.CylinderGeometry(0.018, 0.006, 0.01, 24, 1);
-  const mushMat = new THREE.MeshPhysicalMaterial({ color: 0x5a2a8a, roughness: 0.5, emissive: 0x6a30c0, emissiveIntensity: 0.15, sheen: 0.6, sheenColor: new THREE.Color(0.7, 0.5, 1) });
-  [[0.1, 0.16], [0.13, 0.19], [0.07, 0.2], [-0.25, 0.15]].forEach(([x, z]) => {
-    const m = new THREE.Mesh(mush, mushMat); m.position.set(x, sandHeight(x, z) + 0.004, z); m.rotation.set(0.2 * Math.sin(x * 50), 0, 0.2 * Math.cos(z * 40)); group.add(m);
+  // mushroom corals (Fungia): oval discs with fine radial septa, olive-brown with a pale mouth
+  const mush = new THREE.CircleGeometry(0.02, 72, 0, Math.PI * 2);
+  { const pa = mush.attributes.position; for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), y = pa.getY(i), r = Math.hypot(x, y) / 0.02; pa.setZ(i, 0.006 * (1 - r * r)); pa.setY(i, y * 0.75); } }
+  mush.rotateX(-Math.PI / 2); mush.computeVertexNormals();
+  const mushMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.55, sheen: 0.5, sheenColor: new THREE.Color(0.8, 0.9, 0.6) });
+  patch(mushMat, { key: 'fungia',
+    color: /* glsl */`{ float a = atan(vObjP.z, vObjP.x); float r = length(vObjP.xz / vec2(1.0, 0.75)) / 0.02;
+      float sept = 0.5 + 0.5 * sin(a * 90.0);
+      vec3 c = mix(vec3(0.42, 0.4, 0.22), vec3(0.6, 0.55, 0.32), sept * 0.6 + 0.2 * vn3(vObjP * 600.0));
+      c = mix(c, vec3(0.78, 0.74, 0.6), 1.0 - smoothstep(0.05, 0.14, r));
+      diffuseColor.rgb *= c; }`,
+    normal: /* glsl */`{ float a = atan(vObjP.z, vObjP.x); normal = bumpN(normal, -vViewPosition, sin(a * 90.0) * 0.5, 0.0012); }` });
+  [[0.1, 0.16], [0.13, 0.19], [0.07, 0.2], [-0.25, 0.15]].forEach(([x, z], i) => {
+    const m = new THREE.Mesh(mush, mushMat); m.position.set(x, sandHeight(x, z) + 0.001, z); m.rotation.set(0.12 * Math.sin(x * 50), i * 1.3, 0.12 * Math.cos(z * 40)); group.add(m);
   });
   group.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; } });
   return { group, obstacles, sandHeight, update: (t) => { swayUniforms.uTime.value = t; } };
