@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ミミイカの3D水槽</title>
+<style>
+:root{--bg:#07090c;--fg:#cfd8e3}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#07090c;--fg:#cfd8e3}}
+:root[data-theme="dark"]{--bg:#07090c;--fg:#cfd8e3}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;overflow:hidden}
+canvas{display:block;touch-action:none}
+#info{position:fixed;left:16px;right:16px;bottom:12px;text-align:center;font-size:12px;opacity:.65;pointer-events:none}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head><body>
+<div id="info">ドラッグで回転・ホイール/ピンチでズーム ／ 水中をタップで餌 ／ 放っておくとミミイカは砂に潜ります</div>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+// ---------- 基本 ----------
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(2,devicePixelRatio));renderer.setSize(innerWidth,innerHeight);
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x07090c);
+const camera=new THREE.PerspectiveCamera(40,innerWidth/innerHeight,0.05,50);
+camera.position.set(0.7,1.15,3.5);
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.target.set(0,0.72,0);controls.enableDamping=true;controls.minDistance=2.6;controls.maxDistance=8;
+controls.maxPolarAngle=Math.PI*0.5;controls.enablePan=false;controls.update();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+
+// 水槽寸法
+const TW=3.0,TH=1.6,TD=1.4,G=0.02;           // 幅・高さ・奥行・ガラス厚
+const SAND=0.26,WATER=1.46;                    // 砂面・水面の高さ
+const LDIR=new THREE.Vector3(0.18,1,0.12).normalize(); // 光（上から）
+
+// ---------- 共通シェーダ断片：コースティクス ----------
+const CAUSTIC=`
+float caustic(vec2 uv,float t){
+  vec2 p=mod(uv*6.28318,6.28318)-250.0; vec2 i=p; float c=1.0; float inten=0.005;
+  for(int n=0;n<5;n++){float tt=t*(1.0-(3.5/float(n+1)));
+    i=p+vec2(cos(tt-i.x)+sin(tt+i.y),sin(tt-i.y)+cos(tt+i.x));
+    c+=1.0/length(vec2(p.x/(sin(i.x+tt)/inten),p.y/(cos(i.y+tt)/inten)));}
+  c/=5.0; c=1.17-pow(c,1.4); return pow(abs(c),8.0);
+}
+float causticRGB(vec3 wp,float t,float blur){
+  vec3 L=normalize(vec3(${LDIR.x},${LDIR.y},${LDIR.z}));
+  vec2 uv=(wp.xz+L.xz/L.y*(${WATER.toFixed(3)}-wp.y))*0.55;
+  float a=caustic(uv,t*0.5), b=caustic(uv*0.5+3.1,t*0.37);
+  return mix(a*0.7+b*0.5,0.35,blur);
+}`;
+const uTime={value:0};
+
+// ---------- 部屋・台 ----------
+const room=new THREE.Mesh(new THREE.PlaneGeometry(30,30),new THREE.MeshStandardMaterial({color:0x111418,roughness:1}));
+room.rotation.x=-Math.PI/2;room.position.y=-0.55;room.receiveShadow=true;scene.add(room);
+const back=new THREE.Mesh(new THREE.PlaneGeometry(30,12),new THREE.MeshStandardMaterial({color:0x0d1015,roughness:1}));back.position.set(0,5,-3);scene.add(back);
+const stand=new THREE.Mesh(new THREE.BoxGeometry(TW+0.3,0.55,TD+0.3),new THREE.MeshStandardMaterial({color:0x1d1a17,roughness:0.6}));
+stand.position.y=-0.275;stand.receiveShadow=true;stand.castShadow=true;scene.add(stand);
+// 照明器具（上部）
+const lampMat=new THREE.MeshStandardMaterial({color:0x22262b,roughness:0.4,metalness:0.6});
+const lamp=new THREE.Mesh(new THREE.BoxGeometry(TW*0.9,0.05,0.22),lampMat);lamp.position.set(0,TH+0.22,0);scene.add(lamp);
+const lampFace=new THREE.Mesh(new THREE.PlaneGeometry(TW*0.86,0.16),new THREE.MeshBasicMaterial({color:0xdff4ff}));
+lampFace.rotation.x=Math.PI/2;lampFace.position.set(0,TH+0.194,0);scene.add(lampFace);
+for(const sx of[-1,1]){const leg=new THREE.Mesh(new THREE.BoxGeometry(0.03,0.22,0.03),lampMat);leg.position.set(sx*TW*0.44,TH+0.1,0);scene.add(leg);}
+
+// ---------- ライト ----------
+scene.add(new THREE.HemisphereLight(0x9fc6e0,0x1a140c,0.35));
+const sun=new THREE.DirectionalLight(0xe8f6ff,1.5);sun.position.copy(LDIR).multiplyScalar(6);sun.target.position.set(0,0,0);
+sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-2,right:2,top:2,bottom:-2,near:1,far:12});sun.shadow.bias=-0.0008;sun.shadow.normalBias=0.01;
+scene.add(sun,sun.target);
+
+
+// ---------- 砂 ----------
+function hash(x,y){const s=Math.sin(x*127.1+y*311.7)*43758.5453;return s-Math.floor(s);}
+function vnoise(x,y){const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy,u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy);
+ return (hash(ix,iy)*(1-u)+hash(ix+1,iy)*u)*(1-v)+(hash(ix,iy+1)*(1-u)+hash(ix+1,iy+1)*u)*v;}
+function sandH(x,z){return SAND+(vnoise(x*1.3+5,z*1.3)-0.5)*0.07+(vnoise(x*4,z*4)-0.5)*0.015+Math.sin(x*9+z*2+vnoise(x,z)*4)*0.004-z*0.02;}
+const dents=[];// ミミイカが潜った跡
+const sandGeo=new THREE.PlaneGeometry(TW-2*G,TD-2*G,180,90);sandGeo.rotateX(-Math.PI/2);
+{const p=sandGeo.attributes.position;for(let i=0;i<p.count;i++)p.setY(i,sandH(p.getX(i),p.getZ(i)));sandGeo.computeVertexNormals();}
+// 砂テクスチャ（粒）
+function sandTex(){const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d');g.fillStyle='#cdb892';g.fillRect(0,0,512,512);
+ for(let i=0;i<60000;i++){const v=Math.random();g.fillStyle=v<.45?`rgba(120,95,60,${.25+Math.random()*.3})`:v<.9?`rgba(245,235,210,${.25+Math.random()*.35})`:`rgba(60,50,40,.5)`;g.fillRect(Math.random()*512,Math.random()*512,1+Math.random()*1.5,1+Math.random()*1.5);}
+ const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(4,2);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;return t;}
+const sandMat=new THREE.MeshStandardMaterial({map:sandTex(),roughness:0.95});
+addCaustics(sandMat,1.0);
+const sand=new THREE.Mesh(sandGeo,sandMat);sand.receiveShadow=true;scene.add(sand);
+// 砂の側面（ガラス越しに見える断面）
+{const st=sandTex();{const c=st.image,g=c.getContext('2d');for(let y=0;y<512;y+=3){g.fillStyle=`rgba(${80+Math.random()*60},${60+Math.random()*40},30,${Math.random()*.18})`;g.fillRect(0,y+Math.sin(y)*2,512,2+Math.random()*3);}st.needsUpdate=true;st.repeat.set(3,1);}
+ const sm=new THREE.MeshStandardMaterial({map:st,roughness:1,color:0xc9b48c,side:THREE.DoubleSide,emissive:0x5a4a30});
+ const mk=(w,rot,x,z)=>{const g=new THREE.PlaneGeometry(w,1,120,1);const pos=g.attributes.position;
+  for(let i=0;i<pos.count;i++){const u=pos.getX(i),top=pos.getY(i)>0;const wx=rot?x:u,wz=rot?-u*Math.sign(x):z;const lx=rot?x:u,lz=rot?u:z;
+   pos.setXYZ(i,lx,top?sandH(lx,lz):0.002,lz);}g.computeVertexNormals();const m=new THREE.Mesh(g,sm);scene.add(m);};
+ mk(TW-2*G,false,0,TD/2-G-0.001);mk(TW-2*G,false,0,-(TD/2-G-0.001));mk(TD-2*G,true,TW/2-G-0.001,0);mk(TD-2*G,true,-(TW/2-G-0.001),0);
+ const bottom=new THREE.Mesh(new THREE.BoxGeometry(TW,0.012,TD),new THREE.MeshStandardMaterial({color:0x0a0c0e}));bottom.position.y=-0.004;scene.add(bottom);}
+
+function addCaustics(mat,strength,tint=true){
+ mat.onBeforeCompile=sh=>{sh.uniforms.uTime=uTime;
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvWP=(modelMatrix*vec4(transformed,1.0)).xyz;');
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vWP;uniform float uTime;'+CAUSTIC)
+   .replace('#include <opaque_fragment>',`
+    float under=step(vWP.y,${WATER.toFixed(3)});
+    float cst=causticRGB(vWP,uTime,0.0)*under;
+    float up=clamp(dot(normal,normalize(vec3(0.0,1.0,0.0))),0.0,1.0);
+    outgoingLight+=diffuseColor.rgb*vec3(0.8,0.97,1.0)*cst*${strength.toFixed(2)}*2.2*(0.2+0.8*up);
+    outgoingLight*=mix(vec3(1.0),${tint?'vec3(0.62,0.86,0.95)':'vec3(0.9,0.97,1.0)'},under);
+    #include <opaque_fragment>`);
+ };}
+
+// ---------- 水ボリューム（光のカーテン＋濁り、レイマーチ） ----------
+const volMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.FrontSide,
+ blending:THREE.CustomBlending,blendSrc:THREE.OneFactor,blendDst:THREE.OneMinusSrcAlphaFactor,
+ uniforms:{uTime},
+ vertexShader:`varying vec3 vWP;void main(){vec4 w=modelMatrix*vec4(position,1.0);vWP=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
+ fragmentShader:`varying vec3 vWP;uniform float uTime;${CAUSTIC}
+ float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+ void main(){
+  vec3 ro=cameraPosition, rd=normalize(vWP-cameraPosition);
+  vec3 bmin=vec3(${(-TW/2+G).toFixed(3)},${SAND-0.05},${(-TD/2+G).toFixed(3)}), bmax=vec3(${(TW/2-G).toFixed(3)},${WATER.toFixed(3)},${(TD/2-G).toFixed(3)});
+  vec3 t0=(bmin-ro)/rd,t1=(bmax-ro)/rd; vec3 tn=min(t0,t1),tf=max(t0,t1);
+  float a=max(max(max(tn.x,tn.y),tn.z),0.0), b=min(min(tf.x,tf.y),tf.z);
+  if(b<=a) discard;
+  const int N=40; float dt=(b-a)/float(N); float t=a+dt*h(gl_FragCoord.xy+fract(uTime));
+  float scat=0.0, trans=1.0; float sigma=0.42;
+  for(int i=0;i<N;i++){
+    vec3 p=ro+rd*t;
+    if(p.y<${SAND.toFixed(3)}+0.02) break;
+    float depth=clamp((${WATER.toFixed(3)}-p.y)/1.2,0.0,1.0);
+    float c=causticRGB(p,uTime,depth*0.55);
+    float shaft=pow(c,1.3)*2.0+0.05;
+    scat+=trans*shaft*exp(-depth*1.2)*dt;
+    trans*=exp(-sigma*dt);
+    t+=dt;
+  }
+  float fog=1.0-trans;
+  vec3 wc=vec3(0.03,0.20,0.27);
+  vec3 col=wc*fog+vec3(0.55,0.85,1.0)*scat*0.9;
+  gl_FragColor=vec4(col,fog*0.92);
+ }`});
+const vol=new THREE.Mesh(new THREE.BoxGeometry(TW-2*G,WATER-SAND+0.05,TD-2*G),volMat);
+vol.position.y=(WATER+SAND-0.05)/2;vol.renderOrder=1;scene.add(vol);
+
+// ---------- 水面 ----------
+const surfMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms:{uTime},
+ vertexShader:`uniform float uTime;varying vec3 vWP;varying vec3 vN;
+ float w(vec2 p){return sin(p.x*7.0+uTime*1.3)*0.004+sin(p.y*9.0-uTime*1.1+p.x*2.0)*0.003+sin((p.x+p.y)*15.0+uTime*2.2)*0.0015;}
+ void main(){vec3 p=position;vec2 q=(modelMatrix*vec4(p,1.0)).xz;float e=0.01;float hh=w(q);
+  vN=normalize(vec3(-(w(q+vec2(e,0))-hh)/e,1.0,-(w(q+vec2(0,e))-hh)/e));
+  vec4 wp=modelMatrix*vec4(p,1.0);wp.y+=hh;vWP=wp.xyz;gl_Position=projectionMatrix*viewMatrix*wp;}`,
+ fragmentShader:`varying vec3 vWP;varying vec3 vN;
+ void main(){vec3 v=normalize(cameraPosition-vWP);vec3 n=gl_FrontFacing?vN:-vN;
+  float fr=pow(1.0-abs(dot(n,v)),4.0);
+  vec3 L=normalize(vec3(${LDIR.x},${LDIR.y},${LDIR.z}));vec3 hv=normalize(L+v);float sp=pow(max(dot(n,hv),0.0),120.0);
+  vec3 col=mix(vec3(0.10,0.30,0.38),vec3(0.75,0.9,1.0),fr);
+  float a=gl_FrontFacing?0.18+fr*0.6:0.35+fr*0.5; // 下から見ると全反射気味
+  gl_FragColor=vec4(col+sp*1.5,clamp(a+sp,0.0,1.0));}`});
+const surfGeo=new THREE.PlaneGeometry(TW-2*G,TD-2*G,150,70);surfGeo.rotateX(-Math.PI/2);
+const surf=new THREE.Mesh(surfGeo,surfMat);surf.position.y=WATER;surf.renderOrder=2;scene.add(surf);
+
+// ---------- ガラス ----------
+const glassMat=new THREE.MeshPhysicalMaterial({color:0xcfeee8,transparent:true,opacity:0.08,roughness:0.03,metalness:0,clearcoat:1,clearcoatRoughness:0.02,specularIntensity:1,depthWrite:false,side:THREE.DoubleSide,envMapIntensity:1});
+const edgeMat=new THREE.MeshStandardMaterial({color:0x7fb5ad,transparent:true,opacity:0.55,roughness:0.1,depthWrite:false});
+const panes=[[TW,TH,G,0,TH/2,TD/2-G/2],[TW,TH,G,0,TH/2,-TD/2+G/2],[G,TH,TD-2*G,TW/2-G/2,TH/2,0],[G,TH,TD-2*G,-TW/2+G/2,TH/2,0]];
+for(const[w,h,d,x,y,z]of panes){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),glassMat);m.position.set(x,y,z);m.renderOrder=4;scene.add(m);}
+// ガラスの縁（緑がかった断面）とシリコン
+const eg=new THREE.EdgesGeometry(new THREE.BoxGeometry(TW,TH,TD));const edges=new THREE.LineSegments(eg,new THREE.LineBasicMaterial({color:0x9fd0c8,transparent:true,opacity:0.6}));edges.position.y=TH/2;edges.renderOrder=5;scene.add(edges);
+for(const[x,z]of[[1,1],[1,-1],[-1,1],[-1,-1]]){const s=new THREE.Mesh(new THREE.BoxGeometry(0.018,TH,0.018),edgeMat);s.position.set(x*(TW/2-G),TH/2,z*(TD/2-G));s.renderOrder=5;scene.add(s);}
+// 水位ライン（メニスカス）
+{const mg=new THREE.MeshBasicMaterial({color:0xcff3ff,transparent:true,opacity:0.5,depthWrite:false});
+ for(const[w,rx,x,z]of[[TW-2*G,0,0,TD/2-G-0.002],[TW-2*G,0,0,-TD/2+G+0.002],[TD-2*G,1,TW/2-G-0.002,0],[TD-2*G,1,-TW/2+G+0.002,0]]){const m=new THREE.Mesh(new THREE.PlaneGeometry(w,0.006),mg);m.position.set(x,WATER,z);if(rx)m.rotation.y=Math.PI/2;m.renderOrder=3;scene.add(m);}}
+
+// ---------- マリンスノー ----------
+const NM=500,mg=new THREE.BufferGeometry(),mp=new Float32Array(NM*3),mseed=[];
+for(let i=0;i<NM;i++){mp[i*3]=(Math.random()-.5)*(TW-0.1);mp[i*3+1]=SAND+0.05+Math.random()*(WATER-SAND-0.08);mp[i*3+2]=(Math.random()-.5)*(TD-0.1);mseed.push(Math.random()*10);}
+mg.setAttribute('position',new THREE.BufferAttribute(mp,3));
+const motes=new THREE.Points(mg,new THREE.PointsMaterial({color:0xdff3ff,size:0.008,transparent:true,opacity:0.55,depthWrite:false,blending:THREE.AdditiveBlending}));motes.renderOrder=3;scene.add(motes);
+
+// 砂煙
+const NP=400,pg=new THREE.BufferGeometry(),pp=new Float32Array(NP*3),pv=[];for(let i=0;i<NP;i++){pp[i*3+1]=-10;pv.push({v:new THREE.Vector3(),life:0});}
+pg.setAttribute('position',new THREE.BufferAttribute(pp,3));
+const puffs=new THREE.Points(pg,new THREE.PointsMaterial({color:0xd8c6a0,size:0.012,transparent:true,opacity:0.8,depthWrite:false}));puffs.renderOrder=3;puffs.frustumCulled=false;scene.add(puffs);
+let pIdx=0;function puff(x,z,str=1){const i=pIdx++%NP;pp[i*3]=x+(Math.random()-.5)*0.08;pp[i*3+1]=sandH(x,z)+0.005;pp[i*3+2]=z+(Math.random()-.5)*0.08;
+ const a=Math.random()*6.28;pv[i].v.set(Math.cos(a)*0.12*str,(0.1+Math.random()*0.25)*str,Math.sin(a)*0.12*str);pv[i].life=1;}
+
+// ---------- ミミイカ ----------
+function chromTex(seed){const c=document.createElement('canvas');c.width=512;c.height=256;const g=c.getContext('2d');
+ const gr=g.createLinearGradient(0,0,0,256);gr.addColorStop(0,'#e7a86a');gr.addColorStop(.5,'#f1c79c');gr.addColorStop(1,'#f6e2cc');g.fillStyle=gr;g.fillRect(0,0,512,256);
+ for(let i=0;i<420;i++){const y=Math.pow(Math.random(),1.6)*256;const r=1+Math.random()*4*(1-y/256);const hue=10+Math.random()*25;
+  g.fillStyle=`hsla(${hue},75%,${22+Math.random()*20}%,${.35+Math.random()*.5})`;g.beginPath();g.arc(Math.random()*512,y,r,0,7);g.fill();}
+ // 虹色の反射（イリドフォア）
+ for(let i=0;i<40;i++){g.fillStyle=`hsla(${160+Math.random()*80},80%,70%,.12)`;g.beginPath();g.arc(Math.random()*512,Math.random()*256,4+Math.random()*10,0,7);g.fill();}
+ const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;}
+const food=[];
+class Squid{
+ constructor(i){
+  const s=this.s=0.11;this.g=new THREE.Group();scene.add(this.g);
+  const skin=this.skin=new THREE.MeshPhysicalMaterial({map:chromTex(i),roughness:0.45,clearcoat:0.5,clearcoatRoughness:0.35,emissive:0x3a1e0c,sheen:0.6,sheenColor:new THREE.Color(0x9fe0ff),transmission:0.0,transparent:true,opacity:0.97});
+  addCaustics(skin,0.5,false);
+  const fleshT=new THREE.MeshPhysicalMaterial({color:0xf0c49a,emissive:0x40220e,roughness:0.4,transparent:true,opacity:0.8,sheen:0.5,side:THREE.DoubleSide});
+  // 外套膜（丸い胴）
+  const mantle=new THREE.Mesh(new THREE.SphereGeometry(1,40,28),skin);mantle.scale.set(0.62*s*1.6,0.5*s*1.6,0.52*s*1.6);mantle.position.x=-0.25*s;this.mantle=mantle;
+  // 頭
+  const head=new THREE.Mesh(new THREE.SphereGeometry(1,32,20),skin);head.scale.set(0.42*s*1.6,0.38*s*1.6,0.45*s*1.6);head.position.x=0.55*s;
+  this.g.add(mantle,head);
+  // 目（大きく左右に）
+  this.eyes=[];for(const z of[-1,1]){const eg=new THREE.Group();eg.position.set(0.6*s,0.12*s,z*0.5*s);
+   const w=new THREE.Mesh(new THREE.SphereGeometry(0.26*s,24,16),new THREE.MeshPhysicalMaterial({color:0x3a4146,metalness:0.4,roughness:0.12,clearcoat:1}));
+   const pu=new THREE.Mesh(new THREE.SphereGeometry(0.2*s,20,12),new THREE.MeshStandardMaterial({color:0x05080a,roughness:0.05}));pu.position.z=z*0.1*s;pu.scale.set(1,0.8,1);
+   const gl=new THREE.Mesh(new THREE.SphereGeometry(0.04*s,8,6),new THREE.MeshBasicMaterial({color:0xffffff}));gl.position.set(0.05*s,0.07*s,z*0.24*s);
+   eg.add(w,pu,gl);this.g.add(eg);this.eyes.push(eg);}
+  // 耳ヒレ（左右）
+  this.fins=[];for(const z of[-1,1]){const pv=new THREE.Group();pv.position.set(-0.3*s,0.15*s,z*0.62*s);
+   const shape=new THREE.Shape();shape.moveTo(-0.4*s,0);shape.bezierCurveTo(-0.55*s,0.95*s,0.45*s,1.0*s,0.35*s,0);shape.lineTo(-0.4*s,0);
+   const f=new THREE.Mesh(new THREE.ShapeGeometry(shape,16),fleshT);f.rotation.x=z>0?Math.PI/2:-Math.PI/2;f.position.z=0;
+   pv.add(f);this.g.add(pv);pv.userData.z=z;this.fins.push(pv);}
+  // 腕 8本
+  this.arms=[];const armMat=new THREE.MeshStandardMaterial({color:0xf2c9a0,emissive:0x3a2210,roughness:0.5,transparent:true,opacity:0.95});
+  for(let k=0;k<8;k++){const a=k/8*Math.PI*2;const piv=new THREE.Group();piv.position.set(0.85*s,Math.sin(a)*0.18*s,Math.cos(a)*0.2*s);
+   const len=(k%4===0?1.1:0.85)*s;const cg=new THREE.CylinderGeometry(0.02*s*1.6,0.075*s*1.6,len,8,4);cg.rotateZ(-Math.PI/2);cg.translate(len/2,0,0);
+   const m=new THREE.Mesh(cg,armMat);piv.add(m);piv.userData={a,len};this.g.add(piv);this.arms.push(piv);}
+  this.g.traverse(o=>{if(o.isMesh){o.castShadow=true;o.renderOrder=2;}});
+  this.pos=new THREE.Vector3((i?0.6:-0.6),0.8,(i?-0.2:0.2));this.vel=new THREE.Vector3();this.target=this.pos.clone();
+  this.yaw=i?Math.PI:0;this.t=Math.random()*10;this.state='swim';this.timer=6+Math.random()*6;this.bury=0;this.excite=0;this.blink=0;this.pick();
+ }
+ pick(){this.target.set((Math.random()-.5)*(TW-0.5),SAND+0.2+Math.random()*(WATER-SAND-0.45),(Math.random()-.5)*(TD-0.45));}
+ update(dt){const s=this.s;this.t+=dt;this.timer-=dt;this.blink-=dt;if(this.blink<-3-Math.random()*5)this.blink=0.14;
+  const sh=sandH(this.pos.x,this.pos.z);const f=food.find(f=>!f.eaten);let speed=0.18;
+  if(this.state==='swim'){
+   if(f){this.target.copy(f.m.position);speed=0.42;if(this.pos.distanceTo(f.m.position)<s*1.4){f.eaten=true;scene.remove(f.m);this.excite=1;}}
+   else if(this.pos.distanceTo(this.target)<0.08||Math.random()<dt*0.12)this.pick();
+   if(this.timer<0&&!f){this.state='descend';this.target.set(this.pos.x+(Math.random()-.5)*0.3,0,this.pos.z+(Math.random()-.5)*0.2);}
+  }else if(this.state==='descend'){this.target.y=sandH(this.target.x,this.target.z)+s*0.45;speed=0.12;
+   if(this.pos.distanceTo(this.target)<0.03){this.state='burying';this.timer=2.4;}
+  }else if(this.state==='burying'){this.vel.multiplyScalar(0.9);this.bury=Math.min(1,this.bury+dt*0.42);if(Math.random()<dt*40)puff(this.pos.x,this.pos.z,1);
+   if(this.timer<0){this.state='buried';this.timer=7+Math.random()*7;}
+  }else if(this.state==='buried'){if(this.timer<0||f){this.state='emerge';}
+  }else if(this.state==='emerge'){this.bury=Math.max(0,this.bury-dt*1.1);if(Math.random()<dt*30)puff(this.pos.x,this.pos.z,1.4);
+   if(this.bury<=0){this.state='swim';this.timer=10+Math.random()*10;this.pick();this.pos.y+=0.02;}}
+  if(this.state==='swim'||this.state==='descend'){const d=this.target.clone().sub(this.pos);const L=d.length()||1;
+   const des=d.multiplyScalar(Math.min(speed,L*1.5)/L);this.vel.lerp(des,Math.min(1,dt*1.6));
+   this.vel.y+=Math.sin(this.t*2.1)*0.02*dt*10;}
+  else if(this.state!=='burying'){this.vel.set(0,0,0);}
+  this.pos.addScaledVector(this.vel,dt);
+  // 境界
+  const mx=TW/2-G-0.12,mz=TD/2-G-0.1;this.pos.x=THREE.MathUtils.clamp(this.pos.x,-mx,mx);this.pos.z=THREE.MathUtils.clamp(this.pos.z,-mz,mz);
+  const floor=sandH(this.pos.x,this.pos.z)+s*0.45-this.bury*s*0.95;this.pos.y=THREE.MathUtils.clamp(this.pos.y,floor,WATER-0.1);
+  // 向き（ゆっくり旋回）
+  const hv=Math.hypot(this.vel.x,this.vel.z);if(hv>0.03){const want=Math.atan2(-this.vel.z,this.vel.x);let d=want-this.yaw;d=Math.atan2(Math.sin(d),Math.cos(d));this.yaw+=d*Math.min(1,dt*2.5);}
+  const pitch=THREE.MathUtils.clamp(this.vel.y*2.2,-0.5,0.5);
+  this.g.position.copy(this.pos);this.g.rotation.set(0,this.yaw,pitch,'YXZ');
+  // ヒレのはばたき・腕のゆらぎ・呼吸
+  const flap=(this.state==='swim'?Math.sin(this.t*10)*0.55:Math.sin(this.t*3)*0.2)*(1-this.bury);
+  for(const fn of this.fins)fn.rotation.x=fn.userData.z*(0.25+flap);
+  for(let k=0;k<8;k++){const a=this.arms[k];const ph=this.t*2.4+k;a.rotation.set(0,Math.sin(a.userData.a)*0.0+Math.cos(a.userData.a)*-0.2+Math.sin(ph)*0.1,Math.sin(a.userData.a)*0.2+Math.cos(ph*0.8)*0.12);}
+  const br=1+Math.sin(this.t*3.2)*0.035;this.mantle.scale.y=0.5*s*1.6*br;this.mantle.scale.z=0.52*s*1.6*br;
+  for(const e of this.eyes)e.scale.y=this.blink>0?0.25:1;
+  // 体色変化（興奮すると濃く）
+  this.excite=Math.max(0,this.excite-dt*0.25);const k=1.1+0.6*this.excite+0.1*Math.sin(this.t*0.7);this.skin.color.setRGB(k*1.05,k*0.8,k*0.62);
+ }}
+const squids=[new Squid(0),new Squid(1)];
+
+// ---------- 餌（タップ） ----------
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();let down=null;
+renderer.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
+renderer.domElement.addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;
+ ndc.set(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1);ray.setFromCamera(ndc,camera);const hit=ray.intersectObject(vol)[0];if(!hit)return;
+ const p=hit.point.clone();// 手前のガラス面から少し奥へ
+ p.addScaledVector(ray.ray.direction,0.25);p.x=THREE.MathUtils.clamp(p.x,-TW/2+0.1,TW/2-0.1);p.z=THREE.MathUtils.clamp(p.z,-TD/2+0.1,TD/2-0.1);p.y=Math.min(p.y,WATER-0.03);
+ for(let i=0;i<3;i++){const m=new THREE.Mesh(new THREE.SphereGeometry(0.009,8,6),new THREE.MeshStandardMaterial({color:0xf0dcc0,emissive:0x302010}));m.position.copy(p).add(new THREE.Vector3((Math.random()-.5)*.06,(Math.random()-.5)*.03,(Math.random()-.5)*.06));m.renderOrder=2;scene.add(m);food.push({m,eaten:false});}});
+
+// ---------- ループ ----------
+const clock=new THREE.Clock();
+function loop(){const dt=Math.min(0.05,clock.getDelta());uTime.value+=dt;const t=uTime.value;
+ for(let i=0;i<NM;i++){mp[i*3+1]+=dt*0.006*(0.5+Math.sin(mseed[i])*0.5);mp[i*3]+=Math.sin(t*0.3+mseed[i])*dt*0.004;if(mp[i*3+1]>WATER-0.02)mp[i*3+1]=SAND+0.04;}
+ mg.attributes.position.needsUpdate=true;
+ for(let i=0;i<NP;i++){const q=pv[i];if(q.life<=0)continue;q.life-=dt*0.7;q.v.y-=dt*0.35;q.v.multiplyScalar(1-dt*1.5);pp[i*3]+=q.v.x*dt;pp[i*3+1]+=q.v.y*dt;pp[i*3+2]+=q.v.z*dt;
+  if(q.life<=0||pp[i*3+1]<sandH(pp[i*3],pp[i*3+2])){q.life=0;pp[i*3+1]=-10;}}
+ pg.attributes.position.needsUpdate=true;
+ for(let i=food.length-1;i>=0;i--){const f=food[i];if(f.eaten){food.splice(i,1);continue;}const fl=sandH(f.m.position.x,f.m.position.z)+0.01;f.m.position.y=Math.max(fl,f.m.position.y-dt*0.05);f.m.position.x+=Math.sin(t*2+i)*dt*0.01;}
+ for(const s of squids)s.update(dt);
+ controls.update();renderer.render(scene,camera);requestAnimationFrame(loop);}
+loop();
+</script></body></html>
