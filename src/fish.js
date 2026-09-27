@@ -33,7 +33,7 @@ export const ANATOMY = {
   bottom: spline([[0, -0.01], [0.03, -0.021], [0.06, -0.038], [0.1, -0.072], [0.14, -0.112], [0.2, -0.168], [0.28, -0.228],
     [0.37, -0.27], [0.46, -0.28], [0.55, -0.265], [0.65, -0.225], [0.75, -0.165], [0.85, -0.11], [0.93, -0.08], [1.0, -0.07]]),
   width: spline([[0, 0.0065], [0.03, 0.011], [0.06, 0.016], [0.1, 0.025], [0.15, 0.037], [0.25, 0.052], [0.38, 0.056], [0.5, 0.052],
-    [0.65, 0.045], [0.8, 0.03], [0.92, 0.021], [1.0, 0.018]]),
+    [0.65, 0.045], [0.8, 0.03], [0.9, 0.021], [0.95, 0.016], [0.985, 0.008], [1.0, 0.003]]),
   eye: { s: 0.155, y: 0.066, r: 0.033 },
 };
 
@@ -179,7 +179,7 @@ function finLayouts() {
   // Caudal: 17 principal rays, truncate to slightly rounded
   const nC = 19;
   const cBase = [], cTip = polyline([[1.2, 0.175], [1.225, 0.1], [1.232, 0.0], [1.225, -0.1], [1.2, -0.175]], nC);
-  for (let i = 0; i < nC; i++) { const f = i / (nC - 1); cBase.push([0.985, 0.068 - f * 0.132]); }
+  for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.955 + 0.02 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.006 - f * (top(s) - bottom(s) - 0.012)]); }
   return { dorsal: { base: dBase, tip: dTip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
 
@@ -386,6 +386,19 @@ Paint paint(vec2 p){
       col = mix(yellow, vec3(0.95,0.9,0.7), smoothstep(1.06, 1.14, s));
     }
     col *= 0.96 + 0.08*fbm(p*50.);
+    // scaled sheath over the fin bases, as on the real fish: small scales, opaque, silvery
+    float sheath = dorsal ? 1. - smoothstep(0.003, 0.024, y - top)
+                 : anal   ? 1. - smoothstep(0.003, 0.022, bot - y)
+                 :          1. - smoothstep(0.99, 1.04, s);
+    if (sheath > 0.0) {
+      float sid2, rim2;
+      float sh2 = scales(p * 1.7 + 3.0, sid2, rim2);
+      vec3 bodyC = col * (0.965 + 0.06*sid2) * mix(1.0, 0.92, rim2);
+      col = mix(col, bodyC, sheath);
+      h = sh2 * sheath * 0.8;
+      alpha = mix(alpha, 1.0, sheath);
+      metal = mix(metal, 0.3, sheath); rough = mix(rough, 0.32, sheath);
+    }
   }
 
   o.col = col; o.alpha = alpha; o.h = h; o.rough = rough; o.metal = metal; o.ao = ao;
@@ -499,7 +512,7 @@ export function createButterflyfish(renderer, opts = {}) {
     map: tex.albedo, normalMap: tex.normal, normalScale: new THREE.Vector2(1, 1),
     roughnessMap: tex.orm, metalnessMap: tex.orm, aoMap: tex.orm, aoMapIntensity: 1.0,
     roughness: 1, metalness: 1,
-    clearcoat: 0.4, clearcoatRoughness: 0.22,
+    clearcoat: 0.3, clearcoatRoughness: 0.25,
     iridescence: 0.1, iridescenceIOR: 1.6, iridescenceThicknessRange: [180, 520],
     sheen: 0.25, sheenColor: new THREE.Color(0.7, 0.8, 1.0), sheenRoughness: 0.5,
   });
@@ -521,7 +534,14 @@ export function createButterflyfish(renderer, opts = {}) {
           float r = vFin.x, t = vFin.y;
           float dr = abs(fract(r + 0.5) - 0.5);            // 0 on a ray
           float fw = fwidth(r) * 1.2 + 0.02;
-          float ray = 1.0 - smoothstep(0.03, 0.03 + fw, dr);
+          float rid = floor(r + 0.5);
+          float rh = fract(sin(rid * 91.7) * 43758.5);
+          // soft rays fork in their distal half: a second, fainter line appears beside each ray
+          float fork = smoothstep(0.45, 0.7, t) * (1.0 - smoothstep(0.0, 0.0, uSpines - r));
+          float dr2 = abs(dr - 0.09 * fork);
+          float ray = 1.0 - smoothstep(0.025, 0.025 + fw, min(dr, dr2 + 0.01 * (1.0 - fork)));
+          ray *= 0.75 + 0.25 * rh;
+          ray *= 0.85 + 0.15 * step(0.5, fract(t * 22.0 + rh));   // segmented joints
           bool spine = r < uSpines + 0.01;
           float kind = uKind;
           // membrane translucency: thinner toward the edge
@@ -533,7 +553,7 @@ export function createButterflyfish(renderer, opts = {}) {
           } else if (kind < 2.5) {       // caudal: yellow base, clear distal half, dark submarginal bar
             memA = mix(0.95, 0.5, smoothstep(0.35, 0.8, t));
           } else {                       // pectoral (clear) / pelvic (white)
-            memA = kind < 3.5 ? mix(0.16, 0.05, t) : mix(0.92, 0.75, t);
+            memA = kind < 3.5 ? mix(0.1, 0.03, t) : mix(0.92, 0.75, t);
           }
           vec3 c = diffuseColor.rgb;
           #ifdef USE_MAP
@@ -543,9 +563,10 @@ export function createButterflyfish(renderer, opts = {}) {
           #endif
           // soft-ray fins: dark submarginal line and pale translucent margin
           if (kind < 1.5 && !spine) {
-            float sub = smoothstep(0.80, 0.84, t) * (1.0 - smoothstep(0.88, 0.91, t));
-            c = mix(c, vec3(0.08, 0.05, 0.03), sub * 0.85);
-            float mar = smoothstep(0.9, 0.95, t);
+            float sub = smoothstep(0.845, 0.86, t) * (1.0 - smoothstep(0.878, 0.892, t));
+            c = mix(c, vec3(0.03, 0.02, 0.015), sub * 0.95);
+            memA = mix(memA, 0.95, sub);
+            float mar = smoothstep(0.895, 0.93, t);
             c = mix(c, vec3(0.95, 0.95, 0.9), mar * 0.8); memA = mix(memA, 0.35, mar);
           }
           if (kind > 1.5 && kind < 2.5) {
@@ -559,9 +580,10 @@ export function createButterflyfish(renderer, opts = {}) {
           // rays are denser and lighter; spines are white and stiff
           vec3 rayC = spine ? vec3(0.97) : mix(c, c * 1.12 + 0.04, 0.8);
           c = mix(c, rayC, ray * (spine ? 0.9 : 0.4));
-          float a = mix(memA, spine ? 0.98 : (kind > 2.5 && kind < 3.5 ? 0.3 : 0.93), ray);
+          float a = mix(memA, spine ? 0.98 : (kind > 2.5 && kind < 3.5 ? 0.16 : 0.93), ray);
           a = mix(a, 1.0, opaque);
           a *= smoothstep(0.0, 0.03, 1.0 - t + 0.02);        // feather the very edge
+          if (kind > 2.5 && kind < 3.5) a *= smoothstep(0.05, 0.45, abs(dot(normalize(vNormal), normalize(vViewPosition))));   // clear fin vanishes edge-on
           diffuseColor = vec4(c, a);
           vFinGlow = c * (1.0 - a) * 0.35;
         }`)
@@ -572,7 +594,7 @@ export function createButterflyfish(renderer, opts = {}) {
     const m = new THREE.MeshPhysicalMaterial({
       map: kind < 3 ? tex.albedo : null, color: 0xffffff,
       roughness: 0.42, metalness: 0.0, transparent: true, side: THREE.DoubleSide,
-      clearcoat: kind === 3 ? 0.15 : 0.3, clearcoatRoughness: 0.25, depthWrite: true,
+      clearcoat: kind === 3 ? 0.0 : 0.3, clearcoatRoughness: 0.25, depthWrite: true,
       sheen: kind === 3 ? 0.0 : 0.15, sheenColor: new THREE.Color(1, 1, 1), sheenRoughness: 0.6,
     });
     const u = { uKind: { value: kind }, uSpines: { value: spines }, uGlow: uniforms.uGlow };
@@ -607,7 +629,7 @@ export function createButterflyfish(renderer, opts = {}) {
   // -- filament: the "thread" trailing from the soft dorsal
   let fi = 0; layouts.dorsal.tip.forEach((p, i) => { if (p[0] > layouts.dorsal.tip[fi][0]) fi = i; });
   const fb0 = layouts.dorsal.base[fi], fb1 = layouts.dorsal.tip[fi];
-  const fm = [fb0[0] + (fb1[0] - fb0[0]) * 0.55, fb0[1] + (fb1[1] - fb0[1]) * 0.55];
+  const fm = [fb0[0] + (fb1[0] - fb0[0]) * 0.9, fb0[1] + (fb1[1] - fb0[1]) * 0.9];
   const fb = fb1;
   const filCurve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(sx(fm[0]), fm[1], 0), new THREE.Vector3(sx(fb[0]), fb[1], 0),
@@ -624,7 +646,12 @@ export function createButterflyfish(renderer, opts = {}) {
     fp.setXYZ(i, v.x, v.y, v.z);
   }
   filGeo.computeVertexNormals();
-  const filMat = new THREE.MeshPhysicalMaterial({ color: 0xf6d27a, roughness: 0.45, clearcoat: 0.3 });
+  {  // yellow at the base fading to translucent white at the tip
+    const fc = [];
+    for (let i = 0; i < fp.count; i++) { const f = Math.min(1, Math.floor(i / 7) / 96); fc.push(1.0, 0.8 + 0.18 * f, 0.35 + 0.6 * f); }
+    filGeo.setAttribute('color', new THREE.Float32BufferAttribute(fc, 3));
+  }
+  const filMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.45, clearcoat: 0.3, sheen: 0.4, sheenColor: new THREE.Color(1, 1, 0.9) });
   addSwim(filMat, uniforms, { key: 'fil' });
   const fil = new THREE.Mesh(filGeo, filMat);
   group.add(fil);
@@ -703,6 +730,7 @@ export function createButterflyfish(renderer, opts = {}) {
   }
 
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  for (const p of pairs) p.traverse((o) => { o.castShadow = false; });   // clear/thin paired fins cast no solid shadow
 
   let phase = 0;
   function update(dt, t, { amp = 0.04, freq = 1.6, turn = 0 } = {}) {
@@ -753,7 +781,7 @@ function makeEyeTexture() {
       const f = (r - pupil) / (iris - pupil);
       const fib = 0.75 + 0.25 * Math.sin(a * 60 + rnd(Math.floor(a * 30)) * 6) * rnd(Math.floor(a * 90) + 7);
       // thin bright golden collar next to the pupil, darker bronze outward
-      const collar = Math.exp(-Math.pow((f - 0.1) / 0.07, 2));
+      const collar = 0.7 * Math.exp(-Math.pow((f - 0.1) / 0.06, 2));
       const base = [72, 52, 26].map((v) => v * (1 - 0.65 * f));
       col = base.map((v, i) => v * fib + collar * [150, 115, 55][i]);
     } else {

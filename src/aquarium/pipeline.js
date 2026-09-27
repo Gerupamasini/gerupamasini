@@ -111,6 +111,35 @@ class AquariumRenderPass extends Pass {
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: 'uniform sampler2D t; varying vec2 vUv; void main(){ gl_FragColor = texture2D(t, vUv); }',
     }));
+    // depth of field: golden-spiral gather, weighted by each tap's own circle of confusion
+    this.dof = new FullScreenQuad(new THREE.ShaderMaterial({
+      uniforms: { tColor: { value: null }, tDepth: { value: null }, uInvProj: { value: new THREE.Matrix4() },
+        uFocus: { value: 0.8 }, uAperture: { value: 0.0 }, uRes: { value: new THREE.Vector2(1, 1) } },
+      depthTest: false, depthWrite: false,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: /* glsl */`
+        uniform sampler2D tColor; uniform sampler2D tDepth; uniform mat4 uInvProj;
+        uniform float uFocus; uniform float uAperture; uniform vec2 uRes;
+        varying vec2 vUv;
+        float dist(vec2 uv){ float d = texture2D(tDepth, uv).x; vec4 v = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return length(v.xyz / v.w); }
+        float coc(float z){ return clamp(abs(1.0 / uFocus - 1.0 / z) * uAperture * uRes.y, 0.0, 14.0); }
+        void main(){
+          vec3 c0 = texture2D(tColor, vUv).rgb;
+          float r0 = coc(dist(vUv));
+          if (uAperture <= 0.0 || r0 < 0.5) { gl_FragColor = vec4(c0, 1.0); return; }
+          vec3 acc = c0; float wsum = 1.0;
+          for (int i = 1; i < 32; i++) {
+            float fi = float(i);
+            float rr = sqrt(fi / 32.0) * r0;
+            float a = fi * 2.39996323;
+            vec2 uv = vUv + vec2(cos(a), sin(a)) * rr / uRes;
+            float ri = coc(dist(uv));
+            float w = smoothstep(rr - 1.0, rr + 1.0, ri + 0.5);   // a tap only contributes if it would blur this far
+            acc += texture2D(tColor, uv).rgb * w; wsum += w;
+          }
+          gl_FragColor = vec4(acc / wsum, 1.0);
+        }`,
+    }));
     this.frame = 0;
   }
   setSize(w, h) {
@@ -150,8 +179,11 @@ class AquariumRenderPass extends Pass {
     cam.layers.enableAll();
     // out
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
-    this.copy.material.uniforms.t.value = this.sceneRT.texture;
-    this.copy.render(renderer);
+    const du = this.dof.material.uniforms;
+    du.tColor.value = this.sceneRT.texture; du.tDepth.value = this.sceneRT.depthTexture;
+    du.uInvProj.value.copy(cam.projectionMatrixInverse);
+    du.uRes.value.set(this.sceneRT.width, this.sceneRT.height);
+    this.dof.render(renderer);
     renderer.autoClear = autoClear;
   }
 }
@@ -180,7 +212,7 @@ export function createPipeline(renderer, scene, camera, opts) {
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }));
   const main = new AquariumRenderPass(renderer, scene, camera, opts);
   composer.addPass(main);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.35, 0.6, 1.1);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.3, 0.6, 1.7);
   composer.addPass(bloom);
   const grade = new ShaderPass(GRADE);
   composer.addPass(grade);

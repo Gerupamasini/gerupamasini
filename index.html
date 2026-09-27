@@ -45,7 +45,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TANK } from './src/aquarium/config.js';
 import { createCaustics, causticUniforms, addCaustics, meanRefracted, createSurface } from './src/aquarium/water.js';
 import { createReef } from './src/aquarium/reef.js';
-import { buildEnvironment, createTank, createRoom } from './src/aquarium/tank.js';
+import { buildEnvironment, buildUnderwaterEnvironment, createTank, createRoom } from './src/aquarium/tank.js';
 import { createBubbles, createSpecks } from './src/aquarium/fx.js';
 import { createPipeline, LAYER_TRANSPARENT } from './src/aquarium/pipeline.js';
 import { Butterflyfish } from './src/aquarium/school.js';
@@ -66,6 +66,7 @@ scene.background = new THREE.Color(0x030405);
 const env = buildEnvironment(renderer);
 scene.environment = env.pmrem;
 scene.environmentIntensity = 0.35;
+const uwEnv = buildUnderwaterEnvironment(renderer);
 
 // --- lights: the LED bar over the tank is the "sun" whose light makes the caustics
 const sun = new THREE.DirectionalLight(0xf4f8ff, 2.8);
@@ -111,10 +112,12 @@ const submerged = [reef.group, f1.obj, f2.obj];
 for (const g of submerged) g.traverse((o) => {
   if (o.isMesh && o.material && !o.material.isShaderMaterial && !o.material.userData.caustic) {
     o.material.userData.caustic = true;
+    o.material.envMap = uwEnv;
+    o.material.envMapIntensity = o.material.envMapIntensity === 1 ? 0.6 : o.material.envMapIntensity;
     addCaustics(o.material, cu);
   }
 });
-for (const f of fishModels) f.obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.material.envMapIntensity = 1.4; } });
+for (const f of fishModels) f.obj.traverse((o) => { if (o.isMesh) o.material.envMapIntensity = 0.9; });
 
 // --- camera
 const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.02, 30);
@@ -153,7 +156,7 @@ for (const o of [surface.mesh, bubbles.mesh, specks.points, ...tank.transparent]
 // --- ui
 const ui = document.getElementById('ui');
 if (Q.has('noui')) ui.classList.add('hidden');
-let follow = false, paused = false;
+let follow = false, paused = false, dofOn = !Q.has('nodof');
 const press = (b, on) => b.setAttribute('aria-pressed', on);
 document.getElementById('bView').onclick = (e) => {
   const v = VIEWS.front; camera.position.set(...v.pos); controls.target.set(...v.target); follow = false; press(document.getElementById('bFollow'), false);
@@ -184,9 +187,27 @@ if (Q.has('pose')) {   // evaluation pose: fish side-on to the front glass
 // warm up the fish behaviour so a still frame shows them mid-swim
 for (let i = 0; i < +(Q.get('warm') || 0) * 30; i++) { for (const f of fishModels) f.update(1 / 30); t += 1 / 30; }
 const followPos = new THREE.Vector3();
+// adaptive resolution: keep the frame rate up by trading pixel density
+const maxPR = renderer.getPixelRatio();
+let prNow = maxPR, ftAcc = 0, ftN = 0;
+function adapt(dt) {
+  if (Q.has('shot')) return;
+  ftAcc += dt; ftN++;
+  if (ftN < 45) return;
+  const avg = ftAcc / ftN; ftAcc = 0; ftN = 0;
+  const next = avg > 0.024 ? Math.max(0.55, prNow - 0.15) : avg < 0.0145 ? Math.min(maxPR, prNow + 0.1) : prNow;
+  if (Math.abs(next - prNow) > 0.01) {
+    prNow = next;
+    renderer.setPixelRatio(prNow);
+    pipeline.setSize(innerWidth, innerHeight);
+    renderer.getDrawingBufferSize(surface.uniforms.uRes.value);
+    specks.points.material.uniforms.uPx.value = prNow;
+  }
+}
 renderer.setAnimationLoop(() => {
-  const dt = paused ? 0 : Math.min(clock.getDelta(), 1 / 20);
-  if (paused) clock.getDelta();
+  const raw = clock.getDelta();
+  adapt(raw);
+  const dt = paused ? 0 : Math.min(raw, 1 / 20);
   t += dt;
   for (const f of fishModels) f.update(dt);
   reef.update(t);
@@ -201,6 +222,13 @@ renderer.setAnimationLoop(() => {
     controls.target.lerp(p, 1 - Math.exp(-dt * 3));
   }
   controls.update();
+  {  // focus on the nearer fish when close, otherwise keep everything sharp
+    const du = pipeline.main.dof.material.uniforms;
+    const d = Math.min(camera.position.distanceTo(f1.p), camera.position.distanceTo(f2.p));
+    du.uFocus.value += (d - du.uFocus.value) * Math.min(1, dt * 4 + (frames < 2 ? 1 : 0));
+    const close = THREE.MathUtils.smoothstep(1.3, 0.6, camera.position.distanceTo(controls.target));
+    du.uAperture.value = dofOn ? 0.0035 * close : 0;
+  }
   if (Q.has('direct')) renderer.render(scene, camera); else pipeline.render(dt, t);
   if (++frames === 4) { window.__ready = true; document.getElementById('load').remove(); }
 });

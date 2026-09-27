@@ -111,7 +111,7 @@ function rockGeometry(seed, r, stretch = [1, 0.7, 1], detail = 6) {
 }
 
 function rockMaterial() {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.3 });
   patch(mat, {
     key: 'rock',
     color: /* glsl */`{
@@ -319,13 +319,15 @@ function leatherCoral(seed, { r = 0.07, color = [0.78, 0.7, 0.45] }) {
   cap.rotateX(-Math.PI / 2);
   cap.translate(0, r * 0.8, 0);
   cap.computeVertexNormals();
-  const capMesh = new THREE.Mesh(cap, new THREE.MeshPhysicalMaterial({ color: new THREE.Color(...color), roughness: 0.8, side: THREE.DoubleSide }));
+  const capMat = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(...color), roughness: 0.8, side: THREE.DoubleSide });
+  capMat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\nif (!gl_FrontFacing) diffuseColor.rgb *= 0.55;'); };
+  const capMesh = new THREE.Mesh(cap, capMat);
   group.add(capMesh);
   // polyps
-  const pg = new THREE.CylinderGeometry(0.0006, 0.0009, 0.009, 5, 3);
-  pg.translate(0, 0.0045, 0);
+  const pg = new THREE.CylinderGeometry(0.0004, 0.0007, 0.005, 5, 2);
+  pg.translate(0, 0.0025, 0);
   const pm = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(color[0] * 1.1, color[1] * 1.1, color[2]), roughness: 0.6, emissive: new THREE.Color(0.3, 0.5, 0.2), emissiveIntensity: 0.08 });
-  const n = 700;
+  const n = 1600;
   const inst = new THREE.InstancedMesh(pg, pm, n);
   const M = new THREE.Matrix4();
   for (let i = 0; i < n; i++) {
@@ -341,28 +343,32 @@ function leatherCoral(seed, { r = 0.07, color = [0.78, 0.7, 0.45] }) {
   return group;
 }
 
-// Zoanthid colony: a mat of short polyps with bright oral discs.
-function zoanthids(seed, { r = 0.04, disc = [0.2, 0.9, 0.5], ring = [1, 0.5, 0.1], count = 40 }) {
+// Zoanthid colony: packed polyps, each a short column flaring into an oral disc with a
+// dark mouth, a coloured disc, a contrasting rim and a fringe of short tentacles.
+function zoanthids(seed, { r = 0.04, disc = [0.2, 0.9, 0.5], ring = [1, 0.5, 0.1], count = 70 }) {
   const rnd = mulberry32(seed);
-  const g = new THREE.CylinderGeometry(0.005, 0.0045, 0.012, 12, 1);
-  g.translate(0, 0.006, 0);
+  const prof = [[0.0035, 0], [0.0033, 0.006], [0.0045, 0.0085], [0.0062, 0.0098], [0.0066, 0.0103], [0.0058, 0.0106],
+    [0.0042, 0.0104], [0.0022, 0.0101], [0.0008, 0.0098], [0.0, 0.0096]];
+  const cols = [[0.35, 0.28, 0.2], [0.4, 0.32, 0.22], ring.map((c) => c * 0.8), ring, ring, [0.95, 0.95, 0.85].map((c, i) => c * 0.5 + ring[i] * 0.5),
+    disc, disc, [0.15, 0.1, 0.08], [0.1, 0.07, 0.05]];
+  const g = new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 18);
   const colors = [];
-  const pa = g.attributes.position;
-  for (let i = 0; i < pa.count; i++) {
-    const y = pa.getY(i), rad = Math.hypot(pa.getX(i), pa.getZ(i));
-    const c = y > 0.0115 ? (rad < 0.0028 ? disc : ring) : [0.4, 0.3, 0.2];
-    colors.push(...c);
-  }
+  const segs = prof.length;
+  for (let i = 0; i < g.attributes.position.count; i++) colors.push(...cols[i % segs]);
   g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  const mat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, emissive: new THREE.Color(...disc), emissiveIntensity: 0.25, clearcoat: 0.4 });
+  g.computeVertexNormals();
+  const mat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, emissive: new THREE.Color(...disc), emissiveIntensity: 0.2, clearcoat: 0.5, side: THREE.DoubleSide });
   const inst = new THREE.InstancedMesh(g, mat, count);
-  const M = new THREE.Matrix4();
+  const M = new THREE.Matrix4(), S = new THREE.Vector3(), P = new THREE.Vector3(), Qt = new THREE.Quaternion();
   for (let i = 0; i < count; i++) {
-    const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * r;
-    M.makeRotationFromEuler(new THREE.Euler((rnd() - 0.5) * 0.4, rnd() * 6, (rnd() - 0.5) * 0.4));
-    M.setPosition(Math.cos(a) * rr, 0, Math.sin(a) * rr);
-    inst.setMatrixAt(i, M);
+    const a = i * 2.39996 + rnd() * 0.3, rr = Math.sqrt((i + 0.5) / count) * r;
+    const sc = 0.8 + rnd() * 0.45;
+    Qt.setFromEuler(new THREE.Euler((rnd() - 0.5) * 0.5 + Math.sin(a) * rr / r * 0.5, rnd() * 6, (rnd() - 0.5) * 0.5 - Math.cos(a) * rr / r * 0.5));
+    P.set(Math.cos(a) * rr, -0.002 * rr / r, Math.sin(a) * rr);
+    S.set(sc, sc * (0.8 + rnd() * 0.5), sc);
+    inst.setMatrixAt(i, M.compose(P, Qt, S));
   }
+  inst.castShadow = true;
   return inst;
 }
 
@@ -444,7 +450,7 @@ export function createReef() {
   const rockMat = rockMaterial();
   const obstacles = [];   // spheres the fish keep clear of
   const rock = (seed, x, z, r, st, rotY = 0, yOff = 0) => {
-    const m = new THREE.Mesh(rockGeometry(seed, r, st, r > 0.05 ? 7 : 6), rockMat);
+    const m = new THREE.Mesh(rockGeometry(seed, r, st, r > 0.07 ? 7 : 6), rockMat);
     const y = sandHeight(x, z) + r * st[1] * 0.35 + yOff;
     m.position.set(x, y, z);
     m.rotation.y = rotY;
@@ -487,8 +493,8 @@ export function createReef() {
   place(zoanthids(61, {}), -0.42, -0.1, 0.1);
   place(zoanthids(62, { disc: [1, 0.4, 0.2], ring: [0.3, 0.9, 0.9] }), 0.44, 0.06, 0.035);
   place(zoanthids(63, { disc: [0.8, 0.95, 0.2], ring: [0.8, 0.2, 0.6], count: 28 }), 0.02, -0.16, 0.07);
-  place(leatherCoral(81, {}), 0.2, -0.02, 0.0, 1.0, 0.4);
-  place(leatherCoral(82, { r: 0.05, color: [0.65, 0.72, 0.5] }), -0.2, 0.0, 0.0, 1.0, 1.4);
+  place(leatherCoral(81, { r: 0.06 }), 0.22, -0.1, 0.0, 1.0, 0.4);
+  place(leatherCoral(82, { r: 0.045, color: [0.65, 0.72, 0.5] }), -0.17, -0.12, 0.0, 1.0, 1.4);
   place(seagrass(71, { count: 50 }), 0.52, -0.2, 0);
   place(seagrass(72, { count: 36, h: 0.16, color: 0x5a8a2c }), -0.52, -0.22, 0);
   place(seagrass(73, { count: 24, h: 0.12, color: 0x2f6a3a }), -0.18, -0.22, 0);

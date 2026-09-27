@@ -211,9 +211,12 @@ export function createSurface(cu, { envMap, sceneTex, resolution }) {
         float rp = (n1*cost - n2*cosi) / (n1*cost + n2*cosi);
         return 0.5 * (rs*rs + rp*rp);
       }
+      float edgeW;
       vec3 sampleScene(vec3 worldP){
         vec4 c = projectionMatrix * viewMatrix * vec4(worldP, 1.0);
         vec2 uv = c.xy / c.w * 0.5 + 0.5;
+        vec2 e = smoothstep(vec2(0.0), vec2(0.08), uv) * smoothstep(vec2(1.0), vec2(0.92), uv);
+        edgeW = e.x * e.y * step(0.0, c.w);
         return texture2D(uScene, clamp(uv, 0.001, 0.999)).rgb;
       }
       void main(){
@@ -238,8 +241,8 @@ export function createSurface(cu, { envMap, sceneTex, resolution }) {
           float cosi = max(dot(-V, nb), 0.0);
           float F = fresnel(cosi, 1.333, 1.0);
           vec3 R = reflect(V, nb);
-          vec3 refl = sampleScene(vW + R * 0.25);
-          refl = mix(refl, uDeep, 0.35);
+          vec3 refl = sampleScene(vW + R * 0.18);
+          refl = mix(uDeep, refl, edgeW * 0.7);
           vec3 T = refract(V, nb, 1.333);
           vec3 sky = (dot(T,T) > 0.0) ? textureLod(uEnv, T, 2.0).rgb * 1.2 + uLightCol * pow(max(dot(T, -uLightDirW), 0.0), 60.0) * 2.5 : vec3(0.0);
           col = mix(sky, refl, F);

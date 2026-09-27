@@ -32,6 +32,6 @@ await pg.route(/cdn\.jsdelivr\.net\/npm\/three@[^/]+\/(.*)$/, async route => {
 await pg.goto(`http://localhost:${port}/${page}`);
 await pg.waitForFunction(() => window.__ready === true, null, { timeout: 120000 }).catch(() => console.log('ready timeout'));
 await pg.waitForTimeout(+wait);
-await pg.screenshot({ path: out });
+await pg.screenshot({ path: out, timeout: 180000 });
 await browser.close();
 server.close();

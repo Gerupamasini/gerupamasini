@@ -28,6 +28,31 @@ export function buildEnvironment(renderer) {
   return { pmrem, cube: crt.texture };
 }
 
+// What a submerged object "sees": Snell's window overhead, blue water around, sand below.
+export function buildUnderwaterEnvironment(renderer) {
+  const env = new THREE.Scene();
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(5, 64, 32), new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `varying vec3 vD;
+      void main(){
+        float y = vD.y;
+        vec3 water = mix(vec3(0.02, 0.09, 0.14), vec3(0.06, 0.24, 0.34), smoothstep(-0.2, 0.6, y));
+        float win = smoothstep(0.62, 0.72, y);                         // Snell's window, 48.6 deg half-angle
+        vec3 c = mix(water, vec3(1.6, 1.8, 1.9), win);
+        c += vec3(5.0) * smoothstep(0.97, 0.995, y);                    // the fixture seen through the surface
+        vec3 sand = vec3(0.42, 0.4, 0.34);
+        c = mix(c, sand, smoothstep(-0.05, -0.35, y));
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  }));
+  env.add(sky);
+  const pm = new THREE.PMREMGenerator(renderer);
+  const tex = pm.fromScene(env, 0.0).texture;
+  pm.dispose();
+  return tex;
+}
+
 // Custom glass: Fresnel reflections at full strength over a faint green body tint; the
 // polished edges of each pane glow green (you look along the glass), and a bright
 // meniscus line marks where the water meets the glass.

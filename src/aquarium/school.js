@@ -35,8 +35,8 @@ export class Butterflyfish {
     let goal = this.target.clone();
     if (this.leader) {
       // stay a body length or two beside / behind the partner
-      const off = new THREE.Vector3(-Math.cos(this.leader.yaw), 0, Math.sin(this.leader.yaw)).multiplyScalar(0.16)
-        .add(new THREE.Vector3(Math.sin(this.leader.yaw), 0.03, Math.cos(this.leader.yaw)).multiplyScalar(0.07));
+      const off = new THREE.Vector3(-Math.cos(this.leader.yaw), 0, Math.sin(this.leader.yaw)).multiplyScalar(0.2)
+        .add(new THREE.Vector3(Math.sin(this.leader.yaw), 0.35, Math.cos(this.leader.yaw)).multiplyScalar(0.12));
       goal = this.leader.p.clone().add(off);
     } else if (this.p.distanceTo(this.target) < 0.08 || this.modeT < -12) {
       this.target = this.pickTarget(); this.modeT = 0;
@@ -60,6 +60,10 @@ export class Butterflyfish {
     for (const o of this.obstacles) {
       const d = this.p.distanceTo(o.c) - o.r;
       if (d < 0.08) avoid.addScaledVector(this.p.clone().sub(o.c).normalize(), Math.pow(1 - Math.max(d, 0) / 0.08, 2) * 2.5);
+    }
+    if (this.leader) {
+      const d = this.p.distanceTo(this.leader.p);
+      if (d < 0.12) avoid.addScaledVector(this.p.clone().sub(this.leader.p).normalize(), (1 - d / 0.12) * 3);
     }
     const steer = desired.add(avoid).normalize();
     const wantYaw = Math.atan2(-steer.z, steer.x);
