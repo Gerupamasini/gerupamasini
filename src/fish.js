@@ -373,11 +373,12 @@ Paint paint(vec2 p){
     // head: snout white-grey, darker tip; lips; gill cover rim
     float snout = 1. - smoothstep(0.02, 0.1, s);
     col = mix(col, vec3(0.8, 0.79, 0.78), snout * 0.7);
-    col = mix(col, vec3(0.74, 0.66, 0.66), 1. - smoothstep(0.006, 0.02, s));          // greyish-pink lips
+    col = mix(col, vec3(0.5, 0.48, 0.5), 1. - smoothstep(0.005, 0.016, s));          // thin grey lips
     float slit = (1. - smoothstep(0.0012, 0.003, abs(y + 0.001))) * (1. - smoothstep(0.004, 0.012, s));
     col = mix(col, vec3(0.2, 0.15, 0.15), slit); h -= 0.8 * slit;
     float opR = length((p - vec2(0.14, 0.0)) * vec2(1.0, 0.75));
-    float op = (1. - smoothstep(0.0, 0.005, abs(opR - 0.115))) * smoothstep(0.12, -0.05, y) * step(0.15, s);
+    float op = (1. - smoothstep(0.0, 0.007, abs(opR - 0.115))) * smoothstep(0.12, -0.05, y) * step(0.15, s);
+    col = mix(col, vec3(0.93, 0.93, 0.95), (1. - smoothstep(0.004, 0.012, abs(opR - 0.125))) * smoothstep(0.1, -0.05, y) * step(0.2, s) * 0.5 * (1.0 - bandM));   // pale gill-cover margin
     h -= 0.35 * op; col *= 1. - 0.06 * op;
     for (int k = 0; k < 2; k++) {   // nostrils
       vec2 nc = vec2(0.105 + 0.012*float(k), 0.075 + 0.004*float(k));
@@ -627,7 +628,7 @@ export function createButterflyfish(renderer, opts = {}) {
             c = mix(c, vec3(0.95, 0.93, 0.85), smoothstep(0.79, 0.84, t) * 0.8);
           }
           if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.9, 0.6), vec3(0.9), t); ray *= 0.6; }
-          if (kind > 3.5) c = mix(vec3(0.97, 0.93, 0.78), vec3(0.98, 0.97, 0.92), t);   // pelvics: white with a yellowish base
+          if (kind > 3.5) { c = mix(vec3(0.97, 0.86, 0.45), vec3(0.98, 0.95, 0.8), t); c = mix(c, vec3(0.25, 0.2, 0.15), (1.0 - smoothstep(0.0, 0.6, r)) * 0.7); }   // pelvics: yellow-white, dark leading spine
           // rays: faint ridges only (the membrane is thick)
           vec3 rayC = spine ? c * 1.06 + 0.02 : c * 1.05 + 0.015;
           c = mix(c, rayC, ray * 0.07);
@@ -757,7 +758,7 @@ export function createButterflyfish(renderer, opts = {}) {
     group.add(pecPivot);
     pairs.push(pecPivot);
     // pelvic: white, with a stout spine, points down/back
-    const vg = buildPairedFin({ len: 0.13, span: 0.025, n: 7, shape: (f) => 1.0 - 0.6 * Math.pow(f, 0.8) });
+    const vg = buildPairedFin({ len: 0.17, span: 0.025, n: 7, shape: (f) => 1.0 - 0.6 * Math.pow(f, 0.8) });
     const pel = new THREE.Mesh(vg, pelMat);
     const pelPivot = new THREE.Group();
     pelPivot.position.set(sx(0.31), ANATOMY.bottom(0.31) + 0.012, side * 0.01);

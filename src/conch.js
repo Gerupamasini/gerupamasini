@@ -11,7 +11,7 @@ function bodyR(x) {
     return (2 * e3 - 3 * e2 + 1) * 0.135 + (e3 - 2 * e2 + e) * 1.4 * 0.11 + (-2 * e3 + 3 * e2) * 0.31;
   }
   const t = (x - 0.3) / 0.68;
-  return 0.31 * (1 - t) + 0.06 * t + 0.03 * Math.sin(t * Math.PI);    // convex flanks: squat shell (L:W ~ 1.6)
+  return 0.31 * (1 - t) + 0.03 * t + 0.03 * Math.sin(t * Math.PI);    // convex flanks narrowing to a closed anterior canal
 }
 // Spire: low stepped cone of ~7 whorls with sutures
 function spireR(x) {

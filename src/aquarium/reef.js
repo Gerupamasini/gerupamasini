@@ -133,11 +133,15 @@ function rockMaterial() {
       float pore = smoothstep(0.74, 0.84, vn3(q * 14.0)) * smoothstep(0.4, 0.65, fbmS(q * 2.0));
       c *= 1.0 - 0.12 * pore;
       c *= 0.75 + 0.35 * smoothstep(0.2, 0.8, fbmS(q * 4.0 + 9.0));
+      // deep porous cavities (live rock is riddled with holes) read as dark occluded pits
+      float cav = smoothstep(0.62, 0.78, vn3(q * 3.2 + 13.0)) * smoothstep(0.3, 0.6, fbmS(q * 1.1 + 4.0));
+      c *= 1.0 - 0.7 * cav;
       diffuseColor.rgb *= c;
     }`,
     normal: /* glsl */`{
       vec3 q = vObjP * 22.0;
       float h = fbmS(q * 3.0) * 0.6 + vn3(q * 30.0) * 0.2 - smoothstep(0.7, 0.82, vn3(q * 14.0)) * 0.3;
+      h -= 0.9 * smoothstep(0.62, 0.78, vn3(q * 3.2 + 13.0)) * smoothstep(0.3, 0.6, fbmS(q * 1.1 + 4.0));
       normal = bumpN(normal, -vViewPosition, h, 0.0016);
     }`,
   });
