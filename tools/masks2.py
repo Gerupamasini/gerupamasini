@@ -18,7 +18,7 @@ warm=(s>0.38)&(h>6)&(h<38)&sil
 warm=clean(warm,2,6,3000); warm=ndi.binary_fill_holes(warm)
 # fins at the very rear are warm even where photo is washed out
 warm|=sil&(ss>1.0)
-warm=(cv2.GaussianBlur(warm.astype(np.float32),(0,0),12)>0.5)&sil   # smooth, clean boundary
+warm=(cv2.GaussianBlur(warm.astype(np.float32),(0,0),30)>0.5)&sil   # smooth, clean boundary
 # --- neutral black
 blk=(v<0.3)&(s<0.55)&sil&(edge>4)
 blk=clean(blk,1,5,300); blk=ndi.binary_fill_holes(blk)
@@ -35,7 +35,50 @@ st&=~(warm&(edge<35))
 st&=~(warm&(ss>0.93))
 st&=~((ss<0.3)&(yy<0.02))
 st=clean(st,1,1,600)
-st=ndi.binary_erosion(st,iterations=3)   # photo stripes are ~1/3 of the spacing
+# clean, uniform stripes: smooth the traced shapes, take their centre lines, redraw at a
+# constant width (~28% of the spacing, as in photographs) with soft edges
+from skimage.morphology import skeletonize
+st=cv2.GaussianBlur(st.astype(np.float32),(0,0),5)>0.45
+sk=skeletonize(st)
+lab,n=ndi.label(sk,structure=np.ones((3,3))); sizes=ndi.sum(sk,lab,range(1,n+1))
+sk=np.isin(lab,1+np.nonzero(sizes>=40)[0])
+# prune short side branches (spurs) at junctions
+nb=ndi.convolve(sk.astype(np.uint8),np.ones((3,3),np.uint8),mode='constant')-1
+junc=sk&(nb>=3)
+jd=ndi.binary_dilation(junc,iterations=2)
+br=sk&~jd
+lab2,n2=ndi.label(br,structure=np.ones((3,3))); sz2=ndi.sum(br,lab2,range(1,n2+1))
+ends=sk&(nb==1)
+keep=np.zeros_like(sk)
+for i in range(1,n2+1):
+    m=lab2==i
+    if sz2[i-1]>=45 or not (m&ends).any(): keep|=m
+sk=keep|(jd&sk&ndi.binary_dilation(keep,iterations=3))
+# extend each stripe from its end nearest the yellow field straight on into the yellow
+# (in life the rear set continues as thin brown lines up to the soft dorsal base)
+ext=np.zeros_like(sk)
+nb2=ndi.convolve(sk.astype(np.uint8),np.ones((3,3),np.uint8),mode='constant')-1
+eys,exs=np.nonzero(sk&(nb2==1))
+warmD=ndi.distance_transform_edt(~warm)          # px to the yellow field
+for y0,x0 in zip(eys,exs):
+    if warmD[y0,x0]>60 or ss[y0,x0]<0.3: continue
+    # local direction from the last ~25 skeleton px
+    ys,xs=np.nonzero(sk[max(0,y0-25):y0+26,max(0,x0-25):x0+26])
+    ys=ys+max(0,y0-25); xs=xs+max(0,x0-25)
+    if len(xs)<8: continue
+    d=np.array([x0-xs.mean(),y0-ys.mean()]); n=np.linalg.norm(d)
+    if n<3: continue
+    d/=n; p=np.array([x0,y0],float)
+    for k in range(0,700):
+        p+=d; xi,yi=int(p[0]),int(p[1])
+        if not (0<=xi<W and 0<=yi<H) or not sil[yi,xi] or edge[yi,xi]<30: break
+        if ss[yi,xi]>0.97: break
+        ext[yi,xi]=True
+EXT=ext.copy()
+dsk=ndi.distance_transform_edt(~sk)
+HALF=7.5   # px in the 2048-wide painting (spacing ~55 px)
+st=dsk<HALF
+STRIPE_SOFT=np.clip((HALF+1.2-dsk)/2.4,0,1)
 # --- brown amount inside the warm region (smooth), and the bright yellow lines inside it
 lum=cv2.GaussianBlur(v,(0,0),7)
 brown=np.clip((0.6-lum)/0.33,0,1)*warm
@@ -49,8 +92,8 @@ dist_in=ndi.distance_transform_edt(warm)/W*(S1-S0)       # fish units
 white_side=sil&~warm&(ss<0.93)&(edge>15)
 bd=ndi.distance_transform_edt(~white_side)/W*(S1-S0)      # distance to the white region
 # brown: darkest along the white boundary, fading to orange ~0.3 body lengths behind it
-brown=np.clip(1-(bd-0.05)/0.25,0,1)**1.3*warm*np.clip((yy+0.16)/0.06,0,1)*np.clip((0.93-ss)/0.22,0,1)
-R=soft(warm,3); G=soft(brown,26); B=soft(st,1.6); A=soft(blk,2.0)
+brown=np.clip(1-(bd-0.06)/0.3,0,1)**0.9*warm*np.clip((yy+0.16)/0.06,0,1)*np.clip((0.93-ss)/0.22,0,1)
+R=soft(warm,3); G=soft(brown,30); B=STRIPE_SOFT; A=soft(blk,2.0)
 # pack: R warm, G brown, B stripes, A black; yellow lines in a second tiny channel via G sign trick -> store separately
 out=np.stack([R,G,B,A],-1)
 # RGB only (browsers drop colour under zero alpha): r = yellow, g = brown (s > 0.32) or eye band (s < 0.32), b = stripes
@@ -58,12 +101,12 @@ Gp=np.where(ss<0.32,A,G)
 # thin yellow lines parallel to the white/yellow boundary (offset curves of its distance field)
 bds=cv2.GaussianBlur(bd.astype(np.float32),(0,0),45)
 YL=np.zeros_like(bds)
-for k,(d0,a) in enumerate([(0.03,1.0),(0.075,0.8),(0.12,0.55)]):
+for k,(d0,a) in enumerate([(0.028,0.9),(0.07,0.75),(0.112,0.55),(0.154,0.35)]):
     YL=np.maximum(YL,a*np.clip(1-np.abs(bds-d0)/0.0035,0,1))
 YL*=warm*(edge>22)*np.clip((0.97-ss)/0.05,0,1)*np.clip((yy+0.12)/0.05,0,1)
 YL=soft(YL>0.35,1.2)
 zone=(soft(warm,3)>0.5)&(G>0.3)
-B=np.where(zone,0.5+0.5*np.clip(YL,0,1),B*0.49)   # b<0.5: stripe strength; b>0.5: yellow line (brown zone)
+B=np.where(zone,0.53+0.47*np.clip(YL,0,1),B*0.46)   # stripes 0..0.46, yellow lines 0.53..1 (gap avoids 8-bit rounding)   # b<0.5: stripe strength; b>0.5: yellow line (brown zone)
 rgb=np.stack([R,Gp,B],-1)
 cv2.imwrite('auriga_pattern.png',(np.clip(rgb,0,1)*255).astype(np.uint8)[...,::-1])
 cv2.imwrite('auriga_ylines.png',(np.clip(soft(ylines,1.5),0,1)*255).astype(np.uint8))

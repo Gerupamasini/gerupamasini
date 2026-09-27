@@ -9,7 +9,7 @@ import * as THREE from 'three';
 // ---------------------------------------------------------------- anatomy ---------
 
 // Catmull-Rom through (s, v) control points, evaluated at s.
-function spline(pts) {
+export function spline(pts) {
   return (s) => {
     if (s <= pts[0][0]) return pts[0][1];
     const n = pts.length;
@@ -32,18 +32,19 @@ function spline(pts) {
 // The snout is long and low, the forehead rises steeply from s = 0.12, and the belly is
 // shallow; the dorsal and anal fins make the rear of the fish tall and square.
 export const ANATOMY = {
-  top: spline([[0, 0.008], [0.0369, 0.0338], [0.0917, 0.0632], [0.124, 0.08], [0.1353, 0.104], [0.153, 0.139], [0.171, 0.172],
+  top: spline([[0, 0.013], [0.012, 0.019], [0.0369, 0.0338], [0.0917, 0.0632], [0.124, 0.08], [0.1353, 0.104], [0.153, 0.139], [0.171, 0.172],
     [0.19, 0.21], [0.212, 0.243], [0.238, 0.27], [0.266, 0.287], [0.294, 0.301], [0.35, 0.304], [0.45, 0.296], [0.6, 0.274],
     [0.75, 0.232], [0.85, 0.177], [0.93, 0.116], [1.0, 0.05]]),
-  bottom: spline([[0, -0.008], [0.0164, -0.0112], [0.046, -0.026], [0.089, -0.046], [0.129, -0.075], [0.171, -0.099],
+  bottom: spline([[0, -0.013], [0.0164, -0.019], [0.046, -0.026], [0.089, -0.046], [0.129, -0.075], [0.171, -0.099],
     [0.2125, -0.124], [0.254, -0.148], [0.297, -0.168], [0.34, -0.186], [0.384, -0.199], [0.45, -0.21], [0.55, -0.205],
     [0.65, -0.19], [0.75, -0.165], [0.85, -0.13], [0.93, -0.09], [1.0, -0.05]]),
-  width: spline([[0, 0.007], [0.03, 0.011], [0.06, 0.015], [0.1, 0.021], [0.15, 0.032], [0.25, 0.046], [0.38, 0.052], [0.5, 0.049],
+  width: spline([[0, 0.009], [0.012, 0.011], [0.03, 0.013], [0.06, 0.015], [0.1, 0.019], [0.15, 0.027], [0.25, 0.037], [0.38, 0.041], [0.5, 0.039],
     [0.65, 0.041], [0.8, 0.029], [0.9, 0.02], [0.95, 0.014], [0.985, 0.008], [1.0, 0.003]]),
   eye: { s: 0.16, y: 0.028, r: 0.027 },
 };
 
 // painting space
+const DEPTH = 1.09;
 const S0 = -0.03, S1 = 1.3, Y0 = -0.52, Y1 = 0.6;
 const toUV = (s, y) => [(s - S0) / (S1 - S0), (y - Y0) / (Y1 - Y0)];
 const sx = (s) => 0.5 - s; // s -> fish-space x
@@ -73,7 +74,7 @@ function buildBody() {
       let z = Math.sign(Math.sin(th)) * lensZ(yn, w);
       // head: cheek / operculum bulge, forehead dip in front of the eye
       const cheek = Math.exp(-(((s - 0.22) / 0.07) ** 2) - (((y + 0.03) / 0.09) ** 2));
-      z *= 1 + 0.1 * cheek;
+      z *= 1 + 0.04 * cheek;
       // slight concave predorsal profile (nape) is in the outline; snout is a tube
       pos.push(sx(s), y, z);
       uv.push(...toUV(s, y));
@@ -105,7 +106,7 @@ function buildBody() {
 // A fin is a fan of rays, each from base[i] to tip[i] in side-view (s, y) space.
 // Membranes are subdivided between rays; the free edge is scalloped between ray tips and
 // the membrane is pleated (rays alternately forward/back) like a real folded fin.
-function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallop = 0.06, bow = 0.0, zOff = 0, flat = false, spines = -1, spineScallop = 0.14 }) {
+export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallop = 0.06, bow = 0.0, zOff = 0, flat = false, spines = -1, spineScallop = 0.14 }) {
   const nR = base.length;
   const pos = [], uv = [], fin = [], idx = [];
   const cols = (nR - 1) * sub + 1;
@@ -144,7 +145,7 @@ function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallop = 0.0
 }
 
 // sample a closed-ish outline spline by arclength-ish parameter
-function polyline(pts, n) {
+export function polyline(pts, n) {
   // pts: [[s,y],...] ; returns n points evenly spaced along the polyline, Catmull-Rom smoothed
   const P = [];
   const m = pts.length;
@@ -184,7 +185,7 @@ function finLayouts() {
     [1.0783, -0.1269], [1.0535, -0.0922], [1.0013, -0.052]], nA);
   for (let i = 0; i < nA; i++) { const s = 0.48 + (0.985 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.003]); }
   const nC = 19;
-  const cBase = [], cTip = polyline([[1.165, 0.125], [1.182, 0.06], [1.186, 0.0], [1.179, -0.06], [1.16, -0.128]], nC);
+  const cBase = [], cTip = polyline([[1.19, 0.135], [1.212, 0.065], [1.218, 0.0], [1.21, -0.065], [1.186, -0.138]], nC);
   for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.955 + 0.02 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.006 - f * (top(s) - bottom(s) - 0.012)]); }
   return { dorsal: { base: dBase, tip: dTip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
@@ -224,7 +225,7 @@ float sdSeg(vec2 p, vec2 a, vec2 b){ vec2 pa=p-a, ba=b-a; float h=clamp(dot(pa,b
 
 // --- overlapping cycloid scales; returns height, writes per-scale id
 float scales(vec2 p, out float sid, out float rim){
-  float sz = 0.0235;
+  float sz = 0.0135;
   vec2 q = vec2(p.x, p.y*1.1) / sz;
   float r0 = floor(q.y);
   float best = 1e9; float h = 0.; sid = 0.; rim = 0.;
@@ -297,11 +298,11 @@ Paint paint(vec2 p){
   bool caudal = !inBody && !dorsal && !anal;
   float yn = clamp((y - (top+bot)*.5) / max((top-bot)*.5, 1e-3), -1., 1.);
 
-  vec3 white  = vec3(0.9, 0.89, 0.93);
+  vec3 white  = vec3(0.89, 0.915, 0.935);    // pearly bluish white
   vec3 yellow = vec3(1.0, 0.78, 0.0);
   vec3 orange = vec3(1.0, 0.62, 0.0);
   vec3 brown  = vec3(0.46, 0.25, 0.05);
-  vec3 ink    = vec3(0.2, 0.2, 0.26);      // slate grey-navy, as in photographs
+  vec3 ink    = vec3(0.2, 0.195, 0.21);      // dark grey, as in photographs
 
   // --- pattern masks traced from a photograph of a real fish (see tools/masks2.py):
   //     r = yellow field, g = brown zone (s > 0.32) or eye band (s < 0.32), b = stripes
@@ -309,16 +310,17 @@ Paint paint(vec2 p){
   float aa = 0.12;
   float Y  = smoothstep(0.5 - aa * 2.0, 0.5 + aa * 2.0, pm.r);
   float Br = s < 0.32 ? 0.0 : pm.g;
-  // b < 0.5: stripe strength (x 0.49); b > 0.5: thin yellow line inside the brown zone
-  float stV = pm.b < 0.5 ? pm.b / 0.49 : 0.0;
-  float ylV = pm.b > 0.5 ? (pm.b - 0.5) / 0.5 : 0.0;
-  float st = smoothstep(0.5 - aa, 0.5 + aa, stV);
+  // b <= 0.46: stripe strength; b >= 0.53: thin yellow line inside the brown zone
+  float stV = pm.b < 0.495 ? pm.b / 0.46 : 0.0;
+  float ylV = pm.b > 0.505 ? (pm.b - 0.53) / 0.47 : 0.0;
+  float st = smoothstep(0.15, 0.85, stV) * (0.82 + 0.18 * vnoise(p * 70.0));
   float yl = smoothstep(0.3, 0.7, ylV);
   float bandM = s < 0.32 ? smoothstep(0.5 - aa, 0.5 + aa, pm.g) : 0.0;
   if (caudal) { Y = 1.0; st = 0.0; bandM = 0.0; }
-  vec3 yel = mix(yellow, orange, smoothstep(0.55, 1.05, s) * 0.5);
-  vec3 warmCol = mix(yel, mix(orange * 0.9, brown, smoothstep(0.35, 1.0, Br)), smoothstep(0.0, 0.45, Br));
-  warmCol = mix(warmCol, vec3(1.0, 0.86, 0.12), yl * 0.9);
+  vec3 yel = mix(yellow, orange, clamp(smoothstep(0.55, 1.05, s) * 0.45 + Br * 0.5 + smoothstep(0.0, 0.3, y) * 0.25, 0.0, 1.0));
+  yel = mix(yel, vec3(1.0, 0.86, 0.3), smoothstep(-0.05, -0.25, y) * 0.5);
+  vec3 warmCol = mix(yel, mix(orange * 0.85, brown * 0.8, smoothstep(0.2, 0.62, Br)), smoothstep(0.0, 0.3, Br));
+  warmCol = mix(warmCol, vec3(1.0, 0.84, 0.2), yl * 0.75);
   vec3 col = mix(white, warmCol, Y);
   col = mix(col, mix(ink, brown * 0.55, Y), st);
   float stripeMask = 1.0;
@@ -328,10 +330,10 @@ Paint paint(vec2 p){
   if (inBody) {
     // subtle scales: visible mostly as sheen, not relief
     float sid, rim;
-    float scaleMask = smoothstep(0.22, 0.3, s) * (1. - smoothstep(0.85, 1.0, abs(yn)));
+    float scaleMask = smoothstep(0.27, 0.36, s) * (1. - smoothstep(0.8, 1.0, abs(yn)));
     float sh = scales(p, sid, rim);
-    h = sh * scaleMask * 0.5;
-    col *= mix(1.0, 0.975 + 0.05*sid, scaleMask);
+    h = sh * scaleMask * 0.16;
+    col *= mix(1.0, 0.985 + 0.03*sid, scaleMask);
     metal = mix(0.05, 0.3 + 0.15*sid, scaleMask) * (1. - Y*0.6) * (1. - st);
     rough = mix(0.45, 0.3 + 0.1*sid, scaleMask);
     // lavender-grey shading of the white in the shadowed belly and around the gill cover
@@ -339,7 +341,9 @@ Paint paint(vec2 p){
     // head: snout white-grey, darker tip; lips; gill cover rim
     float snout = 1. - smoothstep(0.02, 0.1, s);
     col = mix(col, vec3(0.8, 0.79, 0.78), snout * 0.7);
-    col = mix(col, vec3(0.62, 0.6, 0.6), 1. - smoothstep(0.004, 0.02, s));
+    col = mix(col, vec3(0.74, 0.66, 0.66), 1. - smoothstep(0.006, 0.02, s));          // greyish-pink lips
+    float slit = (1. - smoothstep(0.0012, 0.003, abs(y + 0.001))) * (1. - smoothstep(0.004, 0.012, s));
+    col = mix(col, vec3(0.2, 0.15, 0.15), slit); h -= 0.8 * slit;
     float opR = length((p - vec2(0.14, 0.0)) * vec2(1.0, 0.75));
     float op = (1. - smoothstep(0.0, 0.005, abs(opR - 0.115))) * smoothstep(0.12, -0.05, y) * step(0.15, s);
     h -= 0.35 * op; col *= 1. - 0.06 * op;
@@ -348,16 +352,25 @@ Paint paint(vec2 p){
       float pit = 1. - smoothstep(0.002, 0.004, length((p - nc) * vec2(1.0, 1.3)));
       h -= 0.9 * pit; col = mix(col, vec3(0.35, 0.33, 0.32), pit * 0.7);
     }
-    // eye band (from the traced masks)
-    float band = bandM;
-    col = mix(col, ink * 0.55, band);
+    // eye band: vertical, rounded above the eye, running down to the throat (as in photographs)
+    float t01 = clamp((0.075 - y) / 0.22, 0.0, 1.0);   // 0 at the top of the band, 1 at the throat
+    float wob = 0.004 * (fbm(p * 60.0) - 0.5);
+    float fr = mix(0.136, 0.126, t01) + 0.005 * sin(t01 * 3.1416) + wob, bk = mix(0.19, 0.232, t01) - wob;   // narrow above the eye, wide at the throat
+    float dB = max(max(fr - s, s - bk), 0.0);
+    float topCap = length(vec2((s - (fr + bk) * 0.5) / ((bk - fr) * 0.5), (y - 0.062) / 0.025)) - 1.0;   // rounded top
+    float inBand = step(0.0, -max(fr - s, s - bk)) * (y < 0.062 ? 1.0 : step(topCap, 0.0));
+    float edgeD = min(min(s - fr, bk - s), y < 0.062 ? 1.0 : -topCap * 0.02);
+    float band = smoothstep(-0.0015, 0.0025, edgeD) * inBand;
+    float bandRim = (1.0 - smoothstep(0.0, 0.006, -edgeD)) * (1.0 - band) * step(y, 0.085) * step(fr - 0.012, s) * step(s, bk + 0.012);
+    col = mix(col, vec3(0.98, 0.985, 1.0), bandRim * 0.55);   // thin pale border
+    col = mix(col, vec3(0.045, 0.036, 0.034), band);
     metal = mix(metal, 0.0, band); rough = mix(rough, 0.32, band);
     // faint pale sheen along the back of the white field
     col *= 0.975 + 0.05 * fbm(p * 30.);
   } else if (dorsal) {
     // spinous part carries the white + stripes, soft part is yellow
-    float r = length(((p - uOcellus) * mat2(0.985, 0.17, -0.17, 0.985)) * vec2(1.0, 2.3));
-    float spot = 1. - smoothstep(0.05 - uTexel.x, 0.05 + uTexel.x, r);
+    float r = length(((p - uOcellus) * mat2(0.985, 0.17, -0.17, 0.985)) * vec2(1.0, 1.7));
+    float spot = 1. - smoothstep(0.042 - uTexel.x, 0.042 + uTexel.x, r);
     col = mix(col, ink * 0.5, spot);
     alpha = 0.5 + 0.5 * spot;
     rough = 0.45; metal = 0.0;
@@ -440,9 +453,12 @@ vec3 swimBend(vec3 p, inout vec3 n){
   float A  = uAmp * (0.05 + 0.25*s*s + 0.6*max(s-0.45,0.)*max(s-0.45,0.));
   float dA = uAmp * (0.5*s + 1.2*max(s-0.45,0.));
   float ph = uPhase - k*s;
-  // turning: the whole body arcs (curvature ~ uTurn)
-  float turnZ = uTurn * (s-0.35)*(s-0.35);
-  float dTurn = uTurn * 2.*(s-0.35);
+  // turning: the body bends into a C around a point ~1/3 back from the snout; the tail
+  // (flexible) bends more than the head (stiff)
+  float st = s - 0.36;
+  float flex = st < 0.0 ? 0.7 : 1.0 + 0.8 * st;
+  float turnZ = uTurn * st * st * flex;
+  float dTurn = uTurn * (2.0 * st * flex + (st < 0.0 ? 0.0 : 0.8 * st * st));
   float z = A*sin(ph) - uAmp*0.03*sin(uPhase) + turnZ;
   float dzds = dA*sin(ph) - A*k*cos(ph) + dTurn;
   vec3 T = normalize(vec3(1.0, 0.0, -dzds));
@@ -452,7 +468,7 @@ vec3 swimBend(vec3 p, inout vec3 n){
 }
 `;
 
-function addSwim(material, uniforms, extra = {}) {
+export function addSwim(material, uniforms, extra = {}) {
   material.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms);
     const bend = extra.noBend ? '' : 'swimPos = swimBend(swimPos, objectNormal);';
@@ -532,7 +548,7 @@ export function createButterflyfish(renderer, opts = {}) {
           float memA = 0.96;
           if (kind < 1.5 && spine) memA = mix(0.95, 0.8, t);
           if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.5, smoothstep(0.86, 0.98, t));      // caudal: clear margin
-          if (kind > 2.5) memA = kind < 3.5 ? mix(0.1, 0.03, t) : mix(0.92, 0.75, t);             // pectoral / pelvic
+          if (kind > 2.5) memA = kind < 3.5 ? mix(0.06, 0.02, t) : mix(0.92, 0.75, t);             // pectoral / pelvic
           vec3 c = diffuseColor.rgb * (kind < 2.5 ? 0.9 : 1.0);
           #ifdef USE_MAP
           float opaque = clamp((diffuseColor.a - 0.5) * 2.0, 0.0, 1.0);
@@ -555,7 +571,7 @@ export function createButterflyfish(renderer, opts = {}) {
             c = mix(c, vec3(0.95, 0.93, 0.85), smoothstep(0.84, 0.94, t) * 0.8);
           }
           if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.9, 0.6), vec3(0.9), t); ray *= 0.6; }
-          if (kind > 3.5) c = vec3(0.96, 0.96, 0.94);
+          if (kind > 3.5) c = mix(vec3(1.0, 0.86, 0.3), vec3(1.0, 0.93, 0.6), t);   // pelvics: lemon yellow
           // rays: faint ridges only (the membrane is thick)
           vec3 rayC = spine ? c * 1.06 + 0.02 : c * 1.05 + 0.015;
           c = mix(c, rayC, ray * 0.07);
@@ -581,7 +597,7 @@ export function createButterflyfish(renderer, opts = {}) {
     return m;
   };
 
-  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, sub: 4, segs: 18, pleat: 0.001, scallop: 0.004, spines: 12, spineScallop: 0.04, bow: -0.02 }), mkFinMat(0, 12, 37));
+  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, sub: 4, segs: 18, pleat: 0.0015, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02 }), mkFinMat(0, 12, 37));
   const anal = new THREE.Mesh(buildFin({ ...layouts.anal, sub: 4, segs: 16, pleat: 0.001, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02 }), mkFinMat(1, 2));
   const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, sub: 4, segs: 16, pleat: 0.0012, scallop: 0.006 }), mkFinMat(2, -1));
   for (const m of [dorsal, anal, caudal]) { m.renderOrder = 2; group.add(m); }
@@ -606,7 +622,7 @@ export function createButterflyfish(renderer, opts = {}) {
 
   // -- filament: the "thread" trailing from the soft dorsal
   // the thread grows from the dorsal edge just ahead of the rear corner
-  let fi = 0; layouts.dorsal.tip.forEach((p, i) => { if (Math.hypot(p[0] - 1.04, p[1] - 0.296) < Math.hypot(layouts.dorsal.tip[fi][0] - 1.04, layouts.dorsal.tip[fi][1] - 0.296)) fi = i; });
+  let fi = 0; layouts.dorsal.tip.forEach((p, i) => { if (Math.hypot(p[0] - 1.095, p[1] - 0.197) < Math.hypot(layouts.dorsal.tip[fi][0] - 1.095, layouts.dorsal.tip[fi][1] - 0.197)) fi = i; });
   const fb0 = layouts.dorsal.base[fi], fb1 = layouts.dorsal.tip[fi];
   const fm = [fb0[0] + (fb1[0] - fb0[0]) * 0.9, fb0[1] + (fb1[1] - fb0[1]) * 0.9];
   const fb = fb1;
@@ -638,27 +654,28 @@ export function createButterflyfish(renderer, opts = {}) {
 
   // -- eyes: dark globe with a thin golden-brown iris ring and a glossy cornea
   const { eye } = ANATOMY;
+  const eyeMeshes = [];
   const eyeTex = makeEyeTexture();
-  const eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTex, roughness: 0.3, clearcoat: 0.5, clearcoatRoughness: 0.08, envMapIntensity: 0.25 });
+  const eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTex, roughness: 0.4, clearcoat: 0.25, clearcoatRoughness: 0.2, envMapIntensity: 0.1 });
   addSwim(eyeMat, uniforms, { key: 'eye' });
   const corneaMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.0, transmission: 0, transparent: true, opacity: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.05, ior: 1.38, envMapIntensity: 0.3 });
   addSwim(corneaMat, uniforms, { key: 'cornea' });
   const rimMat = new THREE.MeshPhysicalMaterial({ color: 0x0b0a0a, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.15 });
   addSwim(rimMat, uniforms, { key: 'rim' });
   for (const side of [1, -1]) {
-    const w = ANATOMY.width(eye.s) * 1.18 * lensZN(eye.y);
+    const w = ANATOMY.width(eye.s) * 1.03 * lensZN(eye.y);
     const g = new THREE.SphereGeometry(eye.r, 48, 32);
     g.rotateY(side > 0 ? 0 : Math.PI);   // texture pupil faces +z (outward)
-    g.scale(1, 1, 0.2);
-    g.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.12));
+    g.scale(1, 1, 0.13);
+    g.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.1));
 
     const m = new THREE.Mesh(g, eyeMat);
-    group.add(m);
+    group.add(m); eyeMeshes.push(m);
     const cg = new THREE.SphereGeometry(eye.r * 1.03, 48, 32, 0, Math.PI * 2, 0, Math.PI * 0.42);
     cg.rotateX(Math.PI / 2 * side);
     cg.scale(1, 1, 0.3);
     cg.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.12));
-    group.add(new THREE.Mesh(cg, corneaMat));
+    // (no separate cornea: in life the eye reads as a dark, barely glossy disc within the band)
   }
 
   // -- mouth: small terminal mouth with thin lips at the tip of the snout
@@ -692,7 +709,7 @@ export function createButterflyfish(renderer, opts = {}) {
     group.add(pecPivot);
     pairs.push(pecPivot);
     // pelvic: white, with a stout spine, points down/back
-    const vg = buildPairedFin({ len: 0.14, span: 0.03, n: 7, shape: (f) => 1.0 - 0.55 * Math.pow(f, 0.8) });
+    const vg = buildPairedFin({ len: 0.2, span: 0.03, n: 7, shape: (f) => 1.0 - 0.6 * Math.pow(f, 0.8) });
     const pel = new THREE.Mesh(vg, pelMat);
     const pelPivot = new THREE.Group();
     pelPivot.position.set(sx(0.31), ANATOMY.bottom(0.31) + 0.012, side * 0.01);
@@ -704,6 +721,10 @@ export function createButterflyfish(renderer, opts = {}) {
     pairs.push(pelPivot);
   }
 
+  // The traced photo was taken slightly from above, which foreshortens the height; across the
+  // other side views the fish is ~9% deeper. Eyes are counter-scaled so they stay round.
+  group.scale.y = DEPTH;
+  for (const e of eyeMeshes) e.scale.y = 1 / DEPTH, e.position.y = eye.y * (1 - 1 / DEPTH);
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   for (const p of pairs) p.traverse((o) => { o.castShadow = false; });   // clear/thin paired fins cast no solid shadow
 
@@ -711,14 +732,16 @@ export function createButterflyfish(renderer, opts = {}) {
   function update(dt, t, { amp = 0.04, freq = 1.6, turn = 0 } = {}) {
     phase += dt * freq * Math.PI * 2;
     // pectorals: accumulated phase so the rate can change smoothly; ~0.8-1.3 beats/s
-    pecPhase += dt * Math.PI * 2 * (0.75 + 0.3 * Math.min(freq, 2));
+    pecPhase += dt * Math.PI * 2 * (0.75 + 0.3 * Math.min(freq, 2) + 0.6 * Math.abs(turn));
     uniforms.uPhase.value = phase;
     uniforms.uAmp.value = amp;
     uniforms.uTurn.value = turn;
     for (const p of pairs) {
       const { side, kind } = p.userData;
       if (kind === 'pec') {
-        const f = Math.sin(pecPhase + (side > 0 ? 0 : 0.35));
+        // the fin on the outside of a turn beats harder, the inner one is held in as a brake
+        const a = THREE.MathUtils.clamp(1 - side * turn * 2.5, 0.3, 2.0);
+        const f = Math.sin(pecPhase + (side > 0 ? 0 : 0.35)) * a;
         p.rotation.set(side * (-0.1 + 0.2 * f), side * (0.4 + 0.22 * f), -0.25 + 0.06 * f);
       } else {
         const f = Math.sin(t * 0.6 + side);
@@ -774,7 +797,7 @@ function makeEyeTexture() {
   return t;
 }
 
-function mergeGeos(geos) {
+export function mergeGeos(geos) {
   let n = 0, m = 0;
   for (const g of geos) { n += g.attributes.position.count; m += g.index.count; }
   const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), idx = new Uint32Array(m);

@@ -61,12 +61,12 @@ scene.add(fish.group);
 const camera = new THREE.PerspectiveCamera(+(Q.get('fov') || 30), innerWidth / innerHeight, 0.01, 50);
 const views = {
   side: [0, 0.02, 2.6], photo: [-0.1, 0.0, 4.2], q34: [1.2, 0.35, 2.1], front: [2.3, 0.1, 0.6], top: [0.2, 2.4, 0.4],
-  head: [0.75, 0.08, 0.75], dorsal: [-0.05, 0.55, 0.85], topd: [-0.1, 4.6, 0.001], tail: [-1.2, 0.3, 1.2], back: [-0.8, 0.2, -2.3], low: [0.6, -1.3, 1.9],
+  head: [0.75, 0.08, 0.75], headside: [0.3, 0.0, -1.0], dorsal: [-0.05, 0.55, 0.85], topd: [-0.1, 4.6, 0.001], tail: [-1.2, 0.3, 1.2], back: [-0.8, 0.2, -2.3], low: [0.6, -1.3, 1.9],
 };
 const view = views[Q.get('view') || 'q34'];
 camera.position.set(...view);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(Q.get('view') === 'head' ? 0.3 : Q.get('view') === 'photo' ? -0.1 : 0, 0.0, 0);
+controls.target.set(Q.get('view') === 'head' || Q.get('view') === 'headside' ? 0.3 : Q.get('view') === 'photo' ? -0.1 : 0, 0.0, 0);
 controls.enableDamping = true;
 controls.update();
 

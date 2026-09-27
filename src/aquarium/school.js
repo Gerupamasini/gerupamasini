@@ -13,6 +13,7 @@ export class Butterflyfish {
     this.obj = new THREE.Group();
     this.obj.add(model.group);
     model.group.scale.setScalar(scale);
+    model.group.position.x = -0.14 * scale;   // turn about a point ~1/3 back from the snout
     this.scale = scale;
     this.p = start.clone();
     this.yaw = this.rnd() * Math.PI * 2; this.pitch = 0; this.roll = 0;
@@ -71,7 +72,10 @@ export class Butterflyfish {
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     const maxTurn = this.mode === 'hover' ? 0.8 : 1.4;
     const tr = THREE.MathUtils.clamp(dy * 2.0, -maxTurn, maxTurn);
-    this.turnRate += (tr - this.turnRate) * Math.min(1, dt * 3);
+    const prevRate = this.turnRate;
+    this.turnRate += (tr - this.turnRate) * Math.min(1, dt * 2.2);
+    const turnAcc = (this.turnRate - prevRate) / Math.max(dt, 1e-4);
+    this.kick = Math.max((this.kick || 0) - dt * 1.5, Math.min(1, Math.abs(turnAcc) * 0.25));
     this.yaw += this.turnRate * dt;
     const wantPitch = THREE.MathUtils.clamp(Math.asin(THREE.MathUtils.clamp(steer.y, -1, 1)), -0.35, 0.35) + (this.mode === 'hover' ? -0.25 : 0);
     this.pitch += (wantPitch - this.pitch) * Math.min(1, dt * 1.5);
@@ -92,9 +96,9 @@ export class Butterflyfish {
     // swimming: faster tail beat with speed, body arcs into turns
     const sp = this.speed / this.scale;       // body lengths per second
     this.model.update(dt, this.t, {
-      amp: 0.015 + Math.min(sp, 1.2) * 0.035,
-      freq: 0.6 + Math.min(sp, 1.5) * 0.9,
-      turn: THREE.MathUtils.clamp(-this.turnRate * 0.12, -0.25, 0.25),
+      amp: 0.015 + Math.min(sp, 1.2) * 0.035 + this.kick * 0.03,     // tail kick when a turn starts
+      freq: 0.6 + Math.min(sp, 1.5) * 0.9 + this.kick * 0.5,
+      turn: THREE.MathUtils.clamp(-this.turnRate * 0.4, -0.6, 0.6),
     });
   }
 }
