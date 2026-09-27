@@ -95,7 +95,7 @@ class AquariumRenderPass extends Pass {
         tColor: { value: null }, tDepth: { value: null },
         uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uCamPos: { value: new THREE.Vector3() },
         uNear: { value: 0 }, uFar: { value: 0 },
-        uSigmaA: { value: new THREE.Vector3(0.5, 0.13, 0.09) }, uSigmaS: { value: 0.22 },
+        uSigmaA: { value: new THREE.Vector3(0.75, 0.2, 0.13) }, uSigmaS: { value: 0.4 },
         uScatterCol: { value: new THREE.Color(0.55, 0.85, 0.95) }, uAmbient: { value: new THREE.Color(0.035, 0.09, 0.13) },
         uSunCol: { value: new THREE.Color(1, 1, 1) }, uSunDirW: { value: new THREE.Vector3(0, -1, 0) },
         uShadow: { value: null }, uShadowMat: { value: new THREE.Matrix4() }, uShaft: { value: 0.3 }, uFrame: { value: 0 },

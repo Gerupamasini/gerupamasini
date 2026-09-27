@@ -92,7 +92,7 @@ scene.add(roomLight, roomLight.target);
 // --- water
 const caustics = createCaustics(renderer, { size: +(Q.get('cs') || 1024), grid: +(Q.get('cg') || 320) });
 const cu = causticUniforms(caustics);
-cu.uCausticStrength.value = 0.55;
+cu.uCausticStrength.value = 0.4;
 cu.uCausticDir.value.copy(meanRefracted(sun.target.position.clone().sub(sun.position)));
 
 const reef = createReef();

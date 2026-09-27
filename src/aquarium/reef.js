@@ -60,7 +60,7 @@ function createSand() {
     color: /* glsl */`{
       vec3 q = vObjP * 900.0;
       float g = vn3(q), g2 = vn3(q * 0.37 + 11.0), g3 = h13(floor(q * 0.5));
-      vec3 base = mix(vec3(0.38, 0.35, 0.29), vec3(0.5, 0.46, 0.39), g);
+      vec3 base = mix(vec3(0.33, 0.3, 0.24), vec3(0.45, 0.41, 0.33), g);
       base = mix(base, vec3(0.62, 0.55, 0.47), smoothstep(0.82, 0.95, g2) * 0.7);   // darker grains
       base = mix(base, vec3(0.9, 0.62, 0.62), step(0.985, g3) * 0.6);               // pink shell bits
       base = mix(base, vec3(0.3, 0.28, 0.26), step(0.995, h13(floor(q * 0.8) + 3.0)) * 0.8);
@@ -127,11 +127,11 @@ function rockMaterial() {
     color: /* glsl */`{
       vec3 q = vObjP * 22.0;
       float n = fbmS(q), m = fbmS(q * 2.7 + 5.0), s = vn3(q * 9.0);
-      vec3 stone = mix(vec3(0.3, 0.26, 0.22), vec3(0.52, 0.47, 0.4), n);
+      vec3 stone = mix(vec3(0.22, 0.19, 0.15), vec3(0.42, 0.37, 0.3), n);
       // coralline algae: pink / purple crusts, strongest on lit faces
       float up = clamp(vWorldN.y * 0.5 + 0.5, 0.0, 1.0);
       float cor = smoothstep(0.58, 0.72, m + up * 0.1);
-      vec3 coralline = mix(vec3(0.55, 0.3, 0.38), vec3(0.7, 0.42, 0.5), s);
+      vec3 coralline = mix(vec3(0.48, 0.14, 0.32), vec3(0.66, 0.26, 0.46), s);
       vec3 c = mix(stone, coralline, cor * 0.8);
       c = mix(c, vec3(0.62, 0.58, 0.5), smoothstep(0.6, 0.75, fbmS(q * 0.6 + 3.0)) * 0.5);   // bleached calcareous patches
       c = mix(c, vec3(0.42, 0.3, 0.16), smoothstep(0.55, 0.7, fbmS(q * 0.8 + 21.0)) * 0.55);  // brown sponge / diatom film
@@ -245,7 +245,7 @@ function brainCoral(seed, r = 0.07) {
       vec3 u = normalize(vObjP);
       float h = length(vObjP);
       float valley = smoothstep(${(r * 1.02).toFixed(4)}, ${(r * 1.05).toFixed(4)}, h / mix(1.0, 0.72, abs(u.y)));
-      diffuseColor.rgb *= mix(vec3(0.3, 0.42, 0.16), vec3(0.72, 0.78, 0.35), valley);
+      diffuseColor.rgb *= mix(vec3(0.12, 0.24, 0.05), vec3(0.52, 0.62, 0.14), valley);
     }`,
   });
   const m = new THREE.Mesh(geo, mat);
@@ -502,19 +502,19 @@ export function createReef() {
   const place = (m, x, z, yOff = 0, s = 1, rotY = 0) => {
     m.position.set(x, sandHeight(x, z) + yOff, z); m.scale.setScalar(s); m.rotation.y = rotY; group.add(m); return m;
   };
-  place(acropora(21, { size: 0.2, color: [0.36, 0.32, 0.24], tip: [0.52, 0.62, 0.78] }), -0.3, -0.13, 0.19, 1.0);
-  place(acropora(22, { size: 0.16, color: [0.4, 0.3, 0.3], tip: [0.68, 0.52, 0.66], trunks: 6 }), 0.38, -0.1, 0.13, 1.0, 1.0);
-  place(acropora(23, { size: 0.13, color: [0.38, 0.37, 0.22], tip: [0.66, 0.72, 0.46], trunks: 5 }), 0.12, -0.17, 0.12, 1.0, 2.0);
-  place(acropora(24, { size: 0.12, color: [0.48, 0.4, 0.28], tip: [0.75, 0.68, 0.5], trunks: 5, spread: 0.8 }), -0.47, 0.03, 0.04, 1.0, 0.5);
+  place(acropora(21, { size: 0.2, color: [0.14, 0.12, 0.08], tip: [0.2, 0.36, 0.78] }), -0.3, -0.13, 0.19, 1.0);
+  place(acropora(22, { size: 0.16, color: [0.2, 0.1, 0.14], tip: [0.62, 0.22, 0.52], trunks: 6 }), 0.38, -0.1, 0.13, 1.0, 1.0);
+  place(acropora(23, { size: 0.13, color: [0.12, 0.18, 0.06], tip: [0.34, 0.66, 0.16], trunks: 5 }), 0.12, -0.17, 0.12, 1.0, 2.0);
+  place(acropora(24, { size: 0.12, color: [0.28, 0.17, 0.09], tip: [0.66, 0.48, 0.22], trunks: 5, spread: 0.8 }), -0.47, 0.03, 0.04, 1.0, 0.5);
   place(brainCoral(31, 0.06), -0.1, 0.02, 0.0);
   place(seaFan(41, { size: 0.26 }), 0.02, -0.21, 0.04, 1.0, 0.15);
-  place(anemone(51, { color: [0.5, 0.42, 0.28], tipCol: [0.78, 0.56, 0.46] }), 0.3, 0.1, 0.0);
-  place(anemone(52, { r: 0.028, color: [0.42, 0.48, 0.3], tipCol: [0.7, 0.78, 0.55] }), -0.46, 0.08, 0.025);
+  place(anemone(51, { color: [0.32, 0.2, 0.1], tipCol: [0.78, 0.32, 0.36] }), 0.3, 0.1, 0.0);
+  place(anemone(52, { r: 0.028, color: [0.2, 0.3, 0.1], tipCol: [0.45, 0.7, 0.28] }), -0.46, 0.08, 0.025);
   place(zoanthids(61, {}), -0.42, -0.1, 0.1);
   place(zoanthids(62, { disc: [1, 0.4, 0.2], ring: [0.3, 0.9, 0.9] }), 0.44, 0.06, 0.035);
   place(zoanthids(63, { disc: [0.8, 0.95, 0.2], ring: [0.8, 0.2, 0.6], count: 28 }), 0.02, -0.16, 0.07);
   place(leatherCoral(81, { r: 0.06 }), 0.22, -0.1, 0.0, 1.0, 0.4);
-  place(leatherCoral(82, { r: 0.045, color: [0.65, 0.72, 0.5] }), -0.17, -0.12, 0.0, 1.0, 1.4);
+  place(leatherCoral(82, { r: 0.045, color: [0.5, 0.56, 0.3] }), -0.17, -0.12, 0.0, 1.0, 1.4);
   // mushroom corals on the sand
   // mushroom corals (Fungia): oval discs with fine radial septa, olive-brown with a pale mouth
   const mush = new THREE.CircleGeometry(0.02, 72, 0, Math.PI * 2);
