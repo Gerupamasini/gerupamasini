@@ -312,7 +312,7 @@ Paint paint(vec2 p){
   float Br = s < 0.32 ? 0.0 : pm.g;
   // b = distance field to stripe centre lines: thin stripes on the white, widening into
   // dark bands in the dusky zone so that only thin yellow gaps remain between them
-  float thr = 0.79;   // half-width 7.5 px of the 36 px field
+  float thr = 0.815;   // half-width 7.5 px of the 36 px field
   float stV = smoothstep(thr - 0.035, thr + 0.035, pm.b);
   float ylV = 0.0;
   float st = stV * (0.85 + 0.15 * vnoise(p * 70.0));
@@ -362,9 +362,9 @@ Paint paint(vec2 p){
     float wob = 0.004 * (fbm(p * 60.0) - 0.5);
     float fr = mix(0.136, 0.126, t01) + 0.005 * sin(t01 * 3.1416) + wob, bk = mix(0.19, 0.232, t01) - wob;   // narrow above the eye, wide at the throat
     float dB = max(max(fr - s, s - bk), 0.0);
-    float topCap = length(vec2((s - (fr + bk) * 0.5) / ((bk - fr) * 0.5), (y - 0.062) / 0.025)) - 1.0;   // rounded top
-    float inBand = step(0.0, -max(fr - s, s - bk)) * (y < 0.062 ? 1.0 : step(topCap, 0.0));
-    float edgeD = min(min(s - fr, bk - s), y < 0.062 ? 1.0 : -topCap * 0.02);
+    float topCap = length(vec2((s - (fr + bk) * 0.5) / ((bk - fr) * 0.5), (y - 0.075) / 0.05)) - 1.0;   // rounded top, a little above the eye
+    float inBand = step(0.0, -max(fr - s, s - bk)) * (y < 0.075 ? 1.0 : step(topCap, 0.0));
+    float edgeD = min(min(s - fr, bk - s), y < 0.075 ? 1.0 : -topCap * 0.02);
     float band = smoothstep(-0.0015, 0.0025, edgeD) * inBand;
     float bandRim = (1.0 - smoothstep(0.0, 0.006, -edgeD)) * (1.0 - band) * step(y, 0.085) * step(fr - 0.012, s) * step(s, bk + 0.012);
     col = mix(col, vec3(0.98, 0.985, 1.0), bandRim * 0.55);   // thin pale border
@@ -576,7 +576,7 @@ export function createButterflyfish(renderer, opts = {}) {
             c = mix(c, vec3(0.95, 0.93, 0.85), smoothstep(0.84, 0.94, t) * 0.8);
           }
           if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.9, 0.6), vec3(0.9), t); ray *= 0.6; }
-          if (kind > 3.5) c = mix(vec3(1.0, 0.86, 0.3), vec3(1.0, 0.93, 0.6), t);   // pelvics: lemon yellow
+          if (kind > 3.5) c = mix(vec3(0.97, 0.93, 0.78), vec3(0.98, 0.97, 0.92), t);   // pelvics: white with a yellowish base
           // rays: faint ridges only (the membrane is thick)
           vec3 rayC = spine ? c * 1.06 + 0.02 : c * 1.05 + 0.015;
           c = mix(c, rayC, ray * 0.07);
@@ -714,13 +714,13 @@ export function createButterflyfish(renderer, opts = {}) {
     group.add(pecPivot);
     pairs.push(pecPivot);
     // pelvic: white, with a stout spine, points down/back
-    const vg = buildPairedFin({ len: 0.16, span: 0.03, n: 7, shape: (f) => 1.0 - 0.6 * Math.pow(f, 0.8) });
+    const vg = buildPairedFin({ len: 0.13, span: 0.025, n: 7, shape: (f) => 1.0 - 0.6 * Math.pow(f, 0.8) });
     const pel = new THREE.Mesh(vg, pelMat);
     const pelPivot = new THREE.Group();
     pelPivot.position.set(sx(0.31), ANATOMY.bottom(0.31) + 0.012, side * 0.01);
     pel.position.set(-0.5, 0, 0);
     pelPivot.add(pel);
-    pelPivot.rotation.set(side * 0.12, side * 0.08, 0.35);
+    pelPivot.rotation.set(side * 0.05, side * 0.04, 0.12);   // held close along the belly
     pelPivot.userData = { side, kind: 'pel' };
     group.add(pelPivot);
     pairs.push(pelPivot);
@@ -750,7 +750,7 @@ export function createButterflyfish(renderer, opts = {}) {
         p.rotation.set(side * (-0.1 + 0.2 * f), side * (0.4 + 0.22 * f), -0.25 + 0.06 * f);
       } else {
         const f = Math.sin(t * 0.6 + side);
-        p.rotation.set(side * (0.12 + 0.04 * f), side * 0.08, 0.35 + 0.05 * f);
+        p.rotation.set(side * (0.05 + 0.03 * f), side * 0.04, 0.12 + 0.04 * f);
       }
     }
   }
