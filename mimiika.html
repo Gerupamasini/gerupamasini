@@ -3,6 +3,8 @@
 <title>ミミイカの水槽</title>
 <style>
 :root{--bg:#0b0f14;--fg:#cfd8e3}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b0f14;--fg:#cfd8e3}}
+:root[data-theme="dark"]{--bg:#0b0f14;--fg:#cfd8e3}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;overflow:hidden}
 canvas{display:block;width:100vw;height:100vh}
 #info{position:fixed;left:0;right:0;text-align:center;bottom:10px;font-size:12px;opacity:.6;pointer-events:none}
