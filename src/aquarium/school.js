@@ -92,8 +92,8 @@ export class Butterflyfish {
     // swimming: faster tail beat with speed, body arcs into turns
     const sp = this.speed / this.scale;       // body lengths per second
     this.model.update(dt, this.t, {
-      amp: 0.02 + Math.min(sp, 1.2) * 0.05,
-      freq: 0.9 + sp * 2.2,
+      amp: 0.015 + Math.min(sp, 1.2) * 0.035,
+      freq: 0.6 + Math.min(sp, 1.5) * 0.9,
       turn: THREE.MathUtils.clamp(-this.turnRate * 0.12, -0.25, 0.25),
     });
   }

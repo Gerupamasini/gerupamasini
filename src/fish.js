@@ -27,17 +27,20 @@ function spline(pts) {
 }
 
 // Dorsal and ventral body outline (without fins), half width.
-// Landmarks measured from side-view photographs (iNaturalist, CC) and normalised so the
-// snout tip is s = 0 and the caudal peduncle s = 1. Body + median fins together form a
-// rounded trapezoid that is tallest at the rear corner of the soft dorsal.
+// Outline traced from a public-domain side-view photograph (iNaturalist photo 67560751, CC0)
+// and cross-checked on three other side views: snout tip s = 0, caudal peduncle s = 1.
+// The snout is long and low, the forehead rises steeply from s = 0.12, and the belly is
+// shallow; the dorsal and anal fins make the rear of the fish tall and square.
 export const ANATOMY = {
-  top: spline([[0, 0.012], [0.025, 0.03], [0.05, 0.054], [0.1, 0.11], [0.14, 0.168], [0.18, 0.222], [0.22, 0.262],
-    [0.27, 0.29], [0.35, 0.302], [0.45, 0.298], [0.55, 0.283], [0.65, 0.252], [0.75, 0.208], [0.85, 0.15], [0.93, 0.095], [1.0, 0.05]]),
-  bottom: spline([[0, -0.012], [0.03, -0.04], [0.07, -0.08], [0.11, -0.122], [0.18, -0.18], [0.25, -0.228],
-    [0.34, -0.268], [0.43, -0.288], [0.52, -0.284], [0.62, -0.254], [0.72, -0.21], [0.82, -0.155], [0.92, -0.095], [1.0, -0.05]]),
-  width: spline([[0, 0.008], [0.03, 0.013], [0.06, 0.018], [0.1, 0.024], [0.15, 0.036], [0.25, 0.05], [0.38, 0.055], [0.5, 0.051],
-    [0.65, 0.043], [0.8, 0.03], [0.9, 0.021], [0.95, 0.015], [0.985, 0.008], [1.0, 0.003]]),
-  eye: { s: 0.155, y: 0.062, r: 0.033 },
+  top: spline([[0, 0.008], [0.0369, 0.0338], [0.0917, 0.0632], [0.124, 0.08], [0.1353, 0.104], [0.153, 0.139], [0.171, 0.172],
+    [0.19, 0.21], [0.212, 0.243], [0.238, 0.27], [0.266, 0.287], [0.294, 0.301], [0.35, 0.304], [0.45, 0.296], [0.6, 0.274],
+    [0.75, 0.232], [0.85, 0.177], [0.93, 0.116], [1.0, 0.05]]),
+  bottom: spline([[0, -0.008], [0.0164, -0.0112], [0.046, -0.026], [0.089, -0.046], [0.129, -0.075], [0.171, -0.099],
+    [0.2125, -0.124], [0.254, -0.148], [0.297, -0.168], [0.34, -0.186], [0.384, -0.199], [0.45, -0.21], [0.55, -0.205],
+    [0.65, -0.19], [0.75, -0.165], [0.85, -0.13], [0.93, -0.09], [1.0, -0.05]]),
+  width: spline([[0, 0.007], [0.03, 0.011], [0.06, 0.015], [0.1, 0.021], [0.15, 0.032], [0.25, 0.046], [0.38, 0.052], [0.5, 0.049],
+    [0.65, 0.041], [0.8, 0.029], [0.9, 0.02], [0.95, 0.014], [0.985, 0.008], [1.0, 0.003]]),
+  eye: { s: 0.16, y: 0.028, r: 0.027 },
 };
 
 // painting space
@@ -168,20 +171,20 @@ function polyline(pts, n) {
 
 function finLayouts() {
   const { top, bottom } = ANATOMY;
-  // Dorsal: XII-XIII spines + ~23 soft rays; the outer edge runs almost level from the nape
-  // back to a square-ish rear corner that overhangs the peduncle.
+  // outer edges from the traced photograph
   const nD = 37;
-  const dBase = [], dTip = polyline([[0.245, 0.282], [0.3, 0.322], [0.4, 0.343], [0.5, 0.349], [0.6, 0.349], [0.7, 0.344],
-    [0.8, 0.335], [0.9, 0.322], [0.99, 0.306], [1.06, 0.292], [1.095, 0.265], [1.103, 0.21], [1.08, 0.14], [1.0, 0.058]], nD);
-  for (let i = 0; i < nD; i++) { const s = 0.235 + (0.97 - 0.235) * (i / (nD - 1)); dBase.push([s, top(s) - 0.004]); }
-  // Anal: III spines + ~20 soft rays; flat bottom edge and a rounded rear corner
+  const dBase = [], dTip = polyline([[0.3, 0.312], [0.3459, 0.3226], [0.3957, 0.3313], [0.445, 0.3383], [0.4932, 0.3407], [0.541, 0.3414],
+    [0.5886, 0.3411], [0.6346, 0.3345], [0.6806, 0.328], [0.7262, 0.3197], [0.7722, 0.3131], [0.8177, 0.3048], [0.8631, 0.2955],
+    [0.9073, 0.2818], [0.9518, 0.269], [0.9949, 0.2508], [1.0377, 0.2307], [1.0882, 0.204], [1.0977, 0.1922], [1.0851, 0.1524],
+    [1.0561, 0.1119], [1.0293, 0.0804], [0.9987, 0.052]], nD);
+  for (let i = 0; i < nD; i++) { const s = 0.295 + (0.985 - 0.295) * (i / (nD - 1)); dBase.push([s, top(s) - 0.003]); }
   const nA = 26;
-  const aBase = [], aTip = polyline([[0.46, -0.298], [0.53, -0.322], [0.63, -0.33], [0.73, -0.328], [0.83, -0.316],
-    [0.93, -0.296], [1.02, -0.268], [1.075, -0.232], [1.098, -0.18], [1.075, -0.112], [1.0, -0.058]], nA);
-  for (let i = 0; i < nA; i++) { const s = 0.45 + (0.97 - 0.45) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.004]); }
-  // Caudal: short and truncate
+  const aBase = [], aTip = polyline([[0.49, -0.212], [0.592, -0.2264], [0.6847, -0.2368], [0.7547, -0.2426], [0.8265, -0.2412],
+    [0.8758, -0.2342], [0.9487, -0.2283], [0.9991, -0.2169], [1.0472, -0.1954], [1.0696, -0.1819], [1.0852, -0.1571],
+    [1.0783, -0.1269], [1.0535, -0.0922], [1.0013, -0.052]], nA);
+  for (let i = 0; i < nA; i++) { const s = 0.48 + (0.985 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.003]); }
   const nC = 19;
-  const cBase = [], cTip = polyline([[1.17, 0.152], [1.188, 0.08], [1.194, 0.0], [1.188, -0.08], [1.17, -0.152]], nC);
+  const cBase = [], cTip = polyline([[1.165, 0.125], [1.182, 0.06], [1.186, 0.0], [1.179, -0.06], [1.16, -0.128]], nC);
   for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.955 + 0.02 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.006 - f * (top(s) - bottom(s) - 0.012)]); }
   return { dorsal: { base: dBase, tip: dTip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
@@ -205,6 +208,7 @@ const PAINT_GLSL = /* glsl */`
 uniform vec2 uOutline[96];   // (top, bottom) at s = i/95
 uniform vec2 uOcellus;       // eyespot centre in (s,y)
 uniform vec2 uTexel;         // size of one texel in (s,y)
+uniform sampler2D uPattern;  // traced pattern masks
 varying vec2 vP;
 
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
@@ -296,46 +300,29 @@ Paint paint(vec2 p){
   vec3 white  = vec3(0.9, 0.89, 0.93);
   vec3 yellow = vec3(1.0, 0.78, 0.0);
   vec3 orange = vec3(1.0, 0.62, 0.0);
-  vec3 brown  = vec3(0.36, 0.2, 0.06);
-  vec3 ink    = vec3(0.14, 0.12, 0.13);
+  vec3 brown  = vec3(0.46, 0.25, 0.05);
+  vec3 ink    = vec3(0.2, 0.2, 0.26);      // slate grey-navy, as in photographs
 
-  // --- stripe coordinate: B behind/below the meeting line, A in front, rounded where they join
-  float side = locusSide(p);
-  float fB = fieldB(p), fA = fieldA(p);
-  float blend = smoothstep(-0.03, 0.03, side) * smoothstep(-0.2, -0.02, y);
-  float f = mix(fB, fA, blend);
-
-  // --- yellow field: behind a boundary that crosses the stripes obliquely
-  vec2 ya = uYellowL.xy, yd = normalize(uYellowL.zw - uYellowL.xy);
-  float inY = dot(p - ya, vec2(-yd.y, yd.x)) / uSpB * 1.25;     // in stripe spacings, >0 toward the rear
-  inY += 0.35 * (fbm(p * 9.0) - 0.5);
-  float Yt = smoothstep(-0.15, 0.35, inY);
-  // anal fin: white in front like the body, yellow toward the rear and along its margin
-  float analY = smoothstep(0.52, 0.68, s) + smoothstep(-0.302, -0.316, y) * smoothstep(0.5, 0.62, s);
-  float Yfin = max(float(anal) * clamp(analY, 0.0, 1.0), float(caudal));
-  float Y = max(Yt, Yfin);
-  if (dorsal) Y = max(Yt, smoothstep(0.66, 0.8, s));
-  vec3 yel = mix(yellow, orange, smoothstep(0.6, 1.05, s) * 0.55);
-
-  // stripes keep their width into the yellow, turning brown there and fading out; just inside
-  // the boundary a brown shadow band carries thin bright yellow lines between the stripes
-  float w = mix(0.28, 0.46, smoothstep(-0.6, 0.6, inY));
-  float st = stripe(f, w);
-  float eb = eyeBand(p);
-  float headMask = smoothstep(0.035, 0.075, eb - 0.03) * smoothstep(0.17, 0.24, s);
-  float stripeMask = headMask * (1.0 - smoothstep(2.6, 4.0, inY));
-  if (!inBody && !dorsal) stripeMask = 0.0;
-  if (dorsal) stripeMask *= 1.0 - smoothstep(0.62, 0.74, s);
-  if (caudal) stripeMask = 0.0;
-
-  vec3 bg = mix(white, yel, Y);
-  float shadowBand = smoothstep(-0.35, 0.2, inY) * (1.0 - smoothstep(1.6, 3.2, inY)) * (1.0 - Yfin) * headMask;
-  bg = mix(bg, mix(brown, yel, 0.12), shadowBand * 0.92);
-  float yLine = (1.0 - smoothstep(0.03, 0.09, abs(abs(fract(f) - 0.5) - w * 0.5 - 0.1))) * shadowBand;
-  bg = mix(bg, vec3(1.0, 0.9, 0.2), yLine * 0.8);
-  vec3 lineCol = mix(ink, brown * 0.8, smoothstep(-0.3, 0.5, inY));
-  vec3 col = mix(bg, lineCol, st * stripeMask);
-
+  // --- pattern masks traced from a photograph of a real fish (see tools/masks2.py):
+  //     r = yellow field, g = brown zone (s > 0.32) or eye band (s < 0.32), b = stripes
+  vec4 pm = texture2D(uPattern, (p - vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)})) / vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}));
+  float aa = 0.12;
+  float Y  = smoothstep(0.5 - aa * 2.0, 0.5 + aa * 2.0, pm.r);
+  float Br = s < 0.32 ? 0.0 : pm.g;
+  // b < 0.5: stripe strength (x 0.49); b > 0.5: thin yellow line inside the brown zone
+  float stV = pm.b < 0.5 ? pm.b / 0.49 : 0.0;
+  float ylV = pm.b > 0.5 ? (pm.b - 0.5) / 0.5 : 0.0;
+  float st = smoothstep(0.5 - aa, 0.5 + aa, stV);
+  float yl = smoothstep(0.3, 0.7, ylV);
+  float bandM = s < 0.32 ? smoothstep(0.5 - aa, 0.5 + aa, pm.g) : 0.0;
+  if (caudal) { Y = 1.0; st = 0.0; bandM = 0.0; }
+  vec3 yel = mix(yellow, orange, smoothstep(0.55, 1.05, s) * 0.5);
+  vec3 warmCol = mix(yel, mix(orange * 0.9, brown, smoothstep(0.35, 1.0, Br)), smoothstep(0.0, 0.45, Br));
+  warmCol = mix(warmCol, vec3(1.0, 0.86, 0.12), yl * 0.9);
+  vec3 col = mix(white, warmCol, Y);
+  col = mix(col, mix(ink, brown * 0.55, Y), st);
+  float stripeMask = 1.0;
+  float eb = 1.0;
   float h = 0.0, rough = 0.4, metal = 0.12, ao = 1.0, alpha = 1.0;
 
   if (inBody) {
@@ -345,7 +332,7 @@ Paint paint(vec2 p){
     float sh = scales(p, sid, rim);
     h = sh * scaleMask * 0.5;
     col *= mix(1.0, 0.975 + 0.05*sid, scaleMask);
-    metal = mix(0.05, 0.3 + 0.15*sid, scaleMask) * (1. - Y*0.6) * (1. - st*stripeMask);
+    metal = mix(0.05, 0.3 + 0.15*sid, scaleMask) * (1. - Y*0.6) * (1. - st);
     rough = mix(0.45, 0.3 + 0.1*sid, scaleMask);
     // lavender-grey shading of the white in the shadowed belly and around the gill cover
     col = mix(col, col * vec3(0.93, 0.93, 0.98), smoothstep(0.2, -0.9, yn) * 0.5 * (1.0 - Y));
@@ -361,16 +348,16 @@ Paint paint(vec2 p){
       float pit = 1. - smoothstep(0.002, 0.004, length((p - nc) * vec2(1.0, 1.3)));
       h -= 0.9 * pit; col = mix(col, vec3(0.35, 0.33, 0.32), pit * 0.7);
     }
-    // eye band
-    float band = 1. - smoothstep(0.036 - uTexel.x*1.5, 0.036 + uTexel.x*1.5, eb);
-    col = mix(col, ink * 0.6, band);
+    // eye band (from the traced masks)
+    float band = bandM;
+    col = mix(col, ink * 0.55, band);
     metal = mix(metal, 0.0, band); rough = mix(rough, 0.32, band);
     // faint pale sheen along the back of the white field
     col *= 0.975 + 0.05 * fbm(p * 30.);
   } else if (dorsal) {
     // spinous part carries the white + stripes, soft part is yellow
-    float r = length(((p - uOcellus) * mat2(0.96, 0.28, -0.28, 0.96)) * vec2(1.0, 2.1));
-    float spot = 1. - smoothstep(0.047 - uTexel.x, 0.047 + uTexel.x, r);
+    float r = length(((p - uOcellus) * mat2(0.985, 0.17, -0.17, 0.985)) * vec2(1.0, 2.3));
+    float spot = 1. - smoothstep(0.05 - uTexel.x, 0.05 + uTexel.x, r);
     col = mix(col, ink * 0.5, spot);
     alpha = 0.5 + 0.5 * spot;
     rough = 0.45; metal = 0.0;
@@ -390,13 +377,13 @@ Paint paint(vec2 p){
 }
 `;
 
-function bakeTextures(renderer, W, H, ocellus) {
+function bakeTextures(renderer, W, H, ocellus, pattern) {
   const { top, bottom } = ANATOMY;
   const outline = [];
   for (let i = 0; i < 96; i++) { const s = i / 95; outline.push(new THREE.Vector2(top(s), bottom(s))); }
   const texel = new THREE.Vector2((S1 - S0) / W, (Y1 - Y0) / H);
   const common = {
-    uOutline: { value: outline }, uOcellus: { value: new THREE.Vector2(...ocellus) }, uTexel: { value: texel },
+    uOutline: { value: outline }, uOcellus: { value: new THREE.Vector2(...ocellus) }, uTexel: { value: texel }, uPattern: { value: pattern },
     // stripe field measured from photographs (see PAINT_GLSL)
     uSpB: { value: 0.086 }, uSpA: { value: 0.06 }, uSlopeB: { value: 0.75 }, uSlopeA: { value: 62.0 },
     uLocus: { value: new THREE.Vector4(0.41, -0.2, 0.33, 0.36) }, uYellowP: { value: new THREE.Vector2(0.5, 0.33) }, uYellowL: { value: new THREE.Vector4(0.47, 0.35, 0.86, -0.23) },
@@ -478,6 +465,16 @@ function addSwim(material, uniforms, extra = {}) {
   material.customProgramCacheKey = () => 'fish-' + (extra.key || 'x');
 }
 
+// ---------------------------------------------------------- assets ----------------
+
+export function loadPattern(url = new URL('../assets/auriga_pattern.png', import.meta.url).href) {
+  return new THREE.TextureLoader().loadAsync(url).then((t) => {
+    t.colorSpace = THREE.NoColorSpace;
+    t.minFilter = THREE.LinearFilter; t.generateMipmaps = false;
+    return t;
+  });
+}
+
 // ---------------------------------------------------------- assembly --------------
 
 export function createButterflyfish(renderer, opts = {}) {
@@ -487,8 +484,8 @@ export function createButterflyfish(renderer, opts = {}) {
   // ocellus sits in the soft dorsal near its posterior margin
   const oi = Math.round(layouts.dorsal.base.length * 0.8);
   const ob = layouts.dorsal.base[oi], ot = layouts.dorsal.tip[oi];
-  const ocellus = [1.0, 0.262];   // black oval near the rear corner of the soft dorsal (from photos)
-  const tex = opts.textures || bakeTextures(renderer, texW, texH, ocellus);
+  const ocellus = [1.012, 0.206];   // black oval under the rear corner of the soft dorsal (traced)
+  const tex = opts.textures || bakeTextures(renderer, texW, texH, ocellus, opts.pattern);
 
   const uniforms = { uPhase: { value: 0 }, uAmp: { value: 0.0 }, uTurn: { value: 0 }, uFlap: { value: 0 }, uGlow: { value: 1.0 } };
   const group = new THREE.Group();
@@ -642,9 +639,9 @@ export function createButterflyfish(renderer, opts = {}) {
   // -- eyes: dark globe with a thin golden-brown iris ring and a glossy cornea
   const { eye } = ANATOMY;
   const eyeTex = makeEyeTexture();
-  const eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTex, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.02 });
+  const eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTex, roughness: 0.3, clearcoat: 0.5, clearcoatRoughness: 0.08, envMapIntensity: 0.25 });
   addSwim(eyeMat, uniforms, { key: 'eye' });
-  const corneaMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.0, transmission: 0, transparent: true, opacity: 0.12, clearcoat: 1, clearcoatRoughness: 0, ior: 1.38 });
+  const corneaMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.0, transmission: 0, transparent: true, opacity: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.05, ior: 1.38, envMapIntensity: 0.3 });
   addSwim(corneaMat, uniforms, { key: 'cornea' });
   const rimMat = new THREE.MeshPhysicalMaterial({ color: 0x0b0a0a, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.15 });
   addSwim(rimMat, uniforms, { key: 'rim' });
@@ -652,15 +649,15 @@ export function createButterflyfish(renderer, opts = {}) {
     const w = ANATOMY.width(eye.s) * 1.18 * lensZN(eye.y);
     const g = new THREE.SphereGeometry(eye.r, 48, 32);
     g.rotateY(side > 0 ? 0 : Math.PI);   // texture pupil faces +z (outward)
-    g.scale(1, 1, 0.26);
-    g.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.24));
+    g.scale(1, 1, 0.2);
+    g.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.12));
 
     const m = new THREE.Mesh(g, eyeMat);
     group.add(m);
     const cg = new THREE.SphereGeometry(eye.r * 1.03, 48, 32, 0, Math.PI * 2, 0, Math.PI * 0.42);
     cg.rotateX(Math.PI / 2 * side);
-    cg.scale(1, 1, 0.4);
-    cg.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.26));
+    cg.scale(1, 1, 0.3);
+    cg.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.12));
     group.add(new THREE.Mesh(cg, corneaMat));
   }
 
@@ -710,19 +707,21 @@ export function createButterflyfish(renderer, opts = {}) {
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   for (const p of pairs) p.traverse((o) => { o.castShadow = false; });   // clear/thin paired fins cast no solid shadow
 
-  let phase = 0;
+  let phase = 0, pecPhase = 0;
   function update(dt, t, { amp = 0.04, freq = 1.6, turn = 0 } = {}) {
     phase += dt * freq * Math.PI * 2;
+    // pectorals: accumulated phase so the rate can change smoothly; ~0.8-1.3 beats/s
+    pecPhase += dt * Math.PI * 2 * (0.75 + 0.3 * Math.min(freq, 2));
     uniforms.uPhase.value = phase;
     uniforms.uAmp.value = amp;
     uniforms.uTurn.value = turn;
     for (const p of pairs) {
       const { side, kind } = p.userData;
       if (kind === 'pec') {
-        const f = Math.sin(t * 5.2 * (0.6 + freq * 0.3));
-        p.rotation.set(side * (-0.15 + 0.35 * f), side * (0.35 + 0.35 * f), -0.25 + 0.1 * f);
+        const f = Math.sin(pecPhase + (side > 0 ? 0 : 0.35));
+        p.rotation.set(side * (-0.1 + 0.2 * f), side * (0.4 + 0.22 * f), -0.25 + 0.06 * f);
       } else {
-        const f = Math.sin(t * 1.3 + side);
+        const f = Math.sin(t * 0.6 + side);
         p.rotation.set(side * (0.12 + 0.04 * f), side * 0.08, 0.35 + 0.05 * f);
       }
     }
@@ -759,11 +758,12 @@ function makeEyeTexture() {
       const f = (r - pupil) / (iris - pupil);
       const fib = 0.75 + 0.25 * Math.sin(a * 60 + rnd(Math.floor(a * 30)) * 6) * rnd(Math.floor(a * 90) + 7);
       // thin bright golden collar next to the pupil, darker bronze outward
-      const collar = 0.12 * Math.exp(-Math.pow((f - 0.1) / 0.06, 2));
-      const base = [72, 52, 26].map((v) => v * (1 - 0.65 * f));
+      // real eye: black pupil, very dark brown iris with a faint bronze ring; it disappears into the band
+      const collar = 0.06 * Math.exp(-Math.pow((f - 0.12) / 0.06, 2));
+      const base = [26, 18, 11].map((v) => v * (1 - 0.6 * f));
       col = base.map((v, i) => v * fib + collar * [150, 115, 55][i]);
     } else {
-      col = [10, 9, 8];
+      col = [6, 5, 5];
     }
     const o = (y * W + x) * 4;
     img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;

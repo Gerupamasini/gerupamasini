@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { createButterflyfish } from './src/fish.js';
+import { createButterflyfish, loadPattern } from './src/fish.js';
 
 const Q = new URLSearchParams(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -54,7 +54,8 @@ scene.add(key);
 const rim = new THREE.DirectionalLight(0xbfdcff, 2.0); rim.position.set(-2, 1.0, -2.5); scene.add(rim);
 const fill = new THREE.DirectionalLight(0xdfe8ff, 0.5); fill.position.set(-1, -0.6, 2); scene.add(fill);
 
-const fish = createButterflyfish(renderer, { texSize: +(Q.get('tex') || 4096) });
+const pattern = await loadPattern();
+const fish = createButterflyfish(renderer, { texSize: +(Q.get('tex') || 4096), pattern });
 scene.add(fish.group);
 
 const camera = new THREE.PerspectiveCamera(+(Q.get('fov') || 30), innerWidth / innerHeight, 0.01, 50);
@@ -80,6 +81,13 @@ if (Q.has('dump')) {   // show a baked texture full screen
   renderer.toneMapping = THREE.NoToneMapping;
 }
 
+// pixel-aligned orthographic camera matching the painting space (for overlays with the traced photo)
+let orthoCam = null;
+if (Q.has('ortho')) {
+  orthoCam = new THREE.OrthographicCamera(-0.03 - 0.5, 1.3 - 0.5, 0.6, -0.52, 0.01, 20);
+  orthoCam.position.set(0, 0, -5); orthoCam.lookAt(0, 0, 0);
+  scene.background = new THREE.Color(Q.get('bg') || '#303030');
+}
 const swim = Q.get('swim') !== '0';
 const clock = new THREE.Clock();
 let t = +(Q.get('t') || 0), frames = 0;
@@ -113,7 +121,7 @@ renderer.setAnimationLoop(() => {
       renderer.render(scene, camera);
     });
     renderer.setScissorTest(false);
-  } else renderer.render(scene, camera);
+  } else renderer.render(scene, orthoCam || camera);
   if (++frames === 3) window.__ready = true;
 });
 </script>
