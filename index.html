@@ -5,18 +5,19 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Butterflyfish Reef Tank</title>
 <style>
-  :root { --bg: #050708; --ink: #d8e4e8; --dim: #7c8d94; --line: rgba(160, 220, 235, .18); --panel: rgba(8, 14, 18, .72); }
-  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --panel: rgba(8, 14, 18, .72); } }
+  /* single dark look on purpose: a dim room lit by the tank */
+  :root { color-scheme: dark; --bg: #050708; --ink: #d8e4e8; --dim: #8b9ba2; --line: rgba(160, 220, 235, .2); --panel: rgba(8, 14, 18, .74); --accent: #8fdcee; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden;
     font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
   canvas { display: block; touch-action: none; }
-  #ui { position: fixed; top: 12px; left: 12px; background: var(--panel); border: 1px solid var(--line);
-    backdrop-filter: blur(6px); padding: 10px 12px; max-width: calc(100vw - 48px); }
+  #ui { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); left: 16px; background: var(--panel); border: 1px solid var(--line);
+    backdrop-filter: blur(6px); padding: 10px 12px; max-width: calc(100vw - 32px); box-sizing: border-box; }
   #ui h1 { margin: 0 0 2px; font: 400 15px Georgia, serif; letter-spacing: .04em; }
   #ui p { margin: 0 0 8px; color: var(--dim); }
   #ui .row { display: flex; gap: 6px; flex-wrap: wrap; }
   #ui button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 4px 8px; cursor: pointer; }
-  #ui button[aria-pressed="true"] { border-color: #6fd3ea; color: #9fe7f7; }
+  #ui button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  #ui button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #ui.hidden { display: none; }
   #load { position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); pointer-events: none; }
 </style>
@@ -100,7 +101,7 @@ scene.add(room);
 
 // --- fish: a pair, as they are usually seen on the reef
 const fishModels = [];
-const m1 = createButterflyfish(renderer, { texSize: +(Q.get('tex') || 4096) });
+const m1 = createButterflyfish(renderer, { texSize: +(Q.get('tex') || (Math.min(innerWidth, innerHeight) < 700 ? 2048 : 4096)) });
 const m2 = createButterflyfish(renderer, { textures: m1.textures });
 const f1 = new Butterflyfish(m1, { scale: 0.15, seed: 3, start: new THREE.Vector3(-0.1, 0.32, 0.05), obstacles: reef.obstacles });
 const f2 = new Butterflyfish(m2, { seed: 8, start: new THREE.Vector3(0.05, 0.28, -0.02), leader: f1, obstacles: reef.obstacles, scale: 0.14 });
@@ -130,6 +131,10 @@ const VIEWS = {
 };
 const v0 = VIEWS[Q.get('view') || 'hero'];
 camera.position.set(...v0.pos);
+if (camera.aspect < 1.4) {   // narrow screens: step back so the whole tank stays in frame
+  const tgt = new THREE.Vector3(...v0.target);
+  camera.position.sub(tgt).multiplyScalar(Math.min(2.6, 1.4 / camera.aspect)).add(tgt);
+}
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(...v0.target);
 controls.enableDamping = true;
