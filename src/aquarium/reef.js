@@ -65,11 +65,21 @@ function createSand() {
       base = mix(base, vec3(0.9, 0.62, 0.62), step(0.985, g3) * 0.6);               // pink shell bits
       base = mix(base, vec3(0.3, 0.28, 0.26), step(0.995, h13(floor(q * 0.8) + 3.0)) * 0.8);
       float patchy = fbmS(vObjP * 6.0);
-      base *= 0.9 + 0.18 * patchy;
+      base *= 0.82 + 0.3 * patchy;
+      // coarse aragonite: millimetre-to-centimetre rubble grains of varied tone, visible at viewing distance
+      vec3 cq = vObjP * 260.0; vec3 ci = floor(cq); vec3 cf3 = fract(cq) - 0.5;
+      float rg = h13(ci + 7.0), rd = length(cf3.xz + (vec2(h13(ci), h13(ci + 2.0)) - 0.5) * 0.5);
+      float grain = step(0.72, rg) * smoothstep(0.32, 0.18, rd);
+      base = mix(base, base * mix(0.55, 1.25, h13(ci + 5.0)) * mix(vec3(1.0), vec3(1.05, 0.92, 0.85), step(0.5, h13(ci + 9.0))), grain);
+      base *= 0.85 + 0.15 * vn3(vObjP * 80.0);                                // mid-scale mottling
+      base = mix(base, base * vec3(0.72, 0.74, 0.62), smoothstep(0.55, 0.75, fbmS(vObjP * 14.0 + 4.0)) * 0.5);   // detritus / diatom film
       diffuseColor.rgb *= base;
     }`,
     normal: /* glsl */`{
       float hq = vn3(vObjP * 900.0) * 0.6 + vn3(vObjP * 2200.0) * 0.4;
+      vec3 cq = vObjP * 260.0; vec3 ci = floor(cq); vec3 cf3 = fract(cq) - 0.5;
+      float rd = length(cf3.xz + (vec2(h13(ci), h13(ci + 2.0)) - 0.5) * 0.5);
+      hq += step(0.72, h13(ci + 7.0)) * smoothstep(0.32, 0.1, rd) * 1.5 + vn3(vObjP * 80.0) * 0.8;
       normal = bumpN(normal, -vViewPosition, hq, 0.0006);
     }`,
   });

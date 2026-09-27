@@ -229,6 +229,7 @@ uniform vec2 uOcellus;       // eyespot centre in (s,y)
 uniform vec2 uTexel;         // size of one texel in (s,y)
 uniform sampler2D uPattern;  // traced pattern masks
 uniform sampler2D uPhoto; uniform float uPhotoMix;
+float stCoreEarly(float b, float s){ return smoothstep(0.6, 0.85, b) * smoothstep(0.26, 0.3, s); }
 varying vec2 vP;
 
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
@@ -352,6 +353,13 @@ Paint paint(vec2 p){
   // wherever it covers the fish; the masks remain as a fallback outside it
   vec4 ph = texture2D(uPhoto, (p - vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)})) / vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}));
   col = mix(col, ph.rgb, ph.a * uPhotoMix);
+  // the photo's dusky saddle is darkened by shadow and motion blur; in life it is a narrower
+  // amber-brown transition, so lift dark warm tones in the yellow zone back toward orange
+  {
+    float lum = dot(col, vec3(0.3, 0.55, 0.15));
+    float warm = smoothstep(1.2, 2.2, col.r / max(col.b, 0.02)) * smoothstep(0.42, 0.12, lum) * (1.0 - stCoreEarly(pm.b, s));
+    col = mix(col, mix(yel, orange, 0.5) * 0.72, warm * 0.55 * ph.a * uPhotoMix);
+  }
   // the photo's stripes are soft (motion + JPEG); reinforce them with the traced stripe field
   float stCore = smoothstep(0.7, 0.9, pm.b) * smoothstep(0.26, 0.3, s) * (1.0 - Y * 0.6);
   col = mix(col, col * vec3(0.3, 0.3, 0.34), stCore * 0.6 * uPhotoMix);
@@ -390,13 +398,19 @@ Paint paint(vec2 p){
     float wob = 0.004 * (fbm(p * 60.0) - 0.5);
     float fr = mix(0.136, 0.126, t01) + 0.005 * sin(t01 * 3.1416) + wob, bk = mix(0.19, 0.232, t01) - wob;   // narrow above the eye, wide at the throat
     float dB = max(max(fr - s, s - bk), 0.0);
-    float topCap = length(vec2((s - (fr + bk) * 0.5) / ((bk - fr) * 0.5), (y - 0.075) / 0.05)) - 1.0;   // rounded top, a little above the eye
-    float inBand = step(0.0, -max(fr - s, s - bk)) * (y < 0.075 ? 1.0 : step(topCap, 0.0));
-    float edgeD = min(min(s - fr, bk - s), y < 0.075 ? 1.0 : -topCap * 0.02);
+    // above the eye the band narrows and runs on up over the nape to the dorsal profile
+    if (y > 0.075) { float u2 = clamp((y - 0.075) / 0.12, 0.0, 1.0); fr = mix(fr, 0.146, u2); bk = mix(bk, 0.178, u2); }
+    float topCap = length(vec2((s - (fr + bk) * 0.5) / ((bk - fr) * 0.5), (y - 0.28) / 0.04)) - 1.0;
+    float inBand = step(0.0, -max(fr - s, s - bk)) * (y < 0.28 ? 1.0 : step(topCap, 0.0));
+    float edgeD = min(min(s - fr, bk - s), y < 0.28 ? 1.0 : -topCap * 0.02);
     float band = smoothstep(-0.0015, 0.0025, edgeD) * inBand;
-    band *= 1.0 - uPhotoMix * ph.a;   // the photo carries its own band
-    float bandRim = (1.0 - smoothstep(0.0, 0.006, -edgeD)) * (1.0 - band) * step(y, 0.085) * step(fr - 0.012, s) * step(s, bk + 0.012);
-    col = mix(col, vec3(0.98, 0.985, 1.0), bandRim * 0.55 * (1.0 - uPhotoMix * ph.a));   // thin pale border
+    // the photo's own band sits too far back and low (the eye was at its upper edge): clear its
+    // dark pixels outside the anatomical band, then paint the band procedurally everywhere
+    float phLum = dot(col, vec3(0.3, 0.55, 0.15));
+    float phDark = smoothstep(0.6, 0.3, phLum) * step(0.04, s) * (1.0 - smoothstep(0.25, 0.265, s)) * step(-0.3, y) * step(y, 0.2);
+    col = mix(col, white * (0.95 + 0.05 * fbm(p * 40.0)), phDark * (1.0 - band) * ph.a * uPhotoMix);
+    float bandRim = (1.0 - smoothstep(0.0, 0.006, -edgeD)) * (1.0 - band) * step(fr - 0.012, s) * step(s, bk + 0.012);
+    col = mix(col, vec3(0.98, 0.985, 1.0), bandRim * 0.0);
     col = mix(col, vec3(0.045, 0.036, 0.034), band);
     metal = mix(metal, 0.0, band); rough = mix(rough, 0.32, band);
     // faint pale sheen along the back of the white field
@@ -616,23 +630,25 @@ export function createButterflyfish(renderer, opts = {}) {
             c = mix(c, vec3(0.05, 0.04, 0.04), smoothstep(uRays - 4.6, uRays - 3.4, r) * smoothstep(0.3, 0.55, t));
           }
           if (kind > 0.5 && kind < 1.5 && !spine) {
-            // anal: dark submarginal line and a pale margin
+            // anal: soft part yellow (orange toward the rear), dark submarginal line and a pale margin
+            c = mix(c, mix(vec3(0.98, 0.78, 0.06), vec3(0.98, 0.6, 0.04), smoothstep(uRays * 0.5, uRays, r)), smoothstep(uSpines, uSpines + (uRays - uSpines) * 0.35, r) * smoothstep(0.05, 0.3, t) * 0.9);
             float sub = smoothstep(0.86, 0.88, t) * (1.0 - smoothstep(0.9, 0.92, t));
             c = mix(c, vec3(0.08, 0.05, 0.03), sub * 0.9);
             c = mix(c, vec3(0.97, 0.95, 0.85), smoothstep(0.925, 0.95, t) * 0.9);
           }
           if (kind > 1.5 && kind < 2.5) {
             // caudal: yellow, a thin dark submarginal bar, then a clear margin
-            float bar = smoothstep(0.68, 0.71, t) * (1.0 - smoothstep(0.76, 0.79, t));
-            c = mix(c, vec3(0.1, 0.07, 0.05), bar * 0.9);
-            c = mix(c, vec3(0.95, 0.93, 0.85), smoothstep(0.79, 0.84, t) * 0.8);
+            float bar = smoothstep(0.63, 0.67, t) * (1.0 - smoothstep(0.76, 0.795, t));
+            c = mix(c, vec3(0.1, 0.075, 0.05), smoothstep(0.55, 0.64, t) * 0.35);   // yellow darkens toward the bar
+            c = mix(c, vec3(0.04, 0.035, 0.03), bar * 0.95);
+            c = mix(c, vec3(0.9, 0.9, 0.86), smoothstep(0.79, 0.84, t) * 0.7);
           }
           if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.9, 0.6), vec3(0.9), t); ray *= 0.6; }
           if (kind > 3.5) { c = mix(vec3(0.97, 0.86, 0.45), vec3(0.98, 0.95, 0.8), t); c = mix(c, vec3(0.25, 0.2, 0.15), (1.0 - smoothstep(0.0, 0.6, r)) * 0.7); }   // pelvics: yellow-white, dark leading spine
           // rays: faint ridges only (the membrane is thick)
           vec3 rayC = spine ? c * 1.06 + 0.02 : c * 1.05 + 0.015;
           c = mix(c, rayC, ray * 0.07);
-          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : 0.98, ray);
+          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.4, smoothstep(0.8, 0.88, t)) : 0.98), ray);
           a = mix(a, 1.0, opaque);
           a *= smoothstep(0.0, 0.03, 1.0 - t + 0.02);
           if (kind > 2.5 && kind < 3.5) a *= smoothstep(0.05, 0.45, abs(dot(normalize(vNormal), normalize(vViewPosition))));

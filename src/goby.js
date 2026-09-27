@@ -11,14 +11,14 @@ const GDEPTH = 1.15;
 
 export const GOBY = {
   // averaged from two traced side views (iNaturalist, CC0 / CC BY-NC); slender body, blunt head
-  top: spline([[0, 0.01], [0.01, 0.034], [0.03, 0.062], [0.06, 0.088], [0.1, 0.108], [0.15, 0.12], [0.25, 0.132],
+  top: spline([[0, 0.004], [0.015, 0.026], [0.04, 0.052], [0.07, 0.078], [0.1, 0.098], [0.15, 0.116], [0.25, 0.132],
     [0.4, 0.13], [0.6, 0.11], [0.8, 0.078], [0.93, 0.05], [1.0, 0.036]]),
-  bottom: spline([[0, -0.01], [0.012, -0.024], [0.04, -0.038], [0.09, -0.05], [0.16, -0.057], [0.25, -0.06],
+  bottom: spline([[0, -0.006], [0.015, -0.02], [0.04, -0.035], [0.09, -0.05], [0.16, -0.057], [0.25, -0.06],
     [0.4, -0.06], [0.6, -0.054], [0.8, -0.044], [0.93, -0.033], [1.0, -0.027]]),
   // laterally compressed behind the head, tapering to a thin peduncle that runs into the tail
   width: spline([[0, 0.011], [0.03, 0.024], [0.08, 0.034], [0.16, 0.037], [0.3, 0.032], [0.5, 0.024], [0.7, 0.016],
     [0.88, 0.01], [0.96, 0.006], [1.0, 0.002]]),
-  eye: { s: 0.066, y: 0.044, r: 0.036 },
+  eye: { s: 0.07, y: 0.045, r: 0.03 },
 };
 
 function buildBody() {
@@ -58,18 +58,18 @@ function finLayouts() {
   // first dorsal: the "flag" — 6 long spines, the front ones longest, curving back
   // The flag is a narrow blade: spines packed together, the front one longest; the fin's
   // leading edge sweeps up and back in one curve (traced), the trailing edge runs close behind.
-  const flagBase = even(0.255, 0.315, 7, (s) => top(s) - 0.003);   // narrow base
+  const flagBase = even(0.26, 0.34, 7, (s) => top(s) - 0.003);   // narrow base
   // spine 0 runs along the leading edge to the tip; the others end on the trailing edge,
   // which runs from just behind the last spine up to meet the tip
   // trailing edge hugs the leading spine above the lowest fifth: a slender ray, membrane at the base
-  const trail = polyline([[0.61, 0.572], [0.58, 0.553], [0.53, 0.51], [0.46, 0.43], [0.39, 0.3], [0.335, 0.17]], 6);
-  const flagTip = [[0.615, 0.572], ...trail];
+  const trail = polyline([[0.7, 0.45], [0.62, 0.425], [0.53, 0.37], [0.46, 0.3], [0.41, 0.22], [0.37, 0.155]], 6);
+  const flagTip = [[0.705, 0.452], ...trail];   // reclined, curving back (side-view photos)
   // second dorsal and anal: long, low, running almost to the caudal
   // traced from the CC0 side view: low fins whose edges run nearly parallel to the body
   const d2Base = even(0.4, 0.97, 24, (s) => top(s) - 0.003);
-  const d2Tip = polyline([[0.41, 0.152], [0.55, 0.16], [0.7, 0.148], [0.85, 0.12], [0.96, 0.095], [1.03, 0.075], [1.06, 0.06], [1.0, 0.045]], 24);
+  const d2Tip = polyline([[0.41, 0.165], [0.52, 0.19], [0.66, 0.192], [0.8, 0.172], [0.92, 0.14], [1.02, 0.1], [1.08, 0.07], [1.02, 0.045]], 24);   // tall, reaching the caudal
   const aBase = even(0.46, 0.97, 22, (s) => bottom(s) + 0.003);
-  const aTip = polyline([[0.47, -0.075], [0.6, -0.085], [0.75, -0.088], [0.9, -0.084], [1.0, -0.075], [1.06, -0.058], [1.0, -0.035]], 22);
+  const aTip = polyline([[0.47, -0.085], [0.58, -0.11], [0.72, -0.12], [0.86, -0.112], [0.98, -0.092], [1.07, -0.065], [1.02, -0.035]], 22);
   // caudal: rounded / slightly lanceolate
   const cBase = even(0, 1, 17, (f) => 0).map(([f]) => { const s = 0.94 + 0.03 * Math.sin(Math.PI * f); return [s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]; });
   const cTip = polyline([[1.08, 0.058], [1.18, 0.052], [1.27, 0.025], [1.3, -0.005], [1.27, -0.035], [1.18, -0.062], [1.08, -0.068]], 17);   // long lanceolate caudal
@@ -140,7 +140,7 @@ vec4 gobyColor(vec2 p){
       // caudal: red with blackish streaks along the upper and lower lobes, dark centre
       // caudal: maroon-brown, darkening outward, faint dark streaks near the upper and lower edges
       float band = smoothstep(0.08, 0.02, abs(r / 16.0 - 0.12)) + smoothstep(0.08, 0.02, abs(r / 16.0 - 0.88));
-      c = mix(vec3(0.3, 0.06, 0.045), vec3(0.14, 0.035, 0.035), t) * (0.85 + 0.15 * ray);
+      c = mix(vec3(0.16, 0.022, 0.012), vec3(0.045, 0.008, 0.007), smoothstep(0.1, 0.8, t)) * (0.85 + 0.15 * ray);
       c = mix(c, vec3(0.08, 0.03, 0.03), band * 0.5);
       a = mix(0.95, 0.7, t);
     } else if (uGKind < 5.5) {
@@ -156,7 +156,14 @@ vec4 gobyColor(vec2 p){
     vec4 ph = texture2D(uGPhoto, (p - vec2(${S0}, ${Y0})) / vec2(${S1 - S0}, ${Y1 - Y0}));
     c = mix(c, ph.rgb, ph.a * uGPhotoMix);
     // soft fins carry the flank colour (orange -> red -> maroon) rather than the photo's pale fins
-    if (uGKind > 1.5) c = mix(c, mix(vec3(0.9, 0.42, 0.14), vec3(0.45, 0.08, 0.05), smoothstep(0.55, 1.0, s)), smoothstep(0.45, 0.62, s) * 0.75);
+    // rear half: flame orange-red deepening to maroon (linear-space values measured from the side-view photos)
+    {
+      float g2 = s + 0.25 * y + (uGKind > 1.5 ? 0.04 : 0.0);
+      vec3 rear = mix(vec3(0.46, 0.075, 0.018), vec3(0.2, 0.025, 0.01), smoothstep(0.6, 0.8, g2));
+      rear = mix(rear, vec3(0.06, 0.008, 0.006), smoothstep(0.84, 1.02, g2));
+      c = mix(c, rear, smoothstep(0.38, 0.56, g2) * 0.92);
+      if (uGKind > 1.5) c = mix(c, vec3(0.06, 0.01, 0.008), smoothstep(0.88, 0.97, vFinG.y) * 0.7);   // dark fin margin
+    }
     if (uGKind < 0.5) {
       // brighter lemon face, lavender nape stripe, violet freckles, upturned mouth
       float face = 1.0 - smoothstep(0.07, 0.15, length((p - vec2(0.035, 0.03)) * vec2(1.0, 1.2)));
@@ -244,11 +251,11 @@ export function createFireGoby() {
   for (const side of [1, -1]) {
     const w = GOBY.width(eye.s);
     const M = new THREE.Matrix4().compose(
-      new THREE.Vector3(sx(eye.s), eye.y, side * (w - eye.r * 0.5)),
+      new THREE.Vector3(sx(eye.s), eye.y, side * (w - eye.r * 0.72)),
       new THREE.Quaternion().setFromEuler(new THREE.Euler(side * -0.15, side > 0 ? 0.25 : Math.PI - 0.25, 0)),
       new THREE.Vector3(1, 1 / GDEPTH, 1));
     group.add(createFishEye({
-      r: eye.r, matrix: M, pupilA: 0.78, irisA: 0.95,
+      r: eye.r, matrix: M, pupilA: 0.6, irisA: 0.95,
       pupil: [0.004, 0.004, 0.008], irisIn: [0.85, 0.82, 0.78], irisOut: [0.72, 0.6, 0.88], limbus: [0.5, 0.38, 0.7],
       sclera: [0.72, 0.8, 0.36], upper: [0.8, 0.45, 0.82], upperAmt: 0.75,
       patch: (m, k) => addSwim(m, uniforms, { key: 'goby-' + k }),
@@ -266,7 +273,7 @@ export function createFireGoby() {
   for (const side of [1, -1]) {
     const pec = paired(0.13, 0.06, 12, (f) => 0.6 + 0.4 * Math.sin(Math.PI * f), 5, [sx(0.19), -0.01, side * 0.048], [side * -0.2, side * 0.3, -0.2]);
     pec.userData = { side, kind: 'pec' }; pairs.push(pec);
-    const pel = paired(0.19, 0.006, 3, (f) => 1 - 0.2 * f, 6, [sx(0.24), GOBY.bottom(0.24) + 0.006, side * 0.01], [side * 0.08, side * 0.03, 0.5]);
+    const pel = paired(0.19, 0.006, 3, (f) => 1 - 0.2 * f, 6, [sx(0.24), GOBY.bottom(0.24) + 0.006, side * 0.01], [side * 0.08, side * 0.03, 0.15]);
     pel.userData = { side, kind: 'pel' }; pairs.push(pel);
   }
   group.scale.y = GDEPTH;   // photographed adults are ~15% deeper than the first trace
@@ -284,7 +291,7 @@ export function createFireGoby() {
     for (const p of pairs) {
       const { side, kind } = p.userData;
       if (kind === 'pec') { const f = Math.sin(pecPhase + (side > 0 ? 0 : 0.5)); p.rotation.set(side * (-0.2 + 0.35 * f), side * (0.3 + 0.3 * f), -0.2); }
-      else p.rotation.set(side * (0.08 + 0.02 * Math.sin(t * 0.8)), side * 0.03, 0.5 + 0.04 * Math.sin(t * 0.6));
+      else p.rotation.set(side * (0.08 + 0.02 * Math.sin(t * 0.8)), side * 0.03, 0.15 + 0.04 * Math.sin(t * 0.6));
     }
   }
   return { group, update, uniforms };
