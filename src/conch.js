@@ -26,7 +26,7 @@ function shellGeometry() {
   const push = (p, s) => { pos.push(p.x, p.y, p.z); suv.push(s[0], s[1], s[2]); };
   // Body whorl: angle th from 0 (columella side, facing down) through the back to the lip.
   const NT = 150, NX = 150, TH = Math.PI * 2 * 0.985;
-  const lipFlare = (x) => 0.04 * Math.max(0, 1 - Math.abs((x - 0.5) / 0.4)) + 0.018;   // wing near the posterior
+  const lipFlare = (x) => 0.015 * Math.max(0, 1 - Math.abs((x - 0.5) / 0.4)) + 0.008;   // wing near the posterior
   const P = (th, x, inner) => {
     const f = th / (Math.PI * 2);
     let r = bodyR(x) * (1 + 0.05 * f);                                  // spiral growth: lip stands proud
@@ -69,7 +69,7 @@ function shellGeometry() {
   // spire (surface of revolution) closing the posterior end
   const spStart = pos.length / 3, NS = 90, NA = 72;
   for (let j = 0; j <= NS; j++) for (let i = 0; i <= NA; i++) {
-    const x = (j / NS) * 0.2, r = spireR(x), a = (i / NA) * Math.PI * 2;
+    const x = (j / NS) * 0.25, r = spireR(x), a = (i / NA) * Math.PI * 2;
     push(new THREE.Vector3(x, r * Math.sin(a), r * Math.cos(a)), [i / NA, x, 3]);
   }
   for (let j = 0; j < NS; j++) for (let i = 0; i < NA; i++) {
@@ -199,10 +199,10 @@ export function createStrawberryConch({ live = 1 } = {}) {
   const stalks = [];
   for (const side of [1, -1]) {
     const piv = new THREE.Group(); piv.position.set(0.93, -0.16, side * 0.05);
-    const { g, curve } = tube([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.06, 0.035, side * 0.025), new THREE.Vector3(0.11, 0.085, side * 0.05), new THREE.Vector3(0.14, 0.14, side * 0.065)], 0.018, 0.014);
+    const { g, curve } = tube([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.06, 0.035, side * 0.025), new THREE.Vector3(0.11, 0.085, side * 0.05), new THREE.Vector3(0.14, 0.14, side * 0.065)], 0.012, 0.009);
     piv.add(new THREE.Mesh(g, stalkMat));
     const end = curve.getPointAt(1), dir = curve.getTangentAt(1);
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.021, 24, 16), eyeMat);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.016, 24, 16), eyeMat);
     eye.position.copy(end).addScaledVector(dir, 0.012);
     eye.lookAt(eye.position.clone().add(new THREE.Vector3(0.3, 0.1, side * 1.0)));
     eye.rotateY(-Math.PI / 2);                      // texture pole faces outwards

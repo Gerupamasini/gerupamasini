@@ -117,7 +117,7 @@ for (const f of fishModels) scene.add(f.obj);
 const critters = [
   new HoveringGoby(createFireGoby(), { home: new THREE.Vector3(0.24, reef.sandHeight(0.24, 0.12) + 0.03, 0.12), seed: 11 }),
   new HoveringGoby(createFireGoby(), { home: new THREE.Vector3(0.3, reef.sandHeight(0.3, 0.08) + 0.05, 0.08), seed: 17, scale: 0.068 }),
-  new SandConch(createStrawberryConch({ live: 0.3 }), { pos: new THREE.Vector3(-0.2, 0, 0.16), heading: 0.3, sandHeight: reef.sandHeight }),
+  new SandConch(createStrawberryConch({ live: 0.15 }), { pos: new THREE.Vector3(-0.2, 0, 0.16), heading: 0.3, sandHeight: reef.sandHeight }),
   new SandConch(createStrawberryConch({ live: 0.3 }), { pos: new THREE.Vector3(0.05, 0, 0.19), heading: 2.6, scale: 0.055, sandHeight: reef.sandHeight }),
 ];
 for (const c of critters) scene.add(c.obj);

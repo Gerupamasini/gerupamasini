@@ -501,9 +501,6 @@ export function createReef() {
   place(zoanthids(63, { disc: [0.8, 0.95, 0.2], ring: [0.8, 0.2, 0.6], count: 28 }), 0.02, -0.16, 0.07);
   place(leatherCoral(81, { r: 0.06 }), 0.22, -0.1, 0.0, 1.0, 0.4);
   place(leatherCoral(82, { r: 0.045, color: [0.65, 0.72, 0.5] }), -0.17, -0.12, 0.0, 1.0, 1.4);
-  place(seagrass(71, { count: 50 }), 0.52, -0.2, 0);
-  place(seagrass(72, { count: 36, h: 0.16, color: 0x5a8a2c }), -0.52, -0.22, 0);
-  place(seagrass(73, { count: 24, h: 0.12, color: 0x2f6a3a }), -0.18, -0.22, 0);
   // mushroom corals on the sand
   // mushroom corals (Fungia): oval discs with fine radial septa, olive-brown with a pale mouth
   const mush = new THREE.CircleGeometry(0.02, 72, 0, Math.PI * 2);

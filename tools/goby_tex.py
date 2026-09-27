@@ -80,9 +80,9 @@ out=np.clip(enc(np.clip(Lt,0,1)),0,1)
 hk=np.clip((0.2-ss)/0.08,0,1)[...,None]*np.clip((out[...,2]-out[...,0])/0.2,0,1)[...,None]
 out=out*(1-hk*0.7)+np.clip(out*np.array([0.66,1.02,0.96]),0,1)*hk*0.7     # head: lemon-lime
 # rear: the dark caudal and the fin tips read maroon-black in life; re-tone by luminance
-tk=np.clip((ss-0.88)/0.12,0,1)[...,None]
+tk=np.clip((ss-0.78)/0.14,0,1)[...,None]
 Lg=np.clip(out.mean(-1,keepdims=True)*1.6,0,1)
-maroon=np.array([0.03,0.03,0.1])+Lg*np.array([0.05,0.07,0.28])        # BGR
+maroon=np.array([0.04,0.05,0.28])+Lg*np.array([0.04,0.08,0.3])   # deep red-maroon (BGR)        # BGR
 out=out*(1-tk)+maroon*tk
 # red zone: a little less neon
 g=out.mean(-1,keepdims=True); rk=np.clip((out[...,2]-out[...,1])/0.3,0,1)[...,None]

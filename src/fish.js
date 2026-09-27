@@ -352,6 +352,9 @@ Paint paint(vec2 p){
   // wherever it covers the fish; the masks remain as a fallback outside it
   vec4 ph = texture2D(uPhoto, (p - vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)})) / vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}));
   col = mix(col, ph.rgb, ph.a * uPhotoMix);
+  // the photo's stripes are soft (motion + JPEG); reinforce them with the traced stripe field
+  float stCore = smoothstep(0.7, 0.9, pm.b) * smoothstep(0.26, 0.3, s) * (1.0 - Y * 0.6);
+  col = mix(col, col * vec3(0.3, 0.3, 0.34), stCore * 0.6 * uPhotoMix);
   float stripeMask = 1.0;
   float eb = 1.0;
   float h = 0.0, rough = 0.4, metal = 0.12, ao = 1.0, alpha = 1.0;
@@ -598,7 +601,7 @@ export function createButterflyfish(renderer, opts = {}) {
           // median fins are nearly opaque in life; spines show only faintly through the membrane
           float memA = 0.96;
           if (kind < 1.5 && spine) memA = mix(0.95, 0.8, t);
-          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.35, smoothstep(0.84, 0.95, t));     // caudal: clear margin
+          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.3, smoothstep(0.79, 0.86, t));      // caudal: clear margin
           if (kind > 2.5) memA = kind < 3.5 ? mix(0.06, 0.02, t) : mix(0.92, 0.75, t);             // pectoral / pelvic
           vec3 c = diffuseColor.rgb * (kind < 2.5 ? 0.9 : 1.0);
           #ifdef USE_MAP
@@ -619,9 +622,9 @@ export function createButterflyfish(renderer, opts = {}) {
           }
           if (kind > 1.5 && kind < 2.5) {
             // caudal: yellow, a thin dark submarginal bar, then a clear margin
-            float bar = smoothstep(0.76, 0.79, t) * (1.0 - smoothstep(0.81, 0.84, t));
-            c = mix(c, vec3(0.12, 0.08, 0.05), bar * 0.85);
-            c = mix(c, vec3(0.95, 0.93, 0.85), smoothstep(0.84, 0.9, t) * 0.8);
+            float bar = smoothstep(0.68, 0.71, t) * (1.0 - smoothstep(0.76, 0.79, t));
+            c = mix(c, vec3(0.1, 0.07, 0.05), bar * 0.9);
+            c = mix(c, vec3(0.95, 0.93, 0.85), smoothstep(0.79, 0.84, t) * 0.8);
           }
           if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.9, 0.6), vec3(0.9), t); ray *= 0.6; }
           if (kind > 3.5) c = mix(vec3(0.97, 0.93, 0.78), vec3(0.98, 0.97, 0.92), t);   // pelvics: white with a yellowish base
@@ -683,7 +686,7 @@ export function createButterflyfish(renderer, opts = {}) {
     new THREE.Vector3(sx(fm[0]), fm[1], 0), new THREE.Vector3(sx(fb[0]), fb[1], 0),
     new THREE.Vector3(sx(fb[0] + 0.1), fb[1] - 0.03, 0.003), new THREE.Vector3(sx(fb[0] + 0.2), fb[1] - 0.07, 0.006),
     new THREE.Vector3(sx(fb[0] + 0.3), fb[1] - 0.12, 0.002), new THREE.Vector3(sx(fb[0] + 0.4), fb[1] - 0.17, -0.004)]);
-  const filGeo = new THREE.TubeGeometry(filCurve, 96, 0.0062, 6, false);
+  const filGeo = new THREE.TubeGeometry(filCurve, 96, 0.0035, 6, false);
   // taper
   const fp = filGeo.attributes.position;
   for (let i = 0; i < fp.count; i++) {
@@ -716,8 +719,8 @@ export function createButterflyfish(renderer, opts = {}) {
       new THREE.Quaternion().setFromEuler(new THREE.Euler(side * -0.08, side > 0 ? 0.18 : Math.PI - 0.18, 0)),   // looks slightly forward
       new THREE.Vector3(1, 1 / DEPTH, 1));
     const e = createFishEye({
-      r: eye.r, matrix: M, pupilA: 0.44, irisA: 0.88,
-      pupil: [0.006, 0.006, 0.008], irisIn: [0.12, 0.1, 0.08], irisOut: [0.3, 0.32, 0.36], limbus: [0.04, 0.04, 0.05], sclera: [0.05, 0.05, 0.055],
+      r: eye.r, matrix: M, pupilA: 0.5, irisA: 0.9,
+      pupil: [0.005, 0.005, 0.008], irisIn: [0.16, 0.11, 0.05], irisOut: [0.07, 0.05, 0.035], limbus: [0.04, 0.04, 0.05], sclera: [0.05, 0.05, 0.055],
       patch: (m, k) => addSwim(m, uniforms, { key: 'auriga-' + k }),
     });
     group.add(e); eyeMeshes.push(e);
