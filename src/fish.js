@@ -5,6 +5,7 @@
 // All of the colour pattern is painted in a side-view (s, y) space by a GPU bake, so
 // the body and the median fins share one continuous painting, like the real animal.
 import * as THREE from 'three';
+import { createFishEye } from './eye.js';
 
 // ---------------------------------------------------------------- anatomy ---------
 
@@ -40,7 +41,7 @@ export const ANATOMY = {
     [0.65, -0.19], [0.75, -0.165], [0.85, -0.13], [0.93, -0.09], [1.0, -0.05]]),
   width: spline([[0, 0.009], [0.012, 0.011], [0.03, 0.013], [0.06, 0.015], [0.1, 0.019], [0.15, 0.027], [0.25, 0.037], [0.38, 0.041], [0.5, 0.039],
     [0.65, 0.041], [0.8, 0.029], [0.9, 0.02], [0.95, 0.014], [0.985, 0.008], [1.0, 0.003]]),
-  eye: { s: 0.16, y: 0.028, r: 0.027 },
+  eye: { s: 0.16, y: 0.03, r: 0.033 },
 };
 
 // painting space
@@ -704,30 +705,22 @@ export function createButterflyfish(renderer, opts = {}) {
   group.add(fil);
 
 
-  // -- eyes: dark globe with a thin golden-brown iris ring and a glossy cornea
+  // -- eyes: a real globe bulging within the band: black pupil, dark bronze iris grading to
+  //    a silvery blue-grey outer ring, dark limbus, glossy cornea
   const { eye } = ANATOMY;
   const eyeMeshes = [];
-  const eyeTex = makeEyeTexture();
-  const eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTex, roughness: 0.4, clearcoat: 0.25, clearcoatRoughness: 0.2, envMapIntensity: 0.1 });
-  addSwim(eyeMat, uniforms, { key: 'eye' });
-  const corneaMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.0, transmission: 0, transparent: true, opacity: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.05, ior: 1.38, envMapIntensity: 0.3 });
-  addSwim(corneaMat, uniforms, { key: 'cornea' });
-  const rimMat = new THREE.MeshPhysicalMaterial({ color: 0x0b0a0a, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.15 });
-  addSwim(rimMat, uniforms, { key: 'rim' });
   for (const side of [1, -1]) {
     const w = ANATOMY.width(eye.s) * 1.03 * lensZN(eye.y);
-    const g = new THREE.SphereGeometry(eye.r, 48, 32);
-    g.rotateY(side > 0 ? 0 : Math.PI);   // texture pupil faces +z (outward)
-    g.scale(1, 1, 0.13);
-    g.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.1));
-
-    const m = new THREE.Mesh(g, eyeMat);
-    group.add(m); eyeMeshes.push(m);
-    const cg = new THREE.SphereGeometry(eye.r * 1.03, 48, 32, 0, Math.PI * 2, 0, Math.PI * 0.42);
-    cg.rotateX(Math.PI / 2 * side);
-    cg.scale(1, 1, 0.3);
-    cg.translate(sx(eye.s), eye.y, side * (w - eye.r * 0.12));
-    // (no separate cornea: in life the eye reads as a dark, barely glossy disc within the band)
+    const M = new THREE.Matrix4().compose(
+      new THREE.Vector3(sx(eye.s), eye.y, side * (w - eye.r * 0.55)),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(side * -0.08, side > 0 ? 0.18 : Math.PI - 0.18, 0)),   // looks slightly forward
+      new THREE.Vector3(1, 1 / DEPTH, 1));
+    const e = createFishEye({
+      r: eye.r, matrix: M, pupilA: 0.44, irisA: 0.88,
+      pupil: [0.006, 0.006, 0.008], irisIn: [0.12, 0.1, 0.08], irisOut: [0.3, 0.32, 0.36], limbus: [0.04, 0.04, 0.05], sclera: [0.05, 0.05, 0.055],
+      patch: (m, k) => addSwim(m, uniforms, { key: 'auriga-' + k }),
+    });
+    group.add(e); eyeMeshes.push(e);
   }
 
   // -- mouth: small terminal mouth with thin lips at the tip of the snout
@@ -776,7 +769,6 @@ export function createButterflyfish(renderer, opts = {}) {
   // The traced photo was taken slightly from above, which foreshortens the height; across the
   // other side views the fish is ~9% deeper. Eyes are counter-scaled so they stay round.
   group.scale.y = DEPTH;
-  for (const e of eyeMeshes) e.scale.y = 1 / DEPTH, e.position.y = eye.y * (1 - 1 / DEPTH);
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   for (const p of pairs) p.traverse((o) => { o.castShadow = false; });   // clear/thin paired fins cast no solid shadow
 

@@ -50,7 +50,7 @@ import { buildEnvironment, buildUnderwaterEnvironment, createTank, createRoom } 
 import { createBubbles, createSpecks } from './src/aquarium/fx.js';
 import { createPipeline, LAYER_TRANSPARENT } from './src/aquarium/pipeline.js';
 import { Butterflyfish, HoveringGoby, SandConch } from './src/aquarium/school.js';
-import { createFireGoby } from './src/goby.js';
+import { createFireGoby, loadGobyPhoto } from './src/goby.js';
 import { createStrawberryConch } from './src/conch.js';
 import { createButterflyfish, loadPattern, loadPhoto } from './src/fish.js';
 
@@ -106,6 +106,7 @@ scene.add(room);
 const fishModels = [];
 const pattern = await loadPattern();
 const photo = await loadPhoto();
+await loadGobyPhoto();
 const m1 = createButterflyfish(renderer, { pattern, photo, texSize: +(Q.get('tex') || (Math.min(innerWidth, innerHeight) < 700 ? 2048 : 4096)) });
 const m2 = createButterflyfish(renderer, { textures: m1.textures });
 const f1 = new Butterflyfish(m1, { scale: 0.15, seed: 3, start: new THREE.Vector3(-0.1, 0.32, 0.05), obstacles: reef.obstacles });

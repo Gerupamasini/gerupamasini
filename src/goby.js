@@ -3,19 +3,22 @@
 // x = 0.5 - s. Outline and fin shapes traced from side-view photographs (iNaturalist).
 import * as THREE from 'three';
 import { spline, polyline, buildFin, addSwim } from './fish.js';
+import { createFishEye } from './eye.js';
 
 const S0 = -0.03, S1 = 1.3, Y0 = -0.52, Y1 = 0.6;   // shared painting space (buildFin UVs)
 const sx = (s) => 0.5 - s;
+const GDEPTH = 1.15;
 
 export const GOBY = {
-  top: spline([[0, 0.008], [0.01, 0.036], [0.03, 0.07], [0.06, 0.1], [0.1, 0.124], [0.15, 0.14], [0.25, 0.152],
-    [0.4, 0.146], [0.6, 0.122], [0.8, 0.09], [0.93, 0.066], [1.0, 0.054]]),
-  bottom: spline([[0, -0.012], [0.012, -0.026], [0.04, -0.042], [0.09, -0.056], [0.16, -0.066], [0.25, -0.071],
-    [0.4, -0.072], [0.6, -0.064], [0.8, -0.054], [0.93, -0.044], [1.0, -0.04]]),
+  // averaged from two traced side views (iNaturalist, CC0 / CC BY-NC); slender body, blunt head
+  top: spline([[0, 0.01], [0.01, 0.034], [0.03, 0.062], [0.06, 0.088], [0.1, 0.108], [0.15, 0.12], [0.25, 0.132],
+    [0.4, 0.13], [0.6, 0.112], [0.8, 0.084], [0.93, 0.062], [1.0, 0.05]]),
+  bottom: spline([[0, -0.01], [0.012, -0.024], [0.04, -0.038], [0.09, -0.05], [0.16, -0.057], [0.25, -0.06],
+    [0.4, -0.06], [0.6, -0.055], [0.8, -0.048], [0.93, -0.04], [1.0, -0.036]]),
   // laterally compressed behind the head, tapering to a thin peduncle that runs into the tail
   width: spline([[0, 0.011], [0.03, 0.024], [0.08, 0.034], [0.16, 0.037], [0.3, 0.032], [0.5, 0.024], [0.7, 0.016],
     [0.88, 0.01], [0.96, 0.006], [1.0, 0.002]]),
-  eye: { s: 0.06, y: 0.046, r: 0.033 },
+  eye: { s: 0.07, y: 0.042, r: 0.03 },
 };
 
 function buildBody() {
@@ -61,13 +64,14 @@ function finLayouts() {
   const trail = polyline([[0.6, 0.562], [0.53, 0.52], [0.46, 0.45], [0.405, 0.36], [0.37, 0.26], [0.345, 0.17]], 6);
   const flagTip = [[0.615, 0.572], ...trail];
   // second dorsal and anal: long, low, running almost to the caudal
-  const d2Base = even(0.43, 0.985, 24, (s) => top(s) - 0.003);
-  const d2Tip = polyline([[0.45, 0.2], [0.56, 0.215], [0.72, 0.195], [0.87, 0.165], [0.98, 0.13], [1.05, 0.1], [1.08, 0.07], [1.0, 0.05]], 24);
-  const aBase = even(0.5, 0.985, 22, (s) => bottom(s) + 0.003);
-  const aTip = polyline([[0.51, -0.1], [0.6, -0.115], [0.79, -0.125], [0.95, -0.12], [1.05, -0.1], [1.08, -0.075], [1.0, -0.04]], 22);
+  // traced from the CC0 side view: low fins whose edges run nearly parallel to the body
+  const d2Base = even(0.4, 0.97, 24, (s) => top(s) - 0.003);
+  const d2Tip = polyline([[0.41, 0.152], [0.55, 0.16], [0.7, 0.148], [0.85, 0.118], [0.97, 0.088], [1.02, 0.068], [0.99, 0.052]], 24);
+  const aBase = even(0.46, 0.97, 22, (s) => bottom(s) + 0.003);
+  const aTip = polyline([[0.47, -0.075], [0.6, -0.085], [0.75, -0.088], [0.9, -0.082], [0.99, -0.07], [1.02, -0.055], [0.99, -0.04]], 22);
   // caudal: rounded / slightly lanceolate
   const cBase = even(0, 1, 17, (f) => 0).map(([f]) => { const s = 0.94 + 0.03 * Math.sin(Math.PI * f); return [s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]; });
-  const cTip = polyline([[1.1, 0.07], [1.17, 0.045], [1.205, 0.005], [1.2, -0.035], [1.16, -0.068], [1.1, -0.084]], 17);
+  const cTip = polyline([[1.1, 0.06], [1.19, 0.05], [1.24, 0.01], [1.24, -0.03], [1.2, -0.068], [1.1, -0.078]], 17);   // long, rounded caudal
   return { flag: { base: flagBase, tip: flagTip }, d2: { base: d2Base, tip: d2Tip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
 
@@ -77,6 +81,7 @@ float gh(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); r
 float gn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(gh(i), gh(i+vec2(1,0)), f.x), mix(gh(i+vec2(0,1)), gh(i+vec2(1,1)), f.x), f.y); }
 uniform float uGKind;   // 0 body, 1 flag, 2 second dorsal, 3 anal, 4 caudal, 5 pectoral, 6 pelvic
+uniform sampler2D uGPhoto; uniform float uGPhotoMix;
 varying vec2 vFinG;
 vec4 gobyColor(vec2 p){
   float s = p.x, y = p.y;
@@ -140,10 +145,20 @@ vec4 gobyColor(vec2 p){
     c = mix(c, c * 1.02, ray * 0.04);
     a *= smoothstep(0.0, 0.04, 1.0 - t + 0.02);
   }
-  c *= 0.97 + 0.06 * gn(p * 60.0);
+  // photographic albedo (CC0 photo warped onto the model) on the body and median fins
+  if (uGKind < 0.5 || (uGKind > 1.5 && uGKind < 4.5)) {
+    vec4 ph = texture2D(uGPhoto, (p - vec2(${S0}, ${Y0})) / vec2(${S1 - S0}, ${Y1 - Y0}));
+    c = mix(c, ph.rgb, ph.a * uGPhotoMix);
+  }
+  c *= 0.98 + 0.04 * gn(p * 60.0);
   return vec4(c, a);
 }
 `;
+
+let photoTex = null;
+export function loadGobyPhoto(url = new URL('../assets/goby_photo.webp', import.meta.url).href) {
+  return new THREE.TextureLoader().loadAsync(url).then((t) => { t.colorSpace = THREE.SRGBColorSpace; photoTex = t; return t; });
+}
 
 function gobyMaterial(kind, uniforms) {
   const fin = kind > 0;
@@ -155,7 +170,7 @@ function gobyMaterial(kind, uniforms) {
     transparent: fin, side: fin ? THREE.DoubleSide : THREE.FrontSide,
   });
   m.userData.gobyKind = kind;
-  addSwim(m, { ...uniforms, uGKind: { value: kind } }, {
+  addSwim(m, { ...uniforms, uGKind: { value: kind }, uGPhoto: { value: photoTex }, uGPhotoMix: { value: photoTex ? 1 : 0 } }, {
     key: 'goby' + kind, noBend: kind >= 5,
     frag: (sh) => {
       sh.vertexShader = sh.vertexShader
@@ -203,13 +218,21 @@ export function createFireGoby() {
   flagPivot.position.set(hx, hy, 0); flagMesh.position.set(-hx, -hy, 0);
   flagPivot.add(flagMesh); group.add(flagPivot);
   // eyes: large, high on the head
-  const { eye } = GOBY, eyeMat = new THREE.MeshPhysicalMaterial({ map: eyeTexture(), roughness: 0.3, clearcoat: 0.5, clearcoatRoughness: 0.1, envMapIntensity: 0.4 });
-  addSwim(eyeMat, uniforms, { key: 'gobyeye' });
+  // eyes: large globes set high on the head — black pupil, silvery-white iris flushed
+  // pink-violet above, lemon skin around, glossy cornea
+  const { eye } = GOBY;
   for (const side of [1, -1]) {
-    const w = GOBY.width(eye.s) * 0.9;
-    const g = new THREE.SphereGeometry(eye.r, 32, 24); g.rotateY(side > 0 ? 0 : Math.PI); g.scale(1, 1, 0.45);
-    g.translate(sx(eye.s), eye.y, side * (w * 1.02 - eye.r * 0.05));   // large, bulging eye set high on the head
-    group.add(new THREE.Mesh(g, eyeMat));
+    const w = GOBY.width(eye.s);
+    const M = new THREE.Matrix4().compose(
+      new THREE.Vector3(sx(eye.s), eye.y, side * (w - eye.r * 0.5)),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(side * -0.15, side > 0 ? 0.25 : Math.PI - 0.25, 0)),
+      new THREE.Vector3(1, 1 / GDEPTH, 1));
+    group.add(createFishEye({
+      r: eye.r, matrix: M, pupilA: 0.6, irisA: 0.95,
+      pupil: [0.006, 0.006, 0.01], irisIn: [0.66, 0.68, 0.66], irisOut: [0.42, 0.45, 0.48], limbus: [0.2, 0.18, 0.24],
+      sclera: [0.72, 0.8, 0.36], upper: [0.8, 0.45, 0.82], upperAmt: 0.75,
+      patch: (m, k) => addSwim(m, uniforms, { key: 'goby-' + k }),
+    }));
   }
   // paired fins: clear rounded pectorals, long thread-like white pelvics
   const pairs = [];
@@ -226,6 +249,7 @@ export function createFireGoby() {
     const pel = paired(0.19, 0.012, 3, (f) => 1 - 0.3 * f, 6, [sx(0.24), GOBY.bottom(0.24) + 0.006, side * 0.01], [side * 0.06, side * 0.03, 0.08]);
     pel.userData = { side, kind: 'pel' }; pairs.push(pel);
   }
+  group.scale.y = GDEPTH;   // photographed adults are ~15% deeper than the first trace
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   for (const p of pairs) p.traverse((o) => { o.castShadow = false; });   // thin clear fins: no solid shadow
 
