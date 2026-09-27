@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Butterflyfish Reef Tank</title>
+<style>
+  :root { --bg: #050708; --ink: #d8e4e8; --dim: #7c8d94; --line: rgba(160, 220, 235, .18); --panel: rgba(8, 14, 18, .72); }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --panel: rgba(8, 14, 18, .72); } }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden;
+    font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  canvas { display: block; touch-action: none; }
+  #ui { position: fixed; top: 12px; left: 12px; background: var(--panel); border: 1px solid var(--line);
+    backdrop-filter: blur(6px); padding: 10px 12px; max-width: calc(100vw - 48px); }
+  #ui h1 { margin: 0 0 2px; font: 400 15px Georgia, serif; letter-spacing: .04em; }
+  #ui p { margin: 0 0 8px; color: var(--dim); }
+  #ui .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  #ui button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 4px 8px; cursor: pointer; }
+  #ui button[aria-pressed="true"] { border-color: #6fd3ea; color: #9fe7f7; }
+  #ui.hidden { display: none; }
+  #load { position: fixed; inset: 0; display: grid; place-items: center; color: var(--dim); pointer-events: none; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="load">水槽を準備しています…</div>
+<div id="ui">
+  <h1>トゲチョウチョウオの水槽</h1>
+  <p>Chaetodon auriga · ドラッグで回転 / ホイールでズーム · H で非表示</p>
+  <div class="row">
+    <button id="bView" aria-pressed="false">正面ビュー</button>
+    <button id="bFollow" aria-pressed="false">魚を追う</button>
+    <button id="bRays" aria-pressed="true">光の筋</button>
+    <button id="bPause" aria-pressed="false">一時停止</button>
+  </div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TANK } from './src/aquarium/config.js';
+import { createCaustics, causticUniforms, addCaustics, meanRefracted, createSurface } from './src/aquarium/water.js';
+import { createReef } from './src/aquarium/reef.js';
+import { buildEnvironment, createTank, createRoom } from './src/aquarium/tank.js';
+import { createBubbles, createSpecks } from './src/aquarium/fx.js';
+import { createPipeline, LAYER_TRANSPARENT } from './src/aquarium/pipeline.js';
+import { Butterflyfish } from './src/aquarium/school.js';
+import { createButterflyfish } from './src/fish.js';
+
+const Q = new URLSearchParams(location.search);
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: Q.has('shot') });
+renderer.setPixelRatio(Math.min(devicePixelRatio, +(Q.get('pr') || 1.5)));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = +(Q.get('exp') || 0.92);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x030405);
+const env = buildEnvironment(renderer);
+scene.environment = env.pmrem;
+scene.environmentIntensity = 0.35;
+
+// --- lights: the LED bar over the tank is the "sun" whose light makes the caustics
+const sun = new THREE.DirectionalLight(0xf4f8ff, 2.8);
+sun.position.set(0.25, TANK.h + 0.9, 0.18);
+sun.target.position.set(0, 0, 0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -0.75, right: 0.75, top: 0.45, bottom: -0.45, near: 0.2, far: 2.2 });
+sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.004; sun.shadow.radius = 3;
+scene.add(sun, sun.target);
+scene.add(new THREE.HemisphereLight(0x6fb4ff, 0xcfc2a2, 0.85));   // sky through the surface / bounce off the sand
+// the tank throws blue light onto the wall behind it
+const spill = new THREE.PointLight(0x3a9ad8, 1.6, 3.0, 1.6);
+spill.position.set(0, 0.35, -0.55);
+scene.add(spill);
+const roomLight = new THREE.SpotLight(0xffc896, 6, 6, 0.6, 0.8, 1.5);
+roomLight.position.set(-1.8, 2.2, 1.6); roomLight.target.position.set(0, -0.3, 0);
+scene.add(roomLight, roomLight.target);
+
+// --- water
+const caustics = createCaustics(renderer, { size: +(Q.get('cs') || 1024), grid: +(Q.get('cg') || 320) });
+const cu = causticUniforms(caustics);
+cu.uCausticDir.value.copy(meanRefracted(sun.target.position.clone().sub(sun.position)));
+
+const reef = createReef();
+scene.add(reef.group);
+const tank = createTank(env.cube);
+scene.add(tank.group);
+const room = createRoom();
+scene.add(room);
+
+// --- fish: a pair, as they are usually seen on the reef
+const fishModels = [];
+const m1 = createButterflyfish(renderer, { texSize: +(Q.get('tex') || 4096) });
+const m2 = createButterflyfish(renderer, { textures: m1.textures });
+const f1 = new Butterflyfish(m1, { scale: 0.15, seed: 3, start: new THREE.Vector3(-0.1, 0.32, 0.05), obstacles: reef.obstacles });
+const f2 = new Butterflyfish(m2, { seed: 8, start: new THREE.Vector3(0.05, 0.28, -0.02), leader: f1, obstacles: reef.obstacles, scale: 0.14 });
+fishModels.push(f1, f2);
+for (const f of fishModels) scene.add(f.obj);
+
+// everything under water is lit through the caustics
+const submerged = [reef.group, f1.obj, f2.obj];
+for (const g of submerged) g.traverse((o) => {
+  if (o.isMesh && o.material && !o.material.isShaderMaterial && !o.material.userData.caustic) {
+    o.material.userData.caustic = true;
+    addCaustics(o.material, cu);
+  }
+});
+for (const f of fishModels) f.obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.material.envMapIntensity = 1.4; } });
+
+// --- camera
+const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.02, 30);
+const VIEWS = {
+  hero: { pos: [0.78, 0.46, 1.12], target: [0.0, 0.25, 0] },
+  front: { pos: [0, 0.3, 1.25], target: [0, 0.29, 0] },
+  close: { pos: [0.25, 0.32, 0.62], target: [0.0, 0.3, 0] },
+  top: { pos: [0.3, 1.5, 0.7], target: [0, 0.25, 0] },
+  wide: { pos: [1.6, 0.6, 2.4], target: [0, 0.1, 0] },
+};
+const v0 = VIEWS[Q.get('view') || 'hero'];
+camera.position.set(...v0.pos);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(...v0.target);
+controls.enableDamping = true;
+controls.minDistance = 0.25; controls.maxDistance = 4;
+controls.maxPolarAngle = Math.PI * 0.62;
+controls.update();
+
+// --- pipeline + transparent layer (needs the volume texture for refraction)
+const pipeline = createPipeline(renderer, scene, camera, { light: sun, caustics, causticU: cu, samples: +(Q.get('msaa') || 4) });
+pipeline.main.debugNoVolume = Q.has('novol');
+const res = new THREE.Vector2();
+renderer.getDrawingBufferSize(res);
+const surface = createSurface(cu, { envMap: env.cube, sceneTex: pipeline.volumeTexture, resolution: res });
+surface.uniforms.uLightDirW.value.copy(sun.target.position).sub(sun.position).normalize();
+scene.add(surface.mesh);
+const bubbles = createBubbles(env.cube);
+scene.add(bubbles.mesh, bubbles.stone);
+addCaustics(bubbles.stone.material, cu);
+const specks = createSpecks(cu);
+specks.points.material.uniforms.uPx.value = renderer.getPixelRatio();
+scene.add(specks.points);
+for (const o of [surface.mesh, bubbles.mesh, specks.points, ...tank.transparent]) o.layers.set(LAYER_TRANSPARENT);
+
+// --- ui
+const ui = document.getElementById('ui');
+if (Q.has('noui')) ui.classList.add('hidden');
+let follow = false, paused = false;
+const press = (b, on) => b.setAttribute('aria-pressed', on);
+document.getElementById('bView').onclick = (e) => {
+  const v = VIEWS.front; camera.position.set(...v.pos); controls.target.set(...v.target); follow = false; press(document.getElementById('bFollow'), false);
+};
+document.getElementById('bFollow').onclick = (e) => { follow = !follow; press(e.currentTarget, follow); };
+document.getElementById('bRays').onclick = (e) => {
+  const u = pipeline.main.volume.material.uniforms.uShaft; u.value = u.value > 0 ? 0 : 0.3; press(e.currentTarget, u.value > 0);
+};
+document.getElementById('bPause').onclick = (e) => { paused = !paused; press(e.currentTarget, paused); };
+addEventListener('keydown', (e) => { if (e.key === 'h' || e.key === 'H') ui.classList.toggle('hidden'); });
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  pipeline.setSize(innerWidth, innerHeight);
+  renderer.getDrawingBufferSize(surface.uniforms.uRes.value);
+});
+pipeline.setSize(innerWidth, innerHeight);
+
+// --- loop
+const clock = new THREE.Clock();
+let t = +(Q.get('t') || 0), frames = 0;
+if (Q.has('pose')) {   // evaluation pose: fish side-on to the front glass
+  const pz = Q.get('pose').split(',').map(Number);
+  f1.p.set(pz[0] || 0, pz[1] || 0.3, pz[2] || 0.1); f1.yaw = pz[3] || 0; f1.update = ((u) => (dt) => { f1.model.update(dt, t, { amp: 0.03, freq: 1.2 }); f1.obj.position.copy(f1.p); f1.obj.rotation.set(0, f1.yaw, 0); })();
+  f2.p.set(-0.3, 0.38, -0.12);
+}
+// warm up the fish behaviour so a still frame shows them mid-swim
+for (let i = 0; i < +(Q.get('warm') || 0) * 30; i++) { for (const f of fishModels) f.update(1 / 30); t += 1 / 30; }
+const followPos = new THREE.Vector3();
+renderer.setAnimationLoop(() => {
+  const dt = paused ? 0 : Math.min(clock.getDelta(), 1 / 20);
+  if (paused) clock.getDelta();
+  t += dt;
+  for (const f of fishModels) f.update(dt);
+  reef.update(t);
+  bubbles.update(dt, t);
+  specks.update(t);
+  caustics.update(t, sun.target.position.clone().sub(sun.position));
+  surface.uniforms.uTime.value = t;
+  if (follow) {
+    const p = f1.p;
+    followPos.lerp(new THREE.Vector3(p.x * 0.8, p.y + 0.02, TANK.d / 2 + 0.42), 1 - Math.exp(-dt * 1.5));
+    camera.position.lerp(followPos, 1 - Math.exp(-dt * 2));
+    controls.target.lerp(p, 1 - Math.exp(-dt * 3));
+  }
+  controls.update();
+  if (Q.has('direct')) renderer.render(scene, camera); else pipeline.render(dt, t);
+  if (++frames === 4) { window.__ready = true; document.getElementById('load').remove(); }
+});
+</script>
+</body>
+</html>
