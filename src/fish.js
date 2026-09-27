@@ -106,9 +106,11 @@ function buildBody() {
 // A fin is a fan of rays, each from base[i] to tip[i] in side-view (s, y) space.
 // Membranes are subdivided between rays; the free edge is scalloped between ray tips and
 // the membrane is pleated (rays alternately forward/back) like a real folded fin.
-export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallop = 0.06, bow = 0.0, zOff = 0, flat = false, spines = -1, spineScallop = 0.14 }) {
+// thick > 0 builds a closed thin shell: fleshy at the root, thinning to the edge, with the
+// rays standing slightly proud of the membrane on both faces.
+export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallop = 0.06, bow = 0.0, zOff = 0, flat = false, spines = -1, spineScallop = 0.14, thick = 0 }) {
   const nR = base.length;
-  const pos = [], uv = [], fin = [], idx = [];
+  const pos = [], uv = [], fin = [], idx = [], side = [];
   const cols = (nR - 1) * sub + 1;
   for (let c = 0; c < cols; c++) {
     const r = c / sub, i0 = Math.min(Math.floor(r), nR - 2), f = r - i0;
@@ -125,15 +127,30 @@ export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallo
       const bw = bow * Math.sin(Math.PI * t);
       s += -dy * bw; y += dx * bw;
       const z = flat ? 0 : pleat * Math.pow(t, 0.8) * Math.cos(Math.PI * r) + zOff;
-      pos.push(sx(s), y, z);
+      const th = thick * (Math.pow(1 - t, 2.2) + 0.06 + 0.25 * (1 - between) * (1 - t));
+      pos.push(sx(s), y, z + th);
       uv.push(...toUV(s, y));
       fin.push(r, t / 1.0);
+      side.push(sx(s), y, z - th);
     }
   }
   const rows = segs + 1;
   for (let c = 0; c < cols - 1; c++) for (let k = 0; k < segs; k++) {
     const a = c * rows + k, b2 = a + 1, cc = a + rows, d = cc + 1;
     idx.push(a, cc, b2, b2, cc, d);
+  }
+  if (thick > 0) {
+    // back face (reversed winding) and a strip closing the free edge
+    const n0 = pos.length / 3;
+    pos.push(...side); uv.push(...uv.slice(0, n0 * 2)); fin.push(...fin.slice(0, n0 * 2));
+    for (let c = 0; c < cols - 1; c++) for (let k = 0; k < segs; k++) {
+      const a = n0 + c * rows + k, b2 = a + 1, cc = a + rows, d = cc + 1;
+      idx.push(a, b2, cc, b2, d, cc);
+    }
+    for (let c = 0; c < cols - 1; c++) {
+      const a = c * rows + segs, b2 = a + rows, a2 = a + n0, b3 = b2 + n0;
+      idx.push(a, a2, b2, b2, a2, b3);
+    }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -210,6 +227,7 @@ uniform vec2 uOutline[96];   // (top, bottom) at s = i/95
 uniform vec2 uOcellus;       // eyespot centre in (s,y)
 uniform vec2 uTexel;         // size of one texel in (s,y)
 uniform sampler2D uPattern;  // traced pattern masks
+uniform sampler2D uPhoto; uniform float uPhotoMix;
 varying vec2 vP;
 
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
@@ -329,6 +347,10 @@ Paint paint(vec2 p){
   warmCol = mix(warmCol, vec3(1.0, 0.86, 0.1), gapLine);   // gaps in the dusky zone stay yellow-orange
   vec3 col = mix(white, warmCol, Y);
   col = mix(col, mix(ink, brown * mix(0.5, 0.32, Br), Y), st);
+  // photographic albedo (de-lit CC0 photo in painting space) replaces the mask painting
+  // wherever it covers the fish; the masks remain as a fallback outside it
+  vec4 ph = texture2D(uPhoto, (p - vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)})) / vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}));
+  col = mix(col, ph.rgb, ph.a * uPhotoMix);
   float stripeMask = 1.0;
   float eb = 1.0;
   float h = 0.0, rough = 0.4, metal = 0.12, ao = 1.0, alpha = 1.0;
@@ -367,8 +389,9 @@ Paint paint(vec2 p){
     float inBand = step(0.0, -max(fr - s, s - bk)) * (y < 0.075 ? 1.0 : step(topCap, 0.0));
     float edgeD = min(min(s - fr, bk - s), y < 0.075 ? 1.0 : -topCap * 0.02);
     float band = smoothstep(-0.0015, 0.0025, edgeD) * inBand;
+    band *= 1.0 - uPhotoMix * ph.a;   // the photo carries its own band
     float bandRim = (1.0 - smoothstep(0.0, 0.006, -edgeD)) * (1.0 - band) * step(y, 0.085) * step(fr - 0.012, s) * step(s, bk + 0.012);
-    col = mix(col, vec3(0.98, 0.985, 1.0), bandRim * 0.55);   // thin pale border
+    col = mix(col, vec3(0.98, 0.985, 1.0), bandRim * 0.55 * (1.0 - uPhotoMix * ph.a));   // thin pale border
     col = mix(col, vec3(0.045, 0.036, 0.034), band);
     metal = mix(metal, 0.0, band); rough = mix(rough, 0.32, band);
     // faint pale sheen along the back of the white field
@@ -396,13 +419,13 @@ Paint paint(vec2 p){
 }
 `;
 
-function bakeTextures(renderer, W, H, ocellus, pattern) {
+function bakeTextures(renderer, W, H, ocellus, pattern, photo) {
   const { top, bottom } = ANATOMY;
   const outline = [];
   for (let i = 0; i < 96; i++) { const s = i / 95; outline.push(new THREE.Vector2(top(s), bottom(s))); }
   const texel = new THREE.Vector2((S1 - S0) / W, (Y1 - Y0) / H);
   const common = {
-    uOutline: { value: outline }, uOcellus: { value: new THREE.Vector2(...ocellus) }, uTexel: { value: texel }, uPattern: { value: pattern },
+    uOutline: { value: outline }, uOcellus: { value: new THREE.Vector2(...ocellus) }, uTexel: { value: texel }, uPattern: { value: pattern }, uPhoto: { value: photo }, uPhotoMix: { value: photo ? 1 : 0 },
     // stripe field measured from photographs (see PAINT_GLSL)
     uSpB: { value: 0.086 }, uSpA: { value: 0.06 }, uSlopeB: { value: 0.75 }, uSlopeA: { value: 62.0 },
     uLocus: { value: new THREE.Vector4(0.41, -0.2, 0.33, 0.36) }, uYellowP: { value: new THREE.Vector2(0.5, 0.33) }, uYellowL: { value: new THREE.Vector4(0.47, 0.35, 0.86, -0.23) },
@@ -453,24 +476,38 @@ function bakeTextures(renderer, W, H, ocellus, pattern) {
 // matching normal rotation so the lighting follows the bend.
 const SWIM_PARS = /* glsl */`
 uniform float uPhase; uniform float uAmp; uniform float uTurn;
-vec3 swimBend(vec3 p, inout vec3 n){
-  float s = 0.5 - p.x;
+// Lateral spine slope dz/ds: a travelling wave growing toward the tail, plus a C-shaped
+// bend for turning (stiff head, flexible tail).
+float spineSlope(float s){
   float k = 5.2;
   float A  = uAmp * (0.05 + 0.25*s*s + 0.6*max(s-0.45,0.)*max(s-0.45,0.));
   float dA = uAmp * (0.5*s + 1.2*max(s-0.45,0.));
   float ph = uPhase - k*s;
-  // turning: the body bends into a C around a point ~1/3 back from the snout; the tail
-  // (flexible) bends more than the head (stiff)
   float st = s - 0.36;
-  float flex = st < 0.0 ? 0.7 : 1.0 + 0.8 * st;
-  float turnZ = uTurn * st * st * flex;
-  float dTurn = uTurn * (2.0 * st * flex + (st < 0.0 ? 0.0 : 0.8 * st * st));
-  float z = A*sin(ph) - uAmp*0.03*sin(uPhase) + turnZ;
-  float dzds = dA*sin(ph) - A*k*cos(ph) + dTurn;
-  vec3 T = normalize(vec3(1.0, 0.0, -dzds));
-  n = vec3(n.x*T.x - n.z*T.z, n.y, n.x*T.z + n.z*T.x);
-  // keep length along the arc roughly constant
-  return vec3(p.x - 0.5*z*dzds, p.y, p.z + z);
+  float flex = st < 0.0 ? 0.6 : 1.0 + 0.6 * st;
+  float dTurn = uTurn * 2.0 * st * flex;
+  return dA*sin(ph) - A*k*cos(ph) + dTurn;
+}
+// The spine is bent like a real backbone: each piece keeps its length (integrated tangent
+// angles from a pivot 1/3 back), and every cross-section is rotated with the spine instead
+// of being sheared sideways, so the body never stretches or thins in a bend.
+vec3 swimBend(vec3 p, inout vec3 n){
+  float s = 0.5 - p.x;
+  const float S0 = 0.36;
+  const int N = 12;
+  float ds = (s - S0) / float(N);
+  vec2 q = vec2(0.5 - S0, 0.0);          // spine point (x, z) at the pivot
+  for (int i = 0; i < N; i++) {
+    float sm = S0 + (float(i) + 0.5) * ds;
+    float th = atan(spineSlope(sm));
+    q += vec2(-cos(th), sin(th)) * ds;   // s increases toward -x
+  }
+  float th = atan(spineSlope(s));
+  float c = cos(th), sn = sin(th);
+  // rotate the section about y: local z (thickness) follows the spine normal
+  vec3 r = vec3(q.x - p.z * sn, p.y, q.y + p.z * c);
+  n = vec3(n.x * c - n.z * sn, n.y, n.x * sn + n.z * c);
+  return r;
 }
 `;
 
@@ -488,6 +525,13 @@ export function addSwim(material, uniforms, extra = {}) {
 }
 
 // ---------------------------------------------------------- assets ----------------
+
+export function loadPhoto(url = new URL('../assets/auriga_photo.webp', import.meta.url).href) {
+  return new THREE.TextureLoader().loadAsync(url).then((t) => {
+    t.colorSpace = THREE.NoColorSpace; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.premultiplyAlpha = false;
+    return t;
+  });
+}
 
 export function loadPattern(url = new URL('../assets/auriga_pattern.png', import.meta.url).href) {
   return new THREE.TextureLoader().loadAsync(url).then((t) => {
@@ -507,7 +551,7 @@ export function createButterflyfish(renderer, opts = {}) {
   const oi = Math.round(layouts.dorsal.base.length * 0.8);
   const ob = layouts.dorsal.base[oi], ot = layouts.dorsal.tip[oi];
   const ocellus = [1.012, 0.206];   // black oval under the rear corner of the soft dorsal (traced)
-  const tex = opts.textures || bakeTextures(renderer, texW, texH, ocellus, opts.pattern);
+  const tex = opts.textures || bakeTextures(renderer, texW, texH, ocellus, opts.pattern, opts.photo || null);
 
   const uniforms = { uPhase: { value: 0 }, uAmp: { value: 0.0 }, uTurn: { value: 0 }, uFlap: { value: 0 }, uGlow: { value: 1.0 } };
   const group = new THREE.Group();
@@ -605,9 +649,9 @@ export function createButterflyfish(renderer, opts = {}) {
     return m;
   };
 
-  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, sub: 4, segs: 18, pleat: 0.0015, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02 }), mkFinMat(0, 12, 37));
-  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, sub: 4, segs: 16, pleat: 0.001, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02 }), mkFinMat(1, 2));
-  const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, sub: 4, segs: 16, pleat: 0.0012, scallop: 0.006 }), mkFinMat(2, -1));
+  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, sub: 4, segs: 18, pleat: 0.0015, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.007 }), mkFinMat(0, 12, 37));
+  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, sub: 4, segs: 16, pleat: 0.001, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.007 }), mkFinMat(1, 2));
+  const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, sub: 4, segs: 16, pleat: 0.0012, scallop: 0.006, thick: 0.005 }), mkFinMat(2, -1));
   for (const m of [dorsal, anal, caudal]) { m.renderOrder = 2; group.add(m); }
 
   // -- stout dorsal & anal spines as real geometry

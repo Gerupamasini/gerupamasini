@@ -98,7 +98,7 @@ export class Butterflyfish {
     this.model.update(dt, this.t, {
       amp: 0.015 + Math.min(sp, 1.2) * 0.035 + this.kick * 0.03,     // tail kick when a turn starts
       freq: 0.6 + Math.min(sp, 1.5) * 0.9 + this.kick * 0.5,
-      turn: THREE.MathUtils.clamp(-this.turnRate * 0.4, -0.6, 0.6),
+      turn: THREE.MathUtils.clamp(-this.turnRate * 0.25, -0.35, 0.35),
     });
   }
 }

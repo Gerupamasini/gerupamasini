@@ -1,4 +1,7 @@
-`auriga_pattern.png` holds the colour-pattern masks of *Chaetodon auriga* in the model's side-view
-painting space (r = yellow field, g = brown zone / eye band, b = stripes and yellow lines).
-They were traced from iNaturalist photo 67560751 (CC0, public domain) with `tools/rectify.py`,
-`tools/frame74.py` and `tools/masks2.py`.
+Textures for *Chaetodon auriga*, both in the model's side-view painting space.
+
+- `auriga_photo.webp`: de-lit, colour-corrected albedo made from iNaturalist photo 67560751
+  (public domain, CC0), rectified onto the model with `tools/rectify.py`, `tools/frame74.py`
+  and `tools/delight.py`.
+- `auriga_pattern.png`: pattern masks traced from the same photo (`tools/masks2.py`):
+  r = yellow field (+ thin yellow lines), g = dusky zone / eye band, b = stripe distance field.
