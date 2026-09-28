@@ -142,7 +142,7 @@ export const CRAB_SPECS = {
   yamato: {
     w: 0.66, h: 0.1, l: 0.36,
     carapace: yamatoCarapace,
-    legs: { merus: 0.42, carpus: 0.14, prop: 0.24, dact: 0.22, r: 0.036, flat: 0.68, k: [0.9, 1.0, 1.0, 0.82], spread: 0.42, curve: 0.12 },
+    legs: { merus: 0.35, carpus: 0.13, prop: 0.2, dact: 0.19, r: 0.042, flat: 0.62, k: [0.9, 1.0, 1.0, 0.82], spread: 0.42, curve: 0.12 },
     claw: { merus: 0.3, carpus: 0.13, palm: 0.46, H: 0.15, T: 0.1, r: 0.05, big: 1.2 },
     eye: { stalk: 0.5, r: 0.017, cornea: 0.03, sep: 0.07, yaw: 0.1, up: 0.04, raise: 0.5 },
     mouth: 0.13,

@@ -1,6 +1,7 @@
 # 干潟観察 — 葛西の渚
 
-![screenshot](screenshot.png)
+![マハゼ稚魚と透明な浅瀬](docs/shot-mahaze.png)
+![ヤマトオサガニとヤドカリ](docs/shot-yamato.png)
 
 東京湾奥・葛西海浜公園の干潟をモデルにした、生き物を上から観察するだけの 3D 観察ゲーム（Three.js / WebGL）。
 
