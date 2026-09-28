@@ -197,7 +197,7 @@ export const GLSL = {
       col = mix(col, vec3(0.6, 0.36, 0.16), clamp((front*0.9 + lateral*0.65) * (0.35 + 0.65*beads), 0.0, 1.0));
       // 乾いた泥の薄い付着
       float dust = smoothstep(0.4, 0.8, fbm3(p*7.0 + uSeed*3.0)) * smoothstep(0.5, 0.9, n.y);
-      col = mix(col, vec3(0.42, 0.4, 0.33), dust * 0.2);
+      col = mix(col, vec3(0.4, 0.39, 0.34), dust * 0.38);
       col = mix(col, uC4, smoothstep(-0.06, -0.13, p.y));
       return col;
     }`,
