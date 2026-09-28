@@ -201,7 +201,7 @@ const CLAW_POSES = {
 };
 // ヤマトオサガニ（雌・小型）：はさみを顔の前に垂らし、掌の面を前に、指は内下方へ
 const CLAW_POSES_Y = {
-  rest: { yaw0: 0.8, p0: 0.1, f1: 1.4, p1: 0.0, px: -0.45, py: -0.35, pz: 0.8, bx: 0.1, by: -1, bz: 0.0, open: 0.22 },
+  rest: { yaw0: 0.8, p0: 0.35, f1: 1.4, p1: 0.0, px: -0.5, py: 0.05, pz: 0.85, bx: 0.1, by: -1, bz: 0.0, open: 0.12 },
   reach: { yaw0: 0.95, p0: 0.0, f1: 1.25, p1: -0.1, px: -0.18, py: -0.9, pz: 0.4, bx: -0.9, by: -0.2, bz: 0.25, open: 0.45 },
   mouth: { yaw0: 1.05, p0: 0.35, f1: 1.8, p1: 0.15, px: -0.5, py: -0.6, pz: 0.5, bx: -0.8, by: -0.5, bz: -0.3, open: 0.0 },
   waveUp: { yaw0: 0.7, p0: 1.0, f1: 1.0, p1: 0.4, px: -0.2, py: 0.6, pz: 0.75, bx: -1, by: 0.2, bz: 0.2, open: 0.25 },
@@ -1223,8 +1223,8 @@ export class Ecosystem {
         dactA: chela(0.5, [0xc8c09a, 0xdcb444, 0x9a5020], [0.58, 0, 1, 0]),
         clawB: chela(0.41, [0xe8d49a, 0xe2b456, 0xa85a24], [0.58, 0, 0, 0]),
         dactB: chela(0.51, [0xe8d49a, 0xe0ac4c, 0x9a5020], [0.58, 0, 1, 0]),
-        clawF: chela(0.45, [0xa89c74, 0xc49448, 0x8a5424], [0.46, 0, 0, 0]),
-        dactF: chela(0.55, [0xb49a64, 0xc08c40, 0x7e4a20], [0.46, 0, 1, 0]),
+        clawF: chela(0.45, [0xa89c74, 0x9a6a34, 0x4a2a14], [0.46, 0, 0, 0]),
+        dactF: chela(0.55, [0xa07844, 0x9a6a34, 0x4a2a14], [0.46, 0, 1, 0]),
         mouth: organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.2, colors: [0xb4b4ac, 0xa2a29a, 0xc6c6be], P: [1, 0, 0, 0], roughness: 0.22, clearcoat: 1.0, clearcoatRoughness: 0.08 }),
         setae: new THREE.MeshStandardMaterial({ color: 0x5a5234, roughness: 0.7, side: THREE.DoubleSide }),
       };
