@@ -394,7 +394,7 @@ function macroChelaGeo(PL, PH, T, q = 1) {
 }
 // 可動指：関節から鉤状に湾曲し、先端は不動指の先に重なる。tip は関節から見た先端位置
 function macroDactGeo(PL, PH, q = 1) {
-  return cached(`mdact3:${PL}:${PH}:${q}`, () => {
+  return cached(`mdact4:${PL}:${PH}:${q}`, () => {
     const D = macroChelaDims(PL, PH);
     const tx = D.tip[0] - D.pivot[0] + PH * 0.02, ty = D.tip[1] - D.pivot[1] + PH * 0.04;
     const L = Math.hypot(tx, ty);
@@ -402,7 +402,7 @@ function macroDactGeo(PL, PH, q = 1) {
     const bow = L * 0.22;
     const P = (t, b) => [ux * L * t + nx * b, uy * L * t + ny * b, 0];
     const pts = [P(0, 0), P(0.3, bow * 0.85), P(0.62, bow), P(0.88, bow * 0.55), P(1, 0)];
-    const t = tube(pts, [PH * 0.15, PH * 0.14, PH * 0.1, PH * 0.06, PH * 0.02], PH * 0.05);
+    const t = tube(pts, [PH * 0.12, PH * 0.11, PH * 0.085, PH * 0.05, PH * 0.018], PH * 0.05);
     const teeth = [];
     for (let i = 0; i < 7; i++) {
       const s = 0.2 + i * 0.1, b = bow * Math.sin(Math.PI * Math.min(1, s * 1.1)) * 0.9 - PH * 0.09;
