@@ -695,9 +695,9 @@ export function createButterflyfish(renderer, opts = {}) {
     return m;
   };
 
-  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, ridge: 0.08, sub: 4, segs: 18, pleat: 0.0015, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.007 }), mkFinMat(0, 12, 37));
+  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, ridge: 0.08, sub: 4, segs: 18, pleat: 0.0005, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.007 }), mkFinMat(0, 12, 37));
   const anal = new THREE.Mesh(buildFin({ ...layouts.anal, ridge: 0.02, sub: 4, segs: 16, pleat: 0.0002, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.007 }), mkFinMat(1, 2, 23));
-  const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, sub: 4, segs: 16, pleat: 0.0012, scallop: 0.006, thick: 0.005 }), mkFinMat(2, -1));
+  const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, ridge: 0.06, sub: 4, segs: 16, pleat: 0.0004, scallop: 0.006, thick: 0.005 }), mkFinMat(2, -1));
   for (const m of [dorsal, anal, caudal]) { m.renderOrder = 2; group.add(m); }
 
   // -- stout dorsal & anal spines as real geometry
