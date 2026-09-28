@@ -35,12 +35,12 @@ export function spline(pts) {
 export const ANATOMY = {
   top: spline([[0, 0.013], [0.012, 0.019], [0.0369, 0.0338], [0.0917, 0.0632], [0.124, 0.08], [0.1353, 0.104], [0.153, 0.139], [0.171, 0.172],
     [0.19, 0.21], [0.212, 0.243], [0.238, 0.27], [0.266, 0.287], [0.294, 0.301], [0.35, 0.304], [0.45, 0.296], [0.6, 0.274],
-    [0.75, 0.232], [0.85, 0.177], [0.93, 0.116], [1.0, 0.05]]),
+    [0.75, 0.232], [0.85, 0.172], [0.92, 0.106], [0.96, 0.066], [1.0, 0.036]]),   // slender caudal peduncle (side-view photos)
   bottom: spline([[0, -0.013], [0.0164, -0.019], [0.046, -0.026], [0.089, -0.046], [0.129, -0.075], [0.171, -0.099],
     [0.2125, -0.124], [0.254, -0.148], [0.297, -0.168], [0.34, -0.186], [0.384, -0.199], [0.45, -0.21], [0.55, -0.205],
-    [0.65, -0.19], [0.75, -0.165], [0.85, -0.13], [0.93, -0.09], [1.0, -0.05]]),
+    [0.65, -0.19], [0.75, -0.165], [0.85, -0.126], [0.92, -0.084], [0.96, -0.056], [1.0, -0.034]]),
   width: spline([[0, 0.009], [0.012, 0.011], [0.03, 0.013], [0.06, 0.015], [0.1, 0.019], [0.15, 0.027], [0.25, 0.037], [0.38, 0.041], [0.5, 0.039],
-    [0.65, 0.041], [0.8, 0.029], [0.9, 0.02], [0.95, 0.014], [0.985, 0.008], [1.0, 0.003]]),
+    [0.65, 0.041], [0.8, 0.028], [0.9, 0.017], [0.95, 0.01], [0.985, 0.006], [1.0, 0.004]]),   // thin, compressed peduncle
   eye: { s: 0.16, y: 0.03, r: 0.033 },
 };
 
@@ -60,7 +60,7 @@ function lensZ(yn, w, s = 0.5) {
   // fin root (as in real chaetodontids) instead of meeting a flat fin at a crease
   const k = yn < 0 ? THREE.MathUtils.smoothstep(s, 0.46, 0.6) : THREE.MathUtils.smoothstep(s, 0.27, 0.36);
   if (k <= 0) return z;
-  const e = 1 - Math.abs(yn), E = 0.3, finT = 0.0085;
+  const e = 1 - Math.abs(yn), E = 0.45, finT = 0.013;
   if (e >= E) return z;
   const aE = 1 - Math.pow(1 - E, 2.1), zE = w * Math.pow(aE, 0.62) * (1 + 0.12 * yn);
   const root = finT + (zE - finT) * Math.pow(e / E, 1.7);     // concave, flush with the fin shell at the keel
@@ -137,7 +137,7 @@ export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallo
       const bw = bow * Math.sin(Math.PI * t);
       s += -dy * bw; y += dx * bw;
       const z = flat ? 0 : pleat * Math.pow(t, 0.8) * Math.cos(Math.PI * r) + zOff;
-      const th = thick * (Math.pow(1 - t, 2.2) + 0.06 + ridge * (1 - between) * (1 - t));
+      const th = thick * (Math.pow(1 - t, 3.0) * 0.94 + 0.06 * (1 - 0.6 * t) + ridge * (1 - between) * (1 - t));   // fleshy root, thin edge
       pos.push(sx(s), y, z + th);
       uv.push(...toUV(s, y));
       fin.push(r, t / 1.0);
@@ -204,16 +204,17 @@ function finLayouts() {
   const dBase = [], dTip = polyline([[0.3, 0.312], [0.3459, 0.3226], [0.3957, 0.3313], [0.445, 0.3383], [0.4932, 0.3407], [0.541, 0.3414],
     [0.5886, 0.3411], [0.6346, 0.3345], [0.6806, 0.328], [0.7262, 0.3197], [0.7722, 0.3131], [0.8177, 0.3048], [0.8631, 0.2955],
     [0.9073, 0.2818], [0.9518, 0.269], [0.9949, 0.2508], [1.0377, 0.2307], [1.0882, 0.204], [1.0977, 0.1922], [1.0851, 0.1524],
-    [1.0561, 0.1119], [1.0293, 0.0804], [0.9987, 0.052]], nD);
+    [1.0561, 0.1119], [1.03, 0.078], [1.0, 0.052], [0.984, 0.042]], nD);   // deep notch above the peduncle
   for (let i = 0; i < nD; i++) { const s = 0.295 + (0.985 - 0.295) * (i / (nD - 1)); dBase.push([s, top(s) - 0.003]); }
   const nA = 26;
   const aBase = [], aTip = polyline([[0.49, -0.212], [0.592, -0.2264], [0.6847, -0.2368], [0.7547, -0.2426], [0.8265, -0.2412],
     [0.8758, -0.2342], [0.9487, -0.2283], [1.0, -0.216], [1.04, -0.2], [1.066, -0.178], [1.08, -0.15],
-    [1.078, -0.122], [1.06, -0.095], [1.03, -0.072], [1.0, -0.054]], nA);   // rounded rear lobe
+    [1.078, -0.122], [1.06, -0.095], [1.03, -0.07], [1.0, -0.05], [0.984, -0.04]], nA);   // rounded rear lobe
   for (let i = 0; i < nA; i++) { const s = 0.48 + (0.985 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.012 * THREE.MathUtils.smoothstep(s, 0.48, 0.6)]); }   // root sunk into the fleshy keel
   const nC = 19;
-  const cBase = [], cTip = polyline([[1.19, 0.135], [1.212, 0.065], [1.218, 0.0], [1.21, -0.065], [1.186, -0.138]], nC);
-  for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.955 + 0.02 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.006 - f * (top(s) - bottom(s) - 0.012)]); }
+  // caudal: rises from the narrow peduncle and flares into a broad, short fan
+  const cBase = [], cTip = polyline([[1.165, 0.152], [1.192, 0.076], [1.2, 0.0], [1.192, -0.076], [1.162, -0.156]], nC);
+  for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.962 + 0.012 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]); }
   return { dorsal: { base: dBase, tip: dTip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
 
@@ -321,7 +322,7 @@ Paint paint(vec2 p){
   vec2 ol = outline(s);
   float top = ol.x, bot = ol.y;
   bool inBody = s >= 0. && s <= 1.0 && y <= top && y >= bot;
-  bool behind = s > 0.985 && abs(y) < 0.06 + (s - 0.985) * 0.55;          // the caudal fan
+  bool behind = s > 0.975 && abs(y) < 0.045 + (s - 0.975) * 0.6;          // the caudal fan
   bool dorsal = !inBody && y > 0.0 && s < 1.12 && !behind;
   bool anal = !inBody && y < 0.0 && s < 1.12 && s > 0.3 && !behind;
   bool caudal = !inBody && !dorsal && !anal;
@@ -361,6 +362,7 @@ Paint paint(vec2 p){
   // photographic albedo (de-lit CC0 photo in painting space) replaces the mask painting
   // wherever it covers the fish; the masks remain as a fallback outside it
   vec4 ph = texture2D(uPhoto, (p - vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)})) / vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}));
+  ph.a *= 1.0 - smoothstep(0.86, 0.95, s);   // the photo has a sunlit hot spot on the peduncle: use the painted yellow there
   col = mix(col, ph.rgb, ph.a * uPhotoMix);
   // the photo's dusky saddle is darkened by shadow and motion blur; in life it is a narrower
   // amber-brown transition, so lift dark warm tones in the yellow zone back toward orange
@@ -371,6 +373,23 @@ Paint paint(vec2 p){
     // blurred reflection in the photo left a grey-green haze at the shoulder: pull greenish tints back to pearl white
     float greenish = smoothstep(0.0, 0.05, col.g - col.r) * smoothstep(0.0, 0.08, col.g - col.b) * smoothstep(0.3, 0.38, s) * (1.0 - smoothstep(0.62, 0.7, s));
     col = mix(col, white * (0.92 + 0.08 * lum), greenish * 0.8 * ph.a * uPhotoMix);
+  }
+  // rear body: in photographs the area behind the dusky band, the peduncle and the flesh
+  // along the soft dorsal and anal fin bases are clear yellow, continuous with the fins
+  if (inBody) {
+    // the dusky band is only ~0.07 body lengths wide, just behind the diagonal rear edge of
+    // the white striped field (from the soft dorsal origin down to the anal fin); behind it
+    // the body is solid yellow, deepening to orange-yellow toward the top
+    // distance to the white field, probed along the boundary normal (toward the head and belly)
+    vec2 PU = vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)}), PS = vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)});
+    #define WHITE_AT(o) smoothstep(0.42, 0.6, min(min(texture2D(uPhoto, (p + (o) - PU) / PS).r, texture2D(uPhoto, (p + (o) - PU) / PS).g), texture2D(uPhoto, (p + (o) - PU) / PS).b))
+    float here = WHITE_AT(vec2(0.0));
+    float nearWhite = max(WHITE_AT(vec2(-0.025, -0.025)), WHITE_AT(vec2(-0.048, -0.045)) * 0.85);
+    float rearY = max(smoothstep(0.8, 0.93, s), (1.0 - nearWhite) * (1.0 - here) * smoothstep(0.4, 0.5, s));
+    float nearDorsal = smoothstep(0.55, 0.7, s) * smoothstep(0.07, 0.0, top - y);
+    float nearAnal = smoothstep(0.62, 0.75, s) * smoothstep(0.05, 0.0, y - bot) * smoothstep(0.02, -0.08, y);
+    float k = max(rearY, max(nearDorsal, nearAnal));
+    col = mix(col, mix(vec3(1.0, 0.82, 0.06), vec3(1.0, 0.68, 0.02), smoothstep(0.0, 0.25, y)), k);
   }
   // the photo's stripes are soft (motion + JPEG); reinforce them with the traced stripe field
   float stCore = smoothstep(0.7, 0.9, pm.b) * smoothstep(0.26, 0.3, s) * (1.0 - Y * 0.6);
@@ -643,7 +662,7 @@ export function createButterflyfish(renderer, opts = {}) {
             ray *= mix(1.0, 0.35, soft);
             // thin dark line along the whole dorsal edge; black margin down the soft dorsal's rear edge
             c = mix(c, vec3(0.06, 0.05, 0.05), smoothstep(0.93, 0.965, t) * 0.9);
-            c = mix(c, vec3(0.05, 0.04, 0.04), smoothstep(uRays - 4.6, uRays - 3.4, r) * smoothstep(0.3, 0.55, t));
+            c = mix(c, vec3(0.04, 0.035, 0.035), smoothstep(uRays - 6.0, uRays - 4.2, r) * smoothstep(0.08, 0.3, t));   // broad black rear margin of the soft dorsal, down into the notch
           }
           if (kind > 0.5 && kind < 1.5) {
             // anal fin, as photographed: the spiny front and the inner (basal) part are pearl
@@ -665,7 +684,8 @@ export function createButterflyfish(renderer, opts = {}) {
             // (photographs: solid yellow fan, one thin dark submarginal line, narrow clear edge)
             c = mix(c, vec3(1.0, 0.8, 0.04), 0.6);
             float bar = smoothstep(0.855, 0.87, t) * (1.0 - smoothstep(0.89, 0.905, t));
-            c = mix(c, vec3(0.1, 0.07, 0.03), bar * 0.9);
+            c = mix(c, vec3(0.2, 0.14, 0.05), bar * 0.6);
+            ray *= 0.3;
             c = mix(c, vec3(0.95, 0.93, 0.7), smoothstep(0.905, 0.93, t) * 0.6);
           }
           if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.9, 0.6), vec3(0.9), t); ray *= 0.6; }
@@ -695,8 +715,8 @@ export function createButterflyfish(renderer, opts = {}) {
     return m;
   };
 
-  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, ridge: 0.08, sub: 4, segs: 18, pleat: 0.0005, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.007 }), mkFinMat(0, 12, 37));
-  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, ridge: 0.02, sub: 4, segs: 16, pleat: 0.0002, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.007 }), mkFinMat(1, 2, 23));
+  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, ridge: 0.08, sub: 4, segs: 18, pleat: 0.0005, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.012 }), mkFinMat(0, 12, 37));
+  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, ridge: 0.02, sub: 4, segs: 16, pleat: 0.0002, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.012 }), mkFinMat(1, 2, 23));
   const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, ridge: 0.06, sub: 4, segs: 16, pleat: 0.0004, scallop: 0.006, thick: 0.005 }), mkFinMat(2, -1));
   for (const m of [dorsal, anal, caudal]) { m.renderOrder = 2; group.add(m); }
 
