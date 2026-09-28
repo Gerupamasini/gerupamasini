@@ -1237,7 +1237,7 @@ export class Ecosystem {
       roughness: 0.52, clearcoat: 0.45, clearcoatRoughness: 0.28,
     });
     const B = seed > 0.5;
-    return { shell, leg: sh.leg, legDact: sh.legDact, claw: B ? sh.clawB : sh.clawA, dact: B ? sh.dactB : sh.dactA, clawF: sh.clawF, dactF: sh.dactF, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.yamaCornea || (this.yamaCornea = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0xa8a296, 0x2e2c28], roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.12 })) };
+    return { shell, leg: sh.leg, legDact: sh.legDact, claw: B ? sh.clawB : sh.clawA, dact: B ? sh.dactB : sh.dactA, clawF: sh.clawF, dactF: sh.dactF, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.yamaCornea || (this.yamaCornea = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0xa8a296, 0x2e2c28], roughness: 0.45, clearcoat: 0.5, clearcoatRoughness: 0.25 })) };
   }
 
   kometsukiMaterials(seed) {
