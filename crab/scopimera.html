@@ -28,9 +28,9 @@ const sun=new THREE.DirectionalLight(0xffffff,2.6);sun.position.set(0.05,0.12,0.
 Object.assign(sun.shadow.camera,{left:-.04,right:.04,top:.04,bottom:-.04,near:.01,far:.4});sun.shadow.bias=-0.0002;scene.add(sun);
 const fill=new THREE.DirectionalLight(0xbcd4ff,0.6);fill.position.set(-0.08,0.05,-0.05);scene.add(fill);
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.3),new THREE.MeshStandardMaterial({color:0xcbbd9f,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);window.__ground=ground;
-const views={persp:[0.022,0.018,0.028],top:[0,0.055,0.0001],front:[0,0.007,0.045],side:[0.045,0.007,0],bottom:[0,-0.03,0.012]};
+const views={persp:[0.022,0.018,0.028],top:[0,0.055,0.0001],front:[0,0.007,0.045],side:[0.045,0.007,0],bottom:[0,-0.03,0.012],close:[0.006,0.006,0.016]};
 function setView(v){const p=views[v];if(window.__ground)window.__ground.visible=v!=="bottom";cam.position.set(...p);ctl.target.set(0,v==="top"?0:0.005,0);ctl.update();}
-setView('persp');document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+setView("persp");window.__setView=setView;document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>setView(b.dataset.v));
 addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight);});
 let bones={},rest={},walking=false;document.getElementById('walk').onclick=()=>walking=!walking;
 new GLTFLoader().load('scopimera_globosa_LOD0.glb?v='+Date.now(),g=>{g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}if(o.isBone){bones[o.name]=o;rest[o.name]=o.quaternion.clone();}});scene.add(g.scene);window.__crab=g;});

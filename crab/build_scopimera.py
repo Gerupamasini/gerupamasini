@@ -46,10 +46,10 @@ LEGS = {
 SEG_R = {
     "coxa":     (0.58, 0.52, 0.66, 0.60),
     "basis":    (0.46, 0.42, 0.52, 0.48),
-    "merus":    (0.26, 0.22, 0.82, 0.62),   # 長節: 幅広く平たい板状
-    "carpus":   (0.24, 0.21, 0.46, 0.38),
-    "propodus": (0.21, 0.18, 0.38, 0.30),
-    "dactylus": (0.20, 0.02, 0.27, 0.03),   # 指節: 湾曲して尖る
+    "merus":    (0.22, 0.19, 0.72, 0.54),   # 長節: 幅広く平たい板状
+    "carpus":   (0.20, 0.18, 0.38, 0.32),
+    "propodus": (0.18, 0.15, 0.32, 0.26),
+    "dactylus": (0.16, 0.02, 0.22, 0.03),   # 指節: 湾曲して尖る
 }
 SEGS = ["coxa", "basis", "merus", "carpus", "propodus", "dactylus"]
 # 基本姿勢（水平からの仰角, 度）。膝（長節末端）は甲の上面近くまで上がる。carpus 以降はソルバで接地。
@@ -65,7 +65,7 @@ CHEL_R = {
     "basis": (0.45, 0.42, 0.50, 0.48),
     "merus": (0.38, 0.34, 0.75, 0.62),
     "carpus": (0.42, 0.38, 0.56, 0.52),
-    "propodus": (0.50, 0.42, 1.30, 1.05),   # 掌部: 大きく丸く平たい板状
+    "propodus": (0.34, 0.30, 1.15, 0.95),   # 掌部: 大きく丸く平たい板状
     "fixed": (0.24, 0.02, 0.32, 0.03),      # 不動指
     "dactylus": (0.22, 0.02, 0.30, 0.03),   # 可動指
 }
@@ -410,6 +410,17 @@ def build_cheliped(sg):
     tube(hinge, d_d, CHEL["L"][5], CHEL_R["dactylus"], name, "cheliped_dactylus", sg,
          nl=16, nc=12, bend=0.35, tip=True, ext0=0.6)
     BONES.append((name, mirror_x(hinge, sg), mirror_x(hinge + d_d * CHEL["L"][5], sg), f"cheliped_{side}_propodus"))
+    # 指の咬合縁の細かな歯（両指の向かい合う縁に並ぶ小さな突起）
+    for grp, base, dd_, L, bend, toward in ((f"cheliped_{side}_propodus", base_fixed, d_f, 2.1, 0.25, +1),
+                                            (name, hinge, d_d, CHEL["L"][5], 0.35, -1)):
+        d0, n0, h0 = frame_from(dd_)
+        for k in range(9):
+            t = 0.12 + 0.62 * k / 8
+            r_here = 0.30 * (1 - t) + 0.03 * t
+            C = base + d0 * (L * t) - h0 * bend * t * t + h0 * (toward * r_here * 0.8)
+            tooth_dir = h0 * toward + d0 * 0.35
+            tube(C, tooth_dir, 0.12 + 0.05 * (k % 2), (0.05, 0.005, 0.05, 0.005), grp, "cheliped_fixed", sg,
+                 nl=3, nc=4, tip=True, ext0=0.0)
 
 
 def build_eye(sg):
@@ -520,6 +531,28 @@ for g, idx in groups.items():
     vg.add(idx, 1.0, 'REPLACE')
 
 # ------------------------------------------------------------------ テクスチャ（手続き生成）
+def noise_at(px, py, seed):
+    """任意座標での値ノイズ（ワールド座標 mm でサンプルし、UV の伸びを避ける）"""
+    ix, iy = np.floor(px), np.floor(py)
+    fx, fy = px - ix, py - iy
+    fx, fy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+
+    def h(x, y):
+        v = np.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453
+        return v - np.floor(v)
+    return ((h(ix, iy) * (1 - fx) + h(ix + 1, iy) * fx) * (1 - fy)
+            + (h(ix, iy + 1) * (1 - fx) + h(ix + 1, iy + 1) * fx) * fy)
+
+
+def fbm_at(px, py, freq, octaves, seed):
+    out, amp, tot = 0.0, 1.0, 0.0
+    for o in range(octaves):
+        out = out + amp * noise_at(px * freq * 2 ** o, py * freq * 2 ** o, seed + o)
+        tot += amp
+        amp *= 0.5
+    return out / tot
+
+
 def value_noise(res, cells, seed):
     rng = np.random.default_rng(seed)
     g = rng.random((cells + 1, cells + 1))
@@ -582,8 +615,18 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         top = np.sin(a) * np.ones_like(s)
         wt = smooth(-0.35, 0.35, top)
         wu = smooth(-0.15, -0.6, top)
-        mott = smooth(0.55, 0.63, mid) * 0.6                   # 暗色の網目状まだら
-        spot = smooth(0.66, 0.72, fin) * 0.9 + smooth(0.62, 0.66, grn) * 0.5   # 明色の細かな顆粒斑
+        # 甲羅表面の実座標（mm）で模様を生成: 上面は (x, z)、側面は高さも混ぜる
+        W, T, D, yc, zz = carapace_profile(s)
+        wx = W * np.sign(np.cos(a)) * np.abs(np.cos(a)) ** (2 / 2.7)
+        wy = np.where(top > 0, T * np.abs(top) ** (2 / 2.4), -D * np.abs(top) ** (2 / 3.6))
+        # 三平面投影: 上面は (x, z)、側面は (y, z) で標本化し、面の向きで混ぜる
+        sw = smooth(0.35, 0.85, np.abs(np.cos(a))) * np.ones_like(s)
+        fw = smooth(0.70, 0.95, np.abs(s)) * np.ones_like(sw)       # 前面・後面
+        def tri(fn):
+            return (fn(wx, zz) * (1 - sw) + fn(wy + 11.0, zz) * sw) * (1 - fw) + fn(wx, wy + 23.0) * fw
+        mott = smooth(0.55, 0.64, tri(lambda u_, v_: fbm_at(u_, v_, 0.9, 3, 5))) * 0.65          # 暗色の網目状まだら
+        spot = (smooth(0.62, 0.70, tri(lambda u_, v_: fbm_at(u_, v_, 7.0, 2, 9))) * 0.9
+                + smooth(0.66, 0.72, tri(lambda u_, v_: noise_at(u_ * 16, v_ * 16, 3))) * 0.8)   # 明色の細かな顆粒斑
         c = BASE * (1 - mott[..., None] * 0.75) + DARK * mott[..., None] * 0.75
         c = c * (1 - spot[..., None] * 0.6) + LIGHT * spot[..., None] * 0.6
         c = c * wt[..., None] + BASE * 1.08 * (1 - wt[..., None])
@@ -593,7 +636,7 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         c = c * (0.92 + 0.14 * mac[..., None])
         col[y0:y1, x0:x1] = np.clip(c, 0, 1)
         rough[y0:y1, x0:x1] = 0.36 + 0.10 * fin + 0.06 * wu
-        height[y0:y1, x0:x1] = 0.35 * fin + 0.5 * grn + 0.25 * mott
+        height[y0:y1, x0:x1] = 0.6 * spot + 0.25 * mott + 0.2 * grn
     elif kind == "seg":
         sg = info["seg"]
         chel = info["leg"] == "cheliped"
@@ -604,8 +647,9 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         band = np.zeros_like(ones)
         for b in range(nb):
             cpos = (b + 0.55) / (nb + 0.2)
-            band = np.maximum(band, np.exp(-((lu - cpos) / (0.10 / nb ** 0.5)) ** 2) * ones)
-        band = np.clip(band * smooth(0.35, 0.65, mid + 0.25 * (np.sin(lv * 6.283) * 0.5 + 0.5)), 0, 1)
+            wdt = (0.09 / nb ** 0.5) * (0.8 + 0.4 * noise_at(lv * 6, np.full_like(lv, b * 3.1 + nb), 17))
+            band = np.maximum(band, smooth(1.0, 0.55, np.abs(lu - cpos) / wdt) * ones)
+        band = np.clip(band * (0.75 + 0.25 * mid), 0, 1)
         if chel:
             band = band * 0.35
         # 長節の鼓膜状の窓（暗い楕円）
@@ -617,8 +661,14 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         c = c * (1 - spot[..., None] * 0.4) + LIGHT * spot[..., None] * 0.4
         if chel and sg in ("propodus", "fixed", "dactylus", "carpus"):
             # 鋏: つやのある淡いラベンダー白。掌部の外面上部にだけ薄い斑
-            up = smooth(0.2, 0.0, np.abs(lv - 0.25)) * 0.35 * smooth(0.5, 0.65, mid)
-            c = PALM * (1 - up[..., None]) + BASE * up[..., None]
+            # 掌部の平たい面（外面・内面）に灰褐色のまだらと明点、上縁は暗く、下縁は明るい
+            face = np.abs(np.cos(lv * 2 * np.pi)) * np.ones_like(lu)
+            mot = face * smooth(0.45, 0.6, fbm_at(lu * uw * 40, lv * vh * 40, 1.0, 3, 21)) * (0.22 if sg == "propodus" else 0.12)
+            up = smooth(0.12, 0.0, np.abs(lv - 0.25)) * 0.5 * np.ones_like(lu)
+            c = PALM * (1 - mot[..., None]) + BASE * mot[..., None]
+            c = c * (1 - up[..., None]) + DARK * up[..., None]
+            dots = smooth(0.70, 0.76, noise_at(lu * uw * 400, lv * vh * 400, 4)) * face * 0.6
+            c = c * (1 - dots[..., None]) + PALM * dots[..., None]
             c = c * (0.96 + 0.06 * mac[..., None])
         if sg in ("dactylus", "fixed"):
             tipw = smooth(0.45, 0.9, lu) * ones
@@ -627,7 +677,10 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         c = c * (0.94 + 0.10 * mac[..., None])
         col[y0:y1, x0:x1] = np.clip(c, 0, 1)
         rough[y0:y1, x0:x1] = (0.30 if chel else 0.48) + 0.08 * fin - (0.15 * smooth(0.6, 1.0, lu) if sg in ("dactylus", "fixed") else 0)
-        height[y0:y1, x0:x1] = 0.4 * fin + 0.4 * grn
+        # 法線用の高さ場は縦横比を補正した局所座標で生成（UV の伸びによる筋を防ぐ）
+        height[y0:y1, x0:x1] = 0.5 * fbm_at(lu * uw * 300, lv * vh * 300, 1.0, 2, 13) + 0.3 * noise_at(lu * uw * 900, lv * vh * 900, 19)
+        if chel and sg in ("propodus", "carpus", "fixed", "dactylus"):
+            height[y0:y1, x0:x1] *= 0.15                   # 鋏はなめらかでつやがある
     elif kind == "eyestalk":
         # 眼柄: 明るい灰色、付け根側に暗い帯
         dk = np.exp(-((lu - 0.45) / 0.12) ** 2) * np.ones_like(lv) * 0.5
@@ -656,7 +709,7 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         c = c * (1 - dots[..., None] * 0.5 * up[..., None]) + BELLY * dots[..., None] * 0.5 * up[..., None]
         col[y0:y1, x0:x1] = c * (0.95 + 0.08 * mac[..., None])
         rough[y0:y1, x0:x1] = 0.5
-        height[y0:y1, x0:x1] = 0.6 * fin
+        height[y0:y1, x0:x1] = 0.1 * fin
 
 # 高さ場 → 接空間ノーマル（OpenGL/glTF 規約: +Y = +V）
 gy, gx = np.gradient(height)
