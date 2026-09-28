@@ -201,7 +201,7 @@ const CLAW_POSES = {
 };
 // ヤマトオサガニ（雌・小型）：はさみを顔の前に垂らし、掌の面を前に、指は内下方へ
 const CLAW_POSES_Y = {
-  rest: { yaw0: 1.0, p0: 0.2, f1: 1.45, p1: 0.0, px: -0.22, py: -0.85, pz: 0.45, bx: -0.9, by: -0.3, bz: 0.15, open: 0.12 },
+  rest: { yaw0: 0.9, p0: 0.15, f1: 1.5, p1: 0.0, px: -0.9, py: -0.3, pz: 0.25, bx: 0.0, by: -1, bz: 0.2, open: 0.06 },
   reach: { yaw0: 0.95, p0: 0.0, f1: 1.25, p1: -0.1, px: -0.18, py: -0.9, pz: 0.4, bx: -0.9, by: -0.2, bz: 0.25, open: 0.45 },
   mouth: { yaw0: 1.05, p0: 0.35, f1: 1.8, p1: 0.15, px: -0.5, py: -0.6, pz: 0.5, bx: -0.8, by: -0.5, bz: -0.3, open: 0.0 },
   waveUp: { yaw0: 0.7, p0: 1.0, f1: 1.0, p1: 0.4, px: -0.2, py: 0.6, pz: 0.75, bx: -1, by: 0.2, bz: 0.2, open: 0.25 },
@@ -1217,14 +1217,14 @@ export class Ecosystem {
         leg: spk(0.5, [0x4e4a30, 0x6a6440, 0x2a281a, 0x9a7446], [150, 0.4, 0, 0], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.62, clearcoat: 0.3, clearcoatRoughness: 0.32 }),
         legDact: spk(0.55, [0x4e4a30, 0x6a6440, 0x2a281a, 0x9a7446], [150, 0.4, 1, L.dact], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.62, clearcoat: 0.3, clearcoatRoughness: 0.32 }),
         arm: spk(0.9, [0x3e3c28, 0x55523a, 0x24231a, 0xa8a890], [120, 1.0, 0, 0]),
-        stalk: spk(0.2, [0x8c9474, 0xa8b08e, 0x464a36, 0xc4c8b0], [220, 0.3, 0, 0], { clearcoat: 0.7, clearcoatRoughness: 0.15 }),
+        stalk: spk(0.2, [0x80866a, 0x9ca084, 0x404232, 0xbcbca2], [220, 0.3, 0, 0], { clearcoat: 0.7, clearcoatRoughness: 0.15 }),
         // 雄の掌：灰緑色（写真4）と淡黄色（写真3）の個体差
         clawA: chela(0.4, [0xb6b89a, 0xd8b848, 0xa85a24], [0.58, 0, 0, 0]),
         dactA: chela(0.5, [0xc8c09a, 0xdcb444, 0x9a5020], [0.58, 0, 1, 0]),
         clawB: chela(0.41, [0xe8d49a, 0xe2b456, 0xa85a24], [0.58, 0, 0, 0]),
         dactB: chela(0.51, [0xe8d49a, 0xe0ac4c, 0x9a5020], [0.58, 0, 1, 0]),
-        clawF: chela(0.45, [0xeadcae, 0xe4bc70, 0xb87838], [0.4, 0, 0, 0]),
-        dactF: chela(0.55, [0xe6d8b0, 0xe0b060, 0xa86a30], [0.4, 0, 1, 0]),
+        clawF: chela(0.45, [0xd6c89c, 0xd8b066, 0xa87038], [0.4, 0, 0, 0]),
+        dactF: chela(0.55, [0xd4c89e, 0xd4a85a, 0xa06a30], [0.4, 0, 1, 0]),
         mouth: organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.2, colors: [0xb4b4ac, 0xa2a29a, 0xc6c6be], P: [1, 0, 0, 0], roughness: 0.22, clearcoat: 1.0, clearcoatRoughness: 0.08 }),
         setae: new THREE.MeshStandardMaterial({ color: 0x5a5234, roughness: 0.7, side: THREE.DoubleSide }),
       };
@@ -1237,7 +1237,7 @@ export class Ecosystem {
       roughness: 0.46, clearcoat: 0.7, clearcoatRoughness: 0.14,
     });
     const B = seed > 0.5;
-    return { shell, leg: sh.leg, legDact: sh.legDact, claw: B ? sh.clawB : sh.clawA, dact: B ? sh.dactB : sh.dactA, clawF: sh.clawF, dactF: sh.dactF, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.yamaCornea || (this.yamaCornea = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0x76766e, 0x26262a], roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.03 })) };
+    return { shell, leg: sh.leg, legDact: sh.legDact, claw: B ? sh.clawB : sh.clawA, dact: B ? sh.dactB : sh.dactA, clawF: sh.clawF, dactF: sh.dactF, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.yamaCornea || (this.yamaCornea = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0x9a9c96, 0x2a2a2c], roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.03 })) };
   }
 
   kometsukiMaterials(seed) {

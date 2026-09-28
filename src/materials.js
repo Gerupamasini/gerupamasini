@@ -178,10 +178,17 @@ export const GLSL = {
       col = mix(col, uC1*0.6, blot*0.55);
       vec3 c = cell3(p*60.0 + uSeed*7.0);
       float smooth0 = smoothstep(0.05, 0.12, length(p.xz - vec2(0.0, -0.03)));
-      col = mix(col, uC3, (1.0 - smoothstep(0.0, 0.3, c.x)) * 0.4 * smooth0);
+      col = mix(col, uC3, (1.0 - smoothstep(0.0, 0.3, c.x)) * 0.18 * smooth0);
       col *= 0.9 + 0.1 * snoise3(p*14.0 + uSeed);
       // 橙褐色の数珠状の縁
-      float front = smoothstep(uP.x*0.84, uP.x*0.94, p.z) * smoothstep(-0.03, 0.02, p.y);
+      // 前縁：眼窩の上縁と下縁の 2 本の細い数珠列（眼窩の溝の中は暗い）
+      float fz = smoothstep(uP.x*0.84, uP.x*0.92, p.z);
+      float h = uP.z;
+      float upperM = smoothstep(0.42*h, 0.5*h, p.y) * (1.0 - smoothstep(0.66*h, 0.76*h, p.y));
+      float lowerM = smoothstep(-0.1*h, -0.03*h, p.y) * (1.0 - smoothstep(0.08*h, 0.14*h, p.y));
+      float trench = fz * smoothstep(0.1*h, 0.16*h, p.y) * (1.0 - smoothstep(0.4*h, 0.46*h, p.y));
+      col *= 1.0 - trench * 0.35;
+      float front = fz * max(upperM, lowerM);
       float lateral = smoothstep(uP.y*0.9, uP.y*0.98, abs(p.x)) * smoothstep(-0.04, 0.01, p.y) * step(p.z, uP.x*0.92);
       vec3 bc = cell3(p*120.0);
       float beads = 1.0 - smoothstep(0.1, 0.42, bc.x);

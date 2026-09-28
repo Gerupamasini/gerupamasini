@@ -250,7 +250,7 @@ export function bristleGeo(len, r, count, hairLen, seed = 1, depress = false, r2
 // 額は狭く下向きに曲がり、先端は二葉で中央に溝。眼窩は前縁全体に長く伸び、眼柄がそこに収まる。
 // 背面は胃域・心域・鰓域などの域が溝で区切られ、大きな顆粒に覆われる（中央の小域は平滑）。
 function yamatoCarapace(w, h, l, q = 1) {
-  return cached(`yama-car3:${w}:${h}:${l}:${q}`, () => {
+  return cached(`yama-car4:${w}:${h}:${l}:${q}`, () => {
     const fw = w * 0.12;
     const box = roundBox([0, -h * 0.15, 0], [w * 0.97, h * 0.48, l * 0.97], h * 0.42);
     const dome = ellipsoid([0, h * 0.08, -l * 0.05], [w * 0.95, h * 0.85, l * 0.98]);
@@ -264,15 +264,29 @@ function yamatoCarapace(w, h, l, q = 1) {
       ellipsoid([w * 0.56, h * 0.35, l * 0.62], [w * 0.2, h * 0.3, l * 0.22]),   // 肝域
       ellipsoid([-w * 0.56, h * 0.35, l * 0.62], [w * 0.2, h * 0.3, l * 0.22]),
     ];
+    // 域を区切る浅い溝（H 字形の胃心溝・鰓心溝・頸溝）。上から見た折れ線からの距離で背面を押し下げる
     const grooves = [
-      cone([-w * 0.17, h * 1.0, -l * 0.12], [w * 0.17, h * 1.0, -l * 0.12], h * 0.045, h * 0.045),
-      cone([w * 0.18, h * 1.02, l * 0.28], [w * 0.2, h * 0.95, -l * 0.62], h * 0.04, h * 0.036),
-      cone([-w * 0.18, h * 1.02, l * 0.28], [-w * 0.2, h * 0.95, -l * 0.62], h * 0.04, h * 0.036),
-      cone([w * 0.22, h * 0.95, -l * 0.18], [w * 0.5, h * 0.8, -l * 0.66], h * 0.036, h * 0.032),
-      cone([-w * 0.22, h * 0.95, -l * 0.18], [-w * 0.5, h * 0.8, -l * 0.66], h * 0.036, h * 0.032),
-      cone([w * 0.32, h * 0.95, l * 0.3], [w * 0.85, h * 0.67, l * 0.18], h * 0.036, h * 0.032),   // 頸溝
-      cone([-w * 0.32, h * 0.95, l * 0.3], [-w * 0.85, h * 0.67, l * 0.18], h * 0.036, h * 0.032),
+      [[-w * 0.17, -l * 0.12], [w * 0.17, -l * 0.12]],
+      [[w * 0.18, l * 0.28], [w * 0.2, -l * 0.62]],
+      [[-w * 0.18, l * 0.28], [-w * 0.2, -l * 0.62]],
+      [[w * 0.22, -l * 0.18], [w * 0.5, -l * 0.66]],
+      [[-w * 0.22, -l * 0.18], [-w * 0.5, -l * 0.66]],
+      [[w * 0.32, l * 0.3], [w * 0.85, l * 0.18]],
+      [[-w * 0.32, l * 0.3], [-w * 0.85, l * 0.18]],
     ];
+    const gW = w * 0.03, gD = h * 0.05;
+    const grooveAt = (x, z) => {
+      let g = 0;
+      for (const [[ax, az], [bx, bz]] of grooves) {
+        const dx = bx - ax, dz = bz - az;
+        const t = Math.min(1, Math.max(0, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
+        const ex = x - ax - dx * t, ez = z - az - dz * t;
+        // 端はしだいに浅く消える
+        const fade = Math.min(1, t * 5, (1 - t) * 5) * 0.6 + 0.4;
+        g = Math.max(g, Math.exp(-(ex * ex + ez * ez) / (gW * gW)) * fade);
+      }
+      return g;
+    };
     // 額：狭く下へ曲がり、先端は二葉
     const front = [
       ellipsoid([0, h * 0.25, l * 0.98], [fw, h * 0.32, l * 0.14]),
@@ -300,7 +314,7 @@ function yamatoCarapace(w, h, l, q = 1) {
       for (const o of orbit) d = smax(d, -o(x, y, z), h * 0.09);
       d = smax(d, -frontFurrow(x, y, z), h * 0.05);
       for (const t of teeth) d = smin(d, t(x, y, z), h * 0.12);
-      for (const g of grooves) d = smax(d, -g(x, y, z), h * 0.07);
+      if (y > h * 0.3) d += grooveAt(x, z) * gD * THREE.MathUtils.smoothstep(y, h * 0.3, h * 0.6);
       d = smax(d, -buccal(x, y, z), h * 0.06);
       // 側縁の細かな鋸歯
       const ax = Math.abs(xs);
@@ -427,7 +441,7 @@ export const CRAB_SPECS = {
     legs: {
       cox: 0.06, bi: 0.08, merus: 0.58, carpus: 0.2, prop: 0.28, dact: 0.25,
       r: 0.062, merusR: 1.45, merusFlat: 0.55, flat: 0.6, k: [0.84, 1.0, 0.97, 0.76], spread: 0.36, curve: 0.08,
-      hipX: 0.86, hipY: 0.38, hipZ: [0.5, 0.18, -0.16, -0.5],
+      hipX: 0.8, hipY: 0.5, hipZ: [0.5, 0.18, -0.16, -0.5], coxR: 1.2,
       setae: [0.03, 0.035, 0.045, 0.055], serrate: 9, reach: 0.8,
       blade: { bi: [0.05, 0.07], merus: [0.088, 0.08], carpus: [0.062, 0.056], prop: [0.05, 0.038], dact: [0.036, 0.003], th: 0.42 },
     },
@@ -438,7 +452,7 @@ export const CRAB_SPECS = {
     clawF: { cox: 0.045, bi: 0.05, merus: 0.22, carpus: 0.12, PL: 0.4, PH: 0.11, T: 0.065, r: 0.04, macro: true, shX: 0.36, shY: 0.55, shZ: 0.55 },
     // 眼柄は細長く、額の脇から V 字に立ち上がる
     eye: { stalk: 0.4, r: 0.015, cornea: 0.021, cLen: 1.7, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },
-    mouth: 0.3, mouthTilt: 0.55, antenna: 0.1,
+    mouth: 0.25, mouthTilt: 1.15, mouthPos: [0.19, -0.5, 0.76], antenna: 0.1,
     Hb: 0.26, phiD: 0.95, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
   },
 };
@@ -471,7 +485,7 @@ export function crabKit(name, q = 1) {
     const mr = L.r * (L.merusR || 1);
     return {
       carapace: S.carapace(S.w, S.h, S.l, q),
-      coxa: segGeo(L.cox, L.r * 1.55, L.r * 1.4, 0.8, { q }),
+      coxa: segGeo(L.cox, L.r * (L.coxR || 1.55), L.r * (L.coxR || 1.55) * 0.9, 0.8, { q }),
       ...(L.blade ? {
         bi: bladeGeo(L.bi, ...L.blade.bi, L.blade.th * 1.2, { q, neck: 0.8 }),
         merus: bladeGeo(L.merus, ...L.blade.merus, L.blade.th, { q, serrate: L.serrate, spine: 1 }),
@@ -618,7 +632,8 @@ export function buildCrab(name, mats, male = true, q = 1) {
   for (const s of [1, -1]) {
     const g = new THREE.Group();
     // 口枠に収まり、下端は胸板の方へ後傾する
-    g.position.set(s * S.mouth * 0.22, -S.h * 0.42, S.l * 0.93);
+    const mp = S.mouthPos || [0.22, -0.42, 0.93];
+    g.position.set(s * S.mouth * mp[0], S.h * mp[1], S.l * mp[2]);
     g.userData.tilt = S.mouthTilt ?? -0.35;
     g.rotation.set(g.userData.tilt, s > 0 ? 0.12 : -0.12, 0);
     const m = new THREE.Mesh(K.maxilliped, mats.mouth || mats.shell);

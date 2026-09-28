@@ -571,12 +571,34 @@ export class World {
   // ---------- 貝殻片・小石・流れ藻 ----------
   buildDebris() {
     const rnd = mulberry32(4242);
-    const geos = [
-      new THREE.SphereGeometry(0.12, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.DodecahedronGeometry(0.07, 0),
-      new THREE.CircleGeometry(0.1, 7),
-    ];
-    geos[2].rotateX(-Math.PI / 2);
+    // 二枚貝の殻：放射肋と成長線のある浅い椀
+    const valve = new THREE.SphereGeometry(0.12, 30, 10, 0, Math.PI * 2, 0, Math.PI * 0.4);
+    // 殻の破片：椀の一部を不規則に割ったような曲面片
+    const shard = new THREE.SphereGeometry(0.13, 9, 4, 0, 1.7, 0, 0.55);
+    // 小石：角の取れた多面体
+    const pebble = new THREE.IcosahedronGeometry(0.07, 1);
+    const rn = mulberry32(77);
+    for (const [g, kind] of [[valve, 0], [pebble, 1], [shard, 2]]) {
+      const pa = g.attributes.position;
+      for (let i = 0; i < pa.count; i++) {
+        let x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
+        if (kind === 0) {
+          const a = Math.atan2(z, x), r = Math.hypot(x, z);
+          const k = 1 + 0.03 * Math.pow(Math.abs(Math.sin(a * 11)), 0.6) + 0.012 * Math.sin(r * 230);
+          x *= k * 1.12; z *= k; y *= k;
+        } else if (kind === 1) {
+          const k = 1 + 0.18 * Math.sin(x * 40 + 1.3) * Math.sin(z * 33) + 0.1 * Math.sin(y * 50);
+          x *= k; y *= k * 0.75; z *= k;
+        } else {
+          const k = 1 + (rn() - 0.5) * 0.18 * Math.min(1, Math.hypot(x, z) * 20);
+          x *= k; z *= k;
+        }
+        pa.setXYZ(i, x, y, z);
+      }
+      g.computeVertexNormals();
+    }
+    shard.translate(0, -0.13 * Math.cos(0.55), 0);
+    const geos = [valve, pebble, shard];
     const mats = [
       new THREE.MeshStandardMaterial({ color: 0xb8b0a2, roughness: 0.55, side: THREE.DoubleSide }),
       new THREE.MeshStandardMaterial({ color: 0x6e6658, roughness: 0.8 }),
