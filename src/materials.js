@@ -253,6 +253,9 @@ export const GLSL = {
       float tip = uP.z > 0.5 ? smoothstep(0.3 * L, 0.5 * L, p.x) : smoothstep(0.85 * L, 1.02 * L, p.x);
       col = mix(col, uC3, tip * 0.75);
       col *= 0.93 + 0.07 * snoise3(p * 30.0 + uSeed);
+      // 掌の外面の細かな暗い斑点（生体写真の灰緑色の掌）
+      vec3 sp = cell3(p * 190.0 + uSeed * 5.0);
+      col = mix(col, col * 0.62, (1.0 - smoothstep(0.08, 0.26, sp.x)) * step(0.55, sp.z) * (1.0 - fin) * 0.8);
       // 掌の上縁の瘤と内面の細かな顆粒はわずかに白い
       vec3 c = cell3(p * 140.0);
       col = mix(col, col * 1.08, (1.0 - smoothstep(0.0, 0.35, c.x)) * 0.5);
