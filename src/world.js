@@ -406,8 +406,11 @@ export class World {
     this.skyScene = new THREE.Scene();
     this.skyForEnv = new Sky();
     this.skyForEnv.scale.setScalar(1000);
-    Object.assign(this.skyForEnv.material.uniforms, {});
     this.skyScene.add(this.skyForEnv);
+    // 環境光の下半球は泥の地面（下向きの面が空を映して白く光らないように）
+    this.envGround = new THREE.Mesh(new THREE.CircleGeometry(900, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x2a261e }));
+    this.envGround.position.y = -2;
+    this.skyScene.add(this.envGround);
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
     this.envCubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
     this.envCubeCam = new THREE.CubeCamera(1, 5000, this.envCubeRT);
@@ -466,6 +469,7 @@ export class World {
       .multiplyScalar(0.35 + 0.65 * THREE.MathUtils.smoothstep(elev, -4, 15));
     const top = new THREE.Color(0.25, 0.45, 0.78).multiplyScalar(0.3 + 0.7 * THREE.MathUtils.smoothstep(elev, -4, 20));
     this.scene.fog.color.copy(horizon).multiplyScalar(0.95);
+    this.envGround.material.color.setRGB(0.16, 0.145, 0.115).multiplyScalar(0.3 + 0.7 * THREE.MathUtils.smoothstep(elev, -4, 20));
 
     if (Math.abs(hour - this.lastEnvHour) > 0.2) {
       this.lastEnvHour = hour;

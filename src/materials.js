@@ -146,8 +146,11 @@ export const GLSL = {
       vec3 c = cell3(p*48.0 + uSeed*7.0);
       col = mix(col, uC3, (1.0 - smoothstep(0.0, 0.35, c.x)) * 0.45);  // 顆粒の頂は明るい
       col = mix(col, uC1*0.55, smoothstep(0.55, 0.9, snoise3(p*7.0+3.0+uSeed)) * 0.6);
-      col = mix(col, uC3*1.05, smoothstep(0.02, 0.0, abs(p.z - 0.33)) * 0.3);
-      col = mix(col, uC4, smoothstep(0.0, -0.05, p.y));
+      col = mix(col, uC3*1.05, smoothstep(0.03, 0.0, abs(p.z - 0.38)) * 0.35);   // 前縁の明るい帯
+      // 乾きかけた泥の付着（上向きの面にまだらに）
+      float dust = smoothstep(0.05, 0.55, fbm3(p*8.0 + uSeed*3.0)) * smoothstep(0.3, 0.85, n.y);
+      col = mix(col, vec3(0.46, 0.42, 0.35), dust * 0.5);
+      col = mix(col, uC4, smoothstep(-0.04, -0.1, p.y));
       return col;
     }`,
     bump: `float orgBump(vec3 p){
@@ -178,8 +181,8 @@ export const GLSL = {
       return col;
     }`,
     bump: `float orgBump(vec3 p){
-      vec3 c = cell3(p*110.0);
-      return (1.0 - smoothstep(0.0, 0.4, c.x))*0.0015;
+      vec3 c = cell3(p*170.0);
+      return (1.0 - smoothstep(0.0, 0.4, c.x))*0.0006 + snoise3(p*40.0)*0.0006;
     }`,
   },
   // 複眼：黒地に細かな個眼の格子

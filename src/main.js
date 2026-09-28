@@ -181,6 +181,23 @@ function select(a) {
 }
 function deselect() { state.follow = null; $('#card').classList.remove('show'); ring.visible = false; }
 
+// ---------- 観察用の固定表示（?inspect=種名&cam=方位,仰角,距離&state=行動） ----------
+const inspectName = params.get('inspect');
+const inspectAgent = inspectName ? eco.agents.find((a) => a.species === inspectName) : null;
+const camSpec = (params.get('cam') || '0,0.35,3').split(',').map(Number);
+function holdInspect() {
+  const a = inspectAgent;
+  if (a.sink !== undefined) { a.sink = 0; a.state = params.get('state') || 'idle'; a.timer = 99; if (a.state === 'wave') a.wave = 1; }
+  if (a.targetOut !== undefined) { a.out = a.targetOut = 1; a.timer = 99; }
+  const P = a.root.position;
+  for (const o of eco.agents) if (o !== a && o.root.position.distanceTo(P) < 3) o.root.visible = false;
+  const [az, el, d] = camSpec;
+  const yaw = (a.yaw || 0) + az;
+  controls.target.set(P.x, P.y + 0.15 * d / 3, P.z);
+  camera.position.set(P.x + Math.sin(yaw) * Math.cos(el) * d, P.y + Math.sin(el) * d + 0.1, P.z + Math.cos(yaw) * Math.cos(el) * d);
+  camera.lookAt(controls.target);
+}
+
 // ---------- ループ ----------
 world.setTimeOfDay(state.hour);
 const clock = new THREE.Clock();
@@ -225,6 +242,7 @@ function frame() {
   const camDist = camera.position.distanceTo(controls.target);
   world.update(dt, state.t, level, controls.target, camDist);
   eco.update(dt, state.t, camera.position);
+  if (inspectAgent) holdInspect();
 
   // 追従カメラ
   if (state.follow) {
@@ -243,7 +261,7 @@ function frame() {
     camera.position.lerp(camPos, 1 - Math.exp(-rawDt * 2.5));
     camFly -= rawDt * 0.6;
   }
-  controls.update();
+  if (!inspectAgent) controls.update();
   // カメラが地面や水面に潜らないように
   const gh = world.heightAt(camera.position.x, camera.position.z);
   camera.position.y = Math.max(camera.position.y, Math.max(gh, level) + 0.3);

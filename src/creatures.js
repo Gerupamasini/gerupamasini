@@ -112,7 +112,8 @@ class PelletField {
       this.mesh.setMatrixAt(alive, _m);
       // 作りたては湿って暗く、時間とともに乾いて明るくなる
       const dry = clamp(it.age / 90, 0, 1);
-      this.col.setRGB(lerp(0.24, 0.42, dry), lerp(0.21, 0.37, dry), lerp(0.16, 0.28, dry));
+      if (it.mud) this.col.setRGB(lerp(0.16, 0.26, dry), lerp(0.15, 0.24, dry), lerp(0.13, 0.2, dry));
+      else this.col.setRGB(lerp(0.24, 0.42, dry), lerp(0.21, 0.37, dry), lerp(0.16, 0.28, dry));
       this.mesh.setColorAt(alive, this.col);
       alive++;
     }
@@ -198,6 +199,14 @@ const CLAW_POSES = {
   waveUp: { yaw0: 0.35, p0: 1.15, f1: 0.55, p1: 0.75, f2: 0.25, p2: 0.2, open: 0.15 },
   tuck: { yaw0: 1.0, p0: -0.2, f1: 2.1, p1: 0.35, f2: 1.2, p2: 0.2, open: 0.0 },
 };
+// ヤマトオサガニ：頑丈なはさみを顔の前に垂らし、掌の面を前に向ける
+const CLAW_POSES_Y = {
+  rest: { yaw0: 1.0, p0: 0.12, f1: 1.45, p1: 0.0, f2: 0.5, p2: -0.95, open: 0.12 },
+  reach: { yaw0: 0.95, p0: -0.05, f1: 1.25, p1: -0.1, f2: 0.6, p2: -1.25, open: 0.45 },
+  mouth: { yaw0: 1.05, p0: 0.35, f1: 1.8, p1: 0.15, f2: 0.55, p2: -0.6, open: 0.0 },
+  waveUp: { yaw0: 0.7, p0: 1.0, f1: 1.0, p1: 0.4, f2: 0.4, p2: 0.1, open: 0.25 },
+  tuck: { yaw0: 1.1, p0: -0.15, f1: 1.9, p1: 0.2, f2: 0.8, p2: -1.0, open: 0.0 },
+};
 function mixPose(a, b, t, out = {}) { for (const k in a) out[k] = a[k] + (b[k] - a[k]) * t; return out; }
 function setClaw(c, p) {
   const s = c.s;
@@ -220,6 +229,7 @@ class Crab extends Agent {
     this.rnd = rnd;
     this.male = rnd() < 0.5;
     const mats = sys.crabMaterials(species, rnd());
+    this.mats = mats;
     this.parts = buildCrab(species, mats, this.male);
     this.setup(this.parts.root);
     this.scale = species === 'kometsuki' ? 0.85 + rnd() * 0.3 : 0.8 + rnd() * 0.35;
@@ -252,11 +262,11 @@ class Crab extends Agent {
     const r = this.parts.root;
     if (!sys.lodCache[key]) {
       // 低解像度の個体を平らな地面で静止姿勢にしてから1つにまとめる
-      const lp = buildCrab(species, { shell: shellMat, leg: this.parts.legs[0].F.children[0].material, claw: this.parts.claws[0].g0.children[0].material, cornea: sys.corneaMat }, this.male, 4);
+      const lp = buildCrab(species, { ...this.mats, shell: shellMat }, this.male, 4);
       const lr = new LegRig(lp.body, lp.legs, { phiD: this.S.phiD });
       lr.update(0, FLAT, null, false);
-      for (const c of lp.claws) setClaw(c, CLAW_POSES.rest);
-      setEyes(lp, this.S.eye, 0.7);
+      for (const c of lp.claws) setClaw(c, (species === 'yamato' ? CLAW_POSES_Y : CLAW_POSES).rest);
+      setEyes(lp, this.S.eye, 0.92);
       sys.lodCache[key] = buildLODGeometry(lp.root);
     }
     const L = sys.lodCache[key];
@@ -311,14 +321,17 @@ class Crab extends Agent {
         if (wet) { this.state = 'return'; break; }
         // 少しずつ横歩きしながら砂をすくって食べる
         if (Math.sin(t * 0.8 + this.gait) > 0.55) move = this.stepToward(this.target, speed * 0.3, dt);
-        if (this.species === 'kometsuki') {
+        {
+          // コメツキガニは砂団子、ヤマトオサガニは泥の小さな粒を残す
+          const K = this.species === 'kometsuki';
           this.pelletT -= dt;
           if (this.pelletT <= 0) {
-            this.pelletT = 1.1 + this.rnd() * 0.9;
-            const back = this.yaw + Math.PI + (this.rnd() - 0.5) * 1.2;
-            const d = this.S.l * 1.9 * this.scale;
+            this.pelletT = K ? 1.1 + this.rnd() * 0.9 : 1.6 + this.rnd() * 1.4;
+            const back = this.yaw + (K ? Math.PI : 0) + (this.rnd() - 0.5) * 1.4;
+            const d = this.S.l * (K ? 1.9 : 1.3) * this.scale;
             const px = this.p.x + Math.sin(back) * d, pz = this.p.y + Math.cos(back) * d;
-            this.sys.pellets.add(px, this.world.heightAt(px, pz), pz, (0.75 + this.rnd() * 0.5) * this.scale);
+            const it = this.sys.pellets.add(px, this.world.heightAt(px, pz), pz, (K ? 0.75 + this.rnd() * 0.5 : 0.45 + this.rnd() * 0.3) * this.scale);
+            if (!K) it.mud = true;
           }
         }
         if (this.timer <= 0) { this.state = 'idle'; this.timer = 0.3 + this.rnd(); }
@@ -382,22 +395,23 @@ class Crab extends Agent {
 
     // はさみ
     const feeding = this.state === 'feed';
+    const CP = this.species === 'yamato' ? CLAW_POSES_Y : CLAW_POSES;
     for (const c of P.claws) {
       let pose;
-      if (this.sink > 0.05) pose = mixPose(CLAW_POSES.rest, CLAW_POSES.tuck, clamp(this.sink * 2, 0, 1), this.pose);
+      if (this.sink > 0.05) pose = mixPose(CP.rest, CP.tuck, clamp(this.sink * 2, 0, 1), this.pose);
       else if (feeding) {
         const ph = (t * (this.species === 'kometsuki' ? 1.6 : 1.1) + this.feedPh + (c.s > 0 ? 0 : 0.5)) % 1;
         const k = ph < 0.5 ? sstep(0, 0.5, ph) : 1 - sstep(0.5, 1, ph);
-        pose = mixPose(CLAW_POSES.mouth, CLAW_POSES.reach, k, this.pose);
+        pose = mixPose(CP.mouth, CP.reach, k, this.pose);
       } else {
         const big = c.s > 0 && this.male && this.species === 'yamato';
         const w = this.wave * (big ? 1 : 0.35) * (0.5 + 0.5 * Math.sin(t * 2.6 + (c.s > 0 ? 0 : 0.5)));
-        pose = mixPose(CLAW_POSES.rest, CLAW_POSES.waveUp, w, this.pose);
+        pose = mixPose(CP.rest, CP.waveUp, w, this.pose);
       }
       setClaw(c, pose);
     }
-    // 眼柄：活動中は立てる
-    const alert = (1 - this.sink) * (this.state === 'wave' || this.moving ? 1 : 0.7);
+    // 眼柄：活動中は潜望鏡のように立てる
+    const alert = (1 - clamp(this.sink * 1.5, 0, 1)) * (this.state === 'wave' || this.moving ? 1 : 0.92);
     setEyes(P, S.eye, alert, t);
     // 口器の動き
     for (const m of P.mouth) m.rotation.x = -0.35 + (feeding ? Math.sin(t * 14 + m.position.x * 40) * 0.12 : 0);
@@ -1137,24 +1151,28 @@ export class Ecosystem {
       this.crabShared[species] = {
         leg: organicMaterial({
           key: 'leg', glsl: GLSL.leg, seed: 0.5,
-          colors: Y ? [0x6a6150, 0x4c4538, 0x2e2a22, 0xb2a88e] : [0xa6977c, 0x7e705a, 0x55493a, 0xddd4c2],
-          roughness: 0.45, clearcoat: 0.55, clearcoatRoughness: 0.25, sss: Y ? 0x806850 : 0xd8b890, sssK: Y ? 0.15 : 0.35,
+          colors: Y ? [0x6a5334, 0x4e3e26, 0x2e2416, 0xa8905e] : [0xa6977c, 0x7e705a, 0x55493a, 0xddd4c2],
+          roughness: 0.42, clearcoat: 0.6, clearcoatRoughness: 0.22, sss: Y ? 0xa06a3a : 0xd8b890, sssK: Y ? 0.2 : 0.35,
         }),
         claw: organicMaterial({
           key: 'claw', glsl: GLSL.claw, seed: 0.7,
-          colors: Y ? [0xd8c8c2, 0xbfa8a2, 0xf4eeea] : [0xd8ccb6, 0xbcae94, 0xf2ece0],
-          P: [Y ? 0.6 : 0.17, 0, 0, 0],
+          colors: Y ? [0xe0cf9e, 0xcdb680, 0xf2e8cc] : [0xd8ccb6, 0xbcae94, 0xf2ece0],
+          P: [Y ? 0.4 : 0.17, 0, 0, 0],
           roughness: 0.38, clearcoat: 0.7, clearcoatRoughness: 0.2, sss: 0xf0d0c0, sssK: 0.3,
         }),
       };
     }
     const sh = this.crabShared[species];
+    if (Y && !sh.arm) {
+      sh.arm = organicMaterial({ key: 'leg', glsl: GLSL.leg, seed: 0.9, colors: [0x7a4a24, 0x5e3a1e, 0x3a2414, 0xb0845a], roughness: 0.4, clearcoat: 0.7, clearcoatRoughness: 0.2, sss: 0xc07040, sssK: 0.2 });
+      sh.mouth = organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.2, colors: [0xb4a282, 0xa08e70, 0xc8b898], P: [1, 0, 0, 0], roughness: 0.45, clearcoat: 0.4, clearcoatRoughness: 0.3 });
+    }
     const shell = organicMaterial({
       key: Y ? 'yamaShell' : 'komeShell', glsl: Y ? GLSL.yamatoShell : GLSL.kometsukiShell, seed,
-      colors: Y ? [0x4e4636, 0x6a5c44, 0x958a70, 0xc8bea8] : [0x8e7e66, 0xa89a80, 0x4a3c2e, 0xd6cebe],
+      colors: Y ? [0x4c3e2a, 0x6e5c40, 0x86765a, 0x4a3e2e] : [0x8e7e66, 0xa89a80, 0x4a3c2e, 0xd6cebe],
       roughness: Y ? 0.5 : 0.58, clearcoat: 0.45, clearcoatRoughness: 0.3,
     });
-    return { shell, leg: sh.leg, claw: sh.claw, cornea: this.corneaMat };
+    return { shell, leg: sh.leg, claw: sh.claw, arm: sh.arm, mouth: sh.mouth, cornea: this.corneaMat };
   }
 
   buildBait() {
