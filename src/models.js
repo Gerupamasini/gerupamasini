@@ -14,7 +14,7 @@ function cached(key, fn) {
 // 脚の節：+x 方向に長さ len、断面は z 方向に平たい
 export function segGeo(len, r1, r2, flat = 0.6, opts = {}) {
   const q = opts.q || 1;
-  const key = `seg:${len}:${r1}:${r2}:${flat}:${opts.curve || 0}:${opts.knob ?? 1}:${q}`;
+  const key = `seg:${len}:${r1}:${r2}:${flat}:${opts.curve || 0}:${opts.knob ?? 1}:${q}:${opts.serrate || 0}:${opts.depress ? 1 : 0}`;
   return cached(key, () => {
     const curve = opts.curve || 0;
     const body = curve
@@ -23,17 +23,27 @@ export function segGeo(len, r1, r2, flat = 0.6, opts = {}) {
     const knob = sphere([r1 * 0.2, 0, 0], r1 * 1.02);
     const useKnob = opts.knob ?? 1;
     const ridge = cone([len * 0.1, r1 * 0.55, 0], [len * 0.85, r2 * 0.5 - curve * len * 0.4, 0], r1 * 0.35, r2 * 0.3);
+    const serr = opts.serrate || 0;
+    const dep = !!opts.depress;   // 背腹に扁平（歩脚の長節など：上から見て幅広い）
     const f = (x, y, z) => {
-      const zz = z / flat;
-      let d = body(x, y, zz);
-      if (useKnob) d = smin(d, knob(x, y, zz), r1 * 0.4);
-      // 背側の稜
-      d = smin(d, ridge(x, y, zz), r1 * 0.5);
+      const yy = dep ? y / flat : y, zz = dep ? z : z / flat;
+      let d = body(x, yy, zz);
+      if (useKnob) d = smin(d, knob(x, yy, zz), r1 * 0.4);
+      // 背側の稜（側扁の節のみ）
+      if (!dep) d = smin(d, ridge(x, yy, zz), r1 * 0.5);
+      // 前縁・後縁（側扁なら背縁・腹縁）の鋸歯（小棘の列）
+      if (serr) {
+        const t = Math.min(1, Math.max(0, x / len));
+        const tooth = Math.pow(Math.max(0, Math.sin(t * serr * Math.PI * 2)), 6) * (1 - t * 0.5);
+        const edge = Math.max(0, Math.abs(dep ? z : y) / r1 - 0.45);
+        d -= tooth * edge * r1 * 0.22 * (t > 0.05 && t < 0.97 ? 1 : 0);
+      }
       return d * flat;
     };
     const rMax = Math.max(r1, r2) * 1.3;
     const cell = Math.min(Math.max(Math.max(r1, r2) * 0.3, len / 90), len / 14) * q;
-    return meshSDF(f, [-rMax, -rMax - curve * len, -rMax * flat], [len + rMax, rMax, rMax * flat], cell);
+    const ry = dep ? rMax * flat : rMax, rz = dep ? rMax : rMax * flat;
+    return meshSDF(f, [-rMax, -ry - curve * len, -rz], [len + rMax, ry, rz], cell);
   });
 }
 
@@ -123,8 +133,8 @@ function kometsukiCarapace(w, h, l, q = 1) {
 }
 
 // 脚の剛毛：節の背縁と腹縁から外向き・先端向きに伸びる細い針（+x が節の長さ方向）
-export function bristleGeo(len, r, count, hairLen, seed = 1) {
-  return cached(`bristle:${len}:${r}:${count}:${hairLen}:${seed}`, () => {
+export function bristleGeo(len, r, count, hairLen, seed = 1, depress = false) {
+  return cached(`bristle:${len}:${r}:${count}:${hairLen}:${seed}:${depress}`, () => {
     const rnd = mulberry32(seed);
     const pos = [];
     const dir = new THREE.Vector3(), u = new THREE.Vector3(), v = new THREE.Vector3(), b = new THREE.Vector3(), tip = new THREE.Vector3();
@@ -132,12 +142,18 @@ export function bristleGeo(len, r, count, hairLen, seed = 1) {
     for (let i = 0; i < count; i++) {
       const side = i % 2 ? 1 : -1;
       const x = ((i + 0.5 + (rnd() - 0.5) * 0.8) / count) * len;
-      b.set(x, side * r * 0.75, (rnd() - 0.5) * r * 0.5);
-      dir.set(0.5 + rnd() * 0.5, side * (0.8 + rnd() * 0.4), (rnd() - 0.5) * 0.9).normalize();
+      if (depress) {
+        // 前縁・後縁から水平に（やや下向きに）生える
+        b.set(x, (rnd() - 0.5) * r * 0.3, side * r * 0.8);
+        dir.set(0.45 + rnd() * 0.5, -0.25 + (rnd() - 0.5) * 0.5, side * (0.8 + rnd() * 0.4)).normalize();
+      } else {
+        b.set(x, side * r * 0.75, (rnd() - 0.5) * r * 0.5);
+        dir.set(0.5 + rnd() * 0.5, side * (0.8 + rnd() * 0.4), (rnd() - 0.5) * 0.9).normalize();
+      }
       const L = hairLen * (0.55 + rnd() * 0.7);
       tip.copy(b).addScaledVector(dir, L);
-      u.crossVectors(dir, up).normalize().multiplyScalar(r * 0.09);
-      v.crossVectors(dir, u).normalize().multiplyScalar(r * 0.09);
+      u.crossVectors(dir, up).normalize().multiplyScalar(r * 0.05);
+      v.crossVectors(dir, u).normalize().multiplyScalar(r * 0.05);
       const p0 = b.clone().add(u), p1 = b.clone().sub(u).add(v), p2 = b.clone().sub(u).sub(v);
       for (const [A, B] of [[p0, p1], [p1, p2], [p2, p0]]) pos.push(A.x, A.y, A.z, B.x, B.y, B.z, tip.x, tip.y, tip.z);
     }
@@ -148,37 +164,142 @@ export function bristleGeo(len, r, count, hairLen, seed = 1) {
   });
 }
 
-// ヤマトオサガニ：前が広い台形で厚みのある甲。前縁に長い眼窩、前側縁に歯
+// ヤマトオサガニの甲（Macrophthalmus japonicus）
+// 甲幅:甲長 ≈ 1.6。側縁は後方へわずかに収斂し、前側縁に明瞭な歯2つと不明瞭な歯1つ。
+// 額は狭く下向きに曲がり、先端は二葉で中央に溝。眼窩は前縁全体に長く伸び、眼柄がそこに収まる。
+// 背面は胃域・心域・鰓域などの域が溝で区切られ、大きな顆粒に覆われる（中央の小域は平滑）。
 function yamatoCarapace(w, h, l, q = 1) {
-  return cached(`yama-car2:${w}:${h}:${q}`, () => {
-    const box = roundBox([0, -h * 0.1, 0], [w, h * 0.5, l], h * 0.45);
-    const dome = ellipsoid([0, h * 0.15, -l * 0.02], [w * 0.97, h * 0.85, l * 0.97]);
+  return cached(`yama-car3:${w}:${h}:${l}:${q}`, () => {
+    const fw = w * 0.12;
+    const box = roundBox([0, -h * 0.15, 0], [w * 0.97, h * 0.48, l * 0.97], h * 0.42);
+    const dome = ellipsoid([0, h * 0.08, -l * 0.05], [w * 0.95, h * 0.85, l * 0.98]);
     const regions = [
-      ellipsoid([0, h * 0.6, l * 0.18], [w * 0.26, h * 0.42, l * 0.42]),
-      ellipsoid([w * 0.52, h * 0.48, -l * 0.02], [w * 0.36, h * 0.42, l * 0.62]),
-      ellipsoid([-w * 0.52, h * 0.48, -l * 0.02], [w * 0.36, h * 0.42, l * 0.62]),
-      ellipsoid([0, h * 0.5, -l * 0.5], [w * 0.18, h * 0.36, l * 0.3]),
+      ellipsoid([w * 0.2, h * 0.6, l * 0.36], [w * 0.16, h * 0.34, l * 0.3]),     // 前胃域
+      ellipsoid([-w * 0.2, h * 0.6, l * 0.36], [w * 0.16, h * 0.34, l * 0.3]),
+      ellipsoid([0, h * 0.64, l * 0.1], [w * 0.14, h * 0.34, l * 0.32]),         // 中胃域
+      ellipsoid([0, h * 0.55, -l * 0.4], [w * 0.17, h * 0.32, l * 0.26]),        // 心域
+      ellipsoid([w * 0.58, h * 0.45, -l * 0.08], [w * 0.36, h * 0.4, l * 0.62]), // 鰓域
+      ellipsoid([-w * 0.58, h * 0.45, -l * 0.08], [w * 0.36, h * 0.4, l * 0.62]),
+      ellipsoid([w * 0.56, h * 0.35, l * 0.62], [w * 0.2, h * 0.3, l * 0.22]),   // 肝域
+      ellipsoid([-w * 0.56, h * 0.35, l * 0.62], [w * 0.2, h * 0.3, l * 0.22]),
     ];
-    const orbit = [1, -1].map((s) => cone([s * w * 0.1, h * 0.3, l * 1.0], [s * w * 0.92, h * 0.28, l * 0.95], h * 0.26, h * 0.22));
-    const frontNotch = ellipsoid([0, h * 0.35, l * 1.03], [w * 0.05, h * 0.45, l * 0.08]);
-    const teeth = [1, -1].map((s) => cone([s * w * 0.86, h * 0.15, l * 0.88], [s * w * 1.04, h * 0.26, l * 0.94], h * 0.3, h * 0.07));
-    const teeth2 = [1, -1].map((s) => cone([s * w * 0.9, h * 0.05, l * 0.45], [s * w * 1.03, h * 0.12, l * 0.5], h * 0.25, h * 0.06));
-    const hGroove = cone([-w * 0.18, h * 1.0, l * 0.0], [w * 0.18, h * 1.0, l * 0.0], h * 0.08, h * 0.08);
-    const brG = [1, -1].map((s) => cone([s * w * 0.24, h * 0.98, l * 0.35], [s * w * 0.2, h * 0.92, -l * 0.55], h * 0.08, h * 0.07));
+    const grooves = [
+      cone([-w * 0.17, h * 0.95, -l * 0.12], [w * 0.17, h * 0.95, -l * 0.12], h * 0.06, h * 0.06),
+      cone([w * 0.18, h * 0.97, l * 0.28], [w * 0.2, h * 0.9, -l * 0.62], h * 0.055, h * 0.05),
+      cone([-w * 0.18, h * 0.97, l * 0.28], [-w * 0.2, h * 0.9, -l * 0.62], h * 0.055, h * 0.05),
+      cone([w * 0.22, h * 0.9, -l * 0.18], [w * 0.5, h * 0.75, -l * 0.66], h * 0.05, h * 0.045),
+      cone([-w * 0.22, h * 0.9, -l * 0.18], [-w * 0.5, h * 0.75, -l * 0.66], h * 0.05, h * 0.045),
+      cone([w * 0.32, h * 0.9, l * 0.3], [w * 0.85, h * 0.62, l * 0.18], h * 0.05, h * 0.045),   // 頸溝
+      cone([-w * 0.32, h * 0.9, l * 0.3], [-w * 0.85, h * 0.62, l * 0.18], h * 0.05, h * 0.045),
+    ];
+    // 額：狭く下へ曲がり、先端は二葉
+    const front = [
+      ellipsoid([0, h * 0.25, l * 0.98], [fw, h * 0.32, l * 0.14]),
+    ];
+    const frontLobes = [1, -1].map((s) => ellipsoid([s * fw * 0.45, h * 0.02, l * 1.08], [fw * 0.5, h * 0.2, l * 0.07]));
+    const frontFurrow = cone([0, h * 0.55, l * 0.85], [0, h * 0.1, l * 1.12], h * 0.05, h * 0.04);
+    // 眼窩：前縁の全長にわたる溝
+    const orbit = [1, -1].map((s) => cone([s * fw * 1.25, h * 0.36, l * 0.99], [s * w * 0.97, h * 0.3, l * 0.95], h * 0.27, h * 0.24));
+    // 前側縁の歯：外眼窩角（第1歯）、第2歯、不明瞭な第3歯
+    const teeth = [];
+    for (const s of [1, -1]) {
+      teeth.push(cone([s * w * 0.88, h * 0.18, l * 0.9], [s * w * 1.05, h * 0.26, l * 1.0], h * 0.28, h * 0.05));
+      teeth.push(cone([s * w * 0.9, h * 0.1, l * 0.55], [s * w * 1.04, h * 0.14, l * 0.6], h * 0.24, h * 0.05));
+      teeth.push(cone([s * w * 0.92, h * 0.05, l * 0.22], [s * w * 1.0, h * 0.07, l * 0.25], h * 0.18, h * 0.06));
+    }
+    // 口腔（第3顎脚が収まる）と、腹面の平らな胸板
+    const buccal = roundBox([0, -h * 0.58, l * 0.72], [w * 0.2, h * 0.22, l * 0.3], h * 0.1);
     const f = (x, y, z) => {
-      const xs = x / (1 + 0.13 * (z / l));   // 前ほど幅広い
-      let d = smin(box(xs, y, z), dome(xs, y, z), h * 0.5);
-      for (const r of regions) d = smin(d, r(xs, y, z), h * 0.45);
-      d = smax(d, -(y + h * 0.58), h * 0.25);
-      for (const o of orbit) d = smax(d, -o(x, y, z), h * 0.1);
-      d = smax(d, -frontNotch(x, y, z), h * 0.12);
-      for (const t of teeth) d = smin(d, t(x, y, z), h * 0.15);
-      for (const t of teeth2) d = smin(d, t(x, y, z), h * 0.15);
-      d = smax(d, -hGroove(x, y, z), h * 0.08);
-      for (const g of brG) d = smax(d, -g(x, y, z), h * 0.08);
+      const xs = x / (1 + 0.08 * (z / l));   // 側縁は後方へ収斂
+      let d = smin(box(xs, y, z), dome(xs, y, z), h * 0.45);
+      for (const r of regions) d = smin(d, r(xs, y, z), h * 0.4);
+      for (const fr of front) d = smin(d, fr(x, y, z), h * 0.25);
+      for (const lb of frontLobes) d = smin(d, lb(x, y, z), h * 0.12);
+      d = smax(d, -(y + h * 0.6), h * 0.22);
+      for (const o of orbit) d = smax(d, -o(x, y, z), h * 0.09);
+      d = smax(d, -frontFurrow(x, y, z), h * 0.05);
+      for (const t of teeth) d = smin(d, t(x, y, z), h * 0.12);
+      for (const g of grooves) d = smax(d, -g(x, y, z), h * 0.07);
+      d = smax(d, -buccal(x, y, z), h * 0.06);
+      // 側縁の細かな鋸歯
+      const ax = Math.abs(xs);
+      if (ax > w * 0.8 && z < l * 0.9 && z > -l * 0.7) {
+        const serr = Math.pow(Math.max(0, Math.sin(z / l * 26)), 6) * Math.max(0, 1 - Math.abs(y - h * 0.05) / (h * 0.35));
+        d -= serr * h * 0.06 * THREE.MathUtils.smoothstep(ax, w * 0.85, w * 0.97);
+      }
       return d;
     };
-    return meshSDF(f, [-w * 1.2, -h * 0.8, -l * 1.1], [w * 1.2, h * 1.3, l * 1.15], (w / 44) * q);
+    return meshSDF(f, [-w * 1.2, -h * 0.8, -l * 1.1], [w * 1.2, h * 1.3, l * 1.25], (w / 48) * q);
+  });
+}
+
+// オサガニ類の雄の長い鉗（前節＝掌部＋不動指）
+// 前節長 PL の約半分が掌部。掌部上縁に大きな瘤の列、不動指は下方へ曲がり（deflexed）、
+// 基部に楔形で縁が細かく波打つ大きな歯を持つ。
+function macroChelaGeo(PL, PH, T, q = 1) {
+  return cached(`mchela:${PL}:${PH}:${T}:${q}`, () => {
+    const pl = PL * 0.52;
+    const palm = roundBox([pl * 0.5, 0, 0], [pl * 0.5, PH * 0.42, T * 0.42], T * 0.36);
+    const palmRound = ellipsoid([pl * 0.5, 0, 0], [pl * 0.58, PH * 0.52, T * 0.5]);
+    const tub = [];
+    for (let i = 0; i < 7; i++) tub.push(sphere([pl * (0.08 + i * 0.13), PH * 0.46, T * 0.05], PH * 0.07));
+    const ang = -0.42;   // 不動指の下方への屈曲
+    const fx = (d) => pl * 0.92 + Math.cos(ang) * d, fy = (d) => -PH * 0.18 + Math.sin(ang) * d;
+    const FL = PL - pl * 0.92;
+    const pollex = tube([[pl * 0.8, -PH * 0.2, 0], [fx(FL * 0.35), fy(FL * 0.35), 0], [fx(FL * 0.75), fy(FL * 0.75) + PH * 0.02, 0], [fx(FL), fy(FL) + PH * 0.08, 0]],
+      [PH * 0.26, PH * 0.16, PH * 0.1, PH * 0.025], PH * 0.05);
+    const wedge = cone([fx(FL * 0.18), fy(FL * 0.18) + PH * 0.05, 0], [fx(FL * 0.26), fy(FL * 0.26) + PH * 0.2, 0], PH * 0.11, PH * 0.035);
+    const cren = [];
+    for (let i = 0; i < 9; i++) cren.push(sphere([fx(FL * (0.32 + i * 0.07)), fy(FL * (0.32 + i * 0.07)) + PH * 0.1, 0], PH * 0.025));
+    const f = (x, y, z) => {
+      let d = smin(palm(x, y, z), palmRound(x, y, z), PH * 0.1);
+      for (const t of tub) d = smin(d, t(x, y, z), PH * 0.04);
+      d = smin(d, pollex(x, y, z * 1.2) / 1.2, PH * 0.15);
+      d = smin(d, wedge(x, y, z * 1.3) / 1.3, PH * 0.04);
+      for (const c of cren) d = smin(d, c(x, y, z), PH * 0.015);
+      return d;
+    };
+    return meshSDF(f, [-PH * 0.3, -PH * 0.6 - FL * 0.45, -T * 0.6], [PL * 1.02, PH * 0.62, T * 0.6], Math.max(PH, T) / 20 * q);
+  });
+}
+// 可動指：上縁に沿って弧を描き、基部に四角い大きな歯
+function macroDactGeo(DL, PH, q = 1) {
+  return cached(`mdact:${DL}:${PH}:${q}`, () => {
+    const ang = -0.42;
+    const pts = [[0, 0, 0], [DL * 0.3, PH * 0.02, 0], [DL * 0.62 * Math.cos(ang * 0.4), DL * 0.62 * Math.sin(ang * 0.6), 0], [DL * Math.cos(ang), DL * Math.sin(ang) - PH * 0.06, 0]];
+    const t = tube(pts, [PH * 0.15, PH * 0.12, PH * 0.07, PH * 0.02], PH * 0.04);
+    const quad = roundBox([DL * 0.22, -PH * 0.12, 0], [DL * 0.07, PH * 0.07, PH * 0.05], PH * 0.02);
+    const cren = [];
+    for (let i = 0; i < 7; i++) cren.push(sphere([DL * (0.36 + i * 0.08), -PH * 0.08 + Math.sin(ang * 0.6) * DL * (0.36 + i * 0.08) * 0.6, 0], PH * 0.022));
+    const f = (x, y, z) => {
+      let d = t(x, y, z * 1.2) / 1.2;
+      d = smin(d, quad(x, y, z), PH * 0.03);
+      for (const c of cren) d = smin(d, c(x, y, z), PH * 0.012);
+      return d;
+    };
+    return meshSDF(f, [-PH * 0.2, -DL * 0.5, -PH * 0.2], [DL * 1.02, PH * 0.2, PH * 0.2], PH / 20 * q);
+  });
+}
+
+// 第3顎脚：坐節（大きな板）と長節（上の板）、小さな触肢
+function maxillipedGeo(s, q = 1) {
+  return cached(`mxp:${s}:${q}`, () => {
+    const isch = roundBox([0, -s * 0.28, 0], [s * 0.22, s * 0.26, s * 0.035], s * 0.03);
+    const mer = roundBox([s * 0.02, s * 0.22, 0], [s * 0.19, s * 0.2, s * 0.03], s * 0.05);
+    const palp = cone([s * 0.12, s * 0.38, s * 0.02], [s * -0.12, s * 0.5, s * 0.03], s * 0.035, s * 0.02);
+    const f = (x, y, z) => smin(smax(smin(isch(x, y, z), mer(x, y, z), s * 0.01), -roundBox([0, -s * 0.02, 0], [s * 0.3, s * 0.008, s * 0.1], 0.0)(x, y, z), s * 0.01), palp(x, y, z), s * 0.02);
+    return meshSDF(f, [-s * 0.3, -s * 0.6, -s * 0.08], [s * 0.3, s * 0.6, s * 0.1], s / 26 * q);
+  });
+}
+
+// 腹部（腹面に折りたたまれた7節）。雄は細い三角形、雌は円く広い
+function abdomenGeo(w, l, female, q = 1) {
+  return cached(`abd:${w}:${l}:${female}:${q}`, () => {
+    const widths = female ? [0.62, 0.7, 0.76, 0.8, 0.8, 0.74, 0.5] : [0.52, 0.46, 0.38, 0.32, 0.27, 0.23, 0.15];
+    const segL = (l * (female ? 1.35 : 1.15)) / 7;
+    const parts = widths.map((wd, i) => roundBox([0, 0, -i * segL - segL * 0.5], [w * wd * 0.5, 0.012, segL * 0.47], 0.01));
+    const f = (x, y, z) => { let d = parts[0](x, y, z); for (let i = 1; i < parts.length; i++) d = smin(d, parts[i](x, y, z), 0.004); return d; };
+    return meshSDF(f, [-w * 0.45, -0.03, -segL * 7.2], [w * 0.45, 0.03, 0.02], Math.min(0.008, w / 40) * q);
   });
 }
 
@@ -188,114 +309,169 @@ function mouthGeo(s, q = 1) {
 }
 
 // ---------- カニ一式 ----------
+// ---------- カニ一式 ----------
+// 歩脚・鉗脚は実際の甲殻類と同じ 6 節：底節(coxa)・基坐節(basis-ischium)・長節(merus)・腕節(carpus)・前節(propodus)・指節(dactylus)
 export const CRAB_SPECS = {
   kometsuki: {
+    // コメツキガニ Scopimera globosa：甲幅 約1cm
     w: 0.2, h: 0.13, l: 0.18,
     carapace: kometsukiCarapace,
-    legs: { merus: 0.19, carpus: 0.075, prop: 0.13, dact: 0.13, r: 0.02, merusR: 1.45, merusFlat: 0.42, flat: 0.55, k: [0.9, 1.0, 1.0, 0.86], spread: 0.44, curve: 0.2, setae: 0.05 },
-    claw: { merus: 0.08, carpus: 0.06, palm: 0.2, H: 0.13, T: 0.06, r: 0.022, big: 1, chela: true },
+    legs: {
+      cox: 0.028, bi: 0.03, merus: 0.18, carpus: 0.075, prop: 0.13, dact: 0.13,
+      r: 0.02, merusR: 1.45, merusFlat: 0.42, flat: 0.55, k: [0.9, 1.0, 1.0, 0.86], spread: 0.44, curve: 0.2,
+      hipX: 0.78, hipY: 0.32, hipZ: [0.42, 0.12, -0.18, -0.46],
+      setae: [0.05, 0.05, 0.05, 0.05], serrate: 0,
+    },
+    claw: { cox: 0.02, bi: 0.022, merus: 0.07, carpus: 0.06, palm: 0.2, H: 0.13, T: 0.06, r: 0.022, chela: true, shX: 0.42, shY: 0.28, shZ: 0.8 },
     eye: { stalk: 0.085, r: 0.012, cornea: 0.017, cLen: 1.9, sep: 0.06, yaw: 0.2, up: 0.1, raise: 1.35 },
-    mouth: 0.08,
-    Hb: 0.12, phiD: 1.05, stepTime: 0.11, stepH: 0.05, stepThresh: 0.07,
+    mouth: 0.1, antenna: 0.05,
+    Hb: 0.12, phiD: 0.95, stepTime: 0.11, stepH: 0.05, stepThresh: 0.07,
   },
   yamato: {
-    w: 0.56, h: 0.17, l: 0.4,
+    // ヤマトオサガニ Macrophthalmus japonicus：甲幅 約2.8cm（甲幅:甲長 ≈ 1.6）
+    // 歩脚は甲幅の約 2.9 倍に広がり、長節は幅広く扁平で縁に小棘。後方の歩脚ほど剛毛が密。
+    w: 0.55, h: 0.13, l: 0.345,
     carapace: yamatoCarapace,
-    legs: { merus: 0.3, carpus: 0.12, prop: 0.17, dact: 0.16, r: 0.05, flat: 0.6, k: [0.9, 1.0, 1.0, 0.84], spread: 0.4, curve: 0.12 },
-    claw: { merus: 0.22, carpus: 0.12, palm: 0.4, H: 0.19, T: 0.095, r: 0.045, big: 1.15, chela: true },
-    eye: { stalk: 0.3, r: 0.013, cornea: 0.021, sep: 0.11, yaw: 0.25, up: 0.08, raise: 1.35 },
-    mouth: 0.11,
-    Hb: 0.3, phiD: 0.95, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
+    legs: {
+      cox: 0.06, bi: 0.07, merus: 0.5, carpus: 0.19, prop: 0.31, dact: 0.27,
+      r: 0.042, merusR: 1.55, merusFlat: 0.42, flat: 0.5, k: [0.86, 1.0, 0.98, 0.74], spread: 0.36, curve: 0.1,
+      hipX: 0.86, hipY: 0.35, hipZ: [0.5, 0.18, -0.16, -0.5],
+      setae: [0.04, 0.06, 0.1, 0.12], serrate: 9,
+    },
+    // 雄の鉗：前節長 PL ≈ 甲幅 × 0.75、前節高 PH ≈ PL × 0.27、可動指長 DL ≈ PL × 0.5
+    claw: { cox: 0.05, bi: 0.06, merus: 0.44, carpus: 0.2, PL: 0.82, PH: 0.21, T: 0.1, r: 0.055, macro: true, shX: 0.55, shY: 0.3, shZ: 0.84 },
+    clawF: { cox: 0.045, bi: 0.05, merus: 0.26, carpus: 0.13, PL: 0.4, PH: 0.12, T: 0.06, r: 0.04, macro: true, shX: 0.55, shY: 0.3, shZ: 0.84 },
+    // 眼柄は細長く、角膜は外眼窩角まで届く
+    eye: { stalk: 0.4, r: 0.014, cornea: 0.022, cLen: 2.2, sep: 0.085, yaw: 0.06, up: 0.05, raise: 1.4 },
+    mouth: 0.19, antenna: 0.1,
+    Hb: 0.26, phiD: 0.8, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
   },
 };
 
+function clawGeos(C, q) {
+  if (C.macro) {
+    return {
+      cCox: segGeo(C.cox, C.r * 1.2, C.r * 1.1, 0.85, { q }),
+      cBi: segGeo(C.bi, C.r * 1.05, C.r, 0.8, { q }),
+      cMerus: segGeo(C.merus, C.r * 1.1, C.r, 0.62, { q, serrate: 7 }),
+      cCarpus: segGeo(C.carpus, C.r * 1.2, C.r * 1.1, 0.8, { q }),
+      palm: macroChelaGeo(C.PL, C.PH, C.T, q),
+      cDact: macroDactGeo(C.PL * 0.5, C.PH, q),
+    };
+  }
+  return {
+    cCox: segGeo(C.cox, C.r * 1.2, C.r * 1.1, 0.85, { q }),
+    cBi: segGeo(C.bi, C.r * 1.05, C.r, 0.8, { q }),
+    cMerus: segGeo(C.merus, C.r, C.r * 0.95, 0.75, { q }),
+    cCarpus: segGeo(C.carpus, C.r * 1.05, C.r * 0.95, 0.8, { q }),
+    palm: C.chela ? chelaGeo(C.palm, C.H, C.T, q) : palmGeo(C.palm, C.H, C.T, q),
+    cDact: C.chela ? chelaDactGeo(C.palm, C.H, q) : dactylGeo(C.palm, C.H, q),
+  };
+}
+
 export function crabKit(name, q = 1) {
-  return cached(`crabkit:${name}:${q}`, () => {
+  return cached(`crabkit2:${name}:${q}`, () => {
     const S = CRAB_SPECS[name];
-    const L = S.legs, C = S.claw, E = S.eye;
+    const L = S.legs, E = S.eye;
+    const mr = L.r * (L.merusR || 1);
     return {
       carapace: S.carapace(S.w, S.h, S.l, q),
-      merus: segGeo(L.merus, L.r * (L.merusR || 1), L.r * (L.merusR || 1) * 0.8, L.merusFlat || L.flat, { q }),
-      carpus: segGeo(L.carpus, L.r * 0.85, L.r * 0.8, L.flat, { q }),
-      prop: segGeo(L.prop, L.r * 0.78, L.r * 0.6, L.flat, { q }),
-      dact: segGeo(L.dact, L.r * 0.6, L.r * 0.12, L.flat, { curve: L.curve, knob: 0, q }),
-      cMerus: segGeo(C.merus, C.r, C.r * 0.95, 0.75, { q }),
-      cCarpus: segGeo(C.carpus, C.r * 1.05, C.r * 0.95, 0.8, { q }),
-      palm: C.chela ? chelaGeo(C.palm, C.H, C.T, q) : palmGeo(C.palm, C.H, C.T, q),
-      cDact: C.chela ? chelaDactGeo(C.palm, C.H, q) : dactylGeo(C.palm, C.H, q),
+      coxa: segGeo(L.cox, L.r * 1.55, L.r * 1.4, 0.8, { q }),
+      bi: segGeo(L.bi, L.r * 1.35, mr * 0.95, 0.6, { q, depress: true }),
+      merus: segGeo(L.merus, mr, mr * 0.8, L.merusFlat || L.flat, { q, serrate: L.serrate, depress: true }),
+      carpus: segGeo(L.carpus, L.r * 1.05, L.r * 0.95, L.flat, { q, depress: true }),
+      prop: segGeo(L.prop, L.r * 0.95, L.r * 0.7, L.flat, { q, depress: true }),
+      dact: segGeo(L.dact, L.r * 0.65, L.r * 0.12, L.flat + 0.15, { curve: L.curve, knob: 0, q, depress: true }),
+      claw: clawGeos(S.claw, q),
+      clawF: S.clawF ? clawGeos(S.clawF, q) : null,
       stalk: segGeo(E.stalk, E.r, E.r * 0.9, 1, { knob: 0, q }),
-      ...(L.setae ? {
-        hairM: bristleGeo(L.merus, L.r * (L.merusR || 1), 12, L.setae, 3),
-        hairC: bristleGeo(L.carpus, L.r * 0.85, 5, L.setae * 0.9, 5),
-        hairP: bristleGeo(L.prop, L.r * 0.75, 10, L.setae * 0.9, 7),
-        hairD: bristleGeo(L.dact * 0.7, L.r * 0.5, 6, L.setae * 0.6, 9),
-      } : {}),
       cornea: new THREE.SphereGeometry(E.cornea, Math.round(20 / q), Math.round(14 / q)),
-      mouth: mouthGeo(S.mouth, q),
+      maxilliped: maxillipedGeo(S.mouth, q),
+      antenna: segGeo(S.antenna, S.antenna * 0.07, S.antenna * 0.02, 1, { knob: 0, q, curve: 0.1 }),
+      abdM: abdomenGeo(S.w, S.l, false, q),
+      abdF: abdomenGeo(S.w, S.l, true, q),
+      hair: L.setae ? L.setae.map((sl, i) => ({
+        M: bristleGeo(L.merus, mr, 12, sl * 0.6, 3 + i, true),
+        C: bristleGeo(L.carpus, L.r * 1.05, 10, sl, 5 + i, true),
+        P: bristleGeo(L.prop, L.r * 0.95, 20, sl * 1.15, 7 + i, true),
+        D: bristleGeo(L.dact * 0.7, L.r * 0.6, 9, sl * 0.75, 9 + i, true),
+      })) : null,
     };
   });
 }
 
-// 個体のリグを組み立てる。mats: { shell, leg, claw, cornea }
+// 個体のリグを組み立てる。mats: { shell, leg, merus?, claw, arm?, mouth?, stalk?, setae?, cornea }
 export function buildCrab(name, mats, male = true, q = 1) {
   const S = CRAB_SPECS[name], K = crabKit(name, q);
-  const L = S.legs, C = S.claw, E = S.eye;
+  const L = S.legs, E = S.eye;
+  const C = (!male && S.clawF) ? S.clawF : S.claw;
+  const CK = (!male && K.clawF) ? K.clawF : K.claw;
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
   body.position.y = S.Hb;
-  const car = new THREE.Mesh(K.carapace, mats.shell);
-  body.add(car);
+  body.add(new THREE.Mesh(K.carapace, mats.shell));
 
+  // 歩脚（第2〜第5胸脚）
   const legs = [];
+  const mesh = (g, m, parent, x = 0, sc = 1) => { const o = new THREE.Mesh(g, m); o.position.x = x; o.scale.setScalar(sc); parent.add(o); return o; };
   for (const s of [1, -1]) {
     for (let i = 0; i < 4; i++) {
       const k = L.k[i];
       const hip = new THREE.Group();
-      hip.position.set(s * S.w * 0.82, -S.h * 0.3, S.l * (0.45 - i * 0.33));
+      hip.position.set(s * S.w * L.hipX, -S.h * L.hipY, S.l * L.hipZ[i]);
       const spread = (i - 1.5) * L.spread;
       const baseYaw = s > 0 ? spread : Math.PI - spread;
       hip.rotation.y = baseYaw;
-      const F = new THREE.Group();
-      const mer = new THREE.Mesh(K.merus, mats.merus || mats.leg); mer.scale.setScalar(k); F.add(mer);
-      const Kn = new THREE.Group(); Kn.position.x = L.merus * k;
-      const carp = new THREE.Mesh(K.carpus, mats.leg); carp.scale.setScalar(k); Kn.add(carp);
-      const prop = new THREE.Mesh(K.prop, mats.leg); prop.scale.setScalar(k); prop.position.x = L.carpus * k; Kn.add(prop);
-      const D = new THREE.Group(); D.position.x = (L.carpus + L.prop) * k;
-      const dac = new THREE.Mesh(K.dact, mats.leg); dac.scale.setScalar(k); D.add(dac);
-      if (L.setae && q === 1 && mats.setae) {
-        const add = (parent, geo, x) => { const m = new THREE.Mesh(geo, mats.setae); m.scale.setScalar(k); m.position.x = x; m.userData.noLOD = true; parent.add(m); };
-        add(F, K.hairM, 0); add(Kn, K.hairC, 0); add(Kn, K.hairP, L.carpus * k); add(D, K.hairD, 0);
+      mesh(K.coxa, mats.shell, hip);                      // 底節（体に付く）
+      const F = new THREE.Group(); F.position.x = L.cox; hip.add(F);
+      mesh(K.bi, mats.leg, F);                             // 基坐節
+      mesh(K.merus, mats.merus || mats.leg, F, L.bi, k);   // 長節
+      const Kn = new THREE.Group(); Kn.position.x = L.bi + L.merus * k; F.add(Kn);
+      mesh(K.carpus, mats.leg, Kn, 0, k);                  // 腕節
+      mesh(K.prop, mats.leg, Kn, L.carpus * k, k);         // 前節
+      const D = new THREE.Group(); D.position.x = (L.carpus + L.prop) * k; Kn.add(D);
+      mesh(K.dact, mats.leg, D, 0, k);                     // 指節
+      if (K.hair && q === 1 && mats.setae) {
+        const H = K.hair[i];
+        for (const [g, parent, x] of [[H.M, F, L.bi], [H.C, Kn, 0], [H.P, Kn, L.carpus * k], [H.D, D, 0]]) {
+          const m = mesh(g, mats.setae, parent, x, k); m.userData.noLOD = true; m.castShadow = false;
+        }
       }
-      Kn.add(D); F.add(Kn); hip.add(F); body.add(hip);
-      const a = L.merus * k, b = (L.carpus + L.prop) * k;
+      body.add(hip);
+      const a = L.bi + L.merus * k, b = (L.carpus + L.prop) * k;
       const dl = L.dact * k * Math.hypot(1, L.curve), dAng = Math.atan(L.curve);
-      const reach = (a + b) * 0.92 + dl * 0.35;
+      const reach = L.cox + (a + b) * 0.93 + dl * 0.45;   // 長節がほぼ水平になる広い立ち姿
       const restLocal = new THREE.Vector3(
         hip.position.x + Math.cos(baseYaw) * reach, -S.Hb, hip.position.z - Math.sin(baseYaw) * reach);
-      legs.push({ hip, F, K: Kn, D, a, b, dl, dAng, baseYaw, s, i, restLocal, group: (i + (s > 0 ? 0 : 1)) % 2, foot: new THREE.Vector3(), valid: false, stepping: false, t: 0, from: new THREE.Vector3(), to: new THREE.Vector3() });
+      legs.push({ hip, F, K: Kn, D, a, b, dl, dAng, cox: L.cox, baseYaw, s, i, restLocal, group: (i + (s > 0 ? 0 : 1)) % 2, foot: new THREE.Vector3(), valid: false, stepping: false, t: 0, from: new THREE.Vector3(), to: new THREE.Vector3() });
     }
   }
 
-  // 鉗脚
+  // 鉗脚（第1胸脚）
   const claws = [];
   for (const s of [1, -1]) {
-    const big = s > 0 && male ? C.big : (male ? 1 : 0.85);
+    const big = C.macro ? 1 : (male ? 1 : 0.85);
     const sh = new THREE.Group();
-    sh.position.set(s * S.w * 0.42, -S.h * 0.25, S.l * 0.78);
+    sh.position.set(s * S.w * C.shX, -S.h * C.shY, S.l * C.shZ);
     const g0 = new THREE.Group(); sh.add(g0);
-    const m1 = new THREE.Mesh(K.cMerus, mats.arm || mats.claw); m1.scale.setScalar(big); g0.add(m1);
-    const g1 = new THREE.Group(); g1.position.x = C.merus * big; g0.add(g1);
-    const m2 = new THREE.Mesh(K.cCarpus, mats.arm || mats.claw); m2.scale.setScalar(big); g1.add(m2);
+    mesh(CK.cCox, mats.shell, g0);
+    mesh(CK.cBi, mats.arm || mats.claw, g0, C.cox);
+    mesh(CK.cMerus, mats.arm || mats.claw, g0, C.cox + C.bi, big);
+    const g1 = new THREE.Group(); g1.position.x = C.cox + C.bi + C.merus * big; g0.add(g1);
+    mesh(CK.cCarpus, mats.arm || mats.claw, g1, 0, big);
     const g2 = new THREE.Group(); g2.position.x = C.carpus * big; g1.add(g2);
-    const palm = new THREE.Mesh(K.palm, mats.claw); palm.scale.setScalar(big); g2.add(palm);
-    const g3 = new THREE.Group(); g3.position.set(C.palm * (C.chela ? 0.5 : 0.56) * big, C.H * (C.chela ? 0.16 : 0.2) * big, 0); g2.add(g3);
-    const dm = new THREE.Mesh(K.cDact, mats.claw); dm.scale.setScalar(big); g3.add(dm);
+    mesh(CK.palm, mats.claw, g2, 0, big);
+    const g3 = new THREE.Group();
+    if (C.macro) g3.position.set(C.PL * 0.52 * 0.93, C.PH * 0.2, 0);
+    else g3.position.set(C.palm * (C.chela ? 0.5 : 0.56) * big, C.H * (C.chela ? 0.16 : 0.2) * big, 0);
+    g2.add(g3);
+    mesh(CK.cDact, mats.claw, g3, 0, big);
     body.add(sh);
     claws.push({ sh, g0, g1, g2, g3, s, big });
   }
 
-  // 眼柄
+  // 眼柄（眼窩に沿って横たわり、活動中は立てる）
   const eyes = [];
   for (const s of [1, -1]) {
     const g = new THREE.Group();
@@ -311,17 +487,33 @@ export function buildCrab(name, mats, male = true, q = 1) {
     eyes.push({ g, inner, s });
   }
 
-  // 口器
-  const mouth = [];
+  // 触角（第2触角）：額の下から短い鞭状部
   for (const s of [1, -1]) {
-    const m = new THREE.Mesh(K.mouth, mats.mouth || mats.shell);
-    m.position.set(s * S.mouth * 0.27, -S.h * 0.32, S.l * 0.9);
-    m.rotation.x = -0.35;
-    body.add(m);
-    mouth.push(m);
+    const a = new THREE.Mesh(K.antenna, mats.stalk || mats.leg);
+    a.position.set(s * S.w * 0.1, S.h * 0.02, S.l * 1.0);
+    a.rotation.set(0, s > 0 ? -1.1 : Math.PI + 1.1, -0.35);
+    body.add(a);
   }
 
-  root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  // 第3顎脚（口の蓋）：左右一対の板
+  const mouth = [];
+  for (const s of [1, -1]) {
+    const g = new THREE.Group();
+    g.position.set(s * S.mouth * 0.23, -S.h * 0.42, S.l * 0.96);
+    g.rotation.set(-0.3, s > 0 ? 0.08 : -0.08, 0);
+    const m = new THREE.Mesh(K.maxilliped, mats.mouth || mats.shell);
+    if (s < 0) m.scale.x = -1;
+    g.add(m);
+    body.add(g);
+    mouth.push(g);
+  }
+
+  // 腹部（胸板の下に折りたたまれる）
+  const abd = new THREE.Mesh(male ? K.abdM : K.abdF, mats.shell);
+  abd.position.set(0, -S.h * 0.63, S.l * 0.25);
+  body.add(abd);
+
+  root.traverse((o) => { if (o.isMesh) { o.castShadow = o.castShadow !== false; o.receiveShadow = true; } });
   return { root, body, legs, claws, eyes, mouth, spec: S };
 }
 

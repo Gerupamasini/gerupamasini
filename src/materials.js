@@ -151,15 +151,16 @@ export const GLSL = {
       col = mix(col, uC2*1.05, speck*0.3*(1.0-band));
       col = mix(col, uC4, smoothstep(0.0, -0.02, p.y)*0.35);
       if (uP.y > 0.5) {
-        vec2 q = vec2((p.x - uP.z*0.5)/(uP.z*0.3), p.y/0.02);
-        float tym = 1.0 - smoothstep(0.7, 1.0, length(q));
+        // 鼓膜は長節の背面（上から見える面）の楕円
+        vec2 q = vec2((p.x - uP.z*0.5)/(uP.z*0.3), p.z/0.018);
+        float tym = (1.0 - smoothstep(0.7, 1.0, length(q))) * smoothstep(-0.002, 0.004, p.y);
         col = mix(col, uC3, tym * 0.85);
       }
       return col;
     }`,
     bump: 'float orgBump(vec3 p){ return snoise3(p*vec3(40.0,120.0,120.0))*0.0008; }',
     rough: `float orgRough(vec3 p, float r){
-      if (uP.y > 0.5) { vec2 q = vec2((p.x - uP.z*0.5)/(uP.z*0.3), p.y/0.02); return mix(r, 0.12, 1.0 - smoothstep(0.7, 1.0, length(q))); }
+      if (uP.y > 0.5) { vec2 q = vec2((p.x - uP.z*0.5)/(uP.z*0.3), p.z/0.018); return mix(r, 0.12, (1.0 - smoothstep(0.7, 1.0, length(q))) * smoothstep(-0.002, 0.004, p.y)); }
       return r;
     }`,
   },

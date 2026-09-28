@@ -215,6 +215,18 @@ const CLAW_POSES_K = {
   waveUp: { yaw0: 0.7, p0: 1.1, f1: 1.0, p1: 0.4, f2: 0.4, p2: 0.1, open: 0.25 },
   tuck: { yaw0: 1.1, p0: 0.2, f1: 1.9, p1: 0.2, f2: 0.8, p2: -0.9, open: 0.0 },
 };
+// ヤマトオサガニの雄：長い鉗を体の前に構え、左右の指先を正中線付近で向かい合わせる
+const CLAW_POSES_YM = {
+  rest: { yaw0: 0.8, p0: -0.1, f1: 0.9, p1: 0.08, f2: 0.9, p2: 0.0, open: 0.08 },
+  reach: { yaw0: 0.85, p0: -0.3, f1: 0.8, p1: 0.0, f2: 0.95, p2: -0.15, open: 0.35 },
+  mouth: { yaw0: 1.0, p0: 0.0, f1: 1.2, p1: 0.1, f2: 0.85, p2: 0.1, open: 0.0 },
+  waveUp: { yaw0: 0.55, p0: 1.15, f1: 0.8, p1: 0.35, f2: 0.25, p2: 0.2, open: 0.2 },
+  tuck: { yaw0: 1.2, p0: -0.1, f1: 1.1, p1: 0.1, f2: 0.3, p2: 0.0, open: 0.0 },
+};
+function clawPoses(species, male) {
+  if (species === 'kometsuki') return CLAW_POSES_K;
+  return male ? CLAW_POSES_YM : CLAW_POSES_Y;
+}
 function mixPose(a, b, t, out = {}) { for (const k in a) out[k] = a[k] + (b[k] - a[k]) * t; return out; }
 function setClaw(c, p) {
   const s = c.s;
@@ -273,7 +285,7 @@ class Crab extends Agent {
       const lp = buildCrab(species, { ...this.mats, shell: shellMat }, this.male, 4);
       const lr = new LegRig(lp.body, lp.legs, { phiD: this.S.phiD });
       lr.update(0, FLAT, null, false);
-      for (const c of lp.claws) setClaw(c, (species === 'kometsuki' ? CLAW_POSES_K : CLAW_POSES_Y).rest);
+      for (const c of lp.claws) setClaw(c, clawPoses(species, this.male).rest);
       setEyes(lp, this.S.eye, 0.92);
       sys.lodCache[key] = buildLODGeometry(lp.root);
     }
@@ -403,7 +415,7 @@ class Crab extends Agent {
 
     // はさみ
     const feeding = this.state === 'feed';
-    const CP = this.species === 'kometsuki' ? CLAW_POSES_K : CLAW_POSES_Y;
+    const CP = clawPoses(this.species, this.male);
     for (const c of P.claws) {
       let pose;
       if (this.sink > 0.05) pose = mixPose(CP.rest, CP.tuck, clamp(this.sink * 2, 0, 1), this.pose);
@@ -1185,6 +1197,8 @@ export class Ecosystem {
     const sh = this.crabShared[species];
     if (Y && !sh.arm) {
       sh.arm = organicMaterial({ key: 'leg', glsl: GLSL.leg, seed: 0.9, colors: [0x7a4a24, 0x5e3a1e, 0x3a2414, 0xb0845a], roughness: 0.4, clearcoat: 0.7, clearcoatRoughness: 0.2, sss: 0xc07040, sssK: 0.2 });
+      sh.stalk = organicMaterial({ key: 'leg', glsl: GLSL.leg, seed: 0.2, colors: [0x6a5a40, 0x4e4230, 0x3a3020, 0x8a7a5a], roughness: 0.45, clearcoat: 0.5, clearcoatRoughness: 0.25 });
+      sh.setae = new THREE.MeshStandardMaterial({ color: 0xb09a78, roughness: 0.6, side: THREE.DoubleSide });
       sh.mouth = organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.2, colors: [0xb4a282, 0xa08e70, 0xc8b898], P: [1, 0, 0, 0], roughness: 0.45, clearcoat: 0.4, clearcoatRoughness: 0.3 });
     }
     const shell = organicMaterial({
@@ -1192,7 +1206,7 @@ export class Ecosystem {
       colors: Y ? [0x4c3e2a, 0x6e5c40, 0x86765a, 0x4a3e2e] : [0x8e7e66, 0xa89a80, 0x4a3c2e, 0xd6cebe],
       roughness: Y ? 0.5 : 0.58, clearcoat: 0.45, clearcoatRoughness: 0.3,
     });
-    return { shell, leg: sh.leg, claw: sh.claw, arm: sh.arm, mouth: sh.mouth, cornea: this.corneaMat };
+    return { shell, leg: sh.leg, claw: sh.claw, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.corneaMat };
   }
 
   kometsukiMaterials(seed) {

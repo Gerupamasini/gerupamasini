@@ -183,7 +183,8 @@ function deselect() { state.follow = null; $('#card').classList.remove('show'); 
 
 // ---------- 観察用の固定表示（?inspect=種名&cam=方位,仰角,距離&state=行動） ----------
 const inspectName = params.get('inspect');
-const inspectAgent = inspectName ? eco.agents.find((a) => a.species === inspectName) : null;
+const inspectSex = params.get('sex');
+const inspectAgent = inspectName ? eco.agents.find((a) => a.species === inspectName && (!inspectSex || a.male === (inspectSex === 'm'))) : null;
 const camSpec = (params.get('cam') || '0,0.35,3').split(',').map(Number);
 let P0 = null;
 function holdInspect() {

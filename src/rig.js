@@ -82,7 +82,7 @@ export class LegRig {
     const dy0 = angDiff(l.baseYaw, yaw);
     yaw = l.baseYaw + clamp(dy0, -this.yawRange, this.yawRange);
     l.hip.rotation.y = yaw;
-    const h = Math.hypot(_v.x, _v.z);
+    const h = Math.hypot(_v.x, _v.z) - (l.cox || 0);   // 底節の分だけ関節が外にある
     const dy = _v.y;
     // 指節の分を差し引いた足首位置
     const cd = Math.cos(this.phiD), sd = Math.sin(this.phiD);
