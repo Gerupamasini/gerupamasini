@@ -476,7 +476,7 @@ export const CRAB_SPECS = {
     claw: { cox: 0.05, bi: 0.06, merus: 0.28, carpus: 0.15, PL: 0.58, PH: 0.16, T: 0.09, r: 0.05, macro: true, shX: 0.36, shY: 0.55, shZ: 0.5, tuft: 0.07 },
     clawF: { cox: 0.045, bi: 0.05, merus: 0.22, carpus: 0.12, PL: 0.46, PH: 0.13, T: 0.065, r: 0.04, macro: true, shX: 0.36, shY: 0.55, shZ: 0.55 },
     // 眼柄は細長く、額の脇から V 字に立ち上がる
-    eye: { stalk: 0.4, r: 0.015, cornea: 0.024, cLen: 1.9, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },
+    eye: { stalk: 0.4, r: 0.016, taper: 1.35, curve: 0.04, cornea: 0.024, cLen: 1.9, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },
     mouth: 0.25, mouthTilt: 1.15, mouthPos: [0.19, -0.5, 0.76], antenna: 0.1,
     Hb: 0.26, phiD: 0.95, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
   },
@@ -529,7 +529,7 @@ export function crabKit(name, q = 1) {
       // 鉗脚の長節・腕節の内面の密な剛毛の房（雄）
       tuftM: S.claw.tuft ? tuftGeo(S.claw.merus, S.claw.r, 70, S.claw.tuft, 21) : null,
       tuftC: S.claw.tuft ? tuftGeo(S.claw.carpus, S.claw.r, 40, S.claw.tuft * 0.8, 23) : null,
-      stalk: segGeo(E.stalk, E.r, E.r * 0.9, 1, { knob: 0, q }),
+      stalk: segGeo(E.stalk, E.r * (E.taper || 1), E.r * 0.9, 1, { knob: 0, q, curve: E.curve || 0 }),
       cornea: new THREE.SphereGeometry(E.cornea, Math.round(20 / q), Math.round(14 / q)),
       maxilliped: maxillipedGeo(S.mouth, q),
       antenna: segGeo(S.antenna, S.antenna * 0.07, S.antenna * 0.02, 1, { knob: 0, q, curve: 0.1 }),
