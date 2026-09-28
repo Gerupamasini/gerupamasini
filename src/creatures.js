@@ -1217,7 +1217,7 @@ export class Ecosystem {
         leg: spk(0.5, [0x524a34, 0x6c6244, 0x2a281a, 0x9a7446], [150, 0.4, 0, 0], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.62, clearcoat: 0.3, clearcoatRoughness: 0.32 }),
         legDact: spk(0.55, [0x524a34, 0x6c6244, 0x2a281a, 0x9a7446], [150, 0.4, 1, L.dact], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.62, clearcoat: 0.3, clearcoatRoughness: 0.32 }),
         arm: spk(0.9, [0x5a5638, 0x74704a, 0x2e2c1e, 0xa8a890], [120, 1.0, 0, 0]),
-        stalk: spk(0.2, [0x80866a, 0x9ca084, 0x404232, 0xbcbca2], [220, 0.3, 0, 0], { clearcoat: 0.7, clearcoatRoughness: 0.15 }),
+        stalk: spk(0.2, [0x8a866a, 0xa6a080, 0x46422e, 0xbeb89e], [220, 0.3, 0, 0], { clearcoat: 0.7, clearcoatRoughness: 0.15 }),
         // 雄の掌：灰緑色（写真4）と淡黄色（写真3）の個体差
         clawA: chela(0.4, [0xb6b89a, 0xd8b848, 0xa85a24], [0.58, 0, 0, 0]),
         dactA: chela(0.5, [0xc8c09a, 0xdcb444, 0x9a5020], [0.58, 0, 1, 0]),
