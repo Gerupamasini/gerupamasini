@@ -239,21 +239,21 @@ function yamatoCarapace(w, h, l, q = 1) {
 function macroChelaGeo(PL, PH, T, q = 1) {
   return cached(`mchela:${PL}:${PH}:${T}:${q}`, () => {
     const pl = PL * 0.52;
-    const palm = roundBox([pl * 0.5, 0, 0], [pl * 0.5, PH * 0.42, T * 0.42], T * 0.36);
-    const palmRound = ellipsoid([pl * 0.5, 0, 0], [pl * 0.58, PH * 0.52, T * 0.5]);
+    const palm = roundBox([pl * 0.5, 0, 0], [pl * 0.46, PH * 0.4, T * 0.38], T * 0.37);
+    const palmRound = ellipsoid([pl * 0.5, 0, 0], [pl * 0.54, PH * 0.53, T * 0.5]);
     const tub = [];
-    for (let i = 0; i < 7; i++) tub.push(sphere([pl * (0.08 + i * 0.13), PH * 0.46, T * 0.05], PH * 0.07));
+    for (let i = 0; i < 7; i++) tub.push(sphere([pl * (0.12 + i * 0.12), PH * 0.48, T * 0.05], PH * 0.035));
     const ang = -0.42;   // 不動指の下方への屈曲
     const fx = (d) => pl * 0.92 + Math.cos(ang) * d, fy = (d) => -PH * 0.18 + Math.sin(ang) * d;
     const FL = PL - pl * 0.92;
-    const pollex = tube([[pl * 0.8, -PH * 0.2, 0], [fx(FL * 0.35), fy(FL * 0.35), 0], [fx(FL * 0.75), fy(FL * 0.75) + PH * 0.02, 0], [fx(FL), fy(FL) + PH * 0.08, 0]],
-      [PH * 0.26, PH * 0.16, PH * 0.1, PH * 0.025], PH * 0.05);
+    const pollex = tube([[pl * 0.84, -PH * 0.2, 0], [fx(FL * 0.35), fy(FL * 0.35), 0], [fx(FL * 0.75), fy(FL * 0.75) + PH * 0.02, 0], [fx(FL), fy(FL) + PH * 0.08, 0]],
+      [PH * 0.22, PH * 0.14, PH * 0.085, PH * 0.02], PH * 0.05);
     const wedge = cone([fx(FL * 0.18), fy(FL * 0.18) + PH * 0.05, 0], [fx(FL * 0.26), fy(FL * 0.26) + PH * 0.2, 0], PH * 0.11, PH * 0.035);
     const cren = [];
     for (let i = 0; i < 9; i++) cren.push(sphere([fx(FL * (0.32 + i * 0.07)), fy(FL * (0.32 + i * 0.07)) + PH * 0.1, 0], PH * 0.025));
     const f = (x, y, z) => {
-      let d = smin(palm(x, y, z), palmRound(x, y, z), PH * 0.1);
-      for (const t of tub) d = smin(d, t(x, y, z), PH * 0.04);
+      let d = smin(palm(x, y, z), palmRound(x, y, z), PH * 0.25);
+      for (const t of tub) d = smin(d, t(x, y, z), PH * 0.03);
       d = smin(d, pollex(x, y, z * 1.2) / 1.2, PH * 0.15);
       d = smin(d, wedge(x, y, z * 1.3) / 1.3, PH * 0.04);
       for (const c of cren) d = smin(d, c(x, y, z), PH * 0.015);
@@ -283,12 +283,14 @@ function macroDactGeo(DL, PH, q = 1) {
 
 // 第3顎脚：坐節（大きな板）と長節（上の板）、小さな触肢
 function maxillipedGeo(s, q = 1) {
-  return cached(`mxp:${s}:${q}`, () => {
-    const isch = roundBox([0, -s * 0.28, 0], [s * 0.22, s * 0.26, s * 0.035], s * 0.03);
-    const mer = roundBox([s * 0.02, s * 0.22, 0], [s * 0.19, s * 0.2, s * 0.03], s * 0.05);
-    const palp = cone([s * 0.12, s * 0.38, s * 0.02], [s * -0.12, s * 0.5, s * 0.03], s * 0.035, s * 0.02);
-    const f = (x, y, z) => smin(smax(smin(isch(x, y, z), mer(x, y, z), s * 0.01), -roundBox([0, -s * 0.02, 0], [s * 0.3, s * 0.008, s * 0.1], 0.0)(x, y, z), s * 0.01), palp(x, y, z), s * 0.02);
-    return meshSDF(f, [-s * 0.3, -s * 0.6, -s * 0.08], [s * 0.3, s * 0.6, s * 0.1], s / 26 * q);
+  return cached(`mxp2:${s}:${q}`, () => {
+    // 坐節（下の大きな楕円板）と長節（上の小さな楕円板）。外面はわずかに膨らむ
+    const isch = ellipsoid([0, -s * 0.2, 0], [s * 0.21, s * 0.3, s * 0.045]);
+    const mer = ellipsoid([s * 0.01, s * 0.24, 0], [s * 0.18, s * 0.19, s * 0.04]);
+    const suture = roundBox([0, s * 0.05, s * 0.04], [s * 0.3, s * 0.006, s * 0.02], 0.0);
+    const palp = cone([s * 0.12, s * 0.36, s * 0.02], [-s * 0.1, s * 0.46, s * 0.03], s * 0.03, s * 0.018);
+    const f = (x, y, z) => smin(smax(smin(isch(x, y, z), mer(x, y, z), s * 0.04), -suture(x, y, z), s * 0.01), palp(x, y, z), s * 0.02);
+    return meshSDF(f, [-s * 0.3, -s * 0.55, -s * 0.08], [s * 0.3, s * 0.52, s * 0.1], s / 30 * q);
   });
 }
 
@@ -329,22 +331,24 @@ export const CRAB_SPECS = {
   },
   yamato: {
     // ヤマトオサガニ Macrophthalmus japonicus：甲幅 約2.8cm（甲幅:甲長 ≈ 1.6）
-    // 歩脚は甲幅の約 2.9 倍に広がり、長節は幅広く扁平で縁に小棘。後方の歩脚ほど剛毛が密。
-    w: 0.55, h: 0.13, l: 0.345,
+    // 生きた個体は歩脚の膝（長節と腕節の関節）を甲より高く上げ、指節の先を泥に立てる。
+    // 歩脚は太く頑丈で焦げ茶色。剛毛は生体写真ではほとんど目立たない。
+    w: 0.55, h: 0.17, l: 0.345,
     carapace: yamatoCarapace,
     legs: {
-      cox: 0.06, bi: 0.07, merus: 0.5, carpus: 0.19, prop: 0.31, dact: 0.27,
-      r: 0.042, merusR: 1.55, merusFlat: 0.42, flat: 0.5, k: [0.86, 1.0, 0.98, 0.74], spread: 0.36, curve: 0.1,
-      hipX: 0.86, hipY: 0.35, hipZ: [0.5, 0.18, -0.16, -0.5],
-      setae: [0.04, 0.06, 0.1, 0.12], serrate: 9,
+      cox: 0.06, bi: 0.07, merus: 0.38, carpus: 0.15, prop: 0.24, dact: 0.21,
+      r: 0.06, merusR: 1.4, merusFlat: 0.7, flat: 0.72, k: [0.88, 1.0, 0.98, 0.8], spread: 0.38, curve: 0.16,
+      hipX: 0.86, hipY: 0.38, hipZ: [0.5, 0.18, -0.16, -0.5],
+      setae: null, serrate: 9, reach: 0.74,
     },
-    // 雄の鉗：前節長 PL ≈ 甲幅 × 0.75、前節高 PH ≈ PL × 0.27、可動指長 DL ≈ PL × 0.5
-    claw: { cox: 0.05, bi: 0.06, merus: 0.44, carpus: 0.2, PL: 0.82, PH: 0.21, T: 0.1, r: 0.055, macro: true, shX: 0.55, shY: 0.3, shZ: 0.84 },
-    clawF: { cox: 0.045, bi: 0.05, merus: 0.26, carpus: 0.13, PL: 0.4, PH: 0.12, T: 0.06, r: 0.04, macro: true, shX: 0.55, shY: 0.3, shZ: 0.84 },
-    // 眼柄は細長く、角膜は外眼窩角まで届く
-    eye: { stalk: 0.4, r: 0.014, cornea: 0.022, cLen: 2.2, sep: 0.085, yaw: 0.06, up: 0.05, raise: 1.4 },
-    mouth: 0.19, antenna: 0.1,
-    Hb: 0.26, phiD: 0.8, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
+    // 鉗は顔の前に垂らして構え、指先を泥につける。雄は大きく、雌は小さい。
+    // 前節高 PH ≈ 前節長 PL × 0.27（美濃・伊谷 2024 の計測図）
+    claw: { cox: 0.05, bi: 0.06, merus: 0.3, carpus: 0.16, PL: 0.7, PH: 0.19, T: 0.1, r: 0.052, macro: true, shX: 0.5, shY: 0.36, shZ: 0.84 },
+    clawF: { cox: 0.045, bi: 0.05, merus: 0.22, carpus: 0.12, PL: 0.4, PH: 0.11, T: 0.065, r: 0.04, macro: true, shX: 0.5, shY: 0.36, shZ: 0.84 },
+    // 眼柄は細長く、額の脇から V 字に立ち上がる
+    eye: { stalk: 0.4, r: 0.015, cornea: 0.021, cLen: 1.7, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },
+    mouth: 0.3, antenna: 0.1,
+    Hb: 0.26, phiD: 0.95, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
   },
 };
 
@@ -354,7 +358,7 @@ function clawGeos(C, q) {
       cCox: segGeo(C.cox, C.r * 1.2, C.r * 1.1, 0.85, { q }),
       cBi: segGeo(C.bi, C.r * 1.05, C.r, 0.8, { q }),
       cMerus: segGeo(C.merus, C.r * 1.1, C.r, 0.62, { q, serrate: 7 }),
-      cCarpus: segGeo(C.carpus, C.r * 1.2, C.r * 1.1, 0.8, { q }),
+      cCarpus: segGeo(C.carpus, C.r * 0.95, C.r * 0.9, 0.8, { q }),
       palm: macroChelaGeo(C.PL, C.PH, C.T, q),
       cDact: macroDactGeo(C.PL * 0.5, C.PH, q),
     };
@@ -441,7 +445,7 @@ export function buildCrab(name, mats, male = true, q = 1) {
       body.add(hip);
       const a = L.bi + L.merus * k, b = (L.carpus + L.prop) * k;
       const dl = L.dact * k * Math.hypot(1, L.curve), dAng = Math.atan(L.curve);
-      const reach = L.cox + (a + b) * 0.93 + dl * 0.45;   // 長節がほぼ水平になる広い立ち姿
+      const reach = L.cox + (a + b) * (L.reach || 0.93) + dl * 0.45;
       const restLocal = new THREE.Vector3(
         hip.position.x + Math.cos(baseYaw) * reach, -S.Hb, hip.position.z - Math.sin(baseYaw) * reach);
       legs.push({ hip, F, K: Kn, D, a, b, dl, dAng, cox: L.cox, baseYaw, s, i, restLocal, group: (i + (s > 0 ? 0 : 1)) % 2, foot: new THREE.Vector3(), valid: false, stepping: false, t: 0, from: new THREE.Vector3(), to: new THREE.Vector3() });
@@ -466,7 +470,7 @@ export function buildCrab(name, mats, male = true, q = 1) {
     if (C.macro) g3.position.set(C.PL * 0.52 * 0.93, C.PH * 0.2, 0);
     else g3.position.set(C.palm * (C.chela ? 0.5 : 0.56) * big, C.H * (C.chela ? 0.16 : 0.2) * big, 0);
     g2.add(g3);
-    mesh(CK.cDact, mats.claw, g3, 0, big);
+    mesh(CK.cDact, mats.dact || mats.claw, g3, 0, big);
     body.add(sh);
     claws.push({ sh, g0, g1, g2, g3, s, big });
   }
@@ -499,8 +503,8 @@ export function buildCrab(name, mats, male = true, q = 1) {
   const mouth = [];
   for (const s of [1, -1]) {
     const g = new THREE.Group();
-    g.position.set(s * S.mouth * 0.23, -S.h * 0.42, S.l * 0.96);
-    g.rotation.set(-0.3, s > 0 ? 0.08 : -0.08, 0);
+    g.position.set(s * S.mouth * 0.23, -S.h * 0.4, S.l * 0.97);
+    g.rotation.set(-0.12, s > 0 ? 0.1 : -0.1, 0);
     const m = new THREE.Mesh(K.maxilliped, mats.mouth || mats.shell);
     if (s < 0) m.scale.x = -1;
     g.add(m);

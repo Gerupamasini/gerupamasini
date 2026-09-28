@@ -199,13 +199,13 @@ const CLAW_POSES = {
   waveUp: { yaw0: 0.35, p0: 1.15, f1: 0.55, p1: 0.75, f2: 0.25, p2: 0.2, open: 0.15 },
   tuck: { yaw0: 1.0, p0: -0.2, f1: 2.1, p1: 0.35, f2: 1.2, p2: 0.2, open: 0.0 },
 };
-// ヤマトオサガニ：頑丈なはさみを顔の前に垂らし、掌の面を前に向ける
+// ヤマトオサガニ（雌・小型）：はさみを顔の前に垂らし、掌の面を前に、指は内下方へ
 const CLAW_POSES_Y = {
-  rest: { yaw0: 1.0, p0: 0.12, f1: 1.45, p1: 0.0, f2: 0.5, p2: -0.95, open: 0.12 },
-  reach: { yaw0: 0.95, p0: -0.05, f1: 1.25, p1: -0.1, f2: 0.6, p2: -1.25, open: 0.45 },
-  mouth: { yaw0: 1.05, p0: 0.35, f1: 1.8, p1: 0.15, f2: 0.55, p2: -0.6, open: 0.0 },
-  waveUp: { yaw0: 0.7, p0: 1.0, f1: 1.0, p1: 0.4, f2: 0.4, p2: 0.1, open: 0.25 },
-  tuck: { yaw0: 1.1, p0: -0.15, f1: 1.9, p1: 0.2, f2: 0.8, p2: -1.0, open: 0.0 },
+  rest: { yaw0: 1.0, p0: 0.2, f1: 1.45, p1: 0.0, px: -0.22, py: -0.85, pz: 0.45, bx: -0.9, by: -0.3, bz: 0.15, open: 0.12 },
+  reach: { yaw0: 0.95, p0: 0.0, f1: 1.25, p1: -0.1, px: -0.18, py: -0.9, pz: 0.4, bx: -0.9, by: -0.2, bz: 0.25, open: 0.45 },
+  mouth: { yaw0: 1.05, p0: 0.35, f1: 1.8, p1: 0.15, px: -0.5, py: -0.6, pz: 0.5, bx: -0.8, by: -0.5, bz: -0.3, open: 0.0 },
+  waveUp: { yaw0: 0.7, p0: 1.0, f1: 1.0, p1: 0.4, px: -0.2, py: 0.6, pz: 0.75, bx: -1, by: 0.2, bz: 0.2, open: 0.25 },
+  tuck: { yaw0: 1.1, p0: -0.1, f1: 1.9, p1: 0.2, px: -0.3, py: -0.9, pz: 0.2, bx: -1, by: -0.1, bz: 0.0, open: 0.0 },
 };
 // コメツキガニ：体が低いので腕を持ち上げ、平たい掌を前に向けて指先を内下方へ（正面から見て V 字）
 const CLAW_POSES_K = {
@@ -225,14 +225,37 @@ const CLAW_POSES_YM = {
 };
 function clawPoses(species, male) {
   if (species === 'kometsuki') return CLAW_POSES_K;
-  return male ? CLAW_POSES_YM : CLAW_POSES_Y;
+  return male ? CLAW_POSES_YM2 : CLAW_POSES_Y;
 }
+// ヤマトオサガニの雄（生体写真）：大きな鉗を顔の前に斜めに構え、指先を前下方へ
+const CLAW_POSES_YM2 = {
+  rest: { yaw0: 1.0, p0: 0.3, f1: 1.4, p1: 0.0, px: -0.3, py: -0.6, pz: 0.75, bx: -0.7, by: -0.7, bz: 0.1, open: 0.18 },
+  reach: { yaw0: 0.95, p0: 0.1, f1: 1.25, p1: -0.1, px: -0.25, py: -0.75, pz: 0.6, bx: -0.6, by: -0.8, bz: 0.1, open: 0.5 },
+  mouth: { yaw0: 1.1, p0: 0.45, f1: 1.75, p1: 0.15, px: -0.55, py: -0.45, pz: 0.7, bx: -0.8, by: -0.5, bz: -0.3, open: 0.0 },
+  waveUp: { yaw0: 0.65, p0: 1.1, f1: 1.0, p1: 0.4, px: -0.2, py: 0.6, pz: 0.75, bx: -1, by: 0.2, bz: 0.2, open: 0.3 },
+  tuck: { yaw0: 1.1, p0: 0.25, f1: 1.8, p1: 0.2, px: -0.35, py: -0.8, pz: 0.45, bx: -1, by: -0.2, bz: 0.0, open: 0.0 },
+};
 function mixPose(a, b, t, out = {}) { for (const k in a) out[k] = a[k] + (b[k] - a[k]) * t; return out; }
+const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _mb = new THREE.Matrix4();
+const _X = new THREE.Vector3(), _Y = new THREE.Vector3(), _Z = new THREE.Vector3();
 function setClaw(c, p) {
   const s = c.s;
   c.g0.rotation.set(0, s > 0 ? -p.yaw0 : Math.PI + p.yaw0, p.p0);
   c.g1.rotation.set(0, -s * p.f1, p.p1);
-  c.g2.rotation.set(0, -s * p.f2, p.p2);
+  if (p.px !== undefined) {
+    // 掌の向きを体の座標で直接指定（手首は掌を長軸まわりにも回せる）。
+    // 掌の長軸 (px,py,pz) と、指が曲がる側 (bx,by,bz)。x は右側基準で左右反転する。
+    _X.set(p.px * s, p.py, p.pz).normalize();
+    _Y.set(p.bx * s, p.by, p.bz);
+    _Y.addScaledVector(_X, -_Y.dot(_X)).normalize().negate();   // 指は掌の -y 側へ曲がる
+    _Z.crossVectors(_X, _Y);
+    _mb.makeBasis(_X, _Y, _Z);
+    _qb.setFromRotationMatrix(_mb);
+    _qa.copy(c.g0.quaternion).multiply(c.g1.quaternion).invert();
+    c.g2.quaternion.copy(_qa).multiply(_qb);
+  } else {
+    c.g2.rotation.set(0, -s * p.f2, p.p2);
+  }
   c.g3.rotation.z = p.open;
 }
 function setEyes(parts, E, alert, t = 0) {
@@ -248,7 +271,8 @@ class Crab extends Agent {
     this.S = S;
     this.rnd = rnd;
     this.male = rnd() < 0.5;
-    const mats = sys.crabMaterials(species, rnd());
+    const mats = { ...sys.crabMaterials(species, rnd()) };
+    if (species === 'yamato' && !this.male) { mats.claw = mats.clawF; mats.dact = mats.dactF; }
     this.mats = mats;
     this.parts = buildCrab(species, mats, this.male);
     this.setup(this.parts.root);
@@ -1177,36 +1201,28 @@ export class Ecosystem {
   }
 
   crabMaterials(species, seed) {
-    const Y = species === 'yamato';
     if (species === 'kometsuki') return this.kometsukiMaterials(seed);
-    if (!this.crabShared[species]) {
-      this.crabShared[species] = {
-        leg: organicMaterial({
-          key: 'leg', glsl: GLSL.leg, seed: 0.5,
-          colors: Y ? [0x6a5334, 0x4e3e26, 0x2e2416, 0xa8905e] : [0xa6977c, 0x7e705a, 0x55493a, 0xddd4c2],
-          roughness: 0.42, clearcoat: 0.6, clearcoatRoughness: 0.22, sss: Y ? 0xa06a3a : 0xd8b890, sssK: Y ? 0.2 : 0.35,
-        }),
-        claw: organicMaterial({
-          key: 'claw', glsl: GLSL.claw, seed: 0.7,
-          colors: Y ? [0xe0cf9e, 0xcdb680, 0xf2e8cc] : [0xd8ccb6, 0xbcae94, 0xf2ece0],
-          P: [Y ? 0.4 : 0.17, 0, 0, 0],
-          roughness: 0.38, clearcoat: 0.7, clearcoatRoughness: 0.2, sss: 0xf0d0c0, sssK: 0.3,
-        }),
+    // ヤマトオサガニ：濡れた泥の艶（クリアコート強め）
+    if (!this.yamaShared) {
+      const wet = { clearcoat: 0.6, clearcoatRoughness: 0.18 };
+      this.yamaShared = {
+        leg: organicMaterial({ key: 'leg', glsl: GLSL.leg, seed: 0.5, colors: [0x3e3128, 0x5e4c3c, 0x2e241c, 0x6e5e4e], roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.25, sss: 0x6a4a34, sssK: 0.12 }),
+        arm: organicMaterial({ key: 'leg', glsl: GLSL.leg, seed: 0.9, colors: [0x4a3526, 0x65493a, 0x34261c, 0x6a5440], roughness: 0.5, clearcoat: 0.45, clearcoatRoughness: 0.22, sss: 0x7a5034, sssK: 0.12 }),
+        claw: organicMaterial({ key: 'chelaY', glsl: GLSL.chelaY, seed: 0.4, colors: [0xeadcb4, 0xe0a640, 0xa4561e], P: [0.7, 0, 0, 0], roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.12, sss: 0xf0dcb0, sssK: 0.25 }),
+        clawF: organicMaterial({ key: 'chelaY', glsl: GLSL.chelaY, seed: 0.45, colors: [0xece2c4, 0xe4bc70, 0xb87838], P: [0.4, 0, 0, 0], roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.12, sss: 0xf0dcb0, sssK: 0.25 }),
+        dact: organicMaterial({ key: 'chelaY', glsl: GLSL.chelaY, seed: 0.5, colors: [0xe6d8b0, 0xde9c38, 0x98501c], P: [0.7, 0, 1, 0], roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.12 }),
+        dactF: organicMaterial({ key: 'chelaY', glsl: GLSL.chelaY, seed: 0.55, colors: [0xe8dcc0, 0xe0b060, 0xa86a30], P: [0.4, 0, 1, 0], roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.12 }),
+        mouth: organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.2, colors: [0xc4c4be, 0xaeaca6, 0xd0d0ca], P: [1, 0, 0, 0], roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.15 }),
+        stalk: organicMaterial({ key: 'leg', glsl: GLSL.leg, seed: 0.2, colors: [0x8a7e70, 0x766a5c, 0x94887a, 0x9a8e80], roughness: 0.4, clearcoat: 0.5, clearcoatRoughness: 0.2 }),
       };
     }
-    const sh = this.crabShared[species];
-    if (Y && !sh.arm) {
-      sh.arm = organicMaterial({ key: 'leg', glsl: GLSL.leg, seed: 0.9, colors: [0x7a4a24, 0x5e3a1e, 0x3a2414, 0xb0845a], roughness: 0.4, clearcoat: 0.7, clearcoatRoughness: 0.2, sss: 0xc07040, sssK: 0.2 });
-      sh.stalk = organicMaterial({ key: 'leg', glsl: GLSL.leg, seed: 0.2, colors: [0x6a5a40, 0x4e4230, 0x3a3020, 0x8a7a5a], roughness: 0.45, clearcoat: 0.5, clearcoatRoughness: 0.25 });
-      sh.setae = new THREE.MeshStandardMaterial({ color: 0xb09a78, roughness: 0.6, side: THREE.DoubleSide });
-      sh.mouth = organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.2, colors: [0xb4a282, 0xa08e70, 0xc8b898], P: [1, 0, 0, 0], roughness: 0.45, clearcoat: 0.4, clearcoatRoughness: 0.3 });
-    }
+    const sh = this.yamaShared;
     const shell = organicMaterial({
-      key: Y ? 'yamaShell' : 'komeShell', glsl: Y ? GLSL.yamatoShell : GLSL.kometsukiShell, seed,
-      colors: Y ? [0x4c3e2a, 0x6e5c40, 0x86765a, 0x4a3e2e] : [0x8e7e66, 0xa89a80, 0x4a3c2e, 0xd6cebe],
-      roughness: Y ? 0.5 : 0.58, clearcoat: 0.45, clearcoatRoughness: 0.3,
+      key: 'yamaShell2', glsl: GLSL.yamatoShell, seed,
+      colors: [0x3c2e24, 0x57453a, 0x5c4a3c, 0x4e4238],
+      roughness: 0.5, clearcoat: 0.55, clearcoatRoughness: 0.26,
     });
-    return { shell, leg: sh.leg, claw: sh.claw, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.corneaMat };
+    return { shell, leg: sh.leg, claw: sh.claw, dact: sh.dact, clawF: sh.clawF, dactF: sh.dactF, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, cornea: this.corneaMat };
   }
 
   kometsukiMaterials(seed) {

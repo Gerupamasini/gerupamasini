@@ -165,24 +165,49 @@ export const GLSL = {
     }`,
   },
   // ヤマトオサガニの甲：暗い灰緑褐色、目立つ顆粒
+  // ヤマトオサガニの甲：濃い焦げ茶〜灰褐色でほぼ一様、濡れて艶がある。大きな顆粒（中央の小域は平滑）、
+  // 溝は暗く、上向きの面にだけ薄く乾いた泥が付く。uP.x: 甲長の半分（前縁の位置）
   yamatoShell: {
     color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
-      float big = fbm3(p*3.5 + uSeed)*0.5+0.5;
-      vec3 col = mix(uC1, uC2, smoothstep(0.3, 0.75, big));
-      vec3 c = cell3(p*48.0 + uSeed*7.0);
-      col = mix(col, uC3, (1.0 - smoothstep(0.0, 0.35, c.x)) * 0.45);  // 顆粒の頂は明るい
-      col = mix(col, uC1*0.55, smoothstep(0.55, 0.9, snoise3(p*7.0+3.0+uSeed)) * 0.6);
-      col = mix(col, uC3*1.05, smoothstep(0.03, 0.0, abs(p.z - 0.38)) * 0.35);   // 前縁の明るい帯
-      // 乾きかけた泥の付着（上向きの面にまだらに）
-      float dust = smoothstep(0.05, 0.55, fbm3(p*8.0 + uSeed*3.0)) * smoothstep(0.3, 0.85, n.y);
-      col = mix(col, vec3(0.46, 0.42, 0.35), dust * 0.5);
-      col = mix(col, uC4, smoothstep(-0.04, -0.1, p.y));
+      float big = fbm3(p*3.0 + uSeed)*0.5+0.5;
+      vec3 col = mix(uC1, uC2, smoothstep(0.25, 0.8, big));
+      vec3 c = cell3(p*52.0 + uSeed*7.0);
+      float smooth0 = smoothstep(0.05, 0.12, length(p.xz - vec2(0.0, -0.03)));   // 中央の平滑な小域
+      col = mix(col, uC3, (1.0 - smoothstep(0.0, 0.32, c.x)) * 0.2 * smooth0);
+      col *= 0.9 + 0.1 * snoise3(p*14.0 + uSeed);
+      // 乾いた泥の薄い付着
+      float dust = smoothstep(0.35, 0.75, fbm3(p*7.0 + uSeed*3.0)) * smoothstep(0.5, 0.9, n.y);
+      col = mix(col, vec3(0.42, 0.39, 0.34), dust * 0.28);
+      // 腹面・前面下部はやや淡い灰褐色
+      col = mix(col, uC4, smoothstep(-0.05, -0.12, p.y));
       return col;
     }`,
     bump: `float orgBump(vec3 p){
-      vec3 c = cell3(p*48.0);
-      return (1.0 - smoothstep(0.0, 0.42, c.x))*0.006 + snoise3(p*18.0)*0.002;
+      vec3 c = cell3(p*52.0);
+      float smooth0 = smoothstep(0.05, 0.12, length(p.xz - vec2(0.0, -0.03)));
+      return (1.0 - smoothstep(0.0, 0.42, c.x))*0.0028*smooth0 + snoise3(p*22.0)*0.0012;
     }`,
+    rough: 'float orgRough(vec3 p, float r){ return r + snoise3(p*9.0)*0.12; }',
+  },
+  // ヤマトオサガニの鉗：掌は乳白〜淡黄、指は黄〜橙で先端ほど濃い。uP.x: 前節長, uP.z: 1なら可動指
+  chelaY: {
+    color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
+      float L = uP.x;
+      float fin = uP.z > 0.5 ? 0.35 + 0.65 * smoothstep(0.0, 0.5 * L, p.x) : smoothstep(0.42 * L, 0.62 * L, p.x);
+      vec3 col = mix(uC1, uC2, fin);
+      float tip = uP.z > 0.5 ? smoothstep(0.3 * L, 0.5 * L, p.x) : smoothstep(0.85 * L, 1.02 * L, p.x);
+      col = mix(col, uC3, tip * 0.75);
+      col *= 0.93 + 0.07 * snoise3(p * 30.0 + uSeed);
+      // 掌の上縁の瘤と内面の細かな顆粒はわずかに白い
+      vec3 c = cell3(p * 140.0);
+      col = mix(col, col * 1.08, (1.0 - smoothstep(0.0, 0.35, c.x)) * 0.5);
+      return col;
+    }`,
+    bump: `float orgBump(vec3 p){
+      vec3 c = cell3(p*140.0);
+      return (1.0 - smoothstep(0.0, 0.4, c.x))*0.0007 + snoise3(p*35.0)*0.0006;
+    }`,
+    thick: 'float orgThick(vec3 p){ return 0.5; }',
   },
   // 歩脚：まだら模様と節の明暗
   leg: {
