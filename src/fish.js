@@ -203,8 +203,8 @@ function finLayouts() {
   const nD = 37;
   const dBase = [], dTip = polyline([[0.3, 0.312], [0.3459, 0.3226], [0.3957, 0.3313], [0.445, 0.3383], [0.4932, 0.3407], [0.541, 0.3414],
     [0.5886, 0.3411], [0.6346, 0.3345], [0.6806, 0.328], [0.7262, 0.3197], [0.7722, 0.3131], [0.8177, 0.3048], [0.8631, 0.2955],
-    [0.9073, 0.2818], [0.9518, 0.269], [0.9949, 0.2508], [1.0377, 0.2307], [1.0882, 0.204], [1.0977, 0.1922], [1.0851, 0.1524],
-    [1.064, 0.125], [1.035, 0.1], [1.0, 0.078], [0.972, 0.062], [0.95, 0.054]], nD);   // deep, open notch above the peduncle
+    [0.9073, 0.2818], [0.9518, 0.269], [0.9949, 0.2508], [1.03, 0.236], [1.058, 0.222], [1.066, 0.205],
+    [1.055, 0.175], [1.03, 0.145], [1.0, 0.118], [0.972, 0.09], [0.95, 0.064]], nD);   // near-vertical rear edge down to a sharp notch (aligned photo)   // deep, open notch above the peduncle
   for (let i = 0; i < nD; i++) { const s = 0.295 + (0.95 - 0.295) * (i / (nD - 1)); dBase.push([s, top(s) - 0.003]); }
   const nA = 26;
   const aBase = [], aTip = polyline([[0.49, -0.212], [0.592, -0.2264], [0.6847, -0.2368], [0.7547, -0.2426], [0.8265, -0.2412],
@@ -213,7 +213,7 @@ function finLayouts() {
   for (let i = 0; i < nA; i++) { const s = 0.48 + (0.95 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.012 * THREE.MathUtils.smoothstep(s, 0.48, 0.6)]); }   // root sunk into the fleshy keel
   const nC = 19;
   // caudal: rises from the narrow peduncle and flares into a broad, short fan
-  const cBase = [], cTip = polyline([[1.13, 0.158], [1.148, 0.1], [1.158, 0.04], [1.165, -0.02], [1.174, -0.08], [1.184, -0.13], [1.17, -0.162]], nC);   // truncate, faintly concave, angular corners
+  const cBase = [], cTip = polyline([[1.085, 0.158], [1.118, 0.105], [1.136, 0.04], [1.142, -0.02], [1.144, -0.08], [1.14, -0.13], [1.118, -0.16]], nC);   // shorter fan, steep upper corner (aligned photo)   // truncate, faintly concave, angular corners
   for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.962 + 0.01 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]); }
   return { dorsal: { base: dBase, tip: dTip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
@@ -466,8 +466,10 @@ Paint paint(vec2 p){
   } else if (dorsal) {
     // spinous part carries the white + stripes, soft part is yellow
     float r = length(((p - uOcellus) * mat2(0.985, 0.17, -0.17, 0.985)) * vec2(1.0, 1.7));
-    float spot = 1. - smoothstep(0.042 - uTexel.x, 0.042 + uTexel.x, r);
-    col = mix(col, ink * 0.5, spot);
+    float spot = 1. - smoothstep(0.036 - uTexel.x, 0.036 + uTexel.x, r);
+    float ring = (1. - smoothstep(0.046, 0.05, r)) * (1.0 - spot);          // pale yellow ring around the eyespot
+    col = mix(col, vec3(1.0, 0.9, 0.35), ring * 0.8);
+    col = mix(col, vec3(0.03, 0.025, 0.025), spot);
     alpha = 0.5 + 0.5 * spot;
     rough = 0.45; metal = 0.0;
   } else if (anal) {
@@ -617,7 +619,7 @@ export function createButterflyfish(renderer, opts = {}) {
   // ocellus sits in the soft dorsal near its posterior margin
   const oi = Math.round(layouts.dorsal.base.length * 0.8);
   const ob = layouts.dorsal.base[oi], ot = layouts.dorsal.tip[oi];
-  const ocellus = [1.012, 0.206];   // black oval under the rear corner of the soft dorsal (traced)
+  const ocellus = [0.95, 0.222];   // black oval under the rear corner of the soft dorsal (traced)
   const tex = opts.textures || bakeTextures(renderer, texW, texH, ocellus, opts.pattern, opts.photo || null);
 
   const uniforms = { uPhase: { value: 0 }, uAmp: { value: 0.0 }, uTurn: { value: 0 }, uFlap: { value: 0 }, uGlow: { value: 1.0 } };
@@ -686,10 +688,9 @@ export function createButterflyfish(renderer, opts = {}) {
             int ri = int(clamp(floor(r), 0.0, 38.0));
             vec2 SH = mix(uFinSH[ri], uFinSH[ri + 1], clamp(r - float(ri), 0.0, 1.0));
             float fromEdge = (1.0 - t) * max(SH.y, 1e-3);
-            float rear = smoothstep(uRays - 9.5, uRays - 7.5, r);
-            float bw = 0.03 + 0.006 * sin(r * 1.7);
+            float rear = smoothstep(uRays - 11.0, uRays - 8.5, r);
+            float bw = 0.034 + 0.024 * smoothstep(uRays - 8.0, uRays - 3.0, r) * (1.0 - smoothstep(uRays - 2.0, uRays - 0.2, r));   // broad black wedge behind the eyespot, narrowing into the notch
             c = mix(c, vec3(0.035, 0.03, 0.03), rear * (1.0 - smoothstep(bw - 0.004, bw + 0.004, fromEdge)));
-            c = mix(c, vec3(0.75, 0.8, 0.85), rear * (1.0 - smoothstep(0.002, 0.004, fromEdge)) * 0.6);   // hairline pale rim
           }
           if (kind > 0.5 && kind < 1.5) {
             // anal fin, as photographed from the side: the fin is pearl white inside, continuous
