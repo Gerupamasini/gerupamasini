@@ -230,8 +230,8 @@ function clawPoses(species, male) {
 // ヤマトオサガニの雄（生体写真）：大きな鉗を顔の前に斜めに構え、指先を前下方へ
 const CLAW_POSES_YM2 = {
   rest: { yaw0: 0.7, p0: 0.05, f1: 1.45, p1: 0.0, px: -1, py: -0.2, pz: 0.18, bx: 0.0, by: -1, bz: 0.05, open: 0.03 },
-  reach: { yaw0: 0.7, p0: -0.1, f1: 1.3, p1: -0.05, px: -0.7, py: -0.45, pz: 0.55, bx: 0.0, by: -1, bz: 0.2, open: 0.45 },
-  mouth: { yaw0: 0.8, p0: 0.2, f1: 1.7, p1: 0.1, px: -0.85, py: 0.05, pz: 0.45, bx: 0.1, by: -1, bz: -0.1, open: 0.0 },
+  reach: { yaw0: 0.65, p0: -0.1, f1: 1.3, p1: -0.05, px: -0.9, py: -0.4, pz: 0.25, bx: 0.0, by: -1, bz: 0.1, open: 0.35 },
+  mouth: { yaw0: 0.8, p0: 0.2, f1: 1.7, p1: 0.1, px: -1, py: 0.05, pz: 0.2, bx: 0.0, by: -1, bz: -0.05, open: 0.0 },
   waveUp: { yaw0: 0.4, p0: 0.2, f1: 0.5, p1: 1.1, px: -0.1, py: 0.75, pz: 0.65, bx: -1, by: 0.1, bz: 0.2, open: 0.3 },
   tuck: { yaw0: 1.2, p0: 0.0, f1: 1.3, p1: 0.1, px: -0.7, py: -0.05, pz: 0.7, bx: 0.05, by: -1, bz: 0.0, open: 0.0 },
 };
@@ -1212,7 +1212,7 @@ export class Ecosystem {
     if (!this.yamaShared) {
       const spk = (seed, colors, P, extra = {}) => organicMaterial({ key: 'speckle', glsl: GLSL.speckle, seed, colors, P, roughness: 0.5, clearcoat: 0.55, clearcoatRoughness: 0.22, sss: 0x6a6a40, sssK: 0.12, ...extra });
       const L = CRAB_SPECS.yamato.legs;
-      const chela = (seed, pal, P) => organicMaterial({ key: 'chelaY', glsl: GLSL.chelaY, seed, colors: pal, P, roughness: 0.33, clearcoat: 0.85, clearcoatRoughness: 0.1, sss: 0xf0dcb0, sssK: 0.22 });
+      const chela = (seed, pal, P) => organicMaterial({ key: 'chelaY', glsl: GLSL.chelaY, seed, colors: pal, P, roughness: 0.42, clearcoat: 0.5, clearcoatRoughness: 0.2, sss: 0xf0dcb0, sssK: 0.22 });
       this.yamaShared = {
         leg: spk(0.5, [0x524a34, 0x6c6244, 0x2a281a, 0x9a7446], [150, 0.4, 0, 0], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.62, clearcoat: 0.3, clearcoatRoughness: 0.32 }),
         legDact: spk(0.55, [0x524a34, 0x6c6244, 0x2a281a, 0x9a7446], [150, 0.4, 1, L.dact], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.62, clearcoat: 0.3, clearcoatRoughness: 0.32 }),
