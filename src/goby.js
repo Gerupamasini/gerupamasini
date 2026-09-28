@@ -7,7 +7,7 @@ import { createFishEye } from './eye.js';
 
 const S0 = -0.03, S1 = 1.3, Y0 = -0.52, Y1 = 0.6;   // shared painting space (buildFin UVs)
 const sx = (s) => 0.5 - s;
-const GDEPTH = 1.15;
+const GDEPTH = 1.0;   // slender: ~5:1 standard length to depth, as in the side-view references
 
 export const GOBY = {
   // averaged from two traced side views (iNaturalist, CC0 / CC BY-NC); slender body, blunt head
@@ -67,9 +67,9 @@ function finLayouts() {
   // second dorsal and anal: long, low, running almost to the caudal
   // traced from the CC0 side view: low fins whose edges run nearly parallel to the body
   const d2Base = even(0.4, 0.97, 24, (s) => top(s) - 0.003);
-  const d2Tip = polyline([[0.41, 0.158], [0.52, 0.176], [0.66, 0.174], [0.8, 0.152], [0.92, 0.12], [1.02, 0.085], [1.08, 0.06], [1.02, 0.04]], 24);   // tall, reaching the caudal
+  const d2Tip = polyline([[0.41, 0.152], [0.52, 0.163], [0.66, 0.156], [0.8, 0.13], [0.92, 0.1], [1.02, 0.072], [1.08, 0.052], [1.02, 0.036]], 24);   // low, hugging the back   // tall, reaching the caudal
   const aBase = even(0.46, 0.97, 22, (s) => bottom(s) + 0.003);
-  const aTip = polyline([[0.47, -0.08], [0.58, -0.1], [0.72, -0.106], [0.86, -0.098], [0.98, -0.08], [1.07, -0.055], [1.02, -0.03]], 22);
+  const aTip = polyline([[0.47, -0.075], [0.58, -0.088], [0.72, -0.09], [0.86, -0.082], [0.98, -0.066], [1.07, -0.046], [1.02, -0.026]], 22);
   // caudal: rounded / slightly lanceolate
   const cBase = even(0, 1, 17, (f) => 0).map(([f]) => { const s = 0.94 + 0.03 * Math.sin(Math.PI * f); return [s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]; });
   const cTip = polyline([[1.08, 0.058], [1.18, 0.052], [1.27, 0.025], [1.3, -0.005], [1.27, -0.035], [1.18, -0.062], [1.08, -0.068]], 17);   // long lanceolate caudal

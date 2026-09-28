@@ -135,7 +135,7 @@ export class HoveringGoby {
     this.obj.position.copy(this.p);
     this.obj.rotation.set(0, this.yaw, 0);
     this.obj.rotateZ(THREE.MathUtils.clamp(this.v.y * 4, -0.4, 0.4));
-    this.model.update(dt, this.t, { amp: 0.01 + Math.min(sp / this.scale, 2) * 0.03, freq: 1.2 + sp / this.scale * 1.5, turn: THREE.MathUtils.clamp(-this.turnRate * 0.25, -0.5, 0.5), flick });
+    this.model.update(dt, this.t, { amp: 0.01 + Math.min(sp / this.scale, 2) * 0.03, freq: 1.2 + sp / this.scale * 1.5, turn: THREE.MathUtils.clamp(-this.turnRate * 0.1, -0.16, 0.16), flick });   // a goby pivots stiffly; big bends made it look stubby
   }
 }
 
