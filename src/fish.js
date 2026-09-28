@@ -33,7 +33,7 @@ export function spline(pts) {
 // The snout is long and low, the forehead rises steeply from s = 0.12, and the belly is
 // shallow; the dorsal and anal fins make the rear of the fish tall and square.
 export const ANATOMY = {
-  top: spline([[0, 0.013], [0.012, 0.019], [0.0369, 0.0338], [0.0917, 0.0632], [0.124, 0.08], [0.1353, 0.104], [0.153, 0.139], [0.171, 0.172],
+  top: spline([[0, 0.013], [0.012, 0.019], [0.0369, 0.0305], [0.0917, 0.0585], [0.124, 0.08], [0.1353, 0.104], [0.153, 0.139], [0.171, 0.172],
     [0.19, 0.21], [0.212, 0.243], [0.238, 0.27], [0.266, 0.287], [0.294, 0.301], [0.35, 0.304], [0.45, 0.296], [0.6, 0.274],
     [0.75, 0.232], [0.85, 0.172], [0.92, 0.106], [0.96, 0.066], [1.0, 0.036]]),   // slender caudal peduncle (side-view photos)
   bottom: spline([[0, -0.013], [0.0164, -0.019], [0.046, -0.026], [0.089, -0.046], [0.129, -0.075], [0.171, -0.099],
@@ -60,7 +60,7 @@ function lensZ(yn, w, s = 0.5) {
   // fin root (as in real chaetodontids) instead of meeting a flat fin at a crease
   const k = yn < 0 ? THREE.MathUtils.smoothstep(s, 0.46, 0.6) : THREE.MathUtils.smoothstep(s, 0.27, 0.36);
   if (k <= 0) return z;
-  const e = 1 - Math.abs(yn), E = 0.45, finT = 0.013;
+  const e = 1 - Math.abs(yn), E = 0.6, finT = 0.013;
   if (e >= E) return z;
   const aE = 1 - Math.pow(1 - E, 2.1), zE = w * Math.pow(aE, 0.62) * (1 + 0.12 * yn);
   const root = finT + (zE - finT) * Math.pow(e / E, 1.7);     // concave, flush with the fin shell at the keel
@@ -336,7 +336,19 @@ Paint paint(vec2 p){
 
   // --- pattern masks traced from a photograph of a real fish (see tools/masks2.py):
   //     r = yellow field (+ gap lines), g = brown zone (s > 0.32) or eye band (s < 0.32), b = stripe distance
-  vec4 pm = texture2D(uPattern, (p - vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)})) / vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}));
+  // the traced stripes are ruler-straight; in life they bow with the curve of the flank:
+  // the lower (rearward-descending) set sags in the middle, the upper set bows forward, and
+  // every line wanders slightly. Warp the lookup of the traced masks and photo accordingly.
+  vec2 pw = p;
+  {
+    float lower = smoothstep(0.12, -0.05, y + (s - 0.45) * 0.4) * smoothstep(0.28, 0.4, s);
+    pw.y += 0.02 * sin(clamp((s - 0.3) / 0.7, 0.0, 1.0) * 3.1416) * lower;
+    float upper = smoothstep(0.05, 0.18, y) * (1.0 - smoothstep(0.5, 0.62, s)) * smoothstep(0.2, 0.28, s);
+    pw.x -= 0.022 * sin(clamp((y - 0.0) / 0.32, 0.0, 1.0) * 3.1416) * upper;
+    float inF = smoothstep(0.24, 0.3, s) * (inBody ? 1.0 : 0.0);
+    pw += inF * vec2(0.0025 * sin(p.y * 31.0 + p.x * 7.0), 0.003 * sin(p.x * 23.0 - p.y * 11.0 + 1.3));
+  }
+  vec4 pm = texture2D(uPattern, (pw - vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)})) / vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}));
   float aa = 0.12;
   float Y  = smoothstep(0.1, 0.4, pm.r);          // r: 0..0.5 yellow field, 0.5..1 thin yellow gap lines
   float Br = s < 0.32 ? 0.0 : pm.g;
@@ -361,7 +373,7 @@ Paint paint(vec2 p){
   col = mix(col, mix(ink, brown * mix(0.5, 0.32, Br), Y), st);
   // photographic albedo (de-lit CC0 photo in painting space) replaces the mask painting
   // wherever it covers the fish; the masks remain as a fallback outside it
-  vec4 ph = texture2D(uPhoto, (p - vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)})) / vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}));
+  vec4 ph = texture2D(uPhoto, (pw - vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)})) / vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}));
   ph.a *= 1.0 - smoothstep(0.86, 0.95, s);   // the photo has a sunlit hot spot on the peduncle: use the painted yellow there
   col = mix(col, ph.rgb, ph.a * uPhotoMix);
   // the photo's dusky saddle is darkened by shadow and motion blur; in life it is a narrower
@@ -382,7 +394,7 @@ Paint paint(vec2 p){
     // the body is solid yellow, deepening to orange-yellow toward the top
     // distance to the white field, probed along the boundary normal (toward the head and belly)
     vec2 PU = vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)}), PS = vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)});
-    #define WHITE_AT(o) smoothstep(0.42, 0.6, min(min(texture2D(uPhoto, (p + (o) - PU) / PS).r, texture2D(uPhoto, (p + (o) - PU) / PS).g), texture2D(uPhoto, (p + (o) - PU) / PS).b))
+    #define WHITE_AT(o) smoothstep(0.42, 0.6, min(min(texture2D(uPhoto, (pw + (o) - PU) / PS).r, texture2D(uPhoto, (pw + (o) - PU) / PS).g), texture2D(uPhoto, (pw + (o) - PU) / PS).b))
     float here = WHITE_AT(vec2(0.0));
     float nearWhite = max(WHITE_AT(vec2(-0.025, -0.025)), WHITE_AT(vec2(-0.048, -0.045)) * 0.85);
     float rearY = max(smoothstep(0.8, 0.93, s) * max(smoothstep(0.02, 0.07, y - bot), smoothstep(0.93, 0.98, s)), max(1.0 - nearWhite, smoothstep(0.02, -0.07, y) * smoothstep(0.68, 0.8, s)) * (1.0 - here) * smoothstep(0.4, 0.5, s));
@@ -427,7 +439,8 @@ Paint paint(vec2 p){
     // eye band: vertical, rounded above the eye, running down to the throat (as in photographs)
     float t01 = clamp((0.075 - y) / 0.22, 0.0, 1.0);   // 0 at the top of the band, 1 at the throat
     float wob = 0.004 * (fbm(p * 60.0) - 0.5);
-    float fr = mix(0.136, 0.126, t01) + 0.005 * sin(t01 * 3.1416) + wob, bk = mix(0.19, 0.232, t01) - wob;   // narrow above the eye, wide at the throat
+    float wob2 = 0.006 * (fbm(p * 25.0) - 0.5);
+    float fr = mix(0.136, 0.124, t01) + 0.008 * sin(t01 * 3.1416) + wob + wob2, bk = mix(0.19, 0.228, t01) + 0.016 * sin(t01 * 3.1416) - wob + wob2;   // convex rear edge, organic outline   // narrow above the eye, wide at the throat
     float dB = max(max(fr - s, s - bk), 0.0);
     // above the eye the band narrows and runs on up over the nape to the dorsal profile
     if (y > 0.075) { float u2 = clamp((y - 0.075) / 0.12, 0.0, 1.0); fr = mix(fr, 0.146, u2); bk = mix(bk, 0.178, u2); }
@@ -675,14 +688,20 @@ export function createButterflyfish(renderer, opts = {}) {
             float sR = SH.x, hR = max(SH.y, 1e-3);
             float fromEdge = (1.0 - t) * hR;                              // distance to the free edge
             float bandW = mix(0.007, 0.04, smoothstep(0.55, 0.85, sR)) + smoothstep(0.85, 0.97, sR) * 0.035;
-            float yb = 1.0 - smoothstep(bandW - 0.006, bandW + 0.006, fromEdge);
+            float dBand = fromEdge - bandW;
             // the white field ends in a rounded corner over the rear lobe: everything behind the
             // diagonal rear edge of the white (continued from the flank) is yellow
             #ifdef USE_MAP
             vec2 pp = vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)}) + vMapUv * vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)});
-            float behind = smoothstep(-0.03, 0.02, pp.x - (0.9 + 0.91 * (-0.09 - pp.y)));
-            yb = max(yb, behind);
+            // curved rear edge of the white field, bulging backwards over the lobe
+            float sb = 0.9 + 0.91 * (-0.09 - pp.y) + 2.2 * (pp.y + 0.16) * (pp.y + 0.16) + 0.004 * sin(pp.y * 70.0);
+            float dBehind = sb - pp.x;
+            float kS = 0.035;                                           // smooth union: rounded corner
+            float hS = clamp(0.5 + 0.5 * (dBehind - dBand) / kS, 0.0, 1.0);
+            dBand = mix(dBehind, dBand, hS) - kS * hS * (1.0 - hS);
             #endif
+            dBand += 0.003 * sin(sR * 60.0 + t * 5.0);                  // slightly irregular, not ruled
+            float yb = 1.0 - smoothstep(-0.008, 0.008, dBand);
             vec3 yl2 = mix(vec3(1.0, 0.78, 0.04), vec3(1.0, 0.68, 0.01), smoothstep(0.8, 0.98, sR));
             c = mix(vec3(0.84, 0.855, 0.86), yl2, yb);
             float lobe = smoothstep(0.8, 0.92, sR);
