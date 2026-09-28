@@ -96,7 +96,8 @@ export function bladeGeo(len, w1, w2, th, opts = {}) {
       return d;
     };
     const wMax = Math.max(w1, w2) * 1.15;
-    const cell = Math.max(wMax * th * 0.42, len / 110) * q;
+    // 低解像度（遠景用）でも厚み方向に 2 セル以上を確保して板が欠けないようにする
+    const cell = Math.min(Math.max(wMax * th * 0.42, len / 110) * q, wMax * th * 0.75);
     return meshSDF(f, [x0 - cell, -wMax * th - curve * len, -wMax], [x1 + cell, wMax * th, wMax], cell);
   });
 }
@@ -250,10 +251,29 @@ export function bristleGeo(len, r, count, hairLen, seed = 1, depress = false, r2
 // 額は狭く下向きに曲がり、先端は二葉で中央に溝。眼窩は前縁全体に長く伸び、眼柄がそこに収まる。
 // 背面は胃域・心域・鰓域などの域が溝で区切られ、大きな顆粒に覆われる（中央の小域は平滑）。
 function yamatoCarapace(w, h, l, q = 1) {
-  return cached(`yama-car4:${w}:${h}:${l}:${q}`, () => {
+  return cached(`yama-car5:${w}:${h}:${l}:${q}`, () => {
     const fw = w * 0.12;
-    const box = roundBox([0, -h * 0.15, 0], [w * 0.97, h * 0.48, l * 0.97], h * 0.42);
-    const dome = ellipsoid([0, h * 0.08, -l * 0.05], [w * 0.95, h * 0.85, l * 0.98]);
+    // 基本形：平たい上面（側方・後方へ緩く下がる）と、角ばった側縁。側壁は下へ向かって内側に入る
+    const topY = (x, z) => {
+      const u = x / w, v = z / l;
+      return h * (0.8 - 0.34 * u * u * u * u - 0.16 * v * v - 0.12 * Math.max(0, -v) ** 2);
+    };
+    // 上から見た輪郭：前側縁はほぼ平行、後ろ 4 割で後側縁が斜めに狭まり、後縁は甲幅の 2/3 ほど
+    const halfW = (v) => {
+      const a = w * 0.97 * (1 - 0.03 * (1 - v));
+      if (v >= -0.2) return a;
+      const a0 = w * 0.97 * (1 - 0.03 * 1.2);
+      return a0 - (a0 - w * 0.66) * Math.min(1, (-0.2 - v) / 0.77);
+    };
+    const outline = (x, y, z) => {
+      const k = THREE.MathUtils.clamp((h * 0.25 - y) / h, 0, 1);
+      const v = z / l;
+      const slope = v < -0.2 ? 0.86 : 1;
+      const dx = (Math.abs(x) - halfW(v) * (1 - 0.14 * k)) * slope;
+      const dz = Math.abs(z) - l * 0.97 * (1 - 0.06 * k);
+      return smax(dx, dz, l * 0.22);
+    };
+    const base = (x, y, z) => smax(outline(x, y, z), (y - topY(x, z)) * 0.9, h * 0.13);
     const regions = [
       ellipsoid([w * 0.2, h * 0.6, l * 0.36], [w * 0.16, h * 0.34, l * 0.3]),     // 前胃域
       ellipsoid([-w * 0.2, h * 0.6, l * 0.36], [w * 0.16, h * 0.34, l * 0.3]),
@@ -305,9 +325,9 @@ function yamatoCarapace(w, h, l, q = 1) {
     // 口腔（第3顎脚が収まる）と、腹面の平らな胸板
     const buccal = roundBox([0, -h * 0.58, l * 0.72], [w * 0.2, h * 0.22, l * 0.3], h * 0.1);
     const f = (x, y, z) => {
-      const xs = x / (1 + 0.08 * (z / l));   // 側縁は後方へ収斂
-      let d = smin(box(xs, y, z), dome(xs, y, z), h * 0.45);
-      for (const r of regions) d = smin(d, r(xs, y, z), h * 0.4);
+      const xs = x;
+      let d = base(xs, y, z);
+      for (const r of regions) d = smin(d, smax(r(xs, y, z), outline(xs, y, z) + h * 0.04, h * 0.1), h * 0.4);
       for (const fr of front) d = smin(d, fr(x, y, z), h * 0.25);
       for (const lb of frontLobes) d = smin(d, lb(x, y, z), h * 0.12);
       d = smax(d, -(y + h * 0.6), h * 0.22);
@@ -332,7 +352,7 @@ function yamatoCarapace(w, h, l, q = 1) {
 // 前節長 PL の約半分が掌部。掌部上縁に大きな瘤の列、不動指は下方へ曲がり（deflexed）、
 // 基部に楔形で縁が細かく波打つ大きな歯を持つ。
 function macroChelaGeo(PL, PH, T, q = 1) {
-  return cached(`mchela:${PL}:${PH}:${T}:${q}`, () => {
+  return cached(`mchela2:${PL}:${PH}:${T}:${q}`, () => {
     const pl = PL * 0.6;   // 掌は長く、指は鉗長の 4 割ほど
     const palm = roundBox([pl * 0.5, 0, 0], [pl * 0.46, PH * 0.4, T * 0.38], T * 0.37);
     const palmRound = ellipsoid([pl * 0.5, 0, 0], [pl * 0.54, PH * 0.53, T * 0.5]);
@@ -346,8 +366,13 @@ function macroChelaGeo(PL, PH, T, q = 1) {
     const wedge = cone([fx(FL * 0.18), fy(FL * 0.18) + PH * 0.05, 0], [fx(FL * 0.26), fy(FL * 0.26) + PH * 0.2, 0], PH * 0.11, PH * 0.035);
     const cren = [];
     for (let i = 0; i < 9; i++) cren.push(sphere([fx(FL * (0.32 + i * 0.07)), fy(FL * (0.32 + i * 0.07)) + PH * 0.1, 0], PH * 0.025));
+    // 外面の縦の隆起線と、下縁の稜
+    const ridge = cone([pl * 0.08, -PH * 0.05, T * 0.36], [pl * 0.9, -PH * 0.12, T * 0.3], PH * 0.05, PH * 0.04);
+    const keel = cone([pl * 0.05, -PH * 0.42, 0], [pl * 0.95, -PH * 0.36, 0], PH * 0.07, PH * 0.06);
     const f = (x, y, z) => {
-      let d = smin(palm(x, y, z), palmRound(x, y, z), PH * 0.25);
+      let d = smin(palm(x, y, z * 1.12), palmRound(x, y, z * 1.12), PH * 0.25) / 1.12;
+      d = smin(d, ridge(x, y, z), PH * 0.08);
+      d = smin(d, keel(x, y, z * 1.3) / 1.3, PH * 0.1);
       for (const t of tub) d = smin(d, t(x, y, z), PH * 0.03);
       d = smin(d, pollex(x, y, z * 1.2) / 1.2, PH * 0.15);
       d = smin(d, wedge(x, y, z * 1.3) / 1.3, PH * 0.04);
@@ -441,7 +466,7 @@ export const CRAB_SPECS = {
     legs: {
       cox: 0.06, bi: 0.08, merus: 0.58, carpus: 0.2, prop: 0.28, dact: 0.25,
       r: 0.062, merusR: 1.45, merusFlat: 0.55, flat: 0.6, k: [0.84, 1.0, 0.97, 0.76], spread: 0.36, curve: 0.08,
-      hipX: 0.8, hipY: 0.5, hipZ: [0.5, 0.18, -0.16, -0.5], coxR: 1.2,
+      hipX: [0.8, 0.8, 0.75, 0.64], hipY: 0.5, hipZ: [0.5, 0.18, -0.16, -0.5], coxR: 1.2,
       setae: [0.03, 0.035, 0.045, 0.055], serrate: 9, reach: 0.8,
       blade: { bi: [0.05, 0.07], merus: [0.088, 0.08], carpus: [0.062, 0.056], prop: [0.05, 0.038], dact: [0.036, 0.003], th: 0.42 },
     },
@@ -461,9 +486,9 @@ function clawGeos(C, q) {
   if (C.macro) {
     return {
       cCox: segGeo(C.cox, C.r * 1.2, C.r * 1.1, 0.85, { q }),
-      cBi: segGeo(C.bi, C.r * 1.05, C.r, 0.8, { q }),
-      cMerus: segGeo(C.merus, C.r * 1.1, C.r, 0.62, { q, serrate: 7 }),
-      cCarpus: segGeo(C.carpus, C.r * 0.95, C.r * 0.9, 0.8, { q }),
+      cBi: segGeo(C.bi, C.r * 1.05, C.r, 0.8, { q, knob: 0 }),
+      cMerus: segGeo(C.merus, C.r * 1.1, C.r, 0.62, { q, serrate: 7, knob: 0 }),
+      cCarpus: segGeo(C.carpus, C.r * 0.8, C.r * 1.0, 0.8, { q }),
       palm: macroChelaGeo(C.PL, C.PH, C.T, q),
       cDact: macroDactGeo(C.PL * 0.47, C.PH, q),
     };
@@ -544,7 +569,7 @@ export function buildCrab(name, mats, male = true, q = 1) {
     for (let i = 0; i < 4; i++) {
       const k = L.k[i];
       const hip = new THREE.Group();
-      hip.position.set(s * S.w * L.hipX, -S.h * L.hipY, S.l * L.hipZ[i]);
+      hip.position.set(s * S.w * (Array.isArray(L.hipX) ? L.hipX[i] : L.hipX), -S.h * L.hipY, S.l * L.hipZ[i]);
       const spread = (i - 1.5) * L.spread;
       const baseYaw = s > 0 ? spread : Math.PI - spread;
       hip.rotation.y = baseYaw;
