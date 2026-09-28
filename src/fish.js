@@ -385,11 +385,11 @@ Paint paint(vec2 p){
     #define WHITE_AT(o) smoothstep(0.42, 0.6, min(min(texture2D(uPhoto, (p + (o) - PU) / PS).r, texture2D(uPhoto, (p + (o) - PU) / PS).g), texture2D(uPhoto, (p + (o) - PU) / PS).b))
     float here = WHITE_AT(vec2(0.0));
     float nearWhite = max(WHITE_AT(vec2(-0.025, -0.025)), WHITE_AT(vec2(-0.048, -0.045)) * 0.85);
-    float rearY = max(smoothstep(0.8, 0.93, s), (1.0 - nearWhite) * (1.0 - here) * smoothstep(0.4, 0.5, s));
+    float rearY = max(smoothstep(0.8, 0.93, s) * max(smoothstep(0.02, 0.07, y - bot), smoothstep(0.93, 0.98, s)), max(1.0 - nearWhite, smoothstep(0.02, -0.07, y) * smoothstep(0.68, 0.8, s)) * (1.0 - here) * smoothstep(0.4, 0.5, s));
     float nearDorsal = smoothstep(0.55, 0.7, s) * smoothstep(0.07, 0.0, top - y);
     float nearAnal = smoothstep(0.62, 0.75, s) * smoothstep(0.05, 0.0, y - bot) * smoothstep(0.02, -0.08, y);
-    float k = max(rearY, max(nearDorsal, nearAnal));
-    col = mix(col, mix(vec3(1.0, 0.82, 0.06), vec3(1.0, 0.68, 0.02), smoothstep(0.0, 0.25, y)), k);
+    float k = max(rearY, nearDorsal);   // (the belly above the anal fin stays white, as photographed)
+    col = mix(col, mix(vec3(1.0, 0.78, 0.04), vec3(1.0, 0.64, 0.01), smoothstep(-0.05, 0.25, y)), k);
   }
   // the photo's stripes are soft (motion + JPEG); reinforce them with the traced stripe field
   float stCore = smoothstep(0.7, 0.9, pm.b) * smoothstep(0.26, 0.3, s) * (1.0 - Y * 0.6);
@@ -647,7 +647,7 @@ export function createButterflyfish(renderer, opts = {}) {
           // median fins are nearly opaque in life; spines show only faintly through the membrane
           float memA = 0.96;
           if (kind < 1.5 && spine) memA = mix(0.95, 0.8, t);
-          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.15, smoothstep(0.9, 0.95, t));      // caudal: clear margin
+          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.45, smoothstep(0.9, 0.95, t));      // caudal: clear margin
           if (kind > 2.5) memA = kind < 3.5 ? mix(0.06, 0.02, t) : mix(0.92, 0.75, t);             // pectoral / pelvic
           vec3 c = diffuseColor.rgb * (kind < 2.5 ? 0.9 : 1.0);
           #ifdef USE_MAP
@@ -665,24 +665,37 @@ export function createButterflyfish(renderer, opts = {}) {
             c = mix(c, vec3(0.04, 0.035, 0.035), smoothstep(uRays - 6.0, uRays - 4.2, r) * smoothstep(0.08, 0.3, t));   // broad black rear margin of the soft dorsal, down into the notch
           }
           if (kind > 0.5 && kind < 1.5) {
-            // anal fin, as photographed: the spiny front and the inner (basal) part are pearl
-            // white, continuous with the flank; a yellow band along the outer part widens to
-            // fill the rounded rear lobe; then a thin dark brown submarginal line and a pale
-            // blue-white margin along the lower and rear edge only
-            float rr = clamp((r - uSpines) / max(uRays - uSpines, 1.0), 0.0, 1.0);   // 0 front .. 1 rear
-            float yStart = mix(0.55, -0.2, smoothstep(0.05, 0.6, rr));
-            float yb = smoothstep(yStart, yStart + 0.18, t);
-            vec3 yl2 = mix(vec3(1.0, 0.8, 0.05), vec3(1.0, 0.7, 0.02), rr);
+            // anal fin, as photographed from the side: the fin is pearl white inside, continuous
+            // with the belly; yellow is a band of fixed width along the outer edge that begins as
+            // a thin line under the belly, widens toward the rear and fills the rounded rear
+            // lobe; a thin dark submarginal line and a pale blue-white rim follow the lobe only
+            int ri = int(clamp(floor(r), 0.0, 24.0));
+            vec2 A = uFinSH[ri], B = uFinSH[ri + 1];
+            vec2 SH = mix(A, B, clamp(r - float(ri), 0.0, 1.0));
+            float sR = SH.x, hR = max(SH.y, 1e-3);
+            float fromEdge = (1.0 - t) * hR;                              // distance to the free edge
+            float bandW = mix(0.007, 0.04, smoothstep(0.55, 0.85, sR)) + smoothstep(0.85, 0.97, sR) * 0.035;
+            float yb = 1.0 - smoothstep(bandW - 0.006, bandW + 0.006, fromEdge);
+            // the white field ends in a rounded corner over the rear lobe: everything behind the
+            // diagonal rear edge of the white (continued from the flank) is yellow
+            #ifdef USE_MAP
+            vec2 pp = vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)}) + vMapUv * vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)});
+            float behind = smoothstep(-0.03, 0.02, pp.x - (0.9 + 0.91 * (-0.09 - pp.y)));
+            yb = max(yb, behind);
+            #endif
+            vec3 yl2 = mix(vec3(1.0, 0.78, 0.04), vec3(1.0, 0.68, 0.01), smoothstep(0.8, 0.98, sR));
             c = mix(vec3(0.84, 0.855, 0.86), yl2, yb);
-            float edge = smoothstep(0.1, 0.35, rr);
-            c = mix(c, vec3(0.16, 0.09, 0.04), (smoothstep(0.86, 0.885, t) - smoothstep(0.905, 0.93, t)) * edge * 0.85);
-            c = mix(c, vec3(0.78, 0.88, 0.96), smoothstep(0.925, 0.955, t) * edge * 0.9);
-            ray *= 0.25;                    // thick, scaled fin: rays barely show
+            float lobe = smoothstep(0.8, 0.92, sR);
+            c = mix(c, vec3(0.2, 0.12, 0.05), (1.0 - smoothstep(0.004, 0.0065, abs(fromEdge - 0.011))) * lobe * 0.8);   // dark submarginal line
+            c = mix(c, vec3(0.8, 0.88, 0.95), (1.0 - smoothstep(0.003, 0.0055, fromEdge)) * 0.85);                     // pale rim
+            if (spine) c = mix(c, vec3(0.9, 0.9, 0.88), 0.7);
+            c *= mix(0.86, 1.0, smoothstep(0.0, 0.35, t));   // root shaded like the curving belly it grows from
+            ray *= 0.2;
           }
           if (kind > 1.5 && kind < 2.5) {
             // caudal: yellow, a thin dark submarginal bar, then a clear margin
             // (photographs: solid yellow fan, one thin dark submarginal line, narrow clear edge)
-            c = mix(c, vec3(1.0, 0.8, 0.04), 0.6);
+            c = mix(c, vec3(1.0, 0.76, 0.03), 0.65);
             float bar = smoothstep(0.855, 0.87, t) * (1.0 - smoothstep(0.89, 0.905, t));
             c = mix(c, vec3(0.2, 0.14, 0.05), bar * 0.6);
             ray *= 0.3;
@@ -693,7 +706,7 @@ export function createButterflyfish(renderer, opts = {}) {
           // rays: faint ridges only (the membrane is thick)
           vec3 rayC = spine ? c * 1.06 + 0.02 : c * 1.05 + 0.015;
           c = mix(c, rayC, ray * 0.07);
-          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.25, smoothstep(0.9, 0.95, t)) : 0.98), ray);
+          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.5, smoothstep(0.9, 0.95, t)) : 0.98), ray);
           a = mix(a, 1.0, opaque);
           a *= smoothstep(0.0, 0.03, 1.0 - t + 0.02);
           if (kind > 2.5 && kind < 3.5) a *= smoothstep(0.05, 0.45, abs(dot(normalize(vNormal), normalize(vViewPosition))));
@@ -701,7 +714,7 @@ export function createButterflyfish(renderer, opts = {}) {
           vFinGlow = c * (1.0 - a) * 0.35;
         }`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vFinGlow * uGlow;')
-      .replace('varying vec2 vFin; uniform float uKind;', 'varying vec2 vFin; vec3 vFinGlow; uniform float uGlow; uniform float uRays; uniform float uKind;');
+      .replace('varying vec2 vFin; uniform float uKind;', 'varying vec2 vFin; vec3 vFinGlow; uniform float uGlow; uniform float uRays; uniform float uKind; uniform vec2 uFinSH[26];');
   };
   const mkFinMat = (kind, spines, rays = 0) => {
     const m = new THREE.MeshPhysicalMaterial({
@@ -710,13 +723,16 @@ export function createButterflyfish(renderer, opts = {}) {
       clearcoat: kind === 3 ? 0.0 : 0.08, clearcoatRoughness: 0.25, depthWrite: true,
       sheen: 0.0, sheenColor: new THREE.Color(1, 1, 1), sheenRoughness: 0.6,
     });
-    const u = { uKind: { value: kind }, uSpines: { value: spines }, uGlow: uniforms.uGlow, uRays: { value: rays } };
+    // per-ray (s at the base, ray length) so the fin shader can paint bands of fixed width from the edge
+    const L = kind === 1 ? layouts.anal : null;
+    const sh = Array.from({ length: 26 }, (_, i) => L && L.base[i] ? new THREE.Vector2(L.base[i][0], Math.hypot(L.tip[i][0] - L.base[i][0], L.tip[i][1] - L.base[i][1])) : new THREE.Vector2());
+    const u = { uKind: { value: kind }, uSpines: { value: spines }, uGlow: uniforms.uGlow, uRays: { value: rays }, uFinSH: { value: sh } };
     addSwim(m, { ...uniforms, ...u }, { key: 'fin' + kind, frag: finFrag(kind), noBend: kind >= 3 });
     return m;
   };
 
   const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, ridge: 0.08, sub: 4, segs: 18, pleat: 0.0005, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.012 }), mkFinMat(0, 12, 37));
-  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, ridge: 0.02, sub: 4, segs: 16, pleat: 0.0002, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.012 }), mkFinMat(1, 2, 23));
+  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, ridge: 0.02, sub: 4, segs: 16, pleat: 0.0002, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.012 }), mkFinMat(1, 2, 25));
   const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, ridge: 0.06, sub: 4, segs: 16, pleat: 0.0004, scallop: 0.006, thick: 0.005 }), mkFinMat(2, -1));
   for (const m of [dorsal, anal, caudal]) { m.renderOrder = 2; group.add(m); }
 
