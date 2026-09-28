@@ -421,7 +421,7 @@ function buildFish(o, rnd) {
   const uv = bg.attributes.uv, bp = bg.attributes.position;
   for (let i = 0; i < uv.count; i++) {
     const z = bp.getZ(i), y = bp.getY(i);
-    uv.setXY(i, 1 - (z / L + 0.62), 0.5 - y / (o.girth * L * 0.2));
+    uv.setXY(i, 1 - (z / L + 0.62), 0.5 + y / (o.girth * L * 0.2));
   }
   // 頭部はやや扁平で幅広（ハゼ型）
   for (let i = 0; i < bp.count; i++) {
@@ -1060,10 +1060,6 @@ class Clam extends Agent {
     g.scale(0.8, 0.62, 0.4);
     const shell = new THREE.Mesh(g, physMat({ map: tex, roughness: 0.42, clearcoat: 0.55 }));
     root.add(shell);
-    // 殻の合わせ目
-    const seam = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.012, 6, 48), physMat({ color: 0x3b3129 }));
-    seam.scale.set(1.05, 0.82, 1); seam.position.y = 0.02;
-    root.add(seam);
     // 水管（入水管・出水管）
     const siphMat = physMat({ color: 0xc8b8a2, roughness: 0.35, sheen: 0.3 });
     const tipMat = physMat({ color: 0x5a4632, roughness: 0.4 });
@@ -1255,7 +1251,7 @@ export class Ecosystem {
     };
 
     const kome = {
-      w: 0.24, h: 0.16, l: 0.21, legLen: 0.42, legR: 0.028, clawLen: 0.3, clawBig: 1,
+      w: 0.24, h: 0.15, l: 0.21, legLen: 0.62, legR: 0.03, clawLen: 0.3, clawBig: 1,
       eyeSep: 0.07, eyeLen: 0.08, eyeR: 0.02, eyeSplay: 1.1, eyeUp: 0.9, eyeRaise: 0,
       holeR: 0.13, roam: 2.2, speed: 0.55, pellets: true, waver: false,
       bodyMat: physMat({ map: mottled('#a89272', '#5e4d3a', '#cbb898', rnd, 420), roughness: 0.6, clearcoat: 0.25 }),

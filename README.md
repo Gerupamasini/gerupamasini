@@ -1,5 +1,7 @@
 # 干潟観察 — 葛西の渚
 
+![screenshot](screenshot.png)
+
 東京湾奥・葛西海浜公園の干潟をモデルにした、生き物を上から観察するだけの 3D 観察ゲーム（Three.js / WebGL）。
 
 ## 起動

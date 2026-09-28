@@ -330,7 +330,7 @@ export class World {
           float fn = snoise(p*1.6 + uTime*vec2(0.15,0.11))*0.5 + snoise(p*4.0 - uTime*0.2)*0.3;
           float foamBand = smoothstep(0.14, 0.0, depth) * smoothstep(-0.02, 0.03, depth);
           float foam = foamBand * smoothstep(0.1, 0.6, fn + 0.15*sin(depth*25.0 - uTime*1.3 + fn*4.0));
-          float bubbles = smoothstep(0.78, 0.9, snoise(p*2.3 + uTime*0.05)) * smoothstep(0.6, 0.0, depth) * 0.6;
+          float bubbles = smoothstep(0.82, 0.95, snoise(p*11.0 + uTime*0.05)) * smoothstep(0.4, 0.8, snoise(p*0.7 - uTime*0.02)) * smoothstep(0.35, 0.0, depth) * 0.45;
           foam = max(foam, bubbles*edge);
 
           vec3 col = scatter*(1.0-fres) + sky*fres + spec*uSunCol*uSunUp;
@@ -384,7 +384,7 @@ export class World {
     this.hemi = new THREE.HemisphereLight(0xbfd6ff, 0x8a7a5c, 0.6);
     this.scene.add(this.hemi);
 
-    this.scene.fog = new THREE.FogExp2(0xc8d4dc, 0.0011);
+    this.scene.fog = new THREE.FogExp2(0xc8d4dc, 0.00115);
     this.lastEnvHour = -99;
   }
 
@@ -480,9 +480,9 @@ export class World {
     const city = new THREE.InstancedMesh(boxGeo, cityMat, nb);
     for (let i = 0; i < nb; i++) {
       const ang = -0.9 + rnd() * 1.8;
-      const r = 1500 + rnd() * 400;
+      const r = 1900 + rnd() * 500;
       const x = Math.sin(ang) * r, z = -Math.cos(ang) * r;
-      const w = 20 + rnd() * 50, h = 15 + Math.pow(rnd(), 3) * 170;
+      const w = 18 + rnd() * 40, h = 8 + Math.pow(rnd(), 4) * 150;
       q.setFromEuler(new THREE.Euler(0, rnd() * 3, 0));
       m.compose(p.set(x, -3, z), q, s.set(w, h, w * (0.6 + rnd())));
       city.setMatrixAt(i, m);
