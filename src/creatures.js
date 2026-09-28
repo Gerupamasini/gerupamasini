@@ -1223,8 +1223,8 @@ export class Ecosystem {
         dactA: chela(0.5, [0xc8c09a, 0xdcb444, 0x9a5020], [0.58, 0, 1, 0]),
         clawB: chela(0.41, [0xe8d49a, 0xe2b456, 0xa85a24], [0.58, 0, 0, 0]),
         dactB: chela(0.51, [0xe8d49a, 0xe0ac4c, 0x9a5020], [0.58, 0, 1, 0]),
-        clawF: chela(0.45, [0xd6c89c, 0xd8b066, 0xa87038], [0.4, 0, 0, 0]),
-        dactF: chela(0.55, [0xd4c89e, 0xd4a85a, 0xa06a30], [0.4, 0, 1, 0]),
+        clawF: chela(0.45, [0xd6c89c, 0xd8b066, 0xa87038], [0.46, 0, 0, 0]),
+        dactF: chela(0.55, [0xd4c89e, 0xd4a85a, 0xa06a30], [0.46, 0, 1, 0]),
         mouth: organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.2, colors: [0xb4b4ac, 0xa2a29a, 0xc6c6be], P: [1, 0, 0, 0], roughness: 0.22, clearcoat: 1.0, clearcoatRoughness: 0.08 }),
         setae: new THREE.MeshStandardMaterial({ color: 0x5a5234, roughness: 0.7, side: THREE.DoubleSide }),
       };
@@ -1234,10 +1234,10 @@ export class Ecosystem {
       key: 'yamaShell3', glsl: GLSL.yamatoShell, seed,
       colors: [0x524e34, 0x74704c, 0xa29a68, 0x645e4a],
       P: [CRAB_SPECS.yamato.l, CRAB_SPECS.yamato.w, CRAB_SPECS.yamato.h, 0],
-      roughness: 0.46, clearcoat: 0.7, clearcoatRoughness: 0.14,
+      roughness: 0.52, clearcoat: 0.45, clearcoatRoughness: 0.28,
     });
     const B = seed > 0.5;
-    return { shell, leg: sh.leg, legDact: sh.legDact, claw: B ? sh.clawB : sh.clawA, dact: B ? sh.dactB : sh.dactA, clawF: sh.clawF, dactF: sh.dactF, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.yamaCornea || (this.yamaCornea = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0x9a9c96, 0x2a2a2c], roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.03 })) };
+    return { shell, leg: sh.leg, legDact: sh.legDact, claw: B ? sh.clawB : sh.clawA, dact: B ? sh.dactB : sh.dactA, clawF: sh.clawF, dactF: sh.dactF, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.yamaCornea || (this.yamaCornea = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0xb4b8b6, 0x2e3032], roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.12 })) };
   }
 
   kometsukiMaterials(seed) {

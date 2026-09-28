@@ -474,9 +474,9 @@ export const CRAB_SPECS = {
     // 前節高 PH ≈ 前節長 PL × 0.27（美濃・伊谷 2024 の計測図）
     // 鉗脚の底節は甲の下、口の脇の腹面に付く（前側縁の角ではない）
     claw: { cox: 0.05, bi: 0.06, merus: 0.28, carpus: 0.15, PL: 0.58, PH: 0.16, T: 0.09, r: 0.05, macro: true, shX: 0.36, shY: 0.55, shZ: 0.5, tuft: 0.07 },
-    clawF: { cox: 0.045, bi: 0.05, merus: 0.22, carpus: 0.12, PL: 0.4, PH: 0.11, T: 0.065, r: 0.04, macro: true, shX: 0.36, shY: 0.55, shZ: 0.55 },
+    clawF: { cox: 0.045, bi: 0.05, merus: 0.22, carpus: 0.12, PL: 0.46, PH: 0.13, T: 0.065, r: 0.04, macro: true, shX: 0.36, shY: 0.55, shZ: 0.55 },
     // 眼柄は細長く、額の脇から V 字に立ち上がる
-    eye: { stalk: 0.4, r: 0.015, cornea: 0.021, cLen: 1.7, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },
+    eye: { stalk: 0.4, r: 0.015, cornea: 0.024, cLen: 1.9, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },
     mouth: 0.25, mouthTilt: 1.15, mouthPos: [0.19, -0.5, 0.76], antenna: 0.1,
     Hb: 0.26, phiD: 0.95, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
   },
