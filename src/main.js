@@ -3,11 +3,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { World } from './world.js';
 import { applyUnderwater } from './shaders.js';
+import { setWorldUniforms } from './materials.js';
 import { Ecosystem } from './creatures.js';
+import { WaterPass } from './water.js';
+import { makeDOFPass, makeGradePass } from './post.js';
 import { SPECIES, ORDER } from './species.js';
 
 const params = new URLSearchParams(location.search);
@@ -21,62 +23,54 @@ renderer.toneMappingExposure = 0.9;
 document.getElementById('app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 6000);
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.04, 6000);
 camera.position.set(6, 30, 26);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.07;
-controls.minDistance = 2.5;
+controls.minDistance = 1.2;
 controls.maxDistance = 110;
-controls.maxPolarAngle = 1.35;
+controls.maxPolarAngle = 1.4;
 controls.screenSpacePanning = false;
 controls.panSpeed = 1.2;
+controls.zoomSpeed = 1.2;
 
 const world = new World(scene, renderer);
+setWorldUniforms(world.uniforms);
 const eco = new Ecosystem(world);
 scene.traverse((o) => {
-  if (!o.isMesh || o === world.terrain || o === world.waterMesh) return;
+  if (!o.isMesh || o === world.terrain) return;
   const ms = Array.isArray(o.material) ? o.material : [o.material];
-  for (const m of ms) if ((m.isMeshStandardMaterial) && m !== world.terrainMat) applyUnderwater(m, world.uniforms);
+  for (const m of ms) {
+    if (!m.isMeshStandardMaterial || m === world.terrainMat || m === world.featureMat || m.userData.u) continue;
+    applyUnderwater(m, world.uniforms);
+  }
 });
 
 // ---------- ポストプロセス ----------
+// シーン → 水面（屈折・吸収・反射） → 被写界深度 → ブルーム → 色調 → 出力
 const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 });
+rt.depthTexture = new THREE.DepthTexture(innerWidth, innerHeight, THREE.FloatType);
 const composer = new EffectComposer(renderer, rt);
 composer.setPixelRatio(renderer.getPixelRatio());
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.12, 0.45, 1.6);
+const water = new WaterPass(camera, world);
+composer.addPass(water);
+const dof = makeDOFPass();
+composer.addPass(dof);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.14, 0.5, 1.4);
 composer.addPass(bloom);
-// ティルトシフト（ミニチュア感）＋ビネット＋色調
-const grade = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, uRes: { value: new THREE.Vector2(innerWidth, innerHeight) }, uTilt: { value: 1 }, uFocusY: { value: 0.5 } },
-  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uTilt; uniform float uFocusY; varying vec2 vUv;
-    void main(){
-      float d = abs(vUv.y - uFocusY);
-      float blur = smoothstep(0.18, 0.55, d) * 3.2 * uTilt;
-      vec3 c = texture2D(tDiffuse, vUv).rgb;
-      if (blur > 0.05) {
-        vec3 acc = c; float w = 1.0;
-        for (int i=0;i<12;i++){
-          float a = float(i)*2.39996; float r = sqrt(float(i)+0.5)/3.5;
-          vec2 o = vec2(cos(a),sin(a))*r*blur/uRes*3.0;
-          acc += texture2D(tDiffuse, vUv+o).rgb; w += 1.0;
-        }
-        c = acc/w;
-      }
-      // 軽い色調補正
-      float l = dot(c, vec3(0.2126,0.7152,0.0722));
-      c = mix(vec3(l), c, 1.08);
-      vec2 q = vUv - 0.5;
-      c *= 1.0 - dot(q,q)*0.55;
-      gl_FragColor = vec4(c, 1.0);
-    }`,
-});
+const grade = makeGradePass();
 composer.addPass(grade);
 composer.addPass(new OutputPass());
+function sizePasses() {
+  const pr = renderer.getPixelRatio();
+  water.setSize(innerWidth * pr, innerHeight * pr);
+  dof.uniforms.uRes.value.set(innerWidth * pr, innerHeight * pr);
+}
+sizePasses();
 
 // ---------- 時間と潮 ----------
 const state = {
@@ -86,7 +80,7 @@ const state = {
   paused: false,
   t: 0,
   follow: null,
-  tilt: true,
+  dof: true,
 };
 const TIDE_MID = -0.35, TIDE_AMP = 1.35;
 const TIDE_PERIOD = 300; // 秒（速度1のとき）
@@ -124,7 +118,7 @@ tideSlider.addEventListener('input', () => { state.tidePhase = +tideSlider.value
 hourSlider.addEventListener('input', () => { state.hour = +hourSlider.value; world.setTimeOfDay(state.hour); });
 speedSlider.addEventListener('input', () => { state.speed = +speedSlider.value; $('#speed-v').textContent = `×${state.speed}`; });
 $('#pause').addEventListener('click', () => { state.paused = !state.paused; $('#pause').textContent = state.paused ? '▶ 再生' : '❚❚ 一時停止'; });
-$('#tiltbtn').addEventListener('click', () => { state.tilt = !state.tilt; $('#tiltbtn').classList.toggle('on', state.tilt); });
+$('#tiltbtn').addEventListener('click', () => { state.dof = !state.dof; $('#tiltbtn').classList.toggle('on', state.dof); });
 $('#topbtn').addEventListener('click', () => {
   const d = camera.position.distanceTo(controls.target);
   camPos.set(controls.target.x, controls.target.y + d * 0.98, controls.target.z + d * 0.2);
@@ -164,8 +158,8 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 });
 
 const ring = new THREE.Mesh(
-  new THREE.RingGeometry(0.96, 1.0, 64).rotateX(-Math.PI / 2),
-  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false })
+  new THREE.RingGeometry(0.975, 1.0, 96).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false, toneMapped: false })
 );
 ring.renderOrder = 20;
 ring.visible = false;
@@ -179,7 +173,7 @@ function select(a) {
   $('#card-size').textContent = sp.size;
   $('#card-text').textContent = sp.text;
   $('#card').classList.add('show');
-  const dist = { kometsuki: 5, yamato: 8, sunamogri: 6, mahaze: 7, himehaze: 6, yadokari: 6, arumushiro: 5, asari: 6, mategai: 7 }[a.species] || 7;
+  const dist = { kometsuki: 2.6, yamato: 4.5, sunamogri: 3.2, mahaze: 3.5, himehaze: 3, yadokari: 2.8, arumushiro: 2.6, asari: 3, mategai: 3.5 }[a.species] || 4;
   const dir = camera.position.clone().sub(controls.target).normalize();
   if (dir.y < 0.55) { dir.y = 0.8; dir.normalize(); }
   camPos.copy(a.root.position).addScaledVector(dir, dist);
@@ -228,8 +222,9 @@ function frame() {
   if (Math.abs(+hourSlider.value - state.hour) > 0.05) { hourSlider.value = state.hour; world.setTimeOfDay(state.hour); }
 
   const level = tideLevel(state.tidePhase);
-  world.update(dt, state.t, level, controls.target);
-  eco.update(dt, state.t);
+  const camDist = camera.position.distanceTo(controls.target);
+  world.update(dt, state.t, level, controls.target, camDist);
+  eco.update(dt, state.t, camera.position);
 
   // 追従カメラ
   if (state.follow) {
@@ -251,13 +246,17 @@ function frame() {
   controls.update();
   // カメラが地面や水面に潜らないように
   const gh = world.heightAt(camera.position.x, camera.position.z);
-  camera.position.y = Math.max(camera.position.y, Math.max(gh, level) + 1.0);
+  camera.position.y = Math.max(camera.position.y, Math.max(gh, level) + 0.3);
 
-  // ティルトシフトの焦点を注視点の画面位置に
-  const sp = controls.target.clone().project(camera);
-  grade.uniforms.uFocusY.value = THREE.MathUtils.clamp(sp.y * 0.5 + 0.5, 0.2, 0.8);
-  const camDist = camera.position.distanceTo(controls.target);
-  grade.uniforms.uTilt.value = state.tilt ? THREE.MathUtils.smoothstep(camDist, 4, 30) * 0.8 + 0.2 : 0;
+  // 被写界深度：注視点に合焦。近いほど浅い（マクロレンズの挙動）
+  const focus = camera.position.distanceTo(controls.target);
+  const realDt = Math.min((performance.now() - lastReal) / 1000, 1); lastReal = performance.now();
+  focusDist = THREE.MathUtils.lerp(focusDist, focus, 1 - Math.exp(-realDt * 6));
+  const pr = renderer.getPixelRatio();
+  dof.uniforms.uFocus.value = focusDist;
+  dof.uniforms.uAperture.value = state.dof ? (36 / focusDist) * (innerHeight * pr / 1080) : 0;
+  dof.uniforms.uMaxBlur.value = 10 * (innerHeight * pr / 1080);
+  grade.uniforms.uTime.value = state.t % 100;
 
   // HUD
   countT -= rawDt;
@@ -292,11 +291,13 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   composer.setSize(innerWidth, innerHeight);
-  grade.uniforms.uRes.value.set(innerWidth, innerHeight);
+  sizePasses();
 });
 
 // 最初の数フレームで初期状態を安定させる
-for (let i = 0; i < 90; i++) { world.update(1 / 30, i / 30, tideLevel(state.tidePhase), controls.target); eco.update(1 / 30, i / 30); }
+let focusDist = camera.position.distanceTo(controls.target);
+let lastReal = performance.now();
+for (let i = 0; i < 90; i++) { world.update(1 / 30, i / 30, tideLevel(state.tidePhase), controls.target, focusDist); eco.update(1 / 30, i / 30, camera.position); }
 state.t = 3;
 document.body.classList.add('ready');
 window.__game = { world, eco, state, camera, controls, select };

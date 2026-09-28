@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { createNoise2D, fbm, mulberry32 } from './noise.js';
-import { NOISE_GLSL, CAUSTIC_GLSL } from './shaders.js';
+import { NOISE_GLSL, CAUSTIC_GLSL, SUNVIS_GLSL } from './shaders.js';
 
 export const SIZE = 240;          // 地形の一辺（1単位 ≒ 2.5cm のミニチュアスケール）
 const RES = 480;                  // 地形メッシュの分割数
@@ -110,6 +110,14 @@ export class World {
 
   depthAt(x, z) { return this.water - this.heightAt(x, z); }
 
+  // 泥っぽさ（低い場所・澪筋の近くほど泥）
+  siltAt(x, z, h = this.heightAt(x, z)) {
+    const d = Math.abs(x - channelCenter(z));
+    let s = smooth(0.1, -1.0, h) * 0.8 + Math.exp(-(d * d) / 60) * 0.5;
+    s += nD(x * 0.04, z * 0.04) * 0.25;
+    return Math.min(1, Math.max(0, s));
+  }
+
   // ---------- 砂泥の地形 ----------
   buildTerrain() {
     const geo = new THREE.PlaneGeometry(SIZE, SIZE, RES, RES);
@@ -123,14 +131,12 @@ export class World {
       const h = this.grid[j * n + i];
       pos.setY(k, h);
       const x = pos.getX(k), z = pos.getZ(k);
-      const d = Math.abs(x - channelCenter(z));
-      let s = smooth(0.1, -1.0, h) * 0.8 + Math.exp(-(d * d) / 60) * 0.5;
-      s += nD(x * 0.04, z * 0.04) * 0.25;
-      silt[k] = Math.min(1, Math.max(0, s));
+      silt[k] = this.siltAt(x, z, h);
       pool[k] = this.pool[j * n + i];
     }
     geo.setAttribute('aSilt', new THREE.BufferAttribute(silt, 1));
     geo.setAttribute('aPool', new THREE.BufferAttribute(pool, 1));
+    geo.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(pos.count).fill(1), 1));
     geo.computeVertexNormals();
 
     const grain = makeSandTextures();
@@ -142,6 +148,26 @@ export class World {
     }
     grain.map.colorSpace = THREE.SRGBColorSpace;
 
+    this.initHoleMask();
+    const mat = this.makeTerrainMaterial(grain, true);
+    this.featureMat = this.makeTerrainMaterial(grain, false);
+    this.terrainMat = mat;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    this.scene.add(mesh);
+    this.terrain = mesh;
+
+    // 地形の外側（沖の海底）
+    const bed = new THREE.Mesh(
+      new THREE.PlaneGeometry(6000, 6000),
+      new THREE.MeshStandardMaterial({ color: 0x3d3a30, roughness: 1 })
+    );
+    bed.rotation.x = -Math.PI / 2;
+    bed.position.y = -4.6;
+    this.scene.add(bed);
+  }
+
+  makeTerrainMaterial(grain, holes) {
     const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map: grain.map,
@@ -156,15 +182,15 @@ export class World {
       Object.assign(sh.uniforms, U);
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
-          attribute float aSilt; attribute float aPool;
-          varying vec3 vWPos; varying float vSilt; varying float vPool;`)
+          attribute float aSilt; attribute float aPool; attribute float aAO;
+          varying vec3 vWPos; varying float vSilt; varying float vPool; varying float vAO;`)
         .replace('#include <project_vertex>', `#include <project_vertex>
-          vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz; vSilt = aSilt; vPool = aPool;`);
+          vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz; vSilt = aSilt; vPool = aPool; vAO = aAO;`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
           uniform float uTime; uniform float uWater; uniform vec3 uSunDir; uniform vec3 uSunCol;
           uniform float uSunUp; uniform vec3 uMurk; uniform float uAmbient;
-          varying vec3 vWPos; varying float vSilt; varying float vPool;
+          varying vec3 vWPos; varying float vSilt; varying float vPool; varying float vAO;
           ${NOISE_GLSL}
           ${CAUSTIC_GLSL}
           float rippleH(vec2 p){
@@ -198,8 +224,9 @@ export class World {
           diffuseColor.rgb *= mix(1.0, 0.52 - 0.12*vSilt, wet);
           diffuseColor.rgb *= mix(1.0, 0.78, puddle);`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-          roughnessFactor = mix(0.93, 0.32, wet*wet);
-          roughnessFactor = mix(roughnessFactor, 0.05, puddle);`)
+          roughnessFactor = mix(0.93, 0.3, wet*wet);
+          roughnessFactor = mix(roughnessFactor, 0.05, puddle);
+          roughnessFactor = mix(roughnessFactor, 0.8, smoothstep(0.0, 0.02, depth));   // 水中の砂に空気との鏡面反射はない`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
           {
             float camD = length(cameraPosition - vWPos);
@@ -218,137 +245,150 @@ export class World {
           }`)
         .replace('#include <opaque_fragment>', `
           {
+            ${SUNVIS_GLSL}
             // 雲の影
             float cl = smoothstep(0.05, 0.75, snoise(wp*0.010 + uTime*vec2(0.0045, 0.003)));
             outgoingLight *= 1.0 - 0.22*cl*uSunUp;
+            float camD = length(cameraPosition - vWPos);
+            // 乾いた砂粒のきらめき
+            if (depth < -0.05 && camD < 14.0) {
+              vec2 gc = floor(wp*140.0);
+              float hh = hash12(gc);
+              if (hh > 0.985) {
+                vec3 gn = normalize(vec3(hash12(gc+1.7)-0.5, 1.2, hash12(gc+3.1)-0.5));
+                vec3 Vd = normalize(cameraPosition - vWPos);
+                float gs = pow(max(dot(gn, normalize(uSunDir + Vd)), 0.0), 400.0);
+                vec2 fp = fract(wp*140.0) - 0.5;
+                outgoingLight += uSunCol * gs * 6.0 * smoothstep(0.35, 0.1, length(fp)) * sunVis * (1.0 - wet) * (1.0 - smoothstep(6.0, 14.0, camD));
+              }
+            }
             if (depth > 0.0) {
               vec2 cuv = wp*0.11;
-              vec3 c = caustic3(cuv, uTime*0.45) * 0.7 + caustic3(cuv*1.7+3.1, uTime*0.6) * 0.45;
-              float cm = smoothstep(0.0, 0.25, depth) * exp(-depth*0.45) * (1.0-0.6*cl);
-              outgoingLight += c * cm * uSunCol * diffuseColor.rgb * 1.4 * uSunUp;
-              vec3 ext = exp(-vec3(0.62, 0.36, 0.46) * depth * 0.55);
-              outgoingLight = mix(uMurk * uAmbient, outgoingLight * ext, exp(-depth*0.16));
+              vec3 c = caustic3(cuv, uTime*0.45) * 0.75 + caustic3(cuv*1.7+3.1, uTime*0.6) * 0.45;
+              float cm = smoothstep(0.0, 0.12, depth) * exp(-depth*0.12) * (1.0-0.6*cl) * sunVis;
+              outgoingLight += c * cm * uSunCol * diffuseColor.rgb * 1.5 * uSunUp;
+              // 水中へ届く光の減衰（下向き光）
+              outgoingLight *= exp(-vec3(0.05, 0.02, 0.028) * depth * 0.6);
             }
+            outgoingLight *= mix(0.06, 1.0, vAO);
           }
           #include <opaque_fragment>`);
+      if (holes) {
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', `#include <common>
+            uniform sampler2D uHoles; uniform float uHoleExt;`)
+          .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+            {
+              vec2 huv = (vWPos.xz + uHoleExt) / (2.0 * uHoleExt);
+              if (all(greaterThan(huv, vec2(0.0))) && all(lessThan(huv, vec2(1.0))) && texture2D(uHoles, huv).r > 0.5) discard;
+            }`);
+      }
     };
-    this.terrainMat = mat;
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.receiveShadow = true;
-    this.scene.add(mesh);
-    this.terrain = mesh;
-
-    // 地形の外側（沖の海底）
-    const bed = new THREE.Mesh(
-      new THREE.PlaneGeometry(6000, 6000),
-      new THREE.MeshStandardMaterial({ color: 0x3d3a30, roughness: 1 })
-    );
-    bed.rotation.x = -Math.PI / 2;
-    bed.position.y = -4.6;
-    this.scene.add(bed);
+    mat.customProgramCacheKey = () => (holes ? 'terrain-h' : 'terrain-f');
+    return mat;
   }
 
-  // ---------- 水面 ----------
+  // ---------- 水面（描画はスクリーン空間の WaterPass で行う） ----------
   buildWater() {
-    // 地形高さテクスチャ（水深計算用）
-    const TN = 512;
-    const data = new Uint16Array(TN * TN);
-    for (let j = 0; j < TN; j++) for (let i = 0; i < TN; i++) {
-      const x = ((i + 0.5) / TN - 0.5) * SIZE, z = ((j + 0.5) / TN - 0.5) * SIZE;
-      data[j * TN + i] = THREE.DataUtils.toHalfFloat(this.heightAt(x, z));
+    this.waveNormal = makeWaveNormal(256);
+  }
+
+  // ---------- 巣穴・マウンドなどの地表の起伏（地形に頂点ごとに沿わせる） ----------
+  // prof(r, angle) -> [高さ, AO] 。r は 0..1 に正規化した半径。shaft は中心の竪穴。
+  makeGroundFeature(x, z, radius, prof, opts = {}) {
+    const rings = opts.rings || 22, segs = opts.segs || 36;
+    const sx = opts.sx || 1, sz = opts.sz || 1, rot = opts.rot || 0;
+    const shaft = opts.shaft;   // { r, depth }
+    const pos = [], silt = [], pool = [], ao = [], idx = [], uv = [];
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const rows = [];
+    if (shaft) {
+      rows.push({ kind: 'bottom' });
+      for (let k = 6; k >= 1; k--) rows.push({ kind: 'shaft', k: k / 6 });
     }
-    const hTex = new THREE.DataTexture(data, TN, TN, THREE.RedFormat, THREE.HalfFloatType);
-    hTex.magFilter = hTex.minFilter = THREE.LinearFilter;
-    hTex.needsUpdate = true;
+    for (let i = 0; i <= rings; i++) rows.push({ kind: 'surf', t: i / rings });
+    const rMin = shaft ? shaft.r / radius : 0.0;
+    for (const R of rows) {
+      for (let j = 0; j <= segs; j++) {
+        const a = (j / segs) * Math.PI * 2;
+        let lx, lz, y, o;
+        if (R.kind === 'surf') {
+          const r = rMin + (1 - rMin) * R.t;
+          lx = Math.cos(a) * r * radius * sx; lz = Math.sin(a) * r * radius * sz;
+          const pr = prof(r, a);
+          y = pr[0]; o = pr[1];
+          if (shaft) o *= THREE.MathUtils.lerp(0.35, 1, THREE.MathUtils.smoothstep(r, rMin, rMin + 0.3));
+        } else {
+          const k = R.kind === 'bottom' ? 1 : R.k;
+          const rr = R.kind === 'bottom' ? 0 : shaft.r * (1 - k * 0.3);
+          lx = Math.cos(a) * rr * sx; lz = Math.sin(a) * rr * sz;
+          y = prof(rMin, a)[0] - shaft.depth * k;
+          o = 0.3 * (1 - k) ** 2;
+        }
+        const wx = x + lx * cr - lz * sr, wz = z + lx * sr + lz * cr;
+        pos.push(wx, this.heightAt(wx, wz) + y + 0.003, wz);
+        uv.push(wx / SIZE + 0.5, 0.5 - wz / SIZE);
+        silt.push(this.siltAt(wx, wz)); pool.push(0); ao.push(o);
+      }
+    }
+    for (let i = 0; i < rows.length - 1; i++) for (let j = 0; j < segs; j++) {
+      const A = i * (segs + 1) + j, B = A + segs + 1;
+      idx.push(A, A + 1, B, B, A + 1, B + 1);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('aSilt', new THREE.Float32BufferAttribute(silt, 1));
+    geo.setAttribute('aPool', new THREE.Float32BufferAttribute(pool, 1));
+    geo.setAttribute('aAO', new THREE.Float32BufferAttribute(ao, 1));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, this.featureMat);
+    m.receiveShadow = true;
+    m.castShadow = !!opts.cast;
+    this.scene.add(m);
+    if (shaft) this.cutHole(x, z, shaft.r * 1.35, sx, sz, rot);
+    return m;
+  }
 
-    const nTex = makeWaveNormal(256);
-    const U = this.uniforms;
-    this.waterUniforms = {
-      ...U,
-      uHeight: { value: hTex },
-      uNormal: { value: nTex },
-      uSize: { value: SIZE },
-      uSkyTop: { value: new THREE.Color(0.35, 0.55, 0.85) },
-      uSkyHor: { value: new THREE.Color(0.8, 0.85, 0.9) },
-      uShallow: { value: new THREE.Color(0.36, 0.40, 0.30) },
-      uDeep: { value: new THREE.Color(0.07, 0.15, 0.13) },
-      fogColor: { value: new THREE.Color() },
-      fogDensity: { value: 0 },
-    };
-    const mat = new THREE.ShaderMaterial({
-      uniforms: this.waterUniforms,
-      transparent: true,
-      depthWrite: false,
-      fog: true,
-      vertexShader: /* glsl */ `
-        varying vec3 vWPos;
-        #include <fog_pars_vertex>
-        void main(){
-          vec4 wp = modelMatrix * vec4(position, 1.0);
-          vWPos = wp.xyz;
-          vec4 mvPosition = viewMatrix * wp;
-          gl_Position = projectionMatrix * mvPosition;
-          #include <fog_vertex>
-        }`,
-      fragmentShader: /* glsl */ `
-        uniform sampler2D uHeight; uniform sampler2D uNormal;
-        uniform float uSize, uWater, uTime, uSunUp, uAmbient;
-        uniform vec3 uSunDir, uSunCol, uSkyTop, uSkyHor, uShallow, uDeep;
-        varying vec3 vWPos;
-        #include <common>
-        #include <fog_pars_fragment>
-        ${NOISE_GLSL}
-        void main(){
-          vec2 uv = vWPos.xz / uSize + 0.5;
-          float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
-          float h = mix(-4.6, texture2D(uHeight, clamp(uv, 0.001, 0.999)).r, inside);
-          float depth = uWater - h;
-          if (depth < -0.01) discard;
-          float camD = length(cameraPosition - vWPos);
+  // 地形メッシュに穴を開けるマスク（巣穴の竪穴を見せるため）
+  initHoleMask() {
+    this.holeN = 2048;
+    this.holeExt = 64;
+    this.holeData = new Uint8Array(this.holeN * this.holeN);
+    this.holeTex = new THREE.DataTexture(this.holeData, this.holeN, this.holeN, THREE.RedFormat, THREE.UnsignedByteType);
+    this.holeTex.magFilter = THREE.LinearFilter;
+    this.holeTex.minFilter = THREE.LinearFilter;
+    this.holeTex.needsUpdate = true;
+    this.uniforms.uHoles = { value: this.holeTex };
+    this.uniforms.uHoleExt = { value: this.holeExt };
+  }
 
-          vec2 p = vWPos.xz;
-          vec3 n1 = texture2D(uNormal, p*0.045 + uTime*vec2(0.012, 0.007)).xyz*2.0-1.0;
-          vec3 n2 = texture2D(uNormal, p*0.11 + uTime*vec2(-0.017, 0.013)).xyz*2.0-1.0;
-          vec3 n3 = texture2D(uNormal, p*0.37 + uTime*vec2(0.03, -0.026)).xyz*2.0-1.0;
-          vec2 slope = n1.xy*0.45 + n2.xy*0.3 + n3.xy*0.1*smoothstep(3.0,12.0,camD)*(1.0-smoothstep(12.0,50.0,camD));
-          float calm = 0.35 + 0.65*smoothstep(0.0, 0.6, depth);
-          vec3 N = normalize(vec3(slope.x*0.55*calm, 1.0, slope.y*0.55*calm));
-          vec3 V = normalize(cameraPosition - vWPos);
-          float NdV = max(dot(N, V), 0.0);
-          float fres = 0.02 + 0.98*pow(1.0-NdV, 5.0);
-          vec3 R = reflect(-V, N);
-          vec3 sky = mix(uSkyHor, uSkyTop, pow(clamp(R.y,0.0,1.0), 0.6));
-          vec3 H = normalize(uSunDir + V);
-          float spec = pow(max(dot(N, H), 0.0), 1400.0)*3.0 + pow(max(dot(N,H),0.0), 120.0)*0.05;
+  cutHole(x, z, r, sx = 1, sz = 1, rot = 0) {
+    const N = this.holeN, E = this.holeExt;
+    const toI = (v) => ((v + E) / (2 * E)) * N;
+    const R = r * Math.max(sx, sz);
+    const i0 = Math.max(0, Math.floor(toI(x - R)) - 1), i1 = Math.min(N - 1, Math.ceil(toI(x + R)) + 1);
+    const j0 = Math.max(0, Math.floor(toI(z - R)) - 1), j1 = Math.min(N - 1, Math.ceil(toI(z + R)) + 1);
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const wx = ((i + 0.5) / N) * 2 * E - E - x, wz = ((j + 0.5) / N) * 2 * E - E - z;
+      const lx = (wx * cr + wz * sr) / sx, lz = (-wx * sr + wz * cr) / sz;
+      const d = Math.hypot(lx, lz) / r;
+      const v = Math.round(255 * THREE.MathUtils.clamp((1.15 - d) / 0.3, 0, 1));
+      if (v > this.holeData[j * N + i]) this.holeData[j * N + i] = v;
+    }
+    this.holeTex.needsUpdate = true;
+  }
 
-          float turb = 1.0 - exp(-depth*0.3);
-          vec3 scatter = mix(uShallow, uDeep, 1.0 - exp(-depth*0.45)) * uAmbient;
-          scatter += uSunCol * 0.05 * uSunUp * (1.0 - turb);
-
-          // 汀線の泡と薄い水膜
-          float edge = smoothstep(-0.01, 0.07, depth);
-          float fn = snoise(p*1.6 + uTime*vec2(0.15,0.11))*0.5 + snoise(p*4.0 - uTime*0.2)*0.3;
-          float foamBand = smoothstep(0.14, 0.0, depth) * smoothstep(-0.02, 0.03, depth);
-          float foam = foamBand * smoothstep(0.1, 0.6, fn + 0.15*sin(depth*25.0 - uTime*1.3 + fn*4.0));
-          float bubbles = smoothstep(0.82, 0.95, snoise(p*11.0 + uTime*0.05)) * smoothstep(0.4, 0.8, snoise(p*0.7 - uTime*0.02)) * smoothstep(0.35, 0.0, depth) * 0.45;
-          foam = max(foam, bubbles*edge);
-
-          vec3 col = scatter*(1.0-fres) + sky*fres + spec*uSunCol*uSunUp;
-          float alpha = mix(turb*0.8, 1.0, fres) * edge;
-          alpha = max(alpha, clamp(spec,0.0,1.0)*edge);
-          col = mix(col, vec3(0.92,0.93,0.9)*(0.4+0.6*uSunUp)*uAmbient, foam*0.85);
-          alpha = max(alpha, foam*0.9);
-          gl_FragColor = vec4(col, alpha);
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-          #include <fog_fragment>
-        }`,
-    });
-    const geo = new THREE.PlaneGeometry(8000, 8000, 1, 1);
-    geo.rotateX(-Math.PI / 2);
-    this.waterMesh = new THREE.Mesh(geo, mat);
-    this.waterMesh.renderOrder = 10;
-    this.scene.add(this.waterMesh);
+  // 標準的な巣穴（掘り出した砂の縁と暗い竪穴）
+  makeBurrow(x, z, r, opts = {}) {
+    const rim = opts.rim ?? 0.35;
+    return this.makeGroundFeature(x, z, r * 3.2, (t, a) => {
+      const bump = rim * r * Math.exp(-((t - 0.42) ** 2) / 0.03) * (1 + 0.25 * Math.sin(a * 3 + x));
+      const fade = 1 - THREE.MathUtils.smoothstep(t, 0.7, 1);
+      return [bump * fade - 0.004 * (1 - t), 1];
+    }, { shaft: { r, depth: r * 5 }, ...opts });
   }
 
   // ---------- 空と光 ----------
@@ -369,6 +409,10 @@ export class World {
     Object.assign(this.skyForEnv.material.uniforms, {});
     this.skyScene.add(this.skyForEnv);
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.envCubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
+    this.envCubeCam = new THREE.CubeCamera(1, 5000, this.envCubeRT);
+    this.skyScene.add(this.envCubeCam);
+    this.envCube = this.envCubeRT.texture;
 
     this.sun = new THREE.DirectionalLight(0xffffff, 3);
     this.sun.castShadow = true;
@@ -418,18 +462,16 @@ export class World {
     U.uSunUp.value = up;
     U.uAmbient.value = 0.25 + 0.75 * THREE.MathUtils.smoothstep(elev, -5, 25);
 
-    const wu = this.waterUniforms;
     const horizon = new THREE.Color(0.78, 0.84, 0.9).lerp(new THREE.Color(0.95, 0.66, 0.45), warm * 0.8)
       .multiplyScalar(0.35 + 0.65 * THREE.MathUtils.smoothstep(elev, -4, 15));
     const top = new THREE.Color(0.25, 0.45, 0.78).multiplyScalar(0.3 + 0.7 * THREE.MathUtils.smoothstep(elev, -4, 20));
-    wu.uSkyHor.value.copy(horizon);
-    wu.uSkyTop.value.copy(top);
     this.scene.fog.color.copy(horizon).multiplyScalar(0.95);
 
     if (Math.abs(hour - this.lastEnvHour) > 0.2) {
       this.lastEnvHour = hour;
       if (this.envRT) this.envRT.dispose();
       this.envRT = this.pmrem.fromScene(this.skyScene, 0, 0.1, 2000);
+      this.envCubeCam.update(this.renderer, this.skyScene);
       this.scene.environment = this.envRT.texture;
       this.scene.environmentIntensity = 0.16;
     }
@@ -532,9 +574,9 @@ export class World {
     ];
     geos[2].rotateX(-Math.PI / 2);
     const mats = [
-      new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.55, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ color: 0xb8b0a2, roughness: 0.55, side: THREE.DoubleSide }),
       new THREE.MeshStandardMaterial({ color: 0x6e6658, roughness: 0.8 }),
-      new THREE.MeshStandardMaterial({ color: 0xd6c8b4, roughness: 0.5, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ color: 0xa89c8a, roughness: 0.5, side: THREE.DoubleSide }),
     ];
     const counts = [1400, 900, 1200];
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
@@ -585,20 +627,26 @@ export class World {
     this.scene.add(ulva);
   }
 
-  update(dt, t, waterLevel, focus) {
+  update(dt, t, waterLevel, focus, camDist = 40) {
     this.time = t;
     this.water = waterLevel;
     this.uniforms.uTime.value = t;
     this.uniforms.uWater.value = waterLevel;
-    this.waterMesh.position.y = waterLevel;
-    this.waterUniforms.fogColor.value.copy(this.scene.fog.color);
-    this.waterUniforms.fogDensity.value = this.scene.fog.density;
+    // 影の範囲を注視距離に合わせる（接写では影がくっきり細かくなる）
+    const half = THREE.MathUtils.clamp(camDist * 0.9, 5, 42);
+    const sc = this.sun.shadow.camera;
+    if (Math.abs(sc.right - half) > half * 0.08) {
+      sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;
+      sc.updateProjectionMatrix();
+      this.sun.shadow.normalBias = 0.004 + 0.016 * (half / 42);
+      this.sun.shadow.bias = -0.0002 - 0.0003 * (half / 42);
+    }
     // 影カメラを注視点へ追従（テクセル単位にスナップしてちらつき防止）
-    const snap = 84 / 4096;
+    const snap = (2 * sc.right) / 4096;
     const fx = Math.round(focus.x / snap) * snap, fz = Math.round(focus.z / snap) * snap;
     this.sun.target.position.set(fx, 0, fz);
     this.sun.position.set(fx, 0, fz).addScaledVector(this.sunDir, 150);
-      }
+  }
 }
 
 // ---------- 手続き的テクスチャ ----------
