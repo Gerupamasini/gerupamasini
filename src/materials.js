@@ -244,38 +244,48 @@ export const GLSL = {
     thick: 'float orgThick(vec3 p){ return 1.0; }',
     bump: 'float orgBump(vec3 p){ return snoise3(p*45.0)*0.0008; }',
   },
-  // ハゼ稚魚の体：背は暗く、腹は白銀。体側中央の暗斑列と黒色素胞
+  // ハゼの体：背は灰褐色で細かな黒点と網目、体側中央に暗褐色の斑列、腹は白銀。
+  // uP.x: 体側斑の周波数, uP.y: 背の網目の強さ, uP.z: 1なら眼から口への暗色線と尾柄の斑
   goby: {
     color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
-      float y = p.y;
-      vec3 col = mix(uC3, uC2, smoothstep(-0.05, -0.01, y));
-      col = mix(col, uC1, smoothstep(-0.005, 0.05, y));
-      float z = p.z;
-      float noise = snoise3(p*14.0 + uSeed)*0.35;
-      float blot = smoothstep(0.55, 0.85, sin(z*uP.x + uSeed*3.0)*0.5+0.5 + noise) * exp(-pow(y/0.028, 2.0)) * step(z, 0.24) * step(-0.45, z);
-      float sad = smoothstep(0.55, 0.9, sin(z*uP.x*0.75 + 1.7 + uSeed)*0.5+0.5 + noise) * smoothstep(0.02, 0.06, y) * step(z, 0.3);
-      vec3 cc = cell3(p*110.0 + uSeed*5.0);
-      float dots = smoothstep(0.22, 0.1, cc.x) * step(0.35, cc.z) * smoothstep(-0.03, 0.04, y);
-      float head = smoothstep(0.2, 0.3, z);
-      col = mix(col, uC4, clamp(blot*0.95 + sad*0.7*uP.y + dots*0.75, 0.0, 0.92));
-      // 鰓蓋の金色の光沢
-      float op = smoothstep(0.035, 0.0, abs(z - 0.25) - 0.025) * smoothstep(0.05, 0.0, abs(y + 0.005) - 0.02);
-      col = mix(col, vec3(0.78, 0.62, 0.3), op * 0.35);
-      col = mix(col, col*vec3(0.95,0.9,0.85), head*0.2);
+      float y = p.y, z = p.z;
+      vec3 col = mix(uC3, uC2, smoothstep(-0.055, -0.012, y));
+      col = mix(col, uC1, smoothstep(0.004, 0.065, y));
+      float wob = snoise3(p*11.0 + uSeed)*0.7;
+      float bl = smoothstep(0.45, 0.85, sin(z*uP.x + uSeed*3.0 + wob)*0.5+0.5 + snoise3(p*24.0+uSeed)*0.18)
+               * exp(-pow((y - 0.004)/0.024, 2.0)) * step(z, 0.2) * smoothstep(-0.47, -0.4, z);
+      vec3 cc = cell3(p*150.0 + uSeed*5.0);
+      float speck = (1.0 - smoothstep(0.06, 0.26, cc.x)) * step(0.45, cc.z) * smoothstep(-0.03, 0.03, y);
+      float net = smoothstep(0.15, 0.55, fbm3(p*vec3(34.0, 34.0, 20.0) + uSeed*2.0)) * smoothstep(0.015, 0.06, y) * uP.y;
+      // 背中を横切る暗い鞍状斑（上から見たときの模様）
+      float sad = smoothstep(0.5, 0.85, sin(z*uP.x*0.9 + 1.3 + uSeed*3.0 + wob)*0.5+0.5) * smoothstep(0.035, 0.075, y) * step(z, 0.3) * smoothstep(-0.46, -0.36, z);
+      // 眼の下から上顎への暗色線
+      vec2 q = vec2(z, y);
+      vec2 a = vec2(0.36, 0.034), b = vec2(0.47, -0.006);
+      vec2 pa = q - a, ba = b - a;
+      float hs = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+      float stripe = smoothstep(0.011, 0.004, length(pa - ba*hs)) * step(0.028, abs(p.x)) * uP.z;
+      float tailSpot = exp(-pow((z + 0.44)/0.018, 2.0) - pow(y/0.02, 2.0)) * uP.z;
+      col = mix(col, uC4, clamp(bl*0.85 + speck*0.65 + net*0.35 + sad*0.55*uP.y + stripe*0.6 + tailSpot*0.8, 0.0, 0.92));
+      // 唇と喉は白っぽい
+      col = mix(col, uC3*1.03, smoothstep(0.43, 0.49, z) * smoothstep(0.0, -0.03, y) * 0.7);
+      // 鰓蓋の淡い金属光沢
+      float op = smoothstep(0.04, 0.0, abs(z - 0.26) - 0.03) * smoothstep(0.04, 0.0, abs(y + 0.01) - 0.02);
+      col = mix(col, vec3(0.78, 0.72, 0.52), op * 0.25);
       return col;
     }`,
-    bump: 'float orgBump(vec3 p){ return snoise3(p*vec3(160.0, 160.0, 60.0))*0.0004; }',
+    bump: 'float orgBump(vec3 p){ return snoise3(p*vec3(170.0, 170.0, 70.0))*0.0004; }',
     thick: 'float orgThick(vec3 p){ return smoothstep(0.1, -0.35, p.z) * 0.6 + 0.4; }',
-    rough: 'float orgRough(vec3 p, float r){ return mix(0.25, 0.4, smoothstep(0.0, 0.05, p.y)); }',
+    rough: 'float orgRough(vec3 p, float r){ return mix(0.22, 0.38, smoothstep(0.0, 0.05, p.y)); }',
   },
   // 魚の眼：金色の虹彩と黒い瞳（+x が外向き）
   fishEye: {
     color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
       vec3 d = normalize(p);
       float a = acos(clamp(d.x, -1.0, 1.0));
-      vec3 col = mix(vec3(0.02), uC1, smoothstep(0.42, 0.5, a));
-      col = mix(col, uC1*0.4, smoothstep(0.85, 1.1, a));
-      col += uC1 * 0.3 * smoothstep(0.5, 0.6, a) * (1.0 - smoothstep(0.7, 0.9, a)) * (snoise3(d*30.0)*0.5+0.5);
+      vec3 col = mix(vec3(0.015), uC1, smoothstep(0.78, 0.86, a));
+      col = mix(col, uC1*0.3, smoothstep(1.0, 1.2, a));
+      col += uC1 * 0.25 * smoothstep(0.8, 0.88, a) * (1.0 - smoothstep(0.92, 1.05, a)) * (snoise3(d*30.0)*0.5+0.5);
       return col;
     }`,
     rough: 'float orgRough(vec3 p, float r){ return 0.08; }',

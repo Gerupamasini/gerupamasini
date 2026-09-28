@@ -385,30 +385,54 @@ export function spiralShell(o) {
 
 // ---------- ハゼ稚魚 ----------
 export function gobyKit() {
-  return cached('goby', () => {
-    const parts = [
-      ellipsoid([0, 0.004, 0.345], [0.066, 0.054, 0.15]),
-      ellipsoid([0, -0.006, 0.23], [0.078, 0.064, 0.12]),
-      ellipsoid([0, 0.004, 0.05], [0.066, 0.074, 0.25]),
-      ellipsoid([0, 0.0, -0.19], [0.045, 0.058, 0.2]),
-      ellipsoid([0, 0.0, -0.36], [0.02, 0.04, 0.11]),
-    ];
-    const mouth = ellipsoid([0, -0.024, 0.49], [0.052, 0.006, 0.05]);
-    const lip = ellipsoid([0, -0.02, 0.47], [0.05, 0.02, 0.03]);
-    const eyeB = [1, -1].map((s) => sphere([s * 0.03, 0.04, 0.385], 0.03));
-    const gill = [1, -1].map((s) => cone([s * 0.078, 0.03, 0.2], [s * 0.078, -0.05, 0.215], 0.004, 0.004));
-    const f = (x, y, z) => {
-      let d = parts[0](x, y, z);
-      for (let i = 1; i < parts.length; i++) d = smin(d, parts[i](x, y, z), 0.05);
-      d = smin(d, lip(x, y, z), 0.02);
-      for (const e of eyeB) d = smin(d, e(x, y, z), 0.025);
-      d = smax(d, -mouth(x, y, z), 0.008);
-      for (const g of gill) d = smax(d, -g(x, y, z), 0.006);
+  return cached('goby2', () => {
+    // 体は断面（幅・高さ・中心の高さ）を体軸に沿って補間するロフト形状（頭が +z）
+    const Z = [-0.47, -0.43, -0.36, -0.2, -0.02, 0.14, 0.24, 0.33, 0.41, 0.46, 0.5];
+    const W = [0.008, 0.02, 0.032, 0.052, 0.07, 0.078, 0.084, 0.084, 0.072, 0.052, 0.014];
+    const H = [0.04, 0.047, 0.052, 0.068, 0.08, 0.082, 0.077, 0.068, 0.056, 0.042, 0.014];
+    const Y = [0.0, 0.0, 0.0, 0.002, 0.004, 0.004, 0.002, 0.0, -0.004, -0.01, -0.016];
+    const interp = (arr, z) => {
+      if (z <= Z[0]) return arr[0];
+      for (let i = 0; i < Z.length - 1; i++) {
+        if (z <= Z[i + 1]) {
+          const t = (z - Z[i]) / (Z[i + 1] - Z[i]);
+          const e = t * t * (3 - 2 * t);
+          return arr[i] + (arr[i + 1] - arr[i]) * e;
+        }
+      }
+      return arr[arr.length - 1];
+    };
+    const z0 = Z[0], z1 = Z[Z.length - 1];
+    const loft = (x, y, z) => {
+      const zc = Math.min(z1, Math.max(z0, z));
+      const w = interp(W, zc), yc = interp(Y, zc);
+      let h = interp(H, zc);
+      if (y < yc) h *= 0.86;                      // 腹は平たい
+      else if (zc > 0.2) h *= 0.9;                // 頭頂はやや扁平
+      let d = (Math.hypot(x / w, (y - yc) / h) - 1) * Math.min(w, h) * 0.9;
+      const over = z < z0 ? z0 - z : z > z1 ? z - z1 : 0;
+      if (over > 0) d = Math.hypot(Math.max(d, 0), over);
       return d;
     };
-    const body = meshSDF(f, [-0.1, -0.08, -0.5], [0.1, 0.1, 0.52], 0.008);
+    const jaw = ellipsoid([0, -0.03, 0.455], [0.046, 0.018, 0.05]);
+    const mouth = ellipsoid([0, -0.018, 0.47], [0.058, 0.0055, 0.055]);
+    const cheeks = [1, -1].map((s) => ellipsoid([s * 0.048, -0.012, 0.28], [0.04, 0.046, 0.075]));
+    const eyeB = [1, -1].map((s) => sphere([s * 0.033, 0.052, 0.37], 0.027));
+    const gill = [1, -1].map((s) => cone([s * 0.078, 0.035, 0.215], [s * 0.07, -0.058, 0.235], 0.0035, 0.0035));
+    const f = (x, y, z) => {
+      let d = loft(x, y, z);
+      for (const c of cheeks) d = smin(d, c(x, y, z), 0.03);
+      d = smin(d, jaw(x, y, z), 0.02);
+      for (const e of eyeB) d = smin(d, e(x, y, z), 0.022);
+      d = smax(d, -mouth(x, y, z), 0.006);
+      for (const g of gill) d = smax(d, -g(x, y, z), 0.005);
+      return d;
+    };
+    const body = meshSDF(f, [-0.1, -0.09, -0.49], [0.1, 0.1, 0.53], 0.0068);
 
-    const fin = (base, tip, nu = 14, nv = 6) => {
+    // 鰭：鰭条ごとに u が整数になる UV（シェーダで鰭条と斑点の列を描く）
+    const fin = (base, tip, rays, nv = 7) => {
+      const nu = rays * 3;
       const pos = [], uv = [], idx = [];
       for (let i = 0; i <= nu; i++) {
         const u = i / nu;
@@ -416,7 +440,7 @@ export function gobyKit() {
         for (let j = 0; j <= nv; j++) {
           const v = j / nv;
           pos.push(b[0] + (t[0] - b[0]) * v, b[1] + (t[1] - b[1]) * v, b[2] + (t[2] - b[2]) * v);
-          uv.push(u, v);
+          uv.push(u * rays, v);
         }
       }
       for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
@@ -431,22 +455,30 @@ export function gobyKit() {
       return g;
     };
     const lerp3 = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+    const topY = (z) => interp(Y, z) + interp(H, z) * 0.9 - 0.004;
+    const botY = (z) => interp(Y, z) - interp(H, z) * 0.86 + 0.004;
     const fins = {
-      d1: fin((u) => lerp3([0, 0.07, 0.15], [0, 0.074, 0.0], u), (u, b) => [0, b[1] + 0.075 * Math.sin(Math.PI * (0.12 + u * 0.8)) + 0.01, b[2] - 0.035]),
-      d2: fin((u) => lerp3([0, 0.07, -0.03], [0, 0.044, -0.32], u), (u, b) => [0, b[1] + 0.058 * (1 - Math.pow(u, 4)) + 0.008, b[2] - 0.03 - 0.03 * u]),
-      anal: fin((u) => lerp3([0, -0.055, -0.07], [0, -0.036, -0.31], u), (u, b) => [0, b[1] - 0.05 * (1 - Math.pow(u, 4)) - 0.006, b[2] - 0.03 - 0.03 * u]),
-      caudal: fin((u) => lerp3([0, -0.034, -0.44], [0, 0.034, -0.44], u), (u, b) => [0, b[1] * 2.2, -0.44 - 0.17 * (1 - 1.6 * (u - 0.5) ** 2)], 16, 7),
-      pelvic: fin((u) => lerp3([-0.034, -0.062, 0.18], [0.034, -0.062, 0.18], u), (u, b) => [b[0] * 1.3, b[1] - 0.018 - 0.01 * Math.sin(Math.PI * u), 0.18 - 0.11 * (1 - 1.8 * (u - 0.5) ** 2)], 10, 5),
+      d1: fin((u) => { const z = 0.16 - u * 0.13; return [0, topY(z), z]; },
+        (u, b) => [0, b[1] + 0.105 * Math.pow(Math.sin(Math.PI * (0.08 + 0.86 * u)), 0.8) + 0.006, b[2] - 0.045], 6),
+      d2: fin((u) => { const z = -0.01 - u * 0.32; return [0, topY(z), z]; },
+        (u, b) => [0, b[1] + (0.082 - 0.02 * u) * (1 - Math.pow(u, 6)) + 0.006, b[2] - 0.05 - 0.02 * u], 12),
+      anal: fin((u) => { const z = -0.06 - u * 0.27; return [0, botY(z), z]; },
+        (u, b) => [0, b[1] - 0.062 * (1 - Math.pow(u, 6)) - 0.005, b[2] - 0.045 - 0.02 * u], 11),
+      caudal: fin((u) => lerp3([0, -0.044, -0.445], [0, 0.044, -0.445], u),
+        (u, b) => [0, b[1] * 2.3, -0.445 - 0.23 * (1 - 1.2 * (u - 0.5) ** 2)], 15, 8),
+      pelvic: fin((u) => lerp3([-0.04, -0.068, 0.19], [0.04, -0.068, 0.19], u),
+        (u, b) => [b[0] * 1.35, b[1] - 0.016 - 0.012 * Math.sin(Math.PI * u), 0.19 - 0.12 * (1 - 1.8 * (u - 0.5) ** 2)], 10, 5),
     };
     for (const s of [1, -1]) {
       fins['pec' + s] = fin(
-        (u) => lerp3([s * 0.07, -0.04, 0.2], [s * 0.066, 0.022, 0.205], u),
+        (u) => lerp3([s * 0.076, -0.056, 0.215], [s * 0.072, 0.026, 0.222], u),
         (u, b) => {
-          const a = -0.95 + u * 1.55;
-          return [b[0] + s * 0.05, b[1] + Math.sin(a) * 0.1, b[2] - Math.cos(a) * 0.12];
-        }, 14, 6);
+          const a = -1.0 + u * 1.75;
+          const R = 0.145 * (1 - 0.3 * (u - 0.45) ** 2);
+          return [b[0] + s * 0.05, b[1] + Math.sin(a) * R, b[2] - Math.cos(a) * R];
+        }, 16, 7);
     }
-    const eye = new THREE.SphereGeometry(0.029, 24, 18);
+    const eye = new THREE.SphereGeometry(0.026, 28, 20);
     return { body, fins, eye };
   });
 }

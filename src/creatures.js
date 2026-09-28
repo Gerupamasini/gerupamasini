@@ -558,7 +558,7 @@ const BEND_GLSL = `
     transformed.x += (sin(transformed.z*6.0 - uPhase)*uAmp + uTurn*transformed.z*transformed.z*0.8) * w; }`;
 
 function finMaterial(U, o) {
-  const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.3, transparent: true, side: THREE.DoubleSide, depthWrite: false, clearcoat: 0.4 });
+  const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.3, transparent: true, side: THREE.DoubleSide, depthWrite: true, clearcoat: 0.4 });
   const F = { uMem: { value: new THREE.Color(o.mem) }, uRay: { value: new THREE.Color(o.ray) }, uSpot: { value: new THREE.Color(o.spot) }, uRays: { value: o.rays }, uFSeed: { value: o.seed } };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U, F);
@@ -572,13 +572,24 @@ function finMaterial(U, o) {
       .replace('#include <common>', `#include <common>
         varying vec2 vFin; uniform vec3 uMem; uniform vec3 uRay; uniform vec3 uSpot; uniform float uRays; uniform float uFSeed;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-        float ray = pow(abs(cos(vFin.x * uRays * 3.14159)), 8.0);
-        float edge = 1.0 - smoothstep(0.82, 1.0, vFin.y);
-        float spots = smoothstep(0.6, 0.8, sin(vFin.y*17.0 + vFin.x*4.0 + uFSeed*6.0)*0.5+0.5) * ray * smoothstep(0.05, 0.2, vFin.y);
+        // 鰭条（u が整数の位置）と、鰭条に沿って並ぶ黒い斑点の列
+        float ray = pow(abs(cos(vFin.x * 3.14159)), 10.0);
+        float edge = 1.0 - smoothstep(0.84, 1.0, vFin.y);
+        float rid = floor(vFin.x + 0.5);
+        float rh = fract(sin(rid * 12.9898 + uFSeed * 78.233) * 43758.5453);
+        float row = sin(vFin.y * uRays * (0.85 + 0.3 * rh) + rh * 6.28 + uFSeed * 6.0) * 0.5 + 0.5;
+        float spots = smoothstep(0.58 + 0.12 * rh, 0.82, row) * pow(abs(cos(vFin.x * 3.14159)), 2.0) * smoothstep(0.04, 0.16, vFin.y) * (1.0 - 0.5 * smoothstep(0.6, 0.95, vFin.y));
         vec3 fc = mix(uMem, uRay, ray);
-        fc = mix(fc, uSpot, spots * 0.85);
+        fc = mix(fc, uSpot, spots * 0.9);
         diffuseColor.rgb = fc;
-        diffuseColor.a = (0.22 + 0.55*ray + 0.3*spots) * edge;`);
+        diffuseColor.a = (0.15 + 0.5*ray + 0.55*spots) * edge;`)
+      .replace('#include <opaque_fragment>', `
+        // 薄い鰭は光を透かす：向きによらず太陽光と環境光の一部を透過光として加える
+        #if NUM_DIR_LIGHTS > 0
+          outgoingLight += diffuseColor.rgb * directionalLights[0].color * 0.3;
+        #endif
+        outgoingLight += diffuseColor.rgb * ambientLightColor * 0.4;
+        #include <opaque_fragment>`);
   };
   m.customProgramCacheKey = () => 'fin';
   return m;
@@ -599,14 +610,14 @@ class Goby extends Agent {
     };
     const bodyMat = organicMaterial({
       key: 'goby', glsl: GLSL.goby, seed, vertex: bendHook, extraUniforms: U,
-      colors: mahaze ? [0x4a4232, 0x8a7c60, 0xdcd6c8, 0x1e1a12] : [0x9c8c6c, 0xc4b89c, 0xece6da, 0x6a4a2a],
-      P: mahaze ? [26, 1, 0, 0] : [34, 0.6, 0, 0],
-      sss: mahaze ? 0xffc890 : 0xffd8a8, sssK: mahaze ? 0.35 : 0.45,
-      roughness: 0.3, clearcoat: 0.9, clearcoatRoughness: 0.12, sheen: 0.6, sheenColor: 0xc8d0d8, sheenRoughness: 0.4,
+      colors: mahaze ? [0x5a5648, 0x9a9684, 0xdcdcd4, 0x2a2418] : [0x9c8c6c, 0xc4b89c, 0xece6da, 0x6a4a2a],
+      P: mahaze ? [56, 1.1, 1, 0] : [60, 0.6, 0, 0],
+      sss: mahaze ? 0xf0d8b0 : 0xffd8a8, sssK: mahaze ? 0.3 : 0.45,
+      roughness: 0.45, clearcoat: 0.25, clearcoatRoughness: 0.35,
     });
     const finMat = finMaterial(U, mahaze
-      ? { mem: 0xb8ae96, ray: 0x6e604a, spot: 0x2a2218, rays: 7, seed }
-      : { mem: 0xd8cebc, ray: 0x9a8868, spot: 0x9a5024, rays: 7, seed });
+      ? { mem: 0xa8a696, ray: 0x7e7866, spot: 0x2a261c, rays: 15, seed }
+      : { mem: 0xd8cebc, ray: 0x9a8868, spot: 0x9a5024, rays: 12, seed });
     const root = new THREE.Group();
     const body = new THREE.Mesh(K.body, bodyMat);
     body.castShadow = true;
@@ -620,8 +631,8 @@ class Goby extends Agent {
     }
     for (const s of [1, -1]) {
       const e = new THREE.Mesh(K.eye, sys.fishEyeMat);
-      e.position.set(s * 0.036, 0.046, 0.385);
-      e.rotation.set(0, s > 0 ? 0 : Math.PI, 0.55);
+      e.position.set(s * 0.036, 0.057, 0.372);
+      e.rotation.set(0, s > 0 ? 0 : Math.PI, 0.6);
       e.castShadow = true;
       root.add(e);
     }
@@ -1076,7 +1087,7 @@ export class Ecosystem {
 
     // 種で共有するマテリアル
     this.corneaMat = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0x14161a, 0x3c434c], roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.04 });
-    this.fishEyeMat = organicMaterial({ key: 'fishEye', glsl: GLSL.fishEye, colors: [0xc9a24a], roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.03 });
+    this.fishEyeMat = organicMaterial({ key: 'fishEye', glsl: GLSL.fishEye, colors: [0x9c9480], roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.03 });
     this.siphonMat = organicMaterial({ key: 'siphon', glsl: GLSL.siphon, colors: [0xc4b49c, 0x7a5a3c, 0x3a2a1e], P: [0.5, 0, 0, 0], roughness: 0.3, clearcoat: 0.9, clearcoatRoughness: 0.15, sss: 0xe8c8a0, sssK: 0.3 });
     this.nassaShellMat = organicMaterial({ key: 'gastro', glsl: GLSL.gastropod, vertexColors: true, colors: [0x6a5a44], seed: 0.3, roughness: 0.5, clearcoat: 0.55, clearcoatRoughness: 0.3 });
     this.crabShared = {};

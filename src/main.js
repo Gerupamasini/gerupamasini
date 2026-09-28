@@ -185,16 +185,22 @@ function deselect() { state.follow = null; $('#card').classList.remove('show'); 
 const inspectName = params.get('inspect');
 const inspectAgent = inspectName ? eco.agents.find((a) => a.species === inspectName) : null;
 const camSpec = (params.get('cam') || '0,0.35,3').split(',').map(Number);
+let P0 = null;
 function holdInspect() {
   const a = inspectAgent;
+  if (!P0) P0 = a.root.position.clone();
+  if (a.U && params.has('water')) { a.p.copy(P0); }
   if (a.sink !== undefined) { a.sink = 0; a.state = params.get('state') || 'idle'; a.timer = 99; if (a.state === 'wave') a.wave = 1; }
   if (a.targetOut !== undefined) { a.out = a.targetOut = 1; a.timer = 99; }
+  if (a.U && params.has('water')) { a.root.visible = true; a.visible = true; a.root.position.y = world.heightAt(P0.x, P0.z) + 0.1; a.root.rotation.set(0, a.yaw, 0); }
   const P = a.root.position;
   for (const o of eco.agents) if (o !== a && o.root.position.distanceTo(P) < 3) o.root.visible = false;
   const [az, el, d] = camSpec;
   const yaw = (a.yaw || 0) + az;
-  controls.target.set(P.x, P.y + 0.15 * d / 3, P.z);
-  camera.position.set(P.x + Math.sin(yaw) * Math.cos(el) * d, P.y + Math.sin(el) * d + 0.1, P.z + Math.cos(yaw) * Math.cos(el) * d);
+  const off = +(params.get('off') || 0);
+  controls.target.set(P.x + Math.sin(a.yaw || 0) * off, P.y + (a.U ? 0 : 0.15 * d / 3), P.z + Math.cos(a.yaw || 0) * off);
+  const T = controls.target;
+  camera.position.set(T.x + Math.sin(yaw) * Math.cos(el) * d, T.y + Math.sin(el) * d + 0.1, T.z + Math.cos(yaw) * Math.cos(el) * d);
   camera.lookAt(controls.target);
 }
 
@@ -238,7 +244,7 @@ function frame() {
   if (state.hour > 18.8) state.hour = 5.2;
   if (Math.abs(+hourSlider.value - state.hour) > 0.05) { hourSlider.value = state.hour; world.setTimeOfDay(state.hour); }
 
-  const level = tideLevel(state.tidePhase);
+  const level = params.has('water') ? +params.get('water') : tideLevel(state.tidePhase);
   const camDist = camera.position.distanceTo(controls.target);
   world.update(dt, state.t, level, controls.target, camDist);
   eco.update(dt, state.t, camera.position);
@@ -264,7 +270,8 @@ function frame() {
   if (!inspectAgent) controls.update();
   // カメラが地面や水面に潜らないように
   const gh = world.heightAt(camera.position.x, camera.position.z);
-  camera.position.y = Math.max(camera.position.y, Math.max(gh, level) + 0.3);
+  camera.position.y = Math.max(camera.position.y, Math.max(gh, level) + (inspectAgent ? 0.12 : 0.3));
+  if (inspectAgent) camera.lookAt(controls.target);
 
   // 被写界深度：注視点に合焦。近いほど浅い（マクロレンズの挙動）
   const focus = camera.position.distanceTo(controls.target);
