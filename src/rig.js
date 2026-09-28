@@ -22,6 +22,7 @@ export class LegRig {
     this.stepThresh = opts.stepThresh ?? 0.08;
     this.yawRange = opts.yawRange ?? 1.0;
     this.footLift = opts.footLift ?? 0.004;
+    this.spread = 1;   // 休息時に脚を平たく広げる倍率
     this.active = true;
   }
 
@@ -48,7 +49,12 @@ export class LegRig {
     const speed = vel ? Math.hypot(vel.x, vel.z) : 0;
     const stepTime = this.stepTime / clamp(speed * 2.5, 0.8, 1.6);
     for (const l of this.legs) {
-      _w.copy(l.restLocal).applyMatrix4(body.matrixWorld);
+      _w.copy(l.restLocal);
+      if (this.spread !== 1) {
+        _w.x = l.hip.position.x + (_w.x - l.hip.position.x) * this.spread;
+        _w.z = l.hip.position.z + (_w.z - l.hip.position.z) * this.spread;
+      }
+      _w.applyMatrix4(body.matrixWorld);
       _w.y = world.heightAt(_w.x, _w.z) + this.footLift;
       if (!l.valid) { l.foot.copy(_w); l.valid = true; l.stepping = false; }
       if (l.stepping) {

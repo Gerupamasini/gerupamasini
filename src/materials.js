@@ -167,33 +167,79 @@ export const GLSL = {
   // ヤマトオサガニの甲：暗い灰緑褐色、目立つ顆粒
   // ヤマトオサガニの甲：濃い焦げ茶〜灰褐色でほぼ一様、濡れて艶がある。大きな顆粒（中央の小域は平滑）、
   // 溝は暗く、上向きの面にだけ薄く乾いた泥が付く。uP.x: 甲長の半分（前縁の位置）
+  // uP: (甲長の半分, 甲幅の半分, 甲高の半分)。オリーブ褐色の地に左右対称の暗斑と黄色みのある顆粒。
+  // 前縁・眼窩縁・側縁は橙褐色の顆粒が数珠状に並ぶ。濡れて艶がある。
   yamatoShell: {
     color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
+      vec3 ps = vec3(abs(p.x), p.y, p.z);
       float big = fbm3(p*3.0 + uSeed)*0.5+0.5;
       vec3 col = mix(uC1, uC2, smoothstep(0.25, 0.8, big));
-      vec3 c = cell3(p*52.0 + uSeed*7.0);
-      float smooth0 = smoothstep(0.05, 0.12, length(p.xz - vec2(0.0, -0.03)));   // 中央の平滑な小域
-      col = mix(col, uC3, (1.0 - smoothstep(0.0, 0.32, c.x)) * 0.2 * smooth0);
+      float blot = smoothstep(0.55, 0.8, fbm3(ps*6.0 + uSeed*4.0)*0.5+0.5);
+      col = mix(col, uC1*0.6, blot*0.55);
+      vec3 c = cell3(p*60.0 + uSeed*7.0);
+      float smooth0 = smoothstep(0.05, 0.12, length(p.xz - vec2(0.0, -0.03)));
+      col = mix(col, uC3, (1.0 - smoothstep(0.0, 0.3, c.x)) * 0.4 * smooth0);
       col *= 0.9 + 0.1 * snoise3(p*14.0 + uSeed);
+      // 橙褐色の数珠状の縁
+      float front = smoothstep(uP.x*0.84, uP.x*0.94, p.z) * smoothstep(-0.03, 0.02, p.y);
+      float lateral = smoothstep(uP.y*0.9, uP.y*0.98, abs(p.x)) * smoothstep(-0.04, 0.01, p.y) * step(p.z, uP.x*0.92);
+      vec3 bc = cell3(p*120.0);
+      float beads = 1.0 - smoothstep(0.1, 0.42, bc.x);
+      col = mix(col, vec3(0.6, 0.36, 0.16), clamp((front*0.9 + lateral*0.65) * (0.35 + 0.65*beads), 0.0, 1.0));
       // 乾いた泥の薄い付着
-      float dust = smoothstep(0.35, 0.75, fbm3(p*7.0 + uSeed*3.0)) * smoothstep(0.5, 0.9, n.y);
-      col = mix(col, vec3(0.42, 0.39, 0.34), dust * 0.28);
-      // 腹面・前面下部はやや淡い灰褐色
-      col = mix(col, uC4, smoothstep(-0.05, -0.12, p.y));
+      float dust = smoothstep(0.4, 0.8, fbm3(p*7.0 + uSeed*3.0)) * smoothstep(0.5, 0.9, n.y);
+      col = mix(col, vec3(0.42, 0.4, 0.33), dust * 0.2);
+      col = mix(col, uC4, smoothstep(-0.06, -0.13, p.y));
       return col;
     }`,
     bump: `float orgBump(vec3 p){
-      vec3 c = cell3(p*52.0);
+      vec3 c = cell3(p*60.0);
       float smooth0 = smoothstep(0.05, 0.12, length(p.xz - vec2(0.0, -0.03)));
-      return (1.0 - smoothstep(0.0, 0.42, c.x))*0.0028*smooth0 + snoise3(p*22.0)*0.0012;
+      vec3 bc = cell3(p*120.0);
+      float rim = smoothstep(uP.x*0.84, uP.x*0.94, p.z) + smoothstep(uP.y*0.9, uP.y*0.98, abs(p.x));
+      return (1.0 - smoothstep(0.0, 0.42, c.x))*0.0028*smooth0 + (1.0 - smoothstep(0.0, 0.4, bc.x))*0.002*min(rim, 1.0) + snoise3(p*22.0)*0.0012;
     }`,
     rough: 'float orgRough(vec3 p, float r){ return r + snoise3(p*9.0)*0.12; }',
+  },
+  // 斑点模様（ヤマトオサガニの歩脚・眼柄）。uP.x: 斑点の細かさ, uP.y: 淡色斑の量, uP.z: 1なら先端が黄色い指節, uP.w: 節の長さ
+  speckle: {
+    color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
+      float m = fbm3(p*vec3(12.0, 20.0, 20.0) + uSeed)*0.5+0.5;
+      vec3 col = mix(uC1, uC2, smoothstep(0.3, 0.75, m));
+      vec3 c = cell3(p*uP.x + uSeed*3.0);
+      float dark = (1.0 - smoothstep(0.1, 0.36, c.x)) * step(0.45, c.z);
+      float pale = (1.0 - smoothstep(0.08, 0.3, c.x)) * step(c.z, 0.14) * uP.y;
+      col = mix(col, uC3, dark * 0.75);
+      col = mix(col, uC4, pale * 0.8);
+      if (uP.z > 0.5) col = mix(col, vec3(0.78, 0.66, 0.34), smoothstep(uP.w*0.55, uP.w*0.95, p.x) * 0.8);
+      col = mix(col, col*1.12, smoothstep(0.0, -0.02, p.y) * 0.5);   // 腹面はやや淡い
+      return col;
+    }`,
+    bump: `float orgBump(vec3 p){ vec3 c = cell3(p*uP.x); return (1.0 - smoothstep(0.0, 0.4, c.x))*0.0008 + snoise3(p*vec3(40.0,90.0,90.0))*0.0008; }`,
+  },
+  // ヤマトオサガニの歩脚：背面はオリーブ褐色に暗いまだら、前後縁と腹面は黄土〜橙色。uP.z=1 なら指節（先端が黄色）
+  yamaLeg: {
+    color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
+      float m = fbm3(p*vec3(9.0, 16.0, 16.0) + uSeed)*0.5+0.5;
+      vec3 col = mix(uC1, uC2, smoothstep(0.3, 0.75, m));
+      float blot = smoothstep(0.56, 0.78, fbm3(p*vec3(12.0, 6.0, 9.0) + uSeed*2.0)*0.5+0.5);
+      col = mix(col, uC3, blot * 0.55);
+      vec3 c = cell3(p*uP.x + uSeed*3.0);
+      float dark = (1.0 - smoothstep(0.1, 0.34, c.x)) * step(0.5, c.z);
+      col = mix(col, uC3, dark * 0.6);
+      float edge = smoothstep(0.6, 0.92, abs(n.z));
+      float ventral = smoothstep(0.1, -0.6, n.y);
+      col = mix(col, uC4, max(edge * 0.5, ventral * 0.65));
+      if (uP.z > 0.5) col = mix(col, vec3(0.74, 0.6, 0.3), smoothstep(uP.w*0.5, uP.w*0.95, p.x) * 0.8);
+      return col;
+    }`,
+    bump: `float orgBump(vec3 p){ vec3 c = cell3(p*uP.x); return (1.0 - smoothstep(0.0, 0.4, c.x))*0.0008 + snoise3(p*vec3(40.0,90.0,90.0))*0.0008; }`,
   },
   // ヤマトオサガニの鉗：掌は乳白〜淡黄、指は黄〜橙で先端ほど濃い。uP.x: 前節長, uP.z: 1なら可動指
   chelaY: {
     color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
       float L = uP.x;
-      float fin = uP.z > 0.5 ? 0.35 + 0.65 * smoothstep(0.0, 0.5 * L, p.x) : smoothstep(0.42 * L, 0.62 * L, p.x);
+      float fin = uP.z > 0.5 ? 0.35 + 0.65 * smoothstep(0.0, 0.5 * L, p.x) : smoothstep(0.5 * L, 0.66 * L, p.x);
       vec3 col = mix(uC1, uC2, fin);
       float tip = uP.z > 0.5 ? smoothstep(0.3 * L, 0.5 * L, p.x) : smoothstep(0.85 * L, 1.02 * L, p.x);
       col = mix(col, uC3, tip * 0.75);

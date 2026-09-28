@@ -193,6 +193,7 @@ function holdInspect() {
   if (a.U && params.has('water')) { a.p.copy(P0); }
   if (a.sink !== undefined) { a.sink = 0; a.state = params.get('state') || 'idle'; a.timer = 99; if (a.state === 'wave') a.wave = 1; }
   if (a.targetOut !== undefined) { a.out = a.targetOut = 1; a.timer = 99; }
+  if (params.has('crouch')) a.crouch = +params.get('crouch');
   if (a.U && params.has('water')) { a.root.visible = true; a.visible = true; a.root.position.y = world.heightAt(P0.x, P0.z) + 0.1; a.root.rotation.set(0, a.yaw, 0); }
   const P = a.root.position;
   for (const o of eco.agents) if (o !== a && o.root.position.distanceTo(P) < 3) o.root.visible = false;
