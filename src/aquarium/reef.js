@@ -128,9 +128,9 @@ function rockMaterial() {
       vec3 stone = mix(vec3(0.3, 0.25, 0.18), vec3(0.56, 0.49, 0.37), n);   // tan-cream limestone
       // coralline algae: pink / purple crusts, strongest on lit faces
       float up = clamp(vWorldN.y * 0.5 + 0.5, 0.0, 1.0);
-      float cor = smoothstep(0.56, 0.66, m + up * 0.12 + (vn3(q * 5.0) - 0.5) * 0.22);   // crust with ragged, fine-grained edges
+      float cor = smoothstep(0.63, 0.72, m + up * 0.12 + (vn3(q * 5.0) - 0.5) * 0.22);   // crust with ragged, fine-grained edges
       vec3 coralline = mix(vec3(0.4, 0.2, 0.28), vec3(0.6, 0.34, 0.44), s) * (0.85 + 0.3 * vn3(q * 20.0));
-      vec3 c = mix(stone, coralline, cor * 0.65);
+      vec3 c = mix(stone, coralline, cor * 0.6);
       c = mix(c, vec3(0.62, 0.58, 0.5), smoothstep(0.6, 0.75, fbmS(q * 0.6 + 3.0)) * 0.5);   // bleached calcareous patches
       c = mix(c, vec3(0.42, 0.3, 0.16), smoothstep(0.55, 0.7, fbmS(q * 0.8 + 21.0)) * 0.55);  // brown sponge / diatom film
       c = mix(c, vec3(0.7, 0.2, 0.2), smoothstep(0.72, 0.8, fbmS(q * 1.7 + 40.0)) * 0.6);   // red coralline
