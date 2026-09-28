@@ -125,7 +125,7 @@ function rockMaterial() {
     color: /* glsl */`{
       vec3 q = vObjP * 22.0;
       float n = fbmS(q), m = fbmS(q * 2.7 + 5.0), s = vn3(q * 9.0);
-      vec3 stone = mix(vec3(0.22, 0.19, 0.15), vec3(0.42, 0.37, 0.3), n);
+      vec3 stone = mix(vec3(0.3, 0.25, 0.18), vec3(0.56, 0.49, 0.37), n);   // tan-cream limestone
       // coralline algae: pink / purple crusts, strongest on lit faces
       float up = clamp(vWorldN.y * 0.5 + 0.5, 0.0, 1.0);
       float cor = smoothstep(0.56, 0.66, m + up * 0.12 + (vn3(q * 5.0) - 0.5) * 0.22);   // crust with ragged, fine-grained edges
@@ -144,6 +144,9 @@ function rockMaterial() {
       // deep porous cavities (live rock is riddled with holes) read as dark occluded pits
       float cav = smoothstep(0.62, 0.78, vn3(q * 3.2 + 13.0)) * smoothstep(0.3, 0.6, fbmS(q * 1.1 + 4.0));
       c *= 1.0 - 0.7 * cav;
+      // dense small pores and worm holes: the high-frequency texture of real live rock
+      float pit = smoothstep(0.7, 0.84, vn3(q * 8.0 + 2.0)) + 0.6 * smoothstep(0.76, 0.9, vn3(q * 19.0 + 7.0));
+      c *= 1.0 - 0.45 * min(pit, 1.0);
       diffuseColor.rgb *= c;
     }`,
     normal: /* glsl */`{
@@ -524,11 +527,12 @@ export function createReef() {
   const mushMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.55, sheen: 0.5, sheenColor: new THREE.Color(0.8, 0.9, 0.6) });
   patch(mushMat, { key: 'fungia',
     color: /* glsl */`{ float a = atan(vObjP.z, vObjP.x); float r = length(vObjP.xz / vec2(1.0, 0.75)) / 0.02;
-      float sept = 0.5 + 0.5 * sin(a * 90.0);
+      float aa = 1.0 - smoothstep(0.4, 1.2, fwidth(a * 90.0));   // fade septa before they alias
+      float sept = 0.5 + 0.5 * sin(a * 90.0) * aa;
       vec3 c = mix(vec3(0.42, 0.4, 0.22), vec3(0.6, 0.55, 0.32), sept * 0.6 + 0.2 * vn3(vObjP * 600.0));
       c = mix(c, vec3(0.78, 0.74, 0.6), 1.0 - smoothstep(0.05, 0.14, r));
       diffuseColor.rgb *= c; }`,
-    normal: /* glsl */`{ float a = atan(vObjP.z, vObjP.x); normal = bumpN(normal, -vViewPosition, sin(a * 90.0) * 0.5, 0.0012); }` });
+    normal: /* glsl */`{ float a = atan(vObjP.z, vObjP.x); normal = bumpN(normal, -vViewPosition, sin(a * 90.0) * 0.5 * (1.0 - smoothstep(0.4, 1.2, fwidth(a * 90.0))), 0.0012); }` });
   [[0.1, 0.16], [0.13, 0.19], [0.07, 0.2], [-0.25, 0.15]].forEach(([x, z], i) => {
     const m = new THREE.Mesh(mush, mushMat); m.position.set(x, sandHeight(x, z) + 0.001, z); m.rotation.set(0.12 * Math.sin(x * 50), i * 1.3, 0.12 * Math.cos(z * 40)); group.add(m);
   });

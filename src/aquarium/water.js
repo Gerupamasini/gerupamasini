@@ -135,7 +135,13 @@ vec3 causticAt(vec3 P, float lod){
   // the focus changes with depth: close under the surface the pattern is soft
   float depth = ${TANK.level.toFixed(4)} - P.y;
   float focus = smoothstep(0.0, 0.3, depth);
-  vec3 c = min(textureLod(uCaustic, uv, lod + (1.0 - focus) * 3.0).rgb, vec3(3.0));
+  float L = lod + (1.0 - focus) * 3.0;
+  // sharp filaments plus a soft halo (finite size of the light, forward scattering) so the
+  // pattern reads as light, not as drawn lines; slight dispersion splits the colour at the edges
+  vec2 dsp = vec2(0.0005, 0.00025);
+  vec3 cs = vec3(textureLod(uCaustic, uv + dsp, L).r, textureLod(uCaustic, uv, L).g, textureLod(uCaustic, uv - dsp, L).b);
+  vec3 cb = textureLod(uCaustic, uv, L + 2.2).rgb;
+  vec3 c = min(cs * 0.55 + cb * 0.45, vec3(3.0));
   c = mix(vec3(1.0), c, 0.35 + 0.65 * focus);
   float inside = step(abs(P.x), ${(TANK.w / 2).toFixed(4)}) * step(abs(P.z), ${(TANK.d / 2).toFixed(4)}) * step(P.y, ${TANK.level.toFixed(4)});
   return mix(vec3(1.0), c, inside * uCausticStrength);
