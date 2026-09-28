@@ -52,10 +52,19 @@ const sx = (s) => 0.5 - s; // s -> fish-space x
 
 // ------------------------------------------------------------- body mesh ----------
 
-function lensZ(yn, w) {
+function lensZ(yn, w, s = 0.5) {
   // cross-section: thick above the midline, sharp dorsal/ventral keels feeding the fins
   const a = Math.max(0, 1 - Math.pow(Math.abs(yn), 2.1));
-  return w * Math.pow(a, 0.62) * (1 + 0.12 * yn);
+  const z = w * Math.pow(a, 0.62) * (1 + 0.12 * yn);
+  // where a median fin sits on the keel, the flank sweeps into it with a concave, scaled
+  // fin root (as in real chaetodontids) instead of meeting a flat fin at a crease
+  const k = yn < 0 ? THREE.MathUtils.smoothstep(s, 0.46, 0.6) : THREE.MathUtils.smoothstep(s, 0.27, 0.36);
+  if (k <= 0) return z;
+  const e = 1 - Math.abs(yn), E = 0.3, finT = 0.0085;
+  if (e >= E) return z;
+  const aE = 1 - Math.pow(1 - E, 2.1), zE = w * Math.pow(aE, 0.62) * (1 + 0.12 * yn);
+  const root = finT + (zE - finT) * Math.pow(e / E, 1.7);     // concave, flush with the fin shell at the keel
+  return z + (Math.min(root, z + finT) - z) * k;
 }
 
 function buildBody() {
@@ -72,7 +81,7 @@ function buildBody() {
       const th = (j / NR) * Math.PI * 2;
       const yn = Math.cos(th);
       const y = c + hh * yn;
-      let z = Math.sign(Math.sin(th)) * lensZ(yn, w);
+      let z = Math.sign(Math.sin(th)) * lensZ(yn, w, s);
       // head: cheek / operculum bulge, forehead dip in front of the eye
       const cheek = Math.exp(-(((s - 0.22) / 0.07) ** 2) - (((y + 0.03) / 0.09) ** 2));
       z *= 1 + 0.04 * cheek;
@@ -109,7 +118,7 @@ function buildBody() {
 // the membrane is pleated (rays alternately forward/back) like a real folded fin.
 // thick > 0 builds a closed thin shell: fleshy at the root, thinning to the edge, with the
 // rays standing slightly proud of the membrane on both faces.
-export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallop = 0.06, bow = 0.0, zOff = 0, flat = false, spines = -1, spineScallop = 0.14, thick = 0 }) {
+export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallop = 0.06, bow = 0.0, zOff = 0, flat = false, spines = -1, spineScallop = 0.14, thick = 0, ridge = 0.25 }) {
   const nR = base.length;
   const pos = [], uv = [], fin = [], idx = [], side = [];
   const cols = (nR - 1) * sub + 1;
@@ -128,7 +137,7 @@ export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallo
       const bw = bow * Math.sin(Math.PI * t);
       s += -dy * bw; y += dx * bw;
       const z = flat ? 0 : pleat * Math.pow(t, 0.8) * Math.cos(Math.PI * r) + zOff;
-      const th = thick * (Math.pow(1 - t, 2.2) + 0.06 + 0.25 * (1 - between) * (1 - t));
+      const th = thick * (Math.pow(1 - t, 2.2) + 0.06 + ridge * (1 - between) * (1 - t));
       pos.push(sx(s), y, z + th);
       uv.push(...toUV(s, y));
       fin.push(r, t / 1.0);
@@ -199,9 +208,9 @@ function finLayouts() {
   for (let i = 0; i < nD; i++) { const s = 0.295 + (0.985 - 0.295) * (i / (nD - 1)); dBase.push([s, top(s) - 0.003]); }
   const nA = 26;
   const aBase = [], aTip = polyline([[0.49, -0.212], [0.592, -0.2264], [0.6847, -0.2368], [0.7547, -0.2426], [0.8265, -0.2412],
-    [0.8758, -0.2342], [0.9487, -0.2283], [0.9991, -0.2169], [1.0472, -0.1954], [1.0696, -0.1819], [1.0852, -0.1571],
-    [1.0783, -0.1269], [1.0535, -0.0922], [1.0013, -0.052]], nA);
-  for (let i = 0; i < nA; i++) { const s = 0.48 + (0.985 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.003]); }
+    [0.8758, -0.2342], [0.9487, -0.2283], [1.0, -0.216], [1.04, -0.2], [1.066, -0.178], [1.08, -0.15],
+    [1.078, -0.122], [1.06, -0.095], [1.03, -0.072], [1.0, -0.054]], nA);   // rounded rear lobe
+  for (let i = 0; i < nA; i++) { const s = 0.48 + (0.985 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.012 * THREE.MathUtils.smoothstep(s, 0.48, 0.6)]); }   // root sunk into the fleshy keel
   const nC = 19;
   const cBase = [], cTip = polyline([[1.19, 0.135], [1.212, 0.065], [1.218, 0.0], [1.21, -0.065], [1.186, -0.138]], nC);
   for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.955 + 0.02 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.006 - f * (top(s) - bottom(s) - 0.012)]); }
@@ -619,7 +628,7 @@ export function createButterflyfish(renderer, opts = {}) {
           // median fins are nearly opaque in life; spines show only faintly through the membrane
           float memA = 0.96;
           if (kind < 1.5 && spine) memA = mix(0.95, 0.8, t);
-          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.1, smoothstep(0.79, 0.86, t));      // caudal: clear margin
+          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.15, smoothstep(0.9, 0.95, t));      // caudal: clear margin
           if (kind > 2.5) memA = kind < 3.5 ? mix(0.06, 0.02, t) : mix(0.92, 0.75, t);             // pectoral / pelvic
           vec3 c = diffuseColor.rgb * (kind < 2.5 ? 0.9 : 1.0);
           #ifdef USE_MAP
@@ -628,30 +637,43 @@ export function createButterflyfish(renderer, opts = {}) {
           float opaque = 0.0;
           #endif
           if (kind < 0.5) {
+            // soft dorsal: clean lemon-yellow in photographs (the photo texture reads orange here)
+            float soft = smoothstep(uSpines - 1.0, uSpines + 3.0, r);
+            c = mix(c, mix(vec3(1.0, 0.8, 0.05), vec3(1.0, 0.68, 0.02), smoothstep(0.5, 1.0, t)), soft * 0.55 * smoothstep(0.12, 0.3, dot(c, vec3(0.3, 0.55, 0.15))));   // keep the ocellus and dark margin
+            ray *= mix(1.0, 0.35, soft);
             // thin dark line along the whole dorsal edge; black margin down the soft dorsal's rear edge
             c = mix(c, vec3(0.06, 0.05, 0.05), smoothstep(0.93, 0.965, t) * 0.9);
             c = mix(c, vec3(0.05, 0.04, 0.04), smoothstep(uRays - 4.6, uRays - 3.4, r) * smoothstep(0.3, 0.55, t));
           }
-          if (kind > 0.5 && kind < 1.5 && !spine) {
-            // anal: soft part yellow (orange toward the rear), dark submarginal line and a pale margin
-            c = mix(c, mix(vec3(0.98, 0.78, 0.06), vec3(0.98, 0.6, 0.04), smoothstep(uRays * 0.5, uRays, r)), smoothstep(uSpines, uSpines + (uRays - uSpines) * 0.35, r) * smoothstep(0.05, 0.3, t) * 0.9);
-            float sub = smoothstep(0.86, 0.88, t) * (1.0 - smoothstep(0.9, 0.92, t));
-            c = mix(c, vec3(0.08, 0.05, 0.03), sub * 0.9);
-            c = mix(c, vec3(0.97, 0.95, 0.85), smoothstep(0.925, 0.95, t) * 0.9);
+          if (kind > 0.5 && kind < 1.5) {
+            // anal fin, as photographed: the spiny front and the inner (basal) part are pearl
+            // white, continuous with the flank; a yellow band along the outer part widens to
+            // fill the rounded rear lobe; then a thin dark brown submarginal line and a pale
+            // blue-white margin along the lower and rear edge only
+            float rr = clamp((r - uSpines) / max(uRays - uSpines, 1.0), 0.0, 1.0);   // 0 front .. 1 rear
+            float yStart = mix(0.55, -0.2, smoothstep(0.05, 0.6, rr));
+            float yb = smoothstep(yStart, yStart + 0.18, t);
+            vec3 yl2 = mix(vec3(1.0, 0.8, 0.05), vec3(1.0, 0.7, 0.02), rr);
+            c = mix(vec3(0.84, 0.855, 0.86), yl2, yb);
+            float edge = smoothstep(0.1, 0.35, rr);
+            c = mix(c, vec3(0.16, 0.09, 0.04), (smoothstep(0.86, 0.885, t) - smoothstep(0.905, 0.93, t)) * edge * 0.85);
+            c = mix(c, vec3(0.78, 0.88, 0.96), smoothstep(0.925, 0.955, t) * edge * 0.9);
+            ray *= 0.25;                    // thick, scaled fin: rays barely show
           }
           if (kind > 1.5 && kind < 2.5) {
             // caudal: yellow, a thin dark submarginal bar, then a clear margin
-            float bar = smoothstep(0.63, 0.67, t) * (1.0 - smoothstep(0.76, 0.795, t));
-            c = mix(c, vec3(0.1, 0.075, 0.05), smoothstep(0.55, 0.64, t) * 0.35);   // yellow darkens toward the bar
-            c = mix(c, vec3(0.04, 0.035, 0.03), bar * 0.95);
-            c = mix(c, vec3(0.9, 0.9, 0.86), smoothstep(0.79, 0.84, t) * 0.7);
+            // (photographs: solid yellow fan, one thin dark submarginal line, narrow clear edge)
+            c = mix(c, vec3(1.0, 0.8, 0.04), 0.6);
+            float bar = smoothstep(0.855, 0.87, t) * (1.0 - smoothstep(0.89, 0.905, t));
+            c = mix(c, vec3(0.1, 0.07, 0.03), bar * 0.9);
+            c = mix(c, vec3(0.95, 0.93, 0.7), smoothstep(0.905, 0.93, t) * 0.6);
           }
           if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.9, 0.6), vec3(0.9), t); ray *= 0.6; }
           if (kind > 3.5) { c = mix(vec3(0.97, 0.86, 0.45), vec3(0.98, 0.95, 0.8), t); c = mix(c, vec3(0.25, 0.2, 0.15), (1.0 - smoothstep(0.0, 0.6, r)) * 0.7); }   // pelvics: yellow-white, dark leading spine
           // rays: faint ridges only (the membrane is thick)
           vec3 rayC = spine ? c * 1.06 + 0.02 : c * 1.05 + 0.015;
           c = mix(c, rayC, ray * 0.07);
-          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.16, smoothstep(0.8, 0.88, t)) : 0.98), ray);
+          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.25, smoothstep(0.9, 0.95, t)) : 0.98), ray);
           a = mix(a, 1.0, opaque);
           a *= smoothstep(0.0, 0.03, 1.0 - t + 0.02);
           if (kind > 2.5 && kind < 3.5) a *= smoothstep(0.05, 0.45, abs(dot(normalize(vNormal), normalize(vViewPosition))));
@@ -673,8 +695,8 @@ export function createButterflyfish(renderer, opts = {}) {
     return m;
   };
 
-  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, sub: 4, segs: 18, pleat: 0.0015, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.007 }), mkFinMat(0, 12, 37));
-  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, sub: 4, segs: 16, pleat: 0.001, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.007 }), mkFinMat(1, 2, 23));
+  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, ridge: 0.08, sub: 4, segs: 18, pleat: 0.0015, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.007 }), mkFinMat(0, 12, 37));
+  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, ridge: 0.02, sub: 4, segs: 16, pleat: 0.0002, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.007 }), mkFinMat(1, 2, 23));
   const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, sub: 4, segs: 16, pleat: 0.0012, scallop: 0.006, thick: 0.005 }), mkFinMat(2, -1));
   for (const m of [dorsal, anal, caudal]) { m.renderOrder = 2; group.add(m); }
 
