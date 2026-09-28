@@ -1219,8 +1219,8 @@ export class Ecosystem {
         arm: spk(0.9, [0x5a5638, 0x74704a, 0x2e2c1e, 0xa8a890], [120, 1.0, 0, 0]),
         stalk: spk(0.2, [0x8a866a, 0xa6a080, 0x46422e, 0xbeb89e], [220, 0.3, 0, 0], { clearcoat: 0.7, clearcoatRoughness: 0.15 }),
         // 雄の掌：灰緑色（写真4）と淡黄色（写真3）の個体差
-        clawA: chela(0.4, [0xb6b89a, 0xd8b848, 0xa85a24], [0.58, 0, 0, 0]),
-        dactA: chela(0.5, [0xc8c09a, 0xdcb444, 0x9a5020], [0.58, 0, 1, 0]),
+        clawA: chela(0.4, [0xb6b89a, 0xc8b460, 0x9a5a28], [0.58, 0, 0, 0]),
+        dactA: chela(0.5, [0xc4bc98, 0xc8ae58, 0x8e5024], [0.58, 0, 1, 0]),
         clawB: chela(0.41, [0xe8d49a, 0xe2b456, 0xa85a24], [0.58, 0, 0, 0]),
         dactB: chela(0.51, [0xe8d49a, 0xe0ac4c, 0x9a5020], [0.58, 0, 1, 0]),
         clawF: chela(0.45, [0xa89c74, 0x9a6a34, 0x4a2a14], [0.46, 0, 0, 0]),
@@ -1237,7 +1237,7 @@ export class Ecosystem {
       roughness: 0.52, clearcoat: 0.45, clearcoatRoughness: 0.28,
     });
     const B = seed > 0.5;
-    return { shell, leg: sh.leg, legDact: sh.legDact, claw: B ? sh.clawB : sh.clawA, dact: B ? sh.dactB : sh.dactA, clawF: sh.clawF, dactF: sh.dactF, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.yamaCornea || (this.yamaCornea = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0xb4b8b6, 0x2e3032], roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.12 })) };
+    return { shell, leg: sh.leg, legDact: sh.legDact, claw: B ? sh.clawB : sh.clawA, dact: B ? sh.dactB : sh.dactA, clawF: sh.clawF, dactF: sh.dactF, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.yamaCornea || (this.yamaCornea = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0xa8a296, 0x2e2c28], roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.12 })) };
   }
 
   kometsukiMaterials(seed) {
