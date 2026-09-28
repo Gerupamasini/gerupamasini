@@ -256,6 +256,11 @@ export const GLSL = {
       // 掌の外面の細かな暗い斑点（生体写真の灰緑色の掌）
       vec3 sp = cell3(p * 190.0 + uSeed * 5.0);
       col = mix(col, col * 0.62, (1.0 - smoothstep(0.08, 0.26, sp.x)) * step(0.55, sp.z) * (1.0 - fin) * 0.8);
+      // 関節膜（掌と腕節の間・可動指の付け根）は暗い
+      if (uP.z < 0.5) col = mix(col, uC3 * 0.55, (1.0 - smoothstep(0.0, 0.06 * L, p.x)) * 0.8);
+      else col = mix(col, uC3 * 0.6, (1.0 - smoothstep(0.0, 0.05 * L, length(p.xy))) * 0.7);
+      // 指先は黒褐色で艶がある
+      col = mix(col, uC3 * 0.45, uP.z > 0.5 ? smoothstep(0.42 * L, 0.52 * L, p.x) : smoothstep(0.98 * L, 1.06 * L, p.x));
       // 掌の上縁の瘤と内面の細かな顆粒はわずかに白い
       vec3 c = cell3(p * 140.0);
       col = mix(col, col * 1.08, (1.0 - smoothstep(0.0, 0.35, c.x)) * 0.5);

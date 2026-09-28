@@ -361,7 +361,7 @@ export function macroChelaDims(PL, PH) {
   return { pl, ang, FL, base, tip, pivot };
 }
 function macroChelaGeo(PL, PH, T, q = 1) {
-  return cached(`mchela5:${PL}:${PH}:${T}:${q}`, () => {
+  return cached(`mchela7:${PL}:${PH}:${T}:${q}`, () => {
     const D = macroChelaDims(PL, PH);
     const { pl, ang, FL, base } = D;
     const palm = ellipsoid([pl * 0.5, 0, 0], [pl * 0.56, PH * 0.5, T * 0.5]);
@@ -380,13 +380,24 @@ function macroChelaGeo(PL, PH, T, q = 1) {
     const tub = [];
     for (let i = 0; i < 6; i++) { const x = pl * (0.2 + i * 0.1); const u = (x - pl * 0.5) / (pl * 0.56); tub.push(sphere([x, PH * 0.5 * Math.sqrt(Math.max(0, 1 - u * u)) - PH * 0.02, T * 0.05], PH * 0.028)); }
     const ridge = cone([pl * 0.2, -PH * 0.12, T * 0.36], [pl * 0.8, -PH * 0.2, T * 0.3], PH * 0.02, PH * 0.018);
+    // 可動指の関節窩（掌の上端先の縁がめくれた受け口）
+    const socket = ellipsoid([D.pivot[0] - PH * 0.02, D.pivot[1] - PH * 0.02, 0], [PH * 0.14, PH * 0.12, T * 0.36]);
+    const socketCut = sphere([D.pivot[0] + PH * 0.06, D.pivot[1], 0], PH * 0.1);
+    // 不動指基部の大きな臼歯状の歯
+    const molar = ellipsoid([fx(FL * 0.22) - Math.sin(ang) * PH * 0.17, fy(FL * 0.22) + Math.cos(ang) * PH * 0.17, 0], [PH * 0.07, PH * 0.05, T * 0.18]);
+    // 下縁の稜（掌の下縁から不動指の外縁へ続く）
+    const keel = tube([[pl * 0.1, -PH * 0.44, 0], [pl * 0.6, -PH * 0.46, 0], [fx(FL * 0.3), fy(FL * 0.3) - PH * 0.12, 0]], [PH * 0.05, PH * 0.05, PH * 0.03], PH * 0.05);
     const f = (x, y, z) => {
       let d = palm(x, y, z * 1.1) / 1.1;
       d = smin(d, neck(x, y, z), PH * 0.1);
-      d = smin(d, pollex(x, y, z * 1.5) / 1.5, PH * 0.18);
+      d = smin(d, pollex(x, y, z * 1.15) / 1.15, PH * 0.18);
       for (const t of teeth) d = smin(d, t(x, y, z * 1.3) / 1.3, PH * 0.02);
       for (const t of tub) d = smin(d, t(x, y, z), PH * 0.03);
       d = smin(d, ridge(x, y, z), PH * 0.06);
+      d = smin(d, socket(x, y, z), PH * 0.06);
+      d = smax(d, -socketCut(x, y, z), PH * 0.03);
+      d = smin(d, molar(x, y, z), PH * 0.03);
+      d = smin(d, keel(x, y, z * 1.6) / 1.6, PH * 0.08);
       return d;
     };
     return meshSDF(f, [-PH * 0.3, -PH * 0.65 - FL * 0.8, -T * 0.6], [PL * 1.05, PH * 0.6, T * 0.6], Math.max(PH, T) / 26 * q);
@@ -394,7 +405,7 @@ function macroChelaGeo(PL, PH, T, q = 1) {
 }
 // 可動指：関節から鉤状に湾曲し、先端は不動指の先に重なる。tip は関節から見た先端位置
 function macroDactGeo(PL, PH, q = 1) {
-  return cached(`mdact4:${PL}:${PH}:${q}`, () => {
+  return cached(`mdact6:${PL}:${PH}:${q}`, () => {
     const D = macroChelaDims(PL, PH);
     const tx = D.tip[0] - D.pivot[0] + PH * 0.02, ty = D.tip[1] - D.pivot[1] + PH * 0.04;
     const L = Math.hypot(tx, ty);
@@ -408,8 +419,12 @@ function macroDactGeo(PL, PH, q = 1) {
       const s = 0.2 + i * 0.1, b = bow * Math.sin(Math.PI * Math.min(1, s * 1.1)) * 0.9 - PH * 0.09;
       teeth.push(sphere(P(s, b), PH * 0.03));
     }
+    const condyle = sphere([0, 0, 0], PH * 0.1);
+    const bigTooth = ellipsoid(P(0.32, bow * 0.85 - PH * 0.11), [PH * 0.06, PH * 0.045, PH * 0.05]);
     const f = (x, y, z) => {
-      let d = t(x, y, z * 1.4) / 1.4;
+      let d = t(x, y, z * 1.12) / 1.12;
+      d = smin(d, condyle(x, y, z), PH * 0.03);
+      d = smin(d, bigTooth(x, y, z), PH * 0.02);
       for (const k of teeth) d = smin(d, k(x, y, z * 1.3) / 1.3, PH * 0.02);
       return d;
     };
