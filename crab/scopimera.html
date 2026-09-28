@@ -12,7 +12,7 @@ button{background:#2c3036;color:var(--fg);border:1px solid #444a52;border-radius
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head><body>
-<div id="ui"><button data-v="persp">斜め</button><button data-v="top">上面</button><button data-v="front">正面</button><button data-v="side">側面</button><button id="walk">歩行テスト</button></div>
+<div id="ui"><button data-v="persp">斜め</button><button data-v="top">上面</button><button data-v="front">正面</button><button data-v="side">側面</button><button data-v="bottom">腹面</button><button id="walk">歩行テスト</button></div>
 <div id="info">Scopimera globosa（コメツキガニ）LOD0 ／ GLTFLoader + MeshStandardMaterial + DirectionalLight + AmbientLight のみ</div>
 <script type="module">
 import * as THREE from 'three';
@@ -27,9 +27,9 @@ scene.add(new THREE.AmbientLight(0xffffff,0.9));
 const sun=new THREE.DirectionalLight(0xffffff,2.6);sun.position.set(0.05,0.12,0.08);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
 Object.assign(sun.shadow.camera,{left:-.04,right:.04,top:.04,bottom:-.04,near:.01,far:.4});sun.shadow.bias=-0.0002;scene.add(sun);
 const fill=new THREE.DirectionalLight(0xbcd4ff,0.6);fill.position.set(-0.08,0.05,-0.05);scene.add(fill);
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.3),new THREE.MeshStandardMaterial({color:0xcbbd9f,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
-const views={persp:[0.022,0.018,0.028],top:[0,0.055,0.0001],front:[0,0.007,0.045],side:[0.045,0.007,0]};
-function setView(v){const p=views[v];cam.position.set(...p);ctl.target.set(0,v==="top"?0:0.005,0);ctl.update();}
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.3),new THREE.MeshStandardMaterial({color:0xcbbd9f,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);window.__ground=ground;
+const views={persp:[0.022,0.018,0.028],top:[0,0.055,0.0001],front:[0,0.007,0.045],side:[0.045,0.007,0],bottom:[0,-0.03,0.012]};
+function setView(v){const p=views[v];if(window.__ground)window.__ground.visible=v!=="bottom";cam.position.set(...p);ctl.target.set(0,v==="top"?0:0.005,0);ctl.update();}
 setView('persp');document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>setView(b.dataset.v));
 addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight);});
 let bones={},rest={},walking=false;document.getElementById('walk').onclick=()=>walking=!walking;

@@ -56,16 +56,16 @@ SEGS = ["coxa", "basis", "merus", "carpus", "propodus", "dactylus"]
 PITCH = [-25.0, -5.0, 36.0, -22.0, -66.0, -82.0]
 
 # 鋏脚: 左右同大。掌部は丸く平たく、口の前に折りたたみ、指は下内向き
-CHEL = dict(z=2.9,
-            L=[0.7, 0.6, 2.6, 1.4, 2.5, 2.0],       # coxa, basis, merus, carpus, propodus(掌部), dactylus
-            yaw=[40.0, 55.0, 72.0, 128.0, 152.0, 150.0],
-            pitch=[-30.0, -15.0, 8.0, -12.0, -52.0, -80.0])
+CHEL = dict(z=2.2,
+            L=[0.6, 0.5, 1.5, 1.1, 2.4, 2.0],       # coxa, basis, merus, carpus, propodus(掌部), dactylus
+            yaw=[30.0, 50.0, 82.0, 150.0, 172.0, 178.0],  # 口の前に折りたたみ、指先は正中線付近で出会う
+            pitch=[-35.0, -20.0, 5.0, 0.0, -68.0, -85.0])
 CHEL_R = {
     "coxa": (0.55, 0.50, 0.62, 0.56),
     "basis": (0.45, 0.42, 0.50, 0.48),
     "merus": (0.38, 0.34, 0.75, 0.62),
     "carpus": (0.42, 0.38, 0.56, 0.52),
-    "propodus": (0.48, 0.40, 1.15, 0.95),   # 掌部: 丸く平たい板状
+    "propodus": (0.50, 0.42, 1.30, 1.05),   # 掌部: 大きく丸く平たい板状
     "fixed": (0.24, 0.02, 0.32, 0.03),      # 不動指
     "dactylus": (0.22, 0.02, 0.30, 0.03),   # 可動指
 }
@@ -151,7 +151,8 @@ layout_row("cheliped", [(f"cheliped_{sg}", ln + 1.0, dict(kind="seg", seg=sg, le
 layout_row("misc", [("eyestalk", 3.0, dict(kind="eyestalk")),
                     ("cornea", 1.5, dict(kind="cornea")),
                     ("mxp", 3.0, dict(kind="mxp")),
-                    ("seta", 1.0, dict(kind="seta"))])
+                    ("seta", 1.0, dict(kind="seta")),
+                    ("abd", 2.0, dict(kind="abd"))])
 
 
 # ------------------------------------------------------------------ メッシュ蓄積
@@ -373,8 +374,8 @@ def build_leg(leg, p, sg, ground):
         tube(P, dirs[i], L, SEG_R[sgm], name, f"{leg}_{sgm}", sg, nl=nl, nc=14, bend=bend, tip=tip,
              sq=2.6 if sgm == "merus" else 2.3)
         if sgm in ("merus", "carpus", "propodus"):
-            add_setae(P, dirs[i], L, SEG_R[sgm][2], name, sg, {"merus": 7, "carpus": 4, "propodus": 5}[sgm],
-                      {"merus": 0.9, "carpus": 0.8, "propodus": 0.9}[sgm], hash((leg, sgm, sg)) % 1000)
+            add_setae(P, dirs[i], L, SEG_R[sgm][2], name, sg, {"merus": 12, "carpus": 6, "propodus": 8}[sgm],
+                      {"merus": 1.1, "carpus": 0.9, "propodus": 1.0}[sgm], hash((leg, sgm, sg)) % 1000)
         BONES.append((name, mirror_x(P, sg), mirror_x(P + dirs[i] * L, sg), parent))
         parent = name
         P = P + dirs[i] * L
@@ -439,13 +440,20 @@ def build_mouthparts():
         ellipsoid(C, 1.0, 1.45, 0.45, "carapace", "mxp", sg, nu=20, nv=10, rot=rot)
 
 
+def build_abdomen():
+    """腹節: 腹面中央の細長い板（雄は幅が狭い）"""
+    W, T, D, yc, z = carapace_profile(-0.1)
+    C = np.array([0.0, yc + H_CENTER - D * 0.93, -0.3])
+    ellipsoid(C, 1.05, 0.22, 2.6, "carapace", "abd", 1, nu=20, nv=8)
+
+
 def add_setae(P0, d, L, rh, grp, sg, count, length, seed):
     """脚の縁の剛毛（写真で目立つ長い毛）。細い三角錐として実ジオメトリ化"""
     rng = np.random.default_rng(seed)
     d, n, h = frame_from(d)
     for i in range(count):
         t = 0.15 + 0.75 * (i + rng.random() * 0.6) / count
-        side_h = -1.0 if i % 3 else 1.0                  # 主に腹縁
+        side_h = -1.0 if i % 2 else 1.0                  # 背縁・腹縁の両方
         base = P0 + d * (L * t) + h * (rh * 0.85 * side_h) + n * (rng.random() - 0.5) * 0.2
         hd = h * side_h * 0.8 + d * 0.55 + n * (rng.random() - 0.5) * 0.5
         tube(base, hd, length * (0.7 + 0.6 * rng.random()), (0.035, 0.004, 0.035, 0.004), grp, "seta", sg,
@@ -455,6 +463,7 @@ def add_setae(P0, d, L, rh, grp, sg, count, length, seed):
 # ------------------------------------------------------------------ 組み立て
 build_carapace()
 build_mouthparts()
+build_abdomen()
 GROUND = 0.0
 for leg, p in LEGS.items():
     for sg in (1, -1):
@@ -543,9 +552,11 @@ col[:] = (0.80, 0.80, 0.80)
 rough = np.full((TEX, TEX), 0.55)
 height = np.zeros((TEX, TEX))
 
-BASE = np.array([0.66, 0.66, 0.56])           # 灰オリーブ（砂色の迷彩）
+BASE = np.array([0.46, 0.44, 0.35])           # 灰オリーブ（砂色の迷彩）
 DARK = np.array([0.18, 0.19, 0.17])           # 暗色斑
-LIGHT = np.array([0.86, 0.86, 0.78])          # 明色の小斑
+LIGHT = np.array([0.88, 0.87, 0.78])
+LILAC = np.array([0.58, 0.47, 0.76])          # 腹面の胸板: 薄紫
+PALM = np.array([0.86, 0.85, 0.93])           # 鋏: つやのある淡いラベンダー白          # 明色の小斑
 BELLY = np.array([0.93, 0.92, 0.88])
 TIP = np.array([0.93, 0.80, 0.80])            # 鋏の指先: 白〜淡いピンク
 DTIP = np.array([0.55, 0.45, 0.32])           # 歩脚指節先端: 飴色
@@ -571,15 +582,17 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         top = np.sin(a) * np.ones_like(s)
         wt = smooth(-0.35, 0.35, top)
         wu = smooth(-0.15, -0.6, top)
-        mott = smooth(0.52, 0.60, mid) * 0.8                   # 暗色の網目状まだら
-        spot = smooth(0.78, 0.84, fin)                   # 明色の小斑
+        mott = smooth(0.55, 0.63, mid) * 0.6                   # 暗色の網目状まだら
+        spot = smooth(0.66, 0.72, fin) * 0.9 + smooth(0.62, 0.66, grn) * 0.5   # 明色の細かな顆粒斑
         c = BASE * (1 - mott[..., None] * 0.75) + DARK * mott[..., None] * 0.75
         c = c * (1 - spot[..., None] * 0.6) + LIGHT * spot[..., None] * 0.6
         c = c * wt[..., None] + BASE * 1.08 * (1 - wt[..., None])
+        lil = wu * smooth(0.95, 0.6, np.abs(np.cos(a))) * smooth(0.04, 0.16, np.abs(np.cos(a))) * (0.85 + 0.15 * mac)   # 胸板の紫斑、縁は白
         c = c * (1 - wu[..., None]) + BELLY * wu[..., None]
+        c = c * (1 - lil[..., None]) + LILAC * lil[..., None]
         c = c * (0.92 + 0.14 * mac[..., None])
         col[y0:y1, x0:x1] = np.clip(c, 0, 1)
-        rough[y0:y1, x0:x1] = 0.48 + 0.10 * fin + 0.08 * wu
+        rough[y0:y1, x0:x1] = 0.36 + 0.10 * fin + 0.06 * wu
         height[y0:y1, x0:x1] = 0.35 * fin + 0.5 * grn + 0.25 * mott
     elif kind == "seg":
         sg = info["seg"]
@@ -602,17 +615,18 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         c = c * (1 - band[..., None] * 0.7) + DARK * band[..., None] * 0.7
         spot = smooth(0.80, 0.86, fin)
         c = c * (1 - spot[..., None] * 0.4) + LIGHT * spot[..., None] * 0.4
-        if sg == "propodus" and chel:
-            # 掌部: 上縁が暗く、下半分は明るい
-            up = smooth(0.15, 0.35, np.abs(lv - 0.25) * -1 + 0.5)
-            c = c * (1 - 0.45 * up[..., None]) + DARK * 0.45 * up[..., None]
+        if chel and sg in ("propodus", "fixed", "dactylus", "carpus"):
+            # 鋏: つやのある淡いラベンダー白。掌部の外面上部にだけ薄い斑
+            up = smooth(0.2, 0.0, np.abs(lv - 0.25)) * 0.35 * smooth(0.5, 0.65, mid)
+            c = PALM * (1 - up[..., None]) + BASE * up[..., None]
+            c = c * (0.96 + 0.06 * mac[..., None])
         if sg in ("dactylus", "fixed"):
             tipw = smooth(0.45, 0.9, lu) * ones
             tc = TIP if chel or sg == "fixed" else DTIP
             c = c * (1 - tipw[..., None]) + tc * tipw[..., None]
         c = c * (0.94 + 0.10 * mac[..., None])
         col[y0:y1, x0:x1] = np.clip(c, 0, 1)
-        rough[y0:y1, x0:x1] = 0.55 + 0.08 * fin - (0.15 * smooth(0.6, 1.0, lu) if sg in ("dactylus", "fixed") else 0)
+        rough[y0:y1, x0:x1] = (0.30 if chel else 0.48) + 0.08 * fin - (0.15 * smooth(0.6, 1.0, lu) if sg in ("dactylus", "fixed") else 0)
         height[y0:y1, x0:x1] = 0.4 * fin + 0.4 * grn
     elif kind == "eyestalk":
         # 眼柄: 明るい灰色、付け根側に暗い帯
@@ -624,8 +638,15 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
     elif kind == "cornea":
         col[y0:y1, x0:x1] = (0.10, 0.09, 0.08)
         rough[y0:y1, x0:x1] = 0.2
+    elif kind == "abd":
+        c = np.array([0.80, 0.82, 0.84]) * np.ones_like(lu * lv)[..., None]
+        seg_line = np.exp(-((np.mod(lu * 5, 1) - 0.5) / 0.05) ** 2) * 0.25
+        c = c * (1 - seg_line[..., None]) + (fin[..., None] - 0.5) * 0.08
+        col[y0:y1, x0:x1] = np.clip(c, 0, 1)
+        rough[y0:y1, x0:x1] = 0.35
+        height[y0:y1, x0:x1] = 0.3 * fin - 1.5 * seg_line
     elif kind == "seta":
-        col[y0:y1, x0:x1] = (0.78, 0.76, 0.66)
+        col[y0:y1, x0:x1] = (0.20, 0.19, 0.16)
         rough[y0:y1, x0:x1] = 0.6
     elif kind == "mxp":
         # 第3顎脚: 白い板に、上半分の暗色斑と点刻
@@ -689,7 +710,7 @@ def eye_material():
     m = bpy.data.materials.new("Scopimera_Eye")
     m.use_nodes = True
     bsdf = m.node_tree.nodes["Principled BSDF"]
-    bsdf.inputs["Base Color"].default_value = (0.03, 0.032, 0.035, 1.0)
+    bsdf.inputs["Base Color"].default_value = (0.10, 0.085, 0.075, 1.0)
     bsdf.inputs["Roughness"].default_value = 0.18
     bsdf.inputs["Metallic"].default_value = 0.0
     return m
