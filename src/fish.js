@@ -359,6 +359,9 @@ Paint paint(vec2 p){
     float lum = dot(col, vec3(0.3, 0.55, 0.15));
     float warm = smoothstep(1.2, 2.2, col.r / max(col.b, 0.02)) * smoothstep(0.42, 0.12, lum) * (1.0 - stCoreEarly(pm.b, s));
     col = mix(col, mix(yel, orange, 0.5) * 0.72, warm * 0.55 * ph.a * uPhotoMix);
+    // blurred reflection in the photo left a grey-green haze at the shoulder: pull greenish tints back to pearl white
+    float greenish = smoothstep(0.0, 0.05, col.g - col.r) * smoothstep(0.0, 0.08, col.g - col.b) * smoothstep(0.3, 0.38, s) * (1.0 - smoothstep(0.62, 0.7, s));
+    col = mix(col, white * (0.92 + 0.08 * lum), greenish * 0.8 * ph.a * uPhotoMix);
   }
   // the photo's stripes are soft (motion + JPEG); reinforce them with the traced stripe field
   float stCore = smoothstep(0.7, 0.9, pm.b) * smoothstep(0.26, 0.3, s) * (1.0 - Y * 0.6);
@@ -616,7 +619,7 @@ export function createButterflyfish(renderer, opts = {}) {
           // median fins are nearly opaque in life; spines show only faintly through the membrane
           float memA = 0.96;
           if (kind < 1.5 && spine) memA = mix(0.95, 0.8, t);
-          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.3, smoothstep(0.79, 0.86, t));      // caudal: clear margin
+          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.1, smoothstep(0.79, 0.86, t));      // caudal: clear margin
           if (kind > 2.5) memA = kind < 3.5 ? mix(0.06, 0.02, t) : mix(0.92, 0.75, t);             // pectoral / pelvic
           vec3 c = diffuseColor.rgb * (kind < 2.5 ? 0.9 : 1.0);
           #ifdef USE_MAP
@@ -648,7 +651,7 @@ export function createButterflyfish(renderer, opts = {}) {
           // rays: faint ridges only (the membrane is thick)
           vec3 rayC = spine ? c * 1.06 + 0.02 : c * 1.05 + 0.015;
           c = mix(c, rayC, ray * 0.07);
-          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.4, smoothstep(0.8, 0.88, t)) : 0.98), ray);
+          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.16, smoothstep(0.8, 0.88, t)) : 0.98), ray);
           a = mix(a, 1.0, opaque);
           a *= smoothstep(0.0, 0.03, 1.0 - t + 0.02);
           if (kind > 2.5 && kind < 3.5) a *= smoothstep(0.05, 0.45, abs(dot(normalize(vNormal), normalize(vViewPosition))));
@@ -671,7 +674,7 @@ export function createButterflyfish(renderer, opts = {}) {
   };
 
   const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, sub: 4, segs: 18, pleat: 0.0015, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.007 }), mkFinMat(0, 12, 37));
-  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, sub: 4, segs: 16, pleat: 0.001, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.007 }), mkFinMat(1, 2));
+  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, sub: 4, segs: 16, pleat: 0.001, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.007 }), mkFinMat(1, 2, 23));
   const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, sub: 4, segs: 16, pleat: 0.0012, scallop: 0.006, thick: 0.005 }), mkFinMat(2, -1));
   for (const m of [dorsal, anal, caudal]) { m.renderOrder = 2; group.add(m); }
 

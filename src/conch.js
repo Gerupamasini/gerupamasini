@@ -12,14 +12,14 @@ function bodyR(x) {
     return (2 * e3 - 3 * e2 + 1) * 0.135 + (e3 - 2 * e2 + e) * 1.4 * 0.11 + (-2 * e3 + 3 * e2) * 0.31;
   }
   const t = Math.min(1, (x - 0.3) / 0.68);
-  let r = 0.105 + 0.205 * (1 - t) + 0.035 * Math.sin(t * Math.PI);   // near-straight, slightly convex taper to a broad, truncated front
+  let r = 0.075 + 0.235 * (1 - t) + 0.03 * Math.sin(t * Math.PI);   // near-straight, slightly convex taper to a broad, truncated front
   const e = Math.max(0, (x - 0.9) / 0.08);
   return r * Math.sqrt(Math.max(0.0, 1 - e * e * 0.97));                   // blunt, rounded anterior end
 }
 // Spire: low stepped cone of ~7 whorls with sutures
 function spireR(x) {
-  const t = x / 0.2, turns = 5;
-  const base = 0.14 * Math.pow(t, 1.05);    // spire ~20% of length
+  const t = Math.max(0, (x + 0.1) / 0.3), turns = 7;
+  const base = 0.14 * Math.pow(t, 1.35);    // taller, slightly concave spire (~27% of length)
   const w = t * turns, f = w - Math.floor(w);
   return base * (1 - 0.13 * Math.pow(1 - f, 3));                        // whorls with shallow sutures
 }
@@ -75,7 +75,7 @@ function shellGeometry() {
   // spire (surface of revolution) closing the posterior end
   const spStart = pos.length / 3, NS = 90, NA = 72;
   for (let j = 0; j <= NS; j++) for (let i = 0; i <= NA; i++) {
-    const x = (j / NS) * 0.25, r = spireR(x), a = (i / NA) * Math.PI * 2;
+    const x = -0.1 + (j / NS) * 0.35, r = spireR(x), a = (i / NA) * Math.PI * 2;
     push(new THREE.Vector3(x, r * Math.sin(a), r * Math.cos(a)), [i / NA, x, 3]);
   }
   for (let j = 0; j < NS; j++) for (let i = 0; i < NA; i++) {
@@ -109,9 +109,12 @@ vec4 shellColor(){
     float flame = cf(vec2(u * 7.0 + cf(vec2(u * 3.0, x * 6.0)) * 1.2, x * 2.2));
     float bands = smoothstep(-0.2, 0.6, sin(x * 48.0 + cf(q * 0.6) * 2.5));   // white spiral interruptions
     float mid = 0.55 + 0.45 * exp(-pow((x - 0.55) / 0.2, 2.0));
-    float bl = smoothstep(0.3, 0.37, flame * mid * (0.75 + 0.35 * bands)) * (0.75 + 0.25 * cn(q * 1.7));
+    float rag = (cn(vec2(u * 140.0, x * 30.0)) - 0.5) * 0.12;                      // ragged, flecked flame edges
+    float bl = smoothstep(0.3, 0.35, flame * mid * (0.75 + 0.35 * bands) + rag) * (0.75 + 0.25 * cn(q * 1.7));
+    float zig = 0.5 + 0.5 * sin(u * 380.0 + 2.5 * sin(x * 90.0 + cn(vec2(u * 20.0, x * 10.0)) * 6.0) + cn(vec2(u * 60.0, x * 8.0)) * 5.0);                  // fine axial zigzag growth streaks
+    bl *= 0.86 + 0.14 * zig;
     bl *= smoothstep(0.97, 0.9, x);                                            // pale anterior tip
-    vec3 tan = mix(vec3(0.86, 0.52, 0.2), vec3(0.62, 0.3, 0.16), smoothstep(0.55, 0.8, cn(q * 0.4)) * 0.6);
+    vec3 tan = mix(vec3(0.72, 0.32, 0.08), vec3(0.5, 0.2, 0.08), smoothstep(0.55, 0.8, cn(q * 0.4)) * 0.6);
     c = mix(cream, tan, bl * 0.9);
     c = mix(c, vec3(0.45, 0.3, 0.3), smoothstep(0.93, 0.99, u) * smoothstep(0.4, 0.6, x) * 0.4);   // purplish-brown near the lip
     // fine spiral cords and growth lines
@@ -212,7 +215,7 @@ export function createStrawberryConch({ live = 1 } = {}) {
   // soft parts emerge from the anterior end of the aperture, under the shell
   const skin = mottled([0.36, 0.33, 0.24], [0.14, 0.13, 0.1], 60, 'skin');
   const foot = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), skin);
-  foot.scale.set(0.2, 0.045, 0.085); foot.position.set(0.74, -0.21, -0.05);
+  foot.scale.set(0.18, 0.04, 0.075); foot.position.set(0.82, -0.2, -0.05);
   body.add(foot);
   // proboscis: long, grooved, grey-brown with dark mottles, sweeping the sand ahead of the shell
   const snout = tube([new THREE.Vector3(0.86, -0.12, -0.05), new THREE.Vector3(0.96, -0.17, -0.045), new THREE.Vector3(1.06, -0.205, -0.03),
@@ -238,13 +241,13 @@ export function createStrawberryConch({ live = 1 } = {}) {
   // operculum: brown, sickle-shaped, serrated along one edge
   const opShape = new THREE.Shape();
   opShape.moveTo(0, 0);
-  for (let i = 0; i <= 20; i++) { const t = i / 20; opShape.lineTo(t * 0.26, 0.035 * Math.sin(t * Math.PI) + 0.004 * (i % 2)); }
-  for (let i = 20; i >= 0; i--) { const t = i / 20; opShape.lineTo(t * 0.26, -0.004 + 0.012 * Math.sin(t * Math.PI)); }
-  const opGeo = new THREE.ExtrudeGeometry(opShape, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 2 });
-  const opMat = new THREE.MeshPhysicalMaterial({ color: 0x5a3418, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.1 });
+  for (let i = 0; i <= 28; i++) { const t = i / 28; opShape.lineTo(t * 0.3, 0.062 * Math.pow(Math.sin(t * Math.PI), 0.8) * (1 - 0.35 * t) + 0.005 * (i % 2)); }   // serrated outer edge
+  for (let i = 28; i >= 0; i--) { const t = i / 28; opShape.lineTo(t * 0.3, 0.02 * Math.sin(t * Math.PI) - 0.004); }             // concave inner edge: a sickle
+  const opGeo = new THREE.ExtrudeGeometry(opShape, { depth: 0.008, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 3 });
+  const opMat = new THREE.MeshPhysicalMaterial({ color: 0x6b3510, roughness: 0.3, clearcoat: 0.9, clearcoatRoughness: 0.08, sheen: 0.4, sheenColor: new THREE.Color(0.9, 0.5, 0.2) });   // horny, amber-brown
   const operculum = new THREE.Mesh(opGeo, opMat);
-  const opPiv = new THREE.Group(); opPiv.position.set(0.55, -0.26, -0.01); opPiv.add(operculum);
-  operculum.rotation.set(Math.PI / 2, 0, 0.15);
+  const opPiv = new THREE.Group(); opPiv.position.set(0.86, -0.2, -0.13); opPiv.rotation.y = 0.45; opPiv.add(operculum);
+  operculum.rotation.set(Math.PI / 2 - 0.6, 0, 0.12);   // on the back of the foot, tipped out so it shows beside the shell
   body.add(opPiv);
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
