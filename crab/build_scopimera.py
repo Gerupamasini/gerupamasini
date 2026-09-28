@@ -585,6 +585,38 @@ col[:] = (0.80, 0.80, 0.80)
 rough = np.full((TEX, TEX), 0.55)
 height = np.zeros((TEX, TEX))
 
+# ---- 実物写真（上面）からの色投影 --------------------------------------------
+import os
+REF_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref_top.jpg")
+REF = None
+if os.path.exists(REF_PATH):
+    _im = bpy.data.images.load(REF_PATH)
+    _w, _h = _im.size
+    REF = np.array(_im.pixels[:], dtype=np.float32).reshape(_h, _w, 4)[::-1, :, :3]   # 上から下へ
+    REF = REF ** (1 / 2.2)                           # linear → sRGB 相当
+    REF = np.clip((REF - 0.5) * 1.25 + 0.44, 0, 1)
+REF_C = (600.0, 335.0)                               # 写真上の甲の中心 (px)
+REF_S = 23.0                                         # px / mm
+LEG_LINE = ((740.0, 355.0), (970.0, 320.0))          # 写真上の右第 2 歩脚の軸（付け根→先端）
+LEG_HALF = 9.0                                       # 脚の半幅 (px)
+PALM_BOX = (455.0, 232.0, 512.0, 300.0)              # 左鋏掌部の範囲
+
+
+def ref_sample(px, py):
+    """写真のバイリニア標本化（範囲外はクランプ）"""
+    h, w, _ = REF.shape
+    px = np.clip(px, 0, w - 1.001)
+    py = np.clip(py, 0, h - 1.001)
+    x0, y0 = np.floor(px).astype(int), np.floor(py).astype(int)
+    fx, fy = (px - x0)[..., None], (py - y0)[..., None]
+    a = REF[y0, x0] * (1 - fx) + REF[y0, x0 + 1] * fx
+    b = REF[y0 + 1, x0] * (1 - fx) + REF[y0 + 1, x0 + 1] * fx
+    return a * (1 - fy) + b * fy
+
+
+LEG_T = {"coxa": (0.0, 0.04), "basis": (0.04, 0.08), "merus": (0.08, 0.50),
+         "carpus": (0.50, 0.66), "propodus": (0.66, 0.84), "dactylus": (0.84, 1.0)}
+
 BASE = np.array([0.46, 0.44, 0.35])           # 灰オリーブ（砂色の迷彩）
 DARK = np.array([0.18, 0.19, 0.17])           # 暗色斑
 LIGHT = np.array([0.88, 0.87, 0.78])
@@ -630,6 +662,11 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         c = BASE * (1 - mott[..., None] * 0.75) + DARK * mott[..., None] * 0.75
         c = c * (1 - spot[..., None] * 0.6) + LIGHT * spot[..., None] * 0.6
         c = c * wt[..., None] + BASE * 1.08 * (1 - wt[..., None])
+        if REF is not None:
+            # 上面は写真を真上から投影。前縁部（写真では眼が伏せてある）と側面は手続き模様へ移行
+            photo = ref_sample(REF_C[0] + wx * REF_S, REF_C[1] - zz * REF_S)
+            pw = (smooth(-0.1, 0.45, top) * smooth(1.9, 1.2, zz))[..., None]
+            c = c * (1 - pw) + photo * 0.8 * pw
         lil = wu * smooth(0.95, 0.6, np.abs(np.cos(a))) * smooth(0.04, 0.16, np.abs(np.cos(a))) * (0.85 + 0.15 * mac)   # 胸板の紫斑、縁は白
         c = c * (1 - wu[..., None]) + BELLY * wu[..., None]
         c = c * (1 - lil[..., None]) + LILAC * lil[..., None]
@@ -674,6 +711,22 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
             tipw = smooth(0.45, 0.9, lu) * ones
             tc = TIP if chel or sg == "fixed" else DTIP
             c = c * (1 - tipw[..., None]) + tc * tipw[..., None]
+        if REF is not None and not chel and sg in LEG_T:
+            t0, t1 = LEG_T[sg]
+            t = t0 + (t1 - t0) * lu
+            off = np.cos(lv * 2 * np.pi) * LEG_HALF * 0.55
+            (ax, ay), (bx, by) = LEG_LINE
+            dx, dy = bx - ax, by - ay
+            ln = math.hypot(dx, dy)
+            nx, ny = -dy / ln, dx / ln
+            photo = ref_sample(ax + dx * t + nx * off, ay + dy * t + ny * off)
+            c = photo * np.ones_like(lv)[..., None]
+        if REF is not None and chel and sg == "propodus":
+            x0p, y0p, x1p, y1p = PALM_BOX
+            face = np.abs(np.cos(lv * 2 * np.pi)) * np.ones_like(lu)
+            photo = ref_sample(x0p + (x1p - x0p) * (1 - lu) * np.ones_like(lv),
+                               y0p + (y1p - y0p) * (0.5 + 0.5 * np.sin(lv * 2 * np.pi)))
+            c = c * (1 - face[..., None] * 0.8) + photo * face[..., None] * 0.8
         memb = (smooth(0.06, 0.0, lu) + smooth(0.94, 1.0, lu)) * np.ones_like(lv) * (0.0 if sg == "dactylus" else 0.5)
         c = c * (1 - memb[..., None]) + np.array([0.62, 0.58, 0.55]) * memb[..., None]   # 関節膜
         c = c * (0.94 + 0.10 * mac[..., None])
