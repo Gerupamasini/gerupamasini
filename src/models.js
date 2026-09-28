@@ -467,7 +467,7 @@ export const CRAB_SPECS = {
       cox: 0.06, bi: 0.08, merus: 0.58, carpus: 0.2, prop: 0.28, dact: 0.25,
       r: 0.062, merusR: 1.45, merusFlat: 0.55, flat: 0.6, k: [0.84, 1.0, 0.97, 0.76], spread: 0.36, curve: 0.08,
       hipX: [0.8, 0.8, 0.75, 0.64], hipY: 0.5, hipZ: [0.5, 0.18, -0.16, -0.5], coxR: 1.2,
-      setae: [0.03, 0.035, 0.045, 0.055], serrate: 9, reach: 0.8,
+      setae: [0.03, 0.035, 0.045, 0.055], serrate: 9, reach: 0.9,
       blade: { bi: [0.05, 0.07], merus: [0.088, 0.08], carpus: [0.062, 0.056], prop: [0.05, 0.038], dact: [0.036, 0.003], th: 0.42 },
     },
     // 鉗は顔の前に垂らして構え、指先を泥につける。雄は大きく、雌は小さい。
