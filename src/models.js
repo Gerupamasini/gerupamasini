@@ -493,7 +493,7 @@ export const CRAB_SPECS = {
     claw: { cox: 0.05, bi: 0.06, merus: 0.28, carpus: 0.15, PL: 0.56, PH: 0.26, T: 0.12, r: 0.05, macro: true, shX: 0.36, shY: 0.55, shZ: 0.5, tuft: 0.1 },
     clawF: { cox: 0.045, bi: 0.05, merus: 0.22, carpus: 0.12, PL: 0.38, PH: 0.14, T: 0.075, r: 0.04, macro: true, shX: 0.36, shY: 0.55, shZ: 0.55 },
     // 眼柄は細長く、額の脇から V 字に立ち上がる
-    eye: { stalk: 0.34, r: 0.026, taper: 1.15, curve: 0.03, cornea: 0.034, cLen: 1.6, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },
+    eye: { stalk: 0.37, r: 0.017, taper: 1.2, curve: 0.03, cornea: 0.025, cLen: 1.7, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },
     mouth: 0.25, mouthTilt: 1.15, mouthPos: [0.19, -0.5, 0.76], antenna: 0.1,
     Hb: 0.26, phiD: 0.95, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
   },
