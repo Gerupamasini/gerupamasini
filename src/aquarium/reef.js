@@ -62,15 +62,13 @@ function createSand() {
       float g = vn3(q), g2 = vn3(q * 0.37 + 11.0), g3 = h13(floor(q * 0.5));
       vec3 base = mix(vec3(0.33, 0.3, 0.24), vec3(0.45, 0.41, 0.33), g);
       base = mix(base, vec3(0.62, 0.55, 0.47), smoothstep(0.82, 0.95, g2) * 0.7);   // darker grains
-      base = mix(base, vec3(0.9, 0.62, 0.62), step(0.985, g3) * 0.6);               // pink shell bits
-      base = mix(base, vec3(0.3, 0.28, 0.26), step(0.995, h13(floor(q * 0.8) + 3.0)) * 0.8);
       float patchy = fbmS(vObjP * 6.0);
       base *= 0.82 + 0.3 * patchy;
       // coarse aragonite: millimetre-to-centimetre rubble grains of varied tone, visible at viewing distance
       vec3 cq = vObjP * 260.0; vec3 ci = floor(cq); vec3 cf3 = fract(cq) - 0.5;
       float rg = h13(ci + 7.0), rd = length(cf3.xz + (vec2(h13(ci), h13(ci + 2.0)) - 0.5) * 0.5);
-      float grain = step(0.72, rg) * smoothstep(0.32, 0.18, rd);
-      base = mix(base, base * mix(0.55, 1.25, h13(ci + 5.0)) * mix(vec3(1.0), vec3(1.05, 0.92, 0.85), step(0.5, h13(ci + 9.0))), grain);
+      float grain = step(0.8, rg) * smoothstep(0.3, 0.05, rd + 0.12 * vn3(cq * 3.0));
+      base = mix(base, base * mix(0.75, 1.15, h13(ci + 5.0)) * mix(vec3(1.0), vec3(1.05, 0.92, 0.85), step(0.5, h13(ci + 9.0))), grain);
       base *= 0.85 + 0.15 * vn3(vObjP * 80.0);                                // mid-scale mottling
       base = mix(base, base * vec3(0.72, 0.74, 0.62), smoothstep(0.55, 0.75, fbmS(vObjP * 14.0 + 4.0)) * 0.5);   // detritus / diatom film
       diffuseColor.rgb *= base;
@@ -79,7 +77,7 @@ function createSand() {
       float hq = vn3(vObjP * 900.0) * 0.6 + vn3(vObjP * 2200.0) * 0.4;
       vec3 cq = vObjP * 260.0; vec3 ci = floor(cq); vec3 cf3 = fract(cq) - 0.5;
       float rd = length(cf3.xz + (vec2(h13(ci), h13(ci + 2.0)) - 0.5) * 0.5);
-      hq += step(0.72, h13(ci + 7.0)) * smoothstep(0.32, 0.1, rd) * 1.5 + vn3(vObjP * 80.0) * 0.8;
+      hq += step(0.8, h13(ci + 7.0)) * pow(max(0.0, 1.0 - rd / 0.3), 2.0) * 0.4 + vn3(vObjP * 80.0) * 0.8;
       normal = bumpN(normal, -vViewPosition, hq, 0.0006);
     }`,
   });
@@ -130,9 +128,9 @@ function rockMaterial() {
       vec3 stone = mix(vec3(0.22, 0.19, 0.15), vec3(0.42, 0.37, 0.3), n);
       // coralline algae: pink / purple crusts, strongest on lit faces
       float up = clamp(vWorldN.y * 0.5 + 0.5, 0.0, 1.0);
-      float cor = smoothstep(0.58, 0.72, m + up * 0.1);
-      vec3 coralline = mix(vec3(0.48, 0.14, 0.32), vec3(0.66, 0.26, 0.46), s);
-      vec3 c = mix(stone, coralline, cor * 0.8);
+      float cor = smoothstep(0.56, 0.66, m + up * 0.12 + (vn3(q * 5.0) - 0.5) * 0.22);   // crust with ragged, fine-grained edges
+      vec3 coralline = mix(vec3(0.4, 0.2, 0.28), vec3(0.6, 0.34, 0.44), s) * (0.85 + 0.3 * vn3(q * 20.0));
+      vec3 c = mix(stone, coralline, cor * 0.65);
       c = mix(c, vec3(0.62, 0.58, 0.5), smoothstep(0.6, 0.75, fbmS(q * 0.6 + 3.0)) * 0.5);   // bleached calcareous patches
       c = mix(c, vec3(0.42, 0.3, 0.16), smoothstep(0.55, 0.7, fbmS(q * 0.8 + 21.0)) * 0.55);  // brown sponge / diatom film
       c = mix(c, vec3(0.7, 0.2, 0.2), smoothstep(0.72, 0.8, fbmS(q * 1.7 + 40.0)) * 0.6);   // red coralline
@@ -150,9 +148,9 @@ function rockMaterial() {
     }`,
     normal: /* glsl */`{
       vec3 q = vObjP * 22.0;
-      float h = fbmS(q * 3.0) * 0.6 + vn3(q * 30.0) * 0.2 - smoothstep(0.7, 0.82, vn3(q * 14.0)) * 0.3;
+      float h = fbmS(q * 3.0) * 0.6 + vn3(q * 12.0) * 0.12 - smoothstep(0.62, 0.92, vn3(q * 14.0)) * 0.25;   // no sub-pixel noise: derivative bump turns it into blocks
       h -= 0.9 * smoothstep(0.62, 0.78, vn3(q * 3.2 + 13.0)) * smoothstep(0.3, 0.6, fbmS(q * 1.1 + 4.0));
-      normal = bumpN(normal, -vViewPosition, h, 0.0016);
+      normal = bumpN(normal, -vViewPosition, h, 0.0013);
     }`,
   });
   return mat;
@@ -291,18 +289,19 @@ function anemone(seed, { r = 0.035, color = [0.95, 0.55, 0.7], tipCol = [1, 0.9,
   { const pa = col.attributes.position; for (let i = 0; i < pa.count; i++) { const a = Math.atan2(pa.getZ(i), pa.getX(i)); const k = 1 + 0.06 * Math.sin(a * 5 + seed) + 0.03 * Math.sin(a * 11); pa.setX(i, pa.getX(i) * k); pa.setZ(i, pa.getZ(i) * k); } col.computeVertexNormals(); }
   const cm = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(...color).multiplyScalar(0.75), roughness: 0.5, sheen: 0.5, sheenColor: new THREE.Color(...tipCol), clearcoat: 0.3 });
   group.add(new THREE.Mesh(col, cm));
-  const tg = new THREE.CylinderGeometry(0.0016, 0.0019, 0.045, 8, 8, false);   // bubble-tip tentacles
+  const tg = new THREE.CylinderGeometry(0.0016, 0.0019, 0.045, 12, 10, false);   // bubble-tip tentacles
   tg.translate(0, 0.0225, 0);
   { const pa = tg.attributes.position; for (let i = 0; i < pa.count; i++) { const t = pa.getY(i) / 0.045;
       const k = 1 + 1.1 * Math.exp(-Math.pow((t - 0.8) / 0.1, 2)) - 0.4 * Math.max(0, t - 0.92) / 0.08;   // swollen bulb below a narrow tip
-      pa.setX(i, pa.getX(i) * k); pa.setZ(i, pa.getZ(i) * k); } tg.computeVertexNormals(); }
+      // soft tentacles droop and curl instead of standing like rods
+      pa.setX(i, pa.getX(i) * k + 0.012 * t * t); pa.setZ(i, pa.getZ(i) * k); pa.setY(i, pa.getY(i) - 0.004 * t * t); } tg.computeVertexNormals(); }
   const colors = [];
   for (let i = 0; i < tg.attributes.position.count; i++) {
     const t = (tg.attributes.position.getY(i)) / 0.045;
     colors.push(...color.map((c, k) => c + (tipCol[k] - c) * Math.pow(t, 3)));
   }
   tg.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  const mat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.45, sheen: 0.8, sheenColor: new THREE.Color(...tipCol), transmission: 0, emissive: new THREE.Color(...color), emissiveIntensity: 0.06 });
+  const mat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.35, clearcoat: 0.5, clearcoatRoughness: 0.25, sheen: 1.0, sheenRoughness: 0.35, sheenColor: new THREE.Color(...tipCol), emissive: new THREE.Color(...tipCol), emissiveIntensity: 0.08 });   // wet, slightly translucent-looking tissue
   const inst = new THREE.InstancedMesh(tg, mat, count);
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3();
   for (let i = 0; i < count; i++) {
@@ -311,8 +310,10 @@ function anemone(seed, { r = 0.035, color = [0.95, 0.55, 0.7], tipCol = [1, 0.9,
     const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)).multiplyScalar(0.3 + 1.4 * rr / r);
     const dir = new THREE.Vector3(out.x, 1, out.z).normalize();
     q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-    const L = 0.8 + rnd() * 0.7;
-    s.set(1, L, 1);
+    // curl outward (towards the rim) with some random twist
+    q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a + (rnd() - 0.5) * 1.6));
+    const L = 0.8 + rnd() * 0.7, th = 0.8 + rnd() * 0.45;
+    s.set(th, L, th);
     M.compose(pos, q, s);
     inst.setMatrixAt(i, M);
   }

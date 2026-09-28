@@ -144,8 +144,25 @@ export class SandConch {
   constructor(model, { pos, heading = 0, scale = 0.06, sandHeight, bounds = 0.45 }) {
     this.model = model; this.sandHeight = sandHeight; this.bounds = bounds;
     this.obj = new THREE.Group(); this.obj.add(model.group); model.group.scale.setScalar(scale);
-    model.group.position.set(-0.55 * scale, 0.235 * scale, 0);
+    model.group.position.set(-0.55 * scale, 0.19 * scale, 0);      // settled a little into the sand
+    // contact shadow: soft dark ellipse where the shell and foot press into the sand
+    this.obj.add(SandConch.contactShadow(scale));
     this.p = pos.clone(); this.heading = heading; this.t = 0;
+  }
+  static contactShadow(scale) {
+    if (!SandConch._tex) {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gr.addColorStop(0, 'rgba(0,0,0,0.85)'); gr.addColorStop(0.45, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+      SandConch._tex = new THREE.CanvasTexture(c);
+    }
+    const m = new THREE.MeshBasicMaterial({ map: SandConch._tex, transparent: true, depthWrite: false, color: 0x0a0806, polygonOffset: true, polygonOffsetFactor: -2 });
+    m.userData.caustic = true;
+    const d = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), m);
+    d.rotation.x = -Math.PI / 2; d.scale.set(1.25 * scale, 0.75 * scale, 1); d.position.set(0.0, 0.0008, -0.03 * scale);
+    d.renderOrder = 1; d.castShadow = false; d.receiveShadow = false;
+    return d;
   }
   update(dt) {
     this.t += dt;

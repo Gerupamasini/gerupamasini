@@ -182,8 +182,10 @@ function mottled(base, dark, scale, key) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvOP = position;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vOP;\n' + SHELL_GLSL.split('uniform float uLive;')[0])
       .replace('#include <map_fragment>', `#include <map_fragment>
-        { float n = cf(vOP.xy * ${scale.toFixed(1)} + vOP.z * 7.0); float sp = step(0.72, cn(vOP.xz * ${(scale * 3).toFixed(1)}));
-          diffuseColor.rgb *= mix(vec3(${base.join(',')}), vec3(${dark.join(',')}), smoothstep(0.4, 0.65, n)) * (1.0 - 0.25 * sp); }`);
+        { vec3 P3 = vOP * ${scale.toFixed(1)};
+          float n = (cf(P3.xy) + cf(P3.yz + 3.1) + cf(P3.xz + 7.3)) / 3.0;          // isotropic mottling (no streaks)
+          float sp = step(0.8, (cn(P3.xy * 3.0) + cn(P3.yz * 3.0 + 5.0)) * 0.5 + 0.2);
+          diffuseColor.rgb *= mix(vec3(${base.join(',')}), vec3(${dark.join(',')}), smoothstep(0.42, 0.58, n)) * (1.0 - 0.3 * sp); }`);
   };
   m.customProgramCacheKey = () => 'conch-' + key;
   return m;
@@ -210,25 +212,27 @@ export function createStrawberryConch({ live = 1 } = {}) {
   // soft parts emerge from the anterior end of the aperture, under the shell
   const skin = mottled([0.36, 0.33, 0.24], [0.14, 0.13, 0.1], 60, 'skin');
   const foot = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), skin);
-  foot.scale.set(0.16, 0.04, 0.07); foot.position.set(0.8, -0.2, -0.01);
+  foot.scale.set(0.2, 0.045, 0.085); foot.position.set(0.74, -0.21, -0.05);
   body.add(foot);
-  const snout = tube([new THREE.Vector3(0.9, -0.19, 0), new THREE.Vector3(0.98, -0.21, 0.015), new THREE.Vector3(1.05, -0.24, 0.02)], 0.026, 0.016).g;
+  // proboscis: long, grooved, grey-brown with dark mottles, sweeping the sand ahead of the shell
+  const snout = tube([new THREE.Vector3(0.86, -0.12, -0.05), new THREE.Vector3(0.96, -0.17, -0.045), new THREE.Vector3(1.06, -0.205, -0.03),
+    new THREE.Vector3(1.15, -0.22, -0.01)], 0.034, 0.02, 48, 16).g;
   body.add(new THREE.Mesh(snout, skin));
   // eyestalks with ringed eyes
-  const stalkMat = mottled([0.72, 0.7, 0.62], [0.45, 0.42, 0.36], 90, 'stalk');
+  const stalkMat = mottled([0.66, 0.62, 0.54], [0.5, 0.44, 0.38], 140, 'stalk');
   stalkMat.transparent = true; stalkMat.opacity = 0.85;
   const stalks = [];
   for (const side of [1, -1]) {
-    const piv = new THREE.Group(); piv.position.set(0.93, -0.16, side * 0.05);
-    const { g, curve } = tube([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.06, 0.035, side * 0.025), new THREE.Vector3(0.11, 0.085, side * 0.05), new THREE.Vector3(0.14, 0.14, side * 0.065)], 0.014, 0.011);
+    const piv = new THREE.Group(); piv.position.set(0.9, -0.1, -0.03 + side * 0.045);   // stalks leave the anterior notch
+    const { g, curve } = tube([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.06, 0.035, side * 0.025), new THREE.Vector3(0.11, 0.085, side * 0.05), new THREE.Vector3(0.15, 0.15, side * 0.065)], 0.019, 0.013, 40, 14);
     piv.add(new THREE.Mesh(g, stalkMat));
     // a real camera eye at the tip: black pupil, bright lemon iris, thin dark rim, set in the pale stalk
     const end = curve.getPointAt(1), dir = curve.getTangentAt(1);
     const look = new THREE.Vector3(0.45, 0.15, side * 1.0).normalize().add(dir.clone().multiplyScalar(0.6)).normalize();
     const m = new THREE.Matrix4().lookAt(look, new THREE.Vector3(), new THREE.Vector3(0, 1, 0));   // eye's +z (pupil) -> look
     m.setPosition(end.clone().addScaledVector(dir, 0.004));
-    piv.add(createFishEye({ r: 0.019, matrix: m, pupilA: 0.42, irisA: 0.95, pupil: [0.01, 0.01, 0.01],
-      irisIn: [0.98, 0.86, 0.2], irisOut: [0.9, 0.7, 0.08], limbus: [0.08, 0.06, 0.03], sclera: [0.62, 0.6, 0.52] }));
+    piv.add(createFishEye({ r: 0.019, matrix: m, pupilA: 0.5, irisA: 1.25, pupil: [0.01, 0.01, 0.01],
+      irisIn: [0.98, 0.86, 0.2], irisOut: [0.9, 0.7, 0.08], limbus: [0.12, 0.1, 0.05], sclera: [0.5, 0.46, 0.4] }));
     piv.userData.side = side; body.add(piv); stalks.push(piv);
   }
   // operculum: brown, sickle-shaped, serrated along one edge
