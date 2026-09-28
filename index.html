@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>干潟観察 — 葛西の渚</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;600&family=Noto+Serif+JP:wght@500&display=swap" rel="stylesheet" />
+<style>
+  :root { --glass: rgba(18, 24, 28, 0.42); --line: rgba(255,255,255,0.14); --ink: #f3f1ea; --sub: rgba(243,241,234,0.62); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1114; color: var(--ink); font-family: 'Noto Sans JP', system-ui, sans-serif; }
+  #app canvas { display: block; }
+  .panel { position: fixed; background: var(--glass); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); transition: opacity .5s, transform .5s; }
+  #title { top: 18px; left: 18px; padding: 14px 18px 12px; }
+  #title h1 { margin: 0; font: 500 20px 'Noto Serif JP', serif; letter-spacing: .12em; }
+  #title p { margin: 4px 0 0; font-size: 11px; color: var(--sub); letter-spacing: .08em; }
+  #time { top: 18px; right: 18px; padding: 12px 16px; width: 250px; }
+  #time .row { display: flex; align-items: baseline; justify-content: space-between; }
+  #clock { font: 300 28px 'Noto Sans JP'; letter-spacing: .05em; }
+  #tide-label { font-size: 14px; font-weight: 600; letter-spacing: .15em; color: #bfe6f5; }
+  #tide-level { font-size: 11px; color: var(--sub); }
+  #tidegraph { width: 100%; height: 46px; margin: 6px 0 4px; }
+  label { display: block; font-size: 11px; color: var(--sub); margin-top: 8px; }
+  input[type=range] { width: 100%; accent-color: #bfe6f5; }
+  .btns { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.08); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; font-size: 11px; cursor: pointer; }
+  button:hover { background: rgba(255,255,255,0.16); }
+  button.on { background: rgba(191,230,245,0.22); }
+  #guide { left: 18px; bottom: 18px; padding: 10px 10px 8px; width: 230px; }
+  #guide h2 { margin: 2px 6px 6px; font-size: 11px; font-weight: 400; color: var(--sub); letter-spacing: .15em; }
+  .sp { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; background: transparent; padding: 5px 6px; border-radius: 6px; text-align: left; font-size: 13px; }
+  .sp i { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255,255,255,0.15); }
+  .sp .nm { flex: 1; }
+  .sp .ct { font-variant-numeric: tabular-nums; color: var(--sub); font-size: 12px; }
+  .sp.none { opacity: .45; }
+  #card { right: 18px; bottom: 18px; width: 340px; padding: 18px 20px 16px; opacity: 0; transform: translateY(16px); pointer-events: none; }
+  #card.show { opacity: 1; transform: none; pointer-events: auto; }
+  #card-name { margin: 0; font: 500 22px 'Noto Serif JP', serif; letter-spacing: .08em; }
+  #card-sci { font-style: italic; font-size: 12px; color: var(--sub); margin-top: 2px; }
+  #card-size { display: inline-block; margin-top: 8px; font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(255,255,255,0.1); }
+  #card-text { font-size: 13px; line-height: 1.85; margin: 10px 0 0; color: rgba(243,241,234,0.9); }
+  #close { position: absolute; top: 12px; right: 12px; }
+  #toast { left: 50%; top: 22px; transform: translate(-50%, -10px); padding: 10px 16px; font-size: 13px; opacity: 0; pointer-events: none; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #help { left: 50%; bottom: 16px; transform: translateX(-50%); font-size: 11px; color: var(--sub); padding: 6px 14px; border-radius: 99px; white-space: nowrap; }
+  body.clean .panel:not(#card) { opacity: 0; pointer-events: none; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #0d1114; font: 300 14px 'Noto Sans JP'; letter-spacing: .3em; color: var(--sub); transition: opacity 1.2s; z-index: 10; }
+  body.ready #loading { opacity: 0; pointer-events: none; }
+  @media (max-width: 760px) {
+    #title { top: 10px; left: 10px; padding: 10px 12px; } #title h1 { font-size: 16px; }
+    #time { top: auto; bottom: 10px; right: 10px; width: 180px; padding: 10px; }
+    #guide { bottom: 10px; left: 10px; width: 170px; max-height: 45vh; overflow: auto; }
+    .sp { font-size: 11px; padding: 3px; }
+    #card { left: 10px; right: 10px; width: auto; bottom: auto; top: 70px; }
+    #help { display: none; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading">干潟を準備しています…</div>
+
+<div id="title" class="panel">
+  <h1>干潟観察</h1>
+  <p>葛西の渚 ― 東京湾奥の干潟</p>
+</div>
+
+<div id="time" class="panel">
+  <div class="row"><span id="clock">09:30</span><span id="tide-label">干潮</span></div>
+  <canvas id="tidegraph" width="250" height="46"></canvas>
+  <div id="tide-level">潮位</div>
+  <label>潮の満ち引き</label>
+  <input id="tide" type="range" min="0" max="1" step="0.001" />
+  <label>時刻</label>
+  <input id="hour" type="range" min="5" max="19" step="0.01" />
+  <label>時の流れ <span id="speed-v">×1</span></label>
+  <input id="speed" type="range" min="0.25" max="8" step="0.25" value="1" />
+  <div class="btns">
+    <button id="pause">❚❚ 一時停止</button>
+    <button id="topbtn">真上から</button>
+    <button id="tiltbtn" class="on">ミニチュア</button>
+    <button id="hidebtn">UI非表示</button>
+  </div>
+</div>
+
+<div id="guide" class="panel">
+  <h2>いま見られる生き物</h2>
+  <div id="species-list"></div>
+</div>
+
+<div id="card" class="panel">
+  <button id="close">✕</button>
+  <h3 id="card-name"></h3>
+  <div id="card-sci"></div>
+  <div id="card-size"></div>
+  <p id="card-text"></p>
+</div>
+
+<div id="toast" class="panel"></div>
+<div id="help" class="panel">ドラッグ：回転 ／ 右ドラッグ：移動 ／ ホイール：ズーム ／ 生き物をクリックで観察 ／ H：UI切替</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
