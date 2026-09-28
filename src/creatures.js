@@ -232,7 +232,7 @@ const CLAW_POSES_YM2 = {
   rest: { yaw0: 0.7, p0: 0.05, f1: 1.45, p1: 0.0, px: -0.8, py: -0.18, pz: 0.55, bx: 0.05, by: -1, bz: 0.1, open: 0.03 },
   reach: { yaw0: 0.7, p0: -0.1, f1: 1.3, p1: -0.05, px: -0.7, py: -0.45, pz: 0.55, bx: 0.0, by: -1, bz: 0.2, open: 0.45 },
   mouth: { yaw0: 0.8, p0: 0.2, f1: 1.7, p1: 0.1, px: -0.85, py: 0.05, pz: 0.45, bx: 0.1, by: -1, bz: -0.1, open: 0.0 },
-  waveUp: { yaw0: 0.65, p0: 1.1, f1: 1.0, p1: 0.4, px: -0.2, py: 0.6, pz: 0.75, bx: -1, by: 0.2, bz: 0.2, open: 0.3 },
+  waveUp: { yaw0: 0.4, p0: 0.2, f1: 0.5, p1: 1.1, px: -0.1, py: 0.75, pz: 0.65, bx: -1, by: 0.1, bz: 0.2, open: 0.3 },
   tuck: { yaw0: 1.2, p0: 0.0, f1: 1.3, p1: 0.1, px: -0.7, py: -0.05, pz: 0.7, bx: 0.05, by: -1, bz: 0.0, open: 0.0 },
 };
 function mixPose(a, b, t, out = {}) { for (const k in a) out[k] = a[k] + (b[k] - a[k]) * t; return out; }
