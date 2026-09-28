@@ -59,6 +59,7 @@ const fill = new THREE.DirectionalLight(0xdfe8ff, 0.5); fill.position.set(-1, -0
 const species = Q.get('species') || 'auriga';
 const fish = species === 'conch' ? (() => { const c = createStrawberryConch({ live: +(Q.get('live') ?? 1) }); c.group.position.set(-0.5, 0, 0); const g = new THREE.Group(); g.add(c.group); return { group: g, update: (dt, t) => c.update(dt, t), uniforms: { uPhase: { value: 0 }, uAmp: { value: 0 }, uTurn: { value: 0 } } }; })() : species === 'goby' ? (Q.has('nophoto') || await loadGobyPhoto(), createFireGoby()) : createButterflyfish(renderer, { texSize: +(Q.get('tex') || 4096), pattern: await loadPattern(), photo: Q.has('nophoto') ? null : await loadPhoto() });
 scene.add(fish.group);
+if (Q.has('hide')) { const h = Q.get('hide').split(','); fish.group.traverse((o) => { if (h.includes(o.name)) o.visible = false; }); }
 
 const camera = new THREE.PerspectiveCamera(+(Q.get('fov') || 30), innerWidth / innerHeight, 0.01, 50);
 const views = {

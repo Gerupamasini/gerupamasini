@@ -35,12 +35,12 @@ export function spline(pts) {
 export const ANATOMY = {
   top: spline([[0, 0.013], [0.012, 0.019], [0.0369, 0.0305], [0.0917, 0.0585], [0.124, 0.08], [0.1353, 0.104], [0.153, 0.139], [0.171, 0.172],
     [0.19, 0.21], [0.212, 0.243], [0.238, 0.27], [0.266, 0.287], [0.294, 0.301], [0.35, 0.304], [0.45, 0.296], [0.6, 0.274],
-    [0.75, 0.232], [0.85, 0.172], [0.92, 0.106], [0.96, 0.066], [1.0, 0.036]]),   // slender caudal peduncle (side-view photos)
+    [0.75, 0.232], [0.85, 0.17], [0.91, 0.1], [0.95, 0.055], [0.975, 0.04], [1.0, 0.035]]),   // slender caudal peduncle (side-view photos)
   bottom: spline([[0, -0.013], [0.0164, -0.019], [0.046, -0.026], [0.089, -0.046], [0.129, -0.075], [0.171, -0.099],
     [0.2125, -0.124], [0.254, -0.148], [0.297, -0.168], [0.34, -0.186], [0.384, -0.199], [0.45, -0.21], [0.55, -0.205],
-    [0.65, -0.19], [0.75, -0.165], [0.85, -0.126], [0.92, -0.084], [0.96, -0.056], [1.0, -0.034]]),
+    [0.65, -0.19], [0.75, -0.165], [0.85, -0.124], [0.91, -0.08], [0.95, -0.046], [0.975, -0.036], [1.0, -0.033]]),
   width: spline([[0, 0.009], [0.012, 0.011], [0.03, 0.013], [0.06, 0.015], [0.1, 0.019], [0.15, 0.027], [0.25, 0.037], [0.38, 0.041], [0.5, 0.039],
-    [0.65, 0.041], [0.8, 0.028], [0.9, 0.017], [0.95, 0.01], [0.985, 0.006], [1.0, 0.004]]),   // thin, compressed peduncle
+    [0.65, 0.041], [0.8, 0.027], [0.88, 0.016], [0.93, 0.0095], [0.96, 0.0062], [0.985, 0.0035], [1.0, 0.0022]]),   // thin, compressed peduncle
   eye: { s: 0.16, y: 0.03, r: 0.033 },
 };
 
@@ -60,11 +60,11 @@ function lensZ(yn, w, s = 0.5) {
   // fin root (as in real chaetodontids) instead of meeting a flat fin at a crease
   const k = yn < 0 ? THREE.MathUtils.smoothstep(s, 0.46, 0.6) : THREE.MathUtils.smoothstep(s, 0.27, 0.36);
   if (k <= 0) return z;
-  const e = 1 - Math.abs(yn), E = 0.6, finT = 0.013;
+  const e = 1 - Math.abs(yn), E = 0.6, finT = Math.min(0.013, w * 0.9 * Math.min(1, ANATOMY.width(s) / 0.014));   // never wider than the body (thin peduncle)
   if (e >= E) return z;
   const aE = 1 - Math.pow(1 - E, 2.1), zE = w * Math.pow(aE, 0.62) * (1 + 0.12 * yn);
   const root = finT + (zE - finT) * Math.pow(e / E, 1.7);     // concave, flush with the fin shell at the keel
-  return z + (Math.min(root, z + finT) - z) * k;
+  return z + (Math.min(root, Math.max(z, finT)) - z) * k;
 }
 
 function buildBody() {
@@ -118,7 +118,7 @@ function buildBody() {
 // the membrane is pleated (rays alternately forward/back) like a real folded fin.
 // thick > 0 builds a closed thin shell: fleshy at the root, thinning to the edge, with the
 // rays standing slightly proud of the membrane on both faces.
-export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallop = 0.06, bow = 0.0, zOff = 0, flat = false, spines = -1, spineScallop = 0.14, thick = 0, ridge = 0.25 }) {
+export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallop = 0.06, bow = 0.0, zOff = 0, flat = false, spines = -1, spineScallop = 0.14, thick = 0, ridge = 0.25, thickAt = null }) {
   const nR = base.length;
   const pos = [], uv = [], fin = [], idx = [], side = [];
   const cols = (nR - 1) * sub + 1;
@@ -137,7 +137,7 @@ export function buildFin({ base, tip, sub = 4, segs = 16, pleat = 0.0035, scallo
       const bw = bow * Math.sin(Math.PI * t);
       s += -dy * bw; y += dx * bw;
       const z = flat ? 0 : pleat * Math.pow(t, 0.8) * Math.cos(Math.PI * r) + zOff;
-      const th = thick * (Math.pow(1 - t, 3.0) * 0.94 + 0.06 * (1 - 0.6 * t) + ridge * (1 - between) * (1 - t));   // fleshy root, thin edge
+      const th = thick * (thickAt ? thickAt(b[0]) : 1) * THREE.MathUtils.smoothstep(Math.hypot(dx, dy), 0.0, 0.07) * (Math.pow(1 - t, 3.0) * 0.94 + 0.06 * (1 - 0.6 * t) + ridge * (1 - between) * (1 - t));   // fleshy root, thin edge
       pos.push(sx(s), y, z + th);
       uv.push(...toUV(s, y));
       fin.push(r, t / 1.0);
@@ -204,17 +204,17 @@ function finLayouts() {
   const dBase = [], dTip = polyline([[0.3, 0.312], [0.3459, 0.3226], [0.3957, 0.3313], [0.445, 0.3383], [0.4932, 0.3407], [0.541, 0.3414],
     [0.5886, 0.3411], [0.6346, 0.3345], [0.6806, 0.328], [0.7262, 0.3197], [0.7722, 0.3131], [0.8177, 0.3048], [0.8631, 0.2955],
     [0.9073, 0.2818], [0.9518, 0.269], [0.9949, 0.2508], [1.0377, 0.2307], [1.0882, 0.204], [1.0977, 0.1922], [1.0851, 0.1524],
-    [1.0561, 0.1119], [1.03, 0.078], [1.0, 0.052], [0.984, 0.042]], nD);   // deep notch above the peduncle
-  for (let i = 0; i < nD; i++) { const s = 0.295 + (0.985 - 0.295) * (i / (nD - 1)); dBase.push([s, top(s) - 0.003]); }
+    [1.064, 0.125], [1.035, 0.1], [1.0, 0.078], [0.972, 0.062], [0.95, 0.054]], nD);   // deep, open notch above the peduncle
+  for (let i = 0; i < nD; i++) { const s = 0.295 + (0.95 - 0.295) * (i / (nD - 1)); dBase.push([s, top(s) - 0.003]); }
   const nA = 26;
   const aBase = [], aTip = polyline([[0.49, -0.212], [0.592, -0.2264], [0.6847, -0.2368], [0.7547, -0.2426], [0.8265, -0.2412],
     [0.8758, -0.2342], [0.9487, -0.2283], [1.0, -0.216], [1.04, -0.2], [1.066, -0.178], [1.08, -0.15],
-    [1.078, -0.122], [1.06, -0.095], [1.03, -0.07], [1.0, -0.05], [0.984, -0.04]], nA);   // rounded rear lobe
-  for (let i = 0; i < nA; i++) { const s = 0.48 + (0.985 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.012 * THREE.MathUtils.smoothstep(s, 0.48, 0.6)]); }   // root sunk into the fleshy keel
+    [1.078, -0.125], [1.06, -0.104], [1.03, -0.086], [1.0, -0.068], [0.972, -0.056], [0.95, -0.05]], nA);   // rounded rear lobe
+  for (let i = 0; i < nA; i++) { const s = 0.48 + (0.95 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.012 * THREE.MathUtils.smoothstep(s, 0.48, 0.6)]); }   // root sunk into the fleshy keel
   const nC = 19;
   // caudal: rises from the narrow peduncle and flares into a broad, short fan
-  const cBase = [], cTip = polyline([[1.165, 0.152], [1.192, 0.076], [1.2, 0.0], [1.192, -0.076], [1.162, -0.156]], nC);
-  for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.962 + 0.012 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]); }
+  const cBase = [], cTip = polyline([[1.13, 0.158], [1.148, 0.1], [1.158, 0.04], [1.165, -0.02], [1.174, -0.08], [1.184, -0.13], [1.17, -0.162]], nC);   // truncate, faintly concave, angular corners
+  for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.962 + 0.01 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]); }
   return { dorsal: { base: dBase, tip: dTip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
 
@@ -386,6 +386,7 @@ Paint paint(vec2 p){
     float greenish = smoothstep(0.0, 0.05, col.g - col.r) * smoothstep(0.0, 0.08, col.g - col.b) * smoothstep(0.3, 0.38, s) * (1.0 - smoothstep(0.62, 0.7, s));
     col = mix(col, white * (0.92 + 0.08 * lum), greenish * 0.8 * ph.a * uPhotoMix);
   }
+  float rearK = 0.0;
   // rear body: in photographs the area behind the dusky band, the peduncle and the flesh
   // along the soft dorsal and anal fin bases are clear yellow, continuous with the fins
   if (inBody) {
@@ -400,8 +401,9 @@ Paint paint(vec2 p){
     float rearY = max(smoothstep(0.8, 0.93, s) * max(smoothstep(0.02, 0.07, y - bot), smoothstep(0.93, 0.98, s)), max(1.0 - nearWhite, smoothstep(0.02, -0.07, y) * smoothstep(0.68, 0.8, s)) * (1.0 - here) * smoothstep(0.4, 0.5, s));
     float nearDorsal = smoothstep(0.55, 0.7, s) * smoothstep(0.07, 0.0, top - y);
     float nearAnal = smoothstep(0.62, 0.75, s) * smoothstep(0.05, 0.0, y - bot) * smoothstep(0.02, -0.08, y);
-    float k = max(rearY, nearDorsal);   // (the belly above the anal fin stays white, as photographed)
-    col = mix(col, mix(vec3(1.0, 0.78, 0.04), vec3(1.0, 0.64, 0.01), smoothstep(-0.05, 0.25, y)), k);
+    float k = max(rearY, nearDorsal);
+    rearK = k;   // (the belly above the anal fin stays white, as photographed)
+    col = mix(col, mix(vec3(0.99, 0.76, 0.07), vec3(0.97, 0.66, 0.03), smoothstep(-0.05, 0.25, y)), k);   // baked texture is sRGB
   }
   // the photo's stripes are soft (motion + JPEG); reinforce them with the traced stripe field
   float stCore = smoothstep(0.7, 0.9, pm.b) * smoothstep(0.26, 0.3, s) * (1.0 - Y * 0.6);
@@ -413,7 +415,9 @@ Paint paint(vec2 p){
   if (inBody) {
     // subtle scales: visible mostly as sheen, not relief
     float sid, rim;
-    float scaleMask = 0.6 * smoothstep(0.27, 0.36, s) * (1. - smoothstep(0.8, 1.0, abs(yn)));
+    // scales fade out toward the median-fin roots and over the yellow rear, so body and fins
+    // share one material there (no rim where they meet)
+    float scaleMask = 0.6 * smoothstep(0.27, 0.36, s) * (1. - smoothstep(0.55, 0.95, abs(yn)) * smoothstep(0.4, 0.6, s)) * (1. - smoothstep(0.8, 1.0, abs(yn))) * (1.0 - 0.7 * rearK);
     float sh = scales(p, sid, rim);
     h = sh * scaleMask * 0.16;
     col *= mix(1.0, 0.985 + 0.03*sid, scaleMask);
@@ -660,7 +664,7 @@ export function createButterflyfish(renderer, opts = {}) {
           // median fins are nearly opaque in life; spines show only faintly through the membrane
           float memA = 0.96;
           if (kind < 1.5 && spine) memA = mix(0.95, 0.8, t);
-          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.45, smoothstep(0.9, 0.95, t));      // caudal: clear margin
+          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.72, smoothstep(0.9, 0.97, t));      // caudal: clear margin
           if (kind > 2.5) memA = kind < 3.5 ? mix(0.06, 0.02, t) : mix(0.92, 0.75, t);             // pectoral / pelvic
           vec3 c = diffuseColor.rgb * (kind < 2.5 ? 0.9 : 1.0);
           #ifdef USE_MAP
@@ -670,12 +674,22 @@ export function createButterflyfish(renderer, opts = {}) {
           #endif
           if (kind < 0.5) {
             // soft dorsal: clean lemon-yellow in photographs (the photo texture reads orange here)
+            // soft dorsal: rich golden yellow like the rear body (photographs), paler toward the edge
             float soft = smoothstep(uSpines - 1.0, uSpines + 3.0, r);
-            c = mix(c, mix(vec3(1.0, 0.8, 0.05), vec3(1.0, 0.68, 0.02), smoothstep(0.5, 1.0, t)), soft * 0.55 * smoothstep(0.12, 0.3, dot(c, vec3(0.3, 0.55, 0.15))));   // keep the ocellus and dark margin
+            vec3 gold = mix(vec3(0.95, 0.4, 0.003), vec3(0.98, 0.55, 0.01), smoothstep(0.3, 0.9, t));   // linear-space golden
+            c = mix(c, gold, soft * 0.7 * smoothstep(0.12, 0.3, dot(c, vec3(0.3, 0.55, 0.15))));   // keep the ocellus
             ray *= mix(1.0, 0.35, soft);
-            // thin dark line along the whole dorsal edge; black margin down the soft dorsal's rear edge
+            // thin dark line along the whole dorsal edge
             c = mix(c, vec3(0.06, 0.05, 0.05), smoothstep(0.93, 0.965, t) * 0.9);
-            c = mix(c, vec3(0.04, 0.035, 0.035), smoothstep(uRays - 6.0, uRays - 4.2, r) * smoothstep(0.08, 0.3, t));   // broad black rear margin of the soft dorsal, down into the notch
+            // broad black band of constant width along the rear edge, from under the ocellus
+            // down into the notch above the peduncle
+            int ri = int(clamp(floor(r), 0.0, 38.0));
+            vec2 SH = mix(uFinSH[ri], uFinSH[ri + 1], clamp(r - float(ri), 0.0, 1.0));
+            float fromEdge = (1.0 - t) * max(SH.y, 1e-3);
+            float rear = smoothstep(uRays - 9.5, uRays - 7.5, r);
+            float bw = 0.03 + 0.006 * sin(r * 1.7);
+            c = mix(c, vec3(0.035, 0.03, 0.03), rear * (1.0 - smoothstep(bw - 0.004, bw + 0.004, fromEdge)));
+            c = mix(c, vec3(0.75, 0.8, 0.85), rear * (1.0 - smoothstep(0.002, 0.004, fromEdge)) * 0.6);   // hairline pale rim
           }
           if (kind > 0.5 && kind < 1.5) {
             // anal fin, as photographed from the side: the fin is pearl white inside, continuous
@@ -702,7 +716,7 @@ export function createButterflyfish(renderer, opts = {}) {
             #endif
             dBand += 0.003 * sin(sR * 60.0 + t * 5.0);                  // slightly irregular, not ruled
             float yb = 1.0 - smoothstep(-0.008, 0.008, dBand);
-            vec3 yl2 = mix(vec3(1.0, 0.78, 0.04), vec3(1.0, 0.68, 0.01), smoothstep(0.8, 0.98, sR));
+            vec3 yl2 = mix(vec3(0.98, 0.6, 0.012), vec3(0.96, 0.46, 0.004), smoothstep(0.8, 0.98, sR));
             c = mix(vec3(0.84, 0.855, 0.86), yl2, yb);
             float lobe = smoothstep(0.8, 0.92, sR);
             c = mix(c, vec3(0.2, 0.12, 0.05), (1.0 - smoothstep(0.004, 0.0065, abs(fromEdge - 0.011))) * lobe * 0.8);   // dark submarginal line
@@ -714,18 +728,20 @@ export function createButterflyfish(renderer, opts = {}) {
           if (kind > 1.5 && kind < 2.5) {
             // caudal: yellow, a thin dark submarginal bar, then a clear margin
             // (photographs: solid yellow fan, one thin dark submarginal line, narrow clear edge)
-            c = mix(c, vec3(1.0, 0.76, 0.03), 0.65);
-            float bar = smoothstep(0.855, 0.87, t) * (1.0 - smoothstep(0.89, 0.905, t));
-            c = mix(c, vec3(0.2, 0.14, 0.05), bar * 0.6);
+            // deep golden at the root, clearer lemon toward the edge (as photographed)
+            vec3 gold = mix(vec3(0.9, 0.36, 0.003), vec3(0.97, 0.56, 0.012), smoothstep(0.05, 0.75, t));
+            c = mix(c, gold, 0.85);
+            float bar = smoothstep(0.875, 0.89, t) * (1.0 - smoothstep(0.905, 0.92, t));
+            c = mix(c, vec3(0.22, 0.13, 0.03), bar * 0.75);
             ray *= 0.3;
-            c = mix(c, vec3(0.95, 0.93, 0.7), smoothstep(0.905, 0.93, t) * 0.6);
+            c = mix(c, vec3(0.5, 0.52, 0.55), smoothstep(0.925, 0.945, t));   // narrow grey translucent margin
           }
           if (kind > 2.5 && kind < 3.5) { c = mix(vec3(0.98, 0.9, 0.6), vec3(0.9), t); ray *= 0.6; }
           if (kind > 3.5) { c = mix(vec3(0.97, 0.86, 0.45), vec3(0.98, 0.95, 0.8), t); c = mix(c, vec3(0.25, 0.2, 0.15), (1.0 - smoothstep(0.0, 0.6, r)) * 0.7); }   // pelvics: yellow-white, dark leading spine
           // rays: faint ridges only (the membrane is thick)
           vec3 rayC = spine ? c * 1.06 + 0.02 : c * 1.05 + 0.015;
           c = mix(c, rayC, ray * 0.07);
-          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.5, smoothstep(0.9, 0.95, t)) : 0.98), ray);
+          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.75, smoothstep(0.9, 0.97, t)) : 0.98), ray);
           a = mix(a, 1.0, opaque);
           a *= smoothstep(0.0, 0.03, 1.0 - t + 0.02);
           if (kind > 2.5 && kind < 3.5) a *= smoothstep(0.05, 0.45, abs(dot(normalize(vNormal), normalize(vViewPosition))));
@@ -733,26 +749,27 @@ export function createButterflyfish(renderer, opts = {}) {
           vFinGlow = c * (1.0 - a) * 0.35;
         }`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vFinGlow * uGlow;')
-      .replace('varying vec2 vFin; uniform float uKind;', 'varying vec2 vFin; vec3 vFinGlow; uniform float uGlow; uniform float uRays; uniform float uKind; uniform vec2 uFinSH[26];');
+      .replace('varying vec2 vFin; uniform float uKind;', 'varying vec2 vFin; vec3 vFinGlow; uniform float uGlow; uniform float uRays; uniform float uKind; uniform vec2 uFinSH[40];');
   };
   const mkFinMat = (kind, spines, rays = 0) => {
     const m = new THREE.MeshPhysicalMaterial({
       map: kind < 3 ? tex.albedo : null, color: 0xffffff,
       roughness: 0.55, metalness: 0.0, transparent: true, side: THREE.DoubleSide,
-      clearcoat: kind === 3 ? 0.0 : 0.08, clearcoatRoughness: 0.25, depthWrite: true,
+      clearcoat: kind === 3 ? 0.0 : 0.22, clearcoatRoughness: 0.25, depthWrite: true,
       sheen: 0.0, sheenColor: new THREE.Color(1, 1, 1), sheenRoughness: 0.6,
     });
     // per-ray (s at the base, ray length) so the fin shader can paint bands of fixed width from the edge
-    const L = kind === 1 ? layouts.anal : null;
-    const sh = Array.from({ length: 26 }, (_, i) => L && L.base[i] ? new THREE.Vector2(L.base[i][0], Math.hypot(L.tip[i][0] - L.base[i][0], L.tip[i][1] - L.base[i][1])) : new THREE.Vector2());
+    const L = kind === 1 ? layouts.anal : kind === 0 ? layouts.dorsal : null;
+    const sh = Array.from({ length: 40 }, (_, i) => L && L.base[i] ? new THREE.Vector2(L.base[i][0], Math.hypot(L.tip[i][0] - L.base[i][0], L.tip[i][1] - L.base[i][1])) : new THREE.Vector2());
     const u = { uKind: { value: kind }, uSpines: { value: spines }, uGlow: uniforms.uGlow, uRays: { value: rays }, uFinSH: { value: sh } };
     addSwim(m, { ...uniforms, ...u }, { key: 'fin' + kind, frag: finFrag(kind), noBend: kind >= 3 });
     return m;
   };
 
-  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, ridge: 0.08, sub: 4, segs: 18, pleat: 0.0005, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.012 }), mkFinMat(0, 12, 37));
-  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, ridge: 0.02, sub: 4, segs: 16, pleat: 0.0002, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.012 }), mkFinMat(1, 2, 25));
-  const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, ridge: 0.06, sub: 4, segs: 16, pleat: 0.0004, scallop: 0.006, thick: 0.005 }), mkFinMat(2, -1));
+  const dorsal = new THREE.Mesh(buildFin({ ...layouts.dorsal, thickAt: (s) => Math.min(1, ANATOMY.width(s) / 0.014), ridge: 0.08, sub: 4, segs: 18, pleat: 0.0005, scallop: 0.004, spines: 12, spineScallop: 0.13, bow: -0.02, thick: 0.012 }), mkFinMat(0, 12, 37));
+  const anal = new THREE.Mesh(buildFin({ ...layouts.anal, thickAt: (s) => Math.min(1, ANATOMY.width(s) / 0.014), ridge: 0.02, sub: 4, segs: 16, pleat: 0.0002, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.012 }), mkFinMat(1, 2, 25));
+  const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, ridge: 0.0, sub: 4, segs: 16, pleat: 0.0004, scallop: 0.002, thick: 0.011, thickAt: (s) => Math.max(0.5, Math.min(1, ANATOMY.width(Math.min(s, 1)) / 0.012)) }), mkFinMat(2, -1));
+  dorsal.name = 'dorsal'; anal.name = 'anal'; caudal.name = 'caudal';
   for (const m of [dorsal, anal, caudal]) { m.renderOrder = 2; group.add(m); }
 
   // -- stout dorsal & anal spines as real geometry
