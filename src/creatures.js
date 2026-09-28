@@ -207,6 +207,14 @@ const CLAW_POSES_Y = {
   waveUp: { yaw0: 0.7, p0: 1.0, f1: 1.0, p1: 0.4, f2: 0.4, p2: 0.1, open: 0.25 },
   tuck: { yaw0: 1.1, p0: -0.15, f1: 1.9, p1: 0.2, f2: 0.8, p2: -1.0, open: 0.0 },
 };
+// コメツキガニ：体が低いので腕を持ち上げ、平たい掌を前に向けて指先を内下方へ（正面から見て V 字）
+const CLAW_POSES_K = {
+  rest: { yaw0: 1.0, p0: 0.5, f1: 1.4, p1: 0.0, f2: 0.55, p2: -0.85, open: 0.12 },
+  reach: { yaw0: 0.9, p0: 0.2, f1: 1.2, p1: -0.1, f2: 0.65, p2: -1.15, open: 0.5 },
+  mouth: { yaw0: 1.05, p0: 0.7, f1: 1.75, p1: 0.15, f2: 0.5, p2: -0.45, open: 0.0 },
+  waveUp: { yaw0: 0.7, p0: 1.1, f1: 1.0, p1: 0.4, f2: 0.4, p2: 0.1, open: 0.25 },
+  tuck: { yaw0: 1.1, p0: 0.2, f1: 1.9, p1: 0.2, f2: 0.8, p2: -0.9, open: 0.0 },
+};
 function mixPose(a, b, t, out = {}) { for (const k in a) out[k] = a[k] + (b[k] - a[k]) * t; return out; }
 function setClaw(c, p) {
   const s = c.s;
@@ -265,7 +273,7 @@ class Crab extends Agent {
       const lp = buildCrab(species, { ...this.mats, shell: shellMat }, this.male, 4);
       const lr = new LegRig(lp.body, lp.legs, { phiD: this.S.phiD });
       lr.update(0, FLAT, null, false);
-      for (const c of lp.claws) setClaw(c, (species === 'yamato' ? CLAW_POSES_Y : CLAW_POSES).rest);
+      for (const c of lp.claws) setClaw(c, (species === 'kometsuki' ? CLAW_POSES_K : CLAW_POSES_Y).rest);
       setEyes(lp, this.S.eye, 0.92);
       sys.lodCache[key] = buildLODGeometry(lp.root);
     }
@@ -395,7 +403,7 @@ class Crab extends Agent {
 
     // はさみ
     const feeding = this.state === 'feed';
-    const CP = this.species === 'yamato' ? CLAW_POSES_Y : CLAW_POSES;
+    const CP = this.species === 'kometsuki' ? CLAW_POSES_K : CLAW_POSES_Y;
     for (const c of P.claws) {
       let pose;
       if (this.sink > 0.05) pose = mixPose(CP.rest, CP.tuck, clamp(this.sink * 2, 0, 1), this.pose);
@@ -1147,6 +1155,7 @@ export class Ecosystem {
 
   crabMaterials(species, seed) {
     const Y = species === 'yamato';
+    if (species === 'kometsuki') return this.kometsukiMaterials(seed);
     if (!this.crabShared[species]) {
       this.crabShared[species] = {
         leg: organicMaterial({
@@ -1173,6 +1182,29 @@ export class Ecosystem {
       roughness: Y ? 0.5 : 0.58, clearcoat: 0.45, clearcoatRoughness: 0.3,
     });
     return { shell, leg: sh.leg, claw: sh.claw, arm: sh.arm, mouth: sh.mouth, cornea: this.corneaMat };
+  }
+
+  kometsukiMaterials(seed) {
+    if (!this.komeShared) {
+      const S = CRAB_SPECS.kometsuki.legs;
+      const legCommon = { key: 'legBanded', glsl: GLSL.legBanded, roughness: 0.4, clearcoat: 0.6, clearcoatRoughness: 0.2, sss: 0xd8c8a0, sssK: 0.35 };
+      this.komeShared = {
+        leg: organicMaterial({ ...legCommon, seed: 0.3, colors: [0x3c3420, 0xd8d0b4, 0xd8dcd8, 0x8a8a80], P: [70, 0, 0, 0] }),
+        merus: organicMaterial({ ...legCommon, seed: 0.6, colors: [0x3c3420, 0xd8d0b4, 0xdfe4e2, 0x8a8a80], P: [55, 1, S.merus, 0] }),
+        stalk: organicMaterial({ ...legCommon, seed: 0.8, colors: [0x9a968a, 0xc0beb2, 0xd8dcd8, 0x8a8a80], P: [40, 0, 0, 0] }),
+        claw: organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.4, colors: [0xc2c6bc, 0xa4aaa0, 0xf6f4ee], P: [0.2, 1.6, 0, 0], roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.15, sss: 0xe0e4e0, sssK: 0.1 }),
+        arm: organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.5, colors: [0xa8aca2, 0x6a6a58, 0xb8bab0], P: [1, 1, 0, 0], roughness: 0.35, clearcoat: 0.7, clearcoatRoughness: 0.2 }),
+        mouth: organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.1, colors: [0xe8eae6, 0xd8dcd6, 0xf0f0ec], P: [1, 0, 0, 0], roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.2 }),
+        setae: new THREE.MeshStandardMaterial({ color: 0xcfc8b0, roughness: 0.55, side: THREE.DoubleSide }),
+      };
+    }
+    const sh = this.komeShared;
+    const shell = organicMaterial({
+      key: 'komeShell2', glsl: GLSL.kometsukiShell, seed,
+      colors: [0x3e3824, 0x5c5234, 0xd2c89e, 0x9a9c94],
+      roughness: 0.55, clearcoat: 0.3, clearcoatRoughness: 0.35,
+    });
+    return { shell, leg: sh.leg, merus: sh.merus, stalk: sh.stalk, claw: sh.claw, arm: sh.arm, mouth: sh.mouth, setae: sh.setae, cornea: this.corneaMat };
   }
 
   buildBait() {

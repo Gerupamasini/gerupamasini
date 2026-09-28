@@ -117,26 +117,51 @@ function glslType(v) {
 
 // ---------- 種ごとの GLSL 模様 ----------
 export const GLSL = {
-  // コメツキガニの甲：砂に溶け込む灰褐色、細かな暗色点と顆粒
+  // コメツキガニの甲：暗いオリーブ褐色の地に、淡黄色の細かな顆粒がびっしり。左右対称の淡い斑
   kometsukiShell: {
     color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
-      vec3 q = p*42.0 + uSeed*13.7;
-      float big = fbm3(p*7.0 + uSeed)*0.5+0.5;
-      vec3 col = mix(uC1, uC2, smoothstep(0.25, 0.8, big));
-      vec3 c = cell3(q);
-      float spot = smoothstep(0.42, 0.18, c.x) * step(0.45, c.z);
-      col = mix(col, uC3, spot*0.8);
-      float fine = smoothstep(0.3, 0.1, cell3(p*120.0 + uSeed).x);
-      col = mix(col, uC3, fine*0.35);
-      col = mix(col, uC4, smoothstep(0.0, -0.06, p.y));      // 腹側は白っぽい
-      col *= 0.9 + 0.1*snoise3(p*60.0);
+      vec3 ps = vec3(abs(p.x), p.y, p.z);             // 左右対称の模様
+      float big = fbm3(ps*9.0 + uSeed*3.0)*0.5+0.5;
+      vec3 col = mix(uC1, uC2, smoothstep(0.3, 0.75, big));
+      vec3 c = cell3(p*120.0 + uSeed*13.7);
+      float gran = 1.0 - smoothstep(0.1, 0.42, c.x);
+      col = mix(col, uC3, gran * (0.45 + 0.4*step(0.3, c.z)));
+      vec3 c2 = cell3(p*230.0 + uSeed*3.1);
+      col = mix(col, uC3*0.9, (1.0 - smoothstep(0.1, 0.35, c2.x)) * 0.3);
+      // 淡い対称斑（前方の一対と、後方の帯）
+      float pale = smoothstep(0.62, 0.8, fbm3(ps*5.0 + 17.0 + uSeed)*0.5+0.5);
+      col = mix(col, uC3*0.95, pale*0.55);
+      // 腹側と側面下部は銀灰色
+      col = mix(col, uC4, smoothstep(-0.02, -0.09, p.y));
       return col;
     }`,
     bump: `float orgBump(vec3 p){
-      vec3 c = cell3(p*85.0);
-      return (1.0 - smoothstep(0.0, 0.5, c.x))*0.0022 + snoise3(p*30.0)*0.0012;
+      vec3 c = cell3(p*95.0);
+      return (1.0 - smoothstep(0.0, 0.42, c.x))*0.0016 + snoise3(p*30.0)*0.0008;
     }`,
-    rough: 'float orgRough(vec3 p, float r){ return r + (snoise3(p*50.0))*0.1; }',
+    rough: 'float orgRough(vec3 p, float r){ return r + snoise3(p*50.0)*0.08; }',
+  },
+  // くっきりした縞の脚（コメツキガニ）。uP.x: 縞の周波数, uP.y: 1なら鼓膜（長節の銀色の楕円）, uP.z: 節の長さ
+  legBanded: {
+    color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
+      float wob = snoise3(p*vec3(20.0, 60.0, 60.0) + uSeed)*0.25;
+      float band = smoothstep(-0.15, 0.15, sin(p.x*uP.x + wob*3.0 + uSeed*2.0));
+      vec3 col = mix(uC1, uC2, band);
+      float speck = smoothstep(0.25, 0.1, cell3(p*140.0 + uSeed).x);
+      col = mix(col, uC2*1.05, speck*0.3*(1.0-band));
+      col = mix(col, uC4, smoothstep(0.0, -0.02, p.y)*0.35);
+      if (uP.y > 0.5) {
+        vec2 q = vec2((p.x - uP.z*0.5)/(uP.z*0.3), p.y/0.02);
+        float tym = 1.0 - smoothstep(0.7, 1.0, length(q));
+        col = mix(col, uC3, tym * 0.85);
+      }
+      return col;
+    }`,
+    bump: 'float orgBump(vec3 p){ return snoise3(p*vec3(40.0,120.0,120.0))*0.0008; }',
+    rough: `float orgRough(vec3 p, float r){
+      if (uP.y > 0.5) { vec2 q = vec2((p.x - uP.z*0.5)/(uP.z*0.3), p.y/0.02); return mix(r, 0.12, 1.0 - smoothstep(0.7, 1.0, length(q))); }
+      return r;
+    }`,
   },
   // ヤマトオサガニの甲：暗い灰緑褐色、目立つ顆粒
   yamatoShell: {
@@ -176,6 +201,10 @@ export const GLSL = {
     color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
       float m = fbm3(p*14.0 + uSeed)*0.5+0.5;
       vec3 col = mix(uC1, uC2, smoothstep(0.3, 0.8, m));
+      // 掌の上面と外面の暗いまだら（uP.y で強さ）
+      float mot = smoothstep(0.42, 0.66, fbm3(p*vec3(22.0, 30.0, 22.0) + uSeed*5.0)*0.5+0.5) * smoothstep(-0.02, 0.03, p.y + p.z*0.3);
+      col = mix(col, vec3(0.2, 0.19, 0.13), clamp(mot * uP.y, 0.0, 0.9) * (1.0 - smoothstep(uP.x*0.45, uP.x*0.6, p.x)));
+      col = mix(col, vec3(0.24, 0.24, 0.2), smoothstep(uP.x*0.32, uP.x*0.06, p.x) * 0.45 * min(uP.y, 1.0));   // 手首側の暗い帯
       col = mix(col, uC3, smoothstep(uP.x*0.55, uP.x*0.9, p.x));   // 指先
       col = mix(col, col*0.8, smoothstep(0.0, -0.02, p.y)*0.3);
       return col;

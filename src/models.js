@@ -1,6 +1,7 @@
 // 生き物の造形（SDF で作る有機的なパーツと、関節を持つリグ）
 import * as THREE from 'three';
 import { sphere, ellipsoid, cone, roundBox, tube, union, smin, smax, meshSDF } from './sdf.js';
+import { mulberry32 } from './noise.js';
 
 const TAU = Math.PI * 2;
 const cache = new Map();
@@ -95,27 +96,55 @@ function dactylGeo(P, H, q = 1) {
 }
 
 // ---------- カニの甲 ----------
+// コメツキガニ：丸みのある四角形で背が高く盛り上がる甲。前縁中央に寄った眼窩
 function kometsukiCarapace(w, h, l, q = 1) {
-  return cached(`kome-car:${w}:${q}`, () => {
-    const main = ellipsoid([0, 0, 0], [w, h, l]);
-    const frontLobe = ellipsoid([0, -h * 0.05, l * 0.62], [w * 0.55, h * 0.6, l * 0.45]);
-    const branch = [1, -1].map((s) => ellipsoid([s * w * 0.42, h * 0.3, -l * 0.1], [w * 0.5, h * 0.75, l * 0.7]));
-    const orbits = [1, -1].map((s) => ellipsoid([s * w * 0.52, h * 0.15, l * 0.92], [w * 0.2, h * 0.22, l * 0.26]));
-    const grooveH = cone([-w * 0.25, h * 0.98, l * 0.02], [w * 0.25, h * 0.98, l * 0.02], h * 0.05, h * 0.05);
-    const grooveL = [1, -1].map((s) => cone([s * w * 0.25, h * 0.96, l * 0.35], [s * w * 0.3, h * 0.94, -l * 0.35], h * 0.045, h * 0.045));
-    const sternum = ellipsoid([0, -h * 0.55, -l * 0.05], [w * 0.8, h * 0.25, l * 0.8]);
+  return cached(`kome-car2:${w}:${h}:${q}`, () => {
+    const core = roundBox([0, -h * 0.15, 0], [w * 0.9, h * 0.55, l * 0.9], h * 0.5);
+    const dome = ellipsoid([0, h * 0.05, -l * 0.05], [w, h, l]);
+    const cheeks = [1, -1].map((s) => ellipsoid([s * w * 0.5, h * 0.05, l * 0.25], [w * 0.5, h * 0.8, l * 0.6]));
+    const orbits = [1, -1].map((s) => ellipsoid([s * w * 0.3, h * 0.45, l * 0.98], [w * 0.14, h * 0.28, l * 0.2]));
+    const front = ellipsoid([0, h * 0.3, l * 1.08], [w * 0.1, h * 0.35, l * 0.12]);
+    const grooveH = cone([-w * 0.2, h * 1.04, l * 0.02], [w * 0.2, h * 1.04, l * 0.02], h * 0.05, h * 0.05);
+    const grooveL = [1, -1].map((s) => cone([s * w * 0.22, h * 1.0, l * 0.4], [s * w * 0.26, h * 0.95, -l * 0.4], h * 0.05, h * 0.05));
+    const sternum = ellipsoid([0, -h * 0.6, -l * 0.05], [w * 0.8, h * 0.25, l * 0.8]);
     const f = (x, y, z) => {
-      let d = smin(main(x, y, z), frontLobe(x, y, z), w * 0.25);
-      for (const b of branch) d = smin(d, b(x, y, z), w * 0.2);
-      d = smax(d, y - h * 0.92, h * 0.5);                // 背面をやや平たく
-      d = smax(d, -(y + h * 0.62), h * 0.25);           // 腹面を平らに
+      let d = smin(core(x, y, z), dome(x, y, z), w * 0.2);
+      for (const c of cheeks) d = smin(d, c(x, y, z), w * 0.2);
+      d = smax(d, -(y + h * 0.66), h * 0.2);
       d = smin(d, sternum(x, y, z), h * 0.15);
-      for (const o of orbits) d = smax(d, -o(x, y, z), w * 0.06);
+      for (const o of orbits) d = smax(d, -o(x, y, z), w * 0.05);
+      d = smax(d, -front(x, y, z), w * 0.05);
       d = smax(d, -grooveH(x, y, z), h * 0.05);
       for (const g of grooveL) d = smax(d, -g(x, y, z), h * 0.05);
       return d;
     };
-    return meshSDF(f, [-w * 1.05, -h * 1.0, -l * 1.1], [w * 1.05, h * 1.05, l * 1.2], (w / 26) * q);
+    return meshSDF(f, [-w * 1.1, -h * 1.0, -l * 1.1], [w * 1.1, h * 1.15, l * 1.2], (w / 30) * q);
+  });
+}
+
+// 脚の剛毛：節の背縁と腹縁から外向き・先端向きに伸びる細い針（+x が節の長さ方向）
+export function bristleGeo(len, r, count, hairLen, seed = 1) {
+  return cached(`bristle:${len}:${r}:${count}:${hairLen}:${seed}`, () => {
+    const rnd = mulberry32(seed);
+    const pos = [];
+    const dir = new THREE.Vector3(), u = new THREE.Vector3(), v = new THREE.Vector3(), b = new THREE.Vector3(), tip = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 0, 1);
+    for (let i = 0; i < count; i++) {
+      const side = i % 2 ? 1 : -1;
+      const x = ((i + 0.5 + (rnd() - 0.5) * 0.8) / count) * len;
+      b.set(x, side * r * 0.75, (rnd() - 0.5) * r * 0.5);
+      dir.set(0.5 + rnd() * 0.5, side * (0.8 + rnd() * 0.4), (rnd() - 0.5) * 0.9).normalize();
+      const L = hairLen * (0.55 + rnd() * 0.7);
+      tip.copy(b).addScaledVector(dir, L);
+      u.crossVectors(dir, up).normalize().multiplyScalar(r * 0.09);
+      v.crossVectors(dir, u).normalize().multiplyScalar(r * 0.09);
+      const p0 = b.clone().add(u), p1 = b.clone().sub(u).add(v), p2 = b.clone().sub(u).sub(v);
+      for (const [A, B] of [[p0, p1], [p1, p2], [p2, p0]]) pos.push(A.x, A.y, A.z, B.x, B.y, B.z, tip.x, tip.y, tip.z);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    return g;
   });
 }
 
@@ -161,13 +190,13 @@ function mouthGeo(s, q = 1) {
 // ---------- カニ一式 ----------
 export const CRAB_SPECS = {
   kometsuki: {
-    w: 0.2, h: 0.115, l: 0.17,
+    w: 0.2, h: 0.13, l: 0.18,
     carapace: kometsukiCarapace,
-    legs: { merus: 0.16, carpus: 0.065, prop: 0.1, dact: 0.12, r: 0.022, flat: 0.6, k: [0.92, 1.0, 1.0, 0.86], spread: 0.46, curve: 0.18 },
-    claw: { merus: 0.1, carpus: 0.06, palm: 0.17, H: 0.07, T: 0.045, r: 0.022, big: 1 },
-    eye: { stalk: 0.09, r: 0.011, cornea: 0.015, sep: 0.1, yaw: 0.35, up: 1.15, raise: 0 },
-    mouth: 0.05,
-    Hb: 0.13, phiD: 1.0, stepTime: 0.11, stepH: 0.05, stepThresh: 0.07,
+    legs: { merus: 0.19, carpus: 0.075, prop: 0.13, dact: 0.13, r: 0.02, merusR: 1.45, merusFlat: 0.42, flat: 0.55, k: [0.9, 1.0, 1.0, 0.86], spread: 0.44, curve: 0.2, setae: 0.05 },
+    claw: { merus: 0.08, carpus: 0.06, palm: 0.2, H: 0.13, T: 0.06, r: 0.022, big: 1, chela: true },
+    eye: { stalk: 0.085, r: 0.012, cornea: 0.017, cLen: 1.9, sep: 0.06, yaw: 0.2, up: 0.1, raise: 1.35 },
+    mouth: 0.08,
+    Hb: 0.12, phiD: 1.05, stepTime: 0.11, stepH: 0.05, stepThresh: 0.07,
   },
   yamato: {
     w: 0.56, h: 0.17, l: 0.4,
@@ -186,7 +215,7 @@ export function crabKit(name, q = 1) {
     const L = S.legs, C = S.claw, E = S.eye;
     return {
       carapace: S.carapace(S.w, S.h, S.l, q),
-      merus: segGeo(L.merus, L.r, L.r * 0.85, L.flat, { q }),
+      merus: segGeo(L.merus, L.r * (L.merusR || 1), L.r * (L.merusR || 1) * 0.8, L.merusFlat || L.flat, { q }),
       carpus: segGeo(L.carpus, L.r * 0.85, L.r * 0.8, L.flat, { q }),
       prop: segGeo(L.prop, L.r * 0.78, L.r * 0.6, L.flat, { q }),
       dact: segGeo(L.dact, L.r * 0.6, L.r * 0.12, L.flat, { curve: L.curve, knob: 0, q }),
@@ -195,6 +224,12 @@ export function crabKit(name, q = 1) {
       palm: C.chela ? chelaGeo(C.palm, C.H, C.T, q) : palmGeo(C.palm, C.H, C.T, q),
       cDact: C.chela ? chelaDactGeo(C.palm, C.H, q) : dactylGeo(C.palm, C.H, q),
       stalk: segGeo(E.stalk, E.r, E.r * 0.9, 1, { knob: 0, q }),
+      ...(L.setae ? {
+        hairM: bristleGeo(L.merus, L.r * (L.merusR || 1), 12, L.setae, 3),
+        hairC: bristleGeo(L.carpus, L.r * 0.85, 5, L.setae * 0.9, 5),
+        hairP: bristleGeo(L.prop, L.r * 0.75, 10, L.setae * 0.9, 7),
+        hairD: bristleGeo(L.dact * 0.7, L.r * 0.5, 6, L.setae * 0.6, 9),
+      } : {}),
       cornea: new THREE.SphereGeometry(E.cornea, Math.round(20 / q), Math.round(14 / q)),
       mouth: mouthGeo(S.mouth, q),
     };
@@ -222,12 +257,16 @@ export function buildCrab(name, mats, male = true, q = 1) {
       const baseYaw = s > 0 ? spread : Math.PI - spread;
       hip.rotation.y = baseYaw;
       const F = new THREE.Group();
-      const mer = new THREE.Mesh(K.merus, mats.leg); mer.scale.setScalar(k); F.add(mer);
+      const mer = new THREE.Mesh(K.merus, mats.merus || mats.leg); mer.scale.setScalar(k); F.add(mer);
       const Kn = new THREE.Group(); Kn.position.x = L.merus * k;
       const carp = new THREE.Mesh(K.carpus, mats.leg); carp.scale.setScalar(k); Kn.add(carp);
       const prop = new THREE.Mesh(K.prop, mats.leg); prop.scale.setScalar(k); prop.position.x = L.carpus * k; Kn.add(prop);
       const D = new THREE.Group(); D.position.x = (L.carpus + L.prop) * k;
       const dac = new THREE.Mesh(K.dact, mats.leg); dac.scale.setScalar(k); D.add(dac);
+      if (L.setae && q === 1 && mats.setae) {
+        const add = (parent, geo, x) => { const m = new THREE.Mesh(geo, mats.setae); m.scale.setScalar(k); m.position.x = x; m.userData.noLOD = true; parent.add(m); };
+        add(F, K.hairM, 0); add(Kn, K.hairC, 0); add(Kn, K.hairP, L.carpus * k); add(D, K.hairD, 0);
+      }
       Kn.add(D); F.add(Kn); hip.add(F); body.add(hip);
       const a = L.merus * k, b = (L.carpus + L.prop) * k;
       const dl = L.dact * k * Math.hypot(1, L.curve), dAng = Math.atan(L.curve);
@@ -262,10 +301,11 @@ export function buildCrab(name, mats, male = true, q = 1) {
     const g = new THREE.Group();
     g.position.set(s * E.sep, S.h * 0.3, S.l * 0.93);
     const inner = new THREE.Group(); g.add(inner);
-    inner.add(new THREE.Mesh(K.stalk, mats.leg));
+    inner.add(new THREE.Mesh(K.stalk, mats.stalk || mats.leg));
     const co = new THREE.Mesh(K.cornea, mats.cornea);
-    co.position.x = E.stalk + E.cornea * 0.3;
-    co.scale.set(1.25, 1, 1);
+    const cl = E.cLen || 1.25;
+    co.position.x = E.stalk + E.cornea * (cl - 0.7) * 0.8;
+    co.scale.set(cl, 1, 1);
     inner.add(co);
     body.add(g);
     eyes.push({ g, inner, s });
