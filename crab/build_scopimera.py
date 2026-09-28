@@ -32,40 +32,40 @@ CL = 8.0            # 甲長（前後）
 CW_HALF = 5.0       # 甲幅の半分（甲幅 10 mm。幅は長さよりやや広い）
 DOME_T = 3.5        # 中心線から背面頂部まで（丸く膨らむ甲）
 DOME_D = 2.3        # 中心線から腹面まで
-H_CENTER = 8.0      # 仮の甲中心高さ（脚先接地ソルバで最終的に全体を持ち上げ/下げ）
+H_CENTER = 4.2      # 仮の甲中心高さ（脚先接地ソルバで最終的に全体を持ち上げ/下げ）
 
 # 歩脚: [coxa, basis, merus, carpus, propodus, dactylus] の長さ（mm）
 #       長節は幅広く側扁（鼓膜状の窓がある）、指節はやや長く湾曲して尖る。第2・第3歩脚が最長。
 LEGS = {
-    "leg1": dict(z=1.9, yaw=42.0, L=[0.8, 0.6, 3.6, 1.8, 2.2, 2.4]),
-    "leg2": dict(z=0.3, yaw=14.0, L=[0.8, 0.6, 4.4, 2.1, 2.6, 2.8]),
-    "leg3": dict(z=-1.4, yaw=-14.0, L=[0.8, 0.6, 4.4, 2.1, 2.6, 2.8]),
-    "leg4": dict(z=-2.9, yaw=-42.0, L=[0.8, 0.6, 3.8, 1.8, 2.2, 2.5]),
+    "leg1": dict(z=1.9, yaw=48.0, L=[0.8, 0.6, 4.6, 2.2, 2.8, 2.9]),
+    "leg2": dict(z=0.3, yaw=13.0, L=[0.8, 0.6, 5.6, 2.6, 3.3, 3.3]),
+    "leg3": dict(z=-1.4, yaw=-13.0, L=[0.8, 0.6, 5.6, 2.6, 3.3, 3.3]),
+    "leg4": dict(z=-2.9, yaw=-50.0, L=[0.8, 0.6, 4.8, 2.2, 2.8, 3.0]),
 }
 # 断面半径（幅=脚平面の法線方向, 高さ=脚平面内）: 付け根→先端
 SEG_R = {
     "coxa":     (0.58, 0.52, 0.66, 0.60),
     "basis":    (0.46, 0.42, 0.52, 0.48),
-    "merus":    (0.22, 0.19, 0.72, 0.54),   # 長節: 幅広く平たい板状
-    "carpus":   (0.20, 0.18, 0.38, 0.32),
-    "propodus": (0.18, 0.15, 0.32, 0.26),
-    "dactylus": (0.16, 0.02, 0.22, 0.03),   # 指節: 湾曲して尖る
+    "merus":    (0.40, 0.34, 0.70, 0.55),   # 長節: 幅広く平たい板状
+    "carpus":   (0.30, 0.26, 0.40, 0.34),
+    "propodus": (0.26, 0.21, 0.34, 0.28),
+    "dactylus": (0.20, 0.02, 0.24, 0.03),   # 指節: 湾曲して尖る
 }
 SEGS = ["coxa", "basis", "merus", "carpus", "propodus", "dactylus"]
 # 基本姿勢（水平からの仰角, 度）。膝（長節末端）は甲の上面近くまで上がる。carpus 以降はソルバで接地。
-PITCH = [-25.0, -5.0, 36.0, -22.0, -66.0, -82.0]
+PITCH = [-10.0, 5.0, 30.0, -38.0, -64.0, -80.0]
 
 # 鋏脚: 左右同大。掌部は丸く平たく、口の前に折りたたみ、指は下内向き
-CHEL = dict(z=2.2,
-            L=[0.6, 0.5, 1.5, 1.1, 2.4, 2.0],       # coxa, basis, merus, carpus, propodus(掌部), dactylus
-            yaw=[30.0, 50.0, 82.0, 150.0, 172.0, 178.0],  # 口の前に折りたたみ、指先は正中線付近で出会う
-            pitch=[-35.0, -20.0, 5.0, 0.0, -68.0, -85.0])
+CHEL = dict(z=2.5,
+            L=[0.6, 0.5, 1.8, 1.2, 3.0, 2.3],       # coxa, basis, merus, carpus, propodus(掌部), dactylus
+            yaw=[30.0, 55.0, 80.0, 140.0, 165.0, 172.0],  # 前隅で高く構え、指先は正中線付近の地面近くへ
+            pitch=[-10.0, 15.0, 35.0, 5.0, -70.0, -82.0])
 CHEL_R = {
     "coxa": (0.55, 0.50, 0.62, 0.56),
     "basis": (0.45, 0.42, 0.50, 0.48),
     "merus": (0.38, 0.34, 0.75, 0.62),
     "carpus": (0.42, 0.38, 0.56, 0.52),
-    "propodus": (0.34, 0.30, 1.15, 0.95),   # 掌部: 大きく丸く平たい板状
+    "propodus": (0.42, 0.36, 1.55, 1.25),   # 掌部: 大きく丸く平たい板状
     "fixed": (0.24, 0.02, 0.32, 0.03),      # 不動指
     "dactylus": (0.22, 0.02, 0.30, 0.03),   # 可動指
 }
@@ -197,7 +197,7 @@ def frame_from(d):
 
 
 def tube(P0, d, L, r, grp, rect_key, sg, nl=14, nc=14, bend=0.0, tip=False,
-         cap0=0.75, cap1=0.75, ext0=0.22, ext1=0.22, mat=0, sq=2.3, h_override=None):
+         cap0=0.45, cap1=0.45, ext0=0.10, ext1=0.10, mat=0, sq=2.3, h_override=None):
     """扁平断面・テーパー・端部丸めつきの節。r=(幅0,幅1,高0,高1)。
     sg=+1 右, -1 左（ミラー）。UV は rect に展開（u=長さ方向, v=周方向）。"""
     d, n, h = frame_from(d)
@@ -383,7 +383,7 @@ def build_leg(leg, p, sg, ground):
 
 def build_cheliped(sg):
     side = "R" if sg > 0 else "L"
-    P0 = side_attach(CHEL["z"], lower=0.35)
+    P0 = side_attach(CHEL["z"], lower=0.05)
     dirs = chain_dirs(CHEL["yaw"], CHEL["pitch"])
     names = ["coxa", "basis", "merus", "carpus", "propodus"]
     P = P0.copy()
@@ -428,16 +428,16 @@ def build_eye(sg):
     side = "R" if sg > 0 else "L"
     s = 0.86
     W, T, D, yc, z = carapace_profile(s)
-    base = np.array([1.05, yc + H_CENTER + T * 0.55, z - 0.3])
+    base = np.array([1.25, yc + H_CENTER + T * 0.45, z - 0.2])
     d = chain_dirs([80.0], [80.0])[0]                   # ほぼ真上、わずかに前・外へ
-    L = 3.9
+    L = 4.2
     name = f"eye_{side}"
-    tip = tube(base, d, L, (0.36, 0.34, 0.40, 0.38), name, "eyestalk", sg, nl=14, nc=14, ext0=0.4, ext1=0.1)
+    tip = tube(base, d, L, (0.52, 0.48, 0.56, 0.52), name, "eyestalk", sg, nl=14, nc=14, ext0=0.4, ext1=0.1)
     # 角膜: 眼柄先端をやや太く包む縦長の楕円体（前・外側を向く）
     dd, n, h = frame_from(d)
     C = tip - dd * 0.35 + np.array([0.05, 0.0, 0.08])
     rot = np.stack([n, dd, h], axis=1)
-    ellipsoid(C, 0.44, 0.62, 0.46, name, "cornea", sg, nu=16, nv=12, mat=1, rot=rot)
+    ellipsoid(C, 0.58, 0.75, 0.60, name, "cornea", sg, nu=16, nv=12, mat=1, rot=rot)
     BONES.append((name, mirror_x(base, sg), mirror_x(base + d * L, sg), "carapace"))
 
 
@@ -448,7 +448,7 @@ def build_mouthparts():
         C = np.array([0.98, yc + H_CENTER - 0.55, z + 0.30])
         tilt = math.radians(12)
         rot = np.array([[1, 0, 0], [0, math.cos(tilt), -math.sin(tilt)], [0, math.sin(tilt), math.cos(tilt)]])
-        ellipsoid(C, 1.0, 1.45, 0.45, "carapace", "mxp", sg, nu=20, nv=10, rot=rot)
+        ellipsoid(C, 0.85, 1.2, 0.40, "carapace", "mxp", sg, nu=24, nv=16, rot=rot)
 
 
 def build_abdomen():
@@ -636,7 +636,7 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         c = c * (0.92 + 0.14 * mac[..., None])
         col[y0:y1, x0:x1] = np.clip(c, 0, 1)
         rough[y0:y1, x0:x1] = 0.36 + 0.10 * fin + 0.06 * wu
-        height[y0:y1, x0:x1] = 0.6 * spot + 0.25 * mott + 0.2 * grn
+        height[y0:y1, x0:x1] = 0.6 * spot + 0.25 * mott
     elif kind == "seg":
         sg = info["seg"]
         chel = info["leg"] == "cheliped"
@@ -674,6 +674,8 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
             tipw = smooth(0.45, 0.9, lu) * ones
             tc = TIP if chel or sg == "fixed" else DTIP
             c = c * (1 - tipw[..., None]) + tc * tipw[..., None]
+        memb = (smooth(0.06, 0.0, lu) + smooth(0.94, 1.0, lu)) * np.ones_like(lv) * (0.0 if sg == "dactylus" else 0.5)
+        c = c * (1 - memb[..., None]) + np.array([0.62, 0.58, 0.55]) * memb[..., None]   # 関節膜
         c = c * (0.94 + 0.10 * mac[..., None])
         col[y0:y1, x0:x1] = np.clip(c, 0, 1)
         rough[y0:y1, x0:x1] = (0.30 if chel else 0.48) + 0.08 * fin - (0.15 * smooth(0.6, 1.0, lu) if sg in ("dactylus", "fixed") else 0)
@@ -705,11 +707,11 @@ for key, (u0, v0, uw, vh, info) in ATLAS.rects.items():
         # 第3顎脚: 白い板に、上半分の暗色斑と点刻
         up = smooth(0.58, 0.74, lv) * np.ones_like(lu)
         dots = smooth(0.70, 0.78, fin)
-        c = BELLY * (1 - up[..., None] * 0.8) + DARK * up[..., None] * 0.8
+        c = np.array([0.84, 0.84, 0.82]) * (1 - up[..., None] * 0.7) + DARK * up[..., None] * 0.7
         c = c * (1 - dots[..., None] * 0.5 * up[..., None]) + BELLY * dots[..., None] * 0.5 * up[..., None]
         col[y0:y1, x0:x1] = c * (0.95 + 0.08 * mac[..., None])
         rough[y0:y1, x0:x1] = 0.5
-        height[y0:y1, x0:x1] = 0.1 * fin
+        height[y0:y1, x0:x1] = 0.0
 
 # 高さ場 → 接空間ノーマル（OpenGL/glTF 規約: +Y = +V）
 gy, gx = np.gradient(height)
