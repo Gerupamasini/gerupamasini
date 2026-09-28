@@ -64,7 +64,7 @@ function buildLODGeometry(root) {
 class PelletField {
   constructor(scene, cap = 3000) {
     this.cap = cap;
-    const geo = new THREE.IcosahedronGeometry(0.045, 2);
+    const geo = new THREE.IcosahedronGeometry(0.045, 1);
     const p = geo.attributes.position;
     const rnd = mulberry32(8);
     for (let i = 0; i < p.count; i++) {
@@ -251,14 +251,13 @@ class Crab extends Agent {
     const key = species + (this.male ? 'M' : 'F');
     const r = this.parts.root;
     if (!sys.lodCache[key]) {
-      // 平らな地面で静止姿勢を作ってからまとめる
-      r.position.set(0, 0, 0); r.quaternion.identity(); r.scale.setScalar(1);
-      this.rig.reset();
-      this.rig.update(0, FLAT, null, false);
-      for (const c of this.parts.claws) setClaw(c, CLAW_POSES.rest);
-      setEyes(this.parts, this.S.eye, 0.7);
-      sys.lodCache[key] = buildLODGeometry(r);
-      this.rig.reset();
+      // 低解像度の個体を平らな地面で静止姿勢にしてから1つにまとめる
+      const lp = buildCrab(species, { shell: shellMat, leg: this.parts.legs[0].F.children[0].material, claw: this.parts.claws[0].g0.children[0].material, cornea: sys.corneaMat }, this.male, 4);
+      const lr = new LegRig(lp.body, lp.legs, { phiD: this.S.phiD });
+      lr.update(0, FLAT, null, false);
+      for (const c of lp.claws) setClaw(c, CLAW_POSES.rest);
+      setEyes(lp, this.S.eye, 0.7);
+      sys.lodCache[key] = buildLODGeometry(lp.root);
     }
     const L = sys.lodCache[key];
     const mats = L.materials.map((m, i) => (i === 0 ? shellMat : m));
@@ -425,10 +424,10 @@ class GhostShrimp extends Agent {
 
     const K = shrimpKit();
     const seed = rnd();
-    const common = { key: 'shrimp', glsl: GLSL.shrimp, sss: 0xff9f8a, sssK: 1.1, seed, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.2, sheen: 0.4, sheenColor: 0xffd0c0 };
-    const carMat = organicMaterial({ ...common, colors: [0xf1d9ce, 0xf6e4dc, 0xd4652e, 0], P: [1, 0, 0, 0] });
-    const bodyMat = organicMaterial({ ...common, colors: [0xf0d6cc, 0xf5e0d6, 0xdc8a60, 0], P: [0.25, 0, 0, 0] });
-    const clawMat = organicMaterial({ ...common, colors: [0xf4e6d6, 0xf8ecdf, 0xe0b080, 0], P: [0, 0, 0, 0], sss: 0xffc0a0, sssK: 0.8 });
+    const common = { key: 'shrimp', glsl: GLSL.shrimp, sss: 0xff9f8a, sssK: 0.6, seed, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.2, sheen: 0.4, sheenColor: 0xffd0c0 };
+    const carMat = organicMaterial({ ...common, colors: [0xd8c2b8, 0xe6d4ca, 0xd0622a, 0], P: [1, 0.6, 0, 0], transparent: true, opacity: 0.9 });
+    const bodyMat = organicMaterial({ ...common, colors: [0xdcc4b8, 0xe8d6cc, 0xd08a64, 0], P: [0.2, 1, 0, 0], transparent: true, opacity: 0.9 });
+    const clawMat = organicMaterial({ ...common, colors: [0xe8dcc8, 0xf0e6d4, 0xd8b088, 0], P: [0, 0, 0, 0], sss: 0xffc0a0, sssK: 0.5 });
 
     const root = new THREE.Group();
     const body = new THREE.Group();
@@ -693,7 +692,7 @@ function shellBasis(axis, apertureNormal) {
   return new THREE.Matrix4().makeBasis(X, Y, Z);
 }
 
-const HERMIT_SHELL = { turns: 7.5, apR: 0.13, coil: 0.085, height: 0.62, shrink: 0.1, ribs: 18, cords: 6, ribAmp: 0.04, cordAmp: 0.05, knobAmp: 0.1, colA: 0x3e3830, colB: 0x6c6254, colC: 0xb8ac98, bands: 1, bandPhase: 1.0, sutureAt: 1.4, perTurn: 64, rad: 26 };
+const HERMIT_SHELL = { turns: 7.5, apR: 0.13, coil: 0.085, height: 0.62, shrink: 0.1, ribs: 18, cords: 6, ribAmp: 0.04, cordAmp: 0.05, knobAmp: 0.1, colA: 0x3e3830, colB: 0x6c6254, colC: 0xb8ac98, bands: 1, bandPhase: 1.0, sutureAt: 1.4, perTurn: 44, rad: 18 };
 
 class Hermit extends Agent {
   constructor(sys, x, z, rnd) {
@@ -838,7 +837,7 @@ class Hermit extends Agent {
 // ============================================================
 // アラムシロガイ
 // ============================================================
-const NASSA_SHELL = { turns: 5.2, apR: 0.16, coil: 0.1, height: 0.5, shrink: 0.1, ribs: 17, cords: 9, ribAmp: 0.03, cordAmp: 0.03, knobAmp: 0.11, colA: 0x8a7a5e, colB: 0xcdbf9e, colC: 0x6a5840, bands: 1, bandPhase: 2.4, sutureAt: 1.6, perTurn: 80, rad: 30 };
+const NASSA_SHELL = { turns: 5.2, apR: 0.16, coil: 0.1, height: 0.5, shrink: 0.1, ribs: 17, cords: 9, ribAmp: 0.03, cordAmp: 0.03, knobAmp: 0.11, colA: 0x8a7a5e, colB: 0xcdbf9e, colC: 0x6a5840, bands: 1, bandPhase: 2.4, sutureAt: 1.6, perTurn: 52, rad: 20 };
 
 class Nassa extends Agent {
   constructor(sys, x, z, rnd) {
@@ -944,6 +943,7 @@ class Clam extends Agent {
       // 砂の中に立って埋まり、水管だけが砂の表面に届く
       root.position.set(x, g - 0.75 * this.sc, z);
       root.rotation.set((rnd() - 0.5) * 0.3, this.yaw, -0.35);
+      root.children[0].visible = false;   // 砂の中なので描かない
       const sx = x - Math.cos(this.yaw) * 0.35 * this.sc, sz = z + Math.sin(this.yaw) * 0.35 * this.sc;
       this.hole = w.makeBurrow(sx, sz, 0.075 * this.sc, { rim: 0.2, sx: 1.25, rot: -this.yaw });
       const siph = new THREE.Mesh(siphonGeo(0.055, 0.5), sys.siphonMat);
@@ -964,7 +964,7 @@ class Clam extends Agent {
     this.ext = damp(this.ext, sub ? 1 : 0, sub ? 0.5 : 2.2, dt);
     // 水管の先端が砂面から少しだけ出る
     const s = this.sc * 0.9;
-    const protrude = lerp(-0.08, 0.12 + 0.02 * Math.sin(t * 1.3 + this.phase), this.ext);
+    const protrude = lerp(-0.08, 0.07 + 0.015 * Math.sin(t * 1.3 + this.phase), this.ext);
     this.siph.scale.set(s, s, s);
     this.siph.position.set(this.siphBase.x, this.siphBase.y - 0.5 * s + protrude, this.siphBase.z);
     this.siph.visible = this.ext > 0.03;
@@ -986,7 +986,8 @@ class Razor extends Agent {
     const seed = rnd();
     const root = new THREE.Group();
     const shellMat = organicMaterial({ key: 'razor', glsl: GLSL.razorShell, colors: [0x9a7a44, 0xd4b474, 0x6a5030], seed, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.08 });
-    root.add(new THREE.Mesh(razorGeo(), shellMat));
+    this.shellMesh = new THREE.Mesh(razorGeo(), shellMat);
+    root.add(this.shellMesh);
     const siph = new THREE.Mesh(siphonGeo(0.05, 0.24, 8), sys.siphonMat);
     siph.position.y = -0.14;
     root.add(siph);
@@ -1027,6 +1028,7 @@ class Razor extends Agent {
     this.root.position.y = this.ground + this.rise - 0.1;
     this.siph.position.y = Math.max(tip - this.rise + 0.1 - 0.24, -0.5);
     this.siph.visible = sub || this.rise > 0.05;
+    this.shellMesh.visible = this.rise > 0.03;
     this.visible = this.rise > 0.08 || sub;
     this.root.visible = true;
   }
@@ -1053,7 +1055,7 @@ export class Ecosystem {
     // 種で共有するマテリアル
     this.corneaMat = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0x14161a, 0x3c434c], roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.04 });
     this.fishEyeMat = organicMaterial({ key: 'fishEye', glsl: GLSL.fishEye, colors: [0xc9a24a], roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.03 });
-    this.siphonMat = organicMaterial({ key: 'siphon', glsl: GLSL.siphon, colors: [0xe4d8c4, 0x8a6a4a, 0x3a2a1e], P: [0.5, 0, 0, 0], roughness: 0.3, clearcoat: 0.9, clearcoatRoughness: 0.15, sss: 0xffe0c0, sssK: 0.8 });
+    this.siphonMat = organicMaterial({ key: 'siphon', glsl: GLSL.siphon, colors: [0xc4b49c, 0x7a5a3c, 0x3a2a1e], P: [0.5, 0, 0, 0], roughness: 0.3, clearcoat: 0.9, clearcoatRoughness: 0.15, sss: 0xe8c8a0, sssK: 0.3 });
     this.nassaShellMat = organicMaterial({ key: 'gastro', glsl: GLSL.gastropod, vertexColors: true, colors: [0x6a5a44], seed: 0.3, roughness: 0.5, clearcoat: 0.55, clearcoatRoughness: 0.3 });
     this.crabShared = {};
 

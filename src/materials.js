@@ -160,8 +160,9 @@ export const GLSL = {
     color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
       float m = fbm3(p*vec3(16.0, 30.0, 30.0) + uSeed)*0.5+0.5;
       vec3 col = mix(uC1, uC2, smoothstep(0.35, 0.7, m));
-      float band = smoothstep(0.55, 0.9, sin(p.x*55.0 + uSeed)*0.5+0.5);
-      col = mix(col, uC3, band*0.25);
+      float band = smoothstep(0.5, 0.85, sin(p.x*60.0 + uSeed*5.0 + snoise3(p*20.0)*1.5)*0.5+0.5);
+      col = mix(col, uC3, band*0.45);
+      col = mix(col, uC3*0.8, smoothstep(0.012, 0.0, p.x)*0.5);   // 関節の付け根は暗い
       col = mix(col, uC4, smoothstep(0.0, -0.02, p.y) * 0.4);
       return col;
     }`,
@@ -195,9 +196,15 @@ export const GLSL = {
   shrimp: {
     color: `vec3 orgColor(vec3 p, vec3 n, vec3 base){
       float m = fbm3(p*10.0 + uSeed)*0.5+0.5;
-      vec3 col = mix(uC1, uC2, m*0.5);
-      float organ = smoothstep(0.08, 0.0, length((p - vec3(0.0, 0.02, 0.0)) * vec3(1.6, 2.2, 0.8)) - 0.05);
+      vec3 col = mix(uC1, uC2, m*0.7);
+      col *= 0.92 + 0.08 * snoise3(p * 90.0);
+      // 甲の下に透けて見える中腸腺（背側から見た投影で判定）
+      float organ = 1.0 - smoothstep(0.45, 1.0, length(vec2(p.x / 0.075, (p.z - 0.1) / 0.1)) + snoise3(p * 25.0) * 0.15);
+      organ *= smoothstep(-0.04, 0.02, p.y) * (0.7 + 0.3 * snoise3(p * 60.0));
       col = mix(col, uC3, organ * uP.x);
+      // 腸管（背中線に沿った細い暗赤色の線）
+      float gut = smoothstep(0.012, 0.004, abs(p.x)) * smoothstep(0.0, 0.04, p.y) * uP.y;
+      col = mix(col, vec3(0.55, 0.28, 0.2), gut * 0.6);
       float dots = smoothstep(0.2, 0.08, cell3(p*70.0 + uSeed).x);
       col = mix(col, uC3*0.9, dots*0.25);
       return col;

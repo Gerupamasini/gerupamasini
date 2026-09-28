@@ -12,7 +12,8 @@ function cached(key, fn) {
 // ---------- 汎用パーツ ----------
 // 脚の節：+x 方向に長さ len、断面は z 方向に平たい
 export function segGeo(len, r1, r2, flat = 0.6, opts = {}) {
-  const key = `seg:${len}:${r1}:${r2}:${flat}:${opts.curve || 0}:${opts.knob ?? 1}`;
+  const q = opts.q || 1;
+  const key = `seg:${len}:${r1}:${r2}:${flat}:${opts.curve || 0}:${opts.knob ?? 1}:${q}`;
   return cached(key, () => {
     const curve = opts.curve || 0;
     const body = curve
@@ -30,14 +31,14 @@ export function segGeo(len, r1, r2, flat = 0.6, opts = {}) {
       return d * flat;
     };
     const rMax = Math.max(r1, r2) * 1.3;
-    const cell = Math.min(Math.max(Math.min(r1, r2 * 1.5) * 0.2, len / 220), len / 24);
+    const cell = Math.min(Math.max(Math.max(r1, r2) * 0.3, len / 90), len / 14) * q;
     return meshSDF(f, [-rMax, -rMax - curve * len, -rMax * flat], [len + rMax, rMax, rMax * flat], cell);
   });
 }
 
 // はさみの掌部＋不動指（+x 方向）
-function palmGeo(P, H, T, opts = {}) {
-  return cached(`palm:${P}:${H}:${T}:${opts.stout || 0}`, () => {
+function palmGeo(P, H, T, q = 1) {
+  return cached(`palm:${P}:${H}:${T}:${q}`, () => {
     const manus = ellipsoid([P * 0.3, 0, 0], [P * 0.36, H * 0.5, T * 0.5]);
     const heel = ellipsoid([P * 0.08, -H * 0.05, 0], [P * 0.14, H * 0.32, T * 0.42]);
     const pollex = tube([[P * 0.5, -H * 0.2, 0], [P * 0.78, -H * 0.13, 0], [P * 1.02, -H * 0.0, 0]], [H * 0.21, H * 0.13, H * 0.03], H * 0.05);
@@ -51,32 +52,35 @@ function palmGeo(P, H, T, opts = {}) {
       d = smin(d, cone([P * 0.05, H * 0.42, 0], [P * 0.55, H * 0.38, 0], H * 0.06, H * 0.05)(x, y, z), H * 0.12);
       return d;
     };
-    return meshSDF(f, [-P * 0.1, -H * 0.6, -T * 0.6], [P * 1.08, H * 0.6, T * 0.6], Math.max(H, T) / 26);
+    return meshSDF(f, [-P * 0.1, -H * 0.6, -T * 0.6], [P * 1.08, H * 0.6, T * 0.6], Math.max(H, T) / 16 * q);
   });
 }
 
 // 可動指（原点が関節、+x 方向）
-function dactylGeo(P, H) {
-  return cached(`dact:${P}:${H}`, () => {
+function dactylGeo(P, H, q = 1) {
+  return cached(`dact:${P}:${H}:${q}`, () => {
     const t = tube([[0, 0, 0], [P * 0.22, H * 0.03, 0], [P * 0.46, -H * 0.14, 0]], [H * 0.17, H * 0.12, H * 0.03], H * 0.05);
     const teeth = [];
     for (let i = 0; i < 4; i++) teeth.push(sphere([P * (0.1 + i * 0.08), -H * 0.11, 0], H * 0.035));
     const f = (x, y, z) => { let d = t(x, y, z * 1.3) / 1.3; for (const s of teeth) d = smin(d, s(x, y, z), H * 0.03); return d; };
-    return meshSDF(f, [-H * 0.2, -H * 0.3, -H * 0.2], [P * 0.5, H * 0.25, H * 0.2], H / 30);
+    return meshSDF(f, [-H * 0.2, -H * 0.3, -H * 0.2], [P * 0.5, H * 0.25, H * 0.2], H / 24 * q);
   });
 }
 
 // ---------- カニの甲 ----------
-function kometsukiCarapace(w, h, l) {
-  return cached(`kome-car:${w}`, () => {
+function kometsukiCarapace(w, h, l, q = 1) {
+  return cached(`kome-car:${w}:${q}`, () => {
     const main = ellipsoid([0, 0, 0], [w, h, l]);
     const frontLobe = ellipsoid([0, -h * 0.05, l * 0.62], [w * 0.55, h * 0.6, l * 0.45]);
+    const branch = [1, -1].map((s) => ellipsoid([s * w * 0.42, h * 0.3, -l * 0.1], [w * 0.5, h * 0.75, l * 0.7]));
     const orbits = [1, -1].map((s) => ellipsoid([s * w * 0.52, h * 0.15, l * 0.92], [w * 0.2, h * 0.22, l * 0.26]));
     const grooveH = cone([-w * 0.25, h * 0.98, l * 0.02], [w * 0.25, h * 0.98, l * 0.02], h * 0.05, h * 0.05);
     const grooveL = [1, -1].map((s) => cone([s * w * 0.25, h * 0.96, l * 0.35], [s * w * 0.3, h * 0.94, -l * 0.35], h * 0.045, h * 0.045));
     const sternum = ellipsoid([0, -h * 0.55, -l * 0.05], [w * 0.8, h * 0.25, l * 0.8]);
     const f = (x, y, z) => {
       let d = smin(main(x, y, z), frontLobe(x, y, z), w * 0.25);
+      for (const b of branch) d = smin(d, b(x, y, z), w * 0.2);
+      d = smax(d, y - h * 0.92, h * 0.5);                // 背面をやや平たく
       d = smax(d, -(y + h * 0.62), h * 0.25);           // 腹面を平らに
       d = smin(d, sternum(x, y, z), h * 0.15);
       for (const o of orbits) d = smax(d, -o(x, y, z), w * 0.06);
@@ -84,12 +88,12 @@ function kometsukiCarapace(w, h, l) {
       for (const g of grooveL) d = smax(d, -g(x, y, z), h * 0.05);
       return d;
     };
-    return meshSDF(f, [-w * 1.05, -h * 1.0, -l * 1.1], [w * 1.05, h * 1.05, l * 1.2], w / 42);
+    return meshSDF(f, [-w * 1.05, -h * 1.0, -l * 1.1], [w * 1.05, h * 1.05, l * 1.2], (w / 26) * q);
   });
 }
 
-function yamatoCarapace(w, h, l) {
-  return cached(`yama-car:${w}`, () => {
+function yamatoCarapace(w, h, l, q = 1) {
+  return cached(`yama-car:${w}:${q}`, () => {
     const box = roundBox([0, 0, 0], [w, h, l], h * 0.9);
     const bumps = [
       ellipsoid([0, h * 0.55, l * 0.12], [w * 0.34, h * 0.95, l * 0.6]),
@@ -115,23 +119,23 @@ function yamatoCarapace(w, h, l) {
       for (const g of cardiacG) d = smax(d, -g(x, y, z), h * 0.15);
       return d;
     };
-    return meshSDF(f, [-w * 1.2, -h * 1.2, -l * 1.15], [w * 1.2, h * 1.8, l * 1.2], w / 90);
+    return meshSDF(f, [-w * 1.2, -h * 1.2, -l * 1.15], [w * 1.2, h * 1.8, l * 1.2], (w / 48) * q);
   });
 }
 
 // 第3顎脚（口の蓋）
-function mouthGeo(s) {
-  return cached(`mouth:${s}`, () => meshSDF(roundBox([0, 0, 0], [s * 0.5, s * 0.6, s * 0.08], s * 0.07), [-s * 0.6, -s * 0.7, -s * 0.2], [s * 0.6, s * 0.7, s * 0.2], s / 20));
+function mouthGeo(s, q = 1) {
+  return cached(`mouth:${s}:${q}`, () => meshSDF(roundBox([0, 0, 0], [s * 0.5, s * 0.6, s * 0.08], s * 0.07), [-s * 0.6, -s * 0.7, -s * 0.2], [s * 0.6, s * 0.7, s * 0.2], s / 16 * q));
 }
 
 // ---------- カニ一式 ----------
 export const CRAB_SPECS = {
   kometsuki: {
-    w: 0.2, h: 0.13, l: 0.17,
+    w: 0.2, h: 0.115, l: 0.17,
     carapace: kometsukiCarapace,
-    legs: { merus: 0.16, carpus: 0.065, prop: 0.1, dact: 0.12, r: 0.027, flat: 0.62, k: [0.92, 1.0, 1.0, 0.86], spread: 0.46, curve: 0.18 },
+    legs: { merus: 0.16, carpus: 0.065, prop: 0.1, dact: 0.12, r: 0.022, flat: 0.6, k: [0.92, 1.0, 1.0, 0.86], spread: 0.46, curve: 0.18 },
     claw: { merus: 0.1, carpus: 0.06, palm: 0.17, H: 0.07, T: 0.045, r: 0.022, big: 1 },
-    eye: { stalk: 0.085, r: 0.012, cornea: 0.021, sep: 0.1, yaw: 0.35, up: 1.2, raise: 0 },
+    eye: { stalk: 0.09, r: 0.011, cornea: 0.015, sep: 0.1, yaw: 0.35, up: 1.15, raise: 0 },
     mouth: 0.05,
     Hb: 0.13, phiD: 1.0, stepTime: 0.11, stepH: 0.05, stepThresh: 0.07,
   },
@@ -146,30 +150,30 @@ export const CRAB_SPECS = {
   },
 };
 
-export function crabKit(name) {
-  return cached(`crabkit:${name}`, () => {
+export function crabKit(name, q = 1) {
+  return cached(`crabkit:${name}:${q}`, () => {
     const S = CRAB_SPECS[name];
     const L = S.legs, C = S.claw, E = S.eye;
     return {
-      carapace: S.carapace(S.w, S.h, S.l),
-      merus: segGeo(L.merus, L.r, L.r * 0.85, L.flat),
-      carpus: segGeo(L.carpus, L.r * 0.85, L.r * 0.8, L.flat),
-      prop: segGeo(L.prop, L.r * 0.78, L.r * 0.6, L.flat),
-      dact: segGeo(L.dact, L.r * 0.6, L.r * 0.12, L.flat, { curve: L.curve, knob: 0 }),
-      cMerus: segGeo(C.merus, C.r, C.r * 0.95, 0.75),
-      cCarpus: segGeo(C.carpus, C.r * 1.05, C.r * 0.95, 0.8),
-      palm: palmGeo(C.palm, C.H, C.T),
-      cDact: dactylGeo(C.palm, C.H),
-      stalk: segGeo(E.stalk, E.r, E.r * 0.9, 1, { knob: 0 }),
-      cornea: new THREE.SphereGeometry(E.cornea, 20, 14),
-      mouth: mouthGeo(S.mouth),
+      carapace: S.carapace(S.w, S.h, S.l, q),
+      merus: segGeo(L.merus, L.r, L.r * 0.85, L.flat, { q }),
+      carpus: segGeo(L.carpus, L.r * 0.85, L.r * 0.8, L.flat, { q }),
+      prop: segGeo(L.prop, L.r * 0.78, L.r * 0.6, L.flat, { q }),
+      dact: segGeo(L.dact, L.r * 0.6, L.r * 0.12, L.flat, { curve: L.curve, knob: 0, q }),
+      cMerus: segGeo(C.merus, C.r, C.r * 0.95, 0.75, { q }),
+      cCarpus: segGeo(C.carpus, C.r * 1.05, C.r * 0.95, 0.8, { q }),
+      palm: palmGeo(C.palm, C.H, C.T, q),
+      cDact: dactylGeo(C.palm, C.H, q),
+      stalk: segGeo(E.stalk, E.r, E.r * 0.9, 1, { knob: 0, q }),
+      cornea: new THREE.SphereGeometry(E.cornea, Math.round(20 / q), Math.round(14 / q)),
+      mouth: mouthGeo(S.mouth, q),
     };
   });
 }
 
 // 個体のリグを組み立てる。mats: { shell, leg, claw, cornea }
-export function buildCrab(name, mats, male = true) {
-  const S = CRAB_SPECS[name], K = crabKit(name);
+export function buildCrab(name, mats, male = true, q = 1) {
+  const S = CRAB_SPECS[name], K = crabKit(name, q);
   const L = S.legs, C = S.claw, E = S.eye;
   const root = new THREE.Group();
   const body = new THREE.Group();
@@ -255,7 +259,7 @@ export function buildCrab(name, mats, male = true) {
 export function spiralShell(o) {
   const key = 'shell:' + JSON.stringify(o);
   return cached(key, () => {
-    const perTurn = o.perTurn || 72, rad = o.rad || 28;
+    const perTurn = o.perTurn || 48, rad = o.rad || 20;
     const seg = Math.round(o.turns * perTurn);
     const thetaMax = o.turns * TAU;
     const k = Math.log(o.shrink) / thetaMax;
@@ -332,7 +336,7 @@ export function gobyKit() {
       for (const g of gill) d = smax(d, -g(x, y, z), 0.006);
       return d;
     };
-    const body = meshSDF(f, [-0.1, -0.08, -0.5], [0.1, 0.1, 0.52], 0.0055);
+    const body = meshSDF(f, [-0.1, -0.08, -0.5], [0.1, 0.1, 0.52], 0.008);
 
     const fin = (base, tip, nu = 14, nv = 6) => {
       const pos = [], uv = [], idx = [];
@@ -385,7 +389,7 @@ export function shrimpKit() {
       const ros = cone([0, 0.03, 0.4], [0, 0.02, 0.47], 0.03, 0.006);
       const cerv = cone([-0.11, 0.07, 0.24], [0.11, 0.07, 0.24], 0.008, 0.008);
       const f = (x, y, z) => smax(smin(main(x, y, z), ros(x, y, z), 0.03), -cerv(x, y, z), 0.01);
-      return meshSDF(f, [-0.12, -0.11, -0.05], [0.12, 0.11, 0.48], 0.006);
+      return meshSDF(f, [-0.12, -0.11, -0.05], [0.12, 0.11, 0.48], 0.0085);
     })();
     const segs = [];
     for (let i = 0; i < 5; i++) {
@@ -393,7 +397,7 @@ export function shrimpKit() {
       const main = ellipsoid([0, 0, -0.055], [w, hgt, 0.075]);
       const pleura = ellipsoid([0, -hgt * 0.45, -0.055], [w * 1.08, hgt * 0.6, 0.06]);
       const f = (x, y, z) => smin(main(x, y, z), pleura(x, y, z), 0.02);
-      segs.push(meshSDF(f, [-w * 1.15, -hgt * 1.2, -0.14], [w * 1.15, hgt * 1.1, 0.03], 0.006));
+      segs.push(meshSDF(f, [-w * 1.15, -hgt * 1.2, -0.14], [w * 1.15, hgt * 1.1, 0.03], 0.009));
     }
     const tail = (() => {
       const tel = roundBox([0, 0, -0.08], [0.04, 0.012, 0.075], 0.01);
@@ -402,10 +406,19 @@ export function shrimpKit() {
       return meshSDF(f, [-0.13, -0.03, -0.18], [0.13, 0.03, 0.01], 0.005);
     })();
     const bigPalm = (() => {
-      const m = ellipsoid([0.12, 0, 0], [0.13, 0.075, 0.035]);
-      const pol = tube([[0.2, -0.03, 0], [0.3, -0.02, 0], [0.36, 0.0, 0]], [0.028, 0.018, 0.005]);
-      const f = (x, y, z) => smin(m(x, y, z), pol(x, y, z), 0.02);
-      return meshSDF(f, [-0.02, -0.08, -0.04], [0.37, 0.08, 0.04], 0.005);
+      const box = roundBox([0.12, 0, 0], [0.11, 0.068, 0.03], 0.028);
+      const heel = ellipsoid([0.04, -0.01, 0], [0.06, 0.06, 0.035]);
+      const pol = tube([[0.2, -0.03, 0], [0.28, -0.026, 0], [0.35, -0.006, 0]], [0.026, 0.017, 0.004]);
+      const gap = ellipsoid([0.3, 0.012, 0], [0.07, 0.016, 0.06]);
+      const teeth = [0, 1, 2].map((i) => sphere([0.24 + i * 0.03, -0.012, 0], 0.008));
+      const f = (x, y, z) => {
+        let d = smin(box(x, y, z), heel(x, y, z), 0.03);
+        d = smin(d, pol(x, y, z), 0.02);
+        d = smax(d, -gap(x, y, z), 0.01);
+        for (const t of teeth) d = smin(d, t(x, y, z), 0.006);
+        return d;
+      };
+      return meshSDF(f, [-0.03, -0.08, -0.045], [0.37, 0.08, 0.045], 0.006);
     })();
     const bigDact = meshSDF(tube([[0, 0, 0], [0.08, 0.005, 0], [0.16, -0.02, 0]], [0.024, 0.016, 0.004]), [-0.03, -0.03, -0.03], [0.17, 0.03, 0.03], 0.004);
     return {
@@ -414,7 +427,7 @@ export function shrimpKit() {
       leg: segGeo(0.16, 0.012, 0.008, 0.7),
       legD: segGeo(0.1, 0.008, 0.003, 0.7, { curve: 0.2, knob: 0 }),
       antenna: segGeo(0.55, 0.006, 0.0015, 1, { knob: 0, curve: 0.05 }),
-      eye: new THREE.SphereGeometry(0.014, 10, 8),
+      eye: new THREE.SphereGeometry(0.008, 10, 8),
     };
   });
 }
@@ -422,7 +435,7 @@ export function shrimpKit() {
 // ---------- 二枚貝 ----------
 export function asariGeo() {
   return cached('asari', () => {
-    const g = new THREE.SphereGeometry(1, 96, 64);
+    const g = new THREE.SphereGeometry(1, 64, 40);
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       let X = p.getX(i), Y = p.getY(i), Z = p.getZ(i);
@@ -460,7 +473,7 @@ export function siphonGeo(r = 0.06, len = 0.5, tent = 10) {
       for (const t of tents) d = smin(d, t(x, y, z), r * 0.08);
       return d;
     };
-    return meshSDF(f, [-r * 1.6, -r * 0.2, -r * 1.6], [r * 2.1, len + r * 1.4, r * 1.6], r / 9);
+    return meshSDF(f, [-r * 1.6, -r * 0.2, -r * 1.6], [r * 2.1, len + r * 1.4, r * 1.6], r / 6);
   });
 }
 
@@ -468,7 +481,7 @@ export function razorGeo() {
   return cached('razor', () => {
     const shell = roundBox([0, -1.9, 0], [0.15, 1.9, 0.085], 0.08);
     const f = (x, y, z) => shell(x + 0.02 * Math.sin(y * 0.5), y, z);
-    return meshSDF(f, [-0.2, -3.9, -0.12], [0.2, 0.1, 0.12], 0.012);
+    return meshSDF(f, [-0.2, -3.9, -0.12], [0.2, 0.1, 0.12], 0.022);
   });
 }
 
@@ -479,7 +492,7 @@ export function nassaKit() {
       const m = ellipsoid([0, 0.0, 0.05], [0.16, 0.035, 0.3]);
       const pro = [1, -1].map((s) => ellipsoid([s * 0.12, 0.0, 0.3], [0.08, 0.025, 0.06]));
       const f = (x, y, z) => { let d = m(x, y, z); for (const p of pro) d = smin(d, p(x, y, z), 0.05); return smax(d, -(y + 0.01), 0.02); };
-      return meshSDF(f, [-0.25, -0.05, -0.3], [0.25, 0.05, 0.4], 0.008);
+      return meshSDF(f, [-0.25, -0.05, -0.3], [0.25, 0.05, 0.4], 0.012);
     })();
     const siphon = meshSDF(tube([[0, 0, 0], [0, 0.08, 0.12], [0, 0.18, 0.22], [0, 0.26, 0.26]], [0.035, 0.03, 0.027, 0.024]), [-0.05, -0.05, -0.05], [0.05, 0.3, 0.3], 0.006);
     const tentacle = segGeo(0.2, 0.012, 0.004, 1, { knob: 0 });
@@ -492,7 +505,7 @@ export function hermitKit() {
     const shield = (() => {
       const m = ellipsoid([0, 0, 0], [0.07, 0.04, 0.08]);
       const ros = cone([0, 0.01, 0.07], [0, 0.005, 0.1], 0.015, 0.004);
-      return meshSDF((x, y, z) => smin(m(x, y, z), ros(x, y, z), 0.02), [-0.08, -0.05, -0.09], [0.08, 0.05, 0.11], 0.004);
+      return meshSDF((x, y, z) => smin(m(x, y, z), ros(x, y, z), 0.02), [-0.08, -0.05, -0.09], [0.08, 0.05, 0.11], 0.006);
     })();
     return {
       shield,

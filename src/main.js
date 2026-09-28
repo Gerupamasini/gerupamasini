@@ -300,5 +300,5 @@ let lastReal = performance.now();
 for (let i = 0; i < 90; i++) { world.update(1 / 30, i / 30, tideLevel(state.tidePhase), controls.target, focusDist); eco.update(1 / 30, i / 30, camera.position); }
 state.t = 3;
 document.body.classList.add('ready');
-window.__game = { world, eco, state, camera, controls, select };
+window.__game = { world, eco, state, camera, controls, select, renderer, THREE };
 requestAnimationFrame(frame);

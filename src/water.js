@@ -109,9 +109,16 @@ export class WaterPass extends Pass {
               float F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
 
               // 太陽のきらめき（細かな面が太陽を映す）
+              // 細かなさざ波の面ごとに向きをずらし、太陽の映り込みをきらめきの粒に分解する
+              vec2 gp = S.xz * 55.0 + uTime * vec2(0.7, 0.4);
+              vec2 gc = floor(gp);
+              float gshape = smoothstep(0.32, 0.0, length(fract(gp) - 0.5 + (vec2(hash12(gc + 1.3), hash12(gc + 5.9)) - 0.5) * 0.4));
+              vec3 jit = vec3(hash12(gc) - 0.5, 0.0, hash12(gc + 7.3) - 0.5) * 0.09;
+              vec3 Ng = normalize(N + jit);
               vec3 H = normalize(uSunDir - rd);
-              float nh = max(dot(N, H), 0.0);
-              float glint = pow(nh, 6000.0) * 45.0 + pow(nh, 900.0) * 0.25;
+              float nh = max(dot(Ng, H), 0.0);
+              float tw = 0.5 + 0.5 * sin(uTime * 9.0 + hash12(gc + 3.1) * 40.0);
+              float glint = pow(nh, 5000.0) * 90.0 * tw * gshape + pow(max(dot(N, H), 0.0), 1500.0) * 0.08;
               vec3 spec = uSunCol * glint * F * uSunUp;
 
               col = mix(under, env, F) + spec;
