@@ -204,17 +204,17 @@ function finLayouts() {
   const dBase = [], dTip = polyline([[0.3, 0.312], [0.3459, 0.3226], [0.3957, 0.3313], [0.445, 0.3383], [0.4932, 0.3407], [0.541, 0.3414],
     [0.5886, 0.3411], [0.6346, 0.3345], [0.6806, 0.328], [0.7262, 0.3197], [0.7722, 0.3131], [0.8177, 0.3048], [0.8631, 0.2955],
     [0.9073, 0.2818], [0.9518, 0.269], [0.9949, 0.2508], [1.03, 0.236], [1.058, 0.222], [1.066, 0.205],
-    [1.055, 0.175], [1.03, 0.145], [1.0, 0.118], [0.972, 0.09], [0.95, 0.064]], nD);   // near-vertical rear edge down to a sharp notch (aligned photo)   // deep, open notch above the peduncle
-  for (let i = 0; i < nD; i++) { const s = 0.295 + (0.95 - 0.295) * (i / (nD - 1)); dBase.push([s, top(s) - 0.003]); }
+    [1.05, 0.172], [1.025, 0.138], [1.0, 0.108], [0.99, 0.09], [0.978, 0.072], [0.972, 0.058]], nD);   // rear edge runs down onto the peduncle, meeting the caudal root   // near-vertical rear edge down to a sharp notch (aligned photo)   // deep, open notch above the peduncle
+  for (let i = 0; i < nD; i++) { const s = 0.295 + (0.968 - 0.295) * (i / (nD - 1)); dBase.push([s, top(s) - 0.003]); }
   const nA = 26;
   const aBase = [], aTip = polyline([[0.49, -0.212], [0.592, -0.2264], [0.6847, -0.2368], [0.7547, -0.2426], [0.8265, -0.2412],
     [0.8758, -0.2342], [0.9487, -0.2283], [1.0, -0.216], [1.04, -0.2], [1.066, -0.178], [1.08, -0.15],
-    [1.078, -0.125], [1.06, -0.104], [1.03, -0.086], [1.0, -0.068], [0.972, -0.056], [0.95, -0.05]], nA);   // rounded rear lobe
-  for (let i = 0; i < nA; i++) { const s = 0.48 + (0.95 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.012 * THREE.MathUtils.smoothstep(s, 0.48, 0.6)]); }   // root sunk into the fleshy keel
+    [1.078, -0.13], [1.058, -0.112], [1.03, -0.092], [1.0, -0.075], [0.985, -0.062], [0.972, -0.052]], nA);   // rounded rear lobe
+  for (let i = 0; i < nA; i++) { const s = 0.48 + (0.968 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.012 * THREE.MathUtils.smoothstep(s, 0.48, 0.6)]); }   // root sunk into the fleshy keel
   const nC = 19;
   // caudal: rises from the narrow peduncle and flares into a broad, short fan
-  const cBase = [], cTip = polyline([[1.085, 0.158], [1.118, 0.105], [1.136, 0.04], [1.142, -0.02], [1.144, -0.08], [1.14, -0.13], [1.118, -0.16]], nC);   // shorter fan, steep upper corner (aligned photo)   // truncate, faintly concave, angular corners
-  for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.962 + 0.01 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]); }
+  const cBase = [], cTip = polyline([[1.07, 0.205], [1.108, 0.13], [1.13, 0.07], [1.136, 0.04], [1.142, -0.02], [1.144, -0.08], [1.134, -0.13], [1.09, -0.185]], nC);   // shorter fan, steep upper corner (aligned photo)   // truncate, faintly concave, angular corners
+  for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.955 + 0.012 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]); }
   return { dorsal: { base: dBase, tip: dTip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
 
@@ -689,7 +689,7 @@ export function createButterflyfish(renderer, opts = {}) {
             vec2 SH = mix(uFinSH[ri], uFinSH[ri + 1], clamp(r - float(ri), 0.0, 1.0));
             float fromEdge = (1.0 - t) * max(SH.y, 1e-3);
             float rear = smoothstep(uRays - 11.0, uRays - 8.5, r);
-            float bw = 0.034 + 0.024 * smoothstep(uRays - 8.0, uRays - 3.0, r) * (1.0 - smoothstep(uRays - 2.0, uRays - 0.2, r));   // broad black wedge behind the eyespot, narrowing into the notch
+            float bw = 0.042 + 0.03 * smoothstep(uRays - 9.0, uRays - 3.5, r) * (1.0 - smoothstep(uRays - 2.0, uRays - 0.2, r));   // broad black wedge behind the eyespot, narrowing into the notch
             c = mix(c, vec3(0.035, 0.03, 0.03), rear * (1.0 - smoothstep(bw - 0.004, bw + 0.004, fromEdge)));
           }
           if (kind > 0.5 && kind < 1.5) {
@@ -771,6 +771,8 @@ export function createButterflyfish(renderer, opts = {}) {
   const anal = new THREE.Mesh(buildFin({ ...layouts.anal, thickAt: (s) => Math.min(1, ANATOMY.width(s) / 0.014), ridge: 0.02, sub: 4, segs: 16, pleat: 0.0002, scallop: 0.004, spines: 2, spineScallop: 0.05, bow: 0.02, thick: 0.012 }), mkFinMat(1, 2, 25));
   const caudal = new THREE.Mesh(buildFin({ ...layouts.caudal, ridge: 0.0, sub: 4, segs: 16, pleat: 0.0004, scallop: 0.002, thick: 0.011, thickAt: (s) => Math.max(0.5, Math.min(1, ANATOMY.width(Math.min(s, 1)) / 0.012)) }), mkFinMat(2, -1));
   dorsal.name = 'dorsal'; anal.name = 'anal'; caudal.name = 'caudal';
+  // the caudal fan tucks under the rear edges of the soft dorsal and anal fins (no gap, no z-fight)
+  Object.assign(caudal.material, { polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
   for (const m of [dorsal, anal, caudal]) { m.renderOrder = 2; group.add(m); }
 
   // -- stout dorsal & anal spines as real geometry
