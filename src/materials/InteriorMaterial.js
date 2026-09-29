@@ -1,0 +1,78 @@
+// Wet mucosa of the mouth, teeth, gill-cover lining, gill chamber and gill filaments.
+// Only visible when the mouth gapes or the gill covers flare.
+import * as THREE from 'three';
+import { commonGLSL } from './common.glsl.js';
+
+const vertexShader = /* glsl */ `
+#include <skinning_pars_vertex>
+attribute vec4 color;
+attribute float _gill;
+varying vec3 vWorldPos;
+varying vec3 vWorldNormal;
+varying vec4 vColor;
+varying vec2 vUv;
+varying float vGill;
+void main() {
+  vUv = uv;
+  vColor = color;
+  vGill = _gill;
+  vec3 transformed = position;
+  vec3 objectNormal = normal;
+  #ifdef USE_SKINNING
+    #include <skinbase_vertex>
+    mat4 skinMatrix = mat4(0.0);
+    skinMatrix += skinWeight.x * boneMatX;
+    skinMatrix += skinWeight.y * boneMatY;
+    skinMatrix += skinWeight.z * boneMatZ;
+    skinMatrix += skinWeight.w * boneMatW;
+    skinMatrix = bindMatrixInverse * skinMatrix * bindMatrix;
+    transformed = (skinMatrix * vec4(position, 1.0)).xyz;
+    objectNormal = mat3(skinMatrix) * normal;
+  #endif
+  vec4 wp = modelMatrix * vec4(transformed, 1.0);
+  vWorldPos = wp.xyz;
+  vWorldNormal = normalize(mat3(modelMatrix) * objectNormal);
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}
+`;
+
+const fragmentShader = /* glsl */ `
+${commonGLSL}
+varying vec3 vWorldPos;
+varying vec3 vWorldNormal;
+varying vec4 vColor;
+varying vec2 vUv;
+varying float vGill;
+void main() {
+  vec3 N = normalize(vWorldNormal) * (gl_FrontFacing ? 1.0 : -1.0);
+  vec3 V = normalize(cameraPosition - vWorldPos);
+  vec3 L = normalize(uLightDir);
+  vec3 alb = vColor.rgb;
+  float rough = 0.28;
+  // gill filaments: dense lamellae across the arch, bright arterial red with darker gaps
+  if (vGill > 0.0) {
+    float f = fract(vUv.x * 150.0);
+    float lam = smoothstep(0.0, 0.25, f) * smoothstep(1.0, 0.6, f);
+    float tip = smoothstep(0.0, 1.0, vUv.y);
+    vec3 gillC = mix(vec3(0.28, 0.02, 0.02), vec3(0.78, 0.12, 0.1), lam) * (0.55 + 0.45 * tip);
+    alb = mix(alb, gillC, vGill);
+    rough = mix(rough, 0.18, vGill);
+    N = normalize(N + (lam - 0.5) * 0.35 * normalize(cross(N, vec3(0.0, 1.0, 0.0)) + 1e-4));
+  }
+  // light reaching into the cavities is strongly occluded: the vertex colour already carries the depth AO
+  float cavity = clamp(dot(vColor.rgb, vec3(0.333)) * 1.6, 0.0, 1.0);
+  // palatal / buccal folds break up the reflections
+  float folds = sin(vUv.x * 90.0 + sin(vUv.y * 17.0) * 2.0) * 0.5 + 0.5;
+  alb *= mix(0.88, 1.0, folds * (1.0 - vGill));
+  vec3 diff = alb * (uLightColor * max(dot(N, L), 0.0) * INV_PI * (0.35 + 0.65 * cavity) + ambientIrr(N));
+  float spec = specGGX(N, V, L, rough, 0.03);
+  vec3 env = waterEnv(reflect(-V, N), rough) * F_Schlick(0.03, max(dot(N, V), 1e-3)) * (0.3 + 0.7 * cavity);
+  vec3 col = diff + uLightColor * spec * (0.3 + 0.7 * cavity) + env;
+  col = applyFog(col, length(cameraPosition - vWorldPos));
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+export function createInteriorMaterial({ shared }) {
+  return new THREE.ShaderMaterial({ name: 'MahazeInterior', uniforms: { ...shared }, vertexShader, fragmentShader, side: THREE.DoubleSide });
+}

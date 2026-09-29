@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { commonGLSL } from './common.glsl.js';
 
 const vertexShader = /* glsl */ `
+#include <skinning_pars_vertex>
 attribute vec4 tangent;
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
@@ -14,11 +15,26 @@ varying vec4 vWorldTangent;
 varying vec2 vUv;
 void main() {
   vUv = uv;
-  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vec3 transformed = position;
+  vec3 objectNormal = normal;
+  vec3 objectTangent = tangent.xyz;
+  #ifdef USE_SKINNING
+    #include <skinbase_vertex>
+    mat4 skinMatrix = mat4(0.0);
+    skinMatrix += skinWeight.x * boneMatX;
+    skinMatrix += skinWeight.y * boneMatY;
+    skinMatrix += skinWeight.z * boneMatZ;
+    skinMatrix += skinWeight.w * boneMatW;
+    skinMatrix = bindMatrixInverse * skinMatrix * bindMatrix;
+    transformed = (skinMatrix * vec4(position, 1.0)).xyz;
+    objectNormal = mat3(skinMatrix) * normal;
+    objectTangent = mat3(skinMatrix) * tangent.xyz;
+  #endif
+  vec4 wp = modelMatrix * vec4(transformed, 1.0);
   vWorldPos = wp.xyz;
   mat3 m = mat3(modelMatrix);
-  vWorldNormal = normalize(m * normal);
-  vWorldTangent = vec4(normalize(m * tangent.xyz), tangent.w);
+  vWorldNormal = normalize(m * objectNormal);
+  vWorldTangent = vec4(normalize(m * objectTangent), tangent.w);
   gl_Position = projectionMatrix * viewMatrix * wp;
 }
 `;

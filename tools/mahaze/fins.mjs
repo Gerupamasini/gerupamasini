@@ -230,6 +230,8 @@ export function buildFinMesh(def, SUB = 6, NT = 36) {
   const normal = new Float32Array(count * 3);
   const tangent = new Float32Array(count * 4);
   const uv = new Float32Array(count * 2);
+  const fish = new Float32Array(count * 3);
+  const rayT = new Float32Array(count);
   const { x, y, w, h } = def.rect;
   const e = 1e-3;
   for (let j = 0; j < rows; j++) {
@@ -248,6 +250,8 @@ export function buildFinMesh(def, SUB = 6, NT = 36) {
       const bDesired = dirToObject(mul(pt, -1));
       const wsign = dot(cross(nO, tO), bDesired) >= 0 ? 1 : -1;
       position.set(toObject(p), idx * 3);
+      fish.set(p, idx * 3);
+      rayT[idx] = t;
       normal.set(nO, idx * 3);
       tangent.set([tO[0], tO[1], tO[2], wsign], idx * 4);
       uv[idx * 2] = (x + INSET + (a / (n - 1)) * (w - 2 * INSET)) / ATLAS;
@@ -270,7 +274,7 @@ export function buildFinMesh(def, SUB = 6, NT = 36) {
       for (let k = 0; k < tris.length; k += 3) { const tmp = tris[k + 1]; tris[k + 1] = tris[k + 2]; tris[k + 2] = tmp; }
     }
   }
-  return { position, normal, tangent, uv, indices: new Uint32Array(tris) };
+  return { position, normal, tangent, uv, indices: new Uint32Array(tris), fish, rayT };
 }
 
 // ---------------------------------------------------------------------------

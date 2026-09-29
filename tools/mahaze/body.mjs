@@ -1,7 +1,7 @@
 // Body mesh + baked surface textures for the juvenile goby.
 import {
-  S_END, SL, VERT_START, VERT_COUNT, EYE, MOUTH, OPERCLE, PREOPERCLE,
-  section, basePoint, project, fieldGrad, field, throughDist, toObject, dirToObject,
+  S_END, SL, VERT_START, VERT_COUNT, EYE, MOUTH, OPERCLE, PREOPERCLE, RICTUS_S,
+  section, basePoint, project, fieldGrad, field, throughDist, toObject, dirToObject, gapeY,
 } from './anatomy.mjs';
 import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep } from '../lib/noise.mjs';
 
@@ -72,113 +72,253 @@ function distToPolyline2(s, y, poly) {
   return best;
 }
 
-export function buildBody({ NS = 400, NV = 192, texW = 2048, texH = 1024, log = () => {} } = {}) {
-  const sList = distributeSections(NS);
+function projectGrid(sOf, phiOf, NS, NV, log) {
   const cols = NV + 1;
   const nVert = NS * cols;
   const P = new Float64Array(nVert * 3);
   const N = new Float64Array(nVert * 3);
-
-  log('  projecting loft onto sculpt field …');
+  const S = new Float64Array(nVert);
+  const PHI = new Float64Array(nVert);
   for (let i = 0; i < NS; i++) {
-    const s = sList[i];
-    const q = section(s);
     for (let j = 0; j < NV; j++) {
-      const phi = (j / NV) * TAU;
-      const p = project(basePoint(s, phi, q));
+      const sv = sOf(i, j), phi = phiOf(i, j);
+      const p = project(basePoint(sv, phi, section(sv)));
       const n = fieldGrad(p[0], p[1], p[2]);
       const k = (i * cols + j) * 3;
       P[k] = p[0]; P[k + 1] = p[1]; P[k + 2] = p[2];
       N[k] = n[0]; N[k + 1] = n[1]; N[k + 2] = n[2];
+      S[i * cols + j] = sv; PHI[i * cols + j] = phi;
     }
     const k0 = i * cols * 3, kN = (i * cols + NV) * 3;
     for (let c = 0; c < 3; c++) { P[kN + c] = P[k0 + c]; N[kN + c] = N[k0 + c]; }
+    S[i * cols + NV] = S[i * cols]; PHI[i * cols + NV] = TAU;
+    if (log && i % 100 === 0) log(`    row ${i}/${NS}`);
   }
+  return { P, N, S, PHI, cols, nVert };
+}
 
+export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, log = () => {} } = {}) {
+  // --------------------------------------------------------------------------- bake grid (regular s/φ)
+  log('  projecting bake grid …');
+  const sListB = distributeSections(NSb);
+  const B = projectGrid((i) => sListB[i], (i, j) => (j / NVb) * TAU, NSb, NVb);
+  const colsB = B.cols;
+  const gpB = (i, j) => { const k = (i * colsB + j) * 3; return [B.P[k], B.P[k + 1], B.P[k + 2]]; };
+  const gnB = (i, j) => { const k = (i * colsB + j) * 3; return [B.N[k], B.N[k + 1], B.N[k + 2]]; };
+  log('  AO, thickness, metric …');
+  const nB = B.nVert;
+  const dS = new Float32Array(nB), dPhi = new Float32Array(nB), AO = new Float32Array(nB), THK = new Float32Array(nB), QD = new Float32Array(nB);
+  for (let i = 0; i < NSb; i++) {
+    const i0 = Math.max(0, i - 1), i1 = Math.min(NSb - 1, i + 1);
+    for (let j = 0; j <= NVb; j++) {
+      const jj0 = j === 0 ? NVb - 1 : j - 1, jj1 = j === NVb ? 1 : j + 1;
+      const ps = sub(gpB(i1, j), gpB(i0, j));
+      const pp = sub(gpB(i, jj1), gpB(i, jj0));
+      const idx = i * colsB + j;
+      dS[idx] = Math.max(Math.hypot(...ps) / Math.max(sListB[i1] - sListB[i0], 1e-6), 0.05);
+      dPhi[idx] = Math.max(Math.hypot(...pp) / ((2 * TAU) / NVb), 1e-3);
+      const p = gpB(i, j), nn = gnB(i, j);
+      let occ = 0;
+      const dks = [0.06, 0.15, 0.3, 0.55, 0.9], wks = [0.3, 0.28, 0.2, 0.14, 0.08];
+      for (let k = 0; k < dks.length; k++) {
+        const d = dks[k];
+        occ += (wks[k] * Math.max(0, d - field(p[0] + nn[0] * d, p[1] + nn[1] * d, p[2] + nn[2] * d))) / d;
+      }
+      AO[idx] = clamp(1 - occ * 1.25, 0.2, 1);
+      THK[idx] = throughDist([p[0] - nn[0] * 0.02, p[1] - nn[1] * 0.02, p[2] - nn[2] * 0.02], [-nn[0], -nn[1], -nn[2]], 12);
+    }
+    const jt = NVb / 2;
+    QD[i * colsB + jt] = 0;
+    for (let j = jt + 1; j <= NVb; j++) QD[i * colsB + j] = QD[i * colsB + j - 1] + Math.hypot(...sub(gpB(i, j), gpB(i, j - 1)));
+    for (let j = jt - 1; j >= 0; j--) QD[i * colsB + j] = QD[i * colsB + j + 1] + Math.hypot(...sub(gpB(i, j), gpB(i, j + 1)));
+  }
+  log('  baking body textures …');
+  const T = bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log });
+
+  // --------------------------------------------------------------------------- render mesh (warped grid with cuts)
+  log('  render mesh …');
+  const mesh = buildWarpedMesh(NS, NV, log);
+  return { ...mesh, textures: T };
+}
+
+// base-loft surface z on the +z side at height y
+function sideZ(s, y) {
+  const q = section(clamp(s, 0.01, S_END - 0.01));
+  const dy = y - q.yc;
+  const h = Math.max(dy > 0 ? q.t : q.b, 1e-4);
+  const n = dy > 0 ? q.nT : q.nB;
+  return q.w * Math.pow(Math.max(0, 1 - Math.pow(clamp(Math.abs(dy) / h), n)), 1 / n);
+}
+
+// φ of the gape on the +z side at s (base loft)
+function gapePhi(s) {
+  const sc = clamp(s, 0.15, RICTUS_S);
+  const y = gapeY(sc);
+  return invPhi(sc, y, Math.max(sideZ(sc, y), 1e-3));
+}
+
+// Opercular margin in loft parameters: table of (φ, s) on the +z side (ordered by φ ascending)
+function marginTable() {
+  const pts = OPERCLE.map(([s, y]) => [invPhi(s, y, Math.max(sideZ(s, y), 1e-3)), s]);
+  pts.sort((a, b) => a[0] - b[0]);
+  return pts;
+}
+
+function buildWarpedMesh(NS, NV, log) {
+  const sList = distributeSections(NS);
+  const cols = NV + 1;
+  // ---- gape: column jg (left) and NV-jg (right) follow the gape up to the rictus
+  const jg = Math.round(NV * 0.22);
+  const vg = jg / NV;
+  const phiOfRow = (sv, v) => {
+    const pg = gapePhi(sv);
+    let pw;
+    if (v <= vg) pw = (v / vg) * pg;
+    else if (v <= 1 - vg) pw = pg + ((v - vg) / (1 - 2 * vg)) * (TAU - 2 * pg);
+    else pw = TAU - pg + ((v - (1 - vg)) / vg) * pg;
+    const beta = smoothstep(RICTUS_S + 0.4, RICTUS_S + 3.5, sv);
+    return pw * (1 - beta) + v * TAU * beta;
+  };
+  // ---- operculum: row im is bent so it runs along the free margin of the gill cover
+  const sM = 10.3;
+  let im = 0;
+  for (let i = 0; i < NS; i++) if (Math.abs(sList[i] - sM) < Math.abs(sList[im] - sM)) im = i;
+  const sIm = sList[im];
+  const MT = marginTable();
+  const phiB = MT[0][0], phiT = MT[MT.length - 1][0];
+  const marginS = (phi) => {
+    const f = clamp(phi, phiB, phiT);
+    for (let k = 0; k < MT.length - 1; k++) {
+      if (f <= MT[k + 1][0]) return MT[k][1] + ((f - MT[k][0]) / Math.max(MT[k + 1][0] - MT[k][0], 1e-9)) * (MT[k + 1][1] - MT[k][1]);
+    }
+    return MT[MT.length - 1][1];
+  };
+  const deltaAt = (phi) => {
+    const ph = phi > Math.PI ? TAU - phi : phi; // mirror right side
+    const fade = smoothstep(phiB - 0.35, phiB, ph) * smoothstep(phiT + 0.35, phiT, ph);
+    return (marginS(ph) - sIm) * fade;
+  };
+  const sOf = (i, j) => {
+    const s0 = sList[i];
+    const phi = phiOfRow(s0, j / NV);
+    const K = Math.exp(-(((s0 - sIm) / 1.6) ** 2));
+    return s0 + deltaAt(phi) * K;
+  };
+  const phiOf = (i, j) => phiOfRow(sList[i], j / NV);
+  const G = projectGrid(sOf, phiOf, NS, NV, log);
+  const { P, N, S, PHI } = G;
   const gp = (i, j) => { const k = (i * cols + j) * 3; return [P[k], P[k + 1], P[k + 2]]; };
   const gn = (i, j) => { const k = (i * cols + j) * 3; return [N[k], N[k + 1], N[k + 2]]; };
 
-  // metric, tangent frames, AO, thickness, dorsal arc coordinate
-  log('  tangents, AO, thickness …');
-  const dS = new Float32Array(nVert); // |dP/ds|
-  const dPhi = new Float32Array(nVert); // |dP/dphi|
-  const tangentObj = new Float32Array(nVert * 4);
-  const AO = new Float32Array(nVert);
-  const THK = new Float32Array(nVert);
-  const QD = new Float32Array(nVert);
+  // flap cut columns
+  const jB = Math.ceil((phiB / TAU) * NV), jT = Math.floor((phiT / TAU) * NV);
+  let ir = 0;
+  for (let i = 0; i < NS; i++) if (sList[i] <= RICTUS_S) ir = i;
+
+  // ---- per-grid vertex data
+  const base = [];
   for (let i = 0; i < NS; i++) {
     const i0 = Math.max(0, i - 1), i1 = Math.min(NS - 1, i + 1);
     for (let j = 0; j <= NV; j++) {
       const jj0 = j === 0 ? NV - 1 : j - 1, jj1 = j === NV ? 1 : j + 1;
       const ps = sub(gp(i1, j), gp(i0, j));
       const pp = sub(gp(i, jj1), gp(i, jj0));
-      const idx = i * cols + j;
-      dS[idx] = Math.max(Math.hypot(...ps) / Math.max(sList[i1] - sList[i0], 1e-6), 0.05);
-      dPhi[idx] = Math.max(Math.hypot(...pp) / ((2 * TAU) / NV), 1e-3);
-      // tangent frame in object space
       const n = dirToObject(gn(i, j));
       let t = dirToObject(ps);
       if (Math.hypot(...t) < 1e-9) t = [0, 0, -1];
       t = nrm(sub(t, n.map((c) => c * dot(n, t))));
-      const bDesired = dirToObject(pp.map((c) => -c));
-      const w = dot(cross(n, t), bDesired) >= 0 ? 1 : -1;
-      tangentObj.set([t[0], t[1], t[2], w], idx * 4);
-      // SDF ambient occlusion
-      const p = gp(i, j), nn = gn(i, j);
-      let occ = 0;
-      const dks = [0.06, 0.15, 0.3, 0.55, 0.9], wks = [0.3, 0.28, 0.2, 0.14, 0.08];
-      for (let k = 0; k < dks.length; k++) {
-        const d = dks[k];
-        const f = field(p[0] + nn[0] * d, p[1] + nn[1] * d, p[2] + nn[2] * d);
-        occ += (wks[k] * Math.max(0, d - f)) / d;
-      }
-      AO[idx] = clamp(1 - occ * 1.25, 0.2, 1);
-      THK[idx] = throughDist([p[0] - nn[0] * 0.02, p[1] - nn[1] * 0.02, p[2] - nn[2] * 0.02], [-nn[0], -nn[1], -nn[2]], 12);
+      const w = dot(cross(n, t), dirToObject(pp.map((c) => -c))) >= 0 ? 1 : -1;
+      base.push({ i, j, fish: gp(i, j), n, t: [t[0], t[1], t[2], w], s: S[i * cols + j], phi: PHI[i * cols + j] });
     }
-    // arc length from dorsal midline (j = NV/2)
-    const jt = NV / 2;
-    QD[i * cols + jt] = 0;
-    for (let j = jt + 1; j <= NV; j++) QD[i * cols + j] = QD[i * cols + j - 1] + Math.hypot(...sub(gp(i, j), gp(i, j - 1)));
-    for (let j = jt - 1; j >= 0; j--) QD[i * cols + j] = QD[i * cols + j + 1] + Math.hypot(...sub(gp(i, j), gp(i, j + 1)));
   }
-
-  // ---------------------------------------------------------------------------
-  // Mesh arrays (object space)
-  const position = new Float32Array(nVert * 3);
-  const normal = new Float32Array(nVert * 3);
-  const uv = new Float32Array(nVert * 2);
-  for (let i = 0; i < NS; i++)
-    for (let j = 0; j <= NV; j++) {
-      const idx = i * cols + j;
-      position.set(toObject(gp(i, j)), idx * 3);
-      normal.set(dirToObject(gn(i, j)), idx * 3);
-      uv[idx * 2] = sList[i] / S_END;
-      uv[idx * 2 + 1] = j / NV;
+  const verts = base.map((b) => ({ ...b, jawSide: 0, flap: 0, cut: '' }));
+  const gid = (i, j) => i * cols + j;
+  // lower arc (jaw side) membership for grid vertices in the cut zone
+  const lowerArc = (j) => j <= jg || j >= NV - jg;
+  for (const v of verts) if (v.i <= ir && lowerArc(v.j) && v.j !== jg && v.j !== NV - jg) v.jawSide = 1;
+  // duplicate gape columns (rows 0 … ir-1) for the jaw side
+  const jawCopy = new Map();
+  for (let i = 0; i < ir; i++) {
+    for (const j of [jg, NV - jg]) {
+      const c = { ...base[gid(i, j)], jawSide: 1, flap: 0, cut: 'gapeLower' };
+      verts[gid(i, j)].cut = 'gapeUpper';
+      jawCopy.set(gid(i, j), verts.length);
+      verts.push(c);
     }
+  }
+  // duplicate the margin row (columns strictly inside the cut) for the flap side
+  const flapCopy = new Map();
+  const flapCols = [];
+  for (let j = jB + 1; j < jT; j++) flapCols.push(j, NV - j);
+  for (const j of flapCols) {
+    const c = { ...base[gid(im, j)], jawSide: 0, flap: 1, cut: 'flap' };
+    verts[gid(im, j)].cut = 'opercBody';
+    flapCopy.set(gid(im, j), verts.length);
+    verts.push(c);
+  }
+  const inFlapQuad = (i, j) => {
+    const jc = j + 0.5;
+    const left = jc > jB && jc < jT, right = jc > NV - jT && jc < NV - jB;
+    return i < im && (left || right);
+  };
   const tris = [];
   for (let i = 0; i < NS - 1; i++)
     for (let j = 0; j < NV; j++) {
-      const a = i * cols + j, b = (i + 1) * cols + j, c = (i + 1) * cols + j + 1, d = i * cols + j + 1;
-      tris.push(a, b, c, a, c, d);
+      const q = [gid(i, j), gid(i + 1, j), gid(i + 1, j + 1), gid(i, j + 1)];
+      const jawQuad = i + 1 <= ir && (j + 1 <= jg || j >= NV - jg);
+      const flapQuad = inFlapQuad(i, j) && i === im - 1;
+      const mapped = q.map((g) => {
+        if (jawQuad && jawCopy.has(g)) return jawCopy.get(g);
+        if (flapQuad && flapCopy.has(g)) return flapCopy.get(g);
+        return g;
+      });
+      tris.push(mapped[0], mapped[1], mapped[2], mapped[0], mapped[2], mapped[3]);
     }
-  // orient winding outward (check a mid-body quad)
+  // orient winding outward
   {
     const i = Math.floor(NS / 2), j = Math.floor(NV / 4);
-    const a = i * cols + j, b = (i + 1) * cols + j, c = (i + 1) * cols + j + 1;
-    const pa = position.subarray(a * 3, a * 3 + 3), pb = position.subarray(b * 3, b * 3 + 3), pc = position.subarray(c * 3, c * 3 + 3);
-    const fn = cross(sub(pb, pa), sub(pc, pa));
-    if (dot(fn, normal.subarray(a * 3, a * 3 + 3)) < 0) {
-      for (let k = 0; k < tris.length; k += 3) { const t = tris[k + 1]; tris[k + 1] = tris[k + 2]; tris[k + 2] = t; }
-    }
+    const a = verts[gid(i, j)].fish, b = verts[gid(i + 1, j)].fish, c = verts[gid(i + 1, j + 1)].fish;
+    const fn = cross(sub(dirToObject(sub(b, a)), [0, 0, 0]), dirToObject(sub(c, a)));
+    if (dot(fn, verts[gid(i, j)].n) < 0) for (let k = 0; k < tris.length; k += 3) { const t = tris[k + 1]; tris[k + 1] = tris[k + 2]; tris[k + 2] = t; }
   }
-  const indices = new Uint32Array(tris);
+  // flap membership (for skin weights): vertices anterior to the margin row inside the cut columns
+  for (const v of verts) {
+    if (v.flap) continue;
+    const left = v.j > jB && v.j < jT, right = v.j > NV - jT && v.j < NV - jB;
+    if ((left || right) && v.i < im && v.i > im - 90) v.flap = v.cut === 'opercBody' ? 0 : 0.5; // 0.5 = candidate; weight decided by the rig
+  }
 
-  // ---------------------------------------------------------------------------
-  // Texture baking
-  log('  baking body textures …');
-  const T = bakeBodyTextures({ sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log });
-
-  return { position, normal, tangent: tangentObj, uv, indices, textures: T, stats: { vertices: nVert, triangles: indices.length / 3 } };
+  const nV = verts.length;
+  const position = new Float32Array(nV * 3), normal = new Float32Array(nV * 3), tangent = new Float32Array(nV * 4), uv = new Float32Array(nV * 2);
+  verts.forEach((v, k) => {
+    position.set(toObject(v.fish), k * 3);
+    normal.set(v.n, k * 3);
+    tangent.set(v.t, k * 4);
+    uv[k * 2] = clamp(v.s / S_END, 0, 1);
+    uv[k * 2 + 1] = v.phi / TAU;
+  });
+  // ordered cut edges for the interior meshes
+  const gapeEdge = (side) => {
+    const j = side > 0 ? jg : NV - jg;
+    const up = [], lo = [];
+    for (let i = ir; i >= 0; i--) {
+      up.push(gid(i, j));
+      lo.push(i < ir ? jawCopy.get(gid(i, j)) : gid(i, j));
+    }
+    return { up, lo };
+  };
+  const marginEdge = (side) => {
+    const js = [];
+    for (let j = jB; j <= jT; j++) js.push(side > 0 ? j : NV - j);
+    return { body: js.map((j) => gid(im, j)), flap: js.map((j) => (flapCopy.has(gid(im, j)) ? flapCopy.get(gid(im, j)) : gid(im, j))) };
+  };
+  log(`    mesh: ${nV} vertices, ${tris.length / 3} triangles (gape rows 0…${ir}, margin row ${im}, cols ${jB}…${jT})`);
+  return {
+    position, normal, tangent, uv, indices: new Uint32Array(tris),
+    verts, grid: { NS, NV, cols, ir, jg, im, jB, jT, sList },
+    edges: { gapeL: gapeEdge(1), gapeR: gapeEdge(-1), marginL: marginEdge(1), marginR: marginEdge(-1) },
+    stats: { vertices: nV, triangles: tris.length / 3 },
+  };
 }
 
 // =============================================================================
@@ -306,7 +446,7 @@ function bakeBodyTextures(ctx) {
     }
     // keep the eye itself and lips clean
     const ed = eyeDist(s, y, z);
-    d *= smoothstep(EYE.radius + 0.05, EYE.radius + 0.35, ed);
+    d *= smoothstep(EYE.radius + 0.02, EYE.radius + 0.15, ed);
     d *= 1 - belly * 0.97;
     const size = 0.8 + 0.5 * dorsal + 0.35 * b;
     return [Math.max(0, d), size];
@@ -335,7 +475,11 @@ function bakeBodyTextures(ctx) {
       const belly = smoothstep(-0.05, -0.7, hn);
       const { b, sd } = blotchAt(s, yy, z, hn);
       let m = 0.035 * dorsal + 0.075 * b + 0.05 * sd;
-      if (head > 0) m = mix(m, 0.08 * dorsal + 0.3 * headMarks(s, yy, z, hn), head);
+      if (head > 0) {
+        // fine dark vermiculation on the cheek and gill cover (typical of Acanthogobius heads)
+        const verm = smoothstep(0.74, 0.9, ridged3(s * 1.5 + 3.1, yy * 1.5, Math.abs(z) * 1.5, 3, 61)) * smoothstep(-0.8, -0.2, hn) * smoothstep(3.0, 5.0, s);
+        m = mix(m, 0.08 * dorsal + 0.3 * headMarks(s, yy, z, hn) + 0.16 * verm, head);
+      }
       // dusky dorsal reticulation (pigment along scale pockets)
       m += 0.1 * dorsal * smoothstep(0.55, 0.8, ridged3(s * 2.2, yy * 2.2, z * 2.2, 3, 3)) * (1 - head * 0.5);
       m *= 1 - belly;
@@ -344,7 +488,7 @@ function bakeBodyTextures(ctx) {
       const ed = eyeDist(s, yy, z);
       let iri = 0.85 * belly + 0.3 * smoothstep(0.25, -0.4, hn) + 0.12 * Math.exp(-(((hn - 0.02) / 0.22) ** 2));
       iri = Math.max(iri, head * 0.55 * smoothstep(0.55, -0.3, hn) * smoothstep(3.0, 5.5, s));
-      iri = Math.max(iri, 0.2 * smoothstep(EYE.radius + 0.7, EYE.radius + 0.25, ed) * smoothstep(EYE.radius, EYE.radius + 0.2, ed));
+      iri = Math.max(iri, 0.06 * smoothstep(EYE.radius + 0.5, EYE.radius + 0.2, ed) * smoothstep(EYE.radius, EYE.radius + 0.15, ed));
       iri *= 1 - 0.7 * b;
       iri *= 0.85 + 0.3 * fbm3(s * 1.3, yy * 1.3, z * 1.3, 3, 41);
       IRI[t] = clamp(iri);
@@ -631,6 +775,13 @@ function bakeBodyTextures(ctx) {
       const I = IRI[t];
       r = mix(r, 0.78, I * 0.5); g = mix(g, 0.79, I * 0.5); b = mix(b, 0.75, I * 0.5);
       r *= Math.exp(-M * 2.0); g *= Math.exp(-M * 2.15); b *= Math.exp(-M * 2.35);
+      // pale, fleshy lips (upper and lower lip rolls)
+      if (s < 5.2 && yy < 2.9) {
+        const dl = distToPolyline2(s, yy, MOUTH);
+        const lipM = smoothstep(0.55, 0.15, dl) * smoothstep(5.2, 4.2, s);
+        const lowerLip = yy < gapeY(Math.min(s, RICTUS_S)) ? 1 : 0.35; // lower lip paler (as in the photos)
+        r = mix(r, 0.66, lipM * 0.3 * lowerLip); g = mix(g, 0.58, lipM * 0.3 * lowerLip); b = mix(b, 0.5, lipM * 0.3 * lowerLip);
+      }
       // shadowed mouth slit
       if (s < 5.5 && yy < 2.4) {
         const dm = distToPolyline2(s, yy, MOUTH);

@@ -80,7 +80,7 @@ void main() {
   vec3 Nd = normalize(mix(N, irisN, irisMask * 0.7));
   vec3 diffuse = base * (Lc * sat(dot(Nd, L) * 0.8 + 0.2) * INV_PI + ambientIrr(Nd));
   // iridescent (guanine) sheen on the iris, strongest at grazing angles
-  vec3 sheen = irisMask * (1.0 - pupil) * vec3(0.05, 0.16, 0.14) * pow(1.0 - NoV, 2.0) * (ambientIrr(N) * 1.5 + Lc * 0.05);
+  vec3 sheen = irisMask * (1.0 - pupil) * vec3(0.04, 0.1, 0.08) * pow(1.0 - NoV, 3.0) * (ambientIrr(N) + Lc * 0.03);
   // fish lens bulging through the pupil: tight secondary highlight, deep blue-black body
   vec3 lensC = vec3(0.0, 0.0, uEyeR * 0.28);
   vec3 lensN = normalize(lp - lensC);

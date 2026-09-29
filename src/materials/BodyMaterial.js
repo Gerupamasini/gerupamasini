@@ -12,24 +12,47 @@
 import * as THREE from 'three';
 import { commonGLSL } from './common.glsl.js';
 
-const vertexShader = /* glsl */ `
+// Skinned: the volume is evaluated in the rest pose (vObjPos) and world directions are mapped into
+// that rest space with the per-vertex skinning rotation (vObjToWorld).
+export const skinnedVertexShader = /* glsl */ `
+#include <skinning_pars_vertex>
 attribute vec4 tangent;
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
 varying vec4 vWorldTangent;
 varying vec2 vUv;
 varying vec3 vObjPos;
+varying mat3 vObjToWorld;
 void main() {
   vUv = uv;
   vObjPos = position;
-  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vec3 transformed = position;
+  vec3 objectNormal = normal;
+  vec3 objectTangent = tangent.xyz;
+  mat3 skinRot = mat3(1.0);
+  #ifdef USE_SKINNING
+    #include <skinbase_vertex>
+    mat4 skinMatrix = mat4(0.0);
+    skinMatrix += skinWeight.x * boneMatX;
+    skinMatrix += skinWeight.y * boneMatY;
+    skinMatrix += skinWeight.z * boneMatZ;
+    skinMatrix += skinWeight.w * boneMatW;
+    skinMatrix = bindMatrixInverse * skinMatrix * bindMatrix;
+    transformed = (skinMatrix * vec4(position, 1.0)).xyz;
+    skinRot = mat3(skinMatrix);
+    objectNormal = skinRot * normal;
+    objectTangent = skinRot * tangent.xyz;
+  #endif
+  vec4 wp = modelMatrix * vec4(transformed, 1.0);
   vWorldPos = wp.xyz;
   mat3 m = mat3(modelMatrix);
-  vWorldNormal = normalize(m * normal);
-  vWorldTangent = vec4(normalize(m * tangent.xyz), tangent.w);
+  vWorldNormal = normalize(m * objectNormal);
+  vWorldTangent = vec4(normalize(m * objectTangent), tangent.w);
+  vObjToWorld = m * skinRot;
   gl_Position = projectionMatrix * viewMatrix * wp;
 }
 `;
+const vertexShader = skinnedVertexShader;
 
 const fragmentShader = /* glsl */ `
 ${commonGLSL}
@@ -43,7 +66,6 @@ uniform sampler2D uPigment;
 uniform sampler2D uProfile;
 uniform sampler2D uBg;          // opaque scene behind the fish (rgb) + view distance (a)
 uniform vec2 uResolution;
-uniform mat4 uInvModel;
 uniform vec4 uFrame;            // S0, Y0, SL, SEND (mm)
 uniform float uVertStart;
 uniform float uVertLen;
@@ -62,6 +84,8 @@ varying vec3 vWorldNormal;
 varying vec4 vWorldTangent;
 varying vec2 vUv;
 varying vec3 vObjPos;
+varying mat3 vObjToWorld;
+mat3 gWorldToObj;
 
 #define PROFILE_N 512.0
 #define G_FWD 0.82
@@ -71,7 +95,7 @@ vec3 toFish(vec3 o) { return vec3(uFrame.x - o.z * 1000.0, o.y * 1000.0 + uFrame
 vec3 dirToFish(vec3 o) { return vec3(-o.z, o.y, o.x); }
 vec3 fishToObj(vec3 f) { return vec3(f.z * 0.001, (f.y - uFrame.y) * 0.001, (uFrame.x - f.x) * 0.001); }
 vec3 fishDirToObj(vec3 d) { return vec3(d.z, d.y, -d.x); }
-vec3 worldDirToFish(vec3 d) { return normalize(dirToFish((uInvModel * vec4(d, 0.0)).xyz)); }
+vec3 worldDirToFish(vec3 d) { return normalize(dirToFish(gWorldToObj * d)); }
 
 struct Sec { float yc; float t; float b; float w; float nT; float nB; };
 Sec section(float s) {
@@ -237,6 +261,7 @@ void main() {
   vec3 pig = texture(uPigment, vUv).rgb;
 
   // ---- fish space
+  gWorldToObj = inverse(vObjToWorld);
   vec3 pF = toFish(vObjPos);
   vec3 NgF = worldDirToFish(Ng);
   vec3 NF = worldDirToFish(N);
@@ -284,8 +309,8 @@ void main() {
   vec3 nE = gradR(xE);
   vec3 Rout = refract(R, -nE, uIor);
   if (dot(Rout, Rout) < 0.5) Rout = R;
-  vec3 xEw = (modelMatrix * vec4(fishToObj(xE), 1.0)).xyz;
-  vec3 dOutW = normalize(mat3(modelMatrix) * fishDirToObj(Rout));
+  vec3 xEw = vWorldPos + vObjToWorld * (fishToObj(xE) - vObjPos);
+  vec3 dOutW = normalize(vObjToWorld * fishDirToObj(Rout));
   vec2 suv = gl_FragCoord.xy / uResolution;
   float bgDist = texture(uBg, suv).a;
   float dE = length(xEw - cameraPosition);
@@ -294,7 +319,7 @@ void main() {
   vec2 ruv = clip.w > 0.0 ? clip.xy / clip.w * 0.5 + 0.5 : suv;
   ruv = clamp(ruv, vec2(0.001), vec2(0.999));
   float spread = sqrt(tauS * (1.0 - G_FWD)) * 0.45;
-  float worldPerMM = length(modelMatrix[0].xyz) * 0.001;
+  float worldPerMM = length(vObjToWorld[0]) * 0.001;
   float blurW = (beyond + tExit * worldPerMM) * min(spread, 1.3);
   float pxPerW = uResolution.y * projectionMatrix[1][1] * 0.5 / max(dE, 1e-5);
   float lod = clamp(log2(max(blurW * pxPerW, 1.0)), 0.0, 9.0);
@@ -380,7 +405,6 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uORM: { value: textures.orm },
     uPigment: { value: textures.pigment },
     uProfile: { value: profileTexture },
-    uInvModel: { value: new THREE.Matrix4() },
     uFrame: { value: new THREE.Vector4(frame.S0, frame.Y0, frame.SL, frame.SEND) },
     uVertStart: { value: vertebrae.start },
     uVertLen: { value: (frame.SL - vertebrae.start) / vertebrae.count },

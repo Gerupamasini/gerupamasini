@@ -4,6 +4,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createBodyMaterial, createProfileTexture } from './materials/BodyMaterial.js';
 import { createFinMaterials } from './materials/FinMaterial.js';
 import { createEyeMaterial } from './materials/EyeMaterial.js';
+import { createInteriorMaterial } from './materials/InteriorMaterial.js';
+import { createBehavior } from './fish/Behavior.js';
 import { createBackground, createFloor, createParticles } from './scene/Environment.js';
 import { createPost } from './scene/Post.js';
 
@@ -104,7 +106,7 @@ const LIGHT_PRESETS = {
   back: { az: 13, el: 15 },
   side: { az: 90, el: 22 },
 };
-const fish = { root: null, body: null, eyes: [], fins: [], originals: new Map(), profile: null, frame: null };
+const fish = { root: null, body: null, eyes: [], fins: [], interiors: [], originals: new Map(), profile: null, frame: null, bones: {}, behavior: null };
 
 // ---------------------------------------------------------------------------- loading
 const loader = new GLTFLoader();
@@ -183,14 +185,19 @@ async function onLoaded(gltf) {
   const parser = gltf.parser;
   const root = gltf.scene;
   const meshes = [];
-  root.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  root.traverse((o) => {
+    if (o.isMesh) meshes.push(o);
+    if (o.isBone) fish.bones[o.name] = o;
+  });
   for (const m of meshes) {
     m.layers.set(LAYER_FISH);
+    m.frustumCulled = false; // skinned: bounds change with the animation
     fish.originals.set(m, m.material);
     const x = m.material.userData.mahaze || {};
     if (x.role === 'body') fish.body = m;
     else if (x.role === 'eye') fish.eyes.push(m);
     else if (x.role === 'fin') fish.fins.push({ mesh: m });
+    else if (x.role === 'interior') fish.interiors.push(m);
   }
   if (!fish.body) throw new Error('Body mesh not found in glTF');
 
@@ -209,27 +216,30 @@ async function onLoaded(gltf) {
     shared,
   });
   fish.body.userData.custom = bodyMat;
-  fish.body.onBeforeRender = () => {
-    if (fish.body.material === bodyMat) bodyMat.uniforms.uInvModel.value.copy(fish.body.matrixWorld).invert();
-  };
 
   // eyes
   const eyeOrig = fish.eyes[0].material;
   const eyeMat = createEyeMaterial({ irisTexture: eyeOrig.map, params: eyeOrig.userData.mahaze, shared });
   for (const e of fish.eyes) e.userData.custom = eyeMat;
 
-  // fins (two passes each)
+  // mouth / gill interiors
+  const interiorMat = createInteriorMaterial({ shared });
+  for (const m of fish.interiors) m.userData.custom = interiorMat;
+
+  // fins (two passes each, both skinned to the same skeleton)
   const finOrig = fish.fins[0].mesh.material;
   const finData = await parser.getDependency('texture', finOrig.userData.mahaze.dataTexture);
   finData.colorSpace = THREE.NoColorSpace;
   const finMats = createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finOrig.normalMap }, shared });
   for (const f of fish.fins) {
-    const scatter = new THREE.Mesh(f.mesh.geometry, finMats.scatter);
+    const scatter = new THREE.SkinnedMesh(f.mesh.geometry, finMats.scatter);
+    scatter.bind(f.mesh.skeleton, f.mesh.bindMatrix);
+    scatter.frustumCulled = false;
     scatter.layers.set(LAYER_FISH);
     scatter.layers.enable(LAYER_BEHIND);
     f.mesh.layers.enable(LAYER_BEHIND);
     scatter.name = `${f.mesh.name}_scatter`;
-    f.mesh.add(scatter);
+    f.mesh.parent.add(scatter);
     f.scatter = scatter;
     f.mesh.userData.custom = finMats.transmit;
     f.mesh.geometry.computeBoundingSphere();
@@ -237,11 +247,17 @@ async function onLoaded(gltf) {
   }
 
   scene.add(root);
+  root.updateMatrixWorld(true);
+  for (const bone of Object.values(fish.bones)) bone.userData.restObj = bone.getWorldPosition(new THREE.Vector3());
   fish.root = root;
+  fish.behavior = createBehavior({ root, bones: fish.bones, clips: gltf.animations });
+  fish.behavior.setAuto(document.getElementById('auto').checked);
   applyMaterialMode();
   if (!userMovedCamera) setCameraPreset(currentPreset, true);
   progressEl.hidden = true;
   document.body.classList.add('ready');
+  // debugging / automated capture: advance the behaviour without waiting for real time
+  window.__mahaze = { fish, step: (sec) => { for (let t = 0; t < sec; t += 1 / 60) fish.behavior.update(1 / 60); } };
   window.__mahazeReady = true;
 }
 
@@ -250,6 +266,7 @@ function applyMaterialMode() {
   const custom = state.custom;
   fish.body.material = custom ? fish.body.userData.custom : fish.originals.get(fish.body);
   for (const e of fish.eyes) e.material = custom ? e.userData.custom : fish.originals.get(e);
+  for (const m of fish.interiors) m.material = custom ? m.userData.custom : fish.originals.get(m);
   for (const f of fish.fins) {
     f.mesh.material = custom ? f.mesh.userData.custom : fish.originals.get(f.mesh);
     f.scatter.visible = custom;
@@ -305,8 +322,10 @@ function setCameraPreset(name, instant = false) {
   const p = PRESETS[name] || PRESETS.whole;
   currentPreset = PRESETS[name] ? name : 'whole';
   userMovedCamera = false;
-  const target = new THREE.Vector3(...p.target);
-  const off = new THREE.Vector3(...p.pos).sub(target);
+  // presets are authored in the fish frame; follow the fish wherever it has swum
+  const toWorld = (v) => (fish.root ? fish.root.localToWorld(v) : v);
+  const target = toWorld(new THREE.Vector3(...p.target));
+  const off = toWorld(new THREE.Vector3(...p.pos)).sub(target);
   off.setLength(Math.min(controls.maxDistance, Math.max(off.length(), fitDistance(p.radius))));
   const to = { target, pos: target.clone().add(off) };
   if (instant) {
@@ -355,18 +374,22 @@ function sortFins() {
   });
 }
 
-const shadowS = [3.5, 8.5, 13.5, 19, 25, 31, 37, 45];
+// soft shadow capsule chain along the (animated) spine
+const SHADOW_CHAIN = [['J_head', 3.0], ['J_head', 8.0], ['J_root', 13.0], ['J_sp1', 17.0], ['J_sp3', 25.0], ['J_sp5', 33.0], ['J_sp7', 40.0], ['J_caudal2', 46.5]];
+const _bv = new THREE.Vector3();
 function updateFloorShadow() {
   if (!fish.profile) return;
   const P = fish.profile, F = fish.frame;
   const arr = floor.material.uniforms.uShadow.value;
-  shadowS.forEach((s, i) => {
+  SHADOW_CHAIN.forEach(([boneName, s], i) => {
+    const bone = fish.bones[boneName];
     const k = Math.min(P.n - 1, Math.round((Math.min(s, F.SEND) / F.SEND) * (P.n - 1)));
     const [yc, t, b, w] = P.data.slice(k * 6, k * 6 + 4);
-    let r = s > F.SEND ? 1.6 : Math.max(0.6, (t + b + 2 * w) * 0.25);
-    const obj = new THREE.Vector3(0, (yc - F.Y0) * 0.001, (F.S0 - Math.min(s, F.SEND + 3)) * 0.001);
-    obj.applyMatrix4(fish.body.matrixWorld);
-    arr[i].set(obj.x, obj.y, obj.z, r * 0.001 * (s > F.SEND ? 0.5 : 1));
+    const r = s > F.SEND ? 1.6 : Math.max(0.6, (t + b + 2 * w) * 0.25);
+    // axis point at s in the rest pose, re-expressed in the bone's frame, then carried by the animated bone
+    _bv.set(0, (yc - F.Y0) * 0.001, (F.S0 - Math.min(s, F.SEND + 3)) * 0.001).sub(bone.userData.restObj);
+    bone.localToWorld(_bv);
+    arr[i].set(_bv.x, _bv.y, _bv.z, r * 0.001 * (s > F.SEND ? 0.5 : 1));
   });
 }
 
@@ -404,11 +427,21 @@ function frame() {
     camera.position.lerpVectors(camTween.from.pos, camTween.to.pos, e);
     if (camTween.t >= 1) camTween = null;
   }
+  if (fish.behavior) {
+    const before = fish.behavior.anchor().clone();
+    fish.behavior.update(dt);
+    fish.root.updateMatrixWorld(true);
+    if (document.getElementById('follow-fish').checked) {
+      const delta = fish.behavior.anchor().clone().sub(before);
+      controls.target.add(delta);
+      camera.position.add(delta);
+      if (camTween) { camTween.from.target.add(delta); camTween.from.pos.add(delta); camTween.to.target.add(delta); camTween.to.pos.add(delta); }
+    }
+  }
   controls.update();
   updateLight();
   fbKey.position.copy(shared.uLightDir.value).multiplyScalar(0.3);
   if (fish.root) {
-    fish.root.updateMatrixWorld();
     sortFins();
     updateFloorShadow();
   }
@@ -463,6 +496,10 @@ bindRange('light-int', (v) => {
 bindRange('scatter', (v) => { shared.uScatter.value = v; });
 bindRange('interior', (v) => { shared.uInterior.value = v; });
 bindRange('exposure', (v) => { post.material.uniforms.uExposure.value = v; });
+document.getElementById('auto').addEventListener('change', (e) => fish.behavior?.setAuto(e.target.checked));
+document.getElementById('freeze').addEventListener('change', (e) => fish.behavior?.setPaused(e.target.checked));
+document.getElementById('act-swim').addEventListener('click', () => fish.behavior?.swim());
+document.getElementById('act-yawn').addEventListener('click', () => fish.behavior?.yawn());
 document.getElementById('floor').addEventListener('change', (e) => { floor.visible = e.target.checked && envName === 'water'; });
 document.getElementById('snow').addEventListener('change', (e) => { particles.visible = e.target.checked; });
 document.getElementById('autorot').addEventListener('change', (e) => { controls.autoRotate = e.target.checked; controls.autoRotateSpeed = 0.8; });
@@ -484,6 +521,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '1') pick('cam-preset', 'whole');
   if (e.key === '2') pick('cam-preset', 'head');
   if (e.key === '3') pick('cam-preset', 'tail');
+  if (e.key === 'y') fish.behavior?.yawn();
+  if (e.key === 'w') fish.behavior?.swim();
 });
 
 // URL parameters for reproducible views (?light=back&view=tail&debug=1)
@@ -492,6 +531,16 @@ if (params.get('debug')) document.querySelector(`#debug button[data-v="${params.
 if (params.get('shading')) document.querySelector(`#shading button[data-v="${params.get('shading')}"]`)?.click();
 if (params.get('env')) document.querySelector(`#env button[data-v="${params.get('env')}"]`)?.click();
 if (params.get('floor') === '0') { document.getElementById('floor').checked = false; floor.visible = false; }
+if (params.get('anim')) {
+  // anim=yawn:1.0 | swim:0.1 | freeze  → reproducible stills
+  const [name, t] = params.get('anim').split(':');
+  const wait = setInterval(() => {
+    if (!window.__mahazeReady) return;
+    clearInterval(wait);
+    if (name === 'freeze') { fish.behavior.setPaused(true); document.getElementById('freeze').checked = true; }
+    else fish.behavior.pose(name, Number(t) || 0);
+  }, 50);
+}
 if (params.get('cam')) {
   // cam=px,py,pz,tx,ty,tz (metres)
   const c = params.get('cam').split(',').map(Number);

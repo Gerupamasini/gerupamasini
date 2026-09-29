@@ -11,6 +11,8 @@ import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, profileTable } from
 import { buildBody } from './mahaze/body.mjs';
 import { finDefinitions, buildFinMesh, paintFinAtlas } from './mahaze/fins.mjs';
 import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './mahaze/eye.mjs';
+import { buildMouth, buildGills } from './mahaze/interior.mjs';
+import { JOINTS, J, bodyWeights, interiorWeights, finWeights, buildClips } from './mahaze/rig.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -64,7 +66,7 @@ const sClamp = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAM
 
 // ---------------------------------------------------------------- body
 log('body');
-const body = buildBody({ NS: fast ? 200 : 400, NV: fast ? 96 : 192, texW: fast ? 1024 : 2048, texH: fast ? 512 : 1024, log });
+const body = buildBody({ NS: fast ? 230 : 460, NV: fast ? 112 : 224, NSb: fast ? 200 : 400, NVb: fast ? 96 : 192, texW: fast ? 1024 : 2048, texH: fast ? 512 : 1024, log });
 const BT = body.textures;
 const tAlb = gb.addTexture(image(gb, 'body_basecolor', BT.width, BT.height, 3, BT.albedo, 'jpeg', 93), sBody, 'body_basecolor');
 const tNrm = gb.addTexture(image(gb, 'body_normal', BT.width, BT.height, 3, BT.normal, 'png'), sBody, 'body_normal');
@@ -96,11 +98,48 @@ const mBody = gb.addMaterial({
     },
   },
 });
-const bodyPrim = gb.primitive({ position: body.position, normal: body.normal, tangent: body.tangent, uv: body.uv, indices: body.indices, material: mBody });
-const meshBody = gb.addMesh('Body', [bodyPrim]);
-const nodes = [gb.addNode({ name: 'Body', mesh: meshBody })];
 
-// ---------------------------------------------------------------- eyes
+// ---------------------------------------------------------------- skeleton
+log('rig');
+const jointNodes = JOINTS.map((j) => {
+  const par = j.parent ? JOINTS[J[j.parent]].obj : [0, 0, 0];
+  return gb.addNode({ name: j.name, translation: j.obj.map((v, k) => v - par[k]), children: [] });
+});
+JOINTS.forEach((j, i) => { if (j.parent) gb.json.nodes[jointNodes[J[j.parent]]].children.push(jointNodes[i]); });
+const ibm = new Float32Array(JOINTS.length * 16);
+JOINTS.forEach((j, i) => {
+  ibm.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -j.obj[0], -j.obj[1], -j.obj[2], 1], i * 16);
+});
+const skin = gb.addSkin({ name: 'Mahaze_Rig', joints: jointNodes, skeleton: jointNodes[J.J_root], inverseBindMatrices: gb.addAccessor(ibm, 'MAT4') });
+const skinned = [];
+const skinAttrs = (w) => ({ JOINTS_0: { array: w.joints, type: 'VEC4' }, WEIGHTS_0: { array: w.weights, type: 'VEC4', normalized: true } });
+
+const bw = bodyWeights(body);
+const bodyPrim = gb.primitive({ position: body.position, normal: body.normal, tangent: body.tangent, uv: body.uv, indices: body.indices, material: mBody, extraAttributes: skinAttrs(bw) });
+skinned.push(gb.addNode({ name: 'Body', mesh: gb.addMesh('Body', [bodyPrim]), skin }));
+
+// ---------------------------------------------------------------- mouth & gill interiors
+log('interiors');
+const mInterior = gb.addMaterial({
+  name: 'Mahaze_Interior',
+  pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.3 },
+  doubleSided: true,
+  extensions: { KHR_materials_clearcoat: { clearcoatFactor: 0.6, clearcoatRoughnessFactor: 0.08 } },
+  extras: { mahaze: { role: 'interior' } },
+});
+const mouth = buildMouth(body);
+const gills = buildGills(body);
+for (const part of [mouth.cavity, mouth.teeth, gills]) {
+  const w = interiorWeights(part);
+  const prim = gb.primitive({
+    position: part.position, normal: part.normal, uv: part.uv, indices: part.indices, material: mInterior,
+    extraAttributes: { ...skinAttrs(w), COLOR_0: { array: part.color, type: 'VEC4' }, _GILL: { array: part.gill, type: 'SCALAR' } },
+  });
+  skinned.push(gb.addNode({ name: part.name, mesh: gb.addMesh(part.name, [prim]), skin }));
+  log(`  ${part.name}: ${part.position.length / 3} verts`);
+}
+
+// ---------------------------------------------------------------- eyes (children of the eye joints)
 log('eyes');
 const iris = paintIris(fast ? 512 : 1024);
 const tIris = gb.addTexture(image(gb, 'eye_iris', iris.size, iris.size, 3, iris.rgb, 'jpeg', 94), sClamp, 'eye_iris');
@@ -112,9 +151,10 @@ const mEye = gb.addMaterial({
 });
 const eye = buildEyeMesh();
 const meshEye = gb.addMesh('Eye', [gb.primitive({ ...eye, material: mEye })]);
-for (const [side, name] of [[1, 'Eye_L'], [-1, 'Eye_R']]) {
+for (const [side, name, jn] of [[1, 'Eye_L', 'J_eyeL'], [-1, 'Eye_R', 'J_eyeR']]) {
   const tr = eyeTransform(side);
-  nodes.push(gb.addNode({ name, mesh: meshEye, translation: tr.translation, rotation: tr.rotation }));
+  const node = gb.addNode({ name, mesh: meshEye, rotation: tr.rotation });
+  gb.json.nodes[jointNodes[J[jn]]].children.push(node);
 }
 
 // ---------------------------------------------------------------- fins
@@ -135,23 +175,33 @@ const mFin = gb.addMaterial({
 });
 for (const def of defs) {
   const m = buildFinMesh(def, 6, def.name === 'Fin_Caudal' ? 44 : 36);
-  const mesh = gb.addMesh(def.name, [gb.primitive({ ...m, material: mFin })]);
-  nodes.push(gb.addNode({ name: def.name, mesh, extras: { mahaze: { fin: def.name } } }));
+  const w = finWeights(def.name, m.fish, m.rayT);
+  const mesh = gb.addMesh(def.name, [gb.primitive({ ...m, material: mFin, extraAttributes: skinAttrs(w) })]);
+  skinned.push(gb.addNode({ name: def.name, mesh, skin, extras: { mahaze: { fin: def.name } } }));
+}
+
+// ---------------------------------------------------------------- animations
+log('animations');
+for (const clip of buildClips()) {
+  gb.addAnimation({ name: clip.name, channels: clip.channels.map((c) => ({ node: jointNodes[c.joint], path: c.path, times: c.times, values: c.values })) });
+  log(`  ${clip.name}: ${clip.duration}s, ${clip.channels.length} channels`);
 }
 
 // ---------------------------------------------------------------- scene
 const rootNode = gb.addNode({
   name: 'Mahaze_Juvenile',
-  children: nodes,
+  children: [jointNodes[J.J_root]],
   extras: {
     species: 'Acanthogobius flavimanus (Temminck & Schlegel, 1845)',
     commonName: 'マハゼ (yellowfin goby), juvenile',
     totalLength_mm: TL,
     standardLength_mm: SL,
     units: 'metres (+Y dorsal, +Z anterior)',
+    animations: 'Idle (loop, breathing), Swim (loop, burst tail beat), Yawn (one-shot)',
   },
 });
-gb.addScene('Mahaze', [rootNode]);
+// skinned meshes sit at the scene root (their node transforms are ignored; joints drive them)
+gb.addScene('Mahaze', [rootNode, ...skinned]);
 gb.json.asset.copyright = 'Procedurally generated model (no photographic textures).';
 
 const glb = gb.toBuffer();

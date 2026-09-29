@@ -2,8 +2,8 @@
 import { EYE, toObject, dirToObject } from './anatomy.mjs';
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../lib/noise.mjs';
 
-export const PUPIL_ANGLE = 0.4; // rad (half-angle from the axis)
-export const IRIS_ANGLE = 1.0;
+export const PUPIL_ANGLE = 0.5; // rad (half-angle from the axis)
+export const IRIS_ANGLE = 1.06;
 export const CORNEA_BULGE = 0.075;
 
 const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
@@ -117,8 +117,9 @@ export function paintIris(size = 1024) {
         const fib = 0.5 + 0.5 * perlin3(Math.cos(psi) * 38, Math.sin(psi) * 38, f * 2.5, 11);
         const fib2 = 0.5 + 0.5 * perlin3(Math.cos(psi) * 90, Math.sin(psi) * 90, f * 6, 12);
         // golden inner ring -> bronze -> dark outer margin
-        const gold = [0.72, 0.5, 0.15], bronze = [0.2, 0.15, 0.085], dark = [0.05, 0.045, 0.04];
-        let t1 = smoothstep(0.03, 0.16, f);
+        // dark olive-bronze iris with a thin golden pupillary ring (as in the reference photos)
+        const gold = [0.55, 0.42, 0.14], bronze = [0.085, 0.07, 0.042], dark = [0.03, 0.028, 0.024];
+        let t1 = smoothstep(0.02, 0.11, f);
         c = [mix(gold[0], bronze[0], t1), mix(gold[1], bronze[1], t1), mix(gold[2], bronze[2], t1)];
         const t2 = smoothstep(0.8, 1.0, f);
         c = c.map((v, k) => mix(v, dark[k], t2));
@@ -127,16 +128,16 @@ export function paintIris(size = 1024) {
         // greenish iridescent crescent on the dorsal half of the iris
         const up = smoothstep(-0.1, 0.8, ly / Math.max(Math.sin(theta), 1e-3));
         const teal = [0.2, 0.42, 0.36];
-        c = c.map((v, k) => mix(v, teal[k], up * 0.35 * smoothstep(0.15, 0.6, f) * (1 - t2)));
+        c = c.map((v, k) => mix(v, teal[k] * 0.45, up * 0.3 * smoothstep(0.15, 0.6, f) * (1 - t2)));
         // golden flecks
         const fl = smoothstep(0.35, 0.6, fbm3(lx * 30, ly * 30, lz * 30, 2, 23)) * (1 - t2);
-        c = c.map((v, k) => mix(v, gold[k] * 0.7, fl * 0.45));
+        c = c.map((v, k) => mix(v, [0.36, 0.32, 0.13][k], fl * 0.5));
         // melanophore speckles
         const sp = fbm3(lx * 22, ly * 22, lz * 22, 3, 13);
         const speck = smoothstep(0.25, 0.45, sp);
         c = c.map((v) => v * (1 - 0.7 * speck));
         // bright pupillary rim
-        c = c.map((v, k) => v + [0.25, 0.17, 0.05][k] * Math.exp(-(((theta - pupilEdge) / 0.015) ** 2)));
+        c = c.map((v, k) => v + [0.3, 0.22, 0.07][k] * Math.exp(-(((theta - pupilEdge) / 0.02) ** 2)));
       } else {
         // sclera region (mostly under the skin): dark, silvery speckled
         const sp = fbm3(lx * 16, ly * 16, lz * 16, 3, 17);

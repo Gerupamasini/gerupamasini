@@ -7,7 +7,7 @@ const COMPONENT = {
   Uint16Array: 5123,
   Uint8Array: 5121,
 };
-const NUM_COMPONENTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
+const NUM_COMPONENTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
 
 export class GLBBuilder {
   constructor(generator = 'mahaze-procedural-builder') {
@@ -108,6 +108,30 @@ export class GLBBuilder {
     return this.json.nodes.length - 1;
   }
 
+  addSkin(skin) {
+    this.json.skins = this.json.skins || [];
+    this.json.skins.push(skin);
+    return this.json.skins.length - 1;
+  }
+
+  /** clip: { name, channels: [{ node, path, times: Float32Array, values: Float32Array }] } */
+  addAnimation(clip) {
+    this.json.animations = this.json.animations || [];
+    const samplers = [], channels = [];
+    const timeCache = new Map();
+    for (const ch of clip.channels) {
+      let input = timeCache.get(ch.times);
+      if (input === undefined) {
+        input = this.addAccessor(ch.times, 'SCALAR', { minMax: true });
+        timeCache.set(ch.times, input);
+      }
+      const output = this.addAccessor(ch.values, ch.path === 'rotation' ? 'VEC4' : 'VEC3');
+      samplers.push({ input, output, interpolation: 'LINEAR' });
+      channels.push({ sampler: samplers.length - 1, target: { node: ch.node, path: ch.path } });
+    }
+    this.json.animations.push({ name: clip.name, samplers, channels });
+  }
+
   addScene(name, nodes, extras) {
     const s = { name, nodes };
     if (extras) s.extras = extras;
@@ -142,7 +166,7 @@ export class GLBBuilder {
       attributes.TEXCOORD_0 = this.addAccessor(uq, 'VEC2', { target: 34962, normalized: true });
     }
     for (const [k, v] of Object.entries(extraAttributes)) {
-      attributes[k] = this.addAccessor(v.array, v.type, { target: 34962 });
+      attributes[k] = this.addAccessor(v.array, v.type, { target: 34962, normalized: !!v.normalized });
     }
     const idx = this.addAccessor(indices, 'SCALAR', { target: 34963 });
     return { attributes, indices: idx, material, mode: 4 };
@@ -152,6 +176,7 @@ export class GLBBuilder {
     const json = this.json;
     if (!json.extensionsUsed.length) delete json.extensionsUsed;
     if (json.extensionsRequired && !json.extensionsRequired.length) delete json.extensionsRequired;
+    for (const n of json.nodes) if (n.children && !n.children.length) delete n.children;
     for (const k of ['textures', 'images', 'samplers', 'materials']) if (!json[k].length) delete json[k];
     const bin = Buffer.concat(this.parts);
     const binPad = (4 - (bin.length % 4)) % 4;
