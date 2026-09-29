@@ -229,7 +229,7 @@ function clawPoses(species, male) {
 }
 // ヤマトオサガニの雄（生体写真）：大きな鉗を顔の前に斜めに構え、指先を前下方へ
 const CLAW_POSES_YM2 = {
-  rest: { yaw0: 0.55, p0: 0.3, f1: 1.4, p1: 0.0, px: -0.85, py: -0.42, pz: 0.3, bx: 0.42, by: -0.85, bz: 0.0, open: 0.13 },
+  rest: { yaw0: 0.2, p0: 0.48, f1: 1.15, p1: 0.0, px: -0.86, py: -0.44, pz: 0.12, bx: 0.44, by: -0.86, bz: 0.0, open: 0.13 },
   reach: { yaw0: 0.65, p0: -0.1, f1: 1.3, p1: -0.05, px: -0.9, py: -0.4, pz: 0.25, bx: 0.0, by: -1, bz: 0.1, open: 0.35 },
   mouth: { yaw0: 0.8, p0: 0.2, f1: 1.7, p1: 0.1, px: -1, py: 0.05, pz: 0.2, bx: 0.0, by: -1, bz: -0.05, open: 0.0 },
   waveUp: { yaw0: 0.4, p0: 0.2, f1: 0.5, p1: 1.1, px: -0.1, py: 0.75, pz: 0.65, bx: -1, by: 0.1, bz: 0.2, open: 0.3 },
@@ -1214,15 +1214,15 @@ export class Ecosystem {
       const L = CRAB_SPECS.yamato.legs;
       const chela = (seed, pal, P) => organicMaterial({ key: 'chelaY', glsl: GLSL.chelaY, seed, colors: pal, P, roughness: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.3, sss: 0xf0dcb0, sssK: 0.22 });
       this.yamaShared = {
-        leg: spk(0.5, [0x5a4632, 0x74603e, 0x2e2418, 0xa0703c], [150, 0.4, 0, 0], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.25 }),
-        legDact: spk(0.55, [0x7a5432, 0x9a6c3a, 0x3a2616, 0xc08a48], [150, 0.4, 1, L.dact], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.5, clearcoat: 0.45, clearcoatRoughness: 0.22 }),
+        leg: spk(0.5, [0x7a5c34, 0x9c7a46, 0x34261a, 0xc49a5c], [150, 0.4, 0, 0], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.25 }),
+        legDact: spk(0.55, [0x9a7442, 0xbc9254, 0x3a2616, 0xd0a868], [150, 0.4, 1, L.dact], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.5, clearcoat: 0.45, clearcoatRoughness: 0.22 }),
         arm: spk(0.9, [0x4a3a2a, 0x604c36, 0x241a12, 0xa89070], [120, 0.6, 0, 0]),
         stalk: spk(0.2, [0x8a7458, 0xa88e6c, 0x4a3a28, 0xc0a888], [220, 0.3, 0, 0], { clearcoat: 0.5, clearcoatRoughness: 0.2 }),
         // 雄の掌：灰緑色（写真4）と淡黄色（写真3）の個体差
-        clawA: chela(0.4, [0xdcd2b8, 0xd6ccb0, 0x5a3418], [0.56, 0, 0, 0]),
-        dactA: chela(0.5, [0xd4ccb4, 0xd2c6a6, 0x5a3418], [0.56, 0, 1, 0]),
-        clawB: chela(0.41, [0xe8dcbc, 0xe0d0a8, 0x5e3616], [0.56, 0, 0, 0]),
-        dactB: chela(0.51, [0xe0d4b4, 0xdccaa0, 0x5e3616], [0.56, 0, 1, 0]),
+        clawA: chela(0.4, [0xe6dcc0, 0xd6ccb0, 0x5a3418], [0.72, 0, 0, 0]),
+        dactA: chela(0.5, [0xd4ccb4, 0xd2c6a6, 0x5a3418], [0.72, 0, 1, 0]),
+        clawB: chela(0.41, [0xe8dcbc, 0xe0d0a8, 0x5e3616], [0.72, 0, 0, 0]),
+        dactB: chela(0.51, [0xe0d4b4, 0xdccaa0, 0x5e3616], [0.72, 0, 1, 0]),
         clawF: chela(0.45, [0xa89c74, 0x9a6a34, 0x4a2a14], [0.38, 0, 0, 0]),
         dactF: chela(0.55, [0xa07844, 0x9a6a34, 0x4a2a14], [0.38, 0, 1, 0]),
         mouth: organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.2, colors: [0xb4b4ac, 0xa2a29a, 0xc6c6be], P: [1, 0, 0, 0], roughness: 0.22, clearcoat: 1.0, clearcoatRoughness: 0.08 }),
