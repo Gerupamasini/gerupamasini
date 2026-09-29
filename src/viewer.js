@@ -30,7 +30,12 @@ const ground = makeGround(scene).group;
 
 let root, crab, mixer, actions = {}, current = null, joints = [], selected = null, clock = new THREE.Clock();
 const nodes = {};
-new GLTFLoader().load('./models/ilyoplax_pusilla.glb', (gltf) => {
+const MODEL_URLS = ['./models/ilyoplax_pusilla.glb', './chigogani-model.wasm'];   // .wasm = same GLB bytes, for hosts that only serve web file types
+async function loadModel() {
+  for (const u of MODEL_URLS) { try { const r = await fetch(u); if (r.ok) return await new GLTFLoader().parseAsync(await r.arrayBuffer(), './'); } catch (e) { /* try next */ } }
+  throw new Error('model not found');
+}
+loadModel().then((gltf) => {
   root = gltf.scene; root.scale.multiplyScalar(S); scene.add(root);
   root.traverse((o) => {
     if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; if (o.material.map) o.material.map.anisotropy = 8; }
@@ -41,7 +46,7 @@ new GLTFLoader().load('./models/ilyoplax_pusilla.glb', (gltf) => {
   mixer = new THREE.AnimationMixer(root);
   for (const clip of gltf.animations) actions[clip.name] = mixer.clipAction(clip);
   buildUI(gltf.animations.map((a) => a.name)); buildTree(); setView('front', true); window.__ready = true;
-}, undefined, (e) => { document.body.insertAdjacentHTML('beforeend', `<pre style="position:fixed;top:10px;left:10px;color:#f88">${e.message || e}</pre>`); });
+}).catch((e) => { document.body.insertAdjacentHTML('beforeend', `<pre style="position:fixed;top:10px;left:10px;color:#f88">${e.message || e}</pre>`); });
 
 function play(name) {
   if (current) actions[current].fadeOut(0.25);
@@ -51,7 +56,7 @@ function play(name) {
 }
 function buildUI(names) {
   const box = $('clips'); const add = (label, n) => { const b = document.createElement('button'); b.textContent = label; b.dataset.n = n || ''; b.onclick = () => play(n); box.appendChild(b); };
-  add('停止（手動）', ''); const jp = { Wave: '鋏を振る', Sidewalk: '横歩き', Idle: 'アイドル' };
+  add('停止（手動）', ''); const jp = { Wave: '鋏を振る', Sidewalk: '横歩き', Idle: 'アイドル', EyeStow: '目柄を収納' };
   names.forEach((n) => add(jp[n] || n, n));
   document.querySelector('#clips button').classList.add('on');
   $('wire').onchange = (e) => root.traverse((o) => { if (o.isMesh) o.material.wireframe = e.target.checked; });

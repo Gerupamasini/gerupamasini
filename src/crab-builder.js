@@ -252,12 +252,16 @@ function mergeGeometriesSafe(g) { // make indexed by welding positions
 const merge = (gs) => mergeGeometries(gs.filter(Boolean), false);
 
 // ---------- carapace ----------
-const CP = { a0: 0.5, b: 0.4, n: 3.3, Ht: 0.27, Hb: 0.17, ta: 0.55, tb: 0.75 };
-const aAt = (z) => CP.a0 * (0.8 + 0.2 * (z / CP.b + 1) / 2);
+const CP = { a0: 0.5, b: 0.4, n: 4.0, Ht: 0.27, Hb: 0.17, ta: 0.55, tb: 0.75 };
+const aAt = (z) => CP.a0 * (0.76 + 0.24 * (z / CP.b + 1) / 2);
 function rhoOf(x, z) { return Math.pow(Math.pow(Math.abs(x / aAt(z)), CP.n) + Math.pow(Math.abs(z / CP.b), CP.n), 1 / CP.n); }
 export const topY = (x, z) => CP.Ht * Math.pow(Math.cos(Math.asin(clamp(rhoOf(x, z), 0, 0.9999))), CP.ta);
 export const botY = (x, z) => -CP.Hb * Math.pow(Math.cos(Math.asin(clamp(rhoOf(x, z), 0, 0.9999))), CP.tb);
-const EYE_X = 0.115, EYE_Z = 0.3;
+function frontZ(x, r) { let lo = 0, hi = CP.b * 1.05; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (rhoOf(x, m) < r) lo = m; else hi = m; } return lo; }
+// orbital groove: runs along the front margin (rho = 0.93 contour) from the eye socket to the exorbital corner
+const ORB = { x0: 0.1, x1: 0.46, rho: 0.93, sink: 0.02 };
+const orbZ = (x) => frontZ(x, ORB.rho);
+const EYE_X = ORB.x0, EYE_Z = orbZ(ORB.x0);
 
 function dseg(px, pz, ax, az, bx, bz) {
   const dx = bx - ax, dz = bz - az, t = clamp(((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz));
@@ -282,15 +286,22 @@ function dorsalRelief(x, z) {
   d += 0.02 * gauss(ax, 0.16) * gauss(z - 0.15, 0.14);            // gastric
   d += 0.016 * gauss(ax, 0.1) * gauss(z + 0.13, 0.13);            // cardiac
   d += 0.014 * gauss(ax - 0.29, 0.1) * gauss(z + 0.02, 0.2);      // branchial
-  // orbit rims
+  // orbital groove (eyestalk stowage) + raised lip, socket ring at the inner end
+  const inO = smooth(ORB.x0 - 0.03, ORB.x0 + 0.02, ax) * smooth(ORB.x1 + 0.06, ORB.x1, ax);
+  if (inO > 0 && z > 0) {
+    const dz = (z - orbZ(Math.min(ax, 0.49)) + 0.012) * 0.9;
+    const gv = 0.06 * gauss(dz, 0.036) * inO; g += gv * 0.9; d -= gv;
+    d += 0.014 * gauss(Math.abs(dz) - 0.06, 0.016) * inO;
+  }
   const eo = Math.hypot(ax - EYE_X, z - EYE_Z);
-  d += 0.013 * gauss(eo - 0.055, 0.018) - 0.02 * gauss(eo, 0.028);
+  d += 0.012 * gauss(eo - 0.05, 0.014) - 0.03 * gauss(eo, 0.03);
   return { d, g };
 }
 function ventralRelief(x, z) {
   const ax = Math.abs(x);
   let d = 0;
-  for (const zs of [-0.26, -0.14, -0.02, 0.12]) d -= 0.016 * gauss(z - zs, 0.012) * smooth(0.27, 0.2, ax) * smooth(0.06, 0.12, ax + (zs < -0.05 ? 0.06 : 0));
+  for (const zs of [-0.29, -0.2, -0.11, -0.02, 0.09, 0.19]) d -= 0.02 * gauss(z - zs + 0.05 * ax, 0.011) * smooth(0.27, 0.2, ax) * smooth(0.0, 0.1, ax);   // sternite sutures (4-8)
+  d -= 0.012 * gauss(ax, 0.008) * smooth(0.3, 0.15, z) * smooth(-0.36, -0.3, z);                                                                    // median sternal groove
   d -= 0.012 * gauss(ax - 0.235, 0.014) * smooth(0.32, 0.2, z) * smooth(-0.34, -0.2, z);   // sternal edge
   d -= 0.03 * smooth(0.115, 0.07, ax) * smooth(0.03, -0.02, z) * smooth(-0.36, -0.3, z);   // abdominal channel
   d -= 0.014 * gauss(ax - 0.05, 0.03) * gauss(z - 0.2, 0.06);                               // mouth field
@@ -311,7 +322,8 @@ function buildCarapace() {
       // anterolateral tooth
       const ang = Math.atan2(Math.abs(bz), Math.abs(bx));
       const tooth = 1 + 0.045 * gauss(angDiff(ang, 0.62), 0.07) * (bz > 0 ? 1 : 0);
-      const z = rho * bz * CP.b * tooth;
+      const lobe = 1 + 0.045 * gauss(angDiff(Math.atan2(s, c), PI / 2), 0.32) * (bz > 0 ? 1 : 0);
+      const z = rho * bz * CP.b * tooth * lobe;
       const x = rho * bx * aAt(z) * tooth;
       pos.push(x, yv, z);
     }
@@ -364,9 +376,10 @@ function buildCarapace() {
       d += (fbm(v.x * 34, v.y * 34, v.z * 34, 3) - 0.5) * 0.016 * (1 - 0.5 * rim);
       d -= 0.012 * smooth(0.74, 0.88, fbm(v.x * 60 + 7, v.y * 60, v.z * 60, 2));   // mud-filled pits
       d += (fbm(v.x * 11 + 4, v.y * 11, v.z * 11, 3) - 0.5) * 0.02;
-      d *= 1 - 0.7 * smooth(0.06, 0.0, v.y) * 0;
+      d -= 0.012 * gauss(v.y - 0.03, 0.02) * smooth(0.34, 0.2, v.z);   // thoraco-branchial sulcus along the flank
     } else {
-      d = ventralRelief(v.x, v.z) + (fbm(v.x * 30, v.y * 30, v.z * 30, 3) - 0.5) * 0.008;
+      const vr = ventralRelief(v.x, v.z); grooveAt[i] = Math.max(0, -vr) * 0.8;
+      d = vr + (fbm(v.x * 30, v.y * 30, v.z * 30, 3) - 0.5) * 0.008;
     }
     v.addScaledVector(nn, d); P.setXYZ(i, v.x, v.y, v.z);
   }
@@ -387,6 +400,15 @@ function buildCarapace() {
     const bm = clamp(lobe * 1.5 - 0.2 + (bd - 0.5) * 0.9) * smooth(-0.1, 0.07, v.y) * smooth(0.04, 0.09, ax);
     const bcol = PAL.blue.clone().lerp(PAL.blueHi, smooth(0.6, 1.0, bm) * 0.25).lerp(PAL.blueDeep, smooth(0.5, 0.0, bm) * 0.9 + Math.min(1, grooveAt[i] * 40) * 0.5);
     cc.lerp(bcol, smooth(0.08, 0.5, bm));
+    // chromatophore speckle: fine pale and dark dots
+    const dots = fbm(v.x * 110 + 3, v.y * 110, v.z * 110, 1);
+    cc.lerp(C('#cbc3aa'), smooth(0.8, 0.9, dots) * 0.4 * smooth(-0.05, 0.1, v.y));
+    cc.multiplyScalar(1 - 0.25 * smooth(0.12, 0.05, dots));
+    // face / pterygostomial region tinted blue-white, orbital groove dark
+    const face = smooth(0.2, 0.32, v.z) * smooth(0.06, -0.04, v.y) * smooth(0.02, 0.14, ax) * smooth(0.46, 0.34, ax);
+    cc.lerp(PAL.blue.clone().lerp(PAL.claw, 0.35), face * 0.55 * smooth(0.35, 0.65, bd + 0.15));
+    const inGroove = Math.min(1, grooveAt[i] * 16) * smooth(ORB.x0 - 0.03, ORB.x0 + 0.02, ax) * smooth(0.28, 0.36, v.z);
+    cc.lerp(PAL.shellDark.clone().multiplyScalar(0.8), inGroove * 0.85);
     // grooves darker
     cc.multiplyScalar(1 - Math.min(0.45, grooveAt[i] * 22));
     // underside
@@ -424,10 +446,13 @@ function legSegment(kind, s, mats, tone = 0) {
   const geos = [];
   let L, prof, opt = {};
   if (kind === 'coxa') {
-    L = 0.13 * s; prof = (t) => ({ w: s * (0.06 - 0.014 * t), h: s * (0.065 - 0.014 * t), n: 2 });
+    L = 0.09 * s; prof = (t) => ({ w: s * (0.06 - 0.014 * t), h: s * (0.065 - 0.014 * t), n: 2 });
     opt = { cap0: 0.06, cap1: 0.05, neck1: 0.7, nR: 20, nT: 18 };
+  } else if (kind === 'basis') {   // basis + ischium (fused in brachyurans)
+    L = 0.11 * s; prof = (t) => ({ w: s * (0.042 + 0.006 * Math.sin(PI * t)), h: s * (0.05 + 0.008 * Math.sin(PI * t)), n: 2.2 });
+    opt = { cap0: 0.05, cap1: 0.05, neck1: 0.7, nR: 20, nT: 16 };
   } else if (kind === 'merus') {
-    L = 0.46 * s;
+    L = 0.43 * s;
     prof = (t) => ({ w: s * (0.024 + 0.016 * bump(t, 0.5, 0.42)), h: s * (0.036 + 0.036 * bump(t, 0.45, 0.4) - 0.005 * t), n: 2.6, oy: s * 0.006 * Math.sin(PI * t) });
     opt = { cap0: 0.07, cap1: 0.06, ridge: 0.28, ridgeB: 0.14, ridgeW: 0.42, nR: 28, nT: 56 };
   } else if (kind === 'carpus') {
@@ -483,8 +508,12 @@ function chelaGeom(kind, s, mats) {
   const geos = [];
   let L, T;
   if (kind === 'coxa') {
-    L = 0.17 * s; T = makeTube({ L, prof: (t) => ({ w: s * 0.08, h: s * 0.085, n: 2 }), colorFn: legColor(PAL.legMid), cap0: 0.06, cap1: 0.05, neck1: 0.72, nR: 20, nT: 16, ext: 0.03 });
+    L = 0.1 * s; T = makeTube({ L, prof: (t) => ({ w: s * 0.08, h: s * 0.085, n: 2 }), colorFn: legColor(PAL.legMid), cap0: 0.06, cap1: 0.05, neck1: 0.72, nR: 20, nT: 16, ext: 0.03 });
     geos.push(T.geo); geos.push(endBall(T, L, (t) => ({ w: s * 0.08, h: s * 0.085 }), 0.72));
+  } else if (kind === 'ischium') {
+    L = 0.12 * s; T = makeTube({ L, prof: (t) => ({ w: s * (0.075 + 0.01 * Math.sin(PI * t)), h: s * (0.08 + 0.012 * Math.sin(PI * t)), n: 2.1 }), colorFn: legColor(PAL.legMid), cap0: 0.05, cap1: 0.05, neck1: 0.7, nR: 22, nT: 14, ext: 0.03 });
+    geos.push(T.geo); geos.push(endBall(T, L, (t) => ({ w: s * 0.075, h: s * 0.08 }), 0.7));
+    for (let i = 0; i < 3; i++) { const sp = T.sample(L * (0.3 + 0.25 * i), 3 * PI / 2 + 0.2); geos.push(makeSpike(sp.p, sp.n, 0.035 * s, 0.005 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3)); }
   } else if (kind === 'merus') {
     L = 0.42 * s;
     T = makeTube({ L, prof: (t) => ({ w: s * (0.055 + 0.04 * bump(t, 0.6, 0.4)), h: s * (0.06 + 0.055 * bump(t, 0.65, 0.4)), n: 2.4 }), colorFn: legColor(PAL.clawDarkMerus.clone().lerp(PAL.legMid, 0.4), 0.1), cap0: 0.07, cap1: 0.06, ridgeB: 0.3, ridge: 0.15, ridgeW: 0.5, nR: 28, nT: 40, ext: 0.03 });
@@ -566,17 +595,19 @@ export function buildCrab(mats) {
   for (let i = 0; i < 4; i++) { const x = (rnd() - 0.5) * 0.6, z = -0.05 - rnd() * 0.25; grains.push(makeBlob(new V3(x, topY(x, z), z), 0.026 + rnd() * 0.018, new V3(1.3, 0.45, 1), PAL.mud.clone().multiplyScalar(0.55), 2)); }
   const mud = new THREE.Mesh(merge(grains), mats.mud); mud.name = 'MudGrains_mesh'; body.add(mud);
 
-  // ---- eyestalks ----
+  // ---- eyestalks (rest = erect as photographed; stow = lying in the orbital groove) ----
   for (const side of [R, Lf]) {
     const sx = side === R ? 1 : -1;
-    const eye = joint(`${side}_eyestalk`, body, new V3(EYE_X, topY(EYE_X, EYE_Z) - 0.045, EYE_Z), [0, 0, 74], { hinge: 'z', min: -15, max: 100, label: 'eyestalk' }, sx < 0);
-    const Ls = 0.46;
+    const zA = orbZ(ORB.x0) - ORB.sink, zB = orbZ(ORB.x1) - ORB.sink, yP = topY(ORB.x0, orbZ(ORB.x0)) - ORB.sink;
+    const Ls = 0.37, stowYaw = Math.atan2(zA - zB, ORB.x1 - ORB.x0) / D2R;
+    const eye = joint(`${side}_eyestalk`, body, new V3(ORB.x0, yP, zA), [0, 0, 74], { hinge: 'z', min: -15, max: 100, label: 'eyestalk', stow: [0, stowYaw, -3] }, sx < 0);
     const T = makeTube({
       L: Ls, prof: (t) => ({ w: 0.03 - 0.012 * t + 0.008 * bump(t, 0, 0.2), h: 0.03 - 0.012 * t + 0.008 * bump(t, 0, 0.2), n: 2, oz: 0.004 * Math.sin(PI * t) }),
-      colorFn: (t, a, p, o) => { o.copy(PAL.legMid).lerp(PAL.legPale, 0.3).lerp(PAL.legDark, smooth(0.75, 1, t) * 0.7); o.multiplyScalar(0.85 + 0.3 * fbm(p.x * 25, p.y * 25, p.z * 25, 2)); },
+      colorFn: (t, a, p, o) => { o.copy(PAL.legMid).lerp(PAL.legPale, 0.3).lerp(PAL.legDark, smooth(0.75, 1, t) * 0.7); o.lerp(PAL.blue, 0.35 * smooth(0.6, 0.0, t) * (0.5 + 0.5 * Math.sin(a))); o.multiplyScalar(0.85 + 0.3 * fbm(p.x * 25, p.y * 25, p.z * 25, 2)); },
       cap0: 0.05, cap1: 0.05, neck0: 0.8, neck1: 0.9, nR: 18, nT: 30, ext: 0.05,
     });
-    const stalk = new THREE.Mesh(T.geo, mats.leg); stalk.name = `${side}_eyestalk_mesh`; eye.add(stalk);
+    const gs = [T.geo, makeBall(new V3(0, 0, 0), 0.036, PAL.membrane, new V3(0.8, 1, 1))];   // basal collar seated in the socket
+    const stalk = new THREE.Mesh(merge(gs), mats.leg); stalk.name = `${side}_eyestalk_mesh`; eye.add(stalk);
     const cornea = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), mats.cornea); cornea.name = `${side}_cornea_mesh`;
     cornea.scale.set(0.043, 0.036, 0.036); cornea.position.set(Ls + 0.02, 0.0, 0.006); eye.add(cornea);
     reg(eye);
@@ -588,7 +619,7 @@ export function buildCrab(mats) {
     const mx = joint(`${side}_maxilliped3`, body, new V3(0.035, botY(0.035, 0.05) - 0.02, 0.06), [0, -84, 0], { hinge: 'z', min: -10, max: 60, label: 'maxilliped3' }, sx < 0);
     const T = makeTube({
       L: 0.27, prof: (t) => ({ w: 0.072 * (0.8 + 0.2 * Math.sin(PI * clamp(t * 1.2))) * (1 - 0.25 * t), h: 0.018, n: 2.6, oy: -0.004 * t }),
-      colorFn: (t, a, p, o) => { o.copy(PAL.shellDark).lerp(PAL.legMid, 0.4 + 0.3 * fbm(p.x * 20, p.y * 20, p.z * 20, 2)); },
+      colorFn: (t, a, p, o) => { o.copy(PAL.shellDark).lerp(PAL.legMid, 0.4 + 0.3 * fbm(p.x * 20, p.y * 20, p.z * 20, 2)); o.lerp(PAL.blue.clone().lerp(PAL.claw, 0.4), smooth(0.3, 0.75, t) * 0.7); },
       cap0: 0.04, cap1: 0.08, neck0: 0.8, neck1: 0.5, nR: 20, nT: 24, ext: 0.03,
     });
     const gs = [T.geo];
@@ -600,18 +631,23 @@ export function buildCrab(mats) {
   // ---- abdomen (male: narrow, segmented) ----
   {
     const ab = joint('Abdomen', body, new V3(0, botY(0, -0.33) - 0.004, -0.345), [0, -90, 0], { hinge: 'z', min: -5, max: 75, label: 'abdomen' });
-    const Lz = 0.4, segs = [0.05, 0.14, 0.22, 0.35, 0.5, 0.66, 0.84];
+    const Lz = 0.4, segs = [[0.06, 0.5], [0.15, 0.55], [0.24, 0.25], [0.35, 0.22], [0.5, 0.3], [0.66, 0.5], [0.84, 0.55]];   // [suture position, depth]: somites 1-2, 2-3, partly fused 3-5, 5-6, 6-telson
     const T = makeTube({
       L: Lz, n: 3.0,
       prof: (t) => {
         let w = t < 0.25 ? mix(0.2, 0.1, smooth(0, 0.25, t)) : t < 0.7 ? mix(0.1, 0.075, (t - 0.25) / 0.45) : 0.075 * Math.pow(Math.max(0, 1 - (t - 0.7) / 0.3), 0.55) + 0.01;
-        let h = 0.016;
-        for (const s of segs) h *= 1 - 0.3 * gauss(t - s, 0.012);
+        let h = 0.018;
+        for (const [st, dp] of segs) { h *= 1 - dp * 0.55 * gauss(t - st, 0.013); w *= 1 - dp * 0.08 * gauss(t - st, 0.012); }
         const z = -0.345 + t * Lz;
-        return { w, h, oy: botY(0, z) - 0.345 * 0 - 0.006 - botY(0, -0.345) + 0.0 };
+        return { w, h, oy: botY(0, z) - 0.006 - botY(0, -0.345) };
       },
-      colorFn: (t, a, p, o) => { o.copy(PAL.abd).multiplyScalar(0.85 + 0.25 * fbm(p.x * 20, p.y * 20, p.z * 20, 2)); o.lerp(PAL.shellDark, 0.25 * gauss(t - 1, 0.15)); },
-      cap0: 0.04, cap1: 0.1, neck0: 0.85, neck1: 0.3, nR: 24, nT: 70, ext: 0.0, ridgeB: 0.25, uvScale: 0.5,
+      colorFn: (t, a, p, o) => {
+        o.copy(PAL.abd).multiplyScalar(0.85 + 0.25 * fbm(p.x * 20, p.y * 20, p.z * 20, 2));
+        let sut = 0; for (const [st, dp] of segs) sut = Math.max(sut, dp * gauss(t - st, 0.011));
+        o.lerp(PAL.shellDark, sut * 0.8).lerp(PAL.blue, 0.12 * (0.5 + 0.5 * Math.cos(a)));
+        o.lerp(PAL.shellDark, 0.3 * gauss(t - 1, 0.12));
+      },
+      cap0: 0.04, cap1: 0.1, neck0: 0.85, neck1: 0.3, nR: 28, nT: 110, ext: 0.0, ridgeB: 0.25, uvScale: 0.5,
     });
     const m = new THREE.Mesh(T.geo, mats.carapace); m.name = 'Abdomen_mesh'; ab.add(m);
     reg(ab);
@@ -619,12 +655,12 @@ export function buildCrab(mats) {
 
   // ---- chelipeds ----
   const chelaSpec = [
-    { n: 'coxa', s: 1 }, { n: 'merus', s: 1 }, { n: 'carpus', s: 1 }, { n: 'propodus', s: 1 }, { n: 'dactylus', s: 1 },
+    { n: 'coxa', s: 1 }, { n: 'ischium', s: 1 }, { n: 'merus', s: 1 }, { n: 'carpus', s: 1 }, { n: 'propodus', s: 1 }, { n: 'dactylus', s: 1 },
   ];
   for (const side of [R, Lf]) {
     const sx = side === R ? 1 : -1;
     let parent = body, off = new V3(0.27, -0.075, 0.24);
-    const rest = { coxa: [0, -40, -6], merus: [0, -8, 14], carpus: [0, -78, -6], propodus: [0, 0, -38], dactylus: [0, 0, 0] };
+    const rest = { coxa: [0, -40, -6], ischium: [0, 0, 0], merus: [0, -8, 14], carpus: [0, -78, -6], propodus: [0, 0, -38], dactylus: [0, 0, 0] };
     let prevL = 0;
     for (const cs of chelaSpec) {
       const seg = chelaGeom(cs.n, cs.s, mats);
@@ -650,13 +686,14 @@ export function buildCrab(mats) {
       const pname = `${side}_leg${k + 2}`;
       const rest = {
         coxa: [0, -lg.yaw, -8],
+        basis: [0, 0, 0],
         merus: [0, 0, 12],
         carpus: [0, 0, -44 + k * 2],
         propodus: [0, 0, -10],
         dactylus: [0, 0, -10],
       };
       let parent = body, prevL = 0;
-      for (const kind of ['coxa', 'merus', 'carpus', 'propodus', 'dactylus']) {
+      for (const kind of ['coxa', 'basis', 'merus', 'carpus', 'propodus', 'dactylus']) {
         const seg = legSegment(kind, lg.s, mats, kind === 'carpus' ? 1 : 0);
         const pos = parent === body ? new V3(xs, botY(xs, lg.z) + 0.085, lg.z) : new V3(prevL, 0, 0);
         const j = joint(`${pname}_${kind}`, parent, pos, rest[kind], { hinge: 'z', min: -100, max: 100, label: `leg ${k + 2} ${kind}` }, parent === body && sx < 0);

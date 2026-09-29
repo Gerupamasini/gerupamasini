@@ -17,6 +17,7 @@ export function makeClips(crab) {
     reset();
     return new THREE.AnimationClip(name, dur, Object.entries(vals).map(([n, v]) => new THREE.QuaternionKeyframeTrack(`${n}.quaternion`, times, v)));
   };
+  const stow = (k) => { for (const j of JOINTS) if (j.userData.stow) j.rotation.set(...j.userData.rest.map((r, i) => r + (j.userData.stow[i] * D - r) * k)); };
   const S = (p) => Math.sin(p * 2 * Math.PI);
   return [
     clipFrom('Wave', 3.2, 48, (p) => {
@@ -37,6 +38,7 @@ export function makeClips(crab) {
       });
       for (const s of ['R', 'L']) { add(`${s}_cheliped_merus`, 'z', 3 * S(p * 2)); add(`${s}_cheliped_dactylus`, 'z', 4 * S(p * 2)); }
     }),
+    clipFrom('EyeStow', 3, 48, (p) => stow(Math.min(1, Math.max(0, 1.4 - Math.abs(p - 0.5) * 4)))),
     clipFrom('Idle', 4, 48, (p) => {
       for (const s of ['R', 'L']) {
         add(`${s}_eyestalk`, 'z', 5 * S(p) + (p > 0.7 && p < 0.85 ? -60 * Math.sin((p - 0.7) / 0.15 * Math.PI) : 0));
