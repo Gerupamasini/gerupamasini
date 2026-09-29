@@ -229,7 +229,7 @@ function clawPoses(species, male) {
 }
 // ヤマトオサガニの雄（生体写真）：大きな鉗を顔の前に斜めに構え、指先を前下方へ
 const CLAW_POSES_YM2 = {
-  rest: { yaw0: 0.64, p0: 0.05, f1: 1.45, p1: 0.0, px: -1, py: -0.2, pz: 0.12, bx: 0.0, by: -1, bz: 0.05, open: 0.08 },
+  rest: { yaw0: 0.6, p0: 0.22, f1: 1.45, p1: 0.0, px: -1, py: -0.15, pz: 0.12, bx: 0.0, by: -1, bz: 0.45, open: 0.1 },
   reach: { yaw0: 0.65, p0: -0.1, f1: 1.3, p1: -0.05, px: -0.9, py: -0.4, pz: 0.25, bx: 0.0, by: -1, bz: 0.1, open: 0.35 },
   mouth: { yaw0: 0.8, p0: 0.2, f1: 1.7, p1: 0.1, px: -1, py: 0.05, pz: 0.2, bx: 0.0, by: -1, bz: -0.05, open: 0.0 },
   waveUp: { yaw0: 0.4, p0: 0.2, f1: 0.5, p1: 1.1, px: -0.1, py: 0.75, pz: 0.65, bx: -1, by: 0.1, bz: 0.2, open: 0.3 },
@@ -1220,9 +1220,9 @@ export class Ecosystem {
         stalk: spk(0.2, [0x8a866a, 0xa6a080, 0x46422e, 0xbeb89e], [220, 0.3, 0, 0], { clearcoat: 0.7, clearcoatRoughness: 0.15 }),
         // 雄の掌：灰緑色（写真4）と淡黄色（写真3）の個体差
         clawA: chela(0.4, [0xcfccba, 0xc89450, 0x7a3e18], [0.56, 0, 0, 0]),
-        dactA: chela(0.5, [0xd0c0a0, 0xc89048, 0x7a3e18], [0.56, 0, 1, 0]),
+        dactA: chela(0.5, [0xc4a070, 0xc89048, 0x7a3e18], [0.56, 0, 1, 0]),
         clawB: chela(0.41, [0xe2d8bc, 0xd49a50, 0x7e4018], [0.56, 0, 0, 0]),
-        dactB: chela(0.51, [0xdcc8a4, 0xd09448, 0x7e4018], [0.56, 0, 1, 0]),
+        dactB: chela(0.51, [0xcca878, 0xd09448, 0x7e4018], [0.56, 0, 1, 0]),
         clawF: chela(0.45, [0xa89c74, 0x9a6a34, 0x4a2a14], [0.38, 0, 0, 0]),
         dactF: chela(0.55, [0xa07844, 0x9a6a34, 0x4a2a14], [0.38, 0, 1, 0]),
         mouth: organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.2, colors: [0xb4b4ac, 0xa2a29a, 0xc6c6be], P: [1, 0, 0, 0], roughness: 0.22, clearcoat: 1.0, clearcoatRoughness: 0.08 }),
