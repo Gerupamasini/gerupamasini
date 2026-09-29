@@ -72,7 +72,7 @@ export function makeTextures() {
     const dx = (H(x + 1, y) - H(x - 1, y)) * 3.4, dy = (H(x, y + 1) - H(x, y - 1)) * 3.4;
     const l = Math.hypot(dx, dy, 1);
     iN.data[i] = (-dx / l * 0.5 + 0.5) * 255; iN.data[i + 1] = (dy / l * 0.5 + 0.5) * 255; iN.data[i + 2] = (1 / l * 0.5 + 0.5) * 255; iN.data[i + 3] = 255;
-    iO.data[i] = 255; iO.data[i + 1] = clamp(0.62 + (0.5 - hv) * 0.6 + (hash3(x, y, 4) - 0.5) * 0.1) * 255; iO.data[i + 2] = 0; iO.data[i + 3] = 255;
+    iO.data[i] = 255; iO.data[i + 1] = clamp(0.8 + (0.5 - hv) * 0.5 + (hash3(x, y, 4) - 0.5) * 0.1) * 255; iO.data[i + 2] = 0; iO.data[i + 3] = 255;
   }
   cA.getContext('2d').putImageData(iA, 0, 0); cN.getContext('2d').putImageData(iN, 0, 0); cO.getContext('2d').putImageData(iO, 0, 0);
   const T = (cv, srgb) => {
@@ -506,15 +506,15 @@ function legSegment(kind, s, mats, tone = 0) {
   } else if (kind === 'carpus') {
     for (let i = 0; i < 2; i++) { const sp = T.sample(L * 0.92, PI / 2 + (i ? 0.5 : -0.5)); geos.push(makeSpike(sp.p, sp.n.clone().add(new V3(0.3, 0, 0)), 0.045 * s, 0.009 * s, new V3(0, 0, 0), PAL.legMid, 4, 3)); }
   } else if (kind === 'propodus') {
-    for (let i = 0; i < 16; i++) {
-      const t = 0.2 + 0.78 * (i / 15), sp = T.sample(L * t, 3 * PI / 2 - 0.35 + (i % 2) * 0.7);
-      geos.push(makeSpike(sp.p, sp.n.clone().add(new V3(0.35, 0, 0)), (0.05 + 0.03 * rnd()) * s, 0.0055 * s, new V3(0.3, -0.2, 0), PAL.seta, 4, 3));
+    for (let i = 0; i < 10; i++) {
+      const t = 0.2 + 0.78 * (i / 9), sp = T.sample(L * t, 3 * PI / 2 - 0.35 + (i % 2) * 0.7);
+      geos.push(makeSpike(sp.p, sp.n.clone().add(new V3(0.35, 0, 0)), (0.035 + 0.025 * rnd()) * s, 0.0035 * s, new V3(0.3, -0.2, 0), PAL.seta, 4, 3));
     }
     for (let i = 0; i < 4; i++) { const t = 0.35 + 0.18 * i, sp = T.sample(L * t, PI / 2 + 0.25); geos.push(makeSpike(sp.p, sp.n, 0.09 * s, 0.006 * s, new V3(0.5, 0, 0), PAL.seta, 4, 3)); }
   } else if (kind === 'dactylus') {
-    for (let i = 0; i < 12; i++) {
-      const t = 0.08 + 0.55 * (i / 11), sp = T.sample(L * t, PI / 2 + (i % 2 ? 0.4 : -0.4));
-      geos.push(makeSpike(sp.p, sp.n, 0.05 * s, 0.005 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3));
+    for (let i = 0; i < 8; i++) {
+      const t = 0.08 + 0.55 * (i / 7), sp = T.sample(L * t, PI / 2 + (i % 2 ? 0.4 : -0.4));
+      geos.push(makeSpike(sp.p, sp.n, 0.035 * s, 0.0032 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3));
     }
   }
   const m = new THREE.Mesh(merge(geos), mats.leg);
@@ -683,7 +683,7 @@ export function buildCrab(mats) {
 
   // ---- chelipeds ----
   const chelaSpec = [
-    { n: 'coxa', s: 1 }, { n: 'ischium', s: 1 }, { n: 'merus', s: 1 }, { n: 'carpus', s: 1 }, { n: 'propodus', s: 1 }, { n: 'dactylus', s: 1 },
+    { n: 'coxa', s: 1 }, { n: 'ischium', s: 1 }, { n: 'merus', s: 1 }, { n: 'carpus', s: 0.95 }, { n: 'propodus', s: 0.84 }, { n: 'dactylus', s: 0.84 },
   ];
   for (const side of [R, Lf]) {
     const sx = side === R ? 1 : -1;
