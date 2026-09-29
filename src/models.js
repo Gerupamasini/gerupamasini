@@ -78,14 +78,14 @@ export function bladeGeo(len, w1, w2, th, opts = {}) {
       const r = Math.pow(Math.pow(Math.abs(z) / hw, n) + Math.pow(Math.abs(yc) / ty, n), 1 / n);
       let d = (r - 1) * Math.min(hw, ty);
       // 節の両端は丸く切る
-      d = smax(d, Math.max(x0 - x, x - x1), ty * (x > len * 0.5 ? 0.5 : 0.9));
+      d = smax(d, Math.max(x0 - x, x - x1), ty * (x > len * 0.5 ? 0.3 : 0.7));
       // 背面中央のゆるい縦溝
       d += Math.exp(-Math.pow(z / (hw * 0.18), 2)) * ty * 0.06 * (yc > 0 ? 1 : 0) * Math.sin(tc * Math.PI);
       if (serr) {
         // 前縁・後縁の小鋸歯
         const tooth = Math.pow(Math.max(0, Math.sin(tc * serr * Math.PI * 2)), 5);
         const edge = Math.max(0, Math.abs(z) / hw - 0.75) * 4;
-        d -= tooth * Math.min(1, edge) * hw * 0.06 * (tc > 0.12 && tc < 0.93 ? 1 : 0);
+        d -= tooth * Math.min(1, edge) * hw * 0.11 * (tc > 0.12 && tc < 0.93 ? 1 : 0);
       }
       if (opts.spine) {
         // 長節前縁の先端近くにある鋭い棘
@@ -234,8 +234,8 @@ export function bristleGeo(len, r, count, hairLen, seed = 1, depress = false, r2
       }
       const L = hairLen * (0.55 + rnd() * 0.7);
       tip.copy(b).addScaledVector(dir, L);
-      u.crossVectors(dir, up).normalize().multiplyScalar(r * 0.05);
-      v.crossVectors(dir, u).normalize().multiplyScalar(r * 0.05);
+      u.crossVectors(dir, up).normalize().multiplyScalar(r * (r2 !== r ? 0.1 : 0.05));
+      v.crossVectors(dir, u).normalize().multiplyScalar(r * (r2 !== r ? 0.1 : 0.05));
       const p0 = b.clone().add(u), p1 = b.clone().sub(u).add(v), p2 = b.clone().sub(u).sub(v);
       for (const [A, B] of [[p0, p1], [p1, p2], [p2, p0]]) pos.push(A.x, A.y, A.z, B.x, B.y, B.z, tip.x, tip.y, tip.z);
     }
@@ -497,11 +497,11 @@ export const CRAB_SPECS = {
     // 歩脚は長く、長節は幅広い板状（標本写真の第3胸脚で長節長 ≈ 甲幅×0.55、幅 ≈ 長さ×0.27）。
     // 休息時は体を泥につけるほど低くし、脚を真横へ大きく広げる（野外写真で脚の開帳 ≈ 甲幅×2.7）。
     legs: {
-      cox: 0.06, bi: 0.08, merus: 0.58, carpus: 0.2, prop: 0.28, dact: 0.25,
-      r: 0.062, merusR: 1.45, merusFlat: 0.55, flat: 0.6, k: [0.84, 1.0, 0.97, 0.76], spread: 0.36, curve: 0.08,
+      cox: 0.06, bi: 0.08, merus: 0.47, carpus: 0.17, prop: 0.24, dact: 0.21,
+      r: 0.062, merusR: 1.45, merusFlat: 0.55, flat: 0.6, k: [0.86, 1.0, 0.98, 0.8], spread: 0.36, curve: 0.12,
       hipX: [0.8, 0.8, 0.75, 0.64], hipY: 0.5, hipZ: [0.5, 0.18, -0.16, -0.5], coxR: 1.2,
-      setae: [0.03, 0.035, 0.045, 0.055], serrate: 9, reach: 0.9,
-      blade: { bi: [0.05, 0.07], merus: [0.088, 0.08], carpus: [0.062, 0.056], prop: [0.05, 0.038], dact: [0.036, 0.003], th: 0.42 },
+      setae: [0.018, 0.02, 0.022, 0.024], serrate: 11, reach: 0.78,
+      blade: { bi: [0.055, 0.08], merus: [0.108, 0.095], carpus: [0.07, 0.064], prop: [0.058, 0.044], dact: [0.04, 0.004], th: 0.4, neck: 0.86 },
     },
     // 鉗は顔の前に垂らして構え、指先を泥につける。雄は大きく、雌は小さい。
     // 前節高 PH ≈ 前節長 PL × 0.27（美濃・伊谷 2024 の計測図）
@@ -546,9 +546,9 @@ export function crabKit(name, q = 1) {
       coxa: segGeo(L.cox, L.r * (L.coxR || 1.55), L.r * (L.coxR || 1.55) * 0.9, 0.8, { q }),
       ...(L.blade ? {
         bi: bladeGeo(L.bi, ...L.blade.bi, L.blade.th * 1.2, { q, neck: 0.8 }),
-        merus: bladeGeo(L.merus, ...L.blade.merus, L.blade.th, { q, serrate: L.serrate, spine: 1 }),
-        carpus: bladeGeo(L.carpus, ...L.blade.carpus, L.blade.th * 1.05, { q }),
-        prop: bladeGeo(L.prop, ...L.blade.prop, L.blade.th * 1.05, { q }),
+        merus: bladeGeo(L.merus, ...L.blade.merus, L.blade.th, { q, serrate: L.serrate, spine: 1, neck: L.blade.neck }),
+        carpus: bladeGeo(L.carpus, ...L.blade.carpus, L.blade.th * 1.05, { q, neck: L.blade.neck, serrate: 4 }),
+        prop: bladeGeo(L.prop, ...L.blade.prop, L.blade.th * 1.05, { q, neck: L.blade.neck, serrate: 6 }),
         dact: bladeGeo(L.dact, ...L.blade.dact, L.blade.th * 1.1, { q, tip: 1, curve: L.curve, neck: 0.8 }),
       } : {
         bi: segGeo(L.bi, L.r * 1.35, mr * 0.95, 0.6, { q, depress: true }),
@@ -569,10 +569,10 @@ export function crabKit(name, q = 1) {
       abdM: abdomenGeo(S.w, S.l, false, q),
       abdF: abdomenGeo(S.w, S.l, true, q),
       hair: L.setae ? L.setae.map((sl, i) => (L.blade ? {
-        M: bristleGeo(L.merus, L.blade.merus[0], 34, sl * 0.6, 3 + i, true, L.blade.merus[1]),
-        C: bristleGeo(L.carpus, L.blade.carpus[0], 22, sl * 1.1, 5 + i, true, L.blade.carpus[1]),
-        P: bristleGeo(L.prop, L.blade.prop[0], 44, sl * 1.3, 7 + i, true, L.blade.prop[1]),
-        D: bristleGeo(L.dact * 0.7, L.blade.dact[0], 14, sl * 0.8, 9 + i, true, L.blade.dact[0] * 0.35),
+        M: bristleGeo(L.merus, L.blade.merus[0], 18, sl * 0.8, 3 + i, true, L.blade.merus[1]),
+        C: bristleGeo(L.carpus, L.blade.carpus[0], 10, sl * 1.2, 5 + i, true, L.blade.carpus[1]),
+        P: bristleGeo(L.prop, L.blade.prop[0], 16, sl * 1.4, 7 + i, true, L.blade.prop[1]),
+        D: bristleGeo(L.dact * 0.7, L.blade.dact[0], 8, sl * 0.9, 9 + i, true, L.blade.dact[0] * 0.35),
       } : {
         M: bristleGeo(L.merus, mr, 12, sl * 0.6, 3 + i, true),
         C: bristleGeo(L.carpus, L.r * 1.05, 10, sl, 5 + i, true),

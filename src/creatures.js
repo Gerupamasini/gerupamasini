@@ -437,7 +437,7 @@ class Crab extends Agent {
     // 体の上下動と呼吸
     const cr = this.crouch || 0;
     P.body.position.y = S.Hb * (1 - 0.5 * cr) + Math.sin(t * 2.3 + this.gait) * 0.003 + (this.moving ? Math.abs(Math.sin(this.gait * 2)) * 0.008 : 0);
-    this.rig.spread = 1 + 0.22 * cr;
+    this.rig.spread = 1 + 0.12 * cr;
     P.body.rotation.z = this.moving ? Math.sin(this.gait) * 0.03 : 0;
     if (this.sink > 0.05) this.rig.fold(clamp(this.sink * 1.5, 0, 1));
     else this.rig.update(dt, this.world, this.vel, this.moving);
@@ -1214,9 +1214,9 @@ export class Ecosystem {
       const L = CRAB_SPECS.yamato.legs;
       const chela = (seed, pal, P) => organicMaterial({ key: 'chelaY', glsl: GLSL.chelaY, seed, colors: pal, P, roughness: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.3, sss: 0xf0dcb0, sssK: 0.22 });
       this.yamaShared = {
-        leg: spk(0.5, [0x524a34, 0x6c6244, 0x2a281a, 0x9a7446], [150, 0.4, 0, 0], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.62, clearcoat: 0.3, clearcoatRoughness: 0.32 }),
-        legDact: spk(0.55, [0x524a34, 0x6c6244, 0x2a281a, 0x9a7446], [150, 0.4, 1, L.dact], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.62, clearcoat: 0.3, clearcoatRoughness: 0.32 }),
-        arm: spk(0.9, [0x5a5638, 0x74704a, 0x2e2c1e, 0xa8a890], [120, 1.0, 0, 0]),
+        leg: spk(0.5, [0x5a4632, 0x74603e, 0x2e2418, 0xa0703c], [150, 0.4, 0, 0], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.25 }),
+        legDact: spk(0.55, [0x7a5432, 0x9a6c3a, 0x3a2616, 0xc08a48], [150, 0.4, 1, L.dact], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.5, clearcoat: 0.45, clearcoatRoughness: 0.22 }),
+        arm: spk(0.9, [0x4a3a2a, 0x604c36, 0x241a12, 0xa89070], [120, 0.6, 0, 0]),
         stalk: spk(0.2, [0x8a866a, 0xa6a080, 0x46422e, 0xbeb89e], [220, 0.3, 0, 0], { clearcoat: 0.7, clearcoatRoughness: 0.15 }),
         // 雄の掌：灰緑色（写真4）と淡黄色（写真3）の個体差
         clawA: chela(0.4, [0xdcd2b8, 0xd6ccb0, 0x5a3418], [0.56, 0, 0, 0]),
@@ -1232,7 +1232,7 @@ export class Ecosystem {
     const sh = this.yamaShared;
     const shell = organicMaterial({
       key: 'yamaShell3', glsl: GLSL.yamatoShell, seed,
-      colors: [0x57503a, 0x776e50, 0xa2966c, 0x665e4c],
+      colors: [0x5a5040, 0x786a52, 0xa89878, 0x6a5e4c],
       P: [CRAB_SPECS.yamato.l, CRAB_SPECS.yamato.w, CRAB_SPECS.yamato.h, 0],
       roughness: 0.52, clearcoat: 0.45, clearcoatRoughness: 0.28,
     });

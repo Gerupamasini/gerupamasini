@@ -239,10 +239,14 @@ export const GLSL = {
       float edge = smoothstep(0.6, 0.92, abs(n.z));
       float ventral = smoothstep(0.1, -0.6, n.y);
       col = mix(col, uC4, max(edge * 0.5, ventral * 0.65));
+      // 背面をおおう淡色の細かな顆粒（写真の脚の「ざらつき」）
+      vec3 gr = cell3(p * 320.0 + uSeed);
+      float gran = (1.0 - smoothstep(0.05, 0.22, gr.x)) * smoothstep(-0.1, 0.4, n.y);
+      col = mix(col, col * 1.55 + 0.04, gran * 0.55);
       if (uP.z > 0.5) col = mix(col, vec3(0.74, 0.6, 0.3), smoothstep(uP.w*0.5, uP.w*0.95, p.x) * 0.8);
       return col;
     }`,
-    bump: `float orgBump(vec3 p){ vec3 c = cell3(p*uP.x); return (1.0 - smoothstep(0.0, 0.4, c.x))*0.0008 + snoise3(p*vec3(40.0,90.0,90.0))*0.0008; }`,
+    bump: `float orgBump(vec3 p){ vec3 c = cell3(p*uP.x); vec3 g = cell3(p*320.0); return (1.0 - smoothstep(0.0, 0.4, c.x))*0.0008 + (1.0 - smoothstep(0.0, 0.25, g.x))*0.0009 + snoise3(p*vec3(40.0,90.0,90.0))*0.0008; }`,
   },
   // ヤマトオサガニの鉗：掌は乳白〜淡黄、指は黄〜橙で先端ほど濃い。uP.x: 前節長, uP.z: 1なら可動指
   chelaY: {
