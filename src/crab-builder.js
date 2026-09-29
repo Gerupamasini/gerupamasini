@@ -259,7 +259,7 @@ export const topY = (x, z) => CP.Ht * Math.pow(Math.cos(Math.asin(clamp(rhoOf(x,
 export const botY = (x, z) => -CP.Hb * Math.pow(Math.cos(Math.asin(clamp(rhoOf(x, z), 0, 0.9999))), CP.tb);
 function frontZ(x, r) { let lo = 0, hi = CP.b * 1.05; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (rhoOf(x, m) < r) lo = m; else hi = m; } return lo; }
 // orbital groove: runs along the front margin (rho = 0.93 contour) from the eye socket to the exorbital corner
-const ORB = { x0: 0.1, x1: 0.46, rho: 0.93, sink: 0.02 };
+const ORB = { x0: 0.1, x1: 0.46, rho: 0.86, sink: 0.012 };
 const orbZ = (x) => frontZ(x, ORB.rho);
 const EYE_X = ORB.x0, EYE_Z = orbZ(ORB.x0);
 
@@ -290,8 +290,8 @@ function dorsalRelief(x, z) {
   const inO = smooth(ORB.x0 - 0.03, ORB.x0 + 0.02, ax) * smooth(ORB.x1 + 0.06, ORB.x1, ax);
   if (inO > 0 && z > 0) {
     const dz = (z - orbZ(Math.min(ax, 0.49)) + 0.012) * 0.9;
-    const gv = 0.06 * gauss(dz, 0.036) * inO; g += gv * 0.9; d -= gv;
-    d += 0.014 * gauss(Math.abs(dz) - 0.06, 0.016) * inO;
+    const gv = 0.07 * gauss(dz, 0.05) * inO; g += gv * 0.9; d -= gv;
+    d += 0.018 * gauss(Math.abs(dz) - 0.085, 0.02) * inO;
   }
   const eo = Math.hypot(ax - EYE_X, z - EYE_Z);
   d += 0.012 * gauss(eo - 0.05, 0.014) - 0.03 * gauss(eo, 0.03);
@@ -397,9 +397,9 @@ function buildCarapace() {
     // male blue patches: two pastel lobes over the anterior branchial/hepatic regions, dark centre strip
     const bd = fbm(v.x * 10 + 9, v.y * 10, v.z * 10, 4);
     const lobe = gauss((ax - 0.25) / 1.0, 0.15) * gauss((v.z - 0.16 - 0.35 * (ax - 0.25)) / 1.0, 0.17);
-    const bm = clamp(lobe * 1.5 - 0.2 + (bd - 0.5) * 0.9) * smooth(-0.1, 0.07, v.y) * smooth(0.04, 0.09, ax);
+    const bm = clamp(lobe * 1.4 - 0.15 + (bd - 0.5) * 1.3) * smooth(-0.1, 0.07, v.y) * smooth(0.04, 0.09, ax);
     const bcol = PAL.blue.clone().lerp(PAL.blueHi, smooth(0.6, 1.0, bm) * 0.25).lerp(PAL.blueDeep, smooth(0.5, 0.0, bm) * 0.9 + Math.min(1, grooveAt[i] * 40) * 0.5);
-    cc.lerp(bcol, smooth(0.08, 0.5, bm));
+    cc.lerp(bcol, smooth(0.0, 0.85, bm) * 0.92);
     // chromatophore speckle: fine pale and dark dots
     const dots = fbm(v.x * 110 + 3, v.y * 110, v.z * 110, 1);
     cc.lerp(C('#cbc3aa'), smooth(0.8, 0.9, dots) * 0.4 * smooth(-0.05, 0.1, v.y));
@@ -414,7 +414,7 @@ function buildCarapace() {
     // underside
     if (v.y < 0) {
       const u = smooth(0.0, -0.06, v.y);
-      const ster = smooth(0.26, 0.2, ax) * smooth(-0.36, -0.28, v.z) * smooth(0.34, 0.26, v.z);
+      const ster = smooth(0.3, 0.17, ax) * smooth(-0.38, -0.26, v.z) * smooth(0.36, 0.24, v.z);
       const under = PAL.sternum.clone().multiplyScalar(0.8 + 0.3 * m2).lerp(PAL.shellDark, 0.15 * smooth(0.5, 0.8, m1));
       cc.lerp(PAL.shell.clone().multiplyScalar(0.7), u * 0.6);
       cc.lerp(under, ster * u);
@@ -644,7 +644,7 @@ export function buildCrab(mats) {
       colorFn: (t, a, p, o) => {
         o.copy(PAL.abd).multiplyScalar(0.85 + 0.25 * fbm(p.x * 20, p.y * 20, p.z * 20, 2));
         let sut = 0; for (const [st, dp] of segs) sut = Math.max(sut, dp * gauss(t - st, 0.011));
-        o.lerp(PAL.shellDark, sut * 0.8).lerp(PAL.blue, 0.12 * (0.5 + 0.5 * Math.cos(a)));
+        o.multiplyScalar(0.8).lerp(PAL.shellDark, sut * 1.0).lerp(PAL.blue, 0.12 * (0.5 + 0.5 * Math.cos(a)));
         o.lerp(PAL.shellDark, 0.3 * gauss(t - 1, 0.12));
       },
       cap0: 0.04, cap1: 0.1, neck0: 0.85, neck1: 0.3, nR: 28, nT: 110, ext: 0.0, ridgeB: 0.25, uvScale: 0.5,
