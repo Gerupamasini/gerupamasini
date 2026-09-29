@@ -1232,7 +1232,7 @@ export class Ecosystem {
     const sh = this.yamaShared;
     const shell = organicMaterial({
       key: 'yamaShell3', glsl: GLSL.yamatoShell, seed,
-      colors: [0x5a5040, 0x786a52, 0xa89878, 0x6a5e4c],
+      colors: [0x6e604c, 0x8a7a62, 0xb0a084, 0x7a6c58],
       P: [CRAB_SPECS.yamato.l, CRAB_SPECS.yamato.w, CRAB_SPECS.yamato.h, 0],
       roughness: 0.52, clearcoat: 0.45, clearcoatRoughness: 0.28,
     });
