@@ -41,15 +41,15 @@ function groundTextures() {
     for (let o = 0; o < 6; o++) { a += amp * pnoise(u, v, c, o); amp *= 0.55; c *= 2; }
     const grain = pnoise(u, v, 512, 9), grain2 = pnoise(u, v, 200, 4);
     const pebble = Math.pow(Math.max(0, pnoise(u, v, 40, 3) - 0.62) * 3.0, 1.2);
-    h[y * S + x] = a * 0.7 + grain * 0.09 + grain2 * 0.08 + pebble * 0.7;
+    h[y * S + x] = a * 0.7 + grain * 0.09 + grain2 * 0.08 + pebble * 0.35;
   }
   const H = (x, y) => h[((y + S) % S) * S + ((x + S) % S)];
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     const i = (y * S + x) * 4, hv = H(x, y), u = x / S, v = y / S;
-    const dx = (H(x + 1, y) - H(x - 1, y)) * 7, dy = (H(x, y + 1) - H(x, y - 1)) * 7, l = Math.hypot(dx, dy, 1);
+    const dx = (H(x + 1, y) - H(x - 1, y)) * 4, dy = (H(x, y + 1) - H(x, y - 1)) * 4, l = Math.hypot(dx, dy, 1);
     iN.data[i] = (-dx / l * 0.5 + 0.5) * 255; iN.data[i + 1] = (dy / l * 0.5 + 0.5) * 255; iN.data[i + 2] = (1 / l * 0.5 + 0.5) * 255; iN.data[i + 3] = 255;
     const wet = Math.min(1, Math.max(0, (pnoise(u, v, 6, 21) - 0.35) * 3));  // damp patches
-    const spk = hash(x, y, 5) > 0.985 ? 1 : 0;                             // glinting sand grains
+    const spk = Math.min(1, Math.max(0, pnoise(u, v, 700, 7) - 0.84) * 6);                             // glinting sand grains
     const base = 0.42 + hv * 0.5;
     const r = (base * 0.62 + 0.03) * (1 - wet * 0.35) + spk * 0.25, g = (base * 0.56 + 0.03) * (1 - wet * 0.35) + spk * 0.22, b = (base * 0.46 + 0.03) * (1 - wet * 0.3) + spk * 0.16;
     iA.data[i] = Math.pow(r, 0.9) * 255; iA.data[i + 1] = Math.pow(g, 0.9) * 255; iA.data[i + 2] = Math.pow(b, 0.9) * 255; iA.data[i + 3] = 255;

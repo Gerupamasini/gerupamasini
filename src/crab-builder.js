@@ -361,7 +361,8 @@ function buildCarapace() {
       const r = dorsalRelief(v.x, v.z); d = r.d; grooveAt[i] = r.g;
       // granulation, stronger in mid-carapace, fading toward the rim
       const rim = smooth(0.35, 0.02, v.y);
-      d += (fbm(v.x * 34, v.y * 34, v.z * 34, 3) - 0.5) * 0.011 * (1 - 0.5 * rim);
+      d += (fbm(v.x * 34, v.y * 34, v.z * 34, 3) - 0.5) * 0.016 * (1 - 0.5 * rim);
+      d -= 0.012 * smooth(0.74, 0.88, fbm(v.x * 60 + 7, v.y * 60, v.z * 60, 2));   // mud-filled pits
       d += (fbm(v.x * 11 + 4, v.y * 11, v.z * 11, 3) - 0.5) * 0.02;
       d *= 1 - 0.7 * smooth(0.06, 0.0, v.y) * 0;
     } else {
@@ -512,7 +513,7 @@ function chelaGeom(kind, s, mats) {
     geos.push(T.geo);
     for (let i = 0; i < 8; i++) {   // teeth on the fixed finger's cutting edge
       const t = F0 + 0.03 + 0.34 * (i / 7), sp = T.sample(L * t, PI / 2);
-      geos.push(makeSpike(sp.p.clone().add(new V3(0, -0.004, 0)), new V3(0.15, 1, 0), (0.024 - 0.002 * i) * s, 0.011 * s, new V3(0, 0, 0), PAL.clawTip.clone().lerp(PAL.claw, 0.55), 4, 2));
+      geos.push(makeSpike(sp.p.clone().add(new V3(0, -0.004, 0)), new V3(0.15, 1, 0), (0.04 - 0.003 * i) * s, 0.015 * s, new V3(0, 0, 0), PAL.clawTip.clone().lerp(PAL.claw, 0.4), 4, 2));
     }
     for (let i = 0; i < 9; i++) { const t = 0.15 + 0.6 * i / 8, sp = T.sample(L * t, 3 * PI / 2); geos.push(makeSpike(sp.p, sp.n, 0.045 * s, 0.005 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3)); }
     T.hinge = new V3(L * 0.58, bottom(0.58) + 2 * hh(0.58) - 0.035 * s, 0);
@@ -528,7 +529,7 @@ function chelaGeom(kind, s, mats) {
     geos.push(T.geo);
     for (let i = 0; i < 8; i++) {
       const t = 0.14 + 0.62 * (i / 7), sp = T.sample(L * t, 3 * PI / 2);
-      geos.push(makeSpike(sp.p, new V3(0.1, -1, 0), (0.026 - 0.0018 * i) * s, 0.011 * s, new V3(0, 0, 0), PAL.clawTip.clone().lerp(PAL.claw, 0.55), 4, 2));
+      geos.push(makeSpike(sp.p, new V3(0.1, -1, 0), (0.04 - 0.0028 * i) * s, 0.015 * s, new V3(0, 0, 0), PAL.clawTip.clone().lerp(PAL.claw, 0.4), 4, 2));
     }
   }
   const m = new THREE.Mesh(merge(geos), (kind === 'propodus' || kind === 'dactylus') ? mats.claw : mats.leg);

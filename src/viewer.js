@@ -107,7 +107,8 @@ const VIEWS = {
 };
 function setView(k, instant) {
   const v = VIEWS[k]; const dir = new THREE.Vector3(...v.d).normalize(), tg = new THREE.Vector3(...v.t);
-  camera.position.copy(tg).addScaledVector(dir, v.r); controls.target.copy(tg); controls.update();
+  const zoomK = camera.aspect < 1.3 ? Math.min(2.4, 1.3 / camera.aspect) : 1;
+  camera.position.copy(tg).addScaledVector(dir, v.r * zoomK); controls.target.copy(tg); controls.update();
   ground.visible = v.ground === false ? false : $('ground').checked;
 }
 function resize() {
