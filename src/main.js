@@ -109,9 +109,75 @@ const fish = { root: null, body: null, eyes: [], fins: [], originals: new Map(),
 // ---------------------------------------------------------------------------- loading
 const loader = new GLTFLoader();
 const progressEl = document.getElementById('progress');
-loader.load(MODEL_URL, (gltf) => onLoaded(gltf).catch((e) => fail(e.message || String(e))), (ev) => {
-  if (ev.total) progressEl.textContent = `モデル読み込み中… ${Math.round((ev.loaded / ev.total) * 100)}%`;
-}, (err) => fail(`モデルを読み込めません: ${err.message || err}. ローカルサーバー経由で開いてください (npm run serve)。`));
+const progressText = progressEl.querySelector('.msg');
+const progressBar = progressEl.querySelector('.bar i');
+function setProgress(text, frac) {
+  progressText.textContent = text;
+  if (frac !== undefined) progressBar.style.width = `${Math.round(frac * 100)}%`;
+}
+
+async function fetchBytes(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText} (${url.split('/').pop()})`);
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!res.body || !res.body.getReader) return new Uint8Array(await res.arrayBuffer());
+  const reader = res.body.getReader();
+  const chunks = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.length;
+    if (total) onProgress(Math.min(1, loaded / total));
+  }
+  const out = new Uint8Array(loaded);
+  let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}
+
+// A .gltf whose buffer is a base64 data: URI is repacked into an in-memory GLB, because hosts with a
+// strict Content-Security-Policy refuse fetch() of data: URIs (which GLTFLoader would otherwise do).
+function toGLB(bytes) {
+  if (bytes[0] === 0x67 && bytes[1] === 0x6c && bytes[2] === 0x54 && bytes[3] === 0x46) {
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  }
+  const json = JSON.parse(new TextDecoder().decode(bytes));
+  let bin = new Uint8Array(0);
+  const b0 = json.buffers && json.buffers[0];
+  if (b0 && typeof b0.uri === 'string' && b0.uri.startsWith('data:')) {
+    const raw = atob(b0.uri.slice(b0.uri.indexOf(',') + 1));
+    bin = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bin[i] = raw.charCodeAt(i);
+    delete b0.uri;
+  }
+  const enc = new TextEncoder().encode(JSON.stringify(json));
+  const jsonLen = Math.ceil(enc.length / 4) * 4;
+  const binLen = Math.ceil(bin.length / 4) * 4;
+  const total = 12 + 8 + jsonLen + (bin.length ? 8 + binLen : 0);
+  const out = new Uint8Array(total);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, 0x46546c67, true); dv.setUint32(4, 2, true); dv.setUint32(8, total, true);
+  dv.setUint32(12, jsonLen, true); dv.setUint32(16, 0x4e4f534a, true);
+  out.fill(0x20, 20, 20 + jsonLen);
+  out.set(enc, 20);
+  if (bin.length) {
+    dv.setUint32(20 + jsonLen, binLen, true); dv.setUint32(24 + jsonLen, 0x004e4942, true);
+    out.set(bin, 28 + jsonLen);
+  }
+  return out.buffer;
+}
+
+async function loadModel(url) {
+  const abs = new URL(url, location.href).href;
+  const bytes = await fetchBytes(abs, (f) => setProgress(`モデルを読み込み中… ${Math.round(f * 100)}%`, f * 0.85));
+  setProgress('テクスチャを展開中…', 0.9);
+  const gltf = await loader.parseAsync(toGLB(bytes), new URL('.', abs).href);
+  setProgress('シェーダーを準備中…', 0.97);
+  await onLoaded(gltf);
+}
+loadModel(MODEL_URL).catch((err) => fail(`モデルを読み込めませんでした: ${err && err.message ? err.message : err}`));
 
 async function onLoaded(gltf) {
   const parser = gltf.parser;
@@ -173,13 +239,14 @@ async function onLoaded(gltf) {
   scene.add(root);
   fish.root = root;
   applyMaterialMode();
-  setCameraPreset('whole', true);
-  progressEl.remove();
+  if (!userMovedCamera) setCameraPreset(currentPreset, true);
+  progressEl.hidden = true;
   document.body.classList.add('ready');
   window.__mahazeReady = true;
 }
 
 function applyMaterialMode() {
+  if (!fish.body) return;
   const custom = state.custom;
   fish.body.material = custom ? fish.body.userData.custom : fish.originals.get(fish.body);
   for (const e of fish.eyes) e.material = custom ? e.userData.custom : fish.originals.get(e);
@@ -191,16 +258,57 @@ function applyMaterialMode() {
 }
 
 // ---------------------------------------------------------------------------- camera presets
+// radius: half-size (m) of the part that must stay in view
 const PRESETS = {
-  whole: { target: [0, 0.0005, 0.0], pos: [0.082, 0.024, 0.036] },
-  head: { target: [0.0005, 0.0012, 0.0185], pos: [0.022, 0.011, 0.034] },
-  tail: { target: [0, 0.0003, -0.017], pos: [0.028, 0.006, -0.008] },
-  below: { target: [0, -0.001, 0.004], pos: [0.045, -0.03, 0.03] },
+  whole: { target: [0, 0.0005, 0.0], pos: [0.082, 0.024, 0.036], radius: 0.029 },
+  head: { target: [0.0005, 0.0012, 0.0185], pos: [0.022, 0.011, 0.034], radius: 0.0085 },
+  tail: { target: [0, 0.0003, -0.017], pos: [0.028, 0.006, -0.008], radius: 0.012 },
+  below: { target: [0, -0.001, 0.004], pos: [0.045, -0.03, 0.03], radius: 0.028 },
 };
 let camTween = null;
+let userMovedCamera = false;
+const initialPreset = params.get('view') || 'whole';
+controls.addEventListener('start', () => { userMovedCamera = true; camTween = null; });
+
+// the free (unobstructed) part of the canvas, in CSS px
+const view = { w: 1, h: 1, ox: 0, oy: 0 };
+function measureFreeArea() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  const panel = document.querySelector('.panel');
+  let ox = 0, oy = 0;
+  if (panel && !document.body.classList.contains('panel-hidden')) {
+    const r = panel.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) {
+      if (r.width > w * 0.6) oy = Math.min(h * 0.6, h - r.top + 8); // bottom sheet (narrow screens)
+      else if (r.left < w * 0.3) ox = Math.min(w * 0.6, r.right + 8); // side panel
+    }
+  }
+  Object.assign(view, { w, h, ox, oy });
+}
+function applyViewOffset() {
+  const { w, h, ox, oy } = view;
+  camera.aspect = (w + ox) / (h + oy);
+  if (ox || oy) camera.setViewOffset(w + ox, h + oy, 0, oy, w, h);
+  else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+// distance at which a sphere of radius r fits inside the free area
+function fitDistance(r) {
+  const { w, h, ox, oy } = view;
+  const fpx = ((h + oy) / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const half = Math.min(Math.atan(((w - ox) / 2) / fpx), Math.atan(((h - oy) / 2) / fpx));
+  return (r * 1.12) / Math.sin(half);
+}
+
+let currentPreset = initialPreset;
 function setCameraPreset(name, instant = false) {
-  const p = PRESETS[name];
-  const to = { target: new THREE.Vector3(...p.target), pos: new THREE.Vector3(...p.pos) };
+  const p = PRESETS[name] || PRESETS.whole;
+  currentPreset = PRESETS[name] ? name : 'whole';
+  userMovedCamera = false;
+  const target = new THREE.Vector3(...p.target);
+  const off = new THREE.Vector3(...p.pos).sub(target);
+  off.setLength(Math.min(controls.maxDistance, Math.max(off.length(), fitDistance(p.radius))));
+  const to = { target, pos: target.clone().add(off) };
   if (instant) {
     controls.target.copy(to.target);
     camera.position.copy(to.pos);
@@ -271,11 +379,15 @@ function resize() {
   mainRT.setSize(bw, bh);
   shared.uResolution.value.set(bw, bh);
   post.material.uniforms.uRes.value.set(bw, bh);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
+  measureFreeArea();
+  applyViewOffset();
   particles.material.uniforms.uPxScale.value = bh * camera.projectionMatrix.elements[5] * 0.5;
+  // keep a preset view framed when the viewport changes, unless the user has moved the camera
+  if (!userMovedCamera && !camTween) setCameraPreset(currentPreset, true);
 }
 window.addEventListener('resize', resize);
+// narrow screens start with the panel folded so the fish is not hidden behind it
+if (window.innerWidth < 720 && !params.has('panel')) document.body.classList.add('panel-hidden');
 resize();
 
 // ---------------------------------------------------------------------------- loop
@@ -356,7 +468,13 @@ document.getElementById('snow').addEventListener('change', (e) => { particles.vi
 document.getElementById('autorot').addEventListener('change', (e) => { controls.autoRotate = e.target.checked; controls.autoRotateSpeed = 0.8; });
 document.getElementById('follow').addEventListener('change', (e) => { state.followCamera = e.target.checked; });
 document.getElementById('quality').addEventListener('change', (e) => { pixelRatio = Math.min(window.devicePixelRatio || 1, Number(e.target.value)); resize(); });
-document.getElementById('toggle-panel').addEventListener('click', () => document.body.classList.toggle('panel-hidden'));
+document.getElementById('toggle-panel').addEventListener('click', () => {
+  document.body.classList.toggle('panel-hidden');
+  measureFreeArea();
+  applyViewOffset();
+  particles.material.uniforms.uPxScale.value = shared.uResolution.value.y * camera.projectionMatrix.elements[5] * 0.5;
+  if (!userMovedCamera) setCameraPreset(currentPreset, !!camTween);
+});
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   const pick = (group, v) => document.querySelector(`#${group} button[data-v="${v}"]`)?.click();
@@ -374,20 +492,22 @@ if (params.get('debug')) document.querySelector(`#debug button[data-v="${params.
 if (params.get('shading')) document.querySelector(`#shading button[data-v="${params.get('shading')}"]`)?.click();
 if (params.get('env')) document.querySelector(`#env button[data-v="${params.get('env')}"]`)?.click();
 if (params.get('floor') === '0') { document.getElementById('floor').checked = false; floor.visible = false; }
-const initialView = params.get('view');
-if (initialView) {
-  const wait = setInterval(() => { if (window.__mahazeReady) { clearInterval(wait); setCameraPreset(initialView, true); } }, 50);
-}
 if (params.get('cam')) {
   // cam=px,py,pz,tx,ty,tz (metres)
   const c = params.get('cam').split(',').map(Number);
   const wait = setInterval(() => {
-    if (window.__mahazeReady) { clearInterval(wait); camera.position.set(c[0], c[1], c[2]); controls.target.set(c[3], c[4], c[5]); controls.update(); }
+    if (window.__mahazeReady) { clearInterval(wait); userMovedCamera = true; camera.position.set(c[0], c[1], c[2]); controls.target.set(c[3], c[4], c[5]); controls.update(); }
   }, 50);
 }
 
 function fail(msg) {
+  msg = String(msg);
+  if (msg.length > 240) msg = `${msg.slice(0, 240)}…`;
   const el = document.getElementById('progress');
-  if (el) { el.textContent = msg; el.classList.add('error'); }
+  if (el) {
+    el.hidden = false;
+    el.classList.add('error');
+    el.querySelector('.msg').textContent = msg;
+  }
   console.error(msg);
 }

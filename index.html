@@ -13,12 +13,19 @@
     --text: #d9e6e6;
     --muted: #8aa3a5;
     --accent: #e7b766;
+    --error: #f0a38b;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; overflow: hidden; }
   #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  #progress { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); letter-spacing: 0.04em; padding: 16px; text-align: center; }
-  #progress.error { color: #f0a38b; }
+  #progress { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; pointer-events: none; }
+  #progress[hidden] { display: none; }
+  #progress .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; width: min(320px, 100%); text-align: center; backdrop-filter: blur(8px); }
+  #progress .msg { color: var(--text); letter-spacing: 0.03em; overflow-wrap: anywhere; }
+  #progress .bar { height: 3px; margin-top: 10px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  #progress .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #progress.error .msg { color: var(--error); }
+  #progress.error .bar { display: none; }
   .panel { position: fixed; top: 12px; left: 12px; width: 286px; max-height: calc(100% - 24px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; backdrop-filter: blur(8px); transition: opacity .2s, transform .2s; }
   body.panel-hidden .panel { opacity: 0; transform: translateX(-12px); pointer-events: none; }
   h1 { font-size: 14px; margin: 0 0 2px; font-weight: 600; letter-spacing: .02em; }
@@ -38,7 +45,6 @@
   select { background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12px; }
   .hint { position: fixed; right: 14px; bottom: 12px; color: var(--muted); font-size: 11.5px; text-align: right; text-shadow: 0 1px 2px #000; pointer-events: none; }
   #toggle-panel { position: fixed; top: 12px; right: 12px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; }
-  body:not(.ready) .panel, body:not(.ready) .hint { opacity: 0.35; pointer-events: none; }
   @media (max-width: 640px) {
     .panel { top: auto; bottom: 10px; left: 10px; right: 10px; width: auto; max-height: 46%; }
     .hint { display: none; }
@@ -50,7 +56,7 @@
 </head>
 <body>
 <canvas id="view"></canvas>
-<div id="progress">モデル読み込み中…</div>
+<div id="progress" role="status"><div class="card"><div class="msg">モデルを読み込み中…</div><div class="bar"><i></i></div></div></div>
 
 <aside class="panel">
   <h1>マハゼ 幼魚（全長 約50mm）</h1>
