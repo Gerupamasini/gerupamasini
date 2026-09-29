@@ -203,17 +203,17 @@ function finLayouts() {
   const nD = 37;
   const dBase = [], dTip = polyline([[0.3, 0.312], [0.3459, 0.3226], [0.3957, 0.3313], [0.445, 0.3383], [0.4932, 0.3407], [0.541, 0.3414],
     [0.5886, 0.3411], [0.6346, 0.3345], [0.6806, 0.328], [0.7262, 0.3197], [0.7722, 0.3131], [0.8177, 0.3048], [0.8631, 0.2955],
-    [0.9073, 0.2818], [0.94, 0.274], [0.966, 0.263], [0.98, 0.247],
-    [0.984, 0.218], [0.977, 0.186], [0.966, 0.156], [0.958, 0.126], [0.955, 0.1], [0.96, 0.076], [0.966, 0.06]], nD);   // (photo) rounded rear corner, rear edge falls almost vertically to the root; open V gap to the caudal   // rear edge runs down onto the peduncle, meeting the caudal root   // near-vertical rear edge down to a sharp notch (aligned photo)   // deep, open notch above the peduncle
+    [0.9073, 0.2818], [0.94, 0.274], [0.968, 0.264], [0.99, 0.248],
+    [1.0, 0.22], [0.999, 0.188], [0.992, 0.158], [0.983, 0.13], [0.975, 0.104], [0.969, 0.08], [0.966, 0.062]], nD);   // (photo) rounded rear corner, rear edge falls almost vertically to the root; open V gap to the caudal   // rear edge runs down onto the peduncle, meeting the caudal root   // near-vertical rear edge down to a sharp notch (aligned photo)   // deep, open notch above the peduncle
   for (let i = 0; i < nD; i++) { const s = 0.295 + (0.968 - 0.295) * (i / (nD - 1)); dBase.push([s, top(s) - 0.003]); }
   const nA = 26;
   const aBase = [], aTip = polyline([[0.49, -0.212], [0.592, -0.2264], [0.6847, -0.2368], [0.7547, -0.2426], [0.8265, -0.2412],
-    [0.8758, -0.2342], [0.9487, -0.2283], [1.0, -0.216], [1.04, -0.2], [1.066, -0.178], [1.08, -0.15],
-    [1.078, -0.13], [1.058, -0.112], [1.03, -0.092], [1.0, -0.075], [0.985, -0.062], [0.972, -0.052]], nA);   // rounded rear lobe
+    [0.8758, -0.2342], [0.9487, -0.2283], [1.0, -0.216], [1.04, -0.2], [1.066, -0.178], [1.075, -0.155],
+    [1.068, -0.135], [1.05, -0.118], [1.028, -0.095], [1.003, -0.07], [0.985, -0.055], [0.972, -0.045]], nA);   // rounded rear lobe
   for (let i = 0; i < nA; i++) { const s = 0.48 + (0.968 - 0.48) * (i / (nA - 1)); aBase.push([s, bottom(s) + 0.012 * THREE.MathUtils.smoothstep(s, 0.48, 0.6)]); }   // root sunk into the fleshy keel
   const nC = 19;
   // caudal: rises from the narrow peduncle and flares into a broad, short fan
-  const cBase = [], cTip = polyline([[0.958, 0.098], [1.0, 0.138], [1.04, 0.17], [1.078, 0.2], [1.104, 0.165], [1.12, 0.11], [1.13, 0.045], [1.136, -0.02], [1.136, -0.07], [1.126, -0.11], [1.1, -0.145], [1.07, -0.16]], nC);   // (photo) free edge rises from the shared root in the notch to a sharp upper corner, then a slightly convex rear edge; lower corner behind the anal lobe
+  const cBase = [], cTip = polyline([[0.962, 0.09], [0.998, 0.128], [1.04, 0.168], [1.078, 0.2], [1.1, 0.19], [1.11, 0.13], [1.12, 0.06], [1.128, -0.01], [1.134, -0.06], [1.138, -0.106], [1.108, -0.122], [1.08, -0.13], [1.055, -0.114], [1.03, -0.093], [1.003, -0.066], [0.972, -0.042]], nC);   // (photo) joined only at the root: narrow V gaps to the soft dorsal above and the anal lobe below
   for (let i = 0; i < nC; i++) { const f = i / (nC - 1), s = 0.955 + 0.012 * Math.sin(Math.PI * f); cBase.push([s, top(s) - 0.004 - f * (top(s) - bottom(s) - 0.008)]); }
   return { dorsal: { base: dBase, tip: dTip }, anal: { base: aBase, tip: aTip }, caudal: { base: cBase, tip: cTip } };
 }
@@ -666,7 +666,7 @@ export function createButterflyfish(renderer, opts = {}) {
           // median fins are nearly opaque in life; spines show only faintly through the membrane
           float memA = 0.96;
           if (kind < 1.5 && spine) memA = mix(0.95, 0.8, t);
-          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.72, smoothstep(0.9, 0.97, t) * smoothstep(3.0, 5.5, r));      // caudal: clear margin
+          if (kind > 1.5 && kind < 2.5) memA = mix(0.98, 0.72, smoothstep(0.9, 0.97, t) * (smoothstep(3.6, 4.6, r) * (1.0 - smoothstep(12.3, 13.2, r))));      // caudal: clear margin
           if (kind > 2.5) memA = kind < 3.5 ? mix(0.06, 0.02, t) : mix(0.92, 0.75, t);             // pectoral / pelvic
           vec3 c = diffuseColor.rgb * (kind < 2.5 ? 0.9 : 1.0);
           #ifdef USE_MAP
@@ -689,7 +689,7 @@ export function createButterflyfish(renderer, opts = {}) {
             vec2 SH = mix(uFinSH[ri], uFinSH[ri + 1], clamp(r - float(ri), 0.0, 1.0));
             float fromEdge = (1.0 - t) * max(SH.y, 1e-3);
             float rear = smoothstep(uRays - 11.0, uRays - 8.5, r);
-            float bw = 0.016 + 0.006 * smoothstep(uRays - 9.0, uRays - 3.5, r) * (1.0 - smoothstep(uRays - 2.0, uRays - 0.2, r));   // broad black wedge behind the eyespot, narrowing into the notch
+            float bw = mix(0.018, 0.003, smoothstep(uRays - 7.0, uRays - 0.5, r));   // black edge thins out toward the caudal root   // broad black wedge behind the eyespot, narrowing into the notch
             c = mix(c, vec3(0.035, 0.03, 0.03), rear * (1.0 - smoothstep(bw - 0.004, bw + 0.004, fromEdge)));
           }
           if (kind > 0.5 && kind < 1.5) {
@@ -722,7 +722,7 @@ export function createButterflyfish(renderer, opts = {}) {
             float lobe = smoothstep(0.8, 0.92, sR);
             c = mix(c, vec3(0.2, 0.12, 0.05), (1.0 - smoothstep(0.004, 0.0065, abs(fromEdge - 0.011))) * lobe * 0.8);   // dark submarginal line
             c = mix(c, vec3(0.8, 0.88, 0.95), (1.0 - smoothstep(0.003, 0.0055, fromEdge)) * 0.7 * (1.0 - smoothstep(0.9, 0.94, sR)));   // rim stops where the lobe turns up into the notch                     // pale rim
-            c = mix(c, vec3(0.16, 0.09, 0.03), (1.0 - smoothstep(0.002, 0.0045, fromEdge)) * smoothstep(0.9, 0.95, sR) * 0.85);   // thin dark edge where the lobe crosses the caudal
+            c = mix(c, vec3(0.08, 0.05, 0.02), (1.0 - smoothstep(0.003, 0.006, fromEdge)) * smoothstep(0.86, 0.92, sR) * 0.9);   // dark edge along the lobe where it faces the caudal (photo)   // thin dark edge where the lobe crosses the caudal
             if (spine) c = mix(c, vec3(0.9, 0.9, 0.88), 0.7);
             c *= mix(0.86, 1.0, smoothstep(0.0, 0.35, t));   // root shaded like the curving belly it grows from
             ray *= 0.2;
@@ -734,7 +734,7 @@ export function createButterflyfish(renderer, opts = {}) {
             vec3 gold = mix(vec3(0.97, 0.5, 0.006), vec3(0.97, 0.58, 0.014), smoothstep(0.1, 0.75, t));   // root = body rear colour (sRGB ~0.99,0.74,0.07)
             c = mix(c, gold, 0.92);
             float bar = smoothstep(0.875, 0.89, t) * (1.0 - smoothstep(0.905, 0.92, t));
-            float rearEdge = smoothstep(3.0, 5.5, r);   // the upper edge rising from the notch has no margin (photo)
+            float rearEdge = (smoothstep(3.6, 4.6, r) * (1.0 - smoothstep(12.3, 13.2, r)));   // the upper edge rising from the notch has no margin (photo)
             c = mix(c, vec3(0.22, 0.13, 0.03), bar * 0.75 * rearEdge);
             ray *= 0.3;
             c = mix(c, vec3(0.5, 0.52, 0.55), smoothstep(0.925, 0.945, t) * rearEdge);   // narrow grey translucent margin
@@ -744,9 +744,9 @@ export function createButterflyfish(renderer, opts = {}) {
           // rays: faint ridges only (the membrane is thick)
           vec3 rayC = spine ? c * 1.06 + 0.02 : c * 1.05 + 0.015;
           c = mix(c, rayC, ray * 0.07 * (kind > 1.5 && kind < 2.5 ? smoothstep(0.3, 0.75, t) : 1.0));
-          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.75, smoothstep(0.9, 0.97, t) * smoothstep(3.0, 5.5, r)) : 0.98), ray);
+          float a = mix(memA, kind > 2.5 && kind < 3.5 ? 0.16 : (kind > 1.5 && kind < 2.5 ? mix(0.98, 0.75, smoothstep(0.9, 0.97, t) * (smoothstep(3.6, 4.6, r) * (1.0 - smoothstep(12.3, 13.2, r)))) : 0.98), ray);
           a = mix(a, 1.0, opaque);
-          a *= mix(1.0, smoothstep(0.0, 0.03, 1.0 - t + 0.02), (kind > 1.5 && kind < 2.5) ? smoothstep(3.0, 5.5, r) : 1.0);   // solid upper caudal edge
+          a *= mix(1.0, smoothstep(0.0, 0.03, 1.0 - t + 0.02), (kind > 1.5 && kind < 2.5) ? (smoothstep(3.6, 4.6, r) * (1.0 - smoothstep(12.3, 13.2, r))) : 1.0);   // solid upper caudal edge
           if (kind > 2.5 && kind < 3.5) a *= smoothstep(0.05, 0.45, abs(dot(normalize(vNormal), normalize(vViewPosition))));
           diffuseColor = vec4(c, a);
           vFinGlow = c * (1.0 - a) * 0.35;
