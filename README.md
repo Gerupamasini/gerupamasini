@@ -16,7 +16,7 @@ npm install && npm run build:model   # GLB を作り直す場合のみ（約1分
 WebGL2 と `EXT_color_buffer_float` に対応したブラウザで動作します（デスクトップ版 Chrome、Edge、Firefox、Safari 17 以降）。
 
 操作: ドラッグで回転、ホイール／ピンチで拡大（眼の接写まで）、右ドラッグで移動。キー `F` / `B` / `S` で正面光／逆光／側光、`1` / `2` / `3` でカメラ位置のプリセット。
-URL パラメータで表示を固定できます（例: `?light=back&view=tail&env=tank`）。
+URL パラメータで表示を固定できます（例: `?light=back&view=tail&env=tank`）。読み込むモデルは `window.MAHAZE_MODEL_URL` で差し替えられます（`.gltf` とテクスチャを分けた形式でも可）。
 
 ## モデルの内容
 

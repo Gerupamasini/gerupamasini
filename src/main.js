@@ -7,7 +7,8 @@ import { createEyeMaterial } from './materials/EyeMaterial.js';
 import { createBackground, createFloor, createParticles } from './scene/Environment.js';
 import { createPost } from './scene/Post.js';
 
-const MODEL_URL = new URL('../models/mahaze_juvenile.glb', import.meta.url).href;
+// window.MAHAZE_MODEL_URL can point the viewer at another copy of the model (e.g. a .gltf with external textures)
+const MODEL_URL = window.MAHAZE_MODEL_URL || new URL('../models/mahaze_juvenile.glb', import.meta.url).href;
 const LAYER_FISH = 2; // body, eyes, fins (main pass)
 const LAYER_BEHIND = 3; // fins are also drawn into the background buffer so they show through thin tissue
 const params = new URLSearchParams(location.search);
