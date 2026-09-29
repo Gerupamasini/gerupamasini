@@ -1,0 +1,641 @@
+// Procedural Ilyoplax pusilla (male) — units: 1 = 1 cm while building; the exported
+// GLB root node is scaled by 0.01 so the file is in metres.
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const { Vector3: V3, Color } = THREE;
+const PI = Math.PI;
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const sm = (x) => { x = clamp(x); return x * x * (3 - 2 * x); };
+const smooth = (a, b, x) => sm((x - a) / (b - a));
+const mix = (a, b, t) => a + (b - a) * t;
+const sq = (x) => x * x;
+const gauss = (x, w) => Math.exp(-sq(x / w));
+const angDiff = (a, b) => { let d = (a - b) % (2 * PI); if (d > PI) d -= 2 * PI; if (d < -PI) d += 2 * PI; return d; };
+const D2R = PI / 180;
+
+// ---------- deterministic noise ----------
+function hash3(x, y, z) {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1103515245); h ^= h >>> 16;
+  return (h >>> 0) / 4294967295;
+}
+function vnoise(x, y, z) {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const fx = sm(x - ix), fy = sm(y - iy), fz = sm(z - iz);
+  const l = (a, b, t) => a + (b - a) * t;
+  return l(l(l(hash3(ix, iy, iz), hash3(ix + 1, iy, iz), fx), l(hash3(ix, iy + 1, iz), hash3(ix + 1, iy + 1, iz), fx), fy),
+    l(l(hash3(ix, iy, iz + 1), hash3(ix + 1, iy, iz + 1), fx), l(hash3(ix, iy + 1, iz + 1), hash3(ix + 1, iy + 1, iz + 1), fx), fy), fz);
+}
+function fbm(x, y, z, o = 4) {
+  let s = 0, a = 0.5, f = 1;
+  for (let i = 0; i < o; i++) { s += a * vnoise(x * f, y * f, z * f); f *= 2.03; a *= 0.5; }
+  return s / (1 - Math.pow(0.5, o));
+}
+let seed = 12345;
+const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+
+const C = (hex) => new Color(hex);
+const PAL = {
+  shell: C('#6d664f'), shellDark: C('#3b372c'), mud: C('#9a8d6c'), blue: C('#37b3d8'), blueDeep: C('#2a8fb5'),
+  legDark: C('#2e2924'), legMid: C('#57493a'), legPale: C('#8d8267'), membrane: C('#6f6249'),
+  claw: C('#ece8dc'), clawShade: C('#c9c6bb'), clawTip: C('#8a6e4a'), clawDarkMerus: C('#3a322b'),
+  sternum: C('#b3ac96'), abd: C('#9a917a'), seta: C('#cfc7b0'),
+};
+
+// ---------- textures (tileable cuticle micro-detail) ----------
+export function makeTextures() {
+  const S = 512, G = 32;
+  const lat = new Float32Array(G * G * 4).map(() => Math.random());
+  const pn = (x, y, cells, off) => { // periodic value noise
+    x *= cells; y *= cells;
+    const ix = Math.floor(x), iy = Math.floor(y), fx = sm(x - ix), fy = sm(y - iy);
+    const g = (i, j) => hash3(((i % cells) + cells) % cells, ((j % cells) + cells) % cells, off);
+    return mix(mix(g(ix, iy), g(ix + 1, iy), fx), mix(g(ix, iy + 1), g(ix + 1, iy + 1), fx), fy);
+  };
+  const h = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = x / S, v = y / S;
+    let a = 0, amp = 0.5, c = 4;
+    for (let o = 0; o < 6; o++) { a += amp * pn(u, v, c, o + 3); amp *= 0.55; c *= 2; }
+    const pit = Math.pow(pn(u, v, 64, 21), 6) * 0.5; // fine pores/granules
+    h[y * S + x] = a * 0.9 + pit * 0.3;
+  }
+  const mk = () => { const c = document.createElement('canvas'); c.width = c.height = S; return c; };
+  const cA = mk(), cN = mk(), cO = mk();
+  const iA = cA.getContext('2d').createImageData(S, S), iN = cN.getContext('2d').createImageData(S, S), iO = cO.getContext('2d').createImageData(S, S);
+  const H = (x, y) => h[((y + S) % S) * S + ((x + S) % S)];
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = (y * S + x) * 4, hv = H(x, y);
+    const g = clamp(0.78 + (hv - 0.4) * 0.7 + (hash3(x, y, 9) - 0.5) * 0.06);
+    iA.data[i] = iA.data[i + 1] = iA.data[i + 2] = g * 255; iA.data[i + 3] = 255;
+    const dx = (H(x + 1, y) - H(x - 1, y)) * 2.2, dy = (H(x, y + 1) - H(x, y - 1)) * 2.2;
+    const l = Math.hypot(dx, dy, 1);
+    iN.data[i] = (-dx / l * 0.5 + 0.5) * 255; iN.data[i + 1] = (dy / l * 0.5 + 0.5) * 255; iN.data[i + 2] = (1 / l * 0.5 + 0.5) * 255; iN.data[i + 3] = 255;
+    iO.data[i] = 255; iO.data[i + 1] = clamp(0.62 + (0.5 - hv) * 0.6 + (hash3(x, y, 4) - 0.5) * 0.1) * 255; iO.data[i + 2] = 0; iO.data[i + 3] = 255;
+  }
+  cA.getContext('2d').putImageData(iA, 0, 0); cN.getContext('2d').putImageData(iN, 0, 0); cO.getContext('2d').putImageData(iO, 0, 0);
+  const T = (cv, srgb) => {
+    const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t;
+  };
+  return { albedo: T(cA, true), normal: T(cN, false), orm: T(cO, false) };
+}
+
+export function makeMaterials(tx) {
+  const base = { map: tx.albedo, normalMap: tx.normal, roughnessMap: tx.orm, metalnessMap: tx.orm, metalness: 0, vertexColors: true };
+  return {
+    carapace: Object.assign(new THREE.MeshStandardMaterial({ ...base, roughness: 1.0, normalScale: new THREE.Vector2(0.55, 0.55) }), { name: 'Carapace' }),
+    leg: Object.assign(new THREE.MeshStandardMaterial({ ...base, roughness: 0.95, normalScale: new THREE.Vector2(0.4, 0.4) }), { name: 'LegCuticle' }),
+    claw: Object.assign(new THREE.MeshPhysicalMaterial({ ...base, roughness: 0.62, clearcoat: 0.55, clearcoatRoughness: 0.32, normalScale: new THREE.Vector2(0.12, 0.12) }), { name: 'ClawEnamel' }),
+    cornea: Object.assign(new THREE.MeshPhysicalMaterial({ color: 0x07080b, roughness: 0.12, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05 }), { name: 'Cornea' }),
+    mud: Object.assign(new THREE.MeshStandardMaterial({ ...base, roughness: 1, normalScale: new THREE.Vector2(1.4, 1.4) }), { name: 'MudGrain' }),
+  };
+}
+
+// ---------- geometry helpers ----------
+function finishGeo(pos, uv, col, idx) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Lofted swept tube along +X with superellipse section, per-station width/height/offset.
+ *  Section angle a: 0 => +Z, PI/2 => +Y. */
+function makeTube(o) {
+  const { L, ext = 0.04, nT = 44, nR = 24, prof, cap0 = 0.05, cap1 = 0.05, neck0 = 0.62, neck1 = 0.62,
+    colorFn, ridge = 0, ridgeB = 0, ridgeW = 0.4, n: defN = 2.2, uvScale = 0.6 } = o;
+  const xs = [-ext];
+  for (let i = 0; i <= nT; i++) xs.push(L * (0.5 - 0.5 * Math.cos(PI * i / nT)));
+  const dt = 0.01;
+  const scaleAt = (x) => {
+    if (x <= 0) return neck0;
+    if (x < cap0) return neck0 + (1 - neck0) * sm(x / cap0);
+    if (x >= L) return neck1;
+    if (x > L - cap1) return neck1 + (1 - neck1) * sm((L - x) / cap1);
+    return 1;
+  };
+  const P = (x, a, out = new V3()) => {
+    const t = clamp(x / L), p = prof(t), e = scaleAt(x), n = p.n || defN;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const sy = Math.sign(sa) * Math.pow(Math.abs(sa), 2 / n), sz = Math.sign(ca) * Math.pow(Math.abs(ca), 2 / n);
+    let rr = 1;
+    if (ridge) rr += ridge * gauss(angDiff(a, PI / 2), ridgeW);
+    if (ridgeB) rr += ridgeB * gauss(angDiff(a, 3 * PI / 2), ridgeW);
+    const ly = p.h * e * sy * rr, lz = p.w * e * sz;
+    const pa = prof(clamp(t - dt)), pb = prof(clamp(t + dt));
+    const span = Math.max(1e-6, (clamp(t + dt) - clamp(t - dt)) * L);
+    const ts = Math.atan(((pb.oy || 0) - (pa.oy || 0)) / span), ps = Math.atan(((pb.oz || 0) - (pa.oz || 0)) / span);
+    let x1 = -ly * Math.sin(ts), y1 = ly * Math.cos(ts);
+    const x2 = x1 * Math.cos(ps) + lz * Math.sin(ps), z2 = -x1 * Math.sin(ps) + lz * Math.cos(ps);
+    return out.set(x + x2, (p.oy || 0) + y1, (p.oz || 0) + z2);
+  };
+  const pos = [], uv = [], col = [], idx = [];
+  const perim = 2 * PI * (prof(0.5).w + prof(0.5).h) * 0.5;
+  const rings = xs.length;
+  const tmp = new V3(), cc = new Color();
+  for (let i = 0; i < rings; i++) {
+    const x = xs[i], t = clamp(x / L);
+    for (let j = 0; j <= nR; j++) {
+      const a = 2 * PI * j / nR;
+      P(x, a, tmp); pos.push(tmp.x, tmp.y, tmp.z);
+      uv.push(x / uvScale, j / nR * perim / uvScale);
+      if (colorFn) colorFn(t, a, tmp, cc); else cc.set(0x808080);
+      const mem = 1 - smooth(0, cap0 * 0.9, Math.max(0, x)) * (x > 0 ? 1 : 0);
+      const memD = 1 - smooth(0, cap1 * 0.9, Math.max(0, L - x));
+      const mf = x <= 0 ? 1 : clamp(mem + memD);
+      if (mf > 0) cc.lerp(PAL.membrane, mf * 0.85);
+      col.push(cc.r, cc.g, cc.b);
+    }
+  }
+  const W = nR + 1;
+  for (let i = 0; i < rings - 1; i++) for (let j = 0; j < nR; j++) {
+    const a = i * W + j, b = a + 1, c = a + W, d = c + 1;
+    idx.push(a, c, b, b, c, d);
+  }
+  // end caps
+  for (const [ri, dir] of [[0, -1], [rings - 1, 1]]) {
+    const x = xs[ri], base = pos.length / 3;
+    P(x, 0, tmp); const cen = new V3(x, prof(clamp(x / L)).oy || 0, prof(clamp(x / L)).oz || 0);
+    pos.push(cen.x, cen.y, cen.z); uv.push(0, 0); col.push(PAL.membrane.r, PAL.membrane.g, PAL.membrane.b);
+    for (let j = 0; j <= nR; j++) {
+      const k = ri * W + j; pos.push(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]); uv.push(0.1, 0.1); col.push(PAL.membrane.r, PAL.membrane.g, PAL.membrane.b);
+    }
+    for (let j = 0; j < nR; j++) {
+      if (dir < 0) idx.push(base, base + 1 + j + 1, base + 1 + j); else idx.push(base, base + 1 + j, base + 1 + j + 1);
+    }
+  }
+  // orientation check on a mid ring vertex
+  let geo = finishGeo(pos, uv, col, idx);
+  const nrm = geo.attributes.normal, mid = Math.floor(rings / 2) * W + 3;
+  const pm = new V3().fromBufferAttribute(geo.attributes.position, mid), nm = new V3().fromBufferAttribute(nrm, mid);
+  const cen = new V3(pm.x, prof(clamp(pm.x / L)).oy || 0, prof(clamp(pm.x / L)).oz || 0);
+  if (nm.dot(pm.sub(cen)) < 0) { const ix = geo.index.array; for (let k = 0; k < ix.length; k += 3) { const t = ix[k + 1]; ix[k + 1] = ix[k + 2]; ix[k + 2] = t; } geo.computeVertexNormals(); }
+  // fix seam normals
+  const N = geo.attributes.normal;
+  for (let i = 0; i < rings; i++) {
+    const a = i * W, b = i * W + nR;
+    const v = new V3().fromBufferAttribute(N, a).add(new V3().fromBufferAttribute(N, b)).normalize();
+    N.setXYZ(a, v.x, v.y, v.z); N.setXYZ(b, v.x, v.y, v.z);
+  }
+  const sample = (x, a) => {
+    const p0 = P(x, a), px = P(x + 0.01, a).sub(p0), pa = P(x, a + 0.05).sub(p0);
+    const n = new V3().crossVectors(px, pa).normalize();
+    const t = clamp(x / L), cen2 = new V3(x, prof(t).oy || 0, prof(t).oz || 0);
+    if (n.dot(p0.clone().sub(cen2)) < 0) n.negate();
+    return { p: p0, n };
+  };
+  return { geo, sample, P };
+}
+
+/** Thin bent cone (spine / seta). */
+function makeSpike(base, dir, len, r, bend, color, sides = 5, rings = 4) {
+  const pos = [], uv = [], col = [], idx = [];
+  const d = dir.clone().normalize();
+  let u = new V3().crossVectors(d, Math.abs(d.y) < 0.9 ? new V3(0, 1, 0) : new V3(1, 0, 0)).normalize();
+  const w = new V3().crossVectors(d, u).normalize();
+  for (let k = 0; k <= rings; k++) {
+    const t = k / rings, rad = r * Math.pow(1 - t, 0.85) + 1e-4;
+    const cen = base.clone().addScaledVector(d, len * t).addScaledVector(bend, t * t * len);
+    for (let j = 0; j <= sides; j++) {
+      const a = 2 * PI * j / sides;
+      pos.push(cen.x + (u.x * Math.cos(a) + w.x * Math.sin(a)) * rad, cen.y + (u.y * Math.cos(a) + w.y * Math.sin(a)) * rad, cen.z + (u.z * Math.cos(a) + w.z * Math.sin(a)) * rad);
+      uv.push(t * 0.3, j / sides * 0.3);
+      const c = color.clone().lerp(PAL.seta, t * 0.25); col.push(c.r, c.g, c.b);
+    }
+  }
+  const W = sides + 1;
+  for (let k = 0; k < rings; k++) for (let j = 0; j < sides; j++) { const a = k * W + j; idx.push(a, a + 1, a + W, a + 1, a + W + 1, a + W); }
+  return finishGeo(pos, uv, col, idx);
+}
+
+function makeBlob(center, radius, squash, color, detail = 1) {
+  let g = new THREE.IcosahedronGeometry(1, detail); g.deleteAttribute('normal'); g.deleteAttribute('uv');
+  g = mergeGeometriesSafe(g);
+  const p = g.attributes.position, col = [], uv = [];
+  for (let i = 0; i < p.count; i++) {
+    const v = new V3().fromBufferAttribute(p, i).normalize();
+    const k = 0.75 + 0.5 * vnoise(v.x * 2.3 + center.x * 40, v.y * 2.3, v.z * 2.3 + center.z * 40);
+    p.setXYZ(i, center.x + v.x * radius * k * squash.x, center.y + v.y * radius * k * squash.y, center.z + v.z * radius * k * squash.z);
+    const cv = color.clone().multiplyScalar(0.8 + 0.4 * rnd()); col.push(cv.r, cv.g, cv.b); uv.push(v.x * 0.5 + 0.5, v.y * 0.5 + 0.5);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeVertexNormals();
+  return g;
+}
+function mergeGeometriesSafe(g) { // make indexed by welding positions
+  const p = g.attributes.position, map = new Map(), pos = [], idx = [];
+  for (let i = 0; i < p.count; i++) {
+    const k = `${p.getX(i).toFixed(4)},${p.getY(i).toFixed(4)},${p.getZ(i).toFixed(4)}`;
+    if (!map.has(k)) { map.set(k, pos.length / 3); pos.push(p.getX(i), p.getY(i), p.getZ(i)); }
+    idx.push(map.get(k));
+  }
+  const o = new THREE.BufferGeometry(); o.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); o.setIndex(idx); return o;
+}
+const merge = (gs) => mergeGeometries(gs.filter(Boolean), false);
+
+// ---------- carapace ----------
+const CP = { a0: 0.5, b: 0.4, n: 3.3, Ht: 0.27, Hb: 0.17, ta: 0.55, tb: 0.75 };
+const aAt = (z) => CP.a0 * (0.8 + 0.2 * (z / CP.b + 1) / 2);
+function rhoOf(x, z) { return Math.pow(Math.pow(Math.abs(x / aAt(z)), CP.n) + Math.pow(Math.abs(z / CP.b), CP.n), 1 / CP.n); }
+export const topY = (x, z) => CP.Ht * Math.pow(Math.cos(Math.asin(clamp(rhoOf(x, z), 0, 0.9999))), CP.ta);
+export const botY = (x, z) => -CP.Hb * Math.pow(Math.cos(Math.asin(clamp(rhoOf(x, z), 0, 0.9999))), CP.tb);
+const EYE_X = 0.115, EYE_Z = 0.3;
+
+function dseg(px, pz, ax, az, bx, bz) {
+  const dx = bx - ax, dz = bz - az, t = clamp(((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz));
+  return Math.hypot(px - ax - dx * t, pz - az - dz * t);
+}
+/** dorsal relief: sulci + regions (cm) */
+function dorsalRelief(x, z) {
+  const ax = Math.abs(x);
+  let d = 0, g = 0;
+  const groove = (dist, w, depth) => { const v = depth * gauss(dist, w); g += v; d -= v; };
+  // cervical (transverse) groove, bowed
+  groove(z - (0.07 - 0.2 * ax * ax), 0.014, 0.017 * smooth(0.42, 0.3, ax));
+  // gastric boundaries + cardiac
+  groove(ax - 0.135, 0.012, 0.012 * smooth(0.02, 0.09, z) * smooth(0.34, 0.26, z));
+  groove(ax - 0.095, 0.011, 0.011 * smooth(0.07, 0.0, z) * smooth(-0.3, -0.2, z));
+  // branchial oblique sulcus
+  groove(dseg(ax, z, 0.41, 0.06, 0.2, -0.28), 0.012, 0.011);
+  // frontal border and posterior border
+  groove(z - 0.315, 0.012, 0.012 * smooth(0.23, 0.14, ax));
+  groove(z + 0.305, 0.012, 0.014 * smooth(0.42, 0.3, ax));
+  // regional inflation
+  d += 0.02 * gauss(ax, 0.16) * gauss(z - 0.15, 0.14);            // gastric
+  d += 0.016 * gauss(ax, 0.1) * gauss(z + 0.13, 0.13);            // cardiac
+  d += 0.014 * gauss(ax - 0.29, 0.1) * gauss(z + 0.02, 0.2);      // branchial
+  // orbit rims
+  const eo = Math.hypot(ax - EYE_X, z - EYE_Z);
+  d += 0.013 * gauss(eo - 0.055, 0.018) - 0.02 * gauss(eo, 0.028);
+  return { d, g };
+}
+function ventralRelief(x, z) {
+  const ax = Math.abs(x);
+  let d = 0;
+  for (const zs of [-0.26, -0.14, -0.02, 0.12]) d -= 0.009 * gauss(z - zs, 0.011) * smooth(0.27, 0.2, ax) * smooth(0.06, 0.12, ax + (zs < -0.05 ? 0.06 : 0));
+  d -= 0.012 * gauss(ax - 0.235, 0.014) * smooth(0.32, 0.2, z) * smooth(-0.34, -0.2, z);   // sternal edge
+  d -= 0.03 * smooth(0.115, 0.07, ax) * smooth(0.03, -0.02, z) * smooth(-0.36, -0.3, z);   // abdominal channel
+  d -= 0.014 * gauss(ax - 0.05, 0.03) * gauss(z - 0.2, 0.06);                               // mouth field
+  return d;
+}
+
+function buildCarapace() {
+  const NT = 256, NP = 168;
+  const pos = [], idx = [];
+  const NTh = NT;
+  const rings = NP + 1;
+  for (let i = 0; i < rings; i++) {
+    const phi = PI * i / NP, rho = Math.sin(phi), cph = Math.cos(phi);
+    const yv = cph >= 0 ? CP.Ht * Math.pow(cph, CP.ta) : -CP.Hb * Math.pow(-cph, CP.tb);
+    for (let j = 0; j < NTh; j++) {
+      const th = 2 * PI * j / NTh, c = Math.cos(th), s = Math.sin(th);
+      let bx = Math.sign(c) * Math.pow(Math.abs(c), 2 / CP.n), bz = Math.sign(s) * Math.pow(Math.abs(s), 2 / CP.n);
+      // anterolateral tooth
+      const ang = Math.atan2(Math.abs(bz), Math.abs(bx));
+      const tooth = 1 + 0.045 * gauss(angDiff(ang, 0.62), 0.07) * (bz > 0 ? 1 : 0);
+      const z = rho * bz * CP.b * tooth;
+      const x = rho * bx * aAt(z) * tooth;
+      pos.push(x, yv, z);
+    }
+  }
+  // texture coords: top half unfolded along the profile (no rim stretching), underside planar
+  const uv = new Array(rings * NTh * 2).fill(0);
+  for (let j = 0; j < NTh; j++) {
+    let sacc = 0;
+    for (let i = 0; i < rings; i++) {
+      const k = i * NTh + j;
+      if (i > 0) { const q = k - NTh; sacc += Math.hypot(pos[k * 3] - pos[q * 3], pos[k * 3 + 1] - pos[q * 3 + 1], pos[k * 3 + 2] - pos[q * 3 + 2]); }
+      const x = pos[k * 3], z = pos[k * 3 + 2], h = Math.hypot(x, z);
+      const f = i < rings / 2 ? (h < 1e-3 ? 1 : sacc / h) : 1;
+      uv[k * 2] = x * f / 0.55 + 3.1; uv[k * 2 + 1] = z * f / 0.55 + 1.7;
+    }
+  }
+  const W = NTh;
+  for (let i = 0; i < rings - 1; i++) for (let j = 0; j < NTh; j++) {
+    const a = i * W + j, b = i * W + (j + 1) % NTh, c = a + W, d = b + W;
+    idx.push(a, b, c, b, d, c);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  const fixPoles = () => {
+    const n = g.attributes.normal;
+    for (let j = 0; j < NTh; j++) { n.setXYZ(j, 0, 1, 0); n.setXYZ((rings - 1) * W + j, 0, -1, 0); }
+  };
+  g.computeVertexNormals(); fixPoles();
+  // displacement along normals
+  const P = g.attributes.position, N = g.attributes.normal, colArr = new Float32Array(P.count * 3);
+  const grooveAt = new Float32Array(P.count);
+  const v = new V3(), nn = new V3();
+  for (let i = 0; i < P.count; i++) {
+    v.fromBufferAttribute(P, i); nn.fromBufferAttribute(N, i);
+    let d;
+    if (v.y >= -0.005) {
+      const r = dorsalRelief(v.x, v.z); d = r.d; grooveAt[i] = r.g;
+      // granulation, stronger in mid-carapace, fading toward the rim
+      const rim = smooth(0.35, 0.02, v.y);
+      d += (fbm(v.x * 34, v.y * 34, v.z * 34, 3) - 0.5) * 0.011 * (1 - 0.5 * rim);
+      d += (fbm(v.x * 11 + 4, v.y * 11, v.z * 11, 3) - 0.5) * 0.02;
+      d *= 1 - 0.7 * smooth(0.06, 0.0, v.y) * 0;
+    } else {
+      d = ventralRelief(v.x, v.z) + (fbm(v.x * 30, v.y * 30, v.z * 30, 3) - 0.5) * 0.008;
+    }
+    v.addScaledVector(nn, d); P.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals(); fixPoles();
+  // colours
+  const cc = new Color();
+  for (let i = 0; i < P.count; i++) {
+    v.fromBufferAttribute(P, i);
+    const ax = Math.abs(v.x);
+    const m1 = fbm(v.x * 5 + 2, v.y * 5, v.z * 5, 4), m2 = fbm(v.x * 15, v.y * 15 + 3, v.z * 15, 3), m3 = fbm(v.x * 38, v.y * 38, v.z * 38 + 7, 2);
+    cc.copy(PAL.shell).lerp(PAL.shellDark, smooth(0.45, 0.7, m1) * 0.75);
+    cc.lerp(PAL.mud, smooth(0.5, 0.72, m2) * 0.65 * smooth(-0.05, 0.12, v.y));
+    cc.multiplyScalar(0.85 + 0.3 * m3);
+    // male blue patch (anterior branchial / hepatic region)
+    const bd = fbm(v.x * 12, v.y * 12, v.z * 12, 3);
+    const bm = gauss(ax - 0.29, 0.085) * gauss(v.z - 0.19 - 0.3 * (ax - 0.29), 0.1) * smooth(-0.08, 0.06, v.y) * smooth(0.25, 0.55, bd + 0.25);
+    cc.lerp(PAL.blue, clamp(bm * 1.25));
+    cc.lerp(PAL.blueDeep, clamp(bm - 0.6) * 0.7);
+    // grooves darker
+    cc.multiplyScalar(1 - Math.min(0.45, grooveAt[i] * 22));
+    // underside
+    if (v.y < 0) {
+      const u = smooth(0.0, -0.06, v.y);
+      const ster = smooth(0.26, 0.2, ax) * smooth(-0.36, -0.28, v.z) * smooth(0.34, 0.26, v.z);
+      const under = PAL.sternum.clone().multiplyScalar(0.8 + 0.3 * m2).lerp(PAL.shellDark, 0.15 * smooth(0.5, 0.8, m1));
+      cc.lerp(PAL.shell.clone().multiplyScalar(0.7), u * 0.6);
+      cc.lerp(under, ster * u);
+    }
+    colArr[i * 3] = cc.r; colArr[i * 3 + 1] = cc.g; colArr[i * 3 + 2] = cc.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
+  return g;
+}
+
+// ---------- appendages ----------
+const bump = (t, c, w) => Math.exp(-sq((t - c) / w));
+
+function legColor(base, pale = 0.0) {
+  return (t, a, p, out) => {
+    const m = fbm(p.x * 9 + 1, p.y * 9, p.z * 9, 3), m2 = fbm(p.x * 26, p.y * 26, p.z * 26 + 5, 2);
+    out.copy(PAL.legDark).lerp(base, smooth(0.35, 0.75, m));
+    const up = 0.5 + 0.5 * Math.sin(a);
+    out.lerp(PAL.mud, smooth(0.6, 0.85, m2) * 0.5 * up * 0.6);
+    out.lerp(PAL.legPale, pale * smooth(0.45, 0.8, m));
+    out.multiplyScalar(0.85 + 0.3 * m2);
+  };
+}
+
+/** Walking-leg segment meshes (each returns Group of meshes, along +X, pivot at proximal end). */
+function legSegment(kind, s, mats, tone = 0) {
+  const g = new THREE.Group();
+  const geos = [];
+  let L, prof, opt = {};
+  if (kind === 'coxa') {
+    L = 0.13 * s; prof = (t) => ({ w: s * (0.06 - 0.014 * t), h: s * (0.065 - 0.014 * t), n: 2 });
+    opt = { cap0: 0.06, cap1: 0.05, neck1: 0.7, nR: 20, nT: 18 };
+  } else if (kind === 'merus') {
+    L = 0.44 * s;
+    prof = (t) => ({ w: s * (0.024 + 0.016 * bump(t, 0.5, 0.42)), h: s * (0.036 + 0.036 * bump(t, 0.45, 0.4) - 0.005 * t), n: 2.6, oy: s * 0.006 * Math.sin(PI * t) });
+    opt = { cap0: 0.07, cap1: 0.06, ridge: 0.28, ridgeB: 0.14, ridgeW: 0.42, nR: 28, nT: 56 };
+  } else if (kind === 'carpus') {
+    L = 0.2 * s;
+    prof = (t) => ({ w: s * (0.03 + 0.012 * bump(t, 0.45, 0.35)), h: s * (0.036 + 0.02 * bump(t, 0.4, 0.35)), n: 2.1 });
+    opt = { cap0: 0.06, cap1: 0.05, ridge: 0.18, nR: 24, nT: 28 };
+  } else if (kind === 'propodus') {
+    L = 0.42 * s;
+    prof = (t) => ({ w: s * (0.02 + 0.005 * bump(t, 0.3, 0.3) - 0.005 * t), h: s * (0.03 + 0.008 * bump(t, 0.25, 0.3) - 0.009 * t), n: 2.3, oy: -s * 0.004 * Math.sin(PI * t) });
+    opt = { cap0: 0.05, cap1: 0.045, ridgeB: 0.12, nR: 20, nT: 48 };
+  } else { // dactylus
+    L = 0.3 * s;
+    prof = (t) => ({ w: s * (0.018 * Math.pow(1 - t, 0.75) + 0.0015), h: s * (0.024 * Math.pow(1 - t, 0.8) + 0.0015), n: 2.2, oy: -s * 0.085 * t * t });
+    opt = { cap0: 0.04, cap1: 0.0, neck1: 0.5, ridge: 0.2, nR: 16, nT: 40 };
+  }
+  { const p0 = prof; prof = (t) => { const r = p0(t); r.w *= 1.18; r.h *= 1.18; return r; }; }
+  const base = tone > 0 ? PAL.legPale.clone().lerp(PAL.legMid, 0.5) : PAL.legMid;
+  const T = makeTube({ L, prof, colorFn: legColor(base, kind === 'propodus' ? 0.35 : 0.15), ...opt, ext: 0.03 * s });
+  geos.push(T.geo);
+  // spines / setae
+  if (kind === 'merus') {
+    geos.push(makeSpike(T.sample(L * 0.97, PI / 2).p, new V3(0.4, 1, 0), 0.06 * s, 0.014 * s, new V3(0, 0, 0), PAL.legMid, 5, 3)); // distal dorsal spine
+    for (let i = 0; i < 6; i++) { const t = 0.15 + 0.14 * i, sp = T.sample(L * t, 3 * PI / 2 + 0.3); geos.push(makeSpike(sp.p, sp.n, 0.05 * s, 0.006 * s, new V3(0.5, 0, 0), PAL.seta, 4, 3)); }
+  } else if (kind === 'carpus') {
+    for (let i = 0; i < 2; i++) { const sp = T.sample(L * 0.92, PI / 2 + (i ? 0.5 : -0.5)); geos.push(makeSpike(sp.p, sp.n.clone().add(new V3(0.3, 0, 0)), 0.045 * s, 0.009 * s, new V3(0, 0, 0), PAL.legMid, 4, 3)); }
+  } else if (kind === 'propodus') {
+    for (let i = 0; i < 16; i++) {
+      const t = 0.2 + 0.78 * (i / 15), sp = T.sample(L * t, 3 * PI / 2 - 0.35 + (i % 2) * 0.7);
+      geos.push(makeSpike(sp.p, sp.n.clone().add(new V3(0.35, 0, 0)), (0.05 + 0.03 * rnd()) * s, 0.0055 * s, new V3(0.3, -0.2, 0), PAL.seta, 4, 3));
+    }
+    for (let i = 0; i < 4; i++) { const t = 0.35 + 0.18 * i, sp = T.sample(L * t, PI / 2 + 0.25); geos.push(makeSpike(sp.p, sp.n, 0.09 * s, 0.006 * s, new V3(0.5, 0, 0), PAL.seta, 4, 3)); }
+  } else if (kind === 'dactylus') {
+    for (let i = 0; i < 12; i++) {
+      const t = 0.08 + 0.55 * (i / 11), sp = T.sample(L * t, PI / 2 + (i % 2 ? 0.4 : -0.4));
+      geos.push(makeSpike(sp.p, sp.n, 0.05 * s, 0.005 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3));
+    }
+  }
+  const m = new THREE.Mesh(merge(geos), mats.leg);
+  g.add(m);
+  return { group: g, L, mesh: m };
+}
+
+function clawColor(t, a, p, out) {
+  const m = fbm(p.x * 8, p.y * 8, p.z * 8, 3);
+  out.copy(PAL.claw).lerp(PAL.clawShade, smooth(0.4, 0.8, m) * 0.6);
+  out.multiplyScalar(0.94 + 0.08 * fbm(p.x * 30, p.y * 30, p.z * 30, 2));
+}
+
+function chelaGeom(kind, s, mats) {
+  const geos = [];
+  let L, T;
+  if (kind === 'coxa') {
+    L = 0.17 * s; T = makeTube({ L, prof: (t) => ({ w: s * 0.08, h: s * 0.085, n: 2 }), colorFn: legColor(PAL.legMid), cap0: 0.06, cap1: 0.05, neck1: 0.72, nR: 20, nT: 16, ext: 0.03 });
+    geos.push(T.geo);
+  } else if (kind === 'merus') {
+    L = 0.42 * s;
+    T = makeTube({ L, prof: (t) => ({ w: s * (0.055 + 0.04 * bump(t, 0.6, 0.4)), h: s * (0.06 + 0.055 * bump(t, 0.65, 0.4)), n: 2.4 }), colorFn: legColor(PAL.clawDarkMerus.clone().lerp(PAL.legMid, 0.4), 0.1), cap0: 0.07, cap1: 0.06, ridgeB: 0.3, ridge: 0.15, ridgeW: 0.5, nR: 28, nT: 40, ext: 0.03 });
+    geos.push(T.geo);
+    for (let i = 0; i < 7; i++) { const sp = T.sample(L * (0.35 + 0.09 * i), 3 * PI / 2 + 0.15); geos.push(makeSpike(sp.p, sp.n, 0.045 * s, 0.006 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3)); }
+  } else if (kind === 'carpus') {
+    L = 0.3 * s;
+    T = makeTube({ L, prof: (t) => ({ w: s * (0.075 + 0.028 * bump(t, 0.5, 0.35)), h: s * (0.08 + 0.03 * bump(t, 0.45, 0.35)), n: 2.0 }), colorFn: (t, a, p, o) => { legColor(PAL.legMid, 0.25)(t, a, p, o); o.lerp(PAL.clawShade, 0.25 * t); }, cap0: 0.06, cap1: 0.06, ridge: 0.16, nR: 26, nT: 30, ext: 0.03 });
+    geos.push(T.geo);
+    const sp = T.sample(L * 0.9, PI / 2 + 0.35); geos.push(makeSpike(sp.p, sp.n, 0.06 * s, 0.014 * s, new V3(0, 0, 0), PAL.clawShade, 5, 3));
+  } else if (kind === 'propodus') {
+    // palm + fixed finger; fingers lie in the local XY plane, palm broad in Y
+    L = 0.74 * s; const Hp = 0.115 * s, F0 = 0.6;
+    const hh = (t) => t < F0 ? Hp * (0.5 + 0.5 * Math.pow(Math.sin(PI * t / F0), 0.8)) : 0.5 * Hp * Math.pow(Math.max(0, 1 - (t - F0) / (1 - F0)), 0.85) + 0.005 * s;
+    const bottom = (t) => -Hp + (t > F0 ? 0.11 * s * sq((t - F0) / (1 - F0)) : 0);
+    T = makeTube({
+      L, n: 2.3,
+      prof: (t) => {
+        const h = hh(t);
+        const w = t < F0 ? s * (0.05 + 0.03 * Math.sin(PI * t / F0)) : s * (0.05 * Math.pow(Math.max(0, 1 - (t - F0) / (1 - F0)), 0.55) + 0.006);
+        return { h, w, n: t < F0 ? 2.5 : 2.0, oy: bottom(t) + h };
+      },
+      colorFn: (t, a, p, o) => { clawColor(t, a, p, o); if (t < 0.12) o.lerp(PAL.clawShade, 1 - t / 0.12); if (t > 0.9) o.lerp(PAL.clawTip, smooth(0.9, 1, t) * 0.8); },
+      cap0: 0.06, cap1: 0.0, neck0: 0.6, neck1: 0.4, nR: 32, nT: 72, ext: 0.03, ridge: 0.05, uvScale: 0.9,
+    });
+    geos.push(T.geo);
+    for (let i = 0; i < 8; i++) {   // teeth on the fixed finger's cutting edge
+      const t = F0 + 0.03 + 0.34 * (i / 7), sp = T.sample(L * t, PI / 2);
+      geos.push(makeSpike(sp.p.clone().add(new V3(0, -0.004, 0)), new V3(0.15, 1, 0), (0.024 - 0.002 * i) * s, 0.011 * s, new V3(0, 0, 0), PAL.clawTip.clone().lerp(PAL.claw, 0.55), 4, 2));
+    }
+    for (let i = 0; i < 9; i++) { const t = 0.15 + 0.6 * i / 8, sp = T.sample(L * t, 3 * PI / 2); geos.push(makeSpike(sp.p, sp.n, 0.045 * s, 0.005 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3)); }
+    T.hinge = new V3(L * 0.56, bottom(0.56) + 2 * hh(0.56) - 0.03 * s, 0);
+  } else { // dactylus (movable finger) — drawn pointing along +X, curved toward -Y (closing side)
+    L = 0.36 * s;
+    T = makeTube({
+      L, n: 2.2,
+      prof: (t) => ({ h: s * (0.04 * Math.pow(1 - t, 0.8) + 0.004), w: s * (0.04 * Math.pow(1 - t, 0.55) + 0.005), oy: -s * 0.06 * t * t }),
+      colorFn: (t, a, p, o) => { clawColor(t, a, p, o); if (t > 0.86) o.lerp(PAL.clawTip, smooth(0.86, 1, t) * 0.85); },
+      cap0: 0.04, cap1: 0.0, neck0: 0.7, neck1: 0.35, nR: 24, nT: 44, ext: 0.03, uvScale: 0.9,
+    });
+    geos.push(T.geo);
+    for (let i = 0; i < 8; i++) {
+      const t = 0.14 + 0.62 * (i / 7), sp = T.sample(L * t, 3 * PI / 2);
+      geos.push(makeSpike(sp.p, new V3(0.1, -1, 0), (0.026 - 0.0018 * i) * s, 0.011 * s, new V3(0, 0, 0), PAL.clawTip.clone().lerp(PAL.claw, 0.55), 4, 2));
+    }
+  }
+  const m = new THREE.Mesh(merge(geos), (kind === 'propodus' || kind === 'dactylus') ? mats.claw : mats.leg);
+  const g = new THREE.Group(); g.add(m);
+  return { group: g, L, mesh: m, hinge: T.hinge };
+}
+
+// ---------- assembly ----------
+const R = 'R', Lf = 'L';
+function joint(name, parent, pos, rot, meta, mirror = false) {
+  if (mirror) { const m = new THREE.Group(); m.name = `${name}_mount`; m.scale.x = -1; parent.add(m); parent = m; }
+  const j = new THREE.Group(); j.name = name; j.position.copy(pos); j.rotation.set(rot[0] * D2R, rot[1] * D2R, rot[2] * D2R);
+  j.userData = { joint: true, ...meta }; parent.add(j); return j;
+}
+
+export const JOINTS = []; // registry for animation: {node, rest:[x,y,z]deg}
+
+function reg(node, meta) { JOINTS.push(node); node.userData.rest = [node.rotation.x, node.rotation.y, node.rotation.z]; }
+
+export function buildCrab(mats) {
+  seed = 12345; JOINTS.length = 0;
+  const crab = new THREE.Group(); crab.name = 'Crab';
+  const body = new THREE.Group(); body.name = 'Body'; crab.add(body);
+  const carapace = new THREE.Mesh(buildCarapace(), mats.carapace); carapace.name = 'Carapace_mesh'; body.add(carapace);
+
+  // sand / mud grains on the carapace
+  const grains = [];
+  for (let i = 0; i < 260; i++) {
+    const th = rnd() * 2 * PI, rr = Math.sqrt(rnd()) * 0.92;
+    const x = Math.cos(th) * rr * 0.48, z = Math.sin(th) * rr * 0.37; if (topY(x, z) < 0.03) continue;
+    const y = topY(x, z) - 0.004, r = 0.006 + 0.012 * Math.pow(rnd(), 3);
+    grains.push(makeBlob(new V3(x, y, z), r, new V3(1, 0.7, 1), rnd() < 0.6 ? PAL.mud.clone().multiplyScalar(0.7) : C('#8f8a7a')));
+  }
+  for (let i = 0; i < 4; i++) { const x = (rnd() - 0.5) * 0.6, z = -0.05 - rnd() * 0.25; grains.push(makeBlob(new V3(x, topY(x, z), z), 0.04 + rnd() * 0.025, new V3(1.2, 0.5, 1), PAL.mud.clone().multiplyScalar(0.75), 2)); }
+  const mud = new THREE.Mesh(merge(grains), mats.mud); mud.name = 'MudGrains_mesh'; body.add(mud);
+
+  // ---- eyestalks ----
+  for (const side of [R, Lf]) {
+    const sx = side === R ? 1 : -1;
+    const eye = joint(`${side}_eyestalk`, body, new V3(EYE_X, topY(EYE_X, EYE_Z) - 0.045, EYE_Z), [0, 0, 84], { hinge: 'z', min: -15, max: 100, label: 'eyestalk' }, sx < 0);
+    const Ls = 0.46;
+    const T = makeTube({
+      L: Ls, prof: (t) => ({ w: 0.036 - 0.014 * t + 0.008 * bump(t, 0, 0.2), h: 0.036 - 0.014 * t + 0.008 * bump(t, 0, 0.2), n: 2, oz: 0.004 * Math.sin(PI * t) }),
+      colorFn: (t, a, p, o) => { o.copy(PAL.legMid).lerp(PAL.legPale, 0.3).lerp(PAL.legDark, smooth(0.75, 1, t) * 0.7); o.multiplyScalar(0.85 + 0.3 * fbm(p.x * 25, p.y * 25, p.z * 25, 2)); },
+      cap0: 0.05, cap1: 0.05, neck0: 0.8, neck1: 0.9, nR: 18, nT: 30, ext: 0.05,
+    });
+    const stalk = new THREE.Mesh(T.geo, mats.leg); stalk.name = `${side}_eyestalk_mesh`; eye.add(stalk);
+    const cornea = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), mats.cornea); cornea.name = `${side}_cornea_mesh`;
+    cornea.scale.set(0.05, 0.043, 0.042); cornea.position.set(Ls + 0.02, 0.0, 0.006); eye.add(cornea);
+    reg(eye);
+  }
+
+  // ---- third maxillipeds ----
+  for (const side of [R, Lf]) {
+    const sx = side === R ? 1 : -1;
+    const mx = joint(`${side}_maxilliped3`, body, new V3(0.035, botY(0.035, 0.05) - 0.02, 0.06), [0, -84, 0], { hinge: 'z', min: -10, max: 60, label: 'maxilliped3' }, sx < 0);
+    const T = makeTube({
+      L: 0.3, prof: (t) => ({ w: 0.075 * (0.8 + 0.2 * Math.sin(PI * clamp(t * 1.2))) * (1 - 0.25 * t), h: 0.018, n: 2.6, oy: -0.004 * t }),
+      colorFn: (t, a, p, o) => { o.copy(PAL.shellDark).lerp(PAL.legMid, 0.4 + 0.3 * fbm(p.x * 20, p.y * 20, p.z * 20, 2)); },
+      cap0: 0.04, cap1: 0.08, neck0: 0.8, neck1: 0.5, nR: 20, nT: 24, ext: 0.03,
+    });
+    const gs = [T.geo];
+    for (let i = 0; i < 10; i++) { const sp = T.sample(0.3 * (0.4 + 0.06 * i), 0.0 + (i % 2) * 0.2); gs.push(makeSpike(sp.p, sp.n.clone().add(new V3(0.8, 0, 0)), 0.05, 0.005, new V3(0, -0.2, 0), PAL.seta, 4, 3)); }
+    const m = new THREE.Mesh(merge(gs), mats.leg); m.name = `${side}_maxilliped3_mesh`; mx.add(m);
+    reg(mx);
+  }
+
+  // ---- abdomen (male: narrow, segmented) ----
+  {
+    const ab = joint('Abdomen', body, new V3(0, botY(0, -0.33) - 0.004, -0.345), [0, -90, 0], { hinge: 'z', min: -5, max: 75, label: 'abdomen' });
+    const Lz = 0.4, segs = [0.05, 0.14, 0.22, 0.35, 0.5, 0.66, 0.84];
+    const T = makeTube({
+      L: Lz, n: 3.0,
+      prof: (t) => {
+        let w = t < 0.25 ? mix(0.2, 0.1, smooth(0, 0.25, t)) : t < 0.7 ? mix(0.1, 0.075, (t - 0.25) / 0.45) : 0.075 * Math.pow(Math.max(0, 1 - (t - 0.7) / 0.3), 0.55) + 0.01;
+        let h = 0.016;
+        for (const s of segs) h *= 1 - 0.3 * gauss(t - s, 0.012);
+        const z = -0.345 + t * Lz;
+        return { w, h, oy: botY(0, z) - 0.345 * 0 - 0.006 - botY(0, -0.345) + 0.0 };
+      },
+      colorFn: (t, a, p, o) => { o.copy(PAL.abd).multiplyScalar(0.85 + 0.25 * fbm(p.x * 20, p.y * 20, p.z * 20, 2)); o.lerp(PAL.shellDark, 0.25 * gauss(t - 1, 0.15)); },
+      cap0: 0.04, cap1: 0.1, neck0: 0.85, neck1: 0.3, nR: 24, nT: 70, ext: 0.0, ridgeB: 0.25, uvScale: 0.5,
+    });
+    const m = new THREE.Mesh(T.geo, mats.carapace); m.name = 'Abdomen_mesh'; ab.add(m);
+    reg(ab);
+  }
+
+  // ---- chelipeds ----
+  const chelaSpec = [
+    { n: 'coxa', s: 1 }, { n: 'merus', s: 1 }, { n: 'carpus', s: 1 }, { n: 'propodus', s: 1 }, { n: 'dactylus', s: 1 },
+  ];
+  for (const side of [R, Lf]) {
+    const sx = side === R ? 1 : -1;
+    let parent = body, off = new V3(0.27, -0.075, 0.24);
+    const rest = { coxa: [0, -42, -6], merus: [0, -8, 16], carpus: [0, -128, -8], propodus: [0, 0, -58], dactylus: [0, 0, 0] };
+    let prevL = 0;
+    for (const cs of chelaSpec) {
+      const seg = chelaGeom(cs.n, cs.s, mats);
+      let pos = parent === body ? off : new V3(prevL, 0, 0);
+      const j = joint(`${side}_cheliped_${cs.n}`, parent, pos, rest[cs.n], { hinge: cs.n === 'carpus' ? 'y' : 'z', min: -120, max: 120, label: `cheliped ${cs.n}` }, parent === body && sx < 0);
+      seg.mesh.name = `${j.name}_mesh`; j.add(seg.group);
+      if (cs.n === 'propodus') { j.userData.hingePos = seg.hinge.toArray(); }
+      if (cs.n === 'dactylus') { const hp = parent.userData.hingePos; j.position.set(hp[0], hp[1], hp[2]); j.rotation.z = -9 * D2R; }
+      reg(j); parent = j; prevL = seg.L;
+      if (cs.n === 'propodus') prevL = seg.L;
+    }
+  }
+
+  // ---- walking legs ----
+  const legs = [
+    { z: 0.17, yaw: 32, s: 0.95 }, { z: 0.03, yaw: 10, s: 1.06 }, { z: -0.11, yaw: -12, s: 1.02 }, { z: -0.24, yaw: -34, s: 0.9 },
+  ];
+  legs.forEach((lg, k) => {
+    for (const side of [R, Lf]) {
+      const sx = side === R ? 1 : -1;
+      const xr = aAt(lg.z) * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(lg.z / CP.b), CP.n)), 1 / CP.n) * 0.9;
+      const xs = xr;
+      const pname = `${side}_leg${k + 2}`;
+      const rest = {
+        coxa: [0, -lg.yaw, -8],
+        merus: [0, 0, 30],
+        carpus: [0, 0, -78 + k * 2],
+        propodus: [0, 0, -22],
+        dactylus: [0, 0, -12],
+      };
+      let parent = body, prevL = 0;
+      for (const kind of ['coxa', 'merus', 'carpus', 'propodus', 'dactylus']) {
+        const seg = legSegment(kind, lg.s, mats, kind === 'carpus' ? 1 : 0);
+        const pos = parent === body ? new V3(xs, botY(xs, lg.z) + 0.085, lg.z) : new V3(prevL, 0, 0);
+        const j = joint(`${pname}_${kind}`, parent, pos, rest[kind], { hinge: 'z', min: -100, max: 100, label: `leg ${k + 2} ${kind}` }, parent === body && sx < 0);
+        seg.mesh.name = `${j.name}_mesh`; j.add(seg.group);
+        reg(j); parent = j; prevL = seg.L;
+      }
+    }
+  });
+  return crab;
+}

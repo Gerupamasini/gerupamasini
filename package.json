@@ -1,0 +1,23 @@
+{
+  "name": "chigogani-3d",
+  "version": "1.0.0",
+  "description": "Ilyoplax pusilla procedural GLB + Three.js viewer",
+  "scripts": {
+    "start": "node tools/server.mjs",
+    "build:model": "node tools/build-model.mjs",
+    "shots": "node tools/shots.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gerupamasini/gerupamasini.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Gerupamasini/gerupamasini/issues"
+  },
+  "homepage": "https://github.com/Gerupamasini/gerupamasini#readme",
+  "type": "module",
+  "devDependencies": {
+    "playwright-core": "^1.63.0",
+    "three": "^0.170.0"
+  }
+}
