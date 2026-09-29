@@ -352,24 +352,25 @@ function yamatoCarapace(w, h, l, q = 1) {
 // 掌は高さが長さの半分近くある卵形で側扁。不動指は短く三角形で下方へ強く屈曲し（deflexed）、
 // 可動指は掌の上端の関節から鉤状に下へ湾曲して不動指の先に重なる。両指の内縁に小歯が並ぶ。
 export function macroChelaDims(PL, PH) {
-  const pl = PL * 0.62;                       // 掌部の長さ
-  const ang = -0.75;                          // 不動指の向き
-  const FL = PL * 0.4;                        // 不動指の長さ
-  const base = [pl * 0.86, -PH * 0.24];       // 不動指の基部（掌の下縁の先）
+  const pl = PL * 0.6;                        // 掌部の長さ（細長い）
+  const ang = -0.3;                           // 不動指はわずかに下へ向く
+  const FL = PL * 0.42;                       // 不動指の長さ
+  const base = [pl * 0.9, -PH * 0.22];        // 不動指の基部（掌の下縁の先）
   const tip = [base[0] + Math.cos(ang) * FL, base[1] + Math.sin(ang) * FL];
-  const pivot = [pl * 0.9, PH * 0.3];         // 可動指の関節（掌の上縁の先）
+  const pivot = [pl * 0.95, PH * 0.26];       // 可動指の関節（掌の上縁の先）
   return { pl, ang, FL, base, tip, pivot };
 }
 function macroChelaGeo(PL, PH, T, q = 1) {
-  return cached(`mchela7:${PL}:${PH}:${T}:${q}`, () => {
+  return cached(`mchela9:${PL}:${PH}:${T}:${q}`, () => {
     const D = macroChelaDims(PL, PH);
     const { pl, ang, FL, base } = D;
-    const palm = ellipsoid([pl * 0.5, 0, 0], [pl * 0.56, PH * 0.5, T * 0.5]);
+    const palm0 = ellipsoid([pl * 0.5, 0, 0], [pl * 0.58, PH * 0.5, T * 0.5]);
+    const palm = (x, y, z) => { const t = Math.min(1, Math.max(0, x / pl)); return palm0(x, y / (1 - 0.18 * t * t), z / (1 - 0.15 * t)) * (1 - 0.1 * t); };
     const neck = cone([-PH * 0.05, PH * 0.12, 0], [pl * 0.2, PH * 0.08, 0], PH * 0.13, PH * 0.2);
     // 不動指：基部は太く、先へ細る三角形。下縁は掌の下縁から連続して下へ曲がる
     const fx = (d) => base[0] + Math.cos(ang) * d, fy = (d) => base[1] + Math.sin(ang) * d;
     const pollex = tube([[pl * 0.62, -PH * 0.12, 0], [fx(0), fy(0), 0], [fx(FL * 0.5), fy(FL * 0.5), 0], [fx(FL), fy(FL), 0]],
-      [PH * 0.3, PH * 0.22, PH * 0.12, PH * 0.025], PH * 0.06);
+      [PH * 0.32, PH * 0.24, PH * 0.15, PH * 0.035], PH * 0.06);
     const teeth = [];
     for (let i = 0; i < 8; i++) {
       const d = FL * (0.12 + i * 0.1);
@@ -378,10 +379,10 @@ function macroChelaGeo(PL, PH, T, q = 1) {
     }
     // 掌の上縁の顆粒列と外面の縦の隆起
     const tub = [];
-    for (let i = 0; i < 6; i++) { const x = pl * (0.2 + i * 0.1); const u = (x - pl * 0.5) / (pl * 0.56); tub.push(sphere([x, PH * 0.5 * Math.sqrt(Math.max(0, 1 - u * u)) - PH * 0.02, T * 0.05], PH * 0.028)); }
+    for (let i = 0; i < 16; i++) { const x = pl * (0.12 + i * 0.052); const u = (x - pl * 0.5) / (pl * 0.56); tub.push(sphere([x, PH * 0.5 * Math.sqrt(Math.max(0, 1 - u * u)) - PH * 0.03, T * 0.12], PH * 0.024)); }
     const ridge = cone([pl * 0.2, -PH * 0.12, T * 0.36], [pl * 0.8, -PH * 0.2, T * 0.3], PH * 0.02, PH * 0.018);
     // 可動指の関節窩（掌の上端先の縁がめくれた受け口）
-    const socket = ellipsoid([D.pivot[0] - PH * 0.02, D.pivot[1] - PH * 0.02, 0], [PH * 0.14, PH * 0.12, T * 0.36]);
+    const socket = ellipsoid([D.pivot[0] - PH * 0.04, D.pivot[1] - PH * 0.04, 0], [PH * 0.1, PH * 0.08, T * 0.3]);
     const socketCut = sphere([D.pivot[0] + PH * 0.06, D.pivot[1], 0], PH * 0.1);
     // 不動指基部の大きな臼歯状の歯
     const molar = ellipsoid([fx(FL * 0.22) - Math.sin(ang) * PH * 0.17, fy(FL * 0.22) + Math.cos(ang) * PH * 0.17, 0], [PH * 0.07, PH * 0.05, T * 0.18]);
@@ -405,12 +406,12 @@ function macroChelaGeo(PL, PH, T, q = 1) {
 }
 // 可動指：関節から鉤状に湾曲し、先端は不動指の先に重なる。tip は関節から見た先端位置
 function macroDactGeo(PL, PH, q = 1) {
-  return cached(`mdact6:${PL}:${PH}:${q}`, () => {
+  return cached(`mdact8:${PL}:${PH}:${q}`, () => {
     const D = macroChelaDims(PL, PH);
     const tx = D.tip[0] - D.pivot[0] + PH * 0.02, ty = D.tip[1] - D.pivot[1] + PH * 0.04;
     const L = Math.hypot(tx, ty);
     const ux = tx / L, uy = ty / L, nx = -uy, ny = ux;   // 弦の方向と、外側（上）への法線
-    const bow = L * 0.22;
+    const bow = L * 0.12;
     const P = (t, b) => [ux * L * t + nx * b, uy * L * t + ny * b, 0];
     const pts = [P(0, 0), P(0.3, bow * 0.85), P(0.62, bow), P(0.88, bow * 0.55), P(1, 0)];
     const t = tube(pts, [PH * 0.12, PH * 0.11, PH * 0.085, PH * 0.05, PH * 0.018], PH * 0.05);
@@ -419,7 +420,7 @@ function macroDactGeo(PL, PH, q = 1) {
       const s = 0.2 + i * 0.1, b = bow * Math.sin(Math.PI * Math.min(1, s * 1.1)) * 0.9 - PH * 0.09;
       teeth.push(sphere(P(s, b), PH * 0.03));
     }
-    const condyle = sphere([0, 0, 0], PH * 0.1);
+    const condyle = sphere([0, 0, 0], PH * 0.065);
     const bigTooth = ellipsoid(P(0.32, bow * 0.85 - PH * 0.11), [PH * 0.06, PH * 0.045, PH * 0.05]);
     const f = (x, y, z) => {
       let d = t(x, y, z * 1.12) / 1.12;
@@ -505,7 +506,7 @@ export const CRAB_SPECS = {
     // 鉗は顔の前に垂らして構え、指先を泥につける。雄は大きく、雌は小さい。
     // 前節高 PH ≈ 前節長 PL × 0.27（美濃・伊谷 2024 の計測図）
     // 鉗脚の底節は甲の下、口の脇の腹面に付く（前側縁の角ではない）
-    claw: { cox: 0.05, bi: 0.06, merus: 0.28, carpus: 0.15, PL: 0.56, PH: 0.26, T: 0.12, r: 0.05, macro: true, shX: 0.36, shY: 0.55, shZ: 0.5, tuft: 0.1 },
+    claw: { cox: 0.05, bi: 0.06, merus: 0.28, carpus: 0.15, PL: 0.62, PH: 0.19, T: 0.11, r: 0.05, macro: true, shX: 0.36, shY: 0.55, shZ: 0.5, tuft: 0.1 },
     clawF: { cox: 0.045, bi: 0.05, merus: 0.22, carpus: 0.12, PL: 0.38, PH: 0.14, T: 0.075, r: 0.04, macro: true, shX: 0.36, shY: 0.55, shZ: 0.55 },
     // 眼柄は細長く、額の脇から V 字に立ち上がる
     eye: { stalk: 0.37, r: 0.017, taper: 1.2, curve: 0.03, cornea: 0.025, cLen: 1.7, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },

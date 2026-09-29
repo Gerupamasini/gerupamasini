@@ -259,6 +259,12 @@ export const GLSL = {
       // 関節膜（掌と腕節の間・可動指の付け根）は暗い
       if (uP.z < 0.5) col = mix(col, uC3 * 0.55, (1.0 - smoothstep(0.0, 0.06 * L, p.x)) * 0.8);
       else col = mix(col, uC3 * 0.6, (1.0 - smoothstep(0.0, 0.05 * L, length(p.xy))) * 0.7);
+      // 両指の切断縁（向かい合う縁）と歯は暗褐色
+      float edgeN = uP.z < 0.5 ? smoothstep(0.15, 0.6, n.y) * smoothstep(0.58 * L, 0.66 * L, p.x) : smoothstep(-0.1, -0.55, n.y) * smoothstep(0.02 * L, 0.06 * L, p.x);
+      vec3 tc = cell3(p * 260.0);
+      col = mix(col, uC3 * 0.5, edgeN * (0.55 + 0.45 * (1.0 - smoothstep(0.1, 0.35, tc.x))));
+      // 可動指の背縁の暗褐色の小斑
+      if (uP.z > 0.5) col = mix(col, uC3 * 0.55, smoothstep(0.5, 0.85, n.y) * (1.0 - smoothstep(0.05, 0.22, cell3(p * 90.0 + 3.0).x)) * 0.8);
       // 指先は黒褐色で艶がある
       col = mix(col, uC3 * 0.45, uP.z > 0.5 ? smoothstep(0.42 * L, 0.52 * L, p.x) : smoothstep(0.98 * L, 1.06 * L, p.x));
       // 掌の上縁の瘤と内面の細かな顆粒はわずかに白い
