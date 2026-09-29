@@ -1,9 +1,10 @@
 # チゴガニ (Ilyoplax pusilla) ♂ — 3D モデル
 
-- `models/ilyoplax_pusilla.glb` — 完成モデル（単位 m、甲幅≈1 cm、約 8 MB、アニメ 3 種入り）
+- `models/ilyoplax_pusilla.glb` — 完成モデル（単位 m、甲幅≈1 cm、約 13 MB、13万頂点・24万三角形、MikkTSpace 接線付き、アニメ 3 種、glTF Validator: エラー/警告 0）
 - `index.html` + `src/viewer.js` — Three.js ビューア（回転/拡大、関節スライダ、クリック選択、クリップ再生）
 - `src/crab-builder.js` — 形状生成（節ごとの断面・長さ・棘・剛毛・眼柄・腹面）／`src/crab-clips.js` — アニメ
-- `tools/build-model.mjs` — GLB 再生成（headless Chromium で GLTFExporter を実行）
+- `src/scene-env.js` — 空の IBL・泥干潟の地面・巣穴・小石
+- `tools/build-model.mjs` — GLB 再生成（headless Chromium で GLTFExporter を実行）／`tools/validate.mjs` — glTF 検証／`tools/shots.mjs`, `tools/ui-test.mjs` — スクリーンショットと UI 動作テスト
 
 ```
 npm install        # three / playwright-core（ビューア自体は vendor/ の同梱版で動作）

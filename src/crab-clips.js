@@ -22,8 +22,8 @@ export function makeClips(crab) {
     clipFrom('Wave', 3.2, 48, (p) => {
       for (const s of ['R', 'L']) {
         const ph = s === 'R' ? 0 : 0.12, k = Math.pow(Math.sin((p * 2 + ph) * 2 * Math.PI) * 0.5 + 0.5, 1.4);
-        add(`${s}_cheliped_merus`, 'z', 30 * k); add(`${s}_cheliped_carpus`, 'z', 50 * k); add(`${s}_cheliped_propodus`, 'z', 40 * k);
-        add(`${s}_cheliped_dactylus`, 'z', 16 * Math.sin((p * 4 + ph) * 2 * Math.PI) * k + 12 * k);
+        add(`${s}_cheliped_merus`, 'z', 18 * k); add(`${s}_cheliped_carpus`, 'y', 60 * k); add(`${s}_cheliped_propodus`, 'z', 120 * k);
+        add(`${s}_cheliped_dactylus`, 'z', 12 * Math.sin((p * 4 + ph) * 2 * Math.PI) * k + 14 * k);
         add(`${s}_eyestalk`, 'z', 8 * k);
       }
     }),
