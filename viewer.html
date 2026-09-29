@@ -70,6 +70,7 @@ const view = views[Q.get('view') || 'q34'];
 camera.position.set(...view);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(Q.get('view') === 'head' || Q.get('view') === 'headside' ? 0.3 : Q.get('view') === 'photo' ? -0.1 : 0, 0.0, 0);
+if (Q.has('tx')) { controls.target.set(+Q.get('tx'), +(Q.get('ty') || 0), 0); camera.position.x += +Q.get('tx') - (Q.get('view') === 'photo' ? -0.1 : 0); }
 controls.enableDamping = true;
 controls.update();
 
