@@ -264,12 +264,21 @@ export const GLSL = {
       // 掌の上縁の瘤と内面の細かな顆粒はわずかに白い
       vec3 c = cell3(p * 140.0);
       col = mix(col, col * 1.08, (1.0 - smoothstep(0.0, 0.35, c.x)) * 0.5);
+      // 掌は上半が磁器のように白く、下半から指へかけて淡黄色を帯びる
+      if (uP.z < 0.5) col = mix(col, col * vec3(1.02, 0.95, 0.82), smoothstep(0.02, -0.08, p.y) * (1.0 - fin) * 0.8);
+      // 指の外面を走る浅い縦溝は暗い
+      if (uP.z < 0.5) col *= 1.0 - 0.18 * fin * smoothstep(0.012, 0.0, abs(p.z - 0.01)) ;
+      // 泥の薄い付着（凹みにたまる）
+      float mud = smoothstep(0.55, 0.85, fbm3(p * 22.0 + uSeed * 3.0) * 0.5 + 0.5);
+      col = mix(col, vec3(0.36, 0.34, 0.3), mud * 0.35 * smoothstep(0.2, -0.4, n.y));
       return col;
     }`,
     bump: `float orgBump(vec3 p){
       vec3 c = cell3(p*140.0);
-      return (1.0 - smoothstep(0.0, 0.4, c.x))*0.0007 + snoise3(p*35.0)*0.0006;
+      vec3 pits = cell3(p*420.0);   // 表面の細かな点刻
+      return (1.0 - smoothstep(0.0, 0.4, c.x))*0.0007 - (1.0 - smoothstep(0.0, 0.18, pits.x))*0.00035 + snoise3(p*35.0)*0.0006 + snoise3(p*9.0)*0.0009;
     }`,
+    rough: 'float orgRough(vec3 p, float r){ return r + snoise3(p*18.0)*0.1; }',
     thick: 'float orgThick(vec3 p){ return 0.5; }',
   },
   // 歩脚：まだら模様と節の明暗
