@@ -42,7 +42,7 @@ const BOUNDS = new THREE.Sphere(new THREE.Vector3(0, 0.05, 0), 0.26);
 export class KentishPloverModel {
   /**
    * @param {object} o
-   * @param {string} o.palette  maleBreeding | femaleBreeding | nonBreeding
+   * @param {string} o.palette  maleBreeding | femaleBreeding | nonBreeding | juvenile
    * @param {object} o.individual  individual variation values (see KentishPlover.js)
    * @param {number[]} o.lods  which detail levels to build (default 0,1,2)
    */

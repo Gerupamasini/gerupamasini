@@ -160,39 +160,42 @@ export class KentishPloverManager {
       geo.setAttribute('aWing', new THREE.BufferAttribute(w, 1));
       parts.push(geo.index ? geo.toNonIndexed() : geo);
     };
+    // relaxed stand proportions (body_shape_spec.md §2–§6): body 10° tail-down, head sunk onto the breast
     const body = new THREE.SphereGeometry(1, 8, 5);
-    body.scale(0.02, 0.018, 0.042);
-    body.translate(0, 0.057, -0.004);
+    body.scale(0.02, 0.023, 0.046);
+    body.rotateX(-0.17);
+    body.translate(0, 0.062, -0.012);
     add(body, pal.underparts);
     const back = new THREE.SphereGeometry(1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-    back.scale(0.021, 0.012, 0.043);
-    back.translate(0, 0.06, -0.006);
+    back.scale(0.0205, 0.016, 0.046);
+    back.rotateX(-0.2);
+    back.translate(0, 0.066, -0.014);
     add(back, pal.mantle);
-    const head = new THREE.SphereGeometry(0.0105, 7, 5);
-    head.translate(0, 0.08, 0.047);
+    const head = new THREE.SphereGeometry(0.0125, 7, 5);
+    head.translate(0, 0.0935, 0.024);
     add(head, pal.underparts);
-    const cap = new THREE.SphereGeometry(0.0108, 7, 3, 0, Math.PI * 2, 0, Math.PI / 2.6);
-    cap.translate(0, 0.081, 0.046);
+    const cap = new THREE.SphereGeometry(0.0128, 7, 3, 0, Math.PI * 2, 0, Math.PI / 2.6);
+    cap.translate(0, 0.0945, 0.023);
     add(cap, pal.crown);
-    const bill = new THREE.ConeGeometry(0.0022, 0.016, 4);
-    bill.rotateX(Math.PI / 2);
-    bill.translate(0, 0.077, 0.066);
+    const bill = new THREE.ConeGeometry(0.002, 0.016, 4);
+    bill.rotateX(Math.PI / 2 + 0.41); // 23.6° down
+    bill.translate(0, 0.0866, 0.0468);
     add(bill, pal.bill);
     for (const s of [1, -1]) {
-      const leg = new THREE.BoxGeometry(0.0022, 0.045, 0.0022);
-      leg.translate(0.01 * s, 0.022, -0.006);
+      const leg = new THREE.BoxGeometry(0.0022, 0.036, 0.0022);
+      leg.translate(0.0075 * s, 0.018, -0.01);
       add(leg, pal.legs);
       const wing = new THREE.BufferGeometry();
       // wing panel in the bind (spread) frame: root at shoulder, pivot handled in the shader
       const v = [0, 0, 0.02, 0.19 * s, 0, -0.01, 0.2 * s, 0, -0.035, 0, 0, 0.02, 0.2 * s, 0, -0.035, 0, 0, -0.035];
       wing.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-      wing.translate(0.008 * s, 0.064, 0.0);
+      wing.translate(0.008 * s, 0.072, -0.008);
       wing.computeVertexNormals();
       add(wing, pal.flightDark, s);
     }
-    const tail = new THREE.PlaneGeometry(0.014, 0.03);
+    const tail = new THREE.PlaneGeometry(0.014, 0.034);
     tail.rotateX(-Math.PI / 2);
-    tail.translate(0, 0.058, -0.06);
+    tail.translate(0, 0.058, -0.066);
     add(tail, pal.tailDark);
     const merged = mergeGeos(parts);
     merged.setAttribute('aFlap', new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3));
@@ -211,13 +214,13 @@ export class KentishPloverManager {
           if (abs(s) > 0.5) {
             float fly = aFlap.x;
             float ang = sin(uTime * 6.2831 * max(aFlap.y, 1.0) + aFlap.z * 6.0) * 0.9 * fly;
-            vec3 p = transformed - vec3(0.008 * s, 0.064, 0.0);
+            vec3 p = transformed - vec3(0.008 * s, 0.072, -0.008);
             // fold: shorten span to the flank when not flying
             float span = mix(0.08, 1.0, step(0.01, fly));
             p.x *= span;
             float c = cos(ang), sn = sin(ang) * s;
             p = vec3(p.x * c - p.y * sn, p.x * sn + p.y * c, p.z);
-            transformed = p + vec3(0.008 * s, 0.064, 0.0);
+            transformed = p + vec3(0.008 * s, 0.072, -0.008);
           }`
         );
     };

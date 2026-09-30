@@ -1,11 +1,20 @@
 // Signed-distance sculpting of the feathered body outline + Surface Nets polygonisation.
 // Working unit inside this file: millimetres (converted to metres by the caller).
 
-function sdEllipsoid(px, py, pz, c, r) {
-  // Inigo Quilez' bound-corrected ellipsoid distance
+function sdEllipsoid(px, py, pz, c, r, rx = 0) {
+  // Inigo Quilez' bound-corrected ellipsoid distance. rx (degrees): pitch of the ellipsoid about X, + = front
+  // up / rear down (the relaxed body tilt is sculpted into the bind pose, body_shape_spec.md §16)
+  let dy = py - c[1];
+  let dz = pz - c[2];
+  if (rx) {
+    const a = (rx * Math.PI) / 180;
+    const cs = Math.cos(a);
+    const sn = Math.sin(a);
+    [dy, dz] = [cs * dy - sn * dz, sn * dy + cs * dz];
+  }
   const x = (px - c[0]) / r[0];
-  const y = (py - c[1]) / r[1];
-  const z = (pz - c[2]) / r[2];
+  const y = dy / r[1];
+  const z = dz / r[2];
   const k0 = Math.sqrt(x * x + y * y + z * z);
   const x2 = x / r[0];
   const y2 = y / r[1];
@@ -36,7 +45,7 @@ const smin = (a, b, k) => {
 const smax = (a, b, k) => -smin(-a, -b, k);
 
 function primDist(p, x, y, z) {
-  return p.type === 'capsule' ? sdCapsule(x, y, z, p.a, p.b, p.r) : sdEllipsoid(x, y, z, p.c, p.r);
+  return p.type === 'capsule' ? sdCapsule(x, y, z, p.a, p.b, p.r) : sdEllipsoid(x, y, z, p.c, p.r, p.rx);
 }
 
 /** Build the SDF function (mm → mm) from the sculpt description. */
