@@ -63,6 +63,9 @@ uniform sampler2D uAlbedo;
 uniform sampler2D uNormalMap;
 uniform sampler2D uORM;
 uniform sampler2D uPigment;
+uniform sampler2D uCapAlbedo;   // snout cap: rgb albedo, a roughness (planar y/z projection)
+uniform sampler2D uCapPigment;
+uniform vec4 uCapRect;          // y0, y1, z0, z1 (mm)
 uniform sampler2D uProfile;
 uniform sampler2D uBg;          // opaque scene behind the fish (rgb) + view distance (a)
 uniform vec2 uResolution;
@@ -244,26 +247,46 @@ vec3 sampleBg(vec2 uv, float lod) {
 
 void main() {
   vec3 Ng = normalize(vWorldNormal) * (gl_FrontFacing ? 1.0 : -1.0);
+  gWorldToObj = inverse(vObjToWorld);
+  vec3 pF = toFish(vObjPos);
+  vec3 NgF = worldDirToFish(Ng);
+
+  // seam-free texture derivatives: v wraps at the ventral midline, so take the smaller of the plain
+  // and the half-shifted derivative (otherwise the jump selects the coarsest mip → a line under the chin)
+  vec2 uvA = vUv, uvB = vec2(vUv.x, fract(vUv.y + 0.5));
+  vec2 dxA = dFdx(uvA), dyA = dFdy(uvA), dxB = dFdx(uvB), dyB = dFdy(uvB);
+  vec2 gdx = dot(dxA, dxA) < dot(dxB, dxB) ? dxA : dxB;
+  vec2 gdy = dot(dyA, dyA) < dot(dyB, dyB) ? dyA : dyB;
+
+  // snout cap: the loft UVs converge at the snout tip, so the front face is shaded from a planar map
+  float capW = (1.0 - smoothstep(0.75, 1.55, pF.x)) * smoothstep(0.05, 0.45, -NgF.x);
+  vec2 capUV = vec2((pF.z - uCapRect.z) / (uCapRect.w - uCapRect.z), (pF.y - uCapRect.x) / (uCapRect.y - uCapRect.x));
+
   vec3 Tw = normalize(vWorldTangent.xyz - Ng * dot(Ng, vWorldTangent.xyz));
   vec3 Bw = cross(Ng, Tw) * vWorldTangent.w;
-  vec3 nm = texture(uNormalMap, vUv).xyz * 2.0 - 1.0;
-  nm.xy *= uNormalStrength;
+  vec3 nm = textureGrad(uNormalMap, vUv, gdx, gdy).xyz * 2.0 - 1.0;
+  nm.xy *= uNormalStrength * (1.0 - capW);
   vec3 N = normalize(mat3(Tw, Bw, Ng) * nm);
   vec3 V = normalize(cameraPosition - vWorldPos);
   float nv = dot(N, V);
   if (nv < 0.02) N = normalize(N + V * (0.02 - nv));
   vec3 L = normalize(uLightDir);
 
-  vec3 albedo = texture(uAlbedo, vUv).rgb;
-  vec3 orm = texture(uORM, vUv).rgb;
+  vec3 albedo = textureGrad(uAlbedo, vUv, gdx, gdy).rgb;
+  vec3 orm = textureGrad(uORM, vUv, gdx, gdy).rgb;
+  vec3 pig = textureGrad(uPigment, vUv, gdx, gdy).rgb;
   float ao = orm.r;
-  float rough = clamp(orm.g, 0.06, 1.0);
-  vec3 pig = texture(uPigment, vUv).rgb;
+  float rough = orm.g;
+  if (capW > 0.001) {
+    vec4 ca = texture(uCapAlbedo, capUV);
+    albedo = mix(albedo, ca.rgb, capW);
+    rough = mix(rough, ca.a, capW);
+    pig = mix(pig, texture(uCapPigment, capUV).rgb, capW);
+    ao = mix(ao, 1.0, capW * 0.5);
+  }
+  rough = clamp(rough, 0.06, 1.0);
 
   // ---- fish space
-  gWorldToObj = inverse(vObjToWorld);
-  vec3 pF = toFish(vObjPos);
-  vec3 NgF = worldDirToFish(Ng);
   vec3 NF = worldDirToFish(N);
   vec3 VF = worldDirToFish(-V);
   vec3 LF = worldDirToFish(L);
@@ -310,6 +333,10 @@ void main() {
   tauE += outside * vec3(4.0);
   tauA += outside * vec3(0.5);
   tauS += outside * 6.0;
+  // lip rolls are dense, blood-perfused tissue: they scatter and absorb, they are not see-through
+  tauE += jaws * vec3(6.0, 7.0, 7.5);
+  tauA += jaws * vec3(0.15, 0.3, 0.4);
+  tauS += jaws * 9.0;
   vec3 xE = pIn + R * tExit;
   vec3 skinIn = skinT(pig);
   vec3 skinOut = skinT(textureLod(uPigment, fishUV(xE), 2.0).rgb);
@@ -406,13 +433,16 @@ void main() {
 }
 `;
 
-export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared }) {
+export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect }) {
   const uniforms = {
     ...shared,
     uAlbedo: { value: textures.albedo },
     uNormalMap: { value: textures.normal },
     uORM: { value: textures.orm },
     uPigment: { value: textures.pigment },
+    uCapAlbedo: { value: textures.capAlbedo },
+    uCapPigment: { value: textures.capPigment },
+    uCapRect: { value: new THREE.Vector4(capRect.y0, capRect.y1, capRect.z0, capRect.z1) },
     uProfile: { value: profileTexture },
     uFrame: { value: new THREE.Vector4(frame.S0, frame.Y0, frame.SL, frame.SEND) },
     uVertStart: { value: vertebrae.start },

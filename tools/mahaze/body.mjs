@@ -3,7 +3,7 @@ import {
   S_END, SL, VERT_START, VERT_COUNT, EYE, MOUTH, OPERCLE, PREOPERCLE, RICTUS_S,
   section, basePoint, project, fieldGrad, field, throughDist, toObject, dirToObject, gapeY,
 } from './anatomy.mjs';
-import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep } from '../lib/noise.mjs';
+import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEachCell3 } from '../lib/noise.mjs';
 
 const TAU = Math.PI * 2;
 
@@ -46,6 +46,20 @@ export function invPhi(s, y, z) {
   let phi = Math.atan2(a, c);
   if (phi < 0) phi += TAU;
   return phi;
+}
+
+// Upper / lower lip bands around the gape (0..1), fish-space s, y in mm.
+function lipBands(s, y) {
+  if (s > RICTUS_S + 0.9 || y > 3.6) return { up: 0, lo: 0, rim: 0 };
+  const g = gapeY(Math.min(Math.max(s, 0.05), RICTUS_S));
+  const along = smoothstep(RICTUS_S + 0.7, RICTUS_S - 0.3, s);
+  const dy = y - g;
+  const wu = 0.62 - 0.22 * clamp(s / RICTUS_S, 0, 1); // upper lip roll height
+  const wl = 0.5 - 0.18 * clamp(s / RICTUS_S, 0, 1);
+  const up = dy > 0 ? smoothstep(wu, wu * 0.55, dy) * along : 0;
+  const lo = dy <= 0 ? smoothstep(wl, wl * 0.55, -dy) * along : 0;
+  const rim = Math.exp(-((dy / 0.09) ** 2)) * along; // moist margin where the lips meet
+  return { up, lo, rim };
 }
 
 // piecewise-linear lookup of the opercular margin: s at a given height
@@ -214,6 +228,35 @@ function buildWarpedMesh(NS, NV, log) {
   const jB = Math.ceil((phiB / TAU) * NV), jT = Math.floor((phiT / TAU) * NV);
   let ir = 0;
   for (let i = 0; i < NS; i++) if (sList[i] <= RICTUS_S) ir = i;
+
+  // Snap the gape columns exactly onto the lip seam: march horizontally (at the gape height) from outside
+  // toward the midline and stop at the surface. The radial projection alone lands them alternately on
+  // the upper or lower lip flank, which shows as a stair-stepped mouth line.
+  for (let i = 1; i <= ir; i++) {
+    for (const j of [jg, NV - jg]) {
+      const k = (i * cols + j) * 3;
+      const sv = P[k], side = Math.sign(P[k + 2]) || 1;
+      const yg = gapeY(Math.min(Math.max(sv, 0.05), RICTUS_S));
+      // horizontal inward direction: toward the midline, tilted forward near the snout tip
+      const fwd = smoothstep(0.9, 0.05, sv);
+      const d = nrm([fwd, 0, -side * (1 - fwd)]);
+      const o = [sv - d[0] * 2.0, yg, side * 3.5 * (1 - fwd) + 0];
+      let t0 = 0, found = false;
+      for (let n = 0; n < 300; n++) {
+        const t = n * 0.02;
+        if (field(o[0] + d[0] * t, o[1], o[2] + d[2] * t) < 0) { found = true; t0 = t; break; }
+      }
+      if (!found) continue;
+      let lo = t0 - 0.02, hi = t0;
+      for (let n = 0; n < 14; n++) { const m = 0.5 * (lo + hi); if (field(o[0] + d[0] * m, o[1], o[2] + d[2] * m) < 0) hi = m; else lo = m; }
+      const t = 0.5 * (lo + hi);
+      const p = [o[0] + d[0] * t, o[1], o[2] + d[2] * t];
+      if (Math.abs(p[0] - sv) > 0.6) continue; // safety: stay on this section
+      const g = fieldGrad(p[0], p[1], p[2]);
+      P[k] = p[0]; P[k + 1] = p[1]; P[k + 2] = p[2];
+      N[k] = g[0]; N[k + 1] = g[1]; N[k + 2] = g[2];
+    }
+  }
 
   // ---- per-grid vertex data
   const base = [];
@@ -451,7 +494,10 @@ function bakeBodyTextures(ctx) {
     const ed = eyeDist(s, y, z);
     d *= 1 + 0.9 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.35) ** 2));
     d *= 1 - belly * 0.97;
-    const size = 0.8 + 0.5 * dorsal + 0.35 * b;
+    const lb = lipBands(s, y);
+    d = d * (1 - 0.6 * lb.lo) + 32.0 * lb.up + 8.0 * lb.lo;
+    d *= 1 - 0.85 * lb.rim;
+    const size = (0.8 + 0.5 * dorsal + 0.35 * b) * (1 - 0.15 * lb.up);
     return [Math.max(0, d), size];
   }
 
@@ -464,47 +510,72 @@ function bakeBodyTextures(ctx) {
   const GILL = new Float32Array(nT);
   const HN = new Float32Array(nT);
   const HEAD = new Float32Array(nT);
+  // smooth pigment fields at a fish-space surface point
+  function pigmentAt(s, yy, z, q = section(clamp(s, 0.01, S_END - 0.01))) {
+    const dy = yy - q.yc;
+    const hn = clamp(dy / Math.max(dy > 0 ? q.t : q.b, 1e-3), -1.2, 1.2);
+    const head = headF(s, yy);
+    const dorsal = smoothstep(-0.2, 0.8, hn);
+    const belly = smoothstep(-0.05, -0.7, hn);
+    const { b, sd } = blotchAt(s, yy, z, hn);
+    let m = 0.035 * dorsal + 0.075 * b + 0.05 * sd;
+    if (head > 0) {
+      // fine dark vermiculation on the cheek and gill cover (typical of Acanthogobius heads)
+      const verm = smoothstep(0.74, 0.9, ridged3(s * 1.5 + 3.1, yy * 1.5, Math.abs(z) * 1.5, 3, 61)) * smoothstep(-0.8, -0.2, hn) * smoothstep(3.0, 5.0, s);
+      // coarse dark reticulation over the head top, snout and cheeks (user close-up photo)
+      const retic = smoothstep(0.68, 0.84, ridged3(s * 1.05 + 7.3, yy * 1.05, Math.abs(z) * 1.05, 3, 62)) * smoothstep(-0.45, 0.2, hn) * smoothstep(0.8, 2.5, s);
+      m = mix(m, 0.08 * dorsal + 0.3 * headMarks(s, yy, z, hn) + 0.16 * verm + 0.14 * retic, head);
+    }
+    // dusky dorsal reticulation (pigment along scale pockets)
+    m += 0.1 * dorsal * smoothstep(0.55, 0.8, ridged3(s * 2.2, yy * 2.2, z * 2.2, 3, 3)) * (1 - head * 0.5);
+    m *= 1 - belly;
+    const ed = eyeDist(s, yy, z);
+    m += 0.12 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.3) ** 2));
+    let iri = 0.85 * belly + 0.3 * smoothstep(0.25, -0.4, hn) + 0.12 * Math.exp(-(((hn - 0.02) / 0.22) ** 2));
+    iri = Math.max(iri, head * 0.55 * smoothstep(0.55, -0.3, hn) * smoothstep(3.0, 5.5, s));
+    iri = Math.max(iri, 0.06 * smoothstep(EYE.radius + 0.5, EYE.radius + 0.2, ed) * smoothstep(EYE.radius, EYE.radius + 0.15, ed));
+    iri *= 1 - 0.7 * b;
+    iri *= 0.85 + 0.3 * fbm3(s * 1.3, yy * 1.3, z * 1.3, 3, 41);
+    // lips carry no silvery iridophores; the chin is only faintly silvered
+    if (s < 5.5) iri *= 1 - 0.9 * smoothstep(0.75, 0.25, distToPolyline2(s, yy, MOUTH)) * smoothstep(5.2, 4.0, s);
+    iri *= 1 - 0.55 * smoothstep(6.0, 3.5, s) * smoothstep(0.1, -0.4, hn);
+    let xan = 0.2 + 0.45 * dorsal + 0.35 * head * smoothstep(-0.3, 0.4, hn);
+    xan *= 1 - 0.85 * belly;
+    xan *= 0.8 + 0.4 * fbm3(s * 0.9, yy * 0.9, z * 0.9, 3, 51);
+    // gill region seen through the operculum (used for the fallback albedo only)
+    const gill = smoothstep(7.5, 9.0, s) * smoothstep(11.6, 10.6, s) * smoothstep(0.35, -0.2, hn) * smoothstep(-0.95, -0.55, hn);
+    return { hn, head, mel: m, iri: clamp(iri), xan: clamp(xan), gill };
+  }
+
+  // melanophores as a 3D jittered point field (used where the texture parameterisation degenerates)
+  function spots3D(s0, yy, z) {
+    const CELL = 0.1;
+    const px = s0 / CELL, py = yy / CELL, pz = z / CELL;
+    let v = 0;
+    forEachCell3(px, py, pz, 4711, (fx, fy, fz, h) => {
+      const [dens, size] = melDensity(Math.max(fx * CELL, 0.21), fy * CELL, fz * CELL);
+      if ((h >>> 3) / 536870912 > Math.min(0.95, dens * CELL * CELL * 1.6)) return;
+      const dx = (px - fx) * CELL, dy = (py - fy) * CELL, dz = (pz - fz) * CELL;
+      const r = Math.hypot(dx, dy, dz);
+      // same look as the texture-space splats: a soft dark core with a few short, irregular dendrites
+      const rc = (0.012 + 0.014 * ((h & 255) / 255)) * size;
+      if (r > rc * 3.2) return;
+      const ang = Math.atan2(dz, dy) + ((h >>> 8) & 255) / 40;
+      const arms = 3 + ((h >>> 16) & 3);
+      const wob = 0.5 + 0.5 * Math.cos(arms * ang + 1.7 * Math.sin(2 * ang + ((h >>> 12) & 15)));
+      const reach = rc * (1 + 1.4 * Math.pow(wob, 6));
+      const core = smoothstep(rc * 1.05, rc * 0.25, r);
+      const dend = 0.75 * smoothstep(reach, rc * 0.6, r) * Math.pow(wob, 3);
+      v = Math.max(v, (0.65 + 0.3 * ((h >>> 20) & 255) / 255) * Math.max(core, dend));
+    });
+    return v;
+  }
+
   for (let y = 0; y < texH; y++)
     for (let x = 0; x < texW; x++) {
       const t = y * texW + x;
-      const s = A.px[t], yy = A.py[t], z = A.pz[t];
-      const q = secs[x];
-      const dy = yy - q.yc;
-      const hn = clamp(dy / Math.max(dy > 0 ? q.t : q.b, 1e-3), -1.2, 1.2);
-      HN[t] = hn;
-      const head = headF(s, yy);
-      HEAD[t] = head;
-      const dorsal = smoothstep(-0.2, 0.8, hn);
-      const belly = smoothstep(-0.05, -0.7, hn);
-      const { b, sd } = blotchAt(s, yy, z, hn);
-      let m = 0.035 * dorsal + 0.075 * b + 0.05 * sd;
-      if (head > 0) {
-        // fine dark vermiculation on the cheek and gill cover (typical of Acanthogobius heads)
-        const verm = smoothstep(0.74, 0.9, ridged3(s * 1.5 + 3.1, yy * 1.5, Math.abs(z) * 1.5, 3, 61)) * smoothstep(-0.8, -0.2, hn) * smoothstep(3.0, 5.0, s);
-        // coarse dark reticulation over the head top, snout and cheeks (user close-up photo)
-        const retic = smoothstep(0.68, 0.84, ridged3(s * 1.05 + 7.3, yy * 1.05, Math.abs(z) * 1.05, 3, 62)) * smoothstep(-0.45, 0.2, hn) * smoothstep(0.8, 2.5, s);
-        m = mix(m, 0.08 * dorsal + 0.3 * headMarks(s, yy, z, hn) + 0.16 * verm + 0.14 * retic, head);
-      }
-      // dusky dorsal reticulation (pigment along scale pockets)
-      m += 0.1 * dorsal * smoothstep(0.55, 0.8, ridged3(s * 2.2, yy * 2.2, z * 2.2, 3, 3)) * (1 - head * 0.5);
-      m *= 1 - belly;
-      m += 0.12 * Math.exp(-(((eyeDist(s, yy, z) - EYE.radius - EYE.skin) / 0.3) ** 2));
-      MEL[t] = m;
-      const ed = eyeDist(s, yy, z);
-      let iri = 0.85 * belly + 0.3 * smoothstep(0.25, -0.4, hn) + 0.12 * Math.exp(-(((hn - 0.02) / 0.22) ** 2));
-      iri = Math.max(iri, head * 0.55 * smoothstep(0.55, -0.3, hn) * smoothstep(3.0, 5.5, s));
-      iri = Math.max(iri, 0.06 * smoothstep(EYE.radius + 0.5, EYE.radius + 0.2, ed) * smoothstep(EYE.radius, EYE.radius + 0.15, ed));
-      iri *= 1 - 0.7 * b;
-      iri *= 0.85 + 0.3 * fbm3(s * 1.3, yy * 1.3, z * 1.3, 3, 41);
-      // lips carry no silvery iridophores (they are fleshy and pink in every photo)
-      if (s < 5.5) iri *= 1 - 0.9 * smoothstep(0.75, 0.25, distToPolyline2(s, yy, MOUTH)) * smoothstep(5.2, 4.0, s);
-      IRI[t] = clamp(iri);
-      let xan = 0.2 + 0.45 * dorsal + 0.35 * head * smoothstep(-0.3, 0.4, hn);
-      xan *= 1 - 0.85 * belly;
-      xan *= 0.8 + 0.4 * fbm3(s * 0.9, yy * 0.9, z * 0.9, 3, 51);
-      XAN[t] = clamp(xan);
-      // gill region seen through the operculum (used for the fallback albedo only)
-      GILL[t] = smoothstep(7.5, 9.0, s) * smoothstep(11.6, 10.6, s) * smoothstep(0.35, -0.2, hn) * smoothstep(-0.95, -0.55, hn);
+      const P = pigmentAt(A.px[t], A.py[t], A.pz[t], secs[x]);
+      HN[t] = P.hn; HEAD[t] = P.head; MEL[t] = P.mel; IRI[t] = P.iri; XAN[t] = P.xan; GILL[t] = P.gill;
     }
 
   // ---------------------------------------------------------------------------
@@ -589,6 +660,17 @@ function bakeBodyTextures(ctx) {
     }
   log(`      ${nSpots} melanophores`);
 
+  // Snout tip: the loft's texture pole collapses there, so texture-space splats would smear. Place the
+  // melanophores of the front face as a 3D point field instead (the front face itself is shaded from a
+  // separate planar "snout cap" texture, see below).
+  for (let y = 0; y < texH; y++)
+    for (let x = 0; x < texW; x++) {
+      const t = y * texW + x;
+      if (A.px[t] > 1.25) continue;
+      const v = spots3D(A.px[t], A.py[t], A.pz[t]) * smoothstep(1.25, 0.7, A.px[t]);
+      MEL[t] = 1 - (1 - MEL[t]) * (1 - Math.min(v, 0.95));
+    }
+
   // ---------------------------------------------------------------------------
   // Height field (mm)
   log('    height field …');
@@ -667,6 +749,14 @@ function bakeBodyTextures(ctx) {
       h += 0.003 * fbm3(s * 18, yy * 18, z * 18, 3, 71) + 0.0012 * fbm3(s * 55, yy * 55, z * 55, 2, 72);
       if (head > 0) {
         h += head * 0.0045 * (ridged3(s * 7 + z * 3, yy * 9, z * 7, 3, 81) - 0.6);
+        // lips: fine folds running across the lip roll, plus tiny papillae (fleshy, not rubbery)
+        const lbH = lipBands(s, yy);
+        const lipAmt = Math.max(lbH.up, lbH.lo);
+        if (lipAmt > 0) {
+          const fold = Math.pow(0.5 + 0.5 * Math.sin((s / 0.11 + 0.8 * fbm3(s * 6, yy * 6, z * 6, 2, 83)) * Math.PI * 2), 3);
+          const pap = smoothstep(0.35, 0.6, fbm3(s * 38, yy * 38, z * 38, 2, 84));
+          h += lipAmt * (-0.0045 * fold + 0.0025 * pap);
+        }
         // mouth crease reinforcement
         if (s < 6 && yy < 2.6) {
           const dm = distToPolyline2(s, yy, MOUTH);
@@ -734,10 +824,48 @@ function bakeBodyTextures(ctx) {
           const r = Math.hypot((xx + 0.5 - cx) * du, (Math.floor(cy) + oy + 0.5 - cy) * dv);
           let v;
           if (b.kind === 'pore') v = -0.02 * smoothstep(0.05, 0.02, r) + 0.006 * Math.exp(-(((r - 0.055) / 0.012) ** 2));
-          else v = 0.012 * smoothstep(0.028, 0.004, r);
+          else v = (0.004 + 0.004 * hash01(Math.round(b.s * 97), Math.round(b.y * 97), 3, 9)) * smoothstep(0.024, 0.004, r);
           H[yy * texW + xx] += v;
         }
     }
+  }
+
+  // albedo (linear) + roughness at a surface point
+  function shadeAt(s, yy, z, hn, head, MELv, I, X, G, cavity, halfW) {
+    const dorsal = smoothstep(-0.2, 0.8, hn);
+    const belly = smoothstep(-0.05, -0.7, hn);
+    const M = MELv * 1.6;
+    // pale amber tissue, olive-brown back, milky belly (juvenile photos IMG_1603 / 9176 / user photo 1)
+    let r = 0.66, g = 0.53, b = 0.3;
+    r = mix(r, 0.5, dorsal * 0.55); g = mix(g, 0.44, dorsal * 0.55); b = mix(b, 0.2, dorsal * 0.55);
+    r = mix(r, 0.76, belly); g = mix(g, 0.7, belly); b = mix(b, 0.58, belly);
+    r *= mix(1, 1.02, X * 0.6); g *= mix(1, 0.9, X * 0.6); b *= mix(1, 0.55, X * 0.6);
+    r = mix(r, 0.78, I * 0.4); g = mix(g, 0.77, I * 0.4); b = mix(b, 0.7, I * 0.4);
+    // blood-tinted throat and cheeks under the thin skin
+    const flush = head * smoothstep(0.2, -0.55, hn) * smoothstep(4.5, 6.5, s) + smoothstep(9.5, 11.5, s) * smoothstep(13.5, 12.0, s) * smoothstep(0.1, -0.5, hn);
+    r = mix(r, 0.76, flush * 0.25); g = mix(g, 0.55, flush * 0.25); b = mix(b, 0.47, flush * 0.25);
+    const lb = lipBands(s, yy);
+    {
+      const n = 0.85 + 0.3 * fbm3(s * 9, yy * 9, z * 9, 2, 85);
+      // upper lip: dusky olive-brown like the snout, speckled (speckles come from MEL below)
+      r = mix(r, 0.56 * n, lb.up * 0.35); g = mix(g, 0.46 * n, lb.up * 0.35); b = mix(b, 0.3 * n, lb.up * 0.35);
+      // lower lip: pale warm cream (not grey-white), a little translucent
+      r = mix(r, 0.7 * n, lb.lo * 0.4); g = mix(g, 0.6 * n, lb.lo * 0.4); b = mix(b, 0.46 * n, lb.lo * 0.4);
+      // moist margin: faint warm translucency, strongly desaturated
+      r = mix(r, 0.66, lb.rim * 0.22); g = mix(g, 0.52, lb.rim * 0.22); b = mix(b, 0.45, lb.rim * 0.22);
+    }
+    r *= Math.exp(-M * 2.0); g *= Math.exp(-M * 2.15); b *= Math.exp(-M * 2.35);
+    // shadowed mouth slit
+    if (s < 5.5 && yy < 2.6) {
+      const dm = distToPolyline2(Math.max(s, 0.02), yy, MOUTH);
+      const slit = 0.6 * Math.exp(-((dm / 0.07) ** 2)) * smoothstep(0.1, 0.35, Math.abs(z) / Math.max(halfW, 1e-3) + (s < 0.6 ? 1 : 0));
+      r *= 1 - 0.42 * slit; g *= 1 - 0.44 * slit; b *= 1 - 0.46 * slit;
+    }
+    const gl = G * 0.35;
+    g *= 1 - 0.2 * gl; b *= 1 - 0.22 * gl;
+    let rough = 0.31 + 0.035 * fbm3(s * 1.7, yy * 1.7, z * 1.7, 3, 91) - 0.04 * head + 0.03 * belly + cavity * 0.25;
+    rough += 0.12 * Math.max(lb.up, lb.lo) - 0.06 * lb.rim;
+    return { r, g, b, rough };
   }
 
   // ---------------------------------------------------------------------------
@@ -768,50 +896,18 @@ function bakeBodyTextures(ctx) {
       normalMap[t * 3 + 1] = Math.round((ny * 0.5 + 0.5) * 255);
       normalMap[t * 3 + 2] = Math.round((nz * 0.5 + 0.5) * 255);
       // cavity from the height Laplacian (mm^-1)
-      const lap = (H[y * texW + xp] + H[y * texW + xm] - 2 * H[t]) / (A.du[t] * A.du[t]) +
-        (H[ym * texW + x] + H[yp * texW + x] - 2 * H[t]) / (A.dv[t] * A.dv[t]);
+      // (dv is clamped: near the snout pole the texel height collapses and would blow up the Laplacian)
+      const lap = poleK * (H[y * texW + xp] + H[y * texW + xm] - 2 * H[t]) / (A.du[t] * A.du[t]) + poleK *
+        (H[ym * texW + x] + H[yp * texW + x] - 2 * H[t]) / Math.max(A.dv[t] * A.dv[t], 1e-4);
       const cavity = clamp(lap * 0.35, 0, 0.35);
 
       const s = A.px[t], yy = A.py[t], z = A.pz[t];
-      const hn = HN[t], head = HEAD[t];
-      const dorsal = smoothstep(-0.2, 0.8, hn);
-      const belly = smoothstep(-0.05, -0.7, hn);
-      const M = MEL[t] * 1.6;
-      // base milky-amber tissue (linear)
-      // pale amber tissue, olive-brown back, milky belly (juvenile photos IMG_1603 / 9176 / user photo 1)
-      let r = 0.66, g = 0.53, b = 0.3;
-      r = mix(r, 0.5, dorsal * 0.55); g = mix(g, 0.44, dorsal * 0.55); b = mix(b, 0.2, dorsal * 0.55);
-      r = mix(r, 0.76, belly); g = mix(g, 0.7, belly); b = mix(b, 0.58, belly);
-      const X = XAN[t];
-      r *= mix(1, 1.02, X * 0.6); g *= mix(1, 0.9, X * 0.6); b *= mix(1, 0.55, X * 0.6);
-      const I = IRI[t];
-      r = mix(r, 0.78, I * 0.4); g = mix(g, 0.77, I * 0.4); b = mix(b, 0.7, I * 0.4);
-      // blood-tinted throat and cheeks under the thin skin (pinkish in every lateral photo)
-      const flush = head * smoothstep(0.2, -0.55, hn) * smoothstep(2.0, 5.0, s) + smoothstep(9.5, 11.5, s) * smoothstep(13.5, 12.0, s) * smoothstep(0.1, -0.5, hn);
-      r = mix(r, 0.78, flush * 0.35); g = mix(g, 0.52, flush * 0.35); b = mix(b, 0.46, flush * 0.35);
-      r *= Math.exp(-M * 2.0); g *= Math.exp(-M * 2.15); b *= Math.exp(-M * 2.35);
-      // pale, fleshy lips (upper and lower lip rolls)
-      if (s < 5.2 && yy < 3.3) {
-        const dl = distToPolyline2(s, yy, MOUTH);
-        const lipM = smoothstep(0.7, 0.2, dl) * smoothstep(5.0, 3.8, s);
-        // thick lips are pink-orange (blood under thin skin), strongest on the lip rolls
-        const lk = lipM * 0.8;
-        r = mix(r, 0.84, lk); g = mix(g, 0.46, lk); b = mix(b, 0.36, lk);
-      }
-      // shadowed mouth slit
-      if (s < 5.5 && yy < 2.6) {
-        const dm = distToPolyline2(s, yy, MOUTH);
-        const slit = Math.exp(-((dm / 0.05) ** 2)) * smoothstep(0.1, 0.35, Math.abs(z) / Math.max(secs[x].w, 1e-3) + (s < 0.6 ? 1 : 0));
-        r *= 1 - 0.5 * slit; g *= 1 - 0.52 * slit; b *= 1 - 0.54 * slit;
-      }
-      const gl = GILL[t] * 0.35;
-      g *= 1 - 0.2 * gl; b *= 1 - 0.22 * gl;
-      albedo[t * 3] = srgb(r); albedo[t * 3 + 1] = srgb(g); albedo[t * 3 + 2] = srgb(b);
-
+      const C = shadeAt(s, yy, z, HN[t], HEAD[t], MEL[t], IRI[t], XAN[t], GILL[t], cavity, secs[x].w);
+      const I = IRI[t], X = XAN[t];
+      albedo[t * 3] = srgb(C.r); albedo[t * 3 + 1] = srgb(C.g); albedo[t * 3 + 2] = srgb(C.b);
       const ao = clamp(A.ao[t] * (1 - cavity), 0, 1);
-      let rough = 0.31 + 0.035 * fbm3(s * 1.7, yy * 1.7, z * 1.7, 3, 91) - 0.04 * head + 0.03 * belly + cavity * 0.25;
       orm[t * 3] = Math.round(ao * 255);
-      orm[t * 3 + 1] = Math.round(clamp(rough, 0.12, 0.8) * 255);
+      orm[t * 3 + 1] = Math.round(clamp(C.rough, 0.12, 0.8) * 255);
       orm[t * 3 + 2] = 0;
 
       pigment[t * 3] = Math.round(clamp(MEL[t]) * 255);
@@ -825,5 +921,55 @@ function bakeBodyTextures(ctx) {
       volume[t * 3 + 2] = 0;
     }
   }
-  return { width: texW, height: texH, albedo, normal: normalMap, orm, pigment, volume };
+  // ---------------------------------------------------------------------------
+  // Snout cap: planar (y, z) projection of the front face, shaded with the same functions. The viewer
+  // blends it over the loft UVs where they converge at the snout tip.
+  log('    snout cap …');
+  const CAP = texW >= 2048 ? 384 : 192;
+  const capRect = { y0: -0.2, y1: 4.8, z0: -2.7, z1: 2.7 };
+  const capAlb = new Uint8Array(CAP * CAP * 4);
+  const capPig = new Uint8Array(CAP * CAP * 3);
+  const valid = new Uint8Array(CAP * CAP);
+  for (let j = 0; j < CAP; j++)
+    for (let i = 0; i < CAP; i++) {
+      const yy = capRect.y0 + ((j + 0.5) / CAP) * (capRect.y1 - capRect.y0);
+      const z = capRect.z0 + ((i + 0.5) / CAP) * (capRect.z1 - capRect.z0);
+      // march from in front of the fish toward +s until inside
+      let s0 = -1.2, hit = false;
+      for (let k = 0; k < 160; k++) { if (field(s0, yy, z) < 0) { hit = true; break; } s0 += 0.025; }
+      if (!hit || s0 > 2.6) continue;
+      let lo = s0 - 0.025, hi = s0;
+      for (let k = 0; k < 12; k++) { const m = 0.5 * (lo + hi); if (field(m, yy, z) < 0) hi = m; else lo = m; }
+      const sp = 0.5 * (lo + hi);
+      const P = pigmentAt(Math.max(sp, 0.02), yy, z);
+      const mel = 1 - (1 - P.mel) * (1 - Math.min(spots3D(Math.max(sp, 0.21), yy, z), 0.95));
+      const C = shadeAt(Math.max(sp, 0.02), yy, z, P.hn, P.head, mel, P.iri, P.xan, P.gill, 0, section(Math.max(sp, 0.05)).w);
+      const o = j * CAP + i;
+      valid[o] = 1;
+      capAlb[o * 4] = srgb(C.r); capAlb[o * 4 + 1] = srgb(C.g); capAlb[o * 4 + 2] = srgb(C.b);
+      capAlb[o * 4 + 3] = Math.round(clamp(C.rough, 0.12, 0.8) * 255);
+      capPig[o * 3] = Math.round(clamp(mel) * 255); capPig[o * 3 + 1] = Math.round(P.iri * 255); capPig[o * 3 + 2] = Math.round(P.xan * 255);
+    }
+  // dilate into the empty border so bilinear / mip filtering never pulls in black
+  for (let pass = 0; pass < 12; pass++) {
+    const next = valid.slice();
+    for (let j = 0; j < CAP; j++)
+      for (let i = 0; i < CAP; i++) {
+        const o = j * CAP + i;
+        if (valid[o]) continue;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ii = i + di, jj = j + dj;
+          if (ii < 0 || jj < 0 || ii >= CAP || jj >= CAP) continue;
+          const q = jj * CAP + ii;
+          if (!valid[q]) continue;
+          for (let c = 0; c < 4; c++) capAlb[o * 4 + c] = capAlb[q * 4 + c];
+          for (let c = 0; c < 3; c++) capPig[o * 3 + c] = capPig[q * 3 + c];
+          next[o] = 1;
+          break;
+        }
+      }
+    valid.set(next);
+  }
+  const cap = { size: CAP, albedo: capAlb, pigment: capPig, rect: capRect };
+  return { width: texW, height: texH, albedo, normal: normalMap, orm, pigment, volume, cap };
 }

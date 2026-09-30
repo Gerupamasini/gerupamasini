@@ -124,7 +124,7 @@ export function defaultPose() {
 export function breathe(p, time, depth = 1) {
   const w = 2 * Math.PI * 1.15;
   const b = (lag) => 0.5 - 0.5 * Math.cos(w * (time - lag));
-  p.jaw += 0.012 * depth * b(0);
+  p.jaw += 0.005 * depth * b(0);  // lips stay sealed; water enters as the buccal floor drops
   p.premax += 0.05 * depth * b(0);
   p.hyoid += 0.06 * depth * b(0.08);
   p.opercL += 0.05 * depth * b(0.2);

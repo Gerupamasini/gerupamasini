@@ -76,6 +76,8 @@ const tOrm = gb.addTexture(image(gb, 'body_orm', orm.w, orm.h, 3, orm.data, 'png
 const vol = downsample2(BT.width, BT.height, 3, BT.volume);
 const tVol = gb.addTexture(image(gb, 'body_transmission_thickness', vol.w, vol.h, 3, vol.data, 'png'), sBody, 'body_transmission_thickness');
 const tPig = gb.addTexture(image(gb, 'body_pigment', BT.width, BT.height, 3, BT.pigment, 'jpeg', 95), sBody, 'body_pigment_mel_irid_xan');
+const tCapAlb = gb.addTexture(image(gb, 'snoutcap_basecolor_roughness', BT.cap.size, BT.cap.size, 4, BT.cap.albedo, 'png'), sClamp, 'snoutcap_basecolor_roughness');
+const tCapPig = gb.addTexture(image(gb, 'snoutcap_pigment', BT.cap.size, BT.cap.size, 3, BT.cap.pigment, 'png'), sClamp, 'snoutcap_pigment');
 
 const profile = profileTable(512);
 const mBody = gb.addMaterial({
@@ -93,6 +95,8 @@ const mBody = gb.addMaterial({
     mahaze: {
       role: 'body',
       pigmentTexture: tPig,
+      // planar (y, z) projected front of the snout, replaces the converging loft UVs at the tip
+      snoutCap: { albedoRoughness: tCapAlb, pigment: tCapPig, rectMM: BT.cap.rect },
       fishFrame: { S0, Y0, SL, SEND: S_END, unitsPerMM: 0.001 },
       vertebrae: { start: VERT_START, count: VERT_COUNT },
       profile: { n: profile.length, fields: ['yc', 't', 'b', 'w', 'nT', 'nB'], data: profile.flat() },

@@ -207,11 +207,16 @@ async function onLoaded(gltf) {
   const bx = fish.body.material.userData.mahaze;
   const pigment = await parser.getDependency('texture', bx.pigmentTexture);
   pigment.colorSpace = THREE.NoColorSpace;
+  const capAlbedo = await parser.getDependency('texture', bx.snoutCap.albedoRoughness);
+  const capPigment = await parser.getDependency('texture', bx.snoutCap.pigment);
+  capAlbedo.colorSpace = THREE.SRGBColorSpace; // rgb decoded to linear on sampling; alpha (roughness) stays linear
+  capPigment.colorSpace = THREE.NoColorSpace;
   fish.profile = bx.profile;
   fish.frame = bx.fishFrame;
   const orig = fish.body.material;
   const bodyMat = createBodyMaterial({
-    textures: { albedo: orig.map, normal: orig.normalMap, orm: orig.roughnessMap || orig.aoMap, pigment },
+    textures: { albedo: orig.map, normal: orig.normalMap, orm: orig.roughnessMap || orig.aoMap, pigment, capAlbedo, capPigment },
+    capRect: bx.snoutCap.rectMM,
     profileTexture: createProfileTexture(bx.profile),
     frame: bx.fishFrame,
     vertebrae: bx.vertebrae,
