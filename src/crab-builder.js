@@ -43,6 +43,19 @@ const PAL = {
   sternum: C('#a9b8bf'), abd: C('#9a917a'), seta: C('#a79e84'),
 };
 
+// Colour morphs seen in the reference photographs. 'brown' (olive-brown carapace, teal only on face/lower flank, brown legs,
+// amber-cream claws) is the commoner one; 'blue' (p13_0) has the whole dorsal shield cerulean with blue-grey legs.
+export const VARIANTS = {
+  brown: { brown: 1, legDark: '#3a3226', legMid: '#6b5a40', legPale: '#a48a5e', claw: '#efe2c4', clawShade: '#d6bf8c', tint: '#e8c98a' },
+  blue: { brown: 0, legDark: '#3a4352', legMid: '#5d6c82', legPale: '#8a6f4c', claw: '#f6efdc', clawShade: '#dccfae', tint: '#e9c9a0' },
+};
+export const V = { brown: 1, tint: C('#e8c98a') };
+export function setVariant(name) {
+  const o = VARIANTS[name]; V.brown = o.brown; V.tint = C(o.tint);
+  for (const k of ['legDark', 'legMid', 'legPale', 'claw', 'clawShade']) PAL[k] = C(o[k]);
+  PAL.membrane = C(name === 'brown' ? '#5a4a34' : '#343d4d'); PAL.clawDarkMerus = C(name === 'brown' ? '#4a3d2c' : '#1c222c');
+}
+
 // ---------- textures (tileable cuticle micro-detail) ----------
 export function makeTextures() {
   const S = 1024, G = 32;
@@ -427,10 +440,18 @@ function buildCarapace() {
     const flank = smooth(0.02, 0.2, ax) * smooth(0.05, -0.08, v.y);
     cc.copy(PAL.blue).lerp(PAL.blueDeep, smooth(0.4, 0.85, m1) * 0.22).lerp(PAL.blueHi, smooth(0.6, 0.9, bd) * 0.12 * front);
     cc.lerp(C('#3f9db0'), flank * 0.4);                                            // teal flank
+    if (V.brown > 0) {   // olive-brown dorsal shield with a pale sheen; sutures dark brown; teal survives on the face, lower flank and rim of the front
+      const oliv = C('#7b6f4e').lerp(C('#a89a72'), smooth(0.35, 0.8, m1) * 0.7).lerp(C('#4f4632'), smooth(0.55, 0.9, m2) * 0.45);
+      oliv.lerp(C('#c9bd98'), smooth(0.7, 0.9, bd) * 0.3 * front);
+      const teal = smooth(0.06, -0.06, v.y) * smooth(0.0, 0.18, ax) * smooth(-0.15, 0.2, v.z) + 0.55 * smooth(0.16, 0.3, v.z) * smooth(0.05, -0.04, v.y);
+      const keep = clamp(teal * (0.75 + 0.5 * bd));
+      const brownMix = new Color().copy(oliv).lerp(C('#3fa3a6'), keep);
+      cc.lerp(brownMix, V.brown);
+    }
     cc.lerp(PAL.shell.clone().lerp(PAL.mud, smooth(0.4, 0.8, m2) * 0.5), (1 - front) * (0.55 + 0.35 * smooth(0.4, 0.75, m2)) * smooth(-0.04, 0.1, v.y));
     cc.lerp(PAL.mud, smooth(0.62, 0.85, m3) * 0.35 * (1 - 0.6 * front) * smooth(0.03, 0.2, Math.hypot(v.x, v.z)));
     cc.multiplyScalar(0.9 + 0.2 * m3);
-    cc.lerp(PAL.navy, smooth(0.04, -0.1, v.y) * 0.75);
+    cc.lerp(PAL.navy.clone().lerp(C('#3a3324'), V.brown), smooth(0.04, -0.1, v.y) * 0.6);
     // chromatophore speckle: fine pale and dark dots
     const pfc = smooth(0.03, 0.2, Math.hypot(v.x, v.z));
     const dots = 0.5 + (fbm(v.x * 110 + 3, v.y * 110, v.z * 110, 1) - 0.5) * pfc;
@@ -442,13 +463,13 @@ function buildCarapace() {
     const inGroove = Math.min(1, grooveAt[i] * 16) * smooth(ORB.x0 - 0.03, ORB.x0 + 0.02, ax) * smooth(0.28, 0.36, v.z);
     cc.lerp(PAL.shellDark.clone().multiplyScalar(0.8), inGroove * 0.85);
     // grooves darker
-    cc.lerp(PAL.navy, Math.min(0.85, grooveAt[i] * 34));   // sutures read navy, as in the photographs
+    cc.lerp(PAL.navy.clone().lerp(C('#2f291c'), V.brown), Math.min(0.85, grooveAt[i] * 34));   // sutures read navy, as in the photographs
     // underside
     if (v.y < 0) {
       const u = smooth(0.0, -0.06, v.y);
       const ster = smooth(0.3, 0.17, ax) * smooth(-0.38, -0.26, v.z) * smooth(0.36, 0.24, v.z);
       const under = PAL.sternum.clone().multiplyScalar(0.72 + 0.4 * m2).lerp(PAL.shellDark, 0.25 * smooth(0.45, 0.8, m1)).lerp(PAL.blue, 0.1 + 0.12 * smooth(0.1, 0.25, ax));
-      cc.lerp(PAL.navy.clone().lerp(PAL.blue, 0.35), u * 0.7);
+      cc.lerp(PAL.navy.clone().lerp(PAL.blue, 0.35).lerp(C('#5a5038'), V.brown), u * 0.7);
       cc.lerp(under, ster * u);
     }
     colArr[i * 3] = cc.r; colArr[i * 3 + 1] = cc.g; colArr[i * 3 + 2] = cc.b;
@@ -537,7 +558,7 @@ function legSegment(kind, s, mats, tone = 0) {
 function clawColor(t, a, p, out) {
   const m = fbm(p.x * 7, p.y * 7, p.z * 7, 3), sp = fbm(p.x * 45 + 3, p.y * 45, p.z * 45, 2);
   out.copy(PAL.claw).lerp(PAL.clawShade, smooth(0.35, 0.8, m) * 0.7);
-  out.lerp(C('#e9c9a0'), 0.18 * smooth(0.3, 0.8, m)); out.lerp(PAL.blueDeep, 0.03 * (0.5 + 0.5 * Math.sin(a - PI / 2)) * smooth(0.5, 0.2, t));   // faint bluish translucency toward the palm edges
+  out.lerp(V.tint, 0.3 * smooth(0.25, 0.8, m) + 0.2 * V.brown * smooth(0.3, 0.6, t)); out.lerp(PAL.blueDeep, 0.03 * (0.5 + 0.5 * Math.sin(a - PI / 2)) * smooth(0.5, 0.2, t));   // faint bluish translucency toward the palm edges
   out.lerp(PAL.mud, smooth(0.8, 0.92, sp) * 0.3);                                                    // mud specks
   out.multiplyScalar(0.94 + 0.1 * fbm(p.x * 30, p.y * 30, p.z * 30, 2));
 }

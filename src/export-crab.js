@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { makeTextures, makeMaterials, buildCrab } from './crab-builder.js';
+import { makeTextures, makeMaterials, buildCrab, setVariant } from './crab-builder.js';
 import { makeClips } from './crab-clips.js';
 import { computeMikkTSpaceTangents, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as MikkTSpace from 'three/addons/libs/mikktspace.module.js';
 
 /** Builds the crab, drops it on y=0, bakes clips, returns GLB as base64. */
-export async function exportCrab() {
+export async function exportCrab(variant = 'brown') {
+  setVariant(variant);
   const tx = makeTextures(), mats = makeMaterials(tx);
   const crab = buildCrab(mats);
   await MikkTSpace.ready;

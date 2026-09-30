@@ -9,6 +9,7 @@ const C = {
   p25_0: { cam: [-0.4, 1.4, -3.4], tg: [0, 0.3, 0], note: 'rear/dorsal' },
   p21_1: { cam: [2.9, 1.4, 2.3], tg: [0, 0.35, 0.3], note: '3/4 front high' },
   p24_1: { cam: [0.0, 0.8, 4.3], tg: [0, 0.3, 0.3], note: 'front, low' },
+  user1: { cam: [1.7, 2.3, 3.6], tg: [0, 0.3, 0.3], note: 'front-high, brown morph' },
   p14_0: { cam: [2.2, 2.6, 2.2], tg: [0, 0.3, 0.3], note: 'high, one claw raised' },
 };
 const which = (process.argv[2] || Object.keys(C).join(',')).split(',');

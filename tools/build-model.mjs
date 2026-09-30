@@ -10,9 +10,11 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   page.on('pageerror', (e) => console.log('[pageerror]', e.message, e.stack?.split('\n').slice(0, 4).join('\n')));
   await page.goto('http://localhost:8123/tools/build.html');
   await page.waitForFunction('window.ready', null, { timeout: 30000 });
-  const r = await page.evaluate(() => window.exportCrab());
-  fs.mkdirSync('models', { recursive: true });
-  fs.writeFileSync('models/ilyoplax_pusilla.glb', Buffer.from(r.b64, 'base64'));
-  console.log('GLB', (r.size / 1e6).toFixed(2), 'MB', JSON.stringify(r.bbox));
+  for (const [variant, file] of [['brown', 'ilyoplax_pusilla.glb'], ['blue', 'ilyoplax_pusilla_blue.glb']]) {
+    const r = await page.evaluate((v) => window.exportCrab(v), variant);
+    fs.mkdirSync('models', { recursive: true });
+    fs.writeFileSync('models/' + file, Buffer.from(r.b64, 'base64'));
+    console.log('GLB', variant, (r.size / 1e6).toFixed(2), 'MB');
+  }
   await browser.close(); srv.close();
 }
