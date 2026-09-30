@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ANATOMY as A } from './anatomy.js';
+import { MORPH } from './morphology.js';
 import { ShrimpModel } from './ShrimpModel.js';
 import { Brain } from './Brain.js';
 
@@ -79,7 +80,7 @@ export class Shrimp {
     this.socialPush = new THREE.Vector3();
     this.walkSpeed = A.walk.speed * this.scale;
     this.swimSpeed = A.swim.speed * this.scale;
-    this.standH = 0.0058 * this.scale;
+    this.standH = (MORPH.carapace.stations[0][1] + MORPH.rest.standClearance) * A.totalLength * this.scale;
     this.bodyY = new Spring(0, 3);
     this.bodyPitch = new Spring(0, 2.5);
     this.bodyRoll = new Spring(0, 2.5);
@@ -90,7 +91,7 @@ export class Shrimp {
     this.pleoPhase = Math.random() * TAU;
     this.gaitClock = 0;
     this.lastFlipEnd = -10;
-    this.abdSprings = this.model.abd.map(() => new Spring(0, 6));
+    this.abdSprings = this.model.abd.map((_, i) => new Spring(A.abdomen.rest[i], 6));
     this.uroSpread = new Spring(0, 10);
     this.flickT = 0;
     this.flickAmt = 0;
@@ -111,8 +112,10 @@ export class Shrimp {
   initLegs() {
     // Metachronal wave back-to-front; left/right in antiphase; per-leg jitter.
     const offsets = { P5: 0.0, P4: 0.34, P3: 0.68 };
-    const fwd = { P3: 0.0035, P4: -0.0005, P5: -0.0055 };
-    const lat = { P3: 0.0125, P4: 0.0135, P5: 0.013 };
+    // Foot rest positions in TL (same as ShrimpModel.poseStanding) [PHOTO 001, 005].
+    const TLm = A.totalLength;
+    const fwd = { P3: -0.01 * TLm, P4: -0.05 * TLm, P5: -0.09 * TLm };
+    const lat = { P3: 0.13 * TLm, P4: 0.145 * TLm, P5: 0.14 * TLm };
     this.legs = this.model.walkLegs.map((leg) => {
       const n = leg.P.name;
       const restLocal = new THREE.Vector3(leg.hipPos.x + fwd[n], -this.standH / this.scale, leg.side * lat[n]).multiplyScalar(this.scale);
@@ -196,35 +199,8 @@ export class Shrimp {
   }
 
   solveLegIK(leg, footWorld) {
-    // Target in cephalothorax space relative to coxa.
-    const ceph = this.model.ceph;
-    _v.copy(footWorld);
-    ceph.worldToLocal(_v);
-    _v.sub(leg.coxa.position);
-    const L1 = leg.L1;
-    const L2 = leg.L2;
-    const D = clamp(_v.length(), Math.abs(L1 - L2) + 1e-5, L1 + L2 - 1e-5);
-    const u = _w.copy(_v).normalize();
-    const alpha = Math.acos(clamp((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
-    const beta = Math.acos(clamp((L1 * L1 + L2 * L2 - D * D) / (2 * L1 * L2), -1, 1));
-    // Knee bends outward-and-up (decapod merus is splayed laterally), not straight up.
-    const hint = _k.set(0, 0.2, leg.side);
-    hint.addScaledVector(u, -hint.dot(u)).normalize();
-    const knee = _k2.copy(u).multiplyScalar(L1 * Math.cos(alpha)).addScaledVector(hint, L1 * Math.sin(alpha));
-    const yaw = Math.atan2(-knee.z, knee.x);
-    const pitch = Math.atan2(knee.y, Math.hypot(knee.x, knee.z));
-    leg.hip.rotation.set(0, yaw, pitch, 'YZX');
-    // Roll about the merus so the carpus bends toward the foot.
-    _q.setFromEuler(leg.hip.rotation);
-    const Y0 = _k3.set(0, 1, 0).applyQuaternion(_q);
-    const Z0 = _k4.set(0, 0, 1).applyQuaternion(_q);
-    const X0 = _k5.copy(knee).normalize();
-    const perp = _v.sub(knee);
-    perp.addScaledVector(X0, -perp.dot(X0)).normalize();
-    leg.hip.rotation.set(Math.atan2(-perp.dot(Z0), -perp.dot(Y0)), yaw, pitch, 'YZX');
-    leg.knee.rotation.set(0, 0, -(Math.PI - beta));
-    leg.wrist.rotation.set(0, 0, 0);
-    leg.dactyl.rotation.set(0, 0, -0.25);
+    // Shared analytic IK (knee splayed outward-up) lives on the model.
+    this.model.solveLegIK(leg, this.model.ceph.worldToLocal(_v.copy(footWorld)));
   }
 
   poseLegFK(leg, dt, tuck) {
@@ -516,15 +492,17 @@ export class Shrimp {
     const swimming = this.mode === 'water' && !this.flip;
     const beat = swimming ? this.thrust : 0;
     for (let i = 0; i < 6; i++) {
-      let target = [0.04, 0.05, 0.1, 0.06, 0.03, 0.02][i]; // resting dorsal "hump" at 3rd somite
-      if (swimming) target = -0.03 + 0.03 * beat * Math.sin(this.pleoPhase * 0.5 - i * 0.6);
+      // Resting live posture traced from photo 001 (hump at s3, sharp bend at s3/s4).
+      let target = Ab.rest[i];
+      // Swimming: abdomen straightens and undulates slightly with the pleopod beat.
+      if (swimming) target = Ab.rest[i] * 0.35 + 0.03 * beat * Math.sin(this.pleoPhase * 0.5 - i * 0.6);
       if (it.arms === 'groom' && it.groomPart === 'body') target += 0.25 * (i < 4 ? 1 : 0.5) * (0.6 + 0.4 * Math.sin(t * 2));
       target += startle * 0.35 * Ab.flexMax[i];
       target += noise1(t * 0.3 + i, sd) * 0.012;
       if (this.flip) {
         // Anterior-to-posterior recruitment: posterior joints lag slightly.
         const f = clamp(this.flip.flex * (1.15 - i * 0.04), 0, 1);
-        this.abdSprings[i].v = lerp(this.abdSprings[i].v, Ab.flexMax[i] * f, 0.85);
+        this.abdSprings[i].v = lerp(this.abdSprings[i].v, lerp(Ab.rest[i], Ab.flexMax[i], f), 0.85);
         this.abdSprings[i].vel = 0;
       } else {
         this.abdSprings[i].step(target, dt, 5);
@@ -534,15 +512,16 @@ export class Shrimp {
       m.abd[i].rotation.y = this.flip ? (this.flip.yawKick ?? 0) * 0.04 * this.flip.flex : -this.yawRate * 0.01;
     }
     // Telson follows with slight extra flex
-    m.telson.rotation.z = this.abdSprings[5].v * 0.4;
+    m.telson.rotation.z = MORPH.rest.telson + (this.abdSprings[5].v - Ab.rest[5]) * 0.4;
 
     // ---- Tail fan spread (open during flips / hover steering)
     const spreadTarget = this.flip ? 1 : swimming ? 0.35 + 0.2 * Math.abs(this.yawRate) : 0.05 + startle * 0.5;
     const spread = this.uroSpread.step(spreadTarget, dt, this.flip ? 25 : 5);
     for (const u of m.uropods) {
       const s = u.userData.side;
-      u.rotation.y = -s * (0.15 + spread * 0.55) + this.yawRate * 0.05;
-      u.rotation.x = s * spread * 0.2;
+      u.rotation.y = -s * (0.1 + spread * 0.6) + this.yawRate * 0.05;
+      // Closed fan is rolled lateral-edge-down; spreading flattens it into a horizontal fan.
+      u.rotation.x = s * MORPH.rest.fanRoll * (1 - spread);
       for (const k of ['exo', 'endo']) {
         const r = u.userData[k];
         r.rotation.y = r.userData.base * (1 + spread * 0.8);
@@ -575,10 +554,11 @@ export class Shrimp {
       const isP1 = c.P.name === 'P1';
       const alt = s > 0 ? 0 : Math.PI;
       const n = noise1(t * 0.5 + (isP1 ? 0 : 5) + s * 2, sd) * 0.06;
-      let yaw = -s * (isP1 ? 0.35 : 0.55);
-      let pitch = -0.95;
-      let knee = 1.25;
-      let wrist = 0.15;
+      // Rest carriage [PHOTO 001]: P2 held forward-down under the antennae, P1 folded.
+      let yaw = -s * (isP1 ? 0.3 : 0.18);
+      let pitch = isP1 ? -0.75 : -0.42;
+      let knee = isP1 ? 1.35 : 0.38;
+      let wrist = isP1 ? 0.35 : 0.05;
       let open = 0.08 + Math.max(0, noise1(t * 0.9 + s, sd + 1)) * 0.2;
       if (it.arms === 'forage') {
         // Alternating picking at substrate.
@@ -684,15 +664,15 @@ export class Shrimp {
       switch (it.antenna) {
         case 'sweep':
           // Asymmetric sweeping, one antenna forward while the other scans laterally.
-          yaw = b.y + s * (0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * 1.4 + (s > 0 ? 0 : 2.1)))) ;
+          yaw = b.y - s * (0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * 1.4 + (s > 0 ? 0 : 2.1))));
           pitch = -0.2 + 0.2 * Math.sin(t * 1.1 + s);
           break;
         case 'forward':
-          yaw = s * 0.08 + noise1(t * 2, sd + s) * 0.1;
+          yaw = -s * 0.08 + noise1(t * 2, sd + s) * 0.1;
           pitch = -0.1;
           break;
         case 'back':
-          yaw = s * 2.4;
+          yaw = -s * 2.4;
           pitch = 0.15;
           break;
         case 'flick':
@@ -701,16 +681,16 @@ export class Shrimp {
       }
       if (it.arms === 'groom' && it.groomPart === 'antenna') {
         pitch = -0.9;
-        yaw = s * 0.15;
+        yaw = -s * 0.15;
       }
       if (this.startleT < 1.2) {
         // Orient toward stimulus.
         const local = this.root.worldToLocal(_v.copy(this.startlePoint));
         const ang = Math.atan2(-local.z, local.x);
-        yaw = lerp(yaw, clamp(ang, -2, 2) + s * 0.1, 0.7);
+        yaw = lerp(yaw, clamp(ang, -2, 2) - s * 0.1, 0.7);
       }
       if (this.flip) {
-        yaw = s * 2.2;
+        yaw = -s * 2.2;
         pitch = 0.1;
       }
       j.rotation.y = damp(j.rotation.y, yaw, this.flip ? 30 : 5, dt);

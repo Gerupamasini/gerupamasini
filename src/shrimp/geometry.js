@@ -79,6 +79,8 @@ export function podomere(len, r0, r1, radial = 10) {
     j[i] = Math.max(0, 1 - t / 0.12, (t - 0.88) / 0.12);
   }
   g.setAttribute('aJoint', new THREE.Float32BufferAttribute(j, 1));
+  g.setAttribute('aPig', new THREE.Float32BufferAttribute(new Float32Array(p.count).fill(0.3), 1));
+  g.setAttribute('aThick', new THREE.Float32BufferAttribute(new Float32Array(p.count).fill(0.5), 1));
   g.computeVertexNormals();
   return g;
 }

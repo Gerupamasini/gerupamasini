@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 
-// Shared GLSL: hash-based 3D noise + cellular dots for chromatophores.
+// Global look controls shared by every shrimp material (UI slider / calibration).
+export const LOOK = {
+  pigment: { value: 1.0 }, // individual pigmentation 0 (pale, photo 011) .. 1.5 (dense, photo 007)
+  milk: { value: 1.0 }, // tissue turbidity multiplier
+};
+
 const NOISE_GLSL = /* glsl */ `
 float shHash(vec3 p){ p = fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float shNoise(vec3 x){
@@ -10,82 +15,109 @@ float shNoise(vec3 x){
              mix(mix(shHash(i+vec3(0,0,1)),shHash(i+vec3(1,0,1)),f.x),
                  mix(shHash(i+vec3(0,1,1)),shHash(i+vec3(1,1,1)),f.x),f.y),f.z);
 }
-// Returns 0..1 chromatophore coverage. Star-ish dots with irregular expansion.
-float shChromato(vec3 p, float density, float expand){
-  vec3 c = p*density; vec3 i=floor(c); vec3 f=fract(c);
-  float d=1e3;
+// Chromatophores: sparse round-to-stellate dots on a jittered lattice. keep = probability a
+// cell holds a chromatophore, radius in cell units. Returns coverage 0..1.
+float shChromato(vec3 p, float cellsPerMetre, float keep, float radius){
+  vec3 c = p*cellsPerMetre; vec3 i=floor(c); vec3 f=fract(c);
+  float cov = 0.0;
   for(int z=-1;z<=1;z++)for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){
-    vec3 g=vec3(x,y,z); vec3 o=vec3(shHash(i+g),shHash(i+g+13.1),shHash(i+g+27.7));
-    if(shHash(i+g+5.3)>0.3) continue; // sparse
-    vec3 r=g+o-f; d=min(d,dot(r,r));
+    vec3 g=vec3(x,y,z);
+    vec3 h=i+g;
+    if(shHash(h+5.3) > keep) continue;
+    vec3 o=vec3(shHash(h),shHash(h+13.1),shHash(h+27.7));
+    vec3 r=g+o-f;
+    float d=length(r);
+    float rr = radius*(0.6+0.8*shHash(h+41.3)*shHash(h+17.9)); // mostly punctate, a few expanded
+    float star = 1.0 + 0.12*sin(atan(r.y,r.x)*5.0 + shHash(h+3.7)*6.28); // round to faintly stellate
+    cov = max(cov, smoothstep(rr*star, rr*star*0.55, d));
   }
-  float dend = shNoise(p*density*6.0)*0.5; // dendritic edge
-  return smoothstep(expand+0.02, expand*0.4, sqrt(d)-dend*expand);
+  return cov;
 }
 `;
 
 /**
- * Exoskeleton: MeshPhysicalMaterial (transmission/IOR/clearcoat/sheen) with
- * procedural chromatophores, joint-membrane density, micro-relief normals.
- * Geometry may provide attribute `aJoint` (0..1) marking arthrodial membranes.
+ * Cuticle + underlying tissue as one translucent layer.
+ * Geometry attributes (from loft.js): aJoint (arthrodial membrane), aPig (chromatophore
+ * density map), aThick (tissue thickness proxy -> turbidity / attenuation).
  */
-export function createShellMaterial(opts = {}) {
+export function createCuticleMaterial(o = {}) {
   const mat = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(opts.color ?? 0xf2f3ee),
-    roughness: 0.07,
+    color: new THREE.Color(o.color ?? 0xb9beb6),
+    roughness: o.roughness ?? 0.3,
     metalness: 0,
-    transmission: opts.transmission ?? 0.92,
-    thickness: opts.thickness ?? 0.0025,
-    ior: 1.43, // chitin-protein ~1.42-1.55
-    attenuationColor: new THREE.Color(0xf0ebdf),
-    attenuationDistance: 0.006,
-    clearcoat: 0.7,
-    clearcoatRoughness: 0.12,
-    sheen: 0.15,
-    sheenColor: new THREE.Color(0xdfe6ea),
-    sheenRoughness: 0.5,
-    specularIntensity: 0.9,
-    side: opts.side ?? THREE.FrontSide,
+    transmission: o.transmission ?? 0.8,
+    thickness: o.thickness ?? 0.003,
+    ior: 1.43,
+    attenuationColor: new THREE.Color(o.attenuationColor ?? 0xd9c58e),
+    attenuationDistance: o.attenuationDistance ?? 0.006,
+    clearcoat: o.clearcoat ?? 0.85,
+    clearcoatRoughness: 0.08,
+    sheen: o.sheen ?? 0.25,
+    sheenColor: new THREE.Color(0xd6dcd8),
+    sheenRoughness: 0.6,
+    specularIntensity: 0.8,
+    side: o.side ?? THREE.FrontSide,
   });
-  const uniforms = {
-    uChromaDensity: { value: opts.chromaDensity ?? 1300 },
-    uChromaExpand: { value: opts.chromaExpand ?? 0.07 },
-    uChromaColor: { value: new THREE.Color(opts.chromaColor ?? 0x7a3218) },
-    uJointColor: { value: new THREE.Color(0xb8a58a) },
-    uRelief: { value: opts.relief ?? 0.18 },
+  const u = {
+    uPigment: LOOK.pigment,
+    uMilk: LOOK.milk,
+    uMilkBase: { value: o.milk ?? 0.35 }, // fraction of transmission lost to scattering at aThick = 1
+    uCells: { value: o.cells ?? 2400 }, // chromatophore lattice cells per metre (~0.42 mm)
+    uKeep: { value: o.keep ?? 0.85 },
+    uDotR: { value: o.dotR ?? 0.22 },
+    uChromaColor: { value: new THREE.Color(o.chroma ?? 0x6a4a2a) },
+    uChromaCore: { value: new THREE.Color(o.chromaCore ?? 0x3a2410) },
+    uJointColor: { value: new THREE.Color(o.jointColor ?? 0xa89a80) },
+    uRelief: { value: o.relief ?? 0.12 },
   };
-  mat.userData.uniforms = uniforms;
-  mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute float aJoint;\nvarying float vJoint;\nvarying vec3 vObjPos;`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvJoint = aJoint;\nvObjPos = position;`);
-
-    const transmission = THREE.ShaderChunk.transmission_fragment.replace(
-      'material.transmission = transmission;',
-      'material.transmission = transmission * (1.0 - 0.75*shPig) * (1.0 - 0.35*vJoint);'
-    );
-    shader.fragmentShader = shader.fragmentShader
+  mat.userData.uniforms = u;
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader
       .replace(
         '#include <common>',
-        `#include <common>\n${NOISE_GLSL}\nuniform float uChromaDensity; uniform float uChromaExpand; uniform vec3 uChromaColor; uniform vec3 uJointColor; uniform float uRelief;\nvarying float vJoint; varying vec3 vObjPos;\nfloat shPig;`
+        `#include <common>
+        attribute float aJoint; attribute float aPig; attribute float aThick;
+        varying float vJoint; varying float vPigD; varying float vThick; varying vec3 vObjPos;`
+      )
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvJoint = aJoint; vPigD = aPig; vThick = aThick; vObjPos = position;`);
+    const transmission = THREE.ShaderChunk.transmission_fragment
+      .replace(
+        'material.transmission = transmission;',
+        `material.transmission = transmission * (1.0 - clamp(uMilkBase*uMilk*vThick, 0.0, 0.95)) * (1.0 - 0.85*shPig) * (1.0 - 0.3*vJoint);`
+      )
+      .replace('material.thickness = thickness;', 'material.thickness = thickness * (0.25 + vThick);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        ${NOISE_GLSL}
+        uniform float uPigment; uniform float uMilk; uniform float uMilkBase; uniform float uCells; uniform float uKeep; uniform float uDotR;
+        uniform vec3 uChromaColor; uniform vec3 uChromaCore; uniform vec3 uJointColor; uniform float uRelief;
+        varying float vJoint; varying float vPigD; varying float vThick; varying vec3 vObjPos;
+        float shPig;`
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-        shPig = shChromato(vObjPos, uChromaDensity, uChromaExpand * (0.35 + 1.6*vJoint)) * (0.55 + 0.45*vJoint);
-        shPig = max(shPig, 0.5*shChromato(vObjPos*1.7+3.1, uChromaDensity*2.2, 0.035));
-        float blotch = shNoise(vObjPos*180.0);
-        diffuseColor.rgb *= mix(0.94, 1.03, blotch);             // subtle hue drift / grime
-        diffuseColor.rgb = mix(diffuseColor.rgb, uJointColor, vJoint*0.55);
-        diffuseColor.rgb = mix(diffuseColor.rgb, uChromaColor, shPig);`
+        {
+          float dens = clamp(vPigD*uPigment, 0.0, 1.6);
+          float cov = shChromato(vObjPos, uCells, uKeep*min(dens,1.0), uDotR*(0.7+0.3*min(dens,1.2)));
+          // Very dense regions (eyestalks, scaphocerite rim) merge into continuous pigment.
+          cov = max(cov, smoothstep(1.05, 1.5, dens) * (0.55 + 0.45*shNoise(vObjPos*9000.0)));
+          shPig = cov;
+          float grime = shNoise(vObjPos*1500.0);
+          diffuseColor.rgb *= mix(0.95, 1.03, grime);
+          diffuseColor.rgb = mix(diffuseColor.rgb, uJointColor, vJoint*0.45);
+          vec3 pc = mix(uChromaColor, uChromaCore, smoothstep(0.6, 1.0, cov));
+          diffuseColor.rgb = mix(diffuseColor.rgb, pc, cov);
+        }`
       )
       .replace(
         '#include <normal_fragment_maps>',
         `#include <normal_fragment_maps>
         {
-          // Procedural micro-relief: pits and fine ridges on the cuticle.
-          vec3 q = vObjPos*2600.0;
+          vec3 q = vObjPos*9000.0;
           float e = 0.35;
           float n0 = shNoise(q);
           vec3 g = vec3(shNoise(q+vec3(e,0,0))-n0, shNoise(q+vec3(0,e,0))-n0, shNoise(q+vec3(0,0,e))-n0);
@@ -94,102 +126,72 @@ export function createShellMaterial(opts = {}) {
       )
       .replace(
         '#include <roughnessmap_fragment>',
-        `#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + vJoint*0.35 + shPig*0.2, 0.04, 1.0);`
+        `#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + vJoint*0.3 + shPig*0.25, 0.04, 1.0);`
       )
       .replace('#include <transmission_fragment>', transmission);
   };
-  mat.customProgramCacheKey = () => 'shrimpShell' + (opts.key ?? '');
+  mat.customProgramCacheKey = () => 'cuticle-v3-' + (o.key ?? '');
   return mat;
 }
 
-/** Internal tissue: opaque so it lands in the transmission buffer and is seen through the shell. */
-export function createTissueMaterial(color, opts = {}) {
-  const mat = new THREE.MeshStandardMaterial({
-    color,
-    roughness: opts.roughness ?? 0.6,
-    emissive: new THREE.Color(color).multiplyScalar(opts.glow ?? 0.08),
-  });
-  if (opts.striated) {
-    mat.onBeforeCompile = (shader) => {
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vObjPos;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvObjPos = position;');
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vObjPos;')
-        .replace(
-          '#include <color_fragment>',
-          `#include <color_fragment>
-          // Myomere chevrons: striated flexor/extensor bundles.
-          float s = sin(vObjPos.x*2400.0 + abs(vObjPos.y)*1800.0);
-          diffuseColor.rgb *= 0.86 + 0.14*smoothstep(-0.2,0.8,s);`
-        );
-    };
-    mat.customProgramCacheKey = () => 'tissueStriated';
-  }
-  return mat;
-}
-
-let FACETS = null;
-function facetNormalMap() {
-  // Hexagonal ommatidial lattice as a normal map.
-  if (FACETS) return FACETS;
-  const S = 256;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = S;
-  const ctx = cv.getContext('2d');
-  const img = ctx.createImageData(S, S);
-  const cell = 6;
-  for (let y = 0; y < S; y++)
-    for (let x = 0; x < S; x++) {
-      const row = Math.round(y / (cell * 0.866));
-      const cx = (Math.round(x / cell - (row % 2) * 0.5) + (row % 2) * 0.5) * cell;
-      const cy = row * cell * 0.866;
-      const dx = (x - cx) / cell;
-      const dy = (y - cy) / cell;
-      const o = (y * S + x) * 4;
-      img.data[o] = 128 + dx * 150;
-      img.data[o + 1] = 128 + dy * 150;
-      img.data[o + 2] = 255;
-      img.data[o + 3] = 255;
-    }
-  ctx.putImageData(img, 0, 0);
-  FACETS = new THREE.CanvasTexture(cv);
-  FACETS.wrapS = FACETS.wrapT = THREE.RepeatWrapping;
-  FACETS.repeat.set(4, 2);
-  return FACETS;
-}
-
-export function createEyeMaterial() {
-  return new THREE.MeshPhysicalMaterial({
-    color: 0x1c140c,
-    normalMap: facetNormalMap(),
-    normalScale: new THREE.Vector2(0.25, 0.25),
-    roughness: 0.32,
-    clearcoat: 1,
-    clearcoatRoughness: 0.05,
-    iridescence: 0.45, // ommatidial lattice shimmer
-    iridescenceIOR: 1.6,
-    sheen: 0.4,
-    sheenColor: new THREE.Color(0x9a7a3a), // golden eyeshine from reflecting pigment
-  });
-}
-
-export function createAppendageMaterial() {
-  // Thin appendages: transmission is wasteful at sub-pixel widths; use a translucent-looking opaque.
+/** Internal organs: opaque, so they are captured in the transmission buffer and seen through the cuticle. */
+export function createTissueMaterial(color, o = {}) {
   return new THREE.MeshStandardMaterial({
-    color: 0xd9d6cc,
-    roughness: 0.35,
-    transparent: true,
-    opacity: 0.55,
-    depthWrite: false,
+    color,
+    roughness: o.roughness ?? 0.55,
+    emissive: new THREE.Color(color).multiplyScalar(o.glow ?? 0.05),
+  });
+}
+
+/**
+ * Compound eye as seen live [PHOTO 001, 002, 005, 007, 043]: dark screening pigment with a
+ * pseudopupil (darkest where ommatidia face the viewer), brownish-grey periphery, and a pale
+ * translucent corneal rim at grazing angles; wet clear-coat highlight on top.
+ */
+export function createEyeMaterial() {
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: 0x141010,
+    roughness: 0.45,
+    clearcoat: 1,
+    clearcoatRoughness: 0.04,
+    specularIntensity: 0.6,
+  });
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+      {
+        vec3 vd = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition);
+        float facing = clamp(dot(normalize(vNormal), vd), 0.0, 1.0);
+        vec3 pupil = vec3(0.012, 0.010, 0.009);
+        vec3 periph = vec3(0.16, 0.13, 0.12);
+        vec3 rim = vec3(0.62, 0.60, 0.55);
+        vec3 c = mix(periph, pupil, smoothstep(0.55, 0.95, facing));
+        c = mix(rim, c, smoothstep(0.05, 0.32, facing));
+        diffuseColor.rgb = c;
+      }`
+    );
+  };
+  mat.customProgramCacheKey = () => 'eye-v3';
+  return mat;
+}
+
+export function createFlagellumMaterial(tint) {
+  return new THREE.MeshPhysicalMaterial({
+    color: tint,
+    roughness: 0.3,
+    transmission: 0.35,
+    thickness: 0.0002,
+    ior: 1.43,
+    clearcoat: 0.5,
   });
 }
 
 export function createEggMaterial() {
   return new THREE.MeshPhysicalMaterial({
-    color: 0x5f7d2a,
+    color: 0x736c4a, // [PHOTO 048] olive egg mass
     roughness: 0.25,
-    transmission: 0.35,
+    transmission: 0.3,
     thickness: 0.0008,
     ior: 1.36,
     clearcoat: 0.6,
