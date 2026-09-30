@@ -62,7 +62,7 @@ export function separation(fish, neighbours, out) {
   for (const n of neighbours) {
     const other = n.fish;
     const d = n.dist;
-    const r = 1.1 * (SL + other.SL) * 0.5 + 0.3 * SL;
+    const r = 1.25 * (SL + other.SL) * 0.5 + 0.35 * SL;
     if (d < r && d > 1e-5) {
       const w = (1 - d / r) ** 2;
       out.addScaledVector(n.delta, (-w / d) * 3.2);
@@ -158,7 +158,7 @@ export function resolveOverlaps(fishList) {
           B.copy(fj.loc.pos).addScaledVector(fwdJ, oj * fj.SL);
           d.subVectors(B, A);
           const dist = d.length();
-          const minD = 0.13 * (fi.SL + fj.SL) + 0.06 * (fi.SL + fj.SL);
+          const minD = 0.22 * (fi.SL + fj.SL);
           if (dist < minD && dist > 1e-6) {
             const corr = (minD - dist) * 0.5 * 0.5;
             d.multiplyScalar(corr / dist);

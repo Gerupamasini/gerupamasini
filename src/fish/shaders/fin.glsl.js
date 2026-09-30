@@ -155,6 +155,7 @@ diffuseColor.a = gFinAlpha;
 `;
 
 export const finFragmentNormal = /* glsl */ `
+#if FISH_LOD < 2
 {
   // tangent across the rays from screen-space derivatives of the ray coordinate
   vec3 dpx = dFdx(-vViewPosition);
@@ -166,6 +167,7 @@ export const finFragmentNormal = /* glsl */ `
   if (dot(cross(dpx, dpy), normal) < 0.0) Tc = -Tc;
   normal = normalize(normal + Tc * gPleat);
 }
+#endif
 `;
 
 export const finFragmentMaterial = /* glsl */ `

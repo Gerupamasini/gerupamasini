@@ -17,7 +17,7 @@ export function groundHeight(x, z) {
 }
 
 function pebbleGeometry(rng) {
-  const g = mergeVertices(new THREE.IcosahedronGeometry(1, 2));
+  const g = mergeVertices(new THREE.IcosahedronGeometry(1, 1));
   const p = g.attributes.position;
   const v = new THREE.Vector3();
   const o = rng.range(0, 100);

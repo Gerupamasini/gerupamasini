@@ -46,6 +46,7 @@ export class App {
     renderer.shadowMap.type = THREE.PCFShadowMap;
     this.container.appendChild(renderer.domElement);
     this.renderer = renderer;
+    renderer.info.autoReset = false; // count every pass of a frame (shadow, reflection, composer)
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(34, window.innerWidth / window.innerHeight, 0.005, 30);
@@ -338,10 +339,12 @@ export class App {
 
   render() {
     const t0 = performance.now();
+    this.renderer.info.reset();
     this.fishSystem.update(this.camera, this.renderer);
-    if (this.world) this.world.surface.renderReflection(this.camera);
     if (this.usePost) this.post.render();
     else this.renderer.render(this.scene, this.camera);
+    // TIR mirror for the next frame (after the shadow maps of this frame exist)
+    if (this.world) this.world.surface.renderReflection(this.camera);
     this.perf.renderMs = performance.now() - t0;
   }
 
@@ -495,6 +498,7 @@ export class App {
       for (let i = 0; i < 200; i++) this._updateCamera(1 / 30);
     }
     for (const k of ['skeleton', 'velocity', 'target', 'collision', 'labels']) if (p.has(k)) this.debugDraw.flags[k] = true;
+    if (p.has('debugRefl') && this.world) this.world.surface.material.uniforms.uDebugRefl.value = 1;
     if (p.has('hide')) {
       const names = p.get('hide').split(',');
       this.scene.traverse((o) => {
@@ -504,6 +508,16 @@ export class App {
     }
     this.debugDraw.update(this.fishSystem.fish, this.world, this.camera, this.selected);
     if (p.has('strip')) this._filmstrip(p);
-    else this.render();
+    else {
+      this.render();
+      this.render(); // second frame: reflection + shadows fully initialised
+    }
+    if (p.has('showRefl') && this.world) {
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: this.world.surface.rt.texture, depthTest: false }));
+      const sc = new THREE.Scene();
+      sc.add(q);
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(sc, new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1));
+    }
   }
 }

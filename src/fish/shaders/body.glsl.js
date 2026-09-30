@@ -197,7 +197,13 @@ void computeFishSurface() {
   // ---- scales
   vec2 fw = fwidth(vScaleUV);
   float detail = (1.0 - smoothstep(0.22, 0.75, max(fw.x, fw.y))) * scaleMask;
+#if FISH_LOD >= 2
+  // distant fish: scales are sub-pixel -> skip the per-scale lookup entirely
+  detail = 0.0;
+  ScaleHit sh; sh.q = vec2(0.0); sh.id = floor(vScaleUV); sh.d = 0.5; sh.dPrev = 9.0;
+#else
   ScaleHit sh = scaleLookup(vScaleUV);
+#endif
   vec3 rnd = hash32(sh.id + seed * 17.0);
   float d = sh.d;
   vec2 q = sh.q;
@@ -243,7 +249,7 @@ void computeFishSurface() {
   vec3 col = bodyPigment(rp, red, whiteness, specTint);
   // per-scale pigment variation and lighter scale margins in pigmented areas
   col *= mix(1.0, 0.97 + 0.06 * rnd.z, detail);
-  col = mix(col, col * vec3(1.06, 1.2, 1.3) + vec3(0.02, 0.025, 0.0), edge * (1.0 - whiteness) * 0.55 * detail);
+  col = mix(col, col * vec3(1.05, 1.16, 1.25) + vec3(0.015, 0.02, 0.0), edge * (1.0 - whiteness) * 0.38 * detail);
   // reticulated slightly darker margins on white scales (fewer iridophores at the edge)
   col *= mix(1.0, 0.93, (edge * 0.5 + marginShadow * 0.5) * whiteness * detail);
 

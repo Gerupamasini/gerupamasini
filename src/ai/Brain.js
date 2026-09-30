@@ -223,7 +223,9 @@ export class Brain {
     if (state === 'freeze') this.target.copy(this._coverSpot());
     if (state === 'wallFollow') {
       this.sub.dirX = r.sign();
-      this.sub.z = r.next() < 0.5 ? -TANK.D / 2 + 0.05 : TANK.D / 2 - 0.05;
+      const off = r.range(0.045, 0.1);
+      this.sub.z = r.next() < 0.5 ? -TANK.D / 2 + off : TANK.D / 2 - off;
+      this.sub.yK = r.range(0.45, 1.1);
     }
   }
 
@@ -315,7 +317,7 @@ export class Brain {
     }
     this.target.copy(best);
     this.hasTarget = true;
-    this.sub.pauseAt = r.next() < 0.45;
+    this.sub.pauseAt = r.next() < 0.3;
   }
 
   _cell(p) {
@@ -407,14 +409,14 @@ export class Brain {
       case 'wander': {
         const to = _v.subVectors(this.target, L.pos);
         const d = to.length();
-        const spd = (0.35 + 0.45 * D.curiosity) * act * SL;
+        const spd = (0.45 + 0.5 * D.curiosity) * act * SL;
         if (this.phase === 'go') {
           des.copy(to).normalize().multiplyScalar(spd * smoothstep(0, 0.12, d) + 0.05 * SL);
           if (d < 0.06) {
             if (this.sub.pauseAt) {
               this.phase = 'pause';
               this.phaseTime = 0;
-              this.sub.pauseDur = me.rng.range(1, 6);
+              this.sub.pauseDur = me.rng.range(1, 4);
             } else this._pickWanderTarget(world);
           }
         } else {
@@ -468,7 +470,7 @@ export class Brain {
         break;
       }
       case 'wallFollow': {
-        const tgt = _a.set(this.sub.dirX * 0.5, this._prefY() * 0.7, this.sub.z);
+        const tgt = _a.set(this.sub.dirX * 0.5, this._prefY() * this.sub.yK, this.sub.z);
         if (Math.abs(L.pos.x - tgt.x) < 0.08) this.sub.dirX *= -1;
         des.subVectors(tgt, L.pos).normalize().multiplyScalar((0.6 + 0.3 * act) * SL);
         break;

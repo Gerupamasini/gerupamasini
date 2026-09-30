@@ -63,13 +63,18 @@ export function buildTank() {
   };
   rim(H + 0.012, 0.024);
   rim(-0.012, 0.024);
-  // hood with the LED bar
-  const hood = new THREE.Mesh(new THREE.BoxGeometry(L + 0.08, 0.05, D + 0.08), frameMat);
-  hood.position.set(0, H + 0.12, 0);
-  g.add(hood);
+  // slim LED light bar on legs (open top, like most modern goldfish tanks)
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(L * 0.94, 0.014, 0.1), frameMat);
+  bar.position.set(0, H + 0.1, -0.02);
+  g.add(bar);
+  for (const sx of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.1, 0.06), frameMat);
+    leg.position.set(sx * (L / 2 + 0.006), H + 0.05, -0.02);
+    g.add(leg);
+  }
   const ledMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.97, 0.92).multiplyScalar(3) });
-  const led = new THREE.Mesh(new THREE.BoxGeometry(L * 0.9, 0.004, 0.05), ledMat);
-  led.position.set(0, H + 0.093, -0.02);
+  const led = new THREE.Mesh(new THREE.BoxGeometry(L * 0.9, 0.003, 0.07), ledMat);
+  led.position.set(0, H + 0.0915, -0.02);
   g.add(led);
 
   // background: dark blue-black film on the back glass (in water -> attenuated)

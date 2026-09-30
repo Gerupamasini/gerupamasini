@@ -41,7 +41,9 @@ export class World {
     this.plantCurrent = plants.current;
     scene.add(this.plants);
     this.colliders = [...rocks.colliders, ...plants.colliders];
-    for (const o of [this.substrate, this.rocks, this.plants]) o.traverse((c) => c.layers.enable(1));
+    // layer 1 = content visible in the surface TIR mirror (pebble instances are
+    // skipped: from the grazing mirror angle only the base colour reads)
+    for (const o of [this.substrate, this.rocks, this.plants]) o.traverse((c) => { if (!c.isInstancedMesh || o !== this.substrate) c.layers.enable(1); });
     this.tank.traverse((c) => {
       if (c.material && c.geometry && c.geometry.type === 'PlaneGeometry') c.layers.enable(1);
     });
