@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ヒメハゼ Favonigobius gymnauchen</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#233;font-family:system-ui,sans-serif}
+  #hud{position:fixed;left:8px;bottom:8px;color:#e8f2ef;font:12px/1.3 ui-monospace,monospace;background:#0008;padding:4px 8px;border-radius:4px;max-width:calc(100vw - 32px)}
+  #panel{position:fixed;top:8px;left:8px;color:#e8f2ef;font-size:12px;background:#0009;padding:8px;border-radius:6px;display:flex;flex-direction:column;gap:6px;max-width:calc(100vw - 32px)}
+  #panel .row{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+  button,select{font:inherit;background:#1d3a38;color:#e8f2ef;border:1px solid #4a7470;border-radius:4px;padding:2px 6px;cursor:pointer}
+  #labels .lbl{position:fixed;transform:translate(-50%,-100%);color:#fff;font:11px ui-monospace,monospace;text-shadow:0 0 3px #000;pointer-events:none;white-space:nowrap}
+</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+</head>
+<body>
+<div id="panel">
+  <b>ヒメハゼ <i>Favonigobius gymnauchen</i> — 東京湾・干潟</b>
+  <div class="row">照明:
+    <button data-preset="clearShallow">明るい浅瀬</button>
+    <button data-preset="turbidFlat">濁った干潟</button>
+    <button data-preset="lowSun">低角度日光</button>
+    <button data-preset="shade">影</button>
+  </div>
+  <div class="row">
+    <button data-act="predator">捕食者 (P)</button>
+    <button data-act="food">餌を撒く (F)</button>
+    <button data-act="pause">一時停止 (Space)</button>
+    <button data-act="follow">追従切替</button>
+    <button data-act="labels">状態表示</button>
+    LOD <select data-act="lod"><option value="auto">auto</option><option value="0">LOD0</option><option value="1">LOD1</option><option value="2">LOD2</option><option value="3">LOD3</option></select>
+  </div>
+  <div class="row">時刻 <input type="range" min="0" max="24" step="0.5" value="11" data-act="time">
+    潮位 <input type="range" min="0" max="1" step="0.05" value="0.5" data-act="tide"></div>
+</div>
+<div id="labels"></div>
+<div id="hud"></div>
+<script type="module" src="./demo/main.js"></script>
+</body>
+</html>
