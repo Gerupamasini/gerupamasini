@@ -3,6 +3,7 @@
 
 import GUI from 'lil-gui';
 import * as THREE from 'three';
+import { QUALITY_LEVELS } from '../render/AdaptiveQuality.js';
 import { U } from '../render/SharedUniforms.js';
 import { ANIMS } from '../fish/AnimDemo.js';
 import { STATES } from '../ai/Brain.js';
@@ -10,6 +11,7 @@ import { COLOR_TYPES } from '../fish/Fish.js';
 
 export function buildGUI(app) {
   const gui = new GUI({ title: 'Comet Goldfish — Debug', width: 320 });
+  if (app.opts.params.get('gui') !== 'open') gui.close(); // keep the tank unobstructed until asked
   const fs = app.fishSystem;
   const all = () => fs.fish;
   const sel = () => app.selected;
@@ -40,7 +42,15 @@ export function buildGUI(app) {
     });
   }
   sim.add(simP, 'nextFish').name('select next fish (N)');
-  sim.add(app, 'cameraMode', ['orbit', 'follow']).name('camera (C)').listen();
+  const camP = {
+    get mode() {
+      return app.cameraMode;
+    },
+    set mode(v) {
+      app.setCameraMode(v);
+    },
+  };
+  sim.add(camP, 'mode', app.world ? ['cinematic', 'orbit', 'follow'] : ['orbit', 'follow']).name('camera (V / C)').listen();
 
   // ------------------------------------------------------------ animation
   const an = gui.addFolder('Animation');
@@ -76,7 +86,8 @@ export function buildGUI(app) {
   mat.add(U.uRoughness, 'value', 0.05, 1, 0.01).name('roughness');
   mat.add(U.uGuanine, 'value', 0, 1.2, 0.01).name('guanine reflectance');
   mat.add(U.uIridescence, 'value', 0, 1, 0.01).name('iridescence');
-  mat.add(U.uSSS, 'value', 0, 2, 0.01).name('subsurface');
+  mat.add(U.uSSS, 'value', 0, 2, 0.01).name('subsurface (diffusion)');
+  mat.add(U.uTranslucency, 'value', 0, 3, 0.01).name('body translucency');
   mat.add(U.uFinOpacity, 'value', 0.1, 1.6, 0.01).name('fin opacity');
   mat.add(U.uFinTransmission, 'value', 0, 3, 0.01).name('fin transmission');
   mat.add(U.uFinRoughness, 'value', 0.05, 1, 0.01).name('fin roughness');
@@ -164,11 +175,45 @@ export function buildGUI(app) {
   }
   li.close();
 
+  // ------------------------------------------------------------ lens & quality
+  if (app.post) {
+    const le = gui.addFolder('Lens & Quality');
+    const lensP = {
+      get dof() {
+        return app.post.dof.enabled;
+      },
+      set dof(v) {
+        app.dofEnabled = v;
+        app.post.dof.enabled = v;
+      },
+    };
+    le.add(lensP, 'dof').name('depth of field').listen();
+    le.add(app.post.dof, 'maxBlur', 0.002, 0.03, 0.001).name('max blur (frame h)');
+    const u = app.post.lens.material.uniforms;
+    le.add(u.uCA, 'value', 0, 0.01, 0.0001).name('chromatic aberration');
+    le.add(u.uVignette, 'value', 0, 1, 0.01).name('vignette');
+    le.add(u.uGrain, 'value', 0, 0.15, 0.001).name('film grain');
+    if (app.quality) {
+      const q = app.quality;
+      const qp = {
+        get level() {
+          return q.current.name;
+        },
+        set level(v) {
+          q.set(QUALITY_LEVELS.findIndex((l) => l.name === v));
+        },
+      };
+      le.add(q, 'auto').name('adaptive quality').listen();
+      le.add(qp, 'level', QUALITY_LEVELS.map((l) => l.name)).name('quality level').listen();
+    }
+    le.close();
+  }
+
   // ------------------------------------------------------------ debug views
   const dbg = gui.addFolder('Debug View');
   const dv = { view: 'shaded', wireframe: false };
-  dbg.add(dv, 'view', ['shaded', 'normals', 'albedo/pattern', 'scale normals']).onChange((v) => {
-    U.uDebugView.value = { shaded: 0, normals: 1, 'albedo/pattern': 2, 'scale normals': 3 }[v];
+  dbg.add(dv, 'view', ['shaded', 'normals', 'albedo/pattern', 'scale normals', 'thickness (transmittance)']).onChange((v) => {
+    U.uDebugView.value = { shaded: 0, normals: 1, 'albedo/pattern': 2, 'scale normals': 3, 'thickness (transmittance)': 4 }[v];
   });
   dbg.add(dv, 'wireframe').onChange((v) => fs.setWireframe(v));
   const flags = app.debugDraw.flags;

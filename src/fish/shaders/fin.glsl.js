@@ -105,7 +105,7 @@ void computeFinSurface() {
   ray = mix(w * 1.4, ray, rayAA);
   // pleated membrane: rays are ridges, membrane sags between them
   float xr = rc - floor(rc + 0.5);
-  gPleat = (sin(xr * 6.2831853) * 0.22 + (-2.0 * xr / (w * w)) * exp(-xr * xr / (w * w)) * w * 0.35) * rayAA * (1.0 - t * 0.5);
+  gPleat = (sin(xr * 6.2831853) * 0.14 + (-2.0 * xr / (w * w)) * exp(-xr * xr / (w * w)) * w * 0.25) * rayAA * (1.0 - t * 0.5);
   // segmentation joints of the lepidotrichia (shorter segments distally)
   float segF = (type < 0.5 ? 34.0 : 22.0);
   float seg = fract(spow(max(t, 0.0), 0.8) * segF + rc * 0.37);
@@ -120,18 +120,22 @@ void computeFinSurface() {
   vec3 pig = redCol;
   if (ctype > 1.5 && ctype < 2.5) pig = mix(uColOrange, uColYellow, 0.3);
   if (ctype > 2.5 && ctype < 3.5) pig = uColYellow;
-  vec3 membraneWhite = vec3(0.78, 0.83, 0.88);
+  vec3 membraneWhite = vec3(0.86, 0.89, 0.93);
   vec3 col = mix(membraneWhite, pig, redM);
   // rays carry more chromatophores + iridophores: denser pigment / whiter
-  col = mix(col, mix(vec3(0.97, 0.98, 1.0), pig * 1.05, redM), ray * 0.75);
+  col = mix(col, mix(vec3(0.97, 0.98, 1.0), pig * 1.05, redM), ray * 0.5);
   col *= 1.0 - joint * 0.35;
 
-  // ---- opacity: continuous milky membrane, rays slightly denser
-  float aMem = mix(0.34, 0.66, redM);
-  float aRay = mix(0.7, 0.9, redM);
+  // ---- opacity (per shell layer; the fin is two layers thick): clear,
+  // milky membrane with streaky density along the rays, denser rays, fleshy
+  // opaque base, and a distal zone that clears toward the margin
+  float aMem = mix(0.15, 0.46, redM);
+  float aRay = mix(0.24, 0.72, redM);
   float alpha = mix(aMem, aRay, ray);
-  alpha = mix(alpha, 0.97, smoothstep(0.1, 0.0, t)); // fleshy base
-  alpha *= 1.0 - 0.18 * smoothstep(0.6, 1.0, t) * (1.0 - ray);
+  float milk = vnoise2(vec2(rc * 1.7 + seed * 5.0, t * 3.0 - seed)) * 0.65 + vnoise2(vec2(rc * 0.45, t * 9.0 + seed * 2.0)) * 0.35;
+  alpha *= mix(1.0, 0.7 + 0.6 * milk, 1.0 - ray);
+  alpha = mix(alpha, 0.95, smoothstep(0.12, 0.0, t)); // fleshy base
+  alpha *= 1.0 - 0.4 * smoothstep(0.35, 1.0, t) * (1.0 - ray) * (1.0 - 0.5 * redM);
   // fine serration: membrane recedes slightly between the ray tips; fraying
   float fray = vnoise2(vec2(rc * 3.0 + seed * 7.0, seed)) * 0.006;
   float cut = 1.0 - (0.005 + fray) * (1.0 - ray);
@@ -171,7 +175,7 @@ export const finFragmentNormal = /* glsl */ `
 `;
 
 export const finFragmentMaterial = /* glsl */ `
-material.specularColor = vec3(mix(0.03, 0.07, gFinRay));
+material.specularColor = vec3(mix(0.03, 0.05, gFinRay));
 material.specularColorBlended = material.specularColor;
 material.specularF90 = 1.0;
 material.diffuseContribution = gFinAlbedo;
@@ -192,10 +196,14 @@ export const finFragmentLightsEnd = /* glsl */ `
     // forward scattering peak when looking toward the light through the fin
     float fwd = spow(saturate(dot(V, -L)), 6.0);
     float wrapF = saturate((dot(normal, L) + 0.6) / 1.6) - saturate(dot(normal, L));
-    reflectedLight.directDiffuse += lc * gFinTrans * uFinTransmission * (backLit * 0.8 + fwd * 1.4 + wrapF * 0.35) * caus;
+    // in-membrane scattering: light entering the thin collagen sheet at any
+    // angle is diffused inside it and re-emitted from both faces (milky glow
+    // even when the key light grazes the fin plane)
+    float inScat = 0.28 * (1.0 - abs(dot(normal, L))) + 0.1;
+    reflectedLight.directDiffuse += lc * gFinTrans * uFinTransmission * (backLit * 0.8 + fwd * 1.4 + wrapF * 0.5 + inScat) * RECIPROCAL_PI * 2.2 * caus;
   #endif
   // hemispherical transmitted ambient from behind the membrane
-  reflectedLight.indirectDiffuse *= 1.0 + 0.35 * uFinTransmission;
+  reflectedLight.indirectDiffuse *= 1.0 + 0.6 * uFinTransmission;
 }
 `;
 
@@ -203,7 +211,7 @@ export const finFragmentOutput = /* glsl */ `
 {
   float nv = abs(dot(normalize(normal), normalize(vViewPosition)));
   // grazing views see more membrane / specular sheen
-  diffuseColor.a = clamp(diffuseColor.a + spow(clamp(1.0 - nv, 0.0, 1.0), 3.0) * 0.35 * uFinOpacity, 0.0, 1.0);
+  diffuseColor.a = clamp(diffuseColor.a + spow(clamp(1.0 - nv, 0.0, 1.0), 3.0) * 0.22 * uFinOpacity, 0.0, 1.0);
   float a = max(diffuseColor.a, 0.02);
   outgoingLight = totalDiffuse + totalSpecular / a;
   outgoingLight = waterAttenuate(outgoingLight, vFishWorld);

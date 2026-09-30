@@ -6,7 +6,7 @@ const app = new App(document.getElementById('app'), {
   fishCount: params.has('fish') ? Number(params.get('fish')) : undefined,
   seed: params.has('seed') ? Number(params.get('seed')) : undefined,
   gui: params.get('gui') !== '0',
-  quality: params.get('quality') || 'high',
+  quality: params.get('quality') || 'auto',
   test: params.get('test') || null,
   params,
 });

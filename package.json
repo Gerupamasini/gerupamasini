@@ -9,8 +9,9 @@
     "start": "vite --open",
     "build": "vite build",
     "preview": "vite preview",
-    "shots": "node tools/screenshot.mjs",
-    "perf": "node tools/perf.mjs"
+    "shots": "node tools/dev/shot.mjs",
+    "perf": "node tools/perf.mjs",
+    "artifact": "node tools/build-artifact.mjs"
   },
   "dependencies": {
     "lil-gui": "^0.21.0",

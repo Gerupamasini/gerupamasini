@@ -68,6 +68,10 @@ export class World {
     scene.add(key, key.target);
     key.layers.enable(1);
     this.key = key;
+    // share the key-light shadow transform with the fish shaders (light that
+    // enters the body elsewhere is shadowed at its entry point)
+    U.uKeyShadowMatrix.value = key.shadow.matrix;
+    U.uKeyShadowOn.value = 1;
     const hemi = new THREE.HemisphereLight(0x9ccfd6, 0x3b3122, 0.55);
     hemi.layers.enable(1);
     scene.add(hemi);

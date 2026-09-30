@@ -259,6 +259,9 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   const N0 = new Float32Array(count * 3); // undisplaced normal (closed)
   const maskArr = new Float32Array(count * 4);
   const mask2Arr = new Float32Array(count * 4);
+  // local elliptic cross-section (centre height, half width, half height) used
+  // by the shader to trace chords through the body for light transport
+  const sectArr = new Float32Array(count * 3);
   const flap = new Float32Array(count);
   const v = new THREE.Vector3();
   const masks = {};
@@ -343,6 +346,14 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
           maskArr[idx * 4 + 1] = masks.gill;
           maskArr[idx * 4 + 2] = masks.lip;
           maskArr[idx * 4 + 3] = thick;
+          {
+            const sc = clamp(s, 0.004, 1.0);
+            const T = profile.top(sc);
+            const B = profile.bot(sc);
+            sectArr[idx * 3] = 0.5 * (T + B);
+            sectArr[idx * 3 + 1] = Math.max(profile.hw(sc), 0.004);
+            sectArr[idx * 3 + 2] = Math.max(0.5 * (T - B), 0.004);
+          }
           mask2Arr[idx * 4 + 0] = masks.operc;
           mask2Arr[idx * 4 + 1] = a; // dorso-ventral coordinate (-1 belly .. +1 back)
           mask2Arr[idx * 4 + 2] = c < nTheta / 2 || c === nTheta ? 1 : -1;
@@ -519,6 +530,7 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   g.setAttribute('aScaleUV', new THREE.BufferAttribute(scaleUV, 2));
   g.setAttribute('aMask', new THREE.BufferAttribute(maskArr, 4));
   g.setAttribute('aMask2', new THREE.BufferAttribute(mask2Arr, 4));
+  g.setAttribute('aSect', new THREE.BufferAttribute(sectArr, 3));
   g.setAttribute('aMorphMouth', new THREE.BufferAttribute(mouthDelta, 3));
   g.setAttribute('aMorphMouthN', new THREE.BufferAttribute(mouthNDelta, 3));
   g.setAttribute('aMorphOperc', new THREE.BufferAttribute(opercDelta, 3));

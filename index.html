@@ -2,25 +2,75 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Comet Goldfish — Real-time Aquarium</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- page:begin (tools/build-artifact.mjs publishes everything between the markers) -->
+    <title>Comet Goldfish Aquarium</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" />
     <style>
-      html, body { margin: 0; height: 100%; background: #05080a; overflow: hidden; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
-      #app { position: fixed; inset: 0; }
+      /* Layout: the tank fills the screen; quiet glass chips float at the
+         corners (hints top-left, debug GUI top-right, HUD bottom-left,
+         camera / feeding controls bottom-right, one row on phones). */
+      :root {
+        --water: #04090b;      /* deep tank water behind the canvas */
+        --glass: rgba(6, 18, 22, 0.55);
+        --glass-edge: rgba(150, 205, 214, 0.16);
+        --ink: #d7e9ec;        /* primary text */
+        --ink-dim: #8fb0b6;    /* hints */
+        --koi: #e8552a;        /* goldfish orange-red accent */
+        --font-ui: 'Zen Kaku Gothic New', 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
+        --font-data: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+        color-scheme: dark;
+      }
+      html, body { margin: 0; height: 100%; background: var(--water); color: var(--ink); overflow: hidden; font-family: var(--font-ui); }
+      #app { position: fixed; inset: 0; touch-action: none; }
       canvas { display: block; }
-      #hud { position: fixed; left: 10px; bottom: 10px; color: #cfe3ea; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; background: rgba(0,0,0,0.35); padding: 6px 9px; border-radius: 6px; pointer-events: none; white-space: pre; }
+      #hud { position: fixed; left: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); color: var(--ink); font: 11.5px/1.5 var(--font-data); font-variant-numeric: tabular-nums; background: var(--glass); border: 1px solid var(--glass-edge); padding: 7px 10px; border-radius: 8px; pointer-events: none; white-space: pre; max-width: calc(100vw - 24px); overflow: hidden; }
       #labels { position: fixed; inset: 0; pointer-events: none; }
-      .fish-label { position: absolute; transform: translate(-50%, -100%); color: #fff; font: 11px/1.2 ui-monospace, Menlo, monospace; background: rgba(0,0,0,0.55); padding: 2px 5px; border-radius: 4px; white-space: nowrap; }
-      #help { position: fixed; left: 10px; top: 10px; max-width: calc(100vw - 300px); color: #9fb6bd; font: 12px/1.5 system-ui, sans-serif; background: rgba(0,0,0,0.35); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
-      #loading { position: fixed; inset: 0; display: grid; place-items: center; color: #9fc3cf; font: 14px system-ui, sans-serif; letter-spacing: 0.05em; }
+      .fish-label { position: absolute; transform: translate(-50%, -100%); color: var(--ink); font: 11px/1.2 var(--font-data); background: var(--glass); padding: 2px 5px; border-radius: 4px; white-space: nowrap; }
+      #help { position: fixed; left: 12px; top: calc(12px + env(safe-area-inset-top, 0px)); max-width: min(560px, calc(100vw - 370px)); color: var(--ink-dim); font-size: 12.5px; line-height: 1.6; background: var(--glass); border: 1px solid var(--glass-edge); padding: 8px 12px; border-radius: 8px; pointer-events: none; }
+      #help b { color: var(--ink); font-weight: 700; letter-spacing: 0.04em; margin-right: 0.5em; }
+      #help b i { font-style: normal; color: var(--koi); }
+      #help .touch { display: none; }
+      #ctrl { position: fixed; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+      #ctrl button { font: 500 13px/1 var(--font-ui); color: var(--ink); background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 999px; padding: 9px 14px; cursor: pointer; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+      #ctrl button:hover { border-color: rgba(232, 85, 42, 0.55); }
+      #ctrl button:focus-visible { outline: 2px solid var(--koi); outline-offset: 2px; }
+      #ctrl button[aria-pressed='true'] { border-color: var(--koi); color: #fff; background: rgba(232, 85, 42, 0.22); }
+      #loading { position: fixed; inset: 0; display: grid; place-items: center; color: var(--ink-dim); font: 14px var(--font-ui); letter-spacing: 0.06em; background: var(--water); }
+      #loading span { color: var(--koi); }
+      body.ui-hidden #ctrl button:not([data-act='ui']) { display: none; }
+      @media (pointer: coarse) {
+        #help .mouse { display: none; }
+        #help .touch { display: inline; }
+      }
+      @media (max-width: 720px) {
+        #help { max-width: calc(100vw - 24px); font-size: 12px; }
+        #hud { display: none; }
+        #ctrl { left: 12px; right: 12px; justify-content: center; }
+        #ctrl button { flex: 1 1 auto; padding: 10px 8px; }
+      }
+      @media (max-width: 720px) and (pointer: coarse) {
+        body .lil-gui.root { display: none !important; }
+      }
     </style>
+    <!-- page:end-head -->
   </head>
   <body>
+    <!-- page:body -->
     <div id="app"></div>
     <div id="labels"></div>
     <div id="hud"></div>
-    <div id="help">魚をクリック: 選択 ・ ガラスをクリック: タップ（驚愕刺激） ・ 上から水面をクリック / F: 給餌 ・ C: 追従カメラ ・ H: UI 表示切替</div>
-    <div id="loading">Comet Goldfish — generating procedural assets…</div>
+    <div id="help"><b>コメット<i>金魚</i></b><span class="mouse">ドラッグ: 視点 ・ 魚をクリック: 選択 ・ ガラスをクリック: タップ ・ 水面を上からクリック / F: 給餌 ・ V: シネマ ・ C: 追従 ・ H: UI</span><span class="touch">ドラッグ: 視点 ・ ピンチ: ズーム ・ 魚をタップ: 選択</span></div>
+    <div id="ctrl" role="toolbar" aria-label="水槽の操作">
+      <button type="button" data-act="cine" aria-pressed="true">自由視点</button>
+      <button type="button" data-act="feed">給餌</button>
+      <button type="button" data-act="tap">ガラスをタップ</button>
+      <button type="button" data-act="ui">UI</button>
+    </div>
+    <div id="loading">コメット金魚を生成しています<span>…</span></div>
+    <!-- page:script -->
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

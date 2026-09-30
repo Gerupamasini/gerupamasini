@@ -8,7 +8,7 @@ import { buildRigLayout, NS } from './RigLayout.js';
 import { buildBodyGeometry, eyeRest } from './BodyGeometry.js';
 import { buildFinGeometry } from './FinGeometry.js';
 import { head } from './morphology.js';
-import { createBodyMaterial, createBodyDepthMaterial, createFinMaterial, createFinDepthMaterial, createEyeMaterial } from './FishMaterials.js';
+import { createBodyMaterial, createBodyDepthMaterial, createFinMaterial, createFinDepthMaterial, createFinDepthWriteMaterial, createEyeMaterial } from './FishMaterials.js';
 import { U } from '../render/SharedUniforms.js';
 
 const LOD_SPECS = [
@@ -44,6 +44,7 @@ export class FishSystem {
 
     this.bodyDepth = createBodyDepthMaterial(this.layout);
     this.finDepth = createFinDepthMaterial(this.layout);
+    this.finDepthWrite = createFinDepthWriteMaterial(this.layout);
     this.eyeMat = createEyeMaterial();
     this.lods = LOD_SPECS.map((spec, lod) => this._buildLOD(spec, lod));
   }
@@ -80,6 +81,11 @@ export class FishSystem {
     fins.customDepthMaterial = this.finDepth;
     fins.renderOrder = 2;
     fins.name = `fishFins.LOD${lod}`;
+    // same instances, depth only, after all fins (for the depth of field)
+    const finsZ = new THREE.Mesh(finGeom, this.finDepthWrite);
+    finsZ.frustumCulled = false;
+    finsZ.renderOrder = 3;
+    finsZ.name = `fishFinsDepth.LOD${lod}`;
     const eyeGeom = new THREE.SphereGeometry(1, spec.eye[0], spec.eye[1]);
     // SphereGeometry poles sit on ±Y, so the optical axis (+Z) has no pole pinch
     const eyeParams = new THREE.InstancedBufferAttribute(new Float32Array(this.maxFish * 2 * 4), 4);
@@ -92,10 +98,11 @@ export class FishSystem {
     eyes.count = 0;
     eyes.name = `fishEyes.LOD${lod}`;
     for (const m of [body, fins, eyes]) m.layers.enable(1); // visible in the surface (TIR) reflection
-    this.group.add(body, fins, eyes);
+    this.group.add(body, fins, finsZ, eyes);
     return {
       body,
       fins,
+      finsZ,
       eyes,
       bodyTris: bodyGeom.index.count / 3,
       finTris: finGeom.index.count / 3,
@@ -199,7 +206,7 @@ export class FishSystem {
       }
       L.body.geometry.instanceCount = n;
       L.fins.geometry.instanceCount = n;
-      L.body.visible = L.fins.visible = n > 0;
+      L.body.visible = L.fins.visible = L.finsZ.visible = n > 0;
       L.eyes.count = ne;
       rows.needsUpdate = true;
       frows.needsUpdate = true;

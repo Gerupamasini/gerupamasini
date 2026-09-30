@@ -33,6 +33,9 @@ export const U = {
   uGuanine: { value: 0.55 },
   uIridescence: { value: 0.3 },
   uSSS: { value: 0.6 },
+  uTranslucency: { value: 1.0 }, // tissue translucency (scales the mean free path)
+  uKeyShadowMatrix: { value: new THREE.Matrix4() }, // world -> key-light shadow map
+  uKeyShadowOn: { value: 0 },
 
   // fins
   uFinOpacity: { value: 1.0 },

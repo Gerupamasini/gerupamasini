@@ -10,6 +10,8 @@ import { AnimDemo } from './fish/AnimDemo.js';
 import { U } from './render/SharedUniforms.js';
 import { buildStudioEnvScene, bakeEnvironment } from './render/StudioEnvironment.js';
 import { PostFX } from './render/PostFX.js';
+import { CinematicDirector } from './render/CinematicCamera.js';
+import { AdaptiveQuality, QUALITY_LEVELS } from './render/AdaptiveQuality.js';
 import { World } from './world/World.js';
 import { TANK } from './world/TankConfig.js';
 import { DebugDraw } from './debug/DebugDraw.js';
@@ -37,7 +39,7 @@ export class App {
   async init() {
     const test = !!this.opts.test;
     const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: test });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, test ? 1 : 1.5));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.NeutralToneMapping;
@@ -66,15 +68,28 @@ export class App {
     if (this.mode === 'studio') this._initStudio();
     else this._initAquarium();
 
-    this.post = new PostFX(renderer, this.scene, this.camera);
+    this.post = new PostFX(renderer, this.scene, this.camera, { samples: this.opts.params.has('msaa') ? Number(this.opts.params.get('msaa')) : 4 });
+    if (this.opts.params.has('dofDebug')) this.post.dof.material.uniforms.uDebug.value = 1;
+    this.focusDist = 1;
+    this.director = new CinematicDirector(this);
+    const pp = this.opts.params;
+    const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (this.mode === 'aquarium' && ((!test && !calm && pp.get('cine') !== '0') || (test && pp.has('cine')))) this.cameraMode = 'cinematic';
+    if (pp.has('cine') && pp.get('cine') !== '1' && pp.get('cine') !== '0') this.director.forceType = pp.get('cine');
+    if (pp.get('dof') === '0') this.dofEnabled = false;
+    this.post.dof.enabled = this.dofEnabled !== false;
+    this.controls.enabled = this.cameraMode !== 'cinematic';
     if (this.mode === 'studio') {
-      this.post.bloom.strength = 0.1;
-      this.post.bloom.threshold = 1.2;
+      this.post.bloom.strength = 0.05;
+      this.post.bloom.radius = 0.25;
+      this.post.bloom.threshold = 1.6;
     }
-    this.usePost = this.opts.quality !== 'low';
+    this.usePost = pp.get('post') !== '0';
     this._bindInput();
     window.addEventListener('resize', () => this._resize());
     this._resize();
+    if (!test) this.quality = new AdaptiveQuality(this, { mode: this.opts.quality || 'auto' });
+    this._bindButtons();
     if (this.opts.gui && !test) this.gui = buildGUI(this);
     this.hud = document.getElementById('hud');
     if (this.opts.params.get('hud') === '0' && this.hud) this.hud.style.display = 'none';
@@ -147,6 +162,7 @@ export class App {
     scene.add(fill);
     scene.add(new THREE.HemisphereLight(0xbfd2e0, 0x201a14, 0.35));
     this.studioLights = { key, fill };
+    U.uCausticLightDir.value.copy(key.position).normalize(); // key direction for the body light transport
     const p = this.opts.params;
     const seed = this.opts.seed ?? 7;
     const colorType = p.has('color') ? Number(p.get('color')) : 0;
@@ -194,7 +210,13 @@ export class App {
   _bindInput() {
     const el = this.renderer.domElement;
     let down = null;
-    el.addEventListener('pointerdown', (e) => (down = { x: e.clientX, y: e.clientY, t: performance.now() }));
+    el.addEventListener('pointerdown', (e) => {
+      down = { x: e.clientX, y: e.clientY, t: performance.now() };
+      if (this.cameraMode === 'cinematic') this.setCameraMode('orbit');
+    });
+    el.addEventListener('wheel', () => {
+      if (this.cameraMode === 'cinematic') this.setCameraMode('orbit');
+    }, { passive: true });
     el.addEventListener('pointerup', (e) => {
       if (!down) return;
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
@@ -210,8 +232,48 @@ export class App {
       if (k === 'p') this.paused = !this.paused;
       if (k === 'h') this.toggleUI();
       if (k === 'n') this.selectNext();
-      if (k === 'c') this.cameraMode = this.cameraMode === 'follow' ? 'orbit' : 'follow';
+      if (k === 'c') this.setCameraMode(this.cameraMode === 'follow' ? 'orbit' : 'follow');
+      if (k === 'v') this.setCameraMode(this.cameraMode === 'cinematic' ? 'orbit' : 'cinematic');
     });
+  }
+
+  setCameraMode(m) {
+    if (m === this.cameraMode) return;
+    if (this.cameraMode === 'cinematic') {
+      this.director.release(this.controls);
+      if (this.director.subject) this.selected = this.director.subject;
+    }
+    if (m === 'cinematic') this.director.shot = null; // start with a fresh cut
+    this.cameraMode = m;
+    this.controls.enabled = m !== 'cinematic';
+    this._syncButtons();
+  }
+
+  _bindButtons() {
+    const bar = document.getElementById('ctrl');
+    if (!bar) return;
+    if (this.opts.test || this.mode !== 'aquarium') {
+      bar.style.display = 'none';
+      return;
+    }
+    bar.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const a = b.dataset.act;
+      if (a === 'cine') this.setCameraMode(this.cameraMode === 'cinematic' ? 'orbit' : 'cinematic');
+      if (a === 'feed') this.feed();
+      if (a === 'tap') this.tapGlass();
+      if (a === 'ui') this.toggleUI();
+    });
+    this._syncButtons();
+  }
+
+  _syncButtons() {
+    const b = document.querySelector('#ctrl [data-act="cine"]');
+    if (!b) return;
+    const on = this.cameraMode === 'cinematic';
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.textContent = on ? '自由視点' : 'シネマ';
   }
 
   toggleUI() {
@@ -222,6 +284,7 @@ export class App {
       if (el) el.style.display = d;
     }
     if (this.gui) this.gui.domElement.style.display = d;
+    document.body.classList.toggle('ui-hidden', !!this.uiHidden);
   }
 
   selectNext() {
@@ -328,6 +391,13 @@ export class App {
   }
 
   _updateCamera(dt) {
+    if (this.cameraMode === 'cinematic' && this.world) {
+      this.director.update(dt);
+      this.focusDist = this.director.focus;
+      this.post.dof.focus = this.focusDist;
+      this.post.dof.fStop = this.director.fStop;
+      return;
+    }
     if (this.cameraMode === 'follow' && this.selected) {
       const f = this.selected;
       const fwd = f.loc.forward;
@@ -339,6 +409,31 @@ export class App {
       this.controls.target.lerp(f.loc.pos, 1 - Math.exp(-dt * 5));
     }
     this.controls.update();
+    this._autoFocus(dt);
+  }
+
+  /** Lens autofocus: followed fish, else the fish nearest the frame centre, else the orbit target. */
+  _autoFocus(dt) {
+    const cam = this.camera;
+    let target = cam.position.distanceTo(this.controls.target);
+    if (this.cameraMode === 'follow' && this.selected) target = cam.position.distanceTo(this.selected.loc.pos);
+    else {
+      const dir = new THREE.Vector3();
+      cam.getWorldDirection(dir);
+      let best = Infinity;
+      const v = new THREE.Vector3();
+      for (const f of this.fishSystem.fish) {
+        v.subVectors(f.loc.pos, cam.position);
+        const along = v.dot(dir);
+        if (along <= 0.02) continue;
+        const off = Math.sqrt(Math.max(0, v.lengthSq() - along * along));
+        if (off / along < 0.12 && along < best) best = along;
+      }
+      if (best < Infinity) target = best;
+    }
+    this.focusDist += (target - this.focusDist) * (1 - Math.exp(-dt * 3));
+    this.post.dof.focus = this.focusDist;
+    this.post.dof.fStop = this.mode === 'studio' ? 8 : 4;
   }
 
   render() {
@@ -357,6 +452,7 @@ export class App {
     const realDt = this._last ? (now - this._last) / 1000 : 1 / 60;
     const rawDt = Math.min(0.05, realDt);
     this._last = now;
+    if (this.quality) this.quality.sample(realDt);
     if (!this.paused) this.step(rawDt * this.timeScale);
     this._updateCamera(rawDt);
     this.debugDraw.update(this.fishSystem.fish, this.world, this.camera, this.selected);
@@ -382,6 +478,7 @@ export class App {
     const lines = [
       `FPS ${this.perf.fps.toFixed(0)}  frame ${this.perf.frameMs.toFixed(1)} ms  sim(CPU) ${this.perf.simMs.toFixed(2)} ms  submit ${this.perf.renderMs.toFixed(1)} ms`,
       `draw calls ${info.render.calls}  tris ${(info.render.triangles / 1000).toFixed(0)}k  fish ${this.fishSystem.fish.length}  visible ${fs.visible}  LOD0/1/2 ${fs.lod.join('/')}`,
+      `camera ${this.cameraMode}${this.cameraMode === 'cinematic' && this.director.shot ? ' (' + this.director.shot.type + ')' : ''}  focus ${this.focusDist.toFixed(2)} m  quality ${this.quality ? this.quality.current.name + (this.quality.auto ? ' auto' : '') : '-'} @${this.renderer.getPixelRatio().toFixed(2)}x`,
     ];
     if (s) {
       const b = s.brain;
@@ -489,6 +586,7 @@ export class App {
     if (p.has('feed')) this.feed(0, 0.05, 12);
     for (let t = 0; t < tWarm; t += dt) {
       this.step(dt);
+      if (this.cameraMode === 'cinematic') this._updateCamera(dt);
       if (p.has('tapAt') && Math.abs(t - Number(p.get('tapAt'))) < dt / 2) this.tapGlass(new THREE.Vector3(0, 0.2, TANK.D / 2));
     }
     if (p.has('cam')) {
@@ -500,6 +598,10 @@ export class App {
     if (p.has('follow') && this.selected) {
       this.cameraMode = 'follow';
       for (let i = 0; i < 200; i++) this._updateCamera(1 / 30);
+    }
+    if (this.cameraMode !== 'cinematic') {
+      this.focusDist = this.camera.position.distanceTo(this.controls.target);
+      for (let i = 0; i < 60; i++) this._autoFocus(1 / 30);
     }
     for (const k of ['skeleton', 'velocity', 'target', 'collision', 'labels']) if (p.has(k)) this.debugDraw.flags[k] = true;
     if (p.has('debugRefl') && this.world) this.world.surface.material.uniforms.uDebugRefl.value = 1;

@@ -14,6 +14,7 @@ import {
   bodyFragmentMaterial,
   bodyFragmentLightsEnd,
   bodyFragmentOutput,
+  bodyFragmentShadowPars,
 } from './shaders/body.glsl.js';
 import {
   finVertexPars,
@@ -56,7 +57,8 @@ export function createBodyMaterial(layout, { lod = 0 } = {}) {
   m.onBeforeCompile = (shader) => {
     attachUniforms(shader, [
       'uRig', 'uDebugView', 'uColRed', 'uColOrange', 'uColYellow', 'uColWhite', 'uColGill',
-      'uScaleIntensity', 'uRoughness', 'uGuanine', 'uIridescence', 'uSSS', ...UW_UNIFORMS,
+      'uScaleIntensity', 'uRoughness', 'uGuanine', 'uIridescence', 'uSSS', 'uTranslucency',
+      'uKeyShadowMatrix', 'uKeyShadowOn', ...UW_UNIFORMS,
     ]);
     let vs = shader.vertexShader;
     vs = mustReplace(vs, '#include <common>', '#include <common>\n' + rigVertexCommon + bodyVertexPars, 'common');
@@ -66,6 +68,7 @@ export function createBodyMaterial(layout, { lod = 0 } = {}) {
 
     let fs = shader.fragmentShader;
     fs = mustReplace(fs, '#include <common>', '#include <common>\n' + noiseCommon + underwaterCommon + bodyFragmentPars, 'common');
+    fs = mustReplace(fs, '#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n' + bodyFragmentShadowPars, 'shadow_pars');
     fs = mustReplace(fs, '#include <color_fragment>', '#include <color_fragment>\n' + bodyFragmentColor, 'color');
     fs = mustReplace(fs, '#include <roughnessmap_fragment>', 'float roughnessFactor = gFS.rough;', 'roughness');
     fs = mustReplace(fs, '#include <metalnessmap_fragment>', 'float metalnessFactor = 0.0;', 'metalness');
@@ -146,6 +149,25 @@ export function createFinDepthMaterial(layout) {
     shader.fragmentShader = fs;
   };
   m.customProgramCacheKey = () => 'fish-fin-depth';
+  return m;
+}
+
+/**
+ * Depth-only pass for the translucent fins, drawn after them: no colour, but
+ * fin depth lands in the scene depth buffer so the lens (depth of field)
+ * focuses on the fins instead of the background seen through them.
+ */
+export function createFinDepthWriteMaterial(layout) {
+  const m = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true, transparent: true, side: THREE.DoubleSide });
+  m.defines = { RIG_MISC: layout.misc };
+  m.onBeforeCompile = (shader) => {
+    attachUniforms(shader, ['uRig']);
+    let vs = shader.vertexShader;
+    vs = mustReplace(vs, '#include <common>', '#include <common>\n#define DEPTH_ONLY\n' + rigVertexCommon + finVertexPars, 'common');
+    vs = mustReplace(vs, '#include <begin_vertex>', 'finDeform();\nvec3 transformed = gFishPos;', 'begin');
+    shader.vertexShader = vs;
+  };
+  m.customProgramCacheKey = () => 'fish-fin-depthwrite';
   return m;
 }
 

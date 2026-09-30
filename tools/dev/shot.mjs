@@ -10,5 +10,5 @@ await p.goto((process.env.BASE || 'http://localhost:5173') + path, { waitUntil: 
 try { await p.waitForFunction(() => window.__ready === true, null, { timeout: 900000, polling: 500 }); } catch (e) { logs.push('timeout waiting for __ready'); }
 await p.waitForTimeout(+wait);
 await p.screenshot({ path: out, timeout: 240000 });
-console.log(logs.slice(0, 40).join('\n'));
+console.log(logs.filter((l) => !/CERT_AUTHORITY|\[vite\]/.test(l)).slice(0, 60).join('\n'));
 await b.close();
