@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { animation as ANIM, joints as J } from './KentishPloverConfig.js';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
-import { computeWingFold, spreadAt, spreadScaleAt, raiseAt, foldAt, foldPath, WING_RAISE } from './anatomy/wingFold.js';
+import { computeWingFold, spreadAt, spreadScaleAt, raiseAt, foldPath, WING_RAISE } from './anatomy/wingFold.js';
 import { getBodySDF, getTorsoSDF } from './anatomy/bodyMesh.js';
 import { WING } from './anatomy/featherLayout.js';
 import { BILL } from './anatomy/bareParts.js';
@@ -796,12 +796,8 @@ export class KentishPloverAnimator {
       // folded feathers re-aimed while the wing is raised off the flank (below): by the action, or while folding
       const raise = (ov?.raise ?? 0) + path.raise;
       const folded = (f) => (raise ? _q4.copy(FF.get(f.name)).premultiply(raiseAt(this.fold.raise.get(f.name), raise, _q3)) : FF.get(f.name));
-      // spread → folded, each feather lifted on the way so it swings past the flank instead of through it
-      const FD = this.fold.folding;
-      const blend = (f, q) => {
-        q.slerp(folded(f), path.hand);
-        return effFold > 0 && effFold < 1 && FD.has(f.name) ? q.multiply(foldAt(FD.get(f.name), effFold, _q3)) : q;
-      };
+      // spread → folded, each feather about its own base (the fold path keeps the closing wing off the body)
+      const blend = (f, q) => q.slerp(folded(f), path.hand);
       for (let i = 1; i <= 10; i++) {
         const bone = b[`p${i}_${side}`];
         const f = bone.userData.spec.feather;
