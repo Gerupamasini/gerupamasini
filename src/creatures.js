@@ -1223,8 +1223,8 @@ export class Ecosystem {
         dactA: chela(0.5, [0xe8dcbc, 0xd2c6a6, 0x5a3418], [0.72, 0, 1, 0]),
         clawB: chela(0.41, [0xe8dcbc, 0xe0d0a8, 0x5e3616], [0.72, 0, 0, 0]),
         dactB: chela(0.51, [0xe0d4b4, 0xdccaa0, 0x5e3616], [0.72, 0, 1, 0]),
-        clawF: chela(0.45, [0xa89c74, 0x9a6a34, 0x4a2a14], [0.38, 0, 0, 0]),
-        dactF: chela(0.55, [0xa07844, 0x9a6a34, 0x4a2a14], [0.38, 0, 1, 0]),
+        clawF: chela(0.45, [0xe2d8bc, 0xd8ccae, 0x5a3418], [0.38, 0, 0, 0]),
+        dactF: chela(0.55, [0xdcd0b0, 0xd4c6a4, 0x5a3418], [0.38, 0, 1, 0]),
         mouth: organicMaterial({ key: 'claw', glsl: GLSL.claw, seed: 0.2, colors: [0xb4b4ac, 0xa2a29a, 0xc6c6be], P: [1, 0, 0, 0], roughness: 0.22, clearcoat: 1.0, clearcoatRoughness: 0.08 }),
         setae: new THREE.MeshStandardMaterial({ color: 0x5a5234, roughness: 0.7, side: THREE.DoubleSide }),
       };
