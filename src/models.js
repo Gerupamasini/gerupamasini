@@ -66,7 +66,9 @@ export function bladeGeo(len, w1, w2, th, opts = {}) {
       const b = t < 0.1 ? neck + (1 - neck) * Math.sin(Math.max(0, t + 0.03) / 0.13 * Math.PI * 0.5) : 1;
       const base = w1 + (w2 - w1) * Math.min(1, Math.max(0, (t - 0.1) / 0.85));
       // 背面から見ると中ほどがわずかに膨らむ
-      return base * b * (1 + 0.06 * Math.sin(Math.min(1, Math.max(0, t)) * Math.PI));
+      // 遠位端も関節へ向けて丸くすぼまる（段々の円錐に見えないように）
+      const e = t > 0.82 ? 1 - 0.28 * Math.pow((t - 0.82) / 0.18, 1.6) : 1;
+      return base * b * e * (1 + 0.1 * Math.sin(Math.min(1, Math.max(0, t)) * Math.PI));
     };
     const f = (x, y, z) => {
       const t = x / len;
@@ -85,7 +87,7 @@ export function bladeGeo(len, w1, w2, th, opts = {}) {
         // 前縁・後縁の小鋸歯
         const tooth = Math.pow(Math.max(0, Math.sin(tc * serr * Math.PI * 2)), 5);
         const edge = Math.max(0, Math.abs(z) / hw - 0.75) * 4;
-        d -= tooth * Math.min(1, edge) * hw * 0.07 * (tc > 0.12 && tc < 0.93 ? 1 : 0);
+        d -= tooth * Math.min(1, edge) * hw * 0.03 * (tc > 0.12 && tc < 0.93 ? 1 : 0);
       }
       if (opts.spine) {
         // 長節前縁の先端近くにある鋭い棘
@@ -498,10 +500,10 @@ export const CRAB_SPECS = {
     // 休息時は体を泥につけるほど低くし、脚を真横へ大きく広げる（野外写真で脚の開帳 ≈ 甲幅×2.7）。
     legs: {
       cox: 0.06, bi: 0.08, merus: 0.47, carpus: 0.17, prop: 0.24, dact: 0.21,
-      r: 0.062, merusR: 1.45, merusFlat: 0.55, flat: 0.6, k: [0.86, 1.0, 0.98, 0.8], spread: 0.36, curve: 0.12,
+      r: 0.062, merusR: 1.45, merusFlat: 0.55, flat: 0.6, k: [0.86, 1.0, 0.98, 0.8], spread: 0.42, curve: 0.12,
       hipX: [0.8, 0.8, 0.75, 0.64], hipY: 0.5, hipZ: [0.5, 0.18, -0.16, -0.5], coxR: 1.2,
-      setae: [0.018, 0.02, 0.022, 0.024], serrate: 11, reach: 0.93,
-      blade: { bi: [0.055, 0.08], merus: [0.108, 0.095], carpus: [0.07, 0.064], prop: [0.058, 0.044], dact: [0.04, 0.004], th: 0.4, neck: 0.86 },
+      setae: [0.018, 0.02, 0.022, 0.024], serrate: 11, reach: 0.66,
+      blade: { bi: [0.055, 0.08], merus: [0.118, 0.104], carpus: [0.08, 0.072], prop: [0.068, 0.052], dact: [0.05, 0.004], th: 0.4, neck: 0.86 },
     },
     // 鉗は顔の前に垂らして構え、指先を泥につける。雄は大きく、雌は小さい。
     // 前節高 PH ≈ 前節長 PL × 0.27（美濃・伊谷 2024 の計測図）
@@ -511,7 +513,7 @@ export const CRAB_SPECS = {
     // 眼柄は細長く、額の脇から V 字に立ち上がる
     eye: { stalk: 0.27, r: 0.017, taper: 1.2, curve: 0.03, cornea: 0.025, cLen: 1.7, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },
     mouth: 0.25, mouthTilt: 1.15, mouthPos: [0.19, -0.5, 0.76], antenna: 0.1,
-    Hb: 0.19, phiD: 1.0, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
+    Hb: 0.19, phiD: 1.32, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
   },
 };
 
@@ -547,8 +549,8 @@ export function crabKit(name, q = 1) {
       ...(L.blade ? {
         bi: bladeGeo(L.bi, ...L.blade.bi, L.blade.th * 1.2, { q, neck: 0.8 }),
         merus: bladeGeo(L.merus, ...L.blade.merus, L.blade.th, { q, serrate: L.serrate, spine: 1, neck: L.blade.neck }),
-        carpus: bladeGeo(L.carpus, ...L.blade.carpus, L.blade.th * 1.05, { q, neck: L.blade.neck, serrate: 4 }),
-        prop: bladeGeo(L.prop, ...L.blade.prop, L.blade.th * 1.05, { q, neck: L.blade.neck, serrate: 6 }),
+        carpus: bladeGeo(L.carpus, ...L.blade.carpus, L.blade.th * 1.05, { q, neck: L.blade.neck, serrate: 0 }),
+        prop: bladeGeo(L.prop, ...L.blade.prop, L.blade.th * 1.05, { q, neck: L.blade.neck, serrate: 0 }),
         dact: bladeGeo(L.dact, ...L.blade.dact, L.blade.th * 1.1, { q, tip: 1, curve: L.curve, neck: 0.8 }),
       } : {
         bi: segGeo(L.bi, L.r * 1.35, mr * 0.95, 0.6, { q, depress: true }),
