@@ -1214,8 +1214,8 @@ export class Ecosystem {
       const L = CRAB_SPECS.yamato.legs;
       const chela = (seed, pal, P) => organicMaterial({ key: 'chelaY', glsl: GLSL.chelaY, seed, colors: pal, P, roughness: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.3, sss: 0xf0dcb0, sssK: 0.22 });
       this.yamaShared = {
-        leg: spk(0.5, [0x7a5c34, 0x9c7a46, 0x34261a, 0xc49a5c], [150, 0.4, 0, 0], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.25 }),
-        legDact: spk(0.55, [0x9a7442, 0xbc9254, 0x3a2616, 0xd0a868], [150, 0.4, 1, L.dact], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.5, clearcoat: 0.45, clearcoatRoughness: 0.22 }),
+        leg: spk(0.5, [0x5e4630, 0x7c603e, 0x2a1e16, 0xb08650], [150, 0.4, 0, 0], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.25 }),
+        legDact: spk(0.55, [0x86603a, 0xa87e4a, 0x3a2616, 0xc8985c], [150, 0.4, 1, L.dact], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.5, clearcoat: 0.45, clearcoatRoughness: 0.22 }),
         arm: spk(0.9, [0x2e241a, 0x44362a, 0x16100c, 0x8a7458], [120, 0.6, 0, 0]),
         stalk: spk(0.2, [0x8a7458, 0xa88e6c, 0x4a3a28, 0xc0a888], [220, 0.3, 0, 0], { clearcoat: 0.5, clearcoatRoughness: 0.2 }),
         // 雄の掌：灰緑色（写真4）と淡黄色（写真3）の個体差
