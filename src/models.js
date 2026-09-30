@@ -513,7 +513,7 @@ export const CRAB_SPECS = {
     // 眼柄は細長く、額の脇から V 字に立ち上がる
     eye: { stalk: 0.27, r: 0.017, taper: 1.2, curve: 0.03, cornea: 0.025, cLen: 1.7, sep: 0.075, yaw: 0.12, up: 0.05, raise: 1.28 },
     mouth: 0.25, mouthTilt: 1.15, mouthPos: [0.19, -0.5, 0.76], antenna: 0.1,
-    Hb: 0.19, phiD: 1.32, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
+    Hb: 0.19, walkH: 0.78, phiD: 1.32, stepTime: 0.16, stepH: 0.08, stepThresh: 0.16,
   },
 };
 

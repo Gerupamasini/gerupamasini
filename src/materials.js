@@ -251,6 +251,8 @@ export const GLSL = {
       float gran = (1.0 - smoothstep(0.05, 0.22, gr.x)) * smoothstep(-0.1, 0.4, n.y);
       col = mix(col, col * 1.55 + 0.04, gran * 0.55);
       if (uP.z > 0.5) col = mix(col, vec3(0.74, 0.6, 0.3), smoothstep(uP.w*0.5, uP.w*0.95, p.x) * 0.8);
+      // 指節の先端（角質の爪）は暗褐色
+      if (uP.z > 0.5) col = mix(col, vec3(0.2, 0.12, 0.06), smoothstep(uP.w*0.84, uP.w*0.97, p.x) * 0.85);
       return col;
     }`,
     bump: `float orgBump(vec3 p){ vec3 c = cell3(p*uP.x); vec3 g = cell3(p*320.0); return (1.0 - smoothstep(0.0, 0.4, c.x))*0.0008 + (1.0 - smoothstep(0.0, 0.25, g.x))*0.0009 + snoise3(p*vec3(40.0,90.0,90.0))*0.0008; }`,

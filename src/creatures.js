@@ -436,7 +436,7 @@ class Crab extends Agent {
     if (!near) { this.rig.reset(); return; }
     // 体の上下動と呼吸
     const cr = this.crouch || 0;
-    P.body.position.y = S.Hb * (1 - 0.5 * cr) + Math.sin(t * 2.3 + this.gait) * 0.003 + (this.moving ? Math.abs(Math.sin(this.gait * 2)) * 0.008 : 0);
+    P.body.position.y = S.Hb * ((S.walkH ?? 1) * (1 - cr) + 0.5 * cr) + Math.sin(t * 2.3 + this.gait) * 0.003 + (this.moving ? Math.abs(Math.sin(this.gait * 2)) * 0.008 : 0);
     this.rig.spread = 1 + 0.12 * cr;
     P.body.rotation.z = this.moving ? Math.sin(this.gait) * 0.03 : 0;
     if (this.sink > 0.05) this.rig.fold(clamp(this.sink * 1.5, 0, 1));
