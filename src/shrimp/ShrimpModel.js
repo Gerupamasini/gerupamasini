@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ANATOMY as A } from './anatomy.js';
 import { shellTube, podomere, plate, ellipseOutline, rostrumGeometry } from './geometry.js';
-import { createShellMaterial, createTissueMaterial, createEyeMaterial, createAppendageMaterial, createEggMaterial } from './materials.js';
+import { createShellMaterial, createTissueMaterial, createEyeMaterial, createEggMaterial } from './materials.js';
 import { Flagellum } from './Flagellum.js';
 
 // Shared materials across individuals (one program each).
@@ -11,7 +11,7 @@ function shared() {
   SHARED = {
     shell: createShellMaterial({ key: 'body' }),
     shellThin: createShellMaterial({ key: 'thin', transmission: 0.8, thickness: 0.0006, chromaDensity: 1400, chromaExpand: 0.16 }),
-    append: createAppendageMaterial(),
+    append: createShellMaterial({ key: 'leg', transmission: 0.75, thickness: 0.0004, chromaDensity: 2600, chromaExpand: 0.1, relief: 0.15 }),
     muscle: createTissueMaterial(0xc9c2b6, { striated: true, glow: 0.05 }),
     rostrum: createShellMaterial({ key: 'rostrum', transmission: 0.55, thickness: 0.0008, chromaDensity: 1600 }),
     gut: createTissueMaterial(0x4a3524, { roughness: 0.5 }),
@@ -22,7 +22,7 @@ function shared() {
     eyestalk: createTissueMaterial(0xcfc4b0),
     chromaDot: new THREE.MeshBasicMaterial({ color: 0x5a2413 }),
     egg: createEggMaterial(),
-    flag: new THREE.MeshStandardMaterial({ color: 0xcdc5b4, roughness: 0.4 }),
+    flag: new THREE.MeshPhysicalMaterial({ color: 0xc8b39c, roughness: 0.35, transmission: 0.45, thickness: 0.0002, ior: 1.43 }),
   };
   return SHARED;
 }
@@ -154,8 +154,8 @@ export class ShrimpModel {
         const f = new Flagellum({
           length: A.antennule.flagellumLength * len * this.scale,
           nodes: A.antennule.nodes,
-          rootRadius: 0.00022 * this.scale,
-          tipRadius: 0.00005 * this.scale,
+          rootRadius: 0.00013 * this.scale,
+          tipRadius: 0.00003 * this.scale,
           material: M.flag,
           stiffness: 0.42,
         });
@@ -181,8 +181,8 @@ export class ShrimpModel {
       const f = new Flagellum({
         length: A.antenna.flagellumLength * this.scale,
         nodes: A.antenna.nodes,
-        rootRadius: 0.00035 * this.scale,
-        tipRadius: 0.00005 * this.scale,
+        rootRadius: 0.0002 * this.scale,
+        tipRadius: 0.00003 * this.scale,
         material: M.flag,
         stiffness: 0.55,
       });
@@ -235,7 +235,6 @@ export class ShrimpModel {
         const isj = joint(hip, li, 0, 0);
         mesh(podomere(lm, P.r, P.r * 0.95), M.append, isj);
         const knee = joint(hip, L1, 0, 0);
-        mesh(new THREE.SphereGeometry(P.r * 0.9, 7, 5), M.append, knee, false); // articulation membrane
         mesh(podomere(lc, P.r * 0.85, P.r * 0.8), M.append, knee);
         const wrist = joint(knee, lc, 0, 0);
         const leg = { P, side: s, coxa, hip, knee, wrist, L1, hipPos, index: pi };

@@ -11,8 +11,8 @@ export const ANATOMY = {
   // Cephalothorax. Local origin = posterior carapace margin, +X forward.
   carapace: {
     length: 0.24 * L, // [R]
-    height: 0.105 * L,
-    width: 0.085 * L,
+    height: 0.108 * L,
+    width: 0.068 * L, // laterally compressed (width/height ~0.63) [R]
   },
 
   // Rostrum: longer than carapace, basal crest + subdistal teeth. [R] Exopalaemon
@@ -29,7 +29,7 @@ export const ANATOMY = {
   abdomen: {
     lengths: [0.085, 0.085, 0.09, 0.075, 0.07, 0.115].map((f) => f * L),
     heights: [0.1, 0.1, 0.105, 0.09, 0.075, 0.055].map((f) => f * L),
-    widths: [0.08, 0.078, 0.072, 0.064, 0.056, 0.045].map((f) => f * L),
+    widths: [0.064, 0.062, 0.057, 0.05, 0.043, 0.036].map((f) => f * L),
     // Range of motion per joint (rad). Positive = ventral flexion.
     flexMax: [0.35, 0.45, 0.7, 0.6, 0.55, 0.45],
     extendMax: [0.06, 0.08, 0.12, 0.12, 0.1, 0.12],
@@ -53,11 +53,11 @@ export const ANATOMY = {
 
   // Pereopods: [merus, carpus, propodus, dactylus] fractions of L, attach x on carapace.
   pereopods: [
-    { name: 'P1', chela: true, attachX: 0.2, segs: [0.09, 0.07, 0.05, 0.022].map((f) => f * L), r: 0.0042 * L },
-    { name: 'P2', chela: true, attachX: 0.36, segs: [0.13, 0.12, 0.08, 0.035].map((f) => f * L), r: 0.0055 * L },
-    { name: 'P3', chela: false, attachX: 0.52, segs: [0.14, 0.06, 0.1, 0.03].map((f) => f * L), r: 0.0048 * L },
-    { name: 'P4', chela: false, attachX: 0.67, segs: [0.15, 0.06, 0.11, 0.03].map((f) => f * L), r: 0.0046 * L },
-    { name: 'P5', chela: false, attachX: 0.82, segs: [0.15, 0.06, 0.12, 0.03].map((f) => f * L), r: 0.0044 * L },
+    { name: 'P1', chela: true, attachX: 0.2, segs: [0.09, 0.07, 0.05, 0.022].map((f) => f * L), r: 0.0028 * L },
+    { name: 'P2', chela: true, attachX: 0.36, segs: [0.13, 0.12, 0.08, 0.035].map((f) => f * L), r: 0.0036 * L },
+    { name: 'P3', chela: false, attachX: 0.52, segs: [0.12, 0.055, 0.09, 0.028].map((f) => f * L), r: 0.003 * L },
+    { name: 'P4', chela: false, attachX: 0.67, segs: [0.13, 0.055, 0.1, 0.028].map((f) => f * L), r: 0.0029 * L },
+    { name: 'P5', chela: false, attachX: 0.82, segs: [0.13, 0.055, 0.11, 0.028].map((f) => f * L), r: 0.0028 * L },
   ],
 
   pleopod: { length: 0.1 * L, width: 0.018 * L },

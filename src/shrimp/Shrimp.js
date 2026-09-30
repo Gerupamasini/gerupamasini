@@ -7,6 +7,11 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
+const _k = new THREE.Vector3();
+const _k2 = new THREE.Vector3();
+const _k3 = new THREE.Vector3();
+const _k4 = new THREE.Vector3();
+const _k5 = new THREE.Vector3();
 const TAU = Math.PI * 2;
 const clamp = THREE.MathUtils.clamp;
 const lerp = THREE.MathUtils.lerp;
@@ -74,7 +79,7 @@ export class Shrimp {
     this.socialPush = new THREE.Vector3();
     this.walkSpeed = A.walk.speed * this.scale;
     this.swimSpeed = A.swim.speed * this.scale;
-    this.standH = 0.0078 * this.scale;
+    this.standH = 0.0058 * this.scale;
     this.bodyY = new Spring(0, 3);
     this.bodyPitch = new Spring(0, 2.5);
     this.bodyRoll = new Spring(0, 2.5);
@@ -107,7 +112,7 @@ export class Shrimp {
     // Metachronal wave back-to-front; left/right in antiphase; per-leg jitter.
     const offsets = { P5: 0.0, P4: 0.34, P3: 0.68 };
     const fwd = { P3: 0.0035, P4: -0.0005, P5: -0.0055 };
-    const lat = { P3: 0.0125, P4: 0.0135, P5: 0.0125 };
+    const lat = { P3: 0.0125, P4: 0.0135, P5: 0.013 };
     this.legs = this.model.walkLegs.map((leg) => {
       const n = leg.P.name;
       const restLocal = new THREE.Vector3(leg.hipPos.x + fwd[n], -this.standH / this.scale, leg.side * lat[n]).multiplyScalar(this.scale);
@@ -196,15 +201,27 @@ export class Shrimp {
     _v.copy(footWorld);
     ceph.worldToLocal(_v);
     _v.sub(leg.coxa.position);
-    const r = Math.hypot(_v.x, _v.z);
-    const yaw = Math.atan2(-_v.z, _v.x);
     const L1 = leg.L1;
     const L2 = leg.L2;
-    const D = clamp(Math.hypot(r, _v.y), Math.abs(L1 - L2) + 1e-5, L1 + L2 - 1e-5);
-    const phi = Math.atan2(_v.y, r);
+    const D = clamp(_v.length(), Math.abs(L1 - L2) + 1e-5, L1 + L2 - 1e-5);
+    const u = _w.copy(_v).normalize();
     const alpha = Math.acos(clamp((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
     const beta = Math.acos(clamp((L1 * L1 + L2 * L2 - D * D) / (2 * L1 * L2), -1, 1));
-    leg.hip.rotation.set(0, yaw, phi + alpha, 'YZX');
+    // Knee bends outward-and-up (decapod merus is splayed laterally), not straight up.
+    const hint = _k.set(0, 0.2, leg.side);
+    hint.addScaledVector(u, -hint.dot(u)).normalize();
+    const knee = _k2.copy(u).multiplyScalar(L1 * Math.cos(alpha)).addScaledVector(hint, L1 * Math.sin(alpha));
+    const yaw = Math.atan2(-knee.z, knee.x);
+    const pitch = Math.atan2(knee.y, Math.hypot(knee.x, knee.z));
+    leg.hip.rotation.set(0, yaw, pitch, 'YZX');
+    // Roll about the merus so the carpus bends toward the foot.
+    _q.setFromEuler(leg.hip.rotation);
+    const Y0 = _k3.set(0, 1, 0).applyQuaternion(_q);
+    const Z0 = _k4.set(0, 0, 1).applyQuaternion(_q);
+    const X0 = _k5.copy(knee).normalize();
+    const perp = _v.sub(knee);
+    perp.addScaledVector(X0, -perp.dot(X0)).normalize();
+    leg.hip.rotation.set(Math.atan2(-perp.dot(Z0), -perp.dot(Y0)), yaw, pitch, 'YZX');
     leg.knee.rotation.set(0, 0, -(Math.PI - beta));
     leg.wrist.rotation.set(0, 0, 0);
     leg.dactyl.rotation.set(0, 0, -0.25);

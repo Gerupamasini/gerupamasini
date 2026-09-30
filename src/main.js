@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { World } from './World.js';
 import { Shrimp } from './shrimp/Shrimp.js';
 
@@ -45,6 +51,31 @@ rim.position.set(-0.3, 0.15, -0.3);
 scene.add(rim);
 
 const world = new World(scene);
+
+// ---------------------------------------------------------------- macro-photography post stack
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+// Shallow depth of field like a macro lens (focus tracks the selected animal).
+const bokeh = new BokehPass(scene, camera, { focus: 0.1, aperture: 0.004, maxblur: 0.006 });
+composer.addPass(bokeh);
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.18, 0.6, 0.85));
+const lens = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
+    void main(){
+      vec2 c = vUv-0.5; float r2 = dot(c,c);
+      // Lateral chromatic aberration grows toward the frame edge.
+      vec2 off = c*r2*0.012;
+      vec3 col = vec3(texture2D(tDiffuse, vUv+off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv-off).b);
+      col *= 1.0 - r2*0.9;                                   // vignette
+      col += (h(vUv*1000.0+uTime)-0.5)*0.025;                // sensor grain
+      gl_FragColor = vec4(col,1.0);
+    }`,
+});
+composer.addPass(lens);
+composer.addPass(new OutputPass());
 
 // Individuals: berried female, female, two males (females larger) [R].
 const specs = [
@@ -111,6 +142,7 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
 });
 
 function applyEnvironment() {
@@ -161,7 +193,9 @@ function frame() {
     camera.position.copy(controls.target).add(camOffset);
   }
   controls.update();
-  renderer.render(scene, camera);
+  bokeh.uniforms.focus.value = THREE.MathUtils.lerp(bokeh.uniforms.focus.value, camera.position.distanceTo(selected.position), 0.5);
+  lens.uniforms.uTime.value = (lens.uniforms.uTime.value + 0.37) % 100;
+  composer.render();
   hudT -= raw;
   if (hudT <= 0) {
     drawHud();
@@ -170,4 +204,4 @@ function frame() {
   requestAnimationFrame(frame);
 }
 frame();
-window.__app = { world, scene, camera, renderer, controls };
+window.__app = { world, scene, camera, renderer, controls, composer };

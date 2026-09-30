@@ -32,7 +32,7 @@ float shChromato(vec3 p, float density, float expand){
 export function createShellMaterial(opts = {}) {
   const mat = new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(opts.color ?? 0xf2f3ee),
-    roughness: 0.22,
+    roughness: 0.07,
     metalness: 0,
     transmission: opts.transmission ?? 0.92,
     thickness: opts.thickness ?? 0.0025,
@@ -41,7 +41,7 @@ export function createShellMaterial(opts = {}) {
     attenuationDistance: 0.006,
     clearcoat: 0.7,
     clearcoatRoughness: 0.12,
-    sheen: 0.35,
+    sheen: 0.15,
     sheenColor: new THREE.Color(0xdfe6ea),
     sheenRoughness: 0.5,
     specularIntensity: 0.9,
@@ -52,7 +52,7 @@ export function createShellMaterial(opts = {}) {
     uChromaExpand: { value: opts.chromaExpand ?? 0.07 },
     uChromaColor: { value: new THREE.Color(opts.chromaColor ?? 0x7a3218) },
     uJointColor: { value: new THREE.Color(0xb8a58a) },
-    uRelief: { value: opts.relief ?? 0.35 },
+    uRelief: { value: opts.relief ?? 0.18 },
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (shader) => {
@@ -73,7 +73,8 @@ export function createShellMaterial(opts = {}) {
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-        shPig = shChromato(vObjPos, uChromaDensity, uChromaExpand);
+        shPig = shChromato(vObjPos, uChromaDensity, uChromaExpand * (0.35 + 1.6*vJoint)) * (0.55 + 0.45*vJoint);
+        shPig = max(shPig, 0.5*shChromato(vObjPos*1.7+3.1, uChromaDensity*2.2, 0.035));
         float blotch = shNoise(vObjPos*180.0);
         diffuseColor.rgb *= mix(0.94, 1.03, blotch);             // subtle hue drift / grime
         diffuseColor.rgb = mix(diffuseColor.rgb, uJointColor, vJoint*0.55);
@@ -128,16 +129,48 @@ export function createTissueMaterial(color, opts = {}) {
   return mat;
 }
 
+let FACETS = null;
+function facetNormalMap() {
+  // Hexagonal ommatidial lattice as a normal map.
+  if (FACETS) return FACETS;
+  const S = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(S, S);
+  const cell = 6;
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      const row = Math.round(y / (cell * 0.866));
+      const cx = (Math.round(x / cell - (row % 2) * 0.5) + (row % 2) * 0.5) * cell;
+      const cy = row * cell * 0.866;
+      const dx = (x - cx) / cell;
+      const dy = (y - cy) / cell;
+      const o = (y * S + x) * 4;
+      img.data[o] = 128 + dx * 150;
+      img.data[o + 1] = 128 + dy * 150;
+      img.data[o + 2] = 255;
+      img.data[o + 3] = 255;
+    }
+  ctx.putImageData(img, 0, 0);
+  FACETS = new THREE.CanvasTexture(cv);
+  FACETS.wrapS = FACETS.wrapT = THREE.RepeatWrapping;
+  FACETS.repeat.set(4, 2);
+  return FACETS;
+}
+
 export function createEyeMaterial() {
   return new THREE.MeshPhysicalMaterial({
-    color: 0x0a0806,
-    roughness: 0.18,
+    color: 0x1c140c,
+    normalMap: facetNormalMap(),
+    normalScale: new THREE.Vector2(0.25, 0.25),
+    roughness: 0.32,
     clearcoat: 1,
     clearcoatRoughness: 0.05,
     iridescence: 0.45, // ommatidial lattice shimmer
     iridescenceIOR: 1.6,
     sheen: 0.4,
-    sheenColor: new THREE.Color(0x3a2e20),
+    sheenColor: new THREE.Color(0x9a7a3a), // golden eyeshine from reflecting pigment
   });
 }
 

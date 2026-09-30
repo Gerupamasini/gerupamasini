@@ -62,19 +62,23 @@ export function shellTube(length, dir, profile, { rings = 16, radial = 28, joint
 }
 
 /** Tapered podomere along +X from 0 to len, with slightly flattened section. */
-export function podomere(len, r0, r1, radial = 7) {
-  const g = new THREE.CylinderGeometry(r1, r0, len, radial, 3, false);
+export function podomere(len, r0, r1, radial = 10) {
+  const g = new THREE.CylinderGeometry(r1, r0, len, radial, 6, false);
   g.rotateZ(-Math.PI / 2);
   g.translate(len / 2, 0, 0);
   g.scale(1, 1, 0.8);
   // Swell the middle a little (podomeres are fusiform).
   const p = g.attributes.position;
+  const j = new Float32Array(p.count);
   for (let i = 0; i < p.count; i++) {
     const t = p.getX(i) / len;
     const s = 1 + 0.18 * Math.sin(Math.PI * t);
     p.setY(i, p.getY(i) * s);
     p.setZ(i, p.getZ(i) * s);
+    // Arthrodial membranes at both articulations: darker, less transparent.
+    j[i] = Math.max(0, 1 - t / 0.12, (t - 0.88) / 0.12);
   }
+  g.setAttribute('aJoint', new THREE.Float32BufferAttribute(j, 1));
   g.computeVertexNormals();
   return g;
 }
