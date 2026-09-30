@@ -58,7 +58,16 @@ export function createCuticleMaterial(o = {}) {
     specularIntensity: 0.8,
     side: o.side ?? THREE.FrontSide,
   });
+  if (o.glass) {
+    // Thin cuticle is nearly clear face-on and densest at grazing angles; the milkiness comes
+    // from tissue underneath (separate translucent muscle meshes), so the shell stays glassy.
+    mat.transmission = 0;
+    mat.transparent = true;
+    mat.depthWrite = false;
+  }
   const u = {
+    uAlpha: { value: o.alpha ?? 0.12 },
+    uRimAlpha: { value: o.rimAlpha ?? 0.75 },
     uPigment: LOOK.pigment,
     uMilk: LOOK.milk,
     uMilkBase: { value: o.milk ?? 0.35 }, // fraction of transmission lost to scattering at aThick = 1
@@ -92,7 +101,7 @@ export function createCuticleMaterial(o = {}) {
         '#include <common>',
         `#include <common>
         ${NOISE_GLSL}
-        uniform float uPigment; uniform float uMilk; uniform float uMilkBase; uniform float uCells; uniform float uKeep; uniform float uDotR;
+        uniform float uAlpha; uniform float uRimAlpha; uniform float uPigment; uniform float uMilk; uniform float uMilkBase; uniform float uCells; uniform float uKeep; uniform float uDotR;
         uniform vec3 uChromaColor; uniform vec3 uChromaCore; uniform vec3 uJointColor; uniform float uRelief;
         varying float vJoint; varying float vPigD; varying float vThick; varying vec3 vObjPos;
         float shPig;`
@@ -111,7 +120,19 @@ export function createCuticleMaterial(o = {}) {
           diffuseColor.rgb = mix(diffuseColor.rgb, uJointColor, vJoint*0.45);
           vec3 pc = mix(uChromaColor, uChromaCore, smoothstep(0.6, 1.0, cov));
           diffuseColor.rgb = mix(diffuseColor.rgb, pc, cov);
+          vec3 vd = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition);
+          float fres = 1.0 - abs(dot(normalize(vNormal), vd));
+          float a = mix(uAlpha, uRimAlpha, pow(fres, 2.2));
+          a = max(a, cov * 0.92);
+          a = max(a, uAlpha + vJoint * 0.25);
+          diffuseColor.a = clamp(a, 0.0, 1.0);
         }`
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        `#include <opaque_fragment>
+        // keep specular glints on the wet cuticle bright even where the shell is clear
+        gl_FragColor.a = max(gl_FragColor.a, clamp((max(outgoingLight.r, max(outgoingLight.g, outgoingLight.b)) - 0.55) * 2.0, 0.0, 1.0));`
       )
       .replace(
         '#include <normal_fragment_maps>',

@@ -176,7 +176,7 @@ export class Shrimp {
       const neighbourSwinging = this.legs.some((o) => o !== leg && o.swinging && (o.side === leg.side ? Math.abs(o.index - leg.index) === 1 : o.index === leg.index));
       if (!leg.swinging) {
         const moving = freq > 0.2;
-        if ((moving && wrapped && err > stepLen * 0.12) || err > stepLen * 1.5 || (!moving && err > stepLen * 0.3 && !neighbourSwinging && Math.random() < dt * 4)) {
+        if ((moving && wrapped && err > stepLen * 0.12) || err > stepLen * 1.5 || (!moving && err > stepLen * 0.45 && !neighbourSwinging && Math.random() < dt * 0.8)) {
           this.startStep(leg, stepLen);
         }
       }
@@ -188,7 +188,7 @@ export class Shrimp {
         this.desiredFoot(leg, _w, (1 - t) * leg.swingDur * 1.4);
         leg.to.lerp(_w, 0.2);
         leg.foot.lerpVectors(leg.from, leg.to, s);
-        leg.foot.y += Math.sin(Math.PI * t) * (0.0035 * this.scale + err * 0.25);
+        leg.foot.y += Math.sin(Math.PI * t) * (0.0018 * this.scale + err * 0.1);
         if (t >= 1) {
           leg.swinging = false;
           leg.foot.y = this.world.groundY(leg.foot.x, leg.foot.z, leg.foot.y + 0.01);
@@ -363,10 +363,10 @@ export class Shrimp {
       wantYaw = Math.atan2(flow.z, -flow.x);
     }
     if (!this.flip) {
-      const turnRate = this.mode === 'ground' ? 2.2 : 3.0;
+      const turnRate = this.mode === 'ground' ? 1.1 : 1.8;
       const target = wantYaw === null ? this.yaw + noise1(this.time * 0.15, this.seed) * 0.002 : wantYaw;
       const err = wrapAngle(target - this.yaw);
-      const rate = clamp(err * 3, -turnRate, turnRate);
+      const rate = clamp(err * 1.5, -turnRate, turnRate);
       this.yawRate = damp(this.yawRate, rate, 10, dt);
       this.yaw += this.yawRate * dt;
     }
@@ -498,7 +498,7 @@ export class Shrimp {
       if (swimming) target = Ab.rest[i] * 0.35 + 0.03 * beat * Math.sin(this.pleoPhase * 0.5 - i * 0.6);
       if (it.arms === 'groom' && it.groomPart === 'body') target += 0.25 * (i < 4 ? 1 : 0.5) * (0.6 + 0.4 * Math.sin(t * 2));
       target += startle * 0.35 * Ab.flexMax[i];
-      target += noise1(t * 0.3 + i, sd) * 0.012;
+      target += noise1(t * 0.15 + i, sd) * 0.004;
       if (this.flip) {
         // Anterior-to-posterior recruitment: posterior joints lag slightly.
         const f = clamp(this.flip.flex * (1.15 - i * 0.04), 0, 1);
@@ -553,13 +553,13 @@ export class Shrimp {
       const s = c.side;
       const isP1 = c.P.name === 'P1';
       const alt = s > 0 ? 0 : Math.PI;
-      const n = noise1(t * 0.5 + (isP1 ? 0 : 5) + s * 2, sd) * 0.06;
+      const n = noise1(t * 0.25 + (isP1 ? 0 : 5) + s * 2, sd) * 0.02;
       // Rest carriage [PHOTO 001]: P2 held forward-down under the antennae, P1 folded.
       let yaw = -s * (isP1 ? 0.3 : 0.18);
       let pitch = isP1 ? -0.75 : -0.42;
       let knee = isP1 ? 1.35 : 0.38;
       let wrist = isP1 ? 0.35 : 0.05;
-      let open = 0.08 + Math.max(0, noise1(t * 0.9 + s, sd + 1)) * 0.2;
+      let open = 0.06 + Math.max(0, noise1(t * 0.3 + s, sd + 1)) * 0.06;
       if (it.arms === 'forage') {
         // Alternating picking at substrate.
         const c1 = Math.sin(t * (isP1 ? 3.1 : 2.4) + alt + (isP1 ? 1 : 0));
@@ -618,13 +618,13 @@ export class Shrimp {
       const feed = it.arms === 'feed' ? 1 : it.arms === 'forage' ? 0.5 : 0;
       const side = j.position.z > 0 ? 0 : Math.PI;
       const c1 = Math.sin(t * lerp(1.1, 5, feed) + side);
-      j.rotation.z = s.z + c1 * lerp(0.05, 0.3, feed) + noise1(t, sd + 4) * 0.03;
+      j.rotation.z = s.z + c1 * lerp(0.02, 0.3, feed) + noise1(t * 0.4, sd + 4) * 0.01;
       j.rotation.y = s.y + c1 * lerp(0.02, 0.15, feed);
       const chain = j.userData.chain;
       chain[1].rotation.z = 0.35 + lerp(0, 0.5, feed) * (0.5 + 0.5 * c1);
     }
     m.maxillae.forEach((j, i) => {
-      j.rotation.z = -1.3 + Math.sin(t * TAU * 3.2 + i) * 0.12;
+      j.rotation.z = -1.3 + Math.sin(t * TAU * 3.2 + i) * 0.04;
     });
     // Heart beat visible through carapace (~3 Hz; rises with activity/fear).
     const hb = 2.5 + this.brain.s.fear * 2 + this.speed * 10;
@@ -638,37 +638,37 @@ export class Shrimp {
       const s = e.userData.side;
       const b = e.userData.base;
       const fold = this.flip ? 0.6 : startle * 0.5;
-      e.rotation.y = b.y + noise1(t * 0.8, sd + s * 5) * 0.08 - s * fold;
-      e.rotation.z = b.z + noise1(t * 0.6, sd + s * 7) * 0.06 + (it.arms === 'groom' && it.groomPart === 'eye' ? -0.3 : 0);
+      e.rotation.y = b.y + noise1(t * 0.3, sd + s * 5) * 0.03 - s * fold;
+      e.rotation.z = b.z + noise1(t * 0.25, sd + s * 7) * 0.02 + (it.arms === 'groom' && it.groomPart === 'eye' ? -0.3 : 0);
     }
 
     // ---- Antennae (2nd) & antennules (1st): base actuators; flagella are physically simulated
     this.flickT -= dt;
     if (this.flickT <= 0) {
       // Antennule flicking = chemosensory sampling, rate increases when food smelled.
-      this.flickT = 0.3 + Math.random() * (it.antenna === 'forward' || beh === 'investigate' ? 0.4 : 1.6);
+      this.flickT = 0.8 + Math.random() * (it.antenna === 'forward' || beh === 'investigate' ? 1.0 : 3.0);
       this.flickAmt = 1;
     }
     this.flickAmt = Math.max(0, this.flickAmt - dt * 8);
     for (const j of m.antennules) {
       const s = j.userData.side;
       const b = j.userData.base;
-      j.rotation.z = b.z - this.flickAmt * 0.35 + noise1(t * 1.5, sd + s) * 0.05;
-      j.rotation.y = b.y + noise1(t * 0.7, sd + s * 3) * 0.1;
+      j.rotation.z = b.z - this.flickAmt * 0.16 + noise1(t * 0.5, sd + s) * 0.02;
+      j.rotation.y = b.y + noise1(t * 0.3, sd + s * 3) * 0.04;
     }
     for (const j of m.antennae) {
       const s = j.userData.side;
       const b = j.userData.base;
-      let yaw = b.y + noise1(t * 0.35, sd + s * 11) * 0.15;
-      let pitch = b.z + noise1(t * 0.3, sd + s * 13) * 0.08;
+      let yaw = b.y + noise1(t * 0.15, sd + s * 11) * 0.06;
+      let pitch = b.z + noise1(t * 0.12, sd + s * 13) * 0.03;
       switch (it.antenna) {
         case 'sweep':
           // Asymmetric sweeping, one antenna forward while the other scans laterally.
-          yaw = b.y - s * (0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * 1.4 + (s > 0 ? 0 : 2.1))));
-          pitch = -0.2 + 0.2 * Math.sin(t * 1.1 + s);
+          yaw = b.y - s * (0.2 + 0.35 * (0.5 + 0.5 * Math.sin(t * 0.6 + (s > 0 ? 0 : 2.1))));
+          pitch = -0.15 + 0.1 * Math.sin(t * 0.5 + s);
           break;
         case 'forward':
-          yaw = -s * 0.08 + noise1(t * 2, sd + s) * 0.1;
+          yaw = -s * 0.08 + noise1(t * 0.6, sd + s) * 0.04;
           pitch = -0.1;
           break;
         case 'back':
@@ -676,7 +676,7 @@ export class Shrimp {
           pitch = 0.15;
           break;
         case 'flick':
-          yaw = b.y + s * 0.3 * Math.sin(t * 3);
+          yaw = b.y + s * 0.12 * Math.sin(t * 1.2);
           break;
       }
       if (it.arms === 'groom' && it.groomPart === 'antenna') {

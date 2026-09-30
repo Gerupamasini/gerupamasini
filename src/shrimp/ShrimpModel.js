@@ -25,14 +25,17 @@ function materials() {
   const C = M.colour;
   SHARED = {
     // Abdomen: turbid muscle under the cuticle -> milky grey (#7a807c over dark, #9b8f6a over white).
-    abdomen: createCuticleMaterial({ key: 'abd', color: 0x9aa09b, transmission: 0.86, milk: 0.34, attenuationColor: 0xd2b878, attenuationDistance: 0.004 }),
+    abdomen: createCuticleMaterial({ key: 'abd', glass: true, color: 0xdfe3dd, alpha: 0.1, rimAlpha: 0.5, roughness: 0.18 }),
     // Carapace: clearer, organs visible through it.
-    carapace: createCuticleMaterial({ key: 'cara', color: 0xa9aca3, transmission: 0.9, milk: 0.2, attenuationColor: 0xd8c690, attenuationDistance: 0.006 }),
-    rostrum: createCuticleMaterial({ key: 'ros', color: 0xcfcfc4, transmission: 0.7, milk: 0.1, thickness: 0.0006, cells: 3200, dotR: 0.34 }),
+    carapace: createCuticleMaterial({ key: 'cara', glass: true, color: 0xe2e5de, alpha: 0.08, rimAlpha: 0.5, roughness: 0.15 }),
+    rostrum: createCuticleMaterial({ key: 'ros', glass: true, color: 0xe4e4dc, alpha: 0.3, rimAlpha: 0.85, cells: 3200, dotR: 0.34 }),
     // Legs, pleopods: milky white translucent [PHOTO 004 #babaaf].
-    append: createCuticleMaterial({ key: 'app', color: 0xbdbdb2, transmission: 0.72, milk: 0.28, thickness: 0.0008, cells: 3600, keep: 0.4, relief: 0.05, sheen: 0.4 }),
-    fan: createCuticleMaterial({ key: 'fan', color: 0xd8d6cc, transmission: 0.72, milk: 0.25, thickness: 0.0006, cells: 3000, keep: 0.5 }),
-    stalk: createCuticleMaterial({ key: 'stalk', color: 0xcfc6b2, transmission: 0.55, milk: 0.2, thickness: 0.0008, cells: 5200, dotR: 0.38, chroma: C.eyestalkPigment }),
+    append: createCuticleMaterial({ key: 'app', glass: true, color: 0xdcdcd2, alpha: 0.2, rimAlpha: 0.6, cells: 3600, keep: 0.4, relief: 0.05, sheen: 0.3 }),
+    fan: createCuticleMaterial({ key: 'fan', glass: true, color: 0xe4e2d8, alpha: 0.22, rimAlpha: 0.75, cells: 3000, keep: 0.5 }),
+    stalk: createCuticleMaterial({ key: 'stalk', glass: true, color: 0xd8cfbb, alpha: 0.45, rimAlpha: 0.85, cells: 5200, dotR: 0.38, chroma: C.eyestalkPigment }),
+    // Abdominal flexor/extensor mass: the milky, faintly bluish-grey translucency of the live body [PHOTO 001, 003].
+    muscle: new THREE.MeshStandardMaterial({ color: 0xc4cbc7, roughness: 0.7, transparent: true, opacity: 0.62, depthWrite: false }),
+    cephTissue: new THREE.MeshStandardMaterial({ color: 0xc9ccc3, roughness: 0.7, transparent: true, opacity: 0.45, depthWrite: false }),
     eye: createEyeMaterial(),
     stomach: createTissueMaterial(C.stomach, { roughness: 0.45 }),
     hepato: createTissueMaterial(C.hepatopancreas),
@@ -80,6 +83,7 @@ function ellipsoid(rx, ry, rz, seg = 18) {
   g.scale(rx, ry, rz);
   return g;
 }
+const h0Shift = () => 0;
 function mergeShell(geos) {
   const clean = geos.map((g) => {
     const n = g.index ? g.toNonIndexed() : g;
@@ -153,6 +157,11 @@ export class ShrimpModel {
       caps: [true, true],
     });
     this.carapace = mesh(carapaceGeo, S.carapace, this.ceph);
+    this.carapace.renderOrder = 3;
+    // Soft tissue inside the cephalothorax veils the organs, as in the live photos.
+    const tissue = mesh(carapaceGeo, S.cephTissue, this.ceph, false);
+    tissue.scale.set(0.97, 0.86, 0.84);
+    tissue.renderOrder = 2;
 
     // Anterior spines: antennal and branchiostegal.
     for (const s of [1, -1]) {
@@ -506,6 +515,12 @@ export class ShrimpModel {
       });
       const seg = mesh(geo, S.abdomen, j);
       seg.userData.somite = i;
+      seg.renderOrder = 3;
+      // Translucent muscle filling the somite (seen through the clear cuticle).
+      const mus = mesh(geo, S.muscle, j, false);
+      mus.scale.set(0.96, 0.78, 0.74);
+      mus.position.y = h0Shift(i);
+      mus.renderOrder = 2;
       // Internal: dorsal hindgut line [PHOTO 005-007] and ventral nerve cord [PHOTO 001, 003].
       const h = ((s.h0 + s.h1) / 2) * T;
       const gut = mesh(new THREE.CylinderGeometry(0.0022 * T, 0.0022 * T, len * 1.08, 6), S.gut, j, false);
