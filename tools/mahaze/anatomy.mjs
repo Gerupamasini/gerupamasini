@@ -22,12 +22,20 @@ export const VERT_COUNT = 31;
 // 03 and 05 (1 % SL = 0.41 mm). Snout tip 2.1 mm above the throat line (5 % SL); dorsal profile rises
 // 2 % SL within the first 1 % SL (blunt, rounded snout), −7.5 % SL at the eye front, eye top at −9 %;
 // head depth at the eye 13 % SL, body depth 17–18 % SL, caudal peduncle 7.5 % SL.
+// Widths (KW, KNB, KDY, snout cap, cheek swelling) were refitted to dorsal, frontal and front-oblique photos:
+// an orthographic camera is solved per photo from landmarks (snout tip, eyes, mouth corners) and the model's
+// silhouette is overlaid on the photo; the snout tapers to a rounded wedge in dorsal view, the mouth is ~0.6
+// of the head width and the cheeks swell smoothly behind the eyes.
 const KS = [0.0, 0.41, 0.82, 1.23, 1.64, 2.05, 2.46, 2.87, 3.28, 4.1, 4.9, 6.15, 8.2, 10.25, 12.3, 15, 18, 21, 24, 27, 30, 33, 36, 38.5, 40.5, 42, 43.2];
 const KTOP = [2.85, 3.08, 3.42, 3.66, 3.95, 4.23, 4.48, 4.8, 5.05, 5.3, 5.42, 5.63, 6.2, 6.52, 6.74, 6.95, 7.05, 6.95, 6.72, 6.38, 5.98, 5.6, 5.27, 5.05, 4.88, 4.78, 4.66];
 const KBOT = [1.4, 1.2, 0.98, 0.83, 0.68, 0.54, 0.43, 0.33, 0.25, 0.13, 0.07, 0.03, 0.0, 0.0, 0.0, 0.0, 0.02, 0.12, 0.35, 0.7, 1.1, 1.48, 1.8, 2.0, 2.14, 2.24, 2.36];
-const KW = [1.62, 1.95, 2.18, 2.36, 2.5, 2.62, 2.74, 2.85, 2.94, 3.04, 3.14, 3.3, 3.38, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
+const KW = [1.45, 1.62, 1.74, 1.84, 1.9, 1.95, 2.02, 2.1, 2.2, 2.42, 2.68, 3.08, 3.34, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
 const KNT = [2.2, 2.12, 2.04, 1.97, 1.91, 1.87, 1.84, 1.82, 1.8, 1.8, 1.82, 1.86, 1.92, 1.98, 2.02, 2.03, 2.0, 1.97, 1.95, 1.92, 1.9, 1.87, 1.84, 1.82, 1.8, 1.8, 1.8];
-const KNB = [2.5, 2.7, 2.85, 3.0, 3.1, 3.2, 3.25, 3.25, 3.2, 3.15, 3.1, 3.0, 2.85, 2.75, 2.65, 2.55, 2.45, 2.35, 2.2, 2.1, 2.0, 1.95, 1.9, 1.87, 1.85, 1.85, 1.85];
+const KNB = [2.2, 2.3, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.45, 2.5, 2.6, 2.75, 2.85, 2.75, 2.65, 2.55, 2.45, 2.35, 2.2, 2.1, 2.0, 1.95, 1.9, 1.87, 1.85, 1.85, 1.85];
+
+// Height of the widest point above the mid-height (mm): the snout is widest high up (below the eyes)
+// and tapers to a narrower mouth and chin, as in the dorsal and frontal photos.
+const KDY = [0.15, 0.2, 0.26, 0.32, 0.4, 0.46, 0.5, 0.54, 0.56, 0.52, 0.42, 0.24, 0.06, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 export function monotone(xs, ys) {
   const n = xs.length;
@@ -67,15 +75,18 @@ const fBot = monotone(KS, KBOT);
 const fW = monotone(KS, KW);
 const fNT = monotone(KS, KNT);
 const fNB = monotone(KS, KNB);
+const fDY = monotone(KS, KDY);
 
 const SNOUT_CAP = 0.62;
+const SNOUT_CAP_W = 1.1;
+const SNOUT_CAP_WE = 2.0; // the width rounds off over a longer run: rounded snout tip in dorsal view
 const TAIL_BLADE0 = 39.3;
 
 // blunt, rounded snout front (superelliptic cap): the front face is almost flat, as in the photos
-function snoutCap(s) {
-  if (s >= SNOUT_CAP) return 1;
-  const u = clamp(s / SNOUT_CAP, 0, 1);
-  return Math.pow(Math.max(0, 1 - Math.pow(1 - u, 2.6)), 1 / 2.6);
+function snoutCap(s, len = SNOUT_CAP, e = 2.6) {
+  if (s >= len) return 1;
+  const u = clamp(s / len, 0, 1);
+  return Math.pow(Math.max(0, 1 - Math.pow(1 - u, e)), 1 / e);
 }
 // the caudal peduncle ends in a thin vertical blade that merges into the caudal fin plane
 function tailU(s) { return clamp((s - TAIL_BLADE0) / (S_END - TAIL_BLADE0), 0, 1); }
@@ -83,11 +94,11 @@ function tailU(s) { return clamp((s - TAIL_BLADE0) / (S_END - TAIL_BLADE0), 0, 1
 /** Cross-section parameters at s. */
 export function section(s) {
   const top = fTop(s), bot = fBot(s);
-  const yc = (top + bot) / 2;
   const c = snoutCap(s);
+  const yc = (top + bot) / 2 + fDY(s) * c;
   const u = tailU(s);
   const ch = c * (1 - 0.45 * u * u);
-  const cw = c * Math.sqrt(Math.max(0, 1 - u * u)) * (1 - 0.4 * u);
+  const cw = snoutCap(s, SNOUT_CAP_W, SNOUT_CAP_WE) * Math.sqrt(Math.max(0, 1 - u * u)) * (1 - 0.4 * u);
   return {
     yc,
     t: (top - yc) * ch,
@@ -181,9 +192,10 @@ export function surfaceAt(s, y) {
 // tops rise just above the dorsal head profile.
 // Close-up / frontal photos (user refs): each eye is a raised turret on the head top; the dorsomedial
 // part of the dome is covered by pigmented skin, only a lateral cornea window shows the iris. Pupils
-// look sideways, ~30° up and ~20° forward; interorbital ≈ 0.7 eye Ø; eye centres 45 % of head width apart.
+// look sideways, ~30° up and ~20° forward; interorbital < eye Ø. Frontal photos of a juvenile: the eye turrets
+// span ~60 % of the cheek width and the pupils ~48 %, so the eyes sit close together on the head top.
 export const EYE = {
-  center: [4.9, 4.82, 1.3],
+  center: [4.9, 4.9, 1.15],
   axis: norm3([-0.25, 0.45, 0.86]),
   radius: 1.0,
   skin: 0.06,
@@ -294,8 +306,6 @@ function buildFeatures() {
   const operc = capsuleChain(onSurface(OPERCLE.map(([s, y]) => [s + 0.07, y]), 0.0), OPERCLE.map((_, i, a) => (i === 0 || i === a.length - 1 ? 0.012 : 0.03)));
   const preop = capsuleChain(onSurface(PREOPERCLE, 0.0), PREOPERCLE.map(() => 0.018));
 
-  const cheekS = surfaceAt(6.8, 2.55);
-  const cheek = [cheekS.p[0], cheekS.p[1], cheekS.p[2] - 0.32];
   const opS = surfaceAt(10.0, 2.55);
   const opPlate = [opS.p[0], opS.p[1], opS.p[2] - 0.32];
 
@@ -316,7 +326,7 @@ function buildFeatures() {
     lipsU, lipsUR: mirrorZ(lipsU), lipsL, lipsLR: mirrorZ(lipsL),
     crease, creaseR: mirrorZ(crease), gU, gUR: mirrorZ(gU), gL, gLR: mirrorZ(gL),
     operc, opercR: mirrorZ(operc), preop, preopR: mirrorZ(preop),
-    cheek, opPlate, pecLobe, nosA: nosA.p, nosAn: nosA.n, nosB: nosB.p,
+    opPlate, pecLobe, nosA: nosA.p, nosAn: nosA.n, nosB: nosB.p,
     eyes: [eyeL, eyeR], Rs, rho,
     papilla: [22.9, botY(22.9) + 0.02, 0],
     anus: [22.45, botY(22.45) - 0.03, 0],
@@ -338,7 +348,8 @@ export function field(s, y, z) {
   // eye mounds
   if (s < 8.5) for (const e of F.eyes) d = smin(d, sphereDist(p, e.c, F.Rs), 0.24);
   // cheeks (adductor muscles) and the gill-cover plate
-  if (s > 3.5 && s < 10) d = smin(d, ellipsoidDist(pm, F.cheek, [2.2, 1.55, 0.55]), 0.5);
+  // (a swelling that follows the loft, so the cheek rises smoothly out of the narrow snout behind the eye)
+  if (s > 2.5 && s < 11.5) d -= 0.36 * Math.exp(-(((s - 6.9) / 1.9) ** 2)) * Math.exp(-(((y - 2.3) / 1.45) ** 2));
   if (s > 7.5 && s < 12.5) d = smin(d, ellipsoidDist(pm, F.opPlate, [1.3, 2.0, 0.36]), 0.35);
   // fleshy lips
   if (s < 5.5 && y < 3.1) {

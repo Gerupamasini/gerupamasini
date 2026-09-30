@@ -179,9 +179,11 @@ const mFin = gb.addMaterial({
   extras: { mahaze: { role: 'fin', dataTexture: tFinData } },
 });
 const finNodes = {};
+let contactFishY = botY(12.0) - 0.2; // lowest point of the pelvic sucker rim (the fish rests on it)
 for (const def of defs) {
   const SUB = 6, NT = def.name === 'Fin_Caudal' ? 44 : 36;
   const m = buildFinMesh(def, SUB, NT);
+  if (def.type === 'pelvic') { contactFishY = Infinity; for (let i = 1; i < m.fish.length; i += 3) contactFishY = Math.min(contactFishY, m.fish[i]); }
   const w = finWeights(def.name, m.fish, m.rayT, m.baseS);
   const names = FIN_TARGETS[def.name];
   const targets = buildFinTargets(def, SUB, NT, names);
@@ -213,7 +215,7 @@ const rootNode = gb.addNode({
     units: 'metres (+Y dorsal, +Z anterior)',
     animations: 'Idle (loop, breathing), Swim (loop, 8 Hz burst tail beat), Yawn (one-shot)',
     // rig axes (object space, sign folded in) for procedural animation with src/fish/pose.js
-    mahazeRig: { axes: AXES, contactY: toObject([12.0, botY(12.0) - 0.2, 0])[1] },
+    mahazeRig: { axes: AXES, contactY: toObject([12.0, contactFishY, 0])[1], tailContactY: toObject([48.0, 0.6, 0])[1] },
   },
 });
 // skinned meshes sit at the scene root (their node transforms are ignored; joints drive them)

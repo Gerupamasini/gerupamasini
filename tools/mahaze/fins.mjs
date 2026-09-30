@@ -119,26 +119,38 @@ function pectoralFin(side, rect) {
   };
 }
 
+// Pelvic sucker: the two pelvic fins (I,5 each) are fused into an oval, cup-shaped disc under the chest.
+// The spines point forward-laterally and a membrane (frenum) closes the front, so the rim runs all the way
+// round; the rim curls down to meet the substrate (the fish rests on it) and the centre stays vaulted.
+export const PELVIC = { base: 12.0, front: 1.1, back: 5.6, halfWidth: 1.75, drop: 1.4 };
 function pelvicDisc(rect) {
-  const rays = [];
-  const N = 12;
-  for (let k = 0; k < N; k++) {
-    const f = k / (N - 1);
-    const u = 2 * f - 1; // +1 … -1 across (left … right)
-    const spine = k === 0 || k === N - 1;
-    // the fused disc lies almost flat under the belly (the fish rests on it)
-    const s = 12.0 + 0.18 * Math.abs(u);
-    const z = -u * 0.9;
-    const y = botY(s) + 0.1;
-    const th = -u * (spine ? 46 : 38) * DEG;
-    const dir = nrm([Math.cos(th), -(0.06 + 0.05 * Math.abs(u)), Math.sin(th)]);
-    const len = spine ? 1.5 : 4.4 + 1.6 * (1 - Math.abs(u));
-    rays.push({ base: [s, y, z], dir, len, kind: spine ? 'spine' : 'soft', curv: 0.04, bend: [0, 0, 0], th, dy: dir[1] });
-  }
+  const P = PELVIC;
+  const c = P.back - (P.front + P.back) / 2; // oval centre, measured from the base along +s
+  const a = (P.front + P.back) / 2, b = P.halfWidth;
+  // distance from the base to the oval rim in the horizontal direction phi (0 = backwards, +90° = left)
+  const rimR = (phi) => {
+    const cp = Math.cos(phi), sp = Math.sin(phi);
+    const A = (cp * cp) / (a * a) + (sp * sp) / (b * b), B = (-2 * c * cp) / (a * a), C = (c * c) / (a * a) - 1;
+    return (-B + Math.sqrt(B * B - 4 * A * C)) / (2 * A);
+  };
+  // left frenum edge, left spine, 5 + 5 soft rays, right spine, right frenum edge
+  const layout = [[178.5, 'frenum'], [124, 'spine'], [88, 'soft'], [66, 'soft'], [46, 'soft'], [28, 'soft'], [10, 'soft'],
+    [-10, 'soft'], [-28, 'soft'], [-46, 'soft'], [-66, 'soft'], [-88, 'soft'], [-124, 'spine'], [-178.5, 'frenum']];
+  const y0 = botY(P.base) + 0.06;
+  const rays = layout.map(([deg, kind]) => {
+    const phi = deg * DEG;
+    const len0 = rimR(phi);
+    // the rim sits at a constant depth below the base: part slope, part down-curl near the rim
+    const lin = 0.35 * P.drop, curl = 0.65 * P.drop;
+    const h = [Math.cos(phi), 0, Math.sin(phi)];
+    const dir = nrm([h[0] * len0, -lin, h[2] * len0]);
+    const len = Math.hypot(len0, lin);
+    const base = [P.base + 0.12 * Math.cos(phi), y0, 0.12 * Math.sin(phi)];
+    return { base, dir, len, kind, curv: 0, bend: [0, 0, 0], phi, cup: curl / (0.12 * len) };
+  });
   const normal = [0, -1, 0];
-  for (const r of rays) r.bend = inPlaneBend(r.dir, normal);
   return {
-    name: 'Fin_Pelvic', type: 'pelvic', rays, normal, notch: 0.04, pleat: 0.03, sag: 0.03, rect, branchT: 0.55, segStart: 0.2, cup: -0.18, wave: 0,
+    name: 'Fin_Pelvic', type: 'pelvic', rays, normal, notch: 0.02, pleat: 0.015, sag: 0.02, rect, branchT: 0.55, segStart: 0.25, cup: 0, wave: 0,
     pigment: (r, n, Lr, len, t) => ({ mel: 0, xan: 0.1, irid: 0.42 * smoothstep(1.0, 0.2, t) }),
   };
 }
@@ -195,7 +207,7 @@ export function finDefinitions() {
 function rayPoint(def, r, t) {
   let p = add(r.base, mul(r.dir, r.len * t));
   p = add(p, mul(r.bend, r.len * r.curv * t * t));
-  p = add(p, mul(def.normal, def.cup * t * t * r.len * 0.12));
+  p = add(p, mul(def.normal, (r.cup ?? def.cup) * t * t * r.len * 0.12));
   return p;
 }
 
@@ -250,11 +262,11 @@ function foldedDef(def) {
   }
   if (def.type === 'pelvic') {
     const rays = def.rays.map((r) => {
-      const th = r.th * 0.45;
-      const dir = nrm([Math.cos(th), r.dy, Math.sin(th)]);
-      return { ...r, dir };
+      const phi = r.phi * 0.55;
+      const dir = nrm([Math.cos(phi), r.dir[1] * 0.3, Math.sin(phi)]);
+      return { ...r, dir, cup: (r.cup ?? 0) * 0.25 };
     });
-    return { ...def, rays, pleat: def.pleat * 2.2 };
+    return { ...def, rays, pleat: def.pleat * 2.5 };
   }
   return def;
 }
@@ -413,6 +425,7 @@ export function paintFinAtlas(defs, log = () => {}) {
         let rNear = kNear;
         for (let r = Math.max(0, kNear - 1); r <= Math.min(n - 1, kNear + 1); r++) {
           const ray = R[r];
+          if (ray.kind === 'frenum') continue;
           const soft = ray.kind === 'soft';
           const width0 = soft ? 0.062 : 0.09;
           const width = width0 * (1 - (soft ? 0.55 : 0.7) * t);

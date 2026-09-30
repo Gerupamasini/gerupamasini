@@ -270,6 +270,7 @@ async function onLoaded(gltf) {
     finMeshes: Object.fromEntries(fish.fins.map((f) => [f.mesh.name, f.mesh])),
     axes: rig.axes,
     contactY: rig.contactY,
+    tailContactY: rig.tailContactY,
     floorY: rig.contactY,
   });
   fish.behavior.setAuto(document.getElementById('auto').checked);

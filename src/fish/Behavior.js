@@ -16,12 +16,12 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const damp = (cur, goal, rate, dt) => cur + (goal - cur) * (1 - Math.exp(-rate * dt));
 const rand = (a, b) => a + Math.random() * (b - a);
 
-export function createBehavior({ root, bones, finMeshes, axes, contactY, floorY }) {
+export function createBehavior({ root, bones, finMeshes, axes, contactY, tailContactY = contactY + 0.0008, floorY }) {
   const rest = {};
   for (const [name, b] of Object.entries(bones)) rest[name] = b.position.clone();
   // contact points in object space: under the pelvic disc (s ≈ 12 mm) and the lower caudal lobe (s ≈ 48 mm)
   const contact = new THREE.Vector3(0, contactY, 0.013);
-  const tailContact = new THREE.Vector3(0, contactY + 0.0008, -0.023);
+  const tailContact = new THREE.Vector3(0, tailContactY, -0.023);
 
   const st = {
     auto: true, paused: false,
