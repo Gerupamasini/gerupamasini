@@ -470,16 +470,36 @@ function mergeAll(geos) {
 
 export function createReef() {
   const group = new THREE.Group();
-  group.add(createSand());
+  const sand = createSand();
+  group.add(sand);
   const rockMat = rockMaterial();
   const obstacles = [];   // spheres the fish keep clear of
+  const rocks = [];
+  const ray = new THREE.Raycaster();
+  const down = new THREE.Vector3(0, -1, 0);
+  // highest rock surface under (x, z), or null
+  const rockTop = (x, z) => {
+    ray.set(new THREE.Vector3(x, 1, z), down);
+    const h = ray.intersectObjects(rocks, false)[0];
+    return h || null;
+  };
+  const surfaceAt = (x, z) => { const h = rockTop(x, z); return h ? h : { point: new THREE.Vector3(x, sandHeight(x, z), z), face: { normal: new THREE.Vector3(0, 1, 0) }, object: sand, sandHit: true }; };
   const rock = (seed, x, z, r, st, rotY = 0, yOff = 0) => {
     const m = new THREE.Mesh(rockGeometry(seed, r, st, 7), rockMat);
-    const y = sandHeight(x, z) + r * st[1] * 0.35 + yOff;
+    let y = sandHeight(x, z) + r * st[1] * 0.35;
+    if (yOff > 0 && rocks.length) {
+      // a stacked stone rests on the stones below it: find their surface under its footprint
+      let top = -1;
+      for (const [dx, dz] of [[0, 0], [0.35, 0], [-0.35, 0], [0, 0.35], [0, -0.35]]) {
+        const h = rockTop(x + dx * r * st[0], z + dz * r * st[2]);
+        if (h) top = Math.max(top, h.point.y);
+      }
+      y = top > 0 ? top + r * st[1] * 0.3 : y + yOff;
+    }
     m.position.set(x, y, z);
     m.rotation.y = rotY;
     m.castShadow = true; m.receiveShadow = true;
-    group.add(m);
+    group.add(m); m.updateMatrixWorld(); rocks.push(m);
     obstacles.push({ c: new THREE.Vector3(x, y, z), r: r * Math.max(...st) * 1.25 });
     return m;
   };
@@ -503,22 +523,41 @@ export function createReef() {
   ];
   for (const [seed, x, z, r, st, ry, yo] of stones) rock(seed, x, z, r, st, ry, yo);
 
-  const place = (m, x, z, yOff = 0, s = 1, rotY = 0) => {
-    m.position.set(x, sandHeight(x, z) + yOff, z); m.scale.setScalar(s); m.rotation.y = rotY; group.add(m); return m;
+  // corals are set onto the real surface below them (rock or sand), sunk in a little so the
+  // base grows out of the substrate instead of floating over it or cutting through it
+  const place = (m, x, z, sink = 0, s = 1, rotY = 0, obstacle = 0) => {
+    const h = surfaceAt(x, z);
+    m.position.set(x, h.point.y - (typeof sink === 'number' && sink < 0.03 ? sink : 0.006), z); m.scale.setScalar(s); m.rotation.y = rotY; group.add(m);
+    if (obstacle) obstacles.push({ c: m.position.clone().add(new THREE.Vector3(0, obstacle * 0.5, 0)), r: obstacle * 0.55 });
+    return m;
   };
-  place(acropora(21, { size: 0.2, color: [0.14, 0.12, 0.08], tip: [0.2, 0.36, 0.78] }), -0.3, -0.13, 0.19, 1.0);
-  place(acropora(22, { size: 0.16, color: [0.2, 0.1, 0.14], tip: [0.62, 0.22, 0.52], trunks: 6 }), 0.38, -0.1, 0.13, 1.0, 1.0);
-  place(acropora(23, { size: 0.13, color: [0.12, 0.18, 0.06], tip: [0.34, 0.66, 0.16], trunks: 5 }), 0.12, -0.17, 0.12, 1.0, 2.0);
-  place(acropora(24, { size: 0.12, color: [0.28, 0.17, 0.09], tip: [0.66, 0.48, 0.22], trunks: 5, spread: 0.8 }), -0.47, 0.03, 0.04, 1.0, 0.5);
-  place(brainCoral(31, 0.06), -0.1, 0.02, 0.0);
-  place(seaFan(41, { size: 0.26 }), 0.02, -0.21, 0.04, 1.0, 0.15);
-  place(anemone(51, { color: [0.32, 0.2, 0.1], tipCol: [0.78, 0.32, 0.36] }), 0.3, 0.1, 0.0);
-  place(anemone(52, { r: 0.028, color: [0.2, 0.3, 0.1], tipCol: [0.45, 0.7, 0.28] }), -0.46, 0.08, 0.025);
-  place(zoanthids(61, {}), -0.42, -0.1, 0.1);
-  place(zoanthids(62, { disc: [1, 0.4, 0.2], ring: [0.3, 0.9, 0.9] }), 0.44, 0.06, 0.035);
-  place(zoanthids(63, { disc: [0.8, 0.95, 0.2], ring: [0.8, 0.2, 0.6], count: 28 }), 0.02, -0.16, 0.07);
-  place(leatherCoral(81, { r: 0.06 }), 0.22, -0.1, 0.0, 1.0, 0.4);
-  place(leatherCoral(82, { r: 0.045, color: [0.5, 0.56, 0.3] }), -0.17, -0.12, 0.0, 1.0, 1.4);
+  // zoanthid colonies: every polyp is dropped onto the rock and stands along its normal
+  const placeColony = (inst, x, z) => {
+    group.add(inst);
+    const M = new THREE.Matrix4(), P = new THREE.Vector3(), Qt = new THREE.Quaternion(), Sv = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < inst.count; i++) {
+      inst.getMatrixAt(i, M); M.decompose(P, Qt, Sv);
+      const h = surfaceAt(x + P.x, z + P.z);
+      const n = h.face.normal.clone(); if (!h.sandHit) n.transformDirection(h.object.matrixWorld);
+      const q = new THREE.Quaternion().setFromUnitVectors(up, n.lerp(up, 0.3).normalize()).multiply(Qt);
+      inst.setMatrixAt(i, M.compose(h.point.clone().addScaledVector(n, -0.0008), q, Sv));
+    }
+    inst.instanceMatrix.needsUpdate = true; inst.computeBoundingSphere();
+    return inst;
+  };
+  place(acropora(21, { size: 0.2, color: [0.14, 0.12, 0.08], tip: [0.2, 0.36, 0.78] }), -0.34, -0.15, 0.012, 1.0, 0, 0.2);
+  place(acropora(22, { size: 0.16, color: [0.2, 0.1, 0.14], tip: [0.62, 0.22, 0.52], trunks: 6 }), 0.38, -0.11, 0.012, 1.0, 1.0, 0.16);
+  place(acropora(23, { size: 0.13, color: [0.12, 0.18, 0.06], tip: [0.34, 0.66, 0.16], trunks: 5 }), 0.12, -0.18, 0.012, 1.0, 2.0, 0.13);
+  place(acropora(24, { size: 0.12, color: [0.28, 0.17, 0.09], tip: [0.66, 0.48, 0.22], trunks: 5, spread: 0.8 }), -0.45, 0.04, 0.012, 1.0, 0.5, 0.12);
+  place(brainCoral(31, 0.06), -0.1, 0.02, 0.008);
+  place(seaFan(41, { size: 0.26 }), 0.0, -0.215, 0.01, 1.0, 0.15, 0.2);
+  place(anemone(51, { color: [0.32, 0.2, 0.1], tipCol: [0.78, 0.32, 0.36] }), 0.3, 0.1, 0.006);
+  place(anemone(52, { r: 0.028, color: [0.2, 0.3, 0.1], tipCol: [0.45, 0.7, 0.28] }), -0.46, 0.08, 0.006);
+  placeColony(zoanthids(61, {}), -0.4, -0.08);
+  placeColony(zoanthids(62, { disc: [1, 0.4, 0.2], ring: [0.3, 0.9, 0.9] }), 0.46, 0.05);
+  placeColony(zoanthids(63, { disc: [0.8, 0.95, 0.2], ring: [0.8, 0.2, 0.6], count: 28 }), 0.03, -0.18);
+  place(leatherCoral(81, { r: 0.06 }), 0.22, -0.02, 0.008, 1.0, 0.4, 0.1);
+  place(leatherCoral(82, { r: 0.045, color: [0.5, 0.56, 0.3] }), -0.2, -0.02, 0.008, 1.0, 1.4, 0.08);
   // mushroom corals on the sand
   // mushroom corals (Fungia): oval discs with fine radial septa, olive-brown with a pale mouth
   const mush = new THREE.CircleGeometry(0.02, 72, 0, Math.PI * 2);
