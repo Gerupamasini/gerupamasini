@@ -206,11 +206,11 @@ export const GLSL = {
       return col;
     }`,
     bump: `float orgBump(vec3 p){
-      vec3 c = cell3(p*60.0);
+      vec3 c = cell3(p*42.0);
       float smooth0 = smoothstep(0.05, 0.12, length(p.xz - vec2(0.0, -0.03)));
       vec3 bc = cell3(p*120.0);
       float rim = smoothstep(uP.x*0.84, uP.x*0.94, p.z) + smoothstep(uP.y*0.9, uP.y*0.98, abs(p.x));
-      return (1.0 - smoothstep(0.0, 0.42, c.x))*0.0028*smooth0 + (1.0 - smoothstep(0.0, 0.4, bc.x))*0.002*min(rim, 1.0) + snoise3(p*22.0)*0.0012;
+      return (1.0 - smoothstep(0.0, 0.38, c.x))*0.0042*smooth0 + (1.0 - smoothstep(0.0, 0.4, bc.x))*0.002*min(rim, 1.0) + snoise3(p*22.0)*0.0012;
     }`,
     rough: 'float orgRough(vec3 p, float r){ return r + snoise3(p*9.0)*0.12; }',
   },
