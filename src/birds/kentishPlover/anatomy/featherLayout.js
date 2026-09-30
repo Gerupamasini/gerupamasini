@@ -95,14 +95,14 @@ export function buildWingLayout() {
   // Lesser coverts: small, on the arm itself, rigid with the arm bone.
   const lesser = [
     ['forearm', elbow, wrist, 9, 7.0, 7.2],
-    ['humerus', humerus, elbow, 5, 8.0, 7.5],
+    ['humerus', humerus, elbow, 4, 8.0, 7.5],
   ];
   for (const [bone, a, b, n, len, w] of lesser) {
     for (let r = 0; r < 2; r++) {
       for (let q = 0; q < n; q++) {
         // (short of the carpal joint, which the alula and the primary coverts cover; on the humerus from where
         // the spread arm leaves the body plumage — the breast-side feathers and scapulars cover the wing root)
-        const t = bone === 'forearm' ? (q + 0.5 + r * 0.5) / (n + 1.5) : 0.3 + (0.7 * (q + 0.5 + r * 0.5)) / (n + 0.5);
+        const t = bone === 'forearm' ? (q + 0.5 + r * 0.5) / (n + 1.5) : 0.45 + (0.55 * (q + 0.5 + r * 0.5)) / (n + 0.5);
         const base = add(lerp3(a, b, t), [0, top + 1.0 + r * 0.25 - a[1] + wrist[1], 8.5 - r * 3.2]); // over the arm tube's leading half
         feathers.push({ name: `lc_${bone}_${r}_${q}`, bone, type: 'lesserCovert', base, angle: 96, length: len - r, width: w, innerVane: 0.5, curve: 0.1, layer: order + 3 + r, index: q });
       }

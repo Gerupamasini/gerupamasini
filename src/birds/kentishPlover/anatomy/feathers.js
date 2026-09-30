@@ -329,11 +329,11 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
         const [n, mask] = contact(pf.toArray());
         gb.setContact(v, new THREE.Vector3(...n).applyQuaternion(Rinv).toArray(), mask);
         // bent onto its layer of the folded-wing shell
-        // (LOD1/2: a little higher over their coarser body, whose facets stand up to about half a millimetre off the
-        // outline — invisible from the distances they are shown at)
+        // (LOD1/2: a little further off their coarser body — higher, or deeper for the hidden ones — whose facets
+        // stand up to about half a millimetre off the outline; invisible from the distances they are shown at)
         const nb = new THREE.Vector3();
         const cw = conformAt(fr, pf, gb.uv[v * 2 + 1], gb.uv[v * 2], sdf, torso, nb);
-        if (detail && foldLayer(f) >= 0) cw.addScaledVector(nb, 0.35 * detail * smooth01(0, 0.22, gb.uv[v * 2 + 1]));
+        if (detail) cw.addScaledVector(nb, (foldLayer(f) >= 0 ? 0.35 * smooth01(0, 0.22, gb.uv[v * 2 + 1]) : -0.4) * detail);
         const c = cw.applyQuaternion(Rinv).multiplyScalar(0.001);
         gb.conform.splice(v * 3, 3, c.x, c.y, c.z);
         // …and shaded like the surface it lies on (a quarter of its own vane's tilt kept), so neighbouring

@@ -522,7 +522,7 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
     const bake = clearBody(lines, V(f.base), new THREE.Quaternion(), bindDir, Y, [sdf, torsoSdf], { poses: [levelPose], down: 0, yaws: [0, 15, -15, 30, -30, 45, -45, 60, -60, 90, -90] });
     const dirB = bindDir.clone().applyQuaternion(bake);
     const nB = Y.clone().applyQuaternion(bake);
-    let table = poses.map((row) => row.map((col) => col.map((pose) => clearBody(lines, V(f.base), bake, dirB, nB, [sdf, torsoSdf], { poses: [pose], down: 0 }))));
+    let table = poses.map((row) => row.map((col) => col.map((pose) => clearBody(lines, V(f.base), bake, dirB, nB, [sdf, torsoSdf], { poses: [pose], down: 20 }))));
     // between the entries (half-way along each axis): where the interpolated aim is not clear, the entries it
     // is interpolated from are lifted for that pose as well
     const extra = poses.map((row) => row.map((col) => col.map(() => [])));
@@ -582,8 +582,8 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
 //    the folded wing in beside the flank, and the raise lays it down (foldPath). Coverts, tertials and
 //    scapulars therefore never sweep across the body at full length — nothing is shortened (the old solution
 //    drew the coverts back to 5 % of their length mid-fold, leaving the arm tube bare). What little the
-//    unfolding still brings near the body each feather clears itself: lifted (tip toward its dorsal side,
-//    about its base) by the smallest angle that keeps it clear at that fold fraction, for the spread poses the
+//    unfolding still brings near the body each feather clears itself: turned about its base (tip toward its
+//    dorsal side, or away from it where the raised wing's dorsal side faces the back) by the smallest angle that keeps it clear at that fold fraction, for the spread poses the
 //    fold starts from (standing, after landing, wing stretch) — measured on a denser set of fractions, every
 //    FOLD_STEPS entry holding the most its two intervals need (foldTable; animator: foldAt).
 const FOLD_ABDUCT = 0.45; // rad: the humerus raised off the flank half-way through its swing
@@ -601,19 +601,31 @@ export function foldPath(fold) {
   const arm = smooth01(0.3, 1, u);
   return { arm, hand: smooth01(0, 0.8, u), abduct: FOLD_ABDUCT * Math.sin(Math.PI * arm), raise: RAISE_MAX * smooth01(0.15, 0.85, u) };
 }
-export const FOLD_STEPS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65, 0.7, 0.75, FOLD_RAISED, 1];
-const FOLD_DENSE = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.625, 0.65, 0.675, 0.7, 0.725, 0.75, 0.77, 0.79];
+export const FOLD_STEPS = [0, 0.03, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65, 0.7, 0.75, FOLD_RAISED, 1];
+const FOLD_DENSE = [0.015, 0.03, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.625, 0.65, 0.675, 0.7, 0.725, 0.75, 0.77, 0.79];
 // spread poses the fold starts from: humerus elevation × (sweep, forearm sweep, hand sweep) of standing,
 // landing (wings raised) and the wing stretch
-const FOLD_FROM = [0.08, 0.45, 0.9].flatMap((elev) =>
-  [
-    [-0.05, 0, 0],
-    [0.2, 0, 0.4],
-    [0.3, -0.3, 0.6],
-  ].map(([sweep, fSweep, wSweep]) => ({ elev, sweep, fSweep, wSweep }))
-);
+// (+ the wing stretch and the take-off, which raise the wing while it unfolds: their spread pose at fold φ)
+const FOLD_FROM = [0.08, 0.45, 0.9, 1.25]
+  .flatMap((elev) =>
+    [
+      [-0.05, 0, 0],
+      [0.2, 0, 0.4],
+      [0.3, -0.3, 0.6],
+    ].map(([sweep, fSweep, wSweep]) => ({ elev, sweep, fSweep, wSweep }))
+  )
+  .concat([
+    { at: (phi) => ({ elev: 1.25 * (1 - phi), sweep: 0.3, fSweep: -0.3 * (1 - phi), wSweep: 0.6 * (1 - phi) }) },
+    { at: (phi) => ({ elev: 1.0 * (1 - phi), sweep: -0.05, fSweep: 0, wSweep: 0 }) },
+  ]);
+const spreadFrom = (sp, phi) => (sp.at ? sp.at(phi) : sp);
 const MAX_LIFT = 40; // degrees
-const envelope = (need) => FOLD_STEPS.map((phi, i) => (phi <= 0 || phi >= FOLD_RAISED ? 0 : Math.max(0, ...FOLD_DENSE.map((x, d) => (x > FOLD_STEPS[i - 1] && x < FOLD_STEPS[i + 1] ? need[d] : 0)))));
+const envelope = (need) =>
+  FOLD_STEPS.map((phi, i) => {
+    if (phi <= 0 || phi >= FOLD_RAISED) return 0;
+    const near = FOLD_DENSE.map((x, d) => (x > FOLD_STEPS[i - 1] && x < FOLD_STEPS[i + 1] ? need[d] : 0));
+    return near.reduce((m, v) => (Math.abs(v) > Math.abs(m) ? v : m), 0);
+  });
 
 const foldLiftAt = (entry, fold) => {
   const [i, u] = cell(FOLD_STEPS, fold);
@@ -640,7 +652,8 @@ function raisePose(a) {
 /** The arm part-folded from each spread pose, per FOLD_DENSE fraction: world rotation and joint of each bone. */
 function foldedArms(A) {
   return FOLD_DENSE.map((phi) =>
-    FOLD_FROM.map((sp) => {
+    FOLD_FROM.map((sp0) => {
+      const sp = spreadFrom(sp0, phi);
       const path = foldPath(phi);
       const RH = wingQuat(sp.sweep, sp.elev).slerp(A.humerus, path.arm).premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), path.abduct));
       const RF = RH.clone().multiply(wingQuat(sp.fSweep).slerp(A.forearm, path.hand));
@@ -673,7 +686,8 @@ function foldTable(wingFeathers, A, feather, spread, raise, rigid, sdfs) {
     const need = FOLD_DENSE.map((phi, d) => {
       const lines = linesAt(conformWeight(phi));
       let most = 0;
-      FOLD_FROM.forEach((sp, s) => {
+      FOLD_FROM.forEach((sp0, s) => {
+        const sp = spreadFrom(sp0, phi);
         const arm = arms[d][s];
         const [q, pivotBind, pivot] = arm[parentOf(f)];
         const from = entry ? spreadAt(entry, sp.elev, sp.sweep, 0, new THREE.Quaternion()) : new THREE.Quaternion();
@@ -683,23 +697,25 @@ function foldTable(wingFeathers, A, feather, spread, raise, rigid, sdfs) {
         const R = (a) => Ra.copy(QL).multiply(new THREE.Quaternion().setFromAxisAngle(axis, a * deg));
         const clear = (a) => sdfs.every((sdf) => violation(lines, base, R(a), sdf, arm.raised, 0, CLEAR_MOVING) <= 0);
         if (clear(0)) return;
-        let a = 2;
-        while (a <= MAX_LIFT && !clear(a)) a += 2;
-        if (a <= MAX_LIFT) {
-          let lo = a - 2; // not clear … clear
+        // smallest turn, tip toward the dorsal side or (a raised wing's dorsal side faces the back) the other way
+        let a = 0;
+        for (let k = 2; k <= MAX_LIFT && !a; k += 2) for (const x of [k, -k]) if (!a && clear(x)) a = x;
+        if (a) {
+          let lo = a - 2 * Math.sign(a); // not clear … clear
           for (let it = 0; it < 4; it++) {
             const mid = (lo + a) / 2;
             if (clear(mid)) a = mid;
             else lo = mid;
           }
         } else {
-          // nothing clears it: the least violating lift
+          // nothing clears it: the least violating turn
           const v = (x) => Math.max(...sdfs.map((sdf) => violation(lines, base, R(x), sdf, arm.raised, Infinity, CLEAR_MOVING)));
           let best = [0, v(0)];
-          for (let x = 4; x <= MAX_LIFT; x += 4) if (v(x) < best[1] - 0.02) best = [x, v(x)];
+          for (let x = 4; x <= MAX_LIFT; x += 4) for (const y of [x, -x]) if (v(y) < best[1] - 0.02) best = [y, v(y)];
           a = best[0];
         }
-        most = Math.max(most, a);
+        // (the entry keeps the largest turn of either sign that its spread poses need)
+        if (Math.abs(a) > Math.abs(most)) most = a;
       });
       return most;
     });

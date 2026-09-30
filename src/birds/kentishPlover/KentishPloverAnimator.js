@@ -1287,7 +1287,9 @@ export const ACTIONS = {
     duration: 1.8,
     pose(u) {
       const k = smoothstep(0, 0.3, u) * (1 - smoothstep(0.7, 1, u));
-      return { wing: { both: { fold: 1 - k, elev: 1.25 * k, hSweep: 0.3, fSweep: -0.3 * k, wSweep: 0.6 * k, wTwist: 0 } }, posture: { pitch: 0.18 * k, neck: -0.3 } };
+      // (the neck drawn in only once the wings are up: its nape plumage rises where the tertials pass while
+      // the wings open and close)
+      return { wing: { both: { fold: 1 - k, elev: 1.25 * k, hSweep: 0.3, fSweep: -0.3 * k, wSweep: 0.6 * k, wTwist: 0 } }, posture: { pitch: 0.18 * k, neck: -0.3 * smoothstep(0.3, 0.4, u) * (1 - smoothstep(0.6, 0.7, u)) } };
     },
   },
 
