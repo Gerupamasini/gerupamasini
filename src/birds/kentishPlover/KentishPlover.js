@@ -229,7 +229,8 @@ export class KentishPlover {
     this.pos.addScaledVector(this.vel, dt);
     // attitude: bank into turns (centripetal), pitch with climb/brake
     const aLat = yawRate * newSpeed;
-    f.roll = damp(f.roll, clamp(Math.atan2(aLat, 9.81), -0.9, 0.9), 5, dt);
+    const maxBank = f.phase === 'climb' ? 0.35 : 0.9;
+    f.roll = damp(f.roll, clamp(Math.atan2(aLat, 9.81), -maxBank, maxBank), 5, dt);
     f.pitch = damp(f.pitch, clamp(-f.vy * 0.12, -0.35, 0.35) - brake * 0.45, 4, dt);
     this.animator.attitude.pitch = f.pitch;
     this.animator.attitude.roll = -f.roll;

@@ -353,7 +353,7 @@ function sphereCap(sk, center, axis, R, maxAngle, segA, segR, part, bones, uvMod
       const b = start + i * segR + ((j + 1) % segR);
       const c = a + segR;
       const d = b + segR;
-      sk.index.push(a, b, c, b, d, c);
+      sk.index.push(a, c, b, b, c, d); // counter-clockwise seen from outside (verified by tools/dev/winding.mjs)
     }
   }
 }

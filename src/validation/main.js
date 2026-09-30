@@ -64,6 +64,21 @@ if (mode === 'silhouette') {
 }
 
 let poser = null;
+if (mode === 'glb') {
+  // verify the exported asset: load the GLB and pose it with its baked clip
+  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+  const gltf = await new GLTFLoader().loadAsync('/assets/models/kentish_plover.glb');
+  bird.object.visible = false;
+  scene.add(gltf.scene);
+  gltf.scene.traverse((o) => {
+    if (o.isMesh) o.castShadow = true;
+  });
+  const clip = gltf.animations.find((c) => c.name === (q.get('clip') || '06_Peck_worm')) ?? gltf.animations[0];
+  const mixer = new THREE.AnimationMixer(gltf.scene);
+  mixer.clipAction(clip).play();
+  mixer.setTime(Number(q.get('t') ?? 0.3) * clip.duration);
+  window.__glb = { clips: gltf.animations.map((c) => c.name), clip: clip.name };
+}
 async function setupPose() {
   const pose = q.get('pose');
   if (!pose || pose === 'bind') return;
@@ -104,6 +119,13 @@ function layout() {
   const W = window.innerWidth;
   const H = window.innerHeight;
   views.length = 0;
+  if (mode === 'eye') {
+    const c = new THREE.PerspectiveCamera(20, W / H, 0.002, 5);
+    c.position.set(0.07, 0.092, 0.075);
+    c.lookAt(0.009, 0.081, 0.05);
+    views.push({ cam: c, rect: [0, 0, W, H], label: 'eye macro' });
+    return;
+  }
   if (mode === 'closeup') {
     const c = new THREE.PerspectiveCamera(22, W / H, 0.005, 10);
     c.position.set(0.16, 0.1, 0.19);

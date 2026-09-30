@@ -124,6 +124,15 @@ export class KentishPloverModel {
     em.lids.userData.uniforms.uNict.value.set(nictL, nictR);
   }
 
+  /** Clock + wind for feather micro-motion. */
+  setFeatherTime(t, wind = 0.35) {
+    const f = this.current?.feathers;
+    if (f) {
+      f.userData.uniforms.uTime.value = t;
+      f.userData.uniforms.uWind.value = wind;
+    }
+  }
+
   /** Wing openness for the feather shader (underwing colour of the arm surface). */
   setWingFold(v) {
     const f = this.current?.feathers;

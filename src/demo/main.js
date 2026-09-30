@@ -19,7 +19,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 0.95;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -37,7 +37,7 @@ const prey = new PreyField(terrain, tide);
 prey.createVisuals(scene);
 const world = { terrain, tide, prey, threats: [], time: 0, context: q.get('context') ?? 'foraging', birds: null, player: null };
 const birds = new KentishPloverManager(world, scene);
-const player = new Player(world, scene, new THREE.Vector3(Number(q.get('px') ?? 0), 0, Number(q.get('pz') ?? 40)));
+const player = new Player(world, scene, new THREE.Vector3(0, 0, 0));
 
 // pre-build geometries (one-off cost, shared by every bird)
 await new Promise((r) => setTimeout(r, 30));
@@ -66,6 +66,11 @@ function spawnFlock(n) {
   }
 }
 spawnFlock(Number(q.get('birds') ?? 14));
+// the observer starts well up-shore of the flock (outside the alert distance)
+{
+  const cz = findShoreZ(Number(q.get('bx') ?? 0));
+  player.pos.set(Number(q.get('px') ?? 6), 0, Number(q.get('pz') ?? cz + 55));
+}
 let selected = birds.all[0];
 
 // --------------------------------------------------------------- camera

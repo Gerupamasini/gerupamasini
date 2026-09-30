@@ -74,7 +74,7 @@ function cleanGeometry(src, colors) {
 }
 
 const CLIPS = [
-  ['01_Idle', 'stand', 6],
+  ['01_Idle', 'stand', 4],
   ['02_Walk', 'walk', 1 / ANIM.walk.strideHz],
   ['03_Run', 'run', 1 / ANIM.run.strideHz],
   ['05_ForageSearch', 'forage', 4],
@@ -127,16 +127,28 @@ function bakeClips(model) {
       }
     }
     const kf = [];
+    // constant channels collapse to one key; bind-pose channels are dropped entirely
+    const constant = (arr, k) => {
+      for (let i = k; i < arr.length; i++) if (Math.abs(arr[i] - arr[i % k]) > 1e-6) return false;
+      return true;
+    };
     for (const [bn, tr] of tracks) {
-      kf.push(new THREE.VectorKeyframeTrack(`${bn}.position`, tr.t, tr.p));
-      kf.push(new THREE.QuaternionKeyframeTrack(`${bn}.quaternion`, tr.t, tr.q));
+      const bone = model.bones[bn];
+      const bp = bone.userData.bindLocalPos;
+      const bq = bone.userData.bindLocalQuat;
+      if (constant(tr.p, 3)) {
+        if (Math.hypot(tr.p[0] - bp.x, tr.p[1] - bp.y, tr.p[2] - bp.z) > 1e-7) kf.push(new THREE.VectorKeyframeTrack(`${bn}.position`, [0], tr.p.slice(0, 3)));
+      } else kf.push(new THREE.VectorKeyframeTrack(`${bn}.position`, tr.t, tr.p));
+      if (constant(tr.q, 4)) {
+        if (Math.abs(Math.abs(tr.q[0] * bq.x + tr.q[1] * bq.y + tr.q[2] * bq.z + tr.q[3] * bq.w) - 1) > 1e-7) kf.push(new THREE.QuaternionKeyframeTrack(`${bn}.quaternion`, [0], tr.q.slice(0, 4)));
+      } else kf.push(new THREE.QuaternionKeyframeTrack(`${bn}.quaternion`, tr.t, tr.q));
     }
     clips.push(new THREE.AnimationClip(name, duration, kf));
   }
   return clips;
 }
 
-export async function exportGLB(renderer) {
+export async function exportGLB(renderer = new THREE.WebGLRenderer()) {
   const pal = getPalette('maleBreeding');
   const model = new KentishPloverModel({ palette: 'maleBreeding', lods: [0], shadows: false });
   const lod = model.lods[0];

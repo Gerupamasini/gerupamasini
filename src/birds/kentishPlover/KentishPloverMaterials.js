@@ -366,14 +366,26 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
     uWear: { value: individual.plumageWear ?? 0.2 },
     uDetail: { value: detail },
     uFold: { value: 1 },
+    uTime: { value: 0 },
+    uWind: { value: 0.35 },
   };
   mat.userData.uniforms = uniforms;
   mat.defines = { USE_UV: '' };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec4 aFeather;\nvarying vec4 vFeather;`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvFeather = aFeather;`);
+      .replace('#include <common>', `#include <common>\nattribute vec4 aFeather;\nvarying vec4 vFeather;\nuniform float uTime, uWind;`)
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vFeather = aFeather;
+        // feather micro-motion: tips flutter slightly in the wind (strongest on tail, tertials, scapulars)
+        float kfT = floor(aFeather.x + 0.5);
+        float kfLoose = (kfT > 7.5 && kfT < 10.5) || (kfT > 1.5 && kfT < 2.5) ? 1.0 : 0.35;
+        float kfPh = aFeather.z * 37.0 + aFeather.y * 1.7;
+        float kfW = sin(uTime * 7.3 + kfPh) * 0.6 + sin(uTime * 13.1 + kfPh * 1.9) * 0.4;
+        transformed += normal * (uWind * kfLoose * 0.00035 * uv.y * uv.y * kfW);`
+      );
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FEATHER_FRAG}`)
       .replace(

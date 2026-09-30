@@ -95,7 +95,7 @@ root (0,0,0)                       … 地面上の移動基準
 | supercilium | #E8E4DA | #DDD5C5 | #DED8CB |
 | eyeStripe / earCoverts | #1E1B19 | #6A5846 | #7C6B58 |
 | hindneckCollar | #E9E6DE | 同 | 同 |
-| mantle/scapulars/coverts | #A0907A | #A2927C | #A09282 |
+| mantle/scapulars/coverts | #958470 | #978672 | #958878 |
 | breastPatch | #1F1C1A | #6E5C4A | #857563 |
 | underparts | #ECEAE4 | 同 | 同 |
 | bill | #151413 | 同 | 同 |

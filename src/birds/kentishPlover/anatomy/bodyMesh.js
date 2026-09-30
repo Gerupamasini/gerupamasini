@@ -11,7 +11,7 @@ export const BILL_TIP_MM = [0, 76, 78];
 
 // Spine influence segments (mm) and falloff sigma — distance-weighted skinning.
 const SPINE = [
-  { bone: 'tail', a: [0, 58.5, -42], b: [0, 58, -58], s: 7 },
+  { bone: 'tail', a: [0, 58.5, -38], b: [0, 58, -56], s: 7 },
   { bone: 'body', a: [0, 56.5, -34], b: [0, 57, -8], s: 13 },
   { bone: 'chest', a: [0, 57.5, -2], b: [0, 60, 22], s: 13 },
   { bone: 'neck0', a: [0, 63, 27], b: [0, 66, 30], s: 4.5 },

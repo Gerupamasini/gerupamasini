@@ -196,6 +196,14 @@ export class KentishPloverAnimator {
   previewAction(name, t = 0.5, variant) {
     this.setRoot(new THREE.Vector3(), 0, new THREE.Vector3());
     this._initFeet = true;
+    // reset transient state so previews are independent of each other
+    this.action = null;
+    this.flight.active = false;
+    this.flight.freeze = false;
+    this.flight.amp = 0;
+    this.flight.glide = 0;
+    this.flight.brake = 0;
+    this.p.fold = this.target.fold = 1;
     if (name === 'stand') this.setPosture('relaxed');
     else if (name === 'alert') this.setPosture('alert');
     else if (name === 'forage') this.setPosture('forage');
@@ -336,6 +344,8 @@ export class KentishPloverAnimator {
     this._updateLids(dt, act);
     model.setFluff(this.p.fluff);
     model.setWingFold(clamp(this.p.fold, 0, 1));
+    // feathers are sleeked when alert/flying (less flutter), loose when fluffed/resting
+    model.setFeatherTime(this.time, clamp(0.35 + this.p.fluff * 0.4 - (this.flight.active ? 0.2 : 0), 0.05, 1));
     obj.updateMatrixWorld(true);
   }
 

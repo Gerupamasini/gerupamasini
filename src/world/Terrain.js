@@ -167,10 +167,11 @@ export class Terrain {
           vec2 p = vWPos.xz;
           float n = tfbm(p * 0.35);
           float fine = tfbm(p * 9.0);
-          vec3 sandDry = mix(vec3(0.74, 0.66, 0.52), vec3(0.80, 0.73, 0.60), n);
-          vec3 sandWet = mix(vec3(0.47, 0.41, 0.33), vec3(0.54, 0.47, 0.38), n);
-          vec3 mudDry = mix(vec3(0.42, 0.37, 0.31), vec3(0.48, 0.43, 0.36), n);
-          vec3 mudWet = mix(vec3(0.24, 0.21, 0.18), vec3(0.30, 0.26, 0.22), n);
+          // linear-space albedos: dry sand ≈0.35–0.45, wet sand ≈0.15–0.2, mud ≈0.1, wet mud ≈0.05
+          vec3 sandDry = mix(vec3(0.52, 0.43, 0.30), vec3(0.60, 0.51, 0.37), n);
+          vec3 sandWet = mix(vec3(0.21, 0.17, 0.12), vec3(0.26, 0.21, 0.15), n);
+          vec3 mudDry = mix(vec3(0.16, 0.135, 0.105), vec3(0.2, 0.17, 0.13), n);
+          vec3 mudWet = mix(vec3(0.055, 0.047, 0.04), vec3(0.075, 0.064, 0.052), n);
           vec3 veg = mix(vec3(0.33, 0.38, 0.22), vec3(0.45, 0.47, 0.3), tn(p * 1.7));
           vec3 sandC = mix(sandDry, sandWet, wet);
           vec3 mudC = mix(mudDry, mudWet, wet);
@@ -179,8 +180,13 @@ export class Terrain {
           // submerged: attenuate & tint by depth
           float depth = max(uTide - h, 0.0);
           c = mix(c, c * vec3(0.55, 0.62, 0.6), under * (1.0 - exp(-depth * 18.0)));
+          // worm casts & burrow holes on mud (visual cue of the prey community)
+          float wormCast = smoothstep(0.93, 0.97, tn(p * 6.0 + 17.0)) * vSub.x * (1.0 - under);
+          c = mix(c, c * 1.5, wormCast);
+          float burrow = smoothstep(0.95, 0.99, tn(p * 11.0 - 3.0)) * vSub.x * (1.0 - under);
+          c = mix(c, c * 0.35, burrow);
           diffuseColor.rgb *= c;
-          float kRough = mix(0.92, 0.35, wet * (vSub.x * 0.8 + vSub.y * 0.5));
+          float kRough = mix(0.92, 0.22, wet * (vSub.x * 0.85 + vSub.y * 0.45));
           kRough = mix(kRough, 0.08, under);`
         )
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = kRough;')

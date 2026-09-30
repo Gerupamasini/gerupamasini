@@ -123,10 +123,12 @@ export function surfaceNets(sdf, bounds, res) {
 
   const indices = [];
   // For each grid edge crossing the surface, emit the quad of the 4 cells sharing that edge.
-  const quad = (a, b, c, d, flip) => {
+  // Quads are listed in the cyclic (y→z, z→x, x→y) order, i.e. counter-clockwise around the +axis.
+  // When the lower corner is inside (s0), the outward normal points along +axis → keep that order.
+  const quad = (a, b, c, d, insideLow) => {
     if (a < 0 || b < 0 || c < 0 || d < 0) return;
-    if (flip) indices.push(a, c, b, a, d, c);
-    else indices.push(a, b, c, a, c, d);
+    if (insideLow) indices.push(a, b, c, a, c, d);
+    else indices.push(a, c, b, a, d, c);
   };
   for (let k = 1; k < nz - 1; k++) {
     for (let j = 1; j < ny - 1; j++) {

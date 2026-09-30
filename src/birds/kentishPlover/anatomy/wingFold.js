@@ -13,7 +13,7 @@ const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
 const Y = new THREE.Vector3(0, 1, 0);
 
 export const FOLD_TARGET = {
-  humerus: { x: [0.24, -0.02, -0.97], y: [0.8, 0.5, 0.2] },
+  humerus: { x: [0.19, -0.02, -0.98], y: [0.8, 0.5, 0.2] },
   forearm: { x: [-0.07, -0.26, 0.963], y: [0.8, 0.6, 0] },
   hand: { x: [0.02, -0.02, -1], y: [0.55, 0.83, 0] },
 };
@@ -82,7 +82,7 @@ export function computeWingFold(wingFeathers, sdf) {
       dirHint.normalize();
       const guess = base.clone().addScaledVector(dirHint, L);
       const [pp, nn] = projectToSurface(sdf, guess.x, guess.y, guess.z);
-      const lift = f.type === 'alula' ? -0.6 : f.type === 'lesserCovert' && f.bone === 'hand' ? 1.2 : f.type === 'lesserCovert' ? 3.6 : f.type === 'tertial' ? 3.4 : 2.2 + (order[f.name] ?? 0) * 0.05;
+      const lift = f.type === 'alula' ? -0.6 : f.type === 'lesserCovert' && f.bone === 'hand' ? 1.2 : f.type === 'lesserCovert' ? 2.6 : f.type === 'tertial' ? 3.4 : 2.2 + (order[f.name] ?? 0) * 0.05;
       const surfTip = V(pp).addScaledVector(V(nn), lift);
       // If the body has ended (behind the rump), keep the straight hint instead
       tip = guess.z < -48 ? guess : surfTip;

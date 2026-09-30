@@ -17,9 +17,7 @@ page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`));
 await page.goto('http://127.0.0.1:5198/validation.html?mode=export');
 const res = await page.evaluate(async () => {
   const mod = await import('/src/validation/exportGLB.js');
-  const THREE = await import('three');
-  const r = new THREE.WebGLRenderer();
-  const { glb, clips } = await mod.exportGLB(r);
+  const { glb, clips } = await mod.exportGLB();
   const bytes = new Uint8Array(glb);
   let bin = '';
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
