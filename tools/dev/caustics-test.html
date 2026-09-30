@@ -1,0 +1,11 @@
+<!doctype html><html><body style="margin:0;background:#000"><script type="module">
+import * as THREE from 'three';
+import { Caustics } from '/src/world/Caustics.js';
+const r = new THREE.WebGLRenderer(); r.setSize(512,512); document.body.appendChild(r.domElement);
+const c = new Caustics(r); c.update(3.0);
+const s = new THREE.Scene(); const cam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+s.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), new THREE.MeshBasicMaterial({ map: c.rt.texture })));
+r.render(s, cam);
+const px = new Float32Array(4); 
+window.__ready = true;
+</script></body></html>

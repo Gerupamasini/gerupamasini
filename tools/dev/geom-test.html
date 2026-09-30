@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>body{margin:0;background:#111}canvas{display:block}</style></head>
+<body><script type="module">
+import * as THREE from 'three';
+import { buildBodyGeometry, eyeRest } from '/src/fish/BodyGeometry.js';
+const W = innerWidth, H = innerHeight;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H); document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x202428);
+const params = new URLSearchParams(location.search);
+const mode = params.get('mode') || 'shade';
+const g = buildBodyGeometry({});
+const mat = mode === 'normal' ? new THREE.MeshNormalMaterial() : new THREE.MeshStandardMaterial({ color: 0xd87040, roughness: 0.55, metalness: 0.0, wireframe: mode === 'wire' });
+const body = new THREE.Mesh(g, mat);
+scene.add(body);
+if (params.get('open')) { const pos = g.attributes.position, d = g.attributes.aMorphMouth; for (let i=0;i<pos.count;i++){pos.setXYZ(i,pos.getX(i)+d.getX(i),pos.getY(i)+d.getY(i),pos.getZ(i)+d.getZ(i));} g.computeVertexNormals(); }
+for (const side of [1,-1]) { const e = eyeRest(side); const m = new THREE.Mesh(new THREE.SphereGeometry(e.radius, 32, 24), new THREE.MeshStandardMaterial({color:0x111111, roughness:0.1})); m.position.copy(e.center); scene.add(m); }
+scene.add(new THREE.HemisphereLight(0xffffff, 0x404040, 1.2));
+const dl = new THREE.DirectionalLight(0xffffff, 2.2); dl.position.set(0.3, 1, 0.6); scene.add(dl);
+const views = params.get('view') ? [params.get('view')] : ['side','top','front','q34','head','below'];
+const cams = {
+  side: [[-0.5,0,2.2],[-0.5,0,0], 0.62],
+  top: [[-0.5,2.2,0.001],[-0.5,0,0], 0.62],
+  front: [[2.2,0.0,0],[0,0,0], 0.22],
+  q34: [[1.0,0.45,1.2],[-0.45,0,0], 0.62],
+  head: [[0.2,0.05,1.2],[-0.14,0.0,0], 0.15],
+  below: [[-0.5,-2.2,0.001],[-0.5,0,0], 0.62],
+};
+renderer.setScissorTest(true);
+const cols = Math.min(3, views.length), rows = Math.ceil(views.length / cols);
+const vw = W / cols, vh = H / rows;
+views.forEach((v, k) => {
+  const [p, t, half] = cams[v];
+  const cam = new THREE.OrthographicCamera(-half * vw / vh, half * vw / vh, half, -half, 0.01, 10);
+  cam.position.set(...p); cam.up.set(0, v==='top'||v==='below' ? 0:1, v==='top'?-1:(v==='below'?1:0)); cam.lookAt(...t);
+  const x = (k % cols) * vw, y = H - (Math.floor(k / cols) + 1) * vh;
+  renderer.setViewport(x, y, vw, vh); renderer.setScissor(x, y, vw, vh);
+  renderer.render(scene, cam);
+});
+window.__ready = true;
+</script></body></html>
