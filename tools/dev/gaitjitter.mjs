@@ -12,6 +12,7 @@
 //
 // usage: node tools/dev/gaitjitter.mjs [--secs=30] [--aiSecs=90] [--only=treadmill,viewer,far,ai]
 //                                      [--rates=60,60j,30j,120j,144j] [--save=out.json] [--compare=before.json]
+//                                      [--csv=dir]  (per-frame body-vs-camera, pitch, lean, state for every run)
 import * as THREE from 'three';
 import { writeFileSync, readFileSync } from 'node:fs';
 import { makeRng, wrapAngle } from '../../src/core/math.js';
@@ -34,6 +35,7 @@ const JOLT = 0.5; // mm: |2nd difference| of the body position on screen that co
 globalThis.setTimeout = (fn) => fn(); // alarm delays resolve immediately
 let rnd = makeRng(12345);
 Math.random = () => rnd(); // deterministic runs (spawn headings, AI jitter)
+new KentishPloverModel({ lods: [2], shadows: false }); // warm the geometry caches so runs don't depend on scenario order
 
 // --------------------------------------------------------------- display timing
 function frameDts(spec, secs, seed = 7) {
@@ -169,6 +171,8 @@ function runDemo(kind, dts, dist = 0.6) {
     b.animator.setGaze('forward');
   }
   const rec = [];
+  rec.flockSteps = 0; // ground-height steps > 5 mm in one frame, any bird of the flock (terrain discontinuities)
+  const prevY = mgr.all.map((o) => o.pos.y);
   let t = 0;
   for (const dt of dts) {
     t += dt;
@@ -180,6 +184,10 @@ function runDemo(kind, dts, dist = 0.6) {
       b.moveTo(tgt, { gait: kind, arrive: 0.01 });
     }
     mgr.update(dt, camera);
+    mgr.all.forEach((o, i) => {
+      if (!o.airborne && Math.abs(o.pos.y - prevY[i]) > 0.005) rec.flockSteps++;
+      prevY[i] = o.airborne ? NaN : o.pos.y;
+    });
     const delta = b.pos.clone().sub(last);
     camera.position.add(delta);
     target.add(delta);
@@ -277,6 +285,9 @@ function metrics(rec, { moving = false } = {}) {
   const mv = sel.filter((r) => r.speed > 0.02);
   const lift = [];
   for (const r of sel) for (const f of r.feet) if (f[3] > 0) lift.push((f[1] - r.pos[1]) * 1000);
+  // root height steps (terrain discontinuities move the whole bird — and the follow camera — vertically)
+  const ySteps = [];
+  for (let i = 1; i < r0.length; i++) ySteps.push(Math.abs(r0[i].pos[1] - r0[i - 1].pos[1]) * 1000);
   const footStep = [];
   for (const i of idx) for (const k of [0, 1]) footStep.push(len(sub(r0[i].footBone[k], r0[i - 1].footBone[k])) * 1000);
   return {
@@ -309,6 +320,8 @@ function metrics(rec, { moving = false } = {}) {
     liftMax: Math.max(0, ...lift),
     swingFrac: sel.length ? sel.reduce((a, r) => a + r.feet.filter((f) => f[3] > 0).length, 0) / (2 * sel.length) : 0,
     footStepMax: Math.max(0, ...footStep),
+    yStepMax: Math.max(0, ...ySteps),
+    ySteps: ySteps.filter((y) => y > 5).length,
   };
 }
 
@@ -333,7 +346,7 @@ function printRow(name, m) {
 }
 function printGait(name, m) {
   console.log(
-    `${name.padEnd(22)}  moving ${(m.movingFrac * 100).toFixed(0).padStart(3)}%  speed ${f1(m.speedMean, 3)} (max ${f1(m.speedMax, 3)}) m/s  stride ${f1(m.strideHz, 3)} Hz  duty ${f1(m.duty, 3)}  footLift max ${f1(m.liftMax)} mm  swing ${(m.swingFrac * 100).toFixed(1)}%  foot step max ${f1(m.footStepMax, 1)} mm/frame`
+    `${name.padEnd(22)}  moving ${(m.movingFrac * 100).toFixed(0).padStart(3)}%  speed ${f1(m.speedMean, 3)} (max ${f1(m.speedMax, 3)}) m/s  stride ${f1(m.strideHz, 3)} Hz  duty ${f1(m.duty, 3)}  footLift max ${f1(m.liftMax)} mm  swing ${(m.swingFrac * 100).toFixed(1)}%  foot step max ${f1(m.footStepMax, 1)} mm/frame  root Δy max ${f1(m.yStepMax, 1)} mm (${m.ySteps} steps > 5 mm${m.flockSteps !== undefined ? `; whole flock ${m.flockSteps}` : ''})`
   );
 }
 
@@ -357,8 +370,13 @@ for (const [name, fn, secs] of scen) {
     const all = metrics(rec);
     const mov = metrics(rec, { moving: true });
     printRow(`${rate}`, name === 'ai' ? mov : all);
+    mov.flockSteps = rec.flockSteps;
     gait.push([key, mov]);
-    out.runs[key] = { metrics: all, moving: mov, feet: rec.map((r) => [r.t, ...r.feet[0].slice(0, 3), ...r.feet[1].slice(0, 3)]), footBone: rec.map((r) => [...r.footBone[0], ...r.footBone[1]]), ankle: rec.map((r) => [...r.ankle[0], ...r.ankle[1]]), pos: rec.map((r) => r.pos), states: name === 'ai' ? rec.map((r) => r.state) : undefined };
+    if (args.csv) {
+      const rows = rec.map((r) => [r.t.toFixed(4), r.upd ? 1 : 0, r.state ?? '', r.act ?? '', r.speed.toFixed(3), ...sub(r.body, r.cam).map((v) => (v * 1000).toFixed(3)), ((r.pitch * 180) / Math.PI).toFixed(2), ((r.roll * 180) / Math.PI).toFixed(2), ((r.lean * 180) / Math.PI).toFixed(2)].join(','));
+      writeFileSync(`${args.csv}/${key}.csv`, ['t,upd,state,act,speed,body_x_mm,body_y_mm,body_z_mm,pitch_deg,roll_deg,lean_deg', ...rows].join('\n'));
+    }
+    out.runs[key] = { metrics: all, moving: mov, upd: rec.map((r) => (r.upd ? 1 : 0)), feet: rec.map((r) => [r.t, ...r.feet[0].slice(0, 3), ...r.feet[1].slice(0, 3)]), footBone: rec.map((r) => [...r.footBone[0], ...r.footBone[1]]), ankle: rec.map((r) => [...r.ankle[0], ...r.ankle[1]]), pos: rec.map((r) => r.pos), states: name === 'ai' ? rec.map((r) => r.state) : undefined };
   }
 }
 console.log('\n== gait / legs (moving frames)');
@@ -366,7 +384,7 @@ for (const [k, m] of gait) printGait(k, m);
 
 if (args.compare) {
   const base = JSON.parse(readFileSync(args.compare, 'utf8'));
-  console.log(`\n== foot trajectories vs ${args.compare} (max |Δ| over all frames, mm)`);
+  console.log(`\n== foot trajectories vs ${args.compare} (max |Δ| after warm-up over frames where both runs posed the skeleton, mm)`);
   for (const [k, run] of Object.entries(out.runs)) {
     const b = base.runs[k];
     if (!b) continue;
@@ -375,7 +393,10 @@ if (args.compare) {
     let dB = 0;
     let dA = 0;
     let dP = 0;
+    let used = 0;
     for (let i = 0; i < n; i++) {
+      if (run.feet[i][0] <= WARMUP || (b.upd && !b.upd[i]) || !run.upd[i]) continue;
+      used++;
       for (let j = 1; j < 7; j++) dF = Math.max(dF, Math.abs(run.feet[i][j] - b.feet[i][j]));
       for (let j = 0; j < 6; j++) dB = Math.max(dB, Math.abs(run.footBone[i][j] - b.footBone[i][j]));
       for (let j = 0; j < 6; j++) dA = Math.max(dA, Math.abs(run.ankle[i][j] - b.ankle[i][j]));
@@ -384,7 +405,7 @@ if (args.compare) {
     const g0 = b.moving;
     const g1 = run.moving;
     console.log(
-      `${k.padEnd(22)} foot target ${f1(dF * 1000, 3)}  foot joint ${f1(dB * 1000, 3)}  intertarsal ${f1(dA * 1000, 3)}  entity pos ${f1(dP * 1000, 3)}  | speed ${f1(g0.speedMean, 3)}→${f1(g1.speedMean, 3)}  stride ${f1(g0.strideHz, 3)}→${f1(g1.strideHz, 3)} Hz  duty ${f1(g0.duty, 3)}→${f1(g1.duty, 3)}  lift ${f1(g0.liftMax)}→${f1(g1.liftMax)} mm`
+      `${k.padEnd(22)} (${String(used).padStart(5)} fr) foot target ${f1(dF * 1000, 3)}  foot joint ${f1(dB * 1000, 3)}  intertarsal ${f1(dA * 1000, 3)}  entity pos ${f1(dP * 1000, 3)}  | speed ${f1(g0.speedMean, 3)}→${f1(g1.speedMean, 3)}  stride ${f1(g0.strideHz, 3)}→${f1(g1.strideHz, 3)} Hz  duty ${f1(g0.duty, 3)}→${f1(g1.duty, 3)}  lift ${f1(g0.liftMax)}→${f1(g1.liftMax)} mm`
     );
   }
 }
