@@ -22,7 +22,7 @@ export const GOBY = {
   // it compressed
   width: spline([[0, 0.03], [0.02, 0.043], [0.05, 0.05], [0.09, 0.053], [0.15, 0.051], [0.22, 0.043], [0.3, 0.036],
     [0.5, 0.025], [0.7, 0.017], [0.88, 0.011], [0.96, 0.008], [1.0, 0.004]]),
-  eye: { s: 0.066, y: 0.053, r: 0.034 },
+  eye: { s: 0.068, y: 0.052, r: 0.038 },
   mouth: [[0.0, 0.026], [0.046, 0.003]],     // cleft: from the snout tip back and down to below the eye front
 };
 
@@ -169,7 +169,7 @@ vec4 gobyColor(vec2 p){
     } else if (uGKind < 5.5) {
       c = vec3(0.95, 0.94, 0.88); a = mix(0.12, 0.03, t); a = mix(a, 0.3, ray * 0.6);   // clear pectoral with visible rays
     } else {
-      c = mix(vec3(0.92, 0.92, 0.66), vec3(0.97, 0.97, 0.94), smoothstep(0.0, 0.35, t)); c *= 0.95 + 0.05 * ray; float rw = mix(0.2, 0.05, t); a = mix(0.06, 0.92, 1.0 - smoothstep(rw * 0.5, rw, abs(fract(r + 0.5) - 0.5)));   // rays taper to a point, faint membrane   // two stout white rays, clear membrane between
+      c = mix(vec3(0.92, 0.92, 0.66), vec3(0.97, 0.97, 0.94), smoothstep(0.0, 0.35, t)); c *= 0.95 + 0.05 * ray; float rw = mix(0.2, 0.05, t); a = mix(0.0, 0.92, 1.0 - smoothstep(rw * 0.5, rw, abs(fract(r + 0.5) - 0.5)));   // rays taper to a point, faint membrane   // two stout white rays, clear membrane between
     }
     c = mix(c, c * 1.02, ray * 0.04);
     a *= smoothstep(0.0, 0.04, 1.0 - t + 0.02);
