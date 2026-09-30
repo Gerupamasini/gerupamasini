@@ -198,39 +198,109 @@ export class Butterflyfish {
   }
 }
 
-// Fire goby: hovers head-into-the-current a little above its bolt hole, darting briefly and
-// flicking its flag; retreats toward the hole when it strays.
+// Fire goby, from field and aquarium observations of Nemateleotris: it hovers a few cm above
+// its burrow facing into the current, head a little up, holding station with constant fast
+// pectoral fanning while the body and tail stay almost still; every few seconds it snaps at a
+// passing particle - a sudden 1-2 tail-beat lunge of a few cm, then it sculls back tail-first
+// to its station; it flicks the tall flag down and up as a signal (often several times in a
+// row), lays it back during fast moves, repositions with short bursts, and when startled
+// dives head-first into the burrow, waits, then creeps out again.
 export class HoveringGoby {
   constructor(model, { home, scale = 0.075, seed = 5 }) {
     this.model = model; this.rnd = mulberry32(seed);
     this.obj = new THREE.Group(); this.obj.add(model.group); model.group.scale.setScalar(scale);
     model.group.position.x = -0.3 * scale;
-    this.home = home.clone(); this.p = home.clone().add(new THREE.Vector3(0, 0.03, 0));
-    this.v = new THREE.Vector3(); this.yaw = this.rnd() * 6.28; this.t = 0; this.next = 1;
-    this.target = this.p.clone(); this.turnRate = 0; this.scale = scale;
+    this.scale = scale;
+    this.home = home.clone();                       // burrow mouth on the sand
+    this.station = home.clone().add(new THREE.Vector3(0, 0.035, 0));
+    this.p = this.station.clone(); this.v = new THREE.Vector3();
+    this.face = -Math.PI * 0.5 + (this.rnd() < 0.5 ? -1 : 1) * (0.9 + this.rnd() * 0.4);   // facing out toward the front glass (the "current"), three-quarter on
+    this.yaw = this.face; this.yawRate = 0; this.pitch = 0.12; this.t = 0;
+    this.mode = 'hover'; this.modeT = 1 + this.rnd() * 2;
+    this.burst = 0; this.kick = 0; this.flickT = 0; this.flickN = 0; this.nextFlick = 2 + this.rnd() * 4; this.fold = 0;
+    this.phaseN = this.rnd() * 100;
   }
+  fwd() { return new THREE.Vector3(Math.cos(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.sin(this.yaw) * Math.cos(this.pitch)); }
   update(dt) {
-    this.t += dt; this.next -= dt;
-    let flick = 0;
-    if (this.next <= 0) {
-      const r = this.rnd;
-      this.target = this.home.clone().add(new THREE.Vector3((r() - 0.5) * 0.08, 0.015 + r() * 0.05, (r() - 0.5) * 0.06));
-      this.next = 1.5 + r() * 3.5; if (r() < 0.5) flick = 1;
+    const r = this.rnd, S = this.scale;
+    this.t += dt; this.modeT -= dt;
+    const n = (k) => Math.sin(this.t * k + this.phaseN) + 0.5 * Math.sin(this.t * k * 2.3 + this.phaseN * 1.7);
+    let wantYaw = this.face + 0.25 * n(0.13), wantPitch = 0.12 + 0.05 * n(0.21);
+    let pec = 3.2, pecAmp = 1.0, fold = 0, flare = 0, goal = this.station, kp = 6.0;
+    const f = this.fwd();
+
+    if (this.mode === 'hover') {
+      // station keeping: tiny drift, slow yaw wander; occasionally pick a new station nearby
+      goal = this.station.clone().add(new THREE.Vector3(0.004 * n(0.4), 0.003 * n(0.33), 0.004 * n(0.27)));
+      if (this.modeT < 0) {
+        const x = r();
+        if (x < 0.55) {            // snap at plankton ahead and a little above
+          this.mode = 'lunge'; this.modeT = 0.35;
+          this.snap = this.p.clone().add(f.clone().multiplyScalar(0.03 + r() * 0.03)).add(new THREE.Vector3((r() - 0.5) * 0.02, 0.005 + r() * 0.015, (r() - 0.5) * 0.02));
+          this.yaw += (r() - 0.5) * 0.4; this.burst = 1;
+        } else if (x < 0.85) {     // reposition a little
+          this.station = this.home.clone().add(new THREE.Vector3((r() - 0.5) * 0.05, 0.025 + r() * 0.04, (r() - 0.5) * 0.04));
+          this.mode = 'move'; this.modeT = 2.5; this.burst = 0.7;
+        } else if (x < 0.88) {     // startled: dive into the burrow
+          this.mode = 'dive'; this.modeT = 3 + r() * 3; this.burst = 1;
+        } else this.modeT = 1 + r() * 2;
+        if (this.mode === 'hover') this.modeT = 1.5 + r() * 3;
+      }
+    } else if (this.mode === 'lunge') {
+      goal = this.snap; kp = 60; fold = 0.8; pecAmp = 0.4;
+      wantYaw = Math.atan2(-(this.snap.z - this.p.z), this.snap.x - this.p.x);
+      if (this.modeT < 0) { this.mode = 'return'; this.modeT = 1.2; this.nextFlick = Math.min(this.nextFlick, 0.4); }
+    } else if (this.mode === 'return') {
+      // scull back to the station without turning round (pectorals backing, tail still)
+      goal = this.station; kp = 4; pec = 4.0; pecAmp = 1.3; flare = 0.6;
+      if (this.modeT < 0) { this.mode = 'hover'; this.modeT = 1.5 + r() * 3.5; }
+    } else if (this.mode === 'move') {
+      goal = this.station; kp = 8; fold = 0.4;
+      const d = this.station.clone().sub(this.p); if (d.length() > 0.01) wantYaw = Math.atan2(-d.z, d.x);
+      if (this.modeT < 0 || d.length() < 0.006) { this.mode = 'hover'; this.modeT = 1 + r() * 3; }
+    } else if (this.mode === 'dive') {
+      // head-first down into the burrow (the fish disappears into the rubble), then creeps out
+      goal = this.home.clone().add(new THREE.Vector3(0, -0.02, 0)); kp = 30; fold = 1; wantPitch = -1.2;
+      if (this.p.distanceTo(goal) < 0.01) this.obj.visible = false;
+      if (this.modeT < 0) { this.mode = 'emerge'; this.modeT = 4; this.obj.visible = true; }
+    } else if (this.mode === 'emerge') {
+      goal = this.station; kp = 1.5; wantPitch = 0.5; fold = 0.3 * this.modeT / 4; pec = 2.5;
+      if (this.modeT < 0) { this.mode = 'hover'; this.modeT = 2 + r() * 3; }
     }
-    const to = this.target.clone().sub(this.p);
-    this.v.addScaledVector(to, dt * 3.0).multiplyScalar(Math.exp(-dt * 2.5));
+
+    // flag flicks: quick fold-and-raise, often in runs of 2-4
+    this.nextFlick -= dt;
+    if (this.nextFlick <= 0 && this.mode !== 'dive') { this.flickN = 1 + Math.floor(r() * 3); this.flickT = 0; this.nextFlick = 3 + r() * 7; }
+    if (this.flickN > 0) { this.flickT += dt; const ph = this.flickT / 0.28; fold = Math.max(fold, Math.sin(Math.min(ph, 1) * Math.PI) * 0.9); if (ph >= 1) { this.flickN--; this.flickT = 0; } }
+
+    // dynamics: position servo (thrust from pectorals / tail) with water drag
+    const err = goal.clone().sub(this.p);
+    const acc = err.multiplyScalar(kp).addScaledVector(this.v, -2 * Math.sqrt(kp) * 0.9);
+    if (this.burst > 0) { if (this.burst >= 0.99 || (this.burst >= 0.69 && this.kick <= 0)) this.kick = 1; acc.addScaledVector(f, 0.35 * this.burst); this.burst = Math.max(0, this.burst - dt / 0.22); }
+    this.kick = Math.max(0, this.kick - dt / 0.38);   // visible tail stroke outlasts the thrust
+    this.v.addScaledVector(acc, dt);
     this.p.addScaledVector(this.v, dt);
-    // mostly faces the front glass / current, turns toward the move when darting
-    const sp = this.v.length();
-    const want = sp > 0.02 ? Math.atan2(-this.v.z, this.v.x) : Math.PI * 0.5 + 0.6 * Math.sin(this.t * 0.2);
-    let dy = Math.atan2(Math.sin(want - this.yaw), Math.cos(want - this.yaw));
-    const prev = this.turnRate;
-    this.turnRate += (THREE.MathUtils.clamp(dy * 2.5, -3, 3) - this.turnRate) * Math.min(1, dt * 4);
-    this.yaw += this.turnRate * dt;
+    const floor = this.home.y + 0.012; if (this.mode !== 'dive' && this.p.y < floor) { this.p.y = floor; this.v.y = Math.max(0, this.v.y); }
+
+    // pivoting on the pectorals: quick but damped yaw, no banking of this small fish
+    let dy = Math.atan2(Math.sin(wantYaw - this.yaw), Math.cos(wantYaw - this.yaw));
+    const prevRate = this.yawRate;
+    this.yawRate += (THREE.MathUtils.clamp(dy * 6, -5, 5) - this.yawRate) * Math.min(1, dt * 10);
+    this.yaw += this.yawRate * dt;
+    this.pitch += (wantPitch - this.pitch) * Math.min(1, dt * (this.mode === 'dive' ? 8 : 3));
+
     this.obj.position.copy(this.p);
     this.obj.rotation.set(0, this.yaw, 0);
-    this.obj.rotateZ(THREE.MathUtils.clamp(this.v.y * 4, -0.4, 0.4));
-    this.model.update(dt, this.t, { amp: 0.01 + Math.min(sp / this.scale, 2) * 0.03, freq: 1.2 + sp / this.scale * 1.5, turn: THREE.MathUtils.clamp(-this.turnRate * 0.1, -0.16, 0.16), flick });   // a goby pivots stiffly; big bends made it look stubby
+    this.obj.rotateZ(this.pitch);
+
+    const sp = this.v.length() / S, b = Math.max(this.burst, 0), k = this.kick;
+    const moving = this.mode === 'move' || this.mode === 'dive' || this.mode === 'emerge';
+    this.model.update(dt, this.t, {
+      amp: 0.007 + 0.09 * Math.sin(Math.min(k, 1) * Math.PI) + (moving ? 0.025 * Math.min(sp, 1.5) : 0),   // faint sculling; one or two strong strokes in a burst
+      freq: 1.6 + 3.6 * (k > 0 ? 1 : 0) + (moving ? 1.6 : 0),
+      turn: THREE.MathUtils.clamp(-this.yawRate * 0.05, -0.15, 0.15),
+      pec: pec + (moving ? 0.8 : 0), pecAmp: k > 0.3 ? 0.25 : pecAmp, fold, flare,
+    });
   }
 }
 

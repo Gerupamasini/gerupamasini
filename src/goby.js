@@ -347,18 +347,22 @@ export function createFireGoby() {
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   for (const p of pairs) p.traverse((o) => { o.castShadow = false; });   // thin clear fins: no solid shadow
 
-  let phase = 0, pecPhase = 0, flagT = 0;
-  function update(dt, t, { amp = 0.02, freq = 1.0, turn = 0, flick = 0 } = {}) {
+  // controls: amp/freq = tail beat (only strong in bursts), pec = pectoral beats/s (fire gobies
+  // fan them constantly while hovering), pecAmp, fold = flag laid back (0 erect .. 1 folded),
+  // flare = pelvic rays spread (braking / settling)
+  let phase = 0, pecPhase = 0, fold = 0;
+  function update(dt, t, { amp = 0.006, freq = 2.0, turn = 0, pec = 3.2, pecAmp = 1, fold: foldT = 0, flare = 0 } = {}) {
     phase += dt * freq * Math.PI * 2;
-    pecPhase += dt * Math.PI * 2 * 1.4;
+    pecPhase += dt * Math.PI * 2 * pec;
     uniforms.uPhase.value = phase; uniforms.uAmp.value = amp; uniforms.uTurn.value = turn;
-    // the flag is raised and lowered in little flicks (signalling)
-    flagT = Math.max(0, flagT - dt * 2.5); if (flick) flagT = 1;
-    flagPivot.rotation.z = -0.35 * flagT * (0.5 + 0.5 * Math.sin(t * 16));
+    fold += (foldT - fold) * Math.min(1, dt * (foldT > fold ? 22 : 9));   // folds fast, raises a little slower
+    flagPivot.rotation.z = 0.95 * fold;   // lays the flag back along the dorsal profile
     for (const p of pairs) {
       const { side, kind } = p.userData;
-      if (kind === 'pec') { const f = Math.sin(pecPhase + (side > 0 ? 0 : 0.5)); p.rotation.set(side * (-0.2 + 0.35 * f), side * (0.3 + 0.3 * f), -0.2); }
-      else p.rotation.set(side * (0.08 + 0.02 * Math.sin(t * 0.8)), side * 0.05, 0.3 + 0.05 * Math.sin(t * 0.6));
+      if (kind === 'pec') {
+        const f = Math.sin(pecPhase + (side > 0 ? 0 : 0.6)) * pecAmp;   // left and right slightly out of phase
+        p.rotation.set(side * (-0.2 + 0.3 * f), side * (0.35 + 0.28 * f), -0.2 + 0.05 * f);
+      } else p.rotation.set(side * (0.08 + 0.1 * flare + 0.02 * Math.sin(t * 0.8)), side * (0.05 + 0.08 * flare), 0.3 - 0.15 * flare + 0.04 * Math.sin(t * 0.6));
     }
   }
   return { group, update, uniforms };

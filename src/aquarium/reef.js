@@ -583,7 +583,7 @@ export function createReef() {
       c = mix(c, vec3(0.78, 0.74, 0.6), 1.0 - smoothstep(0.05, 0.14, r));
       diffuseColor.rgb *= c; }`,
     normal: /* glsl */`{ float a = atan(vObjP.z, vObjP.x); normal = bumpN(normal, -vViewPosition, sin(a * 90.0) * 0.5 * (1.0 - smoothstep(0.4, 1.2, fwidth(a * 90.0))), 0.0012); }` });
-  [[0.1, 0.16], [0.13, 0.19], [0.07, 0.2], [-0.25, 0.15]].forEach(([x, z], i) => {
+  [[-0.05, 0.13], [0.36, 0.2], [-0.32, 0.21], [-0.38, 0.12]].forEach(([x, z], i) => {   // clear of the goby burrows and the conches
     const m = new THREE.Mesh(mush, mushMat); m.position.set(x, sandHeight(x, z) + 0.001, z); m.rotation.set(0.12 * Math.sin(x * 50), i * 1.3, 0.12 * Math.cos(z * 40)); group.add(m);
   });
   group.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; } });

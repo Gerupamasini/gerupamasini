@@ -27,6 +27,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createButterflyfish, loadPattern, loadPhoto } from './src/fish.js';
 import { createFireGoby, loadGobyPhoto } from './src/goby.js';
 import { createStrawberryConch } from './src/conch.js';
+import { HoveringGoby } from './src/aquarium/school.js';
 
 const Q = new URLSearchParams(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -77,6 +78,29 @@ controls.update();
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
 });
+if (Q.has('film') && species === 'goby') {
+  // behaviour filmstrip: run the tank behaviour and lay N frames side by side (fixed side camera)
+  scene.remove(fish.group);
+  const beh = new HoveringGoby(fish, { home: new THREE.Vector3(0, -0.04, 0), seed: +(Q.get('seed') || 11), scale: 0.075 });
+  scene.add(beh.obj);
+  beh.face = 0; beh.yaw = 0;
+  if (Q.has('tl')) { let last = ''; for (let i = 0; i < 60 * 60; i++) { beh.update(1 / 60); if (beh.mode !== last) { console.log('tl', (i / 60).toFixed(2), beh.mode); last = beh.mode; } } }
+  for (let i = 0; i < Math.round(+(Q.get('t0') || 0) * 60); i++) beh.update(1 / 60);
+  console.log('film', beh.mode, beh.p.toArray(), beh.obj.visible, beh.obj.children.length);
+  const N = +(Q.get('film')), dtF = +(Q.get('dt') || 0.1), cols = Math.min(N, 4), rows = Math.ceil(N / cols);
+  const W = innerWidth / cols, H = innerHeight / rows;
+  renderer.setScissorTest(true);
+  for (let k = 0; k < N; k++) {
+    const x = (k % cols) * W, y = innerHeight - (Math.floor(k / cols) + 1) * H;
+    if (Q.has('top')) { camera.position.set(beh.home.x + 0.01, beh.home.y + 0.35, 0.001); } else camera.position.set(beh.home.x + 0.01, beh.home.y + 0.05, 0.32); camera.aspect = W / H; camera.fov = 30; camera.updateProjectionMatrix(); controls.enabled = false;
+    camera.lookAt(beh.home.x + 0.01, beh.home.y + 0.04, 0);
+    renderer.setViewport(x, y, W, H); renderer.setScissor(x, y, W, H); renderer.render(scene, camera);
+    for (let i = 0; i < Math.round(dtF * 60); i++) beh.update(1 / 60);
+  }
+  renderer.setScissorTest(false);
+  window.__ready = true;
+  await new Promise(() => {});
+}
 if (Q.has('dump')) {   // show a baked texture full screen
   const t = fish.textures[Q.get('dump')];
   scene.clear(); scene.background = new THREE.Color(0x404040);
