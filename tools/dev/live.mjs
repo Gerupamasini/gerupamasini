@@ -16,7 +16,7 @@ await p.waitForTimeout(t / 3);
 await p.keyboard.press('t');
 await p.waitForTimeout(t / 3);
 const hud = await p.evaluate(() => document.getElementById('hud')?.textContent);
-await p.screenshot({ path: out });
 console.log('HUD:\n' + hud);
 console.log(logs.filter((l) => !/Mismatch between texture format|404|KHR_parallel/.test(l)).slice(0, 30).join('\n'));
+await p.screenshot({ path: out, timeout: 240000 });
 await b.close();

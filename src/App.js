@@ -176,7 +176,11 @@ export class App {
       tail: [-0.9 * SL, 0.0, SL * 1.6],
       below: [0, -d, 0.001],
     };
-    const pos = views[v] || views.side;
+    const pos = (views[v] || views.side).slice();
+    if (v === 'head' || v === 'dorsal' || v === 'tail') {
+      const z = Number(this.opts.params.get('zoom') || 1);
+      for (let i = 0; i < 3; i++) pos[i] *= z;
+    }
     if (v === 'head') c.set(0.25 * SL, 0, 0);
     if (v === 'dorsal') c.set(-0.2 * SL, 0.3 * SL, 0);
     if (v === 'tail') c.set(-0.95 * SL, 0, 0);

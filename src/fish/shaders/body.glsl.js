@@ -220,7 +220,7 @@ void computeFishSurface() {
   vec2 foc = q - vec2(-0.25, 0.0);
   float rf = length(foc * vec2(1.0, 1.25));
   float fineFade = 1.0 - smoothstep(0.03, 0.09, max(fw.x, fw.y));
-  grad += normalize(foc + 1e-5) * sin(rf * 70.0) * 0.03 * fineFade;
+  grad += normalize(foc + 1e-5) * sin(rf * 70.0) * 0.014 * fineFade;
   // radii: radial grooves in the exposed posterior field
   float ang = atan(foc.y, foc.x);
   grad += vec2(-sin(ang), cos(ang)) * spow(abs(sin(ang * 4.0 + rnd.z * 6.28)), 24.0) * 0.05 * step(0.0, foc.x) * fineFade;
@@ -287,7 +287,7 @@ void computeFishSurface() {
     vec3 hp = rp * 180.0;
     float mn = vnoise3(hp) - 0.5;
     float mn2 = vnoise3(hp * 2.7 + 3.1) - 0.5;
-    nT = normalize(nT + vec3(mn, mn2, 0.0) * 0.12 * headSkin);
+    nT = normalize(nT + vec3(mn, mn2, 0.0) * 0.07 * headSkin);
     col *= 1.0 + (vnoise3(rp * 55.0 + seed) - 0.5) * 0.12 * headSkin;
   }
   // ventral xanthophore wash behind the pectorals (yellowish belly in sarasa)
