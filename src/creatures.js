@@ -1216,7 +1216,7 @@ export class Ecosystem {
       this.yamaShared = {
         leg: spk(0.5, [0x7a5c34, 0x9c7a46, 0x34261a, 0xc49a5c], [150, 0.4, 0, 0], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.25 }),
         legDact: spk(0.55, [0x9a7442, 0xbc9254, 0x3a2616, 0xd0a868], [150, 0.4, 1, L.dact], { key: 'yamaLeg', glsl: GLSL.yamaLeg, roughness: 0.5, clearcoat: 0.45, clearcoatRoughness: 0.22 }),
-        arm: spk(0.9, [0x4a3a2a, 0x604c36, 0x241a12, 0xa89070], [120, 0.6, 0, 0]),
+        arm: spk(0.9, [0x2e241a, 0x44362a, 0x16100c, 0x8a7458], [120, 0.6, 0, 0]),
         stalk: spk(0.2, [0x8a7458, 0xa88e6c, 0x4a3a28, 0xc0a888], [220, 0.3, 0, 0], { clearcoat: 0.5, clearcoatRoughness: 0.2 }),
         // 雄の掌：灰緑色（写真4）と淡黄色（写真3）の個体差
         clawA: chela(0.4, [0xeee0c0, 0xd6ccb0, 0x5a3418], [0.72, 0, 0, 0]),
@@ -1234,7 +1234,7 @@ export class Ecosystem {
       key: 'yamaShell3', glsl: GLSL.yamatoShell, seed,
       colors: [0x6e5a3a, 0x8e744c, 0xb49870, 0x7a6448],
       P: [CRAB_SPECS.yamato.l, CRAB_SPECS.yamato.w, CRAB_SPECS.yamato.h, 0],
-      roughness: 0.52, clearcoat: 0.45, clearcoatRoughness: 0.28,
+      roughness: 0.42, clearcoat: 0.8, clearcoatRoughness: 0.1,
     });
     const B = seed > 0.5;
     return { shell, leg: sh.leg, legDact: sh.legDact, claw: B ? sh.clawB : sh.clawA, dact: B ? sh.dactB : sh.dactA, clawF: sh.clawF, dactF: sh.dactF, arm: sh.arm, mouth: sh.mouth, stalk: sh.stalk, setae: sh.setae, cornea: this.yamaCornea || (this.yamaCornea = organicMaterial({ key: 'cornea', glsl: GLSL.cornea, colors: [0xa8a296, 0x2e2c28], roughness: 0.45, clearcoat: 0.5, clearcoatRoughness: 0.25 })) };
