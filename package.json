@@ -1,0 +1,23 @@
+{
+  "name": "shirataebi",
+  "version": "1.0.0",
+  "description": "Exopalaemon orientis — anatomically-based real-time shrimp for Three.js",
+  "scripts": {
+    "start": "npx http-server -c-1 -p 8080 ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gerupamasini/gerupamasini.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Gerupamasini/gerupamasini/issues"
+  },
+  "homepage": "https://github.com/Gerupamasini/gerupamasini#readme",
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "type": "module"
+}
