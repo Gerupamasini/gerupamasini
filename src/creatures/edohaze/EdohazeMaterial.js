@@ -197,9 +197,14 @@ export class EdohazeMaterialSet {
       uPale: { value: 0 },
       uDarken: { value: 0 },
     };
-    const maps = getSkinMaps(variantSeed, sex, slMm);
+    const maps = getSkinMaps(variantSeed, slMm);
     this.maps = maps;
     this.body = [0, 1, 2].map((l) => createBodyMaterial(maps, l, this.perFish));
+    maps.onUpgrade((m) => this.body.forEach((mat, l) => {
+      mat.map = m.map; mat.roughnessMap = m.ormMap;
+      if (mat.normalMap) mat.normalMap = m.normalMap;
+      if (mat.iridescenceMap) mat.iridescenceMap = m.ormMap;
+    }));
     this.eye = createEyeMaterials(seed);
     Object.assign(this, createMouthMaterials());
     this.fins = [[], [], []];

@@ -13,16 +13,53 @@ import { Simplex3, mulberry32, smoothstep, clamp, lerp, gauss } from './EdohazeM
 // whitish belly, NO mid-body black bar (Chikuzen-haze trait), low contrast overall.
 
 const cache = new Map();
+export const SKIN_HI = { W: 1024, H: 384 };
+const SKIN_LO = { W: 256, H: 96 };
 
-export function getSkinMaps(variantSeed, sex = 1, slMm = 37, W = 1024, H = 384) {
-  const key = `${variantSeed}|${sex}|${W}`;
+/**
+ * Returns shared skin maps for a pigment variant. A low-resolution set is built
+ * synchronously (~0.1 s); the full-resolution set (1024×384, scales resolved at
+ * ~0.04 mm/texel) is generated in a Web Worker and swapped in when ready, so the
+ * main thread never stalls. `maps.onUpgrade(cb)` notifies materials.
+ */
+export function getSkinMaps(variantSeed, slMm = 37) {
+  const key = `${variantSeed}`;
   if (cache.has(key)) return cache.get(key);
-  const maps = generate(variantSeed, sex, slMm, W, H);
+  const d = generateData(variantSeed, slMm, SKIN_LO.W, SKIN_LO.H);
+  const maps = wrap(d, SKIN_LO.W, SKIN_LO.H);
+  maps.listeners = []; maps.onUpgrade = (cb) => maps.listeners.push(cb);
   cache.set(key, maps);
+  requestHiRes(variantSeed, slMm, maps);
   return maps;
 }
 
-function generate(seed, sex, slMm, W, H) {
+function requestHiRes(variantSeed, slMm, maps) {
+  if (typeof Worker === 'undefined') return;
+  try {
+    const w = new Worker(new URL('./EdohazeTextureWorker.js', import.meta.url), { type: 'module' });
+    w.onmessage = (e) => {
+      const hi = wrap(e.data, SKIN_HI.W, SKIN_HI.H);
+      for (const k of ['map', 'normalMap', 'ormMap']) { const old = maps[k]; maps[k] = hi[k]; old.dispose(); }
+      maps.listeners.forEach((cb) => cb(maps));
+      w.terminate();
+    };
+    w.postMessage({ seed: variantSeed, slMm, W: SKIN_HI.W, H: SKIN_HI.H });
+  } catch (err) { console.warn('Edohaze: hi-res skin worker unavailable', err); }
+}
+
+function wrap(d, W, H) {
+  const mk = (data, srgb) => {
+    const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping;
+    t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+    t.anisotropy = 8; t.needsUpdate = true; return t;
+  };
+  return { map: mk(d.col, true), normalMap: mk(d.nrm, false), ormMap: mk(d.orm, false) };
+}
+
+export function generateData(seed, slMm, W, H) {
+  const sex = 1;
   const rnd = mulberry32(seed * 7919 + 13);
   const nz = new Simplex3(seed + 101);
   const nz2 = new Simplex3(seed + 202);
@@ -121,7 +158,7 @@ function generate(seed, sex, slMm, W, H) {
       const mott = 1 + 0.10 * lf * (0.4 + 0.6 * tD);
       // melanophores: jittered cellular dots ~0.3 mm, stellate falloff
       let mel = 0;
-      const md = melDensity * lerp(0.15, 1.0, smoothstep(-0.7, 0.6, dv)) * (s < 0.03 ? 1.2 : 1);
+      const md = melDensity * lerp(0.02, 1.0, smoothstep(-0.45, 0.6, dv)) * (s < 0.03 ? 1.2 : 1); // belly/throat nearly clean
       {
         const cs = 0.22;
         const gx = Math.floor(ax / cs), gy = Math.floor(arc / cs);
@@ -159,8 +196,6 @@ function generate(seed, sex, slMm, W, H) {
       r += (cheekPale + guan * 0.25) * 0.5; g += (cheekPale + guan * 0.25) * 0.5; b += (cheekPale * 0.8 + guan * 0.2) * 0.5;
       // subtle hue individuality
       r *= 1 + hueShift; b *= 1 - hueShift;
-      // sex: males slightly darker/duskier head (weak; unconfirmed breeding colours)
-      if (sex > 1.0) { const k = 1 - 0.06 * head; r *= k; g *= k; b *= k; }
 
       col[i * 4] = toSRGB(r); col[i * 4 + 1] = toSRGB(g); col[i * 4 + 2] = toSRGB(b); col[i * 4 + 3] = 255;
       // ORM-style: R = translucency, G = roughness, B = guanine/iridescence mask
@@ -187,14 +222,7 @@ function generate(seed, sex, slMm, W, H) {
     nrm[i * 4 + 2] = (1 / l * 0.5 + 0.5) * 255;
     nrm[i * 4 + 3] = 255;
   }
-  const mk = (data, srgb) => {
-    const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
-    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping;
-    t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
-    t.anisotropy = 8; t.needsUpdate = true; return t;
-  };
-  return { map: mk(col, true), normalMap: mk(nrm, false), ormMap: mk(orm, false) };
+  return { col, nrm, orm };
 }
 
 const s2l = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
