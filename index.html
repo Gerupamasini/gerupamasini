@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kentish Plover — Tidal Flat Demo</title>
+    <link rel="stylesheet" href="/src/demo/demo.css" />
+  </head>
+  <body>
+    <div id="hud" class="panel hidden"></div>
+    <div id="ui" class="panel">
+      <h1>シロチドリ <span>Charadrius alexandrinus</span></h1>
+      <div class="row"><label>Camera</label>
+        <select id="cam"><option value="bird">Follow selected bird</option><option value="player">Player (3rd person)</option><option value="free">Free orbit</option></select>
+      </div>
+      <div class="row"><label>Time ×</label><input id="timescale" type="range" min="0" max="600" step="10" value="60" /><span id="timescaleV">60</span></div>
+      <div class="row"><label>Tide</label><select id="tide"><option value="auto">Auto (M2 12.42 h)</option><option value="-0.8">Low</option><option value="-0.2">Mid (falling)</option><option value="0.85">High</option></select></div>
+      <div class="row"><label>Birds</label><input id="count" type="number" min="1" max="60" value="14" /><button id="respawn">Respawn</button></div>
+      <div class="row"><label>Animation</label>
+        <select id="anim">
+          <option value="">— AI controlled —</option>
+          <option value="idle">01 Idle</option>
+          <option value="walk">02 Walk</option>
+          <option value="run">03 Run</option>
+          <option value="stop">04 Stop / Observe</option>
+          <option value="forage">05 Forage search</option>
+          <option value="peck">06 Peck (worm)</option>
+          <option value="peckCrab">06 Peck (crab)</option>
+          <option value="preen:breast">07 Preen: breast</option>
+          <option value="preen:flank">07 Preen: flank/under-wing</option>
+          <option value="preen:scapulars">07 Preen: scapulars/back</option>
+          <option value="preen:wing">07 Preen: wing</option>
+          <option value="preen:tail">07 Preen: tail/oil gland</option>
+          <option value="scratch">07 Head scratch (indirect)</option>
+          <option value="wingStretch">07 Wing stretch</option>
+          <option value="shake">07 Body shake</option>
+          <option value="restOneLeg">08 Rest: one leg</option>
+          <option value="restTucked">08 Rest: bill tucked</option>
+          <option value="sit">08 Rest: sitting</option>
+          <option value="alert">09 Alert</option>
+          <option value="footTremble">05 Foot-trembling</option>
+          <option value="fly">10–12 Take-off → Flight → Landing</option>
+        </select>
+      </div>
+      <div class="row"><label>Debug</label><input id="debug" type="checkbox" checked /> <small>H: HUD · click: select bird · WASD/Shift: walk/run</small></div>
+      <div id="status"></div>
+    </div>
+    <div id="loading">Generating plover geometry…</div>
+    <script type="module" src="/src/demo/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+strip_peck: saved 
+  [error] Failed to load resource: the server responded with a status of 404 (Not Found)
+strip_preen_scap: saved 
+strip_preen_wing: saved 
+strip_scratch: saved 
+strip_wingstretch: saved 
+strip_rest: saved 
+strip_resttuck: saved 
+strip_sit: saved 
+strip_alert: saved 
+strip_flight: saved 
+strip_takeoff: saved 
+strip_landing: saved 

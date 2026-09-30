@@ -163,7 +163,9 @@ export const animation = {
   saccadeInterval: { idle: [0.5, 1.8], scan: [0.25, 0.9], alert: [1.2, 3.0] },
   saccadeDuration: 0.075,
   walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.0 },
-  run: { speed: 1.3, maxSpeed: 2.0, strideHz: 7.0, duty: 0.45, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.14 },
+  run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.14 },
+  gaitCentreOffset: mm(7), // mid-stance foot position lies under the centre of mass, ahead of the hip (D)
+  heelLift: { walk: mm(4), run: mm(6) }, // late-stance heel-off (MTP joint rises, toes stay down)
   stopDecel: 12,
   accel: 9,
   headStabilization: 0.8,
@@ -186,8 +188,9 @@ export const disturbance = {
   walkAwayDistance: 35,
   runAwayDistance: 22,
   flightInitiationDistance: 14,
-  persistSeconds: 6, // continued approach inside walk-away zone triggers flight
-  seasonScale: { breeding: 1.8, wintering: 1.0 },
+  persistSeconds: 9, // continued approach inside the walk-away zone eventually triggers flight
+  // S11: ~80 m for nesting birds vs ~40 m for non-breeding flocks → multiplier by behavioural context
+  contextScale: { nesting: 1.8, foraging: 1.0 },
   threatTypes: {
     human: { distanceScale: 1.0, flyBias: 0.0 },
     dog: { distanceScale: 1.6, flyBias: 0.5 },
@@ -212,13 +215,14 @@ export const social = {
 };
 
 export const foraging = {
-  scanDuration: [0.4, 2.5],
+  scanDuration: [0.8, 3.5],
   giveUpHazard: 0.9, // per second while scanning without detection
   movingDetectionFactor: 0.15,
   relocateDistance: [0.3, 1.5],
   relocateTurn: 1.2, // max turn (rad)
   walkToPreyMax: 0.35, // beyond this, run to prey
   detectionRange: 2.2,
+  lookLatency: 0.3, // s after stopping before prey can be detected (D)
   footTrembleHazard: 0.08,
   sandpiperModeDensity: 0.8, // plasticity S13: very high prey density → short walking search
   maxPecksPerMinute: 25, // S18
@@ -249,7 +253,7 @@ export const individualVariation = {
 
 export const lod = {
   distances: [2.5, 9, 30], // LOD0 < 2.5 m < LOD1 < 9 m < LOD2 < 30 m < LOD3
-  sdfResolution: [0.85, 1.8, 3.4], // mm voxel per LOD0..2
+  sdfResolution: [1.15, 2.6, 4.6], // mm voxel per LOD0..2 (≈24k / 5k / 1.5k body tris)
   aiRate: [20, 20, 8, 3], // Hz per LOD
   animRate: [60, 60, 30, 15],
 };

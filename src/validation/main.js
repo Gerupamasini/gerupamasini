@@ -78,7 +78,29 @@ function ortho(w, h, span) {
 }
 
 const views = [];
+function stripLayout() {
+  // contact sheet: N frames of one action (side view, identical scale), row 2 = 3/4 view
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const n = Number(q.get('frames') ?? 6);
+  const w = Math.floor(W / n);
+  const h = Math.floor(H / 2);
+  for (let i = 0; i < n; i++) {
+    const t = q.has('cyc') ? i / n : n === 1 ? 0 : i / (n - 1);
+    const side = ortho(w, h, Number(q.get('span') ?? 0.1));
+    side.position.set(0.5, 0.05 + Number(q.get('camY') ?? 0), 0.0 + Number(q.get('camZ') ?? 0));
+    side.lookAt(0, 0.05 + Number(q.get('camY') ?? 0), Number(q.get('camZ') ?? 0));
+    side.layers.enable(1);
+    const p = new THREE.PerspectiveCamera(30, w / h, 0.005, 20);
+    const pd = Number(q.get('pd') ?? 0.32);
+    p.position.set(pd * 0.8, pd * 0.45 + Number(q.get('camY') ?? 0), pd * 0.75 + Number(q.get('camZ') ?? 0));
+    p.lookAt(0, 0.045 + Number(q.get('camY') ?? 0), Number(q.get('camZ') ?? 0));
+    views.push({ cam: side, rect: [i * w, 0, w, h], label: `t=${t.toFixed(2)}`, t });
+    views.push({ cam: p, rect: [i * w, h, w, h], label: '', t });
+  }
+}
 function layout() {
+  if (mode === 'strip') return stripLayout();
   const W = window.innerWidth;
   const H = window.innerHeight;
   views.length = 0;
@@ -132,12 +154,27 @@ for (const v of views) {
   d.textContent = v.label;
   document.body.appendChild(d);
 }
-await setupPose();
+if (mode !== 'strip') await setupPose();
 const hide = (q.get('hide') || '').split(',').filter(Boolean);
 bird.object.traverse((o) => {
   if (o.isMesh && hide.some((h) => o.name.startsWith(h))) o.visible = false;
 });
 bird.object.updateMatrixWorld(true);
-render();
-render();
+if (mode === 'strip') {
+  const mod = await import('../birds/kentishPlover/KentishPloverAnimator.js');
+  const H = window.innerHeight;
+  for (const v of views) {
+    const a = new mod.KentishPloverAnimator(bird, { seed: 3 });
+    a.previewAction(q.get('pose') || 'walk', v.t, q.get('variant') || undefined);
+    bird.object.position.set(0, bird.object.position.y, 0);
+    bird.object.updateMatrixWorld(true);
+    const [x, y, w, h] = v.rect;
+    renderer.setViewport(x, H - y - h, w, h);
+    renderer.setScissor(x, H - y - h, w, h);
+    renderer.render(scene, v.cam);
+  }
+} else {
+  render();
+  render();
+}
 window.__ready = true;

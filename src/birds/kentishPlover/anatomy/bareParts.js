@@ -31,20 +31,34 @@ class Skinned {
     }
   }
   /** Loft rings (each ring = array of {p, n, uv}) into a tube; `cap` closes the ends. */
-  loft(rings, part, bonesPerRing, { capStart = false, capEnd = false } = {}) {
+  loft(rings, part, bonesPerRing, { capStart = false, capEnd = false, flip = false } = {}) {
     const start = this.count;
     const seg = rings[0].length;
     rings.forEach((ring, i) => ring.forEach((q) => this.v(q.p, q.n, q.uv, q.part ?? part, bonesPerRing[i])));
+    // auto-orient: make triangle winding agree with the analytic outward normals (robust to mirrored builds)
+    {
+      const mid = Math.min(rings.length - 2, Math.floor(rings.length / 2));
+      const s0 = Math.floor(seg / 4);
+      const P = (ri, si) => rings[ri][si % seg].p;
+      const a0 = P(mid, s0);
+      const c0 = P(mid + 1, s0);
+      const b0 = P(mid, s0 + 1);
+      const gn = cross(sub(c0, a0), sub(b0, a0));
+      const an = rings[mid][s0].n;
+      if (gn[0] * an[0] + gn[1] * an[1] + gn[2] * an[2] < 0) flip = !flip;
+    }
     for (let i = 0; i < rings.length - 1; i++) {
       for (let s = 0; s < seg; s++) {
         const a = start + i * seg + s;
         const b = start + i * seg + ((s + 1) % seg);
         const c = a + seg;
         const d = b + seg;
-        this.index.push(a, c, b, b, c, d);
+        if (flip) this.index.push(a, b, c, b, d, c);
+        else this.index.push(a, c, b, b, c, d);
       }
     }
-    const cap = (ri, flip) => {
+    const cap = (ri, capFlip) => {
+      const flip = capFlip;
       const ring = rings[ri];
       const c = ring.reduce((acc, q) => [acc[0] + q.p[0] / seg, acc[1] + q.p[1] / seg, acc[2] + q.p[2] / seg], [0, 0, 0]);
       const ci = this.count;
@@ -53,10 +67,11 @@ class Skinned {
       for (let s = 0; s < seg; s++) {
         const a = start + ri * seg + s;
         const b = start + ri * seg + ((s + 1) % seg);
-        if (flip) this.index.push(ci, a, b);
+        if (flip !== flipAll) this.index.push(ci, a, b);
         else this.index.push(ci, b, a);
       }
     };
+    const flipAll = flip;
     if (capStart) cap(0, true);
     if (capEnd) cap(rings.length - 1, false);
   }
@@ -107,7 +122,7 @@ export function buildBill(sk, boneIndex, J, opts = {}) {
   const base = [0, 77.6, 57.0]; // hidden ~4.5 mm inside the lores feathering (feather line z≈61.8)
   const tip = [0, 75.7, 77.8]; // exposed culmen 16 mm (S2, S3)
   const axis = norm(sub(tip, base));
-  const up = norm(cross(cross(axis, [0, 1, 0]), axis)).map((v) => -v);
+  const up = norm(cross(cross(axis, [0, 1, 0]), axis)); // world-up-ish, perpendicular to the bill axis
   const side = norm(cross(up, axis));
   const Ltot = Math.hypot(...sub(tip, base));
   const head = boneIndex.head;

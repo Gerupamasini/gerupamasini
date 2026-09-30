@@ -1,0 +1,18 @@
+html, body { margin: 0; height: 100%; overflow: hidden; background: #b9c4cc; font: 12px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #1d2227; }
+canvas { display: block; }
+.panel { position: absolute; background: rgba(250, 248, 244, 0.86); border-radius: 8px; padding: 10px 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); backdrop-filter: blur(4px); }
+#ui { top: 12px; left: 12px; width: 300px; }
+#ui h1 { font-size: 14px; margin: 0 0 8px; }
+#ui h1 span { font-weight: normal; font-style: italic; color: #555; font-size: 12px; }
+.row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+.row label { width: 70px; color: #444; }
+.row select, .row input[type=number] { flex: 1; }
+.row input[type=range] { flex: 1; }
+#status { margin-top: 6px; color: #333; white-space: pre; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+#hud { top: 12px; right: 12px; width: 290px; font-family: ui-monospace, Menlo, monospace; font-size: 11px; white-space: pre; }
+.hidden { display: none; }
+#loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #b9c4cc; }
+.bar { display: inline-block; height: 7px; background: #3b6ea5; vertical-align: middle; border-radius: 2px; }
+.bar.fear { background: #c0392b; }
+.bar.hunger { background: #d68910; }
+@media (max-width: 700px) { #ui { width: calc(100% - 48px); } #hud { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; } }

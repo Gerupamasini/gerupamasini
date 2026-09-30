@@ -30,7 +30,7 @@ export function getGeometries(detail) {
     body: buildBodyGeometry(CFG, spec.boneIndex, res),
     feathers: buildFeatherGeometry(spec, spec.boneIndex, sdf, detail),
     bare: buildBareParts(spec.boneIndex, CFG.joints, spec.toes, detail),
-    eyes: detail === 0 ? buildEyes(spec.boneIndex, CFG.joints) : detail === 1 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 6, segR: 14 }) : null,
+    eyes: detail === 0 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 10, segR: 24 }) : detail === 1 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 4, segR: 12 }) : null,
   };
   GEO.set(detail, g);
   return g;
@@ -87,10 +87,13 @@ export class KentishPloverModel {
     if (g.eyes) {
       eyeMats = createEyeMaterials(this.pal);
       meshes.push(this._skinned(g.eyes.eyeball, eyeMats.eyeball, `eyeball${detail}`, false));
-      const c = this._skinned(g.eyes.cornea, eyeMats.cornea, `cornea${detail}`, false);
-      c.renderOrder = 2;
-      meshes.push(c);
-      meshes.push(this._skinned(g.eyes.lids, eyeMats.lids, `lids${detail}`, false));
+      if (detail === 0) {
+        // cornea catch-light and lids/nictitating membrane only where they can be resolved
+        const c = this._skinned(g.eyes.cornea, eyeMats.cornea, `cornea${detail}`, false);
+        c.renderOrder = 2;
+        meshes.push(c);
+        meshes.push(this._skinned(g.eyes.lids, eyeMats.lids, `lids${detail}`, false));
+      }
     }
     this.materials.push(body, feathers, bare);
     return { meshes, body, feathers, bare, eyeMats };

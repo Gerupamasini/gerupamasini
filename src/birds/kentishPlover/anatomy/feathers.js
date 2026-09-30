@@ -219,7 +219,7 @@ function armTube(gb, boneIndex) {
 export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0) {
   const gb = new GeoBuilder();
   const rng = mulberry(detail * 131 + 17);
-  const segs = detail === 0 ? { nL: 9, nW: 3 } : detail === 1 ? { nL: 6, nW: 2 } : { nL: 4, nW: 1 };
+  const segs = detail === 0 ? { nL: 8, nW: 2 } : detail === 1 ? { nL: 5, nW: 1 } : { nL: 4, nW: 1 };
 
   // ---- Left wing (then mirrored) ----
   const wingStart = gb.mark();

@@ -550,6 +550,9 @@ export function createFarMaterial(pal) {
   return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0 });
 }
 
+/** GLSL sources, exported for offline baking (tools/export-glb.mjs → src/validation/exportGLB.js). */
+export const GLSL = { BODY_UNIFORMS_GLSL, BODY_FRAG_FUNCS, FEATHER_FRAG, paletteUniforms };
+
 export function getPalette(name) {
   return PLUMAGE.palettes[name] ?? PLUMAGE.palettes.maleBreeding;
 }

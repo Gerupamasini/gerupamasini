@@ -125,6 +125,7 @@ export class KentishPloverAnimator {
 
     // Wings / flight
     this.flight = { active: false, phase: 0, hz: ANIM.flight.cruiseHz, amp: 0, glide: 0, flap: 0, brake: 0 };
+    this.attitude = { pitch: 0, roll: 0 }; // whole-body attitude in flight (set by the entity)
 
     // Actions
     this.action = null;
@@ -226,13 +227,39 @@ export class KentishPloverAnimator {
       this.update(0);
       return;
     } else if (ACTIONS[name]) {
-      this.play(name, { variant, target: new THREE.Vector3(0, 0, 0.085) });
+      // freeze the action at normalised time t and let the smoothed posture converge on it
+      this.play(name, { variant, target: new THREE.Vector3(0, 0, 0.055), preyType: variant === 'crab' ? 'crab' : 'polychaete' });
+      this.action.t = t * this.action.dur;
+      this._freezeAction = true;
       this._settle(1.2);
-      this.action = { ...this.action, t: t * this.action.dur };
-      this._settle(0);
+      this._freezeAction = false;
       return;
     }
     this._settle(1.5);
+  }
+
+  /** Cheap path for invisible / far birds: advance action timelines and fire their events, no posing. */
+  advance(dt) {
+    this.time += dt;
+    if (this.action) {
+      const a = this.action;
+      a.t += dt;
+      const u = clamp(a.t / a.dur, 0, 1);
+      if (a.def.events) {
+        for (const [name, at] of Object.entries(a.def.events)) {
+          if (u >= at && !a.fired.has(name)) {
+            a.fired.add(name);
+            a.onEvent?.(name);
+          }
+        }
+      }
+      if (u >= 1) {
+        this.action = null;
+        a.onEvent?.('done');
+      }
+    }
+    if (this.flight.active) this.flight.phase = (this.flight.phase + dt * this.flight.hz) % 1;
+    this._initFeet = true;
   }
 
   _settle(seconds) {
@@ -254,6 +281,7 @@ export class KentishPloverAnimator {
     const obj = model.object;
     obj.position.copy(this.rootPos);
     obj.quaternion.setFromAxisAngle(Y, this.heading);
+    if (this.attitude.pitch || this.attitude.roll) obj.quaternion.multiply(qAxis(X, this.attitude.pitch, _q)).multiply(qAxis(Z, this.attitude.roll, _q2));
     obj.updateMatrixWorld(false);
 
     // acceleration → lean (plovers pitch forward when accelerating, rock back on stopping)
@@ -397,7 +425,7 @@ export class KentishPloverAnimator {
     const s = this.stride;
     for (const f of this.feet) {
       // rest (neutral) foot position under the hip in world space
-      const rest = _v.set(J.foot[0] * mm * f.sign, 0, J.foot[2] * mm).applyQuaternion(obj.quaternion).add(this.rootPos);
+      const rest = _v.set(J.foot[0] * mm * f.sign, 0, J.foot[2] * mm + ANIM.gaitCentreOffset * this.stride.amount).applyQuaternion(obj.quaternion).add(this.rootPos);
       rest.y = ground(rest.x, rest.z);
       if (this._initFeet || !f.initialised) {
         f.planted.copy(rest);
@@ -438,8 +466,10 @@ export class KentishPloverAnimator {
             f.wasSwing = false;
           }
           f.pos.copy(f.planted);
+          f.stance = ph / s.duty;
         }
       } else {
+        f.stance = 0;
         // standing: settle any airborne foot; take a corrective step if the body drifted/turned
         if (f.wasSwing) {
           f.planted.copy(f.to);
@@ -468,6 +498,7 @@ export class KentishPloverAnimator {
         } else f.pos.copy(f.planted);
       }
       f.swing = swing;
+      if (swing > 0) f.stance = 0;
       // raised leg (one-legged rest, scratching, foot trembling)
       const raiseTarget = (this.p.oneLeg > 0 && f.side === 'R' ? this.p.oneLeg : 0) + (act?.legRaise?.[f.side] ?? 0);
       f.raise = raiseTarget;
@@ -497,17 +528,29 @@ export class KentishPloverAnimator {
     const foot = b[`foot_${s}`];
     const bodyQ = b.body.getWorldQuaternion(_q2);
     // femur swings slightly with the stride (thigh mostly fixed in birds, knee drives — S24)
-    const swingPh = this.stride.amount * Math.sin(((this.stride.clock + f.phaseOffset) % 1) * 2 * Math.PI);
-    femur.quaternion.multiply(qAxis(X, -swingPh * 0.14 - this.p.sit * 0.6 - f.raise * 0.5, _q));
+    // femur: protracted (knee forward, negative X-rotation) at touchdown, retracts through stance
+    // (knee moves back/down), swings forward again in swing. Larger arcs when running.
+    const st = f.stance ?? 0;
+    const runMixF = clamp((this.velocity.length() - ANIM.walk.speed) / (ANIM.run.speed - ANIM.walk.speed), 0, 1);
+    const pro = lerp(0.16, 0.32, runMixF);
+    const ret = lerp(0.1, 0.22, runMixF);
+    const femurSwing = this.stride.amount * (f.swing > 0 ? lerp(ret, -pro, easeInOut(f.swing)) : lerp(-pro, ret, st));
+    // hip extension compensates body pitch so the knee stays over the feet (the body pivots over the legs)
+    const hipComp = -(this.p.pitch + this.lean) * 0.8;
+    femur.quaternion.multiply(qAxis(X, femurSwing + hipComp - this.p.sit * 0.6 - f.raise * 0.5, _q));
     femur.updateMatrixWorld(true);
     const knee = tib.getWorldPosition(new THREE.Vector3());
 
     let target = new THREE.Vector3().copy(f.pos);
     target.y += J.foot[1] * mm; // joint above the sole
+    // heel-off: in late stance the MTP joint rises while the toe tips stay planted
+    const runMix = clamp((this.velocity.length() - ANIM.walk.speed) / (ANIM.run.speed - ANIM.walk.speed), 0, 1);
+    const heel = this.stride.amount * smoothstep(0.55, 1.0, st) * lerp(ANIM.heelLift.walk, ANIM.heelLift.run, runMix);
+    target.y += heel;
     const raise = f.raise;
     if (raise > 0.001) {
       // tuck the foot up under the belly feathers (one-legged rest) or forward for scratching
-      const tuck = new THREE.Vector3(J.foot[0] * mm * f.sign * 0.7, 0.036, 0.004).applyQuaternion(this.model.object.quaternion).add(this.rootPos);
+      const tuck = new THREE.Vector3(J.foot[0] * mm * f.sign * 0.5, 0.041, 0.006).applyQuaternion(this.model.object.quaternion).add(this.rootPos);
       tuck.y += this.p.height;
       if (act?.legRaiseTarget?.[s]) tuck.copy(act.legRaiseTarget[s]);
       target.lerp(tuck, clamp(raise, 0, 1));
@@ -532,7 +575,7 @@ export class KentishPloverAnimator {
     }
     const Dn = D.clone().normalize();
     // pole: backward in body space (the intertarsal joint points caudally), slightly outward
-    const pole = new THREE.Vector3(0.12 * f.sign, 0.1, -1).applyQuaternion(bodyQ);
+    const pole = (raise > 0.3 && act?.legRaiseTarget?.[s] ? new THREE.Vector3(f.sign, -0.25, -0.35) : new THREE.Vector3(0.12 * f.sign, 0.1, -1)).applyQuaternion(bodyQ);
     const bend = pole.sub(Dn.clone().multiplyScalar(pole.dot(Dn))).normalize();
     const cosA = clamp((Lt * Lt + d * d - Lm * Lm) / (2 * Lt * d), -1, 1);
     const a = Math.acos(cosA);
@@ -556,7 +599,9 @@ export class KentishPloverAnimator {
     const yaw = f.yaw;
     const swing = f.swing;
     const curl = Math.max(bump(swing, 0.0, 0.85), raise, this.p.sit * 0.7);
-    const footPitch = -0.35 * bump(swing, 0, 0.35) + 0.25 * bump(swing, 0.55, 1.0) + raise * 0.9;
+    // heel-off pitches the foot toes-down (angle keeps the toe tips on the ground)
+    const heelPitch = Math.asin(clamp(heel / 0.014, 0, 0.9));
+    const footPitch = -0.35 * bump(swing, 0, 0.35) + 0.25 * bump(swing, 0.55, 1.0) + raise * 0.9 + heelPitch;
     const qFootW = qAxis(Y, yaw, new THREE.Quaternion()).multiply(qAxis(X, footPitch, _q));
     foot.quaternion.copy(qTarW.clone().invert().multiply(qFootW));
     // toes: flex during swing (grasp-like curl), splay at touchdown, conform when planted
@@ -580,10 +625,11 @@ export class KentishPloverAnimator {
     const b = this.b;
     const tuck = 1 - (act?.legsDown ?? 0);
     for (const s of ['L', 'R']) {
-      b[`femur_${s}`].quaternion.multiply(qAxis(X, -0.55 * tuck, _q));
-      b[`tibio_${s}`].quaternion.multiply(qAxis(X, -0.25 * tuck - (1 - tuck) * 0.2, _q));
-      b[`tarso_${s}`].quaternion.multiply(qAxis(X, -1.35 * tuck + (1 - tuck) * 0.4, _q));
-      b[`foot_${s}`].quaternion.multiply(qAxis(X, 0.5 * tuck, _q));
+      // tuck: tibiotarsus pressed back along the belly, tarsus and toes trailing under the tail (C)
+      b[`femur_${s}`].quaternion.multiply(qAxis(X, 0.05 * tuck - (1 - tuck) * 0.35, _q));
+      b[`tibio_${s}`].quaternion.multiply(qAxis(X, 0.45 * tuck - (1 - tuck) * 0.1, _q));
+      b[`tarso_${s}`].quaternion.multiply(qAxis(X, 1.05 * tuck - (1 - tuck) * 0.5, _q));
+      b[`foot_${s}`].quaternion.multiply(qAxis(X, 0.35 * tuck, _q));
       for (const key of ['inner', 'mid', 'outer'])
         for (let i = 0; i < 3; i++) {
           const t = b[`toe_${key}${i}_${s}`];
@@ -764,14 +810,23 @@ export class KentishPloverAnimator {
     const rootQ = obj.quaternion;
     // 1) desired head orientation (world)
     let headQ;
-    if (act?.headQ) headQ = act.headQ;
+    let tuckPos = null;
+    if (!act?.headQ && this.posture === 'restTucked') {
+      // bill tucked into the scapulars: head rotated ~160° and resting on the mantle (sleep posture)
+      const side = this._tuckSide ?? (this._tuckSide = this.rng() < 0.5 ? 1 : -1);
+      const onBack = this.bodyPoint([side * 7, 74, 6]);
+      const dir = this.bodyPoint([side * 11, 69, -12]).sub(onBack).normalize();
+      headQ = this.billQuat(dir, side * 0.5);
+      tuckPos = onBack.clone().sub(BILL_FROM_HEAD.clone().multiplyScalar(0.45).applyQuaternion(headQ));
+    } else if (act?.headQ) headQ = act.headQ;
     else {
       const g = this.gaze;
       headQ = new THREE.Quaternion().copy(rootQ).multiply(qAxis(Y, g.yaw, _q)).multiply(qAxis(X, g.pitch + (act?.headPitchAdd ?? 0), _q)).multiply(qAxis(Z, g.roll, _q));
     }
     // 2) desired head pivot position (world). Default: relative to the ROOT (not the bobbing body) → head stabilisation.
     let headPos;
-    if (act?.billTarget) {
+    if (tuckPos) headPos = tuckPos;
+    else if (act?.billTarget) {
       headPos = act.billTarget.clone().sub(BILL_FROM_HEAD.clone().applyQuaternion(headQ));
     } else if (act?.headPos) headPos = act.headPos;
     else {
@@ -814,7 +869,7 @@ export class KentishPloverAnimator {
       const n0w = b.neck0.getWorldQuaternion(new THREE.Quaternion());
       const parentQ = b.chest.getWorldQuaternion(new THREE.Quaternion());
       b.neck0.quaternion.copy(parentQ.invert().multiply(aim.multiply(n0w)));
-      stretch = clamp((stretch * des.length()) / Math.max(1e-5, cur.length()), 0.62, 2.6);
+      stretch = clamp((stretch * des.length()) / Math.max(1e-5, cur.length()), 0.62, 2.0);
     }
     b.neck1.position.copy(b.neck1.userData.bindLocalPos).multiplyScalar(stretch);
     b.neck2.position.copy(b.neck2.userData.bindLocalPos).multiplyScalar(stretch);
@@ -853,7 +908,7 @@ export class KentishPloverAnimator {
   // ------------------------------------------------------------ actions
   _runAction(dt) {
     const a = this.action;
-    a.t += dt;
+    if (!this._freezeAction) a.t += dt;
     const u = clamp(a.t / a.dur, 0, 1);
     const out = a.def.pose(u, a.params, this, a) || {};
     if (a.def.events) {
@@ -864,7 +919,7 @@ export class KentishPloverAnimator {
         }
       }
     }
-    if (u >= 1 && !a.def.loop) {
+    if (u >= 1 && !a.def.loop && !this._freezeAction) {
       const cb = a.onEvent;
       this.action = null;
       cb?.('done');
@@ -943,7 +998,13 @@ export const ACTIONS = {
       const toT = target.clone().sub(root);
       const dist = Math.hypot(toT.x, toT.z);
       const yawW = Math.atan2(toT.x, toT.z);
-      const out = { posture: { pitch: 0.55 + clamp(0.09 - dist, -0.05, 0.08) * 3, height: -0.006, neck: -0.2 }, fast: { pitch: 16, height: 14 } };
+      // plovers pick by tipping the whole body forward over the legs; tilt builds up through aim → strike
+      const maxPitch = 0.9 + clamp(0.055 - dist, -0.04, 0.04) * 4;
+      const aimK = smoothstep(0, 0.22, u);
+      const strikeK = smoothstep(0.2, 0.3, u);
+      const recK = smoothstep(0.6, 1.0, u);
+      const tilt = maxPitch * (0.55 * aimK + 0.45 * strikeK) * (1 - 0.85 * recK);
+      const out = { posture: { pitch: tilt, height: -0.009 * (0.5 * aimK + 0.5 * strikeK) * (1 - recK), neck: -0.2 }, fast: { pitch: 18, height: 14 } };
       const dir = new THREE.Vector3(Math.sin(yawW) * 0.25, -1, Math.cos(yawW) * 0.25);
       const aimU = 0.22;
       const strikeU = 0.3;
@@ -975,7 +1036,6 @@ export const ACTIONS = {
         const k = easeInOut((u - recoverStart) / (1 - recoverStart));
         billT = deep.clone().add(new THREE.Vector3(0, 0.01, 0)).lerp(A.rootToWorld(0, 0.078, 0.07), k);
         out.jaw = u < recoverStart + 0.15 ? 0.1 : 0; // swallow
-        out.posture.pitch = lerp(out.posture.pitch, 0.15, k);
       }
       out.billTarget = billT;
       const roll = type === 'crab' && u > strikeU && u < recoverStart ? Math.sin(u * 40) * 0.3 : 0;
@@ -1027,7 +1087,7 @@ export const ACTIONS = {
       const out = {
         legRaise: { [side]: k },
         legRaiseTarget: { [side]: A.bodyPoint([sg * 12, 74 + scr * 1000, 38]) },
-        wing: { [side]: { fold: 1 - 0.25 * k } },
+        wing: { [side]: { fold: 1 - 0.1 * k } },
         posture: { roll: -sg * 0.12 * k, pitch: 0.12 * k, neck: -0.3 },
       };
       out.headQ = new THREE.Quaternion().copy(A.model.object.quaternion).multiply(qAxis(Z, -sg * 0.5 * k, new THREE.Quaternion())).multiply(qAxis(X, 0.35 * k, new THREE.Quaternion()));
