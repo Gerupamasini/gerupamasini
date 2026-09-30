@@ -43,6 +43,7 @@ function materials() {
     statocyst: createTissueMaterial(0x2a2218),
     blue: createTissueMaterial(C.blueSpot, { roughness: 0.3 }),
     egg: createEggMaterial(),
+    setae: new THREE.MeshStandardMaterial({ color: 0xe2e0d6, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6 }),
     flag: new Map(),
   };
   return SHARED;
@@ -145,7 +146,7 @@ export class ShrimpModel {
         const dorsal = smoothstep(0.2, 0.8, yN) * 0.2;
         return {
           joint: t < 0.04 ? 1 - t / 0.04 : 0,
-          pig: 0.38 + dorsal + line * 0.9 + (t > 0.9 ? 0.4 : 0),
+          pig: 0.62 + dorsal + line * 0.9 + (t > 0.9 ? 0.4 : 0),
           thick: 0.25 + 0.35 * smoothstep(-0.9, 0.2, yN),
         };
       },
@@ -402,7 +403,7 @@ export class ShrimpModel {
         const sternum = new THREE.Vector3(P.x * T, (c.v + 0.12 * hb) * T, s * c.w * 0.3 * T);
         const basisLen = 0.022;
         const hipPos = sternum.clone().add(new THREE.Vector3(0, -basisLen * 0.8 * T, s * basisLen * 0.6 * T));
-        const r = P.r * T;
+        const r = P.r * T * 0.75; // slender, glassy pereopods [PHOTO 001, 004]
         const bg = podomere(basisLen * T, r * 1.3, r * 1.05);
         const basis = mesh(bg, S.append, this.ceph, false);
         basis.position.copy(sternum);
@@ -466,8 +467,12 @@ export class ShrimpModel {
         station: (t) => {
           const u = t * (1 + ov + oh) - ov; // <0 = hidden articular part, >1 = overhanging margin
           const uc = clamp01(u);
-          const h = THREE.MathUtils.lerp(s.h0, s.h1, uc) * T;
-          const w = THREE.MathUtils.lerp(s.w0, s.w1, uc) * T;
+          // Continuous body outline: each somite starts at the previous one's posterior size.
+          const h0 = i > 0 ? A[i - 1].h1 : s.h0;
+          const w0 = i > 0 ? A[i - 1].w1 : s.w0;
+          const e = uc * uc * (3 - 2 * uc);
+          const h = THREE.MathUtils.lerp(h0, s.h1, e) * T;
+          const w = THREE.MathUtils.lerp(w0, s.w1, e) * T;
           const hump = s.hump ? 1 + s.hump * Math.sin(Math.PI * uc) : 1;
           // Pleural lobe: ventral margin deepest mid-somite; the s2 pleuron also extends forward.
           const lobe = s.pleuron > 0 ? 0.86 + 0.14 * s.pleuron * Math.sin(Math.PI * clamp01(u * 0.9 + 0.1)) : 1;
@@ -476,12 +481,14 @@ export class ShrimpModel {
           let half = w;
           if (u < 0) {
             const k = -u / ov; // 0 at the joint, 1 at the front of the hidden part
-            top *= 0.93 - 0.1 * k;
-            bottom *= (i === 1 ? 0.97 : 0.9) - 0.12 * k;
-            half *= 0.95 - 0.06 * k;
+            // articular part slides just inside the previous tergite
+            top *= 0.965 - 0.08 * k;
+            bottom *= (i === 1 ? 0.99 : 0.94) - 0.1 * k;
+            half *= 0.97 - 0.05 * k;
           } else if (u > 1) {
-            top *= 1.006;
-            half *= 1.006;
+            // thin posterior tergite margin lying over the next somite
+            top *= 1.012;
+            half *= 1.012;
           }
           return { top, bottom, half, y: 0, contour };
         },
@@ -492,7 +499,7 @@ export class ShrimpModel {
           const ventralLine = smoothstep(-0.8, -0.95, yN) * 0.35;
           return {
             joint: u < 0.02 ? clamp01(-u / ov + 0.5) : 0,
-            pig: 0.42 + 0.2 * smoothstep(0.3, 0.9, yN) + band * 0.75 + ventralLine,
+            pig: 0.7 + 0.25 * smoothstep(0.3, 0.9, yN) + band * 0.7 + ventralLine,
             thick: 0.35 + 0.65 * smoothstep(-0.95, -0.2, yN) * smoothstep(1.02, 0.6, Math.abs(yN) + 0.1),
           };
         },
@@ -565,17 +572,30 @@ export class ShrimpModel {
       for (const r of [1, -1]) {
         const ramus = joint(fork, 0, 0, 0);
         const rl = P.ramus * T * scale * (r > 0 ? 1 : 0.92);
-        // Narrow lanceolate lamella tapering to a point, distal half curving backward.
+        // Lanceolate lamella with a rounded-acute tip, distal half curving backward [PHOTO 003, 017].
+        const shape = (t) => (t < P.ramusMaxAt ? 0.6 + (0.4 * t) / P.ramusMaxAt : Math.sqrt(Math.max(0, 1 - ((t - P.ramusMaxAt) / (1 - P.ramusMaxAt)) ** 1.6)));
         const g = blade({
           len: rl,
-          width: (t) => P.ramusHalf * T * (t < P.ramusMaxAt ? 0.55 + (0.45 * t) / P.ramusMaxAt : Math.pow((1 - t) / (1 - P.ramusMaxAt), 0.8)),
-          thick: () => 0.0009 * T,
-          attrs: () => ({ pig: 0.15, thick: 0.3 }),
+          width: (t) => P.ramusHalf * T * shape(t),
+          thick: (t) => 0.001 * T * (1 - 0.6 * t),
+          attrs: () => ({ pig: 0.2, thick: 0.45 }),
           flat: false,
         });
         bendZ(g, rl, -P.curl, 2);
         const m = mesh(g, S.append, ramus, false);
         m.rotation.z = -Math.PI / 2; // hang down
+        // Plumose setal fringe: a wider, very thin, faint halo around the lamella.
+        const fg = blade({
+          len: rl * 1.04,
+          width: (t) => P.ramusHalf * T * (shape(Math.min(1, t)) + 0.35),
+          thick: () => 0.0002 * T,
+          flat: false,
+          rings: 12,
+          half: 6,
+        });
+        bendZ(fg, rl, -P.curl, 2);
+        const fr = mesh(fg, S.setae, ramus, false);
+        fr.rotation.z = -Math.PI / 2;
         ramus.rotation.z = P.ramusBack - P.restBack;
         ramus.userData.r = r;
         rami.push(ramus);
