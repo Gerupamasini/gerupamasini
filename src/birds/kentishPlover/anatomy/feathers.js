@@ -288,6 +288,17 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
     if (detail >= 2 && (f.type === 'primary' || f.type === 'secondary' || f.type === 'greaterCovert')) fr.width *= 1.9;
     const m = gb.mark();
     emitFeather(gb, fr, wingFrame(fr), { idx: [idx], w: [1] }, FEATHER_TYPE[f.type], rng(), segs);
+    // wing-root feathers re-aimed about their base so the spread wing clears the body (wingFold.js)
+    const S = fold?.spread.get(f.name)?.bake;
+    if (S) {
+      const v3 = new THREE.Vector3();
+      for (let v = m.v; v < gb.count; v++) {
+        v3.set(...bindMM(v)).sub(new THREE.Vector3(...f.base)).applyQuaternion(S).add(new THREE.Vector3(...f.base)).multiplyScalar(0.001);
+        gb.pos.splice(v * 3, 3, v3.x, v3.y, v3.z);
+        v3.fromArray(gb.nrm, v * 3).applyQuaternion(S);
+        gb.nrm.splice(v * 3, 3, v3.x, v3.y, v3.z);
+      }
+    }
     const F = fold?.world.get(f.name);
     if (F) {
       // contact evaluated where the feather lies when folded, expressed in its bind (spread) frame

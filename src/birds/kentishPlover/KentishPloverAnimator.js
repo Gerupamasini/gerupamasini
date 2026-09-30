@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { animation as ANIM, joints as J } from './KentishPloverConfig.js';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
-import { computeWingFold } from './anatomy/wingFold.js';
+import { computeWingFold, spreadAt } from './anatomy/wingFold.js';
 import { getBodySDF, getTorsoSDF } from './anatomy/bodyMesh.js';
 import { WING } from './anatomy/featherLayout.js';
 import { clamp, lerp, damp, smoothstep, makeRng, makeFbm1D, frameQuat, mirrorQuat, wrapAngle } from '../../core/math.js';
@@ -15,6 +15,7 @@ const mm = 0.001;
 const DEG = Math.PI / 180;
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
+const _q3 = new THREE.Quaternion();
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -730,26 +731,29 @@ export class KentishPloverAnimator {
       // flight feathers: spread pose (fan in during the upstroke) blended with the per-feather fold
       const fanIn = flex * 0.45 * amp;
       const FF = this.fold.feather;
+      // wing-root feathers re-aimed for the current humerus elevation / sweep so the spread wing clears the body
+      const SP = this.fold.spread;
+      const root = (f, q) => (SP.has(f.name) ? q.premultiply(spreadAt(SP.get(f.name), elev, hSweep, _q3)) : q);
       for (let i = 1; i <= 10; i++) {
         const bone = b[`p${i}_${side}`];
         const f = bone.userData.spec.feather;
-        const q = qAxis(Y, (15 * DEG - f.angle * DEG) * fanIn * 0.6, _q2).slerp(FF.get(f.name), effFold);
+        const q = root(f, qAxis(Y, (15 * DEG - f.angle * DEG) * fanIn * 0.6, _q2)).slerp(FF.get(f.name), effFold);
         apply(bone, q);
       }
       for (let j = 1; j <= 11; j++) {
         const bone = b[`s${j}_${side}`];
         const f = bone.userData.spec.feather;
-        const q = qAxis(Y, flex * amp * -0.12, _q2).slerp(FF.get(f.name), effFold);
+        const q = root(f, qAxis(Y, flex * amp * -0.12, _q2)).slerp(FF.get(f.name), effFold);
         apply(bone, q);
       }
       for (let k = 1; k <= 3; k++) {
         const bone = b[`t${k}_${side}`];
         const f = bone.userData.spec.feather;
-        apply(bone, _q2.identity().slerp(FF.get(f.name), effFold));
+        apply(bone, root(f, _q2.identity()).slerp(FF.get(f.name), effFold));
       }
       for (const bone of this._coverts[side]) {
         const f = bone.userData.spec.feather;
-        apply(bone, _q2.identity().slerp(FF.get(f.name), effFold));
+        apply(bone, root(f, _q2.identity()).slerp(FF.get(f.name), effFold));
       }
       // alula raised during braking/landing (slow flight)
       apply(b[`alula_${side}`], qAxis(Y, -brake * 0.4 * spread, _q2));

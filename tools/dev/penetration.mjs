@@ -415,7 +415,7 @@ function measure(model, S, anim) {
             insideAfter = 0;
             depth = visDepth = 0;
             // exposure checks
-            if (I.type !== 'rectrix' && !(I.type === 'upperTailCovert' || I.type === 'underTailCovert') && midX(p) * I.side < -1.0) r.cross++;
+            if (folded && I.type !== "rectrix" && !(I.type === "upperTailCovert" || I.type === "underTailCovert") && midX(p) * I.side < -1.0) r.cross++;
           } else if (d < -EPS) {
             inside = true;
             if (emerged) {
