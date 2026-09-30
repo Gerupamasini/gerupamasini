@@ -22,8 +22,8 @@ export const GOBY = {
   // it compressed
   width: spline([[0, 0.03], [0.02, 0.043], [0.05, 0.05], [0.09, 0.053], [0.15, 0.051], [0.22, 0.043], [0.3, 0.036],
     [0.5, 0.025], [0.7, 0.017], [0.88, 0.011], [0.96, 0.008], [1.0, 0.004]]),
-  eye: { s: 0.07, y: 0.052, r: 0.034 },
-  mouth: [[0.0, 0.021], [0.028, 0.002]],     // cleft: from the snout tip back and down to below the eye front
+  eye: { s: 0.066, y: 0.053, r: 0.034 },
+  mouth: [[0.0, 0.026], [0.046, 0.003]],     // cleft: from the snout tip back and down to below the eye front
 };
 
 function buildBody() {
@@ -43,12 +43,15 @@ function buildBody() {
       let z = sd * w * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(yn), ne)), 1 / ne) * (1 + 0.1 * yn);
       // eye socket: the skin is drawn back around the globe and forms a soft raised rim
       const de = Math.hypot(s - eye.s, (y - eye.y) * 1.05) / eye.r;
-      if (de < 1.5 && yn > -0.3) z *= 1 - 0.3 * Math.exp(-Math.pow(de / 0.85, 4)) + 0.025 * Math.exp(-Math.pow((de - 1.12) / 0.2, 2));
+      if (de < 1.5 && yn > -0.3) z *= 1 - 0.36 * Math.exp(-Math.pow(de / 1.0, 4));   // socket only: the skin runs straight onto the eye (no rim)
+      // gill cover: a soft bulge ending in a free edge (a small step down onto the body)
+      const dO = Math.hypot(s - 0.11, (y - 0.02) * 0.8) - 0.07;
+      if (y < 0.07 && s > 0.1 && s < 0.2) z *= 1 + 0.035 * THREE.MathUtils.smoothstep(dO, -0.035, -0.002) * (1 - THREE.MathUtils.smoothstep(dO, -0.002, 0.004));
       // mouth: a cleft running obliquely back from the snout tip, lips rolled either side
       if (s < m1[0] + 0.012 && yn < 0.4) {
         const u = THREE.MathUtils.clamp(s / m1[0], 0, 1), ym = m0[1] + (m1[1] - m0[1]) * u, dy = y - ym;
         const fall = 1 - THREE.MathUtils.smoothstep(s, m1[0] - 0.004, m1[0] + 0.01);
-        z *= 1 - fall * 0.12 * Math.exp(-Math.pow(dy / 0.002, 2));
+        z *= 1 - fall * (0.16 * Math.exp(-Math.pow(dy / 0.0022, 2)) - 0.05 * Math.exp(-Math.pow((Math.abs(dy) - 0.006) / 0.003, 2)));   // cleft with thick rolled lips
       }
       pos.push(sx(s), y, z);
       ynA.push(yn); zA.push(z);
@@ -166,7 +169,7 @@ vec4 gobyColor(vec2 p){
     } else if (uGKind < 5.5) {
       c = vec3(0.95, 0.94, 0.88); a = mix(0.12, 0.03, t); a = mix(a, 0.3, ray * 0.6);   // clear pectoral with visible rays
     } else {
-      c = mix(vec3(0.92, 0.92, 0.66), vec3(0.97, 0.97, 0.94), smoothstep(0.0, 0.35, t)); c *= 0.95 + 0.05 * ray; a = mix(0.0, 0.92, 1.0 - smoothstep(0.1, 0.22, abs(fract(r + 0.5) - 0.5)));   // two stout white rays, clear membrane between
+      c = mix(vec3(0.92, 0.92, 0.66), vec3(0.97, 0.97, 0.94), smoothstep(0.0, 0.35, t)); c *= 0.95 + 0.05 * ray; float rw = mix(0.2, 0.05, t); a = mix(0.06, 0.92, 1.0 - smoothstep(rw * 0.5, rw, abs(fract(r + 0.5) - 0.5)));   // rays taper to a point, faint membrane   // two stout white rays, clear membrane between
     }
     c = mix(c, c * 1.02, ray * 0.04);
     a *= smoothstep(0.0, 0.04, 1.0 - t + 0.02);
@@ -179,10 +182,11 @@ vec4 gobyColor(vec2 p){
     // rear half: flame orange-red deepening to maroon (linear-space values measured from the side-view photos)
     {
       float g2 = s + 0.15 * y + (uGKind > 1.5 ? 0.03 : 0.0);
-      vec3 rear = mix(vec3(0.66, 0.24, 0.04), vec3(0.42, 0.08, 0.02), smoothstep(0.72, 0.88, g2));   // (photo) pale -> orange -> red
-      rear = mix(rear, vec3(0.07, 0.01, 0.008), smoothstep(0.9, 1.04, g2));                        // maroon-black peduncle and tail
-      c = mix(c, rear, smoothstep(0.46, 0.74, g2) * 0.94);   // long, soft transition
+      vec3 rear = mix(vec3(0.79, 0.16, 0.022), vec3(0.42, 0.05, 0.015), smoothstep(0.76, 0.9, g2));   // (photo) pale -> orange -> red
+      rear = mix(rear, vec3(0.06, 0.005, 0.005), smoothstep(0.9, 1.04, g2));                        // maroon-black peduncle and tail
+      c = mix(c, rear, smoothstep(0.52, 0.78, g2) * 0.95);   // long, soft transition
       if (uGKind > 1.5) c = mix(c, vec3(0.06, 0.01, 0.008), smoothstep(0.66, 0.84, vFinG.y) * 0.85 * smoothstep(0.5, 0.62, s));   // dark fin margin
+      if (uGKind > 1.5 && uGKind < 3.5) c = mix(c, vec3(0.03, 0.006, 0.005), smoothstep(0.93, 1.0, s) * 0.8);   // near-black rear edge
       if (uGKind > 1.5 && uGKind < 2.5) c = mix(c, vec3(0.8, 0.8, 0.82), (1.0 - smoothstep(0.46, 0.6, s)) * 0.9);   // low pale membrane behind the flag
     }
     if (uGKind < 0.5) {
@@ -202,18 +206,18 @@ vec4 gobyColor(vec2 p){
       c = mix(base, mix(lime, limeHi, smoothstep(0.02, -0.06, s - 0.04) * 0.5), face);
       // violet crown stripe (both sides meet at the top, so yn ~ 1)
       float az = abs(vGZ), onTop = step(0.0, yn);
-      float cw = mix(0.004, 0.009, smoothstep(0.05, 0.2, s));                              // narrow between the eyes, widening to the flag
+      float cw = mix(0.0025, 0.006, smoothstep(0.05, 0.2, s));                              // narrow between the eyes, widening to the flag
       float crown = onTop * (1.0 - smoothstep(cw, cw + 0.002, az)) * smoothstep(0.03, 0.055, s) * (1.0 - smoothstep(0.28, 0.3, s));
       
       // seen from the side the stripe shows as a lavender line along the dorsal profile
-      float lat = onTop * (1.0 - smoothstep(cw + 0.004, cw + 0.007, az)) * smoothstep(0.035, 0.06, s) * (1.0 - smoothstep(0.27, 0.3, s));
-      c = mix(c, vec3(0.4, 0.22, 0.84), lat * 0.92);
+      float lat = onTop * (1.0 - smoothstep(cw - 0.001, cw + 0.004, az)) * smoothstep(0.035, 0.06, s) * (1.0 - smoothstep(0.27, 0.3, s));
+      c = mix(c, vec3(0.4, 0.22, 0.8), lat * 0.92);
       c = mix(c, vec3(0.5, 0.42, 0.85), onTop * (1.0 - smoothstep(cw + 0.002, cw + 0.006, az)) * (1.0 - crown) * smoothstep(0.03, 0.06, s) * (1.0 - smoothstep(0.23, 0.26, s)) * 0.35);
       // speckles: small round violet-blue dots, densest behind the eye and on the nape
-      vec2 q = p * vec2(72.0, 72.0); vec2 cell = floor(q); vec2 fq = fract(q) - 0.5 - (vec2(gh(cell + 1.3), gh(cell + 7.1)) - 0.5) * 0.5;
-      float dot_ = step(0.55, gh(cell)) * (1.0 - smoothstep(0.12, 0.2, length(fq)));
+      vec2 q = p * vec2(95.0, 95.0); vec2 cell = floor(q); vec2 fq = fract(q) - 0.5 - (vec2(gh(cell + 1.3), gh(cell + 7.1)) - 0.5) * 0.5;
+      float dot_ = step(0.45, gh(cell)) * (1.0 - smoothstep(0.1, 0.18, length(fq)));
       float spReg = smoothstep(0.045, 0.08, s) * (1.0 - smoothstep(0.15, 0.22, s)) * smoothstep(-0.55, -0.1, yn) * (1.0 - smoothstep(0.84, 0.9, yn)) * (1.0 - ring * 0.8);
-      c = mix(c, vec3(0.55, 0.82, 0.95), dot_ * spReg * 0.9);   // (photo) bright pale-cyan speckles behind and below the eye
+      c = mix(c, vec3(0.32, 0.45, 1.0), dot_ * spReg * 0.9);   // (photo) bright pale-cyan speckles behind and below the eye
       c = mix(c, vec3(0.86, 0.86, 0.92), dot_ * smoothstep(0.17, 0.24, s) * (1.0 - smoothstep(0.34, 0.42, s)) * smoothstep(-0.3, 0.2, yn) * 0.45);   // fine pale dots on the nape and upper flank
       // gill cover edge: a faint curved crease behind the cheek
       float op = 1.0 - smoothstep(0.0, 0.0035, abs(length((p - vec2(0.11, 0.02)) * vec2(1.0, 0.8)) - 0.07));
@@ -223,7 +227,7 @@ vec4 gobyColor(vec2 p){
       vec2 M0 = vec2(${GOBY.mouth[0][0].toFixed(3)}, ${GOBY.mouth[0][1].toFixed(3)}), M1 = vec2(${GOBY.mouth[1][0].toFixed(3)}, ${GOBY.mouth[1][1].toFixed(3)});
       float u = clamp((s - M0.x) / (M1.x - M0.x), 0.0, 1.0), ym = mix(M0.y, M1.y, u), dm = abs(y - ym);
       float inM = 1.0 - smoothstep(M1.x - 0.004, M1.x + 0.003, s);
-      c = mix(c, vec3(0.8, 0.8, 0.66), (1.0 - smoothstep(0.002, 0.004, abs(dm - 0.003))) * inM * 0.3);   // lips
+      c = mix(c, vec3(0.86, 0.86, 0.62), (1.0 - smoothstep(0.002, 0.005, abs(dm - 0.005))) * inM * 0.3);   // thick pale lips
       c = mix(c, vec3(0.16, 0.1, 0.09), (1.0 - smoothstep(0.0008, 0.002, dm)) * inM * 0.7);
     }
   }
@@ -312,11 +316,12 @@ export function createFireGoby() {
     // eyes look sideways, a little forward and up (dorsolateral, as in the front views)
     const dir = new THREE.Vector3(0.28, 0.32, side).normalize();
     const M = new THREE.Matrix4().lookAt(dir, new THREE.Vector3(), new THREE.Vector3(0, 1, 0));
-    M.setPosition(sx(eye.s), eye.y, side * (zs - eye.r * 0.8));
+    M.setPosition(sx(eye.s), eye.y, side * (zs - eye.r * 0.84));
     M.multiply(new THREE.Matrix4().makeScale(1.12, 0.94, 1));   // the eye reads a little wider than high (photos)
     M.multiply(new THREE.Matrix4().makeScale(1, 1, 1));
     group.add(createFishEye({
-      r: eye.r, matrix: M, pupilA: 0.72, irisA: 0.99,
+      r: eye.r, matrix: M, pupilA: 0.56, irisA: 1.02, pupilAspect: 1.35,
+      azV: [0.36, 0.03, 0.27], azH: [0.42, 0.66, 0.8], azMix: 0.85,   // (photos) magenta arcs above / below, pale blue-white in front / behind
       // close-ups: large black pupil, a bright silvery ring, then magenta-violet crescents
       pupil: [0.003, 0.003, 0.006], irisIn: [0.55, 0.6, 0.78], irisOut: [0.5, 0.07, 0.42], limbus: [0.1, 0.04, 0.12],
       sclera: [0.66, 0.74, 0.16], upper: [0.7, 0.2, 0.75], upperAmt: 0.35,
@@ -328,7 +333,7 @@ export function createFireGoby() {
   const paired = (len, span, n, shape, kind, pos, rot) => {
     const base = [], tip = [];
     for (let i = 0; i < n; i++) { const f = i / (n - 1); base.push([0.5, (f - 0.5) * span]); const l = len * shape(f); tip.push([0.5 + l, (f - 0.5) * span * 1.5 - l * 0.2]); }
-    const m = new THREE.Mesh(buildFin({ base, tip, sub: 3, segs: 10, pleat: 0.0015, scallop: 0.03 }), gobyMaterial(kind, uniforms));
+    const m = new THREE.Mesh(buildFin({ base, tip, sub: 3, segs: 10, pleat: 0.0015, scallop: kind === 6 ? 0.0 : 0.03, bow: kind === 6 ? 0.06 : 0 }), gobyMaterial(kind, uniforms));   // pelvic rays curve slightly
     m.position.set(-0.0, 0, 0);
     const piv = new THREE.Group(); piv.add(m); piv.position.set(...pos); piv.rotation.set(...rot); group.add(piv); return piv;
   };

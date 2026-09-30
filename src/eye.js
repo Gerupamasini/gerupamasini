@@ -6,7 +6,8 @@ import * as THREE from 'three';
 const EYE_GLSL = /* glsl */`
 varying vec3 vEyeDir;
 uniform vec3 uPupil, uIrisIn, uIrisOut, uLimbus, uSclera, uUpper;
-uniform float uPupilA, uIrisA, uUpperAmt;
+uniform float uPupilA, uIrisA, uUpperAmt, uPupAsp, uAzMix;
+uniform vec3 uAzV, uAzH;
 float eh(float n){ return fract(sin(n) * 43758.5453); }
 vec3 eyeColor(){
   vec3 d = normalize(vEyeDir);
@@ -14,13 +15,18 @@ vec3 eyeColor(){
   float az = atan(d.y, d.x);
   float fib = 0.8 + 0.2 * sin(az * 70.0 + 3.0 * eh(floor(az * 20.0))) * eh(floor(az * 55.0) + 3.0);
   vec3 c;
-  if (th < uPupilA) {
+  // optional horizontally elongated pupil (measured on the local x axis)
+  float thP = d.z > 0.0 ? asin(clamp(length(vec2(d.x / uPupAsp, d.y)), 0.0, 1.0)) : 3.1416;
+  if (thP < uPupilA) {
     c = uPupil;
   } else if (th < uIrisA) {
     float f = (th - uPupilA) / (uIrisA - uPupilA);
     c = mix(uIrisIn, uIrisOut, smoothstep(0.0, 1.0, f)) * fib;
     c = mix(c, c * 1.35, exp(-pow((f - 0.08) / 0.06, 2.0)) * 0.6);   // bright collar at the pupil edge
     c = mix(c, uUpper, uUpperAmt * smoothstep(0.1, 0.9, d.y) * (0.4 + 0.6 * f));
+    // optional azimuthal pattern: one colour above / below the pupil, another in front / behind
+    vec2 az2 = normalize(d.xy + 1e-5);
+    c = mix(c, mix(uAzH, uAzV, smoothstep(0.35, 0.85, abs(az2.y))) * fib, uAzMix);
     c = mix(c, uLimbus, smoothstep(0.86, 0.98, f));                    // dark limbus
   } else {
     c = mix(uLimbus, uSclera, smoothstep(uIrisA, uIrisA + 0.12, th));
@@ -53,6 +59,7 @@ function eyeballGeometry(r, pupilA, irisA) {
 export function createFishEye({
   r, pupil = [0.01, 0.01, 0.012], irisIn = [0.2, 0.15, 0.1], irisOut = [0.4, 0.4, 0.42], limbus = [0.05, 0.05, 0.06],
   sclera = [0.1, 0.1, 0.11], upper = [0.8, 0.5, 0.8], upperAmt = 0, pupilA = 0.36, irisA = 0.78, patch = (m) => m,
+  pupilAspect = 1, azV = [0, 0, 0], azH = [0, 0, 0], azMix = 0,
   matrix = new THREE.Matrix4(),   // placement, baked into the vertices (so the swim bend applies)
 }) {
   const group = new THREE.Group();
@@ -60,6 +67,7 @@ export function createFishEye({
     uPupil: { value: new THREE.Color(...pupil) }, uIrisIn: { value: new THREE.Color(...irisIn) }, uIrisOut: { value: new THREE.Color(...irisOut) },
     uLimbus: { value: new THREE.Color(...limbus) }, uSclera: { value: new THREE.Color(...sclera) }, uUpper: { value: new THREE.Color(...upper) },
     uPupilA: { value: pupilA }, uIrisA: { value: irisA }, uUpperAmt: { value: upperAmt },
+    uPupAsp: { value: pupilAspect }, uAzMix: { value: azMix }, uAzV: { value: new THREE.Color(...azV) }, uAzH: { value: new THREE.Color(...azH) },
   };
   const ballMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.35, clearcoat: 0.0, envMapIntensity: 0.4 });
   patch(ballMat, 'eyeball');
