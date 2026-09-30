@@ -179,9 +179,9 @@ export const GLSL = {
       float net = smoothstep(0.6, 0.85, fbm3(ps*14.0 + uSeed*2.0)*0.5+0.5);
       col = mix(col, uC1*0.6, net*0.35);
       // 背面の赤褐色の細い唐草状の模様（写真の甲の赤い線）
-      float vein = 1.0 - smoothstep(0.0, 0.07, abs(snoise3(ps*vec3(11.0, 6.0, 9.0) + uSeed*5.0)));
+      float vein = 1.0 - smoothstep(0.0, 0.07, abs(snoise3(ps*vec3(11.0, 6.0, 9.0) + uSeed*5.0)) * 0.8);
       vein *= smoothstep(0.45, 0.7, fbm3(ps*4.0 + uSeed)*0.5+0.5) * smoothstep(0.3, 0.8, n.y);
-      col = mix(col, vec3(0.45, 0.2, 0.15), vein * 0.65);
+      col = mix(col, col * vec3(0.78, 0.5, 0.42), vein * 0.9);
       vec3 c = cell3(p*60.0 + uSeed*7.0);
       float smooth0 = smoothstep(0.05, 0.12, length(p.xz - vec2(0.0, -0.03)));
       col = mix(col, uC3, (1.0 - smoothstep(0.0, 0.3, c.x)) * 0.18 * smooth0);
