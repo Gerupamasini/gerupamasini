@@ -3,49 +3,53 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Kentish Plover — Tidal Flat Demo</title>
+    <title>シロチドリの干潟</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap" />
     <link rel="stylesheet" href="/src/demo/demo.css" />
   </head>
   <body>
     <div id="hud" class="panel hidden"></div>
-    <div id="ui" class="panel">
-      <h1>シロチドリ <span>Charadrius alexandrinus</span></h1>
-      <div class="row"><label>Camera</label>
-        <select id="cam"><option value="bird">Follow selected bird</option><option value="player">Player (3rd person)</option><option value="free">Free orbit</option></select>
+    <details id="ui" class="panel" open>
+      <summary><h1>シロチドリ <span>Charadrius alexandrinus</span></h1></summary>
+      <div class="controls">
+        <div class="row"><label for="cam">Camera</label>
+          <select id="cam"><option value="bird">選択個体を追う</option><option value="player">プレイヤー視点</option><option value="free">自由視点</option></select>
+        </div>
+        <div class="row"><label for="timescale">時間倍率</label><input id="timescale" type="range" min="0" max="600" step="10" value="60" /><span id="timescaleV">60</span></div>
+        <div class="row"><label for="tide">潮位</label><select id="tide"><option value="auto">自動（M2 12.42 h）</option><option value="-0.8">干潮</option><option value="-0.2">中潮（下げ）</option><option value="0.85">満潮</option></select></div>
+        <div class="row"><label for="count">個体数</label><input id="count" type="number" min="1" max="60" value="14" /><button id="respawn" type="button">再配置</button></div>
+        <div class="row"><label for="anim">アニメ</label>
+          <select id="anim">
+            <option value="">— AI に任せる —</option>
+            <option value="idle">01 Idle</option>
+            <option value="walk">02 Walk</option>
+            <option value="run">03 Run</option>
+            <option value="stop">04 Stop / Observe</option>
+            <option value="forage">05 Forage search</option>
+            <option value="footTremble">05 足ふるわせ</option>
+            <option value="peck">06 Peck（ゴカイ）</option>
+            <option value="peckCrab">06 Peck（カニ）</option>
+            <option value="preen:breast">07 羽繕い：胸</option>
+            <option value="preen:flank">07 羽繕い：脇・翼の下</option>
+            <option value="preen:scapulars">07 羽繕い：肩羽・背</option>
+            <option value="preen:wing">07 羽繕い：翼</option>
+            <option value="preen:tail">07 羽繕い：尾・尾脂腺</option>
+            <option value="scratch">07 頭掻き（間接法）</option>
+            <option value="wingStretch">07 両翼伸ばし</option>
+            <option value="shake">07 身震い</option>
+            <option value="restOneLeg">08 休息：片脚立ち</option>
+            <option value="restTucked">08 休息：嘴を背に</option>
+            <option value="sit">08 休息：伏せ</option>
+            <option value="alert">09 Alert</option>
+            <option value="fly">10–12 離陸→飛翔→着陸</option>
+          </select>
+        </div>
+        <div class="row"><label for="debug">Debug</label><input id="debug" type="checkbox" checked /></div>
+        <p class="hint">鳥をクリックで選択 · WASD / 矢印で歩く、Shift で走る（鳥が反応します） · H で HUD 切替 · ドラッグで視点回転</p>
+        <div id="status"></div>
       </div>
-      <div class="row"><label>Time ×</label><input id="timescale" type="range" min="0" max="600" step="10" value="60" /><span id="timescaleV">60</span></div>
-      <div class="row"><label>Tide</label><select id="tide"><option value="auto">Auto (M2 12.42 h)</option><option value="-0.8">Low</option><option value="-0.2">Mid (falling)</option><option value="0.85">High</option></select></div>
-      <div class="row"><label>Birds</label><input id="count" type="number" min="1" max="60" value="14" /><button id="respawn">Respawn</button></div>
-      <div class="row"><label>Animation</label>
-        <select id="anim">
-          <option value="">— AI controlled —</option>
-          <option value="idle">01 Idle</option>
-          <option value="walk">02 Walk</option>
-          <option value="run">03 Run</option>
-          <option value="stop">04 Stop / Observe</option>
-          <option value="forage">05 Forage search</option>
-          <option value="peck">06 Peck (worm)</option>
-          <option value="peckCrab">06 Peck (crab)</option>
-          <option value="preen:breast">07 Preen: breast</option>
-          <option value="preen:flank">07 Preen: flank/under-wing</option>
-          <option value="preen:scapulars">07 Preen: scapulars/back</option>
-          <option value="preen:wing">07 Preen: wing</option>
-          <option value="preen:tail">07 Preen: tail/oil gland</option>
-          <option value="scratch">07 Head scratch (indirect)</option>
-          <option value="wingStretch">07 Wing stretch</option>
-          <option value="shake">07 Body shake</option>
-          <option value="restOneLeg">08 Rest: one leg</option>
-          <option value="restTucked">08 Rest: bill tucked</option>
-          <option value="sit">08 Rest: sitting</option>
-          <option value="alert">09 Alert</option>
-          <option value="footTremble">05 Foot-trembling</option>
-          <option value="fly">10–12 Take-off → Flight → Landing</option>
-        </select>
-      </div>
-      <div class="row"><label>Debug</label><input id="debug" type="checkbox" checked /> <small>H: HUD · click: select bird · WASD/Shift: walk/run</small></div>
-      <div id="status"></div>
-    </div>
-    <div id="loading">Generating plover geometry…</div>
+    </details>
+    <div id="loading">シロチドリのメッシュを生成中…</div>
     <script type="module" src="/src/demo/main.js"></script>
   </body>
 </html>

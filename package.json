@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "validate": "node tools/validate.mjs",
-    "export-glb": "node tools/export-glb.mjs"
+    "export-glb": "node tools/export-glb.mjs",
+    "build:artifact": "node tools/build-artifact.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

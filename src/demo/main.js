@@ -79,12 +79,13 @@ controls.enableDamping = true;
 controls.minDistance = 0.12;
 controls.maxDistance = 200;
 let camMode = q.get('cam') ?? 'bird';
-const camDist = Number(q.get('dist') ?? 0.9);
+const camDist = Number(q.get('dist') ?? 0.6);
 function placeCameraAround(target, dist, yaw = 0.8, pitch = 0.22) {
   camera.position.set(target.x + Math.sin(yaw) * Math.cos(pitch) * dist, target.y + Math.sin(pitch) * dist, target.z + Math.cos(yaw) * Math.cos(pitch) * dist);
   controls.target.copy(target);
 }
-placeCameraAround(selected.pos.clone().add(new THREE.Vector3(0, 0.05, 0)), camDist, Number(q.get('yaw') ?? 0.9), Number(q.get('pitch') ?? 0.2));
+// open on a three-quarter side view of the selected bird (yaw relative to its heading)
+placeCameraAround(selected.pos.clone().add(new THREE.Vector3(0, 0.05, 0)), camDist, q.has('yaw') ? Number(q.get('yaw')) : selected.heading + 1.15, Number(q.get('pitch') ?? 0.16));
 const lastFollow = new THREE.Vector3().copy(selected.pos);
 
 // --------------------------------------------------------------- selection
