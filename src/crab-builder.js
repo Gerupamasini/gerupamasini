@@ -38,8 +38,8 @@ const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return
 const C = (hex) => new Color(hex);
 const PAL = {
   shell: C('#7a755f'), shellDark: C('#2c2f33'), mud: C('#9a8d6c'), blue: C('#3a8fd0'), blueDeep: C('#1c5a98'), blueHi: C('#7fbde6'), navy: C('#16243a'),
-  tympanum: C('#6a7382'), legDark: C('#262c38'), legMid: C('#4a5466'), legPale: C('#7a6a52'), membrane: C('#343d4d'),
-  claw: C('#efe9d8'), clawShade: C('#cfc6ad'), clawTip: C('#a98357'), clawDarkMerus: C('#1c222c'),
+  tympanum: C('#6a7382'), legDark: C('#3a4352'), legMid: C('#5d6c82'), legPale: C('#8a6f4c'), membrane: C('#343d4d'),
+  claw: C('#f6efdc'), clawShade: C('#dccfae'), clawTip: C('#a98357'), clawDarkMerus: C('#1c222c'),
   sternum: C('#a9b8bf'), abd: C('#9a917a'), seta: C('#a79e84'),
 };
 
@@ -466,7 +466,7 @@ const bump = (t, c, w) => Math.exp(-sq((t - c) / w));
 function legColor(base, pale = 0.0) {
   return (t, a, p, out) => {
     const m = fbm(p.x * 7 + 1, p.y * 7, p.z * 7, 3), m2 = fbm(p.x * 22, p.y * 22, p.z * 22 + 5, 3), sp = fbm(p.x * 70, p.y * 70, p.z * 70, 2);
-    out.copy(PAL.legDark).lerp(base, smooth(0.3, 0.8, m) * 0.55);
+    out.copy(PAL.legDark).lerp(base, 0.55 + smooth(0.3, 0.8, m) * 0.45);
     const up = 0.5 + 0.5 * Math.sin(a);
     out.lerp(PAL.mud, smooth(0.55, 0.85, m2) * (0.1 + 0.2 * up));         // soft silt film
     out.lerp(PAL.mud, smooth(0.66, 0.8, sp) * 0.55);                          // fine dry-silt specks
@@ -506,7 +506,7 @@ function legSegment(kind, s, mats, tone = 0) {
   { const p0 = prof, kw = { coxa: 1.0, basis: 1.0, merus: 0.95, carpus: 0.78, propodus: 0.78, dactylus: 0.95 }[kind], kh = { coxa: 1.0, basis: 1.0, merus: 1.0, carpus: 0.78, propodus: 0.78, dactylus: 0.9 }[kind]; prof = (t) => { const r = p0(t); r.w *= kw; r.h *= kh; return r; }; }
   const base = tone > 0 ? PAL.legPale.clone().lerp(PAL.legMid, 0.5) : PAL.legMid;
   const lc0 = legColor(base, kind === 'propodus' ? 0.35 : 0.15);
-  const lc = (t, a, p, o) => { lc0(t, a, p, o); if (kind === 'dactylus') o.lerp(PAL.legPale, 0.7); if (kind === 'propodus') o.lerp(PAL.legPale, 0.25 * smooth(0.5, 1, t)); };
+  const lc = (t, a, p, o) => { lc0(t, a, p, o); o.lerp(PAL.legPale, 0.35 * gauss(t, 0.09) + 0.35 * gauss(t - 1, 0.09)); if (kind === 'dactylus') o.lerp(PAL.legPale, 0.7); if (kind === 'propodus') o.lerp(PAL.legPale, 0.25 * smooth(0.5, 1, t)); };
   const colorFn = kind === 'merus' ? (t, a, p, o) => { lc(t, a, p, o); const w = smooth(0.1, 0.55, tympMask(t, a)); o.lerp(PAL.tympanum, w * 0.5); o.multiplyScalar(1 - 0.35 * gauss(tympMask(t, a) - 0.1, 0.05)); } : lc;   // tympanum: pale membranous oval with a darker rim
   const T = makeTube({ L, prof, colorFn, ...opt, ext: 0.03 * s });
   geos.push(T.geo);
@@ -537,8 +537,8 @@ function legSegment(kind, s, mats, tone = 0) {
 function clawColor(t, a, p, out) {
   const m = fbm(p.x * 7, p.y * 7, p.z * 7, 3), sp = fbm(p.x * 45 + 3, p.y * 45, p.z * 45, 2);
   out.copy(PAL.claw).lerp(PAL.clawShade, smooth(0.35, 0.8, m) * 0.7);
-  out.lerp(PAL.blueDeep, 0.06 * (0.5 + 0.5 * Math.sin(a - PI / 2)) * smooth(0.5, 0.2, t));   // faint bluish translucency toward the palm edges
-  out.lerp(PAL.mud, smooth(0.72, 0.9, sp) * 0.5);                                                    // mud specks
+  out.lerp(C('#e9c9a0'), 0.18 * smooth(0.3, 0.8, m)); out.lerp(PAL.blueDeep, 0.03 * (0.5 + 0.5 * Math.sin(a - PI / 2)) * smooth(0.5, 0.2, t));   // faint bluish translucency toward the palm edges
+  out.lerp(PAL.mud, smooth(0.8, 0.92, sp) * 0.3);                                                    // mud specks
   out.multiplyScalar(0.94 + 0.1 * fbm(p.x * 30, p.y * 30, p.z * 30, 2));
 }
 

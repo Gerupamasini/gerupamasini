@@ -51,7 +51,7 @@ function groundTextures() {
     const wet = Math.min(1, Math.max(0, (pnoise(u, v, 6, 21) - 0.35) * 3));  // damp patches
     const spk = Math.min(1, Math.max(0, pnoise(u, v, 700, 7) - 0.84) * 6);                             // glinting sand grains
     const base = 0.42 + hv * 0.5;
-    const r = (base * 0.62 + 0.03) * (1 - wet * 0.35) + spk * 0.25, g = (base * 0.56 + 0.03) * (1 - wet * 0.35) + spk * 0.22, b = (base * 0.46 + 0.03) * (1 - wet * 0.3) + spk * 0.16;
+    const r = (base * 0.55 + 0.02) * (1 - wet * 0.4) + spk * 0.2, g = (base * 0.47 + 0.02) * (1 - wet * 0.4) + spk * 0.19, b = (base * 0.36 + 0.02) * (1 - wet * 0.35) + spk * 0.16;
     iA.data[i] = Math.pow(r, 0.9) * 255; iA.data[i + 1] = Math.pow(g, 0.9) * 255; iA.data[i + 2] = Math.pow(b, 0.9) * 255; iA.data[i + 3] = 255;
     const rough = 0.95 - wet * 0.3 + spk * -0.25;
     iR.data[i] = 255; iR.data[i + 1] = Math.max(0.75, rough) * 255; iR.data[i + 2] = 0; iR.data[i + 3] = 255;
