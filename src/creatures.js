@@ -1219,8 +1219,8 @@ export class Ecosystem {
         arm: spk(0.9, [0x4a3a2a, 0x604c36, 0x241a12, 0xa89070], [120, 0.6, 0, 0]),
         stalk: spk(0.2, [0x8a7458, 0xa88e6c, 0x4a3a28, 0xc0a888], [220, 0.3, 0, 0], { clearcoat: 0.5, clearcoatRoughness: 0.2 }),
         // 雄の掌：灰緑色（写真4）と淡黄色（写真3）の個体差
-        clawA: chela(0.4, [0xe6dcc0, 0xd6ccb0, 0x5a3418], [0.72, 0, 0, 0]),
-        dactA: chela(0.5, [0xd4ccb4, 0xd2c6a6, 0x5a3418], [0.72, 0, 1, 0]),
+        clawA: chela(0.4, [0xeee0c0, 0xd6ccb0, 0x5a3418], [0.72, 0, 0, 0]),
+        dactA: chela(0.5, [0xe8dcbc, 0xd2c6a6, 0x5a3418], [0.72, 0, 1, 0]),
         clawB: chela(0.41, [0xe8dcbc, 0xe0d0a8, 0x5e3616], [0.72, 0, 0, 0]),
         dactB: chela(0.51, [0xe0d4b4, 0xdccaa0, 0x5e3616], [0.72, 0, 1, 0]),
         clawF: chela(0.45, [0xa89c74, 0x9a6a34, 0x4a2a14], [0.38, 0, 0, 0]),
