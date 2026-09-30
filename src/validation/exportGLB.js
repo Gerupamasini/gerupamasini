@@ -120,10 +120,11 @@ function bakeClips(model) {
       sample(t);
       for (const bone of model.boneList) {
         let tr = tracks.get(bone.name);
-        if (!tr) tracks.set(bone.name, (tr = { t: [], p: [], q: [] }));
+        if (!tr) tracks.set(bone.name, (tr = { t: [], p: [], q: [], s: [] }));
         tr.t.push(t);
         tr.p.push(bone.position.x, bone.position.y, bone.position.z);
         tr.q.push(bone.quaternion.x, bone.quaternion.y, bone.quaternion.z, bone.quaternion.w);
+        tr.s.push(bone.scale.x, bone.scale.y, bone.scale.z); // coverts shortened where the wing presses them (wingFold)
       }
     }
     const kf = [];
@@ -142,6 +143,9 @@ function bakeClips(model) {
       if (constant(tr.q, 4)) {
         if (Math.abs(Math.abs(tr.q[0] * bq.x + tr.q[1] * bq.y + tr.q[2] * bq.z + tr.q[3] * bq.w) - 1) > 1e-7) kf.push(new THREE.QuaternionKeyframeTrack(`${bn}.quaternion`, [0], tr.q.slice(0, 4)));
       } else kf.push(new THREE.QuaternionKeyframeTrack(`${bn}.quaternion`, tr.t, tr.q));
+      if (constant(tr.s, 3)) {
+        if (Math.abs(tr.s[0] - 1) > 1e-6) kf.push(new THREE.VectorKeyframeTrack(`${bn}.scale`, [0], tr.s.slice(0, 3)));
+      } else kf.push(new THREE.VectorKeyframeTrack(`${bn}.scale`, tr.t, tr.s));
     }
     clips.push(new THREE.AnimationClip(name, duration, kf));
   }

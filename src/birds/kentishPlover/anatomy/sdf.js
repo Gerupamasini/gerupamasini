@@ -64,10 +64,12 @@ export function makeBodySDF(sculpt) {
  * Returns { positions: Float32Array (mm), normals, indices }.
  */
 export function surfaceNets(sdf, bounds, res) {
-  const [x0, y0, z0] = bounds.min;
-  const nx = Math.ceil((bounds.max[0] - x0) / res) + 1;
-  const ny = Math.ceil((bounds.max[1] - y0) / res) + 1;
-  const nz = Math.ceil((bounds.max[2] - z0) / res) + 1;
+  // one extra cell layer around the bounds (same grid alignment): the quad pass skips the outermost grid
+  // edges, so a surface crossing the first cell layer (the flank at a coarse resolution) was left open
+  const [x0, y0, z0] = bounds.min.map((v) => v - res);
+  const nx = Math.ceil((bounds.max[0] - bounds.min[0]) / res) + 3;
+  const ny = Math.ceil((bounds.max[1] - bounds.min[1]) / res) + 3;
+  const nz = Math.ceil((bounds.max[2] - bounds.min[2]) / res) + 3;
   const field = new Float32Array(nx * ny * nz);
   const idx = (i, j, k) => i + nx * (j + ny * k);
   for (let k = 0; k < nz; k++) {

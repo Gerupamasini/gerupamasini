@@ -19,8 +19,10 @@
 //            the neck bones relative to the chest): the neck lying on the scapulars / shoulder when it bends
 //            (preening, rest). Reported separately (two plumage regions in contact, not a feather through
 //            the body).
-// A folded wing's arm tube is collapsed to a line by the feather shader (not rendered) and is skipped.
+// The arm tube is collapsed to a line by the feather shader from half the fold on (not rendered) and is skipped
+// there.
 // usage: node tools/dev/penetration.mjs [--lod=0,1,2] [--pose=regex] [--top=15] [--seed=3] [--json=out.json] [--list]
+//        [--fine=k]  (k× denser action phases: fold transitions, preen / scratch approach)
 import * as THREE from 'three';
 import { KentishPloverModel } from '../../src/birds/kentishPlover/KentishPloverModel.js';
 import { KentishPloverAnimator, PREEN_VARIANTS } from '../../src/birds/kentishPlover/KentishPloverAnimator.js';
@@ -47,7 +49,8 @@ const TNAME = Object.fromEntries(Object.entries(FEATHER_TYPE).map(([k, v]) => [v
 const WINGISH = new Set(['primary', 'secondary', 'tertial', 'primaryCovert', 'greaterCovert', 'medianCovert', 'lesserCovert', 'alula', 'arm']);
 
 // ------------------------------------------------------------------ poses
-const steps = (a, b, s) => { const o = []; for (let t = a; t <= b + 1e-9; t += s) o.push(+t.toFixed(3)); return o; };
+const FINE = Number(args.fine ?? 1);
+const steps = (a, b, s) => { const o = []; for (let t = a; t <= b + 1e-9; t += s / FINE) o.push(+t.toFixed(3)); return o; };
 const POSES = [
   ['bind'], ['stand'], ['alert'], ['forage'], ['restOneLeg'], ['restTucked'], ['sit'],
   ...['walk', 'run', 'flight', 'glide'].flatMap((n) => steps(0, 0.875, 0.125).map((t) => [n, t])),
@@ -267,7 +270,7 @@ function skin(M, pos, nrm, si, sw, i, off, P, N) {
 
 // ------------------------------------------------------------------ measurement of one pose
 const R = 2.5; // mm: exact search radius around the body surface
-const RAY = [0.137, 0.974, 0.181];
+const RAYS = [[0.137, 0.974, 0.181], [-0.881, -0.2, 0.429], [0.662, -0.349, -0.663]].map((d) => { const l = Math.hypot(...d); return d.map((x) => x / l); });
 function measure(model, S, anim) {
   const { B, F } = S;
   const bu = B.mesh.material.userData.uniforms;
@@ -328,25 +331,34 @@ function measure(model, S, anim) {
       sdC[0] = cx; sdC[1] = cy; sdC[2] = cz;
       sdNeck = neckMoved[B.idx[bt * 3]] + neckMoved[B.idx[bt * 3 + 1]] + neckMoved[B.idx[bt * 3 + 2]];
       const dist = Math.sqrt(best);
-      return (px - cx) * nx + (py - cy) * ny + (pz - cz) * nz < 0 ? -dist : dist;
+      // near the surface the interpolated normal gives the side; further away (closest point on an edge or
+      // vertex of a coarse LOD mesh, whose normal can point anywhere) the ray parity does
+      if (dist <= R) return (px - cx) * nx + (py - cy) * ny + (pz - cz) * nz < 0 ? -dist : dist;
+      return inside(px, py, pz) ? -dist : dist;
     }
-    // far from the surface: parity of crossings along a fixed ray (exact inside test)
+    // far from the surface: parity of crossings
     sdN[0] = sdN[1] = sdN[2] = 0;
     sdNeck = 0;
+    return inside(px, py, pz) ? -R : R;
+  }
+  // inside test: majority of the crossing parities along three rays (a single ray is fooled where it grazes an
+  // edge or a vertex, or crosses the few non-manifold edges of the coarse LOD2 mesh)
+  function parity(px, py, pz, D) {
     let hits = 0;
     const seen = new Set();
-    for (let s = 0; s < 80; s += 1) {
-      const qx = px + RAY[0] * s, qy = py + RAY[1] * s, qz = pz + RAY[2] * s;
-      if (qy > bmax[1] + 1) break;
+    for (let s = 0; s < 120; s += 1) {
+      const qx = px + D[0] * s, qy = py + D[1] * s, qz = pz + D[2] * s;
+      if (qx < bmin[0] - 1 || qy < bmin[1] - 1 || qz < bmin[2] - 1 || qx > bmax[0] + 1 || qy > bmax[1] + 1 || qz > bmax[2] + 1) break;
       tg.query(qx - 0.6, qy - 0.6, qz - 0.6, qx + 0.6, qy + 0.6, qz + 0.6, cand, nTri);
       for (const t of cand) {
         if (seen.has(t)) continue;
         seen.add(t);
-        if (rayTri(px, py, pz, RAY[0], RAY[1], RAY[2], BP, B.idx[t * 3] * 3, B.idx[t * 3 + 1] * 3, B.idx[t * 3 + 2] * 3) > 0) hits++;
+        if (rayTri(px, py, pz, D[0], D[1], D[2], BP, B.idx[t * 3] * 3, B.idx[t * 3 + 1] * 3, B.idx[t * 3 + 2] * 3) > 0) hits++;
       }
     }
-    return hits % 2 ? -R : R;
+    return hits % 2;
   }
+  const inside = (px, py, pz) => RAYS.reduce((n, D) => n + parity(px, py, pz, D), 0) >= 2;
 
   // feathers
   const MF = boneMatrices(model, F.mesh);
@@ -359,7 +371,7 @@ function measure(model, S, anim) {
       const t = Math.round(F.ft[i * 4]);
       const fold = F.pos[i * 3] >= 0 ? foldLR[0] : foldLR[1];
       const k = (t < 7.5 || t === FEATHER_TYPE.arm ? fold : 1) * (fluff * 0.0012 * F.lieMask[i * 2] + (anim ? breath : 0) * ANIM.breathAmp * 0.021 * F.lieMask[i * 2 + 1]);
-      for (let c = 0; c < 3; c++) off[c] = F.lie[i * 3 + c] * k + F.core[i * 3 + c] * fold;
+      for (let c = 0; c < 3; c++) off[c] = F.lie[i * 3 + c] * k + F.core[i * 3 + c] * smooth(0, 0.5, fold);
     }
     skin(MF, F.pos, F.nrm, F.si, F.sw, i, off, FP, FN);
   }
@@ -392,7 +404,7 @@ function measure(model, S, anim) {
   const SUB = 4;
   F.inst.forEach((I, own) => {
     const r = { name: I.name, type: I.type, reentry: 0, dip: 0, tipIn: 0, vis: 0, visDip: 0, neck: 0, cross: 0, under: 0, buried: 0, at: null, visAt: null };
-    if (I.type === 'arm' && foldLR[I.side > 0 ? 0 : 1] > 0.99) {
+    if (I.type === 'arm' && foldLR[I.side > 0 ? 0 : 1] >= 0.5) {
       res.push(r); // folded away (degenerate), not rendered
       return;
     }
@@ -431,7 +443,10 @@ function measure(model, S, anim) {
             // feather coming out through the far-side flank (it went through the body)
             if (inside && folded && WINGISH.has(I.type) && sdN[1] < -0.7) (pend ??= {}).under = { at: p.map((x) => +x.toFixed(1)), n: sdN.map((x) => +x.toFixed(2)) };
             if (inside && folded && I.type !== 'rectrix' && sdN[0] * I.side < -0.5) (pend ??= {}).cross = true;
-            if (!emerged) emerged = true;
+            // (a line only counts as emerged once it sticks out further than the dip it may make — at LOD1/2
+            // past the LOD's limit: a buried feather's edge grazing the outline by less shows nothing more
+            // than a tolerated dip does)
+            if (!emerged && d > Math.max(EPS, LIM.dip, LIM.emerge)) emerged = true;
             inside = false;
             insideAfter = 0;
             depth = visDepth = 0;

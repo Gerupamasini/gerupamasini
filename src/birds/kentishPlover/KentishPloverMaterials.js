@@ -385,10 +385,11 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
         float kfT = floor(aFeather.x + 0.5);
         vFold = position.x >= 0.0 ? uFold.x : uFold.y; // left wing is built at +x, right wing mirrored
         // the plumage lying on the body rises and falls with the body shader's fluffing / breathing
-        // (wing feathers only while folded onto it); the arm tube (propatagium) folds away with the wing
+        // (wing feathers only while folded onto it); the arm tube (propatagium) folds away with the forearm,
+        // gone by half the fold (wingFold.foldPath: the hand folds first, then the humerus tucks it in)
         float kfWing = kfT < 7.5 || (kfT > 10.5 && kfT < 11.5) ? vFold : 1.0;
         transformed += aLie * kfWing * (uFluff * 0.0012 * aLieMask.x + uBreath * ${ANIM_BREATH} * aLieMask.y);
-        transformed += aCore * vFold;
+        transformed += aCore * smoothstep(0.0, 0.5, vFold);
         // feather micro-motion: tips flutter slightly in the wind (strongest on tail, tertials, scapulars)
         float kfLoose = (kfT > 7.5 && kfT < 10.5) || (kfT > 1.5 && kfT < 2.5) ? 1.0 : 0.35;
         float kfPh = aFeather.z * 37.0 + aFeather.y * 1.7;
