@@ -72,7 +72,8 @@ export function buildWingLayout() {
     feathers.push({ name: `t${k}`, bone: `t${k}`, type: 'tertial', base, angle: tAng[k - 1], length: tLen[k - 1], width: 11.5, innerVane: 0.55, curve: 0.1, layer: order++, index: k });
   }
 
-  // Coverts ride on the bone of the remex they overlie, so they fold with it.
+  // Coverts overlie the base of their remex (`bone`); each has its own bone rooted on the arm and its own
+  // folded orientation (skeleton.COVERT_ARM, wingFold.js).
   const top = order * STACK + 0.5;
   for (let i = 1; i <= 10; i++) {
     const p = prim[i];

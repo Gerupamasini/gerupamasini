@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
 import { buildSkeletonSpec, createBones } from './anatomy/skeleton.js';
-import { buildBodyGeometry, getBodySDF } from './anatomy/bodyMesh.js';
+import { buildBodyGeometry, getBodySDF, getTorsoSDF } from './anatomy/bodyMesh.js';
 import { buildFeatherGeometry } from './anatomy/feathers.js';
+import { computeWingFold } from './anatomy/wingFold.js';
 import { buildBareParts, buildEyes } from './anatomy/bareParts.js';
 import { createBodyMaterial, createFeatherMaterial, createBarePartsMaterial, createEyeMaterials, getPalette } from './KentishPloverMaterials.js';
 
@@ -28,7 +29,7 @@ export function getGeometries(detail) {
   const res = CFG.lod.sdfResolution[detail];
   const g = {
     body: buildBodyGeometry(CFG, spec.boneIndex, res),
-    feathers: buildFeatherGeometry(spec, spec.boneIndex, sdf, detail),
+    feathers: buildFeatherGeometry(spec, spec.boneIndex, sdf, detail, computeWingFold(spec.wingFeathers, sdf, getTorsoSDF(CFG))),
     bare: buildBareParts(spec.boneIndex, CFG.joints, spec.toes, detail),
     eyes: detail === 0 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 10, segR: 24 }) : detail === 1 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 4, segR: 12 }) : null,
   };
@@ -133,21 +134,24 @@ export class KentishPloverModel {
     }
   }
 
-  /** Wing openness for the feather shader (underwing colour of the arm surface). */
-  setWingFold(v) {
+  /** How folded each wing is (1 folded … 0 spread): underwing colour, arm tube, plumage contact. */
+  setWingFold(left, right = left) {
     const f = this.current?.feathers;
-    if (f) f.userData.uniforms.uFold.value = v;
+    if (f) f.userData.uniforms.uFold.value.set(left, right);
   }
 
+  /** Fluffing (body shader displacement); the plumage lying on the body follows it. */
   setFluff(v) {
-    const b = this.current?.body;
-    if (b) b.userData.uniforms.uFluff.value = v;
+    const c = this.current;
+    if (c?.body) c.body.userData.uniforms.uFluff.value = v;
+    if (c?.feathers) c.feathers.userData.uniforms.uFluff.value = v;
   }
 
   /** Breathing: −1..1 cycle value; displacement is masked to the chest/flanks in the shader. */
   setBreath(v) {
-    const b = this.current?.body;
-    if (b) b.userData.uniforms.uBreath.value = v;
+    const c = this.current;
+    if (c?.body) c.body.userData.uniforms.uBreath.value = v;
+    if (c?.feathers) c.feathers.userData.uniforms.uBreath.value = v;
   }
 
   dispose() {
