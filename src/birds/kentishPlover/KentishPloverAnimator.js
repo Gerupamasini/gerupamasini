@@ -4,6 +4,7 @@ import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
 import { computeWingFold, spreadAt, spreadScaleAt, raiseAt, foldAt, foldScaleAt, foldPath, WING_RAISE } from './anatomy/wingFold.js';
 import { getBodySDF, getTorsoSDF } from './anatomy/bodyMesh.js';
 import { WING } from './anatomy/featherLayout.js';
+import { BILL } from './anatomy/bareParts.js';
 import { clamp, lerp, damp, smoothstep, makeRng, makeFbm1D, frameQuat, mirrorQuat, wrapAngle } from '../../core/math.js';
 
 // Procedural, layered animation for the plover (docs/animation_reference.md).
@@ -33,7 +34,7 @@ const V = (a) => new THREE.Vector3(a[0] * mm, a[1] * mm, a[2] * mm);
 const BIND = {
   headPivot: V(J.head),
   neck0: V(J.neck0),
-  billTip: V([0, 75.7, 77.8]),
+  billTip: V(BILL.tip),
   hip: V(J.hip),
   knee: V(J.knee),
   ankle: V(J.ankle),
@@ -43,13 +44,25 @@ const L_TIB = BIND.ankle.distanceTo(BIND.knee);
 const L_TAR = BIND.foot.distanceTo(BIND.ankle);
 const BILL_FROM_HEAD = BIND.billTip.clone().sub(BIND.headPivot); // head-local (bind rotation = identity)
 const NECK_LEN = BIND.headPivot.distanceTo(BIND.neck0);
+// resting gaze pitch (rad, + = bill down): with the bind bill axis (23.6° down) the relaxed bill points 25° down
+// (photos 20–27°, body_shape_spec.md §6, §17.3)
+export const GAZE_PITCH_REST = 0.02;
 
 // ---------------------------------------------------------------- contact with the plumage
-// Torso outline without neck & head (rest space, mm) and the head's outline as sample points (head-local,
+// Trunk outline without the head and the neck-filling plumage (rest space, mm) and the head's outline as sample points (head-local,
 // mm from the head pivot): when preening or resting with the bill in the scapulars the head is kept on top
-// of the plumage lying on the body instead of sinking into it.
-const TORSO_SDF = getTorsoSDF(CFG);
+// of the plumage lying on the body instead of sinking into it. The relaxed head is sunk into the mantle /
+// fore-breast (no visible neck, body_shape_spec.md §7), so each point may sink no deeper than it does at rest.
+const TORSO_SDF = getTorsoSDF(CFG, { trunkOnly: true });
 const PLUMAGE = 3.5; // mm: scapulars, lesser coverts and tertials above the outline
+// mm: how much deeper than at rest a head / neck point on or near the trunk at rest may go — the neck-filling
+// plumage (mantleNape, foreBreast) is compressed when the neck retracts (walking: crown only ≈6 mm above the
+// back, photos; body_shape_spec.md §7, §12). Points clear of the trunk at rest (crown, face) get none.
+const SINK = 10;
+// share of the body pitch that carries the head pivot with it (about the hip). 1: the head keeps its place on
+// the body — walking photos in the bill–tail frame match the relaxed stand (IoU 0.88), only the crown sits lower
+const HEAD_PITCH_FOLLOW = 1;
+const sinkLimit = (rest, need) => Math.min(rest, need) - SINK * smoothstep(need + 6, need + 2, rest);
 const HEAD_PTS = (() => {
   const head = CFG.bodySculpt.prims.find((p) => p.name === 'head');
   const c = [head.c[0] - J.head[0], head.c[1] - J.head[1], head.c[2] - J.head[2]];
@@ -60,6 +73,8 @@ const HEAD_PTS = (() => {
       const b = (lo / 8) * Math.PI * 2;
       pts.push(new THREE.Vector3(c[0] + head.r[0] * Math.cos(a) * Math.sin(b), c[1] + head.r[1] * Math.sin(a), c[2] + head.r[2] * Math.cos(a) * Math.cos(b)));
     }
+  // depth over the torso outline at rest (mm)
+  for (const q of pts) q.rest = TORSO_SDF(q.x + J.head[0], q.y + J.head[1], q.z + J.head[2]);
   return pts;
 })();
 // The neck the same way: rings on its outline around neck1 / neck2 (bone-local, mm), each allowed to sink no
@@ -67,7 +82,7 @@ const HEAD_PTS = (() => {
 // flank or tucked into the scapulars the neck lies on the scapulars instead of passing through them. `t`:
 // how far along the chain from neck0 to the head the point is (a push of the head moves it by about t).
 const NECK_PTS = (() => {
-  const neck = CFG.bodySculpt.prims.find((p) => p.name === 'neck');
+  const neck = CFG.bodySculpt.neckContact; // the neck is not sculpted (filled by mantleNape / foreBreast at rest)
   const axis = new THREE.Vector3(...neck.b).sub(new THREE.Vector3(...neck.a)).normalize();
   const u = new THREE.Vector3(1, 0, 0);
   const v = axis.clone().cross(u).normalize();
@@ -91,7 +106,7 @@ const WING_HINGE = new THREE.Vector3(...WING_RAISE.hinge);
 // (anatomy/wingFold.js: Z-folded arm + per-feather orientations that wrap the curved flank)
 let FOLD = null;
 function getFold(model) {
-  if (!FOLD) FOLD = computeWingFold(model.spec.wingFeathers, getBodySDF(CFG), TORSO_SDF);
+  if (!FOLD) FOLD = computeWingFold(model.spec.wingFeathers, getBodySDF(CFG), getTorsoSDF(CFG));
   return FOLD;
 }
 
@@ -164,7 +179,7 @@ export class KentishPloverAnimator {
     this.idleStepTimer = 0;
 
     // Head / gaze
-    this.gaze = { yaw: 0, pitch: 0.05, roll: 0, tYaw: 0, tPitch: 0.05, tRoll: 0, timer: 0, mode: 'idle', point: null };
+    this.gaze = { yaw: 0, pitch: GAZE_PITCH_REST, roll: 0, tYaw: 0, tPitch: GAZE_PITCH_REST, tRoll: 0, timer: 0, mode: 'idle', point: null };
     this.headWorldTarget = null; // optional absolute head-pivot target (set by actions)
     this.headOverride = null; // {q: world quaternion}
     this.headStab = new THREE.Vector3();
@@ -410,37 +425,46 @@ export class KentishPloverAnimator {
     const P = this.posture;
     const run = this.stride.amount * smoothstep(0.5, 1.2, this.velocity.length());
     Object.assign(t, { height: 0, pitch: 0, roll: 0, neck: 0, fold: 1, tailPitch: 0, tailSpread: 0, fluff: 0.15, sleep: 0, oneLeg: 0, sit: 0 });
+    // pitch is relative to the bind = relaxed stand (body axis 10° tail-down); values from the photos
+    // (body_shape_spec.md §12)
     switch (P) {
-      case 'alert': // head up, neck stretched, body more upright, feathers sleeked (S11 / docs)
-        Object.assign(t, { height: 0.003, pitch: -0.12, neck: 1, fluff: -0.25, tailPitch: 0.05 });
+      case 'alert': // head up, neck stretched, body more upright, feathers sleeked (S11; spec §12, n = 1)
+        Object.assign(t, { height: 0.003, pitch: -0.1, neck: 0.6, fluff: -0.25, tailPitch: 0.05 });
         break;
-      case 'forage': // body tilted forward, head low, looking at the ground
-        Object.assign(t, { height: -0.002, pitch: 0.2, neck: -0.2, fluff: 0.1 });
+      case 'forage': // searching: body tipped forward (axis ≈ −8°), neck slightly extended, bill 35–45° down
+        Object.assign(t, { height: -0.002, pitch: 0.3, neck: 0.2, fluff: 0.1 });
         break;
       case 'hunched': // aggressive run posture: head low & forward
-        Object.assign(t, { height: -0.004, pitch: 0.32, neck: -0.3, fluff: 0.35, tailPitch: -0.1 });
+        Object.assign(t, { height: -0.004, pitch: 0.47, neck: -0.3, fluff: 0.35, tailPitch: -0.1 });
         break;
       case 'run':
-        Object.assign(t, { height: -0.003, pitch: ANIM.run.bodyPitch, neck: -0.45, fluff: -0.1 });
+        Object.assign(t, { height: -0.003, pitch: ANIM.run.bodyPitch, neck: ANIM.run.neck, fluff: -0.1 });
         break;
       case 'restOneLeg':
-        Object.assign(t, { height: 0.001, pitch: -0.02, neck: -1, fluff: 0.8, sleep: 0.7, oneLeg: 1 });
+        Object.assign(t, { height: 0.001, pitch: 0.01, neck: -1, fluff: 0.8, sleep: 0.7, oneLeg: 1 });
         break;
       case 'restTucked':
         Object.assign(t, { height: 0.0, pitch: 0.0, neck: -1, fluff: 0.9, sleep: 1, oneLeg: 1 });
         break;
       case 'sit':
-        Object.assign(t, { height: 0, pitch: -0.03, neck: -1, fluff: 0.9, sleep: 0.8, sit: 1 });
+        Object.assign(t, { height: 0, pitch: 0, neck: -1, fluff: 0.9, sleep: 0.8, sit: 1 });
         break;
       default:
         break;
     }
+    // walking levels the body and lowers the head (12 walking photos: axis −1°, crown ≈6 mm over the back)
+    if (P !== 'run' && P !== 'forage' && P !== 'hunched') {
+      const walk = this.stride.amount;
+      t.pitch += walk * ANIM.walk.bodyPitch;
+      if (P !== 'alert') t.neck = lerp(t.neck, Math.min(t.neck, ANIM.walk.neck), walk);
+    }
     if (run > 0 && P !== 'run') {
-      t.pitch = lerp(t.pitch, ANIM.run.bodyPitch, run);
-      t.neck = lerp(t.neck, -0.45, run);
+      t.pitch = lerp(t.pitch, Math.max(t.pitch, ANIM.run.bodyPitch), run);
+      t.neck = lerp(t.neck, ANIM.run.neck, run);
     }
     if (this.flight.active) {
-      Object.assign(t, { fold: 0, neck: -0.6, fluff: -0.3, tailSpread: this.flight.brake * 0.9, tailPitch: this.flight.brake * 0.35, oneLeg: 0, sit: 0, sleep: 0 });
+      // level body in flight: +0.17 from the tail-down bind (spec §12)
+      Object.assign(t, { fold: 0, pitch: 0.17, neck: -0.6, fluff: -0.3, tailSpread: this.flight.brake * 0.9, tailPitch: this.flight.brake * 0.35, oneLeg: 0, sit: 0, sleep: 0 });
     }
   }
 
@@ -619,7 +643,7 @@ export class KentishPloverAnimator {
     const raise = f.raise;
     if (raise > 0.001) {
       // tuck the foot up under the belly feathers (one-legged rest) or forward for scratching
-      const tuck = new THREE.Vector3(J.foot[0] * mm * f.sign * 0.5, 0.041, 0.006).applyQuaternion(this.model.object.quaternion).add(this.rootPos);
+      const tuck = new THREE.Vector3(J.foot[0] * mm * f.sign * 0.5, 0.042, -0.004).applyQuaternion(this.model.object.quaternion).add(this.rootPos);
       tuck.y += this.p.height;
       if (act?.legRaiseTarget?.[s]) tuck.copy(act.legRaiseTarget[s]);
       target.lerp(tuck, clamp(raise, 0, 1));
@@ -908,8 +932,9 @@ export class KentishPloverAnimator {
     if (!act?.headQ && this.posture === 'restTucked') {
       // bill tucked into the scapulars: head rotated ~160° and resting on the mantle (sleep posture)
       const side = this._tuckSide ?? (this._tuckSide = this.rng() < 0.5 ? 1 : -1);
-      const onBack = this.bodyPoint([side * 7, 74, 6]);
-      const dir = this.bodyPoint([side * 11, 69, -12]).sub(onBack).normalize();
+      // head on the mantle, crown the bird's highest point, bill into the scapulars (p040; spec §12)
+      const onBack = this.bodyPoint([side * 6, 92, 2]);
+      const dir = this.bodyPoint([side * 11, 84, -14]).sub(onBack).normalize();
       headQ = this.billQuat(dir, side * 0.5);
       tuckPos = onBack.clone().sub(BILL_FROM_HEAD.clone().multiplyScalar(0.45).applyQuaternion(headQ));
     } else if (act?.headQ) headQ = act.headQ;
@@ -926,13 +951,14 @@ export class KentishPloverAnimator {
     else {
       const n = this.p.neck;
       // posture offsets (m, root space): alert = up & slightly forward, retracted = down & back
-      const up = n > 0 ? n * 0.013 : n * 0.009;
-      const fwd = n > 0 ? n * 0.003 : n * 0.006;
+      // (neck −1: crown − back +15 → +10 mm, spec §12)
+      const up = n > 0 ? n * 0.009 : n * 0.005;
+      const fwd = n > 0 ? n * 0.003 : n * 0.002;
       const local = BIND.headPivot.clone().add(new THREE.Vector3(0, up + this.p.height - this.p.sit * 0.022, fwd));
       // body pitch carries the head forward/down with it (about the hip)
       const pitch = this.p.pitch + this.lean;
       const hip = new THREE.Vector3(0, BIND.hip.y + this.p.height, BIND.hip.z);
-      local.sub(hip).applyAxisAngle(X, pitch * 0.85).add(hip);
+      local.sub(hip).applyAxisAngle(X, pitch * HEAD_PITCH_FOLLOW).add(hip);
       headPos = local.applyQuaternion(rootQ).add(this.rootPos);
       // stabilisation: residual body bob is NOT transferred to the head (ANIM.headStabilization)
       const bob = this.stride.amount * this._bob();
@@ -1009,7 +1035,7 @@ export class KentishPloverAnimator {
     const at = new THREE.Vector3();
     for (const s of NECK_PTS) {
       p.copy(s.local).multiplyScalar(mm).applyMatrix4(this.b[s.bone].matrixWorld).applyMatrix4(inv).add(BIND_CHEST).multiplyScalar(1000);
-      const deficit = (Math.min(s.rest, plumage) - TORSO_SDF(p.x, p.y, p.z)) / s.t;
+      const deficit = (sinkLimit(s.rest, plumage) - TORSO_SDF(p.x, p.y, p.z)) / s.t;
       if (deficit > worst) [worst, at.x, at.y, at.z] = [deficit, p.x, p.y, p.z];
     }
     if (worst <= 0.01) return p.set(0, 0, 0);
@@ -1026,18 +1052,18 @@ export class KentishPloverAnimator {
     const need = PLUMAGE + 1.2 * Math.max(0, this.p.fluff);
     const p = new THREE.Vector3();
     for (let it = 0; it < 3; it++) {
-      let worst = Infinity;
+      let worst = 0;
       const at = new THREE.Vector3();
       for (const s of HEAD_PTS) {
         // world → chest-local → rest (mm)
         p.copy(s).multiplyScalar(mm).applyQuaternion(headQ).add(headPos).applyMatrix4(inv).add(BIND_CHEST).multiplyScalar(1000);
-        const d = TORSO_SDF(p.x, p.y, p.z);
-        if (d < worst) [worst, at.x, at.y, at.z] = [d, p.x, p.y, p.z];
+        const deficit = sinkLimit(s.rest, need) - TORSO_SDF(p.x, p.y, p.z);
+        if (deficit > worst) [worst, at.x, at.y, at.z] = [deficit, p.x, p.y, p.z];
       }
-      if (worst >= need) break;
+      if (worst <= 0.01) break;
       const e = 0.2;
       const g = new THREE.Vector3(TORSO_SDF(at.x + e, at.y, at.z) - TORSO_SDF(at.x - e, at.y, at.z), TORSO_SDF(at.x, at.y + e, at.z) - TORSO_SDF(at.x, at.y - e, at.z), TORSO_SDF(at.x, at.y, at.z + e) - TORSO_SDF(at.x, at.y, at.z - e)).normalize();
-      headPos.addScaledVector(g.applyQuaternion(chest.getWorldQuaternion(_q)), (need - worst) * mm);
+      headPos.addScaledVector(g.applyQuaternion(chest.getWorldQuaternion(_q)), worst * mm);
     }
     return headPos;
   }
@@ -1118,7 +1144,7 @@ export class KentishPloverAnimator {
 }
 
 const BIND_CHEST = V(J.chest);
-const BILL_DIR = BIND.billTip.clone().sub(V([0, 77.6, 57.0])).normalize();
+const BILL_DIR = BIND.billTip.clone().sub(V(BILL.base)).normalize();
 
 // ---------------------------------------------------------------- action library
 // Each action: duration (s) or fn, pose(u, params, anim, state) → overrides, optional events {name: u}.
@@ -1129,19 +1155,19 @@ function preenTarget(variant) {
   // bird-local mm points on the plumage + bill approach roll
   switch (variant) {
     case 'breast':
-      return { p: [3, 60, 34], roll: 0.2 };
+      return { p: [3, 66, 30], roll: 0.2 };
     case 'belly':
-      return { p: [6, 53, 29], roll: 0.3 };
+      return { p: [6, 52, 19], roll: 0.3 };
     case 'flank':
-      return { p: [17, 56, 2], roll: 0.9, wingLift: 0.5 };
+      return { p: [15, 58, 0], roll: 0.9, wingLift: 0.5 };
     case 'scapulars':
-      return { p: [9, 72, 4], roll: 1.4 };
+      return { p: [9, 87, -6], roll: 1.4 };
     case 'wing':
-      return { p: [16, 63, -30], roll: 1.3, wingLift: 0.2 };
+      return { p: [16, 66, -28], roll: 1.3, wingLift: 0.2 };
     case 'tail':
-      return { p: [0, 63, -40], roll: 0.4 };
+      return { p: [0, 67, -52], roll: 0.4 };
     default:
-      return { p: [3, 60, 34], roll: 0.2 };
+      return { p: [3, 66, 30], roll: 0.2 };
   }
 }
 
@@ -1158,8 +1184,9 @@ export const ACTIONS = {
       const toT = target.clone().sub(root);
       const dist = Math.hypot(toT.x, toT.z);
       const yawW = Math.atan2(toT.x, toT.z);
-      // plovers pick by tipping the whole body forward over the legs; tilt builds up through aim → strike
-      const maxPitch = 0.9 + clamp(0.055 - dist, -0.04, 0.04) * 4;
+      // plovers pick by tipping the whole body forward over the legs (up to +0.56 from the relaxed stand, body
+      // axis ≈ −22°) and stretching the neck 15–20 mm (p007, p061; spec §7, §12); tilt builds up through aim → strike
+      const maxPitch = 0.56 + clamp(0.055 - dist, -0.04, 0.04) * 4;
       const aimK = smoothstep(0, 0.22, u);
       const strikeK = smoothstep(0.2, 0.3, u);
       const recK = smoothstep(0.6, 1.0, u);
@@ -1194,7 +1221,7 @@ export const ACTIONS = {
         } else billT.y += 0.004 * k;
       } else {
         const k = easeInOut((u - recoverStart) / (1 - recoverStart));
-        billT = deep.clone().add(new THREE.Vector3(0, 0.01, 0)).lerp(A.rootToWorld(0, 0.078, 0.07), k);
+        billT = deep.clone().add(new THREE.Vector3(0, 0.01, 0)).lerp(A.rootToWorld(0, 0.085, 0.052), k);
         out.jaw = u < recoverStart + 0.15 ? 0.1 : 0; // swallow
       }
       out.billTarget = billT;
@@ -1221,7 +1248,7 @@ export const ACTIONS = {
       const center = A.bodyPoint([pt[0] * 0.2, pt[1] + 16, pt[2] + 20]);
       const bill = center.clone().lerp(onBody, approach);
       bill.y += nib * approach;
-      const dir = onBody.clone().sub(A.bodyPoint([pt[0] * -0.3, 82, pt[2] + 14])).normalize();
+      const dir = onBody.clone().sub(A.bodyPoint([pt[0] * -0.3, 96, pt[2] + 14])).normalize();
       const out = {
         billTarget: approach > 0.02 ? bill : null,
         headQ: approach > 0.02 ? A.billQuat(dir, tg.roll * side) : null,
@@ -1247,7 +1274,7 @@ export const ACTIONS = {
       const scr = Math.sin(u * Math.PI * 2 * 9) * 0.002;
       const out = {
         legRaise: { [side]: k },
-        legRaiseTarget: { [side]: A.bodyPoint([sg * 12, 74 + scr * 1000, 38]) },
+        legRaiseTarget: { [side]: A.bodyPoint([sg * 12, 87 + scr * 1000, 14]) },
         wing: { [side]: { raise: 0.1 * k } }, // folded wing held slightly off the flank
         posture: { roll: -sg * 0.12 * k, pitch: 0.12 * k, neck: -0.3 },
       };
@@ -1281,7 +1308,7 @@ export const ACTIONS = {
       const side = (st.side ??= A.rng() < 0.5 ? 'L' : 'R');
       const k = smoothstep(0, 0.1, u) * (1 - smoothstep(0.9, 1, u));
       const tr = 0.15 + 0.1 * Math.sin(u * Math.PI * 2 * 10);
-      return { legRaise: { [side]: tr * k }, legRaiseTarget: { [side]: A.rootToWorld((side === 'L' ? 1 : -1) * 0.01, 0.006, 0.02) }, posture: { pitch: 0.3, neck: -0.2 } };
+      return { legRaise: { [side]: tr * k }, legRaiseTarget: { [side]: A.rootToWorld((side === 'L' ? 1 : -1) * 0.01, 0.006, 0.02) }, posture: { pitch: 0.3, neck: 0.2 } };
     },
   },
 
@@ -1291,7 +1318,8 @@ export const ACTIONS = {
     events: { push: 0.24, airborne: 0.36 },
     pose(u, p, A) {
       const crouch = smoothstep(0, 0.24, u) * (1 - smoothstep(0.24, 0.36, u));
-      const out = { posture: { height: -0.012 * crouch + 0.01 * smoothstep(0.24, 0.4, u), pitch: 0.25 * crouch - 0.1 * smoothstep(0.3, 0.5, u), neck: -0.5, fluff: -0.3 }, fast: { height: 30, pitch: 20 }, legsGround: u < 0.36 };
+      // (lift-off: body levelled from the tail-down stand, +0.07 = 0.17 level − 0.1 nose up)
+      const out = { posture: { height: -0.012 * crouch + 0.01 * smoothstep(0.24, 0.4, u), pitch: 0.25 * crouch + 0.07 * smoothstep(0.3, 0.5, u), neck: -0.5, fluff: -0.3 }, fast: { height: 30, pitch: 20 }, legsGround: u < 0.36 };
       out.wing = { both: { fold: 1 - smoothstep(0.1, 0.3, u), elev: lerp(0, 1.0, smoothstep(0.15, 0.32, u)) } };
       if (u > 0.34) out.wing = null;
       return out;
@@ -1304,7 +1332,8 @@ export const ACTIONS = {
     events: { touchdown: 0.2 },
     pose(u) {
       const absorb = bump(u, 0.18, 0.5);
-      const out = { posture: { height: -0.008 * absorb, pitch: 0.2 * absorb - 0.15 * (1 - smoothstep(0, 0.2, u)) }, fast: { height: 25 }, legsGround: u > 0.18, legsDown: 1 };
+      // braking in the air: tail down like the stand (pitch 0), then absorb forward
+      const out = { posture: { height: -0.008 * absorb, pitch: 0.2 * absorb }, fast: { height: 25 }, legsGround: u > 0.18, legsDown: 1 };
       // wings: spread & raised after touchdown, then folded (C: characteristic plover "wing-lift")
       const up = smoothstep(0.2, 0.45, u) * (1 - smoothstep(0.55, 0.9, u));
       out.wing = { both: { fold: smoothstep(0.35, 0.95, u), elev: 0.9 * up, hSweep: 0.2, wSweep: 0.4 } };
@@ -1318,7 +1347,7 @@ export const ACTIONS = {
     duration: 0.8,
     pose(u) {
       const k = bump(u, 0, 1);
-      return { posture: { pitch: 0.35 * k, neck: -0.4, fluff: 0.5 * k, height: -0.004 * k }, tailSpread: 0.4 * k, tailPitch: 0.15 * k };
+      return { posture: { pitch: 0.5 * k, neck: -0.4, fluff: 0.5 * k, height: -0.004 * k }, tailSpread: 0.4 * k, tailPitch: 0.15 * k };
     },
   },
 };
