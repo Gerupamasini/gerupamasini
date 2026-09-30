@@ -486,18 +486,29 @@ export function createReef() {
   const surfaceAt = (x, z) => { const h = rockTop(x, z); return h ? h : { point: new THREE.Vector3(x, sandHeight(x, z), z), face: { normal: new THREE.Vector3(0, 1, 0) }, object: sand, sandHit: true }; };
   const rock = (seed, x, z, r, st, rotY = 0, yOff = 0) => {
     const m = new THREE.Mesh(rockGeometry(seed, r, st, 7), rockMat);
-    let y = sandHeight(x, z) + r * st[1] * 0.35;
-    if (yOff > 0 && rocks.length) {
-      // a stacked stone rests on the stones below it: find their surface under its footprint
-      let top = -1;
-      for (const [dx, dz] of [[0, 0], [0.35, 0], [-0.35, 0], [0, 0.35], [0, -0.35]]) {
-        const h = rockTop(x + dx * r * st[0], z + dz * r * st[2]);
-        if (h) top = Math.max(top, h.point.y);
-      }
-      y = top > 0 ? top + r * st[1] * 0.3 : y + yOff;
+    // drop the stone from above until its underside touches the sand or a stone placed
+    // earlier, then settle it a little into what it rests on (no floating, no deep overlap)
+    m.position.set(x, 1.0, z); m.rotation.y = rotY; m.updateMatrixWorld();
+    const pa = m.geometry.attributes.position, v = new THREE.Vector3();
+    const gaps = [];
+    for (let i = 0; i < pa.count; i += 3) {
+      v.fromBufferAttribute(pa, i);
+      if (v.y > 0.2 * r * st[1]) continue;              // underside only
+      v.applyMatrix4(m.matrixWorld);
+      let sup = sandHeight(v.x, v.z), fromRock = false;
+      if (rocks.length) { ray.set(new THREE.Vector3(v.x, v.y + 0.002, v.z), down); const h = ray.intersectObjects(rocks, false)[0]; if (h && h.point.y > sup) { sup = h.point.y; fromRock = true; } }
+      gaps.push([v.y - sup, fromRock]);
     }
-    m.position.set(x, y, z);
-    m.rotation.y = rotY;
+    // it comes to rest when a small part of its underside is in contact (irregular stones
+    // interlock), so take a low percentile of the gaps rather than the single first contact
+    gaps.sort((a, b) => a[0] - b[0]);
+    // on sand: bedded in so a good part of the underside is buried; on rock: nested into the
+    // stones below (the overlap is hidden inside them) so it never sits on a single point
+    const rockSup = gaps.filter((g) => g[1]).length > gaps.length * 0.25;
+    const k = gaps[Math.floor(gaps.length * (rockSup ? 0.45 : 0.3))], onSand = !rockSup;
+    const settle = onSand ? 0.12 * r * st[1] : 0.1 * r * st[1];
+    m.position.y = 1.0 - k[0] - settle;
+    const y = m.position.y;
     m.castShadow = true; m.receiveShadow = true;
     group.add(m); m.updateMatrixWorld(); rocks.push(m);
     obstacles.push({ c: new THREE.Vector3(x, y, z), r: r * Math.max(...st) * 1.25 });
