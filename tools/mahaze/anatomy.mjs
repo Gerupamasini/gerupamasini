@@ -18,12 +18,16 @@ export const VERT_COUNT = 31;
 
 // ---------------------------------------------------------------------------
 // Profile key points (pre-cap dimensions)
-const KS = [0.0, 0.6, 1.5, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 16.0, 19.0, 22.0, 25.0, 28.0, 31.0, 34.0, 37.0, 39.5, 41.0, 43.2];
-const KTOP = [2.85, 3.3, 3.9, 4.5, 4.95, 5.15, 5.3, 5.5, 5.85, 6.2, 6.3, 6.18, 5.92, 5.55, 5.2, 4.9, 4.65, 4.5, 4.4, 4.25];
-const KBOT = [1.05, 0.8, 0.45, 0.15, 0.03, 0.0, 0.0, 0.0, 0.05, 0.1, 0.15, 0.3, 0.55, 0.8, 1.02, 1.18, 1.28, 1.36, 1.42, 1.6];
-const KW = [1.6, 2.1, 2.55, 2.95, 3.3, 3.55, 3.6, 3.42, 3.18, 2.92, 2.7, 2.46, 2.2, 1.9, 1.58, 1.28, 0.98, 0.76, 0.6, 0.45];
-const KNT = [2.3, 2.3, 2.35, 2.4, 2.4, 2.35, 2.3, 2.25, 2.2, 2.1, 2.05, 2.0, 1.95, 1.92, 1.9, 1.85, 1.82, 1.8, 1.8, 1.8];
-const KNB = [2.6, 2.8, 3.0, 3.2, 3.2, 3.2, 3.1, 3.0, 2.85, 2.7, 2.55, 2.4, 2.25, 2.1, 2.0, 1.95, 1.9, 1.85, 1.85, 1.85];
+// Measured on the lateral photo of a juvenile (IMG_1603, fine %SL grid) and cross-checked on IMG_9176,
+// 03 and 05 (1 % SL = 0.41 mm). Snout tip 2.1 mm above the throat line (5 % SL); dorsal profile rises
+// 2 % SL within the first 1 % SL (blunt, rounded snout), −7.5 % SL at the eye front, eye top at −9 %;
+// head depth at the eye 13 % SL, body depth 17–18 % SL, caudal peduncle 7.5 % SL.
+const KS = [0.0, 0.41, 0.82, 1.23, 1.64, 2.05, 2.46, 2.87, 3.28, 4.1, 4.9, 6.15, 8.2, 10.25, 12.3, 15, 18, 21, 24, 27, 30, 33, 36, 38.5, 40.5, 42, 43.2];
+const KTOP = [2.85, 3.08, 3.42, 3.66, 3.95, 4.23, 4.48, 4.8, 5.05, 5.3, 5.42, 5.63, 6.2, 6.52, 6.74, 6.95, 7.05, 6.95, 6.72, 6.38, 5.98, 5.6, 5.27, 5.05, 4.88, 4.78, 4.66];
+const KBOT = [1.4, 1.2, 0.98, 0.83, 0.68, 0.54, 0.43, 0.33, 0.25, 0.13, 0.07, 0.03, 0.0, 0.0, 0.0, 0.0, 0.02, 0.12, 0.35, 0.7, 1.1, 1.48, 1.8, 2.0, 2.14, 2.24, 2.36];
+const KW = [1.62, 1.95, 2.18, 2.36, 2.5, 2.62, 2.74, 2.85, 2.94, 3.04, 3.14, 3.3, 3.38, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
+const KNT = [2.2, 2.12, 2.04, 1.97, 1.91, 1.87, 1.84, 1.82, 1.8, 1.8, 1.82, 1.86, 1.92, 1.98, 2.02, 2.03, 2.0, 1.97, 1.95, 1.92, 1.9, 1.87, 1.84, 1.82, 1.8, 1.8, 1.8];
+const KNB = [2.5, 2.7, 2.85, 3.0, 3.1, 3.2, 3.25, 3.25, 3.2, 3.15, 3.1, 3.0, 2.85, 2.75, 2.65, 2.55, 2.45, 2.35, 2.2, 2.1, 2.0, 1.95, 1.9, 1.87, 1.85, 1.85, 1.85];
 
 export function monotone(xs, ys) {
   const n = xs.length;
@@ -64,13 +68,14 @@ const fW = monotone(KS, KW);
 const fNT = monotone(KS, KNT);
 const fNB = monotone(KS, KNB);
 
-const SNOUT_CAP = 0.9;
+const SNOUT_CAP = 0.62;
 const TAIL_BLADE0 = 39.3;
 
+// blunt, rounded snout front (superelliptic cap): the front face is almost flat, as in the photos
 function snoutCap(s) {
   if (s >= SNOUT_CAP) return 1;
   const u = clamp(s / SNOUT_CAP, 0, 1);
-  return Math.sqrt(Math.max(0, 1 - (1 - u) * (1 - u)));
+  return Math.pow(Math.max(0, 1 - Math.pow(1 - u, 2.6)), 1 / 2.6);
 }
 // the caudal peduncle ends in a thin vertical blade that merges into the caudal fin plane
 function tailU(s) { return clamp((s - TAIL_BLADE0) / (S_END - TAIL_BLADE0), 0, 1); }
@@ -170,31 +175,37 @@ export function surfaceAt(s, y) {
   return { p: [s, y, z], n: norm3(g) };
 }
 
-// Eye (left side, +z). Right eye mirrors z. Goby eyes sit high, bulge dorsolaterally and nearly meet
-// over the narrow interorbital.
+// Eye (left side, +z). Right eye mirrors z. Measured: centre 12 % SL behind the snout, 2.4 mm above
+// the snout tip; eyeball Ø ≈ 2 mm; the iris ellipse (3.9 × 3.5 % SL) shows the pupil looks sideways,
+// tilted ~26° upward and slightly forward. The eyes sit high and close (interorbital < eye Ø) and their
+// tops rise just above the dorsal head profile.
+// Close-up / frontal photos (user refs): each eye is a raised turret on the head top; the dorsomedial
+// part of the dome is covered by pigmented skin, only a lateral cornea window shows the iris. Pupils
+// look sideways, ~30° up and ~20° forward; interorbital ≈ 0.7 eye Ø; eye centres 45 % of head width apart.
 export const EYE = {
-  center: [4.7, 4.5, 1.32],
-  axis: norm3([-0.25, 0.72, 0.65]),
-  radius: 1.08,
+  center: [4.9, 4.82, 1.3],
+  axis: norm3([-0.25, 0.45, 0.86]),
+  radius: 1.0,
   skin: 0.06,
-  aperture: 58 * (Math.PI / 180),
+  aperture: 60 * (Math.PI / 180),
 };
 
-// Gape (line where the lips meet) on the lateral surface, from the snout tip to the rictus.
-export const MOUTH = [[0.0, 1.95], [0.35, 1.9], [0.8, 1.8], [1.5, 1.64], [2.3, 1.49], [3.1, 1.38], [3.8, 1.32], [4.3, 1.33]];
-export const RICTUS_S = 4.3;
-// Free margin of the gill cover (operculum + subopercle), top → bottom.
-export const OPERCLE = [[9.6, 4.55], [10.4, 4.2], [11.0, 3.5], [11.3, 2.6], [11.2, 1.7], [10.8, 0.95], [10.1, 0.42], [9.3, 0.14]];
+// Gape (where the lips meet): from the snout tip gently down to the rictus at 8.5 % SL, just in front
+// of the eye (the juvenile maxilla does not reach the eye centre). The upper jaw overhangs slightly.
+export const MOUTH = [[0.0, 1.98], [0.3, 1.95], [0.8, 1.87], [1.5, 1.74], [2.2, 1.6], [2.8, 1.49], [3.2, 1.42], [3.5, 1.37]];
+export const RICTUS_S = 3.5;
+// Free margin of the gill cover (operculum + subopercle), top → bottom (head length ≈ 28.5 % SL).
+export const OPERCLE = [[10.0, 5.1], [10.8, 4.62], [11.4, 3.8], [11.7, 2.8], [11.55, 1.8], [11.1, 0.95], [10.4, 0.38], [9.6, 0.08]];
 // Preopercular groove (hinge side of the gill cover), top → bottom.
-export const PREOPERCLE = [[6.9, 4.25], [7.5, 3.3], [7.8, 2.4], [7.6, 1.5], [7.0, 0.8], [6.2, 0.4]];
+export const PREOPERCLE = [[7.1, 4.8], [7.7, 3.62], [8.0, 2.5], [7.8, 1.5], [7.1, 0.75], [6.2, 0.32]];
 
 // Rig pivots (fish space, mm)
 export const PIVOTS = {
-  jaw: [4.9, 1.25, 0],
-  premax: [1.0, 2.3, 0],
-  hyoid: [5.6, 0.7, 0],
-  opercTop: [8.9, 4.3],
-  opercBottom: [9.2, 0.5],
+  jaw: [4.15, 1.0, 0],
+  premax: [0.9, 2.6, 0],
+  hyoid: [5.4, 0.45, 0],
+  opercTop: [9.4, 4.9],
+  opercBottom: [9.6, 0.45],
 };
 
 /** y of the gape at s (piecewise linear on MOUTH). */
@@ -265,33 +276,34 @@ function lipLine(sign, radii, out) {
 
 function buildFeatures() {
   const n = MOUTH.length;
-  const ru = MOUTH.map((_, i) => 0.38 - 0.17 * (i / (n - 1)));
-  const rl = MOUTH.map((_, i) => 0.31 - 0.14 * (i / (n - 1)));
-  const lipsU = capsuleChain(lipLine(1, ru, 0.15), ru);
-  const lipsL = capsuleChain(lipLine(-1, rl, 0.12), rl);
+  const ru = MOUTH.map((_, i) => 0.37 - 0.18 * (i / (n - 1)));
+  const rl = MOUTH.map((_, i) => 0.31 - 0.15 * (i / (n - 1)));
+  const lipsU = capsuleChain(lipLine(1, ru, 0.18), ru);
+  // the upper jaw overhangs the lower slightly: the lower lip starts a little behind the snout tip
+  const lipsL = capsuleChain(lipLine(-1, rl, 0.14).map((p, i) => (i === 0 ? [p[0] + 0.12, p[1], p[2]] : p)), rl);
   const gape = onSurface(MOUTH, 0.0);
   gape[0] = [-0.12, MOUTH[0][1], 0];
-  const crease = capsuleChain(gape, MOUTH.map(() => 0.045));
+  const crease = capsuleChain(gape, MOUTH.map((_, i) => 0.065 - 0.015 * (i / (MOUTH.length - 1))));
   // premaxillary groove above the upper lip, mental groove below the lower lip
-  const grooveU = onSurface(MOUTH.slice(1).map(([s, y]) => [s, y + 0.78]), -0.02);
-  grooveU.unshift([0.45, MOUTH[0][1] + 0.84, 0]);
+  const grooveU = onSurface(MOUTH.slice(1).map(([s, y]) => [s, y + 0.62]), -0.02);
+  grooveU.unshift([0.4, MOUTH[0][1] + 0.66, 0]);
   const grooveL = onSurface(MOUTH.slice(2, -1).map(([s, y]) => [s, y - 0.66]), -0.02);
   const gU = capsuleChain(grooveU, grooveU.map((_, i) => 0.05 - 0.02 * (i / grooveU.length)));
   const gL = capsuleChain(grooveL, grooveL.map(() => 0.05));
 
-  const operc = capsuleChain(onSurface(OPERCLE.map(([s, y]) => [s + 0.07, y]), 0.0), OPERCLE.map((_, i, a) => (i === 0 || i === a.length - 1 ? 0.02 : 0.05)));
-  const preop = capsuleChain(onSurface(PREOPERCLE, 0.0), PREOPERCLE.map(() => 0.035));
+  const operc = capsuleChain(onSurface(OPERCLE.map(([s, y]) => [s + 0.07, y]), 0.0), OPERCLE.map((_, i, a) => (i === 0 || i === a.length - 1 ? 0.012 : 0.03)));
+  const preop = capsuleChain(onSurface(PREOPERCLE, 0.0), PREOPERCLE.map(() => 0.018));
 
-  const cheekS = surfaceAt(7.0, 2.3);
-  const cheek = [cheekS.p[0], cheekS.p[1], cheekS.p[2] - 0.38];
+  const cheekS = surfaceAt(6.8, 2.55);
+  const cheek = [cheekS.p[0], cheekS.p[1], cheekS.p[2] - 0.32];
   const opS = surfaceAt(10.0, 2.55);
   const opPlate = [opS.p[0], opS.p[1], opS.p[2] - 0.32];
 
   const pecSurf = surfaceAt(12.35, 2.35);
   const pecLobe = [pecSurf.p[0], pecSurf.p[1], pecSurf.p[2] - 0.28];
 
-  const nosA = surfaceAt(1.35, 3.3);
-  const nosB = surfaceAt(2.5, 3.95);
+  const nosA = surfaceAt(1.05, 2.95);
+  const nosB = surfaceAt(2.4, 3.75);
 
   const E = EYE;
   const Rs = E.radius + E.skin;
@@ -309,7 +321,7 @@ function buildFeatures() {
     papilla: [22.9, botY(22.9) + 0.02, 0],
     anus: [22.45, botY(22.45) - 0.03, 0],
     pelvicBase: [12.0, botY(12.0) + 0.08, 0],
-    interorb: [4.9, topY(4.9) + 0.3, 0],
+    interorb: [4.9, topY(4.9) + 0.22, 0],
   };
 }
 
@@ -324,14 +336,14 @@ export function field(s, y, z) {
   const L = z >= 0;
   let d = baseDist(s, y, z);
   // eye mounds
-  if (s < 8.5) for (const e of F.eyes) d = smin(d, sphereDist(p, e.c, F.Rs), 0.42);
+  if (s < 8.5) for (const e of F.eyes) d = smin(d, sphereDist(p, e.c, F.Rs), 0.24);
   // cheeks (adductor muscles) and the gill-cover plate
-  if (s > 4 && s < 10) d = smin(d, ellipsoidDist(pm, F.cheek, [1.9, 1.5, 0.52]), 0.45);
-  if (s > 7.5 && s < 12.5) d = smin(d, ellipsoidDist(pm, F.opPlate, [1.35, 2.0, 0.44]), 0.3);
+  if (s > 3.5 && s < 10) d = smin(d, ellipsoidDist(pm, F.cheek, [2.2, 1.55, 0.55]), 0.5);
+  if (s > 7.5 && s < 12.5) d = smin(d, ellipsoidDist(pm, F.opPlate, [1.3, 2.0, 0.36]), 0.35);
   // fleshy lips
-  if (s < 5.5 && y < 3.2) {
-    d = smin(d, capsuleChainDist(p, L ? F.lipsU : F.lipsUR), 0.1);
-    d = smin(d, capsuleChainDist(p, L ? F.lipsL : F.lipsLR), 0.1);
+  if (s < 5.5 && y < 3.1) {
+    d = smin(d, capsuleChainDist(p, L ? F.lipsU : F.lipsUR), 0.16);
+    d = smin(d, capsuleChainDist(p, L ? F.lipsL : F.lipsLR), 0.16);
   }
   // pectoral fin base (fleshy lobe)
   if (s > 10.5 && s < 14.5) d = smin(d, ellipsoidDist(pm, F.pecLobe, [0.75, 1.55, 0.45]), 0.3);
@@ -344,13 +356,13 @@ export function field(s, y, z) {
 
   // --- subtractions
   if (s < 8.5) for (const e of F.eyes) d = smax(d, -sphereDist(p, e.cut, F.rho), 0.08);
-  if (s < 5.5 && y < 3.2) {
+  if (s < 5.5 && y < 3.1) {
     d = smax(d, -capsuleChainDist(p, L ? F.crease : F.creaseR), 0.04);
     d = smax(d, -capsuleChainDist(p, L ? F.gU : F.gUR), 0.06);
   }
   if (s > 8.5 && s < 12.5) d = smax(d, -capsuleChainDist(p, L ? F.operc : F.opercR), 0.05);
   if (s > 5.5 && s < 9) d = smax(d, -capsuleChainDist(p, L ? F.preop : F.preopR), 0.04);
-  if (s > 2.5 && s < 7.5) d = smax(d, -ellipsoidDist(p, F.interorb, [1.5, 0.4, 0.42]), 0.25);
+  if (s > 2.5 && s < 7.5) d = smax(d, -ellipsoidDist(p, F.interorb, [1.4, 0.32, 0.38]), 0.22);
   if (s > 21.5 && s < 23.5) d = smax(d, -sphereDist(p, F.anus, 0.09), 0.05);
   if (s < 4) d = smax(d, -sphereDist(pm, F.nosB, 0.09), 0.05);
   return d;

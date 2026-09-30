@@ -67,7 +67,9 @@ post.material.uniforms.uTex.value = mainRT.texture;
 
 // ---------------------------------------------------------------------------- environment
 const background = createBackground(shared);
-const floor = createFloor(shared, -0.0105);
+const floor = createFloor(shared, -0.0034);
+const followPos = new THREE.Vector3();
+const followTarget = new THREE.Vector3();
 const particles = createParticles(shared);
 scene.add(background, floor, particles);
 // lights are only used by the standard-PBR fallback materials of the glTF
@@ -225,6 +227,7 @@ async function onLoaded(gltf) {
   // mouth / gill interiors
   const interiorMat = createInteriorMaterial({ shared });
   for (const m of fish.interiors) m.userData.custom = interiorMat;
+  fish.interiorMat = interiorMat;
 
   // fins (two passes each, both skinned to the same skeleton)
   const finOrig = fish.fins[0].mesh.material;
@@ -234,6 +237,9 @@ async function onLoaded(gltf) {
   for (const f of fish.fins) {
     const scatter = new THREE.SkinnedMesh(f.mesh.geometry, finMats.scatter);
     scatter.bind(f.mesh.skeleton, f.mesh.bindMatrix);
+    // both passes share the fin's morph state (fold / flex / sculling wave)
+    scatter.morphTargetInfluences = f.mesh.morphTargetInfluences;
+    scatter.morphTargetDictionary = f.mesh.morphTargetDictionary;
     scatter.frustumCulled = false;
     scatter.layers.set(LAYER_FISH);
     scatter.layers.enable(LAYER_BEHIND);
@@ -250,14 +256,24 @@ async function onLoaded(gltf) {
   root.updateMatrixWorld(true);
   for (const bone of Object.values(fish.bones)) bone.userData.restObj = bone.getWorldPosition(new THREE.Vector3());
   fish.root = root;
-  fish.behavior = createBehavior({ root, bones: fish.bones, clips: gltf.animations });
+  const rig = root.getObjectByName('Mahaze_Juvenile').userData.mahazeRig;
+  // the sand is at the level of the pelvic disc: the goby rests on the bottom
+  floor.position.y = rig.contactY;
+  fish.behavior = createBehavior({
+    root,
+    bones: fish.bones,
+    finMeshes: Object.fromEntries(fish.fins.map((f) => [f.mesh.name, f.mesh])),
+    axes: rig.axes,
+    contactY: rig.contactY,
+    floorY: rig.contactY,
+  });
   fish.behavior.setAuto(document.getElementById('auto').checked);
   applyMaterialMode();
   if (!userMovedCamera) setCameraPreset(currentPreset, true);
   progressEl.hidden = true;
   document.body.classList.add('ready');
   // debugging / automated capture: advance the behaviour without waiting for real time
-  window.__mahaze = { fish, step: (sec) => { for (let t = 0; t < sec; t += 1 / 60) fish.behavior.update(1 / 60); } };
+  window.__mahaze = { fish, camera, controls, THREE, step: (sec) => { for (let t = 0; t < sec; t += 1 / 60) fish.behavior.update(1 / 60); } };
   window.__mahazeReady = true;
 }
 
@@ -280,7 +296,7 @@ const PRESETS = {
   whole: { target: [0, 0.0005, 0.0], pos: [0.082, 0.024, 0.036], radius: 0.029 },
   head: { target: [0.0005, 0.0012, 0.0185], pos: [0.022, 0.011, 0.034], radius: 0.0085 },
   tail: { target: [0, 0.0003, -0.017], pos: [0.028, 0.006, -0.008], radius: 0.012 },
-  below: { target: [0, -0.001, 0.004], pos: [0.045, -0.03, 0.03], radius: 0.028 },
+  below: { target: [0, -0.0008, 0.012], pos: [0.02, -0.0012, 0.06], radius: 0.02 },
 };
 let camTween = null;
 let userMovedCamera = false;
@@ -428,15 +444,21 @@ function frame() {
     if (camTween.t >= 1) camTween = null;
   }
   if (fish.behavior) {
-    const before = fish.behavior.anchor().clone();
     fish.behavior.update(dt);
     fish.root.updateMatrixWorld(true);
+    fish.interiorMat.uniforms.uMouthOpen.value = fish.behavior.state.mouthOpen || 0;
+    fish.interiorMat.uniforms.uGillOpen.value = fish.behavior.state.gillOpen || 0;
     if (document.getElementById('follow-fish').checked) {
-      const delta = fish.behavior.anchor().clone().sub(before);
+      // spring-damped follow: the camera trails a dart slightly instead of being welded to the fish
+      followTarget.copy(fish.behavior.anchor());
+      followTarget.y = 0;
+      const k = 1 - Math.exp(-dt * 5);
+      const delta = followPos.clone().lerp(followTarget, k).sub(followPos);
+      followPos.add(delta);
       controls.target.add(delta);
       camera.position.add(delta);
       if (camTween) { camTween.from.target.add(delta); camTween.from.pos.add(delta); camTween.to.target.add(delta); camTween.to.pos.add(delta); }
-    }
+    } else followPos.copy(fish.behavior.anchor()).setY(0);
   }
   controls.update();
   updateLight();
@@ -498,8 +520,9 @@ bindRange('interior', (v) => { shared.uInterior.value = v; });
 bindRange('exposure', (v) => { post.material.uniforms.uExposure.value = v; });
 document.getElementById('auto').addEventListener('change', (e) => fish.behavior?.setAuto(e.target.checked));
 document.getElementById('freeze').addEventListener('change', (e) => fish.behavior?.setPaused(e.target.checked));
-document.getElementById('act-swim').addEventListener('click', () => fish.behavior?.swim());
+document.getElementById('act-swim').addEventListener('click', () => fish.behavior?.dart());
 document.getElementById('act-yawn').addEventListener('click', () => fish.behavior?.yawn());
+document.getElementById('act-flick').addEventListener('click', () => fish.behavior?.flick());
 document.getElementById('floor').addEventListener('change', (e) => { floor.visible = e.target.checked && envName === 'water'; });
 document.getElementById('snow').addEventListener('change', (e) => { particles.visible = e.target.checked; });
 document.getElementById('autorot').addEventListener('change', (e) => { controls.autoRotate = e.target.checked; controls.autoRotateSpeed = 0.8; });
@@ -522,7 +545,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '2') pick('cam-preset', 'head');
   if (e.key === '3') pick('cam-preset', 'tail');
   if (e.key === 'y') fish.behavior?.yawn();
-  if (e.key === 'w') fish.behavior?.swim();
+  if (e.key === 'w') fish.behavior?.dart();
+  if (e.key === 'd') fish.behavior?.flick();
 });
 
 // URL parameters for reproducible views (?light=back&view=tail&debug=1)
@@ -537,8 +561,8 @@ if (params.get('anim')) {
   const wait = setInterval(() => {
     if (!window.__mahazeReady) return;
     clearInterval(wait);
-    if (name === 'freeze') { fish.behavior.setPaused(true); document.getElementById('freeze').checked = true; }
-    else fish.behavior.pose(name, Number(t) || 0);
+    fish.behavior.pose(name === 'freeze' ? 'perch' : name, Number(t) || 0);
+    document.getElementById('freeze').checked = true;
   }, 50);
 }
 if (params.get('cam')) {

@@ -212,13 +212,13 @@ export function buildGills(mesh) {
         const depth = 0.07;
         const p = sub(v.fish, mul(nf, depth));
         const u = r / ROWS;
-        row.push(out.vert(p, [...lining.map((c) => c * (0.8 + 0.2 * hash01(r, k, 3, 4))), 1], [k / (J - 1), u], 'flapLining', 1, 0));
+        row.push(out.vert(p, [...lining.map((c) => c * (0.8 + 0.2 * hash01(r, k, 3, 4))), 0.5], [k / (J - 1), u], 'flapLining', 1, 0));
       }
       lin.push(row);
     }
     out.grid(lin, (c) => [0, 0, -Math.sign(c[2])]); // lining looks toward the body
     // 2) free edge strip joining the outer skin (flap copy) to the lining
-    const edgeRows = [E.flap.map((g) => out.vert(V[g].fish, [...edgeC, 1], [0, 0], 'flapLining', 1, 0)), lin[0]];
+    const edgeRows = [E.flap.map((g) => out.vert(V[g].fish, [...edgeC, 0.5], [0, 0], 'flapLining', 1, 0)), lin[0]];
     out.grid(edgeRows, (c) => [1, 0, 0]);
     // 3) chamber wall: starts at the body-side cut and runs forward under the flap, 0.55 mm deep
     const wallRows = [];
@@ -231,7 +231,7 @@ export function buildGills(mesh) {
         const d = r === 0 ? 0 : Math.min(0.18 + 0.4 * smoothstep(0, 6, r), 0.42 * halfW);
         const p = sub(v.fish, mul(nf, d));
         const endFade = Math.min(k, J - 1 - k) / 3;
-        row.push(out.vert(p, [...wall.map((c) => c * (0.7 + 0.3 * clamp(endFade))), 1], [k / (J - 1), r / ROWS], 'gillWall', 0, 0));
+        row.push(out.vert(p, [...wall.map((c) => c * (0.7 + 0.3 * clamp(endFade))), 0.5], [k / (J - 1), r / ROWS], 'gillWall', 0, 0));
       }
       wallRows.push(row);
     }
@@ -249,8 +249,8 @@ export function buildGills(mesh) {
         // keep the filament tips under the closed gill cover (wall depth minus the lining clearance)
         const depth = Math.hypot(...sub(v.fish, pw));
         const h = Math.max(0.02, Math.min(H * (0.4 + 0.6 * lat), depth - 0.12));
-        base.push(out.vert(pw, [0.5, 0.05, 0.05, 1], [k / (J - 1), 0], 'gillArch', 0, 1));
-        top.push(out.vert(add(pw, mul(nf, h)), [0.85, 0.16, 0.14, 1], [k / (J - 1), 1], 'gillArch', 0, 1));
+        base.push(out.vert(pw, [0.5, 0.05, 0.05, 0.5], [k / (J - 1), 0], 'gillArch', 0, 1));
+        top.push(out.vert(add(pw, mul(nf, h)), [0.85, 0.16, 0.14, 0.5], [k / (J - 1), 1], 'gillArch', 0, 1));
       }
       out.grid([base, top], (c) => [1, 0, 0]);
       // back face of the ribbon too (arches are seen from both sides when the cover swings)

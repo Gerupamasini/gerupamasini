@@ -87,6 +87,8 @@ void main() {
   float lensSpec = pupil * specGGX(normalize(mat3(modelMatrix) * lensN), V, L, 0.06, 0.03);
   vec3 lensEnv = pupil * waterEnv(reflect(-V, normalize(mat3(modelMatrix) * lensN)), 0.08) * 0.03;
   diffuse = mix(diffuse, vec3(0.003, 0.005, 0.008) + ambientIrr(N) * 0.02, pupil);
+  // the pupil glints blue-green (retinal / lens reflection seen in the close-up photos)
+  diffuse += pupil * vec3(0.012, 0.05, 0.065) * (ambientIrr(N) * 1.5 + Lc * 0.015) * (0.6 + 0.8 * pow(1.0 - NoV, 1.5));
   // cornea
   float spec = specGGX(N, V, L, 0.035, 0.03);
   vec3 envSpec = waterEnv(reflect(-V, N), 0.035) * F_Schlick(0.03, NoV) * 1.3;

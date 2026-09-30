@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { commonGLSL } from './common.glsl.js';
 
 const vertexShader = /* glsl */ `
+#include <morphtarget_pars_vertex>
 #include <skinning_pars_vertex>
 attribute vec4 tangent;
 varying vec3 vWorldPos;
@@ -18,6 +19,9 @@ void main() {
   vec3 transformed = position;
   vec3 objectNormal = normal;
   vec3 objectTangent = tangent.xyz;
+  // fin shape morphs (fold, trailing flex, sculling wave) before skinning
+  #include <morphinstance_vertex>
+  #include <morphtarget_vertex>
   #ifdef USE_SKINNING
     #include <skinbase_vertex>
     mat4 skinMatrix = mat4(0.0);

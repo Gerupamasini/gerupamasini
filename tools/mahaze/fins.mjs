@@ -33,9 +33,9 @@ function medianFin({ name, s0, s1, count, a0, a1, lengths, dorsal, spines, curv,
     const y = dorsal ? topY(s) - 0.14 : botY(s) + 0.14;
     const a = (a0 + (a1 - a0) * f) * DEG;
     const dir = nrm([Math.cos(a), Math.sin(a), 0]);
-    rays.push({ base: [s, y, 0], dir, len: lengths[k], kind: k < spines ? 'spine' : 'soft', curv, bend: inPlaneBend(dir, normal) });
+    rays.push({ base: [s, y, 0], dir, len: lengths[k], kind: k < spines ? 'spine' : 'soft', curv, bend: inPlaneBend(dir, normal), ang: a });
   }
-  return { name, rays, normal, notch, pleat, sag, rect, branchT, segStart, pigment, cup: 0, wave: 0.0 };
+  return { name, type: 'median', dorsal, rays, normal, notch, pleat, sag, rect, branchT, segStart, pigment, cup: 0, wave: 0.0 };
 }
 
 function caudalFin(rect) {
@@ -46,7 +46,7 @@ function caudalFin(rect) {
   const proc = [[38.9, 1.0, 13], [39.5, 1.9, 16], [40.1, 3.0, 18.5]];
   for (const [s, len, ang] of proc) {
     const dir = nrm([Math.cos(ang * DEG), Math.sin(ang * DEG), 0]);
-    rays.push({ base: [s, topY(s) - 0.12, 0], dir, len, kind: 'spine', curv: 0, bend: [0, 0, 0] });
+    rays.push({ base: [s, topY(s) - 0.12, 0], dir, len, kind: 'spine', curv: 0, bend: [0, 0, 0], ang: ang * DEG });
   }
   const NP = 17;
   for (let k = 0; k < NP; k++) {
@@ -57,14 +57,14 @@ function caudalFin(rect) {
     const ang = -u * 20 * DEG;
     const len = 6.9 + 2.2 * Math.pow(Math.max(0, 1 - u * u), 0.8);
     const dir = nrm([Math.cos(ang), Math.sin(ang), 0]);
-    rays.push({ base: [s, y, 0], dir, len, kind: 'soft', curv: 0, bend: [0, 0, 0] });
+    rays.push({ base: [s, y, 0], dir, len, kind: 'soft', curv: 0, bend: [0, 0, 0], ang });
   }
   for (const [s, len, ang] of proc.slice().reverse()) {
     const dir = nrm([Math.cos(-ang * DEG), Math.sin(-ang * DEG), 0]);
-    rays.push({ base: [s, botY(s) + 0.12, 0], dir, len, kind: 'spine', curv: 0, bend: [0, 0, 0] });
+    rays.push({ base: [s, botY(s) + 0.12, 0], dir, len, kind: 'spine', curv: 0, bend: [0, 0, 0], ang: -ang * DEG });
   }
   return {
-    name: 'Fin_Caudal', rays, normal, notch: 0.035, pleat: 0.035, sag: 0.025, rect, branchT: 0.5, segStart: 0.12, cup: 0, wave: 0.16,
+    name: 'Fin_Caudal', type: 'caudal', rays, normal, notch: 0.035, pleat: 0.035, sag: 0.025, rect, branchT: 0.5, segStart: 0.12, cup: 0, wave: 0.16,
     pigment: (r, n, Lr, len, t, dRay, fAcross) => {
       let mel = 0;
       const upper = 1 - fAcross;
@@ -95,17 +95,18 @@ function pectoralFin(side, rect) {
   if (normal[2] * side < 0) normal = mul(normal, -1);
   for (let k = 0; k < NR; k++) {
     const f = k / (NR - 1);
-    const s = 12.0 + 0.45 * f + 0.15 * f * f;
-    const y = 3.5 - 2.3 * f;
+    const s = 12.3 + 0.45 * f + 0.15 * f * f;
+    const y = 4.0 - 2.9 * f;
     const sp = surfaceAt(s, y).p;
     const base = [s, y, side * (sp[2] - 0.12)];
-    const psi = (40 - f * 92) * DEG;
+    // upper rays sweep back at ~25°, lower rays point down-back (fan top stays at eye level)
+    const psi = (25 - f * 82) * DEG;
     const dir = nrm(add(mul(Xf, Math.cos(psi)), mul(Yf, Math.sin(psi))));
     const len = 4.6 + 2.8 * Math.pow(Math.max(0, 1 - ((f - 0.4) / 0.62) ** 2), 0.75);
-    rays.push({ base, dir, len, kind: 'soft', curv: 0.05, bend: inPlaneBend(dir, normal) });
+    rays.push({ base, dir, len, kind: 'soft', curv: 0.05, bend: inPlaneBend(dir, normal), psi });
   }
   return {
-    name: side > 0 ? 'Fin_Pectoral_L' : 'Fin_Pectoral_R', rays, normal, notch: 0.03, pleat: 0.06, sag: 0.03, rect, branchT: 0.45, segStart: 0.15, cup: 0.22, wave: 0.05,
+    name: side > 0 ? 'Fin_Pectoral_L' : 'Fin_Pectoral_R', type: 'pectoral', Xf, Yf, rays, normal, notch: 0.03, pleat: 0.06, sag: 0.03, rect, branchT: 0.45, segStart: 0.15, cup: 0.22, wave: 0.05,
     pigment: (r, n, Lr, len, t, dRay, fAcross) => {
       let mel = 0;
       for (let j = 0; j < 3; j++) {
@@ -125,18 +126,19 @@ function pelvicDisc(rect) {
     const f = k / (N - 1);
     const u = 2 * f - 1; // +1 … -1 across (left … right)
     const spine = k === 0 || k === N - 1;
-    const s = 11.75 + 0.18 * Math.abs(u);
+    // the fused disc lies almost flat under the belly (the fish rests on it)
+    const s = 12.0 + 0.18 * Math.abs(u);
     const z = -u * 0.9;
-    const y = botY(s) + 0.12;
+    const y = botY(s) + 0.1;
     const th = -u * (spine ? 46 : 38) * DEG;
-    const dir = nrm([Math.cos(th), -(0.16 + 0.16 * Math.abs(u)), Math.sin(th)]);
+    const dir = nrm([Math.cos(th), -(0.06 + 0.05 * Math.abs(u)), Math.sin(th)]);
     const len = spine ? 1.5 : 4.4 + 1.6 * (1 - Math.abs(u));
-    rays.push({ base: [s, y, z], dir, len, kind: spine ? 'spine' : 'soft', curv: 0.04, bend: [0, 0, 0] });
+    rays.push({ base: [s, y, z], dir, len, kind: spine ? 'spine' : 'soft', curv: 0.04, bend: [0, 0, 0], th, dy: dir[1] });
   }
   const normal = [0, -1, 0];
   for (const r of rays) r.bend = inPlaneBend(r.dir, normal);
   return {
-    name: 'Fin_Pelvic', rays, normal, notch: 0.04, pleat: 0.03, sag: 0.03, rect, branchT: 0.55, segStart: 0.2, cup: -0.18, wave: 0,
+    name: 'Fin_Pelvic', type: 'pelvic', rays, normal, notch: 0.04, pleat: 0.03, sag: 0.03, rect, branchT: 0.55, segStart: 0.2, cup: -0.18, wave: 0,
     pigment: (r, n, Lr, len, t) => ({ mel: 0, xan: 0.1, irid: 0.42 * smoothstep(1.0, 0.2, t) }),
   };
 }
@@ -144,8 +146,8 @@ function pelvicDisc(rect) {
 export function finDefinitions() {
   const R = (x, y, w, h) => ({ x, y, w, h });
   const D1 = medianFin({
-    name: 'Fin_Dorsal1', s0: 13.6, s1: 17.6, count: 8, a0: 70, a1: 40, dorsal: true, spines: 8, curv: 0.09, notch: 0.3, pleat: 0.04, sag: 0.02,
-    lengths: [4.3, 5.3, 5.7, 5.5, 4.9, 4.1, 3.2, 2.2], rect: R(1024, 1024, 512, 512), branchT: 2, segStart: 2,
+    name: 'Fin_Dorsal1', s0: 12.9, s1: 16.8, count: 8, a0: 70, a1: 40, dorsal: true, spines: 8, curv: 0.09, notch: 0.3, pleat: 0.04, sag: 0.02,
+    lengths: [3.9, 4.7, 5.0, 4.8, 4.3, 3.6, 2.9, 2.1], rect: R(1024, 1024, 512, 512), branchT: 2, segStart: 2,
     pigment: (r, n, Lr, len, t, dRay) => {
       let mel = 0;
       for (let j = 0; j < 9; j++) {
@@ -159,7 +161,7 @@ export function finDefinitions() {
     },
   });
   const D2 = medianFin({
-    name: 'Fin_Dorsal2', s0: 19.2, s1: 33.0, count: 14, a0: 60, a1: 27, dorsal: true, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
+    name: 'Fin_Dorsal2', s0: 19.7, s1: 35.6, count: 14, a0: 60, a1: 27, dorsal: true, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
     lengths: [2.9, 3.6, 4.0, 4.2, 4.3, 4.35, 4.4, 4.4, 4.45, 4.5, 4.55, 4.5, 4.35, 3.9], rect: R(0, 1024, 1024, 512), branchT: 0.55, segStart: 0.18,
     pigment: (r, n, Lr, len, t, dRay) => {
       let mel = 0;
@@ -174,7 +176,7 @@ export function finDefinitions() {
     },
   });
   const AN = medianFin({
-    name: 'Fin_Anal', s0: 23.7, s1: 33.2, count: 12, a0: -58, a1: -27, dorsal: false, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
+    name: 'Fin_Anal', s0: 21.4, s1: 35.0, count: 12, a0: -58, a1: -27, dorsal: false, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
     lengths: [2.1, 2.9, 3.3, 3.5, 3.6, 3.65, 3.7, 3.7, 3.75, 3.8, 3.75, 3.5], rect: R(0, 1536, 1024, 512), branchT: 0.55, segStart: 0.18,
     pigment: (r, n, Lr, len, t) => ({ mel: 0.12 * smoothstep(0.72, 0.95, t), xan: 0.14, irid: 0.32 * smoothstep(0.35, 0.0, t) }),
   });
@@ -221,6 +223,84 @@ export function finSurface(def, a, t) {
   return add(p, mul(def.normal, off));
 }
 
+// ---------------------------------------------------------------------------
+// Morph targets (fish-space shapes evaluated on the same (a, t) grid as the mesh)
+
+/** Rays rotated in a fin plane (spanned by u, v) from angle a0 to a1 about each ray base. */
+function withRayAngles(def, angleOf, planeU, planeV, pleatK = 2.6) {
+  const rays = def.rays.map((r, k) => {
+    const ang = angleOf(r, k);
+    const dir = nrm(add(mul(planeU, Math.cos(ang)), mul(planeV, Math.sin(ang))));
+    return { ...r, dir, curv: r.curv * 0.3, bend: inPlaneBend(dir, def.normal) };
+  });
+  // the membrane gathers into deeper pleats as the rays close up
+  return { ...def, rays, pleat: def.pleat * pleatK, sag: def.sag * 0.5, wave: def.wave * 0.3 };
+}
+
+function foldedDef(def) {
+  if (def.type === 'median') {
+    // rays lie back along the body (dorsal fins drop into their groove, the anal fin folds back)
+    const sgn = def.dorsal ? 1 : -1;
+    return withRayAngles(def, (r) => sgn * (0.07 + 0.06 * Math.abs(r.ang)), [1, 0, 0], [0, 1, 0]);
+  }
+  if (def.type === 'caudal') return withRayAngles(def, (r) => r.ang * 0.3, [1, 0, 0], [0, 1, 0]);
+  if (def.type === 'pectoral') {
+    const mid = -6 * DEG;
+    return withRayAngles(def, (r) => mid + (r.psi - mid) * 0.28, def.Xf, def.Yf);
+  }
+  if (def.type === 'pelvic') {
+    const rays = def.rays.map((r) => {
+      const th = r.th * 0.45;
+      const dir = nrm([Math.cos(th), r.dy, Math.sin(th)]);
+      return { ...r, dir };
+    });
+    return { ...def, rays, pleat: def.pleat * 2.2 };
+  }
+  return def;
+}
+
+function gridPositions(def, SUB, NT, disp) {
+  const n = def.rays.length;
+  const cols = (n - 1) * SUB + 1;
+  const out = [];
+  for (let j = 0; j <= NT; j++) {
+    const t = j / NT;
+    for (let i = 0; i < cols; i++) {
+      const a = i / SUB;
+      let p = finSurface(def, a, t);
+      if (disp) p = add(p, disp(a, t, n));
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+const rayLenAt = (def, a) => {
+  const k = clamp(Math.floor(a), 0, def.rays.length - 2), f = a - k;
+  return def.rays[k].len * (1 - f) + def.rays[k + 1].len * f;
+};
+
+/** Object-space morph deltas in the order of FIN_TARGETS[def.name]. */
+export function buildFinTargets(def, SUB, NT, targetNames) {
+  const rest = gridPositions(def, SUB, NT);
+  const delta = (pts) => {
+    const d = new Float32Array(rest.length * 3);
+    // fish-space mm offset → object-space metres (X = z, Y = y, Z = −s)
+    pts.forEach((p, i) => { const q = sub(p, rest[i]); d.set([q[2] / 1000, q[1] / 1000, -q[0] / 1000], i * 3); });
+    return d;
+  };
+  const N = def.normal;
+  const make = {
+    fold: () => gridPositions(foldedDef(def), SUB, NT),
+    // passive trailing flex: tips lag sideways (weight ±1 = tip deflected by ~30 % of its length)
+    flex: () => gridPositions(def, SUB, NT, (a, t) => mul(N, (def.type === 'caudal' ? 0.32 : 0.22) * rayLenAt(def, a) * t * t)),
+    // pectoral sculling: a travelling wave across the fin (sin / cos basis)
+    waveS: () => gridPositions(def, SUB, NT, (a, t, n) => mul(N, 0.16 * rayLenAt(def, a) * Math.pow(t, 1.5) * Math.sin((2 * Math.PI * a) / ((n - 1) * 0.85)))),
+    waveC: () => gridPositions(def, SUB, NT, (a, t, n) => mul(N, 0.16 * rayLenAt(def, a) * Math.pow(t, 1.5) * Math.cos((2 * Math.PI * a) / ((n - 1) * 0.85)))),
+  };
+  return targetNames.map((name) => delta(make[name]()));
+}
+
 export function buildFinMesh(def, SUB = 6, NT = 36) {
   const n = def.rays.length;
   const cols = (n - 1) * SUB + 1;
@@ -232,6 +312,7 @@ export function buildFinMesh(def, SUB = 6, NT = 36) {
   const uv = new Float32Array(count * 2);
   const fish = new Float32Array(count * 3);
   const rayT = new Float32Array(count);
+  const baseS = new Float32Array(count);
   const { x, y, w, h } = def.rect;
   const e = 1e-3;
   for (let j = 0; j < rows; j++) {
@@ -252,6 +333,7 @@ export function buildFinMesh(def, SUB = 6, NT = 36) {
       position.set(toObject(p), idx * 3);
       fish.set(p, idx * 3);
       rayT[idx] = t;
+      baseS[idx] = finSurface(def, a, 0)[0];
       normal.set(nO, idx * 3);
       tangent.set([tO[0], tO[1], tO[2], wsign], idx * 4);
       uv[idx * 2] = (x + INSET + (a / (n - 1)) * (w - 2 * INSET)) / ATLAS;
@@ -274,7 +356,7 @@ export function buildFinMesh(def, SUB = 6, NT = 36) {
       for (let k = 0; k < tris.length; k += 3) { const tmp = tris[k + 1]; tris[k + 1] = tris[k + 2]; tris[k + 2] = tmp; }
     }
   }
-  return { position, normal, tangent, uv, indices: new Uint32Array(tris), fish, rayT };
+  return { position, normal, tangent, uv, indices: new Uint32Array(tris), fish, rayT, baseS };
 }
 
 // ---------------------------------------------------------------------------

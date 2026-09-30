@@ -274,9 +274,15 @@ void main() {
   float jit = ign(gl_FragCoord.xy);
 
   // ---- view ray through the body
-  vec3 R = refract(VF, NF, 1.0 / uIor);
+  // refract with the smooth volume normal: sculpted creases (gape, grooves) must not steer the ray
+  // straight back out through a thin sliver of tissue
+  vec3 NvolF = gradR(pIn);
+  if (dot(NvolF, NgF) < 0.2) NvolF = NgF;
+  vec3 NrF = normalize(mix(NF, NvolF, 0.75));
+  vec3 R = refract(VF, NrF, 1.0 / uIor);
   if (dot(R, R) < 0.5) R = VF;
-  float tExit = exitDist(pIn, R, maxLen);
+  if (dot(R, NvolF) > -0.25) R = normalize(R - NvolF * (dot(R, NvolF) + 0.25));
+  float tExit = max(exitDist(pIn, R, maxLen), min(maxLen, 0.6));
   const int NSV = 14;
   float dt = tExit / float(NSV);
   vec3 tauE = vec3(0.0);
@@ -298,6 +304,9 @@ void main() {
   }
   // sculpted appendages outside the analytic volume (orbit rims, lips, papilla) are solid tissue
   float outside = smoothstep(0.98, 1.1, bodyR(pIn));
+  // lips and jaws are dense (dentary, premaxilla, thick lip tissue)
+  float jaws = (1.0 - smoothstep(3.0, 4.6, pF.x)) * (1.0 - smoothstep(2.4, 3.2, pF.y));
+  outside = max(outside, 0.8 * jaws);
   tauE += outside * vec3(4.0);
   tauA += outside * vec3(0.5);
   tauS += outside * 6.0;

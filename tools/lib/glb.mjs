@@ -125,7 +125,8 @@ export class GLBBuilder {
         input = this.addAccessor(ch.times, 'SCALAR', { minMax: true });
         timeCache.set(ch.times, input);
       }
-      const output = this.addAccessor(ch.values, ch.path === 'rotation' ? 'VEC4' : 'VEC3');
+      const type = ch.path === 'rotation' ? 'VEC4' : ch.path === 'weights' ? 'SCALAR' : 'VEC3';
+      const output = this.addAccessor(ch.values, type);
       samplers.push({ input, output, interpolation: 'LINEAR' });
       channels.push({ sampler: samplers.length - 1, target: { node: ch.node, path: ch.path } });
     }
@@ -143,7 +144,7 @@ export class GLBBuilder {
    * Adds a triangle primitive and returns the primitive object.
    * Normals / tangents are stored as normalized int8 and UVs as normalized uint16 (KHR_mesh_quantization).
    */
-  primitive({ position, normal, tangent, uv, indices, material, extraAttributes = {} }) {
+  primitive({ position, normal, tangent, uv, indices, material, extraAttributes = {}, targets = null }) {
     this.useExtension('KHR_mesh_quantization');
     this.json.extensionsRequired = this.json.extensionsRequired || [];
     if (!this.json.extensionsRequired.includes('KHR_mesh_quantization')) this.json.extensionsRequired.push('KHR_mesh_quantization');
@@ -169,7 +170,9 @@ export class GLBBuilder {
       attributes[k] = this.addAccessor(v.array, v.type, { target: 34962, normalized: !!v.normalized });
     }
     const idx = this.addAccessor(indices, 'SCALAR', { target: 34963 });
-    return { attributes, indices: idx, material, mode: 4 };
+    const prim = { attributes, indices: idx, material, mode: 4 };
+    if (targets && targets.length) prim.targets = targets.map((d) => ({ POSITION: this.addAccessor(d, 'VEC3', { target: 34962, minMax: true }) }));
+    return prim;
   }
 
   toBuffer() {

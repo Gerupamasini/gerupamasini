@@ -7,12 +7,13 @@ import { fileURLToPath } from 'node:url';
 import jpeg from 'jpeg-js';
 import { GLBBuilder } from './lib/glb.mjs';
 import { encodePNG } from './lib/png.mjs';
-import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, profileTable } from './mahaze/anatomy.mjs';
+import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, profileTable, toObject, botY } from './mahaze/anatomy.mjs';
 import { buildBody } from './mahaze/body.mjs';
-import { finDefinitions, buildFinMesh, paintFinAtlas } from './mahaze/fins.mjs';
+import { finDefinitions, buildFinMesh, buildFinTargets, paintFinAtlas } from './mahaze/fins.mjs';
 import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './mahaze/eye.mjs';
 import { buildMouth, buildGills } from './mahaze/interior.mjs';
-import { JOINTS, J, bodyWeights, interiorWeights, finWeights, buildClips } from './mahaze/rig.mjs';
+import { JOINTS, J, AXES, bodyWeights, interiorWeights, finWeights, buildClips } from './mahaze/rig.mjs';
+import { FIN_TARGETS } from '../src/fish/pose.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -173,18 +174,27 @@ const mFin = gb.addMaterial({
   extensions: { KHR_materials_ior: { ior: 1.36 } },
   extras: { mahaze: { role: 'fin', dataTexture: tFinData } },
 });
+const finNodes = {};
 for (const def of defs) {
-  const m = buildFinMesh(def, 6, def.name === 'Fin_Caudal' ? 44 : 36);
-  const w = finWeights(def.name, m.fish, m.rayT);
-  const mesh = gb.addMesh(def.name, [gb.primitive({ ...m, material: mFin, extraAttributes: skinAttrs(w) })]);
-  skinned.push(gb.addNode({ name: def.name, mesh, skin, extras: { mahaze: { fin: def.name } } }));
+  const SUB = 6, NT = def.name === 'Fin_Caudal' ? 44 : 36;
+  const m = buildFinMesh(def, SUB, NT);
+  const w = finWeights(def.name, m.fish, m.rayT, m.baseS);
+  const names = FIN_TARGETS[def.name];
+  const targets = buildFinTargets(def, SUB, NT, names);
+  const prim = gb.primitive({ ...m, material: mFin, extraAttributes: skinAttrs(w), targets });
+  const mesh = gb.addMesh(def.name, [prim], { targetNames: names });
+  gb.json.meshes[mesh].weights = names.map(() => 0);
+  finNodes[def.name] = gb.addNode({ name: def.name, mesh, skin, extras: { mahaze: { fin: def.name } } });
+  skinned.push(finNodes[def.name]);
 }
 
 // ---------------------------------------------------------------- animations
 log('animations');
 for (const clip of buildClips()) {
-  gb.addAnimation({ name: clip.name, channels: clip.channels.map((c) => ({ node: jointNodes[c.joint], path: c.path, times: c.times, values: c.values })) });
-  log(`  ${clip.name}: ${clip.duration}s, ${clip.channels.length} channels`);
+  const channels = clip.channels.map((c) => ({ node: jointNodes[c.joint], path: c.path, times: c.times, values: c.values }));
+  for (const wch of clip.weights) channels.push({ node: finNodes[wch.mesh], path: 'weights', times: wch.times, values: wch.values });
+  gb.addAnimation({ name: clip.name, channels });
+  log(`  ${clip.name}: ${clip.duration.toFixed(3)}s, ${channels.length} channels`);
 }
 
 // ---------------------------------------------------------------- scene
@@ -197,7 +207,9 @@ const rootNode = gb.addNode({
     totalLength_mm: TL,
     standardLength_mm: SL,
     units: 'metres (+Y dorsal, +Z anterior)',
-    animations: 'Idle (loop, breathing), Swim (loop, burst tail beat), Yawn (one-shot)',
+    animations: 'Idle (loop, breathing), Swim (loop, 8 Hz burst tail beat), Yawn (one-shot)',
+    // rig axes (object space, sign folded in) for procedural animation with src/fish/pose.js
+    mahazeRig: { axes: AXES, contactY: toObject([12.0, botY(12.0) - 0.2, 0])[1] },
   },
 });
 // skinned meshes sit at the scene root (their node transforms are ignored; joints drive them)

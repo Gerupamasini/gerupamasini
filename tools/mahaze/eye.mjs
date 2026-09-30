@@ -2,8 +2,8 @@
 import { EYE, toObject, dirToObject } from './anatomy.mjs';
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../lib/noise.mjs';
 
-export const PUPIL_ANGLE = 0.5; // rad (half-angle from the axis)
-export const IRIS_ANGLE = 1.06;
+export const PUPIL_ANGLE = 0.38; // rad (half-angle from the axis)
+export const IRIS_ANGLE = 1.08;
 export const CORNEA_BULGE = 0.075;
 
 const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
@@ -108,41 +108,47 @@ export function paintIris(size = 1024) {
       const theta = r * Math.PI;
       const psi = Math.atan2(dy, dx);
       const lx = Math.sin(theta) * Math.cos(psi), ly = Math.sin(theta) * Math.sin(psi), lz = Math.cos(theta);
-      const pupilEdge = PUPIL_ANGLE + 0.012 * perlin3(Math.cos(psi) * 3, Math.sin(psi) * 3, 0.5, 5);
+      // slightly irregular pupil margin
+      const pupilEdge = PUPIL_ANGLE + 0.018 * perlin3(Math.cos(psi) * 2.2, Math.sin(psi) * 2.2, 0.5, 5) + 0.008 * perlin3(Math.cos(psi) * 9, Math.sin(psi) * 9, 1.5, 6);
+      const upness = ly / Math.max(Math.sin(theta), 1e-3); // +1 dorsal … −1 ventral
       let c;
       if (theta < pupilEdge) {
-        c = [0.012, 0.016, 0.02];
+        c = [0.008, 0.01, 0.012];
       } else if (theta < IRIS_ANGLE) {
         const f = (theta - pupilEdge) / (IRIS_ANGLE - pupilEdge);
-        const fib = 0.5 + 0.5 * perlin3(Math.cos(psi) * 38, Math.sin(psi) * 38, f * 2.5, 11);
-        const fib2 = 0.5 + 0.5 * perlin3(Math.cos(psi) * 90, Math.sin(psi) * 90, f * 6, 12);
-        // golden inner ring -> bronze -> dark outer margin
-        // dark olive-bronze iris with a thin golden pupillary ring (as in the reference photos)
-        const gold = [0.55, 0.42, 0.14], bronze = [0.085, 0.07, 0.042], dark = [0.03, 0.028, 0.024];
-        let t1 = smoothstep(0.02, 0.11, f);
-        c = [mix(gold[0], bronze[0], t1), mix(gold[1], bronze[1], t1), mix(gold[2], bronze[2], t1)];
-        const t2 = smoothstep(0.8, 1.0, f);
-        c = c.map((v, k) => mix(v, dark[k], t2));
-        const fibK = 0.72 + 0.4 * fib + 0.18 * fib2;
-        c = c.map((v) => v * fibK);
-        // greenish iridescent crescent on the dorsal half of the iris
-        const up = smoothstep(-0.1, 0.8, ly / Math.max(Math.sin(theta), 1e-3));
-        const teal = [0.2, 0.42, 0.36];
-        c = c.map((v, k) => mix(v, teal[k] * 0.45, up * 0.3 * smoothstep(0.15, 0.6, f) * (1 - t2)));
-        // golden flecks
-        const fl = smoothstep(0.35, 0.6, fbm3(lx * 30, ly * 30, lz * 30, 2, 23)) * (1 - t2);
-        c = c.map((v, k) => mix(v, [0.36, 0.32, 0.13][k], fl * 0.5));
-        // melanophore speckles
-        const sp = fbm3(lx * 22, ly * 22, lz * 22, 3, 13);
-        const speck = smoothstep(0.25, 0.45, sp);
-        c = c.map((v) => v * (1 - 0.7 * speck));
-        // bright pupillary rim
-        c = c.map((v, k) => v + [0.3, 0.22, 0.07][k] * Math.exp(-(((theta - pupilEdge) / 0.02) ** 2)));
+        // As in the photos (IMG_1603, 03, user photo 1): brassy golden-cream guanine layer, brightest in a
+        // band around the pupil, fading into olive-bronze; an irregular melanin cap darkens the dorsal iris;
+        // the stroma is mottled with melanophores, not a clean gradient.
+        // user close-ups: dark bronze-olive iris, narrow golden rim, pale silvery-cream crescent below the pupil
+        const brass = [0.42, 0.33, 0.14], gold = [0.22, 0.16, 0.06], olive = [0.09, 0.075, 0.035], dark = [0.03, 0.026, 0.02];
+        const t0 = smoothstep(0.02, 0.3, f), t1 = smoothstep(0.3, 0.75, f);
+        c = brass.map((v, k) => mix(mix(v, gold[k], t0), olive[k], t1));
+        const low = smoothstep(0.1, 0.75, -upness) * smoothstep(0.05, 0.25, f) * smoothstep(0.95, 0.6, f);
+        c = c.map((v, k) => mix(v, [0.4, 0.36, 0.26][k], low * 0.4));
+        // radial stroma fibres and crypts
+        const fib = perlin3(Math.cos(psi) * 34, Math.sin(psi) * 34, f * 3.0, 11);
+        const fib2 = perlin3(Math.cos(psi) * 80, Math.sin(psi) * 80, f * 7.0, 12);
+        c = c.map((v) => v * (0.82 + 0.25 * fib + 0.12 * fib2));
+        // mottled melanophores (cellular clusters)
+        const m1 = fbm3(lx * 14, ly * 14, lz * 14, 3, 13);
+        const m2 = fbm3(lx * 36, ly * 36, lz * 36, 2, 14);
+        const mott = smoothstep(0.05, 0.35, m1) * 0.55 + smoothstep(0.25, 0.5, m2) * 0.35;
+        c = c.map((v, k) => mix(v, dark[k] * 1.5, clamp(mott) * (0.35 + 0.4 * f)));
+        // dorsal melanin cap with a ragged lower edge
+        const capEdge = 0.25 + 0.18 * perlin3(Math.cos(psi) * 5, Math.sin(psi) * 5, 2.5, 15);
+        const cap = smoothstep(capEdge, capEdge + 0.3, upness) * smoothstep(0.08, 0.3, f);
+        c = c.map((v, k) => mix(v, dark[k] * 1.3, cap * 0.8));
+        // limbal darkening
+        c = c.map((v, k) => mix(v, dark[k], smoothstep(0.8, 1.0, f)));
+        // pupillary ruff: a bright but broken golden rim
+        const ruff = Math.exp(-(((theta - pupilEdge) / 0.022) ** 2)) * (0.55 + 0.45 * smoothstep(-0.2, 0.4, perlin3(Math.cos(psi) * 7, Math.sin(psi) * 7, 3.3, 16))) * (1 - 0.7 * cap);
+        c = c.map((v, k) => v + [0.26, 0.19, 0.06][k] * ruff);
       } else {
-        // sclera region (mostly under the skin): dark, silvery speckled
+        // outer eyeball (visible as a dark rim around the iris, as in the photos): brown-black with a
+        // faint silvery-bronze sheen
         const sp = fbm3(lx * 16, ly * 16, lz * 16, 3, 17);
-        const base = 0.16 + 0.12 * sp;
-        c = [base * 0.95, base, base * 0.95];
+        const base = 0.045 + 0.035 * sp;
+        c = [base * 1.2, base, base * 0.75];
         c = c.map((v) => v * (1 - 0.5 * smoothstep(0.2, 0.5, fbm3(lx * 40, ly * 40, lz * 40, 2, 19))));
       }
       const o = (py * size + px) * 3;

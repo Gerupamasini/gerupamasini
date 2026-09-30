@@ -43,6 +43,8 @@ varying vec3 vWorldNormal;
 varying vec4 vColor;
 varying vec2 vUv;
 varying float vGill;
+uniform float uMouthOpen;
+uniform float uGillOpen;
 void main() {
   vec3 N = normalize(vWorldNormal) * (gl_FrontFacing ? 1.0 : -1.0);
   vec3 V = normalize(cameraPosition - vWorldPos);
@@ -61,18 +63,29 @@ void main() {
   }
   // light reaching into the cavities is strongly occluded: the vertex colour already carries the depth AO
   float cavity = clamp(dot(vColor.rgb, vec3(0.333)) * 1.6, 0.0, 1.0);
+  // light only reaches the cavities through the gape / gill slit: a barely parted mouth reads as a
+  // dark line, a wide yawn lets light in
+  float isMouth = step(0.75, vColor.a);
+  float open = isMouth > 0.5 ? smoothstep(0.02, 0.4, uMouthOpen) : smoothstep(0.03, 0.35, uGillOpen);
+  float occl = mix(0.06, 1.0, open);
   // palatal / buccal folds break up the reflections
   float folds = sin(vUv.x * 90.0 + sin(vUv.y * 17.0) * 2.0) * 0.5 + 0.5;
   alb *= mix(0.88, 1.0, folds * (1.0 - vGill));
-  vec3 diff = alb * (uLightColor * max(dot(N, L), 0.0) * INV_PI * (0.35 + 0.65 * cavity) + ambientIrr(N));
+  vec3 diff = alb * (uLightColor * max(dot(N, L), 0.0) * INV_PI * (0.35 + 0.65 * cavity) + ambientIrr(N)) * occl;
   float spec = specGGX(N, V, L, rough, 0.03);
-  vec3 env = waterEnv(reflect(-V, N), rough) * F_Schlick(0.03, max(dot(N, V), 1e-3)) * (0.3 + 0.7 * cavity);
-  vec3 col = diff + uLightColor * spec * (0.3 + 0.7 * cavity) + env;
+  vec3 env = waterEnv(reflect(-V, N), rough) * F_Schlick(0.03, max(dot(N, V), 1e-3)) * (0.3 + 0.7 * cavity) * occl;
+  vec3 col = diff + uLightColor * spec * (0.3 + 0.7 * cavity) * occl + env;
   col = applyFog(col, length(cameraPosition - vWorldPos));
   gl_FragColor = vec4(col, 1.0);
 }
 `;
 
 export function createInteriorMaterial({ shared }) {
-  return new THREE.ShaderMaterial({ name: 'MahazeInterior', uniforms: { ...shared }, vertexShader, fragmentShader, side: THREE.DoubleSide });
+  return new THREE.ShaderMaterial({
+    name: 'MahazeInterior',
+    uniforms: { ...shared, uMouthOpen: { value: 0 }, uGillOpen: { value: 0 } },
+    vertexShader,
+    fragmentShader,
+    side: THREE.DoubleSide,
+  });
 }
