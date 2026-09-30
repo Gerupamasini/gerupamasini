@@ -229,7 +229,7 @@ function clawPoses(species, male) {
 }
 // ヤマトオサガニの雄（生体写真）：大きな鉗を顔の前に斜めに構え、指先を前下方へ
 const CLAW_POSES_YM2 = {
-  rest: { yaw0: 0.2, p0: 0.62, f1: 1.15, p1: 0.0, px: -0.72, py: -0.45, pz: 0.4, bx: 0.45, by: -0.85, bz: 0.15, open: 0.13 },
+  rest: { yaw0: 0.2, p0: 0.62, f1: 1.15, p1: 0.0, px: -0.8, py: -0.22, pz: 0.4, bx: 0.28, by: -0.92, bz: 0.15, open: 0.13 },
   reach: { yaw0: 0.65, p0: -0.1, f1: 1.3, p1: -0.05, px: -0.9, py: -0.4, pz: 0.25, bx: 0.0, by: -1, bz: 0.1, open: 0.35 },
   mouth: { yaw0: 0.8, p0: 0.2, f1: 1.7, p1: 0.1, px: -1, py: 0.05, pz: 0.2, bx: 0.0, by: -1, bz: -0.05, open: 0.0 },
   waveUp: { yaw0: 0.4, p0: 0.2, f1: 0.5, p1: 1.1, px: -0.1, py: 0.75, pz: 0.65, bx: -1, by: 0.1, bz: 0.2, open: 0.3 },
