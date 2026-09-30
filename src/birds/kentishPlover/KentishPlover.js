@@ -265,7 +265,7 @@ export class KentishPlover {
    * @param {number} dt real seconds
    * @param {object} sched {aiRate, animRate, visible}
    */
-  update(dt, sched = { aiRate: 20, animRate: 60, visible: true }) {
+  update(dt, sched = { aiRate: 20, animRate: Infinity, visible: true }) {
     this._aiAccum += dt;
     const aiStep = 1 / sched.aiRate;
     if (this._aiAccum >= aiStep) {
@@ -276,12 +276,16 @@ export class KentishPlover {
     else this._updateGround(dt);
     this.ai.tick(dt); // cheap per-frame parts (state timers)
     this._animAccum += dt;
-    const animStep = 1 / sched.animRate;
-    if (sched.visible && this._animAccum >= animStep * 0.999) {
+    const animStep = 1 / sched.animRate; // 0 for animRate Infinity → every frame
+    // throttled LODs pose on the frame nearest each step, so frame-time jitter can't stretch the cadence
+    if (sched.visible && this._animAccum >= animStep - dt * 0.5) {
       this.animator.setRoot(this.pos, this.heading, this.vel);
       this.animator.update(this._animAccum);
       this._animAccum = 0;
-    } else if (!sched.visible) {
+    } else if (sched.visible) {
+      // between throttled poses the posed bird still moves with the entity (it never lags its position)
+      this.animator.placeRoot(this.pos, this.heading);
+    } else {
       // not drawn: keep action timelines/events running without touching the skeleton
       this.animator.advance(this._animAccum);
       this._animAccum = 0;
