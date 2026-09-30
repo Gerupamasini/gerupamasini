@@ -242,7 +242,7 @@ export const GLSL = {
       col = mix(col, uC3, dark * 0.6);
       float edge = smoothstep(0.6, 0.92, abs(n.z));
       float ventral = smoothstep(0.1, -0.6, n.y);
-      col = mix(col, uC4, max(edge * 0.5, ventral * 0.65));
+      col = mix(col, uC4, max(edge * 0.18, ventral * 0.5));
       // 背面をおおう淡色の細かな顆粒（写真の脚の「ざらつき」）
       vec3 gr = cell3(p * 320.0 + uSeed);
       float gran = (1.0 - smoothstep(0.05, 0.22, gr.x)) * smoothstep(-0.1, 0.4, n.y);

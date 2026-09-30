@@ -85,7 +85,7 @@ export function bladeGeo(len, w1, w2, th, opts = {}) {
         // 前縁・後縁の小鋸歯
         const tooth = Math.pow(Math.max(0, Math.sin(tc * serr * Math.PI * 2)), 5);
         const edge = Math.max(0, Math.abs(z) / hw - 0.75) * 4;
-        d -= tooth * Math.min(1, edge) * hw * 0.11 * (tc > 0.12 && tc < 0.93 ? 1 : 0);
+        d -= tooth * Math.min(1, edge) * hw * 0.07 * (tc > 0.12 && tc < 0.93 ? 1 : 0);
       }
       if (opts.spine) {
         // 長節前縁の先端近くにある鋭い棘
