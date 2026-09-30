@@ -53,6 +53,22 @@ export function computeSpineWeights(p, boneIndex) {
   return order.map(([v, i]) => [boneIndex[SPINE[i].bone], v / sum]);
 }
 
+const smooth = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * Where the body shader displaces the outline along its normal (rest position, mm): [fluff mask, breathing
+ * mask]. Same expressions as the body vertex shader (KentishPloverMaterials.createBodyMaterial); the
+ * plumage lying on the body uses them to rise and fall with it.
+ */
+export function bodyDisplacementMasks(p) {
+  const fluff = smooth(40, 60, p[1]);
+  const breath = smooth(-30, -5, p[2]) * (1 - smooth(22, 34, p[2])) * (1 - smooth(66, 74, p[1]));
+  return [fluff, breath];
+}
+
 export function flowDirection(p, n) {
   let fx = p[0] - BILL_TIP_MM[0];
   let fy = p[1] - BILL_TIP_MM[1] - 0.12 * Math.abs(p[0]);

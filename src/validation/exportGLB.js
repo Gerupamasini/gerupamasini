@@ -36,12 +36,12 @@ function bakeVertexColors(renderer, geometry, kind, pal) {
     g.setAttribute('uv', geometry.getAttribute('uv'));
     g.setAttribute('aFeather', geometry.getAttribute('aFeather'));
     const c = (h) => ({ value: new THREE.Color(h) });
-    Object.assign(uniforms, { uMantle: c(pal.mantle), uMantleDark: c(pal.mantleDark), uFringe: c(pal.fringe), uFlightDark: c(pal.flightDark), uFlightMid: c(pal.flightMid), uTailDark: c(pal.tailDark), uWhite: c(pal.white), uUnder: c(pal.underparts), uWear: { value: 0.25 }, uDetail: { value: 2 }, uFold: { value: 1 } });
+    Object.assign(uniforms, { uMantle: c(pal.mantle), uMantleDark: c(pal.mantleDark), uFringe: c(pal.fringe), uFlightDark: c(pal.flightDark), uFlightMid: c(pal.flightMid), uTailDark: c(pal.tailDark), uWhite: c(pal.white), uUnder: c(pal.underparts), uWear: { value: 0.25 }, uDetail: { value: 2 } });
     vtx = `attribute float aIdx; attribute vec4 aFeather; uniform float uW, uH; varying vec4 vF; varying vec2 vUv2;
       void main(){ vF = aFeather; vUv2 = uv; float x = mod(aIdx, uW); float y = floor(aIdx / uW);
       gl_Position = vec4((x + 0.5) / uW * 2.0 - 1.0, (y + 0.5) / uH * 2.0 - 1.0, 0.0, 1.0); gl_PointSize = 1.0; }`;
     frag = `${GLSL.FEATHER_FRAG.replace('varying vec4 vFeather;', '')}\nvarying vec4 vF; varying vec2 vUv2;
-      void main(){ vec3 c = kpFeatherTop(floor(vF.x + 0.5), vF.y, vUv2, vF.z); gl_FragColor = vec4(pow(c, vec3(1.0/2.2)), 1.0); }`;
+      void main(){ vec3 c = kpFeatherTop(floor(vF.x + 0.5), vF.y, vUv2, vF.z, 1.0); gl_FragColor = vec4(pow(c, vec3(1.0/2.2)), 1.0); }`;
   }
   const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: vtx, fragmentShader: frag });
   const pts = new THREE.Points(g, mat);

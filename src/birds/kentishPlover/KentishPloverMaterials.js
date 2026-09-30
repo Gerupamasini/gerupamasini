@@ -205,6 +205,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
         #endif
         vFlowV = normalize(normalMatrix * kpFl);`
       )
+      // masks mirrored in bodyMesh.bodyDisplacementMasks (the plumage lying on the body follows them)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n transformed += normal * uFluff * 0.0012 * smoothstep(40.0, 60.0, aRest.y);\n transformed += normal * uBreath * ${ANIM_BREATH} * smoothstep(-30.0, -5.0, aRest.z) * (1.0 - smoothstep(22.0, 34.0, aRest.z)) * (1.0 - smoothstep(66.0, 74.0, aRest.y));`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${BODY_UNIFORMS_GLSL}\n${BODY_FRAG_FUNCS}`)
@@ -268,11 +269,11 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
 const FEATHER_FRAG = /* glsl */ `
 ${GLSL_COMMON}
 uniform vec3 uMantle, uMantleDark, uFringe, uFlightDark, uFlightMid, uTailDark, uWhite, uUnder;
-uniform float uWear, uDetail, uFold;
+uniform float uWear, uDetail;
 varying vec4 vFeather;
 
-// Colour of the dorsal (upper) surface of a feather.
-vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd) {
+// Colour of the dorsal (upper) surface of a feather (fold: 1 wing folded … 0 spread).
+vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd, float fold) {
   float across = uv.x; float t = uv.y; float a = abs(across);
   float rachis = 1.0 - smoothstep(0.035, 0.07, a);
   float edge = smoothstep(0.62, 1.0, a) + smoothstep(0.8, 1.0, t);
@@ -329,7 +330,7 @@ vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd) {
     c = mix(c, uFringe, smoothstep(0.78, 0.97, max(a, t * 1.02)) * (1.0 - uWear * 0.75));
   } else if (type < 11.5) {
     // arm (propatagium surface under the lesser coverts); underside white only when the wing is open
-    c = mix(uMantle, uUnder, smoothstep(-0.2, -0.6, across) * (1.0 - uFold));
+    c = mix(uMantle, uUnder, smoothstep(-0.2, -0.6, across) * (1.0 - fold));
   } else {
     c = uWhite; // under-tail coverts
   }
@@ -340,14 +341,14 @@ vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd) {
 }
 
 // Ventral (under) surface: remiges pale grey, coverts white (under-wing coverts are white).
-vec3 kpFeatherBottom(float type, float idx, vec2 uv) {
+vec3 kpFeatherBottom(float type, float idx, vec2 uv, float fold) {
   if (type < 0.5) return mix(mix(uFlightMid, uWhite, 0.55), uWhite, 1.0 - smoothstep(0.3, 0.5, uv.y));
   if (type < 1.5) return mix(mix(uFlightMid, uWhite, 0.6), uWhite, 1.0 - smoothstep(0.35, 0.55, uv.y));
   if (type > 7.5 && type < 8.5) return mix(mix(uTailDark, uWhite, 0.4), uWhite, smoothstep(3.5, 5.0, idx));
   if (type > 9.5 && type < 10.5) return uMantleDark;
-  if (type > 10.5 && type < 11.5) return mix(uMantle, uWhite, 1.0 - uFold);
+  if (type > 10.5 && type < 11.5) return mix(uMantle, uWhite, 1.0 - fold);
   if (type > 6.5 && type < 7.5) return mix(uFlightDark, uFlightMid, 0.5);
-  if (type > 2.5 && type < 6.5) return mix(uMantleDark, uWhite, 1.0 - uFold); // under-wing coverts (white) only matter when open
+  if (type > 2.5 && type < 6.5) return mix(uMantleDark, uWhite, 1.0 - fold); // under-wing coverts (white) only matter when open
   return uWhite;
 }
 `;
@@ -365,7 +366,9 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
     uUnder: { value: srgb(pal.underparts) },
     uWear: { value: individual.plumageWear ?? 0.2 },
     uDetail: { value: detail },
-    uFold: { value: 1 },
+    uFold: { value: new THREE.Vector2(1, 1) }, // left, right wing
+    uFluff: { value: 0 },
+    uBreath: { value: 0 },
     uTime: { value: 0 },
     uWind: { value: 0.35 },
   };
@@ -374,25 +377,31 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec4 aFeather;\nvarying vec4 vFeather;\nuniform float uTime, uWind;`)
+      .replace('#include <common>', `#include <common>\nattribute vec4 aFeather; attribute vec3 aLie; attribute vec2 aLieMask; attribute vec3 aCore;\nvarying vec4 vFeather; varying float vFold;\nuniform float uTime, uWind, uFluff, uBreath; uniform vec2 uFold;`)
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
         vFeather = aFeather;
-        // feather micro-motion: tips flutter slightly in the wind (strongest on tail, tertials, scapulars)
         float kfT = floor(aFeather.x + 0.5);
+        vFold = position.x >= 0.0 ? uFold.x : uFold.y; // left wing is built at +x, right wing mirrored
+        // the plumage lying on the body rises and falls with the body shader's fluffing / breathing
+        // (wing feathers only while folded onto it); the arm tube (propatagium) folds away with the wing
+        float kfWing = kfT < 7.5 || (kfT > 10.5 && kfT < 11.5) ? vFold : 1.0;
+        transformed += aLie * kfWing * (uFluff * 0.0012 * aLieMask.x + uBreath * ${ANIM_BREATH} * aLieMask.y);
+        transformed += aCore * vFold;
+        // feather micro-motion: tips flutter slightly in the wind (strongest on tail, tertials, scapulars)
         float kfLoose = (kfT > 7.5 && kfT < 10.5) || (kfT > 1.5 && kfT < 2.5) ? 1.0 : 0.35;
         float kfPh = aFeather.z * 37.0 + aFeather.y * 1.7;
         float kfW = sin(uTime * 7.3 + kfPh) * 0.6 + sin(uTime * 13.1 + kfPh * 1.9) * 0.4;
         transformed += normal * (uWind * kfLoose * 0.00035 * uv.y * uv.y * kfW);`
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${FEATHER_FRAG}`)
+      .replace('#include <common>', `#include <common>\n${FEATHER_FRAG}\nvarying float vFold;`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
         float kfType = floor(vFeather.x + 0.5);
-        vec3 kfCol = gl_FrontFacing ? kpFeatherTop(kfType, vFeather.y, vUv, vFeather.z) : kpFeatherBottom(kfType, vFeather.y, vUv);
+        vec3 kfCol = gl_FrontFacing ? kpFeatherTop(kfType, vFeather.y, vUv, vFeather.z, vFold) : kpFeatherBottom(kfType, vFeather.y, vUv, vFold);
         diffuseColor.rgb *= kfCol;`
       )
       .replace(

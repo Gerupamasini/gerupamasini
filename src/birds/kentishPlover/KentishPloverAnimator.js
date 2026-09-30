@@ -124,6 +124,7 @@ export class KentishPloverAnimator {
     this.headStab = new THREE.Vector3();
 
     // Wings / flight
+    this.foldLR = [1, 1]; // how folded each wing is (after action overrides)
     this.flight = { active: false, phase: 0, hz: ANIM.flight.cruiseHz, amp: 0, glide: 0, flap: 0, brake: 0 };
     this.attitude = { pitch: 0, roll: 0 }; // whole-body attitude in flight (set by the entity)
 
@@ -142,10 +143,10 @@ export class KentishPloverAnimator {
     this.lean = 0;
 
     this._initFeet = true;
-    this._lesser = { L: [], R: [] };
+    this._coverts = { L: [], R: [] };
     for (const bone of model.boneList) {
       const f = bone.userData.spec.feather;
-      if (f && (f.type === 'lesserCovert' || f.type === 'alula')) this._lesser[bone.name.endsWith('_L') ? 'L' : 'R'].push(bone);
+      if (f && (/Covert$/.test(f.type) || f.type === 'alula')) this._coverts[bone.name.endsWith('_L') ? 'L' : 'R'].push(bone);
     }
   }
 
@@ -343,7 +344,7 @@ export class KentishPloverAnimator {
     // -------------------------------------------------- micro: blink / lids / fluff
     this._updateLids(dt, act);
     model.setFluff(this.p.fluff);
-    model.setWingFold(clamp(this.p.fold, 0, 1));
+    model.setWingFold(this.foldLR[0], this.foldLR[1]);
     // feathers are sleeked when alert/flying (less flutter), loose when fluffed/resting
     model.setFeatherTime(this.time, clamp(0.35 + this.p.fluff * 0.4 - (this.flight.active ? 0.2 : 0), 0.05, 1));
     obj.updateMatrixWorld(true);
@@ -687,6 +688,7 @@ export class KentishPloverAnimator {
         wElev = ov.wElev ?? wElev;
       }
       const effFold = ov?.fold ?? fold;
+      this.foldLR[side === 'L' ? 0 : 1] = clamp(effFold, 0, 1);
       const qH = wingQuat(hSweep, elev, hTwist);
       const qF = wingQuat(fSweep, 0, 0);
       const qW = wingQuat(wSweep, wElev, wTwist);
@@ -721,7 +723,7 @@ export class KentishPloverAnimator {
         const f = bone.userData.spec.feather;
         apply(bone, _q2.identity().slerp(FF.get(f.name), effFold));
       }
-      for (const bone of this._lesser[side]) {
+      for (const bone of this._coverts[side]) {
         const f = bone.userData.spec.feather;
         apply(bone, _q2.identity().slerp(FF.get(f.name), effFold));
       }
