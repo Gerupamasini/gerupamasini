@@ -38,6 +38,12 @@ export function qmul(a, b) {
   ];
 }
 const Y = [0, 1, 0];
+/** Rotate vector v by unit quaternion q. */
+export function qrot(q, v) {
+  const [x, y, z, w] = q;
+  const tx = 2 * (y * v[2] - z * v[1]), ty = 2 * (z * v[0] - x * v[2]), tz = 2 * (x * v[1] - y * v[0]);
+  return [v[0] + w * tx + (y * tz - z * ty), v[1] + w * ty + (z * tx - x * tz), v[2] + w * tz + (x * ty - y * tx)];
+}
 
 /**
  * Lateral midline displacement (mm, +X = fish's left) of a subcarangiform travelling wave
@@ -95,7 +101,25 @@ export function computePose(p, axes) {
   }
   // head pitch (nose up > 0) on top of the lateral bend
   q.J_head = qmul(q.J_head, quat(axes.headUp, p.headPitch));
-  q.J_jaw = quat(axes.jaw, p.jaw);
+  // suspensoria swing out (cheeks and gill covers widen); the quadrates carry the rear ends of the two
+  // lower-jaw halves outward, so each half both drops (hinge on its quadrate) and rotates about the
+  // symphysis in the horizontal plane: the jaw opens wide and round rather than as a narrow slot
+  const susp = p.susp || 0;
+  q.J_suspL = quat(axes.suspL, susp);
+  q.J_suspR = quat(axes.suspR, susp);
+  const Rd = quat(axes.jaw, p.jaw);
+  const phi = Math.atan(axes.jawSpreadK * Math.sin(susp));
+  const S = axes.symphysis;
+  for (const side of [1, -1]) {
+    const Jp = [side * axes.jawJointL[0], axes.jawJointL[1], axes.jawJointL[2]];
+    const d0 = qrot(Rd, [S[0] - Jp[0], S[1] - Jp[1], S[2] - Jp[2]]);
+    const Sd = [Jp[0] + d0[0], Jp[1] + d0[1], Jp[2] + d0[2]];
+    const Ry = quat(Y, -side * phi);
+    const r = qrot(Ry, [Jp[0] - Sd[0], Jp[1] - Sd[1], Jp[2] - Sd[2]]);
+    const name = side > 0 ? 'J_jawL' : 'J_jawR';
+    q[name] = qmul(Ry, Rd);
+    t[name] = [r[0] + Sd[0] - Jp[0], r[1] + Sd[1] - Jp[1], r[2] + Sd[2] - Jp[2]];
+  }
   q.J_hyoid = quat(axes.hyoid, p.hyoid);
   q.J_opercL = quat(axes.opercL, p.opercL);
   q.J_opercR = quat(axes.opercR, p.opercR);
@@ -127,7 +151,7 @@ export function computePose(p, axes) {
 export function defaultPose() {
   return {
     phase: 0, gain: 0, turn: 0, headPitch: 0.02, arch: 0,
-    jaw: 0, premax: 0, hyoid: 0, opercL: 0, opercR: 0,
+    jaw: 0, premax: 0, hyoid: 0, susp: 0, opercL: 0, opercR: 0,
     pecAbdL: 0.4, pecAbdR: 0.4, pecDepL: 0.42, pecDepR: 0.42, foldPecL: 0.0, foldPecR: 0.0, flexPecL: 0, flexPecR: 0,
     scullPhase: 0, scullAmpL: 0.04, scullAmpR: 0.04, pelvicPitch: 0,
     foldD1: 0.55, foldD2: 0.3, foldAnal: 0.85, foldCaudal: 0.45, foldPelvic: 0,
@@ -143,6 +167,7 @@ export function breathe(p, time, depth = 1) {
   p.jaw += 0.005 * depth * b(0);  // lips stay sealed; water enters as the buccal floor drops
   p.premax += 0.05 * depth * b(0);
   p.hyoid += 0.06 * depth * b(0.08);
+  p.susp += 0.012 * depth * b(0.1);
   p.opercL += 0.05 * depth * b(0.2);
   p.opercR += 0.05 * depth * b(0.2);
   return p;
@@ -166,5 +191,7 @@ export function yawnCurves(t) {
     return 0;
   };
   const flush = Math.exp(-(((t - 1.75) / 0.12) ** 2));
-  return { open, hyoid: lag(0.12), operc: Math.max(lag(0.25), 0.6 * flush), fins: lag(0.05), done: t > 2.3 };
+  // anterior → posterior expansion: jaw, then hyoid and suspensoria (head widens), then gill covers;
+  // compression runs the same way (the cheeks close just after the jaws, then water leaves the gills)
+  return { open, hyoid: lag(0.12), susp: lag(0.1), operc: Math.max(lag(0.25), 0.6 * flush), fins: lag(0.05), done: t > 2.3 };
 }

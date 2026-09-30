@@ -57,7 +57,8 @@ function caudalFin(rect) {
     const ang = -u * 20 * DEG;
     const len = 6.9 + 2.2 * Math.pow(Math.max(0, 1 - u * u), 0.8);
     const dir = nrm([Math.cos(ang), Math.sin(ang), 0]);
-    rays.push({ base: [s, y, 0], dir, len, kind: 'soft', curv: 0, bend: [0, 0, 0], ang });
+    // 17 principal rays: the outermost of each lobe are unbranched (15 branched)
+    rays.push({ base: [s, y, 0], dir, len, kind: 'soft', simple: k === 0 || k === NP - 1, curv: 0, bend: [0, 0, 0], ang });
   }
   for (const [s, len, ang] of proc.slice().reverse()) {
     const dir = nrm([Math.cos(-ang * DEG), Math.sin(-ang * DEG), 0]);
@@ -102,8 +103,12 @@ function pectoralFin(side, rect) {
     // upper rays sweep back at ~25°, lower rays point down-back (fan top stays at eye level)
     const psi = (25 - f * 82) * DEG;
     const dir = nrm(add(mul(Xf, Math.cos(psi)), mul(Yf, Math.sin(psi))));
-    const len = 4.6 + 2.8 * Math.pow(Math.max(0, 1 - ((f - 0.4) / 0.62) ** 2), 0.75);
-    rays.push({ base, dir, len, kind: 'soft', curv: 0.05, bend: inPlaneBend(dir, normal), psi });
+    // rounded fan (skeleton reference): the upper rays shorten quickly (top ray ~1/3 of the longest),
+    // the longest are at mid-fin, the lower rays shorten gently
+    const x = (f - 0.5) / (f < 0.5 ? 0.5 : 0.62);
+    const len = 7.4 * (0.36 + 0.64 * Math.pow(Math.max(0, 1 - x * x), 0.6));
+    // uppermost and lowermost rays are simple (unbranched), the rest branch near their tips
+    rays.push({ base, dir, len, kind: 'soft', simple: k < 2 || k === NR - 1, curv: 0.05, bend: inPlaneBend(dir, normal), psi });
   }
   return {
     name: side > 0 ? 'Fin_Pectoral_L' : 'Fin_Pectoral_R', type: 'pectoral', Xf, Yf, rays, normal, notch: 0.03, pleat: 0.06, sag: 0.03, rect, branchT: 0.45, segStart: 0.15, cup: 0.22, wave: 0.05,
@@ -433,7 +438,7 @@ export function paintFinAtlas(defs, log = () => {}) {
           const width0 = soft ? 0.062 : 0.09;
           const width = width0 * (1 - (soft ? 0.55 : 0.7) * t);
           const centers = [];
-          if (soft && t > def.branchT && r > 0 && r < n - 1) {
+          if (soft && !ray.simple && t > def.branchT && r > 0 && r < n - 1) {
             const d1 = 0.17 * smoothstep(def.branchT, def.branchT + 0.3, t);
             if (def.name === 'Fin_Caudal' && t > 0.8) {
               const d2 = 0.06 * smoothstep(0.8, 0.95, t);

@@ -12,16 +12,28 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 // pivots in fish space (mm); parent by name
 const yc = (s) => section(s).yc;
 const opHingeL = (() => { const p = surfaceAt(9.0, 2.7).p; return [p[0], p[1], p[2] - 0.2]; })();
+// Suspensorium (hyomandibula + quadrate + pterygoids + preopercle, carrying the cheek and the gill cover):
+// it swings laterally about the line through its two articulations with the skull, the palatine (front,
+// at the lateral ethmoid) and the hyomandibula (back, under the rear of the orbit). Abduction widens the
+// mouth cavity and the cheeks; the quadrates, and with them the rear ends of the lower-jaw halves, move out.
+const PALATINE = [2.3, 3.4, 0.8];
+const HYOMAND = [7.6, 4.5, 1.2];
+// lower jaw: each half (dentary + articular) hinges on its quadrate and meets the other at the symphysis
+const JAW_JOINT = [PIVOTS.jaw[0], PIVOTS.jaw[1], 1.55];
+const SYMPHYSIS = [0.35, 1.5, 0];
 const pecBase = (() => { const p = surfaceAt(12.45, 2.6).p; return [p[0], p[1], p[2] - 0.15]; })();
 
 export const JOINTS = [
   { name: 'J_root', parent: null, at: [13.0, yc(13.0), 0] },
   { name: 'J_head', parent: 'J_root', at: [9.0, yc(9.0), 0] },
-  { name: 'J_jaw', parent: 'J_head', at: PIVOTS.jaw },
+  { name: 'J_suspL', parent: 'J_head', at: HYOMAND },
+  { name: 'J_suspR', parent: 'J_head', at: [HYOMAND[0], HYOMAND[1], -HYOMAND[2]] },
+  { name: 'J_jawL', parent: 'J_head', at: JAW_JOINT },
+  { name: 'J_jawR', parent: 'J_head', at: [JAW_JOINT[0], JAW_JOINT[1], -JAW_JOINT[2]] },
   { name: 'J_premax', parent: 'J_head', at: PIVOTS.premax },
   { name: 'J_hyoid', parent: 'J_head', at: PIVOTS.hyoid },
-  { name: 'J_opercL', parent: 'J_head', at: opHingeL },
-  { name: 'J_opercR', parent: 'J_head', at: [opHingeL[0], opHingeL[1], -opHingeL[2]] },
+  { name: 'J_opercL', parent: 'J_suspL', at: opHingeL },
+  { name: 'J_opercR', parent: 'J_suspR', at: [opHingeL[0], opHingeL[1], -opHingeL[2]] },
   { name: 'J_eyeL', parent: 'J_head', at: EYE.center },
   { name: 'J_eyeR', parent: 'J_head', at: [EYE.center[0], EYE.center[1], -EYE.center[2]] },
   { name: 'J_pecL', parent: 'J_root', at: pecBase },
@@ -70,7 +82,9 @@ function opercWeight(p) {
   const yTop = OPERCLE[0][1], yBot = OPERCLE[OPERCLE.length - 1][1];
   const sh = polyS(PREOPERCLE, y), sm = polyS(OPERCLE, y);
   const u = (s - sh) / Math.max(sm - sh, 0.3);
-  const ends = smoothstep(yBot - 0.05, yBot + 0.55, y) * smoothstep(yTop + 0.05, yTop - 0.5, y);
+  // goby gill openings are restricted to the sides: below the pectoral base the branchiostegal membrane is
+  // joined to the isthmus, so the lower part of the cover follows the cheek and throat, it does not flare
+  const ends = smoothstep(Math.max(yBot, 1.1), 2.2, y) * smoothstep(yTop + 0.05, yTop - 0.5, y);
   return smoothstep(0.02, 0.85, u) * ends;
 }
 
@@ -96,12 +110,37 @@ function jawWeightBody(v) {
   return s > r ? Math.max(soft, lip * smoothstep(r + 0.5, r, s)) : lip;
 }
 
-function combine(regional, s) {
+// share of the head skin carried by the suspensorium: the cheek and gill-cover region below the eye,
+// lateral surfaces only (the throat midline and the skull roof stay with the head)
+export function suspWeight(s, y, z) {
+  const q = section(clamp(s, 0.3, 30));
+  const lat = Math.abs(z) / Math.max(q.w, 0.3);
+  return smoothstep(RICTUS_S - 0.4, RICTUS_S + 1.6, s) * smoothstep(12.2, 10.9, s) *
+    smoothstep(EYE.center[1] - 0.6, EYE.center[1] - 1.7, y) * smoothstep(0.22, 0.7, lat);
+}
+const suspJ = (z) => (z >= 0 ? J.J_suspL : J.J_suspR);
+// the lower jaw is two halves: split a jaw influence smoothly across the symphysis
+function jawSplit(w, z) {
+  const f = smoothstep(-0.3, 0.3, z);
+  return [[J.J_jawL, w * f], [J.J_jawR, w * (1 - f)]];
+}
+
+function combine(regional, s, susp = 0, z = 0) {
   let rest = 1;
   const out = [];
   for (const [j, w] of regional) if (w > 1e-3) { out.push([j, w]); rest -= w; }
   rest = Math.max(rest, 0);
-  for (const [j, w] of spineWeights(s)) out.push([j, w * rest]);
+  if (susp > 1e-3) out.push([suspJ(z), rest * susp]);
+  for (const [j, w] of spineWeights(s)) out.push([j, w * rest * (1 - susp)]);
+  return out;
+}
+// replace the J_head part of an explicit influence list by head + suspensorium
+function withSusp(list, susp, z) {
+  if (susp < 1e-3) return list;
+  const out = [];
+  for (const [j, w] of list) {
+    if (j === J.J_head) { out.push([j, w * (1 - susp)], [suspJ(z), w * susp]); } else out.push([j, w]);
+  }
   return out;
 }
 
@@ -121,12 +160,12 @@ function pack(list, n) {
   return { joints, weights };
 }
 
-export function bodyWeights(mesh) {
-  const list = mesh.verts.map((v) => {
+function skinInfluence(v) {
+  {
     const [s, y, z] = v.fish;
     const reg = [];
     const wj = clamp(jawWeightBody(v));
-    if (wj > 0) reg.push([J.J_jaw, wj]);
+    if (wj > 0) reg.push(...jawSplit(wj, z));
     const gy = gapeY(Math.min(s, RICTUS_S));
     if (!v.jawSide && s < RICTUS_S + 0.3 && y > gy - 0.05) {
       const wp = smoothstep(gy + 0.75, gy + 0.18, y) * smoothstep(RICTUS_S + 0.3, RICTUS_S - 1.3, s);
@@ -138,48 +177,59 @@ export function bodyWeights(mesh) {
       const wo = opercWeight(v.fish) * (1 - hy * 0.5);
       if (wo > 0) reg.push([z >= 0 ? J.J_opercL : J.J_opercR, wo]);
     }
-    return combine(reg, s);
-  });
-  return pack(list, mesh.verts.length);
+    return combine(reg, s, suspWeight(s, y, z), z);
+  }
+}
+export function bodyWeights(mesh) {
+  return pack(mesh.verts.map(skinInfluence), mesh.verts.length);
 }
 
-function mouthUpperW(s, u) {
+function mouthUpperW(s, u, y, z) {
   const edge = smoothstep(0.3, 0.0, u);
   const seal = 0.45 * cornerSeal(s) * edge;
   // at the lip margin the same premaxilla influence as the skin it is stitched to (see bodyWeights)
   const pm = 0.9 * smoothstep(RICTUS_S + 0.3, RICTUS_S - 1.3, s) * edge;
-  return [[J.J_jaw, seal], [J.J_premax, pm], [J.J_head, Math.max(0, 1 - seal - pm)]];
+  return withSusp([...jawSplit(seal, z), [J.J_premax, pm], [J.J_head, Math.max(0, 1 - seal - pm)]], suspWeight(s, y, z * 1.25), z);
 }
-function mouthLowerW(s, u) {
+function mouthLowerW(s, u, y, z) {
   const edgeJaw = 1 - 0.55 * cornerSeal(s) * smoothstep(0.3, 0.0, u);
   const jaw = edgeJaw + (0.35 - edgeJaw) * smoothstep(0.35, 1.0, u);
   const hy = 0.45 * smoothstep(0.4, 1.0, u);
-  return [[J.J_jaw, jaw], [J.J_hyoid, hy], [J.J_head, Math.max(0, 1 - jaw - hy)]];
+  return withSusp([...jawSplit(jaw, z), [J.J_hyoid, hy], [J.J_head, Math.max(0, 1 - jaw - hy)]], suspWeight(s, y, z * 1.25), z);
 }
 
-export function interiorWeights(part) {
+export function interiorWeights(part, body) {
   const list = part.verts.map((v) => {
-    const s = v.fish[0];
+    const [s, y, z] = v.fish;
+    // gill-chamber parts move exactly like the skin they hang from (so nothing pokes through); the chamber
+    // wall and arches stay with the cheek, not with the swinging gill cover (operculum → its suspensorium)
+    if (v.src >= 0 && body) {
+      const inf = skinInfluence(body.verts[v.src]);
+      if (v.zone === 'flapLining') return inf;
+      return inf.map(([j, w]) => [j === J.J_opercL ? J.J_suspL : j === J.J_opercR ? J.J_suspR : j, w]);
+    }
     const reg = [];
     const u = v.blend;
     switch (v.zone) {
       case 'mouthUpper':
-        return mouthUpperW(s, u);
+        return mouthUpperW(s, u, y, z);
       case 'mouthLower':
-        return mouthLowerW(s, u);
+        return mouthLowerW(s, u, y, z);
       case 'mouthWall': {
         // corner wall between the two sheets: blend their influences across (u) at this depth
         const d = v.uv[1];
         const m = new Map();
-        for (const [j, w] of mouthUpperW(s, d)) m.set(j, (m.get(j) || 0) + w * (1 - u));
-        for (const [j, w] of mouthLowerW(s, d)) m.set(j, (m.get(j) || 0) + w * u);
+        for (const [j, w] of mouthUpperW(s, d, y, z)) m.set(j, (m.get(j) || 0) + w * (1 - u));
+        for (const [j, w] of mouthLowerW(s, d, y, z)) m.set(j, (m.get(j) || 0) + w * u);
         return [...m.entries()];
       }
       case 'flapLining':
-        reg.push([v.fish[2] >= 0 ? J.J_opercL : J.J_opercR, opercWeight(v.fish)]);
-        return combine(reg, s);
+        // the lining sits just under the flap skin: never more suspensorium influence than the skin above it
+        reg.push([z >= 0 ? J.J_opercL : J.J_opercR, opercWeight(v.fish)]);
+        return combine(reg, s, suspWeight(s, y, z), z);
       default:
-        return combine([], s);
+        // gill-chamber wall and arches hang from the suspensorium and the hyoid arch laterally
+        return combine([], s, 0.6 * suspWeight(s, y, z * 1.15), z);
     }
   });
   return pack(list, part.verts.length);
@@ -220,8 +270,23 @@ function axisFor(joint, axis, probeFish, want) {
 }
 const X = [1, 0, 0], Yax = [0, 1, 0], Z = [0, 0, 1];
 const opAxis = nrm(dirToObject(sub([PIVOTS.opercBottom[0], PIVOTS.opercBottom[1], 0], [PIVOTS.opercTop[0], PIVOTS.opercTop[1], 0])));
+const suspAxisL = nrm(dirToObject(sub(PALATINE, HYOMAND)));
+const suspAxisR = [-suspAxisL[0], suspAxisL[1], suspAxisL[2]];
+// quadrate distance from the suspensorium axis over the jaw length: quadrate lateral travel → ramus angle
+const quadR = (() => {
+  const a = HYOMAND, d = nrm(sub(PALATINE, HYOMAND)), v = sub(JAW_JOINT, a);
+  const along = dot(v, d);
+  return Math.hypot(v[0] - d[0] * along, v[1] - d[1] * along, v[2] - d[2] * along);
+})();
+const jawLen = Math.hypot(JAW_JOINT[0] - SYMPHYSIS[0], JAW_JOINT[1] - SYMPHYSIS[1], JAW_JOINT[2] - SYMPHYSIS[2]);
 export const AXES = {
-  jaw: axisFor('J_jaw', X, [1.0, 1.0, 0], [0, -1, 0]),
+  jaw: axisFor('J_jawL', X, [1.0, 1.0, 0], [0, -1, 0]),
+  suspL: axisFor('J_suspL', suspAxisL, [5.5, 1.0, 2.5], [1, 0, 0]),
+  suspR: axisFor('J_suspR', suspAxisR, [5.5, 1.0, -2.5], [-1, 0, 0]),
+  // lower-jaw geometry (object space, m) for the two-halves jaw (see pose.js)
+  jawJointL: toObject(JAW_JOINT),
+  symphysis: toObject(SYMPHYSIS),
+  jawSpreadK: quadR / jawLen,
   hyoid: axisFor('J_hyoid', X, [8.5, 0.3, 0], [0, -1, 0]),
   opercL: axisFor('J_opercL', opAxis, [11.4, 2.6, 3.2], [1, 0, 0]),
   opercR: axisFor('J_opercR', opAxis, [11.4, 2.6, -3.2], [-1, 0, 0]),
@@ -288,7 +353,8 @@ export function buildClips() {
     p.jaw = 0.62 * y.open;
     p.premax = y.open;
     p.hyoid = 0.3 * y.hyoid;
-    p.opercL = p.opercR = 0.42 * y.operc;
+    p.susp = 0.22 * y.susp;
+    p.opercL = p.opercR = 0.3 * y.operc;
     p.headPitch += 0.09 * y.open;
     p.foldD1 = 0.55 * (1 - y.fins); p.foldD2 = 0.3 * (1 - y.fins); p.foldAnal = 0.35 * (1 - y.fins); p.foldCaudal = 0.45 * (1 - y.fins);
     p.pecAbdL = p.pecAbdR = 0.4 + 0.25 * y.fins;

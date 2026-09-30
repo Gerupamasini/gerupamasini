@@ -135,7 +135,7 @@ const mInterior = gb.addMaterial({
 const mouth = buildMouth(body);
 const gills = buildGills(body);
 for (const part of [mouth.cavity, mouth.teeth, gills]) {
-  const w = interiorWeights(part);
+  const w = interiorWeights(part, body);
   const prim = gb.primitive({
     position: part.position, normal: part.normal, uv: part.uv, indices: part.indices, material: mInterior,
     extraAttributes: { ...skinAttrs(w), COLOR_0: { array: part.color, type: 'VEC4' }, _GILL: { array: part.gill, type: 'SCALAR' } },

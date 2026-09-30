@@ -16,8 +16,9 @@ const bez = (p0, c, p1, t) => add(add(mul(p0, (1 - t) * (1 - t)), mul(c, 2 * t *
 
 class Builder {
   constructor() { this.v = []; this.idx = []; }
-  vert(fish, color, uv, zone, blend, gill = 0) {
-    this.v.push({ fish, color, uv, zone, blend, gill });
+  // src: index of the body-skin vertex this interior vertex hangs from (its skin weights are reused)
+  vert(fish, color, uv, zone, blend, gill = 0, src = -1) {
+    this.v.push({ fish, color, uv, zone, blend, gill, src });
     return this.v.length - 1;
   }
   // grid of vertex indices [row][col] -> quads; `inside` = a point the normals must face
@@ -179,49 +180,81 @@ export function buildMouth(mesh) {
     }
     B.grid(rows, (c) => [0, 1, 0]);
   }
-  // teeth: an outer row of enlarged, recurved conical teeth and an inner band of fine villiform teeth
+  // teeth (after the cleared-and-dried skeleton reference): an outer row of well-spaced, enlarged conical
+  // teeth that curve back and inward (largest at the front of the dentary), and behind them a band of fine
+  // villiform teeth; both jaws are toothed back to just before the mouth corner
   const teeth = new Builder();
-  const addTooth = (base, dir, len, rad, zone) => {
-    const tip = add(base, mul(dir, len));
-    const a0 = nrm(cross(dir, [0, 0, 1]).map((x) => x + 1e-6));
-    const b0 = nrm(cross(dir, a0));
-    const ring = [];
-    const col = [0.84, 0.8, 0.7, 1];
-    for (let i = 0; i < 6; i++) {
-      const ang = (i / 6) * Math.PI * 2;
-      const p = add(base, add(mul(a0, Math.cos(ang) * rad), mul(b0, Math.sin(ang) * rad)));
-      ring.push(teeth.vert(p, col, [0.5, 0.02], zone, 0.06, 0));
+  const colBase = [0.86, 0.83, 0.74, 1], colTip = [0.93, 0.9, 0.82, 1];
+  const addTooth = (base, dir, len, rad, curl, zone) => {
+    // curved cone: centre line bends from `dir` toward the back of the mouth (+s) and the midline
+    const back = nrm([1, 0, -Math.sign(base[2]) * 0.35]);
+    const NS = 4, NA = 7;
+    const centre = (u) => add(base, add(mul(dir, len * u), mul(back, len * curl * u * u)));
+    const tangent = (u) => nrm(add(mul(dir, len), mul(back, 2 * len * curl * u)));
+    const rings = [];
+    for (let i = 0; i < NS; i++) {
+      const u = i / NS;
+      const c = centre(u), tg = tangent(u);
+      const a0 = nrm(cross(tg, [0, 0, 1]).map((x) => x + 1e-6));
+      const b0 = nrm(cross(tg, a0));
+      const r = rad * Math.pow(1 - u, 0.85);
+      const col = colBase.map((x, k) => x + (colTip[k] - x) * u);
+      const ring = [];
+      for (let j = 0; j < NA; j++) {
+        const ang = (j / NA) * Math.PI * 2;
+        ring.push(teeth.vert(add(c, add(mul(a0, Math.cos(ang) * r), mul(b0, Math.sin(ang) * r))), col, [0.5, 0.02], zone, 0.06, 0));
+      }
+      rings.push({ ring, c });
     }
-    const t = teeth.vert(add(tip, mul([1, 0, 0], len * 0.25)), col, [0.5, 0.02], zone, 0.06, 0);
-    for (let i = 0; i < 6; i++) teeth.tri(ring[i], ring[(i + 1) % 6], t, (c) => sub(c, base));
+    const tip = teeth.vert(centre(1), colTip, [0.5, 0.02], zone, 0.06, 0);
+    for (let i = 0; i < NS - 1; i++) {
+      const A = rings[i], Bn = rings[i + 1];
+      const mid = mul(add(A.c, Bn.c), 0.5);
+      for (let j = 0; j < NA; j++) {
+        const j1 = (j + 1) % NA;
+        teeth.tri(A.ring[j], A.ring[j1], Bn.ring[j1], (c) => sub(c, mid));
+        teeth.tri(A.ring[j], Bn.ring[j1], Bn.ring[j], (c) => sub(c, mid));
+      }
+    }
+    const last = rings[NS - 1];
+    for (let j = 0; j < NA; j++) teeth.tri(last.ring[j], last.ring[(j + 1) % NA], tip, (c) => sub(c, last.c));
   };
   const toothRow = (edge, upper) => {
-    let acc = 0;
+    // inner lip margin (just inside the lip roll) as an arc-length polyline
     const cs = ctrl[upper];
-    for (let k = 0; k < edge.length - 1; k++) {
-      const a = V[edge[k]].fish, b = V[edge[k + 1]].fish;
-      const ia = bez(cs[k][1], cs[k][2], cs[k][3], 0.015), ib = bez(cs[k + 1][1], cs[k + 1][2], cs[k + 1][3], 0.015);
-      const L = Math.hypot(...sub(b, a));
-      const n = Math.floor((acc + L) / 0.05) - Math.floor(acc / 0.05);
-      for (let t = 0; t < n; t++) {
-        const f = (t + 0.5) / Math.max(n, 1);
-        const p = lerp3(a, b, f);
-        if (p[0] > RICTUS_S - 1.1) continue;
-        if (hash01(k, t, upper ? 5 : 6, 7) < 0.12) continue;
-        const gy = gapeY(Math.max(p[0], 0.1));
-        // every other position is an outer (enlarged) tooth; the rest fill two inner rows of fine teeth
-        const outer = (k * 7 + t) % 2 === 0;
-        const row = outer ? 0 : 1 + (hash01(k, t, upper ? 3 : 4, 8) < 0.5 ? 0 : 1);
-        const q = lerp3(ia, ib, f);
-        const base = [q[0] + 0.02 + 0.07 * row, q[1] + (upper ? 0.03 : -0.03) * (1 + row), q[2] * (1 - 0.04 * row)];
-        const dir = nrm([0.35 + 0.1 * row, upper ? -1 : 1, -Math.sign(p[2]) * 0.25]);
-        const h = hash01(k, t, upper ? 1 : 2, 9);
-        const len = outer ? 0.1 + 0.05 * h : 0.045 + 0.025 * h;
-        const rad = outer ? 0.02 + 0.005 * h : 0.01 + 0.003 * h;
-        addTooth(base, dir, len, rad, upper ? 'mouthUpper' : 'mouthLower');
+    const pts = cs.map((c) => bez(c[1], c[2], c[3], 0.015));
+    const cum = [0];
+    for (let k = 1; k < pts.length; k++) cum.push(cum[k - 1] + Math.hypot(...sub(pts[k], pts[k - 1])));
+    const at = (d) => {
+      let k = 1;
+      while (k < pts.length - 1 && cum[k] < d) k++;
+      const f = clamp((d - cum[k - 1]) / Math.max(cum[k] - cum[k - 1], 1e-6), 0, 1);
+      return lerp3(pts[k - 1], pts[k], f);
+    };
+    const total = cum[cum.length - 1];
+    const zone = upper ? 'mouthUpper' : 'mouthLower';
+    const sEnd = RICTUS_S - (upper ? 0.7 : 0.55);
+    const place = (spacing, row, idx0) => {
+      for (let d = spacing * 0.5, i = 0; d < total; d += spacing, i++) {
+        const q = at(d + (hash01(i, row, upper ? 11 : 12, 3) - 0.5) * spacing * 0.3);
+        if (q[0] > sEnd) continue;
+        if (row > 0 && hash01(i, row, upper ? 5 : 6, 7) < 0.15) continue;
+        const front = 1 - clamp(q[0] / sEnd, 0, 1); // 1 at the symphysis
+        const h = hash01(i, row + idx0, upper ? 1 : 2, 9);
+        const base = [q[0] + 0.03 + 0.075 * row, q[1] + (upper ? 0.035 : -0.035) * (1 + 0.8 * row), q[2] * (1 - 0.045 * row)];
+        const dir = nrm([0.12 + 0.08 * row, upper ? -1 : 1, -Math.sign(q[2] || 1) * (0.2 + 0.1 * row)]);
+        if (row === 0) {
+          // enlarged outer teeth; the lower jaw's front teeth are the largest (canine-like)
+          const len = (upper ? 0.15 + 0.06 * front : 0.15 + 0.12 * front * front) * (0.85 + 0.3 * h);
+          addTooth(base, dir, len, 0.03 + 0.012 * front, 0.35, zone);
+        } else {
+          addTooth(base, dir, 0.05 + 0.03 * h, 0.012 + 0.003 * h, 0.2, zone);
+        }
       }
-      acc += L;
-    }
+    };
+    place(0.14, 0, 0);
+    place(0.06, 1, 10);
+    place(0.065, 2, 20);
   };
   toothRow(edgeU, true);
   toothRow(edgeL, false);
@@ -255,26 +288,27 @@ export function buildGills(mesh) {
         const depth = 0.07;
         const p = sub(v.fish, mul(nf, depth));
         const u = r / ROWS;
-        row.push(out.vert(p, [...lining.map((c) => c * (0.8 + 0.2 * hash01(r, k, 3, 4))), 0.5], [k / (J - 1), u], 'flapLining', 1, 0));
+        row.push(out.vert(p, [...lining.map((c) => c * (0.8 + 0.2 * hash01(r, k, 3, 4))), 0.5], [k / (J - 1), u], 'flapLining', 1, 0, g));
       }
       lin.push(row);
     }
     out.grid(lin, (c) => [0, 0, -Math.sign(c[2])]); // lining looks toward the body
     // 2) free edge strip joining the outer skin (flap copy) to the lining
-    const edgeRows = [E.flap.map((g) => out.vert(V[g].fish, [...edgeC, 0.5], [0, 0], 'flapLining', 1, 0)), lin[0]];
+    const edgeRows = [E.flap.map((g) => out.vert(V[g].fish, [...edgeC, 0.5], [0, 0], 'flapLining', 1, 0, g)), lin[0]];
     out.grid(edgeRows, (c) => [1, 0, 0]);
     // 3) chamber wall: starts at the body-side cut and runs forward under the flap, 0.55 mm deep
     const wallRows = [];
     for (let r = 0; r <= ROWS; r++) {
       const row = [];
       for (let k = 0; k < J; k++) {
-        const v = V[r === 0 ? E.body[k] : gidAt(im - r, js[k])];
+        const gi = r === 0 ? E.body[k] : gidAt(im - r, js[k]);
+        const v = V[gi];
         const nf = [-v.n[2], v.n[1], v.n[0]];
         const halfW = Math.max(Math.abs(v.fish[2]), 0.2);
         const d = r === 0 ? 0 : Math.min(0.18 + 0.4 * smoothstep(0, 6, r), 0.42 * halfW);
         const p = sub(v.fish, mul(nf, d));
         const endFade = Math.min(k, J - 1 - k) / 3;
-        row.push(out.vert(p, [...wall.map((c) => c * (0.7 + 0.3 * clamp(endFade))), 0.5], [k / (J - 1), r / ROWS], 'gillWall', 0, 0));
+        row.push(out.vert(p, [...wall.map((c) => c * (0.7 + 0.3 * clamp(endFade))), 0.5], [k / (J - 1), r / ROWS], 'gillWall', 0, 0, gi));
       }
       wallRows.push(row);
     }
@@ -292,8 +326,9 @@ export function buildGills(mesh) {
         // keep the filament tips under the closed gill cover (wall depth minus the lining clearance)
         const depth = Math.hypot(...sub(v.fish, pw));
         const h = Math.max(0.02, Math.min(H * (0.4 + 0.6 * lat), depth - 0.12));
-        base.push(out.vert(pw, [0.5, 0.05, 0.05, 0.5], [k / (J - 1), 0], 'gillArch', 0, 1));
-        top.push(out.vert(add(pw, mul(nf, h)), [0.85, 0.16, 0.14, 0.5], [k / (J - 1), 1], 'gillArch', 0, 1));
+        const gs = out.v[wallRows[r][k]].src;
+        base.push(out.vert(pw, [0.5, 0.05, 0.05, 0.5], [k / (J - 1), 0], 'gillArch', 0, 1, gs));
+        top.push(out.vert(add(pw, mul(nf, h)), [0.85, 0.16, 0.14, 0.5], [k / (J - 1), 1], 'gillArch', 0, 1, gs));
       }
       out.grid([base, top], (c) => [1, 0, 0]);
       // back face of the ribbon too (arches are seen from both sides when the cover swings)

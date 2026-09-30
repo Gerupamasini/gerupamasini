@@ -334,8 +334,9 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
       p.jaw += 0.62 * y.open;
       p.premax += y.open;
       p.hyoid += 0.3 * y.hyoid;
-      p.opercL += 0.42 * y.operc;
-      p.opercR += 0.42 * y.operc;
+      p.susp += 0.22 * y.susp;
+      p.opercL += 0.3 * y.operc;
+      p.opercR += 0.3 * y.operc;
       p.headPitch += 0.1 * y.open;
       p.foldD1 *= 1 - y.fins; p.foldD2 *= 1 - y.fins; p.foldAnal *= 1 - y.fins; p.foldCaudal *= 1 - y.fins;
       p.pecAbdL += 0.25 * y.fins; p.pecAbdR += 0.25 * y.fins;
