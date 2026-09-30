@@ -251,7 +251,7 @@ export function bristleGeo(len, r, count, hairLen, seed = 1, depress = false, r2
 // 額は狭く下向きに曲がり、先端は二葉で中央に溝。眼窩は前縁全体に長く伸び、眼柄がそこに収まる。
 // 背面は胃域・心域・鰓域などの域が溝で区切られ、大きな顆粒に覆われる（中央の小域は平滑）。
 function yamatoCarapace(w, h, l, q = 1) {
-  return cached(`yama-car5:${w}:${h}:${l}:${q}`, () => {
+  return cached(`yama-car6:${w}:${h}:${l}:${q}`, () => {
     const fw = w * 0.12;
     // 基本形：平たい上面（側方・後方へ緩く下がる）と、角ばった側縁。側壁は下へ向かって内側に入る
     const topY = (x, z) => {
@@ -294,7 +294,7 @@ function yamatoCarapace(w, h, l, q = 1) {
       [[w * 0.32, l * 0.3], [w * 0.85, l * 0.18]],
       [[-w * 0.32, l * 0.3], [-w * 0.85, l * 0.18]],
     ];
-    const gW = w * 0.03, gD = h * 0.05;
+    const gW = w * 0.05, gD = h * 0.028;
     const grooveAt = (x, z) => {
       let g = 0;
       for (const [[ax, az], [bx, bz]] of grooves) {
