@@ -67,8 +67,8 @@ export function bladeGeo(len, w1, w2, th, opts = {}) {
       const base = w1 + (w2 - w1) * Math.min(1, Math.max(0, (t - 0.1) / 0.85));
       // 背面から見ると中ほどがわずかに膨らむ
       // 遠位端も関節へ向けて丸くすぼまる（段々の円錐に見えないように）
-      const e = t > 0.82 ? 1 - 0.28 * Math.pow((t - 0.82) / 0.18, 1.6) : 1;
-      return base * b * e * (1 + 0.1 * Math.sin(Math.min(1, Math.max(0, t)) * Math.PI));
+      const e = t > 0.86 ? 1 - 0.16 * Math.pow((t - 0.86) / 0.14, 1.6) : 1;
+      return base * b * e * (1 + 0.03 * Math.sin(Math.min(1, Math.max(0, t)) * Math.PI));
     };
     const f = (x, y, z) => {
       const t = x / len;
@@ -502,7 +502,7 @@ export const CRAB_SPECS = {
       cox: 0.06, bi: 0.08, merus: 0.47, carpus: 0.17, prop: 0.24, dact: 0.21,
       r: 0.062, merusR: 1.45, merusFlat: 0.55, flat: 0.6, k: [0.86, 1.0, 0.98, 0.8], spread: 0.42, curve: 0.12,
       hipX: [0.8, 0.8, 0.75, 0.64], hipY: 0.5, hipZ: [0.5, 0.18, -0.16, -0.5], coxR: 1.2,
-      setae: [0.018, 0.02, 0.022, 0.024], serrate: 11, reach: 0.66,
+      setae: [0.018, 0.02, 0.022, 0.024], serrate: 11, reach: 0.76,
       blade: { bi: [0.055, 0.08], merus: [0.118, 0.104], carpus: [0.08, 0.072], prop: [0.068, 0.052], dact: [0.05, 0.004], th: 0.4, neck: 0.86 },
     },
     // 鉗は顔の前に垂らして構え、指先を泥につける。雄は大きく、雌は小さい。
