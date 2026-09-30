@@ -186,6 +186,8 @@ for (const v of views) {
 }
 if (mode !== 'strip') await setupPose();
 const hide = (q.get('hide') || '').split(',').filter(Boolean);
+// fdebug=1: wing / tail feathers in a flat colour per type (feathers.FEATHER_TYPE)
+if (q.get('fdebug')) bird.object.traverse((o) => o.material?.userData?.uniforms?.uDebugType && (o.material.userData.uniforms.uDebugType.value = 1));
 bird.object.traverse((o) => {
   if (o.isMesh && hide.some((h) => o.name.startsWith(h))) o.visible = false;
 });

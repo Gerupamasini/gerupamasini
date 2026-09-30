@@ -70,9 +70,11 @@ export function buildWingLayout() {
   }
 
   // Tertials t1..t3 along the humerus (bases lerp(elbow, shoulder, 0.30 / 0.42 / 0.54)); lengths put the folded
-  // tips at z −52 ± 5, y ≈ 67.7 (spec §10.3)
-  const tLen = [34, 39, 41];
-  const tAng = [112, 124, 136];
+  // tips at z −52 ± 5 (−55…−56), y ≈ 67.7, so the primaries project 28 mm beyond them (22 ± 8, spec §10.3).
+  // Spread, they trail straight back beside the body (fanned inward at 112–136° they crossed the back and had
+  // to be turned up like fins to clear it).
+  const tLen = [38, 42.5, 44.5];
+  const tAng = [96, 98, 100];
   for (let k = 1; k <= 3; k++) {
     const base = add(lerp3(elbow, humerus, 0.3 + 0.12 * (k - 1)), [0, order * STACK + 0.4, -2.0]);
     feathers.push({ name: `t${k}`, bone: `t${k}`, type: 'tertial', base, angle: tAng[k - 1], length: tLen[k - 1], width: 11.5, innerVane: 0.55, curve: 0.1, layer: order++, index: k });
@@ -93,13 +95,15 @@ export function buildWingLayout() {
   // Lesser coverts: small, on the arm itself, rigid with the arm bone.
   const lesser = [
     ['forearm', elbow, wrist, 9, 7.0, 7.2],
-    ['humerus', humerus, elbow, 6, 8.0, 7.5],
+    ['humerus', humerus, elbow, 5, 8.0, 7.5],
   ];
   for (const [bone, a, b, n, len, w] of lesser) {
     for (let r = 0; r < 2; r++) {
       for (let q = 0; q < n; q++) {
-        const t = (q + 0.5 + r * 0.5) / (n + 0.5);
-        const base = add(lerp3(a, b, t), [0, top + 1.0 + r * 0.25 - a[1] + wrist[1], 12.5 - r * 3.2]);
+        // (short of the carpal joint, which the alula and the primary coverts cover; on the humerus from where
+        // the spread arm leaves the body plumage — the breast-side feathers and scapulars cover the wing root)
+        const t = bone === 'forearm' ? (q + 0.5 + r * 0.5) / (n + 1.5) : 0.3 + (0.7 * (q + 0.5 + r * 0.5)) / (n + 0.5);
+        const base = add(lerp3(a, b, t), [0, top + 1.0 + r * 0.25 - a[1] + wrist[1], 8.5 - r * 3.2]); // over the arm tube's leading half
         feathers.push({ name: `lc_${bone}_${r}_${q}`, bone, type: 'lesserCovert', base, angle: 96, length: len - r, width: w, innerVane: 0.5, curve: 0.1, layer: order + 3 + r, index: q });
       }
     }
@@ -160,8 +164,9 @@ export function buildTailLayout(tailPivot) {
         name: `ltc${i}${side ? 'R' : 'L'}`,
         bone: 'tail',
         type: 'underTailCovert',
-        base: [tailPivot[0] + sgn * (1.0 + i * 1.6), tailPivot[1] - 3.5 - i * 0.3, tailPivot[2] + 10 - i * 2.5],
-        yaw: sgn * (2 + i * 4) * deg,
+        // (close under the vent: fanned wider, the outer pair lay over the flank where it swells when fluffed)
+        base: [tailPivot[0] + sgn * (1.0 + i * 1.2), tailPivot[1] - 3.5 - i * 0.3, tailPivot[2] + 10 - i * 2.5],
+        yaw: sgn * (2 + i * 2.5) * deg,
         length: 32 - i * 3,
         width: 9.5,
         innerVane: 0.55,

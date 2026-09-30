@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { plumage as PLUMAGE, animation as ANIM } from './KentishPloverConfig.js';
 import { FLUFF_REST } from './anatomy/bodyMesh.js';
+import { CONFORM_FOLD } from './anatomy/wingFold.js';
 
 // breathing displacement amplitude (m): fractional expansion × body half-width
 const ANIM_BREATH = (ANIM.breathAmp * 0.021).toFixed(6);
@@ -331,45 +332,64 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
 const FEATHER_FRAG = /* glsl */ `
 ${GLSL_COMMON}
 uniform vec3 uMantle, uMantleDark, uFringe, uFlightDark, uFlightMid, uTailDark, uWhite, uUnder;
-uniform float uWear, uDetail;
+uniform float uWear, uDetail, uDebugType, uFringeMix, uSubterminal;
 varying vec4 vFeather;
 
-// Colour of the dorsal (upper) surface of a feather (fold: 1 wing folded … 0 spread).
+// validation: flat colour per feather type (validation page ?fdebug=1)
+vec3 kpDebugType(float type) {
+  vec3 P[13] = vec3[13](vec3(0.1), vec3(0.9, 0.1, 0.1), vec3(0.1, 0.8, 0.1), vec3(0.6, 0.0, 0.6), vec3(0.1, 0.3, 0.95), vec3(0.0, 0.8, 0.8), vec3(0.95, 0.85, 0.1), vec3(1.0, 0.5, 0.0), vec3(0.5, 0.3, 0.1), vec3(0.6, 0.6, 1.0), vec3(1.0, 0.6, 0.7), vec3(1.0), vec3(0.7, 0.9, 0.5));
+  return P[int(clamp(type, 0.0, 12.0))];
+}
+
+// Grey-brown feather of the mantle / closed wing: slightly darker centre, a fine pale fringe only round the
+// rounded tip (strength from the palette's fringeMix: adult male 0.25 … juvenile 0.9), juveniles with a dark
+// subterminal line inside it — overlapping rows read as smooth scallops, not plates (spec §10.4, §15).
+vec3 kpBrownFeather(vec2 uv, float centre) {
+  float a = abs(uv.x); float t = uv.y;
+  vec3 c = mix(uMantle, uMantleDark, (1.0 - smoothstep(0.1, 0.55, a)) * (1.0 - smoothstep(0.45, 0.85, t)) * centre);
+  float tip = clamp(smoothstep(0.88, 0.98, t) + smoothstep(0.86, 0.99, a) * smoothstep(0.72, 0.9, t), 0.0, 1.0);
+  float sub = smoothstep(0.72, 0.78, t) * (1.0 - smoothstep(0.84, 0.88, t)) * uSubterminal;
+  c = mix(c, c * (uMantleDark / max(uMantle, vec3(1e-3))) * 0.9, sub * 0.6);
+  return mix(c, uFringe, tip * min(1.0, uFringeMix * 1.6) * (1.0 - uWear * 0.7));
+}
+
+// Colour of the dorsal (upper) surface of a feather (fold: 1 wing folded … 0 spread). On the closed wing only
+// the grey-brown tips of the coverts, tertials and outer secondaries show and the wing reads uniformly
+// grey-brown with the dark primary tips behind (p006, p052, p066; spec §10.4); the white wing-bar (greater
+// covert tips, remex bases) and the darker remiges appear as the wing opens (S7, S27).
 vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd, float fold) {
   float across = uv.x; float t = uv.y; float a = abs(across);
   float rachis = 1.0 - smoothstep(0.035, 0.07, a);
-  float edge = smoothstep(0.62, 1.0, a) + smoothstep(0.8, 1.0, t);
   vec3 c;
   if (type < 0.5) {
     // primary: dark; inner primaries show a white base on the outer vane (wing-bar continues)
     c = uFlightDark;
-    float whiteBase = (1.0 - smoothstep(0.26, 0.36, t)) * step(across, 0.0) * (1.0 - smoothstep(5.5, 7.5, idx));
+    float whiteBase = (1.0 - smoothstep(0.26, 0.36, t)) * step(across, 0.0) * (1.0 - smoothstep(5.5, 7.5, idx)) * (1.0 - fold);
     c = mix(c, uWhite, whiteBase);
-    c = mix(c, mix(uFlightDark, uWhite, 0.75), rachis * smoothstep(0.1, 0.25, t) * (1.0 - smoothstep(0.75, 0.95, t)));
+    c = mix(c, mix(uFlightDark, uWhite, 0.75), rachis * smoothstep(0.1, 0.25, t) * (1.0 - smoothstep(0.75, 0.95, t)) * (1.0 - 0.7 * fold));
   } else if (type < 1.5) {
-    // secondary: dark grey-brown, white base and narrow white tip
+    // secondary: dark grey-brown, white base and narrow white tip (open wing)
     c = uFlightMid;
     c = mix(c, uWhite, 1.0 - smoothstep(0.24, 0.32, t)); // white base hidden under the greater coverts
     c = mix(c, uWhite, smoothstep(0.9, 0.97, t) * (0.55 + 0.45 * (1.0 - uWear)));
+    c = mix(c, mix(kpBrownFeather(uv, 0.8), uMantleDark, 0.15), fold);
   } else if (type < 2.5) {
-    // tertial: grey-brown with darker centre and pale fringe
-    c = mix(uMantle, uMantleDark, (1.0 - smoothstep(0.35, 0.75, a)) * 0.8);
-    c = mix(c, uFringe, smoothstep(0.82, 0.97, max(a, t)) * (1.0 - uWear * 0.7));
+    c = kpBrownFeather(uv, 0.9); // tertial
   } else if (type < 3.5) {
     // primary covert: dark with narrow pale tip on the inner ones
     c = mix(uFlightDark, uFlightMid, 0.35);
     c = mix(c, uWhite, smoothstep(0.86, 0.96, t) * (1.0 - smoothstep(3.0, 6.0, idx)));
+    c = mix(c, uMantleDark, fold);
   } else if (type < 4.5) {
-    // greater covert: grey-brown with broad white tip → the long white wing-bar (S7, S27)
+    // greater covert: grey-brown with broad white tip → the long white wing-bar of the open wing (S7, S27)
     c = uMantle;
     c = mix(c, uMantleDark, (1.0 - smoothstep(0.2, 0.6, a)) * (1.0 - smoothstep(0.5, 0.7, t)) * 0.5);
     c = mix(c, uWhite, smoothstep(0.66, 0.74, t));
+    c = mix(c, kpBrownFeather(uv, 0.6), fold);
   } else if (type < 6.5) {
-    // median / lesser covert: grey-brown, dark shaft streak, pale fringe
-    c = mix(uMantle, uMantleDark, rachis * 0.7 + (1.0 - smoothstep(0.15, 0.5, a)) * 0.25);
-    c = mix(c, uFringe, smoothstep(0.7, 0.95, max(a * 0.95, t)) * (1.0 - uWear * 0.8));
+    c = kpBrownFeather(uv, 0.3); // median / lesser covert
   } else if (type < 7.5) {
-    c = uFlightDark; // alula
+    c = mix(uFlightDark, uMantleDark, fold); // alula
   } else if (type < 8.5) {
     // rectrices: central pair brown with dark subterminal band; outer pairs white (S7, S27)
     float i = idx;
@@ -385,11 +405,9 @@ vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd, float fold) {
     c = mix(c, mix(uTailDark, uWhite, 0.45), sub * step(3.5, i) * (1.0 - step(5.5, i)) * step(0.0, across) * 0.7);
   } else if (type < 9.5) {
     // upper-tail coverts: centre grey-brown, sides white
-    c = idx < 0.5 ? uMantle : uWhite;
+    c = idx < 0.5 ? kpBrownFeather(uv, 0.4) : uWhite;
   } else if (type < 10.5) {
-    // scapular: grey-brown, dark centre, pale fringe
-    c = mix(uMantle, uMantleDark, (1.0 - smoothstep(0.1, 0.55, a)) * (1.0 - smoothstep(0.45, 0.85, t)) * 0.75);
-    c = mix(c, uFringe, smoothstep(0.78, 0.97, max(a, t * 1.02)) * (1.0 - uWear * 0.75));
+    c = kpBrownFeather(uv, 0.7); // scapular
   } else if (type < 11.5) {
     // arm (propatagium surface under the lesser coverts); underside white only when the wing is open
     c = mix(uMantle, uUnder, smoothstep(-0.2, -0.6, across) * (1.0 - fold));
@@ -428,6 +446,9 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
     uUnder: { value: srgb(pal.underparts) },
     uWear: { value: individual.plumageWear ?? 0.2 },
     uDetail: { value: detail },
+    uDebugType: { value: 0 },
+    uFringeMix: { value: pal.fringeMix ?? 0.55 },
+    uSubterminal: { value: pal.subterminalDark ? 1 : 0 },
     uFold: { value: new THREE.Vector2(1, 1) }, // left, right wing
     uFluff: { value: 0 },
     uBreath: { value: 0 },
@@ -439,7 +460,12 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec4 aFeather; attribute vec3 aLie; attribute vec2 aLieMask; attribute vec3 aCore;\nvarying vec4 vFeather; varying float vFold;\nuniform float uTime, uWind, uFluff, uBreath; uniform vec2 uFold;`)
+      .replace('#include <common>', `#include <common>\nattribute vec4 aFeather; attribute vec3 aLie; attribute vec2 aLieMask; attribute vec3 aCore; attribute vec3 aConform; attribute vec3 aConformN;\nvarying vec4 vFeather; varying float vFold;\nuniform float uTime, uWind, uFluff, uBreath; uniform vec2 uFold;`)
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+        objectNormal = normalize(objectNormal + aConformN * smoothstep(${CONFORM_FOLD[0].toFixed(2)}, ${CONFORM_FOLD[1].toFixed(2)}, position.x >= 0.0 ? uFold.x : uFold.y));`
+      )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
@@ -452,6 +478,8 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
         float kfWing = kfT < 7.5 || (kfT > 10.5 && kfT < 11.5) ? vFold : 1.0;
         transformed += aLie * kfWing * ((uFluff - ${FLUFF_REST_GLSL}) * 0.001 * aLieMask.x + uBreath * ${ANIM_BREATH} * aLieMask.y);
         transformed += aCore * smoothstep(0.0, 0.5, vFold);
+        // folded wing feathers bent onto their layer of the shell (wingFold.conformAt, CONFORM_FOLD)
+        transformed += aConform * smoothstep(${CONFORM_FOLD[0].toFixed(2)}, ${CONFORM_FOLD[1].toFixed(2)}, vFold);
         // feather micro-motion: tips flutter slightly in the wind (strongest on tail, tertials, scapulars)
         float kfLoose = (kfT > 7.5 && kfT < 10.5) || (kfT > 1.5 && kfT < 2.5) ? 1.0 : 0.35;
         float kfPh = aFeather.z * 37.0 + aFeather.y * 1.7;
@@ -465,6 +493,7 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
         `#include <color_fragment>
         float kfType = floor(vFeather.x + 0.5);
         vec3 kfCol = gl_FrontFacing ? kpFeatherTop(kfType, vFeather.y, vUv, vFeather.z, vFold) : kpFeatherBottom(kfType, vFeather.y, vUv, vFold);
+        if (uDebugType > 0.5) kfCol = kpDebugType(kfType) * (gl_FrontFacing ? 1.0 : 0.55);
         diffuseColor.rgb *= kfCol;`
       )
       .replace(

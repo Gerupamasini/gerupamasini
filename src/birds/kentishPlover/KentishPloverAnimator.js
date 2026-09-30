@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { animation as ANIM, joints as J } from './KentishPloverConfig.js';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
-import { computeWingFold, spreadAt, spreadScaleAt, raiseAt, foldAt, foldScaleAt, foldPath, WING_RAISE } from './anatomy/wingFold.js';
+import { computeWingFold, spreadAt, spreadScaleAt, raiseAt, foldAt, foldPath, WING_RAISE } from './anatomy/wingFold.js';
 import { getBodySDF, getTorsoSDF } from './anatomy/bodyMesh.js';
 import { WING } from './anatomy/featherLayout.js';
 import { BILL } from './anatomy/bareParts.js';
@@ -771,7 +771,8 @@ export class KentishPloverAnimator {
       }
       const effFold = ov?.fold ?? fold;
       this.foldLR[side === 'L' ? 0 : 1] = clamp(effFold, 0, 1);
-      // blend flight/spread pose with the folded pose (wingFold.foldPath: hand first, then the humerus)
+      // blend flight/spread pose with the folded pose (wingFold.foldPath: hand first, then the humerus, the
+      // folded wing held off the flank until it is complete and then laid down)
       const path = foldPath(effFold);
       const qH = wingQuat(hSweep, elev, hTwist);
       const qF = wingQuat(fSweep, 0, 0);
@@ -792,8 +793,8 @@ export class KentishPloverAnimator {
       // wing-root feathers re-aimed for the current humerus elevation / sweep / twist so the spread wing clears the body
       const SP = this.fold.spread;
       const root = (f, q) => (SP.has(f.name) ? q.premultiply(spreadAt(SP.get(f.name), elev, hSweep, hTwist, _q3)) : q);
-      // folded feathers re-aimed while the wing is raised off the flank (below)
-      const raise = ov?.raise ?? 0;
+      // folded feathers re-aimed while the wing is raised off the flank (below): by the action, or while folding
+      const raise = (ov?.raise ?? 0) + path.raise;
       const folded = (f) => (raise ? _q4.copy(FF.get(f.name)).premultiply(raiseAt(this.fold.raise.get(f.name), raise, _q3)) : FF.get(f.name));
       // spread → folded, each feather lifted on the way so it swings past the flank instead of through it
       const FD = this.fold.folding;
@@ -819,11 +820,9 @@ export class KentishPloverAnimator {
       for (const bone of this._coverts[side]) {
         const f = bone.userData.spec.feather;
         apply(bone, blend(f, root(f, _q2.identity())));
-        // coverts shortened where no turn keeps them clear: the shoulder-end marginal coverts where the spread
-        // wing presses them against the neck / breast, the wrist's coverts where the folding hand passes it
-        const sSpread = SP.has(f.name) ? lerp(spreadScaleAt(SP.get(f.name), elev, hSweep, hTwist), 1, effFold) : 1;
-        const sFold = effFold > 0 && effFold < 1 && FD.has(f.name) ? foldScaleAt(FD.get(f.name), effFold) : 1;
-        bone.scale.setScalar(sSpread * sFold);
+        // the shoulder-end marginal coverts slightly shortened (≥ 0.8) where the spread wing presses them against
+        // the neck / breast
+        bone.scale.setScalar(SP.has(f.name) ? lerp(spreadScaleAt(SP.get(f.name), elev, hSweep, hTwist), 1, effFold) : 1);
       }
       // alula raised during braking/landing (slow flight)
       apply(b[`alula_${side}`], qAxis(Y, -brake * 0.4 * spread, _q2));

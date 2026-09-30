@@ -2,7 +2,7 @@
 // For every pose / action phase and LOD: pose the bird with KentishPloverAnimator, CPU-skin the body mesh
 // (including the body shader's fluff + breathing displacement, breath taken at full inhalation) and the
 // feather mesh (including the feather shader's body-contact displacement / arm-tube fold and the worst-case
-// inward wind flutter), then measure against
+// inward wind flutter, the folded wing's bend onto its shell), then measure against
 // the POSED body triangles (exact closest-point distance near the surface, ray parity for the sign further away):
 //   reentry  max depth (mm) of feather surface inside the body AFTER the feather has emerged, along each
 //            longitudinal line of the feather (base → tip). A feather may be rooted inside the plumage
@@ -29,6 +29,7 @@ import { KentishPloverAnimator, PREEN_VARIANTS } from '../../src/birds/kentishPl
 import { FEATHER_TYPE } from '../../src/birds/kentishPlover/anatomy/feathers.js';
 import { bodyDisplacementMasks, FLUFF_REST } from '../../src/birds/kentishPlover/anatomy/bodyMesh.js';
 import { animation as ANIM, lod as LODCFG } from '../../src/birds/kentishPlover/KentishPloverConfig.js';
+import { CONFORM_FOLD } from '../../src/birds/kentishPlover/anatomy/wingFold.js';
 import { writeFileSync } from 'node:fs';
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const [k, v] = a.replace(/^--/, '').split('='); return [k, v ?? '1']; }));
@@ -188,6 +189,7 @@ function analyse(model, d) {
     lie: fg.getAttribute('aLie')?.array, // body contact (feather shader), absent in older builds
     lieMask: fg.getAttribute('aLieMask')?.array,
     core: fg.getAttribute('aCore')?.array,
+    conform: fg.getAttribute('aConform')?.array, // folded wing bent onto its shell (wingFold.conformAt)
   };
   // feather instances = contiguous runs of vertices with the same (type, index, rnd)
   const inst = [];
@@ -314,11 +316,25 @@ function measure(model, S, anim) {
   const sdN = [0, 0, 0];
   const sdC = [0, 0, 0];
   let sdNeck = 0; // how much the closest body surface belongs to the neck / head
+  // Where the neck / head plumage folds over the shoulders (head turned, bent down to preen) the body mesh
+  // overlaps itself: a point under the trunk's surface may lie nearest to the inner side of the neck sheet and
+  // read as outside. There the trunk surface alone decides (the neck lying on the shoulder is the separate
+  // `neck` measure).
   function sd(px, py, pz, r = R) {
+    const d = sd0(px, py, pz, r, false);
+    if (d <= 0 || !sdNeck) return d;
+    const keep = [sdN[0], sdN[1], sdN[2], sdC[0], sdC[1], sdC[2], sdNeck];
+    const dt = sd0(px, py, pz, r, true);
+    if (dt < 0 && dt > -r) return dt;
+    [sdN[0], sdN[1], sdN[2], sdC[0], sdC[1], sdC[2], sdNeck] = keep;
+    return d;
+  }
+  function sd0(px, py, pz, r, trunkOnly) {
     if (px < bmin[0] - r || py < bmin[1] - r || pz < bmin[2] - r || px > bmax[0] + r || py > bmax[1] + r || pz > bmax[2] + r) { sdN[0] = sdN[1] = sdN[2] = 0; return 99; }
     tg.query(px - r, py - r, pz - r, px + r, py + r, pz + r, cand, nTri);
     let best = r * r, bt = -1, bu0 = 0, bv0 = 0, bw0 = 0;
     for (const t of cand) {
+      if (trunkOnly && (neckMoved[B.idx[t * 3]] || neckMoved[B.idx[t * 3 + 1]] || neckMoved[B.idx[t * 3 + 2]])) continue;
       const d2 = closestBary(px, py, pz, BP, B.idx[t * 3] * 3, B.idx[t * 3 + 1] * 3, B.idx[t * 3 + 2] * 3, bary);
       if (d2 < best) { best = d2; bt = t; bu0 = bary[0]; bv0 = bary[1]; bw0 = bary[2]; }
     }
@@ -372,7 +388,8 @@ function measure(model, S, anim) {
       const t = Math.round(F.ft[i * 4]);
       const fold = F.pos[i * 3] >= 0 ? foldLR[0] : foldLR[1];
       const k = (t < 7.5 || t === FEATHER_TYPE.arm ? fold : 1) * (fluff * 0.001 * F.lieMask[i * 2] + (anim ? breath : 0) * ANIM.breathAmp * 0.021 * F.lieMask[i * 2 + 1]);
-      for (let c = 0; c < 3; c++) off[c] = F.lie[i * 3 + c] * k + F.core[i * 3 + c] * smooth(0, 0.5, fold);
+      const kc = F.conform ? smooth(CONFORM_FOLD[0], CONFORM_FOLD[1], fold) : 0;
+      for (let c = 0; c < 3; c++) off[c] = F.lie[i * 3 + c] * k + F.core[i * 3 + c] * smooth(0, 0.5, fold) + (kc ? F.conform[i * 3 + c] * kc : 0);
     }
     skin(MF, F.pos, F.nrm, F.si, F.sw, i, off, FP, FN);
   }

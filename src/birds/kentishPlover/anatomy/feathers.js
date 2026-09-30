@@ -2,6 +2,12 @@ import * as THREE from 'three';
 import { WING, buildScapularLayout } from './featherLayout.js';
 import { projectToSurface } from './sdf.js';
 import { computeSpineWeights, bodyDisplacementMasks } from './bodyMesh.js';
+import { conformAt, foldLayer } from './wingFold.js';
+
+const smooth01 = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 
 // Real feather geometry: rachis + asymmetric vanes, bend and camber defined per vertex.
 // Opaque (outline = vertices), so there is no alpha overdraw. Colour pattern is procedural in
@@ -9,7 +15,9 @@ import { computeSpineWeights, bodyDisplacementMasks } from './bodyMesh.js';
 // aLie / aLieMask: outward body normal (bind frame of the vertex, × contact weight) and the body shader's
 // displacement masks where the feather lies on the body (folded wing: at its folded place), so the plumage
 // rises and falls with the fluffed / breathing body instead of being swallowed by it. aCore: arm tube
-// vertex → tube axis (the propatagium folds away with the wing).
+// vertex → tube axis (the propatagium folds away with the wing). aConform: bend of a folded wing feather onto
+// its layer of the folded-wing shell (wingFold.conformAt), in its bind frame (m), applied while folded;
+// aConformN: the matching change of its normal.
 
 export const FEATHER_TYPE = {
   primary: 0,
@@ -61,6 +69,8 @@ class GeoBuilder {
     this.lie = [];
     this.lieMask = [];
     this.core = [];
+    this.conform = [];
+    this.conformN = [];
     this.index = [];
   }
   get count() {
@@ -76,6 +86,8 @@ class GeoBuilder {
     this.lie.push(0, 0, 0);
     this.lieMask.push(0, 0);
     this.core.push(0, 0, 0);
+    this.conform.push(0, 0, 0);
+    this.conformN.push(0, 0, 0);
   }
   setContact(v, n, mask) {
     for (let k = 0; k < 3; k++) this.lie[v * 3 + k] = n[k];
@@ -98,6 +110,8 @@ class GeoBuilder {
       this.lie.push(-this.lie[v * 3], this.lie[v * 3 + 1], this.lie[v * 3 + 2]);
       this.lieMask.push(this.lieMask[v * 2], this.lieMask[v * 2 + 1]);
       this.core.push(-this.core[v * 3], this.core[v * 3 + 1], this.core[v * 3 + 2]);
+      this.conform.push(-this.conform[v * 3], this.conform[v * 3 + 1], this.conform[v * 3 + 2]);
+      this.conformN.push(-this.conformN[v * 3], this.conformN[v * 3 + 1], this.conformN[v * 3 + 2]);
     }
     for (let i = iStart; i < iEnd; i += 3) {
       this.index.push(this.index[i] + offset, this.index[i + 2] + offset, this.index[i + 1] + offset);
@@ -117,6 +131,8 @@ class GeoBuilder {
     g.setAttribute('aLie', new THREE.Float32BufferAttribute(this.lie, 3));
     g.setAttribute('aLieMask', new THREE.Float32BufferAttribute(this.lieMask, 2));
     g.setAttribute('aCore', new THREE.Float32BufferAttribute(this.core, 3));
+    g.setAttribute('aConform', new THREE.Float32BufferAttribute(this.conform, 3));
+    g.setAttribute('aConformN', new THREE.Float32BufferAttribute(this.conformN, 3));
     g.setIndex(this.index);
     g.computeBoundingSphere();
     return g;
@@ -256,7 +272,8 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
   const gb = new GeoBuilder();
   // contact with the body at rest-space point p: outward normal × weight (full within 3 mm of the outline,
   // none beyond 6 mm) and the body shader's displacement masks there
-  const contact = (p) => {
+  // (tail coverts: within 8 / 12 mm — the vent and rump swell under their whole length when fluffed)
+  const contact = (p, near = 3) => {
     const e = 0.2;
     const g = [0, 1, 2].map((k) => {
       const a = [...p];
@@ -266,7 +283,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
       return sdf(a[0], a[1], a[2]) - sdf(b[0], b[1], b[2]);
     });
     const gl = Math.hypot(...g) || 1;
-    const x = Math.max(0, Math.min(1, (sdf(p[0], p[1], p[2]) - 3) / 3));
+    const x = Math.max(0, Math.min(1, (sdf(p[0], p[1], p[2]) - near) / near));
     const w = 1 - x * x * (3 - 2 * x);
     return [g.map((v) => (v / gl) * w), bodyDisplacementMasks(p, g.map((v) => v / gl))];
   };
@@ -277,6 +294,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
     const w = computeSpineWeights(p, boneIndex);
     return { idx: w.map((e) => e[0]), w: w.map((e) => e[1]) };
   };
+  const torso = fold?.torso ?? sdf; // trunk outline without the neck (wingFold.conformAt)
   const segs = detail === 0 ? { nL: 8, nW: 2 } : detail === 1 ? { nL: 5, nW: 1 } : { nL: LOD2_CARD.rows, nW: 1 };
 
   // ---- Left wing (then mirrored) ----
@@ -310,6 +328,19 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
         const pf = new THREE.Vector3(...bindMM(v)).sub(new THREE.Vector3(...f.base)).applyQuaternion(F.R).add(F.base);
         const [n, mask] = contact(pf.toArray());
         gb.setContact(v, new THREE.Vector3(...n).applyQuaternion(Rinv).toArray(), mask);
+        // bent onto its layer of the folded-wing shell
+        // (LOD1/2: a little higher over their coarser body, whose facets stand up to about half a millimetre off the
+        // outline — invisible from the distances they are shown at)
+        const nb = new THREE.Vector3();
+        const cw = conformAt(fr, pf, gb.uv[v * 2 + 1], gb.uv[v * 2], sdf, torso, nb);
+        if (detail && foldLayer(f) >= 0) cw.addScaledVector(nb, 0.35 * detail * smooth01(0, 0.22, gb.uv[v * 2 + 1]));
+        const c = cw.applyQuaternion(Rinv).multiplyScalar(0.001);
+        gb.conform.splice(v * 3, 3, c.x, c.y, c.z);
+        // …and shaded like the surface it lies on (a quarter of its own vane's tilt kept), so neighbouring
+        // feathers of a row do not read as separately tilted plates
+        const n0 = new THREE.Vector3().fromArray(gb.nrm, v * 3);
+        const dn = nb.applyQuaternion(Rinv).multiplyScalar(0.75).addScaledVector(n0, 0.25).normalize().sub(n0);
+        gb.conformN.splice(v * 3, 3, dn.x, dn.y, dn.z);
       }
     }
   }
@@ -339,7 +370,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
       ? (p) => {
           const up = f.type === 'upperTailCovert' ? 1 : -1;
           // stacked like the other coverts (inner over outer, left over right) instead of coplanar (z-fighting)
-          const lift = 0.5 + (2 - f.index) * 0.3 + (f.side > 0 ? 0.1 : 0);
+          const lift = 0.9 + (2 - f.index) * 0.3 + (f.side > 0 ? 0.1 : 0) + 0.4 * detail; // (coarser LOD bodies)
           // straight over / under the tail, but lying on the rump / vent wherever the body is in the way:
           // raised (lowered) vertically to `lift` above the outline. (Closest-point projection of the
           // rooted bases scattered neighbouring rows onto different sides and the straight part dived
@@ -364,7 +395,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
     const bone = covert ? spineSkin : { idx: [boneIndex[f.bone]], w: [1] };
     const m = gb.mark();
     emitFeather(gb, fr, { base: f.base, dir: d, side, normal: f.type === 'underTailCovert' ? [0, -1, 0] : [0, 1, 0] }, bone, FEATHER_TYPE[f.type], rng(), { ...segs, conform, sweep: 0.0 });
-    if (covert) for (let v = m.v; v < gb.count; v++) gb.setContact(v, ...contact(bindMM(v)));
+    if (covert) for (let v = m.v; v < gb.count; v++) gb.setContact(v, ...contact(bindMM(v), 8));
   }
 
   // ---- Scapulars (body feathers lying on the mantle, conformed to the SDF surface) ----
@@ -377,7 +408,8 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
       const dl = Math.hypot(...dir);
       dir = dir.map((v) => v / dl);
       const side = [dir[1] * bn[2] - dir[2] * bn[1], dir[2] * bn[0] - dir[0] * bn[2], dir[0] * bn[1] - dir[1] * bn[0]].map((v) => v * f.side);
-      const lift = 0.45 + f.layer * 0.35;
+      // over the folded-wing shell (wingFold.foldLayer ≤ 1.5 mm), row 0 over row 1
+      const lift = 1.6 + f.layer * 0.1;
       const conform = (p) => {
         const [pp, nn] = projectToSurface(sdf, p[0], p[1], p[2]);
         return [[pp[0] + nn[0] * lift, pp[1] + nn[1] * lift, pp[2] + nn[2] * lift], nn];

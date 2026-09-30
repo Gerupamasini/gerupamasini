@@ -29,6 +29,10 @@ import PRECOMPUTED from './wingFold.cache.js';
 //    foldTable) below.
 // The result is precomputed (wingFold.cache.js, see computeWingFold).
 
+const smooth01 = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
 const Y = new THREE.Vector3(0, 1, 0);
 
@@ -67,6 +71,81 @@ const CLEAR = 0.35; // mm: minimal height of exposed feather surface over the bo
 const CLEAR_MOVING = 1;
 const SAG = 0.1; // mm: tolerated sag of an exposed line toward the outline (no visible dip)
 
+// Folded wing as a thin layered shell (body_shape_spec.md §10.4: smooth overlapping rows, not separate plates):
+// every folded wing feather is bent onto the body at its own height above the outline — proximal feathers over
+// distal ones, remiges < greater < median coverts < tertials, the scapulars (feathers.js) on top — so rows
+// overlap in order and the stack stays within 1.5 mm of the flank (spec §10.3). The primary coverts, alula and
+// lesser coverts lie under the breast-side and mantle plumage (the carpal joint and the wing's front edge are
+// hidden, spec §10.2 / §14) and are pressed below the outline.
+// Height (mm) above the outline, per feather.
+export function foldLayer(f) {
+  switch (f.type) {
+    case 'primary':
+      return 0.45 + 0.012 * (10 - f.index);
+    case 'secondary':
+      return 0.62 + 0.02 * f.index;
+    case 'greaterCovert':
+      return 0.9 + 0.015 * f.index;
+    case 'medianCovert':
+      return 1.1 + 0.015 * f.index;
+    case 'tertial':
+      return 1.3 + 0.06 * f.index;
+    case 'lesserCovert':
+      return -2; // under the scapulars and the neck base
+    default:
+      return -1.2; // primary coverts, alula
+  }
+}
+// the bend is applied while the wing is folded (feather shader: aConform · smoothstep(0.6, 0.8, fold))
+export const CONFORM_FOLD = [0.6, 0.8];
+export const conformWeight = (fold) => smooth01(CONFORM_FOLD[0], CONFORM_FOLD[1], fold);
+const FLAT = 0.3; // folded vanes pressed flat: this much of the camber is kept
+
+/**
+ * Bend of a folded feather onto its shell layer: world displacement (mm) of the point `p` (folded, world) at
+ * shaft position t, vane position a. From its base (inside the plumage) the feather rises to its layer by
+ * t 0.22 and then stays there; parts standing further off than 2.5–6 mm (over the tail, behind the rump) keep
+ * their straight shape. The primaries stay under the plumage for their basal third (under the primary coverts
+ * in the bird, spec §10.2) and come out under the secondaries and tertials. Layers below the outline only push
+ * down — below the trunk's outline without the neck (`torso`), which leaves the shoulders when the head turns.
+ * With `normal` the bent surface's normal is returned too (world).
+ */
+export function conformAt(f, p, t, a, sdf, torso = sdf, normal = null) {
+  const H = foldLayer(f) + FLAT * (featherOffset(f, t, a)[2] - featherOffset(f, t, 0)[2]);
+  if (H < 0) sdf = torso;
+  const d = sdf(p.x, p.y, p.z);
+  let target;
+  if (H < 0) target = Math.min(d, H);
+  else {
+    const shell = d > H ? d + (H - d) * (1 - smooth01(H + 2.5, H + 6, d)) : H;
+    const t0 = f.type === 'primary' ? 0.28 : 0;
+    const under = f.type === 'primary' ? Math.min(torso(p.x, p.y, p.z), -1.2) + d - torso(p.x, p.y, p.z) : d;
+    target = under + (shell - under) * smooth01(t0, t0 + 0.22, t);
+  }
+  const q = p.clone();
+  const g = new THREE.Vector3();
+  for (let it = 0; it < 3; it++) {
+    const e = 0.15;
+    const dq = sdf(q.x, q.y, q.z);
+    g.set(sdf(q.x + e, q.y, q.z) - sdf(q.x - e, q.y, q.z), sdf(q.x, q.y + e, q.z) - sdf(q.x, q.y - e, q.z), sdf(q.x, q.y, q.z + e) - sdf(q.x, q.y, q.z - e)).normalize();
+    q.addScaledVector(g, target - dq);
+  }
+  if (normal) normal.copy(g);
+  return q.sub(p);
+}
+
+/** Sample lines bent onto the shell (bind offsets), for a wing folded to `w` of the bend (conformWeight). */
+function conformLines(lines, base, R, sdf, torso, w = 1) {
+  if (!w) return lines;
+  const Rinv = R.clone().invert();
+  return lines.map((l) => l.map((o) => {
+    const p = o.clone().applyQuaternion(R).add(base);
+    const c = o.clone().add(conformAt(o.f, p, o.t, o.a, sdf, torso).applyQuaternion(Rinv).multiplyScalar(w));
+    Object.assign(c, { f: o.f, t: o.t, a: o.a });
+    return c;
+  }));
+}
+
 /**
  * Sample lines (bind-space offsets from the feather base) along the shaft at positions across the vane — plus
  * the vane edges of the wider LOD2 card of the same feather, which rides the same bone.
@@ -76,7 +155,7 @@ function shapeLines(f, across = [-1, -0.5, 0, 0.5, 1], along = 13, card = LOD2_C
   const lines = across.map((a) =>
     Array.from({ length: along }, (_, i) => {
       const o = featherOffset(f, i / (along - 1), a);
-      return new THREE.Vector3(...[0, 1, 2].map((k) => fr.dir[k] * o[0] + fr.side[k] * o[1] + fr.normal[k] * o[2]));
+      return Object.assign(new THREE.Vector3(...[0, 1, 2].map((k) => fr.dir[k] * o[0] + fr.side[k] * o[1] + fr.normal[k] * o[2])), { f, t: i / (along - 1), a });
     })
   );
   return card ? lines.concat(cardLines({ ...f, width: f.width * LOD2_CARD.width })) : lines;
@@ -88,11 +167,15 @@ function cardLines(f) {
   const n = LOD2_CARD.rows;
   const at = (t, a) => {
     const o = featherOffset(f, t, a);
-    return new THREE.Vector3(...[0, 1, 2].map((k) => fr.dir[k] * o[0] + fr.side[k] * o[1] + fr.normal[k] * o[2]));
+    return Object.assign(new THREE.Vector3(...[0, 1, 2].map((k) => fr.dir[k] * o[0] + fr.side[k] * o[1] + fr.normal[k] * o[2])), { f, t, a });
   };
   return [-1, 0, 1].map((a) => {
     const line = [];
-    for (let i = 0; i < n - 1; i++) for (let j = 0; j < 4; j++) line.push(at(i / (n - 1), a).lerp(at((i + 1) / (n - 1), a), j / 4));
+    for (let i = 0; i < n - 1; i++)
+      for (let j = 0; j < 4; j++) {
+        const t = (i + j / 4) / (n - 1);
+        line.push(Object.assign(at(i / (n - 1), a).lerp(at((i + 1) / (n - 1), a), j / 4), { f, t, a }));
+      }
     line.push(at(1, a));
     return line;
   });
@@ -215,15 +298,15 @@ export function spreadScaleAt(entry, elev, sweep, twist) {
 
 /**
  * Largest length factor up to `from` (bisection) at which the feather at R about `base` clears the outlines; down to
- * MIN_SCALE, i.e. drawn back into the plumage at its base.
+ * MIN_SCALE at most (a covert drawn back further would bare the arm under it).
  */
-const MIN_SCALE = 0.05;
+const MIN_SCALE = 0.8;
 function shrinkToClear(lines, base, R, sdfs, pose, from = 1, clear = CLEAR) {
   const ok = (s) => sdfs.every((sdf) => violation(s === 1 ? lines : lines.map((l) => l.map((o) => o.clone().multiplyScalar(s))), base, R, sdf, pose, 0, clear) <= 0);
   if (ok(from)) return from;
-  if (!ok(0.4)) return MIN_SCALE;
-  let [lo, hi] = [0.4, from]; // clear … not clear
-  for (let it = 0; it < 6; it++) {
+  if (!ok(MIN_SCALE)) return MIN_SCALE;
+  let [lo, hi] = [MIN_SCALE, from]; // clear … not clear
+  for (let it = 0; it < 5; it++) {
     const mid = (lo + hi) / 2;
     if (ok(mid)) lo = mid;
     else hi = mid;
@@ -237,7 +320,7 @@ let CACHE = null;
 // tools/dev/wingfold-cache.mjs) under a key of what it depends on: the solver version, the wing layout and the
 // body outline (sampled). Whenever either changes the key no longer matches and the solution is computed
 // here instead (with a console warning to regenerate the cache).
-export const WING_FOLD_SOLVER = 3; // bump with any change of the solver below
+export const WING_FOLD_SOLVER = 4; // bump with any change of the solver below
 export function wingFoldKey(wingFeathers, sdf, torsoSdf = sdf) {
   const probe = [];
   for (let x = 0; x <= 24; x += 6) for (let y = 40; y <= 90; y += 10) for (let z = -50; z <= 50; z += 10) probe.push(Math.round(sdf(x, y, z) * 100), Math.round(torsoSdf(x, y, z) * 100));
@@ -266,7 +349,7 @@ export function serializeWingFold(F) {
     world: mapObj(F.world, (w) => ({ base: va(w.base), R: qa(w.R) })),
     spread: mapObj(F.spread, (e) => ({ bake: qa(e.bake), table: e.table.map((r) => r.map((c) => c.map(qa))), scale: e.scale.map((r) => r.map((c) => c.map(r6))) })),
     raise: mapObj(F.raise, (e) => e.map(qa)),
-    folding: mapObj(F.folding, (e) => ({ axis: va(e.axis), angle: e.angle.map(r6), scale: e.scale && e.scale.map(r6) })),
+    folding: mapObj(F.folding, (e) => ({ axis: va(e.axis), angle: e.angle.map(r6) })),
   };
 }
 
@@ -277,7 +360,7 @@ function deserializeWingFold(D) {
     world: objMap(D.world, (w) => ({ base: V(w.base), R: aq(w.R) })),
     spread: objMap(D.spread, (e) => ({ bake: aq(e.bake), table: e.table.map((r) => r.map((c) => c.map(aq))), scale: e.scale })),
     raise: objMap(D.raise, (e) => e.map(aq)),
-    folding: objMap(D.folding, (e) => ({ axis: V(e.axis), angle: e.angle, scale: e.scale })),
+    folding: objMap(D.folding, (e) => ({ axis: V(e.axis), angle: e.angle })),
   };
 }
 
@@ -295,7 +378,7 @@ function deserializeWingFold(D) {
 export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = true } = {}) {
   if (CACHE) return CACHE;
   if (useCache) {
-    if (PRECOMPUTED.key === wingFoldKey(wingFeathers, sdf, torsoSdf)) return (CACHE = deserializeWingFold(PRECOMPUTED.data));
+    if (PRECOMPUTED.key === wingFoldKey(wingFeathers, sdf, torsoSdf)) return (CACHE = { ...deserializeWingFold(PRECOMPUTED.data), torso: torsoSdf });
     console.warn('wingFold: the precomputed wing fold is out of date (body or wing layout changed) — solving it now; run node tools/dev/wingfold-cache.mjs');
   }
   const A = armFold();
@@ -308,6 +391,7 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
     hand: { q: A.wW, pivotBind: V(WING.wrist), pivot: W },
   };
   const feather = new Map();
+  const rigid = new Map(); // folded placement before the bend onto the shell (conformAt)
   const world = new Map(); // folded feather bones in chest/bind space: {base (mm), R} (feathers.js: body contact)
   const remex = new Map(); // folded remiges: {bind base, world base, world rotation} for their coverts
   const deg = Math.PI / 180;
@@ -354,9 +438,11 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
       // the folded wing falls toward the rear (spec §10.2)
       const lcHint = { humerus: [0.0, -0.05, -1], forearm: [0.03, -0.35, -1], hand: [-0.25, 0.15, -1] };
       if (f.type === 'alula') lcHint.alula = [-0.25, 0.2, -1];
-      const dirHint = f.type === 'alula' ? V(lcHint.alula) : f.type === 'tertial' ? V([0.0, -0.05, -1]) : f.type === 'lesserCovert' ? V(lcHint[f.bone]) : V([0.0, -0.12, -1]);
+      const dirHint = f.type === 'alula' ? V(lcHint.alula) : f.type === 'lesserCovert' ? V(lcHint[f.bone]) : V([0.0, -0.12, -1]);
       dirHint.normalize();
-      const guess = base.clone().addScaledVector(dirHint, L);
+      // tertials: tips at z −52 ± 5, y ≈ 67.7 (spec §10.3), the innermost nearest the back line — the three
+      // lying side by side over the rear of the folded wing, under the scapulars
+      const guess = f.type === 'tertial' ? V([[10.5, 65.5, -53], [8, 67, -52], [5.5, 68, -50.5]][f.index - 1]) : base.clone().addScaledVector(dirHint, L);
       const [pp, nn] = projectToSurface(sdf, guess.x, guess.y, guess.z);
       const lift = f.type === 'alula' ? -0.6 : f.type === 'lesserCovert' && f.bone === 'hand' ? 1.2 : f.type === 'lesserCovert' ? 2.6 : f.type === 'tertial' ? 3.4 : 2.2 + (order[f.name] ?? 0) * 0.05;
       const surfTip = V(pp).addScaledVector(V(nn), lift);
@@ -372,8 +458,9 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
     const bindDir = new THREE.Vector3(Math.cos(f.angle * deg), 0, -Math.sin(f.angle * deg));
     // target frame: feather along dirW, dorsal surface facing the body normal (outward)
     let Rw = frameQuat(dirW, n).multiply(frameQuat(bindDir, Y).invert());
-    const lines = shapeLines(f);
-    Rw = clearBody(lines, base, Rw, dirW, n, [sdf, torsoSdf]);
+    // (no clearance turn: the bend onto the shell keeps the folded feather out of the body)
+    rigid.set(f.name, { base, R: Rw.clone() });
+    const lines = conformLines(shapeLines(f), base, Rw, sdf, torsoSdf);
     {
       // re-aimed per raise step; half-way between two steps, where the interpolated aim is not clear, the
       // (raised) steps on either side are solved for that raise as well
@@ -484,36 +571,38 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
     feather.get(f.name).multiply(inv);
     world.get(f.name).R.multiply(inv);
   }
-  const folding = foldTable(wingFeathers, A, feather, spread, [sdf, torsoSdf]);
-  CACHE = { arm: { humerus: A.humerus, forearm: A.forearm, hand: A.hand }, feather, world, spread, raise, folding };
+  const folding = foldTable(wingFeathers, A, feather, spread, raise, rigid, [sdf, torsoSdf]);
+  CACHE = { arm: { humerus: A.humerus, forearm: A.forearm, hand: A.hand }, feather, world, spread, raise, folding, torso: torsoSdf };
   return CACHE;
 }
 
-// 5) Folding / unfolding: every bone turns from its spread rotation to its folded one (animator: slerp). Turned
-//    all at the same rate, the hand and its remiges swing through the flank on the way; so the hand and
-//    forearm fold first, out to the side, and the humerus then swings the folded wing onto the flank, raised
-//    off it half-way (foldPath). What that leaves, each feather clears itself: lifted (tip toward its dorsal
-//    side, about its base) by the smallest angle that keeps it clear at that fold fraction, for the spread
-//    poses the fold starts from (standing, after landing, wing stretch) — measured on a denser set of
-//    fractions, every FOLD_STEPS entry holding the most its two intervals need, so the interpolated angle
-//    also clears the fractions in between; a covert no lift clears is also shortened (foldTable; animator:
-//    foldAt, foldScaleAt).
-const smooth01 = (a, b, x) => {
-  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
+// 5) Folding / unfolding. The folded wing is first raised off the flank as a whole (about WING_RAISE.hinge,
+//    re-aimed per raise step exactly like the preening raise, so it is clear by construction) and only then
+//    unfolded; folding runs the other way: the hand and forearm fold first, out to the side, the humerus swings
+//    the folded wing in beside the flank, and the raise lays it down (foldPath). Coverts, tertials and
+//    scapulars therefore never sweep across the body at full length — nothing is shortened (the old solution
+//    drew the coverts back to 5 % of their length mid-fold, leaving the arm tube bare). What little the
+//    unfolding still brings near the body each feather clears itself: lifted (tip toward its dorsal side,
+//    about its base) by the smallest angle that keeps it clear at that fold fraction, for the spread poses the
+//    fold starts from (standing, after landing, wing stretch) — measured on a denser set of fractions, every
+//    FOLD_STEPS entry holding the most its two intervals need (foldTable; animator: foldAt).
 const FOLD_ABDUCT = 0.45; // rad: the humerus raised off the flank half-way through its swing
+export const FOLD_RAISED = 0.8; // fold fraction at which the folded wing is complete, still raised off the flank
+const RAISE_MAX = WING_RAISE.steps[WING_RAISE.steps.length - 1];
 /**
- * How far each part of the wing is folded at fold fraction `fold`: the hand and forearm fold first (with the
- * remiges and coverts), out to the side; then the humerus swings the folded wing back onto the flank, raised
- * off it on the way (abduct, rad about the body's long axis).
+ * How far each part of the wing is folded at fold fraction `fold`: up to FOLD_RAISED the hand and forearm fold
+ * first (with the remiges and coverts), out to the side, then the humerus swings the folded wing back (abduct,
+ * rad about the body's long axis at the shoulder) while the whole wing is raised off the flank (raise, rad about
+ * the dorsal hinge); from FOLD_RAISED on the folded wing is lowered onto the flank.
  */
 export function foldPath(fold) {
-  const arm = smooth01(0.35, 1, fold);
-  return { arm, hand: smooth01(0, 0.65, fold), abduct: FOLD_ABDUCT * Math.sin(Math.PI * arm) };
+  if (fold >= FOLD_RAISED) return { arm: 1, hand: 1, abduct: 0, raise: RAISE_MAX * (1 - smooth01(FOLD_RAISED, 1, fold)) };
+  const u = fold / FOLD_RAISED;
+  const arm = smooth01(0.3, 1, u);
+  return { arm, hand: smooth01(0, 0.8, u), abduct: FOLD_ABDUCT * Math.sin(Math.PI * arm), raise: RAISE_MAX * smooth01(0.15, 0.85, u) };
 }
-export const FOLD_STEPS = [0, 0.2, 0.4, 0.55, 0.7, 0.8, 0.87, 0.93, 0.97, 0.99, 1];
-const FOLD_DENSE = [0.1, 0.2, 0.3, 0.4, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.825, 0.85, 0.875, 0.9, 0.92, 0.94, 0.96, 0.97, 0.98, 0.99, 0.995];
+export const FOLD_STEPS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.65, 0.7, 0.75, FOLD_RAISED, 1];
+const FOLD_DENSE = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.625, 0.65, 0.675, 0.7, 0.725, 0.75, 0.77, 0.79];
 // spread poses the fold starts from: humerus elevation × (sweep, forearm sweep, hand sweep) of standing,
 // landing (wings raised) and the wing stretch
 const FOLD_FROM = [0.08, 0.45, 0.9].flatMap((elev) =>
@@ -524,7 +613,7 @@ const FOLD_FROM = [0.08, 0.45, 0.9].flatMap((elev) =>
   ].map(([sweep, fSweep, wSweep]) => ({ elev, sweep, fSweep, wSweep }))
 );
 const MAX_LIFT = 40; // degrees
-const envelope = (need) => FOLD_STEPS.map((phi, i) => (phi <= 0 || phi >= 1 ? 0 : Math.max(0, ...FOLD_DENSE.map((x, d) => (x > FOLD_STEPS[i - 1] && x < FOLD_STEPS[i + 1] ? need[d] : 0)))));
+const envelope = (need) => FOLD_STEPS.map((phi, i) => (phi <= 0 || phi >= FOLD_RAISED ? 0 : Math.max(0, ...FOLD_DENSE.map((x, d) => (x > FOLD_STEPS[i - 1] && x < FOLD_STEPS[i + 1] ? need[d] : 0)))));
 
 const foldLiftAt = (entry, fold) => {
   const [i, u] = cell(FOLD_STEPS, fold);
@@ -533,12 +622,6 @@ const foldLiftAt = (entry, fold) => {
 /** Lift of a wing feather (local, post-multiplied onto its slerped rotation) with the wing `fold` folded. */
 export function foldAt(entry, fold, out = new THREE.Quaternion()) {
   return out.setFromAxisAngle(entry.axis, foldLiftAt(entry, fold) * (Math.PI / 180));
-}
-/** Length factor of a covert (bone scale) with the wing `fold` folded. */
-export function foldScaleAt(entry, fold) {
-  if (!entry.scale) return 1;
-  const [i, u] = cell(FOLD_STEPS, fold);
-  return entry.scale[i] + (entry.scale[i + 1] - entry.scale[i]) * u;
 }
 
 /** Left-wing local rotation (sweep back, elevation, twist) in the bone's bind frame (same as the animator's). */
@@ -550,7 +633,9 @@ function wingQuat(sweep = 0, elev = 0, twist = 0) {
 }
 
 const parentOf = (f) => (f.type === 'primary' || f.type === 'alula' ? 'hand' : f.type === 'secondary' ? 'forearm' : f.type === 'tertial' ? 'humerus' : f.type === 'lesserCovert' ? f.bone : COVERT_ARM[f.type]);
-const raisePose = (a) => ({ q: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), a), pivot: V(WING_RAISE.hinge) });
+function raisePose(a) {
+  return { q: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), a), pivot: V(WING_RAISE.hinge) };
+}
 
 /** The arm part-folded from each spread pose, per FOLD_DENSE fraction: world rotation and joint of each bone. */
 function foldedArms(A) {
@@ -563,18 +648,13 @@ function foldedArms(A) {
       const S = V(WING.humerus);
       const E = S.clone().add(V(WING.elbow).sub(S).applyQuaternion(RH));
       const W = E.clone().add(V(WING.wrist).sub(V(WING.elbow)).applyQuaternion(RF));
-      return { humerus: [RH, V(WING.humerus), S], forearm: [RF, V(WING.elbow), E], hand: [RW, V(WING.wrist), W] };
+      // (the shoulder raise about the hinge acts on the whole chain: `raised`)
+      return { humerus: [RH, V(WING.humerus), S], forearm: [RF, V(WING.elbow), E], hand: [RW, V(WING.wrist), W], raised: raisePose(path.raise), path };
     })
   );
 }
 
-/** Mesh-bind sample lines of a wing feather (after the spread-wing bake) — coarser than the fold solve's. */
-const bakedLines = (f, spread) => {
-  const bake = spread.get(f.name)?.bake;
-  return shapeLines(f, [-1, 0, 1], 7).map((l) => (bake ? l.map((o) => o.clone().applyQuaternion(bake)) : l));
-};
-
-function foldTable(wingFeathers, A, feather, spread, sdfs) {
+function foldTable(wingFeathers, A, feather, spread, raise, rigid, sdfs) {
   const deg = Math.PI / 180;
   const arms = foldedArms(A);
   const out = new Map();
@@ -583,23 +663,25 @@ function foldTable(wingFeathers, A, feather, spread, sdfs) {
     if (!feather.has(f.name)) continue;
     const entry = spread.get(f.name);
     const bake = entry?.bake;
-    const lines = bakedLines(f, spread);
+    const { base: fb, R: fR } = rigid.get(f.name);
+    // sample lines (mesh bind frame, after the spread-wing bake) bent onto the shell as far as the fold has it
+    const straight = shapeLines(f, [-1, 0, 1], 7);
+    const linesAt = (w) => conformLines(straight, fb, fR, sdfs[0], sdfs[1], w).map((l) => (bake ? l.map((o) => o.clone().applyQuaternion(bake)) : l));
     // +angle turns the tip toward the dorsal side (bind frame of the mesh, i.e. after the spread-wing bake)
     const axis = new THREE.Vector3(Math.cos(f.angle * deg), 0, -Math.sin(f.angle * deg)).cross(Y).normalize();
     if (bake) axis.applyQuaternion(bake);
-    // the feather's base and rotation (before the lift) per dense fraction and spread pose
-    const placed = FOLD_DENSE.map((phi, d) =>
-      FOLD_FROM.map((sp, s) => {
-        const [q, pivotBind, pivot] = arms[d][s][parentOf(f)];
-        const from = entry ? spreadAt(entry, sp.elev, sp.sweep, 0, new THREE.Quaternion()) : new THREE.Quaternion();
-        return { base: V(f.base).sub(pivotBind).applyQuaternion(q).add(pivot), QL: q.clone().multiply(from.slerp(feather.get(f.name), foldPath(phi).hand)) };
-      })
-    );
     const need = FOLD_DENSE.map((phi, d) => {
+      const lines = linesAt(conformWeight(phi));
       let most = 0;
-      placed[d].forEach(({ base, QL }) => {
+      FOLD_FROM.forEach((sp, s) => {
+        const arm = arms[d][s];
+        const [q, pivotBind, pivot] = arm[parentOf(f)];
+        const from = entry ? spreadAt(entry, sp.elev, sp.sweep, 0, new THREE.Quaternion()) : new THREE.Quaternion();
+        const folded = raiseAt(raise.get(f.name), arm.path.raise).multiply(feather.get(f.name));
+        const base = V(f.base).sub(pivotBind).applyQuaternion(q).add(pivot);
+        const QL = q.clone().multiply(from.slerp(folded, arm.path.hand));
         const R = (a) => Ra.copy(QL).multiply(new THREE.Quaternion().setFromAxisAngle(axis, a * deg));
-        const clear = (a) => sdfs.every((sdf) => violation(lines, base, R(a), sdf, null, 0, CLEAR_MOVING) <= 0);
+        const clear = (a) => sdfs.every((sdf) => violation(lines, base, R(a), sdf, arm.raised, 0, CLEAR_MOVING) <= 0);
         if (clear(0)) return;
         let a = 2;
         while (a <= MAX_LIFT && !clear(a)) a += 2;
@@ -612,7 +694,7 @@ function foldTable(wingFeathers, A, feather, spread, sdfs) {
           }
         } else {
           // nothing clears it: the least violating lift
-          const v = (x) => Math.max(...sdfs.map((sdf) => violation(lines, base, R(x), sdf, null, Infinity, CLEAR_MOVING)));
+          const v = (x) => Math.max(...sdfs.map((sdf) => violation(lines, base, R(x), sdf, arm.raised, Infinity, CLEAR_MOVING)));
           let best = [0, v(0)];
           for (let x = 4; x <= MAX_LIFT; x += 4) if (v(x) < best[1] - 0.02) best = [x, v(x)];
           a = best[0];
@@ -622,16 +704,7 @@ function foldTable(wingFeathers, A, feather, spread, sdfs) {
       return most;
     });
     if (need.every((n) => n === 0)) continue;
-    const angle = envelope(need);
-    // a covert that no lift clears (its base next to the body mid-fold) is also shortened (bone scale) as far as
-    // it needs at the lift it gets
-    let scale = null;
-    if (/Covert$/.test(f.type)) {
-      const lifted = (phi) => new THREE.Quaternion().setFromAxisAngle(axis, foldLiftAt({ angle }, phi) * deg);
-      const short = FOLD_DENSE.map((phi, d) => Math.min(...placed[d].map(({ base, QL }) => shrinkToClear(lines, base, QL.clone().multiply(lifted(phi)), sdfs, null, 1, CLEAR_MOVING))));
-      if (short.some((x) => x < 1)) scale = FOLD_STEPS.map((phi, i) => (phi <= 0 || phi >= 1 ? 1 : Math.min(1, ...FOLD_DENSE.map((x, d) => (x > FOLD_STEPS[i - 1] && x < FOLD_STEPS[i + 1] ? short[d] : 1)))));
-    }
-    out.set(f.name, { axis, angle, scale });
+    out.set(f.name, { axis, angle: envelope(need) });
   }
   return out;
 }

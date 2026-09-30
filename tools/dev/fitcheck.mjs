@@ -9,6 +9,7 @@ import { KentishPloverModel } from '../../src/birds/kentishPlover/KentishPloverM
 import { KentishPloverAnimator, GAZE_PITCH_REST } from '../../src/birds/kentishPlover/KentishPloverAnimator.js';
 import { getBodySDF, bodyDisplacementMasks, FLUFF_REST } from '../../src/birds/kentishPlover/anatomy/bodyMesh.js';
 import { KentishPloverConfig as CFG } from '../../src/birds/kentishPlover/KentishPloverConfig.js';
+import { CONFORM_FOLD } from '../../src/birds/kentishPlover/anatomy/wingFold.js';
 
 const args = process.argv.slice(2);
 const out = args.find((a) => !a.includes('=')) ?? 'fitcheck.json';
@@ -40,6 +41,7 @@ for (const mesh of m.lods[0].meshes) {
   const lieM = g.getAttribute('aLieMask');
   const rest = g.getAttribute('aRest');
   const core = g.getAttribute('aCore');
+  const conf = g.getAttribute('aConform');
   const fold = m.current.feathers.userData.uniforms.uFold.value;
   for (let i = 0; i < n; i++) {
     v.fromBufferAttribute(g.getAttribute('position'), i);
@@ -50,6 +52,11 @@ for (const mesh of m.lods[0].meshes) {
     }
     if (lie && df) v.addScaledVector(new THREE.Vector3(lie.getX(i), lie.getY(i), lie.getZ(i)), df * lieM.getX(i));
     // the arm tube collapses onto its axis as the wing folds (feather shader: aCore · smoothstep(0, 0.5, fold))
+    // folded wing feathers bent onto their shell (feather shader: aConform · smoothstep(CONFORM_FOLD, fold))
+    if (conf) {
+      const u = Math.min(1, Math.max(0, ((v.x >= 0 ? fold.x : fold.y) - CONFORM_FOLD[0]) / (CONFORM_FOLD[1] - CONFORM_FOLD[0])));
+      v.addScaledVector(new THREE.Vector3(conf.getX(i), conf.getY(i), conf.getZ(i)), u * u * (3 - 2 * u));
+    }
     if (core) {
       const u = Math.min(1, Math.max(0, (v.x >= 0 ? fold.x : fold.y) / 0.5));
       v.addScaledVector(new THREE.Vector3(core.getX(i), core.getY(i), core.getZ(i)), u * u * (3 - 2 * u));
