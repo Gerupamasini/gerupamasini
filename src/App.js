@@ -536,6 +536,8 @@ export class App {
   _probe(seconds) {
     const dt = 1 / 60;
     const stats = { states: {}, gaits: {}, speed: [], depth: [], wallMin: Infinity, collisions: 0, startles: 0, eaten: 0, tailHz: [] };
+    // motion rhythm ("dou to sei"): stillness vs activity bouts per fish
+    const rhythm = { still: 0, tailQuiet: 0, pectAmp: 0, n: 0, stillBouts: [], activeBouts: [], cur: new Map() };
     const fish = this.fishSystem.fish;
     let foodBefore = 0;
     const t0 = performance.now();
@@ -544,6 +546,22 @@ export class App {
       if (k % 2400 === 1200) this.tapGlass();
       foodBefore = this.world.food.items.length;
       this.step(dt);
+      for (const f of fish) {
+        const L = f.loc;
+        const still = L.speed / f.SL < 0.12 && L.amp < 0.02;
+        rhythm.n++;
+        if (still) rhythm.still++;
+        if (L.amp < 0.012) rhythm.tailQuiet++;
+        rhythm.pectAmp += (L.pect[0].amp + L.pect[1].amp) * 0.5;
+        const c = rhythm.cur.get(f) || { still, t: 0 };
+        if (c.still !== still) {
+          (c.still ? rhythm.stillBouts : rhythm.activeBouts).push(c.t);
+          c.still = still;
+          c.t = 0;
+        }
+        c.t += dt;
+        rhythm.cur.set(f, c);
+      }
       if (this.world.food.items.length < foodBefore) stats.eaten += foodBefore - this.world.food.items.length;
       if (k % 30 !== 0) continue;
       for (const f of fish) {
@@ -578,6 +596,13 @@ export class App {
       closeContacts: stats.collisions,
       foodEaten: stats.eaten,
       yawns: fish.reduce((acc, f) => acc + (f.loc.yawns || 0), 0),
+      rhythm: {
+        stillFrac: (rhythm.still / rhythm.n).toFixed(3),
+        tailQuietFrac: (rhythm.tailQuiet / rhythm.n).toFixed(3),
+        pectAmpMean: (rhythm.pectAmp / rhythm.n).toFixed(3),
+        stillBoutS: rhythm.stillBouts.length ? { n: rhythm.stillBouts.length, p50: q(rhythm.stillBouts, 0.5), p90: q(rhythm.stillBouts, 0.9) } : null,
+        activeBoutS: rhythm.activeBouts.length ? { n: rhythm.activeBouts.length, p50: q(rhythm.activeBouts, 0.5), p90: q(rhythm.activeBouts, 0.9) } : null,
+      },
       usPerFishUpdate: { brain: ((Fish.prof.brain / Fish.prof.n) * 1000).toFixed(1), loc: ((Fish.prof.loc / Fish.prof.n) * 1000).toFixed(1), rig: ((Fish.prof.rig / Fish.prof.n) * 1000).toFixed(1) },
     }));
   }
