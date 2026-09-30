@@ -48,12 +48,15 @@ export class KentishPlover {
     this.pos = position.clone();
     this.pos.y = world.terrain.heightAt(this.pos.x, this.pos.z);
     this.heading = heading;
+    this.yawRate = 0; // rad/s
     this.vel = new THREE.Vector3();
     this.loco = { mode: 'idle', target: null, speed: 0, arrive: 0.02, face: null, onArrive: null, blocked: false };
     this.flight = null;
     this.ai = new KentishPloverAI(this, { seed });
     this.lod = 0;
     this._animAccum = 0;
+    this._dtAvg = 1 / 60; // smoothed frame time (pose cadence of throttled LODs)
+    this._animFrames = -((id | 0) % 5); // staggers the throttled poses of a flock over the frames
     this._aiAccum = Math.random() * 0.05;
   }
 
@@ -119,7 +122,15 @@ export class KentishPlover {
     if (L.mode === 'move' && desired > 0.001) want = Math.atan2(dirX, dirZ);
     else if (L.face) want = Math.atan2(L.face.x - this.pos.x, L.face.z - this.pos.z);
     const turnRate = next > 0.5 ? 9 : 6;
-    this.heading = dampAngle(this.heading, want, turnRate, dt);
+    // Yaw: the rate the damped heading asks for (turnRate·error), but no faster than the rate from which the bird
+    // can still brake to the target at turnAccel/2 (no overshoot), and changing by at most turnAccel·dt per frame
+    // (no one-frame twist of the whole bird at every start). Small corrections keep the plain damped approach.
+    if (dt > 0) {
+      const err = wrapAngle(want - this.heading);
+      const wantRate = Math.sign(err) * Math.min(Math.abs(err) * (1 - Math.exp(-turnRate * dt)) / dt, Math.sqrt(A.turnAccel * Math.abs(err)));
+      this.yawRate += clamp(wantRate - this.yawRate, -A.turnAccel * dt, A.turnAccel * dt);
+      this.heading += this.yawRate * dt;
+    }
     this.vel.set(Math.sin(this.heading) * next, 0, Math.cos(this.heading) * next);
     // don't walk into deep water
     const nx = this.pos.x + this.vel.x * dt;
@@ -139,6 +150,12 @@ export class KentishPlover {
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     this.pos.y = this.world.terrain.heightAt(this.pos.x, this.pos.z);
+    // after touchdown: level out the flight attitude
+    const att = this.animator.attitude;
+    if (att.pitch || att.roll) {
+      att.pitch = Math.abs(att.pitch) < 1e-4 ? 0 : damp(att.pitch, 0, 8, dt);
+      att.roll = Math.abs(att.roll) < 1e-4 ? 0 : damp(att.roll, 0, 8, dt);
+    }
   }
 
   // ------------------------------------------------------------ flight
@@ -222,6 +239,7 @@ export class KentishPlover {
     const newHeading = dampAngle(curHeading, wantHeading, turnRate, dt);
     const yawRate = wrapAngle(newHeading - curHeading) / Math.max(dt, 1e-4);
     this.heading = newHeading;
+    this.yawRate = yawRate; // carried into the ground heading at touchdown
     // vertical
     const errY = targetAlt - this.pos.y;
     f.vy = damp(f.vy, clamp(errY * 2.2, -2.2, 2.8), 3, dt);
@@ -250,8 +268,8 @@ export class KentishPlover {
     this.pos.y = this.world.terrain.heightAt(this.pos.x, this.pos.z);
     this.vel.y = 0;
     this.animator.setFlight(false);
-    this.animator.attitude.pitch = 0;
-    this.animator.attitude.roll = 0;
+    // the flight attitude (braking pitch up to ~30°) rights itself over the run-out (_updateGround): zeroing it here
+    // swung the trunk by ~45 mm in one frame at every touchdown
     this.animator._initFeet = true;
     // run out the remaining momentum (2–3 steps)
     const s = Math.min(1.4, this.speed);
@@ -263,9 +281,9 @@ export class KentishPlover {
   // ------------------------------------------------------------ frame update
   /**
    * @param {number} dt real seconds
-   * @param {object} sched {aiRate, animRate, visible}
+   * @param {object} sched {aiRate, animRate, visible, dist} (dist: fov-scaled camera distance, m)
    */
-  update(dt, sched = { aiRate: 20, animRate: 60, visible: true }) {
+  update(dt, sched = { aiRate: 20, animRate: Infinity, visible: true }) {
     this._aiAccum += dt;
     const aiStep = 1 / sched.aiRate;
     if (this._aiAccum >= aiStep) {
@@ -276,12 +294,28 @@ export class KentishPlover {
     else this._updateGround(dt);
     this.ai.tick(dt); // cheap per-frame parts (state timers)
     this._animAccum += dt;
-    const animStep = 1 / sched.animRate;
-    if (sched.visible && this._animAccum >= animStep * 0.999) {
+    // Throttled LODs pose every n-th frame, n = display rate / animRate rounded (a 144 Hz display poses LOD2 every
+    // 5th frame): a steady cadence, never a jittery 4-5-4-4-5 mix. A frame that advanced no time is never posed
+    // (the animator treats dt = 0 as a settle).
+    if (dt > 0) {
+      this._dtAvg += (dt - this._dtAvg) * 0.05;
+      this._animFrames++;
+    }
+    const every = Number.isFinite(sched.animRate) ? Math.max(1, Math.round(1 / (sched.animRate * this._dtAvg))) : 1;
+    const walking = !this.flight && this.speed > 0.02;
+    const lagging = walking && every > 1 && this.animator.rootPos.distanceTo(this.pos) > CFG.lod.maxLagAngle * (sched.dist ?? 0);
+    if (sched.visible && dt > 0 && (this._animFrames >= every || lagging)) {
       this.animator.setRoot(this.pos, this.heading, this.vel);
       this.animator.update(this._animAccum);
       this._animAccum = 0;
-    } else if (!sched.visible) {
+      this._animFrames = 0;
+    } else if (sched.visible) {
+      // Between throttled poses a standing or flying bird moves with the entity (it never lags). A walking one stays
+      // where it was posed: moving only the root would drag its planted feet forward and snap them back at the next
+      // pose. It is re-posed early once that lag would show (lod.maxLagAngle, ≈1 px), and the bird the camera
+      // follows is posed every frame (KentishPloverManager.focus), so it never steps against the camera.
+      if (!walking) this.animator.placeRoot(this.pos, this.heading);
+    } else {
       // not drawn: keep action timelines/events running without touching the skeleton
       this.animator.advance(this._animAccum);
       this._animAccum = 0;

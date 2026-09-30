@@ -38,7 +38,9 @@ export class Terrain {
     if (z < 34) {
       const dx = x - this.creekCentre(z);
       const w = 3.5 + 0.035 * (34 - z);
-      const depth = 0.55 * smooth(34, 10, z) + 0.25;
+      // the creek head grades up over 2 m: ending it at full depth left a 25 cm step in heightAt at z = 34,
+      // which teleported birds (and the follow camera) walking across it (tools/dev/gaitjitter.mjs)
+      const depth = (0.55 * smooth(34, 10, z) + 0.25) * smooth(34, 32, z);
       h -= depth * Math.exp(-(dx * dx) / (w * w));
     }
     return h;

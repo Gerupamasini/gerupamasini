@@ -329,6 +329,7 @@ function frame() {
   const camYaw = Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z) + Math.PI;
   player.update(dt, camYaw);
   driveViewer(dt);
+  birds.focus = camMode === 'bird' ? selected : null;
   birds.update(dt, camera);
   prey.updateVisuals(controls.target, 8);
   // camera follow

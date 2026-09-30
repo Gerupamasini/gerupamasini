@@ -164,10 +164,24 @@ export const animation = {
   saccadeDuration: 0.075,
   walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.0 },
   run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.14 },
+  sway: mm(0.6), // lateral trunk sway per stride (D)
+  // Trunk bob (2 per stride) and sway (1 per stride) are limited to this acceleration (m/s², ≈0.15 g): walking
+  // keeps its full 1.2 mm inverted-pendulum bob (needs ≈0.75), running at 9.5 Hz is left with ≈0.2 mm — the body
+  // glides level while the legs blur, like a wind-up toy (C: plover runs look "gliding", research.md §5.6, S32).
+  // A 2.5 mm bob at 19 Hz is only 3 frames per cycle at 60 fps and read as vibration (D; tools/dev/gaitjitter.mjs)
+  trunkMaxAccel: 1.5,
+  // Acceleration lean: forward on starting, back on braking. Low-passed input and a small gain → a slight rock
+  // (≈1.5°) on starts/stops instead of a 6° nod that followed every speed change (D; gaitjitter.mjs)
+  lean: { gain: 0.008, max: 0.06, inputRate: 10, rate: 6 }, // rad per m/s², clamp (rad), smoothing rates (1/s)
   gaitCentreOffset: mm(7), // mid-stance foot position lies under the centre of mass, ahead of the hip (D)
   heelLift: { walk: mm(4), run: mm(6) }, // late-stance heel-off (MTP joint rises, toes stay down)
   stopDecel: 12,
   accel: 9,
+  // Max ground yaw acceleration (rad/s²). The heading still converges at turnRate 6/9, but its rate ramps up and
+  // brakes over a few frames instead of stepping from 0 to 5–18 rad/s in one frame at every start (a one-frame
+  // twist of the whole bird about its feet; the trunk sits ~12 mm behind them). A 180° pivot takes ≈0.35 s,
+  // a 30° heading correction ≈0.15 s (D; tools/dev/gaitjitter.mjs)
+  turnAccel: 100,
   headStabilization: 0.8,
   footTrembleHz: 10,
   flight: {
@@ -255,7 +269,14 @@ export const lod = {
   distances: [2.5, 9, 30], // LOD0 < 2.5 m < LOD1 < 9 m < LOD2 < 30 m < LOD3
   sdfResolution: [1.15, 2.6, 4.6], // mm voxel per LOD0..2 (≈24k / 5k / 1.5k body tris)
   aiRate: [20, 20, 8, 3], // Hz per LOD
-  animRate: [60, 60, 30, 15],
+  // skeleton pose rate per LOD (Hz); Infinity = every rendered frame. Near birds must be posed every frame: the
+  // follow camera moves every frame, and a skipped pose (frame-time jitter, 120/144 Hz displays) made the whole
+  // bird jolt by up to v·dt on screen (D; tools/dev/gaitjitter.mjs)
+  animRate: [Infinity, Infinity, 30, 15],
+  // A throttled bird that walks/runs stays where it was posed until its next pose (so its planted feet stay
+  // planted), but is re-posed early once it lags its entity by more than this angle as seen from the camera
+  // (rad; ≈1 px at 800 px / 45°): a running LOD2 bird near 9 m would otherwise advance in 4 px steps at 30 Hz.
+  maxLagAngle: 0.001,
 };
 
 export const KentishPloverConfig = {

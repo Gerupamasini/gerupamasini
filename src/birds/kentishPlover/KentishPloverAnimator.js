@@ -139,6 +139,7 @@ export class KentishPloverAnimator {
     // Lean from acceleration
     this._prevVel = new THREE.Vector3();
     this.accel = new THREE.Vector3();
+    this.aFwd = 0; // low-passed forward acceleration
     this.lean = 0;
 
     this._initFeet = true;
@@ -154,6 +155,14 @@ export class KentishPloverAnimator {
     this.rootPos.copy(pos);
     this.heading = heading;
     if (velocity) this.velocity.copy(velocity);
+  }
+
+  /** Place the whole bird at the root (position, heading, flight attitude) without re-posing the skeleton. */
+  placeRoot(pos, heading) {
+    const obj = this.model.object;
+    obj.position.copy(pos);
+    obj.quaternion.setFromAxisAngle(Y, heading);
+    if (this.attitude.pitch || this.attitude.roll) obj.quaternion.multiply(qAxis(X, this.attitude.pitch, _q)).multiply(qAxis(Z, this.attitude.roll, _q2));
   }
 
   setPosture(name) {
@@ -287,9 +296,7 @@ export class KentishPloverAnimator {
     }
     // place the whole bird
     const obj = model.object;
-    obj.position.copy(this.rootPos);
-    obj.quaternion.setFromAxisAngle(Y, this.heading);
-    if (this.attitude.pitch || this.attitude.roll) obj.quaternion.multiply(qAxis(X, this.attitude.pitch, _q)).multiply(qAxis(Z, this.attitude.roll, _q2));
+    this.placeRoot(this.rootPos, this.heading);
     obj.updateMatrixWorld(false);
 
     // acceleration → lean (plovers pitch forward when accelerating, rock back on stopping)
@@ -297,8 +304,9 @@ export class KentishPloverAnimator {
       this.accel.copy(this.velocity).sub(this._prevVel).divideScalar(dt);
       this._prevVel.copy(this.velocity);
       const fwd = _v.set(Math.sin(this.heading), 0, Math.cos(this.heading));
-      const aFwd = clamp(this.accel.dot(fwd), -15, 15);
-      this.lean = damp(this.lean, aFwd * 0.012, 14, dt);
+      const LN = ANIM.lean;
+      this.aFwd = damp(this.aFwd, clamp(this.accel.dot(fwd), -15, 15), LN.inputRate, dt);
+      this.lean = damp(this.lean, clamp(this.aFwd * LN.gain, -LN.max, LN.max), LN.rate, dt);
     }
 
     this._postureTargets();
@@ -395,10 +403,13 @@ export class KentishPloverAnimator {
     const r = ANIM.run;
     const u = clamp((speed - w.speed) / (r.speed - w.speed), 0, 1);
     const hz = speed < w.speed ? w.strideHz * Math.max(0.55, Math.sqrt(speed / w.speed)) : lerp(w.strideHz, r.strideHz, Math.sqrt(u)) + Math.max(0, speed - r.speed) * 2.2;
+    // trunk bob (2× stride frequency) and sway (1×) are acceleration-limited (ANIM.trunkMaxAccel)
+    const w2 = (2 * Math.PI * (hz / this.timing)) ** 2;
     return {
       hz: hz / this.timing,
       duty: lerp(w.duty, r.duty, u),
-      bob: lerp(w.bob, r.bob, u),
+      bob: Math.min(lerp(w.bob, r.bob, u), ANIM.trunkMaxAccel / (2 * w2)),
+      sway: Math.min(ANIM.sway, ANIM.trunkMaxAccel / w2),
       lift: lerp(w.footLift, r.footLift, u),
     };
   }
@@ -410,6 +421,7 @@ export class KentishPloverAnimator {
     s.hz = P.hz;
     s.duty = P.duty;
     s.bobA = P.bob;
+    s.swayA = P.sway;
     s.lift = P.lift;
     s.amount = dt > 0 ? damp(s.amount, moving ? 1 : 0, moving ? 12 : 8, dt) : moving ? 1 : 0;
     if (moving) s.clock = (s.clock + dt * s.hz) % 1;
@@ -421,7 +433,7 @@ export class KentishPloverAnimator {
     return this.stride.bobA * 0.5 * (1 - Math.cos(ph * 4 * Math.PI)) - this.stride.bobA * 0.5;
   }
   _sway() {
-    return Math.sin(this.stride.clock * 2 * Math.PI) * 0.0006;
+    return Math.sin(this.stride.clock * 2 * Math.PI) * this.stride.swayA;
   }
 
   // ------------------------------------------------------------ legs on the ground (planted feet + IK)
