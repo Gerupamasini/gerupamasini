@@ -53,6 +53,7 @@ const shared = {
   uCausticAmt: { value: 0.22 },
   uFinDensity: { value: 1.0 },
   uDebug: { value: 0 },
+  uFloorY: { value: -1e3 },
   uBg: { value: null },
   uResolution: { value: new THREE.Vector2(1, 1) },
 };
@@ -264,13 +265,21 @@ async function onLoaded(gltf) {
   const rig = root.getObjectByName('Mahaze_Juvenile').userData.mahazeRig;
   // the sand is at the level of the pelvic disc: the goby rests on the bottom
   floor.position.y = rig.contactY;
+  // points that can touch the sand: the pelvic sucker rim, the belly line and the lower caudal lobe
+  const F = fish.frame, P = fish.profile;
+  const botY = (s) => { const k = Math.min(P.n - 1, Math.round((s / F.SEND) * (P.n - 1))); return P.data[k * 6] - P.data[k * 6 + 2]; };
+  const rimY = rig.contactY * 1000 + F.Y0;
+  const contacts = [
+    ['J_pelvic', 13.0, rimY], ['J_pelvic', 14.8, rimY], ['J_pelvic', 16.6, rimY],
+    ['J_root', 15.5, botY(15.5)], ['J_sp1', 18.5, botY(18.5)], ['J_sp2', 22.5, botY(22.5)], ['J_sp3', 26.5, botY(26.5)],
+    ['J_sp4', 30.5, botY(30.5)], ['J_sp5', 34.5, botY(34.5)], ['J_sp6', 38.5, botY(38.5)], ['J_caudal2', 48.0, rig.tailContactY * 1000 + F.Y0],
+  ].map(([bone, s, y]) => ({ bone: fish.bones[bone], p: new THREE.Vector3(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001).sub(fish.bones[bone].userData.restObj) }));
   fish.behavior = createBehavior({
     root,
     bones: fish.bones,
     finMeshes: Object.fromEntries(fish.fins.map((f) => [f.mesh.name, f.mesh])),
     axes: rig.axes,
-    contactY: rig.contactY,
-    tailContactY: rig.tailContactY,
+    contacts,
     floorY: rig.contactY,
   });
   fish.behavior.setAuto(document.getElementById('auto').checked);
@@ -482,6 +491,7 @@ function frame() {
   if (fish.root) {
     sortFins();
     updateFloorShadow();
+    shared.uFloorY.value = floor.position.y; // the fish always rests on this plane (sand shown or not)
   }
   renderScene();
   requestAnimationFrame(frame);

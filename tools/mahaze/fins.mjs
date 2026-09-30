@@ -122,7 +122,7 @@ function pectoralFin(side, rect) {
 // Pelvic sucker: the two pelvic fins (I,5 each) are fused into an oval, cup-shaped disc under the chest.
 // The spines point forward-laterally and a membrane (frenum) closes the front, so the rim runs all the way
 // round; the rim curls down to meet the substrate (the fish rests on it) and the centre stays vaulted.
-export const PELVIC = { base: 12.0, front: 1.1, back: 5.6, halfWidth: 1.75, drop: 1.4 };
+export const PELVIC = { base: 12.0, front: 1.1, back: 5.6, halfWidth: 1.75, drop: 0.45 };
 function pelvicDisc(rect) {
   const P = PELVIC;
   const c = P.back - (P.front + P.back) / 2; // oval centre, measured from the base along +s
@@ -257,8 +257,11 @@ function foldedDef(def) {
   }
   if (def.type === 'caudal') return withRayAngles(def, (r) => r.ang * 0.3, [1, 0, 0], [0, 1, 0]);
   if (def.type === 'pectoral') {
-    const mid = -6 * DEG;
-    return withRayAngles(def, (r) => mid + (r.psi - mid) * 0.28, def.Xf, def.Yf);
+    // folded: the rays close into a narrow fan pointing straight back and the fin lies flat against the
+    // flank (its lower half no longer flares out), as when a goby tucks its pectorals in for a dart
+    const side = Math.sign(def.Xf[2]);
+    const mid = -4 * DEG;
+    return withRayAngles(def, (r) => mid - (r.psi - mid) * 0.08, nrm([1, 0, 0.12 * side]), [0, 1, 0]);
   }
   if (def.type === 'pelvic') {
     const rays = def.rays.map((r) => {

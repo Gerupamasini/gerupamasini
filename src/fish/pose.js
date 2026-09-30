@@ -18,8 +18,8 @@ export const FIN_TARGETS = {
   Fin_Dorsal2: ['fold', 'flex'],
   Fin_Anal: ['fold', 'flex'],
   Fin_Caudal: ['fold', 'flex'],
-  Fin_Pectoral_L: ['fold', 'waveS', 'waveC'],
-  Fin_Pectoral_R: ['fold', 'waveS', 'waveC'],
+  Fin_Pectoral_L: ['fold', 'flex', 'waveS', 'waveC'],
+  Fin_Pectoral_R: ['fold', 'flex', 'waveS', 'waveC'],
   Fin_Pelvic: ['fold'],
 };
 
@@ -86,6 +86,13 @@ export function computePose(p, axes) {
     for (let k = 2; k < SPINE.length; k++) local[SPINE[k][0]] += (p.segYaw[SPINE[k][0]] || 0) - (k > 2 ? p.segYaw[SPINE[k - 1][0]] || 0 : 0);
   }
   for (const [name] of SPINE) q[name] = quat(Y, local[name]);
+  // alert posture: the front of the trunk is raised (root pitched nose-up by the caller) and the trunk
+  // flexes back down behind the pelvic region, so the posterior half lies flat on the sand
+  if (p.arch) {
+    q.J_sp1 = qmul(q.J_sp1, quat(axes.headUp, -0.45 * p.arch));
+    q.J_sp2 = qmul(q.J_sp2, quat(axes.headUp, -0.4 * p.arch));
+    q.J_sp3 = qmul(q.J_sp3, quat(axes.headUp, -0.15 * p.arch));
+  }
   // head pitch (nose up > 0) on top of the lateral bend
   q.J_head = qmul(q.J_head, quat(axes.headUp, p.headPitch));
   q.J_jaw = quat(axes.jaw, p.jaw);
@@ -105,21 +112,25 @@ export function computePose(p, axes) {
     Fin_Dorsal2: [clamp(p.foldD2, 0, 1), clamp(p.flexD, -1, 1)],
     Fin_Anal: [clamp(p.foldAnal, 0, 1), clamp(p.flexD, -1, 1)],
     Fin_Caudal: [clamp(p.foldCaudal, 0, 1), clamp(p.flexCaudal, -1, 1)],
-    Fin_Pectoral_L: [clamp(p.foldPecL, 0, 1), p.scullAmpL * Math.sin(sc), p.scullAmpL * Math.cos(sc)],
-    Fin_Pectoral_R: [clamp(p.foldPecR, 0, 1), p.scullAmpR * Math.sin(sc + 0.9), p.scullAmpR * Math.cos(sc + 0.9)],
+    Fin_Pectoral_L: [clamp(p.foldPecL, 0, 1), clamp(p.flexPecL, -1, 1), p.scullAmpL * Math.sin(sc), p.scullAmpL * Math.cos(sc)],
+    Fin_Pectoral_R: [clamp(p.foldPecR, 0, 1), clamp(p.flexPecR, -1, 1), p.scullAmpR * Math.sin(sc + 0.9), p.scullAmpR * Math.cos(sc + 0.9)],
     Fin_Pelvic: [clamp(p.foldPelvic, 0, 1)],
   };
   return { q, t, morph };
 }
 
-/** Perched at rest: body on the bottom, pectorals spread as props, dorsal fins half down. */
+/**
+ * Perched at rest (as in lateral photos of resting juveniles): belly just above the sand on the pelvic
+ * sucker, pectorals spread down and back with their lower rays on the sand, anal fin folded back along
+ * the belly, dorsal fins half down.
+ */
 export function defaultPose() {
   return {
-    phase: 0, gain: 0, turn: 0, headPitch: 0.035,
+    phase: 0, gain: 0, turn: 0, headPitch: 0.02, arch: 0,
     jaw: 0, premax: 0, hyoid: 0, opercL: 0, opercR: 0,
-    pecAbdL: 0.5, pecAbdR: 0.5, pecDepL: 0.45, pecDepR: 0.45, foldPecL: 0.0, foldPecR: 0.0,
-    scullPhase: 0, scullAmpL: 0.15, scullAmpR: 0.15, pelvicPitch: 0,
-    foldD1: 0.55, foldD2: 0.3, foldAnal: 0.35, foldCaudal: 0.45, foldPelvic: 0,
+    pecAbdL: 0.4, pecAbdR: 0.4, pecDepL: 0.42, pecDepR: 0.42, foldPecL: 0.0, foldPecR: 0.0, flexPecL: 0, flexPecR: 0,
+    scullPhase: 0, scullAmpL: 0.04, scullAmpR: 0.04, pelvicPitch: 0,
+    foldD1: 0.55, foldD2: 0.3, foldAnal: 0.85, foldCaudal: 0.45, foldPelvic: 0,
     flexD: 0, flexCaudal: 0,
     eyeYawL: 0, eyePitchL: 0, eyeYawR: 0, eyePitchR: 0,
   };

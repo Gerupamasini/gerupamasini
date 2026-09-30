@@ -262,7 +262,9 @@ export function buildClips() {
   const idleDur = 4 / 1.15;
   const idle = sampleClip('Idle', idleDur, 30, (t) => {
     const p = breathe(defaultPose(), t);
-    p.scullPhase = (2 * Math.PI * 3 * t) / idleDur;
+    // planted pectorals: a slight twitch with each breath and a faint membrane ripple
+    p.scullPhase = (2 * Math.PI * 4 * t) / idleDur;
+    p.pecAbdL += 0.012 * Math.sin(2 * Math.PI * 1.15 * t); p.pecAbdR = p.pecAbdL;
     return p;
   });
   // Swim: one burst cycle at 8 Hz with streamlined fins (pectorals pressed to the flanks)
@@ -272,8 +274,8 @@ export function buildClips() {
     p.phase = 2 * Math.PI * f * t;
     p.gain = 1;
     p.headPitch = 0;
-    p.pecAbdL = p.pecAbdR = -0.36; p.pecDepL = p.pecDepR = 0;
-    p.foldPecL = p.foldPecR = 0.75; p.scullAmpL = p.scullAmpR = 0;
+    p.pecAbdL = p.pecAbdR = -0.06; p.pecDepL = p.pecDepR = 0;
+    p.foldPecL = p.foldPecR = 0.85; p.scullAmpL = p.scullAmpR = 0;
     p.foldD1 = 0.15; p.foldD2 = 0.05; p.foldAnal = 0.1; p.foldCaudal = 0; p.foldPelvic = 0.6;
     p.flexCaudal = -0.8 * Math.cos(p.phase - 2.2);
     p.flexD = -0.35 * Math.cos(p.phase - 1.2);
@@ -289,7 +291,7 @@ export function buildClips() {
     p.opercL = p.opercR = 0.42 * y.operc;
     p.headPitch += 0.09 * y.open;
     p.foldD1 = 0.55 * (1 - y.fins); p.foldD2 = 0.3 * (1 - y.fins); p.foldAnal = 0.35 * (1 - y.fins); p.foldCaudal = 0.45 * (1 - y.fins);
-    p.pecAbdL = p.pecAbdR = 0.5 + 0.25 * y.fins;
+    p.pecAbdL = p.pecAbdR = 0.4 + 0.25 * y.fins;
     return p;
   });
   return [idle, swim, yawn];

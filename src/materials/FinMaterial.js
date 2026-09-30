@@ -10,6 +10,7 @@ const vertexShader = /* glsl */ `
 #include <morphtarget_pars_vertex>
 #include <skinning_pars_vertex>
 attribute vec4 tangent;
+uniform float uFloorY;          // world height of the sand (far below when there is no floor)
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
 varying vec4 vWorldTangent;
@@ -35,6 +36,11 @@ void main() {
     objectTangent = mat3(skinMatrix) * tangent.xyz;
   #endif
   vec4 wp = modelMatrix * vec4(transformed, 1.0);
+  // ground contact: whatever part of a fin is pressed into the sand lies flat on it (soft limit, so the
+  // membrane rolls smoothly onto the sand instead of creasing)
+  const float LIM = 0.00012;
+  float gap = wp.y - uFloorY;
+  if (gap < LIM) wp.y = uFloorY + LIM * exp((gap - LIM) / LIM);
   vWorldPos = wp.xyz;
   mat3 m = mat3(modelMatrix);
   vWorldNormal = normalize(m * objectNormal);
