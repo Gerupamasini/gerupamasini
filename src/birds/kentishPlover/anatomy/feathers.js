@@ -268,7 +268,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
     const gl = Math.hypot(...g) || 1;
     const x = Math.max(0, Math.min(1, (sdf(p[0], p[1], p[2]) - 3) / 3));
     const w = 1 - x * x * (3 - 2 * x);
-    return [g.map((v) => (v / gl) * w), bodyDisplacementMasks(p)];
+    return [g.map((v) => (v / gl) * w), bodyDisplacementMasks(p, g.map((v) => v / gl))];
   };
   const bindMM = (v) => [gb.pos[v * 3] * 1000, gb.pos[v * 3 + 1] * 1000, gb.pos[v * 3 + 2] * 1000];
   const rng = mulberry(detail * 131 + 17);
@@ -325,7 +325,9 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
     if (detail >= 2 && f.type === 'upperTailCovert') continue;
     if (detail >= 2 && f.type === 'rectrix' && f.index % 2 === 0) continue;
     const yaw = f.yaw;
-    const dir = [Math.sin(yaw), -0.07, -Math.cos(yaw)];
+    // tail 7.7° below the body frame (tip at (−85, 55.1) with the shaft's bend, spec §11); the under-tail coverts
+    // run flatter along the vent
+    const dir = [Math.sin(yaw), f.type === 'underTailCovert' ? -0.06 : -0.11, -Math.cos(yaw)];
     const dl = Math.hypot(dir[0], dir[1], dir[2]);
     const d = [dir[0] / dl, dir[1] / dl, dir[2] / dl];
     // outer vane faces away from the tail midline

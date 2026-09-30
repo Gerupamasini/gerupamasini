@@ -32,10 +32,12 @@ import PRECOMPUTED from './wingFold.cache.js';
 const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
 const Y = new THREE.Vector3(0, 1, 0);
 
+// folded arm bone directions (x) and dorsal hints (y): shoulder (10, 77, 6) → elbow (11, 67, −28) → carpal joint
+// (16, 71, 16) → hand tip (16.5, 67.8, −11); the folded wing falls ≈9° toward the rear (spec §10.2)
 export const FOLD_TARGET = {
-  humerus: { x: [0.19, -0.02, -0.98], y: [0.8, 0.5, 0.2] },
-  forearm: { x: [-0.07, -0.26, 0.963], y: [0.8, 0.6, 0] },
-  hand: { x: [0.02, -0.02, -1], y: [0.55, 0.83, 0] },
+  humerus: { x: [0.028, -0.282, -0.959], y: [0.8, 0.5, 0.2] },
+  forearm: { x: [0.115, 0.092, 0.989], y: [0.8, 0.6, 0] },
+  hand: { x: [0.02, -0.12, -0.99], y: [0.55, 0.83, 0] },
 };
 
 function armFold() {
@@ -51,7 +53,7 @@ function armFold() {
 // Folded wing raised off the flank as a whole (preening under it, scratching over it; animator): the shoulder
 // turns about a hinge along the body's long axis on the wing's dorsal edge (left wing, mm). Every feather
 // gets a re-aim per raise step so it stays clear of the flank all the way (raiseAt).
-export const WING_RAISE = { hinge: [8, 72, 0], steps: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3] };
+export const WING_RAISE = { hinge: [8, 84, -12], steps: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3] };
 
 /** Re-aim of a folded feather (local, premultiplied onto its folded rotation) with the wing raised by `a`. */
 export function raiseAt(entry, a, out = new THREE.Quaternion()) {
@@ -235,7 +237,7 @@ let CACHE = null;
 // tools/dev/wingfold-cache.mjs) under a key of what it depends on: the solver version, the wing layout and the
 // body outline (sampled). Whenever either changes the key no longer matches and the solution is computed
 // here instead (with a console warning to regenerate the cache).
-export const WING_FOLD_SOLVER = 1; // bump with any change of the solver below
+export const WING_FOLD_SOLVER = 3; // bump with any change of the solver below
 export function wingFoldKey(wingFeathers, sdf, torsoSdf = sdf) {
   const probe = [];
   for (let x = 0; x <= 24; x += 6) for (let y = 40; y <= 90; y += 10) for (let z = -50; z <= 50; z += 10) probe.push(Math.round(sdf(x, y, z) * 100), Math.round(torsoSdf(x, y, z) * 100));
@@ -334,7 +336,8 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
       // tips converge over the tail: longest primaries meet near the midline at the tail tip (±5 mm)
       const zTip = V(f.base).z - 0; // unused
       const x = 4.8 + (10 - f.index) * 0.9;
-      const y = 58.6 + (10 - f.index) * 0.35;
+      // p9 tip (−84, 57.4), spec §10.3; the chord ends higher by the shaft's ventral bend (featherOffset)
+      const y = 57.0 + (10 - f.index) * 0.35 + f.curve * L * 0.83;
       const dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));
       tip = new THREE.Vector3(x, y, base.z - dz);
       n = V([0.55, 0.83, 0]).normalize();
@@ -348,16 +351,17 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
       n = Y.clone().applyQuaternion(r.Rw);
     } else {
       // lie back along the body surface, lifted by the stack thickness
-      const lcHint = { humerus: [0.0, 0.1, -1], forearm: [0.03, -0.3, -1], hand: [-0.25, 0.25, -1] };
+      // the folded wing falls toward the rear (spec §10.2)
+      const lcHint = { humerus: [0.0, -0.05, -1], forearm: [0.03, -0.35, -1], hand: [-0.25, 0.15, -1] };
       if (f.type === 'alula') lcHint.alula = [-0.25, 0.2, -1];
-      const dirHint = f.type === 'alula' ? V(lcHint.alula) : f.type === 'tertial' ? V([0.0, 0.05, -1]) : f.type === 'lesserCovert' ? V(lcHint[f.bone]) : V([0.0, 0.1, -1]);
+      const dirHint = f.type === 'alula' ? V(lcHint.alula) : f.type === 'tertial' ? V([0.0, -0.05, -1]) : f.type === 'lesserCovert' ? V(lcHint[f.bone]) : V([0.0, -0.12, -1]);
       dirHint.normalize();
       const guess = base.clone().addScaledVector(dirHint, L);
       const [pp, nn] = projectToSurface(sdf, guess.x, guess.y, guess.z);
       const lift = f.type === 'alula' ? -0.6 : f.type === 'lesserCovert' && f.bone === 'hand' ? 1.2 : f.type === 'lesserCovert' ? 2.6 : f.type === 'tertial' ? 3.4 : 2.2 + (order[f.name] ?? 0) * 0.05;
       const surfTip = V(pp).addScaledVector(V(nn), lift);
-      // If the body has ended (behind the rump), keep the straight hint instead
-      tip = guess.z < -48 ? guess : surfTip;
+      // If the body has ended (behind the rump; the relaxed body reaches z −66), keep the straight hint instead
+      tip = guess.z < -62 ? guess : surfTip;
       // keep feather length: re-normalise direction
       const d = tip.clone().sub(base).normalize();
       tip = base.clone().addScaledVector(d, L);

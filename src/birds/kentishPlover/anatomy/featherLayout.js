@@ -8,12 +8,15 @@ const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const deg = Math.PI / 180;
 
+// Spread bind moved by (0, +13, −14) onto the relaxed body (body_shape_spec.md §10.2): folded (FOLD_TARGET)
+// the shoulder is at (10, 77, 6), the elbow (11, 67, −28) and the carpal joint (16, 71, 16), under the rear
+// lower end of the breast-side patch.
 export const WING = {
-  shoulder: [7.5, 63.5, 21],
-  humerus: [10, 64, 20],
-  elbow: [45, 64, 15.5], // humerus 35.4 mm
-  wrist: [89, 64, 21.5], // forearm (ulna) 44.4 mm
-  handTip: [115, 64, 17.5], // carpometacarpus + digits 26.3 mm
+  shoulder: [7.5, 76.5, 7],
+  humerus: [10, 77, 6],
+  elbow: [45, 77, 1.5], // humerus 35.4 mm
+  wrist: [89, 77, 7.5], // forearm (ulna) 44.4 mm
+  handTip: [115, 77, 3.5], // carpometacarpus + digits 26.3 mm
 };
 
 // Direction in the wing plane: angle measured from +X (distal) toward −Z (trailing edge).
@@ -42,7 +45,9 @@ export function buildWingLayout() {
 
   // Primaries
   const pAngles = [66, 59, 52, 45, 38, 31, 24.5, 18.5, 13.5, 9.5]; // p1..p10
-  const pTipDist = [60, 64, 69, 75, 82, 90, 98, 104.5, 108, 104]; // from wrist; p9 = wing chord (S1,S3)
+  // from the wrist; p9 = wing chord (S1,S3: 105–108 flattened, ≈100 projected when folded, spec §10.3): the
+  // folded p9 tip lies at z −84, 1 mm short of the tail tip (photos, spec §3)
+  const pTipDist = [60, 64, 69, 75, 82, 90, 97, 99, 102.3, 98.3];
   const prim = [];
   for (let i = 10; i >= 1; i--) {
     const t = 0.06 + (0.9 * (i - 1)) / 9;
@@ -64,11 +69,12 @@ export function buildWingLayout() {
     feathers.push(sec[j]);
   }
 
-  // Tertials t1..t3, on the elbow region of the humerus
-  const tLen = [41, 45, 39];
+  // Tertials t1..t3 along the humerus (bases lerp(elbow, shoulder, 0.30 / 0.42 / 0.54)); lengths put the folded
+  // tips at z −52 ± 5, y ≈ 67.7 (spec §10.3)
+  const tLen = [34, 39, 41];
   const tAng = [112, 124, 136];
   for (let k = 1; k <= 3; k++) {
-    const base = add(lerp3(elbow, humerus, 0.04 + 0.12 * (k - 1)), [0, order * STACK + 0.4, -2.0]);
+    const base = add(lerp3(elbow, humerus, 0.3 + 0.12 * (k - 1)), [0, order * STACK + 0.4, -2.0]);
     feathers.push({ name: `t${k}`, bone: `t${k}`, type: 'tertial', base, angle: tAng[k - 1], length: tLen[k - 1], width: 11.5, innerVane: 0.55, curve: 0.1, layer: order++, index: k });
   }
 
@@ -98,9 +104,10 @@ export function buildWingLayout() {
       }
     }
   }
-  // Alula (bastard wing): 3 small feathers on the leading edge at the wrist.
+  // Alula (bastard wing): 3 small feathers on the leading edge at the wrist, close over the bone: folded, the
+  // carpal joint lies under the breast-side plumage (spec §10.2) and the alula must not stand out of it.
   for (let a = 0; a < 3; a++) {
-    feathers.push({ name: `al${a}`, bone: 'alula', type: 'alula', base: add(wrist, [1 + a * 1.5, top + 0.8 - wrist[1] + wrist[1], 5.5 - a * 0.6]), angle: -2 + a * 7, length: 15 - a * 3, width: 3.8, innerVane: 0.7, curve: 0.05, layer: order + 3, index: a });
+    feathers.push({ name: `al${a}`, bone: 'alula', type: 'alula', base: add(wrist, [1 + a * 1.5, 0.5, 5.5 - a * 0.6]), angle: -2 + a * 7, length: 15 - a * 3, width: 3.8, innerVane: 0.7, curve: 0.05, layer: order + 3, index: a });
   }
   return feathers;
 }
@@ -112,14 +119,15 @@ export function buildTailLayout(tailPivot) {
   for (let side = 0; side < 2; side++) {
     const sgn = side === 0 ? 1 : -1;
     for (let i = 1; i <= 6; i++) {
-      const x = sgn * (0.6 + 1.25 * (i - 1));
+      // closed tail 14–18 mm wide (spec §11)
+      const x = sgn * (0.5 + 0.55 * (i - 1));
       const base = [tailPivot[0] + x, tailPivot[1] + 0.9 - (i - 1) * 0.16, tailPivot[2] + 1.5];
       feathers.push({
         name: `r${i}${side ? 'R' : 'L'}`,
         bone: `r${i}_${side ? 'R' : 'L'}`,
         type: 'rectrix',
         base,
-        yaw: sgn * (i - 1) * 1.6 * deg, // fanned slightly outward
+        yaw: sgn * (i - 1) * 0.35 * deg, // fanned slightly outward
         length: lengths[i - 1],
         width: 8.2,
         innerVane: 0.58,
@@ -130,7 +138,7 @@ export function buildTailLayout(tailPivot) {
     }
   }
   // Upper-tail coverts (grey-brown centrally, white laterally) and white under-tail coverts: together
-  // they hide the basal half of the rectrices, so only ~20 mm of tail shows beyond the body (D).
+  // they hide the basal half of the rectrices, so 20 ± 5 mm of tail shows beyond either (photos, spec §11).
   for (let side = 0; side < 2; side++) {
     const sgn = side === 0 ? 1 : -1;
     for (let i = 0; i < 3; i++) {
@@ -138,9 +146,10 @@ export function buildTailLayout(tailPivot) {
         name: `utc${i}${side ? 'R' : 'L'}`,
         bone: 'tail',
         type: 'upperTailCovert',
-        base: [tailPivot[0] + sgn * (1.0 + i * 2.8), tailPivot[1] + 3.2 - i * 0.6, tailPivot[2] + 12 - i * 2.0],
-        yaw: sgn * (4 + i * 8) * deg,
-        length: 26 - i * 3,
+        // (closed over the narrow closed tail and the rump, 16 mm wide at z −60)
+        base: [tailPivot[0] + sgn * (1.0 + i * 2.0), tailPivot[1] + 3.2 - i * 0.6, tailPivot[2] + 12 - i * 2.0],
+        yaw: sgn * (3 + i * 5) * deg,
+        length: 30 - i * 3,
         width: 10,
         innerVane: 0.55,
         curve: 0.05,
@@ -151,12 +160,12 @@ export function buildTailLayout(tailPivot) {
         name: `ltc${i}${side ? 'R' : 'L'}`,
         bone: 'tail',
         type: 'underTailCovert',
-        base: [tailPivot[0] + sgn * (1.0 + i * 2.4), tailPivot[1] - 4.5 - i * 0.3, tailPivot[2] + 10 - i * 2.5],
-        yaw: sgn * (3 + i * 7) * deg,
-        length: 25 - i * 3,
+        base: [tailPivot[0] + sgn * (1.0 + i * 1.6), tailPivot[1] - 3.5 - i * 0.3, tailPivot[2] + 10 - i * 2.5],
+        yaw: sgn * (2 + i * 4) * deg,
+        length: 32 - i * 3,
         width: 9.5,
         innerVane: 0.55,
-        curve: -0.05,
+        curve: 0.03, // tips curl up against the tail: rear end at (−63.4, 53.4) (spec §3)
         index: i,
         side: sgn,
       });
@@ -171,9 +180,10 @@ export function buildTailLayout(tailPivot) {
  */
 export function buildScapularLayout() {
   const out = [];
+  // two rows over the relaxed mantle (spec §10.3)
   const rows = [
-    { x0: 6.5, x1: 9.5, z0: 20, z1: -8, n: 6, len: [15, 21], w: 8.8, out: 0.2, y: 0 },
-    { x0: 11.5, x1: 14.5, z0: 22, z1: -2, n: 5, len: [13, 18], w: 8.0, out: 0.42, y: -2.5 },
+    { x0: 6.5, x1: 9.5, z0: 5, z1: -23, n: 6, len: [15, 21], w: 8.8, out: 0.2, y: 88 },
+    { x0: 11.5, x1: 14.5, z0: 7, z1: -17, n: 5, len: [13, 18], w: 8.0, out: 0.42, y: 85.5 },
   ];
   rows.forEach((r, ri) => {
     for (let side = 0; side < 2; side++) {
@@ -185,7 +195,7 @@ export function buildScapularLayout() {
           type: 'scapular',
           side: sgn,
           row: ri,
-          seed: [sgn * (r.x0 + (r.x1 - r.x0) * t), 70 + r.y, r.z0 + (r.z1 - r.z0) * t],
+          seed: [sgn * (r.x0 + (r.x1 - r.x0) * t), r.y, r.z0 + (r.z1 - r.z0) * t],
           outward: sgn * r.out,
           length: r.len[0] + (r.len[1] - r.len[0]) * Math.sin(t * Math.PI * 0.9),
           width: r.w,
