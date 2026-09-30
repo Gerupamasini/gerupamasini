@@ -78,6 +78,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.minDistance = 0.12;
 controls.maxDistance = 200;
+controls.maxPolarAngle = Math.PI * 0.56; // slightly below the target (bird's-eye-level shots), terrain clamp below
 let camMode = q.get('cam') ?? 'bird';
 const camDist = Number(q.get('dist') ?? 0.6);
 function placeCameraAround(target, dist, yaw = 0.8, pitch = 0.22) {
@@ -343,6 +344,11 @@ function frame() {
     lastFollow.copy(player.pos);
   }
   controls.update();
+  // never let the orbit camera dip below the flat or the water surface (the terrain is single-sided)
+  {
+    const floor = Math.max(terrain.heightAt(camera.position.x, camera.position.z), tide.level) + 0.02;
+    if (camera.position.y < floor) camera.position.y = floor;
+  }
   env.follow(controls.target);
   // sun follows time of day (lighting only; subtle)
   const d = tide.daylight;

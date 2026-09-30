@@ -463,7 +463,19 @@ export function createBarePartsMaterial(pal, detail = 0) {
         if (kbP < 0.5) { kbCol = uBill; kbRough = 0.46 + 0.08 * kpNoise(vUv * vec2(20.0, 40.0)); }
         else if (kbP < 1.5) { kbCol = uLegs * (0.9 + 0.12 * kpHash(kbI)); kbRough = 0.5 + 0.1 * (1.0 - kbCell); }
         else if (kbP < 2.5) { kbCol = uBill * 0.85; kbRough = 0.3; }
-        else if (kbP < 3.5) { kbCol = uUnder * (0.9 + 0.1 * vUv.y); kbRough = 0.85; }
+        else if (kbP < 3.5) {
+          // feathered tibia: staggered rows of small white contour feathers, each slightly shaded just
+          // below the overlapping tip above it, fine barb striation along the leg
+          vec2 kbFs = vec2(vUv.x * 12.0, vUv.y * 10.0);
+          float kbRow = floor(kbFs.y);
+          vec2 kbFi = floor(kbFs + vec2(0.5 * mod(kbRow, 2.0), 0.0));
+          vec2 kbFf = fract(kbFs + vec2(0.5 * mod(kbRow, 2.0), 0.0));
+          float kbTip = 0.55 + 0.35 * abs(kbFf.x - 0.5) * 2.0;
+          float kbShade = smoothstep(0.0, 0.3, kbFf.y) * (1.0 - 0.5 * smoothstep(kbTip, kbTip + 0.12, kbFf.y));
+          float kbBarb = 0.5 + 0.5 * sin(vUv.x * 190.0 + vUv.y * 14.0 + kpHash(kbFi) * 6.28);
+          kbCol = uUnder * (0.8 + 0.12 * kbShade + 0.035 * kbBarb + 0.04 * kpHash(kbFi)) * mix(0.9, 1.0, smoothstep(0.1, 0.5, vUv.y));
+          kbRough = 0.84;
+        }
         else if (kbP < 4.5) { kbCol = uMouth; kbRough = 0.45; }
         else { kbCol = mix(uLegs, vec3(0.35, 0.33, 0.3), 0.25); kbRough = 0.75; }
         diffuseColor.rgb *= kbCol;`

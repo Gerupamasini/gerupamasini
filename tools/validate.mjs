@@ -7,9 +7,10 @@ import { mkdirSync } from 'node:fs';
 const outDir = 'docs/validation';
 mkdirSync(outDir, { recursive: true });
 
-const server = await createServer({ logLevel: 'error', server: { port: 5199, host: '127.0.0.1' } });
+// port is chosen automatically (strictPort false) so several captures can run side by side
+const server = await createServer({ logLevel: 'error', server: { port: Number(process.env.VALIDATE_PORT ?? 5199), strictPort: false, host: '127.0.0.1' } });
 await server.listen();
-const base = 'http://127.0.0.1:5199';
+const base = server.resolvedUrls.local[0].replace(/\/$/, '');
 
 const browser = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',

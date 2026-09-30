@@ -218,17 +218,60 @@ export function buildLegs(sk, boneIndex, J, toes, opts = {}) {
     // make ring 'n' axis point forward-ish (toward +Z) for consistent flattening
     const fwd = norm(cross(fT.d, [m, 0, 0]));
     const frT = { d: fT.d, n: fwd, b: norm(cross(fT.d, fwd)) };
-    // Feathered thigh skirt (white underparts feathers over the upper tibiotarsus)
-    if (detail < 2) {
-      const skirt = [];
-      const skirtB = [];
-      const ks = [0.5, 0.57, 0.63, 0.67, 0.7];
-      const rr = [2.1, 1.9, 1.65, 1.45, 1.3];
-      ks.forEach((k, i) => {
-        skirt.push(ring(addv(knee, scl(tib, k)), frT, rr[i] * 1.05, rr[i] * 0.85, seg, k, 3, 0.6));
-        skirtB.push([[B('tibio'), 1]]);
+    // Feathered "drumstick": one continuous tube from the mid-femur (deep inside the belly) through the knee
+    // down the upper tibiotarsus, so no gap can open between belly and bare tibia however the femur swings.
+    // The tibia leaves the belly contour at t≈0.35 (rest pose); feathers end at t≈0.66 with a ragged,
+    // feather-tipped edge (alternating length per vertex) instead of a clean cuff.
+    {
+      const hip = mir(J.hip);
+      const fem = sub(knee, hip);
+      const fF = legFrame(fem);
+      const fwdF = norm(cross(fF.d, [m, 0, 0]));
+      const frF = { d: fF.d, n: fwdF, b: norm(cross(fF.d, fwdF)) };
+      const tSeg = detail < 2 ? seg + 2 : seg;
+      // [segment, t, radius, rows]
+      const st =
+        detail < 2
+          ? [['f', 0.35, 4.2], ['f', 0.7, 4.6], ['k', 0, 4.4], ['t', 0.14, 3.9], ['t', 0.28, 3.2], ['t', 0.4, 2.55], ['t', 0.5, 2.05], ['t', 0.58, 1.7], ['t', 0.64, 1.45], ['e', 0.675, 1.28]]
+          : [['f', 0.5, 4.2], ['k', 0, 4.2], ['t', 0.3, 3.0], ['t', 0.5, 1.9], ['e', 0.66, 1.3]];
+      const thigh = [];
+      const thighB = [];
+      st.forEach(([s, t, r]) => {
+        let c;
+        let fr;
+        let w;
+        if (s === 'f') {
+          c = addv(hip, scl(fem, t));
+          fr = frF;
+          w = [[B('femur'), 1]];
+        } else if (s === 'k') {
+          // knee: average of the two frames, split weights so the tube bends smoothly
+          c = knee;
+          const d = norm(addv(frF.d, frT.d));
+          const n = norm(cross(d, [m, 0, 0]));
+          fr = { d, n, b: norm(cross(d, n)) };
+          w = [[B('femur'), 0.5], [B('tibio'), 0.5]];
+        } else {
+          c = addv(knee, scl(tib, t));
+          fr = frT;
+          w = s === 't' && t < 0.2 ? [[B('tibio'), 0.75 + t * 1.25], [B('femur'), 0.25 - t * 1.25]] : [[B('tibio'), 1]];
+        }
+        const rg = ring(c, fr, r * 1.06, r * 0.9, tSeg, s === 'f' ? t * 0.3 : 0.3 + (s === 'k' ? 0 : t), 3, 0.35 * r / 4);
+        if (s === 'e') {
+          // ragged feather-tip edge: every other vertex reaches further down and tucks in
+          rg.forEach((q, i) => {
+            const long = i % 2 === 0;
+            const extra = long ? 0.9 : -0.35;
+            q.p = addv(q.p, scl(frT.d, extra));
+            const radial = sub(q.p, addv(knee, scl(tib, t + extra / Math.hypot(...tib))));
+            q.p = addv(q.p, scl(radial, long ? -0.12 : 0.0));
+            q.uv = [q.uv[0], 1];
+          });
+        }
+        thigh.push(rg);
+        thighB.push(w);
       });
-      sk.loft(skirt, 3, skirtB);
+      sk.loft(thigh, 3, thighB);
     }
     // Bare tibia → intertarsal joint → tarsometatarsus → foot joint
     const tar = sub(foot, ankle);

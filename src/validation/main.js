@@ -127,9 +127,12 @@ function layout() {
     return;
   }
   if (mode === 'closeup') {
-    const c = new THREE.PerspectiveCamera(22, W / H, 0.005, 10);
-    c.position.set(0.16, 0.1, 0.19);
-    c.lookAt(0.0, 0.07, 0.035);
+    // free camera: cam=x,y,z&look=x,y,z (metres) and fov
+    const c = new THREE.PerspectiveCamera(Number(q.get('fov') ?? 22), W / H, 0.005, 10);
+    const cp = (q.get('cam') ?? '0.16,0.1,0.19').split(',').map(Number);
+    const lk = (q.get('look') ?? '0.0,0.07,0.035').split(',').map(Number);
+    c.position.set(cp[0], cp[1], cp[2]);
+    c.lookAt(lk[0], lk[1], lk[2]);
     views.push({ cam: c, rect: [0, 0, W, H], label: 'head close-up' });
     return;
   }
