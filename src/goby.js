@@ -11,43 +11,63 @@ const GDEPTH = 1.0;   // slender: ~5:1 standard length to depth, as in the side-
 
 export const GOBY = {
   // averaged from two traced side views (iNaturalist, CC0 / CC BY-NC); slender body, blunt head
-  top: spline([[0, 0.004], [0.015, 0.026], [0.04, 0.052], [0.07, 0.078], [0.1, 0.098], [0.15, 0.116], [0.25, 0.132],
+  // head re-traced from close side / 3-4 / front photographs: short blunt rounded snout,
+  // the dorsal profile rising evenly over large eyes set high and forward, oblique mouth
+  top: spline([[0, 0.016], [0.012, 0.034], [0.03, 0.054], [0.06, 0.076], [0.1, 0.096], [0.15, 0.114], [0.25, 0.132],
     [0.4, 0.13], [0.6, 0.11], [0.8, 0.074], [0.93, 0.042], [1.0, 0.028]]),
-  bottom: spline([[0, -0.006], [0.015, -0.02], [0.04, -0.035], [0.09, -0.05], [0.16, -0.057], [0.25, -0.06],
+  bottom: spline([[0, -0.012], [0.012, -0.026], [0.035, -0.039], [0.07, -0.049], [0.13, -0.056], [0.25, -0.06],
     [0.4, -0.06], [0.6, -0.054], [0.8, -0.042], [0.93, -0.028], [1.0, -0.02]]),
   // laterally compressed behind the head, tapering to a thin peduncle that runs into the tail
-  width: spline([[0, 0.011], [0.03, 0.024], [0.08, 0.034], [0.16, 0.037], [0.3, 0.032], [0.5, 0.024], [0.7, 0.016],
-    [0.88, 0.01], [0.96, 0.006], [1.0, 0.002]]),
-  eye: { s: 0.07, y: 0.045, r: 0.027 },
+  // the head is broad and rounded seen from the front (width ~0.7 of depth), the body behind
+  // it compressed
+  width: spline([[0, 0.03], [0.02, 0.043], [0.05, 0.05], [0.09, 0.053], [0.15, 0.051], [0.22, 0.043], [0.3, 0.036],
+    [0.5, 0.025], [0.7, 0.016], [0.88, 0.01], [0.96, 0.006], [1.0, 0.002]]),
+  eye: { s: 0.07, y: 0.043, r: 0.029 },
+  mouth: [[0.0, -0.004], [0.03, -0.028]],     // cleft: from the snout tip back and down to below the eye front
 };
 
 function buildBody() {
   const NS = 180, NR = 96, { top, bottom, width } = GOBY;
-  const pos = [], uv = [], idx = [];
+  const pos = [], uv = [], idx = [], ynA = [], zA = [];
+  const { eye, mouth } = GOBY;
+  const [m0, m1] = mouth;
   for (let i = 0; i < NS; i++) {
-    const t = i / (NS - 1), s = 0.002 + 0.998 * (0.35 * t * t + 0.65 * t);
-    const tp = top(s), bt = bottom(s), c = (tp + bt) / 2, hh = (tp - bt) / 2, w = width(s);
+    const t = i / (NS - 1), s = 0.0005 + 0.9995 * (0.5 * t * t + 0.5 * t);
+    // round the snout off like a dome instead of ending in a flat cap
+    const kTip = Math.sqrt(Math.max(0, 1 - Math.pow(Math.max(0, 1 - s / 0.03), 2)));
+    const tp = top(s), bt = bottom(s), c = (tp + bt) / 2, hh = (tp - bt) / 2 * kTip, w = width(s) * kTip;
     for (let j = 0; j < NR; j++) {
-      const th = (j / NR) * Math.PI * 2, yn = Math.cos(th);
-      // rounder cross-section than the butterflyfish; flattened belly
-      // head rounded, body behind it a compressed lens that feeds the fin bases
-      const lensK = THREE.MathUtils.smoothstep(s, 0.15, 0.45);
-      let z = Math.sign(Math.sin(th)) * w * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(yn), 2.0)), 0.5) * (1 + 0.1 * yn);
-      pos.push(sx(s), c + hh * yn, z);
-      uv.push((s - S0) / (S1 - S0), (c + hh * yn - Y0) / (Y1 - Y0));
+      const th = (j / NR) * Math.PI * 2, yn = Math.cos(th), sd = Math.sign(Math.sin(th)) || 1;
+      let y = c + hh * yn;
+      const ne = 2.0 + 0.5 * (1 - THREE.MathUtils.smoothstep(s, 0.12, 0.25));   // fuller, rounder head section
+      let z = sd * w * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(yn), ne)), 1 / ne) * (1 + 0.1 * yn);
+      // eye socket: the skin is drawn back around the globe and forms a soft raised rim
+      const de = Math.hypot(s - eye.s, (y - eye.y) * 1.05) / eye.r;
+      if (de < 1.5 && yn > -0.3) z *= 1 - 0.3 * Math.exp(-Math.pow(de / 0.85, 4)) + 0.025 * Math.exp(-Math.pow((de - 1.12) / 0.2, 2));
+      // mouth: a cleft running obliquely back from the snout tip, lips rolled either side
+      if (s < m1[0] + 0.012 && yn < 0.4) {
+        const u = THREE.MathUtils.clamp(s / m1[0], 0, 1), ym = m0[1] + (m1[1] - m0[1]) * u, dy = y - ym;
+        const fall = 1 - THREE.MathUtils.smoothstep(s, m1[0] - 0.004, m1[0] + 0.01);
+        z *= 1 - fall * 0.12 * Math.exp(-Math.pow(dy / 0.002, 2));
+      }
+      pos.push(sx(s), y, z);
+      ynA.push(yn); zA.push(z);
+      uv.push((s - S0) / (S1 - S0), (y - Y0) / (Y1 - Y0));
     }
   }
   for (let i = 0; i < NS - 1; i++) for (let j = 0; j < NR; j++) {
     const a = i * NR + j, b = i * NR + (j + 1) % NR, c = a + NR, d = b + NR;
     idx.push(a, c, b, b, c, d);
   }
-  const tip = pos.length / 3; pos.push(sx(0) + 0.002, (top(0) + bottom(0)) / 2, 0); uv.push((0 - S0) / (S1 - S0), (0 - Y0) / (Y1 - Y0));
+  const tip = pos.length / 3; pos.push(sx(0), (top(0) + bottom(0)) / 2, 0); ynA.push(0); zA.push(0); uv.push((0 - S0) / (S1 - S0), ((top(0) + bottom(0)) / 2 - Y0) / (Y1 - Y0));
   for (let j = 0; j < NR; j++) idx.push(tip, j, (j + 1) % NR);
-  const end = pos.length / 3, last = (NS - 1) * NR; pos.push(sx(1), (top(1) + bottom(1)) / 2, 0); uv.push((1 - S0) / (S1 - S0), 0.5);
+  const end = pos.length / 3, last = (NS - 1) * NR; pos.push(sx(1), (top(1) + bottom(1)) / 2, 0); ynA.push(0); zA.push(0); uv.push((1 - S0) / (S1 - S0), 0.5);
   for (let j = 0; j < NR; j++) idx.push(end, last + (j + 1) % NR, last + j);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('gyn', new THREE.Float32BufferAttribute(ynA, 1));
+  g.setAttribute('gz', new THREE.Float32BufferAttribute(zA, 1));
   g.setIndex(idx); g.computeVertexNormals();
   return g;
 }
@@ -165,17 +185,41 @@ vec4 gobyColor(vec2 p){
       if (uGKind > 1.5) c = mix(c, vec3(0.06, 0.01, 0.008), smoothstep(0.88, 0.97, vFinG.y) * 0.7);   // dark fin margin
     }
     if (uGKind < 0.5) {
-      // brighter lemon face, lavender nape stripe, violet freckles, upturned mouth
-      float face = 1.0 - smoothstep(0.045, 0.1, length((p - vec2(0.04, 0.035)) * vec2(1.0, 1.2)));
-      c = mix(c, vec3(0.82, 0.8, 0.9), (1.0 - face) * smoothstep(0.2, 0.08, s) * 0.45);   // pale grey behind the face (limits the photo's yellow)
-      c = mix(c, vec3(0.9, 0.88, 0.45), face * 0.6);
-      float topY = mix(0.03, 0.13, smoothstep(0.0, 0.25, s));
-      float vl = (1.0 - smoothstep(0.003, 0.007, abs(y - (topY - 0.006)))) * (1.0 - smoothstep(0.22, 0.28, s)) * smoothstep(0.02, 0.05, s);
-      c = mix(c, vec3(0.73, 0.65, 0.9), vl * 0.8);
-      vec2 q = p * 110.0; float sp = step(0.9, gh(floor(q))) * (1.0 - smoothstep(0.15, 0.3, length(fract(q) - 0.5)));
-      c = mix(c, vec3(0.62, 0.55, 0.95), sp * (1.0 - smoothstep(0.08, 0.2, s)) * 0.7);
-      float m = 1.0 - smoothstep(0.0015, 0.0035, abs((y + 0.006) + s * 0.5) + max(s - 0.03, 0.0) * 4.0);
-      c = mix(c, vec3(0.3, 0.2, 0.18), m * 0.85);
+      // ---- face, from close-ups in several views (linear-space colours sampled from them):
+      // lime-yellow snout, cheeks and ring around the eye; pale lilac-white throat and body;
+      // a vivid violet stripe along the dorsal midline from between the eyes to the flag;
+      // fine violet-blue speckles behind / below the eye and over the nape; oblique mouth
+      float yn = vGYn;
+      vec3 lilac = vec3(0.64, 0.63, 0.74), lime = vec3(0.58, 0.66, 0.2), limeHi = vec3(0.68, 0.74, 0.3);
+      vec2 E = vec2(${GOBY.eye.s.toFixed(3)}, ${GOBY.eye.y.toFixed(3)});
+      float headT = s + 0.07 * max(0.0, -yn) - 0.015 * max(0.0, yn);
+      float face = (1.0 - smoothstep(0.075, 0.125, headT)) * (1.0 - smoothstep(0.55, 0.85, yn) * smoothstep(0.03, 0.08, s));   // crown behind the eyes stays pale
+      float ring = 1.0 - smoothstep(0.035, 0.05, length((p - E) * vec2(1.0, 1.1)));       // yellow skin all round the eye
+      face = max(face, ring);
+      face *= 1.0 - smoothstep(-0.2, -0.75, yn) * smoothstep(0.02, 0.06, s) * 0.65;       // cheek and throat pale, only tinged yellow
+      vec3 base = mix(c, lilac, smoothstep(0.06, 0.2, s) * (1.0 - smoothstep(0.24, 0.34, s)) * 0.55);   // clean pale head behind the face
+      c = mix(base, mix(lime, limeHi, smoothstep(0.02, -0.06, s - 0.04) * 0.5), face);
+      // violet crown stripe (both sides meet at the top, so yn ~ 1)
+      float az = abs(vGZ), onTop = step(0.0, yn);
+      float cw = mix(0.0035, 0.0065, smoothstep(0.05, 0.2, s));                              // narrow between the eyes, widening to the flag
+      float crown = onTop * (1.0 - smoothstep(cw, cw + 0.002, az)) * smoothstep(0.03, 0.055, s) * (1.0 - smoothstep(0.235, 0.26, s));
+      c = mix(c, vec3(0.34, 0.16, 0.78), crown * 0.95);
+      c = mix(c, vec3(0.5, 0.42, 0.85), onTop * (1.0 - smoothstep(cw + 0.002, cw + 0.006, az)) * (1.0 - crown) * smoothstep(0.03, 0.06, s) * (1.0 - smoothstep(0.23, 0.26, s)) * 0.35);
+      // speckles: small round violet-blue dots, densest behind the eye and on the nape
+      vec2 q = p * vec2(175.0, 175.0); vec2 cell = floor(q); vec2 fq = fract(q) - 0.5 - (vec2(gh(cell + 1.3), gh(cell + 7.1)) - 0.5) * 0.5;
+      float dot_ = step(0.78, gh(cell)) * (1.0 - smoothstep(0.13, 0.22, length(fq)));
+      float spReg = smoothstep(0.045, 0.08, s) * (1.0 - smoothstep(0.15, 0.22, s)) * smoothstep(-0.55, -0.1, yn) * (1.0 - smoothstep(0.84, 0.9, yn)) * (1.0 - ring * 0.8);
+      c = mix(c, vec3(0.22, 0.26, 0.85), dot_ * spReg * 0.85);
+      c = mix(c, vec3(0.86, 0.86, 0.92), dot_ * smoothstep(0.17, 0.24, s) * (1.0 - smoothstep(0.34, 0.42, s)) * smoothstep(-0.3, 0.2, yn) * 0.45);   // fine pale dots on the nape and upper flank
+      // gill cover edge: a faint curved crease behind the cheek
+      float op = 1.0 - smoothstep(0.0, 0.0035, abs(length((p - vec2(0.11, 0.02)) * vec2(1.0, 0.8)) - 0.07));
+      c *= 1.0 - 0.12 * op * step(y, 0.07) * step(0.12, s);
+      // mouth: dark cleft with pale lips
+      vec2 M0 = vec2(${GOBY.mouth[0][0].toFixed(3)}, ${GOBY.mouth[0][1].toFixed(3)}), M1 = vec2(${GOBY.mouth[1][0].toFixed(3)}, ${GOBY.mouth[1][1].toFixed(3)});
+      float u = clamp((s - M0.x) / (M1.x - M0.x), 0.0, 1.0), ym = mix(M0.y, M1.y, u), dm = abs(y - ym);
+      float inM = 1.0 - smoothstep(M1.x - 0.004, M1.x + 0.003, s);
+      c = mix(c, vec3(0.8, 0.8, 0.66), (1.0 - smoothstep(0.002, 0.004, abs(dm - 0.003))) * inM * 0.3);   // lips
+      c = mix(c, vec3(0.16, 0.1, 0.09), (1.0 - smoothstep(0.0008, 0.002, dm)) * inM * 0.7);
     }
   }
   if (uGKind > 1.5 && uGKind < 4.5) {
@@ -208,10 +252,10 @@ function gobyMaterial(kind, uniforms) {
     key: 'goby' + kind, noBend: kind >= 5,
     frag: (sh) => {
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute vec2 fin; varying vec2 vFinG; varying vec2 vPaint;')
-        .replace('#include <uv_vertex>', `#include <uv_vertex>\nvFinG = fin; vPaint = vec2(${S0}, ${Y0}) + uv * vec2(${S1 - S0}, ${Y1 - Y0});`);
+        .replace('#include <common>', '#include <common>\nattribute vec2 fin; attribute float gyn; attribute float gz; varying vec2 vFinG; varying vec2 vPaint; varying float vGYn; varying float vGZ;')
+        .replace('#include <uv_vertex>', `#include <uv_vertex>\nvFinG = fin; vGYn = gyn; vGZ = gz; vPaint = vec2(${S0}, ${Y0}) + uv * vec2(${S1 - S0}, ${Y1 - Y0});`);
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec2 vPaint;\n' + GOBY_PAINT)
+        .replace('#include <common>', '#include <common>\nvarying vec2 vPaint; varying float vGYn; varying float vGZ;\n' + GOBY_PAINT)
         .replace('#include <map_fragment>', '#include <map_fragment>\n{ vec4 gc = gobyColor(vPaint); diffuseColor.rgb *= gc.rgb; diffuseColor.a *= gc.a; }');
     },
   });
@@ -256,15 +300,20 @@ export function createFireGoby() {
   // pink-violet above, lemon skin around, glossy cornea
   const { eye } = GOBY;
   for (const side of [1, -1]) {
-    const w = GOBY.width(eye.s);
-    const M = new THREE.Matrix4().compose(
-      new THREE.Vector3(sx(eye.s), eye.y, side * (w - eye.r * 0.72)),
-      new THREE.Quaternion().setFromEuler(new THREE.Euler(side * -0.15, side > 0 ? 0.25 : Math.PI - 0.25, 0)),
-      new THREE.Vector3(1, 1 / GDEPTH, 1));
+    // globe centre just inside the local skin surface (read from the same section formula)
+    const tp = GOBY.top(eye.s), bt = GOBY.bottom(eye.s), yn = (eye.y - (tp + bt) / 2) / ((tp - bt) / 2);
+    const ne = 2.5 - 0.5 * THREE.MathUtils.smoothstep(eye.s, 0.12, 0.25);
+    const zs = GOBY.width(eye.s) * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(yn), ne)), 1 / ne) * (1 + 0.1 * yn);
+    // eyes look sideways, a little forward and up (dorsolateral, as in the front views)
+    const dir = new THREE.Vector3(0.28, 0.32, side).normalize();
+    const M = new THREE.Matrix4().lookAt(dir, new THREE.Vector3(), new THREE.Vector3(0, 1, 0));
+    M.setPosition(sx(eye.s), eye.y, side * (zs - eye.r * 0.8));
+    M.multiply(new THREE.Matrix4().makeScale(1, 1, 1));
     group.add(createFishEye({
-      r: eye.r, matrix: M, pupilA: 0.6, irisA: 0.95,
-      pupil: [0.004, 0.004, 0.008], irisIn: [0.78, 0.76, 0.6], irisOut: [0.62, 0.55, 0.6], limbus: [0.42, 0.32, 0.55],
-      sclera: [0.72, 0.8, 0.36], upper: [0.8, 0.45, 0.82], upperAmt: 0.75,
+      r: eye.r, matrix: M, pupilA: 0.72, irisA: 0.99,
+      // close-ups: large black pupil, a bright silvery ring, then magenta-violet crescents
+      pupil: [0.003, 0.003, 0.006], irisIn: [0.55, 0.6, 0.78], irisOut: [0.5, 0.07, 0.42], limbus: [0.1, 0.04, 0.12],
+      sclera: [0.66, 0.74, 0.16], upper: [0.7, 0.2, 0.75], upperAmt: 0.35,
       patch: (m, k) => addSwim(m, uniforms, { key: 'goby-' + k }),
     }));
   }
