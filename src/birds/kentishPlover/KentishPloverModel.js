@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
 import { buildSkeletonSpec, createBones } from './anatomy/skeleton.js';
-import { buildBodyGeometry, getBodySDF } from './anatomy/bodyMesh.js';
+import { buildBodyGeometry, getBodySDF, getTorsoSDF } from './anatomy/bodyMesh.js';
 import { buildFeatherGeometry } from './anatomy/feathers.js';
 import { computeWingFold } from './anatomy/wingFold.js';
 import { buildBareParts, buildEyes } from './anatomy/bareParts.js';
@@ -29,7 +29,7 @@ export function getGeometries(detail) {
   const res = CFG.lod.sdfResolution[detail];
   const g = {
     body: buildBodyGeometry(CFG, spec.boneIndex, res),
-    feathers: buildFeatherGeometry(spec, spec.boneIndex, sdf, detail, computeWingFold(spec.wingFeathers, sdf)),
+    feathers: buildFeatherGeometry(spec, spec.boneIndex, sdf, detail, computeWingFold(spec.wingFeathers, sdf, getTorsoSDF(CFG))),
     bare: buildBareParts(spec.boneIndex, CFG.joints, spec.toes, detail),
     eyes: detail === 0 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 10, segR: 24 }) : detail === 1 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 4, segR: 12 }) : null,
   };

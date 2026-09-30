@@ -124,3 +124,9 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
 export function getBodySDF(cfg) {
   return makeBodySDF(cfg.bodySculpt);
 }
+
+/** Outline without neck and head: what the shoulders look like while the neck is bent away from them. */
+export function getTorsoSDF(cfg) {
+  const neckHead = new Set(['neck', 'head', 'lores', 'chin']);
+  return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !neckHead.has(p.name)), cuts: [] });
+}

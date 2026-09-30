@@ -15,7 +15,8 @@ import { frameQuat } from '../../../core/math.js';
 // 3) Clearance: a rigid feather aimed only by its tip still cuts through the body with its curved shaft,
 //    cambered vanes or the coverts riding on it. Each feather is therefore pitched about its base by the
 //    smallest angle after which its real surface (same shape as the mesh, feathers.featherOffset) either
-//    stays buried or, once it has emerged from the plumage, stays CLEAR mm above the body outline
+//    stays buried or, once it has emerged from the plumage, stays CLEAR mm above the body outline — with
+//    and without the neck, which moves away from the shoulders when the head turns
 //    (tools/dev/penetration.mjs measures the result in every pose).
 
 const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
@@ -74,8 +75,9 @@ function violation(lines, base, R, sdf) {
 }
 
 /** Smallest pitch about the base (tip away from / into the body) that satisfies the clearance rule. */
-function clearBody(lines, base, Rw, dirW, n, sdf) {
-  if (violation(lines, base, Rw, sdf) <= 0) return Rw;
+function clearBody(lines, base, Rw, dirW, n, sdfs) {
+  const viol = (R) => Math.max(...sdfs.map((sdf) => violation(lines, base, R, sdf)));
+  if (viol(Rw) <= 0) return Rw;
   const axis = dirW.clone().cross(n).normalize(); // +angle lifts the tip off the body
   const q = new THREE.Quaternion();
   let best = Rw;
@@ -85,7 +87,7 @@ function clearBody(lines, base, Rw, dirW, n, sdf) {
       const deg = s * k * 0.25;
       if (deg < -15) continue;
       const R = q.setFromAxisAngle(axis, (deg * Math.PI) / 180).clone().multiply(Rw);
-      const v = violation(lines, base, R, sdf);
+      const v = viol(R);
       if (v <= 0) return R;
       if (v < bestV) [best, bestV] = [R, v];
     }
@@ -98,10 +100,11 @@ let CACHE = null;
 /**
  * @param {object[]} wingFeathers  layout records (featherLayout.buildWingLayout)
  * @param {Function} sdf  body SDF (mm)
+ * @param {Function} torsoSdf  body SDF without neck & head (bodyMesh.getTorsoSDF)
  * @returns {{arm:{humerus,forearm,hand}, feather: Map<string, THREE.Quaternion>, world: Map<string, {base, R}>}}
  *   local quaternions (+ each feather bone's folded world placement)
  */
-export function computeWingFold(wingFeathers, sdf) {
+export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf) {
   if (CACHE) return CACHE;
   const A = armFold();
   const S = V(WING.humerus);
@@ -172,7 +175,7 @@ export function computeWingFold(wingFeathers, sdf) {
     const bindDir = new THREE.Vector3(Math.cos(f.angle * deg), 0, -Math.sin(f.angle * deg));
     // target frame: feather along dirW, dorsal surface facing the body normal (outward)
     let Rw = frameQuat(dirW, n).multiply(frameQuat(bindDir, Y).invert());
-    Rw = clearBody(shapeLines(f), base, Rw, dirW, n, sdf);
+    Rw = clearBody(shapeLines(f), base, Rw, dirW, n, [sdf, torsoSdf]);
     if (f.type === 'primary' || f.type === 'secondary') remex.set(f.bone, { bindBase: V(f.base), base, Rw });
     const local = P.q.clone().invert().multiply(Rw);
     feather.set(f.name, local);
