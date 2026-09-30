@@ -43,6 +43,9 @@ export class Brain {
     this.phaseTime = 0;
     this.sub = {};
     this.hab = { tap: 0, loom: 0, social: 0 };
+    // yawning: spontaneous, more frequent at rest and when fatigued, and
+    // typically at the transition from rest to activity (arousal change)
+    this.yawnTimer = jitterDuration(fish.rng, 120, 0.6);
     this.lastStimulusTime = -1;
     this.pendingContagion = [];
     this.utilities = {};
@@ -199,6 +202,10 @@ export class Brain {
   _enter(state, time, dur = null) {
     const r = this.fish.rng;
     const P = this.fish.personality;
+    // waking up: leaving rest / a long pause is often marked by a yawn
+    if ((this.state === 'rest' || (this.state === 'pause' && this.stateTime > 4)) && state !== 'startle' && state !== 'freeze' && r.next() < 0.45) {
+      this.yawnTimer = Math.min(this.yawnTimer, r.range(0.4, 2.0));
+    }
     this.state = state;
     this.stateTime = 0;
     this.phase = 'go';
@@ -355,6 +362,19 @@ export class Brain {
 
     // ---- stimuli (interrupt)
     if (this.state !== 'startle') this._processStimuli(world, time, neigh);
+
+    // ---- yawning
+    {
+      const calm = this.state === 'rest' || this.state === 'pause';
+      const busy = this.state === 'startle' || this.state === 'freeze' || this.state === 'approachFood' || this.state === 'surfaceFeed' || L.cstart || L.gait === 'burst';
+      this.yawnTimer -= dt * (calm ? 2.2 : 1) * (1 + 1.5 * D.fatigue) * (D.fear > 0.5 ? 0.2 : 1);
+      if (this.yawnTimer <= 0) {
+        if (!busy && !L.mouthProgram) {
+          L.mouthAction('yawn');
+          this.yawnTimer = jitterDuration(me.rng, 240, 0.6);
+        } else this.yawnTimer = 3.0;
+      }
+    }
 
     // ---- selection
     this.nextEval -= dt;

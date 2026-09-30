@@ -166,6 +166,11 @@ export class Fish {
     data[o++] = v.sparkle;
     data[o++] = v.finAlpha;
     data[o++] = v.finRedOther;
+    // head articulation: premaxillary protrusion, throat expansion, yawn, spare
+    data[o++] = L.protrusion;
+    data[o++] = L.throat;
+    data[o++] = L.yawnLevel;
+    data[o++] = 0;
     return o;
   }
 }

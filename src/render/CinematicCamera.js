@@ -77,11 +77,11 @@ export class CinematicDirector {
     return pool[0];
   }
 
-  cut() {
+  cut(subject = null, type = null, len = null) {
     const rng = this.app.rng;
-    const def = (this.forceType && SHOTS.find((x) => x.type === this.forceType)) || this._pickShot(rng);
-    this.subject = this._pickSubject(rng) || this.subject;
-    this.shot = { ...def, len: def.dur[0] + rng.next() * (def.dur[1] - def.dur[0]), side: rng.next() < 0.5 ? 1 : -1, seed: rng.next() * 100 };
+    const def = (type && SHOTS.find((x) => x.type === type)) || (this.forceType && SHOTS.find((x) => x.type === this.forceType)) || this._pickShot(rng);
+    this.subject = subject || this._pickSubject(rng) || this.subject;
+    this.shot = { ...def, len: len ?? def.dur[0] + rng.next() * (def.dur[1] - def.dur[0]), side: rng.next() < 0.5 ? 1 : -1, seed: rng.next() * 100 };
     this.t = 0;
     if (this.subject) {
       this.pose.pos.copy(this.subject.loc.pos);
@@ -155,6 +155,16 @@ export class CinematicDirector {
   update(dt) {
     const cam = this.app.camera;
     if (!this.shot || this.t > this.shot.len || !this.subject || !this.app.fishSystem.fish.includes(this.subject)) this.cut();
+    else if (!this.forceType && this.t > 1.2) {
+      // a fish is about to yawn: cut to a close three-quarter view of its head
+      for (const f of this.app.fishSystem.fish) {
+        const yt = f.brain ? f.brain.yawnTimer : 99;
+        if (yt > 0.3 && yt < 1.6 && !(this.shot.type === 'head34' && this.subject === f)) {
+          this.cut(f, 'head34', 5.5);
+          break;
+        }
+      }
+    }
     this.t += dt;
     const f = this.subject;
     if (f) {

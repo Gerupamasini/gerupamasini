@@ -51,11 +51,12 @@ export const head = {
   eyeProtrusion: 0.5, // fraction of radius standing proud of the head surface
   // mouth (terminal, very slightly superior)
   mouthY: 0.004,
-  mouthOpenRW: 0.027, // open gape half-width
-  mouthOpenRH: 0.025, // open gape half-height
+  mouthOpenRW: 0.019, // open gape half-width (rounded rectangle)
+  mouthOpenTop: 0.012, // upper lip above the mouth line when open
+  mouthOpenBot: 0.025, // lower lip below it (the jaw drops)
   mouthClosedRW: 0.022,
   mouthClosedRH: 0.0022,
-  mouthProtrusion: 0.011, // premaxillary protrusion when open
+  mouthProtrusion: 0.012, // premaxillary protrusion (separate morph)
   mouthDepth: 0.075, // depth of the buccal cavity into the head
   // nostrils (paired nares) in front of the eye
   nareS: 0.05,

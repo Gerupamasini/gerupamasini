@@ -12,7 +12,7 @@
 import { buildFinDefs } from './morphology.js';
 
 export const NS = 24; // spine samples from snout (s=0) to caudal base (s=1)
-export const MISC = 4;
+export const MISC = 5;
 
 export const FIN_TYPES = { caudal: 0, dorsal: 1, anal: 2, pectoral: 3, pelvic: 4 };
 

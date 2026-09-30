@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 
-export const ANIMS = ['AI', 'idle', 'slow', 'cruise', 'accelerate', 'turn', 'brake', 'startle', 'feeding', 'surfaceFeeding'];
+export const ANIMS = ['AI', 'idle', 'slow', 'cruise', 'accelerate', 'turn', 'brake', 'startle', 'feeding', 'surfaceFeeding', 'yawn'];
 
 export class AnimDemo {
   constructor() {
@@ -101,6 +101,11 @@ export class AnimDemo {
           world.food.drop(p.x, p.z, 3, 'pellet');
         }
         break;
+      case 'yawn':
+        b.forced = 'pause';
+        b.yawnTimer = 99;
+        if (this._every(fish, 'yawn', 5.5, dt) && !L.mouthProgram) L.mouthAction('yawn');
+        break;
       case 'surfaceFeeding':
         b.forced = null;
         b.drives.hunger = 1;
@@ -162,6 +167,11 @@ export class AnimDemo {
         c.speed = 0.15;
         c.pitchBias = 0.7;
         if (this._every(fish, 'gulp', 2.6, dt)) L.mouthAction('gulp');
+        break;
+      case 'yawn':
+        c.speed = 0;
+        c.hoverPrecision = 0.6;
+        if (this._every(fish, 'yawn', 4.5, dt) && !L.mouthProgram) L.mouthAction('yawn');
         break;
     }
     // flume keeps heading roughly constant

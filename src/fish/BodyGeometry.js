@@ -26,24 +26,60 @@ const tmp2 = [0, 0];
 // ---------------------------------------------------------------------------
 // Undisplaced surface
 // ---------------------------------------------------------------------------
-function ringParams(state) {
-  return state === 1
-    ? { rw: head.mouthOpenRW, rh: head.mouthOpenRH, x: head.mouthProtrusion, blend: 0.034 }
-    : { rw: head.mouthClosedRW, rh: head.mouthClosedRH, x: 0.0, blend: 0.016 };
+const _ring = { x: 0, y: 0, z: 0 };
+
+/**
+ * Lip ring (the margin of the gape) for angle theta around the mouth.
+ * state 0: closed — a thin slit whose corners droop and sit behind the lips.
+ * state 1: open — rounded-rectangular gape: the lower jaw (dentary) swings
+ *          down and slightly back about the quadrate joint, the upper lip
+ *          (premaxilla) stays; corners are set back.
+ * state 2: open + premaxillary protrusion — the upper jaw slides forward and
+ *          a little down, pulling the lips into a short tube (suction).
+ */
+function mouthRing(theta, state, out) {
+  const a = -Math.cos(theta); // -1 lower lip .. +1 upper lip
+  const b = Math.sin(theta); // lateral
+  const b2 = b * b;
+  if (state === 0) {
+    out.x = -0.0045 * b2;
+    out.y = head.mouthY + head.mouthClosedRH * a - 0.0038 * b2;
+    out.z = head.mouthClosedRW * b;
+    return out;
+  }
+  const e = 2 / 2.6; // superellipse -> rounded rectangle
+  const sa = Math.sign(a) * Math.pow(Math.abs(a), e);
+  const sb = Math.sign(b) * Math.pow(Math.abs(b), e);
+  const lower = Math.max(0, -sa);
+  const upper = Math.max(0, sa);
+  out.y = head.mouthY + (sa >= 0 ? head.mouthOpenTop * sa : head.mouthOpenBot * sa);
+  out.z = head.mouthOpenRW * sb * (1 - 0.14 * lower); // the lower jaw is a little narrower
+  out.x = -0.003 - 0.0035 * b2 - 0.0045 * lower; // the gape sits within the face, not on a tube
+  if (state === 2) {
+    out.x += head.mouthProtrusion * (0.6 + 0.4 * upper);
+    out.y -= 0.0022 * upper;
+  }
+  return out;
+}
+
+function mouthCentreY(state) {
+  return state === 0 ? head.mouthY : head.mouthY + 0.5 * (head.mouthOpenTop - head.mouthOpenBot);
 }
 
 /** Base (undisplaced) surface point. u < 0: buccal cavity (c = -u), u >= 0: body s. */
 function basePoint(u, theta, state, out) {
-  const ring = ringParams(state);
-  const ca = -Math.cos(theta);
-  const sa = Math.sin(theta);
+  mouthRing(theta, state, _ring);
+  const blend = state === 0 ? 0.016 : 0.024;
   if (u < 0) {
     const c = Math.min(1, -u);
+    // the cavity widens behind the lips (buccal chamber) and closes toward
+    // the pharynx; its floor sinks with the hyoid when the mouth is open
     const shape = Math.sqrt(Math.max(0, 1 - Math.pow(c, 4))) * (1 + 0.55 * Math.sin(Math.PI * Math.min(1, c * 1.25)));
-    const rw = ring.rw * shape * 0.92;
-    const rh = Math.max(ring.rh, state === 1 ? 0 : 0.0016) * shape * 0.92;
-    const yc = head.mouthY - 0.18 * c * head.mouthDepth;
-    out.set(ring.x - c * head.mouthDepth, yc + rh * ca, rw * sa);
+    const cy = mouthCentreY(state);
+    const yc = cy - 0.18 * c * head.mouthDepth;
+    let dy = (_ring.y - cy) * shape * 0.92;
+    if (state === 0) dy = Math.sign(dy || -1) * Math.max(Math.abs(dy), 0.0016 * shape * 0.92);
+    out.set(_ring.x - c * head.mouthDepth, yc + dy, _ring.z * shape * 0.92);
     return out;
   }
   const s = Math.min(u, S_END);
@@ -51,16 +87,14 @@ function basePoint(u, theta, state, out) {
   let x = -s;
   let y = tmp2[0];
   let z = tmp2[1];
-  if (s < ring.blend) {
+  if (s < blend) {
     // rounded (quarter-ellipse) transition so the lips/snout read blunt
-    const t = Math.min(1, s / ring.blend);
+    const t = Math.min(1, s / blend);
     let w = Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t)));
     w = w * w * (3 - 2 * w) * 0.35 + w * 0.65;
-    const ry = head.mouthY + ring.rh * ca;
-    const rz = ring.rw * sa;
-    x = lerp(ring.x, x, w);
-    y = lerp(ry, y, w);
-    z = lerp(rz, z, w);
+    x = lerp(_ring.x, x, w);
+    y = lerp(_ring.y, y, w);
+    z = lerp(_ring.z, z, w);
   }
   out.set(x, y, z);
   return out;
@@ -142,12 +176,19 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
   // lips: thick rolled lips around the gape
   const lip = gauss(s - 0.009, 0.01);
   d += 0.0044 * lip;
-  masks.lip = smoothstep(0.03, 0.006, s);
+  masks.lip = smoothstep(0.02, 0.004, s);
 
   // gape line: lip fold / posterior end of the maxilla running back and down
   // from the mouth corner toward the front-lower edge of the orbit
   const ry = head.mouthY - 0.003 - (s - 0.012) * 0.48;
   if (s > 0.008 && s < 0.075) d -= 0.0016 * gauss(y - ry, 0.0035) * smoothstep(0.008, 0.02, s) * smoothstep(0.075, 0.05, s) * smoothstep(0.3, 0.8, lateral);
+
+  // lower jaw: posterior outline of the dentary running from below the mouth
+  // corner down and back to the chin / throat (a soft crease)
+  if (s > 0.018 && s < 0.11 && y < head.mouthY - 0.004) {
+    const ym = head.mouthY - 0.011 - (s - 0.018) * 0.62;
+    d -= 0.0011 * gauss(y - ym, 0.0032) * smoothstep(0.018, 0.035, s) * smoothstep(0.11, 0.085, s);
+  }
 
   // paired nares with the characteristic separating flap
   const dn = Math.hypot(s - head.nareS, y - head.nareY);
@@ -169,7 +210,9 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
     d += 0.0024 * plate * vfade;
     masks.operc = smoothstep(-0.11, -0.01, e) * smoothstep(0.004, -0.002, e) * vfade;
     // hinge at the front, maximal abduction at the free margin
-    masks.opercFlap = Math.pow(smoothstep(-0.1, -0.001, e), 1.6) * smoothstep(0.0035, 0.0005, e) * vfade;
+    // (the release behind the margin spans several mesh rows so the opened
+    // slit is a smooth slope — a one-row step would show the grid as teeth)
+    masks.opercFlap = Math.pow(smoothstep(-0.1, -0.001, e), 1.6) * Math.pow(smoothstep(0.016, 0.0, e), 1.5) * vfade * vfade;
     // preopercle ridge (subtle: covered by skin in goldfish)
     const ep = s - preopercS(y);
     d += 0.0007 * gauss(ep, 0.007) * vfade;
@@ -255,19 +298,19 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   const count = NR * NC;
   const thetas = thetaTable(nTheta);
 
-  const P = [new Float32Array(count * 3), new Float32Array(count * 3)]; // closed, open
+  const P = [new Float32Array(count * 3), new Float32Array(count * 3), new Float32Array(count * 3)]; // closed, open, open+protruded
   const N0 = new Float32Array(count * 3); // undisplaced normal (closed)
   const maskArr = new Float32Array(count * 4);
   const mask2Arr = new Float32Array(count * 4);
   // local elliptic cross-section (centre height, half width, half height) used
   // by the shader to trace chords through the body for light transport
-  const sectArr = new Float32Array(count * 3);
+  const sectArr = new Float32Array(count * 4);
   const flap = new Float32Array(count);
   const v = new THREE.Vector3();
   const masks = {};
 
-  // 1) undisplaced grids for both states
-  for (let st = 0; st < 2; st++) {
+  // 1) undisplaced grids for all mouth states
+  for (let st = 0; st < 3; st++) {
     for (let r = 0; r < NR; r++) {
       for (let c = 0; c < NC; c++) {
         const th = thetas[c];
@@ -315,13 +358,15 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   gridNormals(P[0], N0);
   const N1base = new Float32Array(count * 3);
   gridNormals(P[1], N1base);
+  const N2base = new Float32Array(count * 3);
+  gridNormals(P[2], N2base);
 
   // 2) detail displacement along base normals (same field for both states,
   //    evaluated once on the undisplaced CLOSED surface)
   const dispArr = new Float32Array(count);
-  for (let st = 0; st < 2; st++) {
+  for (let st = 0; st < 3; st++) {
     const pos = P[st];
-    const nrm = st === 0 ? N0 : N1base;
+    const nrm = st === 0 ? N0 : st === 1 ? N1base : N2base;
     for (let r = 0; r < NR; r++) {
       for (let c = 0; c < NC; c++) {
         const idx = r * NC + c;
@@ -329,8 +374,8 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
         if (st === 0) dispArr[idx] = detailDisplacement(uRows[r], P[0][i], P[0][i + 1], P[0][i + 2], asymSeed, masks);
         let d = dispArr[idx];
         // open gape: fleshy lips roll outward into a thick "O"
-        if (st === 1 && uRows[r] >= 0) d += 0.0048 * gauss(uRows[r] - 0.005, 0.009);
-        if (st === 1 && uRows[r] < 0) d += 0.0025 * gauss(uRows[r], 0.12);
+        if (st >= 1 && uRows[r] >= 0) d += 0.0052 * gauss(uRows[r] - 0.005, 0.009);
+        if (st >= 1 && uRows[r] < 0) d += 0.0025 * gauss(uRows[r], 0.12);
         pos[i] += nrm[i] * d;
         pos[i + 1] += nrm[i + 1] * d;
         pos[i + 2] += nrm[i + 2] * d;
@@ -345,14 +390,21 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
           maskArr[idx * 4 + 0] = 0; // scale mask (filled later)
           maskArr[idx * 4 + 1] = masks.gill;
           maskArr[idx * 4 + 2] = masks.lip;
-          maskArr[idx * 4 + 3] = thick;
+          // signed distance behind the free opercular margin (gill slit
+          // coordinate for the shader); far away elsewhere
+          const yv = P[0][i + 1];
+          maskArr[idx * 4 + 3] = s >= 0 && yv > head.opercBotY - 0.03 && yv < head.opercTopY + 0.02 ? s - opercMarginS(clamp(yv, head.opercBotY, head.opercTopY)) : 1.0;
           {
             const sc = clamp(s, 0.004, 1.0);
             const T = profile.top(sc);
             const B = profile.bot(sc);
-            sectArr[idx * 3] = 0.5 * (T + B);
-            sectArr[idx * 3 + 1] = Math.max(profile.hw(sc), 0.004);
-            sectArr[idx * 3 + 2] = Math.max(0.5 * (T - B), 0.004);
+            sectArr[idx * 4] = 0.5 * (T + B);
+            sectArr[idx * 4 + 1] = Math.max(profile.hw(sc), 0.004);
+            sectArr[idx * 4 + 2] = Math.max(0.5 * (T - B), 0.004);
+            // throat (hyoid / branchiostegal) expansion along the normal: the
+            // floor of the head between the lower jaw and the isthmus bulges
+            // during buccal expansion and strongly in a yawn
+            sectArr[idx * 4 + 3] = s < 0 ? 0 : 0.011 * gauss(s - 0.16, 0.075) * smoothstep(0.05, -0.65, a) * smoothstep(0.015, 0.05, s);
           }
           mask2Arr[idx * 4 + 0] = masks.operc;
           mask2Arr[idx * 4 + 1] = a; // dorso-ventral coordinate (-1 belly .. +1 back)
@@ -367,7 +419,7 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   const eyes = [eyeRest(1), eyeRest(-1)];
   const q = new THREE.Vector3();
   const radial = new THREE.Vector3();
-  for (let st = 0; st < 2; st++) {
+  for (let st = 0; st < 3; st++) {
     const pos = P[st];
     for (let idx = 0; idx < count; idx++) {
       const i = idx * 3;
@@ -399,8 +451,10 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   // 4) final normals
   const NF0 = new Float32Array(count * 3);
   const NF1 = new Float32Array(count * 3);
+  const NF2 = new Float32Array(count * 3);
   gridNormals(P[0], NF0);
   gridNormals(P[1], NF1);
+  gridNormals(P[2], NF2);
 
   // orientation check: mid-flank left side must face +z
   {
@@ -408,7 +462,7 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
     const c = Math.round(nTheta / 4);
     const k = (r * NC + c) * 3;
     if (NF0[k + 2] < 0) {
-      for (const arr of [NF0, NF1, N0]) for (let i = 0; i < arr.length; i++) arr[i] = -arr[i];
+      for (const arr of [NF0, NF1, NF2, N0]) for (let i = 0; i < arr.length; i++) arr[i] = -arr[i];
     }
   }
 
@@ -418,8 +472,8 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
     const f = flap[idx];
     if (f <= 0) continue;
     const i = idx * 3;
-    const amp = 0.0105 * f;
-    opercDelta[i] = NF0[i] * amp - 0.0025 * f;
+    const amp = 0.0125 * f;
+    opercDelta[i] = NF0[i] * amp - 0.003 * f;
     opercDelta[i + 1] = NF0[i + 1] * amp;
     opercDelta[i + 2] = NF0[i + 2] * amp;
   }
@@ -486,9 +540,11 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   // 7) morph deltas
   const mouthDelta = new Float32Array(count * 3);
   const mouthNDelta = new Float32Array(count * 3);
+  const protDelta = new Float32Array(count * 3);
   for (let i = 0; i < count * 3; i++) {
     mouthDelta[i] = P[1][i] - P[0][i];
     mouthNDelta[i] = NF1[i] - NF0[i];
+    protDelta[i] = P[2][i] - P[1][i];
   }
 
   // 8) indices
@@ -530,10 +586,11 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   g.setAttribute('aScaleUV', new THREE.BufferAttribute(scaleUV, 2));
   g.setAttribute('aMask', new THREE.BufferAttribute(maskArr, 4));
   g.setAttribute('aMask2', new THREE.BufferAttribute(mask2Arr, 4));
-  g.setAttribute('aSect', new THREE.BufferAttribute(sectArr, 3));
+  g.setAttribute('aSect', new THREE.BufferAttribute(sectArr, 4));
   g.setAttribute('aMorphMouth', new THREE.BufferAttribute(mouthDelta, 3));
   g.setAttribute('aMorphMouthN', new THREE.BufferAttribute(mouthNDelta, 3));
   g.setAttribute('aMorphOperc', new THREE.BufferAttribute(opercDelta, 3));
+  g.setAttribute('aMorphProt', new THREE.BufferAttribute(protDelta, 3));
   g.setIndex(count > 65535 ? new THREE.Uint32BufferAttribute(indices, 1) : new THREE.Uint16BufferAttribute(indices, 1));
   g.userData = { rows: NR, cols: NC, eyes };
   return g;

@@ -191,15 +191,25 @@ export class App {
       dorsal: [-0.1 * SL, SL * 0.35, SL * 1.1],
       tail: [-0.9 * SL, 0.0, SL * 1.6],
       below: [0, -d, 0.001],
+      face: [SL * 0.95, SL * 0.06, SL * 0.55],
+      gill: [SL * 0.12, SL * 0.04, SL * 0.8],
+      flank: [SL * 0.02, SL * 0.03, SL * 0.5],
+      gillrear: [-SL * 0.55, SL * 0.12, SL * 0.55],
+      mouthfront: [SL * 0.75, SL * 0.02, SL * 0.12],
     };
     const pos = (views[v] || views.side).slice();
-    if (v === 'head' || v === 'dorsal' || v === 'tail') {
+    if (v === 'head' || v === 'dorsal' || v === 'tail' || v === 'face' || v === 'gill' || v === 'flank' || v === 'gillrear' || v === 'mouthfront') {
       const z = Number(this.opts.params.get('zoom') || 1);
       for (let i = 0; i < 3; i++) pos[i] *= z;
     }
     if (v === 'head') c.set(0.25 * SL, 0, 0);
     if (v === 'dorsal') c.set(-0.2 * SL, 0.3 * SL, 0);
     if (v === 'tail') c.set(-0.95 * SL, 0, 0);
+    if (v === 'face') c.set(0.3 * SL, 0.0, 0);
+    if (v === 'gill') c.set(0.1 * SL, -0.01 * SL, 0.04 * SL);
+    if (v === 'flank') c.set(-0.12 * SL, 0.0, 0.08 * SL);
+    if (v === 'gillrear') c.set(0.08 * SL, -0.01 * SL, 0.05 * SL);
+    if (v === 'mouthfront') c.set(0.36 * SL, 0.0, 0);
     this.camera.position.set(c.x + pos[0], c.y + pos[1], c.z + pos[2]);
     this.controls.target.copy(c);
     this.camera.lookAt(c);
@@ -567,6 +577,7 @@ export class App {
       minWallClearanceBL: stats.wallMin.toFixed(2),
       closeContacts: stats.collisions,
       foodEaten: stats.eaten,
+      yawns: fish.reduce((acc, f) => acc + (f.loc.yawns || 0), 0),
       usPerFishUpdate: { brain: ((Fish.prof.brain / Fish.prof.n) * 1000).toFixed(1), loc: ((Fish.prof.loc / Fish.prof.n) * 1000).toFixed(1), rig: ((Fish.prof.rig / Fish.prof.n) * 1000).toFixed(1) },
     }));
   }
@@ -602,6 +613,12 @@ export class App {
     if (this.cameraMode !== 'cinematic') {
       this.focusDist = this.camera.position.distanceTo(this.controls.target);
       for (let i = 0; i < 60; i++) this._autoFocus(1 / 30);
+    }
+    if (p.has('wire')) this.fishSystem.setWireframe(true);
+    // inspection overrides: hold the mouth / gill covers at a fixed opening
+    for (const f of this.fishSystem.fish) {
+      if (p.has('mouth')) f.loc.mouth = Number(p.get('mouth'));
+      if (p.has('operc')) f.loc.operc[0] = f.loc.operc[1] = Number(p.get('operc'));
     }
     for (const k of ['skeleton', 'velocity', 'target', 'collision', 'labels']) if (p.has(k)) this.debugDraw.flags[k] = true;
     if (p.has('debugRefl') && this.world) this.world.surface.material.uniforms.uDebugRefl.value = 1;

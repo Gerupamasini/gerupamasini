@@ -110,6 +110,9 @@ export class Locomotion {
     // head: breathing, mouth, eyes
     this.breathPhase = r.range(0, TAU);
     this.mouth = 0;
+    this.protrusion = 0; // premaxillary protrusion (0..1, scales with the gape)
+    this.throat = 0; // hyoid / branchiostegal expansion of the head floor
+    this.yawnLevel = 0; // 0..1 envelope of a yawn (fins, posture)
     this.operc = [0, 0];
     this.mouthProgram = null;
     this.coughTimer = r.range(40, 160);
@@ -166,17 +169,27 @@ export class Locomotion {
     return true;
   }
 
-  /** Mouth programs: 'strike' (suction), 'peck' (substrate), 'gulp' (surface), 'spit', 'cough'. */
+  /**
+   * Mouth programs: 'strike' (suction), 'peck' (substrate), 'gulp' (surface),
+   * 'spit', 'cough' (gill clearing) and 'yawn'.
+   * prot: premaxillary protrusion at the gape peak, throat: hyoid depression.
+   * A yawn (Rasa 1971; Baenninger 1987) is a slow, maximal gape with the
+   * buccal floor and opercula expanded, fins erected and the head raised,
+   * held for up to a second and closed abruptly.
+   */
   mouthAction(kind) {
     const r = this.fish.rng;
     const presets = {
-      strike: { open: r.range(0.05, 0.09), hold: 0.04, close: r.range(0.1, 0.16), peak: 1.0, chew: r.range(0.6, 1.2), operc: 1.0 },
-      peck: { open: r.range(0.07, 0.11), hold: 0.06, close: 0.14, peak: 0.85, chew: r.range(0.8, 1.8), operc: 0.9 },
-      gulp: { open: r.range(0.09, 0.14), hold: 0.1, close: 0.2, peak: 1.0, chew: r.range(0.6, 1.2), operc: 0.8 },
-      spit: { open: 0.05, hold: 0.03, close: 0.1, peak: 0.6, chew: 0, operc: 1.0 },
-      cough: { open: 0.07, hold: 0.08, close: 0.12, peak: 0.55, chew: 0, operc: 1.3, repeat: 1 },
+      strike: { open: r.range(0.05, 0.09), hold: 0.04, close: r.range(0.1, 0.16), peak: 1.0, chew: r.range(0.6, 1.2), operc: 1.0, prot: 1.0, throat: 0.8 },
+      peck: { open: r.range(0.07, 0.11), hold: 0.06, close: 0.14, peak: 0.85, chew: r.range(0.8, 1.8), operc: 0.9, prot: 0.9, throat: 0.6 },
+      gulp: { open: r.range(0.09, 0.14), hold: 0.1, close: 0.2, peak: 1.0, chew: r.range(0.6, 1.2), operc: 0.8, prot: 0.55, throat: 0.7 },
+      spit: { open: 0.05, hold: 0.03, close: 0.1, peak: 0.6, chew: 0, operc: 1.0, prot: 0.35, throat: 0.1 },
+      cough: { open: 0.07, hold: 0.08, close: 0.12, peak: 0.55, chew: 0, operc: 1.3, prot: 0.2, throat: 0.5, repeat: 1 },
+      yawn: { open: r.range(0.65, 1.0), hold: r.range(0.45, 1.0), close: r.range(0.09, 0.14), peak: r.range(1.15, 1.25), chew: 0, operc: r.range(1.5, 1.9), prot: r.range(0.3, 0.5), throat: 1.0, yawn: true },
     };
+    if (!presets[kind]) return;
     this.mouthProgram = { kind, t: 0, ...presets[kind] };
+    if (kind === 'yawn') this.yawns = (this.yawns || 0) + 1;
   }
 
   // ------------------------------------------------------------------ update
@@ -190,6 +203,7 @@ export class Locomotion {
 
     let desiredSpeedBL = cmd.speed;
     if (this.override.enabled) desiredSpeedBL = this.override.speed;
+    desiredSpeedBL *= 1 - 0.6 * this.yawnLevel; // yawns happen while (nearly) stationary
 
     // ---------------------------------------------------------- C-start
     let cBend = 0;
@@ -202,7 +216,7 @@ export class Locomotion {
       const d = cmd.dir;
       const targetYaw = Math.atan2(-d.z, d.x);
       const horiz = Math.hypot(d.x, d.z);
-      const targetPitch = clamp(Math.atan2(d.y, horiz) * 0.85 + cmd.pitchBias, -1.05, 1.0);
+      const targetPitch = clamp(Math.atan2(d.y, horiz) * 0.85 + cmd.pitchBias + this.yawnLevel * 0.16, -1.05, 1.0);
       const err = wrapAngle(targetYaw - this.yaw);
       const U = this.speed / SL;
       // routine turn rates: ~115 °/s hovering .. ~300 °/s swimming (koi: 88–1050 °/s)
@@ -474,11 +488,12 @@ export class Locomotion {
     const pectFold = smoothstep(0.25, 1.4, U); // pectorals adduct already at moderate speed
     // dorsal: erect when slow / manoeuvring, lowered at speed, clamped in fear
     const dorsalT = clamp(1 - 0.45 * fast - 0.65 * fear + 0.1 * this.brakeLevel, 0.15, 1);
-    this.fins.dorsal = damp(this.fins.dorsal, this.cstart ? 0.35 : dorsalT, 4, dt);
-    this.fins.anal = damp(this.fins.anal, clamp(1 - 0.35 * fast - 0.4 * fear, 0.3, 1), 4, dt);
+    const yl = this.yawnLevel; // a yawn erects every fin ("stretch")
+    this.fins.dorsal = damp(this.fins.dorsal, this.cstart ? 0.35 : lerp(dorsalT, 1.18, yl), 4, dt);
+    this.fins.anal = damp(this.fins.anal, lerp(clamp(1 - 0.35 * fast - 0.4 * fear, 0.3, 1), 1.1, yl), 4, dt);
     const spreadT = 0.82 + 0.35 * this.brakeLevel + 0.15 * Math.abs(this.yawRate) / 3 - 0.3 * fear + (this.gait === 'burst' ? 0.2 : 0) - (hover ? 0.1 : 0);
-    this.fins.caudalSpread = damp(this.fins.caudalSpread, clamp(spreadT, 0.45, 1.35), 5, dt);
-    this.fins.pelvic = damp(this.fins.pelvic, clamp(0.75 - 0.6 * fast + 0.4 * this.brakeLevel - 0.3 * fear, 0.05, 1), 4, dt);
+    this.fins.caudalSpread = damp(this.fins.caudalSpread, lerp(clamp(spreadT, 0.45, 1.35), 1.3, yl), 5, dt);
+    this.fins.pelvic = damp(this.fins.pelvic, lerp(clamp(0.75 - 0.6 * fast + 0.4 * this.brakeLevel - 0.3 * fear, 0.05, 1), 1.0, yl), 4, dt);
 
     // pectorals: sculling while hovering, adducted at speed, flared to brake,
     // inner fin extended as a pivot during turns
@@ -486,13 +501,13 @@ export class Locomotion {
       const p = this.pect[s];
       const side = s === 0 ? 1 : -1;
       const turnInner = clamp(-this.yawRate * side * 0.25, 0, 0.4); // left fin is the inner (pivot) fin in left turns (yawRate < 0)
-      const extT = clamp(lerp(0.85, 0.06, pectFold) + turnInner - fear * 0.4, 0.04, 1);
+      const extT = lerp(clamp(lerp(0.85, 0.06, pectFold) + turnInner - fear * 0.4, 0.04, 1), 1.0, yl);
       p.ext = damp(p.ext, this.cstart ? 0.05 : extT, 6, dt);
       p.brake = damp(p.brake, this.brakeLevel * 0.9, 8, dt);
       const f = sig.pectFreq * (hover ? 1 : 1.25) * (1 + 0.1 * fbm1(time * 0.5 + sig.noiseSeed + s * 7, 1));
       // alternating strokes with slowly drifting phase relation
       p.phase += TAU * f * dt;
-      const ampT = (hover ? 0.42 : 0.25) * (1 - fast) + this.brakeLevel * 0.25 + cmd.hoverPrecision * 0.15;
+      const ampT = ((hover ? 0.42 : 0.25) * (1 - fast) + this.brakeLevel * 0.25 + cmd.hoverPrecision * 0.15) * (1 - 0.85 * yl);
       p.amp = damp(p.amp, ampT, 3, dt);
     }
     // phase coupling: pectorals tend toward antiphase while hovering
@@ -511,6 +526,10 @@ export class Locomotion {
     // buccal expansion (mouth opens) leads opercular abduction by ~0.3 cycle
     let mouth = sig.mouthAmp * breathAmp * Math.pow(Math.max(0, Math.sin(bp)), 1.5);
     let operc = sig.opercAmp * breathAmp * Math.pow(Math.max(0, Math.sin(bp - 1.9)), 1.3);
+    // the buccal floor drops just after the mouth opens (water drawn in)
+    let throat = 0.18 * breathAmp * Math.pow(Math.max(0, Math.sin(bp - 0.6)), 1.4);
+    let prot = 0;
+    let yawn = 0;
 
     // occasional gill clearing ("cough")
     this.coughTimer -= dt;
@@ -533,6 +552,17 @@ export class Locomotion {
       else if (t < tClose) m = mp.peak * (1 - smoothstep(tHold, tClose, t));
       // operculum flares just after the gape peak (suction flow exits via gills)
       o = mp.operc * smoothstep(tOpen * 0.6, tHold + 0.03, t) * (1 - smoothstep(tClose, tClose + 0.15, t));
+      const env = m / mp.peak;
+      prot = Math.max(prot, (mp.prot || 0) * env);
+      throat = Math.max(throat, (mp.throat || 0) * env);
+      if (mp.yawn) {
+        // slow ease-in opening, the floor of the head and the gill covers
+        // keep expanding through the hold, everything snaps shut together
+        m = mp.peak * (t < tOpen ? Math.pow(smoothstep(0, tOpen, t), 1.3) : t < tHold ? 1 : 1 - smoothstep(tHold, tClose, t));
+        throat = Math.max(throat, mp.throat * smoothstep(tOpen * 0.25, tHold, t) * (1 - smoothstep(tHold, tClose + 0.05, t)));
+        o = mp.operc * smoothstep(tOpen * 0.45, tHold, t) * (1 - smoothstep(tHold + 0.02, tClose + 0.12, t));
+        yawn = smoothstep(0, tOpen * 0.8, t) * (1 - smoothstep(tHold, tClose + 0.45, t));
+      }
       // chewing / sorting: pharyngeal processing shows as small rhythmic mouth motion
       if (t > tClose && mp.chew > 0) {
         const tc = t - tClose;
@@ -548,6 +578,9 @@ export class Locomotion {
       }
     }
     this.mouth = damp(this.mouth, mouth, 30, dt);
+    this.protrusion = damp(this.protrusion, prot, 25, dt);
+    this.throat = damp(this.throat, throat, 20, dt);
+    this.yawnLevel = damp(this.yawnLevel, yawn, 8, dt);
     this.operc[0] = damp(this.operc[0], operc * (1 + sig.asym), 25, dt);
     this.operc[1] = damp(this.operc[1], operc * (1 - sig.asym), 25, dt);
 
