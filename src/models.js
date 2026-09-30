@@ -571,7 +571,7 @@ export function crabKit(name, q = 1) {
       abdM: abdomenGeo(S.w, S.l, false, q),
       abdF: abdomenGeo(S.w, S.l, true, q),
       hair: L.setae ? L.setae.map((sl, i) => (L.blade ? {
-        M: bristleGeo(L.merus, L.blade.merus[0], 6, sl * 0.6, 3 + i, true, L.blade.merus[1]),
+        M: bristleGeo(L.merus, L.blade.merus[0], 12, sl * 0.5, 3 + i, true, L.blade.merus[1]),
         C: bristleGeo(L.carpus, L.blade.carpus[0], 2, sl * 0.6, 5 + i, true, L.blade.carpus[1]),
         P: bristleGeo(L.prop, L.blade.prop[0], 4, sl * 0.8, 7 + i, true, L.blade.prop[1]),
         D: bristleGeo(L.dact * 0.7, L.blade.dact[0], 8, sl * 0.9, 9 + i, true, L.blade.dact[0] * 0.35),
