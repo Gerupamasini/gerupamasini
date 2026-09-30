@@ -396,10 +396,20 @@ export class ShrimpModel {
     M.pereopods.forEach((P, pi) => {
       const c = this.carapaceAt(P.x);
       for (const s of [1, -1]) {
-        const hipPos = new THREE.Vector3(P.x * T, (c.v + 0.006) * T, s * c.w * 0.42 * T);
-        const coxa = joint(this.ceph, hipPos.x, hipPos.y, hipPos.z, `${P.name}${s > 0 ? 'L' : 'R'}`);
+        // Coxae articulate on the thoracic sternum, under the branchiostegite; a short basis
+        // carries the leg down and out past the carapace margin before the ischium.
+        const hb = (c.d - c.v) / 2;
+        const sternum = new THREE.Vector3(P.x * T, (c.v + 0.12 * hb) * T, s * c.w * 0.3 * T);
+        const basisLen = 0.022;
+        const hipPos = sternum.clone().add(new THREE.Vector3(0, -basisLen * 0.8 * T, s * basisLen * 0.6 * T));
         const r = P.r * T;
-        mesh(withShellAttrs(ellipsoid(r * 1.4, r * 1.2, r * 1.2, 10)), S.append, coxa, false);
+        const bg = podomere(basisLen * T, r * 1.3, r * 1.05);
+        const basis = mesh(bg, S.append, this.ceph, false);
+        basis.position.copy(sternum);
+        basis.rotation.set(0, -s * Math.PI / 2, -0.93, 'YZX');
+        mesh(withShellAttrs(ellipsoid(r * 1.5, r * 1.2, r * 1.3, 10)), S.append, this.ceph, false).position.copy(sternum);
+        const coxa = joint(this.ceph, hipPos.x, hipPos.y, hipPos.z, `${P.name}${s > 0 ? 'L' : 'R'}`);
+        mesh(withShellAttrs(ellipsoid(r * 1.1, r * 1.1, r * 1.1, 8)), S.append, coxa, false);
         const hip = joint(coxa, 0, 0, 0);
         hip.rotation.order = 'YZX';
         const [li, lm, lc, lp, ld] = P.segs.map((v) => v * T);
@@ -679,7 +689,8 @@ export class ShrimpModel {
     const u = v.clone().normalize();
     const alpha = Math.acos(THREE.MathUtils.clamp((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
     const beta = Math.acos(THREE.MathUtils.clamp((L1 * L1 + L2 * L2 - D * D) / (2 * L1 * L2), -1, 1));
-    const hint = new THREE.Vector3(0, 0.35, leg.side);
+    // Knee opens laterally (decapod merus is splayed sideways), kept at or below the coxa.
+    const hint = new THREE.Vector3(0, -0.15, leg.side);
     hint.addScaledVector(u, -hint.dot(u)).normalize();
     const knee = u.clone().multiplyScalar(L1 * Math.cos(alpha)).addScaledVector(hint, L1 * Math.sin(alpha));
     const yaw = Math.atan2(-knee.z, knee.x);
@@ -700,7 +711,7 @@ export class ShrimpModel {
   /** Standing pose on flat ground (used by the validation renders; the game drives feet by IK). */
   poseStanding() {
     const groundY = -(M.carapace.stations[0][1] + M.rest.standClearance) * T;
-    const foot = { P3: [-0.01, 0.13], P4: [-0.05, 0.145], P5: [-0.09, 0.14] }; // feet behind the coxae [PHOTO 001]
+    const foot = { P3: [0.0, 0.2], P4: [-0.04, 0.21], P5: [-0.08, 0.2] }; // feet behind the coxae [PHOTO 001]
     for (const leg of this.walkLegs) {
       const [dx, lat] = foot[leg.P.name];
       this.solveLegIK(leg, new THREE.Vector3(leg.hipPos.x + dx * T, groundY, leg.side * lat * T));

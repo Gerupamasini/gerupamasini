@@ -114,8 +114,8 @@ export class Shrimp {
     const offsets = { P5: 0.0, P4: 0.34, P3: 0.68 };
     // Foot rest positions in TL (same as ShrimpModel.poseStanding) [PHOTO 001, 005].
     const TLm = A.totalLength;
-    const fwd = { P3: -0.01 * TLm, P4: -0.05 * TLm, P5: -0.09 * TLm };
-    const lat = { P3: 0.13 * TLm, P4: 0.145 * TLm, P5: 0.14 * TLm };
+    const fwd = { P3: 0.0, P4: -0.04 * TLm, P5: -0.08 * TLm };
+    const lat = { P3: 0.2 * TLm, P4: 0.21 * TLm, P5: 0.2 * TLm };
     this.legs = this.model.walkLegs.map((leg) => {
       const n = leg.P.name;
       const restLocal = new THREE.Vector3(leg.hipPos.x + fwd[n], -this.standH / this.scale, leg.side * lat[n]).multiplyScalar(this.scale);
