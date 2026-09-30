@@ -27,6 +27,7 @@ import * as THREE from 'three';
 import { KentishPloverModel } from '../../src/birds/kentishPlover/KentishPloverModel.js';
 import { KentishPloverAnimator, PREEN_VARIANTS } from '../../src/birds/kentishPlover/KentishPloverAnimator.js';
 import { FEATHER_TYPE } from '../../src/birds/kentishPlover/anatomy/feathers.js';
+import { bodyDisplacementMasks, FLUFF_REST } from '../../src/birds/kentishPlover/anatomy/bodyMesh.js';
 import { animation as ANIM, lod as LODCFG } from '../../src/birds/kentishPlover/KentishPloverConfig.js';
 import { writeFileSync } from 'node:fs';
 
@@ -170,9 +171,9 @@ function analyse(model, d) {
   B.fluffMask = new Float64Array(B.n);
   B.breathMask = new Float64Array(B.n);
   for (let i = 0; i < B.n; i++) {
-    const y = B.rest[i * 3 + 1], z = B.rest[i * 3 + 2];
-    B.fluffMask[i] = 1.2 * smooth(40, 60, y);
-    B.breathMask[i] = ANIM.breathAmp * 21 * smooth(-30, -5, z) * (1 - smooth(22, 34, z)) * (1 - smooth(66, 74, y));
+    const [fm, bm] = bodyDisplacementMasks([0, 1, 2].map((k) => B.rest[i * 3 + k]), [0, 1, 2].map((k) => B.nrm[i * 3 + k]));
+    B.fluffMask[i] = fm;
+    B.breathMask[i] = ANIM.breathAmp * 21 * bm;
   }
   const F = {
     mesh: fe,
@@ -275,7 +276,7 @@ function measure(model, S, anim) {
   const { B, F } = S;
   const bu = B.mesh.material.userData.uniforms;
   const fu = F.mesh.material.userData.uniforms;
-  const fluff = bu.uFluff.value;
+  const fluff = bu.uFluff.value - FLUFF_REST; // the shaders displace relative to the relaxed sculpt
   const breath = 0.6 + 0.4 * (anim?.p.sleep ?? 0); // full inhalation (worst case)
   const wind = fu.uWind.value;
   const folded = (fu.uFold.value.isVector2 ? Math.min(fu.uFold.value.x, fu.uFold.value.y) : fu.uFold.value) > 0.9;
@@ -370,7 +371,7 @@ function measure(model, S, anim) {
       // same as the feather vertex shader: body contact (wing only while folded) + arm tube folding away
       const t = Math.round(F.ft[i * 4]);
       const fold = F.pos[i * 3] >= 0 ? foldLR[0] : foldLR[1];
-      const k = (t < 7.5 || t === FEATHER_TYPE.arm ? fold : 1) * (fluff * 0.0012 * F.lieMask[i * 2] + (anim ? breath : 0) * ANIM.breathAmp * 0.021 * F.lieMask[i * 2 + 1]);
+      const k = (t < 7.5 || t === FEATHER_TYPE.arm ? fold : 1) * (fluff * 0.001 * F.lieMask[i * 2] + (anim ? breath : 0) * ANIM.breathAmp * 0.021 * F.lieMask[i * 2 + 1]);
       for (let c = 0; c < 3; c++) off[c] = F.lie[i * 3 + c] * k + F.core[i * 3 + c] * smooth(0, 0.5, fold);
     }
     skin(MF, F.pos, F.nrm, F.si, F.sw, i, off, FP, FN);
@@ -511,7 +512,7 @@ function measure(model, S, anim) {
     pokeBy[who] = Math.max(pokeBy[who] ?? 0, sIn);
     if (sIn > poke) { poke = sIn; pokeName = who; pokeAt = [vx, vy, vz].map((x) => +x.toFixed(1)); }
   }
-  return { fluff, wind, feathers: res, poke, pokeN, pokeName, pokeAt, pokeBy, pokeNeck };
+  return { fluff: fluff + FLUFF_REST, wind, feathers: res, poke, pokeN, pokeName, pokeAt, pokeBy, pokeNeck };
 }
 
 // ------------------------------------------------------------------ run

@@ -3,7 +3,7 @@ import { KentishPloverModel } from '../birds/kentishPlover/KentishPloverModel.js
 import { Environment } from '../world/Environment.js';
 
 // Validation sheet: orthographic side / front / top silhouettes on a 1 cm grid + perspective close-ups.
-// Query: ?palette=maleBreeding&lod=0&pose=stand&action=walk&t=0.25&mode=sheet|silhouette|closeup
+// Query: ?palette=maleBreeding&lod=0&pose=stand&action=walk&t=0.25&mode=sheet|silhouette|closeup&gaze=yaw[,pitch]
 
 const q = new URLSearchParams(location.search);
 const palette = q.get('palette') || 'maleBreeding';
@@ -84,6 +84,11 @@ async function setupPose() {
   if (!pose || pose === 'bind') return;
   const mod = await import('../birds/kentishPlover/KentishPloverAnimator.js');
   poser = new mod.KentishPloverAnimator(bird, { seed: 3 });
+  if (q.has('gaze')) {
+    // fixed gaze for photo comparisons: gaze=yaw,pitch (rad; pitch defaults to the resting one), no saccades
+    const [yaw, pitch = mod.GAZE_PITCH_REST] = q.get('gaze').split(',').map(Number);
+    Object.assign(poser.gaze, { yaw, tYaw: yaw, pitch, tPitch: pitch, roll: 0, tRoll: 0, timer: 1e9, mode: 'idle' });
+  }
   poser.previewAction(pose, Number(q.get('t') ?? 0.3), q.get('variant') || undefined);
 }
 
@@ -121,8 +126,8 @@ function layout() {
   views.length = 0;
   if (mode === 'eye') {
     const c = new THREE.PerspectiveCamera(20, W / H, 0.002, 5);
-    c.position.set(0.07, 0.092, 0.075);
-    c.lookAt(0.009, 0.081, 0.05);
+    c.position.set(0.072, 0.106, 0.0505);
+    c.lookAt(0.011, 0.095, 0.0256);
     views.push({ cam: c, rect: [0, 0, W, H], label: 'eye macro' });
     return;
   }
