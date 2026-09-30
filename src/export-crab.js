@@ -13,6 +13,15 @@ export async function exportCrab() {
   crab.traverse((o) => { // MikkTSpace tangents so every renderer shades the normal map identically
     if (!o.isMesh || !o.material.normalMap) return;
     o.geometry = mergeVertices(computeMikkTSpaceTangents(o.geometry, MikkTSpace), 1e-5);
+    if (o.name === 'Carapace_mesh') {   // the polar sliver triangles at the two poles give unstable tangents: use the (planar) UV tangent there
+      const P = o.geometry.attributes.position, T = o.geometry.attributes.tangent;
+      for (const top of [true, false]) {
+        let w = 0, n = 0;
+        for (let i = 0; i < P.count; i++) { const r = Math.hypot(P.getX(i), P.getZ(i)); if (r > 0.09 && r < 0.14 && (P.getY(i) > 0) === top && Math.abs(P.getY(i)) > 0.1) { w += T.getW(i); n++; } }
+        const sign = w >= 0 ? 1 : -1;
+        for (let i = 0; i < P.count; i++) { if (Math.hypot(P.getX(i), P.getZ(i)) < 0.08 && (P.getY(i) > 0) === top && Math.abs(P.getY(i)) > 0.1) T.setXYZW(i, 1, 0, 0, sign); }
+      }
+    }
   });
   crab.updateMatrixWorld(true);
   const feet = new THREE.Box3();

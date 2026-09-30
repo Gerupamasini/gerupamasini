@@ -38,7 +38,7 @@ const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return
 const C = (hex) => new Color(hex);
 const PAL = {
   shell: C('#585142'), shellDark: C('#2c2822'), mud: C('#9a8d6c'), blue: C('#8fcfe2'), blueDeep: C('#3b96ba'), blueHi: C('#d9f0f6'),
-  legDark: C('#1f1b17'), legMid: C('#42382e'), legPale: C('#7a705a'), membrane: C('#7d6f55'),
+  tympanum: C('#9a8b6c'), legDark: C('#1f1b17'), legMid: C('#42382e'), legPale: C('#7a705a'), membrane: C('#7d6f55'),
   claw: C('#dcd2b8'), clawShade: C('#b1a583'), clawTip: C('#7d5f3c'), clawDarkMerus: C('#3a322b'),
   sternum: C('#b3ac96'), abd: C('#9a917a'), seta: C('#a79e84'),
 };
@@ -62,12 +62,12 @@ export function makeTextures() {
     h[y * S + x] = a * 0.9 + pit * 0.3;
   }
   const mk = () => { const c = document.createElement('canvas'); c.width = c.height = S; return c; };
-  const cA = mk(), cN = mk(), cO = mk(); cO.dataset.jpg = '1';
+  const cA = mk(), cN = mk(), cO = mk(); cO.dataset.jpg = '1'; cN.dataset.jpg = '1';
   const iA = cA.getContext('2d').createImageData(S, S), iN = cN.getContext('2d').createImageData(S, S), iO = cO.getContext('2d').createImageData(S, S);
   const H = (x, y) => h[((y + S) % S) * S + ((x + S) % S)];
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     const i = (y * S + x) * 4, hv = H(x, y);
-    const g = clamp(0.78 + (hv - 0.4) * 0.7 + (hash3(x, y, 9) - 0.5) * 0.06);
+    const g = clamp(0.76 + (hv - 0.4) * 1.3 + (hash3(x, y, 9) - 0.5) * 0.12);
     iA.data[i] = iA.data[i + 1] = iA.data[i + 2] = g * 255; iA.data[i + 3] = 255;
     const dx = (H(x + 1, y) - H(x - 1, y)) * 3.4, dy = (H(x, y + 1) - H(x, y - 1)) * 3.4;
     const l = Math.hypot(dx, dy, 1);
@@ -96,9 +96,9 @@ export function makeTextures() {
 export function makeMaterials(tx) {
   const base = { map: tx.albedo, normalMap: tx.normal, roughnessMap: tx.orm, metalnessMap: tx.orm, metalness: 0, vertexColors: true };
   return {
-    carapace: Object.assign(new THREE.MeshStandardMaterial({ ...base, roughness: 1.0, normalScale: new THREE.Vector2(0.9, 0.9) }), { name: 'Carapace' }),
+    carapace: Object.assign(new THREE.MeshStandardMaterial({ ...base, roughness: 1.0, normalScale: new THREE.Vector2(1.5, 1.5) }), { name: 'Carapace' }),
     leg: Object.assign(new THREE.MeshStandardMaterial({ ...base, map: tx.silt, roughness: 1.0, normalScale: new THREE.Vector2(0.8, 0.8) }), { name: 'LegCuticle' }),
-    claw: Object.assign(new THREE.MeshPhysicalMaterial({ ...base, roughness: 0.58, clearcoat: 0.5, clearcoatRoughness: 0.3, sheen: 0.7, sheenRoughness: 0.5, sheenColor: new THREE.Color('#cfe3ee'), normalScale: new THREE.Vector2(0.5, 0.5) }), { name: 'ClawEnamel' }),
+    claw: Object.assign(new THREE.MeshPhysicalMaterial({ ...base, roughness: 0.58, clearcoat: 0.3, clearcoatRoughness: 0.4, sheen: 0.5, sheenRoughness: 0.5, sheenColor: new THREE.Color('#cfe3ee'), normalScale: new THREE.Vector2(0.5, 0.5) }), { name: 'ClawEnamel' }),
     cornea: Object.assign(new THREE.MeshPhysicalMaterial({ color: 0x07080b, roughness: 0.12, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05 }), { name: 'Cornea' }),
     mud: Object.assign(new THREE.MeshStandardMaterial({ ...base, roughness: 1, normalScale: new THREE.Vector2(1.4, 1.4) }), { name: 'MudGrain' }),
   };
@@ -138,7 +138,8 @@ function makeTube(o) {
     if (ridge) rr += ridge * gauss(angDiff(a, PI / 2), ridgeW);
     if (ridgeB) rr += ridgeB * gauss(angDiff(a, 3 * PI / 2), ridgeW);
     if (o.ridges) for (const q of o.ridges) rr += q.k * gauss(angDiff(a, q.a), q.w || 0.25);
-    const ly = p.h * e * sy * rr, lz = p.w * e * sz;
+    const bf = o.bulge ? o.bulge(t, a) : 1;
+    const ly = p.h * e * sy * rr * bf, lz = p.w * e * sz * bf;
     const pa = prof(clamp(t - dt)), pb = prof(clamp(t + dt));
     const span = Math.max(1e-6, (clamp(t + dt) - clamp(t - dt)) * L);
     const ts = Math.atan(((pb.oy || 0) - (pa.oy || 0)) / span), ps = Math.atan(((pb.oz || 0) - (pa.oz || 0)) / span);
@@ -264,8 +265,8 @@ function mergeGeometriesSafe(g) { // make indexed by welding positions
 const merge = (gs) => mergeGeometries(gs.filter(Boolean), false);
 
 // ---------- carapace ----------
-const CP = { a0: 0.5, b: 0.4, n: 4.0, Ht: 0.27, Hb: 0.17, ta: 0.55, tb: 0.75 };
-const aAt = (z) => CP.a0 * (0.76 + 0.24 * (z / CP.b + 1) / 2);
+const CP = { a0: 0.5, b: 0.4, n: 4.6, Ht: 0.27, Hb: 0.17, ta: 0.55, tb: 0.75 };
+const aAt = (z) => CP.a0 * (0.6 + 0.4 * (z / CP.b + 1) / 2);   // lateral borders converge markedly backwards (Ilyoplax pusilla: pentagonal carapace)
 function rhoOf(x, z) { return Math.pow(Math.pow(Math.abs(x / aAt(z)), CP.n) + Math.pow(Math.abs(z / CP.b), CP.n), 1 / CP.n); }
 export const topY = (x, z) => CP.Ht * Math.pow(Math.cos(Math.asin(clamp(rhoOf(x, z), 0, 0.9999))), CP.ta);
 export const botY = (x, z) => -CP.Hb * Math.pow(Math.cos(Math.asin(clamp(rhoOf(x, z), 0, 0.9999))), CP.tb);
@@ -347,7 +348,7 @@ function buildCarapace() {
       let [bx, bz] = bAt(j / NTh); const th2 = Math.atan2(bz, bx);
       // anterolateral tooth
       const ang = Math.atan2(Math.abs(bz), Math.abs(bx));
-      const tooth = 1 + 0.045 * gauss(angDiff(ang, 0.62), 0.07) * (bz > 0 ? 1 : 0);
+      const tooth = 1 + (0.04 * gauss(angDiff(ang, 0.8), 0.08) - 0.05 * gauss(angDiff(ang, 0.66), 0.045)) * (bz > 0 ? 1 : 0);   // exorbital angle + notch behind it
       const lobe = 1 + 0.045 * gauss(angDiff(th2, PI / 2), 0.32) * (bz > 0 ? 1 : 0);
       const z = rho * bz * CP.b * tooth * lobe;
       const x = rho * bx * aAt(z) * tooth;
@@ -376,7 +377,9 @@ function buildCarapace() {
   }
   const W = NTh;
   for (let i = 0; i < rings - 1; i++) for (let j = 0; j < NTh; j++) {
-    const a = i * W + j, b = i * W + (j + 1) % NTh, c = a + W, d = b + W;
+    let a = i * W + j, b = i * W + (j + 1) % NTh, c = a + W, d = b + W;
+    if (i === 0) { a = b = 0; idx.push(b, d, c); continue; }                          // single dorsal pole vertex: no degenerate triangles
+    if (i === rings - 2) { c = d = (rings - 1) * W; idx.push(a, b, c); continue; }   // single ventral pole vertex
     idx.push(a, b, c, b, d, c);
   }
   const g = new THREE.BufferGeometry();
@@ -399,8 +402,9 @@ function buildCarapace() {
       const r = dorsalRelief(v.x, v.z); d = r.d; grooveAt[i] = r.g;
       // granulation, stronger in mid-carapace, fading toward the rim
       const rim = smooth(0.35, 0.02, v.y);
-      d += (fbm(v.x * 34, v.y * 34, v.z * 34, 3) - 0.5) * 0.016 * (1 - 0.5 * rim);
-      d -= 0.012 * smooth(0.74, 0.88, fbm(v.x * 60 + 7, v.y * 60, v.z * 60, 2));   // mud-filled pits
+      const pf = smooth(0.03, 0.2, Math.hypot(v.x, v.z));   // near the polar mesh the quads are thin slivers: fade features finer than the ring spacing
+      d += (fbm(v.x * 34, v.y * 34, v.z * 34, 3) - 0.5) * 0.016 * (1 - 0.5 * rim) * pf;
+      d -= 0.012 * smooth(0.74, 0.88, fbm(v.x * 60 + 7, v.y * 60, v.z * 60, 2)) * pf;   // mud-filled pits
       d += (fbm(v.x * 11 + 4, v.y * 11, v.z * 11, 3) - 0.5) * 0.02;
       d -= 0.012 * gauss(v.y - 0.03, 0.02) * smooth(0.34, 0.2, v.z);   // thoraco-branchial sulcus along the flank
     } else {
@@ -418,7 +422,7 @@ function buildCarapace() {
     const m1 = fbm(v.x * 5 + 2, v.y * 5, v.z * 5, 4), m2 = fbm(v.x * 15, v.y * 15 + 3, v.z * 15, 3), m3 = fbm(v.x * 38, v.y * 38, v.z * 38 + 7, 2);
     cc.copy(PAL.shell).lerp(PAL.shellDark, smooth(0.4, 0.75, m1) * 0.6);
     cc.lerp(PAL.mud, smooth(0.55, 0.78, m2) * 0.5 * smooth(-0.05, 0.12, v.y));
-    cc.lerp(PAL.mud, smooth(0.7, 0.85, m3) * 0.35);
+    cc.lerp(PAL.mud, smooth(0.7, 0.85, m3) * 0.35 * smooth(0.03, 0.2, Math.hypot(v.x, v.z)));
     cc.multiplyScalar(0.85 + 0.3 * m3);
     // male blue patches: two pastel lobes over the anterior branchial/hepatic regions, dark centre strip
     const bd = fbm(v.x * 10 + 9, v.y * 10, v.z * 10, 4);
@@ -427,7 +431,8 @@ function buildCarapace() {
     const bcol = PAL.blue.clone().lerp(PAL.blueHi, smooth(0.6, 1.0, bm) * 0.25).lerp(PAL.blueDeep, smooth(0.5, 0.0, bm) * 0.9 + Math.min(1, grooveAt[i] * 40) * 0.5);
     cc.lerp(bcol, smooth(0.0, 0.85, bm) * 0.92);
     // chromatophore speckle: fine pale and dark dots
-    const dots = fbm(v.x * 110 + 3, v.y * 110, v.z * 110, 1);
+    const pfc = smooth(0.03, 0.2, Math.hypot(v.x, v.z));
+    const dots = 0.5 + (fbm(v.x * 110 + 3, v.y * 110, v.z * 110, 1) - 0.5) * pfc;
     cc.lerp(C('#cbc3aa'), smooth(0.8, 0.9, dots) * 0.4 * smooth(-0.05, 0.1, v.y));
     cc.multiplyScalar(1 - 0.25 * smooth(0.12, 0.05, dots));
     // face / pterygostomial region tinted blue-white, orbital groove dark
@@ -450,6 +455,9 @@ function buildCarapace() {
   g.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
   return g;
 }
+
+// tympanum on the flat faces (+Z / -Z) of the walking-leg merus (P2-P5): oval, centred at 47 % of the segment
+const tympMask = (t, a) => { const e = 1 - sq((t - 0.47) / 0.27); if (e <= 0) return 0; return Math.sqrt(e) * Math.max(gauss(angDiff(a, 0), 0.6), gauss(angDiff(a, PI), 0.6)); };
 
 // ---------- appendages ----------
 const bump = (t, c, w) => Math.exp(-sq((t - c) / w));
@@ -480,7 +488,7 @@ function legSegment(kind, s, mats, tone = 0) {
   } else if (kind === 'merus') {
     L = 0.43 * s;
     prof = (t) => ({ w: s * (0.024 + 0.016 * bump(t, 0.5, 0.42)), h: s * (0.036 + 0.036 * bump(t, 0.45, 0.4) - 0.005 * t), n: 2.6, oy: s * 0.006 * Math.sin(PI * t) });
-    opt = { cap0: 0.07, cap1: 0.06, ridge: 0.28, ridgeB: 0.14, ridgeW: 0.42, nR: 32, nT: 64, ridges: [{ a: PI / 2 + 0.75, k: 0.1, w: 0.2 }, { a: PI / 2 - 0.75, k: 0.1, w: 0.2 }, { a: 3 * PI / 2 + 0.6, k: 0.08, w: 0.18 }] };
+    opt = { cap0: 0.07, cap1: 0.06, ridge: 0.2, ridgeB: 0.1, ridgeW: 0.42, nR: 40, nT: 72, bulge: (t, a) => 1 - 0.16 * smooth(0.12, 0.6, tympMask(t, a)), ridges: [{ a: PI / 2 + 0.75, k: 0.1, w: 0.2 }, { a: PI / 2 - 0.75, k: 0.1, w: 0.2 }, { a: 3 * PI / 2 + 0.6, k: 0.08, w: 0.18 }] };
   } else if (kind === 'carpus') {
     L = 0.2 * s;
     prof = (t) => ({ w: s * (0.03 + 0.012 * bump(t, 0.45, 0.35)), h: s * (0.036 + 0.02 * bump(t, 0.4, 0.35)), n: 2.1 });
@@ -496,15 +504,17 @@ function legSegment(kind, s, mats, tone = 0) {
   }
   { const p0 = prof; prof = (t) => { const r = p0(t); r.w *= 1.18; r.h *= 1.18; return r; }; }
   const base = tone > 0 ? PAL.legPale.clone().lerp(PAL.legMid, 0.5) : PAL.legMid;
-  const T = makeTube({ L, prof, colorFn: legColor(base, kind === 'propodus' ? 0.35 : 0.15), ...opt, ext: 0.03 * s });
+  const lc = legColor(base, kind === 'propodus' ? 0.35 : 0.15);
+  const colorFn = kind === 'merus' ? (t, a, p, o) => { lc(t, a, p, o); const w = smooth(0.1, 0.55, tympMask(t, a)); o.lerp(PAL.tympanum, w * 0.5); o.multiplyScalar(1 - 0.35 * gauss(tympMask(t, a) - 0.1, 0.05)); } : lc;   // tympanum: pale membranous oval with a darker rim
+  const T = makeTube({ L, prof, colorFn, ...opt, ext: 0.03 * s });
   geos.push(T.geo);
   if (kind !== 'dactylus') geos.push(endBall(T, L, prof, 0.62));
   // spines / setae
   if (kind === 'merus') {
-    geos.push(makeSpike(T.sample(L * 0.97, PI / 2).p, new V3(0.4, 1, 0), 0.06 * s, 0.014 * s, new V3(0, 0, 0), PAL.legMid, 5, 3)); // distal dorsal spine
-    for (let i = 0; i < 6; i++) { const t = 0.15 + 0.14 * i, sp = T.sample(L * t, 3 * PI / 2 + 0.3); geos.push(makeSpike(sp.p, sp.n, 0.05 * s, 0.006 * s, new V3(0.5, 0, 0), PAL.seta, 4, 3)); }
+    // merus of P2-P5 is unarmed in I. pusilla (no subdistal spine); only a few short setae on the lower margin
+    for (let i = 0; i < 3; i++) { const t = 0.3 + 0.2 * i, sp = T.sample(L * t, 3 * PI / 2 + 0.3); geos.push(makeSpike(sp.p, sp.n, 0.03 * s, 0.003 * s, new V3(0.5, 0, 0), PAL.seta, 4, 3)); }
   } else if (kind === 'carpus') {
-    for (let i = 0; i < 2; i++) { const sp = T.sample(L * 0.92, PI / 2 + (i ? 0.5 : -0.5)); geos.push(makeSpike(sp.p, sp.n.clone().add(new V3(0.3, 0, 0)), 0.045 * s, 0.009 * s, new V3(0, 0, 0), PAL.legMid, 4, 3)); }
+    // carpus unarmed
   } else if (kind === 'propodus') {
     for (let i = 0; i < 10; i++) {
       const t = 0.2 + 0.78 * (i / 9), sp = T.sample(L * t, 3 * PI / 2 - 0.35 + (i % 2) * 0.7);
@@ -530,6 +540,7 @@ function clawColor(t, a, p, out) {
   out.multiplyScalar(0.94 + 0.1 * fbm(p.x * 30, p.y * 30, p.z * 30, 2));
 }
 
+const CHELA = {};   // shared between propodus and dactylus builds (finger geometry)
 function chelaGeom(kind, s, mats) {
   const geos = [];
   let L, T;
@@ -544,54 +555,56 @@ function chelaGeom(kind, s, mats) {
     L = 0.42 * s;
     T = makeTube({ L, prof: (t) => ({ w: s * (0.055 + 0.04 * bump(t, 0.6, 0.4)), h: s * (0.06 + 0.055 * bump(t, 0.65, 0.4)), n: 2.4 }), colorFn: legColor(PAL.clawDarkMerus.clone().lerp(PAL.legMid, 0.4), 0.1), cap0: 0.07, cap1: 0.06, ridgeB: 0.3, ridge: 0.15, ridgeW: 0.5, nR: 28, nT: 40, ext: 0.03 });
     geos.push(T.geo); geos.push(endBall(T, L, (t) => ({ w: s * 0.095, h: s * 0.115 }), 0.62));
-    for (let i = 0; i < 7; i++) { const sp = T.sample(L * (0.35 + 0.09 * i), 3 * PI / 2 + 0.15); geos.push(makeSpike(sp.p, sp.n, 0.045 * s, 0.006 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3)); }
+    for (let i = 0; i < 3; i++) { const sp = T.sample(L * (0.45 + 0.12 * i), 3 * PI / 2 + 0.15); geos.push(makeSpike(sp.p, sp.n, 0.03 * s, 0.004 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3)); }
   } else if (kind === 'carpus') {
     L = 0.3 * s;
     T = makeTube({ L, prof: (t) => ({ w: s * (0.075 + 0.028 * bump(t, 0.5, 0.35)), h: s * (0.08 + 0.03 * bump(t, 0.45, 0.35)), n: 2.0 }), colorFn: (t, a, p, o) => { legColor(PAL.legMid, 0.25)(t, a, p, o); o.lerp(PAL.claw, 0.55 * smooth(0.3, 0.9, t)); }, cap0: 0.06, cap1: 0.06, neck1: 0.8, ridge: 0.16, nR: 26, nT: 30, ext: 0.03 });
     geos.push(T.geo); geos.push(endBall(T, L, (t) => ({ w: s * 0.103, h: s * 0.11 }), 0.8));
-    const sp = T.sample(L * 0.9, PI / 2 + 0.35); geos.push(makeSpike(sp.p, sp.n, 0.06 * s, 0.014 * s, new V3(0, 0, 0), PAL.clawShade, 5, 3));
   } else if (kind === 'propodus') {
-    // palm + fixed finger; fingers lie in the local XY plane, palm broad in Y
-    L = 0.68 * s; const Hp = 0.17 * s, F0 = 0.62;
-    const hh = (t) => t < F0 ? Hp * (0.5 + 0.5 * Math.pow(Math.sin(PI * t / F0), 0.8)) : 0.5 * Hp * Math.pow(Math.max(0, 1 - (t - F0) / (1 - F0)), 0.85) + 0.005 * s;
-    const bottom = (t) => -Hp + (t > F0 ? 0.11 * s * sq((t - F0) / (1 - F0)) : 0);
+    // male chela of I. pusilla: palm short and very high, fixed finger horizontal (parallel to the palm's lower margin),
+    // crenulate carina on the outer face of each finger. Fingers lie in the local XY plane; outer face = -Z.
+    L = 0.6 * s; const Hp = 0.2 * s, F0 = 0.64;
+    const hh = (t) => t < F0 ? Hp * (0.5 + 0.5 * Math.pow(Math.sin(PI * clamp(t / F0)), 0.55)) * (t < 0.08 ? 0.75 + 0.25 * t / 0.08 : 1) : 0.5 * Hp * Math.pow(Math.max(0, 1 - (t - F0) / (1 - F0)), 0.8) + 0.006 * s;
+    const bottom = () => -Hp;
     T = makeTube({
       L, n: 2.3,
       prof: (t) => {
         const h = hh(t);
-        const w = t < F0 ? s * (0.06 + 0.04 * Math.sin(PI * t / F0)) : s * (0.05 * Math.pow(Math.max(0, 1 - (t - F0) / (1 - F0)), 0.55) + 0.006);
-        return { h, w, n: t < F0 ? 2.5 : 2.0, oy: bottom(t) + h };
+        const w = t < F0 ? s * (0.06 + 0.045 * Math.pow(Math.sin(PI * clamp(t / F0)), 0.7)) : s * (0.05 * Math.pow(Math.max(0, 1 - (t - F0) / (1 - F0)), 0.5) + 0.008);
+        return { h, w, n: t < F0 ? 2.6 : 2.0, oy: bottom(t) + h };
       },
-      colorFn: (t, a, p, o) => { clawColor(t, a, p, o); o.lerp(C('#e6d6a6'), 0.22 * gauss(t - 0.62, 0.12)); o.lerp(PAL.blue, 0.16 * gauss(t, 0.16)); if (t < 0.12) o.lerp(PAL.clawShade, 1 - t / 0.12); if (t > 0.9) o.lerp(PAL.clawTip, smooth(0.9, 1, t) * 0.8); },
-      cap0: 0.06, cap1: 0.0, neck0: 0.6, neck1: 0.4, nR: 40, nT: 84, ext: 0.03, ridge: 0.09, ridgeB: 0.05, uvScale: 0.9,
-      ridges: [{ a: PI / 2 + 0.9, k: 0.035, w: 0.25 }, { a: PI / 2 - 0.9, k: 0.035, w: 0.25 }],
+      colorFn: (t, a, p, o) => { clawColor(t, a, p, o); o.lerp(C('#e6d6a6'), 0.2 * gauss(t - 0.64, 0.12)); o.lerp(PAL.blue, 0.16 * gauss(t, 0.16)); if (t < 0.12) o.lerp(PAL.clawShade, 1 - t / 0.12); if (t > 0.9) o.lerp(PAL.clawTip, smooth(0.9, 1, t) * 0.8); },
+      cap0: 0.06, cap1: 0.0, neck0: 0.6, neck1: 0.4, nR: 40, nT: 84, ext: 0.03, ridge: 0.06, ridgeB: 0.04, uvScale: 0.9,
     });
     geos.push(T.geo);
-    for (let i = 0; i < 16; i++) { const t = 0.1 + 0.42 * i / 15, sp = T.sample(L * t, PI / 2 + (i % 2 ? 0.28 : -0.28)); geos.push(makeBall(sp.p.clone().addScaledVector(sp.n, -0.004 * s), (0.011 + 0.003 * rnd()) * s, PAL.claw.clone().lerp(PAL.clawShade, 0.25), new V3(1.3, 1, 1))); }   // dorsal tubercle rows
-    for (let i = 0; i < 8; i++) {   // teeth on the fixed finger's cutting edge
-      const t = F0 + 0.03 + 0.34 * (i / 7), sp = T.sample(L * t, PI / 2);
-      geos.push(makeSpike(sp.p.clone().add(new V3(0, -0.004, 0)), new V3(0.15, 1, 0), (0.04 - 0.003 * i) * s, 0.015 * s, new V3(0, 0, 0), PAL.clawTip.clone().lerp(PAL.claw, 0.4), 4, 2));
+    for (let i = 0; i < 14; i++) { const t = F0 + 0.02 + 0.3 * i / 13, sp = T.sample(L * t, PI); geos.push(makeBall(sp.p.clone().addScaledVector(sp.n, -0.003 * s), (0.011 - 0.0004 * i) * s, PAL.claw.clone().lerp(PAL.clawShade, 0.15), new V3(1.5, 0.9, 0.9))); }   // crenulate carina (outer face of fixed finger)
+    for (let i = 0; i < 8; i++) {   // small teeth on the fixed finger's cutting edge (not crossing when closed)
+      const t = F0 + 0.03 + 0.3 * (i / 7), sp = T.sample(L * t, PI / 2);
+      geos.push(makeSpike(sp.p.clone().add(new V3(0, -0.004, 0)), new V3(0.15, 1, 0), (0.028 - 0.002 * i) * s, 0.012 * s, new V3(0, 0, 0), PAL.clawTip.clone().lerp(PAL.claw, 0.4), 4, 2));
     }
-    for (let i = 0; i < 9; i++) { const t = 0.15 + 0.6 * i / 8, sp = T.sample(L * t, 3 * PI / 2); geos.push(makeSpike(sp.p, sp.n, 0.045 * s, 0.005 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3)); }
-    T.hinge = new V3(L * 0.58, bottom(0.58) + 2 * hh(0.58) - 0.035 * s, 0);
+    for (let i = 0; i < 7; i++) { const t = 0.15 + 0.5 * i / 6, sp = T.sample(L * t, 3 * PI / 2); geos.push(makeSpike(sp.p, sp.n, 0.035 * s, 0.004 * s, new V3(0.4, 0, 0), PAL.seta, 4, 3)); }
+    T.hinge = new V3(L * 0.6, bottom() + 2 * hh(0.6) - 0.03 * s, 0);
     geos.push(makeBall(T.hinge.clone(), 0.045 * s, PAL.clawShade, new V3(1, 1, 1.3)));
+    const tipY = bottom() + 2 * hh(0.985) * 0.5, vx = L * 0.99 - T.hinge.x, vy = tipY - T.hinge.y;
+    CHELA.dLen = Math.hypot(vx, vy) * 1.03; CHELA.dRest = Math.atan2(vy, vx) + 0.06 * s / Math.hypot(vx, vy);
   } else { // dactylus (movable finger) — drawn pointing along +X, curved toward -Y (closing side)
-    L = 0.36 * s;
+    L = (CHELA.dLen || 0.3 * s);
     T = makeTube({
       L, n: 2.2,
-      prof: (t) => ({ h: s * (0.04 * Math.pow(1 - t, 0.8) + 0.004), w: s * (0.04 * Math.pow(1 - t, 0.55) + 0.005), oy: -s * 0.06 * t * t }),
+      prof: (t) => ({ h: s * (0.05 * Math.pow(1 - t, 0.8) + 0.004), w: s * (0.045 * Math.pow(1 - t, 0.55) + 0.005), oy: -s * 0.06 * t * t }),
       colorFn: (t, a, p, o) => { clawColor(t, a, p, o); if (t > 0.86) o.lerp(PAL.clawTip, smooth(0.86, 1, t) * 0.85); },
       cap0: 0.04, cap1: 0.0, neck0: 0.7, neck1: 0.35, nR: 24, nT: 44, ext: 0.03, uvScale: 0.9,
     });
     geos.push(T.geo);
-    for (let i = 0; i < 8; i++) {
-      const t = 0.14 + 0.62 * (i / 7), sp = T.sample(L * t, 3 * PI / 2);
-      geos.push(makeSpike(sp.p, new V3(0.1, -1, 0), (0.04 - 0.0028 * i) * s, 0.015 * s, new V3(0, 0, 0), PAL.clawTip.clone().lerp(PAL.claw, 0.4), 4, 2));
+    for (let i = 0; i < 7; i++) {
+      const t = 0.14 + 0.6 * (i / 6), sp = T.sample(L * t, 3 * PI / 2);
+      geos.push(makeSpike(sp.p, new V3(0.1, -1, 0), (0.028 - 0.002 * i) * s, 0.012 * s, new V3(0, 0, 0), PAL.clawTip.clone().lerp(PAL.claw, 0.4), 4, 2));
     }
+    for (let i = 0; i < 12; i++) { const t = 0.1 + 0.7 * i / 11, sp = T.sample(L * t, PI); geos.push(makeBall(sp.p.clone().addScaledVector(sp.n, -0.003 * s), (0.011 - 0.0005 * i) * s, PAL.claw.clone().lerp(PAL.clawShade, 0.15), new V3(1.5, 0.9, 0.9))); }   // crenulate carina on the dactylus
   }
   const m = new THREE.Mesh(merge(geos), (kind === 'propodus' || kind === 'dactylus') ? mats.claw : mats.leg);
   const g = new THREE.Group(); g.add(m);
-  return { group: g, L, mesh: m, hinge: T.hinge };
+  return { group: g, L, mesh: m, hinge: T.hinge, dRest: CHELA.dRest };
 }
 
 // ---------- assembly ----------
@@ -683,7 +696,7 @@ export function buildCrab(mats) {
 
   // ---- chelipeds ----
   const chelaSpec = [
-    { n: 'coxa', s: 1 }, { n: 'ischium', s: 1 }, { n: 'merus', s: 1 }, { n: 'carpus', s: 0.95 }, { n: 'propodus', s: 0.84 }, { n: 'dactylus', s: 0.84 },
+    { n: 'coxa', s: 1 }, { n: 'ischium', s: 1 }, { n: 'merus', s: 1 }, { n: 'carpus', s: 0.95 }, { n: 'propodus', s: 0.95 }, { n: 'dactylus', s: 0.95 },
   ];
   for (const side of [R, Lf]) {
     const sx = side === R ? 1 : -1;
@@ -695,8 +708,8 @@ export function buildCrab(mats) {
       let pos = parent === body ? off : new V3(prevL, 0, 0);
       const j = joint(`${side}_cheliped_${cs.n}`, parent, pos, rest[cs.n], { hinge: cs.n === 'carpus' ? 'y' : 'z', min: -120, max: 120, label: `cheliped ${cs.n}` }, parent === body && sx < 0);
       seg.mesh.name = `${j.name}_mesh`; j.add(seg.group);
-      if (cs.n === 'propodus') { j.userData.hingePos = seg.hinge.toArray(); }
-      if (cs.n === 'dactylus') { const hp = parent.userData.hingePos; j.position.set(hp[0], hp[1], hp[2]); j.rotation.z = -9 * D2R; }
+      if (cs.n === 'propodus') { j.userData.hingePos = seg.hinge.toArray(); j.userData.dRest = seg.dRest; }
+      if (cs.n === 'dactylus') { const hp = parent.userData.hingePos; j.position.set(hp[0], hp[1], hp[2]); j.rotation.z = parent.userData.dRest; }
       reg(j); parent = j; prevL = seg.L;
       if (cs.n === 'propodus') prevL = seg.L;
     }
