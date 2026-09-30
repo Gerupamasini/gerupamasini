@@ -1,6 +1,8 @@
 // Procedural behaviour for the juvenile goby, driven by the shared pose model (./pose.js).
 //
 // What real gobies do (and what this reproduces):
+//  * spend most of the time motionless: rests of ~10–30 s (sometimes over a minute) between short bouts of
+//    activity; most bouts are a small repositioning, fewer are darts; yawns are rare
 //  * perch on the bottom on the pelvic disc, the front propped on spread pectoral fins, head slightly
 //    raised, tail resting on the sand; only the gills, pectorals and eyes move (ventilation ~70/min)
 //  * move in short darts: a quick turn (C-bend), 2–4 tail beats at ~8 Hz with pectorals pressed flat
@@ -26,6 +28,8 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const damp = (cur, goal, rate, dt) => cur + (goal - cur) * (1 - Math.exp(-rate * dt));
 const rand = (a, b) => a + Math.random() * (b - a);
+// resting spells: gobies sit motionless most of the time. Heavy-tailed: mostly 10–30 s, sometimes over a minute
+const restTime = (scale = 1) => scale * Math.min(90, 8 + 14 * -Math.log(1 - Math.random() * 0.999));
 
 export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY }) {
   const rest = {};
@@ -33,7 +37,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
 
   const st = {
     auto: true, paused: false,
-    mode: 'perch', t: 0, next: 1.5,
+    mode: 'perch', t: 0, next: rand(5, 9),
     time: 0,
     pos: new THREE.Vector3(), heading: 0, speed: 0, lift: 0,
     // locomotion
@@ -51,7 +55,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     // axial chain yaw (world, rad) for the segments in SPINE order; [1] (J_root) is the heading
     yaw: new Float64Array(SPINE.length), headGoal: 0, headV: 0, headW: 6, turnSign: 1, clock: 0,
     // posture and pectoral fins
-    prop: 0.15, propGoal: 0.12, alertT: rand(4, 9), fan: 0, fanOn: false, fanT: rand(3, 8), strokeP: 0,
+    prop: 0.15, propGoal: 0.12, alertT: rand(15, 35), fan: 0, fanOn: false, fanT: rand(20, 45), strokeP: 0,
     pecs: [0, 1].map(() => ({ abd: 0.4, dep: 0.42, fold: 0, abdV: 0, depV: 0, flex: 0, wave: 0.04 })),
   };
   // head-yaw history (fixed 240 Hz) that the body segments replay with a posterior delay
@@ -114,10 +118,11 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
 
   function chooseNext() {
     const r = Math.random();
-    if (r < 0.46) dart();
-    else if (r < 0.62) yawn();
-    else if (r < 0.8) paddle();
-    else { flick(); st.mode = 'perch'; st.t = 0; st.next = rand(1.5, 3); }
+    if (r < 0.34) dart();
+    else if (r < 0.4) yawn();
+    else if (r < 0.78) paddle();
+    else if (r < 0.9) { flick(); st.mode = 'perch'; st.t = 0; st.next = restTime(0.8); }
+    else { st.mode = 'perch'; st.t = 0; st.next = restTime(); } // look around, stay put
   }
 
   // ------------------------------------------------------------------ update
@@ -143,7 +148,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         const inPower = (st.strokeP % 1) < 0.3;
         st.speed = damp(st.speed, inPower ? 0.022 : 0.0, inPower ? 12 : 8, dt);
         st.paddle = 1;
-        if (st.t > 0.84 + 0.42 * Math.floor(rand(0, 1.99))) { st.mode = 'perch'; st.t = 0; st.next = rand(1.2, 3.5); st.paddle = 0; st.strokeP = 0; }
+        if (st.t > 0.84 + 0.42 * Math.floor(rand(0, 1.99))) { st.mode = 'perch'; st.t = 0; st.next = restTime(0.9); st.paddle = 0; st.strokeP = 0; }
         break;
       }
       case 'orient': {
@@ -186,14 +191,14 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         st.phase += 2 * Math.PI * st.freq * 0.6 * dt * Math.max(st.gain, 0);
         st.gain = damp(st.gain, 0, 10, dt);
         if (st.t > 0.55 && st.speed < 0.01) {
-          st.mode = 'perch'; st.t = 0; st.next = rand(1.2, 4.5); st.gain = 0;
-          if (Math.random() < 0.35) st.flick = 1;
+          st.mode = 'perch'; st.t = 0; st.next = restTime(); st.gain = 0;
+          if (Math.random() < 0.3) st.flick = 1;
         }
         break;
       }
       case 'yawn': {
         const y = yawnCurves(st.t);
-        if (y.done) { st.mode = 'perch'; st.t = 0; st.next = rand(2.5, 5); }
+        if (y.done) { st.mode = 'perch'; st.t = 0; st.next = restTime(); }
         break;
       }
     }
@@ -237,7 +242,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
       if (st.alertT <= 0) {
         const alert = st.propGoal < 0.5;
         st.propGoal = alert ? rand(0.75, 1) : rand(0.05, 0.2);
-        st.alertT = alert ? rand(1.5, 4.5) : rand(4, 11);
+        st.alertT = alert ? rand(4, 12) : rand(30, 70);
       }
     }
     const propGoal = st.mode === 'orient' ? 0.8 : (st.mode === 'dart' || st.mode === 'glide') ? 0 : st.propGoal;
@@ -245,7 +250,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     // resting spells of slow pectoral fanning
     if (st.mode === 'perch') {
       st.fanT -= dt;
-      if (st.fanT <= 0) { st.fanOn = !st.fanOn; st.fanT = st.fanOn ? rand(1.2, 3) : rand(4, 10); }
+      if (st.fanT <= 0) { st.fanOn = !st.fanOn; st.fanT = st.fanOn ? rand(1.2, 2.5) : rand(25, 60); }
     } else st.fanOn = false;
     st.fan = damp(st.fan, st.fanOn ? 1 : 0, 3, dt);
 
@@ -336,13 +341,13 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
       p.pecAbdL += 0.25 * y.fins; p.pecAbdR += 0.25 * y.fins;
     }
 
-    // eyes: independent saccades (mostly horizontal, ±8°), both lead turns
+    // eyes: independent saccades (mostly horizontal, ±8°), with long fixations while resting; both lead turns
     for (const [i, eye] of st.eyes.entries()) {
       eye.timer -= dt;
       if (eye.timer <= 0) {
         eye.gy = rand(-0.14, 0.14);
         eye.gp = rand(-0.05, 0.06);
-        eye.timer = rand(0.4, 2.6);
+        eye.timer = st.mode === 'perch' ? rand(1.5, 7) : rand(0.3, 1.2);
       }
       // both eyes look toward where the head is going (they lead the turn, then settle)
       const lead = clamp(wrap(st.headGoal - st.yaw[0]) + (st.mode === 'orient' ? wrap(st.targetHeading - st.yaw[0]) : 0), -0.6, 0.6) * 0.4;
