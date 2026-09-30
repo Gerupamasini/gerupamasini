@@ -29,6 +29,9 @@ export const FEATHER_TYPE = {
 
 const deg = Math.PI / 180;
 
+// LOD2 draws every other remex / greater covert as a wider card (the wing-fold solver clears both shapes)
+export const LOD2_CARD = { types: new Set(['primary', 'secondary', 'greaterCovert']), width: 1.9, rows: 4 };
+
 const OVATE = new Set(['greaterCovert', 'medianCovert', 'lesserCovert', 'primaryCovert', 'scapular', 'upperTailCovert', 'underTailCovert']);
 function widthProfile(t, type) {
   // base (calamus) → full width → tip; pointed for primaries/alula, broadly ovate for coverts & body feathers
@@ -274,7 +277,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
     const w = computeSpineWeights(p, boneIndex);
     return { idx: w.map((e) => e[0]), w: w.map((e) => e[1]) };
   };
-  const segs = detail === 0 ? { nL: 8, nW: 2 } : detail === 1 ? { nL: 5, nW: 1 } : { nL: 4, nW: 1 };
+  const segs = detail === 0 ? { nL: 8, nW: 2 } : detail === 1 ? { nL: 5, nW: 1 } : { nL: LOD2_CARD.rows, nW: 1 };
 
   // ---- Left wing (then mirrored) ----
   const wingStart = gb.mark();
@@ -285,7 +288,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
     const boneName = f.type === 'primary' || f.type === 'secondary' || f.type === 'tertial' ? f.bone : f.name; // remiges share f.bone, coverts/alula own bones
     const idx = boneIndex[`${boneName}_L`];
     const fr = { ...f };
-    if (detail >= 2 && (f.type === 'primary' || f.type === 'secondary' || f.type === 'greaterCovert')) fr.width *= 1.9;
+    if (detail >= 2 && LOD2_CARD.types.has(f.type)) fr.width *= LOD2_CARD.width;
     const m = gb.mark();
     emitFeather(gb, fr, wingFrame(fr), { idx: [idx], w: [1] }, FEATHER_TYPE[f.type], rng(), segs);
     // wing-root feathers re-aimed about their base so the spread wing clears the body (wingFold.js)
@@ -334,7 +337,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
       ? (p) => {
           const up = f.type === 'upperTailCovert' ? 1 : -1;
           // stacked like the other coverts (inner over outer, left over right) instead of coplanar (z-fighting)
-          const lift = 0.35 + (2 - f.index) * 0.3 + (f.side > 0 ? 0.1 : 0);
+          const lift = 0.5 + (2 - f.index) * 0.3 + (f.side > 0 ? 0.1 : 0);
           // straight over / under the tail, but lying on the rump / vent wherever the body is in the way:
           // raised (lowered) vertically to `lift` above the outline. (Closest-point projection of the
           // rooted bases scattered neighbouring rows onto different sides and the straight part dived

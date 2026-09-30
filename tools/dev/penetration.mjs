@@ -9,7 +9,8 @@
 //            (rectrix bases, wing bones tucked into the flank pocket) but must not dive back in.
 //   dip      a reentry that re-emerges further along (feather dives in and out → slivers / windows)
 //   tipIn    a reentry that stays inside to the tip (feather stuck into the body)
-//   cross    exposed wing / scapular / tail-covert surface on the opposite side of the midline (> 1 mm)
+//   cross    a folded-wing / body feather emerging from the plumage through the far-side flank (surface
+//            facing away from the feather's side): it went through the body
 //   under    folded-wing feather emerging from the plumage on the underside of the body (surface normal y < −0.7)
 //   poke     body surface visible in front of an exposed feather that should cover it: a body vertex whose
 //            inward normal ray hits exposed feather surface within 2.5 mm while its outward ray (15 mm)
@@ -24,7 +25,7 @@ import * as THREE from 'three';
 import { KentishPloverModel } from '../../src/birds/kentishPlover/KentishPloverModel.js';
 import { KentishPloverAnimator, PREEN_VARIANTS } from '../../src/birds/kentishPlover/KentishPloverAnimator.js';
 import { FEATHER_TYPE } from '../../src/birds/kentishPlover/anatomy/feathers.js';
-import { animation as ANIM } from '../../src/birds/kentishPlover/KentishPloverConfig.js';
+import { animation as ANIM, lod as LODCFG } from '../../src/birds/kentishPlover/KentishPloverConfig.js';
 import { writeFileSync } from 'node:fs';
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const [k, v] = a.replace(/^--/, '').split('='); return [k, v ?? '1']; }));
@@ -32,7 +33,15 @@ const LODS = (args.lod ?? '0,1,2').split(',').map(Number);
 const poseRe = args.pose ? new RegExp(args.pose) : null;
 const TOP = Number(args.top ?? 15);
 const SEED = Number(args.seed ?? 3);
-const LIM = { reentry: 0.3, dip: 0.1, poke: 0.3 }; // pass thresholds (mm)
+// Pass thresholds (mm). LOD0 is seen from any distance: 0.3 mm (dips 0.1 mm). LOD1 / LOD2 are only shown
+// from 2.5 / 9 m on (KentishPloverLOD, normalised to a 45° field of view), where one pixel of a 1000 px tall
+// view covers 2·d·tan 22.5° / 1000 = 2.1 / 7.5 mm; a third of a pixel is taken as invisible there. At
+// LOD1/2 a feather coming out on the far side / underside counts once it sticks out more than that too.
+const limitsFor = (lod) => {
+  const s = lod === 0 ? 1 : Math.max(1, (2 * LODCFG.distances[lod - 1] * Math.tan(Math.PI / 8)) / 3 / 0.3);
+  return { reentry: 0.3 * s, dip: 0.1 * s, poke: 0.3 * s, emerge: lod === 0 ? 0 : 0.3 * s };
+};
+let LIM = limitsFor(0);
 const EPS = 0.02; // mm: inside/outside hysteresis
 const TNAME = Object.fromEntries(Object.entries(FEATHER_TYPE).map(([k, v]) => [v, k]));
 const WINGISH = new Set(['primary', 'secondary', 'tertial', 'primaryCovert', 'greaterCovert', 'medianCovert', 'lesserCovert', 'alula', 'arm']);
@@ -389,6 +398,15 @@ function measure(model, S, anim) {
     }
     for (const line of I.lines) {
       let emerged = false, inside = false, depth = 0, visDepth = 0, lineDip = 0, lineVisDip = 0;
+      let pend = null, outMax = 0; // underside / far-side emergence, counted once it sticks out > LIM.emerge
+      const settle = () => {
+        if (pend && outMax > LIM.emerge) {
+          if (pend.under) [r.under, r.underAt, r.underN] = [r.under + 1, pend.under.at, pend.under.n];
+          if (pend.cross) r.cross++;
+        }
+        pend = null;
+        outMax = 0;
+      };
       let insideAfter = 0;
       for (let i = 0; i < line.length; i++) {
         const nsub = i === line.length - 1 ? 1 : SUB;
@@ -407,16 +425,19 @@ function measure(model, S, anim) {
           d -= flutter;
           if (args.probe && I.name === args.probe) (r.prof ??= []).push(`${p.map((x) => x.toFixed(1)).join(",")}:${d.toFixed(2)}${sdNeck ? "n" : ""}`);
           if (d > EPS) {
+            outMax = Math.max(outMax, d);
             if (inside && emerged && insideAfter > 0) { lineDip = Math.max(lineDip, depth); lineVisDip = Math.max(lineVisDip, visDepth); }
-            // a folded-wing feather coming out of the plumage on the underside (belly / lower breast)
-            if (inside && folded && WINGISH.has(I.type) && sdN[1] < -0.7) { r.under++; r.underAt = p.map((x) => +x.toFixed(1)); r.underN = sdN.map((x) => +x.toFixed(2)); }
+            // a folded-wing feather coming out of the plumage on the underside (belly / lower breast), or a
+            // feather coming out through the far-side flank (it went through the body)
+            if (inside && folded && WINGISH.has(I.type) && sdN[1] < -0.7) (pend ??= {}).under = { at: p.map((x) => +x.toFixed(1)), n: sdN.map((x) => +x.toFixed(2)) };
+            if (inside && folded && I.type !== 'rectrix' && sdN[0] * I.side < -0.5) (pend ??= {}).cross = true;
             if (!emerged) emerged = true;
             inside = false;
             insideAfter = 0;
             depth = visDepth = 0;
             // exposure checks
-            if (folded && I.type !== "rectrix" && !(I.type === "upperTailCovert" || I.type === "underTailCovert") && midX(p) * I.side < -1.0) r.cross++;
           } else if (d < -EPS) {
+            settle();
             inside = true;
             if (emerged) {
               insideAfter++;
@@ -437,6 +458,7 @@ function measure(model, S, anim) {
           }
         }
       }
+      settle();
       if (r.prof) { console.log("   line", r.prof.join("  ")); r.prof = []; }
       if (!emerged) r.buried++;
       if (inside && emerged) r.tipIn = Math.max(r.tipIn, depth);
@@ -481,6 +503,7 @@ function measure(model, S, anim) {
 const summary = {};
 let fail = 0;
 for (const d of LODS) {
+  LIM = limitsFor(d);
   const model = new KentishPloverModel({ lods: [d], shadows: false });
   const S = analyse(model, d);
   // sanity: own skinning == three.js CPU skinning
@@ -492,7 +515,7 @@ for (const d of LODS) {
     for (let i = 0; i < S.F.n; i += 97) { skin(M, S.F.pos, S.F.nrm, S.F.si, S.F.sw, i, [0, 0, 0], P, N); S.F.mesh.getVertexPosition(i, v).applyMatrix4(S.F.mesh.matrixWorld).multiplyScalar(1000); err = Math.max(err, Math.hypot(v.x - P[i * 3], v.y - P[i * 3 + 1], v.z - P[i * 3 + 2])); }
     if (err > 1e-3) throw new Error(`skinning mismatch ${err}`);
   }
-  console.log(`\n=== LOD${d}: ${S.F.inst.length} feathers, ${S.B.idx.length / 3} body tris — limits: visible reentry ≤ ${LIM.reentry} mm, visible dip ≤ ${LIM.dip} mm, no cross/under, poke ≤ ${LIM.poke} mm`);
+  console.log(`\n=== LOD${d}: ${S.F.inst.length} feathers, ${S.B.idx.length / 3} body tris — limits: visible reentry ≤ ${LIM.reentry.toFixed(2)} mm, visible dip ≤ ${LIM.dip.toFixed(2)} mm, no cross/under${LIM.emerge ? ` (> ${LIM.emerge.toFixed(2)} mm)` : ""}, poke ≤ ${LIM.poke.toFixed(2)} mm`);
   console.log('  pose'.padEnd(24), 'fluff | vis.reentry worst feather   | vdips cross under | poke   behind          n>0.1 | neck | (all reentry, feather; buried)');
   const worstByFeather = {};
   const rows = [];

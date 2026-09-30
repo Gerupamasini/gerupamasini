@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WING } from './featherLayout.js';
 import { projectToSurface } from './sdf.js';
-import { featherOffset, wingFrame } from './feathers.js';
+import { featherOffset, wingFrame, LOD2_CARD } from './feathers.js';
 import { COVERT_ARM } from './skeleton.js';
 import { frameQuat } from '../../../core/math.js';
 
@@ -45,34 +45,58 @@ function armFold() {
 const CLEAR = 0.35; // mm: minimal height of exposed feather surface over the body outline
 const SAG = 0.1; // mm: tolerated sag of an exposed line toward the outline (no visible dip)
 
-/** Sample lines (bind-space offsets from the feather base) along the shaft at 5 positions across the vane. */
-function shapeLines(f, across = [-1, -0.5, 0, 0.5, 1], along = 13) {
+/**
+ * Sample lines (bind-space offsets from the feather base) along the shaft at positions across the vane — plus
+ * the vane edges of the wider LOD2 card of the same feather, which rides the same bone.
+ */
+function shapeLines(f, across = [-1, -0.5, 0, 0.5, 1], along = 13, card = LOD2_CARD.types.has(f.type)) {
   const fr = wingFrame(f);
-  return across.map((a) =>
+  const lines = across.map((a) =>
     Array.from({ length: along }, (_, i) => {
       const o = featherOffset(f, i / (along - 1), a);
       return new THREE.Vector3(...[0, 1, 2].map((k) => fr.dir[k] * o[0] + fr.side[k] * o[1] + fr.normal[k] * o[2]));
     })
   );
+  return card ? lines.concat(cardLines({ ...f, width: f.width * LOD2_CARD.width })) : lines;
+}
+
+/** The LOD2 card as tessellated (LOD2_CARD.rows rows, vane edges + rachis), straight between its vertices. */
+function cardLines(f) {
+  const fr = wingFrame(f);
+  const n = LOD2_CARD.rows;
+  const at = (t, a) => {
+    const o = featherOffset(f, t, a);
+    return new THREE.Vector3(...[0, 1, 2].map((k) => fr.dir[k] * o[0] + fr.side[k] * o[1] + fr.normal[k] * o[2]));
+  };
+  return [-1, 0, 1].map((a) => {
+    const line = [];
+    for (let i = 0; i < n - 1; i++) for (let j = 0; j < 4; j++) line.push(at(i / (n - 1), a).lerp(at((i + 1) / (n - 1), a), j / 4));
+    line.push(at(1, a));
+    return line;
+  });
 }
 
 /**
  * How far (mm) the feather violates the clearance rule for world rotation R about `base`:
  * along every sample line, once the surface has emerged it must not sink below min(height so far, CLEAR)
  * (less a small SAG); a line whose highest point lies within ±CLEAR of the outline grazes it (flickers)
- * and counts too.
+ * and counts too, as does a line emerging where the outline faces down (normal y < −0.6).
  */
 function violation(lines, base, R, sdf, pose) {
   let v = 0;
   const p = new THREE.Vector3();
   for (const line of lines) {
     let top = -Infinity;
+    let prev = Infinity;
     for (const o of line) {
       p.copy(o).applyQuaternion(R).add(base);
       if (pose) p.sub(pose.pivot).applyQuaternion(pose.q).add(pose.pivot);
       const d = sdf(p.x, p.y, p.z);
       if (top > 0) v = Math.max(v, Math.min(top, CLEAR) - SAG - d);
+      // coming out of the plumage on the underside (belly / lower breast) sticks out below the bird
+      if (prev < 0 && d >= 0 && sdf(p.x, p.y + 0.2, p.z) - sdf(p.x, p.y - 0.2, p.z) < -0.24) v = Math.max(v, CLEAR);
       top = Math.max(top, d);
+      prev = d;
     }
     if (Math.abs(top) < CLEAR) v = Math.max(v, CLEAR - Math.abs(top));
   }
