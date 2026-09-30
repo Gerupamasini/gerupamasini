@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { plumage as PLUMAGE, animation as ANIM } from './KentishPloverConfig.js';
+import { FLUFF_REST } from './anatomy/bodyMesh.js';
 
 // breathing displacement amplitude (m): fractional expansion × body half-width
 const ANIM_BREATH = (ANIM.breathAmp * 0.021).toFixed(6);
@@ -20,11 +21,22 @@ float kpNoise(vec2 p) {
 }
 `;
 
+// Fluff displacement (mm per unit of fluff above the relaxed 0.15) at rest position p with rest normal n —
+// mirrors bodyMesh.bodyDisplacementMasks / headness
+const GLSL_FLUFF = /* glsl */ `
+float kpFluffMM(vec3 p, vec3 n) {
+  vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
+  float head = clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - clamp((83.0 - p.y) / 5.0, 0.0, 1.0));
+  return (2.5 + 4.5 * smoothstep(-0.2, -0.9, n.y) + 1.5 * smoothstep(0.2, 0.9, n.y)) * (1.0 - 0.7 * head) * (1.0 - 0.5 * smoothstep(-45.0, -62.0, p.z));
+}
+`;
+const FLUFF_REST_GLSL = FLUFF_REST.toFixed(3);
+
 // ------------------------------------------------------------------ BODY PLUMAGE
 const BODY_UNIFORMS_GLSL = /* glsl */ `
-uniform vec3 uForehead, uFrontalBar, uCrown, uNape, uSupercilium, uEyeStripe, uEarCoverts, uCollar;
+uniform vec3 uForehead, uFrontalBar, uCrown, uCrownRear, uNape, uSupercilium, uEyeStripe, uEarCoverts, uCollar;
 uniform vec3 uMantle, uMantleDark, uFringe, uBreastPatch, uUnder;
-uniform float uMelanin, uWear, uSeed, uDetail, uFluff;
+uniform float uMelanin, uWear, uSeed, uDetail, uFluff, uFringeMix, uSubterminal;
 varying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;
 `;
 
@@ -35,18 +47,31 @@ float sdSeg2(vec2 p, vec2 a, vec2 b) {
   return length(pa - ba * h);
 }
 
+// Head membership: the enlarged head ellipsoid and throat cut of bodyMesh.headness (skinning), sharpened to
+// a zone (body_shape_spec.md §17.2)
+float kpHeadness(vec3 p) {
+  vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
+  float below = clamp((83.0 - p.y) / 5.0, 0.0, 1.0);
+  return clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - below);
+}
+// Signed distance (mm) to the collar plane: 0 through the nape (z 4, y 92) and the throat sides (z 30, y 80),
+// + toward the head (spec §14)
+float kpCollarQ(vec3 p) {
+  return dot(p - vec3(0.0, 86.0, 17.0), vec3(0.0, 0.909, 0.42));
+}
+
 // Feather tract data: x = cell size (mm), y = normal strength, z = softness (0 hard, 1 downy)
 vec3 kpTract(vec3 p, vec3 n) {
-  float head = smoothstep(68.0, 74.0, p.y + p.z * 0.25 - 7.0) * smoothstep(34.0, 40.0, p.z);
-  float neck = smoothstep(26.0, 32.0, p.z) * (1.0 - head);
+  float head = smoothstep(0.35, 0.65, kpHeadness(p));
+  float neck = (1.0 - smoothstep(2.5, 4.0, abs(kpCollarQ(p)))) * (1.0 - head);
   float dorsal = smoothstep(-0.15, 0.35, n.y);
-  float rump = smoothstep(-26.0, -34.0, p.z);
+  float rump = smoothstep(-40.0, -50.0, p.z);
   vec3 breast = vec3(${PLUMAGE.featherScale.breast.toFixed(2)}, ${PLUMAGE.normalStrength.breast.toFixed(2)}, 0.8);
   vec3 belly = vec3(${PLUMAGE.featherScale.belly.toFixed(2)}, ${PLUMAGE.normalStrength.belly.toFixed(2)}, 1.0);
   vec3 mantle = vec3(${PLUMAGE.featherScale.mantle.toFixed(2)}, ${PLUMAGE.normalStrength.mantle.toFixed(2)}, 0.15);
   vec3 flank = vec3(${PLUMAGE.featherScale.flank.toFixed(2)}, ${PLUMAGE.normalStrength.flank.toFixed(2)}, 0.5);
   vec3 rumpT = vec3(${PLUMAGE.featherScale.rump.toFixed(2)}, ${PLUMAGE.normalStrength.rump.toFixed(2)}, 0.4);
-  vec3 t = mix(mix(belly, breast, smoothstep(0.0, 22.0, p.z)), flank, smoothstep(-0.55, 0.0, n.y) * (1.0 - smoothstep(0.1, 0.4, n.y)));
+  vec3 t = mix(mix(belly, breast, smoothstep(-10.0, 15.0, p.z)), flank, smoothstep(-0.55, 0.0, n.y) * (1.0 - smoothstep(0.1, 0.4, n.y)));
   t = mix(t, mantle, dorsal);
   t = mix(t, rumpT, rump * dorsal);
   t = mix(t, vec3(${PLUMAGE.featherScale.neck.toFixed(2)}, ${PLUMAGE.normalStrength.neck.toFixed(2)}, 0.6), neck);
@@ -78,8 +103,8 @@ float kpFeather(vec2 st, out vec2 fxy, out vec2 id) {
 // Coordinates on the body for the feather lattice: s = distance from the bill tip (along the flow),
 // c = circumferential arc around the bill–tail axis. Seam placed on the ventral midline (softest plumage).
 vec2 kpLattice(vec3 p) {
-  vec3 bt = vec3(0.0, 77.0, 74.0);
-  vec3 tt = vec3(0.0, 58.0, -90.0);
+  vec3 bt = vec3(0.0, 84.0, 50.0);
+  vec3 tt = vec3(0.0, 55.0, -95.0);
   vec3 ax = normalize(tt - bt);
   vec3 d = p - bt;
   float s = length(d);
@@ -89,80 +114,110 @@ vec2 kpLattice(vec3 p) {
   return vec2(phi * rho, s);
 }
 
+// Lower edge of the grey-brown upperparts on the side = visible lower edge of the folded wing, (z, y)
+// (20,63) (5,60) (−10,57) (−25,55.5) (−40,57) (−55,60) (photos, spec §10.1)
+float kpUpperEdge(float z) {
+  if (z > 5.0) return mix(60.0, 63.0, clamp((z - 5.0) / 15.0, 0.0, 1.0));
+  if (z > -10.0) return mix(57.0, 60.0, (z + 10.0) / 15.0);
+  if (z > -25.0) return mix(55.5, 57.0, (z + 25.0) / 15.0);
+  if (z > -40.0) return mix(57.0, 55.5, (z + 40.0) / 15.0);
+  return mix(60.0, 57.0, clamp((z + 55.0) / 15.0, 0.0, 1.0));
+}
+
 vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   float ax = abs(p.x);
-  float lateral = abs(n.x);
   vec3 col = uUnder;
 
-  // Upperparts: grey-brown above the flank line (the line is mostly hidden by the folded wing).
-  float dorsal = smoothstep(58.0, 61.5, p.y + n.y * 5.0 + jitter);
-  float bodyZone = 1.0 - smoothstep(24.0, 30.0, p.z + (p.y - 60.0) * 0.4);
+  // Upperparts: grey-brown above the wing's lower edge, behind the collar and behind the breast-side patch
+  // axis (z, y) (6, 86) → (24, 63): white in front of it (spec §14, §17.2; p006, p066)
+  float yb = kpUpperEdge(p.z);
+  float dorsal = smoothstep(yb - 1.5, yb + 2.0, p.y + n.y * 3.0 + jitter);
+  float q = kpCollarQ(p) + jitter * 0.6;
+  float sFront = ((p.z - 6.0) * 23.0 + (p.y - 86.0) * 18.0) / 29.2;
+  float bodyZone = (1.0 - smoothstep(-1.0, 1.5, sFront + jitter * 0.5)) * (1.0 - smoothstep(-4.0, -3.0, q));
   col = mix(col, uMantle, dorsal * bodyZone);
   // White sides to the rump (S7, S27): grey-brown only along the centre line of rump/upper-tail
-  float rumpSide = smoothstep(-26.0, -32.0, p.z) * smoothstep(4.0, 6.5, ax);
+  float rumpSide = smoothstep(-44.0, -50.0, p.z) * smoothstep(4.0, 6.5, ax);
   col = mix(col, uUnder, rumpSide * dorsal);
 
-  // Hind-neck collar (white, S7) and head hood (crown + nape)
-  vec3 A = normalize(vec3(0.0, 0.62, 0.78));
-  float q = dot(p - vec3(0.0, 69.5, 31.8), A) + jitter * 0.6;
-  float collar = smoothstep(-3.0, -2.2, q) * (1.0 - smoothstep(1.8, 2.6, q));
-  float headZone = smoothstep(1.8, 2.6, q);
-  // Mantle continues up the back of the neck to the collar
-  float neckBack = (1.0 - headZone) * (1.0 - collar) * smoothstep(-0.1, 0.35, n.y - n.z * 0.2) * (1.0 - bodyZone * 0.0);
-  col = mix(col, uMantle, neckBack * smoothstep(20.0, 26.0, p.z) * smoothstep(64.0, 67.0, p.y));
+  // White collar 5–7 mm wide, from the nape obliquely round to the throat sides (S7; spec §14)
+  float collar = smoothstep(-3.2, -2.4, q) * (1.0 - smoothstep(2.4, 3.2, q));
+  float headZone = smoothstep(2.4, 3.2, q);
   col = mix(col, uCollar, collar * smoothstep(-0.6, -0.2, n.y + 0.9));
 
   if (headZone > 0.0) {
-    // Head markings in head-centred directions (u.y up, u.z forward, |u.x| lateral).
-    vec3 hd = p - vec3(0.0, 80.4, 48.0);
-    vec3 u = normalize(hd);
+    // Head markings on the head ellipsoid (centre (0, 93.5, 24), radii 12.5, 12.5, 15; eye (25.5, 95)):
+    // e = unit-sphere coordinates, u = directions (u.y up, u.z forward, |u.x| lateral)
+    vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(12.5, 12.5, 15.0);
+    vec3 u = normalize(e);
     float ux = abs(u.x);
     float j = jitter * 0.04;
+    // angle over the head from the crown (0) to the forehead (≈84°) in the side plane
+    float th = degrees(atan(e.z, e.y)) + jitter * 1.5;
     vec3 h = uUnder; // cheeks, chin, throat
-    // Crown + nape "hood": top of the head behind the fore-crown, down the back of the head to the collar
+    // Crown + nape cap behind the frontal bar, down the back of the head to the collar; brighter and warmer
+    // toward the rear (spec §13.1)
     float hoodEdge = 0.47 - 0.1 * smoothstep(0.0, -0.5, u.z);
-    float crownTop = smoothstep(hoodEdge - 0.04, hoodEdge + 0.04, u.y + j) * (1.0 - smoothstep(0.26, 0.34, u.z + j));
+    float crownTop = smoothstep(hoodEdge - 0.04, hoodEdge + 0.04, u.y + j) * (1.0 - smoothstep(30.0, 32.0, th));
     float nape = smoothstep(-0.2, -0.4, u.z + j) * (1.0 - smoothstep(0.5, 0.66, ux)) * smoothstep(-0.35, -0.1, u.y);
     float hood = max(crownTop, nape);
-    vec3 hoodCol = mix(uCrown, uNape, smoothstep(0.0, -0.6, u.z));
+    vec3 hoodCol = mix(uCrown, uCrownRear, smoothstep(0.2, -0.3, u.z));
+    hoodCol = mix(hoodCol, uNape, smoothstep(-0.3, -0.7, u.z));
     h = mix(h, hoodCol, hood);
-    // Supercilium: white band above the eye, continuous with the white forehead (S5, S7)
-    float sup = smoothstep(0.26, 0.31, u.y + j) * (1.0 - hood) * smoothstep(-0.45, -0.3, u.z) * smoothstep(0.3, 0.45, ux);
+    // Supercilium: white 1.5–2.5 mm above the eye, ending 0.5–1.5 E behind it (males), continuous with the
+    // white forehead under the end of the frontal bar (S5, S7; spec §14)
+    float sup = smoothstep(0.26, 0.31, u.y + j) * (1.0 - hood) * smoothstep(-0.4, -0.26, u.z) * smoothstep(0.3, 0.45, ux);
     h = mix(h, uSupercilium, sup);
-    // White forehead (front face above the lores)
-    float fore = smoothstep(0.26, 0.34, u.z + j) * smoothstep(-0.05, 0.08, u.y);
+    // White forehead in front of the frontal bar, above the lores (3–7 mm under the bar)
+    float fore = smoothstep(44.0, 47.0, th) * smoothstep(-0.05, 0.08, u.y);
     h = mix(h, uForehead, fore * (1.0 - hood));
-    // Black frontal bar across the fore-crown (male breeding; palette gives crown colour otherwise)
-    float bar = smoothstep(0.24, 0.3, u.z + j) * (1.0 - smoothstep(0.58, 0.64, u.z + j)) * smoothstep(0.4, 0.5, u.y) * (1.0 - smoothstep(0.42 * uMelanin, 0.52 * uMelanin, ux));
+    // Frontal bar (male black; palette gives crown colour otherwise): a transverse band 2.5–5 mm deep across the
+    // fore-crown (θ 31–46°), 9–11 mm long, down each side to 0.3–0.5 E above the eye (y ≈ 97.2) (spec §14; p006)
+    float bar = smoothstep(30.0, 32.0, th) * (1.0 - smoothstep(44.0, 46.0, th)) * smoothstep(96.8, 97.6, p.y + jitter * 0.3);
     h = mix(h, uFrontalBar, bar);
-    // Eye stripe: lores → eye → ear coverts (black in male, brown in female; S5, S7, S10)
+    // Eye stripe: lores → eye → ear coverts, 2–3 mm wide in males (brown and narrower otherwise; S5, S7, S10)
     vec2 zy = vec2(p.z, p.y);
-    float dStripe = min(min(sdSeg2(zy, vec2(62.0, 77.9), vec2(53.5, 80.6)), sdSeg2(zy, vec2(53.5, 80.6), vec2(47.8, 81.2))), sdSeg2(zy, vec2(47.8, 81.2), vec2(43.8, 80.2)));
-    float wStripe = mix(0.7, 1.45, smoothstep(60.0, 52.0, p.z)) * uMelanin;
+    float dStripe = min(min(sdSeg2(zy, vec2(37.6, 91.9), vec2(29.1, 94.6)), sdSeg2(zy, vec2(29.1, 94.6), vec2(23.4, 95.2))), sdSeg2(zy, vec2(23.4, 95.2), vec2(19.4, 94.2)));
+    float wStripe = mix(0.7, 1.35, smoothstep(37.0, 30.0, p.z)) * uMelanin;
     float stripe = (1.0 - smoothstep(wStripe - 0.3, wStripe + 0.3, dStripe + jitter * 0.12)) * smoothstep(0.22, 0.4, ux);
-    vec2 e = (zy - vec2(45.0, 79.9)) / (vec2(4.4, 3.2) * uMelanin);
-    float ear = (1.0 - smoothstep(0.85, 1.1, length(e) + jitter * 0.05)) * smoothstep(0.3, 0.55, ux);
+    // ear coverts: centre (17.5, 93.5), radii (5.0, 2.3), rear end against the collar
+    vec2 ec = (zy - vec2(17.5, 93.5)) / (vec2(5.0, 2.3) * uMelanin);
+    float ear = (1.0 - smoothstep(0.85, 1.1, length(ec) + jitter * 0.05)) * smoothstep(0.3, 0.55, ux);
     h = mix(h, uEyeStripe, stripe);
     h = mix(h, uEarCoverts, ear);
     col = mix(col, h, headZone);
   }
 
-  // Lateral breast patches — never meet in the centre (S7, S10)
-  vec3 bp = vec3(sign(p.x) * 13.5, 64.5, 31.5);
-  vec3 br = vec3(6.5, 5.2, 5.2) * uMelanin;
-  float patchD = length((p - bp) / br) + jitter * 0.06;
-  float patchM = (1.0 - smoothstep(0.85, 1.05, patchD)) * smoothstep(5.0, 7.5, ax);
+  // Breast-side patches (male: black rhombus 29 mm long along (z, y) (6, 86) → (24, 63), 52° from horizontal,
+  // half-width 3 at the ends and 5 in the middle, |x| ≥ 7, 9 mm short of the breast front — never meeting in the
+  // centre; it covers the carpal joint and meets the wing's lower edge at (20, 63)) (S7, S10; spec §14)
+  vec2 pa = vec2(p.z - 6.0, p.y - 86.0);
+  vec2 ba = vec2(18.0, -23.0);
+  float tt = dot(pa, ba) / dot(ba, ba);
+  float dPerp = abs(pa.x * ba.y - pa.y * ba.x) / length(ba);
+  float hw = (3.0 + 2.0 * (1.0 - abs(2.0 * clamp(tt, 0.0, 1.0) - 1.0))) * uMelanin;
+  float ends = smoothstep(-0.06, 0.02, tt) * (1.0 - smoothstep(0.98, 1.06, tt));
+  float patchM = (1.0 - smoothstep(hw - 0.6, hw + 0.4, dPerp + jitter * 0.4)) * ends * smoothstep(6.0, 8.0, ax);
   col = mix(col, uBreastPatch, patchM);
   return col;
 }
 `;
 
-function paletteUniforms(pal) {
+/** Cap colour of an individual: the palette's rufous cap toward the sandy one with rufousAmount (spec §13.1). */
+function capColor(pal, key, rufous) {
+  const c = srgb(pal[key] ?? pal.crown);
+  if (!pal.rufousCap || rufous >= 1) return c;
+  return srgb(PLUMAGE.sandyCap[key]).lerp(c, Math.max(0, (rufous - 0.3) / 0.7));
+}
+
+function paletteUniforms(pal, individual = {}) {
+  const rufous = individual.rufousAmount ?? 1;
   return {
     uForehead: { value: srgb(pal.forehead) },
     uFrontalBar: { value: srgb(pal.frontalBar) },
-    uCrown: { value: srgb(pal.crown) },
-    uNape: { value: srgb(pal.nape) },
+    uCrown: { value: capColor(pal, 'crown', rufous) },
+    uCrownRear: { value: capColor(pal, 'crownRear', rufous) },
+    uNape: { value: capColor(pal, 'nape', rufous) },
     uSupercilium: { value: srgb(pal.supercilium) },
     uEyeStripe: { value: srgb(pal.eyeStripe) },
     uEarCoverts: { value: srgb(pal.earCoverts) },
@@ -172,6 +227,8 @@ function paletteUniforms(pal) {
     uFringe: { value: srgb(pal.fringe) },
     uBreastPatch: { value: srgb(pal.breastPatch) },
     uUnder: { value: srgb(pal.underparts) },
+    uFringeMix: { value: pal.fringeMix ?? 0.55 },
+    uSubterminal: { value: pal.subterminalDark ? 1 : 0 },
   };
 }
 
@@ -182,7 +239,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
   const params = { roughness: 0.78, metalness: 0, color: 0xffffff };
   const mat = detail === 0 ? new THREE.MeshPhysicalMaterial({ ...params, sheen: 0.35, sheenRoughness: 0.7, sheenColor: new THREE.Color(0.55, 0.53, 0.5) }) : new THREE.MeshStandardMaterial(params);
   const uniforms = {
-    ...paletteUniforms(pal),
+    ...paletteUniforms(pal, individual),
     uMelanin: { value: individual.melaninPatchScale ?? 1 },
     uWear: { value: individual.plumageWear ?? 0.2 },
     uSeed: { value: individual.seed ?? 0.37 },
@@ -194,7 +251,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec3 aRest; attribute vec3 aFlow;\nuniform float uFluff; uniform float uBreath;\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;`)
+      .replace('#include <common>', `#include <common>\nattribute vec3 aRest; attribute vec3 aFlow;\nuniform float uFluff; uniform float uBreath;\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;\n${GLSL_FLUFF}`)
       .replace(
         '#include <defaultnormal_vertex>',
         `#include <defaultnormal_vertex>
@@ -206,7 +263,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
         vFlowV = normalize(normalMatrix * kpFl);`
       )
       // masks mirrored in bodyMesh.bodyDisplacementMasks (the plumage lying on the body follows them)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\n transformed += normal * uFluff * 0.0012 * smoothstep(40.0, 60.0, aRest.y);\n transformed += normal * uBreath * ${ANIM_BREATH} * smoothstep(-30.0, -5.0, aRest.z) * (1.0 - smoothstep(22.0, 34.0, aRest.z)) * (1.0 - smoothstep(66.0, 74.0, aRest.y));`);
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n transformed += normal * (uFluff - ${FLUFF_REST_GLSL}) * 0.001 * kpFluffMM(aRest, normal);\n transformed += normal * uBreath * ${ANIM_BREATH} * smoothstep(-40.0, -15.0, aRest.z) * (1.0 - smoothstep(18.0, 30.0, aRest.z)) * (1.0 - smoothstep(76.0, 84.0, aRest.y));`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${BODY_UNIFORMS_GLSL}\n${BODY_FRAG_FUNCS}`)
       .replace(
@@ -218,8 +275,10 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
         vec2 kpFxy; vec2 kpId;
         float kpH = kpFeather(vec2(kpLat.x, kpLat.y), kpFxy, kpId);
         float kpRnd = kpHash(kpId + uSeed * 17.0);
-        // Evaluate markings at the visible feather's root → boundaries follow feather tips (scalloped).
-        vec3 kpRootP = vRest - normalize(vFlowR) * kpFxy.y * kpTr.x * 0.9;
+        // Evaluate markings at the visible feather's root → boundaries follow feather tips (scalloped) on the
+        // upperparts; on the head and the white-and-black sides the edges stay nearly smooth (photos, spec §15)
+        float kpScallop = smoothstep(0.1, 0.5, kpN.y) * (1.0 - smoothstep(0.2, 0.5, kpHeadness(vRest)));
+        vec3 kpRootP = vRest - normalize(vFlowR) * kpFxy.y * kpTr.x * 0.9 * mix(0.15, 1.0, kpScallop);
         float kpJit = (kpRnd - 0.5) * 0.6;
         vec3 kpCol = kpPlumage(kpRootP, kpN, kpJit);
         // Within-feather tone: darker shaft streak & pale fringe on the grey-brown upperparts only.
@@ -228,7 +287,10 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
         float kpShaft = (1.0 - smoothstep(0.05, 0.22, abs(kpFxy.x - 0.5))) * (1.0 - smoothstep(0.55, 0.9, kpFxy.y));
         float kpFringe = smoothstep(0.72, 0.98, kpFxy.y) * (1.0 - uWear);
         kpCol = mix(kpCol, kpCol * (uMantleDark / max(uMantle, vec3(1e-3))), kpShaft * kpBrown * 0.55);
-        kpCol = mix(kpCol, mix(kpCol, uFringe, 0.55), kpFringe * kpBrown);
+        kpCol = mix(kpCol, mix(kpCol, uFringe, uFringeMix), kpFringe * kpBrown);
+        // juvenile: dark subterminal band inside the pale fringe (spec §13.2)
+        float kpSub = smoothstep(0.5, 0.6, kpFxy.y) * (1.0 - smoothstep(0.68, 0.74, kpFxy.y)) * uSubterminal;
+        kpCol = mix(kpCol, kpCol * (uMantleDark / max(uMantle, vec3(1e-3))) * 0.9, kpSub * kpBrown * 0.6);
         // Very small per-feather tone variation (no dirty noise).
         kpCol *= 1.0 + (kpRnd - 0.5) * 0.05;
         // Micro shadowing at the tip overlap (feather-scale AO), fades with distance
@@ -388,7 +450,7 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
         // (wing feathers only while folded onto it); the arm tube (propatagium) folds away with the forearm,
         // gone by half the fold (wingFold.foldPath: the hand folds first, then the humerus tucks it in)
         float kfWing = kfT < 7.5 || (kfT > 10.5 && kfT < 11.5) ? vFold : 1.0;
-        transformed += aLie * kfWing * (uFluff * 0.0012 * aLieMask.x + uBreath * ${ANIM_BREATH} * aLieMask.y);
+        transformed += aLie * kfWing * ((uFluff - ${FLUFF_REST_GLSL}) * 0.001 * aLieMask.x + uBreath * ${ANIM_BREATH} * aLieMask.y);
         transformed += aCore * smoothstep(0.0, 0.5, vFold);
         // feather micro-motion: tips flutter slightly in the wind (strongest on tail, tertials, scapulars)
         float kfLoose = (kfT > 7.5 && kfT < 10.5) || (kfT > 1.5 && kfT < 2.5) ? 1.0 : 0.35;
@@ -438,7 +500,7 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
 const BARE_FRAG = /* glsl */ `
 ${GLSL_COMMON}
 uniform vec3 uBill, uLegs, uUnder, uMouth;
-uniform float uDetail;
+uniform float uDetail, uBillRough;
 varying float vPart;
 `;
 
@@ -449,6 +511,7 @@ export function createBarePartsMaterial(pal, detail = 0) {
     uLegs: { value: srgb(pal.legs) },
     uUnder: { value: srgb(pal.underparts) },
     uMouth: { value: srgb('#8e6f6a') },
+    uBillRough: { value: pal.billRoughness ?? 0.46 },
     uDetail: { value: detail },
   };
   mat.userData.uniforms = uniforms;
@@ -470,7 +533,7 @@ export function createBarePartsMaterial(pal, detail = 0) {
         vec2 kbI = floor(kbSt + vec2(0.5 * mod(floor(kbSt.y), 2.0), 0.0));
         vec2 kbF = fract(kbSt + vec2(0.5 * mod(floor(kbSt.y), 2.0), 0.0)) - 0.5;
         float kbCell = 1.0 - smoothstep(0.28, 0.5, max(abs(kbF.x), abs(kbF.y)));
-        if (kbP < 0.5) { kbCol = uBill; kbRough = 0.46 + 0.08 * kpNoise(vUv * vec2(20.0, 40.0)); }
+        if (kbP < 0.5) { kbCol = uBill; kbRough = uBillRough + 0.08 * kpNoise(vUv * vec2(20.0, 40.0)); }
         else if (kbP < 1.5) { kbCol = uLegs * (0.9 + 0.12 * kpHash(kbI)); kbRough = 0.5 + 0.1 * (1.0 - kbCell); }
         else if (kbP < 2.5) { kbCol = uBill * 0.85; kbRough = 0.3; }
         else if (kbP < 3.5) {
@@ -541,7 +604,7 @@ export function createEyeMaterials(pal) {
 
   // Lids: rim (dark eyelid skin), lower lid (rises when asleep), nictitating membrane (blink).
   const lids = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0, side: THREE.DoubleSide, alphaTest: 0.5, transparent: false });
-  const lidU = { uLidClose: { value: new THREE.Vector2(0, 0) }, uNict: { value: new THREE.Vector2(0, 0) }, uRim: { value: srgb('#171514') }, uLidCol: { value: srgb(pal.eyeStripe) } };
+  const lidU = { uLidClose: { value: new THREE.Vector2(0, 0) }, uNict: { value: new THREE.Vector2(0, 0) }, uRim: { value: srgb('#171514') }, uLidRing: { value: srgb(pal.eyelidRing ?? '#171514') }, uLidCol: { value: srgb(pal.eyeStripe) } };
   lids.userData.uniforms = lidU;
   lids.defines = { USE_UV: '' };
   lids.onBeforeCompile = (shader) => {
@@ -550,7 +613,7 @@ export function createEyeMaterials(pal) {
       .replace('#include <common>', `#include <common>\nattribute float aPart;\nvarying float vPart; varying float vSide;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvPart = aPart; vSide = position.x > 0.0 ? 0.0 : 1.0;`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform vec2 uLidClose; uniform vec2 uNict; uniform vec3 uRim; uniform vec3 uLidCol;\nvarying float vPart; varying float vSide;`)
+      .replace('#include <common>', `#include <common>\nuniform vec2 uLidClose; uniform vec2 uNict; uniform vec3 uRim; uniform vec3 uLidRing; uniform vec3 uLidCol;\nvarying float vPart; varying float vSide;`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
@@ -560,7 +623,8 @@ export function createEyeMaterials(pal) {
         float rr = vUv.x; float ph = vUv.y * 6.2831853;
         float ant = cos(ph) * rr;   // +1 anterior
         float ven = sin(ph) * rr;   // +1 ventral
-        vec3 lc = uRim;
+        // rim: pale lower eyelid (0.3–0.5 mm, spec §13.1), dark above (vUv.x = angle round the rim, sin > 0 ventral)
+        vec3 lc = lp < 6.5 ? mix(uRim, uLidRing, smoothstep(0.15, 0.45, sin(vUv.x * 6.2831853))) : uRim;
         float alpha = 1.0;
         if (lp > 6.5 && lp < 7.5) {
           // lower lid: covers from the ventral side upward
