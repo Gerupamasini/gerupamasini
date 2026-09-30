@@ -54,10 +54,10 @@ export function makeVariation(rng, forceType = null) {
     widthScale: clamp(rng.normal(1, 0.05), 0.88, 1.12),
     caudalLobe: clamp(rng.normal(0.76, 0.08), 0.6, 0.98),
     caudalFork: rng.range(0.22, 0.28),
-    dorsalHeight: rng.range(0.26, 0.33),
-    pectoralLength: rng.range(0.23, 0.29),
-    pelvicLength: rng.range(0.25, 0.33),
-    analLength: rng.range(0.17, 0.22),
+    dorsalHeight: rng.range(0.22, 0.28),
+    pectoralLength: rng.range(0.27, 0.33),
+    pelvicLength: rng.range(0.3, 0.38),
+    analLength: rng.range(0.19, 0.25),
     colorType: typeIdx,
     colorName: type,
     seed: rng.range(0, 100),
@@ -88,7 +88,9 @@ export function makeVariation(rng, forceType = null) {
 
 let _id = 0;
 
+
 export class Fish {
+  static prof = { brain: 0, loc: 0, rig: 0, n: 0 };
   constructor(layout, { seed = Math.floor(Math.random() * 1e9), colorType = null, name = null } = {}) {
     this.id = _id++;
     this.rng = new RNG(seed);
@@ -119,8 +121,14 @@ export class Fish {
   }
 
   update(dt, time, world) {
+    const P = Fish.prof;
+    let t0 = performance.now();
     if (this.brain) this.brain.update(dt, time, world);
+    let t1 = performance.now();
+    P.brain += t1 - t0;
     this.loc.update(dt, time);
+    t0 = performance.now();
+    P.loc += t0 - t1;
     if (world && !this.flume) {
       clampToTank(this, world);
       world.flowAt(this.loc.pos, this.rig.flow);
@@ -132,7 +140,10 @@ export class Fish {
     }
     this.rig.setSpine(this.loc.pos, this.loc.quat, this.loc.localP, this.loc.localQ);
     this.loc.writeFinPose(this.rig.pose);
+    t1 = performance.now();
     this.rig.update(dt, dt > 1 / 45 ? 3 : 2);
+    P.rig += performance.now() - t1;
+    P.n++;
   }
 
   /** misc texels (4 x vec4) for the rig texture row */

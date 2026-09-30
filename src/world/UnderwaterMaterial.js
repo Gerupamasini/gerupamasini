@@ -7,7 +7,7 @@ import { underwaterCommon, noiseCommon } from '../fish/shaders/common.glsl.js';
 
 const UW_UNIFORMS = ['uCaustics', 'uCausticParams', 'uCausticLightDir', 'uWaterMin', 'uWaterMax', 'uWaterAbsorb', 'uWaterScatter', 'uWaterDensity', 'uTime'];
 
-export function patchUnderwater(material, { caustics = true, attenuation = true, extraVertex = null, extraVertexPars = '', extraFragmentPars = '', key = '' } = {}) {
+export function patchUnderwater(material, { caustics = true, attenuation = true, extraVertex = null, extraVertexPars = '', extraFragmentPars = '', extraNormal = '', extraColor = '', extraLights = '', key = '' } = {}) {
   const prev = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
     if (prev) prev(shader, renderer);
@@ -31,6 +31,8 @@ export function patchUnderwater(material, { caustics = true, attenuation = true,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nin vec3 vUwWorld;\n' + noiseCommon + underwaterCommon + extraFragmentPars)
+      .replace('#include <color_fragment>', '#include <color_fragment>\n' + extraColor)
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + extraNormal)
       .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>
@@ -39,7 +41,8 @@ export function patchUnderwater(material, { caustics = true, attenuation = true,
           vec3 cc = causticsRGB(vUwWorld, cN);
           reflectedLight.directDiffuse *= cc;
           reflectedLight.directSpecular *= cc;
-        }` : ''}`
+        }` : ''}
+        ${extraLights}`
       )
       .replace('#include <opaque_fragment>', `${attenuation ? 'outgoingLight = waterAttenuate(outgoingLight, vUwWorld);' : ''}\n#include <opaque_fragment>`);
   };

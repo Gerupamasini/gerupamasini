@@ -12,6 +12,7 @@ import { WaterSurface } from './WaterSurface.js';
 import { Caustics } from './Caustics.js';
 import { SuspendedParticles, BubbleColumn, PuffSystem } from './Particles.js';
 import { FoodSystem } from './Food.js';
+import { LightShafts } from './LightShafts.js';
 import { buildAquariumEnvScene, bakeEnvironment } from '../render/StudioEnvironment.js';
 import { U } from '../render/SharedUniforms.js';
 
@@ -79,6 +80,7 @@ export class World {
     this.caustics = new Caustics(renderer);
     this.surface = new WaterSurface(renderer, scene);
     this.particles = new SuspendedParticles(scene);
+    this.shafts = new LightShafts(scene);
     this.bubbles = new BubbleColumn(scene, new THREE.Vector3(-0.54, groundHeight(-0.54, -0.18) + 0.01, -0.18));
     this.puffs = new PuffSystem(scene);
     this.food = new FoodSystem(scene);

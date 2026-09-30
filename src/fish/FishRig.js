@@ -65,6 +65,7 @@ export class FishRig {
     this.stiffnessMul = 1;
     this.dragMul = 1;
     this.flow = new THREE.Vector3(); // ambient water velocity (flume / filter current)
+    this.iterations = 2; // PBD constraint iterations per substep
 
     // chains
     this.chains = [];
@@ -219,16 +220,16 @@ export class FishRig {
     const side = ch.side;
     const ps = this.pose.pect[side > 0 ? 0 : 1];
     // three reference poses (fish-local): adducted, hover-extended, braking
-    const Df = _tmpA.set(-1, -0.14, 0.1 * side).normalize();
-    const De = _tmpB.set(-0.5, -0.32, 0.8 * side).normalize();
-    const Db = _tmpC.set(0.06, -0.38, 0.92 * side).normalize();
+    const Df = _tmpA.set(-1, -0.16, 0.12 * side).normalize();
+    const De = _tmpB.set(-0.62, -0.5, 0.6 * side).normalize();
+    const Db = _tmpC.set(0.06, -0.42, 0.9 * side).normalize();
     const D0 = _tmpD.copy(Df).lerp(De, ps.ext).lerp(Db, ps.brake).normalize();
     // rowing stroke: rotate about the (oblique) fin-base hinge
     _axis.set(-0.6, -0.55, 0.15 * side).normalize();
     _qq.setFromAxisAngle(_axis, ps.stroke * side);
     D0.applyQuaternion(_qq);
     const Nf = _tmpE.set(0.02, 0.2, side).normalize();
-    const Ne = _tmpF.set(0.18, 0.92, 0.35 * side).normalize();
+    const Ne = _tmpF.set(0.12, 0.45, 0.88 * side).normalize();
     const Nb = _tmpG.set(0.95, 0.15, -0.1 * side).normalize();
     const N = _tmpH.copy(Nf).lerp(Ne, ps.ext).lerp(Nb, ps.brake).applyQuaternion(_qq);
     // feathering: rotate plane about the leading edge
@@ -245,11 +246,11 @@ export class FishRig {
   _pelvicDir(ch, out) {
     const side = ch.side;
     const ps = this.pose.pelv[side > 0 ? 0 : 1];
-    const Df = _tmpA.set(-1, -0.1, 0.04 * side).normalize();
-    const De = _tmpB.set(-0.72, -0.58, 0.38 * side).normalize();
+    const Df = _tmpA.set(-1, -0.12, 0.05 * side).normalize();
+    const De = _tmpB.set(-0.74, -0.62, 0.26 * side).normalize();
     const D0 = _tmpD.copy(Df).lerp(De, ps.ext).normalize();
-    const Nf = _tmpE.set(0.0, -0.15, side).normalize();
-    const Ne = _tmpF.set(0.25, -0.35, 0.9 * side).normalize();
+    const Nf = _tmpE.set(0.0, -0.1, side).normalize();
+    const Ne = _tmpF.set(0.18, -0.12, 0.97 * side).normalize();
     const N = _tmpH.copy(Nf).lerp(Ne, ps.ext);
     N.addScaledVector(D0, -N.dot(D0)).normalize();
     const S = _tmpI.crossVectors(N, D0).normalize();
@@ -261,12 +262,17 @@ export class FishRig {
   /** Recompute chain roots (world) and rest directions (world). */
   _updateRoots() {
     const Q = _qRoot;
+    // caudal rays are carried by the hypural plate: one frame (last vertebra)
+    this.sampleSpine(1.0, _tailP, _tailQ);
     for (const ch of this.chains) {
       ch.rootPrev.copy(ch.rootW);
-      // caudal rays are carried by the hypural plate: use the last vertebra frame
       if (ch.type === 0) {
-        this.bodyPoint(ch.rootLocal, ch.rootW, Q);
-        this.sampleSpine(1.0, _v, Q);
+        const s = -ch.rootLocal.x;
+        if (s >= 1.0) {
+          _v2.set(-(s - 1.0), ch.rootLocal.y, ch.rootLocal.z).multiplyScalar(this.SL).applyQuaternion(_tailQ);
+          ch.rootW.copy(_tailP).add(_v2);
+        } else this.bodyPoint(ch.rootLocal, ch.rootW, Q);
+        Q.copy(_tailQ);
       } else {
         this.bodyPoint(ch.rootLocal, ch.rootW, Q);
       }
@@ -315,7 +321,8 @@ export class FishRig {
       this.initialized = true;
       return;
     }
-    this._computeRestCross();
+    // rest spacing between neighbouring rays only changes with the fin pose
+    if ((this._frame = (this._frame || 0) + 1) % 3 === 0) this._computeRestCross();
     const h = dt / substeps;
     const pos = this.pos;
     const vel = this.vel;
@@ -364,7 +371,7 @@ export class FishRig {
         }
       }
       // constraint projection
-      for (let it = 0; it < 3; it++) {
+      for (let it = 0; it < this.iterations; it++) {
         for (const ch of this.chains) this._projectChain(ch);
         this._projectMembrane();
       }
@@ -377,28 +384,41 @@ export class FishRig {
     this._computeNormals();
   }
 
-  _projectChain(ch) {
+  _chainTables(ch) {
     const mech = FIN_MECH[ch.type];
+    const stiff = this.stiffnessMul;
+    if (ch.kap && ch.tabStiff === stiff) return;
+    ch.kap = new Float32Array(ch.M);
+    ch.mem = new Float32Array(ch.M);
+    for (let k = 1; k < ch.M; k++) {
+      const t = k / (ch.M - 1);
+      ch.kap[k] = clamp(lerp(mech.kBase, mech.kTip, Math.pow(t, 0.8)) * (ch.lead ? 1.25 : 1) * stiff, 0, 0.995);
+      ch.mem[k] = lerp(mech.memBase, mech.memTip, t) * Math.min(1.5, stiff);
+    }
+    ch.tabStiff = stiff;
+  }
+
+  _projectChain(ch) {
+    this._chainTables(ch);
     const P = this.pred;
     const M = ch.M;
     const seg = ch.seg;
-    const stiff = this.stiffnessMul;
+    const kapT = ch.kap;
+    const memT = ch.mem;
     const rd = ch.restDir;
     let px = rd.x;
     let py = rd.y;
     let pz = rd.z;
     for (let k = 1; k < M; k++) {
-      const t = k / (M - 1);
       const i = (ch.offset + k) * 3;
       const ip = i - 3;
-      // bending stiffness: taper from base to tip (leading rays are stiffer)
-      let kap = lerp(mech.kBase, mech.kTip, Math.pow(t, 0.8)) * (ch.lead ? 1.25 : 1);
-      kap = clamp(kap * stiff, 0, 0.995);
-      const mem = lerp(mech.memBase, mech.memTip, t) * Math.min(1.5, stiff);
+      // bending stiffness tapers from base to tip (leading rays are stiffer)
+      const kap = kapT[k];
+      const mem = memT[k];
       let dx = px * (1 - mem) + rd.x * mem;
       let dy = py * (1 - mem) + rd.y * mem;
       let dz = pz * (1 - mem) + rd.z * mem;
-      let dl = Math.hypot(dx, dy, dz) || 1;
+      let dl = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
       const tx = P[ip] + (dx / dl) * seg;
       const ty = P[ip + 1] + (dy / dl) * seg;
       const tz = P[ip + 2] + (dz / dl) * seg;
@@ -409,7 +429,7 @@ export class FishRig {
       dx = P[i] - P[ip];
       dy = P[i + 1] - P[ip + 1];
       dz = P[i + 2] - P[ip + 2];
-      dl = Math.hypot(dx, dy, dz) || 1;
+      dl = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
       P[i] = P[ip] + (dx / dl) * seg;
       P[i + 1] = P[ip + 1] + (dy / dl) * seg;
       P[i + 2] = P[ip + 2] + (dz / dl) * seg;
@@ -433,7 +453,7 @@ export class FishRig {
           const dx = P[ib] - P[ia];
           const dy = P[ib + 1] - P[ia + 1];
           const dz = P[ib + 2] - P[ia + 2];
-          const d = Math.hypot(dx, dy, dz) || 1e-6;
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
           const lo = rest * 0.72;
           const hi = rest * 1.12;
           let target = d;
@@ -483,7 +503,7 @@ export class FishRig {
           let nx = cy * az - cz * ay;
           let ny = cz * ax - cx * az;
           let nz = cx * ay - cy * ax;
-          const l = Math.hypot(nx, ny, nz) || 1;
+          const l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
           const o = (ch.offset + k) * 3;
           N[o] = nx / l;
           N[o + 1] = ny / l;
@@ -538,4 +558,6 @@ const _tmpI = new THREE.Vector3();
 const _axis = new THREE.Vector3();
 const _qq = new THREE.Quaternion();
 const _qRoot = new THREE.Quaternion();
+const _tailP = new THREE.Vector3();
+const _tailQ = new THREE.Quaternion();
 export { head, _m };

@@ -47,6 +47,7 @@ in vec4 vFinCoord;
 in vec4 vFinRay;
 in vec3 vFishWorld;
 flat in float vFinType;
+float gPleat;   // signed pleat slope across the rays
 flat in vec4 vFishA;
 flat in vec4 vFishB;
 flat in vec4 vFishC;
@@ -97,11 +98,14 @@ void computeFinSurface() {
 
   float fwr = max(fwidth(rc), 1e-4);
   float rd = rayDistance(rc, t, type, nRays);
-  float w = mix(0.085, 0.03, t) + lead * 0.09;
-  float ray = 1.0 - smoothstep(w - fwr * 0.8, w + fwr * 0.8, rd);
+  float w = mix(0.08, 0.028, t) + lead * 0.09;
+  float ray = 1.0 - smoothstep(w - fwr * 0.7, w + fwr * 0.7, rd);
   // fade the ray pattern to its average when rays get sub-pixel
-  float rayAA = smoothstep(0.9, 0.35, fwr);
+  float rayAA = smoothstep(1.4, 0.5, fwr);
   ray = mix(w * 1.4, ray, rayAA);
+  // pleated membrane: rays are ridges, membrane sags between them
+  float xr = rc - floor(rc + 0.5);
+  gPleat = (sin(xr * 6.2831853) * 0.22 + (-2.0 * xr / (w * w)) * exp(-xr * xr / (w * w)) * w * 0.35) * rayAA * (1.0 - t * 0.5);
   // segmentation joints of the lepidotrichia (shorter segments distally)
   float segF = (type < 0.5 ? 34.0 : 22.0);
   float seg = fract(spow(max(t, 0.0), 0.8) * segF + rc * 0.37);
@@ -116,22 +120,24 @@ void computeFinSurface() {
   vec3 pig = redCol;
   if (ctype > 1.5 && ctype < 2.5) pig = mix(uColOrange, uColYellow, 0.3);
   if (ctype > 2.5 && ctype < 3.5) pig = uColYellow;
-  vec3 membraneWhite = vec3(0.88, 0.92, 0.97);
+  vec3 membraneWhite = vec3(0.78, 0.83, 0.88);
   vec3 col = mix(membraneWhite, pig, redM);
   // rays carry more chromatophores + iridophores: denser pigment / whiter
-  col = mix(col, mix(vec3(0.96, 0.97, 1.0), pig * 1.05, redM), ray * 0.6);
+  col = mix(col, mix(vec3(0.97, 0.98, 1.0), pig * 1.05, redM), ray * 0.75);
   col *= 1.0 - joint * 0.35;
 
   // ---- opacity: continuous milky membrane, rays slightly denser
-  float aMem = mix(0.56, 0.74, redM);
-  float aRay = mix(0.78, 0.92, redM);
+  float aMem = mix(0.34, 0.66, redM);
+  float aRay = mix(0.7, 0.9, redM);
   float alpha = mix(aMem, aRay, ray);
   alpha = mix(alpha, 0.97, smoothstep(0.1, 0.0, t)); // fleshy base
   alpha *= 1.0 - 0.18 * smoothstep(0.6, 1.0, t) * (1.0 - ray);
   // fine serration: membrane recedes slightly between the ray tips; fraying
-  float fray = vnoise2(vec2(rc * 3.0 + seed * 7.0, seed)) * 0.012;
-  float cut = 1.0 - (0.012 + fray) * (1.0 - ray);
-  alpha *= 1.0 - smoothstep(cut - 0.008, cut, t);
+  float fray = vnoise2(vec2(rc * 3.0 + seed * 7.0, seed)) * 0.006;
+  float cut = 1.0 - (0.005 + fray) * (1.0 - ray);
+  alpha *= 1.0 - smoothstep(cut - 0.012, cut, t);
+  // rays fade into the membrane toward the margin (thin distal segments)
+  ray *= 1.0 - 0.55 * smoothstep(0.55, 1.0, t);
   alpha *= uFinOpacity;
 
   gFinAlpha = clamp(alpha, 0.0, 1.0);
@@ -146,6 +152,20 @@ export const finFragmentColor = /* glsl */ `
 computeFinSurface();
 diffuseColor.rgb = gFinAlbedo;
 diffuseColor.a = gFinAlpha;
+`;
+
+export const finFragmentNormal = /* glsl */ `
+{
+  // tangent across the rays from screen-space derivatives of the ray coordinate
+  vec3 dpx = dFdx(-vViewPosition);
+  vec3 dpy = dFdy(-vViewPosition);
+  float drx = dFdx(vFinRay.x);
+  float dry = dFdy(vFinRay.x);
+  vec3 Tc = dpx * dry - dpy * drx;
+  Tc = normalize(cross(normal, cross(Tc, normal)) + 1e-6);
+  if (dot(cross(dpx, dpy), normal) < 0.0) Tc = -Tc;
+  normal = normalize(normal + Tc * gPleat);
+}
 `;
 
 export const finFragmentMaterial = /* glsl */ `

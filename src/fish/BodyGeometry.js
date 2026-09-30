@@ -140,8 +140,8 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
   let d = 0;
 
   // lips: thick rolled lips around the gape
-  const lip = gauss(s - 0.009, 0.009);
-  d += 0.0034 * lip;
+  const lip = gauss(s - 0.009, 0.01);
+  d += 0.0044 * lip;
   masks.lip = smoothstep(0.03, 0.006, s);
 
   // gape line: lip fold / posterior end of the maxilla running back and down
@@ -162,7 +162,7 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
     const e = s - opercMarginS(y); // + behind the free margin
     // gill slit groove just behind the margin
     const groove = smoothstep(-0.0015, 0.003, e) * smoothstep(0.014, 0.004, e);
-    d -= 0.0048 * groove * vfade;
+    d -= 0.0028 * groove * vfade;
     masks.gill = groove * vfade;
     // opercle plate stands slightly proud of the flank behind it
     const plate = smoothstep(-0.075, -0.012, e) * smoothstep(0.0005, -0.0035, e);

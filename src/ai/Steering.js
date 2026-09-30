@@ -10,39 +10,50 @@ const _p = new THREE.Vector3();
 
 /**
  * Vision-based look-ahead obstacle avoidance: probe points ahead along the
- * current heading (1–2 s of travel, min 1.5 BL) and turn away from the
- * nearest boundary; a short-range "lateral line" repulsion (< 0.3 BL) keeps a
+ * current heading (≈1.2 s of travel, min 1.2 BL) and turn away from the
+ * nearest boundary; a short-range "lateral line" repulsion (< 0.5 BL) keeps a
  * minimum clearance even when hovering.
+ * Returns a UNITLESS steering vector in `out`; `.danger` (0..1) says how
+ * urgently the fish should slow down / turn.
  */
 export function avoidObstacles(fish, world, out, opts = {}) {
   const SL = fish.SL;
   const L = fish.loc;
   out.set(0, 0, 0);
+  out.danger = 0;
   const fwd = L.forward;
-  const speed = Math.max(L.speed, 0.4 * SL);
-  const look = Math.max(1.5 * SL, speed * 1.4);
-  const margins = [0.35, 0.7, 1.0];
-  for (const m of margins) {
+  const speed = Math.max(L.speed, 0.3 * SL);
+  const look = Math.max(1.2 * SL, speed * 1.2);
+  const probes = [0.3, 0.65, 1.0];
+  const side = new THREE.Vector3();
+  for (const m of probes) {
     _p.copy(L.pos).addScaledVector(fwd, look * m + 0.36 * SL);
     const d = world.distance(_p, _g, opts);
-    const clearance = 0.45 * SL + 0.5 * SL * m;
+    const clearance = 0.3 * SL + 0.45 * SL * m;
     if (d < clearance) {
-      const w = (1 - Math.max(d, -clearance) / clearance) * (1.4 - m * 0.5);
-      // turn away: combine outward normal with a sideways escape so the fish
-      // swings around instead of stopping dead in front of the glass
-      const side = new THREE.Vector3().crossVectors(_g, new THREE.Vector3(0, 1, 0));
-      if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+      const w = clamp01(1 - d / clearance) * (1.3 - m * 0.5);
+      // turn away: outward normal + sideways escape so the fish swings round
+      side.crossVectors(_g, UP);
+      if (side.lengthSq() < 1e-6) side.set(-fwd.z, 0, fwd.x);
       side.normalize();
       if (side.dot(fwd) < 0) side.negate();
-      out.addScaledVector(_g, w * 1.2).addScaledVector(side, w * 0.8);
+      out.addScaledVector(_g, w * 1.1).addScaledVector(side, w * 0.9);
+      out.danger = Math.max(out.danger, w * (1 - 0.4 * m));
     }
   }
   // lateral-line close-range repulsion around the body
   const d0 = world.distance(L.pos, _g, opts);
-  const r0 = 0.55 * SL;
-  if (d0 < r0) out.addScaledVector(_g, (1 - d0 / r0) * 2.5);
-  return out.multiplyScalar(SL * 2.0);
+  const r0 = 0.45 * SL;
+  if (d0 < r0) {
+    const w = 1 - Math.max(0, d0) / r0;
+    out.addScaledVector(_g, w * 2.0);
+    out.danger = Math.max(out.danger, w);
+  }
+  return out;
 }
+
+const UP = new THREE.Vector3(0, 1, 0);
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
 /** Separation from neighbours (and their long tails). */
 export function separation(fish, neighbours, out) {
@@ -51,10 +62,10 @@ export function separation(fish, neighbours, out) {
   for (const n of neighbours) {
     const other = n.fish;
     const d = n.dist;
-    const r = 0.9 * (SL + other.SL) * 0.5 + 0.25 * SL;
+    const r = 1.1 * (SL + other.SL) * 0.5 + 0.3 * SL;
     if (d < r && d > 1e-5) {
       const w = (1 - d / r) ** 2;
-      out.addScaledVector(n.delta, (-w / d) * SL * 3.5);
+      out.addScaledVector(n.delta, (-w / d) * 3.2);
     }
     // predicted collision (time of closest approach)
     const rv = new THREE.Vector3().subVectors(other.loc.vel, fish.loc.vel);
@@ -62,7 +73,7 @@ export function separation(fish, neighbours, out) {
     if (tca > 0 && tca < 1.2) {
       const closest = new THREE.Vector3().copy(n.delta).addScaledVector(rv, tca);
       const cd = closest.length();
-      if (cd < r * 0.9) out.addScaledVector(closest, (-(1 - cd / r) / Math.max(cd, 1e-3)) * SL * 1.2 * (1 - tca / 1.2));
+      if (cd < r * 0.9) out.addScaledVector(closest, (-(1 - cd / r) / Math.max(cd, 1e-3)) * 0.8 * (1 - tca / 1.2));
     }
   }
   return out;
@@ -120,6 +131,42 @@ export function clampToTank(fish, world) {
       n.normalize();
       const vn = L.vel.dot(n);
       if (vn > 0) L.speed *= 0.85;
+    }
+  }
+}
+
+/**
+ * Soft positional de-penetration between fish bodies (two spheres per fish:
+ * head/trunk). Steering avoids most contacts; this keeps bodies from
+ * interpenetrating in feeding scrums, as real fish would bump and slide.
+ */
+export function resolveOverlaps(fishList) {
+  const n = fishList.length;
+  const A = new THREE.Vector3();
+  const B = new THREE.Vector3();
+  const d = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    const fi = fishList[i];
+    const fwdI = fi.loc.forward;
+    for (let j = i + 1; j < n; j++) {
+      const fj = fishList[j];
+      if (fi.loc.pos.distanceToSquared(fj.loc.pos) > (fi.SL + fj.SL) ** 2) continue;
+      const fwdJ = fj.loc.forward;
+      for (const oi of [0.18, -0.2]) {
+        for (const oj of [0.18, -0.2]) {
+          A.copy(fi.loc.pos).addScaledVector(fwdI, oi * fi.SL);
+          B.copy(fj.loc.pos).addScaledVector(fwdJ, oj * fj.SL);
+          d.subVectors(B, A);
+          const dist = d.length();
+          const minD = 0.13 * (fi.SL + fj.SL) + 0.06 * (fi.SL + fj.SL);
+          if (dist < minD && dist > 1e-6) {
+            const corr = (minD - dist) * 0.5 * 0.5;
+            d.multiplyScalar(corr / dist);
+            fi.loc.pos.sub(d);
+            fj.loc.pos.add(d);
+          }
+        }
+      }
     }
   }
 }

@@ -68,6 +68,7 @@ export function buildGUI(app) {
   an.add(mot, 'finStiffness', 0.2, 2.5, 0.01).name('fin stiffness ×').onChange((v) => all().forEach((f) => (f.rig.stiffnessMul = v)));
   an.add(mot, 'finDrag', 0.2, 3, 0.01).name('fin water drag ×').onChange((v) => all().forEach((f) => (f.rig.dragMul = v)));
   an.add(mot, 'breathing', 0, 3, 0.01).name('breathing speed ×').onChange((v) => all().forEach((f) => (f.loc.globalMul.breath = v)));
+  an.close();
 
   // ------------------------------------------------------------ materials
   const mat = gui.addFolder('Material');
@@ -152,6 +153,7 @@ export function buildGUI(app) {
     li.add(app.world.caustics, 'speed', 0, 3, 0.01).name('caustics speed');
     li.add(U.uWaterDensity, 'value', 0, 4, 0.01).name('water turbidity');
     li.add(app.world.particles.material.uniforms.uIntensity, 'value', 0, 3, 0.01).name('particles');
+    li.add(app.world.shafts.material.uniforms.uIntensity, 'value', 0, 0.3, 0.001).name('light shafts');
     li.add(app.world.bubbles, 'enabled').name('air stone bubbles');
     li.add(app.world.surface, 'useReflection').name('surface TIR reflection');
     li.add(app.world, 'currentStrength', 0, 0.06, 0.001).name('filter current (m/s)');
@@ -175,5 +177,7 @@ export function buildGUI(app) {
   dbg.add(flags, 'velocity');
   dbg.add(flags, 'target').name('AI target');
   dbg.add(flags, 'labels').name('current state');
+  dbg.close();
+  if (window.innerWidth < 900) gui.close();
   return gui;
 }

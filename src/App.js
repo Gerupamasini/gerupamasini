@@ -15,6 +15,7 @@ import { TANK } from './world/TankConfig.js';
 import { DebugDraw } from './debug/DebugDraw.js';
 import { buildGUI } from './debug/DebugGUI.js';
 import { RNG } from './core/random.js';
+import { resolveOverlaps } from './ai/Steering.js';
 
 export class App {
   constructor(container, opts) {
@@ -65,6 +66,10 @@ export class App {
     else this._initAquarium();
 
     this.post = new PostFX(renderer, this.scene, this.camera);
+    if (this.mode === 'studio') {
+      this.post.bloom.strength = 0.1;
+      this.post.bloom.threshold = 1.2;
+    }
     this.usePost = this.opts.quality !== 'low';
     this._bindInput();
     window.addEventListener('resize', () => this._resize());
@@ -92,7 +97,7 @@ export class App {
     const n = this.opts.fishCount ?? 10;
     this.setFishCount(n);
     this.selected = this.fishSystem.fish[0] || null;
-    this.camera.position.set(0.02, 0.27, 1.42);
+    this.camera.position.set(0.0, 0.26, 1.22);
     this.controls.target.set(0, 0.22, 0);
     this.controls.minDistance = 0.08;
     this.controls.maxDistance = 4;
@@ -158,7 +163,7 @@ export class App {
     const f = this.studioFish;
     const SL = f.SL;
     const c = new THREE.Vector3(-0.18 * SL, 0, 0);
-    const d = SL * 3.4;
+    const d = SL * 3.4 * Number(this.opts.params.get('zoom') || 1);
     const views = {
       side: [0, 0.02, d],
       top: [0, d, 0.001],
@@ -310,7 +315,10 @@ export class App {
       }
       f.update(dt, this.time, this.world);
     }
-    if (this.world) this.world.update(dt, this.time);
+    if (this.world) {
+      resolveOverlaps(this.fishSystem.fish);
+      this.world.update(dt, this.time);
+    }
     this.perf.simMs = performance.now() - t0;
   }
 
@@ -339,7 +347,8 @@ export class App {
 
   _tick() {
     const now = performance.now();
-    const rawDt = this._last ? Math.min(0.05, (now - this._last) / 1000) : 1 / 60;
+    const realDt = this._last ? (now - this._last) / 1000 : 1 / 60;
+    const rawDt = Math.min(0.05, realDt);
     this._last = now;
     if (!this.paused) this.step(rawDt * this.timeScale);
     this._updateCamera(rawDt);
@@ -347,7 +356,7 @@ export class App {
     this.render();
     this.frame++;
     const p = this.perf;
-    p.acc += rawDt;
+    p.acc += realDt;
     p.n++;
     if (p.acc > 0.5) {
       p.fps = p.n / p.acc;
@@ -380,8 +389,90 @@ export class App {
     this.hud.textContent = lines.join('\n');
   }
 
+  /** Render N time steps into a grid (motion inspection in headless tests). */
+  _filmstrip(p) {
+    const n = Number(p.get('strip'));
+    const sdt = Number(p.get('stripDt') || 0.05);
+    const cols = Number(p.get('cols') || 4);
+    const rows = Math.ceil(n / cols);
+    const r = this.renderer;
+    const W = r.domElement.width / r.getPixelRatio();
+    const H = r.domElement.height / r.getPixelRatio();
+    const vw = W / cols;
+    const vh = H / rows;
+    this.camera.aspect = vw / vh;
+    this.camera.updateProjectionMatrix();
+    r.setScissorTest(true);
+    r.autoClear = true;
+    const dt = 1 / 120;
+    for (let k = 0; k < n; k++) {
+      if (k > 0) for (let t = 0; t < sdt - 1e-6; t += dt) this.step(dt);
+      if (p.has('follow') && this.selected) for (let i = 0; i < 3; i++) this._updateCamera(1 / 30);
+      this.fishSystem.update(this.camera, r);
+      const x = (k % cols) * vw;
+      const y = H - (Math.floor(k / cols) + 1) * vh;
+      r.setViewport(x, y, vw, vh);
+      r.setScissor(x, y, vw, vh);
+      r.render(this.scene, this.camera);
+    }
+    r.setScissorTest(false);
+  }
+
+  /** Headless behaviour statistics (no rendering). */
+  _probe(seconds) {
+    const dt = 1 / 60;
+    const stats = { states: {}, gaits: {}, speed: [], depth: [], wallMin: Infinity, collisions: 0, startles: 0, eaten: 0, tailHz: [] };
+    const fish = this.fishSystem.fish;
+    let foodBefore = 0;
+    const t0 = performance.now();
+    for (let t = 0, k = 0; t < seconds; t += dt, k++) {
+      if (k % 1800 === 600) this.feed(this.rng.range(-0.3, 0.3), this.rng.range(-0.1, 0.1), 10);
+      if (k % 2400 === 1200) this.tapGlass();
+      foodBefore = this.world.food.items.length;
+      this.step(dt);
+      if (this.world.food.items.length < foodBefore) stats.eaten += foodBefore - this.world.food.items.length;
+      if (k % 30 !== 0) continue;
+      for (const f of fish) {
+        const b = f.brain;
+        stats.states[b.state] = (stats.states[b.state] || 0) + 1;
+        stats.gaits[f.loc.gait] = (stats.gaits[f.loc.gait] || 0) + 1;
+        stats.speed.push(f.loc.speed / f.SL);
+        stats.depth.push(f.loc.pos.y / TANK.water);
+        stats.tailHz.push(f.loc.freq);
+        const wd = Math.min(TANK.L / 2 - Math.abs(f.loc.pos.x), TANK.D / 2 - Math.abs(f.loc.pos.z));
+        stats.wallMin = Math.min(stats.wallMin, wd / f.SL);
+        if (b.startleTime > t - 0.5 && b.startleTime <= t) stats.startles++;
+        for (const o of fish) if (o !== f && o.loc.pos.distanceTo(f.loc.pos) < 0.25 * (f.SL + o.SL)) stats.collisions++;
+      }
+    }
+    const q = (arr, p) => {
+      const a = [...arr].sort((x, y) => x - y);
+      return a[Math.floor(p * (a.length - 1))].toFixed(2);
+    };
+    const tot = Object.values(stats.states).reduce((a, b) => a + b, 0);
+    const pct = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, ((v / tot) * 100).toFixed(1) + '%']));
+    console.log('PROBE ' + JSON.stringify({
+      simSeconds: seconds,
+      wallclockMs: Math.round(performance.now() - t0),
+      msPerFrame: ((performance.now() - t0) / (seconds * 60)).toFixed(3),
+      states: pct(stats.states),
+      gaits: pct(stats.gaits),
+      speedBL: { p10: q(stats.speed, 0.1), p50: q(stats.speed, 0.5), p90: q(stats.speed, 0.9), max: q(stats.speed, 1) },
+      depthFrac: { p10: q(stats.depth, 0.1), p50: q(stats.depth, 0.5), p90: q(stats.depth, 0.9) },
+      tailHz: { p10: q(stats.tailHz, 0.1), p50: q(stats.tailHz, 0.5), p90: q(stats.tailHz, 0.9) },
+      minWallClearanceBL: stats.wallMin.toFixed(2),
+      closeContacts: stats.collisions,
+      foodEaten: stats.eaten,
+      usPerFishUpdate: { brain: ((Fish.prof.brain / Fish.prof.n) * 1000).toFixed(1), loc: ((Fish.prof.loc / Fish.prof.n) * 1000).toFixed(1), rig: ((Fish.prof.rig / Fish.prof.n) * 1000).toFixed(1) },
+    }));
+  }
+
   _runTest() {
     const p = this.opts.params;
+    if (p.has('probe')) {
+      this._probe(Number(p.get('probe')));
+      return;
+    }
     const tWarm = Number(p.get('t') || 2);
     const dt = 1 / 60;
     if (p.has('anim')) {
@@ -412,6 +503,7 @@ export class App {
       if (names.includes('post')) this.usePost = false;
     }
     this.debugDraw.update(this.fishSystem.fish, this.world, this.camera, this.selected);
-    this.render();
+    if (p.has('strip')) this._filmstrip(p);
+    else this.render();
   }
 }

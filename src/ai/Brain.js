@@ -170,10 +170,10 @@ export class Brain {
     const act = P.activity * (0.75 + 0.5 * (0.5 + 0.5 * Math.sin((time / this.activityRhythm.period) * 6.28 + this.activityRhythm.phase)));
     const nearForagers = neigh.filter((n) => n.dist < 4 * this.fish.SL && n.fish.brain && n.fish.brain.state === 'forage').length;
     const U = {
-      rest: 0.12 + 0.65 * D.fatigue * (1 - 0.5 * D.hunger) * (1.3 - act * 0.4),
+      rest: 0.2 + 0.7 * D.fatigue * (1 - 0.5 * D.hunger) * (1.3 - act * 0.4),
       wander: 0.32 * (0.55 + D.curiosity) * (0.55 + 0.45 * act) * (1 - 0.75 * D.fear),
       cruise: 0.24 * act * (1 - 0.6 * D.fear) * (1 - 0.5 * D.fatigue),
-      pause: 0.07,
+      pause: 0.12,
       forage: D.hunger * 0.85 * (0.65 + 0.2 * Math.min(2, nearForagers)) * (1 - 0.8 * D.fear) * P.feedMotivation,
       approachFood: foodSeen ? (0.7 + D.hunger) * (1.25 - 0.6 * D.fear * P.fearfulness) * P.feedMotivation : 0,
       shoal: 0.14 + D.social * P.sociality * 0.75 + 0.45 * D.fear * P.sociality,
@@ -204,7 +204,7 @@ export class Brain {
     this.phase = 'go';
     this.phaseTime = 0;
     this.sub = {};
-    const base = { rest: 25, wander: 35, cruise: 40, pause: 3, forage: 12, approachFood: 10, surfaceFeed: 8, shoal: 30, wallFollow: 25, startle: 1.5, freeze: 20 * (0.5 + P.fearfulness) };
+    const base = { rest: 25, wander: 35, cruise: 40, pause: 3, forage: 12, approachFood: 10, surfaceFeed: 8, shoal: 30, wallFollow: 25, startle: 1.5, freeze: 11 * (0.5 + P.fearfulness) };
     this.stateDur = dur ?? jitterDuration(r, base[state] ?? 10, 0.4);
     if (state === 'wander') this._pickWanderTarget(null, true);
     if (state === 'rest') {
@@ -343,7 +343,7 @@ export class Brain {
     // ---- drives
     const U = L.speed / SL;
     D.hunger = clamp(D.hunger + (dt * P.feedMotivation) / this.params.hungerTime, 0, 1);
-    D.fatigue = clamp(D.fatigue + dt * (U > 0.3 ? 0.0025 * U : -0.012), 0, 1);
+    D.fatigue = clamp(D.fatigue + dt * (U > 0.3 ? 0.004 * U : -0.01), 0, 1);
     const fearHalf = 45 * (0.5 + P.fearfulness);
     D.fear *= Math.pow(0.5, dt / fearHalf);
     const nn = neigh.length ? neigh[0].dist / SL : 99;
@@ -494,16 +494,21 @@ export class Brain {
       }
     }
 
-    // ---- steering blend
+    // ---- steering blend: avoidance & separation steer, they do not add thrust
+    const goalSpeed = Math.min(des.length(), speedCap);
+    const goalDir = goalSpeed > 1e-5 ? _v.copy(des).divideScalar(goalSpeed) : _v.copy(L.forward).setY(0).normalize();
     const avoid = avoidObstacles(me, world, _a, avoidOpts);
-    des.add(avoid);
-    des.add(separation(me, neigh.slice(0, 6), _s).multiplyScalar(sepW));
-    const speed = Math.min(des.length(), speedCap);
-    if (speed > 1e-5) cmd.dir.copy(des).normalize();
-    else {
-      // hovering: keep heading, level out
-      cmd.dir.copy(L.forward).setY(0).normalize();
-    }
+    const sep = separation(me, neigh.slice(0, 6), _s).multiplyScalar(sepW);
+    const hovering = goalSpeed < 0.15 * SL;
+    const steer = _h.copy(goalDir).multiplyScalar(hovering ? 0.3 : 1).add(avoid).add(sep);
+    let speed = goalSpeed;
+    // slow down when heading into an obstacle; drift away gently when hovering
+    speed *= 1 - 0.55 * avoid.danger;
+    const push = avoid.length() + sep.length();
+    if (hovering && push > 0.25) speed = Math.max(speed, Math.min(0.35, push * 0.2) * SL);
+    if (steer.lengthSq() > 1e-8) cmd.dir.copy(steer).normalize();
+    else cmd.dir.copy(goalDir);
+    if (hovering && push <= 0.25) cmd.dir.copy(goalDir);
     cmd.speed = speed / SL;
     if (this.state === 'startle' && L.cstart) cmd.speed = 4;
     if (!cmd.lookAt && neigh.length && me.rng.next() < 0.002) this.sub.glance = neigh[0].fish;

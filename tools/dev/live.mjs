@@ -1,0 +1,22 @@
+// Load the real app (animation loop + GUI), interact, collect console errors + perf HUD.
+import { chromium } from 'playwright-core';
+const [,, path = '/', out = 'live.png', secs = '12'] = process.argv;
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+const logs = [];
+p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(`[${m.type()}] ${m.text()}`); });
+p.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack}`));
+await p.goto('http://localhost:5173' + path, { waitUntil: 'commit' });
+await p.waitForFunction(() => window.__ready === true, null, { timeout: 300000, polling: 500 });
+const t = Number(secs) * 1000;
+await p.waitForTimeout(t / 3);
+await p.keyboard.press('f');
+await p.mouse.click(640, 400);
+await p.waitForTimeout(t / 3);
+await p.keyboard.press('t');
+await p.waitForTimeout(t / 3);
+const hud = await p.evaluate(() => document.getElementById('hud')?.textContent);
+await p.screenshot({ path: out });
+console.log('HUD:\n' + hud);
+console.log(logs.filter((l) => !/Mismatch between texture format|404|KHR_parallel/.test(l)).slice(0, 30).join('\n'));
+await b.close();

@@ -471,6 +471,7 @@ export class Locomotion {
     const fear = cmd.finsClamped;
     const hover = this.gait === 'hover';
     const fast = smoothstep(0.8, 2.5, U);
+    const pectFold = smoothstep(0.25, 1.4, U); // pectorals adduct already at moderate speed
     // dorsal: erect when slow / manoeuvring, lowered at speed, clamped in fear
     const dorsalT = clamp(1 - 0.45 * fast - 0.65 * fear + 0.1 * this.brakeLevel, 0.15, 1);
     this.fins.dorsal = damp(this.fins.dorsal, this.cstart ? 0.35 : dorsalT, 4, dt);
@@ -485,7 +486,7 @@ export class Locomotion {
       const p = this.pect[s];
       const side = s === 0 ? 1 : -1;
       const turnInner = clamp(-this.yawRate * side * 0.25, 0, 0.4); // left fin is the inner (pivot) fin in left turns (yawRate < 0)
-      const extT = clamp(lerp(0.85, 0.08, fast) + turnInner - fear * 0.4, 0.05, 1);
+      const extT = clamp(lerp(0.85, 0.06, pectFold) + turnInner - fear * 0.4, 0.04, 1);
       p.ext = damp(p.ext, this.cstart ? 0.05 : extT, 6, dt);
       p.brake = damp(p.brake, this.brakeLevel * 0.9, 8, dt);
       const f = sig.pectFreq * (hover ? 1 : 1.25) * (1 + 0.1 * fbm1(time * 0.5 + sig.noiseSeed + s * 7, 1));

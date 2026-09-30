@@ -20,6 +20,7 @@ import {
   finFragmentPars,
   finFragmentColor,
   finFragmentMaterial,
+  finFragmentNormal,
   finFragmentLightsEnd,
   finFragmentOutput,
   finDebugHelpers,
@@ -120,6 +121,7 @@ export function createFinMaterial(layout, { lod = 0 } = {}) {
     fs = mustReplace(fs, '#include <common>', '#include <common>\n' + noiseCommon + underwaterCommon + finFragmentPars + finDebugHelpers, 'common');
     fs = mustReplace(fs, '#include <color_fragment>', '#include <color_fragment>\n' + finFragmentColor, 'color');
     fs = mustReplace(fs, '#include <roughnessmap_fragment>', 'float roughnessFactor = gFinRough;', 'roughness');
+    fs = mustReplace(fs, '#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + finFragmentNormal, 'normal');
     fs = mustReplace(fs, '#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n' + finFragmentMaterial, 'lights_physical');
     fs = mustReplace(fs, '#include <lights_fragment_end>', '#include <lights_fragment_end>\n' + finFragmentLightsEnd, 'lights_end');
     fs = mustReplace(fs, '#include <opaque_fragment>', finFragmentOutput + '\n#include <opaque_fragment>', 'opaque');

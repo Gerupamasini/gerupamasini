@@ -23,10 +23,10 @@ export const U = {
   uWaterDensity: { value: 1.0 },
 
   // body pigments (sRGB anchors from the research report §7, tuned on photos)
-  uColRed: { value: srgb('#c8200c') },
+  uColRed: { value: srgb('#d0290c') },
   uColOrange: { value: srgb('#e0661c') },
   uColYellow: { value: srgb('#e8b83a') },
-  uColWhite: { value: srgb('#e4e2de') },
+  uColWhite: { value: srgb('#e6eaee') },
   uColGill: { value: srgb('#b32831') },
   uScaleIntensity: { value: 1.0 },
   uRoughness: { value: 0.34 },

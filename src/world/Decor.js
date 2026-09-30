@@ -41,7 +41,29 @@ export function buildRocks() {
   const group = new THREE.Group();
   group.name = 'rocks';
   const colliders = [];
-  const mat = patchUnderwater(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 }), { key: 'rock' });
+  // procedural stone detail: multi-octave bump + mineral speckle + algae film on top faces
+  const mat = patchUnderwater(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 }), {
+    key: 'rock',
+    extraColor: `
+      {
+        vec3 wp = vUwWorld * 60.0;
+        float sp = vnoise3(wp * 3.0);
+        float gr = fbm3(vUwWorld * 22.0);
+        diffuseColor.rgb *= 0.78 + 0.35 * gr + 0.12 * step(0.82, sp);
+        vec3 nW = inverseTransformDirection(normalize(vNormal), viewMatrix);
+        float top = smoothstep(0.3, 0.9, nW.y);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.75, 0.95, 0.6), top * 0.45 * smoothstep(0.35, 0.65, fbm3(vUwWorld * 9.0)));
+      }`,
+    extraNormal: `
+      {
+        vec3 p = vUwWorld * 70.0;
+        float e = 0.35;
+        float h0 = fbm3(p);
+        vec3 g = vec3(fbm3(p + vec3(e, 0.0, 0.0)) - h0, fbm3(p + vec3(0.0, e, 0.0)) - h0, fbm3(p + vec3(0.0, 0.0, e)) - h0) / e;
+        vec3 gv = (viewMatrix * vec4(g, 0.0)).xyz;
+        normal = normalize(normal - (gv - normal * dot(gv, normal)) * 0.55);
+      }`,
+  });
   const defs = [
     { x: -0.34, z: -0.12, sx: 0.13, sy: 0.1, sz: 0.085, ry: 0.4 },
     { x: -0.2, z: -0.15, sx: 0.07, sy: 0.055, sz: 0.06, ry: 1.2 },
@@ -129,8 +151,26 @@ export function buildPlants() {
   const current = { value: new THREE.Vector3(0.6, 0, 0.15) };
 
   const mkMat = (color, key) => {
-    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0, side: THREE.DoubleSide, emissive: new THREE.Color(color).multiplyScalar(0.05) });
-    patchUnderwater(m, { extraVertexPars: plantSwayPars, extraVertex: plantSway, key });
+    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0, side: THREE.DoubleSide });
+    patchUnderwater(m, {
+      extraVertexPars: plantSwayPars,
+      extraVertex: plantSway,
+      key,
+      // thin leaves: diffuse transmission of the hood light + faint parallel veins
+      extraColor: `
+        {
+          float v = abs(fract(vUwWorld.y * 90.0 + vUwWorld.x * 7.0) - 0.5);
+          diffuseColor.rgb *= 0.92 + 0.16 * smoothstep(0.1, 0.0, v) + 0.1 * (vnoise3(vUwWorld * 40.0) - 0.5);
+        }`,
+      extraLights: `
+        #if NUM_DIR_LIGHTS > 0
+        {
+          vec3 Lp = directionalLights[0].direction;
+          float back = saturate(-dot(normal, Lp)) + 0.35 * saturate(dot(normal, Lp));
+          reflectedLight.directDiffuse += directionalLights[0].color * diffuseColor.rgb * vec3(0.8, 1.0, 0.55) * back * 0.45;
+        }
+        #endif`,
+    });
     const prev = m.onBeforeCompile;
     m.onBeforeCompile = (shader, r) => {
       prev(shader, r);
@@ -140,7 +180,7 @@ export function buildPlants() {
   };
 
   // Vallisneria clumps at the back
-  const valMat = mkMat(0x4f7a2a, 'val');
+  const valMat = mkMat(0x5f8a30, 'val');
   const clumps = [
     { x: -0.5, z: -0.17, n: 26 },
     { x: -0.43, z: -0.19, n: 18 },
@@ -167,7 +207,7 @@ export function buildPlants() {
       q.setFromEuler(e);
       m4.compose(new THREE.Vector3(x, groundHeight(x, z) - 0.004, z), q, new THREE.Vector3(1, len, 1));
       inst.setMatrixAt(k, m4);
-      col.setHSL(0.24 + rng.range(-0.03, 0.03), 0.5, rng.range(0.28, 0.4));
+      col.setHSL(0.24 + rng.range(-0.03, 0.03), 0.55, rng.range(0.32, 0.46));
       inst.setColorAt(k, col);
       aPlant[k * 4] = rng.range(0, 6.28);
       aPlant[k * 4 + 1] = rng.range(0.7, 1.3);
