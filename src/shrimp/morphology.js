@@ -81,7 +81,7 @@ export const MORPH = {
     telson: 0.03,
     fanSpread: 0.35, // rad half-angle; live animals spread to ~0.7 [PHOTO 009], handled ones close it
     fanRoll: 0.85, // closed fan: uropods rolled lateral-edge-down so the fan reads as a leaf in side view [PHOTO 001, 004]
-    standClearance: 0.07, // ventral carapace above substrate [PHOTO 001]
+    standClearance: 0.045, // ventral carapace above substrate [PHOTO 001]
   },
 
   // ------------------------------------------------------------------ tail fan [PHOTO 004, 009, 018, 019]

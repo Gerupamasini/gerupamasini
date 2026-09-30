@@ -114,8 +114,8 @@ export class Shrimp {
     const offsets = { P5: 0.0, P4: 0.34, P3: 0.68 };
     // Foot rest positions in TL (same as ShrimpModel.poseStanding) [PHOTO 001, 005].
     const TLm = A.totalLength;
-    const fwd = { P3: 0.0, P4: -0.04 * TLm, P5: -0.08 * TLm };
-    const lat = { P3: 0.2 * TLm, P4: 0.21 * TLm, P5: 0.2 * TLm };
+    const fwd = { P3: 0.06 * TLm, P4: -0.03 * TLm, P5: -0.12 * TLm };
+    const lat = { P3: 0.19 * TLm, P4: 0.22 * TLm, P5: 0.19 * TLm };
     this.legs = this.model.walkLegs.map((leg) => {
       const n = leg.P.name;
       const restLocal = new THREE.Vector3(leg.hipPos.x + fwd[n], -this.standH / this.scale, leg.side * lat[n]).multiplyScalar(this.scale);
@@ -321,7 +321,7 @@ export class Shrimp {
     if (!this.flip) {
       if (it.mode === 'water' && this.mode === 'ground') {
         this.mode = 'water';
-        this.vel.y += 0.03;
+        this.vel.y += 0.012;
       } else if (it.mode === 'ground' && this.mode === 'water') {
         if (this.position.y - ground < this.standH * 1.4 && this.vel.length() < 0.06) {
           this.mode = 'ground';
@@ -397,20 +397,22 @@ export class Shrimp {
       let right = 0;
       let avg = 0;
       for (const l of this.legs) {
-        avg += l.foot.y;
-        if (l.P.name === 'P3') front += l.foot.y;
-        if (l.P.name === 'P5') back += l.foot.y;
-        if (l.side > 0) left += l.foot.y;
-        else right += l.foot.y;
+        // Support height from the substrate under each foot; a lifted foot must not raise the body
+        // (otherwise the body bobs with every step).
+        const gy = l.swinging ? lerp(l.from.y, l.to.y, Math.min(1, l.swingT)) : l.foot.y;
+        avg += gy;
+        if (l.P.name === 'P3') front += gy;
+        if (l.P.name === 'P5') back += gy;
+        if (l.side > 0) left += gy;
+        else right += gy;
       }
       avg /= this.legs.length;
       const crouch = clamp(flowMag * 0.08, 0, 0.002) + (this.brain.s.fear > 0.3 ? 0.0015 : 0) + (it.arms === 'forage' ? 0.0012 : 0);
-      const breathe = noise1(this.time * 0.4, this.seed + 3) * 0.0002;
-      this.position.y = this.bodyY.step(avg + this.standH - crouch + breathe, dt, 3);
+      this.position.y = this.bodyY.step(avg + this.standH - crouch, dt, 1.2);
       const span = 0.01 * this.scale;
       const pTarget = Math.atan2((front - back) / 2, span) + (it.arms === 'forage' ? -0.12 : 0) + (this.brain.behavior === 'hide' ? -0.05 : 0.03);
-      this.pitch = this.bodyPitch.step(pTarget, dt, 2);
-      this.roll = this.bodyRoll.step(Math.atan2((right - left) / 3, 0.024 * this.scale), dt, 2);
+      this.pitch = this.bodyPitch.step(pTarget, dt, 1);
+      this.roll = this.bodyRoll.step(Math.atan2((right - left) / 3, 0.024 * this.scale), dt, 1);
       this.pitchRate = 0;
       this.thrust = 0;
     } else {

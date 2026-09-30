@@ -725,7 +725,7 @@ export class ShrimpModel {
     const alpha = Math.acos(THREE.MathUtils.clamp((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
     const beta = Math.acos(THREE.MathUtils.clamp((L1 * L1 + L2 * L2 - D * D) / (2 * L1 * L2), -1, 1));
     // Knee opens laterally (decapod merus is splayed sideways), kept at or below the coxa.
-    const hint = new THREE.Vector3(0, -0.15, leg.side);
+    const hint = new THREE.Vector3(0, -0.6, leg.side); // knees low, near the carapace margin [PHOTO 001]
     hint.addScaledVector(u, -hint.dot(u)).normalize();
     const knee = u.clone().multiplyScalar(L1 * Math.cos(alpha)).addScaledVector(hint, L1 * Math.sin(alpha));
     const yaw = Math.atan2(-knee.z, knee.x);
@@ -746,7 +746,7 @@ export class ShrimpModel {
   /** Standing pose on flat ground (used by the validation renders; the game drives feet by IK). */
   poseStanding() {
     const groundY = -(M.carapace.stations[0][1] + M.rest.standClearance) * T;
-    const foot = { P3: [0.0, 0.2], P4: [-0.04, 0.21], P5: [-0.08, 0.2] }; // feet behind the coxae [PHOTO 001]
+    const foot = { P3: [0.06, 0.19], P4: [-0.03, 0.22], P5: [-0.12, 0.19] }; // diagonal splay [PHOTO 005/006] // feet behind the coxae [PHOTO 001]
     for (const leg of this.walkLegs) {
       const [dx, lat] = foot[leg.P.name];
       this.solveLegIK(leg, new THREE.Vector3(leg.hipPos.x + dx * T, groundY, leg.side * lat * T));

@@ -121,8 +121,8 @@ export class Brain {
         walk: 0.3 * act,
         forage: s.hunger * 0.7 * act * (food ? 0.4 : 1),
         explore: s.curiosity * 0.55 * act,
-        swim: 0.22 * act * this.persona.swimminess * (1 - s.fatigue) * (1 - daylight * 0.5),
-        hover: 0.12 + 0.18 * this.persona.swimminess * (1 - s.fatigue) * (world.flowSpeed > 0.01 ? s.flowPreference : 0.6),
+        swim: 0.08 * act * this.persona.swimminess * (1 - s.fatigue) * (1 - daylight * 0.5),
+        hover: 0.03 + 0.07 * this.persona.swimminess * (1 - s.fatigue) * (world.flowSpeed > 0.01 ? s.flowPreference : 0.6),
         groom: 0.08 + s.dirt * 0.65,
         feed: food && foodDist < 0.012 ? 1.3 * (0.3 + s.hunger) : 0,
         investigate: smell * (0.4 + s.hunger) + (this.lastStimulus && sh.time - this.lastStimulus.t < 8 ? s.curiosity * this.persona.boldness * 0.5 : 0),
@@ -148,7 +148,7 @@ export class Brain {
           break;
         }
       }
-      const durations = { idle: [2, 8], walk: [3, 8], forage: [5, 14], explore: [4, 10], swim: [3, 7], hover: [3, 9], groom: [3, 7], feed: [4, 9], investigate: [3, 7], hide: [8, 25], flee: [1, 2] };
+      const durations = { idle: [2, 8], walk: [3, 8], forage: [5, 14], explore: [4, 10], swim: [6, 14], hover: [5, 12], groom: [3, 7], feed: [4, 9], investigate: [3, 7], hide: [8, 25], flee: [1, 2] };
       const [a, b] = durations[pick];
       this.setBehavior(pick, a + Math.random() * (b - a));
       if (pick === 'groom') this.intent.groomPart = Math.random() < 0.65 ? 'antenna' : Math.random() < 0.5 ? 'body' : 'eye';
