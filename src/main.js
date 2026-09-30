@@ -413,7 +413,17 @@ function updateFloorShadow() {
     bone.localToWorld(_bv);
     arr[i].set(_bv.x, _bv.y, _bv.z, r * 0.001 * (s > F.SEND ? 0.5 : 1));
   });
+  // dark core: vertebral column (y ≈ 3.68 mm) and the viscera block (liver + gut + peritoneum)
+  const core = floor.material.uniforms.uCore.value;
+  CORE_CHAIN.forEach(([boneName, s, y, r], i) => {
+    const bone = fish.bones[boneName];
+    _bv.set(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001).sub(bone.userData.restObj);
+    bone.localToWorld(_bv);
+    core[i].set(_bv.x, _bv.y, _bv.z, r * 0.001);
+  });
 }
+const CORE_CHAIN = [['J_root', 11.2, 3.68, 0.34], ['J_sp1', 18.5, 3.68, 0.3], ['J_sp3', 26.5, 3.66, 0.26], ['J_sp5', 34.5, 3.64, 0.21], ['J_sp7', 40.4, 3.6, 0.17],
+  ['J_root', 12.6, 1.6, 1.25], ['J_sp2', 20.8, 1.55, 1.05]];
 
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight;

@@ -68,7 +68,7 @@ export function buildMouth(mesh) {
   const edgeL = [...mesh.edges.gapeL.lo, ...mesh.edges.gapeR.lo.slice().reverse().slice(1)];
   const K = edgeU.length;
   const M = 10;
-  const lip = [0.66, 0.55, 0.48], palate = [0.62, 0.42, 0.38], floorC = [0.66, 0.46, 0.42], deep = [0.07, 0.015, 0.012];
+  const lip = [0.6, 0.47, 0.41], palate = [0.52, 0.34, 0.31], floorC = [0.56, 0.37, 0.34], deep = [0.06, 0.012, 0.01];
   const colorAt = (u, upper, lat) => {
     const base = u < 0.12 ? lip : upper ? palate : floorC;
     const d = smoothstep(0.15, 0.85, u);
@@ -81,6 +81,7 @@ export function buildMouth(mesh) {
     const lat = clamp(P[2] / Math.max(section(Math.max(P[0], 0.3)).w, 0.3), -1, 1);
     return [7.1, q.yc - 0.55, lat * 0.95];
   };
+  const ctrl = { true: [], false: [] }; // per column: [P, lipIn, C, T]
   const sheet = (edge, upper) => {
     const rows = [];
     for (let m = 0; m <= M; m++) rows.push([]);
@@ -93,7 +94,7 @@ export function buildMouth(mesh) {
       // inner face of the lip roll: the mucosa starts at the gape and curls in behind the lip roll
       // (the roll reaches ~2r - out inward from the skin, see anatomy lipLine)
       const f = clamp(s / RICTUS_S, 0, 1);
-      const reach = upper ? 2 * (0.38 - 0.17 * f) - 0.15 + 0.06 : 2 * (0.31 - 0.14 * f) - 0.12 + 0.06;
+      const reach = upper ? 2 * (0.4 - 0.19 * f - 0.08 * f * f) - 0.18 + 0.06 : 2 * (0.29 - 0.12 * f - 0.07 * f * f) - 0.13 + 0.06;
       const az = Math.abs(P[2]);
       // pass over the top of the roll (slightly across the gape line) so the strip never cuts through it;
       // near the snout tip the roll lies across the axis, so step back behind it instead
@@ -102,6 +103,7 @@ export function buildMouth(mesh) {
       // control: palate vaults up, the floor forms a trough (deepest at the midline), both pulled inward
       const latN = clamp(Math.abs(P[2]) / 1.8, 0, 1);
       const C = [s + 1.6 + (7.1 - s) * 0.2, gy + (upper ? 0.55 - 0.25 * latN * latN : -0.78 + 0.45 * latN * latN), lipIn[2] * 0.7];
+      ctrl[upper].push([P, lipIn, C, T]);
       // first ring just inside the lip so the mucosa curls inward
       for (let m = 0; m <= M; m++) {
         const u = m / M;
@@ -143,39 +145,80 @@ export function buildMouth(mesh) {
     }
     B.grid(rows, faceInto);
   }
-  // teeth: small recurved cones along both jaws, just inside the lips
+  // point on a sheet at fractional column kf and depth tau (0 = just inside the lip, 1 = pharynx)
+  const sheetAt = (upper, kf, tau) => {
+    const cs = ctrl[upper];
+    const k0 = clamp(Math.floor(kf), 0, cs.length - 2), f = clamp(kf - k0, 0, 1);
+    const at = (c) => bez(c[1], c[2], c[3], tau);
+    return lerp3(at(cs[k0]), at(cs[k0 + 1]), f);
+  };
+  const midK = (K - 1) / 2;
+  // tongue: a pale, flattened lobe on the mouth floor with a free, bluntly rounded tip; it rides on the
+  // floor (jaw + hyoid) like the floor sheet it sits on
+  {
+    const NA = 12, NL = 14;
+    const rows = [];
+    for (let j = 0; j <= NL; j++) {
+      const l = j / NL; // 0 = tip, 1 = root
+      const tau = 0.1 + 0.45 * l;
+      const halfW = 0.36 * Math.pow(smoothstep(0.0, 0.35, l), 0.5) * (1 - 0.15 * l) + 0.14;
+      const row = [];
+      for (let i = 0; i <= NA; i++) {
+        const a = (i / NA) * 2 - 1;
+        // columns around the midline: convert the lateral offset (mm) into a fractional column
+        const base0 = sheetAt(false, midK, tau);
+        const colW = Math.hypot(...sub(sheetAt(false, midK + 1, tau), base0)) || 0.05;
+        const p = sheetAt(false, midK + (a * halfW) / colW, tau);
+        const bulge = Math.pow(Math.max(0, 1 - a * a), 0.7) * (0.2 * smoothstep(0.0, 0.14, l) + 0.03) * (1 - 0.6 * smoothstep(0.6, 1.0, l));
+        p[1] += bulge;
+        const shade = 0.82 + 0.18 * Math.max(0, 1 - a * a);
+        const col = [0.62 * shade, 0.44 * shade, 0.42 * shade, 1];
+        row.push(B.vert(p, col, [0.5 + a * 0.05, tau], 'mouthLower', 0.12 + 0.5 * l, 0));
+      }
+      rows.push(row);
+    }
+    B.grid(rows, (c) => [0, 1, 0]);
+  }
+  // teeth: an outer row of enlarged, recurved conical teeth and an inner band of fine villiform teeth
   const teeth = new Builder();
   const addTooth = (base, dir, len, rad, zone) => {
     const tip = add(base, mul(dir, len));
     const a0 = nrm(cross(dir, [0, 0, 1]).map((x) => x + 1e-6));
     const b0 = nrm(cross(dir, a0));
     const ring = [];
-    const col = [0.62, 0.58, 0.5, 1];
+    const col = [0.84, 0.8, 0.7, 1];
     for (let i = 0; i < 6; i++) {
       const ang = (i / 6) * Math.PI * 2;
       const p = add(base, add(mul(a0, Math.cos(ang) * rad), mul(b0, Math.sin(ang) * rad)));
-      ring.push(teeth.vert(p, col, [0, 0], zone, 0.06, 0));
+      ring.push(teeth.vert(p, col, [0.5, 0.02], zone, 0.06, 0));
     }
-    const t = teeth.vert(add(tip, mul([1, 0, 0], len * 0.25)), col, [0, 1], zone, 0.06, 0);
+    const t = teeth.vert(add(tip, mul([1, 0, 0], len * 0.25)), col, [0.5, 0.02], zone, 0.06, 0);
     for (let i = 0; i < 6; i++) teeth.tri(ring[i], ring[(i + 1) % 6], t, (c) => sub(c, base));
   };
   const toothRow = (edge, upper) => {
     let acc = 0;
+    const cs = ctrl[upper];
     for (let k = 0; k < edge.length - 1; k++) {
       const a = V[edge[k]].fish, b = V[edge[k + 1]].fish;
+      const ia = bez(cs[k][1], cs[k][2], cs[k][3], 0.015), ib = bez(cs[k + 1][1], cs[k + 1][2], cs[k + 1][3], 0.015);
       const L = Math.hypot(...sub(b, a));
-      const n = Math.floor((acc + L) / 0.07) - Math.floor(acc / 0.07);
+      const n = Math.floor((acc + L) / 0.05) - Math.floor(acc / 0.05);
       for (let t = 0; t < n; t++) {
         const f = (t + 0.5) / Math.max(n, 1);
         const p = lerp3(a, b, f);
-        if (p[0] > RICTUS_S - 1.2) continue;
-        if (hash01(k, t, upper ? 5 : 6, 7) < 0.15) continue;
+        if (p[0] > RICTUS_S - 1.1) continue;
+        if (hash01(k, t, upper ? 5 : 6, 7) < 0.12) continue;
         const gy = gapeY(Math.max(p[0], 0.1));
-        const row2 = hash01(k, t, upper ? 3 : 4, 8) < 0.4 ? 1 : 0; // inner row
-        const base = [p[0] + 0.3 + 0.07 * row2, gy + (upper ? 0.2 : -0.24) + (upper ? 0.03 : -0.03) * row2, p[2] * (0.86 - 0.05 * row2)];
-        const dir = nrm([0.45, upper ? -1 : 1, -Math.sign(p[2]) * 0.15]);
+        // every other position is an outer (enlarged) tooth; the rest fill two inner rows of fine teeth
+        const outer = (k * 7 + t) % 2 === 0;
+        const row = outer ? 0 : 1 + (hash01(k, t, upper ? 3 : 4, 8) < 0.5 ? 0 : 1);
+        const q = lerp3(ia, ib, f);
+        const base = [q[0] + 0.02 + 0.07 * row, q[1] + (upper ? 0.03 : -0.03) * (1 + row), q[2] * (1 - 0.04 * row)];
+        const dir = nrm([0.35 + 0.1 * row, upper ? -1 : 1, -Math.sign(p[2]) * 0.25]);
         const h = hash01(k, t, upper ? 1 : 2, 9);
-        addTooth(base, dir, (0.045 + 0.03 * h) * (row2 ? 0.7 : 1), 0.011 + 0.004 * h, upper ? 'mouthUpper' : 'mouthLower');
+        const len = outer ? 0.1 + 0.05 * h : 0.045 + 0.025 * h;
+        const rad = outer ? 0.02 + 0.005 * h : 0.01 + 0.003 * h;
+        addTooth(base, dir, len, rad, upper ? 'mouthUpper' : 'mouthLower');
       }
       acc += L;
     }

@@ -234,6 +234,62 @@ void medium(vec3 p, out float sS, out vec3 sA) {
   sA += peri * periSpots * vec3(0.5, 0.53, 0.58) * (0.5 + 0.5 * I);
 }
 
+// ---- simple organs and the vertebral column (rest-space fish mm)
+// Their optical depth along a ray is integrated analytically, so thin or small structures are never
+// missed by the coarse march: they block the transmitted background, the back light and the floor light.
+float erfA(float x) { return tanh(1.2025 * x); }
+// chord through a uniform ellipsoid, softened toward the rim (∝ 1 − h², h = normalised impact parameter)
+float ellChord(vec3 o, vec3 d, float L, vec3 c, vec3 r, inout float tFirst) {
+  vec3 oo = (o - c) / r, dd = d / r;
+  float a = dot(dd, dd), b = dot(oo, dd), cc = dot(oo, oo) - 1.0;
+  float disc = b * b - a * cc;
+  if (disc <= 0.0) return 0.0;
+  float sq = sqrt(disc);
+  float a0 = clamp((-b - sq) / a, 0.0, L), a1 = clamp((-b + sq) / a, 0.0, L);
+  if (a1 <= a0) return 0.0;
+  tFirst = min(tFirst, a0);
+  float h2 = clamp(cc + 1.0 - b * b / a, 0.0, 1.0);
+  return (a1 - a0) * sqrt(1.0 - h2);
+}
+// Gaussian tube around the (nearly straight) vertebral column, with denser centrum rims
+float spineTau(vec3 o, vec3 d, float L, inout float tFirst) {
+  float spineY = 3.68;
+  vec2 dp = d.yz;
+  float dd = max(dot(dp, dp), 0.02);
+  float tc = 0.0, sc = 0.0;
+  for (int k = 0; k < 2; k++) {
+    vec2 w = o.yz - vec2(spineY, 0.0);
+    tc = -dot(w, dp) / dd;
+    sc = o.x + d.x * clamp(tc, 0.0, L);
+    Sec q = section(clamp(sc, uVertStart, 40.6));
+    spineY = q.yc + 0.06 * q.t;
+  }
+  vec2 cpt = o.yz - vec2(spineY, 0.0) + dp * tc;
+  float u = clamp((sc - uVertStart) / (40.6 - uVertStart), 0.0, 1.0);
+  float r = mix(0.34, 0.17, u);
+  float sig = r / sqrt(dd);
+  float g = exp(-dot(cpt, cpt) / (r * r)) * sig * 0.8862 * (erfA((L - tc) / sig) - erfA(-tc / sig));
+  float win = smoothstep(uVertStart - 0.4, uVertStart + 0.4, sc) * (1.0 - smoothstep(40.2, 41.0, sc));
+  float vph = fract((sc - uVertStart) / uVertLen);
+  float rim = smoothstep(0.3, 0.48, abs(vph - 0.5));
+  if (g * win > 0.02) tFirst = min(tFirst, max(tc - sig, 0.0));
+  return g * win * (0.7 + 0.6 * rim);
+}
+// absorption optical depth (rgb) of the organs along o + d t, t ∈ [0, L]; tFirst = first organ hit
+vec3 organTau(vec3 o, vec3 d, float L, out float tFirst) {
+  tFirst = 1e3;
+  vec3 tau = spineTau(o, d, L, tFirst) * vec3(4.0, 4.4, 5.0);                                      // vertebral column
+  tau += ellChord(o, d, L, vec3(13.4, 1.55, 0.2), vec3(1.9, 1.05, 1.85), tFirst) * vec3(1.3, 2.3, 2.9); // liver
+  tau += ellChord(o, d, L, vec3(17.9, 1.4, -0.1), vec3(3.7, 1.0, 1.35), tFirst) * vec3(1.0, 1.4, 2.3);  // stomach + gut
+  tau += ellChord(o, d, L, vec3(16.9, 2.72, 0.0), vec3(5.4, 0.3, 1.75), tFirst) * vec3(3.8, 4.0, 4.2);    // dark peritoneum roof
+  tau += ellChord(o, d, L, vec3(16.8, 3.2, 0.0), vec3(5.8, 0.22, 0.32), tFirst) * vec3(0.8, 2.6, 2.6);     // kidney under the column
+  tau += ellChord(o, d, L, vec3(10.2, 0.9, 0.0), vec3(0.7, 0.5, 0.6), tFirst) * vec3(0.5, 4.0, 3.6);      // heart
+  tau += ellChord(o, d, L, vec3(6.8, 4.4, 0.0), vec3(2.4, 0.75, 0.8), tFirst) * vec3(0.15, 0.2, 0.3);    // brain
+  tau += ellChord(o, d, L, vec3(8.3, 3.75, 0.78), vec3(0.32, 0.2, 0.11), tFirst) * vec3(6.0);             // otoliths
+  tau += ellChord(o, d, L, vec3(8.3, 3.75, -0.78), vec3(0.32, 0.2, 0.11), tFirst) * vec3(6.0);
+  return tau;
+}
+
 vec3 sampleBg(vec2 uv, float lod) {
   if (lod < 0.5) return textureLod(uBg, uv, 0.0).rgb;
   vec2 px = exp2(lod - 1.0) / uResolution;
@@ -325,6 +381,13 @@ void main() {
     tauA += sA * dt;
     tauS += sS * dt;
   }
+  // organs and the vertebral column (analytic): they block the light seen through the body
+  float organK = 0.5 + uInterior;
+  float tOrg;
+  vec3 tauOrg = organTau(pIn, R, tExit, tOrg) * organK;
+  tauE += tauOrg;
+  tauA += tauOrg;
+  tauNear += min(tauOrg, vec3(1.6)) * exp(-tOrg * 0.6) * 0.22;
   // sculpted appendages outside the analytic volume (orbit rims, lips, papilla) are solid tissue
   float outside = smoothstep(0.98, 1.1, bodyR(pIn));
   // lips and jaws are dense (dentary, premaxilla, thick lip tissue)
@@ -384,6 +447,8 @@ void main() {
       float excess = max(sS - uSigS * uScatter, 0.0);
       tauL += (sqrt(3.0 * sA * (sA + vec3(sS * (1.0 - G_TIS)))) + vec3(excess * (1.0 - G_TIS) * 0.9)) * (dL / float(NL));
     }
+    float tOrgL;
+    tauL += organTau(pIn, LF, dL, tOrgL) * organK;
     vec3 skinL = skinT(textureLod(uPigment, fishUV(pIn + LF * dL), 2.0).rgb);
     float cosT = dot(-L, V);
     float ph = mix(1.0, 4.0 * PI * hgPhase(cosT, 0.45), 0.55);

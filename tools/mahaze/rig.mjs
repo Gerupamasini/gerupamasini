@@ -74,15 +74,26 @@ function opercWeight(p) {
   return smoothstep(0.02, 0.85, u) * ends;
 }
 
+// Toward the mouth corner the lips stay joined by the lip fold: over the last ~1.6 mm both lips share the
+// jaw motion (the upper lip is pulled down, the lower one moves less), so a gaping mouth has rounded
+// corners instead of a slot that opens all the way to the rictus.
+export const cornerSeal = (s) => smoothstep(RICTUS_S - 1.6, RICTUS_S, s);
 function jawWeightBody(v) {
   const [s, y] = v.fish;
   const r = RICTUS_S;
   // behind the rictus the skin of the jaw angle blends softly into the cheek
   const yExt = gapeY(r) - Math.max(0, s - r) * 0.25;
-  const soft = smoothstep(yExt + 0.1, yExt - 0.6, y) * smoothstep(r + 2.2, r + 0.1, s);
-  if (s <= r - 0.8) return v.jawSide ? 1 : 0;
-  if (v.jawSide) return 1 + (soft - 1) * smoothstep(r - 0.8, r + 0.05, s);
-  return s > r ? soft : 0;
+  // the lower jaw ends at its joint with the quadrate (PIVOTS.jaw): skin behind it must not follow the
+  // rotation (it would ride up and pinch a notch into the throat line)
+  const soft = smoothstep(yExt + 0.1, yExt - 0.6, y) * smoothstep(PIVOTS.jaw[0] + 0.55, PIVOTS.jaw[0] - 0.35, s);
+  const seal = cornerSeal(s);
+  const gy = gapeY(Math.min(s, r));
+  if (v.jawSide) {
+    const front = 1 - 0.55 * seal;
+    return s <= r ? front : front + (soft - front) * smoothstep(r, r + 0.3, s);
+  }
+  const lip = 0.45 * seal * smoothstep(gy + 0.6, gy + 0.05, y);
+  return s > r ? Math.max(soft, lip * smoothstep(r + 0.5, r, s)) : lip;
 }
 
 function combine(regional, s) {
@@ -132,6 +143,20 @@ export function bodyWeights(mesh) {
   return pack(list, mesh.verts.length);
 }
 
+function mouthUpperW(s, u) {
+  const edge = smoothstep(0.3, 0.0, u);
+  const seal = 0.45 * cornerSeal(s) * edge;
+  // at the lip margin the same premaxilla influence as the skin it is stitched to (see bodyWeights)
+  const pm = 0.9 * smoothstep(RICTUS_S + 0.3, RICTUS_S - 1.3, s) * edge;
+  return [[J.J_jaw, seal], [J.J_premax, pm], [J.J_head, Math.max(0, 1 - seal - pm)]];
+}
+function mouthLowerW(s, u) {
+  const edgeJaw = 1 - 0.55 * cornerSeal(s) * smoothstep(0.3, 0.0, u);
+  const jaw = edgeJaw + (0.35 - edgeJaw) * smoothstep(0.35, 1.0, u);
+  const hy = 0.45 * smoothstep(0.4, 1.0, u);
+  return [[J.J_jaw, jaw], [J.J_hyoid, hy], [J.J_head, Math.max(0, 1 - jaw - hy)]];
+}
+
 export function interiorWeights(part) {
   const list = part.verts.map((v) => {
     const s = v.fish[0];
@@ -139,16 +164,17 @@ export function interiorWeights(part) {
     const u = v.blend;
     switch (v.zone) {
       case 'mouthUpper':
-        reg.push([J.J_premax, 0.8 * smoothstep(0.3, 0.0, u)]);
-        reg.push([J.J_head, 1 - 0.8 * smoothstep(0.3, 0.0, u)]);
-        return reg;
-      case 'mouthLower': {
-        const jaw = 1 + (0.35 - 1) * smoothstep(0.35, 1.0, u);
-        const hy = 0.45 * smoothstep(0.4, 1.0, u);
-        return [[J.J_jaw, jaw], [J.J_hyoid, hy], [J.J_head, Math.max(0, 1 - jaw - hy)]];
+        return mouthUpperW(s, u);
+      case 'mouthLower':
+        return mouthLowerW(s, u);
+      case 'mouthWall': {
+        // corner wall between the two sheets: blend their influences across (u) at this depth
+        const d = v.uv[1];
+        const m = new Map();
+        for (const [j, w] of mouthUpperW(s, d)) m.set(j, (m.get(j) || 0) + w * (1 - u));
+        for (const [j, w] of mouthLowerW(s, d)) m.set(j, (m.get(j) || 0) + w * u);
+        return [...m.entries()];
       }
-      case 'mouthWall':
-        return [[J.J_jaw, u * 0.85], [J.J_hyoid, u * 0.1], [J.J_head, 1 - u * 0.95]];
       case 'flapLining':
         reg.push([v.fish[2] >= 0 ? J.J_opercL : J.J_opercR, opercWeight(v.fish)]);
         return combine(reg, s);

@@ -59,6 +59,7 @@ export function createFloor(shared, y) {
     uniforms: {
       ...shared,
       uShadow: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
+      uCore: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
       uCausticAmt: shared.uCausticAmt,
     },
     vertexShader: /* glsl */ `
@@ -68,6 +69,7 @@ export function createFloor(shared, y) {
     fragmentShader: /* glsl */ `
       ${commonGLSL}
       uniform vec4 uShadow[8];
+      uniform vec4 uCore[8];   // 0-4: vertebral column chain, 5-6: viscera capsule (radius in w)
       uniform float uCausticAmt;
       varying vec3 vWorldPos;
 
@@ -88,6 +90,27 @@ export function createFloor(shared, y) {
           if (d < best) { best = d; id = ip + g; off = r; }
         }
         return vec3(sqrt(best), hash2(id * 1.37).x, hash2(id * 3.11).y);
+      }
+      // occlusion of the light ray p + L t by a capsule A–B (radius in w), softened with distance
+      float capsuleOcc(vec4 A, vec4 B, vec3 p, vec3 L, float soft) {
+          vec3 ab = B.xyz - A.xyz, ap = A.xyz - p;
+          float abL = dot(ab, L), abab = dot(ab, ab), apL = dot(ap, L), apab = dot(ap, ab);
+          float den = abab - abL * abL;
+          float u = den > 1e-12 ? clamp((abL * apL - apab) / den, 0.0, 1.0) : 0.0;
+          vec3 q = A.xyz + ab * u;
+          float t = dot(q - p, L);
+          if (t <= 0.0) return 0.0;
+          float d = length(q - p - L * t);
+          float r = mix(A.w, B.w, u);
+          float pen = r + t * soft;
+          return smoothstep(pen * 1.15, pen * 0.15, d) * clamp(r / pen * 1.6, 0.0, 1.0);
+      }
+      // the spine and the viscera block the light inside the translucent body: a darker core
+      float coreShadow(vec3 p, vec3 L) {
+        float occ = 0.0;
+        for (int i = 0; i < 4; i++) occ = max(occ, 0.75 * capsuleOcc(uCore[i], uCore[i + 1], p, L, 0.1));
+        occ = max(occ, 0.9 * capsuleOcc(uCore[5], uCore[6], p, L, 0.12));
+        return occ;
       }
       // soft, translucent shadow of the goby: capsule chain along its axis (radius in w)
       float softShadow(vec3 p, vec3 L) {
@@ -150,7 +173,8 @@ export function createFloor(shared, y) {
         vec3 L = normalize(uLightDir);
         float caus = mix(1.0, caustics(p.xz * 180.0 - L.xz / max(L.y, 0.2) * p.y * 180.0), uCausticAmt * 2.0);
         float occ = softShadow(p, L);
-        vec3 shadowTint = mix(vec3(1.0), vec3(0.45, 0.37, 0.28), occ);   // translucent body -> warm, soft shadow
+        float core = uCore[5].w > 0.0 ? coreShadow(p, L) : 0.0;
+        vec3 shadowTint = mix(vec3(1.0), vec3(0.45, 0.37, 0.28), occ) * mix(vec3(1.0), vec3(0.3, 0.27, 0.24), core);   // translucent body -> warm, soft shadow; spine + viscera darker
         vec3 Lc = uLightColor * caus * shadowTint;
         float ndl = max(dot(N, L), 0.0);
         vec3 col = alb * (Lc * ndl * INV_PI + ambientIrr(N) * (1.0 - occ * 0.2));

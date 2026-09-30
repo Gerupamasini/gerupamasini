@@ -49,9 +49,9 @@ export function midline(xmm, phase, gain, turn) {
   const x = xmm / TL_MM;
   const A = TL_MM * (0.02 - 0.08 * x + 0.16 * x * x) * gain;
   const wave = A * Math.sin(2 * Math.PI * (x / 0.95) - phase);
-  // turn > 0 bends the body so the head swings toward the fish's left
-  const c = turn * TL_MM * 0.5 * (x - 0.26) * (x - 0.26) * Math.sign(x - 0.26);
-  return wave - c;
+  // turn > 0: C-bend concave toward the fish's left (head and tail both swing left about the pelvic disc)
+  const c = turn * TL_MM * 0.6 * (x - 0.26) * (x - 0.26);
+  return wave + c;
 }
 
 /** Local Y-rotation angles for the axial chain that realise the midline (radians). */
@@ -80,6 +80,11 @@ export function computePose(p, axes) {
   const q = {};
   const t = {};
   const { local } = spineAngles(p.phase, p.gain, p.turn);
+  // extra yaw of each axial segment relative to the root segment (turning: the head leads, the body follows)
+  if (p.segYaw) {
+    local.J_head += p.segYaw.J_head || 0;
+    for (let k = 2; k < SPINE.length; k++) local[SPINE[k][0]] += (p.segYaw[SPINE[k][0]] || 0) - (k > 2 ? p.segYaw[SPINE[k - 1][0]] || 0 : 0);
+  }
   for (const [name] of SPINE) q[name] = quat(Y, local[name]);
   // head pitch (nose up > 0) on top of the lateral bend
   q.J_head = qmul(q.J_head, quat(axes.headUp, p.headPitch));
@@ -87,7 +92,7 @@ export function computePose(p, axes) {
   q.J_hyoid = quat(axes.hyoid, p.hyoid);
   q.J_opercL = quat(axes.opercL, p.opercL);
   q.J_opercR = quat(axes.opercR, p.opercR);
-  t.J_premax = [0, -0.00012 * p.premax, 0.00045 * p.premax];
+  t.J_premax = [0, -0.00015 * p.premax, 0.0006 * p.premax];
   q.J_pecL = qmul(quat(axes.pecL, p.pecAbdL), quat(axes.pecDepL, p.pecDepL));
   q.J_pecR = qmul(quat(axes.pecR, p.pecAbdR), quat(axes.pecDepR, p.pecDepR));
   q.J_pelvic = quat(axes.headUp, p.pelvicPitch);

@@ -61,6 +61,18 @@ void main() {
     rough = mix(rough, 0.18, vGill);
     N = normalize(N + (lam - 0.5) * 0.35 * normalize(cross(N, vec3(0.0, 1.0, 0.0)) + 1e-4));
   }
+  // back of the mouth: the pharynx opens between the gill arches (pale arches, dark red filaments between
+  // them) and narrows to the dark oesophagus at the midline
+  if (vColor.a > 0.75 && vGill <= 0.0) {
+    float u = vUv.y;
+    float lat = abs(vUv.x - 0.5) * 2.0;
+    float arches = smoothstep(0.6, 0.72, u) * smoothstep(0.3, 0.55, lat);
+    float f = fract((u - 0.6) / 0.4 * 4.0);
+    float ridge = smoothstep(0.0, 0.3, f) * smoothstep(0.75, 0.45, f);
+    vec3 archC = mix(vec3(0.16, 0.02, 0.02), vec3(0.5, 0.33, 0.3), ridge);
+    alb = mix(alb, archC * (1.0 - 0.5 * smoothstep(0.85, 1.0, u)), arches);
+    alb *= 1.0 - 0.85 * smoothstep(0.78, 0.95, u) * (1.0 - smoothstep(0.1, 0.35, lat));
+  }
   // light reaching into the cavities is strongly occluded: the vertex colour already carries the depth AO
   float cavity = clamp(dot(vColor.rgb, vec3(0.333)) * 1.6, 0.0, 1.0);
   // light only reaches the cavities through the gape / gill slit: a barely parted mouth reads as a
@@ -68,6 +80,8 @@ void main() {
   float isMouth = step(0.75, vColor.a);
   float open = isMouth > 0.5 ? smoothstep(0.02, 0.4, uMouthOpen) : smoothstep(0.03, 0.35, uGillOpen);
   float occl = mix(0.06, 1.0, open);
+  // even a wide gape only lets light in through the opening: the cavity darkens quickly with depth
+  if (isMouth > 0.5 && vGill <= 0.0) occl *= mix(1.0, 0.07, smoothstep(0.05, 0.5, vUv.y));
   // palatal / buccal folds break up the reflections
   float folds = sin(vUv.x * 90.0 + sin(vUv.y * 17.0) * 2.0) * 0.5 + 0.5;
   alb *= mix(0.88, 1.0, folds * (1.0 - vGill));

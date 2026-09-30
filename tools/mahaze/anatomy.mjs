@@ -288,11 +288,27 @@ function lipLine(sign, radii, out) {
 
 function buildFeatures() {
   const n = MOUTH.length;
-  const ru = MOUTH.map((_, i) => 0.37 - 0.18 * (i / (n - 1)));
-  const rl = MOUTH.map((_, i) => 0.31 - 0.15 * (i / (n - 1)));
-  const lipsU = capsuleChain(lipLine(1, ru, 0.18), ru);
+  // upper lip: thick and fleshy in front, tapering toward the mouth corner; the lower lip is thinner and
+  // sits a little inside the upper one at the sides (the upper lip overlaps it), as in the photos
+  const ru = MOUTH.map((_, i) => { const f = i / (n - 1); return 0.4 - 0.19 * f - 0.08 * f * f; });
+  const rl = MOUTH.map((_, i) => { const f = i / (n - 1); return 0.29 - 0.12 * f - 0.07 * f * f; });
+  const uPts = lipLine(1, ru, 0.18);
+  // behind the corner the upper lip (over the maxilla) curls down and back and sinks into the cheek
+  {
+    const g = gapeY(RICTUS_S);
+    const { p, n: nn } = surfaceAt(RICTUS_S + 0.42, g - 0.16);
+    const r = 0.075;
+    uPts.push([p[0] - nn[0] * (r - 0.03), p[1] - nn[1] * (r - 0.03), p[2] - nn[2] * (r - 0.03)]);
+    ru.push(r);
+  }
+  const lipsU = capsuleChain(uPts, ru);
   // the upper jaw overhangs the lower slightly: the lower lip starts a little behind the snout tip
-  const lipsL = capsuleChain(lipLine(-1, rl, 0.14).map((p, i) => (i === 0 ? [p[0] + 0.12, p[1], p[2]] : p)), rl);
+  const lPts = lipLine(-1, rl, 0.13).map((p, i) => {
+    if (i === 0) return [p[0] + 0.12, p[1], p[2]];
+    const f = i / (n - 1);
+    return [p[0], p[1], p[2] * (1 - 0.035 * f)];
+  });
+  const lipsL = capsuleChain(lPts, rl);
   const gape = onSurface(MOUTH, 0.0);
   gape[0] = [-0.12, MOUTH[0][1], 0];
   const crease = capsuleChain(gape, MOUTH.map((_, i) => 0.065 - 0.015 * (i / (MOUTH.length - 1))));
