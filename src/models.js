@@ -361,7 +361,7 @@ export function macroChelaDims(PL, PH) {
   return { pl, ang, FL, base, tip, pivot };
 }
 function macroChelaGeo(PL, PH, T, q = 1) {
-  return cached(`mchela11:${PL}:${PH}:${T}:${q}`, () => {
+  return cached(`mchela12:${PL}:${PH}:${T}:${q}`, () => {
     const D = macroChelaDims(PL, PH);
     const { pl, ang, FL, base } = D;
     const palm0 = ellipsoid([pl * 0.5, 0, 0], [pl * 0.58, PH * 0.5, T * 0.5]);
@@ -379,7 +379,7 @@ function macroChelaGeo(PL, PH, T, q = 1) {
     }
     // 掌の上縁の顆粒列と外面の縦の隆起
     const tub = [];
-    for (let i = 0; i < 9; i++) { const x = pl * (0.14 + i * 0.09); const u = (x - pl * 0.5) / (pl * 0.56); tub.push(sphere([x, PH * 0.5 * Math.sqrt(Math.max(0, 1 - u * u)) - PH * 0.07, T * 0.2], PH * 0.028)); }
+    for (let i = 0; i < 9; i++) { const x = pl * (0.14 + i * 0.09); const u = (x - pl * 0.5) / (pl * 0.56); tub.push(sphere([x, PH * 0.5 * Math.sqrt(Math.max(0, 1 - u * u)) - PH * 0.07, T * 0.16], PH * 0.02)); }
     const ridge = cone([pl * 0.2, -PH * 0.12, T * 0.36], [pl * 0.8, -PH * 0.2, T * 0.3], PH * 0.02, PH * 0.018);
     // 可動指の関節窩（掌の上端先の縁がめくれた受け口）
     const socket = ellipsoid([D.pivot[0] - PH * 0.04, D.pivot[1] - PH * 0.04, 0], [PH * 0.1, PH * 0.08, T * 0.3]);
