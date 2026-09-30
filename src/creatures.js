@@ -229,7 +229,7 @@ function clawPoses(species, male) {
 }
 // ヤマトオサガニの雄（生体写真）：大きな鉗を顔の前に斜めに構え、指先を前下方へ
 const CLAW_POSES_YM2 = {
-  rest: { yaw0: 0.2, p0: 0.36, f1: 1.15, p1: 0.0, px: -0.86, py: -0.44, pz: 0.12, bx: 0.44, by: -0.86, bz: 0.0, open: 0.13 },
+  rest: { yaw0: 0.2, p0: 0.62, f1: 1.15, p1: 0.0, px: -0.74, py: -0.62, pz: 0.12, bx: 0.62, by: -0.74, bz: 0.0, open: 0.13 },
   reach: { yaw0: 0.65, p0: -0.1, f1: 1.3, p1: -0.05, px: -0.9, py: -0.4, pz: 0.25, bx: 0.0, by: -1, bz: 0.1, open: 0.35 },
   mouth: { yaw0: 0.8, p0: 0.2, f1: 1.7, p1: 0.1, px: -1, py: 0.05, pz: 0.2, bx: 0.0, by: -1, bz: -0.05, open: 0.0 },
   waveUp: { yaw0: 0.4, p0: 0.2, f1: 0.5, p1: 1.1, px: -0.1, py: 0.75, pz: 0.65, bx: -1, by: 0.1, bz: 0.2, open: 0.3 },
@@ -1232,7 +1232,7 @@ export class Ecosystem {
     const sh = this.yamaShared;
     const shell = organicMaterial({
       key: 'yamaShell3', glsl: GLSL.yamatoShell, seed,
-      colors: [0x6e604c, 0x8a7a62, 0xb0a084, 0x7a6c58],
+      colors: [0x6e5a3a, 0x8e744c, 0xb49870, 0x7a6448],
       P: [CRAB_SPECS.yamato.l, CRAB_SPECS.yamato.w, CRAB_SPECS.yamato.h, 0],
       roughness: 0.52, clearcoat: 0.45, clearcoatRoughness: 0.28,
     });
