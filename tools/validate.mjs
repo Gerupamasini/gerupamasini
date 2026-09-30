@@ -4,7 +4,7 @@ import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
 import { mkdirSync } from 'node:fs';
 
-const outDir = 'docs/validation';
+const outDir = process.env.VALIDATE_OUT ?? 'docs/validation'; // per-agent scratch dirs avoid clobbering
 mkdirSync(outDir, { recursive: true });
 
 // port is chosen automatically (strictPort false) so several captures can run side by side
