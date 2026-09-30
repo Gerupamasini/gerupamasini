@@ -5,8 +5,8 @@ import { getPalette } from './KentishPloverMaterials.js';
 
 // Flock manager: LOD policy + update scheduling + spatial queries + far-LOD instanced impostors.
 // docs/optimization.md
-//   LOD0  (< 2.5 m)  full geometry (≈24k tris), all feathers, eye cornea/lids, micro-normals, 60 Hz anim, 20 Hz AI
-//   LOD1  (< 9 m)    coarser SDF body, no lesser/median coverts, simple eyes, 60 Hz anim, 20 Hz AI
+//   LOD0  (< 2.5 m)  full geometry (≈24k tris), all feathers, eye cornea/lids, micro-normals, every-frame anim, 20 Hz AI
+//   LOD1  (< 9 m)    coarser SDF body, no lesser/median coverts, simple eyes, every-frame anim, 20 Hz AI
 //   LOD2  (< 30 m)   very coarse body, merged feather cards, no micro-normals, 30 Hz anim, 8 Hz AI
 //   LOD3  (≥ 30 m)   one InstancedMesh for all far birds (≈90 tris each, flap in vertex shader), 3 Hz AI,
 //                    skeleton not updated at all
@@ -25,6 +25,8 @@ export class KentishPloverManager {
     this.far = this._buildFarMesh(maxFar);
     scene.add(this.far);
     this.stats = { lod: [0, 0, 0, 0], culled: 0 };
+    // the bird the camera follows: posed every frame at any LOD (a throttled pose would step against the camera)
+    this.focus = null;
     world.birds = this;
   }
 
@@ -115,7 +117,7 @@ export class KentishPloverManager {
       if (!visible) this.stats.culled++;
       b.lod = lvl;
       this.stats.lod[lvl]++;
-      const sched = { aiRate: CFG.lod.aiRate[lvl], animRate: CFG.lod.animRate[lvl], visible: visible && lvl < 3 };
+      const sched = { aiRate: CFG.lod.aiRate[lvl], animRate: b === this.focus ? Infinity : CFG.lod.animRate[lvl], visible: visible && lvl < 3, dist: d };
       if (lvl < 3) b.model.setLOD(lvl);
       b.model.object.visible = visible && lvl < 3;
       b.update(dt, sched);

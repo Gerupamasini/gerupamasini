@@ -177,6 +177,11 @@ export const animation = {
   heelLift: { walk: mm(4), run: mm(6) }, // late-stance heel-off (MTP joint rises, toes stay down)
   stopDecel: 12,
   accel: 9,
+  // Max ground yaw acceleration (rad/s²). The heading still converges at turnRate 6/9, but its rate ramps up and
+  // brakes over a few frames instead of stepping from 0 to 5–18 rad/s in one frame at every start (a one-frame
+  // twist of the whole bird about its feet; the trunk sits ~12 mm behind them). A 180° pivot takes ≈0.35 s,
+  // a 30° heading correction ≈0.15 s (D; tools/dev/gaitjitter.mjs)
+  turnAccel: 100,
   headStabilization: 0.8,
   footTrembleHz: 10,
   flight: {
@@ -268,6 +273,10 @@ export const lod = {
   // follow camera moves every frame, and a skipped pose (frame-time jitter, 120/144 Hz displays) made the whole
   // bird jolt by up to v·dt on screen (D; tools/dev/gaitjitter.mjs)
   animRate: [Infinity, Infinity, 30, 15],
+  // A throttled bird that walks/runs stays where it was posed until its next pose (so its planted feet stay
+  // planted), but is re-posed early once it lags its entity by more than this angle as seen from the camera
+  // (rad; ≈1 px at 800 px / 45°): a running LOD2 bird near 9 m would otherwise advance in 4 px steps at 30 Hz.
+  maxLagAngle: 0.001,
 };
 
 export const KentishPloverConfig = {

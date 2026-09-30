@@ -5,7 +5,9 @@
 //   treadmill-walk/run  animator only, root fixed, ground scrolling (the validation-page preview)
 //   viewer-walk/run     the demo's animation viewer: entity + manager scheduling, AI paused, gentle circle
 //   ai                  the demo: 14 birds with the behaviour AI, follow camera on bird 0 (LOD0, visible)
-//   viewer-run-12m      viewer run followed from 12 m (LOD2: throttled skeleton)
+//   viewer-run-12m      viewer run followed from 12 m (LOD2, but the followed bird is posed every frame)
+//   viewer-*-12m-static the same from a static camera 12 m away, not followed (LOD2: throttled skeleton; judder
+//                       columns then include the bird's own motion — look at the stance-slip column)
 // Display timing: "60j" = 60 Hz vsync with ±0.3 ms timestamp jitter (performance.now() at frame start),
 //   "60" = exact 1/60 s; likewise 30/120/144. The follow camera moves by the bird's position delta every
 //   frame (src/demo/main.js), so body-relative-to-camera = what the viewer sees.
@@ -149,9 +151,10 @@ function makeWorld() {
   return { world, mgr, camera, tide, prey };
 }
 
-function runDemo(kind, dts, dist = 0.6) {
+function runDemo(kind, dts, dist = 0.6, follow = true) {
   const { world, mgr, camera, tide, prey } = makeWorld();
   const b = mgr.all[0];
+  mgr.focus = follow ? b : null; // main.js: the followed bird is posed every frame at any LOD
   instrument(b.animator);
   // camera: three-quarter side view at 0.6 m (main.js placeCameraAround), then follow by position delta
   const target = b.pos.clone().add(new THREE.Vector3(0, 0.05, 0));
@@ -188,7 +191,7 @@ function runDemo(kind, dts, dist = 0.6) {
       if (!o.airborne && Math.abs(o.pos.y - prevY[i]) > 0.005) rec.flockSteps++;
       prevY[i] = o.airborne ? NaN : o.pos.y;
     });
-    const delta = b.pos.clone().sub(last);
+    const delta = follow ? b.pos.clone().sub(last) : new THREE.Vector3();
     camera.position.add(delta);
     target.add(delta);
     last.copy(b.pos);
@@ -288,6 +291,9 @@ function metrics(rec, { moving = false } = {}) {
   // root height steps (terrain discontinuities move the whole bird — and the follow camera — vertically)
   const ySteps = [];
   for (let i = 1; i < r0.length; i++) ySteps.push(Math.abs(r0[i].pos[1] - r0[i - 1].pos[1]) * 1000);
+  // planted-foot slip: world motion of a foot joint over a frame in which that foot stayed in stance
+  const slip = [];
+  for (const i of idx) for (const k of [0, 1]) if (!(r0[i].feet[k][3] > 0) && !(r0[i - 1].feet[k][3] > 0)) slip.push(len(sub(r0[i].footBone[k], r0[i - 1].footBone[k])) * 1000);
   const footStep = [];
   for (const i of idx) for (const k of [0, 1]) footStep.push(len(sub(r0[i].footBone[k], r0[i - 1].footBone[k])) * 1000);
   return {
@@ -320,6 +326,8 @@ function metrics(rec, { moving = false } = {}) {
     liftMax: Math.max(0, ...lift),
     swingFrac: sel.length ? sel.reduce((a, r) => a + r.feet.filter((f) => f[3] > 0).length, 0) / (2 * sel.length) : 0,
     footStepMax: Math.max(0, ...footStep),
+    slipRms: rms(slip),
+    slipMax: pct(slip, 0.999),
     yStepMax: Math.max(0, ...ySteps),
     ySteps: ySteps.filter((y) => y > 5).length,
   };
@@ -346,7 +354,7 @@ function printRow(name, m) {
 }
 function printGait(name, m) {
   console.log(
-    `${name.padEnd(22)}  moving ${(m.movingFrac * 100).toFixed(0).padStart(3)}%  speed ${f1(m.speedMean, 3)} (max ${f1(m.speedMax, 3)}) m/s  stride ${f1(m.strideHz, 3)} Hz  duty ${f1(m.duty, 3)}  footLift max ${f1(m.liftMax)} mm  swing ${(m.swingFrac * 100).toFixed(1)}%  foot step max ${f1(m.footStepMax, 1)} mm/frame  root Δy max ${f1(m.yStepMax, 1)} mm (${m.ySteps} steps > 5 mm${m.flockSteps !== undefined ? `; whole flock ${m.flockSteps}` : ''})`
+    `${name.padEnd(22)}  moving ${(m.movingFrac * 100).toFixed(0).padStart(3)}%  speed ${f1(m.speedMean, 3)} (max ${f1(m.speedMax, 3)}) m/s  stride ${f1(m.strideHz, 3)} Hz  duty ${f1(m.duty, 3)}  footLift max ${f1(m.liftMax)} mm  swing ${(m.swingFrac * 100).toFixed(1)}%  foot step max ${f1(m.footStepMax, 1)} mm/frame  stance slip ${f1(m.slipRms)}/${f1(m.slipMax)} mm/frame  root Δy max ${f1(m.yStepMax, 1)} mm (${m.ySteps} steps > 5 mm${m.flockSteps !== undefined ? `; whole flock ${m.flockSteps}` : ''})`
   );
 }
 
@@ -356,7 +364,7 @@ const scen = [];
 if (ONLY.includes('treadmill')) scen.push(['treadmill-walk', (d) => runTreadmill('walk', d), SECS], ['treadmill-run', (d) => runTreadmill('run', d), SECS]);
 if (ONLY.includes('viewer')) scen.push(['viewer-walk', (d) => runDemo('walk', d), SECS], ['viewer-run', (d) => runDemo('run', d), SECS]);
 // the same run followed from 12 m: LOD2, skeleton throttled to 30 Hz
-if (ONLY.includes('far')) scen.push(['viewer-run-12m', (d) => runDemo('run', d, 12), SECS]);
+if (ONLY.includes('far')) scen.push(['viewer-run-12m', (d) => runDemo('run', d, 12), SECS], ['viewer-walk-12m-static', (d) => runDemo('walk', d, 12, false), SECS], ['viewer-run-12m-static', (d) => runDemo('run', d, 12, false), SECS]);
 if (ONLY.includes('ai')) scen.push(['ai', (d) => runDemo('ai', d), AI_SECS]);
 
 console.log(`columns: no-anim-update frames | rendered-root lag mean/max (mm) | body judder on screen = |2nd diff| RMS/max (mm/frame) | max step (mm/frame) |`);
@@ -373,8 +381,8 @@ for (const [name, fn, secs] of scen) {
     mov.flockSteps = rec.flockSteps;
     gait.push([key, mov]);
     if (args.csv) {
-      const rows = rec.map((r) => [r.t.toFixed(4), r.upd ? 1 : 0, r.state ?? '', r.act ?? '', r.speed.toFixed(3), ...sub(r.body, r.cam).map((v) => (v * 1000).toFixed(3)), ((r.pitch * 180) / Math.PI).toFixed(2), ((r.roll * 180) / Math.PI).toFixed(2), ((r.lean * 180) / Math.PI).toFixed(2)].join(','));
-      writeFileSync(`${args.csv}/${key}.csv`, ['t,upd,state,act,speed,body_x_mm,body_y_mm,body_z_mm,pitch_deg,roll_deg,lean_deg', ...rows].join('\n'));
+      const rows = rec.map((r) => [r.t.toFixed(4), r.upd ? 1 : 0, r.state ?? '', r.act ?? '', r.speed.toFixed(3), ...sub(r.body, r.cam).map((v) => (v * 1000).toFixed(3)), ((r.pitch * 180) / Math.PI).toFixed(2), ((r.roll * 180) / Math.PI).toFixed(2), ((r.lean * 180) / Math.PI).toFixed(2), ((r.heading * 180) / Math.PI).toFixed(3), ...local(r, "body").map((v) => (v * 1000).toFixed(3))].join(','));
+      writeFileSync(`${args.csv}/${key}.csv`, ['t,upd,state,act,speed,body_x_mm,body_y_mm,body_z_mm,pitch_deg,roll_deg,lean_deg,heading_deg,body_lat_mm,body_up_mm,body_fwd_mm', ...rows].join('\n'));
     }
     out.runs[key] = { metrics: all, moving: mov, upd: rec.map((r) => (r.upd ? 1 : 0)), feet: rec.map((r) => [r.t, ...r.feet[0].slice(0, 3), ...r.feet[1].slice(0, 3)]), footBone: rec.map((r) => [...r.footBone[0], ...r.footBone[1]]), ankle: rec.map((r) => [...r.ankle[0], ...r.ankle[1]]), pos: rec.map((r) => r.pos), states: name === 'ai' ? rec.map((r) => r.state) : undefined };
   }

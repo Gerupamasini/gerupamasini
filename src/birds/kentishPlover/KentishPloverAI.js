@@ -650,12 +650,17 @@ export class KentishPloverAI {
     this.landing = landing;
     this.flightReason = reason;
     b.stop();
-    b.heading = Math.atan2(landing.x - b.pos.x, landing.z - b.pos.z) * 0.6 + b.heading * 0.4;
+    // pivot 60% of the way toward the landing point during the crouch (the ground yaw controller turns the bird;
+    // setting the heading directly twisted the whole bird in one frame, and mixed wrapped/unwrapped angles)
+    const toLanding = Math.atan2(landing.x - b.pos.x, landing.z - b.pos.z);
+    const h = b.heading + wrapAngle(toLanding - b.heading) * 0.6;
+    b.faceTowards(new THREE.Vector3(b.pos.x + Math.sin(h), b.pos.y, b.pos.z + Math.cos(h)));
     this._enter('TAKEOFF', 0.6);
     this.stats.flights++;
     if (reason === 'flee') this.world.birds.broadcastAlarm(b, landing);
     this.anim.play('takeoff', {}, (ev) => {
       if (ev === 'airborne') {
+        b.faceTowards(null);
         b.startFlight(landing, { altitude: reason === 'flee' ? 3 : 2 });
         this._enter('FLY', 99);
       }
