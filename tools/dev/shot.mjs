@@ -6,7 +6,7 @@ const p = await b.newPage({ viewport: { width: +w, height: +h } });
 const logs = [];
 p.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 p.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
-await p.goto('http://localhost:5173' + path, { waitUntil: 'commit', timeout: 120000 });
+await p.goto((process.env.BASE || 'http://localhost:5173') + path, { waitUntil: 'commit', timeout: 120000 });
 try { await p.waitForFunction(() => window.__ready === true, null, { timeout: 900000, polling: 500 }); } catch (e) { logs.push('timeout waiting for __ready'); }
 await p.waitForTimeout(+wait);
 await p.screenshot({ path: out, timeout: 240000 });
