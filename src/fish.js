@@ -255,8 +255,9 @@ float sdSeg(vec2 p, vec2 a, vec2 b){ vec2 pa=p-a, ba=b-a; float h=clamp(dot(pa,b
 
 // --- overlapping cycloid scales; returns height, writes per-scale id
 float scales(vec2 p, out float sid, out float rim){
-  float sz = 0.0135;
-  vec2 q = vec2(p.x, p.y*1.1) / sz;
+  float sz = 0.021;                                   // ~40 scales along the body (lateral-line count 33-43)
+  vec2 pr = mat2(0.906, 0.423, -0.423, 0.906) * p;   // rows run obliquely, parallel to the rear-descending stripes
+  vec2 q = vec2(pr.x, pr.y*1.1) / sz;
   float r0 = floor(q.y);
   float best = 1e9; float h = 0.; sid = 0.; rim = 0.;
   for (int dr=-1; dr<=1; dr++){
@@ -271,7 +272,7 @@ float scales(vec2 p, out float sid, out float rim){
       float dist = length(d * vec2(0.95, 1.0));
       if (dist < 0.78 && ctr.x < best) {
         best = ctr.x;
-        float e = smoothstep(0.64, 0.78, dist) * smoothstep(-0.2, 0.3, d.x);  // free posterior margin
+        float e = smoothstep(0.5, 0.78, dist) * smoothstep(-0.2, 0.3, d.x);  // free posterior margin
         h = 0.45 + 0.55*smoothstep(-0.9, 0.6, d.x) - 0.35*e;
         // radiating circuli / ridges on the exposed field
         h += 0.02 * sin(atan(d.y, d.x) * 14.0) * smoothstep(0.2, 0.6, dist) * step(0.0, d.x);
@@ -375,12 +376,22 @@ Paint paint(vec2 p){
   // wherever it covers the fish; the masks remain as a fallback outside it
   vec4 ph = texture2D(uPhoto, (pw - vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)})) / vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)}));
   ph.a *= (1.0 - smoothstep(0.82, 0.9, s)) * (1.0 - smoothstep(0.6, 0.85, abs(yn)) * smoothstep(0.6, 0.75, s));   // photo outline edge / hot spot: painted yellow on the peduncle and along the fin roots   // the photo has a sunlit hot spot on the peduncle: use the painted yellow there
+  // the photo is motion-blurred and JPEG-blocky in the dusky saddle: smooth it there with a
+  // small disc blur (the white striped field keeps the sharp sample)
+  {
+    vec2 PU0 = vec2(${S0.toFixed(4)}, ${Y0.toFixed(4)}), PS0 = vec2(${(S1 - S0).toFixed(4)}, ${(Y1 - Y0).toFixed(4)});
+    vec3 acc = vec3(0.0);
+    for (int k = 0; k < 8; k++) { float an = float(k) * 0.7854; acc += texture2D(uPhoto, (pw + vec2(cos(an), sin(an)) * 0.007 - PU0) / PS0).rgb; }
+    acc = (acc / 8.0) * 0.6 + ph.rgb * 0.4;
+    float warmZone = smoothstep(1.3, 2.0, ph.r / max(ph.b, 0.03)) * smoothstep(0.34, 0.4, s);
+    ph.rgb = mix(ph.rgb, acc, warmZone);
+  }
   col = mix(col, ph.rgb, ph.a * uPhotoMix);
   // the photo's dusky saddle is darkened by shadow and motion blur; in life it is a narrower
   // amber-brown transition, so lift dark warm tones in the yellow zone back toward orange
   {
     float lum = dot(col, vec3(0.3, 0.55, 0.15));
-    float warm = smoothstep(1.2, 2.2, col.r / max(col.b, 0.02)) * smoothstep(0.42, 0.12, lum) * (1.0 - stCoreEarly(pm.b, s));
+    float warm = smoothstep(1.0, 2.4, col.r / max(col.b, 0.02)) * smoothstep(0.5, 0.08, lum) * (1.0 - stCoreEarly(pm.b, s));
     col = mix(col, mix(yel, orange, 0.5) * 0.72, warm * 0.55 * ph.a * uPhotoMix);
     // blurred reflection in the photo left a grey-green haze at the shoulder: pull greenish tints back to pearl white
     float greenish = smoothstep(0.0, 0.05, col.g - col.r) * smoothstep(0.0, 0.08, col.g - col.b) * smoothstep(0.3, 0.38, s) * (1.0 - smoothstep(0.62, 0.7, s));
@@ -417,10 +428,15 @@ Paint paint(vec2 p){
     float sid, rim;
     // scales fade out toward the median-fin roots and over the yellow rear, so body and fins
     // share one material there (no rim where they meet)
-    float scaleMask = 0.6 * smoothstep(0.27, 0.36, s) * (1. - smoothstep(0.55, 0.95, abs(yn)) * smoothstep(0.4, 0.6, s)) * (1. - smoothstep(0.8, 1.0, abs(yn))) * (1.0 - 0.7 * rearK);
+    float scaleMask = 0.9 * smoothstep(0.27, 0.36, s) * (1. - smoothstep(0.55, 0.95, abs(yn)) * smoothstep(0.4, 0.6, s)) * (1. - smoothstep(0.8, 1.0, abs(yn))) * (1.0 - 0.7 * rearK);
     float sh = scales(p, sid, rim);
-    h = sh * scaleMask * 0.16;
-    col *= mix(1.0, 0.985 + 0.03*sid, scaleMask);
+    h = sh * scaleMask * 0.15;
+    col *= mix(1.0, 0.975 + 0.05*sid, scaleMask);
+    col *= 1.0 - 0.035 * rim * scaleMask;                                   // shadowed scale pockets
+    // the dark stripes are rows of pigmented scale edges: beaded, darkest at the free margins
+    float stq = smoothstep(0.65, 0.9, pm.b) * smoothstep(0.26, 0.3, s) * (1.0 - Y * 0.6);
+    col = mix(col, col * vec3(0.8, 0.78, 0.8), stq * rim * 0.35 * scaleMask);
+        col = mix(col, col * vec3(0.95, 0.98, 1.04), (1.0 - Y) * scaleMask * 0.5);   // faint blue-silver cast on the white
     metal = mix(0.05, 0.3 + 0.15*sid, scaleMask) * (1. - Y*0.6) * (1. - st);
     rough = mix(0.45, 0.3 + 0.1*sid, scaleMask);
     // lavender-grey shading of the white in the shadowed belly and around the gill cover
@@ -544,7 +560,7 @@ function bakeTextures(renderer, W, H, ocellus, pattern, photo) {
 // toward the tail (butterflyfish cruise mostly on pectorals, so it is gentle), plus
 // matching normal rotation so the lighting follows the bend.
 const SWIM_PARS = /* glsl */`
-uniform float uPhase; uniform float uAmp; uniform float uTurn;
+uniform float uPhase; uniform float uAmp; uniform float uTurn; uniform float uFinWave; uniform float uFinPh;
 // Lateral spine slope dz/ds: a travelling wave growing toward the tail, plus a C-shaped
 // bend for turning (stiff head, flexible tail).
 float spineSlope(float s){
@@ -584,9 +600,13 @@ export function addSwim(material, uniforms, extra = {}) {
   material.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms);
     const bend = extra.noBend ? '' : 'swimPos = swimBend(swimPos, objectNormal);';
+    // soft dorsal / anal / caudal: a small travelling wave runs back along the fin margin
+    // (chaetodontids scull with the soft median fins while hovering and picking)
+    const wave = extra.finWave ? `{ float fr = fin.x, ft = fin.y; float soft = ${extra.finWave};
+        swimPos.z += uFinWave * soft * pow(ft, 1.6) * 0.012 * sin(uFinPh - fr * 0.45 - ft * 1.2); }` : '';
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\n' + SWIM_PARS)
-      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvec3 swimPos = position;\n' + bend)
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvec3 swimPos = position;\n' + wave + bend)
       .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = swimPos;');
     if (extra.frag) extra.frag(sh);
   };
@@ -622,7 +642,7 @@ export function createButterflyfish(renderer, opts = {}) {
   const ocellus = [0.925, 0.228];   // black oval under the rear corner of the soft dorsal (traced)
   const tex = opts.textures || bakeTextures(renderer, texW, texH, ocellus, opts.pattern, opts.photo || null);
 
-  const uniforms = { uPhase: { value: 0 }, uAmp: { value: 0.0 }, uTurn: { value: 0 }, uFlap: { value: 0 }, uGlow: { value: 1.0 } };
+  const uniforms = { uPhase: { value: 0 }, uAmp: { value: 0.0 }, uTurn: { value: 0 }, uFlap: { value: 0 }, uGlow: { value: 1.0 }, uFinWave: { value: 0.3 }, uFinPh: { value: 0 } };
   const group = new THREE.Group();
   group.name = 'Chaetodon auriga';
 
@@ -765,7 +785,8 @@ export function createButterflyfish(renderer, opts = {}) {
     const L = kind === 1 ? layouts.anal : kind === 0 ? layouts.dorsal : null;
     const sh = Array.from({ length: 40 }, (_, i) => L && L.base[i] ? new THREE.Vector2(L.base[i][0], Math.hypot(L.tip[i][0] - L.base[i][0], L.tip[i][1] - L.base[i][1])) : new THREE.Vector2());
     const u = { uKind: { value: kind }, uSpines: { value: spines }, uGlow: uniforms.uGlow, uRays: { value: rays }, uFinSH: { value: sh } };
-    addSwim(m, { ...uniforms, ...u }, { key: 'fin' + kind, frag: finFrag(kind), noBend: kind >= 3 });
+    addSwim(m, { ...uniforms, ...u }, { key: 'fin' + kind, frag: finFrag(kind), noBend: kind >= 3,
+      finWave: kind < 2 ? `smoothstep(${(spines + 0.5).toFixed(1)}, ${(spines + 4).toFixed(1)}, fr)` : null });
     return m;
   };
 
@@ -895,23 +916,31 @@ export function createButterflyfish(renderer, opts = {}) {
   for (const p of pairs) p.traverse((o) => { o.castShadow = false; });   // clear/thin paired fins cast no solid shadow
 
   let phase = 0, pecPhase = 0;
-  function update(dt, t, { amp = 0.04, freq = 1.6, turn = 0 } = {}) {
+  // Swimming controls (chaetodontiform, "augmented body-caudal" mode): slow cruising and
+  // manoeuvring are driven by the pectoral fins (pec: beats/s, pecAmp: stroke size, fins
+  // alternate while sculling on the spot); the body and tail only undulate in short bursts
+  // (amp/freq) and are otherwise held nearly straight. finWave: soft dorsal/anal sculling.
+  let finPh = 0;
+  function update(dt, t, { amp = 0.01, freq = 1.2, turn = 0, pec = 2.0, pecAmp = 1.0, scull = 0, finWave = 0.3, brake = 0 } = {}) {
     phase += dt * freq * Math.PI * 2;
-    // pectorals: accumulated phase so the rate can change smoothly; ~0.8-1.3 beats/s
-    pecPhase += dt * Math.PI * 2 * (0.75 + 0.3 * Math.min(freq, 2) + 0.6 * Math.abs(turn));
+    pecPhase += dt * Math.PI * 2 * pec;
+    finPh += dt * Math.PI * 2 * (0.9 + 0.8 * finWave);
     uniforms.uPhase.value = phase;
     uniforms.uAmp.value = amp;
     uniforms.uTurn.value = turn;
+    uniforms.uFinWave.value = finWave;
+    uniforms.uFinPh.value = finPh;
     for (const p of pairs) {
       const { side, kind } = p.userData;
       if (kind === 'pec') {
-        // the fin on the outside of a turn beats harder, the inner one is held in as a brake
-        const a = THREE.MathUtils.clamp(1 - side * turn * 2.5, 0.3, 2.0);
-        const f = Math.sin(pecPhase + (side > 0 ? 0 : 0.35)) * a;
-        p.rotation.set(side * (-0.1 + 0.2 * f), side * (0.4 + 0.22 * f), -0.25 + 0.06 * f);
+        // outside fin of a turn beats harder, inside one is held in as a brake; when sculling
+        // the two fins beat out of phase; a braking fish flares both fins forward
+        const a = THREE.MathUtils.clamp(1 - side * turn * 2.5, 0.3, 2.0) * pecAmp;
+        const f = Math.sin(pecPhase + (side > 0 ? 0 : 0.35 + scull * Math.PI * 0.8)) * a;
+        p.rotation.set(side * (-0.1 + 0.2 * f), side * (0.4 + 0.22 * f + 0.5 * brake), -0.25 + 0.06 * f - 0.25 * brake);
       } else {
         const f = Math.sin(t * 0.6 + side);
-        p.rotation.set(side * (0.05 + 0.03 * f), side * 0.04, 0.12 + 0.04 * f);
+        p.rotation.set(side * (0.05 + 0.03 * f + 0.12 * brake), side * 0.04, 0.12 + 0.04 * f + 0.2 * brake);
       }
     }
   }
