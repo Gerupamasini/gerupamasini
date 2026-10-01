@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
 import { buildSkeletonSpec, createBones } from './anatomy/skeleton.js';
-import { buildBodyGeometry, getBodySDF, getTorsoSDF } from './anatomy/bodyMesh.js';
+import { buildBodyGeometry, buildShellGeometry, getBodySDF, getTorsoSDF } from './anatomy/bodyMesh.js';
 import { buildFeatherGeometry } from './anatomy/feathers.js';
 import { computeWingFold } from './anatomy/wingFold.js';
 import { buildBareParts, buildEyes } from './anatomy/bareParts.js';
@@ -31,8 +31,11 @@ export function getGeometries(detail) {
     body: buildBodyGeometry(CFG, spec.boneIndex, res),
     feathers: buildFeatherGeometry(spec, spec.boneIndex, sdf, detail, computeWingFold(spec.wingFeathers, sdf, getTorsoSDF(CFG))),
     bare: buildBareParts(spec.boneIndex, CFG.joints, spec.toes, detail),
+    shell: null,
     eyes: detail === 0 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 10, segR: 24 }) : detail === 1 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 4, segR: 12 }) : null,
   };
+  // plumage fringe: LOD0 only (beyond 2.5 m the fuzz is under a pixel)
+  if (detail === 0) g.shell = buildShellGeometry(g.body, 3);
   GEO.set(detail, g);
   return g;
 }
@@ -84,6 +87,15 @@ export class KentishPloverModel {
     const feathers = createFeatherMaterial(this.pal, ind, detail);
     const bare = createBarePartsMaterial(this.pal, detail);
     const meshes = [this._skinned(g.body, body, `body${detail}`, shadows), this._skinned(g.feathers, feathers, `feathers${detail}`, shadows), this._skinned(g.bare, bare, `bare${detail}`, shadows)];
+    if (g.shell) {
+      // drawn after the body: the strands are alpha-to-coverage cut-outs over it
+      const shell = createBodyMaterial(this.pal, ind, detail, { shellOf: body });
+      const m = this._skinned(g.shell, shell, `shell${detail}`, shadows);
+      m.castShadow = false;
+      m.renderOrder = 1;
+      meshes.push(m);
+      this.materials.push(shell);
+    }
     let eyeMats = null;
     if (g.eyes) {
       eyeMats = createEyeMaterials(this.pal);

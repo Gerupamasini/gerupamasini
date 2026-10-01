@@ -199,3 +199,50 @@ export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
   const drop = new Set(['neck', 'head', 'lores', 'billCuff', 'chin', ...(trunkOnly ? ['mantleNape', 'foreBreast'] : [])]);
   return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [] });
 }
+
+/**
+ * Plumage fringe shells (LOD0): the body geometry repeated `n` times with aShell = k / n (k = 1…n); the shell
+ * variant of the body material lifts each copy along its normal and keeps only the barb tips that reach it
+ * (KentishPloverMaterials GLSL_SHELL_*).
+ */
+export function buildShellGeometry(body, n = 4) {
+  const g = new THREE.BufferGeometry();
+  const nv = body.getAttribute('position').count;
+  for (const name of ['position', 'normal', 'aRest', 'aFlow', 'skinIndex', 'skinWeight']) {
+    const a = body.getAttribute(name);
+    const out = new a.array.constructor(a.array.length * n);
+    for (let k = 0; k < n; k++) out.set(a.array, k * a.array.length);
+    g.setAttribute(name, new THREE.BufferAttribute(out, a.itemSize));
+  }
+  const sh = new Float32Array(nv * n);
+  for (let k = 0; k < n; k++) sh.fill((k + 1) / n, k * nv, (k + 1) * nv);
+  g.setAttribute('aShell', new THREE.BufferAttribute(sh, 1));
+  // only triangles that grow a fringe at all (shellCovered mirrors the zero cases of GLSL kpShellMM: under the
+  // folded wing and the scapulars, round the eyes, under the tail coverts)
+  const R = body.getAttribute('aRest').array;
+  const N = body.getAttribute('normal').array;
+  const bare = new Uint8Array(nv);
+  for (let v = 0; v < nv; v++) bare[v] = shellCovered([R[v * 3], R[v * 3 + 1], R[v * 3 + 2]], [N[v * 3], N[v * 3 + 1], N[v * 3 + 2]]) ? 1 : 0;
+  const all = body.index.array;
+  const tri = [];
+  for (let t = 0; t < all.length; t += 3) if (!(bare[all[t]] && bare[all[t + 1]] && bare[all[t + 2]])) tri.push(all[t], all[t + 1], all[t + 2]);
+  const idx = tri;
+  const out = nv * n > 65535 ? new Uint32Array(idx.length * n) : new Uint16Array(idx.length * n);
+  for (let k = 0; k < n; k++) for (let i = 0; i < idx.length; i++) out[k * idx.length + i] = idx[i] + k * nv;
+  g.setIndex(new THREE.BufferAttribute(out, 1));
+  g.computeBoundingSphere();
+  return g;
+}
+
+/** Rest point where the plumage fringe has zero length (GLSL kpShellMM in KentishPloverMaterials). */
+function shellCovered(p, n) {
+  if (p[2] < -60) return true;
+  const ax = Math.abs(p[0]);
+  const q = [ax - 7.6, p[1] - 95, p[2] - 25.5];
+  const es = q[0] * 0.954 + q[1] * 0.13 + q[2] * 0.27;
+  const er = Math.hypot(q[0] - 0.954 * es, q[1] - 0.13 * es, q[2] - 0.27 * es);
+  if (er + Math.max(0, 2 - es) < 3.6) return true;
+  const z = p[2];
+  const yb = z > 5 ? 60 + 3 * Math.min(1, (z - 5) / 15) : z > -25 ? 55.5 + 4.5 * ((z + 25) / 30) : 60 - 4.5 * Math.min(1, Math.max(0, (z + 55) / 30));
+  return headness(p) < 0.01 && p[1] + n[1] * 3 > yb - 1 && z < 8;
+}

@@ -133,7 +133,7 @@ export const plumage = {
       mantle: '#9a8574',
       mantleDark: '#72665c',
       fringe: '#bda88e',
-      fringeMix: 0.25,
+      fringeMix: 0.12, // faint: the closed wing of the breeding male reads smooth (p006, p012, p070)
       breastPatch: '#1f1c1b',
       underparts: '#e9e8e3',
       flightDark: '#3a3632',
@@ -141,10 +141,10 @@ export const plumage = {
       tailDark: '#4a4038',
       white: '#ebe9e3',
       bill: '#1a1818',
-      billRoughness: 0.3,
+      billRoughness: 0.48, // a dull sheen, no glossy streak (p012, p070)
       legs: '#827369', // rendered ≈ the photos' white-balanced tarsus #8a7a6d (p006, p020, p070); '#5a534f' rendered near-black
       iris: '#1d1512',
-      eyelidRing: '#dcd6cd',
+      eyelidRing: '#a9a29a', // a thin greyish lower lid, not a white ring (p012)
       eyelidRingUpper: '#1e1a19', // upper lid dark in the black mask, pale only below the eye (p012, p043)
       headPattern: [13, 1, 1], // [supercilium end z (mm), loral stripe, mask round the eye] (KentishPloverMaterials)
       rufousCap: true, // crown / crownRear / nape blend toward plumage.sandyCap with individual.rufousAmount
@@ -172,7 +172,7 @@ export const plumage = {
       legs: '#8e8583',
       iris: '#1d1512',
       eyelidRing: '#dcd6cd',
-      headPattern: [21, 0.7, 0.3], // supercilium ends 4.5 mm behind the eye, the cap drops to the ear coverts (p050, p008)
+      headPattern: [24, 0.7, 0.3], // supercilium ends over the eye's rear edge, the cap drops to the ear coverts (p050, p008)
     },
     nonBreeding: {
       forehead: '#e0dad2',
