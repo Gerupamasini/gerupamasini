@@ -123,6 +123,7 @@ export class Shrimp {
         ...leg,
         restLocal,
         foot: new THREE.Vector3(),
+        local: new THREE.Vector3(),
         from: new THREE.Vector3(),
         to: new THREE.Vector3(),
         swingT: 1,
@@ -136,67 +137,101 @@ export class Shrimp {
     });
   }
 
-  desiredFoot(leg, out, lead = 0) {
-    out.copy(leg.restLocal).applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.yaw);
-    out.add(this.position);
-    if (lead) out.addScaledVector(_w.copy(this.vel).setY(0), lead);
+  /** World position of a body-frame (yaw-only) foot point, dropped onto the substrate. */
+  footWorld(local, out) {
+    out.copy(local).applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.yaw).add(this.position);
     out.y = this.world.groundY(out.x, out.z, this.position.y + 0.02);
     return out;
   }
 
   plantAllFeet() {
     for (const leg of this.legs) {
-      this.desiredFoot(leg, leg.foot);
+      leg.local.copy(leg.restLocal);
+      this.footWorld(leg.local, leg.foot);
       leg.swinging = false;
       leg.swingT = 1;
-      leg.grounded = true;
     }
   }
 
-  startStep(leg, stepLen, freq) {
-    leg.swinging = true;
-    leg.swingT = 0;
-    leg.from.copy(leg.foot);
-    // Spider-like gait: long, low swing (duty factor ~0.65) instead of a quick flick.
-    const f = Math.max(freq, 0.6);
-    leg.swingDur = clamp(0.35 / f, 0.25, 0.6) * (0.92 + Math.random() * 0.16);
-    this.desiredFoot(leg, leg.to, leg.swingDur * 0.5);
-  }
-
-  updateGait(dt) {
+  /**
+   * Leg-driven walking. Stance feet stay fixed on the substrate while each one is retracted
+   * backward relative to the body (and swept for turning); the body pose is then SOLVED from
+   * where the planted feet are, so the body moves because the legs push it. Swing legs are lifted
+   * low and carried forward to land ahead of their rest position (metachronal wave P5->P3).
+   */
+  walkLegs(dt, vCmd, wCmd) {
     const stepLen = A.walk.stepLength * this.scale;
-    const turning = Math.abs(this.yawRate) * 0.012;
-    const freq = clamp((this.speed + turning) / stepLen, 0, 2.2);
+    const duty = 0.65;
+    const moving = vCmd > 0.0015 || Math.abs(wCmd) > 0.04;
+    const freq = moving ? clamp(Math.max(vCmd / stepLen, Math.abs(wCmd) / 0.45), 0.5, 2.2) : 0;
     this.gaitClock += dt * freq;
+    const UP = THREE.Object3D.DEFAULT_UP;
+    // 1) retract stance feet in the body frame (the "power stroke")
+    for (const leg of this.legs) {
+      if (leg.swinging) continue;
+      leg.local.x -= vCmd * dt;
+      leg.local.applyAxisAngle(UP, -wCmd * dt);
+    }
+    // 2) lift-off decisions
+    const swingTime = moving ? clamp((1 - duty) / freq, 0.25, 0.6) : 0.4;
     for (const leg of this.legs) {
       const ph = (this.gaitClock + leg.phase) % 1;
       const wrapped = ph < leg.lastPhase;
       leg.lastPhase = ph;
-      this.desiredFoot(leg, _v);
-      const err = _v.distanceTo(leg.foot);
-      const neighbourSwinging = this.legs.some((o) => o !== leg && o.swinging && (o.side === leg.side ? Math.abs(o.index - leg.index) === 1 : o.index === leg.index));
-      if (!leg.swinging) {
-        const moving = freq > 0.2;
-        // Steps follow the rhythmic wave (P5 -> P4 -> P3); adjacent legs never lift together.
-        if ((moving && wrapped && err > stepLen * 0.08 && !neighbourSwinging) || err > stepLen * 1.3 || (!moving && err > stepLen * 0.45 && !neighbourSwinging && Math.random() < dt * 0.5)) {
-          this.startStep(leg, stepLen, freq);
-        }
+      if (leg.swinging) continue;
+      const drift = Math.hypot(leg.local.x - leg.restLocal.x, leg.local.z - leg.restLocal.z);
+      const neighbour = this.legs.some((o) => o !== leg && o.swinging && (o.side === leg.side ? Math.abs(o.index - leg.index) === 1 : o.index === leg.index));
+      const stanceCount = this.legs.filter((o) => !o.swinging).length;
+      if (stanceCount <= 3 || neighbour) continue; // keep a supporting tripod
+      if ((moving && wrapped && drift > stepLen * 0.1) || drift > stepLen * 0.75 || (!moving && drift > stepLen * 0.25 && Math.random() < dt)) {
+        leg.swinging = true;
+        leg.swingT = 0;
+        leg.swingDur = swingTime * (0.92 + Math.random() * 0.16);
+        leg.from.copy(leg.foot);
       }
-      if (leg.swinging) {
-        leg.swingT += dt / leg.swingDur;
-        const t = Math.min(1, leg.swingT);
-        // Foot reaches forward smoothly; most of the lift happens early, then it is lowered gently.
-        const s = 0.5 - 0.5 * Math.cos(Math.PI * t);
-        this.desiredFoot(leg, _w, (1 - t) * leg.swingDur * 0.5);
-        leg.to.lerp(_w, 1 - Math.exp(-dt * 6));
-        leg.foot.lerpVectors(leg.from, leg.to, s);
-        const lift = Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.15)), 0.8);
-        leg.foot.y += lift * 0.0011 * this.scale;
-        if (t >= 1) {
-          leg.swinging = false;
-          leg.foot.y = this.world.groundY(leg.foot.x, leg.foot.z, leg.foot.y + 0.01);
-          if (this.world.onSediment(leg.foot) && this.speed > 0.02 && Math.random() < 0.05) this.world.puff(leg.foot, 2, 0.002);
-        }
+    }
+    // 3) solve body pose from the planted feet (2D Procrustes: yaw + xz translation)
+    let n = 0;
+    let lx = 0, lz = 0, wx = 0, wz = 0;
+    for (const leg of this.legs) {
+      if (leg.swinging) continue;
+      n++;
+      lx += leg.local.x; lz += leg.local.z; wx += leg.foot.x; wz += leg.foot.z;
+    }
+    if (n >= 2) {
+      lx /= n; lz /= n; wx /= n; wz /= n;
+      let a = 0, b = 0;
+      for (const leg of this.legs) {
+        if (leg.swinging) continue;
+        const px = leg.local.x - lx, pz = leg.local.z - lz;
+        const qx = leg.foot.x - wx, qz = leg.foot.z - wz;
+        a += px * qx + pz * qz;
+        b += px * qz - pz * qx;
+      }
+      const phi = Math.atan2(b, a); // rotation taking body-frame feet onto world feet
+      this.yaw = -phi;
+      const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
+      this.position.x = wx - (lx * c + lz * s);
+      this.position.z = wz - (-lx * s + lz * c);
+    }
+    // 4) swing legs: carried low and forward to land ahead of rest
+    const reach = moving ? clamp(vCmd / Math.max(freq, 0.5), 0, stepLen) * 0.5 : 0;
+    for (const leg of this.legs) {
+      if (!leg.swinging) continue;
+      leg.swingT += dt / leg.swingDur;
+      const t = Math.min(1, leg.swingT);
+      _q.setFromAxisAngle(UP, (wCmd / Math.max(freq, 0.5)) * 0.5);
+      _w.copy(leg.restLocal).applyQuaternion(_q);
+      _w.x += reach;
+      this.footWorld(_w, _v); // landing point, tracking the moving body
+      const e = 0.5 - 0.5 * Math.cos(Math.PI * t);
+      leg.foot.lerpVectors(leg.from, _v, e);
+      leg.foot.y += Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.15)), 0.8) * 0.0011 * this.scale;
+      if (t >= 1) {
+        leg.swinging = false;
+        leg.local.copy(_w);
+        this.footWorld(leg.local, leg.foot);
+        if (this.world.onSediment(leg.foot) && vCmd > 0.01 && Math.random() < 0.05) this.world.puff(leg.foot, 2, 0.002);
       }
     }
   }
@@ -372,28 +407,22 @@ export class Shrimp {
       const err = wrapAngle(target - this.yaw);
       const rate = clamp(err * 1.5, -turnRate, turnRate);
       this.yawRate = damp(this.yawRate, rate, 10, dt);
-      this.yaw += this.yawRate * dt;
+      if (this.mode !== 'ground') this.yaw += this.yawRate * dt;
     }
 
     const fwd = this.forward(new THREE.Vector3());
 
     if (this.mode === 'ground') {
-      // Walking: speed limited while turning sharply (animals re-orient first).
+      // Walking: the brain commands a forward speed and turn rate; the LEGS produce the motion.
       const headingErr = desiredDir ? Math.abs(wrapAngle(Math.atan2(-desiredDir.z, desiredDir.x) - this.yaw)) : 0;
-      const sp = desiredSpeed * clamp(1.2 - headingErr, 0, 1);
-      _v.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).multiplyScalar(sp);
-      // Walking can include a lateral component from social push/obstacles.
-      if (desiredDir) _v.lerp(desiredDir.clone().setY(0).multiplyScalar(sp), 0.25);
-      // Stronger flow pushes the animal slightly and lowers posture.
-      _v.addScaledVector(flow, clamp(flowMag * 3, 0, 0.15));
-      this.vel.x = damp(this.vel.x, _v.x, 6, dt);
-      this.vel.z = damp(this.vel.z, _v.z, 6, dt);
-      this.vel.y = 0;
-      this.position.x += this.vel.x * dt;
-      this.position.z += this.vel.z * dt;
+      this.walkCmd = damp(this.walkCmd ?? 0, desiredSpeed * clamp(1.2 - headingErr, 0, 1), 3, dt);
+      const px = this.position.x;
+      const pz = this.position.z;
+      this.walkLegs(dt, this.walkCmd, this.yawRate);
       W.constrain(this.position, true);
+      this.vel.set((this.position.x - px) / Math.max(dt, 1e-4), 0, (this.position.z - pz) / Math.max(dt, 1e-4));
       this.speed = Math.hypot(this.vel.x, this.vel.z);
-      this.updateGait(dt);
+
       // Body height/pitch/roll from planted feet.
       let front = 0;
       let back = 0;
@@ -403,7 +432,7 @@ export class Shrimp {
       for (const l of this.legs) {
         // Support height from the substrate under each foot; a lifted foot must not raise the body
         // (otherwise the body bobs with every step).
-        const gy = l.swinging ? lerp(l.from.y, l.to.y, Math.min(1, l.swingT)) : l.foot.y;
+        const gy = l.swinging ? l.from.y : l.foot.y;
         avg += gy;
         if (l.P.name === 'P3') front += gy;
         if (l.P.name === 'P5') back += gy;
