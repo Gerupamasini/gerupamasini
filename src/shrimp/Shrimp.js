@@ -153,13 +153,14 @@ export class Shrimp {
     }
   }
 
-  startStep(leg, stepLen) {
+  startStep(leg, stepLen, freq) {
     leg.swinging = true;
     leg.swingT = 0;
     leg.from.copy(leg.foot);
-    const lead = clamp(this.speed / Math.max(1e-4, stepLen), 0, 1) * leg.swingDur * 1.6;
-    this.desiredFoot(leg, leg.to, lead);
-    leg.swingDur = A.walk.stepDuration * (0.85 + Math.random() * 0.35) * (this.speed > 0.005 ? 1 : 1.3);
+    // Spider-like gait: long, low swing (duty factor ~0.65) instead of a quick flick.
+    const f = Math.max(freq, 0.6);
+    leg.swingDur = clamp(0.35 / f, 0.25, 0.6) * (0.92 + Math.random() * 0.16);
+    this.desiredFoot(leg, leg.to, leg.swingDur * 0.5);
   }
 
   updateGait(dt) {
@@ -176,23 +177,25 @@ export class Shrimp {
       const neighbourSwinging = this.legs.some((o) => o !== leg && o.swinging && (o.side === leg.side ? Math.abs(o.index - leg.index) === 1 : o.index === leg.index));
       if (!leg.swinging) {
         const moving = freq > 0.2;
-        if ((moving && wrapped && err > stepLen * 0.12) || err > stepLen * 1.2 || (!moving && err > stepLen * 0.45 && !neighbourSwinging && Math.random() < dt * 0.8)) {
-          this.startStep(leg, stepLen);
+        // Steps follow the rhythmic wave (P5 -> P4 -> P3); adjacent legs never lift together.
+        if ((moving && wrapped && err > stepLen * 0.08 && !neighbourSwinging) || err > stepLen * 1.3 || (!moving && err > stepLen * 0.45 && !neighbourSwinging && Math.random() < dt * 0.5)) {
+          this.startStep(leg, stepLen, freq);
         }
       }
       if (leg.swinging) {
         leg.swingT += dt / leg.swingDur;
         const t = Math.min(1, leg.swingT);
-        const s = smooth(t);
-        // Retarget toward the moving desired point during swing (prevents lagging feet).
-        this.desiredFoot(leg, _w, (1 - t) * leg.swingDur * 1.4);
-        leg.to.lerp(_w, 0.2);
+        // Foot reaches forward smoothly; most of the lift happens early, then it is lowered gently.
+        const s = 0.5 - 0.5 * Math.cos(Math.PI * t);
+        this.desiredFoot(leg, _w, (1 - t) * leg.swingDur * 0.5);
+        leg.to.lerp(_w, 1 - Math.exp(-dt * 6));
         leg.foot.lerpVectors(leg.from, leg.to, s);
-        leg.foot.y += Math.sin(Math.PI * t) * (0.0018 * this.scale + err * 0.1);
+        const lift = Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.15)), 0.8);
+        leg.foot.y += lift * 0.0011 * this.scale;
         if (t >= 1) {
           leg.swinging = false;
           leg.foot.y = this.world.groundY(leg.foot.x, leg.foot.z, leg.foot.y + 0.01);
-          if (this.world.onSediment(leg.foot) && this.speed > 0.02 && Math.random() < 0.08) this.world.puff(leg.foot, 2, 0.002);
+          if (this.world.onSediment(leg.foot) && this.speed > 0.02 && Math.random() < 0.05) this.world.puff(leg.foot, 2, 0.002);
         }
       }
     }
