@@ -92,6 +92,7 @@ float kpNapeMM(vec3 p, vec3 n) {
 
 // ------------------------------------------------------------------ BODY PLUMAGE
 const BODY_UNIFORMS_GLSL = /* glsl */ `
+uniform vec3 uBounce;
 uniform vec3 uForehead, uFrontalBar, uCrown, uCrownRear, uNape, uSupercilium, uEyeStripe, uEarCoverts, uCollar;
 uniform vec3 uMantle, uMantleDark, uFringe, uBreastPatch, uUnder, uEyeRing, uEyeRingUp, uHeadPat;
 uniform float uMelanin, uWear, uSeed, uDetail, uFluff, uFringeMix, uSubterminal, uCapStreak, uCapDrop;
@@ -384,8 +385,18 @@ function paletteUniforms(pal, individual = {}) {
 // a barb tip reaches it (alpha-to-coverage), so the outline is a soft fuzz of feather tips instead of a hard CG
 // edge — longest on the downy white underparts and flanks, short on the head, shortest on the mantle under the
 // scapulars; none round the eyes (photos: p006, p009, p039, p040, p053, p019).
+// Downy wisps: here and there on the belly, flanks and lower breast a loose tuft stands ≈1.5 mm proud of the
+// fringe, a few strands of it long (p006, p009, p053). One cell in ≈9 of 2.2 × 2.2 × 3.5 mm; mirrored per fragment.
+const GLSL_WISP = /* glsl */ `
+float kpWisp(vec3 p, vec3 n) {
+  vec3 c = floor(p / vec3(2.2, 2.2, 3.5));
+  float h = fract(sin(dot(c, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+  return step(0.89, h) * smoothstep(0.1, -0.5, n.y) * smoothstep(-45.0, -30.0, p.z) * (1.0 - smoothstep(22.0, 32.0, p.z));
+}
+`;
 const GLSL_SHELL_VERT = /* glsl */ `
 attribute float aShell; varying float vShell;
+${GLSL_WISP}
 float kpShellMM(vec3 p, vec3 n) {
   vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
   float head = clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - clamp((83.0 - p.y) / 5.0, 0.0, 1.0));
@@ -402,7 +413,7 @@ float kpShellMM(vec3 p, vec3 n) {
   // the wing's lower edge (kpUpperEdge, (z, y) (20, 63) … (−55, 60)) and behind the shoulder
   float yb = p.z > 5.0 ? mix(60.0, 63.0, clamp((p.z - 5.0) / 15.0, 0.0, 1.0)) : p.z > -25.0 ? mix(55.5, 60.0, (p.z + 25.0) / 30.0) : mix(60.0, 55.5, clamp((p.z + 55.0) / 30.0, 0.0, 1.0));
   len *= 1.0 - smoothstep(yb - 3.0, yb - 1.0, p.y + n.y * 3.0) * (1.0 - smoothstep(8.0, 16.0, p.z)) * (1.0 - head);
-  return len;
+  return len * (1.0 + 2.6 * kpWisp(p, n));
 }
 `;
 const GLSL_SHELL_FRAG = /* glsl */ `
@@ -419,6 +430,8 @@ const GLSL_SHELL_FRAG = /* glsl */ `
     vec2 kpSC = floor(kpSL);
     vec2 kpSF = fract(kpSL) - 0.5;
     float kpSH = 0.35 + 0.65 * kpHash(kpSC + 13.7);     // strand height (fraction of the shell stack)
+    // in a wisp (3.6× the stack) most strands stay at the usual height, one in six runs to the top
+    if (kpWisp(vRest, normalize(vRestN)) > 0.5 && kpHash(kpSC + 5.9) < 0.83) kpSH *= 0.28;
     float kpSW = 0.42 * (1.0 - 0.75 * clamp(kpS / kpSH, 0.0, 1.0));
     float kpSX = abs(kpSF.x + (kpHash(kpSC + 3.1) - 0.5) * 0.3);
     float kpAA = clamp(kpFoot / 0.25, 0.02, 0.5);       // strand edge width in cells (≈1 px)
@@ -440,6 +453,14 @@ const GLSL_SHELL_FRAG = /* glsl */ `
 /**
  * Body plumage material. `detail` 0 = full micro-structure + sheen (LOD0), 1 = reduced, 2 = colour only.
  */
+/**
+ * Light bounced up from sunlit sand onto the underparts (linear irradiance, shared by every bird; the demo scales it
+ * with the daylight). The hemisphere light's ground colour alone left the shaded underside of the white belly a
+ * mid grey; in the photos it stays nearly white, lit warm from below (p006, p009, p053, p039). Added as diffuse
+ * irradiance on surfaces facing down, so it shows only where the plumage is pale.
+ */
+export const GROUND_BOUNCE = { value: new THREE.Color(0.75, 0.68, 0.55).multiplyScalar(0.55) };
+
 export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf = null } = {}) {
   const params = { roughness: 0.78, metalness: 0, color: 0xffffff };
   // (the shell variant is the same material as the body — any difference in the BRDF shows as a rim: without
@@ -461,6 +482,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
     uFluff: { value: 0 },
     uBreath: { value: 0 },
     uNapeFill: { value: 0 },
+    uBounce: GROUND_BOUNCE,
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (shader) => {
@@ -491,7 +513,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
         transformed = kpSkin;`
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${BODY_UNIFORMS_GLSL}\n${BODY_FRAG_FUNCS}${shell ? '\nvarying float vShell;' : ''}`)
+      .replace('#include <common>', `#include <common>\n${BODY_UNIFORMS_GLSL}\n${BODY_FRAG_FUNCS}${shell ? '\nvarying float vShell;\n' + GLSL_WISP : ''}`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
@@ -633,6 +655,15 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
           }
         #endif`
       );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+      {
+        // ground bounce (GROUND_BOUNCE): world normal facing down
+        vec3 kpWN = inverseTransformDirection(normal, viewMatrix);
+        reflectedLight.indirectDiffuse += uBounce * BRDF_Lambert(material.diffuseContribution) * smoothstep(0.25, -0.85, kpWN.y);
+      }`
+    );
     shader.fragmentShader = softPlumageLighting(softSelfShadow(shader.fragmentShader, '0.55'), '0.3');
   };
   mat.customProgramCacheKey = () => `kp-body-${detail}${shell ? '-shell' : ''}`;
