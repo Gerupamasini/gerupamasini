@@ -79,8 +79,8 @@ export const MORPH = {
   rest: {
     joints: [-0.46, 0.12, 0.2, 0.42, 0.2, 0.15], // carapace->s1 ... s5->s6 (rad, + = ventral flexion) [PHOTO 001 overlay]
     telson: 0.03,
-    fanSpread: 0.35, // rad half-angle; live animals spread to ~0.7 [PHOTO 009], handled ones close it
-    fanRoll: 0.85, // closed fan: uropods rolled lateral-edge-down so the fan reads as a leaf in side view [PHOTO 001, 004]
+    fanSpread: 0.55, // rad half-angle; live animals spread to ~0.7 [PHOTO 009], handled ones close it
+    fanRoll: 0.55, // closed fan: uropods rolled lateral-edge-down so the fan reads as a leaf in side view [PHOTO 001, 004]
     standVentral: 0.047, // |ventral carapace y| over the walking-leg coxae (x ~0.05-0.11)
     standClearance: 0.045, // ventral carapace above substrate [PHOTO 001]
   },
@@ -88,8 +88,8 @@ export const MORPH = {
   // ------------------------------------------------------------------ tail fan [PHOTO 004, 009, 018, 019]
   telson: { len: 0.12, baseHalf: 0.019, tipHalf: 0.002, dorsalSpines: [0.45, 0.7] },
   uropod: {
-    exo: { len: 0.145, maxHalf: 0.021, at: 0.6, toothAt: 0.85 },
-    endo: { len: 0.125, maxHalf: 0.017, at: 0.55 },
+    exo: { len: 0.145, maxHalf: 0.03, at: 0.55, toothAt: 0.85 }, // broad paddles [PHOTO 009, 019]
+    endo: { len: 0.125, maxHalf: 0.025, at: 0.5 },
   },
 
   // ------------------------------------------------------------------ eyes [PHOTO 001, 005, 007]
@@ -132,7 +132,7 @@ export const MORPH = {
   maxilliped3: { segs: [0.07, 0.06, 0.06], r: 0.0035 },
 
   // ------------------------------------------------------------------ pleopods [PHOTO 001, 004, 017]
-  pleopod: { protopod: 0.04, protoR: 0.006, ramus: 0.075, ramusHalf: 0.011, ramusMaxAt: 0.35, curl: 0.2, restBack: 0.45, ramusBack: 0.75 }, // broad milky paddles seen side-on [PHOTO 003]
+  pleopod: { protopod: 0.04, protoR: 0.006, ramus: 0.075, ramusHalf: 0.0085, ramusMaxAt: 0.35, curl: 0.2, restBack: 0.45, ramusBack: 0.75 }, // broad milky paddles seen side-on [PHOTO 003]
 
   // ------------------------------------------------------------------ colour [PHOTO live only]
   colour: {
@@ -142,8 +142,8 @@ export const MORPH = {
     chromatophore: 0x6a4a2a, // cores #5d532e-#8a5a30 [PHOTO 005, 007, 009]
     eyestalkPigment: 0x5d3f16, // [PHOTO 007]
     stomach: 0x272114, // [PHOTO 007]
-    hepatopancreas: 0x5f5638, // [PHOTO 002, 014]
-    ovary: 0x8c8456, // [PHOTO 011; olive in 048]
+    hepatopancreas: 0x4a3e28, // [PHOTO 002, 014]
+    ovary: 0x9a9470, // [PHOTO 011; olive in 048]
     hindgut: 0x3b3020,
     cornea: 0x141010,
     blueSpot: 0x1e2a3a, // occasional females [PHOTO 045, 048]

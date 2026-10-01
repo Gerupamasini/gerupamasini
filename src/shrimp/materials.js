@@ -124,7 +124,7 @@ export function createCuticleMaterial(o = {}) {
           float fres = 1.0 - abs(dot(normalize(vNormal), vd));
           float a = mix(uAlpha, uRimAlpha, pow(fres, 2.2));
           a = max(a, cov * 0.92);
-          a = max(a, uAlpha + vJoint * 0.25);
+          a = max(a, uAlpha + vJoint * 0.04);
           diffuseColor.a = clamp(a, 0.0, 1.0);
         }`
       )
@@ -185,10 +185,10 @@ export function createEyeMaterial() {
         vec3 vd = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition);
         float facing = clamp(dot(normalize(vNormal), vd), 0.0, 1.0);
         vec3 pupil = vec3(0.012, 0.010, 0.009);
-        vec3 periph = vec3(0.16, 0.13, 0.12);
+        vec3 periph = vec3(0.30, 0.25, 0.23);
         vec3 rim = vec3(0.62, 0.60, 0.55);
-        vec3 c = mix(periph, pupil, smoothstep(0.55, 0.95, facing));
-        c = mix(rim, c, smoothstep(0.05, 0.32, facing));
+        vec3 c = mix(periph, pupil, smoothstep(0.82, 0.97, facing));
+        c = mix(rim, c, smoothstep(0.1, 0.45, facing));
         diffuseColor.rgb = c;
       }`
     );

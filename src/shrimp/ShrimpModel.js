@@ -35,14 +35,14 @@ function materials() {
     stalk: createCuticleMaterial({ key: 'stalk', glass: true, color: 0xd8cfbb, alpha: 0.45, rimAlpha: 0.85, cells: 5200, dotR: 0.38, chroma: C.eyestalkPigment }),
     // Abdominal flexor/extensor mass: the milky, faintly bluish-grey translucency of the live body [PHOTO 001, 003].
     muscle: new THREE.MeshStandardMaterial({ color: 0xc4cbc7, roughness: 0.7, transparent: true, opacity: 0.62, depthWrite: false }),
-    cephTissue: new THREE.MeshStandardMaterial({ color: 0xc9ccc3, roughness: 0.7, transparent: true, opacity: 0.45, depthWrite: false }),
+    cephTissue: new THREE.MeshStandardMaterial({ color: 0xc9ccc3, roughness: 0.7, transparent: true, opacity: 0.58, depthWrite: false }),
     eye: createEyeMaterial(),
     stomach: createTissueMaterial(C.stomach, { roughness: 0.45 }),
     hepato: createTissueMaterial(C.hepatopancreas),
     heart: createTissueMaterial(0xcdb9a4),
     ovary: createTissueMaterial(C.ovary),
     gut: createTissueMaterial(C.hindgut, { roughness: 0.5 }),
-    nerve: createTissueMaterial(0x6a3422, { roughness: 0.5 }),
+    nerve: createTissueMaterial(0x7a4a3a, { roughness: 0.5 }),
     statocyst: createTissueMaterial(0x2a2218),
     blue: createTissueMaterial(C.blueSpot, { roughness: 0.3 }),
     egg: createEggMaterial(),
@@ -179,12 +179,12 @@ export class ShrimpModel {
     const eyeX = C.eyeX;
     const stomach = mesh(ellipsoid(0.03 * T, 0.011 * T, 0.011 * T), S.stomach, this.ceph, false);
     stomach.position.set((eyeX - 0.06) * T, 0.022 * T, 0);
-    const hep = mesh(ellipsoid(0.045 * T, 0.026 * T, 0.028 * T), S.hepato, this.ceph, false);
+    const hep = mesh(ellipsoid(0.04 * T, 0.022 * T, 0.024 * T), S.hepato, this.ceph, false);
     hep.position.set((eyeX - 0.095) * T, 0.002 * T, 0);
     this.heart = mesh(ellipsoid(0.012 * T, 0.007 * T, 0.009 * T), S.heart, this.ceph, false);
     this.heart.position.set(0.03 * T, 0.03 * T, 0);
     if (this.sex === 'female') {
-      const ov = mesh(ellipsoid(0.05 * T, 0.011 * T, 0.02 * T), S.ovary, this.ceph, false);
+      const ov = mesh(ellipsoid(0.04 * T, 0.007 * T, 0.014 * T), S.ovary, this.ceph, false);
       ov.position.set(0.055 * T, 0.03 * T, 0);
     }
 
@@ -512,7 +512,7 @@ export class ShrimpModel {
           }
           return { top, bottom, half, y: 0, contour };
         },
-        caps: [false, i === 5],
+        caps: [false, false],
         attrs: (t, zN, yN) => {
           const u = t * (1 + ov + oh) - ov;
           const band = smoothstep(0.8, 0.97, u) * (1 - smoothstep(1.03, 1.07, u)); // posterior-margin band
@@ -529,7 +529,8 @@ export class ShrimpModel {
       seg.renderOrder = 3;
       // Translucent muscle filling the somite (seen through the clear cuticle).
       const mus = mesh(geo, S.muscle, j, false);
-      mus.scale.set(0.96, 0.78, 0.74);
+      mus.scale.set(0.9, 0.78, 0.74);
+      mus.position.x = -len * 0.02;
       mus.position.y = h0Shift(i);
       mus.renderOrder = 2;
       // Internal: dorsal hindgut line [PHOTO 005-007] and ventral nerve cord [PHOTO 001, 003].
@@ -686,7 +687,7 @@ export class ShrimpModel {
           attrs: (t, zN) => {
             // Dark mark at the base/diaeresis [PHOTO 004, 009], denser dots at the margins.
             const mark = Math.exp(-(((t - 0.12) / 0.07) ** 2)) * smoothstep(0.2, 0.6, zN) * 1.1;
-            return { pig: 0.35 + 0.35 * smoothstep(0.7, 1.0, zN) + mark, thick: 0.2 };
+            return { pig: 0.8 + 0.3 * smoothstep(0.7, 1.0, zN) + mark, thick: 0.2 };
           },
         });
         g.rotateY(Math.PI); // point backward (-X)
