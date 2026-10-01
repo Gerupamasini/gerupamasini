@@ -67,6 +67,8 @@ export class CinematicDirector {
     this.recent = [];
     this.focus = 1;
     this.focusVel = 0;
+    this.targetVel = 0;
+    this.lastTarget = 1;
     this.fStop = 8;
     this.pose = { pos: new THREE.Vector3(), fwd: new THREE.Vector3(1, 0, 0) };
     this.camPos = new THREE.Vector3();
@@ -771,14 +773,44 @@ export class CinematicDirector {
     if (this.snap) {
       this.focus = target;
       this.focusVel = 0;
+      this.targetVel = 0;
     } else if (dt > 0) {
-      const w = 5.0;
-      const h = Math.min(dt, 0.05);
-      this.focusVel += (w * w * (target - this.focus) - 2 * w * this.focusVel) * h;
-      this.focus = Math.max(0.02, this.focus + this.focusVel * h);
+      // predictive (servo) autofocus: the rack follows the measured rate of
+      // the subject's distance as well as the error, so a fish swimming
+      // toward / away from the lens stays on the focal plane instead of
+      // trailing it by 2 v / w (a centimetre or more at macro range)
+      const rate = (target - this.lastTarget) / dt;
+      this.targetVel += (THREE.MathUtils.clamp(rate, -0.6, 0.6) - this.targetVel) * (1 - Math.exp(-dt * 10));
+      // eye-tracking servo: fast but critically damped (sub-stepped so the
+      // explicit integration stays stable at low frame rates)
+      const w = 14.0;
+      const n = Math.max(1, Math.ceil(Math.min(dt, 0.1) / 0.008));
+      const h = Math.min(dt, 0.1) / n;
+      for (let i = 0; i < n; i++) {
+        this.focusVel += (w * w * (target - this.focus) + 2 * w * (this.targetVel - this.focusVel)) * h;
+        this.focus = Math.max(0.02, this.focus + this.focusVel * h);
+      }
     }
+    this.lastTarget = target;
     this.snap = false;
-    this.fStop = this.shot.fStop;
+    this.fStop = this._aperture(this.shot, this.focus, f);
+  }
+
+  /**
+   * Relative aperture for the shot: its nominal f-stop, stopped down at close
+   * range until most of the subject (±0.45 SL around the eye: a fish seen
+   * end-on spans its whole length in depth)
+   * stays within a blur of 0.4 % of the frame height. At 0.15 m the thin-lens
+   * depth of field at f/8 is only a few millimetres, so a macro shot would
+   * otherwise show no sharp plane at all; the background still melts.
+   */
+  _aperture(sh, focus, f) {
+    if (sh.type === 'wide' || !f) return sh.fStop;
+    const fmm = 12 / Math.tan(THREE.MathUtils.degToRad(sh.fov) * 0.5);
+    const F = Math.max(focus * 1000, fmm * 1.5);
+    const dz = 0.45 * f.SL * 1000;
+    const need = (fmm * fmm * dz) / (Math.max(1, F - dz) * (F - fmm) * 24 * 0.004);
+    return THREE.MathUtils.clamp(need, sh.fStop, 22);
   }
 
   /** Move the camera rig toward the desired framing (jump on a cut). */
