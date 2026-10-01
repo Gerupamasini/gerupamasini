@@ -132,7 +132,7 @@ export function createCuticleMaterial(o = {}) {
         '#include <opaque_fragment>',
         `#include <opaque_fragment>
         // keep specular glints on the wet cuticle bright even where the shell is clear
-        gl_FragColor.a = max(gl_FragColor.a, clamp((max(outgoingLight.r, max(outgoingLight.g, outgoingLight.b)) - 0.55) * 2.0, 0.0, 1.0));`
+        gl_FragColor.a = max(gl_FragColor.a, clamp((max(outgoingLight.r, max(outgoingLight.g, outgoingLight.b)) - 0.95) * 5.0, 0.0, 0.8));`
       )
       .replace(
         '#include <normal_fragment_maps>',
@@ -201,9 +201,9 @@ export function createFlagellumMaterial(tint) {
   return new THREE.MeshPhysicalMaterial({
     color: tint,
     roughness: 0.3,
-    transmission: 0.35,
-    thickness: 0.0002,
-    ior: 1.43,
+    transparent: true,
+    opacity: 0.32, // near-invisible in water, catching light only along its length
+    depthWrite: false,
     clearcoat: 0.5,
   });
 }

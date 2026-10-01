@@ -55,21 +55,21 @@ function materials() {
   const C = M.colour;
   SHARED = {
     // Abdomen: turbid muscle under the cuticle -> milky grey (#7a807c over dark, #9b8f6a over white).
-    abdomen: createCuticleMaterial({ key: 'abd', glass: true, color: 0xdfe3dd, alpha: 0.1, rimAlpha: 0.5, roughness: 0.18 }),
+    abdomen: createCuticleMaterial({ key: 'abd', glass: true, color: 0xdfe3dd, alpha: 0.035, rimAlpha: 0.32, roughness: 0.12 }),
     // Carapace: clearer, organs visible through it.
-    carapace: createCuticleMaterial({ key: 'cara', glass: true, color: 0xe2e5de, alpha: 0.08, rimAlpha: 0.5, roughness: 0.15 }),
-    rostrum: createCuticleMaterial({ key: 'ros', glass: true, color: 0xe4e4dc, alpha: 0.3, rimAlpha: 0.85, cells: 3200, dotR: 0.34 }),
+    carapace: createCuticleMaterial({ key: 'cara', glass: true, color: 0xe2e5de, alpha: 0.03, rimAlpha: 0.3, roughness: 0.12 }),
+    rostrum: createCuticleMaterial({ key: 'ros', glass: true, color: 0xe4e4dc, alpha: 0.15, rimAlpha: 0.55, cells: 3200, dotR: 0.34 }),
     // Legs, pleopods: milky white translucent [PHOTO 004 #babaaf].
-    append: createCuticleMaterial({ key: 'app', glass: true, color: 0xdcdcd2, alpha: 0.2, rimAlpha: 0.6, cells: 3600, keep: 0.4, relief: 0.05, sheen: 0.3 }),
-    fan: createCuticleMaterial({ key: 'fan', glass: true, color: 0xe4e2d8, alpha: 0.22, rimAlpha: 0.75, cells: 3000, keep: 0.5 }),
+    append: createCuticleMaterial({ key: 'app', glass: true, color: 0xdcdcd2, alpha: 0.09, rimAlpha: 0.4, cells: 3600, keep: 0.4, relief: 0.05, sheen: 0.3 }),
+    fan: createCuticleMaterial({ key: 'fan', glass: true, color: 0xe4e2d8, alpha: 0.1, rimAlpha: 0.45, cells: 3000, keep: 0.5 }),
     stalk: createCuticleMaterial({ key: 'stalk', glass: true, color: 0xd8cfbb, alpha: 0.45, rimAlpha: 0.85, cells: 5200, dotR: 0.38, chroma: C.eyestalkPigment }),
     // Abdominal flexor/extensor mass: the milky, faintly bluish-grey translucency of the live body [PHOTO 001, 003].
-    muscle: tissueVolume(0xc6cdc8, 0.62, true),
-    gill: tissueVolume(0xa9ada3, 0.14, false),
-    cephTissue: tissueVolume(0xc9ccc3, 0.4, false),
+    muscle: tissueVolume(0xc6cdc8, 0.3, true),
+    gill: tissueVolume(0xa9ada3, 0.08, false),
+    cephTissue: tissueVolume(0xc9ccc3, 0.16, false),
     eye: createEyeMaterial(),
     stomach: createTissueMaterial(C.stomach, { roughness: 0.45 }),
-    hepato: tissueVolume(C.hepatopancreas, 0.7, false),
+    hepato: tissueVolume(C.hepatopancreas, 0.5, false),
     heart: createTissueMaterial(0xcdb9a4),
     ovary: createTissueMaterial(C.ovary),
     gut: createTissueMaterial(C.hindgut, { roughness: 0.5 }),
@@ -77,7 +77,7 @@ function materials() {
     statocyst: createTissueMaterial(0x2a2218),
     blue: createTissueMaterial(C.blueSpot, { roughness: 0.3 }),
     egg: createEggMaterial(),
-    setae: new THREE.MeshStandardMaterial({ color: 0xe2e0d6, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6 }),
+    setae: new THREE.MeshStandardMaterial({ color: 0xe2e0d6, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6 }),
     flag: new Map(),
   };
   return SHARED;
