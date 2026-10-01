@@ -24,6 +24,15 @@ export function buildTank({ glassEnv = null } = {}) {
     depthWrite: false,
     side: THREE.DoubleSide,
   });
+  // The panes reflect the room through the environment map only. The
+  // scene's lights are a hood bar and a broad fill from the room, not points:
+  // as punctual lights on a mirror-smooth pane they made a pin-point GGX glint
+  // thousands of times brighter than white (the faint front fill showed as a
+  // hot, blooming orb hanging in the water in low shots through the glass).
+  glassMat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n  reflectedLight.directSpecular *= 0.0;');
+  };
+  glassMat.customProgramCacheKey = () => 'tank-glass';
   // (float-glass green, seen mostly from outside; faint from inside the water)
   const edgeMat = new THREE.MeshStandardMaterial({ color: 0x3f7a68, roughness: 0.15, metalness: 0, transparent: true, opacity: 0.35 });
   const pane = (w, h, t, x, y, z) => {

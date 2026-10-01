@@ -287,7 +287,8 @@ export class CinematicDirector {
         // the hood light) closes the top of the frame; framings that would
         // show the lamp itself are rejected by the guard
         pos.copy(P).addScaledVector(side, SL * 1.9).addScaledVector(up, -SL * 1.05).addScaledVector(fwd, SL * (0.4 - 0.8 * k));
-        look.copy(P).addScaledVector(up, SL * 0.45).addScaledVector(fwd, -SL * 0.15);
+        // (aimed a little ahead of the centre: the head is the subject)
+        look.copy(P).addScaledVector(up, SL * 0.45).addScaledVector(fwd, SL * 0.1);
         break;
       case 'tail':
         pos.copy(P).addScaledVector(fwd, -SL * 2.3).addScaledVector(side, SL * 1.5).addScaledVector(up, SL * 0.45);
@@ -449,10 +450,24 @@ export class CinematicDirector {
       const behind = -_f5.dot(this._axis(f));
       if (behind > 0.5) ok = false;
       else extra += Math.max(0, behind - 0.2) * 2.5;
+      // nor straight from the front (a round blob with two eyes on its
+      // sides) unless it is the head close-up
+      if (sh.type !== 'head34') {
+        if (-behind > 0.82) ok = false;
+        else extra += Math.max(0, -behind - 0.45) * 2.5;
+      }
     }
     // never the bare hood lamp in frame (seen through Snell's window it is a
     // clipped, blooming bar however it is exposed)
     if (ok && this._inside(sh) && pos.y < TANK.water && this._lampInFrame(pos, look, sh.fov)) ok = false;
+    // the whole head stays in the picture with a margin: the eye well inside,
+    // the snout not cut by the frame edge (only the tail-follow shot may
+    // lose it)
+    if (ok && this._inside(sh) && sh.type !== 'tail') {
+      if (!this._inFrame(pos, look, sh.fov, this._eyeOf(f, pos, _eye), 0.78)) ok = false;
+      const snout = _q.copy(f.loc.pos).addScaledVector(this._axis(f), 0.46 * SL);
+      if (ok && !this._inFrame(pos, look, sh.fov, snout, 0.9)) ok = false;
+    }
     if (ok && pos.z > TANK.D / 2) {
       // through the front glass: the glass guard has craned the camera above
       // the gravel line (impossible: invalid); the subject must still sit
@@ -496,8 +511,10 @@ export class CinematicDirector {
     const hx = TANK.L * 0.45 + 0.015;
     const zc = -0.02;
     const hz = 0.035 + 0.015;
-    for (const sy of [-0.2, 0.3, 0.7, 1.05]) {
-      for (const sx of [-1.05, -0.5, 0, 0.5, 1.05]) {
+    // (dense enough that the strip, stretched or squeezed near the edge of
+    // Snell's window, cannot slip between two rays)
+    for (const sy of [-0.6, -0.25, 0.1, 0.4, 0.7, 0.9, 1.05]) {
+      for (const sx of [-1.05, -0.7, -0.35, 0, 0.35, 0.7, 1.05]) {
         const d = _f4.copy(fwd).addScaledVector(right, sx * tw).addScaledVector(upv, sy * th).normalize();
         if (d.y <= 0.02) continue;
         const t = (wl - pos.y) / d.y;
@@ -586,6 +603,27 @@ export class CinematicDirector {
       if (o.SL / z > 0.7 * tanH) return true;
     }
     return false;
+  }
+
+  /**
+   * The actual (lagging, pushed-back) camera breaks a framing rule that the
+   * planned one keeps: the hood lamp has come into the picture, or the
+   * subject's head is leaving it (a fish swimming at the lens drags the
+   * real camera off its plan).
+   */
+  _liveSpoiled() {
+    const sh = this.shot;
+    if (!this._inside(sh)) return false;
+    const pos = this.camPos;
+    const look = this.camLook;
+    const f = this.subject;
+    if (pos.y < TANK.water && this._lampInFrame(pos, look, sh.fov)) return true;
+    if (sh.type === 'tail') return false;
+    // the subject turned to face the lens
+    if (sh.type !== 'head34' && _q.subVectors(pos, f.loc.pos).normalize().dot(this._axis(f)) > 0.9) return true;
+    if (!this._inFrame(pos, look, sh.fov, this._eyeOf(f, pos, _eye), 0.88)) return true;
+    const snout = _q.copy(f.loc.pos).addScaledVector(this._axis(f), 0.46 * f.SL);
+    return !this._inFrame(pos, look, sh.fov, snout, 0.97);
   }
 
   /** Pick the cheapest valid framing; returns false when none exists. */
@@ -704,7 +742,7 @@ export class CinematicDirector {
       this.frameT = 0;
       const cur = this._evalFrame(this.frame);
       // the real camera lags the plan: it must have a clear view as well
-      const live = this.snap || !this._viewBlocked(this.camPos, this.camLook);
+      const live = this.snap || (!this._viewBlocked(this.camPos, this.camLook) && !this._liveSpoiled());
       this.blockT = live ? 0 : (this.blockT || 0) + slack;
       if (!live && cur.ok) cur.ok = false;
       // how far the camera would travel to reach a framing: long moves would
@@ -945,6 +983,69 @@ export class FollowCamera {
     return pen;
   }
 
+  /**
+   * Fraction of the image covered by out-of-focus neighbours: every other
+   * fish nearer than the subject (or far behind it), projected as a band
+   * from its snout to its caudal tips, as tall as its body and fins plus the
+   * blur circle it gets at the subject's focus distance. A large blurred
+   * foreground fish blocks the companion shot however pretty the subject is.
+   */
+  _neighbourCover(pos, look) {
+    const f = this.subject;
+    const cam = this.app.camera;
+    const fwd = _f1.subVectors(look, pos).normalize();
+    const right = _f2.crossVectors(fwd, UP);
+    if (right.lengthSq() < 1e-8) return 0;
+    right.normalize();
+    const upv = _f3.crossVectors(right, fwd);
+    const th = Math.tan(THREE.MathUtils.degToRad(cam.fov) * 0.5);
+    const tw = th * (cam.aspect || 1.6);
+    const zs = Math.max(0.03, _f4.subVectors(f.loc.pos, pos).dot(fwd));
+    let cover = 0;
+    const N = 8;
+    for (const o of this.app.fishSystem.fish) {
+      if (o === f) continue;
+      const ax = this.d._axis(o);
+      const SL = o.SL;
+      // in focus with the subject (within about ±0.6 SL of its distance): fine
+      const zc = _f4.subVectors(o.loc.pos, pos).dot(fwd);
+      if (Math.abs(zc - zs) < 0.6 * f.SL) continue;
+      let px = 0;
+      let py = 0;
+      let pz = -1;
+      for (let i = 0; i <= N; i++) {
+        const s = THREE.MathUtils.lerp(0.38, -1.4, i / N) * SL;
+        _f5.copy(o.loc.pos).addScaledVector(ax, s).sub(pos);
+        const z = _f5.dot(fwd);
+        const x = z > 0.01 ? _f5.dot(right) / z : 0;
+        const y = z > 0.01 ? _f5.dot(upv) / z : 0;
+        if (i > 0 && z > 0.01 && pz > 0.01) {
+          const zm = 0.5 * (z + pz);
+          // blur circle in tangent units (grows with |1 - zs / z| like the
+          // lens, capped at the lens's 1.1 % of the image height), body plus
+          // fins about 0.48 SL tall
+          const blur = Math.min(1, Math.abs(1 - zs / zm)) * 0.022 * th;
+          const hh = (0.24 * SL) / zm + blur;
+          // the segment's swept band (length x height), scaled by the part
+          // of its bounding box that lies inside the frame
+          const bx0 = Math.min(x, px) - hh;
+          const bx1 = Math.max(x, px) + hh;
+          const by0 = Math.min(y, py) - hh;
+          const by1 = Math.max(y, py) + hh;
+          const box = (bx1 - bx0) * (by1 - by0);
+          const inside = Math.max(0, Math.min(tw, bx1) - Math.max(-tw, bx0)) * Math.max(0, Math.min(th, by1) - Math.max(-th, by0));
+          const cap = (i === 1 ? hh : 0) + (i === N ? hh : 0); // round ends only once
+          const band = Math.min(box, (Math.hypot(x - px, y - py) + cap) * 2 * hh);
+          if (box > 0) cover += band * (inside / box);
+        }
+        px = x;
+        py = y;
+        pz = z;
+      }
+    }
+    return cover / (4 * tw * th);
+  }
+
   /** Validity and cost of a re-framing (camera placed about the subject's pose). */
   _eval(fr) {
     const d = this.d;
@@ -976,6 +1077,11 @@ export class FollowCamera {
       // counts there)
       const of = d._outsideFraction(pos, look, this.app.camera.fov, 0.12);
       extra += 5.0 * of + (of > 0.3 ? 3.0 : 0) + this._seamPenalty(pos, look);
+      // a blurred neighbour across the frame: a clean foreground is
+      // preferred, more than ~20 % of the image blocked is rejected
+      const cover = this._neighbourCover(pos, look);
+      if (cover > 0.2) ok = false;
+      extra += 6.0 * Math.max(0, cover - 0.04);
     }
     const lookZ = this._ed.subVectors(look, pos).normalize().z;
     // the actual camera has to travel there: prefer framings nearby

@@ -59,6 +59,13 @@ export class DOFPass extends Pass {
         // a single non-finite scene pixel (a grazing silhouette fragment)
         // must not be smeared by the gather into a spiral of black dots
         bool bad(vec3 c) { return any(isnan(c)) || any(isinf(c)) || !(c.r + c.g + c.b > -1.0); }
+        // A tiny, extremely bright texel (an eye glint, a sparkle on a fin
+        // edge, the LED through a ripple) must not be spread by the gather
+        // into a big bright bokeh disc: what a gather tap carries is limited
+        // to a few times the white point (a real lens shows such glints as
+        // dim, even discs). The pixel itself keeps its full value.
+        const float TAP_MAX = 6.0;
+        vec3 tap(vec3 c) { float pk = max(c.r, max(c.g, c.b)); return pk > TAP_MAX ? c * (TAP_MAX / pk) : c; }
         void main() {
           vec3 c0 = texture(tDiffuse, vUv).rgb;
           float z0 = linZ(vUv);
@@ -74,6 +81,7 @@ export class DOFPass extends Pass {
             vec2 tc = vUv + vec2(cos(ang), sin(ang)) * uTexel * radius;
             vec3 c = texture(tDiffuse, tc).rgb;
             if (bad(c)) { radius += 1.35 / radius; ang += GOLDEN; continue; }
+            c = tap(c);
             float z = linZ(tc);
             float s = coc(z);
             // sharp background must not bleed over a focused / nearer centre

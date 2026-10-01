@@ -11,7 +11,9 @@
 // by a dilated blur radius, so in-focus fins cost a handful of taps) and laid
 // over it: background through a fin blurs with the background, the fin with
 // the fin, and a blurred fin in front of a sharp head no longer blurs the
-// head beneath it.
+// head beneath it. The suspended specks (world/Particles.js) are drawn into
+// this layer too, after the fins: anything that writes depth in the scene
+// pass cuts the fins behind it.
 
 import * as THREE from 'three';
 import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -111,7 +113,7 @@ export class SceneLayersPass extends Pass {
     scene.traverse((o) => {
       // lights must also pass the layer test of the fin-only camera
       if (o.isLight) o.layers.enable(this.finLayer);
-      else if (o.isMesh && (o.layers.mask & finBit) !== 0) this._hook(o);
+      else if ((o.isMesh || o.isPoints) && (o.layers.mask & finBit) !== 0) this._hook(o);
     });
 
     // 1. the scene (and the shadow maps, fins included) without fin colour
@@ -262,6 +264,10 @@ export class FinCompositePass extends Pass {
               vec2 tc = vUv + vec2(cos(ang), sin(ang)) * uTexel * radius;
               vec4 c = texture(tFin, tc);
               if (bad(c)) c = vec4(0.0);
+              // (same tap limit as the depth of field: a glint on a fin edge
+              // is not spread into a hot disc)
+              float cpk = max(c.r, max(c.g, c.b));
+              if (cpk > 6.0) c.rgb *= 6.0 / cpk;
               // the empty layer around a blurred fin is transparent, always counted
               float s = c.a < 0.003 ? R : texture(tDil, tc).b;
               float m = smoothstep(radius - 0.5, radius + 0.5, s);
