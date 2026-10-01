@@ -44,17 +44,20 @@ export function buildWingLayout() {
   const STACK = 0.11; // mm per layer
 
   // Primaries
-  const pAngles = [66, 59, 52, 45, 38, 31, 24.5, 18.5, 13.5, 9.5]; // p1..p10
+  // p1..p10: fanned 50° (was 56.5°) and broader vanes so the spread hand is one closed surface with a pointed tip,
+  // not separate splayed sticks (p002, p033, p034, p015)
+  const pAngles = [62, 56, 50, 44, 38, 32, 26.5, 21, 16, 12];
   // from the wrist; p9 = wing chord (S1,S3: 105–108 flattened, ≈100 projected when folded, spec §10.3): the
-  // folded p9 tip lies at z −84, 1 mm short of the tail tip (photos, spec §3)
-  const pTipDist = [60, 64, 69, 75, 82, 90, 97, 99, 102.3, 98.3];
+  // folded p7–p10 tips converge on the tail tip (z ≈ −83.5) as one blunt dark cluster — 3 mm shorter, the
+  // rectrices ran on alone as a thin needle (p020, p070, p006)
+  const pTipDist = [60, 64, 69, 75, 82, 90, 100, 103.2, 103.6, 102];
   const prim = [];
   for (let i = 10; i >= 1; i--) {
     const t = 0.06 + (0.9 * (i - 1)) / 9;
     const base = add(lerp3(wrist, handTip, t), [0, order * STACK, -2.2]);
     const angle = pAngles[i - 1];
     const L = solveLength(base, dirFromAngle(angle), wrist, pTipDist[i - 1]);
-    prim[i] = { name: `p${i}`, bone: `p${i}`, type: 'primary', base, angle, length: L, width: 10.2 + (10 - i) * 0.3, innerVane: 0.7, curve: 0.05, layer: order++, index: i };
+    prim[i] = { name: `p${i}`, bone: `p${i}`, type: 'primary', base, angle, length: L, width: 12.6 + (10 - i) * 0.35, innerVane: 0.7, curve: 0.05, layer: order++, index: i };
   }
   for (let i = 10; i >= 1; i--) feathers.push(prim[i]);
 
@@ -119,13 +122,17 @@ export function buildWingLayout() {
 /** Tail: 6 pairs of rectrices on the pygostyle bone (bind = closed tail). */
 export function buildTailLayout(tailPivot) {
   const feathers = [];
-  const lengths = [45, 44.6, 44.1, 43.4, 42.4, 41.2]; // S2,S3 (tail 45 mm); slight graduation (D)
+  // S2,S3 (tail 45 mm); closed, the tips end level (square tail, p020, p070, p006): the graduated 45…41 mm put
+  // the central pair 4 mm past the rest as a single point
+  const lengths = [43.8, 43.8, 43.7, 43.6, 43.4, 43.2];
   for (let side = 0; side < 2; side++) {
     const sgn = side === 0 ? 1 : -1;
     for (let i = 1; i <= 6; i++) {
       // closed tail 14–18 mm wide (spec §11)
       const x = sgn * (0.5 + 0.55 * (i - 1));
-      const base = [tailPivot[0] + x, tailPivot[1] + 0.9 - (i - 1) * 0.16, tailPivot[2] + 1.5];
+      // outer pairs step down under the central ones (closed tail slightly roofed): from the side the white outer
+      // rectrices show as a pale lower edge under the dark tail (p020, p070)
+      const base = [tailPivot[0] + x, tailPivot[1] + 0.9 - (i - 1) * 0.42, tailPivot[2] + 1.5];
       feathers.push({
         name: `r${i}${side ? 'R' : 'L'}`,
         bone: `r${i}_${side ? 'R' : 'L'}`,
@@ -166,9 +173,11 @@ export function buildTailLayout(tailPivot) {
         type: 'underTailCovert',
         // (close under the vent, no wider than it: fanned wider, the outer pair stood out below the flank as a
         // flap)
-        base: [tailPivot[0] + sgn * (1.0 + i * 0.9), tailPivot[1] - 3.5 - i * 0.3, tailPivot[2] + 10 - i * 2.5],
+        // (rooted on the vent's rising outline, not 10 mm ahead of it inside the body: pushed down out of the body
+        // they formed a 40 mm plate under the belly and a sheet hanging below the ventral line — p006, p020, p039)
+        base: [tailPivot[0] + sgn * (1.0 + i * 0.9), tailPivot[1] - 8 - i * 0.3, tailPivot[2] - 6 - i * 2],
         yaw: sgn * (1 + i * 1.5) * deg,
-        length: 32 - i * 3,
+        length: 19 - i * 2,
         width: 8,
         innerVane: 0.55,
         curve: 0.03, // tips curl up against the tail: rear end at (−63.4, 53.4) (spec §3)

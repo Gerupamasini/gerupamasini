@@ -771,11 +771,12 @@ export class KentishPloverAnimator {
     const b = this.b;
     const tuck = 1 - (act?.legsDown ?? 0);
     for (const s of ['L', 'R']) {
-      // tuck: tibiotarsus pressed back along the belly, tarsus and toes trailing under the tail (C)
+      // tuck: tibiotarsus pressed back along the belly, tarsus and toes folded up under the tail coverts — toe tips
+      // at z ≈ −79, short of the tail tip (−84) and ≈7 mm under it (C; p002, p033: no feet behind the tail)
       b[`femur_${s}`].quaternion.multiply(qAxis(X, 0.05 * tuck - (1 - tuck) * 0.35, _q));
-      b[`tibio_${s}`].quaternion.multiply(qAxis(X, 0.45 * tuck - (1 - tuck) * 0.1, _q));
-      b[`tarso_${s}`].quaternion.multiply(qAxis(X, 1.05 * tuck - (1 - tuck) * 0.5, _q));
-      b[`foot_${s}`].quaternion.multiply(qAxis(X, 0.35 * tuck, _q));
+      b[`tibio_${s}`].quaternion.multiply(qAxis(X, 0.55 * tuck - (1 - tuck) * 0.1, _q));
+      b[`tarso_${s}`].quaternion.multiply(qAxis(X, 1.3 * tuck - (1 - tuck) * 0.5, _q));
+      b[`foot_${s}`].quaternion.multiply(qAxis(X, 0.5 * tuck, _q));
       for (const key of ['inner', 'mid', 'outer'])
         for (let i = 0; i < 3; i++) {
           const t = b[`toe_${key}${i}_${s}`];

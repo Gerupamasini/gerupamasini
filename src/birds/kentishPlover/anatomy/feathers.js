@@ -52,7 +52,9 @@ function widthProfile(t, type) {
     return Math.sqrt(Math.max(0, 1 - u * u)) * (1 - 0.1 * u);
   }
   const base = Math.min(1, 0.22 + t / 0.12);
-  const tipStart = pointed ? 0.62 : 0.66;
+  // (primaries keep their width further out: tapering from 62 % the spread hand showed background between the
+  // tips — a plover's primaries are not emarginated and overlap to a pointed wing tip, p002, p033)
+  const tipStart = type === 'primary' ? 0.74 : pointed ? 0.62 : 0.66;
   if (t <= tipStart) return base;
   const u = (t - tipStart) / (1 - tipStart);
   return pointed ? Math.pow(Math.max(0, 1 - u), 0.72) * (1 - 0.15 * u) : Math.sqrt(Math.max(0, 1 - u * u));
@@ -368,10 +370,12 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
   for (const f of spec.tailFeathers) {
     if (detail >= 2 && f.type === 'upperTailCovert') continue;
     if (detail >= 2 && f.type === 'rectrix' && f.index % 2 === 0) continue;
+    // (LOD2: the white vent of the coarse body stands for them — as cards they came loose below it)
+    if (detail >= 2 && f.type === 'underTailCovert') continue;
     const yaw = f.yaw;
-    // tail 7.7° below the body frame (tip at (−85, 55.1) with the shaft's bend, spec §11); the under-tail coverts
-    // run flatter along the vent
-    const dir = [Math.sin(yaw), f.type === 'underTailCovert' ? -0.06 : -0.11, -Math.cos(yaw)];
+    // tail 7.7° below the body frame (tip at (−84, 55), spec §11); the under-tail coverts
+    // run up along the vent to the underside of the tail
+    const dir = [Math.sin(yaw), f.type === 'underTailCovert' ? 0.18 : -0.11, -Math.cos(yaw)];
     const dl = Math.hypot(dir[0], dir[1], dir[2]);
     const d = [dir[0] / dl, dir[1] / dl, dir[2] / dl];
     // outer vane faces away from the tail midline

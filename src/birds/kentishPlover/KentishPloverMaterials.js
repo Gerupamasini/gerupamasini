@@ -419,7 +419,8 @@ vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd, float fold) {
     c = mix(uFlightDark, uMantleDark, 0.5 * fold);
     float whiteBase = (1.0 - smoothstep(0.26, 0.36, t)) * step(across, 0.0) * (1.0 - smoothstep(5.5, 7.5, idx)) * (1.0 - fold);
     c = mix(c, uWhite, whiteBase);
-    c = mix(c, mix(uFlightDark, uWhite, 0.75), rachis * smoothstep(0.1, 0.25, t) * (1.0 - smoothstep(0.75, 0.95, t)) * (1.0 - 0.9 * fold));
+    // pale shafts, subdued: full white rachises split the spread hand into separate sticks (p002, p033)
+    c = mix(c, mix(uFlightDark, uWhite, 0.4), rachis * smoothstep(0.1, 0.25, t) * (1.0 - smoothstep(0.7, 0.9, t)) * (1.0 - 0.9 * fold));
   } else if (type < 1.5) {
     // secondary: dark grey-brown, white base and narrow white tip (open wing)
     c = uFlightMid;
@@ -474,10 +475,14 @@ vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd, float fold) {
   return c;
 }
 
-// Ventral (under) surface: remiges pale grey, coverts white (under-wing coverts are white).
+// Ventral (under) surface: the white under-wing coverts and axillaries cover the basal half of the remiges, whose
+// exposed undersides are pale silvery grey (spec §13.3; p002, p033) — the underwing reads white with a pale grey
+// trailing half, not grey-brown.
 vec3 kpFeatherBottom(float type, float idx, vec2 uv, float fold) {
-  if (type < 0.5) return mix(mix(uFlightMid, uWhite, 0.55), uWhite, 1.0 - smoothstep(0.3, 0.5, uv.y));
-  if (type < 1.5) return mix(mix(uFlightMid, uWhite, 0.6), uWhite, 1.0 - smoothstep(0.35, 0.55, uv.y));
+  // (primary tips and the secondaries' trailing edge darker grey, p002, p034)
+  if (type < 0.5) return mix(mix(uFlightMid, uWhite, mix(0.62, 0.3, smoothstep(0.75, 0.95, uv.y) * (1.0 - smoothstep(3.5, 6.5, idx)))), uWhite, 1.0 - smoothstep(0.45, 0.65, uv.y));
+  if (type < 1.5) return mix(mix(uFlightMid, uWhite, mix(0.72, 0.5, smoothstep(0.8, 0.95, uv.y))), uWhite, 1.0 - smoothstep(0.55, 0.75, uv.y));
+  if (type > 1.5 && type < 2.5) return mix(uMantleDark, uWhite, 1.0 - fold); // tertial: axillary side
   if (type > 7.5 && type < 8.5) return mix(mix(uTailDark, uWhite, 0.4), uWhite, smoothstep(3.5, 5.0, idx));
   if (type > 9.5 && type < 10.5) return uMantleDark;
   if (type > 10.5 && type < 11.5) return mix(uMantle, uWhite, 1.0 - fold);
@@ -549,6 +554,13 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
         vec3 kfCol = gl_FrontFacing ? kpFeatherTop(kfType, vFeather.y, vUv, vFeather.z, vFold) : kpFeatherBottom(kfType, vFeather.y, vUv, vFold);
         if (uDebugType > 0.5) kfCol = kpDebugType(kfType) * (gl_FrontFacing ? 1.0 : 0.55);
         diffuseColor.rgb *= kfCol;`
+      )
+      // Spread wing seen from below: sunlight shines through the thin vanes and the white under-wing coverts, so
+      // the underwing reads white (p002, p033); lit only by the ground bounce it rendered grey-brown
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        if (!gl_FrontFacing && uDebugType < 0.5) totalEmissiveRadiance += diffuseColor.rgb * 0.22 * (1.0 - smoothstep(0.0, 0.6, vFold)) * (kfType < 7.5 || (kfType > 10.5 && kfType < 11.5) ? 1.0 : 0.0);`
       )
       .replace(
         '#include <roughnessmap_fragment>',
