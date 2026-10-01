@@ -268,9 +268,10 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     vec2 la = vec2(41.6, 90.2);
     vec2 lb = vec2(28.6, 95.4);
     float tl = clamp(dot(zy - la, lb - la) / dot(lb - la, lb - la), 0.0, 1.0);
-    float lore = 1.0 - smoothstep(-0.3, 0.3, length(zy - mix(la, lb, tl)) + ej - mix(1.5, 2.35, tl) * uMelanin);
+    float lore = 1.0 - smoothstep(-0.3, 0.3, length(zy - mix(la, lb, tl)) + ej - mix(1.5, 2.35, tl) * uMelanin * mix(0.5, 1.0, clamp((uHeadPat.y - 0.4) / 0.6, 0.0, 1.0)));
+    // (narrower where the loral stripe is pale: a thin brown line in females, p050)
     // (on the sides of the bill base only — over the culmen the two met as a moustache across the forehead)
-    lore *= smoothstep(0.5, 1.4, ax) * smoothstep(0.3, 0.6, abs(n.x)) * uHeadPat.y;
+    lore *= smoothstep(1.6, 2.7, ax) * smoothstep(0.35, 0.65, abs(n.x)) * uHeadPat.y;
     // round the eye: 1.3 mm of mask beyond the lids, a little more below and behind (the eye sits in the mask,
     // p012, p070, p043; females / juveniles only behind it)
     float surround = (1.0 - smoothstep(-0.3, 0.3, length((zy - vec2(26.2, 95.2)) * vec2(0.92, 1.0)) + ej - 4.0 * uMelanin)) * uHeadPat.z;

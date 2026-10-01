@@ -99,10 +99,11 @@ export const bodySculpt = {
     { type: 'vesica', name: 'eyeSocketL', a: [9.03, 95.2, 25.9], b: [16.19, 96.17, 27.93], r: 3.4, off: [0.17, -1.36, 0.05], k: 0.9 },
     { type: 'vesica', name: 'eyeSocketR', a: [-9.03, 95.2, 25.9], b: [-16.19, 96.17, 27.93], r: 3.4, off: [-0.17, -1.36, 0.05], k: 0.9 },
   ],
-  // Upper eyelid fold: the feathered brow over the upper lid stands a little proud of the opening (p012, p043, p050)
+  // Upper eyelid fold: the feathered upper lid stands a little proud of the opening, merged into its upper arc (a
+  // separate ridge above it read as a shelf) (p012, p043, p050)
   adds: [
-    { type: 'ellipsoid', name: 'upperLidL', c: [10.95, 98.35, 26.5], r: [0.8, 0.6, 2.8], k: 0.4 },
-    { type: 'ellipsoid', name: 'upperLidR', c: [-10.95, 98.35, 26.5], r: [0.8, 0.6, 2.8], k: 0.4 },
+    { type: 'ellipsoid', name: 'upperLidL', c: [10.95, 97.95, 26.4], r: [0.8, 0.65, 3.0], k: 0.6 },
+    { type: 'ellipsoid', name: 'upperLidR', c: [-10.95, 97.95, 26.4], r: [0.8, 0.65, 3.0], k: 0.6 },
   ],
   // LOD0 face patches (anatomy/bodyMesh.js): eye sockets and bill base polygonised at 0.3 mm over the base mesh
   facePatch: {
@@ -170,7 +171,7 @@ export const plumage = {
       mantle: '#8a7468',
       mantleDark: '#705c51',
       fringe: '#ad988f',
-      fringeMix: 0.35,
+      fringeMix: 0.5, // pale-edged coverts and tertials (p039, p052)
       breastPatch: '#6c5a4f',
       underparts: '#e9e8e3',
       flightDark: '#3c3834',
@@ -181,7 +182,9 @@ export const plumage = {
       legs: '#8e8583',
       iris: '#1d1512',
       eyelidRing: '#dcd6cd',
-      headPattern: [24, 0.7, 0.3], // supercilium ends over the eye's rear edge, the cap drops to the ear coverts (p050, p008)
+      // supercilium ends over the eye's rear edge, the cap drops to the ear coverts; the brown stripe runs through the
+      // eye — under it too, where the pale eye-ring shows against it (p050, p062, p008)
+      headPattern: [24, 0.75, 0.75],
       capStreak: 0.65, // streaked / pale-tipped crown (p050, p062)
       capDrop: 1.6, // the cap's front edge (mm below the male's bar) — a narrow supercilium over the eye (p050, p008)
     },
@@ -208,7 +211,7 @@ export const plumage = {
       legs: '#92857e', // photos #9b8d86 (p001, p050)
       iris: '#1d1512',
       eyelidRing: '#e4d9cf',
-      headPattern: [20, 0.5, 0.25], // pale lores (p001, p035)
+      headPattern: [20, 0.5, 0.6], // pale lores, brown through the eye (p001, p035)
       capStreak: 0.65, // (p001, p035)
       capDrop: 1.3,
     },
@@ -238,7 +241,7 @@ export const plumage = {
       legs: '#7a6365', // pinkish grey, photos #81696b (p035, p063, p059)
       iris: '#1d1512',
       eyelidRing: '#dcd6cd',
-      headPattern: [22, 0.45, 0.3], // p062, p045
+      headPattern: [22, 0.5, 0.7], // brown through the eye, pale eye-ring (p062, p045)
       capStreak: 0.8, // pale-fringed crown feathers (p062, p063)
       capDrop: 1.8, // the cap reaches the eye's upper lid (p062, p045)
     },
