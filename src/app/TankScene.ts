@@ -11,6 +11,9 @@ import { instantiateModel } from '../creatures/models/ModelLoader';
 import { generateIndividual, type Individual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 import type { BehaviorEvent } from '../creatures/drivers/Driver';
+import type { LoadedModel } from '../creatures/models/ModelLoader';
+import type { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
+import type { HeroLighting } from '../render/HeroPipeline';
 
 const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
 
@@ -20,6 +23,7 @@ interface Occupant {
   driver: Driver;
   root: Object3D;
   unsub: () => void;
+  hero: HeroInstance | null;
 }
 
 /** 自宅の水槽: a bright 60 cm tank with a sand floor, one occupant and an orbit camera. */
@@ -31,6 +35,12 @@ export class TankScene {
   private readonly floor: Floor = { heightAt: () => 0, waterAt: () => WATER_H };
   private autoTimer = 0;
   onBehavior: ((e: BehaviorEvent) => void) | null = null;
+  heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
+  readonly lighting: HeroLighting = {
+    sunDir: new Vector3(0.3, 0.9, 0.35).normalize(), sunColor: new Color(1, 0.97, 0.92), sunIntensity: 1.6,
+    skyColor: new Color(0.78, 0.82, 0.82), groundColor: new Color(0.62, 0.6, 0.55), ambientIntensity: 0.7,
+    fogColor: new Color(0.75, 0.8, 0.8), fogDensity: 0.25, floorY: 0, underwater: true,
+  };
 
   constructor(private readonly canvas: HTMLCanvasElement, aspect: number) {
     this.camera = new PerspectiveCamera(45, aspect, 0.003, 20);
@@ -96,22 +106,26 @@ export class TankScene {
     ind.pos.set(0, 0, 0);
     ind.home.set(0, 0, 0);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
-    const rel = species.model.lod1 ?? species.model.hero ?? species.model.lod2;
+    let hero: HeroInstance | null = null;
+    const rel = this.heroApply && species.model.hero ? species.model.hero : species.model.lod1 ?? species.model.hero ?? species.model.lod2;
     if (rel) {
       const model = await instantiateModel(rel);
       root = model.root; bones = model.bones as Record<string, Object3D>; meshes = model.meshes; extras = model.extras;
       for (const m of meshes) m.castShadow = true;
+      if (this.heroApply && rel === species.model.hero) {
+        try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] tank fallback', err); hero = null; }
+      }
     } else if (entry.placeholder) {
       const ph = entry.placeholder();
       ph.root.userData.placeholder = ph;
       root = ph.root;
     } else return;
-    if (this.occupant) { root.removeFromParent(); return; }
+    if (this.occupant) { hero?.dispose(); root.removeFromParent(); return; }
     const driver = entry.create();
     const unsub = driver.onEvent((e) => this.onBehavior?.(e));
     this.scene.add(root);
     driver.attach(root, ind, extras, bones, meshes);
-    this.occupant = { record, ind, driver, root, unsub };
+    this.occupant = { record, ind, driver, root, unsub, hero };
     this.autoTimer = 1;
     const anchor = driver.anchor();
     this.controls?.target.copy(anchor);
@@ -120,8 +134,13 @@ export class TankScene {
     this.controls?.update();
   }
 
+  get heroActive(): boolean {
+    return !!this.occupant?.hero;
+  }
+
   clearOccupant(): void {
     if (!this.occupant) return;
+    this.occupant.hero?.dispose();
     this.occupant.unsub();
     this.occupant.driver.dispose();
     this.occupant.root.removeFromParent();
@@ -145,6 +164,7 @@ export class TankScene {
       this.autoTimer = 0.5;
     }
     o.driver.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now() });
+    if (o.hero) o.hero.update(this.camera, o.driver.openings ?? { mouth: 0, gill: 0 });
     // keep inside the glass
     const half = new Vector3(TANK_W / 2 - 0.02, 0, TANK_D / 2 - 0.02);
     o.ind.pos.x = Math.max(-half.x, Math.min(half.x, o.ind.pos.x));

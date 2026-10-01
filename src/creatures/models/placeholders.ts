@@ -20,7 +20,7 @@ function mesh(geo: ConstructorParameters<typeof Mesh>[0], mat: Material, name: s
 export function makeShrimp(): PlaceholderModel {
   const root = new Group();
   root.name = 'Shrimp_Placeholder';
-  const body = new MeshStandardMaterial({ color: 0xdcd6c8, roughness: 0.45, transparent: true, opacity: 0.72, metalness: 0 });
+  const body = new MeshStandardMaterial({ color: 0xe8e2d4, roughness: 0.4, transparent: true, opacity: 0.85, metalness: 0 });
   const dark = new MeshStandardMaterial({ color: 0x8a8378, roughness: 0.6 });
   const parts: Record<string, Object3D> = {};
   const L = 0.06;
@@ -117,8 +117,9 @@ export function makePlover(): PlaceholderModel {
     wing.name = side > 0 ? 'wingL' : 'wingR';
     wing.position.set(side * 0.016, 0.012, 0.005);
     body.add(wing);
-    const w = mesh(new BoxGeometry(0.06, 0.003, 0.05), back, 'wingMesh', wing);
-    w.position.x = side * 0.03;
+    const w = mesh(new BoxGeometry(0.05, 0.003, 0.06), back, 'wingMesh', wing);
+    w.position.set(side * 0.012, 0, -0.01);
+    wing.rotation.z = side * 1.25; // folded against the flank; the driver opens them in flight
     parts[wing.name] = wing;
   }
   // neck + head

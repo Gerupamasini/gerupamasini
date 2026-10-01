@@ -78,6 +78,12 @@ export class MahazeDriver implements Driver {
     this.root = null;
   }
 
+  /** mouth / gill opening for the hero interior material */
+  get openings(): { mouth: number; gill: number } {
+    const st = this.beh?.state;
+    return { mouth: st?.mouthOpen ?? 0, gill: st?.gillOpen ?? 0 };
+  }
+
   setIntent(intent: Intent): void {
     const beh = this.beh, ind = this.ind;
     this.intent = intent;

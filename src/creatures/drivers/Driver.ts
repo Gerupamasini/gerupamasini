@@ -46,6 +46,8 @@ export interface Driver {
   onEvent(cb: (e: BehaviorEvent) => void): () => void;
   /** anchor point for cameras (world) */
   anchor(): Vector3;
+  /** mouth / gill opening for hero interior materials (species that have them) */
+  readonly openings?: { mouth: number; gill: number };
   dispose(): void;
 }
 

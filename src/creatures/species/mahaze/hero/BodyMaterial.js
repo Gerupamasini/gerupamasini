@@ -67,7 +67,15 @@ uniform sampler2D uCapAlbedo;   // snout cap: rgb albedo, a roughness (planar y/
 uniform sampler2D uCapPigment;
 uniform vec4 uCapRect;          // y0, y1, z0, z1 (mm)
 uniform sampler2D uProfile;
-uniform sampler2D uBg;          // opaque scene behind the fish (rgb) + view distance (a)
+uniform sampler2D uBg;          // opaque scene behind the fish (rgb) + view distance (a, viewer) or depth texture (game)
+uniform sampler2D uBgDepth;     // depth of the opaque scene (game pipeline); uCamNearFar.x < 0 disables it
+uniform vec2 uCamNearFar;
+float bgDistAt(vec2 uv) {
+  if (uCamNearFar.x <= 0.0) return texture(uBg, uv).a;
+  float d = texture(uBgDepth, uv).r;
+  float z = (uCamNearFar.x * uCamNearFar.y) / ((uCamNearFar.y - uCamNearFar.x) * d - uCamNearFar.y);
+  return min(-z, 50.0);
+}
 uniform vec2 uResolution;
 uniform vec4 uFrame;            // S0, Y0, SL, SEND (mm)
 uniform float uVertStart;
@@ -411,7 +419,7 @@ void main() {
   vec3 xEw = vWorldPos + vObjToWorld * (fishToObj(xE) - vObjPos);
   vec3 dOutW = normalize(vObjToWorld * fishDirToObj(Rout));
   vec2 suv = gl_FragCoord.xy / uResolution;
-  float bgDist = texture(uBg, suv).a;
+  float bgDist = bgDistAt(suv);
   float dE = length(xEw - cameraPosition);
   float beyond = clamp(bgDist - dE, 0.0, 1.5);
   vec4 clip = projectionMatrix * viewMatrix * vec4(xEw + dOutW * beyond, 1.0);

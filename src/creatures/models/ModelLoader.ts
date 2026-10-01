@@ -1,5 +1,5 @@
 import { Bone, Box3, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, Object3D, SkinnedMesh, Vector3, type AnimationClip, type Material } from 'three';
-import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFLoader, type GLTF, type GLTFParser } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 
 export type Tier = 'hero' | 'lod1' | 'lod2';
@@ -25,6 +25,8 @@ export interface LoadedModel {
   extras: Record<string, unknown>;
   /** bounding sphere radius of the rest pose (metres, model scale 1) */
   radius: number;
+  /** glTF parser of the cached asset (texture dependencies for custom materials) */
+  parser: GLTFParser;
 }
 
 const loader = new GLTFLoader();
@@ -94,7 +96,7 @@ export async function instantiateModel(rel: string): Promise<LoadedModel> {
   box.getSize(size);
   const radius = Math.max(size.x, size.y, size.z) * 0.6 || 0.05;
   const extras = (root.children.find((c) => c.userData && Object.keys(c.userData).length)?.userData ?? gltf.scene.userData) as Record<string, unknown>;
-  return { tier, root, bones, meshes, clips: gltf.animations, extras, radius };
+  return { tier, root, bones, meshes, clips: gltf.animations, extras, radius, parser: gltf.parser };
 }
 
 export function disposeInstance(model: LoadedModel): void {

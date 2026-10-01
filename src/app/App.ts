@@ -18,6 +18,8 @@ import { Observation } from '../systems/Observation';
 import { Capture } from '../systems/Capture';
 import { ui, t, toast, type Screen } from '../ui/store';
 import { Root } from '../ui/Root';
+import { HeroPipeline } from '../render/HeroPipeline';
+import { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 
 const HUD_HZ = 4;
 const AUTOSAVE_SEC = 60;
@@ -39,6 +41,7 @@ export class App {
   player: FPSController | null = null;
   creatures: CreatureSystem | null = null;
   tank: TankScene | null = null;
+  hero: HeroPipeline | null = null;
   save: SaveV1 | null = null;
   target: Individual | null = null;
   lockedId: string | null = null;
@@ -147,6 +150,10 @@ export class App {
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
       this.capture.onResolved = (ind, ok) => this.onCaptureResolved(ind, ok);
       this.tank = new TankScene(this.canvas, this.renderer.aspect);
+      if (this.renderer.caps.floatRT) {
+        this.hero = new HeroPipeline(this.renderer.gl);
+        this.applyHeroSetting();
+      }
       this.tank.onBehavior = (e) => { const rec = this.encyclopedia.tankItems.value[0]; if (rec) this.encyclopedia.onBehavior(rec.speciesId, e.behaviorId, this.clock.nowGame()); };
       ui.loading.value = { frac: 0.95, label: t('loading.models') };
       this.onResize();
@@ -176,7 +183,25 @@ export class App {
   async updateSettings(patch: Partial<SettingsData>): Promise<void> {
     this.settings = { ...this.settings, ...patch };
     this.renderer.setQuality(this.settings.quality);
+    this.applyHeroSetting();
     await saveSettings(this.settings);
+  }
+
+  private applyHeroSetting(): void {
+    const hero = this.hero;
+    const fn = hero && this.settings.heroMaterials ? (model: Parameters<typeof HeroInstance.apply>[0]) => HeroInstance.apply(model, hero.shared) : null;
+    if (this.creatures) this.creatures.heroApply = fn;
+    if (this.tank) this.tank.heroApply = fn;
+  }
+
+  private heroLightingFromWorld(anchor: Vector3): import('../render/HeroPipeline').HeroLighting {
+    const w = this.world!;
+    const depth = w.habitat.depthAt(anchor.x, anchor.z);
+    return {
+      sunDir: w.sunDir, sunColor: w.sky.sunLight.color, sunIntensity: w.sky.sunLight.intensity,
+      skyColor: w.sky.hemi.color, groundColor: w.sky.hemi.groundColor, ambientIntensity: w.sky.hemi.intensity,
+      fogColor: w.fog.color, fogDensity: 0.25, floorY: w.terrain.heightAt(anchor.x, anchor.z), underwater: depth > 0,
+    };
   }
 
   // ------------------------------------------------------------------ ticket
@@ -360,7 +385,10 @@ export class App {
 
     if (mode === 'tank' && this.tank) {
       this.tank.update(dt, 1);
-      this.renderer.gl.render(this.tank.scene, this.tank.camera);
+      if (this.hero && this.tank.heroActive) {
+        this.hero.setLighting(this.tank.lighting);
+        this.hero.render(this.tank.scene, this.tank.camera, dt);
+      } else this.renderer.gl.render(this.tank.scene, this.tank.camera);
     } else {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       if (this.worldVisible() || mode === 'zukan' || mode === 'menu' || mode === 'ticket') {
@@ -369,7 +397,11 @@ export class App {
           tod: world.tod, season: world.season, tidePhase: this.tidePhase(), lockedId: this.lockedId,
         });
       }
-      this.renderer.gl.render(world.scene, this.camera);
+      if (mode === 'observe' && this.hero && creatures.heroActive(this.lockedId)) {
+        const anchor = creatures.anchorOf(this.lockedId!) ?? player.position;
+        this.hero.setLighting(this.heroLightingFromWorld(anchor));
+        this.hero.render(world.scene, this.camera, dt);
+      } else this.renderer.gl.render(world.scene, this.camera);
     }
 
     this.fpsAcc += dt; this.fpsCount++;

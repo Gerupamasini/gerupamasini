@@ -162,9 +162,10 @@ export class PloverDriver implements Driver {
       }
       const wl = m.parts.wingL, wr = m.parts.wingR;
       if (wl && wr) {
+        const fold = flying ? 0 : 1.25;
         const flap = flying ? Math.sin(this.phase) * 0.9 : 0;
-        wl.rotation.z = flap;
-        wr.rotation.z = -flap;
+        wl.rotation.z = fold + flap;
+        wr.rotation.z = -fold - flap;
       }
     }
   }

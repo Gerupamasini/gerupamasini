@@ -82,6 +82,22 @@ try {
   });
   await waitFor(4500);
   await page.screenshot({ path: path.join(outDir, '07-waterline.png') });
+  // close-ups of the placeholder species when they are around
+  for (const [sid, file] of [['exopalaemon_orientis', '14-shrimp.png'], ['charadrius_alexandrinus', '15-plover.png']]) {
+    const found = await page.evaluate((sid) => {
+      const a = window.__higata;
+      const p = a.player.position;
+      const ind = a.creatures.individuals.filter((i) => i.species.id === sid).sort((x, y) => x.pos.distanceTo(p) - y.pos.distanceTo(p))[0];
+      if (!ind) return false;
+      const dist = sid === 'charadrius_alexandrinus' ? 3 : 0.9;
+      const px = ind.pos.x + dist, pz = ind.pos.z;
+      a.player.setPose(px, pz, Math.atan2(-(ind.pos.x - px), -(ind.pos.z - pz)));
+      a.player.pitch = -Math.atan2(1.6, dist);
+      return true;
+    }, sid);
+    if (found) { await waitFrames(page, 10); await page.screenshot({ path: path.join(outDir, file) }); }
+    else console.log(`no ${sid} nearby for a close-up`);
+  }
   // walk up to the nearest goby, observe it, catch it, open the zukan and put it in the tank
   const near = await page.evaluate(() => {
     const a = window.__higata;

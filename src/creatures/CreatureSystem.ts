@@ -13,12 +13,14 @@ import type { Individual } from './Individual';
 import type { BehaviorEvent, Driver, Floor, Intent } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
+import type { HeroInstance } from './species/mahaze/hero/applyHero';
 
 interface View {
   tier: Tier | 'placeholder';
   root: Object3D;
   model: LoadedModel | null;
   radius: number;
+  hero: HeroInstance | null;
 }
 
 interface Entry {
@@ -60,6 +62,8 @@ export class CreatureSystem {
   private readonly ray = new Ray();
   private readonly sphere = new Sphere();
   private readonly tmpIntent = { id: 0 };
+  /** when set, hero-tier models get the volumetric materials (observation lock) */
+  heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
 
   constructor(
     private readonly scene: Scene,
@@ -160,6 +164,7 @@ export class CreatureSystem {
       if (e.view) {
         const every = ind.lod <= 1 ? 1 : ind.lod === 2 ? 2 : 4;
         if (this.frameIndex % every === 0) e.driver.update(f.dt * every, { floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs });
+        if (e.view.hero) e.view.hero.update(f.camera, e.driver.openings ?? { mouth: 0, gill: 0 });
       }
     }
   }
@@ -197,13 +202,18 @@ export class CreatureSystem {
       if (!entry?.placeholder) { e.pendingTier = null; return; }
       const ph = entry.placeholder();
       ph.root.userData.placeholder = ph;
-      view = { tier, root: ph.root, model: null, radius: ph.length * 0.6 };
+      view = { tier, root: ph.root, model: null, radius: ph.length * 0.6, hero: null };
     } else {
       const rel = sp.model[tier]!;
       let model: LoadedModel;
       try { model = await instantiateModel(rel); } catch (err) { console.warn(err); e.pendingTier = null; return; }
       if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
-      view = { tier, root: model.root, model, radius: model.radius };
+      let hero: HeroInstance | null = null;
+      if (tier === 'hero' && this.heroApply) {
+        try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] falling back to standard materials', err); hero = null; }
+        if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { hero?.dispose(); model.root.removeFromParent(); return; }
+      }
+      view = { tier, root: model.root, model, radius: model.radius, hero };
     }
     if (e.view) this.dropView(e);
     e.view = view;
@@ -216,6 +226,7 @@ export class CreatureSystem {
 
   private dropView(e: Entry): void {
     if (!e.view) return;
+    e.view.hero?.dispose();
     e.driver.detach();
     e.view.root.removeFromParent();
     e.view = null;
@@ -271,6 +282,12 @@ export class CreatureSystem {
       if (this.ray.intersectsSphere(this.sphere) && d < bestD) { bestD = d; best = e.ind; }
     }
     return best;
+  }
+
+  /** true when the given individual is currently drawn with the hero materials */
+  heroActive(id: string | null): boolean {
+    if (!id) return false;
+    return !!this.entries.get(id)?.view?.hero;
   }
 
   anchorOf(id: string): Vector3 | null {
