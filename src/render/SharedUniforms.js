@@ -20,9 +20,11 @@ export const U = {
   // R,G,B; aquarium water adds dissolved organics (yellowing: blue absorbed)
   // and suspended particles (extinction + a blue-green in-scattered veil), so
   // the back of a 45 cm tank turns blue-green and loses contrast: a black
-  // background reads as murky teal depth, never as a flat void.
-  uWaterAbsorb: { value: new THREE.Vector3(1.5, 0.76, 0.8) },
-  uWaterScatter: { value: new THREE.Color(0.05, 0.1, 0.1) },
+  // background reads as murky depth, never as a flat void. Tannins from the
+  // plants and the mulm absorb a little more blue than green, so the veil
+  // leans toward a deep olive green rather than a uniform teal.
+  uWaterAbsorb: { value: new THREE.Vector3(1.45, 0.72, 0.92) },
+  uWaterScatter: { value: new THREE.Color(0.055, 0.086, 0.074) },
   uWaterDensity: { value: 1.0 },
 
   // body pigments (sRGB anchors from the research report §7, tuned on photos)

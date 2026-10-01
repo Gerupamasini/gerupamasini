@@ -210,22 +210,102 @@ const plantSway = /* glsl */ `
 }
 `;
 
-function ribbonGeometry(len, width, segs) {
-  const g = new THREE.PlaneGeometry(width, len, 2, segs);
-  g.translate(0, len / 2, 0);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i);
-    const t = y / len;
-    const x = p.getX(i);
-    // tapering tip & slight natural twist/curl; the blade is gently
-    // channelled (edges forward), never a flat strip
-    const w = (1 - Math.pow(t, 6)) * (0.8 + 0.2 * (1 - t));
-    p.setX(i, x * w);
-    p.setZ(i, 0.01 * Math.sin(t * 3.1) * t + (x * w) * (x * w) * 40.0);
+// Vallisneria blades are built in world space (uv.y runs along the blade):
+// the whole ribbon leans with the current and sways as one, the amplitude
+// growing smoothly toward the tip (no kinks), and the part floating at the
+// surface stays at the surface.
+const ribbonSway = /* glsl */ `
+{
+  float h = uv.y;
+  vPlantH = h;
+  vPlantAge = aPlant.w;
+  vPlantSeed = aPlant.x;
+  vLeafUv = uv;
+  float ph = aPlant.x;
+  float t = uTime;
+  float sway = sin(t * 0.7 + ph) * 0.55 + sin(t * 1.3 + ph * 2.3 - h * 2.5) * 0.25 + sin(t * 0.23 + ph * 0.7) * 0.4;
+  float bend = h * h * (3.0 - 2.0 * h) * aPlant.y * aPlant.z * 2.2;
+  vec3 dirW = normalize(uCurrent + vec3(0.0001));
+  transformed.x += bend * (0.04 * sway + 0.05 * dirW.x);
+  transformed.z += bend * (0.03 * cos(t * 0.9 + ph * 1.7) + 0.05 * dirW.z);
+  transformed.y = min(transformed.y - bend * 0.012 * abs(sway), ${(TANK.water - 0.004).toFixed(4)});
+}
+`;
+
+// Vallisneria blade as one continuous ribbon built along a smooth centre
+// line: it leaves the crown nearly upright, leans more and more toward the
+// tip (its own weight and the filter current), drifts sideways in a gentle
+// S, twists slowly about its own axis (the light runs along it in long
+// bands) and, where it reaches the surface, arcs over smoothly and floats
+// flat along it, as long tape grass does. Built in world space (the blades
+// are merged into one mesh); uv: x across, y along the blade (0 base .. 1 tip).
+const RIBBON_SEGS = 36;
+function ribbonBlade(rng, base, len, width) {
+  const surfY = TANK.water - 0.007;
+  const R = 0.045; // radius of the arc over at the surface
+  const lean0 = rng.range(0.03, 0.22);
+  const curl = rng.range(0.15, 0.85);
+  const az0 = rng.range(0, Math.PI * 2);
+  const drift = rng.range(-0.9, 0.9);
+  const twist = rng.range(0.6, 2.8) * rng.sign();
+  const ds = len / RIBBON_SEGS;
+  const pts = [];
+  const tans = [];
+  const p = base.clone();
+  for (let i = 0; i <= RIBBON_SEGS; i++) {
+    const t = i / RIBBON_SEGS;
+    let th = lean0 + curl * Math.pow(t, 1.7);
+    const head = surfY - p.y;
+    if (head < R) th = Math.max(th, (Math.PI / 2) * (1 - Math.max(0, head) / R));
+    th = Math.min(th, Math.PI / 2);
+    const az = az0 + drift * t;
+    const d = new THREE.Vector3(Math.sin(th) * Math.cos(az), Math.cos(th), Math.sin(th) * Math.sin(az));
+    pts.push(p.clone());
+    tans.push(d);
+    p.addScaledVector(d, ds);
+    p.y = Math.min(p.y, surfY);
+    p.x = THREE.MathUtils.clamp(p.x, -TANK.L / 2 + 0.012, TANK.L / 2 - 0.012);
+    p.z = THREE.MathUtils.clamp(p.z, -TANK.D / 2 + 0.012, TANK.D / 2 - 0.012);
   }
-  g.computeVertexNormals();
-  return g;
+  // tangents from the actual (clamped) centre line
+  for (let i = 1; i < RIBBON_SEGS; i++) tans[i] = new THREE.Vector3().subVectors(pts[i + 1], pts[i - 1]).normalize();
+  tans[RIBBON_SEGS] = new THREE.Vector3().subVectors(pts[RIBBON_SEGS], pts[RIBBON_SEGS - 1]).normalize();
+  const pos = [];
+  const uv = [];
+  const up = new THREE.Vector3(0, 1, 0);
+  // across-blade direction: parallel transported, slowly twisted, laid flat
+  // where the blade floats
+  const sa = az0 + Math.PI / 2 + rng.range(-1, 1);
+  const side = new THREE.Vector3(Math.cos(sa), 0, Math.sin(sa));
+  const flat = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  const q = new THREE.Quaternion();
+  for (let i = 0; i <= RIBBON_SEGS; i++) {
+    const t = i / RIBBON_SEGS;
+    const T = tans[i];
+    side.addScaledVector(T, -side.dot(T)).normalize();
+    if (i > 0) side.applyQuaternion(q.setFromAxisAngle(T, twist / RIBBON_SEGS));
+    const floatW = THREE.MathUtils.smoothstep(pts[i].y, TANK.water - 0.03, TANK.water - 0.009);
+    if (floatW > 0) {
+      flat.crossVectors(T, up);
+      if (flat.lengthSq() > 1e-6) {
+        flat.normalize();
+        if (flat.dot(side) < 0) flat.negate();
+        side.lerp(flat, floatW * 0.35).normalize();
+      }
+    }
+    // narrow sheath at the base, parallel sides, short blunt tip
+    const w = width * (0.7 + 0.3 * THREE.MathUtils.smoothstep(t, 0, 0.06)) * Math.pow(Math.min(1, (1 - t) / 0.07), 0.55);
+    n.crossVectors(side, T).normalize();
+    for (let j = 0; j < 3; j++) {
+      const a = j - 1; // -1, 0, 1
+      // shallow channel: the midrib sits slightly behind the margins
+      const off = a === 0 ? -0.0006 * (w / width) : 0;
+      pos.push(pts[i].x + side.x * a * w * 0.5 + n.x * off, pts[i].y + side.y * a * w * 0.5 + n.y * off, pts[i].z + side.z * a * w * 0.5 + n.z * off);
+      uv.push(j / 2, t);
+    }
+  }
+  return { pos, uv };
 }
 
 // Amazon-sword leaf: long petiole, lanceolate blade with a slightly wavy
@@ -257,164 +337,143 @@ function swordLeafGeometry(len, width) {
   return g;
 }
 
-// Fine-leaved stem plants. Each whorl leaf is a pair of crossed cards with a
-// forked-needle texture (hornwort) or a finely dissected fan (Cabomba):
-// mip-mapped alpha keeps them feathery at a distance instead of breaking up
-// into single-pixel speckle, alpha-to-coverage keeps the edges smooth up
-// close. Normals are bent outward from the stem, so a whorl shades like a
-// soft volume (lit on top, darker inside) instead of a flicker of facets.
-function leafTexture(kind) {
-  const W = 128;
-  const H = 256;
-  const cv = document.createElement('canvas');
-  cv.width = W;
-  cv.height = H;
-  const g = cv.getContext('2d');
-  // white on opaque black: three.js reads alpha maps from the green channel,
-  // so it carries the antialiased coverage
-  g.fillStyle = '#000';
-  g.fillRect(0, 0, W, H);
-  g.strokeStyle = '#fff';
-  g.lineCap = 'round';
-  const rng = new RNG(kind === 'fan' ? 61 : 17);
-  const seg = (x0, y0, x1, y1, w0, w1, bend) => {
-    // tapered, slightly curved segment drawn as short pieces
-    const n = 10;
-    let px = x0;
-    let py = y0;
-    for (let k = 1; k <= n; k++) {
-      const t = k / n;
-      const x = x0 + (x1 - x0) * t + bend * Math.sin(t * Math.PI);
-      const y = y0 + (y1 - y0) * t;
-      g.lineWidth = w0 + (w1 - w0) * t;
-      g.beginPath();
-      g.moveTo(px, py);
-      g.lineTo(x, y);
-      g.stroke();
-      // tiny marginal teeth on hornwort needles
-      if (kind === 'needle' && k % 3 === 0 && rng.next() < 0.7) {
-        const s = rng.next() < 0.5 ? -1 : 1;
-        g.lineWidth = 1.0;
-        g.beginPath();
-        g.moveTo(x, y);
-        g.lineTo(x + s * 3, y - 3);
-        g.stroke();
-      }
-      px = x;
-      py = y;
-    }
-  };
-  if (kind === 'needle') {
-    // twice-forked needle (Ceratophyllum)
-    const fy1 = 150;
-    const fy2 = 78;
-    seg(64, 254, 64, fy1, 5.5, 4.2, rng.range(-3, 3));
-    for (const s of [-1, 1]) {
-      const x2 = 64 + s * 22;
-      seg(64, fy1, x2, fy2, 4.0, 3.0, s * 3);
-      for (const s2 of [-1, 1]) seg(x2, fy2, x2 + s * 10 + s2 * 16, 4 + rng.range(0, 14), 2.8, 1.2, s2 * 3);
-    }
-  } else {
-    // fan of finely divided segments (Cabomba)
-    seg(64, 254, 64, 200, 4.5, 3.8, 0);
-    const n = 5;
-    for (let i = 0; i < n; i++) {
-      const a = (i / (n - 1) - 0.5) * 1.5;
-      const L = 120 + rng.range(-10, 10);
-      const xm = 64 + Math.sin(a) * L * 0.55;
-      const ym = 200 - Math.cos(a) * L * 0.55;
-      seg(64, 200, xm, ym, 3.4, 2.6, a * 6);
-      for (const s2 of [-1, 1]) {
-        const a2 = a + s2 * 0.22;
-        seg(xm, ym, xm + Math.sin(a2) * L * 0.5, ym - Math.cos(a2) * L * 0.5, 2.4, 1.1, s2 * 2);
-      }
-    }
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.NoColorSpace;
-  tex.generateMipmaps = true;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.anisotropy = 4;
-  return tex;
-}
-
-function stemPlantGeometry(rng, whorls, kind) {
-  const parts = [];
-  const q = new THREE.Quaternion();
-  const m4 = new THREE.Matrix4();
-  const up = new THREE.Vector3(0, 1, 0);
+// Fine-leaved stem plants, built from real leaf geometry (no alpha cards):
+//  * hornwort (Ceratophyllum): whorls of 9–11 stiff needle leaves, each
+//    forked twice, rising from the stem; the whorls crowd into a dense
+//    apical tuft, the lower stem is older and partly bare;
+//  * Cabomba: opposite pairs of fans on short petioles, each fan a palm of
+//    thread-like segments forking twice, opening nearly flat.
+// Every leaf segment is a pair of crossed narrow strips (~0.6 mm), so the
+// needles read from any side and stay crisp up close; at a distance the
+// multisampled sub-pixel strips average into the soft, airy texture of a
+// real whorl instead of a flat fern-like card. Normals are bent outward from
+// the stem, so a whorl shades like a soft volume (lit on top, darker inside).
+function stemPlantGeometry(rng, nodes, kind) {
   const fan = kind === 'fan';
-  // one leaf: two crossed, slightly curled cards, uv (0..1 across, 0..1 along)
-  const leafCards = (len) => {
-    const w = len * (fan ? 0.85 : 0.55);
-    const out = [];
-    for (const rot of [0, Math.PI / 2]) {
-      const g = new THREE.PlaneGeometry(w, len, 1, 2);
-      g.translate(0, len / 2, 0);
-      const p = g.attributes.position;
-      for (let i = 0; i < p.count; i++) {
-        const t = p.getY(i) / len;
-        // curls upward toward the tip
-        p.setZ(i, 0.18 * len * t * t);
+  const pos = [];
+  const nrm = [];
+  const uvs = [];
+  const idx = [];
+  const W = fan ? 0.0019 : 0.0024; // strip width in unit-height space (instances are 0.14–0.38 m tall)
+  const a1 = new THREE.Vector3();
+  const a2 = new THREE.Vector3();
+  const tmp = new THREE.Vector3();
+  const nOut = new THREE.Vector3();
+  // one straight segment p0 -> p1 as two crossed strips; v0 / v1: position
+  // along the leaf (uv.y), w0 / w1: half widths
+  const segment = (p0, p1, v0, v1, w0, w1) => {
+    const d = tmp.subVectors(p1, p0).normalize();
+    a1.set(-d.z, 0, d.x);
+    if (a1.lengthSq() < 1e-6) a1.set(1, 0, 0);
+    a1.normalize();
+    a2.crossVectors(d, a1).normalize();
+    for (const ax of [a1, a2]) {
+      const base = pos.length / 3;
+      for (const [pp, v, w] of [[p0, v0, w0], [p1, v1, w1]]) {
+        for (const sg of [-1, 1]) {
+          pos.push(pp.x + ax.x * w * sg, pp.y + ax.y * w * sg, pp.z + ax.z * w * sg);
+          // volume normal: outward from the stem axis and up
+          nOut.set(pp.x, 0, pp.z);
+          const r = nOut.length();
+          if (r > 1e-5) nOut.multiplyScalar(1 / r);
+          nOut.y = 0.55;
+          nOut.normalize();
+          nrm.push(nOut.x, nOut.y, nOut.z);
+          uvs.push(0.5 + 0.5 * sg, v);
+        }
       }
-      g.rotateY(rot);
-      out.push(g);
+      idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
     }
-    return out;
   };
-  // stem: two crossed thin strips
-  for (const a of [0, Math.PI / 2]) {
-    const g = new THREE.PlaneGeometry(0.0035, 1, 1, 8);
-    g.translate(0, 0.5, 0);
-    g.rotateY(a);
-    // the stem samples a solid part of the texture (the needle's base)
-    const uv = g.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5, 0.02);
-    parts.push(g);
+  const up = new THREE.Vector3(0, 1, 0);
+  // a branch from p along direction d (unit), length L, forking `levels`
+  // times; `rise` bends each generation toward the vertical (stiff needles
+  // curve up), `spread` is the fork half-angle, `plane` the fork axis
+  const branch = (p, d, L, levels, v0, vLen, spread, rise, plane, w) => {
+    const q = new THREE.Vector3().copy(d).lerp(up, rise).normalize();
+    const e = p.clone().addScaledVector(q, L);
+    const v1 = v0 + vLen;
+    segment(p, e, v0, v1, w, w * 0.8);
+    if (levels <= 0) return;
+    const n = fan && levels === 2 ? 3 : 2;
+    for (let i = 0; i < n; i++) {
+      const ang = n === 3 ? (i - 1) * spread * 1.3 : (i === 0 ? -spread : spread);
+      const nd = q.clone().applyAxisAngle(plane, ang + rng.range(-0.12, 0.12));
+      branch(e, nd, L * rng.range(0.78, 0.95), levels - 1, v1, vLen, spread * 0.8, rise, plane, w * 0.8);
+    }
+  };
+  // stem: a thin round-ish strip pair from the gravel to the apex
+  {
+    const segs = 10;
+    let prev = new THREE.Vector3(0, 0, 0);
+    for (let i = 1; i <= segs; i++) {
+      const cur = new THREE.Vector3(0, i / segs, 0);
+      segment(prev, cur, 0.0, 0.0, 0.0024, 0.0018);
+      prev = cur;
+    }
   }
-  const nLeaves = fan ? 5 : 8;
-  for (let k = 0; k < whorls; k++) {
-    const t = (k + 0.5) / whorls;
-    const y = 0.04 + 0.94 * Math.pow(t, 0.9);
-    const len = (fan ? 0.085 : 0.1) * (1 + 0.45 * rng.next()) * (1 - 0.6 * Math.pow(t, 3));
-    const az0 = rng.range(0, Math.PI * 2);
-    for (let j = 0; j < nLeaves; j++) {
-      const az = az0 + (j / nLeaves) * Math.PI * 2 + rng.range(-0.2, 0.2);
-      // leaves rise more steeply near the tip (closed apical tuft)
-      const lift = THREE.MathUtils.lerp(fan ? 0.15 : 0.3, 1.05, t * t) + rng.range(-0.15, 0.15);
-      for (const g of leafCards(len)) {
-        g.rotateZ(rng.range(-0.15, 0.15));
-        // tilt out from the stem, then turn to the leaf azimuth
-        g.rotateX(-(Math.PI / 2 - lift));
-        q.setFromAxisAngle(up, az);
-        m4.makeRotationFromQuaternion(q).setPosition(0, y, 0);
-        g.applyMatrix4(m4);
-        parts.push(g);
+  let az0 = rng.range(0, Math.PI * 2);
+  for (let k = 0; k < nodes; k++) {
+    const t = (k + 0.5) / nodes;
+    // internodes shorten toward the growing tip (dense apical tuft)
+    const y = 0.03 + 0.95 * (1 - Math.pow(1 - t, 1.45));
+    const tip = Math.pow(t, 3);
+    // leaf length nearly constant along the stem (a cylindrical 'foxtail',
+    // not a fir tree): only the youngest apical whorls are shorter
+    const L = (fan ? 0.085 : 0.085) * (1 + 0.35 * rng.next()) * (1 - 0.4 * Math.pow(t, 6)) * (fan ? 1 - 0.3 * tip : 1);
+    const c = new THREE.Vector3(0, y, 0);
+    if (fan) {
+      // opposite pair of fans, successive pairs crossed (decussate)
+      az0 += Math.PI / 2 + rng.range(-0.15, 0.15);
+      for (let j = 0; j < 2; j++) {
+        const az = az0 + j * Math.PI;
+        const out = new THREE.Vector3(Math.cos(az), 0, Math.sin(az));
+        const el = THREE.MathUtils.lerp(0.25, 1.0, tip) + rng.range(-0.1, 0.1);
+        const d = out.clone().multiplyScalar(Math.cos(el)).setY(Math.sin(el));
+        // short petiole, then the palm opening in the near-horizontal plane
+        const pe = c.clone().addScaledVector(d, L * 0.22);
+        segment(c, pe, 0.0, 0.15, W * 0.6, W * 0.5);
+        const plane = new THREE.Vector3().crossVectors(d, out.clone().cross(up)).normalize();
+        for (let i = 0; i < 3; i++) {
+          const nd = d.clone().applyAxisAngle(plane, (i - 1) * 0.55 + rng.range(-0.1, 0.1));
+          branch(pe, nd, L * 0.3, 2, 0.15, 0.28, 0.32, 0.06, plane, W * 0.5);
+        }
+      }
+    } else {
+      // older lower whorls have lost some leaves
+      const keep = THREE.MathUtils.lerp(0.55, 1.0, THREE.MathUtils.smoothstep(t, 0.0, 0.35));
+      const n = rng.int(9, 11);
+      az0 += rng.range(0, Math.PI);
+      for (let j = 0; j < n; j++) {
+        if (rng.next() > keep) continue;
+        const az = az0 + (j / n) * Math.PI * 2 + rng.range(-0.15, 0.15);
+        const out = new THREE.Vector3(Math.cos(az), 0, Math.sin(az));
+        // leaves rise more steeply near the tip (closed apical tuft)
+        const el = THREE.MathUtils.lerp(0.3, 1.15, tip) + rng.range(-0.3, 0.3);
+        const d = out.clone().multiplyScalar(Math.cos(el)).setY(Math.sin(el));
+        // forks spread across the leaf, each leaf rolled at random (no
+        // regular fern-like rows)
+        const plane = new THREE.Vector3().crossVectors(d, out.clone().cross(up).normalize()).normalize();
+        plane.applyAxisAngle(d, rng.range(-1.0, 1.0));
+        branch(c, d, L * 0.45, 2, 0.0, 0.34, 0.3, 0.12, plane, W * 0.5);
       }
     }
   }
-  const merged = mergeGeometries(parts.map((g) => g.toNonIndexed()));
-  for (const g of parts) g.dispose();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  g.setIndex(idx);
   // stems are never quite straight: a gentle arc toward the light / current
   const bx = rng.range(-0.08, 0.08);
   const bz = rng.range(-0.08, 0.08);
-  const mp = merged.attributes.position;
-  const nrm = merged.attributes.normal;
-  const v = new THREE.Vector3();
+  const mp = g.attributes.position;
   for (let i = 0; i < mp.count; i++) {
     const yy = mp.getY(i);
-    // volume normal: outward from the stem axis and up
-    v.set(mp.getX(i), 0, mp.getZ(i));
-    const r = v.length();
-    if (r > 1e-5) v.multiplyScalar(1 / r);
-    v.y = 0.55;
-    v.normalize();
-    nrm.setXYZ(i, v.x, v.y, v.z);
     mp.setX(i, mp.getX(i) + bx * yy * yy);
     mp.setZ(i, mp.getZ(i) + bz * yy * yy);
   }
-  return merged;
+  return g;
 }
 
 export function buildPlants() {
@@ -466,7 +525,7 @@ export function buildPlants() {
     }[kind];
     patchUnderwater(m, {
       extraVertexPars: plantSwayPars,
-      extraVertex: plantSway,
+      extraVertex: kind === 'ribbon' ? ribbonSway : plantSway,
       extraFragmentPars: 'in float vPlantH;\nin float vPlantAge;\nin float vPlantSeed;\nin vec2 vLeafUv;\n',
       key,
       extraColor: `
@@ -482,14 +541,7 @@ export function buildPlants() {
           diffuseColor.rgb = mix(diffuseColor.rgb, brown, spots * 0.75);
           // a film of fine sediment / diatoms on the lower leaves
           diffuseColor.rgb *= mix(0.62, 1.0, smoothstep(0.0, 0.4, vPlantH));
-          ${kind === 'stem' ? `
-          // keep the needle coverage at a distance (alpha of the coarser mips
-          // is rescaled, so whorls neither vanish nor turn to speckle)
-          {
-            vec2 tx = vAlphaMapUv * vec2(128.0, 256.0);
-            float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx)))));
-            diffuseColor.a *= 1.0 + 0.22 * lod;
-          }` : ''}
+
         }`,
       extraLights: `
         #if NUM_DIR_LIGHTS > 0
@@ -521,7 +573,7 @@ export function buildPlants() {
   };
 
   // Vallisneria clumps at the back
-  const valMat = mkMat('val', 'ribbon');
+  const valMat = mkMat('val', 'ribbon', { vertexColors: true });
   const clumps = [
     { x: -0.5, z: -0.17, n: 26 },
     { x: -0.43, z: -0.19, n: 18 },
@@ -530,14 +582,11 @@ export function buildPlants() {
     { x: 0.2, z: -0.19, n: 20 },
     { x: -0.05, z: -0.2, n: 14 },
   ];
-  const leaf = ribbonGeometry(1, 0.009, 18);
-  let total = clumps.reduce((a, c) => a + c.n, 0);
-  const inst = new THREE.InstancedMesh(leaf, valMat, total);
-  const aPlant = new Float32Array(total * 4);
-  const m4 = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const e = new THREE.Euler();
-  let k = 0;
+  const vPos = [];
+  const vUv = [];
+  const vCol = [];
+  const vPlant = [];
+  const vIdx = [];
   for (const c of clumps) {
     // each clump (one runner's daughters) has its own shade
     const hue = 0.24 + rng.range(-0.03, 0.03);
@@ -545,26 +594,48 @@ export function buildPlants() {
     for (let i = 0; i < c.n; i++) {
       const x = c.x + rng.normal(0, 0.018);
       const z = c.z + rng.normal(0, 0.012);
-      const len = rng.range(0.2, 0.44);
+      const len = rng.range(0.2, 0.5);
       const age = Math.pow(rng.next(), 1.6);
-      e.set(rng.range(-0.18, 0.18), rng.range(0, Math.PI * 2), rng.range(-0.18, 0.18));
-      q.setFromEuler(e);
       // blade width 5–13 mm
-      m4.compose(new THREE.Vector3(x, groundHeight(x, z) - 0.004, z), q, new THREE.Vector3(rng.range(0.6, 1.45), len, 1));
-      inst.setMatrixAt(k, m4);
-      inst.setColorAt(k, leafColor(age, hue, light));
-      aPlant[k * 4] = rng.range(0, 6.28);
-      aPlant[k * 4 + 1] = rng.range(0.7, 1.3);
-      aPlant[k * 4 + 2] = 1.0; // geometry height (unit leaf scaled by instance matrix)
-      aPlant[k * 4 + 3] = age;
-      k++;
+      const { pos, uv } = ribbonBlade(rng, new THREE.Vector3(x, groundHeight(x, z) - 0.004, z), len, 0.009 * rng.range(0.6, 1.45));
+      leafColor(age, hue, light);
+      const v0 = vPos.length / 3;
+      const nv = pos.length / 3;
+      const ph = rng.range(0, 6.28);
+      const stiff = rng.range(0.7, 1.3);
+      for (let j = 0; j < nv; j++) {
+        vCol.push(col.r, col.g, col.b);
+        vPlant.push(ph, stiff, len, age);
+      }
+      for (let s = 0; s < RIBBON_SEGS; s++) {
+        for (let j = 0; j < 2; j++) {
+          const a0 = v0 + s * 3 + j;
+          const b0 = a0 + 3;
+          vIdx.push(a0, a0 + 1, b0, a0 + 1, b0 + 1, b0);
+        }
+      }
+      for (const v of pos) vPos.push(v);
+      for (const v of uv) vUv.push(v);
     }
     colliders.push({ type: 'cylinder', center: new THREE.Vector3(c.x, 0, c.z), radius: 0.05, height: 0.4, soft: true });
   }
-  leaf.setAttribute('aPlant', new THREE.InstancedBufferAttribute(aPlant, 4));
-  inst.castShadow = true;
-  inst.receiveShadow = true;
-  group.add(inst);
+  const leaf = new THREE.BufferGeometry();
+  leaf.setAttribute('position', new THREE.Float32BufferAttribute(vPos, 3));
+  leaf.setAttribute('uv', new THREE.Float32BufferAttribute(vUv, 2));
+  leaf.setAttribute('color', new THREE.Float32BufferAttribute(vCol, 3));
+  leaf.setAttribute('aPlant', new THREE.Float32BufferAttribute(vPlant, 4));
+  leaf.setIndex(vIdx);
+  leaf.computeVertexNormals();
+  const valMesh = new THREE.Mesh(leaf, valMat);
+  valMesh.name = 'vallisneria';
+  valMesh.castShadow = true;
+  valMesh.receiveShadow = true;
+  group.add(valMesh);
+  const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  let k = 0;
+  let total = 0;
 
   // Sword-plant rosettes
   const swordMat = mkMat('sword', 'sword');
@@ -606,8 +677,8 @@ export function buildPlants() {
   // Fine-leaved stem plants (bright Cabomba-like fans and darker hornwort-
   // like needle whorls) in the gaps between rocks and ribbons
   const stemMats = {
-    fan: mkMat('stemF', 'stem', { alphaMap: leafTexture('fan'), alphaTest: 0.3, alphaToCoverage: true }),
-    needle: mkMat('stemN', 'stem', { alphaMap: leafTexture('needle'), alphaTest: 0.3, alphaToCoverage: true }),
+    fan: mkMat('stemF', 'stem'),
+    needle: mkMat('stemN', 'stem'),
   };
   const bunches = [
     { x: -0.11, z: -0.19, n: 7, hue: 0.27, light: 0.28, h: [0.24, 0.38], kind: 'fan' },
@@ -616,7 +687,7 @@ export function buildPlants() {
     { x: 0.27, z: -0.17, n: 4, hue: 0.28, light: 0.24, h: [0.18, 0.3], kind: 'needle' },
   ];
   const stemVariants = [];
-  for (const kind of ['fan', 'needle']) for (const w of kind === 'fan' ? [18, 22] : [24, 30]) stemVariants.push({ kind, geo: stemPlantGeometry(rng, w, kind), list: [] });
+  for (const kind of ['fan', 'needle']) for (const w of kind === 'fan' ? [16, 20] : [22, 27]) stemVariants.push({ kind, geo: stemPlantGeometry(rng, w, kind), list: [] });
   for (const b of bunches) {
     const vars = stemVariants.filter((v) => v.kind === b.kind);
     for (let i = 0; i < b.n; i++) {

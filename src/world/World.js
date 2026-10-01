@@ -75,7 +75,7 @@ export class World {
     // enters the body elsewhere is shadowed at its entry point)
     U.uKeyShadowMatrix.value = key.shadow.matrix;
     U.uKeyShadowOn.value = 1;
-    const hemi = new THREE.HemisphereLight(0x9ccfd6, 0x3b3122, 0.22);
+    const hemi = new THREE.HemisphereLight(0xaacdc4, 0x3b3122, 0.22);
     hemi.layers.enable(1);
     scene.add(hemi);
     this.hemi = hemi;
