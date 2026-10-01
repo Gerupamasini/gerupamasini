@@ -123,7 +123,7 @@ export const plumage = {
       white: '#ebe9e3',
       bill: '#1a1818',
       billRoughness: 0.3,
-      legs: '#8a8381', // mid-grey (p006, p020, p017); '#5a534f' rendered near-black under the sun
+      legs: '#827369', // rendered ≈ the photos' white-balanced tarsus #8a7a6d (p006, p020, p070); '#5a534f' rendered near-black
       iris: '#120f0f',
       eyelidRing: '#dcd6cd',
       rufousCap: true, // crown / crownRear / nape blend toward plumage.sandyCap with individual.rufousAmount
@@ -172,7 +172,7 @@ export const plumage = {
       tailDark: '#4c423a',
       white: '#ebe9e3',
       bill: '#1a1818',
-      legs: '#908886',
+      legs: '#92857e', // photos #9b8d86 (p001, p050)
       iris: '#120f0f',
       eyelidRing: '#e4d9cf',
     },
@@ -199,7 +199,7 @@ export const plumage = {
       tailDark: '#4c423a',
       white: '#ebe9e3',
       bill: '#161915',
-      legs: '#958a88', // pinkish grey (p063, p059)
+      legs: '#7a6365', // pinkish grey, photos #81696b (p035, p063, p059)
       iris: '#120f0f',
       eyelidRing: '#dcd6cd',
     },
