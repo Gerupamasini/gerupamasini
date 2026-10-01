@@ -106,7 +106,10 @@ function stripLayout() {
   const w = Math.floor(W / n);
   const h = Math.floor(H / 2);
   for (let i = 0; i < n; i++) {
-    const t = q.has('cyc') ? i / n : n === 1 ? 0 : i / (n - 1);
+    // t0 / t1: a sub-range of the action (e.g. the strike of a peck) spread over the frames
+    const t0 = Number(q.get('t0') ?? 0);
+    const t1 = Number(q.get('t1') ?? 1);
+    const t = t0 + (t1 - t0) * (q.has('cyc') ? i / n : n === 1 ? 0 : i / (n - 1));
     // frames sized for the photo-scale bird (L 142 mm, bill tip z +54 … tail tip −85: centre z −0.015). The
     // ortho width is 2·span·(w/h): with 6 frames per row a span of 0.16 left 150 mm — the walking / pecking bird
     // (bill tip up to z +65) was cut at the frame edge; 0.21 gives ≈200 mm
@@ -120,7 +123,7 @@ function stripLayout() {
     const pd = Number(q.get('pd') ?? 0.5);
     p.position.set(pd * 0.8, pd * 0.45 + cy, pd * 0.75 + cz);
     p.lookAt(0, 0.05 + cy, cz);
-    views.push({ cam: side, rect: [i * w, 0, w, h], label: `t=${t.toFixed(2)}`, t });
+    views.push({ cam: side, rect: [i * w, 0, w, h], label: `t=${t.toFixed(q.has('t0') ? 3 : 2)}`, t });
     views.push({ cam: p, rect: [i * w, h, w, h], label: '', t });
   }
 }
@@ -200,9 +203,31 @@ bird.object.updateMatrixWorld(true);
 if (mode === 'strip') {
   const mod = await import('../birds/kentishPlover/KentishPloverAnimator.js');
   const H = window.innerHeight;
+  // play=1: the action PLAYED in real time at 60 Hz from the foraging stance (smoothing, lag and overshoot as in
+  // the game); the frames are then times in the action (t × its duration). Otherwise each frame is the action
+  // frozen at t with the posture settled on it.
+  let live = null;
+  if (q.has('play')) {
+    live = new mod.KentishPloverAnimator(bird, { seed: 3 });
+    const pose = q.get('pose') || 'peck';
+    const variant = q.get('variant') || undefined;
+    const target = new THREE.Vector3(0, 0, Number(q.get('dist') ?? 62) / 1000);
+    live.previewAction('forage', 0);
+    live.setGaze('ground', target);
+    for (let i = 0; i < 60; i++) live.update(1 / 60);
+    live.play(pose, { variant, target, preyType: pose === 'peck' ? variant || 'polychaete' : undefined });
+    live.clock = 0;
+  }
   for (const v of views) {
-    const a = new mod.KentishPloverAnimator(bird, { seed: 3 });
-    a.previewAction(q.get('pose') || 'walk', v.t, q.get('variant') || undefined);
+    const a = live ?? new mod.KentishPloverAnimator(bird, { seed: 3 });
+    if (live) {
+      const dur = live.action?.dur ?? live.lastDur;
+      live.lastDur = dur;
+      while (live.clock < v.t * dur - 1e-6) {
+        live.update(1 / 60);
+        live.clock += 1 / 60;
+      }
+    } else a.previewAction(q.get('pose') || 'walk', v.t, q.get('variant') || undefined);
     bird.object.position.set(0, bird.object.position.y, 0);
     bird.object.updateMatrixWorld(true);
     const [x, y, w, h] = v.rect;

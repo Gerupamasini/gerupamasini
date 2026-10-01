@@ -318,9 +318,11 @@ function updateHUD(fps) {
 const clock = new THREE.Timer();
 let fpsAvg = 60;
 let frames = 0;
+let skipRender = false;
 function frame() {
   clock.update();
-  const dt = Math.min(clock.getDelta(), 1 / 20);
+  // fixedDt=s: fixed simulation step (captures, tools/dev/peckdemo.mjs)
+  const dt = q.has('fixedDt') ? Number(q.get('fixedDt')) : Math.min(clock.getDelta(), 1 / 20);
   fpsAvg = fpsAvg * 0.95 + (1 / Math.max(dt, 1e-4)) * 0.05;
   world.time += dt;
   tide.update(dt);
@@ -358,12 +360,13 @@ function frame() {
   // camera exposure follows the daylight (as a photographer's would): the morning sun at 60 % made the whole bird
   // read a stop dark — the sandy grey-brown mantle as blackish brown against the photos
   renderer.toneMappingExposure = 0.95 * Math.min(1.6, Math.sqrt(3.6 / env.sun.intensity));
-  renderer.render(scene, camera);
+  if (!skipRender) renderer.render(scene, camera);
   updateHUD(fpsAvg);
   frames++;
   if (frames === Number(q.get('readyAfter') ?? 90)) window.__ready = true;
   $('status').textContent = `Tide ${tide.state} (${tide.level.toFixed(2)} m)   eaten ${prey.eaten}`;
-  requestAnimationFrame(frame);
+  // manual: after the warm-up the loop only runs on window.demo.tick(n) (frame-exact captures)
+  if (!q.has('manual') || frames < Number(q.get('readyAfter') ?? 90)) requestAnimationFrame(frame);
 }
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -371,5 +374,5 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 applyAnimSelection();
-window.demo = { birds, world, camera, controls, player, get selected() { return selected; }, set selected(b) { selected = b; lastFollow.copy(b.pos); } };
+window.demo = { birds, world, camera, controls, player, get selected() { return selected; }, set selected(b) { selected = b; lastFollow.copy(b.pos); }, tick: (n = 1, render = true) => { skipRender = !render; for (let i = 0; i < n; i++) frame(); skipRender = false; } };
 frame();
