@@ -107,15 +107,17 @@ function stripLayout() {
   const h = Math.floor(H / 2);
   for (let i = 0; i < n; i++) {
     const t = q.has('cyc') ? i / n : n === 1 ? 0 : i / (n - 1);
-    // frames sized for the photo-scale bird (L 142 mm, bill tip z +54 … tail tip −85: centre z −0.015)
+    // frames sized for the photo-scale bird (L 142 mm, bill tip z +54 … tail tip −85: centre z −0.015). The
+    // ortho width is 2·span·(w/h): with 6 frames per row a span of 0.16 left 150 mm — the walking / pecking bird
+    // (bill tip up to z +65) was cut at the frame edge; 0.21 gives ≈200 mm
     const cy = Number(q.get('camY') ?? 0);
-    const cz = Number(q.get('camZ') ?? -0.015);
-    const side = ortho(w, h, Number(q.get('span') ?? 0.16));
+    const cz = Number(q.get('camZ') ?? -0.01);
+    const side = ortho(w, h, Number(q.get('span') ?? 0.21));
     side.position.set(0.5, 0.06 + cy, cz);
     side.lookAt(0, 0.06 + cy, cz);
     side.layers.enable(1);
     const p = new THREE.PerspectiveCamera(30, w / h, 0.005, 20);
-    const pd = Number(q.get('pd') ?? 0.42);
+    const pd = Number(q.get('pd') ?? 0.5);
     p.position.set(pd * 0.8, pd * 0.45 + cy, pd * 0.75 + cz);
     p.lookAt(0, 0.05 + cy, cz);
     views.push({ cam: side, rect: [i * w, 0, w, h], label: `t=${t.toFixed(2)}`, t });
