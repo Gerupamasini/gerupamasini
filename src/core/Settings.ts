@@ -9,6 +9,8 @@ export interface SettingsData {
   invertY: boolean;
   volume: number;
   heroMaterials: boolean;
+  /** standing eye height in metres */
+  eyeHeight: number;
 }
 
 export const DEFAULT_SETTINGS: SettingsData = {
@@ -18,6 +20,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   invertY: false,
   volume: 0.8,
   heroMaterials: true,
+  eyeHeight: 1.5,
 };
 
 export interface QualityPreset {

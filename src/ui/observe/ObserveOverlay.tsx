@@ -29,7 +29,11 @@ export function ObserveOverlay({ app }: { app: App }) {
             <button key={s} class={st.speedIndex === i ? 'on' : ''} onClick={() => app.observation.setSpeedIndex(i)}>{s}×</button>
           ))}
         </div>
-        <span class="dim small">ドラッグで回転 / ホイールで接近 / [ ] 速度 / {t('observe.exit')}</span>
+        <div class="seg">
+          <button onClick={() => app.observation.nudge(-1)} title="+">{t('observe.closer')}</button>
+          <button onClick={() => app.observation.nudge(1)} title="-">{t('observe.farther')}</button>
+        </div>
+        <span class="dim small">{t('observe.hint')} / {t('observe.exit')}</span>
       </div>
     </Fragment>
   );

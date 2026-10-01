@@ -1,7 +1,7 @@
 import {
   BoxGeometry, BufferGeometry, Camera, CanvasTexture, ClampToEdgeWrapping, Color, CustomBlending, DataTexture, DirectionalLight, DoubleSide, EdgesGeometry,
   Float32BufferAttribute, FloatType, HalfFloatType, HemisphereLight, LineBasicMaterial, LinearFilter, LinearMipmapLinearFilter,
-  LineSegments, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, Object3D, OneFactor, PerspectiveCamera, PlaneGeometry, Plane,
+  LineSegments, Mesh, MeshStandardMaterial, Object3D, OneFactor, OneMinusSrcAlphaFactor, PerspectiveCamera, PlaneGeometry, Plane,
   PMREMGenerator, Points, PointsMaterial, Raycaster, RGBAFormat, Scene, ShaderMaterial, SpotLight, SrcColorFactor, UnsignedByteType,
   Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer,
 } from 'three';
@@ -19,6 +19,8 @@ import type { BehaviorEvent } from '../creatures/drivers/Driver';
 import type { LoadedModel } from '../creatures/models/ModelLoader';
 import type { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 import type { HeroLighting } from '../render/HeroPipeline';
+import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
+import { Group } from 'three';
 
 export const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
 export const TANK_MAX_OCCUPANTS = 4;
@@ -200,6 +202,15 @@ export class TankScene {
   private readonly hitBox: Mesh;
   private readonly raycaster = new Raycaster();
   private readonly waterPlane = new Plane(new Vector3(0, 1, 0), -W_LEVEL);
+  private readonly floorPlane = new Plane(new Vector3(0, 1, 0), 0);
+  // layout: substrate and decorations
+  private layout: TankLayout = defaultTankLayout();
+  private readonly itemsRoot = new Group();
+  private readonly itemObjects = new Map<string, Object3D>();
+  private readonly sandMesh: Mesh;
+  private readonly sandMat: MeshStandardMaterial;
+  private readonly bottomMesh: Mesh;
+  private itemSeq = 0;
   private drift = 0;
   private time = 0;
   // the water
@@ -374,6 +385,17 @@ export class TankScene {
     sand.rotation.x = -Math.PI / 2;
     sand.receiveShadow = true;
     this.scene.add(sand);
+    this.sandMesh = sand; this.sandMat = sandMat;
+    // bare bottom (dark acrylic) when no substrate is chosen; still lit by the caustics
+    const bottomMat = new MeshStandardMaterial({ color: 0x101316, roughness: 0.3, metalness: 0.1 });
+    lightByCaustics(bottomMat, U, 'tank-bottom', false);
+    const bottom = new Mesh(new PlaneGeometry(TANK_W, TANK_D, 1, 1), bottomMat);
+    bottom.rotation.x = -Math.PI / 2;
+    bottom.receiveShadow = true;
+    bottom.visible = false;
+    this.scene.add(bottom);
+    this.bottomMesh = bottom;
+    this.scene.add(this.itemsRoot);
 
     // the water behind the glass: first what it takes away (absorption, per channel), then what it adds (scattered
     // light sheets, the meniscus); the surface the same way, plus its reflection of the room
@@ -437,10 +459,19 @@ export class TankScene {
     stone.position.copy(TankScene.STONE).setY(0.004);
     this.scene.add(stone);
 
-    // glass panels, edges and an invisible hit box for picking
-    const glassMat = new MeshPhysicalMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.06, roughness: 0.0, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.02,
-      envMapIntensity: 1.5, side: DoubleSide, depthWrite: false,
+    // glass panels: only what the panes reflect of the dark room (Fresnel, premultiplied), so the water and the animals
+    // show through untinted; edges and an invisible hit box for picking
+    const glassMat = new ShaderMaterial({
+      uniforms: U, transparent: true, depthWrite: false, side: DoubleSide, blending: CustomBlending, blendSrc: OneFactor, blendDst: OneMinusSrcAlphaFactor,
+      vertexShader: SIDE_VERT,
+      fragmentShader: COMMON + /* glsl */ `
+        varying vec3 vPos; varying vec3 vNrm;
+        void main() {
+          vec3 d = normalize(vPos - cameraPosition), n = normalize(vNrm) * (gl_FrontFacing ? 1.0 : -1.0);
+          float F = 0.04 + 0.96 * pow(1.0 - abs(dot(d, n)), 5.0);
+          gl_FragColor = vec4(F * room(vPos, reflect(d, n)), F + 0.01);
+          ${OUT}
+        }`,
     });
     const glassParts: [number, number, number, number, number, number][] = [
       [TANK_W, TANK_H, 0.002, 0, TANK_H / 2, TANK_D / 2], [TANK_W, TANK_H, 0.002, 0, TANK_H / 2, -TANK_D / 2],
@@ -452,7 +483,7 @@ export class TankScene {
       g.renderOrder = 6;
       this.scene.add(g);
     }
-    const edges = new LineSegments(new EdgesGeometry(new BoxGeometry(TANK_W, TANK_H, TANK_D)), new LineBasicMaterial({ color: 0x6f8a90, transparent: true, opacity: 0.5 }));
+    const edges = new LineSegments(new EdgesGeometry(new BoxGeometry(TANK_W, TANK_H, TANK_D)), new LineBasicMaterial({ color: 0x9fb4ba, transparent: true, opacity: 0.3 }));
     edges.position.y = TANK_H / 2;
     this.scene.add(edges);
     this.hitBox = new Mesh(new BoxGeometry(TANK_W, TANK_H, TANK_D), new MeshStandardMaterial({ visible: false }));
@@ -498,6 +529,108 @@ export class TankScene {
 
   get heroActive(): boolean {
     return this.occupants.some((o) => o.hero);
+  }
+
+  // ------------------------------------------------------------------ layout: substrate and decorations
+  get currentLayout(): TankLayout {
+    return { substrate: this.layout.substrate, items: this.layout.items.map((i) => ({ ...i })) };
+  }
+
+  setLayout(layout: TankLayout): void {
+    this.layout = { substrate: layout.substrate, items: layout.items.map((i) => ({ ...i })) };
+    this.applySubstrate();
+    for (const o of this.itemObjects.values()) o.removeFromParent();
+    this.itemObjects.clear();
+    for (const it of this.layout.items) this.spawnItem(it);
+  }
+
+  setSubstrate(s: TankSubstrate): void {
+    this.layout.substrate = s;
+    this.applySubstrate();
+  }
+
+  private applySubstrate(): void {
+    const s = this.layout.substrate;
+    this.sandMesh.visible = s !== 'none';
+    this.bottomMesh.visible = s === 'none';
+    if (s === 'mud') { this.sandMat.color.set(0x4a4034); this.sandMat.roughness = 1.0; }
+    else { this.sandMat.color.set(0xb09c78); this.sandMat.roughness = 0.95; }
+  }
+
+  private spawnItem(it: TankItem): void {
+    const seed = [...it.id].reduce((a, c) => (Math.imul(a, 31) + c.charCodeAt(0)) >>> 0, 7);   // the same id always gives the same shape
+    const obj = buildTankItem(it.type, seed);
+    const meshes: Mesh[] = [];
+    obj.traverse((o) => { if ((o as Mesh).isMesh) { const m = o as Mesh; m.castShadow = m.castShadow !== false && it.type !== 'plant'; m.receiveShadow = true; meshes.push(m); } });
+    this.lightMeshesByCaustics(meshes);
+    obj.position.set(it.x, 0, it.z);
+    obj.rotation.y = it.rot;
+    obj.userData.itemId = it.id;
+    this.itemsRoot.add(obj);
+    this.itemObjects.set(it.id, obj);
+  }
+
+  /** Add a decoration at a free spot; null when the tank is full. */
+  addItem(type: TankItemType): TankItem | null {
+    if (this.layout.items.length >= TANK_MAX_ITEMS) return null;
+    const r = ITEM_RADIUS[type];
+    let best: [number, number] = [0, 0], bestD = -1;
+    for (let k = 0; k < 24; k++) {
+      const x = (Math.random() * 2 - 1) * (TX - r - 0.02), z = (Math.random() * 2 - 1) * (TZ - r - 0.02);
+      let d = 1;
+      for (const o of this.layout.items) d = Math.min(d, Math.hypot(o.x - x, o.z - z) - ITEM_RADIUS[o.type] - r);
+      if (d > bestD) { bestD = d; best = [x, z]; }
+    }
+    const it: TankItem = { id: `i${Date.now().toString(36)}${(this.itemSeq++).toString(36)}`, type, x: best[0], z: best[1], rot: Math.random() * Math.PI * 2 };
+    this.layout.items.push(it);
+    this.spawnItem(it);
+    return it;
+  }
+
+  removeItem(id: string): void {
+    this.itemObjects.get(id)?.removeFromParent();
+    this.itemObjects.delete(id);
+    this.layout.items = this.layout.items.filter((i) => i.id !== id);
+  }
+
+  rotateItem(id: string, delta: number): void {
+    const it = this.layout.items.find((i) => i.id === id), obj = this.itemObjects.get(id);
+    if (!it || !obj) return;
+    it.rot += delta;
+    obj.rotation.y = it.rot;
+  }
+
+  /** The decoration under a canvas point (NDC), if any. */
+  pickItem(ndcX: number, ndcY: number): string | null {
+    this.raycaster.setFromCamera(new Vector2(ndcX, ndcY), this.camera);
+    const hits = this.raycaster.intersectObjects(this.itemsRoot.children, true);
+    for (const hit of hits) {
+      let o: Object3D | null = hit.object;
+      while (o && o.userData.itemId === undefined) o = o.parent;
+      if (o) return o.userData.itemId as string;
+    }
+    return null;
+  }
+
+  /** Drag a decoration to where a canvas point (NDC) meets the sand, kept inside the tank. */
+  moveItem(id: string, ndcX: number, ndcY: number): void {
+    const it = this.layout.items.find((i) => i.id === id), obj = this.itemObjects.get(id);
+    if (!it || !obj) return;
+    this.raycaster.setFromCamera(new Vector2(ndcX, ndcY), this.camera);
+    const hit = new Vector3();
+    if (!this.raycaster.ray.intersectPlane(this.floorPlane, hit)) return;
+    const r = ITEM_RADIUS[it.type];
+    it.x = Math.max(-TX + r, Math.min(TX - r, hit.x));
+    it.z = Math.max(-TZ + r, Math.min(TZ - r, hit.z));
+    obj.position.set(it.x, 0, it.z);
+  }
+
+  setAutoRotate(on: boolean): void {
+    if (this.controls) this.controls.autoRotate = on;
+  }
+
+  setControlsEnabled(on: boolean): void {
+    if (this.controls) this.controls.enabled = on;
   }
 
   /** A splash on the surface at (x, z): a ripple spreads from it. */

@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Vector3 } from 'three';
+import { MathUtils, PerspectiveCamera, Vector3 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { signal } from '@preact/signals';
 import type { Individual } from '../creatures/Individual';
@@ -22,6 +22,10 @@ export class Observation {
   private controls: OrbitControls | null = null;
   private target: Individual | null = null;
   private savedNear = 0.05;
+  private savedFov = 70;
+  private fov = 70;
+  /** telephoto while held (right mouse / Z) */
+  zoom = false;
   private readonly follow = new Vector3();
   private readonly tmp = new Vector3();
   private unsub: (() => void) | null = null;
@@ -47,13 +51,16 @@ export class Observation {
     const anchor = this.creatures.anchorOf(ind.id) ?? ind.pos.clone();
     const len = ind.length_mm / 1000;
     this.savedNear = this.camera.near;
+    this.savedFov = this.camera.fov;
+    this.fov = this.camera.fov;
+    this.zoom = false;
     this.camera.near = Math.max(0.002, len * 0.02);
     this.camera.updateProjectionMatrix();
     const controls = new OrbitControls(this.camera, this.canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
-    controls.minDistance = Math.max(0.03, len * 0.5);
-    controls.maxDistance = Math.max(1.5, len * 14);
+    controls.minDistance = Math.max(0.02, len * 0.3);
+    controls.maxDistance = Math.max(2.5, len * 30);
     controls.maxPolarAngle = Math.PI * 0.49;
     controls.enablePan = false;
     controls.zoomSpeed = 0.8;
@@ -90,9 +97,25 @@ export class Observation {
     if (st) this.state.value = { ...st, speedIndex: i };
   }
 
-  update(): void {
+  /** Step the orbit distance: dir < 0 closer, dir > 0 farther. */
+  nudge(dir: number): void {
+    const c = this.controls;
+    if (!c) return;
+    const d = this.tmp.copy(this.camera.position).sub(c.target);
+    const len = MathUtils.clamp(d.length() * (dir < 0 ? 0.78 : 1.28), c.minDistance, c.maxDistance);
+    this.camera.position.copy(c.target).add(d.setLength(len));
+    c.update();
+  }
+
+  update(dt = 0.016): void {
     const c = this.controls, ind = this.target;
     if (!c || !ind) return;
+    const targetFov = this.zoom ? 26 : this.savedFov;
+    if (Math.abs(this.fov - targetFov) > 0.05) {
+      this.fov = MathUtils.damp(this.fov, targetFov, 12, dt);
+      this.camera.fov = this.fov;
+      this.camera.updateProjectionMatrix();
+    }
     if (!this.creatures.get(ind.id)) { this.exit(); return; }
     const anchor = this.creatures.anchorOf(ind.id);
     if (anchor) {
@@ -112,6 +135,7 @@ export class Observation {
     this.unsub?.();
     this.unsub = null;
     this.camera.near = this.savedNear;
+    this.camera.fov = this.savedFov;
     this.camera.updateProjectionMatrix();
     this.state.value = null;
   }

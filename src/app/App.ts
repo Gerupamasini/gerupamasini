@@ -11,6 +11,7 @@ import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { World } from './World';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
+import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
 import { CreatureSystem, type SpawnEnv } from '../creatures/CreatureSystem';
 import type { Individual, IndividualRecord } from '../creatures/Individual';
@@ -20,6 +21,7 @@ import { Capture } from '../systems/Capture';
 import { ui, t, toast, type Screen, type Marker } from '../ui/store';
 import { Root } from '../ui/Root';
 import { HeroPipeline, type HeroLighting } from '../render/HeroPipeline';
+import { FieldRenderer } from '../render/FieldRenderer';
 import { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 
 const HUD_HZ = 4;
@@ -44,6 +46,7 @@ export class App {
   capture: Capture = new Capture();
   tank: TankScene = null!;
   hero: HeroPipeline | null = null;
+  private field: FieldRenderer | null = null;
   world: World | null = null;
   player: FPSController | null = null;
   creatures: CreatureSystem | null = null;
@@ -65,6 +68,7 @@ export class App {
   private curveCacheMin = -1;
   private readonly anchor = new Vector3();
   private readonly tmp = new Vector3();
+  private dragItem: string | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement, readonly uiRoot: HTMLElement) {
     this.renderer = new GameRenderer(canvas);
@@ -76,10 +80,29 @@ export class App {
       if (document.hidden) void this.writeSave();
     });
     window.addEventListener('beforeunload', () => { void this.writeSave(); });
-    canvas.addEventListener('pointerdown', (e) => { this.pointerDown = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+    canvas.addEventListener('pointerdown', (e) => {
+      this.pointerDown = { x: e.clientX, y: e.clientY, t: performance.now() };
+      // in the layout editor a press on a decoration starts dragging it over the sand
+      if (this.mode === 'home' && ui.homePanel.value === 'tank' && ui.tankTab.value === 'layout' && e.button === 0) {
+        const [nx, ny] = this.ndcOf(e.clientX, e.clientY);
+        const id = this.tank.pickItem(nx, ny);
+        if (id) { this.dragItem = id; ui.tankSelected.value = id; this.tank.setControlsEnabled(false); canvas.setPointerCapture(e.pointerId); }
+      }
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!this.dragItem) return;
+      const [nx, ny] = this.ndcOf(e.clientX, e.clientY);
+      this.tank.moveItem(this.dragItem, nx, ny);
+    });
     canvas.addEventListener('pointerup', (e) => {
       const d = this.pointerDown;
       this.pointerDown = null;
+      if (this.dragItem) {
+        this.dragItem = null;
+        this.tank.setControlsEnabled(true);
+        this.commitTankLayout();
+        return;
+      }
       if (!d || this.mode !== 'home') return;
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6 || performance.now() - d.t > 350) return;
       this.onHomeClick(e.clientX, e.clientY);
@@ -137,6 +160,7 @@ export class App {
     this.tank = new TankScene(this.canvas, this.renderer.aspect, this.renderer.gl);
     this.tank.onBehavior = (e, rec) => { this.encyclopedia.onBehavior(rec.speciesId, e.behaviorId, this.clock.nowGame()); };
     if (this.renderer.caps.floatRT) this.hero = new HeroPipeline(this.renderer.gl);
+    if (this.renderer.caps.floatRT) this.field = new FieldRenderer(this.renderer.gl);
     this.applyHeroSetting();
     if (new URLSearchParams(location.search).has('debug')) ui.debug.value = true;
     const existing = await this.saveStore.load();
@@ -179,6 +203,7 @@ export class App {
     this.tank.activate(true);
     this.tank.frameTank();
     void this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
+    this.tank.setLayout(this.save?.tank.layout ?? defaultTankLayout());
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
     this.requestSave();
@@ -191,6 +216,7 @@ export class App {
       const map = this.data.maps.get(this.data.manifest.defaultMap)!;
       this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; });
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
+      this.player.eyeHeight = this.settings.eyeHeight;
       ui.loading.value = { frac: 0.7, label: t('loading.models') };
       this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed);
       await this.creatures.preload();
@@ -228,6 +254,7 @@ export class App {
   async updateSettings(patch: Partial<SettingsData>): Promise<void> {
     this.settings = { ...this.settings, ...patch };
     this.renderer.setQuality(this.settings.quality);
+    if (this.player) this.player.eyeHeight = this.settings.eyeHeight;
     this.applyHeroSetting();
     await saveSettings(this.settings);
   }
@@ -266,6 +293,12 @@ export class App {
   }
 
   // ------------------------------------------------------------------ debug
+  /** The whole flat at a glance (M on the flat). */
+  toggleMap(): void {
+    ui.mapOpen.value = !ui.mapOpen.value;
+    if (ui.mapOpen.value) this.input.exitPointerLock();
+  }
+
   toggleDebug(): void {
     ui.debug.value = !ui.debug.value;
     if (!ui.debug.value) ui.markers.value = [];
@@ -378,10 +411,49 @@ export class App {
     toast(`${t('home.shop')}: ${t('home.soon')}`, 'info');
   }
 
-  private onHomeClick(clientX: number, clientY: number): void {
+  private ndcOf(clientX: number, clientY: number): [number, number] {
     const r = this.canvas.getBoundingClientRect();
-    const nx = ((clientX - r.left) / r.width) * 2 - 1;
-    const ny = -(((clientY - r.top) / r.height) * 2 - 1);
+    return [((clientX - r.left) / r.width) * 2 - 1, -(((clientY - r.top) / r.height) * 2 - 1)];
+  }
+
+  // ------------------------------------------------------------------ tank layout editor
+  private commitTankLayout(): void {
+    ui.tankLayoutVersion.value++;
+    if (!this.save) return;
+    this.save.tank.layout = this.tank.currentLayout;
+    this.requestSave();
+  }
+
+  tankSetSubstrate(s: TankSubstrate): void {
+    this.tank.setSubstrate(s);
+    this.commitTankLayout();
+  }
+
+  tankAddItem(type: TankItemType): void {
+    const it = this.tank.addItem(type);
+    if (!it) { toast(t('tank.full'), 'warn'); return; }
+    ui.tankSelected.value = it.id;
+    this.commitTankLayout();
+  }
+
+  tankRemoveItem(id: string): void {
+    this.tank.removeItem(id);
+    if (ui.tankSelected.value === id) ui.tankSelected.value = null;
+    this.commitTankLayout();
+  }
+
+  tankRotateItem(id: string, delta = Math.PI / 4): void {
+    this.tank.rotateItem(id, delta);
+    this.commitTankLayout();
+  }
+
+  private onHomeClick(clientX: number, clientY: number): void {
+    const [nx, ny] = this.ndcOf(clientX, clientY);
+    if (ui.homePanel.value === 'tank' && ui.tankTab.value === 'layout') {
+      // in the editor a click selects a decoration (or clears the selection); the panel stays open
+      ui.tankSelected.value = this.tank.pickItem(nx, ny);
+      return;
+    }
     const hit = this.tank.pick(nx, ny);
     if (hit?.kind === 'occupant') ui.homeInfo.value = hit.occupant.record;
     else if (hit?.kind === 'tank') { ui.homeInfo.value = null; ui.homePanel.value = 'tank'; this.tank.pokeAt(nx, ny); }
@@ -458,7 +530,8 @@ export class App {
     if (this.input.pressed('debug')) this.toggleDebug();
     switch (mode) {
       case 'field':
-        if (this.input.pressed('menu')) this.openOverlay('menu');
+        if (this.input.pressed('menu')) { if (ui.mapOpen.value) ui.mapOpen.value = false; else this.openOverlay('menu'); }
+        else if (this.input.pressed('map')) this.toggleMap();
         else if (this.input.pressed('zukan')) this.openOverlay('zukan');
         else if (this.input.pressed('ticket')) this.openOverlay('ticket');
         else if (this.input.pressed('home')) this.enterHome();
@@ -470,7 +543,10 @@ export class App {
         else if (this.input.pressed('speedUp')) this.observation.cycleSpeed(1);
         else if (this.input.pressed('speedDown')) this.observation.cycleSpeed(-1);
         else if (this.input.pressed('zukan')) this.openOverlay('zukan');
-        this.observation.update();
+        else if (this.input.pressed('zoomIn')) this.observation.nudge(-1);
+        else if (this.input.pressed('zoomOut')) this.observation.nudge(1);
+        this.observation.zoom = this.input.mouseRightDown || this.input.held('zoom');
+        this.observation.update(dt);
         break;
       case 'capture':
         if (this.input.mouseClicked || this.input.pressed('interact')) this.capture.attempt();
@@ -478,6 +554,7 @@ export class App {
         this.capture.update(dt);
         break;
       case 'home':
+        this.tank.setAutoRotate(ui.homePanel.value !== 'tank');
         if (this.input.pressed('zukan')) this.openOverlay('zukan');
         else if (this.input.pressed('ticket')) this.openOverlay('ticket');
         else if (this.input.pressed('menu')) {
@@ -512,8 +589,9 @@ export class App {
       if (mode === 'observe' && this.hero && creatures.heroActive(this.lockedId)) {
         const anchor = creatures.anchorOf(this.lockedId!) ?? player.position;
         this.hero.setLighting(this.heroLightingFromWorld(anchor));
-        this.hero.render(world.scene, this.camera, dt);
-      } else this.renderer.gl.render(world.scene, this.camera);
+        this.hero.render(world.scene, this.camera, dt, world.water);
+      } else if (this.field) this.field.render(world.scene, this.camera, world.water);
+      else this.renderer.gl.render(world.scene, this.camera);
       if (ui.debug.value && ui.debugState.value.markers) {
         this.markerAcc += dt;
         if (this.markerAcc >= 1 / MARKER_HZ) { this.markerAcc = 0; this.updateMarkers(); }

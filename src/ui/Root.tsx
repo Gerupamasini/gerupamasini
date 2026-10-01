@@ -4,6 +4,7 @@ import type { App } from '../app/App';
 import { ui, t } from './store';
 import { TideGauge } from './hud/TideGauge';
 import { Minimap } from './hud/Minimap';
+import { MapOverlay } from './hud/MapOverlay';
 import { Toasts } from './hud/Toasts';
 import { Menu } from './menu/Menu';
 import { TicketDialog } from './ticket/TicketDialog';
@@ -34,6 +35,7 @@ export function Root({ app }: { app: App }) {
       {screen === 'observe' && <ObserveOverlay app={app} />}
       {screen === 'capture' && <CaptureOverlay app={app} />}
       {inField && <CreatureMarkers />}
+      {screen === 'field' && ui.mapOpen.value && <MapOverlay app={app} />}
       {screen === 'zukan' && <Zukan app={app} />}
       {screen === 'menu' && <Menu app={app} />}
       {screen === 'ticket' && <TicketDialog app={app} />}

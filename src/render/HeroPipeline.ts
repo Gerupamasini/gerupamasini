@@ -3,6 +3,7 @@ import {
   NoToneMapping, PerspectiveCamera, RGBAFormat, Scene, Vector2, Vector3, WebGLRenderTarget, type IUniform, type WebGLRenderer,
 } from 'three';
 import { createPost } from './HeroPost.js';
+import type { WaterPass } from '../world/Water';
 
 export const LAYER_FISH = 2;
 export const LAYER_BEHIND = 3;
@@ -51,6 +52,7 @@ export class HeroPipeline {
   readonly shared: SharedUniforms;
   private readonly envRT: WebGLRenderTarget;
   private readonly mainRT: WebGLRenderTarget;
+  private readonly compRT: WebGLRenderTarget;
   private readonly post = createPost();
   private width = 1;
   private height = 1;
@@ -86,6 +88,11 @@ export class HeroPipeline {
     depth.magFilter = NearestFilter;
     this.envRT.depthTexture = depth;
     this.mainRT = new WebGLRenderTarget(4, 4, { ...rtOpts, samples: 4 });
+    const mainDepth = new DepthTexture(4, 4, FloatType);
+    mainDepth.minFilter = NearestFilter;
+    mainDepth.magFilter = NearestFilter;
+    this.mainRT.depthTexture = mainDepth;
+    this.compRT = new WebGLRenderTarget(4, 4, { ...rtOpts, depthBuffer: false });
     this.shared.uBg.value = this.envRT.texture;
     this.shared.uBgDepth.value = depth;
     this.post.material.uniforms.uTex.value = this.mainRT.texture;
@@ -99,6 +106,7 @@ export class HeroPipeline {
     this.height = height;
     this.envRT.setSize(width, height);
     this.mainRT.setSize(width, height);
+    this.compRT.setSize(width, height);
     this.shared.uResolution.value.set(width, height);
     this.post.material.uniforms.uRes.value.set(width, height);
   }
@@ -121,7 +129,7 @@ export class HeroPipeline {
     s.uCausticAmt.value = l.underwater ? 0.15 : 0.0;
   }
 
-  render(scene: Scene, camera: PerspectiveCamera, dt: number): void {
+  render(scene: Scene, camera: PerspectiveCamera, dt: number, water: WaterPass | null = null): void {
     const r = this.renderer;
     const size = r.getDrawingBufferSize(new Vector2());
     this.resize(Math.max(1, size.x), Math.max(1, size.y));
@@ -140,6 +148,11 @@ export class HeroPipeline {
     camera.layers.enable(LAYER_FISH);
     r.setRenderTarget(this.mainRT);
     r.render(scene, camera);
+    // 2b. the water, composited over everything underwater (the hero included)
+    if (water) {
+      water.render(r, this.mainRT, this.compRT, camera);
+      this.post.material.uniforms.uTex.value = this.compRT.texture;
+    } else this.post.material.uniforms.uTex.value = this.mainRT.texture;
     // 3. tone map to the screen
     r.setRenderTarget(null);
     r.render(this.post.scene, this.post.camera);
@@ -151,5 +164,6 @@ export class HeroPipeline {
   dispose(): void {
     this.envRT.dispose();
     this.mainRT.dispose();
+    this.compRT.dispose();
   }
 }

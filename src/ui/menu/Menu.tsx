@@ -22,6 +22,10 @@ export function Menu({ app }: { app: App }) {
           <input type="range" min="0.3" max="2.5" step="0.1" value={s.mouseSensitivity} onInput={(e) => void app.updateSettings({ mouseSensitivity: Number((e.target as HTMLInputElement).value) })} />
         </div>
         <div class="row">
+          <span>{t('menu.eyeHeight')} <span class="dim small">{s.eyeHeight.toFixed(2)} m</span></span>
+          <input type="range" min="1.1" max="1.9" step="0.05" value={s.eyeHeight} onInput={(e) => void app.updateSettings({ eyeHeight: Number((e.target as HTMLInputElement).value) })} />
+        </div>
+        <div class="row">
           <span>{t('menu.controls')}</span>
           <span class="dim small">{t('hud.hint.move')}</span>
         </div>

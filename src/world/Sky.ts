@@ -1,4 +1,4 @@
-import { Color, DirectionalLight, HemisphereLight, MathUtils, PMREMGenerator, Scene, Vector3, type Texture, type WebGLRenderer } from 'three';
+import { Color, CubeCamera, CubeTexture, DirectionalLight, HalfFloatType, HemisphereLight, LinearFilter, MathUtils, PMREMGenerator, Scene, Vector3, WebGLCubeRenderTarget, type Texture, type WebGLRenderer } from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 
 /** Preetham sky dome, key light, hemisphere light and a PMREM environment refreshed as the sun moves. */
@@ -12,9 +12,13 @@ export class SkyDome {
   private lastEnvElevation = NaN;
   private readonly envScene = new Scene();
   private readonly sunDir = new Vector3(0, 1, 0);
+  private readonly cubeRT: WebGLCubeRenderTarget;
+  private readonly cubeCam: CubeCamera;
+  private lastEnvOvercast = 0;
+  private overcast = 0;
   elevation = 45;
 
-  constructor(private readonly scene: Scene, renderer: WebGLRenderer, shadows: boolean, shadowMapSize: number) {
+  constructor(private readonly scene: Scene, private readonly renderer: WebGLRenderer, shadows: boolean, shadowMapSize: number) {
     this.sky = new Sky();
     this.sky.scale.setScalar(4000);
     const u = this.sky.material.uniforms;
@@ -38,12 +42,26 @@ export class SkyDome {
 
     this.pmrem = new PMREMGenerator(renderer);
     this.pmrem.compileEquirectangularShader();
+    this.cubeRT = new WebGLCubeRenderTarget(128, { type: HalfFloatType, generateMipmaps: false, minFilter: LinearFilter, magFilter: LinearFilter });
+    this.cubeCam = new CubeCamera(1, 5000, this.cubeRT);
+  }
+
+  /** The sky as a cube map (for the water's reflections). */
+  get envCube(): CubeTexture {
+    return this.cubeRT.texture;
+  }
+
+  /** Key light colour times intensity. */
+  sunColorHdr(out = new Vector3()): Vector3 {
+    const c = this.sunLight.color, i = this.sunLight.intensity;
+    return out.set(c.r * i, c.g * i, c.b * i);
   }
 
   /** Update lights and sky for a sun direction (unit vector) and elevation in degrees. Call every frame; cheap. */
   update(sunDir: Vector3, elevation: number, anchor: Vector3, overcast = 0): void {
     this.sunDir.copy(sunDir);
     this.elevation = elevation;
+    this.overcast = overcast;
     this.sky.material.uniforms.sunPosition.value.copy(sunDir);
     const day = MathUtils.smoothstep(elevation, -4, 10);
     const dusk = 1 - MathUtils.smoothstep(elevation, -2, 18);
@@ -73,11 +91,15 @@ export class SkyDome {
 
   /** Rebuild the environment map when the sun moved enough (throttled by the caller). */
   refreshEnvironment(): void {
-    if (Math.abs(this.elevation - this.lastEnvElevation) < 1.5 && this.envTex) return;
+    if (Math.abs(this.elevation - this.lastEnvElevation) < 1.5 && Math.abs(this.overcast - this.lastEnvOvercast) < 0.15 && this.envTex) return;
     this.lastEnvElevation = this.elevation;
+    this.lastEnvOvercast = this.overcast;
     const prev = this.envTex;
     this.envScene.add(this.sky);
+    this.envScene.background = this.fogColor;
     const rt = this.pmrem.fromScene(this.envScene as unknown as Scene, 0, 0.1, 5000);
+    this.cubeCam.position.set(0, 0, 0);
+    this.cubeCam.update(this.renderer, this.envScene);
     this.scene.add(this.sky);
     this.envTex = rt.texture;
     this.scene.environment = this.envTex;
@@ -88,5 +110,6 @@ export class SkyDome {
   dispose(): void {
     this.pmrem.dispose();
     this.envTex?.dispose();
+    this.cubeRT.dispose();
   }
 }
