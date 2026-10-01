@@ -765,7 +765,8 @@ void computeFishSurface() {
     col *= 1.0 - 0.35 * contact;
     ao *= 1.0 - 0.45 * contact;
     // a faint soft crease just outside the band (shading only, no colour)
-    ao *= 1.0 - 0.18 * front * (1.0 - dorsE) * exp(-pow((eu - bandO - 0.18) / 0.12, 2.0));
+    float crE = (eu - bandO - 0.18) / 0.12; // (pow of a negative base is undefined)
+    ao *= 1.0 - 0.18 * front * (1.0 - dorsE) * exp(-crE * crE);
     // fleshy, moist but not glossy
     spec *= 1.0 - 0.45 * band;
     rough = mix(rough, rough + 0.12, band);

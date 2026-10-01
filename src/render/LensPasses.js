@@ -56,25 +56,30 @@ export class DOFPass extends Pass {
         // thin lens: blur diameter ~ |1 - focus / z| (pixels)
         float coc(float z) { return min(uCoC * abs(1.0 - uFocus / z), uMaxBlur); }
         const float GOLDEN = 2.39996323;
+        // a single non-finite scene pixel (a grazing silhouette fragment)
+        // must not be smeared by the gather into a spiral of black dots
+        bool bad(vec3 c) { return any(isnan(c)) || any(isinf(c)) || !(c.r + c.g + c.b > -1.0); }
         void main() {
           vec3 c0 = texture(tDiffuse, vUv).rgb;
           float z0 = linZ(vUv);
           float s0 = coc(z0);
           if (uDebug > 0.5) { outColor = vec4(fract(z0 * 4.0), s0 / uMaxBlur, texture(tDepth, vUv).x, 1.0); return; }
-          vec3 acc = c0;
-          float tot = 1.0;
+          bool b0 = bad(c0);
+          vec3 acc = b0 ? vec3(0.0) : c0;
+          float tot = b0 ? 0.0 : 1.0;
           float radius = 0.75;
           float ang = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) * 6.2831853;
           for (int i = 0; i < 72; i++) {
             if (radius >= uMaxBlur) break;
             vec2 tc = vUv + vec2(cos(ang), sin(ang)) * uTexel * radius;
             vec3 c = texture(tDiffuse, tc).rgb;
+            if (bad(c)) { radius += 1.35 / radius; ang += GOLDEN; continue; }
             float z = linZ(tc);
             float s = coc(z);
             // sharp background must not bleed over a focused / nearer centre
             if (z > z0) s = min(s, s0 * 2.0);
             float m = smoothstep(radius - 0.5, radius + 0.5, s);
-            acc += mix(acc / tot, c, m);
+            acc += tot > 0.0 ? mix(acc / tot, c, m) : c;
             tot += 1.0;
             radius += 1.35 / radius;
             ang += GOLDEN;
@@ -82,7 +87,7 @@ export class DOFPass extends Pass {
           // highlight shoulder on the HDR signal before the glare pass: extreme
           // values (specular sparkles, the LED) are soft-limited so they bloom
           // as small glints instead of long saturated streaks
-          vec3 o = acc / tot;
+          vec3 o = acc / max(tot, 1.0);
           float pk = max(o.r, max(o.g, o.b));
           const float K = 5.0, W = 8.0;
           if (pk > K) o *= (K + (pk - K) / (1.0 + (pk - K) / W)) / pk;
