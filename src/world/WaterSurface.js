@@ -65,6 +65,7 @@ uniform float uUseReflection;
 uniform vec3 uSkyColor;
 uniform vec3 uRoomColor;
 uniform vec3 uLedColor;
+uniform float uLedBelow; // peak radiance of the strip seen through Snell's window
 uniform vec4 uLedBar; // LED strip: centre z, height above the water, half length (x), half width (z)
 uniform vec3 uDeepColor;
 uniform float uWaveAmp;
@@ -101,7 +102,12 @@ void main() {
     // and the hood LED bar, traced along the refracted ray to the bar's
     // actual position so it appears as a small, sharp, very bright strip
     // (not a large glowing disc)
-    vec3 T = refract(-V, n, 1.333);
+    // fine capillary ripples (filter current) jitter the refracted rays a
+    // little more than the broad waves: the lamp image shimmers and breaks
+    // up at its edges instead of standing as a clean slab
+    vec2 cp = p * 160.0 + vec2(uTime * 1.3, -uTime * 0.9);
+    vec2 cap = vec2(vnoise2(cp) - 0.5, vnoise2(cp.yx + 17.0) - 0.5) * 0.035 * uWaveAmp;
+    vec3 T = refract(-V, normalize(n + vec3(cap.x, 0.0, cap.y)), 1.333);
     vec3 trans = uRoomColor;
     if (T.y > 1e-3) {
       vec2 hit = vWorld.xz + T.xz * (uLedBar.y / T.y);
@@ -109,7 +115,16 @@ void main() {
       float ez = smoothstep(0.003, 0.0, abs(hit.y - uLedBar.x) - uLedBar.w);
       // the dark bar housing around the LED strip
       float hz = smoothstep(0.004, 0.0, abs(hit.y - uLedBar.x) - uLedBar.w - 0.016);
-      trans = mix(uRoomColor, uSkyColor, smoothstep(0.2, 0.9, T.y)) * (1.0 - 0.85 * hz * ex) + uLedColor * ex * ez;
+      // The strip as seen from below is a row of LEDs behind a frosted
+      // diffuser, brightest along its centre line. Its radiance is held
+      // below the tone curve's shoulder (white is reached near 1.2 before
+      // exposure): it stays the brightest thing in the frame but keeps its
+      // structure instead of clipping to a flat, blooming white slab.
+      float across = abs(hit.y - uLedBar.x) / uLedBar.w;
+      float ledTex = (0.62 + 0.38 * (0.5 + 0.5 * cos(6.2831853 * hit.x / 0.0167))) * (1.0 - 0.4 * across * across);
+      ledTex *= 0.85 + 0.3 * vnoise2(hit * vec2(90.0, 260.0));
+      vec3 ledBelow = uLedColor / max(uLedColor.r, 1e-3) * uLedBelow * ledTex;
+      trans = mix(uRoomColor, uSkyColor, smoothstep(0.2, 0.9, T.y)) * (1.0 - 0.85 * hz * ex) + ledBelow * ex * ez;
       // the surface film and its fine ripples scatter some of the bar's light
       // sideways: a soft glow around its image fills the window, so the
       // surface reads as a lit plane from below (not a black void with a strip)
@@ -166,6 +181,7 @@ export class WaterSurface {
         uSkyColor: { value: new THREE.Color(0.06, 0.062, 0.066) },
         uRoomColor: { value: new THREE.Color(0.018, 0.018, 0.019) },
         uLedColor: { value: new THREE.Color(7.0, 6.8, 6.4) },
+        uLedBelow: { value: 0.95 },
         // matches the LED strip built in Tank.js (z -0.02, 7 cm deep, 0.9 L long, H + 9 cm)
         uLedBar: { value: new THREE.Vector4(-0.02, TANK.H + 0.0915 - TANK.water, TANK.L * 0.45, 0.035) },
         uDeepColor: { value: new THREE.Color(0.05, 0.12, 0.12) },

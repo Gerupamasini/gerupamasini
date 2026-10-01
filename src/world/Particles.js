@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { TANK } from './TankConfig.js';
 import { RNG } from '../core/random.js';
-import { U } from '../render/SharedUniforms.js';
+import { U, FIN_LAYER } from '../render/SharedUniforms.js';
 import { underwaterCommon, noiseCommon } from '../fish/shaders/common.glsl.js';
 import { groundHeight } from './Substrate.js';
 
@@ -25,13 +25,23 @@ export class SuspendedParticles {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
-    // the bright core of each speck writes depth so the lens blurs it at its
-    // own distance (sharp in the focal plane, a soft disc up close) instead of
-    // smearing it away with the background behind it
+    // The specks live in the translucent fin layer (render/FinLayer.js),
+    // drawn after the fins and their depth: each speck writes its depth there
+    // so the lens blurs it at its own distance (sharp in the focal plane, a
+    // soft disc up close) instead of smearing it away with the background.
+    // (In the opaque scene pass their depth punched holes into every fin
+    // behind them: the fins are depth-tested against the scene depth, so a
+    // faint speck in front of a caudal lobe showed up as a hard dark disc.)
+    // Additive light with a token coverage: enough for the layer to know a
+    // speck is there (and blur it), never enough to darken the scene.
     this.material = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: true,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneFactor,
+      blendSrcAlpha: THREE.OneFactor,
+      blendDstAlpha: THREE.OneFactor,
       uniforms: {
         uTime: U.uTime,
         uPixel: { value: 1 },
@@ -85,7 +95,7 @@ export class SuspendedParticles {
           float c = causticsAt(vW, vec3(0.0, 1.0, 0.0));
           vec3 col = vec3(0.8, 0.82, 0.74) * (0.25 + 1.6 * c);
           col = waterAttenuate(col, vW) * a;
-          gl_FragColor = vec4(col, a);
+          gl_FragColor = vec4(col * a, min(a * 0.1, 0.01));
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
@@ -93,7 +103,9 @@ export class SuspendedParticles {
     this.points = new THREE.Points(g, this.material);
     this.points.frustumCulled = false;
     this.points.name = 'particles';
+    // after the fins (2.x) and the fin depth (3) of the fin layer
     this.points.renderOrder = 4;
+    this.points.layers.set(FIN_LAYER);
     this.points.layers.enable(1);
     scene.add(this.points);
   }
