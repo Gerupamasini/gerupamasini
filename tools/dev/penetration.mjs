@@ -28,6 +28,7 @@
 // there.
 // usage: node tools/dev/penetration.mjs [--lod=0,1,2] [--pose=regex] [--top=15] [--seed=3] [--json=out.json] [--list]
 //        [--fine=k]  (k× denser action phases: fold transitions, preen / scratch approach)
+//        [--neck=mm]  (list the feathers deeper than mm under the neck / head plumage)
 import * as THREE from 'three';
 import { KentishPloverModel } from '../../src/birds/kentishPlover/KentishPloverModel.js';
 import { KentishPloverAnimator, PREEN_VARIANTS } from '../../src/birds/kentishPlover/KentishPloverAnimator.js';
@@ -687,6 +688,11 @@ for (const d of LODS) {
     if (bad) fail++;
     const name = poseName(P);
     console.log(`${bad ? '✗' : ' '} ${name.padEnd(21)} ${m.fluff.toFixed(2).padStart(5)} | ${w.vis.toFixed(2).padStart(6)}  ${w.name.padEnd(18)} | ${String(dips).padStart(5)} ${String(cross).padStart(5)} ${String(under).padStart(5)} | ${m.poke.toFixed(2).padStart(5)}  ${(m.pokeName || '-').padEnd(16)} ${String(m.pokeN).padStart(4)} | ${neck.toFixed(2)} | ${fin.fin.toFixed(1).padStart(4)} ${fin.fin > 0 ? fin.name.padEnd(8) : '-'.padEnd(8)} | (${wa.reentry.toFixed(2)} ${wa.name}; ${buried})`);
+    if (args.neck && neck > Number(args.neck)) {
+      // --neck=mm: which feathers go in under the neck / head plumage (the `neck` column), deepest first
+      const nk = m.feathers.filter((r) => r.neck > Number(args.neck)).sort((a, b) => b.neck - a.neck).slice(0, 6);
+      console.log(`      neck: ${nk.map((r) => `${r.name} ${r.neck.toFixed(2)}`).join(', ')}${m.pokeNeck > Number(args.neck) ? ` poke ${m.pokeNeck.toFixed(2)}` : ''}`);
+    }
     for (const r of m.feathers) {
       const o = (worstByFeather[r.name] ??= { name: r.name, type: r.type, vis: 0, visDip: 0, reentry: 0, cross: 0, under: 0, poke: 0, pose: '', at: null });
       if (r.vis > o.vis) { o.vis = r.vis; o.pose = name; o.at = r.visAt; }

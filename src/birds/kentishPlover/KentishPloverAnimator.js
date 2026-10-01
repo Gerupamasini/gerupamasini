@@ -72,6 +72,21 @@ const SINK = 10;
 const NECK_TURN_LIFT = 0.011;
 // how strongly a far turn of the head gathers toward the head end of the neck sleeve (_poseSleeve)
 const SLEEVE_GATHER = 1.2;
+// how much slimmer the sleeve's cross-section gets at the middle of the neck when the head is turned far round
+// (preening, tucked asleep; _poseSleeve): the plumage sleeks onto the slim neck instead of keeping the resting collar
+const SLEEVE_SLIM = 0.45;
+// head turn (rad, relative to the chest) over which the cross-section corrective comes in by itself: none for looking
+// round (≤ 110° yaw) or pecking, all of it from 155°. Preening sets it with its approach (action `sleeveSlim`), the sleep
+// tuck to SLEEVE_TUCK_SLIM
+const SLEEVE_BEND = [2.0, 2.7];
+const SLEEVE_TUCK_SLIM = 0.35;
+// looking steeply down (pitch 25–60°) the head's pitch spreads toward the base of the sleeve (gather exponent × (1 − this)):
+// gathered at the head end it folded the chin and throat plumage under the bill (§X: pitch 60° flips 424 → 311)
+const SLEEVE_PITCH_SPREAD = 0.25;
+// far bends (with the cross-section corrective): each helper moves this far toward the midpoint of its neighbours
+// on the sleeve curve — the Hermite arch flattens toward the chord, so the neck takes the short way over the shoulder
+// and the inside of the bend is less compressed (preening the tail: creases > 45° 740 → 606, flips 2157 → 2078)
+const SLEEVE_ARCH = 1;
 // share of the body pitch that carries the head pivot with it (about the hip). 1: the head keeps its place on
 // the body — walking photos in the bill–tail frame match the relaxed stand (IoU 0.88), only the crown sits lower
 const HEAD_PITCH_FOLLOW = 1;
@@ -1043,7 +1058,9 @@ export class KentishPloverAnimator {
       // bill aimed steeply down under the scapulars (aimed at y 76 it lay on top of them as a black wedge) and the
       // head buried TUCK_SINK into the fluffed mantle: crown 99.7, crown − back +12.6 (posture.mjs; photos ≈ 98, +10)
       const onBack = this.bodyPoint([side * 6, 79, 2]);
-      const dir = this.bodyPoint([side * 12, 64, -12]).sub(onBack).normalize();
+      // (aimed at [±12, 64, −12] the bill tip lay 2.5 mm outside the resting outline, between the scapulars and the
+      // folded wing: a dark stick on the back. 4 mm further in it lies 1.5–3.5 mm under the outline, §X)
+      const dir = this.bodyPoint([side * 8, 64, -12]).sub(onBack).normalize();
       headQ = this.billQuat(dir, side * 0.5);
       tuckPos = onBack.clone().sub(BILL_FROM_HEAD.clone().multiplyScalar(0.45).applyQuaternion(headQ));
     } else {
@@ -1079,6 +1096,10 @@ export class KentishPloverAnimator {
     // asleep, the head is buried in the fluffed mantle and scapulars (p040: only the crown and the face show
     // above the back, crown − back ≈ +10, spec §12) instead of lying on top of them
     this._tuckSink = tuckPos ? TUCK_SINK * this.p.sleep : 0;
+    // how far the sleeve's cross-section corrective is in (_poseSleeve): preening and the sleep tuck ask for it
+    // (asleep only partly: the fluffed, compact bird keeps a full neck — fully slimmed, the short tucked neck pinched
+    // into a groove between breast and head)
+    this._sleeveSlim = tuckPos ? SLEEVE_TUCK_SLIM * this.p.sleep : act?.sleeveSlim ?? null;
     const want = headPos.clone();
     (this.headWant ??= new THREE.Vector3()).copy(want); // (asked-for head pivot, before the plumage contact: tools/dev/peckcurve.mjs)
     headPos = this._clearHead(headPos.clone(), headQ);
@@ -1147,6 +1168,8 @@ export class KentishPloverAnimator {
     const c0 = _v.set(SL.a[0] - J.chest[0], SL.a[1] - J.chest[1], SL.a[2] - J.chest[2]).multiplyScalar(mm);
     const c1 = _v2.set(SL.b[0] - J.head[0], SL.b[1] - J.head[1], SL.b[2] - J.head[2]).multiplyScalar(mm).applyMatrix4(b.head.matrixWorld).applyMatrix4(inv);
     const A = _v3.set(SL.b[0] - SL.a[0], SL.b[1] - SL.a[1], SL.b[2] - SL.a[2]).multiplyScalar(mm);
+    const turn = 2 * Math.acos(Math.min(1, rel.w));
+    const bend = this._sleeveSlim ?? smoothstep(SLEEVE_BEND[0], SLEEVE_BEND[1], turn);
     const lam = c1.distanceTo(c0) / A.length();
     const m0 = _v4.copy(A).multiplyScalar(lam);
     const m1 = A.applyQuaternion(rel).multiplyScalar(lam);
@@ -1154,10 +1177,12 @@ export class KentishPloverAnimator {
     // head: the base of the sleeve stays with the shoulders under the scapulars and the folded wing instead of
     // sweeping a third of the way round over them
     const A0 = Math.hypot(SL.b[0] - SL.a[0], SL.b[1] - SL.a[1], SL.b[2] - SL.a[2]) * mm;
-    let len = 0;
-    const prev = _vP.copy(c0);
-    const turn = 2 * Math.acos(Math.min(1, rel.w));
-    const gather = 1 + SLEEVE_GATHER * smoothstep(1.6, 2.8, turn);
+    const fw = _vP.set(0, 0, 1).applyQuaternion(rel);
+    const pitchDown = Math.atan2(-fw.y, Math.hypot(fw.x, fw.z));
+    const gather = (1 + SLEEVE_GATHER * smoothstep(1.6, 2.8, turn)) * (1 - SLEEVE_PITCH_SPREAD * smoothstep(0.4, 1.0, pitchDown));
+    const P = (this._sleeveP ??= Array.from({ length: SL.n + 2 }, () => new THREE.Vector3()));
+    P[0].copy(c0);
+    P[SL.n + 1].copy(c1);
     for (let k = 1; k <= SL.n; k++) {
       const t = k / (SL.n + 1);
       const t2 = t * t;
@@ -1166,15 +1191,32 @@ export class KentishPloverAnimator {
       const h10 = t3 - 2 * t2 + t;
       const h01 = -2 * t3 + 3 * t2;
       const h11 = t3 - t2;
+      P[k].set(0, 0, 0).addScaledVector(c0, h00).addScaledVector(m0, h10).addScaledVector(c1, h01).addScaledVector(m1, h11);
+    }
+    let len = 0;
+    for (let k = 1; k <= SL.n + 1; k++) len += P[k].distanceTo(P[k - 1]);
+    // Cross-section corrective (bone scale across the sleeve, GLB-exact): the sleeve's plumage is a thick collar of
+    // fill (≈40 mm across at rest) over a slim neck. Drawn out and bent far back it kept that girth and swept it over
+    // the shoulder as a smooth white balloon. Each helper's cross-section scales with its local stretch λ as
+    // λ^−½ (volume kept, not inflated), and further with the bend toward the slim neck the plumage lies on when the
+    // head is turned far round (SLEEVE_SLIM), tapering to nothing at the trunk and the head ends. All of it by `bend`
+    // (preening, the sleep tuck, turns past 115°): looking round and pecking keep the sleeve as it was.
+    const h0 = A0 / (SL.n + 1);
+    const slim = SLEEVE_SLIM * bend;
+    for (let k = 1; k <= SL.n; k++) {
+      const t = k / (SL.n + 1);
       const bone = b[`sleeve${k}`];
-      bone.position.set(0, 0, 0).addScaledVector(c0, h00).addScaledVector(m0, h10).addScaledVector(c1, h01).addScaledVector(m1, h11);
+      bone.position.copy(P[k]);
+      bone.position.addScaledVector(_v3.copy(P[k - 1]).add(P[k + 1]).multiplyScalar(0.5).sub(P[k]), SLEEVE_ARCH * bend);
       bone.quaternion.identity().slerp(rel, Math.pow(t, gather));
+      const lamK = Math.max(1, P[k + 1].distanceTo(P[k - 1]) / (2 * h0));
+      const taper = Math.pow(Math.sin(Math.PI * t), 0.6);
+      const sc = 1 - (1 - Math.pow(lamK, -0.5) * (1 - slim)) * taper * bend;
+      bone.scale.set(sc, 1, sc);
       bone.updateMatrixWorld(true);
-      len += bone.position.distanceTo(prev);
-      prev.copy(bone.position);
     }
     // stretch of the sleeve (its centre line, posed over rest): the body shader keeps the plumage pattern's ends
-    this.model.setSleeveStretch?.((len + c1.distanceTo(prev)) / A0);
+    this.model.setSleeveStretch?.(len / A0);
   }
 
   /** Head pivot (world) the posture and gaze ask for: relative to the ROOT, not the bobbing body (head stabilisation). */
@@ -1536,18 +1578,23 @@ function heldPrey(P, p, s, target, yaw) {
 }
 
 function preenTarget(variant) {
-  // bird-local mm points on the plumage + bill approach roll
+  // bird-local mm points on the plumage + bill approach roll. `head`: where the head pivot goes (bird-local mm, within
+  // the neck's reach and clear of the plumage), the bill aimed from there at the point (§X). Without it the bill came
+  // in from a point above and the head sat a bill's length (40 mm) beyond the point — out of the neck's reach for
+  // the breast, belly, scapulars and wing: the neck was drawn out to its limit (stretch 2) and the head held high
+  // over the back or out in front of the breast. Inside the reach the plumage contact moved the head by up to 20 mm
+  // between nibble phases; from these pivots it moves 1–4 mm.
   switch (variant) {
     case 'breast':
-      return { p: [6, 74, 33], roll: 0.2 };
+      return { p: [6, 74, 33], head: [-10, 98, 34], roll: 0.2 };
     case 'belly':
-      return { p: [8, 56, 22], roll: 0.5 };
+      return { p: [8, 56, 22], head: [-10, 96, 34], roll: 0.5 };
     case 'flank':
       return { p: [16, 56, 4], roll: 0.9, wingLift: 0.5 };
     case 'scapulars':
-      return { p: [9, 87, -6], roll: 1.4 };
+      return { p: [11, 82, -22], head: [-2, 99, 12], roll: 1.4 };
     case 'wing':
-      return { p: [17, 64, -26], roll: 1.4, wingLift: 0.35 };
+      return { p: [17, 64, -26], head: [8, 98, 2], roll: 1.4, wingLift: 0.35 };
     case 'tail':
       return { p: [0, 67, -52], roll: 0.4 };
     default:
@@ -1648,11 +1695,22 @@ export const ACTIONS = {
       const center = A.bodyPoint([pt[0] * 0.2, pt[1] + 16, pt[2] + 20]);
       const bill = center.clone().lerp(onBody, approach);
       bill.y += nib * approach;
-      const dir = onBody.clone().sub(A.bodyPoint([pt[0] * -0.3, 96, pt[2] + 14])).normalize();
+      const from = tg.head ? [tg.head[0] * side, tg.head[1], tg.head[2]] : [pt[0] * -0.3, 96, pt[2] + 14];
+      const dir = onBody.clone().sub(A.bodyPoint(from)).normalize();
+      const headQ = A.billQuat(dir, tg.roll * side);
+      if (tg.head) {
+        // head pivot given (within the neck's reach, clear of the plumage): the bill aims at the target from there and
+        // the nibble moves the head with it
+        const pivot = A.bodyPoint(from);
+        pivot.y += nib * approach;
+        const off = BILL_FROM_HEAD.clone().applyQuaternion(headQ);
+        bill.copy(center).sub(off).lerp(pivot, approach).add(off);
+      }
       const out = {
         billTarget: approach > 0.02 ? bill : null,
-        headQ: approach > 0.02 ? A.billQuat(dir, tg.roll * side) : null,
+        headQ: approach > 0.02 ? headQ : null,
         posture: { fluff: 0.7, neck: -0.2 },
+        sleeveSlim: approach,
       };
       if (tg.wingLift) {
         // the folded wing is lifted off the flank (unfolding it would swing the feathers through the body)
