@@ -32,11 +32,12 @@ export class MahazeDriver implements Driver {
     this.root = root;
     this.ind = individual;
     const scale = individual.length_mm / individual.species.model.modelLength_mm;
-    const body = meshes.find((m) => ((m as Mesh).material as { userData?: { mahaze?: MahazeExtras } })?.userData?.mahaze?.role === 'body') as Mesh | undefined;
+    const roleOf = (m: Object3D): string | undefined => (m.userData.mahaze as MahazeExtras | undefined)?.role ?? ((m as Mesh).material as { userData?: { mahaze?: MahazeExtras } })?.userData?.mahaze?.role;
+    const body = meshes.find((m) => roleOf(m) === 'body') as Mesh | undefined;
     const rigNode = root.getObjectByName('Mahaze_Juvenile');
     const rig = rigNode?.userData.mahazeRig as { axes: Record<string, number[]>; contactY: number; tailContactY: number } | undefined;
     if (!body || !rig) throw new Error('mahaze: rig data missing in glTF extras');
-    const bx = (body.material as unknown as { userData: { mahaze: MahazeExtras } }).userData.mahaze;
+    const bx = (body.userData.mahaze as MahazeExtras | undefined) ?? (body.material as unknown as { userData: { mahaze: MahazeExtras } }).userData.mahaze;
     // rest-pose bone positions with the root at the origin and unit scale
     root.position.set(0, 0, 0);
     root.quaternion.identity();
@@ -55,8 +56,7 @@ export class MahazeDriver implements Driver {
     const finMeshes: Record<string, Mesh> = {};
     for (const m of meshes) {
       const mesh = m as Mesh;
-      const role = (mesh.material as { userData?: { mahaze?: { role?: string } } }).userData?.mahaze?.role;
-      if (role === 'fin') finMeshes[mesh.name] = mesh;
+      if (roleOf(mesh) === 'fin') finMeshes[mesh.name] = mesh;
       if ((mesh as SkinnedMesh).isSkinnedMesh) (mesh as SkinnedMesh).boundingSphere = new Sphere(new Vector3(0, 0.002, 0.012), 0.04);
     }
     root.scale.setScalar(scale);

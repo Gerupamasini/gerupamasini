@@ -42,7 +42,7 @@ export class HeroInstance {
       t.colorSpace = colorSpace;
       return t;
     };
-    const roleOf = (m: Mesh): MahazeMatExtras | undefined => ((m.material as Material).userData as { mahaze?: MahazeMatExtras }).mahaze;
+    const roleOf = (m: Mesh): MahazeMatExtras | undefined => (m.userData.mahaze as MahazeMatExtras | undefined) ?? ((m.material as Material).userData as { mahaze?: MahazeMatExtras }).mahaze;
     const body = model.meshes.find((m) => roleOf(m)?.role === 'body');
     const eyes = model.meshes.filter((m) => roleOf(m)?.role === 'eye');
     const finMeshes = model.meshes.filter((m) => roleOf(m)?.role === 'fin') as SkinnedMesh[];

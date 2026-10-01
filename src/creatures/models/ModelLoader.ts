@@ -85,6 +85,9 @@ export async function instantiateModel(rel: string): Promise<LoadedModel> {
     if ((o as Mesh).isMesh) {
       const mesh = o as Mesh;
       meshes.push(mesh);
+      // keep the species extras on the mesh so drivers still find them after a material swap
+      const mx = ((Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as Material).userData?.mahaze;
+      if (mx) mesh.userData.mahaze = mx;
       if ((mesh as SkinnedMesh).isSkinnedMesh) {
         // skinned bounds move with the animation; keep culling but with a generous sphere set by the caller
         mesh.frustumCulled = true;
