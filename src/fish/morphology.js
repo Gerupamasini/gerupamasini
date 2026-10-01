@@ -18,22 +18,33 @@ import { monotoneCubic, smoothstep, clamp, lerp } from '../core/math.js';
 // The snout (s < 0.07) is blunt and rounded: the profile rises steeply right
 // behind the lips and the forehead is convex (p12_0, p42_1), not a wedge.
 // Dorsal profile (height of the back above the axis)
-const DORSAL_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.15, 0.23, 0.31, 0.385, 0.44, 0.52, 0.62, 0.73, 0.84, 0.93, 1.0, 1.04];
-const DORSAL_Y = [0.012, 0.034, 0.058, 0.081, 0.1, 0.123, 0.161, 0.194, 0.214, 0.221, 0.214, 0.186, 0.142, 0.1, 0.074, 0.066, 0.068];
+//
+// Behind the hypural plate (s > 1) the scaled peduncle does not end in a cap:
+// the flesh runs on as a thin, laterally compressed tongue over the base of
+// the caudal rays and closes in a rounded (convex) margin on the fin (p12_1,
+// p40_1), so the fin grows out of the body instead of being plugged into it.
+// The peduncle itself is deep (minimum depth ~0.16 SL, p40_1 / p42_0) and
+// strongly compressed laterally: a broad flat wedge, not a round stalk.
+const DORSAL_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.15, 0.23, 0.31, 0.385, 0.44, 0.52, 0.62, 0.73, 0.84, 0.93, 0.975, 1.0, 1.03, 1.06, 1.085, 1.1, 1.11, 1.116];
+const DORSAL_Y = [0.013, 0.036, 0.06, 0.082, 0.1, 0.123, 0.161, 0.194, 0.214, 0.221, 0.214, 0.186, 0.142, 0.104, 0.086, 0.087, 0.087, 0.081, 0.067, 0.048, 0.032, 0.017, 0.006];
 // Ventral profile (negative = below axis)
-const VENTRAL_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.15, 0.21, 0.31, 0.41, 0.5, 0.6, 0.69, 0.76, 0.85, 0.92, 0.965, 1.0, 1.04];
-const VENTRAL_Y = [-0.011, -0.03, -0.049, -0.064, -0.077, -0.089, -0.106, -0.133, -0.149, -0.155, -0.148, -0.124, -0.103, -0.073, -0.057, -0.056, -0.061, -0.066];
-// Half body width (dorsal view)
-const WIDTH_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.16, 0.22, 0.29, 0.36, 0.45, 0.55, 0.65, 0.75, 0.85, 0.93, 1.0, 1.02, 1.04];
-const WIDTH_Z = [0.012, 0.027, 0.042, 0.055, 0.066, 0.077, 0.088, 0.097, 0.1, 0.097, 0.089, 0.075, 0.057, 0.038, 0.026, 0.018, 0.011, 0.003];
+const VENTRAL_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.15, 0.21, 0.31, 0.41, 0.5, 0.6, 0.69, 0.76, 0.85, 0.92, 0.965, 1.0, 1.03, 1.06, 1.085, 1.1, 1.11, 1.116];
+const VENTRAL_Y = [-0.011, -0.031, -0.05, -0.065, -0.077, -0.089, -0.106, -0.133, -0.149, -0.155, -0.148, -0.124, -0.103, -0.077, -0.068, -0.0705, -0.072, -0.067, -0.056, -0.04, -0.027, -0.015, -0.006];
+// Half body width (dorsal view). The snout is broad and rounded in dorsal
+// view (a blunt muzzle, not a wedge); the tongue behind s = 1 thins out to
+// little more than the thickness of the fleshy fin base.
+const WIDTH_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.16, 0.22, 0.29, 0.36, 0.45, 0.55, 0.65, 0.75, 0.85, 0.93, 0.97, 1.0, 1.02, 1.04, 1.06, 1.08, 1.095, 1.108, 1.116];
+const WIDTH_Z = [0.013, 0.03, 0.046, 0.058, 0.068, 0.078, 0.088, 0.097, 0.1, 0.097, 0.089, 0.075, 0.057, 0.038, 0.026, 0.02, 0.015, 0.0118, 0.0092, 0.0066, 0.0042, 0.0025, 0.0014, 0.001];
 // Vertical position of the widest level (-1 = ventral edge, +1 = dorsal edge)
-const WMAX_S = [0.0, 0.1, 0.3, 0.5, 0.75, 1.0];
-const WMAX_Y = [0.0, -0.08, -0.2, -0.24, -0.12, 0.0];
+const WMAX_S = [0.0, 0.1, 0.3, 0.5, 0.75, 1.0, 1.12];
+const WMAX_Y = [0.0, -0.08, -0.2, -0.24, -0.12, 0.0, 0.0];
 // Superellipse exponents of the cross-section. >2 = boxy/full, <2 = keeled.
-const NTOP_S = [0.0, 0.15, 0.35, 0.5, 0.75, 1.0];
-const NTOP_V = [2.2, 2.15, 2.0, 1.9, 1.85, 1.95];
-const NBOT_S = [0.0, 0.15, 0.35, 0.55, 0.7, 0.85, 1.0];
-const NBOT_V = [2.2, 2.3, 2.45, 2.35, 1.95, 1.85, 1.95];
+// The head is close to elliptic (n ~ 2): a boxier section shows as a crease
+// where the top of the head meets the cheek.
+const NTOP_S = [0.0, 0.15, 0.35, 0.5, 0.75, 1.0, 1.12];
+const NTOP_V = [2.05, 2.0, 1.95, 1.9, 1.85, 1.95, 1.95];
+const NBOT_S = [0.0, 0.15, 0.35, 0.55, 0.7, 0.85, 1.0, 1.12];
+const NBOT_V = [2.1, 2.2, 2.4, 2.35, 1.95, 1.85, 1.95, 1.95];
 
 export const profile = {
   top: monotoneCubic(DORSAL_S, DORSAL_Y),
@@ -144,8 +155,10 @@ export function caudalRayAngle(d) {
 /** Caudal ray base [s, |y|] on the hypural plate / peduncle margin. */
 export function caudalRayBase(d) {
   // procurrent rays creep forward along the peduncle margin
+  // (the hypural fan spans most of the deep peduncle, so the outer rays leave
+  // the body at its dorsal / ventral outline)
   const proc = smoothstep(0.78, 1.0, d);
-  return [1.0 - 0.075 * proc, 0.062 * Math.min(1, d / 0.8) + 0.004 * proc];
+  return [1.0 - 0.075 * proc, 0.073 * Math.min(1, d / 0.8) + 0.006 * proc];
 }
 
 const smin = (a, b, k) => {

@@ -9,8 +9,11 @@ in vec4 aFinIdx;
 in vec4 aFinCoord;
 in vec4 aFinRay;
 in float aFinLen;
+in vec4 aFinRoot;
 out vec4 vFinCoord;
 VOUT vec4 vFinRay;
+VOUT vec4 vFinRoot;
+VOUT float vFinRootRed;
 VOUT vec3 vFishWorld;
 VFLAT float vFinType;
 VFLAT vec4 vFishA;
@@ -44,10 +47,39 @@ void finDeform() {
   vec3 P = finPoint(base, nC, nN, c, ts);
   vec3 N = finNormal(base, nC, nN, c, ts);
   float SL = rigMisc(0).w;
+  // ---- rest-shape curvature on top of the simulated rays (shape only; the
+  // rig drives the motion). A comet lobe is a curved ribbon: its rays sweep
+  // back toward the body axis distally, so the leading edge is convex and the
+  // inner margin concave, never a straight bar. The distal membrane carries
+  // a few broad longitudinal folds (the same folds the fragment shader
+  // shades), so the margins also undulate when seen edge-on.
+  float Lr = aFinRoot.w * SL; // true ray length (m)
+  if (aFinIdx.w < 0.5) {
+    float dc = c < float(nC) - 1.05 ? 0.05 : -0.05;
+    vec3 Sc = (finPoint(base, nC, nN, c + dc, ts) - P) / dc; // toward the ventral rays
+    Sc = normalize(Sc - N * dot(Sc, N) + 1e-7);
+    float r = aFinRay.z;
+    float sweep = 0.14 * smoothstep(0.05, 0.75, abs(r - 0.5) * 2.0) * t * t * Lr;
+    P += Sc * (r < 0.5 ? sweep : -sweep);
+  }
+  float foldPh = rc * 0.85 + seed * 3.0 + t * 3.5;
+  P += N * ((aFinIdx.w < 0.5 ? 0.03 : 0.012) * t * t * Lr * cos(foldPh));
+#ifndef DEPTH_ONLY
+  // sarasa: body pattern where the fin attaches (the caudal samples it out to
+  // the margin of the fleshy tongue that covers its base), per vertex
+  vFinRootRed = 0.0;
+  if (rigMisc(1).z < 0.5) {
+    float sR = aFinRoot.x + (aFinIdx.w < 0.5 ? min(t * aFinRoot.w, 0.1) : 0.0);
+    float v = sarasaField(vec3(-sR, aFinRoot.y, aFinRoot.z), seed);
+    float th = 1.0 - rigMisc(2).x;
+    vFinRootRed = smoothstep(th - 0.06, th + 0.06, v);
+  }
+#endif
   gFishPos = P + N * (layer * aFinCoord.w * 0.5 * SL);
   gFishNormal = N * layer;
   vFinCoord = aFinCoord;
   vFinRay = aFinRay;
+  vFinRoot = aFinRoot;
   vFinType = aFinIdx.w;
   vFishWorld = gFishPos;
   vFishA = rigMisc(1);
@@ -59,6 +91,8 @@ void finDeform() {
 export const finFragmentPars = /* glsl */ `
 in vec4 vFinCoord;
 in vec4 vFinRay;
+in vec4 vFinRoot;
+in float vFinRootRed;
 in vec3 vFishWorld;
 flat in float vFinType;
 float gPleat;   // signed pleat slope across the rays
@@ -80,6 +114,7 @@ vec3 gFinAlbedo;
 vec3 gFinTrans;
 float gFinRay;
 float gFinRough;
+vec3 gFinSpec;
 
 // distance (in ray-spacing units) to the nearest (possibly branched) ray
 float rayDistance(float rc, float t, float type, float nRays) {
@@ -87,12 +122,14 @@ float rayDistance(float rc, float t, float type, float nRays) {
   float x = rc - k;
   // outermost rays & the first unbranched rays of dorsal/anal are simple
   bool simple = (k < 0.5) || (k > nRays - 1.5) || (type > 0.5 && type < 2.5 && k < 2.5);
-  float tb1 = type < 0.5 ? mix(0.3, 0.52, abs(k / (nRays - 1.0) - 0.5) * 2.0) : 0.42;
+  // rays branch early (dichotomously, twice), so distally the membrane is
+  // ribbed by many fine rays rather than a few thick ones
+  float tb1 = type < 0.5 ? mix(0.2, 0.4, abs(k / (nRays - 1.0) - 0.5) * 2.0) : 0.34;
   float d = abs(x);
   if (!simple && t > tb1) {
     float sp = 0.2 * smoothstep(tb1, tb1 + 0.3, t);
     d = min(abs(x - sp), abs(x + sp));
-    float tb2 = tb1 + 0.3;
+    float tb2 = tb1 + 0.24;
     if (t > tb2) {
       float sp2 = 0.085 * smoothstep(tb2, tb2 + 0.2, t);
       d = min(min(abs(x - sp - sp2), abs(x - sp + sp2)), min(abs(x + sp - sp2), abs(x + sp + sp2)));
@@ -105,8 +142,8 @@ float rayDistance(float rc, float t, float type, float nRays) {
 // split back from the margin: most spaces intact, a few torn a little
 float finSplit(float cell, float seed, float type) {
   float h = hash12(vec2(cell * 1.31 + 0.5, seed * 3.7 + type * 11.0));
-  float deep = smoothstep(0.86, 0.99, h);
-  return deep * (type < 0.5 ? 0.07 : 0.04) + 0.008 * h;
+  float deep = smoothstep(0.92, 0.995, h);
+  return deep * (type < 0.5 ? 0.045 : 0.03) + 0.008 * h;
 }
 
 void computeFinSurface() {
@@ -117,6 +154,12 @@ void computeFinSurface() {
   float lead = vFinRay.w;
   float type = vFinType;
   float seed = vFishA.w;
+  // fleshy fin base: skin with guanine and blood vessels continues from the
+  // body over the first few millimetres of the rays (absolute length, so the
+  // short central caudal rays and the long lobe rays share one base line)
+  float tAbs = t * vFinRoot.w;
+  float fleshL = type < 0.5 ? 0.15 : 0.022;
+  float flesh = 1.0 - smoothstep(0.2 * fleshL, fleshL, tAbs);
 
   float fwr = max(fwidth(rc), 1e-4);
   float rd = rayDistance(rc, t, type, nRays);
@@ -140,33 +183,53 @@ void computeFinSurface() {
   float nz = vnoise2(vec2(rN * 7.0 + seed * 3.1, t * 5.0 + seed)) - 0.5;
   float nzr = vnoise2(vec2(rc * 1.9 + seed * 2.3, seed * 0.7)) - 0.5;
   float redM = smoothstep(ext + 0.12, ext - 0.14, t + nz * 0.22 + nzr * 0.16 - ray * 0.1);
-  vec3 redCol = mix(uColRed, uColOrange, clamp(0.25 + vFishB.y, 0.0, 1.0) * 0.6);
+  if (ctype < 0.5) {
+    // sarasa: the fin base continues the body pattern where it attaches —
+    // red runs out from a red peduncle / back along the rays, a fin rooted
+    // in white skin stays white at its base (only a faint own wash)
+    float rootRed = vFinRootRed;
+    float runOut = (type < 0.5 ? 0.15 : 0.28) + nz * 0.2 + nzr * 0.25;
+    float cont = rootRed * smoothstep(runOut + 0.1, runOut - 0.1, t - ray * 0.06);
+    redM = max(redM * mix(0.15, 1.0, rootRed), cont);
+  }
+  vec3 redCol = ctype < 0.5 ? uColRed : mix(uColRed, uColOrange, clamp(0.25 + vFishB.y, 0.0, 1.0) * 0.6);
   vec3 pig = redCol;
   if (ctype > 1.5 && ctype < 2.5) pig = mix(uColOrange, uColYellow, 0.3);
-  if (ctype > 2.5 && ctype < 3.5) pig = uColYellow;
+  if (ctype > 2.5 && ctype < 3.5) pig = mix(uColOrange, uColYellow, 0.62); // golden, not lemon
   // distal red thins out to a translucent orange wash before it clears
   pig = mix(pig, mix(pig, uColOrange, 0.35), smoothstep(0.0, 1.0, t) * (1.0 - redM));
   // white membrane: a thin turbid collagen sheet — bluish-white where it
   // scatters light back toward the viewer, warmer in transmission
-  vec3 membraneWhite = vec3(0.8, 0.86, 0.93);
-  vec3 col = mix(membraneWhite, pig, redM);
+  // (a thin sheet: it scatters back only a fraction of the light)
+  vec3 membraneWhite = vec3(0.5, 0.56, 0.64);
+  // the fleshy base is pale pink skin, the same tone as the thin peduncle
+  vec3 fleshWhite = uColWhite * vec3(1.0, 0.85, 0.84);
+  vec3 col = mix(mix(membraneWhite, fleshWhite, flesh), pig, redM);
   // rays carry more chromatophores + iridophores: denser pigment / whiter
-  col = mix(col, mix(vec3(0.93, 0.95, 0.98), pig * 1.04, redM), ray * 0.3);
+  col = mix(col, mix(vec3(0.72, 0.75, 0.8), pig * 1.04, redM), ray * 0.3);
   col *= 1.0 - joint * 0.3;
+  // individual rays differ a little in tint (faint bluish / golden
+  // iridophores), and fine blood vessels run along the rays near the base
+  float rh = hash12(vec2(floor(rc + 0.5) * 1.7 + 0.3, seed * 2.1 + type * 5.0)) - 0.5;
+  col *= mix(vec3(1.0), mix(vec3(0.9, 0.97, 1.1), vec3(1.08, 1.0, 0.86), step(0.0, rh)), ray * (1.0 - redM) * abs(rh) * 1.6);
+  col = mix(col, col * vec3(1.0, 0.74, 0.74), ray * (1.0 - redM) * smoothstep(0.45, 0.08, t) * 0.45);
 
   // ---- opacity (only the shell layer facing the camera is drawn): milky
   // membrane with streaks along the rays, denser rays, fleshy base, and a
   // distal zone that thins and clears toward the margin
-  float distal = smoothstep(0.3, 0.95, t);
-  float aMem = mix(0.55, 0.64, redM) * mix(1.0, 0.33, distal * (1.0 - 0.4 * redM));
+  // (the membrane between the rays is clearly see-through, the rays carry
+  // most of the density; distally both thin out further)
+  float distal = smoothstep(0.25, 0.9, t);
+  float aMem = mix(0.38, 0.52, redM) * mix(1.0, 0.45, distal * (1.0 - 0.35 * redM));
   // paired fins: clearer membrane between strongly marked rays (p42_1)
-  aMem *= type > 2.5 ? mix(0.55, 0.85, redM) : 1.0;
-  float aRay = mix(0.64, 0.8, redM) * mix(1.0, 0.62, distal);
+  aMem *= type > 2.5 ? mix(0.6, 0.85, redM) : 1.0;
+  float aRay = mix(0.62, 0.78, redM) * mix(1.0, 0.55, distal);
   float alpha = mix(aMem, aRay, ray);
   // milky streaks: elongated along the rays, varying from ray to ray
   float milk = vnoise2(vec2(rc * 0.62 + seed * 5.0, t * 1.6 - seed)) * 0.6 + vnoise2(vec2(rc * 1.7 + seed, t * 4.5 + seed * 2.0)) * 0.4;
-  alpha *= mix(1.0, 0.4 + 1.2 * milk, (1.0 - ray * 0.6) * smoothstep(0.05, 0.3, t));
-  alpha = mix(alpha, 0.95, smoothstep(0.1, 0.0, t)); // fleshy base
+  // (with clear windows between the rays where the membrane is thinnest)
+  alpha *= mix(1.0, 0.15 + 1.25 * milk, (1.0 - ray * 0.6) * smoothstep(0.05, 0.3, t));
+  alpha = mix(alpha, 0.97, flesh); // fleshy base
   alpha *= mix(1.0, vFishC.z, 0.6);                  // individual fin density
   // ragged margin: the membrane recedes between the ray tips (shallow
   // scallops), some inter-ray spaces are split further in (frayed), and the
@@ -184,14 +247,19 @@ void computeFinSurface() {
   // rays fade into the membrane toward the margin (thin distal segments)
   ray *= 1.0 - 0.55 * smoothstep(0.55, 1.0, t);
   alpha *= uFinOpacity;
+  // the fleshy base is opaque tissue (the end of the body lies inside it)
+  alpha = max(alpha, flesh * 0.985);
 
   gFinAlpha = clamp(alpha, 0.0, 1.0);
   gFinAlbedo = col;
   // transmitted light: warm white through the clear membrane, deeply
   // saturated through pigment (light crosses the chromatophore layer)
-  gFinTrans = mix(vec3(1.0, 0.95, 0.88), pig * pig * 1.15, redM);
+  gFinTrans = mix(vec3(1.0, 0.85, 0.7), pig * pig * 1.15, redM);
   gFinRay = ray;
   gFinRough = uFinRoughness * mix(1.0, 0.8, ray);
+  // the fleshy base keeps a little of the body's guanine sheen
+  vec3 pigN = col / max(max(col.r, col.g), max(col.b, 1e-3));
+  gFinSpec = mix(vec3(mix(0.02, 0.03, ray)), mix(vec3(0.9, 0.93, 1.0) * 0.45, mix(pigN * pigN, vec3(1.0, 0.6, 0.22), 0.45) * 0.22, redM), flesh);
 }
 `;
 
@@ -224,7 +292,7 @@ export const finFragmentNormal = /* glsl */ `
 
 export const finFragmentMaterial = /* glsl */ `
 // mucus over collagen, immersed: a faint, fairly rough sheen (no lacquer)
-material.specularColor = vec3(mix(0.02, 0.03, gFinRay));
+material.specularColor = gFinSpec;
 material.specularColorBlended = material.specularColor;
 material.specularF90 = 0.6;
 material.diffuseContribution = gFinAlbedo;
@@ -248,7 +316,7 @@ export const finFragmentLightsEnd = /* glsl */ `
     float NL = dot(normal, L);
     float backLit = saturate(-NL);
     float fwd = spow(saturate(dot(V, -L)), 8.0) * saturate(-NL * 4.0);
-    reflectedLight.directDiffuse += lc * gFinTrans * uFinTransmission * (backLit * 0.75 + fwd * 1.6) * RECIPROCAL_PI * caus;
+    reflectedLight.directDiffuse += lc * gFinTrans * uFinTransmission * (backLit * 0.75 + fwd * 0.8) * RECIPROCAL_PI * caus;
   #endif
   // ambient light from the hemisphere behind the membrane, transmitted
   vec3 backIrr = vec3(0.0);

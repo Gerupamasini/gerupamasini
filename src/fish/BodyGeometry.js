@@ -3,7 +3,7 @@
 // The body is lofted from measured morphometric profiles (morphology.js) as a
 // single continuous sheet parameterised by (row, theta):
 //   rows  : buccal cavity (back pocket -> lip rim) followed by the body
-//           (snout s = 0 -> caudal base s = 1.035)
+//           (snout s = 0 -> the end of the fleshy caudal tongue s = S_END)
 //   theta : 0 ventral midline -> PI/2 left flank -> PI dorsal ridge -> 2PI
 // Head details (lips, nares, orbit, preopercle, opercular flap and gill slit)
 // are added as displacement fields. Two dynamic states are baked as morph
@@ -19,9 +19,30 @@ import { profile, head, sectionPoint, opercMarginS, preopercS } from './morpholo
 import { smoothstep, clamp, lerp } from '../core/math.js';
 import { noise3, RNG } from '../core/random.js';
 
-export const S_END = 1.035;
+// the scaled flesh runs on over the caudal fin base as a thin tongue that
+// closes in a rounded margin on the fin (see morphology.js)
+export const S_END = 1.116;
 
 const tmp2 = [0, 0];
+
+// Head relief (SL units unless noted). Kept as named constants so the face
+// can be retuned against measured landmarks without touching the code.
+export const HEAD_RELIEF = {
+  nareDepth: 0.0042, // pit of the paired nostrils
+  nareRadius: 0.0068,
+  nareFlap: 0.0021, // the flap separating anterior and posterior naris
+  opercPlate: 0.0026, // height of the opercle plate above the flank
+  opercStepIn: 0.0065, // the plate's rounded step: from this far in front of the free margin...
+  opercStepOut: 0.0045, // ...to this far behind it
+  opercTuck: 0.0007, // shallow hollow where the flank tucks under the margin
+  preopercRidge: 0.00045, // ridge of the preopercle (under skin, faint)
+  // orbit, in eyeball radii: the head skin meets the eyeball in a smooth
+  // union (fillet) instead of a socket with a raised rim
+  orbitGap: 0.025, // skin stays this far beneath the ball where they meet
+  orbitFillet: 0.16, // blend width of the union
+  orbitSink: 0.3, // hidden skin inside the visible eye sinks this far...
+  orbitSinkR: [0.74, 0.5], // ...between these radii
+};
 
 // ---------------------------------------------------------------------------
 // Undisplaced surface
@@ -170,7 +191,7 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
   }
   const s = -x;
   const side = z >= 0 ? 1 : -1;
-  const lateral = Math.abs(z) / Math.max(1e-4, profile.hw(clamp(s, 0, 1)));
+  const lateral = Math.abs(z) / Math.max(1e-4, profile.hw(clamp(s, 0, S_END)));
   let d = 0;
 
   // lips: thick rolled lips around the gape
@@ -192,22 +213,25 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
 
   // paired nares with the characteristic separating flap
   const dn = Math.hypot(s - head.nareS, y - head.nareY);
-  if (dn < 0.02 && lateral > 0.4) {
-    d -= 0.0032 * gauss(dn, 0.0075);
-    d += 0.0016 * gauss(s - head.nareS, 0.0018) * gauss(y - head.nareY, 0.006); // flap
+  if (dn < 0.022 && lateral > 0.4) {
+    d -= HEAD_RELIEF.nareDepth * gauss(dn, HEAD_RELIEF.nareRadius);
+    d += HEAD_RELIEF.nareFlap * gauss(s - head.nareS, 0.002) * gauss(y - head.nareY, 0.0055); // flap
   }
 
   // opercular series
   if (y > head.opercBotY - 0.02 && y < head.opercTopY + 0.015 && lateral > 0.25) {
     const vfade = smoothstep(head.opercBotY - 0.02, head.opercBotY + 0.012, y) * smoothstep(head.opercTopY + 0.015, head.opercTopY - 0.012, y);
     const e = s - opercMarginS(y); // + behind the free margin
-    // gill slit groove just behind the margin
-    const groove = smoothstep(-0.0015, 0.003, e) * smoothstep(0.014, 0.004, e);
-    d -= 0.0028 * groove * vfade;
-    masks.gill = groove * vfade;
-    // opercle plate stands slightly proud of the flank behind it
-    const plate = smoothstep(-0.075, -0.012, e) * smoothstep(0.0005, -0.0035, e);
-    d += 0.0024 * plate * vfade;
+    // the opercle is a thin plate lying on the flank: it stands slightly
+    // proud and ends in a soft, rounded step at its free margin. A closed
+    // gill cover shows no groove — only the step and its contact shadow
+    // (a carved slit reads as a drawn or stitched seam).
+    const plate = smoothstep(-0.085, -0.02, e) * smoothstep(HEAD_RELIEF.opercStepOut, -HEAD_RELIEF.opercStepIn, e);
+    d += HEAD_RELIEF.opercPlate * plate * vfade;
+    // the flank tucks under the free margin: a very shallow, wide hollow
+    const tuck = smoothstep(-0.003, 0.004, e) * smoothstep(0.022, 0.007, e);
+    d -= HEAD_RELIEF.opercTuck * tuck * vfade;
+    masks.gill = tuck * vfade;
     masks.operc = smoothstep(-0.11, -0.01, e) * smoothstep(0.004, -0.002, e) * vfade;
     // hinge at the front, maximal abduction at the free margin
     // (the release behind the margin spans several mesh rows so the opened
@@ -215,16 +239,18 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
     masks.opercFlap = Math.pow(smoothstep(-0.1, -0.001, e), 1.6) * Math.pow(smoothstep(0.016, 0.0, e), 1.5) * vfade * vfade;
     // preopercle ridge (subtle: covered by skin in goldfish)
     const ep = s - preopercS(y);
-    d += 0.0007 * gauss(ep, 0.007) * vfade;
-    d -= 0.0003 * gauss(ep - 0.009, 0.005) * vfade;
+    d += HEAD_RELIEF.preopercRidge * gauss(ep, 0.009) * vfade;
+    d -= HEAD_RELIEF.preopercRidge * 0.45 * gauss(ep - 0.011, 0.007) * vfade;
   }
 
   // very subtle nuchal/occipital hump & cranial fontanelle groove on the top of the head
   if (lateral < 0.35 && y > 0) d -= 0.0009 * gauss(s - 0.17, 0.05) * gauss(lateral, 0.12);
 
   // natural bilateral micro-asymmetry (different noise per side) — ±0.1 % SL
-  d += 0.0007 * noise3(x * 22 + asymSeed, y * 22, side * 5.3 + asymSeed * 0.37);
-  d += 0.0012 * side * noise3(x * 3.1 + asymSeed * 1.7, y * 3.1, 1.3); // low-frequency side bias
+  // (faded out on the thin caudal tongue, which is barely thicker than the fin)
+  const asymW = smoothstep(1.06, 0.96, s);
+  d += 0.0007 * asymW * noise3(x * 22 + asymSeed, y * 22, side * 5.3 + asymSeed * 0.37);
+  d += 0.0012 * asymW * side * noise3(x * 3.1 + asymSeed * 1.7, y * 3.1, 1.3); // low-frequency side bias
   return d;
 }
 
@@ -237,7 +263,7 @@ function bodyRows(n) {
     2.2 * Math.exp(-(((s - 0.12) / 0.1) ** 2)) +
     1.2 * Math.exp(-(((s - 0.29) / 0.035) ** 2)) +
     1.8 * Math.exp(-((s / 0.02) ** 2)) +
-    0.6 * Math.exp(-(((s - 1.02) / 0.03) ** 2));
+    1.2 * Math.exp(-(((s - 1.07) / 0.04) ** 2)); // rounded margin of the caudal tongue
   const N = 2000;
   const cdf = new Float64Array(N + 1);
   for (let i = 1; i <= N; i++) {
@@ -384,7 +410,7 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
           const s = uRows[r];
           const th = thetas[c];
           const a = -Math.cos(th);
-          const hw = profile.hw(clamp(s, 0, 1));
+          const hw = profile.hw(clamp(s, 0, S_END));
           // thin-ness proxy for translucency: thin at dorsal/ventral edges & peduncle
           const thick = 2 * hw * Math.sqrt(Math.max(0, 1 - a * a * 0.92)) + 0.006;
           maskArr[idx * 4 + 0] = 0; // scale mask (filled later)
@@ -395,7 +421,7 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
           const yv = P[0][i + 1];
           maskArr[idx * 4 + 3] = s >= 0 && yv > head.opercBotY - 0.03 && yv < head.opercTopY + 0.02 ? s - opercMarginS(clamp(yv, head.opercBotY, head.opercTopY)) : 1.0;
           {
-            const sc = clamp(s, 0.004, 1.0);
+            const sc = clamp(s, 0.004, S_END);
             const T = profile.top(sc);
             const B = profile.bot(sc);
             sectArr[idx * 4] = 0.5 * (T + B);
@@ -415,8 +441,16 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
     }
   }
 
-  // 3) orbit: tuck the skin beneath the protruding eyeball, add orbital rim
+  // 3) orbit: the transparent skin over the eye is continuous with the head
+  // skin, so the head surface meets the protruding eyeball tangentially — a
+  // smooth union of the two surfaces (a soft fillet), no socket and no
+  // raised rim around a bead. Inside the visible eye the skin stays just
+  // beneath the ball (hidden by it) and then sinks away.
   const eyes = [eyeRest(1), eyeRest(-1)];
+  const smax = (a, b, k) => {
+    const hh = Math.max(k - Math.abs(a - b), 0) / k;
+    return Math.max(a, b) + hh * hh * k * 0.25;
+  };
   const q = new THREE.Vector3();
   const radial = new THREE.Vector3();
   for (let st = 0; st < 3; st++) {
@@ -431,16 +465,11 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
       const rho = radial.length();
       const R = E.radius;
       if (rho > 1.6 * R || h < -R) continue;
-      // orbital rim: soft raised fold that overlaps the eyeball margin
-      const rim = gauss(rho - 0.9 * R, 0.15 * R);
-      let push = -0.1 * R * rim; // negative => outward along axis
-      // inside the visible eye: push the skin well under the ball surface
-      if (rho < R) {
-        const hb = Math.sqrt(R * R - rho * rho);
-        const target = hb - 0.3 * R;
-        const inside = smoothstep(0.93 * R, 0.8 * R, rho);
-        if (h > target) push += (h - target) * inside;
-      }
+      const hb = rho < R ? Math.sqrt(R * R - rho * rho) : 0;
+      let hn = smax(h, hb - HEAD_RELIEF.orbitGap * R, HEAD_RELIEF.orbitFillet * R);
+      // well inside the visible eye: sink the hidden skin away from the ball
+      hn -= HEAD_RELIEF.orbitSink * R * smoothstep(HEAD_RELIEF.orbitSinkR[0] * R, HEAD_RELIEF.orbitSinkR[1] * R, rho);
+      const push = h - hn; // negative => outward along the axis
       pos[i] -= E.axis.x * push;
       pos[i + 1] -= E.axis.y * push;
       pos[i + 2] -= E.axis.z * push;
@@ -481,7 +510,7 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   // 6) tangents (along body, toward the tail) and scale layout UVs
   const tangent = new Float32Array(count * 3);
   const scaleUV = new Float32Array(count * 2);
-  const halfArc = new Float32Array(NC);
+  const vArc = new Float32Array(NC); // arc length weighted by the inverse local scale height
   const DS0 = 0.0255; // exposed scale length at mid-flank (≈28 lateral-line scales)
   const DV0 = 0.0305; // scale row spacing at mid-flank
   // cumulative U coordinate: integral ds / (DS0 * k(s))
@@ -496,23 +525,27 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   for (let r = 0; r < NR; r++) {
     const s = uRows[r];
     // arc length from ventral midline around the LEFT side of this row
-    halfArc[0] = 0;
+    // scales are smaller toward the dorsal ridge and the belly than on the
+    // mid-flank: the row height shrinks with the dorso-ventral coordinate
+    vArc[0] = 0;
     for (let c = 1; c <= nTheta / 2; c++) {
       const i0 = (r * NC + c - 1) * 3;
       const i1 = (r * NC + c) * 3;
-      halfArc[c] = halfArc[c - 1] + Math.hypot(P[0][i1] - P[0][i0], P[0][i1 + 1] - P[0][i0 + 1], P[0][i1 + 2] - P[0][i0 + 2]);
+      const ds = Math.hypot(P[0][i1] - P[0][i0], P[0][i1 + 1] - P[0][i0 + 1], P[0][i1 + 2] - P[0][i0 + 2]);
+      const am = -Math.cos(0.5 * (thetas[c - 1] + thetas[c]));
+      vArc[c] = vArc[c - 1] + ds / (1 - 0.3 * am * am);
     }
     // lateral line height: runs slightly below mid-flank, parallel to the axis
     const sc = clamp(s, 0, 1);
     const T = profile.top(sc);
     const B = profile.bot(sc);
     const yLL = lerp(B, T, lerp(0.52, 0.5, smoothstep(0.3, 1.0, sc)));
-    let arcLL = halfArc[nTheta / 2] * 0.5;
+    let arcLL = vArc[nTheta / 2] * 0.5;
     for (let c = 1; c <= nTheta / 2; c++) {
       const y0 = P[0][(r * NC + c - 1) * 3 + 1];
       const y1 = P[0][(r * NC + c) * 3 + 1];
       if ((y0 - yLL) * (y1 - yLL) <= 0 && y1 !== y0) {
-        arcLL = lerp(halfArc[c - 1], halfArc[c], (yLL - y0) / (y1 - y0));
+        arcLL = lerp(vArc[c - 1], vArc[c], (yLL - y0) / (y1 - y0));
         break;
       }
     }
@@ -523,7 +556,7 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
       const idx = r * NC + c;
       const cm = c <= nTheta / 2 ? c : nTheta - c; // mirror to the left side
       scaleUV[idx * 2] = Ucum[r] - U_LL0;
-      scaleUV[idx * 2 + 1] = (halfArc[cm] - arcLL) / (DV0 * k);
+      scaleUV[idx * 2 + 1] = (vArc[cm] - arcLL) / (DV0 * k);
       const i0 = (r0 * NC + c) * 3;
       const i1 = (r1 * NC + c) * 3;
       v.set(P[0][i1] - P[0][i0], P[0][i1 + 1] - P[0][i0 + 1], P[0][i1 + 2] - P[0][i0 + 2]).normalize();
@@ -533,7 +566,8 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
       // scale mask: scales start behind the opercular margin / occiput
       const y = P[0][idx * 3 + 1];
       const sStart = opercMarginS(clamp(y, head.opercBotY, head.opercTopY)) + 0.006;
-      maskArr[idx * 4] = s < 0 ? 0 : smoothstep(sStart, sStart + 0.022, s) * smoothstep(1.035, 1.0, s);
+      // (small scales run a little way onto the caudal tongue and fade out)
+      maskArr[idx * 4] = s < 0 ? 0 : smoothstep(sStart, sStart + 0.022, s) * smoothstep(1.085, 1.02, s);
     }
   }
 
