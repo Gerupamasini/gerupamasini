@@ -36,6 +36,9 @@
 17. **鰭の姿勢（P）:** 水中・水槽 23 フレームのうち、背鰭が立つものが 11 枚、胸鰭は広げる 6／畳む 8／垂れる 6。一定の型は無い。口は閉が既定で摂餌時に開く。[F-15、F-07]
 18. **実装方針（私の推論）:** 状態機械は「定位 → 検出 → 迎撃 → 捕獲または拒否 → 復帰」「闘争（誇示 → 追跡）」「驚愕・逃避 → 退避 → 回復」「低水温・夜間の隠れ」に分け、全ての距離・速度・頻度・閾値を `config` の調整値にし、根拠欄に「A／B／C／M／PROXY／P」を残す。**固定してよい数値は、縄張り面積の式（F-22）と、PROXY として明示した上での Piccolo ら 2008 の端点（F-03）程度。** [全体]
 
+19. **（別パスの追記）群れ内の最小間隔と迎撃機動:** Chinook 幼魚の野外 3D 映像で、群れの中の個体は競争相手の近傍を 1.0〜2.9 体長の距離まで避け、迎撃機動は「ゆっくりした横移動／鋭い U ターン／速い S ターン」に分類された（A／B、PROXY）。複数個体の配置と迎撃の動きの型に使える。[F-44]
+20. **（別パスの追記）採餌型・暗所・日陰:** 日本の渓流の charr では、攻撃的な焦点防衛型（ドリフト採餌）と非攻撃的な巡回型（底生採餌）に分かれ、優劣の階層は前者にだけある（A、PROXY）。暗所で側線が正常なニジマスは障害物の左右を探索し、側線を遮断すると片側に固執する（Liao 2006。A、PROXY）。Chinook 幼魚は日向より日陰で警戒が大きく減速する（A、PROXY）。[F-45、F-43、F-47]
+
 ---
 
 ## 2. Findings
@@ -478,6 +481,65 @@
 
 ---
 
+### Part E — 別パス（検索 34 回）による追加（第2版と重複しない内容のみ）
+
+> 検索は全て standard。要約が引用元ページを特定していない場合は「帰属不確実」と書き、URL は候補として並べた。**Piccolo ら 2008 の再検索（別パスの #19）でも要約は "capture probability (-65% to 10%)" と返った。F-03 の "from 65% to 10%" の "from" が欠けた形と読め、F-03 の解釈と矛盾しない（独立の再確認だが、同じ要約文の別表記であり、数値の根拠が増えたわけではない）。**
+
+### F-43 Liao (2006) の結果の中身と、Arnold ら (1991) の parr posture（F-09、F-27 への補足）
+- 主張/値: (1) **Liao (2006)**（J. Exp. Biol. 209:4077–4090。円柱後流の渦、ニジマス）: **明所で側線を遮断したトラウトは、Kármán gait をするか entraining（円柱に寄り添う）をするかに個体差を示した。暗所で側線が正常な entraining のトラウトは、実験中に円柱の右側と左側を行き来して環境を探索した。側線を遮断すると、片側への強い固執が現れ、他の領域を探索しなかった。** entraining と Kármán gait はどちらも、速い流れで地面に対して位置を保つ省エネの戦略と考えられる。(2) **Arnold, Webb & Holford (1991)**（J. Exp. Biol. 156:625–629）: 大西洋サケ parr は典型的に **「parr posture」（伸ばした胸鰭の先端で立つ姿勢）** で定着する。胸鰭を切除した個体と intact の個体で定位保持の性能を比べて、「胸鰭が負の揚力を生む水中翼として働く」という仮説を検証した。**切除の影響（結果）は要約に無い。**
+- 適用範囲: PROXY: ニジマス（水路）、大西洋サケ parr（水路）。ヤマメは未確認。
+- 出典:
+  - https://cob.silverchair.com/jeb/article-pdf/209/20/4077/1257217/4077.pdf ／ https://cob.silverchair.com/jeb/article-split/209/20/4077/16399/The-role-of-the-lateral-line-and-vision-on-body
+  - https://cob.silverchair.com/jeb/article-pdf/156/1/625/2579606/jexbio_156_1_625.pdf
+- 証拠: [A] "In the dark, entraining trout with an intact lateral line will alternate between right and left sides of the cylinder ... when the lateral line is blocked these fish display a strong fidelity to one side"（Liao 2006 の検索要約）。Arnold ら: "Parr typically settled in a characteristic 'parr posture', standing on the tips of their extended pectoral fins."
+- 実装への含意（私の推論）: 暗い場面で側線が働く個体は、障害物の周りを左右に探索する。parr は底に近いとき胸鰭の先端で体を支える姿勢を取る（写真 F-15 の「胸鰭を基質に押し付ける」6 枚と整合する可能性。因果は未確認）。
+
+### F-44 Chinook 幼魚の野外 3D 映像: 群れの中の個体間距離と迎撃機動の型
+- 主張/値: (1) アラスカの渓流の juvenile Chinook salmon（"Territories within groups: The dynamic competition of drift-feeding juvenile Chinook salmon in 3-dimensional space"）で、**群れ（aggregation）内の個体は、競争相手の近傍を 1.0〜2.9 体長の距離まで避けた。** (2) 摂餌中の 3 次元運動を野外で測り、広く使われる機動として **ゆっくりした横移動、鋭い U 字ターン、速い S 字ターン**の運動学を解析した。魚は多くの機動モードを持ち、餌との遭遇を最大にしつつエネルギー消費を抑えている、と推論された（会議抄録）。ドリフト捕食中は、上流を向いて流れの中で位置をほぼ保ち、機動して通過する餌を迎撃する。
+- 適用範囲: **PROXY: Chinook 幼魚**（野外、アラスカ）。サイズ、水温、流速、n、距離の算出法は要約に無い。
+- 出典:
+  - https://pubs.usgs.gov/publication/70269370 ／ https://www.usgs.gov/index.php/publications/territories-within-groups-dynamic-competition-drift-feeding-juvenile-chinook-salmon-3
+  - https://meetings-archive.aps.org/dfd/2010/qt/1/ ／ https://archive.aps.org/dfd/2010/qt/1 （機動。会議抄録）
+- 証拠: [A（個体間距離。PROXY）] "individuals within aggregations avoided the immediate proximity of their competitors, out to a distance of 1.0 to 2.9 body lengths"。[B（機動。会議抄録）] "slow lateral motion, sharp U-shaped turns and fast S-shaped turns"。
+- 実装への含意（私の推論）: 同じ流れの中の複数個体の最小間隔の初期レンジを **1〜3 体長**にできる（F-40 の「予測より広い」と方向が合う。F-14 の水槽の近接は根拠にならない）。迎撃は「横にずれる」「U ターンで戻る」「S ターンで素早く」の 3 型から選ぶ。
+
+### F-45 攻撃・採餌様式の補足: charr の二つの採餌様式、咬みの主体とライフステージ
+- 主張/値: (1) **日本の山地渓流のアメマス（white-spotted charr）とオショロコマ（Dolly Varden）で、攻撃的なドリフト採餌者と、非攻撃的な底生採餌者の二つの様式が見つかった。** ドリフト採餌者は焦点の周りに部分的な縄張りを防衛し、そこから流下餌を捕りに出る。底生採餌者は礫の周りや下を広い範囲で巡回し、範囲は互いに重なる。**体サイズに依存した優劣の階層は攻撃的なドリフト採餌者の間（種内・種間）にあり、底生採餌者には無かった。** アメマスの「ドリフト採餌者:底生採餌者」の比は、オショロコマの 35 倍以上。(2) **咬み（nipping）**: steelhead 幼魚で潜在的に損傷を与える攻撃行動。咬みの大半は優位個体が行い、従属個体の全ての活動は群れ内の優位個体の存在に左右された。**咬み頻度は未成熟 parr で最大、完全にスモルト化した魚で最小。**（(2) は帰属不確実。）
+- 適用範囲: (1) PROXY: charr 2 種（日本の山地渓流）。どの論文の記述かは要約が特定していない（F-20 の Nakano ら 1999 と同系統の可能性があるが未確認）。(2) PROXY: steelhead、大西洋サケ。
+- 出典（候補。帰属不確実）: https://link.springer.com/article/10.1007/BF02684235 ／ https://link.springer.com/doi/10.1007/BF02347237 ／ https://www.sfu.ca/biology/faculty/dill/publications/f85-213.pdf ／ https://eprints.lib.hokudai.ac.jp/repo/huscap/all/21900/44(1)_P22-25.pdf
+- 証拠: [A（帰属不確実。PROXY）] "aggressive drift foragers defended partial territories around focal points from which they made forays to capture invertebrates drifting in the water column. Non-aggressive benthos foragers cruised around and beneath cobble in large foraging ranges that overlapped each other."
+- 実装への含意（私の推論）: 個体の採餌型を「焦点防衛型（攻撃的）」と「巡回型（非攻撃的）」に分け、攻撃行動は前者だけに割り当てる設計に根拠がある（PROXY）。ヤマメでの割合は不明。成熟前の parr で咬みを多くし、スモルト化した個体では減らす、という段階づけの方向。
+
+### F-46 焦点流速・反応距離の補足数値と、遊泳コストの仮説（PROXY）
+- 主張/値: (1) **Chena 川の juvenile Chinook が占めた焦点の流速は平均 12 cm/s**（要約の一文。出典の論文は特定できない）。(2) **単独個体の試験での反応距離は平均 32.7 cm で、流速の有意な影響は無かった**（Biro ら 1996 のファイル名のページの要約。種・体長・条件は要約に無い。F-04 の「流速の影響が弱い／なし」と同方向）。(3) **餌の相対サイズ:** 上の F-37 の Wankowski（大西洋サケ）の記述に加えて、**捕食可能な餌のサイズの相対的な幅は 0.06 体長で、魚のサイズ（2.8〜20.3 cm）に依らず一定**（同じ学位論文の要約）。(4) **Hill & Grossman (1993)**（Ecology 74:685–698）: ニジマスとロージーサイドデイスは、**酸素消費量が少なくて済む流速に過剰に出現した**（遊泳コストの仮説と整合）。形態が適応しているロングノーズデイスとマディドスカルピンは当てはまらなかった。
+- 適用範囲: PROXY: Chinook 幼魚（Chena 川）、種不明（32.7 cm）、大西洋サケ（0.06 fl の幅は、種が要約に無く、F-37 と同じ学位論文の可能性）、ニジマス・デイス（ノースカロライナの渓流と推定。要約に場所は無い）。
+- 出典（候補）: https://link.springer.com/doi/10.1007/s10641-018-0723-5 （Chena 川 12 cm/s。帰属不確実）／ https://www.harkness.ca/PDFs/Contributions%201990s/Biro%20Ridgway%20McLaughlin%201996.pdf （32.7 cm。帰属不確実）／ https://www.storre.stir.ac.uk/bitstream/1893/35136/1/Wankowski-thesis-1977.pdf ／ https://dx.doi.org/10.1007/BF00027524 （Hill & Grossman。帰属不確実）
+- 証拠: [B（帰属不確実）] "Reactive distances for single fish trials averaged 32.7 cm and did not show significant velocity effects"。(1) は [B]、(3) は [B（学位論文）]、(4) は [A]。
+- 実装への含意（私の推論）: 反応距離の既定を単独個体で約 30 cm 前後と置く案はあるが、**種・体長が不明なので体長比にできない**。参考値にとどめ、調整値にする。焦点流速は 10 cm/s 台の低い値から始める案（PROXY）。
+
+### F-47 日陰・驚愕反応・隠れ行動、Grant & Noakes (1987) の題名（F-41、F-42 への補足）
+- 主張/値: (1) **日陰の効果（juvenile Chinook、PMC の論文）:** 反応の大きさは日向より日陰で大きく、日陰をより危険な環境と見なした。**日陰では減速して慎重になり、日向では加速した。** (2) **驚愕反応（startle）:** 外部刺激後の急速な遊泳バーストは対捕食者行動の重要な要素。**Arctic charr は主に上向きの遊泳バースト、brown trout と大西洋サケの稚魚は主に水槽の底近くの短い遊泳バースト**（帰属不確実）。(3) **隠れ行動:** 稚魚の生存にとって最も重要だったのは、刺激後の隠れ行動より通常時の行動だった。主な捕食者が待ち伏せ型（アオサギ）だったことが理由として挙げられた（帰属不確実。魚の種は要約に無い）。(4) Grant & Noakes (1987) "Escape behavior and use of cover by young-of-the-year brook trout, Salvelinus fontinalis" の題名を確認（**内容は未取得**）。F-20 の「Movers and stayers」の題名は、今回も確認できなかった。
+- 適用範囲: PROXY: Chinook 幼魚、charr／brown trout／大西洋サケの稚魚、ブルックトラウト。ヤマメは未確認。
+- 出典: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8445879/ （日陰）／ https://www.annzool.net/PDF/anzf35/anzf35-017p.pdf ／ https://eprints.lib.hokudai.ac.jp/repo/huscap/all/90675/Kouta_Miyamoto.pdf ／ https://link.springer.com/article/10.1007/s00442-021-05008-4 （(2)(3) の候補。帰属不確実）
+- 証拠: [A（日陰。PROXY）] "Salmon slowed down to be cautious in shade and sped up in sun."／ [B（(2)(3)。帰属不確実）]。
+- 実装への含意（私の推論）: 日陰（岸のカバーの下、暗い水中）では警戒反応を大きくし、動きを遅くする。逃避後の「隠れる」より通常時の位置取り（隠れ場所の近さ）が生存を左右する、という設計の優先順位づけの材料。
+
+### F-48 ヤマメ関連の日本語・題名の補足（帰属不確実が多い）
+- 主張/値: (1) 日本語の検索要約: **縄張り争いで従属になった個体は、1.5 歳ごろに降海の準備をする**。**小さな支流で、イワナやヤマメの成魚によるヤマメ幼魚の捕食が確認されている**（どの文書の記述かは特定できない）。(2) masu salmon 若魚は **40 種超の餌を食べ、大半は陸生・空中の無脊椎動物と、カゲロウ・ユスリカなど河床の動物**。湧水河川では主な餌は水生無脊椎動物。小型の若魚は岸近くの遅い流れに特に生息する（帰属不確実）。(3) 萌出初期の masu salmon の稚魚は、昼より夜の活動が大きかった（帰属不確実）。(4) **題名のみ確認（内容未取得）**: "Color vision, spectral sensitivity, accommodation, and visual acuity in juvenile masu salmon Oncorhynchus masou masou"（Fisheries Science）、"Differentiated predation risk on hatchery-reared juvenile masu salmon by white-spotted charr with different body sizes"。視力は反応距離の上限を決めるので、r07 と合わせて次に確認すべき。
+- 適用範囲: ヤマメ／サクラマス（masu salmon）。サイズ、季節、場所、n は要約に無い。
+- 出典（候補）: https://fra.repo.nii.ac.jp/record/2009558/files/sapporo_s_14.pdf ／ https://www.jstage.jst.go.jp/article/suisan/89/1/89_22-00024/_pdf （(1)）／ https://complete.bioone.org/journals/ichthyology-and-herpetology/volume-111/issue-1/i2022050/Ecosystem-Functions-of-a-Spring-Fed-Tributary-in-Providing-Foraging/10.1643/i2022050.full ／ https://asih.kglmeridian.com/view/journals/cope/111/1/article-p44.xml （(2)）／ https://www.hro.or.jp/upload/41034/81-kawamura.pdf （(3)）／ https://link.springer.com/article/10.1111/j.1444-2906.2006.01144.x ／ https://link.springer.com/article/10.1007/s12562-016-1059-8 （(4)）
+- 証拠: [B（帰属不確実）]。(4) は [B（題名のみ）]。
+- 実装への含意（私の推論）: 大型個体が小型個体を捕食しうることは、小型の警戒・岸際への退避の理由として使える。降海準備は r03（生活史）の領域。
+
+### F-49 大西洋サケの夜行性への切り替え: 10℃ を境にした記述（F-29 の閾値の別表現）
+- 主張/値: 総説/論文の要約として、**幼魚の大西洋サケは、夏（水温 10℃ 超）の部分的な夜行性から、冬（10℃ 未満）のほぼ完全な夜行性に変わる。この変化は徐々に進み、光周期に依存せず、水温のみで制御される**（Fraser, Metcalfe & Thorpe 1993 の主旨として述べられる）。秋〜冬、昼は河床の隙間に隠れ、夕方にだけ出て採餌し、夜は流れの遅い所で採餌する。夜間の光量では採餌効率が下がる（Fraser & Metcalfe 1997）ので完全な夜行性は予想外で、エネルギー要求の低下と、特に低水位で増える鳥類の捕食リスクとのトレードオフがこれを促す。Railsback らの要約: **サケ科は水温（代謝要求）が低いと夜に相対的に多く食べる。夜は浅く遅い水で採餌し、最良の生息場所に個体が詰まって入る。**
+- 適用範囲: PROXY: 大西洋サケ parr（欧州）。ヤマメは未確認。F-29 は同じ現象を「8–12℃ で昼の活動を抑える」と記す。
+- 出典（候補。帰属不確実）: https://www.kmae-journal.org/10.1051/kmae/2011083/pdf ／ https://www.kmae-journal.org/articles/kmae/ref/2012/01/kmae110085/kmae110085.html ／ https://link.springer.com/article/10.1023/A:1021372822784 ／ https://catalog.comses.net/publications/70313
+- 証拠: [A（PROXY。総説経由）] "Juvenile Atlantic salmon change from being partly nocturnal in summer (when water temperatures are above 10 °C) to being almost completely nocturnal in winter when temperatures drop below 10 °C ... independent of photoperiod and solely controlled by temperature."
+- 実装への含意（私の推論）: 昼夜の切り替えを「水温が 10℃ 前後で連続的に変わる」関数にでき、10℃ は PROXY の初期値として調整可能にする（F-29 の 8–12℃ と同じ範囲）。夜は流れの遅い所、昼は隙間という空間の切り替えも付ける。
+
+---
+
 ## 3. 資料間の矛盾・不一致
 
 1. **反応距離と流速:** Piccolo ら 2008（coho／steelhead 幼魚、0.29–0.61 m/s、水槽）は、流速の増加で検出距離が低下し、捕獲確率が 65% → 10%。UGA の学位論文群は、グレイリングで反応距離と流速の関係は弱い正または無し、ニジマスで劣位個体は流速で負（または影響ほぼ無し）、ブルックチャーで一貫した効果は無し。→ **種、実験条件（水槽か野外か）、流速範囲、測定法の違いで未解決。ヤマメは未確認。** [F-03、F-04、F-18、F-37]
@@ -494,6 +556,12 @@
 12. **冬の位置:** 北海道のサクラマス幼魚は冬に水際・流速 約 20 cm/s・被覆を好む（F-32）。大西洋サケは冬に昼は基質の隙間に隠れ、夜は基質上の遅い流れに出る（F-29）。→ 矛盾ではなく、被覆の種類（草、粗い基質、基質の隙間）と観察法の違い。ヤマメの冬の行動は両方の成分をサイズ別に持つ可能性（私の推論）。[F-29、F-32]
 13. **避難所の得失:** ニジマスは渦の幅が体長の 1.5 倍以上で避難所を使い、遊泳出力が下がる（F-36 (1)）。一方、流速 50 cm/s 超で餌を取る場合は避難所から出る攻撃のコストが増えて得にならない（F-36 (2)）。→ 定位保持のコストと摂餌のコストの違い。流速範囲の違い。[F-36]
 14. **攻撃性の水温依存と低水温での採餌:** 3℃ では攻撃性が低い（F-39）。一方、0℃ 未満でも夜間に採餌する個体がいる（F-29）。→ 攻撃（縄張り防衛）と採餌は別の量。低温では闘争が減り、夜の採餌は続く。[F-29、F-39]
+
+15. **（別パスの追記）夜行性の閾値の表現:** F-29 は大西洋サケの昼の活動の抑制を 8–12℃（隠れ始めは 6–8℃ とする記述も）と記し、F-49 は「10℃ 超で部分的に夜行性、10℃ 未満でほぼ完全な夜行性」と記す。→ 同じ現象の別の要約。10℃ を 8–12℃ の中心とする扱いで矛盾しない。種はいずれも大西洋サケで、ヤマメの閾値は未確認。[F-29、F-49]
+16. **（別パスの追記）個体間隔:** F-40 は NZ の brown trout で実際の間隔が NREI 予測より広いとだけ述べ、F-44 は Chinook の群れ内で 1.0〜2.9 体長を避けると述べる。F-22（縄張り面積の式）から導く半径は 10 cm で約 0.44 m（約 4.4 体長）。→ 測っている量が違う（群れ内の最近接回避距離／縄張り面積の円相当半径／予測との差）。どれもヤマメではない。[F-22、F-40、F-44]
+17. **（別パスの追記）反応距離と流速:** F-46 の 32.7 cm（単独個体、流速の有意な影響なし。帰属不確実）は F-04 と同方向で、F-03 の検出距離低下とは反対。F-03 の実験は coho／steelhead で流速 0.29–0.61 m/s と速い。→ 流速範囲が速いほど検出距離が落ちる、という整理の余地（私の推論。資料は明言しない）。[F-03、F-04、F-46]
+18. **（別パスの追記）Grant & Noakes 1987:** F-20 の「Movers and stayers」は確認できず、別パスの検索も別題名（escape behavior and use of cover）を示した。→ 同年・同著者の別論文の可能性。mover/stayer の主張は M のまま。[F-20、F-47]
+19. **（別パスの追記）Nakano の対象種:** 別パスでも、Nakano, Fausch & Kitano (1999) の対象が charr 2 種（オショロコマ、アメマス）であることを確認した。課題文の「masu salmon」は誤り。[F-20、F-45]
 
 ---
 
@@ -527,6 +595,13 @@
 7. **その他:**
    - 検索結果のうち未確認の候補: ESJ（日本生態学会）の 65 回大会 H02-01 の要旨（検索 #10、#39 で出たが内容は確認していない）。Fraser ら 1993 の要約が、同論文自身のものか別論文のものか。Piccolo ら 2008 の URL 31555 と 31556 のどちらがどの論文か（31556 が速度の論文と推定）。
    - 季節による行動の変化（産卵期の雄の闘争、スモルト化期の降下行動）は、本書の範囲外。r03（生活史・性）との接続が必要。
+8. **（別パスの追記）別パスの検索 34 回でも取れなかったもの:**
+   - ヤマメの視力・最小分離角（F-48 (4) の題名の論文の中身。反応距離の上限と、r07 の目の仕様に必要）。
+   - Chinook の「捕獲した餌を吐き出す割合」以外の迎撃機動の頻度（U ターン、S ターン、横移動の割合、各機動の速度・距離。F-44 は分類のみ）。
+   - 群れ内の最近接回避距離 1.0–2.9 体長（F-44）が、サケ科の他種・ヤマメで成り立つか。
+   - Liao 2006 の「視覚と側線の寄与の割合」。Arnold ら 1991 の胸鰭切除の結果（F-43）。
+   - 逃避開始距離（FID）の数値と、日陰・暗所での FID の変化量（F-47 は方向のみ）。
+   - 警報物質の日本語検索（サケ科、サクラマス、ヤマメ）は成果なし（別パスの #29）。
 
 ---
 
@@ -579,6 +654,15 @@
 **冬期・低水温・夜間**
 - 昼夜・水温・光: https://link.springer.com/article/10.1023/A:1007691316864 ／ https://eprints.gla.ac.uk/71319 ／ https://theses.gla.ac.uk/75895/ ／ https://theses.gla.ac.uk/75895/1/13818631.pdf ／ https://www.bio.ulaval.ca/labdodson/Papers%20Julian/Johnston%20et%20al%202004.pdf ／ https://www.kmae-journal.org/10.1051/kmae/2011083/pdf ／ https://link.springer.com/article/10.1023/A:1021372822784 ／ https://acnpsearch.tweb-dev.unibo.it/singlejournalindex/9762145 （F-29）
 - 越冬レビュー: https://wicri-demo.istex.fr/Wicri/Eau/explor/LotaV3/Site/fr/Main/Exploration/bibRecord.php?hk=000769 ／ https://informahealthcare.com/doi/ref/10.1577/M03-196.1 （F-30）
+
+**（別パスの追記）Part E の出典（候補を含む。重複は省略）**
+- Liao 2006 / Arnold ら 1991: https://cob.silverchair.com/jeb/article-pdf/209/20/4077/1257217/4077.pdf ／ https://cob.silverchair.com/jeb/article-split/209/20/4077/16399/The-role-of-the-lateral-line-and-vision-on-body ／ https://cob.silverchair.com/jeb/article-pdf/156/1/625/2579606/jexbio_156_1_625.pdf （F-43）
+- Chinook 3D（個体間距離・機動）: https://pubs.usgs.gov/publication/70269370 ／ https://www.usgs.gov/index.php/publications/territories-within-groups-dynamic-competition-drift-feeding-juvenile-chinook-salmon-3 ／ https://meetings-archive.aps.org/dfd/2010/qt/1/ ／ https://archive.aps.org/dfd/2010/qt/1 （F-44）
+- charr の採餌様式・咬み: https://link.springer.com/article/10.1007/BF02684235 ／ https://link.springer.com/doi/10.1007/BF02347237 ／ https://link.springer.com/article/10.1023/A:1007363927379 ／ https://sites.warnercnr.colostate.edu/wp-content/uploads/sites/112/2020/09/Nakano-et-al.-2020-charr-ecol-character-displacement.pdf （F-45、F-20）
+- 補足数値: https://link.springer.com/doi/10.1007/s10641-018-0723-5 ／ https://www.harkness.ca/PDFs/Contributions%201990s/Biro%20Ridgway%20McLaughlin%201996.pdf ／ https://dx.doi.org/10.1007/BF00027524 （F-46）
+- 日陰・驚愕・隠れ: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8445879/ ／ https://www.annzool.net/PDF/anzf35/anzf35-017p.pdf ／ https://eprints.lib.hokudai.ac.jp/repo/huscap/all/90675/Kouta_Miyamoto.pdf ／ https://link.springer.com/article/10.1007/s00442-021-05008-4 （F-47）
+- ヤマメ関連の補足: https://fra.repo.nii.ac.jp/record/2009558/files/sapporo_s_14.pdf ／ https://www.jstage.jst.go.jp/article/suisan/89/1/89_22-00024/_pdf ／ https://complete.bioone.org/journals/ichthyology-and-herpetology/volume-111/issue-1/i2022050/Ecosystem-Functions-of-a-Spring-Fed-Tributary-in-Providing-Foraging/10.1643/i2022050.full ／ https://asih.kglmeridian.com/view/journals/cope/111/1/article-p44.xml ／ https://www.hro.or.jp/upload/41034/81-kawamura.pdf ／ https://link.springer.com/article/10.1111/j.1444-2906.2006.01144.x ／ https://link.springer.com/article/10.1007/s12562-016-1059-8 （F-48）
+- 夜行性（10℃）: https://www.kmae-journal.org/10.1051/kmae/2011083/pdf ／ https://www.kmae-journal.org/articles/kmae/ref/2012/01/kmae110085/kmae110085.html ／ https://link.springer.com/article/10.1023/A:1021372822784 ／ https://catalog.comses.net/publications/70313 （F-49）
 
 **ローカル資料**
 - 写真カタログ: `/home/user/gerupamasini/docs/yamame/photo_analysis/catalog_c01.json` 〜 `catalog_c07.json` （F-13〜F-15）

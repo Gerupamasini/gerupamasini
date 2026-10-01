@@ -1,11 +1,13 @@
 # 頭蓋・顎・鰓蓋・鰓弓・舌骨の骨格と動き（ヤマメ O. masou masou 河川型／サケ科）— 透明骨格標本画像の解析つき
 
 > 作成: ストリームR15（頭蓋・顎・鰓蓋・鰓弓・舌骨担当）。目的は、ヤマメの3Dモデルの口・顔・鰓の骨格と動きの仕様根拠の収集。
-> **重要な制約（この版の限界）**: この実行全体の WebSearch 予算（200回）が、本ストリームの開始時点で既に使い切られていた（"used its web search budget (200 of 200)"）。本ストリームは3回試行したがすべて「検索は実行されなかった」と返ったため、**実行できた検索は0回**。指示に従い迂回せず、手元の情報だけで仕上げた。したがって本書の根拠は次の3種類のみ。
-> 1. **P**: ユーザー提供の透明骨格標本画像 s01.jpg（366×550 px）を、本ストリームが直接開き、グリッド付きズームと簡単な画素プロファイル解析で読んだ所見。座標は s01.jpg の元画素座標。
-> 2. **継承**: 先行ストリーム r01 / r02 / r07 / r10 が WebSearch で得た値と、写真70枚の所見（再検索していない。ランクは先行ストリームの記載を引き継ぎ、疑義があるものは降格して明記）。
-> 3. **M**: 私の記憶（**未検証**）。数値は、確信が持てるもの以外は書かない。
-> 文献が必要な課題2〜6の大半（各骨の接続関係・歯の本数・鰓条骨数・鰓弓構成・顎の回転角など）は、**文献で裏取りできていない**。M の記述は仕様に採用する前に必ず検証すること。
+> **この版（改訂版）の位置づけ**: 初版は WebSearch 予算が尽きた状態で書かれ（検索0回）、根拠は P・継承・M のみだった。本改訂では WebSearch を **34 回**（呼び出し回数。すべて mode="standard"、割当の上限ちょうど。拒否は発生せず）実行し、課題2〜6の裏取りを試みた。初版の P 所見（標本画像 s01.jpg の解析、F-01〜F-11）は**そのまま残した**。
+> 根拠の種類は次の4つ。
+> 1. **P**: ユーザー提供の透明骨格標本画像 s01.jpg（366×550 px）のグリッド付きズームと簡単な画素プロファイル解析。座標は s01.jpg の元画素座標。
+> 2. **検索（A/B/C）**: 今回の WebSearch。検索結果は「題名・URL・モデルが作った要約」だけで本文を読めていないため、**要約文中に明示された記述だけを採用**し、要約と URL の対応が特定できないものは「出典候補」として並記して、ランクを一段下げた。
+> 3. **継承**: 先行ストリーム r01 / r02 / r07 / r10 の検索結果（再検索していない）。
+> 4. **M**: 私の記憶（**未検証**）。
+> **今回の検索で分かったこと／分からなかったこと**: ニジマスの脊椎骨63（体幹33＋尾椎30）、舌咬み装置の歯板の配置、ブルックトラウトの raking の定量（頭蓋挙上36°、49 ms）、サケ科の尾部骨格の一般型（下尾骨6・尾神経棘3）、換気の位相などは取得できた。**一方、サケ科の顎の回転角・最大開口角・鰓蓋の外転角・鰓条骨の本数・歯の本数・担鰭骨の本数・ヤマメ固有の脊椎骨数と腹椎／尾椎の内訳は、今回の検索でも見つからなかった**（Gaps に明記）。M の記述は、仕様に採用する前に必ず検証すること。
 
 ---
 
@@ -22,20 +24,20 @@
 7. **頭部は前腹側から斜めに、強く短縮して写る**。濃青の骨の塊（x≈150〜268、y≈335〜478）、顎先端は (195〜205, 470〜477)。左半分（x≈158〜195、y≈410〜475）に先端へ収束する細長い濃青の骨が2〜3本あり、その内側に**明るい点が縦に並ぶ列（約6〜10点、(176〜192, 436〜470)）が見え、歯列の可能性が高い（個数は数えられない）**。右には薄い青緑の丸い板状域（x≈205〜255、y≈400〜472）があり、鰓蓋系の薄い骨か口蓋側の構造かは**同定できない**。[F-08, F-09]
 8. **標本はほぼ全体が青〜青緑一色で、骨と軟骨を色で区別できない**。この画像から骨化の程度は言えない。[F-10]
 
-### 1-B. 文献由来（継承）と記憶（M）
+### 1-B. 文献由来（継承＋今回の検索）と記憶（M）
 
-9. **脊椎骨数（ヤマメ／O. masou）は 63〜66（ロシア系資料、C）、63〜69（AI生成百科、C）、単一値63（個体か不明、C）。他の Oncorhynchus（PROXY、FishBase、B）はギンザケ61〜69、キングサーモン67〜75、シロザケ59〜71、ベニザケ56〜67、ニジマス60〜66**。台湾亜種はこれより少ないという記述（B）。北海道7河川の比較で脊椎骨数は集団間に有意差（A）。個体差生成は、範囲 63〜69 を仮置きとして集団別の軸を持たせるのが妥当（仮置きは推論。分布の中心は資料から確定できない）。[F-12, F-13, F-14]
-10. **腹椎数と尾椎数には遺伝成分がある（A）が、腹椎／尾椎の個数そのものは未取得**。[F-14, F-31, Gap]
-11. **鰭条数（青森ヤマメ河川型、A）: 背12〜13、胸12〜14（旭川では13〜15）、腹9（旭川では8〜9）、臀12〜14（旭川では11〜14）**。二次資料はこれより広い（C）。尾鰭の主鰭条は O. mykiss で19本（PROXY、B）。担鰭骨の本数は未取得。[F-15, F-16, F-17]
-12. **鰓耙は 16〜22（大半18〜19）（Christie 1970 の検索要約。他の資料で降格の記録あり、C 扱い）**。鰓条骨は青森資料の「11条」が部位ラベルの揺れで曖昧、一般サイトは11〜15（C）。数値は仕様に「仮置き」として使い、確定とは書かない。[F-18, F-19]
-13. **歯の配置（属レベル、C）: Oncorhynchus と Salmo は鋤骨が平坦で、歯が鋤骨全体に二列／ジグザグ状に並ぶ（イワナ属は舟形の鋤骨の前端だけ）。成魚の Oncorhynchus は鋤骨歯と口蓋骨歯の間隔が広い。台湾亜種の記載では基鰓骨歯は無い**。ヤマメ固有の歯の本数と大きさは未取得。[F-20]
-14. **舌咬み装置（B）: サケ科は舌骨領域の背面に発達した歯を持ち、口蓋の対向歯と合わせて餌を固定し裂く（raking）**。口腔内の歯の描写（舌の歯）に必要。[F-21]
-15. **摂餌時の頭の動き（A）: ニジマスの神経頭蓋の最大挙上は 2〜18°（28ストライク、3個体）。大半の椎間関節の背側回転は3°未満で、最大約1/3の関節の回転を合算して持ち上げる**。頭の挙上は小さい。[F-22]
-16. **口の開閉の速さ・開口角・吸引距離は、サケ科では未取得**。時間スケールは吸引型の PROXY（ブルーギルで最大開口まで約13 ms 等）しかなく、ram 寄りのサケ科への適用は未検証。仮置きの扱い。[F-23, F-24]
-17. **呼吸（ニジマス、A）: 換気頻度 57±4 回/分（対照）と 78±4 回/分（軟水順化）、すなわち約0.95〜1.3 Hz（周期0.77〜1.05 s）。運動後は頻度よりも1回換水量（鰓蓋の開きの振幅）が増える**。鰓蓋は「周期」と「振幅」を独立パラメータにする。[F-26]
-18. **繁殖期の顎の変形（A、レビュー）: Oncorhynchus は上顎、Salmo・Salvelinus は下顎の変形が特徴的。ただし写真の産卵期の雄2枚は下顎先端の上向きのフックが明瞭**。河川型ヤマメの成熟雄の定量資料は無い。顎のモーフは「上顎の伸び・下曲がり」と「下顎先端のフック」を別チャンネルにするのが無難。[F-25, F-11]
-19. **外観の顎・鰓蓋（P、写真）: 口を閉じて判別できた21枚のうち、上顎後端は眼の後縁より後方が11枚、眼の中心直下が9枚、眼の前下方が1枚。鰓蓋は大きく丸く、前鰓蓋の弧と鰓蓋との間に縦溝、後縁に黄〜白の縁、鰓膜の下端は胸鰭基部まで**。[F-11]
-20. **（M、未検証）顎・鰓蓋・舌骨は連動する一体のリンク機構として組む**: 下顎の押し下げ、上顎骨の回転、舌骨の押し下げ、鰓蓋の外転、鰓条骨膜の展開、を1本の駆動値に結ぶ。**角度・係数は文献値が無く、パラメータとして露出させる**（リギング案は F-32 に整理）。[F-28, F-29, F-32]
+9. **脊椎骨数（ヤマメ／O. masou）**は 63〜66（ロシア系資料、C）、63〜69（AI生成百科、C）、単一値63（C）。他の Oncorhynchus（PROXY、FishBase、B）はギンザケ61〜69、キングサーモン67〜75、シロザケ59〜71、ベニザケ56〜67、ニジマス60〜66。台湾亜種は日本産より少ない（B）。北海道7河川で集団間に有意差（A）。**今回の検索でも O. masou の FishBase 値や一次文献の値は取得できなかった**。個体差生成は 63〜69 を仮置き（推論）とし、集団別の軸を持たせる。[F-12, F-13, F-14]
+10. **腹椎／尾椎の内訳**: ニジマス（PROXY）は総数63＝体幹椎33＋尾椎30（B）。33/63 は約52%（算術）。ヤマメの内訳は未取得。腹椎数・尾椎数には遺伝成分がある（A）。発生初期の水温でも脊椎骨数の平均が変わる（B。サクラマスの飼育試験で 16 °C 区が 9・12 °C 区より多い傾向）。[F-33, F-34, F-14]
+11. **鰭条数**: 青森ヤマメ（河川型、A）は背12〜13、胸12〜14、腹9、臀12〜14。二次資料はこれより広い（C）。ニジマス（PROXY、B）は背鰭＝不分枝4＋分枝10〜12、臀鰭＝不分枝3＋分枝6〜12。尾鰭の主鰭条は O. mykiss で19本（B）。担鰭骨の本数は未取得（検索で得た「背鰭7〜9本」等は採用しない）。[F-15, F-16, F-17, F-40, F-41]
+12. **鰓耙・鰓弓・鰓条骨**: O. masou の鰓耙は 16〜22（大半18〜19）（C）。ニジマス（PROXY、B）は鰓弓4対、第1鰓弓の鰓耙17〜21（別資料16〜17）。Oncorhynchus の古い記載では「サケ型：鰓耙20〜40・鰓条骨12〜16」「マス型：鰓耙10〜15・鰓条骨10〜14」（C、種の帰属不明）。**ヤマメの鰓条骨の本数は今回も確認できない**（青森の「11」は曖昧）。[F-18, F-19, F-39, F-48]
+13. **歯**: ニジマス（PROXY、B/C）は前上顎骨・主上顎骨・歯骨・口蓋骨・鋤骨柄・舌に、小さく円錐形で内側へ曲がった歯を持ち、鋤骨の歯は1〜2列。咽頭にも歯がある。**舌咬み装置は、基舌骨（舌）の歯板と、鋤骨・副蝶形骨・口蓋骨（dermopalatine）・翼状骨の対向歯板で構成される**（B）。Salmo では咽頭歯板が2対あり、成魚でも鰓弓の骨と癒合しない（B/C）。歯の本数・大きさは未取得。[F-20, F-21, F-38, F-39]
+14. **懸垂骨と骨の参照先**: 舌顎骨は耳殻（舌顎窩）に背側で関節し、腹側は方形骨と続骨に関節して、鰓蓋骨を支える（ニジマス、B）。鰓蓋骨系4枚（鰓蓋・前鰓蓋・下鰓蓋・間鰓蓋）と鰓条骨は、Idaho Virtual Museum のニジマス（スチールヘッド）標本ページに個別要素として載る（モデリング用の参照先、B）。[F-36, F-37]
+15. **顎・舌骨・鰓蓋の運動順序（PROXY：吸引摂食の硬骨魚類一般、A）**: 頭蓋挙上と下顎押し下げが先、舌骨押し下げ・鰓蓋の外転・胸帯の後退が後。鰓蓋リンクにより、下顎押し下げは舌骨の動きと独立に位相をずらせる。下顎は最大開口で押し下げが止まるが舌骨は後退を続け、鰓蓋の外転は顎が開き始めてから始まり、顎が閉じ始めてからピークになる。**サケ科自身の時間経過と角度は見つからなかった**。捕食では体の突進（body ram）が主要因で吸引の寄与は小さい（棘鰭類40種、PROXY。サケ科は含まれない）。[F-43, F-44, F-23, F-24]
+16. **頭の挙上量（行動で別の値）**: ニジマスの捕食ストライクで神経頭蓋の最大挙上 2〜18°（A）。ブルックトラウト（PROXY：イワナ属）の raking のパワーストロークでは平均36°（口を開けたままの咀嚼は16°）、胸帯の後退 0.85 cm（頭長の21%）、所要時間 平均49 ms（咀嚼は77 ms）（A）。動作モード別に別プリセットを持たせる。[F-22, F-45]
+17. **換気**: ニジマスの換気頻度 0.95〜1.3 Hz（周期0.77〜1.05 s、A）。運動後は周期でなく振幅が増える（A）。位相はトラウトで、口腔の拡張が鰓蓋外転の開始の約1/4周期前に始まる（B。要約の表記に揺れあり、要確認）。[F-26, F-46]
+18. **繁殖期の顎と外観**: Oncorhynchus は上顎、Salmo・Salvelinus は下顎の変形が特徴的（A、レビュー）。ただし写真の産卵期の雄2枚は下顎先端の上向きフックが明瞭（P）。口を閉じた21枚で、上顎後端は眼の後縁より後方11・眼中心直下9・前下方1（P）。鰓蓋は大きく丸く、前鰓蓋の弧と縦溝、後縁に黄〜白の縁（P）。顎のモーフは「上顎の伸び・下曲がり」と「下顎先端のフック」を別チャンネルにする。[F-25, F-11]
+19. **尾部骨格と頭部比率**: サケ科の一般型は下尾骨6・尾神経棘（uroneural）3（A、イワナ属の研究。一部個体は7と4）。上尾骨（epural）の本数は未取得。台湾亜種（PROXY、C）の頭部比は、体長/頭長 4.20、頭長/吻長 4.41、頭長/眼径 3.43、頭長/眼間幅 4.12。[F-42, F-49, F-17]
+20. **（M／推論、未検証）リギング**: 顎・舌骨・鰓蓋を連動する一体のリンク機構として組み、1本の駆動値で下顎の押し下げ、主上顎骨の回転、舌骨の押し下げ、鰓蓋の外転、鰓条骨膜の展開をつなぐ。順序は F-43、振幅は F-22 / F-45、周期は F-26 / F-46 を使い、**角度・係数は文献値が無いためパラメータとして露出させる**。[F-28, F-29, F-32]
 
 ---
 
@@ -213,6 +215,7 @@
   - 鰭条数 https://publication.plazi.org/GgServer/html/03A3D24DFF854B70B4CEFB2FFD87650C
   - 尾部骨格 https://openpolar.no/Record/crwiley:10.1002%2Fjmor.10775
 - 証拠: [B] "O. mykiss は尾鰭条 19 本"（r10 F-22 の検索要約）。尾部骨格の数は先行ストリームの要約で、サケ科一般の記述として扱う。
+- 追記（本改訂の検索）: 「下尾骨6・尾神経棘3」がサケ科の一般型であることは、イワナ属の尾部骨格の研究の要約で再確認できた（F-42、A）。上尾骨 epural の本数は未取得。
 
 ### F-18
 - 主張/値: **鰓耙数**。Christie (1970) のまとめで、O. masou は鰓耙が少なく**16〜22（大半が18〜19）**。ロシア系の英語資料は "gill rays very short, 18–22"（用語が鰓条か鰓耙か混在）。Grokipedia は第1鰓弓の鰓耙 19〜26（短く、太く、滑らかで、間隔が広い）。日本語二次資料の単一値16。北海道7河川の比較で下鰓耙は集団間で有意差、上鰓耙は有意差なし（F-14）。上鰓耙・下鰓耙の内訳の個数は未取得。
@@ -239,6 +242,7 @@
   - https://en.wikipedia.org/wiki/Salvelinus
   - https://en.wikipedia.org/wiki/Oncorhynchus_masou_formosanus
 - 証拠: [C] "In the former two genera the teeth form a double or zigzag series over the whole of the vomer bone, which is flat and not boat-shaped"（検索要約。URL と文の対応は不確実）。
+- 追記（本改訂の検索）: ニジマス（PROXY）では、鋤骨の歯は1〜2列で（Salmo trutta と共通）、口蓋骨・鋤骨柄・主上顎骨・前上顎骨・歯骨・舌にも歯がある（F-38、B/C）。Oncorhynchus 属としては整合する。ヤマメの本数は未取得。
 
 ### F-21
 - 主張/値: **舌咬み装置（tongue-bite apparatus）**。サケ科は、前部の舌骨領域の背面に発達した歯を持ち、口蓋（口腔の天井）に対向する歯がある。この機構は、捕獲した餌を固定して裂く "raking" に使われる。ニジマス（O. mykiss）を含むサケ科3種を、250 Hz の高速度映像のコマ送りで比較し、神経頭蓋と舌骨の動きが種間の差を最もよく説明した。ヤマメが対象に含まれるかは不明。
@@ -247,6 +251,7 @@
   - https://sicb.org/?p=35129
   - https://sicb.org/abstracts/evaluating-the-importance-of-new-structures-versus-new-muscle-activity-patterns-in-the-evolution-of-a-novel-feeding-mechanism-in-salmonid-fishes
 - 証拠: [B]（学会抄録）"well-developed teeth on the dorsal surface of the anterior hyoid region and opposing teeth on the roof of the mouth"。
+- 追記（本改訂の検索）: 舌骨側の歯板は基舌骨（強く骨化）にあり、対向歯板は鋤骨・副蝶形骨・口蓋骨（dermopalatine）・翼状骨にある（F-38、B）。ブルックトラウトの raking の定量（頭蓋挙上36°、胸帯後退 0.85 cm＝頭長の21%、49 ms）は F-45（A、PROXY）。
 
 ### F-22
 - 主張/値: ニジマス（Oncorhynchus mykiss）の摂餌中の神経頭蓋と前方24個の椎骨の3次元運動を X 線動体再構成（XROMM）で測定（**28ストライク、3個体**）。**神経頭蓋の最大挙上は 2〜18°**。トラウトは、椎間関節の最大約1/3で、小さな背側回転（大半が3°未満）を合算して神経頭蓋を持ち上げる。頭と体幹が「首のように」動く運動（neck-like）として報告された。要約に無かったもの: ストライクの継続時間、開口角、舌骨・鰓蓋の運動。
@@ -304,101 +309,244 @@
 - 証拠: [A] "8 cephalic canals ... 1 trunk canal and 9 superficial neuromast groups"。
 
 ### F-28
-- 主張/値（**M：私の記憶、未検証。サケ科一般。数値は付けない**）: 頭蓋骨要素の目録と接続関係。
+- 主張/値（**M：私の記憶、未検証。サケ科一般。数値は付けない**。初版の記述を残し、今回の検索で裏取りできた部分に印を付けた）: 頭蓋骨要素の目録と接続関係。
   - 上顎: 前上顎骨（小さく、歯を持つ）と主上顎骨（長く、歯を持ち、口裂の縁の大部分を作る）。主上顎骨の背後縁に上主上顎骨（supramaxilla）が付く。前上顎骨は主上顎骨より動きが小さい（サケ科の上顎の突出は小さい）。
+    - 【検索の結果】主上顎骨が頑丈で弓状、前端に上向きの大きな突起、口縁は凸、という記述は古典的記載の要約にある（F-35、C）。**上主上顎骨は、要約では「2枚」とされ、私の記憶の「1枚」と食い違う（F-35、F-3章）。未確定**。
   - 下顎: 歯骨（歯あり）、関節角骨（anguloarticular）、後関節骨（retroarticular）、メッケル軟骨。顎関節は下顎の関節骨と方形骨の間。
+    - 【検索の結果】Oncorhynchus で歯骨と angular-articular が形の変化で機能的にまとまって進化する、という学会抄録の記述がある（F-35、B）。
   - 懸垂骨: 舌顎骨（hyomandibula）、後翼状骨、内翼状骨、外翼状骨、方形骨、続骨（symplectic）、口蓋骨。舌顎骨は神経頭蓋に関節し、鰓蓋骨とも関節する。前鰓蓋骨は舌顎骨と方形骨の後縁に沿う。
+    - 【検索の結果】ニジマスの舌顎骨は、背側で耳殻の舌顎窩、腹側で方形骨と続骨に関節し、鰓蓋骨を支える（F-36、B）。**ここは支持された**。
   - 鰓蓋骨系: 鰓蓋骨、前鰓蓋骨、間鰓蓋骨、下鰓蓋骨の4枚。鰓蓋骨は舌顎骨との関節で回転する。間鰓蓋骨は靱帯で下顎の後端へつながる（M）。
-  - 舌骨弓: 尾舌骨（urohyal）、基舌骨（basihyal、舌。歯を持つ）、下舌骨、角舌骨（ceratohyal）、上舌骨（epihyal）、間舌骨（interhyal、舌顎骨・続骨側へ連結）。鰓条骨は角舌骨と上舌骨に付き、鰓条骨膜で連結する。
-  - 歯を持つ骨（M と F-20, F-21 の合算）: 前上顎骨、主上顎骨、歯骨、鋤骨、口蓋骨、基舌骨（舌）、咽頭歯板。
-  - 文献候補（**書誌事項は未検証**。仕様の根拠には使わず、追跡調査の手がかりにする）: Norden 1961（サケ科の比較骨学、J. Fish. Res. Board Can.）、Stearley & Smith 1993（太平洋のマスとサケの系統、Trans. Am. Fish. Soc.）。
-- 適用範囲: サケ科一般（M）。Oncorhynchus、ヤマメに限った裏取りは無い。
-- 出典: なし（記憶）。
-- 証拠: [M] 未検証。r07 F-16 の M（上顎は前上顎骨と主上顎骨、上主上顎骨、歯骨と関節角骨、歯のある骨）と一致するが、同一人物（モデル）の記憶の再掲で、独立した確認ではない。
+    - 【検索の結果】ニジマス標本の要素一覧に preopercle, opercle, subopercle, interopercle, branchiostegal rays が並ぶ（F-37、B）。**4枚の構成は支持された**。靱帯のつながりは未確認。
+  - 舌骨弓: 尾舌骨（urohyal）、基舌骨（basihyal、舌。歯を持つ）、下舌骨、角舌骨（ceratohyal）、上舌骨（epihyal）、間舌骨（interhyal）。鰓条骨は角舌骨と上舌骨に付き、鰓条骨膜で連結する。
+    - 【検索の結果】基舌骨が強く骨化し歯板を持つ点は支持された（F-38、B）。その他は未確認。
+  - 歯を持つ骨（M と F-20, F-21, F-38, F-39 の合算）: 前上顎骨、主上顎骨、歯骨、鋤骨、口蓋骨、基舌骨（舌）、咽頭歯板。**検索で支持（B/C）**。
+  - 文献候補: Stearley & Smith (1993) "Phylogeny of the Pacific trouts and salmons (Oncorhynchus) and genera of the family Salmonidae", Trans. Am. Fish. Soc. 122(1):1-33 — **書誌は検索で確認（33現生種・亜種と4化石種、119形質、現生サケ亜科は7属）**が、本文（骨学形質の記述）は読めていない。Sanford (1990) "The phylogenetic relationships of salmonoid fishes", Bull. Br. Mus. Nat. Hist. (Zool.) — 題名と誌名を検索で確認（比較骨学と筋学を使用）。Norden 1961 は未確認。
+- 適用範囲: サケ科一般（M）＋ニジマス等（検索の部分裏取り）。ヤマメの個体での確認は無い。
+- 出典: 記憶＋F-35〜F-39 の各出典。書誌確認の候補URL: https://research.calacademy.org/research/ichthyology/catalog/getref.asp?id=26683 （Stearley & Smith の書誌かは要約から断定できない）
+- 証拠: [M] 未検証。支持された部分は F-35〜F-39 の各ランク（B/C）に従う。
 
 ### F-29
-- 主張/値（**M：未検証**）: 顎の機構。
+- 主張/値（**M：未検証**。検索で支持された部分を併記）: 顎の機構。
   - 下顎回転軸: 顎関節（下顎の関節骨と方形骨）を通る左右方向の軸で、下顎が下がると口が開く。
-  - 主上顎骨: 前端付近で口蓋骨・神経頭蓋側に関節し、口が開くと下顎との靱帯結合によって前方へ振れる（回転）。口を閉じると戻る。前上顎骨はほとんど動かない（突出が小さい）。
+  - 主上顎骨: 前端付近で口蓋骨・神経頭蓋側に関節し、口が開くと下顎との靱帯結合によって前方へ振れる（回転）。口を閉じると戻る。前上顎骨はほとんど動かない（突出が小さい。M）。
+    - 【検索の結果】硬骨魚類一般の記述として、「下顎が下がると主上顎骨の後端が下がり、前端が前上顎骨の外側部を前へ押して、前上顎骨が前へ滑る（突出）」「主上顎骨のねじれは、下顎押し下げまたは A1 筋の収縮で始まる」がある（C、F-43）。**サケ科の主上顎骨の回転角・前上顎骨の可動量は見つからなかった**。
   - 舌骨の押し下げ: 筋（胸骨舌骨筋）が尾舌骨を肩帯方向へ引いて舌骨弓を下げ、口腔底を押し下げて口腔を拡大する。
-  - 鰓蓋: 鰓蓋骨が舌顎骨との関節で外転し、鰓蓋腔が拡大する。鰓蓋骨の後方への回転が間鰓蓋骨の靱帯を介して下顎を下げる、四節リンク（opercular four-bar linkage）は多くの硬骨魚で知られる（サケ科での確認なし）。文献候補: Anker 1974（トゲウオ）、Lauder 1980（ブルーギル）。**書誌事項は未検証**。
-  - 鰓条骨膜: 舌骨が下がると鰓条骨が外に開き、膜が張られて口腔の側壁と鰓蓋腔の弁を作る。
-  - 呼吸では、口腔ポンプと鰓蓋腔の吸引ポンプが交互に働く二段構造。
-- 適用範囲: 硬骨魚類一般（M）。サケ科、ヤマメの角度・係数は未取得。
-- 出典: なし（記憶）。
-- 証拠: [M] 未検証。F-22（頭の挙上 2〜18°）、F-24（一般機構、C）と方向は整合するが、数値は無い。
+    - 【検索の結果】拡張相は、口の開きに続いて、懸垂骨の側方への拡張と舌骨の腹側回転が同時に起こる（硬骨魚類一般、A/C、F-43）。
+  - 鰓蓋: 鰓蓋骨が舌顎骨との関節で外転し、鰓蓋腔が拡大する。四節リンク（opercular four-bar linkage）は多くの硬骨魚で知られる（サケ科での確認なし）。
+    - 【検索の結果】総説の要約に「鰓蓋リンクにより、前方の拡張（下顎押し下げ）を後方の筋が舌骨運動と独立に駆動でき、顎と舌骨の位相をずらせる」とある（PROXY：吸引摂食の硬骨魚、A、F-43）。SICB の抄録 "Opercular-linkage disruption: a test of the four-bar linkage model" がある（魚種は要約に無し。https://sicb.org/?p=34346 ）。
+  - 鰓条骨膜: 舌骨が下がると鰓条骨が外に開き、膜が張られて口腔の側壁と鰓蓋腔の弁を作る（M）。鰓蓋弁と鰓条骨弁が、口の開口部を通る流量の制御装置として働く（F-24、C）。
+  - 呼吸では、口腔ポンプと鰓蓋腔の吸引ポンプが交互に働く二段構造（トラウトで位相の記述あり。F-46）。
+- 適用範囲: 硬骨魚類一般（M＋PROXY）。サケ科、ヤマメの角度・係数は未取得。
+- 出典: 記憶＋F-43、F-46、F-24 の各出典。
+- 証拠: [M] 未検証。方向は F-22、F-43、F-46 と整合するが、サケ科の数値は無い。
 
 ### F-30
-- 主張/値（**M：未検証。数値は付けない**）: 鰓弓・咽頭歯。
-  - 鰓弓は左右4対（全鰓: holobranch）で、各弓は基鰓骨（正中）、下鰓骨、角鰓骨、上鰓骨、咽頭鰓骨から成る。弓の前縁に鰓耙、後縁に鰓弁（鰓糸）が並ぶ。
-  - 第5鰓弓は鰓弁を持たず、角鰓骨5に下咽頭歯板が付く。上咽頭歯板は咽頭鰓骨側に付く。咽頭歯は、口腔内の歯とは別に、食道の入口で餌を押さえる役割（M）。数・形は未確認。
-  - 鰓弁（鰓糸と鰓薄板）の数と寸法は、本ストリームでは未取得。
+- 主張/値（**M：未検証。数値は付けない**）: 鰓弓・咽頭歯のうち、検索で支持されなかった部分。
+  - 各弓は基鰓骨（正中）、下鰓骨、角鰓骨、上鰓骨、咽頭鰓骨から成る。弓の前縁に鰓耙、後縁に鰓弁（鰓糸）が並ぶ。第5鰓弓は鰓弁を持たず、角鰓骨5に下咽頭歯板が付く。上咽頭歯板は咽頭鰓骨側に付く。
+  - 【検索で支持された部分】鰓弓が4対であること、ニジマスの第1鰓弓の鰓耙数（17〜21）、Salmo の咽頭歯板が2対で鰓弓の骨と癒合しないこと、咽頭鰓骨3の咽頭歯は **F-39** を参照。
+  - 鰓弁（鰓糸と鰓薄板）の数と寸法: 検索（「ニジマス 第1鰓弓の鰓糸数・鰓薄板密度」）では、定量値を含む要約が返らなかった（方法論の論文のみ）。未取得。
 - 適用範囲: 硬骨魚類一般（M）。サケ科、ヤマメは未確認。
-- 出典: なし（記憶）。
+- 出典: 記憶。
 - 証拠: [M] 未検証。r07 F-19 の M（鰓弁が血液の色で赤く、通常は鰓蓋に隠れる）とは整合するが、独立した確認ではない。
 
 ### F-31
 - 主張/値（**M：未検証。数値は付けない**）: 軸骨格と尾部骨格の用語。
   - 椎骨は腹椎（肋骨を持つ）と尾椎（血管棘を持つ）に分かれ、腹椎は椎体に肋骨（pleural ribs）と上肋骨・筋間骨を伴う。F-14 の「腹椎数と尾椎数」はこの区分。
-  - 尾部は、尾端の椎体が上へ曲がる（尾端骨）形で、下尾骨（hypurals）が扇状に並んで主鰭条を支える。F-17 の「下尾骨6、尾神経棘3」と主鰭条19本は、サケ科の PROXY として使える。
-  - 胸鰭帯は烏口骨（cleithrum）を主体とし、肩甲骨・烏口骨・基鰭骨と放射骨を含む。腰帯（基鰭骨）は左右1対で、腹鰭が付く。
+  - 尾部は、尾端の椎体が上へ曲がる（尾端骨）形で、下尾骨（hypurals）が扇状に並んで主鰭条を支える。サケ科の一般型は F-42（下尾骨6、尾神経棘3。A）で、ニジマスの主鰭条19本は F-17。
+  - 胸鰭帯は烏口骨（cleithrum）を主体とし、肩甲骨・烏口骨・基鰭骨と放射骨を含む。腰帯（基鰭骨）は左右1対で、腹鰭が付く（検索「サケ科の胸鰭の放射骨の数」では数値が返らなかった。未取得）。
+  - ニジマスの「総数63＝体幹33＋尾椎30」は F-33（B、PROXY）。ただし「体幹椎」が肋骨を持つ腹椎と同義かは要約に無い。
 - 適用範囲: 硬骨魚類一般／サケ科（M）。ヤマメの個数は未取得。
-- 出典: なし（記憶）。F-17 の数は継承（B）。
+- 出典: 記憶。F-17、F-33、F-42 は各 Finding の出典を参照。
 - 証拠: [M] 未検証。
 
 ### F-32
-- 主張/値（**M／推論：設計案であり文献根拠ではない**）: リギング（ボーン／モーフ）への落とし込み案。
-  - **脊柱**: 総数は F-12/F-13 の 63〜69 を目安にする（個体差の分布の中心は未確定）。椎骨1節ごとのボーンは必須でなく、少数のボーンのスキニングで補間してよい（設計判断）。神経棘・血管棘・肋骨はメッシュ上の「ヘリンボーン」配置（F-03：棘は椎間周期の約2〜4倍、腹椎域の肋骨は周期の約11〜14倍、いずれも標本画像の目測）で表現する。
-  - **頭の挙上**: 神経頭蓋を、体幹前方24椎骨に分配した小さな背側回転の合計 2〜18°（F-22）で持ち上げる。
-  - **下顎**: 顎関節に左右軸のボーンを置き、開口角は**パラメータ（文献値なし）**。写真 p001 の開口では下顎が約10〜12 px 下がる程度（F-11）。
+- 主張/値（**M／推論：設計案であり文献根拠ではない**）: リギング（ボーン／モーフ）への落とし込み案。検索で得た値を反映して改訂した。
+  - **脊柱**: 総数は F-12/F-13/F-33 の 63〜69 を目安にする（個体差の分布の中心は未確定。発生水温でも変わる、F-34）。椎骨1節ごとのボーンは必須でなく、少数のボーンのスキニングで補間してよい（設計判断）。神経棘・血管棘・肋骨はメッシュ上の「ヘリンボーン」配置（F-03：棘は椎間周期の約2〜4倍、腹椎域の肋骨は周期の約11〜14倍、いずれも標本画像の目測）で表現する。
+  - **動作の順序（PROXY：吸引摂食の硬骨魚一般、F-43）**: 頭蓋挙上と下顎押し下げ → 舌骨押し下げ・鰓蓋の外転・胸帯の後退、の順に前から後ろへ波のように進める。下顎と舌骨の位相は別パラメータ（鰓蓋リンクのため独立にずらせる）。鰓蓋の外転は、顎が開き始めてから始まり、顎が閉じ始めてからピークになる。**これは吸引型の魚の記述で、サケ科（体の突進が主、F-44 は PROXY）での確認は無い**。
+  - **頭の挙上**: 神経頭蓋を、体幹前方24椎骨に分配した小さな背側回転の合計で持ち上げる。捕食ストライクは 2〜18°（ニジマス、F-22）、raking のパワーストロークは平均36°（ブルックトラウト、F-45）。2つのプリセットにする。
+  - **下顎**: 顎関節に左右軸のボーンを置き、開口角は**パラメータ（サケ科の文献値なし）**。写真 p001 の開口では下顎が約10〜12 px 下がる程度（F-11）。時間スケールは、サケ科で見つかった値は raking の所要49 ms（F-45）のみ。ブルーギルの最大開口まで約13 ms（F-23）は PROXY で、トラウトへの適用は未検証。
   - **主上顎骨**: 下顎の開き角に結合した従動ボーン（結合係数は文献値なし）。前上顎骨は固定（M）。
-  - **舌骨**: 下顎の開き角に結合して腹後方へ押し下げる従動ボーン。鰓条骨膜は、舌骨の押し下げと鰓蓋の外転で形が変わるシェイプキー（モーフ）にする。
-  - **鰓蓋**: 舌顎骨との関節（鰓蓋の前背縁）を軸にした外転ボーン。周期は 0.77〜1.05 s（F-26、ニジマス）で、振幅（開き）は別パラメータ。運動後は周期を保って振幅を増やす（F-26）。
+  - **舌骨**: 下顎の開き角に結合して腹後方へ押し下げる従動ボーン。raking では胸帯が頭長の約21%後退する（F-45）。鰓条骨膜は、舌骨の押し下げと鰓蓋の外転で形が変わるシェイプキー（モーフ）にする。
+  - **鰓蓋**: 舌顎骨との関節（鰓蓋の前背縁）を軸にした外転ボーン。周期は 0.77〜1.05 s（F-26、ニジマス）で、振幅（開き）は別パラメータ。運動後は周期を保って振幅を増やす（F-26）。口腔の拡張は鰓蓋外転の約1/4周期前に始める（F-46、要確認）。
   - **モーフ**: 口の開閉、鰓蓋の開き、鰓条骨膜の展開、頬の膨らみ（口腔拡張）、繁殖期の顎（上顎の伸びと下曲がり、下顎先端のフック。F-25, F-11）。
-  - **歯**: 口腔の内側に、前上顎骨・主上顎骨・歯骨・鋤骨・口蓋骨・舌（基舌骨）の歯列を小さな円錐として配置する（F-20, F-21）。**本数と大きさは未取得で、仮置き**。
-- 適用範囲: 設計案（推論）。根拠は F-03, F-11, F-12, F-22, F-25, F-26 と F-28〜F-31（M）。
+  - **歯**: 口腔の内側に、前上顎骨・主上顎骨・歯骨・口蓋骨・鋤骨（1〜2列）・舌（基舌骨の歯板）の歯列を小さな円錐（内側へ曲がる）として配置する（F-20, F-21, F-38）。**本数と大きさは未取得で、仮置き**。咽頭歯は見えないため省略できる（設計判断）。
+  - **骨の形の参照**: 個々の頭蓋骨の形は Idaho Virtual Museum のニジマス標本ページ等（F-37）を見て作る。
+- 適用範囲: 設計案（推論）。根拠は F-03, F-11, F-12, F-22, F-25, F-26, F-33, F-43, F-45, F-46 と F-28〜F-31（M）。
 - 出典: なし（推論）。
 - 証拠: [M] 推論。ここでの数値はすべて他の Finding からの引用で、本節で新たに作った数値は無い。
+
+### F-33
+- 主張/値: ニジマス（O. mykiss）の脊椎骨は**計63（体幹椎33＋尾椎30）**で、種の同定に使える、という記述。検索要約は、同じ情報が論文 "Calcium and Phosphorus Contents, and Microstructure of Vertebrae in Rainbow Trout (Oncorhynchus mykiss) at Different Developmental Stages"（Progress in Fishery Sciences, 2023年10月）にも現れると述べる。同論文の標本は4段階（平均体重 4, 35, 644, 2,129 g）。椎骨の Ca/P モル比は成長に伴い有意に増加（骨化度が上がる）。micro-CT で椎体の分節は成長とともに明瞭になり、構造が完全になる。
+- 適用範囲: **PROXY: O. mykiss**（淡水養殖個体と思われる。n・範囲は要約に無し）。「体幹椎」が肋骨を持つ腹椎と同義かは不明。FishBase のニジマス 60〜66（F-13）の範囲内。ヤマメへの適用は未検証。
+- 出典: https://doaj.org/article/dc8bd61f4d8c4fbe8f435c205a8d64a8 （Progress in Fishery Sciences, Oct 2023）。出典候補（63の記述の所在はどちらか特定できない）: https://paleo.iri.isu.edu/ViewSpecimen.aspx?id=766 （Idaho Virtual Museum）、https://agris.fao.org/search/en/records/67599cfcc7a957febdfe657e
+- 証拠: [B] "Rainbow trout (Oncorhynchus mykiss) has a total of 63 vertebrae (including 33 trunk vertebrae and 30 caudal vertebrae)"（検索要約。一次ページの文面は未確認のため A としない）。
+
+### F-34
+- 主張/値: サケ・サクラマスでは、**発生初期の水温により脊椎骨数が変異し、平均値が異なる**（北海道の水産機関の広報の記述。発生時の水温が異なる群の判別に使える可能性にも言及）。サクラマスの飼育水温試験（9, 12, 16 °C）では、脊椎骨数は 16 °C で増える傾向。数え方は X 線写真で、神経棘を持つ第1椎骨から尾部棒状骨（尾端）まで。具体的な本数は要約に無し。
+- 適用範囲: サケ・サクラマス（O. m. masou）の孵化場・試験場の飼育個体。ヤマメ（河川型）の野生個体の水温影響は未取得。
+- 出典: https://www.hro.or.jp/upload/41227/dayori91sake.pdf 。出典候補（16 °C の試験の所在は特定できない）: https://eprints.lib.hokudai.ac.jp/repo/huscap/all/24086/42(4)_P147-159.pdf 、https://www.aomori-itc.or.jp/_files/00229791/217-220.pdf
+- 証拠: [B] "サケやサクラマスでは、発生初期の水温により脊椎骨数が変異し平均値が異なる"（検索要約の言い換え。報告書の本文は未確認）。
+
+### F-35
+- 主張/値: サケ科の上顎・下顎の骨の古典的記載（検索要約）。
+  - **主上顎骨**: 頑丈で弓状。前端に上向きの大きな突起があり、口縁側は凸。主上顎骨は前上顎骨の上方へ、長く細い突起として上内側に伸び、篩骨域の前部に付く（要約の "attachment in the front of the ethmoidal region"）。
+  - **上主上顎骨**: 「2枚の大きな上主上顎骨が主上顎骨の上部に重なる。後ろの1枚が最も深く、前上顎骨板の上縁の上へ細い突起を前に出す」と要約された（**対象魚種は要約に無く、サケ科の古典的記載とだけ分かる**）。
+  - **前上顎骨・主上顎骨・歯骨の形は種に固有で、サケ科の同定に使える**（Oncorhynchus の歯骨は angular-articular と機能的にまとまり、形の変化が相補的）。
+  - 絶滅種 O. rastrosus は前上顎骨に巨大な円錐歯1本を持ち、歯骨の正中端には微小な歯のみ（顎の歯の位置の多様性の例。ヤマメには適用しない）。
+- 適用範囲: サケ科の古典的記載（OCR 化された古い文献の要約、魚種不明）。ヤマメ固有ではない。
+- 出典（要約と URL の対応は特定不能）: https://collections.lib.utah.edu/details?id=263433 、https://collections.lib.utah.edu/details?id=263429 、https://collections.lib.utah.edu/details?id=263431 、https://archpress.lib.sfu.ca/index.php/archpress/catalog/download/49/20/906?inline=1 、https://sicb.org/?p=15656 （Meeting Abstract）、https://digitalcommons.pcom.edu/scholarly_papers/1638/ 、https://researchprofiles.library.pcom.edu/en/publications/the-sabertooth-salmon-oncorhynchus-rastrosus-gets-a-facelift/
+- 証拠: [C] "Two large supramaxillaries overlap the upper portion of the maxilla, with the hinder being deepest"（OCR 古文献の検索要約。魚種不明）。歯骨の記述は学会抄録（B）。
+
+### F-36
+- 主張/値: ニジマスの**舌顎骨**の初期発生（孵化後1〜30日）の研究。舌顎骨は対をなす軟骨性骨（endochondral bone）で、舌骨弓の上部に関わる。顎の懸垂に関わり、**鰓蓋骨を支える**。背側は耳殻の舌顎窩（hyomandibular fossa）、腹側は方形骨と続骨（symplectic）に関節する。また同論文は、ニジマスの頭部形態（頭蓋骨の骨）の研究が他にあることを示す。
+- 適用範囲: O. mykiss（稚魚期の発生。成魚の寸法は無し）。
+- 出典（要約と URL の対応は特定不能）: https://www.vliz.be/imisdocs/publications/396850.pdf 、https://marineinfo.org/id/publication/383702
+- 証拠: [B] "The hyomandibular ... takes part in jaw suspension and supports the opercle, dorsally articulating with the otic capsule at the hyomandibular fossa, and ventrally with the quadrate and symplectic"（検索要約。対象論文の特定が不確実なため B）。
+
+### F-37
+- 主張/値: **骨の形の参照先（数値ではなく画像資料）**。Idaho Virtual Museum（Idaho Museum of Natural History）のスチールヘッド（O. mykiss）の標本ページには、preopercle、opercle、subopercle、interopercle、branchiostegal rays などの骨が個別要素として載る。同ミュージアムにはキングサーモン（Chinook）、カットスロート（Cutthroat）の骨格ページもある。North Atlantic Biocultural Organization（NABO）の fish bone manual に頭蓋（skull）のページがある。**これらの画像の寸法・ライセンスは未確認**。
+- 適用範囲: O. mykiss（ニジマス／スチールヘッド）ほか。ヤマメの骨との差は未確認。
+- 出典: https://paleo.iri.isu.edu/ViewSpecimen.aspx?id=766 、https://paleo.iri.isu.edu/ViewSpecimen.aspx?ID=767 、https://virtual.imnh.iri.isu.edu/Osteo/View/Chinook_Salmon/765 、https://virtual.imnh.iri.isu.edu/Osteo/View/Cutthroat_trout/771 、https://www.nabohome.org/products/manuals/fishbone/fish/Skull/skull.htm
+- 証拠: [B] 博物館のデジタル標本ページ（要約が要素名を列挙。画像は未閲覧）。
+
+### F-38
+- 主張/値: **歯の配置（ニジマス、PROXY）と舌咬み装置の歯板**。
+  - ニジマスの歯は小さく発達し、円錐形で内側に曲がり、**主上顎骨・前上顎骨・下顎（歯骨）・口蓋骨・鋤骨の柄・舌**にある。別の記述では「主上顎骨・前上顎骨間（intermaxillary）・口蓋骨・下顎に歯があり、鋤骨・舌・咽頭には2列」。鋤骨の歯は1〜2列（Salmo trutta と O. mykiss で共通）。
+  - 組織学の論文（ニジマスの口腔咽頭腔）: 口腔咽頭腔は、口、口腔、歯、舌、咽頭から成る。**口蓋骨歯と鋤骨歯**を持つ。舌は先端・体・根に分かれ、歯、味蕾、糸状乳頭に似た乳頭を持ち、舌根の深部に骨軟骨組織がある。味蕾は口蓋の前部と咽頭の後部に局在し、咽頭に口蓋器官（palatal organ）がある。
+  - **舌咬み装置（tongue-bite apparatus）**: 基舌骨（強く骨化）に歯板があり、それに向き合って、鋤骨・副蝶形骨・口蓋骨（dermopalatine）・翼状骨に歯板または単独の歯がある。サケ科3種（ニジマス、ブラウントラウト、ブルックトラウト）は、構造がよく似ていても、250 Hz の高速度映像で運動パターンは3種とも異なる。
+  - **歯の本数・大きさ・傾き**: 検索（「サケ科の骨ごとの歯数」）でも、要約に数値は無かった。未取得。
+- 適用範囲: PROXY: O. mykiss（Salmo trutta、S. fontinalis は舌咬み装置のみ）。ヤマメは未確認。
+- 出典（要約と URL の対応は特定不能）: https://journals.usamvcluj.ro/index.php/zootehnie/article/view/5355 （組織学）、https://sicb.org/?p=35129 、https://sicb.org/?p=31727 （舌咬み装置の抄録）、https://www.infish.com.pl/wydawnictwo/Archives/Fasc/work_pdf/Vol19Fasc1/Vol19-Fasc1-%20w02.pdf （鋤骨歯1〜2列）、https://www.fishbase.org/summary/oncorhynchus-mykiss.html 、https://palaeo-electronica.org/2001_2/fish/onchor_m.htm 、https://collections.lib.utah.edu/details?id=275160
+- 証拠: [B] "O. mykiss presents palatine and vomerian teeth"（組織学論文の要約）／"tooth plates on the basihyal (which is heavily ossified) and directly opposing tooth plates ... on the vomer, parasphenoid, dermopalatine and pterygoid"（抄録の要約）。「二列」の古い記述は [C]。
+
+### F-39
+- 主張/値: **鰓弓・鰓耙・咽頭歯板（Salmo／ニジマス）**。
+  - ニジマスは**鰓弓が4対**。第1鰓弓の鰓耙は**17〜21**（別の資料では16〜17）。
+  - Salmo の論文（"Notes on the Chondrocranium and Branchial Skeleton of Salmo"）の要約: **咽頭歯板は2対あり、成魚でも鰓弓の固有の骨と癒合しない**。独立した咽頭歯は通常、咽頭鰓骨3に付く。
+  - ニジマスの鰓弓の神経支配: 第1弓は舌咽神経の後鰓裂枝と迷走神経の前鰓裂枝、第2〜4弓は迷走神経の前後の枝（モデル化には不要）。
+  - 鰓条骨の本数、ニジマスの咽頭歯の本数は、要約に無かった。
+- 適用範囲: ニジマス（PROXY）、Salmo（咽頭歯板）。ヤマメの鰓耙は F-18（16〜22）。
+- 出典（要約と URL の対応は特定不能）: https://www.fishbase.org/summary/oncorhynchus-mykiss.html 、https://palaeo-electronica.org/2001_2/fish/onchor_m.htm 、https://aquaticpath.phhp.ufl.edu/fg2/anat/internal.rt.html 、https://agris.fao.org/search/fr/records/65de51eb4c5aef494fdba4d2 （Salmo の咽頭歯板）
+- 証拠: [B] "Rainbow trout have 17-21 gill rakers over the first gill arch, though another source indicates 16-17"（検索要約。FishBase 系／標本ページ系の記述と思われるが対応は不確実）。咽頭歯板は [C]（書誌 agris の要約）。
+
+### F-40
+- 主張/値: **ニジマスの鰭条（不分枝／分枝の区別あり、PROXY）**: 背鰭は**不分枝4本＋分枝10〜12本**、臀鰭は**不分枝3本＋分枝6〜12本**。胸鰭は「13本」という要約（出典不明）。これは F-15（青森ヤマメ：背12〜13軟条）と F-16（二次資料：背13〜18、臀14〜18等）の差が**「分枝条のみ」か「不分枝を含む総数」かの数え方の違い**で説明できる可能性を示すが、青森資料の数え方は要約に無く、**未検証の仮説のまま**。
+- 適用範囲: PROXY: O. mykiss。
+- 出典（要約と URL の対応は特定不能）: https://www.fishbase.org/summary/oncorhynchus-mykiss.html 、https://palaeo-electronica.org/2001_2/fish/onchor_m.htm
+- 証拠: [B]（PROXY）"The dorsal fin has 4 unbranched and 10-12 branched rays; the anal fin has 3 unbranched and 6-12 branched rays"（検索要約）。胸鰭13本は [C]。
+
+### F-41
+- 主張/値（**採用しない**）: 検索要約に「ニジマスの背鰭の担鰭骨（pterygiophore）は7〜9本で椎骨11〜18番の間、臀鰭の担鰭骨は12〜14本で椎骨14〜21番の間」とあった。**この値は採用しない**。理由は、(1) 背鰭の担鰭骨が分枝条（10〜12）より少ない、(2) 臀鰭の位置が椎骨14〜21番では腹鰭より前になり、標本画像（臀鰭は背鰭・腹鰭より尾側。F-02、F-05）と合わない、(3) 出典の特定ができない（要約の元は複数の無関係なページ）。標本画像の担鰭骨の塊は、背鰭12〜15、臀鰭10〜11（F-04、F-05。ボケのため要確認）。
+- 適用範囲: ニジマス（PROXY）の疑わしい要約。
+- 出典（要約と URL の対応は特定不能）: https://www.ru.ac.za/media/rhodesuniversity/content/ichthyology/documents/Anatomy_Lecture_3.pdf 、https://arc.lib.montana.edu/robert-behnke/objects/2491-32-11.pdf
+- 証拠: [C] "seven to nine rod-like ... pterygiophores of the dorsal fin ... between vertebrae 11 and 18"（検索要約。上記の理由で不採用）。
+
+### F-42
+- 主張/値: **サケ科の尾部骨格の一般型は、下尾骨（hypural）6、尾神経棘（uroneural）3**。イワナ属 Salvelinus alpinus の尾部骨格の発生と変異の研究で、一部の個体は**下尾骨7、尾神経棘4**で、これは「サケ科の一般型」からの逸脱として報告された。サケ科は、前尾椎と尾椎（ural）の両方の神経棘に由来する上尾骨（epural）を同時に持つ、という記述もある（基部の真骨類と共通）。上尾骨の本数、尾椎の数、尾鰭の主鰭条の内訳（分枝・不分枝）は要約に無い。
+- 適用範囲: サケ科の一般型（根拠はイワナ属の論文の要約＝PROXY: Salvelinus alpinus）。Oncorhynchus、ヤマメの個体数は未確認。
+- 出典: https://openpolar.no/Record/crwiley:10.1002%2Fjmor.10775 （Ontogeny, variation, and homology in Salvelinus alpinus caudal skeleton, J. Morphol.）。epural の記述: https://agris.fao.org/search/en/records/676558defccf879925c0f83c （"Epural bones in teleost fishes: A problem of phylogenetic homology"）
+- 証拠: [A] "In contrast to the generalized condition for salmonids, seven hypurals (instead of six), and four uroneurals (instead of three) have been found in some specimens"（査読論文の検索要約）。epural の記述は [B]。
+
+### F-43
+- 主張/値: **顎・舌骨・鰓蓋の運動順序（PROXY：吸引摂食の硬骨魚類一般。サケ科の記述ではない）**。
+  - 拡張相は、口の開きに続いて、**懸垂骨の外転と舌骨の腹側回転（押し下げ）が同時に**起こる。
+  - 頭蓋挙上と下顎押し下げが、舌骨押し下げ・鰓蓋の広がり・胸帯の後退に先行する。頭部の運動は前から後ろへの波として進み、水と餌を口腔に引き込む。
+  - **鰓蓋リンクにより、前方の拡張（下顎押し下げ）を後方の筋が舌骨と独立に駆動でき、顎と舌骨の位相をずらせる**（口が舌骨運動より先に開き始め、ピークに達しうる）。
+  - 下顎押し下げは最大開口で終わるが、舌骨は後退を続けて、その後にピーク変位に達する。**鰓蓋の外転は、顎が開き始めてから始まり、顎が閉じ始めてからピークになる**。
+  - 硬骨魚類一般の突出の機構として、下顎が下がると主上顎骨の後端が下がり、前端が前上顎骨の外側部を前へ押して前上顎骨が滑る（突出）。
+  - 数値（角度・ms）は要約に無い。サケ科が属する魚群（Protacanthopterygii）での検証は無い。
+- 適用範囲: PROXY: 吸引摂食をする硬骨魚類一般（総説・比較研究。魚種は要約に無い）。
+- 出典（どの文がどの URL かは特定不能）: https://pmc.ncbi.nlm.nih.gov/articles/PMC12517347/ （A mechanical perspective on suction feeding in fishes, J. Exp. Biol. 228(18) jeb250567）、https://journals.biologists.com/jeb/article/228/18/jeb250567/369343/A-mechanical-perspective-on-suction-feeding-in 、https://biomechanics.ucr.edu/Day%20et%20al%202015%20ICB.pdf 、https://fishlab.ucdavis.edu/wp-content/uploads/sites/397/2020/05/Mehta-Wainwright-2007.pdf 、https://en.wikipedia.org/wiki/Cranial_kinesis 、https://par.nsf.gov/servlets/purl/10192305
+- 証拠: [A]（PROXY の総説）"cranial elevation and jaw depression precede hyoid depression, opercular flaring, and pectoral girdle retraction"／"opercular abduction starts after the jaws begin to open and reaches its peak after the jaws begin to close"（検索要約）。突出の機構は [C]。
+
+### F-44
+- 主張/値: 吸引摂食をする**棘鰭類40種**の高速度映像の比較で、**捕食者の接近のうち「体の突進（body ram）」の変動が、捕食戦略の多様性の主要因**で、吸引の寄与距離は広い系統・生態の標本でも小さい（吸引が極端に大きい領域は空白）。ram–suction の一直線の連続体ではない、という結論。
+- 適用範囲: **PROXY**: 棘鰭類（spiny-rayed fishes）40種。**サケ科は含まれない**（サケ科が軟条の魚群であること自体は M）。ヤマメの突進距離・速度は未取得。
+- 出典: https://cob.silverchair.com/jeb/article/doi/10.1242/jeb.129015/262046/am/Body-ram-not-suction-is-the-primary-axis-of 、https://cob.silverchair.com/jeb/article-pdf/doi/10.1242/jeb.129015/2038543/jeb_129015v1.pdf （Body ram, not suction, is the primary axis of suction-feeding diversity in spiny-rayed fishes, J. Exp. Biol.。DOI 10.1242/jeb.129015。著者・年は要約に無し）
+- 証拠: [A]（PROXY）"variation in body ram is the major factor underlying the diversity of prey-capture strategies among suction-feeding fishes"（検索要約）。
+
+### F-45
+- 主張/値: **ブルックトラウト（Salvelinus fontinalis）の舌咬み装置による raking（捕食後の餌の固定・引き裂き）の運動学**（250 Hz の高速度映像）。raking のパワーストロークは、**神経頭蓋の挙上が平均36°**（口を開けたままの咀嚼 open-mouth chewing は16°）、**胸帯の後退が 0.85 cm（頭長の21%）**（咀嚼は 0.41 cm、頭長の10%）、**所要時間が平均49 ms**（咀嚼は77 ms）。個体は餌を取り込んだあと、数回 rake してから、口を開けたままの咀嚼を繰り返した。咀嚼は舌骨の背腹方向の動きが主。
+  - 同じ誌の関連論文として、サケ科とアロワナ類の raking の筋活動パターン（収斂）、舌咬み装置の形態の比較（JEB 211）がある（要約のみ）。
+- 適用範囲: **PROXY: Salvelinus fontinalis**（イワナ属）。魚体サイズ・水温・n は要約に無し。ニジマス・ヤマメへの適用は未検証。ストライク（捕食）の運動ではなく、捕獲後の餌処理の運動。
+- 出典: https://journals.biologists.com/jeb/article/204/22/3905/32920/Kinematic-analysis-of-a-novel-feeding-mechanism-in （J. Exp. Biol. 204(22):3905, "Kinematic analysis of a novel feeding mechanism in the brook trout Salvelinus fontinalis (Teleostei: Salmonidae): behavioral modulation of a functional novelty"。著者名は要約に無し）。関連: https://journals.biologists.com/jeb/article/211/21/3378/17848/Biomechanics-of-a-convergently-derived-prey 、https://journals.biologists.com/jeb/article/211/6/989/18071/Is-a-convergently-derived-muscle-activity-pattern
+- 証拠: [A]（PROXY）"significantly greater neurocranial elevation (raking, 36°; open-mouth chewing, 16°) and retraction of the pectoral girdle (raking, 0.85 cm or 21% of head length ...)... raking is significantly shorter in duration (mean 49 ms) than open-mouth chewing (mean 77 ms)"（検索要約）。
+
+### F-46
+- 主張/値: **トラウトの換気の位相**。口腔（buccal cavity）は**鰓蓋の外転（abduction）が始まる約1/4周期前に拡張を始め**、約1/5周期前に収縮を始める、と要約された（収縮の記述は「abduction の前」となっており、内転 adduction の誤記の可能性がある。**要確認**）。呼吸装置は、口腔の圧力ポンプと、対をなす鰓蓋の吸引ポンプが、連続した鰓の幕で隔てられた構造で、両者がほぼ連続した水流を鰓の上に作る。鰓蓋の吸引ポンプは鰓蓋の外側への拡張で、口腔と鰓蓋腔の圧力差を作る。口腔と鰓蓋腔は機械的に連結しており、その連結が換気の運動に影響する（SICB 抄録）。
+  - 周期は F-26（0.77〜1.05 s、ニジマス）。1周期内の位相の数値は上記のみ。
+- 適用範囲: トラウト（ニジマスと思われるが要約に種名なし）。温度・サイズ不明。
+- 出典（どの文がどの URL かは特定不能）: https://sites.harvard.edu/glauder/files/2022/03/Lauder1980BiofluidMechanics.pdf 、https://sicb.org/?p=38852 （Influence of mechanical linkages between the buccal and gill chambers on ventilatory kinematics）、https://nature.com/articles/179255a0.pdf 、https://cob.silverchair.com/jeb/article-pdf/53/3/529/3179455/jexbio_53_3_529.pdf 、https://cob.silverchair.com/jeb/article-pdf/63/3/537/3185249/jexbio_63_3_537.pdf
+- 証拠: [B]（総説・古い研究の要約）"In trout, the buccal cavity begins to expand about a quarter of a cycle before abduction of the operculum starts"。
+
+### F-47
+- 主張/値: **Oncorhynchus 2種の咬合力と開口の関係**。キングサーモン（O. tshawytscha）では最大咬合力が最大開口の**67%**で、カラフトマス（O. gorbuscha）では**43%**で生じる。頭蓋の解剖学的な測定値は2種で有意差がなく、最大咬合力が出る開口が違う。キングサーモンは大きい・逃げる餌に大きな力を使え、カラフトマスは濾過摂食的で極端な開口での力が要らない、と解釈。最大開口角・下顎の長さの数値は要約に無い。
+- 適用範囲: **PROXY: O. tshawytscha, O. gorbuscha**（成魚と思われる。体サイズ・n は要約に無し）。ヤマメは未測定。
+- 出典: https://cob.silverchair.com/jeb/article-pdf/223/20/jeb223180/1980056/jeb223180.pdf （The bite force-gape relationship as an avenue of biomechanical adaptation to trophic niche in two salmonid fishes, J. Exp. Biol. 223(20) jeb223180, Kaczmarek & Gidmark 2020）、https://datadryad.org/dataset/doi:10.5061/dryad.sn02v6x2c （データ）
+- 証拠: [A]（PROXY）"maximum bite force achieved at 67% of maximum gape for king salmon and 43% of maximum gape for pink salmon"（検索要約）。
+
+### F-48
+- 主張/値: **Oncorhynchus の古い分類記載のグループ別の範囲**（検索要約）: 臀鰭が長く、発達した鰭条が14〜17、鰓耙が20〜40、鰓条骨が12〜16（グループ1）。臀鰭が短く、鰭条が9〜13、鰓耙が10〜15、鰓条骨が10〜14（グループ2）。**どちらが O. masou に当たるかは要約に無い**。ヤマメの鰓耙16〜22（F-18）は2グループの中間で、鰓条骨は10〜16のどこかにあるはずだが、確定できない。
+- 適用範囲: Oncorhynchus 属の古い記載（グループ名は要約に無く、太平洋サケ類／マス類と推測するのは M）。ヤマメ固有ではない。
+- 出典（候補）: https://archive.org/download/biostor-14292/biostor-14292.pdf 、https://repository.si.edu/server/api/core/bitstreams/863ffd97-8144-4fed-993d-5da8101d78f4/content
+- 証拠: [C] "anal fins are described as elongate with 14-17 developed rays with gill rakers 20-40 and branchiostegals 12-16, or alternatively anal fins shorter with 9-13 developed rays, gill rakers 10-15 and branchiostegals 10-14"（検索要約。出典の特定が不確実）。
+
+### F-49
+- 主張/値: **台湾亜種（O. m. formosanus）の頭部比**: 体長/頭長 4.20、体長/体高 3.48、頭長/吻長 4.41、頭長/眼径 3.43、頭長/眼間幅 4.12。チチャ湾渓（Chichiawan Stream）で採集した52個体の計数・計測の研究があり、「背鰭条と胸鰭条の変動が大きい以外は、計数形質は諸研究で比較的一致」と述べる。25の計数・計測形質を7種の Oncorhynchus で比べ、計数・計測だけでは台湾亜種の系統は解明できないと結論。脊椎骨数は要約に無し。
+- 適用範囲: **PROXY: O. m. formosanus**（台湾の陸封型。亜種が違い、サイズ・性別・平均か範囲かは要約に無し）。ヤマメ（亜種 masou）の頭部比は F-11 などの写真計測を優先する。
+- 出典（比率がどちらの文書の記述か特定不能）: https://en.wikipedia.org/wiki/Oncorhynchus_masou_formosanus 、https://zoolstud.sinica.edu.tw/Journals/29.3SUPPLEMENT/41.pdf （Zoological Studies 29(3) Suppl.）
+- 証拠: [C] "body length to head length ratio of approximately 4.20 ... head length to snout length ratio of 4.41, head length to eye diameter ratio of 3.43"（検索要約。Wikipedia 系の可能性があり C）。
 
 ---
 
 ## 3. 資料間の矛盾・不一致
 
-1. **脊椎骨数**: O. masou は 63〜66（C）、63〜69（C、AI生成）、単一値63（C）。他種 PROXY は 56〜75 と幅が広く、台湾亜種は日本産より少ない（B）。集団間で有意差があり（A）、腹椎／尾椎の個数は遺伝成分を持つ（A）。単一の「ヤマメの脊椎骨数」は確定できない（F-12〜F-14）。
-2. **鰓条骨と鰓耙の混同**: 青森資料の「11」は鰓条骨か鰓耙か曖昧。"gill rays 18–22" は鰓耙のことと思われるが用語が混在。Christie の鰓耙 16〜22（大半 18〜19）、Grokipedia の 19〜26、日本語単一値 16。鰓条骨 11〜15 は帰属不明（F-18, F-19）。
-3. **鰭条数**: 青森ヤマメ（A）と二次資料（C）で上側のずれ（背12〜13 対 13〜18、臀12〜14 対 14〜18、腹9 対 10〜12）。数え方（主鰭条／総数）の違いという仮説は M（未検証）。標本画像（P）の背鰭 12〜14 本は A と整合するが、臀鰭・腹鰭は重なりで下限しか数えられず、比較できない（F-04〜F-06, F-15, F-16）。
+1. **脊椎骨数**: O. masou は 63〜66（C）、63〜69（C、AI生成）、単一値63（C）。他種 PROXY は 56〜75 と幅が広く、ニジマスは FishBase 60〜66（B）に対し別の記述で「総数63（体幹33＋尾椎30）」（B、F-33）。台湾亜種は日本産より少ない（B）。集団間で有意差があり（A）、腹椎／尾椎の個数は遺伝成分を持ち（A）、発生水温でも平均が変わる（B、F-34）。単一の「ヤマメの脊椎骨数」は確定できない（F-12〜F-14、F-33、F-34）。
+2. **鰓条骨と鰓耙の混同**: 青森資料の「11」は鰓条骨か鰓耙か曖昧。"gill rays 18–22" は鰓耙のことと思われるが用語が混在。Christie の鰓耙 16〜22（大半 18〜19）、Grokipedia の 19〜26、日本語単一値 16、ニジマスの第1鰓弓 17〜21（別資料 16〜17）。古い記載のグループ別の範囲（鰓耙 20〜40／10〜15、鰓条骨 12〜16／10〜14、F-48）のどちらに O. masou が入るかは不明。鰓条骨 11〜15 は帰属不明（F-18, F-19, F-39, F-48）。
+3. **鰭条数**: 青森ヤマメ（A）と二次資料（C）で上側のずれ（背12〜13 対 13〜18、臀12〜14 対 14〜18、腹9 対 10〜12）。ニジマス（PROXY、B）は背鰭＝不分枝4＋分枝10〜12（総数14〜16）で、数え方（分枝条のみ／不分枝を含む総数）の違いで説明できる可能性があるが、**青森資料の数え方は未確認で仮説のまま**。標本画像（P）の背鰭 12〜14 本は A と整合するが、臀鰭・腹鰭は重なりで下限しか数えられず比較できない（F-04〜F-06, F-15, F-16, F-40）。
 4. **肋骨様の線の密度**: 画像では椎間周期 6.6 px に対し、肋骨様の線が約4.2 px 間隔。1椎骨あたり約1.5本に見え、肋骨（pleural ribs）だけでなく別の細い骨が写っているのか、扇の幾何学による見かけかは不明（F-03）。
 5. **顎の変形部位**: 査読レビューは Oncorhynchus で上顎の変形が最も特徴的とする一方、写真の産卵期の雄2枚は下顎先端の上向きのフックが明瞭（F-25, F-11）。排他ではなく両方が起こる可能性があるが、ヤマメでの内訳は未確定。
 6. **向きの推定**: 画像の左＝腹側は、本ストリームの推定（肋骨の扇、鰭の位置）。ユーザー指示の推定と一致するが、画像から独立に確定したものではない（F-01）。
 7. **Christie (1970) のランク**: r02 は A、r06／r10 は C に降格。本書は C に統一（F-16, F-18）。
 8. **r07 の M と本書の M**: 上顎の構成（前上顎骨・主上顎骨・上主上顎骨）は r07 の M と本書の M（F-28）で同じだが、同じ記憶の再掲であり、独立の確認ではない。
+9. **上主上顎骨の枚数（新規）**: 私の記憶（M）は1枚、古典的記載の検索要約（C、魚種不明）は「2枚の大きな上主上顎骨」（F-35）。サケ科・Oncorhynchus で何枚かは**未確定**。モデルは1枚で作り、枚数は後で確認する。
+10. **担鰭骨の本数（新規）**: 検索要約の「ニジマスの背鰭の担鰭骨7〜9本、臀鰭12〜14本（椎骨14〜21番）」（C）は、標本画像（P：背鰭の塊12〜15、臀鰭10〜11、臀鰭は腹鰭より尾側）および鰭条数と矛盾するため**採用しない**（F-41）。
+11. **頭の挙上量（新規）**: ニジマスの捕食ストライクで 2〜18°（A、F-22）、ブルックトラウトの raking で平均36°（A、F-45）。種（Oncorhynchus 対 Salvelinus）と動作（捕食対餌処理）が違い、**矛盾ではなく行動別の値**と解釈する（未検証）。
+12. **顎の時間スケール（新規）**: サケ科の値は raking の49 ms（F-45）だけで、口を開く動作そのものの値は無い。PROXY（ブルーギル13 ms）をそのまま使えるかは未検証（F-23）。
+13. **呼吸の位相の記述（新規）**: F-46 の要約は口腔の収縮開始を「鰓蓋の外転の約1/5周期前」としており、内転の誤記の疑いがある。
 
 ---
 
 ## 4. 見つからなかったこと（Gaps）— 3Dモデル／アニメ／行動実装に必要だが確認できなかった事項
 
-**共通の原因**: 本ストリームの WebSearch は、全体予算（200回）が既に使い切られており、0回しか実行できなかった。以下は「検索したが無かった」ではなく「検索できなかった」ものを多く含む。予算が戻れば優先して再調査すること。
+**今回の検索で埋まった／部分的に埋まったもの**: 歯のある骨の一覧と舌咬み装置の歯板（F-38、定性のみ）、ニジマスの脊椎骨 63＝33＋30（F-33、PROXY）、ブルックトラウトの raking の頭蓋挙上36°・49 ms（F-45、PROXY）、サケ科の尾部骨格の一般型（F-42）、舌顎骨の関節（F-36）、鰓蓋骨系4枚の構成（F-37）、ニジマスの鰓耙・鰭条（F-39, F-40）、換気の位相（F-46）。
 
-1. **顎・頭蓋の骨の個々の形と接続（課題2）**: 前上顎骨・主上顎骨・上主上顎骨・歯骨・関節骨・方形骨・舌顎骨の形と大きさの比、接続関係。F-28 は M のみ。
-2. **鰓蓋骨系の形（課題2）**: 鰓蓋・前鰓蓋・間鰓蓋・下鰓蓋の輪郭と、頭長に対する大きさ。
-3. **鰓条骨の本数（課題2）**: 左右片側の本数（青森の「11」は曖昧、11〜15 は帰属不明）。
-4. **鰓弓4対・鰓耙・咽頭歯（課題2、4）**: 鰓耙の上・下の個数、咽頭歯板の形と歯の数。F-30 は M のみ。
-5. **顎の機構の数値（課題3）**: 下顎の最大開口角、主上顎骨の回転角、舌骨の押し下げ量、鰓蓋の外転角、鰓蓋腔の容積、鰓条骨膜の展開幅、開口の時間経過。サケ科の値は無く、PROXY（吸引型）の時間スケールのみ（F-23）。
-6. **歯の本数と大きさ（課題4）**: 前上顎骨・主上顎骨・歯骨・鋤骨・口蓋骨・舌・咽頭歯の本数、歯の長さ、傾き。F-20, F-21 は配置の定性のみ。
-7. **脊椎骨の内訳（課題5）**: ヤマメの腹椎数・尾椎数、肋骨を持つ椎骨の範囲、上肋骨、尾部骨格（下尾骨・尾神経棘の数）、尾鰭支持の詳細。F-17 は PROXY。
-8. **鰭の骨格（課題6）**: 背鰭・臀鰭・胸鰭・腹鰭の担鰭骨数、各鰭の基部の位置（椎骨番号）、胸鰭帯・腰帯の形。F-04〜F-07 は標本画像からの下限・概算のみ。
+**まだ埋まらないもの**:
+
+1. **顎・頭蓋の骨の個々の形と接続（課題2）**: 前上顎骨・主上顎骨・上主上顎骨・歯骨・関節骨・方形骨の寸法比、接続の靱帯。F-35 は魚種不明の古典的記載の要約のみ。上主上顎骨が1枚か2枚か（F-35 と M の食い違い）。**対策**: Idaho Virtual Museum のニジマス標本ページ（F-37）の画像を直接見る。Sanford (2000) "Salmonid fish osteology and phylogeny"（Theses Zoologicae）を探す（検索では見つからなかった）。
+2. **鰓蓋骨系の形（課題2）**: 鰓蓋・前鰓蓋・間鰓蓋・下鰓蓋の輪郭と頭長に対する大きさ。
+3. **鰓条骨の本数（課題2）**: ヤマメの片側の本数。青森の「11」は曖昧、11〜15は帰属不明、古い記載は10〜16（F-48、帰属不明）。ニジマスの本数は今回も得られなかった。
+4. **鰓弓4対・鰓弁・咽頭歯（課題2、4）**: 鰓耙の上・下の個数、咽頭歯の本数・形、鰓糸の数と鰓薄板の密度。ニジマスの第1鰓弓の鰓耙（17〜21）と Salmo の咽頭歯板2対（F-39）のみ。
+5. **顎の機構の数値（課題3）**: サケ科の下顎の最大開口角、主上顎骨の回転角、前上顎骨の可動量、舌骨の押し下げ量、鰓蓋の外転角、鰓蓋腔の容積、鰓条骨膜の展開幅、開口の時間経過。検索（サケ科の上顎の運動、ニジマスの摂餌運動学、gape cycle）でも見つからず、PROXY（吸引型一般の順序 F-43、ブルーギル13 ms F-23）と raking（F-45）のみ。
+6. **歯の本数と大きさ（課題4）**: 前上顎骨・主上顎骨・歯骨・鋤骨・口蓋骨・舌・咽頭歯の本数、歯の長さ、傾き。F-38 は配置の定性のみ。
+7. **脊椎骨の内訳（課題5）**: ヤマメの腹椎数・尾椎数、肋骨を持つ椎骨の範囲、上肋骨、尾部骨格（上尾骨 epural の本数を含む）、尾鰭支持の詳細。O. masou 固有の値は FishBase 等で取得できなかった（検索で FishBase の O. masou ページの数値は返らず）。F-33（ニジマス PROXY）、F-42（サケ科の一般型）のみ。
+8. **鰭の骨格（課題6）**: 背鰭・臀鰭・胸鰭・腹鰭の担鰭骨数（F-41 は不採用）、各鰭の基部の位置（椎骨番号）、胸鰭帯・腰帯の形。標本画像（F-04〜F-07）の下限・概算のみ。
 9. **標本画像の側の不足**: 種の同定（ラベルが読めない）、スケール、固定前の体長。尾部、頭部の側面像、背面像、より高解像度の画像があれば、F-10 の「言えないこと」の多くが解消できる。**追加で欲しい画像**: (a) 頭部の真横（左側面）像、(b) 尾部（尾鰭・下尾骨）の像、(c) 口を開いた像、(d) 鰓蓋を外した像。
 10. **ヤマメの成熟雄の顎の形状（河川型）**: 定量資料なし（F-25）。
 11. **頭部側線管の孔の座標**: 未取得（F-27）。
-12. **文献候補（M、書誌事項未検証、追跡調査の手がかり）**: Norden (1961) サケ科の比較骨学、Stearley & Smith (1993) 太平洋のマスとサケの系統（骨学形質）、Sanford のサケ科の舌咬み装置の一連の研究（F-21 の抄録の元）、Lauder (1980) 吸引摂食、Anker (1974) 鰓蓋リンク。いずれも本ストリームでは検索で確認できていない。
+12. **サケ科の捕食時の突進距離・速度、口を開く動作の時間**: 未取得（F-44 は棘鰭類）。ニジマス／ヤマメの捕食で body ram がどれだけか。
+13. **文献候補（本文は未確認）**: Stearley & Smith (1993) Trans. Am. Fish. Soc. 122(1):1-33（骨学形質119。書誌は検索で確認）、Sanford (1990) Bull. Br. Mus. Nat. Hist. (Zool.)（比較骨学。題名を検索で確認）、Sanford (2000) Salmonid fish osteology and phylogeny（検索で見つからず）、Norden 1961（未確認）、Lauder (1980)、Anker (1974)（M、未確認）、Beam theory predicts muscle deformation and vertebral curvature during feeding in rainbow trout (J. Exp. Biol. 226(20) jeb245788。題名のみ確認、要約は読めていない)。
+14. **今回の検索の限界**: 要約だけで本文を読めていないため、F-33〜F-49 のうち出典URLの対応が不確実なものは、ランクを B/C に下げている。論文の本文が読める環境なら、F-33（63＝33＋30）、F-38（歯板）、F-43（運動順序）、F-46（位相）を最初に原典で確認すること。
 
 ---
 
-## 5. 出典一覧（URL付き。重複排除。すべて先行ストリームの検索結果に出た URL を継承したもので、本ストリームでは再検索していない）
+## 5. 出典一覧（URL付き。重複排除。「出典候補」は検索要約との対応が特定できないもの）
 
 - ユーザー提供画像: /tmp/claude-0/-home-user-gerupamasini/4b9c0ed7-76e4-51ce-9eeb-e88fc91d17f5/scratchpad/skeleton/s01.jpg（P）
 - 写真カタログ: /home/user/gerupamasini/docs/yamame/photo_analysis/catalog_c01.json 〜 catalog_c07.json（P）
 - 先行ストリームの書: /home/user/gerupamasini/docs/yamame/research/r01_morph_jp.md、r02_morph_en.md、r07_eye_head_mouth.md、r10_fins.md
+- **以下は継承（初版で記載。再検索していない）**
 - https://www.aomori-itc.or.jp/_files/00228510/450-456.pdf （F-15, F-19）
 - https://en.wikipedia.org/wiki/Oncorhynchus_masou 、https://animalia.bio/oncorhynchus-masou 、https://www.wikiwand.com/en/articles/Masu_salmon 、https://grokipedia.com/page/Oncorhynchus_masou （F-12, F-18）
 - https://www.fishbase.se/summary/Oncorhynchus-kisutch.html 、https://fishbase.se/summary/241 、https://www.fishbase.se/summary/oncorhynchus-nerka.html 、https://fishbase.se/summary/Oncorhynchus-tshawytscha 、https://www.fishbase.se/summary/oncorhynchus-mykiss.html （F-13）
@@ -407,28 +555,77 @@
 - https://www.pref.hokkaido.lg.jp/sr/gid/fis023.html 、https://www.fra.go.jp/shigen/salmon/files/salmon08_p11-14.pdf 、https://ja.wikipedia.org/wiki/%E3%82%B5%E3%82%AF%E3%83%A9%E3%83%9E%E3%82%B9 、https://www.hro.or.jp/upload/36117/o7u1kr00000008vd.pdf （F-12, F-16, F-25）
 - https://www.afs-oc.org/wp-content/uploads/2017/08/Christie-Review-of-the-Japanese-salmons.pdf （F-18）
 - https://www.marinelifeid.com/identification/masu-salmon-oncorhynchus-masou-masou/ 、https://allfishes.org/fishes/marine/masu-salmon （F-19）
-- https://publication.plazi.org/GgServer/html/03A3D24DFF854B70B4CEFB2FFD87650C 、https://openpolar.no/Record/crwiley:10.1002%2Fjmor.10775 （F-17）
-- https://en.wikipedia.org/wiki/Oncorhynchus 、https://en.wikipedia.org/wiki/Salvelinus 、https://en.wikipedia.org/wiki/Oncorhynchus_masou_formosanus （F-20）
-- https://sicb.org/?p=35129 、https://sicb.org/abstracts/evaluating-the-importance-of-new-structures-versus-new-muscle-activity-patterns-in-the-evolution-of-a-novel-feeding-mechanism-in-salmonid-fishes （F-21）
+- https://publication.plazi.org/GgServer/html/03A3D24DFF854B70B4CEFB2FFD87650C （F-17）
+- https://en.wikipedia.org/wiki/Oncorhynchus 、https://en.wikipedia.org/wiki/Salvelinus 、https://en.wikipedia.org/wiki/Oncorhynchus_masou_formosanus （F-20, F-49）
+- https://sicb.org/?p=35129 、https://sicb.org/abstracts/evaluating-the-importance-of-new-structures-versus-new-muscle-activity-patterns-in-the-evolution-of-a-novel-feeding-mechanism-in-salmonid-fishes （F-21, F-38）
 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8385379/ 、https://par.nsf.gov/biblio/10516045 、https://sicb.org/?p=43945 （F-22）
 - https://en.wikipedia.org/wiki/Aquatic_feeding_mechanisms 、https://vliz.be/imisdocs/publications/346500.pdf 、https://biomechanics.ucr.edu/Higham%202011%20Fish%20Physiology.pdf 、https://biomechanics.ucr.edu/Higham_etal_2006a.pdf 、https://pmc.ncbi.nlm.nih.gov/articles/PMC8753175 、https://pmc.ncbi.nlm.nih.gov/articles/PMC4507239 （F-23, F-24）
 - https://link.springer.com/article/10.1007/s11160-021-09694-4 （F-25）
 - https://journals.biologists.com/jeb/article-abstract/198/12/2557/7087/The-effects-of-softwater-acclimation-on?redirectedFrom=fulltext 、https://link.springer.com/article/10.1007/s10695-023-01247-9 、https://link.springer.com/article/10.1007/BF00263599 、https://pmc.ncbi.nlm.nih.gov/articles/PMC9923008/ （F-26）
 - https://link.springer.com/article/10.1007/s10228-021-00843-0 、https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9537280/ （F-27）
+- **以下は今回の検索（本改訂）で出た URL**
+- https://doaj.org/article/dc8bd61f4d8c4fbe8f435c205a8d64a8 、https://agris.fao.org/search/en/records/67599cfcc7a957febdfe657e （F-33）
+- https://paleo.iri.isu.edu/ViewSpecimen.aspx?id=766 、https://paleo.iri.isu.edu/ViewSpecimen.aspx?ID=767 、https://virtual.imnh.iri.isu.edu/Osteo/View/Chinook_Salmon/765 、https://virtual.imnh.iri.isu.edu/Osteo/View/Cutthroat_trout/771 、https://www.nabohome.org/products/manuals/fishbone/fish/Skull/skull.htm （F-33, F-37）
+- https://www.hro.or.jp/upload/41227/dayori91sake.pdf 、https://eprints.lib.hokudai.ac.jp/repo/huscap/all/24086/42(4)_P147-159.pdf 、https://www.aomori-itc.or.jp/_files/00229791/217-220.pdf （F-34）
+- https://collections.lib.utah.edu/details?id=263433 、https://collections.lib.utah.edu/details?id=263429 、https://collections.lib.utah.edu/details?id=263431 、https://collections.lib.utah.edu/details?id=275160 、https://archpress.lib.sfu.ca/index.php/archpress/catalog/download/49/20/906?inline=1 、https://sicb.org/?p=15656 、https://digitalcommons.pcom.edu/scholarly_papers/1638/ 、https://researchprofiles.library.pcom.edu/en/publications/the-sabertooth-salmon-oncorhynchus-rastrosus-gets-a-facelift/ （F-35, F-38）
+- https://www.vliz.be/imisdocs/publications/396850.pdf 、https://marineinfo.org/id/publication/383702 （F-36）
+- https://journals.usamvcluj.ro/index.php/zootehnie/article/view/5355 、https://sicb.org/?p=31727 、https://www.infish.com.pl/wydawnictwo/Archives/Fasc/work_pdf/Vol19Fasc1/Vol19-Fasc1-%20w02.pdf （F-38）
+- https://palaeo-electronica.org/2001_2/fish/onchor_m.htm 、https://aquaticpath.phhp.ufl.edu/fg2/anat/internal.rt.html 、https://agris.fao.org/search/fr/records/65de51eb4c5aef494fdba4d2 （F-39, F-40）
+- https://www.ru.ac.za/media/rhodesuniversity/content/ichthyology/documents/Anatomy_Lecture_3.pdf 、https://arc.lib.montana.edu/robert-behnke/objects/2491-32-11.pdf （F-41、不採用）
+- https://openpolar.no/Record/crwiley:10.1002%2Fjmor.10775 、https://agris.fao.org/search/en/records/676558defccf879925c0f83c （F-17, F-42）
+- https://pmc.ncbi.nlm.nih.gov/articles/PMC12517347/ 、https://journals.biologists.com/jeb/article/228/18/jeb250567/369343/A-mechanical-perspective-on-suction-feeding-in 、https://biomechanics.ucr.edu/Day%20et%20al%202015%20ICB.pdf 、https://fishlab.ucdavis.edu/wp-content/uploads/sites/397/2020/05/Mehta-Wainwright-2007.pdf 、https://en.wikipedia.org/wiki/Cranial_kinesis 、https://par.nsf.gov/servlets/purl/10192305 、https://sicb.org/?p=34346 （F-29, F-43）
+- https://cob.silverchair.com/jeb/article/doi/10.1242/jeb.129015/262046/am/Body-ram-not-suction-is-the-primary-axis-of 、https://cob.silverchair.com/jeb/article-pdf/doi/10.1242/jeb.129015/2038543/jeb_129015v1.pdf （F-44）
+- https://journals.biologists.com/jeb/article/204/22/3905/32920/Kinematic-analysis-of-a-novel-feeding-mechanism-in 、https://journals.biologists.com/jeb/article/211/21/3378/17848/Biomechanics-of-a-convergently-derived-prey 、https://journals.biologists.com/jeb/article/211/6/989/18071/Is-a-convergently-derived-muscle-activity-pattern （F-45）
+- https://sites.harvard.edu/glauder/files/2022/03/Lauder1980BiofluidMechanics.pdf 、https://sicb.org/?p=38852 、https://nature.com/articles/179255a0.pdf 、https://cob.silverchair.com/jeb/article-pdf/53/3/529/3179455/jexbio_53_3_529.pdf 、https://cob.silverchair.com/jeb/article-pdf/63/3/537/3185249/jexbio_63_3_537.pdf （F-46）
+- https://cob.silverchair.com/jeb/article-pdf/223/20/jeb223180/1980056/jeb223180.pdf 、https://datadryad.org/dataset/doi:10.5061/dryad.sn02v6x2c （F-47）
+- https://archive.org/download/biostor-14292/biostor-14292.pdf 、https://repository.si.edu/server/api/core/bitstreams/863ffd97-8144-4fed-993d-5da8101d78f4/content （F-48）
+- https://zoolstud.sinica.edu.tw/Journals/29.3SUPPLEMENT/41.pdf （F-49）
+- https://research.calacademy.org/research/ichthyology/catalog/getref.asp?id=26683 （F-28、書誌確認の候補）
+- https://journals.biologists.com/jeb/article/226/20/jeb245788/334186/Beam-theory-predicts-muscle-deformation-and （Gaps 13、題名のみ）
 
 ---
 
 ## 6. 検索ログ
 
-**WebSearch の実行回数: 0 回**（割当 30 回のうち、実行できたもの 0）。全体予算（200／200）が既に消費済みで、以下の3本の試行はすべて "Web search was not performed ... budget" で拒否された。拒否後は検索をやめ、迂回しなかった。
+**WebSearch の呼び出し回数: 34 回**（割当 34、mode はすべて "standard"、拒否なし）。ただし次の4回は、1回の呼び出しの中で複数の検索ブロックが返った（#15: 3ブロック、#18: 2ブロック、#28: 3ブロック、#29: 4ブロック）。ツール側が内部で追加検索をしたとみられ、**全体予算の消費は呼び出し回数34より大きい可能性がある**（実消費は不明）。以降の調査員は、予算の残りを確認してから検索すること。
 
-| # | クエリ | mode | 結果 | 有用度 |
-|---|---|---|---|---|
-| 1 | salmonid cranial osteology premaxilla maxilla supramaxilla dentary Oncorhynchus skull bones description | standard | 予算超過で未実行 | 0（未実行） |
-| 2 | Oncorhynchus mykiss skull osteology opercle preopercle interopercle subopercle branchiostegal rays hyomandibula | standard | 予算超過で未実行 | 0（未実行） |
-| 3 | Oncorhynchus masou vertebrae number abdominal caudal vertebrae | standard | 予算超過で未実行 | 0（未実行） |
+| # | クエリ（要旨） | mode | 結果と有用度 |
+|---|---|---|---|
+| 1 | salmonid cranial osteology premaxilla maxilla supramaxilla dentary Oncorhynchus skull bones description | standard | 中。主上顎骨・上主上顎骨の古典的記載（OCR）、歯骨と angular-articular の抄録（F-35） |
+| 2 | Oncorhynchus mykiss skull osteology opercle preopercle interopercle subopercle branchiostegal rays hyomandibula | standard | 中。舌顎骨の関節、Idaho Virtual Museum の要素一覧（F-36, F-37） |
+| 3 | Oncorhynchus masou vertebrae number abdominal caudal vertebrae | standard | 中。ニジマス63＝33＋30（F-33）。O. masou の内訳は無し |
+| 4 | steelhead Oncorhynchus mykiss total of 63 vertebrae 33 trunk 30 caudal osteology | standard | 中。F-33 の再確認（出典の特定は不能） |
+| 5 | サケ科 頭骨 骨格 前上顎骨 主上顎骨 上主上顎骨 鰓条骨 サクラマス ヤマメ 骨格標本 | standard | 低。サクラマスの形態（青森）と絶滅サケ属の前上顎骨。骨学の記述は無し |
+| 6 | Calcium and Phosphorus Contents, and Microstructure of Vertebrae in Rainbow Trout ... | standard | 低。椎骨の骨化・Ca/P（F-33 の補足） |
+| 7 | Oncorhynchus masou fishbase vertebrae dorsal soft rays anal soft rays masu salmon | standard | 無〜低。FishBase の O. masou 数値は返らず |
+| 8 | rainbow trout prey capture kinematics maximum gape angle hyoid depression cranial elevation ... ram suction | standard | 中。拡張相の一般的な順序（F-43）。サケ科の角度は無し |
+| 9 | salmonid tongue-bite apparatus basihyal teeth vomer palatine teeth Oncorhynchus feeding raking Sanford | standard | 高。舌咬み装置の歯板の配置（F-38）、ブルックトラウトの論文の所在（F-45） |
+| 10 | Sanford 2000 Salmonid fish osteology and phylogeny Teleostei Salmonidae Theses Zoologicae | standard | 低。Sanford (1990) の題名のみ。2000年の書は見つからず |
+| 11 | rainbow trout feeding kinematics gape angle lower jaw depression hyoid retraction opercular abduction ...（許可ドメイン指定） | standard | 中。鰓蓋リンクと運動順序（F-43）。魚種は吸引型一般 |
+| 12 | trout time to peak gape milliseconds feeding strike ram-suction index ... | standard | 低。TTPG の定義とブルーギル値の再確認。サケ科の値は無し |
+| 13 | rainbow trout gill arches gill rakers pharyngeal teeth number branchiostegal rays 10-12 ... | standard | 中。鰓弓4対、鰓耙17〜21、鰭条の不分枝・分枝（F-39, F-40） |
+| 14 | Morpho-Histological Peculiarities of Oro-Pharyngeal Cavity of Rainbow Trout ... teeth ... | standard | 中。口蓋骨歯・鋤骨歯、舌の構造（F-38） |
+| 15 | rainbow trout teeth maxilla premaxilla dentary vomer palatine tongue basibranchial pharyngeal tooth plates ...（3ブロック） | standard | 中。歯のある骨、咽頭歯板2対（F-38, F-39） |
+| 16 | Stearley Smith 1993 Phylogeny of the Pacific trouts and salmons ... osteological characters | standard | 低。書誌のみ確認（119形質、33現生種・亜種） |
+| 17 | salmonid caudal skeleton hypurals uroneurals epurals preural centra principal caudal fin rays Oncorhynchus 19 rays | standard | 中。サケ科の一般型（下尾骨6・尾神経棘3、F-42） |
+| 18 | salmonid pectoral fin skeleton radials scapula coracoid cleithrum rainbow trout ...（2ブロック） | standard | 低。胸鰭の放射骨数は返らず（Gap） |
+| 19 | rainbow trout dorsal fin pterygiophores number proximal radials anal fin ... pelvic girdle basipterygium | standard | 低。疑わしい値（F-41、不採用） |
+| 20 | ヤマメ サクラマス 脊椎骨数 椎骨数 腹椎 尾椎 計数形質 | standard | 中。水温と脊椎骨数の話題（F-34）。ヤマメの本数は無し |
+| 21 | Oncorhynchus masou vertebrae 63 64 65 66 masu salmon meristic counts branchiostegal rays gill rakers pyloric caeca | standard | 低。古い記載のグループ別範囲（F-48）。Taiwan の研究の所在 |
+| 22 | Formosan landlocked salmon O. m. formosanus morphometric meristic vertebrae gill rakers branchiostegal ... | standard | 中。頭部比（F-49）。脊椎骨数は無し |
+| 23 | サクラマス 飼育水温 脊椎骨数 増加 X線写真 神経棘 尾部棒状骨 水温 9℃ 12℃ 16℃ | standard | 中。発生水温で脊椎骨数が変わる（F-34） |
+| 24 | Oncorhynchus formosanus Formosan landlocked salmon fishbase vertebrae dorsal spines soft rays anal soft rays | standard | 無。数値は返らず |
+| 25 | サケ サクラマス 頭骨 鰓蓋骨 前鰓蓋骨 間鰓蓋骨 下鰓蓋骨 歯骨 前上顎骨 主上顎骨 同定 遺跡 出土魚骨 | standard | 無。骨学の記述は返らず |
+| 26 | salmonid upper jaw kinesis maxilla rotation premaxilla protrusion trout mouth opening mechanism ... | standard | 低。硬骨魚一般の突出機構（F-43）。サケ科の値は無し |
+| 27 | rainbow trout ventilation opercular abduction buccal expansion phases kinematics ... | standard | 中。トラウトの口腔・鰓蓋の位相（F-46） |
+| 28 | Oncorhynchus branchiostegal rays count 10 11 12 rainbow trout steelhead cutthroat masou Behnke ...（3ブロック） | standard | 無〜低。本数は返らず（Gap） |
+| 29 | gape cycle duration trout strike mouth opening time ms Atlantic salmon brown trout rainbow trout ...（4ブロック） | standard | 低。サケ科の開口時間は返らず |
+| 30 | The bite force-gape relationship ... two salmonid fishes maximum gape angle lower jaw | standard | 中。Oncorhynchus 2種の咬合力と開口（F-47）。角度は無し |
+| 31 | number of teeth on premaxilla maxilla dentary vomer palatine in salmonids ... tooth counts per bone | standard | 低。鋤骨歯1〜2列のみ。本数は無し |
+| 32 | rainbow trout first gill arch gill filaments number per arch gill rakers lamellae per mm ... | standard | 無。鰓糸数の定量は返らず |
+| 33 | trout ram feeding salmonid ram-suction continuum prey capture mostly ram ... | standard | 中。棘鰭類40種の body ram（F-44、PROXY） |
+| 34 | salmonid raking behavior hyoid retraction neurocranial elevation kinematics ...（許可ドメイン指定） | standard | 高。ブルックトラウトの raking の定量（F-45） |
 
-本書の根拠となった非検索の作業:
-- s01.jpg を Read で開き、grid.py でグリッド付きズーム（全体 s25、頭部 7倍と10倍、背鰭・臀鰭・腹鰭・胸鰭域 8倍、体幹中央・上部 5倍）。numpy／PIL による脊柱中心線の追跡、周期のピーク検出、鰭条・担鰭骨・肋骨の走査線計数（各3〜4本）。
+本書の根拠となった非検索の作業（初版から継承）:
+- s01.jpg を Read で開き、grid.py でグリッド付きズーム（全体 s25、頭部 7倍と10倍、背鰭・臀鰭・腹鰭・胸鰭域 8倍、体幹中央・上部 5倍）。numpy／PIL による脊柱中心線の追跡、周期のピーク検出、鰭条・担鰭骨・肋骨の走査線計数（各3〜4本）。今回の改訂でも s01.jpg を Read で開き直し、初版の記述（頭を下にした像、脊柱は上辺 (222,0) で画角外に出る、青系一色、頭部は下端の濃青の塊）と矛盾しないことを確認した（再計測はしていない）。
 - 既存ファイル r07、r01、r02、r10 の関連箇所の読込み（継承）。catalog_c01〜c07 の head_mouth・caveats の機械検索（歯・舌・鰓弁・鰓耙に触れる写真は p012 の1枚のみ）。
-- r15_cranial_osteology.md は新規作成（既存ファイルなし）。
