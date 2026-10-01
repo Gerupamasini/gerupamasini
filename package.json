@@ -1,14 +1,39 @@
 {
-  "name": "mahaze-juvenile-3d",
-  "version": "1.0.0",
+  "name": "higata-zukan",
+  "version": "0.1.0",
   "private": true,
-  "description": "Photoreal translucent juvenile yellowfin goby (Acanthogobius flavimanus) for Three.js",
+  "description": "干潟図鑑 — real-tide tidal flat creature collecting game (Three.js)",
   "type": "module",
   "scripts": {
-    "build:model": "node tools/build-model.mjs",
-    "serve": "node tools/serve.mjs"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "data:validate": "node tools/data/validate.mjs",
+    "check": "npm run typecheck && npm run test && npm run data:validate",
+    "smoke": "node tests/smoke/screenshot.mjs",
+    "model:mahaze": "node tools/models/mahaze/build.mjs",
+    "terrain:bake": "node tools/terrain/bake-map.mjs",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tools/**/*.mjs\" \"tests/**/*.{ts,mjs}\""
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.3",
+    "idb-keyval": "^6.2.2",
+    "preact": "^10.29.8",
+    "three": "0.186.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "jpeg-js": "^0.4.4"
-  }
+    "@preact/preset-vite": "^2.10.6",
+    "@types/three": "0.186.0",
+    "jpeg-js": "^0.4.4",
+    "playwright-core": "^1.63.0",
+    "pngjs": "^7.0.0",
+    "prettier": "^3.9.9",
+    "typescript": "~5.9.0",
+    "vite": "^7.3.6",
+    "vitest": "^5.0.3"
+  },
+  "engines": { "node": ">=22" }
 }

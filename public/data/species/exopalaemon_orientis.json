@@ -1,0 +1,64 @@
+{
+  "id": "exopalaemon_orientis",
+  "names": { "ja": "シラタエビ", "sci": "Exopalaemon orientis", "en": "Oriental river prawn" },
+  "taxon": { "group": "crustacean", "family": "Palaemonidae" },
+  "locomotion": "walk",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "shrimp",
+    "modelLength_mm": 60,
+    "driver": "shrimp",
+    "clips": { "idle": "Idle", "move": "Move", "special": [] }
+  },
+  "size": {
+    "length_mm": { "min": 35, "max": 80, "mean": 55, "sd": 10 },
+    "weightCoef": { "a": 0.000008, "b": 2.9 }
+  },
+  "sex": { "maleRatio": 0.45, "dimorphic": false },
+  "stages": [
+    { "id": "juvenile", "ja": "幼体", "maxLength_mm": 40 },
+    { "id": "adult", "ja": "成体" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "variation": { "scaleFromLength": true, "tint": { "hueDeg": [-4, 4], "sat": [0.8, 1.1], "val": [0.95, 1.05] } },
+  "spawn": [
+    {
+      "tags": ["shallow", "pool"],
+      "substrate": ["sand", "muddy_sand", "mud"],
+      "depth_m": [0.03, 0.6],
+      "time": ["dawn", "day", "dusk"],
+      "tide": "any",
+      "density_per_100m2": 2.0,
+      "group": [2, 6],
+      "maxPopulation": 80
+    },
+    {
+      "tags": ["shallow", "pool", "waterline"],
+      "substrate": ["sand", "muddy_sand", "mud"],
+      "depth_m": [0.02, 0.6],
+      "time": ["night"],
+      "tide": "any",
+      "density_per_100m2": 4.0,
+      "group": [2, 8],
+      "maxPopulation": 80
+    }
+  ],
+  "brain": { "tree": "shrimp_shallow", "params": { "fleeDistance_m": 1.0, "restMean_s": 8 } },
+  "capture": { "tools": ["hand_net"], "baseDifficulty": 0.35, "alertPenalty": 0.5 },
+  "encyclopedia": {
+    "description": "河口や内湾の浅い砂泥底にすむ小型のエビ。体は半透明で白っぽく、昼は底近くでじっとしていることが多い。夜になると浅場へ出て活発に餌を探す。驚くと尾扇を強く打って後方へ跳ぶ。",
+    "habitatHint": "浅い水中や潮だまり。夜の水際に多い。",
+    "behaviors": [
+      { "id": "rest", "ja": "静止", "hint": "底でじっとしている" },
+      { "id": "walk", "ja": "歩行", "hint": "歩脚で底を歩く" },
+      { "id": "swim", "ja": "遊泳", "hint": "腹脚で泳ぐ" },
+      { "id": "forage", "ja": "摂餌", "hint": "触角を動かしながら餌を探す" },
+      { "id": "tail_flip_escape", "ja": "尾扇で跳ねて逃走", "hint": "近づくと後方へ跳ぶ" }
+    ],
+    "placeholderModel": true
+  }
+}

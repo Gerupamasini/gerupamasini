@@ -1,0 +1,13 @@
+{
+  "id": "kasai_west",
+  "names": { "ja": "西のなぎさ", "en": "West Nagisa" },
+  "station": "jma_tokyo",
+  "origin": { "lat": 35.636, "lon": 139.858 },
+  "size_m": 320,
+  "resolution": 256,
+  "height": { "file": "kasai_west/height.png", "min_tp_m": -3.5, "max_tp_m": 3.0 },
+  "substrate": { "file": "kasai_west/substrate.png", "palette": ["sand", "muddy_sand", "mud", "gravel", "channel"] },
+  "spawnStart": { "x": 10, "z": -120, "heading": 180 },
+  "bounds": { "walkable": [[-155, -155], [155, 155]], "noEntry": [] },
+  "props": []
+}
