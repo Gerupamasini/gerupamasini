@@ -122,7 +122,7 @@ export class Locomotion {
       pectHold: r.range(0.7, 1.4) * (P.calm ?? 1), // individual patience between pectoral bouts
       breathRate: r.range(1.15, 1.6), // Hz  (≈ 70–96 / min at ~22 °C)
       opercAmp: r.range(0.35, 0.55),
-      mouthAmp: r.range(0.05, 0.1),
+      mouthAmp: r.range(0.03, 0.06), // (a resting gape: barely parted lips)
       asym: r.range(-0.06, 0.06),
     };
 
@@ -327,7 +327,11 @@ export class Locomotion {
       // build up over ~0.1 s), so a turn starts softly, peaks and settles.
       const uS = cmd.urgency;
       const wTarget = clamp(err * (1.1 + 4 * uS) * lerp(0.35, 1, commit), -wMax, wMax);
-      const aMax = lerp(5, 2.2, calmHover) * (1 + 3.5 * uS);
+      // (a spin left over from an escape - up to ~10 rad/s - is braked
+      // hard once the behaviour calms down; with only the calm angular
+      // acceleration the fish would whirl round two or three times)
+      const excess = Math.max(0, Math.abs(this.yawRate) - wMax);
+      const aMax = lerp(5, 2.2, calmHover) * (1 + 3.5 * uS) + 4 * excess;
       const aDes = clamp((wTarget - this.yawRate) / (0.3 / (1 + 3.3 * uS)), -aMax, aMax);
       this.yawAcc = damp(this.yawAcc, aDes, (1 + 3.8 * uS) / 0.12, dt);
       this.yawRate += this.yawAcc * dt;
