@@ -7,7 +7,7 @@ import { FishSystem } from './fish/FishSystem.js';
 import { Fish } from './fish/Fish.js';
 import { Brain } from './ai/Brain.js';
 import { AnimDemo } from './fish/AnimDemo.js';
-import { U } from './render/SharedUniforms.js';
+import { U, FIN_LAYER } from './render/SharedUniforms.js';
 import { buildStudioEnvScene, bakeEnvironment } from './render/StudioEnvironment.js';
 import { PostFX } from './render/PostFX.js';
 import { CinematicDirector } from './render/CinematicCamera.js';
@@ -90,6 +90,9 @@ export class App {
       this.post.bloom.strength = 0.03;
       this.post.bloom.radius = 0.2;
       this.post.bloom.threshold = 6.0;
+      // macro lens stopped down on a centred subject: lateral colour stays
+      // well below a pixel (no red/blue fringe on fin margins and rays)
+      this.post.lens.material.uniforms.uCA.value = 0.00012;
     }
     this.usePost = pp.get('post') !== '0';
     this._bindInput();
@@ -501,7 +504,12 @@ export class App {
     this.renderer.info.reset();
     this.fishSystem.update(this.camera, this.renderer);
     if (this.usePost) this.post.render();
-    else this.renderer.render(this.scene, this.camera);
+    else {
+      // without post-processing the fins are drawn with the scene
+      this.camera.layers.enable(FIN_LAYER);
+      this.renderer.render(this.scene, this.camera);
+      this.camera.layers.disable(FIN_LAYER);
+    }
     // TIR mirror for the next frame (after the shadow maps of this frame exist)
     if (this.world) this.world.surface.renderReflection(this.camera);
     this.perf.renderMs = performance.now() - t0;
@@ -568,6 +576,8 @@ export class App {
     this.camera.updateProjectionMatrix();
     r.setScissorTest(true);
     r.autoClear = true;
+    // direct rendering (no post-processing): the fins are drawn with the scene
+    this.camera.layers.enable(FIN_LAYER);
     const dt = 1 / 120;
     for (let k = 0; k < n; k++) {
       if (k > 0) for (let t = 0; t < sdt - 1e-6; t += dt) this.step(dt);
@@ -579,6 +589,7 @@ export class App {
       r.setScissor(x, y, vw, vh);
       r.render(this.scene, this.camera);
     }
+    this.camera.layers.disable(FIN_LAYER);
     r.setScissorTest(false);
   }
 

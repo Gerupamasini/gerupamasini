@@ -237,7 +237,7 @@ const ribbonSway = /* glsl */ `
   vec3 dirW = normalize(uCurrent + vec3(0.0001));
   transformed.x += bend * (0.04 * sway + 0.05 * dirW.x);
   transformed.z += bend * (0.03 * cos(t * 0.9 + ph * 1.7) + 0.05 * dirW.z);
-  transformed.y = min(transformed.y - bend * 0.012 * abs(sway), ${(TANK.water - 0.004).toFixed(4)});
+  transformed.y = min(transformed.y - bend * 0.012 * abs(sway), ${(TANK.water - 0.0015).toFixed(4)});
 }
 `;
 
@@ -252,7 +252,12 @@ const RIBBON_SEGS = 36;
 // `xr` draws the per-blade irregularity (droop, surface arc, sinking tip) from
 // its own stream so the rest of the planting keeps its layout.
 function ribbonBlade(rng, base, len, width, xr) {
-  const surfY = TANK.water - 0.007 - xr.range(0, 0.004);
+  // the floating run lies in the surface film (its mirror image in the
+  // underside of the surface then joins it into one band, as a real
+  // floating leaf does, instead of a second line a centimetre above)
+  const surfY = TANK.water - 0.0018 - xr.range(0, 0.004) * 0.2;
+  // the long blades that reach the surface are the old, broad ones
+  if (len > 0.4) width *= 1.3;
   // radius of the arc over at the surface: stiff young blades turn late and
   // tight, old soft ones bow over in a long sweep
   const R = xr.range(0.022, 0.085);
@@ -265,7 +270,7 @@ function ribbonBlade(rng, base, len, width, xr) {
   const twist = rng.range(0.6, 2.8) * rng.sign();
   // a floating tip lies on the surface for a short run, then (old, heavy,
   // torn tips) slowly sinks back into the water column
-  const floatRun = xr.range(0.015, 0.14);
+  const floatRun = xr.range(0.015, 0.14) * 1.8;
   const sink = xr.next() < 0.55 ? xr.range(0.25, 1.1) : 0;
   const ds = len / RIBBON_SEGS;
   const pts = [];
@@ -310,24 +315,31 @@ function ribbonBlade(rng, base, len, width, xr) {
     const t = i / RIBBON_SEGS;
     const T = tans[i];
     side.addScaledVector(T, -side.dot(T)).normalize();
-    if (i > 0) side.applyQuaternion(q.setFromAxisAngle(T, twist / RIBBON_SEGS));
-    const floatW = THREE.MathUtils.smoothstep(pts[i].y, TANK.water - 0.03, TANK.water - 0.009);
+    const floatW = THREE.MathUtils.smoothstep(pts[i].y, TANK.water - 0.025, TANK.water - 0.004);
+    if (i > 0) side.applyQuaternion(q.setFromAxisAngle(T, (twist / RIBBON_SEGS) * (1 - floatW)));
     if (floatW > 0) {
       flat.crossVectors(T, up);
       if (flat.lengthSq() > 1e-6) {
         flat.normalize();
         if (flat.dot(side) < 0) flat.negate();
-        side.lerp(flat, floatW * 0.35).normalize();
+        // floating: the blade lies flat on the surface film (a tape, not
+        // an edge-on wire)
+        side.lerp(flat, floatW).normalize();
       }
     }
-    // narrow sheath at the base, parallel sides, short blunt tip
-    const w = width * (0.7 + 0.3 * THREE.MathUtils.smoothstep(t, 0, 0.06)) * Math.pow(Math.min(1, (1 - t) / 0.07), 0.55);
+    // narrow sheath at the base, parallel sides, short blunt tip (blades
+    // are at least 6 mm wide: narrower ones read as wires on the surface)
+    const w = Math.max(width, 0.006) * (0.7 + 0.3 * THREE.MathUtils.smoothstep(t, 0, 0.06)) * Math.pow(Math.min(1, (1 - t) / 0.07), 0.55);
     n.crossVectors(side, T).normalize();
     for (let j = 0; j < 3; j++) {
       const a = j - 1; // -1, 0, 1
       // shallow channel: the midrib sits slightly behind the margins
       const off = a === 0 ? -0.0006 * (w / width) : 0;
-      pos.push(pts[i].x + side.x * a * w * 0.5 + n.x * off, pts[i].y + side.y * a * w * 0.5 + n.y * off, pts[i].z + side.z * a * w * 0.5 + n.z * off);
+      // floating: the margins cling to the surface film and the midrib sags
+      // a little below them (a shallow trough, seen from below as a broad
+      // band rather than a hairline)
+      const sag = a === 0 ? floatW * 0.22 * w : 0;
+      pos.push(pts[i].x + side.x * a * w * 0.5 + n.x * off, pts[i].y + side.y * a * w * 0.5 + n.y * off - sag, pts[i].z + side.z * a * w * 0.5 + n.z * off);
       uv.push(j / 2, t);
     }
   }
