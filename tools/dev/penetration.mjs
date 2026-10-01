@@ -4,7 +4,8 @@
 // fill) and the
 // feather mesh (including the feather shader's body-contact displacement / arm-tube fold and the worst-case
 // inward wind flutter, the folded wing's bend onto its shell), then measure against
-// the POSED body triangles (exact closest-point distance near the surface, ray parity for the sign further away):
+// the POSED body triangles (exact closest-point distance near the surface, the generalized winding number for
+// the sign further away and wherever the bent neck overlaps the trunk):
 //   reentry  max depth (mm) of feather surface inside the body AFTER the feather has emerged, along each
 //            longitudinal line of the feather (base → tip). A feather may be rooted inside the plumage
 //            (rectrix bases, wing bones tucked into the flank pocket) but must not dive back in.
@@ -20,8 +21,9 @@
 //            (clear of the body, so the measures above do not see it)
 //   neck     the same two measures where the covering body surface is neck/head plumage (moved > 0.5 mm by
 //            the neck bones relative to the chest): the neck lying on the scapulars / shoulder when it bends
-//            (preening, rest). Reported separately (two plumage regions in contact, not a feather through
-//            the body).
+//            (preening, rest), or where the reentry went in under neck / head plumage (the surface crossed going
+//            in decides, however deep it then runs on under the trunk). Reported separately (two plumage regions
+//            in contact, not a feather through the body).
 // The arm tube is collapsed to a line by the feather shader from half the fold on (not rendered) and is skipped
 // there.
 // usage: node tools/dev/penetration.mjs [--lod=0,1,2] [--pose=regex] [--top=15] [--seed=3] [--json=out.json] [--list]
@@ -282,7 +284,7 @@ function skin(M, pos, nrm, si, sw, i, off, P, N) {
 
 // ------------------------------------------------------------------ measurement of one pose
 const R = 2.5; // mm: exact search radius around the body surface
-const RAYS = [[0.137, 0.974, 0.181], [-0.881, -0.2, 0.429], [0.662, -0.349, -0.663]].map((d) => { const l = Math.hypot(...d); return d.map((x) => x / l); });
+const SIGN_NEAR = 0.5; // mm: near the moved neck, only within this the nearest surface's normal tells the side (winding number beyond)
 function measure(model, S, anim) {
   const { B, F } = S;
   const bu = B.mesh.material.userData.uniforms;
@@ -335,15 +337,29 @@ function measure(model, S, anim) {
     const keep = [sdN[0], sdN[1], sdN[2], sdC[0], sdC[1], sdC[2], sdNeck];
     const dt = sd0(px, py, pz, r, true);
     if (dt < 0 && dt > -r) return dt;
+    // Deeper under the trunk than the exact search radius: where the bent neck has been pushed into the trunk or
+    // folded over itself (the base of the neck on the side the head turned to, preening / tucked asleep), a point
+    // just outside one neck sheet can still lie inside the body — under the trunk's plumage or another fold of the
+    // neck, not out in the open. The mesh overlaps itself there, so crossing parity cannot tell (inside two layers
+    // reads as outside); the generalized winding number counts the layers round the point. Its depth is its
+    // distance under the nearest trunk surface; what covers it is the neck sheet lying over it (`neck`: the bent
+    // neck on the shoulder / scapulars, two plumage regions in contact).
+    if (winding(px, py, pz) > 0.5) {
+      const dd = sd0(px, py, pz, 12, true);
+      [sdN[0], sdN[1], sdN[2], sdC[0], sdC[1], sdC[2], sdNeck] = keep;
+      return -Math.max(EPS * 2, Math.min(Math.abs(dd), 12));
+    }
     [sdN[0], sdN[1], sdN[2], sdC[0], sdC[1], sdC[2], sdNeck] = keep;
     return d;
   }
   function sd0(px, py, pz, r, trunkOnly) {
     if (px < bmin[0] - r || py < bmin[1] - r || pz < bmin[2] - r || px > bmax[0] + r || py > bmax[1] + r || pz > bmax[2] + r) { sdN[0] = sdN[1] = sdN[2] = 0; return 99; }
     tg.query(px - r, py - r, pz - r, px + r, py + r, pz + r, cand, nTri);
-    let best = r * r, bt = -1, bu0 = 0, bv0 = 0, bw0 = 0;
+    let best = r * r, bt = -1, bu0 = 0, bv0 = 0, bw0 = 0, nearNeck = false;
     for (const t of cand) {
-      if (trunkOnly && (neckMoved[B.idx[t * 3]] || neckMoved[B.idx[t * 3 + 1]] || neckMoved[B.idx[t * 3 + 2]])) continue;
+      const nm = neckMoved[B.idx[t * 3]] || neckMoved[B.idx[t * 3 + 1]] || neckMoved[B.idx[t * 3 + 2]];
+      nearNeck ||= !!nm;
+      if (trunkOnly && nm) continue;
       const d2 = closestBary(px, py, pz, BP, B.idx[t * 3] * 3, B.idx[t * 3 + 1] * 3, B.idx[t * 3 + 2] * 3, bary);
       if (d2 < best) { best = d2; bt = t; bu0 = bary[0]; bv0 = bary[1]; bw0 = bary[2]; }
     }
@@ -358,33 +374,62 @@ function measure(model, S, anim) {
       sdNeck = neckMoved[B.idx[bt * 3]] + neckMoved[B.idx[bt * 3 + 1]] + neckMoved[B.idx[bt * 3 + 2]];
       const dist = Math.sqrt(best);
       // near the surface the interpolated normal gives the side; further away (closest point on an edge or
-      // vertex of a coarse LOD mesh, whose normal can point anywhere) the ray parity does
-      if (dist <= R) return (px - cx) * nx + (py - cy) * ny + (pz - cz) * nz < 0 ? -dist : dist;
+      // vertex of a coarse LOD mesh, or across the crease where the bent neck meets the shoulder, whose normal can
+      // point anywhere) the winding number does
+      if (dist <= (nearNeck ? SIGN_NEAR : R)) return (px - cx) * nx + (py - cy) * ny + (pz - cz) * nz < 0 ? -dist : dist;
       return inside(px, py, pz) ? -dist : dist;
     }
-    // far from the surface: parity of crossings
+    // far from the surface: the winding number
     sdN[0] = sdN[1] = sdN[2] = 0;
     sdNeck = 0;
     return inside(px, py, pz) ? -R : R;
   }
-  // inside test: majority of the crossing parities along three rays (a single ray is fooled where it grazes an
-  // edge or a vertex, or crosses the few non-manifold edges of the coarse LOD2 mesh)
-  function parity(px, py, pz, D) {
-    let hits = 0;
-    const seen = new Set();
-    for (let s = 0; s < 120; s += 1) {
-      const qx = px + D[0] * s, qy = py + D[1] * s, qz = pz + D[2] * s;
-      if (qx < bmin[0] - 1 || qy < bmin[1] - 1 || qz < bmin[2] - 1 || qx > bmax[0] + 1 || qy > bmax[1] + 1 || qz > bmax[2] + 1) break;
-      tg.query(qx - 0.6, qy - 0.6, qz - 0.6, qx + 0.6, qy + 0.6, qz + 0.6, cand, nTri);
-      for (const t of cand) {
-        if (seen.has(t)) continue;
-        seen.add(t);
-        if (rayTri(px, py, pz, D[0], D[1], D[2], BP, B.idx[t * 3] * 3, B.idx[t * 3 + 1] * 3, B.idx[t * 3 + 2] * 3) > 0) hits++;
+  const inside = (px, py, pz) => winding(px, py, pz) > 0.5;
+  // Generalized winding number (solid angle of the posed body over 4π; Jacobson et al. 2013, with the far-field
+  // dipole approximation of Barill et al. 2018): 1 inside one layer of plumage, 2 inside two overlapping ones, 0
+  // outside. Unlike crossing parity it is not fooled where the bent neck overlaps the trunk or folds over itself
+  // (inside two layers reads as outside), nor by rays grazing the coarse meshes' edges.
+  const CL = 6; // mm: cluster cells
+  const clusters = new Map();
+  for (let t = 0; t < nTri; t++) {
+    const a = B.idx[t * 3] * 3, b = B.idx[t * 3 + 1] * 3, c = B.idx[t * 3 + 2] * 3;
+    const cx = (BP[a] + BP[b] + BP[c]) / 3, cy = (BP[a + 1] + BP[b + 1] + BP[c + 1]) / 3, cz = (BP[a + 2] + BP[b + 2] + BP[c + 2]) / 3;
+    const key = `${Math.floor(cx / CL)},${Math.floor(cy / CL)},${Math.floor(cz / CL)}`;
+    let C = clusters.get(key);
+    if (!C) clusters.set(key, (C = { tris: [], A: [0, 0, 0], c: [0, 0, 0], area: 0, r: 0 }));
+    const ux = BP[b] - BP[a], uy = BP[b + 1] - BP[a + 1], uz = BP[b + 2] - BP[a + 2];
+    const vx = BP[c] - BP[a], vy = BP[c + 1] - BP[a + 1], vz = BP[c + 2] - BP[a + 2];
+    const nx = (uy * vz - uz * vy) / 2, ny = (uz * vx - ux * vz) / 2, nz = (ux * vy - uy * vx) / 2;
+    const ar = Math.hypot(nx, ny, nz);
+    C.tris.push(t);
+    C.A[0] += nx; C.A[1] += ny; C.A[2] += nz;
+    C.c[0] += cx * ar; C.c[1] += cy * ar; C.c[2] += cz * ar;
+    C.area += ar;
+  }
+  const CLS = [...clusters.values()];
+  for (const C of CLS) {
+    for (let k = 0; k < 3; k++) C.c[k] /= C.area || 1;
+    for (const t of C.tris) for (let e = 0; e < 3; e++) { const v = B.idx[t * 3 + e] * 3; C.r = Math.max(C.r, Math.hypot(BP[v] - C.c[0], BP[v + 1] - C.c[1], BP[v + 2] - C.c[2])); }
+  }
+  function winding(px, py, pz) {
+    let w = 0;
+    for (const C of CLS) {
+      const dx = C.c[0] - px, dy = C.c[1] - py, dz = C.c[2] - pz;
+      const dd = Math.hypot(dx, dy, dz);
+      if (dd > 3 * C.r) { w += (C.A[0] * dx + C.A[1] * dy + C.A[2] * dz) / (dd * dd * dd); continue; }
+      for (const t of C.tris) {
+        const a = B.idx[t * 3] * 3, b = B.idx[t * 3 + 1] * 3, c = B.idx[t * 3 + 2] * 3;
+        const ax = BP[a] - px, ay = BP[a + 1] - py, az = BP[a + 2] - pz;
+        const bx = BP[b] - px, by = BP[b + 1] - py, bz = BP[b + 2] - pz;
+        const cx = BP[c] - px, cy = BP[c + 1] - py, cz = BP[c + 2] - pz;
+        const la = Math.hypot(ax, ay, az), lb = Math.hypot(bx, by, bz), lc = Math.hypot(cx, cy, cz);
+        const det = ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx);
+        const den = la * lb * lc + (ax * bx + ay * by + az * bz) * lc + (bx * cx + by * cy + bz * cz) * la + (cx * ax + cy * ay + cz * az) * lb;
+        w += 2 * Math.atan2(det, den);
       }
     }
-    return hits % 2;
+    return w / (4 * Math.PI);
   }
-  const inside = (px, py, pz) => RAYS.reduce((n, D) => n + parity(px, py, pz, D), 0) >= 2;
   // height of a point above the body straight below it (0 if the vertical misses the body: a feather trailing
   // beside it, or the point is inside)
   function dropToBody(px, py, pz) {
@@ -467,6 +512,25 @@ function measure(model, S, anim) {
         outMax = 0;
       };
       let insideAfter = 0;
+      // the surface a reentry went in through: the plumage the line was last outside of. Going in under the neck /
+      // head plumage lying over it (the bent neck on the shoulder, the head on the scapulars) the whole stretch is
+      // the neck measure, however deep it runs on under the trunk's plumage beyond (the nearest surface switches
+      // to the trunk there, but nothing of the feather is seen past where it went under the neck)
+      let segNeck = 0, prevP = null;
+      // which plumage the line crosses going in between the last outside sample a and the inside sample b (bisection)
+      const entryNeck = (a, b) => {
+        const lo = [...a], hi = [...b], m = [0, 0, 0];
+        const keep = [sdN[0], sdN[1], sdN[2], sdC[0], sdC[1], sdC[2], sdNeck];
+        let neck = 0;
+        for (let step = 0; step < 8; step++) {
+          for (let k = 0; k < 3; k++) m[k] = (lo[k] + hi[k]) / 2;
+          const dm = sd(m[0], m[1], m[2]);
+          if (Math.abs(dm) < R) neck = sdNeck;
+          for (let k = 0; k < 3; k++) (dm > 0 ? lo : hi)[k] = m[k];
+        }
+        [sdN[0], sdN[1], sdN[2], sdC[0], sdC[1], sdC[2], sdNeck] = keep;
+        return neck;
+      };
       for (let i = 0; i < line.length; i++) {
         const nsub = i === line.length - 1 ? 1 : SUB;
         for (let s = 0; s < nsub; s++) {
@@ -504,6 +568,7 @@ function measure(model, S, anim) {
             // exposure checks
           } else if (d < -EPS) {
             settle();
+            if (!inside) segNeck = (prevP && entryNeck(prevP, p)) || sdNeck;
             inside = true;
             if (emerged) {
               insideAfter++;
@@ -511,13 +576,14 @@ function measure(model, S, anim) {
               if (-d > r.reentry) { r.reentry = -d; r.at = p.map((x) => +x.toFixed(1)); }
               // visible unless other plumage lies in front of the body surface above this point
               const vis = sdN[0] || sdN[1] || sdN[2] ? !coveredAbove(sdC[0] + sdN[0] * 0.01, sdC[1] + sdN[1] * 0.01, sdC[2] + sdN[2] * 0.01, sdN[0], sdN[1], sdN[2], own) : true;
-              if (vis && sdNeck > 0) r.neck = Math.max(r.neck, -d);
+              if (vis && (sdNeck > 0 || segNeck)) r.neck = Math.max(r.neck, -d);
               else if (vis) {
                 visDepth = Math.max(visDepth, -d);
                 if (-d > r.vis) { r.vis = -d; r.visAt = p.map((x) => +x.toFixed(1)); r.visNeck = sdNeck; }
               }
             }
           }
+          if (d >= -EPS) prevP = p;
           if (s === 0) {
             const mark = (a) => { if (emerged && !inside) exposed[a] = 1; };
             if (Array.isArray(line[i])) { mark(line[i][0]); mark(line[i][1]); } else mark(line[i]);
