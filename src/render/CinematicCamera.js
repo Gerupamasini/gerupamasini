@@ -840,3 +840,297 @@ export class CinematicDirector {
     this.app.camera.updateProjectionMatrix();
   }
 }
+
+// ---------------------------------------------------------------- follow cam
+// follow-camera re-framings: orbit about the subject (rad), dolly, lift (SL)
+const F_ORBITS = [0, 0.3, -0.3, 0.6, -0.6, 0.95, -0.95, 1.35, -1.35, 1.8, -1.8];
+const F_DOLLY = [1, 0.85, 1.25];
+const F_LIFTS = [0, 0.7, -0.5];
+const F_MARGIN = 0.035; // clearance from the panes, gravel and surface (m)
+
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+/**
+ * Follow camera (the "c" key / follow=1): a side-on companion shot of the
+ * selected fish, always inside the water. It reuses the director's operator
+ * rules — never inside or grazing any fish (not only the subject), rocks or
+ * plants, a clear view of the subject, no part of the image leaving through
+ * a nearby pane — and also keeps the black corner seams of the tank out of
+ * frame. The camera is placed in cylindrical coordinates about the subject
+ * (azimuth, radius, height) and each coordinate follows its target with a
+ * critically damped, rate-limited spring: a change of side is a slow orbit
+ * around the fish, never a straight move through it, and a re-framing never
+ * jumps.
+ */
+export class FollowCamera {
+  constructor(app, director) {
+    this.app = app;
+    this.d = director;
+    this.subject = null;
+    this.pos = new THREE.Vector3();
+    this.look = new THREE.Vector3();
+    this.lookVel = new THREE.Vector3();
+    this.pose = { pos: new THREE.Vector3(), fwd: new THREE.Vector3(1, 0, 0) };
+    // cylindrical camera state about the look point and its rates
+    this.az = 0;
+    this.azVel = 0;
+    this.rad = 0.3;
+    this.radVel = 0;
+    this.h = 0.04;
+    this.hVel = 0;
+    this.sideSign = 1;
+    this.frame = { orbit: 0, dist: 1, lift: 0 };
+    this.frameT = 0;
+    this.badT = 0;
+    this.init = false;
+    this._pl = {};
+    this._ep = new THREE.Vector3();
+    this._ed = new THREE.Vector3();
+  }
+
+  /** Start over from the current camera (on entering follow mode). */
+  reset() {
+    this.init = false;
+  }
+
+  /** Azimuth / radius / height of the planned framing for re-framing fr. */
+  _plan(fr, out) {
+    const SL = this.subject.SL;
+    const fwd = this.pose.fwd;
+    // side vector toward the viewer, with hysteresis: when the fish heads
+    // straight toward / away from the front glass both sides are equal, so
+    // the current one is kept instead of flipping back and forth
+    if (fwd.x * this.sideSign < -0.25) this.sideSign = -this.sideSign;
+    _o.set(-fwd.z * this.sideSign, 0, fwd.x * this.sideSign);
+    // mostly side-on, a little behind the head, slightly above
+    _o.multiplyScalar(3.2 * SL).addScaledVector(fwd, -0.4 * SL);
+    out.az = Math.atan2(_o.z, _o.x) + fr.orbit;
+    out.rad = Math.hypot(_o.x, _o.z) * fr.dist;
+    out.h = (0.5 + fr.lift) * SL;
+    return out;
+  }
+
+  /** Camera position for (az, rad, h) about look, kept inside the water. */
+  _place(az, rad, h, look, out) {
+    out.set(look.x + Math.cos(az) * rad, look.y + h, look.z + Math.sin(az) * rad);
+    return this._clamp(out);
+  }
+
+  _clamp(p) {
+    const m = F_MARGIN;
+    p.x = clamp(p.x, -TANK.L / 2 + m, TANK.L / 2 - m);
+    p.z = clamp(p.z, -TANK.D / 2 + m, TANK.D / 2 - m);
+    p.y = clamp(p.y, groundHeight(p.x, p.z) + m, TANK.water - m);
+    return p;
+  }
+
+  /**
+   * Penalty for the tank's vertical corner seams inside the image (a black
+   * bar through the frame: worst when near).
+   */
+  _seamPenalty(pos, look) {
+    const cam = this.app.camera;
+    const aspect = cam.aspect || 1.6;
+    const half = Math.atan(Math.tan(THREE.MathUtils.degToRad(cam.fov) * 0.5) * aspect) + 0.06;
+    const yaw = Math.atan2(look.z - pos.z, look.x - pos.x);
+    let pen = 0;
+    for (const cx of [-TANK.L / 2, TANK.L / 2]) {
+      for (const cz of [-TANK.D / 2, TANK.D / 2]) {
+        const dx = cx - pos.x;
+        const dz = cz - pos.z;
+        if (Math.abs(wrapAngle(Math.atan2(dz, dx) - yaw)) > half) continue;
+        pen += clamp(0.45 / Math.hypot(dx, dz), 0.4, 4);
+      }
+    }
+    return pen;
+  }
+
+  /** Validity and cost of a re-framing (camera placed about the subject's pose). */
+  _eval(fr) {
+    const d = this.d;
+    const f = this.subject;
+    const SL = f.SL;
+    const pl = this._plan(fr, this._pl);
+    const look = this.pose.pos;
+    // (own scratch vectors: the director's helpers use the module ones)
+    const pos = this._place(pl.az, pl.rad, pl.h, look, this._ep);
+    let ok = d._decorDist(pos) >= 0.025;
+    if (ok) {
+      for (const o of this.app.fishSystem.fish) {
+        if (d._fishDist(pos, o) < (o === f ? 1.2 * SL : 0.6 * o.SL)) {
+          ok = false;
+          break;
+        }
+      }
+    }
+    if (ok && pos.distanceTo(f.loc.pos) < 1.9 * SL) ok = false;
+    if (ok && d._occluded(pos, f.loc.pos, f)) ok = false;
+    // composition (soft: some framing must always remain)
+    let extra = 0;
+    if (ok) {
+      // not from straight ahead / behind (a head-on blob or a tail)
+      const end = Math.abs(this._ed.subVectors(pos, f.loc.pos).setY(0).normalize().dot(d._axis(f)));
+      extra += Math.max(0, end - 0.45) * 2.0 + (end > 0.85 ? 2.0 : 0);
+      // no view of the room through the front pane (the side panes mirror
+      // the planting from inside: only a pane right in front of the lens
+      // counts there)
+      const of = d._outsideFraction(pos, look, this.app.camera.fov, 0.12);
+      extra += 5.0 * of + (of > 0.3 ? 3.0 : 0) + this._seamPenalty(pos, look);
+    }
+    const lookZ = this._ed.subVectors(look, pos).normalize().z;
+    // the actual camera has to travel there: prefer framings nearby
+    // (hysteresis against flipping between two similar ones)
+    const travel = Math.abs(wrapAngle(pl.az - this.az));
+    const cost = Math.abs(fr.orbit) * 0.8 + Math.abs(fr.dist - 1) * 1.6 + Math.abs(fr.lift) * 0.7 + Math.max(0, lookZ) * 2.5 + travel * 0.6 + extra;
+    return { ok, cost };
+  }
+
+  _search() {
+    const cur = this._eval(this.frame);
+    let best = null;
+    let bc = Infinity;
+    const fr = { orbit: 0, dist: 1, lift: 0 };
+    for (const dist of F_DOLLY) {
+      for (const lift of F_LIFTS) {
+        for (const orbit of F_ORBITS) {
+          fr.orbit = orbit;
+          fr.dist = dist;
+          fr.lift = lift;
+          const e = this._eval(fr);
+          if (e.ok && e.cost < bc) {
+            bc = e.cost;
+            best = { ...fr };
+          }
+        }
+      }
+    }
+    if (best && !(cur.ok && cur.cost <= bc + 0.5)) this.frame = best;
+  }
+
+  /**
+   * Hard constraint on the actual camera: out of every fish body and the
+   * decor, inside the water.
+   */
+  _enforce(p) {
+    const d = this.d;
+    const f = this.subject;
+    for (let it = 0; it < 4; it++) {
+      let moved = false;
+      // working distance: back off when the subject swims at the lens
+      _o.subVectors(p, f.loc.pos);
+      const dc = _o.length();
+      if (dc < 1.6 * f.SL) {
+        if (dc < 1e-6) _o.set(0, 0, 1);
+        p.copy(f.loc.pos).addScaledVector(_o.normalize(), 1.6 * f.SL);
+        moved = true;
+      }
+      for (const o of this.app.fishSystem.fish) {
+        const need = o === f ? 0.8 * o.SL : 0.4 * o.SL;
+        const dd = d._fishDist(p, o);
+        if (dd < need) {
+          // _a holds the radial offset from the fish axis
+          if (_a.lengthSq() < 1e-10) _a.set(0, 1, 0);
+          p.addScaledVector(_a.normalize(), need - dd);
+          moved = true;
+        }
+      }
+      const dw = this.app.world.distance(p, _g, { softPlants: false });
+      if (dw < 0.02) {
+        p.addScaledVector(_g, 0.02 - dw);
+        moved = true;
+      }
+      this._clamp(p);
+      if (!moved) break;
+    }
+  }
+
+  update(f, dt) {
+    this.d._axes.clear();
+    const cam = this.app.camera;
+    if (f !== this.subject) {
+      this.subject = f;
+      this.init = false;
+    }
+    _v.copy(f.loc.forward).setY(0);
+    if (_v.lengthSq() < 1e-6) _v.set(1, 0, 0);
+    _v.normalize();
+    if (!this.init) {
+      // start from the current camera: its azimuth / radius / height about the fish
+      this.pose.pos.copy(f.loc.pos);
+      this.pose.fwd.copy(_v);
+      this.look.copy(f.loc.pos);
+      this.lookVel.set(0, 0, 0);
+      _o.subVectors(cam.position, f.loc.pos);
+      this.az = Math.atan2(_o.z, _o.x);
+      this.rad = clamp(Math.hypot(_o.x, _o.z), 1.5 * f.SL, 6 * f.SL);
+      this.h = clamp(_o.y, -1.5 * f.SL, 2 * f.SL);
+      this.azVel = this.radVel = this.hVel = 0;
+      this.sideSign = 1;
+      this.frame = { orbit: 0, dist: 1, lift: 0 };
+      this._search();
+      this.init = true;
+    }
+    // subject pose: tight on position (the centre of mass hardly wiggles),
+    // heavily smoothed heading (turns read as slow camera arcs)
+    this.pose.pos.lerp(f.loc.pos, 1 - Math.exp(-dt * 6));
+    this.pose.fwd.lerp(_v, 1 - Math.exp(-dt * 1.4)).normalize();
+    // operator guard: re-check a few times per second, re-frame when the
+    // framing stays broken, drift back to the plain side view when free
+    this.frameT += dt;
+    if (this.frameT > 0.15) {
+      const slack = this.frameT;
+      this.frameT = 0;
+      const cur = this._eval(this.frame);
+      if (!cur.ok) {
+        this.badT += slack;
+        if (this.badT > 0.2) {
+          this.badT = 0;
+          this._search();
+        }
+      } else {
+        this.badT = 0;
+        if (this.frame.orbit !== 0 || this.frame.dist !== 1 || this.frame.lift !== 0) {
+          const base = { orbit: 0, dist: 1, lift: 0 };
+          const e = this._eval(base);
+          if (e.ok && e.cost + 0.6 < cur.cost) this.frame = base;
+        }
+      }
+    }
+    const pl = this._plan(this.frame, this._pl);
+    // critically damped, rate-limited springs (sub-stepped for stability)
+    const n = Math.max(1, Math.ceil(Math.min(dt, 0.1) / 0.01));
+    const h = Math.min(dt, 0.1) / n;
+    const wl = 4.0; // look point
+    const wa = 1.6; // azimuth / radius / height
+    for (let i = 0; i < n; i++) {
+      _w.subVectors(this.pose.pos, this.look).multiplyScalar(wl * wl).addScaledVector(this.lookVel, -2 * wl);
+      this.lookVel.addScaledVector(_w, h);
+      if (this.lookVel.length() > 0.4) this.lookVel.setLength(0.4);
+      this.look.addScaledVector(this.lookVel, h);
+      // a slow orbit (≤ 0.9 rad/s), never a whip pan
+      this.azVel = clamp(this.azVel + (wa * wa * wrapAngle(pl.az - this.az) - 2 * wa * this.azVel) * h, -0.9, 0.9);
+      this.az = wrapAngle(this.az + this.azVel * h);
+      this.radVel = clamp(this.radVel + (wa * wa * (pl.rad - this.rad) - 2 * wa * this.radVel) * h, -0.2, 0.2);
+      this.rad += this.radVel * h;
+      this.hVel = clamp(this.hVel + (wa * wa * (pl.h - this.h) - 2 * wa * this.hVel) * h, -0.15, 0.15);
+      this.h += this.hVel * h;
+    }
+    const pos = this._place(this.az, this.rad, this.h, this.look, this.pos);
+    // faint hand-held drift
+    const tt = this.app.time;
+    pos.x += noise1(tt * 0.35 + 3.1) * 0.0012;
+    pos.y += noise1(tt * 0.31 + 20.1) * 0.0012;
+    _q.copy(pos);
+    this._enforce(pos);
+    if (pos.distanceToSquared(_q) > 1e-10) {
+      // pushed away: continue the springs from where the camera really is
+      _o.subVectors(pos, this.look);
+      this.az = Math.atan2(_o.z, _o.x);
+      this.rad = Math.hypot(_o.x, _o.z);
+      this.h = _o.y;
+    }
+    cam.position.copy(pos);
+    this.app.controls.target.copy(this.look);
+    cam.lookAt(this.look);
+  }
+}
