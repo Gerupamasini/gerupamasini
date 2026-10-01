@@ -85,16 +85,17 @@ try {
   await page.screenshot({ path: path.join(outDir, '06-evening.png') });
   // stand at the waterline at the current tide and look across the shallows
   await noon();
-  await page.evaluate(() => {
-    const a = window.__higata;
-    a.clock.cancelTicket();
-    const tide = a.world.tide.level(a.clock.nowReal());
-    const z = -125 + ((0.9 - (tide + 0.15)) / 2.8) * 285;
-    a.player.setPose(20, z - 6, Math.PI);
-    a.player.pitch = -0.35;
-  });
+  // the world runs on the debug clock here, so place the player from the world's own water level
+  await page.evaluate(() => { const a = window.__higata; a.clock.cancelTicket(); a.teleport('waterline'); a.player.pitch = -0.35; });
   await waitFor(4500);
   await page.screenshot({ path: path.join(outDir, '07-waterline.png') });
+  // make sure the close-up steps below have something to look at
+  const gobyCount = await page.evaluate(() => window.__higata.creatures.individuals.filter((i) => i.species.id === 'acanthogobius_flavimanus').length);
+  if (gobyCount === 0) {
+    console.log('no goby around the waterline, forcing a spawn');
+    await page.evaluate(() => window.__higata.forceSpawn());
+    await waitFrames(page, 10);
+  }
   // close-ups of the placeholder species when they are around
   for (const [sid, file] of [['exopalaemon_orientis', '14-shrimp.png'], ['charadrius_alexandrinus', '15-plover.png']]) {
     const found = await page.evaluate((sid) => {
