@@ -117,8 +117,14 @@ float vnoise2(vec2 p) {
 // continues the body pattern where the fin attaches.
 float sarasaField(vec3 rp, float seed) {
   vec3 q = rp * vec3(3.4, 4.6, 4.2) + vec3(seed * 13.17, seed * 5.31, seed * 2.73);
+  // value noise is built on an axis-aligned lattice: rotate the domain off
+  // the body axes and warp it a little, so patch outlines are organic lobes
+  // instead of blocky, rectangular steps
+  const mat3 R1 = mat3(0.788, -0.454, 0.416, 0.580, 0.771, -0.262, -0.202, 0.446, 0.872);
+  q = R1 * q;
+  q += (vec3(vnoise3(q * 0.9 + 1.7), vnoise3(q * 0.9 + 8.3), vnoise3(q * 0.9 + 4.1)) - 0.5) * 0.7;
   float n = fbm3(q);
-  float n2 = fbm3(q * 2.3 + 7.1);
+  float n2 = fbm3(R1 * q * 2.3 + 7.1);
   float a = clamp(rp.y / 0.17, -1.0, 1.0);
   float s = -rp.x;
   float h = hash11(seed * 91.7);

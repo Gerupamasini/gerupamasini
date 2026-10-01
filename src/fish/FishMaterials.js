@@ -174,24 +174,34 @@ export function createFinDepthWriteMaterial(layout) {
   const m = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true, transparent: true, side: THREE.DoubleSide });
   m.defines = { RIG_MISC: layout.misc };
   m.onBeforeCompile = (shader) => {
-    attachUniforms(shader, ['uRig']);
+    attachUniforms(shader, ['uRig', 'uWaterDensity']);
     let vs = shader.vertexShader;
     vs = mustReplace(vs, '#include <common>', '#include <common>\n#define DEPTH_ONLY\n' + rigVertexCommon + finVertexPars, 'common');
     vs = mustReplace(vs, '#include <begin_vertex>', 'finDeform();\nvec3 transformed = gFishPos;', 'begin');
     shader.vertexShader = vs;
     let fs = shader.fragmentShader;
-    fs = mustReplace(fs, '#include <common>', '#include <common>\nin vec4 vFinCoord;', 'zw-common');
+    fs = mustReplace(fs, '#include <common>', '#include <common>\nin vec4 vFinCoord;\nuniform float uWaterDensity;', 'zw-common');
     fs = mustReplace(
       fs,
       'void main() {',
       `void main() {
   {
-    // dense fin base writes depth; the thin distal membrane keeps the depth
-    // of what lies behind it (4x4 ordered dither over the transition)
-    float dense = 1.0 - smoothstep(0.22, 0.5, vFinCoord.y);
-    ivec2 q = ivec2(gl_FragCoord.xy) & 3;
-    const float B[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
-    if (dense * 16.0 <= B[q.x + q.y * 4] + 0.5) discard;
+    // In the tank most of the membrane writes depth, so the lens keeps a
+    // focused fin sharp (a fin smeared with the background reads as a
+    // ghost); only the thin distal margin fades into the depth of what lies
+    // behind it (4x4 ordered dither over the transition). The cost is that
+    // background seen through a fin stays a little sharper than it would.
+    // In the studio (no water) nothing but the black void lies behind the
+    // fin, so the whole fin writes depth up to its fraying margin.
+    float y = vFinCoord.y;
+    if (uWaterDensity < 0.01) {
+      if (y > 0.975) discard;
+    } else {
+      float dense = 1.0 - smoothstep(0.6, 0.95, y);
+      ivec2 q = ivec2(gl_FragCoord.xy) & 3;
+      const float B[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
+      if (dense * 16.0 <= B[q.x + q.y * 4] + 0.5) discard;
+    }
   }`,
       'zw-main',
     );
