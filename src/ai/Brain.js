@@ -171,6 +171,19 @@ export class Brain {
 
   triggerStartle(awayDir, intensity, time) {
     const me = this.fish;
+    // an escape is aimed into open water: the nearby glass bends the escape
+    // direction (a fish does not dash head-first into the wall)
+    {
+      const p = me.loc.pos;
+      const r = 0.16;
+      const wx = Math.max(0, 1 - (p.x + TANK.L / 2) / r) - Math.max(0, 1 - (TANK.L / 2 - p.x) / r);
+      const wz = Math.max(0, 1 - (p.z + TANK.D / 2) / r) - Math.max(0, 1 - (TANK.D / 2 - p.z) / r);
+      awayDir = awayDir.clone();
+      awayDir.x += 1.6 * wx;
+      awayDir.z += 1.6 * wz;
+      if (awayDir.lengthSq() < 1e-6) awayDir.set(-p.x, 0, -p.z);
+      awayDir.normalize();
+    }
     if (!me.loc.startle(awayDir, clamp(intensity + 0.3, 0.6, 1.2))) return;
     this.drives.fear = 1;
     this.startleTime = time;
@@ -238,7 +251,7 @@ export class Brain {
     this.phase = 'go';
     this.phaseTime = 0;
     this.sub = {};
-    const base = { rest: 45, wander: 35, cruise: 16, pause: 6 * P.calm, forage: 12, approachFood: 10, surfaceFeed: 8, shoal: 30, wallFollow: 18, startle: 1.5, freeze: 4 + 2.5 * P.fearfulness };
+    const base = { rest: 45, wander: 35, cruise: 16, pause: 4.0 * P.calm, forage: 12, approachFood: 10, surfaceFeed: 8, shoal: 30, wallFollow: 18, startle: 1.5, freeze: 4 + 2.5 * P.fearfulness };
     this.stateDur = dur ?? jitterDuration(r, base[state] ?? 10, state === 'rest' ? 0.5 : state === 'freeze' ? 0.25 : 0.4);
     if (state === 'rest') this.stateDur = Math.max(15, this.stateDur);
     // freezing after a fright lasts a few seconds, then the fish resumes
@@ -246,7 +259,7 @@ export class Brain {
     if (state === 'pause') {
       // a fish that has just fed lingers longer
       if (this.postFeed !== undefined && time - this.postFeed < 30) this.stateDur *= 2.1;
-      this.stateDur = Math.max(4, this.stateDur);
+      this.stateDur = Math.max(3.6, this.stateDur);
     }
     if (state === 'wander') this._pickWanderTarget(null, true);
     if (state === 'rest') this.target.copy(this._restSpot());
@@ -296,7 +309,8 @@ export class Brain {
     for (let k = 0; k < 8; k++) {
       // mostly somewhere below / near the fish, sometimes anywhere
       const p = k < 5 ? new THREE.Vector3(clamp(here.x + r.range(-0.2, 0.2), -0.5, 0.5), 0, clamp(here.z + r.range(-0.12, 0.12), -0.16, 0.14)) : new THREE.Vector3(r.range(-0.5, 0.5), 0, r.range(-0.16, 0.14));
-      p.y = this._ground(p.x, p.z) + r.range(0.19, 0.23) * SL;
+      // (deep-bodied fish rest a little higher)
+      p.y = this._ground(p.x, p.z) + r.range(0.19, 0.23) * SL * (me.variation ? me.variation.depthScale : 1);
       let s = r.range(0, 0.3) - p.distanceTo(me.loc.pos) * 2.5 - p.z * 0.6;
       if (world) {
         const clear = world.distance(p, _g, { ignoreFloor: true, softPlants: false });
@@ -398,7 +412,7 @@ export class Brain {
       s += P.thigmotaxis * 0.4 * (1 - Math.min(1, wallD / 0.12)) * (0.5 + this.drives.fear);
       // not too close, not too far
       const d = p.distanceTo(this.fish.loc.pos);
-      s -= Math.abs(d - 0.35) * 0.8;
+      s -= Math.abs(d - 0.28) * 0.8;
       // turn bias (laterality) for targets to one side
       const toP = p.clone().sub(this.fish.loc.pos);
       const side = Math.sign(toP.x * -Math.sin(this.fish.loc.yaw) - toP.z * Math.cos(this.fish.loc.yaw));
@@ -420,7 +434,7 @@ export class Brain {
     this.hasTarget = true;
     // most wander legs end in a pause; once in a while a leg starts with a
     // purposeful dash (a burst, then a long glide)
-    this.sub.pauseAt = r.next() < 0.7;
+    this.sub.pauseAt = r.next() < 0.85;
     this.sub.dashT = !first && r.next() < 0.08 && best.distanceTo(this.fish.loc.pos) > 0.25 ? r.range(0.35, 0.6) : 0;
   }
 
@@ -549,7 +563,7 @@ export class Brain {
           des.copy(to).normalize().multiplyScalar(Math.min(0.6 * SL, d * 1.2));
           // close enough: the pectorals do the rest
           if (d < 0.8 * SL || this.phaseTime > 20) {
-            if (d >= 0.8 * SL) tgt.set(L.pos.x, this._ground(L.pos.x, L.pos.z) + 0.21 * SL, L.pos.z);
+            if (d >= 0.8 * SL) tgt.set(L.pos.x, this._ground(L.pos.x, L.pos.z) + 0.21 * SL * (me.variation ? me.variation.depthScale : 1), L.pos.z);
             this.phase = 'sink';
             this.phaseTime = 0;
           }
@@ -565,7 +579,7 @@ export class Brain {
             this.sub.lookT = me.rng.range(12, 35);
             // the rest itself starts now
             this.stateTime = 0;
-            this.stateDur = Math.max(12, jitterDuration(me.rng, 21, 0.35));
+            this.stateDur = Math.max(12, jitterDuration(me.rng, 16.5, 0.35));
           }
         } else {
           // lying on the bottom; now and then a slow re-orientation
@@ -598,7 +612,7 @@ export class Brain {
             if (this.sub.pauseAt) {
               this.phase = 'pause';
               this.phaseTime = 0;
-              this.sub.pauseDur = me.rng.range(3.5, 9) * P.calm;
+              this.sub.pauseDur = me.rng.range(2.9, 6.2) * P.calm;
               this.sub.spread = false;
               this.sub.face = null;
               this.sub.lookT = me.rng.range(3, 7);
@@ -687,7 +701,10 @@ export class Brain {
           des.copy(this.fleeDir).multiplyScalar(0.6).add(_a.subVectors(cover, L.pos).normalize()).normalize().multiplyScalar(3.5 * SL);
           cmd.urgency = 1;
           if (this.stateTime > this.stateDur) this._enter('freeze', time);
-        } else des.copy(this.fleeDir).multiplyScalar(4 * SL);
+        } else {
+          des.copy(this.fleeDir).multiplyScalar(4 * SL);
+          cmd.urgency = 1;
+        }
         break;
       }
       case 'freeze': {
@@ -727,6 +744,10 @@ export class Brain {
     // fright and an obstacle right at the body override this. Hovering vs
     // swimming has some hysteresis for the same reason.
     let hovering = goalSpeed < (this.wasHovering ? 0.28 : 0.2) * SL && this.state !== 'startle';
+    // (and a switch between the two is kept for a moment: no flicker)
+    this.hovSwitchT = (this.hovSwitchT || 0) + dt;
+    if (this.wasHovering !== undefined && hovering !== this.wasHovering && this.hovSwitchT < 0.7 && this.state !== 'startle' && !(hovering === false && goalSpeed > 0.6 * SL)) hovering = this.wasHovering;
+    if (hovering !== this.wasHovering) this.hovSwitchT = 0;
     this.wasHovering = hovering;
     // (grazing counts as feeding only once the fish works the gravel)
     const exempt = this.state === 'approachFood' || this.state === 'surfaceFeed' || (this.state === 'forage' && this.phase !== 'go') || this.state === 'startle' || (this.state === 'freeze' && this.phase === 'go') || this.state === 'cruise';
@@ -791,7 +812,8 @@ export class Brain {
       else cmd.dir.copy(goalDir);
       cmd.speed = speed / SL;
     }
-    if (this.state === 'startle' && L.cstart) cmd.speed = 4;
+    // (the escape burst is shortened when it heads for the glass or a rock)
+    if (this.state === 'startle' && L.cstart) cmd.speed = 4 * (1 - 0.75 * avoid.danger);
     // (inspection: why a fish is or is not holding still)
     const dbg = this.dbg || (this.dbg = {});
     dbg.goal = goalSpeed / SL;
@@ -863,8 +885,10 @@ export class Brain {
         const above = _a.copy(spot).setY(spot.y + 0.55 * SL);
         const to = _v.subVectors(above, L.pos);
         const d = to.length();
-        des.copy(to).normalize().multiplyScalar(Math.min(0.7 * SL, d * 2.5) + 0.03 * SL);
-        if (d < 0.25 * SL) {
+        // (slowing down on the way in, so the fish settles over the spot
+        // instead of circling it)
+        des.copy(to).normalize().multiplyScalar(Math.min(0.7 * SL, d * 1.4) + 0.03 * SL);
+        if (d < 0.3 * SL || (d < 0.8 * SL && this.phaseTime > 6)) {
           this.phase = 'tilt';
           this.phaseTime = 0;
         } else if (this.phaseTime > 8 || this.blocked) {
