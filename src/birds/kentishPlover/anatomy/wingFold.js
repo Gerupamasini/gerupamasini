@@ -109,7 +109,9 @@ const FLAT = 0.12; // folded vanes pressed flat: this much of the camber is kept
  * t 0.22 and then stays there; parts standing further off than 2.5–6 mm (over the tail, behind the rump) keep
  * their straight shape. The primaries stay under the plumage for their basal third (under the primary coverts
  * in the bird, spec §10.2) and come out under the secondaries and tertials. Layers below the outline only push
- * down — below the trunk's outline without the neck (`torso`), which leaves the shoulders when the head turns.
+ * down — below the trunk's outline without the neck (`torso`), which leaves the shoulders when the head turns:
+ * the trunk-only outline (bodyMesh.getTorsoSDF trunkOnly), without the neck-filling plumage either (mantleNape,
+ * foreBreast, neck sides), which the neck sleeve carries away with the head (validation §W).
  * With `normal` the bent surface's normal is returned too (world).
  */
 export function conformAt(f, p, t, a, sdf, torso = sdf, normal = null) {
@@ -123,7 +125,9 @@ export function conformAt(f, p, t, a, sdf, torso = sdf, normal = null) {
   if (H < 0) target = Math.min(d, H);
   else {
     const shell = d > H ? d + (H - d) * (1 - smooth01(H + 2.5, H + 6, d)) : H;
-    const t0 = f.type === 'primary' ? 0.28 : 0;
+    // (from 0.33 of the length on: from 0.28 the inner primaries' inner vanes grazed out of the flank 0.1–0.2 mm
+    // under the tertials when fluffed for preening, and the flank showed over them, validation §W)
+    const t0 = f.type === 'primary' ? 0.33 : 0;
     const under = f.type === 'primary' ? Math.min(torso(p.x, p.y, p.z), -1.2) + d - torso(p.x, p.y, p.z) : d;
     target = under + (shell - under) * smooth01(t0, t0 + 0.22, t);
     // the wing's front edge goes in under the breast-side patch, which covers the bend of the wing (spec
@@ -341,7 +345,7 @@ let CACHE = null;
 // tools/dev/wingfold-cache.mjs) under a key of what it depends on: the solver version, the wing layout and the
 // body outline (sampled). Whenever either changes the key no longer matches and the solution is computed
 // here instead (with a console warning to regenerate the cache).
-export const WING_FOLD_SOLVER = 20; // bump with any change of the solver below
+export const WING_FOLD_SOLVER = 21; // bump with any change of the solver below
 export function wingFoldKey(wingFeathers, sdf, torsoSdf = sdf) {
   const probe = [];
   for (let x = 0; x <= 24; x += 6) for (let y = 40; y <= 90; y += 10) for (let z = -50; z <= 50; z += 10) probe.push(Math.round(sdf(x, y, z) * 100), Math.round(torsoSdf(x, y, z) * 100));
