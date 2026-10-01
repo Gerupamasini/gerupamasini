@@ -223,7 +223,7 @@ glTF にはノード木とは別に最上位配列(`materials`、`animations`、
 | 遠景用・小物 | ETC1S 全部(3×512² で 81 KB、PSNR 45.0 dB) | [aud-C §1.1-3, T] |
 | ジオメトリ | meshopt は**任意**。使う場合は POSITION を float のまま(`quantize({pattern: /^(TEXCOORD|JOINTS|WEIGHTS|COLOR)(_\d+)?$/, patternTargets: /^(NORMAL|TANGENT)(_\d+)?$/})`+`KHRMeshQuantization`+`EXTMeshoptCompression(FILTER)`)。`meshopt()` 既定・`quantize()` 既定・gltfpack 既定は IBM に逆量子化行列が混ざり `skeleton.pose()` が骨を壊す(PoC で最大 1,000 mm、gltfpack で 16,627,983 mm) | [aud-C §1.3, §3-1, T] |
 | KTX2 の色空間 | baseColor=sRGB、法線・ORM=linear。`gltf-transform etc1s/uastc` CLI は自動。`ktx2-encoder` の既定は**全テクスチャ sRGB 扱い**(PSNR 33.05 dB 対 47.28 dB) | [aud-C §3-2, T] |
-| ミップ・サイズ | ミップは必ず焼く(無いと minFilter が Linear になりチラつく)。4 の倍数サイズ | [aud-A R12, aud-C §3-8] |
+| ミップ・サイズ | ミップは必ず焼く。4 の倍数サイズ。**資料間の差**: audit_a R12 は「ミップが無いと minFilter が Linear になりチラつく」(`KTX2Loader` 直接使用の場合、`KTX2Loader.js:453`)、audit_c は「`GLTFLoader` 経由ではサンプラ既定の `LinearMipmapLinear` に上書きされ、ミップ 1 段でも SwiftShader では破綻しなかった」(`GLTFLoader.js:3320`)。本設計は GLTFLoader 経由だが、実機の見え方は未確認のため焼く方針を維持 | [aud-A R12, aud-C 付記] |
 | 変換先 | 環境依存(SwiftShader=BC7、Linux Mesa=BC7 に落ちる、モバイルは ASTC/ETC2 の見込み)。**実機未確認** | [aud-C §3-9, R] |
 
 法線マップの向き(緑チャンネルの上下)と鱗の凹凸の見え方は PoC では人工データで**未確認** [aud-C §4]。TANGENT のモーフは three が非対応で、大きなモーフではタンジェントが追従しない [aud-C §4, S]。
