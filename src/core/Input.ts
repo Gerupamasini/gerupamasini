@@ -1,0 +1,110 @@
+export type Action =
+  | 'forward' | 'back' | 'left' | 'right' | 'run' | 'crouch'
+  | 'interact' | 'observe' | 'zukan' | 'menu' | 'speedUp' | 'speedDown' | 'home' | 'ticket';
+
+const BINDINGS: Record<Action, string[]> = {
+  forward: ['KeyW', 'ArrowUp'],
+  back: ['KeyS', 'ArrowDown'],
+  left: ['KeyA', 'ArrowLeft'],
+  right: ['KeyD', 'ArrowRight'],
+  run: ['ShiftLeft', 'ShiftRight'],
+  crouch: ['ControlLeft', 'ControlRight', 'KeyC'],
+  interact: ['KeyE'],
+  observe: ['KeyF'],
+  zukan: ['Tab'],
+  menu: ['Escape'],
+  speedUp: ['BracketRight', 'Period'],
+  speedDown: ['BracketLeft', 'Comma'],
+  home: ['KeyH'],
+  ticket: ['KeyT'],
+};
+
+/** Keyboard and mouse state with per-frame edge detection. */
+export class Input {
+  private down = new Set<string>();
+  private pressedCodes = new Set<string>();
+  private releasedCodes = new Set<string>();
+  mouseDX = 0;
+  mouseDY = 0;
+  wheel = 0;
+  mouseDown = false;
+  mouseClicked = false;
+  pointerLocked = false;
+  /** When true, game actions are ignored (a text field or dialog has focus). */
+  blocked = false;
+  private readonly canvas: HTMLCanvasElement;
+
+  constructor(canvas: HTMLCanvasElement) {
+    this.canvas = canvas;
+    window.addEventListener('keydown', (e) => {
+      if (this.isEditable(e.target)) return;
+      if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
+      if (!this.down.has(e.code)) this.pressedCodes.add(e.code);
+      this.down.add(e.code);
+    });
+    window.addEventListener('keyup', (e) => {
+      this.down.delete(e.code);
+      this.releasedCodes.add(e.code);
+    });
+    window.addEventListener('blur', () => this.down.clear());
+    document.addEventListener('pointerlockchange', () => {
+      this.pointerLocked = document.pointerLockElement === canvas;
+    });
+    canvas.addEventListener('mousemove', (e) => {
+      if (!this.pointerLocked) return;
+      this.mouseDX += e.movementX;
+      this.mouseDY += e.movementY;
+    });
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        this.mouseDown = true;
+        this.mouseClicked = true;
+      }
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.mouseDown = false;
+    });
+    canvas.addEventListener('wheel', (e) => {
+      this.wheel += Math.sign(e.deltaY);
+      e.preventDefault();
+    }, { passive: false });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  private isEditable(t: EventTarget | null): boolean {
+    const el = t as HTMLElement | null;
+    return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+  }
+
+  held(action: Action): boolean {
+    if (this.blocked) return false;
+    return BINDINGS[action].some((c) => this.down.has(c));
+  }
+
+  pressed(action: Action): boolean {
+    if (this.blocked && action !== 'menu') return false;
+    return BINDINGS[action].some((c) => this.pressedCodes.has(c));
+  }
+
+  keyPressed(code: string): boolean {
+    return this.pressedCodes.has(code);
+  }
+
+  requestPointerLock(): void {
+    if (!this.pointerLocked) this.canvas.requestPointerLock?.();
+  }
+
+  exitPointerLock(): void {
+    if (this.pointerLocked) document.exitPointerLock();
+  }
+
+  /** Consume per-frame deltas. Call at the end of the frame. */
+  endFrame(): void {
+    this.pressedCodes.clear();
+    this.releasedCodes.clear();
+    this.mouseDX = 0;
+    this.mouseDY = 0;
+    this.wheel = 0;
+    this.mouseClicked = false;
+  }
+}

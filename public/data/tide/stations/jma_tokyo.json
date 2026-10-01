@@ -1,0 +1,20 @@
+{
+  "id": "jma_tokyo",
+  "names": { "ja": "東京", "en": "Tokyo" },
+  "lat": 35.65,
+  "lon": 139.77,
+  "phaseReference": "JST135E",
+  "phaseConvention": "zone_speed",
+  "mslAboveChartDatum_cm": null,
+  "constituents": [
+    { "name": "M2", "amplitude_cm": 47.73, "phase_deg": 153.73 },
+    { "name": "S2", "amplitude_cm": 23.64, "phase_deg": 181.77 },
+    { "name": "K1", "amplitude_cm": 25.07, "phase_deg": 178.91 },
+    { "name": "O1", "amplitude_cm": 19.57, "phase_deg": 160.28 }
+  ],
+  "source": {
+    "name": "気象庁 潮汐調和定数（60分潮一覧）東京 2025年",
+    "url": "https://www.data.jma.go.jp/kaiyou/db/tide/suisan/harms60.php?stn=TK&year=2025&tyear=2025",
+    "note": "暫定: 主要4分潮のみ（検索結果の抜粋から転記）。全60分潮と位相規約は公式の潮位表との比較で確定する。"
+  }
+}

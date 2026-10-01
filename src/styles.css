@@ -1,0 +1,14 @@
+:root {
+  --ui-bg: rgba(10, 18, 22, 0.82);
+  --ui-fg: #e8eef0;
+  --ui-dim: #9fb3b9;
+  --ui-accent: #6fd3c6;
+  --ui-warn: #f0b461;
+  --ui-font: 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic UI', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #06111a; color: var(--ui-fg); font-family: var(--ui-font); overflow: hidden; }
+#view { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+#ui { position: fixed; inset: 0; pointer-events: none; }
+#ui > * { pointer-events: auto; }
+button { font: inherit; }

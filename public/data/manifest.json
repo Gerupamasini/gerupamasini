@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "species": ["acanthogobius_flavimanus", "exopalaemon_orientis", "charadrius_alexandrinus"],
+  "behaviors": ["fish_benthic", "shrimp_shallow", "shorebird_waterline"],
+  "maps": ["kasai_west"],
+  "stations": ["jma_tokyo"],
+  "items": "items/tools.json",
+  "strings": "strings/ja.json",
+  "defaultMap": "kasai_west"
+}
