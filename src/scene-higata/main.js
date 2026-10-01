@@ -241,7 +241,7 @@ Promise.all([
   state.ready = true;
   progressEl.hidden = true;
   document.body.classList.add('ready');
-  window.__higataScene = { fish, camera, controls, THREE, state, shared, flat, scene, post, snapFocus, camVel, step: (sec) => { for (let t = 0; t < sec; t += 1 / 60) stepWorld(1 / 60); }, frameCount: 0 };
+  window.__higataScene = { fish, camera, controls, THREE, state, shared, flat, scene, post, snapFocus, camVel, renderExternal, advance: (dt) => stepWorld(dt), step: (sec) => { for (let t = 0; t < sec; t += 1 / 60) stepWorld(1 / 60); }, frameCount: 0 };
 }).catch((err) => fail(`読み込みに失敗しました: ${err && err.message ? err.message : err}`));
 
 // ------------------------------------------------------------------------------------------ camera
@@ -429,11 +429,33 @@ function frame() {
   timer.update();
   const rawDt = timer.getDelta();
   const dt = Math.min(rawDt, 1 / 20);
-  if (!state.ready) return;
+  if (!state.ready || state.external) return;
   adaptResolution(rawDt);
   if (!state.paused) stepWorld(dt);
   if (frozenTime !== null) shared.uTime.value = frozenTime;
   updateCamera(dt);
+  finishFrame(dt);
+}
+
+/**
+ * Offline rendering (video capture): step the world by exactly dt, put the camera where the caller says
+ * and draw one frame. The interactive loop stands still while state.external is set.
+ */
+function renderExternal(dt, pos, target, focus = null) {
+  state.external = true;
+  stepWorld(dt);
+  const prev = _tmp3.copy(camera.position);
+  camera.position.set(pos[0], pos[1], pos[2]);
+  controls.target.set(target[0], target[1], target[2]);
+  camera.lookAt(controls.target);
+  camera.updateMatrixWorld();
+  camVel.subVectors(camera.position, prev).divideScalar(dt);
+  state.above = camera.position.y > WATER_Y;
+  if (focus !== null) { focusDist = focus; focusSnap = false; }
+  finishFrame(dt, focus !== null);
+}
+
+function finishFrame(dt, fixedFocus = false) {
   // shadows of all fish on the sediment
   const tu = flat.material.uniforms;
   for (const f of fish) writeShadow(f, tu.uShadow.value, tu.uCore.value, tu.uFishB.value);
@@ -442,9 +464,11 @@ function frame() {
   surfAbove.position.set(camera.position.x, 0, camera.position.z);
   suspended.material.uniforms.uCam.value.copy(camera.position);
   // focus: the fish being watched (or whatever the camera orbits)
-  const fd = fish[state.focus] ? camera.position.distanceTo(fishCenter(fish[state.focus], _tmp2)) : camera.position.distanceTo(controls.target);
-  focusDist = focusSnap ? fd : focusDist + (fd - focusDist) * (1 - Math.exp(-dt * 6));
-  focusSnap = false;
+  if (!fixedFocus) {
+    const fd = fish[state.focus] ? camera.position.distanceTo(fishCenter(fish[state.focus], _tmp2)) : camera.position.distanceTo(controls.target);
+    focusDist = focusSnap ? fd : focusDist + (fd - focusDist) * (1 - Math.exp(-dt * 6));
+    focusSnap = false;
+  }
   post.material.uniforms.uFocus.value = Math.max(focusDist, 0.01);
   post.material.uniforms.uTime.value = shared.uTime.value;
   render();
