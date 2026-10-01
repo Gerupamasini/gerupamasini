@@ -78,6 +78,7 @@ src/scene/Environment.js   背景、砂底、浮遊粒子
 src/scene/Post.js          ブルーム、ACES、ビネット
 tools/build-model.mjs      GLB ビルド（--species mahaze | edohaze。tools/<種>/*.mjs が形状・色素・ひれ・眼・口と鰓の内部・リグとクリップの定義）
 tools/fitcheck.mjs         モデルの輪郭と写真計測値（tools/<種>/targets.json）の照合
+tools/build-web.mjs        静的ホスティング用パッケージ（dist-web/。GLB を glTF＋バッファ＋テクスチャに分割し、#edohaze / #mahaze で種を切替）
 vendor/three/              three.js r186（MIT）
 ```
 

@@ -14,10 +14,30 @@ import { createPost } from './scene/Post.js';
 const LAYER_FISH = 2; // body, eyes, fins (main pass)
 const LAYER_BEHIND = 3; // fins are also drawn into the background buffer so they show through thin tissue
 const params = new URLSearchParams(location.search);
-// species: ?species=edohaze loads the エドハゼ build; default is the juvenile マハゼ
-const SPECIES_KEY = params.get('species') === 'edohaze' ? 'edohaze' : 'mahaze';
+// species: ?species=edohaze (local server), else a bare #edohaze / #mahaze token (hosted copies cannot read
+// the query string), else the page default (window.GOBY_SPECIES_DEFAULT), else the juvenile マハゼ
+const SPECIES_LIST = ['mahaze', 'edohaze'];
+const SPECIES_KEY = [params.get('species'), location.hash.slice(1), window.GOBY_SPECIES_DEFAULT].find((k) => SPECIES_LIST.includes(k)) || 'mahaze';
 const MODEL_FILE = { mahaze: 'mahaze_juvenile.glb', edohaze: 'edohaze.glb' }[SPECIES_KEY];
-const MODEL_URL = window.MAHAZE_MODEL_URL || new URL(`../models/${MODEL_FILE}`, import.meta.url).href;
+const MODEL_URL = window.MAHAZE_MODEL_URL || window.GOBY_MODEL_URLS?.[SPECIES_KEY] || new URL(`../models/${MODEL_FILE}`, import.meta.url).href;
+// species switch (reloads with the other model); the panel title comes from the model's extras for エドハゼ
+for (const b of document.querySelectorAll('#species button')) {
+  b.classList.toggle('on', b.dataset.v === SPECIES_KEY);
+  b.addEventListener('click', () => {
+    if (b.dataset.v === SPECIES_KEY) return;
+    if (params.has('species')) {
+      const u = new URL(location.href);
+      u.searchParams.set('species', b.dataset.v);
+      location.href = u.href;
+    } else {
+      location.hash = b.dataset.v;
+      location.reload();
+    }
+  });
+}
+if (SPECIES_KEY !== 'mahaze') {
+  for (const sel of ['.panel h1', '.panel .sub']) { const el = document.querySelector(sel); if (el) el.textContent = ''; }
+}
 
 // ---------------------------------------------------------------------------- renderer
 const canvas = document.getElementById('view');
