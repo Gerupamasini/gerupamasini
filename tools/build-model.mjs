@@ -64,7 +64,7 @@ function image(gb, name, w, h, ch, data, fmt = 'png', quality = 92) {
   return gb.addImage(buf, fmt === 'jpeg' ? 'image/jpeg' : 'image/png', name);
 }
 
-const gb = new GLBBuilder();
+const gb = new GLBBuilder(SPECIES.generator);
 for (const e of ['KHR_materials_transmission', 'KHR_materials_volume', 'KHR_materials_ior', 'KHR_materials_clearcoat']) gb.useExtension(e);
 
 const LINEAR = 9729, MIPMAP = 9987, CLAMP = 33071, REPEAT = 10497;

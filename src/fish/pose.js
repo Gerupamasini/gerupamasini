@@ -14,10 +14,14 @@ export const SPINE = [
   ['J_sp5', 32.5], ['J_sp6', 36.5], ['J_sp7', 40.0], ['J_caudal', 43.0], ['J_caudal2', 46.5],
 ];
 
+// resting fin folds (0 = erect, 1 = folded); species may override (エドハゼ rests with erect dorsal fins)
+export const REST_FOLD = { d1: 0.55, d2: 0.3, anal: 0.85, caudal: 0.45 };
+
 /** Switch the axial geometry (total length and joint positions along the body, mm). */
 export function configureBody(body) {
   if (!body) return;
   if (body.tlMM) TL_MM = body.tlMM;
+  if (body.restFold) Object.assign(REST_FOLD, body.restFold);
   if (body.spine) body.spine.forEach(([name, sMM]) => { const e = SPINE.find((x) => x[0] === name); if (e) e[1] = sMM; });
 }
 
@@ -136,8 +140,9 @@ export function computePose(p, axes) {
   q.J_pecL = qmul(quat(axes.pecL, p.pecAbdL), quat(axes.pecDepL, p.pecDepL));
   q.J_pecR = qmul(quat(axes.pecR, p.pecAbdR), quat(axes.pecDepR, p.pecDepR));
   q.J_pelvic = quat(axes.headUp, p.pelvicPitch);
-  q.J_eyeL = qmul(quat(Y, p.eyeYawL), quat([1, 0, 0], p.eyePitchL));
-  q.J_eyeR = qmul(quat(Y, p.eyeYawR), quat([1, 0, 0], p.eyePitchR));
+  // saccade axes: per-eye axes from the rig when given (eye frame), else object Y / X
+  q.J_eyeL = qmul(quat(axes.eyeYawL || Y, p.eyeYawL), quat(axes.eyePitchL || [1, 0, 0], p.eyePitchL));
+  q.J_eyeR = qmul(quat(axes.eyeYawR || Y, p.eyeYawR), quat(axes.eyePitchR || [1, 0, 0], p.eyePitchR));
 
   const sc = p.scullPhase;
   const morph = {
@@ -163,7 +168,7 @@ export function defaultPose() {
     jaw: 0, premax: 0, hyoid: 0, susp: 0, opercL: 0, opercR: 0,
     pecAbdL: 0.4, pecAbdR: 0.4, pecDepL: 0.42, pecDepR: 0.42, foldPecL: 0.0, foldPecR: 0.0, flexPecL: 0, flexPecR: 0,
     scullPhase: 0, scullAmpL: 0.04, scullAmpR: 0.04, pelvicPitch: 0,
-    foldD1: 0.55, foldD2: 0.3, foldAnal: 0.85, foldCaudal: 0.45, foldPelvic: 0,
+    foldD1: REST_FOLD.d1, foldD2: REST_FOLD.d2, foldAnal: REST_FOLD.anal, foldCaudal: REST_FOLD.caudal, foldPelvic: 0,
     flexD: 0, flexCaudal: 0,
     eyeYawL: 0, eyePitchL: 0, eyeYawR: 0, eyePitchR: 0,
   };

@@ -1,4 +1,17 @@
-# マハゼ幼魚（*Acanthogobius flavimanus*）写実 3D モデル — Three.js
+# 干潟のハゼ 写実 3D モデル — Three.js
+
+同じ手続き生成パイプラインで作った2種のハゼと、そのビューア、干潟ゲームの試作です。
+
+| 種 | モデル | 表示 | 説明 |
+|---|---|---|---|
+| マハゼ幼魚（*Acanthogobius flavimanus*）全長 約50 mm | `models/mahaze_juvenile.glb` | `http://localhost:8080/` | 下記 |
+| エドハゼ成魚（*Gymnogobius macrognathos*）全長 約45 mm | `models/edohaze.glb` | `http://localhost:8080/?species=edohaze` | [docs/edohaze/HQ_MODEL.md](docs/edohaze/HQ_MODEL.md)（70枚の写真計測との照合表つき） |
+
+干潟ゲームの試作（`game.html`、`npm run dev`）は、エドハゼの軽量なリアルタイム版を使っています（[docs/edohaze/DESIGN.md](docs/edohaze/DESIGN.md)）。
+
+以下はマハゼ幼魚の説明です。エドハゼも同じ構成で、種ごとの定義は `tools/<種>/*.mjs` にあります。
+
+## マハゼ幼魚
 
 全長 約50 mm（標準体長 41 mm）の幼魚を、生体の半透明感を重視して再現したモデルとビューアです。
 
@@ -10,7 +23,7 @@
 
 ```bash
 npm run serve        # → http://localhost:8080/   （依存なし。three.js r186 は vendor/ に同梱）
-npm install && npm run build:model   # GLB を作り直す場合のみ（約1分）
+npm install && npm run build:mahaze   # GLB を作り直す場合のみ（約1分。エドハゼは npm run build:edohaze）
 ```
 
 WebGL2 と `EXT_color_buffer_float` に対応したブラウザで動作します（デスクトップ版 Chrome、Edge、Firefox、Safari 17 以降）。
@@ -63,7 +76,8 @@ src/fish/pose.js           共通の姿勢モデル（体の波、ひれの状�
 src/fish/Behavior.js       行動の状態遷移
 src/scene/Environment.js   背景、砂底、浮遊粒子
 src/scene/Post.js          ブルーム、ACES、ビネット
-tools/build-model.mjs      GLB ビルド（tools/mahaze/*.mjs が形状・色素・ひれ・眼・口と鰓の内部・リグとクリップの定義）
+tools/build-model.mjs      GLB ビルド（--species mahaze | edohaze。tools/<種>/*.mjs が形状・色素・ひれ・眼・口と鰓の内部・リグとクリップの定義）
+tools/fitcheck.mjs         モデルの輪郭と写真計測値（tools/<種>/targets.json）の照合
 vendor/three/              three.js r186（MIT）
 ```
 

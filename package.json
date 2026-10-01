@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "build:model": "node tools/build-model.mjs",
+    "build:mahaze": "node tools/build-model.mjs --species mahaze",
+    "build:edohaze": "node tools/build-model.mjs --species edohaze",
     "serve": "node tools/serve.mjs",
     "dev": "vite",
     "build": "vite build",

@@ -113,29 +113,36 @@ export function paintIris(size = 1024) {
       const upness = ly / Math.max(Math.sin(theta), 1e-3); // +1 dorsal … −1 ventral
       let c;
       if (theta < pupilEdge) {
-        c = [0.008, 0.01, 0.012];
+        // black pupil with a faint teal tapetal eyeshine (photo pupil reflection median sRGB 48,92,101)
+        const g = smoothstep(pupilEdge, 0, theta);
+        c = [0.008 + 0.012 * g, 0.016 + 0.06 * g, 0.02 + 0.075 * g];
       } else if (theta < IRIS_ANGLE) {
         const f = (theta - pupilEdge) / (IRIS_ANGLE - pupilEdge);
-        // エドハゼ (photos 004, 028, 054, 055, 058): a strong cyan–turquoise iridescent ring hugs the pupil
-        // (broken, brighter below), edged by a thin silvery-white rim; the outer iris is dark brown with
-        // sparse gold flecks, darkest under a dorsal melanin cap; a pale silvery crescent lies below.
-        const dark = [0.022, 0.018, 0.014], brown = [0.075, 0.05, 0.028], cyan = [0.05, 0.36, 0.34], teal = [0.025, 0.16, 0.17];
-        const ringW = 0.3 + 0.06 * perlin3(Math.cos(psi) * 4, Math.sin(psi) * 4, 0.7, 21);
-        const ring = smoothstep(ringW, ringW * 0.45, f);
-        // ring brightness: broken by melanophores, brighter on the ventral side
-        const brk = smoothstep(-0.25, 0.35, perlin3(Math.cos(psi) * 9, Math.sin(psi) * 9, 1.9, 22));
-        const ventral = smoothstep(0.6, -0.5, upness);
-        let c0 = cyan.map((v, k) => mix(teal[k], v, 0.45 + 0.55 * ventral) * (0.55 + 0.45 * brk));
-        c = brown.map((v, k) => mix(v, c0[k], ring));
+        // エドハゼ consensus (29 records; 010, 011, 030, 054, 055, 059): a narrow bright silvery-white ring
+        // hugs the pupil, widest as a crescent on the lower / posteroventral side, with a faint teal cast;
+        // the outer iris is dark grey-brown to coppery bronze with fine dark and golden speckles
+        const dark = [0.022, 0.017, 0.013], bronze = [0.1, 0.058, 0.03], silver = [0.34, 0.38, 0.37];
+        const ventral = smoothstep(0.5, -0.7, upness);
+        const ringW = 0.1 + 0.16 * ventral + 0.04 * perlin3(Math.cos(psi) * 4, Math.sin(psi) * 4, 0.7, 21);
+        const brk = smoothstep(-0.3, 0.3, perlin3(Math.cos(psi) * 9, Math.sin(psi) * 9, 1.9, 22));
+        const ring = smoothstep(ringW, ringW * 0.35, f) * (0.65 + 0.35 * brk);
+        const bz = 0.75 + 0.5 * fbm3(lx * 8, ly * 8, lz * 8, 2, 24);
+        c = bronze.map((v, k) => mix(v * bz, silver[k], ring));
+        // teal interference sheen just outside the silver ring
+        const tealK = Math.exp(-(((f - ringW - 0.06) / 0.07) ** 2)) * 0.5;
+        c = c.map((v, k) => v + [0.0, 0.035, 0.04][k] * tealK);
         // thin silvery rim at the pupil margin
-        const rim = Math.exp(-(((theta - pupilEdge) / 0.02) ** 2)) * (0.6 + 0.4 * brk);
-        c = c.map((v, k) => v + [0.32, 0.38, 0.36][k] * rim);
+        const rim = Math.exp(-(((theta - pupilEdge) / 0.015) ** 2)) * (0.6 + 0.4 * brk);
+        c = c.map((v, k) => v + [0.25, 0.28, 0.27][k] * rim);
         // radial stroma fibres
         const fib = perlin3(Math.cos(psi) * 34, Math.sin(psi) * 34, f * 3.0, 11);
         c = c.map((v) => v * (0.85 + 0.22 * fib));
         // gold flecks in the outer iris
         const fl = smoothstep(0.55, 0.85, fbm3(lx * 30, ly * 30, lz * 30, 2, 23)) * smoothstep(0.35, 0.6, f) * (1 - smoothstep(0.9, 1.0, f));
-        c = c.map((v, k) => v + [0.2, 0.15, 0.05][k] * fl * 0.7);
+        c = c.map((v, k) => v + [0.24, 0.17, 0.05][k] * fl * 0.8);
+        // fine dark speckles
+        const dk = smoothstep(0.5, 0.75, fbm3(lx * 45, ly * 45, lz * 45, 2, 25)) * smoothstep(0.3, 0.5, f);
+        c = c.map((v, k) => mix(v, dark[k], dk * 0.6));
         // mottled melanophores
         const m1 = fbm3(lx * 14, ly * 14, lz * 14, 3, 13);
         c = c.map((v, k) => mix(v, dark[k], smoothstep(0.1, 0.4, m1) * 0.5 * smoothstep(0.25, 0.6, f)));

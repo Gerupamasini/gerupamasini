@@ -25,4 +25,4 @@ http.createServer((req, res) => {
       res.end(buf);
     });
   });
-}).listen(port, () => console.log(`Mahaze viewer: http://localhost:${port}/`));
+}).listen(port, () => console.log(`Goby viewer (?species=mahaze | edohaze): http://localhost:${port}/`));

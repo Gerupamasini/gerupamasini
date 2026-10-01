@@ -11,6 +11,25 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 export const ATLAS = 2048;
+
+// Scattered point chromatophores on a fin membrane: jittered grid in (ray index, mm along the ray).
+// Returns 0..1 coverage of the nearest dot. density = probability per cell, size in mm.
+// a = continuous position across the fin in ray-index units (fAcross·(n−1)), mmA = mm per ray interval
+function finDots(a, Lr, cellA, cellL, density, size, seed, mmA = 0.32) {
+  const ga = a / cellA, gl = Lr / cellL;
+  const ia = Math.floor(ga), il = Math.floor(gl);
+  let v = 0;
+  for (let da = -1; da <= 1; da++)
+    for (let dl = -1; dl <= 1; dl++) {
+      const ca = ia + da, cl = il + dl;
+      if (hash01(ca, cl, 1, seed) > density) continue;
+      const pa = (ca + hash01(ca, cl, 2, seed)) * cellA, pl = (cl + hash01(ca, cl, 3, seed)) * cellL;
+      const r = size * (0.7 + 0.6 * hash01(ca, cl, 4, seed));
+      const d = Math.hypot((a - pa) * mmA, Lr - pl);
+      v = Math.max(v, smoothstep(r, r * 0.35, d));
+    }
+  return v;
+}
 const INSET = 6;
 
 function inPlaneBend(dir, normal) {
@@ -56,7 +75,7 @@ function caudalFin(rect) {
     const y = q.yc - u * 1.05;
     const ang = -u * 20 * DEG;
     // rounded caudal: TL − SL = 7.3 mm (TL/SL 1.193, n = 20)
-    const len = 5.55 + 1.85 * Math.pow(Math.max(0, 1 - u * u), 0.8);
+    const len = 4.7 + 2.7 * Math.pow(Math.max(0, 1 - u * u), 0.7);
     const dir = nrm([Math.cos(ang), Math.sin(ang), 0]);
     // 17 principal rays: the outermost of each lobe are unbranched (15 branched)
     rays.push({ base: [s, y, 0], dir, len, kind: 'soft', simple: k === 0 || k === NP - 1, curv: 0, bend: [0, 0, 0], ang });
@@ -68,20 +87,26 @@ function caudalFin(rect) {
   return {
     name: 'Fin_Caudal', type: 'caudal', rays, normal, notch: 0.035, pleat: 0.035, sag: 0.025, rect, branchT: 0.5, segStart: 0.12, cup: 0, wave: 0.16,
     pigment: (r, n, Lr, len, t, dRay, fAcross) => {
-      let mel = 0;
-      const upper = 1 - fAcross;
-      for (let j = 0; j < 12; j++) {
-        const Lj = 0.8 + j * 0.8 + r * 0.02 + (hash01(r, j, 2, 502) - 0.5) * 0.28;
-        if (Lj > len * 0.9) break;
-        if (hash01(r, j, 1, 501) < 0.3) continue;
-        const ls = 0.1 + 0.09 * hash01(r, j, 3, 503);
-        const amp = 0.45 + 0.55 * hash01(r, j, 4, 504);
-        mel = Math.max(mel, amp * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.075) ** 2)));
+      // エドハゼ caudal (photos 004, 028, 033): ~3 vertical rows of dark dots across the rays, densest on
+      // the upper and middle rays and NOT reaching the lower part of the fin (diagnostic, RDB); the base
+      // is densely dotted; the distal margin is hyaline. White guanophore dots between the dark rows.
+      // spec (n = 24 lateral records): 5–10 arcuate vertical rows of small dark dots over the basal
+      // 60–75 % (a fine checker), the distal margin clear; fewer dots on the lower third (058)
+      let mel = 0, irid = 0.06;
+      for (let j = 0; j < 9; j++) {
+        const Lj = 0.55 + j * 0.72 + (hash01(r, j, 2, 802) - 0.5) * 0.16 + 0.25 * Math.sin(Math.PI * fAcross);
+        if (Lj > len * 0.74) break;
+        if (hash01(r, j, 1, 801) < 0.12) continue;
+        const ls = 0.06 + 0.04 * hash01(r, j, 3, 803);
+        mel = Math.max(mel, (0.5 + 0.4 * hash01(r, j, 4, 804)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.05) ** 2)));
+        const Lw = Lj + 0.36;
+        irid = Math.max(irid, 0.45 * Math.exp(-(((Lr - Lw) / 0.07) ** 2)) * Math.exp(-((dRay / 0.05) ** 2)) * (hash01(r, j, 5, 805) < 0.5 ? 1 : 0));
       }
-      mel *= 0.8 * (0.5 + 0.5 * upper) * smoothstep(0.97, 0.75, t);
-      // dark spot at the caudal base
-      mel = Math.max(mel, 0.55 * smoothstep(0.16, 0.04, t) * smoothstep(0.62, 0.3, Math.abs(fAcross - 0.45) * 2));
-      return { mel: mel * 0.85, xan: 0.18 * smoothstep(0.6, 0.1, t), irid: 0.08 };
+      const lowerCut = 0.35 + 0.65 * smoothstep(0.85, 0.6, fAcross); // fewer dots on the lower lobe
+      mel *= 0.9 * lowerCut * smoothstep(0.82, 0.66, t);
+      irid *= lowerCut;
+      mel = Math.max(mel, 0.45 * smoothstep(0.16, 0.04, t) * finDots(fAcross * (n - 1), Lr, 0.7, 0.2, 0.5, 0.06, 806, 0.36));
+      return { mel: mel * 0.9, xan: 0.12 * smoothstep(0.6, 0.1, t), irid };
     },
   };
 }
@@ -107,7 +132,7 @@ function pectoralFin(side, rect) {
     // rounded fan (skeleton reference): the upper rays shorten quickly (top ray ~1/3 of the longest),
     // the longest are at mid-fin, the lower rays shorten gently
     const x = (f - 0.5) / (f < 0.5 ? 0.5 : 0.62);
-    const len = 6.8 * (0.36 + 0.64 * Math.pow(Math.max(0, 1 - x * x), 0.6));
+    const len = 6.0 * (0.36 + 0.64 * Math.pow(Math.max(0, 1 - x * x), 0.6));
     // uppermost and lowermost rays are simple (unbranched), the rest branch near their tips
     rays.push({ base, dir, len, kind: 'soft', simple: k < 2 || k === NR - 1, curv: 0.05, bend: inPlaneBend(dir, normal), psi });
   }
@@ -119,8 +144,8 @@ function pectoralFin(side, rect) {
         const Lj = 0.7 + j * 0.75 + r * 0.03;
         mel = Math.max(mel, Math.exp(-(((Lr - Lj) / 0.12) ** 2)) * Math.exp(-((dRay / 0.06) ** 2)));
       }
-      mel *= 0.4 * smoothstep(0.7, 0.2, fAcross);
-      return { mel, xan: 0.16 * smoothstep(0.5, 0.0, t), irid: 0.14 * smoothstep(0.25, 0.0, t) };
+      mel *= 0.18 * smoothstep(0.7, 0.2, fAcross); // エドハゼ pectoral: almost hyaline (photos 028, 055)
+      return { mel, xan: 0.1 * smoothstep(0.5, 0.0, t), irid: 0.12 * smoothstep(0.25, 0.0, t) };
     },
   };
 }
@@ -158,49 +183,62 @@ function pelvicDisc(rect) {
   const normal = [0, -1, 0];
   return {
     name: 'Fin_Pelvic', type: 'pelvic', rays, normal, notch: 0.02, pleat: 0.015, sag: 0.02, rect, branchT: 0.55, segStart: 0.25, cup: 0, wave: 0,
-    pigment: (r, n, Lr, len, t) => ({ mel: 0, xan: 0.1, irid: 0.42 * smoothstep(1.0, 0.2, t) }),
+    // spec: whitish to yellowish with whitish rays (not opaque white)
+    pigment: (r, n, Lr, len, t) => ({ mel: 0, xan: 0.14, irid: 0.3 * smoothstep(1.0, 0.15, t) }),
   };
 }
 
 export function finDefinitions() {
   const R = (x, y, w, h) => ({ x, y, w, h });
   const D1 = medianFin({
-    // D1 VII: origin 0.381 SL, end 0.534 SL, tallest spine ~0.10 SL above the back (photo medians)
-    name: 'Fin_Dorsal1', s0: 14.5, s1: 20.3, count: 7, a0: 72, a1: 38, dorsal: true, spines: 7, curv: 0.09, notch: 0.3, pleat: 0.04, sag: 0.02,
-    lengths: [3.5, 4.1, 4.25, 4.05, 3.55, 2.85, 2.05], rect: R(1024, 1024, 512, 512), branchT: 2, segStart: 2,
-    pigment: (r, n, Lr, len, t, dRay) => {
-      let mel = 0;
-      for (let j = 0; j < 9; j++) {
-        const Lj = 0.55 + j * 0.62 + r * 0.08 + (hash01(r, j, 2, 512) - 0.5) * 0.2;
-        if (Lj > len * 0.86) break;
-        if (hash01(r, j, 1, 511) < 0.18) continue;
-        const ls = 0.1 + 0.08 * hash01(r, j, 3, 513);
-        mel = Math.max(mel, (0.5 + 0.5 * hash01(r, j, 4, 514)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.1) ** 2)));
+    // D1 VII: origin 0.381 SL, end 0.534 SL, tallest spine ~0.116 SL above the back, tip at s ≈ 0.48 (spec medians)
+    name: 'Fin_Dorsal1', s0: 14.5, s1: 20.3, count: 7, a0: 74, a1: 40, dorsal: true, spines: 7, curv: 0.09, notch: 0.12, pleat: 0.04, sag: 0.02,
+    lengths: [3.9, 4.6, 4.8, 4.6, 4.0, 3.2, 2.3], rect: R(1024, 1024, 512, 512), branchT: 2, segStart: 2,
+    pigment: (r, n, Lr, len, t, dRay, fAcross) => {
+      // photos 004, 060: membrane peppered with fine black melanophores over the basal two thirds,
+      // densest toward the rear and the base; ~4 oblique rows of darker dashes on the spines; orange
+      // xanthophore specks; glassy pale spines; distal margin pale
+      const a = fAcross * (n - 1);
+      const rear = smoothstep(0.2, 0.95, fAcross), base = smoothstep(0.85, 0.25, t);
+      let mel = finDots(a, Lr, 0.45, 0.16, 0.25 + 0.4 * rear * base, 0.05, 811, 0.9) * smoothstep(0.92, 0.6, t);
+      for (let j = 0; j < 4; j++) {
+        const Lj = 0.6 + j * 0.75 + r * 0.06 + (hash01(r, j, 2, 812) - 0.5) * 0.18;
+        if (Lj > len * 0.85) break;
+        mel = Math.max(mel, (0.5 + 0.4 * hash01(r, j, 4, 814)) * Math.exp(-(((Lr - Lj) / 0.13) ** 2)) * Math.exp(-((dRay / 0.09) ** 2)));
       }
-      return { mel: 0.8 * mel + 0.04, xan: 0.25 * smoothstep(0.5, 0.0, t), irid: 0.05 };
+      // spec: a dense dusky-black melanophore blotch on the posterior-basal membrane between the last
+      // 2–3 spines in most fish (013, 014, 028, 042, 044, 045, 048, 056, 060–063); absent in 058
+      const blotchEdge = 0.08 * perlin3(a * 2.1, Lr * 1.7, 0.3, 816);
+      mel = Math.max(mel, 0.78 * smoothstep(0.55, 0.78, fAcross + blotchEdge) * smoothstep(0.62, 0.3, t + blotchEdge));
+      const xan = 0.3 * finDots(a, Lr, 0.5, 0.16, 0.4, 0.04, 815, 0.9) + 0.08;
+      return { mel: 0.85 * mel + 0.03, xan, irid: 0.05 + 0.25 * Math.exp(-((dRay / 0.05) ** 2)) * smoothstep(0.1, 0.5, t) };
     },
   });
   const D2 = medianFin({
-    // D2 I,12: 0.602–0.862 SL, ~0.09 SL high; the posterior rays are longest and reach s ≈ 0.92 SL
-    name: 'Fin_Dorsal2', s0: 22.9, s1: 32.8, count: 13, a0: 58, a1: 22, dorsal: true, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
-    lengths: [2.5, 3.0, 3.3, 3.45, 3.5, 3.55, 3.6, 3.65, 3.75, 3.85, 3.95, 3.95, 3.6], rect: R(0, 1024, 1024, 512), branchT: 0.55, segStart: 0.18,
+    // D2 I,12: 0.602–0.862 SL, tallest anteriorly (~0.09–0.10 SL at s ≈ 0.70); the last rays form a small lobe reaching s ≈ 0.92 SL
+    name: 'Fin_Dorsal2', s0: 22.9, s1: 32.8, count: 13, a0: 64, a1: 30, dorsal: true, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
+    lengths: [3.2, 3.8, 4.15, 4.3, 4.35, 4.35, 4.3, 4.3, 4.3, 4.35, 4.4, 4.35, 4.0], rect: R(0, 1024, 1024, 512), branchT: 0.55, segStart: 0.18,
     pigment: (r, n, Lr, len, t, dRay) => {
-      let mel = 0;
-      for (let j = 0; j < 9; j++) {
-        const Lj = 0.42 + j * 0.55 + r * 0.05 + (hash01(r, j, 2, 522) - 0.5) * 0.2;
-        if (Lj > len * 0.88) break;
-        if (hash01(r, j, 1, 521) < 0.22) continue;
-        const ls = 0.09 + 0.08 * hash01(r, j, 3, 523);
-        mel = Math.max(mel, (0.45 + 0.55 * hash01(r, j, 4, 524)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.075) ** 2)));
+      // photos 004, 028: 4–5 longitudinal rows of dark dashes / X marks on the rays, the distal quarter
+      // unspotted and hyaline; white guanophore dots alternate with the dark rows
+      let mel = 0, irid = 0.05;
+      for (let j = 0; j < 5; j++) {
+        const Lj = 0.45 + j * 0.62 + (hash01(r, j, 2, 822) - 0.5) * 0.14;
+        if (Lj > len * 0.76) break;
+        if (hash01(r, j, 1, 821) < 0.12) continue;
+        const ls = 0.11 + 0.06 * hash01(r, j, 3, 823);
+        mel = Math.max(mel, (0.55 + 0.45 * hash01(r, j, 4, 824)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.085) ** 2)));
+        irid = Math.max(irid, 0.5 * Math.exp(-(((Lr - Lj - 0.31) / 0.08) ** 2)) * Math.exp(-((dRay / 0.06) ** 2)) * (hash01(r, j, 5, 825) < 0.55 ? 1 : 0));
       }
-      return { mel: 0.72 * mel + 0.03, xan: 0.22 * smoothstep(0.6, 0.0, t), irid: 0.05 };
+      return { mel: 0.85 * mel + 0.03, xan: 0.16 * smoothstep(0.6, 0.0, t), irid };
     },
   });
   const AN = medianFin({
     // A I,10: origin 0.672 SL (below the 2nd–3rd D2 ray), end 0.883 SL (photo medians)
     name: 'Fin_Anal', s0: 25.5, s1: 33.6, count: 11, a0: -56, a1: -24, dorsal: false, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
     lengths: [2.0, 2.65, 2.95, 3.1, 3.2, 3.25, 3.3, 3.35, 3.4, 3.4, 3.15], rect: R(0, 1536, 1024, 512), branchT: 0.55, segStart: 0.18,
-    pigment: (r, n, Lr, len, t) => ({ mel: 0.12 * smoothstep(0.72, 0.95, t), xan: 0.14, irid: 0.32 * smoothstep(0.35, 0.0, t) }),
+    // dusky with a darker distal band (photo 004); pale iridescent base
+    pigment: (r, n, Lr, len, t) => ({ mel: 0.08 + 0.3 * smoothstep(0.55, 0.85, t) * smoothstep(1.0, 0.92, t), xan: 0.1, irid: 0.3 * smoothstep(0.35, 0.0, t) }),
   });
   return [
     caudalFin(R(0, 0, 1024, 1024)),

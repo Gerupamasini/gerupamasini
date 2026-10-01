@@ -22,7 +22,7 @@
 //    propped up on the pectorals with the head raised (the tail then touches the sand)
 //  * yawn: slow gape with raised head and erect fins, a short hold, snap shut, opercular flush
 import * as THREE from 'three';
-import { computePose, defaultPose, breathe, yawnCurves, SPINE, TL_MM } from './pose.js';
+import { computePose, defaultPose, breathe, yawnCurves, SPINE, TL_MM, REST_FOLD } from './pose.js';
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -48,7 +48,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     brake: 0,
     pitch: 0.04,
     // fins
-    d1: 0.55, d1Goal: 0.55, flick: 0, scull: 0, scullAmp: 0.15, paddle: 0,
+    d1: REST_FOLD.d1, d1Goal: REST_FOLD.d1, flick: 0, scull: 0, scullAmp: 0.15, paddle: 0,
     // head
     yawnT: -1, breathDepth: 1,
     // eyes
@@ -138,7 +138,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     switch (st.mode) {
       case 'perch':
         st.speed = damp(st.speed, 0, 6, dt);
-        st.d1Goal = 0.55;
+        st.d1Goal = REST_FOLD.d1;
         if (st.auto && st.t > st.next) chooseNext();
         break;
       case 'paddle': {
@@ -315,9 +315,9 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     const flick = Math.sin(Math.min(st.flick, 1) * Math.PI);
     st.d1 = damp(st.d1, st.d1Goal, 10, dt);
     p.foldD1 = clamp(st.d1 * (1 - sw) + 0.12 * sw - 0.6 * flick, 0, 1);
-    p.foldD2 = clamp(0.3 * (1 - sw) + 0.05 * sw - 0.3 * flick, 0, 1);
-    p.foldAnal = clamp(0.85 * (1 - sw) + 0.1 * sw, 0, 1);
-    p.foldCaudal = clamp(0.45 * (1 - sw), 0, 1);
+    p.foldD2 = clamp(REST_FOLD.d2 * (1 - sw) + 0.05 * sw - 0.3 * flick, 0, 1);
+    p.foldAnal = clamp(REST_FOLD.anal * (1 - sw) + 0.1 * sw, 0, 1);
+    p.foldCaudal = clamp(REST_FOLD.caudal * (1 - sw), 0, 1);
     p.foldPelvic = 0.6 * sw * (1 - br);
     // passive trailing flex of the caudal and median fins lags the lateral tail velocity
     // (turning: the fins trail the angular velocity of their body segment)

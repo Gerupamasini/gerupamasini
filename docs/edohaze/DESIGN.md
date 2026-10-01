@@ -1,5 +1,10 @@
 # Edohaze — technical design & integration
 
+> This document covers the lightweight real-time creature used by the mudflat game (`game.html`,
+> `src/creatures/edohaze/`). The photoreal adult model built with the same procedural pipeline as the
+> マハゼ (`models/edohaze.glb`, `tools/edohaze/`, viewer `index.html?species=edohaze`), fitted to the
+> 70-photo measurements, is documented in [HQ_MODEL.md](HQ_MODEL.md).
+
 `src/creatures/edohaze/` contains a self-contained real-time creature for Three.js (r186).
 The species research that every number traces back to is in [RESEARCH.md](RESEARCH.md);
 the scientific self-review and known uncertainties are in [VALIDATION.md](VALIDATION.md).

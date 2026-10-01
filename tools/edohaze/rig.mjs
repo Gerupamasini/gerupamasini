@@ -60,7 +60,8 @@ JOINTS.forEach((j) => { j.obj = toObject(j.at); });
 // chain used for bending (s position, joint)
 const SPINE = [[AX.head, 'J_head'], [AX.root, 'J_root'], ...AX.sp.map((s, k) => [s, `J_sp${k + 1}`]), [AX.caudal, 'J_caudal'], [AX.caudal2, 'J_caudal2']];
 // axial geometry handed to the shared pose model (src/fish/pose.js) and stored in the rig extras
-export const BODY = { tlMM: TL, spine: SPINE.map(([s, name]) => [name, s]) };
+// rest fin folds: in the photos エドハゼ at rest usually holds both dorsal fins erect (004, 008, 015, 033)
+export const BODY = { tlMM: TL, spine: SPINE.map(([s, name]) => [name, s]), restFold: { d1: 0.15, d2: 0.08, anal: 0.55, caudal: 0.2 } };
 configureBody(BODY);
 
 function spineWeights(s) {
@@ -287,6 +288,12 @@ const quadR = (() => {
   return Math.hypot(v[0] - d[0] * along, v[1] - d[1] * along, v[2] - d[2] * along);
 })();
 const jawLen = Math.hypot(JAW_JOINT[0] - SYMPHYSIS[0], JAW_JOINT[1] - SYMPHYSIS[1], JAW_JOINT[2] - SYMPHYSIS[2]);
+// eye saccade axes in the eye's own frame: the dorsolateral エドハゼ eye looks mostly up and out, so
+// rotating about object Y/X would largely twist the iris about its optical axis instead of moving the gaze
+const eyeA = nrm(dirToObject(EYE.axis));
+const eyeYawL = nrm(sub([0, 1, 0], eyeA.map((v) => v * eyeA[1])));
+let eyePitchL = nrm([eyeYawL[1] * eyeA[2] - eyeYawL[2] * eyeA[1], eyeYawL[2] * eyeA[0] - eyeYawL[0] * eyeA[2], eyeYawL[0] * eyeA[1] - eyeYawL[1] * eyeA[0]]);
+if (eyePitchL[0] < 0) eyePitchL = eyePitchL.map((v) => -v);
 export const AXES = {
   jaw: axisFor('J_jawL', X, [1.0, 1.0, 0], [0, -1, 0]),
   suspL: axisFor('J_suspL', suspAxisL, [4.8, 1.0, 2.3], [1, 0, 0]),
@@ -303,6 +310,8 @@ export const AXES = {
   pecDepL: axisFor('J_pecL', Z, [16.0, 2.0, 4.2], [0, -1, 0]),
   pecDepR: axisFor('J_pecR', Z, [16.0, 2.0, -4.2], [0, -1, 0]),
   headUp: axisFor('J_head', X, [1.0, 2.0, 0], [0, 1, 0]),
+  eyeYawL, eyeYawR: [-eyeYawL[0], eyeYawL[1], eyeYawL[2]],
+  eyePitchL, eyePitchR: [eyePitchL[0], -eyePitchL[1], -eyePitchL[2]],
   body: BODY,
 };
 
@@ -365,7 +374,8 @@ export function buildClips() {
     p.susp = 0.22 * y.susp;
     p.opercL = p.opercR = 0.3 * y.operc;
     p.headPitch += 0.09 * y.open;
-    p.foldD1 = 0.55 * (1 - y.fins); p.foldD2 = 0.3 * (1 - y.fins); p.foldAnal = 0.35 * (1 - y.fins); p.foldCaudal = 0.45 * (1 - y.fins);
+    // fins erect from the rest folds (same start pose as Idle, so a cross-fade does not pop)
+    p.foldD1 *= 1 - y.fins; p.foldD2 *= 1 - y.fins; p.foldAnal *= 1 - y.fins; p.foldCaudal *= 1 - y.fins;
     p.pecAbdL = p.pecAbdR = 0.4 + 0.25 * y.fins;
     return p;
   });

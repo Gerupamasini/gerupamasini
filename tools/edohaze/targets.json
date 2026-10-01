@@ -1,5 +1,5 @@
 {
-  "source": "Photogrammetry medians of the 70-photo reference set (28 lateral, 4 dorsal usable individuals); h from the snout-tip → caudal-base axis, fractions of SL",
+  "source": "Photogrammetry medians of the 70-photo reference set (lateral: 22 non-gravid + 9 gravid individuals; dorsal: 025, 029, 043, 065 — half-widths at s 0.3–0.6 are the non-gravid consensus, gravid females reach ~0.10); h from the snout-tip → caudal-base axis, fractions of SL",
   "stations": [
     { "s": 0.02, "top": 0.032,  "bot": -0.045,  "halfW": 0.0396 },
     { "s": 0.05, "top": 0.0489, "bot": -0.0551, "halfW": 0.0532 },
@@ -7,10 +7,10 @@
     { "s": 0.15, "top": 0.0698, "bot": -0.062,  "halfW": 0.072 },
     { "s": 0.20, "top": 0.0776, "bot": -0.0643, "halfW": 0.0728 },
     { "s": 0.25, "top": 0.0872, "bot": -0.0643, "halfW": 0.074 },
-    { "s": 0.30, "top": 0.0935, "bot": -0.0665, "halfW": 0.0668 },
-    { "s": 0.40, "top": 0.100,  "bot": -0.067,  "halfW": 0.0679 },
-    { "s": 0.50, "top": 0.0958, "bot": -0.056,  "halfW": 0.0665 },
-    { "s": 0.60, "top": 0.0904, "bot": -0.0535, "halfW": 0.0486 },
+    { "s": 0.30, "top": 0.0935, "bot": -0.0665, "halfW": 0.061 },
+    { "s": 0.40, "top": 0.100,  "bot": -0.067,  "halfW": 0.0613 },
+    { "s": 0.50, "top": 0.0958, "bot": -0.056,  "halfW": 0.0517 },
+    { "s": 0.60, "top": 0.0904, "bot": -0.0535, "halfW": 0.0502 },
     { "s": 0.70, "top": 0.0755, "bot": -0.0445, "halfW": 0.0345 },
     { "s": 0.80, "top": 0.061,  "bot": -0.044,  "halfW": 0.028 },
     { "s": 0.90, "top": 0.0464, "bot": -0.0429, "halfW": 0.0195 },

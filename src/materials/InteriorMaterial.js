@@ -96,7 +96,7 @@ void main() {
 
 export function createInteriorMaterial({ shared }) {
   return new THREE.ShaderMaterial({
-    name: 'MahazeInterior',
+    name: 'GobyInterior',
     uniforms: { ...shared, uMouthOpen: { value: 0 }, uGillOpen: { value: 0 } },
     vertexShader,
     fragmentShader,

@@ -332,11 +332,13 @@ function buildWarpedMesh(NS, NV, log) {
     const fn = cross(sub(dirToObject(sub(b, a)), [0, 0, 0]), dirToObject(sub(c, a)));
     if (dot(fn, verts[gid(i, j)].n) < 0) for (let k = 0; k < tris.length; k += 3) { const t = tris[k + 1]; tris[k + 1] = tris[k + 2]; tris[k + 2] = t; }
   }
-  // flap membership (for skin weights): vertices anterior to the margin row inside the cut columns
+  // flap membership (for skin weights): vertices anterior to the margin row inside the cut columns, back to
+  // just in front of the preopercle (a mm bound, independent of the mesh resolution)
+  const flapS0 = Math.min(...PREOPERCLE.map((p) => p[0])) - 0.3;
   for (const v of verts) {
     if (v.flap) continue;
     const left = v.j > jB && v.j < jT, right = v.j > NV - jT && v.j < NV - jB;
-    if ((left || right) && v.i < im && v.i > im - 90) v.flap = v.cut === 'opercBody' ? 0 : 0.5; // 0.5 = candidate; weight decided by the rig
+    if ((left || right) && v.i < im && v.fish[0] > flapS0) v.flap = v.cut === 'opercBody' ? 0 : 0.5; // 0.5 = candidate; weight decided by the rig
   }
 
   const nV = verts.length;
@@ -443,6 +445,36 @@ function bakeBodyTextures(ctx) {
     DORSAL.push([8.5 + k * 0.95 + (rnd(k, 0, 21) - 0.5) * 0.7, 0.62 + 0.3 * rnd(k, 0, 22), 0.22 + 0.25 * rnd(k, 0, 23), 0.08 + 0.1 * rnd(k, 0, 24), 0.18 + 0.2 * rnd(k, 0, 25)]);
   }
 
+  // Consensus spec (70 photos): a row of 6–10 small whitish iridophore spots along the dorsolateral line
+  // (s 0.25–0.95 SL, h +0.05–0.07 SL) alternating with dark speckle clusters — a "beaded" dorsal edge
+  // (019, 028, 034, 035, 039, 050, 061)
+  const BEADS = [0.27, 0.35, 0.44, 0.53, 0.62, 0.71, 0.8, 0.88, 0.95].map((f, k) => [f * SL + (rnd(k, 0, 61) - 0.5) * 0.6, 0.66 + 0.12 * rnd(k, 0, 62), 0.55 + 0.45 * rnd(k, 0, 63)]);
+  function beadAt(s, y, q) {
+    let w = 0, dk = 0;
+    for (let k = 0; k < BEADS.length; k++) {
+      const [bs, bh, st] = BEADS[k];
+      if (Math.abs(s - bs) > 2.5) continue;
+      const by = q.yc + bh * q.t;
+      w = Math.max(w, st * Math.exp(-((Math.hypot(s - bs, (y - by) * 1.3) / 0.3) ** 2)));
+      if (k + 1 < BEADS.length) {
+        const ms = 0.5 * (bs + BEADS[k + 1][0]);
+        dk = Math.max(dk, Math.exp(-((Math.hypot((s - ms) / 0.75, (y - by) / 0.45)) ** 2)));
+      }
+    }
+    return { w, dk };
+  }
+  // dorsal net of dark-edged scale pockets with pale centres (dorsal photos 025, 029, 043, 065), densest
+  // from the nape to s ≈ 0.6 SL, often as two paramedian chains; a dark nape patch behind the eyes
+  function dorsalNet(s, y, z, hn, q) {
+    const top = smoothstep(0.35, 0.85, hn);
+    if (top <= 0 || s < 5.5) return { net: 0, nape: 0 };
+    const net = smoothstep(0.58, 0.82, ridged3(s * 0.95, y * 0.95, z * 0.95, 3, 34));
+    const para = 0.55 + 0.45 * Math.exp(-(((Math.abs(z) / Math.max(q.w, 0.2) - 0.42) / 0.3) ** 2));
+    const along = smoothstep(6.5, 9.0, s) * (0.45 + 0.55 * smoothstep(0.78 * SL, 0.58 * SL, s));
+    const nape = smoothstep(0.5, 0.9, hn) * Math.exp(-(((s - 7.9) / 1.5) ** 2));
+    return { net: top * net * para * along, nape };
+  }
+
   function blotchAt(s, y, z, hn) {
     const nz = fbm3(s * 0.6, y * 0.6, z * 0.6, 3, 11) * 0.7 + fbm3(s * 2.4, y * 2.4, z * 2.4, 2, 12) * 0.35;
     let b = 0;
@@ -465,7 +497,7 @@ function bakeBodyTextures(ctx) {
   function headMarks(s, y, z, hn) {
     // エドハゼ head (photos): finely peppered top and snout; a short dark oblique streak below/behind the
     // eye (s ≈ 0.13 SL); scattered larger round dark spots on the cheek and gill cover; a dark rim round the
-    // eye. No preorbital streak or subocular bar.
+    // eye; a faint subocular blotch and a dotted preorbital line (spec: 010, 011, 030, 054).
     let m = 0;
     const nz = fbm3(s * 1.5, y * 1.5, 4.7, 2, 23) * 0.22;
     const eyeS = EYE.center[0], eyeY = EYE.center[1];
@@ -473,6 +505,13 @@ function bakeBodyTextures(ctx) {
     m = Math.max(m, 0.42 * smoothstep(0.26, 0.08, d1 + nz));
     const spots = [[5.4, 2.65, 0.17], [6.3, 3.35, 0.15], [7.1, 2.4, 0.16], [8.0, 3.2, 0.15], [8.6, 2.1, 0.14], [5.9, 1.75, 0.13], [7.6, 1.55, 0.13], [9.3, 3.6, 0.14]];
     for (const [ss, yy, r] of spots) m = Math.max(m, 0.5 * smoothstep(r, r * 0.3, Math.hypot(s - ss, y - yy) + nz * 0.4));
+    // spec: a dark oblique blotch below the anterior eye and a dotted line from the eye to the upper lip
+    const d2 = distToPolyline2(s, y, [[eyeS - 0.15, eyeY - 1.0], [eyeS + 0.35, eyeY - 1.75]]);
+    m = Math.max(m, 0.34 * smoothstep(0.24, 0.07, d2 + nz));
+    for (let k = 0; k < 4; k++) {
+      const f = (k + 0.5) / 4, ds0 = mix(eyeS - EYE.radius - 0.1, 1.15, f), dy0 = mix(eyeY - 0.45, 2.55, f);
+      m = Math.max(m, 0.42 * smoothstep(0.12, 0.035, Math.hypot(s - ds0, y - dy0) + nz * 0.2));
+    }
     return m * smoothstep(-0.9, -0.3, hn);
   }
 
@@ -489,11 +528,16 @@ function bakeBodyTextures(ctx) {
     const n = fbm3(s * 0.8, y * 0.8, Math.abs(z) * 0.8, 3, 5);
     // peppered dorsal two thirds (photos: fine dots ~0.002–0.003 SL), fading on the lower flank
     const upper = smoothstep(-0.45, 0.35, hn);
-    let d = 2.0 + 34.0 * upper * (0.7 + 0.5 * n) + 5.0 * (1 - Math.abs(hn));
-    d += 22.0 * b + 9.0 * sd;
+    let d = 3.0 + 80.0 * upper * (0.7 + 0.5 * n) + 10.0 * (1 - Math.abs(hn));
+    d += 18.0 * b + 9.0 * sd; // blotches are mostly diffuse dusky pigment (smooth term), not spot clusters
+    {
+      const bd = beadAt(s, y, q), dn = dorsalNet(s, y, z, hn, q);
+      d += 55.0 * dn.net + 40.0 * dn.nape + 45.0 * bd.dk * upper;
+      d *= 1 - 0.9 * bd.w;
+    }
     if (head > 0) {
       const hm = headMarks(s, y, z, hn);
-      const hd = 6.0 + 34.0 * dorsal + 30.0 * hm + 8.0 * smoothstep(3.0, 0.8, s);
+      const hd = 8.0 + 48.0 * dorsal + 26.0 * smoothstep(-0.85, -0.25, hn) * (1 - dorsal) + 30.0 * hm + 8.0 * smoothstep(3.0, 0.8, s); // cheeks spotted too (photo 004)
       d = mix(d, hd, head);
     }
     // keep the eye itself and lips clean
@@ -524,22 +568,37 @@ function bakeBodyTextures(ctx) {
     const dorsal = smoothstep(-0.2, 0.8, hn);
     const belly = smoothstep(-0.05, -0.7, hn);
     const { b, sd } = blotchAt(s, yy, z, hn);
-    let m = 0.03 * dorsal + 0.07 * b + 0.025 * sd;
+    let m = 0.03 * dorsal + 0.3 * b + 0.025 * sd;
     if (head > 0) {
       // エドハゼ: no vermiculation; the head top is peppered (point melanophores, splatted below)
-      m = mix(m, 0.06 * dorsal + 0.3 * headMarks(s, yy, z, hn), head);
+      m = mix(m, 0.13 * dorsal + 0.3 * headMarks(s, yy, z, hn), head);
     }
     // dusky dorsal reticulation (pigment along scale pockets)
     m += 0.05 * dorsal * smoothstep(0.6, 0.82, ridged3(s * 2.2, yy * 2.2, z * 2.2, 3, 33)) * (1 - head * 0.5);
+    const dn = dorsalNet(s, yy, z, hn, q), bd = beadAt(s, yy, q);
+    m += (0.12 * dn.net + 0.1 * dn.nape) * (1 - head * 0.6);
+    // posterior body: one or two thin dark axial lines along the horizontal septum carrying small dashes,
+    // and a dark mark at the caudal base (spec, s 0.65–1.0)
+    {
+      const post = smoothstep(0.6 * SL, 0.7 * SL, s) * smoothstep(S_END + 0.2, SL + 0.4, s);
+      const dash = 0.55 + 0.45 * smoothstep(0.2, 0.7, 0.5 + 0.5 * Math.sin((s / 0.85) * TAU + 1.3 * fbm3(s * 0.7, 1.1, 2.2, 2, 57)));
+      const l1 = Math.exp(-(((yy - q.yc) / 0.09) ** 2)), l2 = Math.exp(-(((yy - q.yc - 0.42) / 0.06) ** 2));
+      m += post * dash * (0.16 * l1 + 0.08 * l2);
+      m += 0.22 * Math.exp(-((Math.hypot(s - (SL - 0.45), (yy - q.yc) * 0.9) / 0.6) ** 2));
+    }
+    m *= 1 - 0.85 * bd.w;
     m *= 1 - belly;
     const ed = eyeDist(s, yy, z);
     m += 0.2 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.22) ** 2)) * smoothstep(-0.6, 0.2, yy - EYE.center[1]); // dark periocular rim
     const bellyMass = smoothstep(0.3 * SL, 0.36 * SL, s) * smoothstep(0.66 * SL, 0.6 * SL, s) * smoothstep(0.1, -0.45, hn);
-    let iri = 0.8 * belly + 0.25 * smoothstep(0.25, -0.4, hn) + 0.08 * Math.exp(-(((hn - 0.02) / 0.22) ** 2)) + 0.35 * bellyMass;
+    let iri = 0.7 * belly + 0.1 * smoothstep(0.05, -0.5, hn) + 0.03 * Math.exp(-(((hn - 0.02) / 0.22) ** 2)) + 0.4 * bellyMass;
     // whitish crescent under the eye (photos)
     iri = Math.max(iri, 0.55 * Math.exp(-((Math.hypot(s - EYE.center[0], yy - (EYE.center[1] - EYE.radius - 0.28)) / 0.32) ** 2)));
-    iri = Math.max(iri, head * 0.55 * smoothstep(0.55, -0.3, hn) * smoothstep(2.4, 4.6, s));
+    iri = Math.max(iri, head * 0.25 * smoothstep(0.2, -0.6, hn) * smoothstep(2.4, 4.6, s));
     iri = Math.max(iri, 0.06 * smoothstep(EYE.radius + 0.5, EYE.radius + 0.2, ed) * smoothstep(EYE.radius, EYE.radius + 0.15, ed));
+    iri = Math.max(iri, 0.62 * bd.w);
+    // opercle iridescent patch (yellow-green / blue-green sheen over the gills, s 0.20–0.27 SL)
+    iri = Math.max(iri, 0.3 * smoothstep(7.4, 8.2, s) * smoothstep(10.4, 9.6, s) * Math.exp(-(((hn + 0.05) / 0.45) ** 2)) * head);
     iri *= 1 - 0.7 * b;
     iri *= 0.85 + 0.3 * fbm3(s * 1.3, yy * 1.3, z * 1.3, 3, 41);
     // lips carry no silvery iridophores; the chin is only faintly silvered
@@ -638,8 +697,8 @@ function bakeBodyTextures(ctx) {
       for (let k = 0; k < count; k++) {
         const hx = hash01(cx, cy, k, 307), hy = hash01(cx, cy, k, 308), hs = hash01(cx, cy, k, 309), ha = hash01(cx, cy, k, 310);
         const fx = x0 + hx * (texW / cellsU), fy = y0 + hy * (texH / cellsV);
-        const rCore = (0.012 + 0.016 * hs) * size;
-        const punct = hash01(cx, cy, k, 312) < 0.35;
+        const rCore = (0.016 + 0.014 * hs) * size;
+        const punct = hash01(cx, cy, k, 312) < 0.72;
         // ~30 % lie deeper in the dermis: larger, softer and fainter through the overlying tissue
         const deep = hash01(cx, cy, k, 316) < 0.3;
         const nArms = 3 + Math.floor(hash01(cx, cy, k, 311) * 5);
@@ -749,7 +808,7 @@ function bakeBodyTextures(ctx) {
         const an = Math.abs(hn);
         const chev = an < 0.55 ? an / 0.55 : 1 - (0.45 * (an - 0.55)) / 0.45;
         const ph = (s - VERT_START - 0.95 * chev) / vertLen;
-        h += 0.011 * (0.5 - 0.5 * Math.cos(ph * TAU)) * smoothstep(0.15, 0.5, zn) * smoothstep(VERT_START + 0.6, VERT_START + 2.4, s) * (1 - head);
+        h += 0.003 * (0.5 - 0.5 * Math.cos(ph * TAU)) * smoothstep(0.15, 0.5, zn) * smoothstep(VERT_START + 0.6, VERT_START + 2.4, s) * (1 - head);
       }
       // --- micro skin texture
       h += 0.003 * fbm3(s * 18, yy * 18, z * 18, 3, 71) + 0.0012 * fbm3(s * 55, yy * 55, z * 55, 2, 72);
@@ -781,7 +840,7 @@ function bakeBodyTextures(ctx) {
       if (s > 7.8 && s < 11.2 && yy > 0.2 && yy < 4.7) {
         const d = s - sOperc(yy);
         const lat = smoothstep(0.2, 0.5, zn);
-        h += lat * (0.01 * smoothstep(0.05, -0.12, d) - 0.012 * Math.exp(-((d / 0.035) ** 2)));
+        h += lat * (0.005 * smoothstep(0.05, -0.12, d) - 0.004 * Math.exp(-((d / 0.035) ** 2))); // faint in photos (028, 004)
       }
       // fade relief out at the snout pole (degenerate UVs)
       H[t] = h * smoothstep(0.25, 0.7, s);
@@ -844,9 +903,13 @@ function bakeBodyTextures(ctx) {
     const belly = smoothstep(-0.05, -0.7, hn);
     const M = MELv * 1.6;
     // pale amber tissue, olive-brown back, milky belly (juvenile photos IMG_1603 / 9176 / user photo 1)
-    let r = 0.66, g = 0.53, b = 0.3;
-    r = mix(r, 0.5, dorsal * 0.55); g = mix(g, 0.44, dorsal * 0.55); b = mix(b, 0.2, dorsal * 0.55);
-    r = mix(r, 0.76, belly); g = mix(g, 0.7, belly); b = mix(b, 0.58, belly);
+    // エドハゼ (70-photo palette, white-balanced medians): pale tan back (186,171,128), warmer flank
+    // (178,161,126), warm whitish belly (199,186,170); head top darker (156,145,108) via melanophores
+    // the head's lower flank (cheek, gill cover) keeps the tan ground colour; only the throat is pale
+    const bellyC = belly * (1 - 0.7 * head * smoothstep(-0.95, -0.55, hn));
+    let r = 0.62, g = 0.49, b = 0.27;
+    r = mix(r, 0.53, dorsal * 0.5); g = mix(g, 0.46, dorsal * 0.5); b = mix(b, 0.25, dorsal * 0.5);
+    r = mix(r, 0.74, bellyC); g = mix(g, 0.64, bellyC); b = mix(b, 0.52, bellyC);
     r *= mix(1, 1.02, X * 0.6); g *= mix(1, 0.9, X * 0.6); b *= mix(1, 0.55, X * 0.6);
     r = mix(r, 0.78, I * 0.4); g = mix(g, 0.77, I * 0.4); b = mix(b, 0.7, I * 0.4);
     // blood-tinted throat and cheeks under the thin skin

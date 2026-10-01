@@ -6,6 +6,7 @@ export const SPECIES = {
   file: 'edohaze.glb',
   prefix: 'Edohaze',
   rootName: 'Edohaze_Adult',
+  generator: 'edohaze-procedural-builder',
   scientific: 'Gymnogobius macrognathos (Bleeker, 1860)',
   commonName: 'エドハゼ, adult',
   pelvicBaseS: 11.6,
@@ -30,7 +31,7 @@ export const SPECIES = {
       ['J_root', 13.0, 1.5, 1.15], ['J_sp2', 20.6, 1.45, 1.0]],
   },
   // eye shader: cyan-green guanine ring around the pupil and a cooler grazing sheen (photos 004, 028, 054, 055)
-  eye: { sheen: [0.03, 0.12, 0.12], ring: [0.05, 0.42, 0.4, 0.26] },
+  eye: { sheen: [0.03, 0.1, 0.1], ring: [0.05, 0.085, 0.085, 0.09] },
   // Internal anatomy for the volumetric body shader (fish mm). Placed between the pectoral girdle
   // (11.2 mm) and the anus (24.65 mm); spine height from the loft (yc + 0.06·t ≈ 3.2–3.5 mm).
   // Lateral photos show a white, opaque peritoneum over the gut (silvery belly) and dorsal photos a
