@@ -63,18 +63,34 @@ const SINK = 10;
 // the body — walking photos in the bill–tail frame match the relaxed stand (IoU 0.88), only the crown sits lower
 const HEAD_PITCH_FOLLOW = 1;
 const sinkLimit = (rest, need) => Math.min(rest, need) - SINK * smoothstep(need + 6, need + 2, rest);
+// Over the folded wing (and its front edge under the breast-side patch) the head and neck lie on the wing —
+// preening the breast or the belly, the cheek against the bend of the wing — never in it: there no point may
+// sink deeper than at rest, measured on the whole body outline (the wing lies on the neck-filling plumage at the
+// shoulder, above the trunk-only outline).
+const BODY_SDF = getBodySDF(CFG);
+const wingZone = (p) => smoothstep(9, 12, Math.abs(p.x)) * smoothstep(50, 54, p.y) * (1 - smoothstep(80, 84, p.y)) * (1 - smoothstep(20, 26, p.z)) * smoothstep(-70, -64, p.z);
+/** How far (mm) a head / neck point at p (rest space) is below where it may be. */
+const contactDeficit = (s, need, p) => {
+  const trunk = sinkLimit(s.rest, need) - TORSO_SDF(p.x, p.y, p.z);
+  const w = wingZone(p);
+  return w > 0 ? Math.max(trunk, w * (Math.min(s.restBody, need) - BODY_SDF(p.x, p.y, p.z))) : trunk;
+};
 const HEAD_PTS = (() => {
   const head = CFG.bodySculpt.prims.find((p) => p.name === 'head');
   const c = [head.c[0] - J.head[0], head.c[1] - J.head[1], head.c[2] - J.head[2]];
   const pts = [new THREE.Vector3(c[0], c[1] + head.r[1], c[2]), new THREE.Vector3(c[0], c[1] - head.r[1], c[2])];
-  for (let la = -2; la <= 2; la++)
-    for (let lo = 0; lo < 8; lo++) {
-      const a = (la * 30 * Math.PI) / 180;
-      const b = (lo / 8) * Math.PI * 2;
+  // (every 15°: the cheek must not slip between the samples onto the bend of the wing)
+  for (let la = -5; la <= 5; la++)
+    for (let lo = 0; lo < 24; lo++) {
+      const a = (la * 15 * Math.PI) / 180;
+      const b = (lo / 24) * Math.PI * 2;
       pts.push(new THREE.Vector3(c[0] + head.r[0] * Math.cos(a) * Math.sin(b), c[1] + head.r[1] * Math.sin(a), c[2] + head.r[2] * Math.cos(a) * Math.cos(b)));
     }
   // depth over the torso outline at rest (mm)
-  for (const q of pts) q.rest = TORSO_SDF(q.x + J.head[0], q.y + J.head[1], q.z + J.head[2]);
+  for (const q of pts) {
+    q.rest = TORSO_SDF(q.x + J.head[0], q.y + J.head[1], q.z + J.head[2]);
+    q.restBody = Infinity; // (the head is part of the body outline at rest; never over the wing)
+  }
   return pts;
 })();
 // The neck the same way: rings on its outline around neck1 / neck2 (bone-local, mm), each allowed to sink no
@@ -94,7 +110,7 @@ const NECK_PTS = (() => {
     for (let k = 0; k < 12; k++) {
       const a = (k / 12) * Math.PI * 2;
       const rest = c.clone().addScaledVector(u, neck.r * Math.cos(a)).addScaledVector(v, neck.r * Math.sin(a));
-      pts.push({ bone, local: rest.clone().sub(c), rest: TORSO_SDF(rest.x, rest.y, rest.z), t: c.distanceTo(n0) / len });
+      pts.push({ bone, local: rest.clone().sub(c), rest: TORSO_SDF(rest.x, rest.y, rest.z), restBody: BODY_SDF(rest.x, rest.y, rest.z), t: c.distanceTo(n0) / len });
     }
   }
   return pts;
@@ -1030,7 +1046,7 @@ export class KentishPloverAnimator {
     const at = new THREE.Vector3();
     for (const s of NECK_PTS) {
       p.copy(s.local).multiplyScalar(mm).applyMatrix4(this.b[s.bone].matrixWorld).applyMatrix4(inv).add(BIND_CHEST).multiplyScalar(1000);
-      const deficit = (sinkLimit(s.rest, plumage) - TORSO_SDF(p.x, p.y, p.z)) / s.t;
+      const deficit = contactDeficit(s, plumage, p) / s.t;
       if (deficit > worst) [worst, at.x, at.y, at.z] = [deficit, p.x, p.y, p.z];
     }
     if (worst <= 0.01) return p.set(0, 0, 0);
@@ -1052,7 +1068,7 @@ export class KentishPloverAnimator {
       for (const s of HEAD_PTS) {
         // world → chest-local → rest (mm)
         p.copy(s).multiplyScalar(mm).applyQuaternion(headQ).add(headPos).applyMatrix4(inv).add(BIND_CHEST).multiplyScalar(1000);
-        const deficit = sinkLimit(s.rest, need) - TORSO_SDF(p.x, p.y, p.z);
+        const deficit = contactDeficit(s, need, p);
         if (deficit > worst) [worst, at.x, at.y, at.z] = [deficit, p.x, p.y, p.z];
       }
       if (worst <= 0.01) break;
@@ -1150,15 +1166,15 @@ function preenTarget(variant) {
   // bird-local mm points on the plumage + bill approach roll
   switch (variant) {
     case 'breast':
-      return { p: [3, 66, 30], roll: 0.2 };
+      return { p: [6, 74, 33], roll: 0.2 };
     case 'belly':
-      return { p: [6, 52, 19], roll: 0.3 };
+      return { p: [8, 56, 22], roll: 0.5 };
     case 'flank':
-      return { p: [15, 58, 0], roll: 0.9, wingLift: 0.5 };
+      return { p: [16, 56, 4], roll: 0.9, wingLift: 0.5 };
     case 'scapulars':
       return { p: [9, 87, -6], roll: 1.4 };
     case 'wing':
-      return { p: [16, 66, -28], roll: 1.3, wingLift: 0.2 };
+      return { p: [17, 64, -26], roll: 1.4, wingLift: 0.35 };
     case 'tail':
       return { p: [0, 67, -52], roll: 0.4 };
     default:
@@ -1270,7 +1286,7 @@ export const ACTIONS = {
       const out = {
         legRaise: { [side]: k },
         legRaiseTarget: { [side]: A.bodyPoint([sg * 12, 87 + scr * 1000, 14]) },
-        wing: { [side]: { raise: 0.1 * k } }, // folded wing held slightly off the flank
+        wing: { [side]: { raise: 0.15 * k } }, // folded wing held slightly off the flank
         posture: { roll: -sg * 0.12 * k, pitch: 0.12 * k, neck: -0.3 },
       };
       out.headQ = new THREE.Quaternion().copy(A.model.object.quaternion).multiply(qAxis(Z, -sg * 0.5 * k, new THREE.Quaternion())).multiply(qAxis(X, 0.35 * k, new THREE.Quaternion()));

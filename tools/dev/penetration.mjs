@@ -460,7 +460,9 @@ function measure(model, S, anim) {
             // a folded-wing feather coming out of the plumage on the underside (belly / lower breast), or a
             // feather coming out through the far-side flank (it went through the body)
             if (inside && folded && WINGISH.has(I.type) && sdN[1] < -0.7) (pend ??= {}).under = { at: p.map((x) => +x.toFixed(1)), n: sdN.map((x) => +x.toFixed(2)) };
-            if (inside && folded && I.type !== 'rectrix' && sdN[0] * I.side < -0.5) (pend ??= {}).cross = true;
+            // (not where the surface it comes out of is neck plumage lying over it — the neck turned back over the
+            // scapulars when preening the far wing: two plumage regions in contact, reported as neck)
+            if (inside && folded && I.type !== 'rectrix' && sdN[0] * I.side < -0.5 && !sdNeck) (pend ??= {}).cross = true;
             // (a line only counts as emerged once it sticks out further than the dip it may make — at LOD1/2
             // past the LOD's limit: a buried feather's edge grazing the outline by less shows nothing more
             // than a tolerated dip does)

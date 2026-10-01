@@ -52,6 +52,11 @@ export function computeSpineWeights(p, boneIndex) {
   const h = headness(p);
   for (let i = 0; i < SPINE.length; i++) w[i] *= SPINE[i].bone === 'head' ? 1 : 1 - h;
   w[SPINE.length - 1] = Math.max(w[SPINE.length - 1], h);
+  // the head's blend band (throat, chin, nape) shares with the upper neck rather than straight with the chest:
+  // with the head turned back to preen, skin half on the head and half on the chest stretched as a sheet
+  // across the shoulder and the folded wing
+  const n2 = SPINE.findIndex((s) => s.bone === 'neck2');
+  w[n2] = Math.max(w[n2], 1.6 * Math.min(h, 1 - h));
   const order = w.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, 4);
   const sum = order.reduce((acc, [v]) => acc + v, 0) || 1;
   return order.map(([v, i]) => [boneIndex[SPINE[i].bone], v / sum]);
