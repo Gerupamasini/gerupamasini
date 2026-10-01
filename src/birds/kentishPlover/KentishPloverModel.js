@@ -147,6 +147,12 @@ export class KentishPloverModel {
     if (c?.feathers) c.feathers.userData.uniforms.uFluff.value = v;
   }
 
+  /** Hind-neck fill (mm): the nape plumage puffs out where the head tilts back against the body. */
+  setNape(mm) {
+    const c = this.current;
+    if (c?.body) c.body.userData.uniforms.uNapeFill.value = mm;
+  }
+
   /** Breathing: −1..1 cycle value; displacement is masked to the chest/flanks in the shader. */
   setBreath(v) {
     const c = this.current;

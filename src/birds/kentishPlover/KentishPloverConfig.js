@@ -224,12 +224,14 @@ export const animation = {
   saccadeDuration: 0.075,
   // bodyPitch / neck: relative to the bind (= relaxed stand, body axis 10° tail-down). Walking levels the body
   // (axis −1°, bill 26°, crown only ≈6 mm above the back: 12 photos) and running tips it slightly further
-  // (spec §12, §17.3). Neck −0.4 / −0.5 as in the spec; the head is carried low in front of the breast
-  // (headDown / headFwd, m): retracting the neck alone presses the head into the mantle and the plumage contact
-  // pushes it back up (crown stayed at 100 mm). tools/dev/posture.mjs: walk crown 95, crown − back 4.6 (spec
-  // 90–95, +6 ± 4); run 90, 2.4 (86–92, ≤ +3)
-  walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.19, neck: -0.4, headDown: mm(5), headFwd: mm(5) },
-  run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.2, neck: -0.5, headDown: mm(8), headFwd: mm(8) },
+  // (spec §12, §17.3). The head is carried forward of the breast and clear of the plumage BY CONSTRUCTION: the
+  // spec's neck −0.4 / −0.5 with the head lowered pressed it into the shoulders — the contact solver pushed it
+  // every frame (±2.2 mm sideways as the trunk swayed: head judder, gaitjitter.mjs) and the Frame-A walk profile
+  // had a nape notch up to 0.066 L low (photos p003, p017, p006: crown clearly above the back).
+  // The hind-neck fill (animator napeFill) closes the rest of that notch. tools/dev/posture.mjs: walk crown 96.4,
+  // crown − back 5.9 (spec +6 ± 4); run 91, +3.8; contact correction 0 in both (Frame-A walk IoU 0.892)
+  walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.19, neck: -0.25, headDown: mm(2), headFwd: mm(6) },
+  run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.2, neck: -0.28, headDown: mm(3.5), headFwd: mm(8.5) },
   sway: mm(0.6), // lateral trunk sway per stride (D)
   // Trunk bob (2 per stride) and sway (1 per stride) are limited to this acceleration (m/s², ≈0.15 g): walking
   // keeps its full 1.2 mm inverted-pendulum bob (needs ≈0.75), running at 9.5 Hz is left with ≈0.2 mm — the body

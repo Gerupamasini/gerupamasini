@@ -66,10 +66,12 @@ for (const mesh of LOD === 3 ? farMeshes() : m.lods[LOD].meshes) {
   const fold = m.current.feathers?.userData.uniforms.uFold.value;
   for (let i = 0; i < n; i++) {
     v.fromBufferAttribute(g.getAttribute('position'), i);
-    if (mesh.name.startsWith('body') && df) {
+    if (mesh.name.startsWith('body') && (df || a.napeFill)) {
       const r = [rest.getX(i), rest.getY(i), rest.getZ(i)];
       const nn = [nrm.getX(i), nrm.getY(i), nrm.getZ(i)];
-      v.addScaledVector(new THREE.Vector3(...nn), df * bodyDisplacementMasks(r, nn)[0]);
+      const mk = bodyDisplacementMasks(r, nn);
+      // (+ the hind-neck fill, body shader uNapeFill)
+      v.addScaledVector(new THREE.Vector3(...nn), df * mk[0] + (a.napeFill ?? 0) * 0.001 * mk[2]);
     }
     if (lie && df) v.addScaledVector(new THREE.Vector3(lie.getX(i), lie.getY(i), lie.getZ(i)), df * lieM.getX(i));
     // the arm tube collapses onto its axis as the wing folds (feather shader: aCore · smoothstep(0, 0.5, fold))

@@ -82,7 +82,15 @@ export function bodyDisplacementMasks(p, n = [0, 1, 0]) {
   const fluff = (2.5 + 4.5 * smooth(-0.2, -0.9, n[1]) + 1.5 * smooth(0.2, 0.9, n[1])) * (1 - 0.7 * headness(p)) * (1 - 0.5 * smooth(-45, -62, p[2]));
   // chest and flanks (breast front at z 35, neck base at y ≈ 80 in the relaxed bind)
   const breath = smooth(-40, -15, p[2]) * (1 - smooth(18, 30, p[2])) * (1 - smooth(76, 84, p[1]));
-  return [fluff, breath];
+  return [fluff, breath, napeMask(p, n)];
+}
+
+/** Hind-neck plumage that fills out when the head tilts back against the body (mm per mm of fill): centred on the
+ *  crease between the hind crown and the mantle, (0, 97, 9) at rest, facing up / back (KentishPloverMaterials
+ *  kpNapeMM mirrors it). */
+export function napeMask(p, n) {
+  const e = ((p[1] - 97) / 5.5) ** 2 + ((p[2] - 9) / 7.5) ** 2;
+  return Math.exp(-e) * (1 - smooth(5, 11, Math.abs(p[0]))) * smooth(-0.1, 0.4, n[1]) * (1 - smooth(0.3, 0.7, n[2]));
 }
 
 export function flowDirection(p, n) {

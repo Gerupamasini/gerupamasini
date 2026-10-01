@@ -456,6 +456,17 @@ export class KentishPloverAnimator {
     this._updateGaze(dt, act);
     this._poseNeckHead(dt, act);
 
+    // hind-neck fill: with the head held level over a body pitched forward (walking, running, foraging) the head
+    // is tilted back against the trunk by ≈11°, and the skin between hind crown and mantle creased into a notch
+    // up to 0.066 L deep in the Frame-A walk profile; the plumage fills out there instead (p003, p017, p006).
+    // 0.55 mm per degree up to 7 mm, gone again for the large turns of preening / sleeping (smooth in the pose)
+    {
+      const f = _v.set(0, 0, 1).applyQuaternion(_q.copy(b.chest.getWorldQuaternion(_q2)).invert().multiply(b.head.getWorldQuaternion(_q3)));
+      const up = Math.atan2(f.y, Math.max(1e-6, f.z)) / DEG;
+      this.napeFill = f.z > 0 ? clamp(up * 0.55, 0, 7) * (1 - smoothstep(30, 45, up)) : 0;
+      model.setNape(this.napeFill);
+    }
+
     // -------------------------------------------------- micro: blink / lids / fluff
     this._updateLids(dt, act);
     model.setFluff(this.p.fluff);
@@ -1071,12 +1082,14 @@ export class KentishPloverAnimator {
       stretch = this._solveNeck(headPos.add(push), headQ); // accumulate: beyond reach only the aim turns
     }
     if (!headPos.equals(bestPos)) stretch = this._solveNeck(bestPos, headQ);
-    // the contact correction (root frame) is eased in and out over ≈30 ms: which point touches the plumage
-    // switches from frame to frame as the trunk bobs and sways, and the head followed every switch
+    // the contact correction (root frame) is eased in and out over ≈80 ms: which point touches the plumage
+    // switches from frame to frame as the trunk bobs and sways, and the head followed every switch (at 30 ms the
+    // AI birds' head judder was 0.46 mm/frame against 0.28 before the redesign; now 0.31, gaitjitter.mjs). The
+    // walk / run postures keep the head clear of the plumage, so it is idle there.
     const rootInv = _q3.copy(rootQ).invert();
     const corr = _v2.copy(bestPos).sub(want).applyQuaternion(rootInv);
     if (!this._corr || !(dt > 0)) this._corr = corr.clone();
-    else this._corr.lerp(corr, 1 - Math.exp(-30 * dt));
+    else this._corr.lerp(corr, 1 - Math.exp(-12 * dt));
     if (this._corr.distanceToSquared(corr) > 1e-10) stretch = this._solveNeck(want.add(_v2.copy(this._corr).applyQuaternion(rootQ)), headQ);
     // jaw: opens briefly when swallowing / pulling prey
     b.jaw.quaternion.multiply(qAxis(X, act?.jaw ?? 0, _q));

@@ -56,6 +56,14 @@ float kpFluffMM(vec3 p, vec3 n) {
 }
 `;
 const FLUFF_REST_GLSL = FLUFF_REST.toFixed(3);
+// hind-neck fill (mm per mm, bodyMesh.napeMask)
+const GLSL_NAPE = /* glsl */ `
+float kpNapeMM(vec3 p, vec3 n) {
+  vec2 d = vec2((p.y - 97.0) / 5.5, (p.z - 9.0) / 7.5); // (pow() of a negative base is undefined in GLSL)
+  float e = dot(d, d);
+  return exp(-e) * (1.0 - smoothstep(5.0, 11.0, abs(p.x))) * smoothstep(-0.1, 0.4, n.y) * (1.0 - smoothstep(0.3, 0.7, n.z));
+}
+`;
 
 // ------------------------------------------------------------------ BODY PLUMAGE
 const BODY_UNIFORMS_GLSL = /* glsl */ `
@@ -284,12 +292,13 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
     uDetail: { value: detail },
     uFluff: { value: 0 },
     uBreath: { value: 0 },
+    uNapeFill: { value: 0 },
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec3 aRest; attribute vec3 aFlow;\nuniform float uFluff; uniform float uBreath;\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;\n${GLSL_FLUFF}`)
+      .replace('#include <common>', `#include <common>\nattribute vec3 aRest; attribute vec3 aFlow;\nuniform float uFluff; uniform float uBreath; uniform float uNapeFill;\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;\n${GLSL_FLUFF}\n${GLSL_NAPE}`)
       .replace(
         '#include <defaultnormal_vertex>',
         `#include <defaultnormal_vertex>
@@ -301,7 +310,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
         vFlowV = normalize(normalMatrix * kpFl);`
       )
       // masks mirrored in bodyMesh.bodyDisplacementMasks (the plumage lying on the body follows them)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\n transformed += normal * (uFluff - ${FLUFF_REST_GLSL}) * 0.001 * kpFluffMM(aRest, normal);\n transformed += normal * uBreath * ${ANIM_BREATH} * smoothstep(-40.0, -15.0, aRest.z) * (1.0 - smoothstep(18.0, 30.0, aRest.z)) * (1.0 - smoothstep(76.0, 84.0, aRest.y));`);
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n transformed += normal * (uFluff - ${FLUFF_REST_GLSL}) * 0.001 * kpFluffMM(aRest, normal);\n transformed += normal * uNapeFill * 0.001 * kpNapeMM(aRest, normal);\n transformed += normal * uBreath * ${ANIM_BREATH} * smoothstep(-40.0, -15.0, aRest.z) * (1.0 - smoothstep(18.0, 30.0, aRest.z)) * (1.0 - smoothstep(76.0, 84.0, aRest.y));`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${BODY_UNIFORMS_GLSL}\n${BODY_FRAG_FUNCS}`)
       .replace(

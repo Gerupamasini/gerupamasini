@@ -1,6 +1,7 @@
 // Feather ↔ body interpenetration detector (no browser).
 // For every pose / action phase and LOD: pose the bird with KentishPloverAnimator, CPU-skin the body mesh
-// (including the body shader's fluff + breathing displacement, breath taken at full inhalation) and the
+// (including the body shader's fluff + breathing displacement, breath taken at full inhalation, and the hind-neck
+// fill) and the
 // feather mesh (including the feather shader's body-contact displacement / arm-tube fold and the worst-case
 // inward wind flutter, the folded wing's bend onto its shell), then measure against
 // the POSED body triangles (exact closest-point distance near the surface, ray parity for the sign further away):
@@ -174,10 +175,12 @@ function analyse(model, d) {
   for (let i = 0; i < B.n; i++) for (let k = 0; k < 4; k++) if (neckBones.has(B.si[i * 4 + k])) B.neckW[i] += B.sw[i * 4 + k];
   B.fluffMask = new Float64Array(B.n);
   B.breathMask = new Float64Array(B.n);
+  B.napeMask = new Float64Array(B.n);
   for (let i = 0; i < B.n; i++) {
-    const [fm, bm] = bodyDisplacementMasks([0, 1, 2].map((k) => B.rest[i * 3 + k]), [0, 1, 2].map((k) => B.nrm[i * 3 + k]));
+    const [fm, bm, nm] = bodyDisplacementMasks([0, 1, 2].map((k) => B.rest[i * 3 + k]), [0, 1, 2].map((k) => B.nrm[i * 3 + k]));
     B.fluffMask[i] = fm;
     B.breathMask[i] = ANIM.breathAmp * 21 * bm;
+    B.napeMask[i] = nm;
   }
   const F = {
     mesh: fe,
@@ -296,7 +299,7 @@ function measure(model, S, anim) {
   const neckMoved = new Uint8Array(B.n); // surface carried by the neck / head (vs rigid with the chest)
   const chestO = model.spec.boneIndex.chest * 16;
   for (let i = 0; i < B.n; i++) {
-    const disp = (fluff * B.fluffMask[i] + (anim ? breath : 0) * B.breathMask[i]) / 1000;
+    const disp = (fluff * B.fluffMask[i] + (anim ? breath : 0) * B.breathMask[i] + (bu.uNapeFill?.value ?? 0) * B.napeMask[i]) / 1000;
     for (let k = 0; k < 3; k++) off[k] = B.nrm[i * 3 + k] * disp;
     skin(MB, B.pos, B.nrm, B.si, B.sw, i, off, BP, BN);
     if (B.neckW[i] > 0.02) {
