@@ -367,27 +367,33 @@ float kpShellMM(vec3 p, vec3 n) {
 `;
 const GLSL_SHELL_FRAG = /* glsl */ `
   {
-    // barb tips: thin strands streaked along the feather flow (lattice mm: x across, y along), each reaching a
-    // random height; thinner toward their tips
-    vec2 kpSL = kpLattice(vRest) * vec2(1.0 / 0.2, 1.0 / 0.8);
+    // Barb tips. Two scales: individual strands (0.25 × 0.9 mm, streaked along the feather flow, each reaching a
+    // random height and thinning toward its tip) where they span ≥ 2 px, and below that their mean density — a
+    // smooth coverage ramp, so the fringe never resolves into a dotted line of sub-pixel strands (that read as a
+    // pale stippled halo). Both are modulated by soft tufts (≈1.6 × 3.5 mm) so the edge is downy, not a blur.
+    vec2 kpLt = kpLattice(vRest);
+    float kpFoot = length(fwidth(vRest)) * 0.577;       // mm per pixel
+    float kpTuft = kpNoise(kpLt * vec2(1.0 / 1.6, 1.0 / 3.5) + uSeed * 9.0);
+    float kpS = vShell / mix(0.55, 1.0, kpTuft);        // height relative to the local tuft
+    vec2 kpSL = kpLt * vec2(1.0 / 0.25, 1.0 / 0.9);
     vec2 kpSC = floor(kpSL);
     vec2 kpSF = fract(kpSL) - 0.5;
-    float kpSR = kpHash(kpSC + 13.7);
-    float kpSH = 0.35 + 0.65 * kpSR;                   // strand height (fraction of the shell stack)
-    float kpSW = 0.5 * (1.0 - 0.7 * vShell / max(kpSH, 1e-3)); // half-width, tapering to the tip
+    float kpSH = 0.35 + 0.65 * kpHash(kpSC + 13.7);     // strand height (fraction of the shell stack)
+    float kpSW = 0.42 * (1.0 - 0.75 * clamp(kpS / kpSH, 0.0, 1.0));
     float kpSX = abs(kpSF.x + (kpHash(kpSC + 3.1) - 0.5) * 0.3);
-    float kpCov = (1.0 - smoothstep(kpSW - 0.2, kpSW + 0.2, kpSX)) * smoothstep(kpSH, kpSH - 0.15, vShell) * (1.0 - 0.45 * vShell);
-    // only toward the outline: face-on the tips lie flat over the vanes and the surface reads smooth (a visible
-    // strand texture over the white underparts was fur, not plumage)
+    float kpAA = clamp(kpFoot / 0.25, 0.02, 0.5);       // strand edge width in cells (≈1 px)
+    float kpStrand = (1.0 - smoothstep(kpSW - kpAA, kpSW + kpAA, kpSX)) * smoothstep(kpSH, kpSH - 0.2, kpS);
+    // mean density of the strands at this height: P(height > s) · mean width
+    float kpMean = clamp((1.0 - kpS) / 0.65, 0.0, 1.0) * 0.84 * (1.0 - 0.5 * clamp(kpS, 0.0, 1.0));
+    float kpCov = mix(kpStrand, kpMean, smoothstep(0.06, 0.14, kpFoot));
+    // only toward the outline: face-on the tips lie flat over the vanes and the surface reads smooth
     float kpFacing = abs(dot(normalize(vNormal), normalize(vViewPosition)));
-    kpCov *= 1.0 - smoothstep(0.18, 0.5, kpFacing);
-    // and only where a strand is resolved: below ≈5 px/mm the tips alias into a sparkling halo, the MSAA edge is
-    // soft enough there (demo distance)
-    float kpFoot = length(fwidth(vRest));
-    kpCov *= 1.0 - smoothstep(0.4, 0.8, kpFoot);
-    if (kpCov < 0.02) discard;
-    diffuseColor.a = kpCov * 0.65;
-    diffuseColor.rgb *= 0.9 + 0.1 * vShell;
+    kpCov *= 1.0 - smoothstep(0.15, 0.45, kpFacing);
+    // and only while the fringe spans a few pixels (demo distance: the MSAA edge alone is soft enough)
+    kpCov *= 1.0 - smoothstep(0.3, 0.6, kpFoot);
+    if (kpCov < 0.03) discard;
+    diffuseColor.a = kpCov;
+    kpShellAO = 0.86 + 0.14 * vShell;                    // barbs shade each other toward the skin
   }
 `;
 
@@ -396,10 +402,10 @@ const GLSL_SHELL_FRAG = /* glsl */ `
  */
 export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf = null } = {}) {
   const params = { roughness: 0.78, metalness: 0, color: 0xffffff };
-  // (the shell variant without sheen: seen only at grazing angles, it caught the whole grazing sheen lobe as a
-  // glassy halo round the outline)
-  // (and without specular: seen only at grazing angles, Fresnel lit it as a pale rim along the crown)
-  const mat = shellOf ? new THREE.MeshPhysicalMaterial({ ...params, specularIntensity: 0 }) : detail === 0 ? new THREE.MeshPhysicalMaterial({ ...params, sheen: 0.25, sheenRoughness: 0.75, sheenColor: new THREE.Color(0.55, 0.53, 0.5) }) : new THREE.MeshStandardMaterial(params);
+  // (the shell variant is the same material as the body — any difference in the BRDF shows as a rim: without
+  // specular / sheen its diffuse escaped the grazing Fresnel and sheen energy terms and drew a pale halo; its
+  // normal is bent toward the viewer instead, see below)
+  const mat = detail === 0 ? new THREE.MeshPhysicalMaterial({ ...params, sheen: 0.25, sheenRoughness: 0.75, sheenColor: new THREE.Color(0.55, 0.53, 0.5) }) : new THREE.MeshStandardMaterial(params);
   // shell variant (plumage fringe, KentishPloverModel): shares the body's uniforms, so it fluffs and breathes with it
   const shell = !!shellOf;
   if (shell) {
@@ -432,12 +438,24 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
         vFlowV = normalize(normalMatrix * kpFl);`
       )
       // masks mirrored in bodyMesh.bodyDisplacementMasks (the plumage lying on the body follows them)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>${shell ? '\n vShell = aShell; transformed += normal * aShell * 0.001 * kpShellMM(aRest, normal) * (1.0 + 0.6 * max(uFluff, 0.0));' : ''}\n transformed += normal * (uFluff - ${FLUFF_REST_GLSL}) * 0.001 * kpFluffMM(aRest, normal);\n transformed += normal * uNapeFill * 0.001 * kpNapeMM(aRest, normal);\n transformed += normal * uBreath * ${ANIM_BREATH} * smoothstep(-40.0, -15.0, aRest.z) * (1.0 - smoothstep(18.0, 30.0, aRest.z)) * (1.0 - smoothstep(76.0, 84.0, aRest.y));`);
+      .replace('#include <begin_vertex>', `#include <begin_vertex>${shell ? '\n vShell = aShell;' : ''}\n transformed += normal * (uFluff - ${FLUFF_REST_GLSL}) * 0.001 * kpFluffMM(aRest, normal);\n transformed += normal * uNapeFill * 0.001 * kpNapeMM(aRest, normal);\n transformed += normal * uBreath * ${ANIM_BREATH} * smoothstep(-40.0, -15.0, aRest.z) * (1.0 - smoothstep(18.0, 30.0, aRest.z)) * (1.0 - smoothstep(76.0, 84.0, aRest.y));`);
+    // shell: lifted along the skinned normal for the projection only — the world position used for the shadow
+    // lookup stays on the skin, so a strand is lit and shadowed exactly as the plumage under it (lifted, the
+    // strands stood out of the body's own shadow along the terminator and drew a pale rim round the outline)
+    if (shell)
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <project_vertex>',
+        `vec3 kpSkin = transformed;
+        transformed += objectNormal * aShell * 0.001 * kpShellMM(aRest, normal) * (1.0 + 0.6 * max(uFluff, 0.0));
+        #include <project_vertex>
+        transformed = kpSkin;`
+      );
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${BODY_UNIFORMS_GLSL}\n${BODY_FRAG_FUNCS}${shell ? '\nvarying float vShell;' : ''}`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
+        float kpShellAO = 1.0;
         ${shell ? GLSL_SHELL_FRAG : ''}
         vec3 kpN = normalize(vRestN);
         vec3 kpTr = kpTract(vRest, kpN);
@@ -477,7 +495,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
         // Micro shadowing at the tip overlap (feather-scale AO), fades with distance
         float kpFade = 1.0 - smoothstep(0.25, 0.9, fwidth(kpLat.y));
         kpCol *= mix(1.0, 0.9 + 0.1 * smoothstep(0.0, 0.3, kpFxy.y), kpFade * kpTr.y * kpBrown * kpTex * smoothstep(1.6, 2.6, kpTr.x) * (uDetail < 1.5 ? 1.0 : 0.0));
-        diffuseColor.rgb *= kpCol;`
+        diffuseColor.rgb *= kpCol * kpShellAO;`
       )
       .replace(
         '#include <roughnessmap_fragment>',
@@ -514,7 +532,16 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
             normal = normalize(normal - (kpT0 * kpCy * 0.9 + cross(normal, kpT0) * kpCx * 0.6) * 1.1 * kpClS);
           }
           normal = normalize(normal - (kpT * (kpG.y * 0.9) + kpB2 * (kpG.x * 0.35 + kpBarbs)) * 0.1 * kpStr);
-        }`
+        }
+        #ifdef KP_SHELL
+          // the strands stand out past the outline, where the skin normal is edge-on to the view: shaded there,
+          // they took the extreme grazing sheen / Fresnel lobes. Shade them as the plumage just inside the outline
+          // (normal turned toward the viewer to N·V ≥ 0.35) — the fringe continues the edge colour, no rim
+          {
+            vec3 kpV = normalize(vViewPosition);
+            normal = normalize(normal + kpV * max(0.0, 0.35 - dot(normal, kpV)) * 1.2);
+          }
+        #endif`
       );
     shader.fragmentShader = softPlumageLighting(softSelfShadow(shader.fragmentShader, '0.55'), '0.3');
   };

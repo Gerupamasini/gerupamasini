@@ -21,13 +21,15 @@ renderer.setScissorTest(true);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(mode === 'silhouette' ? 0xffffff : 0xd9d6cf);
+// bg=rrggbb: backdrop colour (fringe / halo checks on dark and light backgrounds); ground=0 hides the ground
+scene.background = new THREE.Color(mode === 'silhouette' ? 0xffffff : q.has('bg') ? Number('0x' + q.get('bg')) : 0xd9d6cf);
 const env = new Environment(renderer, scene, { shadowSize: 0.3, shadowMapSize: 2048 });
 env.follow(new THREE.Vector3(0, 0.04, 0));
 
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshStandardMaterial({ color: 0xb9ad96, roughness: 0.95 }));
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
+ground.visible = q.get('ground') !== '0';
 scene.add(ground);
 
 // 1 cm grid (vertical, behind the bird for the side view; horizontal for the top view)
