@@ -50,17 +50,27 @@ void fishDeform() {
   vec3 p = position + aMorphMouth * m0.x + aMorphProt * (m0.x * m4.x) + aMorphOperc * operc;
   p += normal * aSect.w * m4.y; // hyoid / branchiostegal (throat) expansion
   vec3 n = normalize(normal + aMorphMouthN * m0.x);
-  vec3 sc = vec3(1.0, m1.x, m1.y);
+  // individual depth applies to the trunk only (the head keeps the standard
+  // profile): k(s) eases from 1 at s = 0.16 to depthScale at s = 0.36
+  // (trunkDepthK in Fish.js); the normal gets the matching shear term
   float s = -p.x;
+  float kx = clamp((s - 0.16) / 0.2, 0.0, 1.0);
+  float dk = m1.x - 1.0;
+  float kS = 1.0 + dk * kx * kx * (3.0 - 2.0 * kx);
+  float kD = dk * 6.0 * kx * (1.0 - kx) / 0.2; // dk/ds
+  vec3 sc = vec3(1.0, kS, m1.y);
+  // y' = y k(s), s = -x: inverse-transpose of the Jacobian
+  n = vec3(n.x + n.y * p.y * kD / kS, n.y / kS, n.z / m1.y);
+  float yRest = p.y;
   p.yz *= sc.yz;
-  n = normalize(n / sc);
+  n = normalize(n);
   float s0 = clamp(s, 0.0, 1.0);
   vec3 P; vec4 Q;
   spineSample(s0, P, Q);
   vec3 local = vec3(-(s - s0), p.y, p.z) * m0.w;
   gFishPos = P + qrot(Q, local);
   gFishNormal = qrot(Q, n);
-  vec3 t = aTangent; t.yz *= sc.yz;
+  vec3 t = aTangent; t.y = t.y * kS - yRest * kD * t.x; t.z *= sc.z;
   vec3 tw = normalize(qrot(Q, t));
   vViewTangent = normalize((viewMatrix * vec4(tw, 0.0)).xyz);
   vFishWorld = gFishPos;
@@ -227,6 +237,9 @@ vec3 bodyPigment(vec3 rp, float red, out float whiteness, out vec3 specTint) {
   // dorsal darkening / ventral lightening (countershading from chromatophore
   // density; white skin only a little)
   col *= mix(mix(0.72, 0.92, whiteness), 1.05, smoothstep(0.9, -0.6, a));
+  // white skin: the belly underside carries fewer iridophore layers (the
+  // pale flesh shows): a gentle darker, warmer gradient below the flank
+  col *= mix(vec3(1.0), vec3(0.86, 0.83, 0.82), smoothstep(-0.45, -0.95, a) * whiteness);
   vec3 pig = col / max(max(col.r, col.g), max(col.b, 1e-3));
   // light reflected by the guanine under a carotenoid layer crosses that
   // layer once: gold-orange (diffuse light crosses it twice: crimson);
@@ -264,13 +277,20 @@ ScaleHit scaleLookup(vec2 uv) {
       float j = jc + float(m);
       vec2 id = vec2(i, j);
       vec3 jr = hash32(id * 1.37 + 11.0);
-      vec2 c = vec2(i + 0.5, j + 0.5 * par) + (jr.xy - 0.5) * vec2(0.1, 0.12);
+      vec3 jr2 = hash32(id * 2.11 + 37.0);
+      // no two scales alike: centre, size, outline and orientation vary a
+      // little from scale to scale (a regular lattice reads as a decal)
+      vec2 c = vec2(i + 0.5, j + 0.5 * par) + (jr.xy - 0.5) * vec2(0.16, 0.18);
       vec2 q = uv - c;
-      float rr = R * (0.95 + 0.1 * jr.z);
+      float ra = (jr2.x - 0.5) * 0.24; // +-7 deg
+      q = mat2(cos(ra), sin(ra), -sin(ra), cos(ra)) * q;
+      float rr = R * (0.9 + 0.2 * jr.z);
       // the free (posterior) margin is blunt-pointed rather than circular,
       // so the overlapping margins form the rhombic net seen on goldfish
-      vec2 qa = abs(q * vec2(1.0, 1.25));
-      float d = (q.x > 0.0 ? pow(pow(qa.x, 1.7) + pow(qa.y, 1.7), 1.0 / 1.7) : length(qa)) / rr;
+      // (some scales rounder, some more pointed)
+      vec2 qa = abs(q * vec2(1.0, 1.15 + 0.2 * jr2.y));
+      float pe = 1.5 + 0.45 * jr2.z;
+      float d = (q.x > 0.0 ? pow(pow(qa.x, pe) + pow(qa.y, pe), 1.0 / pe) : length(qa)) / rr;
       if (!cov && d < 1.0) { cov = true; best = d; bq = q; bid = id; }
       else if (!cov && d < best) { best = d; bq = q; bid = id; }
     }
@@ -310,6 +330,15 @@ void computeFishSurface() {
   float a = vMask2.y;
 
   // ---- scales
+  // the scale rows are not a ruled lattice: a slow warp (a few scales in
+  // period) bends the rows and columns and lets the scale size drift by
+  // about +-15 % over the flank
+  vec2 suv = vScaleUV;
+  {
+    vec2 wq = vScaleUV * vec2(0.19, 0.31) + seed * 0.37;
+    suv += (vec2(vnoise2(wq), vnoise2(wq * 1.13 + 5.3)) - 0.5) * vec2(0.7, 0.55)
+         + (vec2(vnoise2(wq * 2.7 + 9.1), vnoise2(wq * 2.9 + 2.7)) - 0.5) * vec2(0.18, 0.14);
+  }
   vec2 fw = fwidth(vScaleUV);
   float fwm = max(fw.x, fw.y);
   // (the scale relief is kept down to scales ~3 px wide: its margins are
@@ -321,7 +350,7 @@ void computeFishSurface() {
   // behind the centres), each attenuated by its own pixel footprint. The
   // texture fades gradually into an even sheen instead of vanishing into a
   // smooth plastic surface.
-  vec2 lu = vScaleUV - vec2(1.0, 0.0);
+  vec2 lu = suv - vec2(1.0, 0.0);
   float bl1 = exp(-3.0 * fwm * fwm);
   float bl2 = exp(-3.0 * fwm * fwm * 1.25);
   float netF = (cos(6.2831853 * lu.x) * bl1 + (cos(6.2831853 * (0.5 * lu.x + lu.y)) + cos(6.2831853 * (0.5 * lu.x - lu.y))) * bl2) * (1.0 / 3.0);
@@ -333,10 +362,10 @@ void computeFishSurface() {
 #if FISH_LOD >= 2
   // distant fish: no per-scale lookup, just the cell of the staggered grid
   detail = 0.0;
-  float cI = floor(vScaleUV.x - 0.5);
-  ScaleHit sh; sh.q = vec2(0.0); sh.id = vec2(cI, floor(vScaleUV.y - 0.5 * mod(cI, 2.0) + 0.5)); sh.d = 0.5; sh.dPrev = 9.0;
+  float cI = floor(suv.x - 0.5);
+  ScaleHit sh; sh.q = vec2(0.0); sh.id = vec2(cI, floor(suv.y - 0.5 * mod(cI, 2.0) + 0.5)); sh.d = 0.5; sh.dPrev = 9.0;
 #else
-  ScaleHit sh = scaleLookup(vScaleUV);
+  ScaleHit sh = scaleLookup(suv);
 #endif
   vec3 rnd = hash32(sh.id + seed * 17.0);
   float d = sh.d;
@@ -378,6 +407,10 @@ void computeFishSurface() {
   float tube = llRow * smoothstep(0.2, 0.06, length(pq));
   grad += llRow * normalize(pq + 1e-5) * tube * 0.07;
 
+  // the net is not equally marked everywhere: iridophore / melanophore
+  // density along the margins drifts over the flank (patches where the
+  // net almost vanishes into the sheen, others where it reads clearly)
+  float netVar = 0.35 + 1.25 * (0.65 * vnoise2(suv * 0.21 + seed * 1.3 + 11.0) + 0.35 * vnoise2(suv * 0.57 - seed + 3.0));
   // thin shadow cast by the overlapping margin of the scale in front
   float marginShadow = 1.0 - smoothstep(1.0, 1.0 + max(0.09, 1.5 * fwm), sh.dPrev);
   float ao = mix(1.0, 1.0 - 0.16 * marginShadow, detail);
@@ -421,7 +454,7 @@ void computeFishSurface() {
   // photographs of white comets (p12_0, p41_0) the net and the scale-to-scale
   // change of the silver sheen stay clearly visible at every distance; with
   // less, the flank reads as smooth porcelain.
-  vec3 nT = normalize(vec3(-(grad * mix(1.0, 0.38, whiteness) * detail + jit * mix(1.0, 0.45, whiteness) * sparkle) * uScaleIntensity, 1.0));
+  vec3 nT = normalize(vec3(-(grad * mix(1.0, 0.44 * mix(1.0, netVar, 0.6), whiteness) * detail + jit * mix(1.0, 0.45, whiteness) * sparkle) * uScaleIntensity, 1.0));
   // per-scale pigment variation (subtle) and a thin darker net along the
   // free margins: melanophores / the overlap shadow (p12_1)
   // (white scales differ more: iridophore density varies from scale to scale)
@@ -429,11 +462,12 @@ void computeFishSurface() {
   col *= mix(1.0, mix(0.9, 0.97, whiteness), regen * detail);
   // lateral-line pore: a tiny dark opening at the end of the canal
   col *= 1.0 - 0.14 * llRow * smoothstep(0.05, 0.015, length((q - vec2(0.3, 0.0)) * vec2(1.0, 2.0))) * detail;
-  col *= 1.0 - (0.28 * edge + 0.15 * marginShadow) * (1.0 - whiteness) * detail;
-  // reticulated slightly darker margins on white scales (fewer iridophores at the edge)
-  col *= mix(1.0, 0.89, (edge * 0.5 + marginShadow * 0.5) * whiteness * detail);
+  col *= 1.0 - (0.28 * edge + 0.15 * marginShadow) * mix(1.0, netVar, 0.5) * (1.0 - whiteness) * detail;
+  // reticulated slightly darker margins on white scales (fewer iridophores
+  // at the edge), irregular in strength
+  col *= 1.0 - 0.13 * netVar * (edge * 0.5 + marginShadow * 0.5) * whiteness * detail;
   // far: the averaged net (darker pockets between the exposed fields)
-  col *= 1.0 + netF * mix(0.11, 0.1, whiteness);
+  col *= 1.0 + netF * mix(0.11, 0.14, whiteness) * mix(1.0, netVar, 0.6);
 
   // the head skin is not a guanine mirror like the white scales: on white
   // and sarasa fish it is a warm, fleshy white (R >= G >= B), never a cool
@@ -454,7 +488,12 @@ void computeFishSurface() {
   // (white: a pearly sheen, not a chrome mirror — part of the light is
   // diffused back by the dense iridophore stack, the albedo carries that)
   float pigRefl = 0.5 * mix(1.0, 0.6, fishTone().x * step(0.5, vFishA.z)); // denser carotenoid layer: weaker sheen
-  float refl = uGuanine * mix(1.0, mix(0.7, 0.9, whiteness), regen) * jitR * mix(pigRefl, 1.0, whiteness);
+  // (white: about 80 % of the full reflector. The rest of the light the
+  // dense, disordered platelet stack returns is diffuse: pearly, not a
+  // chrome mirror. A full-strength mirror F0 also takes the same energy
+  // away from the diffuse term, so the flank went dark grey wherever it
+  // mirrored the dark surroundings.)
+  float refl = uGuanine * mix(1.0, mix(0.7, 0.9, whiteness), regen) * jitR * mix(pigRefl, 0.8, whiteness);
   refl *= mix(1.0 + 0.3 * netF, mix(1.0, 0.85, edge) * (rnd.y < 0.03 ? mix(0.82, 0.94, whiteness) : 1.0), detail);
   // head: iridophores on operculum/cheek give a softer golden sheen
   // the opercle is a pearly plate: guanine-rich, smooth, no scales
@@ -610,8 +649,12 @@ void computeFishSurface() {
   // fleshy orbital rim (the mask covers only the rim band): pale, fleshy
   // and less reflective (p05_1, p12_0, p25_0)
   // (narrow and only slightly paler: a broad pink ring reads as a swollen lid)
-  float orbitN = smoothstep(0.35, 1.0, orbit);
-  col = mix(col, col * 0.6 + vec3(0.37, 0.35, 0.33), 0.4 * orbitN);
+  // (a paler, partly desaturated version of the local skin: fleshy cream on
+  // white, a lighter muted red on red skin; never a pink halo)
+  float orbitN = smoothstep(0.5, 0.95, orbit);
+  col = mix(col, mix(col, vec3(dot(col, vec3(0.33))), 0.35) * 1.12 + 0.03, 0.55 * orbitN);
+  // soft crease just outside the rim
+  ao *= 1.0 - 0.25 * smoothstep(0.0, 0.25, orbit) * smoothstep(0.6, 0.3, orbit);
   spec *= 1.0 - 0.5 * orbitN;
 
   // ---- head skin: fine micro-relief and mottled chromatophores (no scales)
@@ -773,7 +816,7 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     // (white skin: the dense iridophore stack scatters every wavelength back
     // near the surface, so its wrap is short and nearly neutral; a red-only
     // wrap there paints a dark red band along the terminator of the belly)
-    vec3 w = mix(vec3(0.55, 0.24, 0.14), vec3(0.22, 0.17, 0.14), gFS.whiteness) * uSSS;
+    vec3 w = mix(vec3(0.55, 0.24, 0.14), vec3(0.3, 0.26, 0.23), gFS.whiteness) * uSSS;
     vec3 wrapD = saturate((vec3(NL) + w) / (1.0 + w)) / (1.0 + w);
     #if FISH_LOD >= 2
       float sScat = 1.0;
@@ -782,6 +825,15 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     #endif
     vec3 extra = max(wrapD - vec3(saturate(NL)), vec3(0.0));
     reflectedLight.directDiffuse += lc * gFS.albedo * RECIPROCAL_PI * extra * sScat * caus;
+    // ---- guanine multiple scattering (white skin): light entering the lit
+    // side spreads sideways through the stacked iridophore platelets before
+    // it leaves the skin, so shadowed white keeps a soft, slightly warm
+    // luminous fill instead of falling to porcelain grey. It thins out on
+    // the belly underside (fewer layers, flesh shows), which keeps the
+    // darker ventral gradient of the photographs.
+    float aV = vMask2.y;
+    float lateral = gFS.whiteness * smoothstep(-0.95, -0.05, aV) * (1.0 - 0.5 * saturate(NL));
+    reflectedLight.directDiffuse += lc * gFS.albedo * vec3(1.0, 0.95, 0.91) * RECIPROCAL_PI * 0.18 * lateral * sScat * caus;
     // ---- thin-part transmission of the key light: chord from this point
     // toward the light through the local cross-section; light enters on the
     // lit surface (shadowed there) and exits here, filtered by the tissue
