@@ -71,18 +71,17 @@ export const HEAD_RELIEF = {
   // airbrushed colour halo)
   // (the crest right at the edge of the visible eye: the skin's free edge
   // meets the ball crisply instead of a ring standing off it)
-  // (a little broader and lower on the larger ball: a narrow one lies on
-  // the front-view outline and showed the mesh as a sawtooth)
-  orbitRim: 0.1, // height of the rim
-  orbitRimW: 0.16, // its half-width (flat-topped bump)
-  orbitRimOff: -0.02, // its crest this far outside the nominal visible edge
+  // (on the larger, flatter ball: broader and lower, its crest a little
+  // outside the edge, and the skin meets the ball low at the edge itself; a
+  // skin edge standing high above the ball let an oblique view look past
+  // the iris onto the dark ball behind it, a shadowed crescent)
+  orbitRim: 0.08, // height of the rim
+  orbitRimW: 0.2, // its half-width (flat-topped bump)
+  orbitRimOff: 0.2, // its crest this far outside the nominal visible edge
   orbitCrease: 0.04, // depth of the crease just outside the ring...
-  orbitCreaseOff: 0.33, // ...this far outside the visible edge...
+  orbitCreaseOff: 0.5, // ...this far outside the visible edge...
   orbitCreaseW: 0.14, // ...and its half-width (wide enough for the mesh)
-  // (clearly above / below the ball: with the flatter cap the skin crosses
-  // the ball at a shallower angle, and a thin margin left the crossing line
-  // ragged on the mesh)
-  orbitCover: 0.07, // the skin lies this far above the ball where it covers it
+  orbitCover: 0.03, // the skin lies this far above the ball where it covers it
   // (shallow and gradual: with the eye nearly flush, a deep, steep pit
   // showed past the edge of the ball on the front-view outline as a sawtooth)
   orbitSink: 0.14, // hidden skin inside the visible eye sinks this far...
@@ -694,8 +693,8 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
         hn += HEAD_RELIEF.orbitRim * R * Math.exp(-Math.pow(tr * tr, 1.5));
         // (smooth all the way to the mesh: the swell rises from the rim
         // outward, faded to nothing by the edge of the region, 1.6 R)
-        const sw = smoothstep(rv - 0.05 * R, rv + 0.1 * R, rho) * smoothstep(1.6 * R, 1.25 * R, rho);
-        hn += HEAD_RELIEF.orbitSwell * R * gauss(rho - rv - 0.05 * R, HEAD_RELIEF.orbitSwellW * R) * sw;
+        const sw = smoothstep(rv, rv + 0.25 * R, rho) * smoothstep(1.6 * R, 1.25 * R, rho);
+        hn += HEAD_RELIEF.orbitSwell * R * gauss(rho - rv - 0.25 * R, HEAD_RELIEF.orbitSwellW * R) * sw;
       }
       // the crease is deeper below / in front of the eye and fades out over
       // the top, where the ring merges softly into the forehead

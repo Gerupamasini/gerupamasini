@@ -95,7 +95,10 @@ vec3 eyeColor() {
   // edge of the visible eye (the skin meets the ball here): the iris runs
   // right out to it, so the dark limbus is a thin line at the skin margin
   // rather than a broad grey band
-  float irisR = ${VIS_R_EDGE};
+  // (it runs on a little under the skin: on the flatter cap of the larger
+  // ball a saccade slides the iris noticeably, and a disc ending exactly at
+  // the edge then bared a dark crescent of ball on one side)
+  float irisR = ${VIS_R_EDGE} * 1.1;
   float t = smoothstep(pupilR, irisR, r); // 0 pupil margin .. 1 limbus
   // iris: a broad guanine diaphragm (p05_1, p12_0, p11_1, p25_0, p29_0):
   // brass / bronze (silver-grey on white fish), radially fibred, mottled and flecked with reflective

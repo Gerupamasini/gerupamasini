@@ -639,13 +639,15 @@ void computeFishSurface() {
     // (the same vertices form the inner margin of the open lips)
     float closed = 1.0 - smoothstep(0.04, 0.3, vHead.x);
     // (the top of the lower lip lies in the shadow of the upper lip)
-    float cleftLine = smoothstep(dyC > -0.0002 ? 0.0022 : 0.0042, 0.0004, abs(dyC + 0.0002)) * closed;
+    // (a fine line: a broad shadow band under it read as a mouth left a
+    // little open in the resting face)
+    float cleftLine = smoothstep(dyC > -0.0002 ? 0.0016 : 0.0024, 0.0003, abs(dyC + 0.0002)) * closed;
     // the dark line is short: it fades out well before the corners, which
     // are tucked under the rounded upper lip (a long dark line curving back
     // around the snout read as a smile)
     cleftLine *= 1.0 - 0.75 * smoothstep(0.45, 1.0, abs(rp.z) / MOUTH_RW);
-    col *= 1.0 - 0.45 * cleftLine;
-    ao *= 1.0 - 0.5 * cleftLine;
+    col *= 1.0 - 0.35 * cleftLine;
+    ao *= 1.0 - 0.4 * cleftLine;
     spec *= 1.0 - 0.8 * cleftLine;
   }
   // chin and throat: warm white (or the body colour), lit from the dark
@@ -816,7 +818,7 @@ void computeFishSurface() {
     // white dome of a porcelain figurine
     // (down to the level of the eyes: the brow across them is matte too)
     float brow = headSkin * smoothstep(-0.15, 0.35, a) * (1.0 - operc) * smoothstep(0.3, 0.18, sB);
-    spec *= 1.0 - brow * (0.72 + 0.3 * (mot2 - 0.5));
+    spec *= 1.0 - brow * (0.8 + 0.25 * (mot2 - 0.5));
     rough += 0.22 * brow;
     nT = normalize(nT + vec3(mn, mn2, 0.0) * 0.03 * brow);
   }
@@ -824,7 +826,7 @@ void computeFishSurface() {
   // over the nape and the top of the gill cover (behind the forehead term
   // above) it still mirrored like a lacquered dome: a little weaker, broader
   {
-    float dome = headSkin * whiteness * smoothstep(0.1, 0.75, a) * smoothstep(0.04, 0.14, sB) * (lip > -0.5 ? 1.0 : 0.0);
+    float dome = headSkin * whiteness * smoothstep(0.1, 0.75, a) * smoothstep(0.01, 0.08, sB) * (lip > -0.5 ? 1.0 : 0.0);
     spec *= 1.0 - 0.4 * dome;
     rough += 0.08 * dome;
   }
