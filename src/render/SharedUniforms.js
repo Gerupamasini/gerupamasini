@@ -33,9 +33,10 @@ export const U = {
   uColRed: { value: srgb('#d4160a') },
   uColOrange: { value: srgb('#e0661c') },
   uColYellow: { value: srgb('#e8b83a') },
-  // white skin is a guanine mirror over pale flesh: a modest diffuse albedo,
-  // most of its brightness is the (silvery) reflection of the surroundings
-  uColWhite: { value: srgb('#a4a9ae') },
+  // white skin is a dense iridophore stack over pale flesh: pearly, i.e. a
+  // warm-neutral diffuse part (light scattered back by the platelet stack)
+  // plus a soft silvery sheen — neither paper nor a grey chrome mirror
+  uColWhite: { value: srgb('#c2bcb2') },
   uColGill: { value: srgb('#b32831') },
   uScaleIntensity: { value: 1.0 },
   uRoughness: { value: 0.34 },

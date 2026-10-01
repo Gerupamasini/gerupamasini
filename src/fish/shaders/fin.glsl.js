@@ -19,6 +19,7 @@ VFLAT float vFinType;
 VFLAT vec4 vFishA;
 VFLAT vec4 vFishB;
 VFLAT vec4 vFishC;
+VFLAT float vTone; // packed pigment tone (see Fish.writeMisc)
 
 vec3 gFishPos;
 vec3 gFishNormal;
@@ -85,6 +86,7 @@ void finDeform() {
   vFishA = rigMisc(1);
   vFishB = rigMisc(2);
   vFishC = rigMisc(3);
+  vTone = rigMisc(4).w;
 }
 `;
 
@@ -99,6 +101,7 @@ float gPleat;   // signed pleat slope across the rays
 flat in vec4 vFishA;
 flat in vec4 vFishB;
 flat in vec4 vFishC;
+flat in float vTone;
 
 uniform vec3 uColRed;
 uniform vec3 uColOrange;
@@ -167,7 +170,11 @@ void computeFinSurface() {
   float ray = 1.0 - smoothstep(w - fwr * 0.7, w + fwr * 0.7, rd);
   // fade the ray pattern to its average when rays get sub-pixel
   float rayAA = smoothstep(1.4, 0.5, fwr);
-  ray = mix(w * 1.4, ray, rayAA);
+  // sub-pixel rays: their averaged coverage. Rays branch twice, so distally
+  // two to four fine rays share one inter-ray space (~30 % of the width);
+  // a fin seen from afar keeps the density and colour of its rays
+  float rayMean = clamp((t > 0.3 ? (t > 0.6 ? 4.0 : 2.0) : 1.0) * 2.0 * w, 0.12, 0.36);
+  ray = mix(rayMean, ray, rayAA);
   // pleated membrane: rays are ridges, membrane sags between them
   float xr = rc - floor(rc + 0.5);
   gPleat = (sin(xr * 6.2831853) * 0.08 + (-2.0 * xr / (w * w)) * exp(-xr * xr / (w * w)) * w * 0.2) * rayAA * (1.0 - t * 0.5);
@@ -192,7 +199,11 @@ void computeFinSurface() {
     float cont = rootRed * smoothstep(runOut + 0.1, runOut - 0.1, t - ray * 0.06);
     redM = max(redM * mix(0.15, 1.0, rootRed), cont);
   }
-  vec3 redCol = ctype < 0.5 ? uColRed : mix(uColRed, uColOrange, clamp(0.25 + vFishB.y, 0.0, 1.0) * 0.6);
+  // the same individual red as the body (see bodyPigment)
+  float tDark = floor(vTone / 4096.0) / 63.0;
+  vec3 deep = mix(vec3(1.12, 1.45, 1.3), vec3(0.62, 0.32, 0.44), tDark);
+  float oMix = clamp(0.25 + vFishB.y, 0.0, 1.0);
+  vec3 redCol = ctype < 0.5 ? mix(uColRed, uColOrange, oMix * 0.06) * mix(vec3(1.0), deep, 0.5) : mix(uColRed, uColOrange, oMix * 0.85) * deep;
   vec3 pig = redCol;
   if (ctype > 1.5 && ctype < 2.5) pig = mix(uColOrange, uColYellow, 0.3);
   if (ctype > 2.5 && ctype < 3.5) pig = mix(uColOrange, uColYellow, 0.62); // golden, not lemon
@@ -201,7 +212,8 @@ void computeFinSurface() {
   // white membrane: a thin turbid collagen sheet — bluish-white where it
   // scatters light back toward the viewer, warmer in transmission
   // (a thin sheet: it scatters back only a fraction of the light)
-  vec3 membraneWhite = vec3(0.5, 0.56, 0.64);
+  // (milky, warm-neutral: blue-grey membranes read as ghosts in the tank)
+  vec3 membraneWhite = vec3(0.56, 0.58, 0.6);
   // the fleshy base is pale pink skin, the same tone as the thin peduncle
   vec3 fleshWhite = uColWhite * vec3(1.0, 0.85, 0.84);
   vec3 col = mix(mix(membraneWhite, fleshWhite, flesh), pig, redM);
@@ -220,7 +232,7 @@ void computeFinSurface() {
   // (the membrane between the rays is clearly see-through, the rays carry
   // most of the density; distally both thin out further)
   float distal = smoothstep(0.25, 0.9, t);
-  float aMem = mix(0.38, 0.52, redM) * mix(1.0, 0.45, distal * (1.0 - 0.35 * redM));
+  float aMem = mix(0.4, 0.54, redM) * mix(1.0, 0.55, distal * (1.0 - 0.35 * redM));
   // paired fins: clearer membrane between strongly marked rays (p42_1)
   aMem *= type > 2.5 ? mix(0.6, 0.85, redM) : 1.0;
   float aRay = mix(0.62, 0.78, redM) * mix(1.0, 0.55, distal);
@@ -230,6 +242,9 @@ void computeFinSurface() {
   // (with clear windows between the rays where the membrane is thinnest)
   alpha *= mix(1.0, 0.15 + 1.25 * milk, (1.0 - ray * 0.6) * smoothstep(0.05, 0.3, t));
   alpha = mix(alpha, 0.97, flesh); // fleshy base
+  // seen from afar the clear windows and streaks average out: the fin keeps
+  // its mean milky density (it never vanishes into a ghost at distance)
+  alpha = mix(max(alpha, 0.3 * mix(1.0, 0.7, distal)), alpha, rayAA);
   alpha *= mix(1.0, vFishC.z, 0.6);                  // individual fin density
   // ragged margin: the membrane recedes between the ray tips (shallow
   // scallops), some inter-ray spaces are split further in (frayed), and the

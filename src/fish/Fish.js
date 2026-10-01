@@ -87,6 +87,19 @@ export function makeVariation(rng, forceType = null) {
     v.finRedOther = rng.range(0.45, 0.85);
     v.irisHue = type === 'red' ? rng.range(0.5, 1.0) : rng.range(0.0, 0.5);
   }
+  // Pigment individuality (from a sub-generator seeded by this fish, so the
+  // draws above and the personality that follows keep their values):
+  // carotenoid density (pale orange-red .. deep crimson), saturation (clean ..
+  // slightly greyed / dusky) and how pale the belly is. Real comets in one
+  // tank range from deep blood red to orange and pale golden orange.
+  const cr = new RNG(Math.floor(v.seed * 1e7) + 0x2545f491);
+  v.pigDark = cr.next();
+  v.pigSat = clamp(0.55 + 0.45 * cr.next() * (1.3 - 0.3 * v.pigDark), 0, 1);
+  v.bellyPale = cr.next();
+  if (type === 'red' || type === 'orange') {
+    // solid fish spread over the whole red .. orange range
+    v.hueShift = cr.range(-0.35, 0.75);
+  }
   return v;
 }
 
@@ -150,7 +163,7 @@ export class Fish {
     P.n++;
   }
 
-  /** misc texels (4 x vec4) for the rig texture row */
+  /** misc texels (5 x vec4) for the rig texture row */
   writeMisc(data, o) {
     const v = this.variation;
     const L = this.loc;
@@ -174,7 +187,9 @@ export class Fish {
     data[o++] = L.protrusion;
     data[o++] = L.throat;
     data[o++] = L.yawnLevel;
-    data[o++] = 0;
+    // pigment tone packed as three 6-bit fields (exact in float32)
+    const q6 = (x) => Math.round(clamp(x, 0, 1) * 63);
+    data[o++] = q6(v.pigDark) * 4096 + q6(v.pigSat) * 64 + q6(v.bellyPale);
     return o;
   }
 }
