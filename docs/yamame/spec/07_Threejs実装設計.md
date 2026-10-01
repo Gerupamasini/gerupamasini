@@ -100,6 +100,24 @@
 | `Population` | 個体の生成・破棄、Genome 生成、LOD/描画方式の割当、共有 mixer | | 毎フレーム | 7.5, 7.6 |
 | `DebugUI` | ExplainTrace 表示、Provenance 色分け、パラメータ編集、計測 HUD | | 毎フレーム | [spec04 §4.7] |
 
+**04 状態 → 05 モード+鰭・姿勢プリセット対応表(`Locomotion` が持つ。暫定案 [E])**: 04 §4.3.1 の状態名と 05 §5.3.1 のモード名は別の語彙である。モード名は 05 側(必須 12 種+Turn の左右)を正準とし、`Decision` が出す `StateId` を次の表で `LocomotionGoal`(モード+プリセット名+目標速度)に写す。「追加要」は 05 に鰭・姿勢・体波のプリセットがまだ無いもので、05 担当側で追加する(追加されるまで `Locomotion` は最寄りのモードで代用し、`ExplainTrace` に `preset_missing` を出す) [章間レビュー A-15]。
+
+| 04 の状態 | 05 のモード | 鰭・姿勢プリセット | 状況 |
+|---|---|---|---|
+| StationHolding / DriftWatch | StationHolding | 胸鰭 `w_hover`(05 §5.5) | 05 に有り |
+| StrikeAttack | Acceleration → FeedingAttack | 口・鰓蓋のタイムライン(05 §5.6.2) | 05 に有り |
+| RejectSpit | FeedingAttack の後段 | 吐出の口・鰓蓋プリセット | 追加要 |
+| ReturnToStation | ReturnToPosition | – | 05 に有り |
+| CStartFlee | CStartEscape | – | 05 に有り |
+| Alert | Idle または StationHolding | 低姿勢・鰭を畳む警戒プリセット | 追加要 |
+| Hide | SlowSwim(移動中)/ Idle(停止中) | 低姿勢・底近傍プリセット | 追加要 |
+| Display / Submit | StationHolding | 鰭の展開(Display)/ 畳み・傾き(Submit) | 追加要 |
+| Rest / NightHold | Idle | 休息プリセット(尾の振幅最小、胸鰭の微動) | 追加要 |
+| SurfaceRise | Acceleration → Cruise | 上向きピッチと開口の準備 | 追加要 |
+| Chase / Relocate / SlowPatrol | FastSwim / Cruise / SlowSwim(目標速度の帯で選ぶ) | – | 05 に有り(速度帯の名称は 04 `v_slow` / `v_cruise` に従う) |
+| 旋回(全状態共通) | TurnLeft / TurnRight / SharpTurn | `rate_limits` から選択(05 §5.4) | 05 に有り |
+| SpawnDig / Quiver / Sneak | StationHolding または SlowSwim | 産卵動作プリセット | 追加要(D2 で婚姻期を含めるまで任意) |
+
 **依存の向き**: `behavior → locomotion → yamame(three)` の一方向。`behavior` と `locomotion` と `genome` は three に依存させない(Node の単体テストで GPU・DOM 無しに動かすため) [E: 05 章 T-A* と 04 章 AT-* が Node で走ることを前提にしている]。three に依存するのは `src/yamame/`, `src/render/`, `src/environment/` の描画部分だけ。
 
 **フレーム更新(1 フレーム)** — 05 §5.7.2 と aud-B §1.2 の順序をそのまま採る。
@@ -208,7 +226,7 @@ glTF にはノード木とは別に最上位配列(`materials`、`animations`、
 |---|---|---|---|---|
 | `KHR_materials_clearcoat` | 水膜(空気中で強く、水中は 0 にせず小さな正値。06 §6.3.2) | 反映 | 書出し可 | 水膜 F0=0.0204 に対し clearcoat F0=0.04 固定で垂直 +0.02、80° で +0.06 の誤差 [spec01 §1.5, r14 §1-5]。0↔正で再コンパイル [aud-A R2] |
 | `KHR_materials_iridescence` | 虹彩色の弱い上乗せ(鰓蓋・腹側・体側境界。写真 70 枚中 6 枚) | 反映 | 書出し可 | 外側媒質は空気固定(水中では厳密でない)。`iridescenceThicknessRange` 既定 [100,400] nm、マップ無しは最大値 [aud-A §2.1.1, S][spec03 §3.6.2] |
-| `KHR_materials_transmission` / `KHR_materials_volume` | 眼の角膜・水滴のみに限定 | 反映 | 書出し可(transmission に volume が付く) | 不透明を再描画する追加パス(不透明 5+透過 1 → 描画 11 回)。鰭・薄膜には使わない [aud-A R8, R] |
+| `KHR_materials_transmission` / `KHR_materials_volume` | 通常は使わない。角膜は鏡面専用の加算シェル(06 §6.6.2)。transmission は**空気中の特写用の別マテリアル**(角膜・水滴)に限る | 反映 | 書出し可(transmission に volume が付く) | 不透明を再描画する追加パス(不透明 5+透過 1 → 描画 11 回)。鰭・薄膜には使わない [aud-A R8, R] |
 | `KHR_materials_ior` / `specular` / `sheen` / `anisotropy` / `emissive_strength` / `dispersion` | 必要に応じて | 反映 | 書出し可 | サンプラー予算に注意(下) [aud-C §2.12, T] |
 | `KHR_texture_transform` | UV 調整 | 反映 | 非恒等のみ書出し | |
 | `KHR_texture_basisu` | KTX2 | `KTX2Loader` 経由 | 書けない(PNG に展開) | `detectSupport(renderer)` をロード前に呼ぶ [aud-C §3-8] |
@@ -216,7 +234,7 @@ glTF にはノード木とは別に最上位配列(`materials`、`animations`、
 | `KHR_materials_diffuse_transmission` | 半透明鰭の拡散透過 | **未対応**(`userData.gltfExtensions` に残るのみ) | **消える** | 鰭はアルファ合成の薄膜+追加透過光項(カスタム)で表現 [spec01 §1.5, aud-C §3-13] |
 | `EXT_mesh_gpu_instancing` / `KHR_lights_punctual` / `EXT_materials_bump` | 使わない予定 | ソース確認のみ | | 実行未確認 [aud-C §4] |
 
-**サンプラー予算**: STANDARD/PHYSICAL は dfgLUT で常時 1 枠。map+normal+ORM×3+emissive で 8、そこへ iridescence(2)+sheen(2)+clearcoat(3) の全マップを足すと 15。`MAX_TEXTURE_IMAGE_UNITS` は SwiftShader で 32 だが WebGL2 の最小保証は 16、実機に 16 のものがある(影・環境・ボーン・モーフを同時に使う材は超過しうる) [aud-A R5, aud-D §3-15]。**体マテリアルは**: `map`(個体別アルベド)、`normalMap`、ORM(同一 Texture を 3 スロット)、`envMap`(PMREM 1)、影付き平行光 1 灯 → 約 8 枠(dfgLUT 込み)に収め、iridescence/clearcoat はテクスチャマップを使わず**スカラー値のみ**で与える [E: 枠節約]。**ボーンテクスチャ(+1)とモーフテクスチャ(+1)も three は同じ連番カウンタで割り当て、`MAX_TEXTURE_IMAGE_UNITS` を超えると警告する**(`WebGLTextures.js` の `allocateTextureUnit`)ため、スキン+モーフ付きの体マテリアルは約 10 枠で数える [aud-D §3-15]。GL 上の頂点段の上限(`MAX_VERTEX_TEXTURE_IMAGE_UNITS`、実機 16〜32 [aud-D §2.10])とは別に、three の警告基準は共通である。06 章 §6.2.5 は `T_pattern_rt` を足して 11 枠で数える。
+**サンプラー予算**: 枠数の**唯一の定義は 06 §6.2.5**(体表 `mat_body` High は 11 枠、`T_pattern_rt` を使わなければ 10 枠、`iridescenceThicknessMap` を足すと +1。鰭 6 枠)。STANDARD/PHYSICAL は dfgLUT で常時 1 枠。map+normal+ORM×3+emissive で 8、そこへ iridescence(2)+sheen(2)+clearcoat(3) の全マップを足すと 15。`MAX_TEXTURE_IMAGE_UNITS` は SwiftShader で 32 だが WebGL2 の最小保証は 16、実機に 16 のものがある [aud-A R5, aud-D §3-15]。体マテリアルは `map`(個体別アルベド)、`normalMap`、ORM(同一 Texture を 3 スロット)、`envMap`(PMREM 1)、影付き平行光 1 灯で dfgLUT 込み 8 枠、iridescence/clearcoat はテクスチャマップを使わず**スカラー値のみ**で与える [E: 枠節約]。**ボーンテクスチャ(+1)とモーフテクスチャ(+1)も three は同じ連番カウンタで割り当て**(`WebGLTextures.js` の `allocateTextureUnit`)、超えると警告するため、スキン+モーフ付きの体マテリアルは 10 枠(`T_pattern_rt` ありで 11)で数える [aud-D §3-15]。`iridescenceThicknessRange` は厚みマップを使わない限り最大値固定で、06 §6.2.3 の [60,400] 案は取り下げ済み。
 
 ### 7.3.6 圧縮の既定
 
@@ -280,13 +298,15 @@ three r186 のモーフは常にテクスチャ方式で、旧来の「8 本ま�
 | 4 | `mt_buccal_swell` | 頬の膨らみ | 0〜1 | 手続き | [E] |
 | 5 | `mt_kype` | 雄・成熟個体の下顎フック | 0〜1(河川型成熟雄 maturity>0.8 で 0.7) | 個体差 | [spec02 §2.8, E]。発達量は未取得 |
 | 6 | `mt_upper_jaw_ext` | 上顎の伸び | 0〜1(成熟雄で 0.5) | 個体差 | [spec02 §2.8, E] |
-| 7 | `mt_body_depth` | 体高 | ±1SD = ±0.024 SL(平均 0.242 SL) | 個体差 | [spec05 §5.1.3, P: n=27] |
-| 8 | `mt_head_len` | 頭長 | ±0.036 SL(平均 0.264 SL) | 個体差+成熟 | [spec05 §5.1.3, P: n=26] |
+| 7 | `mt_body_depth` | 体高 | ±1SD = ±0.024 SL(平均 0.241 SL。値は 02 §2.2.1 を正準とし、ここでは再掲しない) | 個体差 | [spec05 §5.1.3, P: n=27] |
+| 8 | `mt_head_len` | 頭長 | ±0.036 SL(平均 0.25 SL。02 §2.3 の既定に揃えた。05 §5.1.3 の 0.264 と、そこから導いたボーン位置(顎 s≒0.12、鰓蓋蝶番 s≒0.20 など)は 05 側で再計算する) | 個体差+成熟 | [spec02 §2.3, E][spec05 §5.1.3, P: n=26] |
 | 9 | `mt_peduncle` | 尾柄の細さ | ±0.013 SL(平均 0.091 SL) | 個体差 | [spec05 §5.1.3, P: n=27] |
-| 10 | `mt_eye_size` | 眼径(成長) | 眼径/頭長: parr 0.225±0.036、成魚 0.161±0.013(n=4)。SL との対応は parr(SL≈7 cm)=+1、成魚(SL≥15 cm)=−1 の線形 | 個体差 | [spec05 §5.1.3, P][spec02 §2.8, E] |
+| 10 | `mt_eye_size` | 眼径(成長) | 眼径/頭長: parr 0.227、成魚 0.165(n=3)(02 §2.3・§2.8 の値に統一。05 §5.1.3 の 0.225±0.036 / 0.161±0.013(n=4)は集計セットが異なる値)。SL との対応は parr(SL≈7 cm)=+1、成魚(SL≥15 cm)=−1 の線形 | 個体差 | [spec05 §5.1.3, P][spec02 §2.8, E] |
 | 11 | `mt_belly` | 腹部の膨らみ | 0〜1 | 個体差 | [spec05 §5.1.3, E] |
 | 12 | `mt_fin_wear` | 胸・背鰭の欠け | 0〜1 | 個体差 | [spec05 §5.1.3, E; r10 F-07/F-30, PROXY:タイセイヨウサケ] |
 | (13〜16) | `mt_belly_slim_postspawn`, `mt_hatchery`, `mt_smolt`, `mt_hump` | 産卵後・放流由来・スモルト・降海型雄の隆起 | 既定 0 | 主モデルは**残留型**のため**搭載しない**。P7 以降の任意 | [spec02 §2.8, E] |
+
+**命名の正準は本表**。02・05 は次の別名表を持つ [章間レビュー A-24]: `mt_head_len`=02 `mt_head_length`、`mt_kype`=02 `mt_kype_hook`、`mt_upper_jaw_ext`=05 `mt_upper_jaw_elong`、`mt_belly`=腹の**膨らみ**(正方向)、`mt_belly_slim_postspawn`=産卵後の**痩せ**(負方向)。`mt_belly` と `mt_belly_slim_postspawn` は同時に正にしない(排他)。`mt_hump`/`mt_smolt`/`mt_hatchery` は 05 に無く、02 にのみある(搭載しない)。
 
 **搭載数は 12(必須)+任意 4 = 最大 16** [E: ユニフォーム/層数に余裕を残す]。`MAX_ARRAY_TEXTURE_LAYERS` は SwiftShader で 2048、実機値は未確認 [aud-B §4]。モーフテクスチャの容量は `頂点数 × 2 texel(位置+法線) × ターゲット数 × 16 B`。頂点 15,000(LOD0 の上限案)・16 ターゲットで約 7.7 MB(算術) [aud-B T10c の構成式]。
 
@@ -320,24 +340,28 @@ r186 では **SkinnedMesh を InstancedMesh/BatchedMesh に載せる標準の手
 
 依頼文の「遠=頂点シェーダ脊椎変形+Instanced」に対し、aud-B の推奨順は **①InstancedMesh+`morphTexture`(相対モーフ 5〜8 本)、②(不足なら)`onBeforeCompile` の頂点シェーダ変形** である。理由は、①は標準マテリアルのまま影も追従しカスタム GLSL が不要で、②は法線・影(`customDepthMaterial`/`customDistanceMaterial`)・カリングを全部自前で持つため実装コストが大きい [aud-B §1.1, §2.7]。本設計は **①を遠景の第一案、②を最終手段**とする。どちらも**実描画は未検証** [aud-B §4, aud-D §4]。
 
-### 7.5.2 3 層構成
+### 7.5.2 描画方式の 3 層と LOD(4 段)
 
-| 層 | 方式 | 対象数(予算) | 内容 | 根拠 |
+LOD 段の定義(層名・距離・同時表示数・ボーン数・三角形数・モーフ数)は **06 §6.8.1 の表が唯一の定義**で、本章は方式と実装手順だけを書く [章間レビュー A-25〜A-27]。層名は High / Medium / Low / Far の 4 段で、本章の LOD0 / LOD1 / LOD2 / Far に 1 対 1 で対応する。**実GPU未計測の目標値**で、実機計測(7.8、09 P6)の後に確定する。
+
+| 描画方式の層 | LOD 段 | 方式 | 同時表示(暫定) | 根拠 |
 |---|---|---|---|---|
-| **近景 (Hero)** | `SkinnedMesh`+62 ボーン+副ボーン。`THREE.LOD` で**同一 Skeleton・同一 `bindMatrix` を共有する SkinnedMesh を頂点数違いで並べる** | ≤ 12 | LOD0/LOD1。個体ごと `SkeletonUtils.clone`+共有 mixer | Hero 十数匹以内 [spec05 §5.1.1, E]、LOD [aud-D §1.1-1, §1.2, H] |
-| **中景 (Mid)** | 同じ SkinnedMesh を LOD1/LOD2 で使用(**別リグ(36 本以下)は初期案では作らない**) | ≤ 36(Hero 含め合計 ≤ 48 の skinned) | 62 ボーンのまま頂点数だけ減らす | [E: 05 章は中景リグ 36 本以下を許すが、2 系統のリグ/GLB を保守するコストを避ける。24 ボーンで約 6〜10 µs/匹/frame(N=50〜500, Node)、62 本は 25 µs に外挿 [spec05 §5.1.1] なので 48 匹で約 1.2 ms。実機で超過したら 36 本版を作る(09 章 P6)] |
-| **遠景 (Far)** | `InstancedMesh`+`morphTexture`(波モーフ 5 本+旋回 1〜2 本)。最遠は非スキンの焼き込みポーズ `Mesh` も可 | 残り(例 ≤ 100) | 波の A(s)・λ・ω・φ を Hero と共通値で渡す | [aud-B §1.1, §2.7, 設計案・未検証][aud-D §1.1-4] |
+| **近景 (Hero)** | High (LOD0) | `SkinnedMesh`+62 ボーン+副ボーン。`THREE.LOD` で**同一 Skeleton・同一 `bindMatrix` を共有する SkinnedMesh を頂点数違いで並べる**。個体ごと `SkeletonUtils.clone`+共有 mixer | ≤ 12 | Hero 十数匹以内 [spec05 §5.1.1, E]、LOD [aud-D §1.1-1, §1.2, H] |
+| **中景 (Mid)** | Medium (LOD1)、Low (LOD2) | 同じ SkinnedMesh を LOD1/LOD2 で使用。**62 ボーンのまま頂点数だけ減らす**(別リグ(36 本以下)は初期案では作らない) | skinned 全体(High 含む)≤ 48 | [E: 05 章は中景リグ 36 本以下を許すが、2 系統のリグ/GLB を保守するコストを避ける。36 本版は**予備案**で、P6 の実機計測で CPU スキニングが超過した場合に限り作る(09 P6)] |
+| **遠景 (Far)** | Far | `InstancedMesh`+`morphTexture`(波モーフ 5 本+旋回 1〜2 本)。最遠は非スキンの焼き込みポーズ `Mesh` も可 | ≤ 100 | [aud-B §1.1, §2.7, 設計案・未検証][aud-D §1.1-4] |
 
-**切替距離**: 例示は 6 m / 20 m、`hysteresis` は 0.1〜0.2(level≥1 に付ける。level 0 の値は無視される) [spec04 §4.1.2, aud-D §1.1-2, H]。距離は LOD ノード原点(魚の中心)で測られる [aud-D §1.2]。**実寸との対応(SL 0.20 m 個体が何 px になる距離か)は画面解像度・FOV で決まり、数値は 09 章 P6 の実測で決める**。縦 FOV 50°・1080 px では鱗(SL 200 mm で 1.1〜1.8 mm)がカメラ距離約 0.64〜1.04 m 以上で 2 px 未満になる [spec01 §1.5, r14 §1-8, M 計算] ので、法線マップ/鱗の LOD 切替は 1 m 前後が目安。
+**CPU 見積り**: 24 本で約 6〜10 µs/匹/frame(N=50〜500, Node)の**線形外挿**で 62 本≒25 µs、48 匹で約 1.2 ms [spec05 §5.1.1]。これは**外挿値**であり、ブラウザ・実 GPU では未測定のため、LOD の構成(ボーン数・Hero 数)を決める根拠にしない。決定は P6 の実機計測後 [章間レビュー C-01]。
 
-**LOD ごとの予算(初期案、すべて [E] で実機で調整)**
+**切替距離**: SL 倍で 06 §6.8.1 に従う(High 0–4、Medium 4–12、Low 12–40、Far >40)。04 §4.1.2 の AI-LOD 距離も同じ SL 倍を参照する。audit_d のコード例にある 6 m / 20 m は例示でありここでは使わない。`hysteresis` は 0.1〜0.2(level≥1 に付ける。level 0 の値は無視される) [aud-D §1.1-2, H]。距離は LOD ノード原点(魚の中心)で測られる [aud-D §1.2]。**実寸との対応(SL 0.19 m 個体が何 px になる距離か)は画面解像度・FOV で決まり、数値は 09 章 P6 の実測で決める**。縦 FOV 50°・1080 px では鱗(SL 0.19 m で 1.05〜1.71 mm)がカメラ距離約 0.61〜0.99 m 以上で 2 px 未満になる [spec01 §1.5, r14 §1-8, M 計算。r14 は SL200 mm での値 0.64〜1.04 m で、距離は SL に比例] ので、法線マップ/鱗の LOD 切替は 1 m 前後が目安。
 
-| LOD | 体の三角形 | ボーン | モーフ | 法線マップ | 鰭 | 備考 |
-|---|---|---|---|---|---|---|
-| LOD0 | 約 8,000(7.3.3 のロフト 96×40 を基準、顎・鰓蓋の細部は追加) | 62 | 12 | あり(KTX2) | 6 種+条群ボーン | 参照: 販売ページの自己申告で 926〜3,892 など(C)。**平均・中央値の算出は禁止** [spec01 §1.5, r14 §1-18] |
-| LOD1 | 約 2,400 | 62(共有) | 6(口・鰓蓋・体高) | あり | 簡略化 | 参照: 共有スケルトンで曲げた 2,352 三角形と 208 三角形のシルエットは 1 px 以内で一致 [aud-D §1.1-1, H] |
-| LOD2 | 約 600 | 62(共有) | 0 | 無し(色のみ) | 簡略化 | `weld()`→`simplify({simplifier: MeshoptSimplifier, ratio})`。頂点は元の部分集合で**スキンウェイト・モーフも保たれる**(1,536→384 三角形で変形誤差 0) [aud-C §1.1-11, T] |
-| Far | 約 200 | 無し(morph 5〜7) | 波 5+旋回 1〜2 | 無し | 体と一体 | InstancedMesh [E] |
+**LOD ごとの構成メモ**(数値は 06 §6.8.1):
+
+| LOD | 備考 |
+|---|---|
+| LOD0 (High) | ロフト 96×40 を基準(7.3.3)、顎・鰓蓋の細部は追加。参照: 販売ページの自己申告で 926〜3,892 など(C)。**平均・中央値の算出は禁止** [spec01 §1.5, r14 §1-18] |
+| LOD1 (Medium) | 参照: 共有スケルトンで曲げた 2,352 三角形と 208 三角形のシルエットは 1 px 以内で一致 [aud-D §1.1-1, H] |
+| LOD2 (Low) | `weld()`→`simplify({simplifier: MeshoptSimplifier, ratio})`。頂点は元の部分集合で**スキンウェイト・モーフも保たれる**(1,536→384 三角形で変形誤差 0) [aud-C §1.1-11, T] |
+| Far | InstancedMesh [E]。ボーン無し、morph 5〜7 |
 
 LOD ごとに**同じ骨・同じ IBM**を使う [aud-C §1.1-11]。`mid.bind(skeleton, hi.bindMatrix)` の形で `bindMatrix` を渡す(渡さないと `calculateInverses()` が走って `boneInverses` が壊れる)。骨は LOD0 側にだけ `add` する [aud-D §1.2, S]。
 
@@ -360,13 +384,13 @@ LOD ごとに**同じ骨・同じ IBM**を使う [aud-C §1.1-11]。`mid.bind(sk
 
 BatchedMesh は剛体のみ(スキニングもモーフも不可)で、描画ごと・影パスごとに O(個体数) の CPU 処理がある(20,000 個体で約 4〜5 ms)。本件の規模では使わない [aud-D §3-18, H]。
 
-### 7.5.4 描画コール・メモリの目安(実機未測定)
+### 7.5.4 描画コール・メモリの目安(**実GPU未計測の目標値**。算術と外挿のみ)
 
 | 項目 | 見積り | 根拠 |
 |---|---|---|
-| CPU(骨の手続き+skeleton.update) | 48 匹×約 25 µs ≒ 1.2 ms | [spec05 §5.1.1: 24 本 6〜10 µs からの外挿 [E]、T-A15 の合格条件 ≤40 µs/匹] |
+| CPU(骨の手続き+skeleton.update) | 48 匹×約 25 µs ≒ 1.2 ms(**24 本実測からの外挿値**。LOD の構成決定の根拠にしない) | [spec05 §5.1.1: 24 本 6〜10 µs からの外挿 [E]、T-A15 の合格条件 ≤40 µs/匹] |
 | ボーンテクスチャ転送 | 48 匹×4,096 B ≒ 197 KB/frame | 算術(7.4.1) |
-| 描画コール | skinned 1 匹あたり body+fins+eye×2+口腔内 ≒ 5〜6 call。48 匹で 240〜290、影パスで約 2 倍 | [E: 概算。skeleton ごとに DataTexture と描画コールが 1 つずつ [aud-B §1.1, R]] |
+| 描画コール | skinned 1 匹あたり = body 1 + fins 2 + 眼(2×1 眼のメッシュ数)+口腔内 1。**眼 1 メッシュ/眼なら 6、06 §6.6 の 3 メッシュ/眼(High)なら 10**。眼の構成は未決(09 D17)で、決まるまで High=10 を上限に見積る。48 匹で 290〜480、影パスで約 2 倍 | [E: 概算。skeleton ごとに DataTexture と描画コールが 1 つずつ [aud-B §1.1, R]] |
 | 個体別アルベド | 1024×512 で約 2.8 MB、2048×1024 で約 11.2 MB。Hero 12 匹が 2048 なら 約 134 MB | 算術。**実機 VRAM は未実測** [aud-D §4] |
 | `skeleton.update()` の多重呼出し | 素: 1 回/frame、後処理により 2〜5 回。LOD で見えないレベルは更新されない | [aud-D §3-3, H] |
 
@@ -384,21 +408,23 @@ BatchedMesh は剛体のみ(スキニングもモーフも不可)で、描画ご
 
 ```ts
 type Prov = 'A'|'B'|'C'|'M'|'P'|'E';
+type LifeStage = 'parr'|'juvenile'|'adult'|'spawning_male'|'post_spawn';   // 5 値。03 §3.8.1・04 §4.1.3 もこの型を参照する [02 §2.8]
+interface Scene { season: 'spring'|'summer'|'autumn'|'winter'|number /*月*/; water_temp_c:number; time_of_day:string }  // 産卵期判定・婚姻色・V-B04/V-B05 は同じ定数 SPAWN_SEASON(params.json)を使う
 interface Param { v:number; unit:string; min:number; max:number; prov:Prov; proxy:string|null; src:string }
 
 interface Genome {
   schema: 1;  seed: number;  species: 'yamame';            // 'amago_or_hybrid' 等は別クラス (03 §3.8.3 #1)
-  identity: { life_stage:'parr'|'juvenile'|'adult'|'spawning_male'; sex:'female'|'male';
+  identity: { life_stage:LifeStage; sex:'female'|'male';
               maturity:number; silver_s:number; age_months:number; region_hybrid:boolean };
   size:   { sl_m:number };                                   // 0.06–0.35 [05 §5.8]; 基準 0.19 [02 §2.1]
   morph:  { body_depth_max_over_sl; body_depth_max_pos_s; peduncle_depth_min_over_sl; head_length_over_sl;
             eye_d_over_hl; snout_len_over_hl; upper_jaw_end_over_hl;
             predorsal_s; prepelvic_s; preanal_s; adipose_origin_s; prepectoral_s;
             dorsal_base_over_sl; anal_base_over_sl; pectoral_len_over_sl; pelvic_len_over_sl; caudal_fork_depth_over_sl;
-            body_width_over_depth; section_exponent; scale_pitch_pct_sl;
+            body_width_over_depth; section_exponent; scale_pitch_pct_sl;   // `vertebrae`(02 §2.9.2)は持たない: リグは 24 本固定で、表示専用の値は Genome に入れない [C-11]
             fin_ray_count: {dorsal;pectoral;pelvic;anal};
             mt: Record<MorphName, number> };                 // 7.4.2 の 12 軸
-  pattern:{ pm_count; pm_count_lr_delta; pm_s_first; pm_s_last; pm_spacing_cv; pm_aspect; pm_fuse_p; pm_front_faint_p;
+  pattern:{ pm_count; pm_count_lr_delta; pm_s_first; pm_s_last; pm_spacing_cv; pm_aspect; pm_h_sl; pm_w_sl; pm_fuse_p; pm_front_faint_p;
             pm_dL; pm_da; pm_db; pm_edge_softness; pm_fade; pm_fade_onset_cm;
             spot_dorsal_n; spot_dorsal_diam_eyeD; spot_dorsal_rows; spot_dorsal_age_gain;
             spot_below_n; spot_below_diam_eyeD; spot_below_black_p; spot_head_n; spot_head_diam_eyeD;
@@ -407,9 +433,12 @@ interface Genome {
             pectoral_yellow_b; caudal_margin_a; caudal_margin_sat; adipose_margin:'none'|'dark'|'white';
             fin_damage; nuptial_intensity; flank_pink_da; flank_pink_db; dorsal_darken_dL; pink_band_strength;
             post_spawn_wear; bg_adapt };
+  render: { iris_L; iris_ring_d_over_outer; pupil_d_over_outer; scale_pitch_def:'lateral_line_0.76SL'|'lateral_line_1.0SL'|'reflect_spacing';
+            silver_gain; water_cdom };                                 // 06 §6.9 の項目。pm_h_sl / pm_w_sl は pattern に追加 [A-10]
   motion: { A_tail_scale; lambda_scale; S_L; f_idle; U_fast_exponent; spine_bend_max; head_yaw_gain;
             p_C; tail_droop; jaw_open_max; vent_amp; k_roll };    // 05 §5.2〜5.6, 5.8
   traits: { wariness; boldness; territoriality; rank; forage_mode:'drift'|'patrol'; rhythm_phase_h };  // 04 §4.8.1
+  // 05 §5.8 の警戒度 a∈[0,1] は `traits.wariness` の写像とする(暫定 a=wariness。04 の恐怖欲求 F は状態遷移 F>F_alert の入力で、a には入れない)。a の遷移条件(05 §5.3.2)は 04 の状態名で書く [E, A-23。04/05 側で確定]
 }
 ```
 
@@ -417,21 +446,21 @@ interface Genome {
 
 | 区分 | 既定・分布 | 範囲 | 出典 |
 |---|---|---|---|
-| 体長 SL | 個体群分布(parr/adult 別)。段階の目安は 02 §2.1(0+ 6.65〜8.25 cm など) | 0.06〜0.35 m | [spec05 §5.8, E][spec02 §2.1] |
-| 体高 / 体高位置 / 尾柄高 | 0.241±0.024 / 0.445±0.056 / 0.091±0.013(正規、範囲で切る) | 0.20〜0.28 / 0.36〜0.56 / 0.07〜0.115 | [spec02 §2.9.2, P: n=27] |
+| 体長 SL | 個体群分布(parr/adult 別)。段階の目安は 02 §2.1(0+ 6.65〜8.25 cm など)。02 §2.1 の年齢別 FL(19.4/23.2/28.2 cm)は暫定・要原典で r01v は不整合としているため、**体長分布の生成にこの表を使わない**(使うなら `size_by_age` の分布を広く取る) | 0.06〜0.35 m | [spec05 §5.8, E][spec02 §2.1] |
+| 体高 / 体高位置 / 尾柄高 | 0.241±0.024 / 0.445±0.056 / 0.091±0.013(正規、範囲で切る。数値は 02 §2.2.1・§2.9.2 を正準とする) | 0.20〜0.28 / 0.36〜0.56 / 0.07〜0.115 | [spec02 §2.9.2, P: n=27] |
 | 頭長/SL | 0.25(SD 0.036) | 0.22〜0.29 | 〃 |
 | 眼径/HL | size 連動 0.227→0.165、±0.03 | | 〃 [E] |
 | 鰭起点 | 背 0.504、腹 0.574、臀 0.751、脂 0.843(SD 0.039〜0.049) | 各 02 §2.9.2 | 〃 |
 | 鰭条数 | 背 12(10〜15)、胸 13(12〜15)、腹 9(8〜9)、臀 13(11〜14)。腹を狭く、背・胸・臀を広く | | [spec02 §2.5, A/P] |
 | 地色 | `dorsal_L` 44(SD 10, 28〜67)、`flank_upper_L` 66(SD 8)、`belly_L` 72(SD 9) | 03 §3.8.2 | [spec03 §3.8.2, P: color n=35〜36] |
 | パーマーク | `pm_count` 9(5〜12)、`pm_dL` −18(SD 9.9, −40〜−3)、`pm_fuse_p` 0.31、`pm_front_faint_p` 0.45 | | [spec03 §3.1.7, P] |
-| 黒点 | `spot_dorsal_n` 中央値 40(対数正規 σ=0.8, 3〜150) | | [spec03 §3.2.4, E] |
-| 遊泳 | `A_tail`=0.10·(SL/0.20)^−0.10(0.07〜0.14)、λ=0.9·(SL/0.20)^−0.05(0.8〜1.05)、`S_L` 0.70(0.55〜0.85)、`U_fast`=6.0·(SL/0.20)^−0.25 BL/s(指数 0.15〜0.35) | | [spec05 §5.8, E] |
+| 黒点 | `spot_dorsal_n` 中央値 40(対数正規 σ=0.8, 3〜150)。**野生魚の値は無く、写真の可視域中央値 30 と飼育 0+ の 76.2 の間の [E]** | | [spec03 §3.2.4, E] |
+| 遊泳 | `A_tail`=0.10·(SL/`SL_ref`)^−0.10(0.07〜0.14)、λ=0.9·(SL/`SL_ref`)^−0.05(0.8〜1.05)、`S_L` 0.70(0.55〜0.85)、`U_fast`=6.0·(SL/`SL_ref`)^−0.25 BL/s(指数 0.15〜0.35)。`SL_ref` は 05 §5.8 の式の基準長(現行 0.20 m。基準個体の SL=0.19 m とは別の定数) | | [spec05 §5.8, E] |
 | 行動特性 | `wariness` 正規(0.5, 0.15)、`boldness` は 1−wariness と ρ=−0.7、`territoriality` 正規(0.5, 0.2) で**rank に比例して上限** | 0〜1 | [spec04 §4.8.1, E] |
 
 **相関**: 写真から検出できた相関は弱い(パーマーク ΔL* と地色 L* r=−0.09、背 L* と腹 L* r=−0.30、パーマーク個数と背側黒点数(対数) r=0.25 など) ため**既定は独立**。形態指標間の相関も**未算出**(各独立で生成。`depth(s)` の SD を s ごとに独立に使うと尾部が過大にばらつく [spec02 §2.9.2])。設計上の弱い結合のみ入れる [spec03 §3.8.2, E]: 暗い個体ほど `pm_dL` の絶対値を小さく・桃色を弱く、年齢が高いほど `spot_dorsal_n` を増やす、`pm_count` と `pm_contrast` は独立。`depth(s)` は **平均プロファイル + 1 本の「大きさスカラー」×SD プロファイル**でばらつかせる案 [E: 相関が取れるまでの暫定。要追加解析 — 08 章 ○26]。
 
-**資料間の差(体長の表記)**: 04 §4.8.1 の例(parr 10〜16 cm、adult 18〜30 cm、FL/SL 区別なし [E])と 02 §2.1 の基準個体 SL 190 mm(FL 211 mm)、05 §5.8 の SL 0.06〜0.35 m は定義が揃っていない。**Genome は SL(m) を基準**とし、FL は FL/SL=1.109 [spec02 §2.1, P: n=10] で換算する。
+**資料間の差(体長の表記)**: 04 §4.8.1 の例(parr 10〜16 cm、adult 18〜30 cm、FL/SL 区別なし [E])と 02 §2.1 の基準個体 SL 190 mm(FL 211 mm)、05 §5.8 の SL 0.06〜0.35 m は定義が揃っていない。**Genome は SL(m) を基準**とし(本章 7.0 の規約)、FL は FL/SL=1.109 [spec02 §2.1, P: n=10] で換算する。
 
 ### 7.6.4 生成順序とシード
 
@@ -447,7 +476,7 @@ seed → sub-seed(カテゴリ名のハッシュ) を作り、カテゴリごと
 ```
 カテゴリ別ストリームにする理由: パラメータを追加・順序変更しても、**他カテゴリの個体が変わらない**(再現性)。PRNG は 32 bit の軽量なもの(例: mulberry32/sfc32)を想定 [E]。Node とブラウザで同じ結果になること(浮動小数点の再現)を単体テストで固定する(7.7)。
 
-**テクスチャ生成**: 個体別アルベドは `Genome.pattern/color` から **Canvas2D API** で描く(位置・大きさ・形は 03 §3.1.3 の写真統計から直接生成。反応拡散は使わない [spec03 §3.8.4])。Canvas2D は Node では `@napi-rs/canvas`、ブラウザでは `OffscreenCanvas` と同じコードで動く [E: テストとランタイムで同一生成コードを使う]。レイヤーは 03 §3.6.3 の `albedo_base`、`mask_parr`、`mask_spot_*`、`mask_pink`、`silver_map`、`fin_rgba`、`iris_layer` を、**アルベドへ合成した 1 枚(sRGB)+ 個体差の無い共有 ORM・法線**に畳む。連続量(婚姻色 `nuptial_intensity`、`bg_adapt`、`silver_s`、濡れ)は、アルベドに焼かず**シェーダ uniform**(`onBeforeCompile` の小関数)で動かす [E: 時間で動く量にテクスチャ再生成を使わない。`clearcoat`/`iridescence` は最初から正値を入れて値だけ動かす [aud-A R2]]。
+**テクスチャ生成**: 個体別アルベドは `Genome.pattern/color` から **Canvas2D API** で描く(位置・大きさ・形は 03 §3.1.3 の写真統計から直接生成。反応拡散は使わない [spec03 §3.8.4])。Canvas2D は Node では `@napi-rs/canvas`、ブラウザでは `OffscreenCanvas` と同じコードで動く [E: テストとランタイムで同一生成コードを使う]。レイヤーは 03 §3.6.3 の `albedo_base`、`mask_parr`、`mask_spot_*`、`mask_pink`、`silver_map`、`fin_rgba`、`iris_layer` を、**アルベドへ合成した 1 枚(sRGB)+ 共有の法線・ORM**に畳む。個体別に持つテクスチャは、`T_albedo` のほかに 06 §6.2.4 の **`T_pattern_rt`(動的合成用のパターン重み・桃色・銀・摩耗。連続量を動かす場合のみ)、`T_fin_data`(鰭条の吸収・膜厚・バンプ・白縁。個体差があるなら個体別)、`T_iris`(虹彩環・暗輪・瞳孔。`iris_L`、金環径比で個体別)**である [章間レビュー A-29]。ORM の B(銀・金属度)を個体別に焼くか、共有 ORM+材質スカラー `metalness=silver_gain` にするかは**未決**(06 §6.2.4、09 D18)で、決まるまで本章は共有 ORM+スカラー案を前提にし、個体別に焼く場合は VRAM を 06 の見積りに加える。連続量(婚姻色 `nuptial_intensity`、`bg_adapt`、`silver_s`、濡れ)は、アルベドに焼かず**シェーダ uniform**(`onBeforeCompile` の小関数)で動かす [E: 時間で動く量にテクスチャ再生成を使わない。`clearcoat`/`iridescence` は最初から正値を入れて値だけ動かす [aud-A R2]]。
 
 ### 7.6.5 不自然な組合せの検証関数
 
@@ -462,7 +491,7 @@ seed → sub-seed(カテゴリ名のハッシュ) を作り、カテゴリごと
 | V-C05 | `pm_count`<5 または >12(模様なし型は生成しない) | error | #6 |
 | V-C06 | 腹鰭・臀鰭の先端を黒くする | error | #7 |
 | V-C07 | `age_months`<4 かつ `spot_dorsal_n`>100 | error | #8 |
-| V-C08 | `pm_fade`>0.4 かつ FL<22 cm | error | #9 |
+| V-C08 | `pm_fade`>0.4 かつ FL<22 cm(SL<0.198 m。FL=1.109·SL で換算) | error | #9 |
 | V-C09 | `|pm_count_lr_delta|`>1、または左右の完全ミラー | error | #10 |
 | V-C10 | ブラウントラウトの形質(脂鰭の橙縁、斑の淡色暈)を持つ | error | #11 |
 | V-C11 | 口内・舌が資料なしで鮮やかな赤 | warn | #12 |
@@ -470,8 +499,10 @@ seed → sub-seed(カテゴリ名のハッシュ) を作り、カテゴリごと
 | V-B02 | `wariness`>0.8 かつ `hide_dwell`<20 s、`boldness`>0.8 かつ `flee_dist` が平均の 1.2 倍超 | error | #2 |
 | V-B03 | 低 rank かつ高 `territoriality` | error | #3 |
 | V-B04 | 水温 ≥12℃ で夜行性優勢、≤8℃ で昼の活発な摂餌と追い払い | error(シーン設定) | #4 |
-| V-B05 | 産卵行動を産卵期以外に発生、雄の婚姻色を産卵期以外に | error | #6 |
+| V-B05 | 産卵行動を産卵期(`SPAWN_SEASON`。`Scene.season` と 03 の `nuptial_intensity` が使う期間と**同じ定数**。既定期間は 04 §4.10.1 の 10 月下旬〜11 月中旬に 03 §3.4.3 を合わせて確定する)以外に発生、雄の婚姻色を産卵期以外に | error | #6 |
 | V-B06 | 稚魚(2.4〜3.3 cm)を成魚と同じ流速に定位 | error | #8 |
+| V-B07 | 高密度の群れの生成・配置(条件は 04 §4.8.2 #5) | error(集団単位) | #5 |
+| V-B08 | 底からの高さが 0.1 体高未満の定位点(条件は 04 §4.8.2 #7) | error | #7 |
 | V-M01 | 形態比が 02 §2.9.2 の生成範囲外(体高 0.20〜0.28 など) | clamp | [spec02 §2.9.2] |
 | V-M02 | `mt_kype`>0 または `mt_upper_jaw_ext`>0 で sex≠male、または maturity≤0.8 | error | [spec02 §2.8] |
 | V-M03 | `life_stage`='parr' で `eye_d_over_hl` が成魚側(<0.18)に偏る、またはその逆 | warn | [spec02 §2.8, P] |
@@ -495,6 +526,8 @@ seed → sub-seed(カテゴリ名のハッシュ) を作り、カテゴリごと
 | L4 行動シミュ | AT-01〜AT-14 を 600 s×20 個体で | Node(描画なし) | 統計 |
 
 ### 7.7.2 数値テスト(05 章 T-A1〜T-A15、04 章 AT-01〜AT-14、そのまま自動化)
+
+**合格条件の閾値の多く(S_L 0.55〜0.85、AT-01 ≥70%、T12 の内訳など)は [E] 暫定**で、ヤマメの資料が入ったら更新する。運用は**構造検査(ExplainTrace が全遷移で出る、更新順、ボーン数、割り込み順、方向が合う)を主、数値を従**とし、数値の不合格は調整値の見直しの合図として扱う [章間レビュー C-04]。
 
 | ID | 検査 | 合格条件 | 根拠 |
 |---|---|---|---|
@@ -591,7 +624,7 @@ function measure(fn) {
 | draw call / 三角形 | `renderer.info` | 影パス込みで <700 call [E] |
 | 骨テクスチャ転送 | 帯域換算 | 197 KB/frame の見積り検証 |
 | ジオメトリ/テクスチャ VRAM | `info.memory`(件数のみ)+手計算 | 個体別アルベド数×サイズ |
-| 初回切替ヒッチ | LOD 切替フレームの時間 | <16 ms [E] |
+| 初回切替ヒッチ | LOD 切替フレームの時間 | <16 ms [E]。09 P6(2) は「定常フレーム時間の 2 倍以内(約 33 ms)」で食い違う。どちらかに統一(09 D19、review_06_09 J6) |
 | 後処理コスト | 1 つずつ ON/OFF | AO は 1 つずつ測ってから |
 | Far tier | N=100/500/1000 の InstancedMesh+morph | 実描画未検証 |
 
@@ -636,7 +669,11 @@ function measure(fn) {
 | ヘッドレス起動 | aud-A/d: `@sparticuz/chromium`+puppeteer で動作 / aud-C: 同梱 args で固まった | P0 で統一(7.7.5) |
 | 頭長モーフ | 02 `mt_head_length` / 05 `mt_head_len` | 統合(7.4.2) |
 | aud-C の所在 | 01 章は「欠落」と記載 | 現在は存在。01 章 §1.5/§1.9 の「aud-C 全般が未確認」は本章で解消(ただし規模・実機は未検証) |
-| 体長の定義 | 04: 例示(FL/SL 未区別)/ 02: SL 190 mm 基準 / 05: SL 0.06〜0.35 m | SL 基準、FL/SL=1.109 で換算(7.6.3) |
+| 体長の定義 | 04: 例示(FL/SL 未区別)/ 02: SL 190 mm 基準 / 05: SL 0.06〜0.35 m、式の基準長 0.20 m | SL 基準(BL≡SL)、FL/SL=1.109 で換算(7.0、7.6.3)。05 の 0.20 m は `SL_ref` |
+| LOD の定義 | 06: High/Medium/Low/Far・36 ボーン・2,000/500/150 三角形・High ≤8 / 24 / 64 / 07: LOD0/1/2/Far・62 ボーン共有・2,400/600/200・Hero ≤12 / skinned ≤48 / Far ≤100 | 06 §6.8.1 に統合(4 段、62 共有、07 の三角形数と同時表示数)。36 本版は P6 予備案(7.5.2) |
+| 角膜 | 06: 加算シェル(transmission 不使用)/ 07 旧版: transmission 可 / 09 旧版: アルファ第一案 | 加算シェル。transmission は空気中の特写用の別マテリアル(7.3.5)。未検証のため 09 D16 で確認 |
+| 04→05 の語彙 | 04: 状態名 16 行 / 05: モード名 12 種+Turn | 対応表(7.2.2)。プリセットの追加は 05 担当 |
+| 産卵期の既定 | 03: 9〜11 月 / 04: 10 月下旬〜11 月中旬 | `SPAWN_SEASON` を 1 つにする(V-B05、`nuptial_intensity`)。確定は 03・04 担当 |
 
 ### 7.9.2 不足資料(本章に効くもの)
 
