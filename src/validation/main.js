@@ -181,6 +181,19 @@ function layout() {
     views.push({ cam: c, rect: [0, 0, W, H], label: 'eye macro' });
     return;
   }
+  if (mode === 'closeup' && q.has('cams')) {
+    // several free cameras side by side in one page (one model build for a contact sheet):
+    // cams=x,y,z,lx,ly,lz;x,y,z,lx,ly,lz;… (metres), common fov
+    const list = q.get('cams').split(';').map((c) => c.split(',').map(Number));
+    const w = Math.floor(W / list.length);
+    list.forEach((c, i) => {
+      const cam = new THREE.PerspectiveCamera(Number(q.get('fov') ?? 22), w / H, 0.005, 10);
+      cam.position.set(c[0], c[1], c[2]);
+      cam.lookAt(c[3], c[4], c[5]);
+      views.push({ cam, rect: [i * w, 0, w, H], label: '' });
+    });
+    return;
+  }
   if (mode === 'closeup') {
     // free camera: cam=x,y,z&look=x,y,z (metres) and fov
     const c = new THREE.PerspectiveCamera(Number(q.get('fov') ?? 22), W / H, 0.005, 10);
