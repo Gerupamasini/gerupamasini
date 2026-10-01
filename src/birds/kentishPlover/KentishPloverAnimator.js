@@ -1101,6 +1101,28 @@ export class KentishPloverAnimator {
     // jaw: opens briefly when swallowing / pulling prey
     b.jaw.quaternion.multiply(qAxis(X, act?.jaw ?? 0, _q));
     this.neckStretch = stretch;
+    this._poseThroat();
+  }
+
+  /** Fore-neck helper bone (bodyMesh.computeSpineWeights): its pivot half-way between where the chest and where the
+   *  head would carry it, turned half-way from the chest to the head — the throat plumage stays full between them. */
+  _poseThroat() {
+    const b = this.b;
+    const th = b.throat;
+    if (!th) return;
+    b.chest.updateMatrixWorld(false);
+    const pc = _v2.set(...J.throat.map((x, i) => (x - J.chest[i]) * 0.001)).applyMatrix4(b.chest.matrixWorld);
+    const ph = _v3.set(...J.throat.map((x, i) => (x - J.head[i]) * 0.001)).applyMatrix4(b.head.matrixWorld);
+    const qc = b.chest.getWorldQuaternion(_q2);
+    const qh = b.head.getWorldQuaternion(_q4);
+    // half-way for the head bent down / up / sideways; with the head turned back over the shoulder (preening,
+    // asleep) the throat stays with the breast (half-way it lay as a flap over the shoulder and the folded wing)
+    const f = _v4.set(0, 0, 1).applyQuaternion(_qT.copy(qc).invert().multiply(qh));
+    const k = 0.5 * (1 - smoothstep(1.2, 2.1, Math.atan2(Math.abs(f.x), f.z)));
+    const qm = _q3.copy(qc).slerp(qh, k);
+    th.position.copy(pc.lerp(ph, k)).applyMatrix4(_m.copy(b.chest.matrixWorld).invert());
+    th.quaternion.copy(qc.invert()).multiply(qm);
+    th.updateMatrixWorld(true);
   }
 
   /** Head pivot (world) the posture and gaze ask for: relative to the ROOT, not the bobbing body (head stabilisation). */

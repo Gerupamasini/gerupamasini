@@ -44,28 +44,110 @@ export function headness(p) {
   return Math.max(0, Math.min(1, (1.25 - r) / 0.35)) * Math.max(0, 1 - below);
 }
 
-export function computeSpineWeights(p, boneIndex) {
-  const w = SPINE.map((s) => {
-    const d = segDist(p, s.a, s.b);
-    return Math.exp(-(d * d) / (2 * s.s * s.s));
-  });
-  const h = headness(p);
-  for (let i = 0; i < SPINE.length; i++) w[i] *= SPINE[i].bone === 'head' ? 1 : 1 - h;
-  w[SPINE.length - 1] = Math.max(w[SPINE.length - 1], h);
-  // the head's blend band (throat, chin, nape) shares with the upper neck rather than straight with the chest:
-  // with the head turned back to preen, skin half on the head and half on the chest stretched as a sheet
-  // across the shoulder and the folded wing
-  const n2 = SPINE.findIndex((s) => s.bone === 'neck2');
-  w[n2] = Math.max(w[n2], 1.6 * Math.min(h, 1 - h));
-  const order = w.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, 4);
-  const sum = order.reduce((acc, [v]) => acc + v, 0) || 1;
-  return order.map(([v, i]) => [boneIndex[SPINE[i].bone], v / sum]);
-}
-
 const smooth = (a, b, x) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
+
+/**
+ * Neck band: 1 at the head's blend band (headness r 1.25) → 0 on the trunk. The neck is not sculpted (the
+ * mantleNape / foreBreast plumage fills it at rest), and the old skinning had an ≈8 mm band between the
+ * chest-skinned breast and the head-skinned throat: stretching the neck for a peck pulled it into a thin sheet (a
+ * white tube with a crease from the chin to the breast; p007 / p061 show a short thick neck). The band now reaches
+ * the upper breast in front (y ≈ 70) and the nape behind (z ≈ −1 on the midline).
+ */
+export function neckBand(p) {
+  const x = p[0] / 13;
+  const y = (p[1] - 93.5) / (p[1] < 93.5 ? 12.5 : 13);
+  const z = (p[2] - 24) / (p[2] < 24 ? 12.2 + 1.4 * (1 - smooth(3, 7, Math.abs(p[0]))) : 15.5);
+  const r = Math.sqrt(x * x + y * y + z * z);
+  // none under the front scapulars (skinned to the trunk: the mantle rose through them) nor on the sides of the
+  // neck base over the shoulders (turned back to sleep / preen, that skin swung over the wing coverts)
+  const scap = smooth(2, 4.5, Math.abs(p[0])) * smooth(9, 5, p[2]) * smooth(93, 89, p[1]);
+  const side = smooth(9, 13, Math.abs(p[0])) * smooth(92, 86, p[1]);
+  return Math.max(0, Math.min(1, (1.9 - r) / 0.65)) * (1 - scap) * (1 - side);
+}
+
+/** How much of a neck-band point is fore-neck / throat (in front of the neck chain, 1) rather than hind-neck (0):
+ *  sagittal distance (mm) in front of the line neck0 → head pivot. */
+export function throatSide(p) {
+  return smooth(0, 12, -0.693 * (p[1] - 74) + 0.718 * p[2]);
+}
+
+const spineDist = (p) =>
+  SPINE.map((s) => {
+    const d = segDist(p, s.a, s.b);
+    return Math.exp(-(d * d) / (2 * s.s * s.s));
+  });
+
+/** Trunk-only skinning (tail / body / chest by distance): the scapulars lie on the trunk, not on the neck plumage. */
+export function trunkWeights(p, boneIndex) {
+  const w = spineDist(p);
+  const order = w.map((v, i) => [v, i]).filter(([, i]) => TRUNK.has(SPINE[i].bone));
+  const sum = order.reduce((acc, [v]) => acc + v, 0) || 1;
+  return order.map(([v, i]) => [boneIndex[SPINE[i].bone], v / sum]);
+}
+const TRUNK = new Set(['tail', 'body', 'chest']);
+
+/**
+ * Body skinning. Trunk: tail / body / chest by distance (SPINE). Head: rigid inside its ellipsoid (headness).
+ * Between them the neck band (neckBand): the hind-neck spreads along the neck chain (a hat per bone over the band
+ * coordinate, so the stretch and the turn of a peck are shared smoothly), the fore-neck and throat go
+ * trunk → `throat` (→ head near the head). The throat bone (a helper the animator poses half-way between where
+ * the chest and where the head would carry it, turned half-way) keeps the throat full when the head is pulled down
+ * and forward: on the chain the throat, 25 mm in front of the neck bones, swung round them when the head turned
+ * back to preen; straight between chest and head it collapsed into a sheet. Outside the band, and on the face in
+ * front of the eyes, the distance-weighted skinning (spineWeights) is unchanged.
+ */
+export function computeSpineWeights(p, boneIndex) {
+  const d = spineDist(p);
+  const W = {};
+  const add = (bone, v) => {
+    if (v > 0) W[bone] = (W[bone] ?? 0) + v;
+  };
+  const h = headness(p);
+  const s = neckBand(p);
+  const f = throatSide(p);
+  let ts = 0;
+  SPINE.forEach((q, i) => {
+    if (TRUNK.has(q.bone)) ts += d[i];
+  });
+  const trunk = (k) =>
+    SPINE.forEach((q, i) => {
+      if (TRUNK.has(q.bone)) add(q.bone, ts > 0 ? (d[i] / ts) * k : 0);
+    });
+  // hind-neck: chain coordinate c (0 trunk … 3 neck2), head band on top; along the midline of the nape only (the
+  // sides of the neck on the chain swung out over the shoulders and the wing coverts when the head was turned
+  // back to sleep or preen)
+  const c = 3 * s * (1 - smooth(6, 10, Math.abs(p[0])) * smooth(97, 90, p[1]));
+  // (points near the head by distance — chin, bill-base feathering, the sides of the hind-head — ride on it)
+  const dH = d[SPINE.length - 1];
+  const hf = Math.max(h, dH / (dH + ts + 1e-6));
+  const kb = (1 - f) * (1 - hf);
+  trunk(kb * Math.max(0, 1 - c));
+  ['neck0', 'neck1', 'neck2'].forEach((bn, k) => add(bn, kb * Math.max(0, 1 - Math.abs(c - (k + 1)))));
+  add('head', (1 - f) * hf);
+  // fore-neck: trunk → throat over the band; the head's share only by headness / distance (more of the throat on
+  // the head swung out over the shoulder as a flap when the head turned back to preen)
+  trunk(f * (1 - s) * (1 - hf));
+  add('throat', f * s * (1 - hf));
+  add('head', f * hf);
+  // the head's blend band shares with the upper neck, never straight with the chest (with the head turned back,
+  // skin half on the head and half on the chest stretched as a sheet across the shoulder and the folded wing)
+  add('neck2', Math.max(0, 1.6 * Math.min(h, 1 - h) * (1 - f) - (W.neck2 ?? 0)));
+  // outside the band (fading in across its outer half) and on the face in front of the eyes (lores, chin, bill-base
+  // feathering: rigid there, the face of the head tucked in to sleep lay on the wing coverts) as before
+  const g = smooth(0, 0.5, s) * (1 - smooth(31, 36, p[2]));
+  if (g < 1) {
+    for (const k in W) W[k] *= g;
+    for (const [bn, v] of Object.entries(spineWeights(p))) add(bn, v * (1 - g));
+  }
+  const order = Object.entries(W)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+  const sum = order.reduce((acc, [, v]) => acc + v, 0) || 1;
+  return order.map(([bn, v]) => [boneIndex[bn], v / sum]);
+}
 
 // The sculpt is the relaxed stand, fluffing 0.15 (photos, body_shape_spec.md §12): the shaders displace by
 // (fluff − FLUFF_REST) so the bind outline is the photographed one; alert (−0.25) sleeks it
@@ -256,4 +338,17 @@ function shellCovered(p, n) {
   const z = p[2];
   const yb = z > 5 ? 60 + 3 * Math.min(1, (z - 5) / 15) : z > -25 ? 55.5 + 4.5 * ((z + 25) / 30) : 60 - 4.5 * Math.min(1, Math.max(0, (z + 55) / 30));
   return headness(p) < 0.01 && p[1] + n[1] * 3 > yb - 1 && z < 8;
+}
+
+/** Distance-weighted spine skinning outside the neck band (the trunk, the shoulders, the sides of the neck base):
+ *  every bone by its distance to its SPINE segment, the head rigid inside its ellipsoid. */
+function spineWeights(p) {
+  const w = spineDist(p);
+  const h = headness(p);
+  for (let i = 0; i < SPINE.length; i++) w[i] *= SPINE[i].bone === 'head' ? 1 : 1 - h;
+  w[SPINE.length - 1] = Math.max(w[SPINE.length - 1], h);
+  const n2 = SPINE.findIndex((s) => s.bone === 'neck2');
+  w[n2] = Math.max(w[n2], 1.6 * Math.min(h, 1 - h));
+  const sum = w.reduce((acc, v) => acc + v, 0) || 1;
+  return Object.fromEntries(SPINE.map((q, i) => [q.bone, w[i] / sum]));
 }

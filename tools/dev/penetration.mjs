@@ -173,7 +173,7 @@ function analyse(model, d) {
     idx: bg.index.array,
   };
   // body shader displacement masks (mm per unit uniform) — must mirror KentishPloverMaterials.js
-  const neckBones = new Set(['neck0', 'neck1', 'neck2', 'head', 'jaw'].map((n) => model.spec.boneIndex[n]));
+  const neckBones = new Set(['neck0', 'neck1', 'neck2', 'head', 'jaw', 'throat'].map((n) => model.spec.boneIndex[n]));
   B.neckW = new Float64Array(B.n);
   for (let i = 0; i < B.n; i++) for (let k = 0; k < 4; k++) if (neckBones.has(B.si[i * 4 + k])) B.neckW[i] += B.sw[i * 4 + k];
   B.fluffMask = new Float64Array(B.n);

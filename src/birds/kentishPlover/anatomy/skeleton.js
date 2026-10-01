@@ -88,6 +88,9 @@ export function buildSkeletonSpec(cfg) {
       }
     }
   }
+  // helper: carries the fore-neck / throat plumage half-way between the chest and the head (posed by the animator,
+  // bodyMesh.computeSpineWeights). Last, so the other bones keep their indices.
+  add('throat', 'chest', J.throat);
   return { specs, wingFeathers, tailFeathers, toes: TOES };
 }
 
