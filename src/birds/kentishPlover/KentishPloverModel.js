@@ -173,6 +173,12 @@ export class KentishPloverModel {
     if (c?.body) c.body.userData.uniforms.uNapeFill.value = mm;
   }
 
+  /** Neck sleeve stretch (posed / rest length, animator _poseSleeve): the body shader keeps the plumage pattern's ends. */
+  setSleeveStretch(k) {
+    const c = this.current;
+    if (c?.body) c.body.userData.uniforms.uSleeveStretch.value = k;
+  }
+
   /** Prey in the bill while it is handled (anatomy/heldPrey.js; null hides it). Built on first use. */
   setHeldPrey(state) {
     if (!state && !this._held) return;
