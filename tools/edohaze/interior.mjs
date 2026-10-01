@@ -96,7 +96,7 @@ export function buildMouth(mesh) {
       // inner face of the lip roll: the mucosa starts at the gape and curls in behind the lip roll
       // (the roll reaches ~2r - out inward from the skin, see anatomy lipLine)
       const f = clamp(s / RICTUS_S, 0, 1);
-      const reach = upper ? 2 * (0.36 - 0.17 * f - 0.07 * f * f) - 0.18 + 0.06 : 2 * (0.28 - 0.11 * f - 0.07 * f * f) - 0.13 + 0.06; // lip radii (anatomy)
+      const reach = upper ? 2 * (0.36 - 0.17 * f - 0.07 * f * f) - 0.18 + 0.06 : 2 * (0.32 - 0.15 * f - 0.07 * f * f) - 0.13 + 0.06; // lip radii (anatomy)
       const az = Math.abs(P[2]);
       // pass over the top of the roll (slightly across the gape line) so the strip never cuts through it;
       // near the snout tip the roll lies across the axis, so step back behind it instead

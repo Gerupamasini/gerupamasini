@@ -8,10 +8,11 @@ import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEach
 const TAU = Math.PI * 2;
 
 // Piecewise-linear morph of マハゼ-juvenile head coordinates (mm) onto the エドハゼ head, anchored at the
-// snout tip, the eye centre (4.9 → 3.38 mm) and the opercular margin (11.7 → 10.4 mm); used only for
+// snout tip, the eye centre (4.9 mm → EYE) and the opercular margin (11.7 mm → OPERCLE); used only for
 // the generic gobiid sensory-papilla rows and pores, whose layout scales with the head.
 export function mapHead(s, y) {
-  const s2 = s <= 4.9 ? s * (3.38 / 4.9) : 3.38 + (s - 4.9) * ((10.4 - 3.38) / (11.7 - 4.9));
+  const eS = EYE.center[0], oS = Math.max(...OPERCLE.map((p) => p[0]));
+  const s2 = s <= 4.9 ? s * (eS / 4.9) : eS + (s - 4.9) * ((oS - eS) / (11.7 - 4.9));
   return [s2, y * 0.9 + 0.05];
 }
 
@@ -763,7 +764,7 @@ function bakeBodyTextures(ctx) {
     iri = Math.max(iri, 0.62 * bd.w);
     // opercle iridescent patch: a dim yellow-green sheen on the upper half of the gill cover, slightly darker
     // than the cheek, never a milky disc (s 0.20–0.26 SL; opercle/cheek 0.91 in 042, 013; 059, 044)
-    iri = Math.max(iri, 0.22 * smoothstep(7.4, 8.2, s) * smoothstep(10.4, 9.6, s) * Math.exp(-(((hn - 0.12) / 0.32) ** 2)) * head);
+    iri = Math.max(iri, 0.22 * smoothstep(7.4, 8.2, s) * smoothstep(10.05, 9.3, s) * Math.exp(-(((hn - 0.12) / 0.32) ** 2)) * head);
     iri *= 1 - 0.7 * b;
     iri *= 1 - 0.3 * mb;
     iri *= 0.85 + 0.3 * fbm3(s * 1.3, yy * 1.3, z * 1.3, 3, 41);

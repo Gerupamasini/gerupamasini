@@ -11,7 +11,7 @@ export const SPECIES = {
   commonName: 'エドハゼ, adult',
   pelvicBaseS: 11.6,
   // lower caudal lobe margin at rest: 1.92 mm below the caudal-base centre (principal-ray bases ±1.3 mm)
-  tailContact: [SL + 6.4, section(SL - 0.1).yc - 1.92, 0],
+  tailContact: [SL + 4.4, section(SL - 0.1).yc - 2.9, 0], // lowest point of the lower caudal lobe at rest
   pigmentPNG: true,
   animations: 'Idle (loop, breathing), Swim (loop, 9 Hz burst tail beat), Yawn (one-shot)',
   viewer: {
@@ -21,7 +21,9 @@ export const SPECIES = {
     contacts: [
       ['J_pelvic', 12.5, 'rim'], ['J_pelvic', 14.2, 'rim'], ['J_pelvic', 15.8, 'rim'],
       ['J_root', 14.6, 'bot'], ['J_sp1', 17.0, 'bot'], ['J_sp2', 20.4, 'bot'], ['J_sp3', 24.0, 'bot'],
-      ['J_sp4', 27.6, 'bot'], ['J_sp5', 31.2, 'bot'], ['J_sp6', 34.6, 'bot'], ['J_caudal2', SL + 6.4, 'tail'],
+      ['J_sp4', 27.6, 'bot'], ['J_sp5', 31.2, 'bot'], ['J_sp6', 34.6, 'bot'], ['J_caudal2', SL + 4.4, 'tail'],
+      // erect anal fin (lowest point at rest): the fish rests on it instead of pressing it into the sand (015)
+      ['J_sp5', 29.7, -1.5],
     ],
     totalLengthM: TL / 1000,
     presetScale: TL / 50.0, // camera presets were authored for the 50 mm マハゼ
@@ -48,7 +50,7 @@ export const SPECIES = {
   // Lateral photos show a white, opaque peritoneum over the gut (silvery belly) and dorsal photos a
   // dark visceral mass seen through the back (melanin on the dorsal peritoneum).
   shaderAnatomy: {
-    headWin: [7.7, 10.4],
+    headWin: [7.7, 10.05],
     // gills show pink-red through the thin opercle (059 lower opercle [142–159,112–128,104–117], 016, 025),
     // over s 7.6–9.9 and y 0.6–3.3 mm, ending with the opercle margin (head length 0.265 SL)
     gillWin: [6.3, 7.6, 9.0, 9.9],
