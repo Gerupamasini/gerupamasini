@@ -19,6 +19,12 @@ export class World {
   season: Season = 'autumn';
   tideLevel = 0;
   tideRate = 0;
+  /** debug: fixed tide level in metres (null = follow the model) */
+  tideOverride: number | null = null;
+  /** 0 = clear sky, 1 = full overcast */
+  overcast = 0;
+  /** tone-mapping exposure suggested for the current light */
+  exposure = 0.5;
   private lastHabitatMs = 0;
   private lastEnvMs = 0;
   private timeAcc = 0;
@@ -31,20 +37,20 @@ export class World {
     readonly habitat: Habitat,
     readonly tide: TideModel,
   ) {
-    this.fog = new FogExp2(0xbfd2dc, 0.0032);
+    this.fog = new FogExp2(0xbfd2dc, 0.0024);
     this.scene.fog = this.fog;
     this.scene.add(terrain.mesh, water.mesh);
     for (const pool of habitat.pools) this.scene.add(water.addPool(pool.cells, pool.level));
   }
 
-  static async create(map: MapDef, station: TideStationDef, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void): Promise<World> {
+  static async create(map: MapDef, station: TideStationDef | TideModel, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void): Promise<World> {
     onProgress?.('地形');
     const grid = await loadTerrainGrid(map);
     const terrain = new Terrain(grid, map.substrate.palette);
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain);
     const water = new Water(terrain);
-    const tide = new TideModel(station);
+    const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
@@ -56,23 +62,27 @@ export class World {
   update(gameMs: number, dt: number, anchor: Vector3, camera: PerspectiveCamera): void {
     this.timeAcc += dt;
     // tide
-    this.tideLevel = this.tide.level(gameMs);
-    if (this.timeAcc > 1 || this.tideRate === 0) this.tideRate = this.tide.rate(gameMs);
+    this.tideLevel = this.tideOverride ?? this.tide.level(gameMs);
+    if (this.timeAcc > 1 || this.tideRate === 0) this.tideRate = this.tideOverride !== null ? 0 : this.tide.rate(gameMs);
     this.water.setLevel(this.tideLevel);
-    this.water.update(dt);
     if (gameMs - this.lastHabitatMs > 2000 || this.lastHabitatMs === 0) {
       this.lastHabitatMs = gameMs;
       this.habitat.update(gameMs, this.tideLevel);
     }
-    this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.timeAcc);
     // sun and sky
     const sp = sunPosition(gameMs, this.map.origin.lat, this.map.origin.lon);
     sunDirection(sp, this.sunDir);
     this.sunElevation = sp.elevation;
     this.tod = timeOfDay(sp.elevation, jstParts(gameMs).hour);
     this.season = seasonOf(gameMs);
-    this.sky.update(this.sunDir, sp.elevation, anchor);
+    const sunUp = Math.max(0, Math.min(1, (sp.elevation + 2) / 14)) * (1 - 0.8 * this.overcast);
+    this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.timeAcc, sunUp);
+    this.water.update(dt, sunUp);
+    this.sky.update(this.sunDir, sp.elevation, anchor, this.overcast);
     this.fog.color.copy(this.sky.fogColor);
+    this.fog.density = 0.0024 * (1 + 2.5 * this.overcast);
+    // lift the exposure at night so the flat stays readable under the moon
+    this.exposure = 0.66 + 0.24 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
     this.scene.background = this.sky.fogColor;
     if (this.timeAcc - this.lastEnvMs > 30 || this.lastEnvMs === 0) {
       this.lastEnvMs = this.timeAcc;

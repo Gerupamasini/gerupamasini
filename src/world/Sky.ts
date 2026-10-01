@@ -18,9 +18,9 @@ export class SkyDome {
     this.sky = new Sky();
     this.sky.scale.setScalar(4000);
     const u = this.sky.material.uniforms;
-    u.turbidity.value = 6;
-    u.rayleigh.value = 2.2;
-    u.mieCoefficient.value = 0.006;
+    u.turbidity.value = 3;
+    u.rayleigh.value = 1.6;
+    u.mieCoefficient.value = 0.003;
     u.mieDirectionalG.value = 0.8;
     scene.add(this.sky);
 
@@ -41,27 +41,32 @@ export class SkyDome {
   }
 
   /** Update lights and sky for a sun direction (unit vector) and elevation in degrees. Call every frame; cheap. */
-  update(sunDir: Vector3, elevation: number, anchor: Vector3): void {
+  update(sunDir: Vector3, elevation: number, anchor: Vector3, overcast = 0): void {
     this.sunDir.copy(sunDir);
     this.elevation = elevation;
     this.sky.material.uniforms.sunPosition.value.copy(sunDir);
     const day = MathUtils.smoothstep(elevation, -4, 10);
     const dusk = 1 - MathUtils.smoothstep(elevation, -2, 18);
+    const cloud = MathUtils.clamp(overcast, 0, 1);
     // key light: warm when low, white when high; below the horizon a faint moon/sky light remains
-    const keyColor = new Color(1, 0.98, 0.95).lerp(new Color(1, 0.62, 0.35), dusk);
+    const keyColor = new Color(1, 0.98, 0.95).lerp(new Color(1, 0.62, 0.35), dusk).lerp(new Color(0.55, 0.65, 0.9), 1 - day);
     this.sunLight.color.copy(keyColor);
-    this.sunLight.intensity = 0.08 + 2.1 * day;
+    this.sunLight.intensity = (1.0 + 1.3 * day) * (1 - 0.75 * cloud);
     const lightDir = elevation > -2 ? sunDir : new Vector3(0.3, 1, 0.2).normalize();
     this.sunLight.position.copy(anchor).addScaledVector(lightDir, 120);
     this.sunLight.target.position.copy(anchor);
     // hemisphere: sky colour tracks the horizon tint
-    const skyCol = new Color(0.5, 0.68, 0.8).lerp(new Color(0.04, 0.06, 0.12), 1 - day);
-    const groundCol = new Color(0.28, 0.24, 0.18).lerp(new Color(0.02, 0.02, 0.03), 1 - day);
+    const skyCol = new Color(0.5, 0.68, 0.8).lerp(new Color(0.16, 0.22, 0.34), 1 - day);
+    const groundCol = new Color(0.28, 0.24, 0.18).lerp(new Color(0.05, 0.05, 0.07), 1 - day);
     this.hemi.color.copy(skyCol);
     this.hemi.groundColor.copy(groundCol);
-    this.hemi.intensity = 0.18 + 0.42 * day;
-    this.fogColor.copy(new Color(0.6, 0.7, 0.78).lerp(new Color(0.85, 0.6, 0.42), dusk * day)).lerp(new Color(0.03, 0.05, 0.08), 1 - day);
-    this.sky.material.uniforms.turbidity.value = 4 + 6 * dusk;
+    this.hemi.intensity = (0.65 + 0.05 * day) * (1 + 0.25 * cloud);
+    this.hemi.color.lerp(new Color(0.6, 0.63, 0.66), cloud * 0.7);
+    this.fogColor.copy(new Color(0.6, 0.7, 0.78).lerp(new Color(0.85, 0.6, 0.42), dusk * day)).lerp(new Color(0.06, 0.08, 0.13), 1 - day);
+    this.fogColor.lerp(new Color(0.62, 0.66, 0.7), cloud * day * 0.8);
+    this.sky.material.uniforms.turbidity.value = 2.5 + 6 * dusk + 14 * cloud;
+    this.sky.material.uniforms.rayleigh.value = 1.6 - 0.8 * cloud;
+    this.sky.material.uniforms.mieCoefficient.value = 0.003 + 0.03 * cloud;
     // below the horizon the Preetham model goes black: hide the dome and show the dark fog colour instead
     this.sky.visible = elevation > -7;
   }

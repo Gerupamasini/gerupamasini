@@ -1,8 +1,10 @@
 import {
-  BoxGeometry, Color, DirectionalLight, EdgesGeometry, HemisphereLight, LineBasicMaterial, LineSegments, Mesh, MeshStandardMaterial,
-  Object3D, PerspectiveCamera, PlaneGeometry, Scene, Vector3,
+  BoxGeometry, Color, DirectionalLight, DoubleSide, EdgesGeometry, FrontSide, HemisphereLight, LineBasicMaterial, LineSegments, Mesh,
+  MeshPhysicalMaterial, MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneGeometry, PMREMGenerator, Raycaster, Scene, SpotLight,
+  Vector2, Vector3, type IUniform, type WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { IndividualRecord } from '../creatures/Individual';
 import type { SpeciesDef } from '../data/schemas';
 import type { Driver, Floor } from '../creatures/drivers/Driver';
@@ -14,10 +16,12 @@ import type { BehaviorEvent } from '../creatures/drivers/Driver';
 import type { LoadedModel } from '../creatures/models/ModelLoader';
 import type { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 import type { HeroLighting } from '../render/HeroPipeline';
+import { makeRippleNormalMap, RIPPLE_NORMAL_GLSL } from '../world/Water';
 
-const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
+export const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
+export const TANK_MAX_OCCUPANTS = 4;
 
-interface Occupant {
+export interface Occupant {
   record: IndividualRecord;
   ind: Individual;
   driver: Driver;
@@ -26,59 +30,184 @@ interface Occupant {
   hero: HeroInstance | null;
 }
 
-/** 自宅の水槽: a bright 60 cm tank with a sand floor, one occupant and an orbit camera. */
+const CAUSTIC_GLSL = `
+float hashT(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float vnoiseT(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hashT(i), hashT(i + vec2(1, 0)), f.x), mix(hashT(i + vec2(0, 1)), hashT(i + vec2(1, 1)), f.x), f.y); }
+float causticT(vec2 p, float t) {
+  float n1 = vnoiseT(p + vec2(t * 0.22, t * 0.17));
+  float n2 = vnoiseT(p * 1.31 + vec2(-t * 0.19, t * 0.13) + 5.7);
+  float n3 = vnoiseT(p * 0.7 + vec2(t * 0.08, -t * 0.1) + 11.3);
+  return pow(1.0 - abs(n1 - n2), 9.0) * 1.6 + pow(1.0 - abs(n2 - n3), 12.0) * 0.8;
+}`;
+
+/**
+ * The home showcase tank: a 60 cm aquarium in a dark, quiet room under a cool aquarium light. Water is kept almost
+ * clear so the animals read well; caustics play on the sand; the camera drifts slowly. Several occupants can live in it.
+ */
 export class TankScene {
   readonly scene = new Scene();
   readonly camera: PerspectiveCamera;
   private controls: OrbitControls | null = null;
-  private occupant: Occupant | null = null;
+  readonly occupants: Occupant[] = [];
   private readonly floor: Floor = { heightAt: () => 0, waterAt: () => WATER_H };
-  private autoTimer = 0;
-  onBehavior: ((e: BehaviorEvent) => void) | null = null;
+  private readonly uTime: IUniform<number> = { value: 0 };
+  private readonly hitBox: Mesh;
+  private readonly raycaster = new Raycaster();
+  private drift = 0;
+  onBehavior: ((e: BehaviorEvent, record: IndividualRecord) => void) | null = null;
   heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
   readonly lighting: HeroLighting = {
-    sunDir: new Vector3(0.3, 0.9, 0.35).normalize(), sunColor: new Color(1, 0.97, 0.92), sunIntensity: 1.6,
-    skyColor: new Color(0.78, 0.82, 0.82), groundColor: new Color(0.62, 0.6, 0.55), ambientIntensity: 0.7,
-    fogColor: new Color(0.75, 0.8, 0.8), fogDensity: 0.25, floorY: 0, underwater: true,
+    sunDir: new Vector3(0.12, 0.95, 0.2).normalize(), sunColor: new Color(0.9, 0.97, 1.0), sunIntensity: 2.4,
+    skyColor: new Color(0.7, 0.82, 0.9), groundColor: new Color(0.22, 0.2, 0.18), ambientIntensity: 0.5,
+    fogColor: new Color(0.1, 0.14, 0.16), fogDensity: 0.2, floorY: 0, underwater: true,
   };
 
-  constructor(private readonly canvas: HTMLCanvasElement, aspect: number) {
-    this.camera = new PerspectiveCamera(45, aspect, 0.003, 20);
-    this.camera.position.set(0.55, 0.32, 0.6);
-    this.scene.background = new Color(0.86, 0.9, 0.9);
-    const hemi = new HemisphereLight(0xdfe9ec, 0x8a7a63, 1.1);
-    const key = new DirectionalLight(0xfff6ea, 2.0);
-    key.position.set(0.3, 1.2, 0.6);
-    key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
-    key.shadow.camera.left = -0.5; key.shadow.camera.right = 0.5; key.shadow.camera.top = 0.5; key.shadow.camera.bottom = -0.5;
-    key.shadow.camera.near = 0.1; key.shadow.camera.far = 4;
-    this.scene.add(hemi, key);
-    const sand = new Mesh(new PlaneGeometry(TANK_W, TANK_D, 1, 1), new MeshStandardMaterial({ color: 0xcdbf9f, roughness: 0.95 }));
+  constructor(private readonly canvas: HTMLCanvasElement, aspect: number, renderer: WebGLRenderer) {
+    this.camera = new PerspectiveCamera(40, aspect, 0.003, 20);
+    this.scene.background = new Color(0.028, 0.032, 0.036);
+    const pmrem = new PMREMGenerator(renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.22;
+    // quiet dark room
+    const hemi = new HemisphereLight(0x5a6a72, 0x1a1715, 0.35);
+    const spot = new SpotLight(0xdff4ff, 5.5, 2.5, 0.75, 0.55, 1.2);
+    spot.position.set(0.05, 0.95, 0.08);
+    spot.target.position.set(0, 0, 0);
+    spot.castShadow = true;
+    spot.shadow.mapSize.set(1024, 1024);
+    spot.shadow.bias = -0.0004;
+    const fill = new DirectionalLight(0xffe9d6, 0.35);
+    fill.position.set(0.9, 0.5, 0.8);
+    const rim = new DirectionalLight(0x9fc8e8, 0.3);
+    rim.position.set(-0.8, 0.4, -0.7);
+    this.scene.add(hemi, spot, spot.target, fill, rim);
+    const desk = new Mesh(new PlaneGeometry(6, 4), new MeshStandardMaterial({ color: 0x1b1715, roughness: 0.8, metalness: 0.05 }));
+    desk.rotation.x = -Math.PI / 2;
+    desk.position.y = -0.022;
+    desk.receiveShadow = true;
+    this.scene.add(desk);
+    const wall = new Mesh(new PlaneGeometry(6, 3), new MeshStandardMaterial({ color: 0x0f1214, roughness: 1 }));
+    wall.position.set(0, 1.4, -1.4);
+    this.scene.add(wall);
+    const stand = new Mesh(new BoxGeometry(TANK_W + 0.06, 0.02, TANK_D + 0.06), new MeshStandardMaterial({ color: 0x111111, roughness: 0.4, metalness: 0.2 }));
+    stand.position.y = -0.011;
+    stand.receiveShadow = true;
+    this.scene.add(stand);
+    // aquarium light bar
+    const bar = new Mesh(new BoxGeometry(TANK_W + 0.02, 0.012, 0.05), new MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.4 }));
+    bar.position.set(0, TANK_H + 0.07, 0);
+    const lamp = new Mesh(new BoxGeometry(TANK_W - 0.02, 0.003, 0.03), new MeshStandardMaterial({ color: 0xffffff, emissive: new Color(0.8, 0.95, 1.0), emissiveIntensity: 3 }));
+    lamp.position.set(0, TANK_H + 0.063, 0);
+    this.scene.add(bar, lamp);
+
+    // sand with caustics
+    const sandMat = new MeshStandardMaterial({ color: 0xb8a98a, roughness: 0.95 });
+    const uTime = this.uTime;
+    sandMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = uTime;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPosT;')
+        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPosT = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\nvarying vec3 vWorldPosT;\nuniform float uTime;${CAUSTIC_GLSL}`)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  float grainT = hashT(floor(vWorldPosT.xz * 900.0)) - 0.5;
+  float patchT = vnoiseT(vWorldPosT.xz * 14.0) - 0.5;
+  diffuseColor.rgb *= 1.0 + grainT * 0.14 + patchT * 0.12;
+  float c = causticT(vWorldPosT.xz * 9.0, uTime);
+  diffuseColor.rgb *= 1.0 + c * 0.32;
+}`);
+    };
+    sandMat.customProgramCacheKey = () => 'tank-sand';
+    const sand = new Mesh(new PlaneGeometry(TANK_W, TANK_D, 1, 1), sandMat);
     sand.rotation.x = -Math.PI / 2;
     sand.receiveShadow = true;
     this.scene.add(sand);
-    const stand = new Mesh(new BoxGeometry(TANK_W + 0.06, 0.02, TANK_D + 0.06), new MeshStandardMaterial({ color: 0x3a3330, roughness: 0.6 }));
-    stand.position.y = -0.011;
-    this.scene.add(stand);
-    const glass = new LineSegments(new EdgesGeometry(new BoxGeometry(TANK_W, TANK_H, TANK_D)), new LineBasicMaterial({ color: 0x9fb8bd, transparent: true, opacity: 0.6 }));
-    glass.position.y = TANK_H / 2;
-    this.scene.add(glass);
-    const water = new Mesh(new PlaneGeometry(TANK_W, TANK_D), new MeshStandardMaterial({ color: 0x9fd0d8, transparent: true, opacity: 0.18, roughness: 0.1, depthWrite: false }));
-    water.rotation.x = -Math.PI / 2;
-    water.position.y = WATER_H;
-    this.scene.add(water);
+
+    // water: almost clear so the animals read well; a faint tint and a rippled, reflective surface
+    const body = new Mesh(new BoxGeometry(TANK_W - 0.004, WATER_H, TANK_D - 0.004), new MeshStandardMaterial({
+      color: new Color(0.6, 0.88, 0.84), transparent: true, opacity: 0.05, roughness: 0.08, metalness: 0, side: FrontSide, depthWrite: false, envMapIntensity: 0.4,
+    }));
+    body.position.y = WATER_H / 2;
+    body.renderOrder = 3;
+    this.scene.add(body);
+    const surfMat = new MeshStandardMaterial({
+      color: new Color(0.7, 0.9, 0.88), transparent: true, opacity: 0.2, roughness: 0.03, metalness: 0, depthWrite: false,
+      normalMap: makeRippleNormalMap(), normalScale: new Vector2(0.14, 0.14), envMapIntensity: 1.2,
+    });
+    surfMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = uTime;
+      shader.uniforms.uRippleScale = { value: new Vector3(2.0, 7.0, 19.0) };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPosW;')
+        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPosW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPosW;\nuniform float uTime;\nuniform vec3 uRippleScale;')
+        .replace('#include <normal_fragment_maps>', RIPPLE_NORMAL_GLSL)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  vec3 V = normalize(vViewPosition);
+  float NdV = clamp(dot(normalize(vNormal), V), 0.0, 1.0);
+  float F = 0.02 + 0.98 * pow(1.0 - NdV, 5.0);
+  diffuseColor.a = mix(0.12, 0.85, F);
+}`);
+    };
+    surfMat.customProgramCacheKey = () => 'tank-surface';
+    const surface = new Mesh(new PlaneGeometry(TANK_W - 0.004, TANK_D - 0.004), surfMat);
+    surface.rotation.x = -Math.PI / 2;
+    surface.position.y = WATER_H;
+    surface.renderOrder = 4;
+    this.scene.add(surface);
+
+    // glass panels, edges and an invisible hit box for picking
+    const glassMat = new MeshPhysicalMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.06, roughness: 0.0, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.02,
+      envMapIntensity: 1.5, side: DoubleSide, depthWrite: false,
+    });
+    const glassParts: [number, number, number, number, number, number][] = [
+      [TANK_W, TANK_H, 0.002, 0, TANK_H / 2, TANK_D / 2], [TANK_W, TANK_H, 0.002, 0, TANK_H / 2, -TANK_D / 2],
+      [0.002, TANK_H, TANK_D, TANK_W / 2, TANK_H / 2, 0], [0.002, TANK_H, TANK_D, -TANK_W / 2, TANK_H / 2, 0],
+    ];
+    for (const [w, h, d, x, y, z] of glassParts) {
+      const g = new Mesh(new BoxGeometry(w, h, d), glassMat);
+      g.position.set(x, y, z);
+      g.renderOrder = 5;
+      this.scene.add(g);
+    }
+    const edges = new LineSegments(new EdgesGeometry(new BoxGeometry(TANK_W, TANK_H, TANK_D)), new LineBasicMaterial({ color: 0x6f8a90, transparent: true, opacity: 0.5 }));
+    edges.position.y = TANK_H / 2;
+    this.scene.add(edges);
+    this.hitBox = new Mesh(new BoxGeometry(TANK_W, TANK_H, TANK_D), new MeshStandardMaterial({ visible: false }));
+    this.hitBox.position.y = TANK_H / 2;
+    this.hitBox.name = 'tank-hit';
+    this.scene.add(this.hitBox);
+    this.frameTank();
   }
 
-  activate(): void {
-    if (this.controls) return;
-    this.controls = new OrbitControls(this.camera, this.canvas);
-    this.controls.enableDamping = true;
-    this.controls.target.set(0, 0.06, 0);
-    this.controls.minDistance = 0.03;
-    this.controls.maxDistance = 2.5;
-    this.controls.maxPolarAngle = Math.PI * 0.49;
-    this.controls.update();
+  /** Default framing: the tank fills roughly two thirds of the width. */
+  frameTank(): void {
+    const hfov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
+    const dist = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
+    this.camera.position.set(dist * 0.35, 0.16 + dist * 0.28, dist * 0.95);
+    this.camera.lookAt(0, 0.12, 0);
+    if (this.controls) { this.controls.target.set(0, 0.12, 0); this.controls.update(); }
+  }
+
+  activate(autoRotate = false): void {
+    if (!this.controls) {
+      this.controls = new OrbitControls(this.camera, this.canvas);
+      this.controls.enableDamping = true;
+      this.controls.target.set(0, 0.12, 0);
+      this.controls.minDistance = 0.05;
+      this.controls.maxDistance = 2.2;
+      this.controls.maxPolarAngle = Math.PI * 0.49;
+      this.controls.enablePan = false;
+      this.controls.update();
+    }
+    this.controls.autoRotate = autoRotate;
+    this.controls.autoRotateSpeed = 0.22;
   }
 
   deactivate(): void {
@@ -91,28 +220,39 @@ export class TankScene {
     this.camera.updateProjectionMatrix();
   }
 
-  get occupantId(): string | null {
-    return this.occupant?.record.id ?? null;
+  get heroActive(): boolean {
+    return this.occupants.some((o) => o.hero);
   }
 
-  async setOccupant(record: IndividualRecord | null, species: SpeciesDef | undefined): Promise<void> {
-    this.clearOccupant();
-    if (!record || !species) return;
+  /** Make the tank hold exactly these records (adds and removes as needed). */
+  async setOccupants(records: IndividualRecord[], species: (id: string) => SpeciesDef | undefined): Promise<void> {
+    const wanted = new Set(records.map((r) => r.id));
+    for (const o of [...this.occupants]) if (!wanted.has(o.record.id)) this.removeOccupant(o.record.id);
+    for (const rec of records.slice(0, TANK_MAX_OCCUPANTS)) {
+      if (this.occupants.some((o) => o.record.id === rec.id)) continue;
+      await this.addOccupant(rec, species(rec.speciesId));
+    }
+  }
+
+  private async addOccupant(record: IndividualRecord, species: SpeciesDef | undefined): Promise<void> {
+    if (!species) return;
     const entry = DRIVERS[species.model.driver ?? ''];
     if (!entry) return;
     const seed = hashInts(record.number, record.caughtAt % 100000);
     const ind = generateIndividual(species, seed, 0, 0, 0, 0, Date.now());
     ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits];
-    ind.pos.set(0, 0, 0);
-    ind.home.set(0, 0, 0);
+    const slot = this.occupants.length;
+    ind.pos.set((slot % 2 === 0 ? -1 : 1) * 0.12 * Math.ceil(slot / 2), 0, (slot >= 2 ? 0.06 : -0.04));
+    ind.home.copy(ind.pos);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     let hero: HeroInstance | null = null;
-    const rel = this.heroApply && species.model.hero ? species.model.hero : species.model.lod1 ?? species.model.hero ?? species.model.lod2;
+    const useHero = !!this.heroApply && !!species.model.hero && !this.occupants.some((o) => o.hero);
+    const rel = useHero ? species.model.hero : species.model.lod1 ?? species.model.hero ?? species.model.lod2;
     if (rel) {
       const model = await instantiateModel(rel);
       root = model.root; bones = model.bones as Record<string, Object3D>; meshes = model.meshes; extras = model.extras;
       for (const m of meshes) m.castShadow = true;
-      if (this.heroApply && rel === species.model.hero) {
+      if (useHero && this.heroApply) {
         try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] tank fallback', err); hero = null; }
       }
     } else if (entry.placeholder) {
@@ -120,59 +260,74 @@ export class TankScene {
       ph.root.userData.placeholder = ph;
       root = ph.root;
     } else return;
-    if (this.occupant) { hero?.dispose(); root.removeFromParent(); return; }
+    if (this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); root.removeFromParent(); return; }
     const driver = entry.create();
-    const unsub = driver.onEvent((e) => this.onBehavior?.(e));
+    const unsub = driver.onEvent((e) => this.onBehavior?.(e, record));
     this.scene.add(root);
     driver.attach(root, ind, extras, bones, meshes);
-    this.occupant = { record, ind, driver, root, unsub, hero };
-    this.autoTimer = 1;
-    const anchor = driver.anchor();
-    this.controls?.target.copy(anchor);
-    const dist = Math.max(0.2, (ind.length_mm / 1000) * 3.5);
-    this.camera.position.set(anchor.x + dist * 0.7, anchor.y + dist * 0.55, anchor.z + dist * 0.8);
-    this.controls?.update();
+    root.userData.occupantId = record.id;
+    this.occupants.push({ record, ind, driver, root, unsub, hero });
   }
 
-  get heroActive(): boolean {
-    return !!this.occupant?.hero;
+  removeOccupant(id: string): void {
+    const i = this.occupants.findIndex((o) => o.record.id === id);
+    if (i < 0) return;
+    const o = this.occupants[i];
+    o.hero?.dispose();
+    o.unsub();
+    o.driver.dispose();
+    o.root.removeFromParent();
+    this.occupants.splice(i, 1);
   }
 
-  clearOccupant(): void {
-    if (!this.occupant) return;
-    this.occupant.hero?.dispose();
-    this.occupant.unsub();
-    this.occupant.driver.dispose();
-    this.occupant.root.removeFromParent();
-    this.occupant = null;
+  clearOccupants(): void {
+    for (const o of [...this.occupants]) this.removeOccupant(o.record.id);
+  }
+
+  /** Pick what is under a canvas point: an occupant, the tank, or nothing. */
+  pick(ndcX: number, ndcY: number): { kind: 'occupant'; occupant: Occupant } | { kind: 'tank' } | null {
+    this.raycaster.setFromCamera(new Vector2(ndcX, ndcY), this.camera);
+    const roots = this.occupants.map((o) => o.root);
+    const hits = this.raycaster.intersectObjects(roots, true);
+    if (hits.length) {
+      let obj: Object3D | null = hits[0].object;
+      while (obj && obj.userData.occupantId === undefined) obj = obj.parent;
+      const occ = obj ? this.occupants.find((o) => o.record.id === obj!.userData.occupantId) : undefined;
+      if (occ) return { kind: 'occupant', occupant: occ };
+    }
+    if (this.raycaster.intersectObject(this.hitBox).length) return { kind: 'tank' };
+    return null;
   }
 
   update(dt: number, simScale: number): void {
-    this.controls?.update();
-    const o = this.occupant;
-    if (!o) return;
-    // simple autonomy: rest, wander inside the tank, occasional yawn
-    this.autoTimer -= dt * simScale;
-    if (!o.driver.busy && this.autoTimer <= 0) {
-      const r = o.ind.rng.next();
-      const S = o.ind.length_mm / 1000;
-      if (r < 0.55) o.driver.setIntent({ id: Date.now(), kind: 'rest', urgency: 0, seconds: 6 + o.ind.rng.next() * 20 });
-      else if (r < 0.9) {
-        const tx = (o.ind.rng.next() - 0.5) * (TANK_W - 4 * S), tz = (o.ind.rng.next() - 0.5) * (TANK_D - 3 * S);
-        o.driver.setIntent({ id: Date.now(), kind: 'wander', urgency: 0.3, seconds: 8, target: new Vector3(tx, 0, tz) });
-      } else o.driver.setIntent({ id: Date.now(), kind: 'special', urgency: 0, seconds: 3, param: 'yawn' });
-      this.autoTimer = 0.5;
+    this.uTime.value += dt;
+    this.drift += dt;
+    if (this.controls) {
+      this.controls.update();
+      // gentle vertical breathing of the view on top of the slow orbit
+      this.controls.target.y = 0.12 + Math.sin(this.drift * 0.25) * 0.012;
     }
-    o.driver.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now() });
-    if (o.hero) o.hero.update(this.camera, o.driver.openings ?? { mouth: 0, gill: 0 });
-    // keep inside the glass
-    const half = new Vector3(TANK_W / 2 - 0.02, 0, TANK_D / 2 - 0.02);
-    o.ind.pos.x = Math.max(-half.x, Math.min(half.x, o.ind.pos.x));
-    o.ind.pos.z = Math.max(-half.z, Math.min(half.z, o.ind.pos.z));
+    for (const o of this.occupants) {
+      const d = o.driver;
+      if (!d.busy) {
+        const r = o.ind.rng.next();
+        const S = o.ind.length_mm / 1000;
+        if (r < 0.55) d.setIntent({ id: Date.now(), kind: 'rest', urgency: 0, seconds: 6 + o.ind.rng.next() * 20 });
+        else if (r < 0.9) {
+          const tx = (o.ind.rng.next() - 0.5) * (TANK_W - 4 * S), tz = (o.ind.rng.next() - 0.5) * (TANK_D - 3 * S);
+          d.setIntent({ id: Date.now(), kind: 'wander', urgency: 0.3, seconds: 8, target: new Vector3(tx, 0, tz) });
+        } else d.setIntent({ id: Date.now(), kind: 'special', urgency: 0, seconds: 3, param: 'yawn' });
+      }
+      d.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now() });
+      if (o.hero) o.hero.update(this.camera, d.openings ?? { mouth: 0, gill: 0 });
+      const hx = TANK_W / 2 - 0.02, hz = TANK_D / 2 - 0.02;
+      o.ind.pos.x = Math.max(-hx, Math.min(hx, o.ind.pos.x));
+      o.ind.pos.z = Math.max(-hz, Math.min(hz, o.ind.pos.z));
+    }
   }
 
   dispose(): void {
     this.deactivate();
-    this.clearOccupant();
+    this.clearOccupants();
   }
 }

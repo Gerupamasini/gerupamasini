@@ -1,6 +1,6 @@
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'run' | 'crouch'
-  | 'interact' | 'observe' | 'zukan' | 'menu' | 'speedUp' | 'speedDown' | 'home' | 'ticket';
+  | 'interact' | 'observe' | 'zukan' | 'menu' | 'speedUp' | 'speedDown' | 'home' | 'ticket' | 'debug' | 'zoom';
 
 const BINDINGS: Record<Action, string[]> = {
   forward: ['KeyW', 'ArrowUp'],
@@ -17,6 +17,8 @@ const BINDINGS: Record<Action, string[]> = {
   speedDown: ['BracketLeft', 'Comma'],
   home: ['KeyH'],
   ticket: ['KeyT'],
+  debug: ['F3', 'Backquote'],
+  zoom: ['KeyZ'],
 };
 
 /** Keyboard and mouse state with per-frame edge detection. */
@@ -29,6 +31,7 @@ export class Input {
   wheel = 0;
   mouseDown = false;
   mouseClicked = false;
+  mouseRightDown = false;
   pointerLocked = false;
   /** When true, game actions are ignored (a text field or dialog has focus). */
   blocked = false;
@@ -38,7 +41,7 @@ export class Input {
     this.canvas = canvas;
     window.addEventListener('keydown', (e) => {
       if (this.isEditable(e.target)) return;
-      if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
+      if (e.code === 'Tab' || e.code === 'Space' || e.code === 'F3') e.preventDefault();
       if (!this.down.has(e.code)) this.pressedCodes.add(e.code);
       this.down.add(e.code);
     });
@@ -60,9 +63,11 @@ export class Input {
         this.mouseDown = true;
         this.mouseClicked = true;
       }
+      if (e.button === 2) this.mouseRightDown = true;
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.mouseDown = false;
+      if (e.button === 2) this.mouseRightDown = false;
     });
     canvas.addEventListener('wheel', (e) => {
       this.wheel += Math.sign(e.deltaY);

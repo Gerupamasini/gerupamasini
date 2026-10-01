@@ -9,6 +9,7 @@ import type { QualityPreset } from '../core/Settings';
 import { EventBus } from '../core/EventBus';
 import { BehaviorTree, type PerceptionContext } from './brain/BehaviorTree';
 import { Spawner, type SpawnEnv } from './Spawner';
+export type { SpawnEnv };
 import type { Individual } from './Individual';
 import type { BehaviorEvent, Driver, Floor, Intent } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
@@ -251,6 +252,13 @@ export class CreatureSystem {
     e.driver.dispose();
     this.entries.delete(id);
     this.events.emit('despawn', e.ind);
+  }
+
+  /** debug: spawn everything the rules allow right around the player, ignoring the pop-in distance */
+  forceSpawn(playerPos: Vector3, env: SpawnEnv): number {
+    const requests = this.spawner.plan(playerPos.x, playerPos.z, env, this.individuals, 0);
+    for (const req of requests) this.spawn(this.spawner.create(req, env.gameMs));
+    return requests.length;
   }
 
   /** Push an intent from outside the brain (e.g. a failed capture scares the animal). */

@@ -1,5 +1,6 @@
 import { h } from 'preact';
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { ModelPreview } from './ModelPreview';
 import type { App } from '../../app/App';
 import { t } from '../store';
 import type { IndividualRecord } from '../../creatures/Individual';
@@ -19,6 +20,19 @@ export function Zukan({ app }: { app: App }) {
   const stageName = (id: string) => sp?.stages.find((s) => s.id === id)?.ja ?? id;
   const traitName = (id: string) => sp?.traits.find((s) => s.id === id)?.ja ?? id;
   const inds = p?.individuals ?? [];
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewRef = useRef<ModelPreview | null>(null);
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const pv = new ModelPreview(canvasRef.current);
+    previewRef.current = pv;
+    return () => { pv.dispose(); previewRef.current = null; };
+  }, []);
+  useEffect(() => {
+    const pv = previewRef.current;
+    if (!pv || !sp) return;
+    if (known) void pv.show(sp, sp.model.clips.idle); else pv.clear();
+  }, [sp?.id, known]);
   const largest = inds.reduce<IndividualRecord | null>((a, b) => (!a || b.length_mm > a.length_mm ? b : a), null);
   const smallest = inds.reduce<IndividualRecord | null>((a, b) => (!a || b.length_mm < a.length_mm ? b : a), null);
   return (
@@ -49,6 +63,7 @@ export function Zukan({ app }: { app: App }) {
           {sp && (
             <div class="zukan-detail">
               <h3>{known ? sp.names.ja : t('zukan.unknown')} <span class="dim small">{known ? sp.names.sci : ''}</span></h3>
+              <canvas ref={canvasRef} class="zukan-preview" style={{ visibility: known ? 'visible' : 'hidden' }} />
               <div class="tags">
                 {!sp.collectable && <span class="tag">{t('zukan.notCollectable')}</span>}
                 {sp.encyclopedia.placeholderModel && <span class="tag warn">{t('zukan.placeholder')}</span>}

@@ -3,13 +3,17 @@ import { useEffect } from 'preact/hooks';
 import type { App } from '../app/App';
 import { ui, t } from './store';
 import { TideGauge } from './hud/TideGauge';
+import { Minimap } from './hud/Minimap';
 import { Toasts } from './hud/Toasts';
 import { Menu } from './menu/Menu';
 import { TicketDialog } from './ticket/TicketDialog';
+import { TideTable } from './tide/TideTable';
 import { Zukan } from './zukan/Zukan';
 import { ObserveOverlay } from './observe/ObserveOverlay';
 import { CaptureOverlay } from './capture/CaptureOverlay';
-import { TankPanel } from './tank/TankPanel';
+import { HomeMenu } from './home/HomeMenu';
+import { DebugPanel } from './debug/DebugPanel';
+import { CreatureMarkers } from './debug/CreatureMarkers';
 import './ui.css';
 
 export function Root({ app }: { app: App }) {
@@ -19,18 +23,22 @@ export function Root({ app }: { app: App }) {
     app.canvas.addEventListener('click', onClick);
     return () => app.canvas.removeEventListener('click', onClick);
   }, [app]);
+  const inField = screen === 'field' || screen === 'capture' || screen === 'observe';
   return (
     <Fragment>
       {screen === 'boot' && <Loading />}
       {screen === 'error' && <ErrorScreen />}
       {screen === 'title' && <Title app={app} />}
+      {screen === 'home' && <HomeMenu app={app} />}
       {(screen === 'field' || screen === 'capture') && <Hud app={app} />}
       {screen === 'observe' && <ObserveOverlay app={app} />}
       {screen === 'capture' && <CaptureOverlay app={app} />}
-      {screen === 'tank' && <TankPanel app={app} />}
+      {inField && <CreatureMarkers />}
       {screen === 'zukan' && <Zukan app={app} />}
       {screen === 'menu' && <Menu app={app} />}
       {screen === 'ticket' && <TicketDialog app={app} />}
+      {screen === 'tidetable' && <TideTable app={app} />}
+      {ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}
       <Toasts />
     </Fragment>
   );
@@ -71,7 +79,7 @@ function Title({ app }: { app: App }) {
         </div>
         <div class="dim small">{hud.dateText} {hud.timeText}</div>
       </div>
-      <div class="version">v0.1 身内テスト版</div>
+      <div class="version">v0.2 身内テスト版</div>
     </div>
   );
 }
@@ -96,16 +104,19 @@ function Hud({ app }: { app: App }) {
         )}
       </div>
       <div class="hud-top-right">
-        <div>{t('progress.research')} <b>{hud.research}</b></div>
-        <div>{t('hud.case')} <b>{hud.caseCount}</b>/{hud.caseMax}</div>
-        <div class="dim small">{hud.fps} fps</div>
+        <Minimap app={app} />
+        <div class="stats">
+          <div>{t('progress.research')} <b>{hud.research}</b></div>
+          <div>{t('hud.case')} <b>{hud.caseCount}</b>/{hud.caseMax}</div>
+          <div class="dim small">{hud.fps} fps</div>
+        </div>
       </div>
       <div class="reticle" />
       <div class="hud-center-bottom">
         {hud.tooDeep && <div class="warn">{t('hud.tooDeep')}</div>}
         {hud.prompt && <div class="prompt">{hud.prompt}</div>}
       </div>
-      <div class="hud-bottom dim small">{t('hud.hint.move')}</div>
+      <div class="hud-bottom dim small">{t('hud.hint.move')}<br />{t('hud.hint.view')}</div>
     </Fragment>
   );
 }

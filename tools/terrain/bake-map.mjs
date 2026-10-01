@@ -69,26 +69,66 @@ function channel(x, z) {
 }
 
 const POOLS = [
-  { cx: -20, cz: -30, rx: 12, rz: 8, depth: 0.25 },
-  { cx: 45, cz: 10, rx: 9, rz: 9, depth: 0.3 },
-  { cx: -115, cz: 45, rx: 14, rz: 7, depth: 0.2 },
-  { cx: 92, cz: -52, rx: 7, rz: 5, depth: 0.18 },
-  { cx: 10, cz: 62, rx: 16, rz: 10, depth: 0.3 },
-  { cx: 120, cz: 90, rx: 10, rz: 8, depth: 0.22 },
+  { cx: -20, cz: -50, rx: 12, rz: 8, depth: 0.22 },
+  { cx: 45, cz: 40, rx: 9, rz: 9, depth: 0.3 },
+  { cx: -115, cz: 55, rx: 14, rz: 7, depth: 0.2 },
+  { cx: 92, cz: -62, rx: 7, rz: 5, depth: 0.18 },
+  { cx: 10, cz: 80, rx: 16, rz: 10, depth: 0.3 },
+  { cx: 120, cz: 100, rx: 10, rz: 8, depth: 0.22 },
 ];
+
+// ridge-and-runnel: an offshore sand bar with a trough behind it. Sea water enters the trough through notches in
+// the bar, so water reaches close to the dry beach well before high tide (the "海水が手前に入ってくる" look).
+const BAR = { zc: 15, amp: 8, wavelength: 60, width: 11, height: 0.22, runnelOffset: 22, runnelWidth: 8, runnelDepth: 0.28, gaps: [-60, 70], gapWidth: 6 };
+function barAndRunnel(x, z) {
+  const zc = BAR.zc + BAR.amp * Math.sin(x / BAR.wavelength);
+  const win = smooth(-150, -120, x) * (1 - smooth(120, 150, x));
+  let bar = BAR.height * Math.exp(-(((z - zc) / BAR.width) ** 2)) * win;
+  let gap = 0;
+  for (const gx of BAR.gaps) gap += Math.exp(-(((x - gx) / BAR.gapWidth) ** 2));
+  bar *= 1 - 0.92 * Math.min(1, gap);
+  const runnel = -BAR.runnelDepth * Math.exp(-(((z - (zc - BAR.runnelOffset)) / BAR.runnelWidth) ** 2)) * win;
+  return { bar, runnel, inBar: bar > 0.08, inRunnel: runnel < -0.1 };
+}
+
+// 澪筋: small braided drainage channels running seaward across the flat
+const RUNNELS = [
+  { xs: -130, z0: -75, A: 6, L: 28, phi: 0.3 },
+  { xs: -95, z0: -60, A: 9, L: 35, phi: 2.1 },
+  { xs: -35, z0: -80, A: 7, L: 30, phi: 1.1 },
+  { xs: 5, z0: -70, A: 10, L: 40, phi: 4.0 },
+  { xs: 55, z0: -65, A: 6, L: 26, phi: 0.9 },
+  { xs: 100, z0: -78, A: 8, L: 33, phi: 2.8 },
+  { xs: 140, z0: -60, A: 5, L: 24, phi: 1.7 },
+];
+function drainage(x, z) {
+  let depth = 0, weight = 0;
+  for (const r of RUNNELS) {
+    if (z < r.z0 - 5) continue;
+    const t = clamp((z - r.z0) / 130, 0, 1);
+    const xc = r.xs + r.A * Math.sin((z - r.z0) / r.L + r.phi) + 3 * fbm(z / 15 + r.phi * 7, r.xs / 50, 2);
+    const w = 1.5 + 2.5 * t;
+    const D = 0.06 + 0.16 * t;
+    const d = Math.abs(x - xc);
+    const g = Math.exp(-((d / w) ** 2)) * smooth(r.z0 - 5, r.z0 + 10, z);
+    depth += D * g;
+    weight = Math.max(weight, g);
+  }
+  return { depth: Math.min(depth, 0.26), weight };
+}
 
 function height(x, z) {
   let h = baseProfile(z);
   const intertidal = smooth(-130, -115, z);
   h += 0.12 * fbm(x / 70, z / 70, 3) * intertidal + 0.05 * fbm(x / 22, z / 22, 3) * intertidal;
   h += 0.025 * fbm(x / 4.5, z / 4.5, 2) * intertidal; // ripples
-  // sand bar with a sheltered flat behind it
-  const barX = smooth(-45, -25, x) * (1 - smooth(70, 90, x));
-  h += 0.12 * Math.exp(-(((z - 20) / 7) ** 2)) * barX;
+  const br = barAndRunnel(x, z);
+  h += br.bar + br.runnel;
   for (const p of POOLS) {
     const dx = (x - p.cx) / p.rx, dz = (z - p.cz) / p.rz;
     h -= p.depth * Math.exp(-(dx * dx + dz * dz) * 1.3);
   }
+  h -= drainage(x, z).depth;
   const ch = channel(x, z);
   if (ch) h -= ch.depth;
   return h;
@@ -101,6 +141,11 @@ function substrate(x, z, h) {
   const ch = channel(x, z);
   if (ch && ch.weight > 0.55) return idx.channel;
   if (ch && ch.weight > 0.22) return idx.mud;
+  const dr = drainage(x, z);
+  if (dr.weight > 0.5) return idx.mud;
+  const br = barAndRunnel(x, z);
+  if (br.inBar) return idx.sand;
+  if (br.inRunnel) return idx.muddy_sand;
   const n = fbm(x / 25, z / 25, 3);
   const n2 = fbm(x / 12 + 50, z / 12 - 20, 3);
   if (h > 0.9 && n2 > 0.5) return idx.gravel;

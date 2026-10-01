@@ -48,8 +48,19 @@ try {
   await page.evaluate(() => window.__higata.updateSettings({ quality: 'low' }));
   const titleBtn = page.locator('button.primary').first();
   await titleBtn.click();
+  await page.waitForFunction(() => window.__higata && window.__higata.mode === 'home', null, { timeout: 60000 });
+  await waitFrames(page, 8);
+  await page.screenshot({ path: path.join(outDir, '01b-home.png') });
+  await page.evaluate(() => window.__higata.openOverlay('tidetable'));
+  await waitFrames(page, 3);
+  await page.screenshot({ path: path.join(outDir, '01c-tidetable.png') });
+  await page.evaluate(() => window.__higata.closeOverlay());
+  await page.evaluate(() => window.__higata.enterField());
   await page.waitForFunction(() => window.__higata && window.__higata.world && window.__higata.player && window.__higata.mode === 'field', null, { timeout: 120000 });
-  await waitFor(1500);
+  // daylight for the visual checks (debug clock), real clock again for the ticket test below
+  const noon = () => page.evaluate(() => { const a = window.__higata; const d = new Date(a.clock.nowReal() + 9 * 3600000); a.setDebugTime(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 30) - 9 * 3600000); });
+  await noon();
+  await waitFrames(page, 6);
   await page.screenshot({ path: path.join(outDir, '02-field.png') });
   // look around: turn 90° left and tilt down, then towards the sea
   await page.evaluate(() => { const a = window.__higata; a.player.yaw += Math.PI / 2; a.player.pitch = -0.25; });
@@ -61,6 +72,7 @@ try {
   // low tide / evening via a ticket: find next low water today
   await page.evaluate(() => {
     const a = window.__higata;
+    a.setDebugTime(null);
     const now = a.clock.nowReal();
     const ex = a.world.tide.extrema(now, now + 2 * 86400000);
     const low = ex.find((e) => e.kind === 'low');
@@ -72,6 +84,7 @@ try {
   await waitFor(800);
   await page.screenshot({ path: path.join(outDir, '06-evening.png') });
   // stand at the waterline at the current tide and look across the shallows
+  await noon();
   await page.evaluate(() => {
     const a = window.__higata;
     a.clock.cancelTicket();
@@ -136,15 +149,17 @@ try {
     await page.evaluate(() => window.__higata.openOverlay('zukan'));
     await waitFrames(page, 2);
     await page.screenshot({ path: path.join(outDir, '11-zukan.png') });
-    await page.evaluate(() => { const a = window.__higata; a.closeOverlay(); a.enterTank(); return a.tankPut(a.encyclopedia.caseItems.value[0]); });
+    await page.evaluate(() => { const a = window.__higata; a.closeOverlay(); a.enterHome(); a.setHomePanel('tank'); return a.tankPut(a.encyclopedia.caseItems.value[0]); });
     await waitFrames(page, 12);
     await page.screenshot({ path: path.join(outDir, '12-tank.png') });
-    await page.evaluate(() => { const a = window.__higata; a.leaveTank(); return a.writeSave(); });
+    await page.evaluate(() => { const a = window.__higata; return a.writeSave(); });
     await page.reload({ waitUntil: 'load' });
     await page.waitForFunction(() => document.querySelector('.title-screen'), null, { timeout: 60000 });
     const hasContinue = await page.evaluate(() => [...document.querySelectorAll('.title-buttons button')].some((b) => b.textContent.includes('つづき')));
     if (!hasContinue) errors.push('no continue button after save');
     await page.evaluate(() => window.__higata.continueGame());
+    await page.waitForFunction(() => window.__higata && window.__higata.mode === 'home', null, { timeout: 60000 });
+    await page.evaluate(() => window.__higata.enterField());
     await page.waitForFunction(() => window.__higata && window.__higata.world && window.__higata.player && window.__higata.mode === 'field', null, { timeout: 120000 });
     const restored = await page.evaluate(() => ({ research: window.__higata.encyclopedia.research.value, tank: window.__higata.encyclopedia.tankItems.value.length, removed: window.__higata.removed.size }));
     console.log('after reload', JSON.stringify(restored));
@@ -152,6 +167,15 @@ try {
     await waitFrames(page, 6);
     await page.screenshot({ path: path.join(outDir, '13-continue.png') });
   } else errors.push('no goby spawned near the player');
+  // runnel at mid tide, then debug mode at low tide with markers (daylight)
+  await noon();
+  await page.evaluate(() => { const a = window.__higata; a.toggleDebug(); a.setTideOverride(0.15); a.teleport('runnel'); a.player.pitch = -0.12; });
+  await waitFrames(page, 8);
+  await page.screenshot({ path: path.join(outDir, '16-runnel-midtide.png') });
+  await page.evaluate(() => { const a = window.__higata; a.setTideOverride(-0.8); a.teleport('waterline'); a.forceSpawn(); });
+  await waitFrames(page, 10);
+  await page.screenshot({ path: path.join(outDir, '17-debug-lowtide.png') });
+  await page.evaluate(() => { const a = window.__higata; a.setTideOverride(null); a.toggleDebug(); a.setDebugTime(null); });
   const stats = await page.evaluate(() => { const a = window.__higata; return { tide: a.world.tideLevel, pools: a.world.habitat.pools.length, calls: a.renderer.gl.info.render.calls, tris: a.renderer.gl.info.render.triangles, creatures: a.creatures?.stats(), species: Object.fromEntries(a.creatures.individuals.reduce((m, i) => m.set(i.species.id, (m.get(i.species.id) ?? 0) + 1), new Map())) }; });
   console.log('stats', JSON.stringify(stats));
   await browser.close();
