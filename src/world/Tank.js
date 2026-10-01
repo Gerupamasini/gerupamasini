@@ -82,18 +82,49 @@ export function buildTank({ glassEnv = null } = {}) {
   led.position.set(0, H + 0.0915, -0.02);
   g.add(led);
 
-  // background: matte neutral black film on the back glass. It is lit only by the
-  // hood light that falls off with depth and seen through the water, so it
-  // reads as the usual dark gradient of a photographed tank; the caustic
-  // pattern is kept faint (on a vertical wall it projects into streaks)
+  // background film on the back glass. It is lit only by the hood light that
+  // falls off with depth and seen through the water, so it reads as the
+  // usual dark gradient of a photographed tank; the caustic pattern is kept
+  // faint (on a vertical wall it projects into streaks). The film is a dark
+  // matte photographic backdrop of out-of-focus planting (the
+  // usual aquarium background print): deep olive-green masses of blurred
+  // stems and bushes, denser and darker toward the bottom where dim stones
+  // show, never a flat black void. Everything is soft and low in contrast
+  // (it is printed out of focus and seen through 45 cm of water); the
+  // water veil and the depth of field do the rest.
+  // out-of-focus planting pattern along a vertical wall (u: horizontal
+  // coordinate along it, k: diffuse brightness, e: self-radiance for a
+  // mirrored image that does not depend on the light falling on the wall)
+  const backdrop = (u, k, e = 0) => /* glsl */ `
+      {
+        vec3 wp = vUwWorld;
+        float u = ${u};
+        float yh = wp.y / ${H.toFixed(3)};
+        // tall blurred stems: vertical streaks that wander and fade with height
+        vec2 sp = vec2(u * 22.0 + 1.4 * vnoise2(vec2(u * 3.0, wp.y * 4.0)), wp.y * 2.2);
+        float stems = smoothstep(0.42, 0.78, vnoise2(sp)) * smoothstep(0.98, 0.35, yh);
+        // rounded bush masses in the lower half
+        float bush = smoothstep(0.38, 0.72, vnoise2(vec2(u * 7.0 + 3.0, wp.y * 6.5)) * 0.7 + vnoise2(vec2(u * 19.0, wp.y * 17.0)) * 0.3)
+                   * smoothstep(0.62, 0.15, yh);
+        // dim stones along the bottom
+        float rock = smoothstep(0.5, 0.75, vnoise2(vec2(u * 9.0 + 11.0, 0.0)) * 0.6 + 0.4 * vnoise2(vec2(u * 30.0, wp.y * 30.0)))
+                   * smoothstep(0.24, 0.1, yh);
+        vec3 film = vec3(0.014, 0.02, 0.016);
+        film = mix(film, vec3(0.06, 0.11, 0.04), stems * 0.75);
+        film = mix(film, vec3(0.075, 0.125, 0.045) * (0.7 + 0.6 * vnoise2(vec2(u, wp.y) * 40.0)), bush * 0.8);
+        film = mix(film, vec3(0.08, 0.072, 0.06), rock * 0.75);
+        // faint large-scale unevenness of the print
+        film *= 0.85 + 0.3 * vnoise3(wp * vec3(6.0, 4.0, 6.0));
+        diffuseColor.rgb = film * ${k.toFixed(3)};
+        ${e > 0 ? `totalEmissiveRadiance += film * ${e.toFixed(3)};` : ''}
+      }`;
   const bgMat = patchUnderwater(
-    new THREE.MeshStandardMaterial({ color: 0x090b0a, roughness: 0.95 }),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }),
     {
       caustics: true,
       causticMix: 0.2,
       key: 'bg',
-      // faint, large-scale unevenness of the film (no visible pattern)
-      extraColor: 'diffuseColor.rgb *= 0.85 + 0.3 * vnoise3(vUwWorld * vec3(6.0, 4.0, 6.0));',
+      extraColor: backdrop('wp.x', 1.0),
     }
   );
   const bg = new THREE.Mesh(new THREE.PlaneGeometry(L, H), bgMat);
@@ -101,8 +132,15 @@ export function buildTank({ glassEnv = null } = {}) {
   bg.receiveShadow = true;
   g.add(bg);
   // side panes seen from inside the water: dark glass with a grazing sheen
-  // (no milky diffuse film)
-  const sideMat = patchUnderwater(new THREE.MeshStandardMaterial({ color: 0x030506, roughness: 0.18, metalness: 0.0, envMapIntensity: 0.3, transparent: true, opacity: 0.85 }), { caustics: false, key: 'side' });
+  // (no milky diffuse film). Seen obliquely from inside, the glass/air face
+  // reflects totally (beyond ~49° in water), so a side pane mirrors the
+  // planting of the tank: a dim, soft version of the planted backdrop stands
+  // in for that reflection instead of a black slab.
+  const sideMat = patchUnderwater(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.18, metalness: 0.0, envMapIntensity: 0.3, transparent: true, opacity: 0.85 }), {
+    caustics: false,
+    key: 'side',
+    extraColor: backdrop('wp.z * 1.7 + 2.3 * sign(wp.x)', 0.3, 0.75),
+  });
   for (const s of [-1, 1]) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(D, H), sideMat);
     p.position.set(s * (L / 2 - 0.0005), H / 2, 0);

@@ -50,7 +50,7 @@ const STONE_TONES = [
   [0.12, 0.11, 0.095],
 ];
 
-function rockGeometry(radius, rng, sx, sy, sz) {
+function rockGeometry(radius, rng, sx, sy, sz, toneMul = 1) {
   const g = mergeVertices(new THREE.IcosahedronGeometry(1, 5));
   const p = g.attributes.position;
   const d = new THREE.Vector3();
@@ -78,7 +78,9 @@ function rockGeometry(radius, rng, sx, sy, sz) {
     }
   }
   const nrm = g.attributes.normal;
-  const tone = STONE_TONES[Math.floor(rng.next() * STONE_TONES.length)];
+  // loose pebble-sized stones are washed river cobbles, as light as the gravel
+  // around them (a near-black stone in a pale bed reads as a hole)
+  const tone = STONE_TONES[Math.floor(rng.next() * STONE_TONES.length)].map((v) => v * toneMul);
   const scale = Math.min(sx, sy, sz);
   const col = new Float32Array(p.count * 3);
   for (let i = 0; i < p.count; i++) {
@@ -129,8 +131,12 @@ export function buildRocks() {
         vec3 algae = vec3(0.045, 0.07, 0.022) * (0.7 + 0.6 * vnoise3(wp * 90.0));
         diffuseColor.rgb = mix(diffuseColor.rgb, algae, top * patchy * 0.8);
         // brownish diatom / mulm film where the stone meets the gravel
-        float low = smoothstep(0.075, 0.035, wp.y);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.085, 0.068, 0.045), low * 0.6);
+        // (height above the local bed, which slopes up toward the back, so a
+        // small loose stone is not filmed over as a whole)
+        float bk = 0.5 - wp.z / ${TANK.D.toFixed(4)};
+        float bed = ${TANK.gravel.toFixed(4)} + 0.028 * bk * bk;
+        float low = smoothstep(0.03, 0.002, wp.y - bed);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.085, 0.068, 0.045), low * 0.5);
       }`,
     extraNormal: `
       {
@@ -147,18 +153,21 @@ export function buildRocks() {
     { x: -0.2, z: -0.15, sx: 0.07, sy: 0.055, sz: 0.06, ry: 1.2 },
     { x: 0.33, z: -0.1, sx: 0.1, sy: 0.075, sz: 0.075, ry: -0.6 },
     { x: 0.08, z: 0.05, sx: 0.045, sy: 0.03, sz: 0.04, ry: 2.2 },
-    // a few loose stones
+    // a few loose stones (none in the open gravel at the centre, where the
+    // low close-up cameras look along the bed: a stone there seen edge-on
+    // shows a lit rim over a shaded flank and reads as a pit)
     { x: -0.12, z: 0.1, sx: 0.022, sy: 0.014, sz: 0.018, ry: 0.9, small: true },
     { x: 0.45, z: 0.06, sx: 0.028, sy: 0.016, sz: 0.02, ry: -1.3, small: true },
-    { x: 0.2, z: -0.02, sx: 0.018, sy: 0.012, sz: 0.015, ry: 2.6, small: true },
   ];
   const up = new THREE.Vector3(0, 1, 0);
   for (const d of defs) {
     const radius = stoneShape(rng);
-    const geo = rockGeometry(radius, rng, d.sx, d.sy, d.sz);
+    const geo = rockGeometry(radius, rng, d.sx, d.sy, d.sz, d.small ? 2.1 : 1);
     const m = new THREE.Mesh(geo, mat);
     // bedded into the gravel (no visible flat underside)
-    const y = groundHeight(d.x, d.z) + d.sy * (d.small ? 0.3 : 0.2);
+    // (loose stones sink half into the bed: a stone perched on top shows a lit
+    // rim over a shaded flank, which reads as a crater from a low camera)
+    const y = groundHeight(d.x, d.z) + d.sy * (d.small ? -0.05 : 0.2);
     m.position.set(d.x, y, d.z);
     m.rotation.y = d.ry;
     m.castShadow = true;
@@ -240,24 +249,41 @@ const ribbonSway = /* glsl */ `
 // flat along it, as long tape grass does. Built in world space (the blades
 // are merged into one mesh); uv: x across, y along the blade (0 base .. 1 tip).
 const RIBBON_SEGS = 36;
-function ribbonBlade(rng, base, len, width) {
-  const surfY = TANK.water - 0.007;
-  const R = 0.045; // radius of the arc over at the surface
+// `xr` draws the per-blade irregularity (droop, surface arc, sinking tip) from
+// its own stream so the rest of the planting keeps its layout.
+function ribbonBlade(rng, base, len, width, xr) {
+  const surfY = TANK.water - 0.007 - xr.range(0, 0.004);
+  // radius of the arc over at the surface: stiff young blades turn late and
+  // tight, old soft ones bow over in a long sweep
+  const R = xr.range(0.022, 0.085);
   const lean0 = rng.range(0.03, 0.22);
-  const curl = rng.range(0.15, 0.85);
+  // some blades bow over under their own weight well below the surface and
+  // hang (th beyond 90°), most stay fairly upright
+  const curl = rng.range(0.15, 0.85) * (xr.next() < 0.3 ? xr.range(1.6, 2.8) : 1);
   const az0 = rng.range(0, Math.PI * 2);
   const drift = rng.range(-0.9, 0.9);
   const twist = rng.range(0.6, 2.8) * rng.sign();
+  // a floating tip lies on the surface for a short run, then (old, heavy,
+  // torn tips) slowly sinks back into the water column
+  const floatRun = xr.range(0.015, 0.14);
+  const sink = xr.next() < 0.55 ? xr.range(0.25, 1.1) : 0;
   const ds = len / RIBBON_SEGS;
   const pts = [];
   const tans = [];
   const p = base.clone();
+  let floated = 0;
   for (let i = 0; i <= RIBBON_SEGS; i++) {
     const t = i / RIBBON_SEGS;
-    let th = lean0 + curl * Math.pow(t, 1.7);
+    let th = Math.min(lean0 + curl * Math.pow(t, 1.7), Math.PI * 0.8);
     const head = surfY - p.y;
-    if (head < R) th = Math.max(th, (Math.PI / 2) * (1 - Math.max(0, head) / R));
-    th = Math.min(th, Math.PI / 2);
+    if (floated > floatRun) {
+      // past the floating run: stays sunk-back (no turning up again)
+      floated += ds;
+      th = Math.PI / 2 + sink * Math.min(1, (floated - floatRun) / 0.06);
+    } else if (head < R) {
+      th = Math.max(Math.min(th, Math.PI / 2), (Math.PI / 2) * (1 - Math.max(0, head) / R));
+      if (head < 0.003) floated += ds;
+    }
     const az = az0 + drift * t;
     const d = new THREE.Vector3(Math.sin(th) * Math.cos(az), Math.cos(th), Math.sin(th) * Math.sin(az));
     pts.push(p.clone());
@@ -587,17 +613,24 @@ export function buildPlants() {
   const vCol = [];
   const vPlant = [];
   const vIdx = [];
+  const xr = new RNG(5151);
   for (const c of clumps) {
     // each clump (one runner's daughters) has its own shade
     const hue = 0.24 + rng.range(-0.03, 0.03);
     const light = rng.range(0.24, 0.34);
+    // and its own maturity: young clumps stay well below the surface, older
+    // ones send a few long blades up to float (never an even fringe)
+    const tall = [0.0, 0.1, 0.07, 0.0, 0.16, 0.04][clumps.indexOf(c)];
+    const top = xr.range(0.3, 0.42);
     for (let i = 0; i < c.n; i++) {
       const x = c.x + rng.normal(0, 0.018);
       const z = c.z + rng.normal(0, 0.012);
-      const len = rng.range(0.2, 0.5);
+      const u = (rng.range(0.2, 0.5) - 0.2) / 0.3;
+      // mostly short-to-mid blades (skewed), a few long floaters
+      const len = xr.next() < tall ? xr.range(0.44, 0.7) : 0.12 + (top - 0.12) * Math.pow(u, 0.8);
       const age = Math.pow(rng.next(), 1.6);
       // blade width 5–13 mm
-      const { pos, uv } = ribbonBlade(rng, new THREE.Vector3(x, groundHeight(x, z) - 0.004, z), len, 0.009 * rng.range(0.6, 1.45));
+      const { pos, uv } = ribbonBlade(rng, new THREE.Vector3(x, groundHeight(x, z) - 0.004, z), len, 0.009 * rng.range(0.6, 1.45), xr);
       leafColor(age, hue, light);
       const v0 = vPos.length / 3;
       const nv = pos.length / 3;
