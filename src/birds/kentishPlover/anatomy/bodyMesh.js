@@ -10,6 +10,10 @@ import { makeBodySDF, surfaceNets } from './sdf.js';
 // (body_shape_spec.md §3, §17.1).
 export const BILL_TIP_MM = [0, 83.4, 54];
 
+// neck-side plumage of the sculpt (KentishPloverConfig.bodySculpt): like mantleNape and foreBreast it fills the neck
+// at rest and moves with the neck sleeve, not with the trunk
+export const NECK_FILL = ['neckSideL', 'neckSideR', 'neckUpperL', 'neckUpperR'];
+
 // Spine influence segments (mm) and falloff sigma — distance-weighted skinning (spec §17.1).
 const SPINE = [
   { bone: 'tail', a: [0, 61, -42], b: [0, 58, -62], s: 7 },
@@ -285,7 +289,7 @@ export function getBodySDF(cfg) {
  * only the trunk underneath.
  */
 export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
-  const drop = new Set(['neck', 'head', 'lores', 'billCuff', 'chin', 'cheekL', 'cheekR', ...(trunkOnly ? ['mantleNape', 'foreBreast'] : [])]);
+  const drop = new Set(['neck', 'head', 'lores', 'billCuff', 'chin', 'cheekL', 'cheekR', ...(trunkOnly ? ['mantleNape', 'foreBreast', ...NECK_FILL] : [])]);
   return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [], adds: [] });
 }
 
