@@ -123,11 +123,21 @@ uniform float uDebugView; // 0 off, 1 normals, 2 pattern, 3 scales, 4 thickness
 // and ventral keels are short, rays across the trunk are long.
 float sectChord(vec2 p, vec2 d, vec3 sect) {
   vec2 q = vec2((p.x - sect.x) / sect.z, p.y / sect.y);
-  q /= max(length(q), 1e-4); // project onto the ellipse
+  float l = length(q);
+  q /= max(l, 1e-4); // project onto the ellipse
   vec2 dd = vec2(d.x / sect.z, d.y / sect.y);
-  float a = dot(dd, dd);
+  float a = max(dot(dd, dd), 1e-6);
   float b = dot(q, dd);
-  return b < 0.0 ? min(-2.0 * b / max(a, 1e-6), 0.6) : 0.0;
+  float cs = b < 0.0 ? -2.0 * b / a : 0.0;
+  // points far inside the local ellipse (the lips and the front of the
+  // snout, where the section says little) have no defined projection: the
+  // chord flips there (a dark dot on the lip). Use the half chord through
+  // the centre for them instead.
+  float ch = mix(inversesqrt(a), cs, smoothstep(0.3, 0.7, l));
+  // rays running along the body (front / rear views) cross it lengthwise:
+  // the cylinder model does not hold there, and its chord flips between
+  // zero and the cap across the face
+  return min(mix(0.6, ch, smoothstep(0.2, 0.55, length(d))), 0.6);
 }
 
 // ---------------------------------------------------------------- pattern ----
@@ -372,6 +382,13 @@ void computeFishSurface() {
   // far: the averaged net (darker pockets between the exposed fields)
   col *= 1.0 + netF * mix(0.11, 0.06, whiteness);
 
+  // the head skin is not a guanine mirror like the white scales: on white
+  // and sarasa fish it is a warm, fleshy white (R >= G >= B), never a cool
+  // grey or lilac (p05_1, p12_0, p42_1)
+  float headSkinW = (1.0 - scaleMask) * whiteness * (lip > -0.5 ? 1.0 : 0.0);
+  col = mix(col, col * vec3(1.9, 1.5, 1.22), headSkinW);
+  specTint = mix(specTint, vec3(1.0, 0.95, 0.88), headSkinW);
+
   // guanine reflector strength (metallic scale type, some duller scales)
   // (pigmented scales reflect much less: the carotenoid layer on top keeps
   // red patches saturated; per-scale jitter ±10 % up close, ±25 % as sparkle
@@ -403,34 +420,60 @@ void computeFishSurface() {
   // ---- lips, buccal cavity, gill slit, orbit
   float sB = -rp.x; // axial position (rest)
   if (lip > 0.0) {
-    // outer lips keep the body colour but paler and fleshier; the rolled lip
-    // margin at the gape is pale pink (lower lip and chin palest), wet
-    vec3 lipOuter = mix(col, col * vec3(1.02, 0.9, 0.86) + vec3(0.07, 0.05, 0.05), 0.45);
-    vec3 lipInner = mix(vec3(0.62, 0.4, 0.37), col * vec3(1.0, 0.78, 0.72), 0.35 * (1.0 - whiteness));
-    float margin = smoothstep(0.005, 0.0008, sB);
-    float lowerLip = smoothstep(0.1, -0.5, a);
-    vec3 lc = mix(lipOuter, lipInner, clamp(margin * mix(0.75, 1.0, lowerLip) + lowerLip * 0.25 * lip, 0.0, 1.0));
+    // upper lip: a paler, warmer version of the head colour (yellow-orange
+    // on red, peach on white); lower lip: pink-cream; the moist margin at
+    // the cleft a little pinker. (Measured: #db9174 on crimson, #e37c17 on
+    // orange, #eac7ae on white; lower lip #dcbba5 / #d1b4a8.)
+    float upperW = smoothstep(-0.2, 0.3, a);
+    vec3 upperC = mix(col * vec3(1.06, 0.94, 0.72) + vec3(0.1, 0.07, 0.025), col * vec3(1.02, 0.84, 0.6), whiteness);
+    vec3 lowerC = mix(vec3(0.8, 0.57, 0.47), col * vec3(1.0, 0.8, 0.66) + vec3(0.1, 0.06, 0.04), 0.4 * (1.0 - whiteness));
+    float dyC = rp.y - (MOUTH_Y - MOUTH_DROOP * min(1.0, pow(abs(rp.z) / MOUTH_RW, 2.0)));
+    float margin = smoothstep(0.0035, 0.0008, abs(dyC + 0.0006));
+    vec3 lc = mix(lowerC, upperC, upperW);
+    lc = mix(lc, mix(lowerC, vec3(0.7, 0.4, 0.36), 0.35), margin * 0.5);
     col = mix(col, lc, lip);
-    spec *= 1.0 - 0.75 * lip;
-    rough = mix(rough, 0.24, lip);
+    spec *= 1.0 - 0.7 * lip;
+    rough = mix(rough, 0.3, lip);
+    // closed mouth: the lips meet in a soft shadowed line, not a lit edge
+    // (the same vertices form the inner margin of the open lips)
+    float closed = 1.0 - smoothstep(0.04, 0.3, vHead.x);
+    // (the top of the lower lip lies in the shadow of the upper lip)
+    float cleftLine = smoothstep(dyC > -0.0002 ? 0.0022 : 0.0042, 0.0004, abs(dyC + 0.0002)) * closed;
+    col *= 1.0 - 0.45 * cleftLine;
+    ao *= 1.0 - 0.5 * cleftLine;
+    spec *= 1.0 - 0.8 * cleftLine;
+  }
+  // chin and throat: warm white (or the body colour), lit from the dark
+  // ground below it reflects little; keep it from going grey-mauve
+  {
+    float chin = smoothstep(-0.2, -0.7, a) * smoothstep(0.12, 0.05, sB) * (lip > -0.5 ? 1.0 : 0.0) * (1.0 - scaleMask);
+    col = mix(col, col * vec3(1.06, 1.0, 0.92), chin * whiteness);
+    spec *= 1.0 - 0.35 * chin;
   }
   if (lip < -0.5) {
     // buccal cavity: pale pink mucosa behind the lips, blood-red chamber,
-    // dark pharynx; a paler basihyal pad on the floor, transverse palatal
-    // folds on the roof, and the gill arches (red, with pale rakers) at the back
+    // a dark red pharynx; a pink basihyal pad (tongue) on the floor,
+    // transverse palatal folds on the roof, and the gill arches (red, with
+    // pale rakers) at the back. Seen through the open mouth it reads red /
+    // pink (p09_1: #af3d35 at the front of the chamber), never black.
     float c = clamp(sB / 0.075, 0.0, 1.0);
-    vec3 muc = mix(vec3(0.88, 0.55, 0.52), vec3(0.64, 0.19, 0.17), smoothstep(0.04, 0.45, c));
-    muc = mix(muc, vec3(0.2, 0.035, 0.035), smoothstep(0.55, 1.0, c));
-    muc = mix(muc, vec3(0.92, 0.66, 0.6), smoothstep(-0.25, -0.75, a) * smoothstep(0.06, 0.2, c) * smoothstep(0.62, 0.36, c) * 0.65);
+    vec3 muc = mix(vec3(0.86, 0.47, 0.41), vec3(0.66, 0.22, 0.18), smoothstep(0.03, 0.4, c));
+    muc = mix(muc, vec3(0.36, 0.08, 0.07), smoothstep(0.5, 1.0, c));
+    muc = mix(muc, vec3(0.86, 0.48, 0.46), smoothstep(-0.2, -0.7, a) * smoothstep(0.04, 0.18, c) * smoothstep(0.7, 0.4, c) * 0.75);
     muc *= mix(1.0, 0.9 + 0.1 * (0.5 + 0.5 * sin(c * 55.0)), smoothstep(0.2, 0.75, a) * smoothstep(0.5, 0.12, c));
     // gill arches: a few soft red ridges at the back of the pharynx
     float arches = smoothstep(0.6, 0.72, c) * (1.0 - smoothstep(0.92, 1.0, c));
     float bar = smoothstep(0.35, 0.9, 0.5 + 0.5 * cos((c - 0.6) * 6.2831853 * 9.0));
-    muc = mix(muc, mix(vec3(0.36, 0.04, 0.05), vec3(0.7, 0.13, 0.13), bar), arches * 0.7);
-    col = muc;
-    spec = vec3(0.035);
-    rough = 0.2;
-    ao = mix(0.9, 0.22, smoothstep(0.15, 1.0, c));
+    muc = mix(muc, mix(vec3(0.42, 0.05, 0.06), vec3(0.72, 0.15, 0.14), bar), arches * 0.7);
+    // light reaching into the chamber falls off with depth (the head shades
+    // it); the closed slit is only a dark line
+    muc *= mix(1.0, 0.6, smoothstep(0.1, 0.7, c));
+    float shut = 1.0 - smoothstep(0.04, 0.3, vHead.x);
+    col = muc * mix(1.0, 0.15, shut);
+    // wet, but the lips and the head hide most of the bright surroundings
+    spec = vec3(0.025) * (1.0 - 0.75 * smoothstep(0.04, 0.3, c)) * (1.0 - shut);
+    rough = 0.34;
+    ao = mix(0.95, 0.6, smoothstep(0.3, 1.0, c));
   }
   // ---- gill opening: when the operculum abducts, the stretched slit shows
   // the gill filaments (primary lamellae, stacked dorso-ventrally, tips
@@ -463,7 +506,7 @@ void computeFishSurface() {
   col = mix(col, col * vec3(1.0, 0.8, 0.8), memb * 0.3);
   spec *= 1.0 - 0.3 * memb;
   if (operc > 0.01) {
-    vec2 hv = vec2(sB - 0.19, rp.y - 0.055);
+    vec2 hv = vec2(sB - 0.205, rp.y - 0.055);
     float rang = atan(hv.y, hv.x);
     float striae = spow(abs(sin(rang * 46.0 + vnoise2(hv * 90.0) * 1.5)), 6.0);
     float wOp = operc * smoothstep(-0.004, -0.02, eG);
@@ -472,17 +515,23 @@ void computeFishSurface() {
   }
   // nostrils: the paired nares in front of the eye are small dark openings
   // under a pale flap
+  // under a fleshy flap that is a little paler than the surrounding skin
   {
-    float dn = length(vec2(sB - NARE_S, rp.y - NARE_Y));
-    float nare = smoothstep(0.0065, 0.0018, dn) * smoothstep(0.012, 0.022, abs(rp.z));
-    col *= 1.0 - 0.5 * nare;
-    ao *= 1.0 - 0.35 * nare;
+    float sideN = smoothstep(0.008, 0.016, abs(rp.z));
+    float dn = length(vec2(sB - NARE_S - 0.0012, rp.y - NARE_Y));
+    float nare = smoothstep(0.0055, 0.0015, dn) * sideN;
+    vec2 fq = vec2(sB - NARE_S + NARE_FLAP_S, rp.y - NARE_Y - NARE_FLAP_Y) / vec2(0.0028, 0.0042);
+    float flapM = exp(-dot(fq, fq)) * sideN;
+    col = mix(col, col * 0.75 + vec3(0.2, 0.17, 0.15), flapM * 0.45);
+    col *= 1.0 - 0.55 * nare * (1.0 - flapM);
+    ao *= 1.0 - 0.4 * nare * (1.0 - flapM);
+    spec *= 1.0 - 0.5 * flapM;
   }
   // fleshy orbital rim is pale and less reflective
   // skin around the eye: a little darker and duller (pigmented orbital skin;
   // no pale ring that would frame the eye like a bead)
   col *= 1.0 - 0.12 * orbit;
-  spec *= 1.0 - 0.35 * orbit;
+  spec *= 1.0 - 0.6 * orbit;
 
   // ---- head skin: fine micro-relief and mottled chromatophores (no scales)
   float headSkin = 1.0 - scaleMask;
@@ -672,6 +721,16 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     bg += 0.35 * mix(hemisphereLights[0].groundColor, hemisphereLights[0].skyColor, 0.5 + 0.5 * hy);
   #endif
   reflectedLight.indirectDiffuse += bg * gFS.tissue * Tv * 0.45;
+  // buccal cavity: light entering through the open gape bounces around the
+  // pink chamber (its walls see each other and the opening, not the
+  // surroundings their normals face), so it reads red, not black (p09_1)
+  #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+    if (vMask.z < -0.5) {
+      vec3 upV = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+      vec3 inLight = 0.5 * (getIBLIrradiance(V) + getIBLIrradiance(upV));
+      reflectedLight.indirectDiffuse += gFS.albedo * inLight * 0.45 * smoothstep(0.04, 0.4, vHead.x);
+    }
+  #endif
   reflectedLight.indirectDiffuse *= gFS.ao;
   {
     vec3 tS = gFS.spec / max(max(gFS.spec.r, gFS.spec.g), max(gFS.spec.b, 1e-4));
