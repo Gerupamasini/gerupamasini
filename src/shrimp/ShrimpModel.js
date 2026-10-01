@@ -19,6 +19,36 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
+/**
+ * Translucent soft tissue seen through the clear cuticle. Opacity follows apparent thickness
+ * (dense where the view passes through the middle of the mass, thin toward the silhouette),
+ * and muscle shows the chevron myomere banding of decapod abdominal flexors [PHOTO 001, 003].
+ */
+function tissueVolume(color, opacity, striated) {
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.75, transparent: true, opacity, depthWrite: false });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTPos = position;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTPos;')
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        {
+          vec3 vd = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition);
+          float facing = abs(dot(normalize(vNormal), vd));
+          diffuseColor.a *= mix(0.35, 1.0, pow(facing, 0.7));
+          ${striated ? `float band = sin(vTPos.x * 2600.0 + abs(vTPos.z) * 3000.0 - abs(vTPos.y) * 900.0);
+          diffuseColor.rgb *= 0.9 + 0.1 * smoothstep(-0.3, 0.9, band);
+          diffuseColor.a *= 0.88 + 0.12 * smoothstep(-0.5, 1.0, band);` : ''}
+        }`
+      );
+  };
+  m.customProgramCacheKey = () => 'tissue-' + (striated ? 's' : 'p');
+  return m;
+}
+
 let SHARED = null;
 function materials() {
   if (SHARED) return SHARED;
@@ -34,11 +64,12 @@ function materials() {
     fan: createCuticleMaterial({ key: 'fan', glass: true, color: 0xe4e2d8, alpha: 0.22, rimAlpha: 0.75, cells: 3000, keep: 0.5 }),
     stalk: createCuticleMaterial({ key: 'stalk', glass: true, color: 0xd8cfbb, alpha: 0.45, rimAlpha: 0.85, cells: 5200, dotR: 0.38, chroma: C.eyestalkPigment }),
     // Abdominal flexor/extensor mass: the milky, faintly bluish-grey translucency of the live body [PHOTO 001, 003].
-    muscle: new THREE.MeshStandardMaterial({ color: 0xc4cbc7, roughness: 0.7, transparent: true, opacity: 0.62, depthWrite: false }),
-    cephTissue: new THREE.MeshStandardMaterial({ color: 0xc9ccc3, roughness: 0.7, transparent: true, opacity: 0.58, depthWrite: false }),
+    muscle: tissueVolume(0xc6cdc8, 0.62, true),
+    gill: tissueVolume(0xa9ada3, 0.14, false),
+    cephTissue: tissueVolume(0xc9ccc3, 0.4, false),
     eye: createEyeMaterial(),
     stomach: createTissueMaterial(C.stomach, { roughness: 0.45 }),
-    hepato: createTissueMaterial(C.hepatopancreas),
+    hepato: tissueVolume(C.hepatopancreas, 0.7, false),
     heart: createTissueMaterial(0xcdb9a4),
     ovary: createTissueMaterial(C.ovary),
     gut: createTissueMaterial(C.hindgut, { roughness: 0.5 }),
@@ -179,7 +210,27 @@ export class ShrimpModel {
     const eyeX = C.eyeX;
     const stomach = mesh(ellipsoid(0.03 * T, 0.011 * T, 0.011 * T), S.stomach, this.ceph, false);
     stomach.position.set((eyeX - 0.06) * T, 0.022 * T, 0);
-    const hep = mesh(ellipsoid(0.04 * T, 0.022 * T, 0.024 * T), S.hepato, this.ceph, false);
+    // Hepatopancreas: paired, lobed digestive gland around the stomach [PHOTO 002, 014].
+    const hep = mesh(ellipsoid(0.034 * T, 0.018 * T, 0.02 * T), S.hepato, this.ceph, false);
+    for (const [dx, dy, dz, r] of [[0.012, 0.006, 0.014, 0.6], [-0.014, -0.004, 0.016, 0.55], [0.0, -0.01, -0.015, 0.6], [-0.018, 0.004, -0.012, 0.5]]) {
+      const lobe = mesh(ellipsoid(0.02 * r * T * 1.6, 0.014 * r * T * 1.6, 0.016 * r * T * 1.6, 12), S.hepato, this.ceph, false);
+      lobe.position.set((eyeX - 0.095 + dx) * T, (0.002 + dy) * T, dz * T);
+    }
+    // Gills: stacked phyllobranch lamellae in each branchiostegal chamber, faintly visible.
+    for (const sd of [1, -1]) {
+      for (let k = 0; k < 7; k++) {
+        const xg = (0.03 + k * 0.016) * T;
+        const c = this.carapaceAt(xg / T);
+        const g = mesh(ellipsoid(0.007 * T, (c.d - c.v) * 0.22 * T, 0.0012 * T, 10), S.gill, this.ceph, false);
+        g.position.set(xg, (c.v + (c.d - c.v) * 0.3) * T, sd * c.w * 0.62 * T);
+        g.rotation.set(sd * 0.25, 0, -0.35);
+        g.renderOrder = 1;
+      }
+    }
+    // Oesophagus/foregut link from the mouth to the stomach.
+    const oes = mesh(new THREE.CylinderGeometry(0.003 * T, 0.003 * T, 0.03 * T, 6), S.gut, this.ceph, false);
+    oes.position.set((eyeX - 0.03) * T, 0.004 * T, 0);
+    oes.rotation.z = Math.PI / 2 + 0.6;
     hep.position.set((eyeX - 0.095) * T, 0.002 * T, 0);
     this.heart = mesh(ellipsoid(0.012 * T, 0.007 * T, 0.009 * T), S.heart, this.ceph, false);
     this.heart.position.set(0.03 * T, 0.03 * T, 0);
@@ -538,10 +589,16 @@ export class ShrimpModel {
       const gut = mesh(new THREE.CylinderGeometry(0.0022 * T, 0.0022 * T, len * 1.08, 6), S.gut, j, false);
       gut.rotation.z = Math.PI / 2;
       gut.position.set(-len * 0.5, h * 0.33, 0);
+      // Dorsal abdominal artery just above the hindgut.
+      const art = mesh(new THREE.CylinderGeometry(0.0009 * T, 0.0009 * T, len * 1.05, 5), S.heart, j, false);
+      art.rotation.z = Math.PI / 2;
+      art.position.set(-len * 0.5, h * 0.4, 0);
       if (i < 5) {
         const nerve = mesh(new THREE.CylinderGeometry(0.0016 * T, 0.0016 * T, len * 1.05, 5), S.nerve, j, false);
         nerve.rotation.z = Math.PI / 2;
         nerve.position.set(-len * 0.5, -h * 0.26, 0);
+        const gang = mesh(ellipsoid(0.004 * T, 0.0025 * T, 0.0035 * T, 8), S.nerve, j, false);
+        gang.position.set(-len * 0.45, -h * 0.26, 0);
       }
       if (blueSpots && i >= 1 && i <= 3) {
         for (const sd of [1, -1]) {

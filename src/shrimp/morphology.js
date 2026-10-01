@@ -142,7 +142,7 @@ export const MORPH = {
     chromatophore: 0x6a4a2a, // cores #5d532e-#8a5a30 [PHOTO 005, 007, 009]
     eyestalkPigment: 0x5d3f16, // [PHOTO 007]
     stomach: 0x272114, // [PHOTO 007]
-    hepatopancreas: 0x4a3e28, // [PHOTO 002, 014]
+    hepatopancreas: 0x6b5530, // [PHOTO 002, 014]
     ovary: 0x9a9470, // [PHOTO 011; olive in 048]
     hindgut: 0x3b3020,
     cornea: 0x141010,
