@@ -330,9 +330,9 @@ export class KentishPloverAI {
     item.claimedBy = b;
     this.perception.detectedPrey = item;
     const d = Math.hypot(item.pos.x - b.pos.x, item.pos.z - b.pos.z);
-    // stop a bill-reach short of the prey: tipping forward with the neck stretched and the bill 50–60° down puts
-    // the bill tip ≈6 cm ahead of the feet (p007, p061; KentishPloverAnimator ACTIONS.peck)
-    const reach = 0.062 * b.individual.bodyScale;
+    // stop a bill-reach short of the prey: tipping forward over the feet with the bill 60–67° down puts the bill
+    // tip ≈6 cm ahead of them (p007, p061; KentishPloverAnimator ACTIONS.peck)
+    const reach = CFG.animation.peck.reach * b.individual.bodyScale;
     const dir = _v.set(item.pos.x - b.pos.x, 0, item.pos.z - b.pos.z).normalize();
     const stopAt = item.pos.clone().addScaledVector(dir, -reach);
     this.target = stopAt;
@@ -360,7 +360,26 @@ export class KentishPloverAI {
       return;
     }
     b.faceTowards(it.pos);
-    this._enter('PECK', 3);
+    // eyes on the prey in the foraging stance; after the stop the bird fixates for a moment before it strikes
+    // (the run's momentum is absorbed by the legs first) — a crab gets struck at once, before it runs
+    this.anim.setPosture('forage');
+    this.anim.setGaze('ground', it.pos);
+    this._enter('PECK', 4);
+    const F = CFG.foraging.peckFixation;
+    this._peckAt = it.def.approach === 'sprint' ? this.rng.range(...F.sprint) : this.rng.range(...(this.bird.speed > 0.3 ? F.afterRun : F.afterWalk));
+  }
+
+  _strike() {
+    const b = this.bird;
+    const it = this.targetPrey;
+    this._peckAt = null;
+    if (!it || !it.alive) {
+      if (it) it.claimedBy = null;
+      this.targetPrey = null;
+      b.faceTowards(null);
+      this._forageNext();
+      return;
+    }
     this.stats.pecks++;
     this.anim.play('peck', { target: it.pos.clone(), preyType: it.type }, (ev) => {
       if (ev === 'catch') {
@@ -720,6 +739,10 @@ export class KentishPloverAI {
     }
 
     switch (s) {
+      case 'PECK':
+        // fixation before the strike: the bird has stopped (feet planted) and looks at the prey
+        if (this._peckAt != null && this.stateTime >= this._peckAt && (this.bird.speed < 0.1 || this.stateTime > 1)) this._strike();
+        break;
       case 'FORAGE_SEARCH': {
         // stop → settle → look: no detection during the first ~0.3 s after stopping (head/eye stabilisation)
         const found = this.stateTime > CFG.foraging.lookLatency ? this._detectPrey(dt) : null;

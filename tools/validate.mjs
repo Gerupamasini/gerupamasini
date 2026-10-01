@@ -26,7 +26,9 @@ const shots = process.argv.slice(2).length
 
 for (const [name, query] of shots) {
   const isDemo = query.startsWith('demo');
-  const page = await browser.newPage({ viewport: { width: isDemo ? 1280 : 1400, height: isDemo ? 800 : 1000 } });
+  // VALIDATE_SIZE=WxH: a larger page for dense strips
+  const [vw, vh] = (process.env.VALIDATE_SIZE ?? '').split('x').map(Number);
+  const page = await browser.newPage({ viewport: { width: vw || (isDemo ? 1280 : 1400), height: vh || (isDemo ? 800 : 1000) } });
   const logs = [];
   page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));

@@ -296,7 +296,9 @@ export class KentishPloverAnimator {
     const def = ACTIONS[name];
     if (!def) throw new Error(`unknown action ${name}`);
     const dur = typeof def.duration === 'function' ? def.duration(params, this) : def.duration;
-    this.action = { name, def, params, t: 0, dur: dur * this.timing, onEvent, fired: new Set() };
+    // events {name: u} — or a function of the params (the peck's contact time depends on the prey)
+    const events = typeof def.events === 'function' ? def.events(params, this) : def.events;
+    this.action = { name, def, params, t: 0, dur: dur * this.timing, onEvent, fired: new Set(), events };
     return this.action;
   }
 
@@ -352,7 +354,14 @@ export class KentishPloverAnimator {
       return;
     } else if (ACTIONS[name]) {
       // freeze the action at normalised time t and let the smoothed posture converge on it
-      this.play(name, { variant, target: new THREE.Vector3(0, 0, 0.062), preyType: variant === 'crab' ? 'crab' : 'polychaete' });
+      const target = new THREE.Vector3(0, 0, ANIM.peck.reach);
+      if (name === 'peck') {
+        // a peck starts from the foraging stance with the eyes on the prey (as in the game: AI._peck)
+        this.setPosture('forage');
+        this.setGaze('ground', target);
+        this._settle(0.5);
+      }
+      this.play(name, { variant, target, preyType: name === 'peck' ? (['crab', 'amphipod', 'insect'].includes(variant) ? variant : 'polychaete') : undefined });
       this.action.t = t * this.action.dur;
       this._freezeAction = true;
       this._settle(1.2);
@@ -369,8 +378,8 @@ export class KentishPloverAnimator {
       const a = this.action;
       a.t += dt;
       const u = clamp(a.t / a.dur, 0, 1);
-      if (a.def.events) {
-        for (const [name, at] of Object.entries(a.def.events)) {
+      if (a.events) {
+        for (const [name, at] of Object.entries(a.events)) {
           if (u >= at && !a.fired.has(name)) {
             a.fired.add(name);
             a.onEvent?.(name);
@@ -736,7 +745,9 @@ export class KentishPloverAnimator {
     }
     const Dn = D.clone().normalize();
     // pole: backward in body space (the intertarsal joint points caudally), slightly outward
-    const pole = (raise > 0.3 && act?.legRaiseTarget?.[s] ? new THREE.Vector3(f.sign, -0.25, -0.35) : new THREE.Vector3(0.12 * f.sign, 0.1, -1)).applyQuaternion(bodyQ);
+    // (act.footPlace: the raised foot is put down somewhere else — foot-trembling — a normal leg, flat foot)
+    const place = act?.footPlace?.[s] ?? 0;
+    const pole = (raise > 0.3 && act?.legRaiseTarget?.[s] && !place ? new THREE.Vector3(f.sign, -0.25, -0.35) : new THREE.Vector3(0.12 * f.sign, 0.1, -1)).applyQuaternion(bodyQ);
     const bend = pole.sub(Dn.clone().multiplyScalar(pole.dot(Dn))).normalize();
     const cosA = clamp((Lt * Lt + d * d - Lm * Lm) / (2 * Lt * d), -1, 1);
     const a = Math.acos(cosA);
@@ -759,10 +770,10 @@ export class KentishPloverAnimator {
     // foot: flat on the ground along its yaw in stance; pitched and toes curled in swing
     const yaw = f.yaw;
     const swing = f.swing;
-    const curl = Math.max(bump(swing, 0.0, 0.85), raise, this.p.sit * 0.7);
+    const curl = Math.max(bump(swing, 0.0, 0.85), raise * (1 - place), this.p.sit * 0.7);
     // heel-off pitches the foot toes-down (angle keeps the toe tips on the ground)
     const heelPitch = Math.asin(clamp(heel / 0.014, 0, 0.9));
-    const footPitch = -0.35 * bump(swing, 0, 0.35) + 0.25 * bump(swing, 0.55, 1.0) + raise * 0.9 + heelPitch;
+    const footPitch = -0.35 * bump(swing, 0, 0.35) + 0.25 * bump(swing, 0.55, 1.0) + raise * 0.9 * (1 - place) + heelPitch;
     const qFootW = qAxis(Y, yaw, new THREE.Quaternion()).multiply(qAxis(X, footPitch, _q));
     foot.quaternion.copy(qTarW.clone().invert().multiply(qFootW));
     // toes: flex during swing (grasp-like curl), splay at touchdown, conform when planted
@@ -992,7 +1003,8 @@ export class KentishPloverAnimator {
         yaw = wrapAngle(yaw - s * 1.15);
       }
       g.tYaw = clamp(yaw, -2.4, 2.4);
-      g.tPitch = g.mode === 'ground' ? clamp(Math.atan2(0.08, dist) + 0.35, 0.3, 1.1) : -0.05;
+      // (eyes on the prey: the bill 42° down for prey 2 m away … 58° at a bill-reach — it pointed straight down)
+      g.tPitch = g.mode === 'ground' ? clamp(Math.atan2(0.05, dist) + 0.3, 0.3, 0.6) : -0.05;
     }
     // saccade dynamics: fast rotation, then hold (time constant ~ 25–35 ms)
     const rate = dt > 0 ? 1 / 0.03 : 1e3;
@@ -1019,35 +1031,25 @@ export class KentishPloverAnimator {
       const dir = this.bodyPoint([side * 12, 64, -12]).sub(onBack).normalize();
       headQ = this.billQuat(dir, side * 0.5);
       tuckPos = onBack.clone().sub(BILL_FROM_HEAD.clone().multiplyScalar(0.45).applyQuaternion(headQ));
-    } else if (act?.headQ) headQ = act.headQ;
-    else {
-      const g = this.gaze;
-      headQ = new THREE.Quaternion().copy(rootQ).multiply(qAxis(Y, g.yaw, _q)).multiply(qAxis(X, g.pitch + (act?.headPitchAdd ?? 0), _q)).multiply(qAxis(Z, g.roll, _q));
+    } else {
+      // gaze-driven head (also the start / end of a blended action head: no pop entering or leaving it)
+      const blend = act?.headQ ? act.headBlend ?? 1 : 0;
+      if (blend < 1) {
+        const g = this.gaze;
+        headQ = new THREE.Quaternion().copy(rootQ).multiply(qAxis(Y, g.yaw, _q)).multiply(qAxis(X, g.pitch + (act?.headPitchAdd ?? 0), _q)).multiply(qAxis(Z, g.roll, _q));
+      }
+      if (blend > 0) headQ = blend < 1 ? headQ.slerp(act.headQ, blend) : act.headQ;
     }
     // 2) desired head pivot position (world). Default: relative to the ROOT (not the bobbing body) → head stabilisation.
     let headPos;
+    const blend = act?.billTarget ? act.headBlend ?? 1 : 0;
     if (tuckPos) headPos = tuckPos;
-    else if (act?.billTarget) {
-      headPos = act.billTarget.clone().sub(BILL_FROM_HEAD.clone().applyQuaternion(headQ));
-    } else if (act?.headPos) headPos = act.headPos;
+    else if (blend >= 1) headPos = act.billTarget.clone().sub(BILL_FROM_HEAD.clone().applyQuaternion(headQ));
+    else if (act?.headPos) headPos = act.headPos;
     else {
-      const n = this.p.neck;
-      // posture offsets (m, root space): alert = up & slightly forward, retracted = down & back
-      // (neck −1: crown − back +15 → +10 mm, spec §12)
-      const up = n > 0 ? n * 0.009 : n * 0.005;
-      const fwd = n > 0 ? n * 0.003 : n * 0.002;
-      const local = BIND.headPivot.clone().add(new THREE.Vector3(0, up - this.p.headDown + this.p.height - this.p.sit * SIT_DROP, fwd + this.p.headFwd));
-      // body pitch carries the head forward/down with it (about the hip)
-      const pitch = this.p.pitch + this.lean;
-      const hip = new THREE.Vector3(0, BIND.hip.y + this.p.height, BIND.hip.z);
-      local.sub(hip).applyAxisAngle(X, pitch * HEAD_PITCH_FOLLOW).add(hip);
-      headPos = local.applyQuaternion(rootQ).add(this.rootPos);
-      // stabilisation: residual body bob is NOT transferred to the head (ANIM.headStabilization)
-      const bob = this.stride.amount * this._bob();
-      headPos.y += bob * (1 - ANIM.headStabilization);
-      // idle micro head motion (sub-mm drift), not looping
-      headPos.x += this.n2(this.time * 0.7) * 0.0004 * this.headAmp;
-      headPos.y += this.n3(this.time * 0.9) * 0.0003 * this.headAmp;
+      headPos = this._restHeadPos();
+      // blended action head (pecking): from / back to the posture's head, the bill on the action's own aim
+      if (blend > 0) headPos.lerp(act.billTarget.clone().sub(BILL_FROM_HEAD.clone().applyQuaternion(act.headQ)), blend);
     }
     // 3) neck chain to the head pivot. The head rests on the plumage lying on the back / flanks, never
     //    inside it — checked on the solved chain too (far-back preening targets are beyond the neck's reach)
@@ -1055,10 +1057,11 @@ export class KentishPloverAnimator {
     // above the back, crown − back ≈ +10, spec §12) instead of lying on top of them
     this._tuckSink = tuckPos ? TUCK_SINK * this.p.sleep : 0;
     const want = headPos.clone();
+    (this.headWant ??= new THREE.Vector3()).copy(want); // (asked-for head pivot, before the plumage contact: tools/dev/peckcurve.mjs)
     headPos = this._clearHead(headPos.clone(), headQ);
     let stretch = this._solveNeck(headPos, headQ);
     const reached = b.head.getWorldPosition(new THREE.Vector3());
-    if (act?.billTarget && reached.distanceTo(headPos) > 0.001) {
+    if (act?.billTarget && blend >= 1 && reached.distanceTo(headPos) > 0.001) {
       // bill target beyond the neck's reach (preening far back): the bill points at it from where the head got
       const bill = BILL_FROM_HEAD.clone().applyQuaternion(headQ).normalize();
       headQ = new THREE.Quaternion().setFromUnitVectors(bill, act.billTarget.clone().sub(reached).normalize()).multiply(headQ);
@@ -1093,11 +1096,34 @@ export class KentishPloverAnimator {
     const rootInv = _q3.copy(rootQ).invert();
     const corr = _v2.copy(bestPos).sub(want).applyQuaternion(rootInv);
     if (!this._corr || !(dt > 0)) this._corr = corr.clone();
-    else this._corr.lerp(corr, 1 - Math.exp(-12 * dt));
+    else this._corr.lerp(corr, 1 - Math.exp(-(act?.contactRate ?? 12) * dt)); // (a peck's fast stab: faster)
     if (this._corr.distanceToSquared(corr) > 1e-10) stretch = this._solveNeck(want.add(_v2.copy(this._corr).applyQuaternion(rootQ)), headQ);
     // jaw: opens briefly when swallowing / pulling prey
     b.jaw.quaternion.multiply(qAxis(X, act?.jaw ?? 0, _q));
     this.neckStretch = stretch;
+  }
+
+  /** Head pivot (world) the posture and gaze ask for: relative to the ROOT, not the bobbing body (head stabilisation). */
+  _restHeadPos() {
+    const n = this.p.neck;
+    // posture offsets (m, root space): alert = up & slightly forward, retracted = down & back
+    // (neck −1: crown − back +15 → +10 mm, spec §12)
+    const up = n > 0 ? n * 0.009 : n * 0.005;
+    const fwd = n > 0 ? n * 0.003 : n * 0.002;
+    // (the head rides with the trunk moved forward over the feet: p.shift, pecking)
+    const local = BIND.headPivot.clone().add(new THREE.Vector3(0, up - this.p.headDown + this.p.height - this.p.sit * SIT_DROP, fwd + this.p.headFwd + this.p.shift));
+    // body pitch carries the head forward/down with it (about the hip)
+    const pitch = this.p.pitch + this.lean;
+    const hip = new THREE.Vector3(0, BIND.hip.y + this.p.height, BIND.hip.z + this.p.shift);
+    local.sub(hip).applyAxisAngle(X, pitch * HEAD_PITCH_FOLLOW).add(hip);
+    const headPos = local.applyQuaternion(this.model.object.quaternion).add(this.rootPos);
+    // stabilisation: residual body bob is NOT transferred to the head (ANIM.headStabilization)
+    const bob = this.stride.amount * this._bob();
+    headPos.y += bob * (1 - ANIM.headStabilization);
+    // idle micro head motion (sub-mm drift), not looping
+    headPos.x += this.n2(this.time * 0.7) * 0.0004 * this.headAmp;
+    headPos.y += this.n3(this.time * 0.9) * 0.0003 * this.headAmp;
+    return headPos;
   }
 
   /** Distribute the head rotation over the neck, then aim + stretch neck0 so the head pivot reaches headPos. */
@@ -1215,8 +1241,8 @@ export class KentishPloverAnimator {
     if (!this._freezeAction) a.t += dt;
     const u = clamp(a.t / a.dur, 0, 1);
     const out = a.def.pose(u, a.params, this, a) || {};
-    if (a.def.events) {
-      for (const [name, at] of Object.entries(a.def.events)) {
+    if (a.events) {
+      for (const [name, at] of Object.entries(a.events)) {
         if (u >= at && !a.fired.has(name)) {
           a.fired.add(name);
           a.onEvent?.(name);
@@ -1269,6 +1295,152 @@ const BILL_DIR = BIND.billTip.clone().sub(V(BILL.base)).normalize();
 // Overrides: billTarget (world), headQ (world), headPos, posture{…}, pitchAdd, wing{L,R,both}, legRaise{L,R},
 //            legRaiseTarget, jaw, tailSpread, tailPitch, fast{…} (faster smoothing for keys)
 
+// eased key tracks: keys [[time, value, ease]] (ease of the segment that ends at that key)
+const EASE = {
+  lin: (x) => x,
+  io: (x) => x * x * (3 - 2 * x),
+  in: (x) => x * x, // accelerating (a stab)
+  out: (x) => 1 - (1 - x) * (1 - x), // decelerating (a flick, a pull)
+  out3: (x) => 1 - (1 - x) ** 3,
+};
+function track(keys, t) {
+  if (t <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) {
+    const k = keys[i];
+    if (t <= k[0]) {
+      const [t0, v0] = keys[i - 1];
+      return v0 + (k[1] - v0) * EASE[k[2] ?? 'io'](k[0] > t0 ? (t - t0) / (k[0] - t0) : 1);
+    }
+  }
+  return keys[keys.length - 1][1];
+}
+
+/** The peck's timeline (s) for its prey (ANIM.peck), cached per play() params. */
+const PLANS = new WeakMap();
+function peckPlan(p) {
+  let P = PLANS.get(p);
+  if (P) return P;
+  const C = ANIM.peck;
+  const type = p.preyType ?? 'amphipod';
+  const S = C[type] ?? C.small;
+  const worm = type === 'polychaete';
+  const crab = type === 'crab';
+  // per-peck variation (deterministic in the prey position, so a preview / baked clip is repeatable)
+  const h = (x) => x - Math.floor(x);
+  const r1 = h(Math.sin((p.target?.x ?? 0) * 12.9898 + (p.target?.z ?? 0) * 78.233) * 43758.5453);
+  const tugs = worm ? p.tugs ?? (r1 < 0.4 ? 1 : 2) : 0;
+  const side = r1 < 0.5 ? -1 : 1;
+  // times
+  const t1 = S.aim;
+  const t2 = t1 + S.hold;
+  const tc = t2 + S.strike; // contact
+  const t4 = tc + S.grab;
+  const depth = S.depth;
+  // tracks: [time, value, ease]; `at(track, t0, …keys)` holds the track's last value until t0, then the keys
+  const tr = {};
+  for (const k of ['kb', 'a', 'd', 'el', 'jaw', 'lean', 'rise', 'back', 'tremor', 'yaw', 'roll', 'lift', 'tail', 'toss']) tr[k] = [[0, 0]];
+  const at = (k, t0, ...keys) => {
+    const last = tr[k][tr[k].length - 1];
+    if (t0 > last[0]) tr[k].push([t0, last[1]]);
+    tr[k].push(...keys);
+  };
+  // kb: how far the trunk has tipped toward the strike pose (0 = where it was / the posture's own pose)
+  at('kb', 0, [t1, 0.6, 'io'], [t2, 0.64, 'io'], [tc, 1, 'in'], [tc + 0.04, 1 + C.tipOvershoot / C.tip, 'out'], [t4 + 0.04, 1, 'io']);
+  // a: the head's approach (1 = aim point over the prey, 0 = bill tip on it); d: bill depth along its axis
+  tr.a = [[0, 1]];
+  at('a', t1, [t2, 1 + C.cock / Math.hypot(...C.aim), 'io'], [tc, 0, 'in']);
+  at('d', tc - 0.02, [tc, -depth - 0.0012, 'in'], [tc + 0.03, -depth, 'io']);
+  tr.el = [[0, C.billAim]];
+  at('el', t2, [tc, C.billStrike, 'io']);
+  at('jaw', tc - 0.04, [tc - 0.01, 0.12, 'io'], [tc + 0.025, 0, 'io']);
+  let t = t4;
+  if (worm) {
+    // brace and pull back along the bill (the trunk leans back over the feet, the tail presses down), hold
+    // against the worm (tremor), give a little, pull again further; then it comes free and the head jerks up
+    for (let k = 0; k < tugs; k++) {
+      const pull = S.pull[Math.min(k, S.pull.length - 1)] * (tugs === 1 ? 1.3 : 1);
+      const tp = t + S.tug * 0.36;
+      const th = t + S.tug * 0.66;
+      const te = t + S.tug;
+      const sg = side * (k % 2 ? -1 : 1);
+      at('d', t, [tp, -depth + pull, 'out'], [th, -depth + pull + 0.0005], [te, -depth + pull * 0.45, 'io']);
+      at('el', t, [tp, C.billStrike - 7, 'out'], [te, C.billStrike - 3, 'io']);
+      at('lean', t, [tp, -0.16, 'out'], [th, -0.15], [te, -0.05, 'io']);
+      at('rise', t, [tp, 0.004, 'out'], [te, 0.0015, 'io']);
+      at('back', t, [tp, -0.005, 'out'], [te, -0.002, 'io']);
+      at('tremor', t, [tp, 1, 'io'], [th, 1], [te, 0, 'io']);
+      at('yaw', t, [tp, sg * 0.08, 'out'], [te, 0, 'io']);
+      at('roll', t, [tp, sg * 0.12, 'out'], [te, 0, 'io']);
+      at('tail', t, [tp, 0.1, 'out'], [te, 0.03, 'io']);
+      t = te;
+    }
+    // free: the head flies up and back as the tension goes, the trunk rocks back and settles
+    const tf = t + S.extract;
+    at('d', t, [tf, 0, 'out3']);
+    at('a', t, [tf, 0.3, 'out3']);
+    at('lift', t, [tf, 0.02, 'out3']);
+    at('kb', t, [tf + 0.05, 0.55, 'io']);
+    at('el', t, [tf, C.billLift, 'out']);
+    at('lean', t, [t + S.extract * 0.4, -0.12, 'out'], [tf + 0.08, 0, 'io']);
+    at('rise', t, [tf, 0, 'io']);
+    at('back', t, [tf, 0, 'io']);
+    at('tail', t, [tf, 0, 'io']);
+    at('jaw', t, [tf, 0.04, 'io']);
+    P = { catch: t + S.extract * 0.3 };
+    t = tf;
+  } else {
+    P = { catch: t4 };
+    const tl = t + S.lift;
+    at('d', t, [tl, 0, 'out']);
+    // (the head comes up with the prey and the trunk rises under it: the swallow happens nearly upright)
+    at('a', t, [tl, 0.3, 'out']);
+    at('lift', t, [tl, crab ? 0.022 : 0.02, 'out']);
+    if (!crab) at('kb', t, [tl + 0.04, 0.5, 'io']);
+    at('el', t, [tl, C.billLift, 'io']);
+    t = tl;
+    if (crab) {
+      // shake the crab side to side (decaying), beat it once on the ground half way through
+      const n = Math.round(S.shake * S.shakeHz);
+      for (let i = 1; i < n; i++) {
+        const ti = t + ((i - 0.5) / n) * S.shake;
+        const amp = side * (i % 2 ? 1 : -1) * (1 - 0.5 * (i / n));
+        at('yaw', t, [ti, 0.42 * amp, 'io']);
+        at('roll', t, [ti, 0.28 * amp, 'io']);
+      }
+      at('yaw', t, [t + S.shake, 0, 'io']);
+      at('roll', t, [t + S.shake, 0, 'io']);
+      const tb = t + S.shake * 0.5;
+      at('lift', tb - 0.07, [tb, 0.001, 'in'], [tb + 0.09, 0.02, 'out']);
+      at('el', tb - 0.07, [tb, C.billStrike, 'io'], [tb + 0.09, C.billLift, 'io']);
+      at('kb', tb - 0.1, [tb, 1.02, 'in'], [tb + 0.12, 0.92, 'io'], [t + S.shake, 0.6, 'io']);
+      at('jaw', t, [t + 0.05, 0.05, 'io'], [t + S.shake, 0.05]);
+      t += S.shake;
+    }
+  }
+  // swallow: quick upward flicks of the bill about the head's pivot, jaw open; the trunk eases back meanwhile
+  const ts = t;
+  for (let k = 0; k < S.tosses; k++) {
+    const tu = t + S.toss * 0.4;
+    const te = t + S.toss;
+    at('toss', t, [tu, C.billLift - C.billToss, 'out'], [te, 0, 'io']);
+    const l = tr.lift[tr.lift.length - 1][1];
+    at('lift', t, [tu, l + 0.006, 'out'], [te, l + 0.002, 'io']);
+    at('jaw', t + S.toss * 0.1, [tu, 0.16, 'out'], [te, 0, 'io']);
+    at('tail', t, [tu, -0.06, 'out'], [te, 0, 'io']);
+    t = te;
+  }
+  at('kb', ts, [t, 0.35, 'io']);
+  // recover: the trunk rises first (slightly past its stance), the head follows it back to the gaze-driven head
+  const T = t + S.recover;
+  at('kb', t, [T - S.recover * 0.15, -0.04, 'io'], [T, 0, 'io']);
+  P.rec = [[0, 0], [ts, 0], [T - S.recover * 0.2, 1, 'io']];
+  P.w = [[0, 0], [t1 * 0.8, 1, 'io'], [t, 1], [T, 0, 'io']];
+  for (const k in tr) at(k, T);
+  Object.assign(P, tr, { T, contact: tc, tugs });
+  PLANS.set(p, P);
+  return P;
+}
+
 function preenTarget(variant) {
   // bird-local mm points on the plumage + bill approach roll
   switch (variant) {
@@ -1292,70 +1464,71 @@ function preenTarget(variant) {
 export const PREEN_VARIANTS = ['breast', 'belly', 'flank', 'scapulars', 'wing', 'tail'];
 
 export const ACTIONS = {
-  // 06 Peck — aim (neck retracts), strike (fast), handle prey (type specific), recover.
+  // 06 Peck — aim, fixate, stab, prey handling (worm tugs / crab shake / swallow tosses), recover. A timeline of
+  // eased key tracks (peckPlan, ANIM.peck): the trunk tips over the planted feet and carries the head down; the
+  // head is blended in from (and back out to) the gaze-driven head, so nothing pops at the start or the end.
   peck: {
-    duration: (p) => ({ polychaete: 1.9, crab: 1.35, amphipod: 0.6, insect: 0.6 })[p.preyType] ?? 0.7,
-    events: { strike: 0.28, catch: 0.34 },
-    pose(u, p, A) {
+    duration: (p) => peckPlan(p).T,
+    events: (p) => {
+      const P = peckPlan(p);
+      return { strike: P.contact / P.T, catch: P.catch / P.T };
+    },
+    pose(u, p, A, st) {
+      const P = peckPlan(p);
+      const s = u * P.T;
+      const C = ANIM.peck;
       const target = p.target;
-      const root = A.rootPos;
-      const toT = target.clone().sub(root);
+      const toT = _v.copy(target).sub(A.rootPos);
       const dist = Math.hypot(toT.x, toT.z);
       const yawW = Math.atan2(toT.x, toT.z);
-      // plovers pick by tipping the whole body forward over the legs (up to +0.56 from the relaxed stand, body
-      // axis ≈ −22°) and stretching the neck 15–20 mm (p007, p061; spec §7, §12); tilt builds up through aim → strike.
-      // The legs flex (trunk 15 mm lower): belly ≈ 19 mm over the ground, tarsus 42° (spec §9, §12: 20–25, 42°),
-      // the neck stays under its stretch limit (tools/dev/posture.mjs)
-      const aimK = smoothstep(0, 0.22, u);
-      const strikeK = smoothstep(0.2, 0.3, u);
-      const recK = smoothstep(0.6, 1.0, u);
-      const k = (0.5 * aimK + 0.5 * strikeK) * (1 - recK);
-      const tilt = 0.56 * (0.55 * aimK + 0.45 * strikeK) * (1 - 0.85 * recK);
-      // prey nearer or further than a bill-reach (≈62 mm ahead of the root; the AI stops 32–92 mm short): the
-      // trunk leans forward / back over the planted feet so the neck stays within its stretch (≤ 2, spec §7) and
-      // the tarsus tips toward the photographed 42° (spec §9, §12)
-      const shift = clamp(dist - 0.062, -0.03, 0.035);
-      const out = { posture: { pitch: tilt, height: -0.015 * k, neck: -0.2, shift: shift * k }, fast: { pitch: 18, height: 14, shift: 14 } };
-      // bill 52° down while aiming and 59° at the strike (photos of aiming / picking birds: 50–60°, head and neck
-      // stretched forward, p007, p061; spec §7) — the 63° / 76° before curled the head back under the breast
-      const hz = lerp(0.78, 0.6, strikeK);
-      const dir = new THREE.Vector3(Math.sin(yawW) * hz, -1, Math.cos(yawW) * hz);
-      const aimU = 0.22;
-      const strikeU = 0.3;
-      const type = p.preyType ?? 'amphipod';
-      const recoverStart = type === 'polychaete' ? 0.78 : type === 'crab' ? 0.72 : 0.55;
-      let billT;
-      const above = target.clone().add(new THREE.Vector3(0, 0.022, 0));
-      const deep = target.clone().add(new THREE.Vector3(0, type === 'polychaete' ? -0.006 : -0.0015, 0));
-      if (u < aimU) {
-        // head lowered toward the prey with a short fixation
-        billT = above.clone().lerp(target.clone().add(new THREE.Vector3(0, 0.012, 0)), easeInOut(u / aimU));
-      } else if (u < strikeU) {
-        billT = target.clone().add(new THREE.Vector3(0, 0.012, 0)).lerp(deep, easeInOut((u - aimU) / (strikeU - aimU)));
-      } else if (u < recoverStart) {
-        const k = (u - strikeU) / (recoverStart - strikeU);
-        billT = deep.clone();
-        if (type === 'polychaete') {
-          // pull the worm out: 2 backward tugs
-          billT.y += 0.004 + 0.006 * Math.abs(Math.sin(k * Math.PI * 2));
-          billT.addScaledVector(new THREE.Vector3(Math.sin(yawW), 0, Math.cos(yawW)), -0.006 * k);
-          out.jaw = 0.06;
-        } else if (type === 'crab') {
-          // shake/beat the crab
-          billT.y += 0.008;
-          billT.x += Math.sin(k * Math.PI * 6) * 0.004;
-          out.jaw = 0.05;
-        } else billT.y += 0.004 * k;
-      } else {
-        const k = easeInOut((u - recoverStart) / (1 - recoverStart));
-        billT = deep.clone().add(new THREE.Vector3(0, 0.01, 0)).lerp(A.rootToWorld(0, 0.085, 0.052), k);
-        out.jaw = u < recoverStart + 0.15 ? 0.1 : 0; // swallow
-      }
-      out.billTarget = billT;
-      const roll = type === 'crab' && u > strikeU && u < recoverStart ? Math.sin(u * 40) * 0.3 : 0;
-      out.headQ = A.billQuat(dir.lerp(new THREE.Vector3(Math.sin(yawW), -0.25, Math.cos(yawW)), u > recoverStart ? easeInOut((u - recoverStart) / (1 - recoverStart)) : 0), roll);
-      if (u > recoverStart) out.billTarget = null;
-      if (u > recoverStart) out.headQ = null;
+      // trunk: from where it was (st.p0) to the strike tip and back to the posture's own target
+      st.p0 ??= { pitch: A.p.pitch, height: A.p.height, shift: A.p.shift };
+      const rec = track(P.rec, s);
+      const kb = track(P.kb, s);
+      const base = A.target;
+      const anchor = (k) => lerp(st.p0[k], base[k], rec);
+      // prey nearer or further than a bill-reach: the trunk moves forward / back over the planted feet
+      const shift = clamp(dist - C.reach, -0.03, 0.035);
+      const out = {
+        posture: {
+          pitch: lerp(anchor('pitch'), C.tip, kb) + track(P.lean, s),
+          height: lerp(anchor('height'), -C.crouch, kb) + track(P.rise, s),
+          shift: lerp(anchor('shift'), shift, kb) + track(P.back, s),
+          neck: -0.2,
+        },
+        // (the curves are the motion: posture smoothing only takes the corners off)
+        fast: { pitch: 45, height: 45, shift: 45 },
+      };
+      // bill: elevation / yaw / roll along the plan, tip `d` back up the bill axis from the prey
+      const el = track(P.el, s) * DEG;
+      const yaw = yawW + track(P.yaw, s);
+      const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(el), -Math.sin(el), Math.cos(yaw) * Math.cos(el));
+      let d = track(P.d, s);
+      // tension tremor while the worm resists
+      d += track(P.tremor, s) * Math.sin(s * Math.PI * 2 * 17) * 0.0004;
+      const roll = track(P.roll, s);
+      const tip = target.clone().addScaledVector(dir, -d);
+      // the approach comes from above and a little behind the prey, steeper than the bill: along the bill axis the
+      // aiming head would sit in the breast plumage
+      const ap = track(P.a, s);
+      tip.x -= Math.sin(yawW) * C.aim[1] * ap;
+      tip.z -= Math.cos(yawW) * C.aim[1] * ap;
+      tip.y += C.aim[0] * ap + track(P.lift, s);
+      out.headQ = A.billQuat(dir, roll);
+      const toss = track(P.toss, s) * DEG;
+      if (toss) {
+        // swallowing toss: the head turns bill-up about its own pivot (about the bill tip it would swing the back
+        // of the head into the breast)
+        const head = tip.sub(BILL_FROM_HEAD.clone().applyQuaternion(out.headQ));
+        const de = el - toss;
+        out.headQ = A.billQuat(dir.set(Math.sin(yaw) * Math.cos(de), -Math.sin(de), Math.cos(yaw) * Math.cos(de)), roll);
+        out.billTarget = head.add(BILL_FROM_HEAD.clone().applyQuaternion(out.headQ));
+      } else out.billTarget = tip;
+      out.contactRate = 40;
+      out.headBlend = track(P.w, s);
+      out.jaw = track(P.jaw, s);
+      // the tail counters the trunk (+ = down): pressed down when bracing against a worm, flicked up on a swallow toss
+      out.tailPitch = track(P.tail, s);
       return out;
     },
   },
@@ -1430,14 +1603,28 @@ export const ACTIONS = {
     },
   },
 
-  // Foot-trembling on wet mud (S21, S22)
+  // Foot-trembling on wet mud (S21, S22): one foot is put forward and its toes patter on the mud (≈10 Hz,
+  // ANIM.footTrembleHz) while the weight is on the other leg; head down, eyes on the patch in front of the foot
   footTremble: {
     duration: 1.0,
     pose(u, p, A, st) {
       const side = (st.side ??= A.rng() < 0.5 ? 'L' : 'R');
-      const k = smoothstep(0, 0.1, u) * (1 - smoothstep(0.9, 1, u));
-      const tr = 0.15 + 0.1 * Math.sin(u * Math.PI * 2 * 10);
-      return { legRaise: { [side]: tr * k }, legRaiseTarget: { [side]: A.rootToWorld((side === 'L' ? 1 : -1) * 0.01, 0.006, 0.02) }, posture: { pitch: 0.3, neck: 0.2 } };
+      const sg = side === 'L' ? 1 : -1;
+      const k = smoothstep(0, 0.12, u) * (1 - smoothstep(0.86, 1, u));
+      const on = smoothstep(0.12, 0.2, u) * (1 - smoothstep(0.8, 0.86, u));
+      // foot lifted by up to 3 mm and put down again every cycle (the toe tips stay near the surface)
+      const pat = 0.0015 * on * (1 - Math.cos(u * Math.PI * 2 * ANIM.footTrembleHz * 1.0));
+      const lift = 0.006 * bump(u, 0, 0.14) + 0.006 * bump(u, 0.86, 1);
+      const foot = A.rootToWorld(sg * 0.009, 0, 0.016);
+      foot.y = A.groundHeight(foot.x, foot.z) + lift + pat;
+      st.look ??= A.rootToWorld(sg * 0.006, 0, 0.05);
+      return {
+        legRaise: { [side]: k },
+        legRaiseTarget: { [side]: foot },
+        footPlace: { [side]: 1 },
+        // weight over the standing leg (a millimetre or two sideways), trunk tipped into the search stance
+        posture: { pitch: 0.34, neck: 0.1, roll: sg * 0.04 * k, height: -0.002 * k },
+      };
     },
   },
 

@@ -64,6 +64,7 @@ const POSES = [
   ...['walk', 'run', 'flight', 'glide'].flatMap((n) => steps(0, 0.875, 0.125).map((t) => [n, t])),
   ...steps(0.1, 0.9, 0.1).map((t) => ['peck', t]),
   ...steps(0.1, 0.9, 0.1).map((t) => ['peck', t, 'crab']),
+  ...steps(0.1, 0.9, 0.1).map((t) => ['peck', t, 'amphipod']),
   ...PREEN_VARIANTS.flatMap((v) => steps(0.1, 0.9, 0.2).map((t) => ['preen', t, v])),
   ...['scratch', 'wingStretch', 'shake', 'footTremble', 'takeoff', 'landing', 'threat'].flatMap((n) => steps(0.1, 0.9, 0.1).map((t) => [n, t])),
 ].filter((p) => !poseRe || poseRe.test(p.filter((x) => x !== undefined).join(':')));

@@ -281,6 +281,32 @@ export const animation = {
   turnAccel: 100,
   headStabilization: 0.8,
   footTrembleHz: 10,
+  // Peck (ACTIONS.peck; animation_reference.md §06). Plovers peck by tipping the whole trunk forward over the
+  // planted feet (pivot at the hips, intertarsal joints flex, tail rises) on a SHORT neck that extends only in the
+  // last ≈0.1 s of the stab (p007, p061; spec §7, §12: axis −22°, belly 20–25 mm). Segment times in s (scaled by
+  // the individual's animation timing); D unless noted (no video could be analysed, research.md §0):
+  //   aim     head turns the bill onto the prey and lowers it with the first ~60% of the trunk tip
+  //   hold    binocular fixation, the head cocked back a little (cock)
+  //   strike  stab along the bill axis, accelerating to contact, overshoot then settle (bill 50–60°: photos)
+  //   grab / lift / toss (swallow: quick upward flick of the bill, jaw open) / recover (trunk first, head follows)
+  // small prey ≈0.3 s handling (behavior.md §2) → 0.6 s action; worms 1–2 tugs (brace and lean back, worm
+  // resists, re-grip) and two swallowing tosses (1.4–1.8 s); crabs a fast lunge, lift, shake and one beat on the
+  // ground (1.2 s; behavior.md §2: 1–2 s)
+  peck: {
+    tip: 0.70, // trunk pitch at contact (rad from the relaxed stand: axis −22°, spec §12)
+    tipOvershoot: 0.04,
+    crouch: mm(12), // trunk lowered (legs flexed) at contact
+    reach: mm(58), // bill tip ahead of the root at contact with no trunk shift (the AI stops this far short)
+    aim: [mm(20), mm(4)], // bill tip this far above / behind the prey while aiming (the stab comes down at ≈80°)
+    cock: mm(1.5),
+    billAim: 58, // bill below horizontal (deg) while aiming, at contact, lifted (photos 50–60°, p007, p061)
+    billStrike: 67,
+    billLift: 46,
+    billToss: 24,
+    small: { aim: 0.11, hold: 0.04, strike: 0.09, grab: 0.04, lift: 0.08, toss: 0.1, tosses: 1, recover: 0.14, depth: mm(1.5) },
+    polychaete: { aim: 0.13, hold: 0.07, strike: 0.11, grab: 0.07, tug: 0.36, pull: [mm(10), mm(14)], extract: 0.13, toss: 0.13, tosses: 2, recover: 0.2, depth: mm(4) },
+    crab: { aim: 0.08, hold: 0.02, strike: 0.09, grab: 0.04, lift: 0.08, shake: 0.55, shakeHz: 6.5, toss: 0.14, tosses: 1, recover: 0.18, depth: mm(1) },
+  },
   flight: {
     cruiseHz: 7.5, // Pennycuick 6.8 Hz baseline, S25
     takeoffHz: 9.0,
@@ -337,6 +363,9 @@ export const foraging = {
   footTrembleHazard: 0.08,
   sandpiperModeDensity: 0.8, // plasticity S13: very high prey density → short walking search
   maxPecksPerMinute: 25, // S18
+  // s between stopping at the prey and the strike (fixation, binocular aim; D): after a walk, after a run (the
+  // momentum absorbed first), at a crab (struck at once, before it reaches its burrow)
+  peckFixation: { afterWalk: [0.05, 0.18], afterRun: [0.12, 0.3], sprint: [0.0, 0.05] },
 };
 
 export const drives = {
