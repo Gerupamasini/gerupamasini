@@ -4,13 +4,14 @@
 
 import * as THREE from 'three';
 
+// shafts: the additive in-water light slabs (pure overdraw, first to go)
 export const QUALITY_LEVELS = [
-  { name: 'ultra', pr: 2.0, samples: 4, dof: true, refl: true, bloom: true, lens: true },
-  { name: 'high', pr: 1.5, samples: 4, dof: true, refl: true, bloom: true, lens: true },
-  { name: 'medium', pr: 1.0, samples: 4, dof: true, refl: true, bloom: true, lens: true },
-  { name: 'low', pr: 0.85, samples: 2, dof: false, refl: true, bloom: true, lens: true },
-  { name: 'lower', pr: 0.72, samples: 0, dof: false, refl: false, bloom: true, lens: false },
-  { name: 'minimal', pr: 0.6, samples: 0, dof: false, refl: false, bloom: false, lens: false },
+  { name: 'ultra', pr: 2.0, samples: 4, dof: true, refl: true, bloom: true, lens: true, shafts: true },
+  { name: 'high', pr: 1.5, samples: 4, dof: true, refl: true, bloom: true, lens: true, shafts: true },
+  { name: 'medium', pr: 1.0, samples: 4, dof: true, refl: true, bloom: true, lens: true, shafts: true },
+  { name: 'low', pr: 0.85, samples: 2, dof: false, refl: true, bloom: true, lens: true, shafts: false },
+  { name: 'lower', pr: 0.72, samples: 0, dof: false, refl: false, bloom: true, lens: false, shafts: false },
+  { name: 'minimal', pr: 0.6, samples: 0, dof: false, refl: false, bloom: false, lens: false, shafts: false },
 ];
 
 export function isMobileDevice() {
@@ -49,7 +50,10 @@ export class AdaptiveQuality {
       app.post.bloom.enabled = L.bloom;
       app.post.lens.enabled = L.lens;
     }
-    if (app.world) app.world.surface.useReflection = L.refl;
+    if (app.world) {
+      app.world.surface.useReflection = L.refl;
+      app.world.shafts.group.visible = L.shafts;
+    }
     this.warm = 2.5;
     this.acc = 0;
     this.n = 0;

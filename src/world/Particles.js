@@ -12,7 +12,7 @@ import { groundHeight } from './Substrate.js';
 const uwNoCaustics = underwaterCommon;
 
 export class SuspendedParticles {
-  constructor(scene, count = 1400) {
+  constructor(scene, count = 2600) {
     const rng = new RNG(5);
     const pos = new Float32Array(count * 3);
     const seed = new Float32Array(count);
@@ -25,9 +25,12 @@ export class SuspendedParticles {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+    // the bright core of each speck writes depth so the lens blurs it at its
+    // own distance (sharp in the focal plane, a soft disc up close) instead of
+    // smearing it away with the background behind it
     this.material = new THREE.ShaderMaterial({
       transparent: true,
-      depthWrite: false,
+      depthWrite: true,
       blending: THREE.AdditiveBlending,
       uniforms: {
         uTime: U.uTime,
@@ -58,9 +61,13 @@ export class SuspendedParticles {
           p.y = 0.03 + mod(p.y - 0.03, ${(TANK.water - 0.04).toFixed(3)});
           vec4 mv = modelViewMatrix * vec4(p, 1.0);
           gl_Position = projectionMatrix * mv;
-          float size = mix(0.0003, 0.0011, aSeed * aSeed);
+          // fine silt (most) and a few larger flakes of "marine snow"
+          float flake = step(0.92, fract(aSeed * 13.7));
+          float size = mix(0.00025, 0.0009, aSeed * aSeed) * (1.0 + 1.6 * flake);
           gl_PointSize = max(1.0, size * uPixel / -mv.z);
-          vA = mix(0.08, 0.35, fract(aSeed * 7.3)) * smoothstep(0.02, 0.2, -mv.z);
+          // sub-pixel specks fade instead of popping; very close ones are out of focus anyway
+          float px = size * uPixel / -mv.z;
+          vA = mix(0.1, 0.42, fract(aSeed * 7.3)) * smoothstep(0.02, 0.2, -mv.z) * clamp(px, 0.35, 1.0);
           vW = (modelMatrix * vec4(p, 1.0)).xyz;
         }`,
       fragmentShader: /* glsl */ `
@@ -71,9 +78,12 @@ export class SuspendedParticles {
         ${uwNoCaustics}
         void main() {
           vec2 d = gl_PointCoord - 0.5;
-          float a = smoothstep(0.5, 0.0, length(d)) * vA * uIntensity;
+          float r = length(d);
+          if (r > 0.42) discard;
+          float a = smoothstep(0.5, 0.0, r) * vA * uIntensity;
+          // lit by the hood light (depth falloff + caustics), plus a little ambient
           float c = causticsAt(vW, vec3(0.0, 1.0, 0.0));
-          vec3 col = vec3(0.75, 0.8, 0.72) * (0.35 + 0.65 * c);
+          vec3 col = vec3(0.8, 0.82, 0.74) * (0.25 + 1.6 * c);
           col = waterAttenuate(col, vW) * a;
           gl_FragColor = vec4(col, a);
           #include <tonemapping_fragment>

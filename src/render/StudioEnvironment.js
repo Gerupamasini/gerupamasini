@@ -3,6 +3,7 @@
 //    by the black-background reference photographs)
 //  * aquarium: under-water probe — bright tank LED panel above, Snell's-window
 //    glow, blue-green water column, darker gravel below.
+//  * room: what the glass panes and the surface reflect from the outside.
 
 import * as THREE from 'three';
 
@@ -19,12 +20,13 @@ function panel(w, h, color, intensity) {
 export function buildStudioEnvScene() {
   const scene = new THREE.Scene();
   scene.add(box(20, 12, 20, 0x050505));
-  const top = panel(6, 3, 0xffffff, 6);
-  top.position.set(0.5, 5.5, 1.5);
+  const top = panel(6, 4, 0xf8faff, 6);
+  top.position.set(0.3, 5.5, 2.0);
   top.rotation.x = Math.PI / 2;
   scene.add(top);
-  const front = panel(4, 3, 0xfff6ea, 2.2);
-  front.position.set(-1.5, 1.8, 7);
+  // large soft box behind the camera: even, frontal light like the reference shots
+  const front = panel(7, 4.5, 0xf6f8ff, 3.2);
+  front.position.set(-0.5, 2.2, 7);
   scene.add(front);
   const rim = panel(1.2, 5, 0xdfeaff, 3.5);
   rim.position.set(-6, 1.5, -4);
@@ -72,6 +74,21 @@ export function buildAquariumEnvScene() {
   room.position.set(0, 1, 9.5);
   room.rotation.y = Math.PI;
   scene.add(room);
+  return scene;
+}
+
+// The room around the tank as seen in reflections from the outside (glass
+// panes, frame, the water surface from above): a dim living room with a
+// slightly lighter ceiling. They must not reflect the under-water probe (its
+// Snell's window and LED panel would lay a milky veil on them); the hood
+// light bar's reflection in the surface is traced exactly in WaterSurface.
+export function buildRoomEnvScene() {
+  const scene = new THREE.Scene();
+  scene.add(box(20, 8, 20, 0x0c0b0a));
+  const ceiling = panel(20, 20, 0x2a2724, 0.5);
+  ceiling.position.y = 3.9;
+  ceiling.rotation.x = Math.PI / 2;
+  scene.add(ceiling);
   return scene;
 }
 

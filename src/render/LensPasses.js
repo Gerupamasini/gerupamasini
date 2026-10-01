@@ -117,9 +117,9 @@ export class LensPass extends Pass {
         tDiffuse: { value: null },
         uRes: { value: new THREE.Vector2(1, 1) },
         uTime: { value: 0 },
-        uCA: { value: 0.0022 },
-        uVignette: { value: 0.32 },
-        uGrain: { value: 0.022 },
+        uCA: { value: 0.0005 },
+        uVignette: { value: 0.18 },
+        uGrain: { value: 0.012 },
       },
       vertexShader: quadVS,
       fragmentShader: /* glsl */ `
@@ -140,10 +140,15 @@ export class LensPass extends Pass {
           // natural vignetting (cos^4 falloff of a real lens)
           float c = 1.0 / (1.0 + r2 * 1.6);
           col *= mix(1.0, c * c, uVignette);
-          // film grain: stronger in the mid-tones, frame-varying
-          float g = hash(gl_FragCoord.xy + fract(uTime * 7.31) * 173.0) + hash(gl_FragCoord.xy * 1.37 - fract(uTime * 3.17) * 91.0) - 1.0;
+          // fine sensor noise on the linear signal: photon shot noise grows with
+          // sqrt(signal) (relatively strongest in the shadows) plus a small read
+          // noise floor; mostly luminance with a weak chroma part, per pixel and frame
+          vec2 fc = gl_FragCoord.xy + fract(uTime * 7.31) * 173.0;
+          float g = hash(fc) + hash(fc * 1.37 + 19.1) - 1.0;
+          vec3 gc = vec3(hash(fc + 3.7), hash(fc + 11.3), hash(fc + 29.9)) - 0.5;
           float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
-          col *= 1.0 + g * uGrain * (1.0 - smoothstep(0.0, 1.5, lum) * 0.6);
+          float sigma = uGrain * sqrt(max(lum, 0.0) + 0.0015);
+          col += (vec3(g) * 0.85 + gc * 0.5) * sigma;
           outColor = vec4(max(col, 0.0), 1.0);
         }
       `,

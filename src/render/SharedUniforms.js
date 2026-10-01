@@ -17,9 +17,11 @@ export const U = {
   uWaterMin: { value: new THREE.Vector3(-0.6, 0, -0.225) },
   uWaterMax: { value: new THREE.Vector3(0.6, 0.46, 0.225) },
   // Pure-water absorption (Pope & Fry 1997) is ~[0.45, 0.064, 0.015] /m for
-  // R,G,B; aquarium water adds a little DOM/particle extinction.
-  uWaterAbsorb: { value: new THREE.Vector3(0.62, 0.16, 0.12) },
-  uWaterScatter: { value: new THREE.Color(0.012, 0.03, 0.036) },
+  // R,G,B; aquarium water adds dissolved organics (yellowing: blue absorbed)
+  // and suspended particles (extinction + a blue-green in-scattered veil), so
+  // the back of a 45 cm tank turns blue-green and loses contrast.
+  uWaterAbsorb: { value: new THREE.Vector3(1.1, 0.42, 0.5) },
+  uWaterScatter: { value: new THREE.Color(0.022, 0.058, 0.06) },
   uWaterDensity: { value: 1.0 },
 
   // body pigments (sRGB anchors from the research report §7, tuned on photos)

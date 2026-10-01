@@ -1,38 +1,106 @@
 // Rocks and aquatic plants (Vallisneria ribbons, sword-plant rosettes).
 // Plants sway in the filter current with height-dependent bending in the
-// vertex shader; rocks are displaced noise solids. Both register colliders
-// used by the fish obstacle avoidance.
+// vertex shader and vary in shade, width and condition (old leaves yellow
+// and brown from the tip); rocks are fractured, weathered stones bedded into
+// the gravel. Both register colliders used by the fish obstacle avoidance.
 
 import * as THREE from 'three';
 import { RNG, noise3 } from '../core/random.js';
 import { TANK } from './TankConfig.js';
 import { groundHeight } from './Substrate.js';
 import { patchUnderwater } from './UnderwaterMaterial.js';
-import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeVertices, mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-function rockGeometry(rng, sx, sy, sz) {
+// A weathered stone: a noisy ellipsoid cut by a few fracture planes (a soft
+// minimum keeps the edges rounded by erosion), with fine fracture roughness
+// and faint strata. `radius(dir)` is the radial function in the stone's unit
+// frame; it is also used to keep the gravel out of the stone's footprint.
+function stoneShape(rng) {
+  const o = rng.range(0, 100);
+  const planes = [];
+  const n = rng.int(5, 8);
+  for (let i = 0; i < n; i++) {
+    // fracture faces on the sides and top (the bottom is buried)
+    const th = rng.range(0, Math.PI * 2);
+    const el = rng.range(-0.2, 1.15);
+    planes.push({ n: new THREE.Vector3(Math.cos(th) * Math.cos(el), Math.sin(el), Math.sin(th) * Math.cos(el)), d: rng.range(0.64, 0.86) });
+  }
+  const smin = (a, b, k) => {
+    const h = Math.max(k - Math.abs(a - b), 0) / k;
+    return Math.min(a, b) - h * h * k * 0.25;
+  };
+  const radius = (d) => {
+    let r = 1 + 0.14 * noise3(d.x * 1.4 + o, d.y * 1.4, d.z * 1.4) + 0.05 * noise3(d.x * 3.3, d.y * 3.3 + o, d.z * 3.3);
+    for (const p of planes) {
+      const c = d.x * p.n.x + d.y * p.n.y + d.z * p.n.z;
+      if (c > 0.05) r = smin(r, p.d / c, 0.1);
+    }
+    r += 0.016 * noise3(d.x * 9 + o, d.y * 9, d.z * 9 - o) + 0.006 * noise3(d.x * 23, d.y * 23 + o, d.z * 23);
+    r += 0.006 * Math.sin((d.y + 0.25 * d.x) * 26 + o);
+    return r;
+  };
+  return radius;
+}
+
+// natural stone albedos (linear): grey-brown, dark slate, warm ochre-grey
+const STONE_TONES = [
+  [0.135, 0.122, 0.105],
+  [0.095, 0.1, 0.1],
+  [0.17, 0.138, 0.1],
+  [0.12, 0.11, 0.095],
+];
+
+function rockGeometry(radius, rng, sx, sy, sz) {
   const g = mergeVertices(new THREE.IcosahedronGeometry(1, 5));
   const p = g.attributes.position;
-  const v = new THREE.Vector3();
+  const d = new THREE.Vector3();
   const o = rng.range(0, 100);
+  for (let i = 0; i < p.count; i++) {
+    d.fromBufferAttribute(p, i).normalize();
+    const r = radius(d);
+    p.setXYZ(i, d.x * r * sx, d.y * r * sy, d.z * r * sz);
+  }
+  g.computeVertexNormals();
+  // per-vertex curvature (umbrella operator): concave cavities stay wet and
+  // dark and collect sediment, convex edges are worn lighter
+  const idx = g.index.array;
+  const sum = new Float32Array(p.count * 3);
+  const cnt = new Float32Array(p.count);
+  for (let t = 0; t < idx.length; t += 3) {
+    for (let k = 0; k < 3; k++) {
+      const a = idx[t + k];
+      for (const b of [idx[t + ((k + 1) % 3)], idx[t + ((k + 2) % 3)]]) {
+        sum[a * 3] += p.getX(b);
+        sum[a * 3 + 1] += p.getY(b);
+        sum[a * 3 + 2] += p.getZ(b);
+        cnt[a]++;
+      }
+    }
+  }
+  const nrm = g.attributes.normal;
+  const tone = STONE_TONES[Math.floor(rng.next() * STONE_TONES.length)];
+  const scale = Math.min(sx, sy, sz);
   const col = new Float32Array(p.count * 3);
   for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i);
-    let n = 0.22 * noise3(v.x * 1.3 + o, v.y * 1.3, v.z * 1.3) + 0.08 * noise3(v.x * 3.7, v.y * 3.7 + o, v.z * 3.7) + 0.025 * noise3(v.x * 11, v.y * 11, v.z * 11 + o);
-    // flatter bottom, stratified faces
-    const strata = 0.03 * Math.sin((v.y + 0.3 * v.x) * 14 + o);
-    v.multiplyScalar(1 + n + strata);
-    if (v.y < -0.35) v.y = -0.35 + (v.y + 0.35) * 0.3;
-    v.set(v.x * sx, v.y * sy, v.z * sz);
-    p.setXYZ(i, v.x, v.y, v.z);
-    const t = 0.5 + 0.5 * noise3(v.x * 18, v.y * 18 + o, v.z * 18);
-    const lichen = Math.max(0, noise3(v.x * 6 + 3, v.y * 6, v.z * 6)) * 0.3;
-    col[i * 3] = 0.34 * (0.75 + 0.5 * t) - lichen * 0.05;
-    col[i * 3 + 1] = 0.33 * (0.75 + 0.5 * t) + lichen * 0.05;
-    col[i * 3 + 2] = 0.31 * (0.75 + 0.5 * t) - lichen * 0.08;
+    const lx = sum[i * 3] / cnt[i] - p.getX(i);
+    const ly = sum[i * 3 + 1] / cnt[i] - p.getY(i);
+    const lz = sum[i * 3 + 2] / cnt[i] - p.getZ(i);
+    const curv = (lx * nrm.getX(i) + ly * nrm.getY(i) + lz * nrm.getZ(i)) / (scale * 0.02);
+    const cav = THREE.MathUtils.smoothstep(curv, 0.02, 0.35);
+    const edge = THREE.MathUtils.smoothstep(-curv, 0.05, 0.4);
+    const x = p.getX(i) / scale;
+    const y = p.getY(i) / scale;
+    const z = p.getZ(i) / scale;
+    // mineral banding and mottling
+    const band = 0.5 + 0.5 * Math.sin((y * 3.1 + 0.4 * x) * 2.2 + 1.7 * noise3(x * 0.8 + o, y * 0.8, z * 0.8));
+    const mott = noise3(x * 2.5, y * 2.5 + o, z * 2.5);
+    const b = (0.86 + 0.18 * band + 0.16 * mott) * (1 - 0.5 * cav) * (1 + 0.18 * edge);
+    const warm = 0.03 * mott;
+    col[i * 3] = tone[0] * b * (1 + warm);
+    col[i * 3 + 1] = tone[1] * b;
+    col[i * 3 + 2] = tone[2] * b * (1 - warm * 1.5);
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.computeVertexNormals();
   return g;
 }
 
@@ -41,18 +109,28 @@ export function buildRocks() {
   const group = new THREE.Group();
   group.name = 'rocks';
   const colliders = [];
-  // procedural stone detail: multi-octave bump + mineral speckle + algae film on top faces
-  const mat = patchUnderwater(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 }), {
+  const footprints = []; // exact stone footprints (gravel scattering)
+  // Under water the stone/water interface reflects only ~0.6 % (IOR ratio
+  // 1.55 / 1.33), so the stones look matte: no air-like specular sheen.
+  // Shader detail: fracture-scale bump, mineral grains, patchy algae on the
+  // upward faces, a sediment film near the gravel line.
+  const mat = patchUnderwater(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, ior: 1.17 }), {
     key: 'rock',
     extraColor: `
       {
-        vec3 wp = vUwWorld * 60.0;
-        float sp = vnoise3(wp * 3.0);
-        float gr = fbm3(vUwWorld * 22.0);
-        diffuseColor.rgb *= 0.78 + 0.35 * gr + 0.12 * step(0.82, sp);
+        vec3 wp = vUwWorld;
+        float gr = fbm3(wp * 24.0);
+        float sp = vnoise3(wp * 170.0);
+        diffuseColor.rgb *= 0.8 + 0.4 * gr;
+        diffuseColor.rgb *= 1.0 + 0.3 * smoothstep(0.82, 0.9, sp) - 0.25 * smoothstep(0.16, 0.08, sp);
         vec3 nW = inverseTransformDirection(normalize(vNormal), viewMatrix);
-        float top = smoothstep(0.3, 0.9, nW.y);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.75, 0.95, 0.6), top * 0.45 * smoothstep(0.35, 0.65, fbm3(vUwWorld * 9.0)));
+        float top = smoothstep(0.2, 0.85, nW.y);
+        float patchy = smoothstep(0.4, 0.68, fbm3(wp * 13.0 + 3.0));
+        vec3 algae = vec3(0.045, 0.07, 0.022) * (0.7 + 0.6 * vnoise3(wp * 90.0));
+        diffuseColor.rgb = mix(diffuseColor.rgb, algae, top * patchy * 0.8);
+        // brownish diatom / mulm film where the stone meets the gravel
+        float low = smoothstep(0.075, 0.035, wp.y);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.085, 0.068, 0.045), low * 0.6);
       }`,
     extraNormal: `
       {
@@ -61,7 +139,7 @@ export function buildRocks() {
         float h0 = fbm3(p);
         vec3 g = vec3(fbm3(p + vec3(e, 0.0, 0.0)) - h0, fbm3(p + vec3(0.0, e, 0.0)) - h0, fbm3(p + vec3(0.0, 0.0, e)) - h0) / e;
         vec3 gv = (viewMatrix * vec4(g, 0.0)).xyz;
-        normal = normalize(normal - (gv - normal * dot(gv, normal)) * 0.55);
+        normal = normalize(normal - (gv - normal * dot(gv, normal)) * 0.8);
       }`,
   });
   const defs = [
@@ -69,29 +147,52 @@ export function buildRocks() {
     { x: -0.2, z: -0.15, sx: 0.07, sy: 0.055, sz: 0.06, ry: 1.2 },
     { x: 0.33, z: -0.1, sx: 0.1, sy: 0.075, sz: 0.075, ry: -0.6 },
     { x: 0.08, z: 0.05, sx: 0.045, sy: 0.03, sz: 0.04, ry: 2.2 },
+    // a few loose stones
+    { x: -0.12, z: 0.1, sx: 0.022, sy: 0.014, sz: 0.018, ry: 0.9, small: true },
+    { x: 0.45, z: 0.06, sx: 0.028, sy: 0.016, sz: 0.02, ry: -1.3, small: true },
+    { x: 0.2, z: -0.02, sx: 0.018, sy: 0.012, sz: 0.015, ry: 2.6, small: true },
   ];
+  const up = new THREE.Vector3(0, 1, 0);
   for (const d of defs) {
-    const geo = rockGeometry(rng, d.sx, d.sy, d.sz);
+    const radius = stoneShape(rng);
+    const geo = rockGeometry(radius, rng, d.sx, d.sy, d.sz);
     const m = new THREE.Mesh(geo, mat);
-    const y = groundHeight(d.x, d.z) + d.sy * 0.45;
+    // bedded into the gravel (no visible flat underside)
+    const y = groundHeight(d.x, d.z) + d.sy * (d.small ? 0.3 : 0.2);
     m.position.set(d.x, y, d.z);
     m.rotation.y = d.ry;
     m.castShadow = true;
     m.receiveShadow = true;
     group.add(m);
-    colliders.push({ type: 'ellipsoid', center: new THREE.Vector3(d.x, y, d.z), radii: new THREE.Vector3(d.sx * 1.1, d.sy * 1.15, d.sz * 1.1), radius: Math.max(d.sx, d.sz) });
+    const center = new THREE.Vector3(d.x, y, d.z);
+    const q = new THREE.Vector3();
+    // exact footprint test for the gravel scattering
+    const contains = (x, yy, z, margin = 0) => {
+      q.set(x - center.x, yy - center.y, z - center.z).applyAxisAngle(up, -d.ry);
+      q.set(q.x / d.sx, q.y / d.sy, q.z / d.sz);
+      const l = q.length();
+      if (l < 1e-6) return true;
+      return l < radius(q.divideScalar(l)) * (1 - margin);
+    };
+    footprints.push({ center, radius: Math.max(d.sx, d.sz), contains });
+    // loose pebble-sized stones are not obstacles for the fish
+    if (!d.small) colliders.push({ type: 'ellipsoid', center, radii: new THREE.Vector3(d.sx * 1.1, d.sy * 1.15, d.sz * 1.1), radius: Math.max(d.sx, d.sz) });
   }
-  return { group, colliders };
+  return { group, colliders, footprints };
 }
 
 // ----------------------------------------------------------------- plants
 const plantSwayPars = /* glsl */ `
-in vec4 aPlant; // x: phase, y: stiffness, z: height, w: unused
+in vec4 aPlant; // x: phase, y: stiffness, z: height, w: leaf age / condition (0 fresh .. 1 old)
 uniform vec3 uCurrent;
+out float vPlantH;
+out float vPlantAge;
 `;
 const plantSway = /* glsl */ `
 {
   float h = clamp(position.y / max(aPlant.z, 1e-3), 0.0, 1.0);
+  vPlantH = h;
+  vPlantAge = aPlant.w;
   float ph = aPlant.x;
   float t = uTime;
   // slow swaying in the filter current + travelling flutter along the blade
@@ -129,10 +230,9 @@ function swordLeafGeometry(len, width) {
   for (let i = 0; i < p.count; i++) {
     const y = p.getY(i);
     const t = y / len;
-    const petiole = t < 0.3 ? 0.12 : 1;
     const blade = Math.sin(Math.min(1, (t - 0.25) / 0.75) * Math.PI) ** 0.7;
     const w = t < 0.3 ? 0.1 : Math.max(0.08, blade);
-    p.setX(i, p.getX(i) * w * petiole ** 0);
+    p.setX(i, p.getX(i) * w);
     // arch outward
     p.setZ(i, 0.35 * len * t * t);
     p.setY(i, y * (1 - 0.25 * t));
@@ -143,6 +243,70 @@ function swordLeafGeometry(len, width) {
   return g;
 }
 
+// Fine-leaved stem plant (Cabomba / hornwort-like): whorls of forked,
+// needle-thin leaves along a slender stem, smaller and denser toward the
+// growing tip. Unit height (scaled per instance).
+function stemPlantGeometry(rng, whorls) {
+  const parts = [];
+  const q = new THREE.Quaternion();
+  const m4 = new THREE.Matrix4();
+  const up = new THREE.Vector3(0, 1, 0);
+  const needle = (len, w) => {
+    const g = new THREE.PlaneGeometry(w, len, 1, 3);
+    g.translate(0, len / 2, 0);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const t = p.getY(i) / len;
+      p.setX(i, p.getX(i) * (1 - 0.7 * t));
+      // curls upward toward the tip
+      p.setZ(i, 0.18 * len * t * t);
+    }
+    return g;
+  };
+  // stem: two crossed thin strips
+  for (const a of [0, Math.PI / 2]) {
+    const g = new THREE.PlaneGeometry(0.0035, 1, 1, 8);
+    g.translate(0, 0.5, 0);
+    g.rotateY(a);
+    parts.push(g);
+  }
+  for (let k = 0; k < whorls; k++) {
+    const t = (k + 0.5) / whorls;
+    const y = 0.04 + 0.94 * Math.pow(t, 0.9);
+    const len = (0.1 + 0.045 * rng.next()) * (1 - 0.6 * Math.pow(t, 3));
+    const nLeaves = 6;
+    const az0 = rng.range(0, Math.PI * 2);
+    for (let j = 0; j < nLeaves; j++) {
+      const az = az0 + (j / nLeaves) * Math.PI * 2 + rng.range(-0.15, 0.15);
+      // leaves rise more steeply near the tip (closed apical tuft)
+      const lift = THREE.MathUtils.lerp(0.3, 1.05, t * t) + rng.range(-0.12, 0.12);
+      for (let f = -1; f <= 1; f++) {
+        const g = needle(len * (f === 0 ? 1 : 0.72), 0.0011);
+        // fork: side needles splay sideways within the leaf
+        g.rotateZ(f * 0.38);
+        // tilt out from the stem, then turn to the leaf azimuth
+        g.rotateX(-(Math.PI / 2 - lift));
+        q.setFromAxisAngle(up, az);
+        m4.makeRotationFromQuaternion(q).setPosition(0, y, 0);
+        g.applyMatrix4(m4);
+        parts.push(g);
+      }
+    }
+  }
+  const merged = mergeGeometries(parts.map((g) => g.toNonIndexed()));
+  for (const g of parts) g.dispose();
+  // stems are never quite straight: a gentle arc toward the light / current
+  const bx = rng.range(-0.08, 0.08);
+  const bz = rng.range(-0.08, 0.08);
+  const mp = merged.attributes.position;
+  for (let i = 0; i < mp.count; i++) {
+    const y = mp.getY(i);
+    mp.setX(i, mp.getX(i) + bx * y * y);
+    mp.setZ(i, mp.getZ(i) + bz * y * y);
+  }
+  return merged;
+}
+
 export function buildPlants() {
   const rng = new RNG(99);
   const group = new THREE.Group();
@@ -150,24 +314,41 @@ export function buildPlants() {
   const colliders = [];
   const current = { value: new THREE.Vector3(0.6, 0, 0.15) };
 
-  const mkMat = (color, key) => {
-    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0, side: THREE.DoubleSide });
+  // Leaves under water: the cuticle/water interface reflects almost nothing
+  // (low IOR ratio), so they are matte; thin blades transmit yellow-green
+  // light when seen against the hood light.
+  const mkMat = (key, veins) => {
+    const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0, ior: 1.1, side: THREE.DoubleSide });
     patchUnderwater(m, {
       extraVertexPars: plantSwayPars,
       extraVertex: plantSway,
+      extraFragmentPars: 'in float vPlantH;\nin float vPlantAge;\n',
       key,
-      // thin leaves: diffuse transmission of the hood light + faint parallel veins
       extraColor: `
         {
-          float v = abs(fract(vUwWorld.y * 90.0 + vUwWorld.x * 7.0) - 0.5);
-          diffuseColor.rgb *= 0.92 + 0.16 * smoothstep(0.1, 0.0, v) + 0.1 * (vnoise3(vUwWorld * 40.0) - 0.5);
+          // faint parallel veins and mottling
+          float v = abs(fract(vUwWorld.y * ${veins.toFixed(1)} + vUwWorld.x * 7.0) - 0.5);
+          diffuseColor.rgb *= 0.92 + 0.14 * smoothstep(0.1, 0.0, v) + 0.16 * (vnoise3(vUwWorld * 35.0) - 0.5);
+          // older leaves yellow and brown from the tip, with small dead spots
+          float age = vPlantAge;
+          vec3 brown = vec3(0.13, 0.08, 0.03) * (0.75 + 0.5 * vnoise3(vUwWorld * 110.0));
+          float tip = smoothstep(1.0 - 0.45 * age, 1.02, vPlantH) * smoothstep(0.35, 0.6, age);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(diffuseColor.rgb * vec3(1.2, 1.05, 0.4), brown, smoothstep(0.3, 0.8, tip)), tip);
+          float spots = smoothstep(0.74, 0.82, vnoise3(vUwWorld * 150.0 + age * 13.0)) * smoothstep(0.55, 0.85, age);
+          diffuseColor.rgb = mix(diffuseColor.rgb, brown, spots * 0.75);
+          // a film of fine sediment / diatoms on the lower leaves
+          diffuseColor.rgb *= mix(0.62, 1.0, smoothstep(0.0, 0.4, vPlantH));
         }`,
       extraLights: `
         #if NUM_DIR_LIGHTS > 0
         {
           vec3 Lp = directionalLights[0].direction;
-          float back = saturate(-dot(normal, Lp)) + 0.35 * saturate(dot(normal, Lp));
-          reflectedLight.directDiffuse += directionalLights[0].color * diffuseColor.rgb * vec3(0.8, 1.0, 0.55) * back * 0.45;
+          float NL = dot(normal, Lp);
+          vec3 Vp = normalize(vViewPosition);
+          // diffuse transmission through the thin blade, strongest when
+          // looking toward the light through it
+          float back = saturate(-NL) * (0.45 + 0.9 * spow(saturate(dot(Vp, -Lp)), 3.0));
+          reflectedLight.directDiffuse += directionalLights[0].color * diffuseColor.rgb * vec3(0.75, 1.0, 0.35) * back * uwDirect * 0.6;
         }
         #endif`,
     });
@@ -179,8 +360,16 @@ export function buildPlants() {
     return m;
   };
 
+  const col = new THREE.Color();
+  // leaf colour: mostly greens of different depth, some yellow-green young
+  // blades and a few old yellow-brown ones (sRGB HSL)
+  const leafColor = (age, hue0, light0) => {
+    if (age > 0.85) return col.setHSL(rng.range(0.11, 0.16), rng.range(0.35, 0.55), rng.range(0.2, 0.3));
+    return col.setHSL(hue0 + rng.range(-0.04, 0.05), rng.range(0.32, 0.62), light0 * rng.range(0.7, 1.25));
+  };
+
   // Vallisneria clumps at the back
-  const valMat = mkMat(0x5f8a30, 'val');
+  const valMat = mkMat('val', 90);
   const clumps = [
     { x: -0.5, z: -0.17, n: 26 },
     { x: -0.43, z: -0.19, n: 18 },
@@ -197,21 +386,25 @@ export function buildPlants() {
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
   let k = 0;
-  const col = new THREE.Color();
   for (const c of clumps) {
+    // each clump (one runner's daughters) has its own shade
+    const hue = 0.24 + rng.range(-0.03, 0.03);
+    const light = rng.range(0.24, 0.34);
     for (let i = 0; i < c.n; i++) {
       const x = c.x + rng.normal(0, 0.018);
       const z = c.z + rng.normal(0, 0.012);
-      const len = rng.range(0.22, 0.44);
+      const len = rng.range(0.2, 0.44);
+      const age = Math.pow(rng.next(), 1.6);
       e.set(rng.range(-0.18, 0.18), rng.range(0, Math.PI * 2), rng.range(-0.18, 0.18));
       q.setFromEuler(e);
-      m4.compose(new THREE.Vector3(x, groundHeight(x, z) - 0.004, z), q, new THREE.Vector3(1, len, 1));
+      // blade width 5–13 mm
+      m4.compose(new THREE.Vector3(x, groundHeight(x, z) - 0.004, z), q, new THREE.Vector3(rng.range(0.6, 1.45), len, 1));
       inst.setMatrixAt(k, m4);
-      col.setHSL(0.24 + rng.range(-0.03, 0.03), 0.55, rng.range(0.32, 0.46));
-      inst.setColorAt(k, col);
+      inst.setColorAt(k, leafColor(age, hue, light));
       aPlant[k * 4] = rng.range(0, 6.28);
       aPlant[k * 4 + 1] = rng.range(0.7, 1.3);
       aPlant[k * 4 + 2] = 1.0; // geometry height (unit leaf scaled by instance matrix)
+      aPlant[k * 4 + 3] = age;
       k++;
     }
     colliders.push({ type: 'cylinder', center: new THREE.Vector3(c.x, 0, c.z), radius: 0.05, height: 0.4, soft: true });
@@ -222,7 +415,7 @@ export function buildPlants() {
   group.add(inst);
 
   // Sword-plant rosettes
-  const swordMat = mkMat(0x3f6e24, 'sword');
+  const swordMat = mkMat('sword', 40);
   const rosettes = [
     { x: 0.05, z: -0.13, n: 14, s: 0.2 },
     { x: -0.24, z: 0.02, n: 9, s: 0.12 },
@@ -233,19 +426,22 @@ export function buildPlants() {
   const aP2 = new Float32Array(total * 4);
   k = 0;
   for (const r of rosettes) {
+    const hue = 0.27 + rng.range(-0.02, 0.02);
     for (let i = 0; i < r.n; i++) {
       const len = r.s * rng.range(0.7, 1.2);
+      // outer (older, longer, flatter) leaves age first
+      const age = Math.min(1, Math.pow(rng.next(), 1.4) * 0.8 + (len / r.s - 0.7) * 0.4);
       e.set(0, (i / r.n) * Math.PI * 2 + rng.range(-0.2, 0.2), 0, 'YXZ');
       q.setFromEuler(e);
       const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -rng.range(0.1, 0.5));
       q.multiply(tilt);
-      m4.compose(new THREE.Vector3(r.x, groundHeight(r.x, r.z) - 0.003, r.z), q, new THREE.Vector3(len, len, len));
+      m4.compose(new THREE.Vector3(r.x, groundHeight(r.x, r.z) - 0.003, r.z), q, new THREE.Vector3(len * rng.range(0.75, 1.2), len, len));
       sInst.setMatrixAt(k, m4);
-      col.setHSL(0.26 + rng.range(-0.02, 0.03), 0.55, rng.range(0.24, 0.34));
-      sInst.setColorAt(k, col);
+      sInst.setColorAt(k, leafColor(age, hue, 0.24));
       aP2[k * 4] = rng.range(0, 6.28);
       aP2[k * 4 + 1] = rng.range(0.2, 0.4);
       aP2[k * 4 + 2] = 1.0;
+      aP2[k * 4 + 3] = age;
       k++;
     }
     colliders.push({ type: 'cylinder', center: new THREE.Vector3(r.x, 0, r.z), radius: r.s * 0.75, height: r.s * 0.9, soft: true });
@@ -254,5 +450,48 @@ export function buildPlants() {
   sInst.castShadow = true;
   sInst.receiveShadow = true;
   group.add(sInst);
+
+  // Fine-leaved stem plants (bright Cabomba-like and darker hornwort-like
+  // bunches) in the gaps between rocks and ribbons
+  const stemMat = mkMat('stem', 300);
+  const bunches = [
+    { x: -0.11, z: -0.19, n: 7, hue: 0.27, light: 0.34, h: [0.24, 0.38] },
+    { x: 0.37, z: -0.19, n: 6, hue: 0.29, light: 0.22, h: [0.22, 0.36] },
+    { x: -0.55, z: 0.06, n: 5, hue: 0.26, light: 0.3, h: [0.14, 0.24] },
+    { x: 0.27, z: -0.17, n: 4, hue: 0.28, light: 0.24, h: [0.18, 0.3] },
+  ];
+  const stemGeos = [22, 26, 30].map((w) => stemPlantGeometry(rng, w));
+  const perVar = stemGeos.map(() => []);
+  for (const b of bunches) {
+    for (let i = 0; i < b.n; i++) {
+      const x = b.x + rng.normal(0, 0.015);
+      const z = b.z + rng.normal(0, 0.01);
+      const hgt = rng.range(b.h[0], b.h[1]);
+      const age = Math.pow(rng.next(), 2.2);
+      e.set(rng.range(-0.12, 0.12), rng.range(0, Math.PI * 2), rng.range(-0.12, 0.12));
+      q.setFromEuler(e);
+      perVar[Math.floor(rng.next() * stemGeos.length)].push({
+        m: new THREE.Matrix4().compose(new THREE.Vector3(x, groundHeight(x, z) - 0.006, z), q.clone(), new THREE.Vector3(hgt, hgt, hgt)),
+        c: col.setHSL(b.hue + rng.range(-0.015, 0.015), rng.range(0.42, 0.6), b.light * rng.range(0.85, 1.15)).clone(),
+        a: [rng.range(0, 6.28), rng.range(0.45, 0.8), 1.0, age],
+      });
+    }
+    colliders.push({ type: 'cylinder', center: new THREE.Vector3(b.x, 0, b.z), radius: 0.045, height: b.h[1], soft: true });
+  }
+  stemGeos.forEach((geo, vI) => {
+    const list = perVar[vI];
+    if (!list.length) return;
+    const im = new THREE.InstancedMesh(geo, stemMat, list.length);
+    const ap = new Float32Array(list.length * 4);
+    list.forEach((it, j) => {
+      im.setMatrixAt(j, it.m);
+      im.setColorAt(j, it.c);
+      ap.set(it.a, j * 4);
+    });
+    geo.setAttribute('aPlant', new THREE.InstancedBufferAttribute(ap, 4));
+    im.castShadow = true;
+    im.receiveShadow = true;
+    group.add(im);
+  });
   return { group, colliders, current };
 }

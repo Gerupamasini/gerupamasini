@@ -4,19 +4,23 @@ import * as THREE from 'three';
 import { TANK } from './TankConfig.js';
 import { patchUnderwater } from './UnderwaterMaterial.js';
 
-export function buildTank() {
+export function buildTank({ glassEnv = null } = {}) {
   const g = new THREE.Group();
   g.name = 'tank';
   const { L, D, H, glass } = TANK;
 
-  // glass panes: nearly invisible, reflective at grazing angles, green edges
+  // glass panes: clear float glass has no diffuse component — only the
+  // Fresnel reflection (4 % at normal incidence, rising at grazing angles) is
+  // added on top of what lies behind it (black albedo + additive blending, so
+  // the panes never lay a lit grey film over the tank)
   const glassMat = new THREE.MeshPhysicalMaterial({
-    color: 0xeaf6f2,
+    color: 0x000000,
     metalness: 0,
-    roughness: 0.02,
+    roughness: 0.03,
+    envMap: glassEnv, // the room, not the under-water probe
+    envMapIntensity: glassEnv ? 1.0 : 0.35,
     transparent: true,
-    opacity: 0.06,
-    envMapIntensity: 0.6,
+    blending: THREE.AdditiveBlending,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
@@ -45,7 +49,7 @@ export function buildTank() {
     g.add(s);
   }
   // rim frame (top / bottom)
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x111213, roughness: 0.45, metalness: 0.2 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x111213, roughness: 0.65, metalness: 0.0 });
   const rim = (y, h) => {
     const t = 0.018;
     const parts = [
@@ -77,17 +81,27 @@ export function buildTank() {
   led.position.set(0, H + 0.0915, -0.02);
   g.add(led);
 
-  // background: dark blue-black film on the back glass (in water -> attenuated)
+  // background: matte blue-black film on the back glass. It is lit only by the
+  // hood light that falls off with depth and seen through the water, so it
+  // reads as the usual dark gradient of a photographed tank; the caustic
+  // pattern is kept faint (on a vertical wall it projects into streaks)
   const bgMat = patchUnderwater(
-    new THREE.MeshStandardMaterial({ color: 0x0a1418, roughness: 0.9 }),
-    { caustics: true, key: 'bg' }
+    new THREE.MeshStandardMaterial({ color: 0x070b10, roughness: 0.95 }),
+    {
+      caustics: true,
+      causticMix: 0.2,
+      key: 'bg',
+      // faint, large-scale unevenness of the film (no visible pattern)
+      extraColor: 'diffuseColor.rgb *= 0.85 + 0.3 * vnoise3(vUwWorld * vec3(6.0, 4.0, 6.0));',
+    }
   );
   const bg = new THREE.Mesh(new THREE.PlaneGeometry(L, H), bgMat);
   bg.position.set(0, H / 2, -D / 2 + 0.001);
   bg.receiveShadow = true;
   g.add(bg);
-  // side panels inside the water (seen through the front at an angle)
-  const sideMat = patchUnderwater(new THREE.MeshStandardMaterial({ color: 0x0d181b, roughness: 0.2, metalness: 0.0, transparent: true, opacity: 0.35 }), { key: 'side' });
+  // side panes seen from inside the water: dark glass with a grazing sheen
+  // (no milky diffuse film)
+  const sideMat = patchUnderwater(new THREE.MeshStandardMaterial({ color: 0x030506, roughness: 0.12, metalness: 0.0, envMapIntensity: 0.5, transparent: true, opacity: 0.85 }), { caustics: false, key: 'side' });
   for (const s of [-1, 1]) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(D, H), sideMat);
     p.position.set(s * (L / 2 - 0.0005), H / 2, 0);
@@ -95,8 +109,49 @@ export function buildTank() {
     g.add(p);
   }
 
+  // meniscus: where the surface meets the glass the water climbs a few mm and
+  // its curved underside mirrors the bright hood light, drawing the thin
+  // silvery waterline that marks the surface in every tank photograph
+  const meniscusMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: { uColor: { value: new THREE.Color(0.55, 0.6, 0.6) } },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      varying vec2 vUv;
+      void main() {
+        // bright crest just under the contact line, fading down the curve
+        float y = vUv.y;
+        float a = smoothstep(0.0, 0.75, y) * (1.0 - smoothstep(0.85, 1.0, y));
+        float shimmer = 0.75 + 0.25 * sin(vUv.x * 900.0 + y * 4.0);
+        gl_FragColor = vec4(uColor * a * a * shimmer, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  });
+  const menH = 0.0035;
+  const men = new THREE.Mesh(new THREE.PlaneGeometry(L, menH), meniscusMat);
+  men.position.set(0, TANK.water - menH * 0.35, D / 2 - 0.0006);
+  men.renderOrder = 4;
+  men.name = 'meniscus';
+  g.add(men);
+  // the side panes' waterlines are seen obliquely through more water: fainter
+  const sideMen = meniscusMat.clone();
+  sideMen.uniforms.uColor.value = new THREE.Color(0.2, 0.23, 0.23);
+  for (const s of [-1, 1]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(D, menH), sideMen);
+    m.position.set(s * (L / 2 - 0.0006), TANK.water - menH * 0.35, 0);
+    m.rotation.y = -s * Math.PI / 2;
+    m.renderOrder = 4;
+    g.add(m);
+  }
+
   // stand + room
-  const standMat = new THREE.MeshStandardMaterial({ color: 0x1b1714, roughness: 0.6 });
+  const standMat = new THREE.MeshStandardMaterial({ color: 0x1b1714, roughness: 0.8 });
   const stand = new THREE.Mesh(new THREE.BoxGeometry(L + 0.12, 0.8, D + 0.14), standMat);
   stand.position.set(0, -0.424, 0);
   stand.receiveShadow = true;
@@ -105,5 +160,8 @@ export function buildTank() {
   const room = new THREE.Mesh(new THREE.BoxGeometry(8, 4, 8), roomMat);
   room.position.set(0, 1.2, 1.2);
   g.add(room);
+  // everything outside the water (frame, seams, glass edges, stand, room) is
+  // lit by the room, not by the under-water light probe
+  if (glassEnv) for (const m of [edgeMat, sil, frameMat, standMat, roomMat]) m.envMap = glassEnv;
   return g;
 }

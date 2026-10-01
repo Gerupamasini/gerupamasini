@@ -65,6 +65,7 @@ uniform float uUseReflection;
 uniform vec3 uSkyColor;
 uniform vec3 uRoomColor;
 uniform vec3 uLedColor;
+uniform vec4 uLedBar; // LED strip: centre z, height above the water, half length (x), half width (z)
 uniform vec3 uDeepColor;
 uniform float uWaveAmp;
 uniform float uDebugRefl;
@@ -96,12 +97,20 @@ void main() {
     F = mix(F, 1.0, smoothstep(0.62, 0.66, sinI) * 0.0);
     vec2 ruv = vReflUv.xy / vReflUv.w + N.xz * 0.06;
     vec3 refl = uUseReflection > 0.5 ? texture(uReflection, ruv).rgb : uDeepColor;
-    // light above the surface: LED hood (bright) + dim room
+    // light above the surface (inside Snell's window): the dim room ceiling
+    // and the hood LED bar, traced along the refracted ray to the bar's
+    // actual position so it appears as a small, sharp, very bright strip
+    // (not a large glowing disc)
     vec3 T = refract(-V, n, 1.333);
-    // the hood LED is a long bar along x: only the z-tilt of the refracted ray matters
-    float tz = T.y / max(length(T.yz), 1e-4);
-    float led = smoothstep(0.93, 0.995, tz) * smoothstep(0.2, 0.6, T.y) * 0.55;
-    vec3 trans = mix(uRoomColor, uSkyColor, smoothstep(0.1, 0.8, T.y)) + uLedColor * led;
+    vec3 trans = uRoomColor;
+    if (T.y > 1e-3) {
+      vec2 hit = vWorld.xz + T.xz * (uLedBar.y / T.y);
+      float ex = smoothstep(0.004, 0.0, abs(hit.x) - uLedBar.z);
+      float ez = smoothstep(0.003, 0.0, abs(hit.y - uLedBar.x) - uLedBar.w);
+      // the dark bar housing around the LED strip
+      float hz = smoothstep(0.004, 0.0, abs(hit.y - uLedBar.x) - uLedBar.w - 0.016);
+      trans = mix(uRoomColor, uSkyColor, smoothstep(0.2, 0.9, T.y)) * (1.0 - 0.85 * hz * ex) + uLedColor * ex * ez;
+    }
     col = mix(trans, refl, F);
     col = waterAttenuate(col, vWorld);
     if (uDebugRefl > 0.5) col = texture(uReflection, vReflUv.xy / vReflUv.w).rgb * 4.0;
@@ -122,7 +131,7 @@ void main() {
 `;
 
 export class WaterSurface {
-  constructor(renderer, scene) {
+  constructor(renderer, scene, { roomEnv = null } = {}) {
     this.renderer = renderer;
     this.scene = scene;
     this.ripples = Array.from({ length: MAX_RIPPLES }, () => new THREE.Vector4(0, 0, -99, 0));
@@ -145,9 +154,13 @@ export class WaterSurface {
         uReflection: { value: this.rt.texture },
         uUseReflection: { value: 1 },
         uTexMatrix: { value: this.textureMatrix },
-        uSkyColor: { value: new THREE.Color(0.55, 0.62, 0.64) },
-        uRoomColor: { value: new THREE.Color(0.05, 0.05, 0.05) },
-        uLedColor: { value: new THREE.Color(2.6, 2.5, 2.35) },
+        // room ceiling seen straight up through the window, room walls toward
+        // the window edge: both far dimmer than the hood light
+        uSkyColor: { value: new THREE.Color(0.045, 0.047, 0.05) },
+        uRoomColor: { value: new THREE.Color(0.018, 0.018, 0.019) },
+        uLedColor: { value: new THREE.Color(7.0, 6.8, 6.4) },
+        // matches the LED strip built in Tank.js (z -0.02, 7 cm deep, 0.9 L long, H + 9 cm)
+        uLedBar: { value: new THREE.Vector4(-0.02, TANK.H + 0.0915 - TANK.water, TANK.L * 0.45, 0.035) },
         uDeepColor: { value: new THREE.Color(0.05, 0.12, 0.12) },
         uWaveAmp: { value: 1 },
         uDebugRefl: { value: 0 },
@@ -181,7 +194,8 @@ export class WaterSurface {
       thickness: 0.02,
       ior: 1.333,
       specularIntensity: 1,
-      envMapIntensity: 0.6,
+      envMap: roomEnv, // from above the surface mirrors the room, not the under-water probe
+      envMapIntensity: roomEnv ? 1.0 : 0.6,
       attenuationColor: new THREE.Color(0.75, 0.9, 0.88),
       attenuationDistance: 0.6,
       side: THREE.FrontSide,
@@ -194,6 +208,8 @@ export class WaterSurface {
       shader.uniforms.uTime = U.uTime;
       shader.uniforms.uRipples = tu.uRipples;
       shader.uniforms.uWaveAmp = tu.uWaveAmp;
+      shader.uniforms.uLedBar = tu.uLedBar;
+      shader.uniforms.uLedColor = tu.uLedColor;
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vSurfW;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvSurfW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -203,10 +219,30 @@ export class WaterSurface {
           uniform float uTime;
           uniform vec4 uRipples[${MAX_RIPPLES}];
           uniform float uWaveAmp;
+          uniform vec4 uLedBar;
+          uniform vec3 uLedColor;
           ${noiseCommon}
           ${heightFn}`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-          normal = normalize((viewMatrix * vec4(surfaceNormal(vSurfW.xz), 0.0)).xyz);`);
+          normal = normalize((viewMatrix * vec4(surfaceNormal(vSurfW.xz), 0.0)).xyz);`)
+        // the hood light is an extended bar, not a point at infinity: replace
+        // the directional light's pin-point glint by the rippled reflection
+        // of the actual LED strip (traced like the view from below)
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+          reflectedLight.directSpecular *= 0.0;
+          {
+            vec3 Nw = surfaceNormal(vSurfW.xz);
+            vec3 Vw = normalize(cameraPosition - vSurfW);
+            vec3 Rw = reflect(-Vw, Nw);
+            if (Rw.y > 1e-3) {
+              vec2 hit = vSurfW.xz + Rw.xz * (uLedBar.y / Rw.y);
+              float ex = smoothstep(0.004, 0.0, abs(hit.x) - uLedBar.z);
+              float ez = smoothstep(0.003, 0.0, abs(hit.y - uLedBar.x) - uLedBar.w);
+              float cosI = clamp(dot(Nw, Vw), 0.0, 1.0);
+              float F = 0.02 + 0.98 * spow(1.0 - cosI, 5.0);
+              reflectedLight.directSpecular += uLedColor * (ex * ez * F);
+            }
+          }`);
     };
     this.topMaterial.customProgramCacheKey = () => 'water-top';
     this.top = new THREE.Mesh(geo, this.topMaterial);

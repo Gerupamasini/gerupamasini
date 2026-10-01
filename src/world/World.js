@@ -13,7 +13,7 @@ import { Caustics } from './Caustics.js';
 import { SuspendedParticles, BubbleColumn, PuffSystem } from './Particles.js';
 import { FoodSystem } from './Food.js';
 import { LightShafts } from './LightShafts.js';
-import { buildAquariumEnvScene, bakeEnvironment } from '../render/StudioEnvironment.js';
+import { buildAquariumEnvScene, buildRoomEnvScene, bakeEnvironment } from '../render/StudioEnvironment.js';
 import { U } from '../render/SharedUniforms.js';
 
 export class World {
@@ -27,14 +27,17 @@ export class World {
 
     scene.background = new THREE.Color(0x0b0c0d);
     scene.environment = bakeEnvironment(renderer, buildAquariumEnvScene());
-    scene.environmentIntensity = 0.7;
+    scene.environmentIntensity = 0.4;
 
-    this.tank = buildTank();
+    // the room around the tank: reflected by everything outside the water
+    // (glass panes, frame, the surface seen from above)
+    this.roomEnv = bakeEnvironment(renderer, buildRoomEnvScene());
+    this.tank = buildTank({ glassEnv: this.roomEnv });
     scene.add(this.tank);
     const rocks = buildRocks();
     this.rocks = rocks.group;
     scene.add(this.rocks);
-    this.substrate = buildSubstrate(rocks.colliders);
+    this.substrate = buildSubstrate(rocks.footprints);
     scene.add(this.substrate);
     const plants = buildPlants();
     this.plants = plants.group;
@@ -49,7 +52,7 @@ export class World {
     });
 
     // lights: hood LED (key, casts shadows) + hemispherical in-water fill
-    const key = new THREE.DirectionalLight(0xfff6ec, 3.4);
+    const key = new THREE.DirectionalLight(0xfff6ec, 5.2);
     key.position.set(0.18, TANK.water + 1.2, 0.3);
     key.target.position.set(0, 0.15, 0);
     key.castShadow = true;
@@ -72,19 +75,19 @@ export class World {
     // enters the body elsewhere is shadowed at its entry point)
     U.uKeyShadowMatrix.value = key.shadow.matrix;
     U.uKeyShadowOn.value = 1;
-    const hemi = new THREE.HemisphereLight(0x9ccfd6, 0x3b3122, 0.55);
+    const hemi = new THREE.HemisphereLight(0x9ccfd6, 0x3b3122, 0.22);
     hemi.layers.enable(1);
     scene.add(hemi);
     this.hemi = hemi;
     // soft front room light (from the viewer's side)
-    const room = new THREE.DirectionalLight(0xffe8d0, 0.25);
+    const room = new THREE.DirectionalLight(0xffe8d0, 0.08);
     room.position.set(0.2, 0.6, 2.0);
     scene.add(room);
     this.room = room;
     this._updateLightDir();
 
     this.caustics = new Caustics(renderer);
-    this.surface = new WaterSurface(renderer, scene);
+    this.surface = new WaterSurface(renderer, scene, { roomEnv: this.roomEnv });
     this.particles = new SuspendedParticles(scene);
     this.shafts = new LightShafts(scene);
     this.bubbles = new BubbleColumn(scene, new THREE.Vector3(-0.54, groundHeight(-0.54, -0.18) + 0.01, -0.18));

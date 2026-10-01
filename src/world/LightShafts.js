@@ -18,7 +18,7 @@ export class LightShafts {
       blending: THREE.AdditiveBlending,
       uniforms: {
         uTime: U.uTime,
-        uIntensity: { value: 0.005 },
+        uIntensity: { value: 0.0025 },
         uCaustics: U.uCaustics,
         uCausticParams: U.uCausticParams,
         uCausticLightDir: U.uCausticLightDir,
@@ -37,6 +37,7 @@ export class LightShafts {
         }`,
       fragmentShader: /* glsl */ `
         uniform float uIntensity;
+        uniform float uTime;
         varying vec3 vW;
         ${noiseCommon}
         ${underwaterCommon}
@@ -45,14 +46,18 @@ export class LightShafts {
           vec3 L = uCausticLightDir;
           // trace back to the surface along the light: where did this light enter?
           vec2 ps = vW.xz + L.xz * (depth / max(0.2, L.y));
+          // broad, soft rays: the in-water glow is the caustic field blurred
+          // over the extent of the LED bar (high mip levels), never thin streaks
           float c = 0.0;
           for (int i = 0; i < 3; i++) {
-            vec2 uv = (ps + vec2(float(i) * 0.004, 0.0)) / uCausticParams.x;
-            c += textureLod(uCaustics, uv, 1.2 + float(i) * 0.4).r;
+            vec2 uv = (ps + vec2(float(i) * 0.012, 0.0)) / uCausticParams.x;
+            c += textureLod(uCaustics, uv, 3.2 + float(i) * 0.5).r;
           }
           c = c / 3.0;
-          float shafts = spow(clamp(c / 0.22, 0.0, 4.0), 2.0);
-          float fade = exp(-depth * 4.0) * smoothstep(0.0, 0.03, depth) * smoothstep(0.0, 0.08, vW.y);
+          float shafts = spow(clamp(c / 0.16, 0.0, 3.0), 1.5);
+          // slow large-scale variation (the surface ripples drift)
+          shafts *= 0.6 + 0.4 * vnoise2(vW.xz * 6.0 + vec2(uTime * 0.05, 0.0));
+          float fade = exp(-depth * 6.0) * smoothstep(0.0, 0.04, depth) * smoothstep(0.0, 0.08, vW.y);
           float edge = smoothstep(0.0, 0.06, ${(TANK.L / 2).toFixed(3)} - abs(vW.x));
           vec3 col = vec3(0.85, 0.95, 1.0) * shafts * fade * edge * uIntensity;
           // additive layer: apply only the transmittance (no extra in-scatter fog)
