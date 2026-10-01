@@ -452,7 +452,7 @@ export class App {
     let best = Infinity;
     for (let s = 0; s < 2; s++) {
       const er = fs.eyeRest[s];
-      _afL.set(er.center.x, er.center.y * f.variation.depthScale, er.center.z * f.variation.widthScale);
+      _afL.set(er.center.x, er.center.y, er.center.z * f.variation.widthScale);
       f.rig.bodyPoint(_afL, p, q);
       p.addScaledVector(_afA.copy(er.axis).applyQuaternion(q), er.radius * f.SL * 0.8);
       const d = p.distanceToSquared(camPos);

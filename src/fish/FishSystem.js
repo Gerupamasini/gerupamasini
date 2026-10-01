@@ -189,7 +189,7 @@ export class FishSystem {
         for (let s = 0; s < 2; s++) {
           const er = this.eyeRest[s];
           const side = s === 0 ? 1 : -1;
-          _eyeLocal.set(er.center.x, er.center.y * f.variation.depthScale, er.center.z * f.variation.widthScale);
+          _eyeLocal.set(er.center.x, er.center.y, er.center.z * f.variation.widthScale);
           f.rig.bodyPoint(_eyeLocal, p, q);
           const e = f.loc.eyes[s];
           // base orientation: +Z -> optical axis, then saccade about body up axis
