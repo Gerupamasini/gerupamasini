@@ -32,6 +32,8 @@ uniform float uEyeR;         // mm
 uniform float uPupil;        // rad
 uniform float uIrisA;        // rad
 uniform float uCausticAmt;
+uniform vec3 uSheen;         // grazing guanine sheen colour
+uniform vec4 uRing;          // iridescent ring hugging the pupil: rgb, angular width (0 = none)
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
 varying vec3 vLocalPos;
@@ -61,6 +63,7 @@ void main() {
   float irisMask = 1.0 - smoothstep(uIrisA - 0.03, uIrisA + 0.02, th);
   vec3 irisN = axisW;
   float pupil = 0.0;
+  float ringK = 0.0;
   if (irisMask > 0.0) {
     // refraction through the cornea onto the (slightly domed) iris plane
     vec3 r = refract(-Vl, Nl, 1.0 / 1.035);
@@ -72,6 +75,7 @@ void main() {
     float thI = acos(clamp(normalize(hitI).z, -1.0, 1.0));
     pupil = 1.0 - smoothstep(uPupil - 0.02, uPupil + 0.01, thI);
     base = mix(texture(uIris, vUv).rgb, ic, irisMask);
+    ringK = uRing.w > 0.0 ? smoothstep(uPupil - 0.005, uPupil + 0.02, thI) * (1.0 - smoothstep(uPupil + uRing.w * 0.5, uPupil + uRing.w, thI)) : 0.0;
   } else {
     base = texture(uIris, vUv).rgb;
   }
@@ -80,7 +84,11 @@ void main() {
   vec3 Nd = normalize(mix(N, irisN, irisMask * 0.7));
   vec3 diffuse = base * (Lc * sat(dot(Nd, L) * 0.8 + 0.2) * INV_PI + ambientIrr(Nd));
   // iridescent (guanine) sheen on the iris, strongest at grazing angles
-  vec3 sheen = irisMask * (1.0 - pupil) * vec3(0.04, 0.1, 0.08) * pow(1.0 - NoV, 3.0) * (ambientIrr(N) + Lc * 0.03);
+  vec3 sheen = irisMask * (1.0 - pupil) * uSheen * pow(1.0 - NoV, 3.0) * (ambientIrr(N) + Lc * 0.03);
+  // structural (guanine platelet) colour of the peripupillary ring: visible from most angles, brightest
+  // toward specular geometry — the cyan-green ring of the エドハゼ eye
+  float ringSpec = pow(sat(dot(reflect(-V, irisN), L) * 0.5 + 0.5), 4.0);
+  sheen += ringK * uRing.rgb * (ambientIrr(N) * 0.9 + Lc * (0.04 + 0.12 * ringSpec)) * (0.7 + 0.6 * pow(1.0 - NoV, 1.5));
   // fish lens bulging through the pupil: tight secondary highlight, deep blue-black body
   vec3 lensC = vec3(0.0, 0.0, uEyeR * 0.28);
   vec3 lensN = normalize(lp - lensC);
@@ -107,6 +115,8 @@ export function createEyeMaterial({ irisTexture, params, shared }) {
       uEyeR: { value: params.radiusMM },
       uPupil: { value: params.pupilAngle },
       uIrisA: { value: params.irisAngle },
+      uSheen: { value: new THREE.Vector3(...(params.sheen || [0.04, 0.1, 0.08])) },
+      uRing: { value: new THREE.Vector4(...(params.ring || [0, 0, 0, 0])) },
     },
     vertexShader,
     fragmentShader,

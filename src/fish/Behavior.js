@@ -22,7 +22,7 @@
 //    propped up on the pectorals with the head raised (the tail then touches the sand)
 //  * yawn: slow gape with raised head and erect fins, a short hold, snap shut, opercular flush
 import * as THREE from 'three';
-import { computePose, defaultPose, breathe, yawnCurves, SPINE } from './pose.js';
+import { computePose, defaultPose, breathe, yawnCurves, SPINE, TL_MM } from './pose.js';
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -32,6 +32,8 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const restTime = (scale = 1) => scale * Math.min(90, 8 + 14 * -Math.log(1 - Math.random() * 0.999));
 
 export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY }) {
+  // metric constants were tuned on the 50.5 mm juvenile マハゼ; other species scale with body length
+  const K = TL_MM / 50.5;
   const rest = {};
   for (const [name, b] of Object.entries(bones)) rest[name] = b.position.clone();
 
@@ -64,7 +66,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
   let histHead = 0;
   const segV = new Float64Array(SPINE.length);
   // segment mid-points (mm from the snout) → delay of the curvature pulse (≈ 8 body lengths / s)
-  const segX = SPINE.map(([, s], k) => (k === 0 ? 5 : (s + (k + 1 < SPINE.length ? SPINE[k + 1][1] : 50.5)) / 2));
+  const segX = SPINE.map(([, s], k) => (k === 0 ? 5 * TL_MM / 50.5 : (s + (k + 1 < SPINE.length ? SPINE[k + 1][1] : TL_MM)) / 2));
   const PULSE = 400; // mm / s
   const segDelay = segX.map((x) => Math.round((x - segX[0]) / PULSE / HDT));
   const JOINT_MAX = 0.45;
@@ -96,7 +98,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
   const tmp = new THREE.Vector3();
 
   // ------------------------------------------------------------------ actions
-  function dart(dist = rand(0.06, 0.16), angle = null) {
+  function dart(dist = rand(0.06, 0.16) * K, angle = null) {
     if (st.mode === 'yawn' || st.mode === 'dart') return;
     // choose a target, biased to stay near the start point
     const back = st.pos.length() > 0.12 ? Math.atan2(-st.pos.x, -st.pos.z) : null;
@@ -146,7 +148,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         // each power stroke of the pectorals pushes the fish a little forward
         st.strokeP += dt / 0.42;
         const inPower = (st.strokeP % 1) < 0.3;
-        st.speed = damp(st.speed, inPower ? 0.022 : 0.0, inPower ? 12 : 8, dt);
+        st.speed = damp(st.speed, inPower ? 0.022 * K : 0.0, inPower ? 12 : 8, dt);
         st.paddle = 1;
         if (st.t > 0.84 + 0.42 * Math.floor(rand(0, 1.99))) { st.mode = 'perch'; st.t = 0; st.next = restTime(0.9); st.paddle = 0; st.strokeP = 0; }
         break;
@@ -164,7 +166,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
           // stage 2: the first tail stroke of the dart is the return flip, away from the concave side
           st.mode = 'dart'; st.t = 0;
           st.freq = rand(7.5, 9.5);
-          st.beats = Math.max(2, Math.round(st.dartDist / 0.045 + rand(-0.4, 0.6)));
+          st.beats = Math.max(2, Math.round(st.dartDist / (0.045 * K) + rand(-0.4, 0.6)));
           st.phase = 2 * Math.PI / 0.95 - Math.PI / 2 + (st.turnSign > 0 ? 0 : Math.PI);
           st.gain = 0.35;
         }
@@ -174,7 +176,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         const dur = st.beats / st.freq;
         swimGoal = 1;
         liftGoal = 1;
-        const vmax = 0.26 + 0.06 * (st.freq - 8);
+        const vmax = (0.26 + 0.06 * (st.freq - 8)) * K;
         st.speed = damp(st.speed, vmax, 9, dt);
         st.phase += 2 * Math.PI * st.freq * dt;
         st.gain = damp(st.gain, 1, 22, dt);
@@ -190,7 +192,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         st.speed = damp(st.speed, 0, st.t > 0.15 ? 7 : 3, dt);
         st.phase += 2 * Math.PI * st.freq * 0.6 * dt * Math.max(st.gain, 0);
         st.gain = damp(st.gain, 0, 10, dt);
-        if (st.t > 0.55 && st.speed < 0.01) {
+        if (st.t > 0.55 && st.speed < 0.01 * K) {
           st.mode = 'perch'; st.t = 0; st.next = restTime(); st.gain = 0;
           if (Math.random() < 0.3) st.flick = 1;
         }
@@ -208,7 +210,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     const yawRootOld = st.yaw[1];
     st.clock += dt;
     while (st.clock >= HDT) { stepChain(HDT); st.clock -= HDT; }
-    const pivotZ = 0.012 - 0.005 * st.swim;
+    const pivotZ = (0.012 - 0.005 * st.swim) * K;
     const px = st.pos.x + Math.sin(yawRootOld) * pivotZ, pz = st.pos.z + Math.cos(yawRootOld) * pivotZ;
     st.heading = st.yaw[1];
     st.pos.x = px - Math.sin(st.heading) * pivotZ;
@@ -284,7 +286,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         wave = 0;
       } else if (st.mode === 'glide') {
         if (st.t < 0.12) { abd = -0.06; dep = 0; fold = 0.85; rate = 26; wave = 0; }
-        else if (st.speed > 0.03) { abd = 0.62; dep = 0.18; fold = 0; rate = 16; wave = 0.08; } // flare: brake
+        else if (st.speed > 0.03 * K) { abd = 0.62; dep = 0.18; fold = 0; rate = 16; wave = 0.08; } // flare: brake
         else { abd = 0.4; dep = 0.46; fold = 0.04; rate = 9; wave = 0.04; }                  // set down on the sand
       } else if (st.mode === 'orient') {
         abd += 0.08; dep += 0.05; rate = 18;
@@ -297,7 +299,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
       P.fold = damp(P.fold, fold, rate * 0.6, dt);
       P.wave = damp(P.wave, wave, 4, dt);
       // tips lag each stroke; in a forward flow a spread fin is pressed back
-      const flexGoal = clamp(-0.055 * P.abdV - 2.2 * st.speed * clamp(P.abd + 0.1, 0, 1) * (1 - P.fold), -1, 1);
+      const flexGoal = clamp(-0.055 * P.abdV - 2.2 * (st.speed / K) * clamp(P.abd + 0.1, 0, 1) * (1 - P.fold), -1, 1);
       P.flex = damp(P.flex, flexGoal, 30, dt);
     }
     p.pecAbdL = st.pecs[0].abd; p.pecAbdR = st.pecs[1].abd;
@@ -373,7 +375,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     root.updateMatrixWorld(true);
     let lowest = Infinity;
     for (const c of contacts) lowest = Math.min(lowest, c.bone.localToWorld(tmp.copy(c.p)).y);
-    root.position.y = floorY - lowest + 0.0028 * st.lift;
+    root.position.y = floorY - lowest + 0.0028 * K * st.lift;
   }
 
   const finNames = Object.keys(finMeshes);

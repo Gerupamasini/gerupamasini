@@ -31,7 +31,8 @@ void main() {
     skinMatrix += skinWeight.z * boneMatZ;
     skinMatrix += skinWeight.w * boneMatW;
     skinMatrix = bindMatrixInverse * skinMatrix * bindMatrix;
-    transformed = (skinMatrix * vec4(position, 1.0)).xyz;
+    // skin the morphed shape (fold / flex / sculling), not the rest position
+    transformed = (skinMatrix * vec4(transformed, 1.0)).xyz;
     objectNormal = mat3(skinMatrix) * normal;
     objectTangent = mat3(skinMatrix) * tangent.xyz;
   #endif

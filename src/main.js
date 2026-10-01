@@ -6,14 +6,18 @@ import { createFinMaterials } from './materials/FinMaterial.js';
 import { createEyeMaterial } from './materials/EyeMaterial.js';
 import { createInteriorMaterial } from './materials/InteriorMaterial.js';
 import { createBehavior } from './fish/Behavior.js';
+import { configureBody } from './fish/pose.js';
 import { createBackground, createFloor, createParticles } from './scene/Environment.js';
 import { createPost } from './scene/Post.js';
 
 // window.MAHAZE_MODEL_URL can point the viewer at another copy of the model (e.g. a .gltf with external textures)
-const MODEL_URL = window.MAHAZE_MODEL_URL || new URL('../models/mahaze_juvenile.glb', import.meta.url).href;
 const LAYER_FISH = 2; // body, eyes, fins (main pass)
 const LAYER_BEHIND = 3; // fins are also drawn into the background buffer so they show through thin tissue
 const params = new URLSearchParams(location.search);
+// species: ?species=edohaze loads the エドハゼ build; default is the juvenile マハゼ
+const SPECIES_KEY = params.get('species') === 'edohaze' ? 'edohaze' : 'mahaze';
+const MODEL_FILE = { mahaze: 'mahaze_juvenile.glb', edohaze: 'edohaze.glb' }[SPECIES_KEY];
+const MODEL_URL = window.MAHAZE_MODEL_URL || new URL(`../models/${MODEL_FILE}`, import.meta.url).href;
 
 // ---------------------------------------------------------------------------- renderer
 const canvas = document.getElementById('view');
@@ -221,6 +225,7 @@ async function onLoaded(gltf) {
     profileTexture: createProfileTexture(bx.profile),
     frame: bx.fishFrame,
     vertebrae: bx.vertebrae,
+    anatomy: bx.anatomy, // species organ layout (undefined → マハゼ defaults)
     shared,
   });
   fish.body.userData.custom = bodyMat;
@@ -262,18 +267,27 @@ async function onLoaded(gltf) {
   root.updateMatrixWorld(true);
   for (const bone of Object.values(fish.bones)) bone.userData.restObj = bone.getWorldPosition(new THREE.Vector3());
   fish.root = root;
-  const rig = root.getObjectByName('Mahaze_Juvenile').userData.mahazeRig;
+  let rigNode = null;
+  root.traverse((o) => { if (!rigNode && o.userData && o.userData.mahazeRig) rigNode = o; });
+  const rig = rigNode.userData.mahazeRig;
+  const sv = rigNode.userData.viewer; // species viewer metadata (absent for the マハゼ build)
+  if (sv) applySpeciesViewer(sv, rigNode.userData);
   // the sand is at the level of the pelvic disc: the goby rests on the bottom
   floor.position.y = rig.contactY;
   // points that can touch the sand: the pelvic sucker rim, the belly line and the lower caudal lobe
   const F = fish.frame, P = fish.profile;
   const botY = (s) => { const k = Math.min(P.n - 1, Math.round((s / F.SEND) * (P.n - 1))); return P.data[k * 6] - P.data[k * 6 + 2]; };
   const rimY = rig.contactY * 1000 + F.Y0;
-  const contacts = [
-    ['J_pelvic', 13.0, rimY], ['J_pelvic', 14.8, rimY], ['J_pelvic', 16.6, rimY],
-    ['J_root', 15.5, botY(15.5)], ['J_sp1', 18.5, botY(18.5)], ['J_sp2', 22.5, botY(22.5)], ['J_sp3', 26.5, botY(26.5)],
-    ['J_sp4', 30.5, botY(30.5)], ['J_sp5', 34.5, botY(34.5)], ['J_sp6', 38.5, botY(38.5)], ['J_caudal2', 48.0, rig.tailContactY * 1000 + F.Y0],
-  ].map(([bone, s, y]) => ({ bone: fish.bones[bone], p: new THREE.Vector3(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001).sub(fish.bones[bone].userData.restObj) }));
+  const tailY = rig.tailContactY * 1000 + F.Y0;
+  const contactList = sv && sv.contacts
+    ? sv.contacts.map(([bone, sMM, y]) => [bone, sMM, y === 'rim' ? rimY : y === 'bot' ? botY(sMM) : y === 'tail' ? tailY : y])
+    : [
+      ['J_pelvic', 13.0, rimY], ['J_pelvic', 14.8, rimY], ['J_pelvic', 16.6, rimY],
+      ['J_root', 15.5, botY(15.5)], ['J_sp1', 18.5, botY(18.5)], ['J_sp2', 22.5, botY(22.5)], ['J_sp3', 26.5, botY(26.5)],
+      ['J_sp4', 30.5, botY(30.5)], ['J_sp5', 34.5, botY(34.5)], ['J_sp6', 38.5, botY(38.5)], ['J_caudal2', 48.0, tailY],
+    ];
+  const contacts = contactList.map(([bone, s, y]) => ({ bone: fish.bones[bone], p: new THREE.Vector3(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001).sub(fish.bones[bone].userData.restObj) }));
+  configureBody(rig.axes.body); // species axial geometry (no-op for the マハゼ defaults)
   fish.behavior = createBehavior({
     root,
     bones: fish.bones,
@@ -394,6 +408,27 @@ function updateLight() {
   if (d.y < -0.35) { d.y = -0.35; d.normalize(); }
 }
 
+// ---------------------------------------------------------------------------- species
+// Per-species viewer data stored in the glTF root extras (see tools/<species>/species.mjs)
+function applySpeciesViewer(sv, extras) {
+  if (sv.title) {
+    document.title = `${sv.title.split('（')[0]} 3D`;
+    const h1 = document.querySelector('.panel h1');
+    if (h1) h1.textContent = sv.title;
+    const sub = document.querySelector('.panel .sub');
+    if (sub && sv.subtitle) sub.textContent = sv.subtitle;
+  }
+  if (sv.shadowChain) SHADOW_CHAIN = sv.shadowChain;
+  if (sv.coreChain) CORE_CHAIN = sv.coreChain;
+  if (sv.presetScale) {
+    for (const p of Object.values(PRESETS)) {
+      p.target = p.target.map((v) => v * sv.presetScale);
+      p.pos = p.pos.map((v) => v * sv.presetScale);
+      p.radius *= sv.presetScale;
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------- per-frame helpers
 const _v = new THREE.Vector3();
 function sortFins() {
@@ -406,7 +441,7 @@ function sortFins() {
 }
 
 // soft shadow capsule chain along the (animated) spine
-const SHADOW_CHAIN = [['J_head', 3.0], ['J_head', 8.0], ['J_root', 13.0], ['J_sp1', 17.0], ['J_sp3', 25.0], ['J_sp5', 33.0], ['J_sp7', 40.0], ['J_caudal2', 46.5]];
+let SHADOW_CHAIN = [['J_head', 3.0], ['J_head', 8.0], ['J_root', 13.0], ['J_sp1', 17.0], ['J_sp3', 25.0], ['J_sp5', 33.0], ['J_sp7', 40.0], ['J_caudal2', 46.5]];
 const _bv = new THREE.Vector3();
 function updateFloorShadow() {
   if (!fish.profile) return;
@@ -431,7 +466,7 @@ function updateFloorShadow() {
     core[i].set(_bv.x, _bv.y, _bv.z, r * 0.001);
   });
 }
-const CORE_CHAIN = [['J_root', 11.2, 3.68, 0.34], ['J_sp1', 18.5, 3.68, 0.3], ['J_sp3', 26.5, 3.66, 0.26], ['J_sp5', 34.5, 3.64, 0.21], ['J_sp7', 40.4, 3.6, 0.17],
+let CORE_CHAIN = [['J_root', 11.2, 3.68, 0.34], ['J_sp1', 18.5, 3.68, 0.3], ['J_sp3', 26.5, 3.66, 0.26], ['J_sp5', 34.5, 3.64, 0.21], ['J_sp7', 40.4, 3.6, 0.17],
   ['J_root', 12.6, 1.6, 1.25], ['J_sp2', 20.8, 1.55, 1.05]];
 
 function resize() {
@@ -452,6 +487,7 @@ function resize() {
 window.addEventListener('resize', resize);
 // narrow screens start with the panel folded so the fish is not hidden behind it
 if (window.innerWidth < 720 && !params.has('panel')) document.body.classList.add('panel-hidden');
+if (params.get('panel') === '0') document.body.classList.add('panel-hidden');
 resize();
 
 // ---------------------------------------------------------------------------- loop

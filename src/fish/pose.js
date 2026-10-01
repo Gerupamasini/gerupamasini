@@ -4,13 +4,22 @@
 // identity rotations, so every rotation is expressed in object axes
 // (X = fish's left, Y = dorsal, Z = anterior).
 
-export const TL_MM = 50.5; // snout → caudal fin tip
+// Species geometry (live bindings). Defaults are the juvenile マハゼ; other species (e.g. エドハゼ) call
+// configureBody() with the values stored in their glTF rig extras (mahazeRig.axes.body).
+export let TL_MM = 50.5; // snout → caudal fin tip
 
 // Axial chain (joint name, position along the body in mm from the snout)
 export const SPINE = [
   ['J_head', 9.0], ['J_root', 13.0], ['J_sp1', 16.5], ['J_sp2', 20.5], ['J_sp3', 24.5], ['J_sp4', 28.5],
   ['J_sp5', 32.5], ['J_sp6', 36.5], ['J_sp7', 40.0], ['J_caudal', 43.0], ['J_caudal2', 46.5],
 ];
+
+/** Switch the axial geometry (total length and joint positions along the body, mm). */
+export function configureBody(body) {
+  if (!body) return;
+  if (body.tlMM) TL_MM = body.tlMM;
+  if (body.spine) body.spine.forEach(([name, sMM]) => { const e = SPINE.find((x) => x[0] === name); if (e) e[1] = sMM; });
+}
 
 // Morph target order of every fin mesh
 export const FIN_TARGETS = {

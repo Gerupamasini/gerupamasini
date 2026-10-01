@@ -1,18 +1,13 @@
 #!/usr/bin/env node
-// Builds models/mahaze_juvenile.glb (geometry + baked textures) procedurally.
-//   node tools/build-model.mjs [--fast] [--dump-textures <dir>]
+// Builds a goby GLB (geometry + baked textures) procedurally.
+//   node tools/build-model.mjs [--species mahaze|edohaze] [--fast] [--dump-textures <dir>]
+// Species modules live in tools/<species>/ (anatomy, body, fins, eye, interior, rig, species.mjs).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import jpeg from 'jpeg-js';
 import { GLBBuilder } from './lib/glb.mjs';
 import { encodePNG } from './lib/png.mjs';
-import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, profileTable, toObject, botY } from './mahaze/anatomy.mjs';
-import { buildBody } from './mahaze/body.mjs';
-import { finDefinitions, buildFinMesh, buildFinTargets, paintFinAtlas } from './mahaze/fins.mjs';
-import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './mahaze/eye.mjs';
-import { buildMouth, buildGills } from './mahaze/interior.mjs';
-import { JOINTS, J, AXES, bodyWeights, interiorWeights, finWeights, buildClips } from './mahaze/rig.mjs';
 import { FIN_TARGETS } from '../src/fish/pose.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -20,7 +15,18 @@ const args = process.argv.slice(2);
 const fast = args.includes('--fast');
 const dumpIdx = args.indexOf('--dump-textures');
 const dumpDir = dumpIdx >= 0 ? args[dumpIdx + 1] : null;
-const outFile = path.join(root, 'models', 'mahaze_juvenile.glb');
+const spIdx = args.indexOf('--species');
+const species = spIdx >= 0 ? args[spIdx + 1] : 'mahaze';
+const mod = (f) => import(`./${species}/${f}.mjs`);
+const { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, profileTable, toObject, botY } = await mod('anatomy');
+const { buildBody } = await mod('body');
+const { finDefinitions, buildFinMesh, buildFinTargets, paintFinAtlas } = await mod('fins');
+const { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } = await mod('eye');
+const { buildMouth, buildGills } = await mod('interior');
+const { JOINTS, J, AXES, bodyWeights, interiorWeights, finWeights, buildClips } = await mod('rig');
+const SPECIES = (await mod('species')).SPECIES;
+const outFile = path.join(root, 'models', SPECIES.file);
+const P = SPECIES.prefix;
 
 const t0 = Date.now();
 const log = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).padStart(5)}s] ${m}`);
@@ -75,13 +81,14 @@ const orm = downsample2(BT.width, BT.height, 3, BT.orm);
 const tOrm = gb.addTexture(image(gb, 'body_orm', orm.w, orm.h, 3, orm.data, 'png'), sBody, 'body_occlusion_roughness');
 const vol = downsample2(BT.width, BT.height, 3, BT.volume);
 const tVol = gb.addTexture(image(gb, 'body_transmission_thickness', vol.w, vol.h, 3, vol.data, 'png'), sBody, 'body_transmission_thickness');
-const tPig = gb.addTexture(image(gb, 'body_pigment', BT.width, BT.height, 3, BT.pigment, 'jpeg', 95), sBody, 'body_pigment_mel_irid_xan');
+// (PNG where the species has fine point melanophores that JPEG would smear)
+const tPig = gb.addTexture(image(gb, 'body_pigment', BT.width, BT.height, 3, BT.pigment, SPECIES.pigmentPNG ? 'png' : 'jpeg', 95), sBody, 'body_pigment_mel_irid_xan');
 const tCapAlb = gb.addTexture(image(gb, 'snoutcap_basecolor_roughness', BT.cap.size, BT.cap.size, 4, BT.cap.albedo, 'png'), sClamp, 'snoutcap_basecolor_roughness');
 const tCapPig = gb.addTexture(image(gb, 'snoutcap_pigment', BT.cap.size, BT.cap.size, 3, BT.cap.pigment, 'png'), sClamp, 'snoutcap_pigment');
 
 const profile = profileTable(512);
 const mBody = gb.addMaterial({
-  name: 'Mahaze_Body',
+  name: `${P}_Body`,
   pbrMetallicRoughness: { baseColorTexture: { index: tAlb }, metallicFactor: 0, roughnessFactor: 1, metallicRoughnessTexture: { index: tOrm } },
   normalTexture: { index: tNrm, scale: 1 },
   occlusionTexture: { index: tOrm, strength: 0.85 },
@@ -100,6 +107,7 @@ const mBody = gb.addMaterial({
       fishFrame: { S0, Y0, SL, SEND: S_END, unitsPerMM: 0.001 },
       vertebrae: { start: VERT_START, count: VERT_COUNT },
       profile: { n: profile.length, fields: ['yc', 't', 'b', 'w', 'nT', 'nB'], data: profile.flat() },
+      ...(SPECIES.shaderAnatomy ? { anatomy: SPECIES.shaderAnatomy } : {}),
     },
   },
 });
@@ -115,7 +123,7 @@ const ibm = new Float32Array(JOINTS.length * 16);
 JOINTS.forEach((j, i) => {
   ibm.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -j.obj[0], -j.obj[1], -j.obj[2], 1], i * 16);
 });
-const skin = gb.addSkin({ name: 'Mahaze_Rig', joints: jointNodes, skeleton: jointNodes[J.J_root], inverseBindMatrices: gb.addAccessor(ibm, 'MAT4') });
+const skin = gb.addSkin({ name: `${P}_Rig`, joints: jointNodes, skeleton: jointNodes[J.J_root], inverseBindMatrices: gb.addAccessor(ibm, 'MAT4') });
 const skinned = [];
 const skinAttrs = (w) => ({ JOINTS_0: { array: w.joints, type: 'VEC4' }, WEIGHTS_0: { array: w.weights, type: 'VEC4', normalized: true } });
 
@@ -126,7 +134,7 @@ skinned.push(gb.addNode({ name: 'Body', mesh: gb.addMesh('Body', [bodyPrim]), sk
 // ---------------------------------------------------------------- mouth & gill interiors
 log('interiors');
 const mInterior = gb.addMaterial({
-  name: 'Mahaze_Interior',
+  name: `${P}_Interior`,
   pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.3 },
   doubleSided: true,
   extensions: { KHR_materials_clearcoat: { clearcoatFactor: 0.6, clearcoatRoughnessFactor: 0.08 } },
@@ -149,10 +157,10 @@ log('eyes');
 const iris = paintIris(fast ? 512 : 1024);
 const tIris = gb.addTexture(image(gb, 'eye_iris', iris.size, iris.size, 3, iris.rgb, 'jpeg', 94), sClamp, 'eye_iris');
 const mEye = gb.addMaterial({
-  name: 'Mahaze_Eye',
+  name: `${P}_Eye`,
   pbrMetallicRoughness: { baseColorTexture: { index: tIris }, metallicFactor: 0, roughnessFactor: 0.4 },
   extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: 0.03 }, KHR_materials_ior: { ior: 1.376 } },
-  extras: { mahaze: { role: 'eye', radiusMM: EYE.radius, pupilAngle: PUPIL_ANGLE, irisAngle: IRIS_ANGLE, corneaBulge: CORNEA_BULGE } },
+  extras: { mahaze: { role: 'eye', radiusMM: EYE.radius, pupilAngle: PUPIL_ANGLE, irisAngle: IRIS_ANGLE, corneaBulge: CORNEA_BULGE, ...(SPECIES.eye || {}) } },
 });
 const eye = buildEyeMesh();
 const meshEye = gb.addMesh('Eye', [gb.primitive({ ...eye, material: mEye })]);
@@ -170,7 +178,7 @@ const tFinCol = gb.addTexture(image(gb, 'fin_basecolor_alpha', atlas.size, atlas
 const tFinNrm = gb.addTexture(image(gb, 'fin_normal', atlas.size, atlas.size, 3, atlas.normal, 'jpeg', 95), sClamp, 'fin_normal');
 const tFinData = gb.addTexture(image(gb, 'fin_data', atlas.size, atlas.size, 4, atlas.data, 'png'), sClamp, 'fin_ray_mel_irid_coverage');
 const mFin = gb.addMaterial({
-  name: 'Mahaze_Fin',
+  name: `${P}_Fin`,
   pbrMetallicRoughness: { baseColorTexture: { index: tFinCol }, metallicFactor: 0, roughnessFactor: 0.38 },
   normalTexture: { index: tFinNrm, scale: 1 },
   alphaMode: 'BLEND',
@@ -179,7 +187,7 @@ const mFin = gb.addMaterial({
   extras: { mahaze: { role: 'fin', dataTexture: tFinData } },
 });
 const finNodes = {};
-let contactFishY = botY(12.0) - 0.2; // lowest point of the pelvic sucker rim (the fish rests on it)
+let contactFishY = botY(SPECIES.pelvicBaseS) - 0.2; // lowest point of the pelvic sucker rim (the fish rests on it)
 for (const def of defs) {
   const SUB = 6, NT = def.name === 'Fin_Caudal' ? 44 : 36;
   const m = buildFinMesh(def, SUB, NT);
@@ -205,21 +213,22 @@ for (const clip of buildClips()) {
 
 // ---------------------------------------------------------------- scene
 const rootNode = gb.addNode({
-  name: 'Mahaze_Juvenile',
+  name: SPECIES.rootName,
   children: [jointNodes[J.J_root]],
   extras: {
-    species: 'Acanthogobius flavimanus (Temminck & Schlegel, 1845)',
-    commonName: 'マハゼ (yellowfin goby), juvenile',
+    species: SPECIES.scientific,
+    commonName: SPECIES.commonName,
     totalLength_mm: TL,
     standardLength_mm: SL,
     units: 'metres (+Y dorsal, +Z anterior)',
-    animations: 'Idle (loop, breathing), Swim (loop, 8 Hz burst tail beat), Yawn (one-shot)',
+    animations: SPECIES.animations,
     // rig axes (object space, sign folded in) for procedural animation with src/fish/pose.js
-    mahazeRig: { axes: AXES, contactY: toObject([12.0, contactFishY, 0])[1], tailContactY: toObject([48.0, 0.6, 0])[1] },
+    mahazeRig: { axes: AXES, contactY: toObject([SPECIES.pelvicBaseS, contactFishY, 0])[1], tailContactY: toObject(SPECIES.tailContact)[1] },
+    ...(SPECIES.viewer ? { viewer: SPECIES.viewer } : {}),
   },
 });
 // skinned meshes sit at the scene root (their node transforms are ignored; joints drive them)
-gb.addScene('Mahaze', [rootNode, ...skinned]);
+gb.addScene(P, [rootNode, ...skinned]);
 gb.json.asset.copyright = 'Procedurally generated model (no photographic textures).';
 
 const glb = gb.toBuffer();

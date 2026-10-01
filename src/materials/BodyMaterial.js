@@ -81,6 +81,17 @@ uniform float uNormalStrength;
 uniform float uBackStrength;
 uniform float uCausticAmt;
 uniform int uDebug;
+// species anatomy (fish mm), from extras.mahaze.anatomy — defaults are the juvenile マハゼ
+uniform vec2 uHeadWin;          // head (skull/jaws) density fades out over [x, y]
+uniform vec4 uGillWin;          // gill filaments: rise x→y, fall z→w (s, mm)
+uniform vec2 uHaemal;           // haemal melanophore row starts over [x, y]
+uniform vec4 uAbdomen;          // abdominal cavity centre s, centre height (fraction of b), half-length, strength
+uniform vec3 uSpine;            // initial spine height y, posterior end of the column s, tail fade width
+uniform vec4 uJaw;              // dense lip/jaw tissue: fades out over s [x, y] and above y [z, w] (mm)
+#define N_ORGANS 8
+uniform vec3 uOrgC[N_ORGANS];   // organ ellipsoid centres (mm)
+uniform vec3 uOrgR[N_ORGANS];   // radii (0 = unused)
+uniform vec3 uOrgK[N_ORGANS];   // absorption per mm of chord (rgb)
 
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
@@ -179,11 +190,11 @@ void medium(vec3 p, out float sS, out vec3 sA) {
   float I = uInterior;
 
   // head: skull, brain case, jaws are denser
-  float head = 1.0 - smoothstep(8.5, 11.5, s);
+  float head = 1.0 - smoothstep(uHeadWin.x, uHeadWin.y, s);
   sS += head * 1.5 * uScatter;
   sA += head * vec3(0.008, 0.016, 0.03);
   // gill filaments under the operculum (haemoglobin: absorbs green/blue)
-  float gill = smoothstep(7.2, 8.6, s) * (1.0 - smoothstep(10.3, 11.3, s)) *
+  float gill = smoothstep(uGillWin.x, uGillWin.y, s) * (1.0 - smoothstep(uGillWin.z, uGillWin.w, s)) *
                smoothstep(0.25, 0.6, abs(zn)) * (1.0 - smoothstep(-0.1, 0.45, hn)) * smoothstep(-1.0, -0.6, hn);
   sA += gill * vec3(0.012, 0.2, 0.17) * (0.35 + 0.65 * I);
 
@@ -219,19 +230,19 @@ void medium(vec3 p, out float sS, out vec3 sA) {
     float ph2 = fract((s - uVertStart) / uVertLen + 0.25);
     float seg = exp(-pow((ph2 - 0.5) * uVertLen / 0.2, 2.0));
     float rowU = exp(-(pow(p.y - spineY - 0.5, 2.0) + p.z * p.z) / 0.035);
-    float rowD = exp(-(pow(p.y - spineY + 0.55, 2.0) + p.z * p.z) / 0.03) * smoothstep(23.0, 25.0, s);
+    float rowD = exp(-(pow(p.y - spineY + 0.55, 2.0) + p.z * p.z) / 0.03) * smoothstep(uHaemal.x, uHaemal.y, s);
     sA += (rowU * 0.9 + rowD * 0.7) * seg * trunk * vec3(1.5, 1.7, 1.9) * (0.5 + 0.5 * I);
   }
   // abdominal cavity: viscera + melanin-bearing peritoneum on its dorsal wall
-  vec3 vc = vec3(17.2, q.yc - 0.42 * q.b, 0.0);
-  vec3 vq = (p - vc) / vec3(6.0, 0.58 * q.b + 0.1, 0.66 * q.w + 0.05);
+  vec3 vc = vec3(uAbdomen.x, q.yc - uAbdomen.y * q.b, 0.0);
+  vec3 vq = (p - vc) / vec3(uAbdomen.z, 0.58 * q.b + 0.1, 0.66 * q.w + 0.05);
   float e = length(vq);
   float gut = 1.0 - smoothstep(0.7, 1.0, e);
   sS += I * gut * 2.2;
   sA += I * gut * vec3(0.03, 0.05, 0.08);
   float peri = exp(-pow((e - 0.93) / 0.07, 2.0)) * smoothstep(-0.3, 0.5, vq.y);
   float periSpots = 0.35 + 0.65 * smoothstep(0.2, 0.8, sin(s * 3.1 + p.z * 5.0) * sin(s * 1.7 - p.z * 3.3 + 1.0) * 0.5 + 0.5);
-  sA += peri * periSpots * vec3(0.5, 0.53, 0.58) * (0.5 + 0.5 * I);
+  sA += peri * periSpots * vec3(0.5, 0.53, 0.58) * (0.5 + 0.5 * I) * uAbdomen.w;
 }
 
 // ---- simple organs and the vertebral column (rest-space fish mm)
@@ -253,7 +264,7 @@ float ellChord(vec3 o, vec3 d, float L, vec3 c, vec3 r, inout float tFirst) {
 }
 // Gaussian tube around the (nearly straight) vertebral column, with denser centrum rims
 float spineTau(vec3 o, vec3 d, float L, inout float tFirst) {
-  float spineY = 3.68;
+  float spineY = uSpine.x;
   vec2 dp = d.yz;
   float dd = max(dot(dp, dp), 0.02);
   float tc = 0.0, sc = 0.0;
@@ -261,15 +272,15 @@ float spineTau(vec3 o, vec3 d, float L, inout float tFirst) {
     vec2 w = o.yz - vec2(spineY, 0.0);
     tc = -dot(w, dp) / dd;
     sc = o.x + d.x * clamp(tc, 0.0, L);
-    Sec q = section(clamp(sc, uVertStart, 40.6));
+    Sec q = section(clamp(sc, uVertStart, uSpine.y));
     spineY = q.yc + 0.06 * q.t;
   }
   vec2 cpt = o.yz - vec2(spineY, 0.0) + dp * tc;
-  float u = clamp((sc - uVertStart) / (40.6 - uVertStart), 0.0, 1.0);
+  float u = clamp((sc - uVertStart) / (uSpine.y - uVertStart), 0.0, 1.0);
   float r = mix(0.34, 0.17, u);
   float sig = r / sqrt(dd);
   float g = exp(-dot(cpt, cpt) / (r * r)) * sig * 0.8862 * (erfA((L - tc) / sig) - erfA(-tc / sig));
-  float win = smoothstep(uVertStart - 0.4, uVertStart + 0.4, sc) * (1.0 - smoothstep(40.2, 41.0, sc));
+  float win = smoothstep(uVertStart - 0.4, uVertStart + 0.4, sc) * (1.0 - smoothstep(uSpine.y - 0.4, uSpine.y + uSpine.z, sc));
   float vph = fract((sc - uVertStart) / uVertLen);
   float rim = smoothstep(0.3, 0.48, abs(vph - 0.5));
   if (g * win > 0.02) tFirst = min(tFirst, max(tc - sig, 0.0));
@@ -279,14 +290,10 @@ float spineTau(vec3 o, vec3 d, float L, inout float tFirst) {
 vec3 organTau(vec3 o, vec3 d, float L, out float tFirst) {
   tFirst = 1e3;
   vec3 tau = spineTau(o, d, L, tFirst) * vec3(4.0, 4.4, 5.0);                                      // vertebral column
-  tau += ellChord(o, d, L, vec3(13.4, 1.55, 0.2), vec3(1.9, 1.05, 1.85), tFirst) * vec3(1.3, 2.3, 2.9); // liver
-  tau += ellChord(o, d, L, vec3(17.9, 1.4, -0.1), vec3(3.7, 1.0, 1.35), tFirst) * vec3(1.0, 1.4, 2.3);  // stomach + gut
-  tau += ellChord(o, d, L, vec3(16.9, 2.72, 0.0), vec3(5.4, 0.3, 1.75), tFirst) * vec3(3.8, 4.0, 4.2);    // dark peritoneum roof
-  tau += ellChord(o, d, L, vec3(16.8, 3.2, 0.0), vec3(5.8, 0.22, 0.32), tFirst) * vec3(0.8, 2.6, 2.6);     // kidney under the column
-  tau += ellChord(o, d, L, vec3(10.2, 0.9, 0.0), vec3(0.7, 0.5, 0.6), tFirst) * vec3(0.5, 4.0, 3.6);      // heart
-  tau += ellChord(o, d, L, vec3(6.8, 4.4, 0.0), vec3(2.4, 0.75, 0.8), tFirst) * vec3(0.15, 0.2, 0.3);    // brain
-  tau += ellChord(o, d, L, vec3(8.3, 3.75, 0.78), vec3(0.32, 0.2, 0.11), tFirst) * vec3(6.0);             // otoliths
-  tau += ellChord(o, d, L, vec3(8.3, 3.75, -0.78), vec3(0.32, 0.2, 0.11), tFirst) * vec3(6.0);
+  for (int k = 0; k < N_ORGANS; k++) {
+    if (uOrgR[k].x <= 0.0) continue;
+    tau += ellChord(o, d, L, uOrgC[k], uOrgR[k], tFirst) * uOrgK[k];
+  }
   return tau;
 }
 
@@ -391,7 +398,7 @@ void main() {
   // sculpted appendages outside the analytic volume (orbit rims, lips, papilla) are solid tissue
   float outside = smoothstep(0.98, 1.1, bodyR(pIn));
   // lips and jaws are dense (dentary, premaxilla, thick lip tissue)
-  float jaws = (1.0 - smoothstep(3.0, 4.6, pF.x)) * (1.0 - smoothstep(2.4, 3.2, pF.y));
+  float jaws = (1.0 - smoothstep(uJaw.x, uJaw.y, pF.x)) * (1.0 - smoothstep(uJaw.z, uJaw.w, pF.y));
   outside = max(outside, 0.8 * jaws);
   tauE += outside * vec3(4.0);
   tauA += outside * vec3(0.5);
@@ -498,7 +505,31 @@ void main() {
 }
 `;
 
-export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect }) {
+// Juvenile マハゼ anatomy (fish mm) — the values that were literals in the shader before species support.
+export const MAHAZE_ANATOMY = {
+  headWin: [8.5, 11.5],
+  gillWin: [7.2, 8.6, 10.3, 11.3],
+  haemal: [23.0, 25.0],
+  abdomen: [17.2, 0.42, 6.0, 1.0],
+  spine: [3.68, 40.6, 0.4],
+  jaw: [3.0, 4.6, 2.4, 3.2],
+  sigS: 1.35,
+  sigA: [0.02, 0.048, 0.12],
+  organs: [
+    { name: 'liver', c: [13.4, 1.55, 0.2], r: [1.9, 1.05, 1.85], k: [1.3, 2.3, 2.9] },
+    { name: 'stomach + gut', c: [17.9, 1.4, -0.1], r: [3.7, 1.0, 1.35], k: [1.0, 1.4, 2.3] },
+    { name: 'dark peritoneum roof', c: [16.9, 2.72, 0.0], r: [5.4, 0.3, 1.75], k: [3.8, 4.0, 4.2] },
+    { name: 'kidney', c: [16.8, 3.2, 0.0], r: [5.8, 0.22, 0.32], k: [0.8, 2.6, 2.6] },
+    { name: 'heart', c: [10.2, 0.9, 0.0], r: [0.7, 0.5, 0.6], k: [0.5, 4.0, 3.6] },
+    { name: 'brain', c: [6.8, 4.4, 0.0], r: [2.4, 0.75, 0.8], k: [0.15, 0.2, 0.3] },
+    { name: 'otolith L', c: [8.3, 3.75, 0.78], r: [0.32, 0.2, 0.11], k: [6.0, 6.0, 6.0] },
+    { name: 'otolith R', c: [8.3, 3.75, -0.78], r: [0.32, 0.2, 0.11], k: [6.0, 6.0, 6.0] },
+  ],
+};
+
+export function createBodyMaterial({ textures, profileTexture, frame, vertebrae, shared, capRect, anatomy = MAHAZE_ANATOMY }) {
+  const A = { ...MAHAZE_ANATOMY, ...anatomy };
+  const org = (key) => Array.from({ length: 8 }, (_, k) => new THREE.Vector3(...((A.organs[k] && A.organs[k][key]) || [0, 0, 0])));
   const uniforms = {
     ...shared,
     uAlbedo: { value: textures.albedo },
@@ -512,11 +543,20 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uFrame: { value: new THREE.Vector4(frame.S0, frame.Y0, frame.SL, frame.SEND) },
     uVertStart: { value: vertebrae.start },
     uVertLen: { value: (frame.SL - vertebrae.start) / vertebrae.count },
-    uSigS: { value: 1.35 },
-    uSigA: { value: new THREE.Vector3(0.02, 0.048, 0.12) },
+    uSigS: { value: A.sigS },
+    uSigA: { value: new THREE.Vector3(...A.sigA) },
     uIor: { value: 1.04 },
     uNormalStrength: { value: 1.0 },
     uBackStrength: { value: 0.3 },
+    uHeadWin: { value: new THREE.Vector2(...A.headWin) },
+    uGillWin: { value: new THREE.Vector4(...A.gillWin) },
+    uHaemal: { value: new THREE.Vector2(...A.haemal) },
+    uAbdomen: { value: new THREE.Vector4(...A.abdomen) },
+    uSpine: { value: new THREE.Vector3(...A.spine) },
+    uJaw: { value: new THREE.Vector4(...A.jaw) },
+    uOrgC: { value: org('c') },
+    uOrgR: { value: org('r') },
+    uOrgK: { value: org('k') },
   };
   const mat = new THREE.ShaderMaterial({
     name: 'MahazeBodyVolumetric',
