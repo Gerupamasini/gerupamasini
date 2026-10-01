@@ -4,7 +4,7 @@
 
 ## 7.0 規約と前提
 
-**出典タグ**: `[spec05 §5.1.2]`=本仕様書の他章。`[aud-A R5, R]`=threejs_audit_a の項目(S=ソース確認、R/H=ヘッドレス実行、T=Node 実行、K=一般知識、U=未確認)。`[aud-C §1.1-5, T]`=audit_c(audit_c は 01 章作成時点では欠落していたが、現在は `research/threejs_audit_c_assets_toolchain.md` として存在する)。`[E: 理由]`=資料の裏付けが無い設計値。`PROXY:種名`=他種の値。
+**出典タグ**: `[spec05 §5.1.2]`=本仕様書の他章。`[aud-A R5, R]`=threejs_audit_a の項目(S=ソース確認、R/H=ヘッドレス実行、T=Node 実行、K=一般知識、U=未確認)。`[aud-C §1.1-5, T]`=aud-C(aud-C は 01 章作成時点では欠落していたが、現在は `research/threejs_audit_c_assets_toolchain.md` として存在する)。`[E: 理由]`=資料の裏付けが無い設計値。`PROXY:種名`=他種の値。
 
 **最重要の限界**: 監査は全て **CPU ラスタライザ(SwiftShader)上**で行われ、GPU 実機の性能・見た目・KTX2 変換先・WebGPU 実機は未測定である [aud-D §4, aud-C §4, aud-A U1]。ms の値は相対比にのみ使う。本章の「予算」はすべて [E] で、7.8 の実機計測で置き換える前提である。
 
@@ -100,7 +100,7 @@
 
 **依存の向き**: `behavior → locomotion → yamame(three)` の一方向。`behavior` と `locomotion` と `genome` は three に依存させない(Node の単体テストで GPU・DOM 無しに動かすため) [E: 05 章 T-A* と 04 章 AT-* が Node で走ることを前提にしている]。three に依存するのは `src/yamame/`, `src/render/`, `src/environment/` の描画部分だけ。
 
-**フレーム更新(1 フレーム)** — 05 §5.7.2 と audit_b §1.2 の順序をそのまま採る。
+**フレーム更新(1 フレーム)** — 05 §5.7.2 と aud-B §1.2 の順序をそのまま採る。
 
 ```js
 const timer = new THREE.Timer(); timer.connect(document);        // Clock は r183 で非推奨 [aud-B §1.2, S]
@@ -136,9 +136,9 @@ function frame(ts) {
 | GLTFExporter | 制作には使わない(圧縮拡張を書けない、`KHR_materials_diffuse_transmission` は消える、KTX2 は PNG に展開される)。デバッグ・往復確認用 | [aud-C §1.1-8, T] |
 | Draco | 不採用(この規模では差が数 KB、decoder が wasm 192〜286 KB+JS 58 KB) | [aud-C §1.1-4, T] |
 
-### 7.3.2 標準手順(audit_c で動作確認済みの形)
+### 7.3.2 標準手順(aud-C で動作確認済みの形)
 
-**確認の範囲**: audit_c が実行で確認したのは骨 3・頂点 236・モーフ 1・テクスチャ 3 枚の PoC までである [aud-C §1.1-1, §4]。下の手順の「24 脊椎+副ボーンのウェイト」「超楕円ロフト」「鰭の別 primitive」「眼ボーンの子ノード」「62 ボーン・2K テクスチャでのエンコード」は手順の形を延長した設計で、**未検証 [E]**(P0/P1 で確認する)。
+**確認の範囲**: aud-C が実行で確認したのは骨 3・頂点 236・モーフ 1・テクスチャ 3 枚の PoC までである [aud-C §1.1-1, §4]。下の手順の「24 脊椎+副ボーンのウェイト」「超楕円ロフト」「鰭の別 primitive」「眼ボーンの子ノード」「62 ボーン・2K テクスチャでのエンコード」は手順の形を延長した設計で、**未検証 [E]**(P0/P1 で確認する)。
 
 ```
 [tools/build-assets]
@@ -197,7 +197,7 @@ glTF にはノード木とは別に最上位配列(`materials`、`animations`、
 
 - 論理区分は `extras.groups = {Body:[…], Fins:[…], Eyes:[…], Skeleton:[…]}` に名前で列挙し、ランタイムは `getObjectByName` ではなく `extras` から引く。gltfpack 系の最適化はメッシュ名を `mesh_0` に変え子ノードを挟むため、名前探索が壊れる [aud-C §3-10]。
 - 休止姿勢は**恒等回転**、軸規約は +X=前、+Y=背、+Z=右 [spec05 §0]。書き出し側の骨が非恒等の休止回転を持つ場合は `restQ` を保存して `restQ ⊗ 値` で書く(ポップ防止) [aud-B §3-19]。
-- 複数メッシュが同じ `skin` を参照したときのロード結果(Skeleton が 1 つに共有されるか、`SkinnedMesh` の `bindMatrix` が揃うか)は audit_c が**未実行**(複数 SkinnedMesh の結合は未実行 [aud-C §4])。P1 の受け入れ項目にする。複数 primitive を持つメッシュが `Group` として読まれる挙動は一般知識 [K] で、P1 で確認する。
+- 複数メッシュが同じ `skin` を参照したときのロード結果(Skeleton が 1 つに共有されるか、`SkinnedMesh` の `bindMatrix` が揃うか)は aud-C が**未実行**(複数 SkinnedMesh の結合は未実行 [aud-C §4])。P1 の受け入れ項目にする。複数 primitive を持つメッシュが `Group` として読まれる挙動は一般知識 [K] で、P1 で確認する。
 - ウェイトは頂点あたり**最大 4**、`JOINTS_1/WEIGHTS_1` は無視される。書出し後に `normalizeSkinWeights()` 相当を一度保証する(未正規化で合計 2 → 約 2 倍に伸びる) [aud-B §1.6, T]。`JOINTS_0` は Uint16(または Uint8)、`WEIGHTS_0` は Float32。Uint32 は避ける [aud-B §1.6]。
 
 ### 7.3.5 拡張と GLTFLoader/GLTFExporter の対応
@@ -225,7 +225,7 @@ glTF にはノード木とは別に最上位配列(`materials`、`animations`、
 | 遠景用・小物 | ETC1S 全部(3×512² で 81 KB、PSNR 45.0 dB) | [aud-C §1.1-3, T] |
 | ジオメトリ | meshopt は**任意**。使う場合は POSITION を float のまま(`quantize({pattern: /^(TEXCOORD|JOINTS|WEIGHTS|COLOR)(_\d+)?$/, patternTargets: /^(NORMAL|TANGENT)(_\d+)?$/})`+`KHRMeshQuantization`+`EXTMeshoptCompression(FILTER)`)。`meshopt()` 既定・`quantize()` 既定・gltfpack 既定は IBM に逆量子化行列が混ざり `skeleton.pose()` が骨を壊す(PoC で最大 1,000 mm、gltfpack で 16,627,983 mm) | [aud-C §1.3, §3-1, T] |
 | KTX2 の色空間 | baseColor=sRGB、法線・ORM=linear。`gltf-transform etc1s/uastc` CLI は自動。`ktx2-encoder` の既定は**全テクスチャ sRGB 扱い**(PSNR 33.05 dB 対 47.28 dB) | [aud-C §3-2, T] |
-| ミップ・サイズ | ミップは必ず焼く。4 の倍数サイズ。**資料間の差**: audit_a R12 は「ミップが無いと minFilter が Linear になりチラつく」(`KTX2Loader` 直接使用の場合、`KTX2Loader.js:453`)、audit_c は「`GLTFLoader` 経由ではサンプラ既定の `LinearMipmapLinear` に上書きされ、ミップ 1 段でも SwiftShader では破綻しなかった」(`GLTFLoader.js:3320`)。本設計は GLTFLoader 経由だが、実機の見え方は未確認のため焼く方針を維持 | [aud-A R12, aud-C 付記] |
+| ミップ・サイズ | ミップは必ず焼く。4 の倍数サイズ。**資料間の差**: aud-A R12 は「ミップが無いと minFilter が Linear になりチラつく」(`KTX2Loader` 直接使用の場合、`KTX2Loader.js:453`)、aud-C は「`GLTFLoader` 経由ではサンプラ既定の `LinearMipmapLinear` に上書きされ、ミップ 1 段でも SwiftShader では破綻しなかった」(`GLTFLoader.js:3320`)。本設計は GLTFLoader 経由だが、実機の見え方は未確認のため焼く方針を維持 | [aud-A R12, aud-C 付記] |
 | 変換先 | 環境依存(SwiftShader=BC7、Linux Mesa=BC7 に落ちる、モバイルは ASTC/ETC2 の見込み)。**実機未確認** | [aud-C §3-9, R] |
 
 法線マップの向き(緑チャンネルの上下)と鱗の凹凸の見え方は PoC では人工データで**未確認** [aud-C §4]。TANGENT のモーフは three が非対応で、大きなモーフではタンジェントが追従しない [aud-C §4, S]。
@@ -252,7 +252,7 @@ const gltf = await loader.loadAsync('yamame_hero.glb');
 | ボーン総数 | 62(fish_root 1、spine 24、jaw_lower 1、maxilla 2、hyoid 1、opercle 2、eye 2、胸 8、腹 6、背 4、臀 3、脂 2、caudal_hub 1、caudal_ray 5) | コード上の上限は無い。ボーンテクスチャ 37〜64 本=16×16。**62 本は 16×16 に収まり、上限 64 まで予備 2** | [spec05 §5.1.1, aud-B T1] |
 | ボーンテクスチャのサイズ | | `size = max(4, ceil(sqrt(N×4)/4)×4)`。N=62→16×16。float RGBA で 16×16×16 B = 4,096 B。毎フレーム全体を再アップロード | [aud-B §1.6, 算術] |
 | 1 頂点の影響 | | **最大 4**。5 本以上は無視 | [aud-B §1.6, S] |
-| 脊椎 24 本 | 等間隔 s_j=j/24 | 1 関節の最大角: 尾端振幅 0.10L で 12°、0.12L で 15°、0.20L で 24°(12 本だと 23°/27°/43°)。**この値は audit_b が r08 の二次式包絡で計算したもので、05 章の区分線形包絡では未計算**(T-A6 で再計算する) | [aud-B §1.3, T19] |
+| 脊椎 24 本 | 等間隔 s_j=j/24 | 1 関節の最大角: 尾端振幅 0.10L で 12°、0.12L で 15°、0.20L で 24°(12 本だと 23°/27°/43°)。**この値は aud-B が r08 の二次式包絡で計算したもので、05 章の区分線形包絡では未計算**(T-A6 で再計算する) | [aud-B §1.3, T19] |
 | 鰭条 | 条群ボーン(胸 3、腹 2、背 3、臀 2、尾 5)+鰭膜のスキン/テクスチャ。鰭条 1 本ごとのボーンは置かない | 4 影響制限と 64 本上限のため | [spec05 §5.1.2, E] |
 | 体波 | `bone_j.quaternion = restQ_j ⊗ R_Y(θ_j − θ_{j−1} + bias_j)` | 回転のみで鎖長を保存(横ずらしだと 0.10L で +3.2%、0.17L で +8.4% 伸びる) | [spec05 §5.2.1, aud-B T15] |
 | 移動 | 個体 Group で行う | `fish_root` を動かすとカリング球が古くなる(root を 500 動かすと実体が視錐台内でも描画されない) | [aud-B §1.5, T4-a] |
@@ -300,7 +300,7 @@ three r186 のモーフは常にテクスチャ方式で、旧来の「8 本ま�
 |---|---|---|
 | プロシージャル(CPU) | spine_00..23、頭挙上、jaw/hyoid/opercle、eye、胸鰭 abd、腹鰭、背・臀鰭、尾鰭 spread、モーフ影響度 | 毎フレーム `restQ ⊗ 値` を絶対指定 |
 | 固定クリップ(AnimationMixer, additive) | 各鰭の微小ふらつき(2〜4 s)、胸鰭スカルの揺らぎ、咳(鰓蓋)、休息ポーズの微調整 | `makeClipAdditive(clip, 0)` 後に `weight`=振幅、`timeScale`=周波数 |
-| 両方が同じボーンを触る場合 | | audit_b §1.4-B の 4 ステップ(前回 mixer 出力を戻す → `mixer.update` → δ=restQ⁻¹⊗mixerOut → `proc ⊗ δ`)。素朴な `q.multiply(δ)` は蓄積バグ |
+| 両方が同じボーンを触る場合 | | aud-B §1.4-B の 4 ステップ(前回 mixer 出力を戻す → `mixer.update` → δ=restQ⁻¹⊗mixerOut → `proc ⊗ δ`)。素朴な `q.multiply(δ)` は蓄積バグ |
 
 守るべき落とし穴 [aud-B §3]: `makeClipAdditive` は引数のクリップを**破壊的に変更**(先に `clip.clone()`)、`crossFade` は incoming を `play()` しない(`reset().play()` が別途要る)、`LoopRepeat` は `time==duration` で 0 に折り返す(最後のキー=最初のキー)、トラック名は予約文字 `[ ] . : /` を含めず `PropertyBinding.sanitizeNodeName` 後の値と一致させる、同名の骨が複数あると最初の 1 つのみ。mixer は**個体ごとに作らず 1 つ**に `clipAction(clip, 個体root)` で載せる [aud-B §1.1, T5-e]。
 
@@ -312,11 +312,11 @@ three r186 のモーフは常にテクスチャ方式で、旧来の「8 本ま�
 
 ## 7.5 多数個体: 描画方式と LOD
 
-### 7.5.1 結論(audit_b の個体数別方式と、依頼の 3 段構成の調整)
+### 7.5.1 結論(aud-B の個体数別方式と、依頼の 3 段構成の調整)
 
 r186 では **SkinnedMesh を InstancedMesh/BatchedMesh に載せる標準の手段が無い**。スキニングの有効化は `object.isSkinnedMesh`、インスタンスは `object.isInstancedMesh` と別々の型フラグで、`InstancedMesh.js` に skeleton の記述が 0 件、`BatchedMesh.js` は morph/skin/skeleton/bone の記述が 0 件。シェーダの `getBoneMatrix(i)` はインスタンス番号を取らない [aud-B §2.7, S]。ただし**モーフは `InstancedMesh.morphTexture` で個体別の重みを持てる** [aud-A R13, S]。
 
-依頼文の「遠=頂点シェーダ脊椎変形+Instanced」に対し、audit_b の推奨順は **①InstancedMesh+`morphTexture`(相対モーフ 5〜8 本)、②(不足なら)`onBeforeCompile` の頂点シェーダ変形** である。理由は、①は標準マテリアルのまま影も追従しカスタム GLSL が不要で、②は法線・影(`customDepthMaterial`/`customDistanceMaterial`)・カリングを全部自前で持つため実装コストが大きい [aud-B §1.1, §2.7]。本設計は **①を遠景の第一案、②を最終手段**とする。どちらも**実描画は未検証** [aud-B §4, aud-D §4]。
+依頼文の「遠=頂点シェーダ脊椎変形+Instanced」に対し、aud-B の推奨順は **①InstancedMesh+`morphTexture`(相対モーフ 5〜8 本)、②(不足なら)`onBeforeCompile` の頂点シェーダ変形** である。理由は、①は標準マテリアルのまま影も追従しカスタム GLSL が不要で、②は法線・影(`customDepthMaterial`/`customDistanceMaterial`)・カリングを全部自前で持つため実装コストが大きい [aud-B §1.1, §2.7]。本設計は **①を遠景の第一案、②を最終手段**とする。どちらも**実描画は未検証** [aud-B §4, aud-D §4]。
 
 ### 7.5.2 3 層構成
 
@@ -545,7 +545,7 @@ seed → sub-seed(カテゴリ名のハッシュ) を作り、カテゴリごと
 - 検査対象: 側面(休止)、斜め前(頭・眼・口)、開口(ストライク最大)、鰭の展開(胸 70°)、婚姻期(別プリセット)、LOD0/1/2 の並び、水中フォグ有無。
 - **初回フレームは 2.4〜3.0 s**(シェーダコンパイル+PMREM)なので、`window.__done` フラグを待つ [aud-D §2.10]。
 
-**ハーネスの不一致(未決)**: `tools/threejs-audit/harness.mjs` は `puppeteer-core ^25.12.0`+`@sparticuz/chromium 153`(同梱 `args` に `--use-angle=swiftshader` 等を足す)で動作したが、audit_c は `playwright-core 1.63.0` で `@sparticuz/chromium` の同梱 `args`(`--single-process` 含む)を全部渡すとハーネスが 300 s 以上固まったと報告している(原因未調査 [aud-C §2.13, §3-20])。P0 で**どちらか 1 つに統一**して再現確認する。
+**ハーネスの不一致(未決)**: `tools/threejs-audit/harness.mjs` は `puppeteer-core ^25.12.0`+`@sparticuz/chromium 153`(同梱 `args` に `--use-angle=swiftshader` 等を足す)で動作したが、aud-C は `playwright-core 1.63.0` で `@sparticuz/chromium` の同梱 `args`(`--single-process` 含む)を全部渡すとハーネスが 300 s 以上固まったと報告している(原因未調査 [aud-C §2.13, §3-20])。P0 で**どちらか 1 つに統一**して再現確認する。
 
 ### 7.7.6 CI 案
 
@@ -629,11 +629,11 @@ function measure(fn) {
 
 | 項目 | 差 | 本章の扱い |
 |---|---|---|
-| 遠景方式 | 依頼文: 頂点シェーダ脊椎変形+Instanced / audit_b: InstancedMesh+`morphTexture` を第一、シェーダ変形は最終手段 | morph を第一案、シェーダ変形を後続(7.5.1) |
-| 中景リグ | 05 §5.1.1: 36 本以下 / audit_d: LOD は同一 Skeleton 共有 | 初期は 62 ボーン共有、実機で超過時のみ 36 本版(7.5.2) |
-| ヘッドレス起動 | audit_a/d: `@sparticuz/chromium`+puppeteer で動作 / audit_c: 同梱 args で固まった | P0 で統一(7.7.5) |
+| 遠景方式 | 依頼文: 頂点シェーダ脊椎変形+Instanced / aud-B: InstancedMesh+`morphTexture` を第一、シェーダ変形は最終手段 | morph を第一案、シェーダ変形を後続(7.5.1) |
+| 中景リグ | 05 §5.1.1: 36 本以下 / aud-D: LOD は同一 Skeleton 共有 | 初期は 62 ボーン共有、実機で超過時のみ 36 本版(7.5.2) |
+| ヘッドレス起動 | aud-A/d: `@sparticuz/chromium`+puppeteer で動作 / aud-C: 同梱 args で固まった | P0 で統一(7.7.5) |
 | 頭長モーフ | 02 `mt_head_length` / 05 `mt_head_len` | 統合(7.4.2) |
-| audit_c の所在 | 01 章は「欠落」と記載 | 現在は存在。01 章 §1.5/§1.9 の「audit_c 全般が未確認」は本章で解消(ただし規模・実機は未検証) |
+| aud-C の所在 | 01 章は「欠落」と記載 | 現在は存在。01 章 §1.5/§1.9 の「aud-C 全般が未確認」は本章で解消(ただし規模・実機は未検証) |
 | 体長の定義 | 04: 例示(FL/SL 未区別)/ 02: SL 190 mm 基準 / 05: SL 0.06〜0.35 m | SL 基準、FL/SL=1.109 で換算(7.6.3) |
 
 ### 7.9.2 不足資料(本章に効くもの)
