@@ -18,18 +18,18 @@
 
 | # | 推奨 | 理由（要点） | 詳細 |
 |---|---|---|---|
-| 1 | **「手続き的ロフト → スキンウェイト → モーフ → テクスチャ → GLB → ブラウザ読込」は Node.js だけで完結する**。生成と GLB 出力は `@gltf-transform/core` 4.5.1 の `Document`/`NodeIO`、検証は Node + npm だけで得られるヘッドレス Chromium | 三角形 384・頂点 236・骨 3・モーフ 1・PBR（clearcoat+iridescence+ior+specular+texture_transform）・テクスチャ 3 枚の PoC を **22 変種**（`out/poc_*.glb`）作り、全て r186 `GLTFLoader` で読み込めた。スキン＋モーフの変形結果は **glTF 仕様どおりの CPU 計算と 0.000 mm 差**（float）／量子化でも ≤0.04 mm | §2.9, §5 |
+| 1 | **「手続き的ロフト → スキンウェイト → モーフ → テクスチャ → GLB → ブラウザ読込」は Node.js だけで完結する**。生成と GLB 出力は `@gltf-transform/core` 4.5.1 の `Document`/`NodeIO`、検証は Node + npm だけで得られるヘッドレス Chromium | 三角形 384・頂点 236・骨 3・モーフ 1・PBR（clearcoat+iridescence+ior+specular+texture_transform）・テクスチャ 3 枚の PoC を **22 変種**（`out/poc_*.glb`）作り、全て r186 `GLTFLoader` で読み込めた。スキン＋モーフの変形結果は **glTF 仕様どおりの CPU 計算と 0.000 mm 差**（float）／量子化でも ≤0.04 mm | §2.9–2.11, §5 |
 | 2 | **KTX2 は npm 経由で作れる**。(A) `ktx2tools@1.1.0`（非公式再パッケージ。KTX-Software 4.4.0 の `ktx`/`toktx` Linux バイナリ同梱）＋ `gltf-transform etc1s/uastc` CLI、または (B) `ktx2-encoder@0.6.0`（Basis エンコーダ WASM。プロセス内）。**スロット（色空間）を意識して符号化する**: CLI は自動、(B) は自前で `isSetKTX2SRGBTransferFunc` を切り替える | CLI は baseColor=sRGB／法線・ORM=linear を正しくタグ付け [T]。(B) の既定／同梱 transform は**全テクスチャを sRGB 扱い**にし、法線・ORM が誤解釈される（描画 PSNR 33.05 dB 対 47.28 dB） | §2.10, §3-2 |
 | 3 | **質の階層**: 近景（主役）= **UASTC（全スロット）** か「baseColor=ETC1S＋法線/ORM=UASTC」、遠景・小物 = **ETC1S 全部**。`--level 4` は使わない（3 枚 512² で 72 s） | 3×512²: PNG 738.8 KB → UASTC 447 KB（描画 PSNR 55.7 dB）／混成 430 KB（47.0 dB）／ETC1S 81 KB（45.0 dB）。UASTC level 2＋zstd18 は 1.5 s、ETC1S q128 は 1.0 s（CLI 壁時計） | §2.10 |
-| 4 | **ジオメトリ圧縮は、この規模（数百〜数千三角形）ではほぼ効かない**。使うなら **Meshopt（`EXT_meshopt_compression`）で POSITION は float のまま**（§1.3）。**Draco は不採用** | 非画像部（頂点＋IBM＋アニメ）は plain 21.7 KB → meshopt 11.2 KB → draco 9.3 KB。差は数 KB。Draco は decoder が wasm 192〜286 KB＋JS 58 KB（gzip で wasm 63 KB）で頂点順も変わる。Meshopt decoder は JS 1 本 29 KB（gzip 7.7 KB） | §2.3, §2.9 |
+| 4 | **ジオメトリ圧縮は、この規模（数百〜数千三角形）ではほぼ効かない**。使うなら **Meshopt（`EXT_meshopt_compression`）で POSITION は float のまま**（§1.3）。**Draco は不採用** | 非画像部（頂点＋IBM＋アニメ）は plain 21.7 KB → meshopt 11.2 KB → draco 9.3 KB。差は数 KB。Draco は decoder が wasm 192〜286 KB＋JS 58 KB（gzip で wasm 63 KB）で頂点順も変わる。Meshopt decoder は JS 1 本 29 KB（gzip 7.7 KB） | §2.3, §2.11 |
 | 5 | **スキンメッシュの POSITION を `quantize`/`meshopt()` の既定で量子化しない**。量子化すると IBM に逆量子化行列が混ざり、`skeleton.pose()` が骨を壊す（本 PoC で最大 1.0 m、gltfpack 出力では 16.6 km ずれる） | 変形そのものは正しい（≤0.04 mm）が、`Skeleton.pose()`（`Skeleton.js:153-166`）は `boneInverses` の逆行列で骨を置くため。float POSITION の meshopt 変種は pose() 差 0 [T] | §1.3, §3-1 |
 | 6 | **GLB は `NodeIO.setVertexLayout(VertexLayout.SEPARATE)` で書く**（既定は INTERLEAVED）。**かつ、ランタイムで `BufferGeometryUtils` を呼ばない設計にする**（タンジェント生成・溶接はオフラインで済ませる） | 既定のインターリーブ GLB を `GLTFLoader` で読むと全属性が `InterleavedBufferAttribute` になり、`mergeVertices` は `TypeError`（§3-3）。`deinterleaveGeometry` は `geometry.morphTargets`（存在しないプロパティ）を見ており morphAttributes を処理しない。meshopt の NORMAL（i8 正規化・stride 4）は SEPARATE でもインターリーブになる | §3-3 |
 | 7 | **法線マップがあるなら、タンジェントはオフラインで焼く**: `unweld() → tangents({generateTangents}) → weld()`（`mikktspace@1.1.1`）。三の `computeMikkTSpaceTangents` と**完全一致**（最大差 0） | タンジェントがあると `GLTFLoader` はマテリアルを複製せず `normalScale.y` も反転しない（`GLTFLoader.js:3498,3564`）。頂点数は 236 のまま戻る（weld） | §2.8, §3-6, §3-7 |
-| 8 | **`GLTFExporter` は制作パイプラインに使わない**（デバッグ・往復確認用）。圧縮拡張（meshopt/draco/KTX2/AVIF）を書けず、`KHR_materials_diffuse_transmission` は消え、KTX2 は PNG に展開され（ORM が複製されて画像 3→4 枚）、モーフは POSITION/NORMAL のみ | 制作は常に glTF-Transform。ただし clearcoat/iridescence/sheen/transmission/volume/anisotropy/ior/specular/emissive_strength/dispersion/texture_transform/unlit の往復は [T] で保たれた | §2.7, §3-12 |
+| 8 | **`GLTFExporter` は制作パイプラインに使わない**（デバッグ・往復確認用）。圧縮拡張（meshopt/draco/KTX2/AVIF）を書けず、`KHR_materials_diffuse_transmission` は消え、KTX2 は PNG に展開され（ORM が複製されて画像 3→4 枚）、モーフは POSITION/NORMAL のみ | 制作は常に glTF-Transform。ただし clearcoat/iridescence/sheen/transmission/volume/anisotropy/ior/specular/emissive_strength/dispersion/texture_transform/unlit の往復は [T] で保たれた | §2.5, §2.12, §3-12 |
 | 9 | **読み込み側は `GLTFLoader` 1 つ＋ `KTX2Loader` 1 つ＋ `MeshoptDecoder`**。`ktx2.detectSupport(renderer)` を**ロード前**に必ず呼ぶ。個体の複製は `SkeletonUtils.clone`（geometry・material 共有、skeleton・モーフ重みは個体別）。別ミキサー・別時刻で独立に動く [T] | `KTX2Loader.js:379,411` は未初期化で throw。複数インスタンスは警告（`:351`） | §1.4, §2.2 |
 | 10 | **gltfpack（npm 版）は「メッシュの meshopt 圧縮だけ」に限って使える**。ただし `-af 0` を付ける（付けないと 30 Hz に再サンプルされ、キーフレームの尖りが 4.9 mm 削れる）。テクスチャ圧縮（`-tc`）は npm 版では不可。ノード構造が変わる（メッシュノードが無名の子に移り、アニメのトラック名が `mesh_0.…` になる） | 制作パイプラインの本線は glTF-Transform に統一する方が予測しやすい | §2.11, §3-10 |
-| 11 | **LOD はオフラインで作れる**: `weld() → simplify({simplifier: MeshoptSimplifier, ratio})`。頂点は元の部分集合として残り、**スキンウェイト・モーフも保たれる**（1,536 → 384 三角形、変形誤差 0） | 頂点を新規生成しないため。ただし LOD ごとに同じ骨・同じ IBM を使うこと（D の `LOD` 方針に接続） | §2.9 |
-| 12 | **ブラウザ検証は `playwright-core` ＋ 実行ファイル指定**。(a) プリインストール `/opt/pw-browsers/chromium`（141）、または (b) npm だけで得られる `@sparticuz/chromium@153`（展開先 `TMPDIR`）。`playwright-core install chromium` は CDN 遮断で失敗する。**(b) は同梱の既定引数（`--single-process` 含む）だと本検証ハーネスが 300 s 経っても終わらなかった**ので、通常の引数（`--use-angle=swiftshader` 等）で起動する | WebGL2 は SwiftShader 上で動く（`ANGLE (Google, Vulkan 1.3.0 (SwiftShader …))`）。描画は決定論的で PSNR 比較に使える（D と整合） | §2.12, §5 |
+| 11 | **LOD はオフラインで作れる**: `weld() → simplify({simplifier: MeshoptSimplifier, ratio})`。頂点は元の部分集合として残り、**スキンウェイト・モーフも保たれる**（1,536 → 384 三角形、変形誤差 0） | 頂点を新規生成しないため。ただし LOD ごとに同じ骨・同じ IBM を使うこと（D の `LOD` 方針に接続） | §2.11 |
+| 12 | **ブラウザ検証は `playwright-core` ＋ 実行ファイル指定**。(a) プリインストール `/opt/pw-browsers/chromium`（141）、または (b) npm だけで得られる `@sparticuz/chromium@153`（展開先 `TMPDIR`）。`playwright-core install chromium` は CDN 遮断で失敗する。**(b) は同梱の既定引数（`--single-process` 含む）だと本検証ハーネスが 300 s 経っても終わらなかった**ので、通常の引数（`--use-angle=swiftshader` 等）で起動する | WebGL2 は SwiftShader 上で動く（`ANGLE (Google, Vulkan 1.3.0 (SwiftShader …))`）。描画は決定論的で PSNR 比較に使える（D と整合） | §2.13, §5 |
 
 ### 1.2 オフラインで GLB を作る標準手順（本検証で動いたもの）
 
@@ -132,7 +132,7 @@ const skinned = gltf.scene.getObjectByProperty('isSkinnedMesh', true);
 
 - `DRACOLoader`: 既定の decoder URL は `import.meta.url` 相対（`DRACOLoader.js:15-19`）。`setDecoderPath(path)`（`:102`）、ワーカー上限 4（`:76`）、`preload()`（`:372`）、`dispose()`（`:504`）。WASM が無い環境で JS 版に落ちる（`:384-410`）が、`path` をオブジェクトで渡すと JS 版は使えず例外（`:392`）。**Draco は頂点順を変える**（実測: `poc_draco.glb` の 3 頂点目が元の 3 頂点目と違う［T］）。モーフターゲットは Draco 化されず通常のアクセサのまま残り、`addMorphTargets` が普通に読む（`float` のまま JSON に出る）［T］。
 - Meshopt: `examples/jsm/libs/meshopt_decoder.module.js`（meshoptimizer **1.1** ビルド、ヘッダ記載）。`MeshoptDecoder.supported`（WASM 可否）と `decodeGltfBufferAsync`（`GLTFLoader.js:1643`）を使う。**npm の `meshoptimizer@1.3.0` のエンコーダで作った GLB を three 同梱 1.1 のデコーダが読めた** ［T］（メッシュ頂点・アニメーション）。フィルタ（OCTAHEDRAL/QUATERNION/EXPONENTIAL）込みで動作。
-- スキン・モーフとの互換: Meshopt は JOINTS（`u8`）・WEIGHTS（`u8` 正規化）・モーフ差分（`i16` 正規化）・アニメのクォータニオン（i16 正規化）まで圧縮し、`GLTFLoader` はそのまま読む ［T］。Draco は JOINTS/WEIGHTS を一般属性として圧縮（読込 OK）、モーフは対象外。
+- スキン・モーフとの互換: Meshopt は JOINTS（`u8`）・WEIGHTS（`u8` 正規化）・モーフ差分（`i16` 正規化）・アニメのクォータニオン（i16 正規化）まで圧縮し、`GLTFLoader` はそのまま読む ［T］。Draco は JOINTS_0／WEIGHTS_0 も Draco ストリームに含める（`extensions.KHR_draco_mesh_compression.attributes` に 5 属性。読込 OK ［T］）、モーフターゲットは対象外（通常のアクセサのまま）。
 
 ### 2.4 KTX2Loader
 
@@ -354,7 +354,7 @@ chmod +x node_modules/basis_universal/bin/basisu
 ### 5.2 全再実行
 
 ```sh
-cd $SP/toolchain_test && poc/run_all.sh > out/run_all.log 2>&1      # 26 ステップ。失敗するのは `gltfpack -tc`（期待どおり）だけ
+cd $SP/toolchain_test && poc/run_all.sh > out/run_all.log 2>&1      # 約 30 ステップ（約 2 分）。exit≠0 は `gltfpack -tc` だけ（期待どおり）
 ```
 
 `poc/run_all.sh` の中身（ステップ順）:
