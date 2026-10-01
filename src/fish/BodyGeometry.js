@@ -74,8 +74,8 @@ export const HEAD_RELIEF = {
   // (a little broader and lower on the larger ball: a narrow one lies on
   // the front-view outline and showed the mesh as a sawtooth)
   orbitRim: 0.1, // height of the rim
-  orbitRimW: 0.18, // its half-width (flat-topped bump)
-  orbitRimOff: 0.08, // its crest this far outside the nominal visible edge
+  orbitRimW: 0.16, // its half-width (flat-topped bump)
+  orbitRimOff: -0.02, // its crest this far outside the nominal visible edge
   orbitCrease: 0.04, // depth of the crease just outside the ring...
   orbitCreaseOff: 0.33, // ...this far outside the visible edge...
   orbitCreaseW: 0.14, // ...and its half-width (wide enough for the mesh)
@@ -672,12 +672,22 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
       // covers the ball outside the nominal cap, so the visible eye is a disc
       // centred on the optical axis (pupil centred in the eye)
       const hb = rho < R ? Math.sqrt(R * R - rho * rho) : 0;
-      const cover = smoothstep(rv - 0.05 * R, rv + 0.09 * R, rho) * smoothstep(1.15 * R, 0.98 * R, rho);
-      let hn = smax(h, hb + HEAD_RELIEF.orbitCover * R - (1 - cover) * R, 0.08 * R);
+      // (the covering skin flares away from the edge of the cap along the
+      // ball's tangent cone instead of wrapping down its steep sides: on the
+      // flatter cap that wrap stood up as a cliff that showed the mesh as a
+      // sawtooth on the front-view outline)
+      const hEdge = Math.sqrt(R * R - rv * rv);
+      const coneT = hEdge - (rv / hEdge) * (rho - rv);
+      // (the skin stays above the ball right up to the edge of the cap and
+      // drops away only inside it: the edge itself is cut as an exact circle
+      // per pixel in the body shader, so no steep wall of skin is left on the
+      // mesh outside the opening, whose crest showed as a sawtooth)
+      const cover = smoothstep(rv - 0.16 * R, rv - 0.06 * R, rho) * smoothstep(1.6 * R, 1.3 * R, rho);
+      let hn = smax(h, coneT + HEAD_RELIEF.orbitCover * R - (1 - cover) * R, 0.08 * R);
       // ...and inside the cap it always tucks under the ball, so the edge of
       // the visible eye is the same circle all round (no ragged skin
       // crossing the ball where the head surface happens to lie near it)
-      const inside = smoothstep(rv + 0.02 * R, rv - 0.07 * R, rho);
+      const inside = smoothstep(rv - 0.06 * R, rv - 0.16 * R, rho);
       hn = sminK(hn, hb - HEAD_RELIEF.orbitCover * R + (1 - inside) * R, 0.06 * R);
       {
         const tr = (rho - rv - HEAD_RELIEF.orbitRimOff * R) / (HEAD_RELIEF.orbitRimW * R);
