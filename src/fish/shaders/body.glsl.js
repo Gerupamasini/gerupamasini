@@ -671,7 +671,9 @@ void computeFishSurface() {
     // it); the closed slit is only a dark line
     muc *= mix(1.0, 0.6, smoothstep(0.1, 0.7, c));
     float shut = 1.0 - smoothstep(0.04, 0.3, vHead.x);
-    col = muc * mix(1.0, 0.15, shut);
+    // (closed: the meeting lips' moist margin in shadow, a dull dark red
+    // line, not a black hole)
+    col = mix(muc, vec3(0.16, 0.06, 0.05), shut);
     // wet, but the lips and the head hide most of the bright surroundings
     spec = vec3(0.025) * (1.0 - 0.75 * smoothstep(0.04, 0.3, c)) * (1.0 - shut);
     rough = 0.34;
@@ -753,6 +755,11 @@ void computeFishSurface() {
     // distance outside the visible edge of the eye, in eyeball radii
     float eu = (erho - EYE_VR) / EYE_R;
     float front = step(-EYE_R, eh) * step(0.006, abs(rp.z));
+    // the skin's free edge against the eye is an exact circle: skin that the
+    // mesh leaves above the ball inside the opening (where the flat cap
+    // meets the head at a shallow angle) is cut away per pixel, so the edge
+    // never shows the mesh as a ragged or sawtooth margin
+    if (erho < EYE_VR && eh > 0.0 && abs(rp.z) > 0.006) discard;
     // over the top of the eye the rim merges into the forehead
     float upE = erad.y / max(erho, 1e-6);
     float dorsE = smoothstep(0.1, 0.85, upE);
@@ -765,7 +772,8 @@ void computeFishSurface() {
     // natural flesh: the local skin, a little paler and warmer, partly
     // desaturated (cream-beige on white, a muted lighter red / orange on red)
     float lumC = dot(col, vec3(0.3, 0.5, 0.2));
-    vec3 flesh = mix(col, vec3(lumC), 0.35) * vec3(1.04, 0.96, 0.84) * 1.08 + vec3(0.025, 0.018, 0.01);
+    // (barely paler: a brighter band read as a bright ring around the eye)
+    vec3 flesh = mix(col, vec3(lumC), 0.25) * vec3(1.02, 0.97, 0.9) + vec3(0.008, 0.006, 0.004);
     col = mix(col, flesh, 0.7 * band);
     // the skin's free edge against the ball: a fine moist contact shadow
     // (hard toward the eye, fading over ~0.06 R outward)
@@ -806,18 +814,19 @@ void computeFishSurface() {
     // forehead and snout top: thick skin over the frontal bones, with few
     // reflective iridophores. A soft, broken satin sheen, not the glossy
     // white dome of a porcelain figurine
-    float brow = headSkin * smoothstep(0.0, 0.5, a) * (1.0 - operc) * smoothstep(0.3, 0.18, sB);
-    spec *= 1.0 - brow * (0.55 + 0.4 * (mot2 - 0.5));
-    rough += 0.14 * brow;
+    // (down to the level of the eyes: the brow across them is matte too)
+    float brow = headSkin * smoothstep(-0.15, 0.35, a) * (1.0 - operc) * smoothstep(0.3, 0.18, sB);
+    spec *= 1.0 - brow * (0.72 + 0.3 * (mot2 - 0.5));
+    rough += 0.22 * brow;
     nT = normalize(nT + vec3(mn, mn2, 0.0) * 0.03 * brow);
   }
   // white head: its skin inherits the flank's pearly reflector strength, so
   // over the nape and the top of the gill cover (behind the forehead term
   // above) it still mirrored like a lacquered dome: a little weaker, broader
   {
-    float dome = headSkin * whiteness * smoothstep(0.1, 0.75, a) * smoothstep(0.14, 0.24, sB) * (lip > -0.5 ? 1.0 : 0.0);
-    spec *= 1.0 - 0.3 * dome;
-    rough += 0.06 * dome;
+    float dome = headSkin * whiteness * smoothstep(0.1, 0.75, a) * smoothstep(0.04, 0.14, sB) * (lip > -0.5 ? 1.0 : 0.0);
+    spec *= 1.0 - 0.4 * dome;
+    rough += 0.08 * dome;
   }
   // ventral xanthophore wash behind the pectorals (yellowish belly in sarasa)
   float bellyY = smoothstep(-0.2, -0.75, a) * smoothstep(0.2, 0.36, -rp.x) * smoothstep(0.62, 0.42, -rp.x);
