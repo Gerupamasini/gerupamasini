@@ -43,7 +43,7 @@ export const SPECIES = {
     headWin: [7.7, 10.4],
     gillWin: [6.3, 7.6, 9.3, 10.2],
     // yellow-green / blue-green iridescent patch on the gill cover (004, 044, 058; spec colour notes)
-    opercTint: [0.42, 0.86, 0.78, 0.85],
+    opercTint: [0.4, 0.8, 0.78, 0.65],
     haemal: [24.8, 26.6],
     // cavity centre 0.62·b below the section centre so the peritoneal shell stays under the column
     abdomen: [17.9, 0.62, 6.9, 1.15],
