@@ -38,7 +38,7 @@ try {
     if (Number(sec) > 0) await page.evaluate((t) => window.__higataScene.step(t), Number(sec));
     const n = await page.evaluate(() => window.__higataScene.frameCount);
     await page.waitForFunction((t) => window.__higataScene.frameCount >= t, n + Number(process.env.FRAMES || 3), { timeout: 600000 });
-    await page.screenshot({ path: path.join(outDir, `${label}.png`) });
+    await page.screenshot({ path: path.join(outDir, `${label}.png`), timeout: 300000 });
     console.log('saved', label);
   }
   await browser.close();

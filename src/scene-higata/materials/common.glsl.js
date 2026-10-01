@@ -89,12 +89,12 @@ vec3 causticsAt3(vec3 p) {
   vec3 g = vec3(0.2487, 0.2513, 0.2537);
   vec3 det = (1.0 + H.x * g) * (1.0 + H.z * g) - H.y * H.y * g * g;
   // the sun's disk (0.53°) and the spread of what the band limit removed keep the lines finite
-  float soft = 0.07 + 6.0 * fp / max(D, 1e-3);
+  float soft = 0.09 + 6.0 * fp / max(D, 1e-3);
   vec3 I = 1.0 / max(abs(det), vec3(soft));
   // energy is conserved on average: past a focus the light spreads into the dimmer cells; forward
   // scattering by the silt in the water fills the dark cells a little
   I = mix(I, vec3(1.0), smoothstep(0.0, -1.5, det) * 0.3);
-  I = mix(vec3(1.0), clamp(I, 0.0, 7.0), 0.82);
+  I = mix(vec3(1.0), clamp(I, 0.0, 6.0), 0.72);
   return mix(vec3(1.0), I, smoothstep(0.0, 0.004, D));
 }
 float causticsAt(vec3 p) { return causticsAt3(p).g; }

@@ -32,7 +32,8 @@ if (!renderer.capabilities.isWebGL2 || !renderer.extensions.has('EXT_color_buffe
   fail('WebGL2 と浮動小数点レンダーターゲット (EXT_color_buffer_float) に対応したブラウザが必要です。');
 }
 renderer.toneMapping = THREE.NoToneMapping;
-let pixelRatio = Math.min(window.devicePixelRatio || 1, Number(params.get('dpr')) || 1.5);
+const MAX_DPR = Math.min(window.devicePixelRatio || 1, Number(params.get('dpr')) || 1.5);
+let pixelRatio = MAX_DPR;
 renderer.setPixelRatio(pixelRatio);
 
 const scene = new THREE.Scene();
@@ -55,9 +56,9 @@ const shared = {
   uWaterDeep: { value: v3(0.2, 0.185, 0.15) },
   uWaterUp: { value: v3(0.17, 0.18, 0.15) },
   uSurfaceGlow: { value: v3(0.42, 0.52, 0.6) },
-  uAmbUp: { value: v3(0.2, 0.25, 0.27) },
-  uAmbDown: { value: v3(0.13, 0.12, 0.095) },
-  uFogColor: { value: v3(0.15, 0.175, 0.145) },
+  uAmbUp: { value: v3(0.21, 0.245, 0.25) },
+  uAmbDown: { value: v3(0.15, 0.13, 0.1) },
+  uFogColor: { value: v3(0.16, 0.172, 0.14) },
   uFogDensity: { value: 2.2 },
   uTime: { value: 0 },
   uScatter: { value: 1.0 },
@@ -407,11 +408,27 @@ const timer = new THREE.Timer();
 const frozenTime = params.has('t') ? Number(params.get('t')) : null;
 let focusDist = 0.15;
 let focusSnap = true;
+// adaptive resolution: keep the frame time around 16–25 ms by scaling the render resolution
+const perf = { acc: 0, n: 0, wait: 2 };
+function adaptResolution(rawDt) {
+  if (params.has('dpr') || params.has('capture')) return;
+  perf.acc += rawDt; perf.n++;
+  if (perf.acc < 1.5) return;
+  const ms = (perf.acc / perf.n) * 1000;
+  perf.acc = 0; perf.n = 0;
+  if (perf.wait-- > 0) return; // let shader compilation and loading settle
+  let next = pixelRatio;
+  if (ms > 26) next = Math.max(0.55, pixelRatio * 0.85);
+  else if (ms < 13) next = Math.min(MAX_DPR, pixelRatio * 1.1);
+  if (Math.abs(next - pixelRatio) > 0.02) { pixelRatio = next; resize(); }
+}
 function frame() {
   requestAnimationFrame(frame);
   timer.update();
-  const dt = Math.min(timer.getDelta(), 1 / 20);
+  const rawDt = timer.getDelta();
+  const dt = Math.min(rawDt, 1 / 20);
   if (!state.ready) return;
+  adaptResolution(rawDt);
   if (!state.paused) stepWorld(dt);
   if (frozenTime !== null) shared.uTime.value = frozenTime;
   updateCamera(dt);

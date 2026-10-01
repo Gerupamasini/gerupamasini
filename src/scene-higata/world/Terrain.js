@@ -425,7 +425,7 @@ function createTerrainMaterial(shared, burrows) {
         float sand = clamp(vMat.x, 0.0, 1.0), dark = clamp(vMat.y, 0.0, 1.0), film = clamp(vMat.z, 0.0, 1.0), ejecta = clamp(vMat.w, 0.0, 1.0);
 
         // ---- albedo: grey-brown mud, beige fine sand, dark reduced mud around the openings
-        vec3 mud = vec3(0.165, 0.148, 0.118), sandC = vec3(0.36, 0.318, 0.245), reduced = vec3(0.06, 0.059, 0.055), fresh = vec3(0.25, 0.235, 0.205);
+        vec3 mud = vec3(0.172, 0.146, 0.11), sandC = vec3(0.38, 0.322, 0.232), reduced = vec3(0.058, 0.056, 0.052), fresh = vec3(0.27, 0.245, 0.205);
         float mott = fbm(mm * 0.012, 4);
         float mott2 = fbm(mm * 0.055 + 3.0, 3);
         vec3 alb = mix(mud, sandC, smoothstep(0.1, 0.9, sand + (mott - 0.5) * 0.35));
