@@ -24,7 +24,8 @@ export function buildTank({ glassEnv = null } = {}) {
     depthWrite: false,
     side: THREE.DoubleSide,
   });
-  const edgeMat = new THREE.MeshStandardMaterial({ color: 0x5fae98, roughness: 0.15, metalness: 0, transparent: true, opacity: 0.55 });
+  // (float-glass green, seen mostly from outside; faint from inside the water)
+  const edgeMat = new THREE.MeshStandardMaterial({ color: 0x3f7a68, roughness: 0.15, metalness: 0, transparent: true, opacity: 0.35 });
   const pane = (w, h, t, x, y, z) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, t), glassMat);
     m.position.set(x, y, z);
@@ -101,7 +102,7 @@ export function buildTank({ glassEnv = null } = {}) {
   g.add(bg);
   // side panes seen from inside the water: dark glass with a grazing sheen
   // (no milky diffuse film)
-  const sideMat = patchUnderwater(new THREE.MeshStandardMaterial({ color: 0x030506, roughness: 0.12, metalness: 0.0, envMapIntensity: 0.5, transparent: true, opacity: 0.85 }), { caustics: false, key: 'side' });
+  const sideMat = patchUnderwater(new THREE.MeshStandardMaterial({ color: 0x030506, roughness: 0.18, metalness: 0.0, envMapIntensity: 0.3, transparent: true, opacity: 0.85 }), { caustics: false, key: 'side' });
   for (const s of [-1, 1]) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(D, H), sideMat);
     p.position.set(s * (L / 2 - 0.0005), H / 2, 0);
@@ -111,42 +112,48 @@ export function buildTank({ glassEnv = null } = {}) {
 
   // meniscus: where the surface meets the glass the water climbs a few mm and
   // its curved underside mirrors the bright hood light, drawing the thin
-  // silvery waterline that marks the surface in every tank photograph
-  const meniscusMat = new THREE.ShaderMaterial({
+  // silvery waterline that marks the surface in tank photographs. It is a
+  // feature of the outside view through that pane only: from inside the
+  // water, or through another pane (the side waterlines seen obliquely
+  // through the front glass), it must not draw a bright wire across the frame.
+  const meniscusMat = (color, normal, offset) => new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
+    side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
-    uniforms: { uColor: { value: new THREE.Color(0.55, 0.6, 0.6) } },
+    uniforms: { uColor: { value: color }, uPane: { value: new THREE.Vector4(normal.x, normal.y, normal.z, offset) } },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
       void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */ `
       uniform vec3 uColor;
+      uniform vec4 uPane; // outward pane normal, plane offset of the outer face
       varying vec2 vUv;
       void main() {
+        // camera outside this pane (fades in over the glass thickness)
+        float outside = smoothstep(0.0, 0.02, dot(cameraPosition, uPane.xyz) - uPane.w);
+        if (outside <= 0.0) discard;
         // bright crest just under the contact line, fading down the curve
         float y = vUv.y;
         float a = smoothstep(0.0, 0.75, y) * (1.0 - smoothstep(0.85, 1.0, y));
         float shimmer = 0.75 + 0.25 * sin(vUv.x * 900.0 + y * 4.0);
-        gl_FragColor = vec4(uColor * a * a * shimmer, 1.0);
+        gl_FragColor = vec4(uColor * a * a * shimmer * outside, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
   });
   const menH = 0.0035;
-  const men = new THREE.Mesh(new THREE.PlaneGeometry(L, menH), meniscusMat);
+  const men = new THREE.Mesh(new THREE.PlaneGeometry(L, menH), meniscusMat(new THREE.Color(0.5, 0.55, 0.55), new THREE.Vector3(0, 0, 1), D / 2 + glass));
   men.position.set(0, TANK.water - menH * 0.35, D / 2 - 0.0006);
   men.renderOrder = 4;
   men.name = 'meniscus';
   g.add(men);
-  // the side panes' waterlines are seen obliquely through more water: fainter
-  const sideMen = meniscusMat.clone();
-  sideMen.uniforms.uColor.value = new THREE.Color(0.2, 0.23, 0.23);
   for (const s of [-1, 1]) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(D, menH), sideMen);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(D, menH), meniscusMat(new THREE.Color(0.4, 0.44, 0.44), new THREE.Vector3(s, 0, 0), L / 2 + glass));
     m.position.set(s * (L / 2 - 0.0006), TANK.water - menH * 0.35, 0);
     m.rotation.y = -s * Math.PI / 2;
     m.renderOrder = 4;
+    m.name = 'meniscus';
     g.add(m);
   }
 

@@ -110,6 +110,13 @@ void main() {
       // the dark bar housing around the LED strip
       float hz = smoothstep(0.004, 0.0, abs(hit.y - uLedBar.x) - uLedBar.w - 0.016);
       trans = mix(uRoomColor, uSkyColor, smoothstep(0.2, 0.9, T.y)) * (1.0 - 0.85 * hz * ex) + uLedColor * ex * ez;
+      // the surface film and its fine ripples scatter some of the bar's light
+      // sideways: a soft glow around its image fills the window, so the
+      // surface reads as a lit plane from below (not a black void with a strip)
+      float dx = max(0.0, abs(hit.x) - uLedBar.z);
+      float dz = max(0.0, abs(hit.y - uLedBar.x) - uLedBar.w);
+      float dl = length(vec2(dx, dz));
+      trans += uLedColor * (0.004 * exp(-dl / 0.03) + 0.0012 * exp(-dl / 0.15));
     }
     col = mix(trans, refl, F);
     col = waterAttenuate(col, vWorld);
@@ -156,7 +163,7 @@ export class WaterSurface {
         uTexMatrix: { value: this.textureMatrix },
         // room ceiling seen straight up through the window, room walls toward
         // the window edge: both far dimmer than the hood light
-        uSkyColor: { value: new THREE.Color(0.045, 0.047, 0.05) },
+        uSkyColor: { value: new THREE.Color(0.06, 0.062, 0.066) },
         uRoomColor: { value: new THREE.Color(0.018, 0.018, 0.019) },
         uLedColor: { value: new THREE.Color(7.0, 6.8, 6.4) },
         // matches the LED strip built in Tank.js (z -0.02, 7 cm deep, 0.9 L long, H + 9 cm)

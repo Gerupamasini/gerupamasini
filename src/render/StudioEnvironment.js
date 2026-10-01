@@ -18,21 +18,35 @@ function panel(w, h, color, intensity) {
 }
 
 export function buildStudioEnvScene() {
+  // Black-background product set-up, as in the reference photographs: a big
+  // soft box overhead and slightly behind the fish is the key (bright back,
+  // the light falls off down the flank), a narrower strip box high on the
+  // camera's right models the body, a low, weak frontal fill strip, a grey
+  // bounce card below (what the silvery lower flank mirrors — a black floor
+  // would turn it into a dark band) and a thin rim strip behind that traces
+  // the dorsal contour and the fin edges.
   const scene = new THREE.Scene();
   scene.add(box(20, 12, 20, 0x050505));
-  const top = panel(6, 4, 0xf8faff, 6);
-  top.position.set(0.3, 5.5, 2.0);
+  const top = panel(6, 4.5, 0xf8faff, 6.5);
+  top.position.set(0.4, 5.5, 0.6);
   top.rotation.x = Math.PI / 2;
   scene.add(top);
-  // large soft box behind the camera: even, frontal light like the reference shots
-  const front = panel(7, 4.5, 0xf6f8ff, 3.2);
-  front.position.set(-0.5, 2.2, 7);
+  const side = panel(2.2, 4.5, 0xf6f8ff, 4.0);
+  side.position.set(5.0, 3.2, 2.6);
+  side.lookAt(0, 0, 0);
+  scene.add(side);
+  const front = panel(7, 1.6, 0xf6f8ff, 1.3);
+  front.position.set(-0.5, 0.4, 7);
   scene.add(front);
-  const rim = panel(1.2, 5, 0xdfeaff, 3.5);
-  rim.position.set(-6, 1.5, -4);
+  const rim = panel(1.0, 5, 0xdfeaff, 3.5);
+  rim.position.set(-5.5, 2.5, -4.5);
   rim.lookAt(0, 0, 0);
   scene.add(rim);
-  const floor = panel(8, 8, 0x0b0b0b, 1);
+  const rimTop = panel(5, 0.8, 0xe8f0ff, 2.5);
+  rimTop.position.set(0, 3.5, -5.5);
+  rimTop.lookAt(0, 0, 0);
+  scene.add(rimTop);
+  const floor = panel(8, 8, 0x30343a, 1);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -3;
   scene.add(floor);
@@ -45,9 +59,11 @@ export function buildAquariumEnvScene() {
   const geo = new THREE.SphereGeometry(10, 64, 32);
   const col = [];
   const pos = geo.attributes.position;
+  // (mid water and horizon bright enough for the silvery flanks to mirror
+  // the lit water column instead of a dark band)
   const cBottom = new THREE.Color(0x14120d);
-  const cMid = new THREE.Color(0x0e3a3c);
-  const cHorizon = new THREE.Color(0x1d5552);
+  const cMid = new THREE.Color(0x163a37).multiplyScalar(2.0);
+  const cHorizon = new THREE.Color(0x29524c).multiplyScalar(2.0);
   const cTop = new THREE.Color(0x6fa8b0);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {

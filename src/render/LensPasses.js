@@ -73,7 +73,14 @@ export class DOFPass extends Pass {
             radius += 1.35 / radius;
             ang += GOLDEN;
           }
-          outColor = vec4(acc / tot, 1.0);
+          // highlight shoulder on the HDR signal before the glare pass: extreme
+          // values (specular sparkles, the LED) are soft-limited so they bloom
+          // as small glints instead of long saturated streaks
+          vec3 o = acc / tot;
+          float pk = max(o.r, max(o.g, o.b));
+          const float K = 5.0, W = 8.0;
+          if (pk > K) o *= (K + (pk - K) / (1.0 + (pk - K) / W)) / pk;
+          outColor = vec4(o, 1.0);
         }
       `,
       depthTest: false,
