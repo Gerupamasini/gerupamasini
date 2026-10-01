@@ -49,7 +49,7 @@ WebGL2 と `EXT_color_buffer_float` に対応したブラウザが必要です�
 | A | 自動カメラ（しばらく操作しないと、ゆっくり回りながら別のハゼを見に行く）の切替 |
 | C | カメラへの警戒の切替 |
 
-URL パラメータ: `edo=3&maha=3`（匹数、各 4 まで）、`seed=…`（干潟と配置）、`wind=0.72`（波の強さ）、`sunEl=52&sunAz=215`（太陽の高度・方位）、`exposure=1.5`、`dof=0`、`calm`（カメラを怖がらない）、`dpr=1.5`（解像度）、`cam=px,py,pz,tx,ty,tz`。
+URL パラメータ: `edo=3&maha=3`（匹数、各 4 まで）、`seed=…`（干潟と配置）、`wind=0.28`（波の強さ）、`sunEl=52&sunAz=215`（太陽の高度・方位）、`exposure=1.5`、`dof=0`、`calm`（カメラを怖がらない）、`dpr=1.5`（解像度）、`cam=px,py,pz,tx,ty,tz`。
 
 ## 確認用スクリプト
 
