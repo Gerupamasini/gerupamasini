@@ -87,11 +87,11 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'foreBreast', c: [0, 76, 24], r: [14, 14, 13] },
     { type: 'ellipsoid', name: 'breastSideL', c: [11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
     { type: 'ellipsoid', name: 'breastSideR', c: [-11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
-    { type: 'ellipsoid', name: 'flankPocketL', c: [13.5, 52, -14], r: [7.5, 7.5, 18], k: 6 },
-    { type: 'ellipsoid', name: 'flankPocketR', c: [-13.5, 52, -14], r: [7.5, 7.5, 18], k: 6 },
+    { type: 'ellipsoid', name: 'flankPocketL', c: [12, 53, -14], r: [7.3, 7.5, 18], k: 6 },
+    { type: 'ellipsoid', name: 'flankPocketR', c: [-12, 53, -14], r: [7.3, 7.5, 18], k: 6 },
     // fill the top-view waist and keep the tibia inside the belly (spec §5, §9)
-    { type: 'ellipsoid', name: 'midFlankL', c: [10.5, 48, -2], r: [8.5, 9, 14], k: 6 },
-    { type: 'ellipsoid', name: 'midFlankR', c: [-10.5, 48, -2], r: [8.5, 9, 14], k: 6 },
+    { type: 'ellipsoid', name: 'midFlankL', c: [9.6, 48.5, -2], r: [8.5, 9, 14], k: 6 },
+    { type: 'ellipsoid', name: 'midFlankR', c: [-9.6, 48.5, -2], r: [8.5, 9, 14], k: 6 },
     // Sides of the neck: no waist between head and body from any view (p037, p058, p063 and the front-3/4 reference:
     // the head sits on an egg, the outline runs convex from the cheek out to the breast). Without them the front
     // width fell from 42.6 mm at the breast to 33 at y 84 and rose to the cheeks again (a 2 mm notch at y 90 and
@@ -102,9 +102,15 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'neckUpperL', c: [6, 88.6, 15.5], r: [9.4, 6.2, 10], k: 6 },
     { type: 'ellipsoid', name: 'neckUpperR', c: [-6, 88.6, 15.5], r: [9.4, 6.2, 10], k: 6 },
     // lower breast sides (y 56–62): the front outline dipped 2.2 mm between the breast and the flank pockets, and the
-    // top view 2 mm between breast and flanks at z 0 — one straight-sided egg from the breast down
+    // top view 2 mm between breast and flanks at z 0
     { type: 'ellipsoid', name: 'sideFillL', c: [11, 59.5, 0], r: [9.3, 9, 15], k: 6 },
     { type: 'ellipsoid', name: 'sideFillR', c: [-11, 59.5, 0], r: [9.3, 9, 15], k: 6 },
+    // One egg from the breast down, no second (belly) lobe: the flank pockets and mid-flanks drawn in by 1–1.5 mm
+    // (front width tapers from 42.8 at y 64 to 39.7 / 35.7 at y 50 / 44 instead of a 42 mm column down to y 48),
+    // and the crease between breast and belly filled — seen from 15–60° off the front the underside dipped 0.5–1.2 mm
+    // at y 46–53 between the two (a "double belly"); now ≤ 0.2 mm from every view between the throat and the belly
+    { type: 'ellipsoid', name: 'lowerBreastL', c: [8, 56, 11], r: [9, 9, 11], k: 7 },
+    { type: 'ellipsoid', name: 'lowerBreastR', c: [-8, 56, 11], r: [9, 9, 11], k: 7 },
   ],
   // Subtractive details (smooth subtraction)
   // Eye openings: a 2.8 mm tube along the eye axis through the plumage, its rim rounded over ≈1 mm — the cornea
