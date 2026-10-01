@@ -1,11 +1,11 @@
-# 行動モデル・人工魚・手続き的遊泳アニメの先行事例（計算機科学／ゲーム）— ヤマメ3Dモデル向け調査（第2版：WebSearch 34回で Part A を裏取り）
+# 行動モデル・人工魚・手続き的遊泳アニメの先行事例（計算機科学／ゲーム）— ヤマメ3Dモデル向け調査（第3版：第2版の34回に加え、今回さらに WebSearch 23回で Gap を補強）
 
-> 作成: ストリームR13。**第2版（上書き更新）**。初版は検索0回（当時セッションの検索予算が枯渇）で、Part A は全て記憶（M）だった。本版で standard モード 34 回（extended 0 回）を実行し、Part A を検索結果で裏取り・補完した。
+> 作成: ストリームR13。**第3版（上書き更新）**。経緯: 今回の依頼文は既存ファイルを「検索なしで書かれた初版」と説明していたが、読んだ時点のファイルは既に**第2版（standard 34 回で Part A を裏取り済み）**だった（初版は検索0回で全て記憶 M）。そこで第2版の内容と写真由来（P）の所見はそのまま残し、§4 の Gap と §3 の未解決点のうち優先度の高いものに絞って、**今回 standard モード 23 回（割当 28 回以内、extended 0 回、予算エラーなし）**を追加した。追加分は §1 の項目 28〜37、F-40〜F-44、および既存 F-02／05／07／08／10／31／34／36／39 への追記で、本文中に「第3版」と明記してある。第2版の検索ログ（#1〜#34）は §6 に残し、今回の分は #A1〜#A23 として別表にした。
 >
 > **この文書を使う前に必ず読むこと（調査の限界）**
 > 1. **検索結果は「題名・URL・モデルが作った要約」のみ。論文全文は読めていない。** 式・係数・閾値・表の数値は、要約に明示されたものだけ採用した。要約に無い数値は Gap として §4 に書いた。
 > 2. **ランクの扱い**: 初版の M を、検索要約が裏付けたものだけ B（教材・解説・技術報告）または A（査読論文・公的機関資料）に引き上げた。裏付けの無い M は「M」のまま残し、文中で明示した。
-> 3. **一部の検索呼び出しは1回で複数の検索ブロックを返した**（#8, #13, #22, #23, #32）。ハーネス側の課金カウントは、本書の「呼び出し回数 34」より多い可能性がある。
+> 3. **一部の検索呼び出しは1回で複数の検索ブロックを返した**（第2版: #8, #13, #22, #23, #32。第3版: #A1 は3ブロック、#A2 は5ブロック）。ハーネス側の課金カウントは、本書の「呼び出し回数」（第2版 34、第3版 23）より多い可能性がある。第3版は呼び出し 23 回で止め、ブロック数まで数えた場合の超過を避けた。
 > 4. **ヤマメ固有の実測は、遊泳キネマティクス（稚魚のみ）以外にほぼ無い。** 運動学・高速スタート・胸鰭・Kármán gait・側線の数値の大半は **PROXY（ニジマス等）**。計算機科学・ゲームの事例は魚種を問わない一般論で、ヤマメの根拠にはならない。
 > 5. Part B（F-12〜F-27）は先行ストリーム r07・r08・r09・r11 の検索所見の**継承**で、本ストリームでは再検索していない。ランクは元ファイルのまま。F-28・F-29 は写真（P）の集計。
 > 6. 「設計案」「推論」と書いた箇所は私の設計判断であって資料の主張ではない。
@@ -47,6 +47,19 @@
 26. **頭部アニメ用**: O. m. masou の側線は頭部管8本＋体幹管1本（査読）。ニジマスの摂餌ストライクで神経頭蓋が 2〜18° 挙上、換気頻度 57±4〜78±4 回/分（A・PROXY）。サケ科の開口時間・最大開口角は無い。[F-26, F-27]
 27. **写真（P）**: 水中フレーム 19 枚（自然 8＋水槽 11）の体の湾曲は、ほぼ直線 10、軽い湾曲 8、強い湾曲 1。口が開いているのは 2/19。水槽で頭を 14〜55° 上げて斜め上へ泳ぐ例が 3 枚。[F-28, F-29]
 
+**C. 第3版で追加した所見（今回の検索 23 回による。PROXY を多く含む）**
+
+28. **Tu & Terzopoulos の意図生成器の既定は wander**: 恐れ F が閾値未満のとき H と L を計算し、大きい方が閾値を超えれば摂餌か交尾を起動。**3つの状態変数のどれも閾値を超えなければ wander を起動**する（B）。さらに**知覚フィルタ**があり、直近の行動に不要な感覚情報を減らす（B）。→ ヤマメでは「恐れ・空腹・縄張り刺激のどれも閾値以下なら、既定意図は定位（その場で待機）」とする案（設計案）。閾値の値は依然として未取得。[F-02]
+29. **ドリフト捕食モデルの検証結果**: Hughes ら (2003, CJFAS) は、最先端のドリフト捕食モデルが**総エネルギー獲得を約 2 倍過大評価**したと報告（AFS 2011 総説要旨、B。ブラウントラウト、ニュージーランド）。→ NEI 型スコアは**絶対値でなく定位点どうしの相対比較にだけ使う**（設計案）。迎撃距離・復帰時間の数値は今回も未取得。[F-07, F-36]
+30. **Utility AI の「モメンタムボーナス」**: 直前に選んだ決定の得点に倍率ボーナスを掛け、近い得点どうしの振動を抑える（Utility Worlds のミドルウェア文書、B/C）。別の解説は「新しい行動が現行を一定のマージン以上上回るまで切り替えない」ヒステリシスを述べる（C）。→ 意図保持の根拠が M から B/C に上がった。倍率・マージンの値は未取得。[F-08]
+31. **Reynolds (1999) の階層名と追加の操舵行動を確認**: 階層は action selection（戦略・目標・計画）／steering（経路決定）／locomotion（アニメーション・関節運動）。操舵には seek, flee, pursue, evade, wander, arrival, obstacle avoidance, containment に加え **wall following, path following, flow field following**、群れでは **leader following, unaligned collision avoidance** がある（red3d.com の検索要約、B）。→ ヤマメの定位に **flow field following（流れの場の追従）と arrival** を使う設計案に、概念上の裏付けが付いた。[F-05]
+32. **LOD AI の実装例（Unreal Engine Mass）**: LOD は High／Medium／Low／Off の4段階で、各段階に距離と最大エンティティ数を設定でき、**段階ごとに更新周期 tick rate（秒）を持つ**。視錐台の内外で別の距離を設定できる。画面外の個体は Off で完全停止するより、低コストの処理で状態だけ進める方がよい、という解説もある（Epic 公式ドキュメントの検索要約＋ブログ、B/C）。具体的な距離・周期の数値は無い。[F-10]
+33. **低速の定位・徘徊時の尾鰭打数（PROXY: ブラウントラウト）**: 湖で自由遊泳するブラウントラウトの超音波テレメトリで、尾鰭打数は**ほとんど 2.5 回/s を超えず（≒ 1 BL/s）、「好む」打数は 1.0〜2.0 回/s**（Ross, Watts & Young 1981, J. Fish Biol.、A・PROXY）。→ 定位・徘徊の体波周波数の既定は **1〜2.5 Hz（PROXY）**、高速側はヤマメ稚魚の 20.8〜39.1 Hz（F-13）、と二点が揃った。サイズ・水温・速度との式は要約に無い。大西洋サケの実験要約は**尾鰭打数が速度とともに線形に増え、相対尾鰭振幅はべき関数で増え、低速では振幅の調整の役割は小さい**と述べる（出典論文を特定できず、B）。[F-40]
+34. **捕食者モデルへの反応（PROXY: 大西洋サケ）**: 野外でカワアイサのモデルを見せると、サケ稚魚〜parr の**摂餌率は 25〜39% 低下し、移動率は 123〜386% 増加**。底質の粒径が即時反応の型に、体サイズが移動反応の強さに影響（Dionne & Dodson 2002、A・PROXY）。→ 警戒状態では迎撃頻度を下げ、定位点の変更（移動）を増やす方向づけ（設計案）。**復帰時間の数値は取得できなかった**。[F-41]
+35. **ドリフト捕食の中身（PROXY: アラスカのキングサーモン幼魚）**: 追った餌のうち **52% は捕獲後すぐ口から吐き出され、39% は目視で調べただけで捕獲せず、実際に摂取されたのは 9%**。非食物（デブリ）の取り扱いに採餌時間の 4〜25% を使う（B/A、要約）。→ 「口の開閉＝摂取」ではなく、**打撃 → 吐き出し／摂取**のサブ状態を持てる（設計案）。ヤマメの値は無い。[F-42]
+36. **旋回モデルの出典を補足**: Giant danio の曲率パルスを含む「パルス／C-start／波形オフセット」の比較ロボットの論文は、Howe & Astley (2021)「Comparing the turn performance of different motor control schemes in multilink fish-inspired robots」（Bioinspiration & Biomimetics、DOI 10.1088/1748-3190/abe7cc）と**推定**される（題名は検索結果、内容は未取得）。[F-31]
+37. **体波の位相速度**: ロボット魚（長さ 1.2 m）の実験で、横方向の運動は波長 λ と前から尾へ滑らかに増える振幅を持つ進行波であり、**抗力低減の必要条件は体波の位相速度が前進速度を上回ること**（Barrett ら 1999, J. Fluid Mech. 392:183–212、A・PROXY）。→ 体波の波速 = λ·f を前進速度より常に大きく取る（設計案。F-12 の λ ≈ 0.9 L と F-40 の f の組で成り立つかは、仕様書側で数値を入れて確かめること）。振幅包絡の具体式は今回も未確認。[F-43]
+
 ### 1.1 設計用の暫定値と状態（仕様書に転記する場合は「仮置き」「PROXY」を落とさないこと）
 
 | パラメータ | 暫定値 | 状態 | ランク |
@@ -54,7 +67,10 @@
 | エージェント層構造 | 知覚 → 意図選択（Utility 型）→ 局面の状態機械 → 操舵 → 体波（運動学） | Tu & Terzopoulos の4層、Reynolds の3レベルに倣う設計案 | B（構造）／設計案 |
 | 精神状態の変数 | 警戒（F 相当）・空腹（H 相当）・縄張り刺激（新設） | Tu & Terzopoulos は H・L・F。ヤマメ向けの置換は設計案 | B／設計案 |
 | 意図の優先順位 | 逃避 > 迎撃 > 縄張り防衛 > 移動 > 待機 | 恐れ判定が先、は Tu & Terzopoulos に倣う。順序の根拠はヤマメで無し | B（恐れ先行）／設計案 |
-| 意図の保持 | ヒステリシス（直前の選択に加点） | 必要性は推論。資料での確認は無い | M／推論 |
+| 既定の意図 | 全ての状態変数が閾値以下なら「定位（待機）」 | Tu & Terzopoulos は閾値以下で wander を起動。ヤマメへの置換は設計案 | B／設計案（第3版） |
+| 意図の保持 | モメンタムボーナス（直前の選択の得点に倍率）またはヒステリシス（新規が現行を一定マージン以上上回るまで切替えない） | 方式は Utility AI の実装文書に存在。倍率・マージンの値は無い | B/C（方式）／仮置き（値）（第3版） |
+| 定位・徘徊時の尾鰭周波数 | 1〜2.5 Hz（好む打数 1.0〜2.0 Hz、≒ 1 BL/s で 2.5 Hz） | ブラウントラウト（湖、PROXY）。サイズ・水温は要約に無い | A（PROXY）（第3版） |
+| 体波の位相速度 | λ·f > 前進速度 を保つ | ロボット魚の抗力低減の必要条件（PROXY） | A（PROXY）／設計案（第3版） |
 | 視野角 | 調整可能（既定の根拠なし）。参考: CG 300°、釣り解説 330° | ヤマメの実測は無い | B/C（参考値のみ） |
 | 側線の感知距離 | 調整可能。参考: 1〜2 体長 | PROXY（ゴールドフィッシュ等）。サケ科の実測は未取得 | A/B（PROXY） |
 | 反応距離 | ヤマメは無い。PROXY は 32.7〜187.1 cm | 魚種・光条件で桁が違う | C（継承） |
@@ -70,7 +86,7 @@
 | 定位点での待機割合 | 平均 81%（能動採餌 14%） | 出典論文の特定不能 | C（継承） |
 | 迎撃速度 | 最大持続遊泳速度 | coho／steelhead PROXY | A（継承） |
 | 警戒距離・再出現時間 | 無い。調整可能な値にして根拠なしと明記 | 同上 | — |
-| AI の LOD | 距離に応じて意思決定の更新頻度を下げる | 数値は無い | B/C |
+| AI の LOD | 距離に応じて意思決定の更新頻度を下げる。段階は High／Medium／Low／Off の4段階＋段階ごとの tick rate（UE Mass の構成例）。Off で完全停止するより低コストで状態を進める | 距離・周期の数値は無い | B/C |
 
 ---
 
@@ -97,10 +113,11 @@
   - **判定の順序**: まず恐れを誘う刺激を調べて F を更新する。**F が閾値未満なら H と L を計算**し、**大きい方が閾値を超えれば摂餌か交尾を起動**しうる。
   - **行動ルーチンは8種**: avoiding-static-obstacle、avoiding-fish、eating-food、mating、leaving、wandering、escaping、schooling。
   - 捕食者が現れると、魚はまず群れて身を守り、捕食者が近づくと散る、という挙動が出る。
-  - **未取得**: 閾値の値、障害物回避が全体で何番目か、意図を一定時間保持する仕組み（記憶に「持続の工夫があった」とあるが **M・確信度 低・未確認**）。
+  - **第3版で追加（検索 #A4 で確認、B）**: 「**恐れ・空腹・性衝動の3つの状態変数のどれも閾値を超えなければ wander 行動が起動**される」。また**知覚フィルタ**（直近の行動に不要な感覚情報を減らす）があり、意図生成器の入力は絞られる。
+  - **未取得**: 閾値の値、障害物回避が全体で何番目か、意図を一定時間保持する仕組み（記憶に「持続の工夫があった」とあるが **M・確信度 低・未確認**。#A4 の要約にも保持の記述は無い）。
 - 適用範囲: 計算機科学。ヤマメの行動に直接の根拠はない。
 - 出典: F-01 と同じ（https://education.siggraph.org/static/HyperGraph/animation/art_life/fish.htm 、https://www.cs.princeton.edu/courses/archive/spr15/cos426/papers/Tu94.pdf ）。
-- 証拠: [B] "At each time step ... the intention generator issues an intention based on the fish's habits, mental state, and incoming sensory information." ／ "a habit is a weighting parameter pattern which specifies how sensory stimuli relate to three state variables"
+- 証拠: [B] "At each time step ... the intention generator issues an intention based on the fish's habits, mental state, and incoming sensory information." ／ "a habit is a weighting parameter pattern which specifies how sensory stimuli relate to three state variables" ／（第3版）"If none of the three state variables is above their thresholds, then a wander behavior is initiated." ／ "A perceptual filter allows sensory information which is not vital to immediate behavioral needs to be reduced."（#A4 の要約。出典は上記の SIGGRAPH 教材ページと思われるが、どの文がどのページかは特定不能）
 - 実装への含意（設計案・推論）: ヤマメの意図候補は、**定位（待機）／流下餌の迎撃／縄張り防衛（追い払い）／逃避・隠れる／移動（定位点の変更）／水面への摂餌（ライズ）**程度に絞れる。状態変数は**警戒（F 相当）、空腹（H 相当）、縄張り刺激（新設。L は繁殖期以外は不要）**。個体差は習慣（臆病さ、探索度の重み）で与える。**恐れの判定を最初に行い、閾値以上なら他の欲求を計算しない**構造は人工魚に倣える。優先順位の細部（迎撃 > 縄張り防衛 > 移動 > 待機）はヤマメの資料が無く、調整可能にする。
 
 ### F-03 人工魚の運動系: 筋の位相差による遊泳、前部筋での旋回
@@ -121,10 +138,12 @@
 - 主張/値:
   - **Reynolds (1987)**「Flocks, Herds, and Schools: A Distributed Behavioral Model」（Computer Graphics 21(4)、1987年7月）: 「集団の運動は、自然の群れと同様の分散した行動モデルから生まれ、個体は自分の進路を自分で選ぶ。シミュレートした各個体は独立した行為者で、動的環境の局所知覚、シミュレートした物理法則、アニメーターが与えた行動の集合に従って航行する」。個体は boid と呼ばれ、**近傍の局所情報だけで群れる**。3つの局所規則の名称（衝突回避、速度合わせ、群れの中心化。一般に separation／alignment／cohesion と呼ぶ）は **M・確信度 高（検索要約は概念の一致までしか書かない）**。
   - **Reynolds (1999)**「Steering Behaviors For Autonomous Characters」（GDC 1999）: 自律キャラクターの動きを**3レベル**に分け、**中位の操舵行動**を中心に述べ、低位の locomotion（移動手段）に触れ、高位の目標設定・戦略に言及する。**操舵行動は移動手段から大きく独立**している。操舵の例は **seek と flee、pursue と evade、arrival、wander、obstacle avoidance と containment**。操舵行動の組合せで高位の目標を達成できる。
-  - 記憶（**M・確信度 高**）: 3レベルの名称は action selection／steering／locomotion。path following、flow-field following、wall following、leader following なども提示。乗り物は質点で最大速度・最大操舵力を持つ。
+  - **第3版で確認（検索 #A14、red3d.com の索引、B）**: 3レベルの名称は **action selection（戦略・目標・計画）／steering（経路決定）／locomotion（アニメーション・関節運動）**。操舵行動に **path following、flow field following、wall following**、群れの行動に **leader following、unaligned collision avoidance** がある。leader following は separation と arrival の組合せで、arrival の目標は先導者の少し後ろの点。以前は M だったが B に上げた。
+  - 記憶（**M・確信度 高、未確認のまま**）: 乗り物は質点で最大速度・最大操舵力を持つ。
 - 適用範囲: 計算機科学の群れ・操舵。魚種は限定されない。
 - 出典: https://www.cs.princeton.edu/courses/archive/spr01/cs598b/papers/reynolds87.pdf ／ https://my.eng.utah.edu/~cs6665/Reynolds-1987-FHS.pdf ／ https://www.cs.toronto.edu/~dt/siggraph97-course/cwr87 ／ `https://ics-websites.science.uu.nl/docs/vakken/mcrws/papers_new/Reynolds - 1999 - Steering behaviors for autonomous characters.pdf`（URL は検索結果のとおり、空白を含む）
-- 証拠: [B] "Each simulated bird is implemented as an independent actor that navigates according to its local perception of the dynamic environment" ／ "divides motion behavior into three levels" ／ [M] 規則名・レベル名
+- 証拠: [B] "Each simulated bird is implemented as an independent actor that navigates according to its local perception of the dynamic environment" ／ "divides motion behavior into three levels" ／（第3版）"hierarchy consisting of action selection (strategy, goals, planning), steering (path determination), and locomotion (animation, articulation)" ／ [M] boids の3規則名のみ
+  - 第3版の追加出典（#A14 に出たURL）: https://www.red3d.com/cwr/papers/1999/gdc99steer.pdf ／ https://www.red3d.com/cwr/steer/ ／ https://www.red3d.com/cwr/steer/PathFollow.html ／ https://www.red3d.com/cwr/steer/Wall.html ／ https://www.red3d.com/cwr/steer/LeaderFollow.html ／ https://www.red3d.com/cwr/steer/Unaligned.html ／ http://www.red3d.com/cwr/presentations/2016_UCSC_Steering_Behaviors.pdf
 - 実装への含意（設計案・推論）: ヤマメの定位は**「定位点への arrival／station-keeping」に流れの場の追従（flow-field following）を加えた形**で、障害物回避と containment（川幅・水深・水面）が基本。**cohesion／alignment は既定にせず**、幼魚の近距離の整列は水槽写真の観察 (F-28、P、偏りあり) の範囲で任意項目にする。縄張り性の根拠は F-23。
 
 ### F-06 inSTREAM（Railsback ら）の個体ベース・トラウトモデル
@@ -146,7 +165,7 @@
   - **Fausch (1984)**: サケ科の魚は、**純エネルギー摂取（NEI）が最大になるよう、流速の遅い定位点で、近くに餌を多く運ぶ速い流れがある位置を選ぶ**と提案した。理論は、人工・自然の水路での定位点の特徴の観察と、Chapman (1966) の概念モデルに基づく（AFS 2011 発表要旨）。
   - **Hughes & Dill (1990)**: 定位点の**遊泳コストと餌の捕獲成功**から、その位置のエネルギー的な損益を推定する。NEI は、**総摂取（模擬した餌捕獲）から、エネルギーコスト（基礎代謝、遊泳、消化）と損失（排糞、排泄）を引いたもの**。ベースにした魚は北極グレイリング（アラスカ内陸の亜寒帯山岳河川）。現在の生物エネルギー学ベースの生息場所選択・成長モデルの多くが、この「画期的な」モデルを土台にする。
   - NEI モデルは、反応距離、遊泳コスト、餌の捕獲成功の組み合わせが異なる。
-  - Hughes (1998) は個体スケールのモデルを生息場所選択（異なるスケール）へ拡張、Hughes ら (2003) はブラウントラウトの3次元映像でモデルを検証（題名の存在は確認済み、**結果の数値は取得していない**）。
+  - Hughes (1998) は個体スケールのモデルを生息場所選択（異なるスケール）へ拡張、Hughes ら (2003) はブラウントラウトの3次元映像でモデルを検証（題名の存在は確認済み）。**第3版で追加（#A2, #A13）**: 同検証で、最先端のドリフト捕食モデルは**総エネルギー獲得を約 2 倍過大評価**した（AFS 2011 の総説関連発表の要旨、B）。書誌は Hughes N.F., Hayes J.W., Shearer K.A., Young R.G. (2003) "Testing a model of drift-feeding using three-dimensional videography of wild brown trout, Salmo trutta, in a New Zealand river", Can. J. Fish. Aquat. Sci. 60:1462–1476（検索要約）。**捕獲距離・復帰時間・定位点流速の数値は今回も得られなかった**。Hughes & Dill (1990) の書誌（題名「Position choice by drift-feeding salmonids: model and test for Arctic grayling (Thymallus arcticus) in subarctic mountain streams, interior Alaska」、CJFAS）も #A1 で確認。モデルの捕獲部分は Holling の捕食モデルの要素を使い、**捕獲率を魚の大きさ・流速・水深・水温・流下量の関数**として決める（要約）。**反応距離・捕獲確率・遊泳コストの式は #A1 でも得られなかった**。
   - 記憶（**M・確信度 中**）: 獲得 = 餌濃度 × 捕獲面積（反応距離で決まる）× 流速 × 捕獲確率 × 餌エネルギー。捕獲確率は流速が速いほど下がる。迎撃できる範囲は最大持続遊泳速度、流速、餌の通過時間で上限が決まる。**式の具体形・係数は未取得**。
 - 適用範囲: 北極グレイリング、ブラウントラウト、ニジマス、サケ科全般。ヤマメへの適用は F-35（Urabe ら、北海道）が近いが、種の内訳は要約に無い。
 - 出典:
@@ -161,11 +180,12 @@
 - 主張/値:
   - **行動ツリー（BT）**: Damian Isla が GDC 2005「Handling complexity in the Halo 2 AI」で、ゲーム AI の作成法として初めて提示。**有限状態機械が主流だったゲーム AI の行き詰まりを打開**した。FSM より複雑な行動を設計者が簡単に制御できる。Halo 2 では**1キャラクターあたり約 50 の行動**を管理。GDC 2026 に「行動ツリーと自動計画の20周年」の Isla と Orkin の対談が予定される。
   - **Utility AI**: Dave Mark & Kevin Dill「Improving AI Decision Modeling Through Utility Theory」（GDC 2010 AI Summit）は、**応答曲線、母集団分布、重み付き乱数**で、エージェントの意思決定のモデル化を改善し、意思決定空間を広げ、端のケースを扱う。Dave Mark と ArenaNet の Mike Lewis は GDC 2015 で **IAUS（Infinite Axis Utility System）**を講演。IAUS はデータ駆動で自己完結的に設計。これらの講演で、Utility AI が FSM・BT・プランナーと並ぶ代表的アーキテクチャとして広く言及されるようになった。
-  - 記憶（**M**）: FSM は少数の局面に向くが状態が増えると遷移が爆発する。Utility は連続的な欲求の競合に向き、**ヒステリシス／モメンタム（直前の選択への加点）で振動を抑える**（講演資料での確認は無し）。GOAP は F.E.A.R.（Orkin 2006）。
+  - **第3版で追加（#A7）**: Utility AI では、得点が近い「決定-対象」の組が振動して、エージェントが決定と対象を絶えず変える問題がある。Utility Worlds（Unity/ECS 向けミドルウェア）の文書は、**Momentum Bonus**（直前に選ばれた組の得点に倍率を掛け、次回の決定で優位にして振動を抑える）を挙げる（B/C）。別の解説は**ヒステリシス**（新しい行動が現行を一定のマージン以上上回るまで切り替えない）を述べる（C）。**講演資料（Dill & Mark、Mark & Lewis）自体での確認は無い**。倍率・マージンの値は未取得。
+  - 記憶（**M**）: FSM は少数の局面に向くが状態が増えると遷移が爆発する。GOAP は F.E.A.R.（Orkin 2006）。
 - 適用範囲: ゲーム AI 一般（人型・動物を問わない）。魚固有の知見ではない。
-- 出典: https://en.wikipedia.org/wiki/Behavior_tree_(artificial_intelligence,_robotics_and_control) ／ https://schedule.gdconf.com/session/game-ai-fireside-chat-with-damian-isla-and-jeff-orkin-celebrating-20-years-of-behavior-trees-and-automated-planning-systems/917672 ／ https://gdcvault.com/play/1012410/Improving-AI-Decision-Modeling-Through ／ https://www.gamedeveloper.com/design/gdc-2010-day-1-2-ascending-the-ai-summit ／ https://en.wikipedia.org/wiki/Utility_system ／ https://www.gamedeveloper.com/programming/behavior-trees-for-ai-how-they-work
-- 証拠: [B] "Behavior trees were successfully used to manage on the order of 50 behaviors per character in Halo 2." ／ "response curves, population distributions, and weighted randoms"
-- 実装への含意（設計案・推論）: ヤマメは意図が少なく（F-02）、欲求が連続的に競合（空腹 vs 恐れ）するので、**Utility AI で意図を選び、局面の遂行（迎撃の接近→打撃→復帰、逃避の高速スタート→隠れ場）は小さな状態機械で実装**するのが素直。BT／GOAP は過剰。ヒステリシスが無いと意図が毎フレーム入れ替わって見えるので、必須とする（資料での確認は無く、推論）。
+- 出典: https://en.wikipedia.org/wiki/Behavior_tree_(artificial_intelligence,_robotics_and_control) ／ https://schedule.gdconf.com/session/game-ai-fireside-chat-with-damian-isla-and-jeff-orkin-celebrating-20-years-of-behavior-trees-and-automated-planning-systems/917672 ／ https://gdcvault.com/play/1012410/Improving-AI-Decision-Modeling-Through ／ https://www.gamedeveloper.com/design/gdc-2010-day-1-2-ascending-the-ai-summit ／ https://en.wikipedia.org/wiki/Utility_system ／ https://www.gamedeveloper.com/programming/behavior-trees-for-ai-how-they-work ／（第3版、#A7）https://uintel-ecs.utilityworlds.com/Documentation/UtilityIntelligence/Decisions/ ／ https://uintel-go.utilityworlds.com/Documentation/UtilityIntelligence/Decisions/ ／ https://uintel-go.utilityworlds.com/Documentation/TipsAndTricks/Decisions/ ／ https://www.gbgames.com/2017/02/13/book-review-behavioral-mathematics-for-game-ai-by-dave-mark/（書評。ヒステリシスの文の出所は特定不能）
+- 証拠: [B] "Behavior trees were successfully used to manage on the order of 50 behaviors per character in Halo 2." ／ "response curves, population distributions, and weighted randoms" ／（第3版）"The Momentum Bonus option ... adding a bonus to the last chosen decision-target pair in the next decision-making round ... eliminating oscillation."
+- 実装への含意（設計案・推論）: ヤマメは意図が少なく（F-02）、欲求が連続的に競合（空腹 vs 恐れ）するので、**Utility AI で意図を選び、局面の遂行（迎撃の接近→打撃→復帰、逃避の高速スタート→隠れ場）は小さな状態機械で実装**するのが素直。BT／GOAP は過剰。ヒステリシスが無いと意図が毎フレーム入れ替わって見えるので、必須とする（第3版: 実装方式としては Momentum Bonus／マージン付きの切替が Utility AI のミドルウェア文書に存在する（B/C）。ヤマメでの必要性そのものは推論）。
 
 ### F-09 ゲームの魚AI・水中生物AI・遊泳アニメの事例（Sea of Thieves、ABZU、Subnautica）
 - 主張/値:
@@ -185,8 +205,9 @@
 
 ### F-10 LOD AI（距離・可視性による思考頻度の削減）
 - 主張/値: 研究では行動のシミュレーションへ LOD を広げた用語として **「Simulation LOD」「LOD AI」**があり、「重要でない個体を見つけてその行動のシミュレーション品質を下げる」。実装の例: **各 AI が最も近いプレイヤーとの距離を計算し、距離に応じて更新頻度を決める**（近いほど高頻度、遠いほど低頻度、**最遠は「起床」トリガーに入るまで更新を止める**）。NPC の更新に tick rate（メインループの頻度）と need tick rate（欲求値の更新頻度）を別のパラメータにする例がある。LOD は離散（距離の閾値）でも連続でもよい。
-- 適用範囲: ゲームの群集・NPC 一般。魚固有ではない。具体的な頻度（Hz）・距離の数値は検索で得られなかった。
-- 出典（どの文がどの資料かは特定不能）: https://opus.bibliothek.uni-augsburg.de/opus4/files/46021/46021.pdf ／ https://github.com/IsaacMulcahy/RPG-AI-SYSTEM-WIKI/wiki/Performance-Tuning ／ https://aischool.lillytechsystems.com/game-ai/best-practices.html ／ https://discussions.unity.com/t/ai-in-a-open-world-co-op-game/563086
+- **第3版で追加（#A16、Epic 公式ドキュメントの検索要約、B）**: Unreal Engine の **Mass LOD は各エンティティの LOD を High／Medium／Low／Off の4値で出力**し、**各段階に有効距離と最大エンティティ数を設定**できる。視錐台の内か外か、距離で切られるか、見えているか、でエンティティをチャンクにまとめる。**Mass Simulation LOD は計算の可変周期更新を与える負荷分散の仕組みで、tick rate パラメータが「その LOD にいるときの更新周期（秒）」**を指定する（Variable Tick Parameters）。画面外の個体は、Off で完全停止するより、低コストの処理を回す低忠実度 LOD に割り当てる、という解説もある（ブログ、C）。
+- 適用範囲: ゲームの群集・NPC 一般。魚固有ではない。具体的な頻度（Hz）・距離の数値は検索で得られなかった（#A16 でも設定可能な枠組みの説明のみ）。
+- 出典（どの文がどの資料かは特定不能）: https://opus.bibliothek.uni-augsburg.de/opus4/files/46021/46021.pdf ／ https://github.com/IsaacMulcahy/RPG-AI-SYSTEM-WIKI/wiki/Performance-Tuning ／ https://aischool.lillytechsystems.com/game-ai/best-practices.html ／ https://discussions.unity.com/t/ai-in-a-open-world-co-op-game/563086 ／（第3版）https://dev.epicgames.com/documentation/en-us/unreal-engine/overview-of-mass-gameplay-in-unreal-engine ／ https://dev.epicgames.com/documentation/en-us/unreal-engine/python-api/class/MassSimulationVariableTickParameters ／ https://dev.epicgames.com/documentation/unreal-engine/API/Plugins/MassLOD/FMassSimulationVariableTickParam- ／ https://bugnet.io/blog/how-to-fix-unreal-mass-entity-agents-not-advancing-when-off-screen
 - 証拠: [B/C] "The AI's update frequency is based on this distance. If a player is very close, update frequently. If a player is far, update less frequently."
 - 実装への含意（設計案・推論）: ヤマメの個体数は少数（10〜数十）が想定されるので、LOD は**意思決定頻度（近景は毎フレーム、遠景は数フレームに1回）と、遠景の体波の簡略化（頂点シェーダ）**に限れば十分。具体的な頻度は資料が無く、調整値にする。
 
@@ -362,6 +383,7 @@
 - 適用範囲: Giant danio（PROXY）、ロボット制御。サケ科・ヤマメでの確認は無い。パルスの振幅・幅・速度の数値は要約に無い。
 - 出典: https://sicb.org/?p=39861 ／ https://sicb.org/?p=8043 ／ https://sicb.org/?p=11086 ／ https://sicb.org/abstracts/midlines-in-motion-connecting-midline-curvature-dynamics-to-heading-change-and-center-of-mass-deflection-in-fishes ／ https://meetings-archive.aps.org/mar/2019/v64/3 ／ https://blogs.uakron.edu/astleylab/wp-content/uploads/sites/1471/2021/04/Howe_2021_Bioinspir._Biomim._.pdf
 - 証拠: [B（学会要旨）] "an anterior to posterior propagating pulse of curvature has been observed along the midline of the body, regardless of experimental treatment or heading change magnitude."
+- 第3版の補足（#A6）: 上記の出典 Howe_2021_Bioinspir._Biomim._.pdf に当たる論文は、検索結果に出た Howe & Astley (2021) の2本のうち、**「Comparing the turn performance of different motor control schemes in multilink fish-inspired robots」**（Bioinspiration & Biomimetics、DOI https://doi.org/10.1088/1748-3190/abe7cc）と**推定**される（もう1本は「Testing the effects of body depth on fish maneuverability via robophysical models」、DOI https://doi.org/10.1088/1748-3190/ac33c1 で、体高の影響の論文）。**検索要約に曲率パルスの振幅・幅・速度の数値は無く、取得できなかった**。出典候補: https://meetings.aps.org/Meeting/MAR19/Session/V64.3 ／ https://sicb.org/?p=18174
 - 実装への含意（設計案）: 旋回の実装は (a) 曲率オフセット（単純）、(b) 曲率パルス（自然）の2案を切替可能にする。パルスの伝播速度は、筋の活性化から曲率が遅れるという F-17（Goldbogen ら）と整合する。**ヤマメの通常旋回のパラメータは無い**。
 
 ### F-32 頂点シェーダによる魚の群れアニメ（Godot 公式ドキュメント）
@@ -380,6 +402,7 @@
 
 ### F-34 Railsback & Harvey (2002) 生息場所選択規則の比較（期待成熟度）
 - 主張/値: ストリームのトラウトの個体ベースモデルで、**現実のトラウトの6つの生息場所選択パターンを再現できるかを、3つの選択目的で比較**した: 現在の成長率の最大化、現在の生存確率の最大化、**期待成熟度（EM）の最大化**。EM は、(1) 将来の期間にわたる飢餓などのリスクからの生存予測と、(2) その期間に繁殖サイズに到達する割合の**積**。結果: **成長最大化は3パターン、生存最大化は2パターン、EM 最大化は6パターン全てを再現**。水温や餌量の変化に伴う生息場所のシフトの2パターンは、現在の成長とリスクだけを考える目的では再現できず、EM で説明できた。
+- 第3版で追加（#A3, #A5）: (1) EM の定義は検索で再確認（"the product of (1) predicted survival of starvation and other mortality risks over a future time horizon, and (2) the fraction of reproductive size attained over the time horizon"）。**時間軸（日数）の値と生存の式は今回も得られなかった**。(2) 移動規則の論文「**Movement rules for individual-based models of stream fish**」（Railsback, Harvey, Lamberson, Duffy、Ecological Modelling、1999。巻頁は M のまま）の存在と要旨を確認（B）。要旨: 個体ベースモデルの移動規則は、個体がいつ今の場所を離れるか、どこへ動くかを決め、シミュレーションの正確さに重要。**多くの魚は物理・生物条件の変化に素早く動くので、規則は到達可能な最良の場所を素早く選ばせるべき**。「死亡リスク／摂餌量の比を最小化すると適応度が最大になる」という理論は、典型的な IBM の移動決定には当てはまらず、よくある状況で重大な誤りを生む。出典候補: https://catalog.comses.net/publications/70312 ／ https://research.fs.usda.gov/treesearch/7914 ／ https://archive.epa.gov/ncer/publications/web/pdf/lamberson.pdf ／ https://www.frontiersin.org/journals/ecology-and-evolution/articles/10.3389/fevo.2025.1494539/abstract（同主題の新しい論文。内容は未確認）。
 - 適用範囲: ストリームのトラウトの IBM（北米・欧州型のパラメータ）。ヤマメの検証は無い。
 - 出典: Railsback S.F., Harvey B.C. (2002) Ecology 83(7):1817–1830。https://catalog.comses.net/publications/9071 ／ https://research.fs.usda.gov/treesearch/7905
 - 証拠: [A] "maximizing EM reproduced all six patterns."
@@ -397,7 +420,8 @@
 - 適用範囲: ドリフト捕食モデル全般。どの仮定が非現実的かの個別内容は要約に無い。
 - 出典: https://afs.confex.com/afs/2011/webprogram/Paper4379.html ／ https://afs.confex.com/afs/2011/webprogram/Paper4381.html
 - 証拠: [B] "The model includes a number of unrealistic assumptions about prey detection and capture, and swimming costs."
-- 実装への含意: NEI の式を厳密に実装する必要は無く、**傾向（遅い定位点＋近傍の速い流れ＋被覆）を再現する簡略スコア**で十分、と位置づける（設計案）。
+- 第3版の追加（#A13）: 同じ総説関連発表の要旨が、**Hughes ら (2003, CJFAS) による最先端モデルの検証で、総エネルギー獲得が約 2 倍過大評価された**こと、それが「魚の成長と生息場所選択の正確な予測に重大な含意を持つ」ことを述べる（B）。出典候補: https://afs.confex.com/afs/2011/webprogram/Paper4378.html ／ https://afs.confex.com/afs/2011/webprogram/Paper4385.html ／ https://afs.confex.com/afs/2011/webprogram/Paper4379.html（どの文がどの要旨かは特定不能）。Paper4378 は「ドリフトするデブリがドリフト捕食魚と採餌モデルに与える影響」。
+- 実装への含意: NEI の式を厳密に実装する必要は無く、**傾向（遅い定位点＋近傍の速い流れ＋被覆）を再現する簡略スコア**で十分、と位置づける（設計案）。第3版: 絶対値は約 2 倍ずれうるので、**定位点どうしの相対順位づけにだけ使う**。
 
 ### F-37 感覚の簡略化に使える数値（視野・側線）
 - 主張/値:
@@ -406,6 +430,9 @@
 - 適用範囲: 視野＝釣り解説（C、種不明）。側線＝ゴールドフィッシュ等の実験・理論の要約（PROXY、A/B）。
 - 出典: https://www.flyfisherman.com/editorial/how-trout-see/454967 ／ https://www.hatchmag.com/articles/can-fish-see-directly-behind-them/7716172 （視野の出所の候補。どの文がどの資料かは特定不能）／ https://cob.silverchair.com/jeb/article-split/209/8/1548/16661/Source-location-encoding-in-the-fish-lateral-line ／ https://pub.uni-bielefeld.de/record/1998965 ／ https://archive.aps.org/mar/2010/v10/8 ／ https://pmc.ncbi.nlm.nih.gov/articles/PMC2854557
 - 証拠: [C]（視野）"Trout have a 330 degree horizontal vision beneath the water, leaving a 30 degree blind spot directly behind them." ／ [A/B・PROXY]（側線）"The operating range of the lateral line system has been reported to be one to two body lengths."
+- 第3版の追加（#A11, #A12。結果は乏しい）:
+  - **視力・視野の査読値は再び得られなかった**。出たのは、ゼブラフィッシュ幼生の視力、サケ科の網膜の錐体分布（Pacific salmonid の成熟個体、題名「Cone photoreceptor topography in the retina of sexually mature Pacific salmonid fishes」、https://pubmed.ncbi.nlm.nih.gov/9184985/ 、内容は未取得）、フライフィッシング解説（C）。解説サイトの記述として「光受容器は網膜の下部に密で、上方視の解像度が最大」「焦点が最もシャープなのは口の前 2〜3 インチ」「動きとコントラストの検出に優れる」があるが、**どのサイトのどの文か特定できず、査読根拠も無い（C）**。https://www.sexyloops.com/articles/whatsalmonidssee.shtml ／ https://www.seatrout-fishing.com/salmonid-vision.htm
+  - **側線**: 側線の管系は圧力勾配を検出し、感覚網の配置と相関する圧力変動がニジマスの高精度モデルで測られた（Ristroph, Liao & Zhang 2015, Phys. Rev. Lett. 114:018102、A・PROXY）。側線は流速（表在神経丘）と加速度（管器官）を検出し、rheotaxis・被食回避・摂餌・群れに関与する（一般的な要約、B）。**サケ科の側線の感知距離・閾値の数値は #A11 でも得られなかった**。Liao (2006) J. Exp. Biol. 209:4077「The role of the lateral line and vision on body …」（検索結果の題名は途中で切れている。続きは記憶で「…kinematics and hydrodynamic preference of rainbow trout in turbulent flow」、M）の全文 PDF の URL（https://cob.silverchair.com/jeb/article-pdf/209/20/4077/1257217/4077.pdf ）は索引にあるが、**要約に数値は出なかった**。https://link.aps.org/doi/10.1103/PhysRevLett.114.018102
 - 実装への含意（設計案）: 視覚＝水平 330°（死角 30°）を**仮の既定**として調整可能にし、「根拠は釣り解説のみ、種不明」と明記する。側線＝全方位・1〜2 体長の「動く物」検出（PROXY）。反応距離は F-21 の幅のまま調整可能。
 
 ### F-38 ドリフト捕食魚の3Dステレオ映像研究（存在の確認のみ）
@@ -420,7 +447,47 @@
 - 適用範囲: 魚一般（PROXY 以前の問題として、サケ科の数値が無い）。
 - 出典: https://blumsteinlab.eeb.ucla.edu/wp-content/uploads/sites/104/2019/09/Samia_etal_2019_FishFisheries.pdf （魚類 FID の総説の候補。内容は未確認）／ https://portalinvestigacion.uniovi.es/documentos/5e78c79f2999521b3d11d4b7
 - 証拠: [C] "individual fish size was strongly and positively correlated with FID."
+- 第3版の追加（#A22）: トラウトの FID を直接測った資料は**2回目の検索でも得られなかった**。出たのは、ブラウントラウト／ニジマスが導入された河川の**被食側の魚（darter 類）**の FID（トラウトがいる川で長い）と、サンゴ礁魚の FID の観察者・保護区の効果で、**サケ科の警戒距離ではない**（PROXY ですらない）。https://bearworks.missouristate.edu/articles-cnas/3287 ／ https://researchonline.jcu.edu.au/24518
 - 実装への含意: 警戒距離は「体長に比例させる」調整値にするのが妥当だが、**係数は根拠なし**。
+
+### Part D — 第3版で追加した所見（今回の検索 23 回）
+
+### F-40 低速の定位・徘徊時の尾鰭打数と、速度に対する尾鰭周波数・振幅（PROXY: ブラウントラウト、大西洋サケ）
+- 主張/値:
+  - **ブラウントラウト（湖＝loch に生息、自由遊泳、超音波テレメトリ）**: 低速の定位（station-holding）行動で、**尾鰭打数が 2.5 回/s（≒ 体長 1 倍/s の速度に相当）を超えることはほとんど無く、「好む」打数は 1.0〜2.0 回/s**。したがって酸素負債を生む速度でほとんど泳がない。
+  - **大西洋サケ（段階増速試験）の要約**: 尾鰭打数（TBF）は遊泳速度とともに**線形**に増える。**相対尾鰭振幅（TBA）は遊泳速度とともにべき関数で増え**、高速では振幅と周波数の両方を変え、**低速では振幅の調整は小さな役割**。ブラウントラウトの遊泳速度は尾鰭打数と相関し、その関係は体長に依存して、5 Hz を超える領域で独特の性質がある、という要約もある。
+- 適用範囲: ブラウントラウト（湖のローホ、PROXY）。大西洋サケ（PROXY）。体サイズ、水温、サンプル数は要約に無い。河川のヤマメ成魚の低速遊泳の実測ではない。
+- 出典: Ross L., Watts W., Young A.H. (1981) J. Fish Biol.「ultrasonic biotelemetry system for monitoring tail-beat rate from free-swimming loch-dwelling brown trout (Salmo trutta L.)」（題名は検索要約の記述。巻頁は未取得）。出典URLの候補（どの文がどの資料かは特定不能）: https://stir.ac.uk/research/hub/publication/653604 ／ https://link.springer.com/10.1186/s40317-023-00324-3 ／ https://imr.brage.unit.no/imr-xmlui/handle/11250/3087899?show=full ／ https://www.kmae-journal.org/articles/kmae/pdf/2002/04/kmae2002364s28.pdf ／ https://cob.silverchair.com/jeb/article-split/55/2/489/21667/The-Swimming-Energetics-of-TroutI-Thrust-and-Power
+- 証拠: [A（PROXY）] "tail beat rates rarely exceeded 2.5 tail-beats per second (TB/s) corresponding to a velocity of 1 body length per second ... 'preferred' tail-beat rate of 1.0-2.0 TB/s"（#A21）／ [B（出典特定不能）] "tail beat frequency (TBF) increased linearly with swimming speed ... relative tail beat amplitude increased with swimming speed as a power function"（#A18）
+- 実装への含意（設計案）: 定位・徘徊の体波周波数の既定は 1〜2.5 Hz（PROXY）。これとヤマメ稚魚の高速側 20.8〜39.1 Hz（F-13）の間は、**線形補間**で埋める案（f は速度に線形に増える、という要約に沿う）。**振幅は F-12 の「速度に依存しない尾端振幅」と食い違う**（§3-16）ので、尾端振幅は低速で小さく、速度とともに増える形を既定にし、F-12 の定数振幅は高速域の上限とする、という折衷を調整可能にする。成魚の係数は Gap。
+
+### F-41 捕食者モデルへの反応: 摂餌率の低下と移動率の増加（PROXY: 大西洋サケ）
+- 主張/値: 野外で**カワアイサ（common merganser）のモデル**に曝露する前後で、大西洋サケの(1)細かい底質の fry、(2)粗い底質の fry、(3)粗い底質の parr の活動を比べた。曝露後、**摂餌率は 25〜39% 低下し、移動率は 123〜386% 増加**。底質の粒径が即時の反応の型に、体サイズが移動反応の強さに影響した。
+- 適用範囲: 大西洋サケ fry／parr（PROXY）。野外の人工模型。**復帰時間（摂餌が元に戻るまでの時間）、逃避距離、隠れ場所に入る割合は要約に無く、未取得**。猛禽・鳥類捕食者の総説（USGS）、日本生態学会第65回大会の要旨（https://esj.ne.jp/meeting/abst/65/H02-01.html 、内容未確認）も出たが数値は無い。
+- 出典: Dionne M., Dodson J.J. (2002)（検索結果の PDF 名 Dionne.2002.pdf。誌名・巻頁は要約に無く未取得）。https://www.bio.ulaval.ca/labdodson/Papers%20Julian/Dionne.2002.pdf ／ https://www.usgs.gov/publications/a-review-factors-affecting-susceptibility-juvenile-salmonids-avian-predation
+- 証拠: [A（PROXY）] "the feeding rate of juvenile salmon decreased by 25–39% and the moving rate increased by 123–386%"（#A17）
+- 実装への含意（設計案）: 警戒状態（F-02 の F 相当が高い）では、迎撃（摂餌）の頻度を下げ、定位点の移動（徘徊）を増やす。比率は上記の幅を参考にできるが、ヤマメへの適用は検証されていない。
+
+### F-42 ドリフト捕食の打撃の内訳: 吐き出し・目視のみ・摂取（PROXY: アラスカのキングサーモン幼魚）
+- 主張/値: 追跡された餌候補のうち、**52% は捕獲されたがすぐ口から吐き出され、39% は目視で調べたが捕獲されず、摂取されたのは 9% のみ**。デブリ（非食物）の取り扱いに使った時間は、観察群で採餌時間全体の **4〜25%** で、採餌試行率とともに線形に増えた。採餌試行率と摂取率の相関は中程度（Kendall の τ = 0.55）。別研究（ブルックトラウトの当歳魚）は、捕獲された餌の **46% のみが摂取**されたと述べる。
+- 適用範囲: キングサーモン幼魚（アラスカの清澄な河川、PROXY）、ブルックトラウト当歳魚（PROXY）。ヤマメの値は無い。
+- 出典: 「Mechanisms of drift-feeding behavior in juvenile Chinook salmon and the role of inedible debris in a clear-water Alaskan stream」。https://www.usgs.gov/publications/mechanisms-drift-feeding-behavior-juvenile-chinook-salmon-and-role-inedible-debris-a ／ https://catalog.epscor.alaska.edu/es_AR/dataset/mechanisms-of-drift-feeding-behavior-in-juvenile-chinook-salmon-and-the-role-of-inedible-debris-in-a ／ https://pubs.usgs.gov/publication/70060527 ／ ブルックトラウトの記述の出典は特定不能（https://harkness.ca/PDFs/Contributions%201990s/Biro%20Ridgway%20McLaughlin%201996.pdf の可能性あり。未確認）。
+- 証拠: [B（要約）] "Among all potential food items fish pursued, 52% were captured and quickly expelled from the mouth, 39% were visually inspected but not captured, and only 9% were ingested."（#A23）
+- 実装への含意（設計案）: 迎撃のサブ状態に「接近 → 口を開く → 吐き出し／摂取 → 復帰」を持たせ、**口を開いても必ず摂取とは限らない**ことを表現できる。割合は PROXY で、ヤマメの既定にはしない。また、F-19 の「待機 81%：採餌 14%」は出典不明（C）なので、採餌の頻度の根拠は引き続き Gap。
+
+### F-43 体波の進行波の条件と、ロボット魚（Barrett ら 1999）
+- 主張/値: 長さ 1.2 m の魚型ロボット（柔軟な外皮、尾鰭付き、Re は最大 10^6、乱流促進あり）の実験で、**能動的に泳ぐ流線形の魚型体を推進する動力は、同じ速度で直線の剛体を曳く動力より有意に小さい**。**体の横方向の運動は、波長 λ と、前から尾へ滑らかに増える振幅を持つ進行波**。抗力低減の感度は、無次元周波数（ストローハル数）、体の振動振幅、波長 λ、尾鰭の迎え角と位相角に対して調べられた。**抗力低減の必要条件は、体波の位相速度が前進速度より大きいこと**。
+- 適用範囲: ロボット魚の実験（PROXY）。生きたヤマメの測定ではない。**振幅包絡の具体式は、今回の検索（#A9）でも要約に出ず、未確認**。
+- 出典: Barrett D.S. ほか (1999) "Drag reduction in fish-like locomotion", J. Fluid Mech. 392:183–212（検索要約は題名・誌名・巻頁と第一著者 D.S. Barrett を示す。共著者は検索結果に明示が無く、記憶では M.S. Triantafyllou ら＝M）。https://dspace.mit.edu/handle/1721.1/25618 ／ https://openaccess.library.uitm.edu.my/Record/mit_25618
+- 証拠: [A（PROXY）] "A necessary condition for drag reduction is that the phase speed of the body wave be greater than the forward speed." ／ "The lateral motion of the body is in the form of a travelling wave with wavelength lambda and varying amplitude along the length, smoothly increasing from the front to the tail end"
+- 実装への含意（設計案）: 体波の位相速度 = λ·f（λ ≈ 0.9 L、F-12）が前進速度を上回るように f と速度を対応づける。これは F-16（Kármán gait）の「体波の速度は流速より約 25% 速い」とも矛盾しない（ただし F-16 は後流中の特殊な歩容で、同列の比較ではない）。F-12 の「A(x)/L = 0.02 − 0.0825x + 0.1625x²」は、記憶（M）ではこの論文（RoboTuna）の包絡式と同形に見えるが、**今回の検索では確認できなかった**ので、出所は r08 の算出（サイス 3 点）のまま扱う。
+
+### F-44 ゲームの野生動物 AI の「欲求ベース」実装例（二次資料）
+- 主張/値: ゲーム開発者向けの二次資料や MOD ページは、動物 AI を**欲求（hunger、thirst、energy など）の変数で駆動する「needs-based AI」**で作る例を述べる。Unreal Engine の Ecosystem AI パックは、動物が採餌・狩り・睡眠・探索を行い、飲水・摂食・闘争／逃走の挙動を持つ。Subnautica 2 の MOD「Deep Ecosystem」は、「全ての生き物が hunger、energy、fear を持ち、飢えたら狩り、大きな捕食者から逃げ、疲れたら休む」と説明する。
+- 適用範囲: ファン MOD、マーケットプレイスの商品説明、フォーラム（C）。開発元の一次資料ではない。Tu & Terzopoulos の H・L・F に似た変数が現代のゲーム MOD でも使われる、という確認程度。
+- 出典: https://www.curseforge.com/subnautica-2/ue4ss-mods/deep-ecosystem ／ https://www.unrealengine.com/marketplace/en-US/product/ecosystem-ai ／ https://forum.terasology.org/threads/ideas-behind-implementing-animals-with-ai-in-terasology-part-1.1725/latest
+- 証拠: [C] "Every creature has its own hunger, energy and fear, and acts on these attributes by hunting when starving, fleeing from larger predators, and resting when exhausted."（#A15）
+- 実装への含意: 欲求ベース（連続値の状態変数＋閾値）という設計が、人工魚（F-02）とゲームの双方に見られる、という程度の裏付け。ヤマメの状態変数（警戒・空腹・縄張り刺激）にそのまま使える（設計案）。
 
 ---
 
@@ -441,41 +508,45 @@
 13. **群れの扱い**: Reynolds の boids は群れの結合・整列を前提にするが、ヤマメ幼魚は縄張り性で順位制（A）。水槽写真は同方向を向く個体が多いが、水槽は高密度（P）で根拠にならない（F-05, F-23, F-28）。ABZÛ の魚は群れ（ヤマメの参考にならない）。
 14. **日周**: 釣り情報、県資料、PROXY（冬は夜行性）、サクラマス稚魚の移動は、種・ステージ・季節が違い、同じ軸の比較ではない（F-24）。
 15. **書誌の信頼度**: Part A のうち検索で裏付けた書誌（Tu & Terzopoulos の SIGGRAPH '94、Reynolds 1987・1999、Railsback & Harvey 2002 の Ecology 83(7):1817–1830、Hughes & Dill 1990 の CJFAS 47:2039–2048、Dill & Mark GDC 2010、Isla GDC 2005）と、**検索で裏付けていない書誌**（Fausch 1984 の頁、Hughes 1998、Railsback ら 1999 の頁、Orkin 2006、Mark 2009 の書籍、Colledanchise & Ögren 2018）は区別すること。後者は F-07・F-08 で M と明示した。r08 で Bainbridge 1958 の頁が検索結果と食い違った前例がある。
+16. **（第3版）尾端振幅と速度**: F-12 はニジマスで「尾端振幅は遊泳速度に依存しない」（Webb ら 1984）と書くが、F-40 の大西洋サケの要約は「相対尾鰭振幅は速度とともにべき関数で増え、低速では振幅の調整は小さな役割」と書く。魚種（ニジマス／大西洋サケ）、サイズ範囲、速度域、振幅の定義が違い、**解消できない**。後者は出典論文を特定できていない（B）。ヤマメ稚魚は振幅/全長 ≈ 0.12 でほぼ一定（F-13、A）で、前者に近い。既定は「高速域で一定、低速域は小さく」の折衷を調整可能にする。
+17. **（第3版）NEI の評価**: Hughes ら (2003) は最先端のドリフト捕食モデルが総エネルギー獲得を約 2 倍過大評価したと述べる（F-07, F-36）。一方 Urabe ら (2010) は北海道の渓流でモデル由来の NEI が現存量と密接に関連したと述べる（F-35）。**前者は絶対値の誤差、後者は相対的な指標としての有効性**で、両立しうる。ただし種（ブラウントラウト／サケ科の混成）・場所・検証指標が違う。
+18. **（第3版）人工魚論文の著者順と巻頁**: #A20 の要約は「Xiaoyuan Tu, Demetri Terzopoulos, and Radek Grzeszczuk」の順で、題名を「Artificial Fishes: Autonomous Locomotion, Perception, Behavior, and Learning in a Simulated Physical World」（Artificial Life）と示す。私の記憶（M）は「Terzopoulos, Tu & Grzeszczuk (1994) Artificial Life 1(4):327–351」。**著者順と巻頁は未解決**。仕様書では題名と年のみを使う。
+19. **（第3版）Howe & Astley (2021) の2本**: 検索結果には同年 Bioinspiration & Biomimetics の2本（体高の影響／制御方式別の旋回性能の比較）が出た。パルス・C-start・波形オフセットの比較に当たるのは後者と**推定**したが、要約に内容が無く確定できない（F-31）。
 
 ---
 
 ## 4. 見つからなかったこと（Gaps）— 3Dモデル／アニメ／行動実装に必要だが確認できなかった事項
 
 **A. 本版の検索でも取得できなかった課題の中核**
-1. **Tu & Terzopoulos の閾値と数値**: 意図生成器の閾値の値、障害物回避を含む全体の優先順位、意図の保持の仕組み、バネ定数、運動制御器の筋の駆動式、視覚の「遮蔽」「注意の焦点」の実装（要約に無い。論文 PDF の URL は得たが本文は読めない）。
+1. **Tu & Terzopoulos の閾値と数値**: 意図生成器の閾値の値、障害物回避を含む全体の優先順位、意図の保持の仕組み、バネ定数、運動制御器の筋の駆動式、視覚の「遮蔽」「注意の焦点」の実装（要約に無い。論文 PDF の URL は得たが本文は読めない）。**第3版（#A4）で「全変数が閾値以下なら wander」「知覚フィルタ」は確認したが、閾値の値と意図の保持は依然として未取得。**
 2. **inSTREAM の数式と係数**: 期待成熟度の定義式（時間軸、生存の項）、反応距離・捕獲成功率・遊泳コストの式、移動半径のロジスティック関数の係数、個体の処理順（体長順か）。
-3. **ドリフト捕食モデルの式**（Hughes & Dill 1990 の捕獲確率・追跡距離・遊泳コストの式、Hughes ら 2003 の3次元映像の結果＝迎撃距離・復帰時間・定位点の流速）。要約に数値が無かった。
+3. **ドリフト捕食モデルの式**（Hughes & Dill 1990 の捕獲確率・追跡距離・遊泳コストの式、Hughes ら 2003 の3次元映像の結果＝迎撃距離・復帰時間・定位点の流速）。要約に数値が無かった。**第3版（#A1, #A2, #A13）でも式と迎撃距離・復帰時間は得られず、得たのは「総エネルギー獲得を約 2 倍過大評価」の一文のみ。** 式を本文で読むには、検索ではなく論文全文が必要。
 4. **ゲームの魚AI・遊泳アニメの技術的一次資料**: 初代 Subnautica（Unity）の creature AI、ABZÛ の魚シミュレーションの技術講演、Sea of Thieves の魚（サメ以外）のアニメ。Sea of Thieves のサメの AI の記事は得た（F-09）が、アニメ（体波）の実装は未取得。
-5. **Utility AI の実装細部**: ヒステリシス／モメンタムの標準的な実装、応答曲線の形の選び方。講演資料の本文は読めていない。
-6. **手続き的魚アニメの査読論文・数式**: Gates (2001) の数式（振幅包絡、旋回、急発進の角度）、曲率パルスの振幅・幅・速度の数値（ダニオ）、スプライン／ミッドラインの長さ保存の実装、Three.js での実例。
-7. **LOD AI の具体的な頻度・距離の数値**。
-8. **感覚モデルの数値**: サケ科の視野（各眼の水平・鉛直、両眼視野の重なり角）、視力、瞳孔動態、側線の感知距離と閾値。視野は釣り解説の 330°/30°（C）のみ。
-9. **FID（警戒距離）、逃避速度、再出現時間**（サケ科）。
+5. **Utility AI の実装細部**: 応答曲線の形の選び方、Momentum Bonus の倍率やヒステリシスのマージンの標準値。講演資料の本文は読めていない。（第3版: 方式の存在は #A7 で確認、B/C。値は未取得）
+6. **手続き的魚アニメの査読論文・数式**: Gates (2001) の数式（振幅包絡、旋回、急発進の角度）、曲率パルスの振幅・幅・速度の数値（ダニオ。第3版 #A6 でも得られず）、スプライン／ミッドラインの長さ保存の実装、**Three.js での実例（第3版 #A8 で検索したが、出たのは Godot の頂点シェーダ解説と Unity のボーン＋サイン波のみで、Three.js の実例は見つからなかった）**。RoboTuna 論文（Barrett ら 1999）の振幅包絡の具体式は #A9 でも要約に出ず未確認（F-43）。
+7. **LOD AI の具体的な頻度・距離の数値**。（第3版 #A16: UE Mass の LOD は4段階・段階ごとの距離と tick rate を設定できる枠組みの説明のみで、既定値は未取得）
+8. **感覚モデルの数値**: サケ科の視野（各眼の水平・鉛直、両眼視野の重なり角）、視力、瞳孔動態、側線の感知距離と閾値。視野は釣り解説の 330°/30°（C）のみ。（第3版 #A11, #A12 でも査読値は得られず）
+9. **FID（警戒距離）、逃避速度、再出現時間**（サケ科）。（第3版 #A17, #A22 でも得られず。#A17 は大西洋サケの摂餌率・移動率の変化率のみ、F-41）
 
 **B. 継承した Gap（先行ストリームから引き継ぎ、本ストリームでも未解決）**
 10. ヤマメ**成魚**（15〜30 cm）の遊泳キネマティクス（f–U 関係、尾端振幅、波長、波速）。ヤマメ稚魚の f–U 実験式の式そのもの（未取得）。
 11. 振幅包絡の係数（Di Santo ら 2021 の a0, a1, a2 の代表値、サケ科の値）、頭部のヨー振幅。
-12. 低速（定位・徘徊）時の尾鰭振動数・振幅、定位時の微小動作。
+12. 低速（定位・徘徊）時の尾鰭振動数・振幅、定位時の微小動作。（第3版: 振動数だけ PROXY の幅が得られた＝ブラウントラウト 1.0〜2.5 回/s、F-40。**ヤマメ**の値、振幅、胸鰭・体の微小動作は未取得）
 13. 反応距離・追跡距離・迎撃距離・復帰時間（ヤマメ）、ストライクの時間経過。
-14. 縄張り行動（追い払いの型、頻度、距離）、ライズ（水面摂餌）の運動学。
+14. 縄張り行動（追い払いの型、頻度、距離）、ライズ（水面摂餌）の運動学。（第3版: #A10（英語、サケ科幼魚の agonistic behavior）と #A19（日本語、サクラマス・ヤマメ幼魚）で検索したが、コホ幼魚の agonistic behavior を Strikes／Chases／Approaches に分けて数える方法と、「条件（紫外線曝露）によって strike・chase が増え、approach が減る傾向」「ブルックトラウトとコホは4種のうち最も攻撃的でも縄張り性でもなかった」程度の定性的記述のみ（出典は https://dspace.library.uvic.ca/items/92dbbc99-68e5-4bc5-92fe-2d200086b7b3 と https://www.sfu.ca/biology/faculty/dill/publications/f85-213.pdf が候補。どの文かは特定不能）で、頻度（回/分）・距離の数値は無く、日本語はサケマスの生態一般の資料ばかりだった。ライズの運動学は第3版では検索していない）
 15. 高速スタートの C 型／S 型の頻度、ヤマメ parr のサイズ依存。
 16. サケ科の自然な遊泳でのバースト＆コーストの頻度。
 17. 乱流・浅い礫底の渓流での定位保持（entraining／Kármán gait の渓流での出現）。
 
-**C. 再開時に使う検索クエリの候補（検索予算が戻った場合）**
-- `Hughes Dill 1990 reactive distance capture probability equation swimming cost foraging model "maximum capture distance"`
-- `Hughes Hayes Shearer Young 2003 brown trout 3D videography maximum pursuit distance return focal`
-- `Railsback "expected maturity" fitness function survival time horizon inSTREAM logistic movement radius parameter`
-- `Gates "Animation of Fish Swimming" amplitude envelope equation rapid start backbone angle`
-- `Howe 2021 Bioinspiration Biomimetics pulse turn model giant danio amplitude width velocity`
-- `GDC Vault Subnautica creature AI` ／ `ABZU shoaling simulation technical GPU boids Giant Squid`
-- `trout eye visual field binocular overlap degrees` ／ `salmonid lateral line detection distance body lengths`
-- `flight initiation distance salmonid stream human approach cm`
+**C. 再開時に使う検索クエリの候補（検索予算が戻った場合）。第3版で試して成果が無かったものは「試行済」と書いた。**
+- 試行済（式・数値は出ず）: Hughes & Dill 1990 の捕獲確率式（#A1）、Hughes ら 2003 の迎撃距離・復帰時間（#A2, #A13）、inSTREAM の EM の時間軸・移動半径係数（#A3）、Howe 2021 のパルスの数値（#A6）、Barrett 1999 の包絡式（#A9）、サケ科の視力・視野（#A12）、側線の感知距離（#A11）、サケ科の FID（#A22）、ヤマメ幼魚の攻撃頻度（#A19）。同じ語句で再検索しても出ない公算が高い。
+- 未試行（第3版では予算の都合で実行せず。第2版でも未実行または失敗）:
+  - `Gates "Animation of Fish Swimming" amplitude envelope equation rapid start backbone angle`（第2版 #12・#13 で要約のみ）
+  - `GDC Vault Subnautica creature AI` ／ `ABZU shoaling simulation technical GPU boids Giant Squid`（第2版 #15〜#18 で二次資料のみ）
+  - `trout surface feeding rise ascent angle speed strike kinematics video`（ライズの運動学）
+  - `Dionne Dodson 2002 simulated avian predator Atlantic salmon parr feeding resumed minutes after exposure`（復帰時間）
+  - `Ross Watts Young 1981 Journal of Fish Biology tail-beat rate brown trout loch telemetry swimming speed`（F-40 の出典特定と速度との関係式）
+  - `Railsback Harvey Jackson Lamberson 2009 inSTREAM reactive distance capture success equation maximum swimming speed formula`（モデル記述 PDF の本文を狙う）
 
 ---
 
