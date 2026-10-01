@@ -528,8 +528,8 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
           float kpN2 = kpNoise(kpQt) * 0.65 + kpNoise(kpQt * 2.3 + 1.7) * 0.35;
           float kpSF = (1.0 - smoothstep(0.3, 0.7, fwidth(kpQs.y))) * (uDetail < 1.5 ? 1.0 : 0.0);
           float kpAmt = uCapStreak * kpHoodM * kpSF;
-          kpCol = mix(kpCol, kpCol * 0.74, smoothstep(0.58, 0.78, kpN1) * kpAmt);
-          kpCol = mix(kpCol, mix(kpCol, uFringe, 0.55) * 1.05, smoothstep(0.62, 0.8, kpN2) * kpAmt * 0.55);
+          kpCol = mix(kpCol, kpCol * 0.74, smoothstep(0.55, 0.82, kpN1) * kpAmt);
+          kpCol = mix(kpCol, mix(kpCol, uFringe, 0.55) * 1.05, smoothstep(0.6, 0.85, kpN2) * kpAmt * 0.55);
         }
         // White breast, flanks and belly: the overlapping feather tips just show as faint soft shadows under each
         // tip, broken into patches (p006, p039, p053); none at a distance
