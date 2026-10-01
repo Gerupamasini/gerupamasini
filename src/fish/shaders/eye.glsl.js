@@ -73,7 +73,10 @@ vec3 eyeColor() {
   if (pb.z > 0.0) {
     vec3 V = normalize(vViewPosition);
     vec3 d = -vec3(dot(V, vEyeX), dot(V, vEyeY), dot(V, vEyeZ));
-    float k = 0.4 * (pb.z - IRIS_PLANE) / max(-d.z, 0.2);
+    // (weak: the fish iris lies just under a flat cornea with the lens
+    // bulging through the pupil; a deep plane slid the pupil toward an
+    // oblique viewer, so the eyes seemed to turn and look at the camera)
+    float k = 0.18 * (pb.z - IRIS_PLANE) / max(-d.z, 0.35);
     p = vec3(pb.xy + d.xy * k, pb.z);
   }
   float r = length(p.xy);           // sin(angle from optical axis)

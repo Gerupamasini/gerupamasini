@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { U } from '../render/SharedUniforms.js';
 import { head } from './morphology.js';
-import { HEAD_RELIEF } from './BodyGeometry.js';
+import { HEAD_RELIEF, eyeRest } from './BodyGeometry.js';
 import { rigVertexCommon, noiseCommon, underwaterCommon } from './shaders/common.glsl.js';
 import {
   bodyVertexPars,
@@ -29,6 +29,9 @@ import {
   finDebugHelpers,
 } from './shaders/fin.glsl.js';
 import { eyeVertexPars, eyeVertexMain, eyeFragmentPars, eyeFragmentNormal, eyeFragmentMaterial } from './shaders/eye.glsl.js';
+
+// rest frame of the left eyeball (orbital rim shading)
+const EYE = eyeRest(1);
 
 function mustReplace(src, find, repl, label) {
   if (!src.includes(find)) throw new Error(`[FishMaterials] shader chunk not found (${label}): ${find}`);
@@ -66,6 +69,12 @@ export function createBodyMaterial(layout, { lod = 0 } = {}) {
     MOUTH_Y: head.mouthY.toFixed(4),
     MOUTH_DROOP: head.mouthClosedDroop.toFixed(4),
     MOUTH_RW: head.mouthClosedRW.toFixed(4),
+    // rest frame of the left eye (the right one mirrors it in z), for the
+    // per-pixel orbital rim: a crisp edge the vertex mask cannot resolve
+    EYE_C: `vec3(${EYE.center.toArray().map((v) => v.toFixed(5)).join(', ')})`,
+    EYE_AX: `vec3(${EYE.axis.toArray().map((v) => v.toFixed(5)).join(', ')})`,
+    EYE_R: EYE.radius.toFixed(5),
+    EYE_VR: EYE.visR.toFixed(5),
   };
   m.onBeforeCompile = (shader) => {
     attachUniforms(shader, [
