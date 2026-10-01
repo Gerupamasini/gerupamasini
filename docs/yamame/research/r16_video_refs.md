@@ -15,7 +15,7 @@
 
 ## 1. 要約（仕様に直結する結論）
 
-1. **ヤマメ／サクラマス（アマゴ含む）の実写映像リンクは、今回の検索で27件見つかった**（YouTube 16、北海道新聞の動画ページ7、Getty Images のストック映像4）。うち**産卵(⑦)に直接関係する題名は YouTube 2件＋北海道新聞1件**、**ドリフト捕食(②)は YouTube 1件**、**サクラマスの遡上・ジャンプは YouTube 4件＋北海道新聞3件**。表は F-02〜F-05。映像の中身は未視聴で、長さ・画質は全て不明。[F-02、F-03、F-04、F-05]
+1. **ヤマメ／サクラマス（アマゴ含む）の実写映像リンクは、今回の検索で27件見つかった**（YouTube 16、北海道新聞の動画ページ7、Getty Images のストック映像4）。うち**産卵(⑦)に直接関係する題名は YouTube 2件＋北海道新聞1件**、**ドリフト捕食(②)は YouTube 1件**、**サクラマスの遡上・ジャンプは YouTube 4件＋北海道新聞3件**。表は F-02〜F-05。映像の中身は未視聴で、長さ・画質は全て不明（唯一、Getty の精進川の 1 本のみ「24 秒、1920×1080」と要約に明記）。本改訂でさらに YouTube 5、北海道新聞 3、Getty 2（PROXY）の候補を追加した（F-02、F-04、F-05）。[F-02、F-03、F-04、F-05]
 2. **最有力の「自然水中のヤマメ」候補（題名から）:** 「山女魚（ヤマメ）と岩魚が餌を捉える様子【癒しの風景・水中動画】」(RtT0lcszrrM)。要約は「大量に羽化したユスリカをヤマメとイワナが捕食」「ヤマメの捕食行動は目にも止まらぬ速さ」と述べる。②の見た目確認の第一候補。ただし**元位置への復帰を映しているかは不明**。[F-02]
 3. **産卵(⑦)のヤマメ映像の第一候補:** 「ヤマメ・アマゴの産卵・産卵床・水中映像・実写【癒しの風景】」(61bx-cF9e24)。要約は「秋にサンショウが赤くなるころ産卵が始まり、雄が成熟した雌を探し、雌が産卵床を作る」と説明。「ヤマメ産卵行動受精シーン（Short）」(eXZkJ7gmynA) は受精の場面の短編。**ヤマメとアマゴが混在する題名**（亜種差は §3）。[F-03]
 4. **北海道新聞の動画ページに、サクラマスの産卵・婚姻色の映像が複数ある**（札幌・精進川で産卵する約100匹、八雲町の川底の婚姻色の群れ、清里町「さくらの滝」のジャンプ）。報道機関の短い映像で、水中映像かどうかは題名から判断できる範囲のみ。[F-04]
@@ -70,6 +70,11 @@
 | 6 | 【水中映像】神の子池に遡上したサクラマスが居ました。 | https://www.youtube.com/watch?v=4f934pN3Fg4 | サクラマスの水中映像（北海道斜里郡の神の子池）。要約は婚姻色の個体と述べる | サクラマス |
 | 7 | 秋の渓流でサクラマスを追う！（八千代エンジニヤリング） | https://www.youtube.com/watch?v=Rb0iOQhEuoY | 題名のみ。秋の渓流のサクラマス。内容不明 | サクラマス |
 | 8 | 【渓流の女王ヤマメ】産卵場所を造り在来種の保護を 漁協と釣り人が取り組み 宮崎 NNNセレクション | https://www.youtube.com/watch?v=HuXnQRgGXLQ | 報道（NNN）。人工産卵場づくりの取り組み。⑦の背景資料 | ヤマメ |
+| 9 | 【本改訂】イワナのポイント20カ所以上の水中映像 #渓流釣り #trout #you渓 | https://www.youtube.com/watch?v=bKSORxfAGag | 題名のみ。①定位位置（ポイント）の参照候補。#2 と同じ「you渓」系 | イワナ（PROXY: Salvelinus 系） |
+| 10 | 【本改訂】生態系が狂った川に潜ると尺超えヤマメが無数に現れる！竹ヤスで何匹獲れる？【魚突き】 | https://www.youtube.com/watch?v=4s1CDOEFOaE | 素潜りの魚突きで、大型ヤマメの水中映像を含む（要約）。別の要約は「管理された釣り場であり自然の渓流ではない」と述べる（§3） | ヤマメ（大型） |
+| 11 | 【本改訂】【自然観察】アマゴ（渓流魚）の生息地 | https://www.youtube.com/watch?v=9xq3WhsjlQA | 題名のみ。生息地の観察 | アマゴ（PROXY: 亜種） |
+| 12 | 【本改訂】興津川支流、放流の尺アマゴ、サツキマス | https://www.youtube.com/watch?v=HtM8ZcWqsfQ | 題名のみ | アマゴ／サツキマス（PROXY: 亜種） |
+| 13 | 【本改訂】ヤマメの採卵始まる | https://www.youtube.com/watch?v=2Q-TLWqydOg | 題名から人為的な採卵。自然の行動資料ではない | ヤマメ（飼育） |
 
 - 適用範囲: ヤマメ／アマゴ／サクラマス。地域は北海道・静岡（興津川）・宮崎など。サイズ・水温は不明（#3 のみ水温4℃が題名にある）。
 - 出典: 上表のURL（検索結果）。
@@ -94,7 +99,7 @@
 
 | # | 題名 | URL | 内容（題名・要約から） |
 |---|---|---|---|
-| 1 | 住宅街に産卵サクラマス 札幌・精進川に100匹 | https://www.hokkaido-np.co.jp/movies/detail/5844802405001/ | 産卵(⑦)。札幌・精進川に約100匹（題名） |
+| 1 | 住宅街に産卵サクラマス 札幌・精進川に100匹 | https://www.hokkaido-np.co.jp/movies/detail/5844802405001/ | 産卵(⑦)。札幌・精進川に約100匹（題名）。【本改訂で追記】要約: 2018 年 10 月、札幌市豊平区中野島の住宅街を流れる精進川の滝付近。地元団体が 1998 年から稚魚を放流。道立の研究者は「北海道のサクラマスは 5 月ごろ遡上し、9 月下旬〜10 月上旬に一斉に産卵」と説明（B）。長さは不明 |
 | 2 | 川底に婚姻色の群れ 八雲でサクラマス遡上 | https://www.hokkaido-np.co.jp/movies/detail/5293184179001/ | 婚姻色の群れが川底に（題名）。③遊泳、⑦の前段 |
 | 3 | サクラマス 産卵場所目指し滝にジャンプ 清里 | https://www.hokkaido-np.co.jp/movies/detail/6310054825112/ | 清里町「さくらの滝」でのジャンプ（高速遊泳・ジャンプ） |
 | 4 | サクラマス懸命の跳躍 清里・さくらの滝 | https://www.hokkaido-np.co.jp/movies/detail/6044663246001/ | 同上 |
@@ -105,6 +110,9 @@
 | 9 | 跳ぶ、命つぐ 北海道・斜里川、サクラマスの遡上 | https://www.youtube.com/watch?v=chZ-uHMchZU | 同上 |
 | 10 | 圧巻！サクラマスの滝登り 産卵のため川を遡上 観光客「自分も頑張ろうと思った」 北海道清里町 | https://www.youtube.com/watch?v=DVwBy37BfaU | 滝登り（ジャンプ） |
 | 11 | 仙台市・広瀬川 「サクラマスの遡上」 2016年 7月 | https://www.youtube.com/watch?v=ztEqIJj9lmE | 遡上（2016年7月） |
+| 12 | 【本改訂】**旭川市住宅街の小さな川で サクラマスとヤマメが繁殖行動** | https://www.hokkaido-np.co.jp/movies/detail/5293433246001/ | ⑦。要約: 2014 年 10 月の報道。旭川市中心部に隣接する住宅街の小川でサクラマスが繁殖行動。**降海しないヤマメ（北海道名ヤマベ）が、産卵に便乗して子孫を残そうと必死にまとわりつく姿**も見られた。観察者は日本釣振興会の山田直佳氏。ヤマメとサクラマスが同じ場面に出る数少ない候補（未視聴）。F-21 の sneaking の記述と対応 |
+| 13 | 【本改訂】サクラマス 産卵場所目指し滝を越え懸命にジャンプ | https://www.hokkaido-np.co.jp/movies/detail/6330122736112/ | ③ジャンプ（題名のみ） |
+| 14 | 【本改訂】海で成長 川に凱旋 サクラマス<おたる水族館楽しい仲間たち>30 | https://www.hokkaido-np.co.jp/movies/detail/5447533433001/ | おたる水族館のサクラマス紹介（題名のみ。水槽映像と推測） |
 
 - 適用範囲: サクラマス（降海型）。ヤマメ河川型ではない（PROXY: 同種降海型）。体は河川型より大きい（M。数値は未取得）。
 - 出典: 上表URL。
@@ -115,10 +123,12 @@
 
 | # | 題名 | URL | 内容 |
 |---|---|---|---|
-| 1 | Underwater shots: Cherry salmon, Oncorhynchus masou in the Shojin River - stock video | https://www.gettyimages.ca/detail/video/cherry-salmon-oncorhynchus-masou-in-the-shojin-stock-video-footage/689859998 | 精進川の水中。要約: 婚姻期のため "cherry-red" の外観 |
+| 1 | Underwater shots: Cherry salmon, Oncorhynchus masou in the Shojin River - stock video | https://www.gettyimages.ca/detail/video/cherry-salmon-oncorhynchus-masou-in-the-shojin-stock-video-footage/689859998 | 精進川の水中。要約: 婚姻期のため "cherry-red" の外観。【本改訂で追記】要約: **長さ 24 秒、1920×1080 の HD、NHK Video Bank Creative collection 由来**（本書で長さが要約に明記された唯一のヤマメ／サクラマス映像） |
 | 2 | Several cherry salmon, Oncorhynchus masou in the Shojin River - stock video | https://www.gettyimages.ca/detail/video/several-cherry-salmon-oncorhynchus-masou-in-the-stock-video-footage/689857874 | 複数個体（題名） |
 | 3 | Cherry Trouts Swimming Up Waterfall, Hokkaido, Japan - HD stock video | https://www.gettyimages.com/detail/video/cherry-trouts-swimming-up-waterfall-hokkaido-japan-stock-video-footage/1413541326 | さくらの滝（3.7 m と要約）を登る |
 | 4 | 同題名 | https://www.gettyimages.com/detail/video/cherry-trouts-swimming-up-waterfall-hokkaido-japan-stock-video-footage/1413542678 | 同上（別クリップ） |
+| 5 | 【本改訂】Underwater, Upstream Migration Of Kokanee Salmon, Nikko, Japan - HD stock video（PROXY・優先度低） | https://www.gettyimages.ae/detail/video/underwater-upstream-migration-of-kokanee-salmon-stock-video-footage/1174034482 | 日光のコカニー（O. nerka の陸封型と思われる。M）の遡上水中映像。ヤマメではない | PROXY: Oncorhynchus nerka |
+| 6 | 【本改訂】Trout Battling Strong Currents in Foaming Waters - 4K stock video（種不明・優先度低） | https://www.gettyimages.ae/detail/video/trout-battling-strong-currents-in-foaming-waters-stock-footage/2167562846 | 要約: ドローン撮影で、トラウトが強い流れを遡上し約 30 cm の段差を越えようとする。種・場所は要約になし | 種不明 |
 
 - 適用範囲: サクラマス（降海型、遡上期・婚姻色）。精進川（札幌）、斜里川（北海道）。
 - 出典: 上表URL。
@@ -147,6 +157,10 @@
 | 16 | Underwater Rainbow Trout Feeding | https://www.youtube.com/watch?v=Z2rnHvVErg4 | 要約: **餌を与えられるニジマスを水中撮影**（給餌。自然のドリフト捕食ではない） | PROXY: ニジマス（給餌下） |
 | 17 | Nikon p100 240 fps in slow motion rainbow trout breaching water | https://www.youtube.com/watch?v=UKriQlwkjxw | 240 fps のスロー。ニジマスの水面跳躍（題名）。水中の捕食ではない | PROXY: ニジマス |
 | 18 | This AMAZING Rainbow Trout SLOW MOTION is a Fly Fishing Catch & Release Masterpiece! | https://www.youtube.com/watch?v=yFaMDKLlvMs | 釣り（スロー映像）。行動資料としては限定的 | PROXY: ニジマス |
+| 19 | 【本改訂】Wikimedia Commons「Rainbow trout underwater (Oncorhynchus mykiss).webm」 | https://commons.wikimedia.org/wiki/File:Rainbow_trout_underwater_(Oncorhynchus_mykiss).webm | 要約: **16 秒、1920×1080、68.84 MB**。ニジマスの群れが水中を泳ぐ。2014-09-15 アップロード、"Own work"、投稿者 Liquid Art。ライセンスは要約になく不明（§3、F-11） | PROXY: ニジマス |
+| 20 | 【本改訂】Adobe Stock「rainbow trout swimming underwater (Oncorhynchus mykiss)…snorkeling steelhead trout」 | https://stock.adobe.com/video/rainbow-trout-swimming-underwater-oncorhynchus-mykiss-a-big-group-of-trouts-underwater-river-habitat-freshwater-fish-swimming-in-the-clean-river-diving-in-freshwater-snorkeling-steelhead-trout/483073190 | ニジマスの群れが河川を泳ぐ水中ストック（題名）。有償 | PROXY: ニジマス |
+| 21 | 【本改訂】The Underwater World of Trout（Wendell "Ozzie" Ozefovich 制作、DVD 全 3 巻） | https://search.centrecountylibrary.org/Record/398197 ／ https://search.centrecountylibrary.org/Record/398198 ／ https://globalflyfisher.com/node/39695 ／ https://midcurrent.com/?p=35458 | 要約: **Vol.1 Discovery**＝行動、摂餌パターン、産卵、必要な河川条件の入門。**Vol.2 Feeding Lies**＝水面上と水中の分割画面で、エマージャーを食う、ダンを啜る、ニンフで傾く、スキッター中のカディスに飛びつく等のライズを撮影。**Vol.3 Trout Vision & Refraction**＝トラウトの窓（Snell's window）と屈折。「水槽ではなく、釣り人が通う河川の実際のトラウト」と紹介。ブラウンとニジマスなどが映る。商用 DVD。F-06 #1〜#3 の YouTube は同シリーズの紹介と思われる（要確認） | PROXY: ブラウン、ニジマスほか（北米と推測。M） |
+| 22 | 【本改訂】Troutnut「Some animations on how fish react to prey」 | https://www.troutnut.com/topic/9060/Some-animations-on-how-fish-react-to-prey | 要約: ドリフト捕食のトラウトが獲物をどこで検出するかの **3D アニメーション動画**が作られている（データから、水流速とドリフト量でエネルギー収支がどう変わるかをモデル化）。**アニメーション動画の所在の手がかり（C）。作成者・内容・長さは不明** | PROXY: トラウト一般 |
 
 - 適用範囲: PROXY（上表の種）。撮影地・サイズ・水温・フレームレートは、題名・要約に無いものは不明。ヤマメの日本の渓流とは、水温・流速・魚体・餌生物が異なる。
 - 出典: 上表URL。
@@ -198,6 +212,7 @@
   - Piccolo ら 2008（coho、steelhead 水槽、流速 0.29〜0.61 m/s。捕獲確率と検出距離は流速の増加で低下。迎撃速度は流速・種に影響されず、全流速で予測最大持続遊泳速度で迎撃）。詳細は r09。
   - Chinook 幼魚のドリフト捕食（アラスカ、clear-water。食べられない漂流物の役割）。
   - **今回追加（要約のみ、URLの対応は特定不能）:** O. mykiss は他のサケ科より流速の速い場所でドリフト捕食する傾向があり、3D videogrammetry と無脊椎動物のドリフト測定、河川水理を組み合わせた研究がある（UC Natural Reserve のデータベースの一覧 https://angelo.ucnature.org/research/pub-database/?tgid=112 に出た要約）。
+  - **【本改訂で追記】野外ビデオ研究の記述（A、要約）:** (a) カリフォルニアの河川で、O. mykiss の採餌モードと移動を、3D ビデオグラメトリー、無脊椎動物ドリフト量、河川水理から調べた研究（題名 "Foraging modes and movements of Oncorhynchus mykiss as flow and invertebrate drift recede in a California stream"）。現場のステレオ映像から魚と摂餌イベントの 3 次元位置を手作業で取り出す。採餌移動の頻度は、獲物の濃度と流速が下がるにつれて増えた。(b) Yellowstone cutthroat trout を防水ビデオカメラで観察した研究。獲物は主に水柱と水面から取り、日中のドリフト捕食が中心。夜間や河床からの採餌も観察され、最大でエネルギー摂取の 30% を占めた。採餌率は採餌場所・昼夜・月と最も関係があった。(c) ドリフト捕食の型: 定位置を保ち、前後に飛び出して餌を迎撃する。URL（どの文がどれかは特定不能）: https://par.nsf.gov/biblio/10401631-foraging-modes-movements-oncorhynchus-mykiss-flow-invertebrate-drift-recede-california-stream ／ https://par.nsf.gov/servlets/purl/10401633 ／ https://par.nsf.gov/servlets/purl/10336240 ／ https://par.nsf.gov/biblio/10336240。定位点から出て戻る軌跡の実測値（距離・時間・速度）はどの要約にもなかった。
   - **復帰（元位置に戻る）:** 検索要約（釣り系の解説）に「活発に摂餌する魚は、定位点から出てフライや餌を取り、その後定位点に流れて戻ることが多い」とあるが、**出典URLは特定不能（C）**。ヤマメの復帰距離・時間の実測値は未取得。
 - 適用範囲: PROXY: ブラウントラウト（野外）、coho／steelhead（水槽）、Chinook（野外）、ニジマス（野外）。
 - 出典: 
@@ -217,6 +232,10 @@
 | Vimeo 243466993 | 公開ページのみ | 投稿者、許諾 |
 | 学術論文 | 2024年 JEB 胸鰭論文は CC BY（要約に明記）。他の JEB 論文は、年代により扱いが異なる（M。未確認） | 付属動画の有無と条件 |
 | Zenodo データ | データセットのレコード（killifish、zebrafish）。ライセンスはレコードページで確認が必要 | 映像ファイルの有無 |
+| 【本改訂】Wikimedia Commons ニジマス映像（F-06 #19） | 投稿者 Liquid Art の "Own work"、2014-09-15。16 秒、1920×1080 | ライセンスの種類（Commons のファイルはファイルページに明記されるのが通例。M）。**要約には出ておらず不明** |
+| 【本改訂】Lauder 研（ハーバード）の動画（F-20） | 圧縮版のダウンロードと YouTube チャンネルでの視聴の両方を案内（要約） | 利用条件（再配布・引用の可否）。研究室のページで要確認 |
+| 【本改訂】The Underwater World of Trout（DVD、F-06 #21） | 有償の DVD（全 3 巻）として販売・図書館蔵書 | 再利用は不可と考える（M）。視聴して参照するのみ |
+| 【本改訂】JEB の補足動画（movie.biologists.com） | 論文ごとに DOI をキーにした置き場が存在する | トラウトの補足動画自体を未確認。各動画の条件も不明 |
 
 - 適用範囲: 全体。
 - 出典: F-02〜F-09 のURL。
@@ -254,7 +273,7 @@
 - 証拠: [A（転載）] 例: "The duration of the primary acceleration stages increased with size from 0.07 s ... overall radius of 0.17 L."（Webb 1976）。Harper & Blake は加速度計と高速度シネの併用。
 
 ### F-14 摂餌ストライクの高速度映像: サケ科の舌咬み装置の抄録と攻撃中の測定（PROXY。転載）
-- 主張/値: ニジマス（O. mykiss）を含むサケ科 3 種を 250 Hz の高速度映像でコマ送り解析し、神経頭蓋と舌骨の動きが種間の差を最もよく説明した、という学会抄録（Sanford、Hofstra Univ.）。ヤマメが対象か不明。開口量・時間の数値は要約に無い。Webb 1983: ニジマス 25.7 cm が活餌ミノーを攻撃するときの速度・加速度・旋回半径を測定。**ドリフト餌へのストライク（開口・吸引・鰓蓋の動き）の実測値・映像は未取得。**
+- 主張/値: ニジマス（O. mykiss）を含むサケ科 3 種を 250 Hz の高速度映像でコマ送り解析し、神経頭蓋と舌骨の動きが種間の差を最もよく説明した、という学会抄録（Sanford、Hofstra Univ.）。**【本改訂で解消】3 種は rainbow trout（O. mykiss）、brown trout（Salmo trutta）、brook trout（Salvelinus fontinalis）で、ヤマメ（サクラマス）は含まれない**（本実行の検索要約: "a study of three species of salmonids (rainbow trout Oncorhynchus mykiss, brown trout Salmo trutta, and brook trout Salvelinus fontinalis) used high-speed video (250 Hz) and frame-by-frame analysis"。URL https://sicb.org/?p=35129）。開口量・時間の数値は要約に無い。Webb 1983: ニジマス 25.7 cm が活餌ミノーを攻撃するときの速度・加速度・旋回半径を測定。**ドリフト餌へのストライク（開口・吸引・鰓蓋の動き）の実測値・映像は未取得。**
 - 適用範囲: PROXY: ニジマスを含むサケ科 3 種（水槽）。
 - 出典: https://sicb.org/?p=35129 ／ https://sicb.org/abstracts/evaluating-the-importance-of-new-structures-versus-new-muscle-activity-patterns-in-the-evolution-of-a-novel-feeding-mechanism-in-salmonid-fishes ／ F-13 の Webb (1983)
 - 証拠: [B（転載）] 要約抜粋: "well-developed teeth on the dorsal surface of the anterior hyoid region and opposing teeth on the roof of the mouth"。
@@ -299,7 +318,7 @@
   - **場所の案内（B）:** 山梨県立富士湧水の里水族館（「森の中の水族館。」）は、川の源流から中流の環境を再現し、上流にヤマメ・アマゴを展示。「季節によってなわばり行動や産卵行動などを観察できる」と案内（要約）。https://www.yamanashi-kankou.jp/special/morinosuizoku_2021.html 。映像ではなく展示。
   - **産卵（M＋検索）:** 秋の産卵期に、雌が産卵床を作り、雄が成熟した雌を探して寄り添う（F-03 の要約）。尾で礫を掘る動作、体を震わせる動作、放卵・放精の姿勢が見どころになりうるが、**ヤマメ・サクラマスの具体的な時間・回数・婚姻色の数値は未取得**。河川型の婚姻色は r03 を参照。
 - 適用範囲: M／B／C。ヤマメ河川型に限定した定量は無い。
-- 出典: F-03、F-07、上記URL。
+- 出典: F-03、F-07、上記URL。【本改訂】縄張り行動の文献記述は F-22、産卵行動の文献記述（掘る・quivering・sneaking・probing）は F-21 に追加した。この F-18 の「M」の記述のうち、誇示・突進・追跡・咬みつきと、掘る動作・体を震わせる動作は、F-21／F-22 の要約で A として裏付けられた（PROXY を含む）。旋回・放卵放精の姿勢などは M のまま。
 - 証拠: [M／B／C]
 
 ### F-19 ヤマメの産卵環境（映像の背景が妥当かの確認用。文献ベース）
@@ -307,6 +326,57 @@
 - 適用範囲: ヤマメ・サクラマス（日本の河川）。地域差あり。n・水温は要約に無い。
 - 出典（検索で出たURL）: https://agriknowledge.affrc.go.jp/RN/2010927243.pdf ／ https://agriknowledge.affrc.go.jp/RN/2010921859.pdf ／ https://www.hro.or.jp/upload/36117/o7u1kr00000008vd.pdf ／ https://www.pref.hokkaido.lg.jp/sr/gid/fis023.html ／ https://www.pref.yamanashi.jp/documents/65434/jiho42_p50-51.pdf ／ https://catalog.lib.kyushu-u.ac.jp/opac_download_md/10879/p073.pdf ／ https://www.env.go.jp/council/content/i_07/900428219.pdf ／ https://www.aomori-itc.or.jp/_files/00231541/148-150.pdf ／ https://www.pref.shimane.lg.jp/industry/suisan/shinkou/kawa_mizuumi/seibutu/yamame.html ／ https://www200.pref.yamagata.jp/documents/6273/sakuramasunoseitai.pdf
 - 証拠: [B（公的機関資料の要約。原文で数値を確認していないため A にはしない）] 要約抜粋: "flow speeds of 10-35cm/s and gravelly river beds with stones of 0.5-5.0cm diameter"。
+
+### F-20 【本改訂で追加】PROXY: 研究室の動画ページと論文付属動画の所在（ニジマスの遊泳・定位）
+- 主張/値:
+  - **Lauder 研（ハーバード大）の Research Videos「Trout Swimming (Including Kármán gait)」**: 「Trout Free Stream Swimming」「Trout Kármán gait Locomotion」「Trout Kármán gait Multiple Fish」などの動画。圧縮版のダウンロード、または Lauder Lab の YouTube チャンネルで視聴できる（要約）。撮影は 1000 fps、1024×1024（要約）。ニジマスの自由流遊泳（①③）と障害物後流での定位（Kármán gait）の参照として、本書で最も有望な学術映像。**利用条件は要約になく不明**（F-11）。
+  - **JEB の補足動画置き場**: movie.biologists.com/video/<DOI>/video-N の形式で補足動画（Movie 1 など）が置かれている。検索で出たのは別種の動画（ヘテロポッドの遊泳 600 fps、ムツゴロウ類の捕食 500 Hz、跳躍 900 fps など。DOI との対応は特定不能）で、**トラウトの補足動画は確認できなかった**（先行版の「付属動画 URL 0 件」を追認）。形式の例: https://movie.biologists.com/video/10.1242/jeb.192062/video-1 ／ https://movie.biologists.com/video/10.1242/jeb.145623/video-1 ／ https://movie.biologists.com/video/10.1242/jeb.186270/video-1 ／ https://movie.biologists.com/video/10.1242/jeb.220830/video-2 。
+  - **ニジマスの胸鰭・定位（2024、JEB 227）**: 高速度映像と筋電図（EMG）を同時記録。Phantom Miro LAB 340 で **150 fps**。D 断面円柱の後流で定位するニジマスの胸鰭に、制動（braking）時と Kármán gait 時の 2 種類の使い方があった。制動の全イベントで外転筋と内転筋の両方を動員して胸鰭を能動的に伸ばした。**Kármán gait 時の胸鰭伸展の 50% 超は筋活動なしで起こった**（要約）。
+  - **ニジマスの円柱後流の遊泳運動学（付属動画の有無は要約になし）**: 3×5 円柱アレイ後流（JEB 227(23)）、タンデム円柱（Refuging、JEB 219）、渦列で揺れる定位の慣性機構（PMC）、バースト＆コースト遊泳の運動学（SICB 抄録・題名のみ）。
+  - **映像紹介の記事（題名のみ）**: UVA（バージニア大）の "video techniques reveal trout's energy-saving secret"、UC Davis の魚類研究室ブログ（先行版 F-08 に既出）。
+- 適用範囲: PROXY: ニジマス（水槽・遊泳水路）。自然河川のヤマメではない。
+- 出典:
+  - https://sites.harvard.edu/glauder/research-videos/trout-swimming-including-karman-gait/ ／ https://sites.harvard.edu/glauder/research-videos/ ／ https://sites.harvard.edu/glauder/?p=1483
+  - https://journals.biologists.com/jeb/article/227/5/jeb246275/344160/Kinematics-and-muscle-activity-of-pectoral-fins-in ／ https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10984278/
+  - https://journals.biologists.com/jeb/article/227/23/jeb247873/363304/Swimming-kinematics-of-rainbow-trout-behind-a-3-5 ／ https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11658682/ ／ https://journals.biologists.com/jeb/article/219/14/2182/15396/Refuging-rainbow-trout-selectively-exploit-flows ／ https://pmc.ncbi.nlm.nih.gov/articles/PMC6515803 ／ https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9314336/ ／ https://sicb.org/?p=15220
+  - https://engineering.virginia.edu/news-events/news/uva-researchers-video-techniques-reveal-trouts-energy-saving-secret
+- 証拠: [A（2024 年論文の記述）／B（Lauder 研の動画ページ）] 要約より "All braking events required recruitment from both the abductor and adductor musculature to actively extend a pectoral fin, while over 50% of fin extension movements during Kármán gaiting proceed in the absence of muscle activity."
+
+### F-21 【本改訂で追加】産卵行動（⑦）の記述（サクラマス・ヤマメ・サケ科）と、quivering の発音
+- 主張/値:
+  - **サクラマスの産卵行動（A、要約）:** 雌は体を横に倒し、尾の打撃で礫に窪みを掘る（nest digging）。雄は quivering（頭から尾まで低振幅・高周波の体の震え）を行う。成熟した雄の parr（残留型）が産卵に割り込む（sneaking）。parr 同士で巣への近さを争い、近さの違いが sneaking の成功率の違いになる。大きい体が sneaking の成功に有利だった（小さい体が有利という予測に反する）。**サクラマスの parr は、他のサケ科と違い、優位な降海型の雄にあまり攻撃されない。** 優位な降海型の雄の攻撃頻度は parr の体サイズと関係なく、成熟した雄の parr との交渉の頻度に伴って増える。アカハラ（red-spotted）マスの雄が、雄・雌のイワナのペアで sneaking した事例の観察もある。
+  - **ヤマメの産卵行動（要約）:** 雄が雌に後ろから近づき、体を頭から尾まで小刻みに速く震わせる（quivering）。雌が産卵床を掘ると、掘った場所の礫が動いて周りの川底より白く見える。
+  - **サケ科全般（PROXY: Salmoninae の産卵行動の学位論文の要約）:** 雌は巣に短く、または連続して通う（wandering）。掘る動作と probing が交互に起こる。probing は、雌が巣の上に横たわって臀鰭を基質に押しつけ、基質の適性を試す動作。雄の掘る動作は、威嚇・求愛の機能をもつ置換反応の 2 型として論じられている。映像のコマ送り・スロー再生で解析している。
+  - **quivering の発音（B、PROXY）:** 下関市立しものせき水族館（海響館）の研究者による 2019 年の魚類生態研究会の発表。サケ科の多くの種で繁殖行動時に quivering（雄が雌の体側に後方から近づき、顔から尾部まで小刻みに震わせる）が知られる。サツキマス（アマゴの降海型）、シロザケ、イトウで、産卵時に約 400 Hz の発音をしており、筋振動型の発音（要約）。**これは音の周波数で、目で見える体の震えの周波数ではない。**
+  - **産卵の時期・場所（A、要約）:** 北日本（北海道・東北北部）は 9 月上旬〜10 月中旬、西日本は 10 月下旬〜11 月上旬（F-19 の数値と整合）。稚魚の浮上時期の研究（積算温度からの推定）では、産卵は 10 月中旬〜11 月中旬（出典候補に岐阜県の報告 PDF があるが、どの文がどの URL かは特定不能）。サクラマス全般は 9〜11 月。産卵床は淵尻と瀬で見られた（要約。種は特定不能）。
+  - 産卵 1 回の継続時間、放卵・放精の回数、掘る動作の周期などの数値は、どの要約にもなかった。
+- 適用範囲: サクラマス（北海道ほか）、ヤマメ（日本）、Salmoninae（PROXY）、サツキマス・シロザケ・イトウ（PROXY）。
+- 出典（どの文がどの URL かは、要約から特定不能。組として列挙）:
+  - サクラマス: https://www.museum.kagoshima-u.ac.jp/ichthy/INHFJ_2022_027_087.pdf ／ https://eprints.lib.hokudai.ac.jp/repo/huscap/all/22184/7(2)_P87-108.pdf ／ https://link.springer.com/article/10.1007/BF00004927 ／ https://link.springer.com/article/10.1007/s10641-022-01361-2 ／ https://kaken.nii.ac.jp/grant/KAKENHI-PROJECT-08454246/
+  - ヤマメ・産卵条件: https://agriknowledge.affrc.go.jp/RN/2010921859.pdf ／ https://agriknowledge.affrc.go.jp/RN/2010927243.pdf ／ https://catalog.lib.kyushu-u.ac.jp/opac_download_md/10879/p073.pdf ／ https://www.fish.rd.pref.gifu.lg.jp/kenkyu-houkoku/pdf-71-80/71-009.pdf ／ https://www.env.go.jp/council/content/i_07/900428352.pdf ／ https://www.env.go.jp/council/content/i_07/900428219.pdf ／ https://www.pref.kanagawa.jp/documents/95322/5112suigi08.pdf ／ https://www.pref.tochigi.lg.jp/g65/documents/kennkyuuhoukoku04_24.pdf ／ https://www.pref.shiga.lg.jp/file/attachment/5321167.pdf ／ https://www200.pref.yamagata.jp/documents/6273/sakuramasunoseitai.pdf ／ https://www.hro.or.jp/upload/41038/81-miyakoshi2.pdf ／ https://www.pref.yamagata.jp/documents/6277/0610.pdf ／ https://www.pref.miyagi.jp:443/documents/1119/847862.pdf
+  - Salmoninae: https://diposit.ub.edu/dspace/bitstream/2445/35890/3/02.SALMONIAE_SPAWNING_BEHAVIOR.pdf ／ https://www.infish.com.pl/wydawnictwo/Archives/Fasc/work_pdf/Vol22Fasc2/Vol22Fasc2_w08.pdf ／ https://agris.fao.org/search/en/records/6748e0378834da021e3811d0 （"A method of observing the spawning behaviour of farmed and wild salmonids in a natural stream habitat"。題名のみ）
+  - quivering の発音: https://www.kaikyokan.com/cms/wp-content/uploads/2019/02/2019　魚類生態研究会　サケ科魚類の振動？音？による求愛行動について）.pdf
+- 証拠: [A（行動・条件）／B（400 Hz）] 要約より "Female masu salmon perform nest digging by turning on their side and excavating a depression in the gravel by beats of their tail. Males engage in quivering ... low amplitude and high frequency body vibrations from head to tail."
+
+### F-22 【本改訂で追加】縄張り・攻撃行動（⑥）の文献記述（映像ではない。PROXY を含む）
+- 主張/値:
+  - **サケ科の幼魚（Atlantic salmon、ブラウン／シートラウト、PROXY）:** 淡水期の幼魚は縄張り性が強く、攻撃行動が多い。間接的なもの（誇示、体色の変化）から、追跡・咬みつきまで。誇示には側面誇示と正面誇示があり、直接の接触なしに優位を示し・強める。劣位個体は体色を暗くして服従を示し、優位個体からの攻撃が減る。
+  - **Atlantic salmon とシートラウトの比較:** 7 つの行動型（追跡、咬みつきなど）を記録。Atlantic salmon は突進（charge）、咬みつき、意図動作（intention movements）が最も多く、シートラウトは意図動作と正面誇示が最も多かった。
+  - **濁りの効果:** 低視程では大きな攻撃（追跡、咬みつき）が減り、全体の攻撃は減るが、劣位個体の視覚的な誇示は誇張される（ブラウントラウト）。
+  - **マス（O. masou）の幼魚（日本の河川）:** 4 種の同所的な渓流魚（マスを含む）を 5 つのサイズクラスに分けて、攻撃・採餌・微小生息地を観察。ほぼ直線的な優位順位が 3 か月続いた。攻撃は、同じ微小生息地を好むサイズ群の間で激しかった。月ごとに攻撃の方向・頻度が変わった（順位の逆転、密度・体サイズ・資源利用の変化）。マスの parr は縄張り性が強く、攻撃で負けた 1 歳魚が人工水路で降河行動を始めた。
+  - 距離・持続時間・頻度・縄張りの大きさは、どの要約にもなかった。
+- 適用範囲: PROXY: Atlantic salmon、ブラウン／シートラウト（欧州）。O. masou の文は 4 種の渓流魚の観察（日本）。
+- 出典（どの文がどの URL かは特定不能）: https://en.wikipedia.org/wiki/Fish_aggression ／ https://gupea.ub.gu.se/server/api/core/bitstreams/3c76f7f2-d0e7-4e28-8ac4-3ea1b6fe816b/content ／ https://pub.epsilon.slu.se/id/document/20419071 ／ https://orca.cardiff.ac.uk/62625 ／ https://research-portal.uws.ac.uk/en/publications/subordinate-brown-trout-exaggerate-social-signalling-in-turbid-co/ ／ https://theses.gla.ac.uk/76354/ ／ https://link.springer.com/article/10.1007/BF02678571 ／ https://www.sfu.ca/biology/faculty/dill/publications/z78-198.pdf ／ https://eprints.lib.hokudai.ac.jp/repo/huscap/all/50687/Aqu362-363_167-171.pdf ／ https://www.miyagi.kopas.co.jp/JSFS/jsfs-english/E-PUB/75-5/p0802.html ／ https://www.miyagi.kopas.co.jp/JSFS/jsfs-english/E-PUB/67-4/p703.html
+- 証拠: [A（PROXY を含む）] 要約より "Displays, both lateral and frontal, are aggressive signals that challenge and reinforce dominance without direct physical interactions."
+
+### F-23 【本改訂で追加】摂餌ストライクのタイミング（PROXY: イトヨ）と、高速度映像に骨格モデルを合わせる手法
+- 主張/値:
+  - **ストライクの失敗（PROXY: イトヨ）:** 失敗は主に開口のタイミングの誤りに由来し、獲物から遠すぎる位置で開口し始めて吸引が効かないこと。口の開閉のタイミング設計（獲物にどこまで近づいてから開くか）の参照になるが、サケ科ではない。URL: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11586519/
+  - **VROMM（Video Reconstruction of Moving Morphology）:** 二面の高速度映像と、CT 由来の 3D メッシュモデルを組み合わせ、運動を高精度に再現する手法（要約）。ヤマメの骨格モデル（r15 の標本）を映像に合わせる方法の候補だが、サケ科への適用例は要約にない（M: XROMM の仲間）。この記述は、次の URL 群のどれかに由来するが特定不能: https://digital.lib.washington.edu/researchworks/bitstreams/c5dd8be3-fb04-4764-8d9a-a47cf7b6b65d/download ／ https://cordis.europa.eu/project/id/268335/reporting/fr
+  - 吸引摂食の一般論: 吸引摂食は魚の主な捕食様式で、口腔の拡張は前から後ろへの波として進む。ピーク流速と開口のタイミングの協調が捕獲成功に重要（要約）。サケ科は ram 寄りの摂餌と思われ（M）、そのままの適用は不可。
+- 適用範囲: PROXY: イトヨ、吸引摂食魚一般。
+- 出典: 上記 URL。
+- 証拠: [A（イトヨの論文の要約）／M（骨格モデルとの突合の方針）] 要約より "failed strikes primarily arise from incorrect timing of mouth opening, often beginning too far from the prey for suction to be effective."
 
 ---
 
@@ -321,21 +391,34 @@
 7. **給餌と自然捕食:** F-06 #16 は給餌下のニジマス。自然のドリフト捕食とは行動が異なりうる。
 8. **検索要約の不整合:** 要約が複数URLをまとめて述べるため、個別の映像の内容が確実でない（F-02 #5、F-19）。映像は必ず視聴して確認する。
 9. **PROXY の種:** 運動学数値はほぼ全てニジマス。ドリフト捕食は coho、steelhead、ブラウン、Chinook。ヤマメとの差は不明。
+10. 【本改訂】**Harper & Blake 1990 は「加速度計」のみではない:** 項目 5 は加速度計とだけ述べるが、本実行の要約は「皮下の加速度計と、同時の高速度シネフィルム」。併用が正しいと扱う（F-13 の表も併用の記述に更新済み）。
+11. 【本改訂】**舌咬み装置の抄録にヤマメは含まれない:** F-14 の旧記述「ヤマメが対象か不明」は、3 種（ニジマス、ブラウン、ブルックトラウト）と確認して解消。
+12. 【本改訂】**Commons のニジマス映像の帰属:** 1 回目の要約は「Wiki Drina biodiversity project のカテゴリーに属する」、別の要約は「Own work、投稿者 Liquid Art、2014-09-15 アップロード」。両立しうるが、要約同士で確定できない（F-06 #19）。
+13. 【本改訂】**「ヤマメ・アマゴの産卵」映像の説明文中の樹木:** 先行実行の要約は「サンショウ（Japanese pepper）が赤くなるころ」、本実行の要約は「漆（lacquer tree）が赤くなるころ」と述べる。同じ動画（61bx-cF9e24）の説明文について、要約が一致しない。行動の内容には影響しないが、説明文の逐語引用は避ける。
+14. 【本改訂】**産卵期:** 北日本 9 月上旬〜10 月中旬、西日本 10 月下旬〜11 月上旬（公的機関資料の要約）、稚魚浮上の研究からの推定 10 月中旬〜11 月中旬、北海道のサクラマス 9 月下旬〜10 月上旬、サクラマス全般 9〜11 月。地域差が主因と考えられる。ヤマメ（残留型）とサクラマス（降海型）で産卵時期が違うかは要約にない（F-19、F-21）。
+15. 【本改訂】**parr への攻撃:** マスの parr は優位な降海型の雄にあまり攻撃されない（他のサケ科と異なる）という記述（F-21）と、サケ科の幼魚は縄張り性が強く攻撃が多いという記述（F-22）は、文脈（産卵場と幼魚期の生息場）が異なる。両者を併記。
+16. 【本改訂】**quivering の 400 Hz と「小刻みに速く震える」:** 前者は音の周波数、後者は体の動き。目に見える震えの周波数は未取得。同一視しない（F-21）。
+17. 【本改訂】**魚突き動画の場所:** 本実行の 1 つの要約は「生態系が狂った川」、別の要約は「管理された釣り場であり自然の渓流ではない」（F-02 #10）。自然状態の行動の参照に使えるかは視聴で確認。
 
 ---
 
 ## 4. 見つからなかったこと（Gaps）— 3Dモデル／アニメ／行動実装に必要だが確認できなかった事項
 
-1. **NHK 等の公共放送・学術機関（水産試験場、大学）・水族館公式チャンネルの映像:** 検索で出なかった（水産試験場の検索は PDF 報告書のみ。公式動画の記述なし）。水族館はおたる水族館（報道の紹介）と山梨県立富士湧水の里水族館（展示案内）のみで、公式映像のURLは無し。
+1. **NHK 等の公共放送・学術機関（水産試験場、大学）・水族館公式チャンネルの映像:** 検索で出なかった（水産試験場の検索は PDF 報告書のみ。公式動画の記述なし）。水族館はおたる水族館（報道の紹介）と山梨県立富士湧水の里水族館（展示案内）のみで、公式映像のURLは無し。【本改訂】本実行の 40 回でも、水産試験場・大学・水族館の公式動画は出なかった。NHK 由来は Getty のストック（NHK Video Bank Creative collection、精進川、24 秒）のみで、NHK のサイトや番組名は確認できていない。
 2. **ヤマメの縄張り争い(⑥)の映像:** 0 件。PROXY のニジマス1件のみ（F-07 #1）。
 3. **ヤマメの逃避(⑤)・旋回(④)の映像:** 0 件。PROXY の論文とその数値のみ。
 4. **高速度撮影の公開映像（サケ科）:** 0 件。論文付属動画（Supplementary Movie）のURLも 0 件（JEB の検索で見つかったのは論文ページ・PDF のみ）。非サケ科の Zenodo データが 2 件。
 5. **ドリフト捕食（ストライク）の定量:** 開口から閉顎までの時間、鰓蓋の外転、定位点への復帰の距離・時間。ヤマメ・近縁種とも未取得。
 6. **映像のメタデータ:** 全映像で長さ・画質・フレームレート（F-06 #17 の 240 fps と F-09 の 60 fps を除く）・撮影水温・個体サイズが不明。
 7. **ライセンス・埋め込み可否:** YouTube/Vimeo/報道/ストックの個別条件が全て不明（F-11）。
-8. **ユーザーが言及した骨格資料:** 入力に無い。口・顔・鰓の再現には、骨格資料（顎骨、鰓蓋骨、舌骨）の内容を映像の動きと突き合わせる作業が必要。
+8. **ユーザーが言及した骨格資料:** このストリームの入力には無かった。【本改訂】別ストリームの r15（r15_cranial_osteology.md、透明骨格標本画像 s01.jpg の解析つき）が存在する。口・顔・鰓の再現には、r15 の骨格（顎骨、鰓蓋骨、舌骨）の内容を映像の動きと突き合わせる作業が必要で、**この突合は未実施**（F-16、F-23）。
 9. **ヤマメ固有の運動学の数値:** 尾びれ周波数と速度の関係、逃避の潜時・速度、ストライクの時間など。PROXY（ニジマス等）で暫定。
 10. **映像内容の確認:** 全映像が未視聴。特に F-02 #5 のプレイリストは、どの動画が含まれ、どの行動を映すか不明。
+11. 【本改訂】**トラウトの高速度映像の補足動画（JEB など）の具体的な URL:** 0 件。movie.biologists.com/video/<DOI>/video-N の形式は確認したが、ニジマス・サケ科の動画は特定できなかった（F-20）。Lauder 研の動画ページ（1000 fps）の個別ファイルの条件も不明。
+12. 【本改訂】**産卵行動の定量値:** 1 回の産卵の継続時間、quivering の目に見える周波数、掘る動作の周期、放卵・放精の回数。ヤマメ・サクラマスとも要約になし（F-21）。400 Hz は音の周波数。
+13. 【本改訂】**縄張り行動の定量値:** 攻撃の頻度、距離、持続時間、縄張りの大きさ。ヤマメ・マスの要約になし（F-22）。
+14. 【本改訂】**サケ科の摂餌ストライクの数値:** 250 Hz の抄録に開口時間などの数値が無い。ヤマメ（サクラマス）を対象にした高速度の摂餌研究は見つからなかった（F-14、F-23）。
+15. 【本改訂】**The Underwater World of Trout にヤマメ・イワナ類が含まれるか:** 要約はブラウンとニジマスなどと述べるのみ。Troutnut の 3D アニメーション（F-06 #22）の作成者・内容・長さも不明。
 
 ---
 
@@ -415,11 +498,24 @@
 
 ### 5.5 ヤマメ解説・産卵環境（自治体・メーカー）
 - F-12、F-19 に列挙したURL。
-- ローカル資料: /home/user/gerupamasini/docs/yamame/research/r03_lifestage_sex.md、r07_eye_head_mouth.md、r08_swim_steady.md、r09_swim_transient.md、r10_fins.md、r12_foraging_en.md、/home/user/gerupamasini/docs/yamame/photo_analysis/catalog_c01〜c07.json
+- ローカル資料: /home/user/gerupamasini/docs/yamame/research/r03_lifestage_sex.md、r07_eye_head_mouth.md、r08_swim_steady.md、r09_swim_transient.md、r10_fins.md、r12_foraging_en.md、r15_cranial_osteology.md、/home/user/gerupamasini/docs/yamame/photo_analysis/catalog_c01〜c07.json
+
+### 5.6 【本改訂で追加】本実行（40 回）で新たに出た URL（上の 5.1〜5.5 と重複しないもの）
+- 映像（ヤマメ／サクラマス）: https://www.youtube.com/watch?v=bKSORxfAGag ／ https://www.youtube.com/watch?v=4s1CDOEFOaE ／ https://www.youtube.com/watch?v=9xq3WhsjlQA ／ https://www.youtube.com/watch?v=HtM8ZcWqsfQ ／ https://www.youtube.com/watch?v=2Q-TLWqydOg ／ https://www.hokkaido-np.co.jp/movies/detail/5293433246001/ ／ https://www.hokkaido-np.co.jp/movies/detail/6330122736112/ ／ https://www.hokkaido-np.co.jp/movies/detail/5447533433001/ ／ https://www.gettyimages.ae/detail/video/underwater-upstream-migration-of-kokanee-salmon-stock-video-footage/1174034482 ／ https://www.gettyimages.ae/detail/video/trout-battling-strong-currents-in-foaming-waters-stock-footage/2167562846
+- 映像（PROXY）: https://commons.wikimedia.org/wiki/File:Rainbow_trout_underwater_(Oncorhynchus_mykiss).webm ／ https://commons.wikimedia.org/wiki/Category:Underwater_videos ／ https://commons.wikimedia.org/wiki/Category:Oncorhynchus_mykiss ／ https://commons.wikimedia.org/wiki/Category:Wiki_Drina_biodiversity_project ／ https://stock.adobe.com/video/rainbow-trout-swimming-underwater-oncorhynchus-mykiss-a-big-group-of-trouts-underwater-river-habitat-freshwater-fish-swimming-in-the-clean-river-diving-in-freshwater-snorkeling-steelhead-trout/483073190 ／ https://stock.adobe.com/it/search/video?k=trout ／ https://search.centrecountylibrary.org/Record/398197 ／ https://search.centrecountylibrary.org/Record/398198 ／ https://globalflyfisher.com/node/39695 ／ https://thevlm.org/underwater-video-11am-trout-feeding/ ／ https://www.troutnut.com/videos ／ https://www.troutnut.com/topic/6630/Stomach-Contents-Eclectic-Feeding-and-Selectivity ／ https://www.troutnut.com/topic/9060/Some-animations-on-how-fish-react-to-prey
+- 研究室・補足動画: https://sites.harvard.edu/glauder/research-videos/trout-swimming-including-karman-gait/ ／ https://sites.harvard.edu/glauder/research-videos/ ／ https://sites.harvard.edu/glauder/?p=1483 ／ https://movie.biologists.com/video/10.1242/jeb.192062/video-1 ／ https://movie.biologists.com/video/10.1242/jeb.145623/video-1 ／ https://movie.biologists.com/video/10.1242/jeb.186270/video-1 ／ https://movie.biologists.com/video/10.1242/jeb.220830/video-2 ／ https://engineering.virginia.edu/news-events/news/uva-researchers-video-techniques-reveal-trouts-energy-saving-secret
+- 遊泳・定位の論文: https://journals.biologists.com/jeb/article/227/23/jeb247873/363304/Swimming-kinematics-of-rainbow-trout-behind-a-3-5 ／ https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11658682/ ／ https://journals.biologists.com/jeb/article/219/14/2182/15396/Refuging-rainbow-trout-selectively-exploit-flows ／ https://pmc.ncbi.nlm.nih.gov/articles/PMC6515803 ／ https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9314336/ ／ https://sicb.org/?p=15220
+- ドリフト捕食（野外ビデオ）: https://par.nsf.gov/biblio/10401631-foraging-modes-movements-oncorhynchus-mykiss-flow-invertebrate-drift-recede-california-stream ／ https://par.nsf.gov/servlets/purl/10401633 ／ https://par.nsf.gov/servlets/purl/10336240 ／ https://par.nsf.gov/biblio/10336240 ／ https://ourarchive.otago.ac.nz/esploro/outputs/journalArticle/Quantification-and-comparison-of-individual-space-use/9926516484401891
+- 高速スタート（要約の出所候補）: https://digitalcommons.chapman.edu/sees_articles/174 ／ https://cob.silverchair.com/jeb/article-pdf/207/3/535/1251221/535.pdf ／ https://cob.silverchair.com/jeb/article-pdf/222/14/jeb203091/1909379/jeb203091.pdf ／ https://researchonline.jcu.edu.au/41883/1/41883%20Domeniciet%20al%202015.pdf ／ https://cob.silverchair.com/jeb/article-pdf/221/7/jeb168609/1907430/jeb168609.pdf ／ https://iris.cnr.it/handle/20.500.14243/269211 ／ https://circle.ubc.ca/handle/2429/31018
+- 摂餌: https://sicb.org/?p=15311 ／ https://sicb.org/?p=33737 ／ https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11586519/ ／ https://digital.lib.washington.edu/researchworks/bitstreams/c5dd8be3-fb04-4764-8d9a-a47cf7b6b65d/download ／ https://cordis.europa.eu/project/id/268335/reporting/fr
+- 産卵（F-21 に列挙）: https://www.museum.kagoshima-u.ac.jp/ichthy/INHFJ_2022_027_087.pdf ／ https://eprints.lib.hokudai.ac.jp/repo/huscap/all/22184/7(2)_P87-108.pdf ／ https://link.springer.com/article/10.1007/BF00004927 ／ https://link.springer.com/article/10.1007/s10641-022-01361-2 ／ https://kaken.nii.ac.jp/grant/KAKENHI-PROJECT-08454246/ ／ https://www.fish.rd.pref.gifu.lg.jp/kenkyu-houkoku/pdf-71-80/71-009.pdf ／ https://www.env.go.jp/council/content/i_07/900428352.pdf ／ https://www.pref.kanagawa.jp/documents/95322/5112suigi08.pdf ／ https://www.pref.tochigi.lg.jp/g65/documents/kennkyuuhoukoku04_24.pdf ／ https://www.pref.shiga.lg.jp/file/attachment/5321167.pdf ／ https://www.hro.or.jp/upload/41038/81-miyakoshi2.pdf ／ https://www.pref.yamagata.jp/documents/6277/0610.pdf ／ https://www.pref.miyagi.jp:443/documents/1119/847862.pdf ／ https://www.infish.com.pl/wydawnictwo/Archives/Fasc/work_pdf/Vol22Fasc2/Vol22Fasc2_w08.pdf ／ https://agris.fao.org/search/en/records/6748e0378834da021e3811d0 ／ https://www.kaikyokan.com/cms/wp-content/uploads/2019/02/2019　魚類生態研究会　サケ科魚類の振動？音？による求愛行動について）.pdf
+- 縄張り・攻撃（F-22 に列挙）: https://en.wikipedia.org/wiki/Fish_aggression ／ https://gupea.ub.gu.se/server/api/core/bitstreams/3c76f7f2-d0e7-4e28-8ac4-3ea1b6fe816b/content ／ https://pub.epsilon.slu.se/id/document/20419071 ／ https://orca.cardiff.ac.uk/62625 ／ https://research-portal.uws.ac.uk/en/publications/subordinate-brown-trout-exaggerate-social-signalling-in-turbid-co/ ／ https://theses.gla.ac.uk/76354/ ／ https://link.springer.com/article/10.1007/BF02678571 ／ https://www.sfu.ca/biology/faculty/dill/publications/z78-198.pdf ／ https://eprints.lib.hokudai.ac.jp/repo/huscap/all/50687/Aqu362-363_167-171.pdf ／ https://www.miyagi.kopas.co.jp/JSFS/jsfs-english/E-PUB/75-5/p0802.html ／ https://www.miyagi.kopas.co.jp/JSFS/jsfs-english/E-PUB/67-4/p703.html
 
 ---
 
-## 6. 検索ログ（総検索回数 24、全て mode:"standard"、extended 0 回）
+## 6. 検索ログ（先行更新版 24 回＋本改訂 40 回＝合計 64 回、全て mode:"standard"、extended 0 回）
+
+### 6.1 先行更新版（別実行）の検索ログ（24 回。本実行では再検証していない。そのまま引き継ぎ）
 
 | # | クエリ（要旨） | domain 指定 | 結果 | 有用度 |
 |---|---|---|---|---|
@@ -449,4 +545,53 @@
 | 24 | trout fighting each other underwater video aggressive chase… | youtube.com, vimeo.com | **産卵期ニジマスの縄張り追い払い映像（u7gENF_Bd8k）** | 高 |
 
 - 成功した検索: **24 回**（拒否 0 回）。mode:"extended" の使用は 0 回。WebFetch・curl は使っていない。
-- 初版の「予算枯渇で 0 回」という記述は、今回は予算が残っていたため更新済み。
+- 初版の「予算枯渇で 0 回」という記述は、予算が残っていたため更新済み。
+
+### 6.2 本改訂（本実行）の検索ログ（40 回、全て mode="standard"、予算拒否 0 回）
+| # | クエリ | 有用度 | 備考 |
+|---|---|---|---|
+| 1 | ヤマメ 水中 動画 捕食 渓流 定位 | 低 | 釣り情報（定位場所の一般記述）。動画なし |
+| 2 | ヤマメ 産卵 動画 水中 | 中 | 公的機関資料（産卵期・流速・礫）。動画なし |
+| 3 | trout underwater video drift feeding stream behaviour | 高 | Underwater World of Trout、par.nsf.gov の野外ビデオ研究 |
+| 4 | サクラマス 産卵 水中映像 | 中 | 北海道新聞の動画、県の資料 |
+| 5 | trout high-speed video C-start escape rainbow trout supplementary movie | 中 | Harper & Blake（シネ併用）、C-start の定義。補足動画は無し |
+| 6 | masu salmon underwater footage Japan stream video | 高 | Getty（NHK Video Bank 由来）の精進川サクラマス、滝遡上 |
+| 7 | ヤマメ 縄張り 争い 水中 映像 | 低 | 図鑑・釣り情報のみ。縄張り争いの映像なし |
+| 8 | ヤマメ 水中撮影 YouTube 渓流 ライズ 捕食（youtube.com） | 低 | 釣り動画ばかり。魚突きの水中映像 1 件 |
+| 9 | rainbow trout feeding strike high speed video suction mouth opening kinematics salmonid | 中 | SICB の 3 種 250 Hz、イトヨの失敗要因、VROMM |
+| 10 | Oncorhynchus masou spawning underwater stock video cherry salmon redd | 高 | Getty 24 秒、1920×1080。Salmoninae の論文 |
+| 11 | Journal of Experimental Biology supplementary movie trout "Movie 1" high-speed video swimming | 中 | movie.biologists.com の形式。トラウトの動画は無し |
+| 12 | NHK ビデオバンク ヤマメ サクラマス 映像 素材 水中 | 低 | NHK Video Bank の別素材のみ |
+| 13 | rainbow trout video swimming Kármán gait movie（movie.biologists.com 指定） | 低〜中 | 指定ドメインの結果は出ず。円柱後流の論文群 |
+| 14 | The Underwater World of Trout Ozefovich video drift feeding spawning brown trout rainbow trout DVD | 高 | 全 3 巻の内容 |
+| 15 | 住宅街に産卵サクラマス 札幌・精進川に100匹 動画 | 高 | 内容の要約、他の北海道新聞動画 |
+| 16 | 旭川市住宅街の小さな川で サクラマスとヤマメが繁殖行動 | 高 | ヤマメの sneaking の説明 |
+| 17 | 水族館 ヤマメ サクラマス 水中観察 動画 公式 渓流 水槽 | 中 | おたる水族館の動画 2 本 |
+| 18 | salmonid spawning behaviour female nest digging male quivering crossover video observation Salmo trutta | 中 | Salmoninae の学位論文、probing |
+| 19 | brown trout Atlantic salmon territorial aggression underwater video display chase nip dominance stream | 中 | 攻撃行動の型（PROXY） |
+| 20 | わくわく おたる水族館 「渓流の女王」ヤマメ | 中 | 2025-04-26 公開（要約） |
+| 21 | Wikimedia Commons video Oncorhynchus mykiss OR Salmo trutta underwater webm stream trout | 高 | Commons のニジマス映像、Adobe Stock |
+| 22 | masu salmon Oncorhynchus masou spawning behavior female nest digging male parr sneaking observation stream | 高 | nest digging、quivering、sneaking の記述 |
+| 23 | 渓流 水中映像 ヤマメ イワナ 水中カメラ 魚の動き 観察 4K | 低〜中 | Getty の 4K（種不明） |
+| 24 | File:Rainbow trout underwater (Oncorhynchus mykiss).webm … license（commons.wikimedia.org） | 中 | 投稿者・日付。ライセンスは不明 |
+| 25 | ヤマメ サクラマス 産卵 水中 撮影 動画 雌 産卵床 雄（youtube.com） | 高 | 産卵系 YouTube 3 本 |
+| 26 | rainbow trout pectoral fin station holding turbulent flow high-speed video supplementary movie | 中 | 2024 JEB（150 fps、制動と Kármán gait） |
+| 27 | ヤマメ 産卵行動 観察 雌 産卵床 掘る 雄 求愛 振動 産卵 回数 秒 研究 | 中 | quivering の記述、海響館の発表 |
+| 28 | ヤマメ・アマゴの産卵・産卵床・水中映像・実写【癒しの風景】（youtube.com） | 中 | 動画説明の要約 |
+| 29 | ヤマメ 水中映像 定位 エサ 流下 捕食 渓流 素潜り 魚群 追い払う 威嚇（youtube.com） | 中 | you渓 の水中映像、魚突き |
+| 30 | ヤマメ 動画素材 ストック 水中 渓流 pixta OR adobe OR shutterstock | 低 | PIXTA の一般タグのみ |
+| 31 | trout drift feeding maneuver return to focal point 3D video analysis attack distance capture path | 中 | par.nsf.gov の 3D ビデオグラメトリー、Troutnut のアニメ |
+| 32 | ヤマメ産卵行動受精シーン（Short）（youtube.com） | 低 | 題名のみ |
+| 33 | 興津川のアマゴ(ヤマメ)＆イワナ・渓流釣りのための水中映像 #you渓（youtube.com） | 中 | 説明の要約 |
+| 34 | Some animations on how fish react to prey 3D drift feeding trout animation video（troutnut.com） | 低 | 該当ページの内容は出ず |
+| 35 | masu salmon Oncorhynchus masou juveniles stream snorkeling observation foraging attack rate territorial aggression Nakano dominance | 中 | マス幼魚の優位順位 |
+| 36 | trout takes fly underwater slow motion high speed camera rise strike video | 中 | DVD Vol.2 の内容、高速度フィルムの書籍 |
+| 37 | サケ科魚類 振動 求愛行動 クイバリング 雄 産卵 魚類生態研究会 海響館 | 中 | 約 400 Hz の発音 |
+| 38 | Lauder lab Harvard fish locomotion videos rainbow trout swimming flow tank movies | 高 | Lauder 研の動画ページ（1000 fps） |
+| 39 | "Rainbow trout underwater (Oncorhynchus mykiss).webm" Liquid Art Creative Commons Attribution-ShareAlike | 低 | ライセンスは分からず |
+| 40 | Trout Swimming (Including Kármán gait) Lauder lab research videos download（sites.harvard.edu） | 高 | 動画ページの URL、動画の題名 |
+
+### 6.3 総検索回数
+- **本実行（本改訂）: WebSearch 40 回**（割当ちょうど。全て standard、extended 0 回、予算拒否 0 回）。WebFetch・curl は使っていない。Bash はローカルのファイル確認のみ。
+- 先行更新版（別実行）: 24 回。合計 64 回（共有予算 200 回のうち）。
+- 次に検索予算が得られた場合の優先事項: (1) 動画を実際に視聴して内容・長さ・ライセンスを確認（検索でなく人手）、(2) トラウトの JEB 補足動画の DOI の特定、(3) 水産試験場・大学・水族館の公式動画の所在、(4) 縄張り争い（ヤマメ・イワナ・アマゴ）の水中映像、(5) 産卵行動の定量（継続時間・回数）。
