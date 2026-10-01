@@ -185,7 +185,7 @@ vec3 bodyPigment(vec3 rp, float red, out float whiteness, out vec3 specTint) {
   // carotenoid density follows the dorsal-ventral axis (p12_1, p42_1):
   // deep crimson along the back, red-orange on the flank, yellow-orange
   // toward the belly, pale golden cream on the ventral keel
-  float gS = type < 0.5 ? 0.3 : 1.0; // sarasa red is deep and even (p40_1)
+  float gS = type < 0.5 ? 0.6 : 1.0; // sarasa red is deeper and more even (p40_1)
   vec3 flank = mix(redCol, uColOrange, 0.2 * gS * (1.0 - 0.6 * tone.x));
   vec3 crimson = redCol * vec3(0.72, 0.36, 0.46);
   vec3 bellyCol = mix(uColOrange, uColYellow, 0.4 + 0.35 * tone.z);
@@ -239,7 +239,7 @@ vec3 bodyPigment(vec3 rp, float red, out float whiteness, out vec3 specTint) {
   col *= mix(mix(0.72, 0.92, whiteness), 1.05, smoothstep(0.9, -0.6, a));
   // white skin: the belly underside carries fewer iridophore layers (the
   // pale flesh shows): a gentle darker, warmer gradient below the flank
-  col *= mix(vec3(1.0), vec3(0.86, 0.83, 0.82), smoothstep(-0.45, -0.95, a) * whiteness);
+  col *= mix(vec3(1.0), vec3(0.9, 0.88, 0.88), smoothstep(-0.45, -0.95, a) * whiteness);
   vec3 pig = col / max(max(col.r, col.g), max(col.b, 1e-3));
   // light reflected by the guanine under a carotenoid layer crosses that
   // layer once: gold-orange (diffuse light crosses it twice: crimson);
@@ -252,23 +252,44 @@ vec3 bodyPigment(vec3 rp, float red, out float whiteness, out vec3 specTint) {
   return col;
 }
 
+// Melanophore stipple: sparse small dark dots (one candidate per 3D cell,
+// kept inside its cell, so no neighbour search). p in cell units; returns
+// dot coverage 0..1, antialiased and faded out once a cell is under ~3 px.
+float stipple(vec3 p, float density) {
+  vec3 c = floor(p);
+  float h = hash13(c + 17.0);
+  vec3 o = vec3(hash13(c + 3.1), hash13(c + 5.7), hash13(c + 9.3)) - 0.5;
+  float dd = length(fract(p) - 0.5 - o * 0.4);
+  float r = 0.12 + 0.14 * hash13(c + 23.0);
+  float fwp = max(max(fwidth(p.x), fwidth(p.y)), fwidth(p.z));
+  float dotC = 1.0 - smoothstep(r - 0.6 * fwp, r + 0.6 * fwp, dd);
+  return dotC * step(h, density) * (1.0 - smoothstep(0.18, 0.36, fwp));
+}
+
 // ---------------------------------------------------------------- scales -----
 struct ScaleHit { vec2 q; vec2 id; float d; float dPrev; };
 
 // Imbricate cycloid scales on a staggered grid (U: along body, V: around).
 // The anterior-most scale covering a point is on top (roof-tile overlap),
 // so the visible boundaries are the scalloped free (posterior) margins.
-ScaleHit scaleLookup(vec2 uv) {
+// rk: regional scale size (smaller along the dorsal ridge, the belly and the
+// peduncle, larger on the mid-flank), evaluated once per pixel.
+ScaleHit scaleLookup(vec2 uv, float rk) {
   // radius 1.0 against a unit column spacing: each scale is overlapped by
   // the ones in front so only its posterior ~half (the "exposed field") shows
   const float R = 1.0;
   ScaleHit h; h.d = 9.0; h.dPrev = 9.0; h.q = vec2(0.0); h.id = vec2(0.0);
   float i0 = floor(uv.x - 0.5 - R - 0.1);
   bool found = false;
+  float fbD = 9.0; vec2 fbQ = vec2(0.0); vec2 fbId = vec2(0.0);
   for (int k = 0; k < 3; k++) {
     float i = i0 + float(k);
     float par = mod(i, 2.0);
-    float jc = floor(uv.y - 0.5 * par + 0.5);
+    // the rows are not a perfect half-step stagger: each column of scales
+    // slides a little up or down against its neighbours (imbrication of
+    // real scale rows is irregular; an exact stagger reads as a hex decal)
+    float colOff = (hash12(vec2(i, 7.31)) - 0.5) * 0.36;
+    float jc = floor(uv.y - 0.5 * par - colOff + 0.5);
     // within a column the dorsal neighbour overlaps the ventral one, so the
     // boundary between them is also a rounded margin (not a Voronoi edge)
     float best = 9.0; vec2 bq = vec2(0.0); vec2 bid = vec2(0.0);
@@ -278,27 +299,30 @@ ScaleHit scaleLookup(vec2 uv) {
       vec2 id = vec2(i, j);
       vec3 jr = hash32(id * 1.37 + 11.0);
       vec3 jr2 = hash32(id * 2.11 + 37.0);
-      // no two scales alike: centre, size, outline and orientation vary a
-      // little from scale to scale (a regular lattice reads as a decal)
-      vec2 c = vec2(i + 0.5, j + 0.5 * par) + (jr.xy - 0.5) * vec2(0.16, 0.18);
+      // no two scales alike: centre, size, outline and orientation vary
+      // from scale to scale (a regular lattice reads as a decal)
+      vec2 c = vec2(i + 0.5, j + 0.5 * par + colOff) + (jr.xy - 0.5) * vec2(0.24, 0.26);
       vec2 q = uv - c;
-      float ra = (jr2.x - 0.5) * 0.24; // +-7 deg
+      float ra = (jr2.x - 0.5) * 0.38; // +-11 deg
       q = mat2(cos(ra), sin(ra), -sin(ra), cos(ra)) * q;
-      float rr = R * (0.9 + 0.2 * jr.z);
+      float rr = R * rk * (0.86 + 0.3 * jr.z);
       // the free (posterior) margin is blunt-pointed rather than circular,
       // so the overlapping margins form the rhombic net seen on goldfish
       // (some scales rounder, some more pointed)
-      vec2 qa = abs(q * vec2(1.0, 1.15 + 0.2 * jr2.y));
-      float pe = 1.5 + 0.45 * jr2.z;
+      vec2 qa = abs(q * vec2(1.0, 1.1 + 0.28 * jr2.y));
+      float pe = 1.45 + 0.6 * jr2.z;
       float d = (q.x > 0.0 ? pow(pow(qa.x, pe) + pow(qa.y, pe), 1.0 / pe) : length(qa)) / rr;
       if (!cov && d < 1.0) { cov = true; best = d; bq = q; bid = id; }
       else if (!cov && d < best) { best = d; bq = q; bid = id; }
     }
+    if (best < fbD) { fbD = best; fbQ = bq; fbId = bid; }
     if (!found) {
       if (best < 1.0) { found = true; h.d = best; h.q = bq; h.id = bid; }
       else h.dPrev = min(h.dPrev, best);
     }
   }
+  // (rare gaps left by the jitter: the nearest scale fills them, at its margin)
+  if (!found) { h.d = min(fbD, 0.995); h.q = fbQ; h.id = fbId; }
   return h;
 }
 
@@ -364,7 +388,12 @@ void computeFishSurface() {
   float cI = floor(suv.x - 0.5);
   ScaleHit sh; sh.q = vec2(0.0); sh.id = vec2(cI, floor(suv.y - 0.5 * mod(cI, 2.0) + 0.5)); sh.d = 0.5; sh.dPrev = 9.0;
 #else
-  ScaleHit sh = scaleLookup(suv);
+  // regional scale size: scales are smaller and more crowded along the
+  // dorsal ridge, the belly keel and on the peduncle than on the mid-flank,
+  // plus a slow patchy drift (clusters of larger / smaller scales)
+  float rk = mix(0.9, 1.08, 1.0 - a * a) * mix(1.0, 0.92, smoothstep(0.75, 0.98, -rp.x))
+           * mix(0.93, 1.07, vnoise2(suv * 0.16 + seed * 2.9 + 21.0));
+  ScaleHit sh = scaleLookup(suv, rk);
 #endif
   vec3 rnd = hash32(sh.id + seed * 17.0);
   float d = sh.d;
@@ -410,6 +439,9 @@ void computeFishSurface() {
   // density along the margins drifts over the flank (patches where the
   // net almost vanishes into the sheen, others where it reads clearly)
   float netVar = 0.35 + 1.25 * (0.65 * vnoise2(suv * 0.21 + seed * 1.3 + 11.0) + 0.35 * vnoise2(suv * 0.57 - seed + 3.0));
+  // and it is drawn more strongly toward the dorsum (denser margin
+  // chromatophores, the scales seen more obliquely), fading on the belly
+  netVar *= mix(0.55, 1.35, smoothstep(-0.6, 0.75, a));
   // thin shadow cast by the overlapping margin of the scale in front
   float marginShadow = 1.0 - smoothstep(1.0, 1.0 + max(0.09, 1.5 * fwm), sh.dPrev);
   float ao = mix(1.0, 1.0 - 0.16 * marginShadow, detail);
@@ -458,6 +490,39 @@ void computeFishSurface() {
   // free margins: melanophores / the overlap shadow (p12_1)
   // (white scales differ more: iridophore density varies from scale to scale)
   col *= mix(1.0, mix(0.98 + 0.04 * rnd.z, 0.965 + 0.07 * rnd.z, whiteness), max(detail, 0.6 * sparkle));
+  // pigmented scales: each scale carries its own chromatophore density, so
+  // neighbouring scales differ in value and a little in hue (denser: deeper
+  // crimson; sparser: the guanine lifts it toward orange-gold). Broad enough
+  // (a whole exposed field) to survive the lens blur of a close-up.
+  float pigS = (1.0 - whiteness) * scaleMask * max(detail, 0.7 * sparkle);
+  {
+    float sv = rnd.z - 0.5;
+    float sv2 = hash12(sh.id * 5.17 + seed * 3.0) - 0.5;
+    col *= mix(vec3(1.0), vec3(1.0 + 0.12 * sv, 1.0 + 0.3 * sv + 0.12 * sv2, 1.0 + 0.3 * sv), pigS);
+    // the exposed field is lit by the guanine pocket under its centre and
+    // darkens toward the free margin (melanophores along the edge)
+    col *= mix(1.0, 0.86, smoothstep(0.45, 1.0, d) * pigS);
+  }
+  // dorsal melanophore / dense-carotenoid mottling on pigmented skin:
+  // irregular darker clouds a few scales across, partly snapped to whole
+  // scales (sampled at the scale centre), concentrated on the back and
+  // fading by mid-flank
+  {
+    vec2 sc = mix(suv, suv - q * 0.9, 0.75 * detail);
+    float mN = 0.6 * vnoise2(sc * 0.42 + seed * 4.1 + 2.0) + 0.4 * vnoise2(sc * 1.05 - seed * 2.3 + 9.0);
+    float mot = smoothstep(0.42, 0.78, mN) * smoothstep(-0.1, 0.8, a);
+    float mW = (1.0 - whiteness) * mix(0.55, 1.0, scaleMask);
+    col *= mix(vec3(1.0), vec3(0.8, 0.62, 0.68), mot * mW * 0.75);
+    // fine melanophore stipple over the red, densest on the head top and the
+    // back, a few dots down the flank (p40_1: dusky red patches)
+#if FISH_LOD < 2
+    if (mW > 0.01) {
+      float stD = mix(0.05, 0.42, smoothstep(-0.3, 0.9, a)) * (0.5 + mN);
+      float st = stipple(rp * 260.0 + seed * 13.0, stD) + 0.6 * stipple(rp * 150.0 - seed * 7.0, stD * 0.4);
+      col *= 1.0 - 0.42 * min(st, 1.0) * mW;
+    }
+#endif
+  }
   col *= mix(1.0, mix(0.9, 0.97, whiteness), regen * detail);
   // lateral-line pore: a tiny dark opening at the end of the canal
   col *= 1.0 - 0.14 * llRow * smoothstep(0.05, 0.015, length((q - vec2(0.3, 0.0)) * vec2(1.0, 2.0))) * detail;
@@ -481,7 +546,10 @@ void computeFishSurface() {
   // (pigmented scales reflect much less: the carotenoid layer on top keeps
   // red patches saturated; per-scale jitter ±10 % up close, ±25 % as sparkle
   // at mid range; far away the averaged net modulates the sheen)
-  float jitR = mix(1.0, 0.7 + 0.6 * rnd.x, sparkle * mix(1.0, mix(0.5, 0.6, whiteness), detail));
+  // (pigmented scales keep the full spread up close too: each scale's
+  // guanine pocket is a separate small reflector, p42_1, which breaks the
+  // flank highlight into scale-sized glints instead of one smooth stripe)
+  float jitR = mix(1.0, 0.7 + 0.6 * rnd.x, sparkle * mix(1.0, mix(1.0, 0.6, whiteness), detail));
   // (duller regenerated / odd scales: much subtler on white, whose mirror
   // reflection would turn every dull scale into a dark tile)
   // (white: a pearly sheen, not a chrome mirror — part of the light is
@@ -517,6 +585,14 @@ void computeFishSurface() {
   // a tighter lobe there gives distinct glints instead of one broad sheen.
   rough = mix(rough, min(rough, 0.24), sparkle * (1.0 - detail));
   rough += (0.04 * (1.0 - detail) + 0.08 * (1.0 - sparkle)) * scaleMask;
+  // the mucus film is uneven: a slow variation of its thickness / gloss over
+  // the body softens and breaks the large-scale highlight into patches
+  // (pigmented skin a little more satin overall than a clean lacquer)
+  {
+    float mucus = 0.65 * vnoise3(rp * vec3(13.0, 17.0, 17.0) + seed * 1.9) + 0.35 * vnoise3(rp * 31.0 - seed);
+    rough += (mucus - 0.5) * mix(0.14, 0.08, whiteness) + 0.035 * (1.0 - whiteness) * scaleMask;
+    spec *= mix(0.72, 1.18, mucus);
+  }
 
   // ---- lips, buccal cavity, gill slit, orbit
   float sB = -rp.x; // axial position (rest)
@@ -710,6 +786,12 @@ void computeFishSurface() {
     float mot = vnoise3(rp * 55.0 + seed);
     float mot2 = vnoise3(rp * 21.0 + seed * 1.7 + 4.0);
     col *= 1.0 + ((mot - 0.5) * 0.14 + (mot2 - 0.5) * 0.12) * mix(1.0, 0.5, whiteness) * headSkin;
+    // pigmented head skin: the chromatophore field is visibly uneven — deeper
+    // crimson clouds (denser erythrophores absorb more green / blue) and paler
+    // orange-gold flecks where the guanine shows through (p40_1, p42_1)
+    float mot3 = vnoise3(rp * vec3(120.0, 140.0, 140.0) + seed * 2.7 + 1.3);
+    vec3 cloud = mix(vec3(1.06, 1.22, 1.15), vec3(0.88, 0.7, 0.76), smoothstep(0.3, 0.75, 0.55 * mot2 + 0.45 * mot3));
+    col *= mix(vec3(1.0), cloud, (1.0 - whiteness) * headSkin);
     spec *= 1.0 + ((mot2 - 0.5) * 0.9 + mn * 0.15) * headSkin;
     rough += (mot - 0.5) * 0.12 * headSkin;
     // forehead and snout top: thick skin over the frontal bones, with few
@@ -720,6 +802,14 @@ void computeFishSurface() {
     rough += 0.14 * brow;
     nT = normalize(nT + vec3(mn, mn2, 0.0) * 0.03 * brow);
   }
+  // white head: its skin inherits the flank's pearly reflector strength, so
+  // over the nape and the top of the gill cover (behind the forehead term
+  // above) it still mirrored like a lacquered dome: a little weaker, broader
+  {
+    float dome = headSkin * whiteness * smoothstep(0.1, 0.75, a) * smoothstep(0.14, 0.24, sB) * (lip > -0.5 ? 1.0 : 0.0);
+    spec *= 1.0 - 0.3 * dome;
+    rough += 0.06 * dome;
+  }
   // ventral xanthophore wash behind the pectorals (yellowish belly in sarasa)
   float bellyY = smoothstep(-0.2, -0.75, a) * smoothstep(0.2, 0.36, -rp.x) * smoothstep(0.62, 0.42, -rp.x);
   col = mix(col, col * vec3(1.05, 0.95, 0.62), bellyY * 0.35 * whiteness);
@@ -729,6 +819,21 @@ void computeFishSurface() {
   // through pale skin as a pink flush, strongest toward the free margin
   float blush = operc * whiteness * uTranslucency;
   col = mix(col, col * vec3(1.0, 0.68, 0.7), blush * 0.55);
+  // fin bases: blood vessels feeding the fins run in the thin fleshy base
+  // and show through pale skin as a soft pink flush (p11_1, p12_0): the
+  // pectoral and pelvic insertions, along the anal and dorsal bases and the
+  // caudal peduncle
+  if (whiteness > 0.01) {
+    vec2 pq = vec2(sB - 0.318, rp.y + 0.098) / vec2(0.034, 0.026);
+    float fb = exp(-dot(pq, pq));
+    fb = max(fb, smoothstep(0.42, 0.47, sB) * smoothstep(0.53, 0.49, sB) * smoothstep(-0.7, -0.92, a));
+    fb = max(fb, smoothstep(0.71, 0.75, sB) * smoothstep(0.88, 0.83, sB) * smoothstep(-0.72, -0.95, a));
+    fb = max(fb, 0.6 * smoothstep(0.44, 0.5, sB) * smoothstep(0.86, 0.8, sB) * smoothstep(0.8, 0.97, a));
+    fb = max(fb, 0.8 * smoothstep(0.86, 1.0, sB));
+    // (broken up a little: the capillary bed is not an even airbrush)
+    fb *= 0.75 + 0.5 * vnoise3(rp * 70.0 + seed);
+    col = mix(col, col * vec3(1.0, 0.76, 0.76), fb * whiteness * uTranslucency * 0.55);
+  }
   // flesh seen through the thin white (iridophore-only) skin: pinkish depth,
   // stronger where the body is thin (peduncle, belly, throat) and when viewed
   // head-on (grazing views see the reflective guanine layer instead)
@@ -877,8 +982,15 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     // the belly underside (fewer layers, flesh shows), which keeps the
     // darker ventral gradient of the photographs.
     float aV = vMask2.y;
-    float lateral = gFS.whiteness * smoothstep(-0.95, -0.05, aV) * (1.0 - 0.5 * saturate(NL));
-    reflectedLight.directDiffuse += lc * gFS.albedo * vec3(1.0, 0.95, 0.91) * RECIPROCAL_PI * 0.18 * lateral * sScat * caus;
+    // (pearly, not chalky: what the platelet stack returns sideways is a
+    // faintly cool silver that drifts toward blue-green at grazing angles
+    // (thin-film platelets seen obliquely), so shadowed white reads as
+    // nacre instead of turning grey)
+    float lateral = gFS.whiteness * mix(0.45, 1.0, smoothstep(-0.95, -0.2, aV)) * (1.0 - 0.45 * saturate(NL));
+    vec3 pearlT = mix(vec3(0.97, 0.98, 1.02), vec3(0.86, 0.96, 1.1), spow(1.0 - gNV, 1.5));
+    // (the multiply-scattered part does not need the shadow map tap from
+    // just under this point: it entered the lit side and spread around)
+    reflectedLight.directDiffuse += lc * gFS.albedo * pearlT * RECIPROCAL_PI * 0.42 * lateral * mix(0.5, 1.0, sScat) * caus;
     // ---- thin-part transmission of the key light: chord from this point
     // toward the light through the local cross-section; light enters on the
     // lit surface (shadowed there) and exits here, filtered by the tissue
