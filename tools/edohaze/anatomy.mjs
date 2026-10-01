@@ -188,25 +188,29 @@ export function surfaceAt(s, y) {
   return { p: [s, y, z], n: norm3(g) };
 }
 
-// Eye (left side, +z). Right eye mirrors z. Photo medians (n = 28 lateral, 4 dorsal): centre at
-// s = 0.089 SL, h = +0.038 SL (y ≈ 4.0 mm), horizontal diameter 0.044 SL (1.67 mm), eye top 0.056 SL;
-// interorbital (between the medial edges) ≈ 0.035 SL — narrower than the eye; the eye turrets rise to
-// 0.068 SL, i.e. just above the dorsal head profile. Pupils look sideways and well upward.
+// Eye (left side, +z). Right eye mirrors z. Photo medians (n = 31 lateral, 4 dorsal): visible disc centred at
+// s = 0.088 SL, h = +0.037 SL, 0.045 SL across (incl. the dark rim) and 0.037–0.040 SL tall (top +0.056–0.058,
+// bottom +0.019), its top 0.3–0.9 %SL below the head profile; interorbital between the dark domes ≈ 0.038 SL.
+// In 059 and 054 the eye is a proud globular dome looking sideways and somewhat up (~22°), the whole lower
+// iris visible. The pupil seen in the lateral view is the iris-plane disc (EyeMaterial), ~0.36 R out along
+// the axis, so the centre is placed for that point (with the viewer's perspective it renders at s 0.088,
+// h +0.037 SL; dorsal-view medial edges 0.019 SL from the midline).
 export const EYE = {
-  center: [3.62, 3.84, 1.36],
-  axis: norm3([-0.16, 0.56, 0.81]),
-  radius: 0.84,
+  center: [3.58, 3.81, 1.28],
+  axis: norm3([-0.16, 0.37, 0.92]),
+  radius: 0.86,
   skin: 0.05,
-  aperture: 62 * (Math.PI / 180),
+  aperture: 68 * (Math.PI / 180),
 };
 // dorsal corneal window (see buildFeatures): axis ~75° above horizontal, slightly forward and outward
 export const EYE_DORSAL_AXIS = norm3([-0.15, 0.96, 0.26]);
 const EYE_DORSAL_APERTURE = 55 * (Math.PI / 180);
 
-// Gape: from the snout tip (h = −0.011 SL) obliquely down to the rictus at 0.075 SL (below the front
-// of the eye). The maxilla runs on to ~0.095 SL (below the eye centre/rear) — the large jaw of
-// "macrognathos"; the lower jaw is level with or slightly ahead of the upper.
-export const MOUTH = [[0.0, 2.17], [0.3, 2.12], [0.8, 2.0], [1.4, 1.82], [2.0, 1.62], [2.45, 1.45], [2.7, 1.34], [2.85, 1.27]];
+// Gape: from the snout tip (h = −0.011 SL) straight down and back at ~25° to the rictus at s 0.081,
+// h −0.042 SL (under the front of the eye; 008 traces s 0.083, h −0.046; 034 s 0.079). The maxilla runs on
+// to ~0.095 SL (below the eye centre/rear) — the large jaw of "macrognathos"; the lower jaw is level with
+// or slightly ahead of the upper.
+export const MOUTH = [[0.0, 2.17], [0.3, 2.06], [0.8, 1.83], [1.4, 1.56], [2.0, 1.29], [2.45, 1.08], [2.7, 0.97], [2.85, 0.9]];
 export const RICTUS_S = 2.85;
 export const MAXILLA_END = [3.6, 0.95];
 // Free margin of the gill cover (operculum + subopercle), top → bottom (head length ≈ 27 %SL = 10.3 mm).
@@ -368,8 +372,8 @@ export function field(s, y, z, eyeCut = true) {
   const pm = [s, y, az]; // mirrored to the +z side for symmetric features
   const L = z >= 0;
   let d = baseDist(s, y, z);
-  // eye mounds
-  if (s < 6.5) for (const e of F.eyes) d = smin(d, sphereDist(p, e.c, F.Rs), 0.22);
+  // eye mounds: a tight blend, so the skin does not climb onto the cornea (only a thin rim over its upper edge)
+  if (s < 6.5) for (const e of F.eyes) d = smin(d, sphereDist(p, e.c, F.Rs), 0.12);
   // cheeks (adductor muscles) and the gill-cover plate
   // (a swelling that follows the loft, so the cheek rises smoothly out of the narrow snout behind the eye)
   if (s > 1.8 && s < 10.4) d -= 0.4 * Math.exp(-(((s - 5.6) / 1.75) ** 2)) * Math.exp(-(((y - 2.1) / 1.35) ** 2));

@@ -61,7 +61,9 @@ JOINTS.forEach((j) => { j.obj = toObject(j.at); });
 const SPINE = [[AX.head, 'J_head'], [AX.root, 'J_root'], ...AX.sp.map((s, k) => [s, `J_sp${k + 1}`]), [AX.caudal, 'J_caudal'], [AX.caudal2, 'J_caudal2']];
 // axial geometry handed to the shared pose model (src/fish/pose.js) and stored in the rig extras
 // rest fin folds: in the photos エドハゼ at rest usually holds both dorsal fins erect (004, 008, 015, 033)
-export const BODY = { tlMM: TL, spine: SPINE.map(([s, name]) => [name, s]), restFold: { d1: 0.15, d2: 0.08, anal: 0.55, caudal: 0.2 } };
+// and the anal fin erect opposite D2 in the same pose (015, 058); the caudal fan relaxed, 0.13–0.15 SL
+// tall (042, 004, 048) against 0.16–0.19 SL fully spread (058, 015, 013)
+export const BODY = { tlMM: TL, spine: SPINE.map(([s, name]) => [name, s]), restFold: { d1: 0.1, d2: 0.08, anal: 0.08, caudal: 0.37 } };
 configureBody(BODY);
 
 function spineWeights(s) {

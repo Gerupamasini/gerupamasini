@@ -140,8 +140,8 @@ export function paintIris(size = 1024) {
         // radial stroma fibres
         const fib = perlin3(Math.cos(psi) * 34, Math.sin(psi) * 34, f * 3.0, 11);
         c = c.map((v) => v * (0.85 + 0.22 * fib));
-        // coarse copper and silver grains (~0.05 of the eye diameter) in the outer iris; fbm of 2 octaves
-        // exceeds 0.2 on ~12% of the sphere, so the grains resolve at render scale
+        // coarse copper and silver grains (~0.05 of the eye diameter) in the outer iris; a 2-octave fbm
+        // exceeds 0.2 on ~15% of the sphere, so the grains resolve at render scale
         const fl = smoothstep(0.2, 0.42, fbm3(lx * 18, ly * 18, lz * 18, 2, 23)) * smoothstep(0.15, 0.35, f) * (1 - smoothstep(0.9, 1.0, f));
         const grain = smoothstep(-0.15, 0.15, perlin3(lx * 11, ly * 11, lz * 11, 26));
         const flC = [mix(0.3, 0.45, grain), mix(0.13, 0.47, grain), mix(0.07, 0.44, grain)];

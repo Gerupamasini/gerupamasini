@@ -1,6 +1,7 @@
 // Fins: pleated membrane meshes with individual rays + a shared texture atlas.
 import { section, topY, botY, surfaceAt, toObject, dirToObject, SL } from './anatomy.mjs';
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../lib/noise.mjs';
+import { defaultPose } from '../../src/fish/pose.js';
 
 const DEG = Math.PI / 180;
 const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
@@ -11,6 +12,10 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 export const ATLAS = 2048;
+
+// pigment variants: the D1 posterior-basal blotch is present in most fish (013, 028, 042, 044, 045, 048,
+// 056, 060–063; absent in 058); the dusky anal band only in a few, possibly nuptial, fish (004, 014, 016)
+export const FIN_VARIANT = { d1Blotch: true, analNuptial: false };
 
 // Scattered point chromatophores on a fin membrane: jittered grid in (ray index, mm along the ray).
 // Returns 0..1 coverage of the nearest dot. density = probability per cell, size in mm.
@@ -43,81 +48,119 @@ function inPlaneBend(dir, normal) {
 // ---------------------------------------------------------------------------
 // Fin definitions (fish-space mm)
 
-function medianFin({ name, s0, s1, count, a0, a1, lengths, dorsal, spines, curv, notch, pleat, sag, rect, branchT, segStart, pigment }) {
+// angles: optional per-ray rake (deg) instead of the linear a0 → a1; foldMaxS: depressed tips stop at this s (mm)
+function medianFin({ name, s0, s1, count, a0, a1, angles, lengths, dorsal, spines, curv, notch, pleat, sag, rect, branchT, segStart, pigment, foldMaxS }) {
   const rays = [];
   const normal = [0, 0, 1];
   for (let k = 0; k < count; k++) {
     const f = k / (count - 1);
     const s = s0 + (s1 - s0) * f;
     const y = dorsal ? topY(s) - 0.14 : botY(s) + 0.14;
-    const a = (a0 + (a1 - a0) * f) * DEG;
+    const a = (angles ? angles[k] : a0 + (a1 - a0) * f) * DEG;
     const dir = nrm([Math.cos(a), Math.sin(a), 0]);
     rays.push({ base: [s, y, 0], dir, len: lengths[k], kind: k < spines ? 'spine' : 'soft', curv, bend: inPlaneBend(dir, normal), ang: a });
   }
-  return { name, type: 'median', dorsal, rays, normal, notch, pleat, sag, rect, branchT, segStart, pigment, cup: 0, wave: 0.0 };
+  return { name, type: 'median', dorsal, rays, normal, notch, pleat, sag, rect, branchT, segStart, pigment, foldMaxS, cup: 0, wave: 0.0 };
+}
+
+// atlas point (a = ray index, t = fraction of the ray) on a median fin with straight rays: fish-space s,
+// height h above the ray bases and Lr = mm along the rays (interpolated across the membrane)
+function medianAt({ s0, s1, count, angles, lengths }, a, t) {
+  const k = clamp(Math.floor(a), 0, count - 2), f = a - k;
+  const ang = (angles[k] * (1 - f) + angles[k + 1] * f) * DEG;
+  const Lr = t * (lengths[k] * (1 - f) + lengths[k + 1] * f);
+  return { s: s0 + ((s1 - s0) * a) / (count - 1) + Lr * Math.cos(ang), h: Lr * Math.sin(ang), Lr };
 }
 
 function caudalFin(rect) {
   const rays = [];
   const normal = [0, 0, 1];
   const q = section(SL - 0.1);
-  // dorsal procurrent rays (short, unbranched), principal rays, ventral procurrent rays
-  const proc = [[SL - 1.9, 0.85, 13], [SL - 1.35, 1.6, 16], [SL - 0.8, 2.5, 18.5]];
-  for (const [s, len, ang] of proc) {
-    const dir = nrm([Math.cos(ang * DEG), Math.sin(ang * DEG), 0]);
-    rays.push({ base: [s, topY(s) - 0.12, 0], dir, len, kind: 'spine', curv: 0, bend: [0, 0, 0], ang: ang * DEG });
-  }
   const NP = 17;
+  const principal = [];
   for (let k = 0; k < NP; k++) {
     const f = k / (NP - 1);
     const u = 2 * f - 1; // -1 dorsal … +1 ventral
     const s = SL - 0.15 - 0.28 * Math.abs(u);
     const y = q.yc - u * 1.3; // principal-ray bases span the caudal base (peduncle ~0.08 SL deep)
-    const ang = -u * 20 * DEG;
+    // fan: spread 0.17–0.19 SL tall (058, 015, 013), widest at 60–65 % of the fin length
+    const ang = -u * 27 * DEG;
     // rounded caudal: TL − SL = 7.3 mm (TL/SL 1.193, n = 20)
     const len = 4.7 + 2.7 * Math.pow(Math.max(0, 1 - u * u), 0.7);
     const dir = nrm([Math.cos(ang), Math.sin(ang), 0]);
     // 17 principal rays: the outermost of each lobe are unbranched (15 branched)
-    rays.push({ base: [s, y, 0], dir, len, kind: 'soft', simple: k === 0 || k === NP - 1, curv: 0, bend: [0, 0, 0], ang });
+    principal.push({ base: [s, y, 0], dir, len, kind: 'soft', simple: k === 0 || k === NP - 1, curv: 0, bend: [0, 0, 0], ang });
   }
-  for (const [s, len, ang] of proc.slice().reverse()) {
-    const dir = nrm([Math.cos(-ang * DEG), Math.sin(-ang * DEG), 0]);
-    rays.push({ base: [s, botY(s) + 0.12, 0], dir, len, kind: 'spine', curv: 0, bend: [0, 0, 0], ang: -ang * DEG });
-  }
+  // procurrent rays (short, unbranched) lie along the fin margin from the peduncle outline to the outer
+  // principal-ray tip, so none of them crosses the outer principal ray or sticks out of the membrane
+  const procurrent = (sign) => {
+    const outer = principal[sign > 0 ? 0 : NP - 1];
+    const tipO = add(outer.base, mul(outer.dir, outer.len));
+    const edgeY = (s) => (sign > 0 ? topY(s) - 0.12 : botY(s) + 0.12);
+    const A = [SL - 1.9, edgeY(SL - 1.9), 0];
+    return [[SL - 1.9, 0.14], [SL - 1.35, 0.33], [SL - 0.8, 0.55]].map(([s, phi]) => {
+      const base = [s, edgeY(s), 0];
+      const tip = add(add(A, mul(sub(tipO, A), phi)), [0, sign * 0.05, 0]);
+      const d = sub(tip, base);
+      return { base, dir: nrm(d), len: Math.hypot(...d), kind: 'spine', curv: 0, bend: [0, 0, 0], ang: Math.atan2(d[1], d[0]) };
+    });
+  };
+  rays.push(...procurrent(1), ...principal, ...procurrent(-1).reverse());
   return {
-    name: 'Fin_Caudal', type: 'caudal', rays, normal, notch: 0.035, pleat: 0.12, sag: 0.025, rect, branchT: 0.5, segStart: 0.12, cup: 0, wave: 0.16,
+    // pleat + wave: from above the fan reads as a tan strip 0.021–0.029 SL wide (025, 029), not a needle
+    name: 'Fin_Caudal', type: 'caudal', rays, normal, notch: 0.012, pleat: 0.14, sag: 0.025, rect, branchT: 0.5, segStart: 0.12, cup: 0, wave: 0.42,
+    flush: true, // ray tips end flush with the smooth, clear margin (058, 042)
     pigment: (r, n, Lr, len, t, dRay, fAcross) => {
-      // エドハゼ caudal (photos 004, 028, 033): ~3 vertical rows of dark dots across the rays, densest on
-      // the upper and middle rays and NOT reaching the lower part of the fin (diagnostic, RDB); the base
-      // is densely dotted; the distal margin is hyaline. White guanophore dots between the dark rows.
-      // spec (n = 24 lateral records): 5–10 arcuate vertical rows of small dark dots over the basal
-      // 60–75 % (a fine checker), the distal margin clear; fewer dots on the lower third (058)
+      // spec (n = 24 lateral records): 5–10, typically 6–8, arcuate vertical rows of small dark dots
+      // (0.004–0.006 SL) concentric with the rounded margin, ~0.02 SL apart over the basal 60–80 % (a fine
+      // checker; skeptic B 83–90 %), the distal margin clear; fewer dots on the lower third (058); the base
+      // densely dotted. Rows at constant fractional radius 0.15–0.80, about one dot per ray per row.
+      // A few white guanophore dots between the dark rows on the upper and middle rays only.
       let mel = 0, irid = 0.06;
-      for (let j = 0; j < 9; j++) {
-        const Lj = 0.55 + j * 0.72 + (hash01(r, j, 2, 802) - 0.5) * 0.16 + 0.25 * Math.sin(Math.PI * fAcross);
-        if (Lj > len * 0.74) break;
-        if (hash01(r, j, 1, 801) < 0.12) continue;
-        const ls = 0.06 + 0.04 * hash01(r, j, 3, 803);
-        mel = Math.max(mel, (0.5 + 0.4 * hash01(r, j, 4, 804)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.05) ** 2)));
-        const Lw = Lj + 0.36;
-        irid = Math.max(irid, 0.45 * Math.exp(-(((Lr - Lw) / 0.07) ** 2)) * Math.exp(-((dRay / 0.05) ** 2)) * (hash01(r, j, 5, 805) < 0.5 ? 1 : 0));
+      const lower = smoothstep(0.62, 0.78, fAcross); // lowest 30 % of the rays: half the dots, no white specks
+      for (let j = 0; j < 7; j++) {
+        const Lj = (0.15 + (j * 0.65) / 6) * len + (hash01(r, j, 2, 802) - 0.5) * 0.04;
+        if (hash01(r, j, 1, 801) < 0.1 + 0.45 * lower) continue;
+        const ls = 0.09 + 0.03 * hash01(r, j, 3, 803);
+        mel = Math.max(mel, (0.55 + 0.35 * hash01(r, j, 4, 804)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.08) ** 2)));
+        const Lw = Lj + 0.4;
+        irid = Math.max(irid, 0.4 * (1 - lower) * Math.exp(-(((Lr - Lw) / 0.07) ** 2)) * Math.exp(-((dRay / 0.05) ** 2)) * (hash01(r, j, 5, 805) < 0.35 ? 1 : 0));
       }
-      const lowerCut = 0.35 + 0.65 * smoothstep(0.85, 0.6, fAcross); // fewer dots on the lower lobe
-      mel *= 0.9 * lowerCut * smoothstep(0.82, 0.66, t);
-      irid *= lowerCut;
+      mel *= 0.9 * smoothstep(0.87, 0.8, t);
       mel = Math.max(mel, 0.45 * smoothstep(0.16, 0.04, t) * finDots(fAcross * (n - 1), Lr, 0.7, 0.2, 0.5, 0.06, 806, 0.36));
       return { mel: mel * 0.9, xan: 0.12 * smoothstep(0.6, 0.1, t), irid };
     },
   };
 }
 
+// The viewer's resting pose (pose.js defaultPose) turns the bind fin about its base joint: depression
+// about the body axis (lateral → down), then abduction about the vertical (back → lateral). The fin is
+// laid out in that rest pose and turned back by the inverse rotation, so it rests where the photos show it.
+const PEC_REST = defaultPose();
+function pecRestToBind(v, side) {
+  let [s, y, z] = [v[0], v[1], v[2] * side];
+  const ca = Math.cos(PEC_REST.pecAbdL), sa = Math.sin(PEC_REST.pecAbdL);
+  [s, z] = [s * ca + z * sa, z * ca - s * sa];
+  const cd = Math.cos(PEC_REST.pecDepL), sd = Math.sin(PEC_REST.pecDepL);
+  [y, z] = [y * cd + z * sd, z * cd - y * sd];
+  return [s, y, z * side];
+}
+
 function pectoralFin(side, rect) {
   const rays = [];
   const NR = 19; // Gymnogobius: 18–22 pectoral rays
-  // fin held away from the flank; its lower half flares outward (plane tilted ~30° from vertical)
-  const Xf = nrm([1, 0, 0.42 * side]);
-  const up0 = nrm([0, 1, -0.58 * side]);
-  const Yf = nrm(sub(up0, mul(Xf, dot(up0, Xf))));
+  // rest pose (dorsal photos 025, 029, 065; lateral 008, 015): a broad, nearly invisible fan held out
+  // almost square to the body (middle rays ~80° from the axis), its plane tilted ~45° so the fan shows
+  // both from above (tips over s 0.24–0.39, as in 029) and from the side, the lower rays propped
+  // ventrolaterally on the substrate
+  const YAW = 80 * DEG, DROP = 40 * DEG, ROLL = 28 * DEG;
+  const M = [Math.cos(DROP) * Math.cos(YAW), -Math.sin(DROP), side * Math.cos(DROP) * Math.sin(YAW)];
+  const U0 = [-Math.sin(YAW), 0, side * Math.cos(YAW)]; // horizontal, forward, square to M
+  let W = nrm(cross(U0, M));
+  if (W[1] < 0) W = mul(W, -1);
+  const U = add(mul(U0, Math.cos(ROLL)), mul(W, Math.sin(ROLL))); // toward the upper rays: forward, up
+  const Xf = pecRestToBind(M, side);
+  const Yf = pecRestToBind(U, side);
   let normal = nrm(cross(Xf, Yf));
   if (normal[2] * side < 0) normal = mul(normal, -1);
   for (let k = 0; k < NR; k++) {
@@ -126,13 +169,13 @@ function pectoralFin(side, rect) {
     const y = 3.7 - 2.65 * f;
     const sp = surfaceAt(s, y).p;
     const base = [s, y, side * (sp[2] - 0.12)];
-    // upper rays sweep back at ~25°, lower rays point down-back (fan top stays at eye level)
-    const psi = (25 - f * 82) * DEG;
+    // fan spread ~100°: the upper rays point out and a little forward, the lower rays back and down
+    const psi = (44 - f * 100) * DEG;
     const dir = nrm(add(mul(Xf, Math.cos(psi)), mul(Yf, Math.sin(psi))));
-    // rounded fan (skeleton reference): the upper rays shorten quickly (top ray ~1/3 of the longest),
-    // the longest are at mid-fin, the lower rays shorten gently
-    const x = (f - 0.5) / (f < 0.5 ? 0.5 : 0.62);
-    const len = 6.0 * (0.36 + 0.64 * Math.pow(Math.max(0, 1 - x * x), 0.6));
+    // rounded fan, 0.148 SL long (spec, tip s ≈ 0.43): the middle rays longest, the upper and lower rays
+    // ~70 % of them
+    const x = (f - 0.48) / (f < 0.48 ? 0.48 : 0.52);
+    const len = 5.65 * (0.68 + 0.32 * Math.pow(Math.max(0, 1 - x * x), 0.55));
     // uppermost and lowermost rays are simple (unbranched), the rest branch near their tips
     rays.push({ base, dir, len, kind: 'soft', simple: k < 2 || k === NR - 1, curv: 0.05, bend: inPlaneBend(dir, normal), psi });
   }
@@ -190,34 +233,47 @@ function pelvicDisc(rect) {
 
 export function finDefinitions() {
   const R = (x, y, w, h) => ({ x, y, w, h });
+  // D1 VI (056): origin 0.381 SL, base end 0.532 SL; tallest spine 0.116 SL above the back with its tip at
+  // s ≈ 0.48, h ≈ 0.21 (spec medians); the front spine near vertical (058, 008, 015), the posterior margin
+  // drops almost vertically at s 0.53–0.555, leaving a clear gap of 0.04–0.06 SL before D2 (058, 008)
+  const G1 = { s0: 14.5, s1: 20.1, count: 6, angles: [80, 75, 71, 67, 65, 68], lengths: [4.2, 5.2, 5.1, 4.7, 3.4, 1.8] };
   const D1 = medianFin({
-    // D1 VII: origin 0.381 SL, end 0.534 SL, tallest spine ~0.116 SL above the back, tip at s ≈ 0.48 (spec medians)
-    name: 'Fin_Dorsal1', s0: 14.5, s1: 20.3, count: 7, a0: 74, a1: 40, dorsal: true, spines: 7, curv: 0.09, notch: 0.12, pleat: 0.04, sag: 0.02,
-    lengths: [3.9, 4.6, 4.8, 4.6, 4.0, 3.2, 2.3], rect: R(1024, 1024, 512, 512), branchT: 2, segStart: 2,
+    name: 'Fin_Dorsal1', ...G1, dorsal: true, spines: 6, curv: 0.04, notch: 0.12, pleat: 0.04, sag: 0.02,
+    rect: R(1024, 1024, 512, 512), branchT: 2, segStart: 2,
     pigment: (r, n, Lr, len, t, dRay, fAcross) => {
-      // photos 004, 060: membrane peppered with fine black melanophores over the basal two thirds,
-      // densest toward the rear and the base; ~4 oblique rows of darker dashes on the spines; orange
-      // xanthophore specks; glassy pale spines; distal margin pale
+      // photos 004, 060: membrane peppered with fine black melanophores (~10 % cover), densest toward the
+      // rear and the base; ~4 oblique rows of darker dashes on the spines; orange xanthophore specks;
+      // glassy pale spines; distal margin pale
       const a = fAcross * (n - 1);
+      const p = medianAt(G1, a, t); // p.Lr: mm along the rays, continuous across the membrane
       const rear = smoothstep(0.2, 0.95, fAcross), base = smoothstep(0.85, 0.25, t);
-      let mel = finDots(a, Lr, 0.45, 0.16, 0.25 + 0.4 * rear * base, 0.05, 811, 0.9) * smoothstep(0.92, 0.6, t);
+      let mel = finDots(a, p.Lr, 0.12, 0.12, 0.35 + 0.35 * rear * base, 0.06, 811, 1.15) * smoothstep(0.92, 0.6, t);
       for (let j = 0; j < 4; j++) {
         const Lj = 0.6 + j * 0.75 + r * 0.06 + (hash01(r, j, 2, 812) - 0.5) * 0.18;
         if (Lj > len * 0.85) break;
         mel = Math.max(mel, (0.5 + 0.4 * hash01(r, j, 4, 814)) * Math.exp(-(((Lr - Lj) / 0.13) ** 2)) * Math.exp(-((dRay / 0.09) ** 2)));
       }
       // spec: a dense dusky-black melanophore blotch on the posterior-basal membrane between the last
-      // 2–3 spines in most fish (013, 014, 028, 042, 044, 045, 048, 056, 060–063); absent in 058
-      const blotchEdge = 0.08 * perlin3(a * 2.1, Lr * 1.7, 0.3, 816);
-      mel = Math.max(mel, 0.78 * smoothstep(0.55, 0.78, fAcross + blotchEdge) * smoothstep(0.62, 0.3, t + blotchEdge));
-      const xan = 0.3 * finDots(a, Lr, 0.5, 0.16, 0.4, 0.04, 815, 0.9) + 0.08;
+      // 2–3 spines (s 0.47–0.54, up to 0.03–0.04 SL above the base): a stipple of fine dots (060), neutral
+      // grey-black (028 [75,75,78]) and still see-through between the dots (013). Anchored to the base,
+      // so it does not ride out along the raked spines.
+      if (FIN_VARIANT.d1Blotch) {
+        const e = 0.18 * perlin3(p.s * 1.9, p.h * 1.9, 0.3, 816);
+        const core = smoothstep(17.6, 18.5, p.s + e) * smoothstep(20.5, 20.0, p.s + e) * smoothstep(1.6, 0.95, p.h + e);
+        const dots = finDots(a, p.Lr, 0.085, 0.1, 0.92, 0.065, 817, 1.15);
+        mel = Math.max(mel, core * Math.max(0.95 * dots, 0.12));
+      }
+      const xan = 0.3 * finDots(a, p.Lr, 0.5, 0.16, 0.4, 0.04, 815, 0.9) + 0.08;
       return { mel: 0.85 * mel + 0.03, xan, irid: 0.05 + 0.25 * Math.exp(-((dRay / 0.05) ** 2)) * smoothstep(0.1, 0.5, t) };
     },
   });
   const D2 = medianFin({
-    // D2 I,12: 0.602–0.862 SL, tallest anteriorly (~0.09–0.10 SL at s ≈ 0.70); the last rays form a small lobe reaching s ≈ 0.92 SL
-    name: 'Fin_Dorsal2', s0: 22.9, s1: 32.8, count: 13, a0: 64, a1: 30, dorsal: true, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
-    lengths: [3.2, 3.8, 4.15, 4.3, 4.35, 4.35, 4.3, 4.3, 4.3, 4.35, 4.4, 4.35, 4.0], rect: R(0, 1024, 1024, 512), branchT: 0.55, segStart: 0.18,
+    // D2 I,12: 0.604–0.875 SL; tallest anteriorly, 0.103 SL above the back with the tip at s 0.67–0.70,
+    // h 0.18 (058, 008, 015); margin level over the front half, then sloping down; the last two rays form
+    // a small lobe reaching s 0.92–0.94 when depressed. Anterior rays raked 62–65°, posterior 40–45°.
+    name: 'Fin_Dorsal2', s0: 22.9, s1: 33.2, count: 13, a0: 65, a1: 43, dorsal: true, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
+    lengths: [3.5, 4.6, 4.75, 4.75, 4.6, 4.3, 4.0, 3.7, 3.45, 3.2, 2.95, 3.15, 3.0], rect: R(0, 1024, 1024, 512), branchT: 0.55, segStart: 0.18,
+    foldMaxS: 35.7, // s 0.94 SL
     pigment: (r, n, Lr, len, t, dRay) => {
       // photos 004, 028: 4–5 longitudinal rows of dark dashes / X marks on the rays, the distal quarter
       // unspotted and hyaline; white guanophore dots alternate with the dark rows
@@ -234,11 +290,27 @@ export function finDefinitions() {
     },
   });
   const AN = medianFin({
-    // A I,10: origin 0.672 SL (below the 2nd–3rd D2 ray), end 0.883 SL (photo medians)
-    name: 'Fin_Anal', s0: 25.5, s1: 33.6, count: 11, a0: -56, a1: -24, dorsal: false, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
-    lengths: [2.0, 2.65, 2.95, 3.1, 3.2, 3.25, 3.3, 3.35, 3.4, 3.4, 3.15], rect: R(0, 1536, 1024, 512), branchT: 0.55, segStart: 0.18,
-    // dusky with a darker distal band (photo 004); pale iridescent base
-    pigment: (r, n, Lr, len, t) => ({ mel: 0.08 + 0.3 * smoothstep(0.55, 0.85, t) * smoothstep(1.0, 0.92, t), xan: 0.1, irid: 0.3 * smoothstep(0.35, 0.0, t) }),
+    // A I,10: origin 0.672 SL (below the 2nd–3rd D2 ray), end 0.883 SL (photo medians); an erect fan
+    // opposite D2, 0.054 SL below the belly (044, 048, 058), the 3rd–6th rays longest, convex margin,
+    // rays raked ~50° in front and ~40° behind; depressed tip at s ≤ 0.93 (spec 0.90, 042 0.94)
+    name: 'Fin_Anal', s0: 25.5, s1: 33.5, count: 11, a0: -55, a1: -43, dorsal: false, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
+    lengths: [1.85, 2.5, 2.8, 2.9, 2.9, 2.8, 2.65, 2.45, 2.3, 2.1, 1.9], rect: R(0, 1536, 1024, 512), branchT: 0.55, segStart: 0.18,
+    foldMaxS: 35.3, // s 0.93 SL
+    pigment: (r, n, Lr, len, t, dRay) => {
+      // nuptial variant: dusky with a darker distal band (004, 014, 016)
+      if (FIN_VARIANT.analNuptial) return { mel: 0.08 + 0.3 * smoothstep(0.55, 0.85, t) * smoothstep(1.0, 0.92, t), xan: 0.1, irid: 0.3 * smoothstep(0.35, 0.0, t) };
+      // default: hyaline whitish (058, 050) with 2–3 faint rows of small brown dots on the rays over the
+      // basal 70 % (dotted rays when depressed: 042, 013), about half the D2 contrast; pale iridescent base
+      let mel = 0;
+      for (let j = 0; j < 3; j++) {
+        const Lj = 0.5 + j * 0.6 + (hash01(r, j, 2, 832) - 0.5) * 0.12;
+        if (Lj > len * 0.7) break;
+        if (hash01(r, j, 1, 831) < 0.15) continue;
+        const ls = 0.07 + 0.04 * hash01(r, j, 3, 833);
+        mel = Math.max(mel, (0.3 + 0.2 * hash01(r, j, 4, 834)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.07) ** 2)));
+      }
+      return { mel: 0.85 * mel + 0.02, xan: 0.08, irid: 0.3 * smoothstep(0.35, 0.0, t) };
+    },
   });
   return [
     caudalFin(R(0, 0, 1024, 1024)),
@@ -301,7 +373,11 @@ function foldedDef(def) {
   if (def.type === 'median') {
     // rays lie back along the body (dorsal fins drop into their groove, the anal fin folds back)
     const sgn = def.dorsal ? 1 : -1;
-    return withRayAngles(def, (r) => sgn * (0.07 + 0.06 * Math.abs(r.ang)), [1, 0, 0], [0, 1, 0]);
+    return withRayAngles(def, (r) => {
+      // depressed tips stop short of foldMaxS (anal tip s ≤ 0.93 SL, D2 lobe ≤ 0.94 SL): the last rays stay a little raised
+      const a = 0.07 + 0.06 * Math.abs(r.ang);
+      return sgn * (def.foldMaxS ? Math.max(a, Math.acos(clamp((def.foldMaxS - r.base[0]) / r.len, -1, 1))) : a);
+    }, [1, 0, 0], [0, 1, 0]);
   }
   if (def.type === 'caudal') return withRayAngles(def, (r) => r.ang * 0.3, [1, 0, 0], [0, 1, 0]);
   if (def.type === 'pectoral') {
@@ -510,7 +586,8 @@ export function paintFinAtlas(defs, log = () => {}) {
         let edge = 1 - def.notch * Math.pow(Math.sin(Math.PI * fr), 0.85);
         edge -= (0.035 / Math.max(L, 1)) * (0.5 + 0.5 * perlin3(a * 5.3, 0.5, 1.7, 77)) + (0.02 / Math.max(L, 1)) * Math.abs(perlin3(a * 23, 3.1, 0.2, 78));
         const covM = smoothstep(edge + 0.004, edge - 0.004, tRaw);
-        const covR = smoothstep(0.12, 0.35, rayD) * smoothstep(1.004, 0.996, tRaw);
+        // flush fins: the ray tips end with the membrane margin instead of projecting past it
+        const covR = smoothstep(0.12, 0.35, rayD) * (def.flush ? covM : smoothstep(1.004, 0.996, tRaw));
         let cov = Math.max(covM, covR);
         if (tRaw < 0) cov = 1;
         // pigment
@@ -518,13 +595,15 @@ export function paintFinAtlas(defs, log = () => {}) {
         const pg = def.pigment(rNear, n, t * ray.len, ray.len, t, dRay, fAcross);
         const mel = clamp(pg.mel), xan = clamp(pg.xan), irid = clamp(pg.irid);
         // colours (linear)
-        // hyaline, faintly tan membrane and pale straw rays (photos: fins read clear, not milky white)
-        let cr = mix(0.66, 0.74, rayD), cg = mix(0.63, 0.67, rayD), cb = mix(0.55, 0.5, rayD);
+        // hyaline membrane that scatters little and reads tan where it shows at all (025 caudal from above
+        // [161,152,130]; folded or edge-on fins vanish in 025, 029, 065), whitish rays (pectoral [215,210,195])
+        let cr = mix(0.36, 0.72, rayD), cg = mix(0.32, 0.68, rayD), cb = mix(0.25, 0.58, rayD);
         cr *= mix(1, 1.0, xan); cg *= mix(1, 0.86, xan); cb *= mix(1, 0.5, xan);
         cr = mix(cr, 0.9, irid * 0.5); cg = mix(cg, 0.9, irid * 0.5); cb = mix(cb, 0.88, irid * 0.5);
         cr *= Math.exp(-mel * 2.4); cg *= Math.exp(-mel * 2.8); cb *= Math.exp(-mel * 3.1);
         const o = (py * S + px) * 4;
-        const opacity = clamp(0.2 + 0.5 * rayD + 0.75 * mel + 0.3 * irid);
+        // membrane alpha ~0.2 face-on (spec 0.15–0.3), rays ~0.5
+        const opacity = clamp(0.18 + 0.3 * rayD + 0.75 * mel + 0.3 * irid);
         color[o] = srgb(cr); color[o + 1] = srgb(cg); color[o + 2] = srgb(cb); color[o + 3] = Math.round(cov * opacity * 255);
         data[o] = Math.round(rayD * 255); data[o + 1] = Math.round(mel * 255); data[o + 2] = Math.round(irid * 255); data[o + 3] = Math.round(cov * 255);
         // height (mm)

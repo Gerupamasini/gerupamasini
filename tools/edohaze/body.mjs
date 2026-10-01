@@ -506,7 +506,7 @@ function bakeBodyTextures(ctx) {
     return { w, dk };
   }
   // Scale-pocket reticulation (lateral 058, 022, 008, 010, 031; dorsal 029): staggered oblique rows of pockets,
-  // ~3.5 %SL along s × 2 %SL across (qd: arc length from the dorsal midline, mm), each outlined by the dark
+  // ~3.5 %SL along s × 2 %SL across (qd: signed arc length from the dorsal midline, mm), each outlined by the dark
   // posterior arc of the pocket in front of it; the pocket centres stay pale. Returns the arc mask (0…1).
   const LAT_S = 1.35, LAT_Q = 0.8, LAT_RS = 0.72 * LAT_S, LAT_RQ = 0.72 * LAT_Q;
   function latticeEdge(s, qd) {
@@ -518,46 +518,53 @@ function bakeBodyTextures(ctx) {
       for (let dc = -1; dc <= 1; dc++) {
         const col = cb + dc;
         const hsh = hash3i(col, row, 5, 4409);
-        const cs = (col + off + ((hsh & 255) / 255 - 0.5) * 0.16) * LAT_S;
+        const cs = (col + off + ((hsh & 255) / 255 - 0.5) * 0.3) * LAT_S;
         if (cs >= bcs) continue;
-        const ds = s - cs, dq = qd - (row + (((hsh >>> 8) & 255) / 255 - 0.5) * 0.16) * LAT_Q;
-        const k0 = Math.hypot(ds / LAT_RS, dq / LAT_RQ);
+        const ds = s - cs, dq = qd - (row + (((hsh >>> 8) & 255) / 255 - 0.5) * 0.3) * LAT_Q;
+        const sc = 0.92 + 0.16 * (((hsh >>> 16) & 255) / 255), rs = LAT_RS * sc, rq = LAT_RQ * sc;
+        const k0 = Math.hypot(ds / rs, dq / rq);
         if (k0 >= 1) continue;
         // the anterior-most pocket covering the point is the visible one; distance inside its outline (mm)
-        const k1 = Math.hypot(ds / (LAT_RS * LAT_RS), dq / (LAT_RQ * LAT_RQ));
-        dIn = k1 > 0 ? (k0 * (1 - k0)) / k1 : LAT_RQ;
+        const k1 = Math.hypot(ds / (rs * rs), dq / (rq * rq));
+        dIn = k1 > 0 ? (k0 * (1 - k0)) / k1 : rq;
         bcs = cs;
       }
     }
-    return dIn < 0 ? 0 : smoothstep(0.14, 0.05, dIn); // arc ~0.15 mm wide
+    if (dIn < 0) return 0;
+    // arc ~0.15 mm wide, broken in places (an irregular net, not a regular honeycomb: 029, 058)
+    return smoothstep(0.14, 0.05, dIn) * (0.35 + 0.65 * smoothstep(-0.3, 0.25, fbm3(s * 0.8, qd * 0.8, 2.9, 2, 67)));
   }
   // mean arc coverage, so the melanophores moved onto the arcs keep the overall budget
   let LAT_MEAN = 0;
-  for (let i = 0; i < 4000; i++) LAT_MEAN += latticeEdge(10 + 20 * hash01(i, 1, 2, 4411), 4 * hash01(i, 3, 4, 4412));
+  for (let i = 0; i < 4000; i++) LAT_MEAN += latticeEdge(10 + 20 * hash01(i, 1, 2, 4411), 8 * hash01(i, 3, 4, 4412) - 4);
   LAT_MEAN = Math.max(LAT_MEAN / 4000, 0.05);
 
   // Dorsal pigment zoning (dorsal photos 029, 025, 065, 043; lateral 042, 013, 058, 022). From above the pigment
   // is a reticulated mid-dorsal band between pale translucent margins (margin/midline 1.3–1.4 at s 0.5), a dark
   // nape behind the pale head top, and a pale tail with a midline dash chain (posterior/mid-dorsum 1.2–2.0); in
   // profile the dorsal edge is as pale as the upper flank (1.0–1.2). Both pale zones are the dorsolateral
-  // shoulder, which each view sees obliquely, so it carries ~60 % of the pigment, while the midline (face-on from
-  // above) and the flank (face-on in profile) keep theirs. zn = |z| / half-width (position in dorsal view).
-  function dorsalZone(s, hn, zn, qd) {
+  // shoulder, which each view sees obliquely, so it carries about half the melanophores (and smaller ones), while
+  // the midline (face-on from above) and the flank (face-on in profile) keep theirs. zn = |z| / half-width.
+  // Measured on renders: profile dorsal edge / upper flank 0.64 → 0.97; dorsal margin / midline 0.88 → 1.29.
+  function zoneK(s, hn, zn) {
     const mid = 1 - smoothstep(0.25, 0.45, zn);
-    const rim = 1 - 0.5 * smoothstep(0.7, 1.0, hn) * (1 - mid);
-    const band = 1 - 0.6 * smoothstep(0.35, 0.9, zn) * smoothstep(0.5, 0.75, hn);
+    const rim = 1 - 0.75 * smoothstep(0.62, 0.95, hn) * (1 - mid);
+    const band = 1 - 0.6 * smoothstep(0.35, 0.9, zn) * smoothstep(0.35, 0.6, hn);
     const pst = smoothstep(0.63 * SL, 0.68 * SL, s);
     // the mid-dorsal band itself is densest from the nape to s ≈ 0.6 SL (029: [109,97,69])
-    const midBand = (1 - smoothstep(0.2, 0.4, zn)) * smoothstep(0.75, 0.92, hn) * smoothstep(sP(22), sP(28), s) * (1 - pst);
-    const k = rim * band * (1 - 0.4 * pst) * (1 + 0.35 * midBand);
+    const midBand = (1 - smoothstep(0.25, 0.45, zn)) * smoothstep(0.8, 0.94, hn) * smoothstep(sP(22), sP(28), s) * (1 - pst);
+    return { k: rim * band * (1 - 0.4 * pst * smoothstep(0.35, 0.65, hn)) * (1 + midBand), midBand, pst };
+  }
+  function dorsalZone(s, hn, zn, qd) {
+    const { k, midBand, pst } = zoneK(s, hn, zn);
     // reticulation from the nape to the peduncle, strongest to s ≈ 0.6 SL, down to h ≈ +1–2 %SL
     let lat = 0, edge = 0;
-    if (qd >= 0 && hn > -0.05) {
+    if (!Number.isNaN(qd) && hn > -0.05) {
       lat = smoothstep(-0.05, 0.25, hn) * smoothstep(sP(22), sP(27), s) * smoothstep(sP(97), sP(90), s) * (0.6 + 0.4 * smoothstep(sP(68), sP(58), s));
       if (lat > 0) edge = latticeEdge(s, qd);
     }
     // dark reddish-brown nape just behind the eyes (s 0.13–0.25 SL; nape/head top 0.66–0.73 in 029, 025)
-    const nape = smoothstep(0.45, 0.85, hn) * smoothstep(eyeRear - 0.2, eyeRear + 1.0, s) * smoothstep(sP(27), sP(21), s);
+    const nape = smoothstep(0.4, 0.85, hn) * (1 - 0.5 * smoothstep(0.4, 0.8, zn)) * smoothstep(eyeRear - 0.3, eyeRear + 1.5, s) * smoothstep(sP(28), sP(19), s);
     // the pale posterior dorsum keeps a chain of short dashes on the midline (029, 025)
     let chain = 0;
     if (pst > 0 && hn > 0.5 && zn < 0.3) {
@@ -627,18 +634,18 @@ function bakeBodyTextures(ctx) {
   function headMarks(s, y, hn) {
     if (s > HM_S1) return { line: 0, dots: 0 };
     const nz = fbm3(s * 3.0, y * 3.0, 4.7, 2, 23) * 0.012;
-    let line = 0.7 * smoothstep(0.06, 0.025, distToPolyline2(s, y, POSTOC) + nz);
-    line = Math.max(line, 0.7 * smoothstep(0.09, 0.03, distToPolyline2(s, y, SUBOC) + nz));
+    let line = 0.9 * smoothstep(0.06, 0.025, distToPolyline2(s, y, POSTOC) + nz);
+    line = Math.max(line, 0.75 * smoothstep(0.09, 0.03, distToPolyline2(s, y, SUBOC) + nz));
     line = Math.max(line, 0.35 * smoothstep(0.06, 0.025, distToPolyline2(s, y, PREOP_LINE) + nz));
     let row = 0;
-    for (const R of DOT_ROWS) row = Math.max(row, Math.exp(-((distToPolyline2(s, y, R) / 0.05) ** 2)));
+    for (const R of DOT_ROWS) row = Math.max(row, Math.exp(-((distToPolyline2(s, y, R) / 0.045) ** 2)));
     const cl = smoothstep(1.0, 0.55, Math.hypot((s - CL_S) / CL_RS, (y - yH(s, 2.5)) / CL_RY) + 0.25 * fbm3(s * 2.2, y * 2.2, 1.9, 2, 29));
-    return { line: line * smoothstep(-0.9, -0.3, hn), dots: 150.0 * row + 90.0 * cl };
+    return { line: line * smoothstep(-0.9, -0.3, hn), dots: 220.0 * row + 90.0 * cl };
   }
 
   // melanophore density (spots per mm^2), size factor and head-disc weight at a fish-space point
-  // (qd: arc length from the dorsal midline, mm; < 0 where unknown)
-  function melDensity(s, y, z, qd = -1) {
+  // (qd: signed arc length from the dorsal midline, mm; NaN where unknown)
+  function melDensity(s, y, z, qd = NaN) {
     if (s < 0.2 || s > S_END - 0.1) return [0, 1, 0];
     const q = section(s);
     const dy = y - q.yc;
@@ -653,38 +660,41 @@ function bakeBodyTextures(ctx) {
     // peppered dorsal two thirds (photos: fine dots ~0.002–0.003 SL), fading on the lower flank; behind the
     // visceral block a sparse pepper reaches the lower flank (042, 058: 1–3 % cover at h −3.5…−1 %SL)
     const pz = smoothstep(0.62 * SL, 0.66 * SL, s);
-    const upper = smoothstep(mix(-0.45, -0.85, pz), mix(0.35, 0.2, pz), hn);
+    const low = pz * smoothstep(-0.1, -0.4, hn);
+    const upper = Math.max(smoothstep(-0.45, 0.35, hn), 0.4 * pz * smoothstep(-1.05, -0.5, hn));
     // ~55 % of the dorsal budget lines the scale-pocket arcs, the rest stays random
     const latMul = 1 + 0.55 * DZ.lat * (DZ.edge / LAT_MEAN - 1);
     let d = 3.0 + 80.0 * upper * (0.7 + 0.5 * n) * DZ.k * latMul + 10.0 * (1 - Math.abs(hn));
     d += 18.0 * b + 9.0 * sd * DZ.k; // blotches are mostly diffuse dusky pigment (smooth term), not spot clusters
     {
       const bd = beadAt(s, y, q);
-      d += 60.0 * DZ.nape + 45.0 * bd.dk * upper * DZ.k + 60.0 * DZ.chain;
+      d += 45.0 * DZ.nape + 45.0 * bd.dk * upper * DZ.k + 60.0 * DZ.chain;
       d *= 1 - 0.9 * bd.w;
     }
     if (head > 0) {
       const hm = headMarks(s, y, hn);
-      // pale, finely dotted head top in front of the dark nape (dorsal 029, 025)
+      // pale, finely dotted head top in front of the dark nape (dorsal 029, 025); ×0.65: a head disc covers
+      // ~1.5× the area of a trunk melanophore
       const topD = mix(25.0, 48.0, smoothstep(eyeRear - 0.2, eyeRear + 0.6, s));
-      let hd = 8.0 + topD * dorsal + 26.0 * smoothstep(-0.85, -0.25, hn) * (1 - dorsal) + 8.0 * smoothstep(3.0, 0.8, s) + 60.0 * DZ.nape + hm.dots;
+      let hd = 0.65 * (8.0 + topD * dorsal + 26.0 * smoothstep(-0.85, -0.25, hn) * (1 - dorsal) + 8.0 * smoothstep(3.0, 0.8, s)) + 45.0 * DZ.nape;
       // lower head only lightly dotted (−40 % below h 0), the lower gill cover sparsest (−60 %; 059, 054)
-      const low = smoothstep(yH(s, 0.4), yH(s, -0.4), y);
+      const below = smoothstep(yH(s, 0.4), yH(s, -0.4), y);
       const op = smoothstep(sPreop(y) - 0.05, sPreop(y) + 0.3, s);
-      hd *= (1 - 0.4 * low) * (1 - 0.333 * op * low);
-      d = mix(d, hd, head);
+      hd *= (1 - 0.4 * below) * (1 - 0.333 * op * below);
+      d = mix(d, hd + hm.dots, head);
     }
     // keep the eye itself and lips clean
     const ed = eyeDist(s, y, z);
     d *= 1 + 0.9 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.35) ** 2));
-    d *= 1 - belly * mix(0.97, 0.7, pz);
+    d *= 1 - belly * mix(0.97, 0.5, pz);
     // no melanophores line the opercular margin (059, 054, 057)
     const om = opMargin(s, y);
     if (om < 1) d *= 1 - 0.8 * Math.exp(-(((om + 0.04) / 0.1) ** 2));
     const lb = lipBands(s, y);
     d = d * (1 - 0.6 * lb.lo) + 32.0 * lb.up + 8.0 * lb.lo;
     d *= 1 - 0.85 * lb.rim;
-    const size = (0.72 + 0.35 * dorsal + 0.3 * b) * (1 - 0.15 * lb.up);
+    // (smaller as well as sparser on the pale dorsolateral shoulder; full-sized on the posterior lower flank)
+    const size = (0.72 + 0.35 * dorsal + 0.3 * b + 0.25 * low) * (1 - 0.15 * lb.up) * (0.7 + 0.3 * Math.min(DZ.k, 1));
     return [Math.max(0, d), size, head];
   }
 
@@ -698,7 +708,7 @@ function bakeBodyTextures(ctx) {
   const HN = new Float32Array(nT);
   const HEAD = new Float32Array(nT);
   // smooth pigment fields at a fish-space surface point
-  function pigmentAt(s, yy, z, q = section(clamp(s, 0.01, S_END - 0.01)), qd = -1) {
+  function pigmentAt(s, yy, z, q = section(clamp(s, 0.01, S_END - 0.01)), qd = NaN) {
     const dy = yy - q.yc;
     const hn = clamp(dy / Math.max(dy > 0 ? q.t : q.b, 1e-3), -1.2, 1.2);
     const zn = Math.abs(z) / Math.max(q.w, 1e-3);
@@ -715,7 +725,7 @@ function bakeBodyTextures(ctx) {
       m = mix(m, top * dorsal + 0.3 * headMarks(s, yy, hn).line, head);
     }
     // dusky scale-pocket arcs, the dark nape and the posterior mid-dorsal dash chain
-    m += 0.06 * DZ.lat * DZ.edge * DZ.k * (1 - head * 0.5) + 0.04 * DZ.midBand + 0.12 * DZ.nape + 0.08 * DZ.chain;
+    m += 0.06 * DZ.lat * DZ.edge * DZ.k * (1 - head * 0.5) + 0.09 * DZ.midBand + 0.07 * DZ.nape + 0.08 * DZ.chain;
     const bd = beadAt(s, yy, q);
     // posterior body: two crisp thin dark axial lines along the horizontal septum (h 0 and +1.2–1.5 %SL, each
     // 0.3–0.4 %SL wide at ~0.8 × the flank) carrying small dashes, and a dark mark at the caudal base (042, 058)
@@ -734,7 +744,7 @@ function bakeBodyTextures(ctx) {
     const vEnd = smoothstep(0.64 * SL, 0.62 * SL, s);
     if (vEnd > 0 && s > 0.34 * SL) {
       const h = ((yy - yH(s, 0)) / AX.L) * 100;
-      m += 0.12 * smoothstep(0.35 * SL, 0.4 * SL, s) * vEnd * (0.85 + 0.45 * smoothstep(0.48 * SL, 0.6 * SL, s)) * smoothstep(-1.3, -0.5, h) * smoothstep(3.8, 3.0, h);
+      m += 0.12 * smoothstep(0.35 * SL, 0.4 * SL, s) * vEnd * (0.75 + 0.3 * smoothstep(0.48 * SL, 0.6 * SL, s)) * smoothstep(-1.3, -0.5, h) * smoothstep(3.8, 3.0, h);
     }
     // the opercular margin is a slightly paler, more translucent membrane edge, not a dark outline (059, 054)
     const om = opMargin(s, yy), mb = om < 1 ? Math.exp(-(((om + 0.07) / 0.08) ** 2)) : 0;
@@ -744,10 +754,11 @@ function bakeBodyTextures(ctx) {
     // below the dusky band the peritoneum is opaque silvery white, ending as sharply (lower band 0.73–0.80 ×
     // the translucent flank behind the edge: 042, 058, 044)
     const bellyMass = smoothstep(0.3 * SL, 0.36 * SL, s) * vEnd * smoothstep(yH(s, 0), yH(s, -1.5), yy);
-    let iri = 0.7 * belly + 0.1 * smoothstep(0.05, -0.5, hn) + 0.03 * Math.exp(-(((hn - 0.02) / 0.22) ** 2)) + 0.75 * bellyMass;
+    // (the lower head is yellowish cream rather than silvered: 013, 042, 059)
+    let iri = 0.7 * belly * (1 - 0.5 * head) + 0.1 * smoothstep(0.05, -0.5, hn) + 0.03 * Math.exp(-(((hn - 0.02) / 0.22) ** 2)) + 0.75 * bellyMass;
     // whitish crescent under the eye (photos)
     iri = Math.max(iri, 0.55 * Math.exp(-((Math.hypot(s - EYE.center[0], yy - (EYE.center[1] - EYE.radius - 0.28)) / 0.32) ** 2)));
-    iri = Math.max(iri, head * 0.25 * smoothstep(0.2, -0.6, hn) * smoothstep(2.4, 4.6, s));
+    iri = Math.max(iri, head * 0.15 * smoothstep(0.2, -0.6, hn) * smoothstep(2.4, 4.6, s)); // faint: the cheek reads yellowish
     iri = Math.max(iri, 0.06 * smoothstep(EYE.radius + 0.5, EYE.radius + 0.2, ed) * smoothstep(EYE.radius, EYE.radius + 0.15, ed));
     iri = Math.max(iri, 0.62 * bd.w);
     // opercle iridescent patch: a dim yellow-green sheen on the upper half of the gill cover, slightly darker
@@ -762,7 +773,7 @@ function bakeBodyTextures(ctx) {
     let xan = 0.22 + 0.38 * dorsal + 0.25 * head * smoothstep(-0.3, 0.4, hn);
     xan *= 1 - 0.85 * belly;
     // yellowish cheek, lips and throat (spec cheek [172,156,128], B/R 0.70–0.75; 013, 042, 016, 022)
-    xan += 0.25 * head * smoothstep(-0.9, 0.2, hn);
+    xan += 0.35 * head * smoothstep(-0.9, 0.2, hn);
     xan *= 0.8 + 0.4 * fbm3(s * 0.9, yy * 0.9, z * 0.9, 3, 51);
     // gill region seen through the operculum (used for the fallback albedo only)
     const gill = smoothstep(6.6, 7.9, s) * smoothstep(10.3, 9.4, s) * smoothstep(0.35, -0.2, hn) * smoothstep(-0.95, -0.55, hn);
@@ -802,7 +813,7 @@ function bakeBodyTextures(ctx) {
   for (let y = 0; y < texH; y++)
     for (let x = 0; x < texW; x++) {
       const t = y * texW + x;
-      const P = pigmentAt(A.px[t], A.py[t], A.pz[t], secs[x], A.qd[t]);
+      const P = pigmentAt(A.px[t], A.py[t], A.pz[t], secs[x], A.pz[t] < 0 ? -A.qd[t] : A.qd[t]);
       HN[t] = P.hn; HEAD[t] = P.head; MEL[t] = P.mel; IRI[t] = P.iri; XAN[t] = P.xan; GILL[t] = P.gill;
     }
 
@@ -851,7 +862,7 @@ function bakeBodyTextures(ctx) {
       const xc = Math.floor(x0 + texW / cellsU / 2), yc = Math.floor(y0 + texH / cellsV / 2);
       const t = yc * texW + xc;
       const area = A.du[t] * (texW / cellsU) * A.dv[t] * (texH / cellsV);
-      const [dens, size, disc] = melDensity(A.px[t], A.py[t], A.pz[t], A.qd[t]);
+      const [dens, size, disc] = melDensity(A.px[t], A.py[t], A.pz[t], A.pz[t] < 0 ? -A.qd[t] : A.qd[t]);
       // near the snout pole the texture parameterisation collapses: spots would smear radially
       if (A.px[t] < 0.55 || A.du[t] / Math.max(A.dv[t], 1e-6) > 3) continue;
       const expected = dens * area;
@@ -965,7 +976,7 @@ function bakeBodyTextures(ctx) {
           sh = mix(scaleH(second), scaleH(top), edge);
           // melanophores concentrate along the scale pockets (reticulated look of the upper flank)
           const pocket = Math.exp(-(((top.rr - top.dist) / 0.035) ** 2)) * smoothstep(-0.05, 0.12, top.ds);
-          const dors = smoothstep(-0.1, 0.7, hn);
+          const dors = smoothstep(-0.1, 0.7, hn) * Math.min(1, zoneK(s, hn, zn).k);
           MEL[t] = 1 - (1 - MEL[t]) * (1 - 0.16 * pocket * dors * scMask * (0.6 + 0.4 * hash01(top.hsh & 1023, 0, 0, 7)));
         } else sh = 0.3;
         const amp = 0.013 * (1 - 0.45 * smoothstep(-0.3, -0.8, hn)) * (0.75 + 0.25 * zn);
@@ -1081,14 +1092,14 @@ function bakeBodyTextures(ctx) {
     // the back is barely darker than the flank: in profile the dorsal edge is as pale as the upper flank (042, 013)
     r = mix(r, 0.53, dorsal * 0.15); g = mix(g, 0.46, dorsal * 0.15); b = mix(b, 0.25, dorsal * 0.15);
     // throat and chin warm cream rather than grey-white (059, 058; spec [187,180,154])
-    r = mix(r, mix(0.74, 0.75, head), bellyC); g = mix(g, mix(0.64, 0.645, head), bellyC); b = mix(b, mix(0.52, 0.47, head), bellyC);
+    r = mix(r, mix(0.74, 0.75, head), bellyC); g = mix(g, mix(0.64, 0.66, head), bellyC); b = mix(b, mix(0.52, 0.44, head), bellyC);
     r *= mix(1, 1.02, X * 0.6); g *= mix(1, 0.9, X * 0.6); b *= mix(1, 0.55, X * 0.6);
     r = mix(r, 0.78, I * 0.4); g = mix(g, 0.77, I * 0.4); b = mix(b, 0.7, I * 0.4);
     // reddish-brown nape sides behind the eyes, the gills showing through from above (029, 025: behind-eye
     // (R−G)/mean 0.18–0.19)
     {
       const zn = Math.abs(z) / Math.max(halfW, 1e-3);
-      const nt = 0.7 * smoothstep(0.3, 0.45, zn) * smoothstep(0.97, 0.85, zn) * smoothstep(0.25, 0.5, hn) *
+      const nt = 0.25 * smoothstep(0.3, 0.45, zn) * smoothstep(0.97, 0.85, zn) * smoothstep(0.25, 0.5, hn) *
         smoothstep(eyeRear - 0.1, eyeRear + 0.7, s) * smoothstep(sP(26.5), sP(23), s);
       r = mix(r, 0.45, nt); g = mix(g, 0.3, nt); b = mix(b, 0.18, nt);
     }
