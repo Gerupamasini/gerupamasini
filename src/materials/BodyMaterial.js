@@ -93,6 +93,8 @@ uniform vec4 uAbdomen;          // abdominal cavity centre s, centre height (fra
 uniform vec3 uGut;              // viscera: posterior edge onset (e), scattering (1/mm), peritoneum cut behind the cavity
 uniform vec4 uPeri;             // peritoneal shell absorption rgb (1/mm), shell half-width (e)
 uniform vec2 uMelRows;          // internal melanophore rows: absorption above / below the column
+uniform vec3 uSpineK;           // vertebral-column absorption (rgb, per unit of spine optical depth)
+uniform float uSeptK;           // myoseptal scattering strength (pale W chevrons)
 uniform vec3 uFilm;             // mucus film lobe: weight, roughness, geometric-normal mix
 uniform vec3 uSpine;            // initial spine height y, posterior end of the column s, tail fade width
 uniform vec4 uJaw;              // dense lip/jaw tissue: fades out over s [x, y] and above y [z, w] (mm)
@@ -228,7 +230,7 @@ void medium(vec3 p, out float sS, out vec3 sA) {
     float chev = an < 0.55 ? an / 0.55 : 1.0 - 0.45 * (an - 0.55) / 0.45;
     float mph = fract(((s - uVertStart) - 0.95 * chev) / uVertLen);
     float sept = exp(-pow((mph - 0.5) * uVertLen / 0.08, 2.0)) * trunk;
-    sS += I * sept * 1.6;
+    sS += I * sept * uSeptK;
     // horizontal septum
     sS += I * exp(-dys * dys / 0.02) * trunk * smoothstep(0.3, 0.85, abs(zn)) * 1.1;
   }
@@ -300,7 +302,7 @@ float spineTau(vec3 o, vec3 d, float L, inout float tFirst) {
 // absorption optical depth (rgb) of the organs along o + d t, t ∈ [0, L]; tFirst = first organ hit
 vec3 organTau(vec3 o, vec3 d, float L, out float tFirst) {
   tFirst = 1e3;
-  vec3 tau = spineTau(o, d, L, tFirst) * vec3(4.0, 4.4, 5.0);                                      // vertebral column
+  vec3 tau = spineTau(o, d, L, tFirst) * uSpineK;                                      // vertebral column
   for (int k = 0; k < N_ORGANS; k++) {
     if (uOrgR[k].x <= 0.0) continue;
     tau += ellChord(o, d, L, uOrgC[k], uOrgR[k], tFirst) * uOrgK[k];
@@ -542,6 +544,8 @@ export const MAHAZE_ANATOMY = {
   gut: [0.7, 2.2, 0.0],
   peri: [0.5, 0.53, 0.58, 0.07],
   melRows: [0.9, 0.7],
+  spineK: [4.0, 4.4, 5.0],
+  septK: 1.6,
   film: [0.55, 0.085, 0.55],
   organs: [
     { name: 'liver', c: [13.4, 1.55, 0.2], r: [1.9, 1.05, 1.85], k: [1.3, 2.3, 2.9] },
@@ -587,6 +591,8 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uGut: { value: new THREE.Vector3(...A.gut) },
     uPeri: { value: new THREE.Vector4(...A.peri) },
     uMelRows: { value: new THREE.Vector2(...A.melRows) },
+    uSpineK: { value: new THREE.Vector3(...A.spineK) },
+    uSeptK: { value: A.septK },
     uFilm: { value: new THREE.Vector3(...A.film) },
     uSpine: { value: new THREE.Vector3(...A.spine) },
     uJaw: { value: new THREE.Vector4(...A.jaw) },

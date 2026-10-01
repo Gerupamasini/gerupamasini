@@ -474,24 +474,24 @@ function bakeBodyTextures(ctx) {
   const MID = [0.33, 0.41, 0.49, 0.57, 0.66, 0.74, 0.82, 0.9].map((f) => f * SL);
   MID.forEach((bs, k) => {
     const ant = k < 4;
-    const st = ant ? 0.3 : 0.4;
-    const bh = hnAt(bs, yH(bs, 1.5));
+    const st = ant ? 0.32 : 0.3;
+    const bh = hnAt(bs, yH(bs, 1.0));
     for (let i = 0; i < 4; i++) {
       BLOBS.push(ant
-        ? [bs + (rnd(k, i, 1) - 0.5) * 1.4, bh + (rnd(k, i, 2) - 0.5) * 0.22, (0.42 + 0.32 * rnd(k, i, 3)) * 1.4, 0.12 + 0.1 * rnd(k, i, 4), st * (0.6 + 0.4 * rnd(k, i, 5))]
-        : [bs + (rnd(k, i, 1) - 0.5) * 0.7, bh + (rnd(k, i, 2) - 0.5) * 0.3, 0.3 + 0.2 * rnd(k, i, 3), 0.08 + 0.05 * rnd(k, i, 4), st * (0.6 + 0.4 * rnd(k, i, 5))]);
+        ? [bs + (rnd(k, i, 1) - 0.5) * 1.0, bh + (rnd(k, i, 2) - 0.5) * 0.22, (0.36 + 0.24 * rnd(k, i, 3)) * 1.2, 0.25 + 0.15 * rnd(k, i, 4), st * (0.6 + 0.4 * rnd(k, i, 5))]
+        : [bs + (rnd(k, i, 1) - 0.5) * 0.7, bh + (rnd(k, i, 2) - 0.5) * 0.3, 0.3 + 0.2 * rnd(k, i, 3), 0.18 + 0.1 * rnd(k, i, 4), st * (0.6 + 0.4 * rnd(k, i, 5))]);
     }
   });
   // faint dusky dorsal mottling (irregular, low contrast) — individual variation, not saddles
   const DORSAL = [];
   for (let k = 0; k < 30; k++) {
-    DORSAL.push([8.5 + k * 0.95 + (rnd(k, 0, 21) - 0.5) * 0.7, 0.62 + 0.3 * rnd(k, 0, 22), 0.22 + 0.25 * rnd(k, 0, 23), 0.08 + 0.1 * rnd(k, 0, 24), 0.18 + 0.2 * rnd(k, 0, 25)]);
+    DORSAL.push([8.5 + k * 0.95 + (rnd(k, 0, 21) - 0.5) * 0.7, 0.62 + 0.3 * rnd(k, 0, 22), 0.22 + 0.25 * rnd(k, 0, 23), 0.08 + 0.1 * rnd(k, 0, 24), 0.08 + 0.1 * rnd(k, 0, 25)]);
   }
 
   // Consensus spec (70 photos): a row of 6–10 small whitish iridophore spots along the dorsolateral line
   // (s 0.25–0.95 SL, h +0.05–0.07 SL) alternating with dark speckle clusters — a "beaded" dorsal edge
   // (019, 028, 034, 035, 039, 050, 061)
-  const BEADS = [0.27, 0.35, 0.44, 0.53, 0.62, 0.71, 0.8, 0.88, 0.95].map((f, k) => [f * SL + (rnd(k, 0, 61) - 0.5) * 0.6, 0.66 + 0.12 * rnd(k, 0, 62), 0.55 + 0.45 * rnd(k, 0, 63)]);
+  const BEADS = Array.from({ length: 16 }, (_, k) => 0.27 + 0.045 * k).map((f, k) => [f * SL + (rnd(k, 0, 61) - 0.5) * 0.6, 0.66 + 0.12 * rnd(k, 0, 62), 0.55 + 0.45 * rnd(k, 0, 63)]);
   function beadAt(s, y, q) {
     let w = 0, dk = 0;
     for (let k = 0; k < BEADS.length; k++) {
@@ -499,9 +499,9 @@ function bakeBodyTextures(ctx) {
       if (Math.abs(s - bs) > 2.5) continue;
       const by = q.yc + bh * q.t;
       w = Math.max(w, st * Math.exp(-((Math.hypot(s - bs, (y - by) * 1.3) / 0.3) ** 2)));
-      if (k + 1 < BEADS.length) {
+      if (k + 1 < BEADS.length && rnd(k, 0, 64) < 0.7) {
         const ms = 0.5 * (bs + BEADS[k + 1][0]);
-        dk = Math.max(dk, Math.exp(-((Math.hypot((s - ms) / 0.75, (y - by) / 0.45)) ** 2)));
+        dk = Math.max(dk, Math.exp(-((Math.hypot((s - ms) / 0.45, (y - by) / 0.3)) ** 2)));
       }
     }
     return { w, dk };
@@ -509,7 +509,7 @@ function bakeBodyTextures(ctx) {
   // Scale-pocket reticulation (lateral 058, 022, 008, 010, 031; dorsal 029): staggered oblique rows of pockets,
   // ~3.5 %SL along s × 2 %SL across (qd: signed arc length from the dorsal midline, mm), each outlined by the dark
   // posterior arc of the pocket in front of it; the pocket centres stay pale. Returns the arc mask (0…1).
-  const LAT_S = 1.35, LAT_Q = 0.8, LAT_RS = 0.72 * LAT_S, LAT_RQ = 0.72 * LAT_Q;
+  const LAT_S = 0.8, LAT_Q = 0.5, LAT_RS = 0.72 * LAT_S, LAT_RQ = 0.72 * LAT_Q;
   function latticeEdge(s, qd) {
     const rb = Math.round(qd / LAT_Q);
     let dIn = -1, bcs = 1e9;
@@ -533,7 +533,7 @@ function bakeBodyTextures(ctx) {
     }
     if (dIn < 0) return 0;
     // arc ~0.15 mm wide, broken in places (an irregular net, not a regular honeycomb: 029, 058)
-    return smoothstep(0.14, 0.05, dIn) * (0.35 + 0.65 * smoothstep(-0.3, 0.25, fbm3(s * 0.8, qd * 0.8, 2.9, 2, 67)));
+    return smoothstep(0.09, 0.03, dIn) * (0.35 + 0.65 * smoothstep(-0.3, 0.25, fbm3(s * 0.8, qd * 0.8, 2.9, 2, 67)));
   }
   // mean arc coverage, so the melanophores moved onto the arcs keep the overall budget
   let LAT_MEAN = 0;
@@ -665,18 +665,18 @@ function bakeBodyTextures(ctx) {
     const upper = Math.max(smoothstep(-0.45, 0.35, hn), 0.4 * pz * smoothstep(-1.05, -0.5, hn));
     // ~55 % of the dorsal budget lines the scale-pocket arcs, the rest stays random
     const latMul = 1 + 0.55 * DZ.lat * (DZ.edge / LAT_MEAN - 1);
-    let d = 3.0 + 80.0 * upper * (0.7 + 0.5 * n) * DZ.k * latMul + 10.0 * (1 - Math.abs(hn));
-    d += 18.0 * b + 9.0 * sd * DZ.k; // blotches are mostly diffuse dusky pigment (smooth term), not spot clusters
+    let d = 3.0 + 45.0 * upper * (0.75 + 0.4 * n) * DZ.k * latMul;
+    d += 10.0 * b + 9.0 * sd * DZ.k; // blotches are mostly diffuse dusky pigment (smooth term), not spot clusters
     {
       const bd = beadAt(s, y, q);
-      d += 45.0 * DZ.nape + 45.0 * bd.dk * upper * DZ.k + 60.0 * DZ.chain;
+      d += 45.0 * DZ.nape + 60.0 * bd.dk * upper * DZ.k + 60.0 * DZ.chain;
       d *= 1 - 0.9 * bd.w;
     }
     if (head > 0) {
       const hm = headMarks(s, y, hn);
       // pale, finely dotted head top in front of the dark nape (dorsal 029, 025); ×0.65: a head disc covers
       // ~1.5× the area of a trunk melanophore
-      const topD = mix(25.0, 48.0, smoothstep(eyeRear - 0.2, eyeRear + 0.6, s));
+      const topD = mix(18.0, 35.0, smoothstep(eyeRear - 0.2, eyeRear + 0.6, s));
       let hd = 0.65 * (8.0 + topD * dorsal + 26.0 * smoothstep(-0.85, -0.25, hn) * (1 - dorsal) + 8.0 * smoothstep(3.0, 0.8, s)) + 45.0 * DZ.nape;
       // lower head only lightly dotted (−40 % below h 0), the lower gill cover sparsest (−60 %; 059, 054)
       const below = smoothstep(yH(s, 0.4), yH(s, -0.4), y);
@@ -687,7 +687,7 @@ function bakeBodyTextures(ctx) {
     // keep the eye itself and lips clean
     const ed = eyeDist(s, y, z);
     d *= 1 + 0.9 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.35) ** 2));
-    d *= 1 - belly * mix(0.97, 0.5, pz);
+    d *= 1 - belly * mix(0.97, 0.3, pz);
     // no melanophores line the opercular margin (059, 054, 057)
     const om = opMargin(s, y);
     if (om < 1) d *= 1 - 0.8 * Math.exp(-(((om + 0.04) / 0.1) ** 2));
@@ -695,7 +695,7 @@ function bakeBodyTextures(ctx) {
     d = d * (1 - 0.6 * lb.lo) + 32.0 * lb.up + 8.0 * lb.lo;
     d *= 1 - 0.85 * lb.rim;
     // (smaller as well as sparser on the pale dorsolateral shoulder; full-sized on the posterior lower flank)
-    const size = (0.72 + 0.35 * dorsal + 0.3 * b + 0.25 * low) * (1 - 0.15 * lb.up) * (0.7 + 0.3 * Math.min(DZ.k, 1));
+    const size = (0.9 + 0.15 * dorsal) * (1 - 0.15 * lb.up);
     return [Math.max(0, d), size, head];
   }
 
@@ -722,11 +722,11 @@ function bakeBodyTextures(ctx) {
     if (head > 0) {
       // エドハゼ: no vermiculation or smudges; pale, finely dotted head top in front of the nape (point
       // melanophores, splatted below) and a few crisp dark lines
-      const top = mix(0.06, 0.13, smoothstep(eyeRear - 0.2, eyeRear + 0.6, s));
+      const top = mix(0.03, 0.07, smoothstep(eyeRear - 0.2, eyeRear + 0.6, s));
       m = mix(m, top * dorsal + 0.3 * headMarks(s, yy, hn).line, head);
     }
     // dusky scale-pocket arcs, the dark nape and the posterior mid-dorsal dash chain
-    m += 0.06 * DZ.lat * DZ.edge * DZ.k * (1 - head * 0.5) + 0.09 * DZ.midBand + 0.07 * DZ.nape + 0.08 * DZ.chain;
+    m += 0.025 * DZ.lat * DZ.edge * DZ.k * (1 - head * 0.5) + 0.06 * DZ.midBand + 0.07 * DZ.nape + 0.08 * DZ.chain;
     const bd = beadAt(s, yy, q);
     // posterior body: two crisp thin dark axial lines along the horizontal septum (h 0 and +1.2–1.5 %SL, each
     // 0.3–0.4 %SL wide at ~0.8 × the flank) carrying small dashes, and a dark mark at the caudal base (042, 058)
@@ -734,7 +734,7 @@ function bakeBodyTextures(ctx) {
       const post = smoothstep(0.6 * SL, 0.7 * SL, s) * smoothstep(S_END + 0.2, SL + 0.4, s);
       const dash = 0.55 + 0.45 * smoothstep(0.2, 0.7, 0.5 + 0.5 * Math.sin((s / 0.85) * TAU + 1.3 * fbm3(s * 0.7, 1.1, 2.2, 2, 57)));
       const l1 = Math.exp(-(((yy - q.yc) / 0.09) ** 2)), l2 = Math.exp(-(((yy - q.yc - 0.42) / 0.06) ** 2));
-      m += post * dash * (0.32 * l1 + 0.26 * l2);
+      m += post * dash * (0.06 * l1 + 0.05 * l2);
       m += 0.22 * Math.exp(-((Math.hypot(s - (SL - 0.45), (yy - q.yc) * 0.9) / 0.6) ** 2));
     }
     m *= 1 - 0.85 * bd.w;
@@ -745,7 +745,7 @@ function bakeBodyTextures(ctx) {
     const vEnd = smoothstep(0.64 * SL, 0.62 * SL, s);
     if (vEnd > 0 && s > 0.34 * SL) {
       const h = ((yy - yH(s, 0)) / AX.L) * 100;
-      m += 0.12 * smoothstep(0.35 * SL, 0.4 * SL, s) * vEnd * (0.75 + 0.3 * smoothstep(0.48 * SL, 0.6 * SL, s)) * smoothstep(-1.3, -0.5, h) * smoothstep(3.8, 3.0, h);
+      m += 0.04 * smoothstep(0.35 * SL, 0.4 * SL, s) * vEnd * (0.75 + 0.3 * smoothstep(0.48 * SL, 0.6 * SL, s)) * smoothstep(-1.3, -0.5, h) * smoothstep(3.8, 3.0, h);
     }
     // the opercular margin is a slightly paler, more translucent membrane edge, not a dark outline (059, 054)
     const om = opMargin(s, yy), mb = om < 1 ? Math.exp(-(((om + 0.07) / 0.08) ** 2)) : 0;
@@ -756,7 +756,7 @@ function bakeBodyTextures(ctx) {
     // the translucent flank behind the edge: 042, 058, 044)
     const bellyMass = smoothstep(0.3 * SL, 0.36 * SL, s) * vEnd * smoothstep(yH(s, 0), yH(s, -1.5), yy);
     // (the lower head is yellowish cream rather than silvered: 013, 042, 059)
-    let iri = 0.7 * belly * (1 - 0.5 * head) + 0.1 * smoothstep(0.05, -0.5, hn) + 0.03 * Math.exp(-(((hn - 0.02) / 0.22) ** 2)) + 0.75 * bellyMass;
+    let iri = 0.7 * belly * (1 - 0.5 * head) * (1 - 0.5 * smoothstep(0.62 * SL, 0.68 * SL, s)) + 0.1 * smoothstep(0.05, -0.5, hn) + 0.03 * Math.exp(-(((hn - 0.02) / 0.22) ** 2)) + 0.75 * bellyMass;
     // whitish crescent under the eye (photos)
     iri = Math.max(iri, 0.55 * Math.exp(-((Math.hypot(s - EYE.center[0], yy - (EYE.center[1] - EYE.radius - 0.28)) / 0.32) ** 2)));
     iri = Math.max(iri, head * 0.15 * smoothstep(0.2, -0.6, hn) * smoothstep(2.4, 4.6, s)); // faint: the cheek reads yellowish
@@ -771,11 +771,11 @@ function bakeBodyTextures(ctx) {
     // lips carry no silvery iridophores; the chin is barely silvered (warm cream chin, 059, 058)
     if (s < 4.6) iri *= 1 - 0.9 * smoothstep(0.7, 0.22, distToPolyline2(s, yy, MOUTH)) * smoothstep(4.4, 3.4, s);
     iri *= 1 - 0.8 * smoothstep(5.0, 3.0, s) * smoothstep(0.1, -0.4, hn);
-    let xan = 0.22 + 0.38 * dorsal + 0.25 * head * smoothstep(-0.3, 0.4, hn);
-    xan *= 1 - 0.85 * belly;
+    let xan = 0.24 + 0.2 * dorsal + 0.25 * head * smoothstep(-0.3, 0.4, hn);
+    xan *= 1 - 0.55 * belly;
     // yellowish cheek, lips and throat (spec cheek [172,156,128], B/R 0.70–0.75; 013, 042, 016, 022)
     xan += 0.35 * head * smoothstep(-0.9, 0.2, hn);
-    xan *= 0.8 + 0.4 * fbm3(s * 0.9, yy * 0.9, z * 0.9, 3, 51);
+    xan *= (0.8 + 0.4 * fbm3(s * 0.9, yy * 0.9, z * 0.9, 3, 51)) * (1 - 0.4 * smoothstep(0.35 * SL, 0.4 * SL, s) * vEnd * smoothstep(yH(s, -1.3), yH(s, -0.5), yy) * smoothstep(yH(s, 3.8), yH(s, 3.0), yy));
     // gill region seen through the operculum (used for the fallback albedo only)
     const gill = smoothstep(6.6, 7.9, s) * smoothstep(10.3, 9.4, s) * smoothstep(0.35, -0.2, hn) * smoothstep(-0.95, -0.55, hn);
     return { hn, head, mel: m, iri: clamp(iri), xan: clamp(xan), gill };
@@ -794,7 +794,7 @@ function bakeBodyTextures(ctx) {
       // same look as the texture-space splats: a soft dark core with a few short, irregular dendrites
       if (disc > 0.5) {
         // head: crisp round discs, as in the texture-space splats there
-        const rd = 0.03 + 0.025 * ((h & 255) / 255);
+        const rd = 0.022 + 0.018 * ((h & 255) / 255);
         if (r < rd) v = Math.max(v, (0.78 + 0.2 * ((h >>> 20) & 255) / 255) * smoothstep(rd, rd * 0.7, r));
         return;
       }
@@ -874,18 +874,18 @@ function bakeBodyTextures(ctx) {
         const fx = x0 + hx * (texW / cellsU), fy = y0 + hy * (texH / cellsV);
         if (disc > 0 && hash01(cx, cy, k, 318) < disc) {
           // head (059, 054, 057): crisp round discs 0.17–0.3 %SL across, no dendrites or deep dermal smudges
-          splatSpot(fx, fy, 0.03 + 0.025 * hs, [], 0.78 + 0.2 * hash01(cx, cy, k, 319), 1, 0.7);
+          splatSpot(fx, fy, 0.022 + 0.018 * hs, [], 0.78 + 0.2 * hash01(cx, cy, k, 319), 1, 0.7);
           continue;
         }
-        const rCore = (0.016 + 0.014 * hs) * size;
-        const punct = hash01(cx, cy, k, 312) < 0.72;
+        const rCore = (0.02 + 0.016 * hs) * size;
+        const punct = hash01(cx, cy, k, 312) < 0.95;
         // ~30 % lie deeper in the dermis: larger, softer and fainter through the overlying tissue
-        const deep = hash01(cx, cy, k, 316) < 0.3;
+        const deep = hash01(cx, cy, k, 316) < 0.0;
         const nArms = 3 + Math.floor(hash01(cx, cy, k, 311) * 5);
         const arms = [];
         for (let a = 0; a < nArms; a++) {
           const ang = ha * TAU + (a / nArms) * TAU + (hash01(cx + a, cy, k, 13) - 0.5) * 0.9;
-          const len = rCore * (punct ? 0.9 : 1.8 + 3.0 * hash01(cx, cy + a, k, 14));
+          const len = rCore * (punct ? 0.9 : 1.2 + 1.0 * hash01(cx, cy + a, k, 14));
           const c = Math.cos(ang), sn = Math.sin(ang);
           const w = rCore * (0.2 + 0.16 * hash01(cx, cy, k + a, 15));
           arms.push({ ox: 0, oy: 0, c, s: sn, len, w, k: 0.9 });
@@ -968,7 +968,7 @@ function bakeBodyTextures(ctx) {
           // ctenii on the posterior margin
           const rim = Math.exp(-(((c.rr - c.dist) / 0.018) ** 2)) * smoothstep(0, 0.1, c.ds);
           const ang = Math.atan2(c.dq, c.ds);
-          v += 0.45 * rim * Math.pow(0.5 + 0.5 * Math.cos(ang * 34), 4);
+          v += 0.15 * rim * Math.pow(0.5 + 0.5 * Math.cos(ang * 34), 4);
           return v;
         };
         let sh;
@@ -978,9 +978,9 @@ function bakeBodyTextures(ctx) {
           // melanophores concentrate along the scale pockets (reticulated look of the upper flank)
           const pocket = Math.exp(-(((top.rr - top.dist) / 0.035) ** 2)) * smoothstep(-0.05, 0.12, top.ds);
           const dors = smoothstep(-0.1, 0.7, hn) * Math.min(1, zoneK(s, hn, zn).k);
-          MEL[t] = 1 - (1 - MEL[t]) * (1 - 0.16 * pocket * dors * scMask * (0.6 + 0.4 * hash01(top.hsh & 1023, 0, 0, 7)));
+          MEL[t] = 1 - (1 - MEL[t]) * (1 - 0.0 * pocket * dors * scMask * (0.6 + 0.4 * hash01(top.hsh & 1023, 0, 0, 7)));
         } else sh = 0.3;
-        const amp = 0.013 * (1 - 0.45 * smoothstep(-0.3, -0.8, hn)) * (0.75 + 0.25 * zn);
+        const amp = 0.006 * (1 - 0.45 * smoothstep(-0.3, -0.8, hn)) * (0.75 + 0.25 * zn);
         h += amp * sh * scMask;
       }
       // --- myomere relief on the flanks
@@ -1091,11 +1091,11 @@ function bakeBodyTextures(ctx) {
     const bellyC = belly * (1 - 0.7 * head * smoothstep(-0.95, -0.55, hn));
     let r = 0.62, g = 0.49, b = 0.27;
     // the back is barely darker than the flank: in profile the dorsal edge is as pale as the upper flank (042, 013)
-    r = mix(r, 0.53, dorsal * 0.15); g = mix(g, 0.46, dorsal * 0.15); b = mix(b, 0.25, dorsal * 0.15);
+    r = mix(r, 0.53, dorsal * 0.0); g = mix(g, 0.46, dorsal * 0.0); b = mix(b, 0.25, dorsal * 0.0);
     // throat and chin warm cream rather than grey-white (059, 058; spec [187,180,154])
-    r = mix(r, mix(0.74, 0.75, head), bellyC); g = mix(g, mix(0.64, 0.66, head), bellyC); b = mix(b, mix(0.52, 0.44, head), bellyC);
+    r = mix(r, mix(0.76, 0.75, head), bellyC); g = mix(g, mix(0.68, 0.66, head), bellyC); b = mix(b, mix(0.46, 0.44, head), bellyC);
     r *= mix(1, 1.02, X * 0.6); g *= mix(1, 0.9, X * 0.6); b *= mix(1, 0.55, X * 0.6);
-    r = mix(r, 0.78, I * 0.4); g = mix(g, 0.77, I * 0.4); b = mix(b, 0.7, I * 0.4);
+    r = mix(r, 0.8, I * 0.4); g = mix(g, 0.76, I * 0.4); b = mix(b, 0.58, I * 0.4);
     // reddish-brown nape sides behind the eyes, the gills showing through from above (029, 025: behind-eye
     // (R−G)/mean 0.18–0.19)
     {
@@ -1122,7 +1122,7 @@ function bakeBodyTextures(ctx) {
       // moist margin: faint warm translucency, strongly desaturated
       r = mix(r, 0.66, lb.rim * 0.22); g = mix(g, 0.52, lb.rim * 0.22); b = mix(b, 0.45, lb.rim * 0.22);
     }
-    r *= Math.exp(-M * 2.0); g *= Math.exp(-M * 2.15); b *= Math.exp(-M * 2.35);
+    r *= Math.exp(-M * 2.2); g *= Math.exp(-M * 2.2); b *= Math.exp(-M * 2.2);
     // opercular margin: a band 10–15 % paler than the gill cover, no dark outline (059, 054, 057)
     const mb = om < 1 ? Math.exp(-(((om + 0.07) / 0.08) ** 2)) : 0;
     r *= 1 + 0.13 * mb; g *= 1 + 0.13 * mb; b *= 1 + 0.12 * mb;
@@ -1190,7 +1190,7 @@ function bakeBodyTextures(ctx) {
       const thk = A.thk[t];
       // thin, translucent dorsal ridge (pale dorsal edge in profile: 042, 013) and opercular membrane edge
       const trans = clamp(clamp(1.1 - thk / 5.0, 0.12, 0.92) * (1 - 0.7 * clamp(MEL[t])) * (1 - 0.45 * I) +
-        0.15 * smoothstep(0.7, 0.9, HN[t]) + 0.12 * C.mb, 0, 0.95);
+        0.15 * smoothstep(0.7, 0.9, HN[t]) + 0.12 * C.mb + 0.25 * smoothstep(0.6 * SL, 0.66 * SL, s) * (1 - HEAD[t]), 0, 0.95);
       volume[t * 3] = Math.round(trans * 255);
       volume[t * 3 + 1] = Math.round(clamp(thk / 8.0) * 255);
       volume[t * 3 + 2] = 0;

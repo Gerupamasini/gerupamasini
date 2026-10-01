@@ -26,7 +26,9 @@ export const SPECIES = {
       ['J_sp5', 29.7, -1.5],
     ],
     totalLengthM: TL / 1000,
-    presetScale: TL / 50.0, // camera presets were authored for the 50 mm マハゼ
+    // the camera presets were authored for the 50 mm マハゼ; keeping them shows the adult エドハゼ (4–6 cm,
+    // RDB) at its true size, about 10 % shorter than the juvenile マハゼ
+    presetScale: 1.0,
     // edge-on fins: hyaline lines in the dorsal photos, not bright white strips; folded or edge-on fins are
     // invisible or faint from above (029, 025, 065: ≤ 1.05× their surroundings), membranes alpha 0.15–0.3
     finGrazeMin: 0.3,
@@ -65,17 +67,19 @@ export const SPECIES = {
     // at 24.0 mm (s 0.63) in a sharp, rounded hind wall (042, 058, 044: edge 0.02–0.03 SL wide), with a dusky
     // melanised roof (midline band 0.72–0.85× the flank behind it) over an opaque silvery-white gut
     abdomen: [17.5, 0.62, 6.5, 1.15],
-    gut: [0.9, 8.0, 1.0],
-    peri: [2.5, 2.6, 2.8, 0.12],
+    gut: [0.9, 2.5, 1.0],
+    peri: [2.6, 2.6, 2.6, 0.12],
     // posterior axial melanophores read as thin hairlines, not a smear (042, 058)
-    melRows: [0.45, 0.35],
+    melRows: [0.9, 0.8],
+    spineK: [0.7, 0.75, 0.85],
+    septK: 0.8,
     // satin sheen broken up by the scales; no continuous highlight along the tail (042, 013, 059)
-    film: [0.25, 0.16, 0.25],
+    film: [0.15, 0.2, 0.25],
     spine: [3.3, SL - 0.4, 0.4],
     // long oblique jaw: rictus 2.85 mm, maxilla to 3.6 mm, gape 2.17 → 1.27 mm
     jaw: [2.6, 4.0, 2.3, 3.0],
     // pale, less amber tissue than the juvenile マハゼ (lower blue absorption)
-    sigS: 1.3,
+    sigS: 1.0,
     sigA: [0.02, 0.04, 0.085],
     organs: [
       { name: 'liver', c: [12.9, 1.45, 0.2], r: [1.8, 1.0, 1.65], k: [1.3, 2.3, 2.9] },

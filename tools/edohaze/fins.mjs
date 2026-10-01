@@ -117,10 +117,12 @@ function caudalFin(rect) {
       // densely dotted. Rows at constant fractional radius 0.15–0.80, about one dot per ray per row.
       // A few white guanophore dots between the dark rows on the upper and middle rays only.
       let mel = 0, irid = 0.06;
-      const lower = smoothstep(0.62, 0.78, fAcross); // lowest 30 % of the rays: half the dots, no white specks
+      // the lower quarter of the caudal is unspotted (Ehime/Fukuoka RDB: 尾鰭下部1/4程が無斑 — diagnostic
+      // vs チクゼンハゼ, and unlike the マハゼ's full rows of spots); no white specks there either
+      const lower = smoothstep(0.7, 0.78, fAcross);
       for (let j = 0; j < 7; j++) {
         const Lj = (0.15 + (j * 0.65) / 6) * len + (hash01(r, j, 2, 802) - 0.5) * 0.04;
-        if (hash01(r, j, 1, 801) < 0.1 + 0.45 * lower) continue;
+        if (hash01(r, j, 1, 801) < 0.1 + 0.9 * lower) continue;
         // brown, not black, at photo scale (058 dots ≈ [90,75,60] on the hyaline fin)
         const ls = 0.075 + 0.025 * hash01(r, j, 3, 803);
         mel = Math.max(mel, (0.38 + 0.25 * hash01(r, j, 4, 804)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.065) ** 2)));
