@@ -115,9 +115,11 @@ export const BILL = { base: [0, 91.5, 35.4], featherLine: [0, 89.7, 39.6], tip: 
 export function billProfile(t) {
   // widths & heights (mm) as function of t (0 = feathering, 1 = tip)
   // t: 0 = inside the feathering (hidden 4.6 mm), ≈0.23 = feather line, 1 = tip
-  const W = 0.84 * (4.6 * (1 - 0.42 * smooth(0.1, 0.55, t)) * (1 - smooth(0.9, 1.0, t) ** 1.6) + 0.1 * Math.exp(-(((t - 0.8) / 0.1) ** 2)));
-  const Hu = 0.83 * (3.0 - 1.45 * smooth(0.12, 0.55, t) + 0.38 * Math.exp(-(((t - 0.8) / 0.1) ** 2)) - 1.35 * smooth(0.88, 1, t) ** 1.3);
-  const Hl = 0.83 * (2.1 - 1.0 * smooth(0.12, 0.58, t) + 0.12 * Math.exp(-(((t - 0.78) / 0.1) ** 2)) - 0.85 * smooth(0.86, 1, t) ** 1.3);
+  // (a straight, deep-based black bill that tapers late: the earlier 1.45 / 1.0 constriction read needle-thin
+  // beyond the feathering, p006, p070, p043, p024)
+  const W = 0.84 * (4.6 * (1 - 0.35 * smooth(0.1, 0.55, t)) * (1 - smooth(0.9, 1.0, t) ** 1.6) + 0.1 * Math.exp(-(((t - 0.8) / 0.1) ** 2)));
+  const Hu = 0.83 * (3.0 - 1.15 * smooth(0.15, 0.62, t) + 0.38 * Math.exp(-(((t - 0.8) / 0.1) ** 2)) - 1.35 * smooth(0.88, 1, t) ** 1.3);
+  const Hl = 0.83 * (2.1 - 0.8 * smooth(0.15, 0.65, t) + 0.12 * Math.exp(-(((t - 0.78) / 0.1) ** 2)) - 0.85 * smooth(0.86, 1, t) ** 1.3);
   return { W: Math.max(0.05, W), Hu: Math.max(0.12, Hu), Hl: Math.max(0.08, Hl) };
 }
 
@@ -139,7 +141,7 @@ export function buildBill(sk, boneIndex, J, opts = {}) {
       const t = tt ** 0.85; // denser near the tip
       const lenOff = which === 'lower' ? -0.45 * t : 0; // lower mandible slightly shorter
       const { W, Hu, Hl } = billProfile(t);
-      const c = addv(addv(base, scl(axis, t * Ltot + lenOff)), scl(up, which === 'upper' ? -0.25 * smooth(0.82, 1, t) : 0.05));
+      const c = addv(addv(base, scl(axis, t * Ltot + lenOff)), scl(up, which === 'upper' ? -0.1 * smooth(0.88, 1, t) : 0.05));
       const ring = [];
       for (let s = 0; s < segR; s++) {
         // angle 0..π across the curved outer surface, flat face along the commissure
@@ -375,8 +377,10 @@ export function buildLegs(sk, boneIndex, J, toes, opts = {}) {
 // ---------------------------------------------------------------- Eyes
 export const EYE = {
   radius: 4.0, // eyeball (mm)
-  aperture: 2.7, // visible radius (5.4 mm aperture)
-  corneaR: 3.1,
+  // visible radius: 4.6 mm aperture and a flatter cornea set into the socket — the photos' bill / eye ratio is
+  // 3.0–3.4 (p070, p043); a 5.4 mm eye with a 3.1 mm cornea read as a glossy ball (2.3)
+  aperture: 2.3,
+  corneaR: 3.6,
   axisL: norm([0.955, 0.13, 0.27]), // lateral, 15.7° forward, 7.5° up (D)
 };
 

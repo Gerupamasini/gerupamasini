@@ -25,7 +25,7 @@ export const morphology = {
   toes: { inner: mm(13), mid: mm(19), outer: mm(15) }, // no hallux
   billDepthBase: mm(4.0),
   billWidthBase: mm(3.6),
-  eyeAperture: mm(5.4),
+  eyeAperture: mm(4.6), // apparent eye in the photos (bill / eye 3.0–3.4, p070, p043)
   eyeballRadius: mm(4.0),
   headLength: mm(36),
   headHeight: mm(22),
@@ -46,7 +46,8 @@ export const joints = {
   neck2: [0, 85, 10],
   head: [0, 88.5, 14],
   jaw: [0, 87.5, 38],
-  eyeCenter: [8.0, 95, 25.5], // eyeball centre (spec §6); head surface at x 12.3, eye 9.5 mm behind the breast front
+  eyeCenter: [7.6, 95, 25.5], // eyeball centre (spec §6); head surface at x 12.3, eye 9.5 mm behind the breast front;
+  // sunk 0.4 mm so the cornea apex (x 11.5) stays inside the head outline (photos: the eye sits in the dark stripe)
   shoulder: [10, 77, 6],
   tail: [0, 61, -42], // pygostyle (spec §11)
   // legs (spec §9): the knee sits 7 mm inside the belly, the tibia leaves it under the belly at (±8.3, 37, −11.5)
@@ -83,8 +84,8 @@ export const bodySculpt = {
   ],
   // Subtractive details (smooth subtraction)
   cuts: [
-    { type: 'ellipsoid', name: 'eyeSocketL', c: [12.8, 95.3, 26], r: [2.1, 3.0, 3.2], k: 1.2 },
-    { type: 'ellipsoid', name: 'eyeSocketR', c: [-12.8, 95.3, 26], r: [2.1, 3.0, 3.2], k: 1.2 },
+    { type: 'ellipsoid', name: 'eyeSocketL', c: [12.8, 95.2, 25.8], r: [2.1, 2.6, 2.8], k: 1.2 },
+    { type: 'ellipsoid', name: 'eyeSocketR', c: [-12.8, 95.2, 25.8], r: [2.1, 2.6, 2.8], k: 1.2 },
   ],
   // the SDF spans x ±21, y 36–105, z −66…41
   bounds: { min: [-24, 32, -70], max: [24, 109, 46] },
@@ -122,7 +123,7 @@ export const plumage = {
       white: '#ebe9e3',
       bill: '#1a1818',
       billRoughness: 0.3,
-      legs: '#5a534f',
+      legs: '#8a8381', // mid-grey (p006, p020, p017); '#5a534f' rendered near-black under the sun
       iris: '#120f0f',
       eyelidRing: '#dcd6cd',
       rufousCap: true, // crown / crownRear / nape blend toward plumage.sandyCap with individual.rufousAmount
@@ -147,7 +148,7 @@ export const plumage = {
       tailDark: '#4c423a',
       white: '#ebe9e3',
       bill: '#1a1818',
-      legs: '#6a625e',
+      legs: '#8e8583',
       iris: '#120f0f',
       eyelidRing: '#dcd6cd',
     },
@@ -171,7 +172,7 @@ export const plumage = {
       tailDark: '#4c423a',
       white: '#ebe9e3',
       bill: '#1a1818',
-      legs: '#6e6662',
+      legs: '#908886',
       iris: '#120f0f',
       eyelidRing: '#e4d9cf',
     },
@@ -198,7 +199,7 @@ export const plumage = {
       tailDark: '#4c423a',
       white: '#ebe9e3',
       bill: '#161915',
-      legs: '#6a6460',
+      legs: '#958a88', // pinkish grey (p063, p059)
       iris: '#120f0f',
       eyelidRing: '#dcd6cd',
     },
@@ -211,7 +212,7 @@ export const plumage = {
   // Feather micro-structure (mm): scallop size per feather tract. Kept low-contrast on purpose.
   featherScale: { head: 1.1, neck: 1.7, breast: 2.4, belly: 2.8, mantle: 3.4, flank: 3.0, rump: 2.8 },
   // head, neck and underparts nearly smooth in the photos (spec §15: 0.05–0.1); tiles stay on the upperparts
-  normalStrength: { head: 0.08, neck: 0.1, breast: 0.1, belly: 0.08, mantle: 0.75, flank: 0.18, rump: 0.5 },
+  normalStrength: { head: 0.08, neck: 0.1, breast: 0.1, belly: 0.08, mantle: 0.4, flank: 0.18, rump: 0.3 }, // mantle 0.75 → 0.4: tiles read as plates (spec §10.4)
 };
 
 export const animation = {
