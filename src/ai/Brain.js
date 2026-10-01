@@ -714,6 +714,7 @@ export class Brain {
         const d = to.length();
         if (this.phase === 'go') {
           des.copy(to).normalize().multiplyScalar(Math.min(0.8 * SL, d * 3));
+          cmd.steady = d > 1.2 * SL;
           if (d < 0.8 * SL || this.phaseTime > 3) {
             this.phase = 'hold';
             this.target.copy(L.pos);
@@ -746,7 +747,7 @@ export class Brain {
     let hovering = goalSpeed < (this.wasHovering ? 0.28 : 0.2) * SL && this.state !== 'startle';
     // (and a switch between the two is kept for a moment: no flicker)
     this.hovSwitchT = (this.hovSwitchT || 0) + dt;
-    if (this.wasHovering !== undefined && hovering !== this.wasHovering && this.hovSwitchT < 0.7 && this.state !== 'startle' && !(hovering === false && goalSpeed > 0.6 * SL)) hovering = this.wasHovering;
+    if (this.wasHovering !== undefined && hovering !== this.wasHovering && this.hovSwitchT < 1.2 && this.state !== 'startle' && !(hovering === false && goalSpeed > 0.6 * SL)) hovering = this.wasHovering;
     if (hovering !== this.wasHovering) this.hovSwitchT = 0;
     this.wasHovering = hovering;
     // (grazing counts as feeding only once the fish works the gravel)
@@ -755,6 +756,7 @@ export class Brain {
     let holding = !hovering && stillNow && this.stillT < this.holdMin && !exempt;
     if (holding) hovering = true;
     avoidOpts.intent = hovering ? 0 : 1;
+    avoidOpts.time = time;
     const avoid = avoidObstacles(me, world, _a, avoidOpts);
     // pressed against a rock, a plant or the glass: no waiting, it sets off
     // at once (one clean move instead of a hold that keeps being broken)
@@ -802,12 +804,18 @@ export class Brain {
       }
       cmd.hoverVel.clampLength(0, (crowded || settled ? 0.3 : 0.15) * SL);
     } else {
-      const steer = _h.copy(goalDir).multiplyScalar(hovering ? 0.3 : 1).add(avoid).add(sep);
+      // a slowly moving fish is shuffled aside by neighbours and nearby
+      // obstacles on its pectorals more than it is turned by them (in a
+      // feeding crowd, turning at every nudge makes it zigzag)
+      const slowK = hovering ? 0 : 1 - smoothstep(0.25 * SL, 0.6 * SL, goalSpeed);
+      const steer = _h.copy(goalDir).multiplyScalar(hovering ? 0.3 : 1).addScaledVector(avoid, 1 - 0.5 * slowK).addScaledVector(sep, 1 - 0.6 * slowK);
+      if (slowK > 0) cmd.hoverVel.copy(avoid).multiplyScalar(0.06 * SL * slowK).addScaledVector(sep, 0.06 * SL * slowK).clampLength(0, 0.12 * SL);
       let speed = goalSpeed;
       // slow down when heading into an obstacle; get out of the way when a
       // hovering fish is crowded or about to touch something
       speed *= 1 - 0.55 * avoid.danger;
-      if (hovering) speed = Math.max(speed, clamp(push * 0.25, 0.25, 0.5) * SL);
+      // (a hovering fish moves out of the way on its pectorals, without kicking off)
+      if (hovering) speed = Math.max(speed, clamp(push * 0.2, 0.22, 0.32) * SL);
       if (steer.lengthSq() > 1e-8) cmd.dir.copy(steer).normalize();
       else cmd.dir.copy(goalDir);
       cmd.speed = speed / SL;
@@ -1000,13 +1008,15 @@ export class Brain {
     const to = _v.subVectors(aim, head);
     const d = to.length();
     cmd.lookAt = f.pos;
-    cmd.urgency = 0.5;
+    cmd.urgency = 0.4;
     const hunger = this.drives.hunger;
     const vmax = (1.3 + 1.4 * hunger) * SL;
     const cosF = to.dot(L.forward) / Math.max(d, 1e-5);
     // home in: a purposeful dash while far, slowing down on the final
     // approach (and to turn when the item is off to the side or behind)
-    let v = Math.min(vmax, 1.6 * d + 0.1 * SL) * lerp(0.45, 1, smoothstep(-0.2, 0.7, cosF));
+    // (the run-in is slow enough that a glide, not a hard brake, brings the
+    // fish to the item)
+    let v = Math.min(vmax, 1.1 * d + 0.1 * SL) * lerp(0.45, 1, smoothstep(-0.2, 0.7, cosF));
     if (f.state === 'bottom') {
       // tilt head-down and creep onto a pellet on the gravel with the pectorals
       cmd.pitchBias = -0.6 * smoothstep(1.2 * SL, 0.2 * SL, d);
@@ -1014,8 +1024,16 @@ export class Brain {
       v = Math.max(Math.min(v, lerp(0.3 * SL, v, smoothstep(0.9 * SL, 1.6 * SL, d))), d > 0.2 * SL ? 0.3 * SL : 0);
       if (d < 0.9 * SL) cmd.hoverPrecision = 1;
     }
-    cmd.steady = d > 1.5 * SL;
-    des.copy(to).normalize().multiplyScalar(v);
+    // (the chase is one continuous run - kick-and-glide bouts and braking
+    // in between would make it a string of starts and stops - until the
+    // final, slow approach)
+    cmd.steady = d > 0.7 * SL;
+    // (steer by the bearing from the centre of the body, about which the
+    // fish turns: the bearing from the head swings with every turn of the
+    // head, and close to the item that feedback makes the fish zigzag)
+    _g.subVectors(aim, L.pos);
+    if (_g.lengthSq() < 1e-10) _g.copy(to);
+    des.copy(_g).normalize().multiplyScalar(v);
     if (d < 0.28 * SL) {
       const cos = cosF;
       if (cos > 0.5 && (!this.sub.strikeT || time - this.sub.strikeT > 0.5)) {

@@ -6,7 +6,7 @@
 //   rest   bottom rest: fins folded, dorsal partly lowered, slow breathing
 //   row    slow labriform swimming: alternating pectoral strokes, tail still
 //          and straight with an occasional single assisting beat
-//   slow   intermittent swimming (3–5 tail beats, then a short glide during
+//   slow   intermittent swimming (6–8 tail beats, then a ~1 s glide during
 //          which the fish visibly slows down)
 //   cruise steady swimming
 
@@ -172,7 +172,8 @@ export class AnimDemo {
         c.steady = T % 6 >= 3;
         break;
       case 'turn': {
-        const s = Math.floor(T / 1.8) % 2 === 0 ? 1 : -1;
+        // (calm turns take 1.5-2 s: alternate every 2.6 s so each one completes)
+        const s = Math.floor(T / 2.6) % 2 === 0 ? 1 : -1;
         c.dir.set(Math.cos(0.9), 0, s * Math.sin(0.9));
         c.speed = 1.0;
         break;
