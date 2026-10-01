@@ -780,12 +780,14 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
         {
           float kfSoftT = (kfType > 1.5 && kfType < 7.5) || kfType > 8.5 ? 1.0 : 0.45;
           float kfBarb = abs(vUv.x) * 1.6 - vUv.y * 3.2;
-          float kfB = floor(kfBarb * 14.0);
+          // (fine and shallow: coarser, deeper notches read as torn paper along every covert row once the coverage
+          // alpha stopped brightening them — the photographed rows are smooth rounded tips, p039, p052)
+          float kfB = floor(kfBarb * 26.0);
           float kfJag = kpHash(vec2(kfB, kfType * 7.0 + vFeather.y)) * 0.6 + kpHash(vec2(kfB * 0.37, vFeather.z * 31.0)) * 0.4;
           float kfEdge = 1.0 - abs(vUv.x);
-          float kfW = mix(0.05, 0.16, kfSoftT) * (uDetail < 0.5 ? 1.0 : 0.6);
+          float kfW = mix(0.035, 0.085, kfSoftT) * (uDetail < 0.5 ? 1.0 : 0.6);
           float kfFade = 1.0 - smoothstep(0.02, 0.1, fwidth(vUv.x));
-          float kfA = mix(0.5, 1.0, smoothstep(0.0, kfW, kfEdge - kfW * 0.6 * kfJag));
+          float kfA = mix(0.4, 1.0, smoothstep(0.0, kfW, kfEdge - kfW * 0.35 * kfJag));
           diffuseColor.a = mix(1.0, kfA, kfFade * smoothstep(0.55, 0.8, vUv.y));
         }`
       )
