@@ -34,8 +34,9 @@
 
 import * as THREE from 'three';
 import { NS } from './RigLayout.js';
-import { TAU, clamp, lerp, damp, dampAngle, wrapAngle, smoothstep, jitterDuration } from '../core/math.js';
+import { TAU, clamp, lerp, damp, wrapAngle, smoothstep, jitterDuration } from '../core/math.js';
 import { fbm1 } from '../core/random.js';
+import { TANK } from '../world/TankConfig.js';
 
 const HIST = 256;
 const S_ANCHOR = 0.36; // centre of mass along the body (fraction of SL)
@@ -66,6 +67,16 @@ export class Locomotion {
     this.pitchRate = 0;
     this.speed = 0; // m/s along the body axis
     this.quat = new THREE.Quaternion();
+    // Motion smoothness: every channel the eye follows is at least C1 (no
+    // steps in velocity) and its acceleration is low-pass filtered, so starts,
+    // stops, kicks and turns ease in and out instead of popping. Only the
+    // C-start escape is allowed to be abrupt.
+    this.accel = 0; // m/s² along the body axis (thrust builds up, it never jumps)
+    this.yawAcc = 0; // rad/s²
+    this.desSpeed = 0; // BL/s, eased speed command
+    this.tYaw = null; // eased heading command (rad)
+    this.contactVel = new THREE.Vector3(); // m/s, soft separation from bumps (see Steering)
+    this.contactBrake = 0; // 1/s, speed loss from contacts, applied gradually
 
     // tail wave
     this.phase = r.range(0, TAU);
@@ -242,6 +253,16 @@ export class Locomotion {
     let desiredSpeedBL = cmd.speed;
     if (this.override.enabled) desiredSpeedBL = this.override.speed;
     desiredSpeedBL *= 1 - 0.6 * this.yawnLevel; // yawns happen while (nearly) stationary
+    // the speed command is eased (a fish does not decide to go from a halt to
+    // cruising within one frame); urgent commands pass almost unfiltered
+    {
+      const up = desiredSpeedBL > this.desSpeed;
+      const rate = cmd.urgency > 0.3 || this.cstart ? 14 : up ? 2.6 : 6;
+      this.desSpeed = damp(this.desSpeed, desiredSpeedBL, rate, dt);
+      // (tiny residues are snapped so that "stopped" really means stopped)
+      if (desiredSpeedBL === 0 && this.desSpeed < 0.02) this.desSpeed = 0;
+      desiredSpeedBL = this.desSpeed;
+    }
 
     // ---------------------------------------------------------- C-start
     let cBend = 0;
@@ -253,9 +274,14 @@ export class Locomotion {
     this.restLevel = damp(this.restLevel, cmd.rest, cmd.rest > this.restLevel ? 0.8 : 2.5, dt);
     const rest = this.restLevel;
     this.pitchErr = 0;
-    if (!this.cstart) {
+    if (!this.cstart || this.cstart.free) {
       const d = cmd.dir;
-      const targetYaw = Math.atan2(-d.z, d.x);
+      // the heading command is eased (no flip-flop when steering terms trade
+      // places from one frame to the next); urgent commands pass quickly
+      const rawYaw = Math.atan2(-d.z, d.x);
+      if (this.tYaw === null) this.tYaw = rawYaw;
+      this.tYaw = wrapAngle(this.tYaw + wrapAngle(rawYaw - this.tYaw) * (1 - Math.exp(-dt * lerp(4, 30, cmd.urgency))));
+      const targetYaw = this.tYaw;
       const horiz = Math.hypot(d.x, d.z);
       // climbing / diving fish tilt only moderately (softly limited to
       // ≈ ±35°, never pinned at the limit); only surface feeding raises the
@@ -274,16 +300,26 @@ export class Locomotion {
       // ~60 °/s, a swimming one turns at ~115–300 °/s (koi: 88–1050 °/s)
       const calmHover = (1 - smoothstep(0.15, 0.6, Math.max(U, desiredSpeedBL))) * (1 - cmd.urgency);
       const wMax = lerp(lerp(2.0, 5.2, clamp(U / 2.2, 0, 1)), 1.1 * (1 - 0.5 * rest), calmHover) * sig.turnAgility * (1 + cmd.urgency * 0.9);
-      const wTarget = clamp(err * (2.6 + cmd.urgency * 2), -wMax, wMax);
-      const aMax = lerp(26, 7, calmHover) * (1 + cmd.urgency);
-      this.yawRate += clamp(wTarget - this.yawRate, -aMax * dt, aMax * dt);
+      // critically damped turning: the wanted turn rate follows the heading
+      // error, the angular acceleration that reaches it is bounded and itself
+      // eased in (muscle and fin forces build up over ~0.1 s), so a turn
+      // starts softly, peaks and settles without overshoot or snapping
+      const wTarget = clamp(err * (2.0 + cmd.urgency * 3.5), -wMax, wMax);
+      const aMax = lerp(12, 4.5, calmHover) * (1 + 2.5 * cmd.urgency);
+      const aDes = clamp((wTarget - this.yawRate) / lerp(0.16, 0.06, cmd.urgency), -aMax, aMax);
+      this.yawAcc = damp(this.yawAcc, aDes, 1 / lerp(0.1, 0.025, cmd.urgency), dt);
+      this.yawRate += this.yawAcc * dt;
       // slow heading drift (never a perfectly straight line); a hovering or
       // resting fish hardly wanders off its heading
       const n = fbm1(time * 0.2 + sig.noiseSeed, 2) * 0.12 * (1 - cmd.hoverPrecision) * lerp(1, 0.25, calmHover) * (1 - 0.9 * rest);
       this.yaw = wrapAngle(this.yaw + (this.yawRate + n) * dt);
       this.pitchErr = wrapAngle(targetPitch - this.pitch);
-      // (back within the posture limit quickly, e.g. after surface feeding)
-      this.pitch = dampAngle(this.pitch, targetPitch, (Math.abs(this.pitch) > lim ? 6 : 2.2) + cmd.urgency * 2, dt);
+      // pitch: a critically damped spring (no kink in the pitch rate when
+      // the target posture changes); back within the posture limit quickly,
+      // e.g. after surface feeding
+      const wp = (Math.abs(this.pitch) > lim ? 5 : 3) + cmd.urgency * 3;
+      this.pitchRate += (wp * wp * this.pitchErr - 2 * wp * this.pitchRate) * dt;
+      this.pitch += this.pitchRate * dt;
     }
     const bankTarget = clamp(-this.yawRate * (this.speed / SL) * 0.05, -0.3, 0.3) + fbm1(time * 0.23 + sig.noiseSeed * 1.3, 2) * 0.03 * (1 - 0.7 * rest);
     this.roll = damp(this.roll, bankTarget, 3, dt);
@@ -300,7 +336,7 @@ export class Locomotion {
       cmd.brake ||
       this.override.brake ||
       (!this.cstart && ((desiredSpeedBL < 0.1 && U > (this.gait === 'brake' ? 0.3 : 0.42)) || (desiredSpeedBL < 0.3 && U > 0.9) || (homing && U > desiredSpeedBL * 1.4 + 0.3)));
-    this.brakeLevel = damp(this.brakeLevel, brake ? 1 : 0, brake ? 10 : 4, dt);
+    this.brakeLevel = damp(this.brakeLevel, brake ? 1 : 0, brake ? 6 : 3, dt);
     const B = this.bout;
     const inCStart = this.cstart && this.cstart.t < this.cstart.latency + this.cstart.s1 + this.cstart.s2;
     let targetSpeed = null; // m/s; null = unpowered glide
@@ -315,7 +351,9 @@ export class Locomotion {
     } else if (this.cstart) {
       // post-escape burst swimming
       const k = 1 - smoothstep(0, this.cstart.burst, this.cstart.t - this.cstart.latency - this.cstart.s1 - this.cstart.s2);
-      const burstU = lerp(Math.max(desiredSpeedBL, 1.5), 7.5, k);
+      // (the behaviour layer lowers the command when the escape heads for an
+      // obstacle: the burst is then shorter)
+      const burstU = lerp(Math.max(desiredSpeedBL, 1.5), 7.5 * clamp(cmd.speed / 4, 0.35, 1), k);
       this._steadyBeat((4 / 3) * (burstU + 1) * sig.freqMul, 0.1, dt);
       targetSpeed = burstU * SL;
       this.boutTarget = burstU;
@@ -341,7 +379,9 @@ export class Locomotion {
         }
       }
       targetSpeed = (brake ? desiredSpeedBL * 0.5 : desiredSpeedBL) * SL;
-      tau = brake ? 0.35 : 0.8; // pectoral thrust and braking are gentle
+      // pectoral thrust and braking are gentle; coming to a halt, the
+      // pectorals check the remaining glide a little more firmly
+      tau = brake ? 0.35 : desiredSpeedBL < 0.04 ? 0.6 : 0.8;
       this.glideTime = 0;
     } else if (desiredSpeedBL < (this.gait === 'row' ? 0.36 : 0.3)) {
       // slow labriform swimming: the pectorals row (alternating strokes, see
@@ -358,7 +398,7 @@ export class Locomotion {
           const f = r.range(1.7, 2.2) * sig.freqMul;
           this._startBout(1, f, r.range(0.026, 0.036) * sig.ampMul);
           this.boutTarget = desiredSpeedBL * r.range(1.1, 1.25);
-          this.assistTimer = jitterDuration(r, lerp(1.6, 0.7, smoothstep(0.1, 0.34, desiredSpeedBL)), 0.4);
+          this.assistTimer = jitterDuration(r, lerp(1.35, 0.6, smoothstep(0.1, 0.34, desiredSpeedBL)), 0.4);
         }
       }
       // a beat adds a small surge; rowing thrust itself is gentle. A rowing
@@ -435,20 +475,43 @@ export class Locomotion {
       const f = Math.min(B.f * fMul, 14);
       B.u += f * dt;
       this.phase += TAU * f * dt;
-      targetA = Math.min(B.A * aMul, 0.13) * smoothstep(0, 0.35, B.u) * (1 - smoothstep(B.n - 0.55, B.n, B.u));
+      // (a kick swells over the first beat and dies away over the last one;
+      // a single corrective beat is a soft, symmetric sweep)
+      const rise = Math.min(0.5, 0.4 * B.n);
+      const fall = Math.min(0.75, 0.55 * B.n);
+      targetA = Math.min(B.A * aMul, 0.13) * smoothstep(0, rise, B.u) * (1 - smoothstep(B.n - fall, B.n, B.u));
       targetF = f;
+      this.fLast = f;
       if (B.u >= B.n) {
         B.n = 0;
         B.u = 0;
       }
+    } else if (this.amp > 0.001) {
+      // the wave keeps travelling while the last stroke dies away (a frozen
+      // phase would stop the tail dead in mid-sweep)
+      this.phase += TAU * (this.fLast || 2) * dt;
     }
-    this.amp = damp(this.amp, targetA, 25, dt);
+    this.amp = damp(this.amp, targetA, this.cstart ? 25 : 16, dt);
     this.freq = damp(this.freq, targetF, 8, dt);
 
     // speed dynamics
+    // (second order: the wanted acceleration follows the speed error, the
+    // actual one eases toward it - thrust builds up with the first strokes,
+    // drag takes over smoothly when the tail stops)
     if (!inCStart) {
-      if (targetSpeed === null) this.speed = damp(this.speed, 0, 1 / sig.glideTau, dt);
-      else this.speed = damp(this.speed, targetSpeed, 1 / tau, dt);
+      const aDes = targetSpeed === null ? -this.speed / sig.glideTau : (targetSpeed - this.speed) / tau;
+      // (drag takes over quickly once the tail stops: a glide visibly slows)
+      const tauA = this.cstart || cmd.urgency > 0.6 ? 0.05 : targetSpeed === null ? 0.08 : brake ? 0.12 : 0.17;
+      this.accel = damp(this.accel, aDes, 1 / tauA, dt);
+      this.speed = Math.max(0, this.speed + this.accel * dt);
+      if (this.speed === 0) this.accel = Math.max(0, this.accel);
+    } else this.accel = 0;
+    // contact losses (bumping a neighbour, sliding along the glass) are
+    // spread over a few frames instead of cutting the speed at once
+    if (this.contactBrake > 0) {
+      this.speed *= Math.exp(-this.contactBrake * dt);
+      this.contactBrake *= Math.exp(-dt / 0.15);
+      if (this.contactBrake < 1e-3) this.contactBrake = 0;
     }
     this.exertion = Math.min(1, this.exertion + dt * 0.02 * Math.max(0, U - 1.5));
 
@@ -474,7 +537,24 @@ export class Locomotion {
     ).multiplyScalar(0.012 * SL * hoverDrift * (1 - cmd.hoverPrecision * 0.8) * (1 - 0.85 * rest) * (1 - 0.7 * pectAct));
     if (this.gait === 'hover') this.driftAcc += (drift.length() / SL) * dt;
     this.driftAcc *= Math.exp(-dt * (0.05 + 1.5 * pectAct));
-    this.vel.copy(fwd).multiplyScalar(this.speed).add(this.hoverVel).add(drift);
+    // soft separation after a bump (Steering.resolveOverlaps) fades out
+    this.contactVel.multiplyScalar(Math.exp(-dt / 0.06));
+    this.vel.copy(fwd).multiplyScalar(this.speed).add(this.hoverVel).add(drift).add(this.contactVel);
+    // the water surface is a soft ceiling: rising into it, a fish is slowed
+    // over the last few millimetres instead of being stopped dead by the tank
+    // clamp (Steering.clampToTank), which would read as a jolt
+    if (this.fish.brain && this.vel.y > 0) {
+      const room = TANK.water - 0.1 * SL - this.pos.y;
+      this.vel.y *= smoothstep(0, 0.15 * SL, room);
+    }
+    // likewise the gravel: sinking toward it, the fish settles softly
+    // instead of being lifted back out of it from one frame to the next
+    const fl = this.fish.rig.floor;
+    if (this.fish.brain && fl && this.vel.y < 0) {
+      const ds = this.fish.variation ? this.fish.variation.depthScale : 1;
+      const room = this.pos.y - fl.y - 0.19 * SL * ds;
+      this.vel.y *= 0.15 + 0.85 * smoothstep(0, 0.2 * SL, room);
+    }
     this.pos.addScaledVector(this.vel, dt);
 
     // heading history
@@ -523,8 +603,8 @@ export class Locomotion {
     // kick up to ~1.2x the wanted speed; the glide that follows is short:
     // the next bout starts once drag has slowed the fish to ~0.75–0.9x
     this.boutTarget = want * r.range(1.12, 1.28) + deficit * 0.3;
-    this.glideLow = lerp(0.94, 0.82, sig.burstCoastBias) * r.range(0.96, 1.04);
-    this.glideMax = lerp(0.45, 0.95, sig.burstCoastBias) * r.range(0.8, 1.2);
+    this.glideLow = lerp(0.95, 0.85, sig.burstCoastBias) * r.range(0.96, 1.04);
+    this.glideMax = lerp(0.4, 0.85, sig.burstCoastBias) * r.range(0.8, 1.2);
   }
 
   /** Continuous tail beating (steady swimming, escape burst). */
@@ -583,15 +663,24 @@ export class Locomotion {
     } else {
       const u = smoothstep(e2, e2 + 0.12, t);
       bend = k * lerp(-0.35, 0, u);
-      yawFrac = 1;
+      // the escape turn is complete: during the burst that follows the fish
+      // steers again (away from the glass instead of ramming it)
+      if (!c.free) {
+        c.free = true;
+        this.yawRate = 0;
+        this.yawAcc = 0;
+        this.pitchRate = 0;
+      }
       if (t > e2 + c.burst) {
         this.cstart = null;
-        this.yawRate = 0;
+        this.accel = 0;
       }
+      return bend * c.side;
     }
     this.yaw = wrapAngle(c.yaw0 + c.side * c.total * yawFrac);
     this.pitch = clamp(c.pitch0 + c.pitchKick * Math.min(1, yawFrac), -0.62, 0.62);
     this.yawRate = 0;
+    this.tYaw = this.yaw;
     return bend * c.side;
   }
 
@@ -610,15 +699,20 @@ export class Locomotion {
       const env = (0.02 - 0.0825 * s + 0.1625 * s * s) / 0.1;
       const denv = (-0.0825 + 0.325 * s) / 0.1;
       const arg = k * s - this.phase;
-      const slope = A * (denv * Math.sin(arg) + env * k * Math.cos(arg));
+      // (the head is stabilised: its recoil yaw is about half of what the
+      // bare envelope gives, so the snout does not waggle with every beat)
+      const headCalm = 0.5 + 0.5 * smoothstep(0.08, 0.4, s);
+      const slope = A * (denv * Math.sin(arg) + env * k * Math.cos(arg)) * headCalm;
       let yawA = Math.atan(slope);
       let pitchA = 0;
       // caudally propagating turn: follow the delayed heading
       if (s > S_ANCHOR) {
         const [hy, hp] = this._history(((s - S_ANCHOR) * SL) / U, time);
-        // (a routine turn bends the body into a moderate C, never a U)
-        yawA += clamp(wrapAngle(hy - this.yaw), -0.85, 0.85);
-        pitchA += clamp(hp - this.pitch, -0.5, 0.5) * 0.7;
+        // (a routine turn bends the body into a moderate C, never a U; the
+        // limit is soft - a hard clip puts a kink into the bend rate that
+        // makes the caudal fin whip)
+        yawA += 0.85 * Math.tanh(wrapAngle(hy - this.yaw) / 0.85);
+        pitchA += 0.5 * Math.tanh((hp - this.pitch) / 0.5) * 0.7;
       } else {
         yawA += this.yawRate * 0.05 * ((S_ANCHOR - s) / S_ANCHOR);
       }
@@ -737,7 +831,7 @@ export class Locomotion {
       // adducted against the body while swimming
       const extT = lerp(clamp(lerp(lerp(0.78, 0.5, rest), 0.06, pectFold) + turnInner - fear * 0.4, 0.04, 1), 1.0, yl);
       p.ext = damp(p.ext, this.cstart ? 0.05 : extT, 5, dt);
-      p.brake = damp(p.brake, bl * 0.9, 8, dt);
+      p.brake = damp(p.brake, bl * 0.9, 5, dt);
       const b = p.bout;
       if (rowing) {
         // bouts are suspended while the fin rows; sculling may resume soon after
@@ -745,7 +839,7 @@ export class Locomotion {
         b.u = 0;
         p.hold = Math.min(p.hold, r.range(0.3, 1.2));
         p.fLast = rowF;
-        p.amp = damp(p.amp, rowA * (1 - pectFold * (1 - bl)) * (1 - 0.85 * yl), 6, dt);
+        p.amp = damp(p.amp, rowA * (1 - pectFold * (1 - bl)) * (1 - 0.85 * yl), 4, dt);
         p.act = damp(p.act, 1, 3, dt);
         continue;
       }
@@ -776,17 +870,17 @@ export class Locomotion {
           } else p.hold = r.range(0.8, 2.5) * sig.pectHold * (1 + rest);
         }
       }
-      // stroke envelope: rises over a third of a stroke, fades over the last
-      // half. Between bouts a fin that is still swinging (e.g. at the end of
+      // stroke envelope: eases in over half a stroke and out over the last
+      // ~0.6 stroke (no popping fins). Between bouts a fin that is still swinging (e.g. at the end of
       // rowing) finishes its stroke instead of snapping back.
-      const env = b.n > 0 ? smoothstep(0, 0.3, b.u) * (1 - smoothstep(b.n - 0.5, b.n, b.u)) : 0;
+      const env = b.n > 0 ? smoothstep(0, 0.45, b.u) * (1 - smoothstep(b.n - 0.6, b.n, b.u)) : 0;
       if (b.n > 0) {
         p.phase = Math.max(0, b.u) * TAU;
         p.fLast = b.f;
       } else if (p.amp > 0.004) p.phase += TAU * p.fLast * dt;
       else p.phase = 0;
       const ampT = b.A * env * (1 - pectFold * (1 - bl)) * (1 - 0.85 * yl);
-      p.amp = damp(p.amp, ampT, b.n > 0 ? 20 : 5, dt);
+      p.amp = damp(p.amp, ampT, b.n > 0 ? 10 : 4, dt);
       p.act = damp(p.act, b.n > 0 && b.u > 0 ? 1 : 0, 3, dt);
     }
   }
@@ -887,7 +981,7 @@ export class Locomotion {
         const corr = this.fish.rng.next() < 0.6;
         e.tYaw = corr ? clamp(other.tYaw + this.fish.rng.range(-0.08, 0.08), -0.3, 0.3) : this.fish.rng.range(-0.3, 0.3);
         e.tPitch = this.fish.rng.range(-0.06, 0.06);
-        e.timer = jitterDuration(this.fish.rng, 2.0 * (1 + 1.5 * rest), 0.6);
+        e.timer = jitterDuration(this.fish.rng, 2.6 * (1 + 1.5 * rest), 0.6);
       }
       // saccades are fast (~40–60 ms), fixations drift < 1 °/s
       e.yaw = damp(e.yaw, e.tYaw, look ? 10 : 45, dt);

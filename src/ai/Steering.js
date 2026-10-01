@@ -39,12 +39,16 @@ export function bodyCapsule(f, force = false) {
   const L = f.loc;
   const SL = f.SL;
   const up = c.up.set(0, 1, 0).applyQuaternion(L.quat);
+  // this individual's build: deep / slim, broad / narrow body
+  const v = f.variation;
+  const ds = v ? v.depthScale : 1;
+  const ws = v ? v.widthScale : 1;
   for (let k = 0; k < NB; k++) {
     const e = CAP[k];
-    _p.fromArray(L.localP, e.i * 3).applyQuaternion(L.quat).add(L.pos).addScaledVector(up, e.c * SL);
+    _p.fromArray(L.localP, e.i * 3).applyQuaternion(L.quat).add(L.pos).addScaledVector(up, e.c * SL * ds);
     _p.toArray(c.p, k * 3);
-    c.w[k] = e.w * SL;
-    c.h[k] = e.h * SL;
+    c.w[k] = e.w * SL * ws;
+    c.h[k] = e.h * SL * ds;
   }
   const rig = f.rig;
   const b = (NB - 1) * 3;
@@ -234,7 +238,8 @@ export function avoidObstacles(fish, world, out, opts = {}) {
   // summed (a corner pushes out along its diagonal instead of flipping
   // between its two walls); rocks, plants and the surface come from the
   // nearest-boundary query.
-  const r0 = 0.45 * SL;
+  // (a turning fish swings its rear half outward: it keeps more room)
+  const r0 = (0.45 + 0.12 * Math.min(1, Math.abs(L.yawRate || 0) / 2.5)) * SL;
   const p = L.pos;
   const { min, max } = world.bounds;
   let dWall = Infinity;
@@ -340,6 +345,9 @@ export function shoal(fish, neighbours, out, { cohesion = 1, alignment = 0.25, p
 // pebble tops reach ~3–4 mm)
 const CLEAR = [0, 0.05, 0.1, 0.18, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0].map((s) => ({ i: Math.round(s * (NS - 1)), bot: profile.bot(s), hw: profile.hw(s), margin: s < 0.25 ? 0.0045 : 0.0025 }));
 
+// largest per-frame correction of the bent body out of the glass (m)
+const GLASS_STEP = 0.0005;
+
 /** Keep the centre of mass inside the tank (hard safety net after steering). */
 export function clampToTank(fish, world) {
   const L = fish.loc;
@@ -358,29 +366,43 @@ export function clampToTank(fish, world) {
   // the whole bent body (not just its centre) stays inside the glass: a
   // fish turning close to a wall never swings its rear half through it
   const { min, max } = world.bounds;
+  const ds = fish.variation ? fish.variation.depthScale : 1;
+  const ws = fish.variation ? fish.variation.widthScale : 1;
   let sx0 = 0;
   let sx1 = 0;
   let sz0 = 0;
   let sz1 = 0;
   for (const e of CLEAR) {
     _q.fromArray(L.localP, e.i * 3).applyQuaternion(L.quat).add(p);
-    const low = _q.y + _u.y * e.bot * SL;
+    const low = _q.y + _u.y * e.bot * SL * ds;
     lift = Math.max(lift, world.groundHeight(_q.x, _q.z) + e.margin - low);
-    const r = e.hw * SL + 0.002;
+    const r = e.hw * SL * ws + 0.002;
     sx0 = Math.max(sx0, min.x + r - _q.x);
     sx1 = Math.max(sx1, _q.x - (max.x - r));
     sz0 = Math.max(sz0, min.z + r - _q.z);
     sz1 = Math.max(sz1, _q.z - (max.z - r));
   }
-  p.x += sx0 - sx1;
-  p.z += sz0 - sz1;
+  // (the bent body swinging into the glass in a turn is eased out: a small
+  // positional step per frame, the rest as a short outward drift - a full
+  // correction in one frame shows as a sideways jolt of the whole fish)
+  const bx = sx0 - sx1;
+  const bz = sz0 - sz1;
+  const cx = THREE.MathUtils.clamp(bx, -GLASS_STEP, GLASS_STEP);
+  const cz = THREE.MathUtils.clamp(bz, -GLASS_STEP, GLASS_STEP);
+  p.x += cx;
+  p.z += cz;
+  if (bx !== cx || bz !== cz) {
+    L.contactVel.x += (bx - cx) * 15;
+    L.contactVel.z += (bz - cz) * 15;
+    L.contactVel.clampLength(0, 0.6 * SL);
+  }
   L.groundContact = lift;
   if (lift > 0) {
     p.y += lift;
     // the lift is not a collision: the fish slides along the gravel (and
     // levels out, see Locomotion) at the cost of a little speed
     before.y += lift;
-    if (L.vel.y < 0) L.speed *= 0.97;
+    if (L.vel.y < 0) L.contactBrake = Math.max(L.contactBrake, 1.2);
   }
   // local ground plane for the fin dynamics (fins rest on the gravel, they
   // do not hang into it)
@@ -409,7 +431,8 @@ export function clampToTank(fish, world) {
     if (n.lengthSq() > 0) {
       n.normalize();
       const vn = L.vel.dot(n);
-      if (vn > 0) L.speed *= 0.85;
+      // (the speed loss is spread over a few frames: Locomotion.contactBrake)
+      if (vn > 0) L.contactBrake = Math.max(L.contactBrake, 2.5);
     }
   }
 }
@@ -424,7 +447,8 @@ export function resolveOverlaps(fishList) {
   _capFrame++;
   const n = fishList.length;
   for (const f of fishList) bodyCapsule(f, true);
-  for (let iter = 0; iter < 2; iter++) {
+  // (one pass: the contact is resolved over several frames, see below)
+  {
     for (let i = 0; i < n; i++) {
       const fi = fishList[i];
       for (let j = i + 1; j < n; j++) {
@@ -438,18 +462,48 @@ export function resolveOverlaps(fishList) {
         if (gap >= buffer) continue;
         const mi = fi.loc.restLevel > 0.5 ? 0.25 : 1;
         const mj = fj.loc.restLevel > 0.5 ? 0.25 : 1;
-        const corr = gap < 0 ? -gap * 0.9 + buffer * 0.3 : (buffer - gap) * 0.3;
-        _push(fi, _n, (-corr * mi) / (mi + mj));
-        _push(fj, _n, (corr * mj) / (mi + mj));
-        // the fish driving into the other loses some speed
-        if (fi.loc.vel.dot(_n) > 0) fi.loc.speed *= 0.97;
-        if (fj.loc.vel.dot(_n) < 0) fj.loc.speed *= 0.97;
+        // Soft contact: a near-contact or shallow overlap is a stiff, well
+        // damped spring acting on the velocity (Locomotion.contactVel), so
+        // the bodies ease apart over a few frames; positional steps (which
+        // chatter on and off from frame to frame and read as twitching) are
+        // kept for real interpenetration only, and are small.
+        const SLm = Math.min(fi.SL, fj.SL);
+        {
+          const pen = buffer - gap;
+          _kick(fi, _n, (-pen * mi) / (mi + mj));
+          _kick(fj, _n, (pen * mj) / (mi + mj));
+        }
+        if (gap < 0) {
+          // (the step is a smooth function of the depth: it fades in from
+          // zero, takes half the overlap per frame up to a small cap, and only
+          // a deep overlap is removed faster - no on/off chatter)
+          const pen = -gap;
+          const step = Math.min(0.5 * pen, MAX_STEP) * smoothstep01(pen / (0.02 * SLm)) + 2 * MAX_STEP * smoothstep01((pen - 0.12 * SLm) / (0.1 * SLm));
+          _push(fi, _n, (-step * mi) / (mi + mj));
+          _push(fj, _n, (step * mj) / (mi + mj));
+        }
+        // the fish driving into the other loses some speed (gradually)
+        if (fi.loc.vel.dot(_n) > 0) fi.loc.contactBrake = Math.max(fi.loc.contactBrake, 1.5);
+        if (fj.loc.vel.dot(_n) < 0) fj.loc.contactBrake = Math.max(fj.loc.contactBrake, 1.5);
       }
     }
   }
 }
 
 const _d = new THREE.Vector3();
+// largest positional contact correction per fish pair and frame (m; up to
+// three times this for a deep overlap)
+const MAX_STEP = 0.00015;
+// contact spring on the velocity: per frame, m/s per m of overlap (≈ 100 s⁻²
+// at 60 fps; the contact velocity decays with 0.06 s in Locomotion, which
+// makes the contact well damped: the bodies separate without bouncing)
+const K_CONTACT = 1.6;
+function _kick(f, d, k) {
+  const v = f.loc.contactVel;
+  v.addScaledVector(d, k * K_CONTACT);
+  if (v.y < 0 && (f.loc.groundContact > 0 || f.loc.pos.y - f.rig.floorY() < 0.32 * f.SL)) v.y = 0;
+  v.clampLength(0, 0.6 * f.SL);
+}
 // move a fish (and its already posed rig) by d*k; a fish close to the gravel
 // is not pushed down into it
 function _push(f, d, k) {

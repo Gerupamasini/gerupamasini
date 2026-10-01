@@ -54,6 +54,10 @@ const FIN_MECH = {
   4: { kBase: 0.96, kTip: 0.34, memBase: 0.5, memTip: 0.1, drag: 150, dragT: 4, grav: 0.2, droop: 0, curl: 0.16 }, // pelvic
 };
 
+// per substep: share of a node's velocity difference to its neighbours that is
+// removed (structural damping of fin ringing, see _dampInternal)
+const INTERNAL_DAMP = 0.3;
+
 export class FishRig {
   /**
    * @param layout rig layout
@@ -202,8 +206,10 @@ export class FishRig {
     const droop = FIN_MECH[ch.type].droop * p.relax;
     switch (ch.type) {
       case 0: {
-        // relaxed comet lobes hang a little below the body axis
-        const ae = a * p.caudalSpread - droop;
+        // relaxed comet lobes hang a little below the body axis; even a
+        // folded fin keeps its rays fanned toward the tips (a lobe whose rays
+        // run nearly parallel reads as a thin flake)
+        const ae = a * lerp(p.caudalSpread, 1, 0.35) - droop;
         return out.set(-Math.cos(ae), Math.sin(ae), 0);
       }
       case 1: {
@@ -424,8 +430,47 @@ export class FishRig {
         vel[i] = (pred[i] - pos[i]) / h;
         pos[i] = pred[i];
       }
+      this._dampInternal();
     }
     this._computeNormals();
+  }
+
+  /**
+   * Internal (structural) damping: the velocity of every node is pulled a
+   * little toward the mean of its neighbours along the ray and across the
+   * membrane. Rigid swinging, trailing and drooping are untouched, but the
+   * high-frequency ringing that the stiff constraints and the membrane
+   * limits otherwise excite (a 10–15 Hz shiver of the fin tips after a turn
+   * or a brake, which reads as twitching) dies out within a few frames.
+   */
+  _dampInternal() {
+    const V = this.vel;
+    const c = INTERNAL_DAMP;
+    for (const ch of this.chains) {
+      const o = ch.offset;
+      for (let k = 1; k < ch.M; k++) {
+        const i = (o + k) * 3;
+        const ip = i - 3;
+        const inx = k < ch.M - 1 ? i + 3 : ip;
+        for (let a = 0; a < 3; a++) V[i + a] += c * (0.5 * (V[ip + a] + V[inx + a]) - V[i + a]);
+      }
+    }
+    for (const fin of this.layout.fins) {
+      const c0 = fin.chainStart;
+      for (let j = 0; j < fin.nChains - 1; j++) {
+        const A = this.chains[c0 + j];
+        const B = this.chains[c0 + j + 1];
+        for (let k = 1; k < A.M; k++) {
+          const ia = (A.offset + k) * 3;
+          const ib = (B.offset + k) * 3;
+          for (let a = 0; a < 3; a++) {
+            const m = 0.5 * (V[ia + a] + V[ib + a]);
+            V[ia + a] += c * 0.5 * (m - V[ia + a]);
+            V[ib + a] += c * 0.5 * (m - V[ib + a]);
+          }
+        }
+      }
+    }
   }
 
   _chainTables(ch) {
@@ -545,6 +590,10 @@ export class FishRig {
       for (let j = 0; j < fin.nChains - 1; j++) {
         const a = this.chains[c0 + j];
         const b = this.chains[c0 + j + 1];
+        // the caudal rays stay fanned out to their tips: the membrane between
+        // them hardly lets them bunch (bunched rays fold a lobe into a thin
+        // flake); other fins may fold further
+        const caudal = fin.type === 0;
         for (let k = 1; k < a.M; k++) {
           const ia = (a.offset + k) * 3;
           const ib = (b.offset + k) * 3;
@@ -553,13 +602,13 @@ export class FishRig {
           const dy = P[ib + 1] - P[ia + 1];
           const dz = P[ib + 2] - P[ia + 2];
           const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
-          const lo = rest * 0.72;
+          const lo = rest * (caudal ? 0.9 : 0.72);
           const hi = rest * 1.12;
           let target = d;
           if (d > hi) target = hi;
           else if (d < lo) target = lo;
           else continue;
-          const corr = ((d - target) / d) * 0.5 * 0.6;
+          const corr = ((d - target) / d) * 0.5 * (caudal && d < lo ? 0.9 : 0.6);
           P[ia] += dx * corr;
           P[ia + 1] += dy * corr;
           P[ia + 2] += dz * corr;
