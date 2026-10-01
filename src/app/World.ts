@@ -5,6 +5,8 @@ import { Terrain, loadTerrainGrid } from '../world/Terrain';
 import { WaterPass } from '../world/Water';
 import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
+import { carveFeedingPits } from '../world/FeedingPits';
+import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
 import { jstParts, seasonOf, type Season } from '../core/Time';
 import type { QualityPreset } from '../core/Settings';
@@ -45,9 +47,11 @@ export class World {
   static async create(map: MapDef, station: TideStationDef | TideModel, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void): Promise<World> {
     onProgress?.('地形');
     const grid = await loadTerrainGrid(map);
+    // アカエイの食痕: dug into the flat before the terrain is built, so pools, tags and shading all see them
+    const pits = carveFeedingPits(grid, map.substrate.palette, hashInts(map.id.length * 7919, 20261001));
     const terrain = new Terrain(grid, map.substrate.palette);
     onProgress?.('潮だまり');
-    const habitat = new Habitat(terrain);
+    const habitat = new Habitat(terrain, 5, pits);
     terrain.setSpill(habitat.poolLevels);
     const water = new WaterPass(terrain);
     const tide = station instanceof TideModel ? station : new TideModel(station);
@@ -65,6 +69,7 @@ export class World {
     this.tideLevel = this.tideOverride ?? this.tide.level(gameMs);
     if (this.timeAcc > 1 || this.tideRate === 0) this.tideRate = this.tideOverride !== null ? 0 : this.tide.rate(gameMs);
     this.water.setLevel(this.tideLevel);
+    this.terrain.updateLod(anchor.x, anchor.z);
     if (gameMs - this.lastHabitatMs > 2000 || this.lastHabitatMs === 0) {
       this.lastHabitatMs = gameMs;
       this.habitat.update(gameMs, this.tideLevel);
@@ -86,7 +91,7 @@ export class World {
       fogColor: this.sky.fogColor, fogDensity: this.fog.density, env: this.sky.envCube,
     });
     // lift the exposure at night so the flat stays readable under the moon
-    this.exposure = 0.68 + 0.22 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
+    this.exposure = 0.58 + 0.32 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
     this.scene.background = this.sky.fogColor;
     // the sky refreshes its environment maps itself whenever the sun moved enough (so time jumps show at once)
     this.sky.refreshEnvironment();

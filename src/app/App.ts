@@ -43,6 +43,7 @@ export class App {
   tide: TideModel = null!;
   encyclopedia: Encyclopedia = null!;
   observation: Observation = null!;
+  private leftFieldAt = 0;
   capture: Capture = new Capture();
   tank: TankScene = null!;
   hero: HeroPipeline | null = null;
@@ -74,6 +75,7 @@ export class App {
     this.renderer = new GameRenderer(canvas);
     this.camera = new PerspectiveCamera(70, this.renderer.aspect, 0.05, 2500);
     this.input = new Input(canvas);
+    this.input.onLockError = (reason) => { console.warn('[input] pointer lock refused:', reason); toast(t('hud.lockFailed'), 'warn', 6000); };
     window.addEventListener('resize', () => this.onResize());
     document.addEventListener('visibilitychange', () => {
       this.clock.setPaused(document.hidden || !this.worldVisible());
@@ -132,6 +134,7 @@ export class App {
 
   private setMode(m: Screen): void {
     ui.screen.value = m;
+    this.input.dragLook = m === 'field';
     const overlay = m !== 'field' && m !== 'observe' && m !== 'capture' && m !== 'home';
     this.input.blocked = overlay;
     if (m !== 'field' && m !== 'capture') this.input.exitPointerLock();
@@ -196,6 +199,7 @@ export class App {
 
   /** Home: the tank fills the screen behind the menu. */
   enterHome(): void {
+    if (this.mode === 'field' || this.mode === 'observe' || this.mode === 'capture') this.leftFieldAt = performance.now();
     this.player?.resetFov();
     this.setMode('home');
     ui.homePanel.value = 'none';
@@ -229,6 +233,9 @@ export class App {
       this.onResize();
     }
     this.tank.deactivate();
+    // away long enough for the tide to have moved: the population is rebuilt for the water as it is now
+    if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.creatures?.resetPopulation(null);
+    this.leftFieldAt = 0;
     this.setMode('field');
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
@@ -281,6 +288,7 @@ export class App {
     const now = this.clock.nowReal();
     if (Math.abs(targetGameMs - now) > TICKET_RANGE_DAYS * 86400000) return false;
     this.clock.useTicket(targetGameMs);
+    this.creatures?.resetPopulation(this.lockedId);
     if (this.save) this.save.ticket.usedCount++;
     toast(`${t('ticket.active')}: ${formatJst(targetGameMs, { date: true })}`, 'info');
     this.requestSave();
@@ -289,6 +297,7 @@ export class App {
 
   cancelTicket(): void {
     this.clock.cancelTicket();
+    this.creatures?.resetPopulation(this.lockedId);
     this.requestSave();
   }
 
@@ -306,12 +315,14 @@ export class App {
 
   setDebugTime(ms: number | null): void {
     this.clock.setDebugTime(ms);
+    this.creatures?.resetPopulation(this.lockedId);
     ui.debugState.value = { ...ui.debugState.value, timeOverride: ms !== null };
     this.curveCacheMin = -1;
   }
 
   setTideOverride(level: number | null): void {
     if (this.world) this.world.tideOverride = level;
+    this.creatures?.resetPopulation(this.lockedId);
     ui.debugState.value = { ...ui.debugState.value, tideOverride: level };
   }
 
@@ -333,8 +344,9 @@ export class App {
     switch (target) {
       case 'waterline': {
         x = 0;
-        for (let zz = -w.terrain.half + 5; zz < w.terrain.half - 5; zz += 1) {
-          if (w.habitat.depthAt(0, zz) >= 0.08) { z = zz - 4; break; }
+        // the first spot walking seaward that stands in ankle-deep water (the relief makes a fixed offset unreliable)
+        for (let zz = -w.terrain.half + 5; zz < w.terrain.half - 5; zz += 0.5) {
+          if (w.habitat.depthAt(0, zz) >= 0.06) { z = zz; break; }
         }
         break;
       }
@@ -530,6 +542,8 @@ export class App {
     if (this.input.pressed('debug')) this.toggleDebug();
     switch (mode) {
       case 'field':
+        this.input.dragLook = true;
+        if (!this.input.pointerLocked && (this.input.keyPressed('Enter') || this.input.keyPressed('Space'))) this.focusGame();
         if (this.input.pressed('menu')) { if (ui.mapOpen.value) ui.mapOpen.value = false; else this.openOverlay('menu'); }
         else if (this.input.pressed('map')) this.toggleMap();
         else if (this.input.pressed('zukan')) this.openOverlay('zukan');
@@ -678,7 +692,7 @@ export class App {
       pointerLocked: this.input.pointerLocked,
     };
     if (ui.debug.value) {
-      const info = this.renderer.gl.info.render;
+      const info = (this.field?.lastStats ?? this.renderer.gl.info.render);
       const cs = this.creatures?.stats() ?? { total: 0, visible: 0, lod1: 0 };
       ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1 } };
     }

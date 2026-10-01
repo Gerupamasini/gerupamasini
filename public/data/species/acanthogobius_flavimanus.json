@@ -30,6 +30,17 @@
   "variation": { "scaleFromLength": true, "tint": { "hueDeg": [-6, 6], "sat": [0.9, 1.1], "val": [0.9, 1.05] } },
   "spawn": [
     {
+      "tags": ["small_pool"],
+      "depth_m": [0.02, 0.5],
+      "time": ["dawn", "day", "dusk", "night"],
+      "season": ["spring", "summer", "autumn"],
+      "tide": "any",
+      "density_per_100m2": 5,
+      "group": [1, 2],
+      "maxPopulation": 16,
+      "length_mm": [28, 48]
+    },
+    {
       "tags": ["shallow", "pool"],
       "substrate": ["sand", "muddy_sand", "mud"],
       "depth_m": [0.05, 1.0],

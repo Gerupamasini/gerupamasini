@@ -5,6 +5,8 @@ import type { WaterPass } from '../world/Water';
 export class FieldRenderer {
   private rt: WebGLRenderTarget | null = null;
   private readonly size = new Vector2();
+  /** draw calls and triangles of the last scene render (before the water composite) */
+  readonly lastStats = { calls: 0, triangles: 0 };
 
   constructor(private readonly gl: WebGLRenderer) {}
 
@@ -26,6 +28,8 @@ export class FieldRenderer {
     const gl = this.gl, rt = this.target();
     gl.setRenderTarget(rt);
     gl.render(scene, camera);
+    this.lastStats.calls = gl.info.render.calls;
+    this.lastStats.triangles = gl.info.render.triangles;
     water.render(gl, rt, null, camera);
     gl.setRenderTarget(null);
   }

@@ -19,7 +19,10 @@
   "hud.observe": "観察",
   "hud.observeOnly": "観察のみ（採集不可）",
   "hud.tooDeep": "これ以上は深い",
-  "hud.hint.move": "WASD 移動 / Shift 走る / Ctrl しゃがむ / 右クリック ズーム / E 採集 / F 観察 / M 地図 / Tab 図鑑 / H 自宅 / T チケット / F3 デバッグ / Esc メニュー",
+  "hud.hint.move": "WASD 移動 / Shift 走る / C 視点の高さ切替 / 右クリック ズーム / E 採集 / F 観察 / M 地図 / Tab 図鑑 / H 自宅 / T チケット / F3 デバッグ / Esc メニュー",
+  "hud.clickToPlay": "クリックで操作開始",
+  "hud.clickToPlay.sub": "（Enter でも開始。マウスの固定が効かないときはドラッグで見回せます）",
+  "hud.lockFailed": "ブラウザがマウスの固定を拒否しました。ドラッグで見回せます。もう一度クリックすると再試行します。",
   "observe.speed": "速度",
   "observe.exit": "観察を終了 (F / Esc)",
   "observe.recorded": "行動を記録",
@@ -130,7 +133,7 @@
   "home.gacha": "ガチャ",
   "home.soon": "近日公開",
   "home.hint": "生物をクリックで情報 / 水槽をクリックで管理 / ドラッグで回転",
-  "hud.hint.view": "右クリック（または Z）でズーム / Ctrl でしゃがむと低い視点",
+  "hud.hint.view": "右クリック（または Z）でズーム / C（Ctrl）で低い視点と立ち視点を切り替え",
   "warn.webgl2": "このブラウザは WebGL2 に対応していません。Chrome、Edge、Firefox、Safari 17 以降でお試しください。",
   "warn.clock": "PC の時計が巻き戻されたようです。潮時チケットを無効にしました。"
 }

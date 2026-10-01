@@ -15,6 +15,9 @@ interface MahazeExtras {
  * Drives the マハゼ rig with the procedural behaviour model (perch / paddle / orient / dart / glide / yawn) and maps the
  * brain's intents onto it. Works for every LOD because all tiers share the rig.
  */
+/** axial geometry stored in a goby's rig extras (mahazeRig.axes.body) */
+interface BodyGeometry { tlMM: number; spine: [string, number][]; restFold?: { d1: number; d2: number; anal: number; caudal: number } }
+
 export class MahazeDriver implements Driver {
   private beh: Behavior | null = null;
   private root: Object3D | null = null;
@@ -34,9 +37,12 @@ export class MahazeDriver implements Driver {
     const scale = individual.length_mm / individual.species.model.modelLength_mm;
     const roleOf = (m: Object3D): string | undefined => (m.userData.mahaze as MahazeExtras | undefined)?.role ?? ((m as Mesh).material as { userData?: { mahaze?: MahazeExtras } })?.userData?.mahaze?.role;
     const body = meshes.find((m) => roleOf(m) === 'body') as Mesh | undefined;
-    const rigNode = root.getObjectByName('Mahaze_Juvenile');
-    const rig = rigNode?.userData.mahazeRig as { axes: Record<string, number[]>; contactY: number; tailContactY: number } | undefined;
-    if (!body || !rig) throw new Error('mahaze: rig data missing in glTF extras');
+    let rigNode: Object3D | undefined;
+    root.traverse((o) => { if (!rigNode && o.userData.mahazeRig) rigNode = o; });
+    const rig = rigNode?.userData.mahazeRig as { axes: Record<string, number[]> & { body?: BodyGeometry }; contactY: number; tailContactY: number } | undefined;
+    if (!body || !rig) throw new Error('goby: rig data missing in glTF extras');
+    const bodyGeom: BodyGeometry | null = rig.axes.body ?? null;
+    const viewer = rigNode?.userData.viewer as { contacts?: [string, number, string | number][] } | undefined;
     const bx = (body.userData.mahaze as MahazeExtras | undefined) ?? (body.material as unknown as { userData: { mahaze: MahazeExtras } }).userData.mahaze;
     // rest-pose bone positions with the root at the origin and unit scale
     root.position.set(0, 0, 0);
@@ -47,12 +53,16 @@ export class MahazeDriver implements Driver {
     const F = bx.fishFrame, P = bx.profile;
     const botY = (s: number) => { const k = Math.min(P.n - 1, Math.round((s / F.SEND) * (P.n - 1))); return P.data[k * 6] - P.data[k * 6 + 2]; };
     const rimY = rig.contactY * 1000 + F.Y0;
-    const contactDefs: [string, number, number][] = [
-      ['J_pelvic', 13.0, rimY], ['J_pelvic', 14.8, rimY], ['J_pelvic', 16.6, rimY],
-      ['J_root', 15.5, botY(15.5)], ['J_sp1', 18.5, botY(18.5)], ['J_sp2', 22.5, botY(22.5)], ['J_sp3', 26.5, botY(26.5)],
-      ['J_sp4', 30.5, botY(30.5)], ['J_sp5', 34.5, botY(34.5)], ['J_sp6', 38.5, botY(38.5)], ['J_caudal2', 48.0, rig.tailContactY * 1000 + F.Y0],
-    ];
-    const contacts = contactDefs.map(([bone, s, y]) => ({ bone: bones[bone], p: new Vector3(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001).sub(bones[bone].userData.restObj as Vector3) }));
+    const tailY = rig.tailContactY * 1000 + F.Y0;
+    // ground contacts along the body (bone, s mm, y mm): from the species' rig extras when given, else the マハゼ set
+    const contactDefs: [string, number, number][] = viewer?.contacts
+      ? viewer.contacts.map(([bone, sMM, y]) => [bone, sMM, y === 'rim' ? rimY : y === 'bot' ? botY(sMM) : y === 'tail' ? tailY : Number(y)])
+      : [
+        ['J_pelvic', 13.0, rimY], ['J_pelvic', 14.8, rimY], ['J_pelvic', 16.6, rimY],
+        ['J_root', 15.5, botY(15.5)], ['J_sp1', 18.5, botY(18.5)], ['J_sp2', 22.5, botY(22.5)], ['J_sp3', 26.5, botY(26.5)],
+        ['J_sp4', 30.5, botY(30.5)], ['J_sp5', 34.5, botY(34.5)], ['J_sp6', 38.5, botY(38.5)], ['J_caudal2', 48.0, tailY],
+      ];
+    const contacts = contactDefs.filter(([bone]) => bones[bone]).map(([bone, s, y]) => ({ bone: bones[bone], p: new Vector3(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001).sub(bones[bone].userData.restObj as Vector3) }));
     const finMeshes: Record<string, Mesh> = {};
     for (const m of meshes) {
       const mesh = m as Mesh;
@@ -64,6 +74,7 @@ export class MahazeDriver implements Driver {
       root, bones, finMeshes, axes: rig.axes, contacts, scale,
       floorY: (x: number, z: number) => (this.floor ? this.floor.heightAt(x, z) : 0),
       onEvent: (name: string) => this.emit(name),
+      body: bodyGeom,
     });
     const st = this.beh.state;
     st.pos.set(individual.pos.x, 0, individual.pos.z);
@@ -132,6 +143,17 @@ export class MahazeDriver implements Driver {
     const sdt = dt * ctx.simScale;
     beh.update(sdt);
     const st = beh.state;
+    const b = ctx.bounds;
+    if (b) {
+      // the glass: stop at the walls, turn back toward the middle and give up the dart
+      const cx = Math.max(b.minX, Math.min(b.maxX, st.pos.x)), cz = Math.max(b.minZ, Math.min(b.maxZ, st.pos.z));
+      if (cx !== st.pos.x || cz !== st.pos.z) {
+        st.pos.x = cx; st.pos.z = cz;
+        beh.setHeading(Math.atan2((b.minX + b.maxX) / 2 - cx, (b.minZ + b.maxZ) / 2 - cz));
+        beh.setRestFor(1.5);
+        if (this.root) this.root.position.set(cx, this.root.position.y, cz);
+      }
+    }
     ind.pos.x = st.pos.x;
     ind.pos.z = st.pos.z;
     ind.pos.y = this.root ? this.root.position.y : ind.pos.y;

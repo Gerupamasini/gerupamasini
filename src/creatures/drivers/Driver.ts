@@ -29,10 +29,14 @@ export interface Floor {
 }
 
 export interface DriverContext {
+  /** keep the animal inside this box (the home tank) */
+  bounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
   floor: Floor;
   player: Vector3;
   simScale: number;
   nowMs: number;
+  /** the observed / locked animal: keep full detail whatever the distance to the player */
+  locked?: boolean;
 }
 
 export interface Driver {

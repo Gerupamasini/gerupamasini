@@ -51,6 +51,15 @@ export interface Individual {
   ruleIndex: number;
   mismatchSince: number;
   spawnedAt: number;
+  /** resident of a stingray feeding pit (kept until the player walks away) */
+  pitId?: number;
+  /** game time at which the water under an aquatic animal became too shallow (0 = fine) */
+  strandedSince: number;
+}
+
+/** The least water an aquatic animal is placed in or will stay in: about 15 % of its length, never under 1.5 cm. */
+export function minDepthFor(species: SpeciesDef, length_mm: number): number {
+  return Math.max(0.015, (length_mm / 1000) * 0.15);
 }
 
 function erf(x: number): number {
@@ -77,11 +86,12 @@ function evalTraitCondition(expr: string, vars: Record<string, number>): boolean
 }
 
 /** Deterministically generate an individual from a species definition and a seed. */
-export function generateIndividual(species: SpeciesDef, seed: number, x: number, z: number, cell: number, ruleIndex: number, nowMs: number): Individual {
+export function generateIndividual(species: SpeciesDef, seed: number, x: number, z: number, cell: number, ruleIndex: number, nowMs: number, lengthRange?: [number, number]): Individual {
   const rng = new Rng(seed);
   const L = species.size.length_mm;
   let len = L.mean + L.sd * rng.normal();
   len = Math.max(L.min, Math.min(L.max, len));
+  if (lengthRange) len = Math.max(L.min, Math.min(L.max, lengthRange[0] + (lengthRange[1] - lengthRange[0]) * rng.next()));
   const pct = 50 * (1 + erf((len - L.mean) / (L.sd * Math.SQRT2)));
   const weight = species.size.weightCoef.a * Math.pow(len, species.size.weightCoef.b);
   const sex: Sex = rng.chance(species.sex.maleRatio) ? 'm' : 'f';
@@ -94,7 +104,7 @@ export function generateIndividual(species: SpeciesDef, seed: number, x: number,
     length_mm: Math.round(len * 10) / 10, weight_g: Math.round(weight * 10) / 10, sex, stage, traits, lengthPct: pct,
     alert: 0, energy: rng.range(0.3, 0.9), lod: 3,
     brain: { busyUntil: 0, intentId: 0, cooldowns: new Map(), nextTick: 0, done: true, lastIntentKind: '' },
-    rng: new Rng(seed ^ 0x9e3779b9), cell, ruleIndex, mismatchSince: 0, spawnedAt: nowMs,
+    rng: new Rng(seed ^ 0x9e3779b9), cell, ruleIndex, mismatchSince: 0, spawnedAt: nowMs, strandedSince: 0,
   };
 }
 

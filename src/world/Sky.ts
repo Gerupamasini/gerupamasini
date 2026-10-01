@@ -75,18 +75,19 @@ export class SkyDome {
     const dusk = 1 - MathUtils.smoothstep(elevation, -2, 18);
     const cloud = MathUtils.clamp(overcast, 0, 1);
     // key light: warm when low, white when high; below the horizon a faint moon/sky light remains
-    const keyColor = new Color(1, 0.98, 0.95).lerp(new Color(1, 0.62, 0.35), dusk).lerp(new Color(0.55, 0.65, 0.9), 1 - day);
+    const keyColor = new Color(1, 0.96, 0.9).lerp(new Color(1, 0.62, 0.35), dusk).lerp(new Color(0.55, 0.65, 0.9), 1 - day);
     this.sunLight.color.copy(keyColor);
-    this.sunLight.intensity = (1.0 + 1.3 * day) * (1 - 0.75 * cloud);
+    // the sun carries the daylight; sky light stays a soft bluish fill so sand reads warm with cool shadows
+    this.sunLight.intensity = (0.7 + 1.9 * day) * (1 - 0.75 * cloud);
     const lightDir = elevation > -2 ? sunDir : new Vector3(0.3, 1, 0.2).normalize();
     this.sunLight.position.copy(anchor).addScaledVector(lightDir, 120);
     this.sunLight.target.position.copy(anchor);
     // hemisphere: sky colour tracks the horizon tint
-    const skyCol = new Color(0.5, 0.68, 0.8).lerp(new Color(0.16, 0.22, 0.34), 1 - day);
+    const skyCol = new Color(0.58, 0.68, 0.78).lerp(new Color(0.16, 0.22, 0.34), 1 - day);
     const groundCol = new Color(0.28, 0.24, 0.18).lerp(new Color(0.05, 0.05, 0.07), 1 - day);
     this.hemi.color.copy(skyCol);
     this.hemi.groundColor.copy(groundCol);
-    this.hemi.intensity = (0.5 + 0.05 * day) * (1 + 0.25 * cloud);
+    this.hemi.intensity = (0.2 + 0.1 * day) * (1 + 0.6 * cloud);
     this.hemi.color.lerp(new Color(0.6, 0.63, 0.66), cloud * 0.7);
     this.fogColor.copy(new Color(0.6, 0.7, 0.78).lerp(new Color(0.85, 0.6, 0.42), dusk * day)).lerp(new Color(0.06, 0.08, 0.13), 1 - day);
     this.fogColor.lerp(new Color(0.62, 0.66, 0.7), cloud * day * 0.8);
@@ -111,7 +112,9 @@ export class SkyDome {
     this.scene.add(this.sky);
     this.envTex = rt.texture;
     this.scene.environment = this.envTex;
-    this.scene.environmentIntensity = 0.12 + 0.3 * MathUtils.smoothstep(this.elevation, -4, 10);
+    // three applies this in place of a material's own envMapIntensity (materials without an envMap of their own), so
+    // it is the sky's share of the daylight on everything: a fifth of the sun's, not an equal partner
+    this.scene.environmentIntensity = 0.03 + 0.06 * MathUtils.smoothstep(this.elevation, -4, 10);
     prev?.dispose();
   }
 

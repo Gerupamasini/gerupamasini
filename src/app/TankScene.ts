@@ -145,8 +145,9 @@ void main() {
 `;
 
 /** Lets a standard material receive the caustic light on top of the scene's lights. */
-function lightByCaustics(m: MeshStandardMaterial, U: Record<string, IUniform>, key: string, grain: boolean): void {
-  m.onBeforeCompile = (shader) => {
+function lightByCaustics(m: MeshStandardMaterial, U: Record<string, IUniform>, key: string, grain: boolean, chain?: MeshStandardMaterial['onBeforeCompile']): void {
+  m.onBeforeCompile = (shader, renderer) => {
+    chain?.(shader, renderer);
     Object.assign(shader.uniforms, { uSurf: U.uSurf, uCaus: U.uCaus, uLampCol: U.uLampCol, uCausScale: U.uCausScale });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPosT;')
@@ -685,15 +686,18 @@ export class TankScene {
       const ph = entry.placeholder();
       ph.root.userData.placeholder = ph;
       root = ph.root;
-      const ms: Mesh[] = [];
-      root.traverse((o) => { if ((o as Mesh).isMesh) ms.push(o as Mesh); });
-      this.lightMeshesByCaustics(ms);
     } else return;
     if (this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); root.removeFromParent(); return; }
     const driver = entry.create();
     const unsub = driver.onEvent((e) => this.onBehavior?.(e, record));
     this.scene.add(root);
     driver.attach(root, ind, extras, bones, meshes);
+    if (!rel) {
+      // procedural models are built by the driver in attach(); light them now
+      const ms: Mesh[] = [];
+      root.traverse((o) => { if ((o as Mesh).isMesh) ms.push(o as Mesh); });
+      this.lightMeshesByCaustics(ms);
+    }
     root.userData.occupantId = record.id;
     this.occupants.push({ record, ind, driver, root, unsub, hero });
   }
@@ -706,7 +710,9 @@ export class TankScene {
         if (!(m as MeshStandardMaterial).isMeshStandardMaterial) return m;
         const c = (m as MeshStandardMaterial).clone();
         c.userData = m.userData;
-        lightByCaustics(c, this.U, `tank-${c.type}`, false);
+        // keep a model's own shader injection (e.g. the shrimp cuticle) and add the caustics after it
+        const prev = m.onBeforeCompile, prevKey = Object.prototype.hasOwnProperty.call(m, 'customProgramCacheKey') ? m.customProgramCacheKey() : c.type;
+        lightByCaustics(c, this.U, `tank-${prevKey}`, false, prev);
         return c;
       });
       mesh.material = Array.isArray(mesh.material) ? lit : lit[0];
@@ -817,11 +823,14 @@ export class TankScene {
           d.setIntent({ id: Date.now(), kind: 'wander', urgency: 0.3, seconds: 8, target: new Vector3(tx, 0, tz) });
         } else d.setIntent({ id: Date.now(), kind: 'special', urgency: 0, seconds: 3, param: 'yawn' });
       }
-      d.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now() });
+      const S = o.ind.length_mm / 1000;
+      const hx = TANK_W / 2 - 0.01 - S * 0.55, hz = TANK_D / 2 - 0.01 - S * 0.55;
+      d.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now(), bounds: { minX: -hx, maxX: hx, minZ: -hz, maxZ: hz } });
       if (o.hero) o.hero.update(this.camera, d.openings ?? { mouth: 0, gill: 0 });
-      const hx = TANK_W / 2 - 0.02, hz = TANK_D / 2 - 0.02;
       o.ind.pos.x = Math.max(-hx, Math.min(hx, o.ind.pos.x));
       o.ind.pos.z = Math.max(-hz, Math.min(hz, o.ind.pos.z));
+      o.root.position.x = Math.max(-hx, Math.min(hx, o.root.position.x));
+      o.root.position.z = Math.max(-hz, Math.min(hz, o.root.position.z));
     }
   }
 
