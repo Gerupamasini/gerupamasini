@@ -43,7 +43,7 @@
    },
    "midline": [[47, 279], [85, 285], [123, 283], [160, 278.5], [205, 274], [260, 272], [320, 272], [390, 270.5], [460, 268], [530, 263], [595, 257], [650, 260]],
    "outline_dorsal": [[47, 279], [56, 262], [70, 251], [88, 242], [108, 232], [130, 225], [155, 219], [185, 212.5], [220, 207], [260, 203], [305, 200], [355, 199.5], [410, 203], [470, 212], [530, 218.5], [580, 224], [620, 232], [650, 233.5]],
-   "outline_ventral": [[44, 303], [52, 311], [67, 320], [86, 329], [104, 335], [130, 339], [160, 339.5], [197, 333], [230, 338], [270, 342], [320, 345], [370, 342.5], [415, 334], [455, 326], [490, 318.5], [530, 308], [570, 296], [610, 285.5], [645, 288]],
+   "outline_ventral": [[44, 303], [52, 311], [67, 320], [86, 329], [104, 335], [130, 339], [160, 339.5], [197, 333], [270, 342], [320, 345], [370, 342.5], [415, 334], [455, 326], [490, 318.5], [530, 308], [570, 296], [610, 285.5], [645, 288]],
    "parr_marks": [
     {"cx": 256, "cy": 285, "w": 22, "h": 33, "top_y": 268, "bottom_y": 301},
     {"cx": 337, "cy": 287, "w": 22, "h": 42, "top_y": 266, "bottom_y": 308},
@@ -166,15 +166,15 @@
    "outline_dorsal": [[430, 273], [420, 266.5], [412, 258.5], [405, 252], [396, 245], [384, 239], [370, 232.8], [352.5, 225], [335, 218], [317.5, 212.6], [303.5, 208.5], [286, 206.5], [265, 207.5], [252, 207.5], [240, 208], [236, 207]],
    "outline_ventral": [[427, 278], [415, 277.5], [405, 276.5], [390, 277], [377.5, 275.6], [365, 273], [352.5, 270], [340, 266], [327.5, 261], [315, 256], [305, 252], [292.5, 247], [277.5, 241], [260, 233], [244, 228], [236, 226.5]],
    "parr_marks": [
-    {"cx": 246, "cy": 217, "w": 6, "h": 8, "top_y": 213, "bottom_y": 221},
-    {"cx": 258.5, "cy": 219.5, "w": 8, "h": 8, "top_y": 215.5, "bottom_y": 223.5},
-    {"cx": 272.5, "cy": 222.5, "w": 8, "h": 8, "top_y": 218.5, "bottom_y": 226.5},
-    {"cx": 289.5, "cy": 225, "w": 7, "h": 10, "top_y": 220, "bottom_y": 229},
-    {"cx": 306, "cy": 227, "w": 7, "h": 14, "top_y": 220, "bottom_y": 234},
-    {"cx": 321.5, "cy": 232, "w": 7, "h": 16, "top_y": 222, "bottom_y": 238},
-    {"cx": 340, "cy": 240.5, "w": 7, "h": 10, "top_y": 235.5, "bottom_y": 245.5},
+    {"cx": 370, "cy": 250, "w": 6, "h": 6, "top_y": 247, "bottom_y": 253},
     {"cx": 356, "cy": 245, "w": 7, "h": 9, "top_y": 241, "bottom_y": 249.5},
-    {"cx": 370, "cy": 250, "w": 6, "h": 6, "top_y": 247, "bottom_y": 253}
+    {"cx": 340, "cy": 240.5, "w": 7, "h": 10, "top_y": 235.5, "bottom_y": 245.5},
+    {"cx": 321.5, "cy": 232, "w": 7, "h": 16, "top_y": 222, "bottom_y": 238},
+    {"cx": 306, "cy": 227, "w": 7, "h": 14, "top_y": 220, "bottom_y": 234},
+    {"cx": 289.5, "cy": 225, "w": 7, "h": 10, "top_y": 220, "bottom_y": 229},
+    {"cx": 272.5, "cy": 222.5, "w": 8, "h": 8, "top_y": 218.5, "bottom_y": 226.5},
+    {"cx": 258.5, "cy": 219.5, "w": 8, "h": 8, "top_y": 215.5, "bottom_y": 223.5},
+    {"cx": 246, "cy": 217, "w": 6, "h": 8, "top_y": 213, "bottom_y": 221}
    ],
    "orange_spots_between_parr_marks": [
     {"cx": 330.5, "cy": 236.3},
@@ -189,7 +189,7 @@
    "confidence": "low",
    "confidence_reason": "Usable for parr-mark number, spacing and rough proportions, but the fish is tiny (1 px = 0.5 percent of SL), over-exposed and blurred; the head is obscured by a hook line/leader and a gaping mouth, the snout tip at x 430 is uncertain by +-4 px (a thin line continues to x about 440), mouth/maxilla points are not resolvable, dorsal, pectoral, anal and caudal fins are only partly visible, and the dorsal surface is rolled toward the camera. Parr mark heights are +-3 px. Species is also uncertain because of three orange spots (see notes).",
    "missing": ["maxilla_post", "mouth_corner", "adipose_base_front", "adipose_base_rear", "adipose_tip", "pelvic_origin", "pelvic_tip", "anal_end", "caudal_fork", "lateral_line"],
-   "notes": "Nine blue-grey parr marks (x 246-370) of increasing size from the head backwards then decreasing: the first mark (x 246) lies just in front of the caudal base and the last (x 370) just behind the gill cover; marks 5-6 (x 306, 322) are the tallest (14-16 px, soft upper edge, core about 7-8 px) and the marks lean about 15 degrees with the body axis. Mark heights listed include the soft upper edge (R-channel below about 175); core heights are 6-10 px. Three small orange-pink spots lie between parr marks 6-7, 7-8 and 8-9 at about (331,236), (348,243), (363,247) on the lateral-line height; in an over-exposed photo these may be amago-type red spots or pale artefact, so species yamame vs amago cannot be settled from this photo. The head: eye pupil about 5.5 px, pale gold ring about 13-14 px, eye centre (404.5,264.5); snout tip estimated at (430,273) but jaws look protruding/open (dead or hooked fish), so snout length (snout to eye_anterior about 18 px, 0.34 HL) is probably over-estimated; HL about 54 px (HL/SL about 0.26). Fin notes (all low precision): dorsal fin lies folded back on the dorsal surface with striated rays at x 318-336, y 196-216 (origin = front of base at about (336,215), tip about (322,196)); pectoral fin is a grey strip lying along the belly edge, x 346-374, y 257-270 (base at the gill cover); a peach-orange sliver at x 256-282, y 241-250 just below the belly line is taken as the anal fin (front end (281,243), tip (257,246)); the pelvic fin and the adipose fin were not seen. Caudal fin: brown-orange, upper lobe toward (210,190), lower lobe toward (206,237), fork unclear. Measured straight SL about 204 px; max body depth about 43 px perpendicular (0.21 SL) near x 315-327; peduncle min depth about 17.5 px (0.086 SL) at x 244-246."
+   "notes": "Nine blue-grey parr marks, listed head to tail in parr_marks (x 370 just behind the gill cover down to x 246 just in front of the caudal base); the marks at x 322 and 306 are the tallest (14-16 px, soft upper edge, core about 7-8 px), those near the head and the tail are smaller, and the marks lean with the body axis (about 15 degrees from vertical). Mark heights listed include the soft upper edge (R-channel below about 175); core heights are 6-10 px. Three small orange-pink spots lie between parr marks 6-7, 7-8 and 8-9 at about (331,236), (348,243), (363,247) on the lateral-line height; in an over-exposed photo these may be amago-type red spots or pale artefact, so species yamame vs amago cannot be settled from this photo. The head: eye pupil about 5.5 px, pale gold ring about 13-14 px, eye centre (404.5,264.5); snout tip estimated at (430,273) but jaws look protruding/open (dead or hooked fish), so snout length (snout to eye_anterior about 18 px, 0.34 HL) is probably over-estimated; HL about 54 px (HL/SL about 0.26). Fin notes (all low precision): dorsal fin lies folded back on the dorsal surface with striated rays at x 318-336, y 196-216 (origin = front of base at about (336,215), tip about (322,196)); pectoral fin is a grey strip lying along the belly edge, x 346-374, y 257-270 (base at the gill cover); a peach-orange sliver at x 256-282, y 241-250 just below the belly line is taken as the anal fin (front end (281,243), tip (257,246)); the pelvic fin and the adipose fin were not seen. Caudal fin: brown-orange, upper lobe toward (210,190), lower lobe toward (206,237), fork unclear. Measured straight SL about 204 px; max body depth about 43 px perpendicular (0.21 SL) near x 315-327; peduncle min depth about 17.5 px (0.086 SL) at x 244-246."
   }
  ]
 }
