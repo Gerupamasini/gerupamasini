@@ -76,6 +76,13 @@ export class KentishPloverModel {
     m.boundingSphere = BOUNDS.clone();
     m.castShadow = shadows;
     m.receiveShadow = shadows;
+    if (mat.alphaToCoverage) {
+      // Alpha-to-coverage cut-outs (plumage fringe, frayed vane edges) must not write their alpha: the fragment
+      // alpha is the coverage, and written into the canvas it made the page composite the partly covered pixels
+      // over white — a pale halo along every soft edge, on light and dark backgrounds alike
+      m.onBeforeRender = (r) => r.getContext().colorMask(true, true, true, false);
+      m.onAfterRender = (r) => r.getContext().colorMask(true, true, true, true);
+    }
     this.object.add(m);
     return m;
   }

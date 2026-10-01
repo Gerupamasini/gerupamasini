@@ -40,7 +40,8 @@ for (const [name, query] of shots) {
     console.log(`timeout for ${name}`);
   }
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${outDir}/${name}.png` });
+  // (generous timeout: swiftshader on a loaded machine takes well over the default 30 s for LOD0 close-ups)
+  await page.screenshot({ path: `${outDir}/${name}.png`, timeout: 180000 });
   const errs = logs.filter((l) => /error|warn/i.test(l));
   console.log(`${name}: saved ${errs.length ? '\n  ' + errs.slice(0, 8).join('\n  ') : ''}`);
   await page.close();

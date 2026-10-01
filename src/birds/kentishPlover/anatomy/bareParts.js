@@ -436,34 +436,8 @@ export function buildEyes(boneIndex, J, opts = {}) {
     // cornea: more curved sphere whose rim meets the eyeball at the aperture edge
     const d = Math.sqrt(EYE.radius ** 2 - EYE.aperture ** 2) - Math.sqrt(EYE.corneaR ** 2 - EYE.aperture ** 2);
     sphereCap(cornea, addv(c, scl(axis, d)), axis, EYE.corneaR, Math.asin(EYE.aperture / EYE.corneaR) * 1.02, 8, segR, 0, eb, 'polar');
-    // lid rim torus (dark, thin eyelid skin)
-    const rimC = addv(c, scl(axis, Math.sqrt(EYE.radius ** 2 - EYE.aperture ** 2) + 0.05));
-    const t1 = norm(cross(axis, [0, 1, 0]));
-    const t2 = cross(axis, t1);
-    const rimStart = lids.count;
-    const rimSeg = 32;
-    const tubeSeg = 8;
-    const rMajor = EYE.aperture + 0.12;
-    const rMinor = 0.18;
-    for (let i = 0; i < rimSeg; i++) {
-      const ph = (i / rimSeg) * Math.PI * 2;
-      const radial = norm(addv(scl(t1, Math.cos(ph)), scl(t2, Math.sin(ph))));
-      const cc = addv(rimC, scl(radial, rMajor));
-      for (let j = 0; j < tubeSeg; j++) {
-        const th = (j / tubeSeg) * Math.PI * 2;
-        const n = norm(addv(scl(radial, Math.cos(th)), scl(axis, Math.sin(th))));
-        lids.v(addv(cc, scl(n, rMinor)), n, [i / rimSeg, j / tubeSeg], 6, hb);
-      }
-    }
-    for (let i = 0; i < rimSeg; i++) {
-      for (let j = 0; j < tubeSeg; j++) {
-        const a = rimStart + i * tubeSeg + j;
-        const b = rimStart + ((i + 1) % rimSeg) * tubeSeg + j;
-        const cI = rimStart + i * tubeSeg + ((j + 1) % tubeSeg);
-        const dI = rimStart + ((i + 1) % rimSeg) * tubeSeg + ((j + 1) % tubeSeg);
-        lids.index.push(a, cI, b, b, cI, dI);
-      }
-    }
+    // (no separate lid-rim torus: the almond opening's plumage wall is shaded as the dark lid margin — the round
+    // torus stood through the plumage at the corners of the almond)
     // lower lid (rises when the bird sleeps) and nictitating membrane (sweeps front→back)
     const lidCenter = addv(c, scl(axis, d));
     sphereCap(lids, lidCenter, axis, EYE.corneaR + 0.12, Math.asin(Math.min(0.99, (EYE.aperture + 0.3) / (EYE.corneaR + 0.12))), 8, segR, 7, hb, 'polar', m);
