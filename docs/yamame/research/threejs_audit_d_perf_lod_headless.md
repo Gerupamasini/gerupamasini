@@ -473,8 +473,6 @@ skinnedPixels = 21011   glError = 0   → shot.png (md5 a6de69ba1ecd578cfb91f74b
 
 ---
 
----
-
 ## 付録 A: テストスクリプト全文
 
 （実行に使ったファイルをそのまま掲載する。`pages/file_scheme_test.html` の `file://` パスはセッション固有なので、再現時は自分の `THREE_ROOT` に書き換えること。）
