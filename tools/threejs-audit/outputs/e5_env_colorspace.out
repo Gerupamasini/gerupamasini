@@ -1,0 +1,70 @@
+RESULT {
+  "defaults": {
+    "outputColorSpace": "srgb",
+    "toneMapping": 0,
+    "toneMappingExposure": 1,
+    "ColorManagement_enabled": true,
+    "workingColorSpace": "srgb-linear",
+    "newTextureColorSpace": ""
+  },
+  "env_equirect_mappingSet_false_centerPixel": [
+    0,
+    0,
+    0,
+    255
+  ],
+  "env_equirect_mappingSet_true_centerPixel": [
+    255,
+    255,
+    255,
+    255
+  ],
+  "map_128_colorSpace_NoColorSpace_centerPixel": [
+    188,
+    188,
+    188,
+    255
+  ],
+  "map_128_colorSpace_srgb_centerPixel": [
+    128,
+    128,
+    128,
+    255
+  ],
+  "color_0x808080_as_linear_r": 0.2159,
+  "pmrem_equirect_1024x512": {
+    "rtWidth": 768,
+    "rtHeight": 1024,
+    "mapping": 306,
+    "halfFloat": true,
+    "ms_swiftshader_cpu": 18
+  },
+  "compressedExt": [
+    [
+      "WEBGL_compressed_texture_astc",
+      true
+    ],
+    [
+      "WEBGL_compressed_texture_etc",
+      true
+    ],
+    [
+      "WEBGL_compressed_texture_s3tc",
+      true
+    ],
+    [
+      "WEBGL_compressed_texture_s3tc_srgb",
+      true
+    ],
+    [
+      "EXT_texture_compression_bptc",
+      true
+    ],
+    [
+      "EXT_texture_filter_anisotropic",
+      true
+    ]
+  ],
+  "maxAnisotropy": 16
+}
+--- console ---

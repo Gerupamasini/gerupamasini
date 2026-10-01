@@ -1,0 +1,42 @@
+<!doctype html><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/three/build/three.webgpu.js","three/webgpu":"/three/build/three.webgpu.js","three/tsl":"/three/build/three.tsl.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three/webgpu';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const R = { revision: THREE.REVISION, hasNavigatorGpu: !!navigator.gpu };
+function bentCylinder(mat) {
+  const bones = [new THREE.Bone(), new THREE.Bone()]; bones[1].position.y = 1; bones[0].add(bones[1]);
+  const g = new THREE.CylinderGeometry(0.25, 0.25, 2, 12, 8); const pos = g.attributes.position; const si = [], sw = [];
+  for (let i = 0; i < pos.count; i++) { const w = Math.min(Math.max((pos.getY(i)), 0), 1); si.push(0, 1, 0, 0); sw.push(1 - w, w, 0, 0); }
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+  const mesh = new THREE.SkinnedMesh(g, mat); mesh.add(bones[0]); mesh.bind(new THREE.Skeleton(bones)); return { mesh, bones };
+}
+const W = 64;
+async function renderTo(renderer, scene, cam) {
+  const rt = new THREE.RenderTarget(W, W, { type: THREE.UnsignedByteType });
+  renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, cam); renderer.setRenderTarget(null);
+  const buf = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, W, W);
+  return buf;
+}
+function stats(buf) { let lit = 0, rightLit = 0, sum = [0, 0, 0]; for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; const l = buf[i] + buf[i + 1] + buf[i + 2]; if (l > 30) { lit++; if (x > W / 2 + 6) rightLit++; sum[0] += buf[i]; sum[1] += buf[i + 1]; sum[2] += buf[i + 2]; } } return { lit, rightLit, mean: sum.map(v => +(v / Math.max(lit, 1)).toFixed(1)) }; }
+const cam = new THREE.OrthographicCamera(-1.5, 1.5, 1.5, -1.5, 0.1, 10); cam.position.z = 3;
+
+for (const opts of [{ name: 'auto' }, { name: 'forceWebGL', forceWebGL: true }]) {
+  const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL: opts.forceWebGL });
+  await renderer.init();
+  const out = { backend: renderer.backend.isWebGLBackend ? 'WebGLBackend(WebGL2)' : (renderer.backend.isWebGPUBackend ? 'WebGPUBackend' : '?') };
+  renderer.setSize(W, W);
+  const mkScene = (mat, bend) => { const s = new THREE.Scene(); const l = new THREE.DirectionalLight(0xffffff, 3); l.position.set(1, 1, 2); s.add(l, new THREE.AmbientLight(0xffffff, 0.3)); const { mesh, bones } = bentCylinder(mat); if (bend) bones[1].rotation.z = -Math.PI / 2; s.add(mesh); s.updateMatrixWorld(true); return s; };
+  // 1. skinning: bend vs straight
+  const mPhys = () => new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.4, iridescence: 0 });
+  out.skin_straight = stats(await renderTo(renderer, mkScene(mPhys(), false), cam));
+  out.skin_bent = stats(await renderTo(renderer, mkScene(mPhys(), true), cam));
+  // 3. onBeforeCompile is ignored in node pipeline
+  const mOB = new THREE.MeshPhysicalMaterial({ color: 0x000000 }); mOB.onBeforeCompile = (sh) => { out.onBeforeCompile_called = true; };
+  await renderTo(renderer, mkScene(mOB, false), cam); out.onBeforeCompile_called = !!out.onBeforeCompile_called;
+  // 4. material mapped to node material?
+  out.library_maps_MeshPhysicalMaterial = renderer.library.fromMaterial(new THREE.MeshPhysicalMaterial()).constructor.name;
+  R[opts.name] = out;
+}
+window.__result = R; window.__done = true;
+</script>

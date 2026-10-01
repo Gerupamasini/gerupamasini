@@ -1,0 +1,43 @@
+<!doctype html><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const R = {};
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(128, 128);
+renderer.shadowMap.enabled = true;
+const gl = renderer.getContext();
+const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 100); cam.position.z = 3;
+const tex = (srgb = false) => { const t = new THREE.DataTexture(new Uint8Array([255, 128, 64, 255]), 1, 1); t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.needsUpdate = true; return t; };
+function samplers(mat) {
+  const prog = renderer.properties.get(mat).currentProgram.program;
+  const out = []; const cnt = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < cnt; i++) { const u = gl.getActiveUniform(prog, i); if ([gl.SAMPLER_2D, gl.SAMPLER_CUBE, gl.SAMPLER_2D_ARRAY, gl.SAMPLER_3D, gl.SAMPLER_2D_SHADOW].includes(u.type)) out.push(u.name); }
+  return out;
+}
+const geo = new THREE.SphereGeometry(1, 8, 4);
+const pm = new THREE.PMREMGenerator(renderer); const env = pm.fromScene(new RoomEnvironment(), 0.04);
+const ORM = tex();
+function scene(mat, { shadow = false } = {}) {
+  const s = new THREE.Scene(); s.environment = env.texture;
+  const l = new THREE.DirectionalLight(0xffffff, 1); l.castShadow = shadow; s.add(l);
+  const mesh = new THREE.Mesh(geo, mat); mesh.receiveShadow = shadow; mesh.castShadow = shadow; s.add(mesh); return s;
+}
+// A. bare
+let m = new THREE.MeshPhysicalMaterial(); renderer.render(scene(m), cam); R.A_bare_physical_env = samplers(m);
+// B. base PBR set: map, normal, ORM(3 slots, same texture), emissive
+m = new THREE.MeshPhysicalMaterial({ map: tex(true), normalMap: tex(), roughnessMap: ORM, metalnessMap: ORM, aoMap: ORM, emissiveMap: tex(true), emissive: 0xffffff });
+renderer.render(scene(m), cam); R.B_base_pbr = samplers(m);
+// C. B + iridescence(+thicknessMap) + sheenColorMap + clearcoat maps
+m = new THREE.MeshPhysicalMaterial({ map: tex(true), normalMap: tex(), roughnessMap: ORM, metalnessMap: ORM, aoMap: ORM, emissiveMap: tex(true), emissive: 0xffffff,
+  iridescence: 1, iridescenceMap: tex(), iridescenceThicknessMap: tex(), sheen: 1, sheenColor: new THREE.Color(1, 1, 1), sheenColorMap: tex(true), sheenRoughnessMap: tex(),
+  clearcoat: 1, clearcoatMap: tex(), clearcoatRoughnessMap: tex(), clearcoatNormalMap: tex() });
+renderer.render(scene(m), cam); R.C_full = samplers(m);
+// D. B + transmission maps + 1 shadow-casting directional light
+m = new THREE.MeshPhysicalMaterial({ map: tex(true), normalMap: tex(), roughnessMap: ORM, metalnessMap: ORM, aoMap: ORM, transmission: 1, transmissionMap: tex(), thickness: 1, thicknessMap: tex() });
+renderer.render(scene(m, { shadow: true }), cam); R.D_transmission_shadow = samplers(m);
+for (const k of Object.keys(R)) R[k] = { count: R[k].length, names: R[k] };
+R.limits = { MAX_TEXTURE_IMAGE_UNITS: gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS), spec_min_WebGL2: 16 };
+window.__result = R; window.__done = true;
+</script>

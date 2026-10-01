@@ -1,0 +1,64 @@
+RESULT {
+  "A_bare_physical_env": {
+    "count": 2,
+    "names": [
+      "envMap",
+      "dfgLUT"
+    ]
+  },
+  "B_base_pbr": {
+    "count": 8,
+    "names": [
+      "map",
+      "aoMap",
+      "emissiveMap",
+      "envMap",
+      "dfgLUT",
+      "normalMap",
+      "roughnessMap",
+      "metalnessMap"
+    ]
+  },
+  "C_full": {
+    "count": 15,
+    "names": [
+      "sheenColorMap",
+      "sheenRoughnessMap",
+      "map",
+      "aoMap",
+      "emissiveMap",
+      "envMap",
+      "dfgLUT",
+      "normalMap",
+      "clearcoatMap",
+      "clearcoatNormalMap",
+      "clearcoatRoughnessMap",
+      "iridescenceMap",
+      "iridescenceThicknessMap",
+      "roughnessMap",
+      "metalnessMap"
+    ]
+  },
+  "D_transmission_shadow": {
+    "count": 11,
+    "names": [
+      "map",
+      "aoMap",
+      "envMap",
+      "dfgLUT",
+      "transmissionMap",
+      "thicknessMap",
+      "transmissionSamplerMap",
+      "directionalShadowMap[0]",
+      "normalMap",
+      "roughnessMap",
+      "metalnessMap"
+    ]
+  },
+  "limits": {
+    "MAX_TEXTURE_IMAGE_UNITS": 32,
+    "spec_min_WebGL2": 16
+  }
+}
+--- console ---
+

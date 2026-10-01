@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const W = 64; const R = {};
+function bentCylinder(mat) {
+  const bones = [new THREE.Bone(), new THREE.Bone()]; bones[1].position.y = 1; bones[0].add(bones[1]);
+  const g = new THREE.CylinderGeometry(0.25, 0.25, 2, 12, 8); const pos = g.attributes.position; const si = [], sw = [];
+  for (let i = 0; i < pos.count; i++) { const w = Math.min(Math.max((pos.getY(i)), 0), 1); si.push(0, 1, 0, 0); sw.push(1 - w, w, 0, 0); }
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+  const mesh = new THREE.SkinnedMesh(g, mat); mesh.add(bones[0]); mesh.bind(new THREE.Skeleton(bones)); return { mesh, bones };
+}
+const renderer = new THREE.WebGLRenderer({ antialias: false }); renderer.setSize(W, W);
+const cam = new THREE.OrthographicCamera(-1.5, 1.5, 1.5, -1.5, 0.1, 10); cam.position.z = 3;
+function stats(bend) {
+  const s = new THREE.Scene(); const l = new THREE.DirectionalLight(0xffffff, 3); l.position.set(1, 1, 2); s.add(l, new THREE.AmbientLight(0xffffff, 0.3));
+  const { mesh, bones } = bentCylinder(new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.4 })); if (bend) bones[1].rotation.z = -Math.PI / 2; s.add(mesh); s.updateMatrixWorld(true);
+  const rt = new THREE.WebGLRenderTarget(W, W); renderer.setRenderTarget(rt); renderer.setClearColor(0, 1); renderer.clear(); renderer.render(s, cam);
+  const b = new Uint8Array(W * W * 4); renderer.readRenderTargetPixels(rt, 0, 0, W, W, b); let lit = 0, rightLit = 0; for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (b[i] + b[i + 1] + b[i + 2] > 30) { lit++; } } return { lit };
+}
+R.webgl_skin_straight = stats(false); R.webgl_skin_bent = stats(true);
+window.__result = R; window.__done = true;
+</script>

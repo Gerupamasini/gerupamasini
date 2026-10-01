@@ -1,0 +1,35 @@
+RESULT {
+  "5opaque_plus_physical_no_transmission": {
+    "draw": 6,
+    "copyTex": 0,
+    "blit": 0,
+    "genMip": 0,
+    "clear": 0
+  },
+  "5opaque_plus_transmission_Front": {
+    "draw": 6,
+    "copyTex": 1,
+    "blit": 0,
+    "genMip": 1,
+    "clear": 0
+  },
+  "5opaque_plus_transmission_Double": {
+    "draw": 7,
+    "copyTex": 2,
+    "blit": 0,
+    "genMip": 2,
+    "clear": 0
+  },
+  "iridescence_A_off": [
+    41,
+    41,
+    41
+  ],
+  "iridescence_B_on": [
+    40.7,
+    43.5,
+    42.8
+  ]
+}
+--- console ---
+

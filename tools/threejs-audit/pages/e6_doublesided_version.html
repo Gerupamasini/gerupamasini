@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const R = {};
+const renderer = new THREE.WebGLRenderer(); renderer.setSize(32, 32);
+const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 100); cam.position.z = 3;
+function run(name, mat) {
+  const s = new THREE.Scene(); s.add(new THREE.DirectionalLight(0xffffff, 1)); s.add(new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 4), mat));
+  renderer.render(s, cam); const v0 = mat.version; for (let i = 0; i < 10; i++) renderer.render(s, cam);
+  R[name] = { versionDeltaOver10Frames: mat.version - v0, programsForThisMaterial: renderer.properties.get(mat).programs.size };
+}
+run('opaque_Double', new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide }));
+run('transparent_Double_default', new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, transparent: true, opacity: 0.5 }));
+run('transparent_Double_forceSinglePass', new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, transparent: true, opacity: 0.5, forceSinglePass: true }));
+run('alphaHash_Double', new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, alphaHash: true, opacity: 0.5 }));
+R.reflectivity_default = new THREE.MeshPhysicalMaterial().reflectivity;
+window.__result = R; window.__done = true;
+</script>

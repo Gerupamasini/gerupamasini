@@ -1,0 +1,52 @@
+RESULT {
+  "gating_all_effects_zero": {
+    "USE_THICKNESSMAP": false,
+    "USE_TRANSMISSIONMAP": false,
+    "USE_TRANSMISSION": false,
+    "USE_IRIDESCENCEMAP": false,
+    "USE_IRIDESCENCE_THICKNESSMAP": false,
+    "USE_IRIDESCENCE": false,
+    "USE_CLEARCOATMAP": false,
+    "USE_CLEARCOAT_ROUGHNESSMAP": false,
+    "USE_CLEARCOAT": false,
+    "USE_SHEEN_COLORMAP": false,
+    "USE_SHEEN": false,
+    "USE_ANISOTROPYMAP": false,
+    "USE_ANISOTROPY": false,
+    "USE_SPECULAR_COLORMAP": true,
+    "USE_SPECULAR_INTENSITYMAP": true
+  },
+  "version_bump_on_zero_to_positive": {
+    "before": 0,
+    "after": 5
+  },
+  "gating_effects_on": {
+    "USE_THICKNESSMAP": true,
+    "USE_TRANSMISSIONMAP": true,
+    "USE_TRANSMISSION": true,
+    "USE_IRIDESCENCEMAP": true,
+    "USE_IRIDESCENCE_THICKNESSMAP": true,
+    "USE_IRIDESCENCE": true,
+    "USE_CLEARCOATMAP": true,
+    "USE_CLEARCOAT_ROUGHNESSMAP": true,
+    "USE_CLEARCOAT": true,
+    "USE_SHEEN_COLORMAP": true,
+    "USE_SHEEN": true,
+    "USE_ANISOTROPYMAP": true,
+    "USE_ANISOTROPY": true
+  },
+  "version_no_bump_inside_positive": {
+    "before": 5,
+    "after": 5
+  },
+  "pmrem_fromScene_default": {
+    "mapping": 306,
+    "cubeUV_mapping_const": 306,
+    "rtWidth": 768,
+    "rtHeight": 1024,
+    "type": "HalfFloat",
+    "colorSpace": "srgb-linear"
+  }
+}
+--- console ---
+

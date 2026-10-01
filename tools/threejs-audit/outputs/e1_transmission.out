@@ -1,0 +1,39 @@
+RESULT {
+  "revision": "186",
+  "transmissionResolutionScaleDefault": 1,
+  "5opaque_only": {
+    "calls": 5,
+    "triangles": 1120
+  },
+  "5opaque_plus_physical_notrans": {
+    "calls": 6,
+    "triangles": 1344
+  },
+  "5opaque_plus_trans_Front": {
+    "calls": 11,
+    "triangles": 2464
+  },
+  "5opaque_plus_trans_Double": {
+    "calls": 12,
+    "triangles": 2688
+  },
+  "5opaque_plus_physical_transparent_Double(no trans)": {
+    "calls": 7,
+    "triangles": 1568
+  },
+  "0opaque_plus_trans_Front": {
+    "calls": 1,
+    "triangles": 224
+  },
+  "5opaque_plus_trans_with_overrideMaterial": {
+    "calls": 6,
+    "triangles": 1344
+  },
+  "memory": {
+    "geometries": 8,
+    "textures": 5
+  },
+  "programs_after": 9
+}
+--- console ---
+

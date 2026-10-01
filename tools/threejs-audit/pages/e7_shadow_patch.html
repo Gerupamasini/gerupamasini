@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const R = {};
+const renderer = new THREE.WebGLRenderer(); renderer.setSize(64, 64); renderer.shadowMap.enabled = true;
+const gl = renderer.getContext(); let captured = []; const o = gl.shaderSource.bind(gl); gl.shaderSource = (s, src) => { captured.push(src); o(s, src); };
+const MARK = '/*MARK_SWIM*/ transformed.x += 0.1;';
+const patch = (sh) => { sh.vertexShader = sh.vertexShader.replace('#include <skinning_vertex>', '#include <skinning_vertex>\n' + MARK); };
+function run(withCustomDepth) {
+  captured = [];
+  const s = new THREE.Scene(); const l = new THREE.DirectionalLight(0xffffff, 1); l.castShadow = true; l.position.set(2, 3, 2); s.add(l);
+  const mat = new THREE.MeshPhysicalMaterial(); mat.onBeforeCompile = patch;
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 4), mat); mesh.castShadow = true; s.add(mesh);
+  if (withCustomDepth) { const d = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); d.onBeforeCompile = patch; mesh.customDepthMaterial = d; }
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshStandardMaterial()); plane.receiveShadow = true; plane.rotation.x = -Math.PI / 2; plane.position.y = -1; s.add(plane);
+  renderer.render(s, new THREE.PerspectiveCamera(50, 1, 0.1, 50).translateZ(4));
+  const vs = captured.filter(x => x.includes('void main') && x.includes('gl_Position'));
+  return { vertexShadersCompiled: vs.length, withMark: vs.filter(x => x.includes('MARK_SWIM')).length, depthShaderWithMark: vs.filter(x => x.includes('MARK_SWIM') && /DEPTH_PACKING|vHighPrecisionZW/.test(x)).length };
+}
+R.defaultDepthMaterial = run(false);
+R.customDepthMaterialPatched = run(true);
+window.__result = R; window.__done = true;
+</script>

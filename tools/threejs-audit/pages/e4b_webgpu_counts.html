@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/three/build/three.webgpu.js","three/webgpu":"/three/build/three.webgpu.js","three/tsl":"/three/build/three.tsl.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three/webgpu';
+const R = {};
+const W = 64;
+const cam = new THREE.OrthographicCamera(-1.5, 1.5, 1.5, -1.5, 0.1, 10); cam.position.z = 3;
+function counters(gl) {
+  const c = { draw: 0, copyTex: 0, blit: 0, genMip: 0, clear: 0 };
+  for (const [fn, key] of [['drawElements', 'draw'], ['drawArrays', 'draw'], ['drawElementsInstanced', 'draw'], ['drawArraysInstanced', 'draw'], ['copyTexSubImage2D', 'copyTex'], ['copyTexImage2D', 'copyTex'], ['blitFramebuffer', 'blit'], ['generateMipmap', 'genMip'], ['clear', 'clear']]) {
+    const o = gl[fn].bind(gl); gl[fn] = (...a) => { c[key]++; return o(...a); };
+  }
+  return c;
+}
+const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL: true });
+await renderer.init(); renderer.setSize(W, W);
+const gl = renderer.backend.gl; const c = counters(gl);
+function scene(trans, nOpaque, side) {
+  const s = new THREE.Scene(); s.add(new THREE.DirectionalLight(0xffffff, 3));
+  for (let i = 0; i < nOpaque; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshStandardMaterial({ color: 0xff0000 })); m.position.set(i * 0.4 - 0.8, 0, -1); s.add(m); }
+  const t = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 8), new THREE.MeshPhysicalMaterial({ transmission: trans, thickness: 0.5, side })); s.add(t); return s;
+}
+const rt = new THREE.RenderTarget(W, W, { type: THREE.UnsignedByteType });
+async function run(name, s) {
+  renderer.setRenderTarget(rt); renderer.render(s, cam);  // warm up (compile)
+  await renderer.readRenderTargetPixelsAsync(rt, 0, 0, 1, 1);
+  for (const k in c) c[k] = 0;
+  renderer.render(s, cam);
+  await renderer.readRenderTargetPixelsAsync(rt, 0, 0, 1, 1);
+  R[name] = { ...c };
+}
+await run('5opaque_plus_physical_no_transmission', scene(0, 5, THREE.FrontSide));
+await run('5opaque_plus_transmission_Front', scene(1, 5, THREE.FrontSide));
+await run('5opaque_plus_transmission_Double', scene(1, 5, THREE.DoubleSide));
+// iridescence A/B with identical base
+const mean = async (mat) => { const s = new THREE.Scene(); s.add(new THREE.DirectionalLight(0xffffff, 3)); s.children[0].position.set(1, 1, 2); s.add(new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 16), mat)); const r2 = new THREE.RenderTarget(W, W, { type: THREE.UnsignedByteType }); renderer.setRenderTarget(r2); renderer.setClearColor(0, 1); renderer.clear(); renderer.render(s, cam); const b = await renderer.readRenderTargetPixelsAsync(r2, 0, 0, W, W); let n = 0, S = [0, 0, 0]; for (let i = 0; i < W * W; i++) { if (b[i * 4] + b[i * 4 + 1] + b[i * 4 + 2] > 30) { n++; S[0] += b[i * 4]; S[1] += b[i * 4 + 1]; S[2] += b[i * 4 + 2]; } } return S.map(v => +(v / n).toFixed(1)); };
+R.iridescence_A_off = await mean(new THREE.MeshPhysicalMaterial({ color: 0x888888, roughness: 0.2, iridescence: 0 }));
+R.iridescence_B_on = await mean(new THREE.MeshPhysicalMaterial({ color: 0x888888, roughness: 0.2, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessRange: [200, 500] }));
+window.__result = R; window.__done = true;
+</script>

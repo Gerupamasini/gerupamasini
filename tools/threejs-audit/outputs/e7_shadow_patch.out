@@ -1,0 +1,14 @@
+RESULT {
+  "defaultDepthMaterial": {
+    "vertexShadersCompiled": 3,
+    "withMark": 1,
+    "depthShaderWithMark": 0
+  },
+  "customDepthMaterialPatched": {
+    "vertexShadersCompiled": 1,
+    "withMark": 1,
+    "depthShaderWithMark": 1
+  }
+}
+--- console ---
+

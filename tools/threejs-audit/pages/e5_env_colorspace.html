@@ -1,0 +1,41 @@
+<!doctype html><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const R = {};
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(32, 32);
+const gl = renderer.getContext();
+const cam = new THREE.PerspectiveCamera(40, 1, 0.1, 100); cam.position.z = 3;
+function center() { const b = new Uint8Array(4); gl.readPixels(16, 16, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b); return Array.from(b); }
+R.defaults = { outputColorSpace: renderer.outputColorSpace, toneMapping: renderer.toneMapping, toneMappingExposure: renderer.toneMappingExposure, ColorManagement_enabled: THREE.ColorManagement.enabled, workingColorSpace: THREE.ColorManagement.workingColorSpace, newTextureColorSpace: new THREE.Texture().colorSpace };
+
+// (a) environment texture without mapping set => no IBL (radiance returns 0 when not CUBE_UV)
+function envTex(setMapping) {
+  const w = 256, h = 128; const t = new THREE.DataTexture(new Uint16Array(w * h * 4).fill(0x3c00), w, h, THREE.RGBAFormat, THREE.HalfFloatType); // all channels = 1.0 (half float 0x3c00)
+  t.needsUpdate = true; t.colorSpace = THREE.LinearSRGBColorSpace; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false;
+  if (setMapping) t.mapping = THREE.EquirectangularReflectionMapping; return t;
+}
+for (const set of [false, true]) {
+  const s = new THREE.Scene(); s.environment = envTex(set);
+  s.add(new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.5 })));
+  renderer.setClearColor(0x000000, 1); renderer.render(s, cam);
+  R['env_equirect_mappingSet_' + set + '_centerPixel'] = center();
+}
+// (b) colour-space flag on a colour map
+for (const cs of [THREE.NoColorSpace, THREE.SRGBColorSpace]) {
+  const t = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1); t.colorSpace = cs; t.needsUpdate = true;
+  const s = new THREE.Scene(); s.add(new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshBasicMaterial({ map: t })));
+  renderer.render(s, cam); R['map_128_colorSpace_' + (cs || 'NoColorSpace') + '_centerPixel'] = center();
+}
+// (c) Color constructor / hex are sRGB-interpreted under ColorManagement
+const c = new THREE.Color(0x808080); R.color_0x808080_as_linear_r = +c.r.toFixed(4);
+// (d) PMREM from a 1024x512 equirect: output dims, type
+const w = 1024, h = 512; const big = new THREE.DataTexture(new Uint16Array(w * h * 4).fill(0x3c00), w, h, THREE.RGBAFormat, THREE.HalfFloatType); big.mapping = THREE.EquirectangularReflectionMapping; big.needsUpdate = true; big.colorSpace = THREE.LinearSRGBColorSpace;
+const pm = new THREE.PMREMGenerator(renderer); let t0 = performance.now(); const rt = pm.fromEquirectangular(big); const dt = performance.now() - t0;
+R.pmrem_equirect_1024x512 = { rtWidth: rt.width, rtHeight: rt.height, mapping: rt.texture.mapping, halfFloat: rt.texture.type === THREE.HalfFloatType, ms_swiftshader_cpu: Math.round(dt) };
+// (e) KTX2/compressed-texture sRGB handling: how many GL compressed extensions does this GPU expose (informational)
+R.compressedExt = ['WEBGL_compressed_texture_astc', 'WEBGL_compressed_texture_etc', 'WEBGL_compressed_texture_s3tc', 'WEBGL_compressed_texture_s3tc_srgb', 'EXT_texture_compression_bptc', 'EXT_texture_filter_anisotropic'].map(n => [n, !!gl.getExtension(n)]);
+R.maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+window.__result = R; window.__done = true;
+</script>

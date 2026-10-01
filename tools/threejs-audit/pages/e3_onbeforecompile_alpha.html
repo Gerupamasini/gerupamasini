@@ -1,0 +1,89 @@
+<!doctype html><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const R = {}; const logs = [];
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(64, 64);
+const gl = renderer.getContext();
+let captured = []; const orig = gl.shaderSource.bind(gl); gl.shaderSource = (sh, src) => { captured.push(src); orig(sh, src); };
+const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10); cam.position.z = 2;
+function rt(samples = 0) { return new THREE.WebGLRenderTarget(64, 64, { samples, type: THREE.UnsignedByteType }); }
+function readAll(target) { const b = new Uint8Array(64 * 64 * 4); renderer.readRenderTargetPixels(target, 0, 0, 64, 64, b); return b; }
+function px(b, x, y) { const i = (y * 64 + x) * 4; return [b[i], b[i + 1], b[i + 2], b[i + 3]]; }
+function plane(mat, x = 0, w = 2) { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 2), mat); m.position.x = x; return m; }
+
+// ---------- (1) program-cache pitfall: same onBeforeCompile source text, different baked constants
+function makeMat(rgb) {
+  const m = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>\n diffuseColor.rgb = vec3(${rgb});`);
+  };
+  return m;
+}
+{
+  const sA = new THREE.Scene(); sA.add(plane(makeMat('1.0, 0.0, 0.0'), -0.5, 1));
+  const matB = makeMat('0.0, 0.0, 1.0'); sA.add(plane(matB, 0.5, 1));
+  const t = rt(); renderer.setRenderTarget(t); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(sA, cam);
+  const b = readAll(t);
+  R.pitfall_same_toString_left_expected_red = px(b, 16, 32);
+  R.pitfall_same_toString_right_expected_blue = px(b, 48, 32);
+  R.pitfall_distinct_programs_for_both = renderer.info.programs.filter(p => p.type === 'MeshBasicMaterial').length;
+}
+// late-anchor demo: diffuseColor edited at opaque_fragment (after outgoingLight is computed) has NO effect
+{
+  const m = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', 'diffuseColor.rgb = vec3(1.0,0.0,0.0);\n#include <opaque_fragment>'); };
+  const s = new THREE.Scene(); s.add(plane(m));
+  const t = rt(); renderer.setRenderTarget(t); renderer.clear(); renderer.render(s, cam);
+  R.late_anchor_diffuseColor_after_lighting = px(readAll(t), 32, 32);
+}
+// fix: customProgramCacheKey
+function makeMat2(rgb) { const m = makeMat(rgb); m.customProgramCacheKey = () => 'tint:' + rgb; return m; }
+{
+  const sA = new THREE.Scene(); sA.add(plane(makeMat2('1.0, 0.0, 0.0'), -0.5, 1)); sA.add(plane(makeMat2('0.0, 0.0, 1.0'), 0.5, 1));
+  const t = rt(); renderer.setRenderTarget(t); renderer.clear(); renderer.render(sA, cam);
+  const b = readAll(t);
+  R.fix_customProgramCacheKey_left = px(b, 16, 32); R.fix_customProgramCacheKey_right = px(b, 48, 32);
+}
+
+// ---------- (2) alphaHash: fraction of surviving pixels for alpha=0.5, transparent=false
+function coverage(mat, samples = 0) {
+  const s = new THREE.Scene(); s.add(plane(mat));
+  const t = rt(samples); renderer.setRenderTarget(t); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(s, cam);
+  const b = readAll(t); let lit = 0, sum = 0; for (let i = 0; i < 64 * 64; i++) { if (b[i * 4] > 127) lit++; sum += b[i * 4]; }
+  return { litFraction: +(lit / 4096).toFixed(3), meanR: +(sum / 4096).toFixed(1) };
+}
+captured = []; R.alphaHash_0p5 = coverage(new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.5, alphaHash: true }));
+R.alphaHash_glsl_first_compile = { USE_ALPHAHASH: captured.some(s => /#define USE_ALPHAHASH/.test(s)), varying_vPosition: captured.some(s => /varying vec3 vPosition|out vec3 vPosition/.test(s)), OPAQUE_define: captured.some(s => /#define OPAQUE\b/.test(s)) };
+R.alphaTest_0p5_opacity0p5 = coverage(new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.5, alphaTest: 0.5 }));
+R.alphaTest_0p6_opacity0p5 = coverage(new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.5, alphaTest: 0.6 }));
+R.alphaTest_0p4_opacity0p5 = coverage(new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.5, alphaTest: 0.4 }));
+// alphaToCoverage on MSAA render target (samples=4): partial coverage => mean < 255 but > 0
+R.a2c_msaa4_opacity0p5 = coverage(new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.5, alphaToCoverage: true }), 4);
+R.a2c_off_msaa4_opacity0p5_opaque = coverage(new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.5 }), 4);
+R.a2c_msaa0 = coverage(new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.5, alphaToCoverage: true }), 0);
+
+// ---------- (3) skinned mesh + patch after skinning_vertex compiles; bone texture created
+{
+  const bones = [new THREE.Bone(), new THREE.Bone()]; bones[1].position.y = 1; bones[0].add(bones[1]);
+  const g = new THREE.CylinderGeometry(0.2, 0.2, 2, 8, 4); const pos = g.attributes.position;
+  const si = [], sw = []; for (let i = 0; i < pos.count; i++) { const w = (pos.getY(i) + 1) / 2; si.push(0, 1, 0, 0); sw.push(1 - w, w, 0, 0); }
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+  const mat = new THREE.MeshPhysicalMaterial({ iridescence: 1 });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = { value: 0 };
+    sh.vertexShader = sh.vertexShader.replace('#include <skinning_vertex>', '#include <skinning_vertex>\n transformed.x += 0.01 * sin(transformed.y * 6.0);');
+  };
+  const mesh = new THREE.SkinnedMesh(g, mat); mesh.add(bones[0]); mesh.bind(new THREE.Skeleton(bones));
+  const s = new THREE.Scene(); s.add(mesh, new THREE.DirectionalLight(0xffffff, 1));
+  captured = []; renderer.setRenderTarget(null); renderer.render(s, new THREE.PerspectiveCamera());
+  const vs = captured.find(x => x.includes('boneTexture'));
+  R.skinned = { boneTextureCreated: mesh.skeleton.boneTexture !== null, vs_has_USE_SKINNING: !!vs && /#define USE_SKINNING/.test(vs), vs_has_texelFetch: !!vs && vs.includes('texelFetch( boneTexture'), patchPresent: !!vs && vs.includes('0.01 * sin(transformed.y * 6.0)'), glslVersion300es: !!vs && vs.includes('#version 300 es') };
+  // shadow pass: customDepthMaterial / default depth material lacks the patch
+  const depthVS = captured.filter(x => x.includes('boneTexture'));
+  R.skinned.shaderCountWithBoneTexture = depthVS.length;
+}
+const errs = logs; R.consoleErrors = errs;
+window.__result = R; window.__done = true;
+</script>

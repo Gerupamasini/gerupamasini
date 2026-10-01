@@ -1,0 +1,9 @@
+RESULT {
+  "webgl_skin_straight": {
+    "lit": 420
+  },
+  "webgl_skin_bent": {
+    "lit": 393
+  }
+}
+--- console ---

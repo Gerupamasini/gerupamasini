@@ -1,0 +1,76 @@
+RESULT {
+  "pitfall_same_toString_left_expected_red": [
+    255,
+    0,
+    0,
+    255
+  ],
+  "pitfall_same_toString_right_expected_blue": [
+    255,
+    0,
+    0,
+    255
+  ],
+  "pitfall_distinct_programs_for_both": 1,
+  "late_anchor_diffuseColor_after_lighting": [
+    0,
+    0,
+    0,
+    255
+  ],
+  "fix_customProgramCacheKey_left": [
+    255,
+    0,
+    0,
+    255
+  ],
+  "fix_customProgramCacheKey_right": [
+    0,
+    0,
+    255,
+    255
+  ],
+  "alphaHash_0p5": {
+    "litFraction": 0.482,
+    "meanR": 122.9
+  },
+  "alphaHash_glsl_first_compile": {
+    "USE_ALPHAHASH": true,
+    "varying_vPosition": true,
+    "OPAQUE_define": true
+  },
+  "alphaTest_0p5_opacity0p5": {
+    "litFraction": 1,
+    "meanR": 255
+  },
+  "alphaTest_0p6_opacity0p5": {
+    "litFraction": 0,
+    "meanR": 0
+  },
+  "alphaTest_0p4_opacity0p5": {
+    "litFraction": 1,
+    "meanR": 255
+  },
+  "a2c_msaa4_opacity0p5": {
+    "litFraction": 1,
+    "meanR": 128
+  },
+  "a2c_off_msaa4_opacity0p5_opaque": {
+    "litFraction": 1,
+    "meanR": 255
+  },
+  "a2c_msaa0": {
+    "litFraction": 1,
+    "meanR": 255
+  },
+  "skinned": {
+    "boneTextureCreated": true,
+    "vs_has_USE_SKINNING": true,
+    "vs_has_texelFetch": true,
+    "patchPresent": true,
+    "glslVersion300es": true,
+    "shaderCountWithBoneTexture": 1
+  },
+  "consoleErrors": []
+}
+--- console ---

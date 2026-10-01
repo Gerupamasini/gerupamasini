@@ -1,0 +1,51 @@
+<!doctype html><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const R = {};
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(128, 128);
+const gl = renderer.getContext();
+// capture every shader source passed to GL
+let captured = [];
+const orig = gl.shaderSource.bind(gl);
+gl.shaderSource = (sh, src) => { captured.push(src); orig(sh, src); };
+const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 100); cam.position.z = 3;
+const tex = (srgb = false) => { const t = new THREE.DataTexture(new Uint8Array([255, 128, 64, 255]), 1, 1); t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.needsUpdate = true; return t; };
+function frag() { return captured.filter(s => s.includes('void main') && s.includes('gl_FragColor') || s.includes('pc_fragColor')).pop() || ''; }
+function samplerCount(prog) {
+  let n = 0; const names = [];
+  const cnt = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < cnt; i++) { const u = gl.getActiveUniform(prog, i); if ([gl.SAMPLER_2D, gl.SAMPLER_CUBE, gl.SAMPLER_2D_ARRAY, gl.SAMPLER_3D, gl.SAMPLER_2D_SHADOW].includes(u.type)) { n++; names.push(u.name); } }
+  return { n, names };
+}
+function render(scene) { captured = []; renderer.render(scene, cam); return captured.slice(); }
+const geo = new THREE.SphereGeometry(1, 8, 4);
+
+// --- 1. sub-map gating: thicknessMap with transmission==0, iridescenceThicknessMap with iridescence==0, clearcoatMap with clearcoat==0
+{
+  const s = new THREE.Scene(); s.add(new THREE.DirectionalLight(0xffffff, 1));
+  const m = new THREE.MeshPhysicalMaterial({ thicknessMap: tex(), transmissionMap: tex(), iridescenceMap: tex(), iridescenceThicknessMap: tex(), clearcoatMap: tex(), clearcoatRoughnessMap: tex(), sheenColorMap: tex(true), anisotropyMap: tex(), specularColorMap: tex(true), specularIntensityMap: tex() });
+  s.add(new THREE.Mesh(geo, m));
+  const src = render(s).filter(x => x.includes('USE_')).join('\n');
+  const has = d => new RegExp('#define ' + d + '\\b').test(src);
+  R.gating_all_effects_zero = Object.fromEntries(['USE_THICKNESSMAP', 'USE_TRANSMISSIONMAP', 'USE_TRANSMISSION', 'USE_IRIDESCENCEMAP', 'USE_IRIDESCENCE_THICKNESSMAP', 'USE_IRIDESCENCE', 'USE_CLEARCOATMAP', 'USE_CLEARCOAT_ROUGHNESSMAP', 'USE_CLEARCOAT', 'USE_SHEEN_COLORMAP', 'USE_SHEEN', 'USE_ANISOTROPYMAP', 'USE_ANISOTROPY', 'USE_SPECULAR_COLORMAP', 'USE_SPECULAR_INTENSITYMAP'].map(d => [d, has(d)]));
+  // now enable the effects and re-check (version++ on >0 transition => recompile)
+  const v0 = m.version;
+  m.transmission = 1; m.iridescence = 1; m.clearcoat = 1; m.sheen = 1; m.anisotropy = 0.5;
+  R.version_bump_on_zero_to_positive = { before: v0, after: m.version };
+  const src2 = render(s).filter(x => x.includes('USE_')).join('\n');
+  const has2 = d => new RegExp('#define ' + d + '\\b').test(src2);
+  R.gating_effects_on = Object.fromEntries(['USE_THICKNESSMAP', 'USE_TRANSMISSIONMAP', 'USE_TRANSMISSION', 'USE_IRIDESCENCEMAP', 'USE_IRIDESCENCE_THICKNESSMAP', 'USE_IRIDESCENCE', 'USE_CLEARCOATMAP', 'USE_CLEARCOAT_ROUGHNESSMAP', 'USE_CLEARCOAT', 'USE_SHEEN_COLORMAP', 'USE_SHEEN', 'USE_ANISOTROPYMAP', 'USE_ANISOTROPY'].map(d => [d, has2(d)]));
+  // value change within >0 does not bump version
+  const v1 = m.version; m.transmission = 0.5; m.iridescence = 0.3; R.version_no_bump_inside_positive = { before: v1, after: m.version };
+}
+
+// --- 2. PMREM fromScene defaults (RoomEnvironment): output target dims/type
+{
+  const pm = new THREE.PMREMGenerator(renderer); const env = pm.fromScene(new RoomEnvironment(), 0.04);
+  R.pmrem_fromScene_default = { mapping: env.texture.mapping, cubeUV_mapping_const: THREE.CubeUVReflectionMapping, rtWidth: env.width, rtHeight: env.height, type: env.texture.type === THREE.HalfFloatType ? 'HalfFloat' : env.texture.type, colorSpace: env.texture.colorSpace };
+}
+window.__result = R; window.__done = true;
+</script>

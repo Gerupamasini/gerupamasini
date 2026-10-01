@@ -1,0 +1,45 @@
+<!doctype html><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const R = {};
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(256, 256);
+document.body.appendChild(renderer.domElement);
+R.revision = THREE.REVISION;
+R.transmissionResolutionScaleDefault = renderer.transmissionResolutionScale;
+const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 100); cam.position.z = 6;
+function makeScene({ nOpaque, trans, side, transparent }) {
+  const s = new THREE.Scene();
+  s.add(new THREE.DirectionalLight(0xffffff, 2));
+  const g = new THREE.SphereGeometry(0.5, 16, 8);
+  for (let i = 0; i < nOpaque; i++) { const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0xff8800 })); m.position.set(i - nOpaque / 2, 0, 0); s.add(m); }
+  if (trans !== undefined) {
+    const mat = new THREE.MeshPhysicalMaterial({ transmission: trans, thickness: 0.5, roughness: 0.2, side: side ?? THREE.FrontSide, transparent: !!transparent });
+    const m = new THREE.Mesh(g, mat); m.position.z = 1; s.add(m);
+  }
+  return s;
+}
+function measure(name, scene) {
+  renderer.info.reset();
+  renderer.render(scene, cam);   // first render compiles; counts still valid per frame
+  renderer.info.reset();
+  renderer.render(scene, cam);
+  R[name] = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
+}
+measure('5opaque_only', makeScene({ nOpaque: 5 }));
+measure('5opaque_plus_physical_notrans', makeScene({ nOpaque: 5, trans: 0 }));
+measure('5opaque_plus_trans_Front', makeScene({ nOpaque: 5, trans: 1 }));
+measure('5opaque_plus_trans_Double', makeScene({ nOpaque: 5, trans: 1, side: THREE.DoubleSide }));
+measure('5opaque_plus_physical_transparent_Double(no trans)', makeScene({ nOpaque: 5, trans: 0, side: THREE.DoubleSide, transparent: true }));
+measure('0opaque_plus_trans_Front', makeScene({ nOpaque: 0, trans: 1 }));
+// scene.overrideMaterial disables the transmission pass entirely (source: WebGLRenderer.js renderTransmissionPass early return)
+const sOv = makeScene({ nOpaque: 5, trans: 1 }); sOv.overrideMaterial = new THREE.MeshBasicMaterial();
+measure('5opaque_plus_trans_with_overrideMaterial', sOv);
+// transmission RT facts
+const s2 = makeScene({ nOpaque: 2, trans: 1 }); renderer.render(s2, cam);
+const rtInfo = [];
+renderer.info.memory && (R.memory = { ...renderer.info.memory });
+R.programs_after = renderer.info.programs.length;
+window.__result = R; window.__done = true;
+</script>

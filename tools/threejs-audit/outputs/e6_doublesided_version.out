@@ -1,0 +1,21 @@
+RESULT {
+  "opaque_Double": {
+    "versionDeltaOver10Frames": 0,
+    "programsForThisMaterial": 1
+  },
+  "transparent_Double_default": {
+    "versionDeltaOver10Frames": 20,
+    "programsForThisMaterial": 2
+  },
+  "transparent_Double_forceSinglePass": {
+    "versionDeltaOver10Frames": 0,
+    "programsForThisMaterial": 1
+  },
+  "alphaHash_Double": {
+    "versionDeltaOver10Frames": 0,
+    "programsForThisMaterial": 1
+  },
+  "reflectivity_default": 0.5
+}
+--- console ---
+

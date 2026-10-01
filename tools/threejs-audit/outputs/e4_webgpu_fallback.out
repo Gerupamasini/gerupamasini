@@ -1,0 +1,53 @@
+RESULT {
+  "revision": "186",
+  "hasNavigatorGpu": true,
+  "auto": {
+    "backend": "WebGLBackend(WebGL2)",
+    "skin_straight": {
+      "lit": 420,
+      "rightLit": 0,
+      "mean": [
+        184.1,
+        184.1,
+        184.1
+      ]
+    },
+    "skin_bent": {
+      "lit": 393,
+      "rightLit": 0,
+      "mean": [
+        182.9,
+        182.9,
+        182.9
+      ]
+    },
+    "onBeforeCompile_called": false,
+    "library_maps_MeshPhysicalMaterial": "MeshPhysicalNodeMaterial"
+  },
+  "forceWebGL": {
+    "backend": "WebGLBackend(WebGL2)",
+    "skin_straight": {
+      "lit": 420,
+      "rightLit": 0,
+      "mean": [
+        184.1,
+        184.1,
+        184.1
+      ]
+    },
+    "skin_bent": {
+      "lit": 393,
+      "rightLit": 0,
+      "mean": [
+        182.9,
+        182.9,
+        182.9
+      ]
+    },
+    "onBeforeCompile_called": false,
+    "library_maps_MeshPhysicalMaterial": "MeshPhysicalNodeMaterial"
+  }
+}
+--- console ---
+[warn] No available adapters.
+[warn] THREE.WebGPURenderer: WebGPU is not available, running under WebGL2 backend.
