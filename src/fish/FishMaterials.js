@@ -208,7 +208,7 @@ export function createEyeMaterial() {
   m.onBeforeCompile = (shader) => {
     attachUniforms(shader, ['uIrisGold', 'uIrisRed', 'uIrisSilver', 'uPupil', 'uIrisMetal', ...UW_UNIFORMS]);
     let vs = shader.vertexShader;
-    vs = mustReplace(vs, '#include <common>', '#include <common>\n' + eyeVertexPars, 'common');
+    vs = mustReplace(vs, '#include <common>', '#include <common>\n' + noiseCommon + eyeVertexPars, 'common');
     vs = mustReplace(vs, '#include <begin_vertex>', '#include <begin_vertex>\n' + eyeVertexMain, 'begin');
     shader.vertexShader = vs;
     let fs = shader.fragmentShader;

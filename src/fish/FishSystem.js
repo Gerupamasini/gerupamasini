@@ -101,6 +101,12 @@ export class FishSystem {
     const eyeParams = new THREE.InstancedBufferAttribute(new Float32Array(this.maxFish * 2 * 4), 4);
     eyeParams.setUsage(THREE.DynamicDrawUsage);
     eyeGeom.setAttribute('aEyeParams', eyeParams);
+    // per eye: sarasa flag, red coverage, body pattern seed, side (the eye
+    // shader reads the head pigment around the orbit: silver-grey iris on a
+    // white head, brass on a red one)
+    const eyeHead = new THREE.InstancedBufferAttribute(new Float32Array(this.maxFish * 2 * 4), 4);
+    eyeHead.setUsage(THREE.DynamicDrawUsage);
+    eyeGeom.setAttribute('aEyeHead', eyeHead);
     const eyes = new THREE.InstancedMesh(eyeGeom, this.eyeMat, this.maxFish * 2);
     eyes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     eyes.frustumCulled = false;
@@ -184,6 +190,7 @@ export class FishSystem {
       const rows = L.body.geometry.attributes.aFishRow;
       const frows = L.fins.geometry.attributes.aFishRow;
       const ep = L.eyes.geometry.attributes.aEyeParams;
+      const eh = L.eyes.geometry.attributes.aEyeHead;
       let n = 0;
       let ne = 0;
       for (const f of L.list) {
@@ -214,6 +221,10 @@ export class FishSystem {
           ep.array[ne * 4 + 1] = PUPIL_SCALE;
           ep.array[ne * 4 + 2] = 1.0;
           ep.array[ne * 4 + 3] = v.seed + s * 0.37;
+          eh.array[ne * 4] = v.colorName === 'sarasa' ? 1 : 0;
+          eh.array[ne * 4 + 1] = v.redCoverage;
+          eh.array[ne * 4 + 2] = v.seed;
+          eh.array[ne * 4 + 3] = side;
           ne++;
         }
       }
@@ -226,6 +237,7 @@ export class FishSystem {
       rows.clearUpdateRanges();
       frows.clearUpdateRanges();
       ep.needsUpdate = true;
+      eh.needsUpdate = true;
       L.eyes.instanceMatrix.needsUpdate = true;
       tris += n * (L.bodyTris + L.finTris) + ne * L.eyeTris;
     }

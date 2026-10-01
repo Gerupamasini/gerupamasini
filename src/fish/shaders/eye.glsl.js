@@ -10,6 +10,7 @@
 //               with a flattened normal (evenly lit ring, not a shaded ball)
 
 import { head } from '../morphology.js';
+import { eyeRest } from '../BodyGeometry.js';
 
 // The eye sits nearly flush in its orbit: only a low cap of the ball shows
 // (see morphology.js). Edge of that cap as sin(angle from the optical axis);
@@ -18,6 +19,9 @@ const VIS_R = (0.97 * Math.sqrt(1 - (1 - head.eyeProtrusion) ** 2)).toFixed(4);
 // depth of the iris plane in the unit ball (the base of the exposed cap)
 const IRIS_PLANE = (1 - head.eyeProtrusion).toFixed(4);
 const VIS_R_EDGE = (1.0 * Math.sqrt(1 - (1 - head.eyeProtrusion) ** 2)).toFixed(4);
+// rest-frame point where the eye meets the head (left side), around which
+// the head pigment is sampled
+const [EYE_SX, EYE_SY, EYE_SZ] = eyeRest(1).surface.toArray().map((v) => v.toFixed(5));
 
 export const eyeVertexPars = /* glsl */ `
 in vec4 aEyeParams; // x: iris hue mix, y: pupil size, z: iris brightness, w: seed
@@ -27,6 +31,8 @@ flat out vec4 vEyeParams;
 flat out vec3 vEyeX;
 flat out vec3 vEyeY;
 flat out vec3 vEyeZ;
+in vec4 aEyeHead; // x: sarasa, y: red coverage, z: body pattern seed, w: side
+flat out float vHeadSilver;
 `;
 
 export const eyeVertexMain = /* glsl */ `
@@ -40,6 +46,21 @@ vEyeWorld = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;
   vEyeY = normalize(normalMatrix * (im * vec3(0.0, 1.0, 0.0)));
   vEyeZ = normalize(normalMatrix * (im * vec3(0.0, 0.0, 1.0)));
 }
+{
+  // a sarasa's iris follows the skin around its eye: silver-grey where the
+  // head is white, brass under a red cap (the body's own patch field,
+  // sampled above, behind and below the orbit; constant per eye)
+  float hs = 0.0;
+  if (aEyeHead.x > 0.5) {
+    float th = 1.0 - aEyeHead.y;
+    vec3 c = vec3(${EYE_SX}, ${EYE_SY}, ${EYE_SZ} * aEyeHead.w);
+    float red = smoothstep(th - 0.04, th + 0.04, sarasaField(c + vec3(0.0, 0.045, -0.006 * aEyeHead.w), aEyeHead.z));
+    red += smoothstep(th - 0.04, th + 0.04, sarasaField(c + vec3(-0.05, 0.0, 0.004 * aEyeHead.w), aEyeHead.z));
+    red += smoothstep(th - 0.04, th + 0.04, sarasaField(c + vec3(0.0, -0.04, -0.004 * aEyeHead.w), aEyeHead.z));
+    hs = 1.0 - red / 3.0;
+  }
+  vHeadSilver = hs;
+}
 `;
 
 export const eyeFragmentPars = /* glsl */ `
@@ -50,6 +71,7 @@ flat in vec4 vEyeParams;
 flat in vec3 vEyeX;
 flat in vec3 vEyeY;
 flat in vec3 vEyeZ;
+flat in float vHeadSilver;
 uniform vec3 uIrisGold;
 uniform vec3 uIrisRed;
 uniform vec3 uIrisSilver;
@@ -83,7 +105,7 @@ vec3 eyeColor() {
   float front = step(0.0, p.z);
   float ang = atan(p.y, p.x);
   float seed = vEyeParams.w;
-  float silver = clamp(vEyeParams.x - 1.0, 0.0, 1.0);
+  float silver = max(clamp(vEyeParams.x - 1.0, 0.0, 1.0), 0.85 * vHeadSilver);
   // dorsal direction of the fish in the eye frame (the iris is more
   // pigmented and shaded by the orbit above, brighter below)
   vec3 upV = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
