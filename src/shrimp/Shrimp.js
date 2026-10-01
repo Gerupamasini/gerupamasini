@@ -176,7 +176,7 @@ export class Shrimp {
       const neighbourSwinging = this.legs.some((o) => o !== leg && o.swinging && (o.side === leg.side ? Math.abs(o.index - leg.index) === 1 : o.index === leg.index));
       if (!leg.swinging) {
         const moving = freq > 0.2;
-        if ((moving && wrapped && err > stepLen * 0.12) || err > stepLen * 1.5 || (!moving && err > stepLen * 0.45 && !neighbourSwinging && Math.random() < dt * 0.8)) {
+        if ((moving && wrapped && err > stepLen * 0.12) || err > stepLen * 0.9 || (!moving && err > stepLen * 0.45 && !neighbourSwinging && Math.random() < dt * 0.8)) {
           this.startStep(leg, stepLen);
         }
       }
@@ -210,10 +210,11 @@ export class Shrimp {
     const trail = clamp(this.vel.length() * 6, 0, 0.6);
     const d = leg.dangle.step(tuck ? 1 : 0, dt, tuck ? 12 : 3);
     const n = noise1(t * 0.7 + leg.index * 3.1 + s, this.seed) * 0.08;
-    const yaw = lerp(-s * (1.25 + trail * 0.5) + leg.index * 0.05 * s, -s * 0.5, d);
-    leg.hip.rotation.set(0, yaw, lerp(-0.9 + n, 0.2, d), 'YZX');
-    leg.knee.rotation.set(0, 0, lerp(-1.1 + n, -2.4, d));
-    leg.wrist.rotation.set(0, 0, 0.15);
+    // Hang from the same splay as the standing stance, trailing back a little with speed.
+    const yaw = lerp(leg.restYaw - s * trail * 0.4, -s * 0.5, d);
+    leg.hip.rotation.set(0, yaw, lerp(-0.35 + n, 0.2, d), 'YZX');
+    leg.knee.rotation.set(0, 0, lerp(-0.9 + n, -2.4, d));
+    leg.wrist.rotation.set(0, 0, lerp(-0.4, 0.15, d));
     leg.dactyl.rotation.set(0, 0, -0.3);
   }
 

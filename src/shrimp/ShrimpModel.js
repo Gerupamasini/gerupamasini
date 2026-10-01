@@ -729,6 +729,20 @@ export class ShrimpModel {
   /** Solve a walking leg to a foot target given in cephalothorax space (knee splayed outward-up). */
   solveLegIK(leg, local) {
     const v = local.clone().sub(leg.coxa.position);
+    if (leg.restDir) {
+      // Keep each foot inside its own working sector: a walking leg never swings across to the
+      // other side of its coxa (that is what made the hind legs point the wrong way while walking).
+      const r = Math.hypot(v.x, v.z);
+      const restA = Math.atan2(leg.restDir.z, leg.restDir.x);
+      let a = Math.atan2(v.z, v.x);
+      let da = Math.atan2(Math.sin(a - restA), Math.cos(a - restA));
+      const lim = 0.7; // ~40 deg
+      da = THREE.MathUtils.clamp(da, -lim, lim);
+      a = restA + da;
+      const rr = THREE.MathUtils.clamp(r, leg.restR * 0.7, leg.restR * 1.15);
+      v.x = Math.cos(a) * rr;
+      v.z = Math.sin(a) * rr;
+    }
     const L1 = leg.L1;
     const L2 = leg.L2;
     const D = THREE.MathUtils.clamp(v.length(), Math.abs(L1 - L2) + 1e-6, L1 + L2 - 1e-6);
@@ -737,7 +751,8 @@ export class ShrimpModel {
     const beta = Math.acos(THREE.MathUtils.clamp((L1 * L1 + L2 * L2 - D * D) / (2 * L1 * L2), -1, 1));
     // Knee bends upward in the vertical plane through coxa and foot: merus out and slightly up,
     // distal segments down to the floor (decapod walking-leg stance) [PHOTO 001, 006].
-    const hint = new THREE.Vector3(v.x, 0, v.z).normalize().multiplyScalar(0.25).add(new THREE.Vector3(0, 1, 0));
+    const out = leg.restDir ? leg.restDir.clone() : new THREE.Vector3(v.x, 0, v.z).normalize();
+    const hint = out.multiplyScalar(0.25).add(new THREE.Vector3(0, 1, 0));
     hint.addScaledVector(u, -hint.dot(u)).normalize();
     const knee = u.clone().multiplyScalar(L1 * Math.cos(alpha)).addScaledVector(hint, L1 * Math.sin(alpha));
     const yaw = Math.atan2(-knee.z, knee.x);
@@ -774,6 +789,9 @@ export class ShrimpModel {
       const seg = (len, p) => h.clone().multiplyScalar(len * Math.cos(p)).addScaledVector(up, len * Math.sin(p));
       const foot = leg.coxa.position.clone().add(seg(leg.L1, pM)).add(seg(leg.lc, pC)).add(seg(leg.lpd, pC + leg.wristBend));
       leg.restFoot = foot;
+      leg.restDir = h.clone();
+      leg.restR = Math.hypot(foot.x - leg.coxa.position.x, foot.z - leg.coxa.position.z);
+      leg.restYaw = Math.atan2(-h.z, h.x);
       gy += foot.y;
     }
     gy /= this.walkLegs.length;
