@@ -116,16 +116,16 @@ export function computeSpineWeights(p, boneIndex) {
     SPINE.forEach((q, i) => {
       if (TRUNK.has(q.bone)) add(q.bone, ts > 0 ? (d[i] / ts) * k : 0);
     });
-  // hind-neck: chain coordinate c (0 trunk … 3 neck2), head band on top; along the midline of the nape only (the
-  // sides of the neck on the chain swung out over the shoulders and the wing coverts when the head was turned
-  // back to sleep or preen)
-  const c = 3 * s * (1 - smooth(6, 10, Math.abs(p[0])) * smooth(97, 90, p[1]));
+  // hind-neck: the band gates trunk → chain; along the chain by the position along the neck axis (neck0 → head
+  // pivot), the same all round the neck (by the band coordinate, points 3 mm apart at the side of the neck went to
+  // neck0 and neck2 and sheared into a flap behind the cheek)
+  const ua = Math.max(0, Math.min(1, (0.718 * (p[1] - 74) + 0.693 * p[2]) / 20.2));
   // (points near the head by distance — chin, bill-base feathering, the sides of the hind-head — ride on it)
   const dH = d[SPINE.length - 1];
   const hf = Math.max(h, dH / (dH + ts + 1e-6));
   const kb = (1 - f) * (1 - hf);
-  trunk(kb * Math.max(0, 1 - c));
-  ['neck0', 'neck1', 'neck2'].forEach((bn, k) => add(bn, kb * Math.max(0, 1 - Math.abs(c - (k + 1)))));
+  trunk(kb * (1 - s));
+  ['neck0', 'neck1', 'neck2'].forEach((bn, k) => add(bn, kb * s * Math.max(0, 1 - Math.abs(2 * ua - k))));
   add('head', (1 - f) * hf);
   // fore-neck: trunk → throat over the band; the head's share only by headness / distance (more of the throat on
   // the head swung out over the shoulder as a flap when the head turned back to preen)
@@ -137,7 +137,9 @@ export function computeSpineWeights(p, boneIndex) {
   add('neck2', Math.max(0, 1.6 * Math.min(h, 1 - h) * (1 - f) - (W.neck2 ?? 0)));
   // outside the band (fading in across its outer half) and on the face in front of the eyes (lores, chin, bill-base
   // feathering: rigid there, the face of the head tucked in to sleep lay on the wing coverts) as before
-  const g = smooth(0, 0.5, s) * (1 - smooth(31, 36, p[2]));
+  // (and on the sides of the neck base above the shoulders: on the chain they swung over the wing coverts when the
+  // head turned back to sleep or preen)
+  const g = smooth(0, 0.5, s) * (1 - smooth(31, 36, p[2])) * (1 - (1 - f) * smooth(5, 9, Math.abs(p[0])) * smooth(91, 86, p[1]));
   if (g < 1) {
     for (const k in W) W[k] *= g;
     for (const [bn, v] of Object.entries(spineWeights(p))) add(bn, v * (1 - g));
