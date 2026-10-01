@@ -2,8 +2,8 @@
 // a male's nest with radial ditches, benthic prey, a predator pass, sand FX, caustics and lighting presets.
 // This is sample scaffolding; a host game supplies its own implementation of the World interface.
 import * as THREE from 'three';
-import { SandParticles } from '../fx/SandParticles.js';
-import { mulberry32 } from '../textures/HimehazeTextures.js';
+import { SandParticles } from './SandParticles.js';
+import { mulberry32 } from '../fish/Behavior.js';
 
 export const LIGHT_PRESETS = {
   // clear, bright shallows (~0.5-1 m) at midday
@@ -49,7 +49,7 @@ export function patchCaustics(material, uniforms) {
         #if NUM_DIR_LIGHTS > 0
           float sh = 1.0;
           #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
-            sh = getShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize, directionalLightShadows[ 0 ].shadowBias, directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ] );
+            sh = getShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize, directionalLightShadows[ 0 ].shadowIntensity, directionalLightShadows[ 0 ].shadowBias, directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ] );
           #endif
           reflectedLight.directDiffuse += directionalLights[0].color * diffuseColor.rgb * cs * uCaustic * sh * facing;
         #endif
@@ -81,7 +81,7 @@ export class HimehazeWorld {
     this._buildShells();
     this.fx = new SandParticles(mulberry32(7));
     scene.add(this.fx);
-    this._spawnPrey(40);
+    this._spawnPrey(70);
     this._buildPredator();
     this.setPreset('clearShallow');
   }

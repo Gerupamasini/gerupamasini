@@ -571,6 +571,10 @@ document.getElementById('freeze').addEventListener('change', (e) => fish.behavio
 document.getElementById('act-swim').addEventListener('click', () => fish.behavior?.dart());
 document.getElementById('act-yawn').addEventListener('click', () => fish.behavior?.yawn());
 document.getElementById('act-flick').addEventListener('click', () => fish.behavior?.flick());
+let buried = false;
+const toggleBury = () => { if (!fish.behavior) return; buried = !buried; fish.behavior.bury(buried); };
+document.getElementById('act-bury').addEventListener('click', toggleBury);
+document.getElementById('act-strike').addEventListener('click', () => fish.behavior?.strike());
 document.getElementById('floor').addEventListener('change', (e) => { floor.visible = e.target.checked && envName === 'water'; });
 document.getElementById('snow').addEventListener('change', (e) => { particles.visible = e.target.checked; });
 document.getElementById('autorot').addEventListener('change', (e) => { controls.autoRotate = e.target.checked; controls.autoRotateSpeed = 0.8; });
@@ -595,6 +599,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'y') fish.behavior?.yawn();
   if (e.key === 'w') fish.behavior?.dart();
   if (e.key === 'd') fish.behavior?.flick();
+  if (e.key === 'u') toggleBury();
+  if (e.key === 'k') fish.behavior?.strike();
 });
 
 // URL parameters for reproducible views (?light=back&view=tail&debug=1)

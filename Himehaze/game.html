@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ヒメハゼ 干潟</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --panel: rgba(8, 20, 23, 0.78); --line: rgba(160, 205, 210, 0.16); --text: #d9e6e6; --muted: #8aa3a5; --accent: #e7b766; --error: #f0a38b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b1514; color: var(--text); font: 13px/1.45 system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #progress { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; }
+  #progress[hidden] { display: none; }
+  #progress .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  #progress.error .msg { color: var(--error); }
+  .panel { position: fixed; top: 12px; left: 12px; width: 330px; max-height: calc(100% - 24px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; backdrop-filter: blur(8px); transition: opacity .2s; }
+  body.panel-hidden .panel { opacity: 0; pointer-events: none; }
+  h1 { font-size: 14px; margin: 0 0 2px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 11.5px; margin-bottom: 8px; }
+  .group { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+  .label { color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+  .seg { display: flex; gap: 4px; flex-wrap: wrap; }
+  .seg button { flex: 1 1 auto; background: rgba(255,255,255,0.04); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font: inherit; font-size: 12px; cursor: pointer; }
+  .seg button:hover { border-color: rgba(231,183,102,.5); }
+  .seg button.on { background: rgba(231,183,102,0.18); border-color: var(--accent); }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { padding: 3px 5px; border-radius: 5px; cursor: pointer; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  li.on { background: rgba(231,183,102,0.16); }
+  li b { display: inline-block; width: 28px; }
+  .row { display: grid; grid-template-columns: 60px 1fr; gap: 8px; align-items: center; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  #status { color: var(--muted); font-size: 11px; margin-top: 6px; }
+  #toggle-panel { position: fixed; top: 12px; right: 12px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  @media (max-width: 640px) { .panel { top: auto; bottom: 10px; left: 10px; right: 10px; width: auto; max-height: 45%; } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="progress" role="status"><div class="card"><div class="msg">モデルを読み込み中…</div></div></div>
+<aside class="panel">
+  <h1>ヒメハゼの干潟（行動AIデモ）</h1>
+  <div class="sub">東京湾の砂底。カメラ＝観察者：素早く近づくと逃げ、ゆっくりなら約10cmまで許容します。</div>
+  <div class="group">
+    <div class="label">個体（クリックで追従）</div>
+    <ul id="fish-list"></ul>
+    <div id="status"></div>
+  </div>
+  <div class="group">
+    <div class="label">刺激</div>
+    <div class="seg">
+      <button id="lunge" type="button">急接近する</button>
+      <button id="predator" type="button">捕食者が通過</button>
+      <button id="feed" type="button">餌（ヨコエビ等）を撒く</button>
+    </div>
+    <label style="display:flex;gap:6px;margin-top:6px;font-size:12px"><input id="follow" type="checkbox" checked>カメラが追う</label>
+  </div>
+  <div class="group">
+    <div class="label">環境</div>
+    <div class="seg" id="preset">
+      <button data-v="clearShallow">澄んだ浅場</button>
+      <button data-v="turbidFlat">濁った干潟</button>
+      <button data-v="lowSun">朝夕の斜光</button>
+      <button data-v="shade">日陰</button>
+    </div>
+    <div class="row" style="margin-top:6px"><span class="label">時刻</span><input id="hour" type="range" min="0" max="24" step="0.25"></div>
+  </div>
+</aside>
+<button id="toggle-panel">パネル</button>
+<script type="module" src="./src/game/main.js"></script>
+</body>
+</html>

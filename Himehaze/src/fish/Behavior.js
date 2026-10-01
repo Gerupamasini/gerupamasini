@@ -44,10 +44,13 @@ export function mulberry32(seed) {
  *   root, bones, finMeshes, axes, contacts : rig (see main.js / game/HimehazeActor.js)
  *   floorY   : flat floor height (viewer) — ignored when `ground` is given
  *   ground   : optional (x, z) => { y, normal: THREE.Vector3 } terrain query (raycast) for games
+ *   heightAt : optional (x, z) => y  cheap height field (used per contact point; falls back to ground().y)
  *   seed     : PRNG seed (default 1)
  *   onEvent  : optional (type, data) => void — 'takeoff', 'land', 'strike', 'bury', 'unbury' (sand FX hooks)
  */
-export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY = 0, ground = null, seed = 1, onEvent = null }) {
+export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY = 0, ground = null, heightAt = null, seed = 1, onEvent = null }) {
+  // terrain height query: an explicit height field, else the y of the ground raycast
+  if (!heightAt && ground) heightAt = (x, z) => { const g = ground(x, z); return g ? g.y : floorY; };
   const random = mulberry32(seed * 9301 + 49297);
   const rand = (a, b) => a + random() * (b - a);
   // resting spells: gobies sit motionless most of the time. Heavy-tailed: mostly 10–30 s, sometimes over a minute
@@ -292,7 +295,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         st.alertT = alert ? rand(4, 12) : rand(30, 70);
       }
     }
-    const propGoal = st.mode === 'orient' ? 0.8 : (st.mode === 'dart' || st.mode === 'glide') ? 0 : st.propGoal;
+    const propGoal = st.mode === 'orient' ? 0.8 : (st.mode === 'dart' || st.mode === 'glide') ? 0 : st.alertOverride ?? st.propGoal;
     st.prop = damp(st.prop, propGoal, st.mode === 'orient' ? 10 : 2.5, dt);
     // resting spells of slow pectoral fanning
     if (st.mode === 'perch') {
@@ -389,6 +392,39 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
       p.pecAbdL += 0.25 * y.fins; p.pecAbdR += 0.25 * y.fins;
     }
 
+    // external overrides: displayed / alert fins
+    if (st.finErect !== null) {
+      const e = clamp(st.finErect, 0, 1);
+      p.foldD1 *= 1 - e; p.foldD2 *= 1 - e; p.foldAnal *= 1 - 0.8 * e; p.foldCaudal *= 1 - e;
+    }
+    // suction strike: jaws snap open in ~20 ms, the hyoid, suspensoria and gill covers expand in sequence,
+    // then everything closes (anterior → posterior), with a short lunge [R: gobiid suction feeding]
+    if (st.strikeT >= 0) {
+      st.strikeT += dt;
+      const t = st.strikeT;
+      const pulse = (t0, up, hold, down) => (t < t0 ? 0 : t < t0 + up ? (t - t0) / up : t < t0 + up + hold ? 1 : Math.max(0, 1 - (t - t0 - up - hold) / down));
+      p.jaw += 0.5 * pulse(0, 0.02, 0.03, 0.06);
+      p.premax += 0.9 * pulse(0, 0.02, 0.03, 0.06);
+      p.hyoid += 0.35 * pulse(0.01, 0.025, 0.03, 0.08);
+      p.susp += 0.18 * pulse(0.012, 0.03, 0.03, 0.08);
+      p.opercL += 0.3 * pulse(0.03, 0.03, 0.03, 0.12); p.opercR = p.opercL;
+      if (t < 0.05) st.speed = Math.max(st.speed, 0.09);
+      if (t > 0.3) st.strikeT = -1;
+    }
+    // burial: the body wriggles down into the sand, fins folded; only the eyes stay out
+    const burying = st.buryGoal > st.bury + 0.02;
+    st.bury = damp(st.bury, st.buryGoal, st.buryGoal > st.bury ? 1.6 : 3.0, dt);
+    if (st.bury > 0.02) {
+      const k = clamp(st.bury, 0, 1);
+      p.foldD1 = Math.max(p.foldD1, k); p.foldD2 = Math.max(p.foldD2, k); p.foldAnal = Math.max(p.foldAnal, k); p.foldCaudal = Math.max(p.foldCaudal, 0.8 * k);
+      p.foldPecL = Math.max(p.foldPecL, 0.7 * k); p.foldPecR = Math.max(p.foldPecR, 0.7 * k);
+      p.pecAbdL *= 1 - 0.6 * k; p.pecAbdR *= 1 - 0.6 * k;
+    }
+    if (burying) {
+      st.wrigglePh += 2 * Math.PI * 9 * dt;
+      p.phase = st.wrigglePh; p.gain = Math.max(p.gain, 0.35 * (1 - st.bury));
+    }
+
     // eyes: independent saccades (mostly horizontal, ±8°), with long fixations while resting; both lead turns
     for (const [i, eye] of st.eyes.entries()) {
       eye.timer -= dt;
@@ -399,8 +435,17 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
       }
       // both eyes look toward where the head is going (they lead the turn, then settle)
       const lead = clamp(wrap(st.headGoal - st.yaw[0]) + (st.mode === 'orient' ? wrap(st.targetHeading - st.yaw[0]) : 0), -0.6, 0.6) * 0.4;
-      eye.yaw = damp(eye.yaw, eye.gy + lead, 30, dt);
-      eye.pitch = damp(eye.pitch, eye.gp, 30, dt);
+      let gy = eye.gy + lead, gp = eye.gp;
+      if (st.gaze) {
+        // fixate a target: eyes first (saccade, ±0.45 rad), the head/body only follow beyond that range
+        const head = bones.J_head;
+        const loc = head.worldToLocal(tmp.copy(st.gaze));
+        const az = Math.atan2(loc.x, loc.z), el = Math.atan2(loc.y, Math.hypot(loc.x, loc.z));
+        gy = clamp(az, -0.45, 0.45); gp = clamp(el, -0.25, 0.3);
+        if (i === 0 && st.mode === 'perch' && Math.abs(az) > 0.45) st.headGoal = st.yaw[0] + (az - Math.sign(az) * 0.3);
+      }
+      eye.yaw = damp(eye.yaw, gy, 30, dt);
+      eye.pitch = damp(eye.pitch, gp, 30, dt);
     }
     p.eyeYawL = st.eyes[0].yaw; p.eyePitchL = st.eyes[0].pitch;
     p.eyeYawR = st.eyes[1].yaw; p.eyePitchR = st.eyes[1].pitch;
@@ -412,15 +457,32 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     // ---------------------------------------------------------------- root transform
     const pitch = damp(st.pitch, (0.01 + 0.1 * st.prop) * (1 - sw), 5, dt);
     st.pitch = pitch;
-    e.set(-pitch, st.heading, 0);
+    // terrain (games): the perched fish lies along the local slope (pitch from the sand height 2 cm ahead of and
+    // behind the pelvic disc, roll from ±8 mm to the sides), then rests on whichever contact point touches first
+    let slopeP = 0, slopeR = 0;
+    if (heightAt) {
+      const fx = Math.sin(st.heading), fz = Math.cos(st.heading), x = st.pos.x, z = st.pos.z;
+      const dF = 0.02, dL = 0.008;
+      const gp = Math.atan2(heightAt(x - fx * dF, z - fz * dF) - heightAt(x + fx * dF, z + fz * dF), 2 * dF); // nose down on a descending slope
+      const gr = Math.atan2(heightAt(x + fz * dL, z - fx * dL) - heightAt(x - fz * dL, z + fx * dL), 2 * dL);  // local +X side up where the sand rises
+      const k = 1 - Math.exp(-8 * dt), onBottom = 1 - 0.8 * sw;
+      st.slopeP = damp(st.slopeP ?? gp, gp, 8, dt); st.slopeR = damp(st.slopeR ?? gr, gr, 8, dt);
+      slopeP = st.slopeP * onBottom; slopeR = st.slopeR * onBottom;
+      if (ground) { const g = ground(x, z); if (g) st.groundN.lerp(g.normal, k).normalize(); }
+    }
+    e.set(-pitch + slopeP, st.heading, slopeR);
     root.quaternion.setFromEuler(e);
-    // rest on whichever contact points are lowest in this pose (sucker rim, belly, lower caudal lobe);
-    // lift a few mm while swimming
+    // rest on whichever contact points are lowest in this pose (sucker rim, belly, lower caudal lobe) relative to
+    // the sand under each of them; lift a few mm while swimming
     root.position.set(st.pos.x, 0, st.pos.z);
     root.updateMatrixWorld(true);
-    let lowest = Infinity;
-    for (const c of contacts) lowest = Math.min(lowest, c.bone.localToWorld(tmp.copy(c.p)).y);
-    root.position.y = floorY - lowest + 0.0028 * st.lift;
+    let need = -Infinity;
+    for (const c of contacts) {
+      c.bone.localToWorld(tmp.copy(c.p));
+      need = Math.max(need, (heightAt ? heightAt(tmp.x, tmp.z) : floorY) - tmp.y);
+    }
+    // burial depth: the belly sinks ~6 mm so that only the raised eyes stay above the sand
+    root.position.y = need + 0.0028 * st.lift - 0.006 * st.bury;
   }
 
   const finNames = Object.keys(finMeshes);
@@ -453,6 +515,12 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
 
   return {
     update, dart, yawn, flick, paddle, pose,
+    look, strike, bury, setAlert, erectFins, hop,
+    escape: (heading, dist = 0.25) => dart(dist, heading, true),
+    isIdle: () => st.mode === 'perch' && st.strikeT < 0,
+    position: () => st.pos,
+    heading: () => st.heading,
+    teleport: (x, z, heading = st.heading) => { st.pos.set(x, 0, z); st.yaw.fill(heading); hist.fill(heading); st.heading = heading; st.headGoal = heading; },
     anchor: () => root.position,
     setAuto: (v) => { st.auto = v; },
     setPaused: (v) => { st.paused = v; },
