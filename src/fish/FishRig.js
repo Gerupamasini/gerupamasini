@@ -41,15 +41,17 @@ function interpRay(rays, r) {
 }
 
 // fin mechanical parameters: tip stiffness, rest-shape memory, drag,
-// tangential damping, gravity sag and how far the fin droops when relaxed
-// (rad). The caudal tip is damped well enough that a still fish has a still
-// tail: it trails and sags instead of whipping.
+// tangential damping, gravity sag, how far the fin droops when relaxed (rad)
+// and how much its rays curl downward toward the tip (the soft distal ray
+// segments sag; strongest in a relaxed fin). The caudal tip is damped well
+// enough that a still fish has a still tail: it trails and sags instead of
+// whipping.
 const FIN_MECH = {
-  0: { kBase: 0.97, kTip: 0.28, memBase: 0.38, memTip: 0.06, drag: 170, dragT: 5, grav: 0.35, droop: 0.12 }, // caudal
-  1: { kBase: 0.96, kTip: 0.36, memBase: 0.45, memTip: 0.09, drag: 150, dragT: 4.5, grav: 0.2, droop: 0.1 }, // dorsal
-  2: { kBase: 0.96, kTip: 0.34, memBase: 0.45, memTip: 0.09, drag: 150, dragT: 4.5, grav: 0.25, droop: 0 }, // anal
-  3: { kBase: 0.97, kTip: 0.42, memBase: 0.6, memTip: 0.16, drag: 140, dragT: 4, grav: 0.15, droop: 0 }, // pectoral
-  4: { kBase: 0.96, kTip: 0.36, memBase: 0.5, memTip: 0.1, drag: 150, dragT: 4, grav: 0.2, droop: 0 }, // pelvic
+  0: { kBase: 0.97, kTip: 0.24, memBase: 0.38, memTip: 0.05, drag: 170, dragT: 5, grav: 0.35, droop: 0.12, curl: 0.6 }, // caudal
+  1: { kBase: 0.96, kTip: 0.34, memBase: 0.45, memTip: 0.08, drag: 150, dragT: 4.5, grav: 0.2, droop: 0.1, curl: 0.2 }, // dorsal
+  2: { kBase: 0.96, kTip: 0.32, memBase: 0.45, memTip: 0.08, drag: 150, dragT: 4.5, grav: 0.25, droop: 0, curl: 0.22 }, // anal
+  3: { kBase: 0.97, kTip: 0.42, memBase: 0.6, memTip: 0.16, drag: 140, dragT: 4, grav: 0.15, droop: 0, curl: 0.1 }, // pectoral
+  4: { kBase: 0.96, kTip: 0.34, memBase: 0.5, memTip: 0.1, drag: 150, dragT: 4, grav: 0.2, droop: 0, curl: 0.16 }, // pelvic
 };
 
 export class FishRig {
@@ -67,6 +69,7 @@ export class FishRig {
     for (let i = 0; i < NS; i++) this.spineQ[i * 4 + 3] = 1;
     this.stiffnessMul = 1;
     this.dragMul = 1;
+    this.floor = null; // local ground plane {x, z, y, gx, gz} (set while in the tank)
     this.flow = new THREE.Vector3(); // ambient water velocity (flume / filter current)
     this.iterations = 2; // PBD constraint iterations per substep
 
@@ -92,7 +95,13 @@ export class FishRig {
           restDir: new THREE.Vector3(1, 0, 0),
           rootW: new THREE.Vector3(),
           rootPrev: new THREE.Vector3(),
-          lead: j === 0 ? 1 : 0,
+          // leading rays (both outer rays of the forked caudal) are stiffer
+          lead: j === 0 || (fin.type === 0 && j === def.chains.length - 1) ? 1 : 0,
+          // rays differ a little in their distal flexibility: the trailing
+          // edge bends unevenly instead of moving as one straight line
+          flex: 1 + 0.16 * Math.sin(j * 2.39 + (variation.seed ?? 0) * 1.7 + fin.type * 0.9),
+          // the soft rays next to the caudal fork are the most flexible
+          inner: fin.type === 0 ? 1 - Math.abs(def.chains[j] - 0.5) * 2 : 0,
         };
         // attachment point on the body
         if (fin.type === 3 || fin.type === 4) {
@@ -265,6 +274,30 @@ export class FishRig {
     return out.copy(D0).multiplyScalar(Math.cos(phi)).addScaledVector(S, Math.sin(phi)).normalize();
   }
 
+  /** Height of the gravel below the fish (from the last tank clamp). */
+  floorY() {
+    return this.floor ? this.floor.y : -Infinity;
+  }
+
+  /** Rigidly shift the posed spine and fins (positional collision fix-ups). */
+  translate(dx, dy, dz) {
+    for (let i = 0; i < NS; i++) {
+      this.spineP[i * 3] += dx;
+      this.spineP[i * 3 + 1] += dy;
+      this.spineP[i * 3 + 2] += dz;
+    }
+    for (let i = 0; i < this.nodeTotal; i++) {
+      this.pos[i * 3] += dx;
+      this.pos[i * 3 + 1] += dy;
+      this.pos[i * 3 + 2] += dz;
+    }
+    for (const ch of this.chains) {
+      ch.rootW.x += dx;
+      ch.rootW.y += dy;
+      ch.rootW.z += dz;
+    }
+  }
+
   /** Recompute chain roots (world) and rest directions (world). */
   _updateRoots() {
     const Q = _qRoot;
@@ -285,6 +318,9 @@ export class FishRig {
       this._restDirLocal(ch, ch.restDir);
       ch.restDir.applyQuaternion(Q).normalize();
       ch.seg = (ch.ray.length * this.SL) / (ch.M - 1);
+      // downward curl of the distal rays: strong in a relaxed fin, small in
+      // a working one (water flow and fin muscles straighten the rays)
+      ch.curl = FIN_MECH[ch.type].curl * (0.2 + 0.8 * this.pose.relax) * (1 + 0.25 * ch.inner);
     }
   }
 
@@ -380,6 +416,7 @@ export class FishRig {
       for (let it = 0; it < this.iterations; it++) {
         for (const ch of this.chains) this._projectChain(ch);
         this._projectMembrane();
+        if (this.floor) this._projectFloor();
       }
       // velocities from positions
       for (let i = 0; i < this.nodeTotal * 3; i++) {
@@ -398,8 +435,9 @@ export class FishRig {
     ch.mem = new Float32Array(ch.M);
     for (let k = 1; k < ch.M; k++) {
       const t = k / (ch.M - 1);
-      ch.kap[k] = clamp(lerp(mech.kBase, mech.kTip, Math.pow(t, 0.8)) * (ch.lead ? 1.25 : 1) * stiff, 0, 0.995);
-      ch.mem[k] = lerp(mech.memBase, mech.memTip, t) * Math.min(1.5, stiff);
+      const soft = lerp(1, ch.flex * (1 - 0.18 * ch.inner), t);
+      ch.kap[k] = clamp(lerp(mech.kBase, mech.kTip, Math.pow(t, 0.8)) * (ch.lead ? 1.25 : soft) * stiff, 0, 0.995);
+      ch.mem[k] = lerp(mech.memBase, mech.memTip, t) * Math.min(1.5, stiff) * (ch.lead ? 1 : soft);
     }
     ch.tabStiff = stiff;
   }
@@ -412,6 +450,7 @@ export class FishRig {
     const kapT = ch.kap;
     const memT = ch.mem;
     const rd = ch.restDir;
+    const curl = ch.curl || 0;
     let px = rd.x;
     let py = rd.y;
     let pz = rd.z;
@@ -421,8 +460,13 @@ export class FishRig {
       // bending stiffness tapers from base to tip (leading rays are stiffer)
       const kap = kapT[k];
       const mem = memT[k];
+      // rest shape: the soft distal ray segments bend progressively
+      // downward (the curvature grows toward the tip, so the ray arcs over
+      // instead of tilting as a straight rod)
+      const t = k / (M - 1);
+      const sag = (1.5 * curl * t) / (M - 1);
       let dx = px * (1 - mem) + rd.x * mem;
-      let dy = py * (1 - mem) + rd.y * mem;
+      let dy = py * (1 - mem) + rd.y * mem - sag;
       let dz = pz * (1 - mem) + rd.z * mem;
       let dl = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
       const tx = P[ip] + (dx / dl) * seg;
@@ -442,6 +486,28 @@ export class FishRig {
       px = dx / dl;
       py = dy / dl;
       pz = dz / dl;
+    }
+  }
+
+  /** Fin nodes rest on the gravel instead of hanging into it (with friction). */
+  _projectFloor() {
+    const fl = this.floor;
+    const P = this.pred;
+    const X = this.pos;
+    // only when the fish is close to the bottom (the longest fins reach ~1 SL)
+    const lowest = fl.y + 1.2 * this.SL;
+    if (this.spineP[(NS - 1) * 3 + 1] > lowest && this.spineP[1] > lowest) return;
+    for (const ch of this.chains) {
+      for (let k = 1; k < ch.M; k++) {
+        const i = (ch.offset + k) * 3;
+        const g = fl.y + fl.gx * (P[i] - fl.x) + fl.gz * (P[i + 2] - fl.z) + 0.0025;
+        if (P[i + 1] < g) {
+          P[i + 1] = g;
+          // contact friction: the node barely slides along the gravel
+          P[i] = lerp(P[i], X[i], 0.5);
+          P[i + 2] = lerp(P[i + 2], X[i + 2], 0.5);
+        }
+      }
     }
   }
 

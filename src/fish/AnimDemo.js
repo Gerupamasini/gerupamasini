@@ -4,12 +4,15 @@
 // directly while the fish holds station.
 //   idle   calm hover: tail still and straight, pectorals in short bouts
 //   rest   bottom rest: fins folded, dorsal partly lowered, slow breathing
-//   slow   kick-and-glide cruising (1–2 tail kicks, then a straight glide)
-//   cruise steady swimming (studio) / routine burst-and-glide (aquarium)
+//   row    slow labriform swimming: alternating pectoral strokes, tail still
+//          and straight with an occasional single assisting beat
+//   slow   intermittent swimming (3–5 tail beats, then a short glide during
+//          which the fish visibly slows down)
+//   cruise steady swimming
 
 import * as THREE from 'three';
 
-export const ANIMS = ['AI', 'idle', 'rest', 'slow', 'cruise', 'accelerate', 'turn', 'brake', 'startle', 'feeding', 'surfaceFeeding', 'yawn'];
+export const ANIMS = ['AI', 'idle', 'rest', 'row', 'slow', 'cruise', 'accelerate', 'turn', 'brake', 'startle', 'feeding', 'surfaceFeeding', 'yawn'];
 
 export class AnimDemo {
   constructor() {
@@ -53,10 +56,15 @@ export class AnimDemo {
       case 'rest':
         b.forced = 'rest';
         break;
+      case 'row':
+        b.forced = 'wander';
+        o.enabled = true;
+        o.speed = 0.25;
+        break;
       case 'slow':
         b.forced = 'wander';
         o.enabled = true;
-        o.speed = 0.45;
+        o.speed = 0.55;
         break;
       case 'cruise':
         b.forced = 'cruise';
@@ -149,8 +157,11 @@ export class AnimDemo {
         c.speed = 0;
         c.rest = 1;
         break;
+      case 'row':
+        c.speed = 0.25;
+        break;
       case 'slow':
-        c.speed = 0.5;
+        c.speed = 0.55;
         break;
       case 'cruise':
         c.speed = 1.4;

@@ -15,7 +15,7 @@ export const COLOR_TYPES = ['sarasa', 'red', 'orange', 'yellow', 'white'];
  * Personality axes from the behaviour report (§6): activity (lognormal,
  * CV≈0.3), boldness (Beta(2,2)), exploration correlated with boldness,
  * sociality weakly anti-correlated, independent thigmotaxis, feeding
- * motivation, preferred depth N(0.3,0.15), laterality (2/3 unbiased, rest
+ * motivation, preferred depth N(0.45,0.16), laterality (2/3 unbiased, rest
  * biased with right:left ≈ 1.5:1).
  */
 export function makePersonality(rng) {
@@ -39,7 +39,8 @@ export function makePersonality(rng) {
     sociality: clamp(0.55 - 0.2 * (boldness - 0.5) + 0.2 * g3, 0.05, 1),
     thigmotaxis: clamp(rng.next(), 0, 1),
     feedMotivation: rng.range(0.7, 1.3),
-    preferredDepth: clamp(rng.normal(0.3, 0.15), 0.06, 0.85),
+    // comets use the whole water column; most individuals favour mid-water
+    preferredDepth: clamp(rng.normal(0.45, 0.16), 0.1, 0.85),
     turnBias,
     burstCoast: rng.range(0, 1),
   };

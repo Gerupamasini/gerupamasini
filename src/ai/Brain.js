@@ -12,7 +12,11 @@ import { avoidObstacles, separation, shoal } from './Steering.js';
 
 export const STATES = ['rest', 'wander', 'cruise', 'pause', 'forage', 'approachFood', 'surfaceFeed', 'shoal', 'wallFollow', 'startle', 'freeze'];
 
-const MIN_DWELL = { rest: 15, wander: 8, cruise: 10, pause: 3, forage: 4, approachFood: 0.5, surfaceFeed: 1, shoal: 8, wallFollow: 8, startle: 0.4, freeze: 4 };
+const MIN_DWELL = { rest: 15, wander: 8, cruise: 10, pause: 3.5, forage: 4, approachFood: 0.5, surfaceFeed: 1, shoal: 8, wallFollow: 8, startle: 0.4, freeze: 4 };
+
+// the mouth stops this far above the base of the gravel bed (pebble tops
+// reach ~4 mm above it)
+const HEAD_CLEAR = 0.0055;
 
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -45,9 +49,10 @@ export class Brain {
     this.phaseTime = 0;
     this.sub = {};
     this.hab = { tap: 0, loom: 0, social: 0 };
-    // yawning: spontaneous, more frequent at rest and when fatigued, and
-    // typically at the transition from rest to activity (arousal change)
-    this.yawnTimer = jitterDuration(fish.rng, 120, 0.6);
+    // yawning: spontaneous (one every few minutes per fish), somewhat more
+    // frequent at rest and when fatigued, and typically at the transition
+    // from rest to activity (arousal change)
+    this.yawnTimer = jitterDuration(fish.rng, 140, 0.5);
     this.lastStimulusTime = -1;
     this.pendingContagion = [];
     this.utilities = {};
@@ -90,7 +95,9 @@ export class Brain {
       const cos = d.dot(fwd) / Math.max(dist, 1e-5);
       const seen = (dist < 0.55 && cos > -0.55) || (f.state === 'bottom' && dist < 0.16);
       if (!seen) continue;
-      const score = dist * (1.4 - 0.4 * cos) + (f.claimed && f.claimed !== me ? 0.08 : 0);
+      // an item another fish is already going for is less attractive (the
+      // group spreads over the pellets instead of piling onto one)
+      const score = dist * (1.4 - 0.4 * cos) + (f.claimed && f.claimed !== me ? 0.15 : 0);
       if (score < bestScore) {
         bestScore = score;
         best = f;
@@ -157,7 +164,7 @@ export class Brain {
       // alarmed but no escape: fear rises, brief pause / flinch
       this.drives.fear = Math.min(1, this.drives.fear + 0.25 * threat);
       // (a resting or freezing fish just stays put)
-      if (this.state !== 'approachFood' && this.state !== 'surfaceFeed' && this.state !== 'freeze' && this.state !== 'rest') this._enter('pause', time, 1.5 + 2 * P.fearfulness);
+      if (this.state !== 'approachFood' && this.state !== 'surfaceFeed' && this.state !== 'freeze' && this.state !== 'rest') this._enter('pause', time, 3 + 2.5 * P.fearfulness);
     }
     return false;
   }
@@ -186,14 +193,15 @@ export class Brain {
       cruise: 0.2 * act * (1 - 0.6 * D.fear) * (1 - 0.5 * D.fatigue),
       pause: 0.26,
       forage: graze * 0.85 * (0.65 + 0.2 * Math.min(2, nearForagers)) * (1 - 0.8 * D.fear) * P.feedMotivation,
-      approachFood: foodSeen ? (0.5 + D.hunger) * (1.25 - 0.6 * D.fear * P.fearfulness) * P.feedMotivation : 0,
+      // (a fish that has just eaten several pellets is in less of a hurry)
+      approachFood: foodSeen ? ((0.5 + D.hunger) * (1.25 - 0.6 * D.fear * P.fearfulness) * P.feedMotivation) / (1 + 0.3 * (this.gorged || 0)) : 0,
       shoal: 0.14 + D.social * P.sociality * 0.75 + 0.45 * D.fear * P.sociality,
       wallFollow: D.fear * P.thigmotaxis * 0.7,
     };
     // after a feeding bout the fish tend to settle (pause, rest) for a while
     const sated = this.postFeed !== undefined ? Math.exp(-(time - this.postFeed) / 25) : 0;
-    U.pause += 0.4 * sated;
-    U.rest += 0.2 * sated;
+    U.pause += 0.6 * sated;
+    U.rest += 0.3 * sated;
     if (foodSeen && foodSeen.state === 'surface') {
       U.surfaceFeed = U.approachFood;
       U.approachFood = 0;
@@ -215,7 +223,7 @@ export class Brain {
     const r = this.fish.rng;
     const P = this.fish.personality;
     // waking up: leaving rest / a long pause is often marked by a yawn
-    if ((this.state === 'rest' || (this.state === 'pause' && this.stateTime > 4)) && state !== 'startle' && state !== 'freeze' && r.next() < 0.45) {
+    if (state !== 'startle' && state !== 'freeze' && ((this.state === 'rest' && this.phase === 'down' && r.next() < 0.15) || (this.state === 'pause' && this.stateTime > 8 && r.next() < 0.12))) {
       this.yawnTimer = Math.min(this.yawnTimer, r.range(0.4, 2.0));
     }
     this.state = state;
@@ -223,9 +231,16 @@ export class Brain {
     this.phase = 'go';
     this.phaseTime = 0;
     this.sub = {};
-    const base = { rest: 45, wander: 35, cruise: 40, pause: 5, forage: 12, approachFood: 10, surfaceFeed: 8, shoal: 30, wallFollow: 25, startle: 1.5, freeze: 11 * (0.5 + P.fearfulness) };
-    this.stateDur = dur ?? jitterDuration(r, base[state] ?? 10, state === 'rest' ? 0.5 : 0.4);
+    const base = { rest: 45, wander: 35, cruise: 22, pause: 5.5, forage: 12, approachFood: 10, surfaceFeed: 8, shoal: 30, wallFollow: 18, startle: 1.5, freeze: 4 + 2.5 * P.fearfulness };
+    this.stateDur = dur ?? jitterDuration(r, base[state] ?? 10, state === 'rest' ? 0.5 : state === 'freeze' ? 0.25 : 0.4);
     if (state === 'rest') this.stateDur = Math.max(15, this.stateDur);
+    // freezing after a fright lasts a few seconds, then the fish resumes
+    if (state === 'freeze') this.stateDur = clamp(this.stateDur, 3.5, 6.5);
+    if (state === 'pause') {
+      // a fish that has just fed lingers longer
+      if (this.postFeed !== undefined && time - this.postFeed < 30) this.stateDur *= 1.6;
+      this.stateDur = Math.max(3.5, this.stateDur);
+    }
     if (state === 'wander') this._pickWanderTarget(null, true);
     if (state === 'rest') this.target.copy(this._restSpot());
     if (state === 'shoal') {
@@ -246,7 +261,7 @@ export class Brain {
       this.sub.dirX = r.sign();
       const off = r.range(0.045, 0.1);
       this.sub.z = r.next() < 0.5 ? -TANK.D / 2 + off : TANK.D / 2 - off;
-      this.sub.yK = r.range(0.45, 1.1);
+      this.sub.yK = r.range(0.7, 1.25);
     }
   }
 
@@ -386,7 +401,7 @@ export class Brain {
     this.hasTarget = true;
     // most wander legs end in a pause; once in a while a leg starts with a
     // purposeful dash (a burst, then a long glide)
-    this.sub.pauseAt = r.next() < 0.62;
+    this.sub.pauseAt = r.next() < 0.75;
     this.sub.dashT = !first && r.next() < 0.08 && best.distanceTo(this.fish.loc.pos) > 0.25 ? r.range(0.35, 0.6) : 0;
   }
 
@@ -435,6 +450,7 @@ export class Brain {
     D.social = clamp(D.social + dt * (nn > 4 ? 1 / 40 : -1 / 20), 0, 1);
     D.curiosity = clamp(D.curiosity + dt * (this.state === 'wander' ? -1 / 90 : 1 / 70), 0, 1);
     for (const k in this.hab) this.hab[k] *= Math.exp(-dt / 90);
+    if (this.gorged) this.gorged *= Math.exp(-dt / 60);
 
     // ---- stimuli (interrupt)
     if (this.state !== 'startle') this._processStimuli(world, time, neigh);
@@ -443,11 +459,11 @@ export class Brain {
     {
       const calm = this.state === 'rest' || this.state === 'pause';
       const busy = this.state === 'startle' || this.state === 'freeze' || this.state === 'approachFood' || this.state === 'surfaceFeed' || L.cstart || L.gait === 'burst';
-      this.yawnTimer -= dt * (calm ? 2.2 : 1) * (1 + 1.5 * D.fatigue) * (D.fear > 0.5 ? 0.2 : 1);
+      this.yawnTimer -= dt * (calm ? 1.1 : 1) * (1 + 0.8 * D.fatigue) * (D.fear > 0.5 ? 0.75 : 1);
       if (this.yawnTimer <= 0) {
         if (!busy && !L.mouthProgram) {
           L.mouthAction('yawn');
-          this.yawnTimer = jitterDuration(me.rng, 240, 0.6);
+          this.yawnTimer = jitterDuration(me.rng, 300, 0.45);
         } else this.yawnTimer = 3.0;
       }
     }
@@ -472,6 +488,14 @@ export class Brain {
       }
     }
 
+    // a fish counts as standing still when it has (almost) no forward speed
+    // and its tail is quiet
+    const stillNow = U < 0.12 && L.amp < 0.02;
+    if (stillNow) {
+      if (!this.stillT) this.holdMin = me.rng.range(2.6, 3.8);
+      this.stillT = (this.stillT || 0) + dt;
+    } else this.stillT = 0;
+
     // ---- behaviour
     const cmd = L.cmd;
     cmd.brake = false;
@@ -481,6 +505,7 @@ export class Brain {
     cmd.hoverPrecision = 0;
     cmd.rest = 0;
     cmd.steady = false;
+    cmd.pitchLimit = 0.62;
     cmd.finsClamped = clamp(D.fear * 0.6 * P.fearfulness, 0, 0.7);
     const des = this.desired.set(0, 0, 0);
     let speedCap = 6 * SL;
@@ -509,7 +534,7 @@ export class Brain {
         } else if (this.phase === 'sink') {
           const to = _v.subVectors(tgt, L.pos);
           const d = to.length();
-          des.copy(to).multiplyScalar(1.2).clampLength(0, 0.15 * SL);
+          des.copy(to).multiplyScalar(1.4).clampLength(0, 0.19 * SL);
           cmd.pitchBias = -0.06;
           cmd.rest = 0.5 * smoothstep(0.6 * SL, 0.1 * SL, d);
           if (d < 0.06 * SL || this.phaseTime > 10) {
@@ -518,7 +543,7 @@ export class Brain {
             this.sub.lookT = me.rng.range(12, 35);
             // the rest itself starts now
             this.stateTime = 0;
-            this.stateDur = Math.max(15, jitterDuration(me.rng, 38, 0.5));
+            this.stateDur = Math.max(12, jitterDuration(me.rng, 26, 0.5));
           }
         } else {
           // lying on the bottom; now and then a slow re-orientation
@@ -539,17 +564,19 @@ export class Brain {
         const d = to.length();
         const spd = (0.3 + 0.45 * D.curiosity) * act * SL;
         if (this.phase === 'go') {
-          let v = spd * smoothstep(0, 0.12, d) + 0.05 * SL;
+          // a leg that ends in a pause slows down toward its end; otherwise
+          // the fish swims on through the waypoint
+          let v = spd * (this.sub.pauseAt ? smoothstep(0, 0.12, d) : 1) + 0.05 * SL;
           if (this.sub.dashT > 0) {
             this.sub.dashT -= dt;
             v = Math.max(v, 3 * SL);
           }
           des.copy(to).normalize().multiplyScalar(v);
-          if (d < 0.06) {
+          if (d < (this.sub.pauseAt ? 0.06 : 0.09)) {
             if (this.sub.pauseAt) {
               this.phase = 'pause';
               this.phaseTime = 0;
-              this.sub.pauseDur = me.rng.range(3, 11);
+              this.sub.pauseDur = me.rng.range(3.5, 10);
               this.sub.face = null;
               this.sub.lookT = me.rng.range(3, 7);
             } else this._pickWanderTarget(world);
@@ -581,6 +608,7 @@ export class Brain {
           this.sub.y = clamp(this.sub.y + me.rng.range(-0.05, 0.05), 0.08, TANK.water - 0.05);
         }
         des.copy(to).normalize().multiplyScalar((0.9 + 0.5 * act) * SL * (1 - 0.4 * D.fatigue));
+        cmd.steady = true; // patrolling the tank: continuous tail beat
         break;
       }
       case 'pause': {
@@ -641,11 +669,20 @@ export class Brain {
         const d = to.length();
         if (this.phase === 'go') {
           des.copy(to).normalize().multiplyScalar(Math.min(0.8 * SL, d * 3));
-          if (d < 0.8 * SL || this.phaseTime > 6) {
+          if (d < 0.8 * SL || this.phaseTime > 3) {
             this.phase = 'hold';
             this.target.copy(L.pos);
+            this.sub.held = false;
           }
-        } else des.copy(to).clampLength(0, 0.06 * SL);
+        } else {
+          des.copy(to).clampLength(0, 0.06 * SL);
+          // once it has come to a stop in cover the fish holds still for a
+          // few seconds
+          if (stillNow && !this.sub.held) {
+            this.sub.held = true;
+            this.stateDur = Math.max(this.stateDur, this.stateTime + me.rng.range(3, 4));
+          }
+        }
         cmd.finsClamped = 0.85;
         cmd.hoverPrecision = this.phase === 'go' ? 0.8 : 0.2; // frozen: fins held still
         if (this.stateTime > this.stateDur) this.nextEval = 0;
@@ -656,23 +693,42 @@ export class Brain {
     // ---- steering blend: avoidance & separation steer, they do not add thrust
     const goalSpeed = Math.min(des.length(), speedCap);
     const goalDir = goalSpeed > 1e-5 ? _v.copy(des).divideScalar(goalSpeed) : _v.copy(L.forward).setY(0).normalize();
-    const hovering = goalSpeed < 0.22 * SL && this.state !== 'startle';
+    const feeding = this.state === 'forage' || this.state === 'approachFood' || this.state === 'surfaceFeed';
+    // once a fish has come to a halt it stays put for a few seconds before it
+    // sets off again (no flicker between stopping and swimming); feeding,
+    // fright and an obstacle right at the body override this. Hovering vs
+    // swimming has some hysteresis for the same reason.
+    let hovering = goalSpeed < (this.wasHovering ? 0.28 : 0.2) * SL && this.state !== 'startle';
+    this.wasHovering = hovering;
+    // (grazing counts as feeding only once the fish works the gravel)
+    const exempt = this.state === 'approachFood' || this.state === 'surfaceFeed' || (this.state === 'forage' && this.phase !== 'go') || this.state === 'startle' || (this.state === 'freeze' && this.phase === 'go');
+    const holding = !hovering && stillNow && this.stillT < this.holdMin && !exempt;
+    if (holding) hovering = true;
     avoidOpts.intent = hovering ? 0 : 1;
     const avoid = avoidObstacles(me, world, _a, avoidOpts);
     const sep = separation(me, neigh.slice(0, 6), _s).multiplyScalar(sepW);
     const sepLen = sep.length();
     const push = avoid.length() + sepLen;
     cmd.hoverVel.set(0, 0, 0);
-    const feeding = this.state === 'forage' || this.state === 'approachFood' || this.state === 'surfaceFeed';
-    // getting out of the way of a wall or a neighbour, once started, lasts a
-    // moment (no flickering between holding station and swimming off)
+    // getting out of the way of a wall, once started, lasts a moment (no
+    // flickering between holding station and swimming off); a hovering fish
+    // crowded by a neighbour shuffles aside with its pectorals instead
     this.escapeT = Math.max(0, (this.escapeT || 0) - dt);
-    if (hovering && (avoid.danger >= 0.9 || sepLen >= 2.5)) this.escapeT = 0.8;
+    if (hovering && (avoid.danger >= 0.9 || (sepLen >= 2.5 && !stillNow))) this.escapeT = 0.8;
+    const crowded = hovering && sepLen >= 2.5;
     if (hovering && this.escapeT <= 0) {
       // pectoral station keeping: gentle nudges from walls and neighbours
       // move a hovering fish slowly without turning it or engaging the tail
-      cmd.hoverVel.copy(avoid).multiplyScalar(0.1 * SL).addScaledVector(sep, 0.08 * SL);
-      if (feeding && !(this.state === 'forage' && Math.abs(des.y) > 2 * Math.hypot(des.x, des.z))) {
+      cmd.hoverVel.copy(avoid).multiplyScalar(0.1 * SL).addScaledVector(sep, (crowded ? 0.12 : 0.08) * SL);
+      if (holding) {
+        // about to set off: it may already pivot toward its goal on the pectorals
+        cmd.speed = 0;
+        if (Math.hypot(goalDir.x, goalDir.z) > 0.3) cmd.dir.set(goalDir.x, 0, goalDir.z).normalize();
+        else {
+          const f = L.forward;
+          cmd.dir.set(f.x, 0, f.z).normalize();
+        }
+      } else if (feeding && !(this.state === 'forage' && Math.abs(des.y) > 2 * Math.hypot(des.x, des.z))) {
         // fine positioning on food: creep along the heading toward it
         cmd.dir.copy(goalDir);
         cmd.speed = goalSpeed / SL;
@@ -688,14 +744,14 @@ export class Brain {
           cmd.dir.set(f.x, 0, f.z).normalize();
         }
       }
-      cmd.hoverVel.clampLength(0, 0.15 * SL);
+      cmd.hoverVel.clampLength(0, (crowded ? 0.3 : 0.15) * SL);
     } else {
       const steer = _h.copy(goalDir).multiplyScalar(hovering ? 0.3 : 1).add(avoid).add(sep);
       let speed = goalSpeed;
       // slow down when heading into an obstacle; get out of the way when a
       // hovering fish is crowded or about to touch something
       speed *= 1 - 0.55 * avoid.danger;
-      if (hovering) speed = Math.max(speed, Math.min(0.5, push * 0.25) * SL);
+      if (hovering) speed = Math.max(speed, clamp(push * 0.25, 0.25, 0.5) * SL);
       if (steer.lengthSq() > 1e-8) cmd.dir.copy(steer).normalize();
       else cmd.dir.copy(goalDir);
       cmd.speed = speed / SL;
@@ -715,6 +771,12 @@ export class Brain {
   }
 
   // ------------------------------------------------------------ feeding
+  /** One food item swallowed: less hungry, and a run of pellets sates for a while. */
+  _ate() {
+    this.drives.hunger = Math.max(0, this.drives.hunger - 0.08);
+    this.gorged = (this.gorged || 0) + 1;
+  }
+
   _forage(dt, time, world, des, cmd) {
     const me = this.fish;
     const L = me.loc;
@@ -740,11 +802,12 @@ export class Brain {
         break;
       }
       case 'tilt': {
-        // head-down posture, sink toward the gravel
-        cmd.pitchBias = -0.75;
+        // head-down posture (≈35°), sink toward the gravel
+        cmd.pitchBias = -0.62;
         cmd.hoverPrecision = 1;
-        // creep down onto the spot with the pectorals
-        const to = _v.subVectors(spot, head);
+        // creep down with the pectorals until the mouth touches the pebble
+        // tops (never into the gravel)
+        const to = _v.subVectors(_a.copy(spot).setY(spot.y + HEAD_CLEAR), head);
         des.copy(to).multiplyScalar(1.4).clampLength(0, 0.2 * SL);
         if (to.length() < 0.06 * SL || this.phaseTime > 3) {
           L.mouthAction('peck');
@@ -754,7 +817,7 @@ export class Brain {
           for (const f of world.food.available) {
             if (f.pos.distanceTo(head) < 0.2 * SL) {
               world.food.remove(f);
-              this.drives.hunger = Math.max(0, this.drives.hunger - 0.08);
+              this._ate();
               break;
             }
           }
@@ -762,12 +825,13 @@ export class Brain {
         break;
       }
       case 'peck': {
-        cmd.pitchBias = -0.7;
+        cmd.pitchBias = -0.62;
         cmd.hoverPrecision = 1;
         if (this.phaseTime > 0.25) {
           this.phase = 'sort';
           this.phaseTime = 0;
-          this.sub.sortDur = me.rng.range(0.8, 2.0);
+          // the mouthful is sorted for a few seconds while the fish holds still
+          this.sub.sortDur = me.rng.range(1.8, 3.4);
         }
         break;
       }
@@ -825,8 +889,10 @@ export class Brain {
     const f = this.food;
     f.claimed = me;
     const head = me.headPosition(_h);
-    // lead sinking food slightly
+    // lead sinking food slightly; on the gravel, aim the mouth at the pebble
+    // tops above the item
     const aim = _a.copy(f.pos).addScaledVector(f.vel, 0.3);
+    aim.y = Math.max(aim.y, this._ground(aim.x, aim.z) + HEAD_CLEAR);
     const to = _v.subVectors(aim, head);
     const d = to.length();
     cmd.lookAt = f.pos;
@@ -853,7 +919,7 @@ export class Brain {
         // suction: most strikes succeed
         if (me.rng.next() < 0.88) {
           world.food.remove(f);
-          this.drives.hunger = Math.max(0, hunger - 0.08);
+          this._ate();
           this.food = null;
         } else {
           f.vel.add(new THREE.Vector3(me.rng.range(-0.05, 0.05), 0.02, me.rng.range(-0.05, 0.05)));
@@ -895,6 +961,7 @@ export class Brain {
     } else if (this.phase === 'rise') {
       // head up toward the item, mouth opening synchronised with head lift
       cmd.pitchBias = 0.75;
+      cmd.pitchLimit = 0.95;
       cmd.hoverPrecision = 0.8;
       const to = _v.subVectors(f.pos, head);
       des.copy(to).normalize().multiplyScalar(Math.min(0.9 * SL, to.length() * 5 + 0.1 * SL));
@@ -902,7 +969,7 @@ export class Brain {
         L.mouthAction('gulp');
         world.surface.addRipple(f.pos.x, f.pos.z, 1.0);
         world.food.remove(f);
-        this.drives.hunger = Math.max(0, this.drives.hunger - 0.08);
+        this._ate();
         this.food = null;
         this.phase = 'go';
         this.phaseTime = 0;
