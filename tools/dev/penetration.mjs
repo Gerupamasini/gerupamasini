@@ -15,6 +15,8 @@
 //   poke     body surface visible in front of an exposed feather that should cover it: a body vertex whose
 //            inward normal ray hits exposed feather surface within 2.5 mm while its outward ray (15 mm)
 //            hits no feather at all (depth = distance to the feather behind it)
+//   fin      a tertial / scapular tip more than FIN mm straight above the body: stands up like a fin off the back
+//            (clear of the body, so the measures above do not see it)
 //   neck     the same two measures where the covering body surface is neck/head plumage (moved > 0.5 mm by
 //            the neck bones relative to the chest): the neck lying on the scapulars / shoulder when it bends
 //            (preening, rest). Reported separately (two plumage regions in contact, not a feather through
@@ -47,6 +49,7 @@ const limitsFor = (lod) => {
 };
 let LIM = limitsFor(0);
 const EPS = 0.02; // mm: inside/outside hysteresis
+const FIN = 8; // mm: a tertial / scapular tip further than this straight above the body stands up as a fin
 const TNAME = Object.fromEntries(Object.entries(FEATHER_TYPE).map(([k, v]) => [v, k]));
 const WINGISH = new Set(['primary', 'secondary', 'tertial', 'primaryCovert', 'greaterCovert', 'medianCovert', 'lesserCovert', 'alula', 'arm']);
 
@@ -376,6 +379,26 @@ function measure(model, S, anim) {
     return hits % 2;
   }
   const inside = (px, py, pz) => RAYS.reduce((n, D) => n + parity(px, py, pz, D), 0) >= 2;
+  // height of a point above the body straight below it (0 if the vertical misses the body: a feather trailing
+  // beside it, or the point is inside)
+  function dropToBody(px, py, pz) {
+    if (sd(px, py, pz) <= 0) return 0;
+    const seen = new Set();
+    let best = 0;
+    for (let s = 0; s < 80; s += 1) {
+      const qy = py - s;
+      if (qy < bmin[1] - 1) break;
+      tg.query(px - 0.6, qy - 0.6, pz - 0.6, px + 0.6, qy + 0.6, pz + 0.6, cand, nTri);
+      for (const t of cand) {
+        if (seen.has(t)) continue;
+        seen.add(t);
+        const h = rayTri(px, py, pz, 0, -1, 0, BP, B.idx[t * 3] * 3, B.idx[t * 3 + 1] * 3, B.idx[t * 3 + 2] * 3);
+        if (h > 0 && (!best || h < best)) best = h;
+      }
+      if (best) break;
+    }
+    return best;
+  }
 
   // feathers
   const MF = boneMatrices(model, F.mesh);
@@ -501,6 +524,17 @@ function measure(model, S, anim) {
       r.visDip = Math.max(r.visDip, lineVisDip);
     }
     r.buried = r.buried === I.lines.length ? 1 : 0;
+    // fin: a tertial / scapular tip standing up off the back (closest body surface faces up) — clear of the body,
+    // so none of the measures above sees it (tertials raised like fins in flight passed them)
+    r.fin = 0;
+    if (I.type === 'tertial' || I.type === 'scapular') {
+      for (const line of I.lines) {
+        const a = line[line.length - 1];
+        const vi = Array.isArray(a) ? a[0] : a;
+        const d = dropToBody(FP[vi * 3], FP[vi * 3 + 1], FP[vi * 3 + 2]);
+        if (d > r.fin) { r.fin = d; r.finAt = [FP[vi * 3], FP[vi * 3 + 1], FP[vi * 3 + 2]].map((x) => +x.toFixed(1)); }
+      }
+    }
     res.push(r);
   });
 
@@ -551,7 +585,7 @@ for (const d of LODS) {
     if (err > 1e-3) throw new Error(`skinning mismatch ${err}`);
   }
   console.log(`\n=== LOD${d}: ${S.F.inst.length} feathers, ${S.B.idx.length / 3} body tris — limits: visible reentry ≤ ${LIM.reentry.toFixed(2)} mm, visible dip ≤ ${LIM.dip.toFixed(2)} mm, no cross/under${LIM.emerge ? ` (> ${LIM.emerge.toFixed(2)} mm)` : ""}, poke ≤ ${LIM.poke.toFixed(2)} mm`);
-  console.log('  pose'.padEnd(24), 'fluff | vis.reentry worst feather   | vdips cross under | poke   behind          n>0.1 | neck | (all reentry, feather; buried)');
+  console.log('  pose'.padEnd(24), 'fluff | vis.reentry worst feather   | vdips cross under | poke   behind          n>0.1 | neck | fin (mm) | (all reentry, feather; buried)');
   const worstByFeather = {};
   const rows = [];
   for (const P of POSES) {
@@ -573,10 +607,12 @@ for (const d of LODS) {
     const under = m.feathers.filter((r) => r.under > 0).length;
     const buried = m.feathers.filter((r) => r.buried).length;
     const neck = Math.max(m.pokeNeck, ...m.feathers.map((r) => r.neck));
-    const bad = w.vis > LIM.reentry || dips || cross || under || m.poke > LIM.poke;
+    const fin = m.feathers.reduce((a, r) => (r.fin > a.fin ? r : a), { fin: 0, name: '-' });
+    // (not in the wing stretch: both wings are raised straight up over the back and the tertials go up with them)
+    const bad = w.vis > LIM.reentry || dips || cross || under || m.poke > LIM.poke || (fin.fin > FIN && P[0] !== 'wingStretch');
     if (bad) fail++;
     const name = poseName(P);
-    console.log(`${bad ? '✗' : ' '} ${name.padEnd(21)} ${m.fluff.toFixed(2).padStart(5)} | ${w.vis.toFixed(2).padStart(6)}  ${w.name.padEnd(18)} | ${String(dips).padStart(5)} ${String(cross).padStart(5)} ${String(under).padStart(5)} | ${m.poke.toFixed(2).padStart(5)}  ${(m.pokeName || '-').padEnd(16)} ${String(m.pokeN).padStart(4)} | ${neck.toFixed(2)} | (${wa.reentry.toFixed(2)} ${wa.name}; ${buried})`);
+    console.log(`${bad ? '✗' : ' '} ${name.padEnd(21)} ${m.fluff.toFixed(2).padStart(5)} | ${w.vis.toFixed(2).padStart(6)}  ${w.name.padEnd(18)} | ${String(dips).padStart(5)} ${String(cross).padStart(5)} ${String(under).padStart(5)} | ${m.poke.toFixed(2).padStart(5)}  ${(m.pokeName || '-').padEnd(16)} ${String(m.pokeN).padStart(4)} | ${neck.toFixed(2)} | ${fin.fin.toFixed(1).padStart(4)} ${fin.fin > 0 ? fin.name.padEnd(8) : '-'.padEnd(8)} | (${wa.reentry.toFixed(2)} ${wa.name}; ${buried})`);
     for (const r of m.feathers) {
       const o = (worstByFeather[r.name] ??= { name: r.name, type: r.type, vis: 0, visDip: 0, reentry: 0, cross: 0, under: 0, poke: 0, pose: '', at: null });
       if (r.vis > o.vis) { o.vis = r.vis; o.pose = name; o.at = r.visAt; }
@@ -588,7 +624,7 @@ for (const d of LODS) {
     }
     for (const [k, v] of Object.entries(m.pokeBy)) { const o = worstByFeather[k]; if (o && v > o.poke) { o.poke = v; o.pokePose = name; } }
     if (args.verbose && m.poke > LIM.poke) console.log(`      poke ${m.poke.toFixed(2)} behind ${m.pokeName} at body ${m.pokeAt}`);
-    rows.push({ pose: name, fluff: m.fluff, vis: w.vis, worst: w.name, dips, cross, under, poke: m.poke, pokeBy: m.pokeName, pokeN: m.pokeN, neck, reentry: wa.reentry, buried });
+    rows.push({ pose: name, fluff: m.fluff, vis: w.vis, worst: w.name, dips, cross, under, poke: m.poke, pokeBy: m.pokeName, pokeN: m.pokeN, neck, fin: fin.fin, finBy: fin.name, reentry: wa.reentry, buried });
   }
   const top = Object.values(worstByFeather).filter((o) => o.vis > LIM.reentry || o.visDip > LIM.dip || o.cross || o.under || o.poke > LIM.poke).sort((a, b) => Math.max(b.vis, b.poke) - Math.max(a.vis, a.poke));
   console.log(`-- LOD${d} feathers over the limits (${top.length}):`);

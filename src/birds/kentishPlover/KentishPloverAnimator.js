@@ -19,6 +19,7 @@ const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _q3 = new THREE.Quaternion();
 const _q4 = new THREE.Quaternion();
+const _qT = new THREE.Quaternion();
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -862,10 +863,25 @@ export class KentishPloverAnimator {
         const f = bone.userData.spec.feather;
         apply(bone, blend(f, root(f, qAxis(Y, flex * amp * -0.12, _q2))));
       }
+      // tertials ride the humerus, but on the flight upstroke / a raised wing they stay with the back instead of
+      // standing up as fins (the elevation above level and most of the twist are taken back out): qH⁻¹ · qLevel
+      // (nor swung in across the back by the upstroke's sweep: they keep the glide's)
+      const tElev = Math.min(elev, 0.06);
+      const tTwist = hTwist * 0.3;
+      const tSweep = Math.min(hSweep, -0.05);
+      const tComp = wingQuat(tSweep, tElev, tTwist, _q4).premultiply(_q3.copy(wingQuat(hSweep, elev, hTwist, _q3)).invert());
+      const tLevel = _qT.copy(tComp);
       for (let k = 1; k <= 3; k++) {
         const bone = b[`t${k}_${side}`];
         const f = bone.userData.spec.feather;
-        apply(bone, blend(f, root(f, _q2.identity())));
+        // where that pose's body clearance would lift the feather (the solver lifts it: a fin over the back), it is
+        // swung outward in the wing plane by the same angle instead
+        _q2.identity();
+        if (SP.has(f.name)) {
+          const lift = spreadAt(SP.get(f.name), tElev, tSweep, tTwist, _q3);
+          _q2.setFromAxisAngle(Y, -2 * Math.acos(Math.min(1, Math.abs(lift.w))));
+        }
+        apply(bone, blend(f, _q2.premultiply(tLevel)));
       }
       for (const bone of this._coverts[side]) {
         const f = bone.userData.spec.feather;

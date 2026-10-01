@@ -464,14 +464,16 @@ vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd, float fold) {
   } else if (type < 10.5) {
     c = kpBrownFeather(uv, 0.7); // scapular
   } else if (type < 11.5) {
-    // arm (propatagium surface under the lesser coverts); underside white only when the wing is open
-    c = mix(uMantle, uUnder, smoothstep(-0.2, -0.6, across) * (1.0 - fold));
+    // arm (propatagium under the lesser coverts): covert-coloured, only its underside white when the wing is open
+    // (rnd slot = 0 ventral … 1 dorsal; the trailing half of the whole tube was white and read as a pale pipe
+    // along the leading edge of a raised wing)
+    c = mix(mix(uMantle, uMantleDark, 0.35), mix(uUnder, uMantle, 0.2), smoothstep(0.38, 0.15, rnd) * (1.0 - fold));
   } else {
     c = uWhite; // under-tail coverts
   }
   // feather base is hidden under the next layer: darken slightly (contact AO)
   c *= mix(0.92, 1.0, smoothstep(0.0, 0.3, t));
-  c *= 1.0 + (rnd - 0.5) * 0.05;
+  c *= 1.0 + (type > 10.5 && type < 11.5 ? 0.0 : (rnd - 0.5) * 0.05);
   return c;
 }
 

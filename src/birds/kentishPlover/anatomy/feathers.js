@@ -254,7 +254,8 @@ function armTube(gb, boneIndex) {
       const p = [q.p[0], q.p[1] + yOff, q.p[2] + zOff - 1.5];
       const n = [0, sy, cz];
       const nl = Math.hypot(n[1], n[2]);
-      gb.vertex(p, [0, n[1] / nl, n[2] / nl], [cz, t], [FEATHER_TYPE.arm, 0, 0.5, 0], q.bones.map((b) => boneIndex[`${b[0]}_L`]), q.bones.map((b) => b[1]));
+      // (aFeather.z: 0 ventral … 1 dorsal — the shader colours only the underside white)
+      gb.vertex(p, [0, n[1] / nl, n[2] / nl], [cz, t], [FEATHER_TYPE.arm, 0, 0.5 + 0.5 * sy, 0], q.bones.map((b) => boneIndex[`${b[0]}_L`]), q.bones.map((b) => b[1]));
       gb.core.splice(-3, 3, 0, -yOff / 1000, -zOff / 1000); // this vertex → ring centre (m)
     }
   });
