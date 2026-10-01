@@ -85,8 +85,15 @@ uniform int uDebug;
 uniform vec2 uHeadWin;          // head (skull/jaws) density fades out over [x, y]
 uniform vec4 uGillWin;          // gill filaments: rise x→y, fall z→w (s, mm)
 uniform vec4 uOpercTint;        // structural colour of the gill-cover iridophores over uGillWin: rgb, strength (0 = plain silver)
+uniform vec4 uOpercWin;         // gill-cover sheen: x gain, tint fades in over y [y, z] (mm), w specular cut over the gill cover
+uniform vec3 uGillK;            // gill filament absorption (1/mm, rgb)
+uniform vec4 uGillHn;           // gill window in hn: rise x→y, fall z→w
 uniform vec2 uHaemal;           // haemal melanophore row starts over [x, y]
 uniform vec4 uAbdomen;          // abdominal cavity centre s, centre height (fraction of b), half-length, strength
+uniform vec3 uGut;              // viscera: posterior edge onset (e), scattering (1/mm), peritoneum cut behind the cavity
+uniform vec4 uPeri;             // peritoneal shell absorption rgb (1/mm), shell half-width (e)
+uniform vec2 uMelRows;          // internal melanophore rows: absorption above / below the column
+uniform vec3 uFilm;             // mucus film lobe: weight, roughness, geometric-normal mix
 uniform vec3 uSpine;            // initial spine height y, posterior end of the column s, tail fade width
 uniform vec4 uJaw;              // dense lip/jaw tissue: fades out over s [x, y] and above y [z, w] (mm)
 #define N_ORGANS 8
@@ -196,8 +203,8 @@ void medium(vec3 p, out float sS, out vec3 sA) {
   sA += head * vec3(0.008, 0.016, 0.03);
   // gill filaments under the operculum (haemoglobin: absorbs green/blue)
   float gill = smoothstep(uGillWin.x, uGillWin.y, s) * (1.0 - smoothstep(uGillWin.z, uGillWin.w, s)) *
-               smoothstep(0.25, 0.6, abs(zn)) * (1.0 - smoothstep(-0.1, 0.45, hn)) * smoothstep(-1.0, -0.6, hn);
-  sA += gill * vec3(0.012, 0.2, 0.17) * (0.35 + 0.65 * I);
+               smoothstep(0.25, 0.6, abs(zn)) * (1.0 - smoothstep(uGillHn.z, uGillHn.w, hn)) * smoothstep(uGillHn.x, uGillHn.y, hn);
+  sA += gill * uGillK * (0.35 + 0.65 * I);
 
   float trunk = smoothstep(uVertStart - 0.5, uVertStart + 0.5, s) * (1.0 - smoothstep(uFrame.z - 0.3, uFrame.z + 0.5, s));
   if (trunk > 0.0 && I > 0.0) {
@@ -232,18 +239,21 @@ void medium(vec3 p, out float sS, out vec3 sA) {
     float seg = exp(-pow((ph2 - 0.5) * uVertLen / 0.2, 2.0));
     float rowU = exp(-(pow(p.y - spineY - 0.5, 2.0) + p.z * p.z) / 0.035);
     float rowD = exp(-(pow(p.y - spineY + 0.55, 2.0) + p.z * p.z) / 0.03) * smoothstep(uHaemal.x, uHaemal.y, s);
-    sA += (rowU * 0.9 + rowD * 0.7) * seg * trunk * vec3(1.5, 1.7, 1.9) * (0.5 + 0.5 * I);
+    sA += (rowU * uMelRows.x + rowD * uMelRows.y) * seg * trunk * vec3(1.5, 1.7, 1.9) * (0.5 + 0.5 * I);
   }
   // abdominal cavity: viscera + melanin-bearing peritoneum on its dorsal wall
   vec3 vc = vec3(uAbdomen.x, q.yc - uAbdomen.y * q.b, 0.0);
   vec3 vq = (p - vc) / vec3(uAbdomen.z, 0.58 * q.b + 0.1, 0.66 * q.w + 0.05);
   float e = length(vq);
-  float gut = 1.0 - smoothstep(0.7, 1.0, e);
-  sS += I * gut * 2.2;
+  // the edge onset moves from 0.7 toward uGut.x at the posterior pole (a sharp hind wall, soft elsewhere)
+  float post = smoothstep(0.0, 0.6, vq.x / max(e, 1e-3));
+  float gut = 1.0 - smoothstep(0.7 + (uGut.x - 0.7) * post, 1.0, e);
+  sS += I * gut * uGut.y;
   sA += I * gut * vec3(0.03, 0.05, 0.08);
-  float peri = exp(-pow((e - 0.93) / 0.07, 2.0)) * smoothstep(-0.3, 0.5, vq.y);
+  float peri = exp(-pow((e - 0.93) / uPeri.w, 2.0)) * smoothstep(-0.3, 0.5, vq.y);
+  peri *= 1.0 - uGut.z * post * smoothstep(0.97, 1.03, e);
   float periSpots = 0.35 + 0.65 * smoothstep(0.2, 0.8, sin(s * 3.1 + p.z * 5.0) * sin(s * 1.7 - p.z * 3.3 + 1.0) * 0.5 + 0.5);
-  sA += peri * periSpots * vec3(0.5, 0.53, 0.58) * (0.5 + 0.5 * I) * uAbdomen.w;
+  sA += peri * periSpots * uPeri.rgb * (0.5 + 0.5 * I) * uAbdomen.w;
 }
 
 // ---- simple organs and the vertebral column (rest-space fish mm)
@@ -482,22 +492,24 @@ void main() {
   // iridophore sheen (guanine platelets): view dependent silvery-gold reflection
   float NoV = max(dot(N, V), 1e-3);
   vec3 H = normalize(L + V);
-  float opw = 0.0;
+  float opw = 0.0, opSpec = 1.0;
   if (uOpercTint.w > 0.0) {
     float dyo = pF.y - q0.yc, hno = dyo / max(dyo > 0.0 ? q0.t : q0.b, 1e-3);
-    opw = uOpercTint.w * smoothstep(uGillWin.x, uGillWin.y, pF.x) * (1.0 - smoothstep(uGillWin.z, uGillWin.w, pF.x)) *
-          smoothstep(-0.6, -0.3, hno) * (1.0 - smoothstep(0.3, 0.6, hno));
+    float opc = smoothstep(uGillWin.x, uGillWin.y, pF.x) * (1.0 - smoothstep(uGillWin.z, uGillWin.w, pF.x)) *
+                smoothstep(-0.6, -0.3, hno) * (1.0 - smoothstep(0.3, 0.6, hno));
+    opw = uOpercTint.w * opc * smoothstep(uOpercWin.y, uOpercWin.z, pF.y);
+    opSpec = 1.0 - uOpercWin.w * opc;
   }
   vec3 iridC = mix(vec3(0.95, 0.92, 0.8), uOpercTint.rgb, opw);
   vec3 irid = pig.g * (waterEnv(reflect(-V, N), 0.45) * 0.18 + Lc * pow(sat(dot(N, H)), 18.0) * 0.25 * sat(dot(N, L))) *
-              mix(iridC, vec3(0.75, 0.9, 0.95), pow(1.0 - NoV, 2.0) * (1.0 - 0.6 * opw)) * (1.0 + 2.2 * opw);
+              mix(iridC, vec3(0.75, 0.9, 0.95), pow(1.0 - NoV, 2.0) * (1.0 - 0.6 * opw)) * (1.0 + uOpercWin.x * opw);
 
   // ---- wet specular: skin (map roughness) + thin mucus film
-  vec3 Nm = normalize(mix(N, Ng, 0.55));
-  float spec = specGGX(N, V, L, rough, 0.028) + 0.55 * specGGX(Nm, V, L, 0.085, 0.022);
+  vec3 Nm = normalize(mix(N, Ng, uFilm.z));
+  float spec = specGGX(N, V, L, rough, 0.028) + uFilm.x * specGGX(Nm, V, L, uFilm.y, 0.022);
   vec3 envSpec = waterEnv(reflect(-V, N), rough) * F_SchlickRough(0.028, NoV, rough) +
-                 0.55 * waterEnv(reflect(-V, Nm), 0.085) * F_Schlick(0.022, max(dot(Nm, V), 1e-3));
-  float specOcc = sat(pow(NoV + ao, 1.5) - 1.0 + ao);
+                 uFilm.x * waterEnv(reflect(-V, Nm), uFilm.y) * F_Schlick(0.022, max(dot(Nm, V), 1e-3));
+  float specOcc = sat(pow(NoV + ao, 1.5) - 1.0 + ao) * opSpec;
   float Fv = F_Schlick(0.028, NoV);
 
   vec3 col = (1.0 - Fv) * (diffuse + amb + back + inner + bgT + irid) + (Lc * spec + envSpec) * specOcc;
@@ -523,6 +535,14 @@ export const MAHAZE_ANATOMY = {
   jaw: [3.0, 4.6, 2.4, 3.2],
   sigS: 1.35,
   sigA: [0.02, 0.048, 0.12],
+  // optical constants that species may override (these are the マハゼ values)
+  gillK: [0.012, 0.2, 0.17],
+  gillHn: [-1.0, -0.6, -0.1, 0.45],
+  opercWin: [2.2, -1000, -999, 0.0],
+  gut: [0.7, 2.2, 0.0],
+  peri: [0.5, 0.53, 0.58, 0.07],
+  melRows: [0.9, 0.7],
+  film: [0.55, 0.085, 0.55],
   organs: [
     { name: 'liver', c: [13.4, 1.55, 0.2], r: [1.9, 1.05, 1.85], k: [1.3, 2.3, 2.9] },
     { name: 'stomach + gut', c: [17.9, 1.4, -0.1], r: [3.7, 1.0, 1.35], k: [1.0, 1.4, 2.3] },
@@ -559,8 +579,15 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uHeadWin: { value: new THREE.Vector2(...A.headWin) },
     uGillWin: { value: new THREE.Vector4(...A.gillWin) },
     uOpercTint: { value: new THREE.Vector4(...(A.opercTint || [0, 0, 0, 0])) },
+    uOpercWin: { value: new THREE.Vector4(...A.opercWin) },
+    uGillK: { value: new THREE.Vector3(...A.gillK) },
+    uGillHn: { value: new THREE.Vector4(...A.gillHn) },
     uHaemal: { value: new THREE.Vector2(...A.haemal) },
     uAbdomen: { value: new THREE.Vector4(...A.abdomen) },
+    uGut: { value: new THREE.Vector3(...A.gut) },
+    uPeri: { value: new THREE.Vector4(...A.peri) },
+    uMelRows: { value: new THREE.Vector2(...A.melRows) },
+    uFilm: { value: new THREE.Vector3(...A.film) },
     uSpine: { value: new THREE.Vector3(...A.spine) },
     uJaw: { value: new THREE.Vector4(...A.jaw) },
     uOrgC: { value: org('c') },

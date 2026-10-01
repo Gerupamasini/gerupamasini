@@ -77,6 +77,8 @@ const shared = {
   uCausticAmt: { value: 0.22 },
   uFinDensity: { value: 1.0 },
   uFinGrazeMin: { value: 0.1 },
+  uFinEdge: { value: v3(0.03, 0.3, 0) }, // edge-on fade off
+  uFinOpCap: { value: v3(1, 0, 0) },     // no opacity cap
   uDebug: { value: 0 },
   uFloorY: { value: -1e3 },
   uBg: { value: null },
@@ -442,6 +444,8 @@ function applySpeciesViewer(sv, extras) {
   if (sv.shadowChain) SHADOW_CHAIN = sv.shadowChain;
   if (sv.coreChain) CORE_CHAIN = sv.coreChain;
   if (sv.finGrazeMin) shared.uFinGrazeMin.value = sv.finGrazeMin;
+  if (sv.finEdge) shared.uFinEdge.value.set(...sv.finEdge);
+  if (sv.finOpCap) shared.uFinOpCap.value.set(...sv.finOpCap);
   if (sv.presetScale) {
     for (const p of Object.values(PRESETS)) {
       p.target = p.target.map((v) => v * sv.presetScale);

@@ -58,6 +58,8 @@ uniform sampler2D uNormalMap;
 uniform int uPass;
 uniform float uFinDensity;
 uniform float uFinGrazeMin;   // lower bound of |cos| for the slab path length (edge-on brightness)
+uniform vec3 uFinEdge;        // edge-on fade: the fin dissolves as |cos| drops from y to x; z = strength (0 = off)
+uniform vec3 uFinOpCap;       // cap on the non-melanin opacity = x + y·ray + z·melanin (x ≥ 1 = no cap)
 uniform float uCausticAmt;
 uniform int uDebug;
 varying vec3 vWorldPos;
@@ -92,9 +94,19 @@ void main() {
 
   float F = F_Schlick(0.03, max(dot(N, V), 1e-3));
   vec3 Tv = exp(-tauT / muV) * (1.0 - F);
+  // hyaline membranes: cap the milky (non-melanin) opacity, scaling the scattered light with it, and let
+  // edge-on fins vanish instead of glowing as bright lines
+  float vis = 1.0, edge = 1.0;
+  if (uFinOpCap.x < 1.0) {
+    vec3 Tmel = exp(-mel * vec3(2.3, 2.7, 3.1) / muV);
+    vec3 Trest = exp(-(tauT - mel * vec3(2.3, 2.7, 3.1)) / muV) * (1.0 - F);
+    vis = min(1.0, clamp(uFinOpCap.x + uFinOpCap.y * ray + uFinOpCap.z * mel, 0.0, 1.0) / max(1.0 - dot(Trest, vec3(0.333)), 1e-4));
+    Tv = Tmel * (1.0 - (1.0 - Trest) * vis);
+  }
+  if (uFinEdge.z > 0.0) edge = 1.0 - uFinEdge.z * (1.0 - smoothstep(uFinEdge.x, uFinEdge.y, abs(dot(Ng, V))));
 
   if (uPass == 0) {
-    gl_FragColor = vec4(mix(vec3(1.0), Tv, cov), 1.0);
+    gl_FragColor = vec4(mix(vec3(1.0), Tv, cov * edge), 1.0);
     return;
   }
 
@@ -121,7 +133,7 @@ void main() {
   float fog = exp(-length(cameraPosition - vWorldPos) * uFogDensity);
   col = col * fog + uFogColor * (1.0 - fog) * (1.0 - dot(Tv, vec3(0.333)));
   if (uDebug == 1) col = vec3(0.0);
-  gl_FragColor = vec4(col * cov, 1.0);
+  gl_FragColor = vec4(col * (cov * vis * edge), 1.0);
 }
 `;
 
