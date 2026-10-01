@@ -338,7 +338,7 @@ export function shoal(fish, neighbours, out, { cohesion = 1, alignment = 0.25, p
 // ventral clearance samples along the body: spine index, ventral depth (SL,
 // negative) and the clearance kept above the base of the gravel bed (m;
 // pebble tops reach ~3–4 mm)
-const CLEAR = [0, 0.05, 0.1, 0.18, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0].map((s) => ({ i: Math.round(s * (NS - 1)), bot: profile.bot(s), margin: s < 0.25 ? 0.0045 : 0.0025 }));
+const CLEAR = [0, 0.05, 0.1, 0.18, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0].map((s) => ({ i: Math.round(s * (NS - 1)), bot: profile.bot(s), hw: profile.hw(s), margin: s < 0.25 ? 0.0045 : 0.0025 }));
 
 /** Keep the centre of mass inside the tank (hard safety net after steering). */
 export function clampToTank(fish, world) {
@@ -355,11 +355,25 @@ export function clampToTank(fish, world) {
   // a foraging fish touches the gravel with its lips, it never sinks into it
   _u.set(0, 1, 0).applyQuaternion(L.quat);
   let lift = 0;
+  // the whole bent body (not just its centre) stays inside the glass: a
+  // fish turning close to a wall never swings its rear half through it
+  const { min, max } = world.bounds;
+  let sx0 = 0;
+  let sx1 = 0;
+  let sz0 = 0;
+  let sz1 = 0;
   for (const e of CLEAR) {
     _q.fromArray(L.localP, e.i * 3).applyQuaternion(L.quat).add(p);
     const low = _q.y + _u.y * e.bot * SL;
     lift = Math.max(lift, world.groundHeight(_q.x, _q.z) + e.margin - low);
+    const r = e.hw * SL + 0.002;
+    sx0 = Math.max(sx0, min.x + r - _q.x);
+    sx1 = Math.max(sx1, _q.x - (max.x - r));
+    sz0 = Math.max(sz0, min.z + r - _q.z);
+    sz1 = Math.max(sz1, _q.z - (max.z - r));
   }
+  p.x += sx0 - sx1;
+  p.z += sz0 - sz1;
   L.groundContact = lift;
   if (lift > 0) {
     p.y += lift;
@@ -376,6 +390,8 @@ export function clampToTank(fish, world) {
   fl.y = world.groundHeight(p.x, p.z);
   fl.gx = (world.groundHeight(p.x + 0.02, p.z) - fl.y) / 0.02;
   fl.gz = (world.groundHeight(p.x, p.z + 0.02) - fl.y) / 0.02;
+  // glass faces for the fin dynamics (fins slide along the glass, never through it)
+  fish.rig.walls = world.bounds;
   // push out of rocks
   for (const c of world.colliders) {
     if (c.type !== 'ellipsoid') continue;

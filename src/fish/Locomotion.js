@@ -98,13 +98,15 @@ export class Locomotion {
       freqMul: r.range(0.92, 1.08),
       ampMul: r.range(0.9, 1.1),
       turnAgility: r.range(0.85, 1.2) * (0.8 + 0.4 * (P.activity ?? 1) * 0.5),
-      burstCoastBias: r.range(0.3, 0.85),
+      // swimming style: some individuals kick long and glide far, others
+      // swim in short, frequent bouts
+      burstCoastBias: lerp(0.3, 0.85, 0.65 * (P.burstCoast ?? 0.5) + 0.35 * r.next()),
       // passive deceleration time constant of a glide (s): a gliding
       // goldfish loses about half its speed within ~0.7–0.8 s
       glideTau: r.range(0.85, 1.2),
       noiseSeed: r.range(0, 1000),
       pectFreq: r.range(1.1, 1.8), // pectoral stroke rate during a bout (Hz)
-      pectHold: r.range(0.7, 1.4), // individual patience between pectoral bouts
+      pectHold: r.range(0.7, 1.4) * (P.calm ?? 1), // individual patience between pectoral bouts
       breathRate: r.range(1.15, 1.6), // Hz  (≈ 70–96 / min at ~22 °C)
       opercAmp: r.range(0.35, 0.55),
       mouthAmp: r.range(0.05, 0.1),
@@ -356,7 +358,7 @@ export class Locomotion {
           const f = r.range(1.7, 2.2) * sig.freqMul;
           this._startBout(1, f, r.range(0.026, 0.036) * sig.ampMul);
           this.boutTarget = desiredSpeedBL * r.range(1.1, 1.25);
-          this.assistTimer = jitterDuration(r, lerp(3.0, 1.0, smoothstep(0.1, 0.34, desiredSpeedBL)), 0.4);
+          this.assistTimer = jitterDuration(r, lerp(1.6, 0.7, smoothstep(0.1, 0.34, desiredSpeedBL)), 0.4);
         }
       }
       // a beat adds a small surge; rowing thrust itself is gentle. A rowing
@@ -521,8 +523,8 @@ export class Locomotion {
     // kick up to ~1.2x the wanted speed; the glide that follows is short:
     // the next bout starts once drag has slowed the fish to ~0.75–0.9x
     this.boutTarget = want * r.range(1.12, 1.28) + deficit * 0.3;
-    this.glideLow = lerp(0.92, 0.78, sig.burstCoastBias) * r.range(0.96, 1.04);
-    this.glideMax = lerp(0.5, 1.1, sig.burstCoastBias) * r.range(0.8, 1.2);
+    this.glideLow = lerp(0.94, 0.82, sig.burstCoastBias) * r.range(0.96, 1.04);
+    this.glideMax = lerp(0.45, 0.95, sig.burstCoastBias) * r.range(0.8, 1.2);
   }
 
   /** Continuous tail beating (steady swimming, escape burst). */

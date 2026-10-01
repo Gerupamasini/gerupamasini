@@ -43,6 +43,9 @@ export function makePersonality(rng) {
     preferredDepth: clamp(rng.normal(0.45, 0.16), 0.1, 0.85),
     turnBias,
     burstCoast: rng.range(0, 1),
+    // calmness: how long this individual tends to hold still once it stops
+    // (placid fish linger, busy ones set off sooner)
+    calm: clamp(Math.exp(rng.normal(0, 0.15)) * (1.12 - 0.12 * clamp(Math.exp(0.3 * (0.6 * g1 + 0.8 * g2) - 0.045), 0.5, 1.6)), 0.75, 1.35),
   };
 }
 

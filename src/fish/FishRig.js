@@ -417,6 +417,7 @@ export class FishRig {
         for (const ch of this.chains) this._projectChain(ch);
         this._projectMembrane();
         if (this.floor) this._projectFloor();
+        if (this.walls) this._projectWalls();
       }
       // velocities from positions
       for (let i = 0; i < this.nodeTotal * 3; i++) {
@@ -486,6 +487,32 @@ export class FishRig {
       px = dx / dl;
       py = dy / dl;
       pz = dz / dl;
+    }
+  }
+
+  /** Fin nodes stay inside the glass (they slide along it, with friction). */
+  _projectWalls() {
+    const { min, max } = this.walls;
+    const P = this.pred;
+    const X = this.pos;
+    // only near a wall (the longest fins reach ~1.1 SL from the spine)
+    const reach = 1.3 * this.SL;
+    const hx = this.spineP[0];
+    const hz = this.spineP[2];
+    const tx = this.spineP[(NS - 1) * 3];
+    const tz = this.spineP[(NS - 1) * 3 + 2];
+    if (Math.min(hx, tx) - min.x > reach && max.x - Math.max(hx, tx) > reach && Math.min(hz, tz) - min.z > reach && max.z - Math.max(hz, tz) > reach) return;
+    const m = 0.0015;
+    for (const ch of this.chains) {
+      for (let k = 1; k < ch.M; k++) {
+        const i = (ch.offset + k) * 3;
+        let hit = false;
+        if (P[i] < min.x + m) (P[i] = min.x + m), (hit = true);
+        else if (P[i] > max.x - m) (P[i] = max.x - m), (hit = true);
+        if (P[i + 2] < min.z + m) (P[i + 2] = min.z + m), (hit = true);
+        else if (P[i + 2] > max.z - m) (P[i + 2] = max.z - m), (hit = true);
+        if (hit) P[i + 1] = lerp(P[i + 1], X[i + 1], 0.5);
+      }
     }
   }
 
