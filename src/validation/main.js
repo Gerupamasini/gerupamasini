@@ -3,7 +3,7 @@ import { KentishPloverModel } from '../birds/kentishPlover/KentishPloverModel.js
 import { Environment } from '../world/Environment.js';
 
 // Validation sheet: orthographic side / front / top silhouettes on a 1 cm grid + perspective close-ups.
-// Query: ?palette=maleBreeding&lod=0&pose=stand&action=walk&t=0.25&mode=sheet|silhouette|closeup
+// Query: ?palette=maleBreeding&lod=0&pose=stand&action=walk&t=0.25&mode=sheet|silhouette|closeup&gaze=yaw[,pitch]
 
 const q = new URLSearchParams(location.search);
 const palette = q.get('palette') || 'maleBreeding';
@@ -84,6 +84,11 @@ async function setupPose() {
   if (!pose || pose === 'bind') return;
   const mod = await import('../birds/kentishPlover/KentishPloverAnimator.js');
   poser = new mod.KentishPloverAnimator(bird, { seed: 3 });
+  if (q.has('gaze')) {
+    // fixed gaze for photo comparisons: gaze=yaw,pitch (rad; pitch defaults to the resting one), no saccades
+    const [yaw, pitch = mod.GAZE_PITCH_REST] = q.get('gaze').split(',').map(Number);
+    Object.assign(poser.gaze, { yaw, tYaw: yaw, pitch, tPitch: pitch, roll: 0, tRoll: 0, timer: 1e9, mode: 'idle' });
+  }
   poser.previewAction(pose, Number(q.get('t') ?? 0.3), q.get('variant') || undefined);
 }
 
@@ -102,14 +107,19 @@ function stripLayout() {
   const h = Math.floor(H / 2);
   for (let i = 0; i < n; i++) {
     const t = q.has('cyc') ? i / n : n === 1 ? 0 : i / (n - 1);
-    const side = ortho(w, h, Number(q.get('span') ?? 0.1));
-    side.position.set(0.5, 0.05 + Number(q.get('camY') ?? 0), 0.0 + Number(q.get('camZ') ?? 0));
-    side.lookAt(0, 0.05 + Number(q.get('camY') ?? 0), Number(q.get('camZ') ?? 0));
+    // frames sized for the photo-scale bird (L 142 mm, bill tip z +54 … tail tip −85: centre z −0.015). The
+    // ortho width is 2·span·(w/h): with 6 frames per row a span of 0.16 left 150 mm — the walking / pecking bird
+    // (bill tip up to z +65) was cut at the frame edge; 0.21 gives ≈200 mm
+    const cy = Number(q.get('camY') ?? 0);
+    const cz = Number(q.get('camZ') ?? -0.01);
+    const side = ortho(w, h, Number(q.get('span') ?? 0.21));
+    side.position.set(0.5, 0.06 + cy, cz);
+    side.lookAt(0, 0.06 + cy, cz);
     side.layers.enable(1);
     const p = new THREE.PerspectiveCamera(30, w / h, 0.005, 20);
-    const pd = Number(q.get('pd') ?? 0.32);
-    p.position.set(pd * 0.8, pd * 0.45 + Number(q.get('camY') ?? 0), pd * 0.75 + Number(q.get('camZ') ?? 0));
-    p.lookAt(0, 0.045 + Number(q.get('camY') ?? 0), Number(q.get('camZ') ?? 0));
+    const pd = Number(q.get('pd') ?? 0.5);
+    p.position.set(pd * 0.8, pd * 0.45 + cy, pd * 0.75 + cz);
+    p.lookAt(0, 0.05 + cy, cz);
     views.push({ cam: side, rect: [i * w, 0, w, h], label: `t=${t.toFixed(2)}`, t });
     views.push({ cam: p, rect: [i * w, h, w, h], label: '', t });
   }
@@ -121,8 +131,8 @@ function layout() {
   views.length = 0;
   if (mode === 'eye') {
     const c = new THREE.PerspectiveCamera(20, W / H, 0.002, 5);
-    c.position.set(0.07, 0.092, 0.075);
-    c.lookAt(0.009, 0.081, 0.05);
+    c.position.set(0.072, 0.106, 0.0505);
+    c.lookAt(0.011, 0.095, 0.0256);
     views.push({ cam: c, rect: [0, 0, W, H], label: 'eye macro' });
     return;
   }
@@ -181,6 +191,8 @@ for (const v of views) {
 }
 if (mode !== 'strip') await setupPose();
 const hide = (q.get('hide') || '').split(',').filter(Boolean);
+// fdebug=1: wing / tail feathers in a flat colour per type (feathers.FEATHER_TYPE)
+if (q.get('fdebug')) bird.object.traverse((o) => o.material?.userData?.uniforms?.uDebugType && (o.material.userData.uniforms.uDebugType.value = 1));
 bird.object.traverse((o) => {
   if (o.isMesh && hide.some((h) => o.name.startsWith(h))) o.visible = false;
 });

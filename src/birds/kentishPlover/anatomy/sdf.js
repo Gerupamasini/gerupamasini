@@ -1,11 +1,20 @@
 // Signed-distance sculpting of the feathered body outline + Surface Nets polygonisation.
 // Working unit inside this file: millimetres (converted to metres by the caller).
 
-function sdEllipsoid(px, py, pz, c, r) {
-  // Inigo Quilez' bound-corrected ellipsoid distance
+function sdEllipsoid(px, py, pz, c, r, rx = 0) {
+  // Inigo Quilez' bound-corrected ellipsoid distance. rx (degrees): pitch of the ellipsoid about X, + = front
+  // up / rear down (the relaxed body tilt is sculpted into the bind pose, body_shape_spec.md §16)
+  let dy = py - c[1];
+  let dz = pz - c[2];
+  if (rx) {
+    const a = (rx * Math.PI) / 180;
+    const cs = Math.cos(a);
+    const sn = Math.sin(a);
+    [dy, dz] = [cs * dy - sn * dz, sn * dy + cs * dz];
+  }
   const x = (px - c[0]) / r[0];
-  const y = (py - c[1]) / r[1];
-  const z = (pz - c[2]) / r[2];
+  const y = dy / r[1];
+  const z = dz / r[2];
   const k0 = Math.sqrt(x * x + y * y + z * z);
   const x2 = x / r[0];
   const y2 = y / r[1];
@@ -36,7 +45,7 @@ const smin = (a, b, k) => {
 const smax = (a, b, k) => -smin(-a, -b, k);
 
 function primDist(p, x, y, z) {
-  return p.type === 'capsule' ? sdCapsule(x, y, z, p.a, p.b, p.r) : sdEllipsoid(x, y, z, p.c, p.r);
+  return p.type === 'capsule' ? sdCapsule(x, y, z, p.a, p.b, p.r) : sdEllipsoid(x, y, z, p.c, p.r, p.rx);
 }
 
 /** Build the SDF function (mm → mm) from the sculpt description. */
@@ -64,10 +73,12 @@ export function makeBodySDF(sculpt) {
  * Returns { positions: Float32Array (mm), normals, indices }.
  */
 export function surfaceNets(sdf, bounds, res) {
-  const [x0, y0, z0] = bounds.min;
-  const nx = Math.ceil((bounds.max[0] - x0) / res) + 1;
-  const ny = Math.ceil((bounds.max[1] - y0) / res) + 1;
-  const nz = Math.ceil((bounds.max[2] - z0) / res) + 1;
+  // one extra cell layer around the bounds (same grid alignment): the quad pass skips the outermost grid
+  // edges, so a surface crossing the first cell layer (the flank at a coarse resolution) was left open
+  const [x0, y0, z0] = bounds.min.map((v) => v - res);
+  const nx = Math.ceil((bounds.max[0] - bounds.min[0]) / res) + 3;
+  const ny = Math.ceil((bounds.max[1] - bounds.min[1]) / res) + 3;
+  const nz = Math.ceil((bounds.max[2] - bounds.min[2]) / res) + 3;
   const field = new Float32Array(nx * ny * nz);
   const idx = (i, j, k) => i + nx * (j + ny * k);
   for (let k = 0; k < nz; k++) {
@@ -198,4 +209,41 @@ export function projectToSurface(sdf, x, y, z, e = 0.2) {
     if (it === 3) return [[x, y, z], [gx, gy, gz]];
   }
   return [[x, y, z], [0, 1, 0]];
+}
+
+/**
+ * The same SDF sampled on a lazily filled grid (trilinear; each grid corner is evaluated once, when a query
+ * first needs it). For the animator's per-frame contact tests (hundreds of head / neck samples, several
+ * passes): an exact evaluation runs through every sculpt primitive. On a 1.5 mm grid the interpolation error
+ * of the smooth outline is ≈0.02 mm. Points outside `bounds` are evaluated exactly.
+ */
+export function gridCachedSDF(sdf, bounds, res = 1.5) {
+  const [x0, y0, z0] = bounds.min;
+  const nx = Math.ceil((bounds.max[0] - x0) / res) + 1;
+  const ny = Math.ceil((bounds.max[1] - y0) / res) + 1;
+  const nz = Math.ceil((bounds.max[2] - z0) / res) + 1;
+  const vals = new Float32Array(nx * ny * nz).fill(NaN);
+  const at = (i, j, k) => {
+    const idx = i + nx * (j + ny * k);
+    let v = vals[idx];
+    if (v !== v) v = vals[idx] = sdf(x0 + i * res, y0 + j * res, z0 + k * res);
+    return v;
+  };
+  return (x, y, z) => {
+    const fx = (x - x0) / res;
+    const fy = (y - y0) / res;
+    const fz = (z - z0) / res;
+    const i = Math.floor(fx);
+    const j = Math.floor(fy);
+    const k = Math.floor(fz);
+    if (i < 0 || j < 0 || k < 0 || i >= nx - 1 || j >= ny - 1 || k >= nz - 1) return sdf(x, y, z);
+    const u = fx - i;
+    const v = fy - j;
+    const w = fz - k;
+    const c00 = at(i, j, k) * (1 - u) + at(i + 1, j, k) * u;
+    const c10 = at(i, j + 1, k) * (1 - u) + at(i + 1, j + 1, k) * u;
+    const c01 = at(i, j, k + 1) * (1 - u) + at(i + 1, j, k + 1) * u;
+    const c11 = at(i, j + 1, k + 1) * (1 - u) + at(i + 1, j + 1, k + 1) * u;
+    return (c00 * (1 - v) + c10 * v) * (1 - w) + (c01 * (1 - v) + c11 * v) * w;
+  };
 }

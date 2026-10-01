@@ -330,8 +330,9 @@ export class KentishPloverAI {
     item.claimedBy = b;
     this.perception.detectedPrey = item;
     const d = Math.hypot(item.pos.x - b.pos.x, item.pos.z - b.pos.z);
-    // stop a bill-reach short of the prey: tipping forward puts the bill tip ≈5.5 cm ahead of the feet
-    const reach = 0.055 * b.individual.bodyScale;
+    // stop a bill-reach short of the prey: tipping forward with the neck stretched and the bill 50–60° down puts
+    // the bill tip ≈6 cm ahead of the feet (p007, p061; KentishPloverAnimator ACTIONS.peck)
+    const reach = 0.062 * b.individual.bodyScale;
     const dir = _v.set(item.pos.x - b.pos.x, 0, item.pos.z - b.pos.z).normalize();
     const stopAt = item.pos.clone().addScaledVector(dir, -reach);
     this.target = stopAt;

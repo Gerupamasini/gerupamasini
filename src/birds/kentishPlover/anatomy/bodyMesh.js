@@ -6,18 +6,19 @@ import { makeBodySDF, surfaceNets } from './sdf.js';
 //   for the procedural plumage shader, skinIndex/skinWeight for the spine chain.
 
 // Feather flow: gradient of distance from the bill tip (feathers point away from the bill, toward the
-// tail), with a slight ventral bias on the sides. Used identically in the shader.
-export const BILL_TIP_MM = [0, 76, 78];
+// tail), with a slight ventral bias on the sides. Used identically in the shader. Relaxed bind bill tip
+// (body_shape_spec.md §3, §17.1).
+export const BILL_TIP_MM = [0, 83.4, 54];
 
-// Spine influence segments (mm) and falloff sigma — distance-weighted skinning.
+// Spine influence segments (mm) and falloff sigma — distance-weighted skinning (spec §17.1).
 const SPINE = [
-  { bone: 'tail', a: [0, 58.5, -38], b: [0, 58, -56], s: 7 },
-  { bone: 'body', a: [0, 56.5, -34], b: [0, 57, -8], s: 13 },
-  { bone: 'chest', a: [0, 57.5, -2], b: [0, 60, 22], s: 13 },
-  { bone: 'neck0', a: [0, 63, 27], b: [0, 66, 30], s: 4.5 },
-  { bone: 'neck1', a: [0, 68, 32], b: [0, 70, 34], s: 4.5 },
-  { bone: 'neck2', a: [0, 72, 36], b: [0, 74, 38.5], s: 4.5 },
-  { bone: 'head', a: [0, 77, 44], b: [0, 79, 55], s: 5.5 },
+  { bone: 'tail', a: [0, 61, -42], b: [0, 58, -62], s: 7 },
+  { bone: 'body', a: [0, 62, -38], b: [0, 64, -8], s: 13 },
+  { bone: 'chest', a: [0, 64, -4], b: [0, 68, 20], s: 13 },
+  { bone: 'neck0', a: [0, 74, 0], b: [0, 77, 3], s: 4.5 },
+  { bone: 'neck1', a: [0, 80, 5], b: [0, 82, 7.5], s: 4.5 },
+  { bone: 'neck2', a: [0, 85, 10], b: [0, 87, 12], s: 4.5 },
+  { bone: 'head', a: [0, 89, 16], b: [0, 92, 34], s: 5.5 },
 ];
 
 function segDist(p, a, b) {
@@ -29,14 +30,17 @@ function segDist(p, a, b) {
   return Math.hypot(p[0] - a[0] - bx * t, p[1] - a[1] - by * t, p[2] - a[2] - bz * t);
 }
 
-/** Head membership: inside an enlarged head ellipsoid → rigid with the head bone. */
-function headness(p) {
-  const x = p[0] / 11.5;
-  const y = (p[1] - 80) / 12;
-  const z = (p[2] - 50) / 13.5;
+/**
+ * Head membership: inside an enlarged head ellipsoid → rigid with the head bone; the outer 0.35 band blends
+ * into the neck bones (nape and throat, spec §7, §17.1). Mirrored in the body shader (kpHeadness).
+ */
+export function headness(p) {
+  const x = p[0] / 13;
+  const y = (p[1] - 93.5) / 13;
+  const z = (p[2] - 24) / 15.5;
   const r = Math.sqrt(x * x + y * y + z * z);
-  // Throat below the head is shared with the neck.
-  const below = Math.max(0, (74 - p[1]) / 5);
+  // Throat below the head is shared with the neck; the fore-breast / chin band (y 74–83) stays off the head.
+  const below = Math.max(0, (83 - p[1]) / 5);
   return Math.max(0, Math.min(1, (1.25 - r) / 0.35)) * Math.max(0, 1 - below);
 }
 
@@ -48,9 +52,48 @@ export function computeSpineWeights(p, boneIndex) {
   const h = headness(p);
   for (let i = 0; i < SPINE.length; i++) w[i] *= SPINE[i].bone === 'head' ? 1 : 1 - h;
   w[SPINE.length - 1] = Math.max(w[SPINE.length - 1], h);
+  // the head's blend band (throat, chin, nape) shares with the upper neck rather than straight with the chest:
+  // with the head turned back to preen, skin half on the head and half on the chest stretched as a sheet
+  // across the shoulder and the folded wing
+  const n2 = SPINE.findIndex((s) => s.bone === 'neck2');
+  w[n2] = Math.max(w[n2], 1.6 * Math.min(h, 1 - h));
   const order = w.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, 4);
   const sum = order.reduce((acc, [v]) => acc + v, 0) || 1;
   return order.map(([v, i]) => [boneIndex[SPINE[i].bone], v / sum]);
+}
+
+const smooth = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+// The sculpt is the relaxed stand, fluffing 0.15 (photos, body_shape_spec.md §12): the shaders displace by
+// (fluff − FLUFF_REST) so the bind outline is the photographed one; alert (−0.25) sleeks it
+export const FLUFF_REST = 0.15;
+
+/**
+ * Where the body shader displaces the outline along its normal (rest position and normal, mm): [fluff
+ * displacement (mm per unit of fluff), breathing mask]. Same expressions as the body vertex shader
+ * (KentishPloverMaterials.createBodyMaterial, kpFluffMM); the plumage lying on the body uses them to rise and
+ * fall with it. Per unit of fluff the lower outline drops 7 mm, the back rises 2.2 mm (4 mm over the shoulders,
+ * z > 5, where the folded wing's coverts are tucked under it) and each side 2.5 mm; the head, the throat (z > 15)
+ * and the rear (z < −25) fluff less. With the rest postures at fluff 1.35 this matches
+ * the fluffed / restSit photo medians (Frame-A IoU 0.878 / 0.877, profile 10/17 and 9/17; the earlier 4 mm top and
+ * flat front / rear at fluff 0.8–0.9 gave 0.846 / 0.857 and 5/17, 3/17 with the belly 0.03 L too shallow).
+ */
+export function bodyDisplacementMasks(p, n = [0, 1, 0]) {
+  const fluff = (2.5 + 4.5 * smooth(-0.2, -0.9, n[1]) + (1.5 - 1.8 * smooth(5, -5, p[2])) * smooth(0.2, 0.9, n[1])) * (1 - 0.7 * headness(p)) * (1 - 0.8 * smooth(-25, -55, p[2])) * (1 - 0.6 * smooth(15, 30, p[2]));
+  // chest and flanks (breast front at z 35, neck base at y ≈ 80 in the relaxed bind)
+  const breath = smooth(-40, -15, p[2]) * (1 - smooth(18, 30, p[2])) * (1 - smooth(76, 84, p[1]));
+  return [fluff, breath, napeMask(p, n)];
+}
+
+/** Hind-neck plumage that fills out when the head tilts back against the body (mm per mm of fill): centred on the
+ *  crease between the hind crown and the mantle, (0, 97, 9) at rest, facing up / back (KentishPloverMaterials
+ *  kpNapeMM mirrors it). */
+export function napeMask(p, n) {
+  const e = ((p[1] - 97) / 5.5) ** 2 + ((p[2] - 9) / 7.5) ** 2;
+  return Math.exp(-e) * (1 - smooth(5, 11, Math.abs(p[0]))) * smooth(-0.1, 0.4, n[1]) * (1 - smooth(0.3, 0.7, n[2]));
 }
 
 export function flowDirection(p, n) {
@@ -107,4 +150,15 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
 
 export function getBodySDF(cfg) {
   return makeBodySDF(cfg.bodySculpt);
+}
+
+/**
+ * Outline without the head: what the shoulders look like while the neck is bent away from them.
+ * trunkOnly also drops the plumage that fills the neck at rest (mantleNape, foreBreast; body_shape_spec.md §7):
+ * it is skinned to the neck bones and moves with the head, so the head / neck contact checks (animator) see
+ * only the trunk underneath.
+ */
+export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
+  const drop = new Set(['neck', 'head', 'lores', 'chin', ...(trunkOnly ? ['mantleNape', 'foreBreast'] : [])]);
+  return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [] });
 }

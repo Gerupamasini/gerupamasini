@@ -104,23 +104,29 @@ const smooth = (a, b, x) => {
 };
 
 // ---------------------------------------------------------------- Bill
+// Relaxed bind (spec §3, §6, §16): feather line (0, 89.7, 39.6), tip (0, 83.4, 54) — the bill points 23.6° down
+// in the bind, 25° with the resting gaze pitch. The mesh starts 4.6 mm inside the feathering on the same axis
+// so no seam can open at the lores.
+export const BILL = { base: [0, 91.5, 35.4], featherLine: [0, 89.7, 39.6], tip: [0, 83.4, 54] };
 // Charadrius bill: short, straight; basal part deep with a long nasal groove, mid-bill constriction,
 // swollen distal third (dertrum), blunt-pointed tip; upper tip slightly overhangs the lower.
-// Length 16 mm (S2,S3), depth/width at base D (morphology.md).
+// Exposed culmen 15.9 mm (S2,S3; photo bill/L 0.112), depth / width 4.0 / 3.6 at the feather line (photos,
+// body_shape_spec.md §6).
 export function billProfile(t) {
   // widths & heights (mm) as function of t (0 = feathering, 1 = tip)
-  // t: 0 = inside the feathering (hidden ~4.5 mm), ≈0.2 = feather line, 1 = tip
-  const W = 4.6 * (1 - 0.42 * smooth(0.1, 0.55, t)) * (1 - smooth(0.9, 1.0, t) ** 1.6) + 0.1 * Math.exp(-(((t - 0.8) / 0.1) ** 2));
-  const Hu = 3.0 - 1.45 * smooth(0.12, 0.55, t) + 0.38 * Math.exp(-(((t - 0.8) / 0.1) ** 2)) - 1.35 * smooth(0.88, 1, t) ** 1.3;
-  const Hl = 2.1 - 1.0 * smooth(0.12, 0.58, t) + 0.12 * Math.exp(-(((t - 0.78) / 0.1) ** 2)) - 0.85 * smooth(0.86, 1, t) ** 1.3;
+  // t: 0 = inside the feathering (hidden 4.6 mm), ≈0.23 = feather line, 1 = tip
+  // (a straight, deep-based black bill that tapers late: the earlier 1.45 / 1.0 constriction read needle-thin
+  // beyond the feathering, p006, p070, p043, p024)
+  const W = 0.84 * (4.6 * (1 - 0.35 * smooth(0.1, 0.55, t)) * (1 - smooth(0.9, 1.0, t) ** 1.6) + 0.1 * Math.exp(-(((t - 0.8) / 0.1) ** 2)));
+  const Hu = 0.83 * (3.0 - 1.15 * smooth(0.15, 0.62, t) + 0.38 * Math.exp(-(((t - 0.8) / 0.1) ** 2)) - 1.35 * smooth(0.88, 1, t) ** 1.3);
+  const Hl = 0.83 * (2.1 - 0.8 * smooth(0.15, 0.65, t) + 0.12 * Math.exp(-(((t - 0.78) / 0.1) ** 2)) - 0.85 * smooth(0.86, 1, t) ** 1.3);
   return { W: Math.max(0.05, W), Hu: Math.max(0.12, Hu), Hl: Math.max(0.08, Hl) };
 }
 
 export function buildBill(sk, boneIndex, J, opts = {}) {
   const segL = opts.segL ?? 22;
   const segR = opts.segR ?? 14;
-  const base = [0, 77.6, 57.0]; // hidden ~4.5 mm inside the lores feathering (feather line z≈61.8)
-  const tip = [0, 75.7, 77.8]; // exposed culmen 16 mm (S2, S3)
+  const { base, tip } = BILL;
   const axis = norm(sub(tip, base));
   const up = norm(cross(cross(axis, [0, 1, 0]), axis)); // world-up-ish, perpendicular to the bill axis
   const side = norm(cross(up, axis));
@@ -135,7 +141,7 @@ export function buildBill(sk, boneIndex, J, opts = {}) {
       const t = tt ** 0.85; // denser near the tip
       const lenOff = which === 'lower' ? -0.45 * t : 0; // lower mandible slightly shorter
       const { W, Hu, Hl } = billProfile(t);
-      const c = addv(addv(base, scl(axis, t * Ltot + lenOff)), scl(up, which === 'upper' ? -0.25 * smooth(0.82, 1, t) : 0.05));
+      const c = addv(addv(base, scl(axis, t * Ltot + lenOff)), scl(up, which === 'upper' ? -0.1 * smooth(0.88, 1, t) : 0.05));
       const ring = [];
       for (let s = 0; s < segR; s++) {
         // angle 0..π across the curved outer surface, flat face along the commissure
@@ -220,8 +226,9 @@ export function buildLegs(sk, boneIndex, J, toes, opts = {}) {
     const frT = { d: fT.d, n: fwd, b: norm(cross(fT.d, fwd)) };
     // Feathered "drumstick": one continuous tube from the mid-femur (deep inside the belly) through the knee
     // down the upper tibiotarsus, so no gap can open between belly and bare tibia however the femur swings.
-    // The tibia leaves the belly contour at t≈0.35 (rest pose); feathers end at t≈0.66 with a ragged,
-    // feather-tipped edge (alternating length per vertex) instead of a clean cuff.
+    // The knee lies 7 mm inside the belly; the tibia leaves the belly contour under it at t≈0.74 (y 37, spec §9)
+    // and the feathers end ≤2 mm below it (t≈0.8) with a ragged, feather-tipped edge (alternating length per
+    // vertex) instead of a clean cuff. About 9 mm of bare tibia shows above the intertarsal joint.
     {
       const hip = mir(J.hip);
       const fem = sub(knee, hip);
@@ -232,8 +239,8 @@ export function buildLegs(sk, boneIndex, J, toes, opts = {}) {
       // [segment, t, radius, rows]
       const st =
         detail < 2
-          ? [['f', 0.35, 4.2], ['f', 0.7, 4.6], ['k', 0, 4.4], ['t', 0.14, 3.9], ['t', 0.28, 3.2], ['t', 0.4, 2.55], ['t', 0.5, 2.05], ['t', 0.58, 1.7], ['t', 0.64, 1.45], ['e', 0.675, 1.28]]
-          : [['f', 0.5, 4.2], ['k', 0, 4.2], ['t', 0.3, 3.0], ['t', 0.5, 1.9], ['e', 0.66, 1.3]];
+          ? [['f', 0.35, 4.2], ['f', 0.7, 4.4], ['k', 0, 4.2], ['t', 0.18, 3.8], ['t', 0.36, 3.2], ['t', 0.52, 2.6], ['t', 0.63, 2.1], ['t', 0.71, 1.75], ['t', 0.76, 1.5], ['e', 0.8, 1.32]]
+          : [['f', 0.5, 4.2], ['k', 0, 4.2], ['t', 0.4, 3.0], ['t', 0.68, 1.9], ['e', 0.8, 1.3]];
       const thigh = [];
       const thighB = [];
       st.forEach(([s, t, r]) => {
@@ -280,7 +287,7 @@ export function buildLegs(sk, boneIndex, J, toes, opts = {}) {
     const frM = { d: fM.d, n: fwdM, b: norm(cross(fM.d, fwdM)) };
     const rings = [];
     const rb = [];
-    const tibStations = detail < 2 ? [0.64, 0.75, 0.86, 0.94, 0.985] : [0.66, 0.99];
+    const tibStations = detail < 2 ? [0.77, 0.84, 0.9, 0.95, 0.985] : [0.78, 0.99];
     tibStations.forEach((k) => {
       const joint = smooth(0.84, 1, k);
       rings.push(ring(addv(knee, scl(tib, k)), frT, 1.15 + 0.55 * joint, 1.0 + 0.45 * joint, seg, k * 0.3, 1, 0.5 * joint));
@@ -370,8 +377,10 @@ export function buildLegs(sk, boneIndex, J, toes, opts = {}) {
 // ---------------------------------------------------------------- Eyes
 export const EYE = {
   radius: 4.0, // eyeball (mm)
-  aperture: 2.7, // visible radius (5.4 mm aperture)
-  corneaR: 3.1,
+  // visible radius: 4.6 mm aperture and a flatter cornea set into the socket — the photos' bill / eye ratio is
+  // 3.0–3.4 (p070, p043); a 5.4 mm eye with a 3.1 mm cornea read as a glossy ball (2.3)
+  aperture: 2.3,
+  corneaR: 3.6,
   axisL: norm([0.955, 0.13, 0.27]), // lateral, 15.7° forward, 7.5° up (D)
 };
 

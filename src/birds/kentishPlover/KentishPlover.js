@@ -19,7 +19,8 @@ export function makeIndividual(seed, palette) {
     bodyScale: (female ? CFG.morphology.sexualSizeRatio : 1) * (1 + r.variation(V.bodyScale, c)),
     legLength: r.variation(V.legLength, c),
     melaninPatchScale: 1 + r.variation(V.melaninPatchScale, c),
-    rufousSaturation: 1 + r.variation(V.rufousSaturation, c),
+    // cap colour 0.3 (sandy) … 1 (rufous), most individuals near the rufous end (half-normal, spec §13.1)
+    rufousAmount: V.rufousAmount[1] - Math.abs(r.variation((V.rufousAmount[1] - V.rufousAmount[0]) / c, c)),
     plumageWear: clamp(0.25 + r.variation(V.plumageWear, c), 0, 0.9),
     walkSpeed: 1 + r.variation(V.walkSpeed, c),
     fearThreshold: 1 + r.variation(V.fearThreshold, c),

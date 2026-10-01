@@ -1,10 +1,23 @@
 import * as THREE from 'three';
 import { WING, buildScapularLayout } from './featherLayout.js';
 import { projectToSurface } from './sdf.js';
+import { computeSpineWeights, bodyDisplacementMasks } from './bodyMesh.js';
+import { conformAt, foldLayer } from './wingFold.js';
+
+const smooth01 = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 
 // Real feather geometry: rachis + asymmetric vanes, bend and camber defined per vertex.
 // Opaque (outline = vertices), so there is no alpha overdraw. Colour pattern is procedural in
 // KentishPloverMaterials (uses uv: x = across vane −1..1 (0 = rachis), y = base→tip).
+// aLie / aLieMask: outward body normal (bind frame of the vertex, × contact weight) and the body shader's
+// displacement masks where the feather lies on the body (folded wing: at its folded place), so the plumage
+// rises and falls with the fluffed / breathing body instead of being swallowed by it. aCore: arm tube
+// vertex → tube axis (the propatagium folds away with the wing). aConform: bend of a folded wing feather onto
+// its layer of the folded-wing shell (wingFold.conformAt), in its bind frame (m), applied while folded;
+// aConformN: the matching change of its normal.
 
 export const FEATHER_TYPE = {
   primary: 0,
@@ -24,6 +37,9 @@ export const FEATHER_TYPE = {
 
 const deg = Math.PI / 180;
 
+// LOD2 draws every other remex / greater covert as a wider card (the wing-fold solver clears both shapes)
+export const LOD2_CARD = { types: new Set(['primary', 'secondary', 'greaterCovert']), width: 1.9, rows: 4 };
+
 const OVATE = new Set(['greaterCovert', 'medianCovert', 'lesserCovert', 'primaryCovert', 'scapular', 'upperTailCovert', 'underTailCovert']);
 function widthProfile(t, type) {
   // base (calamus) → full width → tip; pointed for primaries/alula, broadly ovate for coverts & body feathers
@@ -36,7 +52,9 @@ function widthProfile(t, type) {
     return Math.sqrt(Math.max(0, 1 - u * u)) * (1 - 0.1 * u);
   }
   const base = Math.min(1, 0.22 + t / 0.12);
-  const tipStart = pointed ? 0.62 : 0.66;
+  // (primaries keep their width further out: tapering from 62 % the spread hand showed background between the
+  // tips — a plover's primaries are not emarginated and overlap to a pointed wing tip, p002, p033)
+  const tipStart = type === 'primary' ? 0.74 : pointed ? 0.62 : 0.66;
   if (t <= tipStart) return base;
   const u = (t - tipStart) / (1 - tipStart);
   return pointed ? Math.pow(Math.max(0, 1 - u), 0.72) * (1 - 0.15 * u) : Math.sqrt(Math.max(0, 1 - u * u));
@@ -50,6 +68,11 @@ class GeoBuilder {
     this.feather = [];
     this.skinIndex = [];
     this.skinWeight = [];
+    this.lie = [];
+    this.lieMask = [];
+    this.core = [];
+    this.conform = [];
+    this.conformN = [];
     this.index = [];
   }
   get count() {
@@ -62,6 +85,15 @@ class GeoBuilder {
     this.feather.push(f[0], f[1], f[2], f[3]);
     this.skinIndex.push(si[0] ?? 0, si[1] ?? 0, si[2] ?? 0, si[3] ?? 0);
     this.skinWeight.push(sw[0] ?? 1, sw[1] ?? 0, sw[2] ?? 0, sw[3] ?? 0);
+    this.lie.push(0, 0, 0);
+    this.lieMask.push(0, 0);
+    this.core.push(0, 0, 0);
+    this.conform.push(0, 0, 0);
+    this.conformN.push(0, 0, 0);
+  }
+  setContact(v, n, mask) {
+    for (let k = 0; k < 3; k++) this.lie[v * 3 + k] = n[k];
+    for (let k = 0; k < 2; k++) this.lieMask[v * 2 + k] = mask[k];
   }
   mirrorFrom(start, boneMap) {
     // Duplicate vertices [start, count) mirrored in X with remapped bones and flipped winding.
@@ -77,6 +109,11 @@ class GeoBuilder {
       this.feather.push(this.feather[v * 4], this.feather[v * 4 + 1], this.feather[v * 4 + 2], this.feather[v * 4 + 3]);
       for (let k = 0; k < 4; k++) this.skinIndex.push(boneMap(this.skinIndex[v * 4 + k]));
       for (let k = 0; k < 4; k++) this.skinWeight.push(this.skinWeight[v * 4 + k]);
+      this.lie.push(-this.lie[v * 3], this.lie[v * 3 + 1], this.lie[v * 3 + 2]);
+      this.lieMask.push(this.lieMask[v * 2], this.lieMask[v * 2 + 1]);
+      this.core.push(-this.core[v * 3], this.core[v * 3 + 1], this.core[v * 3 + 2]);
+      this.conform.push(-this.conform[v * 3], this.conform[v * 3 + 1], this.conform[v * 3 + 2]);
+      this.conformN.push(-this.conformN[v * 3], this.conformN[v * 3 + 1], this.conformN[v * 3 + 2]);
     }
     for (let i = iStart; i < iEnd; i += 3) {
       this.index.push(this.index[i] + offset, this.index[i + 2] + offset, this.index[i + 1] + offset);
@@ -93,6 +130,11 @@ class GeoBuilder {
     g.setAttribute('aFeather', new THREE.Float32BufferAttribute(this.feather, 4));
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.skinIndex, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.skinWeight, 4));
+    g.setAttribute('aLie', new THREE.Float32BufferAttribute(this.lie, 3));
+    g.setAttribute('aLieMask', new THREE.Float32BufferAttribute(this.lieMask, 2));
+    g.setAttribute('aCore', new THREE.Float32BufferAttribute(this.core, 3));
+    g.setAttribute('aConform', new THREE.Float32BufferAttribute(this.conform, 3));
+    g.setAttribute('aConformN', new THREE.Float32BufferAttribute(this.conformN, 3));
     g.setIndex(this.index);
     g.computeBoundingSphere();
     return g;
@@ -100,35 +142,48 @@ class GeoBuilder {
 }
 
 /**
+ * Shape of a feather in its own frame: offset from the base as [along shaft, along `side`, along the dorsal
+ * normal] (mm) at t (0 base … 1 tip) and a (−1 outer vane edge … 0 rachis … +1 inner edge).
+ * Shared by the mesh and the wing-fold solver (anatomy/wingFold.js), so both see the same surface.
+ */
+export function featherOffset(f, t, a, sweepK = 0.03) {
+  const L = f.length;
+  const W = f.width;
+  const wp = widthProfile(t, f.type);
+  const across = a < 0 ? a * W * (1 - f.innerVane) * wp : a * W * f.innerVane * wp;
+  // Longitudinal bend: shaft curves ventrally toward the tip (concave underside).
+  const bend = -f.curve * L * t * t;
+  // Slight lateral sweep of the tip (feathers curve toward the inner vane).
+  const sweep = sweepK * L * t * t;
+  // Camber: vanes drop away from the rachis (gives the feather volume in grazing light).
+  const camber = -0.06 * W * Math.abs(a) * Math.abs(a) * wp;
+  return [t * L, sweep - across, bend + camber];
+}
+
+/** Shaft position of row i of n: rows closer together toward the tip, so the rounded tips of the overlapping
+ * rows stay round (a hexagonal tip outline read as a scaly plate, spec §10.4). */
+export const rowT = (i, n) => 1 - (1 - i / (n - 1)) ** 1.6;
+
+/**
  * Emit one feather as a grid (nL along × nW across).
  * frame: { base, dir (unit, along shaft), side (unit, toward outer vane), normal (unit, dorsal) }
+ * bone: { idx[], w[] } for the whole feather, or a function of the vertex position returning one.
  * conform(p) optional → [p', n'] projects vertices onto a surface (scapulars).
  */
 function emitFeather(gb, f, frame, bone, typeId, rnd, opts = {}) {
   const nL = opts.nL ?? 9;
   const nW = opts.nW ?? 3; // vertices per vane side (excluding rachis)
   const { base, dir, side, normal } = frame;
-  const L = f.length;
-  const W = f.width;
-  const outerW = W * (1 - f.innerVane);
-  const innerW = W * f.innerVane;
   const start = gb.count;
   const cols = nW * 2 + 1;
   for (let i = 0; i < nL; i++) {
-    const t = i / (nL - 1);
-    const wp = widthProfile(t, f.type);
-    // Longitudinal bend: shaft curves ventrally toward the tip (concave underside).
-    const bend = -f.curve * L * t * t;
-    // Slight lateral sweep of the tip (feathers curve toward the inner vane).
-    const sweep = (opts.sweep ?? 0.03) * L * t * t;
+    const t = rowT(i, nL);
     for (let j = 0; j < cols; j++) {
       const a = (j - nW) / nW; // −1 outer edge … 0 rachis … +1 inner edge
-      const across = a < 0 ? a * outerW * wp : a * innerW * wp;
-      // Camber: vanes drop away from the rachis (gives the feather volume in grazing light).
-      const camber = -0.06 * W * Math.abs(a) * Math.abs(a) * wp;
+      const o = featherOffset(f, t, a, opts.sweep ?? 0.03);
       const p = [0, 0, 0];
       for (let k = 0; k < 3; k++) {
-        p[k] = base[k] + dir[k] * t * L - side[k] * (across - sweep) + normal[k] * (bend + camber);
+        p[k] = base[k] + dir[k] * o[0] + side[k] * o[1] + normal[k] * o[2];
       }
       let n = normal;
       if (opts.conform) {
@@ -144,7 +199,8 @@ function emitFeather(gb, f, frame, bone, typeId, rnd, opts = {}) {
         const l = Math.hypot(n[0], n[1], n[2]);
         n = [n[0] / l, n[1] / l, n[2] / l];
       }
-      gb.vertex(p, n, [a, t], [typeId, f.index ?? 0, rnd, f.side ?? 0], bone.idx, bone.w);
+      const sk = typeof bone === 'function' ? bone(p) : bone;
+      gb.vertex(p, n, [a, t], [typeId, f.index ?? 0, rnd, f.side ?? 0], sk.idx, sk.w);
     }
   }
   // Winding so that the front face is the dorsal (normal) side regardless of vane handedness.
@@ -164,7 +220,7 @@ function emitFeather(gb, f, frame, bone, typeId, rnd, opts = {}) {
   }
 }
 
-function wingFrame(f) {
+export function wingFrame(f) {
   const a = f.angle * deg;
   const dir = [Math.cos(a), 0, -Math.sin(a)];
   // outer vane lies toward the leading edge (+Z side of the shaft)
@@ -198,7 +254,9 @@ function armTube(gb, boneIndex) {
       const p = [q.p[0], q.p[1] + yOff, q.p[2] + zOff - 1.5];
       const n = [0, sy, cz];
       const nl = Math.hypot(n[1], n[2]);
-      gb.vertex(p, [0, n[1] / nl, n[2] / nl], [cz, t], [FEATHER_TYPE.arm, 0, 0.5, 0], q.bones.map((b) => boneIndex[`${b[0]}_L`]), q.bones.map((b) => b[1]));
+      // (aFeather.z: 0 ventral … 1 dorsal — the shader colours only the underside white)
+      gb.vertex(p, [0, n[1] / nl, n[2] / nl], [cz, t], [FEATHER_TYPE.arm, 0, 0.5 + 0.5 * sy, 0], q.bones.map((b) => boneIndex[`${b[0]}_L`]), q.bones.map((b) => b[1]));
+      gb.core.splice(-3, 3, 0, -yOff / 1000, -zOff / 1000); // this vertex → ring centre (m)
     }
   });
   for (let i = 0; i < pts.length - 1; i++) {
@@ -215,11 +273,44 @@ function armTube(gb, boneIndex) {
 /**
  * Build the merged feather geometry for one bird.
  * detail: 0 = LOD0 (everything), 1 = LOD1 (no lesser/median coverts, fewer segments), 2 = LOD2 (few big cards)
+ * fold: wing-fold solution (wingFold.computeWingFold) — where each wing feather lies on the body when folded
  */
-export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0) {
+export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = null) {
   const gb = new GeoBuilder();
+  // contact with the body at rest-space point p: outward normal × weight (full within 3 mm of the outline,
+  // none beyond 6 mm) and the body shader's displacement masks there
+  // (tail coverts: within 8 / 12 mm — the vent and rump swell under their whole length when fluffed)
+  const contact = (p, near = 3) => {
+    const e = 0.2;
+    const g = [0, 1, 2].map((k) => {
+      const a = [...p];
+      const b = [...p];
+      a[k] += e;
+      b[k] -= e;
+      return sdf(a[0], a[1], a[2]) - sdf(b[0], b[1], b[2]);
+    });
+    const gl = Math.hypot(...g) || 1;
+    const x = Math.max(0, Math.min(1, (sdf(p[0], p[1], p[2]) - near) / near));
+    const w = 1 - x * x * (3 - 2 * x);
+    return [g.map((v) => (v / gl) * w), bodyDisplacementMasks(p, g.map((v) => v / gl))];
+  };
+  const bindMM = (v) => [gb.pos[v * 3] * 1000, gb.pos[v * 3 + 1] * 1000, gb.pos[v * 3 + 2] * 1000];
   const rng = mulberry(detail * 131 + 17);
-  const segs = detail === 0 ? { nL: 8, nW: 2 } : detail === 1 ? { nL: 5, nW: 1 } : { nL: 4, nW: 1 };
+  // body feathers (scapulars, tail coverts) deform exactly like the body surface they lie on
+  const spineSkin = (p) => {
+    const w = computeSpineWeights(p, boneIndex);
+    return { idx: w.map((e) => e[0]), w: w.map((e) => e[1]) };
+  };
+  // the scapulars lie on the trunk: they do not ride up with the neck plumage when the head is turned back
+  // (preening the wing, resting) — the neck lies over them instead
+  const trunkBones = new Set(['chest', 'body', 'tail'].map((n) => boneIndex[n]));
+  const trunkSkin = (p) => {
+    const w = computeSpineWeights(p, boneIndex).filter((e) => trunkBones.has(e[0]));
+    const sum = w.reduce((a, e) => a + e[1], 0) || 1;
+    return { idx: w.map((e) => e[0]), w: w.map((e) => e[1] / sum) };
+  };
+  const torso = fold?.torso ?? sdf; // trunk outline without the neck (wingFold.conformAt)
+  const segs = detail === 0 ? { nL: 10, nW: 3 } : detail === 1 ? { nL: 5, nW: 1 } : { nL: LOD2_CARD.rows, nW: 1 };
 
   // ---- Left wing (then mirrored) ----
   const wingStart = gb.mark();
@@ -227,11 +318,47 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0) {
   for (const f of spec.wingFeathers) {
     if (detail >= 1 && (f.type === 'lesserCovert' || f.type === 'medianCovert')) continue;
     if (detail >= 2 && (f.type === 'primaryCovert' || f.type === 'alula' || (f.type === 'primary' && f.index % 2 === 1) || (f.type === 'secondary' && f.index % 2 === 0) || (f.type === 'greaterCovert' && f.index % 2 === 0))) continue;
-    const boneName = f.type === 'lesserCovert' || f.type === 'alula' ? f.name : f.bone;
+    const boneName = f.type === 'primary' || f.type === 'secondary' || f.type === 'tertial' ? f.bone : f.name; // remiges share f.bone, coverts/alula own bones
     const idx = boneIndex[`${boneName}_L`];
     const fr = { ...f };
-    if (detail >= 2 && (f.type === 'primary' || f.type === 'secondary' || f.type === 'greaterCovert')) fr.width *= 1.9;
+    if (detail >= 2 && LOD2_CARD.types.has(f.type)) fr.width *= LOD2_CARD.width;
+    const m = gb.mark();
     emitFeather(gb, fr, wingFrame(fr), { idx: [idx], w: [1] }, FEATHER_TYPE[f.type], rng(), segs);
+    // wing-root feathers re-aimed about their base so the spread wing clears the body (wingFold.js)
+    const S = fold?.spread.get(f.name)?.bake;
+    if (S) {
+      const v3 = new THREE.Vector3();
+      for (let v = m.v; v < gb.count; v++) {
+        v3.set(...bindMM(v)).sub(new THREE.Vector3(...f.base)).applyQuaternion(S).add(new THREE.Vector3(...f.base)).multiplyScalar(0.001);
+        gb.pos.splice(v * 3, 3, v3.x, v3.y, v3.z);
+        v3.fromArray(gb.nrm, v * 3).applyQuaternion(S);
+        gb.nrm.splice(v * 3, 3, v3.x, v3.y, v3.z);
+      }
+    }
+    const F = fold?.world.get(f.name);
+    if (F) {
+      // contact evaluated where the feather lies when folded, expressed in its bind (spread) frame
+      const Rinv = F.R.clone().invert();
+      for (let v = m.v; v < gb.count; v++) {
+        const pf = new THREE.Vector3(...bindMM(v)).sub(new THREE.Vector3(...f.base)).applyQuaternion(F.R).add(F.base);
+        const [n, mask] = contact(pf.toArray());
+        gb.setContact(v, new THREE.Vector3(...n).applyQuaternion(Rinv).toArray(), mask);
+        // bent onto its layer of the folded-wing shell
+        // (LOD1/2: the visible layers a little higher over their coarser body, whose facets stand up to about half
+        // a millimetre off the outline — invisible from the distances they are shown at; the hidden ones as at
+        // LOD0: pressed deeper, they came out with a dip when the wing is raised off the flank)
+        const nb = new THREE.Vector3();
+        const cw = conformAt(fr, pf, gb.uv[v * 2 + 1], gb.uv[v * 2], sdf, torso, nb);
+        if (detail) cw.addScaledVector(nb, (foldLayer(f) >= 0 ? 0.35 * smooth01(0, 0.22, gb.uv[v * 2 + 1]) : 0) * detail);
+        const c = cw.applyQuaternion(Rinv).multiplyScalar(0.001);
+        gb.conform.splice(v * 3, 3, c.x, c.y, c.z);
+        // …and shaded like the surface it lies on (a trace of its own vane's tilt kept), so neighbouring
+        // feathers of a row do not read as separately tilted plates (spec §10.4)
+        const n0 = new THREE.Vector3().fromArray(gb.nrm, v * 3);
+        const dn = nb.applyQuaternion(Rinv).multiplyScalar(0.92).addScaledVector(n0, 0.08).normalize().sub(n0);
+        gb.conformN.splice(v * 3, 3, dn.x, dn.y, dn.z);
+      }
+    }
   }
   const leftToRight = (i) => {
     const name = spec.boneNames[i];
@@ -244,29 +371,61 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0) {
   for (const f of spec.tailFeathers) {
     if (detail >= 2 && f.type === 'upperTailCovert') continue;
     if (detail >= 2 && f.type === 'rectrix' && f.index % 2 === 0) continue;
+    // (LOD2: the white vent of the coarse body stands for them — as cards they came loose below it)
+    if (detail >= 2 && f.type === 'underTailCovert') continue;
     const yaw = f.yaw;
-    const dir = [Math.sin(yaw), -0.07, -Math.cos(yaw)];
+    // tail 7.7° below the body frame (tip at (−84, 55), spec §11); the under-tail coverts
+    // run up along the vent to the underside of the tail
+    const dir = [Math.sin(yaw), f.type === 'underTailCovert' ? 0.18 : -0.11, -Math.cos(yaw)];
     const dl = Math.hypot(dir[0], dir[1], dir[2]);
     const d = [dir[0] / dl, dir[1] / dl, dir[2] / dl];
     // outer vane faces away from the tail midline
     const side = [f.side * Math.cos(yaw), 0, f.side * Math.sin(yaw) * 1];
     const fr = { ...f, innerVane: f.type === 'rectrix' ? 0.6 : 0.55 };
     if (detail >= 2 && f.type === 'rectrix') fr.width *= 1.8;
-    const bone = f.type === 'rectrix' ? boneIndex[f.bone] : boneIndex.tail;
-    const conform =
-      f.type === 'upperTailCovert' || f.type === 'underTailCovert'
-        ? (p, t) => {
-            const up = f.type === 'upperTailCovert' ? 1 : -1;
-            const [pp, nn] = projectToSurface(sdf, p[0], p[1], p[2]);
-            const lift = 0.35;
-            const onSurf = [pp[0] + nn[0] * lift, pp[1] + nn[1] * lift, pp[2] + nn[2] * lift];
-            // hug the body where it exists, then continue straight over / under the tail
-            const w = Math.min(1, Math.max(0, (t - 0.35) / 0.3));
-            const free = [p[0], p[1] + up * 0.8, p[2]];
-            return [[onSurf[0] * (1 - w) + free[0] * w, onSurf[1] * (1 - w) + free[1] * w, onSurf[2] * (1 - w) + free[2] * w], up > 0 ? [0, 1, 0] : [0, -1, 0]];
+    const covert = f.type === 'upperTailCovert' || f.type === 'underTailCovert';
+    const conform = covert
+      ? (p) => {
+          const up = f.type === 'upperTailCovert' ? 1 : -1;
+          // stacked like the other coverts (inner over outer, left over right) instead of coplanar (z-fighting)
+          const lift = 0.9 + (2 - f.index) * 0.3 + (f.side > 0 ? 0.1 : 0) + (f.type === 'underTailCovert' ? 1.2 : 0.4) * detail; // (coarser LOD bodies; the vent's facets swell most when fluffed)
+          // straight over / under the tail, but lying on the rump / vent wherever the body is in the way:
+          // raised (lowered) vertically to `lift` above the outline. (Closest-point projection of the
+          // rooted bases scattered neighbouring rows onto different sides and the straight part dived
+          // 3–4 mm into the rump.)
+          const q = [p[0], p[1] + up * 0.8, p[2]];
+          if (sdf(q[0], q[1], q[2]) < lift) {
+            let a = 0;
+            let b = 0.5;
+            while (sdf(q[0], q[1] + up * b, q[2]) < lift && b < 40) [a, b] = [b, b + 0.5];
+            for (let it = 0; it < 12; it++) {
+              const m = (a + b) / 2;
+              if (sdf(q[0], q[1] + up * m, q[2]) < lift) a = m;
+              else b = m;
+            }
+            q[1] += up * b;
           }
-        : undefined;
-    emitFeather(gb, fr, { base: f.base, dir: d, side, normal: f.type === 'underTailCovert' ? [0, -1, 0] : [0, 1, 0] }, { idx: [bone], w: [1] }, FEATHER_TYPE[f.type], rng(), { ...segs, conform, sweep: 0.0 });
+          // shaded like the rounded rump / vent they lie on (outward body normal), not as flat horizontal
+          // cards (a down-facing card under the vent read as a grey flap)
+          const e = 0.3;
+          const g = [0, 1, 2].map((k) => {
+            const a = [...q];
+            const c = [...q];
+            a[k] += e;
+            c[k] -= e;
+            return sdf(a[0], a[1], a[2]) - sdf(c[0], c[1], c[2]);
+          });
+          g[1] += up * 0.6 * Math.hypot(...g); // (still mostly facing up / down)
+          const gl = Math.hypot(...g) || 1;
+          return [q, g.map((v) => v / gl)];
+        }
+      : undefined;
+    // coverts lie on the rump: skinned like the body surface under them, so they never cut into it when the
+    // tail bone pitches; rectrices ride their own bones
+    const bone = covert ? spineSkin : { idx: [boneIndex[f.bone]], w: [1] };
+    const m = gb.mark();
+    emitFeather(gb, fr, { base: f.base, dir: d, side, normal: f.type === 'underTailCovert' ? [0, -1, 0] : [0, 1, 0] }, bone, FEATHER_TYPE[f.type], rng(), { ...segs, conform, sweep: 0.0 });
+    if (covert) for (let v = m.v; v < gb.count; v++) gb.setContact(v, ...contact(bindMM(v), 8));
   }
 
   // ---- Scapulars (body feathers lying on the mantle, conformed to the SDF surface) ----
@@ -279,14 +438,16 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0) {
       const dl = Math.hypot(...dir);
       dir = dir.map((v) => v / dl);
       const side = [dir[1] * bn[2] - dir[2] * bn[1], dir[2] * bn[0] - dir[0] * bn[2], dir[0] * bn[1] - dir[1] * bn[0]].map((v) => v * f.side);
-      const zf = Math.max(0, Math.min(1, (bp[2] + 6) / 22));
-      const skin = { idx: [boneIndex.chest, boneIndex.body], w: [zf, 1 - zf] };
-      const lift = 0.45 + f.layer * 0.35;
+      // over the folded-wing shell (wingFold.foldLayer ≤ 1.5 mm) where it lies under them, from |x| ≈ 10 on;
+      // close on the mantle nearer the midline (the back line of the photos, spec §2); row 0 over row 1
       const conform = (p) => {
         const [pp, nn] = projectToSurface(sdf, p[0], p[1], p[2]);
+        const lift = 0.5 + f.layer * 0.1 + 1.1 * smooth01(8, 12, Math.abs(pp[0]));
         return [[pp[0] + nn[0] * lift, pp[1] + nn[1] * lift, pp[2] + nn[2] * lift], nn];
       };
-      emitFeather(gb, f, { base: bp, dir, side, normal: bn }, skin, FEATHER_TYPE.scapular, rng(), { ...segs, conform });
+      const m = gb.mark();
+      emitFeather(gb, f, { base: bp, dir, side, normal: bn }, trunkSkin, FEATHER_TYPE.scapular, rng(), { ...segs, conform });
+      for (let v = m.v; v < gb.count; v++) gb.setContact(v, ...contact(bindMM(v)));
     }
   }
   return gb.build();

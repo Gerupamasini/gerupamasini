@@ -8,151 +8,211 @@ const mm = (v) => v / 1000;
 
 export const morphology = {
   // Measured / literature values
-  totalLength: mm(160), // S2,S4,S5,S6
+  totalLength: mm(160), // S2,S4,S5,S6 (museum length, neck stretched — not compared with the standing model)
+  standingLength: mm(142), // bill tip → tail tip chord, relaxed stand (photos, body_shape_spec.md §1)
   wingChord: mm(108), // S1,S3
   wingspan: mm(430), // S4
   massKg: 0.042, // S9
   tailLength: mm(45), // S2,S3
-  tarsus: mm(28), // S1,S3
-  billLength: mm(16), // S2,S3,S26 (nihonensis bill slightly larger)
+  tarsus: mm(29.5), // S1,S3 (29–29.8); photo tarsus/L 0.205–0.21 (spec §9)
+  billLength: mm(15.9), // exposed culmen S2,S3,S26; photo bill/L 0.112 (spec §6)
   sexualSizeRatio: 0.97, // female/male, S9 (~4% male-biased, mostly tarsus)
 
-  // Derived (D) — see docs/morphology.md §1
-  tibiotarsus: mm(36),
-  tibiaBare: mm(11),
-  femur: mm(18),
+  // Derived (D) — see docs/morphology.md §1; head and body from the photos (spec §5, §6, §8)
+  tibiotarsus: mm(35.7),
+  tibiaBare: mm(9),
+  femur: mm(18.2),
   toes: { inner: mm(13), mid: mm(19), outer: mm(15) }, // no hallux
-  billDepthBase: mm(4.3),
-  billWidthBase: mm(4.0),
-  eyeAperture: mm(5.4),
+  billDepthBase: mm(4.0),
+  billWidthBase: mm(3.6),
+  eyeAperture: mm(4.6), // apparent eye in the photos (bill / eye 3.0–3.4, p070, p043)
   eyeballRadius: mm(4.0),
-  headLength: mm(26),
+  headLength: mm(36),
   headHeight: mm(22),
-  headWidth: mm(20),
-  bodyLength: mm(84),
-  bodyWidth: mm(44),
-  bodyHeight: mm(40),
+  headWidth: mm(24.5),
+  bodyLength: mm(99),
+  bodyWidth: mm(41.5),
+  bodyHeight: mm(47),
 };
 
-// Bind-pose joint positions (mm, bird-local). docs/morphology.md §2
+// Bind-pose joint positions (mm, bird-local). The bind IS the relaxed stand (photos, body_shape_spec.md §16):
+// body axis 10° tail-down and back line 23° are sculpted in, so the relaxed posture has pitch 0.
 export const joints = {
-  body: [0, 56, -12],
-  chest: [0, 58, 15],
-  neck0: [0, 63, 27],
-  neck1: [0, 68, 32],
-  neck2: [0, 72, 36],
-  head: [0, 75, 40],
-  jaw: [0, 76.4, 57.5],
-  eyeCenter: [5.9, 81.0, 49.9], // eyeball centre; aperture plane ≈2.9 mm lateral of it
-  shoulder: [12, 64, 20],
-  tail: [0, 59.5, -36.5], // pygostyle: rectrix bases lie ~12 mm inside the rump outline
-  hip: [10, 52, -6],
-  knee: [13, 48, 14],
-  ankle: [11, 28.5, -16], // intertarsal joint (tibiotarsus 35.8 mm)
-  foot: [10, 2.5, -7], // metatarsophalangeal joint (tarsus 27.5 mm)
+  body: [0, 64, -12],
+  chest: [0, 66, 11],
+  // no visible neck at rest (spec §7): the chain stays for head motion, NECK_LEN ≈ 20 mm
+  neck0: [0, 74, 0],
+  neck1: [0, 80, 5],
+  neck2: [0, 85, 10],
+  head: [0, 88.5, 14],
+  jaw: [0, 87.5, 38],
+  eyeCenter: [7.6, 95, 25.5], // eyeball centre (spec §6); head surface at x 12.3, eye 9.5 mm behind the breast front;
+  // sunk 0.4 mm so the cornea apex (x 11.5) stays inside the head outline (photos: the eye sits in the dark stripe)
+  shoulder: [10, 77, 6],
+  tail: [0, 61, -42], // pygostyle (spec §11)
+  // legs (spec §9): the knee sits 7 mm inside the belly, the tibia leaves it under the belly at (±8.3, 37, −11.5)
+  hip: [9.5, 63.5, -10], // femur 18.2 mm
+  knee: [8.5, 56.5, 6.8], // tibiotarsus 35.7 mm, 43° from vertical
+  ankle: [8, 30.3, -17.5], // intertarsal joint 5–6 mm below the belly outline
+  foot: [7, 2.4, -7], // metatarsophalangeal joint (tarsus 29.8 mm joint to joint, 20° from vertical)
 };
 
-// SDF sculpt of the feathered outline (mm). Ellipsoid = centre + radii; capsule = a,b,r.
-// Tuned against the proportions in docs/morphology.md §1 and the silhouette rules §5.
+// SDF sculpt of the feathered outline (mm). Ellipsoid = centre + radii (+ rx: pitch in degrees, + = front up);
+// capsule = a,b,r. Photo-fitted prototype t9 (body_shape_spec.md §16; Frame-A IoU 0.945 vs the relaxed
+// median silhouette of 17 photos): head and body one egg shape, no neck capsule (mantleNape and foreBreast
+// fill the neck), deep bowl-shaped belly lowest at z ≈ −12, straight taper of the rear third.
 export const bodySculpt = {
   smooth: 7.5,
   prims: [
-    { type: 'ellipsoid', name: 'torso', c: [0, 57.5, -2], r: [20.5, 17.5, 36] },
-    { type: 'ellipsoid', name: 'breast', c: [0, 58.5, 17], r: [20.5, 18.5, 19.5] },
-    { type: 'ellipsoid', name: 'belly', c: [0, 51.5, 2], r: [16, 10, 22] },
-    { type: 'ellipsoid', name: 'mantle', c: [0, 63.5, 2], r: [17, 10.5, 28] },
-    { type: 'ellipsoid', name: 'rump', c: [0, 59.5, -31], r: [11.5, 8.5, 15] },
-    { type: 'ellipsoid', name: 'undertail', c: [0, 55, -37], r: [8.5, 6, 12.5] },
-    { type: 'capsule', name: 'neck', a: [0, 64, 27], b: [0, 74, 39], r: 11 },
-    { type: 'ellipsoid', name: 'head', c: [0, 80.4, 48], r: [10.3, 11.1, 12.9], k: 5 },
-    { type: 'ellipsoid', name: 'lores', c: [0, 78.2, 56.8], r: [5.8, 5.2, 5.2], k: 3.2 },
-    { type: 'ellipsoid', name: 'chin', c: [0, 74.5, 53], r: [6.2, 4.6, 6.5], k: 4 },
-    { type: 'ellipsoid', name: 'breastSideL', c: [14, 54.5, 25.5], r: [9.0, 9.8, 10.5], k: 6 },
-    { type: 'ellipsoid', name: 'flankPocketL', c: [13.5, 50.5, -4], r: [9.0, 6.5, 24], k: 6 },
-    { type: 'ellipsoid', name: 'flankPocketR', c: [-13.5, 50.5, -4], r: [9.0, 6.5, 24], k: 6 },
-    { type: 'ellipsoid', name: 'breastSideR', c: [-14, 54.5, 25.5], r: [9.0, 9.8, 10.5], k: 6 },
+    { type: 'ellipsoid', name: 'torso', c: [0, 66, -12], r: [19, 19.5, 39.5], rx: 29 },
+    { type: 'ellipsoid', name: 'breast', c: [0, 66, 11], r: [19.5, 21.5, 20.5] },
+    { type: 'ellipsoid', name: 'belly', c: [0, 47, -11], r: [15.5, 11.5, 21.5] },
+    { type: 'ellipsoid', name: 'mantleNape', c: [0, 86.5, 6], r: [15, 7.5, 13.5] },
+    { type: 'ellipsoid', name: 'rump', c: [0, 61, -48], r: [9.5, 6.5, 16], rx: 24 },
+    { type: 'ellipsoid', name: 'undertail', c: [0, 59.5, -52.5], r: [7, 2, 13], rx: 15 }, // under-tail keel, covered by the LTC
+    { type: 'ellipsoid', name: 'head', c: [0, 93.5, 24], r: [12.5, 12.5, 15], k: 5 },
+    { type: 'ellipsoid', name: 'lores', c: [0, 90, 37], r: [6, 5, 5], k: 3.2 },
+    { type: 'ellipsoid', name: 'chin', c: [0, 84, 31], r: [9, 6, 7], k: 4 },
+    { type: 'ellipsoid', name: 'foreBreast', c: [0, 76, 24], r: [14, 14, 13] },
+    { type: 'ellipsoid', name: 'breastSideL', c: [11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
+    { type: 'ellipsoid', name: 'breastSideR', c: [-11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
+    { type: 'ellipsoid', name: 'flankPocketL', c: [13.5, 52, -14], r: [7.5, 7.5, 18], k: 6 },
+    { type: 'ellipsoid', name: 'flankPocketR', c: [-13.5, 52, -14], r: [7.5, 7.5, 18], k: 6 },
+    // fill the top-view waist and keep the tibia inside the belly (spec §5, §9)
+    { type: 'ellipsoid', name: 'midFlankL', c: [10.5, 48, -2], r: [8.5, 9, 14], k: 6 },
+    { type: 'ellipsoid', name: 'midFlankR', c: [-10.5, 48, -2], r: [8.5, 9, 14], k: 6 },
   ],
   // Subtractive details (smooth subtraction)
   cuts: [
-    { type: 'ellipsoid', name: 'eyeSocketL', c: [10.7, 81.3, 50.4], r: [2.1, 3.0, 3.2], k: 1.2 },
-    { type: 'ellipsoid', name: 'eyeSocketR', c: [-10.7, 81.3, 50.4], r: [2.1, 3.0, 3.2], k: 1.2 },
+    { type: 'ellipsoid', name: 'eyeSocketL', c: [12.8, 95.2, 25.8], r: [2.1, 2.6, 2.8], k: 1.2 },
+    { type: 'ellipsoid', name: 'eyeSocketR', c: [-12.8, 95.2, 25.8], r: [2.1, 2.6, 2.8], k: 1.2 },
   ],
-  bounds: { min: [-26, 30, -60], max: [26, 95, 64] },
+  // the SDF spans x ±21, y 36–105, z −66…41
+  bounds: { min: [-24, 32, -70], max: [24, 109, 46] },
+  // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
+  // mantleNape and foreBreast at rest), but when the head turns or stretches the neck bones carry this tube
+  neckContact: { a: [0, 74, 0], b: [0, 88.5, 14], r: 9 },
 };
 
-// Plumage palettes (sRGB hex). Estimated from textual descriptions — research.md §3.2 (C–D).
+// Plumage palettes (sRGB hex): white-balanced medians of 19 reference photos (body_shape_spec.md §13).
+// Keys read by the shaders are kept; crownRear, fringeMix, eyelidRing, billRoughness and subterminalDark are
+// optional (fall back to crown, 0.55, the lid rim colour, 0.46 and false).
 export const plumage = {
   palettes: {
+    // reference individual (spec §13.1; p006, p043, p065, p066, p070): warm pale-rufous cap brighter than the
+    // mantle (≥1.15× luminance, saturation ≥0.35), black frontal bar, grey legs, uniformly black iris
     maleBreeding: {
-      forehead: '#e6e2d8',
-      frontalBar: '#1c1a18',
-      crown: '#b8743f',
-      nape: '#b37446',
-      supercilium: '#e8e4da',
-      eyeStripe: '#1e1b19',
-      earCoverts: '#1e1b19',
-      collar: '#e9e6de',
-      mantle: '#958470',
-      mantleDark: '#766652',
-      fringe: '#b9ab92',
-      breastPatch: '#1f1c1a',
-      underparts: '#ecebe5',
-      flightDark: '#2d2824',
+      forehead: '#e9e8e3',
+      frontalBar: '#1a1818',
+      crown: '#b88f6c',
+      crownRear: '#c09470',
+      nape: '#c29a76',
+      supercilium: '#e6e3de',
+      eyeStripe: '#1e1a19',
+      earCoverts: '#2a211e',
+      collar: '#ecebe6',
+      mantle: '#9a8574',
+      mantleDark: '#72665c',
+      fringe: '#bda88e',
+      fringeMix: 0.25,
+      breastPatch: '#1f1c1b',
+      underparts: '#e9e8e3',
+      flightDark: '#3a3632',
       flightMid: '#5b5046',
       tailDark: '#4a4038',
       white: '#ebe9e3',
-      bill: '#151413',
-      legs: '#34322f',
-      iris: '#24160d',
+      bill: '#1a1818',
+      billRoughness: 0.3,
+      legs: '#827369', // rendered ≈ the photos' white-balanced tarsus #8a7a6d (p006, p020, p070); '#5a534f' rendered near-black
+      iris: '#120f0f',
+      eyelidRing: '#dcd6cd',
+      rufousCap: true, // crown / crownRear / nape blend toward plumage.sandyCap with individual.rufousAmount
     },
     femaleBreeding: {
-      forehead: '#e0d9cb',
-      frontalBar: '#9e8c72',
-      crown: '#9e8c72',
-      nape: '#9d8c74',
-      supercilium: '#ddd5c5',
-      eyeStripe: '#6a5846',
-      earCoverts: '#6f5d4b',
-      collar: '#e9e6de',
-      mantle: '#978672',
-      mantleDark: '#786854',
-      fringe: '#bbad94',
-      breastPatch: '#6e5c4a',
-      underparts: '#ecebe5',
-      flightDark: '#2f2a26',
+      forehead: '#e2ddd6',
+      frontalBar: '#8c7870',
+      crown: '#8c7870',
+      nape: '#8e7567',
+      supercilium: '#e2dedc',
+      eyeStripe: '#8a7263',
+      earCoverts: '#76604f',
+      collar: '#ecebe6',
+      mantle: '#8a7468',
+      mantleDark: '#705c51',
+      fringe: '#ad988f',
+      fringeMix: 0.35,
+      breastPatch: '#6c5a4f',
+      underparts: '#e9e8e3',
+      flightDark: '#3c3834',
       flightMid: '#5d5248',
       tailDark: '#4c423a',
       white: '#ebe9e3',
-      bill: '#151413',
-      legs: '#353330',
-      iris: '#24160d',
+      bill: '#1a1818',
+      legs: '#8e8583',
+      iris: '#120f0f',
+      eyelidRing: '#dcd6cd',
     },
     nonBreeding: {
-      forehead: '#e2dcd0',
-      frontalBar: '#9a8a74',
-      crown: '#9a8a74',
-      nape: '#9a8b77',
-      supercilium: '#ded8cb',
-      eyeStripe: '#7c6b58',
-      earCoverts: '#7c6b58',
-      collar: '#e9e6de',
-      mantle: '#958878',
-      mantleDark: '#786b5b',
-      fringe: '#b8ac98',
-      breastPatch: '#857563',
-      underparts: '#ecebe5',
-      flightDark: '#2f2a26',
+      forehead: '#e0dad2',
+      frontalBar: '#907d6d',
+      crown: '#907d6d',
+      nape: '#9e8c76',
+      supercilium: '#d8cdc2',
+      eyeStripe: '#826c60',
+      earCoverts: '#877b69',
+      collar: '#e9e6e0',
+      mantle: '#7c6c61',
+      mantleDark: '#5d5242',
+      fringe: '#c6bcb1',
+      fringeMix: 0.6,
+      breastPatch: '#6e6258',
+      underparts: '#e9e8e3',
+      flightDark: '#3c3834',
       flightMid: '#5d5248',
       tailDark: '#4c423a',
       white: '#ebe9e3',
-      bill: '#151413',
-      legs: '#363431',
-      iris: '#24160d',
+      bill: '#1a1818',
+      legs: '#92857e', // photos #9b8d86 (p001, p050)
+      iris: '#120f0f',
+      eyelidRing: '#e4d9cf',
+    },
+    // juvenile (spec §13.2; p062, p063): buff-fringed upperparts with a dark subterminal band, diffuse
+    // incomplete breast band, indistinct collar
+    juvenile: {
+      forehead: '#e4e7e2',
+      frontalBar: '#7c6961',
+      crown: '#7c6961',
+      nape: '#615956',
+      supercilium: '#cbcac1',
+      eyeStripe: '#675f52',
+      earCoverts: '#624a3e',
+      collar: '#d9cfc0',
+      mantle: '#806a54',
+      mantleDark: '#5f4f3e',
+      fringe: '#bba68e',
+      fringeMix: 0.9,
+      subterminalDark: true,
+      breastPatch: '#8f7d70',
+      underparts: '#e9e8e3',
+      flightDark: '#3c3834',
+      flightMid: '#5d5248',
+      tailDark: '#4c423a',
+      white: '#ebe9e3',
+      bill: '#161915',
+      legs: '#7a6365', // pinkish grey, photos #81696b (p035, p063, p059)
+      iris: '#120f0f',
+      eyelidRing: '#dcd6cd',
     },
   },
+  // Photo appearance → albedo: palette colours are darkened by (Y / 0.82)^(γ − 1) so the rendered mantle / white
+  // luminance matches the photos under the scene's sun and ACES (spec §13; measured on side renders)
+  apparentGamma: 1.55,
+  // rufousAmount 0.3 (sandy cap, p012, p020, p054) … 1.0 (the palette's rufous cap), spec §13.1
+  sandyCap: { crown: '#a89483', crownRear: '#ad9886', nape: '#b09c8a' },
   // Feather micro-structure (mm): scallop size per feather tract. Kept low-contrast on purpose.
   featherScale: { head: 1.1, neck: 1.7, breast: 2.4, belly: 2.8, mantle: 3.4, flank: 3.0, rump: 2.8 },
-  normalStrength: { head: 0.35, neck: 0.45, breast: 0.35, belly: 0.3, mantle: 0.75, flank: 0.55, rump: 0.5 },
+  // head, neck and underparts nearly smooth in the photos (spec §15: 0.05–0.1); tiles stay on the upperparts
+  normalStrength: { head: 0.08, neck: 0.1, breast: 0.1, belly: 0.08, mantle: 0.4, flank: 0.18, rump: 0.3 }, // mantle 0.75 → 0.4: tiles read as plates (spec §10.4)
 };
 
 export const animation = {
@@ -162,8 +222,16 @@ export const animation = {
   blinkDuration: 0.12,
   saccadeInterval: { idle: [0.5, 1.8], scan: [0.25, 0.9], alert: [1.2, 3.0] },
   saccadeDuration: 0.075,
-  walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.0 },
-  run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.14 },
+  // bodyPitch / neck: relative to the bind (= relaxed stand, body axis 10° tail-down). Walking levels the body
+  // (axis −1°, bill 26°, crown only ≈6 mm above the back: 12 photos) and running tips it slightly further
+  // (spec §12, §17.3). The head is carried forward of the breast and clear of the plumage BY CONSTRUCTION: the
+  // spec's neck −0.4 / −0.5 with the head lowered pressed it into the shoulders — the contact solver pushed it
+  // every frame (±2.2 mm sideways as the trunk swayed: head judder, gaitjitter.mjs) and the Frame-A walk profile
+  // had a nape notch up to 0.066 L low (photos p003, p017, p006: crown clearly above the back).
+  // The hind-neck fill (animator napeFill) closes the rest of that notch. tools/dev/posture.mjs: walk crown 96.4,
+  // crown − back 5.9 (spec +6 ± 4); run 91, +3.8; contact correction 0 in both (Frame-A walk IoU 0.892)
+  walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.19, neck: -0.25, headDown: mm(2), headFwd: mm(6) },
+  run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.2, neck: -0.28, headDown: mm(3.5), headFwd: mm(8.5) },
   sway: mm(0.6), // lateral trunk sway per stride (D)
   // Trunk bob (2 per stride) and sway (1 per stride) are limited to this acceleration (m/s², ≈0.15 g): walking
   // keeps its full 1.2 mm inverted-pendulum bob (needs ≈0.75), running at 9.5 Hz is left with ≈0.2 mm — the body
@@ -255,7 +323,7 @@ export const individualVariation = {
   bodyScale: 0.025,
   legLength: 0.03,
   melaninPatchScale: 0.12, // S10
-  rufousSaturation: 0.08,
+  rufousAmount: [0.3, 1.0], // cap colour, uniform-ish over this range, biased rufous (spec §13.1)
   plumageWear: 0.3,
   walkSpeed: 0.08,
   fearThreshold: 0.15,

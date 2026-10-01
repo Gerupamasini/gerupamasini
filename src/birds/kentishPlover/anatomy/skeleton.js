@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { WING, buildWingLayout, buildTailLayout } from './featherLayout.js';
 
 // Bird skeleton (not a humanoid rig): pelvis → spine → neck chain → head; wings with one bone per flight
-// feather; legs femur → tibiotarsus → tarsometatarsus → foot → 3 forward toes (no hallux).
+// feather and per covert (coverts are rooted on the arm: primary coverts on the hand, greater/median on the
+// forearm, lesser on forearm/humerus); legs femur → tibiotarsus → tarsometatarsus → foot → 3 forward toes.
 // Bind pose: every bone has identity world rotation except the right wing chain which is rotated
 // 180° about Y so that left-wing local rotations mirror with q → (−x, −y, z, w).
 
@@ -12,6 +13,9 @@ const TOES = {
   mid: { angle: 3, length: 19, segs: [0.38, 0.33, 0.29] },
   outer: { angle: 26, length: 15, segs: [0.42, 0.31, 0.27] },
 };
+
+// arm bone that carries each covert row (lesser coverts name theirs in the layout)
+export const COVERT_ARM = { primaryCovert: 'hand', greaterCovert: 'forearm', medianCovert: 'forearm' };
 
 /** Returns an ordered list of bone specs: {name, parent, pos[mm world], mirror(bool)} */
 export function buildSkeletonSpec(cfg) {
@@ -42,8 +46,8 @@ export function buildSkeletonSpec(cfg) {
     add(`hand_${side}`, `forearm_${side}`, mir(WING.wrist), { mirror });
     add(`alula_${side}`, `hand_${side}`, mir([WING.wrist[0] + 1, WING.wrist[1] + 0.5, WING.wrist[2] + 4]), { mirror });
     for (const f of wingFeathers) {
-      if (f.type === 'lesserCovert' || f.type === 'alula') {
-        add(`${f.name}_${side}`, `${f.type === 'alula' ? 'alula' : f.bone}_${side}`, mir(f.base), { mirror, feather: f });
+      if (f.type === 'lesserCovert' || f.type === 'alula' || COVERT_ARM[f.type]) {
+        add(`${f.name}_${side}`, `${f.type === 'alula' ? 'alula' : COVERT_ARM[f.type] ?? f.bone}_${side}`, mir(f.base), { mirror, feather: f });
         continue;
       }
       if (!['primary', 'secondary', 'tertial'].includes(f.type)) continue;

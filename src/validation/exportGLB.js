@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { KentishPloverModel } from '../birds/kentishPlover/KentishPloverModel.js';
 import { KentishPloverAnimator, PREEN_VARIANTS } from '../birds/kentishPlover/KentishPloverAnimator.js';
-import { GLSL, getPalette } from '../birds/kentishPlover/KentishPloverMaterials.js';
+import { GLSL, getPalette, plumageAlbedo } from '../birds/kentishPlover/KentishPloverMaterials.js';
 import { animation as ANIM } from '../birds/kentishPlover/KentishPloverConfig.js';
 
 // Offline export of the LOD0 plover to GLB:
@@ -35,13 +35,13 @@ function bakeVertexColors(renderer, geometry, kind, pal) {
   } else {
     g.setAttribute('uv', geometry.getAttribute('uv'));
     g.setAttribute('aFeather', geometry.getAttribute('aFeather'));
-    const c = (h) => ({ value: new THREE.Color(h) });
-    Object.assign(uniforms, { uMantle: c(pal.mantle), uMantleDark: c(pal.mantleDark), uFringe: c(pal.fringe), uFlightDark: c(pal.flightDark), uFlightMid: c(pal.flightMid), uTailDark: c(pal.tailDark), uWhite: c(pal.white), uUnder: c(pal.underparts), uWear: { value: 0.25 }, uDetail: { value: 2 }, uFold: { value: 1 } });
+    const c = (h) => ({ value: plumageAlbedo(h) });
+    Object.assign(uniforms, { uMantle: c(pal.mantle), uMantleDark: c(pal.mantleDark), uFringe: c(pal.fringe), uFlightDark: c(pal.flightDark), uFlightMid: c(pal.flightMid), uTailDark: c(pal.tailDark), uWhite: c(pal.white), uUnder: c(pal.underparts), uWear: { value: 0.25 }, uDetail: { value: 2 } });
     vtx = `attribute float aIdx; attribute vec4 aFeather; uniform float uW, uH; varying vec4 vF; varying vec2 vUv2;
       void main(){ vF = aFeather; vUv2 = uv; float x = mod(aIdx, uW); float y = floor(aIdx / uW);
       gl_Position = vec4((x + 0.5) / uW * 2.0 - 1.0, (y + 0.5) / uH * 2.0 - 1.0, 0.0, 1.0); gl_PointSize = 1.0; }`;
     frag = `${GLSL.FEATHER_FRAG.replace('varying vec4 vFeather;', '')}\nvarying vec4 vF; varying vec2 vUv2;
-      void main(){ vec3 c = kpFeatherTop(floor(vF.x + 0.5), vF.y, vUv2, vF.z); gl_FragColor = vec4(pow(c, vec3(1.0/2.2)), 1.0); }`;
+      void main(){ vec3 c = kpFeatherTop(floor(vF.x + 0.5), vF.y, vUv2, vF.z, 1.0); gl_FragColor = vec4(pow(c, vec3(1.0/2.2)), 1.0); }`;
   }
   const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: vtx, fragmentShader: frag });
   const pts = new THREE.Points(g, mat);
@@ -120,10 +120,11 @@ function bakeClips(model) {
       sample(t);
       for (const bone of model.boneList) {
         let tr = tracks.get(bone.name);
-        if (!tr) tracks.set(bone.name, (tr = { t: [], p: [], q: [] }));
+        if (!tr) tracks.set(bone.name, (tr = { t: [], p: [], q: [], s: [] }));
         tr.t.push(t);
         tr.p.push(bone.position.x, bone.position.y, bone.position.z);
         tr.q.push(bone.quaternion.x, bone.quaternion.y, bone.quaternion.z, bone.quaternion.w);
+        tr.s.push(bone.scale.x, bone.scale.y, bone.scale.z); // coverts shortened where the wing presses them (wingFold)
       }
     }
     const kf = [];
@@ -142,6 +143,9 @@ function bakeClips(model) {
       if (constant(tr.q, 4)) {
         if (Math.abs(Math.abs(tr.q[0] * bq.x + tr.q[1] * bq.y + tr.q[2] * bq.z + tr.q[3] * bq.w) - 1) > 1e-7) kf.push(new THREE.QuaternionKeyframeTrack(`${bn}.quaternion`, [0], tr.q.slice(0, 4)));
       } else kf.push(new THREE.QuaternionKeyframeTrack(`${bn}.quaternion`, tr.t, tr.q));
+      if (constant(tr.s, 3)) {
+        if (Math.abs(tr.s[0] - 1) > 1e-6) kf.push(new THREE.VectorKeyframeTrack(`${bn}.scale`, [0], tr.s.slice(0, 3)));
+      } else kf.push(new THREE.VectorKeyframeTrack(`${bn}.scale`, tr.t, tr.s));
     }
     clips.push(new THREE.AnimationClip(name, duration, kf));
   }

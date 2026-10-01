@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
 import { buildSkeletonSpec, createBones } from './anatomy/skeleton.js';
-import { buildBodyGeometry, getBodySDF } from './anatomy/bodyMesh.js';
+import { buildBodyGeometry, getBodySDF, getTorsoSDF } from './anatomy/bodyMesh.js';
 import { buildFeatherGeometry } from './anatomy/feathers.js';
+import { computeWingFold } from './anatomy/wingFold.js';
 import { buildBareParts, buildEyes } from './anatomy/bareParts.js';
 import { createBodyMaterial, createFeatherMaterial, createBarePartsMaterial, createEyeMaterials, getPalette } from './KentishPloverMaterials.js';
 
@@ -28,7 +29,7 @@ export function getGeometries(detail) {
   const res = CFG.lod.sdfResolution[detail];
   const g = {
     body: buildBodyGeometry(CFG, spec.boneIndex, res),
-    feathers: buildFeatherGeometry(spec, spec.boneIndex, sdf, detail),
+    feathers: buildFeatherGeometry(spec, spec.boneIndex, sdf, detail, computeWingFold(spec.wingFeathers, sdf, getTorsoSDF(CFG))),
     bare: buildBareParts(spec.boneIndex, CFG.joints, spec.toes, detail),
     eyes: detail === 0 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 10, segR: 24 }) : detail === 1 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 4, segR: 12 }) : null,
   };
@@ -41,7 +42,7 @@ const BOUNDS = new THREE.Sphere(new THREE.Vector3(0, 0.05, 0), 0.26);
 export class KentishPloverModel {
   /**
    * @param {object} o
-   * @param {string} o.palette  maleBreeding | femaleBreeding | nonBreeding
+   * @param {string} o.palette  maleBreeding | femaleBreeding | nonBreeding | juvenile
    * @param {object} o.individual  individual variation values (see KentishPlover.js)
    * @param {number[]} o.lods  which detail levels to build (default 0,1,2)
    */
@@ -133,21 +134,30 @@ export class KentishPloverModel {
     }
   }
 
-  /** Wing openness for the feather shader (underwing colour of the arm surface). */
-  setWingFold(v) {
+  /** How folded each wing is (1 folded … 0 spread): underwing colour, arm tube, plumage contact. */
+  setWingFold(left, right = left) {
     const f = this.current?.feathers;
-    if (f) f.userData.uniforms.uFold.value = v;
+    if (f) f.userData.uniforms.uFold.value.set(left, right);
   }
 
+  /** Fluffing (body shader displacement); the plumage lying on the body follows it. */
   setFluff(v) {
-    const b = this.current?.body;
-    if (b) b.userData.uniforms.uFluff.value = v;
+    const c = this.current;
+    if (c?.body) c.body.userData.uniforms.uFluff.value = v;
+    if (c?.feathers) c.feathers.userData.uniforms.uFluff.value = v;
+  }
+
+  /** Hind-neck fill (mm): the nape plumage puffs out where the head tilts back against the body. */
+  setNape(mm) {
+    const c = this.current;
+    if (c?.body) c.body.userData.uniforms.uNapeFill.value = mm;
   }
 
   /** Breathing: −1..1 cycle value; displacement is masked to the chest/flanks in the shader. */
   setBreath(v) {
-    const b = this.current?.body;
-    if (b) b.userData.uniforms.uBreath.value = v;
+    const c = this.current;
+    if (c?.body) c.body.userData.uniforms.uBreath.value = v;
+    if (c?.feathers) c.feathers.userData.uniforms.uBreath.value = v;
   }
 
   dispose() {
