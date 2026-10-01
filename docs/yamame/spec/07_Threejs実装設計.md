@@ -138,6 +138,8 @@ function frame(ts) {
 
 ### 7.3.2 標準手順(audit_c で動作確認済みの形)
 
+**確認の範囲**: audit_c が実行で確認したのは骨 3・頂点 236・モーフ 1・テクスチャ 3 枚の PoC までである [aud-C §1.1-1, §4]。下の手順の「24 脊椎+副ボーンのウェイト」「超楕円ロフト」「鰭の別 primitive」「眼ボーンの子ノード」「62 ボーン・2K テクスチャでのエンコード」は手順の形を延長した設計で、**未検証 [E]**(P0/P1 で確認する)。
+
 ```
 [tools/build-assets]
  1. loft.mjs      silhouette.json(02 §2.2.2) + 断面(超楕円) → 頂点・法線・UV・補助属性 (_S, _THETA)
@@ -202,7 +204,7 @@ glTF にはノード木とは別に最上位配列(`materials`、`animations`、
 
 | 拡張 | 用途 | GLTFLoader | GLTFExporter | 備考 |
 |---|---|---|---|---|
-| `KHR_materials_clearcoat` | 水膜(空気中のみ) | 反映 | 書出し可 | 水膜 F0=0.0204 に対し clearcoat F0=0.04 固定で垂直 +0.02、80° で +0.06 の誤差 [spec01 §1.5, r14 §1-5]。0↔正で再コンパイル [aud-A R2] |
+| `KHR_materials_clearcoat` | 水膜(空気中で強く、水中は 0 にせず小さな正値。06 §6.3.2) | 反映 | 書出し可 | 水膜 F0=0.0204 に対し clearcoat F0=0.04 固定で垂直 +0.02、80° で +0.06 の誤差 [spec01 §1.5, r14 §1-5]。0↔正で再コンパイル [aud-A R2] |
 | `KHR_materials_iridescence` | 虹彩色の弱い上乗せ(鰓蓋・腹側・体側境界。写真 70 枚中 6 枚) | 反映 | 書出し可 | 外側媒質は空気固定(水中では厳密でない)。`iridescenceThicknessRange` 既定 [100,400] nm、マップ無しは最大値 [aud-A §2.1.1, S][spec03 §3.6.2] |
 | `KHR_materials_transmission` / `KHR_materials_volume` | 眼の角膜・水滴のみに限定 | 反映 | 書出し可(transmission に volume が付く) | 不透明を再描画する追加パス(不透明 5+透過 1 → 描画 11 回)。鰭・薄膜には使わない [aud-A R8, R] |
 | `KHR_materials_ior` / `specular` / `sheen` / `anisotropy` / `emissive_strength` / `dispersion` | 必要に応じて | 反映 | 書出し可 | サンプラー予算に注意(下) [aud-C §2.12, T] |
@@ -212,7 +214,7 @@ glTF にはノード木とは別に最上位配列(`materials`、`animations`、
 | `KHR_materials_diffuse_transmission` | 半透明鰭の拡散透過 | **未対応**(`userData.gltfExtensions` に残るのみ) | **消える** | 鰭はアルファ合成の薄膜+追加透過光項(カスタム)で表現 [spec01 §1.5, aud-C §3-13] |
 | `EXT_mesh_gpu_instancing` / `KHR_lights_punctual` / `EXT_materials_bump` | 使わない予定 | ソース確認のみ | | 実行未確認 [aud-C §4] |
 
-**サンプラー予算**: STANDARD/PHYSICAL は dfgLUT で常時 1 枠。map+normal+ORM×3+emissive で 8、そこへ iridescence(2)+sheen(2)+clearcoat(3) の全マップを足すと 15。`MAX_TEXTURE_IMAGE_UNITS` は SwiftShader で 32 だが WebGL2 の最小保証は 16、実機に 16 のものがある(影・環境・ボーン・モーフを同時に使う材は超過しうる) [aud-A R5, aud-D §3-15]。**体マテリアルは**: `map`(個体別アルベド)、`normalMap`、ORM(同一 Texture を 3 スロット)、`envMap`(PMREM 1)、影付き平行光 1 灯 → 約 8 枠に収め、iridescence/clearcoat はテクスチャマップを使わず**スカラー値のみ**で与える [E: 枠節約]。ボーンテクスチャは頂点シェーダで別枠(`MAX_VERTEX_TEXTURE_IMAGE_UNITS` 32 は実機 16〜32) [aud-D §2.10]。
+**サンプラー予算**: STANDARD/PHYSICAL は dfgLUT で常時 1 枠。map+normal+ORM×3+emissive で 8、そこへ iridescence(2)+sheen(2)+clearcoat(3) の全マップを足すと 15。`MAX_TEXTURE_IMAGE_UNITS` は SwiftShader で 32 だが WebGL2 の最小保証は 16、実機に 16 のものがある(影・環境・ボーン・モーフを同時に使う材は超過しうる) [aud-A R5, aud-D §3-15]。**体マテリアルは**: `map`(個体別アルベド)、`normalMap`、ORM(同一 Texture を 3 スロット)、`envMap`(PMREM 1)、影付き平行光 1 灯 → 約 8 枠(dfgLUT 込み)に収め、iridescence/clearcoat はテクスチャマップを使わず**スカラー値のみ**で与える [E: 枠節約]。**ボーンテクスチャ(+1)とモーフテクスチャ(+1)も three は同じ連番カウンタで割り当て、`MAX_TEXTURE_IMAGE_UNITS` を超えると警告する**(`WebGLTextures.js` の `allocateTextureUnit`)ため、スキン+モーフ付きの体マテリアルは約 10 枠で数える [aud-D §3-15]。GL 上の頂点段の上限(`MAX_VERTEX_TEXTURE_IMAGE_UNITS`、実機 16〜32 [aud-D §2.10])とは別に、three の警告基準は共通である。06 章 §6.2.5 は `T_pattern_rt` を足して 11 枠で数える。
 
 ### 7.3.6 圧縮の既定
 
@@ -250,7 +252,7 @@ const gltf = await loader.loadAsync('yamame_hero.glb');
 | ボーン総数 | 62(fish_root 1、spine 24、jaw_lower 1、maxilla 2、hyoid 1、opercle 2、eye 2、胸 8、腹 6、背 4、臀 3、脂 2、caudal_hub 1、caudal_ray 5) | コード上の上限は無い。ボーンテクスチャ 37〜64 本=16×16。**62 本は 16×16 に収まり、上限 64 まで予備 2** | [spec05 §5.1.1, aud-B T1] |
 | ボーンテクスチャのサイズ | | `size = max(4, ceil(sqrt(N×4)/4)×4)`。N=62→16×16。float RGBA で 16×16×16 B = 4,096 B。毎フレーム全体を再アップロード | [aud-B §1.6, 算術] |
 | 1 頂点の影響 | | **最大 4**。5 本以上は無視 | [aud-B §1.6, S] |
-| 脊椎 24 本 | 等間隔 s_j=j/24 | 1 関節の最大角: 尾端振幅 0.10L で 12°、0.12L で 15°、0.20L で 24°(12 本だと 23°/27°/43°) | [aud-B §1.3, T19] |
+| 脊椎 24 本 | 等間隔 s_j=j/24 | 1 関節の最大角: 尾端振幅 0.10L で 12°、0.12L で 15°、0.20L で 24°(12 本だと 23°/27°/43°)。**この値は audit_b が r08 の二次式包絡で計算したもので、05 章の区分線形包絡では未計算**(T-A6 で再計算する) | [aud-B §1.3, T19] |
 | 鰭条 | 条群ボーン(胸 3、腹 2、背 3、臀 2、尾 5)+鰭膜のスキン/テクスチャ。鰭条 1 本ごとのボーンは置かない | 4 影響制限と 64 本上限のため | [spec05 §5.1.2, E] |
 | 体波 | `bone_j.quaternion = restQ_j ⊗ R_Y(θ_j − θ_{j−1} + bias_j)` | 回転のみで鎖長を保存(横ずらしだと 0.10L で +3.2%、0.17L で +8.4% 伸びる) | [spec05 §5.2.1, aud-B T15] |
 | 移動 | 個体 Group で行う | `fish_root` を動かすとカリング球が古くなる(root を 500 動かすと実体が視錐台内でも描画されない) | [aud-B §1.5, T4-a] |
@@ -425,7 +427,7 @@ interface Genome {
 | 遊泳 | `A_tail`=0.10·(SL/0.20)^−0.10(0.07〜0.14)、λ=0.9·(SL/0.20)^−0.05(0.8〜1.05)、`S_L` 0.70(0.55〜0.85)、`U_fast`=6.0·(SL/0.20)^−0.25 BL/s(指数 0.15〜0.35) | | [spec05 §5.8, E] |
 | 行動特性 | `wariness` 正規(0.5, 0.15)、`boldness` は 1−wariness と ρ=−0.7、`territoriality` 正規(0.5, 0.2) で**rank に比例して上限** | 0〜1 | [spec04 §4.8.1, E] |
 
-**相関**: 写真から検出できた相関は弱い(パーマーク ΔL* と地色 L* r=−0.09、背 L* と腹 L* r=−0.30、パーマーク個数と背側黒点数(対数) r=0.25 など) ため**既定は独立**。形態指標間の相関も**未算出**(各独立で生成。`depth(s)` の SD を s ごとに独立に使うと尾部が過大にばらつく [spec02 §2.9.2])。設計上の弱い結合のみ入れる [spec03 §3.8.2, E]: 暗い個体ほど `pm_dL` の絶対値を小さく・桃色を弱く、年齢が高いほど `spot_dorsal_n` を増やす、`pm_count` と `pm_contrast` は独立。`depth(s)` は **平均プロファイル + 1 本の「大きさスカラー」×SD プロファイル**でばらつかせる案 [E: 相関が取れるまでの暫定。要追加解析 — 08 章 ◎]。
+**相関**: 写真から検出できた相関は弱い(パーマーク ΔL* と地色 L* r=−0.09、背 L* と腹 L* r=−0.30、パーマーク個数と背側黒点数(対数) r=0.25 など) ため**既定は独立**。形態指標間の相関も**未算出**(各独立で生成。`depth(s)` の SD を s ごとに独立に使うと尾部が過大にばらつく [spec02 §2.9.2])。設計上の弱い結合のみ入れる [spec03 §3.8.2, E]: 暗い個体ほど `pm_dL` の絶対値を小さく・桃色を弱く、年齢が高いほど `spot_dorsal_n` を増やす、`pm_count` と `pm_contrast` は独立。`depth(s)` は **平均プロファイル + 1 本の「大きさスカラー」×SD プロファイル**でばらつかせる案 [E: 相関が取れるまでの暫定。要追加解析 — 08 章 ○26]。
 
 **資料間の差(体長の表記)**: 04 §4.8.1 の例(parr 10〜16 cm、adult 18〜30 cm、FL/SL 区別なし [E])と 02 §2.1 の基準個体 SL 190 mm(FL 211 mm)、05 §5.8 の SL 0.06〜0.35 m は定義が揃っていない。**Genome は SL(m) を基準**とし、FL は FL/SL=1.109 [spec02 §2.1, P: n=10] で換算する。
 
@@ -533,7 +535,7 @@ seed → sub-seed(カテゴリ名のハッシュ) を作り、カテゴリごと
 | 3 | 02 章の既定値と比較。許容誤差は **`depth(s)` ±0.01 SL、鰭起点 ±0.012 SL、頭部比 ±0.02 HL、鰭寸法 ±0.01 SL** [spec02 §2.9.1, E: 評価者間の中央絶対差を丸めた] |
 | 4 | 個体差生成: 100 個体を生成し、各比の平均・SD が 02 §2.9.2 の分布と一致(平均 ±0.2 SD、SD ±20% [E]) |
 
-注: `morpho_stats.py` は `--dir` 配下の `landmarks_<chunk>_<A|B>.json`(評価者別)を一括集計して `morphometrics.json` などを同じ dir に書く CLI で、`photo_metrics` は `if __name__ == "__main__"` の外にあるので関数として import できる。モデル由来の出力は**写真の出力 dir と別の dir**に `landmarks_model_A.json` の名前で置く(写真の集計を汚さない) [E]。`colorsample.py` は写真 ID(環境変数 `YAMAME_PHOTOS` の dir にある `pNNN.jpg`)を引数に取る CLI で、任意画像を直接は受けない。**テクスチャの色検査**(レンダー画像の部位ごとの L*a*b* が 03 §3.5.1 の範囲内か)に使うには、レンダー画像を `pNNN.jpg` 形式で別 dir に置いて `YAMAME_PHOTOS` を切り替えるか、Lab 変換部(`srgb_to_lin`/`lin_to_lab`)だけを流用する [E]。`morpho_stats.py` の入力ファイル群は `docs/yamame/photo_analysis/` にあり、回帰の基準(`profile_mean.json` など)として固定する。
+注: `morpho_stats.py` は `--dir` 配下の `landmarks_<chunk>_<A|B>.json`(評価者別)を一括集計して `morphometrics.json` などを同じ dir に書く CLI で、`photo_metrics` は `if __name__ == "__main__"` の外にあるので関数として import できる。モデル由来の出力は**写真の出力 dir と別の dir**に置く(写真の集計を汚さない)。ファイル名は `morpho_stats.py` が `landmarks_c*_*.json` で拾うため `landmarks_cmodel_A.json` とする(`landmarks_model_A.json` は glob に合わず 0 件になる。同スクリプトの `glob` を確認済み) [E]。`colorsample.py` は写真 ID(環境変数 `YAMAME_PHOTOS` の dir にある `pNNN.jpg`)を引数に取る CLI で、任意画像を直接は受けない。**テクスチャの色検査**(レンダー画像の部位ごとの L*a*b* が 03 §3.5.1 の範囲内か)に使うには、レンダー画像を `pNNN.jpg` 形式で別 dir に置いて `YAMAME_PHOTOS` を切り替えるか、Lab 変換部(`srgb_to_lin`/`lin_to_lab`)だけを流用する [E]。`morpho_stats.py` の入力ファイル群は `docs/yamame/photo_analysis/` にあり、回帰の基準(`profile_mean.json` など)として固定する。
 
 ### 7.7.5 スナップショット(L3)
 
@@ -614,10 +616,10 @@ function measure(fn) {
 ### 7.8.4 水中表現(Environment の実装方針)
 
 - 水中フォグは標準 `FogExp2` を使わない(距離の**二乗**・平面深度・1 色・canvas 直描きは sRGB 空間で混合)。`onBeforeCompile` で線形・放射距離・Beer–Lambert の自前実装(`tonemapping_fragment` の前、ビュー空間位置を `vec3` varying で渡し fragment で `length()`)。標準・チャンク置換・自前版の 3 方式で画素値が解析解と一致 [aud-D §1.1-8, §1.3, H]。放射距離を頂点で `length()` して `float` varying で渡さない(大きな三角形で壊れる) [aud-D §3-11]。
-- σ(RGB)は純水の吸収係数(650 nm で 0.34、550 nm で 0.064、465 nm で 0.010 m⁻¹)を初期値にするが、これは **M(記憶)の仮定**で、出典により 550 nm は 0.052〜0.070 に割れる。渓流の実効値はより大きい(河川の Kd380 が 0.68〜151.1 m⁻¹ の報告) [spec01 §1.5, spec03 §3.7]。`water_cdom` を別パラメータにする。**日本の渓流の実測は未取得(08 章)**。
+- σ(RGB)の既定は 06 章 §6.7.1 の `stream_clear`(0.60, 0.25, 0.20 /m、[E])とし、純水の吸収係数(650 nm で 0.34、550 nm で 0.064、465 nm で 0.010 m⁻¹)は下限プリセット `pure_lower_bound` に置く。後者は **M(記憶)の仮定**で、出典により 550 nm は 0.052〜0.070 に割れる。渓流の実効値はより大きい(河川の Kd380 が 0.68〜151.1 m⁻¹ の報告) [spec01 §1.5, spec03 §3.7]。`water_cdom` を別パラメータにする。**日本の渓流の実測は未取得(08 章)**。
 - コースティクスは平面投影の `onBeforeCompile`(世界座標 XZ、2 層の `min`、時間オフセット)を第一候補。SkinnedMesh/InstancedMesh/床で GL エラー無し。法線項・影による遮蔽は**未実装・未検証** [aud-D §1.1-9, §1.4, H]。
 - 水面は `Reflector`/`Water`/`Water2` がシーンを 1〜2 回再描画し、カメラが水の下だと何も描かない(水中から見上げる面はメッシュを反転) [aud-D §1.1-10, H]。
-- 水中の表面光沢: 水・粘液・表皮の屈折率がほぼ同じため水中では粘液界面の鏡面反射は無視でき、**水中は銀色層の環境反射が主体、空気中(釣り上げ・水面上)は水膜のクリアコート的な光沢を加える**。マテリアルのプリセットを 2 つ持つ(`water`/`air`) [spec03 §3.7, E]。
+- 水中の表面光沢: 水・粘液・表皮の屈折率がほぼ同じため水中では粘液界面の鏡面反射は無視でき、**水中は銀色層の環境反射が主体、空気中(釣り上げ・水面上)は水膜のクリアコート的な光沢を加える**。マテリアルのプリセットを 2 つ持つ(`water`/`air`)が、クリアコートは両プリセットで正値のまま値だけ変える(0↔正で再コンパイルが走るため。06 §6.3.2) [spec03 §3.7, E]。
 
 ---
 
@@ -645,4 +647,4 @@ function measure(fn) {
 | 5 | カスタム頂点属性(`_S`, `_THETA`)の GLB 往復のランタイム動作 | 補助属性の方式 |
 | 6 | 同じ `skin` を参照する複数メッシュのロード挙動 | 7.3.4 の構造 |
 
-詳細は 08 章に集約する。
+資料に関するもの(#1, #3, #4)は 08 章に集約する。実装検証の #2, #5, #6 は資料でなく 09 章 P0/P1 の確認項目として扱う。
