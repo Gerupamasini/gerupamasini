@@ -228,7 +228,7 @@ void computeFinSurface() {
   // (the membrane between the rays is clearly see-through, the rays carry
   // most of the density; distally both thin out further)
   float distal = smoothstep(0.25, 0.9, t);
-  float aMem = mix(0.4, 0.54, redM) * mix(1.0, 0.55, distal * (1.0 - 0.35 * redM));
+  float aMem = mix(0.38, 0.54, redM) * mix(1.0, 0.45, distal * (1.0 - 0.35 * redM));
   // paired fins: clearer membrane between strongly marked rays (p42_1)
   aMem *= type > 2.5 ? mix(0.6, 0.85, redM) : 1.0;
   float aRay = mix(0.62, 0.78, redM) * mix(1.0, 0.55, distal);
@@ -242,19 +242,31 @@ void computeFinSurface() {
   // its mean milky density (it never vanishes into a ghost at distance)
   alpha = mix(max(alpha, 0.3 * mix(1.0, 0.7, distal)), alpha, rayAA);
   alpha *= mix(1.0, vFishC.z, 0.6);                  // individual fin density
-  // ragged margin: the membrane recedes between the ray tips (shallow
-  // scallops), some inter-ray spaces are split further in (frayed), and the
-  // outermost few per cent fade softly instead of a hard cut
+  // ragged margin: the membrane recedes in shallow, smooth arcs between the
+  // primary rays, and a few inter-ray spaces are split further in (frayed).
+  // The recession is a smooth function of the position between two primary
+  // rays only (not of the branched-ray mask): a ray-dependent cut left every
+  // fine ray tip standing proud as a comb / sawtooth at close range.
   float cell = floor(rc);
   float split = finSplit(cell, seed, type);
   float xr0 = rc - cell;                       // 0..1 between two rays
   float scallop = 4.0 * xr0 * (1.0 - xr0);     // 0 at the rays, 1 midway
-  float recede = (0.004 + 0.007 * scallop + split * scallop) * (1.0 - ray);
+  scallop *= scallop * (3.0 - 2.0 * scallop);  // round-bottomed, no V notch
+  float recede = 0.004 + (0.006 + split) * scallop;
   float cut = 1.0 - recede;
-  float soft = 0.03 + 0.015 * (1.0 - ray);
+  // the outermost few per cent thin out softly; up close the fade spans at
+  // least ~2 px so the margin is antialiased (capped, so a small distant fin
+  // does not lose its outer part)
+  float fwt = fwidth(t);
+  float soft = clamp(2.0 * fwt, 0.035, 0.06);
   alpha *= 1.0 - smoothstep(cut - soft, cut, t);
-  // ray tips stand slightly proud of the membrane and taper
-  alpha *= 1.0 - smoothstep(0.96, 1.0, t) * ray;
+  // the distal margin is the thinnest membrane: clearer over the last 15 %
+  alpha *= mix(1.0, 0.7, smoothstep(0.82, 0.97, t) * (1.0 - flesh));
+  // leading / trailing edge of the shell (the mesh ends on the centre of the
+  // outer ray): a 1.5 px coverage ramp instead of a hard, stair-stepped
+  // geometric edge against the black studio background
+  float edgeC = min(rc, nRays - 1.0 - rc);
+  alpha *= smoothstep(0.0, 1.5 * fwr, edgeC) * (1.0 - flesh) + flesh;
   // rays fade into the membrane toward the margin (thin distal segments)
   ray *= 1.0 - 0.55 * smoothstep(0.55, 1.0, t);
   alpha *= uFinOpacity;

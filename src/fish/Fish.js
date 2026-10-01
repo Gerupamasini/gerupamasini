@@ -54,10 +54,14 @@ export function makeVariation(rng, forceType = null) {
   const type = COLOR_TYPES[typeIdx];
   const v = {
     // individuals in one tank differ clearly in size (about +-25 %) and in
-    // build: slim, torpedo-like fish next to deep-bodied ones (body depth
-    // roughly 0.28 .. 0.37 SL); deeper fish are also a little broader
+    // build, but always within comet morphology: a long, slender body with
+    // a maximum depth of about 0.29 .. 0.32 SL (the standard profile is
+    // 0.376 SL deep; deeper bodies read as fancy / common goldfish). The
+    // depth scale applies to the trunk only: the head keeps the standard
+    // profile (see bodyVertexPars / trunkDepthK). Deeper fish are also a
+    // little broader.
     SL: clamp(rng.normal(0.095, 0.016), 0.071, 0.122),
-    depthScale: clamp(rng.normal(1.03, 0.065), 0.87, 1.16),
+    depthScale: clamp(rng.normal(0.83, 0.022), 0.78, 0.85),
     widthScale: clamp(rng.normal(1, 0.04), 0.9, 1.1),
     caudalLobe: clamp(rng.normal(0.76, 0.08), 0.6, 0.98),
     caudalFork: rng.range(0.22, 0.28),
@@ -77,7 +81,7 @@ export function makeVariation(rng, forceType = null) {
     finRedDorsal: -0.3,
     finRedOther: -0.3,
   };
-  v.widthScale = clamp(v.widthScale + 0.45 * (v.depthScale - 1.0), 0.86, 1.16);
+  v.widthScale = clamp(v.widthScale + 0.45 * (v.depthScale - 0.83), 0.9, 1.1);
   if (type === 'sarasa') {
     v.finRedCaudal = rng.next() < 0.55 ? rng.range(0.12, 0.45) : -0.3;
     v.finRedDorsal = rng.next() < 0.6 ? rng.range(0.2, 0.55) : -0.3;
@@ -107,6 +111,16 @@ export function makeVariation(rng, forceType = null) {
   return v;
 }
 
+/**
+ * Depth scale at axial position s (SL units): the head (s < 0.16) keeps the
+ * standard profile, the individual depth scale applies from s = 0.36 on.
+ * Must match trunkDepthK() in the body vertex shader.
+ */
+export function trunkDepthK(s, depthScale) {
+  const x = clamp((s - 0.16) / 0.2, 0, 1);
+  return 1 + (depthScale - 1) * x * x * (3 - 2 * x);
+}
+
 let _id = 0;
 
 
@@ -127,7 +141,7 @@ export class Fish {
     // are scaled the same way), so the dorsal / anal / paired fins neither
     // float above a slim back nor sink into a deep one
     for (const ch of this.rig.chains) {
-      ch.rootLocal.y *= this.variation.depthScale;
+      ch.rootLocal.y *= trunkDepthK(-ch.rootLocal.x, this.variation.depthScale);
       ch.rootLocal.z *= this.variation.widthScale;
     }
     this.brain = null;

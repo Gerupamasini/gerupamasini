@@ -36,7 +36,7 @@ export const U = {
   // white skin is a dense iridophore stack over pale flesh: pearly, i.e. a
   // warm-neutral diffuse part (light scattered back by the platelet stack)
   // plus a soft silvery sheen — neither paper nor a grey chrome mirror
-  uColWhite: { value: srgb('#c2bcb2') },
+  uColWhite: { value: srgb('#c8c2b8') },
   uColGill: { value: srgb('#b32831') },
   uScaleIntensity: { value: 1.0 },
   uRoughness: { value: 0.34 },
