@@ -1,0 +1,14 @@
+{
+  "name": "himehaze-3d",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Photoreal translucent juvenile yellowfin goby (Acanthogobius flavimanus) for Three.js",
+  "type": "module",
+  "scripts": {
+    "build:model": "node tools/build-model.mjs",
+    "serve": "node tools/serve.mjs"
+  },
+  "devDependencies": {
+    "jpeg-js": "^0.4.4"
+  }
+}
