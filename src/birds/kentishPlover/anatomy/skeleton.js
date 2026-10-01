@@ -18,6 +18,9 @@ const TOES = {
 export const COVERT_ARM = { primaryCovert: 'hand', greaterCovert: 'forearm', medianCovert: 'forearm' };
 
 /** Returns an ordered list of bone specs: {name, parent, pos[mm world], mirror(bool)} */
+/** Rest point (mm) of the neck sleeve's centre line at s (0 trunk … 1 head). */
+export const sleevePoint = (sl, s) => sl.a.map((a, i) => a + (sl.b[i] - a) * s);
+
 export function buildSkeletonSpec(cfg) {
   const J = cfg.joints;
   const specs = [];
@@ -88,9 +91,9 @@ export function buildSkeletonSpec(cfg) {
       }
     }
   }
-  // helper: carries the fore-neck / throat plumage half-way between the chest and the head (posed by the animator,
-  // bodyMesh.computeSpineWeights). Last, so the other bones keep their indices.
-  add('throat', 'chest', J.throat);
+  // neck sleeve helpers (posed by the animator, bodyMesh.computeSpineWeights). Last, so the other bones keep their
+  // indices.
+  for (let k = 1; k <= J.sleeve.n; k++) add(`sleeve${k}`, 'chest', sleevePoint(J.sleeve, k / (J.sleeve.n + 1)));
   return { specs, wingFeathers, tailFeathers, toes: TOES };
 }
 

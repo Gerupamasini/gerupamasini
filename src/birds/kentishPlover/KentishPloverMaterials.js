@@ -394,16 +394,32 @@ float kpWisp(vec3 p, vec3 n) {
   return step(0.89, h) * smoothstep(0.1, -0.5, n.y) * smoothstep(-45.0, -30.0, p.z) * (1.0 - smoothstep(22.0, 32.0, p.z));
 }
 `;
+// Neck sleeve stretched (pecking, reaching to preen: posed length / rest length uSleeveStretch, animator
+// _poseSleeve): the plumage pattern is looked up where it lay at rest *along the sleeve* so that the ends keep their
+// size — the hood behind the cap stays on the head, the grey-brown mantle on the back — and the extra length shows
+// the white collar between them (s 0.45 at the hind-neck). Without it the rest-space pattern stretched with the skin
+// and drew the hood and the mantle out into long brown smears down the hind neck. aSleeveG = ∇s / |∇s|² (rest mm):
+// moving the lookup by (s' − s)·aSleeveG reaches the rest point at sleeve position s'.
+const GLSL_SLEEVE_PATTERN = /* glsl */ `
+float kpSleevePattern(float s) {
+  float k = max(uSleeveStretch, 1.0);
+  float sp = s < 0.45 ? min(s * k, 0.45) : max(1.0 - (1.0 - s) * k, 0.45);
+  return sp - s;
+}`;
+
 const GLSL_SHELL_VERT = /* glsl */ `
 attribute float aShell; varying float vShell;
 ${GLSL_WISP}
-float kpShellMM(vec3 p, vec3 n) {
+float kpShellMM(vec3 p, vec3 n, float sleeve) {
+  // neck-sleeve plumage (aSleeve > 0) is never under the scapulars or the wing: drawn out by a stretched or turned
+  // neck it is in view, and without its fringe it showed as a bald pale patch
+  float neck = smoothstep(0.04, 0.2, sleeve);
   vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
   float head = clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - clamp((83.0 - p.y) / 5.0, 0.0, 1.0));
   float under = smoothstep(0.35, -0.3, n.y);       // breast, belly, flanks
   float len = mix(0.3, 0.6, under);
   len *= mix(1.0, 0.55, head);                       // short, dense head feathering
-  len *= mix(1.0, 0.35, smoothstep(0.3, 0.7, n.y) * smoothstep(5.0, 9.0, abs(p.x)) * (1.0 - head)); // under the scapulars / wing
+  len *= mix(1.0, 0.35, smoothstep(0.3, 0.7, n.y) * smoothstep(5.0, 9.0, abs(p.x)) * (1.0 - head) * (1.0 - neck)); // under the scapulars / wing
   vec3 q = vec3(abs(p.x), p.y, p.z) - vec3(7.6, 95.0, 25.5);
   float es = dot(q, vec3(0.954, 0.130, 0.270));
   float er = length(q - vec3(0.954, 0.130, 0.270) * es);
@@ -412,7 +428,7 @@ float kpShellMM(vec3 p, vec3 n) {
   // nor under the folded wing and the scapulars (they would stand through the gaps between the feathers): above
   // the wing's lower edge (kpUpperEdge, (z, y) (20, 63) … (−55, 60)) and behind the shoulder
   float yb = p.z > 5.0 ? mix(60.0, 63.0, clamp((p.z - 5.0) / 15.0, 0.0, 1.0)) : p.z > -25.0 ? mix(55.5, 60.0, (p.z + 25.0) / 30.0) : mix(60.0, 55.5, clamp((p.z + 55.0) / 30.0, 0.0, 1.0));
-  len *= 1.0 - smoothstep(yb - 3.0, yb - 1.0, p.y + n.y * 3.0) * (1.0 - smoothstep(8.0, 16.0, p.z)) * (1.0 - head);
+  len *= 1.0 - smoothstep(yb - 3.0, yb - 1.0, p.y + n.y * 3.0) * (1.0 - smoothstep(8.0, 16.0, p.z)) * (1.0 - head) * (1.0 - neck);
   return len * (1.0 + 2.6 * kpWisp(p, n));
 }
 `;
@@ -482,17 +498,18 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
     uFluff: { value: 0 },
     uBreath: { value: 0 },
     uNapeFill: { value: 0 },
+    uSleeveStretch: { value: 1 },
     uBounce: GROUND_BOUNCE,
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec3 aRest; attribute vec3 aFlow;\nuniform float uFluff; uniform float uBreath; uniform float uNapeFill;\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;\n${GLSL_FLUFF}\n${GLSL_NAPE}\n${shell ? GLSL_SHELL_VERT : ''}`)
+      .replace('#include <common>', `#include <common>\nattribute vec3 aRest; attribute vec3 aFlow; attribute float aSleeve; attribute vec3 aSleeveG;\nuniform float uFluff; uniform float uBreath; uniform float uNapeFill; uniform float uSleeveStretch;\n${GLSL_SLEEVE_PATTERN}\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;\n${GLSL_FLUFF}\n${GLSL_NAPE}\n${shell ? GLSL_SHELL_VERT : ''}`)
       .replace(
         '#include <defaultnormal_vertex>',
         `#include <defaultnormal_vertex>
-        vRest = aRest; vRestN = normal; vFlowR = aFlow;
+        vRest = aRest + aSleeveG * kpSleevePattern(aSleeve); vRestN = normal; vFlowR = aFlow;
         vec3 kpFl = aFlow;
         #ifdef USE_SKINNING
           kpFl = (skinMatrix * vec4(kpFl, 0.0)).xyz;
@@ -508,7 +525,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
       shader.vertexShader = shader.vertexShader.replace(
         '#include <project_vertex>',
         `vec3 kpSkin = transformed;
-        transformed += objectNormal * aShell * 0.001 * kpShellMM(aRest, normal) * (1.0 + 0.6 * max(uFluff, 0.0));
+        transformed += objectNormal * aShell * 0.001 * kpShellMM(aRest, normal, aSleeve) * (1.0 + 0.6 * max(uFluff, 0.0));
         #include <project_vertex>
         transformed = kpSkin;`
       );
