@@ -111,6 +111,26 @@ float vnoise2(vec2 p) {
   vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash12(i), hash12(i + vec2(1,0)), u.x), mix(hash12(i + vec2(0,1)), hash12(i + vec2(1,1)), u.x), u.y);
 }
+
+// Sarasa (red / white) pigment field in the rest frame of the body (SL units,
+// x = -s). Shared by the body and the fins, so the pigment of a fin base
+// continues the body pattern where the fin attaches.
+float sarasaField(vec3 rp, float seed) {
+  vec3 q = rp * vec3(3.4, 4.6, 4.2) + vec3(seed * 13.17, seed * 5.31, seed * 2.73);
+  float n = fbm3(q);
+  float n2 = fbm3(q * 2.3 + 7.1);
+  float a = clamp(rp.y / 0.17, -1.0, 1.0);
+  float s = -rp.x;
+  float h = hash11(seed * 91.7);
+  float bias = 0.24 * a                                   // back redder than belly
+    - 0.3 * smoothstep(-0.25, -0.85, a)                   // white belly
+    + (h > 0.55 ? 0.22 : -0.1) * smoothstep(0.3, 0.1, s)  // red head cap vs white face
+    - (h < 0.3 ? 0.25 : 0.0) * smoothstep(0.06, 0.0, s)   // white snout
+    + 0.12 * smoothstep(0.8, 1.0, s);                     // red caudal base
+  // fine third octave: ragged, irregular blotch borders
+  float n3 = vnoise3(q * 4.0 + 3.3);
+  return n + 0.12 * (n2 - 0.5) + 0.035 * (n3 - 0.5) + bias;
+}
 `;
 
 // Underwater light transport shared by every material inside the tank.

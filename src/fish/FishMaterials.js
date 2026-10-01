@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { U } from '../render/SharedUniforms.js';
+import { head } from './morphology.js';
 import { rigVertexCommon, noiseCommon, underwaterCommon } from './shaders/common.glsl.js';
 import {
   bodyVertexPars,
@@ -26,7 +27,7 @@ import {
   finFragmentOutput,
   finDebugHelpers,
 } from './shaders/fin.glsl.js';
-import { eyeVertexPars, eyeVertexMain, eyeFragmentPars, eyeFragmentNormal } from './shaders/eye.glsl.js';
+import { eyeVertexPars, eyeVertexMain, eyeFragmentPars, eyeFragmentNormal, eyeFragmentMaterial } from './shaders/eye.glsl.js';
 
 function mustReplace(src, find, repl, label) {
   if (!src.includes(find)) throw new Error(`[FishMaterials] shader chunk not found (${label}): ${find}`);
@@ -53,7 +54,8 @@ export function createBodyMaterial(layout, { lod = 0 } = {}) {
     specularIntensity: 1.0,
     envMapIntensity: 1.0,
   });
-  m.defines = { RIG_MISC: layout.misc, FISH_LOD: lod };
+  // nostril landmark for the shading of the nares (same as the geometry)
+  m.defines = { RIG_MISC: layout.misc, FISH_LOD: lod, NARE_S: head.nareS.toFixed(4), NARE_Y: head.nareY.toFixed(4) };
   m.onBeforeCompile = (shader) => {
     attachUniforms(shader, [
       'uRig', 'uDebugView', 'uColRed', 'uColOrange', 'uColYellow', 'uColWhite', 'uColGill',
@@ -115,7 +117,7 @@ export function createFinMaterial(layout, { lod = 0 } = {}) {
       'uFinOpacity', 'uFinTransmission', 'uFinRoughness', ...UW_UNIFORMS,
     ]);
     let vs = shader.vertexShader;
-    vs = mustReplace(vs, '#include <common>', '#include <common>\n' + rigVertexCommon + finVertexPars, 'common');
+    vs = mustReplace(vs, '#include <common>', '#include <common>\n' + rigVertexCommon + noiseCommon + finVertexPars, 'common');
     vs = mustReplace(vs, '#include <beginnormal_vertex>', 'finDeform();\nvec3 objectNormal = gFishNormal;', 'beginnormal');
     vs = mustReplace(vs, '#include <begin_vertex>', 'vec3 transformed = gFishPos;', 'begin_vertex');
     shader.vertexShader = vs;
@@ -178,8 +180,8 @@ export function createEyeMaterial() {
     roughness: 0.2,
     metalness: 0.0,
     // cornea: immersed, so it reflects only faintly, but it is optically
-    // smooth — a small crisp highlight and a faint window reflection
-    clearcoat: 0.45,
+    // smooth — a crisp highlight and a window reflection of the surroundings
+    clearcoat: 0.7,
     clearcoatRoughness: 0.03,
     specularIntensity: 1.0,
   });
@@ -195,6 +197,7 @@ export function createEyeMaterial() {
     fs = mustReplace(fs, '#include <roughnessmap_fragment>', 'float roughnessFactor = gEyeRough;', 'rough');
     fs = mustReplace(fs, '#include <metalnessmap_fragment>', 'float metalnessFactor = gEyeMetal;', 'metal');
     fs = mustReplace(fs, '#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + eyeFragmentNormal, 'normal');
+    fs = mustReplace(fs, '#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n' + eyeFragmentMaterial, 'lights_physical');
     fs = mustReplace(fs, '#include <opaque_fragment>', 'outgoingLight = waterAttenuate(outgoingLight, vEyeWorld);\n#include <opaque_fragment>', 'opaque');
     shader.fragmentShader = fs;
   };

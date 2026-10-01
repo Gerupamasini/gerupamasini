@@ -25,14 +25,18 @@ export const U = {
   uWaterDensity: { value: 1.0 },
 
   // body pigments (sRGB anchors from the research report §7, tuned on photos)
-  uColRed: { value: srgb('#d0290c') },
+  // the red is a deep, saturated carotenoid red (sarasa patches use it
+  // unshifted; solid red / orange fish shift it toward orange individually)
+  uColRed: { value: srgb('#d4160a') },
   uColOrange: { value: srgb('#e0661c') },
   uColYellow: { value: srgb('#e8b83a') },
-  uColWhite: { value: srgb('#e6eaee') },
+  // white skin is a guanine mirror over pale flesh: a modest diffuse albedo,
+  // most of its brightness is the (silvery) reflection of the surroundings
+  uColWhite: { value: srgb('#a4a9ae') },
   uColGill: { value: srgb('#b32831') },
   uScaleIntensity: { value: 1.0 },
   uRoughness: { value: 0.34 },
-  uGuanine: { value: 0.55 },
+  uGuanine: { value: 0.62 },
   uIridescence: { value: 0.3 },
   uSSS: { value: 0.6 },
   uTranslucency: { value: 1.0 }, // tissue translucency (scales the mean free path)
@@ -40,7 +44,7 @@ export const U = {
   uKeyShadowOn: { value: 0 },
 
   // fins
-  uFinOpacity: { value: 1.0 },
+  uFinOpacity: { value: 0.85 },
   uFinTransmission: { value: 1.0 },
   uFinRoughness: { value: 0.32 },
 
@@ -49,5 +53,5 @@ export const U = {
   uIrisRed: { value: srgb('#b8481e') },
   uIrisSilver: { value: srgb('#b8bcc0') },
   uPupil: { value: 0.46 }, // pupil radius / eyeball radius: ~half the visible eye
-  uIrisMetal: { value: 0.3 },
+  uIrisMetal: { value: 0.15 }, // mostly diffuse guanine flecks: the iris stays readable at a distance
 };

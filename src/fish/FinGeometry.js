@@ -17,9 +17,14 @@
 //               follows the real per-ray lengths between the few simulated
 //               chains (curved margins, forked / rounded lobes) instead of
 //               straight spans from chain tip to chain tip
+//   aFinRoot  = rest position (s, y, z) [SL] of the ray base on the body and
+//               the true ray length [SL]: the fin base takes its pigment from
+//               the body pattern where it attaches, and the rest-shape
+//               curvature of the rays scales with their length
 
 import * as THREE from 'three';
-import { clamp } from '../core/math.js';
+import { clamp, smoothstep } from '../core/math.js';
+import { profile } from './morphology.js';
 
 function chainCoordForR(r, chains) {
   for (let j = 0; j < chains.length - 1; j++) {
@@ -31,18 +36,34 @@ function chainCoordForR(r, chains) {
   return chains.length - 1;
 }
 
-/** Ray length at fin position r (linear between the defined rays, as the rig does). */
-function rayLengthAt(rays, r) {
+/** Ray property at fin position r (linear between the defined rays, as the rig does). */
+function rayPropAt(rays, r, key) {
   for (let i = 0; i < rays.length - 1; i++) {
     const a = rays[i];
     const b = rays[i + 1];
     if (r <= b.r + 1e-9) {
       const f = clamp((r - a.r) / Math.max(1e-9, b.r - a.r), 0, 1);
-      return a.length + (b.length - a.length) * f;
+      return a[key] + (b[key] - a[key]) * f;
     }
   }
-  return rays[rays.length - 1].length;
+  return rays[rays.length - 1][key];
 }
+
+/** Rest position of the ray base on the body surface (fish-local SL units, s = -x). */
+function rayRoot(rays, r, type, side) {
+  const s = rayPropAt(rays, r, 's');
+  let y = rayPropAt(rays, r, 'y');
+  let z = 0;
+  if (type === 3) z = side * profile.hw(s) * 0.92;
+  if (type === 4) {
+    y = profile.bot(s) + 0.012;
+    z = side * (0.018 + 0.012 * r);
+  }
+  return [s, y, z];
+}
+
+/** Ray length at fin position r (linear between the defined rays, as the rig does). */
+const rayLengthAt = (rays, r) => rayPropAt(rays, r, 'length');
 
 const cr1 = (p0, p1, p2, p3, t) => {
   const t2 = t * t;
@@ -76,6 +97,7 @@ export function buildFinGeometry(layout, quality = 1) {
   const coordA = [];
   const rayA = [];
   const lenA = [];
+  const rootA = [];
   const indices = [];
   let vcount = 0;
 
@@ -108,12 +130,27 @@ export function buildFinGeometry(layout, quality = 1) {
     const chainLens = def.chains.map((r) => rayLengthAt(rays, r));
     for (const col of cols) {
       col.c = chainCoordForR(col.r, def.chains);
-      col.lenRatio = clamp(rayLengthAt(rays, col.r) / Math.max(1e-4, chainLengthAt(chainLens, col.c)), 0.25, 3);
+      col.len = rayLengthAt(rays, col.r);
+      col.lenRatio = clamp(col.len / Math.max(1e-4, chainLengthAt(chainLens, col.c)), 0.25, 3);
+      col.root = rayRoot(rays, col.r, type, fin.side);
     }
 
     const thicknessOf = (col, t) => {
       // fleshy base, thin distal membrane; rays add a tapered ridge
       let th = 0.0105 * Math.pow(1 - t, 7) + 0.0009 * (1 - t) + 0.00022;
+      if (type === 0) {
+        // the caudal base is a fleshy fan over the hypural plate, thinning over
+        // the first ~0.1 SL (absolute length, the same for short and long
+        // rays) and always a little thinner than the scaled caudal tongue of
+        // the body that lies on it (even in narrow individuals): the tongue's
+        // thin dorsal / ventral edges sink into the fan and its rounded end
+        // meets the fan almost flush, so the body runs into the fin instead of
+        // ending in a cap. Procurrent rays along the peduncle edge stay thin.
+        const tAbs = t * col.len;
+        const d = Math.abs(col.r - 0.5) * 2;
+        const fleshy = 0.012 * (1 - smoothstep(0, 0.12, tAbs)) * smoothstep(0.98, 0.72, d);
+        th = Math.max(th, fleshy + 0.0009 * (1 - t) + 0.00022);
+      }
       if (col.isRay) th += (0.0021 * (1 - t) * (1 - t) + 0.00028) * (col.lead ? (type === 0 ? 1.2 : 2.1) : 1);
       if (type === 3 || type === 4) th *= 0.85;
       return th;
@@ -130,6 +167,7 @@ export function buildFinGeometry(layout, quality = 1) {
           coordA.push(col.c, t, layer, thicknessOf(col, t));
           rayA.push(col.rayCoord, nRays, col.r, col.lead);
           lenA.push(col.lenRatio);
+          rootA.push(col.root[0], col.root[1], col.root[2], col.len);
           vcount++;
         }
       }
@@ -172,6 +210,7 @@ export function buildFinGeometry(layout, quality = 1) {
   g.setAttribute('aFinCoord', new THREE.BufferAttribute(new Float32Array(coordA), 4));
   g.setAttribute('aFinRay', new THREE.BufferAttribute(new Float32Array(rayA), 4));
   g.setAttribute('aFinLen', new THREE.BufferAttribute(new Float32Array(lenA), 1));
+  g.setAttribute('aFinRoot', new THREE.BufferAttribute(new Float32Array(rootA), 4));
   g.setIndex(vcount > 65535 ? new THREE.Uint32BufferAttribute(indices, 1) : new THREE.Uint16BufferAttribute(indices, 1));
   return g;
 }
