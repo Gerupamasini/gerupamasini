@@ -44,7 +44,14 @@ export class DOFPass extends Pass {
         uniform vec2 uTexel;
         uniform float uNear, uFar, uFocus, uCoC, uMaxBlur, uDebug;
         float linZ(vec2 uv) {
-          float d = texture(tDepth, uv).x * 2.0 - 1.0;
+          float d0 = texture(tDepth, uv).x;
+          // nothing opaque was drawn here (the void behind a studio fish):
+          // whatever covers the pixel is translucent (thin distal fin
+          // membrane, which keeps no depth of its own) or a uniform
+          // background, so it is treated as lying in the focal plane instead
+          // of at infinity (fins would otherwise smear with maximum blur)
+          if (d0 >= 0.999999) return uFocus;
+          float d = d0 * 2.0 - 1.0;
           return 2.0 * uNear * uFar / (uFar + uNear - d * (uFar - uNear));
         }
         // thin lens: blur diameter ~ |1 - focus / z| (pixels)

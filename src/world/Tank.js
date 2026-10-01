@@ -82,12 +82,12 @@ export function buildTank({ glassEnv = null } = {}) {
   led.position.set(0, H + 0.0915, -0.02);
   g.add(led);
 
-  // background: matte blue-black film on the back glass. It is lit only by the
+  // background: matte neutral black film on the back glass. It is lit only by the
   // hood light that falls off with depth and seen through the water, so it
   // reads as the usual dark gradient of a photographed tank; the caustic
   // pattern is kept faint (on a vertical wall it projects into streaks)
   const bgMat = patchUnderwater(
-    new THREE.MeshStandardMaterial({ color: 0x070b10, roughness: 0.95 }),
+    new THREE.MeshStandardMaterial({ color: 0x090b0a, roughness: 0.95 }),
     {
       caustics: true,
       causticMix: 0.2,

@@ -154,12 +154,26 @@ uniform float uWaterDensity;   // 0 = no water (studio): no extinction, no hood-
 // right under the lamp stay below clipping.
 #define UW_LAMP_H 0.13
 #define UW_REF_DEPTH 0.2
+#define UW_LAMP_HALF 0.54
+#define UW_LAMP_Z -0.02
+// Pool of light under the lamp: the LED bar (0.9 of the tank length, at
+// z = -2 cm) is a finite line source whose reflector throws the light down,
+// so the irradiance falls off toward the side panes (end-of-line falloff of
+// a finite strip, steepened by the reflector) and gently toward the front
+// and back glass. 1 directly under the middle of the bar.
+float lampPool(vec3 wp) {
+  float H = UW_LAMP_H + max(0.0, uCausticParams.z - wp.y);
+  float ex = (atan((UW_LAMP_HALF - wp.x) / H) + atan((UW_LAMP_HALF + wp.x) / H)) / (2.0 * atan(UW_LAMP_HALF / H));
+  float dz = wp.z - UW_LAMP_Z;
+  float ez = H * H / (H * H + 0.6 * dz * dz);
+  return pow(max(ex, 0.0), 1.3) * ez;
+}
 float lightFalloff(vec3 wp) {
   float depth = max(0.0, uCausticParams.z - wp.y);
   float f = (UW_LAMP_H + UW_REF_DEPTH) / (UW_LAMP_H + depth) * exp(-0.4 * (depth - UW_REF_DEPTH));
   // soft knee from 1.0, asymptote 1.5
   f = f > 1.0 ? 1.0 + 0.5 * (f - 1.0) / (0.5 + (f - 1.0)) : f;
-  return uWaterDensity > 0.0 ? f : 1.0;
+  return uWaterDensity > 0.0 ? f * lampPool(wp) : 1.0;
 }
 // the in-water ambient (light scattered down from the surface) falls off more gently
 float ambientFalloff(vec3 wp) { return mix(1.0, lightFalloff(wp), 0.55); }
