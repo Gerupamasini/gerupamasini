@@ -240,7 +240,8 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
   // surface detail: grain, patches and ripple shading, all procedural
-  float grain = hash21(floor(vWorldPos.xz * 60.0)) - 0.5;
+  // grain: millimetre speckle plus centimetre mottling (the old 1.7 cm cells read as a checkerboard up close)
+  float grain = (hash21(floor(vWorldPos.xz * 450.0)) - 0.5) * 0.6 + (vnoise(vWorldPos.xz * 35.0) - 0.5) * 0.8;
   float patchN = vnoise(vWorldPos.xz * 0.35) - 0.5;
   float isSand = 1.0 - smoothstep(0.5, 1.5, vSubstrate);
   // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
