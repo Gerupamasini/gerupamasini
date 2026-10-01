@@ -17,7 +17,9 @@ export class PostFX {
     this.composer = new EffectComposer(renderer, rt);
     this.renderPass = new RenderPass(scene, camera);
     this.dof = new DOFPass(camera);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.14, 0.4, 1.05);
+    // lens veiling glare only for genuinely bright highlights (LED, specular
+    // sparkles), never for ordinarily lit skin
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.05, 0.2, 3.0);
     this.lens = new LensPass();
     this.output = new OutputPass();
     this.composer.addPass(this.renderPass);

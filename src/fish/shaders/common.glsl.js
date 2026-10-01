@@ -118,40 +118,47 @@ uniform vec3 uCausticLightDir; // direction TOWARD the light (normalised)
 uniform vec3 uWaterMin;
 uniform vec3 uWaterMax;
 uniform vec3 uWaterAbsorb;     // per-channel extinction (1/m)
-uniform vec3 uWaterScatter;    // in-scattered radiance colour
-uniform float uWaterDensity;
+uniform vec3 uWaterScatter;    // in-scattered radiance colour (at mid depth)
+uniform float uWaterDensity;   // 0 = no water (studio): no extinction, no hood-light falloff
 
-float causticsAt(vec3 wp, vec3 n) {
+// Hood-light falloff with depth. The LED bar hangs ~10 cm above the water and
+// behaves like a line source (irradiance ~ 1/r); together with the vertical
+// absorption this makes fish near the surface bright and the gravel and the
+// lower back wall noticeably darker. Normalised to 1 at mid-water depth, so
+// the key-light intensity keeps its meaning.
+#define UW_LAMP_H 0.13
+#define UW_REF_DEPTH 0.2
+float lightFalloff(vec3 wp) {
   float depth = max(0.0, uCausticParams.z - wp.y);
-  vec3 L = uCausticLightDir;
-  vec2 ps = wp.xz + L.xz * (depth / max(0.2, L.y));
-  vec2 uv = ps / uCausticParams.x;
-  float lod = clamp(depth * 2.2, 0.0, 2.5);
-  // slight chromatic dispersion of the focused light
-  float r = textureLod(uCaustics, uv + vec2(0.0018, 0.0), lod).r;
-  float g = textureLod(uCaustics, uv, lod).r;
-  float b = textureLod(uCaustics, uv - vec2(0.0018, 0.0), lod).r;
-  float c = (r + g + b) * 0.3333;
-  float facing = smoothstep(-0.1, 0.6, dot(n, L));
-  float contrast = uCausticParams.y * facing * exp(-depth * 0.9);
-  // texture mean ≈ 0.15 -> factor averages to 1 (energy conserving redistribution)
-  return max(0.0, 1.0 + 0.6 * contrast * (c / 0.15 - 1.0));
+  float f = (UW_LAMP_H + UW_REF_DEPTH) / (UW_LAMP_H + depth) * exp(-0.4 * (depth - UW_REF_DEPTH));
+  return uWaterDensity > 0.0 ? min(f, 2.4) : 1.0;
 }
-vec3 causticsRGB(vec3 wp, vec3 n) {
+// the in-water ambient (light scattered down from the surface) falls off more gently
+float ambientFalloff(vec3 wp) { return mix(1.0, lightFalloff(wp), 0.55); }
+
+// projected caustic pattern only (mean 1): bright filaments near the surface,
+// widening and softening with depth (the LED bar is an extended source)
+vec3 causticsPattern(vec3 wp, vec3 n) {
   float depth = max(0.0, uCausticParams.z - wp.y);
   vec3 L = uCausticLightDir;
   vec2 ps = wp.xz + L.xz * (depth / max(0.2, L.y));
   vec2 uv = ps / uCausticParams.x;
-  float lod = clamp(depth * 2.2, 0.0, 2.5);
-  float d = 0.002 + depth * 0.004;
+  float lod = clamp(0.3 + depth * 3.2, 0.0, 2.6);
+  // slight chromatic dispersion of the focused light
+  float d = 0.0015 + depth * 0.004;
   vec3 c = vec3(textureLod(uCaustics, uv + vec2(d, 0.0), lod).r, textureLod(uCaustics, uv, lod).r, textureLod(uCaustics, uv - vec2(d, 0.0), lod).r);
   float facing = smoothstep(-0.1, 0.6, dot(n, L));
-  float contrast = uCausticParams.y * facing * exp(-depth * 0.9);
-  return max(vec3(0.0), 1.0 + 0.6 * contrast * (c / 0.15 - 1.0));
+  float contrast = uCausticParams.y * facing * (0.35 + 0.65 * exp(-depth * 2.2));
+  // texture mean ≈ 0.15 -> factor averages to 1 (energy conserving redistribution)
+  return max(vec3(0.0), 1.0 + 0.9 * contrast * (c / 0.15 - 1.0));
 }
+// direct hood light modulation: caustics x depth falloff
+vec3 causticsRGB(vec3 wp, vec3 n) { return causticsPattern(wp, n) * lightFalloff(wp); }
+float causticsAt(vec3 wp, vec3 n) { return dot(causticsPattern(wp, n), vec3(0.3333)) * lightFalloff(wp); }
 
-// distance travelled inside the water volume between the camera and wp
-float waterPath(vec3 wp) {
+// distance travelled inside the water volume between the camera and wp, and
+// the point where the view ray enters the water
+float waterSegment(vec3 wp, out vec3 entry) {
   vec3 ro = cameraPosition;
   vec3 rd = wp - ro;
   float len = length(rd);
@@ -161,13 +168,23 @@ float waterPath(vec3 wp) {
   vec3 t1 = (uWaterMax - ro) * inv;
   vec3 tmin = min(t0, t1);
   float tNear = max(max(tmin.x, tmin.y), tmin.z);
-  tNear = max(tNear, 0.0);
+  tNear = clamp(tNear, 0.0, len);
+  entry = ro + rd * tNear;
   return max(0.0, len - tNear);
 }
+float waterPath(vec3 wp) {
+  vec3 e;
+  return waterSegment(wp, e);
+}
 
+// wavelength-dependent extinction (red first: distant things turn blue-green
+// and lose contrast) plus in-scattering, which is brighter in the upper,
+// better lit part of the water column
 vec3 waterAttenuate(vec3 col, vec3 wp) {
-  float d = waterPath(wp) * uWaterDensity;
+  vec3 e;
+  float d = waterSegment(wp, e) * uWaterDensity;
   vec3 T = exp(-uWaterAbsorb * d);
-  return col * T + uWaterScatter * (1.0 - T);
+  vec3 S = uWaterScatter * ambientFalloff(vec3(0.0, 0.5 * (e.y + wp.y), 0.0));
+  return col * T + S * (1.0 - T);
 }
 `;

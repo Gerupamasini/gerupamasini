@@ -43,7 +43,7 @@ export class App {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.NeutralToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 1.4;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     this.container.appendChild(renderer.domElement);
@@ -80,9 +80,10 @@ export class App {
     this.post.dof.enabled = this.dofEnabled !== false;
     this.controls.enabled = this.cameraMode !== 'cinematic';
     if (this.mode === 'studio') {
-      this.post.bloom.strength = 0.05;
-      this.post.bloom.radius = 0.25;
-      this.post.bloom.threshold = 1.6;
+      // no glow halo around a softly lit fish: only true speculars bloom
+      this.post.bloom.strength = 0.03;
+      this.post.bloom.radius = 0.2;
+      this.post.bloom.threshold = 4.0;
     }
     this.usePost = pp.get('post') !== '0';
     this._bindInput();
@@ -149,18 +150,23 @@ export class App {
 
   _initStudio() {
     const { scene, renderer } = this;
+    // black-background product shot (the reference photographs): a large
+    // soft box over and in front of the fish does most of the lighting (the
+    // baked environment), a gentle directional key gives shape and drives
+    // the light transmitted through fins and thin tissue; no hard fill.
     scene.background = new THREE.Color(0x000000);
     scene.environment = bakeEnvironment(renderer, buildStudioEnvScene());
-    scene.environmentIntensity = 0.9;
+    scene.environmentIntensity = 1.0;
+    renderer.toneMappingExposure = 1.0;
     U.uCausticParams.value.y = 0;
     U.uWaterDensity.value = 0;
-    const key = new THREE.DirectionalLight(0xfff5ea, 3.2);
-    key.position.set(0.4, 2.0, 1.0);
+    const key = new THREE.DirectionalLight(0xf6f8ff, 2.1);
+    key.position.set(0.3, 1.8, 1.3);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xdde8ff, 0.8);
-    fill.position.set(-1.5, 0.4, 1.2);
+    const fill = new THREE.DirectionalLight(0xe4ecff, 0.5);
+    fill.position.set(-1.2, 0.3, 1.5);
     scene.add(fill);
-    scene.add(new THREE.HemisphereLight(0xbfd2e0, 0x201a14, 0.35));
+    scene.add(new THREE.HemisphereLight(0xc4d4e4, 0x0a0908, 0.12));
     this.studioLights = { key, fill };
     U.uCausticLightDir.value.copy(key.position).normalize(); // key direction for the body light transport
     const p = this.opts.params;
@@ -443,7 +449,7 @@ export class App {
     }
     this.focusDist += (target - this.focusDist) * (1 - Math.exp(-dt * 3));
     this.post.dof.focus = this.focusDist;
-    this.post.dof.fStop = this.mode === 'studio' ? 8 : 4;
+    this.post.dof.fStop = this.mode === 'studio' ? 11 : 8;
   }
 
   render() {

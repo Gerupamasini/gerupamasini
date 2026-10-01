@@ -7,7 +7,12 @@ import { underwaterCommon, noiseCommon } from '../fish/shaders/common.glsl.js';
 
 const UW_UNIFORMS = ['uCaustics', 'uCausticParams', 'uCausticLightDir', 'uWaterMin', 'uWaterMax', 'uWaterAbsorb', 'uWaterScatter', 'uWaterDensity', 'uTime'];
 
-export function patchUnderwater(material, { caustics = true, attenuation = true, extraVertex = null, extraVertexPars = '', extraFragmentPars = '', extraNormal = '', extraColor = '', extraLights = '', key = '' } = {}) {
+// Options: caustics (projected caustic pattern on direct light), causticMix
+// (pattern contrast, 1 = full), attenuation (in-water extinction along the view
+// ray). Direct light always gets the hood-light depth falloff and indirect
+// light the gentler ambient falloff. extraLights code runs after that and can
+// use `uwDirect` (the direct-light modulation at this point).
+export function patchUnderwater(material, { caustics = true, causticMix = 1, attenuation = true, extraVertex = null, extraVertexPars = '', extraFragmentPars = '', extraNormal = '', extraColor = '', extraLights = '', key = '' } = {}) {
   const prev = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
     if (prev) prev(shader, renderer);
@@ -36,17 +41,21 @@ export function patchUnderwater(material, { caustics = true, attenuation = true,
       .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>
-        ${caustics ? `{
-          vec3 cN = inverseTransformDirection(normal, viewMatrix);
-          vec3 cc = causticsRGB(vUwWorld, cN);
-          reflectedLight.directDiffuse *= cc;
-          reflectedLight.directSpecular *= cc;
-        }` : ''}
+        vec3 uwDirect = vec3(lightFalloff(vUwWorld));
+        {
+          ${caustics ? `vec3 cN = inverseTransformDirection(normal, viewMatrix);
+          uwDirect *= mix(vec3(1.0), causticsPattern(vUwWorld, cN), ${causticMix.toFixed(3)});` : ''}
+          reflectedLight.directDiffuse *= uwDirect;
+          reflectedLight.directSpecular *= uwDirect;
+          float uwAmb = ambientFalloff(vUwWorld);
+          reflectedLight.indirectDiffuse *= uwAmb;
+          reflectedLight.indirectSpecular *= uwAmb;
+        }
         ${extraLights}`
       )
       .replace('#include <opaque_fragment>', `${attenuation ? 'outgoingLight = waterAttenuate(outgoingLight, vUwWorld);' : ''}\n#include <opaque_fragment>`);
   };
   const prevKey = material.customProgramCacheKey?.bind(material);
-  material.customProgramCacheKey = () => (prevKey ? prevKey() : '') + '|uw' + (caustics ? 1 : 0) + (attenuation ? 1 : 0) + key;
+  material.customProgramCacheKey = () => (prevKey ? prevKey() : '') + '|uw' + (caustics ? 1 : 0) + (attenuation ? 1 : 0) + causticMix + key;
   return material;
 }
