@@ -71,7 +71,7 @@ const HEAD_PITCH_FOLLOW = 1;
 // trunk lowered when sitting / incubating (m): breast and belly on the ground (spec §12: belly clearance 0, crown 70–80)
 const SIT_DROP = 0.029;
 // mm: how far the tucked head may sink into the fluffed mantle / scapulars below the plumage contact
-const TUCK_SINK = 14;
+const TUCK_SINK = 19;
 const sinkLimit = (rest, need) => Math.min(rest, need) - SINK * smoothstep(need + 6, need + 2, rest);
 // Over the folded wing (and its front edge under the breast-side patch) the head and neck lie on the wing —
 // preening the breast or the belly, the cheek against the bend of the wing — never in it: there no point may
@@ -352,7 +352,7 @@ export class KentishPloverAnimator {
       return;
     } else if (ACTIONS[name]) {
       // freeze the action at normalised time t and let the smoothed posture converge on it
-      this.play(name, { variant, target: new THREE.Vector3(0, 0, 0.055), preyType: variant === 'crab' ? 'crab' : 'polychaete' });
+      this.play(name, { variant, target: new THREE.Vector3(0, 0, 0.062), preyType: variant === 'crab' ? 'crab' : 'polychaete' });
       this.action.t = t * this.action.dur;
       this._freezeAction = true;
       this._settle(1.2);
@@ -499,14 +499,15 @@ export class KentishPloverAnimator {
         Object.assign(t, { height: -0.003, pitch: ANIM.run.bodyPitch, neck: ANIM.run.neck, fluff: -0.1, headDown: ANIM.run.headDown, headFwd: ANIM.run.headFwd });
         break;
       case 'restOneLeg':
-        // trunk sunk onto the standing leg: belly ≈ 25 mm, crown 97–100 with the fluffing (spec §12)
-        Object.assign(t, { height: -0.005, pitch: 0.01, neck: -1, fluff: 0.8, sleep: 0.7, oneLeg: 1 });
+        // trunk sunk onto the standing leg: belly ≈ 25 mm, crown 97–100 with the fluffing (spec §12); fluffed to
+        // the depth of the fluffed photo median (fluff 0.8 left belly and back ≈ 0.03 L inside it: p019, p022, p068)
+        Object.assign(t, { height: -0.005, pitch: 0.01, neck: -1, fluff: 1.35, sleep: 0.7, oneLeg: 1 });
         break;
       case 'restTucked':
-        Object.assign(t, { height: -0.005, pitch: 0.0, neck: -1, fluff: 0.9, sleep: 1, oneLeg: 1 });
+        Object.assign(t, { height: -0.005, pitch: 0.0, neck: -1, fluff: 1.35, sleep: 1, oneLeg: 1 });
         break;
       case 'sit':
-        Object.assign(t, { height: 0, pitch: 0, neck: -1, fluff: 0.9, sleep: 0.8, sit: 1 });
+        Object.assign(t, { height: 0, pitch: 0, neck: -1, fluff: 1.35, sleep: 0.8, sit: 1 });
         break;
       default:
         break;
@@ -714,7 +715,9 @@ export class KentishPloverAnimator {
       target.lerp(tuck, clamp(raise, 0, 1));
     }
     if (this.p.sit > 0.01) {
-      const sitPos = new THREE.Vector3(J.foot[0] * mm * f.sign, 0.004, 0.012).applyQuaternion(this.model.object.quaternion).add(this.rootPos);
+      // (feet under the belly, toes short of the breast: 12 mm forward, the toes showed in front of the sitting
+      // bird — in the photos the legs are hidden, p019, p016, p049)
+      const sitPos = new THREE.Vector3(J.foot[0] * mm * f.sign * 0.85, 0.004, -0.002).applyQuaternion(this.model.object.quaternion).add(this.rootPos);
       target.lerp(sitPos, this.p.sit);
     }
     const Lt = L_TIB * this.legScale;
@@ -1009,10 +1012,11 @@ export class KentishPloverAnimator {
       // bill tucked into the scapulars: head rotated ~160° and resting on the mantle (sleep posture)
       const side = this._tuckSide ?? (this._tuckSide = this.rng() < 0.5 ? 1 : -1);
       // head on the mantle, crown the bird's highest point, bill into the scapulars (p040; spec §12). The spec's
-      // points [±6, 92, 2] → [±11, 84, −14] left the crown 21 mm over the back (photos ≈ +10): 8 mm lower, and
-      // the head buried TUCK_SINK into the fluffed mantle, crown − back +17 before fluffing (posture.mjs)
-      const onBack = this.bodyPoint([side * 6, 84, 2]);
-      const dir = this.bodyPoint([side * 11, 76, -14]).sub(onBack).normalize();
+      // points [±6, 92, 2] → [±11, 84, −14] left the crown 21 mm over the back (photos ≈ +10): 13 mm lower, the
+      // bill aimed steeply down under the scapulars (aimed at y 76 it lay on top of them as a black wedge) and the
+      // head buried TUCK_SINK into the fluffed mantle: crown 99.7, crown − back +12.6 (posture.mjs; photos ≈ 98, +10)
+      const onBack = this.bodyPoint([side * 6, 79, 2]);
+      const dir = this.bodyPoint([side * 12, 64, -12]).sub(onBack).normalize();
       headQ = this.billQuat(dir, side * 0.5);
       tuckPos = onBack.clone().sub(BILL_FROM_HEAD.clone().multiplyScalar(0.45).applyQuaternion(headQ));
     } else if (act?.headQ) headQ = act.headQ;
@@ -1307,15 +1311,14 @@ export const ACTIONS = {
       const recK = smoothstep(0.6, 1.0, u);
       const k = (0.5 * aimK + 0.5 * strikeK) * (1 - recK);
       const tilt = 0.56 * (0.55 * aimK + 0.45 * strikeK) * (1 - 0.85 * recK);
-      // prey nearer or further than a bill-reach (≈55 mm ahead of the root; the AI stops 25–85 mm short): the
+      // prey nearer or further than a bill-reach (≈62 mm ahead of the root; the AI stops 32–92 mm short): the
       // trunk leans forward / back over the planted feet so the neck stays within its stretch (≤ 2, spec §7) and
       // the tarsus tips toward the photographed 42° (spec §9, §12)
-      const shift = clamp(dist - 0.055, -0.03, 0.035);
+      const shift = clamp(dist - 0.062, -0.03, 0.035);
       const out = { posture: { pitch: tilt, height: -0.015 * k, neck: -0.2, shift: shift * k }, fast: { pitch: 18, height: 14, shift: 14 } };
-      // bill ≈ 63° down while aiming (photos of searching / aiming birds: 52°, p007, p061; steeper keeps the bill
-      // tip on its target within the neck's stretch), ≈ 76° at the strike into the mud (posture.mjs: bill tip on
-      // the target, eye 7–9 mm ahead of the breast, spec §7)
-      const hz = lerp(0.5, 0.25, strikeK);
+      // bill 52° down while aiming and 59° at the strike (photos of aiming / picking birds: 50–60°, head and neck
+      // stretched forward, p007, p061; spec §7) — the 63° / 76° before curled the head back under the breast
+      const hz = lerp(0.78, 0.6, strikeK);
       const dir = new THREE.Vector3(Math.sin(yawW) * hz, -1, Math.cos(yawW) * hz);
       const aimU = 0.22;
       const strikeU = 0.3;

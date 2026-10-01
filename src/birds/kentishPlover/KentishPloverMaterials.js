@@ -52,7 +52,7 @@ const GLSL_FLUFF = /* glsl */ `
 float kpFluffMM(vec3 p, vec3 n) {
   vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
   float head = clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - clamp((83.0 - p.y) / 5.0, 0.0, 1.0));
-  return (2.5 + 4.5 * smoothstep(-0.2, -0.9, n.y) + 1.5 * smoothstep(0.2, 0.9, n.y)) * (1.0 - 0.7 * head) * (1.0 - 0.5 * smoothstep(-45.0, -62.0, p.z));
+  return (2.5 + 4.5 * smoothstep(-0.2, -0.9, n.y) - 0.3 * smoothstep(0.2, 0.9, n.y)) * (1.0 - 0.7 * head) * (1.0 - 0.8 * smoothstep(-25.0, -55.0, p.z)) * (1.0 - 0.6 * smoothstep(15.0, 30.0, p.z));
 }
 `;
 const FLUFF_REST_GLSL = FLUFF_REST.toFixed(3);
