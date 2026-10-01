@@ -48,12 +48,15 @@ vec4 rigMisc(int k) { return rigFetch(RIG_MISC + k); }
 vec3 finNodeP(int base, int chain, int node, int nNodes) { return rigFetch(base + (chain * nNodes + node) * 2).xyz; }
 vec3 finNodeN(int base, int chain, int node, int nNodes) { return rigFetch(base + (chain * nNodes + node) * 2 + 1).xyz; }
 
+// t in [0, 1] runs from the root to the tip node; t > 1 extrapolates along the
+// last segment (rays longer than the chain interpolated at their column)
 vec3 chainPoint(int base, int chain, int nNodes, float t) {
-  float u = clamp(t, 0.0, 1.0) * float(nNodes - 1);
+  float u = max(t, 0.0) * float(nNodes - 1);
   int k = min(int(floor(u)), nNodes - 2);
   float f = u - float(k);
   vec3 p1 = finNodeP(base, chain, k, nNodes);
   vec3 p2 = finNodeP(base, chain, k + 1, nNodes);
+  if (f > 1.0) return p2 + (p2 - p1) * (f - 1.0);
   vec3 p0 = k > 0 ? finNodeP(base, chain, k - 1, nNodes) : 2.0 * p1 - p2;
   vec3 p3 = k + 2 < nNodes ? finNodeP(base, chain, k + 2, nNodes) : 2.0 * p2 - p1;
   return cr3(p0, p1, p2, p3, f);
@@ -72,7 +75,7 @@ vec3 finPoint(int base, int nChains, int nNodes, float c, float t) {
 vec3 finNormal(int base, int nChains, int nNodes, float c, float t) {
   int j = clamp(int(floor(c)), 0, nChains - 2);
   float f = clamp(c - float(j), 0.0, 1.0);
-  float u = clamp(t, 0.0, 1.0) * float(nNodes - 1);
+  float u = clamp(t, 0.0, 1.0) * float(nNodes - 1); // extrapolated tips keep the tip normal
   int k = min(int(floor(u)), nNodes - 2);
   float g = u - float(k);
   vec3 n00 = finNodeN(base, j, k, nNodes);

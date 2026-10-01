@@ -132,7 +132,7 @@ float sectChord(vec2 p, vec2 d, vec3 sect) {
 
 // ---------------------------------------------------------------- pattern ----
 // colorType: 0 sarasa (red/white), 1 red, 2 orange, 3 yellow, 4 white
-float sarasaMask(vec3 rp, float seed, float cover) {
+float sarasaField(vec3 rp, float seed) {
   vec3 q = rp * vec3(3.4, 4.6, 4.2) + vec3(seed * 13.17, seed * 5.31, seed * 2.73);
   float n = fbm3(q);
   float n2 = fbm3(q * 2.3 + 7.1);
@@ -144,9 +144,9 @@ float sarasaMask(vec3 rp, float seed, float cover) {
     + (h > 0.55 ? 0.22 : -0.1) * smoothstep(0.3, 0.1, s)  // red head cap vs white face
     - (h < 0.3 ? 0.25 : 0.0) * smoothstep(0.06, 0.0, s)   // white snout
     + 0.12 * smoothstep(0.8, 1.0, s);                     // red caudal base
-  float v = n + 0.12 * (n2 - 0.5) + bias;
-  float th = 1.0 - cover;
-  return smoothstep(th - 0.018, th + 0.018, v);
+  // fine third octave: ragged, irregular blotch borders
+  float n3 = vnoise3(q * 4.0 + 3.3);
+  return n + 0.12 * (n2 - 0.5) + 0.035 * (n3 - 0.5) + bias;
 }
 
 vec3 bodyPigment(vec3 rp, float red, out float whiteness, out vec3 specTint) {
@@ -154,14 +154,30 @@ vec3 bodyPigment(vec3 rp, float red, out float whiteness, out vec3 specTint) {
   float a = clamp(rp.y / 0.17, -1.0, 1.0);
   float hueShift = vFishB.y;
   vec3 redCol = mix(uColRed, uColOrange, clamp(0.25 + hueShift, 0.0, 1.0) * 0.55);
+  // carotenoid density follows the dorsal-ventral axis: deep crimson along
+  // the back, the base red on the flank, orange to yellow-orange toward the
+  // belly (p12_1, p42_1)
+  vec3 crimson = redCol * vec3(0.8, 0.52, 0.62);
+  vec3 bellyCol = mix(uColOrange, uColYellow, 0.4);
+  vec3 redGrad = mix(redCol, crimson, smoothstep(0.25, 0.95, a));
+  redGrad = mix(redGrad, bellyCol, smoothstep(-0.15, -0.85, a) * 0.7);
+  // large, soft density variation of the chromatophore field (+-10 %) and a
+  // fine xanthophore / melanophore grain
+  vec3 bq = rp * vec3(7.0, 9.0, 9.0) + vec3(vFishA.w * 3.1);
+  float blot = 0.65 * vnoise3(bq) + 0.35 * vnoise3(bq * 2.3 + 5.1);
+  float grain = vnoise3(rp * 260.0 + vFishA.w);
+  vec3 pigVar = vec3(1.0) + vec3(0.1, 0.13, 0.16) * (blot - 0.5) * 2.0;
+  pigVar *= 1.0 - 0.06 * smoothstep(0.55, 0.85, grain);
   vec3 col; whiteness = 0.0;
   if (type < 0.5) {
     // sarasa: red patches on pearly white
     vec3 white = uColWhite * mix(vec3(1.0), vec3(1.0, 0.95, 0.84), 0.35 * smoothstep(0.0, 0.5, red));
-    col = mix(white, redCol, red);
+    // thin margins of a patch carry fewer chromatophores: lighter, oranger
+    vec3 patchCol = mix(redGrad, uColOrange, 0.2 * (1.0 - smoothstep(0.35, 0.9, red))) * pigVar;
+    col = mix(white, patchCol, red);
     whiteness = 1.0 - red;
   } else if (type < 1.5) {
-    col = mix(redCol, mix(uColOrange, uColYellow, 0.35), smoothstep(-0.2, -0.9, a) * 0.6);
+    col = redGrad * pigVar;
   } else if (type < 2.5) {
     col = mix(uColOrange, uColYellow, 0.25 + smoothstep(-0.2, -0.9, a) * 0.5);
   } else if (type < 3.5) {
@@ -171,7 +187,7 @@ vec3 bodyPigment(vec3 rp, float red, out float whiteness, out vec3 specTint) {
     whiteness = 1.0;
   }
   // dorsal darkening / ventral lightening (countershading from chromatophore density)
-  col *= mix(0.86, 1.06, smoothstep(0.9, -0.6, a));
+  col *= mix(0.78, 1.05, smoothstep(0.9, -0.6, a));
   vec3 pig = col / max(max(col.r, col.g), max(col.b, 1e-3));
   specTint = mix(pig * pig * vec3(1.0, 1.05, 1.1), vec3(0.93, 0.96, 1.0), whiteness);
   specTint = mix(specTint, vec3(1.0, 0.8, 0.45), (1.0 - whiteness) * 0.25);
@@ -206,7 +222,10 @@ ScaleHit scaleLookup(vec2 uv) {
       vec2 c = vec2(i + 0.5, j + 0.5 * par) + (jr.xy - 0.5) * vec2(0.1, 0.12);
       vec2 q = uv - c;
       float rr = R * (0.95 + 0.1 * jr.z);
-      float d = length(q * vec2(1.0, 1.25)) / rr;
+      // the free (posterior) margin is blunt-pointed rather than circular,
+      // so the overlapping margins form the rhombic net seen on goldfish
+      vec2 qa = abs(q * vec2(1.0, 1.25));
+      float d = (q.x > 0.0 ? pow(pow(qa.x, 1.7) + pow(qa.y, 1.7), 1.0 / 1.7) : length(qa)) / rr;
       if (!cov && d < 1.0) { cov = true; best = d; bq = q; bid = id; }
       else if (!cov && d < best) { best = d; bq = q; bid = id; }
     }
@@ -247,7 +266,7 @@ void computeFishSurface() {
 
   // ---- scales
   vec2 fw = fwidth(vScaleUV);
-  float detail = (1.0 - smoothstep(0.22, 0.75, max(fw.x, fw.y))) * scaleMask;
+  float detail = (1.0 - smoothstep(0.1, 0.38, max(fw.x, fw.y))) * scaleMask;
 #if FISH_LOD >= 2
   // distant fish: scales are sub-pixel -> skip the per-scale lookup entirely
   detail = 0.0;
@@ -263,13 +282,15 @@ void computeFishSurface() {
   // lifted toward its free (posterior) margin which rolls down onto the next
   // scale; the character comes from each plate's own tilt and rim.
   vec2 grad = vec2(0.035, 0.0);
-  grad += -0.04 * q * vec2(1.0, 1.56);
+  grad += -0.024 * q * vec2(1.0, 1.56);
   float edge = smoothstep(0.9, 1.0, d);
   vec2 rad = normalize(q * vec2(1.0, 1.56) + 1e-5);
-  grad -= rad * edge * 0.16;
+  grad -= rad * edge * 0.1;
   // regenerated scales (lost and regrown): irregular, no radii, duller
   float regen = step(0.972, rnd.z * 0.5 + hash12(sh.id * 3.1 + seed) * 0.5 + 0.02);
-  vec2 jit = (rnd.xy - 0.5) * mix(0.11, 0.2, regen); // per-scale orientation => glints (added below)
+  // per-scale orientation: small (scales lie in a smooth, well-aligned
+  // sheet); larger only on regenerated scales
+  vec2 jit = (rnd.xy - 0.5) * mix(0.06, 0.13, regen); // (added below)
   // the focus lies under the scales in front; on the exposed field only the
   // posterior radii show — fine grooves fanning out to the margin — plus a
   // faint granular texture; circuli run parallel to the free margin
@@ -277,16 +298,16 @@ void computeFishSurface() {
   float fineFade = 1.0 - smoothstep(0.03, 0.09, max(fw.x, fw.y));
   float ang = atan(foc.y, foc.x);
   float radii = spow(abs(sin(ang * 5.0 + rnd.z * 6.28)), 30.0) * smoothstep(0.4, 0.85, length(foc)) * (1.0 - regen);
-  grad += vec2(-sin(ang), cos(ang)) * radii * 0.045 * fineFade;
+  grad += vec2(-sin(ang), cos(ang)) * radii * 0.018 * fineFade; // under epidermis + mucus: faint
   float circ = sin(d * 95.0) * smoothstep(0.55, 0.9, d) * (1.0 - edge);
-  grad += rad * circ * 0.01 * fineFade;
-  grad += (vec2(vnoise2(q * 23.0 + rnd.xy * 40.0), vnoise2(q * 23.0 + rnd.yz * 40.0 + 7.0)) - 0.5) * 0.015 * fineFade * smoothstep(-0.1, 0.4, q.x);
+  grad += rad * circ * 0.004 * fineFade;
+  grad += (vec2(vnoise2(q * 23.0 + rnd.xy * 40.0), vnoise2(q * 23.0 + rnd.yz * 40.0 + 7.0)) - 0.5) * 0.01 * fineFade * smoothstep(-0.1, 0.4, q.x);
   // lateral line: a canal tube on each scale of the lateral-line row,
   // opening at a pore on the exposed field
   float llRow = step(abs(sh.id.y), 0.5) * step(-0.5, sh.id.x);
   vec2 pq = (q - vec2(0.12, 0.0)) * vec2(0.55, 2.6);
   float tube = llRow * smoothstep(0.2, 0.06, length(pq));
-  grad += llRow * normalize(pq + 1e-5) * tube * 0.28;
+  grad += llRow * normalize(pq + 1e-5) * tube * 0.14;
 
   float amp = uScaleIntensity * detail;
   // thin shadow cast by the overlapping margin of the scale in front
@@ -297,40 +318,45 @@ void computeFishSurface() {
   float cover = vFishB.x;
   float red = 0.0;
   if (vFishA.z < 0.5) {
-    red = sarasaMask(rp, seed, cover);
-    // pigment borders follow scale outlines in real sarasa comets
+    float v = sarasaField(rp, seed);
+    // pigment borders partly follow the scales in real sarasa comets: blend
+    // in the field at the scale centre and a per-scale threshold jitter,
+    // so border scales are irregularly in or out, without a grid staircase
     vec3 rp2 = rp + vec3(q.x * 0.0255, -q.y * 0.03, 0.0);
-    float redScale = sarasaMask(rp2, seed, cover);
-    red = mix(red, redScale, 0.7 * scaleMask);
+    float vScale = sarasaField(rp2, seed) + (rnd.y - 0.5) * 0.07;
+    v = mix(v, vScale, 0.28 * scaleMask * detail);
+    float th = 1.0 - cover;
+    red = smoothstep(th - 0.035, th + 0.035, v);
   }
   float whiteness; vec3 specTint;
   vec3 col = bodyPigment(rp, red, whiteness, specTint);
-  // white (guanine-only) scales are thinner and lie flatter: softer relief
-  // white (iridophore-only) scales lie flatter and more uniformly aligned:
+  // white (iridophore-only) scales are thinner, lie flatter and are more
+  // uniformly aligned:
   // softer relief and much less per-scale tilt, so they read as a fine net
   // with a continuous pearly sheen instead of a sequin mosaic
-  vec3 nT = normalize(vec3(-(grad * mix(1.0, 0.65, whiteness) + jit * mix(1.0, 0.3, whiteness)) * amp, 1.0));
-  // per-scale pigment variation and lighter scale margins in pigmented areas
-  col *= mix(1.0, 0.97 + 0.06 * rnd.z, detail);
+  vec3 nT = normalize(vec3(-(grad * mix(1.0, 0.5, whiteness) + jit * mix(1.0, 0.58, whiteness)) * amp, 1.0));
+  // per-scale pigment variation (subtle) and a thin darker net along the
+  // free margins: melanophores / the overlap shadow (p12_1)
+  col *= mix(1.0, 0.98 + 0.04 * rnd.z, detail);
   col *= mix(1.0, mix(0.9, 0.97, whiteness), regen * detail);
   // lateral-line pore: a tiny dark opening at the end of the canal
-  col *= 1.0 - 0.45 * llRow * smoothstep(0.05, 0.015, length((q - vec2(0.3, 0.0)) * vec2(1.0, 2.0))) * detail;
-  col = mix(col, col * vec3(1.05, 1.16, 1.25) + vec3(0.015, 0.02, 0.0), edge * (1.0 - whiteness) * 0.38 * detail);
+  col *= 1.0 - 0.3 * llRow * smoothstep(0.05, 0.015, length((q - vec2(0.3, 0.0)) * vec2(1.0, 2.0))) * detail;
+  col *= 1.0 - (0.2 * edge + 0.12 * marginShadow) * (1.0 - whiteness) * detail;
   // reticulated slightly darker margins on white scales (fewer iridophores at the edge)
   col *= mix(1.0, 0.93, (edge * 0.5 + marginShadow * 0.5) * whiteness * detail);
 
   // guanine reflector strength (metallic scale type, some duller scales)
-  float refl = uGuanine * mix(1.0, 0.55, regen) * mix(mix(0.78, 0.93, whiteness), 1.0, rnd.x) * (rnd.y < 0.06 ? 0.6 : 1.0) * mix(1.0, 0.82, edge) * mix(1.0, 1.25, whiteness);
+  float refl = uGuanine * mix(1.0, 0.7, regen) * mix(0.92, 1.0, rnd.x) * (rnd.y < 0.03 ? 0.82 : 1.0) * mix(1.0, 0.85, edge) * mix(1.0, 1.25, whiteness);
   refl = mix(uGuanine * 0.55, refl, detail);
   // head: iridophores on operculum/cheek give a softer golden sheen
-  float headSheen = uGuanine * (0.25 + 0.45 * operc + 0.2 * smoothstep(0.1, -0.6, a));
+  float headSheen = uGuanine * (0.16 + 0.45 * operc + 0.2 * smoothstep(0.1, -0.6, a));
   refl = mix(headSheen, refl, scaleMask);
   // belly: silvery stratum argenteum
   refl *= mix(1.0, 1.25, smoothstep(-0.3, -0.9, a));
 
   vec3 spec = specTint * refl;
-  float rough = uRoughness * mix(0.8, 1.2, rnd.z);
-  rough = mix(uRoughness * 1.35, rough, scaleMask);
+  float rough = uRoughness * mix(0.93, 1.07, rnd.z);
+  rough = mix(uRoughness * 1.55, rough, scaleMask);
   rough = mix(rough + 0.12, rough, detail * scaleMask + (1.0 - scaleMask));
 
   // ---- lips, buccal cavity, gill slit, orbit
@@ -339,7 +365,7 @@ void computeFishSurface() {
     // outer lips keep the body colour but paler and fleshier; the rolled lip
     // margin at the gape is pale pink (lower lip and chin palest), wet
     vec3 lipOuter = mix(col, col * vec3(1.02, 0.9, 0.86) + vec3(0.07, 0.05, 0.05), 0.45);
-    vec3 lipInner = mix(vec3(0.95, 0.76, 0.7), col * vec3(1.0, 0.78, 0.72), 0.25 * (1.0 - whiteness));
+    vec3 lipInner = mix(vec3(0.82, 0.6, 0.56), col * vec3(1.0, 0.78, 0.72), 0.35 * (1.0 - whiteness));
     float margin = smoothstep(0.005, 0.0008, sB);
     float lowerLip = smoothstep(0.1, -0.5, a);
     vec3 lc = mix(lipOuter, lipInner, clamp(margin * mix(0.75, 1.0, lowerLip) + lowerLip * 0.25 * lip, 0.0, 1.0));
@@ -403,7 +429,7 @@ void computeFishSurface() {
     col *= 1.0 + (striae - 0.3) * 0.04 * wOp;
   }
   // fleshy orbital rim is pale and less reflective
-  col = mix(col, mix(col, vec3(0.92, 0.86, 0.8), 0.45), orbit * 0.5);
+  col = mix(col, mix(col, vec3(0.92, 0.86, 0.8), 0.45), orbit * 0.25);
 
   // ---- head skin: fine micro-relief and mottled chromatophores (no scales)
   float headSkin = 1.0 - scaleMask;
@@ -411,8 +437,14 @@ void computeFishSurface() {
     vec3 hp = rp * 180.0;
     float mn = vnoise3(hp) - 0.5;
     float mn2 = vnoise3(hp * 2.7 + 3.1) - 0.5;
-    nT = normalize(nT + vec3(mn, mn2, 0.0) * 0.07 * headSkin);
-    col *= 1.0 + (vnoise3(rp * 55.0 + seed) - 0.5) * 0.12 * headSkin;
+    nT = normalize(nT + vec3(mn, mn2, 0.0) * 0.08 * headSkin);
+    // uneven iridophore / chromatophore density: soft mottling of tone and
+    // a patchy, broken sheen instead of one smooth plastic highlight
+    float mot = vnoise3(rp * 55.0 + seed);
+    float mot2 = vnoise3(rp * 21.0 + seed * 1.7 + 4.0);
+    col *= 1.0 + ((mot - 0.5) * 0.14 + (mot2 - 0.5) * 0.12) * headSkin;
+    spec *= 1.0 + ((mot2 - 0.5) * 0.9 + mn * 0.3) * headSkin;
+    rough += (mot - 0.5) * 0.12 * headSkin;
   }
   // ventral xanthophore wash behind the pectorals (yellowish belly in sarasa)
   float bellyY = smoothstep(-0.2, -0.75, a) * smoothstep(0.2, 0.36, -rp.x) * smoothstep(0.62, 0.42, -rp.x);
@@ -449,9 +481,9 @@ void computeFishSurface() {
   gFS.rough = clamp(rough, 0.06, 1.0);
   gFS.spec = spec;
   gFS.irid = uIridescence * mix(0.35, 1.0, whiteness) * mix(0.6 + 0.4 * rnd.y, 0.85 + 0.15 * rnd.y, whiteness) * mix(0.4, 1.0, max(scaleMask, operc * 0.85));
-  // film thickness: pigmented scales vary widely (gold / green / violet
-  // glints); white scales keep a uniform pearly film
-  gFS.iridThick = mix(mix(260.0, 520.0, rnd.x), mix(360.0, 410.0, rnd.x), whiteness);
+  // film thickness: a narrow spread (warm gold to pale green glints on
+  // pigmented scales); white scales keep a uniform pearly film
+  gFS.iridThick = mix(mix(330.0, 420.0, rnd.x), mix(365.0, 405.0, rnd.x), whiteness);
   // the tangent frame mirrors at the dorsal / ventral midline: fade the
   // perturbation there so no seam shows (e.g. under the lower lip)
   float midFade = smoothstep(0.02, 0.2, sqrt(max(0.0, 1.0 - a * a)));

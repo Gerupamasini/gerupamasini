@@ -46,6 +46,6 @@ export const U = {
   uIrisGold: { value: srgb('#c9973c') },
   uIrisRed: { value: srgb('#b8481e') },
   uIrisSilver: { value: srgb('#b8bcc0') },
-  uPupil: { value: 0.4 },
-  uIrisMetal: { value: 0.55 },
+  uPupil: { value: 0.46 }, // pupil radius / eyeball radius: ~half the visible eye
+  uIrisMetal: { value: 0.3 },
 };
