@@ -7,12 +7,17 @@ import { TANK } from '../world/TankConfig.js';
 
 const _g = new THREE.Vector3();
 const _p = new THREE.Vector3();
+const _q = new THREE.Vector3();
 
 /**
  * Vision-based look-ahead obstacle avoidance: probe points ahead along the
  * current heading (≈1.2 s of travel, min 1.2 BL) and turn away from the
  * nearest boundary; a short-range "lateral line" repulsion (< 0.5 BL) keeps a
- * minimum clearance even when hovering.
+ * minimum clearance even when hovering. Look-ahead only matters for a fish
+ * that is actually moving: a hovering fish is not steered by what lies in
+ * front of it (unless it is about to set off: `opts.intent`), and the floor
+ * only repels at close range (a fish may settle just above the gravel), more
+ * strongly the faster it swims.
  * Returns a UNITLESS steering vector in `out`; `.danger` (0..1) says how
  * urgently the fish should slow down / turn.
  */
@@ -22,35 +27,84 @@ export function avoidObstacles(fish, world, out, opts = {}) {
   out.set(0, 0, 0);
   out.danger = 0;
   const fwd = L.forward;
-  const speed = Math.max(L.speed, 0.3 * SL);
-  const look = Math.max(1.2 * SL, speed * 1.2);
-  const probes = [0.3, 0.65, 1.0];
-  const side = new THREE.Vector3();
-  for (const m of probes) {
-    _p.copy(L.pos).addScaledVector(fwd, look * m + 0.36 * SL);
-    const d = world.distance(_p, _g, opts);
-    const clearance = 0.3 * SL + 0.45 * SL * m;
-    if (d < clearance) {
-      const w = clamp01(1 - d / clearance) * (1.3 - m * 0.5);
-      // turn away: outward normal + sideways escape so the fish swings round
-      side.crossVectors(_g, UP);
-      if (side.lengthSq() < 1e-6) side.set(-fwd.z, 0, fwd.x);
-      side.normalize();
-      if (side.dot(fwd) < 0) side.negate();
-      out.addScaledVector(_g, w * 1.1).addScaledVector(side, w * 0.9);
-      out.danger = Math.max(out.danger, w * (1 - 0.4 * m));
+  const U = L.speed / SL;
+  // probes are active when the fish moves or is about to (opts.intent = 1)
+  const moving = Math.max(smoothstep01((U - 0.1) / 0.3), opts.intent || 0);
+  if (moving > 0) {
+    const speed = Math.max(L.speed, 0.3 * SL);
+    const look = Math.max(1.2 * SL, speed * 1.2);
+    const probes = [0.3, 0.65, 1.0];
+    const side = _side;
+    for (const m of probes) {
+      _p.copy(L.pos).addScaledVector(fwd, look * m + 0.36 * SL);
+      const d = world.distance(_p, _g, opts);
+      const clearance = 0.3 * SL + 0.45 * SL * m;
+      if (d < clearance) {
+        const w = clamp01(1 - d / clearance) * (1.3 - m * 0.5) * moving;
+        // turn away: outward normal + sideways escape so the fish swings round
+        side.crossVectors(_g, UP);
+        if (side.lengthSq() < 1e-6) side.set(-fwd.z, 0, fwd.x);
+        side.normalize();
+        if (side.dot(fwd) < 0) side.negate();
+        // in a corner the default side may lead into the next wall: escape
+        // toward whichever side has more room
+        const gx = _g.x;
+        const gy = _g.y;
+        const gz = _g.z;
+        const dA = world.distance(_q.copy(_p).addScaledVector(side, 0.8 * SL), null, opts);
+        const dB = world.distance(_q.copy(_p).addScaledVector(side, -0.8 * SL), null, opts);
+        if (dB > dA + 0.1 * SL) side.negate();
+        _g.set(gx, gy, gz);
+        out.addScaledVector(_g, w * 1.1).addScaledVector(side, w * 0.9);
+        out.danger = Math.max(out.danger, w * (1 - 0.4 * m));
+      }
     }
   }
-  // lateral-line close-range repulsion around the body
-  const d0 = world.distance(L.pos, _g, opts);
+  // lateral-line close-range repulsion around the body. The glass walls are
+  // summed (a corner pushes out along its diagonal instead of flipping
+  // between its two walls); rocks, plants and the surface come from the
+  // nearest-boundary query.
   const r0 = 0.45 * SL;
-  if (d0 < r0) {
+  const p = L.pos;
+  const { min, max } = world.bounds;
+  let dWall = Infinity;
+  const wall = (d, gx, gz) => {
+    dWall = Math.min(dWall, d);
+    if (d < r0) {
+      const w = 1 - Math.max(0, d) / r0;
+      out.x += gx * w * 2.0;
+      out.z += gz * w * 2.0;
+      out.danger = Math.max(out.danger, w);
+    }
+  };
+  wall(p.x - min.x, 1, 0);
+  wall(max.x - p.x, -1, 0);
+  wall(p.z - min.z, 0, 1);
+  wall(max.z - p.z, 0, -1);
+  const d0 = world.distance(p, _g, { ...opts, ignoreFloor: true });
+  if (d0 < r0 && d0 < dWall - 1e-6) {
     const w = 1 - Math.max(0, d0) / r0;
     out.addScaledVector(_g, w * 2.0);
     out.danger = Math.max(out.danger, w);
   }
+  // floor: radius grows with speed (0.2 BL hovering .. 0.45 BL swimming)
+  if (!opts.ignoreFloor) {
+    const dF = L.pos.y - world.groundHeight(L.pos.x, L.pos.z);
+    const rF = (0.2 + 0.25 * smoothstep01((U - 0.1) / 0.7)) * SL;
+    if (dF < rF) {
+      const w = 1 - Math.max(0, dF) / rF;
+      out.y += w * 2.0;
+      out.danger = Math.max(out.danger, w);
+    }
+  }
   return out;
 }
+
+const _side = new THREE.Vector3();
+const smoothstep01 = (x) => {
+  const t = x < 0 ? 0 : x > 1 ? 1 : x;
+  return t * t * (3 - 2 * t);
+};
 
 const UP = new THREE.Vector3(0, 1, 0);
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);

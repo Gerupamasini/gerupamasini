@@ -40,13 +40,16 @@ function interpRay(rays, r) {
   return { ...l, r };
 }
 
-// fin mechanical parameters: tip stiffness, rest-shape memory, drag
+// fin mechanical parameters: tip stiffness, rest-shape memory, drag,
+// tangential damping, gravity sag and how far the fin droops when relaxed
+// (rad). The caudal tip is damped well enough that a still fish has a still
+// tail: it trails and sags instead of whipping.
 const FIN_MECH = {
-  0: { kBase: 0.97, kTip: 0.2, memBase: 0.35, memTip: 0.035, drag: 170, dragT: 3, grav: 0.35 }, // caudal
-  1: { kBase: 0.96, kTip: 0.34, memBase: 0.45, memTip: 0.08, drag: 150, dragT: 3, grav: 0.2 }, // dorsal
-  2: { kBase: 0.96, kTip: 0.32, memBase: 0.45, memTip: 0.08, drag: 150, dragT: 3, grav: 0.25 }, // anal
-  3: { kBase: 0.97, kTip: 0.42, memBase: 0.6, memTip: 0.16, drag: 140, dragT: 3, grav: 0.15 }, // pectoral
-  4: { kBase: 0.96, kTip: 0.36, memBase: 0.5, memTip: 0.1, drag: 150, dragT: 3, grav: 0.2 }, // pelvic
+  0: { kBase: 0.97, kTip: 0.28, memBase: 0.38, memTip: 0.06, drag: 170, dragT: 5, grav: 0.35, droop: 0.12 }, // caudal
+  1: { kBase: 0.96, kTip: 0.36, memBase: 0.45, memTip: 0.09, drag: 150, dragT: 4.5, grav: 0.2, droop: 0.1 }, // dorsal
+  2: { kBase: 0.96, kTip: 0.34, memBase: 0.45, memTip: 0.09, drag: 150, dragT: 4.5, grav: 0.25, droop: 0 }, // anal
+  3: { kBase: 0.97, kTip: 0.42, memBase: 0.6, memTip: 0.16, drag: 140, dragT: 4, grav: 0.15, droop: 0 }, // pectoral
+  4: { kBase: 0.96, kTip: 0.36, memBase: 0.5, memTip: 0.1, drag: 150, dragT: 4, grav: 0.2, droop: 0 }, // pelvic
 };
 
 export class FishRig {
@@ -122,6 +125,7 @@ export class FishRig {
       dorsalErect: 1,
       analErect: 1,
       caudalSpread: 0.9,
+      relax: 0, // 0..1: slow, calm fish -> fins droop slightly
       pect: [
         { ext: 0.6, brake: 0, stroke: 0, feather: 0, spread: 0.8 },
         { ext: 0.6, brake: 0, stroke: 0, feather: 0, spread: 0.8 },
@@ -186,13 +190,15 @@ export class FishRig {
   _restDirLocal(ch, out) {
     const p = this.pose;
     const a = ch.ray.angle;
+    const droop = FIN_MECH[ch.type].droop * p.relax;
     switch (ch.type) {
       case 0: {
-        const ae = a * p.caudalSpread;
+        // relaxed comet lobes hang a little below the body axis
+        const ae = a * p.caudalSpread - droop;
         return out.set(-Math.cos(ae), Math.sin(ae), 0);
       }
       case 1: {
-        const ae = lerp(0.1 + 0.05 * ch.ray.r, a, p.dorsalErect);
+        const ae = lerp(0.1 + 0.05 * ch.ray.r, a, p.dorsalErect) - droop * ch.ray.r;
         return out.set(-Math.cos(ae), Math.sin(ae), 0);
       }
       case 2: {
