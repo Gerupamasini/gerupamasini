@@ -14,6 +14,8 @@ npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / 
 npm run terrain:bake # 地形 PNG の再生成
 ```
 
+水深10cmの干潟にエドハゼとマハゼが数匹いるだけの観察シーンは `higata.html` です（`npm run dev` → http://localhost:5173/gerupamasini/higata.html、説明は [docs/scene-higata.md](docs/scene-higata.md)）。
+
 ローカルや別ホストでは `VITE_BASE=/ npm run build` のようにベースパスを変えられます。
 
 ## 文書

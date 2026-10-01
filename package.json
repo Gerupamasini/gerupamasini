@@ -15,6 +15,8 @@
     "smoke": "node tests/smoke/screenshot.mjs",
     "model:mahaze": "node tools/models/mahaze/build.mjs",
     "terrain:bake": "node tools/terrain/bake-map.mjs",
+    "scene:shot": "node tools/scene/shot.mjs",
+    "scene:sim": "node tools/scene/simcheck.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tools/**/*.mjs\" \"tests/**/*.{ts,mjs}\""
   },
   "dependencies": {
