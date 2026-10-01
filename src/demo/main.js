@@ -354,7 +354,10 @@ function frame() {
   // sun follows time of day (lighting only; subtle)
   const d = tide.daylight;
   env.sun.intensity = 0.4 + 3.2 * d;
-  env.hemi.intensity = 0.15 + 0.55 * d;
+  env.hemi.intensity = 0.3 + 0.6 * d; // (sky and bright-sand fill: the shaded side of a bird on a beach is not black)
+  // camera exposure follows the daylight (as a photographer's would): the morning sun at 60 % made the whole bird
+  // read a stop dark — the sandy grey-brown mantle as blackish brown against the photos
+  renderer.toneMappingExposure = 0.95 * Math.min(1.6, Math.sqrt(3.6 / env.sun.intensity));
   renderer.render(scene, camera);
   updateHUD(fpsAvg);
   frames++;

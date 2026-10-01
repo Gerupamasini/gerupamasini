@@ -115,7 +115,47 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
   const key = resolutionMM;
   if (cache.has(key)) return cache.get(key);
   const sdf = makeBodySDF(cfg.bodySculpt);
-  const { positions, normals, indices } = surfaceNets(sdf, cfg.bodySculpt.bounds, resolutionMM);
+  const det = cfg.bodySculpt.facePatch;
+  let positions;
+  let normals;
+  let indices;
+  let baseTris = Infinity; // triangles of the base mesh (the face patches follow)
+  if (det && resolutionMM <= det.maxBaseRes) {
+    // Face patch (eye sockets, lores, bill base, forehead): the same SDF polygonised finer inside a sphere and
+    // laid over the base mesh, which is sunk 0.35 mm under it there (its facets would cut the 2.8 mm eye opening
+    // and the feathering round the bill). Past r − 0.8 the base surfaces again and the patch's rim dips 0.1 mm
+    // under it: no seam, no stitching (same SDF, same normals, same plumage shader).
+    const rr = (q, x, y, z) => Math.hypot(x - q.c[0], y - q.c[1], z - q.c[2]);
+    // (no sink / dip any more: both meshes lie on the same SDF with the same gradient normals, so their overlap
+    // band shades identically; sinking tilted the base normals and drew a visible ring round each patch)
+    const base = surfaceNets(sdf, cfg.bodySculpt.bounds, resolutionMM);
+    // the base mesh's own facets inside the patches are dropped (its coarse eye opening stood through the patch
+    // in places once fluffing displaced both along their own normals)
+    const inner = (i) => det.patches.some((q) => rr(q, base.positions[i * 3], base.positions[i * 3 + 1], base.positions[i * 3 + 2]) < q.r - 1.6);
+    const kept = [];
+    for (let t = 0; t < base.indices.length; t += 3) {
+      const [a, b, c] = [base.indices[t], base.indices[t + 1], base.indices[t + 2]];
+      if (!(inner(a) && inner(b) && inner(c))) kept.push(a, b, c);
+    }
+    base.indices = kept;
+    const parts = [base];
+    for (const q of det.patches) parts.push(surfaceNets(sdf, null, det.res, q));
+    const pos = [];
+    const nrm = [];
+    const ind = [];
+    for (const p of parts) {
+      const off = pos.length / 3;
+      for (const v of p.positions) pos.push(v);
+      for (const v of p.normals) nrm.push(v);
+      for (const i of p.indices) ind.push(i + off);
+    }
+    baseTris = kept.length / 3;
+    positions = new Float32Array(pos);
+    normals = new Float32Array(nrm);
+    indices = new Uint32Array(ind);
+  } else {
+    ({ positions, normals, indices } = surfaceNets(sdf, cfg.bodySculpt.bounds, resolutionMM));
+  }
   const n = positions.length / 3;
   const pos = new Float32Array(n * 3);
   const rest = new Float32Array(n * 3);
@@ -144,6 +184,8 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
   g.setIndex(new THREE.BufferAttribute(n > 65535 ? indices : new Uint16Array(indices), 1));
   g.computeBoundingSphere();
   g.userData.sdf = sdf;
+  g.userData.baseTris = baseTris;
+  g.userData.patches = det && resolutionMM <= det.maxBaseRes ? det.patches : [];
   cache.set(key, g);
   return g;
 }
@@ -159,6 +201,59 @@ export function getBodySDF(cfg) {
  * only the trunk underneath.
  */
 export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
-  const drop = new Set(['neck', 'head', 'lores', 'chin', ...(trunkOnly ? ['mantleNape', 'foreBreast'] : [])]);
-  return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [] });
+  const drop = new Set(['neck', 'head', 'lores', 'billCuff', 'chin', ...(trunkOnly ? ['mantleNape', 'foreBreast'] : [])]);
+  return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [], adds: [] });
+}
+
+/**
+ * Plumage fringe shells (LOD0): the body geometry repeated `n` times with aShell = k / n (k = 1…n); the shell
+ * variant of the body material lifts each copy along its normal and keeps only the barb tips that reach it
+ * (KentishPloverMaterials GLSL_SHELL_*).
+ */
+export function buildShellGeometry(body, n = 4) {
+  const g = new THREE.BufferGeometry();
+  const nv = body.getAttribute('position').count;
+  for (const name of ['position', 'normal', 'aRest', 'aFlow', 'skinIndex', 'skinWeight']) {
+    const a = body.getAttribute(name);
+    const out = new a.array.constructor(a.array.length * n);
+    for (let k = 0; k < n; k++) out.set(a.array, k * a.array.length);
+    g.setAttribute(name, new THREE.BufferAttribute(out, a.itemSize));
+  }
+  const sh = new Float32Array(nv * n);
+  for (let k = 0; k < n; k++) sh.fill((k + 1) / n, k * nv, (k + 1) * nv);
+  g.setAttribute('aShell', new THREE.BufferAttribute(sh, 1));
+  // only triangles that grow a fringe at all (shellCovered mirrors the zero cases of GLSL kpShellMM: under the
+  // folded wing and the scapulars, round the eyes, under the tail coverts)
+  const R = body.getAttribute('aRest').array;
+  const N = body.getAttribute('normal').array;
+  const bare = new Uint8Array(nv);
+  for (let v = 0; v < nv; v++) bare[v] = shellCovered([R[v * 3], R[v * 3 + 1], R[v * 3 + 2]], [N[v * 3], N[v * 3 + 1], N[v * 3 + 2]]) ? 1 : 0;
+  const all = body.index.array;
+  const tri = [];
+  // (and none from the base mesh where a face patch overlies it: doubled shells drew a ring round each patch)
+  const inPatch = (v) => (body.userData.patches ?? []).some((q) => Math.hypot(R[v * 3] - q.c[0], R[v * 3 + 1] - q.c[1], R[v * 3 + 2] - q.c[2]) < q.r);
+  for (let t = 0; t < all.length; t += 3) {
+    if (bare[all[t]] && bare[all[t + 1]] && bare[all[t + 2]]) continue;
+    if (t / 3 < (body.userData.baseTris ?? Infinity) && (inPatch(all[t]) || inPatch(all[t + 1]) || inPatch(all[t + 2]))) continue;
+    tri.push(all[t], all[t + 1], all[t + 2]);
+  }
+  const idx = tri;
+  const out = nv * n > 65535 ? new Uint32Array(idx.length * n) : new Uint16Array(idx.length * n);
+  for (let k = 0; k < n; k++) for (let i = 0; i < idx.length; i++) out[k * idx.length + i] = idx[i] + k * nv;
+  g.setIndex(new THREE.BufferAttribute(out, 1));
+  g.computeBoundingSphere();
+  return g;
+}
+
+/** Rest point where the plumage fringe has zero length (GLSL kpShellMM in KentishPloverMaterials). */
+function shellCovered(p, n) {
+  if (p[2] < -60) return true;
+  const ax = Math.abs(p[0]);
+  const q = [ax - 7.6, p[1] - 95, p[2] - 25.5];
+  const es = q[0] * 0.954 + q[1] * 0.13 + q[2] * 0.27;
+  const er = Math.hypot(q[0] - 0.954 * es, q[1] - 0.13 * es, q[2] - 0.27 * es);
+  if (er + Math.max(0, 2 - es) < 3.6) return true;
+  const z = p[2];
+  const yb = z > 5 ? 60 + 3 * Math.min(1, (z - 5) / 15) : z > -25 ? 55.5 + 4.5 * ((z + 25) / 30) : 60 - 4.5 * Math.min(1, Math.max(0, (z + 55) / 30));
+  return headness(p) < 0.01 && p[1] + n[1] * 3 > yb - 1 && z < 8;
 }
