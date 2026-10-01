@@ -105,8 +105,15 @@ export function makeVariation(rng, forceType = null) {
   v.pigSat = clamp(0.55 + 0.45 * cr.next() * (1.3 - 0.3 * v.pigDark), 0, 1);
   v.bellyPale = cr.next();
   if (type === 'red' || type === 'orange') {
-    // solid fish spread over the whole red .. orange range
-    v.hueShift = cr.range(-0.35, 0.75);
+    // solid fish spread over the whole deep red .. orange-red .. orange-gold
+    // range (the orange end reaches a golden orange, p42_1, p09_1)
+    v.hueShift = cr.range(-0.35, 0.95);
+    // carotenoid density goes with the hue: the orange end is sparse pigment
+    // (lighter), the blood-red end dense (darker). Drawn independently, a
+    // dense orange fish darkened back to the same crimson as the others and
+    // every red in the tank looked alike
+    const orangeness = (v.hueShift + 0.35) / 1.3;
+    v.pigDark = clamp(0.4 * v.pigDark + 0.6 * (1 - orangeness), 0, 1);
   }
   return v;
 }

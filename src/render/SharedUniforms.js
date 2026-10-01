@@ -32,9 +32,12 @@ export const U = {
   uWaterDensity: { value: 1.0 },
 
   // body pigments (sRGB anchors from the research report §7, tuned on photos)
-  // the red is a deep, saturated carotenoid red (sarasa patches use it
-  // unshifted; solid red / orange fish shift it toward orange individually)
-  uColRed: { value: srgb('#d4160a') },
+  // the red is a deep carotenoid red (sarasa patches use it nearly
+  // unshifted; solid red / orange fish shift it toward orange individually).
+  // Not a pure vermilion: red fish in the photographs keep some green
+  // (median sRGB hue ~12 deg, HSV saturation ~0.87 over 97 photos), so the
+  // anchor sits ~10 % below full saturation and a little toward orange
+  uColRed: { value: srgb('#d22c1a') },
   uColOrange: { value: srgb('#e0661c') },
   uColYellow: { value: srgb('#e8b83a') },
   // white skin is a dense iridophore stack over pale flesh: pearly, i.e. a

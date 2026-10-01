@@ -146,6 +146,8 @@ export class LensPass extends Pass {
         uCA: { value: 0.0005 },
         uVignette: { value: 0.18 },
         uGrain: { value: 0.012 },
+        uExposure: { value: 1 },
+        uToeLift: { value: 0 },
       },
       vertexShader: quadVS,
       fragmentShader: /* glsl */ `
@@ -154,7 +156,7 @@ export class LensPass extends Pass {
         out vec4 outColor;
         uniform sampler2D tDiffuse;
         uniform vec2 uRes;
-        uniform float uTime, uCA, uVignette, uGrain;
+        uniform float uTime, uCA, uVignette, uGrain, uExposure, uToeLift;
         float hash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         void main() {
           vec2 d = vUv - 0.5;
@@ -166,6 +168,22 @@ export class LensPass extends Pass {
           // natural vignetting (cos^4 falloff of a real lens)
           float c = 1.0 / (1.0 + r2 * 1.6);
           col *= mix(1.0, c * c, uVignette);
+          // softer toe for saturated colours under the neutral tone curve
+          // that follows: it subtracts the darkest channel (up to 0.04 after
+          // exposure) from all three, which clips the minor channels of every
+          // saturated colour to zero (red fish at sRGB blue ~1, green ~25
+          // where photographs keep green ~50-100). Part of that offset is
+          // given back in proportion to the chroma, so neutrals and the
+          // black level stay exactly as they were (offset(0) = 0) while
+          // saturated colours keep some of their minor channels.
+          {
+            vec3 e = max(col, 0.0) * uExposure;
+            float x = min(e.r, min(e.g, e.b));
+            float mxE = max(e.r, max(e.g, e.b));
+            float chroma = mxE > 1e-5 ? 1.0 - x / mxE : 0.0;
+            float off = x < 0.08 ? x - 6.25 * x * x : 0.04;
+            col += uToeLift * chroma * max(off, 0.0) / max(uExposure, 1e-3);
+          }
           // fine sensor noise on the linear signal: photon shot noise grows with
           // sqrt(signal) (relatively strongest in the shadows) plus a small read
           // noise floor; mostly luminance with a weak chroma part, per pixel and frame
@@ -182,6 +200,9 @@ export class LensPass extends Pass {
       depthWrite: false,
     });
     this.quad = new FullScreenQuad(this.material);
+    // fraction of the neutral tone curve's black offset given back to fully
+    // saturated colours (see above)
+    this.toeLift = 0.45;
   }
 
   render(renderer, writeBuffer, readBuffer, dt) {
@@ -189,6 +210,8 @@ export class LensPass extends Pass {
     u.tDiffuse.value = readBuffer.texture;
     u.uRes.value.set(readBuffer.width, readBuffer.height);
     u.uTime.value += dt || 1 / 60;
+    u.uExposure.value = renderer.toneMappingExposure;
+    u.uToeLift.value = renderer.toneMapping === THREE.NeutralToneMapping ? this.toeLift : 0;
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
     this.quad.render(renderer);
   }

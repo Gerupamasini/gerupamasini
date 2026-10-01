@@ -174,10 +174,10 @@ vec3 bodyPigment(vec3 rp, float red, out float whiteness, out vec3 specTint) {
   // dorsal ridge), so the gradient follows the body all the way to the tail
   float a = clamp(mix(rp.y / 0.17, vMask2.y, 0.6), -1.0, 1.0);
   float hueShift = vFishB.y;
-  // sarasa patches are a deep, saturated red (a narrow individual spread);
-  // solid red fish range individually from blood red to orange-red
+  // sarasa patches are a deep red with a modest individual spread (blood
+  // red .. orange-red); solid red fish range from blood red to orange
   float oMix = clamp(0.25 + hueShift, 0.0, 1.0);
-  vec3 redCol = type < 0.5 ? mix(uColRed, uColOrange, oMix * 0.06) : mix(uColRed, uColOrange, oMix * 0.85);
+  vec3 redCol = type < 0.5 ? mix(uColRed, uColOrange, oMix * 0.3) : mix(uColRed, uColOrange, oMix * 0.95);
   // carotenoid density: denser pigment absorbs more green / blue (crimson,
   // darker), sparse pigment lets the guanine underneath lift it (orange)
   vec3 deep = mix(vec3(1.12, 1.45, 1.3), vec3(0.62, 0.32, 0.44), tone.x);
@@ -192,8 +192,9 @@ vec3 bodyPigment(vec3 rp, float red, out float whiteness, out vec3 specTint) {
   vec3 redGrad = mix(flank, crimson, smoothstep(0.05, 0.85, a) * mix(0.75, 1.0, gS));
   redGrad = mix(redGrad, bellyCol, smoothstep(-0.05, -0.7, a) * 0.8 * gS);
   redGrad = mix(redGrad, vec3(0.86, 0.6, 0.34), smoothstep(-0.55, -1.0, a) * (0.2 + 0.45 * tone.z) * gS);
-  // individual saturation (clean .. a little dusky)
-  float sat = mix(0.8, 1.0, tone.y);
+  // individual saturation (clean .. a little dusky; never the fully clean
+  // vermilion of a dyed plastic: the photographed reds carry some grey)
+  float sat = mix(0.72, 0.94, tone.y);
   redGrad = mix(vec3(dot(redGrad, vec3(0.2126, 0.7152, 0.0722))), redGrad, sat);
   // large, soft density variation of the chromatophore field (+-10 %) and a
   // fine xanthophore / melanophore grain
@@ -539,7 +540,12 @@ void computeFishSurface() {
   // (shares the pearly base with the scaled body; only a touch fleshier,
   // so there is no seam at the scale boundary)
   float headSkinW = (1.0 - scaleMask) * whiteness * (lip > -0.5 ? 1.0 : 0.0);
-  col = mix(col, col * vec3(1.06, 1.0, 0.95), headSkinW);
+  // (not lighter than the flank either: a brighter head read as a
+  // translucent, glowing sweet next to the scaled body)
+  col = mix(col, col * vec3(1.02, 0.98, 0.93), headSkinW);
+  // the gill cover is a bony plate: a little less diffuse white, its
+  // brightness comes from the sheen where the light hits it (p12_0)
+  col *= 1.0 - 0.1 * operc * headSkinW;
   specTint = mix(specTint, vec3(1.0, 0.96, 0.92), headSkinW);
 
   // guanine reflector strength (metallic scale type, some duller scales)
@@ -565,9 +571,11 @@ void computeFishSurface() {
   // head: iridophores on operculum/cheek give a softer golden sheen
   // the opercle is a pearly plate: guanine-rich, smooth, no scales
   float headSheen = uGuanine * (0.16 + 0.75 * operc + 0.2 * smoothstep(0.1, -0.6, a));
-  // white head skin keeps most of the body's pearly reflectance (p11_1:
-  // the cheek and gill cover shine like the flank)
-  headSheen = mix(headSheen, max(headSheen, refl * 0.75), whiteness);
+  // white head skin keeps part of the body's pearly reflectance (p11_1:
+  // the cheek and gill cover shine where the light hits them), but it is
+  // thin skin over bone, not a deep platelet stack: at the flank's strength
+  // the whole head read as a glossy, pearl-coated gummy sweet
+  headSheen = mix(headSheen, max(headSheen, refl * 0.58), whiteness);
   refl = mix(headSheen, refl, scaleMask);
   // belly: silvery stratum argenteum
   refl *= mix(1.0, 1.25, smoothstep(-0.3, -0.9, a));
@@ -819,7 +827,7 @@ void computeFishSurface() {
   // gill blush: blood-filled filaments under the thin opercular bone show
   // through pale skin as a pink flush, strongest toward the free margin
   float blush = operc * whiteness * uTranslucency;
-  col = mix(col, col * vec3(1.0, 0.68, 0.7), blush * 0.55);
+  col = mix(col, col * vec3(1.0, 0.68, 0.7), blush * 0.42);
   // fin bases: blood vessels feeding the fins run in the thin fleshy base
   // and show through pale skin as a soft pink flush (p11_1, p12_0): the
   // pectoral and pelvic insertions, along the anal and dorsal bases and the
@@ -841,7 +849,11 @@ void computeFishSurface() {
   float thickW = 2.0 * vSect.y * sqrt(max(0.0, 1.0 - a * a * 0.92)) + 0.006; // lateral thickness at this height
   float fleshThin = 1.0 - smoothstep(0.03, 0.12, thickW);
   float nvB = gNV;
-  col = mix(col, col * vec3(1.0, 0.8, 0.8), whiteness * uTranslucency * (0.16 + 0.42 * fleshThin) * (0.4 + 0.6 * nvB));
+  // (the head skin lies on the skull and the opercular bones: no flesh
+  // shows through it, so it stays an opaque warm white instead of a
+  // translucent pink, except for the gill blush above)
+  float headBone = (1.0 - scaleMask) * (lip > -0.5 ? 1.0 : 0.0);
+  col = mix(col, col * vec3(1.0, 0.8, 0.8), whiteness * uTranslucency * (0.16 + 0.42 * fleshThin) * (0.4 + 0.6 * nvB) * (1.0 - 0.7 * headBone));
   // pale belly and throat skin: faint warm flesh tone underneath the guanine
   col = mix(col, col * vec3(1.0, 0.9, 0.86), smoothstep(-0.35, -0.9, a) * whiteness * 0.3 * uTranslucency);
   float thin = 1.0 - smoothstep(0.02, 0.16, thickW);
@@ -859,8 +871,10 @@ void computeFishSurface() {
   // the light back inside)
   interior = mix(interior, vec3(1.0, 0.74, 0.72), whiteness * 0.6);
   // (a dense carotenoid layer passes almost only red: no white leak through
-  // red skin, which would lift green and turn every red fish orange)
-  vec3 exitF = mix(pig * pig, vec3(1.0), mix(0.03, 0.18, whiteness)) * mix(0.95, 0.45, whiteness);
+  // red skin, which would lift green and turn every red fish orange; but
+  // not much purer than the pigment itself either: a squared filter made the
+  // diffused light a pure spectral red that over-saturated every red flank)
+  vec3 exitF = mix(mix(pig * pig, pig, 0.4), vec3(1.0), mix(0.03, 0.18, whiteness)) * mix(0.95, 0.45, whiteness);
 
   gFS.albedo = col;
   gFS.rough = clamp(rough, 0.06, 1.0);
@@ -959,6 +973,11 @@ export const bodyFragmentLightsEnd = /* glsl */ `
   // extinction of goldfish tissue (1/mm): red travels furthest, blue is
   // absorbed by blood and scattered out quickly
   vec3 sigma = vec3(0.2, 0.62, 0.95) / max(uTranslucency, 0.05);
+  // white head skin lies directly on the skull and the opercular bones:
+  // opaque, little sideways spread, no light through it (the gill blush is
+  // a colour, not a glow). At the flank's translucency the white head and
+  // gill cover glowed like a gummy sweet in close-ups
+  float headW = gFS.whiteness * (1.0 - vMask.x) * (vMask.z > -0.5 ? 1.0 : 0.0);
   // ---- short-range diffusion: per-channel wrapped lighting (red wraps
   // furthest past the terminator), shadowed from slightly inside the skin
   #if NUM_DIR_LIGHTS > 0
@@ -969,7 +988,7 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     // (white skin: the dense iridophore stack scatters every wavelength back
     // near the surface, so its wrap is short and nearly neutral; a red-only
     // wrap there paints a dark red band along the terminator of the belly)
-    vec3 w = mix(vec3(0.55, 0.24, 0.14), vec3(0.3, 0.26, 0.23), gFS.whiteness) * uSSS;
+    vec3 w = mix(vec3(0.55, 0.24, 0.14), vec3(0.3, 0.26, 0.23), gFS.whiteness) * uSSS * (1.0 - 0.45 * headW);
     vec3 wrapD = saturate((vec3(NL) + w) / (1.0 + w)) / (1.0 + w);
     #if FISH_LOD >= 2
       float sScat = 1.0;
@@ -994,6 +1013,9 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     // (thin-film platelets seen obliquely), so shadowed white reads as
     // nacre instead of turning grey)
     float lateral = gFS.whiteness * mix(0.45, 1.0, smoothstep(-0.95, -0.2, aV)) * (1.0 - 0.45 * saturate(NL));
+    // (head: a thin skin over bone has no deep platelet stack to spread the
+    // light around; what is left keeps its shadow side from going grey)
+    lateral *= 1.0 - 0.5 * headW;
     vec3 pearlT = mix(vec3(0.97, 0.98, 1.02), vec3(0.86, 0.96, 1.1), spow(1.0 - gNV, 1.5));
     // (the multiply-scattered part does not need the shadow map tap from
     // just under this point: it entered the lit side and spread around)
@@ -1018,7 +1040,7 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     vec3 transK = lc * gFS.tissue * Tr * (phase * back * sEntry) * RECIPROCAL_PI * 1.6;
     // never brighter than 1.5x the lit diffuse level (no glowing rims)
     transK = min(transK, mix(1.5, 0.8, gFS.whiteness) * lc * max(gFS.albedo, vec3(0.15 * gFS.whiteness + 0.02)) * RECIPROCAL_PI);
-    reflectedLight.directDiffuse += transK * mix(vec3(1.0), caus, 0.5);
+    reflectedLight.directDiffuse += transK * mix(vec3(1.0), caus, 0.5) * (1.0 - 0.75 * headW);
   #endif
   // ---- in-tank ambient comes down from the surface; the dark gravel below
   // returns little of it, so the back sees a bright hemisphere and the belly
@@ -1048,7 +1070,7 @@ export const bodyFragmentLightsEnd = /* glsl */ `
   #endif
   // (weaker through white skin: at full strength the whole lower flank of a
   // white fish glowed as an orange band)
-  reflectedLight.indirectDiffuse += bg * gFS.tissue * Tv * mix(0.45, 0.33, gFS.whiteness);
+  reflectedLight.indirectDiffuse += bg * gFS.tissue * Tv * mix(0.45, 0.33, gFS.whiteness) * (1.0 - 0.75 * headW);
   // buccal cavity: light entering through the open gape bounces around the
   // pink chamber (its walls see each other and the opening, not the
   // surroundings their normals face), so it reads red, not black (p09_1)
@@ -1072,6 +1094,9 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     reflectedLight.indirectSpecular *= tS;
   }
   reflectedLight.indirectSpecular *= mix(1.0, gFS.ao, 0.8);
+  // white head: the even environment sheen coated the whole face in pearl;
+  // keep the sheen mostly where the key light hits (direct specular)
+  reflectedLight.indirectSpecular *= 1.0 - 0.3 * headW;
   reflectedLight.directDiffuse *= mix(1.0, gFS.ao, 0.5);
   gFS.thin = cV; // debug: view thickness in mm
 }

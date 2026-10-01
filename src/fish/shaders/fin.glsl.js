@@ -196,7 +196,10 @@ void computeFinSurface() {
   float tDark = floor(vTone / 4096.0) / 63.0;
   vec3 deep = mix(vec3(1.12, 1.45, 1.3), vec3(0.62, 0.32, 0.44), tDark);
   float oMix = clamp(0.25 + vFishB.y, 0.0, 1.0);
-  vec3 redCol = ctype < 0.5 ? mix(uColRed, uColOrange, oMix * 0.06) * mix(vec3(1.0), deep, 0.5) : mix(uColRed, uColOrange, oMix * 0.85) * deep;
+  vec3 redCol = ctype < 0.5 ? mix(uColRed, uColOrange, oMix * 0.3) * mix(vec3(1.0), deep, 0.5) : mix(uColRed, uColOrange, oMix * 0.95) * deep;
+  // (and the same individual saturation)
+  float tSat = mod(floor(vTone / 64.0), 64.0) / 63.0;
+  redCol = mix(vec3(dot(redCol, vec3(0.2126, 0.7152, 0.0722))), redCol, mix(0.72, 0.94, tSat));
   vec3 pig = redCol;
   if (ctype > 1.5 && ctype < 2.5) pig = mix(uColOrange, uColYellow, 0.3);
   if (ctype > 2.5 && ctype < 3.5) pig = mix(uColOrange, uColYellow, 0.62); // golden, not lemon
