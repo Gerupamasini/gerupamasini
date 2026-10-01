@@ -53,8 +53,8 @@ const LOD_DIST = [60, 130];
 const SKIRT = 0.35;
 
 const SUBSTRATE_COLORS: Record<Substrate, [number, number, number]> = {
-  sand: [0.63, 0.54, 0.36],
-  muddy_sand: [0.45, 0.37, 0.26],
+  sand: [0.68, 0.56, 0.36],
+  muddy_sand: [0.48, 0.38, 0.25],
   mud: [0.28, 0.24, 0.19],
   gravel: [0.48, 0.46, 0.42],
   channel: [0.22, 0.2, 0.16],
@@ -200,7 +200,7 @@ export class Terrain {
   }
 
   private buildMaterial(): MeshStandardMaterial {
-    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.3, side: DoubleSide });
+    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.15, side: DoubleSide });
     const uWater = this.uWater, uWet = this.uWet, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
