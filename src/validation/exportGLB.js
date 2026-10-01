@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { KentishPloverModel } from '../birds/kentishPlover/KentishPloverModel.js';
 import { KentishPloverAnimator, PREEN_VARIANTS } from '../birds/kentishPlover/KentishPloverAnimator.js';
-import { GLSL, getPalette } from '../birds/kentishPlover/KentishPloverMaterials.js';
+import { GLSL, getPalette, plumageAlbedo } from '../birds/kentishPlover/KentishPloverMaterials.js';
 import { animation as ANIM } from '../birds/kentishPlover/KentishPloverConfig.js';
 
 // Offline export of the LOD0 plover to GLB:
@@ -35,7 +35,7 @@ function bakeVertexColors(renderer, geometry, kind, pal) {
   } else {
     g.setAttribute('uv', geometry.getAttribute('uv'));
     g.setAttribute('aFeather', geometry.getAttribute('aFeather'));
-    const c = (h) => ({ value: new THREE.Color(h) });
+    const c = (h) => ({ value: plumageAlbedo(h) });
     Object.assign(uniforms, { uMantle: c(pal.mantle), uMantleDark: c(pal.mantleDark), uFringe: c(pal.fringe), uFlightDark: c(pal.flightDark), uFlightMid: c(pal.flightMid), uTailDark: c(pal.tailDark), uWhite: c(pal.white), uUnder: c(pal.underparts), uWear: { value: 0.25 }, uDetail: { value: 2 } });
     vtx = `attribute float aIdx; attribute vec4 aFeather; uniform float uW, uH; varying vec4 vF; varying vec2 vUv2;
       void main(){ vF = aFeather; vUv2 = uv; float x = mod(aIdx, uW); float y = floor(aIdx / uW);

@@ -203,6 +203,9 @@ export const plumage = {
       eyelidRing: '#dcd6cd',
     },
   },
+  // Photo appearance → albedo: palette colours are darkened by (Y / 0.82)^(γ − 1) so the rendered mantle / white
+  // luminance matches the photos under the scene's sun and ACES (spec §13; measured on side renders)
+  apparentGamma: 1.55,
   // rufousAmount 0.3 (sandy cap, p012, p020, p054) … 1.0 (the palette's rufous cap), spec §13.1
   sandyCap: { crown: '#a89483', crownRear: '#ad9886', nape: '#b09c8a' },
   // Feather micro-structure (mm): scallop size per feather tract. Kept low-contrast on purpose.

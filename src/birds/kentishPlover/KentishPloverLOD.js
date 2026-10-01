@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
 import { KentishPlover } from './KentishPlover.js';
-import { getPalette } from './KentishPloverMaterials.js';
+import { getPalette, plumageAlbedo } from './KentishPloverMaterials.js';
 import { getBodySDF } from './anatomy/bodyMesh.js';
 
 // Flock manager: LOD policy + update scheduling + spatial queries + far-LOD instanced impostors.
@@ -277,7 +277,7 @@ function farBodyGeometry(pal) {
   }
   const colour = (x, y, z) => {
     const hex = z > 14 ? (y > 92 ? pal.crown : pal.underparts) : y > 58 + Math.max(0, z) * 0.6 ? pal.mantle : pal.underparts;
-    return new THREE.Color(hex);
+    return plumageAlbedo(hex);
   };
   const pos = [];
   const col = [];

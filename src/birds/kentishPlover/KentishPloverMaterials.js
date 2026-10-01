@@ -12,6 +12,18 @@ const ANIM_BREATH = (ANIM.breathAmp * 0.021).toFixed(6);
 
 const srgb = (hex) => new THREE.Color(hex); // THREE.Color(hex) converts sRGB → linear working space
 
+// Palette colours are photo APPEARANCES: white-balanced medians in which the most sunlit white is linear 0.82
+// (spec §13). Used directly as albedo, the scene's strong sun + ACES compress them toward the white: the
+// rendered mantle / white luminance came out 0.51 / 0.37 / 0.42 / 0.37 (male / non-breeding / female /
+// juvenile) against the photos' 0.31 / 0.20 / 0.23 / 0.19. Albedo = colour · (Y / 0.82)^(γ − 1) keeps the
+// whites and darkens mid-tones so the RENDERED ratio matches the photo ratio (plumage.apparentGamma).
+const WHITE_Y = 0.82;
+export function plumageAlbedo(hex) {
+  const c = srgb(hex);
+  const y = Math.max(1e-4, 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
+  return c.multiplyScalar(Math.min(1, Math.pow(y / WHITE_Y, PLUMAGE.apparentGamma - 1)));
+}
+
 // ------------------------------------------------------------------ shared GLSL
 const GLSL_COMMON = /* glsl */ `
 float kpHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -206,28 +218,28 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
 
 /** Cap colour of an individual: the palette's rufous cap toward the sandy one with rufousAmount (spec §13.1). */
 function capColor(pal, key, rufous) {
-  const c = srgb(pal[key] ?? pal.crown);
+  const c = plumageAlbedo(pal[key] ?? pal.crown);
   if (!pal.rufousCap || rufous >= 1) return c;
-  return srgb(PLUMAGE.sandyCap[key]).lerp(c, Math.max(0, (rufous - 0.3) / 0.7));
+  return plumageAlbedo(PLUMAGE.sandyCap[key]).lerp(c, Math.max(0, (rufous - 0.3) / 0.7));
 }
 
 function paletteUniforms(pal, individual = {}) {
   const rufous = individual.rufousAmount ?? 1;
   return {
-    uForehead: { value: srgb(pal.forehead) },
-    uFrontalBar: { value: srgb(pal.frontalBar) },
+    uForehead: { value: plumageAlbedo(pal.forehead) },
+    uFrontalBar: { value: plumageAlbedo(pal.frontalBar) },
     uCrown: { value: capColor(pal, 'crown', rufous) },
     uCrownRear: { value: capColor(pal, 'crownRear', rufous) },
     uNape: { value: capColor(pal, 'nape', rufous) },
-    uSupercilium: { value: srgb(pal.supercilium) },
-    uEyeStripe: { value: srgb(pal.eyeStripe) },
-    uEarCoverts: { value: srgb(pal.earCoverts) },
-    uCollar: { value: srgb(pal.collar) },
-    uMantle: { value: srgb(pal.mantle) },
-    uMantleDark: { value: srgb(pal.mantleDark) },
-    uFringe: { value: srgb(pal.fringe) },
-    uBreastPatch: { value: srgb(pal.breastPatch) },
-    uUnder: { value: srgb(pal.underparts) },
+    uSupercilium: { value: plumageAlbedo(pal.supercilium) },
+    uEyeStripe: { value: plumageAlbedo(pal.eyeStripe) },
+    uEarCoverts: { value: plumageAlbedo(pal.earCoverts) },
+    uCollar: { value: plumageAlbedo(pal.collar) },
+    uMantle: { value: plumageAlbedo(pal.mantle) },
+    uMantleDark: { value: plumageAlbedo(pal.mantleDark) },
+    uFringe: { value: plumageAlbedo(pal.fringe) },
+    uBreastPatch: { value: plumageAlbedo(pal.breastPatch) },
+    uUnder: { value: plumageAlbedo(pal.underparts) },
     uFringeMix: { value: pal.fringeMix ?? 0.55 },
     uSubterminal: { value: pal.subterminalDark ? 1 : 0 },
   };
@@ -444,14 +456,14 @@ vec3 kpFeatherBottom(float type, float idx, vec2 uv, float fold) {
 export function createFeatherMaterial(pal, individual = {}, detail = 0) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72, metalness: 0, side: THREE.DoubleSide });
   const uniforms = {
-    uMantle: { value: srgb(pal.mantle) },
-    uMantleDark: { value: srgb(pal.mantleDark) },
-    uFringe: { value: srgb(pal.fringe) },
-    uFlightDark: { value: srgb(pal.flightDark) },
-    uFlightMid: { value: srgb(pal.flightMid) },
-    uTailDark: { value: srgb(pal.tailDark) },
-    uWhite: { value: srgb(pal.white) },
-    uUnder: { value: srgb(pal.underparts) },
+    uMantle: { value: plumageAlbedo(pal.mantle) },
+    uMantleDark: { value: plumageAlbedo(pal.mantleDark) },
+    uFringe: { value: plumageAlbedo(pal.fringe) },
+    uFlightDark: { value: plumageAlbedo(pal.flightDark) },
+    uFlightMid: { value: plumageAlbedo(pal.flightMid) },
+    uTailDark: { value: plumageAlbedo(pal.tailDark) },
+    uWhite: { value: plumageAlbedo(pal.white) },
+    uUnder: { value: plumageAlbedo(pal.underparts) },
     uWear: { value: individual.plumageWear ?? 0.2 },
     uDetail: { value: detail },
     uDebugType: { value: 0 },
@@ -550,7 +562,7 @@ export function createBarePartsMaterial(pal, detail = 0) {
   const uniforms = {
     uBill: { value: srgb(pal.bill) },
     uLegs: { value: srgb(pal.legs) },
-    uUnder: { value: srgb(pal.underparts) },
+    uUnder: { value: plumageAlbedo(pal.underparts) },
     uMouth: { value: srgb('#8e6f6a') },
     uBillRough: { value: pal.billRoughness ?? 0.46 },
     uDetail: { value: detail },
@@ -645,7 +657,7 @@ export function createEyeMaterials(pal) {
 
   // Lids: rim (dark eyelid skin), lower lid (rises when asleep), nictitating membrane (blink).
   const lids = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0, side: THREE.DoubleSide, alphaTest: 0.5, transparent: false });
-  const lidU = { uLidClose: { value: new THREE.Vector2(0, 0) }, uNict: { value: new THREE.Vector2(0, 0) }, uRim: { value: srgb('#171514') }, uLidRing: { value: srgb(pal.eyelidRing ?? '#171514') }, uLidCol: { value: srgb(pal.eyeStripe) } };
+  const lidU = { uLidClose: { value: new THREE.Vector2(0, 0) }, uNict: { value: new THREE.Vector2(0, 0) }, uRim: { value: srgb('#171514') }, uLidRing: { value: srgb(pal.eyelidRing ?? '#171514') }, uLidCol: { value: plumageAlbedo(pal.eyeStripe) } };
   lids.userData.uniforms = lidU;
   lids.defines = { USE_UV: '' };
   lids.onBeforeCompile = (shader) => {
