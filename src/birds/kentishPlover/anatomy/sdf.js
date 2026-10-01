@@ -44,7 +44,19 @@ const smin = (a, b, k) => {
 };
 const smax = (a, b, k) => -smin(-a, -b, k);
 
+// vesica: the intersection of two capsules a–b of radius r shifted by ±off — a tube with an almond section
+// (eye openings: corners where the two lid arcs meet)
+function sdVesica(x, y, z, p) {
+  const o = p.off;
+  const a1 = [p.a[0] + o[0], p.a[1] + o[1], p.a[2] + o[2]];
+  const b1 = [p.b[0] + o[0], p.b[1] + o[1], p.b[2] + o[2]];
+  const a2 = [p.a[0] - o[0], p.a[1] - o[1], p.a[2] - o[2]];
+  const b2 = [p.b[0] - o[0], p.b[1] - o[1], p.b[2] - o[2]];
+  return Math.max(sdCapsule(x, y, z, a1, b1, p.r), sdCapsule(x, y, z, a2, b2, p.r));
+}
+
 function primDist(p, x, y, z) {
+  if (p.type === 'vesica') return sdVesica(x, y, z, p);
   return p.type === 'capsule' ? sdCapsule(x, y, z, p.a, p.b, p.r) : sdEllipsoid(x, y, z, p.c, p.r, p.rx);
 }
 

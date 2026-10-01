@@ -91,15 +91,18 @@ export const bodySculpt = {
   // Eye openings: a 2.8 mm tube along the eye axis through the plumage, its rim rounded over ≈1 mm — the cornea
   // (flush with the surrounding feathers at its apex) sits 1.2 mm down in it, the plumage rim overlapping the lid
   // margin (photos: the eye is set into the face, not a ball on it: p001, p010, p035, p012)
+  // (an almond, not a round tube: two capsules r 3.4 shifted ±1.37 mm across the axis and intersected — the lid
+  // arcs meet in corners in front of and behind the eye; opening ≈5.7 × 3.6 mm, ≈6.7 × 4.7 with the dark lid
+  // margin, as the photographed eye of the pale-faced birds: 6.7–7.8 × 3.8–5.4 mm, median height 4.7 (p062,
+  // p035, p018, p045, p050, p006, p039 on the eye → bill-tip scale). The round 6.4 mm opening read as a black ball)
   cuts: [
-    { type: 'capsule', name: 'eyeSocketL', a: [9.03, 95.2, 25.9], b: [16.19, 96.17, 27.93], r: 2.78, k: 0.9 },
-    { type: 'capsule', name: 'eyeSocketR', a: [-9.03, 95.2, 25.9], b: [-16.19, 96.17, 27.93], r: 2.78, k: 0.9 },
+    { type: 'vesica', name: 'eyeSocketL', a: [9.03, 95.2, 25.9], b: [16.19, 96.17, 27.93], r: 3.4, off: [0.17, -1.36, 0.05], k: 0.9 },
+    { type: 'vesica', name: 'eyeSocketR', a: [-9.03, 95.2, 25.9], b: [-16.19, 96.17, 27.93], r: 3.4, off: [-0.17, -1.36, 0.05], k: 0.9 },
   ],
-  // Upper eyelid fold: the feathered upper lid overhangs the top of the cornea by ≈0.5 mm, so the opening is a
-  // slightly flattened almond, not a round porthole (p012, p043, p009, p050)
+  // Upper eyelid fold: the feathered brow over the upper lid stands a little proud of the opening (p012, p043, p050)
   adds: [
-    { type: 'ellipsoid', name: 'upperLidL', c: [10.85, 98.45, 26.5], r: [0.75, 0.65, 2.6], k: 0.4 },
-    { type: 'ellipsoid', name: 'upperLidR', c: [-10.85, 98.45, 26.5], r: [0.75, 0.65, 2.6], k: 0.4 },
+    { type: 'ellipsoid', name: 'upperLidL', c: [10.95, 98.35, 26.5], r: [0.8, 0.6, 2.8], k: 0.4 },
+    { type: 'ellipsoid', name: 'upperLidR', c: [-10.95, 98.35, 26.5], r: [0.8, 0.6, 2.8], k: 0.4 },
   ],
   // LOD0 face patches (anatomy/bodyMesh.js): eye sockets and bill base polygonised at 0.3 mm over the base mesh
   facePatch: {
@@ -149,9 +152,10 @@ export const plumage = {
       billRoughness: 0.48, // a dull sheen, no glossy streak (p012, p070)
       legs: '#827369', // rendered ≈ the photos' white-balanced tarsus #8a7a6d (p006, p020, p070); '#5a534f' rendered near-black
       iris: '#1d1512',
-      eyelidRing: '#a9a29a', // a thin greyish lower lid, not a white ring (p012)
+      eyelidRing: '#6f6863', // a thin greyish lower lid in the black mask, not a pale ring (p012, p070)
       eyelidRingUpper: '#1e1a19', // upper lid dark in the black mask, pale only below the eye (p012, p043)
       headPattern: [13, 1, 1], // [supercilium end z (mm), loral stripe, mask round the eye] (KentishPloverMaterials)
+      capStreak: 0.3, // fine crown streaks (0 none … 1 strong): faint in the rufous cap (p070), clearer in p012
       rufousCap: true, // crown / crownRear / nape blend toward plumage.sandyCap with individual.rufousAmount
     },
     femaleBreeding: {
@@ -178,6 +182,8 @@ export const plumage = {
       iris: '#1d1512',
       eyelidRing: '#dcd6cd',
       headPattern: [24, 0.7, 0.3], // supercilium ends over the eye's rear edge, the cap drops to the ear coverts (p050, p008)
+      capStreak: 0.65, // streaked / pale-tipped crown (p050, p062)
+      capDrop: 1.6, // the cap's front edge (mm below the male's bar) — a narrow supercilium over the eye (p050, p008)
     },
     nonBreeding: {
       forehead: '#e0dad2',
@@ -203,6 +209,8 @@ export const plumage = {
       iris: '#1d1512',
       eyelidRing: '#e4d9cf',
       headPattern: [20, 0.5, 0.25], // pale lores (p001, p035)
+      capStreak: 0.65, // (p001, p035)
+      capDrop: 1.3,
     },
     // juvenile (spec §13.2; p062, p063): buff-fringed upperparts with a dark subterminal band, diffuse
     // incomplete breast band, indistinct collar
@@ -231,6 +239,8 @@ export const plumage = {
       iris: '#1d1512',
       eyelidRing: '#dcd6cd',
       headPattern: [22, 0.45, 0.3], // p062, p045
+      capStreak: 0.8, // pale-fringed crown feathers (p062, p063)
+      capDrop: 1.8, // the cap reaches the eye's upper lid (p062, p045)
     },
   },
   // Photo appearance → albedo: palette colours are darkened by (Y / 0.82)^(γ − 1) so the rendered mantle / white
