@@ -1,4 +1,5 @@
 import type { HabitatTag, Substrate } from '../data/schemas';
+import type { FeedingPit } from './FeedingPits';
 import type { Terrain } from './Terrain';
 
 export interface HabitatSample {
@@ -77,6 +78,9 @@ const WET_TAU_MS: Record<Substrate, number> = {
  * Habitat state derived from the terrain and the tide: depth, exposure, tide pools (depressions keep water at their
  * spill height), wetness memory and the habitat tags used by spawn rules. Tags live on a coarse grid (COARSE m cells).
  */
+/** pools smaller than this (m²) count as 'small_pool' habitat */
+const SMALL_POOL_M2 = 40;
+
 export class Habitat {
   readonly spill: Float32Array;
   readonly pools: PoolInfo[] = [];
@@ -90,12 +94,14 @@ export class Habitat {
   readonly coarseSubstrate: Uint8Array;
   readonly coarseSpill: Float32Array;
   readonly coarseDist: Float32Array;
+  /** per coarse cell: the level of the small pool or feeding pit in it (else -1e3) */
+  readonly coarseSmallPool: Float32Array;
   tideLevel = 0;
   /** running high-water mark that decays toward the tide level (drives the wet band) */
   wetLevel = 0;
   private lastUpdateMs = 0;
 
-  constructor(readonly terrain: Terrain, coarseCell = 5) {
+  constructor(readonly terrain: Terrain, coarseCell = 5, readonly pits: FeedingPit[] = []) {
     this.spill = this.computeSpill();
     this.findPools();
     this.poolLevels = this.buildPoolLevels();
@@ -108,6 +114,12 @@ export class Habitat {
     this.coarseSubstrate = new Uint8Array(cn2);
     this.coarseSpill = new Float32Array(cn2);
     this.coarseDist = new Float32Array(cn2);
+    this.coarseSmallPool = new Float32Array(cn2).fill(-1e3);
+    for (const p of this.pools) if (p.area < SMALL_POOL_M2) for (const k of p.cells) {
+      const ci = this.coarseIndex(-terrain.half + (k % terrain.n) * terrain.cell, -terrain.half + Math.floor(k / terrain.n) * terrain.cell);
+      this.coarseSmallPool[ci] = Math.max(this.coarseSmallPool[ci], p.level);
+    }
+    for (const pit of pits) { const ci = this.coarseIndex(pit.x, pit.z); this.coarseSmallPool[ci] = Math.max(this.coarseSmallPool[ci], this.spillAt(pit.x, pit.z)); }
     for (let j = 0; j < this.cn; j++) for (let i = 0; i < this.cn; i++) {
       const [x, z] = this.coarseCenter(i, j);
       const k = j * this.cn + i;
@@ -191,7 +203,39 @@ export class Habitat {
         if (best > -1e2) out[k] = best;
       }
     }
+    // feeding pits: too small for the pool search, but each holds water up to the lowest point of its rim, which
+    // the flood already computed as the spill height of its centre cell
+    const cell = this.terrain.cell, half = this.terrain.half;
+    for (const pit of this.pits) {
+      const ci = Math.round((pit.x + half) / cell), cj = Math.round((pit.z + half) / cell);
+      if (ci < 0 || cj < 0 || ci >= n || cj >= n) continue;
+      const level = this.spill[cj * n + ci];
+      const span = Math.ceil((pit.r * 1.1) / cell);
+      for (let j = cj - span; j <= cj + span; j++) for (let i = ci - span; i <= ci + span; i++) {
+        if (i < 0 || j < 0 || i >= n || j >= n) continue;
+        if (Math.hypot(-half + i * cell - pit.x, -half + j * cell - pit.z) > pit.r * 1.1) continue;
+        const k = j * n + i;
+        out[k] = Math.max(out[k], level);
+      }
+    }
     return out;
+  }
+
+  /** A random point inside a tide pool or feeding pit within a coarse cell (water above the tide), or null. */
+  randomPoolPoint(coarseIndex: number, rnd: () => number): [number, number] | null {
+    const t = this.terrain, n = t.n;
+    const ci = coarseIndex % this.cn, cj = (coarseIndex - ci) / this.cn;
+    const x0 = -t.half + ci * this.coarse, z0 = -t.half + cj * this.coarse;
+    const i0 = Math.max(0, Math.round((x0 + t.half) / t.cell)), j0 = Math.max(0, Math.round((z0 + t.half) / t.cell));
+    const span = Math.ceil(this.coarse / t.cell);
+    const cands: number[] = [];
+    for (let j = j0; j < Math.min(n, j0 + span); j++) for (let i = i0; i < Math.min(n, i0 + span); i++) {
+      const k = j * n + i;
+      if (this.poolLevels[k] > this.tideLevel + 0.01 && this.poolLevels[k] > t.heights[k] + 0.03) cands.push(k);
+    }
+    if (!cands.length) return null;
+    const k = cands[Math.floor(rnd() * cands.length)];
+    return [-t.half + (k % n) * t.cell + (rnd() - 0.5) * t.cell * 0.6, -t.half + Math.floor(k / n) * t.cell + (rnd() - 0.5) * t.cell * 0.6];
   }
 
   spillAt(x: number, z: number): number {
@@ -273,6 +317,8 @@ export class Habitat {
         else tags.push('deep');
         if (sub === 'channel' && depth > 0.05) tags.push('channel');
       }
+      // a small pool or a feeding pit in this cell still holds water above the tide: a nursery for small animals
+      if (this.coarseSmallPool[k] > tideLevel + 0.01) tags.push('small_pool');
       this.tags[k] = tags;
     }
   }

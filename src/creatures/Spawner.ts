@@ -22,6 +22,9 @@ export interface SpawnRequest {
   seed: number;
   x: number;
   z: number;
+  /** resident of this feeding pit */
+  pitId?: number;
+  lengthRange?: [number, number];
 }
 
 const SPAWN_RADIUS = 60;
@@ -95,9 +98,13 @@ export class Spawner {
               const id = `${sp.id}#${hashInts(memberSeed, 7).toString(16).padStart(8, '0')}`;
               if (this.removed.has(id)) continue;
               if ((counts.get(sp.id) ?? 0) >= rule.maxPopulation) break;
-              // position inside the cell matching the depth requirement
+              // position inside the cell matching the depth requirement (small pools: straight into the pool)
               let x = cx, z = cz, ok = false;
-              for (let tries = 0; tries < 5 && !ok; tries++) {
+              if (rule.tags.includes('small_pool')) {
+                const p = h.randomPoolPoint(cell, () => rng.next());
+                if (p) { x = p[0]; z = p[1]; ok = h.sample(x, z, env.gameMs).depth >= (rule.depth_m?.[0] ?? 0.03); }
+              }
+              for (let tries = 0; tries < 8 && !ok; tries++) {
                 x = cx + rng.range(-cs / 2, cs / 2);
                 z = cz + rng.range(-cs / 2, cs / 2);
                 const s = h.sample(x, z, env.gameMs);
@@ -105,7 +112,7 @@ export class Spawner {
                 ok = rule.depth_m ? s.depth >= rule.depth_m[0] && s.depth <= rule.depth_m[1] : aquatic ? s.depth > 0.03 : s.exposed;
               }
               if (!ok) continue;
-              out.push({ species: sp, ruleIndex: ri, cell, seed: memberSeed, x, z });
+              out.push({ species: sp, ruleIndex: ri, cell, seed: memberSeed, x, z, lengthRange: rule.length_mm });
               counts.set(sp.id, (counts.get(sp.id) ?? 0) + 1);
             }
             occupied.add(`${sp.id}:${cell}`);
@@ -113,6 +120,24 @@ export class Spawner {
           }
         }
       }
+    }
+    // stingray feeding pits: now and then one holds a small goby or shrimp (deterministic per pit and day)
+    for (const pit of h.pits) {
+      const d = Math.hypot(pit.x - px, pit.z - pz);
+      if (d > SPAWN_RADIUS || d < minDist) continue;
+      if (live.some((i) => i.pitId === pit.id)) continue;
+      const roll = hashInts(pit.id * 31 + 7, env.day, 977) % 1000;
+      if (roll >= 180) continue;
+      if (h.sample(pit.x, pit.z, env.gameMs).depth < 0.025) continue;
+      const goby = roll % 5 < 3;
+      const sp = this.speciesList.find((q) => q.id === (goby ? 'acanthogobius_flavimanus' : 'exopalaemon_orientis'));
+      if (!sp) continue;
+      if ((counts.get(sp.id) ?? 0) >= 60) continue;
+      const seed = hashInts(pit.id, env.day, 991);
+      const id = `${sp.id}#${hashInts(seed, 7).toString(16).padStart(8, '0')}`;
+      if (this.removed.has(id)) continue;
+      out.push({ species: sp, ruleIndex: 0, cell: h.coarseIndex(pit.x, pit.z), seed, x: pit.x, z: pit.z, pitId: pit.id, lengthRange: goby ? [26, 40] : [26, 42] });
+      counts.set(sp.id, (counts.get(sp.id) ?? 0) + 1);
     }
     return out;
   }
@@ -123,6 +148,7 @@ export class Spawner {
     for (const ind of live) {
       const d = Math.hypot(ind.pos.x - px, ind.pos.z - pz);
       if (d > DESPAWN_RADIUS) { out.push(ind); continue; }
+      if (ind.pitId !== undefined) continue;   // pit residents stay as long as the player is around
       const rule = ind.species.spawn[ind.ruleIndex];
       const cell = this.habitat.coarseIndex(ind.pos.x, ind.pos.z);
       const matches = rule ? this.ruleMatches(rule, cell, env) || ind.species.spawn.some((r) => this.ruleMatches(r, cell, env)) : true;
@@ -134,6 +160,8 @@ export class Spawner {
   }
 
   create(req: SpawnRequest, nowMs: number): Individual {
-    return generateIndividual(req.species, req.seed, req.x, req.z, req.cell, req.ruleIndex, nowMs);
+    const ind = generateIndividual(req.species, req.seed, req.x, req.z, req.cell, req.ruleIndex, nowMs, req.lengthRange);
+    if (req.pitId !== undefined) ind.pitId = req.pitId;
+    return ind;
   }
 }

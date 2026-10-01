@@ -1,5 +1,5 @@
 import {
-  BufferAttribute, BufferGeometry, DataTexture, FloatType, Mesh, MeshStandardMaterial, RedFormat, Vector3,
+  BufferAttribute, BufferGeometry, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshStandardMaterial, RedFormat, Vector3,
   type IUniform, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
 import { makeSpillTexture } from './Water';
@@ -46,12 +46,18 @@ export async function loadTerrainGrid(map: MapDef): Promise<TerrainGrid> {
   return { n, size: map.size_m, heights, substrate };
 }
 
+/** chunk edge in grid cells (≈25 m), vertex step per level of detail, and the distances where the detail drops */
+const CHUNK = 48;
+const LOD_STEP = [1, 2, 4];
+const LOD_DIST = [60, 130];
+const SKIRT = 0.35;
+
 const SUBSTRATE_COLORS: Record<Substrate, [number, number, number]> = {
-  sand: [0.72, 0.64, 0.49],
-  muddy_sand: [0.52, 0.46, 0.36],
-  mud: [0.34, 0.3, 0.25],
-  gravel: [0.58, 0.56, 0.52],
-  channel: [0.26, 0.24, 0.2],
+  sand: [0.6, 0.52, 0.37],
+  muddy_sand: [0.42, 0.36, 0.27],
+  mud: [0.28, 0.24, 0.19],
+  gravel: [0.48, 0.46, 0.42],
+  channel: [0.22, 0.2, 0.16],
 };
 
 export class Terrain {
@@ -62,8 +68,11 @@ export class Terrain {
   readonly heights: Float32Array;
   readonly substrate: Uint8Array;
   readonly palette: Substrate[];
-  readonly mesh: Mesh;
+  /** the flat as chunks (frustum-culled, three levels of detail by distance) */
+  readonly mesh = new Group();
   readonly material: MeshStandardMaterial;
+  private readonly chunks: { mesh: Mesh; lods: (BufferGeometry | null)[]; cx: number; cz: number; lod: number; i0: number; j0: number; i1: number; j1: number }[] = [];
+  private nrm = new Float32Array(0);
   readonly heightTexture: DataTexture;
   /** spill level per cell (tide pools keep water up to this height); set once the habitat is known */
   spillTexture: DataTexture;
@@ -91,55 +100,107 @@ export class Terrain {
     this.spillTexture = makeSpillTexture(new Float32Array(this.n * this.n).fill(-1e3), this.n);
     this.uSpill = { value: this.spillTexture };
 
-    const geo = this.buildGeometry();
     this.material = this.buildMaterial();
-    this.mesh = new Mesh(geo, this.material);
-    this.mesh.receiveShadow = true;
     this.mesh.name = 'terrain';
+    this.buildChunks();
   }
 
-  private buildGeometry(): BufferGeometry {
-    const n = this.n;
-    const pos = new Float32Array(n * n * 3);
-    const uv = new Float32Array(n * n * 2);
-    const col = new Float32Array(n * n * 3);
-    const sub = new Float32Array(n * n);
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const k = j * n + i;
-        pos[k * 3] = -this.half + i * this.cell;
-        pos[k * 3 + 1] = this.heights[k];
-        pos[k * 3 + 2] = -this.half + j * this.cell;
-        uv[k * 2] = i / (n - 1);
-        uv[k * 2 + 1] = j / (n - 1);
-        const s = this.palette[this.substrate[k]] ?? 'mud';
-        const c = SUBSTRATE_COLORS[s];
-        col[k * 3] = c[0]; col[k * 3 + 1] = c[1]; col[k * 3 + 2] = c[2];
-        sub[k] = this.substrate[k];
+  /** Pick each chunk's level of detail from its distance to the player. Cheap; call every frame. */
+  updateLod(px: number, pz: number): void {
+    for (const c of this.chunks) {
+      const d = Math.hypot(c.cx - px, c.cz - pz);
+      const lod = d < LOD_DIST[0] ? 0 : d < LOD_DIST[1] ? 1 : 2;
+      if (lod !== c.lod) {
+        c.lod = lod;
+        // detailed meshes are built the first time a chunk comes close (like loading a chunk)
+        c.lods[lod] ??= this.buildChunkGeometry(c.i0, c.j0, c.i1, c.j1, LOD_STEP[lod], this.nrm);
+        c.mesh.geometry = c.lods[lod]!;
       }
+      // and freed again once the chunk is well out of range
+      if (d > LOD_DIST[1] + 40) for (const l of [0, 1]) { const g = c.lods[l]; if (g) { g.dispose(); c.lods[l] = null; } }
     }
-    const idx = new Uint32Array((n - 1) * (n - 1) * 6);
-    let o = 0;
-    for (let j = 0; j < n - 1; j++) {
-      for (let i = 0; i < n - 1; i++) {
-        const a = j * n + i, b = (j + 1) * n + i, c = j * n + i + 1, d = (j + 1) * n + i + 1;
-        idx[o++] = a; idx[o++] = b; idx[o++] = c;
-        idx[o++] = c; idx[o++] = b; idx[o++] = d;
-      }
+  }
+
+  get chunkStats(): { chunks: number; lod0: number; lod1: number; lod2: number } {
+    const s = { chunks: this.chunks.length, lod0: 0, lod1: 0, lod2: 0 };
+    for (const c of this.chunks) { if (c.lod === 0) s.lod0++; else if (c.lod === 1) s.lod1++; else s.lod2++; }
+    return s;
+  }
+
+  private buildChunks(): void {
+    const n = this.n, nc = Math.ceil((n - 1) / CHUNK);
+    // one normal per grid vertex (central differences) so every level of detail and the skirts shade alike
+    const nrm = new Float32Array(n * n * 3);
+    this.nrm = nrm;
+    const h = this.heights, e2 = 2 * this.cell;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const l = h[j * n + Math.max(0, i - 1)], r = h[j * n + Math.min(n - 1, i + 1)];
+      const d = h[Math.max(0, j - 1) * n + i], u = h[Math.min(n - 1, j + 1) * n + i];
+      const nx = l - r, nz = d - u, len = Math.hypot(nx, e2, nz);
+      const o = (j * n + i) * 3;
+      nrm[o] = nx / len; nrm[o + 1] = e2 / len; nrm[o + 2] = nz / len;
+    }
+    for (let cj = 0; cj < nc; cj++) for (let ci = 0; ci < nc; ci++) {
+      const i0 = ci * CHUNK, j0 = cj * CHUNK, i1 = Math.min(n - 1, i0 + CHUNK), j1 = Math.min(n - 1, j0 + CHUNK);
+      if (i1 <= i0 || j1 <= j0) continue;
+      // only the coarse level is built up front; the finer ones come when the player approaches
+      const coarse = this.buildChunkGeometry(i0, j0, i1, j1, LOD_STEP[2], nrm);
+      const mesh = new Mesh(coarse, this.material);
+      mesh.receiveShadow = true;
+      mesh.name = `terrain-${ci}-${cj}`;
+      this.mesh.add(mesh);
+      this.chunks.push({ mesh, lods: [null, null, coarse], cx: -this.half + ((i0 + i1) / 2) * this.cell, cz: -this.half + ((j0 + j1) / 2) * this.cell, lod: 2, i0, j0, i1, j1 });
+    }
+  }
+
+  /** One chunk at a vertex step, with a skirt hanging down its border so coarser neighbours leave no cracks. */
+  private buildChunkGeometry(i0: number, j0: number, i1: number, j1: number, step: number, nrm: Float32Array): BufferGeometry {
+    const n = this.n;
+    const axis = (a: number, b: number) => { const out: number[] = []; for (let v = a; v < b; v += step) out.push(v); out.push(b); return out; };
+    const is = axis(i0, i1), js = axis(j0, j1);
+    const cols = is.length, rows = js.length;
+    const ring: [number, number][] = [];
+    for (let c = 0; c < cols; c++) ring.push([c, 0]);
+    for (let r = 1; r < rows; r++) ring.push([cols - 1, r]);
+    for (let c = cols - 2; c >= 0; c--) ring.push([c, rows - 1]);
+    for (let r = rows - 2; r >= 1; r--) ring.push([0, r]);
+    const count = cols * rows + ring.length;
+    const pos = new Float32Array(count * 3), nor = new Float32Array(count * 3), uv = new Float32Array(count * 2);
+    const col = new Float32Array(count * 3), sub = new Float32Array(count);
+    const put = (v: number, i: number, j: number, drop: number) => {
+      const k = j * n + i;
+      pos[v * 3] = -this.half + i * this.cell; pos[v * 3 + 1] = this.heights[k] - drop; pos[v * 3 + 2] = -this.half + j * this.cell;
+      nor[v * 3] = nrm[k * 3]; nor[v * 3 + 1] = nrm[k * 3 + 1]; nor[v * 3 + 2] = nrm[k * 3 + 2];
+      uv[v * 2] = i / (n - 1); uv[v * 2 + 1] = j / (n - 1);
+      const c = SUBSTRATE_COLORS[this.palette[this.substrate[k]] ?? 'mud'];
+      col[v * 3] = c[0]; col[v * 3 + 1] = c[1]; col[v * 3 + 2] = c[2];
+      sub[v] = this.substrate[k];
+    };
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) put(r * cols + c, is[c], js[r], 0);
+    ring.forEach(([c, r], q) => put(cols * rows + q, is[c], js[r], SKIRT));
+    const idx: number[] = [];
+    for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols - 1; c++) {
+      const a = r * cols + c, b = (r + 1) * cols + c, cc = r * cols + c + 1, d = (r + 1) * cols + c + 1;
+      idx.push(a, b, cc, cc, b, d);
+    }
+    for (let q = 0; q < ring.length; q++) {
+      const [c0, r0] = ring[q], [c1, r1] = ring[(q + 1) % ring.length];
+      const top0 = r0 * cols + c0, top1 = r1 * cols + c1, sk0 = cols * rows + q, sk1 = cols * rows + ((q + 1) % ring.length);
+      idx.push(top0, sk0, top1, top1, sk0, sk1);
     }
     const geo = new BufferGeometry();
     geo.setAttribute('position', new BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new BufferAttribute(nor, 3));
     geo.setAttribute('uv', new BufferAttribute(uv, 2));
     geo.setAttribute('color', new BufferAttribute(col, 3));
     geo.setAttribute('substrate', new BufferAttribute(sub, 1));
-    geo.setIndex(new BufferAttribute(idx, 1));
-    geo.computeVertexNormals();
+    geo.setIndex(idx);
     geo.computeBoundingSphere();
     return geo;
   }
 
   private buildMaterial(): MeshStandardMaterial {
-    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.5 });
+    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.5, side: DoubleSide });
     const uWater = this.uWater, uWet = this.uWet, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;

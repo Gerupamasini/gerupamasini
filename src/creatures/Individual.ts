@@ -51,6 +51,8 @@ export interface Individual {
   ruleIndex: number;
   mismatchSince: number;
   spawnedAt: number;
+  /** resident of a stingray feeding pit (kept until the player walks away) */
+  pitId?: number;
 }
 
 function erf(x: number): number {
@@ -77,11 +79,12 @@ function evalTraitCondition(expr: string, vars: Record<string, number>): boolean
 }
 
 /** Deterministically generate an individual from a species definition and a seed. */
-export function generateIndividual(species: SpeciesDef, seed: number, x: number, z: number, cell: number, ruleIndex: number, nowMs: number): Individual {
+export function generateIndividual(species: SpeciesDef, seed: number, x: number, z: number, cell: number, ruleIndex: number, nowMs: number, lengthRange?: [number, number]): Individual {
   const rng = new Rng(seed);
   const L = species.size.length_mm;
   let len = L.mean + L.sd * rng.normal();
   len = Math.max(L.min, Math.min(L.max, len));
+  if (lengthRange) len = Math.max(L.min, Math.min(L.max, lengthRange[0] + (lengthRange[1] - lengthRange[0]) * rng.next()));
   const pct = 50 * (1 + erf((len - L.mean) / (L.sd * Math.SQRT2)));
   const weight = species.size.weightCoef.a * Math.pow(len, species.size.weightCoef.b);
   const sex: Sex = rng.chance(species.sex.maleRatio) ? 'm' : 'f';

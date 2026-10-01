@@ -682,7 +682,7 @@ export class App {
       pointerLocked: this.input.pointerLocked,
     };
     if (ui.debug.value) {
-      const info = this.renderer.gl.info.render;
+      const info = (this.field?.lastStats ?? this.renderer.gl.info.render);
       const cs = this.creatures?.stats() ?? { total: 0, visible: 0, lod1: 0 };
       ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1 } };
     }

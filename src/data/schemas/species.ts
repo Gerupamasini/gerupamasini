@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const HabitatTagSchema = z.enum(['exposed_sand', 'exposed_mud', 'waterline', 'shallow', 'pool', 'channel', 'deep']);
+export const HabitatTagSchema = z.enum(['exposed_sand', 'exposed_mud', 'waterline', 'shallow', 'pool', 'small_pool', 'channel', 'deep']);
 export const SubstrateSchema = z.enum(['sand', 'muddy_sand', 'mud', 'gravel', 'channel']);
 export const TimeOfDaySchema = z.enum(['dawn', 'day', 'dusk', 'night']);
 export const SeasonSchema = z.enum(['spring', 'summer', 'autumn', 'winter']);
@@ -19,6 +19,8 @@ export const SpawnRuleSchema = z.object({
   density_per_100m2: z.number().positive(),
   group: z.tuple([z.number().int().min(1), z.number().int().min(1)]).default([1, 1]),
   maxPopulation: z.number().int().positive().default(50),
+  /** restrict the body length of individuals spawned by this rule (mm) */
+  length_mm: z.tuple([z.number(), z.number()]).optional(),
 });
 
 export const SpeciesSchema = z.object({
