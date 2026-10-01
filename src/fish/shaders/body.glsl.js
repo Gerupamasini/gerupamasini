@@ -326,7 +326,6 @@ void computeFishSurface() {
   float gill = vMask.y;
   float lip = vMask.z;
   float operc = vMask2.x;
-  float orbit = vMask2.w;
   float a = vMask2.y;
 
   // ---- scales
@@ -545,7 +544,10 @@ void computeFishSurface() {
     // above the cleft
     // (open, the pale rim is concentrated at the everted margin: the outer
     // part of the upper-lip mask blends back into the snout, no band)
-    float lipW = lip * mix(mix(0.55, 1.0, 1.0 - upperW), mix(1.0, lip, upperW), lipOpen);
+    // (closed, the lower lip keeps mostly the chin colour, pale only along
+    // its moist margin: a full pale lower lip drew a crescent under the
+    // cleft that read as a cartoon smile from the front and above)
+    float lipW = lip * mix(mix(0.55, mix(0.4, 0.85, margin), 1.0 - upperW), mix(1.0, lip, upperW), lipOpen);
     col = mix(col, lc, lipW);
     spec *= 1.0 - 0.7 * lip;
     rough = mix(rough, 0.3, lip);
@@ -554,6 +556,10 @@ void computeFishSurface() {
     float closed = 1.0 - smoothstep(0.04, 0.3, vHead.x);
     // (the top of the lower lip lies in the shadow of the upper lip)
     float cleftLine = smoothstep(dyC > -0.0002 ? 0.0022 : 0.0042, 0.0004, abs(dyC + 0.0002)) * closed;
+    // the dark line is short: it fades out well before the corners, which
+    // are tucked under the rounded upper lip (a long dark line curving back
+    // around the snout read as a smile)
+    cleftLine *= 1.0 - 0.75 * smoothstep(0.45, 1.0, abs(rp.z) / MOUTH_RW);
     col *= 1.0 - 0.45 * cleftLine;
     ao *= 1.0 - 0.5 * cleftLine;
     spec *= 1.0 - 0.8 * cleftLine;
@@ -646,16 +652,48 @@ void computeFishSurface() {
     ao *= 1.0 - 0.4 * nare * (1.0 - flapM);
     spec *= 1.0 - 0.5 * flapM;
   }
-  // fleshy orbital rim (the mask covers only the rim band): pale, fleshy
-  // and less reflective (p05_1, p12_0, p25_0)
-  // (narrow and only slightly paler: a broad pink ring reads as a swollen lid)
-  // (a paler, partly desaturated version of the local skin: fleshy cream on
-  // white, a lighter muted red on red skin; never a pink halo)
-  float orbitN = smoothstep(0.5, 0.95, orbit);
-  col = mix(col, mix(col, vec3(dot(col, vec3(0.33))), 0.35) * 1.12 + 0.03, 0.55 * orbitN);
-  // soft crease just outside the rim
-  ao *= 1.0 - 0.25 * smoothstep(0.0, 0.25, orbit) * smoothstep(0.6, 0.3, orbit);
-  spec *= 1.0 - 0.5 * orbitN;
+  // fleshy orbital rim: pale, fleshy and less reflective (p05_1, p12_0,
+  // p25_0); narrow (a broad ring reads as a swollen lid) and a paler, partly
+  // desaturated version of the local skin, never a pink halo.
+  // The rim is drawn per pixel from the rest-frame eye (the vertex mask is
+  // only 2-3 vertices across it and smeared into an airbrushed halo): a
+  // hard inner edge where the skin meets the ball, with a thin moist contact
+  // shadow, a narrow fleshy band of skin-coloured, slightly paler and less
+  // saturated tissue, and a soft outer falloff into the head skin.
+  {
+    vec3 eq = rp - vec3(EYE_C.xy, EYE_C.z * sign(rp.z));
+    vec3 eax = vec3(EYE_AX.xy, EYE_AX.z * sign(rp.z));
+    float eh = dot(eq, eax);
+    vec3 erad = eq - eh * eax;
+    float erho = length(erad);
+    // distance outside the visible edge of the eye, in eyeball radii
+    float eu = (erho - EYE_VR) / EYE_R;
+    float front = step(-EYE_R, eh) * step(0.006, abs(rp.z));
+    // over the top of the eye the rim merges into the forehead
+    float upE = erad.y / max(erho, 1e-6);
+    float dorsE = smoothstep(0.1, 0.85, upE);
+    float aaE = fwidth(eu);
+    // fleshy band: full right up to the eye, soft outside (wider and fainter
+    // above, narrowest below and in front of the eye)
+    float bandO = mix(0.2, 0.3, dorsE);
+    float band = (1.0 - smoothstep(bandO * 0.35, bandO + 0.12 + aaE, eu)) * front;
+    band *= mix(1.0, 0.55, dorsE);
+    // natural flesh: the local skin, a little paler and warmer, partly
+    // desaturated (cream-beige on white, a muted lighter red / orange on red)
+    float lumC = dot(col, vec3(0.3, 0.5, 0.2));
+    vec3 flesh = mix(col, vec3(lumC), 0.35) * vec3(1.04, 0.96, 0.84) * 1.08 + vec3(0.025, 0.018, 0.01);
+    col = mix(col, flesh, 0.7 * band);
+    // the skin's free edge against the ball: a fine moist contact shadow
+    // (hard toward the eye, fading over ~0.06 R outward)
+    float contact = (1.0 - smoothstep(0.0, 0.06 + aaE, eu)) * front;
+    col *= 1.0 - 0.35 * contact;
+    ao *= 1.0 - 0.45 * contact;
+    // a faint soft crease just outside the band (shading only, no colour)
+    ao *= 1.0 - 0.18 * front * (1.0 - dorsE) * exp(-pow((eu - bandO - 0.18) / 0.12, 2.0));
+    // fleshy, moist but not glossy
+    spec *= 1.0 - 0.45 * band;
+    rough = mix(rough, rough + 0.12, band);
+  }
 
   // ---- head skin: fine micro-relief and mottled chromatophores (no scales)
   float headSkin = 1.0 - scaleMask;
@@ -674,6 +712,13 @@ void computeFishSurface() {
     col *= 1.0 + ((mot - 0.5) * 0.14 + (mot2 - 0.5) * 0.12) * mix(1.0, 0.5, whiteness) * headSkin;
     spec *= 1.0 + ((mot2 - 0.5) * 0.9 + mn * 0.15) * headSkin;
     rough += (mot - 0.5) * 0.12 * headSkin;
+    // forehead and snout top: thick skin over the frontal bones, with few
+    // reflective iridophores. A soft, broken satin sheen, not the glossy
+    // white dome of a porcelain figurine
+    float brow = headSkin * smoothstep(0.0, 0.5, a) * (1.0 - operc) * smoothstep(0.3, 0.18, sB);
+    spec *= 1.0 - brow * (0.55 + 0.4 * (mot2 - 0.5));
+    rough += 0.14 * brow;
+    nT = normalize(nT + vec3(mn, mn2, 0.0) * 0.03 * brow);
   }
   // ventral xanthophore wash behind the pectorals (yellowish belly in sarasa)
   float bellyY = smoothstep(-0.2, -0.75, a) * smoothstep(0.2, 0.36, -rp.x) * smoothstep(0.62, 0.42, -rp.x);
