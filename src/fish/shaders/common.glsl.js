@@ -148,13 +148,18 @@ uniform float uWaterDensity;   // 0 = no water (studio): no extinction, no hood-
 // behaves like a line source (irradiance ~ 1/r); together with the vertical
 // absorption this makes fish near the surface bright and the gravel and the
 // lower back wall noticeably darker. Normalised to 1 at mid-water depth, so
-// the key-light intensity keeps its meaning.
+// the key-light intensity keeps its meaning. Close under the surface the
+// bar no longer acts as a line source (its 7 cm width and the diffuser
+// spread the light), so the rise is soft-capped at 1.5: white skin and fins
+// right under the lamp stay below clipping.
 #define UW_LAMP_H 0.13
 #define UW_REF_DEPTH 0.2
 float lightFalloff(vec3 wp) {
   float depth = max(0.0, uCausticParams.z - wp.y);
   float f = (UW_LAMP_H + UW_REF_DEPTH) / (UW_LAMP_H + depth) * exp(-0.4 * (depth - UW_REF_DEPTH));
-  return uWaterDensity > 0.0 ? min(f, 2.4) : 1.0;
+  // soft knee from 1.0, asymptote 1.5
+  f = f > 1.0 ? 1.0 + 0.5 * (f - 1.0) / (0.5 + (f - 1.0)) : f;
+  return uWaterDensity > 0.0 ? f : 1.0;
 }
 // the in-water ambient (light scattered down from the surface) falls off more gently
 float ambientFalloff(vec3 wp) { return mix(1.0, lightFalloff(wp), 0.55); }

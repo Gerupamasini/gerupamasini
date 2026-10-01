@@ -27,7 +27,7 @@ export class World {
 
     scene.background = new THREE.Color(0x0b0c0d);
     scene.environment = bakeEnvironment(renderer, buildAquariumEnvScene());
-    scene.environmentIntensity = 0.4;
+    scene.environmentIntensity = 0.58;
 
     // the room around the tank: reflected by everything outside the water
     // (glass panes, frame, the surface seen from above)
@@ -102,6 +102,15 @@ export class World {
     U.uWaterDensity.value = 1.0;
     // filter current: gentle flow along the tank near the surface
     this.currentStrength = 0.012;
+  }
+
+  /** Reach of the fine pebble LOD (adaptive quality): 1 = default, 0 = coarse only. */
+  setDetail(k) {
+    this.substrate.traverse((o) => {
+      if (!o.isLOD || o.levels.length < 2) return;
+      if (o.userData.near === undefined) o.userData.near = o.levels[1].distance;
+      o.levels[1].distance = o.userData.near * k;
+    });
   }
 
   _updateLightDir() {

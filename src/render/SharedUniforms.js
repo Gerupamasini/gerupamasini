@@ -19,9 +19,10 @@ export const U = {
   // Pure-water absorption (Pope & Fry 1997) is ~[0.45, 0.064, 0.015] /m for
   // R,G,B; aquarium water adds dissolved organics (yellowing: blue absorbed)
   // and suspended particles (extinction + a blue-green in-scattered veil), so
-  // the back of a 45 cm tank turns blue-green and loses contrast.
-  uWaterAbsorb: { value: new THREE.Vector3(1.1, 0.42, 0.5) },
-  uWaterScatter: { value: new THREE.Color(0.022, 0.058, 0.06) },
+  // the back of a 45 cm tank turns blue-green and loses contrast: a black
+  // background reads as murky teal depth, never as a flat void.
+  uWaterAbsorb: { value: new THREE.Vector3(1.5, 0.76, 0.8) },
+  uWaterScatter: { value: new THREE.Color(0.05, 0.1, 0.1) },
   uWaterDensity: { value: 1.0 },
 
   // body pigments (sRGB anchors from the research report §7, tuned on photos)

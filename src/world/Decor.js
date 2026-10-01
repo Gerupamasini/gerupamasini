@@ -114,7 +114,7 @@ export function buildRocks() {
   // 1.55 / 1.33), so the stones look matte: no air-like specular sheen.
   // Shader detail: fracture-scale bump, mineral grains, patchy algae on the
   // upward faces, a sediment film near the gravel line.
-  const mat = patchUnderwater(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, ior: 1.17 }), {
+  const mat = patchUnderwater(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, ior: 1.17, envMapIntensity: 0.7 }), {
     key: 'rock',
     extraColor: `
       {
@@ -187,12 +187,16 @@ in vec4 aPlant; // x: phase, y: stiffness, z: height, w: leaf age / condition (0
 uniform vec3 uCurrent;
 out float vPlantH;
 out float vPlantAge;
+out float vPlantSeed;
+out vec2 vLeafUv;
 `;
 const plantSway = /* glsl */ `
 {
   float h = clamp(position.y / max(aPlant.z, 1e-3), 0.0, 1.0);
   vPlantH = h;
   vPlantAge = aPlant.w;
+  vPlantSeed = aPlant.x;
+  vLeafUv = uv;
   float ph = aPlant.x;
   float t = uTime;
   // slow swaying in the filter current + travelling flutter along the blade
@@ -207,83 +211,180 @@ const plantSway = /* glsl */ `
 `;
 
 function ribbonGeometry(len, width, segs) {
-  const g = new THREE.PlaneGeometry(width, len, 1, segs);
+  const g = new THREE.PlaneGeometry(width, len, 2, segs);
   g.translate(0, len / 2, 0);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const y = p.getY(i);
     const t = y / len;
-    // tapering tip & slight natural twist/curl
+    const x = p.getX(i);
+    // tapering tip & slight natural twist/curl; the blade is gently
+    // channelled (edges forward), never a flat strip
     const w = (1 - Math.pow(t, 6)) * (0.8 + 0.2 * (1 - t));
-    p.setX(i, p.getX(i) * w);
-    p.setZ(i, 0.01 * Math.sin(t * 3.1) * t);
+    p.setX(i, x * w);
+    p.setZ(i, 0.01 * Math.sin(t * 3.1) * t + (x * w) * (x * w) * 40.0);
   }
   g.computeVertexNormals();
   return g;
 }
 
+// Amazon-sword leaf: long petiole, lanceolate blade with a slightly wavy
+// margin, cupped either side of the sunken midrib, arching outward.
 function swordLeafGeometry(len, width) {
-  const segs = 10;
-  const g = new THREE.PlaneGeometry(width, len, 4, segs);
+  const segs = 16;
+  const g = new THREE.PlaneGeometry(width, len, 6, segs);
   g.translate(0, len / 2, 0);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const y = p.getY(i);
     const t = y / len;
-    const blade = Math.sin(Math.min(1, (t - 0.25) / 0.75) * Math.PI) ** 0.7;
-    const w = t < 0.3 ? 0.1 : Math.max(0.08, blade);
-    p.setX(i, p.getX(i) * w);
+    const x0 = p.getX(i) / width; // -0.5 .. 0.5
+    const bt = Math.min(1, Math.max(0, (t - 0.28) / 0.72));
+    const blade = Math.pow(Math.sin(bt * Math.PI), 0.62) * (1 - 0.25 * bt);
+    const w = t < 0.3 ? 0.07 : Math.max(0.06, blade);
+    const x = x0 * width * w;
+    p.setX(i, x);
     // arch outward
-    p.setZ(i, 0.35 * len * t * t);
+    let z = 0.35 * len * t * t;
+    // cupped blade, sunken midrib
+    z -= Math.abs(x) * 0.22 - x * x * 3.5;
+    // wavy margin
+    z += Math.abs(x0) * 2 * 0.012 * len * Math.sin(t * 38 + x0 * 3) * (t > 0.3 ? 1 : 0);
+    p.setZ(i, z);
     p.setY(i, y * (1 - 0.25 * t));
-    // midrib crease
-    p.setZ(i, p.getZ(i) - Math.abs(p.getX(i)) * 0.25);
   }
   g.computeVertexNormals();
   return g;
 }
 
-// Fine-leaved stem plant (Cabomba / hornwort-like): whorls of forked,
-// needle-thin leaves along a slender stem, smaller and denser toward the
-// growing tip. Unit height (scaled per instance).
-function stemPlantGeometry(rng, whorls) {
+// Fine-leaved stem plants. Each whorl leaf is a pair of crossed cards with a
+// forked-needle texture (hornwort) or a finely dissected fan (Cabomba):
+// mip-mapped alpha keeps them feathery at a distance instead of breaking up
+// into single-pixel speckle, alpha-to-coverage keeps the edges smooth up
+// close. Normals are bent outward from the stem, so a whorl shades like a
+// soft volume (lit on top, darker inside) instead of a flicker of facets.
+function leafTexture(kind) {
+  const W = 128;
+  const H = 256;
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d');
+  // white on opaque black: three.js reads alpha maps from the green channel,
+  // so it carries the antialiased coverage
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#fff';
+  g.lineCap = 'round';
+  const rng = new RNG(kind === 'fan' ? 61 : 17);
+  const seg = (x0, y0, x1, y1, w0, w1, bend) => {
+    // tapered, slightly curved segment drawn as short pieces
+    const n = 10;
+    let px = x0;
+    let py = y0;
+    for (let k = 1; k <= n; k++) {
+      const t = k / n;
+      const x = x0 + (x1 - x0) * t + bend * Math.sin(t * Math.PI);
+      const y = y0 + (y1 - y0) * t;
+      g.lineWidth = w0 + (w1 - w0) * t;
+      g.beginPath();
+      g.moveTo(px, py);
+      g.lineTo(x, y);
+      g.stroke();
+      // tiny marginal teeth on hornwort needles
+      if (kind === 'needle' && k % 3 === 0 && rng.next() < 0.7) {
+        const s = rng.next() < 0.5 ? -1 : 1;
+        g.lineWidth = 1.0;
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x + s * 3, y - 3);
+        g.stroke();
+      }
+      px = x;
+      py = y;
+    }
+  };
+  if (kind === 'needle') {
+    // twice-forked needle (Ceratophyllum)
+    const fy1 = 150;
+    const fy2 = 78;
+    seg(64, 254, 64, fy1, 5.5, 4.2, rng.range(-3, 3));
+    for (const s of [-1, 1]) {
+      const x2 = 64 + s * 22;
+      seg(64, fy1, x2, fy2, 4.0, 3.0, s * 3);
+      for (const s2 of [-1, 1]) seg(x2, fy2, x2 + s * 10 + s2 * 16, 4 + rng.range(0, 14), 2.8, 1.2, s2 * 3);
+    }
+  } else {
+    // fan of finely divided segments (Cabomba)
+    seg(64, 254, 64, 200, 4.5, 3.8, 0);
+    const n = 5;
+    for (let i = 0; i < n; i++) {
+      const a = (i / (n - 1) - 0.5) * 1.5;
+      const L = 120 + rng.range(-10, 10);
+      const xm = 64 + Math.sin(a) * L * 0.55;
+      const ym = 200 - Math.cos(a) * L * 0.55;
+      seg(64, 200, xm, ym, 3.4, 2.6, a * 6);
+      for (const s2 of [-1, 1]) {
+        const a2 = a + s2 * 0.22;
+        seg(xm, ym, xm + Math.sin(a2) * L * 0.5, ym - Math.cos(a2) * L * 0.5, 2.4, 1.1, s2 * 2);
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function stemPlantGeometry(rng, whorls, kind) {
   const parts = [];
   const q = new THREE.Quaternion();
   const m4 = new THREE.Matrix4();
   const up = new THREE.Vector3(0, 1, 0);
-  const needle = (len, w) => {
-    const g = new THREE.PlaneGeometry(w, len, 1, 3);
-    g.translate(0, len / 2, 0);
-    const p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const t = p.getY(i) / len;
-      p.setX(i, p.getX(i) * (1 - 0.7 * t));
-      // curls upward toward the tip
-      p.setZ(i, 0.18 * len * t * t);
+  const fan = kind === 'fan';
+  // one leaf: two crossed, slightly curled cards, uv (0..1 across, 0..1 along)
+  const leafCards = (len) => {
+    const w = len * (fan ? 0.85 : 0.55);
+    const out = [];
+    for (const rot of [0, Math.PI / 2]) {
+      const g = new THREE.PlaneGeometry(w, len, 1, 2);
+      g.translate(0, len / 2, 0);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const t = p.getY(i) / len;
+        // curls upward toward the tip
+        p.setZ(i, 0.18 * len * t * t);
+      }
+      g.rotateY(rot);
+      out.push(g);
     }
-    return g;
+    return out;
   };
   // stem: two crossed thin strips
   for (const a of [0, Math.PI / 2]) {
     const g = new THREE.PlaneGeometry(0.0035, 1, 1, 8);
     g.translate(0, 0.5, 0);
     g.rotateY(a);
+    // the stem samples a solid part of the texture (the needle's base)
+    const uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5, 0.02);
     parts.push(g);
   }
+  const nLeaves = fan ? 5 : 8;
   for (let k = 0; k < whorls; k++) {
     const t = (k + 0.5) / whorls;
     const y = 0.04 + 0.94 * Math.pow(t, 0.9);
-    const len = (0.1 + 0.045 * rng.next()) * (1 - 0.6 * Math.pow(t, 3));
-    const nLeaves = 6;
+    const len = (fan ? 0.085 : 0.1) * (1 + 0.45 * rng.next()) * (1 - 0.6 * Math.pow(t, 3));
     const az0 = rng.range(0, Math.PI * 2);
     for (let j = 0; j < nLeaves; j++) {
-      const az = az0 + (j / nLeaves) * Math.PI * 2 + rng.range(-0.15, 0.15);
+      const az = az0 + (j / nLeaves) * Math.PI * 2 + rng.range(-0.2, 0.2);
       // leaves rise more steeply near the tip (closed apical tuft)
-      const lift = THREE.MathUtils.lerp(0.3, 1.05, t * t) + rng.range(-0.12, 0.12);
-      for (let f = -1; f <= 1; f++) {
-        const g = needle(len * (f === 0 ? 1 : 0.72), 0.0011);
-        // fork: side needles splay sideways within the leaf
-        g.rotateZ(f * 0.38);
+      const lift = THREE.MathUtils.lerp(fan ? 0.15 : 0.3, 1.05, t * t) + rng.range(-0.15, 0.15);
+      for (const g of leafCards(len)) {
+        g.rotateZ(rng.range(-0.15, 0.15));
         // tilt out from the stem, then turn to the leaf azimuth
         g.rotateX(-(Math.PI / 2 - lift));
         q.setFromAxisAngle(up, az);
@@ -299,10 +400,19 @@ function stemPlantGeometry(rng, whorls) {
   const bx = rng.range(-0.08, 0.08);
   const bz = rng.range(-0.08, 0.08);
   const mp = merged.attributes.position;
+  const nrm = merged.attributes.normal;
+  const v = new THREE.Vector3();
   for (let i = 0; i < mp.count; i++) {
-    const y = mp.getY(i);
-    mp.setX(i, mp.getX(i) + bx * y * y);
-    mp.setZ(i, mp.getZ(i) + bz * y * y);
+    const yy = mp.getY(i);
+    // volume normal: outward from the stem axis and up
+    v.set(mp.getX(i), 0, mp.getZ(i));
+    const r = v.length();
+    if (r > 1e-5) v.multiplyScalar(1 / r);
+    v.y = 0.55;
+    v.normalize();
+    nrm.setXYZ(i, v.x, v.y, v.z);
+    mp.setX(i, mp.getX(i) + bx * yy * yy);
+    mp.setZ(i, mp.getZ(i) + bz * yy * yy);
   }
   return merged;
 }
@@ -316,19 +426,53 @@ export function buildPlants() {
 
   // Leaves under water: the cuticle/water interface reflects almost nothing
   // (low IOR ratio), so they are matte; thin blades transmit yellow-green
-  // light when seen against the hood light.
-  const mkMat = (key, veins) => {
-    const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0, ior: 1.1, side: THREE.DoubleSide });
+  // light when seen against the hood light. `kind` selects the leaf
+  // structure drawn in leaf space (uv: across, along).
+  const mkMat = (key, kind, extra = {}) => {
+    const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0, ior: 1.1, side: THREE.DoubleSide, ...extra });
+    const structure = {
+      // Vallisneria: 3–5 parallel longitudinal veins, faint cross-veinlets,
+      // a paler translucent margin
+      ribbon: `
+          float ax = abs(vLeafUv.x - 0.5) * 2.0;
+          float lv = abs(fract(ax * 2.0 + 0.5) - 0.5);
+          diffuseColor.rgb *= 0.9 + 0.12 * smoothstep(0.12, 0.0, lv);
+          float cv = abs(fract(vLeafUv.y * 160.0 + vPlantSeed) - 0.5);
+          diffuseColor.rgb *= 1.0 - 0.05 * smoothstep(0.08, 0.0, cv);
+          diffuseColor.rgb *= mix(1.0, 1.15, smoothstep(0.7, 1.0, ax));`,
+      // Amazon sword: pale sunken midrib, two pairs of arcuate veins
+      // converging at the tip, fine oblique cross-veins, darker blade between,
+      // a few holes and torn margins on older leaves
+      sword: `
+          float sx = (vLeafUv.x - 0.5) * 2.0;
+          float ax = abs(sx);
+          float bl = smoothstep(0.26, 0.34, vLeafUv.y);
+          float mid = smoothstep(0.07, 0.015, ax) * bl;
+          float arc = smoothstep(0.035, 0.0, abs(ax - 0.36)) + 0.8 * smoothstep(0.03, 0.0, abs(ax - 0.7));
+          float cross = smoothstep(0.06, 0.0, abs(fract(vLeafUv.y * 46.0 - ax * 2.2 + vPlantSeed) - 0.5) - 0.44);
+          vec3 vein = diffuseColor.rgb * vec3(1.25, 1.3, 0.85);
+          diffuseColor.rgb *= 0.86 + 0.1 * vnoise2(vLeafUv * vec2(9.0, 40.0) + vPlantSeed);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vein, clamp(mid * 0.8 + arc * 0.4 * bl + cross * 0.12 * bl, 0.0, 1.0));
+          float dmg = smoothstep(0.5, 0.95, vPlantAge);
+          float hole = vnoise2(vLeafUv * vec2(14.0, 55.0) + vPlantSeed * 3.1);
+          if (bl > 0.5 && dmg > 0.0 && hole > 0.92 - 0.05 * dmg && ax < 0.8) discard;
+          // an occasional nibbled margin (goldfish graze on soft leaves)
+          float tear = vnoise2(vec2(vLeafUv.y * 18.0, vPlantSeed));
+          if (bl > 0.5 && ax > 0.97 - 0.14 * dmg * smoothstep(0.62, 0.8, tear)) discard;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.12, 0.08, 0.03), smoothstep(0.75, 0.97, ax) * dmg * 0.7);`,
+      // stem plants: slight lighter tips, darker inner leaves
+      stem: `
+          diffuseColor.rgb *= mix(0.8, 1.1, vLeafUv.y);`,
+    }[kind];
     patchUnderwater(m, {
       extraVertexPars: plantSwayPars,
       extraVertex: plantSway,
-      extraFragmentPars: 'in float vPlantH;\nin float vPlantAge;\n',
+      extraFragmentPars: 'in float vPlantH;\nin float vPlantAge;\nin float vPlantSeed;\nin vec2 vLeafUv;\n',
       key,
       extraColor: `
         {
-          // faint parallel veins and mottling
-          float v = abs(fract(vUwWorld.y * ${veins.toFixed(1)} + vUwWorld.x * 7.0) - 0.5);
-          diffuseColor.rgb *= 0.92 + 0.14 * smoothstep(0.1, 0.0, v) + 0.16 * (vnoise3(vUwWorld * 35.0) - 0.5);
+          ${structure}
+          diffuseColor.rgb *= 1.0 + 0.16 * (vnoise3(vUwWorld * 35.0) - 0.5);
           // older leaves yellow and brown from the tip, with small dead spots
           float age = vPlantAge;
           vec3 brown = vec3(0.13, 0.08, 0.03) * (0.75 + 0.5 * vnoise3(vUwWorld * 110.0));
@@ -338,6 +482,14 @@ export function buildPlants() {
           diffuseColor.rgb = mix(diffuseColor.rgb, brown, spots * 0.75);
           // a film of fine sediment / diatoms on the lower leaves
           diffuseColor.rgb *= mix(0.62, 1.0, smoothstep(0.0, 0.4, vPlantH));
+          ${kind === 'stem' ? `
+          // keep the needle coverage at a distance (alpha of the coarser mips
+          // is rescaled, so whorls neither vanish nor turn to speckle)
+          {
+            vec2 tx = vAlphaMapUv * vec2(128.0, 256.0);
+            float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tx), dFdx(tx)), dot(dFdy(tx), dFdy(tx)))));
+            diffuseColor.a *= 1.0 + 0.22 * lod;
+          }` : ''}
         }`,
       extraLights: `
         #if NUM_DIR_LIGHTS > 0
@@ -369,7 +521,7 @@ export function buildPlants() {
   };
 
   // Vallisneria clumps at the back
-  const valMat = mkMat('val', 90);
+  const valMat = mkMat('val', 'ribbon');
   const clumps = [
     { x: -0.5, z: -0.17, n: 26 },
     { x: -0.43, z: -0.19, n: 18 },
@@ -415,7 +567,7 @@ export function buildPlants() {
   group.add(inst);
 
   // Sword-plant rosettes
-  const swordMat = mkMat('sword', 40);
+  const swordMat = mkMat('sword', 'sword');
   const rosettes = [
     { x: 0.05, z: -0.13, n: 14, s: 0.2 },
     { x: -0.24, z: 0.02, n: 9, s: 0.12 },
@@ -451,18 +603,22 @@ export function buildPlants() {
   sInst.receiveShadow = true;
   group.add(sInst);
 
-  // Fine-leaved stem plants (bright Cabomba-like and darker hornwort-like
-  // bunches) in the gaps between rocks and ribbons
-  const stemMat = mkMat('stem', 300);
+  // Fine-leaved stem plants (bright Cabomba-like fans and darker hornwort-
+  // like needle whorls) in the gaps between rocks and ribbons
+  const stemMats = {
+    fan: mkMat('stemF', 'stem', { alphaMap: leafTexture('fan'), alphaTest: 0.3, alphaToCoverage: true }),
+    needle: mkMat('stemN', 'stem', { alphaMap: leafTexture('needle'), alphaTest: 0.3, alphaToCoverage: true }),
+  };
   const bunches = [
-    { x: -0.11, z: -0.19, n: 7, hue: 0.27, light: 0.34, h: [0.24, 0.38] },
-    { x: 0.37, z: -0.19, n: 6, hue: 0.29, light: 0.22, h: [0.22, 0.36] },
-    { x: -0.55, z: 0.06, n: 5, hue: 0.26, light: 0.3, h: [0.14, 0.24] },
-    { x: 0.27, z: -0.17, n: 4, hue: 0.28, light: 0.24, h: [0.18, 0.3] },
+    { x: -0.11, z: -0.19, n: 7, hue: 0.27, light: 0.28, h: [0.24, 0.38], kind: 'fan' },
+    { x: 0.37, z: -0.19, n: 6, hue: 0.29, light: 0.22, h: [0.22, 0.36], kind: 'needle' },
+    { x: -0.55, z: 0.06, n: 5, hue: 0.26, light: 0.3, h: [0.14, 0.24], kind: 'fan' },
+    { x: 0.27, z: -0.17, n: 4, hue: 0.28, light: 0.24, h: [0.18, 0.3], kind: 'needle' },
   ];
-  const stemGeos = [22, 26, 30].map((w) => stemPlantGeometry(rng, w));
-  const perVar = stemGeos.map(() => []);
+  const stemVariants = [];
+  for (const kind of ['fan', 'needle']) for (const w of kind === 'fan' ? [18, 22] : [24, 30]) stemVariants.push({ kind, geo: stemPlantGeometry(rng, w, kind), list: [] });
   for (const b of bunches) {
+    const vars = stemVariants.filter((v) => v.kind === b.kind);
     for (let i = 0; i < b.n; i++) {
       const x = b.x + rng.normal(0, 0.015);
       const z = b.z + rng.normal(0, 0.01);
@@ -470,7 +626,7 @@ export function buildPlants() {
       const age = Math.pow(rng.next(), 2.2);
       e.set(rng.range(-0.12, 0.12), rng.range(0, Math.PI * 2), rng.range(-0.12, 0.12));
       q.setFromEuler(e);
-      perVar[Math.floor(rng.next() * stemGeos.length)].push({
+      vars[Math.floor(rng.next() * vars.length)].list.push({
         m: new THREE.Matrix4().compose(new THREE.Vector3(x, groundHeight(x, z) - 0.006, z), q.clone(), new THREE.Vector3(hgt, hgt, hgt)),
         c: col.setHSL(b.hue + rng.range(-0.015, 0.015), rng.range(0.42, 0.6), b.light * rng.range(0.85, 1.15)).clone(),
         a: [rng.range(0, 6.28), rng.range(0.45, 0.8), 1.0, age],
@@ -478,20 +634,20 @@ export function buildPlants() {
     }
     colliders.push({ type: 'cylinder', center: new THREE.Vector3(b.x, 0, b.z), radius: 0.045, height: b.h[1], soft: true });
   }
-  stemGeos.forEach((geo, vI) => {
-    const list = perVar[vI];
-    if (!list.length) return;
-    const im = new THREE.InstancedMesh(geo, stemMat, list.length);
+  for (const v of stemVariants) {
+    const list = v.list;
+    if (!list.length) continue;
+    const im = new THREE.InstancedMesh(v.geo, stemMats[v.kind], list.length);
     const ap = new Float32Array(list.length * 4);
     list.forEach((it, j) => {
       im.setMatrixAt(j, it.m);
       im.setColorAt(j, it.c);
       ap.set(it.a, j * 4);
     });
-    geo.setAttribute('aPlant', new THREE.InstancedBufferAttribute(ap, 4));
+    v.geo.setAttribute('aPlant', new THREE.InstancedBufferAttribute(ap, 4));
     im.castShadow = true;
     im.receiveShadow = true;
     group.add(im);
-  });
+  }
   return { group, colliders, current };
 }

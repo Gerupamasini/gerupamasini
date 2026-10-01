@@ -49,6 +49,12 @@ const _g = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _l = new THREE.Vector3();
 const _eye = new THREE.Vector3();
+// scratch for the pane footprint / framing tests (pos / look may be _p / _l)
+const _f1 = new THREE.Vector3();
+const _f2 = new THREE.Vector3();
+const _f3 = new THREE.Vector3();
+const _f4 = new THREE.Vector3();
+const _f5 = new THREE.Vector3();
 
 const clamp = THREE.MathUtils.clamp;
 
@@ -142,6 +148,9 @@ export class CinematicDirector {
 
   /** The subject's eye nearest to the camera (focus and line-of-sight target). */
   _eyeOf(f, camPos, out) {
+    // the iris of the nearer eye on the deformed rig (falls back to an
+    // estimate from the head position)
+    if (this.app.eyeTarget && f.rig) return this.app.eyeTarget(f, camPos, out);
     const ax = this._axis(f);
     f.headPosition(out).addScaledVector(ax, -f.SL * 0.1);
     _o.set(-ax.z, 0, ax.x);
@@ -156,7 +165,7 @@ export class CinematicDirector {
   }
 
   // ------------------------------------------------------------ choices
-  _pickSubject(rng, exclude = null) {
+  _pickSubject(rng, exclude = null, def = null) {
     const fish = this.app.fishSystem.fish;
     if (!fish.length) return null;
     let best = null;
@@ -169,6 +178,14 @@ export class CinematicDirector {
       const st = f.brain ? f.brain.state : '';
       let s = Math.min(wall, 0.12) * 8 + Math.min(p.y - groundHeight(p.x, p.z), 0.12) * 4;
       s += Math.min(f.loc.speed / f.SL, 1.2) * 0.8;
+      // a fish with its head down in the gravel or steeply pitched makes an
+      // awkward portrait (pebbles over the eye, nose-down silhouette)
+      const fy = f.loc.forward.y;
+      const head = f.headPosition(_q);
+      if (head.y - groundHeight(head.x, head.z) < 0.45 * f.SL) s -= 1.0;
+      if (Math.abs(fy) > 0.5) s -= 1.2;
+      // the low angle needs water (and the surface) above the subject
+      if (def && def.type === 'low') s += clamp((p.y - 0.26) / 0.08, -1, 1) * 1.2;
       if (st === 'rest' || st === 'freeze') s -= 0.8;
       if (this.recent.includes(f)) s -= 1.2;
       s += rng.next() * 0.9;
@@ -206,7 +223,7 @@ export class CinematicDirector {
     const def = (type && SHOTS.find((x) => x.type === type)) || (this.forceType && SHOTS.find((x) => x.type === this.forceType)) || this._pickShot(rng);
     const tried = new Set();
     let chosen = null;
-    let f = subject || this._pickSubject(rng) || this.subject;
+    let f = subject || this._pickSubject(rng, null, def) || this.subject;
     // find a subject this shot can be framed on (a few tries), else fall back
     // to the wide shot from outside the glass
     for (let k = 0; k < 5 && f; k++) {
@@ -221,7 +238,7 @@ export class CinematicDirector {
         break;
       }
       if (subject) break; // an explicit subject (yawn close-up): don't swap fish
-      f = this._pickSubject(rng, tried);
+      f = this._pickSubject(rng, tried, def);
     }
     if (!chosen && !this.forceType && def.type !== 'wide') return this.cut(subject || this.subject, 'wide');
     if (!chosen && !this.subject) return;
@@ -263,8 +280,12 @@ export class CinematicDirector {
         look.copy(P).addScaledVector(fwd, SL * 0.2);
         break;
       case 'low':
-        pos.copy(P).addScaledVector(side, SL * 1.75).addScaledVector(up, -SL * 1.1).addScaledVector(fwd, SL * (0.4 - 0.8 * k));
-        look.copy(P).addScaledVector(up, SL * 0.3).addScaledVector(fwd, -SL * 0.2);
+        // below the fish, looking up some 35°: the underside of the surface
+        // (its mirror and the rippled edge of Snell's window, softly lit by
+        // the hood light) closes the top of the frame; framings that would
+        // show the lamp itself are rejected by the guard
+        pos.copy(P).addScaledVector(side, SL * 1.9).addScaledVector(up, -SL * 1.05).addScaledVector(fwd, SL * (0.4 - 0.8 * k));
+        look.copy(P).addScaledVector(up, SL * 0.45).addScaledVector(fwd, -SL * 0.15);
         break;
       case 'tail':
         pos.copy(P).addScaledVector(fwd, -SL * 2.3).addScaledVector(side, SL * 1.5).addScaledVector(up, SL * 0.45);
@@ -301,11 +322,79 @@ export class CinematicDirector {
     const aspect = this.app.camera.aspect || 1.6;
     if (inside && aspect < 1.2) pos.sub(look).multiplyScalar(Math.min(1.9, 1.2 / aspect)).add(look);
     // stay inside the water (or outside the front glass / above the surface)
-    if (inside) this._clampCam(pos, 0.03);
-    else if (sh.type === 'above') {
+    this._guardMiss = 0;
+    if (inside) {
+      this._clampCam(pos, 0.03);
+      this._guardMiss = this._glassGuard(pos, look, sh.fov, 1.2 * SL);
+    } else if (sh.type === 'above') {
       pos.x = clamp(pos.x, -TANK.L / 2 + 0.05, TANK.L / 2 - 0.05);
       pos.z = clamp(pos.z, -TANK.D / 2 + 0.05, TANK.D / 2 - 0.05);
     }
+  }
+
+  /**
+   * Lowest point of the image on the front pane for a camera outside the
+   * glass (the gravel layer's cut face and the rim frame lie below the
+   * gravel line there), and the horizontal extent of the image on the pane.
+   * Returns null when the camera is inside the water.
+   */
+  _paneFootprint(pos, look, fov, out = { minY: 0, minX: 0, maxX: 0, gTop: 0 }) {
+    if (pos.z <= TANK.D / 2) return null;
+    const cam = this.app.camera;
+    const aspect = cam.aspect || 1.6;
+    const fwd = _f1.subVectors(look, pos).normalize();
+    const right = _f2.crossVectors(fwd, UP);
+    if (right.lengthSq() < 1e-8) return null;
+    right.normalize();
+    const upv = _f3.crossVectors(right, fwd);
+    const th = Math.tan(THREE.MathUtils.degToRad(fov) * 0.5);
+    const tw = th * aspect;
+    const zp = TANK.D / 2;
+    out.minY = Infinity;
+    out.minX = Infinity;
+    out.maxX = -Infinity;
+    out.gTop = 0;
+    for (const sy of [-1, 1]) {
+      for (const sx of [-1, 0, 1]) {
+        // ray through an image corner / edge midpoint
+        _f4.copy(fwd).addScaledVector(right, sx * tw).addScaledVector(upv, sy * th);
+        if (_f4.z > -1e-4) continue; // never reaches the pane
+        const t = (zp - pos.z) / _f4.z;
+        const x = pos.x + _f4.x * t;
+        const y = pos.y + _f4.y * t;
+        out.minX = Math.min(out.minX, x);
+        out.maxX = Math.max(out.maxX, x);
+        if (sy < 0) {
+          out.minY = Math.min(out.minY, y);
+          out.gTop = Math.max(out.gTop, groundHeight(clamp(x, -TANK.L / 2, TANK.L / 2), zp - 0.005));
+        }
+      }
+    }
+    return out.minY < Infinity ? out : null;
+  }
+
+  /**
+   * Shooting through the front glass: keep the whole image above the gravel
+   * line (never show the substrate's cut face or the rim frame) by craning
+   * the camera up while it keeps looking at the same point (it tilts down
+   * over the gravel line, as a photographer does). Returns how far (m) the
+   * image still dips below the line after at most maxLift of crane-up:
+   * > 0 means the framing cannot be shot through the glass.
+   */
+  _glassGuard(pos, look, fov, maxLift = 0.1) {
+    let lifted = 0;
+    let need = 0;
+    for (let it = 0; it < 5; it++) {
+      const fp = this._paneFootprint(pos, look, fov, this._fp || (this._fp = {}));
+      if (!fp) return 0;
+      need = fp.gTop + 0.01 - fp.minY;
+      if (need <= 0) return 0;
+      const step = Math.min(need * 1.4 + 0.002, maxLift - lifted, TANK.water - 0.02 - pos.y);
+      if (step <= 1e-4) break;
+      pos.y += step;
+      lifted += step;
+    }
+    return Math.max(0, need);
   }
 
   /**
@@ -332,6 +421,7 @@ export class CinematicDirector {
     const f = this.subject;
     if (!f || sh.type === 'wide') return { ok: true, cost: 0 };
     this._desired(_p, _l, fr);
+    const guardMiss = this._guardMiss;
     const pos = _p.clone();
     const look = _l.clone();
     const SL = f.SL;
@@ -349,10 +439,126 @@ export class CinematicDirector {
       if (pos.distanceTo(ref) < sh.minDist * SL * 0.92) ok = false;
     }
     if (ok && this._viewBlocked(pos, look)) ok = false;
+    // a portrait from straight behind shows a tail and a blurred back, not
+    // the fish (only the tail-follow shot is framed from behind)
+    let extra = 0;
+    if (ok && this._inside(sh) && sh.type !== 'tail') {
+      _f5.subVectors(pos, f.loc.pos).normalize();
+      const behind = -_f5.dot(this._axis(f));
+      if (behind > 0.5) ok = false;
+      else extra += Math.max(0, behind - 0.2) * 2.5;
+    }
+    // never the bare hood lamp in frame (seen through Snell's window it is a
+    // clipped, blooming bar however it is exposed)
+    if (ok && this._inside(sh) && pos.y < TANK.water && this._lampInFrame(pos, look, sh.fov)) ok = false;
+    if (ok && pos.z > TANK.D / 2) {
+      // through the front glass: the glass guard has craned the camera above
+      // the gravel line (impossible: invalid); the subject must still sit
+      // well inside the image, and a fish down at the gravel is better shot
+      // from inside the water (against water and plants, not the substrate)
+      if (guardMiss > 0.002) ok = false;
+      if (ok && !this._inFrame(pos, look, sh.fov, this._eyeOf(f, pos, _eye), 0.78)) ok = false;
+      const low = f.loc.pos.y - groundHeight(f.loc.pos.x, f.loc.pos.z);
+      extra += 1.2 * clamp(1 - low / (1.2 * SL), 0, 1);
+      // the image runs past the tank's corner (glass edge, frame)
+      const fp = this._paneFootprint(pos, look, sh.fov, this._fp || (this._fp = {}));
+      if (fp && (fp.minX < -TANK.L / 2 + 0.01 || fp.maxX > TANK.L / 2 - 0.01)) extra += 1.5;
+    } else if (ok && this._inside(sh)) {
+      // in the water close to the front pane, looking along it: part of the
+      // image leaves the tank through the glass (rim, stand, room)
+      const of = this._outsideFraction(pos, look, sh.fov, Math.max(0.5, pos.distanceTo(f.loc.pos) * 2.0));
+      if (of > 0.3) ok = false;
+      extra += 3.0 * of;
+    }
     _a.subVectors(look, pos).normalize();
     // prefer the planned framing; avoid looking out through the front glass
-    const cost = Math.abs(fr.orbit) * 0.8 + (fr.dist - 1) * 1.6 + Math.abs(fr.lift) * 0.7 + Math.max(0, _a.z) * 2.5;
+    const cost = Math.abs(fr.orbit) * 0.8 + (fr.dist - 1) * 1.6 + Math.abs(fr.lift) * 0.7 + Math.max(0, _a.z) * 2.5 + extra;
     return { ok, cost };
+  }
+
+  /**
+   * Does the hood LED bar appear in the image of a camera under water? Rays
+   * through the upper part of the frame are refracted out through the
+   * surface (inside Snell's window) and tested against the bar.
+   */
+  _lampInFrame(pos, look, fov) {
+    const fwd = _f1.subVectors(look, pos).normalize();
+    const right = _f2.crossVectors(fwd, UP);
+    if (right.lengthSq() < 1e-8) return true;
+    right.normalize();
+    const upv = _f3.crossVectors(right, fwd);
+    const th = Math.tan(THREE.MathUtils.degToRad(fov) * 0.5);
+    const tw = th * (this.app.camera.aspect || 1.6);
+    const wl = TANK.water;
+    const ledH = TANK.H + 0.0915 - wl;
+    const hx = TANK.L * 0.45 + 0.015;
+    const zc = -0.02;
+    const hz = 0.035 + 0.015;
+    for (const sy of [-0.2, 0.3, 0.7, 1.05]) {
+      for (const sx of [-1.05, -0.5, 0, 0.5, 1.05]) {
+        const d = _f4.copy(fwd).addScaledVector(right, sx * tw).addScaledVector(upv, sy * th).normalize();
+        if (d.y <= 0.02) continue;
+        const t = (wl - pos.y) / d.y;
+        const x = pos.x + d.x * t;
+        const z = pos.z + d.z * t;
+        if (Math.abs(x) > TANK.L / 2 || Math.abs(z) > TANK.D / 2) continue;
+        const sinI = Math.sqrt(Math.max(0, 1 - d.y * d.y));
+        const sinT = 1.333 * sinI;
+        if (sinT >= 0.999) continue; // total internal reflection: the mirror
+        const k = sinI > 1e-5 ? (sinT / Math.sqrt(1 - sinT * sinT)) * ledH / sinI : 0;
+        const lx = x + d.x * k;
+        const lz = z + d.z * k;
+        if (Math.abs(lx) < hx && Math.abs(lz - zc) < hz) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Fraction of sample rays of an in-water camera that leave the tank through
+   * the front pane, or through a side pane within maxDist.
+   */
+  _outsideFraction(pos, look, fov, maxDist) {
+    const fwd = _f1.subVectors(look, pos).normalize();
+    const right = _f2.crossVectors(fwd, UP);
+    if (right.lengthSq() < 1e-8) return 0;
+    right.normalize();
+    const upv = _f3.crossVectors(right, fwd);
+    const th = Math.tan(THREE.MathUtils.degToRad(fov) * 0.5);
+    const tw = th * (this.app.camera.aspect || 1.6);
+    let n = 0;
+    let out = 0;
+    for (const sy of [-0.9, 0, 0.9]) {
+      for (const sx of [-1, -0.5, 0, 0.5, 1]) {
+        const d = _f4.copy(fwd).addScaledVector(right, sx * tw).addScaledVector(upv, sy * th).normalize();
+        n++;
+        // first wall the ray meets: front pane or a side pane
+        const tz = d.z > 1e-3 ? (TANK.D / 2 - pos.z) / d.z : Infinity;
+        const tx = Math.abs(d.x) > 1e-3 ? (Math.sign(d.x) * TANK.L / 2 - pos.x) / d.x : Infinity;
+        const t = Math.min(tz, tx);
+        // through the front pane at any distance (from inside it is either a
+        // window onto the room or, beyond 48.6°, a mirror we do not render);
+        // through a side pane only nearby (the far end glass is fine)
+        if (t === tx && t > maxDist) continue;
+        if (!Number.isFinite(t)) continue;
+        const y = pos.y + d.y * t;
+        if (y > 0 && y < TANK.water) out++;
+      }
+    }
+    return out / n;
+  }
+
+  /** Is point p inside the central part (fraction k of the half-size) of the image? */
+  _inFrame(pos, look, fov, p, k) {
+    const fwd = _f1.subVectors(look, pos).normalize();
+    _f4.subVectors(p, pos);
+    const z = _f4.dot(fwd);
+    if (z <= 0.01) return false;
+    const right = _f2.crossVectors(fwd, UP).normalize();
+    const upv = _f3.crossVectors(right, fwd);
+    const th = Math.tan(THREE.MathUtils.degToRad(fov) * 0.5);
+    const aspect = this.app.camera.aspect || 1.6;
+    return Math.abs(_f4.dot(right) / z) < th * aspect * k && Math.abs(_f4.dot(upv) / z) < th * k;
   }
 
   /**
@@ -506,7 +712,15 @@ export class CinematicDirector {
         this._desired(_p, _l, fr);
         return _p.distanceTo(this.camPos) / f0.SL;
       };
-      if (this.blockT > 1.0 && this.t > 1.5) {
+      // the subject turned into an awkward portrait (head down in the gravel,
+      // steeply pitched) for a while: find another subject
+      const head = f0.headPosition(_q);
+      const awk = head.y - groundHeight(head.x, head.z) < 0.3 * f0.SL || Math.abs(f0.loc.forward.y) > 0.64;
+      this.awkT = awk ? (this.awkT || 0) + slack : 0;
+      if (this.awkT > 0.5 && this.t > 1.0) {
+        this.awkT = 0;
+        cut(null, this.forceType || null);
+      } else if (this.blockT > 1.0 && this.t > 1.5) {
         // the view stayed spoiled despite re-framing: cut away
         this.blockT = 0;
         cut(null, this.forceType || null);
@@ -543,6 +757,8 @@ export class CinematicDirector {
         if (this._inside()) this._enforce(this.camPos);
       }
     }
+    // through the glass the actual (smoothed) framing stays above the gravel line
+    if (this._inside()) this._glassGuard(this.camPos, this.camLook, this.shot.fov, 0.05);
     const cam = this.app.camera;
     cam.position.copy(this.camPos);
     cam.lookAt(this.camLook);

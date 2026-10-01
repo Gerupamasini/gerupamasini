@@ -19,6 +19,12 @@ import { buildGUI } from './debug/DebugGUI.js';
 import { RNG } from './core/random.js';
 import { resolveOverlaps } from './ai/Steering.js';
 
+const _afP = new THREE.Vector3();
+const _afQ = new THREE.Quaternion();
+const _afL = new THREE.Vector3();
+const _afA = new THREE.Vector3();
+const _afE = new THREE.Vector3();
+
 export class App {
   constructor(container, opts) {
     this.container = container;
@@ -83,7 +89,7 @@ export class App {
       // no glow halo around a softly lit fish: only true speculars bloom
       this.post.bloom.strength = 0.03;
       this.post.bloom.radius = 0.2;
-      this.post.bloom.threshold = 4.0;
+      this.post.bloom.threshold = 6.0;
     }
     this.usePost = pp.get('post') !== '0';
     this._bindInput();
@@ -160,14 +166,21 @@ export class App {
     renderer.toneMappingExposure = 1.0;
     U.uCausticParams.value.y = 0;
     U.uWaterDensity.value = 0;
-    const key = new THREE.DirectionalLight(0xf6f8ff, 2.1);
-    key.position.set(0.3, 1.8, 1.3);
+    // key from above and to the camera's right (top light as in the black-
+    // background references: bright back, darker belly), a weak frontal
+    // fill, and a cool rim from behind and above that separates the dorsal
+    // contour and the fin edges from the black
+    const key = new THREE.DirectionalLight(0xf6f8ff, 2.0);
+    key.position.set(0.8, 1.9, 0.75);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xe4ecff, 0.5);
-    fill.position.set(-1.2, 0.3, 1.5);
+    const fill = new THREE.DirectionalLight(0xe4ecff, 0.28);
+    fill.position.set(-1.2, 0.2, 1.6);
     scene.add(fill);
-    scene.add(new THREE.HemisphereLight(0xc4d4e4, 0x0a0908, 0.12));
-    this.studioLights = { key, fill };
+    const rim = new THREE.DirectionalLight(0xe0ebff, 0.9);
+    rim.position.set(-0.5, 1.1, -1.5);
+    scene.add(rim);
+    scene.add(new THREE.HemisphereLight(0xc4d4e4, 0x16181b, 0.12));
+    this.studioLights = { key, fill, rim };
     U.uCausticLightDir.value.copy(key.position).normalize(); // key direction for the body light transport
     const p = this.opts.params;
     const seed = this.opts.seed ?? 7;
@@ -428,14 +441,41 @@ export class App {
     this._autoFocus(dt);
   }
 
-  /** Lens autofocus: followed fish, else the fish nearest the frame centre, else the orbit target. */
+  /**
+   * World position of the iris of a fish's eye nearer to the camera, where a
+   * photographer puts the focus (the eyeball centre is a few mm behind it).
+   */
+  eyeTarget(f, camPos, out = new THREE.Vector3()) {
+    const fs = this.fishSystem;
+    const p = _afP;
+    const q = _afQ;
+    let best = Infinity;
+    for (let s = 0; s < 2; s++) {
+      const er = fs.eyeRest[s];
+      _afL.set(er.center.x, er.center.y * f.variation.depthScale, er.center.z * f.variation.widthScale);
+      f.rig.bodyPoint(_afL, p, q);
+      p.addScaledVector(_afA.copy(er.axis).applyQuaternion(q), er.radius * f.SL * 0.8);
+      const d = p.distanceToSquared(camPos);
+      if (d < best) {
+        best = d;
+        out.copy(p);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Lens autofocus on the eye of the subject: the studio fish, the followed
+   * fish, else the fish nearest the frame centre; else the orbit target.
+   */
   _autoFocus(dt) {
     const cam = this.camera;
+    const dir = cam.getWorldDirection(new THREE.Vector3());
     let target = cam.position.distanceTo(this.controls.target);
-    if (this.cameraMode === 'follow' && this.selected) target = cam.position.distanceTo(this.selected.loc.pos);
+    let subject = null;
+    if (this.mode === 'studio') subject = this.studioFish;
+    else if (this.cameraMode === 'follow' && this.selected) subject = this.selected;
     else {
-      const dir = new THREE.Vector3();
-      cam.getWorldDirection(dir);
       let best = Infinity;
       const v = new THREE.Vector3();
       for (const f of this.fishSystem.fish) {
@@ -443,13 +483,17 @@ export class App {
         const along = v.dot(dir);
         if (along <= 0.02) continue;
         const off = Math.sqrt(Math.max(0, v.lengthSq() - along * along));
-        if (off / along < 0.12 && along < best) best = along;
+        if (off / along < 0.12 && along < best) {
+          best = along;
+          subject = f;
+        }
       }
-      if (best < Infinity) target = best;
     }
+    if (subject) target = Math.max(0.02, this.eyeTarget(subject, cam.position, _afE).sub(cam.position).dot(dir));
     this.focusDist += (target - this.focusDist) * (1 - Math.exp(-dt * 3));
     this.post.dof.focus = this.focusDist;
-    this.post.dof.fStop = this.mode === 'studio' ? 11 : 8;
+    // studio macro close-ups stop down further (the eye and the head stay crisp)
+    this.post.dof.fStop = this.mode === 'studio' ? (this.focusDist < 0.2 ? 16 : 11) : 8;
   }
 
   render() {
