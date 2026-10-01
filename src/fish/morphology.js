@@ -63,10 +63,13 @@ export const head = {
   // it never reads as a marble set on the head.
   eyeS: 0.1157,
   eyeY: 0.0118,
-  eyeR: 0.049,
-  eyeProtrusion: 0.27, // fraction of radius standing proud of the head surface
-  // pupil radius (SL): a large round black pupil, ~0.6 of the visible eye
-  pupilR: 0.0215,
+  // (a smaller ball standing further proud keeps the same visible disc in
+  // side view but bulges out of the head in front view, as in p09_1, p29_0)
+  eyeR: 0.039,
+  eyeProtrusion: 0.5, // fraction of radius standing proud of the head surface
+  // pupil radius (SL): a round black pupil, about half the visible eye
+  // (p05_1, p12_0, p11_1, p25_0); the rest is a broad pale guanine iris
+  pupilR: 0.0168,
   // mouth (terminal, very slightly superior)
   mouthY: -0.005,
   // open gape (front view of p09_1: a taller-than-wide oval, round-topped,
@@ -80,9 +83,10 @@ export const head = {
   // about a quarter to a third of the interorbital width across under a
   // rounded upper lip; the lip fold runs on behind the corners along the
   // sides of the snout (side view: p05_1, p25_0)
-  mouthClosedRW: 0.016, // half-width of the cleft
+  // (the cleft about 0.35 of the interorbital width across, p29_0)
+  mouthClosedRW: 0.0145, // half-width of the cleft
   mouthClosedRH: 0.0012, // the closed lips meet: only a fine cleft line
-  mouthClosedDroop: 0.0035, // the corners hang this far below the midline
+  mouthClosedDroop: 0.0025, // the corners hang this far below the midline
   mouthCornerBack: 0.007, // ...and sit this far behind the front of the lips
   mouthProtrusion: 0.012, // premaxillary protrusion (separate morph)
   mouthDepth: 0.075, // depth of the buccal cavity into the head

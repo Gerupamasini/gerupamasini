@@ -29,7 +29,7 @@ const tmp2 = [0, 0];
 // p15_0). The first rows of the body wrap around it: from the inner margin
 // (the gape ring) over the front to the outer side of the roll.
 const OPEN_LIP_U = 0.012; // body rows u < this wrap around the roll
-const OPEN_LIP_R = 0.0062; // radius of the roll (lower lip a little thicker)
+const OPEN_LIP_R = 0.0066; // radius of the roll (lower lip thicker: p09_1)
 const OPEN_BLEND = 0.03; // then the face blends into the head section
 // open state: drop of the chin at the front and the s of the jaw joint
 const JAW_DROP = 0.02;
@@ -46,8 +46,10 @@ export const HEAD_RELIEF = {
   lowerLipY: 0.005,
   lowerLipW: 0.005,
   lipFrontS: [0.034, 0.01], // the lips cover the front of the snout only
-  cleftFold: 0.0018, // short fold continuing the cleft behind the corner
-  rictusDimple: 0.0012,
+  // (both kept faint: from the front, deeper ones read as the wings of an
+  // upper-lip "moustache")
+  cleftFold: 0.001, // short fold continuing the cleft behind the corner
+  rictusDimple: 0.0007,
   jawCrease: 0.0004,
   nareDepth: 0.0042, // pit of the paired nostrils
   nareRadius: 0.0055,
@@ -179,7 +181,7 @@ function basePoint(u, theta, state, out) {
     const ry = _ring.y - cy;
     const rz = _ring.z;
     const rl = Math.max(1e-6, Math.hypot(ry, rz));
-    const r = OPEN_LIP_R * (1 + 0.2 * smoothstep(0.0, 0.8, -Math.cos(theta)));
+    const r = OPEN_LIP_R * (1 + 0.4 * smoothstep(0.0, 0.8, -Math.cos(theta)));
     const lipAt = (uu, o) => {
       const phi = -0.5 * Math.PI + Math.min(1, uu / OPEN_LIP_U) * Math.PI;
       const k = r * (1 + Math.sin(phi));
@@ -278,7 +280,10 @@ export function eyeRest(side = 1) {
   // axis is nearly lateral rather than following the head normal (which
   // turns forward on the tapering head): a recessed eye seen from the side
   // would otherwise show its pupil off-centre in the opening (parallax)
-  const axis = new THREE.Vector3(0.07 + 0.25 * N.x, 0.05 + 0.25 * N.y, Math.sign(N.z) * 1).normalize();
+  // (about 17 deg forward: the pupil sits a little anterior in the opening,
+  // ~10-15 % of its radius in p05_1 / p12_0, and in front view the eyes show
+  // as dark ovals on the sides of the head rather than edge-on slivers)
+  const axis = new THREE.Vector3(0.27 + 0.25 * N.x, 0.05 + 0.25 * N.y, Math.sign(N.z) * 1).normalize();
   const R = head.eyeR;
   const center = P.clone().addScaledVector(axis, (head.eyeProtrusion - 1) * R);
   // nominal radius of the exposed cap (where the ball leaves the skin)
@@ -317,14 +322,17 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
   const cleftY = head.mouthY - head.mouthClosedDroop * zr * zr;
   const dy = y - cleftY;
   const front = smoothstep(HEAD_RELIEF.lipFrontS[0], HEAD_RELIEF.lipFrontS[1], s);
-  const taper = 1 - 0.75 * smoothstep(0.25, 1.0, Math.abs(z) / head.mouthClosedRW);
+  // (the lip roll ends at the corners: carried on around the snout it read
+  // as an upper-lip "moustache" fold in front view)
+  const zra = Math.abs(z) / head.mouthClosedRW;
+  const taper = (1 - 0.75 * smoothstep(0.25, 1.0, zra)) * smoothstep(1.6, 0.85, zra);
   // (zero at the cleft itself: the rounded margins curl in toward it, so the
   // lips never end in thin protruding edges)
   const upperLip = gauss(dy - HEAD_RELIEF.upperLipY, HEAD_RELIEF.upperLipW) * smoothstep(-0.0005, 0.005, dy);
   const lowerLip = gauss(dy + HEAD_RELIEF.lowerLipY, HEAD_RELIEF.lowerLipW) * smoothstep(0.0, -0.006, dy);
   masks.lipD = (HEAD_RELIEF.upperLip * upperLip + HEAD_RELIEF.lowerLip * lowerLip) * front * taper;
   d += masks.lipD;
-  masks.lip = clamp(Math.max(upperLip, lowerLip) * 1.6 + gauss(dy, 0.004), 0, 1) * front * smoothstep(1.12, 0.8, Math.abs(z) / head.mouthClosedRW);
+  masks.lip = clamp(Math.max(upperLip, lowerLip) * 1.6 + gauss(dy, 0.004), 0, 1) * front * smoothstep(1.5, 0.6, zra);
 
   // the cleft runs on behind the corner of the mouth as a short fold sloping
   // ~20 deg down and back (no long cheek crease), ending in a soft dimple
