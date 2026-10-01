@@ -56,5 +56,6 @@ URL パラメータ: `edo=3&maha=3`（匹数、各 4 まで）、`seed=…`（�
 ```bash
 npm run build
 npm run scene:shot -- <出力フォルダ>    # ヘッドレス Chromium でスクリーンショット（tools/scene/shot.mjs）
-npm run scene:sim -- 240               # 行動の統計（各モードの時間、巣穴の出入り、NaN、地面へのめり込み、個体の重なり）
+npm run scene:sim -- 240 --swoop       # 行動の統計（--swoop: 30秒ごとにカメラを急接近させ逃避を数える）（各モードの時間、巣穴の出入り、NaN、地面へのめり込み、個体の重なり）
+node tools/scene/build-web.mjs         # 1ファイル15MB以下の静的パッケージ（dist-higata-web/、モデルを glTF＋バッファ＋テクスチャに分割）
 ```

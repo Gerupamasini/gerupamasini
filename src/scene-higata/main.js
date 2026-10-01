@@ -226,9 +226,11 @@ const showProg = () => {
   progressBar.style.width = `${Math.round(f * 95)}%`;
   progressText.textContent = `ハゼを読み込み中… ${Math.round(f * 100)}%`;
 };
+// hosts that cap file sizes get the models split into glTF + buffer + textures (tools/scene/build-web.mjs)
+const MODEL_URLS = { mahaze: mahazeUrl, edohaze: edohazeUrl, ...(window.HIGATA_MODEL_URLS || {}) };
 Promise.all([
-  loadSpecies('mahaze', mahazeUrl, (f) => { prog.maha = f; showProg(); }),
-  loadSpecies('edohaze', edohazeUrl, (f) => { prog.edo = f; showProg(); }),
+  loadSpecies('mahaze', MODEL_URLS.mahaze, (f) => { prog.maha = f; showProg(); }),
+  loadSpecies('edohaze', MODEL_URLS.edohaze, (f) => { prog.edo = f; showProg(); }),
 ]).then(([spMaha, spEdo]) => {
   progressText.textContent = 'シェーダーを準備中…';
   placeFish(spEdo, spMaha);
@@ -239,7 +241,7 @@ Promise.all([
   state.ready = true;
   progressEl.hidden = true;
   document.body.classList.add('ready');
-  window.__higataScene = { fish, camera, controls, THREE, state, shared, flat, scene, post, snapFocus, step: (sec) => { for (let t = 0; t < sec; t += 1 / 60) stepWorld(1 / 60); }, frameCount: 0 };
+  window.__higataScene = { fish, camera, controls, THREE, state, shared, flat, scene, post, snapFocus, camVel, step: (sec) => { for (let t = 0; t < sec; t += 1 / 60) stepWorld(1 / 60); }, frameCount: 0 };
 }).catch((err) => fail(`読み込みに失敗しました: ${err && err.message ? err.message : err}`));
 
 // ------------------------------------------------------------------------------------------ camera

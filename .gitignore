@@ -7,3 +7,4 @@ dist/
 .vite/
 tests/smoke/out/
 *.log
+dist-higata-web/
