@@ -132,6 +132,17 @@ export class MahazeDriver implements Driver {
     const sdt = dt * ctx.simScale;
     beh.update(sdt);
     const st = beh.state;
+    const b = ctx.bounds;
+    if (b) {
+      // the glass: stop at the walls, turn back toward the middle and give up the dart
+      const cx = Math.max(b.minX, Math.min(b.maxX, st.pos.x)), cz = Math.max(b.minZ, Math.min(b.maxZ, st.pos.z));
+      if (cx !== st.pos.x || cz !== st.pos.z) {
+        st.pos.x = cx; st.pos.z = cz;
+        beh.setHeading(Math.atan2((b.minX + b.maxX) / 2 - cx, (b.minZ + b.maxZ) / 2 - cz));
+        beh.setRestFor(1.5);
+        if (this.root) this.root.position.set(cx, this.root.position.y, cz);
+      }
+    }
     ind.pos.x = st.pos.x;
     ind.pos.z = st.pos.z;
     ind.pos.y = this.root ? this.root.position.y : ind.pos.y;

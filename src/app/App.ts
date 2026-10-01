@@ -74,6 +74,7 @@ export class App {
     this.renderer = new GameRenderer(canvas);
     this.camera = new PerspectiveCamera(70, this.renderer.aspect, 0.05, 2500);
     this.input = new Input(canvas);
+    this.input.onLockError = (reason) => { console.warn('[input] pointer lock refused:', reason); toast(t('hud.lockFailed'), 'warn', 6000); };
     window.addEventListener('resize', () => this.onResize());
     document.addEventListener('visibilitychange', () => {
       this.clock.setPaused(document.hidden || !this.worldVisible());
@@ -132,6 +133,7 @@ export class App {
 
   private setMode(m: Screen): void {
     ui.screen.value = m;
+    this.input.dragLook = m === 'field';
     const overlay = m !== 'field' && m !== 'observe' && m !== 'capture' && m !== 'home';
     this.input.blocked = overlay;
     if (m !== 'field' && m !== 'capture') this.input.exitPointerLock();
@@ -530,6 +532,8 @@ export class App {
     if (this.input.pressed('debug')) this.toggleDebug();
     switch (mode) {
       case 'field':
+        this.input.dragLook = true;
+        if (!this.input.pointerLocked && (this.input.keyPressed('Enter') || this.input.keyPressed('Space'))) this.focusGame();
         if (this.input.pressed('menu')) { if (ui.mapOpen.value) ui.mapOpen.value = false; else this.openOverlay('menu'); }
         else if (this.input.pressed('map')) this.toggleMap();
         else if (this.input.pressed('zukan')) this.openOverlay('zukan');

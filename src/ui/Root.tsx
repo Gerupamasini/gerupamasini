@@ -93,7 +93,8 @@ function Hud({ app }: { app: App }) {
     <Fragment>
       {!hud.pointerLocked && screen === 'field' && (
         <div class="screen center transparent" onClick={() => app.focusGame()}>
-          <div class="hint-big">クリックで操作開始</div>
+          <div class="hint-big">{t('hud.clickToPlay')}</div>
+          <div class="dim small">{t('hud.clickToPlay.sub')}</div>
         </div>
       )}
       <div class="hud-top-left">

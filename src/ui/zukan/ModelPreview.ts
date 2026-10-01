@@ -28,13 +28,14 @@ export class ModelPreview {
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     this.camera = new PerspectiveCamera(35, 1, 0.002, 20);
     const pmrem = new PMREMGenerator(this.renderer);
+    this.scene.background = new Color(0.05, 0.06, 0.07);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.7;
+    this.scene.environmentIntensity = 0.45;
     this.scene.add(new HemisphereLight(0xdfe9ec, 0x6b5e4e, 0.8));
     const key = new DirectionalLight(0xfff4e8, 1.6);
     key.position.set(0.4, 1.0, 0.6);
     this.scene.add(key);
-    const floor = new Mesh(new PlaneGeometry(2, 2), new MeshStandardMaterial({ color: new Color(0.62, 0.56, 0.44), roughness: 0.95 }));
+    const floor = new Mesh(new PlaneGeometry(2, 2), new MeshStandardMaterial({ color: new Color(0.16, 0.15, 0.13), roughness: 0.95 }));
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
     this.controls = new OrbitControls(this.camera, canvas);

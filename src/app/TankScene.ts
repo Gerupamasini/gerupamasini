@@ -817,11 +817,14 @@ export class TankScene {
           d.setIntent({ id: Date.now(), kind: 'wander', urgency: 0.3, seconds: 8, target: new Vector3(tx, 0, tz) });
         } else d.setIntent({ id: Date.now(), kind: 'special', urgency: 0, seconds: 3, param: 'yawn' });
       }
-      d.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now() });
+      const S = o.ind.length_mm / 1000;
+      const hx = TANK_W / 2 - 0.01 - S * 0.55, hz = TANK_D / 2 - 0.01 - S * 0.55;
+      d.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now(), bounds: { minX: -hx, maxX: hx, minZ: -hz, maxZ: hz } });
       if (o.hero) o.hero.update(this.camera, d.openings ?? { mouth: 0, gill: 0 });
-      const hx = TANK_W / 2 - 0.02, hz = TANK_D / 2 - 0.02;
       o.ind.pos.x = Math.max(-hx, Math.min(hx, o.ind.pos.x));
       o.ind.pos.z = Math.max(-hz, Math.min(hz, o.ind.pos.z));
+      o.root.position.x = Math.max(-hx, Math.min(hx, o.root.position.x));
+      o.root.position.z = Math.max(-hz, Math.min(hz, o.root.position.z));
     }
   }
 

@@ -29,6 +29,8 @@ export interface Floor {
 }
 
 export interface DriverContext {
+  /** keep the animal inside this box (the home tank) */
+  bounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
   floor: Floor;
   player: Vector3;
   simScale: number;

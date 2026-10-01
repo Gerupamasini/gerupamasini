@@ -38,6 +38,10 @@ export class Input {
   pointerLocked = false;
   /** When true, game actions are ignored (a text field or dialog has focus). */
   blocked = false;
+  /** when the pointer is not locked, dragging on the canvas still looks around (fallback if the lock is refused) */
+  dragLook = false;
+  /** called when the browser refuses a pointer lock request */
+  onLockError: ((reason: string) => void) | null = null;
   private readonly canvas: HTMLCanvasElement;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -57,10 +61,11 @@ export class Input {
       this.pointerLocked = document.pointerLockElement === canvas;
     });
     canvas.addEventListener('mousemove', (e) => {
-      if (!this.pointerLocked) return;
+      if (!this.pointerLocked && !(this.dragLook && this.mouseDown)) return;
       this.mouseDX += e.movementX;
       this.mouseDY += e.movementY;
     });
+    document.addEventListener('pointerlockerror', () => { this.onLockError?.('pointerlockerror'); });
     canvas.addEventListener('mousedown', (e) => {
       if (e.button === 0) {
         this.mouseDown = true;
@@ -99,7 +104,18 @@ export class Input {
   }
 
   requestPointerLock(): void {
-    if (!this.pointerLocked) this.canvas.requestPointerLock?.();
+    if (this.pointerLocked || document.pointerLockElement === this.canvas) return;
+    try {
+      const r = (this.canvas.requestPointerLock as (() => Promise<void> | void) | undefined)?.call(this.canvas);
+      if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch((e) => this.onLockError?.(String(e)));
+    } catch (e) {
+      this.onLockError?.(String(e));
+    }
+  }
+
+  /** true while the view follows the mouse: the pointer is locked, or the fallback drag is in progress */
+  get looking(): boolean {
+    return this.pointerLocked || (this.dragLook && this.mouseDown);
   }
 
   exitPointerLock(): void {
