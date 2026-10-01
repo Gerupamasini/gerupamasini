@@ -8,7 +8,7 @@
 
 import * as THREE from 'three';
 import { TANK } from './TankConfig.js';
-import { U } from '../render/SharedUniforms.js';
+import { U, FIN_LAYER } from '../render/SharedUniforms.js';
 import { underwaterCommon, noiseCommon } from '../fish/shaders/common.glsl.js';
 
 const MAX_RIPPLES = 16;
@@ -311,6 +311,7 @@ export class WaterSurface {
     pm.elements[10] = cp.z + 1.0;
     pm.elements[14] = cp.w;
     vc.layers.set(1);
+    vc.layers.enable(FIN_LAYER);
     const r = this.renderer;
     const prevRT = r.getRenderTarget();
     const prevShadow = r.shadowMap.autoUpdate;

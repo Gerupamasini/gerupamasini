@@ -9,7 +9,7 @@ import { buildBodyGeometry, eyeRest } from './BodyGeometry.js';
 import { buildFinGeometry } from './FinGeometry.js';
 import { head } from './morphology.js';
 import { createBodyMaterial, createBodyDepthMaterial, createFinMaterial, createFinDepthMaterial, createFinDepthWriteMaterial, createEyeMaterial } from './FishMaterials.js';
-import { U } from '../render/SharedUniforms.js';
+import { U, FIN_LAYER } from '../render/SharedUniforms.js';
 
 // pupil size relative to the uPupil default (0.46 eyeball radii), so the
 // pupil keeps its measured size in SL whatever the eyeball radius
@@ -84,12 +84,17 @@ export class FishSystem {
     fins.castShadow = true;
     fins.receiveShadow = false;
     fins.customDepthMaterial = this.finDepth;
-    fins.renderOrder = 2;
+    // fins live in their own image layer (render/FinLayer.js); the coarser
+    // (farther) LODs blend first so overlapping individuals sort far to near
+    fins.renderOrder = 2 + (2 - lod) * 0.1;
+    fins.layers.set(FIN_LAYER);
     fins.name = `fishFins.LOD${lod}`;
-    // same instances, depth only, after all fins (for the depth of field)
+    // same instances, depth only, after all fins: the depth of the nearest
+    // fin, by which the fin layer is blurred
     const finsZ = new THREE.Mesh(finGeom, this.finDepthWrite);
     finsZ.frustumCulled = false;
     finsZ.renderOrder = 3;
+    finsZ.layers.set(FIN_LAYER);
     finsZ.name = `fishFinsDepth.LOD${lod}`;
     const eyeGeom = new THREE.SphereGeometry(1, spec.eye[0], spec.eye[1]);
     // SphereGeometry poles sit on ±Y, so the optical axis (+Z) has no pole pinch
@@ -102,7 +107,7 @@ export class FishSystem {
     eyes.castShadow = false;
     eyes.count = 0;
     eyes.name = `fishEyes.LOD${lod}`;
-    for (const m of [body, fins, eyes]) m.layers.enable(1); // visible in the surface (TIR) reflection
+    for (const m of [body, eyes]) m.layers.enable(1); // visible in the surface (TIR) reflection (fins: FIN_LAYER)
     this.group.add(body, fins, finsZ, eyes);
     return {
       body,

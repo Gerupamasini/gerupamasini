@@ -46,10 +46,9 @@ export class DOFPass extends Pass {
         float linZ(vec2 uv) {
           float d0 = texture(tDepth, uv).x;
           // nothing opaque was drawn here (the void behind a studio fish):
-          // whatever covers the pixel is translucent (thin distal fin
-          // membrane, which keeps no depth of its own) or a uniform
-          // background, so it is treated as lying in the focal plane instead
-          // of at infinity (fins would otherwise smear with maximum blur)
+          // a uniform background, treated as lying in the focal plane
+          // instead of at infinity (the fins are a separate layer with their
+          // own blur, see FinLayer.js)
           if (d0 >= 0.999999) return uFocus;
           float d = d0 * 2.0 - 1.0;
           return 2.0 * uNear * uFar / (uFar + uNear - d * (uFar - uNear));

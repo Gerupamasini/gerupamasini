@@ -166,50 +166,19 @@ export function createFinDepthMaterial(layout) {
 }
 
 /**
- * Depth-only pass for the translucent fins, drawn after them: no colour, but
- * fin depth lands in the scene depth buffer so the lens (depth of field)
- * focuses on the fins instead of the background seen through them.
+ * Depth-only pass for the translucent fins, drawn after them into the fin
+ * layer (render/FinLayer.js): no colour, but the depth of the nearest fin, by
+ * which the lens blurs the fin layer (the scene behind keeps its own depth).
  */
 export function createFinDepthWriteMaterial(layout) {
   const m = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true, transparent: true, side: THREE.DoubleSide });
   m.defines = { RIG_MISC: layout.misc };
   m.onBeforeCompile = (shader) => {
-    attachUniforms(shader, ['uRig', 'uWaterDensity']);
+    attachUniforms(shader, ['uRig']);
     let vs = shader.vertexShader;
     vs = mustReplace(vs, '#include <common>', '#include <common>\n#define DEPTH_ONLY\n' + rigVertexCommon + finVertexPars, 'common');
     vs = mustReplace(vs, '#include <begin_vertex>', 'finDeform();\nvec3 transformed = gFishPos;', 'begin');
     shader.vertexShader = vs;
-    let fs = shader.fragmentShader;
-    fs = mustReplace(fs, '#include <common>', '#include <common>\nin vec4 vFinCoord;\nuniform float uWaterDensity;', 'zw-common');
-    fs = mustReplace(
-      fs,
-      'void main() {',
-      `void main() {
-  {
-    // In the tank most of the membrane writes depth, so the lens keeps a
-    // focused fin sharp (a fin smeared with the background reads as a
-    // ghost); only the thin distal margin fades into the depth of what lies
-    // behind it (4x4 ordered dither over the transition). The cost is that
-    // background seen through a fin stays a little sharper than it would.
-    // In the studio (no water) the fins write no depth: behind them lies the
-    // black void, which the lens treats as lying in the focal plane, so a
-    // fin out of the focal plane would be blurred inside while its outline
-    // against the void stays a hard, aliased depth edge (an opaque grey
-    // paddle with stair-stepped margins). Kept in the focal plane, the
-    // translucent membrane and its rays stay readable.
-    float y = vFinCoord.y;
-    if (uWaterDensity < 0.01) {
-      discard;
-    } else {
-      float dense = 1.0 - smoothstep(0.6, 0.95, y);
-      ivec2 q = ivec2(gl_FragCoord.xy) & 3;
-      const float B[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
-      if (dense * 16.0 <= B[q.x + q.y * 4] + 0.5) discard;
-    }
-  }`,
-      'zw-main',
-    );
-    shader.fragmentShader = fs;
   };
   m.customProgramCacheKey = () => 'fish-fin-depthwrite';
   return m;

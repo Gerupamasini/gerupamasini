@@ -5,6 +5,10 @@ import * as THREE from 'three';
 
 const srgb = (hex) => new THREE.Color(hex); // Color.set() converts sRGB hex -> linear working space
 
+// Object layer of the translucent fins: drawn into their own image layer
+// (render/FinLayer.js), not with the rest of the scene.
+export const FIN_LAYER = 4;
+
 export const U = {
   uTime: { value: 0 },
   uRig: { value: null },

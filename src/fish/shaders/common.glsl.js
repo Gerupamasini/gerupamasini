@@ -195,8 +195,17 @@ vec3 causticsPattern(vec3 wp, vec3 n) {
   // slight chromatic dispersion of the focused light
   float d = 0.0015 + depth * 0.004;
   vec3 c = vec3(textureLod(uCaustics, uv + vec2(d, 0.0), lod).r, textureLod(uCaustics, uv, lod).r, textureLod(uCaustics, uv - vec2(d, 0.0), lod).r);
+  // deeper down the focused filaments from neighbouring ripples cross and
+  // merge into a softer, larger dapple (the light from the long ripple
+  // groups): a second, coarser and blurrier sampling of the same pattern
+  // takes over with depth, so the bed shows patches of light rather than a
+  // fine net lost in the gravel texture
+  float deep = smoothstep(0.08, 0.4, depth);
+  // (blurring lowers the contrast about the mean 0.15: restored)
+  float cc = 0.15 + (textureLod(uCaustics, uv * 0.43 + vec2(0.37, 0.61), 3.2).r - 0.15) * 2.2;
+  c = mix(c, vec3(max(cc, 0.0)), deep * 0.6);
   float facing = smoothstep(-0.1, 0.6, dot(n, L));
-  float contrast = uCausticParams.y * facing * (0.35 + 0.65 * exp(-depth * 2.2));
+  float contrast = uCausticParams.y * facing * (0.5 + 0.5 * exp(-depth * 2.2));
   // texture mean ≈ 0.15 -> factor averages to 1 (energy conserving redistribution)
   return max(vec3(0.0), 1.0 + 0.9 * contrast * (c / 0.15 - 1.0));
 }
