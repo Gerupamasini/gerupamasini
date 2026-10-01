@@ -3,6 +3,7 @@ import { animation as ANIM, joints as J } from './KentishPloverConfig.js';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
 import { computeWingFold, spreadAt, spreadScaleAt, raiseAt, foldPath, WING_RAISE } from './anatomy/wingFold.js';
 import { getBodySDF, getTorsoSDF } from './anatomy/bodyMesh.js';
+import { gridCachedSDF } from './anatomy/sdf.js';
 import { WING } from './anatomy/featherLayout.js';
 import { BILL } from './anatomy/bareParts.js';
 import { clamp, lerp, damp, smoothstep, makeRng, makeFbm1D, frameQuat, mirrorQuat, wrapAngle } from '../../core/math.js';
@@ -21,6 +22,7 @@ const _q4 = new THREE.Quaternion();
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
@@ -53,7 +55,10 @@ export const GAZE_PITCH_REST = 0.02;
 // mm from the head pivot): when preening or resting with the bill in the scapulars the head is kept on top
 // of the plumage lying on the body instead of sinking into it. The relaxed head is sunk into the mantle /
 // fore-breast (no visible neck, body_shape_spec.md §7), so each point may sink no deeper than it does at rest.
-const TORSO_SDF = getTorsoSDF(CFG, { trunkOnly: true });
+// (both outlines through a lazily filled 1.5 mm grid: the contact passes sample them some 10⁴ times a frame —
+// exact evaluation made a walking bird's update 9× slower than before the redesign: 4.7 ms, now 0.7 vs 0.54)
+const CONTACT_BOUNDS = { min: [-40, -10, -110], max: [40, 130, 75] };
+const TORSO_SDF = gridCachedSDF(getTorsoSDF(CFG, { trunkOnly: true }), CONTACT_BOUNDS);
 const PLUMAGE = 3.5; // mm: scapulars, lesser coverts and tertials above the outline
 // mm: how much deeper than at rest a head / neck point on or near the trunk at rest may go — the neck-filling
 // plumage (mantleNape, foreBreast) is compressed when the neck retracts (walking: crown only ≈6 mm above the
@@ -71,7 +76,7 @@ const sinkLimit = (rest, need) => Math.min(rest, need) - SINK * smoothstep(need 
 // preening the breast or the belly, the cheek against the bend of the wing — never in it: there no point may
 // sink deeper than at rest, measured on the whole body outline (the wing lies on the neck-filling plumage at the
 // shoulder, above the trunk-only outline).
-const BODY_SDF = getBodySDF(CFG);
+const BODY_SDF = gridCachedSDF(getBodySDF(CFG), CONTACT_BOUNDS);
 const wingZone = (p) => smoothstep(9, 12, Math.abs(p.x)) * smoothstep(50, 54, p.y) * (1 - smoothstep(80, 84, p.y)) * (1 - smoothstep(20, 26, p.z)) * smoothstep(-70, -64, p.z);
 /** How far (mm) a head / neck point at p (rest space) is below where it may be; `contactDeficit.sdf` is the
  *  outline that decided it (the push goes along its gradient). */
@@ -1033,15 +1038,19 @@ export class KentishPloverAnimator {
     // worse, so the result does not depend on where a 24-pass cycle happened to stop (head judder, gaitjitter.mjs)
     let best = Infinity;
     const bestPos = headPos.clone();
+    let stall = 0;
     for (let pass = 0; pass < 24; pass++) {
       const reached = b.head.getWorldPosition(new THREE.Vector3());
-      const push = this._clearHead(reached.clone(), headQ).sub(reached).add(this._neckPush());
+      const push = this._clearHead(reached.clone(), headQ, pass === 0).sub(reached).add(this._neckPush());
       const depth = Math.max(this._headWorst, this._neckWorst);
       if (depth < best - 0.01) {
         best = depth;
         bestPos.copy(headPos);
-      } else if (depth > best + 0.05) break;
-      if (push.lengthSq() < 1e-12) break;
+        stall = 0;
+      } else if (depth > best + 0.05 || ++stall >= 3) break;
+      // (pushes under 0.01 mm, or 3 passes without gaining 0.01 mm, end it: walking, 1 in 3 frames ran all 24
+      // passes chasing a few µm — 1.5 ms of a 1.5 ms update)
+      if (push.lengthSq() < 1e-10) break;
       stretch = this._solveNeck(headPos.add(push), headQ); // accumulate: beyond reach only the aim turns
     }
     if (!headPos.equals(bestPos)) stretch = this._solveNeck(bestPos, headQ);
@@ -1111,22 +1120,29 @@ export class KentishPloverAnimator {
     return sdfNormal(sdf, at, new THREE.Vector3()).applyQuaternion(chest.getWorldQuaternion(_q)).multiplyScalar(worst * mm);
   }
 
-  /** Push the head pivot off the torso outline until the head clears the plumage (PLUMAGE mm, + fluffing). */
-  _clearHead(headPos, headQ) {
+  /** Push the head pivot off the torso outline until the head clears the plumage (PLUMAGE mm, + fluffing).
+   *  `full`: test every head sample and keep those within 8 mm of contact for the following (refining) passes
+   *  of the same frame — a pass moves the head by a millimetre or two, never a far sample into contact. */
+  _clearHead(headPos, headQ, full = true) {
     const chest = this.b.chest;
     chest.updateMatrixWorld(true);
     const inv = _m.copy(chest.matrixWorld).invert();
     const need = PLUMAGE + 1.2 * Math.max(0, this.p.fluff) - this._tuckSink;
     const p = new THREE.Vector3();
+    const toRest = new THREE.Matrix4();
+    const pts = full || !this._headNear ? HEAD_PTS : this._headNear;
+    if (full) this._headNear = [];
     this._headWorst = 0;
     for (let it = 0; it < 3; it++) {
       let worst = 0;
       let sdf = TORSO_SDF;
       const at = new THREE.Vector3();
-      for (const s of HEAD_PTS) {
-        // world → chest-local → rest (mm)
-        p.copy(s).multiplyScalar(mm).applyQuaternion(headQ).add(headPos).applyMatrix4(inv).add(BIND_CHEST).multiplyScalar(1000);
+      // head-local (mm) → world → chest-local → rest (mm)
+      toRest.compose(headPos, headQ, _v4.setScalar(mm)).premultiply(inv);
+      for (const s of pts) {
+        p.copy(s).applyMatrix4(toRest).add(BIND_CHEST).multiplyScalar(1000);
         const deficit = contactDeficit(s, need, p);
+        if (full && it === 0 && deficit > -8) this._headNear.push(s);
         if (deficit > worst) [worst, sdf, at.x, at.y, at.z] = [deficit, contactDeficit.sdf, p.x, p.y, p.z];
       }
       if (it === 0) this._headWorst = worst;
@@ -1266,7 +1282,11 @@ export const ACTIONS = {
       // the tarsus tips toward the photographed 42° (spec §9, §12)
       const shift = clamp(dist - 0.055, -0.03, 0.035);
       const out = { posture: { pitch: tilt, height: -0.015 * k, neck: -0.2, shift: shift * k }, fast: { pitch: 18, height: 14, shift: 14 } };
-      const dir = new THREE.Vector3(Math.sin(yawW) * 0.25, -1, Math.cos(yawW) * 0.25);
+      // bill ≈ 63° down while aiming (photos of searching / aiming birds: 52°, p007, p061; steeper keeps the bill
+      // tip on its target within the neck's stretch), ≈ 76° at the strike into the mud (posture.mjs: bill tip on
+      // the target, eye 7–9 mm ahead of the breast, spec §7)
+      const hz = lerp(0.5, 0.25, strikeK);
+      const dir = new THREE.Vector3(Math.sin(yawW) * hz, -1, Math.cos(yawW) * hz);
       const aimU = 0.22;
       const strikeU = 0.3;
       const type = p.preyType ?? 'amphipod';
