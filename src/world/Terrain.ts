@@ -46,9 +46,9 @@ export async function loadTerrainGrid(map: MapDef): Promise<TerrainGrid> {
 }
 
 const SUBSTRATE_COLORS: Record<Substrate, [number, number, number]> = {
-  sand: [0.64, 0.56, 0.41],
-  muddy_sand: [0.44, 0.39, 0.3],
-  mud: [0.29, 0.26, 0.21],
+  sand: [0.72, 0.64, 0.49],
+  muddy_sand: [0.52, 0.46, 0.36],
+  mud: [0.34, 0.3, 0.25],
   gravel: [0.58, 0.56, 0.52],
   channel: [0.26, 0.24, 0.2],
 };
@@ -67,6 +67,7 @@ export class Terrain {
   private readonly uWater: IUniform<number> = { value: -10 };
   private readonly uWet: IUniform<number> = { value: -10 };
   private readonly uTime: IUniform<number> = { value: 0 };
+  private readonly uSunUp: IUniform<number> = { value: 1 };
 
   constructor(grid: TerrainGrid, palette: Substrate[]) {
     this.n = grid.n;
@@ -138,6 +139,7 @@ export class Terrain {
       shader.uniforms.uWaterLevel = uWater;
       shader.uniforms.uWetLevel = uWet;
       shader.uniforms.uTime = uTime;
+      shader.uniforms.uSunUp = this.uSunUp;
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nattribute float substrate;\nvarying float vSubstrate;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvSubstrate = substrate;');
@@ -148,6 +150,7 @@ varying float vSubstrate;
 uniform float uWaterLevel;
 uniform float uWetLevel;
 uniform float uTime;
+uniform float uSunUp;
 float hash21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y); }`)
@@ -163,24 +166,49 @@ float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 
   // wet band: everything between the current water level and the recent high-water mark is darker
   float wet = 1.0 - smoothstep(uWaterLevel + 0.02, uWetLevel + 0.05, vWorldPos.y);
   wet = max(wet, 1.0 - smoothstep(uWaterLevel - 0.05, uWaterLevel + 0.12, vWorldPos.y));
-  diffuseColor.rgb *= mix(1.0, 0.55, wet);
+  diffuseColor.rgb *= mix(1.0, 0.62, wet);
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.85, 0.92, 1.0), 0.5 * wet);
+  // sunlight caustics on the submerged bed: moving cell edges that fade with depth
+  float depth = uWaterLevel - vWorldPos.y;
+  float under = smoothstep(0.0, 0.04, depth) * exp(-depth * 0.9) * uSunUp;
+  if (under > 0.001) {
+    vec2 cp = vWorldPos.xz * 2.2;
+    float n1 = vnoise(cp + vec2(uTime * 0.22, uTime * 0.17));
+    float n2 = vnoise(cp * 1.31 + vec2(-uTime * 0.19, uTime * 0.13) + 5.7);
+    float n3 = vnoise(cp * 0.7 + vec2(uTime * 0.08, -uTime * 0.1) + 11.3);
+    float caustic = pow(1.0 - abs(n1 - n2), 9.0) * 1.6 + pow(1.0 - abs(n2 - n3), 12.0) * 0.8;
+    diffuseColor.rgb *= 1.0 + caustic * under * 0.9;
+  }
+}`)
+        .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+{
+  // ripple marks on sand: crests roughly parallel to the shore, drifting with low-frequency noise
+  float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
+  float strength = sandy * (0.15 + 0.85 * vnoise(vWorldPos.xz * 0.07)) * 0.3;
+  float ph = vWorldPos.z * 83.0 + 3.0 * vnoise(vWorldPos.xz * 0.5) + 1.2 * vnoise(vWorldPos.xz * 2.6);
+  float slope = cos(ph) * strength;
+  // the lee side is steeper
+  slope += cos(ph * 2.0 + 0.6) * strength * 0.35;
+  vec3 worldPerturb = vec3(slope * 0.12, 0.0, slope);
+  vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
+  normal = normalize(normal + viewPerturb);
 }`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 {
   float wetR = 1.0 - smoothstep(uWaterLevel + 0.02, uWetLevel + 0.05, vWorldPos.y);
   wetR = max(wetR, 1.0 - smoothstep(uWaterLevel - 0.05, uWaterLevel + 0.12, vWorldPos.y));
-  roughnessFactor = mix(roughnessFactor, 0.28, wetR);
+  roughnessFactor = mix(roughnessFactor, 0.14, wetR);
 }`);
     };
     mat.customProgramCacheKey = () => 'higata-terrain';
     return mat;
   }
 
-  setWater(level: number, wetLevel: number, time: number): void {
+  setWater(level: number, wetLevel: number, time: number, sunUp = 1): void {
     this.uWater.value = level;
     this.uWet.value = Math.max(level, wetLevel);
     this.uTime.value = time;
+    this.uSunUp.value = sunUp;
   }
 
   private gridIndex(x: number, z: number): { i: number; j: number; fx: number; fz: number } {

@@ -4,10 +4,11 @@ import type { Terrain } from '../world/Terrain';
 import type { Habitat } from '../world/Habitat';
 import type { MapDef } from '../data/schemas';
 
-export const EYE_HEIGHT = 1.6;
-export const CROUCH_HEIGHT = 0.9;
+export const EYE_HEIGHT = 1.5;
+export const CROUCH_HEIGHT = 0.55;
 export const BOOT_DEPTH = 0.35;
-const WALK = 1.4, RUN = 3.0, CROUCH = 0.7;
+const WALK = 1.7, RUN = 4.5, CROUCH = 0.7;
+const FOV_NORMAL = 70, FOV_ZOOM = 32;
 
 /** First-person walker on the terrain with wading limits. */
 export class FPSController {
@@ -23,6 +24,8 @@ export class FPSController {
   speedNow = 0;
   private eye = EYE_HEIGHT;
   private bob = 0;
+  private fov = FOV_NORMAL;
+  zooming = false;
   private readonly tmpForward = new Vector3();
   private readonly tmpRight = new Vector3();
 
@@ -43,21 +46,37 @@ export class FPSController {
     return this.tmpForward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
   }
 
-  setPose(x: number, z: number, yaw: number): void {
+  setPose(x: number, z: number, yaw: number, pitch?: number): void {
     this.position.set(x, this.terrain.heightAt(x, z), z);
     this.yaw = yaw;
+    if (pitch !== undefined) this.pitch = pitch;
     this.syncCamera(0);
+  }
+
+  /** Reset the field of view (e.g. when leaving the field). */
+  resetFov(): void {
+    this.fov = FOV_NORMAL;
+    this.camera.fov = FOV_NORMAL;
+    this.camera.updateProjectionMatrix();
   }
 
   update(dt: number, sensitivity: number, invertY: boolean): void {
     const input = this.input;
     if (this.enabled && input.pointerLocked) {
-      this.yaw -= input.mouseDX * 0.0022 * sensitivity;
-      this.pitch -= input.mouseDY * 0.0022 * sensitivity * (invertY ? -1 : 1);
+      const look = 0.0022 * sensitivity * (this.zooming ? 0.45 : 1);
+      this.yaw -= input.mouseDX * look;
+      this.pitch -= input.mouseDY * look * (invertY ? -1 : 1);
       this.pitch = MathUtils.clamp(this.pitch, -Math.PI / 2 + 0.05, Math.PI / 2 - 0.05);
     }
     this.crouching = this.enabled && input.held('crouch');
     this.running = this.enabled && !this.crouching && input.held('run');
+    this.zooming = this.enabled && (input.mouseRightDown || input.held('zoom'));
+    const targetFov = this.zooming ? FOV_ZOOM : FOV_NORMAL;
+    if (Math.abs(this.fov - targetFov) > 0.05) {
+      this.fov = MathUtils.damp(this.fov, targetFov, 12, dt);
+      this.camera.fov = this.fov;
+      this.camera.updateProjectionMatrix();
+    }
     let mx = 0, mz = 0;
     if (this.enabled) {
       if (input.held('forward')) mz += 1;

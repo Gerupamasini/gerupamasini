@@ -19,6 +19,8 @@ export const TICKET_RANGE_DAYS = 3;
  */
 export class GameClock {
   ticket: TicketState | null = null;
+  /** debug: extra offset applied on top of the ticket (null = off) */
+  debugOffsetMs: number | null = null;
   private offsetMs = 0;
   private endingFromOffset = 0;
   private endingT = 0;
@@ -33,7 +35,12 @@ export class GameClock {
   }
 
   nowGame(): number {
-    return this.nowReal() + this.offsetMs;
+    return this.nowReal() + (this.debugOffsetMs ?? this.offsetMs);
+  }
+
+  /** debug: make game time read `targetGameMs` right now (null restores the normal clock) */
+  setDebugTime(targetGameMs: number | null): void {
+    this.debugOffsetMs = targetGameMs === null ? null : targetGameMs - this.nowReal();
   }
 
   /** Offset (ms) between game and real time; 0 when no ticket is active. */

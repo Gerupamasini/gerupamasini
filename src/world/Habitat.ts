@@ -206,8 +206,9 @@ export class Habitat {
     this.tideLevel = tideLevel;
     const dtH = this.lastUpdateMs ? (nowMs - this.lastUpdateMs) / 3600000 : 0;
     this.lastUpdateMs = nowMs;
-    // high-water mark decays 0.25 m per hour toward the tide
-    this.wetLevel = Math.max(tideLevel, this.wetLevel - 0.25 * dtH);
+    // high-water mark decays 0.25 m per hour toward the tide; capped so a tide jump
+    // (ticket, debug override) does not leave the whole flat looking freshly wetted
+    this.wetLevel = Math.min(Math.max(tideLevel, this.wetLevel - 0.25 * dtH), tideLevel + 0.3);
     const cn = this.cn, cn2 = cn * cn;
     const wet = new Uint8Array(cn2);
     for (let k = 0; k < cn2; k++) {

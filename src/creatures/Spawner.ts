@@ -57,7 +57,7 @@ export class Spawner {
   }
 
   /** Decide spawns for the cells around (px, pz). `population` counts live individuals per species. */
-  plan(px: number, pz: number, env: SpawnEnv, live: Individual[]): SpawnRequest[] {
+  plan(px: number, pz: number, env: SpawnEnv, live: Individual[], minDist = MIN_SPAWN_DIST): SpawnRequest[] {
     const h = this.habitat;
     const cn = h.cn, cs = h.coarse;
     const counts = new Map<string, number>();
@@ -75,7 +75,7 @@ export class Spawner {
         const cell = cj * cn + ci1;
         const [cx, cz] = h.coarseCenter(ci1, cj);
         const d = Math.hypot(cx - px, cz - pz);
-        if (d > SPAWN_RADIUS || d < MIN_SPAWN_DIST) continue;
+        if (d > SPAWN_RADIUS || d < minDist) continue;
         for (const sp of this.speciesList) {
           if (occupied.has(`${sp.id}:${cell}`)) continue;
           for (let ri = 0; ri < sp.spawn.length; ri++) {
