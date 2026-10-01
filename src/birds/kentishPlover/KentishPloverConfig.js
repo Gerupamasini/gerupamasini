@@ -45,7 +45,12 @@ export const joints = {
   neck1: [0, 80, 5],
   neck2: [0, 85, 10],
   head: [0, 88.5, 14],
-  throat: [0, 80, 27], // fore-neck helper (bodyMesh.computeSpineWeights): centre of the throat / fore-neck plumage
+  // Neck sleeve (bodyMesh.computeSpineWeights, animator _poseSleeve): the plumage between trunk and head is carried
+  // by `n` helper bones spaced along a centre line from `a` (on the trunk, centre of the neck base) to `b` (in the
+  // head, centre of the head–neck junction). Each turns by its share of the head's rotation about its own point of
+  // the line, so every cross-section of the sleeve turns about its own centre (no candy-wrapper twist about the
+  // vertebrae at the back of the neck).
+  sleeve: { a: [0, 74, 16], b: [0, 90, 19], n: 5 },
   jaw: [0, 87.5, 38],
   eyeCenter: [7.6, 95, 25.5], // eyeball centre (spec §6); head surface at x 12.3, eye 9.5 mm behind the breast front;
   // sunk 0.4 mm so the cornea apex (x 11.5) stays inside the head outline (photos: the eye sits in the dark stripe)

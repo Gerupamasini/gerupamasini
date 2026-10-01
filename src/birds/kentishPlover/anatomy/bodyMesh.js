@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeBodySDF, surfaceNets } from './sdf.js';
+import { KentishPloverConfig as CFG } from '../KentishPloverConfig.js';
 
 // Body (head–neck–torso–rump) mesh from the SDF sculpt. Attributes:
 //   position/normal (metres), aRest (rest position, mm) and aFlow (feather flow direction, rest space)
@@ -53,31 +54,6 @@ const smooth = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-/**
- * Neck band: 1 at the head's blend band (headness r 1.25) → 0 on the trunk. The neck is not sculpted (the
- * mantleNape / foreBreast plumage fills it at rest), and the old skinning had an ≈8 mm band between the
- * chest-skinned breast and the head-skinned throat: stretching the neck for a peck pulled it into a thin sheet (a
- * white tube with a crease from the chin to the breast; p007 / p061 show a short thick neck). The band now reaches
- * the upper breast in front (y ≈ 70) and the nape behind (z ≈ −1 on the midline).
- */
-export function neckBand(p) {
-  const x = p[0] / 13;
-  const y = (p[1] - 93.5) / (p[1] < 93.5 ? 12.5 : 13);
-  const z = (p[2] - 24) / (p[2] < 24 ? 12.2 + 1.4 * (1 - smooth(3, 7, Math.abs(p[0]))) : 15.5);
-  const r = Math.sqrt(x * x + y * y + z * z);
-  // none under the front scapulars (skinned to the trunk: the mantle rose through them) nor on the sides of the
-  // neck base over the shoulders (turned back to sleep / preen, that skin swung over the wing coverts)
-  const scap = smooth(2, 4.5, Math.abs(p[0])) * smooth(9, 5, p[2]) * smooth(93, 89, p[1]);
-  const side = smooth(9, 13, Math.abs(p[0])) * smooth(92, 86, p[1]);
-  return Math.max(0, Math.min(1, (1.9 - r) / 0.65)) * (1 - scap) * (1 - side);
-}
-
-/** How much of a neck-band point is fore-neck / throat (in front of the neck chain, 1) rather than hind-neck (0):
- *  sagittal distance (mm) in front of the line neck0 → head pivot. */
-export function throatSide(p) {
-  return smooth(0, 12, -0.693 * (p[1] - 74) + 0.718 * p[2]);
-}
-
 const spineDist = (p) =>
   SPINE.map((s) => {
     const d = segDist(p, s.a, s.b);
@@ -93,66 +69,159 @@ export function trunkWeights(p, boneIndex) {
 }
 const TRUNK = new Set(['tail', 'body', 'chest']);
 
+let TRUNK_SDF = null;
+const trunkSDF = () => (TRUNK_SDF ??= getTorsoSDF(CFG, { trunkOnly: true }));
+
 /**
- * Body skinning. Trunk: tail / body / chest by distance (SPINE). Head: rigid inside its ellipsoid (headness).
- * Between them the neck band (neckBand): the hind-neck spreads along the neck chain (a hat per bone over the band
- * coordinate, so the stretch and the turn of a peck are shared smoothly), the fore-neck and throat go
- * trunk → `throat` (→ head near the head). The throat bone (a helper the animator poses half-way between where
- * the chest and where the head would carry it, turned half-way) keeps the throat full when the head is pulled down
- * and forward: on the chain the throat, 25 mm in front of the neck bones, swung round them when the head turned
- * back to preen; straight between chest and head it collapsed into a sheet. Outside the band, and on the face in
- * front of the eyes, the distance-weighted skinning (spineWeights) is unchanged.
+ * Position of a body point along the neck sleeve before smoothing: 0 on the trunk … 1 on the head. The sleeve is the
+ * plumage between the trunk outline (trunk-only SDF: without the neck-filling mantleNape, foreBreast and neck fills)
+ * and the rigid part of the head (the enlarged head ellipsoid of headness up to r 1.05 above y 89, and the face in
+ * front of the eyes): the point's distance a outside the trunk over the sum of a and its distance b outside the
+ * rigid head, so its iso-surfaces follow the trunk near the trunk and the head near the head.
  */
-export function computeSpineWeights(p, boneIndex) {
-  const d = spineDist(p);
+export function sleeveRatio(p) {
+  const a = Math.max(0, trunkSDF()(p[0], p[1], p[2]) - 1);
+  const x = p[0] / 13;
+  const y = (p[1] - 93.5) / 13;
+  const z = (p[2] - 24) / 15.5;
+  const face = smooth(30, 34, p[2]) * smooth(81, 85, p[1]);
+  const bh = Math.max(0, Math.sqrt(x * x + y * y + z * z) - 1.05) * 13 * (1 - face);
+  // (and below it, y < 89: the lower cheeks and the chin behind the bill base are sleeve too, so the neck's turn has room
+  // to spread round the throat)
+  const b = Math.max(bh, (89 - p[1]) * 0.9 * (1 - face));
+  if (a === 0) return 0;
+  return b === 0 ? 1 : a / (a + b);
+}
+const ease = (s) => s * s * (3 - 2 * s);
+// half eased: zero slope would steepen the middle of the field by 1.5× (the turn folds where it is steep round the
+// neck), none would leave a kink where the sleeve meets trunk and head
+const EASE = (h) => h + 0.5 * (ease(h) - h);
+/** Sleeve position of an isolated point (no mesh around it to smooth over): the eased ratio. */
+export const sleeveParam = (p) => ease(sleeveRatio(p));
+
+// trunk surface held at s 0: the breast below y 72, the mantle behind z −9, the shoulder under the folded wing's front
+// edge, and the scapulars' bed (|x| > 3, z < 5, y < 89: neck plumage drawn out from under the scapulars showed as a
+// bald patch when the neck stretched, and swept through them when it turned). Elsewhere a trunk-core surface within
+// 1 mm of the outline (the breast-side ellipsoids at the base of the neck) would pin single points at 0 in the middle
+// of the sleeve
+const trunkHeld = (x, y, z) => y < 72 || z < -9 || (Math.abs(x) > 15 && y < 79) || (z < 5 && y < 89 && Math.abs(x) > 3);
+
+let SLEEVE = null;
+/**
+ * The sleeve position as a harmonic field in a thin shell round the outline (1 mm grid, |SDF| < 2.2 mm — the
+ * Laplacian there is the surface Laplacian), between the rigid head (1) and the held trunk (0), half eased. A harmonic field spreads the head's turn as evenly as the surface allows: the twist about
+ * the neck shears the plumage by (turn) × ∂s/∂(angle round the neck), and where the plain ratio changed fast round
+ * the neck — behind the cheek, where the side of the head comes within a few millimetres of the shoulder — the side
+ * the head turned toward folded over itself. One field for every level of detail and for the body feathers.
+ */
+function sleeveGrid() {
+  if (SLEEVE) return SLEEVE;
+  const sdf = makeBodySDF(CFG.bodySculpt);
+  const h = 1.0;
+  const o = [-27, 57, -26];
+  const N = [Math.ceil(54 / h) + 1, Math.ceil(56 / h) + 1, Math.ceil(74 / h) + 1];
+  const id = (i, j, k) => i + N[0] * (j + N[1] * k);
+  const val = new Float32Array(N[0] * N[1] * N[2]).fill(NaN);
+  const state = new Uint8Array(val.length); // 0 outside the shell, 1 free, 2 held
+  // (the outline first on a 4× coarser grid: fine cells further than the shell from it are skipped — the sculpt's
+  // distance is ≈1-Lipschitz — a sixth of the evaluations)
+  const C = 4;
+  const NC = N.map((n) => Math.ceil((n - 1) / C) + 1);
+  const coarse = new Float32Array(NC[0] * NC[1] * NC[2]);
+  for (let k = 0; k < NC[2]; k++)
+    for (let j = 0; j < NC[1]; j++)
+      for (let i = 0; i < NC[0]; i++) coarse[i + NC[0] * (j + NC[1] * k)] = sdf(o[0] + i * C * h, o[1] + j * C * h, o[2] + k * C * h);
+  const reach = 2.2 + 1.5 * C * h;
+  for (let k = 0; k < N[2]; k++)
+    for (let j = 0; j < N[1]; j++)
+      for (let i = 0; i < N[0]; i++) {
+        const ci = Math.round(i / C);
+        const cj = Math.round(j / C);
+        const ck = Math.round(k / C);
+        if (Math.abs(coarse[Math.min(ci, NC[0] - 1) + NC[0] * (Math.min(cj, NC[1] - 1) + NC[1] * Math.min(ck, NC[2] - 1))]) > reach) continue;
+        const p = [o[0] + i * h, o[1] + j * h, o[2] + k * h];
+        if (Math.abs(sdf(p[0], p[1], p[2])) > 2.2) continue;
+        const r = sleeveRatio(p);
+        const c = id(i, j, k);
+        val[c] = r;
+        state[c] = r >= 1 || (r === 0 && trunkHeld(p[0], p[1], p[2])) || j === 0 ? 2 : 1;
+      }
+  // successive over-relaxation over the free cells (neighbour lists flattened), until no cell moves by 1e-4
+  const nb = [1, -1, N[0], -N[0], N[0] * N[1], -N[0] * N[1]];
+  const free = [];
+  for (let c = 0; c < val.length; c++) if (state[c] === 1) free.push(c);
+  const nf = free.length;
+  const start = new Int32Array(nf + 1);
+  const list = [];
+  for (let f = 0; f < nf; f++) {
+    for (const d of nb) if (state[free[f] + d]) list.push(free[f] + d);
+    start[f + 1] = list.length;
+  }
+  const L = Int32Array.from(list);
+  for (let it = 0; it < 600; it++) {
+    let moved = 0;
+    for (let f = 0; f < nf; f++) {
+      const m = start[f + 1] - start[f];
+      if (!m) continue;
+      let acc = 0;
+      for (let q = start[f]; q < start[f + 1]; q++) acc += val[L[q]];
+      const c = free[f];
+      const v = Math.min(1, Math.max(0, val[c] + 1.85 * (acc / m - val[c])));
+      moved = Math.max(moved, Math.abs(v - val[c]));
+      val[c] = v;
+    }
+    if (moved < 1e-4) break;
+  }
+  SLEEVE = { h, o, N, val, id };
+  return SLEEVE;
+}
+
+/** Sleeve position (0 trunk … 1 head) of a rest point (mm): the harmonic field, eased; the eased ratio off its grid. */
+export function sleeveAt(p) {
+  const G = sleeveGrid();
+  const f = [0, 1, 2].map((a) => (p[a] - G.o[a]) / G.h);
+  const b = f.map(Math.floor);
+  if (b.some((x, a) => x < 0 || x >= G.N[a] - 1)) return sleeveParam(p);
+  let acc = 0;
+  let wsum = 0;
+  for (let dk = 0; dk < 2; dk++)
+    for (let dj = 0; dj < 2; dj++)
+      for (let di = 0; di < 2; di++) {
+        const v = G.val[G.id(b[0] + di, b[1] + dj, b[2] + dk)];
+        if (v !== v) continue;
+        const w = (di ? f[0] - b[0] : 1 - f[0] + b[0]) * (dj ? f[1] - b[1] : 1 - f[1] + b[1]) * (dk ? f[2] - b[2] : 1 - f[2] + b[2]);
+        acc += w * v;
+        wsum += w;
+      }
+  return wsum > 1e-6 ? EASE(acc / wsum) : sleeveParam(p);
+}
+
+/**
+ * Body skinning. Trunk: tail / body / chest by distance (SPINE). Head: rigid. Between them the neck sleeve
+ * (sleeve position s, sleeveAt): hats over s on `n` sleeve helper bones evenly spaced between the trunk (s 0) and
+ * the head (s 1). The animator places each helper on a smooth curve from the neck base to the head and turns it by
+ * its share of the head's rotation (_poseSleeve), so a cross-section of the sleeve turns about its own centre and
+ * neighbouring influences never differ by more than 1/(n+1) of the head's turn: the plumage twists evenly from the
+ * breast to the head instead of shearing between bones 25 mm apart (the old chain + throat-helper weighting folded the
+ * throat into smeared creases when the head turned 70–110° and collapsed it when preening). Linear blending between
+ * neighbours stays volume preserving at these angles (≤ 30° for the 180° of preening the tail), which keeps the GLB
+ * exact.
+ */
+export function computeSpineWeights(p, boneIndex, s = sleeveAt(p)) {
+  const n = CFG.joints.sleeve.n;
+  s *= n + 1;
   const W = {};
   const add = (bone, v) => {
-    if (v > 0) W[bone] = (W[bone] ?? 0) + v;
+    if (v > 1e-4) W[bone] = (W[bone] ?? 0) + v;
   };
-  const h = headness(p);
-  const s = neckBand(p);
-  const f = throatSide(p);
-  let ts = 0;
-  SPINE.forEach((q, i) => {
-    if (TRUNK.has(q.bone)) ts += d[i];
-  });
-  const trunk = (k) =>
-    SPINE.forEach((q, i) => {
-      if (TRUNK.has(q.bone)) add(q.bone, ts > 0 ? (d[i] / ts) * k : 0);
-    });
-  // hind-neck: the band gates trunk → chain; along the chain by the position along the neck axis (neck0 → head
-  // pivot), the same all round the neck (by the band coordinate, points 3 mm apart at the side of the neck went to
-  // neck0 and neck2 and sheared into a flap behind the cheek)
-  const ua = Math.max(0, Math.min(1, (0.718 * (p[1] - 74) + 0.693 * p[2]) / 20.2));
-  // (points near the head by distance — chin, bill-base feathering, the sides of the hind-head — ride on it)
-  const dH = d[SPINE.length - 1];
-  const hf = Math.max(h, dH / (dH + ts + 1e-6));
-  const kb = (1 - f) * (1 - hf);
-  trunk(kb * (1 - s));
-  ['neck0', 'neck1', 'neck2'].forEach((bn, k) => add(bn, kb * s * Math.max(0, 1 - Math.abs(2 * ua - k))));
-  add('head', (1 - f) * hf);
-  // fore-neck: trunk → throat over the band; the head's share only by headness / distance (more of the throat on
-  // the head swung out over the shoulder as a flap when the head turned back to preen)
-  trunk(f * (1 - s) * (1 - hf));
-  add('throat', f * s * (1 - hf));
-  add('head', f * hf);
-  // the head's blend band shares with the upper neck, never straight with the chest (with the head turned back,
-  // skin half on the head and half on the chest stretched as a sheet across the shoulder and the folded wing)
-  add('neck2', Math.max(0, 1.6 * Math.min(h, 1 - h) * (1 - f) - (W.neck2 ?? 0)));
-  // outside the band (fading in across its outer half) and on the face in front of the eyes (lores, chin, bill-base
-  // feathering: rigid there, the face of the head tucked in to sleep lay on the wing coverts) as before
-  // (and on the sides of the neck base above the shoulders: on the chain they swung over the wing coverts when the
-  // head turned back to sleep or preen)
-  const g = smooth(0, 0.5, s) * (1 - smooth(31, 36, p[2])) * (1 - (1 - f) * smooth(5, 9, Math.abs(p[0])) * smooth(91, 86, p[1]));
-  if (g < 1) {
-    for (const k in W) W[k] *= g;
-    for (const [bn, v] of Object.entries(spineWeights(p))) add(bn, v * (1 - g));
-  }
+  const wt = Math.max(0, 1 - s);
+  if (wt > 0) for (const [bi, v] of trunkWeights(p, boneIndex)) add(bi, wt * v);
+  for (let k = 1; k <= n + 1; k++) add(k === n + 1 ? boneIndex.head : boneIndex[`sleeve${k}`], Math.max(0, 1 - Math.abs(s - k)));
   const order = Object.entries(W)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4);
   const sum = order.reduce((acc, [, v]) => acc + v, 0) || 1;
-  return order.map(([bn, v]) => [boneIndex[bn], v / sum]);
+  return order.map(([bi, v]) => [Number(bi), v / sum]);
 }
 
 // The sculpt is the relaxed stand, fluffing 0.15 (photos, body_shape_spec.md §12): the shaders displace by
@@ -250,13 +319,30 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
   const flow = new Float32Array(n * 3);
   const skinIndex = new Uint16Array(n * 4);
   const skinWeight = new Float32Array(n * 4);
+  const sleeve = new Float32Array(n); // sleeve position (0 trunk … 1 head): the shell shader's neck plumage
+  const sleeveG = new Float32Array(n * 3); // ∇s / |∇s|² (rest mm): the pattern lookup along the sleeve
   for (let i = 0; i < n; i++) {
     const p = [positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]];
     const nn = [normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2]];
     rest.set(p, i * 3);
     pos.set([p[0] / 1000, p[1] / 1000, p[2] / 1000], i * 3);
     flow.set(flowDirection(p, nn), i * 3);
-    const w = computeSpineWeights(p, boneIndex);
+    const sv = sleeveAt(p);
+    sleeve[i] = sv;
+    if (sv > 1e-4 && sv < 1 - 1e-4) {
+      const e = 0.4;
+      const gr = [0, 1, 2].map((k) => {
+        const a = [...p];
+        const b = [...p];
+        a[k] += e;
+        b[k] -= e;
+        return (sleeveAt(a) - sleeveAt(b)) / (2 * e);
+      });
+      const g2 = gr[0] * gr[0] + gr[1] * gr[1] + gr[2] * gr[2];
+      const f = Math.min(1 / (g2 + 1e-6), 40 / Math.sqrt(g2 + 1e-12));
+      sleeveG.set([gr[0] * f, gr[1] * f, gr[2] * f], i * 3);
+    }
+    const w = computeSpineWeights(p, boneIndex, sv);
     for (let k = 0; k < 4; k++) {
       skinIndex[i * 4 + k] = w[k] ? w[k][0] : 0;
       skinWeight[i * 4 + k] = w[k] ? w[k][1] : 0;
@@ -269,6 +355,8 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
   g.setAttribute('aFlow', new THREE.BufferAttribute(flow, 3));
   g.setAttribute('skinIndex', new THREE.BufferAttribute(skinIndex, 4));
   g.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeight, 4));
+  g.setAttribute('aSleeve', new THREE.BufferAttribute(sleeve, 1));
+  g.setAttribute('aSleeveG', new THREE.BufferAttribute(sleeveG, 3));
   g.setIndex(new THREE.BufferAttribute(n > 65535 ? indices : new Uint16Array(indices), 1));
   g.computeBoundingSphere();
   g.userData.sdf = sdf;
@@ -301,7 +389,7 @@ export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
 export function buildShellGeometry(body, n = 4) {
   const g = new THREE.BufferGeometry();
   const nv = body.getAttribute('position').count;
-  for (const name of ['position', 'normal', 'aRest', 'aFlow', 'skinIndex', 'skinWeight']) {
+  for (const name of ['position', 'normal', 'aRest', 'aFlow', 'skinIndex', 'skinWeight', 'aSleeve', 'aSleeveG']) {
     const a = body.getAttribute(name);
     const out = new a.array.constructor(a.array.length * n);
     for (let k = 0; k < n; k++) out.set(a.array, k * a.array.length);
@@ -315,7 +403,8 @@ export function buildShellGeometry(body, n = 4) {
   const R = body.getAttribute('aRest').array;
   const N = body.getAttribute('normal').array;
   const bare = new Uint8Array(nv);
-  for (let v = 0; v < nv; v++) bare[v] = shellCovered([R[v * 3], R[v * 3 + 1], R[v * 3 + 2]], [N[v * 3], N[v * 3 + 1], N[v * 3 + 2]]) ? 1 : 0;
+  const SV = body.getAttribute('aSleeve').array;
+  for (let v = 0; v < nv; v++) bare[v] = shellCovered([R[v * 3], R[v * 3 + 1], R[v * 3 + 2]], [N[v * 3], N[v * 3 + 1], N[v * 3 + 2]], SV[v]) ? 1 : 0;
   const all = body.index.array;
   const tri = [];
   // (and none from the base mesh where a face patch overlies it: doubled shells drew a ring round each patch)
@@ -334,7 +423,7 @@ export function buildShellGeometry(body, n = 4) {
 }
 
 /** Rest point where the plumage fringe has zero length (GLSL kpShellMM in KentishPloverMaterials). */
-function shellCovered(p, n) {
+function shellCovered(p, n, sleeve = 0) {
   if (p[2] < -60) return true;
   const ax = Math.abs(p[0]);
   const q = [ax - 7.6, p[1] - 95, p[2] - 25.5];
@@ -343,18 +432,6 @@ function shellCovered(p, n) {
   if (er + Math.max(0, 2 - es) < 3.6) return true;
   const z = p[2];
   const yb = z > 5 ? 60 + 3 * Math.min(1, (z - 5) / 15) : z > -25 ? 55.5 + 4.5 * ((z + 25) / 30) : 60 - 4.5 * Math.min(1, Math.max(0, (z + 55) / 30));
-  return headness(p) < 0.01 && p[1] + n[1] * 3 > yb - 1 && z < 8;
-}
-
-/** Distance-weighted spine skinning outside the neck band (the trunk, the shoulders, the sides of the neck base):
- *  every bone by its distance to its SPINE segment, the head rigid inside its ellipsoid. */
-function spineWeights(p) {
-  const w = spineDist(p);
-  const h = headness(p);
-  for (let i = 0; i < SPINE.length; i++) w[i] *= SPINE[i].bone === 'head' ? 1 : 1 - h;
-  w[SPINE.length - 1] = Math.max(w[SPINE.length - 1], h);
-  const n2 = SPINE.findIndex((s) => s.bone === 'neck2');
-  w[n2] = Math.max(w[n2], 1.6 * Math.min(h, 1 - h));
-  const sum = w.reduce((acc, v) => acc + v, 0) || 1;
-  return Object.fromEntries(SPINE.map((q, i) => [q.bone, w[i] / sum]));
+  // (neck plumage — on the sleeve — is never under the scapulars: drawn out by a stretched or turned neck it is in view)
+  return headness(p) < 0.01 && p[1] + n[1] * 3 > yb - 1 && z < 8 && sleeve < 0.04;
 }

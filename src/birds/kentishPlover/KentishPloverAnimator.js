@@ -25,6 +25,7 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _m = new THREE.Matrix4();
+const _vP = new THREE.Vector3();
 const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
 const Z = new THREE.Vector3(0, 0, 1);
@@ -50,6 +51,8 @@ const NECK_LEN = BIND.headPivot.distanceTo(BIND.neck0);
 // resting gaze pitch (rad, + = bill down): with the bind bill axis (23.6° down) the relaxed bill points 25° down
 // (photos 20–27°, body_shape_spec.md §6, §17.3)
 export const GAZE_PITCH_REST = 0.02;
+// rad: the furthest the head turns round while awake (spec §7: ±110°)
+export const GAZE_YAW_MAX = 1.92;
 
 // ---------------------------------------------------------------- contact with the plumage
 // Trunk outline without the head and the neck-filling plumage (rest space, mm) and the head's outline as sample points (head-local,
@@ -65,6 +68,10 @@ const PLUMAGE = 3.5; // mm: scapulars, lesser coverts and tertials above the out
 // plumage (mantleNape, foreBreast) is compressed when the neck retracts (walking: crown only ≈6 mm above the
 // back, photos; body_shape_spec.md §7, §12). Points clear of the trunk at rest (crown, face) get none.
 const SINK = 10;
+// m: how far the head is drawn up when it turns far round (looking behind; _poseNeckHead)
+const NECK_TURN_LIFT = 0.011;
+// how strongly a far turn of the head gathers toward the head end of the neck sleeve (_poseSleeve)
+const SLEEVE_GATHER = 1.2;
 // share of the body pitch that carries the head pivot with it (about the hip). 1: the head keeps its place on
 // the body — walking photos in the bill–tail frame match the relaxed stand (IoU 0.88), only the crown sits lower
 const HEAD_PITCH_FOLLOW = 1;
@@ -1004,7 +1011,8 @@ export class KentishPloverAnimator {
         const s = yaw >= 0 ? 1 : -1;
         yaw = wrapAngle(yaw - s * 1.15);
       }
-      g.tYaw = clamp(yaw, -2.4, 2.4);
+      // (awake the head turns up to ±110°, body_shape_spec.md §7; a target further round is seen with the lateral eye)
+      g.tYaw = clamp(yaw, -GAZE_YAW_MAX, GAZE_YAW_MAX);
       // (eyes on the prey: the bill 42° down for prey 2 m away … 58° at a bill-reach — it pointed straight down)
       g.tPitch = g.mode === 'ground' ? clamp(Math.atan2(0.05, dist) + 0.3, 0.3, 0.6) : -0.05;
     }
@@ -1050,6 +1058,14 @@ export class KentishPloverAnimator {
     else if (act?.headPos) headPos = act.headPos;
     else {
       headPos = this._restHeadPos();
+      // looking round: the neck is drawn up out of the shoulders as the head turns past ≈40° (p013, p011: the
+      // cheek clears the shoulder instead of being pressed into it; the sleeve plumage gets the length to twist over)
+      {
+        const f = _v.set(0, 0, 1).applyQuaternion(_q.copy(rootQ).invert().multiply(headQ));
+        const turn = Math.atan2(Math.abs(f.x), f.z);
+        const lift = NECK_TURN_LIFT * smoothstep(0.7, 1.95, turn);
+        headPos.addScaledVector(_v2.set(0, 1, 0).applyQuaternion(rootQ), lift);
+      }
       // blended action head (pecking): from / back to the posture's head, the bill on the action's own aim
       if (blend > 0) headPos.lerp(act.billTarget.clone().sub(BILL_FROM_HEAD.clone().applyQuaternion(act.headQ)), blend);
     }
@@ -1103,28 +1119,57 @@ export class KentishPloverAnimator {
     // jaw: opens briefly when swallowing / pulling prey
     b.jaw.quaternion.multiply(qAxis(X, act?.jaw ?? 0, _q));
     this.neckStretch = stretch;
-    this._poseThroat();
+    this._poseSleeve();
   }
 
-  /** Fore-neck helper bone (bodyMesh.computeSpineWeights): its pivot half-way between where the chest and where the
-   *  head would carry it, turned half-way from the chest to the head — the throat plumage stays full between them. */
-  _poseThroat() {
+  /**
+   * Neck sleeve helpers (bodyMesh.computeSpineWeights). Their rest points lie on the sleeve's centre line from
+   * J.sleeve.a (neck base, carried by the chest) to J.sleeve.b (head–neck junction, carried by the head). Posed, the
+   * line is a cubic Hermite curve between where the chest and the head carry those two points, leaving the trunk
+   * along its rest direction and entering the head along the head's — so the plumage arches smoothly over the
+   * shoulder when the head is turned back or tucked — and helper k (s = k / (n + 1)) sits on it at s, turned by the
+   * share s of the head's rotation relative to the chest (the same shortest-arc path as the neck chain). Every
+   * cross-section of the sleeve turns about its own centre; the twist is spread evenly from breast to head.
+   */
+  _poseSleeve() {
     const b = this.b;
-    const th = b.throat;
-    if (!th) return;
-    b.chest.updateMatrixWorld(false);
-    const pc = _v2.set(...J.throat.map((x, i) => (x - J.chest[i]) * 0.001)).applyMatrix4(b.chest.matrixWorld);
-    const ph = _v3.set(...J.throat.map((x, i) => (x - J.head[i]) * 0.001)).applyMatrix4(b.head.matrixWorld);
+    const SL = J.sleeve;
+    if (!b.sleeve1) return;
     const qc = b.chest.getWorldQuaternion(_q2);
-    const qh = b.head.getWorldQuaternion(_q4);
-    // half-way for the head bent down / up / sideways; with the head turned back over the shoulder (preening,
-    // asleep) the throat stays with the breast (half-way it lay as a flap over the shoulder and the folded wing)
-    const f = _v4.set(0, 0, 1).applyQuaternion(_qT.copy(qc).invert().multiply(qh));
-    const k = 0.5 * (1 - smoothstep(1.2, 2.1, Math.atan2(Math.abs(f.x), f.z)));
-    const qm = _q3.copy(qc).slerp(qh, k);
-    th.position.copy(pc.lerp(ph, k)).applyMatrix4(_m.copy(b.chest.matrixWorld).invert());
-    th.quaternion.copy(qc.invert()).multiply(qm);
-    th.updateMatrixWorld(true);
+    const rel = _qT.copy(qc).invert().multiply(b.head.getWorldQuaternion(_q4));
+    if (rel.w < 0) rel.set(-rel.x, -rel.y, -rel.z, -rel.w);
+    const inv = _m.copy(b.chest.matrixWorld).invert();
+    const c0 = _v.set(SL.a[0] - J.chest[0], SL.a[1] - J.chest[1], SL.a[2] - J.chest[2]).multiplyScalar(mm);
+    const c1 = _v2.set(SL.b[0] - J.head[0], SL.b[1] - J.head[1], SL.b[2] - J.head[2]).multiplyScalar(mm).applyMatrix4(b.head.matrixWorld).applyMatrix4(inv);
+    const A = _v3.set(SL.b[0] - SL.a[0], SL.b[1] - SL.a[1], SL.b[2] - SL.a[2]).multiplyScalar(mm);
+    const lam = c1.distanceTo(c0) / A.length();
+    const m0 = _v4.copy(A).multiplyScalar(lam);
+    const m1 = A.applyQuaternion(rel).multiplyScalar(lam);
+    // turned far back (preening the back, the wing or the tail, tucked asleep: 120–180°) the turn gathers toward the
+    // head: the base of the sleeve stays with the shoulders under the scapulars and the folded wing instead of
+    // sweeping a third of the way round over them
+    const A0 = Math.hypot(SL.b[0] - SL.a[0], SL.b[1] - SL.a[1], SL.b[2] - SL.a[2]) * mm;
+    let len = 0;
+    const prev = _vP.copy(c0);
+    const turn = 2 * Math.acos(Math.min(1, rel.w));
+    const gather = 1 + SLEEVE_GATHER * smoothstep(1.6, 2.8, turn);
+    for (let k = 1; k <= SL.n; k++) {
+      const t = k / (SL.n + 1);
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const h00 = 2 * t3 - 3 * t2 + 1;
+      const h10 = t3 - 2 * t2 + t;
+      const h01 = -2 * t3 + 3 * t2;
+      const h11 = t3 - t2;
+      const bone = b[`sleeve${k}`];
+      bone.position.set(0, 0, 0).addScaledVector(c0, h00).addScaledVector(m0, h10).addScaledVector(c1, h01).addScaledVector(m1, h11);
+      bone.quaternion.identity().slerp(rel, Math.pow(t, gather));
+      bone.updateMatrixWorld(true);
+      len += bone.position.distanceTo(prev);
+      prev.copy(bone.position);
+    }
+    // stretch of the sleeve (its centre line, posed over rest): the body shader keeps the plumage pattern's ends
+    this.model.setSleeveStretch?.((len + c1.distanceTo(prev)) / A0);
   }
 
   /** Head pivot (world) the posture and gaze ask for: relative to the ROOT, not the bobbing body (head stabilisation). */
