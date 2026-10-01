@@ -6,6 +6,8 @@
 
 **出典タグ**: `[spec05 §5.1.2]`=本仕様書の他章。`[aud-A R5, R]`=threejs_audit_a の項目(S=ソース確認、R/H=ヘッドレス実行、T=Node 実行、K=一般知識、U=未確認)。`[aud-C §1.1-5, T]`=aud-C(aud-C は 01 章作成時点では欠落していたが、現在は `research/threejs_audit_c_assets_toolchain.md` として存在する)。`[E: 理由]`=資料の裏付けが無い設計値。`PROXY:種名`=他種の値。
 
+**体長基準の規約(全章共通)**: 体長は **SL(標準体長)を基準**とし、BL≡SL(m)。基準個体は SL=0.19 m(FL=0.211 m)。換算は FL=1.109·SL、TL=1.148·SL [spec02 §2.1, P: n=10 / 05 の TL 換算]。FL や TL で書かれた式・閾値は、この換算を挟んで SL に直してから使う(03 §3.1.5 の FL_cm 退色、04 §4.6.6 の縄張り式、V-C08 など)。05 §5.8 の `(SL/0.20)` の 0.20 m は**式の基準長 `SL_ref`** で、基準個体の SL=0.19 m とは別の定数である(05 側で別名にするか 0.19 へ再計算する) [章間レビュー A-01, A-02]。
+
 **最重要の限界**: 監査は全て **CPU ラスタライザ(SwiftShader)上**で行われ、GPU 実機の性能・見た目・KTX2 変換先・WebGPU 実機は未測定である [aud-D §4, aud-C §4, aud-A U1]。ms の値は相対比にのみ使う。本章の「予算」はすべて [E] で、7.8 の実機計測で置き換える前提である。
 
 **バージョン固定**
@@ -26,7 +28,7 @@
 |---|---|---|
 | 第一ターゲット | PC ブラウザ(Chromium 系)、WebGL2 | [E: 利用者要件] |
 | 本線レンダラー | `WebGLRenderer` + `MeshPhysicalMaterial`。WebGL1 は不要(r163 で廃止) | [aud-A R1, S] |
-| 並走検証 | `WebGPURenderer` + TSL。WebGPU 不可環境では WebGL2 バックエンドへ自動降格し、`MeshPhysicalMaterial` は `MeshPhysicalNodeMaterial` に自動置換される。降格後のスキン変形・iridescence・transmission は動作し、スキン変形の画素数は WebGLRenderer と完全一致(420→393 px) | [aud-A R1(c), R] |
+| 並走検証 | `WebGPURenderer` + TSL。WebGPU 不可環境では WebGL2 バックエンドへ自動降格し、`MeshPhysicalMaterial` は `MeshPhysicalNodeMaterial` に自動置換される。降格後のスキン変形・iridescence・transmission は動作し、スキン変形の画素数は WebGLRenderer と完全一致(420→393 px)。**いずれも玩具モデル(骨 3・頂点 236)の PoC の結果**で、62 骨・数千〜万頂点の実モデルでは未検証 | [aud-A R1(c), R] |
 | WebGPU を本線にしない理由 | `onBeforeCompile`/`ShaderChunk` 差し替えは WebGLRenderer 専用で、WebGPURenderer(降格後も)では `onBeforeCompile` が一度も呼ばれなかった。実 WebGPU アダプタでの動作・速度は未検証 | [aud-A R1(a), R; U1] |
 | WebGPU 移行の判断基準 | ①compute で頂点アニメを GPU 化したい、②パッチでは書けない大きさの自前 BRDF が要る、③変形を影に自動反映したい、のいずれかが必須になったとき。それまでは WebGL に留まる | [aud-A R1(e), S] |
 | GLSL パッチの書き方 | 機能単位の小関数に分け、後で TSL へ機械的に移せる形にする。`customProgramCacheKey()` を必ず上書き | [aud-A R1(b), R6, R] |
@@ -129,7 +131,7 @@ function frame(ts) {
 | 制約 | 内容 | 根拠 |
 |---|---|---|
 | Blender 無し | 手続き生成+glTF-Transform の `Document`/`NodeIO` で GLB を書く。DCC 経由の手作業を前提にしない | [aud-C §1.1-1, T] |
-| Node のみで完結 | 「手続き的ロフト → スキンウェイト → モーフ → テクスチャ → GLB → ブラウザ読込」が Node.js だけで動いた。PoC は三角形 384・頂点 236・骨 3・モーフ 1・PBR(clearcoat+iridescence+ior+specular+texture_transform)・テクスチャ 3 枚で **22 変種**を作り全て r186 `GLTFLoader` で読み込めた。変形は glTF 仕様の CPU 計算と 0.000 mm 差(float) | [aud-C §1.1-1, T] |
+| Node のみで完結 | 「手続き的ロフト → スキンウェイト → モーフ → テクスチャ → GLB → ブラウザ読込」が Node.js だけで動いた。PoC は三角形 384・頂点 236・骨 3・モーフ 1・PBR(clearcoat+iridescence+ior+specular+texture_transform)・テクスチャ 3 枚で **22 変種**を作り全て r186 `GLTFLoader` で読み込めた。変形は glTF 仕様の CPU 計算と 0.000 mm 差(float)。**これらは玩具モデルの PoC の結果**で、実モデルの値ではない | [aud-C §1.1-1, T] |
 | **規模は未検証** | PoC は骨 3・頂点 236。本モデルの 62 骨・数千〜万頂点・2K テクスチャでのエンコード時間と変形誤差は**未測定** | [aud-C §4] |
 | KTX2 | 公式 KTX-Software の取得経路はサンドボックスで遮断(npm レジストリのみ到達)。npm 経由で作れる (A) `ktx2tools@1.1.0`(**非公式**再パッケージ、KTX-Software 4.4.0 の `ktx`/`toktx` Linux バイナリ同梱、macOS 無し)+`gltf-transform etc1s/uastc`、または (B) `ktx2-encoder@0.6.0`(WASM、プロセス内)。いずれもハッシュ固定、`--ignore-scripts` で導入して内容確認 | [aud-C §1.1-2, §2.9, §3-17, T] |
 | gltfpack | npm 版 1.3.0 は **BasisU 無しでビルド**されておりテクスチャ圧縮(`-tc`)不可。メッシュ圧縮のみ。本線にしない | [aud-C §1.1-10, T] |
@@ -193,7 +195,7 @@ glTF にはノード木とは別に最上位配列(`materials`、`animations`、
 | `Eyes` | 眼球・虹彩・角膜の非スキンメッシュ。**眼ボーン(`eye_L`, `eye_R`)の子ノード**(眼の回転にボーンが追従する) | `Eye_L`, `Eye_R` |
 | `Skeleton` | 62 ボーンのノード木。ルート `fish_root` は `Yamame` の子で、`SkinnedMesh` の兄弟 | [spec05 §5.1.2 の名称: `fish_root`, `spine_00..23`, `jaw_lower`, `maxilla_L/R`, `hyoid`, `opercle_L/R`, `eye_L/R`, `pectoral_*`, `pelvic_*`, `dorsal_*`, `anal_*`, `adipose_01/02`, `caudal_hub`, `caudal_ray_*`] |
 | `Materials` | 最上位 `materials[]`: `M_Body`, `M_Fin`, `M_Eye_Iris`, `M_Eye_Cornea`, `M_Mouth` | |
-| `Animations` | 最上位 `animations[]`: 副ボーンの additive 用クリップ(2〜4 s ループ): `fin_flutter`, `pec_scull`, `cough` 等。**脊椎にはトラックを置かない** | [spec05 §5.7.1] |
+| `Animations` | 最上位 `animations[]`: 副ボーンの additive 用クリップ(2〜4 s ループ): `fin_flutter`, `pec_scull`, `cough` 等。**脊椎にはトラックを置かない**。05 §5.3.1 の必須アニメ 12 種(Idle〜ReturnToPosition)は**手続きモード**(`Locomotion` が骨とモーフを毎フレーム計算する)であり AnimationClip ではない。GLB に入れるクリップは副ボーン用のみ | [spec05 §5.7.1, §5.3.1] |
 
 - 論理区分は `extras.groups = {Body:[…], Fins:[…], Eyes:[…], Skeleton:[…]}` に名前で列挙し、ランタイムは `getObjectByName` ではなく `extras` から引く。gltfpack 系の最適化はメッシュ名を `mesh_0` に変え子ノードを挟むため、名前探索が壊れる [aud-C §3-10]。
 - 休止姿勢は**恒等回転**、軸規約は +X=前、+Y=背、+Z=右 [spec05 §0]。書き出し側の骨が非恒等の休止回転を持つ場合は `restQ` を保存して `restQ ⊗ 値` で書く(ポップ防止) [aud-B §3-19]。
