@@ -15,15 +15,17 @@
 import { monotoneCubic, smoothstep, clamp, lerp } from '../core/math.js';
 
 // --- Lateral (side view) profiles --------------------------------------------
+// The snout (s < 0.07) is blunt and rounded: the profile rises steeply right
+// behind the lips and the forehead is convex (p12_0, p42_1), not a wedge.
 // Dorsal profile (height of the back above the axis)
 const DORSAL_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.15, 0.23, 0.31, 0.385, 0.44, 0.52, 0.62, 0.73, 0.84, 0.93, 1.0, 1.04];
-const DORSAL_Y = [0.012, 0.029, 0.05, 0.074, 0.1, 0.123, 0.161, 0.194, 0.214, 0.221, 0.214, 0.186, 0.142, 0.1, 0.074, 0.066, 0.068];
+const DORSAL_Y = [0.012, 0.034, 0.058, 0.081, 0.1, 0.123, 0.161, 0.194, 0.214, 0.221, 0.214, 0.186, 0.142, 0.1, 0.074, 0.066, 0.068];
 // Ventral profile (negative = below axis)
 const VENTRAL_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.15, 0.21, 0.31, 0.41, 0.5, 0.6, 0.69, 0.76, 0.85, 0.92, 0.965, 1.0, 1.04];
-const VENTRAL_Y = [-0.011, -0.026, -0.043, -0.059, -0.075, -0.089, -0.106, -0.133, -0.149, -0.155, -0.148, -0.124, -0.103, -0.073, -0.057, -0.056, -0.061, -0.066];
+const VENTRAL_Y = [-0.011, -0.03, -0.049, -0.064, -0.077, -0.089, -0.106, -0.133, -0.149, -0.155, -0.148, -0.124, -0.103, -0.073, -0.057, -0.056, -0.061, -0.066];
 // Half body width (dorsal view)
 const WIDTH_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.16, 0.22, 0.29, 0.36, 0.45, 0.55, 0.65, 0.75, 0.85, 0.93, 1.0, 1.02, 1.04];
-const WIDTH_Z = [0.012, 0.022, 0.036, 0.05, 0.064, 0.077, 0.088, 0.097, 0.1, 0.097, 0.089, 0.075, 0.057, 0.038, 0.026, 0.018, 0.011, 0.003];
+const WIDTH_Z = [0.012, 0.027, 0.042, 0.055, 0.066, 0.077, 0.088, 0.097, 0.1, 0.097, 0.089, 0.075, 0.057, 0.038, 0.026, 0.018, 0.011, 0.003];
 // Vertical position of the widest level (-1 = ventral edge, +1 = dorsal edge)
 const WMAX_S = [0.0, 0.1, 0.3, 0.5, 0.75, 1.0];
 const WMAX_Y = [0.0, -0.08, -0.2, -0.24, -0.12, 0.0];
@@ -54,7 +56,7 @@ export const head = {
   mouthOpenRW: 0.019, // open gape half-width (rounded rectangle)
   mouthOpenTop: 0.012, // upper lip above the mouth line when open
   mouthOpenBot: 0.025, // lower lip below it (the jaw drops)
-  mouthClosedRW: 0.022,
+  mouthClosedRW: 0.026, // broad, rounded terminal mouth (not a pinched slit)
   mouthClosedRH: 0.0022,
   mouthProtrusion: 0.012, // premaxillary protrusion (separate morph)
   mouthDepth: 0.075, // depth of the buccal cavity into the head
@@ -133,18 +135,66 @@ function rayProfile(n, fn) {
   return rays;
 }
 
-/** Comet caudal fin ray length as a function of ray position r (0 dorsal .. 1 ventral). */
+/** Caudal ray direction (radians from the backward axis) at d = |r - 0.5| * 2. */
+export function caudalRayAngle(d) {
+  const proc = smoothstep(0.78, 1.0, d);
+  return 0.5 * Math.pow(d, 0.85) + 0.12 * proc;
+}
+
+/** Caudal ray base [s, |y|] on the hypural plate / peduncle margin. */
+export function caudalRayBase(d) {
+  // procurrent rays creep forward along the peduncle margin
+  const proc = smoothstep(0.78, 1.0, d);
+  return [1.0 - 0.075 * proc, 0.062 * Math.min(1, d / 0.8) + 0.004 * proc];
+}
+
+const smin = (a, b, k) => {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+};
+
+/**
+ * Comet caudal fin ray length as a function of ray position r (0 dorsal ..
+ * 1 ventral). Each lobe is a long ribbon (p40_1, p42_0): the central rays
+ * form a deep, round-bottomed fork whose inner margin runs almost parallel to
+ * the leading edge; the lobe ends in a broad, obliquely truncated, rounded
+ * end formed by the tips of many nearly equally long rays, and the leading
+ * edge (outermost principal ray) drops into the short procurrent rays.
+ * Lengths are solved in the nominal rest pose (caudal spread 0.9).
+ */
 export function caudalRayLength(r, lobe = 0.72, fork = 0.23) {
   const d = Math.abs(r - 0.5) * 2; // 0 at fork .. 1 at outer procurrent ray
-  const tip = 0.8; // position of the longest (lobe-tip) ray
-  if (d <= tip) {
-    const t = d / tip;
-    // inner (fork) margin almost straight -> slightly concave
-    return fork + (lobe - fork) * Math.pow(t, 1.25);
-  }
-  const t = (d - tip) / (1 - tip);
-  // outer margin: rays shorten rapidly into the short procurrent rays
-  return lobe * (1 - 0.97 * Math.pow(t, 0.7)) + 0.01;
+  const tip = 0.8; // outermost principal ray (leading edge, longest)
+  const spread = 0.9;
+  const kIn = 0.25; // rounding of the inner corner of the lobe end
+  const kOut = 0.14; // rounding of the leading-edge corner
+  const kFork = 0.06; // rounding of the fork notch
+  const L = lobe + kOut * 0.25;
+  // inner margin: a line through the fork point, opening slightly less than
+  // the leading edge so the lobe widens a little toward its end
+  const [s0, y0] = caudalRayBase(d);
+  const th = caudalRayAngle(d) * spread;
+  const thl = caudalRayAngle(tip) * spread - 0.06;
+  const dx = -Math.cos(th);
+  const dy = Math.sin(th);
+  const tx = -Math.cos(thl);
+  const ty = Math.sin(thl);
+  const den = dx * ty - dy * tx; // < 0 while the ray opens less than the margin
+  const num = (-1 - fork + s0) * ty + y0 * tx;
+  let inner = den < -1e-5 ? num / den : 1e3;
+  if (inner < 0) inner = 1e3;
+  // the margin bows slightly: the lobe broadens toward its end (paddle)
+  inner *= 1 + Math.pow(Math.max(Math.min(inner, 2) - fork, 0), 2);
+  // round-bottomed notch
+  const hf = Math.max(kFork - Math.abs(inner - fork), 0) / kFork;
+  inner = Math.max(inner, fork) + hf * hf * kFork * 0.25;
+  // lobe end: oblique (leading edge longest) and rounded
+  const e = Math.max(d / tip, 0.3);
+  const end = L * (1 - 0.2 * (1 - e) - 0.8 * (e - 0.75) * (e - 0.75));
+  // outer margin, extended past the tip so the margins can be blended
+  const u = (d - tip) / (1 - tip);
+  const outer = u >= 0 ? L * (1 - 0.97 * u) + 0.01 : L * (1 - 3.0 * u);
+  return smin(smin(inner, end, kIn), outer, kOut);
 }
 
 export function buildFinDefs(variation = {}) {
@@ -159,11 +209,9 @@ export function buildFinDefs(variation = {}) {
   const caudalRays = rayProfile(29, (r) => {
     const d = Math.abs(r - 0.5) * 2;
     const sgn = r < 0.5 ? 1 : -1;
-    // procurrent rays creep forward along the peduncle margin
-    const proc = smoothstep(0.78, 1.0, d);
-    const s = 1.0 - 0.075 * proc;
-    const yBase = sgn * (0.062 * Math.min(1, d / 0.8) + 0.004 * proc);
-    const angle = sgn * (0.42 * Math.pow(d, 0.9) + 0.12 * proc); // radians from -x axis
+    const [s, yb] = caudalRayBase(d);
+    const yBase = sgn * yb;
+    const angle = sgn * caudalRayAngle(d); // radians from -x axis
     return { s, y: yBase, z: 0, angle, length: caudalRayLength(r, lobe, fork), r };
   });
 
@@ -180,13 +228,14 @@ export function buildFinDefs(variation = {}) {
   // ANAL — 3 unbranched + 6 branched (single fin in the comet)
   const analRays = rayProfile(9, (r, i) => {
     const s = lerp(0.742, 0.83, r);
-    const lens = [0.05, 0.12, 0.2, 0.22, 0.205, 0.18, 0.15, 0.12, 0.09];
+    const lens = [0.05, 0.12, 0.2, 0.225, 0.215, 0.195, 0.17, 0.14, 0.11]; // rounded margin
     return { s, y: profile.bot(s) + 0.003, z: 0, angle: lerp(0.92, 0.55, r), length: lens[i] * (analL / 0.2), r };
   });
 
   // PECTORAL — 16 rays, leading edge ray thick
   const pectoralRays = rayProfile(16, (r, i) => {
-    const lens = [0.24, 0.26, 0.26, 0.25, 0.235, 0.215, 0.195, 0.175, 0.155, 0.135, 0.12, 0.105, 0.09, 0.08, 0.07, 0.06];
+    // rounded paddle: rays 2-5 longest, the margin convex toward the short trailing rays
+    const lens = [0.23, 0.26, 0.265, 0.262, 0.255, 0.244, 0.23, 0.213, 0.194, 0.173, 0.152, 0.131, 0.111, 0.093, 0.077, 0.063];
     // base is an oblique line (leading ray dorsal-anterior, trailing ray ventral-posterior)
     return {
       s: head.pectoralS + 0.028 * r,
@@ -199,13 +248,13 @@ export function buildFinDefs(variation = {}) {
 
   // PELVIC — 9 rays
   const pelvicRays = rayProfile(9, (r, i) => {
-    // pointed pelvic fan: 2nd ray longest, rapidly shorter posteriorly
-    const lens = [0.29, 0.33, 0.29, 0.24, 0.195, 0.16, 0.13, 0.105, 0.085];
+    // pelvic fan: 2nd ray longest, the margin slightly convex posteriorly
+    const lens = [0.29, 0.33, 0.315, 0.285, 0.248, 0.21, 0.175, 0.142, 0.112];
     return { s: 0.465 + 0.025 * r, y: 0, angle: lerp(0.0, 0.58, r), length: lens[i] * (pelvL / 0.33), r };
   });
 
   return {
-    caudal: { rays: caudalRays, chains: [0, 0.1, 0.24, 0.38, 0.5, 0.62, 0.76, 0.9, 1.0], nodes: 10 },
+    caudal: { rays: caudalRays, chains: [0, 0.1, 0.22, 0.34, 0.5, 0.66, 0.78, 0.9, 1.0], nodes: 10 },
     dorsal: { rays: dorsalRays, chains: [0, 0.16, 0.4, 0.7, 1.0], nodes: 7 },
     anal: { rays: analRays, chains: [0, 0.35, 0.65, 1.0], nodes: 6 },
     pectoral: { rays: pectoralRays, chains: [0, 0.33, 0.66, 1.0], nodes: 7 },

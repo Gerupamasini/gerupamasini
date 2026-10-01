@@ -11,6 +11,12 @@
 //   aFinIdx   = (texelBase, nChains, nNodes, finType)
 //   aFinCoord = (chainCoord, t, layer ±1, thickness [SL])
 //   aFinRay   = (rayCoord, rayCount, rNorm, leading-edge weight)
+//   aFinLen   = true ray length / length of the chain interpolated at this
+//               column: the GPU samples the interpolated chain at t * aFinLen
+//               (extrapolating along its last segment), so the fin outline
+//               follows the real per-ray lengths between the few simulated
+//               chains (curved margins, forked / rounded lobes) instead of
+//               straight spans from chain tip to chain tip
 
 import * as THREE from 'three';
 import { clamp } from '../core/math.js';
@@ -23,6 +29,37 @@ function chainCoordForR(r, chains) {
     }
   }
   return chains.length - 1;
+}
+
+/** Ray length at fin position r (linear between the defined rays, as the rig does). */
+function rayLengthAt(rays, r) {
+  for (let i = 0; i < rays.length - 1; i++) {
+    const a = rays[i];
+    const b = rays[i + 1];
+    if (r <= b.r + 1e-9) {
+      const f = clamp((r - a.r) / Math.max(1e-9, b.r - a.r), 0, 1);
+      return a.length + (b.length - a.length) * f;
+    }
+  }
+  return rays[rays.length - 1].length;
+}
+
+const cr1 = (p0, p1, p2, p3, t) => {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+};
+
+/** Chain length interpolated across chains exactly like finPoint() on the GPU. */
+function chainLengthAt(lens, c) {
+  const n = lens.length;
+  const j = clamp(Math.floor(c), 0, n - 2);
+  const f = clamp(c - j, 0, 1);
+  const l1 = lens[j];
+  const l2 = lens[j + 1];
+  const l0 = j > 0 ? lens[j - 1] : 2 * l1 - l2;
+  const l3 = j + 2 < n ? lens[j + 2] : 2 * l2 - l1;
+  return cr1(l0, l1, l2, l3, f);
 }
 
 const T_SEG = { 0: 30, 1: 14, 2: 10, 3: 14, 4: 12 };
@@ -38,6 +75,7 @@ export function buildFinGeometry(layout, quality = 1) {
   const idxA = [];
   const coordA = [];
   const rayA = [];
+  const lenA = [];
   const indices = [];
   let vcount = 0;
 
@@ -65,6 +103,13 @@ export function buildFinGeometry(layout, quality = 1) {
     }
     const NCOL = cols.length;
     const NROW = tSeg + 1;
+    // per-column length ratio (rest proportions; per-fish variation scales
+    // whole fins, so the ratio is a shape property shared by all fish)
+    const chainLens = def.chains.map((r) => rayLengthAt(rays, r));
+    for (const col of cols) {
+      col.c = chainCoordForR(col.r, def.chains);
+      col.lenRatio = clamp(rayLengthAt(rays, col.r) / Math.max(1e-4, chainLengthAt(chainLens, col.c)), 0.25, 3);
+    }
 
     const thicknessOf = (col, t) => {
       // fleshy base, thin distal membrane; rays add a tapered ridge
@@ -82,8 +127,9 @@ export function buildFinGeometry(layout, quality = 1) {
         for (let c = 0; c < NCOL; c++) {
           const col = cols[c];
           idxA.push(fin.base, fin.nChains, fin.nNodes, type);
-          coordA.push(chainCoordForR(col.r, def.chains), t, layer, thicknessOf(col, t));
+          coordA.push(col.c, t, layer, thicknessOf(col, t));
           rayA.push(col.rayCoord, nRays, col.r, col.lead);
+          lenA.push(col.lenRatio);
           vcount++;
         }
       }
@@ -125,6 +171,7 @@ export function buildFinGeometry(layout, quality = 1) {
   g.setAttribute('aFinIdx', new THREE.BufferAttribute(new Float32Array(idxA), 4));
   g.setAttribute('aFinCoord', new THREE.BufferAttribute(new Float32Array(coordA), 4));
   g.setAttribute('aFinRay', new THREE.BufferAttribute(new Float32Array(rayA), 4));
+  g.setAttribute('aFinLen', new THREE.BufferAttribute(new Float32Array(lenA), 1));
   g.setIndex(vcount > 65535 ? new THREE.Uint32BufferAttribute(indices, 1) : new THREE.Uint16BufferAttribute(indices, 1));
   return g;
 }

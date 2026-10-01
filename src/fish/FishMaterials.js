@@ -26,7 +26,7 @@ import {
   finFragmentOutput,
   finDebugHelpers,
 } from './shaders/fin.glsl.js';
-import { eyeVertexPars, eyeVertexMain, eyeFragmentPars } from './shaders/eye.glsl.js';
+import { eyeVertexPars, eyeVertexMain, eyeFragmentPars, eyeFragmentNormal } from './shaders/eye.glsl.js';
 
 function mustReplace(src, find, repl, label) {
   if (!src.includes(find)) throw new Error(`[FishMaterials] shader chunk not found (${label}): ${find}`);
@@ -45,8 +45,8 @@ export function createBodyMaterial(layout, { lod = 0 } = {}) {
     color: 0xffffff,
     roughness: 0.35,
     metalness: 0.0,
-    clearcoat: 0.22, // thin mucus film: nearly index-matched to water, so weak
-    clearcoatRoughness: 0.12,
+    // no clearcoat: the mucus film is index-matched to the surrounding water
+    // (reflectance ~1e-4), so there is no separate lacquer highlight
     iridescence: 1.0,
     iridescenceIOR: 1.8, // guanine platelets n ≈ 1.83
     iridescenceThicknessRange: [250, 520],
@@ -177,8 +177,10 @@ export function createEyeMaterial() {
     color: 0xffffff,
     roughness: 0.2,
     metalness: 0.0,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.035, // cornea
+    // cornea: immersed, so it reflects only faintly, but it is optically
+    // smooth — a small crisp highlight and a faint window reflection
+    clearcoat: 0.45,
+    clearcoatRoughness: 0.03,
     specularIntensity: 1.0,
   });
   m.onBeforeCompile = (shader) => {
@@ -192,6 +194,7 @@ export function createEyeMaterial() {
     fs = mustReplace(fs, '#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = eyeColor();', 'color');
     fs = mustReplace(fs, '#include <roughnessmap_fragment>', 'float roughnessFactor = gEyeRough;', 'rough');
     fs = mustReplace(fs, '#include <metalnessmap_fragment>', 'float metalnessFactor = gEyeMetal;', 'metal');
+    fs = mustReplace(fs, '#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + eyeFragmentNormal, 'normal');
     fs = mustReplace(fs, '#include <opaque_fragment>', 'outgoingLight = waterAttenuate(outgoingLight, vEyeWorld);\n#include <opaque_fragment>', 'opaque');
     shader.fragmentShader = fs;
   };
