@@ -2,7 +2,7 @@
 // default gaze pitch) and writes its posed triangles (mm, bird-local) without legs and feet, plus the
 // landmarks the Frame-A transform needs, for tools/dev/fitcheck.py to rasterise and score against the photo
 // median silhouettes. The photo data is not part of the repository: fitcheck.py reads it from a path.
-// usage: node tools/dev/fitcheck.mjs [out.json] [pose=stand] [t=0.25] [lod=0|1|2|3] [landmarks=lod0.json]
+// usage: node tools/dev/fitcheck.mjs [out.json] [pose=stand] [t=0.25] [gaze=0.02] [lod=0|1|2|3] [landmarks=lod0.json]
 //   lod 1/2: that detail level posed the same way; lod 3: the far impostor (one static stand, KentishPloverLOD);
 //   landmarks: take bill tip / tail tip (the Frame-A scale) from an LOD0 export, so all levels share one frame
 import * as THREE from 'three';
@@ -24,7 +24,9 @@ const LOD = Number(opt.lod ?? 0);
 const m = new KentishPloverModel({ lods: [Math.min(LOD, 2)], shadows: false });
 const a = new KentishPloverAnimator(m, { seed: 1 });
 // §19.1: head straight ahead, bill at its rest angle — no saccade during the settle / the simulated strides
-Object.assign(a.gaze, { yaw: 0, tYaw: 0, roll: 0, tRoll: 0, pitch: GAZE_PITCH_REST, tPitch: GAZE_PITCH_REST, timer: 1e9, mode: 'idle' });
+// gaze=<rad>: another head pitch (searching birds look down: forage scan 0.4–0.95 in the animator)
+const gp = Number(opt.gaze ?? GAZE_PITCH_REST);
+Object.assign(a.gaze, { yaw: 0, tYaw: 0, roll: 0, tRoll: 0, pitch: gp, tPitch: gp, timer: 1e9, mode: 'idle' });
 a.previewAction(pose, Number(opt.t ?? 0.25));
 m.object.updateMatrixWorld(true);
 
