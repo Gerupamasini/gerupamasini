@@ -16,7 +16,7 @@
 //   poke     body surface visible in front of an exposed feather that should cover it: a body vertex whose
 //            inward normal ray hits exposed feather surface within 2.5 mm while its outward ray (15 mm)
 //            hits no feather at all (depth = distance to the feather behind it)
-//   fin      a tertial / scapular tip more than FIN mm straight above the body: stands up like a fin off the back
+//   fin      a tertial / scapular tip more than FIN (10) mm straight above the body: stands up like a fin off the back
 //            (clear of the body, so the measures above do not see it)
 //   neck     the same two measures where the covering body surface is neck/head plumage (moved > 0.5 mm by
 //            the neck bones relative to the chest): the neck lying on the scapulars / shoulder when it bends
@@ -50,7 +50,9 @@ const limitsFor = (lod) => {
 };
 let LIM = limitsFor(0);
 const EPS = 0.02; // mm: inside/outside hysteresis
-const FIN = 8; // mm: a tertial / scapular tip further than this straight above the body stands up as a fin
+const FIN = 10; // mm: a tertial / scapular tip further than this straight above the body stands up as a fin
+// (the fluffed shake lifts the front scapulars ≈8 mm; the fins in flight stood 20–40 mm). At LOD1 / LOD2 plus the
+// LOD's reentry tolerance: their coarser body lies up to a couple of millimetres lower under the feathers
 const TNAME = Object.fromEntries(Object.entries(FEATHER_TYPE).map(([k, v]) => [v, k]));
 const WINGISH = new Set(['primary', 'secondary', 'tertial', 'primaryCovert', 'greaterCovert', 'medianCovert', 'lesserCovert', 'alula', 'arm']);
 
@@ -485,7 +487,9 @@ function measure(model, S, anim) {
             if (inside && emerged && insideAfter > 0) { lineDip = Math.max(lineDip, depth); lineVisDip = Math.max(lineVisDip, visDepth); }
             // a folded-wing feather coming out of the plumage on the underside (belly / lower breast), or a
             // feather coming out through the far-side flank (it went through the body)
-            if (inside && folded && WINGISH.has(I.type) && sdN[1] < -0.7) (pend ??= {}).under = { at: p.map((x) => +x.toFixed(1)), n: sdN.map((x) => +x.toFixed(2)) };
+            // (not where that surface is the head / neck plumage lying over the wing — the chin over the tertials when
+            // preening the tail: reported as neck, like cross below)
+            if (inside && folded && WINGISH.has(I.type) && sdN[1] < -0.7 && !sdNeck) (pend ??= {}).under = { at: p.map((x) => +x.toFixed(1)), n: sdN.map((x) => +x.toFixed(2)) };
             // (not where the surface it comes out of is neck plumage lying over it — the neck turned back over the
             // scapulars when preening the far wing: two plumage regions in contact, reported as neck)
             if (inside && folded && I.type !== 'rectrix' && sdN[0] * I.side < -0.5 && !sdNeck) (pend ??= {}).cross = true;
@@ -612,7 +616,7 @@ for (const d of LODS) {
     const neck = Math.max(m.pokeNeck, ...m.feathers.map((r) => r.neck));
     const fin = m.feathers.reduce((a, r) => (r.fin > a.fin ? r : a), { fin: 0, name: '-' });
     // (not in the wing stretch: both wings are raised straight up over the back and the tertials go up with them)
-    const bad = w.vis > LIM.reentry || dips || cross || under || m.poke > LIM.poke || (fin.fin > FIN && P[0] !== 'wingStretch');
+    const bad = w.vis > LIM.reentry || dips || cross || under || m.poke > LIM.poke || (fin.fin > FIN + LIM.reentry && P[0] !== 'wingStretch');
     if (bad) fail++;
     const name = poseName(P);
     console.log(`${bad ? '✗' : ' '} ${name.padEnd(21)} ${m.fluff.toFixed(2).padStart(5)} | ${w.vis.toFixed(2).padStart(6)}  ${w.name.padEnd(18)} | ${String(dips).padStart(5)} ${String(cross).padStart(5)} ${String(under).padStart(5)} | ${m.poke.toFixed(2).padStart(5)}  ${(m.pokeName || '-').padEnd(16)} ${String(m.pokeN).padStart(4)} | ${neck.toFixed(2)} | ${fin.fin.toFixed(1).padStart(4)} ${fin.fin > 0 ? fin.name.padEnd(8) : '-'.padEnd(8)} | (${wa.reentry.toFixed(2)} ${wa.name}; ${buried})`);

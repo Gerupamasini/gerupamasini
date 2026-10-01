@@ -75,13 +75,14 @@ export const FLUFF_REST = 0.15;
  * Where the body shader displaces the outline along its normal (rest position and normal, mm): [fluff
  * displacement (mm per unit of fluff), breathing mask]. Same expressions as the body vertex shader
  * (KentishPloverMaterials.createBodyMaterial, kpFluffMM); the plumage lying on the body uses them to rise and
- * fall with it. Per unit of fluff the lower outline drops 7 mm, the top rises 2.2 mm and each side 2.5 mm; the
- * head, the throat (z > 15) and the rear (z < −25) fluff less. With the rest postures at fluff 1.35 this matches
+ * fall with it. Per unit of fluff the lower outline drops 7 mm, the back rises 2.2 mm (4 mm over the shoulders,
+ * z > 5, where the folded wing's coverts are tucked under it) and each side 2.5 mm; the head, the throat (z > 15)
+ * and the rear (z < −25) fluff less. With the rest postures at fluff 1.35 this matches
  * the fluffed / restSit photo medians (Frame-A IoU 0.878 / 0.877, profile 10/17 and 9/17; the earlier 4 mm top and
  * flat front / rear at fluff 0.8–0.9 gave 0.846 / 0.857 and 5/17, 3/17 with the belly 0.03 L too shallow).
  */
 export function bodyDisplacementMasks(p, n = [0, 1, 0]) {
-  const fluff = (2.5 + 4.5 * smooth(-0.2, -0.9, n[1]) - 0.3 * smooth(0.2, 0.9, n[1])) * (1 - 0.7 * headness(p)) * (1 - 0.8 * smooth(-25, -55, p[2])) * (1 - 0.6 * smooth(15, 30, p[2]));
+  const fluff = (2.5 + 4.5 * smooth(-0.2, -0.9, n[1]) + (1.5 - 1.8 * smooth(5, -5, p[2])) * smooth(0.2, 0.9, n[1])) * (1 - 0.7 * headness(p)) * (1 - 0.8 * smooth(-25, -55, p[2])) * (1 - 0.6 * smooth(15, 30, p[2]));
   // chest and flanks (breast front at z 35, neck base at y ≈ 80 in the relaxed bind)
   const breath = smooth(-40, -15, p[2]) * (1 - smooth(18, 30, p[2])) * (1 - smooth(76, 84, p[1]));
   return [fluff, breath, napeMask(p, n)];

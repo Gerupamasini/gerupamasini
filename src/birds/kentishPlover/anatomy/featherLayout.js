@@ -44,9 +44,9 @@ export function buildWingLayout() {
   const STACK = 0.11; // mm per layer
 
   // Primaries
-  // p1..p10: fanned 50° (was 56.5°) and broader vanes so the spread hand is one closed surface with a pointed tip,
+  // p1..p10: fanned 54° (was 56.5°) and broader vanes so the spread hand is one closed surface with a pointed tip,
   // not separate splayed sticks (p002, p033, p034, p015)
-  const pAngles = [62, 56, 50, 44, 38, 32, 26.5, 21, 16, 12];
+  const pAngles = [66, 58.5, 51.5, 45, 38.5, 32, 26.5, 21, 16, 12];
   // from the wrist; p9 = wing chord (S1,S3: 105–108 flattened, ≈100 projected when folded, spec §10.3): the
   // folded p7–p10 tips converge on the tail tip (z ≈ −83.5) as one blunt dark cluster — 3 mm shorter, the
   // rectrices ran on alone as a thin needle (p020, p070, p006)
