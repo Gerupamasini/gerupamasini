@@ -553,7 +553,8 @@ function bakeBodyTextures(ctx) {
     const band = 1 - 0.6 * smoothstep(0.35, 0.9, zn) * smoothstep(0.35, 0.6, hn);
     const pst = smoothstep(0.63 * SL, 0.68 * SL, s);
     // the mid-dorsal band itself is densest from the nape to s ≈ 0.6 SL (029: [109,97,69])
-    const midBand = (1 - smoothstep(0.25, 0.45, zn)) * smoothstep(0.8, 0.94, hn) * smoothstep(sP(22), sP(28), s) * (1 - pst);
+    // (from above it spans most of the flat back between the paler margins: 025, 029)
+    const midBand = (1 - smoothstep(0.35, 0.62, zn)) * smoothstep(0.78, 0.92, hn) * smoothstep(sP(22), sP(28), s) * (1 - pst);
     return { k: rim * band * (1 - 0.4 * pst * smoothstep(0.35, 0.65, hn)) * (1 + midBand), midBand, pst };
   }
   function dorsalZone(s, hn, zn, qd) {
@@ -572,7 +573,9 @@ function bakeBodyTextures(ctx) {
       const dash = smoothstep(0.35, 0.65, 0.5 + 0.5 * Math.sin((s / 0.95) * TAU + 1.6 * fbm3(s * 0.6, 3.3, 0.7, 2, 63)));
       chain = pst * (1 - smoothstep(0.1, 0.3, zn)) * dash * smoothstep(sP(98), sP(93), s);
     }
-    return { k, lat, edge, nape, chain, midBand };
+    // flat top of the back, seen face-on only from above: the pocket net reads there (029 cells 0.6–1.0 mm)
+    const top = smoothstep(0.8, 0.95, hn) * (1 - smoothstep(0.5, 0.8, zn));
+    return { k, lat, edge, nape, chain, midBand, top };
   }
 
   function blotchAt(s, y, z, hn) {
@@ -641,7 +644,10 @@ function bakeBodyTextures(ctx) {
     let row = 0;
     for (const R of DOT_ROWS) row = Math.max(row, Math.exp(-((distToPolyline2(s, y, R) / 0.045) ** 2)));
     const cl = smoothstep(1.0, 0.55, Math.hypot((s - CL_S) / CL_RS, (y - yH(s, 2.5)) / CL_RY) + 0.25 * fbm3(s * 2.2, y * 2.2, 1.9, 2, 29));
-    return { line: line * smoothstep(-0.9, -0.3, hn), dots: 220.0 * row + 90.0 * cl };
+    // the lines are chains of melanophores (059), not continuous strokes: most of their darkness comes from
+    // dots concentrated along them; the smooth stroke stays faint so it does not read as a crack
+    const lineK = smoothstep(-0.9, -0.3, hn);
+    return { line: line * lineK, dots: 220.0 * row + 90.0 * cl + 260.0 * line * lineK };
   }
 
   // melanophore density (spots per mm^2), size factor and head-disc weight at a fish-space point
@@ -723,10 +729,10 @@ function bakeBodyTextures(ctx) {
       // エドハゼ: no vermiculation or smudges; pale, finely dotted head top in front of the nape (point
       // melanophores, splatted below) and a few crisp dark lines
       const top = mix(0.03, 0.07, smoothstep(eyeRear - 0.2, eyeRear + 0.6, s));
-      m = mix(m, top * dorsal + 0.3 * headMarks(s, yy, hn).line, head);
+      m = mix(m, top * dorsal + 0.1 * headMarks(s, yy, hn).line, head);
     }
     // dusky scale-pocket arcs, the dark nape and the posterior mid-dorsal dash chain
-    m += 0.025 * DZ.lat * DZ.edge * DZ.k * (1 - head * 0.5) + 0.06 * DZ.midBand + 0.07 * DZ.nape + 0.08 * DZ.chain;
+    m += 0.025 * DZ.lat * DZ.edge * DZ.k * (1 - head * 0.5) * (1 + 2.0 * DZ.top) + 0.11 * DZ.midBand + 0.07 * DZ.nape + 0.08 * DZ.chain;
     const bd = beadAt(s, yy, q);
     // posterior body: two crisp thin dark axial lines along the horizontal septum (h 0 and +1.2–1.5 %SL, each
     // 0.3–0.4 %SL wide at ~0.8 × the flank) carrying small dashes, and a dark mark at the caudal base (042, 058)

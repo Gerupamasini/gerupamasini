@@ -56,7 +56,7 @@ export const SPECIES = {
     // gills show pink-red through the thin opercle (059 lower opercle [142–159,112–128,104–117], 016, 025),
     // over s 7.6–9.9 and y 0.6–3.3 mm, ending with the opercle margin (head length 0.265 SL)
     gillWin: [6.3, 7.6, 9.0, 9.9],
-    gillK: [0.03, 0.5, 0.42],
+    gillK: [0.025, 0.38, 0.32],
     gillHn: [-1.15, -0.95, 0.0, 0.35],
     // yellow-green gold iridescent patch on the upper opercle only (059, 044: [150,144,120]), never a
     // milky disc: weak gain, tint above y 2.6 mm, half the wet specular over the gill cover
