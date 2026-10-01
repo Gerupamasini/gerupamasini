@@ -14,7 +14,14 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: false,
     chunkSizeWarningLimit: 1500,
-    rollupOptions: { output: { manualChunks: { three: ['three'] } } },
+    rollupOptions: {
+      // hermit-lab.html: stand-alone viewer for the procedural ユビナガホンヤドカリ
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        hermitLab: fileURLToPath(new URL('./hermit-lab.html', import.meta.url)),
+      },
+      output: { manualChunks: { three: ['three'] } },
+    },
   },
   server: { port: 5173, host: true },
   test: {

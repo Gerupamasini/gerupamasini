@@ -332,6 +332,20 @@ export class Behavior {
     A.restless = false;
     const pos = crab.loco.position;
     if (this.threat.has) A.attention.push({ pos: this.threat.pos, w: clamp(this.threat.level * 1.5, 0, 1), kind: 'threat' });
+    // weak tracking of a nearby player and of walking neighbours, also when they pose no threat [S]
+    else if (env.player) {
+      const dp = Math.hypot(env.player.x - pos.x, env.player.z - pos.z);
+      if (dp < 1.5) A.attention.push({ pos: env.player, w: 0.3 * (1 - dp / 1.5), kind: 'player' });
+    }
+    if (crab.world && (crab.frame & 7) === 0) {
+      let best = null, bs = 0;
+      for (const { crab: o, d } of crab.world.neighbors(pos, 12 * SL, crab)) {
+        const s = Math.abs(o.loco.speed) * (1 - d / (12 * SL));
+        if (s > bs) { bs = s; best = o; }
+      }
+      this.data.mover = bs > 0.3 ? best : null;
+    }
+    if (this.data.mover?.active) A.attention.push({ pos: this.data.mover.loco.position, w: 0.45, kind: 'object' });
     switch (this.state) {
       case STATE.IDLE: {
         L.shuffle = r.chance(dt * 0.2);

@@ -1,10 +1,10 @@
 // Level of detail for ユビナガホンヤドカリ.
 //
-//   LOD0 macro / close-up : observation lock, tank, zukan. Full geometry (~31k tris body), long setae as
+//   LOD0 macro / close-up : observation lock, tank, zukan. Full geometry (~31.6k tris body), long setae as
 //                           geometry + setae cards, mouthparts, P4/P5, abdomen, spines and spinules,
 //                           12-bone antennal flagella with dynamics, shell LOD0.
-//   LOD1 normal gameplay  : ~9.7k tris, fewer setae cards, no spines, same rig and full behaviour.
-//   LOD2 distant          : ~2.5k tris, no setae/mouthparts/abdomen, cheap antennae, half-rate IK,
+//   LOD1 normal gameplay  : ~9.9k tris, fewer setae cards, no spines, same rig and full behaviour.
+//   LOD2 distant          : ~2.7k tris, no setae/mouthparts/abdomen, cheap antennae, half-rate IK,
 //                           slower decisions, no shadow casting.
 // Budgets follow docs/spec/02 §7 (hero ≤ 400k, lod1 ≤ 30k, lod2 ≤ 4k triangles).
 export const LOD_TIERS = [
@@ -14,11 +14,11 @@ export const LOD_TIERS = [
 ];
 
 export const BUDGET = {
-  trianglesBody: [31300, 9700, 2550],
+  trianglesBody: [31600, 9900, 2660],
   trianglesShell: [40000, 8000, 1300],
   drawCalls: [4, 4, 3], // body, setae, shell, contact shadow (LOD2: no setae)
   skinnedMeshes: [2, 2, 1],
-  bones: 127,
+  bones: 137,
   textures: 0, // all surface detail is procedural
   transparentMaterials: 1, // contact shadow only (setae use alpha test + alpha-to-coverage)
 };

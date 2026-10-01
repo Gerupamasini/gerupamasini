@@ -86,7 +86,7 @@ export class Animator {
     this.flick = {};
     for (const side of ['L', 'R']) this.flick[side] = { t: -1, down: 0.1, up: 0.12, timer: rng.wait(2.5), amp: 1, rot: 0, rotT: 0 };
     this.eye = {};
-    for (const side of ['L', 'R']) this.eye[side] = { off: new THREE.Vector2(), offT: new THREE.Vector2(), timer: rng.wait(1.5), seed: side === 'L' ? 5 : 9, dir: this.rig.eyes[side].restDir.clone() };
+    for (const side of ['L', 'R']) this.eye[side] = { off: new THREE.Vector2(), offT: new THREE.Vector2(), timer: rng.wait(1.5), seed: side === 'L' ? 5 : 9, dir: this.rig.eyes[side].restDir.clone(), dip: 0, dipT: 0 };
     this.mouth = { level: 0, phase: 0, groom: 0, groomSide: 'L' };
     this.twitchChela = new Twitch(rng, 4.5, 0.6);
     this.twitchBody = new Twitch(rng, 7, 1.4);
@@ -383,7 +383,11 @@ export class Animator {
       if (st.timer <= 0) {
         st.timer = this.rng.wait(1.6, 0.8);
         st.offT.set((this.rng.next() - 0.5) * 0.32, (this.rng.next() - 0.5) * 0.18);
+        // now and then one stalk alone is pulled down and slowly raised again [G] Carcinus
+        if (this.rng.next() < 0.05) st.dipT = 0.45 + 0.35 * this.rng.next();
       }
+      st.dip = damp(st.dip, st.dipT, st.dipT > st.dip ? 22 : 2.2, dt);
+      st.dipT *= Math.exp(-dt * 5);
       st.off.x = damp(st.off.x, st.offT.x, Math.abs(st.offT.x) > Math.abs(st.off.x) ? 28 : 3, dt);
       st.off.y = damp(st.off.y, st.offT.y, Math.abs(st.offT.y) > Math.abs(st.off.y) ? 28 : 3, dt);
       st.offT.multiplyScalar(Math.exp(-dt * 0.8));
@@ -392,7 +396,7 @@ export class Animator {
       _u.set(goal.x + st.off.x * e.side, goal.y + st.off.y + tr, goal.z).normalize();
       // withdrawal: stalks lowered and swung back along the shield
       _w.set(e.side * 0.55, -0.35, 0.45).normalize();
-      _u.lerp(_w, fold).normalize();
+      _u.lerp(_w, Math.max(fold, st.dip)).normalize();
       st.dir.lerp(_u, 1 - Math.exp(-dt * 30)).normalize();
       quatFromDir(st.dir, Y, e.stalk.quaternion);
     }

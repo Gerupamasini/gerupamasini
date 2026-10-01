@@ -13,6 +13,7 @@
 // the analytic IK (PagurusMinutusRig.solveLegIK) re-solves the joints each frame.
 import * as THREE from 'three';
 import { Rig, solveLegIK } from './PagurusMinutusRig.js';
+import { MORPH } from './PagurusMinutusMorphology.js';
 import { clamp, damp, lerp, smoothstep, wrapAngle, fbm1 } from './PagurusMinutusUtil.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion();
@@ -163,6 +164,13 @@ export class Locomotion {
     this.posture = cmd.posture ?? 'stand';
     let hTarget = post.height * (cmd.heightScale ?? 1);
     this.footScale = damp(this.footScale, post.footScale, 3, dt);
+    // heavier shells (relative to the body) are carried lower [G] P. pollicarus
+    const shell = this.crab.shell;
+    if (shell && this.crab.shellMode === 'carried') {
+      const sl = this.crab.shieldLength_mm;
+      const wRatio = shell.props.mass_g / (MORPH.bodyVolumeK * sl * sl * sl * 1.06e-3);
+      hTarget *= 1 - 0.14 * clamp((wRatio - 1) / 4, 0, 1);
+    }
     // shell dragging: if the shell digs into the ground, the crab stands a little taller
     const sd = this.crab.shellDyn;
     if (sd && this.posture !== 'rest' && legsActive) hTarget += clamp(sd.contactDepth / SL, 0, 0.25) * 0.6;

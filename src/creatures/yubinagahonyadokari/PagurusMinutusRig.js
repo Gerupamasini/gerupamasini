@@ -4,7 +4,8 @@
 // planes are successively perpendicular – Vidal-Gadea et al. 2008; Chapple 2012 for Pagurus):
 //   Coxa      : promotion / remotion  → rotation about the body's vertical axis (local Y)        "TC"
 //   Basis     : levation / depression → rotation about the leg's hinge axis (local Z)            "CB"
-//               (basis and ischium are treated as one functional segment)
+//   Ischium   : fused to the basis (immobile basi-ischial suture, no arthrodial membrane) – a rigid
+//               child bone so the segment exists in the rig and the mesh; it never rotates  [G] decapods
 //   Merus     : fixed in walking legs (ischio-meral joint carries the cheliped's roll)             "B/IM"
 //   Carpus    : flexion of the merus–carpus "knee" (local Z)                                      "MC"
 //   Propodus  : carpo-propodal flexion (local Z) – horizontal swing (local Y) in chelipeds         "CP"
@@ -20,6 +21,9 @@ import { MORPH } from './PagurusMinutusMorphology.js';
 import { clamp } from './PagurusMinutusUtil.js';
 
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
+
+/** share of the fused basi-ischium length taken by the basis (the ischium is the longer, distal part) [S] */
+export const BASIS_FRACTION = 0.42;
 const _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
 /** quaternion mapping local +X to `dir` with local +Y as close as possible to `up` */
@@ -138,7 +142,8 @@ export class Rig {
       const c = MORPH.coxae.cheliped;
       const coxa = add(`Cheliped_${side}_Coxa`, root, new THREE.Vector3(s * c.x, c.y, c.z), new THREE.Quaternion().setFromAxisAngle(Y, yawFor(s * 0.62, 0.78)));
       const basis = add(`Cheliped_${side}_Basis`, coxa, new THREE.Vector3(C.coxa, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, 0.25));
-      const merus = add(`Cheliped_${side}_Merus`, basis, new THREE.Vector3(C.basis, 0, 0));
+      const ischium = add(`Cheliped_${side}_Ischium`, basis, new THREE.Vector3(C.basis * BASIS_FRACTION, 0, 0));
+      const merus = add(`Cheliped_${side}_Merus`, ischium, new THREE.Vector3(C.basis * (1 - BASIS_FRACTION), 0, 0));
       const carpus = add(`Cheliped_${side}_Carpus`, merus, new THREE.Vector3(C.merus, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, -0.45));
       // chela swung mesially (negative swing), held in front of the face
       const propodus = add(`Cheliped_${side}_Propodus`, carpus, new THREE.Vector3(C.carpus, 0, 0), new THREE.Quaternion().setFromAxisAngle(Y, -s * 0.6));
@@ -146,7 +151,7 @@ export class Rig {
       const dactylus = add(`Cheliped_${side}_Dactylus`, propodus, new THREE.Vector3(palm, 0.0, s * chela * (side === 'R' ? 0.13 : 0.1)));
       const tip = add(`Cheliped_${side}_Tip`, propodus, new THREE.Vector3(chela, 0, 0));
       this.chelipeds[side] = {
-        side: s, name: `Cheliped_${side}`, coxa, basis, merus, carpus, propodus, dactylus, tip,
+        side: s, name: `Cheliped_${side}`, coxa, basis, ischium, merus, carpus, propodus, dactylus, tip,
         len: { coxa: C.coxa, basis: C.basis, merus: C.merus, carpus: C.carpus, chela, palm, dactyl: chela * C.dactylFraction },
         coxaPos: coxa.position.clone(),
       };
@@ -165,13 +170,14 @@ export class Rig {
         const restYaw = yawFor(s * dx, dz);
         const coxa = add(`${name}_Coxa`, root, new THREE.Vector3(s * cp.x, cp.y, cp.z), new THREE.Quaternion().setFromAxisAngle(Y, restYaw));
         const basis = add(`${name}_Basis`, coxa, new THREE.Vector3(D.coxa, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, 0.5));
-        const merus = add(`${name}_Merus`, basis, new THREE.Vector3(D.basis, 0, 0));
+        const ischium = add(`${name}_Ischium`, basis, new THREE.Vector3(D.basis * BASIS_FRACTION, 0, 0));
+        const merus = add(`${name}_Merus`, ischium, new THREE.Vector3(D.basis * (1 - BASIS_FRACTION), 0, 0));
         const carpus = add(`${name}_Carpus`, merus, new THREE.Vector3(D.merus, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, -0.95));
         const propodus = add(`${name}_Propodus`, carpus, new THREE.Vector3(D.carpus, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, -0.2));
         const dactylus = add(`${name}_Dactylus`, propodus, new THREE.Vector3(D.propodus, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, -0.4));
         const tip = add(`${name}_Tip`, dactylus, new THREE.Vector3(D.dactylus, 0, 0));
         this.legs[`${side}${n}`] = {
-          side: s, n, name, coxa, basis, merus, carpus, propodus, dactylus, tip,
+          side: s, n, name, coxa, basis, ischium, merus, carpus, propodus, dactylus, tip,
           len: { ...D }, coxaPos: coxa.position.clone(), restYaw, restDir: new THREE.Vector3(s * dx, 0, dz).normalize(),
         };
       }
@@ -189,11 +195,12 @@ export class Rig {
         const dir = n === 3 ? [0.32, -0.95] : [0.22, -0.97];
         const coxa = add(`${name}_Coxa`, root, new THREE.Vector3(s * cp.x, cp.y, cp.z), new THREE.Quaternion().setFromAxisAngle(Y, yawFor(s * dir[0], dir[1])));
         const basis = add(`${name}_Basis`, coxa, new THREE.Vector3(D.coxa, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, 0.35));
-        const merus = add(`${name}_Merus`, basis, new THREE.Vector3(D.basis, 0, 0));
+        const ischium = add(`${name}_Ischium`, basis, new THREE.Vector3(D.basis * BASIS_FRACTION, 0, 0));
+        const merus = add(`${name}_Merus`, ischium, new THREE.Vector3(D.basis * (1 - BASIS_FRACTION), 0, 0));
         const carpus = add(`${name}_Carpus`, merus, new THREE.Vector3(D.merus, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, -2.1));
         const propodus = add(`${name}_Propodus`, carpus, new THREE.Vector3(D.carpus, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, -0.35));
         const dactylus = add(`${name}_Dactylus`, propodus, new THREE.Vector3(D.propodus, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, -0.5));
-        this.reduced[`${side}${n}`] = { side: s, n, name, coxa, basis, merus, carpus, propodus, dactylus, len: { ...D }, restQ: [coxa, basis, merus, carpus, propodus, dactylus].map((b) => b.quaternion.clone()) };
+        this.reduced[`${side}${n}`] = { side: s, n, name, coxa, basis, ischium, merus, carpus, propodus, dactylus, len: { ...D }, restQ: [coxa, basis, merus, carpus, propodus, dactylus].map((b) => b.quaternion.clone()) };
       }
     }
 

@@ -11,6 +11,7 @@
 //   position (bind pose) doubles as the domain for procedural granules, mottling and setae.
 import * as THREE from 'three';
 import { MORPH } from './PagurusMinutusMorphology.js';
+import { BASIS_FRACTION } from './PagurusMinutusRig.js';
 import { TAU, clamp, lerp, hash1, smoothstep } from './PagurusMinutusUtil.js';
 
 export const REGION = {
@@ -312,6 +313,19 @@ function buildChain(acc, rig, lod, side, parts, opts = {}) {
   }
 }
 
+/**
+ * basis + ischium as two articles meeting at an immobile suture (no arthrodial membrane between them;
+ * the flat end caps leave a slight ledge that reads as the suture line) [G]
+ */
+function basiIschium(leg, L, section, region) {
+  const f = BASIS_FRACTION;
+  const mid = [lerp(section[0][0], section[1][0], f), lerp(section[0][1], section[1][1], f)];
+  return [
+    { bone: leg.basis, L: L * f, section: [section[0], mid], kind: KIND.BASIS, region, capEnd: 'flat' },
+    { bone: leg.ischium, L: L * (1 - f), section: [mid, section[1]], kind: KIND.BASIS, region, capStart: 'flat', noMembrane: true },
+  ];
+}
+
 function walkingLeg(acc, rig, lod, leg) {
   const S = MORPH.walkingLegs.section;
   const W = MORPH.walkingLegs;
@@ -319,7 +333,7 @@ function walkingLeg(acc, rig, lod, leg) {
   const L = leg.len;
   const parts = [
     { bone: leg.coxa, L: L.coxa, section: S.coxa, kind: KIND.COXA, region: REGION.LEG },
-    { bone: leg.basis, L: L.basis, section: S.basis, kind: KIND.BASIS, region: REGION.LEG },
+    ...basiIschium(leg, L.basis, S.basis, REGION.LEG),
     { bone: leg.merus, L: L.merus, section: S.merus, kind: KIND.MERUS, region: REGION.LEG, n: 2.7 },
     {
       bone: leg.carpus, L: L.carpus, section: S.carpus, kind: KIND.CARPUS, region: REGION.LEG, n: 2.6,
@@ -353,7 +367,7 @@ function reducedLeg(acc, rig, lod, leg) {
   const r = L.section;
   const parts = [
     { bone: leg.coxa, L: L.coxa, section: [[r * 1.1, r], [r, r * 0.9]], kind: KIND.COXA, region: REGION.REDUCED_LEG },
-    { bone: leg.basis, L: L.basis, section: [[r * 0.9, r * 0.8], [r * 0.9, r * 0.8]], kind: KIND.BASIS, region: REGION.REDUCED_LEG },
+    ...basiIschium(leg, L.basis, [[r * 0.9, r * 0.8], [r * 0.9, r * 0.8]], REGION.REDUCED_LEG),
     { bone: leg.merus, L: L.merus, section: [[r * 1.05, r * 0.75], [r * 1.0, r * 0.72]], kind: KIND.MERUS, region: REGION.REDUCED_LEG },
     { bone: leg.carpus, L: L.carpus, section: [[r * 0.9, r * 0.7], [r * 0.95, r * 0.7]], kind: KIND.CARPUS, region: REGION.REDUCED_LEG },
     { bone: leg.propodus, L: L.propodus, section: [[r * 0.95, r * 0.7], [r * 0.8, r * 0.6]], kind: KIND.PROPODUS, region: REGION.REDUCED_LEG },
@@ -370,7 +384,7 @@ function cheliped(acc, rig, lod, ch, isMajor) {
   const chelaH = L.chela * C.thicknessRatio * 0.5;
   const parts = [
     { bone: ch.coxa, L: L.coxa, section: [[0.1, 0.09], [0.095, 0.085]], kind: KIND.COXA, region: REGION.CHELA_ARM },
-    { bone: ch.basis, L: L.basis, section: [[0.085, 0.075], [0.09, 0.08]], kind: KIND.BASIS, region: REGION.CHELA_ARM },
+    ...basiIschium(ch, L.basis, [[0.085, 0.075], [0.09, 0.08]], REGION.CHELA_ARM),
     {
       bone: ch.merus, L: L.merus, section: [[C.merusSection[1] * 0.85, C.merusSection[0] * 0.8], [C.merusSection[1], C.merusSection[0]]], kind: KIND.MERUS, region: REGION.CHELA_ARM, n: 2.6,
       extra: lod.spines && isMajor ? (a, bi, M) => spine(a, bi, M, new THREE.Vector3(L.merus * 0.55, -C.merusSection[1] * 0.95, 0), new THREE.Vector3(0.2, -1, 0), 0.045, 0.024, REGION.SPINE, s) : null, // ventral tubercle [D]
