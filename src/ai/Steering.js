@@ -228,6 +228,15 @@ export function avoidObstacles(fish, world, out, opts = {}) {
         const dA = world.distance(_q.copy(_p).addScaledVector(side, 0.8 * SL), null, opts);
         const dB = world.distance(_q.copy(_p).addScaledVector(side, -0.8 * SL), null, opts);
         if (dB > dA + 0.1 * SL) side.negate();
+        // the side chosen to swing round is kept for a while: re-deciding it
+        // every frame (the wall normal and the room on either side change as
+        // the fish turns) flips the escape left / right and the fish wags
+        // between the two instead of turning away in one sweep
+        const sgn = side.x * fwd.z - side.z * fwd.x >= 0 ? 1 : -1;
+        const tNow = opts.time ?? 0;
+        if (fish._avoidSgn && sgn !== fish._avoidSgn && tNow - fish._avoidT < 1.5 && Math.abs(dB - dA) < 0.6 * SL) side.negate();
+        else if (sgn !== fish._avoidSgn) fish._avoidSgn = sgn;
+        fish._avoidT = tNow;
         _g.set(gx, gy, gz);
         out.addScaledVector(_g, w * 1.1).addScaledVector(side, w * 0.9);
         out.danger = Math.max(out.danger, w * (1 - 0.4 * m));
