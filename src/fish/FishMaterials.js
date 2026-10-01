@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { U } from '../render/SharedUniforms.js';
 import { head } from './morphology.js';
+import { HEAD_RELIEF } from './BodyGeometry.js';
 import { rigVertexCommon, noiseCommon, underwaterCommon } from './shaders/common.glsl.js';
 import {
   bodyVertexPars,
@@ -54,8 +55,18 @@ export function createBodyMaterial(layout, { lod = 0 } = {}) {
     specularIntensity: 1.0,
     envMapIntensity: 1.0,
   });
-  // nostril landmark for the shading of the nares (same as the geometry)
-  m.defines = { RIG_MISC: layout.misc, FISH_LOD: lod, NARE_S: head.nareS.toFixed(4), NARE_Y: head.nareY.toFixed(4) };
+  // head landmarks for the shading of the nares and lips (same as the geometry)
+  m.defines = {
+    RIG_MISC: layout.misc,
+    FISH_LOD: lod,
+    NARE_S: head.nareS.toFixed(4),
+    NARE_Y: head.nareY.toFixed(4),
+    NARE_FLAP_S: HEAD_RELIEF.nareFlapPos[0].toFixed(4),
+    NARE_FLAP_Y: HEAD_RELIEF.nareFlapPos[1].toFixed(4),
+    MOUTH_Y: head.mouthY.toFixed(4),
+    MOUTH_DROOP: head.mouthClosedDroop.toFixed(4),
+    MOUTH_RW: head.mouthClosedRW.toFixed(4),
+  };
   m.onBeforeCompile = (shader) => {
     attachUniforms(shader, [
       'uRig', 'uDebugView', 'uColRed', 'uColOrange', 'uColYellow', 'uColWhite', 'uColGill',
@@ -168,6 +179,23 @@ export function createFinDepthWriteMaterial(layout) {
     vs = mustReplace(vs, '#include <common>', '#include <common>\n#define DEPTH_ONLY\n' + rigVertexCommon + finVertexPars, 'common');
     vs = mustReplace(vs, '#include <begin_vertex>', 'finDeform();\nvec3 transformed = gFishPos;', 'begin');
     shader.vertexShader = vs;
+    let fs = shader.fragmentShader;
+    fs = mustReplace(fs, '#include <common>', '#include <common>\nin vec4 vFinCoord;', 'zw-common');
+    fs = mustReplace(
+      fs,
+      'void main() {',
+      `void main() {
+  {
+    // dense fin base writes depth; the thin distal membrane keeps the depth
+    // of what lies behind it (4x4 ordered dither over the transition)
+    float dense = 1.0 - smoothstep(0.22, 0.5, vFinCoord.y);
+    ivec2 q = ivec2(gl_FragCoord.xy) & 3;
+    const float B[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
+    if (dense * 16.0 <= B[q.x + q.y * 4] + 0.5) discard;
+  }`,
+      'zw-main',
+    );
+    shader.fragmentShader = fs;
   };
   m.customProgramCacheKey = () => 'fish-fin-depthwrite';
   return m;
@@ -179,10 +207,10 @@ export function createEyeMaterial() {
     color: 0xffffff,
     roughness: 0.2,
     metalness: 0.0,
-    // cornea: immersed, so it reflects only faintly, but it is optically
-    // smooth — a crisp highlight and a window reflection of the surroundings
-    clearcoat: 0.7,
-    clearcoatRoughness: 0.03,
+    // cornea: immersed (index ~1.37 against 1.33 water), so it reflects only
+    // faintly; optically smooth, so the little it reflects stays crisp
+    clearcoat: 0.12,
+    clearcoatRoughness: 0.04,
     specularIntensity: 1.0,
   });
   m.onBeforeCompile = (shader) => {

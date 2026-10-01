@@ -25,13 +25,36 @@ export const S_END = 1.116;
 
 const tmp2 = [0, 0];
 
+// open states: the lips are a thick rolled ring around the gape (p09_1,
+// p15_0). The first rows of the body wrap around it: from the inner margin
+// (the gape ring) over the front to the outer side of the roll.
+const OPEN_LIP_U = 0.012; // body rows u < this wrap around the roll
+const OPEN_LIP_R = 0.0056; // radius of the roll (upper lip a little thicker)
+const OPEN_BLEND = 0.03; // then the face blends into the head section
+// open state: drop of the chin at the front and the s of the jaw joint
+const JAW_DROP = 0.02;
+const JAW_JOINT_S = 0.105;
+
 // Head relief (SL units unless noted). Kept as named constants so the face
 // can be retuned against measured landmarks without touching the code.
 export const HEAD_RELIEF = {
+  // lips (heights measured from the cleft)
+  upperLip: 0.0045, // forward roll of the upper lip
+  upperLipY: 0.011, // its centre above the cleft...
+  upperLipW: 0.0105, // ...and half-height
+  lowerLip: 0.0032, // thinner lower lip, set back
+  lowerLipY: 0.005,
+  lowerLipW: 0.005,
+  lipFrontS: [0.034, 0.01], // the lips cover the front of the snout only
+  cleftFold: 0.0018, // short fold continuing the cleft behind the corner
+  rictusDimple: 0.0012,
+  jawCrease: 0.0004,
   nareDepth: 0.0042, // pit of the paired nostrils
-  nareRadius: 0.0068,
-  nareFlap: 0.0021, // the flap separating anterior and posterior naris
-  opercPlate: 0.0026, // height of the opercle plate above the flank
+  nareRadius: 0.0055,
+  nareFlap: 0.0095, // the flap separating anterior and posterior naris...
+  nareFlapPos: [0.0035, 0.0018], // ...sits this far in front of / above the pit centre
+  nareFlapW: [0.0036, 0.0052], // half-length (s) and half-height of the lobe
+  opercPlate: 0.0018, // height of the opercle plate above the flank (a soft step, not a seam)
   opercStepIn: 0.0065, // the plate's rounded step: from this far in front of the free margin...
   opercStepOut: 0.0045, // ...to this far behind it
   opercTuck: 0.0007, // shallow hollow where the flank tucks under the margin
@@ -63,24 +86,41 @@ function mouthRing(theta, state, out) {
   const b = Math.sin(theta); // lateral
   const b2 = b * b;
   if (state === 0) {
-    out.x = -0.0045 * b2;
-    out.y = head.mouthY + head.mouthClosedRH * a - 0.0038 * b2;
+    // the cleft wraps around the rounded snout: a soft arch in front view,
+    // its rounded corners (rictus) set back on the sides of the head
+    // (the upper lip overhangs the lower one a little: the cleft lies in its
+    // shadow and the top of the lower lip is hidden)
+    out.x = -head.mouthCornerBack * Math.pow(Math.abs(b), 2.4) + 0.0015 * a;
+    out.y = head.mouthY + head.mouthClosedRH * a * (1 - 0.6 * b2) - head.mouthClosedDroop * b2;
     out.z = head.mouthClosedRW * b;
     return out;
   }
-  const e = 2 / 2.6; // superellipse -> rounded rectangle
+  const e = 2 / 2.2; // superellipse -> round-topped, softly squared O
   const sa = Math.sign(a) * Math.pow(Math.abs(a), e);
   const sb = Math.sign(b) * Math.pow(Math.abs(b), e);
   const lower = Math.max(0, -sa);
   const upper = Math.max(0, sa);
   out.y = head.mouthY + (sa >= 0 ? head.mouthOpenTop * sa : head.mouthOpenBot * sa);
-  out.z = head.mouthOpenRW * sb * (1 - 0.14 * lower); // the lower jaw is a little narrower
-  out.x = -0.003 - 0.0035 * b2 - 0.0045 * lower; // the gape sits within the face, not on a tube
+  out.z = head.mouthOpenRW * sb * (1 - 0.16 * lower); // the lower jaw is a little narrower
+  // the open lips stand slightly proud of the face as a short tube; the
+  // corners and the dropped lower jaw sit a little further back
+  out.x = head.mouthOpenFwd - 0.003 * b2 - 0.0035 * lower;
   if (state === 2) {
     out.x += head.mouthProtrusion * (0.6 + 0.4 * upper);
     out.y -= 0.0022 * upper;
   }
   return out;
+}
+
+const sminK = (a, b, k) => {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+};
+const smaxk = (a, b, k) => -sminK(-a, -b, k);
+
+/** Drop of the lower jaw outline in the open state (rotation about the jaw joint). */
+function jawDrop(s) {
+  return JAW_DROP * Math.pow(Math.max(0, 1 - s / JAW_JOINT_S), 1.15);
 }
 
 function mouthCentreY(state) {
@@ -90,17 +130,33 @@ function mouthCentreY(state) {
 /** Base (undisplaced) surface point. u < 0: buccal cavity (c = -u), u >= 0: body s. */
 function basePoint(u, theta, state, out) {
   mouthRing(theta, state, _ring);
-  const blend = state === 0 ? 0.016 : 0.024;
+  // the closed mouth's corners sit far back on the sides: the rounded
+  // transition from the lips to the snout is longer there
+  const bs = Math.sin(theta);
+  const blend = 0.016 + 0.012 * bs * bs;
   if (u < 0) {
     const c = Math.min(1, -u);
     // the cavity widens behind the lips (buccal chamber) and closes toward
     // the pharynx; its floor sinks with the hyoid when the mouth is open
-    const shape = Math.sqrt(Math.max(0, 1 - Math.pow(c, 4))) * (1 + 0.55 * Math.sin(Math.PI * Math.min(1, c * 1.25)));
+    const shape = Math.sqrt(Math.max(0, 1 - Math.pow(c, 4))) * (1 + 0.45 * Math.sin(Math.PI * Math.min(1, c * 1.25)));
     const cy = mouthCentreY(state);
     const yc = cy - 0.18 * c * head.mouthDepth;
     let dy = (_ring.y - cy) * shape * 0.92;
     if (state === 0) dy = Math.sign(dy || -1) * Math.max(Math.abs(dy), 0.0016 * shape * 0.92);
-    out.set(_ring.x - c * head.mouthDepth, yc + dy, _ring.z * shape * 0.92);
+    const x = _ring.x - c * head.mouthDepth;
+    let y = yc + dy;
+    let z = _ring.z * shape * 0.92;
+    // the chamber always stays inside the head (under a layer of tissue),
+    // also where the low mouth meets the short lower jaw
+    const sc = clamp(-x, 0, 0.3);
+    const drop = state === 0 ? 0 : jawDrop(sc);
+    const yLo = profile.bot(sc) - drop + 0.007;
+    const yHi = profile.top(sc) - 0.012;
+    const zHi = profile.hw(sc) - 0.007;
+    const deep = smoothstep(0.1, 0.35, c); // (the lips themselves are free)
+    y = lerp(y, smaxk(sminK(y, yHi, 0.004), yLo, 0.004), deep);
+    z = lerp(z, Math.sign(z) * sminK(Math.abs(z), zHi, 0.004), deep);
+    out.set(x, y, z);
     return out;
   }
   const s = Math.min(u, S_END);
@@ -108,14 +164,61 @@ function basePoint(u, theta, state, out) {
   let x = -s;
   let y = tmp2[0];
   let z = tmp2[1];
+  // open mouth: the lower jaw swings down about the quadrate joint (below
+  // the front of the orbit), so the chin drops with the lower lip
+  if (state !== 0) {
+    y -= jawDrop(s) * smoothstep(0.2, -0.5, -Math.cos(theta));
+    // rolled lip: a half torus around the gape ring
+    const cy = mouthCentreY(state);
+    const ry = _ring.y - cy;
+    const rz = _ring.z;
+    const rl = Math.max(1e-6, Math.hypot(ry, rz));
+    const r = OPEN_LIP_R * (1 + 0.2 * smoothstep(0.0, 0.8, -Math.cos(theta)));
+    const lipAt = (uu, o) => {
+      const phi = -0.5 * Math.PI + Math.min(1, uu / OPEN_LIP_U) * Math.PI;
+      const k = r * (1 + Math.sin(phi));
+      o[0] = _ring.x + r * Math.cos(phi);
+      o[1] = _ring.y + (k * ry) / rl;
+      o[2] = _ring.z + (k * rz) / rl;
+      return o;
+    };
+    const L = lipAt(s, [0, 0, 0]);
+    if (s <= OPEN_LIP_U) {
+      out.set(L[0], L[1], L[2]);
+      return out;
+    }
+    if (s < OPEN_BLEND) {
+      // the roll first runs straight back (a short tube standing proud of
+      // the face), then flares out into the face: a soft neck behind the lips
+      const t = (s - OPEN_LIP_U) / (OPEN_BLEND - OPEN_LIP_U);
+      const wx = 1 - (1 - t) * (1 - t);
+      const wr = t * t * (3 - 2 * t);
+      out.set(lerp(L[0], x, wx), lerp(L[1], y, wr), lerp(L[2], z, wr));
+      return out;
+    }
+    out.set(x, y, z);
+    return out;
+  }
   if (s < blend) {
-    // rounded (quarter-ellipse) transition so the lips/snout read blunt
+    // rounded transition so the lips / snout read blunt (x lags behind y);
+    // the rows still spread evenly over the front of the face, where the
+    // lips need them (a quarter-ellipse put almost all of it in one row)
     const t = Math.min(1, s / blend);
-    let w = Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t)));
-    w = w * w * (3 - 2 * w) * 0.35 + w * 0.65;
+    const w = 1 - Math.pow(1 - t, 1.7);
+    const wy = 1 - Math.pow(1 - t, 2.1);
+    // where the cleft is set back (the corners of the closed mouth) the rows
+    // run from the corner to sections behind it, never forward over it
+    const back = Math.max(0, -_ring.x);
+    if (back > 0) {
+      const st = back + t * (blend - back);
+      sectionPoint(st, theta, tmp2);
+      x = -st;
+      y = tmp2[0];
+      z = tmp2[1];
+    }
     x = lerp(_ring.x, x, w);
-    y = lerp(_ring.y, y, w);
-    z = lerp(_ring.z, z, w);
+    y = lerp(_ring.y, y, wy);
+    z = lerp(_ring.z, z, wy);
   }
   out.set(x, y, z);
   return out;
@@ -185,6 +288,7 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
   masks.operc = 0;
   masks.opercFlap = 0;
   masks.lip = 0;
+  masks.lipD = 0;
   if (u < 0) {
     masks.lip = -1; // buccal cavity
     return 0;
@@ -194,28 +298,56 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
   const lateral = Math.abs(z) / Math.max(1e-4, profile.hw(clamp(s, 0, S_END)));
   let d = 0;
 
-  // lips: thick rolled lips around the gape
-  const lip = gauss(s - 0.009, 0.01);
-  d += 0.0044 * lip;
-  masks.lip = smoothstep(0.02, 0.004, s);
+  // lips: a thick, rounded upper lip (the front-most point of the face) and
+  // a thinner lower lip set slightly back, both tapering into the corners
+  // (p05_1, p25_0, p42_1). Heights are measured from the cleft, which droops
+  // toward the corners in front view.
+  const zr = Math.min(1, Math.abs(z) / head.mouthClosedRW);
+  const cleftY = head.mouthY - head.mouthClosedDroop * zr * zr;
+  const dy = y - cleftY;
+  const front = smoothstep(HEAD_RELIEF.lipFrontS[0], HEAD_RELIEF.lipFrontS[1], s);
+  const taper = 1 - 0.6 * smoothstep(0.35, 1.0, Math.abs(z) / head.mouthClosedRW);
+  // (zero at the cleft itself: the rounded margins curl in toward it, so the
+  // lips never end in thin protruding edges)
+  const upperLip = gauss(dy - HEAD_RELIEF.upperLipY, HEAD_RELIEF.upperLipW) * smoothstep(-0.0005, 0.005, dy);
+  const lowerLip = gauss(dy + HEAD_RELIEF.lowerLipY, HEAD_RELIEF.lowerLipW) * smoothstep(0.0, -0.006, dy);
+  masks.lipD = (HEAD_RELIEF.upperLip * upperLip + HEAD_RELIEF.lowerLip * lowerLip) * front * taper;
+  d += masks.lipD;
+  masks.lip = clamp(Math.max(upperLip, lowerLip) * 1.6 + gauss(dy, 0.004), 0, 1) * front * smoothstep(1.25, 0.9, Math.abs(z) / head.mouthClosedRW);
 
-  // gape line: lip fold / posterior end of the maxilla running back and down
-  // from the mouth corner toward the front-lower edge of the orbit
-  const ry = head.mouthY - 0.003 - (s - 0.012) * 0.48;
-  if (s > 0.008 && s < 0.075) d -= 0.0016 * gauss(y - ry, 0.0035) * smoothstep(0.008, 0.02, s) * smoothstep(0.075, 0.05, s) * smoothstep(0.3, 0.8, lateral);
+  // the cleft runs on behind the corner of the mouth as a short fold sloping
+  // ~20 deg down and back (no long cheek crease), ending in a soft dimple
+  const sC = head.mouthCornerBack;
+  const yC = head.mouthY - head.mouthClosedDroop;
+  // (both start just behind the corner: on the folded lips themselves they
+  // would buckle the thin cleft)
+  if (s > sC && s < sC + 0.026 && lateral > 0.3) {
+    const ry = yC - (s - sC) * 0.36;
+    d -= HEAD_RELIEF.cleftFold * gauss(y - ry, 0.0026) * smoothstep(sC + 0.001, sC + 0.006, s) * smoothstep(sC + 0.026, sC + 0.008, s);
+  }
+  d -= HEAD_RELIEF.rictusDimple * gauss(Math.hypot(s - sC - 0.0065, y - yC + 0.0022), 0.003) * smoothstep(0.3, 0.6, lateral) * smoothstep(sC + 0.001, sC + 0.004, s);
 
-  // lower jaw: posterior outline of the dentary running from below the mouth
-  // corner down and back to the chin / throat (a soft crease)
-  if (s > 0.018 && s < 0.11 && y < head.mouthY - 0.004) {
-    const ym = head.mouthY - 0.011 - (s - 0.018) * 0.62;
-    d -= 0.0011 * gauss(y - ym, 0.0032) * smoothstep(0.018, 0.035, s) * smoothstep(0.11, 0.085, s);
+  // lower jaw: the posterior outline of the dentary below the mouth corner,
+  // only a faint softening (a strong crease reads as a smile wrinkle)
+  if (s > 0.018 && s < 0.06 && y < head.mouthY - 0.006) {
+    const ym = head.mouthY - 0.013 - (s - 0.018) * 0.62;
+    d -= HEAD_RELIEF.jawCrease * gauss(y - ym, 0.0032) * smoothstep(0.018, 0.03, s) * smoothstep(0.06, 0.045, s);
   }
 
   // paired nares with the characteristic separating flap
+  // (dorsolateral on the snout, just under the outline at about the level
+  // of the top of the eye). The flap is a fleshy lobe on the front rim of
+  // the pit standing up and back: in a side view it breaks the outline of
+  // the head (p05_1, p12_0, p25_0, p42_1).
   const dn = Math.hypot(s - head.nareS, y - head.nareY);
-  if (dn < 0.022 && lateral > 0.4) {
-    d -= HEAD_RELIEF.nareDepth * gauss(dn, HEAD_RELIEF.nareRadius);
-    d += HEAD_RELIEF.nareFlap * gauss(s - head.nareS, 0.002) * gauss(y - head.nareY, 0.0055); // flap
+  if (dn < 0.026 && lateral > 0.2) {
+    const wl = smoothstep(0.2, 0.32, lateral);
+    d -= HEAD_RELIEF.nareDepth * gauss(Math.hypot(s - head.nareS - 0.0012, y - head.nareY), HEAD_RELIEF.nareRadius) * wl;
+    const fs = s - head.nareS + HEAD_RELIEF.nareFlapPos[0];
+    const fy = y - head.nareY - HEAD_RELIEF.nareFlapPos[1];
+    // a rounded, flat-topped lobe (a plain gaussian reads as a spike)
+    const fr2 = (fs / HEAD_RELIEF.nareFlapW[0]) ** 2 + (fy / HEAD_RELIEF.nareFlapW[1]) ** 2;
+    d += HEAD_RELIEF.nareFlap * Math.exp(-Math.pow(fr2, 1.35)) * wl;
   }
 
   // opercular series
@@ -244,11 +376,15 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
   }
 
   // very subtle nuchal/occipital hump & cranial fontanelle groove on the top of the head
-  if (lateral < 0.35 && y > 0) d -= 0.0009 * gauss(s - 0.17, 0.05) * gauss(lateral, 0.12);
+  if (lateral < 0.35 && y > 0) d -= 0.0005 * gauss(s - 0.17, 0.05) * gauss(lateral, 0.12);
 
   // natural bilateral micro-asymmetry (different noise per side) — ±0.1 % SL
-  // (faded out on the thin caudal tongue, which is barely thicker than the fin)
-  const asymW = smoothstep(1.06, 0.96, s);
+  // (faded out on the thin caudal tongue, which is barely thicker than the fin,
+  // and toward the dorsal / ventral midline, where the two sides must meet
+  // without a step: a step reads as a seam down the forehead, lip and chin)
+  // (also kept out of the lips, where the folded cleft is only a few
+  // tenths of a millimetre thick)
+  const asymW = smoothstep(1.06, 0.96, s) * smoothstep(0.0, 0.3, lateral) * smoothstep(0.002, 0.012, Math.abs(z)) * smoothstep(0.012, 0.04, s);
   d += 0.0007 * asymW * noise3(x * 22 + asymSeed, y * 22, side * 5.3 + asymSeed * 0.37);
   d += 0.0012 * asymW * side * noise3(x * 3.1 + asymSeed * 1.7, y * 3.1, 1.3); // low-frequency side bias
   return d;
@@ -261,8 +397,9 @@ function bodyRows(n) {
   const density = (s) =>
     1 +
     2.2 * Math.exp(-(((s - 0.12) / 0.1) ** 2)) +
-    1.2 * Math.exp(-(((s - 0.29) / 0.035) ** 2)) +
-    1.8 * Math.exp(-((s / 0.02) ** 2)) +
+    1.2 * Math.exp(-(((s - 0.303) / 0.035) ** 2)) +
+    6.0 * Math.exp(-((s / 0.014) ** 2)) + // lips (and the open lip roll)
+    1.4 * Math.exp(-(((s - head.nareS) / 0.012) ** 2)) + // narial flap
     1.2 * Math.exp(-(((s - 1.07) / 0.04) ** 2)); // rounded margin of the caudal tongue
   const N = 2000;
   const cdf = new Float64Array(N + 1);
@@ -287,8 +424,13 @@ function bodyRows(n) {
 /** Non-uniform theta distribution: extra columns around the eyes / flank. */
 function thetaTable(n) {
   const th0 = 1.62; // approx. angle of the eye on the left side
+  const thN = 2.65; // approx. angle of the nostrils (dorsolateral)
   const density = (t) =>
-    1 + 1.25 * Math.exp(-(((t - th0) / 0.42) ** 2)) + 1.25 * Math.exp(-(((t - (2 * Math.PI - th0)) / 0.42) ** 2));
+    1 +
+    1.25 * Math.exp(-(((t - th0) / 0.42) ** 2)) +
+    1.25 * Math.exp(-(((t - (2 * Math.PI - th0)) / 0.42) ** 2)) +
+    0.9 * Math.exp(-(((t - thN) / 0.2) ** 2)) +
+    0.9 * Math.exp(-(((t - (2 * Math.PI - thN)) / 0.2) ** 2));
   const N = 4000;
   const cdf = new Float64Array(N + 1);
   for (let i = 1; i <= N; i++) cdf[i] = cdf[i - 1] + density(((i - 0.5) / N) * Math.PI * 2);
@@ -317,7 +459,8 @@ function scaleSize(s) {
 // ---------------------------------------------------------------------------
 export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asymSeed = 3.7 } = {}) {
   const uRows = [];
-  for (let k = 0; k < nCavity; k++) uRows.push(-1 + k / nCavity); // -1 .. just before 0
+  // -1 .. just before 0, denser toward the lip margin (the inner side of the lips)
+  for (let k = 0; k < nCavity; k++) uRows.push(-Math.pow(1 - k / nCavity, 1.6));
   for (const s of bodyRows(nBody)) uRows.push(s);
   const NR = uRows.length;
   const NC = nTheta + 1; // duplicated seam column
@@ -390,6 +533,7 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
   // 2) detail displacement along base normals (same field for both states,
   //    evaluated once on the undisplaced CLOSED surface)
   const dispArr = new Float32Array(count);
+  const lipArr = new Float32Array(count); // the lip part of the relief
   for (let st = 0; st < 3; st++) {
     const pos = P[st];
     const nrm = st === 0 ? N0 : st === 1 ? N1base : N2base;
@@ -397,11 +541,15 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
       for (let c = 0; c < NC; c++) {
         const idx = r * NC + c;
         const i = idx * 3;
-        if (st === 0) dispArr[idx] = detailDisplacement(uRows[r], P[0][i], P[0][i + 1], P[0][i + 2], asymSeed, masks);
+        if (st === 0) {
+          dispArr[idx] = detailDisplacement(uRows[r], P[0][i], P[0][i + 1], P[0][i + 2], asymSeed, masks);
+          lipArr[idx] = masks.lipD;
+        }
         let d = dispArr[idx];
-        // open gape: fleshy lips roll outward into a thick "O"
-        if (st >= 1 && uRows[r] >= 0) d += 0.0052 * gauss(uRows[r] - 0.005, 0.009);
-        if (st >= 1 && uRows[r] < 0) d += 0.0025 * gauss(uRows[r], 0.12);
+        // open gape: the rolled lips are built into the base surface; the
+        // closed lip relief only thickens them a little (along the rim normal,
+        // which faces into the mouth, the full relief would close the gape)
+        if (st >= 1) d -= lipArr[idx] * 0.6;
         pos[i] += nrm[i] * d;
         pos[i + 1] += nrm[i + 1] * d;
         pos[i + 2] += nrm[i + 2] * d;
@@ -473,7 +621,11 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
       pos[i] -= E.axis.x * push;
       pos[i + 1] -= E.axis.y * push;
       pos[i + 2] -= E.axis.z * push;
-      if (st === 0) mask2Arr[idx * 4 + 3] = Math.max(mask2Arr[idx * 4 + 3], smoothstep(1.45 * R, 0.9 * R, rho));
+      if (st === 0) {
+        mask2Arr[idx * 4 + 3] = Math.max(mask2Arr[idx * 4 + 3], smoothstep(1.45 * R, 0.9 * R, rho));
+        // the throat expansion must not swell over the lower eye
+        sectArr[idx * 4 + 3] *= smoothstep(1.1 * R, 1.6 * R, rho);
+      }
     }
   }
 

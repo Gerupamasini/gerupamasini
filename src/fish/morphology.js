@@ -26,7 +26,7 @@ import { monotoneCubic, smoothstep, clamp, lerp } from '../core/math.js';
 // The peduncle itself is deep (minimum depth ~0.16 SL, p40_1 / p42_0) and
 // strongly compressed laterally: a broad flat wedge, not a round stalk.
 const DORSAL_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.15, 0.23, 0.31, 0.385, 0.44, 0.52, 0.62, 0.73, 0.84, 0.93, 0.975, 1.0, 1.03, 1.06, 1.085, 1.1, 1.11, 1.116];
-const DORSAL_Y = [0.013, 0.036, 0.06, 0.082, 0.1, 0.123, 0.161, 0.194, 0.214, 0.221, 0.214, 0.186, 0.142, 0.104, 0.086, 0.087, 0.087, 0.081, 0.067, 0.048, 0.032, 0.017, 0.006];
+const DORSAL_Y = [0.019, 0.037, 0.06, 0.082, 0.1, 0.123, 0.161, 0.194, 0.214, 0.221, 0.214, 0.186, 0.142, 0.104, 0.086, 0.087, 0.087, 0.081, 0.067, 0.048, 0.032, 0.017, 0.006];
 // Ventral profile (negative = below axis)
 const VENTRAL_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.15, 0.21, 0.31, 0.41, 0.5, 0.6, 0.69, 0.76, 0.85, 0.92, 0.965, 1.0, 1.03, 1.06, 1.085, 1.1, 1.11, 1.116];
 const VENTRAL_Y = [-0.011, -0.031, -0.05, -0.065, -0.077, -0.089, -0.106, -0.133, -0.149, -0.155, -0.148, -0.124, -0.103, -0.077, -0.068, -0.0705, -0.072, -0.067, -0.056, -0.04, -0.027, -0.015, -0.006];
@@ -34,7 +34,7 @@ const VENTRAL_Y = [-0.011, -0.031, -0.05, -0.065, -0.077, -0.089, -0.106, -0.133
 // view (a blunt muzzle, not a wedge); the tongue behind s = 1 thins out to
 // little more than the thickness of the fleshy fin base.
 const WIDTH_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.16, 0.22, 0.29, 0.36, 0.45, 0.55, 0.65, 0.75, 0.85, 0.93, 0.97, 1.0, 1.02, 1.04, 1.06, 1.08, 1.095, 1.108, 1.116];
-const WIDTH_Z = [0.013, 0.03, 0.046, 0.058, 0.068, 0.078, 0.088, 0.097, 0.1, 0.097, 0.089, 0.075, 0.057, 0.038, 0.026, 0.02, 0.015, 0.0118, 0.0092, 0.0066, 0.0042, 0.0025, 0.0014, 0.001];
+const WIDTH_Z = [0.013, 0.032, 0.052, 0.064, 0.072, 0.079, 0.088, 0.097, 0.1, 0.097, 0.089, 0.075, 0.057, 0.038, 0.026, 0.02, 0.015, 0.0118, 0.0092, 0.0066, 0.0042, 0.0025, 0.0014, 0.001];
 // Vertical position of the widest level (-1 = ventral edge, +1 = dorsal edge)
 const WMAX_S = [0.0, 0.1, 0.3, 0.5, 0.75, 1.0, 1.12];
 const WMAX_Y = [0.0, -0.08, -0.2, -0.24, -0.12, 0.0, 0.0];
@@ -60,25 +60,33 @@ export const head = {
   // eye: centre in (s, y); radius of the exposed eyeball
   eyeS: 0.113,
   eyeY: 0.014,
-  eyeR: 0.036,
+  eyeR: 0.043,
   eyeProtrusion: 0.5, // fraction of radius standing proud of the head surface
   // mouth (terminal, very slightly superior)
-  mouthY: 0.004,
-  mouthOpenRW: 0.019, // open gape half-width (rounded rectangle)
-  mouthOpenTop: 0.012, // upper lip above the mouth line when open
-  mouthOpenBot: 0.025, // lower lip below it (the jaw drops)
-  mouthClosedRW: 0.026, // broad, rounded terminal mouth (not a pinched slit)
-  mouthClosedRH: 0.0022,
+  mouthY: -0.005,
+  // open gape (front view of p09_1: a round-topped, slightly trapezoidal O
+  // about a third of the interorbital width across)
+  mouthOpenRW: 0.024, // half-width at the upper lip
+  mouthOpenTop: 0.016, // upper lip above the mouth line when open
+  mouthOpenBot: 0.031, // lower lip below it (the jaw drops)
+  mouthOpenFwd: 0.005, // the open lips push forward into a short tube
+  // closed mouth: the cleft follows the rounded snout as a soft arch (front
+  // view) whose corners sit well back on the sides of the head (p05_1, p25_0)
+  mouthClosedRW: 0.031, // half-width of the cleft
+  mouthClosedRH: 0.0012, // the closed lips meet: only a fine cleft line
+  mouthClosedDroop: 0.0085, // the corners hang this far below the midline
+  mouthCornerBack: 0.014, // ...and sit this far behind the front of the lips
   mouthProtrusion: 0.012, // premaxillary protrusion (separate morph)
   mouthDepth: 0.075, // depth of the buccal cavity into the head
-  // nostrils (paired nares) in front of the eye
-  nareS: 0.05,
-  nareY: 0.041,
+  // nostrils (paired nares) in front of the eye, at about the level of the
+  // top of the eye just under the dorsal outline
+  nareS: 0.044,
+  nareY: 0.061,
   // opercular (gill cover) posterior margin: s as function of y
   opercTopY: 0.118,
   opercBotY: -0.108,
   // pectoral fin base (just behind the lower opercular margin)
-  pectoralS: 0.29,
+  pectoralS: 0.305,
   pectoralY: -0.088,
 };
 
@@ -88,9 +96,11 @@ export function opercMarginS(y) {
   // (to the dorsal end of the gill opening) and strongly forward below
   // (towards the isthmus / branchiostegal membrane).
   const t = clamp((y - head.opercBotY) / (head.opercTopY - head.opercBotY), 0, 1); // 0 bottom .. 1 top
-  const mid = 0.285;
-  const up = 0.252;
-  const down = 0.22;
+  // (head length tip -> margin ~2.7 snout-eye distances, HL/SL ~0.31:
+  // p05_1, p12_0, p11_1 and the koi skeleton)
+  const mid = 0.303;
+  const up = 0.27;
+  const down = 0.238;
   const k = t - 0.52;
   if (k >= 0) return mid - (mid - up) * Math.pow(k / 0.48, 1.9);
   return mid - (mid - down) * Math.pow(-k / 0.52, 1.6);
@@ -98,7 +108,9 @@ export function opercMarginS(y) {
 
 /** Preopercle ridge (the curved bony ridge between eye and operculum). */
 export function preopercS(y) {
-  return opercMarginS(y) - 0.058 - 0.02 * Math.max(0, -y) / 0.1;
+  // vertical limb at ~0.65 HL, half an eye diameter behind the orbit, curving
+  // forward ventrally toward the jaw joint
+  return opercMarginS(y) - 0.1 - 0.02 * Math.max(0, -y) / 0.1;
 }
 
 // --- Cross-section --------------------------------------------------------------
