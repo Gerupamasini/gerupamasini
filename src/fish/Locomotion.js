@@ -14,8 +14,17 @@
 //  * C-start (Eaton 1977/1988; Domenici & Blake 1997): ~8 ms latency, stage 1
 //    ≈ 20–25 ms C-bend with head angular velocity ≈ 3000–4500 °/s, stage 2
 //    return stroke, peak ≈ 15 BL/s, then burst swimming.
-//  * Burst-and-coast intermittent swimming, pectoral sculling during hovering
-//    (fins are never still: hovering costs ~2× RMR), pectoral braking.
+//  * Intermittent ("burst-and-coast") swimming at routine speeds (Videler &
+//    Weihs 1982; Wu et al. 2007 for goldfish): below ~0.3 BL/s the caudal
+//    fin is held still and straight and the pectorals row; up to ~1 BL/s a
+//    fish gives 1–2 tail kicks and then glides with a straight body for 1–3 s;
+//    up to ~2.2 BL/s bursts of 2–4 beats alternate with glides; only faster
+//    swimming is a steady Bainbridge tail beat.
+//  * Pectoral fins are used in short bouts (station holding, slow turns,
+//    braking, fine positioning) and are otherwise held still, slightly
+//    spread while hovering and adducted against the body while swimming.
+//  * Bottom rest: the fish settles just above the gravel with the dorsal fin
+//    partly lowered, fins folded, slower ventilation and few corrections.
 //  * Buccal–opercular ventilation (mouth leads operculum), ~70–110 min⁻¹.
 //  * Horizontal saccades 2–25° with independent eyes (Easter 1971; Mensh 2004).
 
@@ -56,16 +65,23 @@ export class Locomotion {
 
     // tail wave
     this.phase = r.range(0, TAU);
-    this.freq = 1.0;
-    this.amp = 0.015; // tail-tip amplitude, SL units
+    this.freq = 0;
+    this.amp = 0; // tail-tip amplitude, SL units
     this.waveLen = 0.95 * r.range(0.95, 1.05);
     this.gait = 'hover';
     this.coast = false;
-    this.coastTimer = 0;
-    this.burstBeats = 0;
-    this.lastPhaseCycle = 0;
+    // tail-beat bout: n cycles (0 = tail held still), u = cycles done,
+    // f = beat frequency (Hz), A = peak amplitude (SL)
+    this.bout = { n: 0, u: 0, f: 2, A: 0 };
+    this.glideTime = 0; // time since the last bout ended
+    this.glideLow = 0.65; // the next bout starts when U < glideLow * target
+    this.boutTarget = 0; // speed (BL/s) the current bout drives toward
+    this.flickTimer = r.range(4, 20); // rare corrective tail flick while hovering
     this.brakeLevel = 0;
     this.exertion = 0; // accumulates with fast swimming -> faster breathing
+    this.hoverVel = new THREE.Vector3(); // pectoral translation while hovering (m/s)
+    this.restLevel = 0; // 0..1 bottom-rest posture
+    this.driftAcc = 0; // uncorrected drift since the last pectoral bout (SL)
 
     // individual motor signature
     this.sig = {
@@ -73,8 +89,10 @@ export class Locomotion {
       ampMul: r.range(0.9, 1.1),
       turnAgility: r.range(0.85, 1.2) * (0.8 + 0.4 * (P.activity ?? 1) * 0.5),
       burstCoastBias: r.range(0.3, 0.85),
+      glideTau: r.range(2.2, 3.0), // passive deceleration time constant (s)
       noiseSeed: r.range(0, 1000),
-      pectFreq: r.range(1.4, 2.3), // hovering pectoral beat (Hz)
+      pectFreq: r.range(1.1, 1.8), // pectoral stroke rate during a bout (Hz)
+      pectHold: r.range(0.7, 1.4), // individual patience between pectoral bouts
       breathRate: r.range(1.15, 1.6), // Hz  (≈ 70–96 / min at ~22 °C)
       opercAmp: r.range(0.35, 0.55),
       mouthAmp: r.range(0.05, 0.1),
@@ -91,6 +109,9 @@ export class Locomotion {
       lookAt: null, // THREE.Vector3 | null
       finsClamped: 0, // 0..1 fear posture
       hoverPrecision: 0, // 0..1 fine positioning (feeding)
+      hoverVel: new THREE.Vector3(), // pectoral translation while hovering (m/s, world)
+      rest: 0, // 0..1 bottom-rest posture
+      steady: false, // force continuous (non-intermittent) tail beating
     };
 
     // heading history for caudally propagating turns
@@ -101,11 +122,13 @@ export class Locomotion {
     this.hCount = 0;
 
     // pectorals / fins
+    // each pectoral runs its own bouts of strokes (n strokes at f Hz, peak A)
+    // separated by holds; `act` is the smoothed stroke activity
     this.pect = [
-      { phase: r.range(0, TAU), amp: 0.3, ext: 0.7, brake: 0 },
-      { phase: r.range(0, TAU), amp: 0.3, ext: 0.7, brake: 0 },
+      { phase: 0, amp: 0, ext: 0.7, brake: 0, bout: { n: 0, u: 0, f: 1.4, A: 0 }, hold: r.range(0.2, 2.5), act: 0 },
+      { phase: 0, amp: 0, ext: 0.7, brake: 0, bout: { n: 0, u: 0, f: 1.4, A: 0 }, hold: r.range(0.2, 2.5), act: 0 },
     ];
-    this.fins = { dorsal: 1, anal: 1, caudalSpread: 0.85, pelvic: 0.6 };
+    this.fins = { dorsal: 1, anal: 1, caudalSpread: 0.85, pelvic: 0.6, relax: 0 };
 
     // head: breathing, mouth, eyes
     this.breathPhase = r.range(0, TAU);
@@ -212,110 +235,145 @@ export class Locomotion {
     }
 
     // ---------------------------------------------------------- steering
+    this.restLevel = damp(this.restLevel, cmd.rest, cmd.rest > this.restLevel ? 0.8 : 2.5, dt);
+    const rest = this.restLevel;
+    this.pitchErr = 0;
     if (!this.cstart) {
       const d = cmd.dir;
       const targetYaw = Math.atan2(-d.z, d.x);
       const horiz = Math.hypot(d.x, d.z);
-      const targetPitch = clamp(Math.atan2(d.y, horiz) * 0.85 + cmd.pitchBias + this.yawnLevel * 0.16, -1.05, 1.0);
-      const err = wrapAngle(targetYaw - this.yaw);
+      const targetPitch = clamp(Math.atan2(d.y, horiz) * 0.85 + cmd.pitchBias + this.yawnLevel * 0.16 - 0.05 * rest, -1.05, 1.0);
+      let err = wrapAngle(targetYaw - this.yaw);
+      // a target (nearly) behind: keep turning the way we already turn
+      // instead of flipping sides when the error crosses ±180°
+      if (Math.abs(err) > 2.3 && this.yawRate * err < 0 && Math.abs(this.yawRate) > 0.15) err -= Math.sign(err) * TAU;
       const U = this.speed / SL;
-      // routine turn rates: ~115 °/s hovering .. ~300 °/s swimming (koi: 88–1050 °/s)
-      const wMax = lerp(2.0, 5.2, clamp(U / 2.2, 0, 1)) * sig.turnAgility * (1 + cmd.urgency * 0.9);
+      // routine turn rates: a calmly hovering fish pivots on its pectorals at
+      // ~60 °/s, a swimming one turns at ~115–300 °/s (koi: 88–1050 °/s)
+      const calmHover = (1 - smoothstep(0.15, 0.6, Math.max(U, desiredSpeedBL))) * (1 - cmd.urgency);
+      const wMax = lerp(lerp(2.0, 5.2, clamp(U / 2.2, 0, 1)), 1.1 * (1 - 0.5 * rest), calmHover) * sig.turnAgility * (1 + cmd.urgency * 0.9);
       const wTarget = clamp(err * (2.6 + cmd.urgency * 2), -wMax, wMax);
-      const aMax = 26 * (1 + cmd.urgency);
+      const aMax = lerp(26, 7, calmHover) * (1 + cmd.urgency);
       this.yawRate += clamp(wTarget - this.yawRate, -aMax * dt, aMax * dt);
-      // wandering micro-heading noise (never a perfectly straight line)
-      const n = fbm1(time * 0.35 + sig.noiseSeed, 2) * 0.12 * (1 - cmd.hoverPrecision);
+      // slow heading drift (never a perfectly straight line); a hovering or
+      // resting fish hardly wanders off its heading
+      const n = fbm1(time * 0.2 + sig.noiseSeed, 2) * 0.12 * (1 - cmd.hoverPrecision) * lerp(1, 0.25, calmHover) * (1 - 0.9 * rest);
       this.yaw = wrapAngle(this.yaw + (this.yawRate + n) * dt);
+      this.pitchErr = wrapAngle(targetPitch - this.pitch);
       this.pitch = dampAngle(this.pitch, targetPitch, 2.2 + cmd.urgency * 2, dt);
     }
-    const bankTarget = clamp(-this.yawRate * (this.speed / SL) * 0.05, -0.3, 0.3) + fbm1(time * 0.23 + sig.noiseSeed * 1.3, 2) * 0.03;
+    const bankTarget = clamp(-this.yawRate * (this.speed / SL) * 0.05, -0.3, 0.3) + fbm1(time * 0.23 + sig.noiseSeed * 1.3, 2) * 0.03 * (1 - 0.7 * rest);
     this.roll = damp(this.roll, bankTarget, 3, dt);
 
     // ---------------------------------------------------------- gait / speed
     const U = this.speed / SL;
-    let brake = cmd.brake || this.override.brake || (U > desiredSpeedBL * 1.6 + 0.25 && !this.cstart);
+    const r = this.fish.rng;
+    // a fish that is merely faster than it wants to be glides; it brakes
+    // with the pectorals to stop from a brisk speed, when homing in on
+    // something (food) or on command
+    const homing = cmd.urgency > 0 || cmd.lookAt !== null || cmd.hoverPrecision > 0.3;
+    const brake = cmd.brake || this.override.brake || (!this.cstart && ((desiredSpeedBL < 0.3 && U > 0.9) || (homing && U > desiredSpeedBL * 1.4 + 0.3)));
     this.brakeLevel = damp(this.brakeLevel, brake ? 1 : 0, brake ? 10 : 4, dt);
-
-    let targetF;
-    let targetA;
-    let prodSpeed;
-    if (this.cstart && this.cstart.t < this.cstart.latency + this.cstart.s1 + this.cstart.s2) {
-      targetF = this.freq;
-      targetA = this.amp;
-      prodSpeed = this.speed / SL;
+    const B = this.bout;
+    const inCStart = this.cstart && this.cstart.t < this.cstart.latency + this.cstart.s1 + this.cstart.s2;
+    let targetSpeed = null; // m/s; null = unpowered glide
+    let tau = 0.45;
+    this.coast = false;
+    if (inCStart) {
+      // the C-bend itself comes from the C-start program
       this.gait = 'cstart';
+      B.n = 0;
+      B.u = 0;
     } else if (this.cstart) {
       // post-escape burst swimming
       const k = 1 - smoothstep(0, this.cstart.burst, this.cstart.t - this.cstart.latency - this.cstart.s1 - this.cstart.s2);
       const burstU = lerp(Math.max(desiredSpeedBL, 1.5), 7.5, k);
-      targetF = (4 / 3) * (burstU + 1) * sig.freqMul;
-      targetA = 0.1;
-      prodSpeed = burstU;
+      this._steadyBeat((4 / 3) * (burstU + 1) * sig.freqMul, 0.1, dt);
+      targetSpeed = burstU * SL;
+      this.boutTarget = burstU;
       this.gait = 'burst';
-    } else if (desiredSpeedBL < 0.22 || brake) {
-      // hovering / slow pectoral swimming; tail makes small corrective sweeps
+      this.glideTime = 0;
+    } else if (desiredSpeedBL < (this.gait === 'hover' ? 0.36 : 0.3) || brake) {
+      // hovering / slow pectoral swimming: the caudal fin is held still and
+      // straight. A running tail beat is finished, never frozen mid-stroke.
+      // (A little hysteresis keeps a fish from toggling between pectoral
+      // creeping and tail kicks around the threshold.)
       this.gait = brake ? 'brake' : 'hover';
-      const corr = 0.5 + 0.5 * Math.max(0, fbm1(time * 0.4 + sig.noiseSeed * 2.1, 2));
-      targetF = lerp(0.75, 1.3, corr) * sig.freqMul;
-      targetA = (0.008 + 0.014 * corr) * (brake ? 1.8 : 1);
-      prodSpeed = desiredSpeedBL;
-      this.coast = false;
+      if (B.n > 0) B.n = Math.min(B.n, Math.max(Math.floor(B.u) + 1, B.u + 0.5));
+      else if (!brake && rest < 0.2) {
+        // a rare single, small corrective sweep while holding station
+        this.flickTimer -= dt;
+        if (this.flickTimer <= 0) {
+          if (Math.abs(this.yawRate) > 0.3 || this.driftAcc > 0.05 || this.hoverVel.length() > 0.08 * SL) {
+            this._startBout(1, r.range(1.2, 1.6) * sig.freqMul, r.range(0.01, 0.016));
+            this.boutTarget = Math.max(U, desiredSpeedBL);
+            this.driftAcc *= 0.3;
+            this.flickTimer = jitterDuration(r, 18, 0.5);
+          } else this.flickTimer = r.range(1.5, 4);
+        }
+      }
+      targetSpeed = (brake ? desiredSpeedBL * 0.5 : desiredSpeedBL) * SL;
+      tau = brake ? 0.35 : 1.2; // pectoral thrust and braking are gentle
+      this.glideTime = 0;
+    } else if (desiredSpeedBL < 2.2 && !cmd.steady && !(desiredSpeedBL > 1.2 && sig.burstCoastBias < 0.45)) {
+      // intermittent swimming: a bout of tail kicks, then a glide with the
+      // body straight and the tail still until the speed has decayed
+      if (B.n <= 0) {
+        this.glideTime += dt;
+        const deficit = desiredSpeedBL - U;
+        if (U < desiredSpeedBL * this.glideLow || (this.glideTime > (desiredSpeedBL < 1 ? 3.5 : 2.6) && deficit > 0) || deficit > 0.6) {
+          this._kickBout(desiredSpeedBL, U);
+          this.glideTime = 0;
+        }
+      }
+      if (B.n > 0) {
+        this.gait = 'swim';
+        targetSpeed = this.boutTarget * SL;
+        tau = 0.3; // the first strokes of a kick give most of the thrust
+      } else {
+        this.gait = 'coast';
+        this.coast = true;
+      }
     } else {
-      // swimming, optionally intermittent (burst-and-coast)
+      // steady swimming: Bainbridge tail-beat frequency
       const accel = clamp(desiredSpeedBL - U, 0, 3);
       const uCmd = desiredSpeedBL + accel * 0.9; // thrust overdrive while accelerating
-      const useBC = desiredSpeedBL > 0.35 && desiredSpeedBL < 2.2 && sig.burstCoastBias > 0.35;
-      if (useBC) {
-        // count completed tail beats to end a burst of 1–3 beats
-        const cyc = Math.floor(this.phase / TAU);
-        if (!this.coast && cyc !== this.lastPhaseCycle) {
-          this.burstBeats++;
-          if (this.burstBeats >= this.burstTarget && U > desiredSpeedBL * 0.95) {
-            this.coast = true;
-            this.coastTimer = 0;
-          }
-        }
-        this.lastPhaseCycle = cyc;
-        if (this.coast) {
-          this.coastTimer += dt;
-          if (U < desiredSpeedBL * lerp(0.55, 0.8, sig.burstCoastBias) || this.coastTimer > 2.5 || accel > 0.6) {
-            this.coast = false;
-            this.burstBeats = 0;
-            this.burstTarget = 1 + Math.floor(this.fish.rng.range(0, 3));
-          }
-        }
-      } else this.coast = false;
-      if (this.burstTarget === undefined) this.burstTarget = 2;
-      targetF = Math.max(1.25, (4 / 3) * (uCmd * (this.coast ? 0.5 : 1.12) + 1)) * sig.freqMul;
-      targetA = 0.1 * clamp(0.18 + (0.82 * (targetF - 1.33)) / 3.67, 0.16, 1.0) * sig.ampMul;
-      if (this.coast) targetA *= 0.12;
-      prodSpeed = this.coast ? 0 : uCmd * (useBC ? 1.12 : 1);
-      this.gait = this.coast ? 'coast' : U > 2.5 ? 'cruise-fast' : 'swim';
+      const f = (4 / 3) * (uCmd + 1) * sig.freqMul;
+      this._steadyBeat(f, this._ampForFreq(f) * sig.ampMul, dt);
+      targetSpeed = uCmd * SL;
+      this.boutTarget = desiredSpeedBL;
+      this.gait = U > 2.5 ? 'cruise-fast' : 'swim';
+      this.glideTime = 0;
     }
+    // advance the tail-beat bout; the wave amplitude rises over the first
+    // third of a cycle and fades over the last half, so every bout starts and
+    // ends with a straight body
+    let fMul = this.globalMul.freq;
+    let aMul = this.globalMul.amp;
     if (this.override.enabled) {
-      targetF *= this.override.freqMul;
-      targetA *= this.override.ampMul;
+      fMul *= this.override.freqMul;
+      aMul *= this.override.ampMul;
     }
-    targetF *= this.globalMul.freq;
-    targetA *= this.globalMul.amp;
-    targetF = Math.min(targetF, 14);
-    targetA = Math.min(targetA, 0.13);
-    this.freq = damp(this.freq, targetF, 5, dt);
-    this.amp = damp(this.amp, targetA, targetA > this.amp ? 7 : 3, dt);
-    this.phase += TAU * this.freq * dt;
+    let targetA = 0;
+    let targetF = 0;
+    if (B.n > 0) {
+      const f = Math.min(B.f * fMul, 14);
+      B.u += f * dt;
+      this.phase += TAU * f * dt;
+      targetA = Math.min(B.A * aMul, 0.13) * smoothstep(0, 0.35, B.u) * (1 - smoothstep(B.n - 0.55, B.n, B.u));
+      targetF = f;
+      if (B.u >= B.n) {
+        B.n = 0;
+        B.u = 0;
+      }
+    }
+    this.amp = damp(this.amp, targetA, 25, dt);
+    this.freq = damp(this.freq, targetF, 8, dt);
 
     // speed dynamics
-    if (!(this.cstart && this.cstart.t < this.cstart.latency + this.cstart.s1 + this.cstart.s2)) {
-      let tau = 0.45;
-      let target = prodSpeed * SL;
-      if (this.coast) tau = 1.6; // glide
-      if (brake) {
-        tau = 0.28;
-        target = desiredSpeedBL * SL * 0.5;
-      }
-      if (this.gait === 'hover') tau = 0.9;
-      this.speed = damp(this.speed, target, 1 / tau, dt);
+    if (!inCStart) {
+      if (targetSpeed === null) this.speed = damp(this.speed, 0, 1 / sig.glideTau, dt);
+      else this.speed = damp(this.speed, targetSpeed, 1 / tau, dt);
     }
     this.exertion = Math.min(1, this.exertion + dt * 0.02 * Math.max(0, U - 1.5));
 
@@ -326,13 +384,22 @@ export class Locomotion {
     _q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.roll);
     this.quat.multiply(_q);
     const fwd = forwardFromYawPitch(this.yaw, this.pitch, new THREE.Vector3());
-    // hovering fish drift slowly (pectoral sculling is not perfectly balanced)
+    // pectoral translation while hovering (station keeping, repositioning,
+    // being nudged by a neighbour) - no turn, no tail
+    this.hoverVel.lerp(cmd.hoverVel, 1 - Math.exp(-dt / 0.7));
+    // hovering fish drift slowly between pectoral bouts (the fins are held
+    // still, so nothing balances the slight buoyancy and current); a bout of
+    // strokes corrects it
+    const hoverDrift = this.gait === 'hover' ? 1 : 0.3;
+    const pectAct = 0.5 * (this.pect[0].act + this.pect[1].act);
     const drift = new THREE.Vector3(
       fbm1(time * 0.11 + sig.noiseSeed * 3.3, 2),
       fbm1(time * 0.09 + sig.noiseSeed * 4.1, 2) * 0.6,
       fbm1(time * 0.1 + sig.noiseSeed * 5.7, 2)
-    ).multiplyScalar(0.012 * SL * (this.gait === 'hover' ? 1 : 0.3) * (1 - cmd.hoverPrecision * 0.8));
-    this.vel.copy(fwd).multiplyScalar(this.speed).add(drift);
+    ).multiplyScalar(0.012 * SL * hoverDrift * (1 - cmd.hoverPrecision * 0.8) * (1 - 0.85 * rest) * (1 - 0.7 * pectAct));
+    if (this.gait === 'hover') this.driftAcc += (drift.length() / SL) * dt;
+    this.driftAcc *= Math.exp(-dt * (0.05 + 1.5 * pectAct));
+    this.vel.copy(fwd).multiplyScalar(this.speed).add(this.hoverVel).add(drift);
     this.pos.addScaledVector(this.vel, dt);
 
     // heading history
@@ -353,6 +420,55 @@ export class Locomotion {
     this.debug.tailAmp = this.amp;
     this.debug.speedBL = this.speed / SL;
     this.debug.gait = this.gait;
+  }
+
+  /** Tail-tip amplitude (SL) for a beat frequency: grows with f, ≈ ±0.1 SL above 5 Hz. */
+  _ampForFreq(f) {
+    return 0.1 * clamp(0.18 + (0.82 * (f - 1.33)) / 3.67, 0.16, 1.0);
+  }
+
+  _startBout(n, f, A) {
+    const B = this.bout;
+    B.n = n;
+    B.u = 0;
+    B.f = f;
+    B.A = A;
+  }
+
+  /** One kick bout of intermittent swimming toward `want` BL/s from `U`. */
+  _kickBout(want, U) {
+    const r = this.fish.rng;
+    const sig = this.sig;
+    const deficit = Math.max(0, want - U);
+    let n;
+    let f;
+    if (want < 1.0) {
+      // slow cruising: one or two kicks
+      n = 1 + (r.next() < lerp(0.2, 0.6, smoothstep(0.3, 1.0, want)) ? 1 : 0) + (deficit > 0.45 ? 1 : 0);
+      f = r.range(2.0, 2.7);
+    } else {
+      // brisk swimming: bursts of 2–4 beats
+      n = 2 + Math.floor(r.range(0, 2.99)) + (deficit > 0.8 ? 1 : 0);
+      f = (4 / 3) * (want * 1.25 + 1);
+    }
+    f *= sig.freqMul;
+    const A = this._ampForFreq(f) * sig.ampMul * lerp(1.05, 1.3, smoothstep(0, 0.8, deficit)) * lerp(0.75, 1, smoothstep(0.3, 0.8, want));
+    this._startBout(n, f, A);
+    // kick up to ~1.3x the wanted speed, glide down to ~0.6x before the next bout
+    this.boutTarget = want * r.range(1.25, 1.45) + deficit * 0.3;
+    this.glideLow = lerp(0.5, 0.72, sig.burstCoastBias) * r.range(0.9, 1.1) * lerp(1, 1.12, smoothstep(1, 2, want));
+  }
+
+  /** Continuous tail beating (steady swimming, escape burst). */
+  _steadyBeat(f, A, dt) {
+    const B = this.bout;
+    if (B.n <= 0) {
+      this._startBout(1, f, A);
+      return;
+    }
+    B.n = Math.max(B.n, B.u + 1);
+    B.f = damp(B.f, f, 5, dt);
+    B.A = damp(B.A, A, A > B.A ? 7 : 3, dt);
   }
 
   _history(tAgo, now) {
@@ -419,6 +535,7 @@ export class Locomotion {
     const U = Math.max(this.speed, 1.3 * SL);
     const ia = Math.round(S_ANCHOR * (NS - 1));
     const n1 = this.sig.noiseSeed;
+    const calm = 1 - 0.6 * this.restLevel;
     for (let i = 0; i < NS; i++) {
       const s = i * ds;
       // Videler–Hess amplitude envelope (normalised to 1 at the tail)
@@ -439,8 +556,8 @@ export class Locomotion {
       // C-start: constant curvature C-shape
       yawA += -cBend * (s - S_ANCHOR);
       // postural micro-adjustments (tiny, slow, individual)
-      yawA += fbm1(time * 0.31 + n1 + s * 0.8, 2) * 0.025 * (s - S_ANCHOR);
-      pitchA += fbm1(time * 0.27 + n1 * 1.7 + s * 0.5, 2) * 0.02 * (s - S_ANCHOR);
+      yawA += fbm1(time * 0.2 + n1 + s * 0.8, 2) * 0.025 * (s - S_ANCHOR) * calm;
+      pitchA += fbm1(time * 0.17 + n1 * 1.7 + s * 0.5, 2) * 0.02 * (s - S_ANCHOR) * calm;
       this.bend[i] = yawA;
       this.bendPitch[i] = pitchA;
     }
@@ -481,48 +598,113 @@ export class Locomotion {
   _updateFins(dt, time, brake) {
     const sig = this.sig;
     const cmd = this.cmd;
-    const U = this.speed / this.SL;
+    const r = this.fish.rng;
+    const SL = this.SL;
+    const U = this.speed / SL;
     const fear = cmd.finsClamped;
-    const hover = this.gait === 'hover';
+    const rest = this.restLevel;
+    const bl = this.brakeLevel;
     const fast = smoothstep(0.8, 2.5, U);
-    const pectFold = smoothstep(0.25, 1.4, U); // pectorals adduct already at moderate speed
-    // dorsal: erect when slow / manoeuvring, lowered at speed, clamped in fear
-    const dorsalT = clamp(1 - 0.45 * fast - 0.65 * fear + 0.1 * this.brakeLevel, 0.15, 1);
+    const slow = 1 - smoothstep(0.1, 0.6, U);
+    const pectFold = smoothstep(0.15, 0.6, U); // pectorals adducted as soon as the fish swims
+    // relaxed fins droop a little when the fish is slow and calm (FishRig)
+    this.fins.relax = damp(this.fins.relax, clamp(slow * (1 - 0.7 * fear) * (1 - bl) + 0.3 * rest, 0, 1) * (1 - this.yawnLevel), 1.5, dt);
+    // dorsal: erect when slow / manoeuvring, lowered at speed, clamped in
+    // fear, partly lowered while resting on the bottom
+    const dorsalT = clamp(1 - 0.45 * fast - 0.65 * fear + 0.1 * bl - 0.5 * rest, 0.15, 1);
     const yl = this.yawnLevel; // a yawn erects every fin ("stretch")
     this.fins.dorsal = damp(this.fins.dorsal, this.cstart ? 0.35 : lerp(dorsalT, 1.18, yl), 4, dt);
-    this.fins.anal = damp(this.fins.anal, lerp(clamp(1 - 0.35 * fast - 0.4 * fear, 0.3, 1), 1.1, yl), 4, dt);
-    const spreadT = 0.82 + 0.35 * this.brakeLevel + 0.15 * Math.abs(this.yawRate) / 3 - 0.3 * fear + (this.gait === 'burst' ? 0.2 : 0) - (hover ? 0.1 : 0);
-    this.fins.caudalSpread = damp(this.fins.caudalSpread, lerp(clamp(spreadT, 0.45, 1.35), 1.3, yl), 5, dt);
-    this.fins.pelvic = damp(this.fins.pelvic, lerp(clamp(0.75 - 0.6 * fast + 0.4 * this.brakeLevel - 0.3 * fear, 0.05, 1), 1.0, yl), 4, dt);
+    this.fins.anal = damp(this.fins.anal, lerp(clamp(1 - 0.35 * fast - 0.4 * fear - 0.3 * rest, 0.3, 1), 1.1, yl), 4, dt);
+    // the caudal fin is partly folded while hovering and more so at rest
+    const spreadT = 0.82 + 0.35 * bl + (0.15 * Math.abs(this.yawRate)) / 3 - 0.3 * fear + (this.gait === 'burst' ? 0.2 : 0) - 0.22 * slow - 0.1 * rest;
+    this.fins.caudalSpread = damp(this.fins.caudalSpread, lerp(clamp(spreadT, 0.45, 1.35), 1.3, yl), 3, dt);
+    // pelvics: spread as stabilisers while hovering, tucked at speed and at
+    // rest (where they would otherwise dig into the gravel)
+    this.fins.pelvic = damp(this.fins.pelvic, lerp(clamp(0.72 - 0.6 * fast + 0.4 * bl - 0.3 * fear - 0.4 * rest, 0.05, 1), 1.0, yl), 3, dt);
 
-    // pectorals: sculling while hovering, adducted at speed, flared to brake,
-    // inner fin extended as a pivot during turns
+    // ---- pectorals: short bouts of strokes, held still in between.
+    // How much sculling the moment calls for: slow pectoral swimming,
+    // repositioning, pivot turns, pitch changes, fine positioning (feeding),
+    // accumulated drift, braking.
+    const hoverK = 1 - pectFold;
+    const turnN = smoothstep(0.12, 0.7, Math.abs(this.yawRate));
+    let need =
+      hoverK *
+      clamp(
+        smoothstep(0.03, 0.2, U) +
+          smoothstep(0.01, 0.12, this.hoverVel.length() / SL) +
+          0.8 * turnN +
+          0.5 * smoothstep(0.08, 0.4, Math.abs(this.pitchErr || 0)) +
+          0.6 * cmd.hoverPrecision +
+          0.6 * clamp(this.driftAcc / 0.06, 0, 1),
+        0,
+        1
+      ) *
+      (1 - 0.6 * rest);
+    need = clamp(need + bl, 0, 1);
+    const canScull = !this.cstart && (pectFold < 0.7 || bl > 0.3);
     for (let s = 0; s < 2; s++) {
       const p = this.pect[s];
       const side = s === 0 ? 1 : -1;
       const turnInner = clamp(-this.yawRate * side * 0.25, 0, 0.4); // left fin is the inner (pivot) fin in left turns (yawRate < 0)
-      const extT = lerp(clamp(lerp(0.85, 0.06, pectFold) + turnInner - fear * 0.4, 0.04, 1), 1.0, yl);
-      p.ext = damp(p.ext, this.cstart ? 0.05 : extT, 6, dt);
-      p.brake = damp(p.brake, this.brakeLevel * 0.9, 8, dt);
-      const f = sig.pectFreq * (hover ? 1 : 1.25) * (1 + 0.1 * fbm1(time * 0.5 + sig.noiseSeed + s * 7, 1));
-      // alternating strokes with slowly drifting phase relation
-      p.phase += TAU * f * dt;
-      const ampT = ((hover ? 0.42 : 0.25) * (1 - fast) + this.brakeLevel * 0.25 + cmd.hoverPrecision * 0.15) * (1 - 0.85 * yl);
-      p.amp = damp(p.amp, ampT, 3, dt);
+      // held slightly spread while hovering, lowered as props at rest,
+      // adducted against the body while swimming
+      const extT = lerp(clamp(lerp(lerp(0.78, 0.5, rest), 0.06, pectFold) + turnInner - fear * 0.4, 0.04, 1), 1.0, yl);
+      p.ext = damp(p.ext, this.cstart ? 0.05 : extT, 5, dt);
+      p.brake = damp(p.brake, bl * 0.9, 8, dt);
+      const b = p.bout;
+      if (b.n > 0) {
+        b.u += b.f * dt;
+        if (b.u >= b.n || !canScull) {
+          b.n = 0;
+          b.u = 0;
+          // hold: long when nothing is needed, short when sculling is needed
+          p.hold = lerp(r.range(1.2, 5.5), r.range(0.1, 0.5), need) * sig.pectHold * (1 + 1.5 * rest);
+        }
+      } else if (canScull) {
+        p.hold -= dt * (1 + 3 * need);
+        if (p.hold <= 0) {
+          const urge = need + hoverK * 0.25 * (1 - 0.7 * rest);
+          if (r.next() < clamp(urge, 0.06, 1)) {
+            // the fin on the outside of a turn sculls harder
+            const outer = clamp(this.yawRate * side, -1, 1) * turnN;
+            const n = rest > 0.5 ? 1 + (r.next() < 0.4 ? 1 : 0) : 2 + Math.floor(r.range(0, 3.99)) + (need > 0.6 ? 2 : 0);
+            const f = sig.pectFreq * lerp(1, 1.35, need) * r.range(0.9, 1.1);
+            const A = r.range(0.16, 0.24) * lerp(0.75, 1.15, need) * (1 - 0.5 * rest) * (1 + 0.4 * outer) + 0.08 * bl;
+            this._pectBout(p, n, f, A, 0);
+            // usually both fins row, alternating; about a third of the bouts
+            // use a single fin
+            const o = this.pect[1 - s];
+            if (o.bout.n <= 0 && r.next() < 0.7) this._pectBout(o, n, f * r.range(0.95, 1.05), A * r.range(0.8, 1.1) * (1 - 0.8 * outer), -r.range(0.35, 0.6));
+          } else p.hold = r.range(0.8, 2.5) * sig.pectHold * (1 + rest);
+        }
+      }
+      // stroke envelope: rises over a third of a stroke, fades over the last half
+      const env = b.n > 0 ? smoothstep(0, 0.3, b.u) * (1 - smoothstep(b.n - 0.5, b.n, b.u)) : 0;
+      p.phase = b.n > 0 ? Math.max(0, b.u) * TAU : 0;
+      const ampT = b.A * env * (1 - pectFold * (1 - bl)) * (1 - 0.85 * yl);
+      p.amp = damp(p.amp, ampT, 20, dt);
+      p.act = damp(p.act, b.n > 0 && b.u > 0 ? 1 : 0, 3, dt);
     }
-    // phase coupling: pectorals tend toward antiphase while hovering
-    const dphi = wrapAngle(this.pect[0].phase - this.pect[1].phase - Math.PI);
-    this.pect[0].phase -= dphi * 0.3 * dt;
-    this.pect[1].phase += dphi * 0.3 * dt;
+  }
+
+  _pectBout(p, n, f, A, u0) {
+    const b = p.bout;
+    b.n = n;
+    b.u = u0; // negative: delayed start (the partner fin lags the leader)
+    b.f = f;
+    b.A = A;
   }
 
   _updateHead(dt, time) {
     const sig = this.sig;
     // ---- ventilation
-    const rate = sig.breathRate * this.globalMul.breath * (1 + 0.6 * this.exertion) * (1 + 0.08 * fbm1(time * 0.2 + sig.noiseSeed, 2));
+    // resting fish ventilate more slowly and shallowly
+    const rest = this.restLevel;
+    const rate = sig.breathRate * this.globalMul.breath * (1 + 0.6 * this.exertion) * (1 - 0.22 * rest) * (1 + 0.08 * fbm1(time * 0.2 + sig.noiseSeed, 2));
     this.breathPhase += TAU * rate * dt;
     const bp = this.breathPhase;
-    const breathAmp = 1 + 0.9 * this.exertion;
+    const breathAmp = (1 + 0.9 * this.exertion) * (1 - 0.15 * rest);
     // buccal expansion (mouth opens) leads opercular abduction by ~0.3 cycle
     let mouth = sig.mouthAmp * breathAmp * Math.pow(Math.max(0, Math.sin(bp)), 1.5);
     let operc = sig.opercAmp * breathAmp * Math.pow(Math.max(0, Math.sin(bp - 1.9)), 1.3);
@@ -602,7 +784,7 @@ export class Locomotion {
         const corr = this.fish.rng.next() < 0.6;
         e.tYaw = corr ? clamp(other.tYaw + this.fish.rng.range(-0.08, 0.08), -0.3, 0.3) : this.fish.rng.range(-0.3, 0.3);
         e.tPitch = this.fish.rng.range(-0.06, 0.06);
-        e.timer = jitterDuration(this.fish.rng, 2.0, 0.6);
+        e.timer = jitterDuration(this.fish.rng, 2.0 * (1 + 1.5 * rest), 0.6);
       }
       // saccades are fast (~40–60 ms), fixations drift < 1 °/s
       e.yaw = damp(e.yaw, e.tYaw, look ? 10 : 45, dt);
@@ -615,6 +797,7 @@ export class Locomotion {
     pose.dorsalErect = this.fins.dorsal;
     pose.analErect = this.fins.anal;
     pose.caudalSpread = this.fins.caudalSpread;
+    pose.relax = this.fins.relax;
     for (let s = 0; s < 2; s++) {
       const p = this.pect[s];
       const o = pose.pect[s];

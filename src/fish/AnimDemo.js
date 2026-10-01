@@ -2,10 +2,14 @@
 // from the GUI. In the aquarium they drive the selected fish (or all fish)
 // through the behaviour layer; in the studio flume they drive the motor layer
 // directly while the fish holds station.
+//   idle   calm hover: tail still and straight, pectorals in short bouts
+//   rest   bottom rest: fins folded, dorsal partly lowered, slow breathing
+//   slow   kick-and-glide cruising (1–2 tail kicks, then a straight glide)
+//   cruise steady swimming (studio) / routine burst-and-glide (aquarium)
 
 import * as THREE from 'three';
 
-export const ANIMS = ['AI', 'idle', 'slow', 'cruise', 'accelerate', 'turn', 'brake', 'startle', 'feeding', 'surfaceFeeding', 'yawn'];
+export const ANIMS = ['AI', 'idle', 'rest', 'slow', 'cruise', 'accelerate', 'turn', 'brake', 'startle', 'feeding', 'surfaceFeeding', 'yawn'];
 
 export class AnimDemo {
   constructor() {
@@ -45,6 +49,9 @@ export class AnimDemo {
         break;
       case 'idle':
         b.forced = 'pause';
+        break;
+      case 'rest':
+        b.forced = 'rest';
         break;
       case 'slow':
         b.forced = 'wander';
@@ -127,22 +134,31 @@ export class AnimDemo {
     c.lookAt = null;
     c.urgency = 0;
     c.hoverPrecision = 0;
+    c.rest = 0;
+    c.steady = false;
+    c.hoverVel.set(0, 0, 0);
     c.dir.set(1, 0, 0);
     const T = this.t;
     switch (this.anim) {
       case 'AI':
       case 'idle':
         c.speed = 0;
-        c.hoverPrecision = 0.6;
+        c.hoverPrecision = 0.3;
+        break;
+      case 'rest':
+        c.speed = 0;
+        c.rest = 1;
         break;
       case 'slow':
         c.speed = 0.5;
         break;
       case 'cruise':
         c.speed = 1.4;
+        c.steady = true;
         break;
       case 'accelerate':
         c.speed = T % 6 < 3 ? 0.4 : 3.6;
+        c.steady = T % 6 >= 3;
         break;
       case 'turn': {
         const s = Math.floor(T / 1.8) % 2 === 0 ? 1 : -1;
