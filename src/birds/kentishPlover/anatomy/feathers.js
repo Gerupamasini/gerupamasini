@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WING, buildScapularLayout } from './featherLayout.js';
 import { projectToSurface } from './sdf.js';
-import { computeSpineWeights, bodyDisplacementMasks } from './bodyMesh.js';
+import { computeSpineWeights, trunkWeights, bodyDisplacementMasks } from './bodyMesh.js';
 import { conformAt, foldLayer } from './wingFold.js';
 
 const smooth01 = (a, b, x) => {
@@ -303,11 +303,9 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
   };
   // the scapulars lie on the trunk: they do not ride up with the neck plumage when the head is turned back
   // (preening the wing, resting) — the neck lies over them instead
-  const trunkBones = new Set(['chest', 'body', 'tail'].map((n) => boneIndex[n]));
   const trunkSkin = (p) => {
-    const w = computeSpineWeights(p, boneIndex).filter((e) => trunkBones.has(e[0]));
-    const sum = w.reduce((a, e) => a + e[1], 0) || 1;
-    return { idx: w.map((e) => e[0]), w: w.map((e) => e[1] / sum) };
+    const w = trunkWeights(p, boneIndex);
+    return { idx: w.map((e) => e[0]), w: w.map((e) => e[1]) };
   };
   const torso = fold?.torso ?? sdf; // trunk outline without the neck (wingFold.conformAt)
   const segs = detail === 0 ? { nL: 10, nW: 3 } : detail === 1 ? { nL: 5, nW: 1 } : { nL: LOD2_CARD.rows, nW: 1 };

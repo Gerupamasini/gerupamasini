@@ -91,6 +91,19 @@ async function setupPose() {
     const [yaw, pitch = mod.GAZE_PITCH_REST] = q.get('gaze').split(',').map(Number);
     Object.assign(poser.gaze, { yaw, tYaw: yaw, pitch, tPitch: pitch, roll: 0, tRoll: 0, timer: 1e9, mode: 'idle' });
   }
+  if (q.has('play')) {
+    // play=1 (close-ups too): the action played in real time at 60 Hz from the settled forage stance up to t
+    const target = new THREE.Vector3(0, 0, Number(q.get('dist') ?? 62) / 1000);
+    poser.previewAction('forage', 0);
+    poser.setGaze('ground', target);
+    for (let i = 0; i < 60; i++) poser.update(1 / 60);
+    const variant = q.get('variant') || undefined;
+    poser.play(pose, { variant, target, preyType: pose === 'peck' ? variant || 'polychaete' : undefined });
+    const end = Number(q.get('t') ?? 0.3) * poser.action.dur;
+    for (let c = 0; c < end - 1e-6; c += 1 / 60) poser.update(1 / 60);
+    bird.object.position.set(0, bird.object.position.y, 0);
+    return;
+  }
   poser.previewAction(pose, Number(q.get('t') ?? 0.3), q.get('variant') || undefined);
 }
 

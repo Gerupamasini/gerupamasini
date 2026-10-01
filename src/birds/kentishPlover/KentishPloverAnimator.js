@@ -476,6 +476,8 @@ export class KentishPloverAnimator {
       model.setNape(this.napeFill);
     }
 
+    model.setHeldPrey(act?.held ?? null);
+
     // -------------------------------------------------- micro: blink / lids / fluff
     this._updateLids(dt, act);
     model.setFluff(this.p.fluff);
@@ -1101,6 +1103,28 @@ export class KentishPloverAnimator {
     // jaw: opens briefly when swallowing / pulling prey
     b.jaw.quaternion.multiply(qAxis(X, act?.jaw ?? 0, _q));
     this.neckStretch = stretch;
+    this._poseThroat();
+  }
+
+  /** Fore-neck helper bone (bodyMesh.computeSpineWeights): its pivot half-way between where the chest and where the
+   *  head would carry it, turned half-way from the chest to the head — the throat plumage stays full between them. */
+  _poseThroat() {
+    const b = this.b;
+    const th = b.throat;
+    if (!th) return;
+    b.chest.updateMatrixWorld(false);
+    const pc = _v2.set(...J.throat.map((x, i) => (x - J.chest[i]) * 0.001)).applyMatrix4(b.chest.matrixWorld);
+    const ph = _v3.set(...J.throat.map((x, i) => (x - J.head[i]) * 0.001)).applyMatrix4(b.head.matrixWorld);
+    const qc = b.chest.getWorldQuaternion(_q2);
+    const qh = b.head.getWorldQuaternion(_q4);
+    // half-way for the head bent down / up / sideways; with the head turned back over the shoulder (preening,
+    // asleep) the throat stays with the breast (half-way it lay as a flap over the shoulder and the folded wing)
+    const f = _v4.set(0, 0, 1).applyQuaternion(_qT.copy(qc).invert().multiply(qh));
+    const k = 0.5 * (1 - smoothstep(1.2, 2.1, Math.atan2(Math.abs(f.x), f.z)));
+    const qm = _q3.copy(qc).slerp(qh, k);
+    th.position.copy(pc.lerp(ph, k)).applyMatrix4(_m.copy(b.chest.matrixWorld).invert());
+    th.quaternion.copy(qc.invert()).multiply(qm);
+    th.updateMatrixWorld(true);
   }
 
   /** Head pivot (world) the posture and gaze ask for: relative to the ROOT, not the bobbing body (head stabilisation). */
@@ -1386,7 +1410,7 @@ function peckPlan(p) {
     at('back', t, [tf, 0, 'io']);
     at('tail', t, [tf, 0, 'io']);
     at('jaw', t, [tf, 0.04, 'io']);
-    P = { catch: t + S.extract * 0.3 };
+    P = { catch: t + S.extract * 0.3, free: t + S.extract * 0.3 };
     t = tf;
   } else {
     P = { catch: t4 };
@@ -1429,6 +1453,7 @@ function peckPlan(p) {
     at('tail', t, [tu, -0.06, 'out'], [te, 0, 'io']);
     t = te;
   }
+  P.swallow = [ts, t, S.tosses, S.toss];
   at('kb', ts, [t, 0.35, 'io']);
   // recover: the trunk rises first (slightly past its stance), the head follows it back to the gaze-driven head
   const T = t + S.recover;
@@ -1439,6 +1464,25 @@ function peckPlan(p) {
   Object.assign(P, tr, { T, contact: tc, tugs });
   PLANS.set(p, P);
   return P;
+}
+
+/** The prey in the bill (anatomy/heldPrey.js) at time s of the peck: a worm stretched to its burrow while it is
+ *  pulled, then dangling; crabs / amphipods gripped from the catch; each swallowing toss takes a jerk of it in. A
+ *  miss (params.caught === false, set by the AI at the catch) shows nothing after the catch. */
+function heldPrey(P, p, s, target, yaw) {
+  const worm = (p.preyType ?? 'amphipod') === 'polychaete';
+  const start = worm ? P.contact + 0.02 : P.catch;
+  if (s < start || (p.caught === false && s >= P.catch)) return null;
+  const [ts, te, n, dt] = P.swallow;
+  if (s >= te) return null;
+  let k = 1;
+  if (s > ts) {
+    // in jerks: most of each toss's share on its upstroke
+    const i = Math.min(n - 1, Math.floor((s - ts) / dt));
+    const f = smoothstep(0.1, 0.5, (s - ts - i * dt) / dt);
+    k = 1 - (i + f) / n;
+  }
+  return { type: p.preyType ?? 'amphipod', k, anchor: worm && s < P.free ? target : null, swing: yaw * 2, time: s };
 }
 
 function preenTarget(variant) {
@@ -1513,7 +1557,12 @@ export const ACTIONS = {
       const ap = track(P.a, s);
       tip.x -= Math.sin(yawW) * C.aim[1] * ap;
       tip.z -= Math.cos(yawW) * C.aim[1] * ap;
-      tip.y += C.aim[0] * ap + track(P.lift, s);
+      const lift = track(P.lift, s);
+      tip.y += C.aim[0] * ap + lift;
+      // (the head comes up with the prey in front of the breast, not back into it: lifted straight up the bill axis
+      // the head met the fore-breast and the plumage contact shoved it 7–8 mm off its path)
+      tip.x += Math.sin(yawW) * lift * C.liftFwd;
+      tip.z += Math.cos(yawW) * lift * C.liftFwd;
       out.headQ = A.billQuat(dir, roll);
       const toss = track(P.toss, s) * DEG;
       if (toss) {
@@ -1529,6 +1578,7 @@ export const ACTIONS = {
       out.jaw = track(P.jaw, s);
       // the tail counters the trunk (+ = down): pressed down when bracing against a worm, flicked up on a swallow toss
       out.tailPitch = track(P.tail, s);
+      out.held = heldPrey(P, p, s, target, track(P.yaw, s));
       return out;
     },
   },

@@ -5,6 +5,7 @@ import { buildBodyGeometry, buildShellGeometry, getBodySDF, getTorsoSDF } from '
 import { buildFeatherGeometry } from './anatomy/feathers.js';
 import { computeWingFold } from './anatomy/wingFold.js';
 import { buildBareParts, buildEyes } from './anatomy/bareParts.js';
+import { HeldPrey } from './anatomy/heldPrey.js';
 import { createBodyMaterial, createFeatherMaterial, createBarePartsMaterial, createEyeMaterials, getPalette } from './KentishPloverMaterials.js';
 
 // Geometry is generated once per LOD and shared by every bird; each bird owns a skeleton and its
@@ -170,6 +171,12 @@ export class KentishPloverModel {
   setNape(mm) {
     const c = this.current;
     if (c?.body) c.body.userData.uniforms.uNapeFill.value = mm;
+  }
+
+  /** Prey in the bill while it is handled (anatomy/heldPrey.js; null hides it). Built on first use. */
+  setHeldPrey(state) {
+    if (!state && !this._held) return;
+    (this._held ??= new HeldPrey(this.bones.head, CFG.joints.head)).set(state);
   }
 
   /** Breathing: −1..1 cycle value; displacement is masked to the chest/flanks in the shader. */

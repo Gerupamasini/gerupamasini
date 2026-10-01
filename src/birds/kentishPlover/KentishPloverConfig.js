@@ -45,6 +45,7 @@ export const joints = {
   neck1: [0, 80, 5],
   neck2: [0, 85, 10],
   head: [0, 88.5, 14],
+  throat: [0, 80, 27], // fore-neck helper (bodyMesh.computeSpineWeights): centre of the throat / fore-neck plumage
   jaw: [0, 87.5, 38],
   eyeCenter: [7.6, 95, 25.5], // eyeball centre (spec §6); head surface at x 12.3, eye 9.5 mm behind the breast front;
   // sunk 0.4 mm so the cornea apex (x 11.5) stays inside the head outline (photos: the eye sits in the dark stripe)
@@ -78,6 +79,11 @@ export const bodySculpt = {
     // cone of plumage hugging the bill, not a cut (p012, p070, p050, p010)
     { type: 'capsule', name: 'billCuff', a: [0, 91.6, 35.8], b: [0, 89.9, 39.9], r: 2.0, k: 2.4 },
     { type: 'ellipsoid', name: 'chin', c: [0, 84, 31], r: [9, 6, 7], k: 4 },
+    // ear-covert / cheek plumage behind and below the eye, a little fuller than the head's ellipsoid: from the front the
+    // eyes sit inside the outline of the head, the cheeks the widest part at eye level (p037, p058, p063 — the bare
+    // ellipsoid put the eye openings on the outline and their dark walls stood out of it)
+    { type: 'ellipsoid', name: 'cheekL', c: [9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3 },
+    { type: 'ellipsoid', name: 'cheekR', c: [-9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3 },
     { type: 'ellipsoid', name: 'foreBreast', c: [0, 76, 24], r: [14, 14, 13] },
     { type: 'ellipsoid', name: 'breastSideL', c: [11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
     { type: 'ellipsoid', name: 'breastSideR', c: [-11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
@@ -310,12 +316,13 @@ export const animation = {
     tipOvershoot: 0.04,
     crouch: mm(12), // trunk lowered (legs flexed) at contact
     reach: mm(58), // bill tip ahead of the root at contact with no trunk shift (the AI stops this far short)
-    aim: [mm(20), mm(4)], // bill tip this far above / behind the prey while aiming (the stab comes down at ≈80°)
+    aim: [mm(23), mm(1)], // bill tip this far above / behind the prey while aiming (the stab comes down at ≈80°)
     cock: mm(1.5),
-    billAim: 58, // bill below horizontal (deg) while aiming, at contact, lifted (photos 50–60°, p007, p061)
-    billStrike: 67,
+    billAim: 52, // bill below horizontal (deg) while aiming, at contact, lifted (photos 50–60°, p007, p061)
+    billStrike: 63,
     billLift: 46,
     billToss: 24,
+    liftFwd: 0.4, // bill tip forward per mm lifted (prey handling: the head rises clear of the fore-breast)
     small: { aim: 0.11, hold: 0.04, strike: 0.09, grab: 0.04, lift: 0.08, toss: 0.1, tosses: 1, recover: 0.14, depth: mm(1.5) },
     polychaete: { aim: 0.13, hold: 0.07, strike: 0.11, grab: 0.07, tug: 0.36, pull: [mm(10), mm(14)], extract: 0.13, toss: 0.13, tosses: 2, recover: 0.2, depth: mm(4) },
     crab: { aim: 0.08, hold: 0.02, strike: 0.09, grab: 0.04, lift: 0.08, shake: 0.55, shakeHz: 6.5, toss: 0.14, tosses: 1, recover: 0.18, depth: mm(1) },
