@@ -86,7 +86,7 @@ export class World {
       fogColor: this.sky.fogColor, fogDensity: this.fog.density, env: this.sky.envCube,
     });
     // lift the exposure at night so the flat stays readable under the moon
-    this.exposure = 0.66 + 0.24 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
+    this.exposure = 0.68 + 0.22 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
     this.scene.background = this.sky.fogColor;
     // the sky refreshes its environment maps itself whenever the sun moved enough (so time jumps show at once)
     this.sky.refreshEnvironment();

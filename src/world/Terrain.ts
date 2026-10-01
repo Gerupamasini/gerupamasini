@@ -139,7 +139,7 @@ export class Terrain {
   }
 
   private buildMaterial(): MeshStandardMaterial {
-    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.5 });
     const uWater = this.uWater, uWet = this.uWet, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
@@ -179,8 +179,8 @@ float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 
   // wet band: everything between the current water level and the recent high-water mark is darker
   float wet = 1.0 - smoothstep(lvl + 0.02, max(lvl, uWetLevel) + 0.05, vWorldPos.y);
   wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
-  diffuseColor.rgb *= mix(1.0, 0.62, wet);
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.85, 0.92, 1.0), 0.5 * wet);
+  diffuseColor.rgb *= mix(1.0, 0.68, wet);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.88, 0.93, 1.0), 0.3 * wet);
   // sunlight caustics on the submerged bed: moving cell edges that fade with depth
   float depth = lvl - vWorldPos.y;
   float under = smoothstep(0.0, 0.04, depth) * exp(-depth * 0.9) * uSunUp;
@@ -212,7 +212,7 @@ float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 
   float lvlR = (spillR > uWaterLevel + 0.01 && spillR > vWorldPos.y + 0.003) ? spillR : uWaterLevel;
   float wetR = 1.0 - smoothstep(lvlR + 0.02, max(lvlR, uWetLevel) + 0.05, vWorldPos.y);
   wetR = max(wetR, 1.0 - smoothstep(lvlR - 0.05, lvlR + 0.12, vWorldPos.y));
-  roughnessFactor = mix(roughnessFactor, 0.14, wetR);
+  roughnessFactor = mix(roughnessFactor, 0.42, wetR);   // damp sand has a soft sheen, not a mirror
 }`);
     };
     mat.customProgramCacheKey = () => 'higata-terrain';

@@ -95,7 +95,7 @@ export class WaterPass {
       uScatter: { value: 0.45 },
       uRefr: { value: 0.6 },
       uRes: { value: new Vector2(1, 1) },
-      uEnvI: { value: 0.55 },
+      uEnvI: { value: 0.9 },
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,

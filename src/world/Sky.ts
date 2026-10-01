@@ -21,6 +21,14 @@ export class SkyDome {
   constructor(private readonly scene: Scene, private readonly renderer: WebGLRenderer, shadows: boolean, shadowMapSize: number) {
     this.sky = new Sky();
     this.sky.scale.setScalar(4000);
+    // the Preetham model comes out far brighter than the ground at any exposure; scale the dome so the sky keeps its
+    // blue and the environment maps built from it stop washing the flat out
+    const mat = this.sky.material;
+    mat.uniforms.uSkyScale = { value: 0.4 };
+    mat.fragmentShader = mat.fragmentShader
+      .replace('uniform float mieDirectionalG;', 'uniform float mieDirectionalG;\n\t\tuniform float uSkyScale;')
+      .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( texColor * uSkyScale, 1.0 );');
+    mat.needsUpdate = true;
     const u = this.sky.material.uniforms;
     u.turbidity.value = 3;
     u.rayleigh.value = 1.6;
@@ -78,13 +86,13 @@ export class SkyDome {
     const groundCol = new Color(0.28, 0.24, 0.18).lerp(new Color(0.05, 0.05, 0.07), 1 - day);
     this.hemi.color.copy(skyCol);
     this.hemi.groundColor.copy(groundCol);
-    this.hemi.intensity = (0.65 + 0.05 * day) * (1 + 0.25 * cloud);
+    this.hemi.intensity = (0.5 + 0.05 * day) * (1 + 0.25 * cloud);
     this.hemi.color.lerp(new Color(0.6, 0.63, 0.66), cloud * 0.7);
     this.fogColor.copy(new Color(0.6, 0.7, 0.78).lerp(new Color(0.85, 0.6, 0.42), dusk * day)).lerp(new Color(0.06, 0.08, 0.13), 1 - day);
     this.fogColor.lerp(new Color(0.62, 0.66, 0.7), cloud * day * 0.8);
-    this.sky.material.uniforms.turbidity.value = 2.5 + 6 * dusk + 14 * cloud;
-    this.sky.material.uniforms.rayleigh.value = 1.6 - 0.8 * cloud;
-    this.sky.material.uniforms.mieCoefficient.value = 0.003 + 0.03 * cloud;
+    this.sky.material.uniforms.turbidity.value = 2.0 + 6 * dusk + 14 * cloud;
+    this.sky.material.uniforms.rayleigh.value = 2.2 - 1.2 * cloud;
+    this.sky.material.uniforms.mieCoefficient.value = 0.002 + 0.03 * cloud;
     // below the horizon the Preetham model goes black: hide the dome and show the dark fog colour instead
     this.sky.visible = elevation > -7;
   }
@@ -103,7 +111,7 @@ export class SkyDome {
     this.scene.add(this.sky);
     this.envTex = rt.texture;
     this.scene.environment = this.envTex;
-    this.scene.environmentIntensity = 0.12 + 0.4 * MathUtils.smoothstep(this.elevation, -4, 10);
+    this.scene.environmentIntensity = 0.12 + 0.3 * MathUtils.smoothstep(this.elevation, -4, 10);
     prev?.dispose();
   }
 
