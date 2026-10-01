@@ -36,6 +36,8 @@ export const SpeciesSchema = z.object({
     lod2: z.string().optional(),
     placeholder: z.string().optional(),
     modelLength_mm: z.number().positive(),
+    /** beyond this distance from the player the animal has no view (default from its size) */
+    viewDistance_m: z.number().positive().optional(),
     driver: z.string().optional(),
     clips: z.object({ idle: z.string().default('Idle'), move: z.string().default('Move'), special: z.array(z.string()).default([]) }).default({ idle: 'Idle', move: 'Move', special: [] }),
   }),

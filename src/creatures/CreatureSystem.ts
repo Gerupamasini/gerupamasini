@@ -10,7 +10,7 @@ import { EventBus } from '../core/EventBus';
 import { BehaviorTree, type PerceptionContext } from './brain/BehaviorTree';
 import { Spawner, type SpawnEnv } from './Spawner';
 export type { SpawnEnv };
-import type { Individual } from './Individual';
+import { minDepthFor, type Individual } from './Individual';
 import type { BehaviorEvent, Driver, Floor, Intent } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
@@ -107,7 +107,7 @@ export class CreatureSystem {
   }
 
   private tierFor(sp: SpeciesDef, dist: number, lod1Rank: number, locked: boolean): Tier | 'placeholder' | null {
-    const far = sp.taxon.group === 'bird' ? BIRD_DIST : Math.min(LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400));
+    const far = sp.model.viewDistance_m ?? (sp.taxon.group === 'bird' ? BIRD_DIST : Math.min(LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400)));
     if (dist > far) return null;
     if (!sp.model.lod2 && !sp.model.lod1 && !sp.model.hero) return 'placeholder';
     if (locked) return sp.model.hero ? 'hero' : sp.model.lod1 ? 'lod1' : 'lod2';
@@ -124,6 +124,7 @@ export class CreatureSystem {
       this.spawnAcc = 0;
       const live = this.individuals;
       for (const ind of this.spawner.cull(f.playerPos.x, f.playerPos.z, env, live)) if (ind.id !== f.lockedId) this.despawn(ind.id);
+      this.followTheWater(f);
       const scale = this.preset.creatureScale;
       const requests = this.spawner.plan(f.playerPos.x, f.playerPos.z, env, this.individuals);
       let n = 0;
@@ -164,7 +165,7 @@ export class CreatureSystem {
       // driver update (near every frame, mid every 2nd, far every 4th)
       if (e.view) {
         const every = ind.lod <= 1 ? 1 : ind.lod === 2 ? 2 : 4;
-        if (this.frameIndex % every === 0) e.driver.update(f.dt * every, { floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs });
+        if (this.frameIndex % every === 0) e.driver.update(f.dt * every, { floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs, locked: e.ind.id === f.lockedId });
         if (e.view.hero) e.view.hero.update(f.camera, e.driver.openings ?? { mouth: 0, gill: 0 });
       }
     }
@@ -259,6 +260,35 @@ export class CreatureSystem {
     const requests = this.spawner.plan(playerPos.x, playerPos.z, env, this.individuals, 0);
     for (const req of requests) this.spawn(this.spawner.create(req, env.gameMs));
     return requests.length;
+  }
+
+  /**
+   * Aquatic animals never sit on dry ground: when the water under one gets too shallow it heads for the nearest water
+   * that is deep enough; when there is none nearby, it has been dry for a while, or nobody is close enough to see it,
+   * it simply leaves (slipped off with the tide). Pit residents leave when their pit dries.
+   */
+  private followTheWater(f: CreatureFrame): void {
+    for (const e of [...this.entries.values()]) {
+      const ind = e.ind;
+      if (ind.id === f.lockedId) continue;
+      if (!(ind.species.locomotion === 'swim' || ind.species.taxon.group === 'crustacean')) continue;
+      const need = minDepthFor(ind.species, ind.length_mm);
+      if (this.habitat.depthAt(ind.pos.x, ind.pos.z) >= need) { ind.strandedSince = 0; continue; }
+      if (!ind.strandedSince) ind.strandedSince = f.gameMs;
+      const dist = ind.pos.distanceTo(f.playerPos);
+      const wet = ind.pitId === undefined ? this.habitat.nearestWater(ind.pos.x, ind.pos.z, need + 0.02, 6) : null;
+      if (!wet || dist > 25 || f.gameMs - ind.strandedSince > 12000) { this.despawn(ind.id); continue; }
+      if (ind.brain.lastIntentKind !== 'moveTo' || !e.driver.busy) {
+        ind.alert = Math.max(ind.alert, 0.5);
+        this.issue(e, { id: this.tmpIntent.id--, kind: 'moveTo', urgency: 0.9, seconds: 6, target: wet }, f.gameMs / 1000);
+      }
+    }
+  }
+
+  /** The water jumped (a ticket, a debug time): everyone but the watched animal leaves and the flat is repopulated. */
+  resetPopulation(lockedId: string | null = null): void {
+    for (const id of [...this.entries.keys()]) if (id !== lockedId) this.despawn(id);
+    this.spawnAcc = 1;
   }
 
   /** Push an intent from outside the brain (e.g. a failed capture scares the animal). */

@@ -8,6 +8,7 @@
   "model": {
     "placeholder": "shrimp",
     "modelLength_mm": 60,
+    "viewDistance_m": 10,
     "driver": "shrimp",
     "clips": { "idle": "Idle", "move": "Move", "special": [] }
   },
@@ -59,6 +60,6 @@
       { "id": "forage", "ja": "摂餌", "hint": "触角を動かしながら餌を探す" },
       { "id": "tail_flip_escape", "ja": "尾扇で跳ねて逃走", "hint": "近づくと後方へ跳ぶ" }
     ],
-    "placeholderModel": true
+    "placeholderModel": false
   }
 }

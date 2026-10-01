@@ -43,6 +43,7 @@ export class App {
   tide: TideModel = null!;
   encyclopedia: Encyclopedia = null!;
   observation: Observation = null!;
+  private leftFieldAt = 0;
   capture: Capture = new Capture();
   tank: TankScene = null!;
   hero: HeroPipeline | null = null;
@@ -198,6 +199,7 @@ export class App {
 
   /** Home: the tank fills the screen behind the menu. */
   enterHome(): void {
+    if (this.mode === 'field' || this.mode === 'observe' || this.mode === 'capture') this.leftFieldAt = performance.now();
     this.player?.resetFov();
     this.setMode('home');
     ui.homePanel.value = 'none';
@@ -231,6 +233,9 @@ export class App {
       this.onResize();
     }
     this.tank.deactivate();
+    // away long enough for the tide to have moved: the population is rebuilt for the water as it is now
+    if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.creatures?.resetPopulation(null);
+    this.leftFieldAt = 0;
     this.setMode('field');
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
@@ -283,6 +288,7 @@ export class App {
     const now = this.clock.nowReal();
     if (Math.abs(targetGameMs - now) > TICKET_RANGE_DAYS * 86400000) return false;
     this.clock.useTicket(targetGameMs);
+    this.creatures?.resetPopulation(this.lockedId);
     if (this.save) this.save.ticket.usedCount++;
     toast(`${t('ticket.active')}: ${formatJst(targetGameMs, { date: true })}`, 'info');
     this.requestSave();
@@ -291,6 +297,7 @@ export class App {
 
   cancelTicket(): void {
     this.clock.cancelTicket();
+    this.creatures?.resetPopulation(this.lockedId);
     this.requestSave();
   }
 
@@ -308,12 +315,14 @@ export class App {
 
   setDebugTime(ms: number | null): void {
     this.clock.setDebugTime(ms);
+    this.creatures?.resetPopulation(this.lockedId);
     ui.debugState.value = { ...ui.debugState.value, timeOverride: ms !== null };
     this.curveCacheMin = -1;
   }
 
   setTideOverride(level: number | null): void {
     if (this.world) this.world.tideOverride = level;
+    this.creatures?.resetPopulation(this.lockedId);
     ui.debugState.value = { ...ui.debugState.value, tideOverride: level };
   }
 

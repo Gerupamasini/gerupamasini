@@ -22,7 +22,7 @@
 //    propped up on the pectorals with the head raised (the tail then touches the sand)
 //  * yawn: slow gape with raised head and erect fins, a short hold, snap shut, opercular flush
 import * as THREE from 'three';
-import { computePose, defaultPose, breathe, yawnCurves, SPINE } from './pose.js';
+import { computePose, defaultPose, breathe, yawnCurves, SPINE, TL_MM, REST_FOLD } from './pose.js';
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -31,7 +31,9 @@ const rand = (a, b) => a + Math.random() * (b - a);
 // resting spells: gobies sit motionless most of the time. Heavy-tailed: mostly 10–30 s, sometimes over a minute
 const restTime = (scale = 1) => scale * Math.min(90, 8 + 14 * -Math.log(1 - Math.random() * 0.999));
 
-export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY, scale = 1, onEvent = null }) {
+export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY, scale = 1, onEvent = null, body = null }) {
+  // species geometry: joint positions along the body, total length and resting fin folds (マハゼ defaults)
+  const SP = body?.spine ?? SPINE, TL = body?.tlMM ?? TL_MM, RF = body?.restFold ?? REST_FOLD;
   // floorY may be a function (x, z) → ground height, so the goby can rest on sloping terrain
   const floorAt = typeof floorY === 'function' ? floorY : () => floorY;
   const S = scale; // world metres per model metre: distances and speeds scale with the individual
@@ -50,14 +52,14 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     brake: 0,
     pitch: 0.04,
     // fins
-    d1: 0.55, d1Goal: 0.55, flick: 0, scull: 0, scullAmp: 0.15, paddle: 0,
+    d1: RF.d1, d1Goal: RF.d1, flick: 0, scull: 0, scullAmp: 0.15, paddle: 0,
     // head
     yawnT: -1, breathDepth: 1,
     // eyes
     eyes: [{ yaw: 0, pitch: 0, gy: 0, gp: 0, timer: 0.4 }, { yaw: 0, pitch: 0, gy: 0, gp: 0, timer: 0.9 }],
     recoilX: 0,
-    // axial chain yaw (world, rad) for the segments in SPINE order; [1] (J_root) is the heading
-    yaw: new Float64Array(SPINE.length), headGoal: 0, headV: 0, headW: 6, turnSign: 1, clock: 0,
+    // axial chain yaw (world, rad) for the segments in SP order; [1] (J_root) is the heading
+    yaw: new Float64Array(SP.length), headGoal: 0, headV: 0, headW: 6, turnSign: 1, clock: 0,
     // posture and pectoral fins
     prop: 0.15, propGoal: 0.12, alertT: rand(15, 35), fan: 0, fanOn: false, fanT: rand(20, 45), strokeP: 0,
     pecs: [0, 1].map(() => ({ abd: 0.4, dep: 0.42, fold: 0, abdV: 0, depV: 0, flex: 0, wave: 0.04 })),
@@ -66,9 +68,9 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
   const HDT = 1 / 240, HN = 256;
   const hist = new Float64Array(HN);
   let histHead = 0;
-  const segV = new Float64Array(SPINE.length);
+  const segV = new Float64Array(SP.length);
   // segment mid-points (mm from the snout) → delay of the curvature pulse (≈ 8 body lengths / s)
-  const segX = SPINE.map(([, s], k) => (k === 0 ? 5 : (s + (k + 1 < SPINE.length ? SPINE[k + 1][1] : 50.5)) / 2));
+  const segX = SP.map(([, s], k) => (k === 0 ? 5 : (s + (k + 1 < SP.length ? SP[k + 1][1] : TL)) / 2));
   const PULSE = 400; // mm / s
   const segDelay = segX.map((x) => Math.round((x - segX[0]) / PULSE / HDT));
   const JOINT_MAX = 0.45;
@@ -84,12 +86,12 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     hist[histHead] = st.yaw[0];
     // body segments follow the delayed head yaw (slightly underdamped: the tail settles with a small overshoot)
     const w = 42, z = 0.5;
-    for (let k = 1; k < SPINE.length; k++) {
+    for (let k = 1; k < SP.length; k++) {
       const goal = histAt(segDelay[k]);
       segV[k] += (w * w * (goal - st.yaw[k]) - 2 * z * w * segV[k]) * h;
       st.yaw[k] += segV[k] * h;
     }
-    for (let k = 1; k < SPINE.length; k++) {
+    for (let k = 1; k < SP.length; k++) {
       const d = st.yaw[k] - st.yaw[k - 1];
       if (Math.abs(d) > JOINT_MAX) st.yaw[k] = st.yaw[k - 1] + Math.sign(d) * JOINT_MAX;
     }
@@ -145,7 +147,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     switch (st.mode) {
       case 'perch':
         st.speed = damp(st.speed, 0, 6, dt);
-        st.d1Goal = 0.55;
+        st.d1Goal = RF.d1;
         if (st.t > 20 && !st.restEmitted) { st.restEmitted = true; emit('rest'); }
         if (st.auto && st.t > st.next) chooseNext();
         break;
@@ -236,12 +238,12 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     st.pos.z += Math.cos(st.heading) * st.speed * dt;
 
     // ---------------------------------------------------------------- pose
-    const p = defaultPose();
+    const p = defaultPose(RF);
     p.phase = st.phase;
     p.gain = st.gain;
     p.turn = 0;
     const segYaw = {};
-    SPINE.forEach(([name], k) => { segYaw[name] = st.yaw[k] - st.yaw[1]; });
+    SP.forEach(([name], k) => { segYaw[name] = st.yaw[k] - st.yaw[1]; });
     p.segYaw = segYaw;
     breathe(p, st.time, st.mode === 'dart' ? 0.4 : 1);
 
@@ -331,7 +333,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     p.foldPelvic = 0.6 * sw * (1 - br);
     // passive trailing flex of the caudal and median fins lags the lateral tail velocity
     // (turning: the fins trail the angular velocity of their body segment)
-    const last = SPINE.length - 1;
+    const last = SP.length - 1;
     p.flexCaudal = -0.85 * st.gain * Math.cos(st.phase - 2.2) - clamp(0.045 * segV[last], -0.6, 0.6);
     p.flexD = -0.35 * st.gain * Math.cos(st.phase - 1.2) - clamp(0.02 * segV[5], -0.3, 0.3);
 
@@ -370,7 +372,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     p.eyeYawL = st.eyes[0].yaw; p.eyePitchL = st.eyes[0].pitch;
     p.eyeYawR = st.eyes[1].yaw; p.eyePitchR = st.eyes[1].pitch;
 
-    apply(computePose(p, axes));
+    apply(computePose(p, axes, body));
     st.mouthOpen = p.jaw;
     st.gillOpen = Math.max(p.opercL, p.opercR);
 

@@ -70,8 +70,8 @@ export class ModelPreview {
       }
     } else {
       const entry = DRIVERS[species.model.driver ?? ''];
-      if (!entry?.placeholder) return;
-      root = entry.placeholder().root;
+      if (!entry?.preview && !entry?.placeholder) return;
+      root = entry.preview ? entry.preview() : entry.placeholder!().root;
     }
     this.root = root;
     this.scene.add(root);
@@ -90,7 +90,12 @@ export class ModelPreview {
   }
 
   clear(): void {
-    if (this.root) { this.root.removeFromParent(); this.root = null; }
+    if (this.root) {
+      this.root.removeFromParent();
+      // procedural previews own their geometry; glTF instances share theirs with the loader cache
+      if (this.root.userData.disposable) this.root.traverse((o) => { const m = o as Mesh; if (m.isMesh) m.geometry.dispose(); });
+      this.root = null;
+    }
     this.mixer = null;
   }
 

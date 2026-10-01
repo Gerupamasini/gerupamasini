@@ -224,15 +224,28 @@ uniform sampler2D uSpillTex;
 uniform float uHalf;
 float hash21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y); }`)
+  return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y); }
+// Ripple marks as one continuous scalar field over the whole flat: shore-parallel crests (wavelength ~8 cm) whose
+// line is bent by three layers of noise displacement. Bending the phase instead of the direction keeps the local
+// wavelength bounded, so the crests swerve, split and merge without ever breaking, and chunks share the same field.
+float rippleWarp(vec2 p) {
+  float w = 2.2 * (vnoise(p * 0.04 + 1.7) - 0.5);          // broad swerves, tens of metres
+  w += 0.55 * (vnoise(p * 0.125 - 3.1) - 0.5);            // metre-scale bends and bifurcations
+  w += 0.13 * (vnoise(p * 0.42 + 8.9) - 0.5);             // small wiggles
+  return p.y + w;
+}
+float ripplePhase(vec2 p) { return rippleWarp(p) * 78.5; }
+// where the ripples are: patches of flat sand in between, stronger on clean sand
+float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * (0.5 + 0.5 * vnoise(p * 0.2 + 2.9)); }`)
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
   // surface detail: grain, patches and ripple shading, all procedural
   float grain = hash21(floor(vWorldPos.xz * 60.0)) - 0.5;
   float patchN = vnoise(vWorldPos.xz * 0.35) - 0.5;
-  float ripple = vnoise(vWorldPos.xz * vec2(1.6, 0.25) + 3.7) - 0.5;
-  float isSand = step(vSubstrate, 0.5);
-  float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 + ripple * 0.06 * (1.0 - isSand);
+  float isSand = 1.0 - smoothstep(0.5, 1.5, vSubstrate);
+  // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
+  float ripple = cos(ripplePhase(vWorldPos.xz)) * rippleAmp(vWorldPos.xz) * (0.3 + 0.7 * isSand);
+  float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 - ripple * 0.05;
   diffuseColor.rgb *= detail;
   // the water level here: the tide, or a tide pool's own level above it
   float spillH = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
@@ -256,14 +269,19 @@ float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 
 }`)
         .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
 {
-  // ripple marks on sand: crests roughly parallel to the shore, drifting with low-frequency noise
+  // ripple marks: one continuous warped field (see rippleWarp); sand carries them, mud only faintly
   float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
-  float strength = sandy * (0.15 + 0.85 * vnoise(vWorldPos.xz * 0.07)) * 0.3;
-  float ph = vWorldPos.z * 83.0 + 3.0 * vnoise(vWorldPos.xz * 0.5) + 1.2 * vnoise(vWorldPos.xz * 2.6);
+  float strength = (0.12 + 0.88 * sandy) * rippleAmp(vWorldPos.xz) * 0.34;
+  vec2 rp = vWorldPos.xz;
+  float ph = ripplePhase(rp);
+  // the crest line's local direction comes from the warp gradient, so the shading follows the bends
+  float e = 0.02;
+  vec2 grad = vec2(rippleWarp(rp + vec2(e, 0.0)) - rippleWarp(rp - vec2(e, 0.0)), rippleWarp(rp + vec2(0.0, e)) - rippleWarp(rp - vec2(0.0, e))) / (2.0 * e);
+  grad = normalize(grad + vec2(0.0, 1e-4));
   float slope = cos(ph) * strength;
   // the lee side is steeper
   slope += cos(ph * 2.0 + 0.6) * strength * 0.35;
-  vec3 worldPerturb = vec3(slope * 0.12, 0.0, slope);
+  vec3 worldPerturb = vec3(grad.x * slope, 0.0, grad.y * slope);
   vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
   normal = normalize(normal + viewPerturb);
 }`)

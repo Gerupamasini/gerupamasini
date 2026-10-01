@@ -53,6 +53,13 @@ export interface Individual {
   spawnedAt: number;
   /** resident of a stingray feeding pit (kept until the player walks away) */
   pitId?: number;
+  /** game time at which the water under an aquatic animal became too shallow (0 = fine) */
+  strandedSince: number;
+}
+
+/** The least water an aquatic animal is placed in or will stay in: about a fifth of its length, never under 2 cm. */
+export function minDepthFor(species: SpeciesDef, length_mm: number): number {
+  return Math.max(0.02, (length_mm / 1000) * 0.2);
 }
 
 function erf(x: number): number {
@@ -97,7 +104,7 @@ export function generateIndividual(species: SpeciesDef, seed: number, x: number,
     length_mm: Math.round(len * 10) / 10, weight_g: Math.round(weight * 10) / 10, sex, stage, traits, lengthPct: pct,
     alert: 0, energy: rng.range(0.3, 0.9), lod: 3,
     brain: { busyUntil: 0, intentId: 0, cooldowns: new Map(), nextTick: 0, done: true, lastIntentKind: '' },
-    rng: new Rng(seed ^ 0x9e3779b9), cell, ruleIndex, mismatchSince: 0, spawnedAt: nowMs,
+    rng: new Rng(seed ^ 0x9e3779b9), cell, ruleIndex, mismatchSince: 0, spawnedAt: nowMs, strandedSince: 0,
   };
 }
 

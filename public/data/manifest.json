@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "species": ["acanthogobius_flavimanus", "exopalaemon_orientis", "charadrius_alexandrinus"],
+  "species": ["acanthogobius_flavimanus", "gymnogobius_macrognathos", "exopalaemon_orientis", "charadrius_alexandrinus"],
   "behaviors": ["fish_benthic", "shrimp_shallow", "shorebird_waterline"],
   "maps": ["kasai_west"],
   "stations": ["jma_tokyo"],

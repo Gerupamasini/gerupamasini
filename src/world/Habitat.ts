@@ -1,3 +1,4 @@
+import { Vector3 } from 'three';
 import type { HabitatTag, Substrate } from '../data/schemas';
 import type { FeedingPit } from './FeedingPits';
 import type { Terrain } from './Terrain';
@@ -255,6 +256,23 @@ export class Habitat {
 
   depthAt(x: number, z: number): number {
     return this.waterAt(x, z) - this.terrain.heightAt(x, z);
+  }
+
+  /** Nearest spot (rings of 0.75 m, up to `radius`) with at least `minDepth` of water; the deepest on the first ring that has one. */
+  nearestWater(x: number, z: number, minDepth: number, radius = 6): Vector3 | null {
+    const step = 0.75, rays = 12;
+    for (let ring = 1; ring * step <= radius; ring++) {
+      let best: Vector3 | null = null, bestD = minDepth;
+      for (let r = 0; r < rays; r++) {
+        const ang = (r / rays) * Math.PI * 2 + ring * 0.26;
+        const px = x + Math.sin(ang) * step * ring, pz = z + Math.cos(ang) * step * ring;
+        if (Math.abs(px) > this.terrain.half - 2 || Math.abs(pz) > this.terrain.half - 2) continue;
+        const d = this.depthAt(px, pz);
+        if (d >= bestD) { bestD = d; best = new Vector3(px, 0, pz); }
+      }
+      if (best) return best;
+    }
+    return null;
   }
 
   coarseCenter(i: number, j: number): [number, number] {

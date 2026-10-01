@@ -35,6 +35,8 @@ export interface DriverContext {
   player: Vector3;
   simScale: number;
   nowMs: number;
+  /** the observed / locked animal: keep full detail whatever the distance to the player */
+  locked?: boolean;
 }
 
 export interface Driver {

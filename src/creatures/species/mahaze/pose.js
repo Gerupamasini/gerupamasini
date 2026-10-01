@@ -4,7 +4,9 @@
 // identity rotations, so every rotation is expressed in object axes
 // (X = fish's left, Y = dorsal, Z = anterior).
 
-export const TL_MM = 50.5; // snout → caudal fin tip
+// Species geometry (live bindings). Defaults are the juvenile マハゼ; a build tool calls configureBody() for its
+// species, while at runtime each fish passes its own body (from its glTF rig extras) to computePose/createBehavior.
+export let TL_MM = 50.5; // snout → caudal fin tip
 
 // Axial chain (joint name, position along the body in mm from the snout)
 export const SPINE = [
@@ -13,6 +15,17 @@ export const SPINE = [
 ];
 
 // Morph target order of every fin mesh
+// resting fin folds (0 = erect, 1 = folded); species may override (エドハゼ rests with erect dorsal fins)
+export const REST_FOLD = { d1: 0.55, d2: 0.3, anal: 0.85, caudal: 0.45 };
+
+/** Switch the module defaults to another species' axial geometry (total length, joint positions in mm). */
+export function configureBody(body) {
+  if (!body) return;
+  if (body.tlMM) TL_MM = body.tlMM;
+  if (body.restFold) Object.assign(REST_FOLD, body.restFold);
+  if (body.spine) body.spine.forEach(([name, sMM]) => { const e = SPINE.find((x) => x[0] === name); if (e) e[1] = sMM; });
+}
+
 export const FIN_TARGETS = {
   Fin_Dorsal1: ['fold', 'flex'],
   Fin_Dorsal2: ['fold', 'flex'],
@@ -51,30 +64,30 @@ export function qrot(q, v) {
  *   amplitude envelope A(x) = L (0.02 − 0.08 x + 0.16 x²)  → tail tip ±0.10 L, head recoil ±0.02 L
  *   wavelength λ ≈ 0.95 L
  */
-export function midline(xmm, phase, gain, turn) {
-  const x = xmm / TL_MM;
-  const A = TL_MM * (0.02 - 0.08 * x + 0.16 * x * x) * gain;
+export function midline(xmm, phase, gain, turn, tl = TL_MM) {
+  const x = xmm / tl;
+  const A = tl * (0.02 - 0.08 * x + 0.16 * x * x) * gain;
   const wave = A * Math.sin(2 * Math.PI * (x / 0.95) - phase);
   // turn > 0: C-bend concave toward the fish's left (head and tail both swing left about the pelvic disc)
-  const c = turn * TL_MM * 0.6 * (x - 0.26) * (x - 0.26);
+  const c = turn * tl * 0.6 * (x - 0.26) * (x - 0.26);
   return wave + c;
 }
 
 /** Local Y-rotation angles for the axial chain that realise the midline (radians). */
-export function spineAngles(phase, gain, turn) {
-  const slope = (a, b) => (midline(b, phase, gain, turn) - midline(a, phase, gain, turn)) / (b - a);
+export function spineAngles(phase, gain, turn, spine = SPINE, tl = TL_MM) {
+  const slope = (a, b) => (midline(b, phase, gain, turn, tl) - midline(a, phase, gain, turn, tl)) / (b - a);
   const world = {};
   // root segment (root → sp1) and posterior chain
-  for (let k = 1; k < SPINE.length; k++) {
-    const [name, s] = SPINE[k];
-    const next = k + 1 < SPINE.length ? SPINE[k + 1][1] : TL_MM;
+  for (let k = 1; k < spine.length; k++) {
+    const [name, s] = spine[k];
+    const next = k + 1 < spine.length ? spine[k + 1][1] : tl;
     world[name] = -Math.atan(slope(s, next));
   }
   // head segment: snout → head joint
-  world.J_head = -Math.atan(slope(1.0, SPINE[0][1]));
+  world.J_head = -Math.atan(slope(1.0, spine[0][1]));
   const local = { J_root: world.J_root, J_head: world.J_head - world.J_root };
-  for (let k = 2; k < SPINE.length; k++) local[SPINE[k][0]] = world[SPINE[k][0]] - world[SPINE[k - 1][0]];
-  return { local, recoil: midline(SPINE[1][1], phase, gain, turn) };
+  for (let k = 2; k < spine.length; k++) local[spine[k][0]] = world[spine[k][0]] - world[spine[k - 1][0]];
+  return { local, recoil: midline(spine[1][1], phase, gain, turn, tl) };
 }
 
 /**
@@ -82,16 +95,17 @@ export function spineAngles(phase, gain, turn) {
  * @param {object} p  see defaultPose()
  * @param {object} axes  rig axes from the glTF extras: name → [x, y, z] (sign folded in)
  */
-export function computePose(p, axes) {
+export function computePose(p, axes, body = null) {
+  const spine = body?.spine ?? SPINE, tl = body?.tlMM ?? TL_MM;
   const q = {};
   const t = {};
-  const { local } = spineAngles(p.phase, p.gain, p.turn);
+  const { local } = spineAngles(p.phase, p.gain, p.turn, spine, tl);
   // extra yaw of each axial segment relative to the root segment (turning: the head leads, the body follows)
   if (p.segYaw) {
     local.J_head += p.segYaw.J_head || 0;
-    for (let k = 2; k < SPINE.length; k++) local[SPINE[k][0]] += (p.segYaw[SPINE[k][0]] || 0) - (k > 2 ? p.segYaw[SPINE[k - 1][0]] || 0 : 0);
+    for (let k = 2; k < spine.length; k++) local[spine[k][0]] += (p.segYaw[spine[k][0]] || 0) - (k > 2 ? p.segYaw[spine[k - 1][0]] || 0 : 0);
   }
-  for (const [name] of SPINE) q[name] = quat(Y, local[name]);
+  for (const [name] of spine) q[name] = quat(Y, local[name]);
   // alert posture: the front of the trunk is raised (root pitched nose-up by the caller) and the trunk
   // flexes back down behind the pelvic region, so the posterior half lies flat on the sand
   if (p.arch) {
@@ -127,8 +141,9 @@ export function computePose(p, axes) {
   q.J_pecL = qmul(quat(axes.pecL, p.pecAbdL), quat(axes.pecDepL, p.pecDepL));
   q.J_pecR = qmul(quat(axes.pecR, p.pecAbdR), quat(axes.pecDepR, p.pecDepR));
   q.J_pelvic = quat(axes.headUp, p.pelvicPitch);
-  q.J_eyeL = qmul(quat(Y, p.eyeYawL), quat([1, 0, 0], p.eyePitchL));
-  q.J_eyeR = qmul(quat(Y, p.eyeYawR), quat([1, 0, 0], p.eyePitchR));
+  // saccade axes: per-eye axes from the rig when given (eye frame), else object Y / X
+  q.J_eyeL = qmul(quat(axes.eyeYawL || Y, p.eyeYawL), quat(axes.eyePitchL || [1, 0, 0], p.eyePitchL));
+  q.J_eyeR = qmul(quat(axes.eyeYawR || Y, p.eyeYawR), quat(axes.eyePitchR || [1, 0, 0], p.eyePitchR));
 
   const sc = p.scullPhase;
   const morph = {
@@ -148,13 +163,13 @@ export function computePose(p, axes) {
  * sucker, pectorals spread down and back with their lower rays on the sand, anal fin folded back along
  * the belly, dorsal fins half down.
  */
-export function defaultPose() {
+export function defaultPose(fold = REST_FOLD) {
   return {
     phase: 0, gain: 0, turn: 0, headPitch: 0.02, arch: 0,
     jaw: 0, premax: 0, hyoid: 0, susp: 0, opercL: 0, opercR: 0,
     pecAbdL: 0.4, pecAbdR: 0.4, pecDepL: 0.42, pecDepR: 0.42, foldPecL: 0.0, foldPecR: 0.0, flexPecL: 0, flexPecR: 0,
     scullPhase: 0, scullAmpL: 0.04, scullAmpR: 0.04, pelvicPitch: 0,
-    foldD1: 0.55, foldD2: 0.3, foldAnal: 0.85, foldCaudal: 0.45, foldPelvic: 0,
+    foldD1: fold.d1, foldD2: fold.d2, foldAnal: fold.anal, foldCaudal: fold.caudal, foldPelvic: 0,
     flexD: 0, flexCaudal: 0,
     eyeYawL: 0, eyePitchL: 0, eyeYawR: 0, eyePitchR: 0,
   };

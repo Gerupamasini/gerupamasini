@@ -3,7 +3,7 @@ import type { Habitat } from '../world/Habitat';
 import type { TimeOfDay } from '../world/Sun';
 import type { Season } from '../core/Time';
 import { Rng, hashInts } from '../core/Rng';
-import { generateIndividual, type Individual } from './Individual';
+import { generateIndividual, type Individual, minDepthFor } from './Individual';
 
 export interface SpawnEnv {
   tod: TimeOfDay;
@@ -102,14 +102,16 @@ export class Spawner {
               let x = cx, z = cz, ok = false;
               if (rule.tags.includes('small_pool')) {
                 const p = h.randomPoolPoint(cell, () => rng.next());
-                if (p) { x = p[0]; z = p[1]; ok = h.sample(x, z, env.gameMs).depth >= (rule.depth_m?.[0] ?? 0.03); }
+                if (p) { x = p[0]; z = p[1]; ok = h.sample(x, z, env.gameMs).depth >= Math.max(rule.depth_m?.[0] ?? 0.03, minDepthFor(sp, rule.length_mm ? rule.length_mm[1] : sp.size.length_mm.mean)); }
               }
               for (let tries = 0; tries < 8 && !ok; tries++) {
                 x = cx + rng.range(-cs / 2, cs / 2);
                 z = cz + rng.range(-cs / 2, cs / 2);
                 const s = h.sample(x, z, env.gameMs);
                 const aquatic = sp.locomotion === 'swim' || sp.taxon.group === 'crustacean';
-                ok = rule.depth_m ? s.depth >= rule.depth_m[0] && s.depth <= rule.depth_m[1] : aquatic ? s.depth > 0.03 : s.exposed;
+                // aquatic animals need water over their backs: the rule's floor or the size-based minimum, whichever is more
+                const need = aquatic ? Math.max(rule.depth_m?.[0] ?? 0, minDepthFor(sp, rule.length_mm ? rule.length_mm[1] : sp.size.length_mm.mean)) : 0;
+                ok = rule.depth_m ? s.depth >= Math.max(rule.depth_m[0], need) && s.depth <= rule.depth_m[1] : aquatic ? s.depth >= need : s.exposed;
               }
               if (!ok) continue;
               out.push({ species: sp, ruleIndex: ri, cell, seed: memberSeed, x, z, lengthRange: rule.length_mm });
