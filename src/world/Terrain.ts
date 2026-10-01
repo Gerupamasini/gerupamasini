@@ -53,8 +53,8 @@ const LOD_DIST = [60, 130];
 const SKIRT = 0.35;
 
 const SUBSTRATE_COLORS: Record<Substrate, [number, number, number]> = {
-  sand: [0.6, 0.52, 0.37],
-  muddy_sand: [0.42, 0.36, 0.27],
+  sand: [0.63, 0.54, 0.36],
+  muddy_sand: [0.45, 0.37, 0.26],
   mud: [0.28, 0.24, 0.19],
   gravel: [0.48, 0.46, 0.42],
   channel: [0.22, 0.2, 0.16],
@@ -200,7 +200,7 @@ export class Terrain {
   }
 
   private buildMaterial(): MeshStandardMaterial {
-    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.5, side: DoubleSide });
+    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.3, side: DoubleSide });
     const uWater = this.uWater, uWet = this.uWet, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
@@ -230,13 +230,15 @@ float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 
 // wavelength bounded, so the crests swerve, split and merge without ever breaking, and chunks share the same field.
 float rippleWarp(vec2 p) {
   float w = 2.2 * (vnoise(p * 0.04 + 1.7) - 0.5);          // broad swerves, tens of metres
-  w += 0.55 * (vnoise(p * 0.125 - 3.1) - 0.5);            // metre-scale bends and bifurcations
-  w += 0.13 * (vnoise(p * 0.42 + 8.9) - 0.5);             // small wiggles
+  w += 0.55 * (vnoise(p * 0.125 - 3.1) - 0.5);            // metre-scale bends
+  w += 0.2 * (vnoise(p * 0.65 + 8.9) - 0.5);              // crest waviness at the 1.5 m scale
+  w += 0.09 * (vnoise(p * 1.7 - 5.3) - 0.5);              // 60 cm: crests split and merge
+  w += 0.03 * (vnoise(p * 4.6 + 2.2) - 0.5);              // 20 cm wiggles
   return p.y + w;
 }
 float ripplePhase(vec2 p) { return rippleWarp(p) * 78.5; }
-// where the ripples are: patches of flat sand in between, stronger on clean sand
-float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * (0.5 + 0.5 * vnoise(p * 0.2 + 2.9)); }`)
+// where the ripples are: patches of flat sand in between, crests fading in and out at the metre scale
+float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * smoothstep(0.15, 0.6, vnoise(p * 0.9 + 2.9)) * (0.6 + 0.4 * vnoise(p * 0.2 + 7.1)); }`)
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
   // surface detail: grain, patches and ripple shading, all procedural
@@ -272,7 +274,7 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
 {
   // ripple marks: one continuous warped field (see rippleWarp); sand carries them, mud only faintly
   float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
-  float strength = (0.12 + 0.88 * sandy) * rippleAmp(vWorldPos.xz) * 0.34;
+  float strength = (0.12 + 0.88 * sandy) * rippleAmp(vWorldPos.xz) * 0.26;
   vec2 rp = vWorldPos.xz;
   float ph = ripplePhase(rp);
   // the crest line's local direction comes from the warp gradient, so the shading follows the bends

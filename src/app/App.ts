@@ -344,8 +344,9 @@ export class App {
     switch (target) {
       case 'waterline': {
         x = 0;
-        for (let zz = -w.terrain.half + 5; zz < w.terrain.half - 5; zz += 1) {
-          if (w.habitat.depthAt(0, zz) >= 0.08) { z = zz - 4; break; }
+        // the first spot walking seaward that stands in ankle-deep water (the relief makes a fixed offset unreliable)
+        for (let zz = -w.terrain.half + 5; zz < w.terrain.half - 5; zz += 0.5) {
+          if (w.habitat.depthAt(0, zz) >= 0.06) { z = zz; break; }
         }
         break;
       }
