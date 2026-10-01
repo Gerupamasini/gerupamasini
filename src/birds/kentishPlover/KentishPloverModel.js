@@ -30,7 +30,7 @@ export function getGeometries(detail) {
   const res = CFG.lod.sdfResolution[detail];
   const g = {
     body: buildBodyGeometry(CFG, spec.boneIndex, res),
-    feathers: buildFeatherGeometry(spec, spec.boneIndex, sdf, detail, computeWingFold(spec.wingFeathers, sdf, getTorsoSDF(CFG))),
+    feathers: buildFeatherGeometry(spec, spec.boneIndex, sdf, detail, computeWingFold(spec.wingFeathers, sdf, getTorsoSDF(CFG, { trunkOnly: true }))),
     bare: buildBareParts(spec.boneIndex, CFG.joints, spec.toes, detail),
     shell: null,
     eyes: detail === 0 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 10, segR: 24 }) : detail === 1 ? buildEyes(spec.boneIndex, CFG.joints, { segA: 4, segR: 12 }) : null,

@@ -12,7 +12,7 @@ import PRECOMPUTED from '../../src/birds/kentishPlover/anatomy/wingFold.cache.js
 
 const spec = getSpec();
 const sdf = getBodySDF(CFG);
-const torso = getTorsoSDF(CFG);
+const torso = getTorsoSDF(CFG, { trunkOnly: true });
 const key = wingFoldKey(spec.wingFeathers, sdf, torso);
 if (process.argv.includes('--check')) {
   const ok = PRECOMPUTED.key === key;

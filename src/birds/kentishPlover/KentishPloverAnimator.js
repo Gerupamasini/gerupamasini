@@ -147,6 +147,11 @@ const NECK_PTS = (() => {
   }
   return pts;
 })();
+// Length of the lesser (marginal) coverts while the wing is folded. They lie under the scapulars and the plumage
+// at the base of the neck then and are not seen; at full length their tips reached the crease where the bent
+// neck meets the shoulder when preening the wing / tucked asleep and showed there as a row of small tips stuck
+// into the shoulder (validation §W). Full length again as the wing opens (bone scale, also in the GLB).
+const LESSER_FOLDED = 0.4;
 // Folded wing raised off the flank (preening under it, scratching over it): wingFold.WING_RAISE
 const WING_HINGE = new THREE.Vector3(...WING_RAISE.hinge);
 
@@ -154,7 +159,7 @@ const WING_HINGE = new THREE.Vector3(...WING_RAISE.hinge);
 // (anatomy/wingFold.js: Z-folded arm + per-feather orientations that wrap the curved flank)
 let FOLD = null;
 function getFold(model) {
-  if (!FOLD) FOLD = computeWingFold(model.spec.wingFeathers, getBodySDF(CFG), getTorsoSDF(CFG));
+  if (!FOLD) FOLD = computeWingFold(model.spec.wingFeathers, getBodySDF(CFG), getTorsoSDF(CFG, { trunkOnly: true }));
   return FOLD;
 }
 
@@ -922,7 +927,7 @@ export class KentishPloverAnimator {
         apply(bone, blend(f, root(f, _q2.identity())));
         // the shoulder-end marginal coverts slightly shortened (≥ 0.8) where the spread wing presses them against
         // the neck / breast
-        bone.scale.setScalar(SP.has(f.name) ? lerp(spreadScaleAt(SP.get(f.name), elev, hSweep, hTwist), 1, effFold) : 1);
+        bone.scale.setScalar((SP.has(f.name) ? lerp(spreadScaleAt(SP.get(f.name), elev, hSweep, hTwist), 1, effFold) : 1) * (f.type === 'lesserCovert' ? lerp(1, LESSER_FOLDED, smoothstep(0.85, 1, effFold)) : 1));
       }
       // alula raised during braking/landing (slow flight)
       apply(b[`alula_${side}`], qAxis(Y, -brake * 0.4 * spread, _q2));
