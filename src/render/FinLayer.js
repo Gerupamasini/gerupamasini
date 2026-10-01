@@ -243,9 +243,12 @@ export class FinCompositePass extends Pass {
         uniform sampler2D tDil;
         uniform float uBlur;
         ${finDepthGLSL}
+        // non-finite fin samples (grazing fragments) are dropped, never smeared
+        bool bad(vec4 c) { return any(isnan(c)) || any(isinf(c)) || !(c.r + c.g + c.b + c.a > -1.0); }
         void main() {
           vec3 sc = texture(tDiffuse, vUv).rgb;
           vec4 f0 = texture(tFin, vUv);
+          if (bad(f0)) f0 = vec4(0.0);
           vec2 dil = uBlur > 0.5 ? texture(tDil, vUv).rg : vec2(0.0);
           float R = dil.x;
           vec4 fin = f0;
@@ -258,6 +261,7 @@ export class FinCompositePass extends Pass {
               if (radius >= R) break;
               vec2 tc = vUv + vec2(cos(ang), sin(ang)) * uTexel * radius;
               vec4 c = texture(tFin, tc);
+              if (bad(c)) c = vec4(0.0);
               // the empty layer around a blurred fin is transparent, always counted
               float s = c.a < 0.003 ? R : texture(tDil, tc).b;
               float m = smoothstep(radius - 0.5, radius + 0.5, s);
