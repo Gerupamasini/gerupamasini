@@ -32,9 +32,9 @@
       "depth_m": [0.03, 0.6],
       "time": ["dawn", "day", "dusk"],
       "tide": "any",
-      "density_per_100m2": 2.0,
+      "density_per_100m2": 1.2,
       "group": [2, 6],
-      "maxPopulation": 80
+      "maxPopulation": 48
     },
     {
       "tags": ["shallow", "pool", "waterline"],
@@ -42,9 +42,9 @@
       "depth_m": [0.02, 0.6],
       "time": ["night"],
       "tide": "any",
-      "density_per_100m2": 4.0,
+      "density_per_100m2": 2.4,
       "group": [2, 8],
-      "maxPopulation": 80
+      "maxPopulation": 48
     }
   ],
   "brain": { "tree": "shrimp_shallow", "params": { "fleeDistance_m": 1.0, "restMean_s": 8 } },

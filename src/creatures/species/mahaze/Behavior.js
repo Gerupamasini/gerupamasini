@@ -31,7 +31,11 @@ const rand = (a, b) => a + Math.random() * (b - a);
 // resting spells: gobies sit motionless most of the time. Heavy-tailed: mostly 10–30 s, sometimes over a minute
 const restTime = (scale = 1) => scale * Math.min(90, 8 + 14 * -Math.log(1 - Math.random() * 0.999));
 
-export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY }) {
+export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY, scale = 1, onEvent = null }) {
+  // floorY may be a function (x, z) → ground height, so the goby can rest on sloping terrain
+  const floorAt = typeof floorY === 'function' ? floorY : () => floorY;
+  const S = scale; // world metres per model metre: distances and speeds scale with the individual
+  const emit = (name) => { if (onEvent) onEvent(name); };
   const rest = {};
   for (const [name, b] of Object.entries(bones)) rest[name] = b.position.clone();
 
@@ -96,10 +100,11 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
   const tmp = new THREE.Vector3();
 
   // ------------------------------------------------------------------ actions
-  function dart(dist = rand(0.06, 0.16), angle = null) {
-    if (st.mode === 'yawn' || st.mode === 'dart') return;
+  function dart(dist = rand(0.06, 0.16) * S, angle = null, force = false) {
+    if (st.mode === 'dart') return;
+    if (st.mode === 'yawn') { if (!force) return; st.mode = 'perch'; st.t = 0; }
     // choose a target, biased to stay near the start point
-    const back = st.pos.length() > 0.12 ? Math.atan2(-st.pos.x, -st.pos.z) : null;
+    const back = st.pos.length() > 0.12 * S ? Math.atan2(-st.pos.x, -st.pos.z) : null;
     let dir = angle ?? (back !== null && Math.random() < 0.7 ? back + rand(-0.6, 0.6) : st.heading + rand(-1.6, 1.6));
     st.targetHeading = st.yaw[0] + wrap(dir - st.yaw[0]);
     st.turnSign = Math.sign(wrap(dir - st.yaw[0])) || 1;
@@ -112,7 +117,11 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     if (st.mode !== 'perch') return;
     st.mode = 'yawn';
     st.t = 0;
+    emit('yawn');
   }
+  function setRestFor(seconds) { if (st.mode === 'perch') { st.t = 0; st.next = seconds; } }
+  function setAlert(v) { st.propGoal = v > 0.5 ? rand(0.75, 1) : rand(0.05, 0.2); st.alertT = v > 0.5 ? rand(4, 12) : rand(30, 70); if (v > 0.5) emit('alert'); }
+  function setHeading(h) { st.heading = h; st.yaw.fill(h); st.headGoal = h; st.targetHeading = h; hist.fill(h); }
   function flick() { st.flick = 1; }
   function paddle() { if (st.mode === 'perch') { st.mode = 'paddle'; st.t = 0; st.targetHeading = st.yaw[0] + rand(-0.7, 0.7); } }
 
@@ -137,6 +146,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
       case 'perch':
         st.speed = damp(st.speed, 0, 6, dt);
         st.d1Goal = 0.55;
+        if (st.t > 20 && !st.restEmitted) { st.restEmitted = true; emit('rest'); }
         if (st.auto && st.t > st.next) chooseNext();
         break;
       case 'paddle': {
@@ -146,7 +156,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         // each power stroke of the pectorals pushes the fish a little forward
         st.strokeP += dt / 0.42;
         const inPower = (st.strokeP % 1) < 0.3;
-        st.speed = damp(st.speed, inPower ? 0.022 : 0.0, inPower ? 12 : 8, dt);
+        st.speed = damp(st.speed, inPower ? 0.022 * S : 0.0, inPower ? 12 : 8, dt);
         st.paddle = 1;
         if (st.t > 0.84 + 0.42 * Math.floor(rand(0, 1.99))) { st.mode = 'perch'; st.t = 0; st.next = restTime(0.9); st.paddle = 0; st.strokeP = 0; }
         break;
@@ -162,9 +172,10 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         liftGoal = 0.3;
         if (st.t > 0.05 && (Math.abs(err) < 0.3 || st.t > 0.4)) {
           // stage 2: the first tail stroke of the dart is the return flip, away from the concave side
-          st.mode = 'dart'; st.t = 0;
+          st.mode = 'dart'; st.t = 0; st.restEmitted = false;
+          emit('dart');
           st.freq = rand(7.5, 9.5);
-          st.beats = Math.max(2, Math.round(st.dartDist / 0.045 + rand(-0.4, 0.6)));
+          st.beats = Math.max(2, Math.round(st.dartDist / (0.045 * S) + rand(-0.4, 0.6)));
           st.phase = 2 * Math.PI / 0.95 - Math.PI / 2 + (st.turnSign > 0 ? 0 : Math.PI);
           st.gain = 0.35;
         }
@@ -174,7 +185,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         const dur = st.beats / st.freq;
         swimGoal = 1;
         liftGoal = 1;
-        const vmax = 0.26 + 0.06 * (st.freq - 8);
+        const vmax = (0.26 + 0.06 * (st.freq - 8)) * S;
         st.speed = damp(st.speed, vmax, 9, dt);
         st.phase += 2 * Math.PI * st.freq * dt;
         st.gain = damp(st.gain, 1, 22, dt);
@@ -190,7 +201,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         st.speed = damp(st.speed, 0, st.t > 0.15 ? 7 : 3, dt);
         st.phase += 2 * Math.PI * st.freq * 0.6 * dt * Math.max(st.gain, 0);
         st.gain = damp(st.gain, 0, 10, dt);
-        if (st.t > 0.55 && st.speed < 0.01) {
+        if (st.t > 0.55 && st.speed < 0.01 * S) {
           st.mode = 'perch'; st.t = 0; st.next = restTime(); st.gain = 0;
           if (Math.random() < 0.3) st.flick = 1;
         }
@@ -208,7 +219,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     const yawRootOld = st.yaw[1];
     st.clock += dt;
     while (st.clock >= HDT) { stepChain(HDT); st.clock -= HDT; }
-    const pivotZ = 0.012 - 0.005 * st.swim;
+    const pivotZ = (0.012 - 0.005 * st.swim) * S;
     const px = st.pos.x + Math.sin(yawRootOld) * pivotZ, pz = st.pos.z + Math.cos(yawRootOld) * pivotZ;
     st.heading = st.yaw[1];
     st.pos.x = px - Math.sin(st.heading) * pivotZ;
@@ -243,6 +254,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
         const alert = st.propGoal < 0.5;
         st.propGoal = alert ? rand(0.75, 1) : rand(0.05, 0.2);
         st.alertT = alert ? rand(4, 12) : rand(30, 70);
+        if (alert) emit('alert');
       }
     }
     const propGoal = st.mode === 'orient' ? 0.8 : (st.mode === 'dart' || st.mode === 'glide') ? 0 : st.propGoal;
@@ -373,7 +385,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
     root.updateMatrixWorld(true);
     let lowest = Infinity;
     for (const c of contacts) lowest = Math.min(lowest, c.bone.localToWorld(tmp.copy(c.p)).y);
-    root.position.y = floorY - lowest + 0.0028 * st.lift;
+    root.position.y = floorAt(st.pos.x, st.pos.z) - lowest + 0.0028 * S * st.lift;
   }
 
   const finNames = Object.keys(finMeshes);
@@ -405,7 +417,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY 
   }
 
   return {
-    update, dart, yawn, flick, paddle, pose,
+    update, dart, yawn, flick, paddle, pose, setRestFor, setAlert, setHeading,
     anchor: () => root.position,
     setAuto: (v) => { st.auto = v; },
     setPaused: (v) => { st.paused = v; },
