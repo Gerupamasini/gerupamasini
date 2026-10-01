@@ -20,7 +20,13 @@ const deg = (r) => (r * 180) / Math.PI;
 // bind body axis (breast front → under-tail, photos) is 10° tail-down; the body bone's pitch adds to it
 const BIND_AXIS = 10;
 
-console.log('pose            crown  crown−back  belly  axis°  bill°  tarsus°  eye−breast  stretch  bodyY');
+// distance (mm) of the posed bill tip from the action's bill target (peck: does the bill reach the ground?)
+const billErr = (a, tip) => {
+  const act = a.action;
+  const tg = act?.def.pose(act.t / act.dur, act.params, a, {})?.billTarget;
+  return tg ? tip.distanceTo(mm(tg)) : NaN;
+};
+console.log('pose            crown  crown−back  belly  axis°  bill°  tarsus°  eye−breast  stretch  bodyY   billTip(z,y)  →target');
 for (const spec of poses) {
   const [pose, t] = spec.split('@');
   Object.assign(a.gaze, { yaw: 0, tYaw: 0, roll: 0, tRoll: 0, pitch: GAZE_PITCH_REST, tPitch: GAZE_PITCH_REST, timer: 1e9, mode: 'idle' });
@@ -64,5 +70,5 @@ for (const spec of poses) {
   const eye = local('head', J.eyeCenter);
   const by = mm(a.b.body.getWorldPosition(new THREE.Vector3())).y;
   const f = (x, w = 7) => (Number.isFinite(x) ? x.toFixed(1) : '–').padStart(w);
-  console.log(`${spec.padEnd(14)}${f(crown)}${f(crown - back, 11)}${f(belly)}${f(axis)}${f(bill)}${f(tars, 9)}${f(eye.z - breast, 12)}${f(a.neckStretch ?? 1, 9)}${f(by)}`);
+  console.log(`${spec.padEnd(14)}${f(crown)}${f(crown - back, 11)}${f(belly)}${f(axis)}${f(bill)}${f(tars, 9)}${f(eye.z - breast, 12)}${f(a.neckStretch ?? 1, 9)}${f(by)}   ${f(bt.z)},${f(bt.y)}${f(billErr(a, bt), 9)}`);
 }

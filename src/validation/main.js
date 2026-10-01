@@ -107,14 +107,17 @@ function stripLayout() {
   const h = Math.floor(H / 2);
   for (let i = 0; i < n; i++) {
     const t = q.has('cyc') ? i / n : n === 1 ? 0 : i / (n - 1);
-    const side = ortho(w, h, Number(q.get('span') ?? 0.1));
-    side.position.set(0.5, 0.05 + Number(q.get('camY') ?? 0), 0.0 + Number(q.get('camZ') ?? 0));
-    side.lookAt(0, 0.05 + Number(q.get('camY') ?? 0), Number(q.get('camZ') ?? 0));
+    // frames sized for the photo-scale bird (L 142 mm, bill tip z +54 … tail tip −85: centre z −0.015)
+    const cy = Number(q.get('camY') ?? 0);
+    const cz = Number(q.get('camZ') ?? -0.015);
+    const side = ortho(w, h, Number(q.get('span') ?? 0.16));
+    side.position.set(0.5, 0.06 + cy, cz);
+    side.lookAt(0, 0.06 + cy, cz);
     side.layers.enable(1);
     const p = new THREE.PerspectiveCamera(30, w / h, 0.005, 20);
-    const pd = Number(q.get('pd') ?? 0.32);
-    p.position.set(pd * 0.8, pd * 0.45 + Number(q.get('camY') ?? 0), pd * 0.75 + Number(q.get('camZ') ?? 0));
-    p.lookAt(0, 0.045 + Number(q.get('camY') ?? 0), Number(q.get('camZ') ?? 0));
+    const pd = Number(q.get('pd') ?? 0.42);
+    p.position.set(pd * 0.8, pd * 0.45 + cy, pd * 0.75 + cz);
+    p.lookAt(0, 0.05 + cy, cz);
     views.push({ cam: side, rect: [i * w, 0, w, h], label: `t=${t.toFixed(2)}`, t });
     views.push({ cam: p, rect: [i * w, h, w, h], label: '', t });
   }
