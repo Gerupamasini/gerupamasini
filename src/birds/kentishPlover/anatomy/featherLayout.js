@@ -188,7 +188,7 @@ export function buildScapularLayout() {
   const out = [];
   // two rows over the relaxed mantle (spec §10.3)
   const rows = [
-    { x0: 6.5, x1: 9.5, z0: 5, z1: -23, n: 6, len: [15, 21], w: 8.8, out: 0.2, y: 88 },
+    { x0: 6.5, x1: 9.5, z0: 0, z1: -23, n: 6, len: [15, 21], w: 8.8, out: 0.2, y: 88 },
     { x0: 11.5, x1: 14.5, z0: 7, z1: -17, n: 5, len: [13, 18], w: 8.0, out: 0.42, y: 85.5 },
   ];
   rows.forEach((r, ri) => {

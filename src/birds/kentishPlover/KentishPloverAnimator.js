@@ -62,6 +62,10 @@ const SINK = 10;
 // share of the body pitch that carries the head pivot with it (about the hip). 1: the head keeps its place on
 // the body — walking photos in the bill–tail frame match the relaxed stand (IoU 0.88), only the crown sits lower
 const HEAD_PITCH_FOLLOW = 1;
+// trunk lowered when sitting / incubating (m): breast and belly on the ground (spec §12: belly clearance 0, crown 70–80)
+const SIT_DROP = 0.029;
+// mm: how far the tucked head may sink into the fluffed mantle / scapulars below the plumage contact
+const TUCK_SINK = 14;
 const sinkLimit = (rest, need) => Math.min(rest, need) - SINK * smoothstep(need + 6, need + 2, rest);
 // Over the folded wing (and its front edge under the breast-side patch) the head and neck lie on the wing —
 // preening the breast or the belly, the cheek against the bend of the wing — never in it: there no point may
@@ -69,11 +73,21 @@ const sinkLimit = (rest, need) => Math.min(rest, need) - SINK * smoothstep(need 
 // shoulder, above the trunk-only outline).
 const BODY_SDF = getBodySDF(CFG);
 const wingZone = (p) => smoothstep(9, 12, Math.abs(p.x)) * smoothstep(50, 54, p.y) * (1 - smoothstep(80, 84, p.y)) * (1 - smoothstep(20, 26, p.z)) * smoothstep(-70, -64, p.z);
-/** How far (mm) a head / neck point at p (rest space) is below where it may be. */
+/** How far (mm) a head / neck point at p (rest space) is below where it may be; `contactDeficit.sdf` is the
+ *  outline that decided it (the push goes along its gradient). */
 const contactDeficit = (s, need, p) => {
   const trunk = sinkLimit(s.rest, need) - TORSO_SDF(p.x, p.y, p.z);
   const w = wingZone(p);
-  return w > 0 ? Math.max(trunk, w * (Math.min(s.restBody, need) - BODY_SDF(p.x, p.y, p.z))) : trunk;
+  const wing = w > 0 ? w * (Math.min(s.restBody, need) - BODY_SDF(p.x, p.y, p.z)) : -Infinity;
+  contactDeficit.sdf = wing > trunk ? BODY_SDF : TORSO_SDF;
+  return Math.max(trunk, wing);
+};
+/** Outward unit normal (rest space) of `sdf` at p. Pushing along the trunk's normal where the whole-body outline
+ *  (over the wing) set the depth moved other points deeper: the push grew pass after pass and the head jumped by
+ *  up to 13 mm between frames when the 24-pass loop stopped at a different point (gaitjitter.mjs head judder). */
+const sdfNormal = (sdf, p, out) => {
+  const e = 0.2;
+  return out.set(sdf(p.x + e, p.y, p.z) - sdf(p.x - e, p.y, p.z), sdf(p.x, p.y + e, p.z) - sdf(p.x, p.y - e, p.z), sdf(p.x, p.y, p.z + e) - sdf(p.x, p.y, p.z - e)).normalize();
 };
 const HEAD_PTS = (() => {
   const head = CFG.bodySculpt.prims.find((p) => p.name === 'head');
@@ -89,7 +103,12 @@ const HEAD_PTS = (() => {
   // depth over the torso outline at rest (mm)
   for (const q of pts) {
     q.rest = TORSO_SDF(q.x + J.head[0], q.y + J.head[1], q.z + J.head[2]);
-    q.restBody = Infinity; // (the head is part of the body outline at rest; never over the wing)
+    // (the head is part of the body outline at rest; never over the wing). Points buried in the throat / nape
+    // plumage at rest (under the outline) may sink no deeper than they are at rest: with the neck drawn in
+    // (resting, sitting, walking) the lower head settles into the fluffed fore-breast beside the shoulder
+    // instead of being pushed 8–12 mm up (crown − back +15 instead of the photographed +10, spec §7, §12)
+    const body = BODY_SDF(q.x + J.head[0], q.y + J.head[1], q.z + J.head[2]);
+    q.restBody = body < -0.5 ? body : Infinity;
   }
   return pts;
 })();
@@ -169,6 +188,9 @@ export class KentishPloverAnimator {
       sleep: 0,
       oneLeg: 0, // 0 both legs, 1 = left raised, −1 = right raised
       sit: 0,
+      headDown: 0, // head pivot lowered (m) …
+      headFwd: 0, // … and carried forward (m), root space: walking / foraging carry the head low in front of the breast
+      shift: 0, // trunk moved forward over the planted feet (m): pecking at prey further ahead or nearer than a bill-reach
     };
     this.target = { ...this.p };
     this.posture = 'relaxed';
@@ -199,6 +221,7 @@ export class KentishPloverAnimator {
     this.headWorldTarget = null; // optional absolute head-pivot target (set by actions)
     this.headOverride = null; // {q: world quaternion}
     this.headStab = new THREE.Vector3();
+    this._tuckSink = 0;
 
     // Wings / flight
     this.foldLR = [1, 1]; // how folded each wing is (after action overrides)
@@ -406,8 +429,9 @@ export class KentishPloverAnimator {
     const body = b.body;
     const flying = this.flight.active || this.flight.amp > 0.02;
     const idleShift = (1 - this.stride.amount) * (flying ? 0 : 1) * this.n1(this.time * 0.13) * 0.0007;
-    body.position.y += this.p.height + bob - this.p.sit * 0.022;
+    body.position.y += this.p.height + bob - this.p.sit * SIT_DROP;
     body.position.x += sway + idleShift;
+    body.position.z += this.p.shift;
     body.quaternion.multiply(qAxis(X, this.p.pitch + this.lean + (act?.pitchAdd ?? 0), _q));
     body.quaternion.multiply(qAxis(Z, this.p.roll + sway * 8 + idleShift * 6, _q));
     // breathing: chest/flank expansion in the body shader (allometric rate, animation_reference.md)
@@ -440,27 +464,29 @@ export class KentishPloverAnimator {
     const t = this.target;
     const P = this.posture;
     const run = this.stride.amount * smoothstep(0.5, 1.2, this.velocity.length());
-    Object.assign(t, { height: 0, pitch: 0, roll: 0, neck: 0, fold: 1, tailPitch: 0, tailSpread: 0, fluff: 0.15, sleep: 0, oneLeg: 0, sit: 0 });
+    Object.assign(t, { height: 0, pitch: 0, roll: 0, neck: 0, fold: 1, tailPitch: 0, tailSpread: 0, fluff: 0.15, sleep: 0, oneLeg: 0, sit: 0, headDown: 0, headFwd: 0, shift: 0 });
     // pitch is relative to the bind = relaxed stand (body axis 10° tail-down); values from the photos
     // (body_shape_spec.md §12)
     switch (P) {
       case 'alert': // head up, neck stretched, body more upright, feathers sleeked (S11; spec §12, n = 1)
         Object.assign(t, { height: 0.003, pitch: -0.1, neck: 0.6, fluff: -0.25, tailPitch: 0.05 });
         break;
-      case 'forage': // searching: body tipped forward (axis ≈ −8°), neck slightly extended, bill 35–45° down
-        Object.assign(t, { height: -0.002, pitch: 0.3, neck: 0.2, fluff: 0.1 });
+      case 'forage': // searching: body tipped forward (axis ≈ −8°), neck slightly extended, bill 35–45° down (gaze),
+        // head low in front of the breast: crown ≈ back (crown 87.5 mm, spec §7, §12: 80–90, ≈ 0)
+        Object.assign(t, { height: -0.002, pitch: 0.3, neck: 0.2, fluff: 0.1, headDown: 0.008, headFwd: 0.006 });
         break;
       case 'hunched': // aggressive run posture: head low & forward
         Object.assign(t, { height: -0.004, pitch: 0.47, neck: -0.3, fluff: 0.35, tailPitch: -0.1 });
         break;
       case 'run':
-        Object.assign(t, { height: -0.003, pitch: ANIM.run.bodyPitch, neck: ANIM.run.neck, fluff: -0.1 });
+        Object.assign(t, { height: -0.003, pitch: ANIM.run.bodyPitch, neck: ANIM.run.neck, fluff: -0.1, headDown: ANIM.run.headDown, headFwd: ANIM.run.headFwd });
         break;
       case 'restOneLeg':
-        Object.assign(t, { height: 0.001, pitch: 0.01, neck: -1, fluff: 0.8, sleep: 0.7, oneLeg: 1 });
+        // trunk sunk onto the standing leg: belly ≈ 25 mm, crown 97–100 with the fluffing (spec §12)
+        Object.assign(t, { height: -0.005, pitch: 0.01, neck: -1, fluff: 0.8, sleep: 0.7, oneLeg: 1 });
         break;
       case 'restTucked':
-        Object.assign(t, { height: 0.0, pitch: 0.0, neck: -1, fluff: 0.9, sleep: 1, oneLeg: 1 });
+        Object.assign(t, { height: -0.005, pitch: 0.0, neck: -1, fluff: 0.9, sleep: 1, oneLeg: 1 });
         break;
       case 'sit':
         Object.assign(t, { height: 0, pitch: 0, neck: -1, fluff: 0.9, sleep: 0.8, sit: 1 });
@@ -472,15 +498,21 @@ export class KentishPloverAnimator {
     if (P !== 'run' && P !== 'forage' && P !== 'hunched') {
       const walk = this.stride.amount;
       t.pitch += walk * ANIM.walk.bodyPitch;
-      if (P !== 'alert') t.neck = lerp(t.neck, Math.min(t.neck, ANIM.walk.neck), walk);
+      if (P !== 'alert') {
+        t.neck = lerp(t.neck, Math.min(t.neck, ANIM.walk.neck), walk);
+        t.headDown = lerp(t.headDown, Math.max(t.headDown, ANIM.walk.headDown), walk);
+        t.headFwd = lerp(t.headFwd, Math.max(t.headFwd, ANIM.walk.headFwd), walk);
+      }
     }
     if (run > 0 && P !== 'run') {
       t.pitch = lerp(t.pitch, Math.max(t.pitch, ANIM.run.bodyPitch), run);
       t.neck = lerp(t.neck, ANIM.run.neck, run);
+      t.headDown = lerp(t.headDown, ANIM.run.headDown, run);
+      t.headFwd = lerp(t.headFwd, ANIM.run.headFwd, run);
     }
     if (this.flight.active) {
       // level body in flight: +0.17 from the tail-down bind (spec §12)
-      Object.assign(t, { fold: 0, pitch: 0.17, neck: -0.6, fluff: -0.3, tailSpread: this.flight.brake * 0.9, tailPitch: this.flight.brake * 0.35, oneLeg: 0, sit: 0, sleep: 0 });
+      Object.assign(t, { fold: 0, pitch: 0.17, neck: -0.6, headDown: 0, headFwd: 0, fluff: -0.3, tailSpread: this.flight.brake * 0.9, tailPitch: this.flight.brake * 0.35, oneLeg: 0, sit: 0, sleep: 0 });
     }
   }
 
@@ -943,9 +975,11 @@ export class KentishPloverAnimator {
     if (!act?.headQ && this.posture === 'restTucked') {
       // bill tucked into the scapulars: head rotated ~160° and resting on the mantle (sleep posture)
       const side = this._tuckSide ?? (this._tuckSide = this.rng() < 0.5 ? 1 : -1);
-      // head on the mantle, crown the bird's highest point, bill into the scapulars (p040; spec §12)
-      const onBack = this.bodyPoint([side * 6, 92, 2]);
-      const dir = this.bodyPoint([side * 11, 84, -14]).sub(onBack).normalize();
+      // head on the mantle, crown the bird's highest point, bill into the scapulars (p040; spec §12). The spec's
+      // points [±6, 92, 2] → [±11, 84, −14] left the crown 21 mm over the back (photos ≈ +10): 8 mm lower, and
+      // the head buried TUCK_SINK into the fluffed mantle, crown − back +17 before fluffing (posture.mjs)
+      const onBack = this.bodyPoint([side * 6, 84, 2]);
+      const dir = this.bodyPoint([side * 11, 76, -14]).sub(onBack).normalize();
       headQ = this.billQuat(dir, side * 0.5);
       tuckPos = onBack.clone().sub(BILL_FROM_HEAD.clone().multiplyScalar(0.45).applyQuaternion(headQ));
     } else if (act?.headQ) headQ = act.headQ;
@@ -965,7 +999,7 @@ export class KentishPloverAnimator {
       // (neck −1: crown − back +15 → +10 mm, spec §12)
       const up = n > 0 ? n * 0.009 : n * 0.005;
       const fwd = n > 0 ? n * 0.003 : n * 0.002;
-      const local = BIND.headPivot.clone().add(new THREE.Vector3(0, up + this.p.height - this.p.sit * 0.022, fwd));
+      const local = BIND.headPivot.clone().add(new THREE.Vector3(0, up - this.p.headDown + this.p.height - this.p.sit * SIT_DROP, fwd + this.p.headFwd));
       // body pitch carries the head forward/down with it (about the hip)
       const pitch = this.p.pitch + this.lean;
       const hip = new THREE.Vector3(0, BIND.hip.y + this.p.height, BIND.hip.z);
@@ -980,6 +1014,10 @@ export class KentishPloverAnimator {
     }
     // 3) neck chain to the head pivot. The head rests on the plumage lying on the back / flanks, never
     //    inside it — checked on the solved chain too (far-back preening targets are beyond the neck's reach)
+    // asleep, the head is buried in the fluffed mantle and scapulars (p040: only the crown and the face show
+    // above the back, crown − back ≈ +10, spec §12) instead of lying on top of them
+    this._tuckSink = tuckPos ? TUCK_SINK * this.p.sleep : 0;
+    const want = headPos.clone();
     headPos = this._clearHead(headPos.clone(), headQ);
     let stretch = this._solveNeck(headPos, headQ);
     const reached = b.head.getWorldPosition(new THREE.Vector3());
@@ -990,12 +1028,30 @@ export class KentishPloverAnimator {
       headPos = this._clearHead(reached, headQ);
       stretch = this._solveNeck(headPos, headQ);
     }
+    // Head and neck pushes can work against each other (lifting the head swings the re-aimed neck into the
+    // plumage): the loop keeps the head pivot with the smallest remaining depth and stops once a pass makes it
+    // worse, so the result does not depend on where a 24-pass cycle happened to stop (head judder, gaitjitter.mjs)
+    let best = Infinity;
+    const bestPos = headPos.clone();
     for (let pass = 0; pass < 24; pass++) {
       const reached = b.head.getWorldPosition(new THREE.Vector3());
       const push = this._clearHead(reached.clone(), headQ).sub(reached).add(this._neckPush());
+      const depth = Math.max(this._headWorst, this._neckWorst);
+      if (depth < best - 0.01) {
+        best = depth;
+        bestPos.copy(headPos);
+      } else if (depth > best + 0.05) break;
       if (push.lengthSq() < 1e-12) break;
       stretch = this._solveNeck(headPos.add(push), headQ); // accumulate: beyond reach only the aim turns
     }
+    if (!headPos.equals(bestPos)) stretch = this._solveNeck(bestPos, headQ);
+    // the contact correction (root frame) is eased in and out over ≈30 ms: which point touches the plumage
+    // switches from frame to frame as the trunk bobs and sways, and the head followed every switch
+    const rootInv = _q3.copy(rootQ).invert();
+    const corr = _v2.copy(bestPos).sub(want).applyQuaternion(rootInv);
+    if (!this._corr || !(dt > 0)) this._corr = corr.clone();
+    else this._corr.lerp(corr, 1 - Math.exp(-30 * dt));
+    if (this._corr.distanceToSquared(corr) > 1e-10) stretch = this._solveNeck(want.add(_v2.copy(this._corr).applyQuaternion(rootQ)), headQ);
     // jaw: opens briefly when swallowing / pulling prey
     b.jaw.quaternion.multiply(qAxis(X, act?.jaw ?? 0, _q));
     this.neckStretch = stretch;
@@ -1040,19 +1096,19 @@ export class KentishPloverAnimator {
   _neckPush() {
     const chest = this.b.chest;
     const inv = _m.copy(chest.matrixWorld).invert();
-    const plumage = PLUMAGE + 1.2 * Math.max(0, this.p.fluff);
+    const plumage = PLUMAGE + 1.2 * Math.max(0, this.p.fluff) - this._tuckSink;
     const p = new THREE.Vector3();
     let worst = 0;
+    let sdf = TORSO_SDF;
     const at = new THREE.Vector3();
     for (const s of NECK_PTS) {
       p.copy(s.local).multiplyScalar(mm).applyMatrix4(this.b[s.bone].matrixWorld).applyMatrix4(inv).add(BIND_CHEST).multiplyScalar(1000);
       const deficit = contactDeficit(s, plumage, p) / s.t;
-      if (deficit > worst) [worst, at.x, at.y, at.z] = [deficit, p.x, p.y, p.z];
+      if (deficit > worst) [worst, sdf, at.x, at.y, at.z] = [deficit, contactDeficit.sdf, p.x, p.y, p.z];
     }
+    this._neckWorst = worst;
     if (worst <= 0.01) return p.set(0, 0, 0);
-    const e = 0.2;
-    const g = new THREE.Vector3(TORSO_SDF(at.x + e, at.y, at.z) - TORSO_SDF(at.x - e, at.y, at.z), TORSO_SDF(at.x, at.y + e, at.z) - TORSO_SDF(at.x, at.y - e, at.z), TORSO_SDF(at.x, at.y, at.z + e) - TORSO_SDF(at.x, at.y, at.z - e)).normalize();
-    return g.applyQuaternion(chest.getWorldQuaternion(_q)).multiplyScalar(worst * mm);
+    return sdfNormal(sdf, at, new THREE.Vector3()).applyQuaternion(chest.getWorldQuaternion(_q)).multiplyScalar(worst * mm);
   }
 
   /** Push the head pivot off the torso outline until the head clears the plumage (PLUMAGE mm, + fluffing). */
@@ -1060,21 +1116,22 @@ export class KentishPloverAnimator {
     const chest = this.b.chest;
     chest.updateMatrixWorld(true);
     const inv = _m.copy(chest.matrixWorld).invert();
-    const need = PLUMAGE + 1.2 * Math.max(0, this.p.fluff);
+    const need = PLUMAGE + 1.2 * Math.max(0, this.p.fluff) - this._tuckSink;
     const p = new THREE.Vector3();
+    this._headWorst = 0;
     for (let it = 0; it < 3; it++) {
       let worst = 0;
+      let sdf = TORSO_SDF;
       const at = new THREE.Vector3();
       for (const s of HEAD_PTS) {
         // world → chest-local → rest (mm)
         p.copy(s).multiplyScalar(mm).applyQuaternion(headQ).add(headPos).applyMatrix4(inv).add(BIND_CHEST).multiplyScalar(1000);
         const deficit = contactDeficit(s, need, p);
-        if (deficit > worst) [worst, at.x, at.y, at.z] = [deficit, p.x, p.y, p.z];
+        if (deficit > worst) [worst, sdf, at.x, at.y, at.z] = [deficit, contactDeficit.sdf, p.x, p.y, p.z];
       }
+      if (it === 0) this._headWorst = worst;
       if (worst <= 0.01) break;
-      const e = 0.2;
-      const g = new THREE.Vector3(TORSO_SDF(at.x + e, at.y, at.z) - TORSO_SDF(at.x - e, at.y, at.z), TORSO_SDF(at.x, at.y + e, at.z) - TORSO_SDF(at.x, at.y - e, at.z), TORSO_SDF(at.x, at.y, at.z + e) - TORSO_SDF(at.x, at.y, at.z - e)).normalize();
-      headPos.addScaledVector(g.applyQuaternion(chest.getWorldQuaternion(_q)), worst * mm);
+      headPos.addScaledVector(sdfNormal(sdf, at, _v3).applyQuaternion(chest.getWorldQuaternion(_q)), worst * mm);
     }
     return headPos;
   }
@@ -1196,13 +1253,19 @@ export const ACTIONS = {
       const dist = Math.hypot(toT.x, toT.z);
       const yawW = Math.atan2(toT.x, toT.z);
       // plovers pick by tipping the whole body forward over the legs (up to +0.56 from the relaxed stand, body
-      // axis ≈ −22°) and stretching the neck 15–20 mm (p007, p061; spec §7, §12); tilt builds up through aim → strike
-      const maxPitch = 0.56 + clamp(0.055 - dist, -0.04, 0.04) * 4;
+      // axis ≈ −22°) and stretching the neck 15–20 mm (p007, p061; spec §7, §12); tilt builds up through aim → strike.
+      // The legs flex (trunk 15 mm lower): belly ≈ 19 mm over the ground, tarsus 42° (spec §9, §12: 20–25, 42°),
+      // the neck stays under its stretch limit (tools/dev/posture.mjs)
       const aimK = smoothstep(0, 0.22, u);
       const strikeK = smoothstep(0.2, 0.3, u);
       const recK = smoothstep(0.6, 1.0, u);
-      const tilt = maxPitch * (0.55 * aimK + 0.45 * strikeK) * (1 - 0.85 * recK);
-      const out = { posture: { pitch: tilt, height: -0.009 * (0.5 * aimK + 0.5 * strikeK) * (1 - recK), neck: -0.2 }, fast: { pitch: 18, height: 14 } };
+      const k = (0.5 * aimK + 0.5 * strikeK) * (1 - recK);
+      const tilt = 0.56 * (0.55 * aimK + 0.45 * strikeK) * (1 - 0.85 * recK);
+      // prey nearer or further than a bill-reach (≈55 mm ahead of the root; the AI stops 25–85 mm short): the
+      // trunk leans forward / back over the planted feet so the neck stays within its stretch (≤ 2, spec §7) and
+      // the tarsus tips toward the photographed 42° (spec §9, §12)
+      const shift = clamp(dist - 0.055, -0.03, 0.035);
+      const out = { posture: { pitch: tilt, height: -0.015 * k, neck: -0.2, shift: shift * k }, fast: { pitch: 18, height: 14, shift: 14 } };
       const dir = new THREE.Vector3(Math.sin(yawW) * 0.25, -1, Math.cos(yawW) * 0.25);
       const aimU = 0.22;
       const strikeU = 0.3;

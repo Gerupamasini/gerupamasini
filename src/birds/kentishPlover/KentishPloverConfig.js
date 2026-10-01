@@ -220,11 +220,12 @@ export const animation = {
   saccadeDuration: 0.075,
   // bodyPitch / neck: relative to the bind (= relaxed stand, body axis 10° tail-down). Walking levels the body
   // (axis −1°, bill 26°, crown only ≈6 mm above the back: 12 photos) and running tips it slightly further
-  // (spec §12, §17.3). The neck values are larger than the spec's −0.4 / −0.5 because its neck offsets
-  // (0.005 m per unit) cannot lower the crown to the photographed 90–95 / 86–92 mm otherwise: with −1 / −1.3 the
-  // crown is at 96 / 92 mm and the bill–tail frame IoU vs the walk/run median 0.86 / 0.86 (tools/dev/fitcheck)
-  walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.19, neck: -1.0 },
-  run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.2, neck: -1.3 },
+  // (spec §12, §17.3). Neck −0.4 / −0.5 as in the spec; the head is carried low in front of the breast
+  // (headDown / headFwd, m): retracting the neck alone presses the head into the mantle and the plumage contact
+  // pushes it back up (crown stayed at 100 mm). tools/dev/posture.mjs: walk crown 95, crown − back 4.6 (spec
+  // 90–95, +6 ± 4); run 90, 2.4 (86–92, ≤ +3)
+  walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.19, neck: -0.4, headDown: mm(5), headFwd: mm(5) },
+  run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.2, neck: -0.5, headDown: mm(8), headFwd: mm(8) },
   sway: mm(0.6), // lateral trunk sway per stride (D)
   // Trunk bob (2 per stride) and sway (1 per stride) are limited to this acceleration (m/s², ≈0.15 g): walking
   // keeps its full 1.2 mm inverted-pendulum bob (needs ≈0.75), running at 9.5 Hz is left with ≈0.2 mm — the body
