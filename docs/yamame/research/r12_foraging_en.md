@@ -725,3 +725,48 @@
 3. `ヤマメ 夜間 摂餌 日周 胃内容物`、`サクラマス 幼魚 越冬 水温 隠れ場所`（日本語の夜間・冬期）。
 4. `masu salmon alarm substance` ／ `salmonid startle response distance snorkeler cm`（警報物質、FID の数値）。
 5. 野登川（Nobori River）のサクラマス冬期生息場所の論文の著者・誌名（F-32 (1) の確定）。
+
+---
+
+### 6-b. （別パスの追記）検索ログ — 検索 34 回（全て mode=standard、extended 0、budget 拒否 0）
+
+> 上の第2版の 40 回とは別の実行。**本ストリームの検索の合計は 40 + 34 = 74 回。** 有用度: 高=数値や主要な記述が取れた／中=書誌確認や定性的記述／低=ほぼ成果なし。#13 と #20 は 1 回の呼び出しの中で複数の内部検索の表示があり、予算の消費が 1 回を超えた可能性がある（呼び出し回数としては 1 と数えた）。
+
+| # | クエリ（要旨） | 有用度 | 得たもの |
+|---|---|---|---|
+| 1 | Hughes Dill 1990 position choice drift-feeding Arctic grayling reactive distance fish length | 中 | 書誌、予測と選択位置が合う |
+| 2 | Fausch 1984 profitable stream positions relating specific growth rate to net energy gain | 中 | モデルの記述（F-16 と重複） |
+| 3 | Grant Kramer 1990 territory size ... body length | 高 | 回帰式（F-22 と重複） |
+| 4 | Nakano 1995 individual differences ... red-spotted masu salmon | 低 | 書誌と題名のみ |
+| 5 | Nakano Fausch Kitano 1999 flexible niche partitioning ... charrs | 高 | 書誌、大型=ドリフト・小型=底生（F-20 と重複） |
+| 6 | Grant Noakes 1987 movers and stayers ... brook charr | 低 | 題名を確認できず。別題名（escape behavior and use of cover）が出た（F-47） |
+| 7 | Hughes 1992 ranking of feeding positions grayling dominance | 中 | プール内の位置の序列（F-17 と重複） |
+| 8 | drift-feeding salmonid reaction distance fish length prey size capture success velocity | 高 | Wankowski 学位論文の相対値、Biro 32.7 cm（F-46） |
+| 9 | ヤマメ 縄張り 体長 面積 攻撃 追い払い 定位 流速 採餌 行動観察 | 低 | 成果なし |
+| 10 | masu salmon juvenile focal point velocity depth drift feeding underwater territory | 中 | Ueno ら 2009 の存在（F-31 と重複） |
+| 11 | trout flight initiation distance human approach stream angler | 中 | Samia ら 2019（F-42 と重複） |
+| 12 | juvenile salmonid chemical alarm cue skin extract Brown Smith 1997 | 中 | 書誌（F-25 と重複） |
+| 13 | Nippon Suisan Gakkaishi 75(5) 802-809 masu salmon focal points adult | 高 | Nobori 川の秋〜冬（F-32 と重複）（呼び出し内で複数の内部検索） |
+| 14 | Fraser Metcalfe Thorpe 1993 temperature-dependent switch ... 10 °C | 低 | 書誌のみ |
+| 15 | Liao 2006 lateral line vision ... turbulent flow abstract | 高 | 結果の記述（F-43） |
+| 16 | Rheotaxis revisited multisensory ... | 高 | 総説の要旨（F-27 と重複） |
+| 17 | Atlantic salmon parr nocturnal foraging below 10 °C hide in substratum | 高 | 10℃ の切り替え（F-49） |
+| 18 | Cunjak 1996 winter habitat of selected stream fishes | 低 | 書誌と一般的記述（F-30 と重複） |
+| 19 | Piccolo Hughes Bryant 2008 ... reactive distance cm | 中 | 要約は "(-65% to 10%)" と返った（冒頭の注記） |
+| 20 | Hughes Hayes Young Hayes 2003 brown trout 3D videography | 低 | 書誌のみ（呼び出し内で複数の内部検索） |
+| 21 | juvenile trout mean focal velocity cm/s focal point height above the streambed | 低 | Chena 川 Chinook 12 cm/s（F-46） |
+| 22 | juvenile salmonid aggressive acts per minute nips chases displays | 中 | 咬みの主体、ライフステージ差（F-45）。回/時の数値は無し |
+| 23 | Imre Grant Keeley territory size visual isolation | 中 | 題名、5 cm で約 0.13 m²（F-24 と重複） |
+| 24 | ヤマメ 越冬 冬季 昼間 夜間 活動 水温 隠れ場所 | 低 | 釣りの解説（C）のみ |
+| 25 | masu salmon Nobori River microhabitat channel-unit reach | 中 | 冬の岸際・カバー（F-32 と重複） |
+| 26 | masu salmon focal points near-shore adult fish（allowed_domains 指定） | 高 | Ueno ら 2009 の詳細（F-31 と重複） |
+| 27 | Nakano Fausch Kitano 1999 Dolly Varden white-spotted charr drift benthic results | 高 | 二つの採餌様式（F-45） |
+| 28 | Arnold Webb Holford 1991 pectoral fins station-holding | 中 | parr posture、結果は無し（F-43） |
+| 29 | サケ科 警報物質 サクラマス ヤマメ 皮膚抽出液 | 低 | 成果なし |
+| 30 | Chinook juvenile drift feeding 3D maneuver distance return attack rate | 高 | 1.0–2.9 体長、機動の型（F-44） |
+| 31 | juvenile salmonid overhead shadow predator heron kingfisher response | 中 | 日陰の効果、驚愕反応、隠れ行動（F-47） |
+| 32 | サクラマス ヤマメ 幼魚 縄張り 優劣 順位 闘争（allowed_domains 指定） | 中 | 従属個体の降海準備、成魚による捕食（F-48） |
+| 33 | Hill Grossman 1993 energetic model microhabitat rainbow trout | 中 | 書誌と結論（F-46） |
+| 34 | masu salmon diel activity nocturnal feeding night winter | 中 | 萌出初期の夜間活動、一般的な昼夜のパターン（F-48、F-49） |
+
+**この 34 回で新規に得られた内容は Part E（F-43〜F-49）に、第2版と重複した内容は第2版の F 番号の側に反映済み。**
