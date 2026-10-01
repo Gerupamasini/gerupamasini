@@ -820,6 +820,11 @@ void computeFishSurface() {
     float brow = headSkin * smoothstep(-0.15, 0.35, a) * (1.0 - operc) * smoothstep(0.3, 0.18, sB);
     spec *= 1.0 - brow * (0.8 + 0.25 * (mot2 - 0.5));
     rough += 0.22 * brow;
+    // the rounded front of the snout above the lips faces the viewer in
+    // every frontal view: kept matte as well, or it shows as a glossy knob
+    float snoutF = headSkin * smoothstep(0.05, 0.015, sB) * smoothstep(-0.4, 0.0, a) * (lip > 0.5 ? 0.0 : 1.0);
+    spec *= 1.0 - 0.5 * snoutF;
+    rough += 0.1 * snoutF;
     nT = normalize(nT + vec3(mn, mn2, 0.0) * 0.03 * brow);
   }
   // white head: its skin inherits the flank's pearly reflector strength, so

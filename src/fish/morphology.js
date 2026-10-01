@@ -83,7 +83,7 @@ export const head = {
   eyeR: 0.0449,
   eyeProtrusion: 0.3, // fraction of radius standing proud of the head surface
   // pupil radius (SL): a round black pupil, about half the visible eye
-  // (p05_1, p12_0, p11_1, p25_0); the rest is a broad pale guanine iris
+  // (p05_1, p12_0, p11_1, p25_0); the rest is a broad brass / silver-grey iris
   pupilR: 0.016,
   // mouth (terminal, very slightly superior)
   mouthY: -0.005,

@@ -69,8 +69,6 @@ export const HEAD_RELIEF = {
   // (a defined fleshy ring: a rounded, flat-topped ridge with a shallow
   // crease outside it, so it reads by its own shading instead of an
   // airbrushed colour halo)
-  // (the crest right at the edge of the visible eye: the skin's free edge
-  // meets the ball crisply instead of a ring standing off it)
   // (on the larger, flatter ball: broader and lower, its crest a little
   // outside the edge, and the skin meets the ball low at the edge itself; a
   // skin edge standing high above the ball let an oblique view look past
