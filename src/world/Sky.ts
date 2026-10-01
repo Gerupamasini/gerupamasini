@@ -87,7 +87,7 @@ export class SkyDome {
     const groundCol = new Color(0.28, 0.24, 0.18).lerp(new Color(0.05, 0.05, 0.07), 1 - day);
     this.hemi.color.copy(skyCol);
     this.hemi.groundColor.copy(groundCol);
-    this.hemi.intensity = (0.16 + 0.06 * day) * (1 + 0.6 * cloud);
+    this.hemi.intensity = (0.2 + 0.1 * day) * (1 + 0.6 * cloud);
     this.hemi.color.lerp(new Color(0.6, 0.63, 0.66), cloud * 0.7);
     this.fogColor.copy(new Color(0.6, 0.7, 0.78).lerp(new Color(0.85, 0.6, 0.42), dusk * day)).lerp(new Color(0.06, 0.08, 0.13), 1 - day);
     this.fogColor.lerp(new Color(0.62, 0.66, 0.7), cloud * day * 0.8);
@@ -112,7 +112,9 @@ export class SkyDome {
     this.scene.add(this.sky);
     this.envTex = rt.texture;
     this.scene.environment = this.envTex;
-    this.scene.environmentIntensity = 0.08 + 0.2 * MathUtils.smoothstep(this.elevation, -4, 10);
+    // three applies this in place of a material's own envMapIntensity (materials without an envMap of their own), so
+    // it is the sky's share of the daylight on everything: a fifth of the sun's, not an equal partner
+    this.scene.environmentIntensity = 0.03 + 0.06 * MathUtils.smoothstep(this.elevation, -4, 10);
     prev?.dispose();
   }
 
