@@ -6,7 +6,7 @@ const page = await browser.newPage({ viewport: { width: +w, height: +h } });
 const logs = [];
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(m.type() + ': ' + m.text()); });
 page.on('pageerror', (e) => logs.push('pageerror: ' + e.message));
-await page.goto('http://localhost:4173/?' + q, { waitUntil: 'load' });
+await page.goto('http://localhost:4173/game.html?' + q, { waitUntil: 'load' });
 await page.waitForTimeout(+(process.env.WAIT || 6000));
 if (process.env.PRE) { console.log(JSON.stringify(await page.evaluate(process.env.PRE))); await page.waitForTimeout(+(process.env.WAIT2 || 5000)); }
 await page.screenshot({ path: out });

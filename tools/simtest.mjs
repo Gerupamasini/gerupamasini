@@ -4,7 +4,7 @@ const secs = +(process.argv[2] || 180);
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 320, height: 200 } });
 const errs = []; page.on('pageerror', (e) => errs.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
-await page.goto('http://localhost:4173/?pause=1&shot=wide&fish=8', { waitUntil: 'load' });
+await page.goto('http://localhost:4173/game.html?pause=1&shot=wide&fish=8', { waitUntil: 'load' });
 await page.waitForTimeout(3000);
 const res = await page.evaluate(async (secs) => {
   const T = window.__edo; const F = T.fishes;

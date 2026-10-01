@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'lil-gui';
-import { MudflatWorld } from './world/MudflatWorld.js';
-import { Water } from './world/Water.js';
-import { Sediment } from './world/Sediment.js';
-import { HandNet, PredatorProxy, CameraThreat, PreyField } from './world/Actors.js';
-import { Edohaze } from './creatures/edohaze/Edohaze.js';
-import { EdohazeDebug } from './creatures/edohaze/EdohazeDebug.js';
-import { S as STATES } from './creatures/edohaze/EdohazeBehavior.js';
+import { MudflatWorld } from '../world/MudflatWorld.js';
+import { Water } from '../world/Water.js';
+import { Sediment } from '../world/Sediment.js';
+import { HandNet, PredatorProxy, CameraThreat, PreyField } from '../world/Actors.js';
+import { Edohaze } from '../creatures/edohaze/Edohaze.js';
+import { EdohazeDebug } from '../creatures/edohaze/EdohazeDebug.js';
+import { S as STATES } from '../creatures/edohaze/EdohazeBehavior.js';
 
 // URL options: ?fish=8&seed=3&shot=profile|top|front|close&pause=1&debug=1&t=5
 const Q = new URLSearchParams(location.search);

@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 const [out, mode = 'escape', n = '10', stepMs = '20', view = 'top'] = process.argv.slice(2);
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 360, height: 300 } });
-await page.goto('http://localhost:4173/?pause=1&nogui=1&shot=' + view + '&fish=2&t=1', { waitUntil: 'load' });
+await page.goto('http://localhost:4173/game.html?pause=1&nogui=1&shot=' + view + '&fish=2&t=1', { waitUntil: 'load' });
 await page.waitForTimeout(3000);
 await page.evaluate((mode) => {
   const T = __edo; const f = T.fishes[0];
