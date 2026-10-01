@@ -476,6 +476,8 @@ export class KentishPloverAnimator {
       model.setNape(this.napeFill);
     }
 
+    model.setHeldPrey(act?.held ?? null);
+
     // -------------------------------------------------- micro: blink / lids / fluff
     this._updateLids(dt, act);
     model.setFluff(this.p.fluff);
@@ -1408,7 +1410,7 @@ function peckPlan(p) {
     at('back', t, [tf, 0, 'io']);
     at('tail', t, [tf, 0, 'io']);
     at('jaw', t, [tf, 0.04, 'io']);
-    P = { catch: t + S.extract * 0.3 };
+    P = { catch: t + S.extract * 0.3, free: t + S.extract * 0.3 };
     t = tf;
   } else {
     P = { catch: t4 };
@@ -1451,6 +1453,7 @@ function peckPlan(p) {
     at('tail', t, [tu, -0.06, 'out'], [te, 0, 'io']);
     t = te;
   }
+  P.swallow = [ts, t, S.tosses, S.toss];
   at('kb', ts, [t, 0.35, 'io']);
   // recover: the trunk rises first (slightly past its stance), the head follows it back to the gaze-driven head
   const T = t + S.recover;
@@ -1461,6 +1464,25 @@ function peckPlan(p) {
   Object.assign(P, tr, { T, contact: tc, tugs });
   PLANS.set(p, P);
   return P;
+}
+
+/** The prey in the bill (anatomy/heldPrey.js) at time s of the peck: a worm stretched to its burrow while it is
+ *  pulled, then dangling; crabs / amphipods gripped from the catch; each swallowing toss takes a jerk of it in. A
+ *  miss (params.caught === false, set by the AI at the catch) shows nothing after the catch. */
+function heldPrey(P, p, s, target, yaw) {
+  const worm = (p.preyType ?? 'amphipod') === 'polychaete';
+  const start = worm ? P.contact + 0.02 : P.catch;
+  if (s < start || (p.caught === false && s >= P.catch)) return null;
+  const [ts, te, n, dt] = P.swallow;
+  if (s >= te) return null;
+  let k = 1;
+  if (s > ts) {
+    // in jerks: most of each toss's share on its upstroke
+    const i = Math.min(n - 1, Math.floor((s - ts) / dt));
+    const f = smoothstep(0.1, 0.5, (s - ts - i * dt) / dt);
+    k = 1 - (i + f) / n;
+  }
+  return { type: p.preyType ?? 'amphipod', k, anchor: worm && s < P.free ? target : null, swing: yaw * 2, time: s };
 }
 
 function preenTarget(variant) {
@@ -1556,6 +1578,7 @@ export const ACTIONS = {
       out.jaw = track(P.jaw, s);
       // the tail counters the trunk (+ = down): pressed down when bracing against a worm, flicked up on a swallow toss
       out.tailPitch = track(P.tail, s);
+      out.held = heldPrey(P, p, s, target, track(P.yaw, s));
       return out;
     },
   },

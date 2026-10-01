@@ -185,6 +185,8 @@ export async function exportGLB(renderer = new THREE.WebGLRenderer()) {
   const eyeCol = new Float32Array(eye.geometry.getAttribute('position').count * 3).fill(0.02);
   mk(eye.geometry, eyeCol, 'Eyes', { roughness: 0.1 });
   const clips = bakeClips(model);
+  // (the prey shown in the bill while pecking is the live model's, not part of the asset)
+  model._held?.root.removeFromParent();
   const exporter = new GLTFExporter();
   const glb = await exporter.parseAsync(root, { binary: true, animations: clips, onlyVisible: false });
   return { glb, clips: clips.map((c) => `${c.name} (${c.duration.toFixed(2)} s)`) };

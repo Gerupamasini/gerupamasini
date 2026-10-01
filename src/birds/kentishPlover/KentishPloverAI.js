@@ -386,6 +386,7 @@ export class KentishPloverAI {
         const burrowed = it.burrowed > this.world.prey.time;
         const pSuccess = { polychaete: 0.72, crab: 0.55, amphipod: 0.8, insect: 0.7 }[it.type] * (burrowed ? 0.1 : 1);
         this._caught = this.rng() < pSuccess;
+        if (this.anim.action?.name === 'peck') this.anim.action.params.caught = this._caught; // (prey in the bill or not)
         if (this._caught) this.world.prey.consume(it);
       }
       if (ev === 'done') {
