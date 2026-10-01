@@ -384,7 +384,7 @@ export class App {
     const ny = -(((clientY - r.top) / r.height) * 2 - 1);
     const hit = this.tank.pick(nx, ny);
     if (hit?.kind === 'occupant') ui.homeInfo.value = hit.occupant.record;
-    else if (hit?.kind === 'tank') { ui.homeInfo.value = null; ui.homePanel.value = 'tank'; }
+    else if (hit?.kind === 'tank') { ui.homeInfo.value = null; ui.homePanel.value = 'tank'; this.tank.pokeAt(nx, ny); }
     else ui.homeInfo.value = null;
   }
 
