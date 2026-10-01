@@ -124,7 +124,7 @@ export function paintIris(size = 1024) {
         // hugs the pupil, widest as a crescent on the lower / posteroventral side, with a faint teal cast;
         // the outer iris is coarsely granular coppery red-brown with silvery and golden flecks (059 [88,65,51]–
         // [102,86,71], spec median [106,92,83]); the ring is thin (0.03–0.045 of the diameter) and crisp
-        const dark = [0.022, 0.017, 0.013], bronze = [0.2, 0.125, 0.08], silver = [0.68, 0.77, 0.73];
+        const dark = [0.022, 0.017, 0.013], bronze = [0.13, 0.085, 0.058], silver = [0.68, 0.77, 0.73];
         const ventral = smoothstep(0.5, -0.7, upness);
         const ringW = 0.06 + 0.1 * ventral + 0.025 * perlin3(Math.cos(psi) * 4, Math.sin(psi) * 4, 0.7, 21);
         const brk = smoothstep(-0.3, 0.3, perlin3(Math.cos(psi) * 9, Math.sin(psi) * 9, 1.9, 22));
@@ -144,13 +144,13 @@ export function paintIris(size = 1024) {
         // exceeds 0.2 on ~15% of the sphere, so the grains resolve at render scale
         const fl = smoothstep(0.2, 0.42, fbm3(lx * 18, ly * 18, lz * 18, 2, 23)) * smoothstep(0.15, 0.35, f) * (1 - smoothstep(0.9, 1.0, f));
         const grain = smoothstep(-0.15, 0.15, perlin3(lx * 11, ly * 11, lz * 11, 26));
-        const flC = [mix(0.3, 0.45, grain), mix(0.13, 0.47, grain), mix(0.07, 0.44, grain)];
-        c = c.map((v, k) => mix(v, flC[k], fl * 0.85));
+        const flC = [mix(0.26, 0.3, grain), mix(0.12, 0.31, grain), mix(0.065, 0.29, grain)];
+        c = c.map((v, k) => mix(v, flC[k], fl * 0.55));
         // the ventral third of the iris is silvery grey from the ring almost to the limbus (059 [131,128,118]),
         // granular like the rest and fading out up the sides
         const cres = smoothstep(0.2, 0.75, -upness) * smoothstep(0.05, 0.15, f) * smoothstep(0.95, 0.85, f);
         const cg = 0.8 + 0.25 * fbm3(lx * 22, ly * 22, lz * 22, 2, 27);
-        c = c.map((v, k) => mix(v, [0.4, 0.41, 0.38][k] * cg * (0.85 + 0.3 * fib), cres * 0.85));
+        c = c.map((v, k) => mix(v, [0.3, 0.31, 0.29][k] * cg * (0.85 + 0.3 * fib), cres * 0.45)); // in render light the eye still reads dark (head views 028, 033, 058)
         // dark speckles
         const dk = smoothstep(0.22, 0.42, fbm3(lx * 25, ly * 25, lz * 25, 2, 25)) * smoothstep(0.2, 0.4, f);
         c = c.map((v, k) => mix(v, dark[k], dk * 0.55));
@@ -160,7 +160,7 @@ export function paintIris(size = 1024) {
         // dorsal melanin cap with a ragged edge
         const capEdge = 0.2 + 0.18 * perlin3(Math.cos(psi) * 5, Math.sin(psi) * 5, 2.5, 15);
         const cap = smoothstep(capEdge, capEdge + 0.35, upness) * smoothstep(0.2, 0.45, f);
-        c = c.map((v, k) => mix(v, dark[k], cap * 0.5));
+        c = c.map((v, k) => mix(v, dark[k], cap * 0.65));
         // thin limbal darkening
         c = c.map((v, k) => mix(v, dark[k], smoothstep(0.9, 1.0, f)));
       } else {

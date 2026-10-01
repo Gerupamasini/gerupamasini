@@ -121,13 +121,14 @@ function caudalFin(rect) {
       for (let j = 0; j < 7; j++) {
         const Lj = (0.15 + (j * 0.65) / 6) * len + (hash01(r, j, 2, 802) - 0.5) * 0.04;
         if (hash01(r, j, 1, 801) < 0.1 + 0.45 * lower) continue;
-        const ls = 0.09 + 0.03 * hash01(r, j, 3, 803);
-        mel = Math.max(mel, (0.55 + 0.35 * hash01(r, j, 4, 804)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.08) ** 2)));
+        // brown, not black, at photo scale (058 dots ≈ [90,75,60] on the hyaline fin)
+        const ls = 0.075 + 0.025 * hash01(r, j, 3, 803);
+        mel = Math.max(mel, (0.38 + 0.25 * hash01(r, j, 4, 804)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.065) ** 2)));
         const Lw = Lj + 0.4;
         irid = Math.max(irid, 0.4 * (1 - lower) * Math.exp(-(((Lr - Lw) / 0.07) ** 2)) * Math.exp(-((dRay / 0.05) ** 2)) * (hash01(r, j, 5, 805) < 0.35 ? 1 : 0));
       }
       mel *= 0.9 * smoothstep(0.87, 0.8, t);
-      mel = Math.max(mel, 0.45 * smoothstep(0.16, 0.04, t) * finDots(fAcross * (n - 1), Lr, 0.7, 0.2, 0.5, 0.06, 806, 0.36));
+      mel = Math.max(mel, 0.32 * smoothstep(0.16, 0.04, t) * finDots(fAcross * (n - 1), Lr, 0.7, 0.2, 0.5, 0.06, 806, 0.36));
       return { mel: mel * 0.9, xan: 0.12 * smoothstep(0.6, 0.1, t), irid };
     },
   };
@@ -247,7 +248,7 @@ export function finDefinitions() {
       const a = fAcross * (n - 1);
       const p = medianAt(G1, a, t); // p.Lr: mm along the rays, continuous across the membrane
       const rear = smoothstep(0.2, 0.95, fAcross), base = smoothstep(0.85, 0.25, t);
-      let mel = finDots(a, p.Lr, 0.12, 0.12, 0.35 + 0.35 * rear * base, 0.06, 811, 1.15) * smoothstep(0.92, 0.6, t);
+      let mel = 0.8 * finDots(a, p.Lr, 0.12, 0.12, 0.12 + 0.3 * rear * base, 0.055, 811, 1.15) * smoothstep(0.92, 0.6, t);
       for (let j = 0; j < 4; j++) {
         const Lj = 0.6 + j * 0.75 + r * 0.06 + (hash01(r, j, 2, 812) - 0.5) * 0.18;
         if (Lj > len * 0.85) break;
