@@ -18,7 +18,7 @@ export const ANATOMY = {
   },
 
   // Kinematics [R]
-  walk: { stepLength: 0.1 * L, stepDuration: 0.24, speed: 0.55 * L }, // unhurried ~0.5 BL/s
+  walk: { stepLength: 0.22 * L, stepDuration: 0.34, speed: 0.4 * L }, // ~0.4 BL/s, ~1.8 steps/s per leg
   swim: { pleopodHz: 4.5, speed: 2.5 * L },
   tailFlip: { flexTime: 0.025, reextendTime: 0.06, deltaV: 0.55, pitch: 1.3, maxFlips: 3 },
 };

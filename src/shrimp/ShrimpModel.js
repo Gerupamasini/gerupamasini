@@ -739,7 +739,7 @@ export class ShrimpModel {
       const lim = 0.7; // ~40 deg
       da = THREE.MathUtils.clamp(da, -lim, lim);
       a = restA + da;
-      const rr = THREE.MathUtils.clamp(r, leg.restR * 0.7, leg.restR * 1.15);
+      const rr = THREE.MathUtils.clamp(r, leg.restR * 0.6, leg.restR * 1.3);
       v.x = Math.cos(a) * rr;
       v.z = Math.sin(a) * rr;
     }

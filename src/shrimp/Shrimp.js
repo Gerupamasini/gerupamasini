@@ -165,7 +165,7 @@ export class Shrimp {
   updateGait(dt) {
     const stepLen = A.walk.stepLength * this.scale;
     const turning = Math.abs(this.yawRate) * 0.012;
-    const freq = clamp((this.speed + turning) / stepLen, 0, 7);
+    const freq = clamp((this.speed + turning) / stepLen, 0, 2.2);
     this.gaitClock += dt * freq;
     for (const leg of this.legs) {
       const ph = (this.gaitClock + leg.phase) % 1;
@@ -176,7 +176,7 @@ export class Shrimp {
       const neighbourSwinging = this.legs.some((o) => o !== leg && o.swinging && (o.side === leg.side ? Math.abs(o.index - leg.index) === 1 : o.index === leg.index));
       if (!leg.swinging) {
         const moving = freq > 0.2;
-        if ((moving && wrapped && err > stepLen * 0.12) || err > stepLen * 0.9 || (!moving && err > stepLen * 0.45 && !neighbourSwinging && Math.random() < dt * 0.8)) {
+        if ((moving && wrapped && err > stepLen * 0.12) || err > stepLen * 1.2 || (!moving && err > stepLen * 0.45 && !neighbourSwinging && Math.random() < dt * 0.8)) {
           this.startStep(leg, stepLen);
         }
       }
