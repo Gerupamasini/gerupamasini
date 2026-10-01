@@ -66,9 +66,15 @@ export const HEAD_RELIEF = {
   // head; a soft fleshy rim of orbital skin rises around the visible cap and
   // laps a little over its edge (p05_1, p12_0, p25_0), no fillet climbing
   // up the ball (that read as a bulging marble)
-  orbitRim: 0.12, // height of the rim
-  orbitRimW: 0.15, // its half-width (gaussian)
-  orbitRimOff: 0.07, // its crest this far outside the nominal visible edge
+  // (a defined fleshy ring: a rounded, flat-topped ridge with a shallow
+  // crease outside it, so it reads by its own shading instead of an
+  // airbrushed colour halo)
+  orbitRim: 0.15, // height of the rim
+  orbitRimW: 0.13, // its half-width (flat-topped bump)
+  orbitRimOff: 0.1, // its crest this far outside the nominal visible edge
+  orbitCrease: 0.04, // depth of the crease just outside the ring...
+  orbitCreaseOff: 0.33, // ...this far outside the visible edge...
+  orbitCreaseW: 0.14, // ...and its half-width (wide enough for the mesh)
   orbitCover: 0.03, // the skin lies this far above the ball where it covers it
   orbitSink: 0.3, // hidden skin inside the visible eye sinks this far...
   orbitSinkR: [0.92, 0.7], // ...between these fractions of the visible radius
@@ -181,7 +187,8 @@ function basePoint(u, theta, state, out) {
     const ry = _ring.y - cy;
     const rz = _ring.z;
     const rl = Math.max(1e-6, Math.hypot(ry, rz));
-    const r = OPEN_LIP_R * (1 + 0.4 * smoothstep(0.0, 0.8, -Math.cos(theta)));
+    // (the lower lip roll is clearly the thicker one in p09_1)
+    const r = OPEN_LIP_R * (1 + 0.75 * smoothstep(0.0, 0.8, -Math.cos(theta)));
     const lipAt = (uu, o) => {
       const phi = -0.5 * Math.PI + Math.min(1, uu / OPEN_LIP_U) * Math.PI;
       const k = r * (1 + Math.sin(phi));
@@ -280,10 +287,10 @@ export function eyeRest(side = 1) {
   // axis is nearly lateral rather than following the head normal (which
   // turns forward on the tapering head): a recessed eye seen from the side
   // would otherwise show its pupil off-centre in the opening (parallax)
-  // (about 17 deg forward: the pupil sits a little anterior in the opening,
+  // (about 20 deg forward: the pupil sits a little anterior in the opening,
   // ~10-15 % of its radius in p05_1 / p12_0, and in front view the eyes show
   // as dark ovals on the sides of the head rather than edge-on slivers)
-  const axis = new THREE.Vector3(0.27 + 0.25 * N.x, 0.05 + 0.25 * N.y, Math.sign(N.z) * 1).normalize();
+  const axis = new THREE.Vector3(0.34 + 0.25 * N.x, 0.05 + 0.25 * N.y, Math.sign(N.z) * 1).normalize();
   const R = head.eyeR;
   const center = P.clone().addScaledVector(axis, (head.eyeProtrusion - 1) * R);
   // nominal radius of the exposed cap (where the ball leaves the skin)
@@ -647,7 +654,15 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
       // crossing the ball where the head surface happens to lie near it)
       const inside = smoothstep(rv + 0.02 * R, rv - 0.07 * R, rho);
       hn = sminK(hn, hb - HEAD_RELIEF.orbitCover * R + (1 - inside) * R, 0.06 * R);
-      hn += HEAD_RELIEF.orbitRim * R * gauss(rho - rv - HEAD_RELIEF.orbitRimOff * R, HEAD_RELIEF.orbitRimW * R);
+      {
+        const tr = (rho - rv - HEAD_RELIEF.orbitRimOff * R) / (HEAD_RELIEF.orbitRimW * R);
+        hn += HEAD_RELIEF.orbitRim * R * Math.exp(-Math.pow(tr * tr, 1.5));
+      }
+      // the crease is deeper below / in front of the eye and fades out over
+      // the top, where the ring merges softly into the forehead
+      const upE = (q.y - h * E.axis.y) / Math.max(rho, 1e-6); // radial dir . dorsal
+      const dorsalE = smoothstep(0.1, 0.8, upE);
+      hn -= HEAD_RELIEF.orbitCrease * R * (1 - 0.7 * dorsalE) * gauss(rho - rv - HEAD_RELIEF.orbitCreaseOff * R, HEAD_RELIEF.orbitCreaseW * R);
       hn -= HEAD_RELIEF.orbitSink * R * smoothstep(HEAD_RELIEF.orbitSinkR[0] * rv, HEAD_RELIEF.orbitSinkR[1] * rv, rho);
       const push = h - hn; // negative => outward along the axis
       pos[i] -= E.axis.x * push;
@@ -655,7 +670,11 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
       pos[i + 2] -= E.axis.z * push;
       if (st === 0) {
         // orbital skin: the rim and a narrow band around it
-        mask2Arr[idx * 4 + 3] = Math.max(mask2Arr[idx * 4 + 3], smoothstep(rv + 0.42 * R, rv + 0.12 * R, rho));
+        // (a defined band ending at the crease: a crisp outer edge, soft only
+        // over the top of the eye, where the ring fades into the forehead)
+        const edgeO = rv + (0.2 + 0.12 * dorsalE) * R;
+        const edgeW = (0.12 + 0.2 * dorsalE) * R;
+        mask2Arr[idx * 4 + 3] = Math.max(mask2Arr[idx * 4 + 3], smoothstep(edgeO + edgeW, edgeO - edgeW * 0.3, rho) * (1 - 0.35 * dorsalE));
         // the throat expansion must not swell over the lower eye
         sectArr[idx * 4 + 3] *= smoothstep(rv + 0.1 * R, rv + 0.6 * R, rho);
       }
