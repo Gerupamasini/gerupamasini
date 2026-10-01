@@ -5,7 +5,8 @@
 // Then a summary per prey type: strike duration (bill from 10 mm above the ground to contact), peak head speed,
 // max neck stretch, contact error, max foot slip, max body axis.
 // usage: node tools/dev/peckcurve.mjs [--types=polychaete,crab,amphipod] [--dist=62] [--every=2] [--quiet]
-//        [--csv=dir]
+//        [--csv=dir] [--shape] (shape: per printed row also crown − back, eye (z,y) and eye − breast front, mm —
+//        the contact pose against p007 / p061: head forward of the breast, crown near the back line)
 import * as THREE from 'three';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { KentishPloverModel } from '../../src/birds/kentishPlover/KentishPloverModel.js';
@@ -21,6 +22,32 @@ const J = CFG.joints;
 const deg = (r) => (r * 180) / Math.PI;
 const m = new KentishPloverModel({ lods: [1], shadows: false });
 const local = (a, bone, p) => new THREE.Vector3(...p.map((x, i) => (x - J[bone][i]) * 0.001)).applyMatrix4(a.b[bone].matrixWorld).multiplyScalar(1000);
+const headPrim = CFG.bodySculpt.prims.find((p) => p.name === 'head');
+const _v = new THREE.Vector3();
+// crown (highest head-ellipsoid point), back (highest posed body vertex behind the shoulder), breast front, eye
+function shape(a) {
+  m.object.updateMatrixWorld(true);
+  let crown = -Infinity;
+  for (let la = -6; la <= 6; la++)
+    for (let lo = 0; lo < 24; lo++) {
+      const h = headPrim;
+      const p = [h.c[0] + h.r[0] * Math.cos(la * 0.26) * Math.sin(lo * 0.2618), h.c[1] + h.r[1] * Math.sin(la * 0.26), h.c[2] + h.r[2] * Math.cos(la * 0.26) * Math.cos(lo * 0.2618)];
+      crown = Math.max(crown, local(a, 'head', p).y);
+    }
+  let back = -Infinity;
+  let breast = -Infinity;
+  const mesh = m.lods[1].meshes[0];
+  const g = mesh.geometry;
+  const rest = g.getAttribute('aRest');
+  for (let i = 0; i < rest.count; i += 3) {
+    mesh.getVertexPosition(i, _v);
+    _v.applyMatrix4(mesh.matrixWorld).multiplyScalar(1000);
+    if (rest.getZ(i) < -5 && rest.getZ(i) > -60) back = Math.max(back, _v.y);
+    if (rest.getY(i) < 80 && rest.getY(i) > 50) breast = Math.max(breast, _v.z);
+  }
+  const eye = local(a, 'head', J.eyeCenter);
+  return { cb: crown - back, ez: eye.z, ey: eye.y, eb: eye.z - breast };
+}
 const f = (x, w = 7, d = 1) => (Number.isFinite(x) ? x.toFixed(d) : '–').padStart(w);
 
 const summary = [];
@@ -59,19 +86,20 @@ for (const type of TYPES) {
     prevTip = tip.clone();
     const miss = a.headWant ? a.headWant.clone().multiplyScalar(1000).distanceTo(head) : 0;
     if (args.dbg) console.log("want", a.headWant.clone().multiplyScalar(1000).toArray().map((x) => x.toFixed(1)).join(","), "gaze", a.gaze.pitch.toFixed(2), a.gaze.yaw.toFixed(2), a.gaze.roll.toFixed(2), "corr", a._corr?.clone().multiplyScalar(1000).toArray().map((x) => x.toFixed(1)).join(","), "headWorst", a._headWorst?.toFixed(2), "neckWorst", a._neckWorst?.toFixed(2));
-    rows.push({ t, u: a.action ? a.action.t / dur : 1, miss, axis, by, stretch: a.neckStretch, hz: head.z, hy: head.y, tz: tip.z, ty: tip.y, bill, toPrey, slip, tailUp, hs, ts, jaw: 0 });
+    const sh = 'shape' in args && i % EVERY === 0 ? shape(a) : {};
+    rows.push({ ...sh, t, u: a.action ? a.action.t / dur : 1, miss, axis, by, stretch: a.neckStretch, hz: head.z, hy: head.y, tz: tip.z, ty: tip.y, bill, toPrey, slip, tailUp, hs, ts, jaw: 0 });
   }
   if (!('quiet' in args)) {
     console.log(`\n== ${type}  (duration ${dur.toFixed(2)} s, prey ${(DIST * 1000).toFixed(0)} mm ahead)`);
-    console.log('   t     u  miss  axis°  bodyY stretch  head(z,y)      tip(z,y)     bill°  →prey  slip  tail°  headV  tipV(mm/s)');
+    console.log('   t     u  miss  axis°  bodyY stretch  head(z,y)      tip(z,y)     bill°  →prey  slip  tail°  headV  tipV(mm/s)' + ('shape' in args ? '  crown−back  eye(z,y)  eye−breast' : ''));
     rows.forEach((r, i) => {
       if (i % EVERY) return;
-      console.log(`${f(r.t, 5, 2)}${f(r.u, 6, 2)}${f(r.miss, 6)}${f(r.axis)}${f(r.by)}${f(r.stretch, 7, 2)}${f(r.hz)},${f(r.hy, 6)}${f(r.tz)},${f(r.ty, 6)}${f(r.bill)}${f(r.toPrey)}${f(r.slip, 6)}${f(r.tailUp)}${f(r.hs, 7, 0)}${f(r.ts, 7, 0)}`);
+      console.log(`${f(r.t, 5, 2)}${f(r.u, 6, 2)}${f(r.miss, 6)}${f(r.axis)}${f(r.by)}${f(r.stretch, 7, 2)}${f(r.hz)},${f(r.hy, 6)}${f(r.tz)},${f(r.ty, 6)}${f(r.bill)}${f(r.toPrey)}${f(r.slip, 6)}${f(r.tailUp)}${f(r.hs, 7, 0)}${f(r.ts, 7, 0)}${'shape' in args ? `${f(r.cb, 10)}${f(r.ez)},${f(r.ey, 5)}${f(r.eb, 9)}` : ''}`);
     });
   }
   if (args.csv) {
     mkdirSync(args.csv, { recursive: true });
-    writeFileSync(`${args.csv}/${type}.csv`, Object.keys(rows[0]).join(',') + '\n' + rows.map((r) => Object.values(r).map((v) => +v.toFixed?.(3) ?? v).join(',')).join('\n'));
+    writeFileSync(`${args.csv}/${type}.csv`, Object.keys(rows[1]).join(',') + '\n' + rows.map((r) => Object.keys(rows[1]).map((k) => r[k]).map((v) => +v.toFixed?.(3) ?? v).join(',')).join('\n'));
   }
   const contact = rows.findIndex((r) => r.toPrey < 2);
   const above = rows.slice(0, contact < 0 ? 0 : contact).findLastIndex((r) => r.ty > 10);
