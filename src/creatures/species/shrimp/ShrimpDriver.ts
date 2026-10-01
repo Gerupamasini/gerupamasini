@@ -159,7 +159,8 @@ export class ShrimpDriver implements Driver {
         break;
       case 'wander': case 'moveTo': {
         const t = intent.target ?? ind.pos;
-        const far = Math.hypot(t.x - ind.pos.x, t.z - ind.pos.z) > 0.35 * this.scale;
+        // シラタエビ mostly walk; a swim is for a long move (fleeing is the tail flip below)
+        const far = Math.hypot(t.x - ind.pos.x, t.z - ind.pos.z) > 1.2;
         this.mode = far ? 'swim' : 'walk';
         it.target = new Vector3(t.x, 0, t.z);
         it.mode = far ? 'water' : 'ground';
