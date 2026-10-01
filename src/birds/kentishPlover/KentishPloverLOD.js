@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
 import { KentishPlover } from './KentishPlover.js';
 import { getPalette } from './KentishPloverMaterials.js';
+import { getBodySDF } from './anatomy/bodyMesh.js';
 
 // Flock manager: LOD policy + update scheduling + spatial queries + far-LOD instanced impostors.
 // docs/optimization.md
 //   LOD0  (< 2.5 m)  full geometry (≈24k tris), all feathers, eye cornea/lids, micro-normals, every-frame anim, 20 Hz AI
 //   LOD1  (< 9 m)    coarser SDF body, no lesser/median coverts, simple eyes, every-frame anim, 20 Hz AI
 //   LOD2  (< 30 m)   very coarse body, merged feather cards, no micro-normals, 30 Hz anim, 8 Hz AI
-//   LOD3  (≥ 30 m)   one InstancedMesh for all far birds (≈90 tris each, flap in vertex shader), 3 Hz AI,
+//   LOD3  (≥ 30 m)   one InstancedMesh for all far birds (≈300 tris each, flap in vertex shader), 3 Hz AI,
 //                    skeleton not updated at all
 
 const _frustum = new THREE.Frustum();
@@ -151,51 +152,49 @@ export class KentishPloverManager {
       const n = geo.getAttribute('position').count;
       const c = new Float32Array(n * 3);
       const w = new Float32Array(n);
-      const cc = col(color);
+      const cc = color && col(color);
       for (let i = 0; i < n; i++) {
-        c.set([cc.r, cc.g, cc.b], i * 3);
+        if (cc) c.set([cc.r, cc.g, cc.b], i * 3);
         w[i] = wing;
       }
-      geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
+      if (cc) geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
       geo.setAttribute('aWing', new THREE.BufferAttribute(w, 1));
       parts.push(geo.index ? geo.toNonIndexed() : geo);
     };
-    // relaxed stand proportions (body_shape_spec.md §2–§6): body 10° tail-down, head sunk onto the breast
-    const body = new THREE.SphereGeometry(1, 8, 5);
-    body.scale(0.02, 0.023, 0.046);
-    body.rotateX(-0.17);
-    body.translate(0, 0.062, -0.012);
-    add(body, pal.underparts);
-    const back = new THREE.SphereGeometry(1, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-    back.scale(0.0205, 0.016, 0.046);
-    back.rotateX(-0.2);
-    back.translate(0, 0.066, -0.014);
-    add(back, pal.mantle);
-    const head = new THREE.SphereGeometry(0.0125, 7, 5);
-    head.translate(0, 0.0935, 0.024);
-    add(head, pal.underparts);
-    const cap = new THREE.SphereGeometry(0.0128, 7, 3, 0, Math.PI * 2, 0, Math.PI / 2.6);
-    cap.translate(0, 0.0945, 0.023);
-    add(cap, pal.crown);
-    const bill = new THREE.ConeGeometry(0.002, 0.016, 4);
-    bill.rotateX(Math.PI / 2 + 0.41); // 23.6° down
-    bill.translate(0, 0.0866, 0.0468);
+    // Body and head: one loft of elliptic rings whose top, bottom and width are read off the sculpted outline
+    // (the relaxed bind = the stand, body_shape_spec.md §16) — so the impostor keeps the photo silhouette
+    // (fitcheck.mjs lod=3 vs LOD0 in Frame A). Mantle / wing brown down to the visible wing edge (§10.1),
+    // crown cap on the head, white underparts.
+    add(farBodyGeometry(pal), null);
+    // bill: base under the forehead → tip (bareParts BILL, 25° down)
+    const tip = new THREE.Vector3(0, 0.0824, 0.0539);
+    const base = new THREE.Vector3(0, 0.0872, 0.0385);
+    const bill = new THREE.ConeGeometry(0.0021, tip.distanceTo(base), 4);
+    bill.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), tip.clone().sub(base).normalize()));
+    bill.translate(...base.clone().add(tip).multiplyScalar(0.5).toArray());
     add(bill, pal.bill);
     for (const s of [1, -1]) {
-      const leg = new THREE.BoxGeometry(0.0022, 0.036, 0.0022);
-      leg.translate(0.0075 * s, 0.018, -0.01);
+      // tarsus from the foot (MTP, spec §9) to the heel, tibia to where it leaves the belly
+      const leg = new THREE.BoxGeometry(0.0022, 0.038, 0.0022);
+      leg.translate(0.0078 * s, 0.019, -0.01);
       add(leg, pal.legs);
       const wing = new THREE.BufferGeometry();
-      // wing panel in the bind (spread) frame: root at shoulder, pivot handled in the shader
+      // wing panel in the bind (spread) frame: root at the shoulder, pivot handled in the shader
       const v = [0, 0, 0.02, 0.19 * s, 0, -0.01, 0.2 * s, 0, -0.035, 0, 0, 0.02, 0.2 * s, 0, -0.035, 0, 0, -0.035];
       wing.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-      wing.translate(0.008 * s, 0.072, -0.008);
+      wing.translate(...FAR_SHOULDER.map((x, i) => (i ? x : x * s)));
       wing.computeVertexNormals();
       add(wing, pal.flightDark, s);
     }
-    const tail = new THREE.PlaneGeometry(0.014, 0.034);
-    tail.rotateX(-Math.PI / 2);
-    tail.translate(0, 0.058, -0.066);
+    // closed tail and the primary tips over it: a tapered wedge to the tail tip (z −85, spec §11)
+    const tail = new THREE.BufferGeometry();
+    const tv = [
+      [0.008, 0.063, -0.056], [-0.008, 0.063, -0.056], [-0.007, 0.05, -0.056], [0.007, 0.05, -0.056],
+      [0.003, 0.0565, -0.0852], [-0.003, 0.0565, -0.0852], [-0.002, 0.0535, -0.0852], [0.002, 0.0535, -0.0852],
+    ];
+    const quads = [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7], [4, 5, 6, 7]];
+    tail.setAttribute('position', new THREE.Float32BufferAttribute(quads.flatMap(([a, b, c, d]) => [a, b, c, a, c, d].flatMap((k) => tv[k])), 3));
+    tail.computeVertexNormals();
     add(tail, pal.tailDark);
     const merged = mergeGeos(parts);
     merged.setAttribute('aFlap', new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3));
@@ -214,13 +213,13 @@ export class KentishPloverManager {
           if (abs(s) > 0.5) {
             float fly = aFlap.x;
             float ang = sin(uTime * 6.2831 * max(aFlap.y, 1.0) + aFlap.z * 6.0) * 0.9 * fly;
-            vec3 p = transformed - vec3(0.008 * s, 0.072, -0.008);
+            vec3 p = transformed - vec3(${FAR_SHOULDER[0]} * s, ${FAR_SHOULDER[1]}, ${FAR_SHOULDER[2]});
             // fold: shorten span to the flank when not flying
             float span = mix(0.08, 1.0, step(0.01, fly));
             p.x *= span;
             float c = cos(ang), sn = sin(ang) * s;
             p = vec3(p.x * c - p.y * sn, p.x * sn + p.y * c, p.z);
-            transformed = p + vec3(0.008 * s, 0.072, -0.008);
+            transformed = p + vec3(${FAR_SHOULDER[0]} * s, ${FAR_SHOULDER[1]}, ${FAR_SHOULDER[2]});
           }`
         );
     };
@@ -231,6 +230,83 @@ export class KentishPloverManager {
     m.name = 'plover-far-lod3';
     return m;
   }
+}
+
+// shoulder (m, folded-wing joint, spec §10.2): pivot of the far wing panels
+const FAR_SHOULDER = [0.01, 0.077, 0.006];
+
+/** Loft of the sculpted body + head outline (rest = relaxed stand), vertex-coloured. */
+function farBodyGeometry(pal) {
+  const sdf = getBodySDF(CFG); // mm
+  const RING = 10;
+  // outline crossing along a ray from an inside point (bisection; mm)
+  const edge = (from, dir, max) => {
+    let lo = 0;
+    let hi = max;
+    for (let i = 0; i < 22; i++) {
+      const m = (lo + hi) / 2;
+      if (sdf(from[0] + dir[0] * m, from[1] + dir[1] * m, from[2] + dir[2] * m) < 0) lo = m;
+      else hi = m;
+    }
+    return lo;
+  };
+  // inside point of a slice: lowest SDF on the midline of the slice
+  const inside = (z) => {
+    let best = [Infinity, 0];
+    for (let y = 30; y <= 110; y += 1) {
+      const d = sdf(0, y, z);
+      if (d < best[0]) best = [d, y];
+    }
+    return best;
+  };
+  const zs = [];
+  for (let z = 60; z >= -100; z -= 0.5) if (inside(z)[0] < -0.5) zs.push(z);
+  const [zFront, zRear] = [zs[0], zs[zs.length - 1]];
+  const rings = [];
+  const N = 16;
+  for (let k = 0; k <= N; k++) {
+    // rings packed toward both ends (rounded breast / face and under-tail)
+    const t = 0.5 * (k / N) + 0.5 * (0.5 - 0.5 * Math.cos((k / N) * Math.PI));
+    const z = zFront - 0.6 - (zFront - zRear - 1.2) * t;
+    const yIn = inside(z)[1];
+    const top = yIn + edge([0, yIn, z], [0, 1, 0], 60);
+    const bot = yIn - edge([0, yIn, z], [0, -1, 0], 60);
+    const yc = (top + bot) / 2;
+    const hx = edge([0, yc, z], [1, 0, 0], 40);
+    rings.push({ z, yc, hy: (top - bot) / 2, hx });
+  }
+  const colour = (x, y, z) => {
+    const hex = z > 14 ? (y > 92 ? pal.crown : pal.underparts) : y > 58 + Math.max(0, z) * 0.6 ? pal.mantle : pal.underparts;
+    return new THREE.Color(hex);
+  };
+  const pos = [];
+  const col = [];
+  const vert = (x, y, z) => {
+    pos.push(x * 1e-3, y * 1e-3, z * 1e-3);
+    const c = colour(x, y, z);
+    col.push(c.r, c.g, c.b);
+  };
+  const ringPt = (r, j) => {
+    const a = (j / RING) * Math.PI * 2;
+    return [r.hx * Math.sin(a), r.yc + r.hy * Math.cos(a), r.z];
+  };
+  for (let k = 0; k < rings.length - 1; k++)
+    for (let j = 0; j < RING; j++) {
+      const [a, b, c, d] = [ringPt(rings[k], j), ringPt(rings[k], j + 1), ringPt(rings[k + 1], j + 1), ringPt(rings[k + 1], j)];
+      for (const p of [a, d, c, a, c, b]) vert(...p);
+    }
+  // caps: fans to the front (breast / face) and rear (under-tail) extremes
+  for (const [r, z, flip] of [[rings[0], zFront, false], [rings[rings.length - 1], zRear, true]])
+    for (let j = 0; j < RING; j++) {
+      const [a, b] = [ringPt(r, j), ringPt(r, j + 1)];
+      const c = [0, r.yc, z];
+      for (const p of flip ? [a, b, c] : [a, c, b]) vert(...p);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
 }
 
 function mergeGeos(geos) {
