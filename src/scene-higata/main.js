@@ -63,8 +63,8 @@ const shared = {
   uTime: { value: 0 },
   uScatter: { value: 1.0 },
   uInterior: { value: 0.45 },
-  uCausticAmt: { value: 0.9 },
-  uCausticGain: { value: 1.7 }, // keeps a soft caustic network under the calm surface
+  uCausticAmt: { value: 0.7 },
+  uCausticGain: { value: 1.1 }, // a soft caustic network under the calm surface
   uCausticFish: { value: 0.5 },
   uWaterY: { value: WATER_Y },
   uFinDensity: { value: 1.0 },
