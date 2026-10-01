@@ -1,0 +1,2628 @@
+{
+ "rater": "B",
+ "chunk": "c02",
+ "photos": [
+  {
+   "id": "p011",
+   "facing": "left",
+   "image_size": [
+    941,
+    627
+   ],
+   "landmarks": {
+    "snout": [
+     117,
+     423
+    ],
+    "caudal_base": [
+     787,
+     254
+    ],
+    "eye_center": [
+     160.5,
+     420.5
+    ],
+    "eye_anterior": [
+     147.5,
+     419.5
+    ],
+    "eye_posterior": [
+     173.5,
+     421.5
+    ],
+    "pupil_center": [
+     159,
+     423
+    ],
+    "pupil_diameter_px": 10,
+    "opercle_post": [
+     261,
+     414
+    ],
+    "maxilla_post": [
+     188,
+     443
+    ],
+    "mouth_corner": [
+     178,
+     439
+    ],
+    "lower_jaw_tip": [
+     117,
+     437
+    ],
+    "dorsal_origin": [
+     395,
+     249
+    ],
+    "dorsal_end": [
+     478,
+     238
+    ],
+    "dorsal_tip_longest": null,
+    "adipose_base_front": [
+     652,
+     230
+    ],
+    "adipose_base_rear": [
+     686,
+     230
+    ],
+    "adipose_tip": [
+     667,
+     216
+    ],
+    "pectoral_base_top": [
+     298,
+     427
+    ],
+    "pectoral_base_bottom": [
+     262,
+     446
+    ],
+    "pectoral_tip": [
+     283,
+     462
+    ],
+    "pelvic_origin": [
+     488,
+     400
+    ],
+    "pelvic_tip": [
+     545,
+     451
+    ],
+    "anal_origin": [
+     603,
+     343
+    ],
+    "anal_end": [
+     656,
+     318
+    ],
+    "anal_tip_longest": null,
+    "bd_max_top": [
+     365,
+     258
+    ],
+    "bd_max_bottom": [
+     414,
+     421
+    ],
+    "cp_min_top": [
+     700,
+     231
+    ],
+    "cp_min_bottom": [
+     710,
+     290
+    ],
+    "caudal_tip_upper": null,
+    "caudal_tip_lower": null,
+    "caudal_fork": null
+   },
+   "midline": [
+    [
+     117,
+     423
+    ],
+    [
+     170,
+     408
+    ],
+    [
+     230,
+     390
+    ],
+    [
+     300,
+     366
+    ],
+    [
+     370,
+     347
+    ],
+    [
+     440,
+     331
+    ],
+    [
+     510,
+     314
+    ],
+    [
+     580,
+     296
+    ],
+    [
+     650,
+     275
+    ],
+    [
+     710,
+     259
+    ],
+    [
+     750,
+     256
+    ],
+    [
+     787,
+     254
+    ]
+   ],
+   "outline_dorsal": [
+    [
+     117,
+     423
+    ],
+    [
+     116,
+     411
+    ],
+    [
+     123,
+     400
+    ],
+    [
+     135,
+     386
+    ],
+    [
+     155,
+     371
+    ],
+    [
+     200,
+     343
+    ],
+    [
+     250,
+     311
+    ],
+    [
+     300,
+     285
+    ],
+    [
+     350,
+     263
+    ],
+    [
+     400,
+     252
+    ],
+    [
+     450,
+     247
+    ],
+    [
+     500,
+     241
+    ],
+    [
+     550,
+     235
+    ],
+    [
+     600,
+     231
+    ],
+    [
+     650,
+     232
+    ],
+    [
+     700,
+     232
+    ],
+    [
+     745,
+     224
+    ],
+    [
+     787,
+     225
+    ]
+   ],
+   "outline_ventral": [
+    [
+     117,
+     437
+    ],
+    [
+     122,
+     443
+    ],
+    [
+     145,
+     451
+    ],
+    [
+     177,
+     457
+    ],
+    [
+     209,
+     459.6
+    ],
+    [
+     240,
+     457
+    ],
+    [
+     270,
+     451
+    ],
+    [
+     300,
+     448
+    ],
+    [
+     340,
+     443
+    ],
+    [
+     380,
+     427.5
+    ],
+    [
+     420,
+     419
+    ],
+    [
+     460,
+     407
+    ],
+    [
+     490,
+     398
+    ],
+    [
+     520,
+     383
+    ],
+    [
+     550,
+     370
+    ],
+    [
+     580,
+     359
+    ],
+    [
+     610,
+     345
+    ],
+    [
+     640,
+     327
+    ],
+    [
+     670,
+     306
+    ],
+    [
+     700,
+     291
+    ],
+    [
+     740,
+     288
+    ],
+    [
+     783,
+     285
+    ]
+   ],
+   "parr_marks": [
+    {
+     "cx": 280,
+     "cy": 373,
+     "w": 28,
+     "h": 34,
+     "top_y": 357,
+     "bottom_y": 391
+    },
+    {
+     "cx": 337,
+     "cy": 340,
+     "w": 26,
+     "h": 40,
+     "top_y": 320,
+     "bottom_y": 360
+    },
+    {
+     "cx": 390,
+     "cy": 323,
+     "w": 27,
+     "h": 50,
+     "top_y": 298,
+     "bottom_y": 348
+    },
+    {
+     "cx": 423,
+     "cy": 297,
+     "w": 25,
+     "h": 22,
+     "top_y": 286,
+     "bottom_y": 309,
+     "kind": "dorsal_saddle"
+    },
+    {
+     "cx": 463,
+     "cy": 290,
+     "w": 25,
+     "h": 22,
+     "top_y": 280,
+     "bottom_y": 301,
+     "kind": "dorsal_saddle"
+    },
+    {
+     "cx": 503,
+     "cy": 277,
+     "w": 25,
+     "h": 22,
+     "top_y": 266,
+     "bottom_y": 288
+    },
+    {
+     "cx": 540,
+     "cy": 277,
+     "w": 22,
+     "h": 20,
+     "top_y": 268,
+     "bottom_y": 288
+    },
+    {
+     "cx": 572,
+     "cy": 269,
+     "w": 15,
+     "h": 12,
+     "top_y": 263,
+     "bottom_y": 275,
+     "kind": "dorsal_saddle"
+    },
+    {
+     "cx": 604,
+     "cy": 270,
+     "w": 18,
+     "h": 18,
+     "top_y": 262,
+     "bottom_y": 280
+    },
+    {
+     "cx": 632,
+     "cy": 263,
+     "w": 12,
+     "h": 7,
+     "top_y": 260,
+     "bottom_y": 266,
+     "kind": "dorsal_saddle"
+    },
+    {
+     "cx": 662,
+     "cy": 274,
+     "w": 22,
+     "h": 32,
+     "top_y": 258,
+     "bottom_y": 290
+    },
+    {
+     "cx": 712,
+     "cy": 262,
+     "w": 24,
+     "h": 26,
+     "top_y": 249,
+     "bottom_y": 275
+    },
+    {
+     "cx": 752,
+     "cy": 252,
+     "w": 14,
+     "h": 20,
+     "top_y": 242,
+     "bottom_y": 262
+    }
+   ],
+   "lateral_line_visible": false,
+   "lateral_line_points": null,
+   "orientation_note": "Shallow-water gravel scene; fish lies on its side, photographed obliquely from above/behind the back. Body axis rotated about 15 deg in-plane (head lower-left, tail upper-right). Camera is rolled toward the dorsal side so a pale foreshortened dorsal band plus a dark shadowed rim sit above the flank; head is pitched/foreshortened (lower jaw seen below upper jaw).",
+   "perspective_distortion_risk": "high",
+   "body_curvature_note": "Slightly curved: SL curved/straight about 1.00 on the traced midline, but the caudal peduncle and caudal fin fold upward over a stone and the fin is not measurable.",
+   "confidence": "low",
+   "confidence_reason": "Oblique view with strong roll toward the back: the traced dorsal silhouette (dark rim, y about 232-258 over the mid-body) includes roughly 25-45 px of foreshortened dorsal band, so BD_max and the dorsal half of the outline are inflated; head foreshortened (HL/SL about 0.21 is probably under-estimated); caudal fin folded/overlapped by stone; dorsal and anal fins folded or translucent over stones; HDR/sharpen artefacts. Useful only for parr-mark layout, spot pattern and rough fin positions.",
+   "missing": [
+    "caudal_tip_upper",
+    "caudal_tip_lower",
+    "caudal_fork",
+    "dorsal_tip_longest",
+    "anal_tip_longest",
+    "caudal_tip_upper/lower/fork (folded and overlapped by stone)"
+   ],
+   "notes": "Fish A only. Dorsal fin is a translucent blue-grey structure at x 395-480 over stones; base endpoints (395,249) and (478,238) are approximate and the tip is not recorded (fin folded/ambiguous). Anal fin is folded back along the ventral edge: base (603,343)-(656,318), folded ray tip about (692,312) reaches the peduncle (folded ray length about 90 px); tip left null because chord-height would be meaningless. Adipose fin is a thin curved structure at x 650-690, y 213-232 (low confidence). Pectoral fin is bright yellow, hangs ventrally, strongly foreshortened: base line from (262,446) to (298,427), tip (283,462). Pelvic fin is spread ventrally from (488,400) to tip (545,451). Mouth: upper jaw tip (117,423), lower jaw slightly behind/below (117,437), mouth closed, maxilla end about 0.76 eye diameters behind eye centre. Eye ring about 26 px, black pupil about 10 px. Parr marks (13 incl. dorsal saddle intermediates marked kind=dorsal_saddle) are blue-grey vertical ovals; large ones extend below the lateral midline; a row of small round blue-black spots lies below. Dorsal outline follows the dark upper rim (true silhouette), not the flank/back boundary; flank upper edge is about 25-45 px lower in the mid-body. Caudal_base picked at x about 787 where scaled body ends and the folded fin begins (+-10 px). No red/orange spots identified at this resolution."
+  },
+  {
+   "id": "p012",
+   "facing": "right",
+   "image_size": [
+    605,
+    453
+   ],
+   "landmarks": {
+    "snout": [
+     548,
+     178
+    ],
+    "caudal_base": [
+     66,
+     251
+    ],
+    "eye_center": [
+     493,
+     183.5
+    ],
+    "eye_anterior": [
+     504,
+     183
+    ],
+    "eye_posterior": [
+     481,
+     184
+    ],
+    "pupil_center": [
+     493,
+     185.5
+    ],
+    "pupil_diameter_px": 8.5,
+    "opercle_post": [
+     407,
+     203
+    ],
+    "maxilla_post": [
+     476,
+     228
+    ],
+    "mouth_corner": [
+     482,
+     226
+    ],
+    "lower_jaw_tip": [
+     557,
+     214
+    ],
+    "dorsal_origin": null,
+    "dorsal_end": null,
+    "dorsal_tip_longest": null,
+    "adipose_base_front": [
+     148,
+     207
+    ],
+    "adipose_base_rear": [
+     113,
+     218
+    ],
+    "adipose_tip": [
+     112,
+     200
+    ],
+    "pectoral_base_top": [
+     412,
+     228
+    ],
+    "pectoral_base_bottom": [
+     432,
+     244
+    ],
+    "pectoral_tip": [
+     355,
+     208
+    ],
+    "pelvic_origin": [
+     286,
+     259
+    ],
+    "pelvic_tip": [
+     233,
+     251
+    ],
+    "anal_origin": [
+     210,
+     268
+    ],
+    "anal_end": [
+     152,
+     262
+    ],
+    "anal_tip_longest": [
+     167,
+     296
+    ],
+    "bd_max_top": [
+     338,
+     152
+    ],
+    "bd_max_bottom": [
+     355,
+     259.5
+    ],
+    "cp_min_top": [
+     110,
+     223
+    ],
+    "cp_min_bottom": [
+     119,
+     266
+    ],
+    "caudal_tip_upper": [
+     12,
+     220
+    ],
+    "caudal_tip_lower": [
+     23,
+     313
+    ],
+    "caudal_fork": [
+     20,
+     265
+    ]
+   },
+   "midline": [
+    [
+     548,
+     178
+    ],
+    [
+     520,
+     188
+    ],
+    [
+     490,
+     198
+    ],
+    [
+     460,
+     205
+    ],
+    [
+     430,
+     207
+    ],
+    [
+     400,
+     205
+    ],
+    [
+     370,
+     205
+    ],
+    [
+     340,
+     207
+    ],
+    [
+     300,
+     211
+    ],
+    [
+     250,
+     221
+    ],
+    [
+     200,
+     231
+    ],
+    [
+     150,
+     236
+    ],
+    [
+     110,
+     244
+    ],
+    [
+     66,
+     251
+    ]
+   ],
+   "outline_dorsal": [
+    [
+     548,
+     178
+    ],
+    [
+     539,
+     170
+    ],
+    [
+     528,
+     166.5
+    ],
+    [
+     517,
+     164
+    ],
+    [
+     506,
+     161.7
+    ],
+    [
+     494,
+     159
+    ],
+    [
+     478,
+     157
+    ],
+    [
+     462,
+     156
+    ],
+    [
+     450,
+     154.5
+    ],
+    [
+     425,
+     151.7
+    ],
+    [
+     400,
+     151
+    ],
+    [
+     370,
+     151
+    ],
+    [
+     340,
+     152
+    ],
+    [
+     310,
+     155
+    ],
+    [
+     290,
+     160
+    ],
+    [
+     272,
+     167
+    ],
+    [
+     251,
+     174
+    ],
+    [
+     235,
+     183
+    ],
+    [
+     215,
+     188
+    ],
+    [
+     200,
+     195
+    ],
+    [
+     175,
+     203
+    ],
+    [
+     148,
+     207.5
+    ],
+    [
+     130,
+     215
+    ],
+    [
+     110,
+     223
+    ],
+    [
+     90,
+     227.7
+    ],
+    [
+     66,
+     231.5
+    ]
+   ],
+   "outline_ventral": [
+    [
+     557,
+     214
+    ],
+    [
+     551,
+     224
+    ],
+    [
+     540,
+     231
+    ],
+    [
+     525,
+     236
+    ],
+    [
+     505,
+     240
+    ],
+    [
+     485,
+     243
+    ],
+    [
+     465,
+     247
+    ],
+    [
+     445,
+     251
+    ],
+    [
+     425,
+     254
+    ],
+    [
+     405,
+     257
+    ],
+    [
+     385,
+     259
+    ],
+    [
+     360,
+     260
+    ],
+    [
+     335,
+     262
+    ],
+    [
+     310,
+     264
+    ],
+    [
+     287,
+     266
+    ],
+    [
+     260,
+     268
+    ],
+    [
+     235,
+     269
+    ],
+    [
+     215,
+     270
+    ],
+    [
+     195,
+     266
+    ],
+    [
+     170,
+     264
+    ],
+    [
+     150,
+     261
+    ],
+    [
+     136,
+     261
+    ],
+    [
+     120,
+     264.5
+    ],
+    [
+     104,
+     271
+    ],
+    [
+     90,
+     277.5
+    ],
+    [
+     76,
+     276
+    ]
+   ],
+   "parr_marks": [
+    {
+     "cx": 277,
+     "cy": 189,
+     "w": 15,
+     "h": 22,
+     "top_y": 180,
+     "bottom_y": 200
+    },
+    {
+     "cx": 250,
+     "cy": 208,
+     "w": 16,
+     "h": 36,
+     "top_y": 190,
+     "bottom_y": 226
+    },
+    {
+     "cx": 206,
+     "cy": 220,
+     "w": 18,
+     "h": 24,
+     "top_y": 208,
+     "bottom_y": 232
+    },
+    {
+     "cx": 169,
+     "cy": 218,
+     "w": 18,
+     "h": 22,
+     "top_y": 207,
+     "bottom_y": 229
+    },
+    {
+     "cx": 140,
+     "cy": 233,
+     "w": 20,
+     "h": 26,
+     "top_y": 220,
+     "bottom_y": 246
+    },
+    {
+     "cx": 81,
+     "cy": 247,
+     "w": 14,
+     "h": 24,
+     "top_y": 235,
+     "bottom_y": 259
+    }
+   ],
+   "lateral_line_visible": false,
+   "lateral_line_points": null,
+   "orientation_note": "Fish lying in a landing net, photographed from almost directly above the flank; body axis tilted about 8 deg (head upper-right). Head pitched slightly toward the camera with a wide-open mouth; peduncle bends downward. Net mesh and water drops overlap parts of the belly and fins.",
+   "perspective_distortion_risk": "med",
+   "body_curvature_note": "Slightly curved: midline curved/straight ratio about 1.005; the peduncle droops downward from about x=150 backward, tail fin bends below the body axis.",
+   "confidence": "med",
+   "confidence_reason": "Good lateral view of body, but mouth wide open and head pitched (snout and lower jaw landmarks shifted: lower_jaw_tip lies beyond the upper-jaw tip), dorsal edge is against a pale net/background and dorsal fin not visible, caudal fin is spread but ragged; belly/fins overlapped by net mesh. Ventral outline between x=150-290 is partly confounded by the pelvic/anal fins and mesh.",
+   "missing": [
+    "dorsal_origin",
+    "dorsal_end",
+    "dorsal_tip_longest",
+    "dorsal fin (hidden)"
+   ],
+   "notes": "Dorsal fin not visible (hidden/flat against the bright background) so dorsal_origin/end/tip are null. Adipose fin small, at x 113-148, tip about (112,200). Pectoral fin lies along the flank, base about (412,228)-(432,244), tip about (355,208). Pelvic fin from (286,259) to tip (233,251) pointing backwards; anal fin base (210,268)-(152,262), longest ray tip about (167,296). Mouth open: upper jaw tip (548,178), lower jaw tip (557,214); maxilla posterior end about (476,228), about 1.2 eye diameters behind the eye centre. Eye 22 px with ~8.5 px black pupil. Opercle rear edge about x=407 at eye level (y 203) ; subopercle region pale pink. Parr marks: six faint grey ovals visible in the back half (first near the opercle is not distinguishable); lower flank has many grey-black round spots. Salmon-pink flank; kype-like downward curved lower jaw (spawning-condition male suspected) but not used for measurement. Caudal tips: upper (12,220), lower (23,313), fork about (20,265): the caudal fin is bent/ragged so span and fork depth are unreliable."
+  },
+  {
+   "id": "p013",
+   "facing": "left",
+   "image_size": [
+    1280,
+    960
+   ],
+   "landmarks": {
+    "snout": [
+     200,
+     622
+    ],
+    "caudal_base": [
+     1084,
+     521
+    ],
+    "eye_center": [
+     260,
+     596.5
+    ],
+    "eye_anterior": [
+     236,
+     598
+    ],
+    "eye_posterior": [
+     284,
+     595
+    ],
+    "pupil_center": [
+     255,
+     600.5
+    ],
+    "pupil_diameter_px": 25,
+    "opercle_post": [
+     409,
+     620
+    ],
+    "maxilla_post": [
+     283,
+     637
+    ],
+    "mouth_corner": [
+     278,
+     636
+    ],
+    "lower_jaw_tip": [
+     203,
+     642
+    ],
+    "dorsal_origin": null,
+    "dorsal_end": null,
+    "dorsal_tip_longest": null,
+    "adipose_base_front": null,
+    "adipose_base_rear": null,
+    "adipose_tip": null,
+    "pectoral_base_top": [
+     400,
+     652
+    ],
+    "pectoral_base_bottom": [
+     401,
+     664
+    ],
+    "pectoral_tip": [
+     544,
+     641
+    ],
+    "pelvic_origin": null,
+    "pelvic_tip": null,
+    "anal_origin": [
+     830,
+     632
+    ],
+    "anal_end": [
+     910,
+     600
+    ],
+    "anal_tip_longest": [
+     942,
+     648
+    ],
+    "bd_max_top": [
+     590,
+     467
+    ],
+    "bd_max_bottom": [
+     615,
+     688
+    ],
+    "cp_min_top": [
+     1070,
+     486
+    ],
+    "cp_min_bottom": [
+     1084,
+     558.5
+    ],
+    "caudal_tip_upper": null,
+    "caudal_tip_lower": null,
+    "caudal_fork": null
+   },
+   "midline": [
+    [
+     200,
+     622
+    ],
+    [
+     250,
+     615
+    ],
+    [
+     300,
+     609
+    ],
+    [
+     350,
+     600
+    ],
+    [
+     410,
+     592
+    ],
+    [
+     500,
+     584
+    ],
+    [
+     600,
+     577.5
+    ],
+    [
+     700,
+     576
+    ],
+    [
+     800,
+     562
+    ],
+    [
+     900,
+     548
+    ],
+    [
+     1000,
+     537.5
+    ],
+    [
+     1084,
+     521
+    ]
+   ],
+   "outline_dorsal": [
+    [
+     200,
+     622
+    ],
+    [
+     198,
+     603
+    ],
+    [
+     205,
+     586
+    ],
+    [
+     237,
+     559
+    ],
+    [
+     274,
+     542.5
+    ],
+    [
+     315,
+     528
+    ],
+    [
+     352,
+     512
+    ],
+    [
+     393,
+     501
+    ],
+    [
+     440,
+     489.5
+    ],
+    [
+     503,
+     474
+    ],
+    [
+     560,
+     468
+    ],
+    [
+     620,
+     467
+    ],
+    [
+     700,
+     480
+    ],
+    [
+     767,
+     485
+    ],
+    [
+     854,
+     491
+    ],
+    [
+     940,
+     498
+    ],
+    [
+     1040,
+     492
+    ],
+    [
+     1085,
+     484
+    ]
+   ],
+   "outline_ventral": [
+    [
+     203,
+     642
+    ],
+    [
+     221,
+     667
+    ],
+    [
+     252,
+     678
+    ],
+    [
+     284,
+     684
+    ],
+    [
+     346,
+     687
+    ],
+    [
+     409,
+     687
+    ],
+    [
+     471,
+     692
+    ],
+    [
+     534,
+     692
+    ],
+    [
+     596,
+     689
+    ],
+    [
+     650,
+     682
+    ],
+    [
+     700,
+     672
+    ],
+    [
+     736,
+     659
+    ],
+    [
+     790,
+     641
+    ],
+    [
+     828,
+     634
+    ],
+    [
+     880,
+     607
+    ],
+    [
+     910,
+     597
+    ],
+    [
+     950,
+     582
+    ],
+    [
+     1000,
+     576
+    ],
+    [
+     1040,
+     575
+    ],
+    [
+     1080,
+     558
+    ]
+   ],
+   "parr_marks": [
+    {
+     "cx": 443,
+     "cy": 572,
+     "w": 34,
+     "h": 28,
+     "top_y": 558,
+     "bottom_y": 586,
+     "kind": "faint"
+    },
+    {
+     "cx": 514,
+     "cy": 571,
+     "w": 29,
+     "h": 29,
+     "top_y": 557,
+     "bottom_y": 586,
+     "kind": "faint"
+    },
+    {
+     "cx": 597,
+     "cy": 545,
+     "w": 42,
+     "h": 78,
+     "top_y": 504,
+     "bottom_y": 583
+    },
+    {
+     "cx": 695,
+     "cy": 548,
+     "w": 42,
+     "h": 66,
+     "top_y": 515,
+     "bottom_y": 581
+    },
+    {
+     "cx": 768,
+     "cy": 543,
+     "w": 34,
+     "h": 48,
+     "top_y": 520,
+     "bottom_y": 567
+    },
+    {
+     "cx": 837,
+     "cy": 546,
+     "w": 28,
+     "h": 58,
+     "top_y": 517,
+     "bottom_y": 575
+    },
+    {
+     "cx": 896,
+     "cy": 561,
+     "w": 25,
+     "h": 17,
+     "top_y": 553,
+     "bottom_y": 570,
+     "kind": "faint"
+    }
+   ],
+   "lateral_line_visible": true,
+   "lateral_line_points": [
+    [
+     975,
+     531
+    ],
+    [
+     1000,
+     527
+    ],
+    [
+     1040,
+     524
+    ],
+    [
+     1075,
+     520
+    ]
+   ],
+   "orientation_note": "Fish on its flank on the ground (leaves, grass), photographed by phone from nearly straight above: near-perfect lateral view. Body axis rotated about 5 deg (head lower-left, tail upper-right). Tail and caudal fin curl upward/away; grass blades cross the dorsal edge at x about 600-760 and a leaf covers the ventral edge at x about 760-840.",
+   "perspective_distortion_risk": "low",
+   "body_curvature_note": "Slightly curved: curved/straight ratio about 1.00; caudal peduncle gently bends upward at x>950 and the caudal fin is folded up/away from the body plane.",
+   "confidence": "med",
+   "confidence_reason": "Excellent resolution and a near-perpendicular view, but dorsal edge partly hidden by grass (x 540-760), ventral edge partly hidden by a leaf (x 760-840), all fins except the yellow pectoral and a folded anal fin are folded or hidden, caudal fin is curled so caudal_base is placed where the scaled peduncle ends (+-8 px). Body wet-lying slightly flattened.",
+   "missing": [
+    "dorsal_origin",
+    "dorsal_end",
+    "dorsal_tip_longest",
+    "adipose_base_front",
+    "adipose_base_rear",
+    "adipose_tip",
+    "pelvic_origin",
+    "pelvic_tip",
+    "caudal_tip_upper",
+    "caudal_tip_lower",
+    "caudal_fork",
+    "dorsal fin (hidden by grass)",
+    "adipose fin (hidden)",
+    "pelvic fin (hidden)",
+    "caudal fin tips/fork (curled)"
+   ],
+   "notes": "Mouth closed. Snout tip about (200,622) (blurred left margin), lower jaw tip about (203,642). Mouth corner (end of cleft where the lip line meets the brown jaw groove) about (278,636); a long brown groove continues from there to (365,682): this is not the maxilla (maxilla end is about 0.4 HL from the snout, about 1.0 eye diameter behind eye centre). Eye outer ring x 236-284 (48 px), pupil about 25 px, with white iris-like patch at the rear. Opercle rear margin golden-brown edge at x about 400-410 over y 590-650. Pectoral fin orange-yellow, tapered: base (400,652)-(401,664), tip about (544,641). Anal fin folded back against the ventral edge with white/clear rays: origin about (830,632), end about (910,600), tip about (942,648) (moderate confidence); pelvic fin not identified (hidden under leaf/hidden against belly). Dorsal and adipose fins not visible (edge hidden/overlapped by grass, fish lying on its side). Caudal fin: upper dark lobe curls upward behind the peduncle (not measurable). Parr marks: 4 strong grey-black vertical ovals centred x 597-837 (heights 58-78 px, extend from the dorsal edge below the lateral line) plus 3 faint anterior/posterior marks; below them a row of round black spots (about 12-25 px) at y 590-625 and a thin lateral line near the peduncle. Pink wash on mid-flank; no red/orange spots seen."
+  },
+  {
+   "id": "p016",
+   "facing": "left",
+   "image_size": [
+    600,
+    450
+   ],
+   "landmarks": {
+    "snout": [
+     124,
+     224
+    ],
+    "caudal_base": [
+     460,
+     214
+    ],
+    "eye_center": [
+     168,
+     223.3
+    ],
+    "eye_anterior": [
+     157.5,
+     223.5
+    ],
+    "eye_posterior": [
+     179.5,
+     223.5
+    ],
+    "pupil_center": [
+     167.6,
+     223.3
+    ],
+    "pupil_diameter_px": 12,
+    "opercle_post": [
+     239,
+     236
+    ],
+    "maxilla_post": [
+     172,
+     249
+    ],
+    "mouth_corner": [
+     165,
+     248
+    ],
+    "lower_jaw_tip": [
+     123,
+     241
+    ],
+    "dorsal_origin": [
+     298,
+     175
+    ],
+    "dorsal_end": [
+     357,
+     183
+    ],
+    "dorsal_tip_longest": [
+     348,
+     146
+    ],
+    "adipose_base_front": [
+     417,
+     191
+    ],
+    "adipose_base_rear": [
+     439,
+     195
+    ],
+    "adipose_tip": [
+     432,
+     184
+    ],
+    "pectoral_base_top": [
+     229,
+     262
+    ],
+    "pectoral_base_bottom": [
+     233,
+     275
+    ],
+    "pectoral_tip": [
+     290,
+     283
+    ],
+    "pelvic_origin": [
+     324,
+     268
+    ],
+    "pelvic_tip": [
+     347,
+     287
+    ],
+    "anal_origin": [
+     389,
+     256
+    ],
+    "anal_end": [
+     423,
+     250
+    ],
+    "anal_tip_longest": [
+     412,
+     271
+    ],
+    "bd_max_top": [
+     290,
+     176
+    ],
+    "bd_max_bottom": [
+     292,
+     270.5
+    ],
+    "cp_min_top": [
+     445,
+     196.5
+    ],
+    "cp_min_bottom": [
+     447,
+     230.5
+    ],
+    "caudal_tip_upper": [
+     494,
+     171.5
+    ],
+    "caudal_tip_lower": [
+     508.5,
+     234
+    ],
+    "caudal_fork": [
+     496,
+     206
+    ]
+   },
+   "midline": [
+    [
+     124,
+     224
+    ],
+    [
+     150,
+     226.5
+    ],
+    [
+     180,
+     226.5
+    ],
+    [
+     220,
+     224
+    ],
+    [
+     260,
+     222
+    ],
+    [
+     300,
+     222.5
+    ],
+    [
+     340,
+     222
+    ],
+    [
+     380,
+     220
+    ],
+    [
+     420,
+     216
+    ],
+    [
+     460,
+     214
+    ]
+   ],
+   "outline_dorsal": [
+    [
+     124,
+     224
+    ],
+    [
+     128,
+     216
+    ],
+    [
+     135,
+     210
+    ],
+    [
+     148,
+     203.5
+    ],
+    [
+     165,
+     195
+    ],
+    [
+     185,
+     188
+    ],
+    [
+     205,
+     183
+    ],
+    [
+     225,
+     179.5
+    ],
+    [
+     245,
+     177
+    ],
+    [
+     265,
+     176
+    ],
+    [
+     298,
+     175
+    ],
+    [
+     330,
+     179
+    ],
+    [
+     357,
+     183.5
+    ],
+    [
+     385,
+     186
+    ],
+    [
+     405,
+     189
+    ],
+    [
+     417,
+     191
+    ],
+    [
+     439,
+     195
+    ],
+    [
+     460,
+     195
+    ]
+   ],
+   "outline_ventral": [
+    [
+     123,
+     241
+    ],
+    [
+     130,
+     250
+    ],
+    [
+     143,
+     257
+    ],
+    [
+     157,
+     262
+    ],
+    [
+     174,
+     268
+    ],
+    [
+     197,
+     272
+    ],
+    [
+     220,
+     273.5
+    ],
+    [
+     250,
+     269
+    ],
+    [
+     275,
+     270
+    ],
+    [
+     300,
+     270.5
+    ],
+    [
+     323,
+     267.5
+    ],
+    [
+     350,
+     260
+    ],
+    [
+     367,
+     257.5
+    ],
+    [
+     388,
+     256.5
+    ],
+    [
+     400,
+     248.5
+    ],
+    [
+     410,
+     242
+    ],
+    [
+     420,
+     236
+    ],
+    [
+     430,
+     232
+    ],
+    [
+     445,
+     230.5
+    ],
+    [
+     460,
+     231
+    ]
+   ],
+   "parr_marks": [
+    {
+     "cx": 247.5,
+     "cy": 215.5,
+     "w": 14,
+     "h": 32,
+     "top_y": 199,
+     "bottom_y": 231
+    },
+    {
+     "cx": 276,
+     "cy": 215,
+     "w": 15,
+     "h": 34,
+     "top_y": 198,
+     "bottom_y": 232
+    },
+    {
+     "cx": 310,
+     "cy": 214.5,
+     "w": 18,
+     "h": 32,
+     "top_y": 198,
+     "bottom_y": 230
+    },
+    {
+     "cx": 342,
+     "cy": 213.5,
+     "w": 15,
+     "h": 35,
+     "top_y": 196,
+     "bottom_y": 231
+    },
+    {
+     "cx": 373.5,
+     "cy": 217,
+     "w": 13,
+     "h": 32,
+     "top_y": 201,
+     "bottom_y": 233
+    },
+    {
+     "cx": 399.5,
+     "cy": 215,
+     "w": 13,
+     "h": 30,
+     "top_y": 200,
+     "bottom_y": 230
+    },
+    {
+     "cx": 422,
+     "cy": 215,
+     "w": 11.5,
+     "h": 24,
+     "top_y": 203,
+     "bottom_y": 227
+    },
+    {
+     "cx": 445,
+     "cy": 215.5,
+     "w": 9,
+     "h": 15,
+     "top_y": 208,
+     "bottom_y": 223,
+     "kind": "faint"
+    }
+   ],
+   "lateral_line_visible": false,
+   "lateral_line_points": null,
+   "orientation_note": "Aquarium photo, fish nearly pure lateral view on a black background; body axis horizontal (about 0-3 deg). Caudal fin upper lobe twisted toward the camera; head slightly turned toward camera with mouth open.",
+   "perspective_distortion_risk": "med",
+   "body_curvature_note": "Almost straight: curved/straight about 1.00; peduncle bends slightly downward and the caudal fin is twisted.",
+   "confidence": "high",
+   "confidence_reason": "Clean silhouette on black with every fin visible and nearly perpendicular view; limited by low resolution (SL about 337 px in a 600x450 image) and possible glass refraction. HL/SL (about 0.34) and BD/SL (about 0.28) are the largest of the five photos: a stout juvenile or a magnification effect of the head being nearer the glass cannot be separated.",
+   "missing": [],
+   "notes": "Mouth open with lower jaw lowered; upper jaw tip (124,224), lower jaw tip (123,241), maxilla end about (172,249). Eye (outer dark ring) 157.5-179.5 (22 px), black pupil about 12 px, white iris ring. Opercle rear edge at about x=239. Dorsal fin: base (298,175)-(357,183), tallest ray tip about (348,146) (white-tipped), adipose fin (417,191)-(439,195) with tip about (432,184) as a small white lobe; pectoral fin translucent, base (229,262)-(233,275), tip about (290,283); pelvic fin origin about (324,268), tip (347,287), white leading edge; anal fin origin (389,256), end (423,250), longest ray tip (412,271), white edge. Caudal fin spread but twisted: upper tip (494,171), lower tip (508,234), fork (496,206) (lower confidence because of twisting). Eight vertical grey-black parr marks (first at x about 247, last small and faint at x about 445), tall ovals 30-35 px high reaching from the dorsal edge to just above the belly; many small dark oblique ovals above the parr marks near the back and a row of small dark spots below the lateral midline; no red spots resolved."
+  },
+  {
+   "id": "p018",
+   "facing": "right",
+   "image_size": [
+    640,
+    480
+   ],
+   "landmarks": {
+    "snout": [
+     515,
+     124.5
+    ],
+    "caudal_base": [
+     162,
+     203.5
+    ],
+    "eye_center": [
+     477.5,
+     121.5
+    ],
+    "eye_anterior": [
+     489,
+     121.5
+    ],
+    "eye_posterior": [
+     466.5,
+     123
+    ],
+    "pupil_center": [
+     478.6,
+     119.7
+    ],
+    "pupil_diameter_px": 8,
+    "opercle_post": [
+     428,
+     132
+    ],
+    "maxilla_post": null,
+    "mouth_corner": null,
+    "lower_jaw_tip": null,
+    "dorsal_origin": [
+     332,
+     118
+    ],
+    "dorsal_end": [
+     279,
+     145
+    ],
+    "dorsal_tip_longest": [
+     279,
+     109
+    ],
+    "adipose_base_front": [
+     224,
+     163
+    ],
+    "adipose_base_rear": [
+     209,
+     169
+    ],
+    "adipose_tip": [
+     217,
+     158
+    ],
+    "pectoral_base_top": [
+     438,
+     163
+    ],
+    "pectoral_base_bottom": [
+     426,
+     177
+    ],
+    "pectoral_tip": [
+     403,
+     196
+    ],
+    "pelvic_origin": [
+     326,
+     208
+    ],
+    "pelvic_tip": [
+     296,
+     228
+    ],
+    "anal_origin": [
+     262,
+     215
+    ],
+    "anal_end": [
+     240,
+     216
+    ],
+    "anal_tip_longest": [
+     233,
+     237
+    ],
+    "bd_max_top": [
+     385,
+     107.5
+    ],
+    "bd_max_bottom": [
+     404.4,
+     189
+    ],
+    "cp_min_top": [
+     205,
+     172
+    ],
+    "cp_min_bottom": [
+     214,
+     207.5
+    ],
+    "caudal_tip_upper": [
+     98,
+     166
+    ],
+    "caudal_tip_lower": [
+     128,
+     254
+    ],
+    "caudal_fork": [
+     128,
+     214
+    ]
+   },
+   "midline": [
+    [
+     515,
+     124.5
+    ],
+    [
+     490,
+     126
+    ],
+    [
+     460,
+     132
+    ],
+    [
+     420,
+     142
+    ],
+    [
+     380,
+     152
+    ],
+    [
+     340,
+     161
+    ],
+    [
+     300,
+     168
+    ],
+    [
+     260,
+     179
+    ],
+    [
+     220,
+     186
+    ],
+    [
+     190,
+     194.5
+    ],
+    [
+     162,
+     203.5
+    ]
+   ],
+   "outline_dorsal": [
+    [
+     515,
+     124.5
+    ],
+    [
+     512,
+     115
+    ],
+    [
+     505,
+     108
+    ],
+    [
+     495,
+     104
+    ],
+    [
+     480,
+     102
+    ],
+    [
+     460,
+     100
+    ],
+    [
+     440,
+     99
+    ],
+    [
+     420,
+     101
+    ],
+    [
+     400,
+     104
+    ],
+    [
+     380,
+     109
+    ],
+    [
+     360,
+     114
+    ],
+    [
+     340,
+     118.5
+    ],
+    [
+     310,
+     128
+    ],
+    [
+     283,
+     143.5
+    ],
+    [
+     260,
+     151
+    ],
+    [
+     235,
+     160
+    ],
+    [
+     210,
+     169
+    ],
+    [
+     188,
+     178
+    ],
+    [
+     165,
+     181
+    ]
+   ],
+   "outline_ventral": [
+    [
+     513,
+     129
+    ],
+    [
+     508,
+     137.5
+    ],
+    [
+     494,
+     146
+    ],
+    [
+     481,
+     154
+    ],
+    [
+     467,
+     161
+    ],
+    [
+     453,
+     167
+    ],
+    [
+     440,
+     172
+    ],
+    [
+     426,
+     179
+    ],
+    [
+     410,
+     187
+    ],
+    [
+     395,
+     192
+    ],
+    [
+     380,
+     195
+    ],
+    [
+     360,
+     198.5
+    ],
+    [
+     340,
+     203
+    ],
+    [
+     310,
+     204
+    ],
+    [
+     279,
+     205.6
+    ],
+    [
+     250,
+     207.5
+    ],
+    [
+     220,
+     207.5
+    ],
+    [
+     200,
+     210
+    ],
+    [
+     180,
+     216
+    ],
+    [
+     162,
+     224
+    ]
+   ],
+   "parr_marks": [
+    {
+     "cx": 426.4,
+     "cy": 129,
+     "w": 9.5,
+     "h": 16,
+     "top_y": 121,
+     "bottom_y": 137.5
+    },
+    {
+     "cx": 406.5,
+     "cy": 124,
+     "w": 11,
+     "h": 23,
+     "top_y": 111,
+     "bottom_y": 136,
+     "kind": "faint"
+    },
+    {
+     "cx": 394,
+     "cy": 147,
+     "w": 12.5,
+     "h": 24,
+     "top_y": 134,
+     "bottom_y": 158
+    },
+    {
+     "cx": 370,
+     "cy": 150,
+     "w": 12,
+     "h": 34,
+     "top_y": 131,
+     "bottom_y": 165
+    },
+    {
+     "cx": 346.5,
+     "cy": 160,
+     "w": 12,
+     "h": 37,
+     "top_y": 135,
+     "bottom_y": 172
+    },
+    {
+     "cx": 315.6,
+     "cy": 164,
+     "w": 13,
+     "h": 32,
+     "top_y": 148,
+     "bottom_y": 180
+    },
+    {
+     "cx": 283.4,
+     "cy": 176.5,
+     "w": 15,
+     "h": 22,
+     "top_y": 165.5,
+     "bottom_y": 187.5
+    },
+    {
+     "cx": 247.7,
+     "cy": 181,
+     "w": 16.6,
+     "h": 26,
+     "top_y": 168,
+     "bottom_y": 194
+    },
+    {
+     "cx": 212.5,
+     "cy": 190.5,
+     "w": 16,
+     "h": 15,
+     "top_y": 183,
+     "bottom_y": 198
+    },
+    {
+     "cx": 189,
+     "cy": 196.5,
+     "w": 13.6,
+     "h": 15,
+     "top_y": 189,
+     "bottom_y": 204
+    },
+    {
+     "cx": 172.5,
+     "cy": 199.5,
+     "w": 10.6,
+     "h": 15,
+     "top_y": 192,
+     "bottom_y": 207
+    }
+   ],
+   "lateral_line_visible": false,
+   "lateral_line_points": null,
+   "orientation_note": "Aquarium photo with two fish rising in parallel; this record is the UPPER fish (fish A, head at upper right). Body axis about 14 deg in-plane; near-lateral view, dark background, blurry/low resolution.",
+   "perspective_distortion_risk": "med",
+   "body_curvature_note": "Slightly bowed: curved/straight ratio about 1.002; tail hangs slightly downward. The caudal fin is spread to the left.",
+   "confidence": "med",
+   "confidence_reason": "Near-lateral view and clear silhouette against black, but low resolution/soft focus (SL about 362 px in a 640x480 frame), mouth region and fin tips blurry, the jaw landmarks are not resolvable, glass refraction possible.",
+   "missing": [
+    "maxilla_post",
+    "mouth_corner",
+    "lower_jaw_tip"
+   ],
+   "notes": "Fish A = upper fish; the lower fish is stored as id p018b. Mouth is closed and the maxilla end / jaw tip cannot be resolved so maxilla_post, mouth_corner and lower_jaw_tip are null. Eye 22.5 px with a bright yellow-white ring and ~8 px black pupil. Opercle rear edge estimated at x about 428 (faint). Dorsal fin base (332,118)-(279,145) with pale blue ray tips up to about (279,109); adipose fin tiny at (224,163)-(209,169), tip about (217,158); pectoral base about (438,163)-(426,177) tip (403,196) (white); pelvic origin about (326,208), tip (296,228); anal origin (262,215), end (240,216), tip (233,237). Caudal fin tips: upper (98,166), lower (128,254), fork about (128,214), moderately blurry. Eleven parr marks incl. faint ones (dark blue-grey tall ovals, 30-37 px high mid-body, shorter and rounder at the peduncle); numerous small black spots on the back and below."
+  },
+  {
+   "id": "p018b",
+   "facing": "right",
+   "image_size": [
+    640,
+    480
+   ],
+   "landmarks": {
+    "snout": [
+     482.5,
+     266
+    ],
+    "caudal_base": [
+     166,
+     364
+    ],
+    "eye_center": [
+     450.7,
+     267.5
+    ],
+    "eye_anterior": [
+     461,
+     266
+    ],
+    "eye_posterior": [
+     440.5,
+     268
+    ],
+    "pupil_center": [
+     451.3,
+     265
+    ],
+    "pupil_diameter_px": 8.3,
+    "opercle_post": [
+     407,
+     285
+    ],
+    "maxilla_post": null,
+    "mouth_corner": null,
+    "lower_jaw_tip": [
+     481,
+     273
+    ],
+    "dorsal_origin": [
+     323,
+     275
+    ],
+    "dorsal_end": [
+     263,
+     308
+    ],
+    "dorsal_tip_longest": [
+     266,
+     276
+    ],
+    "adipose_base_front": [
+     222,
+     331
+    ],
+    "adipose_base_rear": [
+     209,
+     337
+    ],
+    "adipose_tip": [
+     213,
+     326
+    ],
+    "pectoral_base_top": [
+     421,
+     306
+    ],
+    "pectoral_base_bottom": [
+     414,
+     316
+    ],
+    "pectoral_tip": [
+     408,
+     345
+    ],
+    "pelvic_origin": [
+     327,
+     355
+    ],
+    "pelvic_tip": [
+     311,
+     388
+    ],
+    "anal_origin": [
+     270,
+     371
+    ],
+    "anal_end": [
+     235,
+     376
+    ],
+    "anal_tip_longest": [
+     244,
+     397
+    ],
+    "bd_max_top": [
+     368,
+     267
+    ],
+    "bd_max_bottom": [
+     392,
+     334.5
+    ],
+    "cp_min_top": [
+     200,
+     343.5
+    ],
+    "cp_min_bottom": [
+     208.5,
+     374.4
+    ],
+    "caudal_tip_upper": [
+     114.7,
+     337
+    ],
+    "caudal_tip_lower": [
+     149.5,
+     425
+    ],
+    "caudal_fork": [
+     140,
+     388
+    ]
+   },
+   "midline": [
+    [
+     482.5,
+     266
+    ],
+    [
+     460,
+     272
+    ],
+    [
+     430,
+     278.5
+    ],
+    [
+     400,
+     292
+    ],
+    [
+     370,
+     304
+    ],
+    [
+     340,
+     313
+    ],
+    [
+     300,
+     325
+    ],
+    [
+     260,
+     342
+    ],
+    [
+     220,
+     354
+    ],
+    [
+     190,
+     363.5
+    ],
+    [
+     166,
+     364
+    ]
+   ],
+   "outline_dorsal": [
+    [
+     482.5,
+     266
+    ],
+    [
+     481,
+     261
+    ],
+    [
+     476,
+     255
+    ],
+    [
+     464,
+     250.4
+    ],
+    [
+     452,
+     248.5
+    ],
+    [
+     440,
+     248.3
+    ],
+    [
+     428,
+     250
+    ],
+    [
+     415,
+     252
+    ],
+    [
+     403,
+     255
+    ],
+    [
+     391,
+     259
+    ],
+    [
+     379,
+     263
+    ],
+    [
+     367,
+     267.4
+    ],
+    [
+     354,
+     271.7
+    ],
+    [
+     340,
+     275.5
+    ],
+    [
+     320,
+     280
+    ],
+    [
+     298,
+     290.6
+    ],
+    [
+     276,
+     303.7
+    ],
+    [
+     254,
+     316.7
+    ],
+    [
+     233,
+     327.6
+    ],
+    [
+     211,
+     339
+    ],
+    [
+     200,
+     343.5
+    ],
+    [
+     190,
+     347
+    ],
+    [
+     166,
+     348
+    ]
+   ],
+   "outline_ventral": [
+    [
+     481,
+     273
+    ],
+    [
+     470,
+     283
+    ],
+    [
+     458,
+     292.4
+    ],
+    [
+     446,
+     301
+    ],
+    [
+     434,
+     308.3
+    ],
+    [
+     421.5,
+     314.4
+    ],
+    [
+     409,
+     325.4
+    ],
+    [
+     397,
+     332.7
+    ],
+    [
+     385,
+     337.6
+    ],
+    [
+     373,
+     341
+    ],
+    [
+     360.5,
+     345
+    ],
+    [
+     348,
+     348
+    ],
+    [
+     330,
+     353.7
+    ],
+    [
+     309,
+     360
+    ],
+    [
+     287,
+     366.7
+    ],
+    [
+     265,
+     371
+    ],
+    [
+     243,
+     373.2
+    ],
+    [
+     222,
+     376
+    ],
+    [
+     200,
+     375
+    ],
+    [
+     185,
+     382
+    ]
+   ],
+   "parr_marks": [
+    {
+     "cx": 390.5,
+     "cy": 281.5,
+     "w": 11,
+     "h": 17,
+     "top_y": 273,
+     "bottom_y": 290
+    },
+    {
+     "cx": 371.5,
+     "cy": 290.5,
+     "w": 15,
+     "h": 21,
+     "top_y": 280,
+     "bottom_y": 301
+    },
+    {
+     "cx": 350.5,
+     "cy": 288,
+     "w": 15,
+     "h": 18,
+     "top_y": 279,
+     "bottom_y": 297
+    },
+    {
+     "cx": 338,
+     "cy": 304,
+     "w": 17,
+     "h": 27,
+     "top_y": 290,
+     "bottom_y": 317
+    },
+    {
+     "cx": 309,
+     "cy": 314,
+     "w": 18,
+     "h": 26,
+     "top_y": 301.5,
+     "bottom_y": 327.6
+    },
+    {
+     "cx": 276,
+     "cy": 330,
+     "w": 17,
+     "h": 23,
+     "top_y": 319,
+     "bottom_y": 342
+    },
+    {
+     "cx": 250.5,
+     "cy": 340,
+     "w": 16,
+     "h": 21,
+     "top_y": 329.7,
+     "bottom_y": 350.4
+    },
+    {
+     "cx": 225.5,
+     "cy": 351.4,
+     "w": 14,
+     "h": 17,
+     "top_y": 343,
+     "bottom_y": 360
+    },
+    {
+     "cx": 200.5,
+     "cy": 359,
+     "w": 16,
+     "h": 15,
+     "top_y": 351.5,
+     "bottom_y": 366.7
+    },
+    {
+     "cx": 181.5,
+     "cy": 365.5,
+     "w": 11,
+     "h": 15,
+     "top_y": 358,
+     "bottom_y": 373
+    }
+   ],
+   "lateral_line_visible": false,
+   "lateral_line_points": null,
+   "orientation_note": "Same aquarium frame as p018: this record is the LOWER fish (fish B, head at upper right at about (482,266)). Body axis about 18 deg in-plane; pectoral fin and head slightly closer to the camera.",
+   "perspective_distortion_risk": "med",
+   "body_curvature_note": "Slightly bowed: curved/straight about 1.005; peduncle drops slightly; caudal fin spread.",
+   "confidence": "med",
+   "confidence_reason": "Same low resolution and soft focus as the upper fish (SL about 333 px in a 640x480 frame); outline against black is clear and the caudal fin is clean, but the jaw/mouth is not resolved (lower_jaw_tip is an estimate +-4 px), fin tips are blurry and glass refraction is possible.",
+   "missing": [
+    "maxilla_post",
+    "mouth_corner"
+   ],
+   "notes": "Fish B (larger-spotted fish; more black spots). Entered as a separate id p018b so that p018 stays the upper fish. Eye 20.5 px, black pupil about 8 px, bright ring. Opercle rear about (407,285). Dorsal fin base (323,275)-(263,308), pale ray tips up to (266,276); adipose fin (222,331)-(209,337); pectoral base (421,306)-(414,316), tip (408,345); pelvic origin (327,355), tip (311,388); anal origin (270,371), end (235,376), tip (244,397). Caudal tips: upper (115,337), lower (150,425), fork about (140,388). Ten parr marks: large grey-black ovals around the mid-body with a smaller round mark at the peduncle; a second row of black round spots (6-12 px) lies below the marks."
+  }
+ ],
+ "method_note": "Independent measurement by rater B. All coordinates are original-image pixels (y down). Landmarks read from grid-labelled zooms (custom overlay helper plus tools/photo/grid.py), checked by overlaying the traced points on the photo; luminance profiles were used to trace silhouette edges where the background is black (p016, p018). p018 = upper fish, p018b = lower fish of the same photo. Rater A's files were never opened."
+}

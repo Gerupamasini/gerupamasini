@@ -1,0 +1,9244 @@
+{
+ "schema": "yamame_color_c04_v1",
+ "chunk": "c04",
+ "assigned_photos": [
+  "p033",
+  "p032",
+  "p031",
+  "p039",
+  "p034",
+  "p040"
+ ],
+ "extra_photos_added": [],
+ "excluded_photos": [],
+ "generated": "2026-10-01",
+ "method": {
+  "tools": [
+   "tools/photo/grid.py (座標グリッド付きズーム)",
+   "tools/photo/colorsample.py と同じ関数(median sRGB -> D65 Lab)をPythonで直接呼び出し(矩形ごとの中央値)"
+  ],
+  "stats": "各矩形の中央値sRGB(0-255)とそのCIE L*a*b*(D65)。chroma=sqrt(a^2+b^2), hue_deg=atan2(b,a)。lum_p10_p90は矩形内の輝度(0-255)の10/90パーセンタイルで鏡面ハイライトと影の広がりを示す。darkest40pct_Lab/brightest40pct_Labは矩形内の輝度下位/上位40%画素の中央値のLabで、鱗モアレ・細いリング・小黒点で中央値が実際の色を外す場合の補正用。",
+  "ratios": "L_star_ratio=L*の比、linear_Y_ratio=L*から変換した線形相対輝度Yの比(PBRのアルベド比に近い)。dorsal/flank_upper/flank_lower/belly の各グループに属するサンプルIDを relative.ratio_definitions に明記し、グループ内のL*平均で比を出している。",
+  "parr_mark_contrast": "マークの中央値Labと、マークに隣接する地色(パーマーク間)の矩形のLab平均との差(dL, da, db, dE76)。dL_using_darkest40pct_markはマークの暗い40%画素を使った場合。",
+  "coordinates": "元画像ピクセル座標 [x0,y0,x1,y1]。x1,y1は排他的(colorsample.pyと同じ)。",
+  "quality_flags": "flags: small_patch(<15px)、near_clipped_highlight(p90>=250)。quality: good/mixed/mixed_specular/mixed_translucent(半透明で背景が透ける)/shadowed/crushed_shadow/overexposed/reference/small_patch など。",
+  "no_averaging": "PDF注記に従い、個体間で色や比率を平均化していない。範囲(最小〜最大)のみ提示し、写真/個体ごとの値を保存した。写真内のグループ平均(例: dorsalの2点)は同一個体内の代表値にすぎない。"
+ },
+ "photos": {
+  "p031": {
+   "source": {
+    "host": "www.ana.co.jp",
+    "url": "https://www.ana.co.jp/travelandlife/article/001841/",
+    "image_size_px": [
+     1200,
+     460
+    ]
+   },
+   "subject": {
+    "catalog_species_ident": "unclear (conf 0.4) ※ヤマメの基準値には使わず参考扱い",
+    "life_stage": "adult_nonspawning (catalog)",
+    "context": "other (ジャンプ中、水しぶき付き)",
+    "view": "lateral_right (ほぼ純側面、尾柄が下方へ屈曲)",
+    "fish_definition": "単独個体",
+    "my_note": "体側中央に桃〜バラ色の広い帯(a*+15)、下半は黄クリーム、背は青灰、尾鰭下葉は赤〜暗赤、鰭は橙〜琥珀。黒点が非常に多い。ヤマメ(朱点なし)と矛盾しないがニジマス型/ブラウン型も排除できず、色の絶対値と桃の帯の強さは参考値。パーマークは淡く色サンプルでは測れなかった。"
+   },
+   "white_balance_cast": "樹冠越しの斑状の直射光と水面反射で緑〜橙の被りが強い。魚体上に中性基準物なし。背は無彩色の青灰(a-1, b0)だが、白飛びした体側下半は黄(b+24)、腹縁の影は青緑灰(a-4)と場所で被りが変わる。体側の桃(a+15)は光沢/照明依存の可能性。",
+   "exposure": "ダイナミックレンジが極端。体側下半は白飛び気味(L95, p90=251)、背・鰭・尾鰭は影で非常に暗い(L12-25)。強いJPEG圧縮で鱗にモアレ。",
+   "reliability": "low",
+   "reliability_reason": "種同定が不確実(0.4)で、斑状直射光+ジャンプ中の姿勢+水面反射により色が場所ごとに大きく変動する。相対関係(桃/黄/青灰の層構造)の方向性だけ参考にできる。",
+   "usable_for": [
+    "体側の三層(背=青灰, 上半=桃〜バラ, 下半=黄クリーム)という層構造の方向性",
+    "鰓蓋の橙〜サーモン",
+    "鰭の橙〜琥珀と尾鰭下葉の赤み"
+   ],
+   "not_usable_for": [
+    "ヤマメの基準色(種が不確実)",
+    "背/腹の輝度比(影と白飛びが支配)",
+    "パーマークの色/コントラスト(淡く測れない)",
+    "鰭の絶対輝度(影で暗い)"
+   ],
+   "not_visible_or_not_measured": [
+    "パーマーク(コントラスト低、色サンプル不可)",
+    "朱点(なし)",
+    "臀鰭は水しぶきで一部隠れる"
+   ],
+   "relative": {
+    "ratio_definitions": {
+     "dorsal": {
+      "samples": [
+       "dorsal_back_a",
+       "dorsal_back_b"
+      ],
+      "Lab_mean": [
+       45.8,
+       -0.6,
+       3.1
+      ]
+     },
+     "flank_upper": {
+      "samples": [
+       "flank_rose_a",
+       "flank_rose_b"
+      ],
+      "Lab_mean": [
+       66.0,
+       15.1,
+       10.8
+      ]
+     },
+     "flank_lower": {
+      "samples": [
+       "flank_yellow_a",
+       "flank_yellow_b"
+      ],
+      "Lab_mean": [
+       80.2,
+       -2.0,
+       18.9
+      ]
+     },
+     "belly": {
+      "samples": [
+       "belly_shadow"
+      ],
+      "Lab_mean": [
+       50.0,
+       -4.1,
+       -0.8
+      ]
+     }
+    },
+    "dorsal_to_flank_upper": {
+     "L_star_ratio": 0.69,
+     "linear_Y_ratio": 0.43
+    },
+    "dorsal_to_flank_lower": {
+     "L_star_ratio": 0.57,
+     "linear_Y_ratio": 0.26
+    },
+    "ventral_to_flank_upper": {
+     "L_star_ratio": 0.76,
+     "linear_Y_ratio": 0.52
+    },
+    "ventral_to_flank_lower": {
+     "L_star_ratio": 0.62,
+     "linear_Y_ratio": 0.32
+    },
+    "flank_upper_to_lower_L_gap": 14.2,
+    "parr_mark_contrast": [],
+    "fin_chroma_overview": {
+     "pectoral_amber": {
+      "region": "pectoral_membrane",
+      "Lab": [
+       40.6,
+       10.6,
+       40.8
+      ],
+      "chroma": 42.1,
+      "hue_deg": 75.0,
+      "quality": "shadowed"
+     },
+     "pelvic_a": {
+      "region": "pelvic",
+      "Lab": [
+       43.8,
+       3.5,
+       36.5
+      ],
+      "chroma": 36.6,
+      "hue_deg": 85.0,
+      "quality": "shadowed"
+     },
+     "anal_a": {
+      "region": "anal",
+      "Lab": [
+       53.1,
+       -1.0,
+       11.5
+      ],
+      "chroma": 11.6,
+      "hue_deg": 95.0,
+      "quality": "mixed_translucent"
+     },
+     "dorsal_fin_a": {
+      "region": "dorsal_fin",
+      "Lab": [
+       12.1,
+       4.6,
+       12.2
+      ],
+      "chroma": 13.0,
+      "hue_deg": 69.0,
+      "quality": "shadowed"
+     },
+     "adipose_a": {
+      "region": "adipose_fin",
+      "Lab": [
+       38.1,
+       8.6,
+       18.0
+      ],
+      "chroma": 20.0,
+      "hue_deg": 65.0,
+      "quality": "small_patch"
+     },
+     "caudal_base": {
+      "region": "caudal_fin_base",
+      "Lab": [
+       20.5,
+       3.3,
+       15.2
+      ],
+      "chroma": 15.6,
+      "hue_deg": 78.0,
+      "quality": "shadowed"
+     },
+     "caudal_lower_red": {
+      "region": "caudal_fin_margin",
+      "Lab": [
+       30.3,
+       20.5,
+       15.7
+      ],
+      "chroma": 25.8,
+      "hue_deg": 37.0,
+      "quality": "small_patch"
+     }
+    },
+    "ratio_caveat": "belly=影の腹縁(L50)で白飛びの体側下半(L95)と同居。ventral_to_flank比は影が支配し意味を持たない。head_dorsal_to_cheekは頭部背面が背景の暗緑の水を反射/透過しているため算出しない。"
+   },
+   "samples": [
+    {
+     "id": "dorsal_back_a",
+     "region": "dorsal_back",
+     "rect": [
+      640,
+      148,
+      720,
+      160
+     ],
+     "n_px": 960,
+     "median_sRGB": [
+      106,
+      109,
+      108
+     ],
+     "hex": "#6a6d6c",
+     "Lab": [
+      45.7,
+      -1.4,
+      0.2
+     ],
+     "chroma": 1.4,
+     "hue_deg": 173.0,
+     "lum_p10_p90": [
+      81,
+      150
+     ],
+     "darkest40pct_Lab": [
+      39.0,
+      -2.1,
+      -0.4
+     ],
+     "brightest40pct_Lab": [
+      55.2,
+      -1.2,
+      -3.4
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "背縁の青灰帯(細い背面の帯、側線より上)。ほぼ無彩色の灰(a-1.4, b+0.2)。黒点が混じる。"
+    },
+    {
+     "id": "dorsal_back_b",
+     "region": "dorsal_back",
+     "rect": [
+      420,
+      185,
+      470,
+      195
+     ],
+     "n_px": 500,
+     "median_sRGB": [
+      113,
+      108,
+      98
+     ],
+     "hex": "#716c62",
+     "Lab": [
+      45.8,
+      0.1,
+      6.0
+     ],
+     "chroma": 6.0,
+     "hue_deg": 89.0,
+     "lum_p10_p90": [
+      66,
+      151
+     ],
+     "darkest40pct_Lab": [
+      35.5,
+      -0.5,
+      5.4
+     ],
+     "brightest40pct_Lab": [
+      57.2,
+      1.1,
+      9.4
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "背縁(体の後半)。灰褐(a0, b+6)。鱗ハイライトでp90=151。"
+    },
+    {
+     "id": "flank_rose_a",
+     "region": "lateral_band",
+     "rect": [
+      610,
+      195,
+      660,
+      225
+     ],
+     "n_px": 1500,
+     "median_sRGB": [
+      183,
+      141,
+      137
+     ],
+     "hex": "#b78d89",
+     "Lab": [
+      62.4,
+      15.3,
+      8.3
+     ],
+     "chroma": 17.4,
+     "hue_deg": 28.0,
+     "lum_p10_p90": [
+      120,
+      181
+     ],
+     "darkest40pct_Lab": [
+      55.3,
+      14.5,
+      8.1
+     ],
+     "brightest40pct_Lab": [
+      70.4,
+      15.1,
+      8.7
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "体側上半の桃〜バラ色の帯(鰓蓋直後)。(183,141,137) Lab(62,15,8)。ジャンプ中の斑状の直射光と反射で強調された可能性あり(catalogは桃帯を虹色帯様と注記)。"
+    },
+    {
+     "id": "flank_rose_b",
+     "region": "lateral_band",
+     "rect": [
+      520,
+      200,
+      570,
+      225
+     ],
+     "n_px": 1250,
+     "median_sRGB": [
+      205,
+      160,
+      147
+     ],
+     "hex": "#cda093",
+     "Lab": [
+      69.6,
+      14.8,
+      13.2
+     ],
+     "chroma": 19.8,
+     "hue_deg": 42.0,
+     "lum_p10_p90": [
+      128,
+      210
+     ],
+     "darkest40pct_Lab": [
+      59.3,
+      14.8,
+      11.1
+     ],
+     "brightest40pct_Lab": [
+      79.0,
+      15.4,
+      13.2
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "体側中央の桃〜サーモン(205,160,147) Lab(70,15,13)。a=+15でp12/c02の婚姻橙より赤紫寄り(色相42度)。"
+    },
+    {
+     "id": "flank_yellow_a",
+     "region": "flank_ground",
+     "rect": [
+      430,
+      250,
+      500,
+      285
+     ],
+     "n_px": 2450,
+     "median_sRGB": [
+      251,
+      241,
+      193
+     ],
+     "hex": "#fbf1c1",
+     "Lab": [
+      94.9,
+      -4.0,
+      24.4
+     ],
+     "chroma": 24.8,
+     "hue_deg": 99.0,
+     "lum_p10_p90": [
+      207,
+      251
+     ],
+     "darkest40pct_Lab": [
+      89.2,
+      -2.8,
+      24.7
+     ],
+     "brightest40pct_Lab": [
+      97.9,
+      -5.8,
+      22.1
+     ],
+     "quality": "overexposed",
+     "flags": [
+      "near_clipped_highlight"
+     ],
+     "comment": "体側下半〜腹側の黄クリーム。光が当たりほぼ白飛び(L95, p90=251)。黄味(b+24)が本来の色相の目安。"
+    },
+    {
+     "id": "flank_yellow_b",
+     "region": "flank_ground",
+     "rect": [
+      560,
+      245,
+      620,
+      280
+     ],
+     "n_px": 2100,
+     "median_sRGB": [
+      168,
+      158,
+      135
+     ],
+     "hex": "#a89e87",
+     "Lab": [
+      65.4,
+      -0.1,
+      13.4
+     ],
+     "chroma": 13.4,
+     "hue_deg": 90.0,
+     "lum_p10_p90": [
+      121,
+      215
+     ],
+     "darkest40pct_Lab": [
+      55.3,
+      -3.9,
+      8.9
+     ],
+     "brightest40pct_Lab": [
+      79.8,
+      5.6,
+      21.1
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "体側下半の別地点。陰った灰黄(L65, b+13)。同一個体でも光の当たり方でLが30違う。"
+    },
+    {
+     "id": "belly_shadow",
+     "region": "belly",
+     "rect": [
+      580,
+      296,
+      680,
+      306
+     ],
+     "n_px": 1000,
+     "median_sRGB": [
+      110,
+      121,
+      120
+     ],
+     "hex": "#6e7978",
+     "Lab": [
+      50.0,
+      -4.1,
+      -0.8
+     ],
+     "chroma": 4.2,
+     "hue_deg": 191.0,
+     "lum_p10_p90": [
+      88,
+      151
+     ],
+     "darkest40pct_Lab": [
+      41.7,
+      -2.6,
+      -4.8
+     ],
+     "brightest40pct_Lab": [
+      57.8,
+      -4.7,
+      3.8
+     ],
+     "quality": "shadowed",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "腹縁(ジャンプ中の影、水の反射)。灰緑〜青灰(L50, a-4)。腹本来の色ではなく影の色。"
+    },
+    {
+     "id": "head_dorsal",
+     "region": "head_dorsal",
+     "rect": [
+      880,
+      175,
+      910,
+      188
+     ],
+     "n_px": 390,
+     "median_sRGB": [
+      51,
+      60,
+      44
+     ],
+     "hex": "#333c2c",
+     "Lab": [
+      24.1,
+      -7.3,
+      8.7
+     ],
+     "chroma": 11.4,
+     "hue_deg": 130.0,
+     "lum_p10_p90": [
+      31,
+      90
+     ],
+     "darkest40pct_Lab": [
+      15.5,
+      -9.8,
+      12.1
+     ],
+     "brightest40pct_Lab": [
+      32.9,
+      -4.4,
+      1.5
+     ],
+     "quality": "mixed",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "吻〜頭部背面。背景の暗緑の水が反射・透過して暗い(L24, a-7)。参考値。"
+    },
+    {
+     "id": "opercle_a",
+     "region": "opercle",
+     "rect": [
+      775,
+      205,
+      815,
+      235
+     ],
+     "n_px": 1200,
+     "median_sRGB": [
+      201,
+      158,
+      138
+     ],
+     "hex": "#c99e8a",
+     "Lab": [
+      68.5,
+      13.2,
+      16.3
+     ],
+     "chroma": 20.9,
+     "hue_deg": 51.0,
+     "lum_p10_p90": [
+      139,
+      193
+     ],
+     "darkest40pct_Lab": [
+      61.2,
+      12.7,
+      16.7
+     ],
+     "brightest40pct_Lab": [
+      75.3,
+      13.2,
+      17.5
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "鰓蓋(橙〜サーモン、金属光沢)。(201,158,138) Lab(68.5,13,16)。"
+    },
+    {
+     "id": "cheek_a",
+     "region": "cheek",
+     "rect": [
+      800,
+      235,
+      850,
+      248
+     ],
+     "n_px": 650,
+     "median_sRGB": [
+      183,
+      165,
+      130
+     ],
+     "hex": "#b7a582",
+     "Lab": [
+      68.5,
+      1.1,
+      20.6
+     ],
+     "chroma": 20.6,
+     "hue_deg": 87.0,
+     "lum_p10_p90": [
+      132,
+      197
+     ],
+     "darkest40pct_Lab": [
+      59.3,
+      -0.4,
+      14.2
+     ],
+     "brightest40pct_Lab": [
+      76.0,
+      1.6,
+      20.9
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "頬〜鰓蓋下縁。黄褐〜オリーブ金(a+1, b+21)。"
+    },
+    {
+     "id": "pectoral_amber",
+     "region": "pectoral_membrane",
+     "rect": [
+      762,
+      285,
+      778,
+      315
+     ],
+     "n_px": 480,
+     "median_sRGB": [
+      128,
+      88,
+      25
+     ],
+     "hex": "#805819",
+     "Lab": [
+      40.6,
+      10.6,
+      40.8
+     ],
+     "chroma": 42.1,
+     "hue_deg": 75.0,
+     "lum_p10_p90": [
+      77,
+      110
+     ],
+     "darkest40pct_Lab": [
+      36.7,
+      11.8,
+      36.5
+     ],
+     "brightest40pct_Lab": [
+      45.6,
+      8.6,
+      45.9
+     ],
+     "quality": "shadowed",
+     "flags": [],
+     "comment": "胸鰭(橙〜琥珀)。(128,88,25) Lab(41,11,41)=暗い琥珀。影側で暗い(明部でも L46)。"
+    },
+    {
+     "id": "pelvic_a",
+     "region": "pelvic",
+     "rect": [
+      528,
+      318,
+      550,
+      340
+     ],
+     "n_px": 484,
+     "median_sRGB": [
+      126,
+      100,
+      41
+     ],
+     "hex": "#7e6429",
+     "Lab": [
+      43.8,
+      3.5,
+      36.5
+     ],
+     "chroma": 36.6,
+     "hue_deg": 85.0,
+     "lum_p10_p90": [
+      79,
+      140
+     ],
+     "darkest40pct_Lab": [
+      36.4,
+      7.8,
+      31.5
+     ],
+     "brightest40pct_Lab": [
+      51.2,
+      2.1,
+      36.6
+     ],
+     "quality": "shadowed",
+     "flags": [],
+     "comment": "腹鰭(橙黄〜琥珀色、鰭条が淡い)。(126,100,41) Lab(44,3.5,36.5)。"
+    },
+    {
+     "id": "anal_a",
+     "region": "anal",
+     "rect": [
+      345,
+      285,
+      385,
+      300
+     ],
+     "n_px": 600,
+     "median_sRGB": [
+      133,
+      126,
+      107
+     ],
+     "hex": "#857e6b",
+     "Lab": [
+      53.1,
+      -1.0,
+      11.5
+     ],
+     "chroma": 11.6,
+     "hue_deg": 95.0,
+     "lum_p10_p90": [
+      98,
+      175
+     ],
+     "darkest40pct_Lab": [
+      45.4,
+      -0.3,
+      10.5
+     ],
+     "brightest40pct_Lab": [
+      64.6,
+      -2.1,
+      13.9
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "臀鰭(半透明、桃褐、基部に赤み)。灰黄褐(L53, a-1, b+11.5)で背景(水しぶきの青灰)の混入あり。"
+    },
+    {
+     "id": "dorsal_fin_a",
+     "region": "dorsal_fin",
+     "rect": [
+      500,
+      135,
+      540,
+      155
+     ],
+     "n_px": 800,
+     "median_sRGB": [
+      43,
+      29,
+      14
+     ],
+     "hex": "#2b1d0e",
+     "Lab": [
+      12.1,
+      4.6,
+      12.2
+     ],
+     "chroma": 13.0,
+     "hue_deg": 69.0,
+     "lum_p10_p90": [
+      14,
+      54
+     ],
+     "darkest40pct_Lab": [
+      7.0,
+      4.2,
+      7.7
+     ],
+     "brightest40pct_Lab": [
+      17.8,
+      6.0,
+      14.4
+     ],
+     "quality": "shadowed",
+     "flags": [],
+     "comment": "背鰭(暗褐、鰭条上に黒点列)。(43,29,14) Lab(12,5,12)。非常に暗い褐黒。"
+    },
+    {
+     "id": "adipose_a",
+     "region": "adipose_fin",
+     "rect": [
+      326,
+      190,
+      340,
+      205
+     ],
+     "n_px": 210,
+     "median_sRGB": [
+      112,
+      84,
+      61
+     ],
+     "hex": "#70543d",
+     "Lab": [
+      38.1,
+      8.6,
+      18.0
+     ],
+     "chroma": 20.0,
+     "hue_deg": 65.0,
+     "lum_p10_p90": [
+      80,
+      119
+     ],
+     "darkest40pct_Lab": [
+      35.7,
+      7.3,
+      19.5
+     ],
+     "brightest40pct_Lab": [
+      44.3,
+      6.2,
+      15.2
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "脂鰭(赤褐〜橙褐の小さな丸い葉形、縁取りなし)。(112,84,61) Lab(38,9,18)。"
+    },
+    {
+     "id": "caudal_base",
+     "region": "caudal_fin_base",
+     "rect": [
+      245,
+      220,
+      275,
+      250
+     ],
+     "n_px": 900,
+     "median_sRGB": [
+      61,
+      47,
+      27
+     ],
+     "hex": "#3d2f1b",
+     "Lab": [
+      20.5,
+      3.3,
+      15.2
+     ],
+     "chroma": 15.6,
+     "hue_deg": 78.0,
+     "lum_p10_p90": [
+      36,
+      71
+     ],
+     "darkest40pct_Lab": [
+      16.9,
+      4.0,
+      16.4
+     ],
+     "brightest40pct_Lab": [
+      24.6,
+      1.3,
+      14.9
+     ],
+     "quality": "shadowed",
+     "flags": [],
+     "comment": "尾鰭上葉〜基部(暗い赤褐〜褐)。(61,47,27) Lab(20.5,3,15)。陰で非常に暗い。"
+    },
+    {
+     "id": "caudal_lower_red",
+     "region": "caudal_fin_margin",
+     "rect": [
+      262,
+      297,
+      285,
+      308
+     ],
+     "n_px": 253,
+     "median_sRGB": [
+      107,
+      58,
+      48
+     ],
+     "hex": "#6b3a30",
+     "Lab": [
+      30.3,
+      20.5,
+      15.7
+     ],
+     "chroma": 25.8,
+     "hue_deg": 37.0,
+     "lum_p10_p90": [
+      54,
+      83
+     ],
+     "darkest40pct_Lab": [
+      24.8,
+      11.4,
+      12.9
+     ],
+     "brightest40pct_Lab": [
+      34.7,
+      22.0,
+      14.2
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "尾鰭下葉(赤〜暗赤)。(107,58,48) Lab(30,20.5,16)。a*が21と鰭の中で最も赤い。"
+    },
+    {
+     "id": "iris_low",
+     "region": "iris_ring",
+     "rect": [
+      846,
+      193,
+      852,
+      201
+     ],
+     "n_px": 48,
+     "median_sRGB": [
+      78,
+      65,
+      66
+     ],
+     "hex": "#4e4142",
+     "Lab": [
+      28.9,
+      5.9,
+      1.2
+     ],
+     "chroma": 6.0,
+     "hue_deg": 11.0,
+     "lum_p10_p90": [
+      33,
+      91
+     ],
+     "darkest40pct_Lab": [
+      15.0,
+      8.9,
+      2.8
+     ],
+     "brightest40pct_Lab": [
+      35.9,
+      2.7,
+      1.6
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "虹彩(瞳孔の左下、赤褐の薄い輪)。(78,65,66) Lab(29,6,1)。リング幅は約4px。"
+    },
+    {
+     "id": "pupil",
+     "region": "pupil",
+     "rect": [
+      853,
+      190,
+      865,
+      200
+     ],
+     "n_px": 120,
+     "median_sRGB": [
+      32,
+      38,
+      34
+     ],
+     "hex": "#202622",
+     "Lab": [
+      14.5,
+      -3.5,
+      1.8
+     ],
+     "chroma": 3.9,
+     "hue_deg": 152.0,
+     "lum_p10_p90": [
+      3,
+      100
+     ],
+     "darkest40pct_Lab": [
+      2.4,
+      -0.6,
+      2.8
+     ],
+     "brightest40pct_Lab": [
+      29.3,
+      3.6,
+      4.4
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "瞳孔(黒、キャッチライトを含む)。darkest40でL2。"
+    },
+    {
+     "id": "black_spot_a",
+     "region": "black_spot_core",
+     "rect": [
+      570,
+      178,
+      573,
+      181
+     ],
+     "n_px": 9,
+     "median_sRGB": [
+      56,
+      56,
+      56
+     ],
+     "hex": "#383838",
+     "Lab": [
+      23.5,
+      -0.0,
+      0.0
+     ],
+     "chroma": 0.0,
+     "hue_deg": 158.0,
+     "lum_p10_p90": [
+      39,
+      80
+     ],
+     "darkest40pct_Lab": [
+      16.0,
+      -0.5,
+      1.3
+     ],
+     "brightest40pct_Lab": [
+      34.0,
+      -0.0,
+      0.0
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "体側上半の黒点(径3-5px、本数が非常に多い)。(56,56,56)で完全な黒にならない(小さすぎて周囲が混入)。darkest40でL16。"
+    }
+   ]
+  },
+  "p032": {
+   "source": {
+    "host": "www.kumagera.ne.jp",
+    "url": "https://www.kumagera.ne.jp/kikuti/dna-kaisetu.html",
+    "image_size_px": [
+     1024,
+     575
+    ]
+   },
+   "subject": {
+    "catalog_species_ident": "yamame (conf 0.65) ※銀化幼魚/アマゴ・サクラマス幼魚の可能性を完全には除外できない",
+    "life_stage": "juvenile (銀化傾向, catalog)",
+    "context": "ground (濡れた砂礫の上、浅い水膜)",
+    "view": "lateral_right (斜め俯瞰、ロール約40度で背面が見える)",
+    "fish_definition": "単独個体",
+    "my_note": "銀白〜クリーム黄の体側に大きな青灰パーマーク約10本、下半に青灰の円斑列。背面は暗オリーブ褐に黒点列。桃/赤の帯はなし(a*は全体で-5〜+5と低彩度)。胸鰭だけ淡黄褐で、他の鰭は無色〜灰紫。"
+   },
+   "white_balance_cast": "曇天〜日陰のスマホ撮影。上部の水膜が空を反射して青白(上方の水面、体の腹側はb-12まで青に傾く)。背景の褐色砂礫が暖色(体の背面に透過/反射)。右上の淡い石は(229,229,201)で黄寄りだが石自体の色は未知。上半(クリーム黄 b+8〜+20)と下半(青白 b-4〜-12)で被りの方向が逆。",
+   "exposure": "適正〜やや明るめ。下半の水膜反射と頭部は白飛びに近い(opercle p90=228)。背面と鰭は暗い(背p10≈59, 背鰭L28)。",
+   "reliability": "med",
+   "reliability_reason": "全体が写りパーマーク/円斑/黒点の色は比較的信頼できるが、銀化個体の高反射で体側下半と腹は空の反射で青白く、水膜の青被りと褐色基質の暖色被りが同居する。成魚の基準にならない。",
+   "usable_for": [
+    "パーマークと円斑の青灰(地色に対する冷色寄りΔb)",
+    "背面の暗オリーブ褐と黒点の黒さ",
+    "銀化個体の体側がクリーム黄→青白に変わる勾配",
+    "胸鰭の淡黄褐"
+   ],
+   "not_usable_for": [
+    "腹の絶対色(空の反射で青白い)",
+    "腹鰭/臀鰭/尾鰭の色(透明で背景の褐色砂礫が透ける)",
+    "頭部・鰓蓋の絶対色(水膜の鏡面反射)",
+    "背/腹の輝度比の絶対値(ロール40度)"
+   ],
+   "not_visible_or_not_measured": [
+    "桃/赤の側線帯(なし。a*最大点でもa+1)",
+    "朱点(なし)",
+    "虹彩リングは眼径22pxと小さく薄い"
+   ],
+   "relative": {
+    "ratio_definitions": {
+     "dorsal": {
+      "samples": [
+       "dorsal_back_d",
+       "dorsal_back_b"
+      ],
+      "Lab_mean": [
+       41.4,
+       -1.8,
+       11.8
+      ]
+     },
+     "flank_upper": {
+      "samples": [
+       "flank_ground_cream_a",
+       "flank_ground_cream_b"
+      ],
+      "Lab_mean": [
+       81.8,
+       0.7,
+       13.7
+      ]
+     },
+     "flank_lower": {
+      "samples": [],
+      "Lab_mean": null
+     },
+     "belly": {
+      "samples": [
+       "belly_a",
+       "belly_b"
+      ],
+      "Lab_mean": [
+       88.1,
+       -5.2,
+       -0.9
+      ]
+     }
+    },
+    "dorsal_to_flank_upper": {
+     "L_star_ratio": 0.51,
+     "linear_Y_ratio": 0.2
+    },
+    "ventral_to_flank_upper": {
+     "L_star_ratio": 1.08,
+     "linear_Y_ratio": 1.21
+    },
+    "parr_mark_contrast": [
+     {
+      "pair": "mark_a_vs_ground",
+      "mark_samples": [
+       "parr_mark_a"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_a_left_cream_b",
+        "rect": [
+         278,
+         172,
+         294,
+         192
+        ],
+        "median_sRGB": [
+         213,
+         198,
+         163
+        ],
+        "Lab": [
+         80.3,
+         -0.3,
+         19.5
+        ]
+       },
+       {
+        "id": "g_a_right",
+        "rect": [
+         332,
+         215,
+         346,
+         232
+        ],
+        "median_sRGB": [
+         218,
+         204,
+         184
+        ],
+        "Lab": [
+         82.7,
+         1.7,
+         11.5
+        ]
+       }
+      ],
+      "mark_Lab": [
+       70.0,
+       -1.5,
+       -13.3
+      ],
+      "ground_Lab_mean": [
+       81.5,
+       0.7,
+       15.5
+      ],
+      "dL": -11.5,
+      "da": -2.2,
+      "db": -28.8,
+      "dE76": 31.1,
+      "dL_using_darkest40pct_mark": -13.8,
+      "mark_darkest40pct_Lab": [
+       67.7,
+       -3.5,
+       -13.8
+      ]
+     },
+     {
+      "pair": "mark_b_vs_ground",
+      "mark_samples": [
+       "parr_mark_b"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_b_right_cream_b",
+        "rect": [
+         278,
+         172,
+         294,
+         192
+        ],
+        "median_sRGB": [
+         213,
+         198,
+         163
+        ],
+        "Lab": [
+         80.3,
+         -0.3,
+         19.5
+        ]
+       }
+      ],
+      "mark_Lab": [
+       69.5,
+       -2.9,
+       -9.2
+      ],
+      "ground_Lab_mean": [
+       80.3,
+       -0.3,
+       19.5
+      ],
+      "dL": -10.8,
+      "da": -2.6,
+      "db": -28.7,
+      "dE76": 30.8,
+      "dL_using_darkest40pct_mark": -13.4,
+      "mark_darkest40pct_Lab": [
+       66.9,
+       -5.7,
+       -0.8
+      ]
+     },
+     {
+      "pair": "mark_c_vs_ground",
+      "mark_samples": [
+       "parr_mark_c"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_c_left",
+        "rect": [
+         355,
+         262,
+         369,
+         276
+        ],
+        "median_sRGB": [
+         215,
+         227,
+         232
+        ],
+        "Lab": [
+         89.5,
+         -3.1,
+         -3.8
+        ]
+       },
+       {
+        "id": "g_c_right_peach",
+        "rect": [
+         410,
+         272,
+         424,
+         286
+        ],
+        "median_sRGB": [
+         217,
+         206,
+         190
+        ],
+        "Lab": [
+         83.2,
+         1.1,
+         9.3
+        ]
+       }
+      ],
+      "mark_Lab": [
+       67.7,
+       -2.3,
+       -10.2
+      ],
+      "ground_Lab_mean": [
+       86.3,
+       -1.0,
+       2.8
+      ],
+      "dL": -18.6,
+      "da": -1.3,
+      "db": -13.0,
+      "dE76": 22.7,
+      "dL_using_darkest40pct_mark": -21.7,
+      "mark_darkest40pct_Lab": [
+       64.6,
+       -2.9,
+       -11.0
+      ]
+     },
+     {
+      "pair": "round_spot_a_vs_ground",
+      "mark_samples": [
+       "round_spot_a"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_spot_a_left",
+        "rect": [
+         355,
+         262,
+         369,
+         276
+        ],
+        "median_sRGB": [
+         215,
+         227,
+         232
+        ],
+        "Lab": [
+         89.5,
+         -3.1,
+         -3.8
+        ]
+       }
+      ],
+      "mark_Lab": [
+       66.0,
+       -0.8,
+       -16.5
+      ],
+      "ground_Lab_mean": [
+       89.5,
+       -3.1,
+       -3.8
+      ],
+      "dL": -23.5,
+      "da": 2.3,
+      "db": -12.7,
+      "dE76": 26.8,
+      "dL_using_darkest40pct_mark": -25.4,
+      "mark_darkest40pct_Lab": [
+       64.1,
+       -0.4,
+       -17.3
+      ]
+     }
+    ],
+    "fin_chroma_overview": {
+     "pectoral_a": {
+      "region": "pectoral_membrane",
+      "Lab": [
+       68.7,
+       -0.1,
+       26.9
+      ],
+      "chroma": 26.9,
+      "hue_deg": 90.0,
+      "quality": "good"
+     },
+     "pelvic_a": {
+      "region": "pelvic",
+      "Lab": [
+       45.8,
+       1.7,
+       8.1
+      ],
+      "chroma": 8.3,
+      "hue_deg": 78.0,
+      "quality": "mixed_translucent"
+     },
+     "anal_a": {
+      "region": "anal",
+      "Lab": [
+       83.8,
+       1.8,
+       -3.8
+      ],
+      "chroma": 4.2,
+      "hue_deg": 295.0,
+      "quality": "mixed_translucent"
+     },
+     "dorsal_fin_b": {
+      "region": "dorsal_fin",
+      "Lab": [
+       27.6,
+       -0.6,
+       6.0
+      ],
+      "chroma": 6.0,
+      "hue_deg": 95.0,
+      "quality": "good"
+     },
+     "adipose_b": {
+      "region": "adipose_fin",
+      "Lab": [
+       48.4,
+       5.1,
+       3.1
+      ],
+      "chroma": 6.0,
+      "hue_deg": 31.0,
+      "quality": "small_patch"
+     },
+     "caudal_upper_lobe": {
+      "region": "caudal_fin_base",
+      "Lab": [
+       43.8,
+       4.7,
+       -0.8
+      ],
+      "chroma": 4.8,
+      "hue_deg": 350.0,
+      "quality": "mixed_translucent"
+     },
+     "caudal_lower_lobe": {
+      "region": "caudal_fin_base",
+      "Lab": [
+       51.6,
+       4.5,
+       -6.4
+      ],
+      "chroma": 7.8,
+      "hue_deg": 305.0,
+      "quality": "mixed_translucent"
+     }
+    },
+    "ratio_caveat": "ロール約40度の俯瞰で背面は上から見た暗い鱗域、腹縁は空を反射して青白い。flank_lowerは別に取れず、腹はbelly_a/belly_bの平均。ventral_to_flank_upperは水膜の反射で過大の可能性。"
+   },
+   "samples": [
+    {
+     "id": "dorsal_back_d",
+     "region": "dorsal_back",
+     "rect": [
+      455,
+      208,
+      480,
+      225
+     ],
+     "n_px": 425,
+     "median_sRGB": [
+      94,
+      89,
+      68
+     ],
+     "hex": "#5e5944",
+     "Lab": [
+      37.7,
+      -1.8,
+      12.9
+     ],
+     "chroma": 13.0,
+     "hue_deg": 98.0,
+     "lum_p10_p90": [
+      39,
+      124
+     ],
+     "darkest40pct_Lab": [
+      28.0,
+      -1.4,
+      12.4
+     ],
+     "brightest40pct_Lab": [
+      47.8,
+      -0.6,
+      12.8
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "背面(体を上から見た暗い鱗域、黒点が散在)。暗いオリーブ褐(a-2, b+13)。黒点・鱗ハイライトを含むので中央値はやや明るめ。"
+    },
+    {
+     "id": "dorsal_back_b",
+     "region": "dorsal_back",
+     "rect": [
+      500,
+      235,
+      530,
+      252
+     ],
+     "n_px": 510,
+     "median_sRGB": [
+      111,
+      107,
+      89
+     ],
+     "hex": "#6f6b59",
+     "Lab": [
+      45.1,
+      -1.8,
+      10.7
+     ],
+     "chroma": 10.8,
+     "hue_deg": 99.0,
+     "lum_p10_p90": [
+      59,
+      147
+     ],
+     "darkest40pct_Lab": [
+      32.9,
+      -0.5,
+      9.7
+     ],
+     "brightest40pct_Lab": [
+      55.0,
+      -0.1,
+      11.4
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "背面の別地点。オリーブ灰褐(L45, b+11)。鱗の白い点状ハイライトが多くp90=147。"
+    },
+    {
+     "id": "flank_ground_cream_a",
+     "region": "flank_ground",
+     "rect": [
+      342,
+      225,
+      362,
+      245
+     ],
+     "n_px": 400,
+     "median_sRGB": [
+      217,
+      206,
+      193
+     ],
+     "hex": "#d9cec1",
+     "Lab": [
+      83.3,
+      1.6,
+      7.8
+     ],
+     "chroma": 8.0,
+     "hue_deg": 78.0,
+     "lum_p10_p90": [
+      193,
+      222
+     ],
+     "darkest40pct_Lab": [
+      80.2,
+      1.9,
+      9.7
+     ],
+     "brightest40pct_Lab": [
+      86.7,
+      1.0,
+      5.9
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "体側上半のパーマーク間地色。淡いクリーム〜ベージュ(a+1.6, b+7.8)。"
+    },
+    {
+     "id": "flank_ground_cream_b",
+     "region": "flank_ground",
+     "rect": [
+      278,
+      172,
+      294,
+      192
+     ],
+     "n_px": 320,
+     "median_sRGB": [
+      213,
+      198,
+      163
+     ],
+     "hex": "#d5c6a3",
+     "Lab": [
+      80.3,
+      -0.3,
+      19.5
+     ],
+     "chroma": 19.5,
+     "hue_deg": 91.0,
+     "lum_p10_p90": [
+      161,
+      217
+     ],
+     "darkest40pct_Lab": [
+      72.3,
+      -0.9,
+      19.4
+     ],
+     "brightest40pct_Lab": [
+      84.4,
+      0.5,
+      17.9
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "尾柄寄り上半のパーマーク間地色。黄味のクリーム(a-0.3, b+19.5)。本写真で最も黄味が強い地色。"
+    },
+    {
+     "id": "flank_ground_peach_a",
+     "region": "flank_ground",
+     "rect": [
+      410,
+      272,
+      424,
+      286
+     ],
+     "n_px": 196,
+     "median_sRGB": [
+      217,
+      206,
+      190
+     ],
+     "hex": "#d9cebe",
+     "Lab": [
+      83.2,
+      1.1,
+      9.3
+     ],
+     "chroma": 9.4,
+     "hue_deg": 83.0,
+     "lum_p10_p90": [
+      189,
+      222
+     ],
+     "darkest40pct_Lab": [
+      78.8,
+      2.1,
+      10.3
+     ],
+     "brightest40pct_Lab": [
+      87.0,
+      0.4,
+      9.0
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "体側中央のパーマーク間でa*が局所的に最大の点(a+1.1)。実際は淡いクリームで桃/サーモンの帯は無し。"
+    },
+    {
+     "id": "parr_mark_a",
+     "region": "parr_mark_core",
+     "rect": [
+      306,
+      210,
+      318,
+      230
+     ],
+     "n_px": 240,
+     "median_sRGB": [
+      155,
+      173,
+      195
+     ],
+     "hex": "#9badc3",
+     "Lab": [
+      70.0,
+      -1.5,
+      -13.3
+     ],
+     "chroma": 13.4,
+     "hue_deg": 264.0,
+     "lum_p10_p90": [
+      162,
+      185
+     ],
+     "darkest40pct_Lab": [
+      67.7,
+      -3.5,
+      -13.8
+     ],
+     "brightest40pct_Lab": [
+      73.9,
+      -1.1,
+      -10.7
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "パーマーク(尾柄寄りの大きな楕円、縦長)。青〜スレートブルー(a-1.5, b-13)。周囲のクリームに対してΔb≈-30と冷色。"
+    },
+    {
+     "id": "parr_mark_b",
+     "region": "parr_mark_core",
+     "rect": [
+      250,
+      178,
+      266,
+      198
+     ],
+     "n_px": 320,
+     "median_sRGB": [
+      155,
+      172,
+      186
+     ],
+     "hex": "#9bacba",
+     "Lab": [
+      69.5,
+      -2.9,
+      -9.2
+     ],
+     "chroma": 9.6,
+     "hue_deg": 252.0,
+     "lum_p10_p90": [
+      158,
+      182
+     ],
+     "darkest40pct_Lab": [
+      66.9,
+      -5.7,
+      -0.8
+     ],
+     "brightest40pct_Lab": [
+      72.7,
+      -3.3,
+      -11.5
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "パーマーク(最も尾柄側)。灰青(a-3, b-9)。"
+    },
+    {
+     "id": "parr_mark_c",
+     "region": "parr_mark_core",
+     "rect": [
+      378,
+      252,
+      392,
+      272
+     ],
+     "n_px": 280,
+     "median_sRGB": [
+      150,
+      167,
+      183
+     ],
+     "hex": "#96a7b7",
+     "Lab": [
+      67.7,
+      -2.3,
+      -10.2
+     ],
+     "chroma": 10.4,
+     "hue_deg": 257.0,
+     "lum_p10_p90": [
+      152,
+      182
+     ],
+     "darkest40pct_Lab": [
+      64.6,
+      -2.9,
+      -11.0
+     ],
+     "brightest40pct_Lab": [
+      71.9,
+      -2.1,
+      -9.4
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "パーマーク(体側中央)。灰青(a-2, b-10)。"
+    },
+    {
+     "id": "round_spot_a",
+     "region": "parr_mark_core",
+     "rect": [
+      341,
+      250,
+      350,
+      262
+     ],
+     "n_px": 108,
+     "median_sRGB": [
+      142,
+      162,
+      190
+     ],
+     "hex": "#8ea2be",
+     "Lab": [
+      66.0,
+      -0.8,
+      -16.5
+     ],
+     "chroma": 16.5,
+     "hue_deg": 267.0,
+     "lum_p10_p90": [
+      151,
+      167
+     ],
+     "darkest40pct_Lab": [
+      64.1,
+      -0.4,
+      -17.3
+     ],
+     "brightest40pct_Lab": [
+      67.6,
+      -0.5,
+      -15.4
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "側線下の小円斑(径約10px)。青(a-1, b-16.5)。マークより小さいが色はより青い。"
+    },
+    {
+     "id": "black_spot_a",
+     "region": "black_spot_core",
+     "rect": [
+      409,
+      187,
+      414,
+      192
+     ],
+     "n_px": 25,
+     "median_sRGB": [
+      30,
+      18,
+      6
+     ],
+     "hex": "#1e1206",
+     "Lab": [
+      6.5,
+      4.0,
+      7.4
+     ],
+     "chroma": 8.4,
+     "hue_deg": 61.0,
+     "lum_p10_p90": [
+      16,
+      28
+     ],
+     "darkest40pct_Lab": [
+      5.3,
+      2.9,
+      7.0
+     ],
+     "brightest40pct_Lab": [
+      8.9,
+      4.1,
+      9.3
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "背の黒点(横長の短楕円、約8x5px)の最暗部。(30,18,6) Lab(6.5,4,7)=褐黒。"
+    },
+    {
+     "id": "black_spot_b",
+     "region": "black_spot_core",
+     "rect": [
+      439,
+      190,
+      444,
+      195
+     ],
+     "n_px": 25,
+     "median_sRGB": [
+      26,
+      19,
+      11
+     ],
+     "hex": "#1a130b",
+     "Lab": [
+      6.4,
+      1.8,
+      5.1
+     ],
+     "chroma": 5.4,
+     "hue_deg": 70.0,
+     "lum_p10_p90": [
+      11,
+      36
+     ],
+     "darkest40pct_Lab": [
+      3.8,
+      1.5,
+      5.5
+     ],
+     "brightest40pct_Lab": [
+      11.9,
+      2.3,
+      6.2
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "背の黒点の別個。(26,19,11) Lab(6.4,1.8,5.1)=褐黒。"
+    },
+    {
+     "id": "belly_a",
+     "region": "belly",
+     "rect": [
+      410,
+      310,
+      440,
+      322
+     ],
+     "n_px": 360,
+     "median_sRGB": [
+      213,
+      225,
+      222
+     ],
+     "hex": "#d5e1de",
+     "Lab": [
+      88.6,
+      -4.6,
+      0.1
+     ],
+     "chroma": 4.6,
+     "hue_deg": 179.0,
+     "lum_p10_p90": [
+      202,
+      234
+     ],
+     "darkest40pct_Lab": [
+      86.1,
+      -4.6,
+      1.2
+     ],
+     "brightest40pct_Lab": [
+      91.2,
+      -3.4,
+      -4.2
+     ],
+     "quality": "mixed_specular",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "腹縁の白帯。青みの白(a-4.6, b0)。水面反射(空)で青白く、実際の腹色より冷たい可能性。"
+    },
+    {
+     "id": "belly_b",
+     "region": "belly",
+     "rect": [
+      470,
+      350,
+      500,
+      365
+     ],
+     "n_px": 450,
+     "median_sRGB": [
+      206,
+      223,
+      223
+     ],
+     "hex": "#cedfdf",
+     "Lab": [
+      87.6,
+      -5.7,
+      -1.9
+     ],
+     "chroma": 6.0,
+     "hue_deg": 199.0,
+     "lum_p10_p90": [
+      178,
+      227
+     ],
+     "darkest40pct_Lab": [
+      83.5,
+      -5.6,
+      -1.4
+     ],
+     "brightest40pct_Lab": [
+      89.4,
+      -5.3,
+      -1.8
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "体側下半〜腹縁。青白(a-5.7, b-1.9)。"
+    },
+    {
+     "id": "head_dorsal",
+     "region": "head_dorsal",
+     "rect": [
+      750,
+      440,
+      775,
+      455
+     ],
+     "n_px": 375,
+     "median_sRGB": [
+      75,
+      65,
+      40
+     ],
+     "hex": "#4b4128",
+     "Lab": [
+      27.9,
+      0.2,
+      16.8
+     ],
+     "chroma": 16.8,
+     "hue_deg": 89.0,
+     "lum_p10_p90": [
+      55,
+      136
+     ],
+     "darkest40pct_Lab": [
+      23.7,
+      1.4,
+      17.6
+     ],
+     "brightest40pct_Lab": [
+      49.1,
+      1.5,
+      14.1
+     ],
+     "quality": "shadowed",
+     "flags": [],
+     "comment": "吻〜頭部背面。暗いオリーブ褐(a0, b+17)。濡れた砂礫の褐色の反射が混じる。"
+    },
+    {
+     "id": "opercle_a",
+     "region": "opercle",
+     "rect": [
+      640,
+      415,
+      670,
+      440
+     ],
+     "n_px": 750,
+     "median_sRGB": [
+      210,
+      211,
+      227
+     ],
+     "hex": "#d2d3e3",
+     "Lab": [
+      84.9,
+      2.7,
+      -8.0
+     ],
+     "chroma": 8.4,
+     "hue_deg": 289.0,
+     "lum_p10_p90": [
+      189,
+      228
+     ],
+     "darkest40pct_Lab": [
+      79.4,
+      2.2,
+      -3.2
+     ],
+     "brightest40pct_Lab": [
+      88.8,
+      2.8,
+      -8.4
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "鰓蓋。ラベンダー白(a+2.7, b-8)。強い水膜の反射で色は光沢依存。"
+    },
+    {
+     "id": "pectoral_a",
+     "region": "pectoral_membrane",
+     "rect": [
+      568,
+      430,
+      590,
+      460
+     ],
+     "n_px": 660,
+     "median_sRGB": [
+      185,
+      166,
+      119
+     ],
+     "hex": "#b9a677",
+     "Lab": [
+      68.7,
+      -0.1,
+      26.9
+     ],
+     "chroma": 26.9,
+     "hue_deg": 90.0,
+     "lum_p10_p90": [
+      151,
+      185
+     ],
+     "darkest40pct_Lab": [
+      64.5,
+      1.2,
+      28.2
+     ],
+     "brightest40pct_Lab": [
+      73.6,
+      -1.3,
+      25.6
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "胸鰭(丸い扇形、縞状の鰭条)。淡い黄褐〜カーキ(a0, b+27)。鮮黄ではなく彩度は中程度。"
+    },
+    {
+     "id": "pelvic_a",
+     "region": "pelvic",
+     "rect": [
+      362,
+      340,
+      385,
+      370
+     ],
+     "n_px": 690,
+     "median_sRGB": [
+      117,
+      107,
+      95
+     ],
+     "hex": "#756b5f",
+     "Lab": [
+      45.8,
+      1.7,
+      8.1
+     ],
+     "chroma": 8.3,
+     "hue_deg": 78.0,
+     "lum_p10_p90": [
+      93,
+      126
+     ],
+     "darkest40pct_Lab": [
+      42.2,
+      1.2,
+      9.6
+     ],
+     "brightest40pct_Lab": [
+      50.5,
+      1.5,
+      7.3
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "腹鰭(ほぼ透明で縞状の鰭条)。背景の砂礫の褐色が透けてL46と暗い。鰭自体は無色〜白(catalog)。色は参考にならない。"
+    },
+    {
+     "id": "anal_a",
+     "region": "anal",
+     "rect": [
+      262,
+      255,
+      285,
+      270
+     ],
+     "n_px": 345,
+     "median_sRGB": [
+      209,
+      208,
+      216
+     ],
+     "hex": "#d1d0d8",
+     "Lab": [
+      83.8,
+      1.8,
+      -3.8
+     ],
+     "chroma": 4.2,
+     "hue_deg": 295.0,
+     "lum_p10_p90": [
+      158,
+      237
+     ],
+     "darkest40pct_Lab": [
+      71.2,
+      2.5,
+      -2.9
+     ],
+     "brightest40pct_Lab": [
+      90.7,
+      2.7,
+      -6.2
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "臀鰭(透明、前縁白)。青みがかった白(b-4)。背景の透過あり。"
+    },
+    {
+     "id": "dorsal_fin_b",
+     "region": "dorsal_fin",
+     "rect": [
+      455,
+      182,
+      490,
+      194
+     ],
+     "n_px": 420,
+     "median_sRGB": [
+      68,
+      65,
+      56
+     ],
+     "hex": "#444138",
+     "Lab": [
+      27.6,
+      -0.6,
+      6.0
+     ],
+     "chroma": 6.0,
+     "hue_deg": 95.0,
+     "lum_p10_p90": [
+      52,
+      79
+     ],
+     "darkest40pct_Lab": [
+      24.0,
+      -0.6,
+      6.1
+     ],
+     "brightest40pct_Lab": [
+      31.5,
+      -0.6,
+      5.8
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "畳んだ背鰭(体の背に沿う暗灰〜暗褐、基部に黒点列)。Lab(27.6,-0.6,6)=暗い無彩色寄りのオリーブ灰。"
+    },
+    {
+     "id": "adipose_b",
+     "region": "adipose_fin",
+     "rect": [
+      276,
+      137,
+      288,
+      146
+     ],
+     "n_px": 108,
+     "median_sRGB": [
+      126,
+      112,
+      110
+     ],
+     "hex": "#7e706e",
+     "Lab": [
+      48.4,
+      5.1,
+      3.1
+     ],
+     "chroma": 6.0,
+     "hue_deg": 31.0,
+     "lum_p10_p90": [
+      104,
+      130
+     ],
+     "darkest40pct_Lab": [
+      45.6,
+      4.7,
+      6.1
+     ],
+     "brightest40pct_Lab": [
+      52.8,
+      3.4,
+      1.2
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "脂鰭(灰紫の小さな楕円、半透明、縁取り無し)。灰紫褐(a+5, b+3, L48)。"
+    },
+    {
+     "id": "caudal_upper_lobe",
+     "region": "caudal_fin_base",
+     "rect": [
+      170,
+      110,
+      195,
+      140
+     ],
+     "n_px": 750,
+     "median_sRGB": [
+      111,
+      101,
+      105
+     ],
+     "hex": "#6f6569",
+     "Lab": [
+      43.8,
+      4.7,
+      -0.8
+     ],
+     "chroma": 4.8,
+     "hue_deg": 350.0,
+     "lum_p10_p90": [
+      93,
+      129
+     ],
+     "darkest40pct_Lab": [
+      40.9,
+      4.4,
+      1.6
+     ],
+     "brightest40pct_Lab": [
+      49.9,
+      3.5,
+      -1.9
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "尾鰭上葉〜基部(スレート灰紫、半透明で背景の褐色が混じる)。無彩色に近い(a+4.7, b-0.8, L44)。"
+    },
+    {
+     "id": "caudal_lower_lobe",
+     "region": "caudal_fin_base",
+     "rect": [
+      160,
+      160,
+      200,
+      190
+     ],
+     "n_px": 1200,
+     "median_sRGB": [
+      126,
+      121,
+      134
+     ],
+     "hex": "#7e7986",
+     "Lab": [
+      51.6,
+      4.5,
+      -6.4
+     ],
+     "chroma": 7.8,
+     "hue_deg": 305.0,
+     "lum_p10_p90": [
+      90,
+      197
+     ],
+     "darkest40pct_Lab": [
+      41.9,
+      5.8,
+      -4.9
+     ],
+     "brightest40pct_Lab": [
+      75.2,
+      3.9,
+      -3.2
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "尾鰭下葉〜基部。灰紫(L51.6, b-6.4)だが白い体側も一部混入(p90=197)。"
+    },
+    {
+     "id": "pupil",
+     "region": "pupil",
+     "rect": [
+      726,
+      463,
+      735,
+      470
+     ],
+     "n_px": 63,
+     "median_sRGB": [
+      16,
+      26,
+      39
+     ],
+     "hex": "#101a27",
+     "Lab": [
+      9.0,
+      0.1,
+      -10.3
+     ],
+     "chroma": 10.3,
+     "hue_deg": 271.0,
+     "lum_p10_p90": [
+      10,
+      83
+     ],
+     "darkest40pct_Lab": [
+      3.9,
+      0.2,
+      -5.0
+     ],
+     "brightest40pct_Lab": [
+      20.2,
+      0.6,
+      -9.9
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "瞳孔(青黒)。眼径約22pxと小さく、中央値(16,26,39) Lab(9,0,-10)で青みの黒。キャッチライトを避けた位置。"
+    },
+    {
+     "id": "ref_pale_stone",
+     "region": "reference",
+     "rect": [
+      940,
+      40,
+      1000,
+      110
+     ],
+     "n_px": 4200,
+     "median_sRGB": [
+      229,
+      229,
+      201
+     ],
+     "hex": "#e5e5c9",
+     "Lab": [
+      90.3,
+      -4.7,
+      13.7
+     ],
+     "chroma": 14.5,
+     "hue_deg": 109.0,
+     "lum_p10_p90": [
+      208,
+      237
+     ],
+     "darkest40pct_Lab": [
+      86.8,
+      -4.4,
+      13.9
+     ],
+     "brightest40pct_Lab": [
+      92.5,
+      -4.2,
+      12.1
+     ],
+     "quality": "reference",
+     "flags": [],
+     "comment": "右上の淡色の丸石(水膜越し)。(229,229,201) Lab(90,-4.7,+13.7)で黄寄り。石自体が淡黄の可能性もあり中性基準としては弱い。"
+    }
+   ]
+  },
+  "p033": {
+   "source": {
+    "host": "ameblo.jp",
+    "url": "https://ameblo.jp/makotoyamame/entry-12626540773.html",
+    "image_size_px": [
+     1280,
+     721
+    ]
+   },
+   "subject": {
+    "catalog_species_ident": "yamame (conf 0.8)",
+    "life_stage": "adult_nonspawning (catalog)",
+    "context": "ground (濡れた礫の上、浅い水膜)",
+    "view": "lateral_left (頭は左下・尾は右上、体軸は約27度の斜め、近接俯瞰でロール約30度)",
+    "fish_definition": "単独個体(同ページのp034は別個体)",
+    "my_note": "口を開いた大型の個体。体側に青灰の大型パーマーク約11本と下半の小円斑、背は暗褐に黒点。体側の地色はクリーム〜淡桃で、パーマーク間に桃〜サーモンのびまん性の染み(連続した赤帯ではない)、尾柄側で橙桃が強い。胸鰭は鮮黄(C71)、尾鰭下縁は鮮橙(C58)。鰓蓋後方に径約5pxの橙点が1個のみで朱点列はなし。"
+   },
+   "white_balance_cast": "ほぼ中性〜わずかに冷色。濡れた淡色の丸石(185,203,206)がa-5.5, b-3の弱い青緑寄りで、頬(232,231,234)と腹(231,233,221)はほぼ無彩色なので、体の暖色(桃・サーモン・黄・橙)は被りではなく実色と見てよい。ただし彩度とシャープのHDR調強調が強く、鱗の点状ハイライト(モアレ)が背・体側に出る。",
+   "exposure": "やや明るめ。腹・頬・体側下半は輝度p90=238-243で白に近いが飽和(255)はしていない。背縁は黒褐でL≈30。鰭(特に尾鰭・背鰭・臀鰭)は焦点外の暈けで背景の礫が透ける。",
+   "reliability": "med",
+   "reliability_reason": "自然光でWBが中性に近く、体の主要部(背・体側・腹・頭・胸鰭・尾鰭下縁)の絶対色は使える。ただし彩度強調と濡れたハイライトによりパーマークと桃の彩度/コントラストはやや強め。背鰭・臀鰭・尾鰭基部は焦点外+背景透過で下限〜参考値。",
+   "usable_for": [
+    "背(黒褐)・体側(クリーム〜淡桃)・腹(白)の明度比",
+    "パーマーク(青灰)と地色(桃〜クリーム)のΔL/Δa/Δb",
+    "体側の桃〜サーモンがパーマーク間に出る位置",
+    "胸鰭の鮮黄の絶対色",
+    "尾鰭下縁の鮮橙/赤橙の縁取り",
+    "虹彩の金色リングと黒い瞳孔",
+    "背の黒点の黒さ",
+    "鰓蓋後方の橙点"
+   ],
+   "not_usable_for": [
+    "背鰭・脂鰭・臀鰭・腹鰭の絶対色(半透明+背景透過+焦点外)",
+    "尾鰭基部の色(背景の灰が混入)",
+    "頭部上面の色(影の暗褐の帯のみ)"
+   ],
+   "not_visible_or_not_measured": [
+    "パーマークの最濃部は鱗モアレで淡く出る(darkest40%を併記)",
+    "朱点列(なし)"
+   ],
+   "relative": {
+    "ratio_definitions": {
+     "dorsal": {
+      "samples": [
+       "dorsal_back_a",
+       "dorsal_back_b"
+      ],
+      "Lab_mean": [
+       31.3,
+       6.6,
+       13.1
+      ]
+     },
+     "flank_upper": {
+      "samples": [
+       "flank_ground_pink_a",
+       "flank_ground_pink_c"
+      ],
+      "Lab_mean": [
+       73.0,
+       10.2,
+       7.0
+      ]
+     },
+     "flank_lower": {
+      "samples": [
+       "flank_ground_cream_mid",
+       "flank_lower_cream"
+      ],
+      "Lab_mean": [
+       88.5,
+       0.4,
+       6.2
+      ]
+     },
+     "belly": {
+      "samples": [
+       "belly_a"
+      ],
+      "Lab_mean": [
+       91.9,
+       -2.8,
+       5.6
+      ]
+     }
+    },
+    "dorsal_to_flank_upper": {
+     "L_star_ratio": 0.43,
+     "linear_Y_ratio": 0.15
+    },
+    "dorsal_to_flank_lower": {
+     "L_star_ratio": 0.35,
+     "linear_Y_ratio": 0.09
+    },
+    "ventral_to_flank_upper": {
+     "L_star_ratio": 1.26,
+     "linear_Y_ratio": 1.78
+    },
+    "ventral_to_flank_lower": {
+     "L_star_ratio": 1.04,
+     "linear_Y_ratio": 1.1
+    },
+    "flank_upper_to_lower_L_gap": 15.5,
+    "parr_mark_contrast": [
+     {
+      "pair": "mark_a_vs_ground",
+      "mark_samples": [
+       "parr_mark_a"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_a_right",
+        "rect": [
+         800,
+         262,
+         815,
+         276
+        ],
+        "median_sRGB": [
+         237,
+         230,
+         222
+        ],
+        "Lab": [
+         91.6,
+         0.9,
+         5.0
+        ]
+       },
+       {
+        "id": "g_a_left",
+        "rect": [
+         762,
+         285,
+         777,
+         299
+        ],
+        "median_sRGB": [
+         229,
+         217,
+         209
+        ],
+        "Lab": [
+         87.4,
+         2.8,
+         5.4
+        ]
+       }
+      ],
+      "mark_Lab": [
+       75.7,
+       5.1,
+       -6.2
+      ],
+      "ground_Lab_mean": [
+       89.5,
+       1.8,
+       5.2
+      ],
+      "dL": -13.8,
+      "da": 3.3,
+      "db": -11.4,
+      "dE76": 18.2,
+      "dL_using_darkest40pct_mark": -20.1,
+      "mark_darkest40pct_Lab": [
+       69.4,
+       4.8,
+       -6.4
+      ]
+     },
+     {
+      "pair": "mark_b_vs_ground",
+      "mark_samples": [
+       "parr_mark_b"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_b_right",
+        "rect": [
+         740,
+         300,
+         755,
+         315
+        ],
+        "median_sRGB": [
+         227,
+         215,
+         203
+        ],
+        "Lab": [
+         86.6,
+         2.1,
+         7.4
+        ]
+       },
+       {
+        "id": "g_b_left",
+        "rect": [
+         692,
+         300,
+         707,
+         315
+        ],
+        "median_sRGB": [
+         212,
+         192,
+         190
+        ],
+        "Lab": [
+         79.3,
+         6.7,
+         3.6
+        ]
+       }
+      ],
+      "mark_Lab": [
+       70.6,
+       5.3,
+       -5.6
+      ],
+      "ground_Lab_mean": [
+       82.9,
+       4.4,
+       5.5
+      ],
+      "dL": -12.3,
+      "da": 0.9,
+      "db": -11.1,
+      "dE76": 16.6,
+      "dL_using_darkest40pct_mark": -17.9,
+      "mark_darkest40pct_Lab": [
+       65.0,
+       5.4,
+       -5.7
+      ]
+     },
+     {
+      "pair": "mark_c_vs_ground",
+      "mark_samples": [
+       "parr_mark_c"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_c_right",
+        "rect": [
+         680,
+         352,
+         695,
+         366
+        ],
+        "median_sRGB": [
+         214,
+         202,
+         198
+        ],
+        "Lab": [
+         82.2,
+         3.4,
+         3.7
+        ]
+       },
+       {
+        "id": "g_c_left",
+        "rect": [
+         625,
+         350,
+         640,
+         366
+        ],
+        "median_sRGB": [
+         204,
+         187,
+         188
+        ],
+        "Lab": [
+         77.3,
+         6.4,
+         1.7
+        ]
+       }
+      ],
+      "mark_Lab": [
+       66.0,
+       3.7,
+       -11.0
+      ],
+      "ground_Lab_mean": [
+       79.8,
+       4.9,
+       2.7
+      ],
+      "dL": -13.8,
+      "da": -1.2,
+      "db": -13.7,
+      "dE76": 19.5,
+      "dL_using_darkest40pct_mark": -20.7,
+      "mark_darkest40pct_Lab": [
+       59.1,
+       4.5,
+       -11.3
+      ]
+     },
+     {
+      "pair": "mark_d_vs_ground",
+      "mark_samples": [
+       "parr_mark_d"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_d_left",
+        "rect": [
+         555,
+         395,
+         568,
+         410
+        ],
+        "median_sRGB": [
+         211,
+         188,
+         192
+        ],
+        "Lab": [
+         78.2,
+         8.8,
+         1.0
+        ]
+       },
+       {
+        "id": "g_d_right",
+        "rect": [
+         612,
+         385,
+         626,
+         400
+        ],
+        "median_sRGB": [
+         210,
+         188,
+         188
+        ],
+        "Lab": [
+         77.9,
+         8.1,
+         2.4
+        ]
+       }
+      ],
+      "mark_Lab": [
+       66.8,
+       3.4,
+       -6.7
+      ],
+      "ground_Lab_mean": [
+       78.1,
+       8.4,
+       1.7
+      ],
+      "dL": -11.3,
+      "da": -5.0,
+      "db": -8.4,
+      "dE76": 14.9,
+      "dL_using_darkest40pct_mark": -19.7,
+      "mark_darkest40pct_Lab": [
+       58.4,
+       3.4,
+       -7.8
+      ]
+     },
+     {
+      "pair": "mark_tail_a_vs_ground",
+      "mark_samples": [
+       "parr_mark_tail_a"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_tail_left",
+        "rect": [
+         925,
+         118,
+         937,
+         134
+        ],
+        "median_sRGB": [
+         185,
+         147,
+         107
+        ],
+        "Lab": [
+         63.5,
+         8.9,
+         26.6
+        ]
+       },
+       {
+        "id": "g_tail_right",
+        "rect": [
+         968,
+         126,
+         982,
+         138
+        ],
+        "median_sRGB": [
+         213,
+         196,
+         166
+        ],
+        "Lab": [
+         79.8,
+         1.1,
+         17.5
+        ]
+       }
+      ],
+      "mark_Lab": [
+       51.7,
+       -0.3,
+       -0.4
+      ],
+      "ground_Lab_mean": [
+       71.7,
+       5.0,
+       22.1
+      ],
+      "dL": -20.0,
+      "da": -5.3,
+      "db": -22.5,
+      "dE76": 30.6,
+      "dL_using_darkest40pct_mark": -23.7,
+      "mark_darkest40pct_Lab": [
+       48.0,
+       -0.2,
+       -0.7
+      ]
+     },
+     {
+      "pair": "round_spot_a_vs_ground",
+      "mark_samples": [
+       "round_spot_a"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_spot_a",
+        "rect": [
+         795,
+         322,
+         810,
+         337
+        ],
+        "median_sRGB": [
+         233,
+         231,
+         218
+        ],
+        "Lab": [
+         91.5,
+         -1.6,
+         6.6
+        ]
+       }
+      ],
+      "mark_Lab": [
+       72.0,
+       1.7,
+       -5.5
+      ],
+      "ground_Lab_mean": [
+       91.5,
+       -1.6,
+       6.6
+      ],
+      "dL": -19.5,
+      "da": 3.3,
+      "db": -12.1,
+      "dE76": 23.2,
+      "dL_using_darkest40pct_mark": -25.4,
+      "mark_darkest40pct_Lab": [
+       66.1,
+       2.0,
+       -6.3
+      ]
+     }
+    ],
+    "head_dorsal_to_cheek": {
+     "L_star_ratio": 0.29,
+     "linear_Y_ratio": 0.06
+    },
+    "fin_chroma_overview": {
+     "pectoral_yellow": {
+      "region": "pectoral_membrane",
+      "Lab": [
+       69.9,
+       7.6,
+       70.9
+      ],
+      "chroma": 71.3,
+      "hue_deg": 84.0,
+      "quality": "good"
+     },
+     "pelvic_tan": {
+      "region": "pelvic",
+      "Lab": [
+       55.9,
+       5.9,
+       28.8
+      ],
+      "chroma": 29.4,
+      "hue_deg": 78.0,
+      "quality": "mixed_translucent"
+     },
+     "anal_membrane": {
+      "region": "anal",
+      "Lab": [
+       65.8,
+       -0.4,
+       -14.3
+      ],
+      "chroma": 14.3,
+      "hue_deg": 269.0,
+      "quality": "mixed_translucent"
+     },
+     "anal_ray_tan": {
+      "region": "anal",
+      "Lab": [
+       61.8,
+       1.3,
+       8.5
+      ],
+      "chroma": 8.6,
+      "hue_deg": 81.0,
+      "quality": "mixed_translucent"
+     },
+     "dorsal_fin_tip_orange": {
+      "region": "dorsal_fin",
+      "Lab": [
+       58.1,
+       7.8,
+       15.5
+      ],
+      "chroma": 17.3,
+      "hue_deg": 63.0,
+      "quality": "mixed_translucent"
+     },
+     "dorsal_fin_body": {
+      "region": "dorsal_fin",
+      "Lab": [
+       42.0,
+       0.1,
+       -12.2
+      ],
+      "chroma": 12.2,
+      "hue_deg": 270.0,
+      "quality": "mixed_translucent"
+     },
+     "adipose_olive": {
+      "region": "adipose_fin",
+      "Lab": [
+       63.4,
+       -4.3,
+       33.0
+      ],
+      "chroma": 33.3,
+      "hue_deg": 97.0,
+      "quality": "small_patch"
+     },
+     "caudal_fin_base": {
+      "region": "caudal_fin_base",
+      "Lab": [
+       48.9,
+       0.2,
+       0.7
+      ],
+      "chroma": 0.7,
+      "hue_deg": 75.0,
+      "quality": "mixed_translucent"
+     },
+     "caudal_margin_orange": {
+      "region": "caudal_fin_margin",
+      "Lab": [
+       63.4,
+       21.4,
+       53.7
+      ],
+      "chroma": 57.8,
+      "hue_deg": 68.0,
+      "quality": "good"
+     },
+     "caudal_margin_red": {
+      "region": "caudal_fin_margin",
+      "Lab": [
+       47.3,
+       21.4,
+       35.9
+      ],
+      "chroma": 41.7,
+      "hue_deg": 59.0,
+      "quality": "mixed_translucent"
+     }
+    },
+    "ratio_caveat": "背(a,b)は鱗モアレで中央値がやや明るく、実際の背縁帯は暗い(darkest40%でL24-26)。体側上半=パーマーク間の桃染み(L69-77)、下半=クリーム〜白(L85-92)。"
+   },
+   "samples": [
+    {
+     "id": "dorsal_back_a",
+     "region": "dorsal_back",
+     "rect": [
+      560,
+      252,
+      590,
+      272
+     ],
+     "n_px": 600,
+     "median_sRGB": [
+      89,
+      66,
+      45
+     ],
+     "hex": "#59422d",
+     "Lab": [
+      29.9,
+      6.9,
+      16.6
+     ],
+     "chroma": 18.0,
+     "hue_deg": 67.0,
+     "lum_p10_p90": [
+      48,
+      102
+     ],
+     "darkest40pct_Lab": [
+      23.7,
+      5.4,
+      15.2
+     ],
+     "brightest40pct_Lab": [
+      37.9,
+      7.7,
+      16.4
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "背縁の暗褐色の帯(側線より上、パーマーク無し)。黒点が少数(面積の約5%)混入。鱗の白い点状ハイライトも混じるので中央値は実際の色よりやや明るい側。"
+    },
+    {
+     "id": "dorsal_back_b",
+     "region": "dorsal_back",
+     "rect": [
+      470,
+      330,
+      495,
+      350
+     ],
+     "n_px": 500,
+     "median_sRGB": [
+      92,
+      73,
+      62
+     ],
+     "hex": "#5c493e",
+     "Lab": [
+      32.7,
+      6.2,
+      9.6
+     ],
+     "chroma": 11.5,
+     "hue_deg": 57.0,
+     "lum_p10_p90": [
+      54,
+      124
+     ],
+     "darkest40pct_Lab": [
+      25.8,
+      5.2,
+      9.5
+     ],
+     "brightest40pct_Lab": [
+      46.0,
+      4.6,
+      5.5
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "背縁帯の別地点(頭に近い側)。灰みの暗褐。a_aより彩度が低い(b+9.6 vs +16.6)。"
+    },
+    {
+     "id": "flank_ground_pink_a",
+     "region": "flank_ground",
+     "rect": [
+      652,
+      255,
+      672,
+      275
+     ],
+     "n_px": 400,
+     "median_sRGB": [
+      196,
+      162,
+      148
+     ],
+     "hex": "#c4a294",
+     "Lab": [
+      69.3,
+      10.4,
+      12.0
+     ],
+     "chroma": 15.8,
+     "hue_deg": 49.0,
+     "lum_p10_p90": [
+      148,
+      195
+     ],
+     "darkest40pct_Lab": [
+      64.0,
+      10.4,
+      12.7
+     ],
+     "brightest40pct_Lab": [
+      75.9,
+      10.1,
+      11.7
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "体側上半のパーマーク間地色。桃〜サーモンのびまん性の染み(a+10, b+12, 色相49度)。体側の最も赤みの強い領域の一つ。"
+    },
+    {
+     "id": "flank_ground_pink_c",
+     "region": "flank_ground",
+     "rect": [
+      570,
+      345,
+      595,
+      368
+     ],
+     "n_px": 575,
+     "median_sRGB": [
+      210,
+      183,
+      186
+     ],
+     "hex": "#d2b7ba",
+     "Lab": [
+      76.7,
+      10.1,
+      2.0
+     ],
+     "chroma": 10.3,
+     "hue_deg": 11.0,
+     "lum_p10_p90": [
+      169,
+      216
+     ],
+     "darkest40pct_Lab": [
+      71.8,
+      9.7,
+      1.3
+     ],
+     "brightest40pct_Lab": [
+      83.0,
+      9.7,
+      1.6
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "体側前半のパーマーク間地色。ピンク寄り(a+10, b+2, 色相11度)で黄味が少ない冷たい桃〜ラベンダー桃。"
+    },
+    {
+     "id": "lateral_band_b",
+     "region": "lateral_band",
+     "rect": [
+      802,
+      168,
+      828,
+      188
+     ],
+     "n_px": 520,
+     "median_sRGB": [
+      168,
+      155,
+      154
+     ],
+     "hex": "#a89b9a",
+     "Lab": [
+      65.0,
+      4.4,
+      2.2
+     ],
+     "chroma": 4.9,
+     "hue_deg": 26.0,
+     "lum_p10_p90": [
+      108,
+      184
+     ],
+     "darkest40pct_Lab": [
+      54.4,
+      5.0,
+      -2.1
+     ],
+     "brightest40pct_Lab": [
+      72.0,
+      6.9,
+      3.7
+     ],
+     "quality": "mixed_shadow",
+     "flags": [],
+     "comment": "体側後半の側線付近(桃色の染み)。鱗モアレと背縁寄りの影でp10/p90が広く、L=65はやや過小。桃色味は弱い(a+4)。"
+    },
+    {
+     "id": "flank_ground_cream_mid",
+     "region": "flank_ground",
+     "rect": [
+      740,
+      290,
+      765,
+      310
+     ],
+     "n_px": 500,
+     "median_sRGB": [
+      223,
+      210,
+      202
+     ],
+     "hex": "#dfd2ca",
+     "Lab": [
+      85.0,
+      3.1,
+      5.6
+     ],
+     "chroma": 6.4,
+     "hue_deg": 61.0,
+     "lum_p10_p90": [
+      196,
+      228
+     ],
+     "darkest40pct_Lab": [
+      81.4,
+      3.2,
+      5.6
+     ],
+     "brightest40pct_Lab": [
+      88.8,
+      2.4,
+      5.3
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "体側中央〜下半の地色。淡いクリーム〜ベージュ(a+3, b+6)。桃の染みは薄れ、パーマークの終端付近。"
+    },
+    {
+     "id": "flank_lower_cream",
+     "region": "flank_ground",
+     "rect": [
+      790,
+      330,
+      830,
+      350
+     ],
+     "n_px": 800,
+     "median_sRGB": [
+      233,
+      233,
+      219
+     ],
+     "hex": "#e9e9db",
+     "Lab": [
+      92.0,
+      -2.4,
+      6.8
+     ],
+     "chroma": 7.2,
+     "hue_deg": 110.0,
+     "lum_p10_p90": [
+      217,
+      241
+     ],
+     "darkest40pct_Lab": [
+      89.5,
+      -2.9,
+      8.3
+     ],
+     "brightest40pct_Lab": [
+      94.1,
+      -2.4,
+      5.7
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "体側下半(腹縁の近く)の地色。クリーム白(a-2, b+7)。小円斑が散在する領域で、斑を避けた。"
+    },
+    {
+     "id": "parr_mark_a",
+     "region": "parr_mark_core",
+     "rect": [
+      781,
+      270,
+      795,
+      284
+     ],
+     "n_px": 196,
+     "median_sRGB": [
+      191,
+      184,
+      198
+     ],
+     "hex": "#bfb8c6",
+     "Lab": [
+      75.7,
+      5.1,
+      -6.2
+     ],
+     "chroma": 8.0,
+     "hue_deg": 309.0,
+     "lum_p10_p90": [
+      164,
+      218
+     ],
+     "darkest40pct_Lab": [
+      69.4,
+      4.8,
+      -6.4
+     ],
+     "brightest40pct_Lab": [
+      83.2,
+      5.3,
+      -7.0
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "パーマーク(体側中央後半、側線上)。青灰〜ラベンダー灰(a+5, b-6)。鱗ハイライトで縁が溶けるため中央値は実際より淡い。"
+    },
+    {
+     "id": "parr_mark_b",
+     "region": "parr_mark_core",
+     "rect": [
+      717,
+      305,
+      732,
+      320
+     ],
+     "n_px": 225,
+     "median_sRGB": [
+      178,
+      170,
+      183
+     ],
+     "hex": "#b2aab7",
+     "Lab": [
+      70.6,
+      5.3,
+      -5.6
+     ],
+     "chroma": 7.7,
+     "hue_deg": 313.0,
+     "lum_p10_p90": [
+      152,
+      200
+     ],
+     "darkest40pct_Lab": [
+      65.0,
+      5.4,
+      -5.7
+     ],
+     "brightest40pct_Lab": [
+      76.8,
+      5.6,
+      -5.7
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "パーマーク(体側中央)。灰青紫(a+5, b-6)。"
+    },
+    {
+     "id": "parr_mark_c",
+     "region": "parr_mark_core",
+     "rect": [
+      652,
+      350,
+      667,
+      366
+     ],
+     "n_px": 240,
+     "median_sRGB": [
+      158,
+      159,
+      180
+     ],
+     "hex": "#9e9fb4",
+     "Lab": [
+      66.0,
+      3.7,
+      -11.0
+     ],
+     "chroma": 11.6,
+     "hue_deg": 289.0,
+     "lum_p10_p90": [
+      135,
+      193
+     ],
+     "darkest40pct_Lab": [
+      59.1,
+      4.5,
+      -11.3
+     ],
+     "brightest40pct_Lab": [
+      73.6,
+      4.2,
+      -10.3
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "パーマーク(体側中央前寄り)。青灰(a+4, b-11)。本写真で最も青みの強いマーク。"
+    },
+    {
+     "id": "parr_mark_d",
+     "region": "parr_mark_core",
+     "rect": [
+      576,
+      395,
+      590,
+      410
+     ],
+     "n_px": 210,
+     "median_sRGB": [
+      163,
+      161,
+      174
+     ],
+     "hex": "#a3a1ae",
+     "Lab": [
+      66.8,
+      3.4,
+      -6.7
+     ],
+     "chroma": 7.5,
+     "hue_deg": 297.0,
+     "lum_p10_p90": [
+      132,
+      199
+     ],
+     "darkest40pct_Lab": [
+      58.4,
+      3.4,
+      -7.8
+     ],
+     "brightest40pct_Lab": [
+      76.3,
+      4.7,
+      -7.2
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "パーマーク(前半・胸鰭の上)。青灰紫(a+3, b-7)。"
+    },
+    {
+     "id": "parr_mark_tail_a",
+     "region": "parr_mark_core",
+     "rect": [
+      944,
+      120,
+      955,
+      134
+     ],
+     "n_px": 154,
+     "median_sRGB": [
+      122,
+      124,
+      124
+     ],
+     "hex": "#7a7c7c",
+     "Lab": [
+      51.7,
+      -0.3,
+      -0.4
+     ],
+     "chroma": 0.5,
+     "hue_deg": 236.0,
+     "lum_p10_p90": [
+      110,
+      156
+     ],
+     "darkest40pct_Lab": [
+      48.0,
+      -0.2,
+      -0.7
+     ],
+     "brightest40pct_Lab": [
+      59.1,
+      0.4,
+      0.1
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "尾柄側のパーマーク。ほぼ完全な無彩色の灰(a0, b0, L52)。周囲の地色が暖色(橙桃)なので対比は大きい。"
+    },
+    {
+     "id": "round_spot_a",
+     "region": "parr_mark_core",
+     "rect": [
+      778,
+      325,
+      788,
+      336
+     ],
+     "n_px": 110,
+     "median_sRGB": [
+      175,
+      176,
+      186
+     ],
+     "hex": "#afb0ba",
+     "Lab": [
+      72.0,
+      1.7,
+      -5.5
+     ],
+     "chroma": 5.7,
+     "hue_deg": 287.0,
+     "lum_p10_p90": [
+      157,
+      194
+     ],
+     "darkest40pct_Lab": [
+      66.1,
+      2.0,
+      -6.3
+     ],
+     "brightest40pct_Lab": [
+      76.8,
+      1.5,
+      -4.0
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "側線下の小円斑(径約12px)。青灰(a+2, b-6)。マークより小さく淡い。"
+    },
+    {
+     "id": "black_spot_dorsal",
+     "region": "black_spot_core",
+     "rect": [
+      587,
+      232,
+      594,
+      239
+     ],
+     "n_px": 49,
+     "median_sRGB": [
+      34,
+      22,
+      7
+     ],
+     "hex": "#221607",
+     "Lab": [
+      8.4,
+      3.9,
+      9.8
+     ],
+     "chroma": 10.5,
+     "hue_deg": 68.0,
+     "lum_p10_p90": [
+      4,
+      56
+     ],
+     "darkest40pct_Lab": [
+      1.6,
+      1.9,
+      2.4
+     ],
+     "brightest40pct_Lab": [
+      21.4,
+      5.3,
+      15.9
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "背の黒点(径約7px)。中央値は(34,22,7)=L8。本物の黒に近い褐黒。黒点の最暗部(darkest40)はL1.6でほぼ純黒。"
+    },
+    {
+     "id": "belly_a",
+     "region": "belly",
+     "rect": [
+      700,
+      430,
+      740,
+      460
+     ],
+     "n_px": 1200,
+     "median_sRGB": [
+      231,
+      233,
+      221
+     ],
+     "hex": "#e7e9dd",
+     "Lab": [
+      91.9,
+      -2.8,
+      5.6
+     ],
+     "chroma": 6.2,
+     "hue_deg": 116.0,
+     "lum_p10_p90": [
+      225,
+      238
+     ],
+     "darkest40pct_Lab": [
+      90.5,
+      -2.9,
+      6.1
+     ],
+     "brightest40pct_Lab": [
+      93.3,
+      -2.8,
+      5.6
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "腹(胸鰭〜腹鰭間の腹面)。白〜クリーム白(a-3, b+6)。明るいが飽和(255)なし。"
+    },
+    {
+     "id": "head_dorsal",
+     "region": "head_dorsal",
+     "rect": [
+      250,
+      520,
+      280,
+      540
+     ],
+     "n_px": 600,
+     "median_sRGB": [
+      73,
+      60,
+      46
+     ],
+     "hex": "#493c2e",
+     "Lab": [
+      26.3,
+      3.3,
+      10.5
+     ],
+     "chroma": 11.0,
+     "hue_deg": 72.0,
+     "lum_p10_p90": [
+      43,
+      82
+     ],
+     "darkest40pct_Lab": [
+      19.4,
+      2.4,
+      17.6
+     ],
+     "brightest40pct_Lab": [
+      32.9,
+      2.0,
+      5.4
+     ],
+     "quality": "shadowed",
+     "flags": [],
+     "comment": "頭部背縁の暗褐色の帯。影と濡れた礫の反射の影響大。眼の上〜吻側の暗い縁取り。"
+    },
+    {
+     "id": "opercle_a",
+     "region": "opercle",
+     "rect": [
+      440,
+      490,
+      480,
+      530
+     ],
+     "n_px": 1600,
+     "median_sRGB": [
+      229,
+      217,
+      229
+     ],
+     "hex": "#e5d9e5",
+     "Lab": [
+      87.9,
+      6.2,
+      -4.4
+     ],
+     "chroma": 7.6,
+     "hue_deg": 325.0,
+     "lum_p10_p90": [
+      196,
+      235
+     ],
+     "darkest40pct_Lab": [
+      83.3,
+      7.5,
+      -2.3
+     ],
+     "brightest40pct_Lab": [
+      91.3,
+      4.0,
+      -4.6
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "鰓蓋(後縁寄りの広い面)。淡桃〜ラベンダー白(a+6, b-4)。金属光沢+淡紫の反射。"
+    },
+    {
+     "id": "cheek_a",
+     "region": "cheek",
+     "rect": [
+      370,
+      560,
+      410,
+      590
+     ],
+     "n_px": 1200,
+     "median_sRGB": [
+      232,
+      231,
+      234
+     ],
+     "hex": "#e8e7ea",
+     "Lab": [
+      91.8,
+      0.9,
+      -1.3
+     ],
+     "chroma": 1.6,
+     "hue_deg": 303.0,
+     "lum_p10_p90": [
+      214,
+      243
+     ],
+     "darkest40pct_Lab": [
+      88.0,
+      1.2,
+      -1.2
+     ],
+     "brightest40pct_Lab": [
+      94.7,
+      0.6,
+      -1.1
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "頬(眼の下〜後方)。ほぼ無彩色の白(L92, C1.6)。光沢でラベンダー味は弱い。"
+    },
+    {
+     "id": "orange_dot_gill",
+     "region": "red_or_orange_spot",
+     "rect": [
+      534,
+      462,
+      540,
+      469
+     ],
+     "n_px": 42,
+     "median_sRGB": [
+      216,
+      148,
+      92
+     ],
+     "hex": "#d8945c",
+     "Lab": [
+      66.9,
+      19.6,
+      39.6
+     ],
+     "chroma": 44.1,
+     "hue_deg": 64.0,
+     "lum_p10_p90": [
+      140,
+      182
+     ],
+     "darkest40pct_Lab": [
+      62.0,
+      18.8,
+      47.4
+     ],
+     "brightest40pct_Lab": [
+      71.6,
+      16.2,
+      26.8
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "鰓蓋後方の橙点(径約5px)。1個のみで朱点列ではない。中央値(216,148,92) Lab(67,20,40)。ぼけで縁が地色と混ざる。"
+    },
+    {
+     "id": "pectoral_yellow",
+     "region": "pectoral_membrane",
+     "rect": [
+      600,
+      480,
+      620,
+      510
+     ],
+     "n_px": 600,
+     "median_sRGB": [
+      214,
+      163,
+      18
+     ],
+     "hex": "#d6a312",
+     "Lab": [
+      69.9,
+      7.6,
+      70.9
+     ],
+     "chroma": 71.3,
+     "hue_deg": 84.0,
+     "lum_p10_p90": [
+      124,
+      194
+     ],
+     "darkest40pct_Lab": [
+      58.4,
+      2.3,
+      42.0
+     ],
+     "brightest40pct_Lab": [
+      79.4,
+      -1.4,
+      80.0
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "胸鰭の鮮黄の膜(基部〜中央)。極めて高い彩度(C71, 色相84度)。本写真で最も鮮やかな部位。前縁にオリーブ褐〜黒の縁取りがある。"
+    },
+    {
+     "id": "pelvic_tan",
+     "region": "pelvic",
+     "rect": [
+      850,
+      372,
+      870,
+      384
+     ],
+     "n_px": 240,
+     "median_sRGB": [
+      160,
+      129,
+      84
+     ],
+     "hex": "#a08154",
+     "Lab": [
+      55.9,
+      5.9,
+      28.8
+     ],
+     "chroma": 29.4,
+     "hue_deg": 78.0,
+     "lum_p10_p90": [
+      112,
+      146
+     ],
+     "darkest40pct_Lab": [
+      50.4,
+      4.4,
+      27.0
+     ],
+     "brightest40pct_Lab": [
+      58.8,
+      6.6,
+      26.6
+     ],
+     "quality": "mixed_translucent",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "腹鰭の鰭条域(淡橙褐/黄褐の帯)。細く半透明で背景が混入。鰭の外縁は白〜桃白、内側が橙褐。"
+    },
+    {
+     "id": "anal_membrane",
+     "region": "anal",
+     "rect": [
+      1005,
+      240,
+      1030,
+      258
+     ],
+     "n_px": 450,
+     "median_sRGB": [
+      145,
+      161,
+      185
+     ],
+     "hex": "#91a1b9",
+     "Lab": [
+      65.8,
+      -0.4,
+      -14.3
+     ],
+     "chroma": 14.3,
+     "hue_deg": 269.0,
+     "lum_p10_p90": [
+      141,
+      174
+     ],
+     "darkest40pct_Lab": [
+      61.4,
+      -2.7,
+      -4.5
+     ],
+     "brightest40pct_Lab": [
+      69.7,
+      -0.8,
+      -17.2
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "臀鰭の外側膜。青白(a0, b-14)は背景の水中礫の青灰を透過した色で鰭本来の色ではない可能性が高い。基部側の鰭条は黄褐。"
+    },
+    {
+     "id": "anal_ray_tan",
+     "region": "anal",
+     "rect": [
+      968,
+      262,
+      986,
+      276
+     ],
+     "n_px": 252,
+     "median_sRGB": [
+      158,
+      148,
+      134
+     ],
+     "hex": "#9e9486",
+     "Lab": [
+      61.8,
+      1.3,
+      8.5
+     ],
+     "chroma": 8.6,
+     "hue_deg": 81.0,
+     "lum_p10_p90": [
+      144,
+      154
+     ],
+     "darkest40pct_Lab": [
+      60.0,
+      2.0,
+      8.5
+     ],
+     "brightest40pct_Lab": [
+      62.9,
+      1.4,
+      5.5
+     ],
+     "quality": "mixed_translucent",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "臀鰭の鰭条域(淡黄褐〜灰褐)。低彩度で背景混入。"
+    },
+    {
+     "id": "dorsal_fin_tip_orange",
+     "region": "dorsal_fin",
+     "rect": [
+      690,
+      134,
+      712,
+      148
+     ],
+     "n_px": 308,
+     "median_sRGB": [
+      163,
+      134,
+      113
+     ],
+     "hex": "#a38671",
+     "Lab": [
+      58.1,
+      7.8,
+      15.5
+     ],
+     "chroma": 17.3,
+     "hue_deg": 63.0,
+     "lum_p10_p90": [
+      97,
+      154
+     ],
+     "darkest40pct_Lab": [
+      50.9,
+      4.6,
+      10.3
+     ],
+     "brightest40pct_Lab": [
+      62.5,
+      8.5,
+      15.5
+     ],
+     "quality": "mixed_translucent",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "背鰭の先端寄りの橙色の斑(径約25px)。鰭がぼけて透明のため、背景の橙色の礫を透過した可能性を排除できない(参考値)。"
+    },
+    {
+     "id": "dorsal_fin_body",
+     "region": "dorsal_fin",
+     "rect": [
+      640,
+      150,
+      700,
+      185
+     ],
+     "n_px": 2100,
+     "median_sRGB": [
+      88,
+      100,
+      119
+     ],
+     "hex": "#586477",
+     "Lab": [
+      42.0,
+      0.1,
+      -12.2
+     ],
+     "chroma": 12.2,
+     "hue_deg": 270.0,
+     "lum_p10_p90": [
+      44,
+      117
+     ],
+     "darkest40pct_Lab": [
+      25.3,
+      0.6,
+      -6.1
+     ],
+     "brightest40pct_Lab": [
+      46.8,
+      1.4,
+      -11.5
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "背鰭の面(半透明で青灰)。暗い背景の礫が透けて、鰭自体の色ではない(参考値のみ)。"
+    },
+    {
+     "id": "adipose_olive",
+     "region": "adipose_fin",
+     "rect": [
+      855,
+      104,
+      880,
+      112
+     ],
+     "n_px": 200,
+     "median_sRGB": [
+      166,
+      154,
+      94
+     ],
+     "hex": "#a69a5e",
+     "Lab": [
+      63.4,
+      -4.3,
+      33.0
+     ],
+     "chroma": 33.3,
+     "hue_deg": 97.0,
+     "lum_p10_p90": [
+      114,
+      183
+     ],
+     "darkest40pct_Lab": [
+      52.7,
+      -4.7,
+      34.6
+     ],
+     "brightest40pct_Lab": [
+      71.5,
+      -3.4,
+      17.1
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "脂鰭の下縁寄りのオリーブ黄色(葉形、径約60x20px)。上半はクリーム白の半透明。縁の黒・橙の縁取りは確認できない。"
+    },
+    {
+     "id": "caudal_fin_base",
+     "region": "caudal_fin_base",
+     "rect": [
+      1050,
+      80,
+      1100,
+      110
+     ],
+     "n_px": 1500,
+     "median_sRGB": [
+      117,
+      116,
+      115
+     ],
+     "hex": "#757473",
+     "Lab": [
+      48.9,
+      0.2,
+      0.7
+     ],
+     "chroma": 0.7,
+     "hue_deg": 75.0,
+     "lum_p10_p90": [
+      108,
+      148
+     ],
+     "darkest40pct_Lab": [
+      46.6,
+      0.4,
+      1.4
+     ],
+     "brightest40pct_Lab": [
+      54.0,
+      6.0,
+      1.9
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "尾鰭基部〜上葉(焦点外)。ほぼ無彩色の灰(L49)。背景の礫が透過して鰭の色とは言えない。"
+    },
+    {
+     "id": "caudal_margin_orange",
+     "region": "caudal_fin_margin",
+     "rect": [
+      1070,
+      146,
+      1100,
+      157
+     ],
+     "n_px": 330,
+     "median_sRGB": [
+      211,
+      137,
+      54
+     ],
+     "hex": "#d38936",
+     "Lab": [
+      63.4,
+      21.4,
+      53.7
+     ],
+     "chroma": 57.8,
+     "hue_deg": 68.0,
+     "lum_p10_p90": [
+      136,
+      183
+     ],
+     "darkest40pct_Lab": [
+      61.1,
+      25.2,
+      62.8
+     ],
+     "brightest40pct_Lab": [
+      70.1,
+      12.3,
+      30.9
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "尾鰭下葉の縁の鮮橙(最も彩度が高い点)。C58, 色相68度。橙の縁取りが明確。"
+    },
+    {
+     "id": "caudal_margin_red",
+     "region": "caudal_fin_margin",
+     "rect": [
+      1110,
+      130,
+      1145,
+      146
+     ],
+     "n_px": 560,
+     "median_sRGB": [
+      160,
+      97,
+      52
+     ],
+     "hex": "#a06134",
+     "Lab": [
+      47.3,
+      21.4,
+      35.9
+     ],
+     "chroma": 41.7,
+     "hue_deg": 59.0,
+     "lum_p10_p90": [
+      96,
+      118
+     ],
+     "darkest40pct_Lab": [
+      44.5,
+      22.6,
+      39.0
+     ],
+     "brightest40pct_Lab": [
+      50.0,
+      19.8,
+      29.8
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "尾鰭下葉の外側(先端寄り)。暗めの赤橙〜銅色(a+21, b+36)。ぼけで暗い背景と混じる。"
+    },
+    {
+     "id": "iris_gold",
+     "region": "iris_ring",
+     "rect": [
+      274,
+      570,
+      281,
+      582
+     ],
+     "n_px": 84,
+     "median_sRGB": [
+      172,
+      128,
+      52
+     ],
+     "hex": "#ac8034",
+     "Lab": [
+      56.4,
+      9.2,
+      46.4
+     ],
+     "chroma": 47.3,
+     "hue_deg": 79.0,
+     "lum_p10_p90": [
+      68,
+      186
+     ],
+     "darkest40pct_Lab": [
+      41.7,
+      6.7,
+      41.7
+     ],
+     "brightest40pct_Lab": [
+      69.6,
+      10.1,
+      56.5
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "虹彩の金色リングの左(吻)側。(172,128,52)=橙金。高彩度(C47)。リング幅は約5-7px。"
+    },
+    {
+     "id": "pupil",
+     "region": "pupil",
+     "rect": [
+      287,
+      566,
+      292,
+      574
+     ],
+     "n_px": 40,
+     "median_sRGB": [
+      3,
+      1,
+      4
+     ],
+     "hex": "#030104",
+     "Lab": [
+      0.5,
+      0.9,
+      -1.0
+     ],
+     "chroma": 1.3,
+     "hue_deg": 315.0,
+     "lum_p10_p90": [
+      0,
+      21
+     ],
+     "darkest40pct_Lab": [
+      0.1,
+      0.3,
+      0.1
+     ],
+     "brightest40pct_Lab": [
+      1.4,
+      1.7,
+      -1.9
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "瞳孔(黒、左側の純黒部分)。右側には空/周囲の青灰の映り込みがある。"
+    },
+    {
+     "id": "ref_pale_boulder",
+     "region": "reference",
+     "rect": [
+      30,
+      380,
+      150,
+      470
+     ],
+     "n_px": 10800,
+     "median_sRGB": [
+      185,
+      203,
+      206
+     ],
+     "hex": "#b9cbce",
+     "Lab": [
+      80.4,
+      -5.5,
+      -3.6
+     ],
+     "chroma": 6.5,
+     "hue_deg": 213.0,
+     "lum_p10_p90": [
+      178,
+      211
+     ],
+     "darkest40pct_Lab": [
+      76.4,
+      -6.1,
+      -2.1
+     ],
+     "brightest40pct_Lab": [
+      83.6,
+      -5.8,
+      -3.7
+     ],
+     "quality": "reference",
+     "flags": [],
+     "comment": "左側の淡灰色の丸石(水膜越し)。中性基準の代わり。(185,203,206) Lab(80,-5.5,-3.6)でわずかに青緑寄り=写真全体に弱い冷色被り(a-5, b-3)があるとみなせる。石の実色は未知。"
+    }
+   ]
+  },
+  "p034": {
+   "source": {
+    "host": "ameblo.jp",
+    "url": "https://ameblo.jp/makotoyamame/entry-12626540773.html",
+    "image_size_px": [
+     1000,
+     667
+    ]
+   },
+   "subject": {
+    "catalog_species_ident": "yamame (conf 0.7) ※サクラマス降海型の可能性は形態のみでは未排除",
+    "life_stage": "spawning_male (catalog)",
+    "context": "ground (礫と落ち葉の上、浅い水)",
+    "view": "lateral_left (頭は左下・尾は右上、ロール約40-50度、近接俯瞰)",
+    "fish_definition": "単独個体(p033とは別個体、p035と同一個体の可能性が高い)",
+    "my_note": "繁殖期の雄。背は黒褐、体側は銅〜桃褐の婚姻色で暗灰のパーマークが9本前後残り、腹は白、尾鰭下葉の縁が鮮橙。胸鰭はオリーブ黄金で前縁が暗褐。頭部は暗い灰褐でキペあり。朱点なし。"
+   },
+   "white_balance_cast": "HDR調の強い彩度・コントラスト処理。中性基準物なし(濡れた礫の青灰と落ち葉の橙が背景)。腹の白は(254,253,253)でクリップ、白い水面反射も強いのでWBの方向は不明だが、体の銅〜桃褐(a+11, b+18)は被りというより婚姻色の実色の可能性が高い。",
+   "exposure": "コントラスト過多。背は黒に潰れる(L8)一方、腹と下半の体側は白飛び(p90=255)。体側中央の銅色の帯だけが適正域。",
+   "reliability": "med",
+   "reliability_reason": "婚姻色の方向性(銅〜桃褐+暗灰パーマーク+橙の尾鰭縁)は信頼できるが、背と腹の絶対値はクリップしており輝度比は計れない。繁殖期の暗化個体で通常期の基準にならない。",
+   "usable_for": [
+    "繁殖期の体側の銅〜桃褐とパーマーク(暗灰褐)のΔL",
+    "尾鰭下葉の鮮橙の縁取り(C69)",
+    "胸鰭のオリーブ金色",
+    "頭部/鰓蓋の暗い灰褐〜銅の色味"
+   ],
+   "not_usable_for": [
+    "背/腹の輝度比(背=潰れ、腹=白飛び)",
+    "背鰭・脂鰭(影で不明)",
+    "臀鰭の色(背景透過)"
+   ],
+   "not_visible_or_not_measured": [
+    "背鰭(影)",
+    "脂鰭(不明)",
+    "朱点(なし)",
+    "小円斑は白飛び域で淡くサンプル不可"
+   ],
+   "relative": {
+    "ratio_definitions": {
+     "dorsal": {
+      "samples": [
+       "dorsal_back_b"
+      ],
+      "Lab_mean": [
+       23.5,
+       -1.8,
+       17.2
+      ]
+     },
+     "flank_upper": {
+      "samples": [
+       "flank_copper_a",
+       "flank_copper_rich"
+      ],
+      "Lab_mean": [
+       58.7,
+       11.6,
+       18.2
+      ]
+     },
+     "flank_lower": {
+      "samples": [
+       "flank_peach_top"
+      ],
+      "Lab_mean": [
+       70.3,
+       8.5,
+       10.7
+      ]
+     },
+     "belly": {
+      "samples": [
+       "belly_b"
+      ],
+      "Lab_mean": [
+       90.3,
+       -1.6,
+       16.4
+      ]
+     }
+    },
+    "dorsal_to_flank_upper": {
+     "L_star_ratio": 0.4,
+     "linear_Y_ratio": 0.15
+    },
+    "dorsal_to_flank_lower": {
+     "L_star_ratio": 0.33,
+     "linear_Y_ratio": 0.1
+    },
+    "ventral_to_flank_upper": {
+     "L_star_ratio": 1.54,
+     "linear_Y_ratio": 2.88
+    },
+    "ventral_to_flank_lower": {
+     "L_star_ratio": 1.28,
+     "linear_Y_ratio": 1.87
+    },
+    "flank_upper_to_lower_L_gap": 11.6,
+    "parr_mark_contrast": [
+     {
+      "pair": "mark_b_vs_ground",
+      "mark_samples": [
+       "parr_mark_b"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_b_right",
+        "rect": [
+         672,
+         180,
+         686,
+         196
+        ],
+        "median_sRGB": [
+         174,
+         133,
+         102
+        ],
+        "Lab": [
+         58.7,
+         11.5,
+         22.8
+        ]
+       }
+      ],
+      "mark_Lab": [
+       26.3,
+       1.2,
+       3.5
+      ],
+      "ground_Lab_mean": [
+       58.7,
+       11.5,
+       22.8
+      ],
+      "dL": -32.4,
+      "da": -10.3,
+      "db": -19.3,
+      "dE76": 39.1,
+      "dL_using_darkest40pct_mark": -36.3,
+      "mark_darkest40pct_Lab": [
+       22.4,
+       0.9,
+       0.3
+      ]
+     },
+     {
+      "pair": "mark_a_vs_ground",
+      "mark_samples": [
+       "parr_mark_a"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_a_left",
+        "rect": [
+         655,
+         205,
+         670,
+         220
+        ],
+        "median_sRGB": [
+         180,
+         145,
+         118
+        ],
+        "Lab": [
+         62.7,
+         9.3,
+         19.3
+        ]
+       },
+       {
+        "id": "g_a_right",
+        "rect": [
+         702,
+         205,
+         716,
+         220
+        ],
+        "median_sRGB": [
+         179,
+         150,
+         127
+        ],
+        "Lab": [
+         64.1,
+         7.3,
+         16.2
+        ]
+       }
+      ],
+      "mark_Lab": [
+       46.1,
+       3.4,
+       5.0
+      ],
+      "ground_Lab_mean": [
+       63.4,
+       8.3,
+       17.8
+      ],
+      "dL": -17.3,
+      "da": -4.9,
+      "db": -12.8,
+      "dE76": 22.1,
+      "dL_using_darkest40pct_mark": -24.3,
+      "mark_darkest40pct_Lab": [
+       39.1,
+       1.8,
+       2.6
+      ]
+     },
+     {
+      "pair": "mark_c_vs_ground",
+      "mark_samples": [
+       "parr_mark_c"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_c_right",
+        "rect": [
+         655,
+         240,
+         670,
+         255
+        ],
+        "median_sRGB": [
+         172,
+         139,
+         116
+        ],
+        "Lab": [
+         60.3,
+         9.1,
+         17.0
+        ]
+       }
+      ],
+      "mark_Lab": [
+       48.0,
+       6.3,
+       6.7
+      ],
+      "ground_Lab_mean": [
+       60.3,
+       9.1,
+       17.0
+      ],
+      "dL": -12.3,
+      "da": -2.8,
+      "db": -10.3,
+      "dE76": 16.3,
+      "dL_using_darkest40pct_mark": -20.3,
+      "mark_darkest40pct_Lab": [
+       40.0,
+       4.6,
+       6.2
+      ]
+     }
+    ],
+    "head_dorsal_to_cheek": {
+     "L_star_ratio": 0.57,
+     "linear_Y_ratio": 0.29
+    },
+    "fin_chroma_overview": {
+     "pectoral_a": {
+      "region": "pectoral_membrane",
+      "Lab": [
+       38.4,
+       -0.3,
+       35.4
+      ],
+      "chroma": 35.4,
+      "hue_deg": 91.0,
+      "quality": "shadowed"
+     },
+     "pelvic_brown": {
+      "region": "pelvic",
+      "Lab": [
+       33.7,
+       5.9,
+       19.8
+      ],
+      "chroma": 20.6,
+      "hue_deg": 73.0,
+      "quality": "shadowed"
+     },
+     "anal_a": {
+      "region": "anal",
+      "Lab": [
+       44.2,
+       -3.1,
+       0.2
+      ],
+      "chroma": 3.1,
+      "hue_deg": 176.0,
+      "quality": "mixed_translucent"
+     },
+     "caudal_base": {
+      "region": "caudal_fin_base",
+      "Lab": [
+       44.2,
+       1.0,
+       1.0
+      ],
+      "chroma": 1.4,
+      "hue_deg": 45.0,
+      "quality": "mixed_translucent"
+     },
+     "caudal_margin_orange": {
+      "region": "caudal_fin_margin",
+      "Lab": [
+       66.0,
+       15.3,
+       67.2
+      ],
+      "chroma": 68.9,
+      "hue_deg": 77.0,
+      "quality": "good"
+     },
+     "caudal_margin_red": {
+      "region": "caudal_fin_margin",
+      "Lab": [
+       46.8,
+       25.5,
+       54.8
+      ],
+      "chroma": 60.5,
+      "hue_deg": 65.0,
+      "quality": "good"
+     }
+    },
+    "ratio_caveat": "背は暗部が潰れ(dorsal_back_a=L8)、背_bのみで比を出した(下限値)。腹はbelly_b(クリーム白, 鏡面混入)を使用、白飛び域(belly_overexposed)は比に使わない。ventral_to_flank_upperは過大評価の可能性。"
+   },
+   "samples": [
+    {
+     "id": "dorsal_back_a",
+     "region": "dorsal_back",
+     "rect": [
+      420,
+      255,
+      470,
+      285
+     ],
+     "n_px": 1500,
+     "median_sRGB": [
+      29,
+      23,
+      13
+     ],
+     "hex": "#1d170d",
+     "Lab": [
+      8.2,
+      1.1,
+      6.8
+     ],
+     "chroma": 6.9,
+     "hue_deg": 81.0,
+     "lum_p10_p90": [
+      2,
+      50
+     ],
+     "darkest40pct_Lab": [
+      2.2,
+      -0.0,
+      0.8
+     ],
+     "brightest40pct_Lab": [
+      15.2,
+      1.5,
+      7.2
+     ],
+     "quality": "crushed_shadow",
+     "flags": [],
+     "comment": "背(側線より上、頭寄り)。HDR現像で暗部が潰れほぼ黒(L8)。黒点と鱗ハイライトを含む。真の色は不明で下限値。"
+    },
+    {
+     "id": "dorsal_back_b",
+     "region": "dorsal_back",
+     "rect": [
+      550,
+      160,
+      600,
+      185
+     ],
+     "n_px": 1250,
+     "median_sRGB": [
+      62,
+      56,
+      30
+     ],
+     "hex": "#3e381e",
+     "Lab": [
+      23.5,
+      -1.8,
+      17.2
+     ],
+     "chroma": 17.3,
+     "hue_deg": 96.0,
+     "lum_p10_p90": [
+      25,
+      118
+     ],
+     "darkest40pct_Lab": [
+      15.6,
+      -0.9,
+      7.8
+     ],
+     "brightest40pct_Lab": [
+      40.5,
+      -20.4,
+      42.1
+     ],
+     "quality": "shadowed",
+     "flags": [],
+     "comment": "背(体の中央、背縁寄り)。暗いオリーブ黒(a-2, b+17, L23.5)。黒点が散在。"
+    },
+    {
+     "id": "flank_copper_a",
+     "region": "flank_ground",
+     "rect": [
+      610,
+      235,
+      630,
+      255
+     ],
+     "n_px": 400,
+     "median_sRGB": [
+      176,
+      138,
+      115
+     ],
+     "hex": "#b08a73",
+     "Lab": [
+      60.3,
+      11.4,
+      17.7
+     ],
+     "chroma": 21.1,
+     "hue_deg": 57.0,
+     "lum_p10_p90": [
+      93,
+      171
+     ],
+     "darkest40pct_Lab": [
+      44.2,
+      7.0,
+      9.6
+     ],
+     "brightest40pct_Lab": [
+      68.2,
+      14.7,
+      15.5
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "体側のパーマーク間の地色。銅〜桃褐(a+11, b+18, 色相57度)。婚姻色の体側。"
+    },
+    {
+     "id": "flank_copper_b",
+     "region": "lateral_band",
+     "rect": [
+      680,
+      200,
+      720,
+      235
+     ],
+     "n_px": 1400,
+     "median_sRGB": [
+      168,
+      143,
+      124
+     ],
+     "hex": "#a88f7c",
+     "Lab": [
+      61.2,
+      6.6,
+      13.7
+     ],
+     "chroma": 15.2,
+     "hue_deg": 64.0,
+     "lum_p10_p90": [
+      100,
+      189
+     ],
+     "darkest40pct_Lab": [
+      47.8,
+      3.7,
+      7.6
+     ],
+     "brightest40pct_Lab": [
+      71.4,
+      8.0,
+      13.9
+     ],
+     "quality": "mixed",
+     "flags": [],
+     "comment": "体側中央〜後半の銅褐の帯(暗帯と交互)。(168,143,124) Lab(61,7,14)。暗いマークが一部混入(p10=100)。"
+    },
+    {
+     "id": "flank_copper_rich",
+     "region": "flank_ground",
+     "rect": [
+      598,
+      240,
+      612,
+      262
+     ],
+     "n_px": 308,
+     "median_sRGB": [
+      168,
+      129,
+      105
+     ],
+     "hex": "#a88169",
+     "Lab": [
+      57.1,
+      11.7,
+      18.8
+     ],
+     "chroma": 22.1,
+     "hue_deg": 58.0,
+     "lum_p10_p90": [
+      108,
+      164
+     ],
+     "darkest40pct_Lab": [
+      49.6,
+      11.8,
+      19.3
+     ],
+     "brightest40pct_Lab": [
+      64.5,
+      13.6,
+      17.5
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "体側中央の銅色(パーマーク間)。最も彩度が高い地色(C22)。"
+    },
+    {
+     "id": "flank_peach_top",
+     "region": "flank_ground",
+     "rect": [
+      740,
+      165,
+      760,
+      185
+     ],
+     "n_px": 400,
+     "median_sRGB": [
+      195,
+      166,
+      153
+     ],
+     "hex": "#c3a699",
+     "Lab": [
+      70.3,
+      8.5,
+      10.7
+     ],
+     "chroma": 13.7,
+     "hue_deg": 51.0,
+     "lum_p10_p90": [
+      155,
+      189
+     ],
+     "darkest40pct_Lab": [
+      66.3,
+      7.6,
+      8.6
+     ],
+     "brightest40pct_Lab": [
+      74.2,
+      9.6,
+      6.4
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "体側後半〜腹寄りの淡い桃(a+8.5, b+11, L70)。銅色が薄れて白い腹へ移行する帯。"
+    },
+    {
+     "id": "parr_mark_a",
+     "region": "parr_mark_core",
+     "rect": [
+      680,
+      214,
+      696,
+      232
+     ],
+     "n_px": 288,
+     "median_sRGB": [
+      118,
+      107,
+      101
+     ],
+     "hex": "#766b65",
+     "Lab": [
+      46.1,
+      3.4,
+      5.0
+     ],
+     "chroma": 6.0,
+     "hue_deg": 56.0,
+     "lum_p10_p90": [
+      86,
+      144
+     ],
+     "darkest40pct_Lab": [
+      39.1,
+      1.8,
+      2.6
+     ],
+     "brightest40pct_Lab": [
+      53.8,
+      5.6,
+      5.1
+     ],
+     "quality": "mixed",
+     "flags": [],
+     "comment": "暗帯(パーマーク)。灰褐(a+3, b+5, L46)。婚姻期で暗帯化し、銅色の地とのコントラストは中。"
+    },
+    {
+     "id": "parr_mark_b",
+     "region": "parr_mark_core",
+     "rect": [
+      655,
+      180,
+      670,
+      194
+     ],
+     "n_px": 210,
+     "median_sRGB": [
+      66,
+      62,
+      57
+     ],
+     "hex": "#423e39",
+     "Lab": [
+      26.3,
+      1.2,
+      3.5
+     ],
+     "chroma": 3.7,
+     "hue_deg": 71.0,
+     "lum_p10_p90": [
+      51,
+      80
+     ],
+     "darkest40pct_Lab": [
+      22.4,
+      0.9,
+      0.3
+     ],
+     "brightest40pct_Lab": [
+      31.1,
+      1.6,
+      6.6
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "暗帯(最も濃い部分)。ほぼ無彩色の暗灰褐(66,62,57) Lab(26,1,3.5)。"
+    },
+    {
+     "id": "parr_mark_c",
+     "region": "parr_mark_core",
+     "rect": [
+      628,
+      232,
+      644,
+      248
+     ],
+     "n_px": 256,
+     "median_sRGB": [
+      129,
+      110,
+      103
+     ],
+     "hex": "#816e67",
+     "Lab": [
+      48.0,
+      6.3,
+      6.7
+     ],
+     "chroma": 9.1,
+     "hue_deg": 47.0,
+     "lum_p10_p90": [
+      84,
+      144
+     ],
+     "darkest40pct_Lab": [
+      40.0,
+      4.6,
+      6.2
+     ],
+     "brightest40pct_Lab": [
+      56.9,
+      8.7,
+      6.9
+     ],
+     "quality": "mixed",
+     "flags": [],
+     "comment": "暗帯(体側中央前寄り)。(129,110,103) Lab(48,6,7)=灰紫褐。縁に桃が混入。"
+    },
+    {
+     "id": "belly_overexposed",
+     "region": "belly",
+     "rect": [
+      730,
+      260,
+      780,
+      300
+     ],
+     "n_px": 2000,
+     "median_sRGB": [
+      254,
+      253,
+      253
+     ],
+     "hex": "#fefdfd",
+     "Lab": [
+      99.4,
+      0.3,
+      0.1
+     ],
+     "chroma": 0.3,
+     "hue_deg": 19.0,
+     "lum_p10_p90": [
+      92,
+      255
+     ],
+     "darkest40pct_Lab": [
+      80.9,
+      -0.9,
+      -7.6
+     ],
+     "brightest40pct_Lab": [
+      100.0,
+      -0.0,
+      0.0
+     ],
+     "quality": "overexposed",
+     "flags": [
+      "near_clipped_highlight"
+     ],
+     "comment": "腹〜体側下半。白飛び(sRGB(254,253,253), p90=255)でLab不可。白である以上の情報なし。"
+    },
+    {
+     "id": "belly_b",
+     "region": "belly",
+     "rect": [
+      600,
+      360,
+      640,
+      390
+     ],
+     "n_px": 1200,
+     "median_sRGB": [
+      237,
+      227,
+      196
+     ],
+     "hex": "#ede3c4",
+     "Lab": [
+      90.3,
+      -1.6,
+      16.4
+     ],
+     "chroma": 16.5,
+     "hue_deg": 96.0,
+     "lum_p10_p90": [
+      96,
+      245
+     ],
+     "darkest40pct_Lab": [
+      59.4,
+      2.4,
+      59.5
+     ],
+     "brightest40pct_Lab": [
+      95.3,
+      -0.6,
+      9.3
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "腹(胸鰭の下付近)。クリーム白(a-1.6, b+16)だが濡れた反射が強い(p10=96, p90=245)。"
+    },
+    {
+     "id": "flank_cream_c",
+     "region": "flank_ground",
+     "rect": [
+      760,
+      180,
+      800,
+      220
+     ],
+     "n_px": 1600,
+     "median_sRGB": [
+      249,
+      242,
+      231
+     ],
+     "hex": "#f9f2e7",
+     "Lab": [
+      95.8,
+      0.5,
+      6.1
+     ],
+     "chroma": 6.2,
+     "hue_deg": 86.0,
+     "lum_p10_p90": [
+      184,
+      254
+     ],
+     "darkest40pct_Lab": [
+      83.6,
+      2.7,
+      8.2
+     ],
+     "brightest40pct_Lab": [
+      99.1,
+      0.3,
+      1.2
+     ],
+     "quality": "overexposed",
+     "flags": [
+      "near_clipped_highlight"
+     ],
+     "comment": "体側下半の白〜クリーム(L96)。ほぼ白飛びで小円斑が淡く見える領域。"
+    },
+    {
+     "id": "head_dorsal",
+     "region": "head_dorsal",
+     "rect": [
+      350,
+      390,
+      390,
+      412
+     ],
+     "n_px": 880,
+     "median_sRGB": [
+      85,
+      75,
+      81
+     ],
+     "hex": "#554b51",
+     "Lab": [
+      33.0,
+      5.4,
+      -2.0
+     ],
+     "chroma": 5.8,
+     "hue_deg": 339.0,
+     "lum_p10_p90": [
+      55,
+      110
+     ],
+     "darkest40pct_Lab": [
+      26.4,
+      4.9,
+      -1.6
+     ],
+     "brightest40pct_Lab": [
+      41.3,
+      4.8,
+      -1.5
+     ],
+     "quality": "shadowed",
+     "flags": [],
+     "comment": "頭部背面(眼の後方上)。暗い灰紫褐(a+5, b-2, L33)。婚姻期の暗化。"
+    },
+    {
+     "id": "cheek_a",
+     "region": "cheek",
+     "rect": [
+      370,
+      455,
+      420,
+      495
+     ],
+     "n_px": 2000,
+     "median_sRGB": [
+      149,
+      138,
+      129
+     ],
+     "hex": "#958a81",
+     "Lab": [
+      58.2,
+      2.5,
+      6.3
+     ],
+     "chroma": 6.8,
+     "hue_deg": 68.0,
+     "lum_p10_p90": [
+      90,
+      188
+     ],
+     "darkest40pct_Lab": [
+      44.7,
+      0.5,
+      6.5
+     ],
+     "brightest40pct_Lab": [
+      71.3,
+      3.9,
+      4.0
+     ],
+     "quality": "mixed",
+     "flags": [],
+     "comment": "頬。灰褐ベージュ(a+2.5, b+6, L58)。白い光沢と暗い斑が混ざる。"
+    },
+    {
+     "id": "opercle_a",
+     "region": "opercle",
+     "rect": [
+      440,
+      400,
+      470,
+      440
+     ],
+     "n_px": 1200,
+     "median_sRGB": [
+      139,
+      127,
+      121
+     ],
+     "hex": "#8b7f79",
+     "Lab": [
+      54.1,
+      3.5,
+      4.9
+     ],
+     "chroma": 6.0,
+     "hue_deg": 55.0,
+     "lum_p10_p90": [
+      83,
+      201
+     ],
+     "darkest40pct_Lab": [
+      40.3,
+      4.6,
+      6.8
+     ],
+     "brightest40pct_Lab": [
+      72.2,
+      2.9,
+      4.5
+     ],
+     "quality": "mixed",
+     "flags": [],
+     "comment": "鰓蓋中央。灰褐(a+3.5, b+5, L54)。"
+    },
+    {
+     "id": "opercle_copper",
+     "region": "opercle",
+     "rect": [
+      450,
+      372,
+      490,
+      398
+     ],
+     "n_px": 1040,
+     "median_sRGB": [
+      193,
+      171,
+      160
+     ],
+     "hex": "#c1aba0",
+     "Lab": [
+      71.6,
+      6.1,
+      8.6
+     ],
+     "chroma": 10.5,
+     "hue_deg": 54.0,
+     "lum_p10_p90": [
+      123,
+      214
+     ],
+     "darkest40pct_Lab": [
+      58.9,
+      6.2,
+      18.3
+     ],
+     "brightest40pct_Lab": [
+      82.3,
+      4.7,
+      5.3
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "鰓蓋上部の銅〜桃褐(a+6, b+9, L72)。光沢で鱗が白く光る。"
+    },
+    {
+     "id": "opercle_gold_edge",
+     "region": "opercle",
+     "rect": [
+      488,
+      420,
+      502,
+      460
+     ],
+     "n_px": 560,
+     "median_sRGB": [
+      201,
+      188,
+      157
+     ],
+     "hex": "#c9bc9d",
+     "Lab": [
+      76.6,
+      -0.4,
+      17.4
+     ],
+     "chroma": 17.4,
+     "hue_deg": 91.0,
+     "lum_p10_p90": [
+      152,
+      234
+     ],
+     "darkest40pct_Lab": [
+      66.7,
+      0.4,
+      17.6
+     ],
+     "brightest40pct_Lab": [
+      87.3,
+      1.3,
+      15.0
+     ],
+     "quality": "mixed_specular",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "鰓蓋後縁の淡黄金(a0, b+17, L77)。"
+    },
+    {
+     "id": "pectoral_a",
+     "region": "pectoral_membrane",
+     "rect": [
+      575,
+      370,
+      595,
+      395
+     ],
+     "n_px": 500,
+     "median_sRGB": [
+      106,
+      89,
+      30
+     ],
+     "hex": "#6a591e",
+     "Lab": [
+      38.4,
+      -0.3,
+      35.4
+     ],
+     "chroma": 35.4,
+     "hue_deg": 91.0,
+     "lum_p10_p90": [
+      47,
+      117
+     ],
+     "darkest40pct_Lab": [
+      23.4,
+      3.2,
+      28.3
+     ],
+     "brightest40pct_Lab": [
+      47.0,
+      3.2,
+      35.7
+     ],
+     "quality": "shadowed",
+     "flags": [],
+     "comment": "胸鰭(黄〜オリーブ金色、前縁は暗褐)。(106,89,30) Lab(38,0,35)=暗いオリーブ黄。"
+    },
+    {
+     "id": "pelvic_brown",
+     "region": "pelvic",
+     "rect": [
+      745,
+      298,
+      770,
+      310
+     ],
+     "n_px": 300,
+     "median_sRGB": [
+      98,
+      75,
+      48
+     ],
+     "hex": "#624b30",
+     "Lab": [
+      33.7,
+      5.9,
+      19.8
+     ],
+     "chroma": 20.6,
+     "hue_deg": 73.0,
+     "lum_p10_p90": [
+      53,
+      148
+     ],
+     "darkest40pct_Lab": [
+      26.3,
+      6.5,
+      18.0
+     ],
+     "brightest40pct_Lab": [
+      41.4,
+      5.9,
+      14.3
+     ],
+     "quality": "shadowed",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "腹鰭(暗褐〜茶、縁は白)。(98,75,48) Lab(34,6,20)。"
+    },
+    {
+     "id": "anal_a",
+     "region": "anal",
+     "rect": [
+      835,
+      205,
+      860,
+      225
+     ],
+     "n_px": 500,
+     "median_sRGB": [
+      99,
+      106,
+      104
+     ],
+     "hex": "#636a68",
+     "Lab": [
+      44.2,
+      -3.1,
+      0.2
+     ],
+     "chroma": 3.1,
+     "hue_deg": 176.0,
+     "lum_p10_p90": [
+      90,
+      123
+     ],
+     "darkest40pct_Lab": [
+      39.7,
+      -3.2,
+      1.5
+     ],
+     "brightest40pct_Lab": [
+      49.4,
+      -3.3,
+      -3.9
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "臀鰭(青灰の半透明)。背景の礫が透過(L44, 無彩色)。参考値。"
+    },
+    {
+     "id": "caudal_base",
+     "region": "caudal_fin_base",
+     "rect": [
+      860,
+      70,
+      890,
+      95
+     ],
+     "n_px": 750,
+     "median_sRGB": [
+      107,
+      104,
+      103
+     ],
+     "hex": "#6b6867",
+     "Lab": [
+      44.2,
+      1.0,
+      1.0
+     ],
+     "chroma": 1.4,
+     "hue_deg": 45.0,
+     "lum_p10_p90": [
+      85,
+      128
+     ],
+     "darkest40pct_Lab": [
+      37.9,
+      -1.8,
+      0.7
+     ],
+     "brightest40pct_Lab": [
+      51.5,
+      4.6,
+      1.7
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "尾鰭基部〜上葉(灰褐、半透明で背景の礫が透ける)。ほぼ無彩色(L44)。"
+    },
+    {
+     "id": "caudal_margin_orange",
+     "region": "caudal_fin_margin",
+     "rect": [
+      895,
+      141,
+      930,
+      150
+     ],
+     "n_px": 315,
+     "median_sRGB": [
+      213,
+      148,
+      22
+     ],
+     "hex": "#d59416",
+     "Lab": [
+      66.0,
+      15.3,
+      67.2
+     ],
+     "chroma": 68.9,
+     "hue_deg": 77.0,
+     "lum_p10_p90": [
+      140,
+      178
+     ],
+     "darkest40pct_Lab": [
+      63.4,
+      19.5,
+      68.3
+     ],
+     "brightest40pct_Lab": [
+      70.2,
+      9.6,
+      52.4
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "尾鰭下葉の縁の鮮橙(213,148,22) Lab(66,15,67)。本写真で最も彩度が高い(C69)。"
+    },
+    {
+     "id": "caudal_margin_red",
+     "region": "caudal_fin_margin",
+     "rect": [
+      935,
+      132,
+      955,
+      146
+     ],
+     "n_px": 280,
+     "median_sRGB": [
+      167,
+      92,
+      2
+     ],
+     "hex": "#a75c02",
+     "Lab": [
+      46.8,
+      25.5,
+      54.8
+     ],
+     "chroma": 60.5,
+     "hue_deg": 65.0,
+     "lum_p10_p90": [
+      94,
+      118
+     ],
+     "darkest40pct_Lab": [
+      44.1,
+      24.9,
+      52.9
+     ],
+     "brightest40pct_Lab": [
+      50.9,
+      27.4,
+      58.3
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "尾鰭下葉の縁(外側寄り)の濃い橙〜赤橙(167,92,2) Lab(47,25.5,55)。"
+    },
+    {
+     "id": "iris_ring",
+     "region": "iris_ring",
+     "rect": [
+      318,
+      464,
+      330,
+      469
+     ],
+     "n_px": 60,
+     "median_sRGB": [
+      66,
+      49,
+      32
+     ],
+     "hex": "#423120",
+     "Lab": [
+      21.7,
+      4.9,
+      13.4
+     ],
+     "chroma": 14.3,
+     "hue_deg": 70.0,
+     "lum_p10_p90": [
+      1,
+      153
+     ],
+     "darkest40pct_Lab": [
+      1.1,
+      1.3,
+      0.9
+     ],
+     "brightest40pct_Lab": [
+      56.8,
+      1.9,
+      23.3
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "虹彩の金色リング(瞳孔下縁)。リング幅が2-3pxで中央値はほぼ黒。リング色は明部(brightest40)を参照。上側は緑青の虹色の脂瞼。"
+    },
+    {
+     "id": "pupil",
+     "region": "pupil",
+     "rect": [
+      318,
+      450,
+      330,
+      462
+     ],
+     "n_px": 144,
+     "median_sRGB": [
+      4,
+      7,
+      25
+     ],
+     "hex": "#040719",
+     "Lab": [
+      2.2,
+      2.7,
+      -9.7
+     ],
+     "chroma": 10.1,
+     "hue_deg": 285.0,
+     "lum_p10_p90": [
+      3,
+      97
+     ],
+     "darkest40pct_Lab": [
+      1.0,
+      1.4,
+      -5.5
+     ],
+     "brightest40pct_Lab": [
+      6.2,
+      5.3,
+      -13.1
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "瞳孔(青みの黒)。(4,7,25) Lab(2,3,-10)。"
+    }
+   ]
+  },
+  "p039": {
+   "source": {
+    "host": "ameblo.jp",
+    "url": "https://ameblo.jp/alpschar/entry-12680633028.html",
+    "image_size_px": [
+     1280,
+     720
+    ]
+   },
+   "subject": {
+    "catalog_species_ident": "yamame (conf 0.6) ※ブログ名がイワナ関連だが写真の魚はイワナ型(白斑・黄橙斑)ではない",
+    "life_stage": "juvenile (スモルト様, catalog)",
+    "context": "landing_net (タモ網の浅い水、強い直射日光)",
+    "view": "lateral_right (頭は右下、吻端と尾部は画像外、体軸は約50度の斜め)",
+    "fish_definition": "単独個体",
+    "my_note": "全体に淡いスモルト様の個体。青灰の縦楕円パーマーク約10本、体側下半に灰褐の円斑、背も淡いオリーブ灰〜ベージュで黒点は小さく少ない。体側の桃は弱い(a+2〜3)、ラベンダー光沢は直射日光の反射。鰭は透明。"
+   },
+   "white_balance_cast": "強い直射日光のラベンダー〜灰紫の反射(体側中央にa+2, b-4)と、網の暗い影、水膜の青被り。腹と鰭の白は(202,200,185)で黄寄りの暖色。魚体上の光沢が冷色、日向の白が暖色で、局所的に被りの方向が逆。",
+   "exposure": "やや低コントラスト。魚体は全体に灰がかった明るさ(体側L≈60-80)で白飛びなし。網の影と水面の太陽の写り込み(飽和)が背景に混入。",
+   "reliability": "med",
+   "reliability_reason": "自然光でパーマークの色(青灰, b-10)と地色(淡桃白)のコントラストは概ね信頼できる。ラベンダー光沢が体側の見かけ色を支配し、背/腹の輝度比は参考値。鰭は網が透けて色が取れない。",
+   "usable_for": [
+    "パーマーク(青灰)と地色(淡桃白)のΔL/Δb",
+    "スモルト様個体の背が暗くない(L59-69)ことの確認",
+    "黒点が小さく淡い(L41)ことの確認",
+    "虹彩のライム〜黄緑リング",
+    "胸鰭の淡黄褐"
+   ],
+   "not_usable_for": [
+    "腹鰭・臀鰭・脂鰭・尾鰭の色(網が透ける/画面外)",
+    "ラベンダー光沢帯を桃色の側線帯として扱うこと",
+    "背/腹の輝度比の絶対値(光沢と影)"
+   ],
+   "not_visible_or_not_measured": [
+    "吻端・尾鰭・脂鰭(画面外)",
+    "朱点(なし)"
+   ],
+   "relative": {
+    "ratio_definitions": {
+     "dorsal": {
+      "samples": [
+       "dorsal_back_a",
+       "dorsal_back_b"
+      ],
+      "Lab_mean": [
+       63.8,
+       -1.3,
+       6.6
+      ]
+     },
+     "flank_upper": {
+      "samples": [
+       "flank_ground_pink_a",
+       "flank_ground_pink_b"
+      ],
+      "Lab_mean": [
+       79.8,
+       2.6,
+       3.8
+      ]
+     },
+     "flank_lower": {
+      "samples": [
+       "flank_beige"
+      ],
+      "Lab_mean": [
+       62.6,
+       1.0,
+       11.0
+      ]
+     },
+     "belly": {
+      "samples": [
+       "belly_a",
+       "belly_b"
+      ],
+      "Lab_mean": [
+       83.4,
+       -1.4,
+       6.9
+      ]
+     }
+    },
+    "dorsal_to_flank_upper": {
+     "L_star_ratio": 0.8,
+     "linear_Y_ratio": 0.58
+    },
+    "dorsal_to_flank_lower": {
+     "L_star_ratio": 1.02,
+     "linear_Y_ratio": 1.05
+    },
+    "ventral_to_flank_upper": {
+     "L_star_ratio": 1.05,
+     "linear_Y_ratio": 1.12
+    },
+    "ventral_to_flank_lower": {
+     "L_star_ratio": 1.33,
+     "linear_Y_ratio": 2.03
+    },
+    "flank_upper_to_lower_L_gap": -17.2,
+    "parr_mark_contrast": [
+     {
+      "pair": "mark_a_vs_ground",
+      "mark_samples": [
+       "parr_mark_a"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_a_right",
+        "rect": [
+         730,
+         290,
+         745,
+         305
+        ],
+        "median_sRGB": [
+         186,
+         177,
+         179
+        ],
+        "Lab": [
+         73.0,
+         3.6,
+         0.1
+        ]
+       }
+      ],
+      "mark_Lab": [
+       59.7,
+       1.1,
+       -9.8
+      ],
+      "ground_Lab_mean": [
+       73.0,
+       3.6,
+       0.1
+      ],
+      "dL": -13.3,
+      "da": -2.5,
+      "db": -9.9,
+      "dE76": 16.8,
+      "dL_using_darkest40pct_mark": -15.8,
+      "mark_darkest40pct_Lab": [
+       57.2,
+       1.6,
+       -9.1
+      ]
+     },
+     {
+      "pair": "mark_b_vs_ground",
+      "mark_samples": [
+       "parr_mark_b"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_b_right",
+        "rect": [
+         640,
+         175,
+         652,
+         190
+        ],
+        "median_sRGB": [
+         206,
+         197,
+         193
+        ],
+        "Lab": [
+         80.1,
+         2.4,
+         3.1
+        ]
+       }
+      ],
+      "mark_Lab": [
+       62.9,
+       0.1,
+       -11.9
+      ],
+      "ground_Lab_mean": [
+       80.1,
+       2.4,
+       3.1
+      ],
+      "dL": -17.2,
+      "da": -2.3,
+      "db": -15.0,
+      "dE76": 22.9,
+      "dL_using_darkest40pct_mark": -19.4,
+      "mark_darkest40pct_Lab": [
+       60.7,
+       0.4,
+       -12.7
+      ]
+     },
+     {
+      "pair": "mark_d_vs_ground",
+      "mark_samples": [
+       "parr_mark_d"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_d_right",
+        "rect": [
+         685,
+         215,
+         700,
+         235
+        ],
+        "median_sRGB": [
+         206,
+         195,
+         189
+        ],
+        "Lab": [
+         79.5,
+         2.8,
+         4.4
+        ]
+       }
+      ],
+      "mark_Lab": [
+       62.5,
+       -0.2,
+       -9.6
+      ],
+      "ground_Lab_mean": [
+       79.5,
+       2.8,
+       4.4
+      ],
+      "dL": -17.0,
+      "da": -3.0,
+      "db": -14.0,
+      "dE76": 22.2,
+      "dL_using_darkest40pct_mark": -20.4,
+      "mark_darkest40pct_Lab": [
+       59.1,
+       0.9,
+       -10.8
+      ]
+     },
+     {
+      "pair": "round_spot_b_vs_ground",
+      "mark_samples": [
+       "round_spot_b"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_spot_b",
+        "rect": [
+         582,
+         264,
+         598,
+         280
+        ],
+        "median_sRGB": [
+         162,
+         146,
+         132
+        ],
+        "Lab": [
+         61.6,
+         3.6,
+         9.6
+        ]
+       }
+      ],
+      "mark_Lab": [
+       48.7,
+       4.3,
+       4.1
+      ],
+      "ground_Lab_mean": [
+       61.6,
+       3.6,
+       9.6
+      ],
+      "dL": -12.9,
+      "da": 0.7,
+      "db": -5.5,
+      "dE76": 14.0,
+      "dL_using_darkest40pct_mark": -13.8,
+      "mark_darkest40pct_Lab": [
+       47.8,
+       3.9,
+       3.9
+      ]
+     }
+    ],
+    "head_dorsal_to_cheek": {
+     "L_star_ratio": 1.05,
+     "linear_Y_ratio": 1.12
+    },
+    "fin_chroma_overview": {
+     "pectoral_a": {
+      "region": "pectoral_membrane",
+      "Lab": [
+       68.5,
+       1.1,
+       24.0
+      ],
+      "chroma": 24.0,
+      "hue_deg": 87.0,
+      "quality": "good"
+     },
+     "pelvic_a": {
+      "region": "pelvic",
+      "Lab": [
+       43.2,
+       -1.3,
+       -5.5
+      ],
+      "chroma": 5.7,
+      "hue_deg": 257.0,
+      "quality": "mixed_translucent"
+     },
+     "anal_a": {
+      "region": "anal",
+      "Lab": [
+       57.4,
+       0.6,
+       -6.4
+      ],
+      "chroma": 6.5,
+      "hue_deg": 276.0,
+      "quality": "mixed_translucent"
+     }
+    },
+    "ratio_caveat": "スモルト様で背も淡い(L59-69)。flank_lower=flank_beige(円斑群の暗い部分を含む)が flank_upper(パーマーク間の淡桃白)より暗く、通常の『下半ほど明るい』勾配にならない。ラベンダー光沢が輝度を押し上げ/押し下げる。"
+   },
+   "samples": [
+    {
+     "id": "dorsal_back_a",
+     "region": "dorsal_back",
+     "rect": [
+      770,
+      240,
+      810,
+      280
+     ],
+     "n_px": 1600,
+     "median_sRGB": [
+      144,
+      141,
+      131
+     ],
+     "hex": "#908d83",
+     "Lab": [
+      58.6,
+      -0.8,
+      5.7
+     ],
+     "chroma": 5.8,
+     "hue_deg": 97.0,
+     "lum_p10_p90": [
+      126,
+      160
+     ],
+     "darkest40pct_Lab": [
+      54.8,
+      -0.7,
+      7.0
+     ],
+     "brightest40pct_Lab": [
+      63.8,
+      -1.3,
+      4.8
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "背側(側線より上、体の中央)の鱗域。灰オリーブ〜黄灰(a-1, b+6)。鱗のモアレハイライトでp90=160。この個体は背も体側も淡く、背が暗褐の他個体と対照的。"
+    },
+    {
+     "id": "dorsal_back_b",
+     "region": "dorsal_back",
+     "rect": [
+      860,
+      420,
+      910,
+      460
+     ],
+     "n_px": 2000,
+     "median_sRGB": [
+      171,
+      169,
+      155
+     ],
+     "hex": "#aba99b",
+     "Lab": [
+      69.0,
+      -1.8,
+      7.5
+     ],
+     "chroma": 7.7,
+     "hue_deg": 104.0,
+     "lum_p10_p90": [
+      154,
+      181
+     ],
+     "darkest40pct_Lab": [
+      65.6,
+      -2.4,
+      8.0
+     ],
+     "brightest40pct_Lab": [
+      72.2,
+      -0.9,
+      7.2
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "背側(頭に近い側)。灰オリーブ〜淡いベージュ(L69, b+7.5)。ぼけた鱗パターン。"
+    },
+    {
+     "id": "flank_ground_pink_a",
+     "region": "flank_ground",
+     "rect": [
+      685,
+      215,
+      700,
+      235
+     ],
+     "n_px": 300,
+     "median_sRGB": [
+      206,
+      195,
+      189
+     ],
+     "hex": "#cec3bd",
+     "Lab": [
+      79.5,
+      2.8,
+      4.4
+     ],
+     "chroma": 5.2,
+     "hue_deg": 57.0,
+     "lum_p10_p90": [
+      186,
+      207
+     ],
+     "darkest40pct_Lab": [
+      76.7,
+      1.7,
+      2.9
+     ],
+     "brightest40pct_Lab": [
+      82.0,
+      2.6,
+      4.9
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "体側のパーマーク間の地色(淡い桃白、(206,195,189))。a+2.8, b+4で桃味は弱い。"
+    },
+    {
+     "id": "flank_ground_pink_b",
+     "region": "flank_ground",
+     "rect": [
+      640,
+      175,
+      652,
+      190
+     ],
+     "n_px": 180,
+     "median_sRGB": [
+      206,
+      197,
+      193
+     ],
+     "hex": "#cec5c1",
+     "Lab": [
+      80.1,
+      2.4,
+      3.1
+     ],
+     "chroma": 4.0,
+     "hue_deg": 52.0,
+     "lum_p10_p90": [
+      188,
+      210
+     ],
+     "darkest40pct_Lab": [
+      77.6,
+      2.4,
+      3.1
+     ],
+     "brightest40pct_Lab": [
+      82.8,
+      3.1,
+      3.4
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "体側のパーマーク間の地色(淡い桃白)。上と同系。"
+    },
+    {
+     "id": "flank_ground_c",
+     "region": "flank_ground",
+     "rect": [
+      730,
+      290,
+      745,
+      305
+     ],
+     "n_px": 225,
+     "median_sRGB": [
+      186,
+      177,
+      179
+     ],
+     "hex": "#bab1b3",
+     "Lab": [
+      73.0,
+      3.6,
+      0.1
+     ],
+     "chroma": 3.6,
+     "hue_deg": 2.0,
+     "lum_p10_p90": [
+      162,
+      186
+     ],
+     "darkest40pct_Lab": [
+      68.4,
+      1.8,
+      -3.7
+     ],
+     "brightest40pct_Lab": [
+      74.9,
+      3.9,
+      1.4
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "体側のパーマーク間の地色。L73で上2点より暗い(光沢の影響)。"
+    },
+    {
+     "id": "flank_beige",
+     "region": "flank_ground",
+     "rect": [
+      545,
+      265,
+      575,
+      290
+     ],
+     "n_px": 750,
+     "median_sRGB": [
+      161,
+      150,
+      132
+     ],
+     "hex": "#a19684",
+     "Lab": [
+      62.6,
+      1.0,
+      11.0
+     ],
+     "chroma": 11.0,
+     "hue_deg": 85.0,
+     "lum_p10_p90": [
+      116,
+      166
+     ],
+     "darkest40pct_Lab": [
+      53.7,
+      3.2,
+      7.2
+     ],
+     "brightest40pct_Lab": [
+      66.6,
+      0.5,
+      10.7
+     ],
+     "quality": "mixed",
+     "flags": [],
+     "comment": "体側下半寄りのベージュ(a+1, b+11)。円斑群のそばで暗い斑が混入(p10=116)。"
+    },
+    {
+     "id": "lateral_lavender",
+     "region": "lateral_band",
+     "rect": [
+      740,
+      350,
+      780,
+      380
+     ],
+     "n_px": 1200,
+     "median_sRGB": [
+      143,
+      142,
+      150
+     ],
+     "hex": "#8f8e96",
+     "Lab": [
+      59.3,
+      1.9,
+      -3.8
+     ],
+     "chroma": 4.3,
+     "hue_deg": 296.0,
+     "lum_p10_p90": [
+      126,
+      165
+     ],
+     "darkest40pct_Lab": [
+      54.6,
+      1.6,
+      -4.3
+     ],
+     "brightest40pct_Lab": [
+      64.9,
+      1.4,
+      -3.6
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "catalogが言うラベンダー光沢帯。灰紫(143,142,150) Lab(59,2,-4)で彩度は低い。桃色の側線帯ではなく、直射日光の鏡面反射による灰紫のかぶり。"
+    },
+    {
+     "id": "parr_mark_a",
+     "region": "parr_mark_core",
+     "rect": [
+      700,
+      285,
+      725,
+      305
+     ],
+     "n_px": 500,
+     "median_sRGB": [
+      137,
+      144,
+      161
+     ],
+     "hex": "#8990a1",
+     "Lab": [
+      59.7,
+      1.1,
+      -9.8
+     ],
+     "chroma": 9.9,
+     "hue_deg": 276.0,
+     "lum_p10_p90": [
+      134,
+      156
+     ],
+     "darkest40pct_Lab": [
+      57.2,
+      1.6,
+      -9.1
+     ],
+     "brightest40pct_Lab": [
+      62.8,
+      -0.5,
+      -10.6
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "パーマーク(体側中央)。青灰〜青紫(a+1, b-10)。縁はぼけてコントラストは低い。"
+    },
+    {
+     "id": "parr_mark_b",
+     "region": "parr_mark_core",
+     "rect": [
+      610,
+      170,
+      632,
+      190
+     ],
+     "n_px": 440,
+     "median_sRGB": [
+      141,
+      153,
+      173
+     ],
+     "hex": "#8d99ad",
+     "Lab": [
+      62.9,
+      0.1,
+      -11.9
+     ],
+     "chroma": 11.9,
+     "hue_deg": 270.0,
+     "lum_p10_p90": [
+      144,
+      162
+     ],
+     "darkest40pct_Lab": [
+      60.7,
+      0.4,
+      -12.7
+     ],
+     "brightest40pct_Lab": [
+      65.5,
+      -0.1,
+      -10.6
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "パーマーク(体側中央前寄り)。青灰(a0, b-12)。"
+    },
+    {
+     "id": "parr_mark_d",
+     "region": "parr_mark_core",
+     "rect": [
+      645,
+      215,
+      665,
+      235
+     ],
+     "n_px": 400,
+     "median_sRGB": [
+      142,
+      152,
+      168
+     ],
+     "hex": "#8e98a8",
+     "Lab": [
+      62.5,
+      -0.2,
+      -9.6
+     ],
+     "chroma": 9.6,
+     "hue_deg": 269.0,
+     "lum_p10_p90": [
+      138,
+      163
+     ],
+     "darkest40pct_Lab": [
+      59.1,
+      0.9,
+      -10.8
+     ],
+     "brightest40pct_Lab": [
+      65.8,
+      -0.7,
+      -9.1
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "パーマーク(体側中央、最も青みが明瞭)。(142,152,168) Lab(62.5,0,-9.6)。"
+    },
+    {
+     "id": "round_spot_b",
+     "region": "parr_mark_core",
+     "rect": [
+      562,
+      264,
+      572,
+      274
+     ],
+     "n_px": 100,
+     "median_sRGB": [
+      126,
+      113,
+      109
+     ],
+     "hex": "#7e716d",
+     "Lab": [
+      48.7,
+      4.3,
+      4.1
+     ],
+     "chroma": 5.9,
+     "hue_deg": 43.0,
+     "lum_p10_p90": [
+      111,
+      123
+     ],
+     "darkest40pct_Lab": [
+      47.8,
+      3.9,
+      3.9
+     ],
+     "brightest40pct_Lab": [
+      50.5,
+      5.0,
+      6.1
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "体側下半の円斑(径約14px)。暗い灰褐(a+4, b+4, L49)で、マークの青灰とは異なり青みがない。"
+    },
+    {
+     "id": "black_spot_dorsal",
+     "region": "black_spot_core",
+     "rect": [
+      831,
+      298,
+      838,
+      304
+     ],
+     "n_px": 42,
+     "median_sRGB": [
+      102,
+      96,
+      89
+     ],
+     "hex": "#666059",
+     "Lab": [
+      41.1,
+      1.0,
+      4.9
+     ],
+     "chroma": 5.0,
+     "hue_deg": 78.0,
+     "lum_p10_p90": [
+      76,
+      126
+     ],
+     "darkest40pct_Lab": [
+      33.5,
+      2.2,
+      3.8
+     ],
+     "brightest40pct_Lab": [
+      49.7,
+      1.6,
+      4.3
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "背側の小黒点(径約5px、少数)。中央値は(102,96,89) Lab(41,1,5)で、小さくぼけて黒にならない暗灰褐。darkest40でもL33。"
+    },
+    {
+     "id": "belly_a",
+     "region": "belly",
+     "rect": [
+      560,
+      330,
+      600,
+      360
+     ],
+     "n_px": 1200,
+     "median_sRGB": [
+      202,
+      200,
+      185
+     ],
+     "hex": "#cac8b9",
+     "Lab": [
+      80.3,
+      -1.7,
+      7.6
+     ],
+     "chroma": 7.7,
+     "hue_deg": 102.0,
+     "lum_p10_p90": [
+      179,
+      211
+     ],
+     "darkest40pct_Lab": [
+      75.2,
+      -1.1,
+      11.5
+     ],
+     "brightest40pct_Lab": [
+      83.8,
+      -2.8,
+      6.8
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "腹(体の下側、白い帯)。クリーム白(a-1.7, b+7.6, L80)。"
+    },
+    {
+     "id": "belly_b",
+     "region": "belly",
+     "rect": [
+      520,
+      300,
+      550,
+      330
+     ],
+     "n_px": 900,
+     "median_sRGB": [
+      220,
+      217,
+      205
+     ],
+     "hex": "#dcd9cd",
+     "Lab": [
+      86.6,
+      -1.1,
+      6.3
+     ],
+     "chroma": 6.4,
+     "hue_deg": 100.0,
+     "lum_p10_p90": [
+      177,
+      233
+     ],
+     "darkest40pct_Lab": [
+      76.6,
+      -0.5,
+      11.4
+     ],
+     "brightest40pct_Lab": [
+      91.4,
+      -3.5,
+      6.5
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "腹の別地点。明るいクリーム白(L86.6)。"
+    },
+    {
+     "id": "head_dorsal",
+     "region": "head_dorsal",
+     "rect": [
+      950,
+      560,
+      990,
+      600
+     ],
+     "n_px": 1600,
+     "median_sRGB": [
+      152,
+      144,
+      125
+     ],
+     "hex": "#98907d",
+     "Lab": [
+      60.0,
+      -0.4,
+      11.2
+     ],
+     "chroma": 11.2,
+     "hue_deg": 92.0,
+     "lum_p10_p90": [
+      130,
+      187
+     ],
+     "darkest40pct_Lab": [
+      56.6,
+      -0.3,
+      12.5
+     ],
+     "brightest40pct_Lab": [
+      66.8,
+      -0.2,
+      9.0
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "頭部背面(後頭部)。オリーブ黄灰(a0, b+11, L60)。黒褐ではなく淡い。"
+    },
+    {
+     "id": "opercle_a",
+     "region": "opercle",
+     "rect": [
+      840,
+      540,
+      890,
+      580
+     ],
+     "n_px": 2000,
+     "median_sRGB": [
+      142,
+      134,
+      144
+     ],
+     "hex": "#8e8690",
+     "Lab": [
+      56.9,
+      4.9,
+      -4.3
+     ],
+     "chroma": 6.5,
+     "hue_deg": 319.0,
+     "lum_p10_p90": [
+      118,
+      155
+     ],
+     "darkest40pct_Lab": [
+      51.2,
+      5.4,
+      0.7
+     ],
+     "brightest40pct_Lab": [
+      61.4,
+      6.7,
+      -8.9
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "鰓蓋。銀灰紫(a+5, b-4)。"
+    },
+    {
+     "id": "cheek_a",
+     "region": "cheek",
+     "rect": [
+      860,
+      610,
+      900,
+      650
+     ],
+     "n_px": 1600,
+     "median_sRGB": [
+      147,
+      134,
+      135
+     ],
+     "hex": "#938687",
+     "Lab": [
+      57.2,
+      4.8,
+      1.4
+     ],
+     "chroma": 5.0,
+     "hue_deg": 17.0,
+     "lum_p10_p90": [
+      128,
+      154
+     ],
+     "darkest40pct_Lab": [
+      54.7,
+      4.4,
+      4.6
+     ],
+     "brightest40pct_Lab": [
+      61.5,
+      5.1,
+      -4.7
+     ],
+     "quality": "mixed_specular",
+     "flags": [],
+     "comment": "頬。銀灰紫〜灰桃(a+5, b+1)。"
+    },
+    {
+     "id": "pectoral_a",
+     "region": "pectoral_membrane",
+     "rect": [
+      715,
+      490,
+      745,
+      520
+     ],
+     "n_px": 900,
+     "median_sRGB": [
+      185,
+      165,
+      124
+     ],
+     "hex": "#b9a57c",
+     "Lab": [
+      68.5,
+      1.1,
+      24.0
+     ],
+     "chroma": 24.0,
+     "hue_deg": 87.0,
+     "lum_p10_p90": [
+      151,
+      186
+     ],
+     "darkest40pct_Lab": [
+      64.4,
+      1.1,
+      23.1
+     ],
+     "brightest40pct_Lab": [
+      73.8,
+      -1.1,
+      24.0
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "胸鰭(淡い黄褐、半透明)。(185,165,124) Lab(68.5,1,24)。鮮黄ではなく彩度は中。"
+    },
+    {
+     "id": "pelvic_a",
+     "region": "pelvic",
+     "rect": [
+      450,
+      310,
+      500,
+      340
+     ],
+     "n_px": 1500,
+     "median_sRGB": [
+      95,
+      103,
+      111
+     ],
+     "hex": "#5f676f",
+     "Lab": [
+      43.2,
+      -1.3,
+      -5.5
+     ],
+     "chroma": 5.7,
+     "hue_deg": 257.0,
+     "lum_p10_p90": [
+      89,
+      124
+     ],
+     "darkest40pct_Lab": [
+      39.4,
+      -1.4,
+      -6.3
+     ],
+     "brightest40pct_Lab": [
+      49.1,
+      -2.4,
+      -2.7
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "腹鰭(透明灰白)。背景のタモ網の暗色が透けてL43。鰭色は参考不可。"
+    },
+    {
+     "id": "anal_a",
+     "region": "anal",
+     "rect": [
+      350,
+      90,
+      390,
+      140
+     ],
+     "n_px": 2000,
+     "median_sRGB": [
+      134,
+      138,
+      149
+     ],
+     "hex": "#868a95",
+     "Lab": [
+      57.4,
+      0.6,
+      -6.4
+     ],
+     "chroma": 6.5,
+     "hue_deg": 276.0,
+     "lum_p10_p90": [
+      114,
+      167
+     ],
+     "darkest40pct_Lab": [
+      52.0,
+      0.8,
+      -6.5
+     ],
+     "brightest40pct_Lab": [
+      65.1,
+      0.4,
+      -5.2
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "臀鰭(透明灰白)。網が透け(134,138,149)=青灰。参考値。"
+    },
+    {
+     "id": "iris_lime",
+     "region": "iris_ring",
+     "rect": [
+      995,
+      668,
+      1008,
+      690
+     ],
+     "n_px": 286,
+     "median_sRGB": [
+      170,
+      172,
+      145
+     ],
+     "hex": "#aaac91",
+     "Lab": [
+      69.5,
+      -5.5,
+      13.7
+     ],
+     "chroma": 14.7,
+     "hue_deg": 112.0,
+     "lum_p10_p90": [
+      127,
+      205
+     ],
+     "darkest40pct_Lab": [
+      58.4,
+      -4.9,
+      10.6
+     ],
+     "brightest40pct_Lab": [
+      78.6,
+      -11.8,
+      18.4
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "虹彩(右縁のライム〜黄緑の金属リング)。(170,172,145) Lab(69.5,-5.5,13.7)。リング幅は約5-8px。"
+    },
+    {
+     "id": "pupil",
+     "region": "pupil",
+     "rect": [
+      950,
+      676,
+      972,
+      692
+     ],
+     "n_px": 352,
+     "median_sRGB": [
+      29,
+      26,
+      25
+     ],
+     "hex": "#1d1a19",
+     "Lab": [
+      9.4,
+      1.6,
+      1.0
+     ],
+     "chroma": 1.9,
+     "hue_deg": 31.0,
+     "lum_p10_p90": [
+      1,
+      65
+     ],
+     "darkest40pct_Lab": [
+      0.5,
+      0.5,
+      -0.9
+     ],
+     "brightest40pct_Lab": [
+      22.6,
+      1.4,
+      4.7
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "瞳孔(黒、大きい)。(29,26,25) Lab(9,1.6,1)。darkest40でL0.5。"
+    }
+   ]
+  },
+  "p040": {
+   "source": {
+    "host": "tonysharks.com",
+    "url": "https://tonysharks.com/Tree_of_life/Eukaryote/Opisthokonta/Yamame/Yamame.html",
+    "image_size_px": [
+     800,
+     580
+    ]
+   },
+   "subject": {
+    "catalog_species_ident": "yamame (conf 0.85)",
+    "life_stage": "parr (catalog)",
+    "context": "in_water_natural (水中の側面、浅い流れ)",
+    "view": "lateral_left (ほぼ純側面、体軸は直線)",
+    "fish_definition": "単独個体",
+    "my_note": "水中のパーマー(幼魚)。パーマーク9本は暗灰褐で地色(桃褐)に対しコントラストが低い。体側中央に桃〜赤褐の帯、背と頭は明るい灰ベージュ、体側下半は緑がかった灰、鰭は半透明の灰黄。眼は暗青〜黒。"
+   },
+   "white_balance_cast": "水中光の緑〜黄被り、低コントラストと霞み、浮遊物。中性基準物なし。体側下半(a-2〜-3, b+8〜+12)が緑黄に傾き、帯(a+5〜+8)は逆に桃褐に傾くので、被りだけでなく本来の桃の帯が残っていると解釈できる。",
+   "exposure": "低コントラストで霞み。背(L70)がむしろ体側の帯(L46-51)より明るく、水中で上方光を受けて背が淡く見える。白飛び/黒潰れはなし。",
+   "reliability": "med",
+   "reliability_reason": "全身が写りパーマーク/帯/黒点/鰭の位置関係と相対色は読める。ただし水中の緑黄被り、霞み、背景の透過があり絶対色は参考値。パーマーの幼魚で成魚の基準にならない。",
+   "usable_for": [
+    "幼魚(パーマー)の体側の桃褐の帯とパーマークの低いΔL(-6〜-10)",
+    "背と頭が明るい灰ベージュで暗くない(逆カウンターシェード)ことの確認",
+    "円斑が無彩色〜緑灰",
+    "鰭が淡い灰黄の半透明であること"
+   ],
+   "not_usable_for": [
+    "鰭の絶対色(背景の礫が透ける)",
+    "腹の色(影+緑被り)",
+    "成魚の背の暗さ(幼魚+水中光)"
+   ],
+   "not_visible_or_not_measured": [
+    "朱点(なし)",
+    "脂鰭は極小で参考値のみ"
+   ],
+   "relative": {
+    "ratio_definitions": {
+     "dorsal": {
+      "samples": [
+       "dorsal_back_a",
+       "dorsal_back_b"
+      ],
+      "Lab_mean": [
+       71.0,
+       0.7,
+       6.3
+      ]
+     },
+     "flank_upper": {
+      "samples": [
+       "lateral_band_ground_a",
+       "lateral_band_ground_b"
+      ],
+      "Lab_mean": [
+       48.7,
+       5.7,
+       9.8
+      ]
+     },
+     "flank_lower": {
+      "samples": [
+       "flank_ground_lower"
+      ],
+      "Lab_mean": [
+       54.3,
+       0.7,
+       8.1
+      ]
+     },
+     "belly": {
+      "samples": [
+       "belly_a"
+      ],
+      "Lab_mean": [
+       59.6,
+       -1.8,
+       7.7
+      ]
+     }
+    },
+    "dorsal_to_flank_upper": {
+     "L_star_ratio": 1.46,
+     "linear_Y_ratio": 2.44
+    },
+    "dorsal_to_flank_lower": {
+     "L_star_ratio": 1.31,
+     "linear_Y_ratio": 1.9
+    },
+    "ventral_to_flank_upper": {
+     "L_star_ratio": 1.22,
+     "linear_Y_ratio": 1.6
+    },
+    "ventral_to_flank_lower": {
+     "L_star_ratio": 1.1,
+     "linear_Y_ratio": 1.24
+    },
+    "flank_upper_to_lower_L_gap": 5.6,
+    "parr_mark_contrast": [
+     {
+      "pair": "mark_a_vs_band_ground",
+      "mark_samples": [
+       "parr_mark_a"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_a_left",
+        "rect": [
+         225,
+         270,
+         248,
+         290
+        ],
+        "median_sRGB": [
+         139,
+         119,
+         105
+        ],
+        "Lab": [
+         51.5,
+         5.4,
+         10.6
+        ]
+       },
+       {
+        "id": "g_a_right",
+        "rect": [
+         275,
+         270,
+         290,
+         290
+        ],
+        "median_sRGB": [
+         131,
+         110,
+         102
+        ],
+        "Lab": [
+         48.2,
+         6.9,
+         7.5
+        ]
+       }
+      ],
+      "mark_Lab": [
+       39.7,
+       2.4,
+       3.5
+      ],
+      "ground_Lab_mean": [
+       49.9,
+       6.2,
+       9.1
+      ],
+      "dL": -10.2,
+      "da": -3.8,
+      "db": -5.6,
+      "dE76": 12.2,
+      "dL_using_darkest40pct_mark": -12.5,
+      "mark_darkest40pct_Lab": [
+       37.4,
+       1.7,
+       3.8
+      ]
+     },
+     {
+      "pair": "mark_b_vs_band_ground",
+      "mark_samples": [
+       "parr_mark_b"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_b_left",
+        "rect": [
+         360,
+         268,
+         378,
+         288
+        ],
+        "median_sRGB": [
+         138,
+         118,
+         105
+        ],
+        "Lab": [
+         51.1,
+         5.6,
+         10.0
+        ]
+       },
+       {
+        "id": "g_b_right",
+        "rect": [
+         408,
+         268,
+         440,
+         284
+        ],
+        "median_sRGB": [
+         126,
+         106,
+         94
+        ],
+        "Lab": [
+         46.3,
+         5.7,
+         9.6
+        ]
+       }
+      ],
+      "mark_Lab": [
+       40.7,
+       3.1,
+       4.3
+      ],
+      "ground_Lab_mean": [
+       48.7,
+       5.7,
+       9.8
+      ],
+      "dL": -8.0,
+      "da": -2.6,
+      "db": -5.5,
+      "dE76": 10.1,
+      "dL_using_darkest40pct_mark": -11.6,
+      "mark_darkest40pct_Lab": [
+       37.1,
+       2.1,
+       3.3
+      ]
+     },
+     {
+      "pair": "mark_c_vs_band_ground",
+      "mark_samples": [
+       "parr_mark_c"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_c_left",
+        "rect": [
+         430,
+         262,
+         444,
+         280
+        ],
+        "median_sRGB": [
+         123,
+         102,
+         88
+        ],
+        "Lab": [
+         44.8,
+         6.0,
+         11.3
+        ]
+       },
+       {
+        "id": "g_c_right",
+        "rect": [
+         470,
+         262,
+         490,
+         275
+        ],
+        "median_sRGB": [
+         128,
+         109,
+         92
+        ],
+        "Lab": [
+         47.4,
+         4.7,
+         12.3
+        ]
+       }
+      ],
+      "mark_Lab": [
+       39.5,
+       0.8,
+       8.7
+      ],
+      "ground_Lab_mean": [
+       46.1,
+       5.3,
+       11.8
+      ],
+      "dL": -6.6,
+      "da": -4.5,
+      "db": -3.1,
+      "dE76": 8.6,
+      "dL_using_darkest40pct_mark": -9.4,
+      "mark_darkest40pct_Lab": [
+       36.7,
+       1.5,
+       8.3
+      ]
+     },
+     {
+      "pair": "round_spot_a_vs_below_band",
+      "mark_samples": [
+       "round_spot_a"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_spot",
+        "rect": [
+         376,
+         300,
+         390,
+         318
+        ],
+        "median_sRGB": [
+         137,
+         129,
+         116
+        ],
+        "Lab": [
+         54.3,
+         0.7,
+         8.1
+        ]
+       }
+      ],
+      "mark_Lab": [
+       42.9,
+       0.6,
+       -0.4
+      ],
+      "ground_Lab_mean": [
+       54.3,
+       0.7,
+       8.1
+      ],
+      "dL": -11.4,
+      "da": -0.1,
+      "db": -8.5,
+      "dE76": 14.2,
+      "dL_using_darkest40pct_mark": -13.9,
+      "mark_darkest40pct_Lab": [
+       40.4,
+       0.6,
+       -1.7
+      ]
+     },
+     {
+      "pair": "round_spot_b_vs_below_band",
+      "mark_samples": [
+       "round_spot_b"
+      ],
+      "ground_samples": [
+       {
+        "id": "g_spot",
+        "rect": [
+         376,
+         300,
+         390,
+         318
+        ],
+        "median_sRGB": [
+         137,
+         129,
+         116
+        ],
+        "Lab": [
+         54.3,
+         0.7,
+         8.1
+        ]
+       }
+      ],
+      "mark_Lab": [
+       41.7,
+       -3.2,
+       1.5
+      ],
+      "ground_Lab_mean": [
+       54.3,
+       0.7,
+       8.1
+      ],
+      "dL": -12.6,
+      "da": -3.9,
+      "db": -6.6,
+      "dE76": 14.7,
+      "dL_using_darkest40pct_mark": -14.3,
+      "mark_darkest40pct_Lab": [
+       40.0,
+       -3.8,
+       1.3
+      ]
+     }
+    ],
+    "head_dorsal_to_cheek": {
+     "L_star_ratio": 1.24,
+     "linear_Y_ratio": 1.67
+    },
+    "fin_chroma_overview": {
+     "pectoral_a": {
+      "region": "pectoral_membrane",
+      "Lab": [
+       72.4,
+       1.5,
+       8.6
+      ],
+      "chroma": 8.7,
+      "hue_deg": 80.0,
+      "quality": "mixed_translucent"
+     },
+     "pelvic_a": {
+      "region": "pelvic",
+      "Lab": [
+       54.3,
+       3.1,
+       18.6
+      ],
+      "chroma": 18.9,
+      "hue_deg": 80.0,
+      "quality": "mixed_translucent"
+     },
+     "anal_a": {
+      "region": "anal",
+      "Lab": [
+       53.4,
+       -0.8,
+       17.9
+      ],
+      "chroma": 17.9,
+      "hue_deg": 92.0,
+      "quality": "mixed_translucent"
+     },
+     "dorsal_fin_a": {
+      "region": "dorsal_fin",
+      "Lab": [
+       59.1,
+       3.2,
+       8.3
+      ],
+      "chroma": 8.9,
+      "hue_deg": 69.0,
+      "quality": "mixed_translucent"
+     },
+     "adipose_a": {
+      "region": "adipose_fin",
+      "Lab": [
+       61.8,
+       -0.6,
+       9.2
+      ],
+      "chroma": 9.3,
+      "hue_deg": 94.0,
+      "quality": "small_patch"
+     },
+     "caudal_base": {
+      "region": "caudal_fin_base",
+      "Lab": [
+       52.1,
+       2.9,
+       11.4
+      ],
+      "chroma": 11.8,
+      "hue_deg": 76.0,
+      "quality": "mixed_translucent"
+     },
+     "caudal_margin": {
+      "region": "caudal_fin_margin",
+      "Lab": [
+       44.7,
+       4.1,
+       9.7
+      ],
+      "chroma": 10.5,
+      "hue_deg": 67.0,
+      "quality": "mixed_translucent"
+     }
+    },
+    "ratio_caveat": "水中のパーマー。背・頭が明るい灰ベージュ(L70-72)で、体側中央の桃褐の帯(L46-51)が最も暗い。逆カウンターシェード(dorsal_to_flank>1)。上方光を受ける水中側面写真の典型で、陸上写真の背の暗さとは別物。"
+   },
+   "samples": [
+    {
+     "id": "dorsal_back_a",
+     "region": "dorsal_back",
+     "rect": [
+      200,
+      222,
+      260,
+      242
+     ],
+     "n_px": 1200,
+     "median_sRGB": [
+      180,
+      169,
+      154
+     ],
+     "hex": "#b4a99a",
+     "Lab": [
+      69.8,
+      1.4,
+      9.2
+     ],
+     "chroma": 9.3,
+     "hue_deg": 81.0,
+     "lum_p10_p90": [
+      159,
+      183
+     ],
+     "darkest40pct_Lab": [
+      66.5,
+      0.4,
+      8.3
+     ],
+     "brightest40pct_Lab": [
+      73.0,
+      1.0,
+      10.1
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "背(側線帯より上)。明るい灰ベージュ(a+1.4, b+9, L70)。暗い背ではなく、水中の上方光で背がむしろ明るく見える。パーマーク上端が薄く透ける。"
+    },
+    {
+     "id": "dorsal_back_b",
+     "region": "dorsal_back",
+     "rect": [
+      420,
+      208,
+      470,
+      222
+     ],
+     "n_px": 700,
+     "median_sRGB": [
+      180,
+      177,
+      171
+     ],
+     "hex": "#b4b1ab",
+     "Lab": [
+      72.3,
+      -0.0,
+      3.4
+     ],
+     "chroma": 3.4,
+     "hue_deg": 91.0,
+     "lum_p10_p90": [
+      138,
+      186
+     ],
+     "darkest40pct_Lab": [
+      66.7,
+      -0.2,
+      4.0
+     ],
+     "brightest40pct_Lab": [
+      74.6,
+      0.1,
+      4.1
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "背(体の後半、背縁寄り)。灰白〜灰ベージュ(a0, b+3.4, L72)。p10=138は背縁の暗い輪郭線。"
+    },
+    {
+     "id": "lateral_band_a",
+     "region": "lateral_band",
+     "rect": [
+      250,
+      266,
+      300,
+      274
+     ],
+     "n_px": 400,
+     "median_sRGB": [
+      140,
+      117,
+      108
+     ],
+     "hex": "#8c756c",
+     "Lab": [
+      51.1,
+      7.5,
+      8.3
+     ],
+     "chroma": 11.2,
+     "hue_deg": 48.0,
+     "lum_p10_p90": [
+      110,
+      147
+     ],
+     "darkest40pct_Lab": [
+      48.2,
+      7.0,
+      6.3
+     ],
+     "brightest40pct_Lab": [
+      56.8,
+      8.3,
+      7.6
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "体側中央の桃〜赤褐の帯(幅約15-25px)。(140,117,108) Lab(51,7.5,8)。連続帯で、パーマーク位置に暗斑が重なる。細い上縁線がやや赤い。"
+    },
+    {
+     "id": "lateral_band_b",
+     "region": "lateral_band",
+     "rect": [
+      470,
+      262,
+      520,
+      272
+     ],
+     "n_px": 500,
+     "median_sRGB": [
+      126,
+      105,
+      88
+     ],
+     "hex": "#7e6958",
+     "Lab": [
+      46.0,
+      5.6,
+      12.7
+     ],
+     "chroma": 13.9,
+     "hue_deg": 66.0,
+     "lum_p10_p90": [
+      91,
+      115
+     ],
+     "darkest40pct_Lab": [
+      40.5,
+      -0.0,
+      8.3
+     ],
+     "brightest40pct_Lab": [
+      48.1,
+      6.1,
+      12.2
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "体側後半の桃褐の帯。(126,105,88) Lab(46,5.6,12.7)。前半より黄味(色相66度)が強い。"
+    },
+    {
+     "id": "lateral_band_ground_a",
+     "region": "flank_ground",
+     "rect": [
+      360,
+      268,
+      378,
+      288
+     ],
+     "n_px": 360,
+     "median_sRGB": [
+      138,
+      118,
+      105
+     ],
+     "hex": "#8a7669",
+     "Lab": [
+      51.1,
+      5.6,
+      10.0
+     ],
+     "chroma": 11.5,
+     "hue_deg": 61.0,
+     "lum_p10_p90": [
+      114,
+      128
+     ],
+     "darkest40pct_Lab": [
+      49.2,
+      5.8,
+      9.6
+     ],
+     "brightest40pct_Lab": [
+      52.9,
+      4.6,
+      10.2
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "帯の中のパーマーク間地色(桃褐)。(138,118,105) Lab(51,5.6,10)。"
+    },
+    {
+     "id": "lateral_band_ground_b",
+     "region": "flank_ground",
+     "rect": [
+      408,
+      268,
+      440,
+      284
+     ],
+     "n_px": 512,
+     "median_sRGB": [
+      126,
+      106,
+      94
+     ],
+     "hex": "#7e6a5e",
+     "Lab": [
+      46.3,
+      5.7,
+      9.6
+     ],
+     "chroma": 11.2,
+     "hue_deg": 59.0,
+     "lum_p10_p90": [
+      102,
+      119
+     ],
+     "darkest40pct_Lab": [
+      44.3,
+      5.8,
+      10.3
+     ],
+     "brightest40pct_Lab": [
+      48.6,
+      5.0,
+      9.3
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "帯の中のパーマーク間地色(桃褐)。Lab(46,5.7,9.6)。"
+    },
+    {
+     "id": "flank_ground_lower",
+     "region": "flank_ground",
+     "rect": [
+      376,
+      300,
+      390,
+      318
+     ],
+     "n_px": 252,
+     "median_sRGB": [
+      137,
+      129,
+      116
+     ],
+     "hex": "#898174",
+     "Lab": [
+      54.3,
+      0.7,
+      8.1
+     ],
+     "chroma": 8.2,
+     "hue_deg": 85.0,
+     "lum_p10_p90": [
+      123,
+      138
+     ],
+     "darkest40pct_Lab": [
+      52.5,
+      1.5,
+      8.5
+     ],
+     "brightest40pct_Lab": [
+      56.9,
+      -2.0,
+      8.3
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "帯の下、円斑の間の地色。灰緑ベージュ(a+0.7, b+8, L54)。水中の緑被りを含む。"
+    },
+    {
+     "id": "parr_mark_a",
+     "region": "parr_mark_core",
+     "rect": [
+      255,
+      278,
+      266,
+      294
+     ],
+     "n_px": 176,
+     "median_sRGB": [
+      100,
+      92,
+      88
+     ],
+     "hex": "#645c58",
+     "Lab": [
+      39.7,
+      2.4,
+      3.5
+     ],
+     "chroma": 4.2,
+     "hue_deg": 55.0,
+     "lum_p10_p90": [
+      85,
+      104
+     ],
+     "darkest40pct_Lab": [
+      37.4,
+      1.7,
+      3.8
+     ],
+     "brightest40pct_Lab": [
+      42.5,
+      2.9,
+      3.3
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "パーマーク(前から2本目)。暗灰褐(a+2.4, b+3.5, L40)。ほぼ無彩色で青味はない。"
+    },
+    {
+     "id": "parr_mark_b",
+     "region": "parr_mark_core",
+     "rect": [
+      385,
+      262,
+      400,
+      295
+     ],
+     "n_px": 495,
+     "median_sRGB": [
+      104,
+      94,
+      89
+     ],
+     "hex": "#685e59",
+     "Lab": [
+      40.7,
+      3.1,
+      4.3
+     ],
+     "chroma": 5.3,
+     "hue_deg": 55.0,
+     "lum_p10_p90": [
+      84,
+      108
+     ],
+     "darkest40pct_Lab": [
+      37.1,
+      2.1,
+      3.3
+     ],
+     "brightest40pct_Lab": [
+      43.7,
+      3.6,
+      3.8
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "パーマーク(体側中央、縦長)。暗灰褐(100,92,86)付近 Lab(41,3,4)。"
+    },
+    {
+     "id": "parr_mark_c",
+     "region": "parr_mark_core",
+     "rect": [
+      448,
+      255,
+      462,
+      290
+     ],
+     "n_px": 490,
+     "median_sRGB": [
+      100,
+      92,
+      79
+     ],
+     "hex": "#645c4f",
+     "Lab": [
+      39.5,
+      0.8,
+      8.7
+     ],
+     "chroma": 8.7,
+     "hue_deg": 85.0,
+     "lum_p10_p90": [
+      83,
+      103
+     ],
+     "darkest40pct_Lab": [
+      36.7,
+      1.5,
+      8.3
+     ],
+     "brightest40pct_Lab": [
+      42.2,
+      1.3,
+      7.8
+     ],
+     "quality": "good",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "パーマーク(後半)。暗灰褐(a+1, b+9)。"
+    },
+    {
+     "id": "round_spot_a",
+     "region": "parr_mark_core",
+     "rect": [
+      291,
+      306,
+      300,
+      317
+     ],
+     "n_px": 99,
+     "median_sRGB": [
+      102,
+      101,
+      102
+     ],
+     "hex": "#666566",
+     "Lab": [
+      42.9,
+      0.6,
+      -0.4
+     ],
+     "chroma": 0.7,
+     "hue_deg": 324.0,
+     "lum_p10_p90": [
+      92,
+      107
+     ],
+     "darkest40pct_Lab": [
+      40.4,
+      0.6,
+      -1.7
+     ],
+     "brightest40pct_Lab": [
+      44.4,
+      1.8,
+      -1.3
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "側線下の円斑(径約12px)。無彩色の灰(a+0.6, b-0.4, L43)。他の円斑は青灰〜緑灰が混ざる。"
+    },
+    {
+     "id": "round_spot_b",
+     "region": "parr_mark_core",
+     "rect": [
+      362,
+      308,
+      371,
+      318
+     ],
+     "n_px": 90,
+     "median_sRGB": [
+      94,
+      100,
+      96
+     ],
+     "hex": "#5e6460",
+     "Lab": [
+      41.7,
+      -3.2,
+      1.5
+     ],
+     "chroma": 3.5,
+     "hue_deg": 155.0,
+     "lum_p10_p90": [
+      92,
+      105
+     ],
+     "darkest40pct_Lab": [
+      40.0,
+      -3.8,
+      1.3
+     ],
+     "brightest40pct_Lab": [
+      43.6,
+      -1.3,
+      1.8
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "側線下の円斑(別個)。緑がかった灰(a-3, b+1.5, L42)。"
+    },
+    {
+     "id": "belly_a",
+     "region": "belly",
+     "rect": [
+      230,
+      318,
+      290,
+      330
+     ],
+     "n_px": 720,
+     "median_sRGB": [
+      146,
+      144,
+      130
+     ],
+     "hex": "#929082",
+     "Lab": [
+      59.6,
+      -1.8,
+      7.7
+     ],
+     "chroma": 7.9,
+     "hue_deg": 103.0,
+     "lum_p10_p90": [
+      134,
+      150
+     ],
+     "darkest40pct_Lab": [
+      57.2,
+      -2.4,
+      9.4
+     ],
+     "brightest40pct_Lab": [
+      61.6,
+      -1.5,
+      7.8
+     ],
+     "quality": "shadowed",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "腹縁(影、緑がかった灰、L60)。腹は体側下半と同じ灰ベージュで白くない。"
+    },
+    {
+     "id": "head_dorsal",
+     "region": "head_dorsal",
+     "rect": [
+      110,
+      228,
+      160,
+      245
+     ],
+     "n_px": 850,
+     "median_sRGB": [
+      184,
+      173,
+      158
+     ],
+     "hex": "#b8ad9e",
+     "Lab": [
+      71.2,
+      1.4,
+      9.1
+     ],
+     "chroma": 9.2,
+     "hue_deg": 81.0,
+     "lum_p10_p90": [
+      168,
+      180
+     ],
+     "darkest40pct_Lab": [
+      69.7,
+      1.2,
+      9.7
+     ],
+     "brightest40pct_Lab": [
+      72.7,
+      1.4,
+      9.1
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "頭部背面。明るい灰ベージュ(a+1.4, b+9, L71)。背と同じ明るさ。"
+    },
+    {
+     "id": "cheek_a",
+     "region": "cheek",
+     "rect": [
+      130,
+      290,
+      175,
+      315
+     ],
+     "n_px": 1125,
+     "median_sRGB": [
+      147,
+      137,
+      121
+     ],
+     "hex": "#938979",
+     "Lab": [
+      57.5,
+      0.9,
+      9.9
+     ],
+     "chroma": 10.0,
+     "hue_deg": 85.0,
+     "lum_p10_p90": [
+      126,
+      148
+     ],
+     "darkest40pct_Lab": [
+      54.2,
+      1.9,
+      9.8
+     ],
+     "brightest40pct_Lab": [
+      60.3,
+      1.2,
+      8.8
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "頬。灰ベージュ(a+1, b+10, L57.5)。"
+    },
+    {
+     "id": "opercle_a",
+     "region": "opercle",
+     "rect": [
+      180,
+      260,
+      215,
+      290
+     ],
+     "n_px": 1050,
+     "median_sRGB": [
+      132,
+      115,
+      105
+     ],
+     "hex": "#847369",
+     "Lab": [
+      49.7,
+      4.9,
+      8.0
+     ],
+     "chroma": 9.3,
+     "hue_deg": 58.0,
+     "lum_p10_p90": [
+      104,
+      148
+     ],
+     "darkest40pct_Lab": [
+      45.1,
+      4.3,
+      7.2
+     ],
+     "brightest40pct_Lab": [
+      57.4,
+      4.3,
+      7.0
+     ],
+     "quality": "good",
+     "flags": [],
+     "comment": "鰓蓋。桃褐の暗い灰(a+5, b+8, L50)。帯の延長で赤みがある。"
+    },
+    {
+     "id": "pectoral_a",
+     "region": "pectoral_membrane",
+     "rect": [
+      235,
+      337,
+      285,
+      347
+     ],
+     "n_px": 500,
+     "median_sRGB": [
+      187,
+      176,
+      162
+     ],
+     "hex": "#bbb0a2",
+     "Lab": [
+      72.4,
+      1.5,
+      8.6
+     ],
+     "chroma": 8.7,
+     "hue_deg": 80.0,
+     "lum_p10_p90": [
+      148,
+      204
+     ],
+     "darkest40pct_Lab": [
+      62.5,
+      -0.5,
+      7.5
+     ],
+     "brightest40pct_Lab": [
+      77.8,
+      1.3,
+      6.7
+     ],
+     "quality": "mixed_translucent",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "胸鰭(淡い灰黄、細長い葉形)。(187,176,162) Lab(72,1.5,8.6)。ほぼ無色で鮮黄ではない。"
+    },
+    {
+     "id": "pelvic_a",
+     "region": "pelvic",
+     "rect": [
+      430,
+      325,
+      470,
+      340
+     ],
+     "n_px": 600,
+     "median_sRGB": [
+      147,
+      127,
+      98
+     ],
+     "hex": "#937f62",
+     "Lab": [
+      54.3,
+      3.1,
+      18.6
+     ],
+     "chroma": 18.9,
+     "hue_deg": 80.0,
+     "lum_p10_p90": [
+      120,
+      135
+     ],
+     "darkest40pct_Lab": [
+      52.0,
+      2.1,
+      16.0
+     ],
+     "brightest40pct_Lab": [
+      55.8,
+      2.7,
+      20.1
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "腹鰭(淡黄〜クリーム、小さな三角形)。(147,127,98) Lab(54,3,19)。背景の礫の暖色が透ける可能性あり。"
+    },
+    {
+     "id": "anal_a",
+     "region": "anal",
+     "rect": [
+      525,
+      295,
+      570,
+      315
+     ],
+     "n_px": 900,
+     "median_sRGB": [
+      138,
+      127,
+      97
+     ],
+     "hex": "#8a7f61",
+     "Lab": [
+      53.4,
+      -0.8,
+      17.9
+     ],
+     "chroma": 17.9,
+     "hue_deg": 92.0,
+     "lum_p10_p90": [
+      118,
+      143
+     ],
+     "darkest40pct_Lab": [
+      50.5,
+      -1.4,
+      17.2
+     ],
+     "brightest40pct_Lab": [
+      58.4,
+      -0.7,
+      14.1
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "臀鰭(灰黄、半透明)。(138,127,97) Lab(53,-1,18)。"
+    },
+    {
+     "id": "dorsal_fin_a",
+     "region": "dorsal_fin",
+     "rect": [
+      390,
+      178,
+      450,
+      195
+     ],
+     "n_px": 1020,
+     "median_sRGB": [
+      154,
+      140,
+      128
+     ],
+     "hex": "#9a8c80",
+     "Lab": [
+      59.1,
+      3.2,
+      8.3
+     ],
+     "chroma": 8.9,
+     "hue_deg": 69.0,
+     "lum_p10_p90": [
+      112,
+      202
+     ],
+     "darkest40pct_Lab": [
+      51.0,
+      3.5,
+      9.3
+     ],
+     "brightest40pct_Lab": [
+      74.1,
+      3.1,
+      6.2
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "背鰭(灰褐の半透明、三角形)。(154,140,128) Lab(59,3,8)。背景の礫が透ける。"
+    },
+    {
+     "id": "adipose_a",
+     "region": "adipose_fin",
+     "rect": [
+      578,
+      217,
+      598,
+      226
+     ],
+     "n_px": 180,
+     "median_sRGB": [
+      155,
+      149,
+      133
+     ],
+     "hex": "#9b9585",
+     "Lab": [
+      61.8,
+      -0.6,
+      9.2
+     ],
+     "chroma": 9.3,
+     "hue_deg": 94.0,
+     "lum_p10_p90": [
+      142,
+      155
+     ],
+     "darkest40pct_Lab": [
+      59.7,
+      0.3,
+      9.0
+     ],
+     "brightest40pct_Lab": [
+      63.5,
+      0.2,
+      9.2
+     ],
+     "quality": "small_patch",
+     "flags": [
+      "small_patch(<15px)"
+     ],
+     "comment": "脂鰭(灰色の小さな葉形)。極めて小さく背景との分離が悪い。参考値。"
+    },
+    {
+     "id": "caudal_base",
+     "region": "caudal_fin_base",
+     "rect": [
+      640,
+      230,
+      680,
+      285
+     ],
+     "n_px": 2200,
+     "median_sRGB": [
+      137,
+      122,
+      105
+     ],
+     "hex": "#897a69",
+     "Lab": [
+      52.1,
+      2.9,
+      11.4
+     ],
+     "chroma": 11.8,
+     "hue_deg": 76.0,
+     "lum_p10_p90": [
+      103,
+      198
+     ],
+     "darkest40pct_Lab": [
+      46.2,
+      3.0,
+      11.7
+     ],
+     "brightest40pct_Lab": [
+      74.1,
+      0.9,
+      7.2
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "尾鰭基部(灰褐の半透明)。(137,122,105) Lab(52,3,11)。"
+    },
+    {
+     "id": "caudal_margin",
+     "region": "caudal_fin_margin",
+     "rect": [
+      735,
+      215,
+      760,
+      300
+     ],
+     "n_px": 2125,
+     "median_sRGB": [
+      119,
+      103,
+      90
+     ],
+     "hex": "#77675a",
+     "Lab": [
+      44.7,
+      4.1,
+      9.7
+     ],
+     "chroma": 10.5,
+     "hue_deg": 67.0,
+     "lum_p10_p90": [
+      82,
+      131
+     ],
+     "darkest40pct_Lab": [
+      38.4,
+      3.4,
+      9.7
+     ],
+     "brightest40pct_Lab": [
+      50.2,
+      3.6,
+      9.3
+     ],
+     "quality": "mixed_translucent",
+     "flags": [],
+     "comment": "尾鰭後縁(暗灰褐、後縁は暗い)。(119,103,90) Lab(45,4,10)。鰭が半透明で背景(暗い岩)が透ける。"
+    },
+    {
+     "id": "pupil",
+     "region": "pupil",
+     "rect": [
+      102,
+      268,
+      120,
+      286
+     ],
+     "n_px": 324,
+     "median_sRGB": [
+      74,
+      76,
+      88
+     ],
+     "hex": "#4a4c58",
+     "Lab": [
+      32.5,
+      1.8,
+      -7.4
+     ],
+     "chroma": 7.6,
+     "hue_deg": 284.0,
+     "lum_p10_p90": [
+      49,
+      130
+     ],
+     "darkest40pct_Lab": [
+      23.5,
+      3.1,
+      -8.8
+     ],
+     "brightest40pct_Lab": [
+      46.0,
+      1.8,
+      -2.5
+     ],
+     "quality": "mixed",
+     "flags": [],
+     "comment": "瞳孔〜眼球(暗い紺〜灰青)。眼は暗青〜黒で瞳孔と虹彩の境界が不明瞭。キャッチライトを含み中央値は明るめ。"
+    }
+   ]
+  }
+ },
+ "cross_photo_summary": {
+  "caution": "6枚は別個体・別撮影条件(p033=大型成魚(非繁殖), p034=繁殖期の雄, p032=銀化傾向の幼魚, p039=スモルト様の幼魚, p040=水中のパーマー(幼魚), p031=種不確実でヤマメ基準に不採用)。以下は範囲の併記であり平均値ではない。値はディスプレイ参照のsRGB/Labで、照明・濡れ・HDR処理を含むため、PBRアルベドへは相対関係を優先して使うこと。",
+  "reliability_by_photo": {
+   "p031": "low",
+   "p032": "med",
+   "p033": "med",
+   "p034": "med",
+   "p039": "med",
+   "p040": "med"
+  },
+  "dorsal_back": {
+   "values": {
+    "p033_brown_black": {
+     "Lab": [
+      31.3,
+      6.6,
+      13.1
+     ],
+     "sRGB_examples": [
+      [
+       89,
+       66,
+       45
+      ],
+      [
+       92,
+       73,
+       62
+      ]
+     ],
+     "note": "暗褐。黒点・鱗ハイライト混入で中央値はやや明るく、darkest40%でL24-26"
+    },
+    "p034_black_olive(spawning)": {
+     "Lab": [
+      23.5,
+      -1.8,
+      17.2
+     ],
+     "sRGB": [
+      62,
+      56,
+      30
+     ],
+     "crushed_Lab": [
+      8.2,
+      1.1,
+      6.8
+     ],
+     "note": "HDRで潰れ。真の色は不明(下限)"
+    },
+    "p032_olive_brown": {
+     "Lab": [
+      41.4,
+      -1.8,
+      11.8
+     ],
+     "sRGB_examples": [
+      [
+       94,
+       89,
+       68
+      ],
+      [
+       111,
+       107,
+       89
+      ]
+     ]
+    },
+    "p031_blue_gray(low_reliability)": {
+     "Lab": [
+      45.8,
+      -0.6,
+      3.1
+     ],
+     "sRGB_examples": [
+      [
+       106,
+       109,
+       108
+      ],
+      [
+       113,
+       108,
+       98
+      ]
+     ]
+    },
+    "p039_pale_olive(smolt-like)": {
+     "Lab": [
+      63.8,
+      -1.3,
+      6.6
+     ],
+     "sRGB_examples": [
+      [
+       144,
+       141,
+       131
+      ],
+      [
+       171,
+       169,
+       155
+      ]
+     ]
+    },
+    "p040_light_gray_beige(underwater parr)": {
+     "Lab": [
+      71.0,
+      0.7,
+      6.3
+     ],
+     "sRGB_examples": [
+      [
+       180,
+       169,
+       154
+      ],
+      [
+       180,
+       177,
+       171
+      ]
+     ]
+    }
+   },
+   "summary": "陸上で横たえた成魚/銀化個体(p032,p033,p034)は背がL≈24-45の暗い褐黒〜オリーブ褐で、色相はb+10〜+17の黄褐寄り。p031は無彩色の青灰(L≈46, b≈0-6)。一方、スモルト様のp039(L≈59-69)と水中のパーマーp040(L≈70-72)は背が明るく、背の暗さは個体/状態で大きく変わる(L=24〜72)。"
+  },
+  "flank_upper_ground(parr_mark_gap_or_lateral_ground)": {
+   "values": {
+    "p033_pink_cream": {
+     "Lab": [
+      73.0,
+      10.2,
+      7.0
+     ],
+     "note": "パーマーク間の桃〜サーモンの染み。a+10, b+2〜+12"
+    },
+    "p034_copper(spawning)": {
+     "Lab": [
+      58.7,
+      11.6,
+      18.2
+     ],
+     "note": "婚姻色の銅〜桃褐。a+11〜12, b+18"
+    },
+    "p032_cream": {
+     "Lab": [
+      81.8,
+      0.7,
+      13.7
+     ],
+     "note": "淡いクリーム〜黄クリーム。a≈0, b+8〜+20。桃味なし"
+    },
+    "p039_pale_pink_white": {
+     "Lab": [
+      79.8,
+      2.6,
+      3.8
+     ],
+     "note": "淡桃白。a+2.6, b+3.8。桃味は弱い"
+    },
+    "p040_pink_brown_band": {
+     "Lab": [
+      48.7,
+      5.7,
+      9.8
+     ],
+     "note": "桃褐の帯(パーマー)。a+5.7, b+9.8"
+    },
+    "p031_rose(low_reliability)": {
+     "Lab": [
+      66.0,
+      15.1,
+      10.8
+     ],
+     "note": "バラ色。a+15。照明依存の疑い"
+    }
+   },
+   "summary": "体側上半の地色はL≈47-82の幅があり、色相は個体で別物: 銅〜桃褐(p034 婚姻色, a+11 b+18)、桃〜サーモン(p033, a+10)、桃褐の帯(p040, a+6 b+10)、無彩色に近いクリーム/淡桃白(p032, p039, a≈0-3)。彩度(chroma)は5〜23。"
+  },
+  "flank_lower_and_belly": {
+   "values": {
+    "p033_flank_lower": [
+     88.5,
+     0.4,
+     6.2
+    ],
+    "p033_belly": [
+     91.9,
+     -2.8,
+     5.6
+    ],
+    "p034_flank_lower_peach": [
+     70.3,
+     8.5,
+     10.7
+    ],
+    "p034_belly(mixed_specular, clipped elsewhere)": [
+     90.3,
+     -1.6,
+     16.4
+    ],
+    "p032_belly(blue-white by sky reflection)": [
+     88.1,
+     -5.2,
+     -0.9
+    ],
+    "p039_belly": [
+     83.4,
+     -1.4,
+     6.9
+    ],
+    "p040_belly(shadow, green-gray)": [
+     59.6,
+     -1.8,
+     7.7
+    ],
+    "p031_belly_shadow(not belly color)": [
+     50.0,
+     -4.1,
+     -0.8
+    ],
+    "p031_flank_lower_yellow(overexposed)": [
+     94.9,
+     -4.0,
+     24.4
+    ]
+   },
+   "summary": "腹は体側下半と同系の最明部になりやすく、L≈83-92(p033,p034,p032,p039)でa≈-1〜-5, b≈0〜+16のクリーム白〜青白。p032は空の反射で青白(b≈-1〜-12)、p034/p033はクリーム白(b+6〜+16)。p040は水中の影で灰緑(L≈60)、p031は影の腹縁(L≈50)で腹本来の色ではない。"
+  },
+  "dorsal_flank_ventral_L_star_ratio": {
+   "p033": {
+    "dorsal_to_flank_upper": 0.43,
+    "ventral_to_flank_upper": 1.26
+   },
+   "p034": {
+    "dorsal_to_flank_upper": 0.4,
+    "ventral_to_flank_upper": 1.54,
+    "note": "背は下限、腹は鏡面混入"
+   },
+   "p032": {
+    "dorsal_to_flank_upper": 0.51,
+    "ventral_to_flank_upper": 1.08
+   },
+   "p031(low_reliability)": {
+    "dorsal_to_flank_upper": 0.69,
+    "ventral_to_flank_upper": "影の腹縁のため不使用"
+   },
+   "p039": {
+    "dorsal_to_flank_upper": 0.8,
+    "ventral_to_flank_upper": 1.05
+   },
+   "p040": {
+    "dorsal_to_flank_upper": 1.46,
+    "ventral_to_flank_upper": 1.22,
+    "note": "水中のパーマー: 背が帯より明るい(逆)"
+   },
+   "range_dorsal_to_flank_L_ratio_land_adult_and_juvenile(p031,p032,p033,p034)": [
+    0.4,
+    0.69
+   ],
+   "range_all_six": [
+    0.4,
+    1.46
+   ],
+   "note": "陸上で横たえた4枚の背/体側上半は0.40-0.69(線形Yで0.15-0.43)と、背は体側よりかなり暗い。腹/体側上半は陸上3枚(p032,p033,p034)で1.08-1.54(p039=1.05, p040=1.22, p031は影のため除外)。ただしスモルト様(p039, 0.80)と水中の幼魚(p040, 1.46)では背が明るくなり、背の暗さは個体差・状態差が大きい。"
+  },
+  "parr_marks": {
+   "values": {
+    "p033": {
+     "mark_Lab": [
+      [
+       75.7,
+       5.1,
+       -6.2
+      ],
+      [
+       70.6,
+       5.3,
+       -5.6
+      ],
+      [
+       66.0,
+       3.7,
+       -11.0
+      ],
+      [
+       66.8,
+       3.4,
+       -6.7
+      ]
+     ],
+     "dL_range": [
+      -13.8,
+      -11.3
+     ],
+     "db_range": [
+      -13.7,
+      -8.4
+     ],
+     "tail_mark": {
+      "Lab": [
+       51.7,
+       -0.3,
+       -0.4
+      ],
+      "dL": -20.0,
+      "note": "尾柄側は無彩色の灰で暖色の地に対し大きい"
+     },
+     "darkest40_dL_range": [
+      -20.7,
+      -17.9
+     ]
+    },
+    "p032": {
+     "mark_Lab": [
+      [
+       70.0,
+       -1.5,
+       -13.3
+      ],
+      [
+       69.5,
+       -2.9,
+       -9.2
+      ],
+      [
+       67.7,
+       -2.3,
+       -10.2
+      ]
+     ],
+     "dL_range": [
+      -18.6,
+      -10.8
+     ],
+     "db_range": [
+      -28.8,
+      -13.0
+     ],
+     "round_spot": {
+      "Lab": [
+       66.0,
+       -0.8,
+       -16.5
+      ],
+      "dL": -23.5
+     }
+    },
+    "p039": {
+     "mark_Lab": [
+      [
+       59.7,
+       1.1,
+       -9.8
+      ],
+      [
+       62.9,
+       0.1,
+       -11.9
+      ],
+      [
+       62.5,
+       -0.2,
+       -9.6
+      ]
+     ],
+     "dL_range": [
+      -17.2,
+      -13.3
+     ],
+     "db_range": [
+      -15.0,
+      -9.9
+     ]
+    },
+    "p034(spawning)": {
+     "mark_Lab": [
+      [
+       46.1,
+       3.4,
+       5.0
+      ],
+      [
+       26.3,
+       1.2,
+       3.5
+      ],
+      [
+       48.0,
+       6.3,
+       6.7
+      ]
+     ],
+     "dL_range": [
+      -32.4,
+      -12.3
+     ],
+     "db_range": [
+      -19.3,
+      -10.3
+     ],
+     "note": "暗灰褐でb≈+1〜+7。青味はなく、銅色の地に対し暗帯化"
+    },
+    "p040(parr)": {
+     "mark_Lab": [
+      [
+       39.7,
+       2.4,
+       3.5
+      ],
+      [
+       40.7,
+       3.1,
+       4.3
+      ],
+      [
+       39.5,
+       0.8,
+       8.7
+      ]
+     ],
+     "dL_range": [
+      -10.2,
+      -6.6
+     ],
+     "db_range": [
+      -5.6,
+      -3.1
+     ],
+     "note": "暗灰褐で低コントラスト(水中の霞み)"
+    }
+   },
+   "summary": "パーマークは黒ではなく『地色より10-20 L*暗い灰青〜スレート』が標準(p032: b-9〜-13で最も青い, p033: b-5〜-11, p039: b-10〜-12; すべてΔL -11〜-19)。婚姻期のp034と水中のp040は青味がなく暗灰褐(b+3〜+9)で、p034は銅色の地に対しΔL最大-32と暗帯化、p040は桃褐の帯の中でΔL -7〜-10と低い。マークの最濃部(darkest40%)は中央値よりさらに2-8暗い。"
+  },
+  "lateral_pink_or_copper_band": {
+   "p033": "連続帯ではなく、パーマーク間に出る桃〜サーモンの染み(a+10, b+2〜+12)。尾柄側ほど橙桃(地色b+13〜+27)。",
+   "p034": "婚姻期の銅〜桃褐(a+11, b+18)がパーマーク間に広く出る(連続した幅広帯、暗帯と交互)。",
+   "p040": "体側中央を走る桃褐の連続帯(a+5.6〜+7.5, b+8〜+13, L46-51)、幅15-25px。",
+   "p031(low_reliability)": "体側上半の桃〜バラ色(a+15)。照明依存の疑い。",
+   "p032": "なし(a*最大でも+1)。",
+   "p039": "なし(ラベンダー光沢 a+2, b-4 は反射)。",
+   "summary": "桃〜銅色の側線帯が見えるのは p033(染み)、p034(婚姻色)、p040(幼魚の連続帯)で、いずれもchroma 10-23の低〜中彩度。p032/p039では反射以外に桃帯が無い。"
+  },
+  "black_spots": {
+   "p033": "径7pxで中央値(34,22,7) L8、最暗部はL1.6の褐黒。",
+   "p032": "径約8x5pxの短楕円で(30,18,6) L6.5の褐黒。",
+   "p031": "径3-5pxの小点で(56,56,56) L23(小さくぼけて灰に見える)。",
+   "p039": "径約5pxで(102,96,89) L41の暗灰褐(黒にならない)。",
+   "summary": "黒点の見かけの黒さは大きさ依存。径7px以上の斑はL≈6-8の褐黒、3-5pxの小点はL≈23-41の灰〜暗灰褐。色相は褐寄り(b+5〜+10)。モデルでは固定の黒ではなくサイズに応じた濃度が妥当。"
+  },
+  "orange_or_red_spots": {
+   "p033": "鰓蓋後方に径約5pxの橙点が1個のみ。(216,148,92) Lab(67,20,40)、朱点列ではない。",
+   "others": "p031/p032/p034/p039/p040には朱点・赤点なし。"
+  },
+  "head_cheek_opercle": {
+   "p033": {
+    "head_dorsal": [
+     26.3,
+     3.3,
+     10.5
+    ],
+    "cheek": [
+     91.8,
+     0.9,
+     -1.3
+    ],
+    "opercle": [
+     87.9,
+     6.2,
+     -4.4
+    ],
+    "note": "頬は白(C1.6)、鰓蓋は淡桃〜ラベンダー白。頭部背面だけ暗褐"
+   },
+   "p034": {
+    "head_dorsal": [
+     33.0,
+     5.4,
+     -2.0
+    ],
+    "cheek": [
+     58.2,
+     2.5,
+     6.3
+    ],
+    "opercle": [
+     54.1,
+     3.5,
+     4.9
+    ],
+    "opercle_copper": [
+     71.6,
+     6.1,
+     8.6
+    ],
+    "note": "婚姻期の暗い灰褐〜銅"
+   },
+   "p032": {
+    "head_dorsal": [
+     27.9,
+     0.2,
+     16.8
+    ],
+    "opercle": [
+     84.9,
+     2.7,
+     -8.0
+    ]
+   },
+   "p031": {
+    "opercle_orange": [
+     68.5,
+     13.2,
+     16.3
+    ],
+    "cheek": [
+     68.5,
+     1.1,
+     20.6
+    ],
+    "note": "鰓蓋がサーモン橙(要注意: 種不確実)"
+   },
+   "p039": {
+    "head_dorsal": [
+     60.0,
+     -0.4,
+     11.2
+    ],
+    "cheek": [
+     57.2,
+     4.8,
+     1.4
+    ],
+    "opercle": [
+     56.9,
+     4.9,
+     -4.3
+    ]
+   },
+   "p040": {
+    "head_dorsal": [
+     71.2,
+     1.4,
+     9.1
+    ],
+    "cheek": [
+     57.5,
+     0.9,
+     9.9
+    ],
+    "opercle": [
+     49.7,
+     4.9,
+     8.0
+    ]
+   },
+   "summary": "成魚(p033)の頬〜鰓蓋は銀白〜淡桃/ラベンダーで光沢が強く(L88-92)、頭部背面は暗褐(L26)の2層。婚姻期(p034)は頭全体が暗い灰褐〜銅(L33-72, 銅は鰓蓋上部)。幼魚(p039,p040)は頭部背面が背と同様に淡い(L60-71)。"
+  },
+  "fins": {
+   "pectoral": {
+    "p033": {
+     "Lab": [
+      69.9,
+      7.6,
+      70.9
+     ],
+     "sRGB": [
+      214,
+      163,
+      18
+     ],
+     "note": "鮮黄(C71)"
+    },
+    "p034": {
+     "Lab": [
+      38.4,
+      -0.3,
+      35.4
+     ],
+     "sRGB": [
+      106,
+      89,
+      30
+     ],
+     "note": "暗いオリーブ金(C35)、前縁暗褐"
+    },
+    "p032": {
+     "Lab": [
+      68.7,
+      -0.1,
+      26.9
+     ],
+     "sRGB": [
+      185,
+      166,
+      119
+     ],
+     "note": "淡黄褐(C27)"
+    },
+    "p039": {
+     "Lab": [
+      68.5,
+      1.1,
+      24.0
+     ],
+     "sRGB": [
+      185,
+      165,
+      124
+     ],
+     "note": "淡黄褐(C24)"
+    },
+    "p031(low_reliability)": {
+     "Lab": [
+      40.6,
+      10.6,
+      40.8
+     ],
+     "sRGB": [
+      128,
+      88,
+      25
+     ],
+     "note": "影の琥珀(C42)"
+    },
+    "p040": {
+     "Lab": [
+      72.4,
+      1.5,
+      8.6
+     ],
+     "sRGB": [
+      187,
+      176,
+      162
+     ],
+     "note": "ほぼ無色(C9)"
+    }
+   },
+   "caudal_margin": {
+    "p033": {
+     "orange": [
+      63.4,
+      21.4,
+      53.7
+     ],
+     "red_orange": [
+      47.3,
+      21.4,
+      35.9
+     ]
+    },
+    "p034": {
+     "orange": [
+      66.0,
+      15.3,
+      67.2
+     ],
+     "deep_orange": [
+      46.8,
+      25.5,
+      54.8
+     ]
+    },
+    "p031(low_reliability)": {
+     "lower_lobe_red": [
+      30.3,
+      20.5,
+      15.7
+     ]
+    },
+    "others": "p032/p039/p040は縁取りの橙なし(p032は灰紫、p040は暗灰褐、p039は画面外)"
+   },
+   "pelvic_anal_dorsal_adipose": "半透明で背景が透けるためほとんどの写真で信頼できる色が取れない。取れた範囲では p033 腹鰭=黄褐の鰭条(a+6,b+29)と青白い縁、脂鰭=オリーブ黄(b+33)、p040 腹鰭/臀鰭=淡黄(b+18-19)、p032 脂鰭=灰紫、p034 腹鰭=暗褐に白縁。",
+   "summary": "胸鰭は個体差が最大: 鮮黄(p033 C71), オリーブ金(p034 C35), 淡黄褐(p032/p039 C24-27), 無色(p040 C9)。尾鰭下縁の鮮橙(C58-69, 色相68-77度)は大型成魚/婚姻期(p033,p034)で顕著だが、幼魚の3枚には無い。腹鰭/臀鰭/背鰭/脂鰭は半透明で、彩度の高い基調色を与える根拠は弱い。"
+  },
+  "eye": {
+   "pupil": "黒(L0.5-9: p033 L0.5, p034 L2, p039 L9, p032 L9(青黒), p031 暗部L2)。p040だけ霞みと映り込みでL33。",
+   "iris_ring": {
+    "p033": {
+     "Lab": [
+      56.4,
+      9.2,
+      46.4
+     ],
+     "note": "橙金リング(C47)"
+    },
+    "p034": {
+     "bright40": [
+      56.8,
+      1.9,
+      23.3
+     ],
+     "note": "薄い金リング(幅2-3px)、上に緑青の虹色脂瞼"
+    },
+    "p039": {
+     "Lab": [
+      69.5,
+      -5.5,
+      13.7
+     ],
+     "bright40": [
+      78.6,
+      -11.8,
+      18.4
+     ],
+     "note": "ライム〜黄緑の金属リング"
+    },
+    "p031": {
+     "Lab": [
+      28.9,
+      5.9,
+      1.2
+     ],
+     "note": "赤褐の薄い輪(低信頼)"
+    },
+    "p032": "眼径22pxで淡いクリームの薄い弧のみ",
+    "p040": "暗青で虹彩が識別不能"
+   },
+   "summary": "瞳孔は黒だが、虹彩リングの色は金橙(p033,p034)・ライム黄緑(p039)・赤褐(p031)と個体差が大きく、WBとリング幅(2-8px)の影響も強いため、リング色を固定せず黒い眼+薄い金属リングとする方が安全。"
+  },
+  "design_takeaways_for_pbr": [
+   "背:体側(上半):腹の輝度比は陸上の4枚で L*≈0.4-0.7 : 1 : 1.1-1.5(線形Yで 0.15-0.45 : 1 : 1.2-2.9)が目安。スモルト様/水中幼魚では背がL60-72と明るく、背のL*(24〜72)は個体パラメータとして可変にする。",
+   "パーマークは黒でなく地色よりΔL*-10〜-20(強調時-30)の灰青〜スレート(a≈+0〜+5, b≈-6〜-13)が標準。婚姻期や水中幼魚は青味が無い暗灰褐に切り替わる。",
+   "桃/銅の体側色は連続した赤帯ではなく、パーマーク間のびまん性の染み(a*+5〜+12, chroma 10-23)。上限でも写真の絶対値(a≈+15)は照明依存を含むため、アルベドでは弱めにする。",
+   "鰭は胸鰭と尾鰭下縁にだけ有彩色(黄 C24-71, 橙 C58-69)を置き、他の鰭は半透明の灰〜淡黄で彩度を抑える。尾鰭下縁の橙は成魚/婚姻期のみ。",
+   "黒点は径7px以上でL≈6-8の褐黒、径3-5pxでは灰(L≈23-41)に見えるため、スケールに応じて濃度を落とす。",
+   "眼は黒い瞳孔+金橙〜黄緑の薄い虹彩リング(幅2-8px)。リング色は個体差・WBで揺れる。"
+  ]
+ }
+}
