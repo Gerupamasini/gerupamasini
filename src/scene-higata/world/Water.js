@@ -200,7 +200,7 @@ export function createSurfaceBelow(shared, sky) {
         float fp = length(fwidth(p));
         vec3 g = waveGrad(p.xz, uTime, fp * 4.0);
         // capillary detail
-        vec3 nd = vnoiseD(p.xz * 160.0 + vec2(uTime * 0.9, -uTime * 0.6)) * 0.0012 * (1.0 - smoothstep(0.0005, 0.003, fp));
+        vec3 nd = vnoiseD(p.xz * 160.0 + vec2(uTime * 0.9, -uTime * 0.6)) * 0.0004 * (1.0 - smoothstep(0.0005, 0.003, fp));
         vec3 n = normalize(vec3(-g.y - nd.y, 1.0, -g.z - nd.z));
         vec3 V = normalize(p - cameraPosition);     // looking up
         vec3 nd2 = -n;                               // normal facing the viewer (into the water)
@@ -262,7 +262,7 @@ export function createSurfaceAbove(shared, sky) {
         vec3 p = vWorldPos;
         float fp = length(fwidth(p));
         vec3 g = waveGrad(p.xz, uTime, fp * 4.0);
-        vec3 nd = vnoiseD(p.xz * 160.0 + vec2(uTime * 0.9, -uTime * 0.6)) * 0.0012 * (1.0 - smoothstep(0.0005, 0.003, fp));
+        vec3 nd = vnoiseD(p.xz * 160.0 + vec2(uTime * 0.9, -uTime * 0.6)) * 0.0004 * (1.0 - smoothstep(0.0005, 0.003, fp));
         vec3 n = normalize(vec3(-g.y - nd.y, 1.0, -g.z - nd.z));
         vec3 V = normalize(p - cameraPosition);   // looking down
         float cosI = max(dot(-V, n), 1e-3);

@@ -64,7 +64,7 @@ const shared = {
   uScatter: { value: 1.0 },
   uInterior: { value: 0.45 },
   uCausticAmt: { value: 0.7 },
-  uCausticGain: { value: 1.1 }, // a soft caustic network under the calm surface
+  uCausticGain: { value: 7.0 }, // long, low swells focus weakly: broad soft bands of light
   uCausticFish: { value: 0.5 },
   uWaterY: { value: WATER_Y },
   uFinDensity: { value: 1.0 },
@@ -77,7 +77,7 @@ const shared = {
   uResolution: { value: new THREE.Vector2(1, 1) },
   ...waves.uniforms,
 };
-shared.uWaveGain.value = Number(params.get('wind')) || 0.28; // almost calm: the bottom stays easy to see
+shared.uWaveGain.value = Number(params.get('wind')) || 1.0; // the spectrum itself is a near-calm swell
 const sky = SKY_UNIFORMS();
 
 // sun: direction in air → refracted direction and transmitted irradiance in the water

@@ -71,13 +71,14 @@ describe('higata scene: mudflat', () => {
 });
 
 describe('higata scene: ripples', () => {
-  it('moves short ripples faster than the gravity-wave speed would (capillarity)', () => {
+  it('is a slow swell: shortest component ≥ 5 cm, travelling at the finite-depth wave speed', () => {
     const w = createWaves({ depth: 0.1 });
     const A = w.uniforms.uWaveA.value, B = w.uniforms.uWaveB.value;
     const last = A.length - 1;
-    const c = B[last].x / A[last].z; // phase speed of the shortest ripple (λ ≈ 1 cm)
-    expect(c).toBeGreaterThan(Math.sqrt(9.81 / A[last].z));
-    expect(c).toBeGreaterThan(0.2);
-    expect(c).toBeLessThan(0.3);
+    expect(2 * Math.PI / A[last].z).toBeGreaterThan(0.05);
+    for (const a of A) expect(a.w * a.z).toBeLessThan(0.02); // gentle: steepness a·k
+    const c = B[last].x / A[last].z; // phase speed of the shortest component (λ = 7 cm)
+    expect(c).toBeGreaterThan(Math.sqrt(9.81 / A[last].z)); // capillarity adds a little
+    expect(c).toBeLessThan(0.4);
   });
 });

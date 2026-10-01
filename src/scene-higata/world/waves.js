@@ -13,19 +13,16 @@ const G = 9.81, SIGMA_RHO = 0.0728 / 1000;
 export function createWaves({ windDir = 0.6, depth = 0.1, seed = 7 } = {}) {
   let s = seed >>> 0;
   const rnd = () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  // wavelength (m) and amplitude (m). Long, gentle undulations plus the capillary–gravity ripples of a light
-  // breeze (λ 1–2.5 cm, steepness a·k ≈ 0.1): only those are curved enough (a·k² ≈ 30–50 m⁻¹) to focus the
-  // sunlight into a caustic network on a bottom 10 cm down (focal length ≈ 1 / (a·k² (1 − 1/n)))
-  const spec = [
-    [0.31, 0.0017], [0.17, 0.0011], [0.083, 0.0008], [0.056, 0.00062], [0.041, 0.00052], [0.033, 0.00046],
-    [0.027, 0.0004], [0.024, 0.00037], [0.021, 0.00033], [0.019, 0.0003], [0.017, 0.00027], [0.0152, 0.00024],
-    [0.0138, 0.00021], [0.0124, 0.00018], [0.0112, 0.00015], [0.0101, 0.00012],
-  ];
+  // wavelength (m) and amplitude (m): an almost calm pool. Only long, low undulations (λ 7–90 cm, steepness
+  // a·k ≈ 0.012) — no wind ripples — so the bottom is seen clearly through the surface and the light on it
+  // moves in broad, slow, soft bands instead of a tight caustic net
+  const spec = [0.9, 0.7, 0.55, 0.45, 0.37, 0.3, 0.25, 0.21, 0.18, 0.155, 0.135, 0.12, 0.105, 0.092, 0.08, 0.07]
+    .map((lambda) => [lambda, (0.012 * lambda) / (2 * Math.PI)]);
   const dirs = [], params = [];
   spec.forEach(([lambda, amp], i) => {
     const k = (2 * Math.PI) / lambda;
-    // short waves are spread wider around the wind direction (capillary ripples are nearly isotropic)
-    const spread = 0.3 + 2.2 * Math.pow(i / (spec.length - 1), 0.7);
+    // a slow swell from one side; the shorter components spread a little wider
+    const spread = 0.35 + 0.9 * (i / (spec.length - 1));
     const a = windDir + (rnd() * 2 - 1) * spread;
     const w = Math.sqrt((G * k + SIGMA_RHO * k * k * k) * Math.tanh(k * depth));
     dirs.push(new THREE.Vector4(Math.cos(a), Math.sin(a), k, amp));
