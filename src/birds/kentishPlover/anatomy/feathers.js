@@ -158,6 +158,10 @@ export function featherOffset(f, t, a, sweepK = 0.03) {
   return [t * L, sweep - across, bend + camber];
 }
 
+/** Shaft position of row i of n: rows closer together toward the tip, so the rounded tips of the overlapping
+ * rows stay round (a hexagonal tip outline read as a scaly plate, spec §10.4). */
+export const rowT = (i, n) => 1 - (1 - i / (n - 1)) ** 1.6;
+
 /**
  * Emit one feather as a grid (nL along × nW across).
  * frame: { base, dir (unit, along shaft), side (unit, toward outer vane), normal (unit, dorsal) }
@@ -171,7 +175,7 @@ function emitFeather(gb, f, frame, bone, typeId, rnd, opts = {}) {
   const start = gb.count;
   const cols = nW * 2 + 1;
   for (let i = 0; i < nL; i++) {
-    const t = i / (nL - 1);
+    const t = rowT(i, nL);
     for (let j = 0; j < cols; j++) {
       const a = (j - nW) / nW; // −1 outer edge … 0 rachis … +1 inner edge
       const o = featherOffset(f, t, a, opts.sweep ?? 0.03);
@@ -294,8 +298,16 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
     const w = computeSpineWeights(p, boneIndex);
     return { idx: w.map((e) => e[0]), w: w.map((e) => e[1]) };
   };
+  // the scapulars lie on the trunk: they do not ride up with the neck plumage when the head is turned back
+  // (preening the wing, resting) — the neck lies over them instead
+  const trunkBones = new Set(['chest', 'body', 'tail'].map((n) => boneIndex[n]));
+  const trunkSkin = (p) => {
+    const w = computeSpineWeights(p, boneIndex).filter((e) => trunkBones.has(e[0]));
+    const sum = w.reduce((a, e) => a + e[1], 0) || 1;
+    return { idx: w.map((e) => e[0]), w: w.map((e) => e[1] / sum) };
+  };
   const torso = fold?.torso ?? sdf; // trunk outline without the neck (wingFold.conformAt)
-  const segs = detail === 0 ? { nL: 8, nW: 2 } : detail === 1 ? { nL: 5, nW: 1 } : { nL: LOD2_CARD.rows, nW: 1 };
+  const segs = detail === 0 ? { nL: 10, nW: 3 } : detail === 1 ? { nL: 5, nW: 1 } : { nL: LOD2_CARD.rows, nW: 1 };
 
   // ---- Left wing (then mirrored) ----
   const wingStart = gb.mark();
@@ -329,17 +341,18 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
         const [n, mask] = contact(pf.toArray());
         gb.setContact(v, new THREE.Vector3(...n).applyQuaternion(Rinv).toArray(), mask);
         // bent onto its layer of the folded-wing shell
-        // (LOD1/2: a little further off their coarser body — higher, or deeper for the hidden ones — whose facets
-        // stand up to about half a millimetre off the outline; invisible from the distances they are shown at)
+        // (LOD1/2: the visible layers a little higher over their coarser body, whose facets stand up to about half
+        // a millimetre off the outline — invisible from the distances they are shown at; the hidden ones as at
+        // LOD0: pressed deeper, they came out with a dip when the wing is raised off the flank)
         const nb = new THREE.Vector3();
         const cw = conformAt(fr, pf, gb.uv[v * 2 + 1], gb.uv[v * 2], sdf, torso, nb);
-        if (detail) cw.addScaledVector(nb, (foldLayer(f) >= 0 ? 0.35 * smooth01(0, 0.22, gb.uv[v * 2 + 1]) : -0.4) * detail);
+        if (detail) cw.addScaledVector(nb, (foldLayer(f) >= 0 ? 0.35 * smooth01(0, 0.22, gb.uv[v * 2 + 1]) : 0) * detail);
         const c = cw.applyQuaternion(Rinv).multiplyScalar(0.001);
         gb.conform.splice(v * 3, 3, c.x, c.y, c.z);
-        // …and shaded like the surface it lies on (a quarter of its own vane's tilt kept), so neighbouring
-        // feathers of a row do not read as separately tilted plates
+        // …and shaded like the surface it lies on (a trace of its own vane's tilt kept), so neighbouring
+        // feathers of a row do not read as separately tilted plates (spec §10.4)
         const n0 = new THREE.Vector3().fromArray(gb.nrm, v * 3);
-        const dn = nb.applyQuaternion(Rinv).multiplyScalar(0.75).addScaledVector(n0, 0.25).normalize().sub(n0);
+        const dn = nb.applyQuaternion(Rinv).multiplyScalar(0.92).addScaledVector(n0, 0.08).normalize().sub(n0);
         gb.conformN.splice(v * 3, 3, dn.x, dn.y, dn.z);
       }
     }
@@ -370,7 +383,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
       ? (p) => {
           const up = f.type === 'upperTailCovert' ? 1 : -1;
           // stacked like the other coverts (inner over outer, left over right) instead of coplanar (z-fighting)
-          const lift = 0.9 + (2 - f.index) * 0.3 + (f.side > 0 ? 0.1 : 0) + 0.4 * detail; // (coarser LOD bodies)
+          const lift = 0.9 + (2 - f.index) * 0.3 + (f.side > 0 ? 0.1 : 0) + (f.type === 'underTailCovert' ? 1.2 : 0.4) * detail; // (coarser LOD bodies; the vent's facets swell most when fluffed)
           // straight over / under the tail, but lying on the rump / vent wherever the body is in the way:
           // raised (lowered) vertically to `lift` above the outline. (Closest-point projection of the
           // rooted bases scattered neighbouring rows onto different sides and the straight part dived
@@ -387,7 +400,19 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
             }
             q[1] += up * b;
           }
-          return [q, [0, up, 0]];
+          // shaded like the rounded rump / vent they lie on (outward body normal), not as flat horizontal
+          // cards (a down-facing card under the vent read as a grey flap)
+          const e = 0.3;
+          const g = [0, 1, 2].map((k) => {
+            const a = [...q];
+            const c = [...q];
+            a[k] += e;
+            c[k] -= e;
+            return sdf(a[0], a[1], a[2]) - sdf(c[0], c[1], c[2]);
+          });
+          g[1] += up * 0.6 * Math.hypot(...g); // (still mostly facing up / down)
+          const gl = Math.hypot(...g) || 1;
+          return [q, g.map((v) => v / gl)];
         }
       : undefined;
     // coverts lie on the rump: skinned like the body surface under them, so they never cut into it when the
@@ -408,14 +433,15 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
       const dl = Math.hypot(...dir);
       dir = dir.map((v) => v / dl);
       const side = [dir[1] * bn[2] - dir[2] * bn[1], dir[2] * bn[0] - dir[0] * bn[2], dir[0] * bn[1] - dir[1] * bn[0]].map((v) => v * f.side);
-      // over the folded-wing shell (wingFold.foldLayer ≤ 1.5 mm), row 0 over row 1
-      const lift = 1.6 + f.layer * 0.1;
+      // over the folded-wing shell (wingFold.foldLayer ≤ 1.5 mm) where it lies under them, from |x| ≈ 10 on;
+      // close on the mantle nearer the midline (the back line of the photos, spec §2); row 0 over row 1
       const conform = (p) => {
         const [pp, nn] = projectToSurface(sdf, p[0], p[1], p[2]);
+        const lift = 0.5 + f.layer * 0.1 + 1.1 * smooth01(8, 12, Math.abs(pp[0]));
         return [[pp[0] + nn[0] * lift, pp[1] + nn[1] * lift, pp[2] + nn[2] * lift], nn];
       };
       const m = gb.mark();
-      emitFeather(gb, f, { base: bp, dir, side, normal: bn }, spineSkin, FEATHER_TYPE.scapular, rng(), { ...segs, conform });
+      emitFeather(gb, f, { base: bp, dir, side, normal: bn }, trunkSkin, FEATHER_TYPE.scapular, rng(), { ...segs, conform });
       for (let v = m.v; v < gb.count; v++) gb.setContact(v, ...contact(bindMM(v)));
     }
   }

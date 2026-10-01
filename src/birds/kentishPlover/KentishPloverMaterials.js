@@ -278,25 +278,30 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
         float kpRnd = kpHash(kpId + uSeed * 17.0);
         // Evaluate markings at the visible feather's root → boundaries follow feather tips (scalloped) on the
         // upperparts; on the head and the white-and-black sides the edges stay nearly smooth (photos, spec §15)
-        float kpScallop = smoothstep(0.1, 0.5, kpN.y) * (1.0 - smoothstep(0.2, 0.5, kpHeadness(vRest)));
+        float kpScallop = smoothstep(0.3, 0.65, kpN.y) * (1.0 - smoothstep(0.2, 0.5, kpHeadness(vRest)));
         vec3 kpRootP = vRest - normalize(vFlowR) * kpFxy.y * kpTr.x * 0.9 * mix(0.15, 1.0, kpScallop);
         float kpJit = (kpRnd - 0.5) * 0.6;
         vec3 kpCol = kpPlumage(kpRootP, kpN, kpJit);
         // Within-feather tone: darker shaft streak & pale fringe on the grey-brown upperparts only.
         float kpLum = dot(kpCol, vec3(0.2126, 0.7152, 0.0722));
         float kpBrown = smoothstep(0.02, 0.06, kpCol.r - kpCol.b) * (1.0 - smoothstep(0.45, 0.6, kpLum));
+        // the grey-brown band on the side between the folded wing's edge and the brown/white boundary reads as
+        // part of the closed wing (smooth, spec §10.1, §10.4): feather tiles only on the mantle, rump and nape
+        float kpTex = mix(1.0, smoothstep(0.25, 0.55, kpN.y), kpBrown);
+        // (and none where the lattice converges on the bill–tail axis behind the rump, under the tail coverts)
+        kpTex *= smoothstep(-58.0, -50.0, vRest.z);
         float kpShaft = (1.0 - smoothstep(0.05, 0.22, abs(kpFxy.x - 0.5))) * (1.0 - smoothstep(0.55, 0.9, kpFxy.y));
         float kpFringe = smoothstep(0.72, 0.98, kpFxy.y) * (1.0 - uWear);
-        kpCol = mix(kpCol, kpCol * (uMantleDark / max(uMantle, vec3(1e-3))), kpShaft * kpBrown * 0.55);
-        kpCol = mix(kpCol, mix(kpCol, uFringe, uFringeMix), kpFringe * kpBrown);
+        kpCol = mix(kpCol, kpCol * (uMantleDark / max(uMantle, vec3(1e-3))), kpShaft * kpBrown * kpTex * 0.55);
+        kpCol = mix(kpCol, mix(kpCol, uFringe, uFringeMix), kpFringe * kpBrown * kpTex);
         // juvenile: dark subterminal band inside the pale fringe (spec §13.2)
         float kpSub = smoothstep(0.5, 0.6, kpFxy.y) * (1.0 - smoothstep(0.68, 0.74, kpFxy.y)) * uSubterminal;
-        kpCol = mix(kpCol, kpCol * (uMantleDark / max(uMantle, vec3(1e-3))) * 0.9, kpSub * kpBrown * 0.6);
+        kpCol = mix(kpCol, kpCol * (uMantleDark / max(uMantle, vec3(1e-3))) * 0.9, kpSub * kpBrown * kpTex * 0.6);
         // Very small per-feather tone variation (no dirty noise).
         kpCol *= 1.0 + (kpRnd - 0.5) * 0.05;
         // Micro shadowing at the tip overlap (feather-scale AO), fades with distance
         float kpFade = 1.0 - smoothstep(0.25, 0.9, fwidth(kpLat.y));
-        kpCol *= mix(1.0, 0.9 + 0.1 * smoothstep(0.0, 0.3, kpFxy.y), kpFade * kpTr.y * kpBrown * smoothstep(1.6, 2.6, kpTr.x) * (uDetail < 1.5 ? 1.0 : 0.0));
+        kpCol *= mix(1.0, 0.9 + 0.1 * smoothstep(0.0, 0.3, kpFxy.y), kpFade * kpTr.y * kpBrown * kpTex * smoothstep(1.6, 2.6, kpTr.x) * (uDetail < 1.5 ? 1.0 : 0.0));
         diffuseColor.rgb *= kpCol;`
       )
       .replace(
@@ -318,7 +323,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0) {
           float kpBarbs = sin((kpFxy.x * 2.0 - 1.0) * 26.0 + kpFxy.y * 9.0) * 0.05 * (1.0 - kpTr.z);
           vec3 kpT = normalize(vFlowV - normal * dot(vFlowV, normal));
           vec3 kpB2 = cross(normal, kpT);
-          float kpStr = kpTr.y * kpFade * (uDetail < 0.5 ? 1.0 : 0.6) * mix(0.45, 1.0, smoothstep(1.3, 2.4, kpTr.x));
+          float kpStr = kpTr.y * kpTex * kpFade * (uDetail < 0.5 ? 1.0 : 0.6) * mix(0.45, 1.0, smoothstep(1.3, 2.4, kpTr.x));
           vec2 kpG = vec2(kpHx - kpH, kpHy - kpH) / kpE;
           normal = normalize(normal - (kpT * (kpG.y * 0.9) + kpB2 * (kpG.x * 0.35 + kpBarbs)) * 0.1 * kpStr);
         }`
@@ -347,10 +352,11 @@ vec3 kpDebugType(float type) {
 vec3 kpBrownFeather(vec2 uv, float centre) {
   float a = abs(uv.x); float t = uv.y;
   vec3 c = mix(uMantle, uMantleDark, (1.0 - smoothstep(0.1, 0.55, a)) * (1.0 - smoothstep(0.45, 0.85, t)) * centre);
-  float tip = clamp(smoothstep(0.88, 0.98, t) + smoothstep(0.86, 0.99, a) * smoothstep(0.72, 0.9, t), 0.0, 1.0);
+  // (a soft band, not a thin bright crescent: the fringes of p052 / p039 fade into the feather)
+  float tip = clamp(smoothstep(0.76, 0.98, t) + smoothstep(0.8, 0.99, a) * smoothstep(0.66, 0.9, t), 0.0, 1.0);
   float sub = smoothstep(0.72, 0.78, t) * (1.0 - smoothstep(0.84, 0.88, t)) * uSubterminal;
   c = mix(c, c * (uMantleDark / max(uMantle, vec3(1e-3))) * 0.9, sub * 0.6);
-  return mix(c, uFringe, tip * min(1.0, uFringeMix * 1.6) * (1.0 - uWear * 0.7));
+  return mix(c, uFringe, tip * min(0.8, uFringeMix * 1.1) * (1.0 - uWear * 0.7));
 }
 
 // Colour of the dorsal (upper) surface of a feather (fold: 1 wing folded … 0 spread). On the closed wing only
@@ -363,10 +369,11 @@ vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd, float fold) {
   vec3 c;
   if (type < 0.5) {
     // primary: dark; inner primaries show a white base on the outer vane (wing-bar continues)
-    c = uFlightDark;
+    // (on the closed wing the exposed primary tips read dark grey-brown, not black: p006, p066, p052)
+    c = mix(uFlightDark, uMantleDark, 0.5 * fold);
     float whiteBase = (1.0 - smoothstep(0.26, 0.36, t)) * step(across, 0.0) * (1.0 - smoothstep(5.5, 7.5, idx)) * (1.0 - fold);
     c = mix(c, uWhite, whiteBase);
-    c = mix(c, mix(uFlightDark, uWhite, 0.75), rachis * smoothstep(0.1, 0.25, t) * (1.0 - smoothstep(0.75, 0.95, t)) * (1.0 - 0.7 * fold));
+    c = mix(c, mix(uFlightDark, uWhite, 0.75), rachis * smoothstep(0.1, 0.25, t) * (1.0 - smoothstep(0.75, 0.95, t)) * (1.0 - 0.9 * fold));
   } else if (type < 1.5) {
     // secondary: dark grey-brown, white base and narrow white tip (open wing)
     c = uFlightMid;
@@ -404,8 +411,9 @@ vec3 kpFeatherTop(float type, float idx, vec2 uv, float rnd, float fold) {
     // r4/r5 keep a small dark mark near the tip on the inner vane
     c = mix(c, mix(uTailDark, uWhite, 0.45), sub * step(3.5, i) * (1.0 - step(5.5, i)) * step(0.0, across) * 0.7);
   } else if (type < 9.5) {
-    // upper-tail coverts: centre grey-brown, sides white
-    c = idx < 0.5 ? kpBrownFeather(uv, 0.4) : uWhite;
+    // upper-tail coverts: centre grey-brown, sides white — the white rump sides show in flight (spec §13.3);
+    // at rest the folded wings cover them and the coverts that peek out between the tertials are grey-brown
+    c = idx < 0.5 ? kpBrownFeather(uv, 0.4) : mix(uWhite, kpBrownFeather(uv, 0.4), fold);
   } else if (type < 10.5) {
     c = kpBrownFeather(uv, 0.7); // scapular
   } else if (type < 11.5) {
@@ -517,7 +525,11 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
           float fade = 1.0 - smoothstep(0.03, 0.12, fwidth(vUv.y));
           float barbs = cos((abs(a) * 1.6 - vUv.y * 3.2) * 70.0) * 0.1 * fade;
           float ridge = (1.0 - smoothstep(0.03, 0.09, abs(a))) * sign(a) * 0.9;
-          normal = normalize(normal + T * (ridge + barbs * sign(a)) * 0.35 * (uDetail < 0.5 ? 1.0 : 0.5));
+          // on the closed wing and on the body feathers (scapulars, tail coverts) the shafts are not seen:
+          // soft rows, no ridged slats (spec §10.4; p006, p052); remiges and rectrices keep them
+          float kfBody = kfType > 8.5 && kfType < 12.5 && kfType != 11.0 ? 1.0 : 0.0;
+          float kfShaft = kfType < 0.5 || (kfType > 7.5 && kfType < 8.5) ? mix(1.0, 0.5, vFold) : mix(1.0, 0.08, max(vFold, kfBody));
+          normal = normalize(normal + T * (ridge + barbs * sign(a)) * 0.35 * kfShaft * (uDetail < 0.5 ? 1.0 : 0.5));
         }`
       );
   };

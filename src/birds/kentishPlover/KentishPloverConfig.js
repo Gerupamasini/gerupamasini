@@ -208,7 +208,7 @@ export const plumage = {
   // Feather micro-structure (mm): scallop size per feather tract. Kept low-contrast on purpose.
   featherScale: { head: 1.1, neck: 1.7, breast: 2.4, belly: 2.8, mantle: 3.4, flank: 3.0, rump: 2.8 },
   // head, neck and underparts nearly smooth in the photos (spec §15: 0.05–0.1); tiles stay on the upperparts
-  normalStrength: { head: 0.08, neck: 0.1, breast: 0.1, belly: 0.08, mantle: 0.75, flank: 0.3, rump: 0.5 },
+  normalStrength: { head: 0.08, neck: 0.1, breast: 0.1, belly: 0.08, mantle: 0.75, flank: 0.18, rump: 0.5 },
 };
 
 export const animation = {

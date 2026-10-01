@@ -153,7 +153,7 @@ export function buildTailLayout(tailPivot) {
         // (closed over the narrow closed tail and the rump, 16 mm wide at z −60)
         base: [tailPivot[0] + sgn * (1.0 + i * 2.0), tailPivot[1] + 3.2 - i * 0.6, tailPivot[2] + 12 - i * 2.0],
         yaw: sgn * (3 + i * 5) * deg,
-        length: 30 - i * 3,
+        length: 32 - i * 3, // (tips at z ≈ −63: 22 mm of tail beyond, spec §11; the top outline runs on to the primaries)
         width: 10,
         innerVane: 0.55,
         curve: 0.05,
@@ -164,11 +164,12 @@ export function buildTailLayout(tailPivot) {
         name: `ltc${i}${side ? 'R' : 'L'}`,
         bone: 'tail',
         type: 'underTailCovert',
-        // (close under the vent: fanned wider, the outer pair lay over the flank where it swells when fluffed)
-        base: [tailPivot[0] + sgn * (1.0 + i * 1.2), tailPivot[1] - 3.5 - i * 0.3, tailPivot[2] + 10 - i * 2.5],
-        yaw: sgn * (2 + i * 2.5) * deg,
+        // (close under the vent, no wider than it: fanned wider, the outer pair stood out below the flank as a
+        // flap)
+        base: [tailPivot[0] + sgn * (1.0 + i * 0.9), tailPivot[1] - 3.5 - i * 0.3, tailPivot[2] + 10 - i * 2.5],
+        yaw: sgn * (1 + i * 1.5) * deg,
         length: 32 - i * 3,
-        width: 9.5,
+        width: 8,
         innerVane: 0.55,
         curve: 0.03, // tips curl up against the tail: rear end at (−63.4, 53.4) (spec §3)
         index: i,
