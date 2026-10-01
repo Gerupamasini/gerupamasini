@@ -1,0 +1,982 @@
+[
+  {
+    "id": "p011",
+    "host": "web.tsuribito.co.jp",
+    "source_url": "https://web.tsuribito.co.jp/suburb/trbt1804yamame02",
+    "view": "lateral_left",
+    "view_tilt_note": "浅瀬の礫上に横臥した魚を上方から斜め俯瞰で撮影。体軸は面内で約15度回転(頭が左下、尾が右上)。背側の暗色帯が上縁に細く見えるためカメラは背側へ約10-20度ロールしている。頭部は斜めで短縮気味(上顎の下に下顎が見える)。尾柄から尾鰭は上方へ折れ曲がり石に重なる。HDR調の強いローカルコントラストとシャープ処理(鱗模様が過強調)があり、形状の細部は処理由来の偽ディテールを含む可能性。",
+    "body_straightness": "slightly_curved",
+    "context": "in_water_natural",
+    "life_stage": "juvenile",
+    "life_stage_evidence": "体側が青銀色で、パーマークは9個前後が明瞭に残るが全体に淡く、体側下半は銀白化している。婚姻色なし。ギンケ化(スモルト化)中の幼魚または銀化気味の若魚と推定。確定はできない。",
+    "size_class_est": "unknown",
+    "size_evidence": "手・ネット・定規などのスケール無し。礫(径5-15cm程度に見える)との比較から概ね15-25cmの幅で推測できるが根拠が弱い。",
+    "sex_guess": "unknown",
+    "sex_evidence": "鼻曲がり無し、婚姻色無し、体型も判別できず。",
+    "species_ident": {
+      "label": "yamame",
+      "confidence": 0.6,
+      "reason": "青灰色の縦楕円パーマーク、LL下に並ぶ小円形の青黒点、朱点・白斑・虹色帯は判別できず。ただし画像は強い加工(HDR/シャープ)で色味が信頼できず、胸鰭の鮮黄色や尾鰭下葉のオレンジ褐色が実色か加工かは不明。アマゴの朱点は解像範囲では見えない。"
+    },
+    "parr_marks": {
+      "visible_count_one_side": 9,
+      "shape": "縦長楕円〜やや先細りの卵形。主要9個の間に、背側だけに出る半楕円(鞍状)の小さな中間マークが約4個交互に並ぶ。尾柄部では丸みを帯びた塊状。",
+      "color": "青灰〜スレート色(画像全体の青被りの影響あり)。上体の背側帯はオリーブ黄色で、その中に斑が入る。",
+      "height_vs_eye_diameter": "主要マークの高さは約50px、眼径は約25px。約2倍(斜め撮影のため参考値)。",
+      "contrast": "high",
+      "extends_below_lateral_line": true,
+      "first_mark_position_vs_opercle": "鰓蓋後縁の直後(眼径約1個分後方)から始まり、鰓蓋縁付近にも暗色域あり。",
+      "last_mark_position": "尾柄部、尾鰭基部の手前(丸みのある小塊)。",
+      "irregularities": "背側のみの中間マーク(約4個)が主マークの間に交互に出る。マーク高は一定でなく、中央部が最大。尾柄に近づくほど丸く小さくなる。片側のみ観察のため左右非対称は評価不可。"
+    },
+    "spots": {
+      "black_dorsal_above_LL": "背側帯のマーク間に微小な青黒点が数個。背中の暗色帯は無地に近い。",
+      "black_below_LL": "マーク下に小円形の青黒点が約12-14個、横一列に並ぶ。径約4-12px(眼径の0.2-0.5倍)。体中央が最大で前後に向かって小さくなる。",
+      "red_orange_spots": {
+        "present": false,
+        "where": "",
+        "count": "0(解像範囲で確認できず)",
+        "color": ""
+      },
+      "opercle_head_spots": "鰓蓋後方に微小な暗点が数個。頭部は概ね無地のオリーブ灰色。",
+      "dorsal_fin_spots": "背鰭は半透明灰色で斑点は確認できない。",
+      "caudal_fin_spots": "斑点は確認できない。"
+    },
+    "lateral_band": {
+      "present": false,
+      "color": "",
+      "extent": "桃色・虹色の縦走帯は無い。上体のオリーブ黄色帯はマーク間の地色。"
+    },
+    "colors": {
+      "dorsal": "最上縁に暗いスレート〜オリーブ黒の細帯(影)。その下は淡い青銀色(中央値約sRGB 141,161,179)。",
+      "flank": "淡い青銀色(下半の中央値約183,216,227)。上半はマーク間にオリーブ黄色の帯。",
+      "ventral": "青みを帯びた銀白色。",
+      "head": "背側はオリーブ灰色、頬は銀灰緑(中央値約124,143,148)。",
+      "opercle": "銀緑色にオリーブ灰の斑模様。",
+      "overall_cast_note": "強いシアン〜青被りとHDR風のコントラスト強調。周囲の礫の橙・青緑も飽和気味。体色の絶対値は使えない。"
+    },
+    "fins": {
+      "pectoral": "近側の胸鰭は鮮やかなレモンイエロー、丸みのある三角形、縁は淡色。加工による強調の可能性あり。",
+      "pelvic": "半透明の灰青色で鰭条が暗く、広く開いている。",
+      "anal": "半透明灰青色で細長く、畳み気味(礫に接している)。",
+      "dorsal": "半透明灰色で高く、後方へ倒れて寝ている。斑点無し。",
+      "adipose": "明確に同定できない。",
+      "caudal": "上葉は暗灰褐色、下葉はオレンジ褐色で鰭条が見える。上方へ折れ曲がり一部は石に重なる。下葉のオレンジは岩の色映りの可能性も残る。"
+    },
+    "eye": {
+      "iris": "瞳孔のまわりに細い銀金色のリング。外側は暗色の眼窩縁。",
+      "pupil": "ほぼ円形、黒。",
+      "size_vs_head": "眼径/頭長は約0.17(25px対150px、斜め撮影のため短縮あり)。",
+      "other": "頭部が斜めのため眼の位置・サイズ評価は参考程度。"
+    },
+    "head_mouth": {
+      "mouth_state": "closed",
+      "snout_profile": "吻は丸みのある鈍い形で、上顎先端が下顎よりわずかに前に出る。俯瞰のため側面の輪郭は評価不可。口はわずかに開き下顎の下縁が見える。",
+      "maxilla_end_vs_eye": "not_visible",
+      "jaw_kype": "none",
+      "opercle_notes": "鰓蓋はオリーブ灰色の斑状、後縁は滑らかで丸い。前鰓蓋の線が見える。"
+    },
+    "skin": {
+      "scales_visible": true,
+      "mucus_gloss_notes": "体側全体に細かい鱗目が見えるが、シャープ処理で強調され実際より粗く見える。粘液の濡れ感はHDR処理で平板化している。",
+      "specular_notes": "空の映り込みによる柔らかい面反射。強いホットスポットは無い。"
+    },
+    "lighting_and_color_reliability": {
+      "lighting": "屋外の自然光、浅い流水中。トーンマップ風の強調と青被り。",
+      "reliability": "low",
+      "why": "彩度とローカルコントラストが強調され、体側が不自然に青い。鱗模様もシャープ処理由来で偽ディテールの可能性。形状・パーマーク配置には使えるが色の絶対値には使えない。"
+    },
+    "posture_behavior": "浅い流水中(水深数cm)で礫の上に横臥。体はほぼ直線で尾柄から尾鰭だけ上へ折れる。口はわずかに開く。近側の胸鰭は下前方へ垂れ、腹鰭は開き、背鰭は後方へ寝る。自発遊泳ではなく、釣獲後に水中へ置いた/休止した状態に見える。",
+    "measure_usable": {
+      "lateral_morphometry": "maybe",
+      "parr_layout": "yes",
+      "color_sampling": "no",
+      "head_detail": "maybe",
+      "fin_detail": "maybe",
+      "reason": "体全体が写り側面にほぼ近いが、背側へのロールと頭部の斜め短縮、尾の折れがある。パーマークと黒点の配置は明瞭。色は加工が強く不可。"
+    },
+    "caveats": "強い画像加工の疑い(HDR/AI超解像風)。尾鰭と背鰭は礫・水面と重なる。スケール無しで体長推定不可。"
+  },
+  {
+    "id": "p012",
+    "host": "remix-com.amebaownd.com",
+    "source_url": "https://remix-com.amebaownd.com/posts/34118208/",
+    "view": "lateral_right",
+    "view_tilt_note": "タモ網の中で横臥した魚を真上近くから撮影。体軸は面内で約8度(頭が右上)。頭部がカメラ側へわずかにピッチし、口を大きく開けている。尾柄はやや下方へ湾曲。魚体は網目・水滴に重なる部分がある。",
+    "body_straightness": "slightly_curved",
+    "context": "landing_net",
+    "life_stage": "spawning_male",
+    "life_stage_evidence": "鮭鱒型の婚姻色に似た橙〜サーモンピンクの体側と、下顎先端が上向きに反った鼻曲がり(キペ)様の形。大型でパーマークが淡く広がり、眼が頭長に対して小さい。撮影時期は不明のため、婚姻期とは断定できない。",
+    "size_class_est": "25-35cm",
+    "size_evidence": "木枠タモ網の楕円枠の長径が約480px、魚体全長が約540pxで枠にほぼ収まる。一般的な渓流用タモ(長径30-40cm)から逆算して約30-35cmと推定。網サイズ不明のため根拠は弱い。",
+    "sex_guess": "male",
+    "sex_evidence": "下顎先端の上向きの反り(キペ様)、頭部が大きくがっしりしている、橙色の発色。中程度の確度。",
+    "species_ident": {
+      "label": "yamame",
+      "confidence": 0.6,
+      "reason": "成魚で淡いパーマークが残り、灰黒の小円斑が下体に多数並ぶ。明確な朱点は無く、白斑・白縁鰭も無いためイワナ類ではない。サーモンピンクの発色と鼻曲がりは婚姻期の個体に整合するが、アマゴや雑種の可能性は排除できない。"
+    },
+    "parr_marks": {
+      "visible_count_one_side": 7,
+      "shape": "幅広で不明瞭な縦長楕円〜塊状。橙色の地色に溶け込む。",
+      "color": "灰褐色〜灰青(中央値約187,163,131、周囲の橙との差が小さい)。",
+      "height_vs_eye_diameter": "高さ約40-50px、眼径約23px。約2倍。",
+      "contrast": "low",
+      "extends_below_lateral_line": true,
+      "first_mark_position_vs_opercle": "鰓蓋後縁から約1.5-2頭高ぶん後方で最初のマークが始まる。",
+      "last_mark_position": "尾柄の中ほどに淡い塊が1個。",
+      "irregularities": "前方ほど薄く、後方ほど不定形に融合する。体側の丸斑と一部が接する。左右差は片側のみで評価不可。"
+    },
+    "spots": {
+      "black_dorsal_above_LL": "背側は褐色の濃淡が主で、灰黒の小点は少数。",
+      "black_below_LL": "LL下に径4-8pxの灰黒の小円斑が60個以上、3-4列の不規則な列で並び、腹側まで広がる。パーマーク近傍に径10-15pxの大きめの円斑も数個。",
+      "red_orange_spots": {
+        "present": false,
+        "where": "",
+        "count": "0",
+        "color": "体側の橙色は斑点でなくびまん性の色素(判別できる朱点は無い)"
+      },
+      "opercle_head_spots": "鰓蓋は橙褐色の大きな斑状の色。黒点は確認できない。",
+      "dorsal_fin_spots": "背鰭は上縁しか見えず確認不可。",
+      "caudal_fin_spots": "斑点は確認できない。"
+    },
+    "lateral_band": {
+      "present": false,
+      "color": "",
+      "extent": "帯は無い。体側全体に橙〜サーモンピンクのびまん性の発色。"
+    },
+    "colors": {
+      "dorsal": "暗褐色(中央値約110,83,55)。",
+      "flank": "橙黄土色(中央値約193,146,100)、尾柄は橙(約204,159,115)。",
+      "ventral": "淡いクリーム黄(中央値約232,216,171)。",
+      "head": "背側はオリーブ灰褐、頬はクリーム色、鰓蓋に橙黄土色の大きな斑。",
+      "opercle": "橙褐色(約172,155,119、一部橙が強い)。",
+      "overall_cast_note": "全体に暖色寄り。背景の石も褐色で、色被りの有無は判断しにくい。曇天の屋外光と推定。"
+    },
+    "fins": {
+      "pectoral": "黄土褐色で半透明、長い尖った葉形。縁は暗色。",
+      "pelvic": "小さく褐色、体に沿って畳まれている。",
+      "anal": "灰青〜紫がかった半透明、幅広で広がる。",
+      "dorsal": "上縁のみ灰色半透明で見える。",
+      "adipose": "灰青色の半透明で、尾柄の背縁上に広がって見える(x約110-148、y約200-218)。置かれた状態で平たく開いている可能性。",
+      "caudal": "灰褐色で下葉の縁に赤褐色味。置かれた状態で広がり、切れ込みは浅く見える。"
+    },
+    "eye": {
+      "iris": "淡い金クリーム色のリングと、外周に暗色リング。",
+      "pupil": "円形、黒。",
+      "size_vs_head": "眼径/頭長は約0.14(眼径約23px、頭長約165px)。成魚らしく小さい。",
+      "other": "眼の上方〜前方に暗色の眼窩縁。"
+    },
+    "head_mouth": {
+      "mouth_state": "open",
+      "snout_profile": "吻は長めで先端が尖る。下顎が上顎より長く、先端が上向きに反ってフック状。口内は暗く、舌は桃色。",
+      "maxilla_end_vs_eye": "behind_eye",
+      "jaw_kype": "clear",
+      "opercle_notes": "鰓蓋は大きく、橙色の大きな斑と、後縁に明るい鰓膜。前鰓蓋の線が明瞭。"
+    },
+    "skin": {
+      "scales_visible": false,
+      "mucus_gloss_notes": "体表は濡れて艶があるが、鱗目は判別できない。滑らかなマット寄りの粘液光沢。",
+      "specular_notes": "上部に網の水面反射。魚体には強いホットスポットは無い。"
+    },
+    "lighting_and_color_reliability": {
+      "lighting": "屋外の曇天〜日陰、水濡れの網上。",
+      "reliability": "med",
+      "why": "解像度は低いが露出は適正で、白飛びや色被りは目立たない。橙色の強さは婚姻色の可能性があり個体/季節依存。"
+    },
+    "posture_behavior": "水中ではなく網上のため行動観察は不可(口を開けた釣獲個体)。",
+    "measure_usable": {
+      "lateral_morphometry": "maybe",
+      "parr_layout": "maybe",
+      "color_sampling": "maybe",
+      "head_detail": "yes",
+      "fin_detail": "maybe",
+      "reason": "体全体が写り側面にほぼ近い。ただし開口と尾柄の湾曲、網による遮蔽がある。パーマークは淡い。頭部は鼻曲がりと口の構造が明瞭。"
+    },
+    "caveats": "元画像が605x453と小さい。婚姻期かどうかは撮影日不明。腹鰭・臀鰭は網の影で形が不鮮明。"
+  },
+  {
+    "id": "p013",
+    "host": "anglers.jp",
+    "source_url": "https://anglers.jp/catches/6825477",
+    "view": "lateral_left",
+    "view_tilt_note": "地面に置かれた魚を真上からスマートフォンで撮影。側面にほぼ直角(ピッチ/ロールは小さい)。体軸は面内で約5度(頭が左下、尾が右上)。尾柄から尾鰭は上方へ反る。腹縁の一部が葉に隠れる。",
+    "body_straightness": "slightly_curved",
+    "context": "ground",
+    "life_stage": "parr",
+    "life_stage_evidence": "パーマークが明瞭で大きく、体側が灰銀色に軽く銀化している程度。体型は細く幼魚的。婚姻色なし。",
+    "size_class_est": "12-18cm",
+    "size_evidence": "左下に置かれた小型スプーン(全長約145px、通常2.5-3.5cm程度と仮定)に対し、魚体は約880px。約15-21cmと推定。ルアーサイズ不明のため根拠は弱く、18cm前後を境界とする。",
+    "sex_guess": "unknown",
+    "sex_evidence": "鼻曲がり・婚姻色なし。判別不可。",
+    "species_ident": {
+      "label": "yamame",
+      "confidence": 0.7,
+      "reason": "灰黒色の大きな縦楕円パーマーク、LL下の黒い円斑、体側の淡桃色の発色、橙黄色の胸鰭。朱点は確認できない。白斑・白縁鰭は無く、イワナ類ではない。"
+    },
+    "parr_marks": {
+      "visible_count_one_side": 9,
+      "shape": "縦長楕円(中央部が最大)。尾柄に近い後方3個は小さく丸い。",
+      "color": "暗灰〜青灰色(中央値約137,135,132)。",
+      "height_vs_eye_diameter": "最大マークは高さ約75-80px、幅約40px、眼径約45px。高さは眼径の約1.7倍。",
+      "contrast": "high",
+      "extends_below_lateral_line": true,
+      "first_mark_position_vs_opercle": "鰓蓋後縁から約1.5眼径後方で薄い最初のマーク。濃いマークは約3眼径後方から。",
+      "last_mark_position": "尾柄部に小さい黒点状のマーク。",
+      "irregularities": "前方2個は薄く不明瞭、中央の3-4個が最も濃くて大きい。2個が部分的に融合。後方は小円斑化。マークの位置は左右対称に見える保証が無い(片側のみ)。"
+    },
+    "spots": {
+      "black_dorsal_above_LL": "背側に径2-4pxの微小な黒点が密に分布(数十個)。",
+      "black_below_LL": "LL下に径20-30pxの黒い円斑が約8個、1-2列。体前半で大きく後半で小さい。",
+      "red_orange_spots": {
+        "present": false,
+        "where": "",
+        "count": "0",
+        "color": "マーク間に淡橙桃色のびまん性の発色のみ"
+      },
+      "opercle_head_spots": "鰓蓋と頬に微小な暗点が数個。",
+      "dorsal_fin_spots": "背鰭は畳まれ確認不可。",
+      "caudal_fin_spots": "尾鰭は暗灰色で斑点は確認できない。"
+    },
+    "lateral_band": {
+      "present": true,
+      "color": "淡いサーモンピンク(中央値約223,191,167)",
+      "extent": "体側中央のマーク間に斑状に出る(x約790-830が最も強い)。連続した帯ではない。"
+    },
+    "colors": {
+      "dorsal": "暗オリーブ黒(中央値約49,49,35)。",
+      "flank": "灰銀色(中央値約211,197,182)、マーク間に淡橙桃色。",
+      "ventral": "灰白色(中央値約177,175,169)。",
+      "head": "背側オリーブ褐色、頬は銀灰。",
+      "opercle": "銀灰色で薄い桃色味。",
+      "overall_cast_note": "曇天の屋外光で概ね中性。周囲の葉の緑の映り込みで影部がやや緑に寄る。"
+    },
+    "fins": {
+      "pectoral": "鮮やかな琥珀〜橙黄色(中央値約191,152,68)、細長い尖った楕円形。前縁に白い鰭条。",
+      "pelvic": "確認できない(下部が葉や草に隠れる)。",
+      "anal": "白っぽい半透明、折り畳まれて見える(x約850-960、y約620-650)。",
+      "dorsal": "畳まれほぼ見えない。",
+      "adipose": "同定できない。",
+      "caudal": "暗灰黒色、二叉形、上方へ反って見える。斑点なし。"
+    },
+    "eye": {
+      "iris": "金オリーブ色の細いリング。外周に暗色。",
+      "pupil": "円形、黒。",
+      "size_vs_head": "眼径/頭長は約0.22(眼径約45px、頭長約200px)。",
+      "other": ""
+    },
+    "head_mouth": {
+      "mouth_state": "closed",
+      "snout_profile": "吻は短く鈍い丸み。上顎先端がわずかに下顎より前に出る。",
+      "maxilla_end_vs_eye": "behind_eye",
+      "jaw_kype": "none",
+      "opercle_notes": "鰓蓋は丸く、後縁に黄褐色の縁取り。前鰓蓋の線が見える。"
+    },
+    "skin": {
+      "scales_visible": true,
+      "mucus_gloss_notes": "背側半分で鱗目が点状パターンとして確認できる。体表は水滴を帯びて濡れ光り。",
+      "specular_notes": "鱗の稜に沿った細かな点状ハイライトと水滴。強い面反射は無い。"
+    },
+    "lighting_and_color_reliability": {
+      "lighting": "屋外曇天、水濡れの苔と落ち葉上。",
+      "reliability": "med",
+      "why": "スマートフォン撮影で露出は適正、背景の緑被りが影に若干のる。釣獲後で死後変化が始まっている可能性(体色の濃淡)。"
+    },
+    "posture_behavior": "地上のため行動観察は不可。",
+    "measure_usable": {
+      "lateral_morphometry": "maybe",
+      "parr_layout": "yes",
+      "color_sampling": "yes",
+      "head_detail": "yes",
+      "fin_detail": "maybe",
+      "reason": "真上からでほぼ直角の側面。ただし葉が腹縁、草が背縁を一部遮り、尾鰭が反って重なる。パーマークと黒点は明瞭。"
+    },
+    "caveats": "スケール不確実。上方へ反る尾鰭の形状は自然遊泳時と異なる。橙色の物体(x約935,y約580)は落ち葉/植物片で魚の鰭ではないと判断。"
+  },
+  {
+    "id": "p014",
+    "host": "ameblo.jp",
+    "source_url": "https://ameblo.jp/hiyokomushi2/entry-12076486309.html",
+    "view": "multi_fish",
+    "view_tilt_note": "水槽内の2尾が同方向(右向き)に並び、ガラス面に近い。右魚(A)はピッチ上向きでヨー約30-40度、頭がカメラに近く正面寄りの斜め。左魚(B)は頭が画面右でほぼ側面だがヨー約15度、頭が手前、尾半分は画面外。背景は白飛びした逆光。",
+    "body_straightness": "straight",
+    "context": "aquarium",
+    "life_stage": "parr",
+    "life_stage_evidence": "眼が頭に対して大きく、パーマークは細い縦楕円で小型。背側に短い黒点の列。",
+    "size_class_est": "unknown",
+    "size_evidence": "水槽内で基準物なし。砂利粒(1-3mm程度と仮定)との比較と眼径(約20-32px)からの幼魚の標準眼径比による推定で約10-15cmだが根拠は弱い。",
+    "sex_guess": "unknown",
+    "sex_evidence": "幼魚で判別不可。",
+    "species_ident": {
+      "label": "yamame",
+      "confidence": 0.55,
+      "reason": "細い縦楕円のパーマークと背側の短い黒点列、橙味の胸鰭。朱点は確認できないが逆光・白飛びで見落とす可能性があり、アマゴ/サクラマス幼魚との区別は不能。"
+    },
+    "parr_marks": {
+      "visible_count_one_side": 6,
+      "shape": "細い縦楕円(幅は高さの約1/3)。やや不整形で縁がぼやける。",
+      "color": "暗スレート灰〜褐灰。",
+      "height_vs_eye_diameter": "B魚で高さ約60px、眼径約32px。約1.9倍。",
+      "contrast": "med",
+      "extends_below_lateral_line": true,
+      "first_mark_position_vs_opercle": "B魚で鰓蓋後縁(x約195)の約45px後方(約1.4眼径)から最初のマーク。",
+      "last_mark_position": "尾部が画面外のため不明。",
+      "irregularities": "A魚は体側が重なり約6個のみ。B魚で5-6個確認。マークの高さ・間隔は不揃い。2番目が細い。"
+    },
+    "spots": {
+      "black_dorsal_above_LL": "背縁に沿って短い黒い線状/楕円斑(幅2-4px、長さ6-10px)が約10個以上の列。",
+      "black_below_LL": "LL下に径8-10px前後の小円斑が少数(B魚で3-4個)。",
+      "red_orange_spots": {
+        "present": false,
+        "where": "",
+        "count": "0(解像・逆光のため確認できず)",
+        "color": ""
+      },
+      "opercle_head_spots": "A魚の鰓蓋・頬に小さな黒点が数個。B魚は確認できない。",
+      "dorsal_fin_spots": "背鰭は淡いクリーム色で斑点は確認できない。",
+      "caudal_fin_spots": "尾鰭は画面外/不可視。"
+    },
+    "lateral_band": {
+      "present": false,
+      "color": "",
+      "extent": "確認できない。"
+    },
+    "colors": {
+      "dorsal": "褐オリーブ(B魚中央値約118,112,100)。",
+      "flank": "褐灰〜黄灰(約134,126,109)。",
+      "ventral": "淡クリーム白(砂利の反射で白飛び気味)。",
+      "head": "背側は褐色、頬は淡い灰白色で斑状(約171,171,157)。",
+      "opercle": "淡灰白色で霜降り状の模様。",
+      "overall_cast_note": "白い窓逆光により全体が低コントラストでウォームグレー。白飛びあり。"
+    },
+    "fins": {
+      "pectoral": "A魚は半透明の黄橙色(中央値約134,113,68)、丸みのある長楕円形。B魚は淡色。",
+      "pelvic": "A魚は半透明の橙クリーム色で広げている。B魚は淡色。",
+      "anal": "確認できない。",
+      "dorsal": "A魚は淡いクリーム色、高い三角形で先端がやや白。",
+      "adipose": "確認できない。",
+      "caudal": "確認できない。"
+    },
+    "eye": {
+      "iris": "淡い金銀〜緑クリーム色の幅広いリング(成魚写真より幅が広い)。",
+      "pupil": "円形、黒、大きい。",
+      "size_vs_head": "眼径/頭長は約0.2(B魚で眼径約32px、頭長約145px。A魚は約0.18)。幼魚で大きい。",
+      "other": "眼の前上方に暗褐色の眼窩斑。"
+    },
+    "head_mouth": {
+      "mouth_state": "closed",
+      "snout_profile": "吻は短く丸い。B魚で上顎がわずかに前に出る。A魚は斜め正面で輪郭評価不可。",
+      "maxilla_end_vs_eye": "behind_eye",
+      "jaw_kype": "none",
+      "opercle_notes": "B魚の鰓蓋は淡白色で大きく、後縁が明瞭。"
+    },
+    "skin": {
+      "scales_visible": true,
+      "mucus_gloss_notes": "B魚の体側に細かい格子状の鱗目が見える。表面はマットで柔らかな光沢。",
+      "specular_notes": "白い逆光による拡散的な輝き。ホットスポットは無い。"
+    },
+    "lighting_and_color_reliability": {
+      "lighting": "水槽、背後に強い白い窓光。逆光・露出過多。",
+      "reliability": "low",
+      "why": "逆光で白飛び、ガラス越しでコントラスト低下。色は参考にならない。"
+    },
+    "posture_behavior": "2尾が同方向(右)を向いて水槽ガラス寄りで並走。A魚はピッチ上向き20-30度で胸鰭を側方へ広げ、腹鰭を橙味で広げる。B魚はほぼ水平で胸鰭を体側に沿わせる。底は白〜桃色の細砂利で、魚は底から体高1個分程度の高さ。",
+    "measure_usable": {
+      "lateral_morphometry": "no",
+      "parr_layout": "maybe",
+      "color_sampling": "no",
+      "head_detail": "yes",
+      "fin_detail": "maybe",
+      "reason": "A魚は斜め正面、B魚は尾半分が欠ける。B魚の頭部はほぼ側面で眼・口・鰓蓋が明瞭。色は逆光で不可。"
+    },
+    "caveats": "元画像720x480と小さい。左端は第3の個体の可能性(尾の一部)。魚種は掲載元の表示に依存(ここでは未確認)。"
+  },
+  {
+    "id": "p015",
+    "host": "note.com",
+    "source_url": "https://note.com/kitasato_labo/n/n13a42411146a",
+    "view": "multi_fish",
+    "view_tilt_note": "水槽ガラスに近い手前の魚F(左向き、ほぼ側面、右端で画面外に切れる)が主被写体。Fは頭がカメラに近くヨー約10-20度。中景のM、上部のT1(淡銀色)・T2(褐色斑多数)はいずれも左向きで、T2は上端で切れる。",
+    "body_straightness": "straight",
+    "context": "aquarium",
+    "life_stage": "parr",
+    "life_stage_evidence": "手前のFは大きな眼、明瞭な縦のパーマーク、小型の黒点。上部のT1は淡銀色でパーマークが薄く、スモルト化の個体に見える。",
+    "size_class_est": "unknown",
+    "size_evidence": "基準物なし。Fの頭長が約250pxと画面に対して大きく、近接撮影。体長は評価不可。",
+    "sex_guess": "unknown",
+    "sex_evidence": "幼魚で判別不可。",
+    "species_ident": {
+      "label": "mixed_multiple",
+      "confidence": 0.6,
+      "reason": "手前のFはヤマメ/サクラマス型の幼魚(パーマーク、小黒点、朱点なし)。T1は淡銀色の別段階(銀化)。T2は褐色の背に黒点が密集し、腹鰭/臀鰭がサーモンピンクで、F・T1と体色が大きく異なり別魚種/別型の可能性を残す。"
+    },
+    "parr_marks": {
+      "visible_count_one_side": 6,
+      "shape": "縦長の楕円。やや傾きがあり上端が前に倒れる。",
+      "color": "暗い褐灰紫色(水槽照明による)。",
+      "height_vs_eye_diameter": "F魚で最大マークの高さ約95px、眼径約65px。約1.5倍。",
+      "contrast": "med",
+      "extends_below_lateral_line": null,
+      "first_mark_position_vs_opercle": "F魚で鰓蓋後縁(x約730)の直後に薄い最初のマーク(x約700-740)。",
+      "last_mark_position": "画面外(x>1280)で不明。",
+      "irregularities": "F魚の最初のマークは薄く、中央の2個が濃く大きい。尾部側3個は縦長だが傾きが異なる。尾が画面外のため全数不明。LLが見えないためLL下への延びは判定不可。"
+    },
+    "spots": {
+      "black_dorsal_above_LL": "F魚の背側に楕円形の黒点が約10個、背縁に沿って1列に並ぶ(径約12-16px)。",
+      "black_below_LL": "F魚のマーク下に小円斑が3-4個(径約15-20px)。",
+      "red_orange_spots": {
+        "present": false,
+        "where": "",
+        "count": "0(F魚)",
+        "color": "T2の腹鰭/臀鰭にサーモンピンクの鰭色あり。斑点ではない"
+      },
+      "opercle_head_spots": "F魚の頬と鰓蓋に目立つ斑はない。T2は頭部と背に黒点が密。",
+      "dorsal_fin_spots": "確認できない(F魚は背鰭が画面外/遮蔽)。",
+      "caudal_fin_spots": "確認できない。"
+    },
+    "lateral_band": {
+      "present": false,
+      "color": "",
+      "extent": "帯は確認できない。"
+    },
+    "colors": {
+      "dorsal": "暗褐紫灰(F魚の中央値約110,95,80)。",
+      "flank": "淡いウォームグレー〜褐灰(約159,142,123)、淡いラベンダー/桃色味。",
+      "ventral": "淡灰褐色(下端は影)。",
+      "head": "背側はオリーブ褐、頬はピンクがかった灰紫(約126,106,90)。",
+      "opercle": "ピンクがかった灰褐色。",
+      "overall_cast_note": "水槽照明/ホワイトバランスで全体にマゼンタ〜褐色の被り。"
+    },
+    "fins": {
+      "pectoral": "確認できない(遮蔽)。",
+      "pelvic": "F魚の腹縁に淡色半透明の鰭が少し見える(x約940-1000、y約560-580)。T1は白い腹鰭。",
+      "anal": "確認できない。T2は淡いサーモンピンクの鰭。",
+      "dorsal": "中景Mの背鰭(x約960-1120、y約320-350)が淡い灰紫色、半透明で、後縁が丸い。F魚自身の背鰭は確認できない。",
+      "adipose": "確認できない。",
+      "caudal": "確認できない。"
+    },
+    "eye": {
+      "iris": "金白色の幅広いリング(外周は細い暗色リング)。",
+      "pupil": "黒、ほぼ円形だがエッジ上部に反射による欠けがある。",
+      "size_vs_head": "眼径/頭長は約0.26(眼径約65px、頭長約250px)。幼魚で大きい。",
+      "other": "鼻孔が眼の前方(x約525,y約467)に桃色の縁で見える。"
+    },
+    "head_mouth": {
+      "mouth_state": "closed",
+      "snout_profile": "吻は短く丸く、上顎先端が下顎よりわずかに前。唇は淡い藤色。",
+      "maxilla_end_vs_eye": "below_center",
+      "jaw_kype": "none",
+      "opercle_notes": "鰓蓋は丸く、後縁はぼやけた灰紫色。前鰓蓋の弧が見える。"
+    },
+    "skin": {
+      "scales_visible": true,
+      "mucus_gloss_notes": "背側に細かい鱗目が見える。体表はマットで柔らかい光沢。",
+      "specular_notes": "ガラスによる弱い反射。鋭いハイライトは無い。"
+    },
+    "lighting_and_color_reliability": {
+      "lighting": "水槽の人工照明、ガラス越し、背景は暗褐色。",
+      "reliability": "low",
+      "why": "体色が全体に褐紫色へ被り、かつ魚の位置によって濃淡が変わる。"
+    },
+    "posture_behavior": "F、M、T1、T2の全個体が左向き(同一方向)。Fは水平に近い姿勢で水槽ガラス寄り、口を閉じて保持。T1は上方でわずかに頭下がりのピッチ。T2は水面近くで頭を左に向ける。水槽内の流れに対する定位(同方向を向く)と見られるが水流は写真からは確認できない。",
+    "measure_usable": {
+      "lateral_morphometry": "no",
+      "parr_layout": "maybe",
+      "color_sampling": "no",
+      "head_detail": "yes",
+      "fin_detail": "no",
+      "reason": "F魚の体が右端で切れて尾が無い。頭部(眼・鼻孔・口・鰓蓋)は非常に鮮明。色は被りが強い。"
+    },
+    "caveats": "掲載元(北里大学研究室のnote)で種名表示がある可能性があるが、ここでは確認していない。Fの尾側は画面外。T2は別型の可能性。"
+  },
+  {
+    "id": "p016",
+    "host": "www.hitoumi.jp",
+    "source_url": "https://www.hitoumi.jp/zukan/fish/190712092542.php",
+    "view": "lateral_left",
+    "view_tilt_note": "水槽内の中央の魚が、黒背景にほぼ純粋な側面で写る。ヨー・ピッチ・ロールは小さい(約5-10度)。体軸は面内でほぼ水平。尾柄から尾鰭がやや下方へ湾曲し、尾鰭は上葉がカメラ側にひねられて見える。",
+    "body_straightness": "slightly_curved",
+    "context": "aquarium",
+    "life_stage": "parr",
+    "life_stage_evidence": "高さのある縦長パーマーク8個前後、背側に黒い短楕円斑、体高が低く細長い体型。婚姻色なし。",
+    "size_class_est": "unknown",
+    "size_evidence": "基準物なし。苔岩に比べ小型だが体長は評価不可。",
+    "sex_guess": "unknown",
+    "sex_evidence": "幼魚で判別不可。",
+    "species_ident": {
+      "label": "yamame",
+      "confidence": 0.6,
+      "reason": "高い縦楕円のパーマーク、背側の黒楕円斑、LL下の小黒点。朱点は判別できず、白斑は無い。腹鰭/臀鰭の前縁と背鰭先端が白いが、これは幼魚期のサケ属にも見られ、イワナ類にも見られる特徴のため決め手にならない。アマゴの可能性も排除できない。"
+    },
+    "parr_marks": {
+      "visible_count_one_side": 8,
+      "shape": "縦長の幅広い楕円。後方ほど細く、尾柄の手前では丸みを帯びる。",
+      "color": "暗オリーブ灰(中央値約81,96,88)。",
+      "height_vs_eye_diameter": "高さ約50px、眼径約20px。約2.5倍。",
+      "contrast": "med",
+      "extends_below_lateral_line": true,
+      "first_mark_position_vs_opercle": "鰓蓋後縁の約20px後方から最初のマーク(淡い)。",
+      "last_mark_position": "尾柄の脂鰭下付近(x約441-450)。",
+      "irregularities": "前方の最初のマークは淡く、第2-4が最も濃い。マーク間隔はほぼ均等だが高さは不揃い。LL上の位置は個体で微妙にずれる。"
+    },
+    "spots": {
+      "black_dorsal_above_LL": "背側に黒い短楕円斑(長さ約8px、幅約4px)が約12-15個、背縁に沿って並ぶ。",
+      "black_below_LL": "体側下半に小さい黒点が約15-20個、散在(径4-6px)。",
+      "red_orange_spots": {
+        "present": false,
+        "where": "",
+        "count": "0(解像範囲で確認できず)",
+        "color": ""
+      },
+      "opercle_head_spots": "鰓蓋と頬に目立つ斑は無い。",
+      "dorsal_fin_spots": "背鰭は暗い鰭条と白い先端。斑点は確認できない。",
+      "caudal_fin_spots": "斑点は確認できない。"
+    },
+    "lateral_band": {
+      "present": false,
+      "color": "",
+      "extent": "帯は無い。"
+    },
+    "colors": {
+      "dorsal": "淡オリーブ褐(約164,162,136)。",
+      "flank": "黄緑色(下半の中央値約132,163,110)。水槽照明の影響が強い。",
+      "ventral": "淡黄白色(白飛び気味、約240,239,201)。",
+      "head": "背側はオリーブ黄、頬は淡い灰緑(約213,214,186)。",
+      "opercle": "淡緑灰、中央に暗斑。",
+      "overall_cast_note": "強い黄緑被り(水槽の藻/照明)。黒背景のため反射が強調される。"
+    },
+    "fins": {
+      "pectoral": "淡黄緑の半透明、大きな丸みのある楕円形。",
+      "pelvic": "白い前縁と暗灰の鰭条、先端が白い。",
+      "anal": "白い前縁と暗い基部、後縁へ向けて白い先端。",
+      "dorsal": "暗い鰭条と白い先端、高い台形。",
+      "adipose": "小さく淡灰白色で縁が白い(x約430,y約189)。",
+      "caudal": "暗灰褐色で下葉先端と縁が白、上葉は黄緑味のオリーブ。二叉形。"
+    },
+    "eye": {
+      "iris": "銀白色の細いリングと外周の暗リング。",
+      "pupil": "円形、黒。",
+      "size_vs_head": "眼径/頭長は約0.19(眼径約20px、頭長約105px)。",
+      "other": ""
+    },
+    "head_mouth": {
+      "mouth_state": "open",
+      "snout_profile": "吻は丸みのある先端。下顎がわずかに下がり、口がわずかに開く。",
+      "maxilla_end_vs_eye": "behind_eye",
+      "jaw_kype": "none",
+      "opercle_notes": "鰓蓋は淡緑の透明感があり、中央に暗斑。後縁の輪郭は薄い。"
+    },
+    "skin": {
+      "scales_visible": false,
+      "mucus_gloss_notes": "鱗目は解像度的に確認できない。背側とかなり強いホットスポットが白飛び。",
+      "specular_notes": "背縁と頭頂にシャープな白い面反射。黒背景により輪郭が強調される。"
+    },
+    "lighting_and_color_reliability": {
+      "lighting": "水槽の上方照明、黒背景。",
+      "reliability": "low",
+      "why": "強い黄緑被りと白飛び。体色の絶対値は不可。パーマーク位置と鰭形状の判定には有用。"
+    },
+    "posture_behavior": "ほぼ水平に遊泳中。全鰭が展開し、胸鰭は大きく側方へ広がり、腹鰭と臀鰭は下方へ開く。背鰭は直立。尾柄がわずかに下方へ湾曲し尾鰭がねじれて見える(旋回の開始か方向転換の可能性)。左端に別個体の頭が写り、鼻先が主魚の鼻先とほぼ接触する(個体間距離ほぼ0)。右上にもう1尾が別方向(右向き)へ遊泳。",
+    "measure_usable": {
+      "lateral_morphometry": "yes",
+      "parr_layout": "yes",
+      "color_sampling": "no",
+      "head_detail": "maybe",
+      "fin_detail": "yes",
+      "reason": "ほぼ純粋な側面で体全体と全鰭が写り、黒背景で輪郭が明瞭。尾柄がわずかに湾曲、尾鰭がねじれている。色は被りが強く不可。"
+    },
+    "caveats": "元画像600x450と小さい。水槽ガラスの屈折で寸法が微小に歪む可能性。尾鰭上葉のねじれで尾鰭形状は正確でない。"
+  },
+  {
+    "id": "p017",
+    "host": "plaza.rakuten.co.jp",
+    "source_url": "https://plaza.rakuten.co.jp/nekomac/diary/202506270002/",
+    "view": "lateral_right",
+    "view_tilt_note": "水槽前面ガラス越しに、礫の上で休止する手前の魚を撮影。ヨー約15-25度で頭がガラス側に近く、頭が大きく見え尾が小さく見える(遠近)。ピッチ・ロールは小さい。背景に別の魚が多数(最低6尾)。ビデオフレーム由来の低解像・ブロックノイズ。",
+    "body_straightness": "straight",
+    "context": "aquarium",
+    "life_stage": "parr",
+    "life_stage_evidence": "青灰色の明瞭なパーマークが8個、LL下の小黒点、体型が細長い。",
+    "size_class_est": "unknown",
+    "size_evidence": "基準物なし。礫(径1-3cm程度)に対して魚は大きく、少なくとも10cm以上に見える。",
+    "sex_guess": "unknown",
+    "sex_evidence": "判別不可。",
+    "species_ident": {
+      "label": "yamame",
+      "confidence": 0.6,
+      "reason": "青灰色の縦楕円パーマークとLL下の小黒点、LL(側線)が淡色の細線として連続して見える。朱点・白斑は確認できないが低解像のため見落としの余地あり。他の背景個体も同様のパーマーク魚。"
+    },
+    "parr_marks": {
+      "visible_count_one_side": 8,
+      "shape": "縦長の楕円。上端が細く、一部のマークは上半分だけ。",
+      "color": "鋼青色(中央値約102,146,162)。",
+      "height_vs_eye_diameter": "最大マークの高さ約56px、眼径(外周)約43px。約1.3-1.5倍。",
+      "contrast": "high",
+      "extends_below_lateral_line": true,
+      "first_mark_position_vs_opercle": "鰓蓋後縁(x約730)の約60px後方(約1.4眼径)に最初の大きなマーク(x約672)。",
+      "last_mark_position": "尾柄(x約430)付近の淡いマーク。",
+      "irregularities": "マークの高さ・位置が不揃い(x約534と594のマークは短く上寄り、566と620は長い)。後方ほど淡く不明瞭。"
+    },
+    "spots": {
+      "black_dorsal_above_LL": "ボケのため確認できない。",
+      "black_below_LL": "LL下に径約10-12pxの黒い楕円斑が5個(y約345)。",
+      "red_orange_spots": {
+        "present": false,
+        "where": "",
+        "count": "0(解像範囲で確認できず)",
+        "color": ""
+      },
+      "opercle_head_spots": "確認できない。",
+      "dorsal_fin_spots": "背鰭は灰色半透明で斑点は確認できない。",
+      "caudal_fin_spots": "確認できない。"
+    },
+    "lateral_band": {
+      "present": false,
+      "color": "",
+      "extent": "LL上の淡い細線のみ(桃色帯ではない)。"
+    },
+    "colors": {
+      "dorsal": "淡灰緑〜オリーブ。",
+      "flank": "淡い青緑〜シアン(上半の中央値約169,210,215)、下半は緑(約116,157,132)。",
+      "ventral": "淡青緑白色。",
+      "head": "オリーブ緑色の被りで彩度低め。",
+      "opercle": "淡い青緑灰色。",
+      "overall_cast_note": "水槽ガラスと緑の苔/礫の映り込みで強い緑〜シアン被り。"
+    },
+    "fins": {
+      "pectoral": "胸鰭は白い鰭条の細線として見えるのみ(x約690-730、y約360-380)。形・色は判別不可。",
+      "pelvic": "腹鰭/臀鰭が礫上に接し、赤褐色〜桃褐色の鰭条が見える(x約420-460、y約348-378)。どちらか区別できない。",
+      "anal": "同上と重なり判別不可。",
+      "dorsal": "高く展開した灰色半透明、淡い鰭条(x約485-570、y約215-255)。",
+      "adipose": "小さな白色の突起(x約410-430、y約270-280)。",
+      "caudal": "小さく淡い桃灰色、二叉(x約357-400、y約255-350)。ボケ。"
+    },
+    "eye": {
+      "iris": "金銀色の細い二重リングが黒瞳孔を囲む。外側は青灰色の眼窩。",
+      "pupil": "円形、黒、大きい。",
+      "size_vs_head": "眼径/頭長は約0.29(眼径約43px、頭長約150px。頭が手前のため過大)。",
+      "other": "眼の前方(鼻孔付近)に白い小斑が見える(x約857、y約327)。眼の周囲は青灰色の眼窩縁。"
+    },
+    "head_mouth": {
+      "mouth_state": "closed",
+      "snout_profile": "吻は丸く短い。ヨーのため口が正面寄りに見え、上顎がわずかに前。",
+      "maxilla_end_vs_eye": "not_visible",
+      "jaw_kype": "none",
+      "opercle_notes": "鰓蓋は丸く大きい。後縁に薄い白い縁取り。"
+    },
+    "skin": {
+      "scales_visible": false,
+      "mucus_gloss_notes": "ボケ・圧縮のため鱗目は確認できない。体表はマットで粘液光沢は弱い。",
+      "specular_notes": "ガラスの反射で全体に白いベールがかかる。"
+    },
+    "lighting_and_color_reliability": {
+      "lighting": "水槽の人工照明、前面ガラス越し。",
+      "reliability": "low",
+      "why": "緑被りが強く、低解像(1280x720)でブロックノイズあり。形状・パーマーク配置には使えるが色は不可。"
+    },
+    "posture_behavior": "礫の上に腹をつけて休止、体は直線でほぼ水平。胸鰭と腹鰭を下へ押し付けて体を支える。頭は右・ガラス側を向く。背景の他の魚は中層を遊泳(上方左側の魚は右向きで尾鰭を下げた姿勢)。",
+    "measure_usable": {
+      "lateral_morphometry": "no",
+      "parr_layout": "yes",
+      "color_sampling": "no",
+      "head_detail": "maybe",
+      "fin_detail": "no",
+      "reason": "体全体は写るが、ヨー約15-25度で頭が過大に写り、腹縁が礫で遮蔽、ボケで尾柄/鰭の輪郭が不鮮明なため比率計測は不可。パーマークの配置は明瞭。"
+    },
+    "caveats": "ビデオフレーム由来。ヨーによる遠近のため体長・頭長比は不可。他の魚が複数写るが主被写体のみ記録。"
+  },
+  {
+    "id": "p018",
+    "host": "www.gao-aqua.jp",
+    "source_url": "https://www.gao-aqua.jp/blog/18889.html",
+    "view": "multi_fish",
+    "view_tilt_note": "水槽内の2尾が平行に右上へ上昇。上の魚Aは体軸が面内で約14度、下の魚Bは約18度(頭が上)。両者ともほぼ側面で、ヨーは小さい。尾はやや下方へ落ち、体が軽く弓なり。暗い背景に上方照明。",
+    "body_straightness": "slightly_curved",
+    "context": "aquarium",
+    "life_stage": "parr",
+    "life_stage_evidence": "眼が大きく、縦のパーマークが10個前後、体が細長い。後方3個のマークは丸い塊状。",
+    "size_class_est": "unknown",
+    "size_evidence": "基準物なし。水槽下端の礫との比較は距離が違い不可。",
+    "sex_guess": "unknown",
+    "sex_evidence": "幼魚で判別不可。",
+    "species_ident": {
+      "label": "yamame",
+      "confidence": 0.5,
+      "reason": "パーマーク、背側の黒点、白縁のない淡青白色の鰭。朱点は判別できず、暗い低解像の水槽写真のためアマゴの可能性を排除できない。2尾でパターンが異なる(下の魚Bは黒点が多く大型)。"
+    },
+    "parr_marks": {
+      "visible_count_one_side": 10,
+      "shape": "A魚:前方は細い縦楕円、後方3個は丸い塊状。B魚:前方5個は細い楕円、後方4個は大きな丸い塊で、斑紋が点状に近づく。",
+      "color": "暗スレート青灰色(中央値約124,128,121)。",
+      "height_vs_eye_diameter": "A魚で高さ約30-35px、眼径約20px。約1.5-1.7倍。",
+      "contrast": "med",
+      "extends_below_lateral_line": true,
+      "first_mark_position_vs_opercle": "A魚で鰓蓋後縁の約15px後方(約0.8眼径)に最初の小さなマーク。",
+      "last_mark_position": "尾柄の基部(尾鰭付け根)の丸い塊。",
+      "irregularities": "個体差が顕著。Bは大型の丸斑が尾柄に3個、背側の黒点がAの約2倍。AとBでマーク間隔・形状が異なる。B魚の4番目のマークは上側に偏る。"
+    },
+    "spots": {
+      "black_dorsal_above_LL": "A魚は径2-4pxの黒点が約15個(2列)。B魚は約25-30個と密。",
+      "black_below_LL": "A魚は小円斑が6-8個。B魚は径4-8pxが約10個、尾柄に大きな丸斑。",
+      "red_orange_spots": {
+        "present": false,
+        "where": "",
+        "count": "0(解像範囲で確認できず)",
+        "color": ""
+      },
+      "opercle_head_spots": "B魚は鰓蓋・頬に黒点が数個。A魚は頬に小さな点が少数。",
+      "dorsal_fin_spots": "背鰭は淡青白色で斑点は確認できない。",
+      "caudal_fin_spots": "斑点は確認できない。"
+    },
+    "lateral_band": {
+      "present": false,
+      "color": "",
+      "extent": "帯は無い。"
+    },
+    "colors": {
+      "dorsal": "淡灰緑(約145,154,148)。",
+      "flank": "クリーム〜淡黄灰色(約147,157,143)。",
+      "ventral": "クリーム白(上方照明で明るい)。",
+      "head": "背側は褐灰、頬は淡灰白。",
+      "opercle": "淡灰白色。",
+      "overall_cast_note": "暗い背景と上方光源で青緑がかる。魚は照明で明るく見える。"
+    },
+    "fins": {
+      "pectoral": "半透明の青白色で細く尖る。",
+      "pelvic": "半透明の青白色で広く開く。",
+      "anal": "半透明の青白色、後縁がやや丸い。",
+      "dorsal": "淡青白色の高い台形、斑点なし。",
+      "adipose": "小さな灰白色の突起(A魚でx約205-225)。",
+      "caudal": "淡い青白色で二叉形、広がり、斑点や色素の縁は無い。"
+    },
+    "eye": {
+      "iris": "A魚はライムイエローの明るいリング。B魚は白金色のリング。ともに外周が暗色。",
+      "pupil": "円形、黒。",
+      "size_vs_head": "眼径/頭長は約0.21-0.23(眼径約20-22px、頭長約85-100px)。",
+      "other": ""
+    },
+    "head_mouth": {
+      "mouth_state": "closed",
+      "snout_profile": "吻は丸く短い。A魚は上顎がやや前に出る。",
+      "maxilla_end_vs_eye": "below_center",
+      "jaw_kype": "none",
+      "opercle_notes": "鰓蓋は丸く、淡灰白色。後縁は薄く不明瞭。"
+    },
+    "skin": {
+      "scales_visible": false,
+      "mucus_gloss_notes": "鱗目は解像度的に確認できない。体表は柔らかいマット質で薄い粘液光沢。",
+      "specular_notes": "上方光による背の弱いハイライト。強いホットスポットは無い。"
+    },
+    "lighting_and_color_reliability": {
+      "lighting": "暗い水槽で上方からの照明。ガラス越し。",
+      "reliability": "low",
+      "why": "暗背景と青緑被り、低解像。形状とパーマーク配置は使えるが色は不可。"
+    },
+    "posture_behavior": "2尾が同方向(右)を向き、頭を上にして14-18度で並走して上昇。胸鰭・腹鰭・臀鰭を軽く広げ、尾鰭を広げて推進。背鰭は直立。2尾の距離は体長の約1/3で、並走している(群れ行動の可能性)。体は軽く弓なりに撓む。",
+    "measure_usable": {
+      "lateral_morphometry": "maybe",
+      "parr_layout": "yes",
+      "color_sampling": "no",
+      "head_detail": "maybe",
+      "fin_detail": "maybe",
+      "reason": "2尾とも体全体と全鰭が写りほぼ側面だが、わずかなヨー、弓なり姿勢、ボケがある。パーマークと黒点の個体差は明瞭。"
+    },
+    "caveats": "元画像640x480と小さい。個体差(Aの規則的な縦楕円とBの丸斑)の観察が有用。ブログ上の種名表示は未確認。"
+  },
+  {
+    "id": "p019",
+    "host": "web.tsuribito.co.jp",
+    "source_url": "https://web.tsuribito.co.jp/suburb/keiryu-trbt-201904-seitai-01",
+    "view": "multi_fish",
+    "view_tilt_note": "浅瀬の礫上に横臥した2尾を斜め上方から撮影。2尾とも右向きで体軸は面内で約20-27度(頭が右下)。上の魚の腹縁が下の魚の背縁に一部重なる。頭部は両者ともカメラ側へ回り込み、背側が見え、側面からの直角性は低い。尾鰭は2尾とも見えるが下の魚の尾は重なる。",
+    "body_straightness": "slightly_curved",
+    "context": "in_water_natural",
+    "life_stage": "parr",
+    "life_stage_evidence": "高い縦楕円のパーマークが10個、体が細長く、眼が大きい。婚姻色なし。",
+    "size_class_est": "12-18cm",
+    "size_evidence": "スケール物なし。礫(径3-8cm程度)との比較で魚は約15-20cmと推測するが根拠は弱い。",
+    "sex_guess": "unknown",
+    "sex_evidence": "幼魚で判別不可。",
+    "species_ident": {
+      "label": "amago_or_hybrid_suspect",
+      "confidence": 0.85,
+      "reason": "2尾とも体側のLL上〜下に橙赤色の朱点が列をなして多数並ぶ(上の魚で約12-20個、下の魚で約35-45個。画素抽出で中央値sRGB約202,114,68の橙赤)。尾鰭下葉の縁も橙赤色。アマゴ(O. masou ishikawae)に典型的な形質で、ヤマメ本来の黒点主体の模様とは異なる。雑種の可能性も排除できない。"
+    },
+    "parr_marks": {
+      "visible_count_one_side": 10,
+      "shape": "上の魚:縦長の細い楕円、規則的に並ぶ。下の魚:幅広くやや不明瞭な楕円で朱点と重なる。",
+      "color": "青灰色(上の魚の中央値約90-109,106-125,132-150)。",
+      "height_vs_eye_diameter": "上の魚で高さ約55-80px、眼径約35px。約1.8-2.2倍。",
+      "contrast": "high",
+      "extends_below_lateral_line": true,
+      "first_mark_position_vs_opercle": "上の魚で鰓蓋後縁から約1.3眼径後方に最初のマーク。",
+      "last_mark_position": "尾柄の基部に小さな丸いマーク(x約368)。",
+      "irregularities": "個体差が顕著:上の魚のマークは濃くて規則的(10個、点線状のLLを貫く)、下の魚のマークは淡く幅広で8-9個。いずれも前方ほど高く、後方ほど丸く小さい。マーク間に朱点が入る。"
+    },
+    "spots": {
+      "black_dorsal_above_LL": "上の魚は背縁に径2-5pxの黒点が約25-30個、背側に密。下の魚もほぼ同数。",
+      "black_below_LL": "少数。上の魚で小さい暗点が2-3個。",
+      "red_orange_spots": {
+        "present": true,
+        "where": "LL上〜LL下の体側全体、マーク間、尾柄近くまで。下の魚では体側下半にも広がる。",
+        "count": "上の魚で約12-20個、下の魚で約35-45個(概算)",
+        "color": "橙赤〜朱色(中央値約sRGB 202,114,68)。径約4-8px、輪郭は明瞭で円形。"
+      },
+      "opercle_head_spots": "頭部に目立つ斑は無い。鰓蓋のすぐ後方の体側に微小な暗点が少数。",
+      "dorsal_fin_spots": "背鰭は半透明灰白色で確認できない。",
+      "caudal_fin_spots": "斑点はなく、下葉の縁が橙赤色に縁取られる。"
+    },
+    "lateral_band": {
+      "present": false,
+      "color": "",
+      "extent": "桃色帯は無い。LLは点線状に見え、青紫の光沢がある。"
+    },
+    "colors": {
+      "dorsal": "オリーブ褐灰に黒点が密。",
+      "flank": "銀白色に青みがかる(マーク間の中央値約174,177,181)。",
+      "ventral": "銀白色。",
+      "head": "背側はオリーブ褐、頬は銀灰色で青紫の光沢。",
+      "opercle": "銀青色の光沢と暗色の縁。",
+      "overall_cast_note": "晴天の自然光。水面反射が抑えられ(偏光フィルター風)、彩度が高い。"
+    },
+    "fins": {
+      "pectoral": "黄クリーム色で基部と前縁に橙味(上の魚)。",
+      "pelvic": "淡黄白色の半透明、橙味を帯びる。",
+      "anal": "半透明の灰白色。",
+      "dorsal": "半透明の灰白色、畳み気味。",
+      "adipose": "判別が難しい。",
+      "caudal": "半透明灰青色で、下葉の下縁が橙赤色(中央値約136,97,81〜156,108,78)。二叉形。"
+    },
+    "eye": {
+      "iris": "暗色で細い白金色のリング。",
+      "pupil": "円形、黒。",
+      "size_vs_head": "眼径/頭長は約0.21(眼径約35px、頭長約165px)。",
+      "other": ""
+    },
+    "head_mouth": {
+      "mouth_state": "open",
+      "snout_profile": "吻は丸く鈍い。口はわずかに開き、下顎がやや下がる。",
+      "maxilla_end_vs_eye": "behind_eye",
+      "jaw_kype": "none",
+      "opercle_notes": "鰓蓋は大きく、銀青色の光沢。後縁に黄褐色の縁取り。前鰓蓋の線が明瞭。"
+    },
+    "skin": {
+      "scales_visible": true,
+      "mucus_gloss_notes": "下の魚の体側に細かい鱗目が点状/格子状に見える。濡れた粘液光沢が強く、背と頭に細い面ハイライト。",
+      "specular_notes": "背に沿った鋭い白い線状ハイライト、鰓蓋に青紫の光沢。"
+    },
+    "lighting_and_color_reliability": {
+      "lighting": "晴天の自然光、浅い澄んだ流水、偏光風の映り込み抑制。",
+      "reliability": "high",
+      "why": "露出・解像度とも良好で水面反射が少なく、パーマークと朱点の色を分離して測れる。ただし彩度は高め。アマゴ疑いのため朱点の色はヤマメ基準としては使えない。"
+    },
+    "posture_behavior": "水深数cmの浅瀬で礫の上に2尾が横臥して並ぶ。自発遊泳ではなく、釣獲後に水に置いた/休止した状態。2尾は体の約1/3が重なる近さ、頭は右、口は軽く開く。胸鰭を広げる。",
+    "measure_usable": {
+      "lateral_morphometry": "no",
+      "parr_layout": "yes",
+      "color_sampling": "yes",
+      "head_detail": "maybe",
+      "fin_detail": "maybe",
+      "reason": "2尾が重なり背縁・腹縁が遮蔽、頭部が回り込み側面性が低い。パーマークと朱点は鮮明で色の分離が可能。"
+    },
+    "caveats": "アマゴ疑い(朱点)のためヤマメ基準には使わず、アマゴ/朱点の比較資料として扱う。朱点数は概算(画素抽出と目視)。掲載元の種名表示は未確認。"
+  },
+  {
+    "id": "p020",
+    "host": "smogeru2020.seesaa.net",
+    "source_url": "https://smogeru2020.seesaa.net/article/499633710.html",
+    "view": "lateral_left",
+    "view_tilt_note": "手のひらに載せた小魚を上方から撮影。体軸は面内で約15度(頭が左上、尾が右下)。側面にほぼ直角だが体がやや撓む。鱗が大きく見える。",
+    "body_straightness": "slightly_curved",
+    "context": "hand",
+    "life_stage": "unknown",
+    "life_stage_evidence": "サケ科ではなく別科(コイ科)に見えるため、ヤマメの成長段階としては評価対象外。",
+    "size_class_est": "<12cm",
+    "size_evidence": "成人の手のひら幅(指4本、画像で約270px、約8-9cm)に対し、魚の全長は約250pxで約8-9cm。",
+    "sex_guess": "unknown",
+    "sex_evidence": "判別不可。",
+    "species_ident": {
+      "label": "other",
+      "confidence": 0.9,
+      "reason": "サケ科ではなくコイ科(カワムツ類の可能性)。脂鰭が見えない、パーマークなし、体側に青黒い縦走帯(体側中央の暗帯)、大きな鱗、小さな末端口、鰓蓋に黄色の斑、鰭基部の黄橙色。ヤマメではない。"
+    },
+    "parr_marks": {
+      "visible_count_one_side": null,
+      "shape": "なし(サケ科でないため該当せず)",
+      "color": "",
+      "height_vs_eye_diameter": "",
+      "contrast": "low",
+      "extends_below_lateral_line": null,
+      "first_mark_position_vs_opercle": "",
+      "last_mark_position": "",
+      "irregularities": "パーマークは無い。"
+    },
+    "spots": {
+      "black_dorsal_above_LL": "なし",
+      "black_below_LL": "なし",
+      "red_orange_spots": {
+        "present": false,
+        "where": "",
+        "count": "0",
+        "color": ""
+      },
+      "opercle_head_spots": "鰓蓋に黄緑色の斑(色素領域)。",
+      "dorsal_fin_spots": "なし",
+      "caudal_fin_spots": "なし"
+    },
+    "lateral_band": {
+      "present": true,
+      "color": "青黒〜青灰色",
+      "extent": "鰓蓋の直後から尾柄まで連続する暗帯(サケ科ではない)。"
+    },
+    "colors": {
+      "dorsal": "黄オリーブ。",
+      "flank": "銀青色で中央に青黒の縦走帯。",
+      "ventral": "銀白色。",
+      "head": "背側はオリーブ、頬は銀灰色。",
+      "opercle": "黄緑色の斑と銀白。",
+      "overall_cast_note": "晴天の屋外光。手の色が肌色で、露出は適正。"
+    },
+    "fins": {
+      "pectoral": "半透明で基部が黄橙色。",
+      "pelvic": "半透明、基部が黄橙色。",
+      "anal": "半透明、基部が黄橙色(x約350-380、y約310-320)。",
+      "dorsal": "単一で、基部が黄橙色(y約262-275)。",
+      "adipose": "なし(確認できない)。",
+      "caudal": "二叉形で縁が暗色、半透明。"
+    },
+    "eye": {
+      "iris": "銀白色のリング。",
+      "pupil": "円形、黒。",
+      "size_vs_head": "眼径/頭長は約0.22(眼径約12px、頭長約55px)。",
+      "other": ""
+    },
+    "head_mouth": {
+      "mouth_state": "hooked_by_lure",
+      "snout_profile": "吻は短く尖り、口は小さい末端口。口にフライの白いハックルが掛かっている(x約205-235、y約255-270)。",
+      "maxilla_end_vs_eye": "before",
+      "jaw_kype": "none",
+      "opercle_notes": "鰓蓋は黄緑色の斑を持ち、後縁は滑らか。"
+    },
+    "skin": {
+      "scales_visible": true,
+      "mucus_gloss_notes": "大きな鱗が明瞭な格子状に見える(体側中央)。濡れた金属的な光沢。",
+      "specular_notes": "鱗ごとに銀色の面反射。強いホットスポットは無い。"
+    },
+    "lighting_and_color_reliability": {
+      "lighting": "晴天の屋外、手のひらで保持、背景は川の水面。",
+      "reliability": "high",
+      "why": "露出良好だがヤマメではないため無関係。"
+    },
+    "posture_behavior": "手のひらでの保持のため行動観察は不可(釣獲個体)。",
+    "measure_usable": {
+      "lateral_morphometry": "no",
+      "parr_layout": "no",
+      "color_sampling": "no",
+      "head_detail": "no",
+      "fin_detail": "no",
+      "reason": "ヤマメではない(コイ科)ため除外。手のスケール参照用としてのみ参考。"
+    },
+    "caveats": "ヤマメ資料に混入したコイ科の魚。種の同定(カワムツ等)は写真のみからは確定できない。除外推奨。"
+  }
+]
