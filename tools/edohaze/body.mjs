@@ -732,7 +732,12 @@ function bakeBodyTextures(ctx) {
       m = mix(m, top * dorsal + 0.1 * headMarks(s, yy, hn).line, head);
     }
     // dusky scale-pocket arcs, the dark nape and the posterior mid-dorsal dash chain
-    m += 0.025 * DZ.lat * DZ.edge * DZ.k * (1 - head * 0.5) * (1 + 2.0 * DZ.top) + 0.11 * DZ.midBand + 0.07 * DZ.nape + 0.08 * DZ.chain;
+    // from above the net is clustered into irregular dark-olive patches, not a regular mesh (029, 025),
+    // over a mottled dusky ground on the flat top of the back
+    const topPatch = DZ.top > 0 ? smoothstep(-0.15, 0.35, fbm3(s * 0.9, yy * 0.9, (Number.isNaN(qd) ? z : qd) * 0.9, 3, 66)) : 0;
+    const topMottle = DZ.top > 0 ? smoothstep(-0.25, 0.45, fbm3(s * 1.7, yy * 1.7, (Number.isNaN(qd) ? z : qd) * 1.7, 3, 67)) : 0;
+    m += 0.025 * DZ.lat * DZ.edge * DZ.k * (1 - head * 0.5) * (1 + 2.0 * DZ.top * topPatch - 0.6 * DZ.top * (1 - topPatch))
+      + 0.11 * DZ.midBand + 0.07 * DZ.nape + 0.08 * DZ.chain + 0.07 * DZ.top * topMottle * (1 - head);
     const bd = beadAt(s, yy, q);
     // posterior body: two crisp thin dark axial lines along the horizontal septum (h 0 and +1.2–1.5 %SL, each
     // 0.3–0.4 %SL wide at ~0.8 × the flank) carrying small dashes, and a dark mark at the caudal base (042, 058)
