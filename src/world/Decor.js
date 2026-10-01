@@ -260,44 +260,54 @@ function ribbonBlade(rng, base, len, width, xr) {
   if (len > 0.4) width *= 1.3;
   // radius of the arc over at the surface: stiff young blades turn late and
   // tight, old soft ones bow over in a long sweep
-  const R = xr.range(0.022, 0.085);
+  const R = xr.range(0.035, 0.09);
   const lean0 = rng.range(0.03, 0.22);
-  // some blades bow over under their own weight well below the surface and
-  // hang (th beyond 90°), most stay fairly upright
+  // some blades bow over under their own weight well below the surface,
+  // most stay fairly upright (never past ~110°: a blade hanging back down
+  // reads as a loop in mid-water)
   const curl = rng.range(0.15, 0.85) * (xr.next() < 0.3 ? xr.range(1.6, 2.8) : 1);
   const az0 = rng.range(0, Math.PI * 2);
   const drift = rng.range(-0.9, 0.9);
   const twist = rng.range(0.6, 2.8) * rng.sign();
-  // a floating tip lies on the surface for a short run, then (old, heavy,
-  // torn tips) slowly sinks back into the water column
-  const floatRun = xr.range(0.015, 0.14) * 1.8;
-  const sink = xr.next() < 0.55 ? xr.range(0.25, 1.1) : 0;
-  const ds = len / RIBBON_SEGS;
-  const pts = [];
-  const tans = [];
-  const p = base.clone();
-  let floated = 0;
-  for (let i = 0; i <= RIBBON_SEGS; i++) {
-    const t = i / RIBBON_SEGS;
-    let th = Math.min(lean0 + curl * Math.pow(t, 1.7), Math.PI * 0.8);
-    const head = surfY - p.y;
-    if (floated > floatRun) {
-      // past the floating run: stays sunk-back (no turning up again)
-      floated += ds;
-      th = Math.PI / 2 + sink * Math.min(1, (floated - floatRun) / 0.06);
-    } else if (head < R) {
-      th = Math.max(Math.min(th, Math.PI / 2), (Math.PI / 2) * (1 - Math.max(0, head) / R));
-      if (head < 0.003) floated += ds;
+  // a blade reaching the surface lies on it for a short run and ends there
+  // (the floating tips of old blades are torn off / decayed): a wide flat
+  // tape on the surface film, never a tip sinking back into the water
+  const floatRun = xr.range(0.02, 0.09);
+  xr.next(); // (former sinking-tip draw: keeps the per-blade stream aligned)
+  // centre line by arc length s; the shape is a function of s / len, so a
+  // blade cut short at the end of its floating run keeps its form
+  const trace = (L) => {
+    const ds = L / RIBBON_SEGS;
+    const pts = [];
+    const tans = [];
+    const p = base.clone();
+    let floated = 0;
+    let cut = Infinity;
+    for (let i = 0; i <= RIBBON_SEGS; i++) {
+      const t = (i * ds) / len;
+      let th = Math.min(lean0 + curl * Math.pow(t, 1.7), Math.PI * 0.61);
+      const head = surfY - p.y;
+      if (floated > 0 || head < R) {
+        th = Math.max(Math.min(th, Math.PI / 2), (Math.PI / 2) * (1 - Math.max(0, head) / R));
+        if (head < 0.003) {
+          if (floated === 0) cut = i * ds + floatRun;
+          floated += ds;
+          th = Math.PI / 2;
+        }
+      }
+      const az = az0 + drift * t;
+      const d = new THREE.Vector3(Math.sin(th) * Math.cos(az), Math.cos(th), Math.sin(th) * Math.sin(az));
+      pts.push(p.clone());
+      tans.push(d);
+      p.addScaledVector(d, ds);
+      p.y = Math.min(p.y, surfY);
+      p.x = THREE.MathUtils.clamp(p.x, -TANK.L / 2 + 0.012, TANK.L / 2 - 0.012);
+      p.z = THREE.MathUtils.clamp(p.z, -TANK.D / 2 + 0.012, TANK.D / 2 - 0.012);
     }
-    const az = az0 + drift * t;
-    const d = new THREE.Vector3(Math.sin(th) * Math.cos(az), Math.cos(th), Math.sin(th) * Math.sin(az));
-    pts.push(p.clone());
-    tans.push(d);
-    p.addScaledVector(d, ds);
-    p.y = Math.min(p.y, surfY);
-    p.x = THREE.MathUtils.clamp(p.x, -TANK.L / 2 + 0.012, TANK.L / 2 - 0.012);
-    p.z = THREE.MathUtils.clamp(p.z, -TANK.D / 2 + 0.012, TANK.D / 2 - 0.012);
-  }
+    return { pts, tans, cut };
+  };
+  let { pts, tans, cut } = trace(len);
+  if (cut < len) ({ pts, tans } = trace(cut));
   // tangents from the actual (clamped) centre line
   for (let i = 1; i < RIBBON_SEGS; i++) tans[i] = new THREE.Vector3().subVectors(pts[i + 1], pts[i - 1]).normalize();
   tans[RIBBON_SEGS] = new THREE.Vector3().subVectors(pts[RIBBON_SEGS], pts[RIBBON_SEGS - 1]).normalize();
@@ -329,7 +339,9 @@ function ribbonBlade(rng, base, len, width, xr) {
     }
     // narrow sheath at the base, parallel sides, short blunt tip (blades
     // are at least 6 mm wide: narrower ones read as wires on the surface)
-    const w = Math.max(width, 0.006) * (0.7 + 0.3 * THREE.MathUtils.smoothstep(t, 0, 0.06)) * Math.pow(Math.min(1, (1 - t) / 0.07), 0.55);
+    // (floating parts slightly wider: the old outer blades that float are
+    // the broadest, and a flat tape seen from below must not thin to a line)
+    const w = Math.max(width, 0.006) * (1 + 0.45 * floatW) * (0.7 + 0.3 * THREE.MathUtils.smoothstep(t, 0, 0.06)) * Math.pow(Math.min(1, (1 - t) / 0.07), 0.55);
     n.crossVectors(side, T).normalize();
     for (let j = 0; j < 3; j++) {
       const a = j - 1; // -1, 0, 1
@@ -632,7 +644,7 @@ export function buildPlants() {
     const light = rng.range(0.24, 0.34);
     // and its own maturity: young clumps stay well below the surface, older
     // ones send a few long blades up to float (never an even fringe)
-    const tall = [0.0, 0.1, 0.07, 0.0, 0.16, 0.04][clumps.indexOf(c)];
+    const tall = [0.0, 0.07, 0.05, 0.0, 0.1, 0.03][clumps.indexOf(c)];
     const top = xr.range(0.3, 0.42);
     for (let i = 0; i < c.n; i++) {
       const x = c.x + rng.normal(0, 0.018);

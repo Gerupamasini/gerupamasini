@@ -949,7 +949,9 @@ export const bodyFragmentLightsEnd = /* glsl */ `
 {
   // key light caustics + sub-surface light transport
   vec3 nW = inverseTransformDirection(normal, viewMatrix);
-  vec3 caus = causticsRGB(vFishWorld, nW);
+  // (on the back, facing the surface, the dapple is a little stronger: the
+  // faint moving net of light that marks a fish lit from above in a tank)
+  vec3 caus = max(vec3(0.0), 1.0 + (causticsPattern(vFishWorld, nW) - 1.0) * (1.0 + 0.7 * smoothstep(0.3, 0.9, nW.y) * uWaterDensity)) * lightFalloff(vFishWorld);
   reflectedLight.directDiffuse *= caus;
   reflectedLight.directSpecular *= mix(vec3(1.0), caus, 0.7);
   vec3 V = normalize(vViewPosition); // toward camera (view space)
@@ -975,6 +977,10 @@ export const bodyFragmentLightsEnd = /* glsl */ `
       float sScat = keyShadowAt(vFishWorld + Lw * 0.0025 + nW * 0.0015, 3.0);
     #endif
     vec3 extra = max(wrapD - vec3(saturate(NL)), vec3(0.0));
+    // in the tank the light past the terminator fades toward the belly (the
+    // underside only sees the dark bed): wrap and guanine fill follow it
+    float downK = uWaterDensity > 0.0 ? mix(0.45, 1.0, smoothstep(-0.8, 0.35, nW.y)) : 1.0;
+    extra *= downK;
     reflectedLight.directDiffuse += lc * gFS.albedo * RECIPROCAL_PI * extra * sScat * caus;
     // ---- guanine multiple scattering (white skin): light entering the lit
     // side spreads sideways through the stacked iridophore platelets before
@@ -991,7 +997,7 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     vec3 pearlT = mix(vec3(0.97, 0.98, 1.02), vec3(0.86, 0.96, 1.1), spow(1.0 - gNV, 1.5));
     // (the multiply-scattered part does not need the shadow map tap from
     // just under this point: it entered the lit side and spread around)
-    reflectedLight.directDiffuse += lc * gFS.albedo * pearlT * RECIPROCAL_PI * 0.42 * lateral * mix(0.5, 1.0, sScat) * caus;
+    reflectedLight.directDiffuse += lc * gFS.albedo * pearlT * RECIPROCAL_PI * 0.42 * lateral * mix(1.0, downK, 0.5) * mix(0.5, 1.0, sScat) * caus;
     // ---- thin-part transmission of the key light: chord from this point
     // toward the light through the local cross-section; light enters on the
     // lit surface (shadowed there) and exits here, filtered by the tissue
@@ -1014,6 +1020,16 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     transK = min(transK, mix(1.5, 0.8, gFS.whiteness) * lc * max(gFS.albedo, vec3(0.15 * gFS.whiteness + 0.02)) * RECIPROCAL_PI);
     reflectedLight.directDiffuse += transK * mix(vec3(1.0), caus, 0.5);
   #endif
+  // ---- in-tank ambient comes down from the surface; the dark gravel below
+  // returns little of it, so the back sees a bright hemisphere and the belly
+  // a dark one, darker still close over the bed (studio: unchanged)
+  if (uWaterDensity > 0.0) {
+    float grad = mix(0.38, 1.3, smoothstep(-0.85, 0.75, nW.y));
+    float nearBed = 1.0 - smoothstep(0.03, 0.14, vFishWorld.y - uWaterMin.y - 0.035);
+    grad *= 1.0 - 0.35 * nearBed * smoothstep(0.1, -0.7, nW.y);
+    reflectedLight.indirectDiffuse *= grad;
+    reflectedLight.indirectSpecular *= mix(1.0, grad, 0.5);
+  }
   // ---- ambient light from behind (water column / surface) diffusing
   // through thin parts toward the viewer: chord along the view ray
   float cV = sectChord(vRestPos.yz, -vLocV.yz, vSect) * slMM;

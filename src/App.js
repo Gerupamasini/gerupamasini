@@ -10,7 +10,7 @@ import { AnimDemo } from './fish/AnimDemo.js';
 import { U, FIN_LAYER } from './render/SharedUniforms.js';
 import { buildStudioEnvScene, bakeEnvironment } from './render/StudioEnvironment.js';
 import { PostFX } from './render/PostFX.js';
-import { CinematicDirector } from './render/CinematicCamera.js';
+import { CinematicDirector, FollowCamera } from './render/CinematicCamera.js';
 import { AdaptiveQuality, QUALITY_LEVELS } from './render/AdaptiveQuality.js';
 import { World } from './world/World.js';
 import { TANK } from './world/TankConfig.js';
@@ -78,6 +78,7 @@ export class App {
     if (this.opts.params.has('dofDebug')) this.post.dof.material.uniforms.uDebug.value = 1;
     this.focusDist = 1;
     this.director = new CinematicDirector(this);
+    this.follower = new FollowCamera(this, this.director);
     const pp = this.opts.params;
     const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (this.mode === 'aquarium' && ((!test && !calm && pp.get('cine') !== '0') || (test && pp.has('cine')))) this.cameraMode = 'cinematic';
@@ -276,6 +277,7 @@ export class App {
       if (this.director.subject) this.selected = this.director.subject;
     }
     if (m === 'cinematic') this.director.shot = null; // start with a fresh cut
+    if (m === 'follow') this.follower.reset();
     this.cameraMode = m;
     this.controls.enabled = m !== 'cinematic';
     this._syncButtons();
@@ -431,16 +433,10 @@ export class App {
       return;
     }
     if (this.cameraMode === 'follow' && this.selected) {
-      const f = this.selected;
-      const fwd = f.loc.forward;
-      const side = new THREE.Vector3(-fwd.z, 0, fwd.x).normalize();
-      if (side.z < 0) side.negate(); // stay on the viewer's side of the fish
-      const want = f.loc.pos.clone().addScaledVector(side, f.SL * 3.2).addScaledVector(fwd, -f.SL * 0.4);
-      want.y += f.SL * 0.5;
-      this.camera.position.lerp(want, 1 - Math.exp(-dt * 2.5));
-      this.controls.target.lerp(f.loc.pos, 1 - Math.exp(-dt * 5));
-    }
-    this.controls.update();
+      // side-on companion shot inside the water (clearance from every fish,
+      // the panes and the corner seams; smooth orbits instead of jumps)
+      this.follower.update(this.selected, dt);
+    } else this.controls.update();
     this._autoFocus(dt);
   }
 
@@ -492,7 +488,14 @@ export class App {
         }
       }
     }
-    if (subject) target = Math.max(0.02, this.eyeTarget(subject, cam.position, _afE).sub(cam.position).dot(dir));
+    if (subject) {
+      const e = this.eyeTarget(subject, cam.position, _afE);
+      // studio close-ups: focus a little behind the eye (30 % toward the body
+      // centre) so the head and the scaled front of the trunk are sharp
+      // together while the eye stays within the depth of field
+      if (this.mode === 'studio') e.lerp(subject.loc.pos, 0.3);
+      target = Math.max(0.02, e.sub(cam.position).dot(dir));
+    }
     this.focusDist += (target - this.focusDist) * (1 - Math.exp(-dt * 3));
     this.post.dof.focus = this.focusDist;
     // studio macro close-ups stop down further (the eye and the head stay crisp)
@@ -581,7 +584,10 @@ export class App {
     const dt = 1 / 120;
     for (let k = 0; k < n; k++) {
       if (k > 0) for (let t = 0; t < sdt - 1e-6; t += dt) this.step(dt);
-      if (p.has('follow') && this.selected) for (let i = 0; i < 3; i++) this._updateCamera(1 / 30);
+      if (k > 0 && p.has('follow') && this.selected) {
+        const nc = Math.max(1, Math.round(sdt * 30));
+        for (let i = 0; i < nc; i++) this._updateCamera(sdt / nc);
+      }
       this.fishSystem.update(this.camera, r);
       const x = (k % cols) * vw;
       const y = H - (Math.floor(k / cols) + 1) * vh;
