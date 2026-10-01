@@ -119,25 +119,27 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
   let positions;
   let normals;
   let indices;
+  let baseTris = Infinity; // triangles of the base mesh (the face patches follow)
   if (det && resolutionMM <= det.maxBaseRes) {
     // Face patch (eye sockets, lores, bill base, forehead): the same SDF polygonised finer inside a sphere and
     // laid over the base mesh, which is sunk 0.35 mm under it there (its facets would cut the 2.8 mm eye opening
     // and the feathering round the bill). Past r − 0.8 the base surfaces again and the patch's rim dips 0.1 mm
     // under it: no seam, no stitching (same SDF, same normals, same plumage shader).
     const rr = (q, x, y, z) => Math.hypot(x - q.c[0], y - q.c[1], z - q.c[2]);
-    const sink = (x, y, z) => det.patches.reduce((s, q) => Math.max(s, 1 - smooth(q.r - 1.6, q.r - 0.8, rr(q, x, y, z))), 0);
-    const base = surfaceNets((x, y, z) => sdf(x, y, z) + det.sink * sink(x, y, z), cfg.bodySculpt.bounds, resolutionMM);
+    // (no sink / dip any more: both meshes lie on the same SDF with the same gradient normals, so their overlap
+    // band shades identically; sinking tilted the base normals and drew a visible ring round each patch)
+    const base = surfaceNets(sdf, cfg.bodySculpt.bounds, resolutionMM);
     // the base mesh's own facets inside the patches are dropped (its coarse eye opening stood through the patch
     // in places once fluffing displaced both along their own normals)
     const inner = (i) => det.patches.some((q) => rr(q, base.positions[i * 3], base.positions[i * 3 + 1], base.positions[i * 3 + 2]) < q.r - 1.6);
     const kept = [];
     for (let t = 0; t < base.indices.length; t += 3) {
       const [a, b, c] = [base.indices[t], base.indices[t + 1], base.indices[t + 2]];
-      if (!(inner(a) || inner(b) || inner(c))) kept.push(a, b, c);
+      if (!(inner(a) && inner(b) && inner(c))) kept.push(a, b, c);
     }
     base.indices = kept;
     const parts = [base];
-    for (const q of det.patches) parts.push(surfaceNets((x, y, z) => sdf(x, y, z) + 0.1 * smooth(q.r - 0.8, q.r, rr(q, x, y, z)), null, det.res, q));
+    for (const q of det.patches) parts.push(surfaceNets(sdf, null, det.res, q));
     const pos = [];
     const nrm = [];
     const ind = [];
@@ -147,6 +149,7 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
       for (const v of p.normals) nrm.push(v);
       for (const i of p.indices) ind.push(i + off);
     }
+    baseTris = kept.length / 3;
     positions = new Float32Array(pos);
     normals = new Float32Array(nrm);
     indices = new Uint32Array(ind);
@@ -181,6 +184,8 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
   g.setIndex(new THREE.BufferAttribute(n > 65535 ? indices : new Uint16Array(indices), 1));
   g.computeBoundingSphere();
   g.userData.sdf = sdf;
+  g.userData.baseTris = baseTris;
+  g.userData.patches = det && resolutionMM <= det.maxBaseRes ? det.patches : [];
   cache.set(key, g);
   return g;
 }
@@ -197,7 +202,7 @@ export function getBodySDF(cfg) {
  */
 export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
   const drop = new Set(['neck', 'head', 'lores', 'billCuff', 'chin', ...(trunkOnly ? ['mantleNape', 'foreBreast'] : [])]);
-  return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [] });
+  return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [], adds: [] });
 }
 
 /**
@@ -225,7 +230,13 @@ export function buildShellGeometry(body, n = 4) {
   for (let v = 0; v < nv; v++) bare[v] = shellCovered([R[v * 3], R[v * 3 + 1], R[v * 3 + 2]], [N[v * 3], N[v * 3 + 1], N[v * 3 + 2]]) ? 1 : 0;
   const all = body.index.array;
   const tri = [];
-  for (let t = 0; t < all.length; t += 3) if (!(bare[all[t]] && bare[all[t + 1]] && bare[all[t + 2]])) tri.push(all[t], all[t + 1], all[t + 2]);
+  // (and none from the base mesh where a face patch overlies it: doubled shells drew a ring round each patch)
+  const inPatch = (v) => (body.userData.patches ?? []).some((q) => Math.hypot(R[v * 3] - q.c[0], R[v * 3 + 1] - q.c[1], R[v * 3 + 2] - q.c[2]) < q.r);
+  for (let t = 0; t < all.length; t += 3) {
+    if (bare[all[t]] && bare[all[t + 1]] && bare[all[t + 2]]) continue;
+    if (t / 3 < (body.userData.baseTris ?? Infinity) && (inPatch(all[t]) || inPatch(all[t + 1]) || inPatch(all[t + 2]))) continue;
+    tri.push(all[t], all[t + 1], all[t + 2]);
+  }
   const idx = tri;
   const out = nv * n > 65535 ? new Uint32Array(idx.length * n) : new Uint16Array(idx.length * n);
   for (let k = 0; k < n; k++) for (let i = 0; i < idx.length; i++) out[k * idx.length + i] = idx[i] + k * nv;

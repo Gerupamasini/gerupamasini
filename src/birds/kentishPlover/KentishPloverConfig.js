@@ -76,7 +76,7 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'lores', c: [0, 90.4, 35.3], r: [5.6, 4.9, 4.8], k: 3.2 },
     // feathering drawn out round the bill base (forehead into the culmen, chin into the lower mandible): a short
     // cone of plumage hugging the bill, not a cut (p012, p070, p050, p010)
-    { type: 'capsule', name: 'billCuff', a: [0, 91.6, 35.8], b: [0, 89.75, 40.3], r: 2.25, k: 3.0 },
+    { type: 'capsule', name: 'billCuff', a: [0, 91.6, 35.8], b: [0, 89.9, 39.9], r: 2.0, k: 2.4 },
     { type: 'ellipsoid', name: 'chin', c: [0, 84, 31], r: [9, 6, 7], k: 4 },
     { type: 'ellipsoid', name: 'foreBreast', c: [0, 76, 24], r: [14, 14, 13] },
     { type: 'ellipsoid', name: 'breastSideL', c: [11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
@@ -95,6 +95,12 @@ export const bodySculpt = {
     { type: 'capsule', name: 'eyeSocketL', a: [9.03, 95.2, 25.9], b: [16.19, 96.17, 27.93], r: 2.78, k: 0.9 },
     { type: 'capsule', name: 'eyeSocketR', a: [-9.03, 95.2, 25.9], b: [-16.19, 96.17, 27.93], r: 2.78, k: 0.9 },
   ],
+  // Upper eyelid fold: the feathered upper lid overhangs the top of the cornea by ≈0.5 mm, so the opening is a
+  // slightly flattened almond, not a round porthole (p012, p043, p009, p050)
+  adds: [
+    { type: 'ellipsoid', name: 'upperLidL', c: [10.85, 98.45, 26.5], r: [0.75, 0.65, 2.6], k: 0.4 },
+    { type: 'ellipsoid', name: 'upperLidR', c: [-10.85, 98.45, 26.5], r: [0.75, 0.65, 2.6], k: 0.4 },
+  ],
   // LOD0 face patches (anatomy/bodyMesh.js): eye sockets and bill base polygonised at 0.3 mm over the base mesh
   facePatch: {
     patches: [
@@ -103,7 +109,6 @@ export const bodySculpt = {
       { c: [0, 90.3, 39.2], r: 5.5 },
     ],
     res: 0.3,
-    sink: 0.35,
     maxBaseRes: 1.5,
   },
   // the SDF spans x ±21, y 36–105, z −66…41
@@ -151,9 +156,9 @@ export const plumage = {
     },
     femaleBreeding: {
       forehead: '#e2ddd6',
-      frontalBar: '#8c7870',
-      crown: '#8c7870',
-      nape: '#8e7567',
+      frontalBar: '#917d6b', // warmer sandy brown cap than the mauve-grey it rendered (p050, p008, p052)
+      crown: '#917d6b',
+      nape: '#937c69',
       supercilium: '#e2dedc',
       eyeStripe: '#8a7263',
       earCoverts: '#76604f',
@@ -209,7 +214,7 @@ export const plumage = {
       supercilium: '#cbcac1',
       eyeStripe: '#675f52',
       earCoverts: '#624a3e',
-      collar: '#d9cfc0',
+      collar: '#e2dbcf',
       mantle: '#806a54',
       mantleDark: '#5f4f3e',
       fringe: '#bba68e',

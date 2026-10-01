@@ -398,7 +398,8 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
   const params = { roughness: 0.78, metalness: 0, color: 0xffffff };
   // (the shell variant without sheen: seen only at grazing angles, it caught the whole grazing sheen lobe as a
   // glassy halo round the outline)
-  const mat = detail === 0 && !shellOf ? new THREE.MeshPhysicalMaterial({ ...params, sheen: 0.25, sheenRoughness: 0.75, sheenColor: new THREE.Color(0.55, 0.53, 0.5) }) : new THREE.MeshStandardMaterial(params);
+  // (and without specular: seen only at grazing angles, Fresnel lit it as a pale rim along the crown)
+  const mat = shellOf ? new THREE.MeshPhysicalMaterial({ ...params, specularIntensity: 0 }) : detail === 0 ? new THREE.MeshPhysicalMaterial({ ...params, sheen: 0.25, sheenRoughness: 0.75, sheenColor: new THREE.Color(0.55, 0.53, 0.5) }) : new THREE.MeshStandardMaterial(params);
   // shell variant (plumage fringe, KentishPloverModel): shares the body's uniforms, so it fluffs and breathes with it
   const shell = !!shellOf;
   if (shell) {

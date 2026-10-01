@@ -52,6 +52,7 @@ function primDist(p, x, y, z) {
 export function makeBodySDF(sculpt) {
   const prims = sculpt.prims;
   const cuts = sculpt.cuts || [];
+  const adds = sculpt.adds || []; // smooth-unioned after the cuts (eyelid folds over the eye openings)
   const k = sculpt.smooth;
   return (x, y, z) => {
     let d = 1e9;
@@ -63,6 +64,7 @@ export function makeBodySDF(sculpt) {
       const c = cuts[i];
       d = smax(d, -primDist(c, x, y, z), c.k ?? 1.5);
     }
+    for (let i = 0; i < adds.length; i++) d = smin(d, primDist(adds[i], x, y, z), adds[i].k ?? 1);
     return d;
   };
 }
