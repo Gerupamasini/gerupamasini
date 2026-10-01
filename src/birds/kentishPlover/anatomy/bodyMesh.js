@@ -285,7 +285,7 @@ export function getBodySDF(cfg) {
  * only the trunk underneath.
  */
 export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
-  const drop = new Set(['neck', 'head', 'lores', 'billCuff', 'chin', ...(trunkOnly ? ['mantleNape', 'foreBreast'] : [])]);
+  const drop = new Set(['neck', 'head', 'lores', 'billCuff', 'chin', 'cheekL', 'cheekR', ...(trunkOnly ? ['mantleNape', 'foreBreast'] : [])]);
   return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [], adds: [] });
 }
 

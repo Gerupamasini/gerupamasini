@@ -57,9 +57,17 @@ function softPlumageLighting(fragmentShader, wrap) {
 const GLSL_COMMON = /* glsl */ `
 float kpHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float kpHash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+// (quintic fade: with the cubic one the cell grid showed as stair-steps along the edges of the markings and in
+// the crown streaks in extreme close-ups)
 float kpNoise(vec2 p) {
-  vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
   return mix(mix(kpHash(i), kpHash(i + vec2(1, 0)), u.x), mix(kpHash(i + vec2(0, 1)), kpHash(i + vec2(1, 1)), u.x), u.y);
+}
+// periodic in x (period per cells): round the eye
+float kpNoiseP(vec2 p, float per) {
+  vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float i0 = mod(i.x, per); float i1 = mod(i.x + 1.0, per);
+  return mix(mix(kpHash(vec2(i0, i.y)), kpHash(vec2(i1, i.y)), u.x), mix(kpHash(vec2(i0, i.y + 1.0)), kpHash(vec2(i1, i.y + 1.0)), u.x), u.y);
 }
 `;
 
@@ -178,7 +186,9 @@ float kpUpperEdge(float z) {
 // streaked along the flow like overlapping feather tips; weaker on the far LODs (no shimmer)
 float kpEdgeN(vec3 p) {
   vec2 l = kpLattice(p);
-  float a = kpNoise(vec2(l.x * 1.7, l.y * 0.55)) + 0.5 * kpNoise(vec2(l.x * 3.9, l.y * 1.3) + 7.1);
+  // (less drawn out along the flow, second octave rotated: long flat runs between steps read as blocky in close-ups)
+  vec2 q2 = mat2(0.8, -0.6, 0.6, 0.8) * vec2(l.x * 3.6, l.y * 1.6);
+  float a = kpNoise(vec2(l.x * 1.6, l.y * 0.8)) + 0.5 * kpNoise(q2 + 7.1);
   return (a / 1.5 - 0.5) * 2.0 * (uDetail < 0.5 ? 1.0 : 0.4);
 }
 
@@ -275,6 +285,13 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     // round the eye: 1.3 mm of mask beyond the lids, a little more below and behind (the eye sits in the mask,
     // p012, p070, p043; females / juveniles only behind it)
     float surround = (1.0 - smoothstep(-0.3, 0.3, length((zy - vec2(26.2, 95.2)) * vec2(0.92, 1.0)) + ej - 4.0 * uMelanin)) * uHeadPat.z;
+    // behind the eye the mask is as deep as the eye and runs on into the ear coverts (p012, p070, p065: no pale gap
+    // between the eye and the ear patch)
+    {
+      vec2 pa = zy - vec2(25.6, 95.4); vec2 ba = vec2(-6.0, -0.4);
+      float tb = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+      surround = max(surround, (1.0 - smoothstep(-0.3, 0.3, length(pa - ba * tb) + ej - mix(2.7, 2.4, tb) * uMelanin)) * uHeadPat.z);
+    }
     // ear coverts: behind the eye, as deep as the eye with its lids (≈5 mm) and ending ≈8 mm behind the eye
     // centre (p012, p006, p065: 14 mm reached the hind-crown)
     vec2 ec = (zy - vec2(20.0, 94.9)) / (vec2(4.9, 2.6) * uMelanin);
@@ -531,6 +548,26 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
           kpCol = mix(kpCol, kpCol * 0.74, smoothstep(0.55, 0.82, kpN1) * kpAmt);
           kpCol = mix(kpCol, mix(kpCol, uFringe, 0.55) * 1.05, smoothstep(0.6, 0.85, kpN2) * kpAmt * 0.55);
         }
+        // Face: the short, fine feathers of the head — radiating from the eye round it, drawn back along the flow
+        // over the cheeks and ear coverts, forward onto the bill base over the lores (p012, p037, p050, p062). Soft
+        // tone streaks and a faint bump; gone before a feather is ≈2 px (no shimmer at a distance)
+        float kpFaceN = 0.0;
+        {
+          float kpFaceM = smoothstep(0.1, 0.6, kpHeadness(vRest)) * (uDetail < 1.5 ? 1.0 : 0.0);
+          vec2 kpE = vec2(vRest.z - 25.8, vRest.y - 95.3);
+          float kpEr = length(kpE);
+          float kpRad = (1.0 - smoothstep(4.5, 8.0, kpEr)) * smoothstep(5.0, 9.0, abs(vRest.x));
+          // 60 feathers round the eye, ≈0.9 mm long
+          vec2 kpQe = vec2((atan(kpE.y, kpE.x) / 6.2832 + 0.5) * 60.0, kpEr / 0.9);
+          vec2 kpQf = kpLattice(vRest) * vec2(1.0 / 0.34, 1.0 / 0.95) + 3.3;
+          float kpNe = kpNoiseP(kpQe, 60.0) * 0.6 + kpNoiseP(kpQe * vec2(2.0, 1.7) + vec2(0.0, 4.1), 120.0) * 0.4;
+          float kpNf = kpNoise(kpQf) * 0.6 + kpNoise(kpQf * vec2(2.3, 1.7) + 1.3) * 0.4;
+          float kpFF = 1.0 - smoothstep(0.3, 0.7, max(fwidth(kpQf.x), fwidth(kpQe.x) * kpRad));
+          kpFaceN = (mix(kpNf, kpNe, kpRad) - 0.5) * kpFaceM * kpFF;
+          // (relative: the white face gets faint grey streaks, the black mask faint sheen streaks)
+          float kpLumF = dot(kpCol, vec3(0.2126, 0.7152, 0.0722));
+          kpCol = mix(kpCol * (1.0 + kpFaceN * 0.16), kpCol + kpFaceN * 0.03, 1.0 - smoothstep(0.05, 0.2, kpLumF));
+        }
         // White breast, flanks and belly: the overlapping feather tips just show as faint soft shadows under each
         // tip, broken into patches (p006, p039, p053); none at a distance
         {
@@ -576,6 +613,15 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
             normal = normalize(normal - (kpT0 * kpCy * 0.9 + cross(normal, kpT0) * kpCx * 0.6) * 1.1 * kpClS);
           }
           normal = normalize(normal - (kpT * (kpG.y * 0.9) + kpB2 * (kpG.x * 0.35 + kpBarbs)) * 0.1 * kpStr);
+          // face feather bump (screen-space derivative bump of kpFaceN, ≈0.05 mm)
+          {
+            vec3 kpSX = dFdx(-vViewPosition); vec3 kpSY = dFdy(-vViewPosition);
+            vec3 kpR1 = cross(kpSY, normal); vec3 kpR2 = cross(normal, kpSX);
+            float kpDet = dot(kpSX, kpR1);
+            float kpBH = kpFaceN * 0.00005;
+            vec3 kpGrad = sign(kpDet) * (dFdx(kpBH) * kpR1 + dFdy(kpBH) * kpR2);
+            if (abs(kpDet) > 0.0) normal = normalize(abs(kpDet) * normal - kpGrad);
+          }
         }
         #ifdef KP_SHELL
           // the strands stand out past the outline, where the skin normal is edge-on to the view: shaded there,

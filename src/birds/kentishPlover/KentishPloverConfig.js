@@ -79,6 +79,11 @@ export const bodySculpt = {
     // cone of plumage hugging the bill, not a cut (p012, p070, p050, p010)
     { type: 'capsule', name: 'billCuff', a: [0, 91.6, 35.8], b: [0, 89.9, 39.9], r: 2.0, k: 2.4 },
     { type: 'ellipsoid', name: 'chin', c: [0, 84, 31], r: [9, 6, 7], k: 4 },
+    // ear-covert / cheek plumage behind and below the eye, a little fuller than the head's ellipsoid: from the front the
+    // eyes sit inside the outline of the head, the cheeks the widest part at eye level (p037, p058, p063 — the bare
+    // ellipsoid put the eye openings on the outline and their dark walls stood out of it)
+    { type: 'ellipsoid', name: 'cheekL', c: [9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3 },
+    { type: 'ellipsoid', name: 'cheekR', c: [-9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3 },
     { type: 'ellipsoid', name: 'foreBreast', c: [0, 76, 24], r: [14, 14, 13] },
     { type: 'ellipsoid', name: 'breastSideL', c: [11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
     { type: 'ellipsoid', name: 'breastSideR', c: [-11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
