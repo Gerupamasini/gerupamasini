@@ -75,6 +75,7 @@ uniform float uVertLen;
 uniform float uSigS;            // base tissue scattering (1/mm)
 uniform vec3 uSigA;             // base tissue absorption (1/mm)
 uniform float uScatter;         // user scale on scattering (milkiness)
+uniform float uWetF0;           // surface Fresnel scale: 1 = in air, ~0.01 = physically underwater
 uniform float uInterior;        // interior structure visibility
 uniform float uIor;             // tissue / water relative IOR
 uniform float uNormalStrength;
@@ -174,7 +175,7 @@ vec2 fishUV(vec3 p) {
 // chromatophore filter of the skin layer (melanin, iridophores, xanthophores)
 vec3 skinT(vec3 pig) {
   vec3 t = exp(-pig.r * vec3(3.4, 3.8, 4.3));
-  t *= exp(-pig.b * vec3(0.02, 0.12, 0.5));
+  t *= exp(-pig.b * vec3(0.02, 0.14, 0.7)); // xanthophores: yellow filter (carotenoid, absorbs blue)
   t *= 1.0 - 0.45 * pig.g;
   return t;
 }
@@ -220,8 +221,8 @@ void medium(vec3 p, out float sS, out vec3 sA) {
     float an = abs(hn);
     float chev = an < 0.55 ? an / 0.55 : 1.0 - 0.45 * (an - 0.55) / 0.45;
     float mph = fract(((s - uVertStart) - 0.95 * chev) / uVertLen);
-    float sept = exp(-pow((mph - 0.5) * uVertLen / 0.08, 2.0)) * trunk;
-    sS += I * sept * 1.6;
+    float sept = exp(-pow((mph - 0.5) * uVertLen / 0.1, 2.0)) * trunk;
+    sS += I * sept * 1.1; // faint in live fish (057, 007), not white chevrons
     // horizontal septum
     sS += I * exp(-dys * dys / 0.02) * trunk * smoothstep(0.3, 0.85, abs(zn)) * 1.1;
   }
@@ -485,9 +486,12 @@ void main() {
 
   // ---- wet specular: skin (map roughness) + thin mucus film
   vec3 Nm = normalize(mix(N, Ng, 0.55));
-  float spec = specGGX(N, V, L, rough, 0.028) + 0.55 * specGGX(Nm, V, L, 0.085, 0.022);
-  vec3 envSpec = waterEnv(reflect(-V, N), rough) * F_SchlickRough(0.028, NoV, rough) +
-                 0.55 * waterEnv(reflect(-V, Nm), 0.085) * F_Schlick(0.022, max(dot(Nm, V), 1e-3));
+  // Underwater the mucus (n ≈ 1.37) borders water (n = 1.333): F0 drops from 0.028 (in air) to ~0.0002.
+  // uWetF0 scales the in-air values (0.1 by default: a little above physical, for scale-edge micro-relief) [F/G].
+  float f0s = 0.028 * uWetF0, f0m = 0.022 * uWetF0;
+  float spec = specGGX(N, V, L, rough, f0s) + 0.55 * specGGX(Nm, V, L, 0.085, f0m);
+  vec3 envSpec = waterEnv(reflect(-V, N), rough) * F_SchlickRough(f0s, NoV, rough) +
+                 0.55 * waterEnv(reflect(-V, Nm), 0.085) * F_Schlick(f0m, max(dot(Nm, V), 1e-3));
   float specOcc = sat(pow(NoV + ao, 1.5) - 1.0 + ao);
   float Fv = F_Schlick(0.028, NoV);
 
@@ -500,6 +504,11 @@ void main() {
   if (uDebug == 1) col = vec3(sat(tExit / 7.0), sat(tExit / 3.5), sat(tExit / 1.2)) * 0.8;
   else if (uDebug == 2) col = back + bgT;
   else if (uDebug == 3) col = vec3(sat(innerScat * 0.25)) + vec3(sat(tauNear.g * 2.0), 0.0, 0.0);
+  // component views for colour checks: 4 surface diffuse + ambient, 5 interior scattering, 6 iridophores, 7 surface specular
+  else if (uDebug == 4) col = diffuse + amb;
+  else if (uDebug == 5) col = inner;
+  else if (uDebug == 6) col = irid;
+  else if (uDebug == 7) col = (Lc * spec + envSpec) * specOcc;
   gl_FragColor = vec4(col, 1.0);
 }
 `;

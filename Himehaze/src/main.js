@@ -49,6 +49,7 @@ const shared = {
   uAmbDown: { value: v3(0.022, 0.045, 0.05) },
   uFogColor: { value: v3(0.012, 0.038, 0.044) },
   uFogDensity: { value: 1.1 },
+  uWetF0: { value: Number(params.get('wet') || 0.1) }, // 1 = wet fish in air; underwater ~0.01–0.1
   uTime: { value: 0 },
   uScatter: { value: 1.0 },
   uInterior: { value: 0.45 },
@@ -605,7 +606,10 @@ window.addEventListener('keydown', (e) => {
 
 // URL parameters for reproducible views (?light=back&view=tail&debug=1)
 if (params.get('light')) document.querySelector(`#light-mode button[data-v="${params.get('light')}"]`)?.click();
-if (params.get('debug')) document.querySelector(`#debug button[data-v="${params.get('debug')}"]`)?.click();
+if (params.get('debug')) {
+  document.querySelector(`#debug button[data-v="${params.get('debug')}"]`)?.click();
+  shared.uDebug.value = Number(params.get('debug')); // 4–6: shader component views without a button
+}
 if (params.get('shading')) document.querySelector(`#shading button[data-v="${params.get('shading')}"]`)?.click();
 if (params.get('env')) document.querySelector(`#env button[data-v="${params.get('env')}"]`)?.click();
 if (params.get('floor') === '0') { document.getElementById('floor').checked = false; floor.visible = false; }
@@ -641,10 +645,14 @@ if (params.get('measure')) {
     if (!params.get('env')) document.querySelector('#env button[data-v="tank"]')?.click();
     if (params.get('floor') !== '1') { document.getElementById('floor').checked = false; floor.visible = false; }
     particles.visible = false;
+    // the telephoto measure camera sits ~0.5 m away: no water fog over that artificial distance
+    shared.uFogDensity.value = 0;
     fish.behavior.setAuto(false);
     fish.behavior.pose(params.get('pose') || 'perch', 0);
     document.getElementById('freeze').checked = true;
     fish.behavior.setPaused(true);
+    // fins=spread: all fins fully erect (as in pinned specimens 025/026/031) for outline comparisons
+    if (params.get('fins') === 'spread') for (const f of fish.fins) if (f.mesh.morphTargetInfluences) f.mesh.morphTargetInfluences.fill(0);
     document.getElementById('follow-fish').checked = false;
     const F = fish.frame;
     const mid = new THREE.Vector3(0, 0, (F.S0 - F.SL * 0.6) * 0.001);

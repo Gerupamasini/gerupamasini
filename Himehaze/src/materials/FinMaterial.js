@@ -84,7 +84,10 @@ void main() {
 
   float ray = dat.r, mel = dat.g, irid = dat.b;
   float tauS = uFinDensity * (0.055 + 0.5 * ray + 0.7 * irid);
-  vec3 tauA = vec3(0.004, 0.008, 0.02) + ray * vec3(0.05, 0.12, 0.26) + mel * vec3(2.3, 2.7, 3.1) + (1.0 - alb) * 0.05;
+  // chromatophore filtering: melanin absorbs broadly; xantho/erythrophores (the atlas colour departing from the
+  // neutral membrane) absorb green/blue, so rust spots transmit rust and yellow tints transmit yellow
+  vec3 chroma = max(vec3(0.8, 0.78, 0.72) - alb, 0.0) * vec3(0.4, 1.0, 1.3);
+  vec3 tauA = vec3(0.004, 0.008, 0.02) + ray * vec3(0.05, 0.12, 0.26) + mel * vec3(2.3, 2.7, 3.1) + chroma;
   vec3 tauT = tauA + vec3(tauS);
   vec3 omega = vec3(tauS) * alb / tauT;
 

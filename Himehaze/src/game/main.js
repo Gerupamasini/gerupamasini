@@ -101,7 +101,8 @@ function updateLOD() {
   for (const e of fishes) {
     const d = camera.position.distanceTo(e.pos);
     const px = (e.actor.TL * f) / Math.max(d, 1e-3);
-    const lod = params.has('lod') ? Number(params.get('lod')) : px > LOD_PX[0] ? 0 : px > LOD_PX[1] ? 1 : px > LOD_PX[2] ? 2 : 3;
+    const forced = window.__game?.lodOverride ?? (params.has('lod') ? Number(params.get('lod')) : null);
+    const lod = forced ?? (px > LOD_PX[0] ? 0 : px > LOD_PX[1] ? 1 : px > LOD_PX[2] ? 2 : 3);
     e.actor.setLOD(lod);
   }
 }

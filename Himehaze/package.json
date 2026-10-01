@@ -2,10 +2,10 @@
   "name": "himehaze-3d",
   "version": "1.0.0",
   "private": true,
-  "description": "Photoreal translucent juvenile yellowfin goby (Acanthogobius flavimanus) for Three.js",
+  "description": "Photo-faithful real-time ヒメハゼ (Favonigobius gymnauchen) model, rig and behaviour AI for Three.js",
   "type": "module",
   "scripts": {
-    "build:model": "node tools/build-model.mjs",
+    "build:model": "node tools/build-model.mjs && node tools/build-model.mjs --male && node tools/build-model.mjs --lod 1 && node tools/build-model.mjs --lod 2 && node tools/build-model.mjs --male --lod 1 && node tools/build-model.mjs --male --lod 2",
     "serve": "node tools/serve.mjs"
   },
   "devDependencies": {

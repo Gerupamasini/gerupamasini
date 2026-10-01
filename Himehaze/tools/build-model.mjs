@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Builds models/himehaze.glb (ヒメハゼ Favonigobius gymnauchen, geometry + baked textures) procedurally.
-//   node tools/build-model.mjs [--fast] [--dump-textures <dir>]
+//   node tools/build-model.mjs [--male] [--fast] [--lod 1|2] [--dump-textures <dir>]
+// --lod N writes a lighter geometry level (models/himehaze[_male]_lodN.glb) with the same skeleton, morph targets
+// and UV layout; its tiny textures are placeholders — games keep the LOD0 materials and swap only geometry.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +23,13 @@ const args = process.argv.slice(2);
 const fast = args.includes('--fast');
 const dumpIdx = args.indexOf('--dump-textures');
 const dumpDir = dumpIdx >= 0 ? args[dumpIdx + 1] : null;
-const outFile = path.join(root, 'models', MALE ? 'himehaze_male.glb' : 'himehaze.glb');
+const lodIdx = args.indexOf('--lod');
+const LOD = lodIdx >= 0 ? Number(args[lodIdx + 1]) : 0;
+const RES = LOD === 1 ? { NS: 200, NV: 96, NSb: 100, NVb: 48, texW: 256, texH: 128, iris: 128, finSUB: 3, finNT: 18, atlasDown: 3 }
+  : LOD >= 2 ? { NS: 96, NV: 40, NSb: 100, NVb: 48, texW: 256, texH: 128, iris: 128, finSUB: 1, finNT: 8, atlasDown: 3 }
+  : fast ? { NS: 230, NV: 112, NSb: 200, NVb: 96, texW: 1024, texH: 512, iris: 512, finSUB: 6, finNT: 36, atlasDown: 0 }
+  : { NS: 460, NV: 224, NSb: 400, NVb: 192, texW: 2048, texH: 1024, iris: 1024, finSUB: 6, finNT: 36, atlasDown: 0 };
+const outFile = path.join(root, 'models', (MALE ? 'himehaze_male' : 'himehaze') + (LOD ? `_lod${LOD}` : '') + '.glb');
 
 const t0 = Date.now();
 const log = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).padStart(5)}s] ${m}`);
@@ -68,7 +76,7 @@ const sClamp = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAM
 
 // ---------------------------------------------------------------- body
 log('body');
-const body = buildBody({ NS: fast ? 230 : 460, NV: fast ? 112 : 224, NSb: fast ? 200 : 400, NVb: fast ? 96 : 192, texW: fast ? 1024 : 2048, texH: fast ? 512 : 1024, log });
+const body = buildBody({ NS: RES.NS, NV: RES.NV, NSb: RES.NSb, NVb: RES.NVb, texW: RES.texW, texH: RES.texH, log });
 const BT = body.textures;
 const tAlb = gb.addTexture(image(gb, 'body_basecolor', BT.width, BT.height, 3, BT.albedo, 'jpeg', 93), sBody, 'body_basecolor');
 const tNrm = gb.addTexture(image(gb, 'body_normal', BT.width, BT.height, 3, BT.normal, 'png'), sBody, 'body_normal');
@@ -150,7 +158,7 @@ for (const part of [mouth.cavity, mouth.teeth, gills]) {
 
 // ---------------------------------------------------------------- eyes (children of the eye joints)
 log('eyes');
-const iris = paintIris(fast ? 512 : 1024);
+const iris = paintIris(RES.iris);
 const tIris = gb.addTexture(image(gb, 'eye_iris', iris.size, iris.size, 3, iris.rgb, 'jpeg', 94), sClamp, 'eye_iris');
 const mEye = gb.addMaterial({
   name: 'Himehaze_Eye',
@@ -170,6 +178,11 @@ for (const [side, name, jn] of [[1, 'Eye_L', 'J_eyeL'], [-1, 'Eye_R', 'J_eyeR']]
 log('fins');
 const defs = finDefinitions();
 const atlas = paintFinAtlas(defs, log);
+for (let k = 0; k < RES.atlasDown; k++) {
+  // LOD files: placeholder-size atlas (the runtime keeps the LOD0 fin material)
+  const c = downsample2(atlas.size, atlas.size, 4, atlas.color), n = downsample2(atlas.size, atlas.size, 3, atlas.normal), d = downsample2(atlas.size, atlas.size, 4, atlas.data);
+  Object.assign(atlas, { size: c.w, color: c.data, normal: n.data, data: d.data });
+}
 const tFinCol = gb.addTexture(image(gb, 'fin_basecolor_alpha', atlas.size, atlas.size, 4, atlas.color, 'png'), sClamp, 'fin_basecolor_alpha');
 const tFinNrm = gb.addTexture(image(gb, 'fin_normal', atlas.size, atlas.size, 3, atlas.normal, 'jpeg', 95), sClamp, 'fin_normal');
 const tFinData = gb.addTexture(image(gb, 'fin_data', atlas.size, atlas.size, 4, atlas.data, 'png'), sClamp, 'fin_ray_mel_irid_coverage');
@@ -185,7 +198,7 @@ const mFin = gb.addMaterial({
 const finNodes = {};
 let contactFishY = botY(PELVIC.base) - 0.2; // lowest point of the pelvic sucker rim (the fish rests on it)
 for (const def of defs) {
-  const SUB = 6, NT = def.name === 'Fin_Caudal' ? 44 : 36;
+  const SUB = RES.finSUB, NT = Math.round(RES.finNT * (def.name === 'Fin_Caudal' ? 44 / 36 : 1));
   const m = buildFinMesh(def, SUB, NT);
   if (def.type === 'pelvic') { contactFishY = Infinity; for (let i = 1; i < m.fish.length; i += 3) contactFishY = Math.min(contactFishY, m.fish[i]); }
   const w = finWeights(def.name, m.fish, m.rayT, m.baseS);
@@ -215,6 +228,7 @@ const rootNode = gb.addNode({
     species: SPECIES.scientificName,
     commonName: `${SPECIES.japaneseName} (${SPECIES.englishName}), adult ${MALE ? 'breeding male' : 'female / non-breeding'}`,
     variant: VARIANT,
+    lod: LOD,
     totalLength_mm: TL,
     standardLength_mm: SL,
     units: 'metres (+Y dorsal, +Z anterior)',

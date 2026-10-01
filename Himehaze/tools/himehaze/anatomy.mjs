@@ -542,7 +542,8 @@ export const PATTERN = {
   secondary: MALE ? [49, 65, 80.5, 92] : [65, 80.5],   // fainter extra marks (dark morph has all four)
   secondaryPeak: MALE ? 0.45 : 0.25,
   lowerRow: [50, 59, 66, 78],                          // small spots above the anal-fin base (h 0.12)
-  caudalSpot: { s: 97.6, len: 2.0, hn: 0.04, h: 0.42, k: 1.45 },
+  // dense core ≈ 2 × 1.8 %SL at x 97–98.5, y 0…+0.5; streaks continue onto the fin rays (fins.mjs) [P fin report §6a]
+  caudalSpot: { s: 97.8, len: 1.5, hn: 0.05, h: 0.36, k: 1.25 },
   // rust spots: 3 rows at h 0.65 / 0.78 / 0.90, one per scale column (period 2.8 %SL), Ø 0.85–1.05 %SL
   rustRows: [0.65, 0.78, 0.9],
   rustPeriod: 2.8,

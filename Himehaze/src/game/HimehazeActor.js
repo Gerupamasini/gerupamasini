@@ -18,17 +18,32 @@ import { CONTACT_S, SPECIES } from '../fish/species.js';
 
 const templates = new Map();
 
-/** Load (once) and cache a GLB as a cloneable template. */
-export function loadHimehazeTemplate(url) {
-  if (!templates.has(url)) {
-    templates.set(url, new GLTFLoader().loadAsync(url).then((gltf) => {
+/**
+ * Load (once) and cache a GLB as a cloneable template.
+ * lods: geometry levels built with `tools/build-model.mjs --lod 1|2` (same skeleton, morph targets and UVs);
+ * `true` derives their URLs (himehaze.glb → himehaze_lod1.glb, himehaze_lod2.glb). Missing files are skipped.
+ */
+export function loadHimehazeTemplate(url, { lods = true } = {}) {
+  const key = `${url}|${lods}`;
+  if (!templates.has(key)) {
+    const loader = new GLTFLoader();
+    const lodUrls = lods === true ? [1, 2].map((k) => url.replace(/\.glb$/, `_lod${k}.glb`)) : lods || [];
+    const geoms = (gltf) => {
+      const m = {};
+      gltf.scene.traverse((o) => { if (o.isMesh) m[o.name] = o.geometry; });
+      return m;
+    };
+    templates.set(key, Promise.all([
+      loader.loadAsync(url),
+      ...lodUrls.map((u) => loader.loadAsync(u).then(geoms).catch(() => null)),
+    ]).then(([gltf, ...lodGeoms]) => {
       const meta = gltf.scene.getObjectByName('Himehaze_Adult');
       let body = null;
       gltf.scene.traverse((o) => { if (o.isMesh && o.material?.userData?.himehaze?.role === 'body') body = o; });
-      return { gltf, rig: meta.userData.himehazeRig, extras: body.material.userData.himehaze, species: meta.userData };
+      return { gltf, rig: meta.userData.himehazeRig, extras: body.material.userData.himehaze, species: meta.userData, lodGeoms: lodGeoms.filter(Boolean) };
     }));
   }
-  return templates.get(url);
+  return templates.get(key);
 }
 
 /**
@@ -115,6 +130,7 @@ export class HimehazeActor {
       cheap.transmission = 0; cheap.thickness = 0; cheap.clearcoat = 0;
       if (o.material.userData?.himehaze?.role === 'fin') { cheap.transparent = true; cheap.opacity = Math.min(full.opacity, 0.55); cheap.depthWrite = false; }
       o.userData.lodMat = [full, cheap];
+      o.userData.lodGeo = [o.geometry, ...tpl.lodGeoms.map((g) => g[o.name] || o.geometry)];
       this.meshes.push(o);
     });
     this.lod = -1;
@@ -122,10 +138,10 @@ export class HimehazeActor {
   }
 
   /**
-   * 0: everything (interior, teeth, gill chamber, all shadows, transmission)
-   * 1: no teeth / gill chamber, fins stop casting shadows
-   * 2: no mouth cavity, no transmission or clearcoat (cheap materials), only the body casts a shadow
-   * 3: silhouette level: pelvic and anal fins hidden, no shadows
+   * 0: full mesh (body 104k verts), interior, teeth, gill chamber, all shadows, transmission
+   * 1: LOD1 mesh (body 19k verts), no teeth / gill chamber, fins stop casting shadows
+   * 2: LOD2 mesh (body 4k verts), no mouth cavity, no transmission / clearcoat, only the body casts a shadow
+   * 3: LOD2 mesh, pelvic and anal fins hidden, no shadows (silhouette level)
    */
   setLOD(l) {
     if (l === this.lod) return;
@@ -138,6 +154,8 @@ export class HimehazeActor {
       else if (/Pelvic|Anal/.test(n)) vis = l <= 2;
       o.visible = vis;
       o.material = o.userData.lodMat[l >= 2 ? 1 : 0];
+      const G = o.userData.lodGeo;
+      o.geometry = G[Math.min(l, G.length - 1)];
       o.castShadow = this.castShadow && (n === 'Body' ? l <= 2 : l === 0 && /Fin_|Eye/.test(n));
     }
   }

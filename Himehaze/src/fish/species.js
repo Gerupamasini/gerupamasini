@@ -41,7 +41,7 @@ export const LANDMARKS = {
 // Optical tissue constants for the volumetric body shader: scattering (1/mm) and absorption (1/mm, rgb).
 // ヒメハゼ adults are pale, translucent straw-tan (warmer and less milky than the juvenile マハゼ) [P 025/031/041/069]
 // The abdomen is opaque white (silvery-white peritoneum: no gut outline visible in any photo) [P colour report §2.5]
-export const TISSUE = { sigS: 1.2, sigA: [0.022, 0.074, 0.2], peritoneum: [0.15, 9.0] };
+export const TISSUE = { sigS: 1.2, sigA: [0.024, 0.085, 0.27], peritoneum: [0.15, 9.0] };
 
 // Points that can touch the sand (bone, s mm, kind) — y is resolved from the profile by the builder.
 export const CONTACT_S = {
