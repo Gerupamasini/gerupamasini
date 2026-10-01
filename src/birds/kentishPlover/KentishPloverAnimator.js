@@ -1535,7 +1535,12 @@ export const ACTIONS = {
       const ap = track(P.a, s);
       tip.x -= Math.sin(yawW) * C.aim[1] * ap;
       tip.z -= Math.cos(yawW) * C.aim[1] * ap;
-      tip.y += C.aim[0] * ap + track(P.lift, s);
+      const lift = track(P.lift, s);
+      tip.y += C.aim[0] * ap + lift;
+      // (the head comes up with the prey in front of the breast, not back into it: lifted straight up the bill axis
+      // the head met the fore-breast and the plumage contact shoved it 7–8 mm off its path)
+      tip.x += Math.sin(yawW) * lift * C.liftFwd;
+      tip.z += Math.cos(yawW) * lift * C.liftFwd;
       out.headQ = A.billQuat(dir, roll);
       const toss = track(P.toss, s) * DEG;
       if (toss) {

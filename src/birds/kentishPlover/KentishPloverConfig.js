@@ -311,12 +311,13 @@ export const animation = {
     tipOvershoot: 0.04,
     crouch: mm(12), // trunk lowered (legs flexed) at contact
     reach: mm(58), // bill tip ahead of the root at contact with no trunk shift (the AI stops this far short)
-    aim: [mm(20), mm(4)], // bill tip this far above / behind the prey while aiming (the stab comes down at ≈80°)
+    aim: [mm(23), mm(1)], // bill tip this far above / behind the prey while aiming (the stab comes down at ≈80°)
     cock: mm(1.5),
-    billAim: 58, // bill below horizontal (deg) while aiming, at contact, lifted (photos 50–60°, p007, p061)
-    billStrike: 67,
+    billAim: 52, // bill below horizontal (deg) while aiming, at contact, lifted (photos 50–60°, p007, p061)
+    billStrike: 63,
     billLift: 46,
     billToss: 24,
+    liftFwd: 0.4, // bill tip forward per mm lifted (prey handling: the head rises clear of the fore-breast)
     small: { aim: 0.11, hold: 0.04, strike: 0.09, grab: 0.04, lift: 0.08, toss: 0.1, tosses: 1, recover: 0.14, depth: mm(1.5) },
     polychaete: { aim: 0.13, hold: 0.07, strike: 0.11, grab: 0.07, tug: 0.36, pull: [mm(10), mm(14)], extract: 0.13, toss: 0.13, tosses: 2, recover: 0.2, depth: mm(4) },
     crab: { aim: 0.08, hold: 0.02, strike: 0.09, grab: 0.04, lift: 0.08, shake: 0.55, shakeHz: 6.5, toss: 0.14, tosses: 1, recover: 0.18, depth: mm(1) },
