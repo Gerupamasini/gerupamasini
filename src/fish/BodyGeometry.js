@@ -29,7 +29,7 @@ const tmp2 = [0, 0];
 // p15_0). The first rows of the body wrap around it: from the inner margin
 // (the gape ring) over the front to the outer side of the roll.
 const OPEN_LIP_U = 0.012; // body rows u < this wrap around the roll
-const OPEN_LIP_R = 0.0056; // radius of the roll (upper lip a little thicker)
+const OPEN_LIP_R = 0.0062; // radius of the roll (lower lip a little thicker)
 const OPEN_BLEND = 0.03; // then the face blends into the head section
 // open state: drop of the chin at the front and the s of the jaw joint
 const JAW_DROP = 0.02;
@@ -51,20 +51,25 @@ export const HEAD_RELIEF = {
   jawCrease: 0.0004,
   nareDepth: 0.0042, // pit of the paired nostrils
   nareRadius: 0.0055,
-  nareFlap: 0.0095, // the flap separating anterior and posterior naris...
-  nareFlapPos: [0.0035, 0.0018], // ...sits this far in front of / above the pit centre
-  nareFlapW: [0.0036, 0.0052], // half-length (s) and half-height of the lobe
+  nareFlap: 0.0042, // the flap separating anterior and posterior naris: a low,
+  // flat, rounded lobe (a tall one reads as a horn)...
+  nareFlapPos: [0.0032, 0.0012], // ...sits this far in front of / above the pit centre
+  nareFlapW: [0.0048, 0.0058], // half-length (s) and half-height of the lobe
   opercPlate: 0.0018, // height of the opercle plate above the flank (a soft step, not a seam)
   opercStepIn: 0.0065, // the plate's rounded step: from this far in front of the free margin...
   opercStepOut: 0.0045, // ...to this far behind it
   opercTuck: 0.0007, // shallow hollow where the flank tucks under the margin
   preopercRidge: 0.00045, // ridge of the preopercle (under skin, faint)
-  // orbit, in eyeball radii: the head skin meets the eyeball in a smooth
-  // union (fillet) instead of a socket with a raised rim
-  orbitGap: 0.025, // skin stays this far beneath the ball where they meet
-  orbitFillet: 0.16, // blend width of the union
+  // orbit, in eyeball radii: the eye sits in a socket nearly flush with the
+  // head; a soft fleshy rim of orbital skin rises around the visible cap and
+  // laps a little over its edge (p05_1, p12_0, p25_0), no fillet climbing
+  // up the ball (that read as a bulging marble)
+  orbitRim: 0.12, // height of the rim
+  orbitRimW: 0.15, // its half-width (gaussian)
+  orbitRimOff: 0.07, // its crest this far outside the nominal visible edge
+  orbitCover: 0.03, // the skin lies this far above the ball where it covers it
   orbitSink: 0.3, // hidden skin inside the visible eye sinks this far...
-  orbitSinkR: [0.74, 0.5], // ...between these radii
+  orbitSinkR: [0.92, 0.7], // ...between these fractions of the visible radius
 };
 
 // ---------------------------------------------------------------------------
@@ -95,13 +100,14 @@ function mouthRing(theta, state, out) {
     out.z = head.mouthClosedRW * b;
     return out;
   }
-  const e = 2 / 2.2; // superellipse -> round-topped, softly squared O
+  const e = 2 / 2.0; // ellipse: a round-topped oval
   const sa = Math.sign(a) * Math.pow(Math.abs(a), e);
   const sb = Math.sign(b) * Math.pow(Math.abs(b), e);
   const lower = Math.max(0, -sa);
   const upper = Math.max(0, sa);
   out.y = head.mouthY + (sa >= 0 ? head.mouthOpenTop * sa : head.mouthOpenBot * sa);
-  out.z = head.mouthOpenRW * sb * (1 - 0.16 * lower); // the lower jaw is a little narrower
+  // a round-topped oval: narrowest at the arch of the upper lip
+  out.z = head.mouthOpenRW * sb * (1 - 0.18 * upper);
   // the open lips stand slightly proud of the face as a short tube; the
   // corners and the dropped lower jaw sit a little further back
   out.x = head.mouthOpenFwd - 0.003 * b2 - 0.0035 * lower;
@@ -268,11 +274,16 @@ export function eyeRest(side = 1) {
   const P = new THREE.Vector3();
   const th = surfacePointAtY(head.eyeS, head.eyeY, side, P);
   const N = baseNormal(head.eyeS, th, new THREE.Vector3());
-  // goldfish eyes look laterally, very slightly forward and upward
-  const axis = N.clone().add(new THREE.Vector3(0.1, 0.07, 0)).normalize();
+  // goldfish eyes look laterally, very slightly forward and upward. The
+  // axis is nearly lateral rather than following the head normal (which
+  // turns forward on the tapering head): a recessed eye seen from the side
+  // would otherwise show its pupil off-centre in the opening (parallax)
+  const axis = new THREE.Vector3(0.07 + 0.25 * N.x, 0.05 + 0.25 * N.y, Math.sign(N.z) * 1).normalize();
   const R = head.eyeR;
   const center = P.clone().addScaledVector(axis, (head.eyeProtrusion - 1) * R);
-  return { center, axis, radius: R, surface: P };
+  // nominal radius of the exposed cap (where the ball leaves the skin)
+  const visR = R * Math.sqrt(1 - (1 - head.eyeProtrusion) ** 2);
+  return { center, axis, radius: R, visR, surface: P };
 }
 
 // ---------------------------------------------------------------------------
@@ -306,14 +317,14 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
   const cleftY = head.mouthY - head.mouthClosedDroop * zr * zr;
   const dy = y - cleftY;
   const front = smoothstep(HEAD_RELIEF.lipFrontS[0], HEAD_RELIEF.lipFrontS[1], s);
-  const taper = 1 - 0.6 * smoothstep(0.35, 1.0, Math.abs(z) / head.mouthClosedRW);
+  const taper = 1 - 0.75 * smoothstep(0.25, 1.0, Math.abs(z) / head.mouthClosedRW);
   // (zero at the cleft itself: the rounded margins curl in toward it, so the
   // lips never end in thin protruding edges)
   const upperLip = gauss(dy - HEAD_RELIEF.upperLipY, HEAD_RELIEF.upperLipW) * smoothstep(-0.0005, 0.005, dy);
   const lowerLip = gauss(dy + HEAD_RELIEF.lowerLipY, HEAD_RELIEF.lowerLipW) * smoothstep(0.0, -0.006, dy);
   masks.lipD = (HEAD_RELIEF.upperLip * upperLip + HEAD_RELIEF.lowerLip * lowerLip) * front * taper;
   d += masks.lipD;
-  masks.lip = clamp(Math.max(upperLip, lowerLip) * 1.6 + gauss(dy, 0.004), 0, 1) * front * smoothstep(1.25, 0.9, Math.abs(z) / head.mouthClosedRW);
+  masks.lip = clamp(Math.max(upperLip, lowerLip) * 1.6 + gauss(dy, 0.004), 0, 1) * front * smoothstep(1.12, 0.8, Math.abs(z) / head.mouthClosedRW);
 
   // the cleft runs on behind the corner of the mouth as a short fold sloping
   // ~20 deg down and back (no long cheek crease), ending in a soft dimple
@@ -321,9 +332,9 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
   const yC = head.mouthY - head.mouthClosedDroop;
   // (both start just behind the corner: on the folded lips themselves they
   // would buckle the thin cleft)
-  if (s > sC && s < sC + 0.026 && lateral > 0.3) {
+  if (s > sC && s < sC + 0.032 && lateral > 0.3) {
     const ry = yC - (s - sC) * 0.36;
-    d -= HEAD_RELIEF.cleftFold * gauss(y - ry, 0.0026) * smoothstep(sC + 0.001, sC + 0.006, s) * smoothstep(sC + 0.026, sC + 0.008, s);
+    d -= HEAD_RELIEF.cleftFold * gauss(y - ry, 0.0026) * smoothstep(sC + 0.001, sC + 0.006, s) * smoothstep(sC + 0.032, sC + 0.01, s);
   }
   d -= HEAD_RELIEF.rictusDimple * gauss(Math.hypot(s - sC - 0.0065, y - yC + 0.0022), 0.003) * smoothstep(0.3, 0.6, lateral) * smoothstep(sC + 0.001, sC + 0.004, s);
 
@@ -347,7 +358,7 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
     const fy = y - head.nareY - HEAD_RELIEF.nareFlapPos[1];
     // a rounded, flat-topped lobe (a plain gaussian reads as a spike)
     const fr2 = (fs / HEAD_RELIEF.nareFlapW[0]) ** 2 + (fy / HEAD_RELIEF.nareFlapW[1]) ** 2;
-    d += HEAD_RELIEF.nareFlap * Math.exp(-Math.pow(fr2, 1.35)) * wl;
+    d += HEAD_RELIEF.nareFlap * Math.exp(-Math.pow(fr2, 1.6)) * wl;
   }
 
   // opercular series
@@ -397,6 +408,7 @@ function bodyRows(n) {
   const density = (s) =>
     1 +
     2.2 * Math.exp(-(((s - 0.12) / 0.1) ** 2)) +
+    1.2 * Math.exp(-(((s - head.eyeS) / 0.035) ** 2)) + // edge of the visible eye
     1.2 * Math.exp(-(((s - 0.303) / 0.035) ** 2)) +
     6.0 * Math.exp(-((s / 0.014) ** 2)) + // lips (and the open lip roll)
     1.4 * Math.exp(-(((s - head.nareS) / 0.012) ** 2)) + // narial flap
@@ -429,6 +441,8 @@ function thetaTable(n) {
     1 +
     1.25 * Math.exp(-(((t - th0) / 0.42) ** 2)) +
     1.25 * Math.exp(-(((t - (2 * Math.PI - th0)) / 0.42) ** 2)) +
+    0.9 * Math.exp(-(((t - th0) / 0.2) ** 2)) + // edge of the visible eye
+    0.9 * Math.exp(-(((t - (2 * Math.PI - th0)) / 0.2) ** 2)) +
     0.9 * Math.exp(-(((t - thN) / 0.2) ** 2)) +
     0.9 * Math.exp(-(((t - (2 * Math.PI - thN)) / 0.2) ** 2));
   const N = 4000;
@@ -589,11 +603,10 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
     }
   }
 
-  // 3) orbit: the transparent skin over the eye is continuous with the head
-  // skin, so the head surface meets the protruding eyeball tangentially — a
-  // smooth union of the two surfaces (a soft fillet), no socket and no
-  // raised rim around a bead. Inside the visible eye the skin stays just
-  // beneath the ball (hidden by it) and then sinks away.
+  // 3) orbit: the eyeball shows as a low cap inside a shallow socket. The
+  // head skin keeps its own surface up to the eye and rises into a soft,
+  // rounded rim that laps a little over the edge of the cap; inside the
+  // visible eye the (hidden) skin sinks away beneath the ball.
   const eyes = [eyeRest(1), eyeRest(-1)];
   const smax = (a, b, k) => {
     const hh = Math.max(k - Math.abs(a - b), 0) / k;
@@ -612,19 +625,31 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
       radial.copy(q).addScaledVector(E.axis, -h);
       const rho = radial.length();
       const R = E.radius;
+      const rv = E.visR;
       if (rho > 1.6 * R || h < -R) continue;
+      // where the head curves away from the eye (behind and below it) the
+      // skin would bare more of the ball than in front: the orbital skin
+      // covers the ball outside the nominal cap, so the visible eye is a disc
+      // centred on the optical axis (pupil centred in the eye)
       const hb = rho < R ? Math.sqrt(R * R - rho * rho) : 0;
-      let hn = smax(h, hb - HEAD_RELIEF.orbitGap * R, HEAD_RELIEF.orbitFillet * R);
-      // well inside the visible eye: sink the hidden skin away from the ball
-      hn -= HEAD_RELIEF.orbitSink * R * smoothstep(HEAD_RELIEF.orbitSinkR[0] * R, HEAD_RELIEF.orbitSinkR[1] * R, rho);
+      const cover = smoothstep(rv - 0.05 * R, rv + 0.09 * R, rho) * smoothstep(1.15 * R, 0.98 * R, rho);
+      let hn = smax(h, hb + HEAD_RELIEF.orbitCover * R - (1 - cover) * R, 0.08 * R);
+      // ...and inside the cap it always tucks under the ball, so the edge of
+      // the visible eye is the same circle all round (no ragged skin
+      // crossing the ball where the head surface happens to lie near it)
+      const inside = smoothstep(rv + 0.02 * R, rv - 0.07 * R, rho);
+      hn = sminK(hn, hb - HEAD_RELIEF.orbitCover * R + (1 - inside) * R, 0.06 * R);
+      hn += HEAD_RELIEF.orbitRim * R * gauss(rho - rv - HEAD_RELIEF.orbitRimOff * R, HEAD_RELIEF.orbitRimW * R);
+      hn -= HEAD_RELIEF.orbitSink * R * smoothstep(HEAD_RELIEF.orbitSinkR[0] * rv, HEAD_RELIEF.orbitSinkR[1] * rv, rho);
       const push = h - hn; // negative => outward along the axis
       pos[i] -= E.axis.x * push;
       pos[i + 1] -= E.axis.y * push;
       pos[i + 2] -= E.axis.z * push;
       if (st === 0) {
-        mask2Arr[idx * 4 + 3] = Math.max(mask2Arr[idx * 4 + 3], smoothstep(1.45 * R, 0.9 * R, rho));
+        // orbital skin: the rim and a narrow band around it
+        mask2Arr[idx * 4 + 3] = Math.max(mask2Arr[idx * 4 + 3], smoothstep(rv + 0.42 * R, rv + 0.12 * R, rho));
         // the throat expansion must not swell over the lower eye
-        sectArr[idx * 4 + 3] *= smoothstep(1.1 * R, 1.6 * R, rho);
+        sectArr[idx * 4 + 3] *= smoothstep(rv + 0.1 * R, rv + 0.6 * R, rho);
       }
     }
   }

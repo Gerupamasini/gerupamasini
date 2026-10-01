@@ -11,6 +11,11 @@ import { head } from './morphology.js';
 import { createBodyMaterial, createBodyDepthMaterial, createFinMaterial, createFinDepthMaterial, createFinDepthWriteMaterial, createEyeMaterial } from './FishMaterials.js';
 import { U } from '../render/SharedUniforms.js';
 
+// pupil size relative to the uPupil default (0.46 eyeball radii), so the
+// pupil keeps its measured size in SL whatever the eyeball radius
+const PUPIL_SCALE = head.pupilR / head.eyeR / 0.46;
+const EYE_TURN = 0.6;
+
 const LOD_SPECS = [
   { body: { nBody: 210, nCavity: 12, nTheta: 128 }, fin: 1, eye: [40, 28] },
   { body: { nBody: 104, nCavity: 6, nTheta: 64 }, fin: 0.5, eye: [22, 16] },
@@ -189,8 +194,11 @@ export class FishSystem {
           const e = f.loc.eyes[s];
           // base orientation: +Z -> optical axis, then saccade about body up axis
           qe.setFromUnitVectors(new THREE.Vector3(0, 0, 1), er.axis);
-          const rot = new THREE.Quaternion().setFromAxisAngle(Yax, side * e.yaw);
-          const rotP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), e.pitch);
+          // (the eye sits deep in its orbit, so only part of each saccade
+          // shows as a turn of the visible cap; the full angle would slide
+          // the pupil to the edge of the small opening)
+          const rot = new THREE.Quaternion().setFromAxisAngle(Yax, side * e.yaw * EYE_TURN);
+          const rotP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), e.pitch * EYE_TURN);
           q.multiply(rot).multiply(rotP).multiply(qe);
           const r = er.radius * f.SL;
           sc.set(r, r, r);
@@ -198,7 +206,7 @@ export class FishSystem {
           L.eyes.setMatrixAt(ne, m4);
           const v = f.variation;
           ep.array[ne * 4] = v.irisHue;
-          ep.array[ne * 4 + 1] = 1.0;
+          ep.array[ne * 4 + 1] = PUPIL_SCALE;
           ep.array[ne * 4 + 2] = 1.0;
           ep.array[ne * 4 + 3] = v.seed + s * 0.37;
           ne++;
