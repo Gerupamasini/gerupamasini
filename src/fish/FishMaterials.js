@@ -191,11 +191,15 @@ export function createFinDepthWriteMaterial(layout) {
     // ghost); only the thin distal margin fades into the depth of what lies
     // behind it (4x4 ordered dither over the transition). The cost is that
     // background seen through a fin stays a little sharper than it would.
-    // In the studio (no water) nothing but the black void lies behind the
-    // fin, so the whole fin writes depth up to its fraying margin.
+    // In the studio (no water) the fins write no depth: behind them lies the
+    // black void, which the lens treats as lying in the focal plane, so a
+    // fin out of the focal plane would be blurred inside while its outline
+    // against the void stays a hard, aliased depth edge (an opaque grey
+    // paddle with stair-stepped margins). Kept in the focal plane, the
+    // translucent membrane and its rays stay readable.
     float y = vFinCoord.y;
     if (uWaterDensity < 0.01) {
-      if (y > 0.975) discard;
+      discard;
     } else {
       float dense = 1.0 - smoothstep(0.6, 0.95, y);
       ivec2 q = ivec2(gl_FragCoord.xy) & 3;

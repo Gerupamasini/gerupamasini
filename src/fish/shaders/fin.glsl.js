@@ -48,21 +48,14 @@ void finDeform() {
   vec3 P = finPoint(base, nC, nN, c, ts);
   vec3 N = finNormal(base, nC, nN, c, ts);
   float SL = rigMisc(0).w;
-  // ---- rest-shape curvature on top of the simulated rays (shape only; the
-  // rig drives the motion). A comet lobe is a curved ribbon: its rays sweep
-  // back toward the body axis distally, so the leading edge is convex and the
-  // inner margin concave, never a straight bar. The distal membrane carries
-  // a few broad longitudinal folds (the same folds the fragment shader
-  // shades), so the margins also undulate when seen edge-on.
+  // ---- rest-shape relief on top of the simulated rays (shape only; the rig
+  // drives the motion). The distal membrane carries a few broad longitudinal
+  // folds (the same folds the fragment shader shades), so the margins also
+  // undulate when seen edge-on. (No in-plane sweep of the rays here: the
+  // distal rays of a caudal lobe converge to almost no spacing, and any
+  // inward shift on top of the simulated rays folds the membrane over itself
+  // into a bright flake.)
   float Lr = aFinRoot.w * SL; // true ray length (m)
-  if (aFinIdx.w < 0.5) {
-    float dc = c < float(nC) - 1.05 ? 0.05 : -0.05;
-    vec3 Sc = (finPoint(base, nC, nN, c + dc, ts) - P) / dc; // toward the ventral rays
-    Sc = normalize(Sc - N * dot(Sc, N) + 1e-7);
-    float r = aFinRay.z;
-    float sweep = 0.14 * smoothstep(0.05, 0.75, abs(r - 0.5) * 2.0) * t * t * Lr;
-    P += Sc * (r < 0.5 ? sweep : -sweep);
-  }
   float foldPh = rc * 0.85 + seed * 3.0 + t * 3.5;
   P += N * ((aFinIdx.w < 0.5 ? 0.03 : 0.012) * t * t * Lr * cos(foldPh));
 #ifndef DEPTH_ONLY
@@ -215,7 +208,7 @@ void computeFinSurface() {
   // (milky, warm-neutral: blue-grey membranes read as ghosts in the tank)
   vec3 membraneWhite = vec3(0.56, 0.58, 0.6);
   // the fleshy base is pale pink skin, the same tone as the thin peduncle
-  vec3 fleshWhite = uColWhite * vec3(1.0, 0.85, 0.84);
+  vec3 fleshWhite = uColWhite * vec3(1.0, 0.8, 0.78);
   vec3 col = mix(mix(membraneWhite, fleshWhite, flesh), pig, redM);
   // rays carry more chromatophores + iridophores: denser pigment / whiter
   col = mix(col, mix(vec3(0.72, 0.75, 0.8), pig * 1.04, redM), ray * 0.3);
@@ -225,6 +218,9 @@ void computeFinSurface() {
   float rh = hash12(vec2(floor(rc + 0.5) * 1.7 + 0.3, seed * 2.1 + type * 5.0)) - 0.5;
   col *= mix(vec3(1.0), mix(vec3(0.9, 0.97, 1.1), vec3(1.08, 1.0, 0.86), step(0.0, rh)), ray * (1.0 - redM) * abs(rh) * 1.6);
   col = mix(col, col * vec3(1.0, 0.74, 0.74), ray * (1.0 - redM) * smoothstep(0.45, 0.08, t) * 0.45);
+  // blood in the thicker proximal membrane shows through as a soft pink
+  // flush next to the fleshy base of an unpigmented fin (p12_0, p11_1)
+  col = mix(col, col * vec3(1.0, 0.8, 0.8), (1.0 - redM) * smoothstep(0.3, 0.02, t) * 0.35);
 
   // ---- opacity (only the shell layer facing the camera is drawn): milky
   // membrane with streaks along the rays, denser rays, fleshy base, and a

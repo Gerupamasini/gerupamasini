@@ -53,9 +53,12 @@ export function makeVariation(rng, forceType = null) {
   const typeIdx = forceType !== null ? forceType : rng.weighted([0.55, 0.18, 0.1, 0.08, 0.09]);
   const type = COLOR_TYPES[typeIdx];
   const v = {
-    SL: clamp(rng.normal(0.095, 0.012), 0.07, 0.125),
-    depthScale: clamp(rng.normal(1, 0.04), 0.9, 1.1),
-    widthScale: clamp(rng.normal(1, 0.05), 0.88, 1.12),
+    // individuals in one tank differ clearly in size (about +-25 %) and in
+    // build: slim, torpedo-like fish next to deep-bodied ones (body depth
+    // roughly 0.28 .. 0.37 SL); deeper fish are also a little broader
+    SL: clamp(rng.normal(0.095, 0.016), 0.071, 0.122),
+    depthScale: clamp(rng.normal(1.03, 0.065), 0.87, 1.16),
+    widthScale: clamp(rng.normal(1, 0.04), 0.9, 1.1),
     caudalLobe: clamp(rng.normal(0.76, 0.08), 0.6, 0.98),
     caudalFork: rng.range(0.22, 0.28),
     dorsalHeight: rng.range(0.22, 0.28),
@@ -74,6 +77,7 @@ export function makeVariation(rng, forceType = null) {
     finRedDorsal: -0.3,
     finRedOther: -0.3,
   };
+  v.widthScale = clamp(v.widthScale + 0.45 * (v.depthScale - 1.0), 0.86, 1.16);
   if (type === 'sarasa') {
     v.finRedCaudal = rng.next() < 0.55 ? rng.range(0.12, 0.45) : -0.3;
     v.finRedDorsal = rng.next() < 0.6 ? rng.range(0.2, 0.55) : -0.3;
@@ -118,6 +122,14 @@ export class Fish {
     this.name = name || `comet-${this.id}`;
     this.loc = new Locomotion(this);
     this.rig = new FishRig(layout, this.variation, this.SL);
+    // the fin rays are attached to the standard body profile: move their
+    // roots with this individual's body depth / width (the body and the eyes
+    // are scaled the same way), so the dorsal / anal / paired fins neither
+    // float above a slim back nor sink into a deep one
+    for (const ch of this.rig.chains) {
+      ch.rootLocal.y *= this.variation.depthScale;
+      ch.rootLocal.z *= this.variation.widthScale;
+    }
     this.brain = null;
     this.row = -1;
     this.lod = 0;
