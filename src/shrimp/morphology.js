@@ -81,6 +81,7 @@ export const MORPH = {
     telson: 0.03,
     fanSpread: 0.35, // rad half-angle; live animals spread to ~0.7 [PHOTO 009], handled ones close it
     fanRoll: 0.85, // closed fan: uropods rolled lateral-edge-down so the fan reads as a leaf in side view [PHOTO 001, 004]
+    standVentral: 0.047, // |ventral carapace y| over the walking-leg coxae (x ~0.05-0.11)
     standClearance: 0.045, // ventral carapace above substrate [PHOTO 001]
   },
 
@@ -122,11 +123,11 @@ export const MORPH = {
   // ------------------------------------------------------------------ pereopods [PHOTO 001, 014, 015; EST]
   // [ischium, merus, carpus, propodus(palm), dactylus(finger)], radius at merus
   pereopods: [
-    { name: 'P1', chela: true, x: 0.165, segs: [0.04, 0.065, 0.075, 0.025, 0.025], r: 0.0032 },
-    { name: 'P2', chela: true, x: 0.14, segs: [0.045, 0.075, 0.09, 0.045, 0.05], r: 0.0045 }, // fingers slightly > palm [PHOTO 048]
-    { name: 'P3', chela: false, x: 0.11, segs: [0.05, 0.1, 0.05, 0.08, 0.025], r: 0.0038 },
-    { name: 'P4', chela: false, x: 0.08, segs: [0.05, 0.1, 0.05, 0.085, 0.025], r: 0.0036 },
-    { name: 'P5', chela: false, x: 0.05, segs: [0.05, 0.1, 0.05, 0.09, 0.025], r: 0.0034 },
+    { name: 'P1', chela: true, x: 0.145, segs: [0.035, 0.055, 0.06, 0.022, 0.022], r: 0.0032 },
+    { name: 'P2', chela: true, x: 0.115, segs: [0.04, 0.06, 0.07, 0.04, 0.045], r: 0.0045 }, // fingers slightly > palm [PHOTO 048]
+    { name: 'P3', chela: false, x: 0.078, segs: [0.045, 0.075, 0.04, 0.065, 0.025], r: 0.0038 },
+    { name: 'P4', chela: false, x: 0.045, segs: [0.045, 0.075, 0.04, 0.068, 0.025], r: 0.0036 },
+    { name: 'P5', chela: false, x: 0.012, segs: [0.045, 0.075, 0.04, 0.072, 0.025], r: 0.0034 },
   ],
   maxilliped3: { segs: [0.07, 0.06, 0.06], r: 0.0035 },
 

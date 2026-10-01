@@ -80,7 +80,7 @@ export class Shrimp {
     this.socialPush = new THREE.Vector3();
     this.walkSpeed = A.walk.speed * this.scale;
     this.swimSpeed = A.swim.speed * this.scale;
-    this.standH = (MORPH.carapace.stations[0][1] + MORPH.rest.standClearance) * A.totalLength * this.scale;
+    this.standH = -this.model.groundY * this.scale; // from the photo-matched stance (ShrimpModel.poseStanding)
     this.bodyY = new Spring(0, 3);
     this.bodyPitch = new Spring(0, 2.5);
     this.bodyRoll = new Spring(0, 2.5);
@@ -114,11 +114,11 @@ export class Shrimp {
     const offsets = { P5: 0.0, P4: 0.34, P3: 0.68 };
     // Foot rest positions in TL (same as ShrimpModel.poseStanding) [PHOTO 001, 005].
     const TLm = A.totalLength;
-    const fwd = { P3: 0.06 * TLm, P4: -0.03 * TLm, P5: -0.12 * TLm };
-    const lat = { P3: 0.19 * TLm, P4: 0.22 * TLm, P5: 0.19 * TLm };
+    const fwd = { P3: -0.005 * TLm, P4: -0.02 * TLm, P5: -0.04 * TLm };
+    const lat = { P3: 0.14 * TLm, P4: 0.15 * TLm, P5: 0.15 * TLm };
     this.legs = this.model.walkLegs.map((leg) => {
       const n = leg.P.name;
-      const restLocal = new THREE.Vector3(leg.hipPos.x + fwd[n], -this.standH / this.scale, leg.side * lat[n]).multiplyScalar(this.scale);
+      const restLocal = leg.restFoot.clone().multiplyScalar(this.scale);
       return {
         ...leg,
         restLocal,

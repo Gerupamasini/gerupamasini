@@ -100,6 +100,9 @@ function mergeShell(geos) {
  * Exoskeletal units are rigid lofted meshes parented to joint transforms.
  * Frame: +X anterior, +Y dorsal, +Z left. Root = carapace/abdomen articulation.
  */
+// Knee-plane hint per walking leg [fwd, up] (lateral = 1): merus runs out-forward-down,
+// carpus/propodus drop steeply down-back to the foot [PHOTO 001, 006].
+
 export class ShrimpModel {
   constructor({ sex = 'female', berried = false, scale = 1, blueSpots = false } = {}) {
     const S = materials();
@@ -448,7 +451,15 @@ export class ShrimpModel {
           const dact = joint(wrist, lp, 0, 0);
           mesh(podomere(ld, r * 0.5, r * 0.07, 6), S.append, dact);
           leg.dactyl = dact;
-          leg.L2 = lc + lp + ld;
+          // Carpus->propodus joint carried at a fixed downward bend; IK solves the merus/knee with the
+          // resulting effective distal vector, so the leg shows two bends like the photos.
+          leg.lc = lc;
+          leg.lpd = lp + ld;
+          leg.wristBend = -0.45;
+          const vx = lc + leg.lpd * Math.cos(leg.wristBend);
+          const vy = leg.lpd * Math.sin(leg.wristBend);
+          leg.L2 = Math.hypot(vx, vy);
+          leg.L2off = Math.atan2(vy, vx);
           this.walkLegs.push(leg);
         }
       }
@@ -724,8 +735,9 @@ export class ShrimpModel {
     const u = v.clone().normalize();
     const alpha = Math.acos(THREE.MathUtils.clamp((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
     const beta = Math.acos(THREE.MathUtils.clamp((L1 * L1 + L2 * L2 - D * D) / (2 * L1 * L2), -1, 1));
-    // Knee opens laterally (decapod merus is splayed sideways), kept at or below the coxa.
-    const hint = new THREE.Vector3(0, -0.6, leg.side); // knees low, near the carapace margin [PHOTO 001]
+    // Knee bends upward in the vertical plane through coxa and foot: merus out and slightly up,
+    // distal segments down to the floor (decapod walking-leg stance) [PHOTO 001, 006].
+    const hint = new THREE.Vector3(v.x, 0, v.z).normalize().multiplyScalar(0.25).add(new THREE.Vector3(0, 1, 0));
     hint.addScaledVector(u, -hint.dot(u)).normalize();
     const knee = u.clone().multiplyScalar(L1 * Math.cos(alpha)).addScaledVector(hint, L1 * Math.sin(alpha));
     const yaw = Math.atan2(-knee.z, knee.x);
@@ -738,29 +750,48 @@ export class ShrimpModel {
     const perp = v.clone().sub(knee);
     perp.addScaledVector(X0, -perp.dot(X0)).normalize();
     leg.hip.rotation.set(Math.atan2(-perp.dot(Z0), -perp.dot(Y0)), yaw, pitch, 'YZX');
-    leg.knee.rotation.set(0, 0, -(Math.PI - beta));
-    leg.wrist.rotation.set(0, 0, 0);
-    leg.dactyl.rotation.set(0, 0, -0.25);
+    leg.knee.rotation.set(0, 0, -(Math.PI - beta) - (leg.L2off ?? 0));
+    leg.wrist.rotation.set(0, 0, leg.wristBend ?? 0);
+    leg.dactyl.rotation.set(0, 0, -0.2);
   }
 
-  /** Standing pose on flat ground (used by the validation renders; the game drives feet by IK). */
+  /**
+   * Standing stance built by forward kinematics from segment angles (deg), then reproduced by IK:
+   * in dorsal view P3 points forward-out, P4 out, P5 back-out [PHOTO 006]; merus ~15 deg up,
+   * carpus ~20 deg down, propodus+dactylus ~45 deg down to the substrate [PHOTO 001, front views].
+   * The ground height follows from the feet, and the game reuses leg.restFoot.
+   */
   poseStanding() {
-    const groundY = -(M.carapace.stations[0][1] + M.rest.standClearance) * T;
-    const foot = { P3: [0.06, 0.19], P4: [-0.03, 0.22], P5: [-0.12, 0.19] }; // diagonal splay [PHOTO 005/006] // feet behind the coxae [PHOTO 001]
+    const STANCE = { P3: { yaw: 62 }, P4: { yaw: 95 }, P5: { yaw: 128 } };
+    const d2r = Math.PI / 180;
+    const pM = 15 * d2r;
+    const pC = -20 * d2r;
+    let gy = 0;
     for (const leg of this.walkLegs) {
-      const [dx, lat] = foot[leg.P.name];
-      this.solveLegIK(leg, new THREE.Vector3(leg.hipPos.x + dx * T, groundY, leg.side * lat * T));
+      const a = STANCE[leg.P.name].yaw * d2r;
+      const h = new THREE.Vector3(Math.cos(a), 0, leg.side * Math.sin(a));
+      const up = new THREE.Vector3(0, 1, 0);
+      const seg = (len, p) => h.clone().multiplyScalar(len * Math.cos(p)).addScaledVector(up, len * Math.sin(p));
+      const foot = leg.coxa.position.clone().add(seg(leg.L1, pM)).add(seg(leg.lc, pC)).add(seg(leg.lpd, pC + leg.wristBend));
+      leg.restFoot = foot;
+      gy += foot.y;
+    }
+    gy /= this.walkLegs.length;
+    this.groundY = gy;
+    for (const leg of this.walkLegs) {
+      leg.restFoot.y = gy;
+      this.solveLegIK(leg, leg.restFoot);
     }
     for (const c of this.chelipeds) {
       const s = c.side;
       if (c.P.name === 'P2') {
-        c.hip.rotation.set(0, -s * 0.18, -0.42, 'YZX');
-        c.knee.rotation.z = 0.38;
+        c.hip.rotation.set(0, -s * 0.38, -0.45, 'YZX');
+        c.knee.rotation.z = 0.3;
         c.wrist.rotation.z = 0.05;
       } else {
-        c.hip.rotation.set(0, -s * 0.3, -0.75, 'YZX');
-        c.knee.rotation.z = 1.35;
-        c.wrist.rotation.z = 0.35;
+        c.hip.rotation.set(0, -s * 0.3, -0.4, 'YZX');
+        c.knee.rotation.z = 0.25;
+        c.wrist.rotation.z = 0.05;
       }
     }
   }
