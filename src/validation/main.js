@@ -57,6 +57,32 @@ const bird = new KentishPloverModel({ palette, lods: [lod], individual: { seed: 
 scene.add(bird.object);
 window.bird = bird;
 
+// wdebug=1: the body coloured by where its skinning sits between trunk (blue) and head (red) along the neck
+// sleeve (sleeve helpers green → yellow), with 1 mm rest-space stripes across the sleeve (shows its twist / stretch)
+if (q.get('wdebug')) {
+  const n = bird.spec.boneNames.filter((b) => b.startsWith('sleeve')).length;
+  const at = Object.fromEntries(bird.spec.boneNames.map((b, i) => [i, b === 'head' || b === 'jaw' ? 1 : b.startsWith('sleeve') ? Number(b.slice(6)) / (n + 1) : 0]));
+  bird.object.traverse((o) => {
+    if (!o.isSkinnedMesh || !/^(body|shell)/.test(o.name)) return;
+    const g = o.geometry;
+    const si = g.getAttribute('skinIndex');
+    const sw = g.getAttribute('skinWeight');
+    const R = g.getAttribute('aRest');
+    const col = new Float32Array(si.count * 3);
+    const c = new THREE.Color();
+    for (let i = 0; i < si.count; i++) {
+      let s = 0;
+      for (let k = 0; k < 4; k++) s += sw.getComponent(i, k) * at[si.getComponent(i, k)];
+      c.setHSL(0.66 * (1 - s), 0.85, 0.5);
+      const stripe = Math.abs(((R.getX(i) + R.getY(i) * 0.3) % 3) + 3) % 3 < 0.6 ? 0.55 : 1;
+      col.set([c.r * stripe, c.g * stripe, c.b * stripe], i * 3);
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    o.material = new THREE.MeshLambertMaterial({ vertexColors: true });
+    if (o.name.startsWith('shell')) o.visible = false;
+  });
+}
+
 if (mode === 'silhouette') {
   const black = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
   bird.object.traverse((o) => {
@@ -88,8 +114,9 @@ async function setupPose() {
   poser = new mod.KentishPloverAnimator(bird, { seed: 3 });
   if (q.has('gaze')) {
     // fixed gaze for photo comparisons: gaze=yaw,pitch (rad; pitch defaults to the resting one), no saccades
-    const [yaw, pitch = mod.GAZE_PITCH_REST] = q.get('gaze').split(',').map(Number);
-    Object.assign(poser.gaze, { yaw, tYaw: yaw, pitch, tPitch: pitch, roll: 0, tRoll: 0, timer: 1e9, mode: 'idle' });
+    // (gaze=yaw,pitch,roll: a third value tilts the head about the bill axis)
+    const [yaw, pitch = mod.GAZE_PITCH_REST, roll = 0] = q.get('gaze').split(',').map(Number);
+    Object.assign(poser.gaze, { yaw, tYaw: yaw, pitch, tPitch: pitch, roll, tRoll: roll, timer: 1e9, mode: 'idle' });
   }
   if (q.has('play')) {
     // play=1 (close-ups too): the action played in real time at 60 Hz from the settled forage stance up to t
