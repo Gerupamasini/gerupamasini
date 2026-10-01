@@ -72,7 +72,7 @@ function caudalFin(rect) {
     const f = k / (NP - 1);
     const u = 2 * f - 1; // -1 dorsal … +1 ventral
     const s = SL - 0.15 - 0.28 * Math.abs(u);
-    const y = q.yc - u * 1.05;
+    const y = q.yc - u * 1.3; // principal-ray bases span the caudal base (peduncle ~0.08 SL deep)
     const ang = -u * 20 * DEG;
     // rounded caudal: TL − SL = 7.3 mm (TL/SL 1.193, n = 20)
     const len = 4.7 + 2.7 * Math.pow(Math.max(0, 1 - u * u), 0.7);
@@ -85,7 +85,7 @@ function caudalFin(rect) {
     rays.push({ base: [s, botY(s) + 0.12, 0], dir, len, kind: 'spine', curv: 0, bend: [0, 0, 0], ang: -ang * DEG });
   }
   return {
-    name: 'Fin_Caudal', type: 'caudal', rays, normal, notch: 0.035, pleat: 0.035, sag: 0.025, rect, branchT: 0.5, segStart: 0.12, cup: 0, wave: 0.16,
+    name: 'Fin_Caudal', type: 'caudal', rays, normal, notch: 0.035, pleat: 0.12, sag: 0.025, rect, branchT: 0.5, segStart: 0.12, cup: 0, wave: 0.16,
     pigment: (r, n, Lr, len, t, dRay, fAcross) => {
       // エドハゼ caudal (photos 004, 028, 033): ~3 vertical rows of dark dots across the rays, densest on
       // the upper and middle rays and NOT reaching the lower part of the fin (diagnostic, RDB); the base
@@ -518,7 +518,8 @@ export function paintFinAtlas(defs, log = () => {}) {
         const pg = def.pigment(rNear, n, t * ray.len, ray.len, t, dRay, fAcross);
         const mel = clamp(pg.mel), xan = clamp(pg.xan), irid = clamp(pg.irid);
         // colours (linear)
-        let cr = mix(0.8, 0.78, rayD), cg = mix(0.78, 0.7, rayD), cb = mix(0.72, 0.52, rayD);
+        // hyaline, faintly tan membrane and pale straw rays (photos: fins read clear, not milky white)
+        let cr = mix(0.66, 0.74, rayD), cg = mix(0.63, 0.67, rayD), cb = mix(0.55, 0.5, rayD);
         cr *= mix(1, 1.0, xan); cg *= mix(1, 0.86, xan); cb *= mix(1, 0.5, xan);
         cr = mix(cr, 0.9, irid * 0.5); cg = mix(cg, 0.9, irid * 0.5); cb = mix(cb, 0.88, irid * 0.5);
         cr *= Math.exp(-mel * 2.4); cg *= Math.exp(-mel * 2.8); cb *= Math.exp(-mel * 3.1);

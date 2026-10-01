@@ -598,7 +598,7 @@ function bakeBodyTextures(ctx) {
     iri = Math.max(iri, 0.06 * smoothstep(EYE.radius + 0.5, EYE.radius + 0.2, ed) * smoothstep(EYE.radius, EYE.radius + 0.15, ed));
     iri = Math.max(iri, 0.62 * bd.w);
     // opercle iridescent patch (yellow-green / blue-green sheen over the gills, s 0.20–0.27 SL)
-    iri = Math.max(iri, 0.3 * smoothstep(7.4, 8.2, s) * smoothstep(10.4, 9.6, s) * Math.exp(-(((hn + 0.05) / 0.45) ** 2)) * head);
+    iri = Math.max(iri, 0.45 * smoothstep(7.4, 8.2, s) * smoothstep(10.4, 9.6, s) * Math.exp(-(((hn + 0.05) / 0.45) ** 2)) * head);
     iri *= 1 - 0.7 * b;
     iri *= 0.85 + 0.3 * fbm3(s * 1.3, yy * 1.3, z * 1.3, 3, 41);
     // lips carry no silvery iridophores; the chin is only faintly silvered

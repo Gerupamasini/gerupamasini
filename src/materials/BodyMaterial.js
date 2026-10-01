@@ -84,6 +84,7 @@ uniform int uDebug;
 // species anatomy (fish mm), from extras.mahaze.anatomy — defaults are the juvenile マハゼ
 uniform vec2 uHeadWin;          // head (skull/jaws) density fades out over [x, y]
 uniform vec4 uGillWin;          // gill filaments: rise x→y, fall z→w (s, mm)
+uniform vec4 uOpercTint;        // structural colour of the gill-cover iridophores over uGillWin: rgb, strength (0 = plain silver)
 uniform vec2 uHaemal;           // haemal melanophore row starts over [x, y]
 uniform vec4 uAbdomen;          // abdominal cavity centre s, centre height (fraction of b), half-length, strength
 uniform vec3 uSpine;            // initial spine height y, posterior end of the column s, tail fade width
@@ -481,8 +482,15 @@ void main() {
   // iridophore sheen (guanine platelets): view dependent silvery-gold reflection
   float NoV = max(dot(N, V), 1e-3);
   vec3 H = normalize(L + V);
+  float opw = 0.0;
+  if (uOpercTint.w > 0.0) {
+    float dyo = pF.y - q0.yc, hno = dyo / max(dyo > 0.0 ? q0.t : q0.b, 1e-3);
+    opw = uOpercTint.w * smoothstep(uGillWin.x, uGillWin.y, pF.x) * (1.0 - smoothstep(uGillWin.z, uGillWin.w, pF.x)) *
+          smoothstep(-0.6, -0.3, hno) * (1.0 - smoothstep(0.3, 0.6, hno));
+  }
+  vec3 iridC = mix(vec3(0.95, 0.92, 0.8), uOpercTint.rgb, opw);
   vec3 irid = pig.g * (waterEnv(reflect(-V, N), 0.45) * 0.18 + Lc * pow(sat(dot(N, H)), 18.0) * 0.25 * sat(dot(N, L))) *
-              mix(vec3(0.95, 0.92, 0.8), vec3(0.75, 0.9, 0.95), pow(1.0 - NoV, 2.0));
+              mix(iridC, vec3(0.75, 0.9, 0.95), pow(1.0 - NoV, 2.0) * (1.0 - 0.6 * opw)) * (1.0 + 2.2 * opw);
 
   // ---- wet specular: skin (map roughness) + thin mucus film
   vec3 Nm = normalize(mix(N, Ng, 0.55));
@@ -550,6 +558,7 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uBackStrength: { value: 0.3 },
     uHeadWin: { value: new THREE.Vector2(...A.headWin) },
     uGillWin: { value: new THREE.Vector4(...A.gillWin) },
+    uOpercTint: { value: new THREE.Vector4(...(A.opercTint || [0, 0, 0, 0])) },
     uHaemal: { value: new THREE.Vector2(...A.haemal) },
     uAbdomen: { value: new THREE.Vector4(...A.abdomen) },
     uSpine: { value: new THREE.Vector3(...A.spine) },

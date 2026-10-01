@@ -115,13 +115,13 @@ export function paintIris(size = 1024) {
       if (theta < pupilEdge) {
         // black pupil with a faint teal tapetal eyeshine (photo pupil reflection median sRGB 48,92,101)
         const g = smoothstep(pupilEdge, 0, theta);
-        c = [0.008 + 0.012 * g, 0.016 + 0.06 * g, 0.02 + 0.075 * g];
+        c = [0.008 + 0.006 * g, 0.012 + 0.024 * g, 0.014 + 0.03 * g]; // near-black; the teal flash eyeshine is view dependent
       } else if (theta < IRIS_ANGLE) {
         const f = (theta - pupilEdge) / (IRIS_ANGLE - pupilEdge);
         // エドハゼ consensus (29 records; 010, 011, 030, 054, 055, 059): a narrow bright silvery-white ring
         // hugs the pupil, widest as a crescent on the lower / posteroventral side, with a faint teal cast;
         // the outer iris is dark grey-brown to coppery bronze with fine dark and golden speckles
-        const dark = [0.022, 0.017, 0.013], bronze = [0.1, 0.058, 0.03], silver = [0.34, 0.38, 0.37];
+        const dark = [0.022, 0.017, 0.013], bronze = [0.1, 0.058, 0.03], silver = [0.48, 0.53, 0.52];
         const ventral = smoothstep(0.5, -0.7, upness);
         const ringW = 0.1 + 0.16 * ventral + 0.04 * perlin3(Math.cos(psi) * 4, Math.sin(psi) * 4, 0.7, 21);
         const brk = smoothstep(-0.3, 0.3, perlin3(Math.cos(psi) * 9, Math.sin(psi) * 9, 1.9, 22));

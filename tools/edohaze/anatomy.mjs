@@ -29,9 +29,9 @@ export const VERT_COUNT = 34; // + urostyle = 35 vertebrae (Fishbase)
 // (* outline includes the eye turret / cheek and opercle swelling added by the sculpt, so the loft is lower)
 // Max depth 16.7 %SL at s≈0.4; caudal peduncle 7.7 %SL at s≈0.955; head half-width 7.4 %SL.
 const KS = [0.0, 0.38, 0.76, 1.14, 1.52, 1.9, 2.47, 3.04, 3.8, 4.75, 5.7, 7.6, 9.5, 11.4, 13.3, 15.2, 17.1, 19.0, 20.9, 22.8, 26.6, 30.4, 34.2, 36.3, 38.0, 40.0];
-const KTOP = [2.98, 3.36, 3.74, 4.02, 4.25, 4.4, 4.62, 4.95, 5.12, 5.16, 5.2, 5.5, 5.86, 6.1, 6.28, 6.35, 6.3, 6.2, 6.12, 6.0, 5.45, 4.9, 4.35, 4.05, 3.95, 3.85];
-const KBOT = [1.55, 1.12, 0.87, 0.7, 0.58, 0.49, 0.42, 0.38, 0.34, 0.28, 0.23, 0.14, 0.12, 0.05, 0.02, 0.04, 0.2, 0.42, 0.5, 0.56, 0.86, 0.92, 0.97, 1.05, 1.15, 1.28];
-const KW = [1.15, 1.33, 1.5, 1.68, 1.85, 2.0, 2.18, 2.3, 2.4, 2.47, 2.52, 2.66, 2.74, 2.22, 2.37, 2.31, 2.2, 2.04, 1.99, 1.88, 1.3, 1.05, 0.74, 0.55, 0.42, 0.34];
+const KTOP = [2.98, 3.47, 3.85, 4.08, 4.26, 4.45, 4.67, 4.92, 5.03, 5, 5.17, 5.54, 5.8, 6.02, 6.16, 6.16, 6.13, 5.96, 5.93, 5.68, 5.13, 4.54, 4, 3.69, 3.64, 3.6];
+const KBOT = [1.55, 0.82, 0.63, 0.48, 0.38, 0.33, 0.31, 0.25, 0.21, 0.19, 0.14, 0.08, 0.06, 0.08, 0.09, 0.06, 0.2, 0.26, 0.32, 0.23, 0.4, 0.43, 0.53, 0.6, 0.61, 1.05];
+const KW = [1.15, 1.46, 1.64, 1.78, 1.93, 2.12, 2.18, 2.47, 2.57, 2.52, 2.58, 2.83, 2.57, 2.26, 2.3, 2.33, 2.19, 2.01, 1.96, 1.88, 1.52, 1.21, 0.86, 0.63, 0.48, 0.42];
 const KNT = [2.2, 2.12, 2.04, 1.97, 1.91, 1.87, 1.84, 1.82, 1.8, 1.8, 1.82, 1.88, 1.95, 2.0, 2.02, 2.02, 2.0, 1.97, 1.95, 1.92, 1.88, 1.85, 1.82, 1.8, 1.8, 1.8];
 const KNB = [2.2, 2.3, 2.4, 2.4, 2.4, 2.45, 2.5, 2.55, 2.6, 2.7, 2.8, 2.85, 2.75, 2.65, 2.55, 2.45, 2.35, 2.25, 2.2, 2.1, 2.0, 1.95, 1.9, 1.87, 1.85, 1.85];
 
@@ -82,7 +82,7 @@ const fDY = monotone(KS, KDY);
 const SNOUT_CAP = 0.62;
 const SNOUT_CAP_W = 1.1;
 const SNOUT_CAP_WE = 2.0; // the width rounds off over a longer run: rounded snout tip in dorsal view
-const TAIL_BLADE0 = 36.7;
+const TAIL_BLADE0 = 37.4;
 
 // blunt, rounded snout front (superelliptic cap): the front face is almost flat, as in the photos
 function snoutCap(s, len = SNOUT_CAP, e = 2.6) {
@@ -199,6 +199,9 @@ export const EYE = {
   skin: 0.05,
   aperture: 62 * (Math.PI / 180),
 };
+// dorsal corneal window (see buildFeatures): axis ~75° above horizontal, slightly forward and outward
+export const EYE_DORSAL_AXIS = norm3([-0.15, 0.96, 0.26]);
+const EYE_DORSAL_APERTURE = 55 * (Math.PI / 180);
 
 // Gape: from the snout tip (h = −0.011 SL) obliquely down to the rictus at 0.075 SL (below the front
 // of the eye). The maxilla runs on to ~0.095 SL (below the eye centre/rear) — the large jaw of
@@ -322,7 +325,7 @@ function buildFeatures() {
   const operc = capsuleChain(onSurface(OPERCLE.map(([s, y]) => [s + 0.07, y]), 0.0), OPERCLE.map((_, i, a) => (i === 0 || i === a.length - 1 ? 0.012 : 0.03)));
   const preop = capsuleChain(onSurface(PREOPERCLE, 0.0), PREOPERCLE.map(() => 0.018));
 
-  const opS = surfaceAt(8.85, 2.35);
+  const opS = surfaceAt(8.2, 2.35); // cheeks/opercle widest in front, soft step-in at the margin (dorsal photos)
   const opPlate = [opS.p[0], opS.p[1], opS.p[2] - 0.32];
 
   const pecSurf = surfaceAt(11.05, 2.2);
@@ -335,15 +338,19 @@ function buildFeatures() {
   const Rs = E.radius + E.skin;
   const cutOff = 1.3;
   const rho = Math.sqrt(Rs * Rs + cutOff * cutOff - 2 * Rs * cutOff * Math.cos(E.aperture));
-  const eyeL = { c: E.center, cut: [E.center[0] + E.axis[0] * cutOff, E.center[1] + E.axis[1] * cutOff, E.center[2] + E.axis[2] * cutOff] };
-  const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], cut: [eyeL.cut[0], eyeL.cut[1], -eyeL.cut[2]] };
+  // second, dorsal corneal window: from above the eyes show as large dark domes whose medial edges are only
+  // 0.038 SL apart (dorsal photos 025, 029, 043); the lateral window alone leaves 0.067 SL of skin between them
+  const rho2 = Math.sqrt(Rs * Rs + cutOff * cutOff - 2 * Rs * cutOff * Math.cos(EYE_DORSAL_APERTURE));
+  const at = (ax) => [E.center[0] + ax[0] * cutOff, E.center[1] + ax[1] * cutOff, E.center[2] + ax[2] * cutOff];
+  const eyeL = { c: E.center, cut: at(E.axis), cut2: at(EYE_DORSAL_AXIS) };
+  const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], cut: [eyeL.cut[0], eyeL.cut[1], -eyeL.cut[2]], cut2: [eyeL.cut2[0], eyeL.cut2[1], -eyeL.cut2[2]] };
 
   return {
     lipsU, lipsUR: mirrorZ(lipsU), lipsL, lipsLR: mirrorZ(lipsL),
     crease, creaseR: mirrorZ(crease), gU, gUR: mirrorZ(gU), gL, gLR: mirrorZ(gL),
     operc, opercR: mirrorZ(operc), preop, preopR: mirrorZ(preop),
     opPlate, pecLobe, nosA: nosA.p, nosAn: nosA.n, nosB: nosB.p,
-    eyes: [eyeL, eyeR], Rs, rho,
+    eyes: [eyeL, eyeR], Rs, rho, rho2,
     papilla: [25.1, botY(25.1) + 0.02, 0],
     anus: [24.65, botY(24.65) - 0.03, 0],
     pelvicBase: [11.6, botY(11.6) + 0.08, 0],
@@ -354,7 +361,7 @@ function buildFeatures() {
 export const FEAT = buildFeatures();
 
 /** Sculpted signed distance field (mm). Negative inside the fish. */
-export function field(s, y, z) {
+export function field(s, y, z, eyeCut = true) {
   const F = FEAT;
   const p = [s, y, z];
   const az = Math.abs(z);
@@ -382,7 +389,10 @@ export function field(s, y, z) {
   if (s < 2.4) d = smin(d, sphereDist(pm, [F.nosA[0] + F.nosAn[0] * 0.03, F.nosA[1] + F.nosAn[1] * 0.03, F.nosA[2] + F.nosAn[2] * 0.03], 0.1), 0.06);
 
   // --- subtractions
-  if (s < 6.5) for (const e of F.eyes) d = smax(d, -sphereDist(p, e.cut, F.rho), 0.07);
+  if (eyeCut && s < 6.5) for (const e of F.eyes) {
+    d = smax(d, -sphereDist(p, e.cut, F.rho), 0.07);
+    d = smax(d, -sphereDist(p, e.cut2, F.rho2), 0.07);
+  }
   if (s < 4.6 && y < 3.0) {
     d = smax(d, -capsuleChainDist(p, L ? F.crease : F.creaseR), 0.04);
     d = smax(d, -capsuleChainDist(p, L ? F.gU : F.gUR), 0.06);
@@ -420,7 +430,9 @@ export function project(p0) {
   const L = Math.hypot(dir[0], dir[1], dir[2]);
   if (L < 1e-6) return p0.slice();
   dir = [dir[0] / L, dir[1] / L, dir[2] / L];
-  const at = (t) => field(o[0] + dir[0] * t, o[1] + dir[1] * t, o[2] + dir[2] * t);
+  // march on the surface without the corneal windows: section rays graze the steep posterodorsal wall of
+  // the eye socket and would alternate between skin and socket (a saw-tooth rim)
+  const at = (t) => field(o[0] + dir[0] * t, o[1] + dir[1] * t, o[2] + dir[2] * t, false);
   let t0 = Math.max(0.02, L - 1.2);
   while (t0 > 0.02 && at(t0) > 0) t0 = Math.max(0.02, t0 - 0.5);
   const step = 0.035;
@@ -438,7 +450,24 @@ export function project(p0) {
     if (at(m) > 0) hi = m; else lo = m;
   }
   const t = 0.5 * (lo + hi);
-  return [o[0] + dir[0] * t, o[1] + dir[1] * t, o[2] + dir[2] * t];
+  return sinkEyeWindow([o[0] + dir[0] * t, o[1] + dir[1] * t, o[2] + dir[2] * t]);
+}
+
+/** Points of the eye mound inside the corneal window slide along −axis onto the window sphere (socket). */
+function sinkEyeWindow(p) {
+  if (p[0] > 6.5) return p;
+  const e = FEAT.eyes[p[2] >= 0 ? 0 : 1];
+  const side = (ax) => (p[2] >= 0 ? ax : [ax[0], ax[1], -ax[2]]);
+  p = sinkInto(p, e.cut, FEAT.rho, side(EYE.axis));
+  return sinkInto(p, e.cut2, FEAT.rho2, side(EYE_DORSAL_AXIS));
+}
+function sinkInto(p, c, rho, a) {
+  const q = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+  const qq = q[0] * q[0] + q[1] * q[1] + q[2] * q[2], rr = rho * rho;
+  if (qq >= rr) return p;
+  const qa = q[0] * a[0] + q[1] * a[1] + q[2] * a[2];
+  const t = qa + Math.sqrt(qa * qa - qq + rr);
+  return [p[0] - a[0] * t, p[1] - a[1] * t, p[2] - a[2] * t];
 }
 
 /** Distance through the base volume from p along dir (mm). */

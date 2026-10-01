@@ -1,5 +1,5 @@
 // Species identity and viewer metadata for the adult エドハゼ build.
-import { SL, TL } from './anatomy.mjs';
+import { SL, TL, section } from './anatomy.mjs';
 
 export const SPECIES = {
   key: 'edohaze',
@@ -10,7 +10,8 @@ export const SPECIES = {
   scientific: 'Gymnogobius macrognathos (Bleeker, 1860)',
   commonName: 'エドハゼ, adult',
   pelvicBaseS: 11.6,
-  tailContact: [SL + 6.4, 0.75, 0],
+  // lower caudal lobe margin at rest: 1.92 mm below the caudal-base centre (principal-ray bases ±1.3 mm)
+  tailContact: [SL + 6.4, section(SL - 0.1).yc - 1.92, 0],
   pigmentPNG: true,
   animations: 'Idle (loop, breathing), Swim (loop, 9 Hz burst tail beat), Yawn (one-shot)',
   viewer: {
@@ -24,6 +25,8 @@ export const SPECIES = {
     ],
     totalLengthM: TL / 1000,
     presetScale: TL / 50.0, // camera presets were authored for the 50 mm マハゼ
+    // edge-on fins: hyaline lines in the dorsal photos, not bright white strips
+    finGrazeMin: 0.3,
     // soft floor shadow along the spine (bone, s mm)
     shadowChain: [['J_head', 2.5], ['J_head', 7.2], ['J_root', 12.0], ['J_sp1', 15.5], ['J_sp3', 22.5], ['J_sp5', 29.8], ['J_sp7', 36.4], ['J_caudal2', SL + 4.4]],
     // dark shadow core: vertebral column (y = yc + 0.06 t) and the viscera block
@@ -39,6 +42,8 @@ export const SPECIES = {
   shaderAnatomy: {
     headWin: [7.7, 10.4],
     gillWin: [6.3, 7.6, 9.3, 10.2],
+    // yellow-green / blue-green iridescent patch on the gill cover (004, 044, 058; spec colour notes)
+    opercTint: [0.42, 0.86, 0.78, 0.85],
     haemal: [24.8, 26.6],
     // cavity centre 0.62·b below the section centre so the peritoneal shell stays under the column
     abdomen: [17.9, 0.62, 6.9, 1.15],

@@ -57,6 +57,7 @@ uniform sampler2D uData;       // r: ray density, g: melanin, b: iridophores, a:
 uniform sampler2D uNormalMap;
 uniform int uPass;
 uniform float uFinDensity;
+uniform float uFinGrazeMin;   // lower bound of |cos| for the slab path length (edge-on brightness)
 uniform float uCausticAmt;
 uniform int uDebug;
 varying vec3 vWorldPos;
@@ -79,7 +80,7 @@ void main() {
   vec3 N = normalize(T * nm.x + B * nm.y + Ng * nm.z);
   vec3 V = normalize(cameraPosition - vWorldPos);
   vec3 L = normalize(uLightDir);
-  float muV = max(abs(dot(Ng, V)), 0.1);
+  float muV = max(abs(dot(Ng, V)), uFinGrazeMin);
   float cosL = dot(Ng, L);
   float muL = max(abs(cosL), 0.1);
 
