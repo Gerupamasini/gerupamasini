@@ -620,7 +620,7 @@ export class App {
       if (this.tmp.z > 1 || Math.abs(this.tmp.x) > 1.05 || Math.abs(this.tmp.y) > 1.05) continue;
       out.push({
         id: ind.id, x: ((this.tmp.x + 1) / 2) * w, y: ((1 - this.tmp.y) / 2) * h - 8,
-        text: `${ind.species.names.ja} ${d.toFixed(1)}m L${ind.lod}${ind.sex === 'm' ? '♂' : '♀'}`,
+        text: `${ind.species.names.ja} ${d.toFixed(1)}m L${ind.lod}${ind.sex === 'm' ? '♂' : '♀'}${d < 6 ? ' ' + (c.driverOf(ind.id)?.debugLabel?.() ?? '') : ''}`,
         kind: ind.species.taxon.group,
       });
       if (out.length >= 80) break;

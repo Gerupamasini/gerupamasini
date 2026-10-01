@@ -63,6 +63,7 @@ export class CreatureSystem {
   private readonly ray = new Ray();
   private readonly sphere = new Sphere();
   private readonly tmpIntent = { id: 0 };
+  private nowMs = 0;
   /** when set, hero-tier models get the volumetric materials (observation lock) */
   heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
 
@@ -82,6 +83,7 @@ export class CreatureSystem {
     this.floor = {
       heightAt: (x, z) => terrain.heightAt(x, z),
       waterAt: (x, z) => habitat.waterAt(x, z),
+      sampleAt: (x, z) => habitat.sample(x, z, this.nowMs),
     };
   }
 
@@ -117,6 +119,7 @@ export class CreatureSystem {
 
   update(f: CreatureFrame): void {
     this.frameIndex++;
+    this.nowMs = f.gameMs;
     const env: SpawnEnv = { tod: f.tod, season: f.season, tidePhase: f.tidePhase, mapId: this.mapId, gameMs: f.gameMs, day: Math.floor(f.gameMs / 86400000) };
     // spawning (1 Hz)
     this.spawnAcc += f.dt;
@@ -187,7 +190,8 @@ export class CreatureSystem {
       const locked = e.ind.id === f.lockedId;
       const tier = this.tierFor(e.ind.species, dist, lod1Rank, locked);
       if (tier === 'lod1') lod1Rank++;
-      e.ind.lod = locked ? 0 : tier === 'lod1' ? 1 : tier === null ? 3 : 2;
+      const near = tier === 'placeholder' && dist <= (DRIVERS[e.ind.species.model.driver ?? '']?.nearDistance ?? -1);
+      e.ind.lod = locked ? 0 : tier === 'lod1' || near ? 1 : tier === null ? 3 : 2;
       if (tier === null) { if (e.view) this.dropView(e); continue; }
       if (e.view?.tier === tier || e.pendingTier === tier) continue;
       void this.setTier(e, tier);

@@ -168,6 +168,39 @@ try {
     await waitFrames(page, 6);
     await page.screenshot({ path: path.join(outDir, '13-continue.png') });
   } else errors.push('no goby spawned near the player');
+  // ユビナガホンヤドカリ: close-up, observation, capture and the home tank
+  await noon();
+  const crab = await page.evaluate(() => {
+    const a = window.__higata;
+    const p = a.player.position;
+    let c = a.creatures.individuals.filter((i) => i.species.id === 'pagurus_minutus').sort((x, y) => x.pos.distanceTo(p) - y.pos.distanceTo(p))[0];
+    if (!c) { a.teleport('pool'); a.forceSpawn(); c = a.creatures.individuals.filter((i) => i.species.id === 'pagurus_minutus')[0]; }
+    if (!c) return null;
+    const dist = 0.7, px = c.pos.x + dist, pz = c.pos.z;
+    a.player.setPose(px, pz, Math.atan2(-(c.pos.x - px), -(c.pos.z - pz)));
+    a.player.pitch = -Math.atan2(1.5, dist);
+    return { id: c.id, len: c.length_mm };
+  });
+  console.log('nearest hermit crab', JSON.stringify(crab));
+  if (crab) {
+    await waitFrames(page, 10);
+    await page.screenshot({ path: path.join(outDir, '17-hermit-near.png') });
+    await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, crab.id);
+    await waitFrames(page, 30);
+    await page.screenshot({ path: path.join(outDir, '18-hermit-observe.png') });
+    await page.evaluate((id) => { const a = window.__higata; a.exitObserve(); a.startCapture(a.creatures.get(id)); }, crab.id);
+    await waitFrames(page, 4);
+    await page.evaluate(() => { const a = window.__higata; const st = a.capture.state.value; a.capture.state.value = { ...st, cursor: (st.bandStart + st.bandEnd) / 2 }; a.capture.attempt(); });
+    await waitFrames(page, 14);
+    const got = await page.evaluate(() => window.__higata.encyclopedia.caseItems.value.some((r) => r.speciesId === 'pagurus_minutus'));
+    if (got) {
+      await page.evaluate(() => { const a = window.__higata; a.enterHome(); a.setHomePanel('tank'); const rec = a.encyclopedia.caseItems.value.find((r) => r.speciesId === 'pagurus_minutus'); return a.tankPut(rec); });
+      await waitFrames(page, 40);
+      await page.screenshot({ path: path.join(outDir, '19-hermit-tank.png') });
+      await page.evaluate(() => window.__higata.enterField());
+      await page.waitForFunction(() => window.__higata && window.__higata.mode === 'field', null, { timeout: 120000 });
+    } else console.log('hermit crab capture failed (random), tank step skipped');
+  } else console.log('no hermit crab nearby');
   // runnel at mid tide, then debug mode at low tide with markers (daylight)
   await noon();
   await page.evaluate(() => { const a = window.__higata; a.toggleDebug(); a.setTideOverride(0.15); a.teleport('runnel'); a.player.pitch = -0.12; });

@@ -48,6 +48,8 @@ export interface Driver {
   anchor(): Vector3;
   /** mouth / gill opening for hero interior materials (species that have them) */
   readonly openings?: { mouth: number; gill: number };
+  /** short state text appended to the debug marker (species with an internal behaviour model) */
+  debugLabel?(): string;
   dispose(): void;
 }
 
