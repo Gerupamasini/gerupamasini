@@ -1,0 +1,1115 @@
+{
+ "chunk": "c07",
+ "method": "colorsample.py median sRGB/Lab; 座標は元画像px、領域は目視で選択",
+ "photos": {
+  "p062": {
+   "species_catalog": "yamame(catalog 0.75)",
+   "white_balance_cast": "やや黄緑〜暖色。網の茶色反射で全体が暖かい。",
+   "exposure": "適正、頭部上と鰓蓋に軽い鏡面反射",
+   "reliability": "med",
+   "samples": [
+    {
+     "region": "dorsal_back",
+     "box": [
+      560,
+      305,
+      600,
+      325
+     ],
+     "median_sRGB": [
+      96,
+      95,
+      68
+     ],
+     "Lab": [
+      39.7,
+      -4.5,
+      15.6
+     ],
+     "comment": "背側、鱗肌理あり。暗オリーブ"
+    },
+    {
+     "region": "flank_ground",
+     "box": [
+      480,
+      385,
+      505,
+      400
+     ],
+     "median_sRGB": [
+      163,
+      154,
+      135
+     ],
+     "Lab": [
+      63.9,
+      0.0,
+      11.2
+     ],
+     "comment": "パーマーク間の地色。灰黄褐"
+    },
+    {
+     "region": "parr_mark_core",
+     "box": [
+      535,
+      400,
+      555,
+      430
+     ],
+     "median_sRGB": [
+      141,
+      150,
+      149
+     ],
+     "Lab": [
+      61.3,
+      -3.4,
+      -0.6
+     ],
+     "comment": "パーマーク中心。青灰緑で地色とのΔLは小さい(低コントラスト)"
+    },
+    {
+     "region": "lateral_band",
+     "box": [
+      420,
+      412,
+      445,
+      425
+     ],
+     "median_sRGB": [
+      167,
+      145,
+      136
+     ],
+     "Lab": [
+      61.9,
+      6.7,
+      7.8
+     ],
+     "comment": "体側の淡い桃色帯。彩度は低い"
+    },
+    {
+     "region": "belly",
+     "box": [
+      460,
+      575,
+      520,
+      595
+     ],
+     "median_sRGB": [
+      190,
+      189,
+      182
+     ],
+     "Lab": [
+      76.5,
+      -0.9,
+      3.7
+     ],
+     "comment": "腹側。ほぼ無彩の淡灰白"
+    },
+    {
+     "region": "head_dorsal",
+     "box": [
+      900,
+      500,
+      950,
+      525
+     ],
+     "median_sRGB": [
+      164,
+      146,
+      118
+     ],
+     "Lab": [
+      61.4,
+      2.2,
+      17.3
+     ],
+     "comment": "頭頂部、オリーブ褐"
+    },
+    {
+     "region": "opercle",
+     "box": [
+      780,
+      540,
+      830,
+      580
+     ],
+     "median_sRGB": [
+      167,
+      163,
+      157
+     ],
+     "Lab": [
+      67.2,
+      0.3,
+      3.6
+     ],
+     "comment": "鰓蓋。鏡面反射が入り青灰白、参考値"
+    },
+    {
+     "region": "pectoral_membrane",
+     "box": [
+      600,
+      600,
+      640,
+      640
+     ],
+     "median_sRGB": [
+      134,
+      104,
+      50
+     ],
+     "Lab": [
+      45.9,
+      5.5,
+      34.4
+     ],
+     "comment": "胸鰭、黄橙。網反射の影響も"
+    },
+    {
+     "region": "pelvic",
+     "box": [
+      310,
+      555,
+      350,
+      580
+     ],
+     "median_sRGB": [
+      137,
+      119,
+      91
+     ],
+     "Lab": [
+      51.0,
+      2.5,
+      18.0
+     ],
+     "comment": "腹鰭、半透明で下の網の色を拾う。参考値"
+    }
+   ],
+   "relative": {
+    "dorsal_to_flank_L_ratio": 0.62,
+    "ventral_to_flank_L_ratio": 1.2,
+    "parr_mark_contrast": {
+     "dL": -2.6,
+     "da": -3.4,
+     "db": -11.8
+    }
+   }
+  },
+  "p063": {
+   "species_catalog": "yamame(catalog 0.65)",
+   "white_balance_cast": "黄緑〜オリーブ寄り、桃赤が強く出る(屋外直射)",
+   "exposure": "直射で明暗差大。背は暗め",
+   "reliability": "med",
+   "samples": [
+    {
+     "region": "dorsal_back",
+     "box": [
+      340,
+      425,
+      380,
+      440
+     ],
+     "median_sRGB": [
+      140,
+      125,
+      112
+     ],
+     "Lab": [
+      53.4,
+      3.7,
+      9.3
+     ],
+     "comment": "背側。暗褐オリーブ"
+    },
+    {
+     "region": "flank_ground",
+     "box": [
+      380,
+      560,
+      420,
+      580
+     ],
+     "median_sRGB": [
+      188,
+      163,
+      125
+     ],
+     "Lab": [
+      68.3,
+      3.5,
+      23.1
+     ],
+     "comment": "体側地色。黄褐オリーブ"
+    },
+    {
+     "region": "lateral_band_pink",
+     "box": [
+      580,
+      690,
+      610,
+      710
+     ],
+     "median_sRGB": [
+      218,
+      161,
+      126
+     ],
+     "Lab": [
+      70.8,
+      16.8,
+      26.5
+     ],
+     "comment": "体側の桃〜橙の婚姻色様の帯。桃帯の中でも明るい部分"
+    },
+    {
+     "region": "belly",
+     "box": [
+      520,
+      740,
+      560,
+      760
+     ],
+     "median_sRGB": [
+      203,
+      190,
+      157
+     ],
+     "Lab": [
+      77.3,
+      -0.7,
+      18.3
+     ],
+     "comment": "腹。淡クリーム"
+    },
+    {
+     "region": "cheek",
+     "box": [
+      760,
+      880,
+      800,
+      900
+     ],
+     "median_sRGB": [
+      164,
+      136,
+      101
+     ],
+     "Lab": [
+      58.5,
+      5.6,
+      22.8
+     ],
+     "comment": "頬、暗黄褐"
+    },
+    {
+     "region": "opercle_red_patch",
+     "box": [
+      700,
+      820,
+      740,
+      850
+     ],
+     "median_sRGB": [
+      197,
+      122,
+      85
+     ],
+     "Lab": [
+      58.5,
+      25.5,
+      32.4
+     ],
+     "comment": "鰓蓋上の赤橙斑。婚姻色または鰓の透け。彩度高"
+    },
+    {
+     "region": "pectoral_membrane",
+     "box": [
+      600,
+      810,
+      620,
+      840
+     ],
+     "median_sRGB": [
+      94,
+      78,
+      53
+     ],
+     "Lab": [
+      34.2,
+      2.8,
+      17.3
+     ],
+     "comment": "胸鰭付け根側、暗褐。細く面積小さく参考値"
+    },
+    {
+     "region": "pelvic",
+     "box": [
+      330,
+      660,
+      360,
+      680
+     ],
+     "median_sRGB": [
+      73,
+      65,
+      60
+     ],
+     "Lab": [
+      28.2,
+      2.4,
+      4.3
+     ],
+     "comment": "腹鰭、暗灰。下の網の暗色を透過しており参考値"
+    }
+   ],
+   "relative": {
+    "dorsal_to_flank_L_ratio": 0.78,
+    "ventral_to_flank_L_ratio": 1.13
+   }
+  },
+  "p064": {
+   "species_catalog": "yamame(catalog 0.55, juvenile)",
+   "white_balance_cast": "手の肌色反射とオレンジ網で暖色寄り、水濡れで青白い反射",
+   "exposure": "やや露出高。腹と鰭に白飛び近い鏡面",
+   "reliability": "low",
+   "samples": [
+    {
+     "region": "dorsal_back",
+     "box": [
+      450,
+      248,
+      500,
+      258
+     ],
+     "median_sRGB": [
+      126,
+      127,
+      129
+     ],
+     "Lab": [
+      53.2,
+      0.0,
+      -1.2
+     ],
+     "comment": "背縁付近。青灰、反射混入の可能性。参考値"
+    },
+    {
+     "region": "flank_upper",
+     "box": [
+      470,
+      270,
+      520,
+      285
+     ],
+     "median_sRGB": [
+      122,
+      112,
+      97
+     ],
+     "Lab": [
+      47.7,
+      1.2,
+      9.8
+     ],
+     "comment": "体側上部、暗灰褐。背と体側の境界"
+    },
+    {
+     "region": "flank_ground",
+     "box": [
+      600,
+      290,
+      640,
+      300
+     ],
+     "median_sRGB": [
+      150,
+      151,
+      137
+     ],
+     "Lab": [
+      62.0,
+      -3.0,
+      7.3
+     ],
+     "comment": "パーマーク間地色。緑灰"
+    },
+    {
+     "region": "parr_mark_core",
+     "box": [
+      495,
+      290,
+      515,
+      315
+     ],
+     "median_sRGB": [
+      102,
+      91,
+      85
+     ],
+     "Lab": [
+      39.5,
+      3.1,
+      5.0
+     ],
+     "comment": "パーマーク中心、暗灰褐"
+    },
+    {
+     "region": "red_or_orange_spot",
+     "box": [
+      555,
+      280,
+      570,
+      292
+     ],
+     "median_sRGB": [
+      168,
+      112,
+      98
+     ],
+     "Lab": [
+      52.8,
+      20.2,
+      17.0
+     ],
+     "comment": "朱〜桃の点。小面積(15x12)で参考値"
+    },
+    {
+     "region": "belly",
+     "box": [
+      420,
+      380,
+      460,
+      400
+     ],
+     "median_sRGB": [
+      184,
+      179,
+      170
+     ],
+     "Lab": [
+      73.1,
+      0.2,
+      5.2
+     ],
+     "comment": "腹。淡灰白"
+    },
+    {
+     "region": "anal",
+     "box": [
+      615,
+      338,
+      645,
+      350
+     ],
+     "median_sRGB": [
+      166,
+      168,
+      183
+     ],
+     "Lab": [
+      69.2,
+      2.4,
+      -7.9
+     ],
+     "comment": "臀鰭、白青灰で鏡面反射。色味は信頼不可"
+    },
+    {
+     "region": "caudal_fin_base",
+     "box": [
+      640,
+      255,
+      680,
+      270
+     ],
+     "median_sRGB": [
+      118,
+      98,
+      82
+     ],
+     "Lab": [
+      43.0,
+      5.4,
+      12.4
+     ],
+     "comment": "尾柄/尾鰭基部、褐"
+    },
+    {
+     "region": "caudal_fin_margin",
+     "box": [
+      760,
+      240,
+      790,
+      260
+     ],
+     "median_sRGB": [
+      91,
+      61,
+      39
+     ],
+     "Lab": [
+      28.7,
+      10.4,
+      18.8
+     ],
+     "comment": "尾鰭、暗赤褐。橙網の影響あり"
+    }
+   ],
+   "relative": {
+    "dorsal_to_flank_L_ratio": 0.86,
+    "ventral_to_flank_L_ratio": 1.18,
+    "parr_mark_contrast": {
+     "dL": -22.5,
+     "da": 6.1,
+     "db": -2.3
+    }
+   }
+  },
+  "p065": {
+   "species_catalog": "unclear(catalog 0.4)",
+   "white_balance_cast": "暖色(橙の岩の反射)、強い日光",
+   "exposure": "白飛び寄りの背側。クロップされ全体比較不能",
+   "reliability": "low",
+   "samples": [
+    {
+     "region": "flank_upper_pale",
+     "box": [
+      480,
+      100,
+      520,
+      120
+     ],
+     "median_sRGB": [
+      228,
+      195,
+      166
+     ],
+     "Lab": [
+      80.8,
+      7.2,
+      18.9
+     ],
+     "comment": "側線上の淡桃クリーム。強い日光でL高い"
+    },
+    {
+     "region": "flank_ground",
+     "box": [
+      560,
+      160,
+      600,
+      180
+     ],
+     "median_sRGB": [
+      145,
+      128,
+      117
+     ],
+     "Lab": [
+      54.8,
+      4.6,
+      8.3
+     ],
+     "comment": "体側地色、淡い灰褐"
+    },
+    {
+     "region": "parr_mark_core",
+     "box": [
+      580,
+      120,
+      600,
+      140
+     ],
+     "median_sRGB": [
+      56,
+      60,
+      63
+     ],
+     "Lab": [
+      25.0,
+      -1.0,
+      -2.4
+     ],
+     "comment": "暗いパーマーク/黒斑、ほぼ無彩の暗灰青"
+    },
+    {
+     "region": "cheek",
+     "box": [
+      330,
+      270,
+      380,
+      300
+     ],
+     "median_sRGB": [
+      167,
+      147,
+      129
+     ],
+     "Lab": [
+      62.2,
+      4.5,
+      12.3
+     ],
+     "comment": "鰓蓋/頬下部、黄褐"
+    },
+    {
+     "region": "opercle_dark_patch",
+     "box": [
+      270,
+      240,
+      330,
+      260
+     ],
+     "median_sRGB": [
+      98,
+      72,
+      72
+     ],
+     "Lab": [
+      33.5,
+      11.0,
+      4.6
+     ],
+     "comment": "鰓蓋上の暗斑領域。目視で暗赤褐"
+    },
+    {
+     "region": "pectoral_membrane",
+     "box": [
+      440,
+      280,
+      470,
+      300
+     ],
+     "median_sRGB": [
+      188,
+      117,
+      35
+     ],
+     "Lab": [
+      55.6,
+      21.6,
+      53.4
+     ],
+     "comment": "胸鰭、黄橙。彩度は比較的高い"
+    }
+   ],
+   "relative": {
+    "parr_mark_contrast": {
+     "dL": -29.8,
+     "da": -5.6,
+     "db": -10.7
+    }
+   }
+  },
+  "p068": {
+   "species_catalog": "yamame(catalog 0.6, parr)",
+   "white_balance_cast": "暖色、水面反射多",
+   "exposure": "背側の大部分が水膜の鏡面反射で白く、色は無効",
+   "reliability": "low",
+   "samples": [
+    {
+     "region": "upper_flank_reflect",
+     "box": [
+      420,
+      130,
+      450,
+      145
+     ],
+     "median_sRGB": [
+      118,
+      118,
+      112
+     ],
+     "Lab": [
+      49.3,
+      -0.8,
+      2.8
+     ],
+     "comment": "背寄り上部、水膜反射込み。参考値"
+    },
+    {
+     "region": "parr_mark_core",
+     "box": [
+      385,
+      255,
+      420,
+      275
+     ],
+     "median_sRGB": [
+      128,
+      113,
+      102
+     ],
+     "Lab": [
+      48.7,
+      3.9,
+      8.2
+     ],
+     "comment": "パーマーク、暗灰褐。位置は目視推定"
+    },
+    {
+     "region": "lateral_band_orange",
+     "box": [
+      360,
+      300,
+      385,
+      315
+     ],
+     "median_sRGB": [
+      207,
+      154,
+      92
+     ],
+     "Lab": [
+      67.4,
+      12.8,
+      40.0
+     ],
+     "comment": "体側の橙帯。彩度高い(b*40)"
+    },
+    {
+     "region": "pectoral_membrane",
+     "box": [
+      330,
+      395,
+      370,
+      410
+     ],
+     "median_sRGB": [
+      171,
+      144,
+      102
+     ],
+     "Lab": [
+      61.3,
+      4.2,
+      26.1
+     ],
+     "comment": "胸鰭/腹寄り、黄褐。同定は中程度"
+    }
+   ],
+   "relative": {}
+  },
+  "p069": {
+   "species_catalog": "yamame(catalog 0.75, adult)",
+   "white_balance_cast": "黄色がやや強い(網の黄色反射)",
+   "exposure": "適正、上面から",
+   "reliability": "med",
+   "samples": [
+    {
+     "region": "flank_upper",
+     "box": [
+      300,
+      290,
+      330,
+      310
+     ],
+     "median_sRGB": [
+      206,
+      178,
+      138
+     ],
+     "Lab": [
+      74.0,
+      4.1,
+      24.1
+     ],
+     "comment": "体側上部、黄褐クリーム"
+    },
+    {
+     "region": "flank_ground",
+     "box": [
+      290,
+      330,
+      315,
+      350
+     ],
+     "median_sRGB": [
+      177,
+      158,
+      126
+     ],
+     "Lab": [
+      66.0,
+      2.0,
+      19.3
+     ],
+     "comment": "地色、淡黄褐"
+    },
+    {
+     "region": "parr_mark_core",
+     "box": [
+      318,
+      378,
+      338,
+      390
+     ],
+     "median_sRGB": [
+      127,
+      124,
+      122
+     ],
+     "Lab": [
+      52.2,
+      0.7,
+      1.5
+     ],
+     "comment": "楕円パーマーク、灰色味。面積小さい"
+    },
+    {
+     "region": "belly",
+     "box": [
+      330,
+      470,
+      350,
+      500
+     ],
+     "median_sRGB": [
+      175,
+      161,
+      133
+     ],
+     "Lab": [
+      66.7,
+      0.5,
+      16.5
+     ],
+     "comment": "腹寄り、淡黄灰"
+    },
+    {
+     "region": "cheek",
+     "box": [
+      360,
+      560,
+      400,
+      590
+     ],
+     "median_sRGB": [
+      179,
+      166,
+      139
+     ],
+     "Lab": [
+      68.5,
+      0.3,
+      15.7
+     ],
+     "comment": "頬、淡黄灰"
+    },
+    {
+     "region": "pectoral_membrane",
+     "box": [
+      310,
+      500,
+      330,
+      540
+     ],
+     "median_sRGB": [
+      199,
+      182,
+      148
+     ],
+     "Lab": [
+      74.7,
+      0.7,
+      19.5
+     ],
+     "comment": "胸鰭、淡黄。面積小"
+    },
+    {
+     "region": "pelvic",
+     "box": [
+      150,
+      210,
+      170,
+      250
+     ],
+     "median_sRGB": [
+      198,
+      170,
+      123
+     ],
+     "Lab": [
+      71.0,
+      3.5,
+      28.0
+     ],
+     "comment": "腹鰭、淡黄白〜橙。網色の影響あり"
+    },
+    {
+     "region": "caudal_fin_base",
+     "box": [
+      40,
+      60,
+      80,
+      90
+     ],
+     "median_sRGB": [
+      176,
+      110,
+      63
+     ],
+     "Lab": [
+      52.7,
+      21.7,
+      36.7
+     ],
+     "comment": "尾鰭、橙褐。網/背景反射の影響を含む"
+    }
+   ],
+   "relative": {
+    "ventral_to_flank_L_ratio": 1.01,
+    "parr_mark_contrast": {
+     "dL": -13.8,
+     "da": -1.3,
+     "db": -17.8
+    }
+   }
+  },
+  "p070": {
+   "species_catalog": "amago_or_hybrid_suspect(catalog 0.5)",
+   "white_balance_cast": "青緑寄り(水中反射、冷色)",
+   "exposure": "水面反射が強く体側の大半が白青",
+   "reliability": "low",
+   "samples": [
+    {
+     "region": "head_dorsal",
+     "box": [
+      130,
+      100,
+      150,
+      115
+     ],
+     "median_sRGB": [
+      150,
+      148,
+      124
+     ],
+     "Lab": [
+      60.9,
+      -3.6,
+      13.2
+     ],
+     "comment": "頭頂部、灰オリーブ"
+    },
+    {
+     "region": "flank_upper",
+     "box": [
+      540,
+      245,
+      570,
+      260
+     ],
+     "median_sRGB": [
+      152,
+      151,
+      135
+     ],
+     "Lab": [
+      62.1,
+      -2.7,
+      8.5
+     ],
+     "comment": "体側上部、帯付近"
+    },
+    {
+     "region": "flank_ground",
+     "box": [
+      330,
+      270,
+      350,
+      285
+     ],
+     "median_sRGB": [
+      136,
+      133,
+      118
+     ],
+     "Lab": [
+      55.4,
+      -1.6,
+      8.5
+     ],
+     "comment": "地色、灰褐。水膜反射込み"
+    },
+    {
+     "region": "belly",
+     "box": [
+      400,
+      300,
+      440,
+      320
+     ],
+     "median_sRGB": [
+      167,
+      174,
+      170
+     ],
+     "Lab": [
+      70.4,
+      -3.2,
+      1.2
+     ],
+     "comment": "腹側、灰白(反射)"
+    },
+    {
+     "region": "pectoral_membrane",
+     "box": [
+      280,
+      290,
+      300,
+      310
+     ],
+     "median_sRGB": [
+      214,
+      167,
+      86
+     ],
+     "Lab": [
+      71.3,
+      8.3,
+      47.8
+     ],
+     "comment": "胸鰭、橙〜黄。彩度高く信頼性は比較的よい"
+    },
+    {
+     "region": "caudal_fin_base",
+     "box": [
+      880,
+      640,
+      920,
+      700
+     ],
+     "median_sRGB": [
+      76,
+      66,
+      66
+     ],
+     "Lab": [
+      29.0,
+      4.3,
+      1.6
+     ],
+     "comment": "尾鰭基部、暗灰褐。赤い縁は未サンプル"
+    }
+   ],
+   "relative": {
+    "ventral_to_flank_L_ratio": 1.27
+   }
+  }
+ },
+ "summary": {
+  "trend": [
+   "背:L約40-55・a*≈0・b*約9-16(暗オリーブ〜灰褐)、体側地色:L約55-68・b*約8-23、腹:L約66-77・a*≈0・b*約4-18(無彩〜淡黄)。背:体側:腹のL比はおよそ0.6-0.8:1:1.1-1.2",
+   "パーマークは青灰〜暗灰褐で地色とのΔLは-2(p062 低コントラスト)〜-25、a*,b*は低彩度(ほぼ無彩〜やや黄)。桃/橙帯は個体差大でp063,p068で彩度高(a*12-17,b*26-40)、p062は淡い",
+   "鰭は胸鰭・腹鰭が黄〜橙(b*18-35、a*5-20)だが網や岩の反射を拾いやすく、臀鰭・腹鰭は半透明で背景色に左右される。個体差と撮影差が分離できない"
+  ],
+  "problems": [
+   "ほぼ全写真で水膜/網/手の反射と暖色/黄緑かぶり。絶対色は信頼度低",
+   "p064,p065,p068,p070は信頼度low、p070は青白反射が強く体色サンプルが少ない",
+   "領域座標は目視で選んだため、一部は部位同定が中程度。鰭は半透明で背景混入"
+  ]
+ }
+}

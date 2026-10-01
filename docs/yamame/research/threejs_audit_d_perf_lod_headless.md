@@ -20,7 +20,7 @@
 |---|---|---|---|
 | 1 | **主役（近景）の LOD は `THREE.LOD` に「同一 `Skeleton`・同一 `bindMatrix` を共有する `SkinnedMesh` を、頂点数違いのジオメトリで並べる」**。最遠だけ非スキンの `Mesh`（焼き込みポーズ）にする | スケルトンは見えているレベルの分しか `update()` されず、共有なら 1 回／フレーム。共有スケルトンで曲げた 2352 三角形と 208 三角形のシルエットは 1 px 以内で一致 [H] | §2.2 |
 | 2 | **`hysteresis` は 0.1〜0.2 を level ≥ 1 に付ける**（level 0 の値は無視される） | 「粗い側へは距離 D で切替、細かい側へ戻るのは D×(1−h) 未満」。[H] で 20 / 18 を確認 | §2.1 |
-| 3 | **初回切替のヒッチ対策は「実キャンバスへ全レベル可視で 1 回描画」**（`autoUpdate=false` にして全 `visible=true`、描画後に戻す）。`renderer.compile()` だけでは初回描画の遅れが消えず、レンダーターゲットへのウォームアップは別プログラムを作るだけで無効 | 初回切替フレーム: 何もしない 85〜151 ms、`compile()` 後 72〜102 ms、実キャンバスへ全レベル描画後 4〜14 ms（定常 2〜9 ms）[H] | §2.2, §3-8 |
+| 3 | **初回切替のヒッチ対策は「実キャンバスへ全レベル可視で 1 回描画」**（`autoUpdate=false` にして全 `visible=true`、描画後に戻す）。`renderer.compile()` だけでは初回描画の遅れが消えず、レンダーターゲットへのウォームアップは別プログラムを作るだけで無効 | 初回切替フレーム: 何もしない 85〜157 ms、`compile()` 後 72〜102 ms、実キャンバスへ全レベル描画後 2〜14 ms（定常 2〜9 ms）[H] | §2.2, §3-8 |
 | 4 | **群れ（数百〜数千）は `THREE.LOD` を個体ごとに使わず**、距離バケット（tier）ごとに `InstancedMesh` を持ち毎フレーム行列を詰め直す（`mesh.count` を縮める）か、`BatchedMesh.setGeometryIdAt` で個体ごとにジオメトリを切り替える。ただし **BatchedMesh はスキニングもモーフも不可**、InstancedMesh はスキニング不可（モーフは `morphTexture` のみ）。**どちらも個体単位の LOD／カリングは自前** | `BatchedMesh.js` に skin／morph の文字列が 0 件、`WebGLPrograms.js:330` で skinning は `object.isSkinnedMesh` のみ [S]。InstancedMesh は 80,000 三角形全部を描く（視錐台外の個体も）[H] | §2.3 |
 | 5 | **`SkinnedMesh`／`InstancedMesh` の `boundingSphere` は初回 1 回しか計算されない**。個体が動く系では **保守的な球を手動で 1 度だけ設定**し、毎フレームの `computeBoundingSphere()` は使わない（1.8k 頂点で 1.2 ms、51k 頂点で 22 ms）。動かさないなら `frustumCulled=false` も可 | root ボーンを 20 動かすと、視野内の体が丸ごと消えた [H] | §2.4 |
 | 6 | **後処理は「必要最小限」**: 既定は `outputBufferType: HalfFloatType` + `renderer.setEffects([...])`（MSAA を保ったまま HDR→トーンマップが最後）か、`EffectComposer` に **`samples: 4` 付き** HalfFloat RT を渡して `RenderPass → UnrealBloomPass(弱) → OutputPass`。**GTAO／SSAO／SAO／SSR／Bokeh／Outline はそれぞれシーン全体を 1〜2 回描き直す**（GTAO 1 つで draw call 15→30、影マップも再描画）ので、入れるなら 1 つずつ測る | EffectComposer 既定 RT は MSAA 無し。GTAO+Bloom+Bokeh で renderer.render が 22 回、影マップ 3 回、skeleton.update 5 回 [H] | §2.6 |
@@ -163,7 +163,7 @@ function measure(fn) {
 | 見た目の一致 | 共有スケルトンで 11 関節を曲げ、2352 三角形（L0）と 208 三角形（L1）を別々に描画: 画素数 1345／1324、外接矩形は x1 のみ 1 px 差 | `x7_misc.html`（`sharedSkeletonLod`） | H |
 | 骨の更新自体は止まらない | 骨は `Object3D` なので、メッシュが `visible=false` でも `updateMatrixWorld` は子を辿る（`visible` を見ない）。mixer を止めない限り骨の計算は続く | `Object3D.js:1176-1214` | S |
 | プログラムが別になる | `skinning: object.isSkinnedMesh === true`、`toneMapping`・`outputColorSpace`（RT かどうか）もキーに入る → 非スキンの遠景、RT でのウォームアップは**別プログラム** | `WebGLPrograms.js:177-183`, `213`, `330`, `436-445`, `490` | S |
-| 切替ヒッチ（SwiftShader） | 非スキン・別マテリアルの遠レベルへの初回切替: プログラム数 +1、初回描画 85〜151 ms（定常 2〜9 ms）。`renderer.compile()` はプログラム登録を前倒しするが（切替時の増分が 0）初回描画は 72〜102 ms のまま。**実キャンバスへの全レベル可視描画**で 4〜14 ms。RT へのウォームアップはプログラム数が切替時にさらに +1 | `x1_lod.html`（`lodSkin_C_*`） | H |
+| 切替ヒッチ（SwiftShader） | 非スキン・別マテリアルの遠レベルへの初回切替: プログラム数 +1、初回描画 85〜157 ms（定常 2〜9 ms）。`renderer.compile()` はプログラム登録を前倒しするが（切替時の増分が 0）初回描画は 72〜102 ms のまま。**実キャンバスへの全レベル可視描画**で 2〜14 ms。RT へのウォームアップ（16×16 の RT に全レベル描画）は、ウォームアップ中にプログラムが +2 増えるのに、切替時にさらに +1 増え、初回描画は 110〜123 ms のまま | `x1_lod.html`（`lodSkin_C_*`、4 種を 3 回ずつ実行） | H |
 | `compile()` の走査 | `scene.traverse`（不可視も含む）で全メッシュのマテリアルを準備。ライトは `traverseVisible`。`compileAsync` は `KHR_parallel_shader_compile` が無いと 10 ms 待ちに退化 | `WebGLRenderer.js:1396-1499`, `1515-1569` | S |
 
 ### 2.3 `InstancedMesh`／`BatchedMesh` の対応範囲
@@ -216,17 +216,17 @@ function measure(fn) {
 | (B) 内蔵 `outputBufferType` ＋ `setEffects` | コンストラクタに `outputBufferType: HalfFloatType`（または Float）→ シーンを（`antialias` なら 4x MSAA の）HDR RT に描き、トーンマップ＋色空間変換を**最後に**全画面 1 draw で行う。`setEffects([...])` は同じ `Pass` インターフェイス（`render(renderer, writeBuffer, readBuffer, deltaTime)`）の物を受け、`OutputPass` は不要（入れると警告）。`toneMapping===NoToneMapping` かつ効果無しのときは内蔵 RT を使わない。MSAA はシーン RT のみ（効果は単一サンプルのピンポン RT） | `WebGLRenderer.js:84`, `114`, `565-569`, `747-773`, `1659`, `1745`; `WebGLOutput.js:31-43`, `138-160`, `162-198`, `206-261` |
 | 実測 [H] | (B) で `UnrealBloomPass`／`GTAOPass`／`BokehPass` が動作（GL エラー無し、画像も正常）。GTAO+Bloom+Bokeh の ms は (A) の約 0.7〜0.8 倍（ノイズ大）。(B) でも G-buffer 系パスは入れ子で `renderer.render(scene…)` を呼ぶ（`_isCompositing` 中は内蔵 RT を使わない: `WebGLOutput.js:165`） | `x3_post.html?mode=effects` |
 
-**各パスの追加コスト**（SwiftShader、640×360、8 メッシュ＋スキン 1。B＝Render+Output を 1 とした相対値、2 回の実行の範囲）:
+**各パスの追加コスト**（SwiftShader、640×360、8 メッシュ＋スキン 1。B＝Render+Output を 1 とした相対値、3 回の実行の範囲）:
 
 | 構成 | `renderer.render` 回数 | 影マップ描画 | `skeleton.update` | 相対時間 | 備考 |
 |---|---|---|---|---|---|
-| A: 素の `render()` | 1 | 1 | 1 | 0.7〜0.95 | |
+| A: 素の `render()` | 1 | 1 | 1 | 0.7〜0.96 | |
 | B: Render＋Output | 2 | 1 | 2 | 1.0 | 全画面 1 draw が増えるだけで `frame` が +1 → スケルトンが 2 回更新される |
 | C: ＋Bloom | 15 | 1 | 2 | 1.3〜1.5 | 全画面 13 draw（5 mip の H/V ブラー＋合成）。シーン再描画なし |
-| D: ＋GTAO | 7 | **2** | 3 | 2.8〜3.1 | G-buffer 用に全シーンを `MeshNormalMaterial` で再描画（15 calls／20,034 三角形） |
+| D: ＋GTAO | 7 | **2** | 3 | 2.5〜3.1 | G-buffer 用に全シーンを `MeshNormalMaterial` で再描画（15 calls／20,034 三角形） |
 | E: ＋Bokeh | 4 | **2** | 3 | 1.5〜2.1 | 深度用に全シーンを `MeshDepthMaterial`（RGBA パック）で再描画 |
-| F: GTAO＋Bloom＋Bokeh | 22 | **3** | 5 | 3.9〜4.1 | calls 合計 64 |
-| G: F ＋ 影を 1 回に | 22 | **1** | 3 | 3.5〜3.9 | 再描画パスは 8 calls／10,018 三角形（影の draw が消える） |
+| F: GTAO＋Bloom＋Bokeh | 22 | **3** | 5 | 3.8〜4.1 | calls 合計 64 |
+| G: F ＋ 影を 1 回に | 22 | **1** | 3 | 3.5〜4.0 | 再描画パスは 8 calls／10,018 三角形（影の draw が消える）。SwiftShader では影 2 回分の差が時間のノイズに埋もれる（CPU ラスタは影の深度描画が軽い） |
 
 - GTAO: `GTAOPass.js:161`（`MeshNormalMaterial`）、`317-322`（HalfFloat の法線 RT＋`DepthTexture`）、`502-506`（G-buffer 描画）、`621-649`（`scene.overrideMaterial` に差し替えて `renderer.render(scene, camera)`）、`651-665`（隠すのは `Points`／`Line` だけ）。コンストラクタ `GTAOPass(scene, camera, width, height, parameters, aoParameters, pdParameters)`（`:56`）。
 - Bokeh: `BokehPass.js:63-75`（深度 RT は HalfFloat・Nearest）、`139-150`（`overrideMaterial=MeshDepthMaterial(RGBADepthPacking)` で再描画）。
@@ -305,16 +305,16 @@ function measure(fn) {
 3. **`skeleton.update()` は `render()` が増えるほど 1 フレーム内で増える**（素: 1、Render+Output: 2、GTAO: 3、GTAO+Bloom+Bokeh: 5）。骨 24×数百匹だと無視できないはず（[R]、未計測）。LOD で見えないレベルは更新されない（§2.2）が、複数 `render()` の影響は LOD では減らない。[H]
 4. **G-buffer／深度パスにも `onBeforeRender` を持つ水面が入る**（`WebGLRenderer.js:2158`）。Reflector を含むシーンの GTAO で入れ子描画が 2 回（メイン＋G-buffer）。G-buffer 側は**水面を別レイヤーにして、AO 用の別カメラ（`layers=0` のみ、メインカメラの位置・向き・投影を毎フレーム複製）**を渡すと 1 回になる（`renderer.render` 9→8、入れ子 2→1）。また**半透明（鰭・粒子）は render list の分類は元マテリアルのまま、描画は不透明の override になる**ので G-buffer に実体として書かれる [S]。`Points`／`Line` だけは自動で隠れる（`GTAOPass.js:651-665`）。[H][S]
 5. **EffectComposer の既定 RT には MSAA が無い**（`EffectComposer.js:69`）。`new WebGLRenderer({antialias:true})` は composer 経由の描画に効かない。`samples:4` の RT を渡すか、内蔵経路 (B) を使う。[S][H]
-6. **`InstancedMesh`／`BatchedMesh`／`SkinnedMesh` の `boundingSphere` は最初に使われた時の 1 回だけ**（個体を動かすと誤カリング、実測 calls=0）。`SkinnedMesh.computeBoundingSphere()` はフレームごとに呼べる重さではない（51k 頂点で 22 ms）。手動の保守的な球を 1 度設定する。InstancedMesh は**個体単位のカリングが無い**ので、視野外の個体も全部描く（80,000 三角形のまま）。[H]
+6. **`InstancedMesh`／`BatchedMesh`／`SkinnedMesh` の `boundingSphere` は最初に使われた時の 1 回だけ**（個体を動かすと誤カリング。Instanced と Skinned は実測 calls=0、BatchedMesh は同じ `Frustum.intersectsObject` の仕組みで [S]・未実測）。`SkinnedMesh.computeBoundingSphere()` はフレームごとに呼べる重さではない（51k 頂点で 22 ms）。手動の保守的な球を 1 度設定する。InstancedMesh は**個体単位のカリングが無い**ので、視野外の個体も全部描く（80,000 三角形のまま）。[H]
 7. **`LOD` の状態は `.visible` に載っている**。(a) 最初の `update()` までは全レベルが可視、(b) **別カメラの `render()`（鏡面・Reflector・Water・composer の別カメラ）が走ると、そのカメラの選択で `.visible` と `getCurrentLevel()` が上書きされる**（実測: 主カメラは L0 で描画 = 画素は赤、フレーム後の `getCurrentLevel()`=1・旗 `01`）。主フレームの描画自体は影響を受けない（render list は構築済み）が、ゲームロジックで `getCurrentLevel()` を読むと鏡面カメラの値になる。距離は自前で測るか、`autoUpdate=false` にして描画後に手動 `lod.update(mainCamera)`。(c) `hysteresis` は `.visible` と結合しているので、自分で `.visible` を触ると壊れる。[H][S]
-8. **LOD の最遠レベルを別プログラム（非スキン・別マテリアル）にすると、初回切替でコンパイル（＋初回描画）が起きる**。`renderer.compile()` はプログラムを前倒しで作る（切替時のプログラム数増分が 0）が、**SwiftShader では初回描画の遅れ（72〜102 ms）は残った**。確実なのは「実キャンバスで全レベルを可視にして 1 回描く」。**レンダーターゲットへのウォームアップは無意味**（`outputColorSpace`・`toneMapping` がキーに入り別プログラムになる: `WebGLPrograms.js:177-183`, `213`）。同様に、フォグ・ライト数・影の有無が本番と違うウォームアップも別プログラム。[H][S]
+8. **LOD の最遠レベルを別プログラム（非スキン・別マテリアル）にすると、初回切替でコンパイル（＋初回描画）が起きる**。`renderer.compile()` はプログラムを前倒しで作る（切替時のプログラム数増分が 0）が、**SwiftShader では初回描画の遅れ（72〜102 ms）は残った**。確実なのは「実キャンバスで全レベルを可視にして 1 回描く」。**レンダーターゲットへのウォームアップは無意味**（`outputColorSpace`・`toneMapping` がキーに入り別プログラムになる: `WebGLPrograms.js:177-183`, `213`。実測: 16×16 の RT に全レベルを描いても切替時にプログラムがもう 1 つ増え、初回描画は 110〜123 ms）。同様に、フォグ・ライト数・影の有無が本番と違うウォームアップも別プログラム。[H][S]
 9. **`ShaderChunk` の差し替えは「最初のコンパイルより前に 1 回だけ」**。キャッシュキーにチャンクの中身が入らないので、既存プログラムには効かない（`customProgramCacheKey` を変えた材だけ拾う）。しかも**グローバル**（全マテリアルに影響）。フォグを可変にしたい場合や一部の材だけ変えたい場合は `onBeforeCompile`＋共有 uniform（§1.3）。[H]
 10. **標準フォグは「距離の二乗・平面深度・色空間依存」**: `exp(−(ρ·depth)²)`、`depth=−mvPosition.z`、canvas 直描きは sRGB 空間で混合・RT は線形空間で混合。**composer を入れるとフォグの見た目が変わる**。Beer–Lambert にしたいなら線形・放射距離・指数 1 次の自前実装。[S][H]
 11. **放射距離を頂点で `length()` して `float` の varying で渡してはいけない**（大きな三角形で壊れる、実測：床の板で全面フォグ）。ビュー空間位置を `vec3` varying で渡し fragment で `length()`。[H]
 12. **`SpotLight.map` の JSDoc は古い**（「castShadow=false だと無効」は誤り。r186 の実装では無影でも効く）。`texture.offset/repeat/rotation` は効かない、alpha は無視、円錐の外は無効。アニメさせるには RT を使うか、CanvasTexture／DataTexture の再アップロード（CPU→GPU）になる。[S][H]
 13. **`Reflector`／`Water`／`Refractor` はカメラが面の裏側だと何もしない**（`Reflector.js:130-133`, `Water.js:252`, `Refractor.js:108-133`）。水中から水面を見上げる像を作るなら、メッシュを反転して置く（`rotation.x=+π/2` で鏡面 RT が描かれた）。スネルの窓の外側の全反射・窓の内側の屈折は自作。[S][H]
 14. **Water 系の RT は HalfFloat（＋Reflector／Refractor は MSAA4）**で、シーンの再描画を伴う。Water2 は鏡面＋屈折の 2 回。`textureWidth/Height` 既定 512。水面の LOD（遠いほど RT を小さく／更新を間引く）は自前。[S][H]
-15. **ヘッドレス環境は実機より「緩い」項目と「厳しい」項目がある**: `MAX_TEXTURE_SIZE` は 8192（実機 16384 より小）、`MAX_TEXTURE_IMAGE_UNITS`／`MAX_VERTEX_TEXTURE_IMAGE_UNITS` は 32（実機 16 のものもある → 影・環境・ボーン・モーフを同時に使う材が実機で超過しうる）、`MAX_VARYING_VECTORS` 31。時間は CPU ラスタで、初回 2.4〜3 s、定常 100 ms 級。**時間のしきい値でテストを落とさない**（同一マシンで 2 倍ぶれる）。[H]
+15. **ヘッドレス環境は実機より「緩い」項目と「厳しい」項目がある**: `MAX_TEXTURE_SIZE` は 8192（実機 16384 より小）、`MAX_TEXTURE_IMAGE_UNITS`／`MAX_VERTEX_TEXTURE_IMAGE_UNITS` は 32（実機には 16 のものもある [R] → 影・環境・ボーン・モーフを同時に使う材が実機で超過しうる）、`MAX_VARYING_VECTORS` 31。時間は CPU ラスタで、初回 2.4〜3 s、定常 100 ms 級。**時間のしきい値でテストを落とさない**（同一マシンで 2 倍ぶれる）。[H]
 16. **`file://` は不可**: ES module が CORS で読めない（`Access to script at 'file:///…' … has been blocked by CORS policy`、`--allow-file-access-from-files` を付けると読める）。ローカル HTTP サーバを立てる。[H]
 17. **`readPixels`／`toDataURL` は `render()` と同じ JS タスク内で**（`preserveDrawingBuffer:false` の既定では、合成後は内容が無効になりうる）。`await` を挟むなら `preserveDrawingBuffer:true` か、`readRenderTargetPixels`。`page.screenshot()` は合成後の画面を撮るので問題ない。[H]
 18. **BatchedMesh は描画ごと・影パスごとに O(個体数) の CPU 処理**（20,000 個体で約 4〜5 ms）。後処理の override パスにも毎回かかる。`sortObjects=false`／`perObjectFrustumCulled=false` で減る（0.2 ms まで）が、前者は透明物の順序、後者は視野外描画を失う。[H]
@@ -453,7 +453,7 @@ skinnedPixels = 21011   glError = 0   → shot.png (md5 a6de69ba1ecd578cfb91f74b
 | ファイル | 内容 | 主な結果（§） |
 |---|---|---|
 | `render_test.html` | 5.4 の拡張版。GL 上限・拡張一覧、float RT、iridescence／clearcoat の A/B 画素差、GPU タイマークエリ | §2.10 |
-| `x1_lod.html` | LOD の API 挙動（hysteresis・zoom・autoUpdate・複数カメラ）、SkinnedMesh レベルの skeleton 更新、切替ヒッチ（3 種のウォームアップ） | §2.1, §2.2 |
+| `x1_lod.html` | LOD の API 挙動（hysteresis・zoom・autoUpdate・複数カメラ）、SkinnedMesh レベルの skeleton 更新、切替ヒッチ（ウォームアップ無し／`compile()`／実キャンバス／RT の 4 条件） | §2.1, §2.2 |
 | `x2_instancing.html` | InstancedMesh のカリング・stale 球、BatchedMesh の個体カリング・LOD・CPU コスト | §2.3 |
 | `x3_post.html?mode=composer\|effects` | EffectComposer 7 構成の render 回数・影・skeleton・info、`setEffects` 経路 | §2.5, §2.6 |
 | `x4_fog.html` | 標準フォグ・チャンク置換・`onBeforeCompile` 版の画素検証、RT 内のフォグ空間、per-vertex 放射距離の失敗例 | §1.3, §2.7 |
@@ -473,9 +473,11 @@ skinnedPixels = 21011   glError = 0   → shot.png (md5 a6de69ba1ecd578cfb91f74b
 
 ---
 
+---
+
 ## 付録 A: テストスクリプト全文
 
-（以下、実行に使ったファイルをそのまま掲載する）
+（実行に使ったファイルをそのまま掲載する。`pages/file_scheme_test.html` の `file://` パスはセッション固有なので、再現時は自分の `THREE_ROOT` に書き換えること。）
 
 ### run.mjs
 
@@ -877,9 +879,9 @@ runVariant('B_separateSkeletons', (mat) => {
 }, [10, 50, 10]);
 
 // C: far level is a NON-skinned Mesh (baked pose): a different shader program -> compile hitch at the first switch unless pre-compiled
-async function hitch(precompile, variant) { // precompile: false | 'compile' | 'warmRender'
+async function hitch(precompile, variant) { // precompile: false | 'compile' | 'warmRender' | 'warmRT'
   const scene = mkScene(); const mat = new THREE.MeshStandardMaterial({ color: 0xccaa77, roughness: 0.3 });
-  const mat2 = new THREE.MeshPhysicalMaterial(variant === 1 ? { color: 0xccaa77, roughness: 0.3, clearcoat: 1, iridescence: 1 } : variant === 2 ? { color: 0xccaa77, roughness: 0.3, sheen: 1, anisotropy: 0.5 } : { color: 0xccaa77, roughness: 0.3, transmission: 0.0, iridescence: 0.5, sheen: 0.5, clearcoat: 0.3 }); // different far material on purpose (distinct program per variant)
+  const mat2 = new THREE.MeshPhysicalMaterial(variant === 1 ? { color: 0xccaa77, roughness: 0.3, clearcoat: 1, iridescence: 1 } : variant === 2 ? { color: 0xccaa77, roughness: 0.3, sheen: 1, anisotropy: 0.5 } : variant === 3 ? { color: 0xccaa77, roughness: 0.3, transmission: 0.0, iridescence: 0.5, sheen: 0.5, clearcoat: 0.3 } : { color: 0xccaa77, roughness: 0.3, iridescence: 1, anisotropy: 0.4, clearcoat: 0.6 }); // different far material on purpose (distinct program per variant)
   const hi = skinnedCylinder(16, 24, 48, mat); const far = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.1, 4, 8, 4), mat2);
   const lod = new THREE.LOD(); lod.addLevel(hi.mesh, 0); lod.addLevel(far, 30); scene.add(lod);
   const visBefore = lod.levels.map(l => +l.object.visible).join('');
@@ -893,6 +895,10 @@ async function hitch(precompile, variant) { // precompile: false | 'compile' | '
     const t = performance.now(); lod.autoUpdate = false; lod.levels.forEach(l => l.object.visible = true);
     renderer.render(scene, camera); sync(); // to the canvas itself: the program key includes output colour space / tone mapping, so an RT warm-up would build different programs
     lod.autoUpdate = true; tc = performance.now() - t; }
+  if (precompile === 'warmRT') { // same warm-up but into a render target: different outputColorSpace / toneMapping in the program key => useless
+    const t = performance.now(); lod.autoUpdate = false; lod.levels.forEach(l => l.object.visible = true);
+    const rt = new THREE.WebGLRenderTarget(16, 16); renderer.setRenderTarget(rt); renderer.render(scene, camera); sync(); renderer.setRenderTarget(null); rt.dispose();
+    lod.autoUpdate = true; tc = performance.now() - t; }
   const p1 = renderer.info.programs.length;
   set(60); const t = performance.now(); renderer.render(scene, camera); sync(); const first = performance.now() - t;
   const p2 = renderer.info.programs.length;
@@ -902,6 +908,7 @@ async function hitch(precompile, variant) { // precompile: false | 'compile' | '
 R.lodSkin_C_hitch_noPrecompile = await hitch(false, 1);
 R.lodSkin_C_hitch_withRendererCompile = await hitch('compile', 2);
 R.lodSkin_C_hitch_withWarmRender = await hitch('warmRender', 3);
+R.lodSkin_C_hitch_withWarmRenderToRT = await hitch('warmRT', 4);
 
 // ---------- 1c. frustum culling happens per level object, not on the LOD node ----------
 {
