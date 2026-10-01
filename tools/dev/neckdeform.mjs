@@ -146,7 +146,11 @@ for (const d of LODS) {
       const s1 = Math.sqrt(tr / 2 + dd), s2 = Math.sqrt(Math.max(0, tr / 2 - dd));
       const pn = [f1[1] * f2[2] - f1[2] * f2[1], f1[2] * f2[0] - f1[0] * f2[2], f1[0] * f2[1] - f1[1] * f2[0]];
       const sn = [0, 1, 2].map((k) => Np[a * 3 + k] + Np[b * 3 + k] + Np[c * 3 + k]);
-      const flipped = pn[0] * sn[0] + pn[1] * sn[1] + pn[2] * sn[2] < 0;
+      // (against the triangle's own rest state: on the coarse levels a few triangles already disagree with their
+      // smooth vertex normals at rest)
+      const rn = [0, 1, 2].map((k) => RN[a * 3 + k] + RN[b * 3 + k] + RN[c * 3 + k]);
+      const restFlip = nn[0] * rn[0] + nn[1] * rn[1] + nn[2] * rn[2] < 0;
+      const flipped = (pn[0] * sn[0] + pn[1] * sn[1] + pn[2] * sn[2] < 0) !== restFlip;
       if (flipped) flip++;
       aRest += A0;
       aPose += Math.hypot(...pn) / 2;
