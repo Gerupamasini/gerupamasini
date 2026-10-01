@@ -1,7 +1,7 @@
 // Eye shader: unit eyeball with +Z optical axis. Round fixed pupil (teleost,
 // about half the visible eye), spherical lens bulging through it, guanine
-// iris (pale silver-gold, pigment-clouded above) with flecks and crypts, thin
-// dark limbus ring. Layers:
+// iris (brass or silver-grey, pigment-clouded above) with flecks and crypts, thin
+// dark limbus ring; a dark brass / silver-grey overall value. Layers:
 //   * cornea  — the clearcoat on the geometric (eyeball) sphere: a faint,
 //               crisp window highlight
 //   * lens    — high-index sphere seen through the pupil: base specular with
@@ -10,6 +10,7 @@
 //               with a flattened normal (evenly lit ring, not a shaded ball)
 
 import { head } from '../morphology.js';
+import { eyeRest } from '../BodyGeometry.js';
 
 // The eye sits nearly flush in its orbit: only a low cap of the ball shows
 // (see morphology.js). Edge of that cap as sin(angle from the optical axis);
@@ -18,6 +19,9 @@ const VIS_R = (0.97 * Math.sqrt(1 - (1 - head.eyeProtrusion) ** 2)).toFixed(4);
 // depth of the iris plane in the unit ball (the base of the exposed cap)
 const IRIS_PLANE = (1 - head.eyeProtrusion).toFixed(4);
 const VIS_R_EDGE = (1.0 * Math.sqrt(1 - (1 - head.eyeProtrusion) ** 2)).toFixed(4);
+// rest-frame point where the eye meets the head (left side), around which
+// the head pigment is sampled
+const [EYE_SX, EYE_SY, EYE_SZ] = eyeRest(1).surface.toArray().map((v) => v.toFixed(5));
 
 export const eyeVertexPars = /* glsl */ `
 in vec4 aEyeParams; // x: iris hue mix, y: pupil size, z: iris brightness, w: seed
@@ -27,6 +31,8 @@ flat out vec4 vEyeParams;
 flat out vec3 vEyeX;
 flat out vec3 vEyeY;
 flat out vec3 vEyeZ;
+in vec4 aEyeHead; // x: sarasa, y: red coverage, z: body pattern seed, w: side
+flat out float vHeadSilver;
 `;
 
 export const eyeVertexMain = /* glsl */ `
@@ -40,6 +46,21 @@ vEyeWorld = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;
   vEyeY = normalize(normalMatrix * (im * vec3(0.0, 1.0, 0.0)));
   vEyeZ = normalize(normalMatrix * (im * vec3(0.0, 0.0, 1.0)));
 }
+{
+  // a sarasa's iris follows the skin around its eye: silver-grey where the
+  // head is white, brass under a red cap (the body's own patch field,
+  // sampled above, behind and below the orbit; constant per eye)
+  float hs = 0.0;
+  if (aEyeHead.x > 0.5) {
+    float th = 1.0 - aEyeHead.y;
+    vec3 c = vec3(${EYE_SX}, ${EYE_SY}, ${EYE_SZ} * aEyeHead.w);
+    float red = smoothstep(th - 0.04, th + 0.04, sarasaField(c + vec3(0.0, 0.045, -0.006 * aEyeHead.w), aEyeHead.z));
+    red += smoothstep(th - 0.04, th + 0.04, sarasaField(c + vec3(-0.05, 0.0, 0.004 * aEyeHead.w), aEyeHead.z));
+    red += smoothstep(th - 0.04, th + 0.04, sarasaField(c + vec3(0.0, -0.04, -0.004 * aEyeHead.w), aEyeHead.z));
+    hs = 1.0 - red / 3.0;
+  }
+  vHeadSilver = hs;
+}
 `;
 
 export const eyeFragmentPars = /* glsl */ `
@@ -50,6 +71,7 @@ flat in vec4 vEyeParams;
 flat in vec3 vEyeX;
 flat in vec3 vEyeY;
 flat in vec3 vEyeZ;
+flat in float vHeadSilver;
 uniform vec3 uIrisGold;
 uniform vec3 uIrisRed;
 uniform vec3 uIrisSilver;
@@ -83,7 +105,7 @@ vec3 eyeColor() {
   float front = step(0.0, p.z);
   float ang = atan(p.y, p.x);
   float seed = vEyeParams.w;
-  float silver = clamp(vEyeParams.x - 1.0, 0.0, 1.0);
+  float silver = max(clamp(vEyeParams.x - 1.0, 0.0, 1.0), 0.85 * vHeadSilver);
   // dorsal direction of the fish in the eye frame (the iris is more
   // pigmented and shaded by the orbit above, brighter below)
   vec3 upV = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
@@ -95,10 +117,13 @@ vec3 eyeColor() {
   // edge of the visible eye (the skin meets the ball here): the iris runs
   // right out to it, so the dark limbus is a thin line at the skin margin
   // rather than a broad grey band
-  float irisR = ${VIS_R_EDGE};
+  // (it runs on a little under the skin: on the flatter cap of the larger
+  // ball a saccade slides the iris noticeably, and a disc ending exactly at
+  // the edge then bared a dark crescent of ball on one side)
+  float irisR = ${VIS_R_EDGE} * 1.1;
   float t = smoothstep(pupilR, irisR, r); // 0 pupil margin .. 1 limbus
-  // iris: a broad, pale guanine diaphragm (p05_1, p12_0, p11_1, p25_0):
-  // silver-grey with a gold cast, radially fibred, mottled and flecked with reflective
+  // iris: a broad guanine diaphragm (p05_1, p12_0, p11_1, p25_0, p29_0):
+  // brass / bronze (silver-grey on white fish), radially fibred, mottled and flecked with reflective
   // iridophores, a warm gold collar at the pupillary margin, chromatophore
   // pigment (the body colour) clouding its upper part, and a thin dark
   // limbus where it meets the orbital skin
@@ -106,14 +131,16 @@ vec3 eyeColor() {
   outer = mix(outer, uIrisSilver, silver);
   float patchI = vnoise2(vec2(ang * 2.2 + seed * 7.0, r * 3.0 + seed));
   float patch2 = vnoise2(vec2(ang * 7.0 + seed * 3.0, r * 9.0 - seed));
-  // the guanine base: silver-grey with a faint gold cast (p12_0, p11_1,
-  // p05_1), never a flat cream; a silver fish keeps it neutral
-  vec3 guanine = mix(vec3(0.5, 0.49, 0.45), uIrisSilver * 0.85, silver);
-  guanine = mix(guanine, outer * 0.8 + 0.06, 0.12 * (1.0 - silver));
+  // the guanine base: a dark brass / bronze on red and orange fish, a mid
+  // silver-grey on white ones (p29_0, p09_1, p12_0, p11_1): a much darker
+  // value than the body (iris luminance ~0.4), never a pale glassy grey
+  vec3 brass = mix(vec3(0.3, 0.17, 0.045), outer * vec3(0.5, 0.48, 0.5), 0.25);
+  vec3 greyI = uIrisSilver * vec3(0.38, 0.39, 0.4);
+  vec3 guanine = mix(brass, greyI, silver);
   vec3 iris = guanine;
   // a warm gold collar just outside the pupil (narrow: the photos show a
-  // gold glint at the pupillary margin, the rest of the iris grey)
-  vec3 collar = mix(uIrisGold * 1.1, uIrisSilver, silver);
+  // gold glint at the pupillary margin, the rest of the iris darker)
+  vec3 collar = mix(uIrisGold * 0.75, uIrisSilver * 0.6, silver);
   iris = mix(iris, collar, smoothstep(0.22, 0.0, t) * 0.75);
   // radial texture: fine iris fibres (stretched along the radius) and
   // broader radial streaks, so the ring has grain rather than a smooth tone
@@ -124,9 +151,9 @@ vec3 eyeColor() {
   // mottling: irregular darker grey-brown clouds of melanophores (densest
   // above the pupil, p12_0) and paler silver patches
   float mot = vnoise2(vec2(ang * 3.2 + seed * 7.0, r * 5.0 + seed)) * 0.6 + vnoise2(vec2(ang * 9.0 - seed * 2.0, r * 14.0)) * 0.4;
-  vec3 melan = mix(vec3(0.16, 0.14, 0.12), outer * 0.35, 0.3);
+  vec3 melan = mix(vec3(0.08, 0.065, 0.05), outer * 0.2, 0.3);
   iris = mix(iris, melan, 0.6 * smoothstep(0.42, 0.7, mot + 0.12 * upness) * smoothstep(0.08, 0.3, t));
-  iris = mix(iris, uIrisSilver * 1.05, 0.25 * smoothstep(0.4, 0.15, mot) * smoothstep(0.1, 0.4, t));
+  iris = mix(iris, mix(brass * 1.5, greyI * 1.4, silver), 0.25 * smoothstep(0.4, 0.15, mot) * smoothstep(0.1, 0.4, t));
   iris = mix(iris, outer * 0.55, 0.22 * smoothstep(0.35, 0.8, patchI) * smoothstep(0.1, 0.5, t));
   iris *= mix(0.88, 1.06, patch2);
   // iridophore flecks (sparkle) and a few dark melanophore spots
@@ -149,8 +176,9 @@ vec3 eyeColor() {
   iris *= mix(0.65, 1.0, smoothstep(0.0, 0.04, t));
   // thin, distinct dark limbal ring at the outer edge of the iris, with the
   // iris darkening a little toward it
-  iris *= mix(1.0, 0.85, smoothstep(0.6, 0.9, t));
-  iris = mix(iris, vec3(0.035, 0.035, 0.04), smoothstep(0.93, 0.97, t) * 0.85);
+  // (the outer iris shades off into the orbit: no bright ring at the edge)
+  iris *= mix(1.0, 0.7, smoothstep(0.55, 0.92, t));
+  iris = mix(iris, vec3(0.03, 0.028, 0.03), smoothstep(0.92, 0.97, t) * 0.85);
   float pupil = 1.0 - smoothstep(pupilR - 0.012, pupilR + 0.008, r);
   // the spherical lens behind the pupil: very dark with a faint blue-green depth
   vec3 lens = mix(vec3(0.012, 0.018, 0.02), vec3(0.002), smoothstep(0.0, pupilR, r));
@@ -168,7 +196,9 @@ vec3 eyeColor() {
   // guanine iris: a soft metallic sheen, rough (fibrous), not a polished coin
   // (reflective silver-gold in the photos: a stronger sheen than the
   // shared default, fading at the dark limbus)
-  gEyeMetal = min(1.0, uIrisMetal * 2.2) * gIris * (1.0 - smoothstep(0.75, 0.95, t));
+  // (a weaker sheen than before: a strong metallic env reflection read as
+  // pale glass at a distance)
+  gEyeMetal = min(1.0, uIrisMetal * 1.3) * gIris * (1.0 - smoothstep(0.6, 0.9, t));
   gEyeRough = mix(mix(0.5, 0.4, gIris), 0.2, gPupil);
   return col;
 }
@@ -213,13 +243,19 @@ export const eyeFragmentMaterial = /* glsl */ `
   // sliver of it shows at an oblique view it must not light up as a glassy
   // crescent)
   float hidden = smoothstep(${VIS_R}, ${VIS_R_EDGE} + 0.02, rr);
-  material.specularF90 = mix(0.4, 0.15, rim) * (1.0 - 0.8 * hidden);
-  material.specularColor *= mix(1.0, 0.6, gPupil) * (1.0 - 0.8 * hidden);
-  material.specularColorBlended *= mix(1.0, 0.6, gPupil) * (1.0 - 0.8 * hidden);
+  // (toward the edge the cornea is seen at grazing angles: a Fresnel rise
+  // there put a pale grey crescent around the iris, the "bright limbal
+  // ring" -- keep the edge nearly unreflective)
+  float edgeR = smoothstep(0.42, ${VIS_R} - 0.05, rr);
+  material.specularF90 = mix(0.4, 0.0, edgeR) * (1.0 - hidden);
+  material.specularColor *= mix(1.0, 0.6, gPupil) * mix(1.0, 0.08, edgeR) * (1.0 - hidden);
+  material.specularColorBlended *= mix(1.0, 0.6, gPupil) * mix(1.0, 0.08, edgeR) * (1.0 - hidden);
   #ifdef USE_CLEARCOAT
     // (the corneal reflection is kept toward the edge of the iris, so the
     // eye shows its curvature as a dome)
-    material.clearcoat *= 0.6 * (1.0 - 0.5 * rim) * (1.0 - hidden);
+    // (and gone at the edge itself, where its grazing Fresnel rises to a
+    // full mirror)
+    material.clearcoat *= 0.6 * (1.0 - 0.5 * rim) * (1.0 - smoothstep(0.5, ${VIS_R}, rr)) * (1.0 - hidden);
   #endif
 }
 `;

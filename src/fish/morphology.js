@@ -35,18 +35,24 @@ const VENTRAL_Y = [-0.011, -0.031, -0.05, -0.065, -0.077, -0.089, -0.106, -0.133
 // little more than the thickness of the fleshy fin base.
 // (the muzzle at the lips is a little narrower than the head behind it: in
 // front view the lips span about 0.4 of the interorbital width, p29_0)
+// (the head is broad at the eyes and over the cheeks: in front view it is
+// about as wide as deep there, flat-fronted, and the eyes sit almost flush
+// in its outline rather than standing out of a head that narrows toward the
+// snout, p09_1, p29_0)
 const WIDTH_S = [0.0, 0.01, 0.033, 0.066, 0.108, 0.16, 0.22, 0.29, 0.36, 0.45, 0.55, 0.65, 0.75, 0.85, 0.93, 0.97, 1.0, 1.02, 1.04, 1.06, 1.08, 1.095, 1.108, 1.116];
-const WIDTH_Z = [0.012, 0.028, 0.049, 0.063, 0.072, 0.079, 0.088, 0.097, 0.1, 0.097, 0.089, 0.075, 0.057, 0.038, 0.026, 0.02, 0.015, 0.0118, 0.0092, 0.0066, 0.0042, 0.0025, 0.0014, 0.001];
+const WIDTH_Z = [0.012, 0.028, 0.05, 0.066, 0.077, 0.087, 0.094, 0.099, 0.1, 0.097, 0.089, 0.075, 0.057, 0.038, 0.026, 0.02, 0.015, 0.0118, 0.0092, 0.0066, 0.0042, 0.0025, 0.0014, 0.001];
 // Vertical position of the widest level (-1 = ventral edge, +1 = dorsal edge)
 const WMAX_S = [0.0, 0.1, 0.3, 0.5, 0.75, 1.0, 1.12];
 const WMAX_Y = [0.0, -0.08, -0.2, -0.24, -0.12, 0.0, 0.0];
 // Superellipse exponents of the cross-section. >2 = boxy/full, <2 = keeled.
 // The head is close to elliptic (n ~ 2): a boxier section shows as a crease
-// where the top of the head meets the cheek.
-const NTOP_S = [0.0, 0.15, 0.35, 0.5, 0.75, 1.0, 1.12];
-const NTOP_V = [2.05, 2.0, 1.95, 1.9, 1.85, 1.95, 1.95];
+// where the top of the head meets the cheek. Around the eyes it is a little
+// fuller (a broad, flattish interorbital and brow over the eyes, p09_1),
+// fading back to elliptic behind the operculum.
+const NTOP_S = [0.0, 0.06, 0.15, 0.25, 0.35, 0.5, 0.75, 1.0, 1.12];
+const NTOP_V = [2.1, 2.55, 2.65, 2.3, 1.95, 1.9, 1.85, 1.95, 1.95];
 const NBOT_S = [0.0, 0.15, 0.35, 0.55, 0.7, 0.85, 1.0, 1.12];
-const NBOT_V = [2.1, 2.2, 2.4, 2.35, 1.95, 1.85, 1.95, 1.95];
+const NBOT_V = [2.1, 2.3, 2.4, 2.35, 1.95, 1.85, 1.95, 1.95];
 
 export const profile = {
   top: monotoneCubic(DORSAL_S, DORSAL_Y),
@@ -71,10 +77,13 @@ export const head = {
   // a flat lens; the visible disc ~5 % smaller and the fleshy rim around it
   // much narrower, so the whole eye reads ~20 % smaller than an eye ringed
   // by a broad halo, while the iris disc stays close to the photos)
-  eyeR: 0.0354,
-  eyeProtrusion: 0.58, // fraction of radius standing proud of the head surface
+  // (front view: a flatter cap of a larger ball, so the eye bulges only
+  // ~15 % of its diameter beyond the head outline with the same visible
+  // disc in side view, p09_1, p29_0)
+  eyeR: 0.0449,
+  eyeProtrusion: 0.3, // fraction of radius standing proud of the head surface
   // pupil radius (SL): a round black pupil, about half the visible eye
-  // (p05_1, p12_0, p11_1, p25_0); the rest is a broad pale guanine iris
+  // (p05_1, p12_0, p11_1, p25_0); the rest is a broad brass / silver-grey iris
   pupilR: 0.016,
   // mouth (terminal, very slightly superior)
   mouthY: -0.005,
@@ -92,7 +101,8 @@ export const head = {
   // (the cleft about 0.35 of the interorbital width across, p29_0)
   // (front view: the cleft with its lips about 0.35-0.4 IO across)
   mouthClosedRW: 0.0125, // half-width of the cleft
-  mouthClosedRH: 0.0012, // the closed lips meet: only a fine cleft line
+  // (a wider gap showed a dark open slit in the resting face)
+  mouthClosedRH: 0.0005, // the closed lips meet: only a fine cleft line
   mouthClosedDroop: 0.0025, // the corners hang this far below the midline
   mouthCornerBack: 0.007, // ...and sit this far behind the front of the lips
   mouthProtrusion: 0.012, // premaxillary protrusion (separate morph)
