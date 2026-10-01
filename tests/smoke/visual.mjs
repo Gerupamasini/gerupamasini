@@ -44,6 +44,12 @@ try {
   await shot('waterline-down.png');
   await page.evaluate(() => { const a = window.__higata; a.setTideOverride(0.3); a.teleport('creek'); a.player.pitch = -0.25; });
   await shot('creek.png', 8);
+  await page.evaluate(() => { const a = window.__higata; a.setTideOverride(-0.5); a.teleport('pool'); a.player.pitch = -0.45; });
+  await shot('pool.png', 8);
+  await page.evaluate(() => { const a = window.__higata; a.player.pitch = -0.9; });
+  await shot('pool-down.png', 6);
+  await page.evaluate(() => { const a = window.__higata; a.setTideOverride(-0.2); a.teleport('waterline'); a.player.pitch = -0.55; a.player.setPose(a.player.position.x, a.player.position.z + 3, Math.PI); });
+  await shot('shallow-down.png', 8);
   await at(18);
   await page.evaluate(() => { const a = window.__higata; a.setTideOverride(0.0); a.teleport('runnel'); a.player.pitch = -0.1; });
   await shot('runnel-18h.png', 8);

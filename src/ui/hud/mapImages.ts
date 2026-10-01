@@ -1,0 +1,52 @@
+import type { World } from '../../app/World';
+
+export const SUB_COLORS = ['#b8a67e', '#8c7d62', '#5c5346', '#9a948a', '#4a443a'];
+
+/** Substrate colours shaded by height, one pixel per terrain cell. */
+export function makeBaseImage(world: World): HTMLCanvasElement {
+  const t = world.terrain, n = t.n;
+  const base = document.createElement('canvas');
+  base.width = n; base.height = n;
+  const ctx = base.getContext('2d')!;
+  const img = ctx.createImageData(n, n);
+  for (let k = 0; k < n * n; k++) {
+    const hex = SUB_COLORS[t.substrate[k]] ?? '#777';
+    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    const shade = 0.8 + 0.25 * Math.max(-1, Math.min(1, t.heights[k] / 2));
+    img.data[k * 4] = r * shade; img.data[k * 4 + 1] = g * shade; img.data[k * 4 + 2] = b * shade; img.data[k * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return base;
+}
+
+/** Water at the current tide (and pools above it) as a translucent layer; call again when the tide moved. */
+export class WaterLayer {
+  readonly canvas: HTMLCanvasElement;
+  private readonly img: ImageData;
+  private lastTide = NaN;
+  constructor(private readonly world: World) {
+    const n = world.terrain.n;
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = n; this.canvas.height = n;
+    this.img = this.canvas.getContext('2d')!.createImageData(n, n);
+  }
+  update(): void {
+    const w = this.world, t = w.terrain, n = t.n;
+    if (Math.abs(w.tideLevel - this.lastTide) < 0.005) return;
+    this.lastTide = w.tideLevel;
+    const pl = w.habitat.poolLevels, d = this.img.data;
+    for (let k = 0; k < n * n; k++) {
+      const ground = t.heights[k];
+      const pooled = pl[k] > this.lastTide + 0.01 && pl[k] > ground + 0.003;
+      const level = pooled ? pl[k] : this.lastTide;
+      const depth = level - ground;
+      const o = k * 4;
+      if (depth > 0) {
+        const a = Math.min(0.85, 0.35 + depth * 0.5);
+        if (pooled) { d[o] = 70; d[o + 1] = 150; d[o + 2] = 165; } else { d[o] = 40; d[o + 1] = 120; d[o + 2] = 150; }
+        d[o + 3] = Math.round(a * 255);
+      } else d[o + 3] = 0;
+    }
+    this.canvas.getContext('2d')!.putImageData(this.img, 0, 0);
+  }
+}

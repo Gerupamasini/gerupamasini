@@ -80,6 +80,8 @@ const WET_TAU_MS: Record<Substrate, number> = {
 export class Habitat {
   readonly spill: Float32Array;
   readonly pools: PoolInfo[] = [];
+  /** per fine cell: the level of the tide pool it belongs to (dilated two cells), else -1e3; drives the shaders */
+  readonly poolLevels: Float32Array;
   readonly coarse: number;
   readonly cn: number;
   readonly tags: HabitatTag[][];
@@ -96,6 +98,7 @@ export class Habitat {
   constructor(readonly terrain: Terrain, coarseCell = 5) {
     this.spill = this.computeSpill();
     this.findPools();
+    this.poolLevels = this.buildPoolLevels();
     this.coarse = coarseCell;
     this.cn = Math.max(2, Math.round(terrain.size / coarseCell));
     const cn2 = this.cn * this.cn;
@@ -170,6 +173,27 @@ export class Habitat {
     this.pools.sort((a, b) => b.area - a.area);
   }
 
+  private buildPoolLevels(): Float32Array {
+    const n = this.terrain.n, out = new Float32Array(n * n).fill(-1e3);
+    for (const p of this.pools) for (const k of p.cells) out[k] = p.level;
+    // grow each pool by two cells so its shallow fringe (less than 3 cm deep) is covered too
+    for (let pass = 0; pass < 2; pass++) {
+      const src = out.slice();
+      for (let k = 0; k < n * n; k++) {
+        if (src[k] > -1e2) continue;
+        const i = k % n, j = (k - i) / n;
+        let best = -1e3;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const ii = i + di, jj = j + dj;
+          if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+          best = Math.max(best, src[jj * n + ii]);
+        }
+        if (best > -1e2) out[k] = best;
+      }
+    }
+    return out;
+  }
+
   spillAt(x: number, z: number): number {
     const t = this.terrain;
     const i = Math.max(0, Math.min(t.n - 1, Math.round((x + t.half) / t.cell)));
@@ -208,7 +232,7 @@ export class Habitat {
     this.lastUpdateMs = nowMs;
     // high-water mark decays 0.25 m per hour toward the tide; capped so a tide jump
     // (ticket, debug override) does not leave the whole flat looking freshly wetted
-    this.wetLevel = Math.min(Math.max(tideLevel, this.wetLevel - 0.25 * dtH), tideLevel + 0.3);
+    this.wetLevel = Math.min(Math.max(tideLevel, this.wetLevel - 0.25 * dtH), tideLevel + 0.18);
     const cn = this.cn, cn2 = cn * cn;
     const wet = new Uint8Array(cn2);
     for (let k = 0; k < cn2; k++) {

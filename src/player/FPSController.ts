@@ -22,6 +22,8 @@ export class FPSController {
   blockedByDepth = false;
   depthHere = 0;
   speedNow = 0;
+  /** standing eye height (metres); crouching keeps the same ratio */
+  eyeHeight = EYE_HEIGHT;
   private eye = EYE_HEIGHT;
   private bob = 0;
   private fov = FOV_NORMAL;
@@ -131,7 +133,7 @@ export class FPSController {
   }
 
   private syncCamera(dt: number): void {
-    const targetEye = this.crouching ? CROUCH_HEIGHT : EYE_HEIGHT;
+    const targetEye = this.crouching ? this.eyeHeight * (CROUCH_HEIGHT / EYE_HEIGHT) : this.eyeHeight;
     this.eye = dt > 0 ? MathUtils.damp(this.eye, targetEye, 10, dt) : targetEye;
     const bobY = this.speedNow > 0 ? Math.sin(this.bob * 2) * 0.012 * Math.min(1, this.speedNow / WALK) : 0;
     this.camera.position.set(this.position.x, this.position.y + this.eye + bobY, this.position.z);

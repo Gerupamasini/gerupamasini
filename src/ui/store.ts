@@ -66,6 +66,14 @@ export const ui = {
   homePanel: signal<'none' | 'tank'>('none'),
   /** creature info card on the home screen */
   homeInfo: signal<IndividualRecord | null>(null),
+  /** full-map overview on the flat (M) */
+  mapOpen: signal(false),
+  /** tank panel tab */
+  tankTab: signal<'fish' | 'layout'>('fish'),
+  /** selected decoration in the tank layout editor */
+  tankSelected: signal<string | null>(null),
+  /** bumped whenever the tank layout changes, so the editor re-renders */
+  tankLayoutVersion: signal(0),
 };
 
 let toastId = 0;

@@ -2,7 +2,7 @@ import { FogExp2, Scene, Vector3, type PerspectiveCamera, type WebGLRenderer } f
 import type { MapDef, TideStationDef } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { Terrain, loadTerrainGrid } from '../world/Terrain';
-import { Water } from '../world/Water';
+import { WaterPass } from '../world/Water';
 import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
@@ -25,22 +25,21 @@ export class World {
   overcast = 0;
   /** tone-mapping exposure suggested for the current light */
   exposure = 0.5;
+  private readonly sunColTmp = new Vector3();
   private lastHabitatMs = 0;
-  private lastEnvMs = 0;
   private timeAcc = 0;
 
   private constructor(
     readonly map: MapDef,
     readonly terrain: Terrain,
-    readonly water: Water,
+    readonly water: WaterPass,
     readonly sky: SkyDome,
     readonly habitat: Habitat,
     readonly tide: TideModel,
   ) {
     this.fog = new FogExp2(0xbfd2dc, 0.0024);
     this.scene.fog = this.fog;
-    this.scene.add(terrain.mesh, water.mesh);
-    for (const pool of habitat.pools) this.scene.add(water.addPool(pool.cells, pool.level));
+    this.scene.add(terrain.mesh);
   }
 
   static async create(map: MapDef, station: TideStationDef | TideModel, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void): Promise<World> {
@@ -49,7 +48,8 @@ export class World {
     const terrain = new Terrain(grid, map.substrate.palette);
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain);
-    const water = new Water(terrain);
+    terrain.setSpill(habitat.poolLevels);
+    const water = new WaterPass(terrain);
     const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
@@ -77,17 +77,19 @@ export class World {
     this.season = seasonOf(gameMs);
     const sunUp = Math.max(0, Math.min(1, (sp.elevation + 2) / 14)) * (1 - 0.8 * this.overcast);
     this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.timeAcc, sunUp);
-    this.water.update(dt, sunUp);
     this.sky.update(this.sunDir, sp.elevation, anchor, this.overcast);
     this.fog.color.copy(this.sky.fogColor);
     this.fog.density = 0.0024 * (1 + 2.5 * this.overcast);
+    const day = Math.max(0, Math.min(1, (sp.elevation + 4) / 14));
+    this.water.update(dt, {
+      sunUp, sunDir: this.sunDir, sunCol: this.sky.sunColorHdr(this.sunColTmp), ambient: this.sky.hemi.intensity * (0.5 + 0.6 * day),
+      fogColor: this.sky.fogColor, fogDensity: this.fog.density, env: this.sky.envCube,
+    });
     // lift the exposure at night so the flat stays readable under the moon
-    this.exposure = 0.66 + 0.24 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
+    this.exposure = 0.68 + 0.22 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
     this.scene.background = this.sky.fogColor;
-    if (this.timeAcc - this.lastEnvMs > 30 || this.lastEnvMs === 0) {
-      this.lastEnvMs = this.timeAcc;
-      this.sky.refreshEnvironment();
-    }
+    // the sky refreshes its environment maps itself whenever the sun moved enough (so time jumps show at once)
+    this.sky.refreshEnvironment();
     this.sky.sky.position.copy(camera.position);
     if (this.timeAcc > 1) this.timeAcc -= 0; // keep accumulating; used as shader time
   }

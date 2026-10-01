@@ -1,6 +1,7 @@
 import { get, set, del } from 'idb-keyval';
 import type { TicketState } from './GameClock';
 import type { IndividualRecord } from '../creatures/Individual';
+import type { TankLayout } from '../app/TankLayout';
 
 export interface SpeciesProgress {
   discovered?: number;
@@ -22,7 +23,7 @@ export interface SaveV1 {
   ticket: { active: TicketState | null; usedCount: number };
   encyclopedia: Record<string, SpeciesProgress>;
   case: IndividualRecord[];
-  tank: { individuals: IndividualRecord[]; lastSimMs: number };
+  tank: { individuals: IndividualRecord[]; lastSimMs: number; layout?: TankLayout };
   removedIndividuals: string[];
   stats: { playSeconds: number; captures: number; observations: number };
 }
@@ -35,7 +36,7 @@ export function emptySave(map: string, now: number): SaveV1 {
     version: 1, createdAt: now, updatedAt: now, lastRealMs: now,
     player: { map, pos: [0, 0, 0], heading: 0, money: 0, research: 0, tools: ['hand_net'] },
     ticket: { active: null, usedCount: 0 },
-    encyclopedia: {}, case: [], tank: { individuals: [], lastSimMs: now }, removedIndividuals: [],
+    encyclopedia: {}, case: [], tank: { individuals: [], lastSimMs: now, layout: { substrate: 'sand', items: [] } }, removedIndividuals: [],
     stats: { playSeconds: 0, captures: 0, observations: 0 },
   };
 }

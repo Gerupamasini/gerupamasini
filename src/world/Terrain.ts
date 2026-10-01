@@ -2,6 +2,7 @@ import {
   BufferAttribute, BufferGeometry, DataTexture, FloatType, Mesh, MeshStandardMaterial, RedFormat, Vector3,
   type IUniform, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
+import { makeSpillTexture } from './Water';
 import type { MapDef, Substrate } from '../data/schemas';
 import { DATA_BASE } from '../data/loader';
 
@@ -64,6 +65,9 @@ export class Terrain {
   readonly mesh: Mesh;
   readonly material: MeshStandardMaterial;
   readonly heightTexture: DataTexture;
+  /** spill level per cell (tide pools keep water up to this height); set once the habitat is known */
+  spillTexture: DataTexture;
+  private readonly uSpill: IUniform<DataTexture>;
   private readonly uWater: IUniform<number> = { value: -10 };
   private readonly uWet: IUniform<number> = { value: -10 };
   private readonly uTime: IUniform<number> = { value: 0 };
@@ -84,6 +88,8 @@ export class Terrain {
     this.heightTexture.wrapS = ClampToEdgeWrapping;
     this.heightTexture.wrapT = ClampToEdgeWrapping;
     this.heightTexture.needsUpdate = true;
+    this.spillTexture = makeSpillTexture(new Float32Array(this.n * this.n).fill(-1e3), this.n);
+    this.uSpill = { value: this.spillTexture };
 
     const geo = this.buildGeometry();
     this.material = this.buildMaterial();
@@ -133,13 +139,15 @@ export class Terrain {
   }
 
   private buildMaterial(): MeshStandardMaterial {
-    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.5 });
     const uWater = this.uWater, uWet = this.uWet, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
       shader.uniforms.uWetLevel = uWet;
       shader.uniforms.uTime = uTime;
       shader.uniforms.uSunUp = this.uSunUp;
+      shader.uniforms.uSpillTex = this.uSpill;
+      shader.uniforms.uHalf = { value: this.half };
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nattribute float substrate;\nvarying float vSubstrate;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvSubstrate = substrate;');
@@ -151,6 +159,8 @@ uniform float uWaterLevel;
 uniform float uWetLevel;
 uniform float uTime;
 uniform float uSunUp;
+uniform sampler2D uSpillTex;
+uniform float uHalf;
 float hash21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y); }`)
@@ -163,13 +173,16 @@ float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 
   float isSand = step(vSubstrate, 0.5);
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 + ripple * 0.06 * (1.0 - isSand);
   diffuseColor.rgb *= detail;
+  // the water level here: the tide, or a tide pool's own level above it
+  float spillH = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
+  float lvl = (spillH > uWaterLevel + 0.01 && spillH > vWorldPos.y + 0.003) ? spillH : uWaterLevel;
   // wet band: everything between the current water level and the recent high-water mark is darker
-  float wet = 1.0 - smoothstep(uWaterLevel + 0.02, uWetLevel + 0.05, vWorldPos.y);
-  wet = max(wet, 1.0 - smoothstep(uWaterLevel - 0.05, uWaterLevel + 0.12, vWorldPos.y));
-  diffuseColor.rgb *= mix(1.0, 0.62, wet);
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.85, 0.92, 1.0), 0.5 * wet);
+  float wet = 1.0 - smoothstep(lvl + 0.02, max(lvl, uWetLevel) + 0.05, vWorldPos.y);
+  wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
+  diffuseColor.rgb *= mix(1.0, 0.68, wet);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.88, 0.93, 1.0), 0.3 * wet);
   // sunlight caustics on the submerged bed: moving cell edges that fade with depth
-  float depth = uWaterLevel - vWorldPos.y;
+  float depth = lvl - vWorldPos.y;
   float under = smoothstep(0.0, 0.04, depth) * exp(-depth * 0.9) * uSunUp;
   if (under > 0.001) {
     vec2 cp = vWorldPos.xz * 2.2;
@@ -195,13 +208,22 @@ float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 
 }`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 {
-  float wetR = 1.0 - smoothstep(uWaterLevel + 0.02, uWetLevel + 0.05, vWorldPos.y);
-  wetR = max(wetR, 1.0 - smoothstep(uWaterLevel - 0.05, uWaterLevel + 0.12, vWorldPos.y));
-  roughnessFactor = mix(roughnessFactor, 0.14, wetR);
+  float spillR = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
+  float lvlR = (spillR > uWaterLevel + 0.01 && spillR > vWorldPos.y + 0.003) ? spillR : uWaterLevel;
+  float wetR = 1.0 - smoothstep(lvlR + 0.02, max(lvlR, uWetLevel) + 0.05, vWorldPos.y);
+  wetR = max(wetR, 1.0 - smoothstep(lvlR - 0.05, lvlR + 0.12, vWorldPos.y));
+  roughnessFactor = mix(roughnessFactor, 0.42, wetR);   // damp sand has a soft sheen, not a mirror
 }`);
     };
     mat.customProgramCacheKey = () => 'higata-terrain';
     return mat;
+  }
+
+  /** Give the terrain the habitat's spill levels (tide pools). */
+  setSpill(spill: Float32Array): void {
+    this.spillTexture.dispose();
+    this.spillTexture = makeSpillTexture(spill, this.n);
+    this.uSpill.value = this.spillTexture;
   }
 
   setWater(level: number, wetLevel: number, time: number, sunUp = 1): void {
