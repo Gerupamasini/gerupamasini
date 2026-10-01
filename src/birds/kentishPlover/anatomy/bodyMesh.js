@@ -115,7 +115,44 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
   const key = resolutionMM;
   if (cache.has(key)) return cache.get(key);
   const sdf = makeBodySDF(cfg.bodySculpt);
-  const { positions, normals, indices } = surfaceNets(sdf, cfg.bodySculpt.bounds, resolutionMM);
+  const det = cfg.bodySculpt.facePatch;
+  let positions;
+  let normals;
+  let indices;
+  if (det && resolutionMM <= det.maxBaseRes) {
+    // Face patch (eye sockets, lores, bill base, forehead): the same SDF polygonised finer inside a sphere and
+    // laid over the base mesh, which is sunk 0.35 mm under it there (its facets would cut the 2.8 mm eye opening
+    // and the feathering round the bill). Past r − 0.8 the base surfaces again and the patch's rim dips 0.1 mm
+    // under it: no seam, no stitching (same SDF, same normals, same plumage shader).
+    const rr = (q, x, y, z) => Math.hypot(x - q.c[0], y - q.c[1], z - q.c[2]);
+    const sink = (x, y, z) => det.patches.reduce((s, q) => Math.max(s, 1 - smooth(q.r - 1.6, q.r - 0.8, rr(q, x, y, z))), 0);
+    const base = surfaceNets((x, y, z) => sdf(x, y, z) + det.sink * sink(x, y, z), cfg.bodySculpt.bounds, resolutionMM);
+    // the base mesh's own facets inside the patches are dropped (its coarse eye opening stood through the patch
+    // in places once fluffing displaced both along their own normals)
+    const inner = (i) => det.patches.some((q) => rr(q, base.positions[i * 3], base.positions[i * 3 + 1], base.positions[i * 3 + 2]) < q.r - 1.6);
+    const kept = [];
+    for (let t = 0; t < base.indices.length; t += 3) {
+      const [a, b, c] = [base.indices[t], base.indices[t + 1], base.indices[t + 2]];
+      if (!(inner(a) || inner(b) || inner(c))) kept.push(a, b, c);
+    }
+    base.indices = kept;
+    const parts = [base];
+    for (const q of det.patches) parts.push(surfaceNets((x, y, z) => sdf(x, y, z) + 0.1 * smooth(q.r - 0.8, q.r, rr(q, x, y, z)), null, det.res, q));
+    const pos = [];
+    const nrm = [];
+    const ind = [];
+    for (const p of parts) {
+      const off = pos.length / 3;
+      for (const v of p.positions) pos.push(v);
+      for (const v of p.normals) nrm.push(v);
+      for (const i of p.indices) ind.push(i + off);
+    }
+    positions = new Float32Array(pos);
+    normals = new Float32Array(nrm);
+    indices = new Uint32Array(ind);
+  } else {
+    ({ positions, normals, indices } = surfaceNets(sdf, cfg.bodySculpt.bounds, resolutionMM));
+  }
   const n = positions.length / 3;
   const pos = new Float32Array(n * 3);
   const rest = new Float32Array(n * 3);
@@ -159,6 +196,6 @@ export function getBodySDF(cfg) {
  * only the trunk underneath.
  */
 export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
-  const drop = new Set(['neck', 'head', 'lores', 'chin', ...(trunkOnly ? ['mantleNape', 'foreBreast'] : [])]);
+  const drop = new Set(['neck', 'head', 'lores', 'billCuff', 'chin', ...(trunkOnly ? ['mantleNape', 'foreBreast'] : [])]);
   return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [] });
 }

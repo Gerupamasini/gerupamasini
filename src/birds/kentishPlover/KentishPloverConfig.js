@@ -25,8 +25,8 @@ export const morphology = {
   toes: { inner: mm(13), mid: mm(19), outer: mm(15) }, // no hallux
   billDepthBase: mm(4.0),
   billWidthBase: mm(3.6),
-  eyeAperture: mm(4.6), // apparent eye in the photos (bill / eye 3.0–3.4, p070, p043)
-  eyeballRadius: mm(4.0),
+  eyeAperture: mm(5.3), // apparent eye in the photos: 5.4–6 mm with the lid rim (pale-faced birds, eye→bill-tip scale)
+  eyeballRadius: mm(4.4),
   headLength: mm(36),
   headHeight: mm(22),
   headWidth: mm(24.5),
@@ -71,7 +71,12 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'rump', c: [0, 61, -48], r: [9.5, 6.5, 16], rx: 24 },
     { type: 'ellipsoid', name: 'undertail', c: [0, 59.5, -52.5], r: [7, 2, 13], rx: 15 }, // under-tail keel, covered by the LTC
     { type: 'ellipsoid', name: 'head', c: [0, 93.5, 24], r: [12.5, 12.5, 15], k: 5 },
-    { type: 'ellipsoid', name: 'lores', c: [0, 90, 37], r: [6, 5, 5], k: 3.2 },
+    // lores pulled back so the feathering meets the bill at the photographed feather line (z 39.6: eye → bill
+    // base 14.8 mm along the bill axis, 43 photos), not 2 mm further out as a wall the bill stuck out of
+    { type: 'ellipsoid', name: 'lores', c: [0, 90.4, 35.3], r: [5.6, 4.9, 4.8], k: 3.2 },
+    // feathering drawn out round the bill base (forehead into the culmen, chin into the lower mandible): a short
+    // cone of plumage hugging the bill, not a cut (p012, p070, p050, p010)
+    { type: 'capsule', name: 'billCuff', a: [0, 91.6, 35.8], b: [0, 89.75, 40.3], r: 2.25, k: 3.0 },
     { type: 'ellipsoid', name: 'chin', c: [0, 84, 31], r: [9, 6, 7], k: 4 },
     { type: 'ellipsoid', name: 'foreBreast', c: [0, 76, 24], r: [14, 14, 13] },
     { type: 'ellipsoid', name: 'breastSideL', c: [11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
@@ -83,10 +88,24 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'midFlankR', c: [-10.5, 48, -2], r: [8.5, 9, 14], k: 6 },
   ],
   // Subtractive details (smooth subtraction)
+  // Eye openings: a 2.8 mm tube along the eye axis through the plumage, its rim rounded over ≈1 mm — the cornea
+  // (flush with the surrounding feathers at its apex) sits 1.2 mm down in it, the plumage rim overlapping the lid
+  // margin (photos: the eye is set into the face, not a ball on it: p001, p010, p035, p012)
   cuts: [
-    { type: 'ellipsoid', name: 'eyeSocketL', c: [12.8, 95.2, 25.8], r: [2.1, 2.6, 2.8], k: 1.2 },
-    { type: 'ellipsoid', name: 'eyeSocketR', c: [-12.8, 95.2, 25.8], r: [2.1, 2.6, 2.8], k: 1.2 },
+    { type: 'capsule', name: 'eyeSocketL', a: [9.03, 95.2, 25.9], b: [16.19, 96.17, 27.93], r: 2.78, k: 0.9 },
+    { type: 'capsule', name: 'eyeSocketR', a: [-9.03, 95.2, 25.9], b: [-16.19, 96.17, 27.93], r: 2.78, k: 0.9 },
   ],
+  // LOD0 face patches (anatomy/bodyMesh.js): eye sockets and bill base polygonised at 0.3 mm over the base mesh
+  facePatch: {
+    patches: [
+      { c: [12.1, 95.6, 26.8], r: 5.5 },
+      { c: [-12.1, 95.6, 26.8], r: 5.5 },
+      { c: [0, 90.3, 39.2], r: 5.5 },
+    ],
+    res: 0.3,
+    sink: 0.35,
+    maxBaseRes: 1.5,
+  },
   // the SDF spans x ±21, y 36–105, z −66…41
   bounds: { min: [-24, 32, -70], max: [24, 109, 46] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
@@ -124,8 +143,10 @@ export const plumage = {
       bill: '#1a1818',
       billRoughness: 0.3,
       legs: '#827369', // rendered ≈ the photos' white-balanced tarsus #8a7a6d (p006, p020, p070); '#5a534f' rendered near-black
-      iris: '#120f0f',
+      iris: '#1d1512',
       eyelidRing: '#dcd6cd',
+      eyelidRingUpper: '#1e1a19', // upper lid dark in the black mask, pale only below the eye (p012, p043)
+      headPattern: [13, 1, 1], // [supercilium end z (mm), loral stripe, mask round the eye] (KentishPloverMaterials)
       rufousCap: true, // crown / crownRear / nape blend toward plumage.sandyCap with individual.rufousAmount
     },
     femaleBreeding: {
@@ -149,8 +170,9 @@ export const plumage = {
       white: '#ebe9e3',
       bill: '#1a1818',
       legs: '#8e8583',
-      iris: '#120f0f',
+      iris: '#1d1512',
       eyelidRing: '#dcd6cd',
+      headPattern: [21, 0.7, 0.3], // supercilium ends 4.5 mm behind the eye, the cap drops to the ear coverts (p050, p008)
     },
     nonBreeding: {
       forehead: '#e0dad2',
@@ -173,8 +195,9 @@ export const plumage = {
       white: '#ebe9e3',
       bill: '#1a1818',
       legs: '#92857e', // photos #9b8d86 (p001, p050)
-      iris: '#120f0f',
+      iris: '#1d1512',
       eyelidRing: '#e4d9cf',
+      headPattern: [20, 0.5, 0.25], // pale lores (p001, p035)
     },
     // juvenile (spec §13.2; p062, p063): buff-fringed upperparts with a dark subterminal band, diffuse
     // incomplete breast band, indistinct collar
@@ -200,8 +223,9 @@ export const plumage = {
       white: '#ebe9e3',
       bill: '#161915',
       legs: '#7a6365', // pinkish grey, photos #81696b (p035, p063, p059)
-      iris: '#120f0f',
+      iris: '#1d1512',
       eyelidRing: '#dcd6cd',
+      headPattern: [22, 0.45, 0.3], // p062, p045
     },
   },
   // Photo appearance → albedo: palette colours are darkened by (Y / 0.82)^(γ − 1) so the rendered mantle / white

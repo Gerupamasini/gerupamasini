@@ -72,7 +72,11 @@ export function makeBodySDF(sculpt) {
  * per surface cell, then relaxes vertices back onto the isosurface along the SDF gradient.
  * Returns { positions: Float32Array (mm), normals, indices }.
  */
-export function surfaceNets(sdf, bounds, res) {
+export function surfaceNets(sdf, bounds, res, region = null) {
+  // region {c, r}: polygonise only the part of the surface inside that sphere (a finer patch laid over a coarser
+  // mesh): the grid spans the sphere, points beyond r + 2·res are not evaluated, and only quads whose four cells
+  // lie inside r are emitted
+  if (region) bounds = { min: region.c.map((v) => v - region.r - res), max: region.c.map((v) => v + region.r + res) };
   // one extra cell layer around the bounds (same grid alignment): the quad pass skips the outermost grid
   // edges, so a surface crossing the first cell layer (the flank at a coarse resolution) was left open
   const [x0, y0, z0] = bounds.min.map((v) => v - res);
@@ -81,13 +85,19 @@ export function surfaceNets(sdf, bounds, res) {
   const nz = Math.ceil((bounds.max[2] - bounds.min[2]) / res) + 3;
   const field = new Float32Array(nx * ny * nz);
   const idx = (i, j, k) => i + nx * (j + ny * k);
+  const rEval = region ? (region.r + 2 * res) ** 2 : Infinity;
   for (let k = 0; k < nz; k++) {
     const z = z0 + k * res;
     for (let j = 0; j < ny; j++) {
       const y = y0 + j * res;
-      for (let i = 0; i < nx; i++) field[idx(i, j, k)] = sdf(x0 + i * res, y, z);
+      for (let i = 0; i < nx; i++) {
+        const x = x0 + i * res;
+        field[idx(i, j, k)] = region && (x - region.c[0]) ** 2 + (y - region.c[1]) ** 2 + (z - region.c[2]) ** 2 > rEval ? 1 : sdf(x, y, z);
+      }
     }
   }
+  const rCell = region ? region.r ** 2 : Infinity;
+  const cellIn = (i, j, k) => !region || (x0 + (i + 0.5) * res - region.c[0]) ** 2 + (y0 + (j + 0.5) * res - region.c[1]) ** 2 + (z0 + (k + 0.5) * res - region.c[2]) ** 2 <= rCell;
 
   const cellVert = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1);
   const cidx = (i, j, k) => i + (nx - 1) * (j + (ny - 1) * k);
@@ -111,7 +121,7 @@ export function surfaceNets(sdf, bounds, res) {
           v[c] = field[idx(i + cc[0], j + cc[1], k + cc[2])];
           if (v[c] < 0) mask |= 1 << c;
         }
-        if (mask === 0 || mask === 255) continue;
+        if (mask === 0 || mask === 255 || !cellIn(i, j, k)) continue;
         let sx = 0;
         let sy = 0;
         let sz = 0;

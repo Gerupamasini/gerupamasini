@@ -376,15 +376,17 @@ export function buildLegs(sk, boneIndex, J, toes, opts = {}) {
 
 // ---------------------------------------------------------------- Eyes
 export const EYE = {
-  radius: 4.0, // eyeball (mm)
-  // visible radius: 4.6 mm aperture and a flatter cornea set into the socket — the photos' bill / eye ratio is
-  // 3.0–3.4 (p070, p043); a 5.4 mm eye with a 3.1 mm cornea read as a glossy ball (2.3)
-  aperture: 2.3,
-  corneaR: 3.6,
+  radius: 4.4, // eyeball (mm)
+  // visible radius: the dark eye of the pale-faced birds is 5.4–6 mm tall with its lid rim (p035, p062, p024,
+  // p018, p052, p019 measured on the eye→bill-tip scale); a 4.6 mm aperture read small and beady.
+  // The aperture lies 1.2 mm down the plumage opening (bodySculpt.cuts) and the flatter cornea rises to the
+  // level of the surrounding feathers, so the eye is set into the face instead of standing out as a ball
+  aperture: 2.65,
+  corneaR: 3.7,
   axisL: norm([0.955, 0.13, 0.27]), // lateral, 15.7° forward, 7.5° up (D)
 };
 
-function sphereCap(sk, center, axis, R, maxAngle, segA, segR, part, bones, uvMode, hand = 1) {
+function sphereCap(sk, center, axis, R, maxAngle, segA, segR, part, bones, uvMode, hand = 1, flatNormal = false) {
   const start = sk.count;
   // t1 = anterior direction for both eyes (hand = ±1), t2 = ventral; uv.y = phi from anterior
   const t1 = scl(norm(cross(axis, Math.abs(axis[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])), hand);
@@ -396,7 +398,7 @@ function sphereCap(sk, center, axis, R, maxAngle, segA, segR, part, bones, uvMod
       const dir = norm(addv(scl(axis, Math.cos(th)), addv(scl(t1, Math.sin(th) * Math.cos(ph)), scl(t2, Math.sin(th) * Math.sin(ph)))));
       const p = addv(center, scl(dir, R));
       // uv: polar (angle/maxAngle, phi) for iris / lid shaders
-      sk.v(p, dir, uvMode === 'polar' ? [th / maxAngle, j / segR] : [0, 0], part, bones);
+      sk.v(p, flatNormal ? axis : dir, uvMode === 'polar' ? [th / maxAngle, j / segR] : [0, 0], part, bones);
     }
   }
   for (let i = 0; i < segA; i++) {
@@ -429,7 +431,8 @@ export function buildEyes(boneIndex, J, opts = {}) {
     const eb = [[boneIndex[`eye_${side}`], 1]];
     const hb = [[boneIndex.head, 1]];
     const maxA = Math.asin(EYE.aperture / EYE.radius) + 0.12;
-    sphereCap(eyeball, c, axis, EYE.radius, maxA, segA, segR, 0, eb, 'polar');
+    // (shaded as the flat iris disc behind the cornea, not as a ball: uniformly dark like the photographed eyes)
+    sphereCap(eyeball, c, axis, EYE.radius, maxA, segA, segR, 0, eb, 'polar', 1, true);
     // cornea: more curved sphere whose rim meets the eyeball at the aperture edge
     const d = Math.sqrt(EYE.radius ** 2 - EYE.aperture ** 2) - Math.sqrt(EYE.corneaR ** 2 - EYE.aperture ** 2);
     sphereCap(cornea, addv(c, scl(axis, d)), axis, EYE.corneaR, Math.asin(EYE.aperture / EYE.corneaR) * 1.02, 8, segR, 0, eb, 'polar');
