@@ -272,6 +272,10 @@ export class WaterSurface {
   renderReflection(camera) {
     const below = camera.position.y < TANK.water;
     this.material.uniforms.uUseReflection.value = below && this.useReflection ? 1 : 0;
+    // seen from below the underside is fully opaque (alpha 1): draw it in the
+    // opaque pass so it can never paint over fish behind it in the sorted
+    // transparent list (fish bodies were cut off near the surface)
+    this.material.transparent = !below;
     if (!below || !this.useReflection) return;
     const wl = TANK.water;
     const vc = this.virtualCamera;
