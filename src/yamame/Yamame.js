@@ -1,8 +1,8 @@
 // Runtime wrapper: Yamame{ Body, Eyes, Fins, Skeleton, Materials, Animations } (docs/yamame/spec/07 §7.3).
 // Takes a parsed glTF (GLTFLoader result) and drives the 62-bone rig procedurally. three.js objects only; no loader here.
 import * as THREE from 'three';
-import { strikePose } from './modes.js';
-import { SPINE_COUNT, spineWave, WaveDriver, cStartShape } from '../locomotion/wave.js';
+import { SPINE_COUNT } from '../locomotion/wave.js';
+import { Locomotion } from '../locomotion/locomotion.js';
 
 const AXIS_Y = new THREE.Vector3(0, 1, 0), AXIS_Z = new THREE.Vector3(0, 0, 1), AXIS_X = new THREE.Vector3(1, 0, 0);
 const q = new THREE.Quaternion();
@@ -26,56 +26,39 @@ export class Yamame {
     this.#buildLOD(opts);
     this.spine = Array.from({ length: SPINE_COUNT }, (_, j) => this.bones[`spine_${String(j).padStart(2, '0')}`]);
     this.rootBone = this.bones.fish_root;
-    this.wave = new WaveDriver({ phase0: opts.phase0 ?? Math.random() * 6.28 });
+    this.loco = new Locomotion({ SL: this.SL, phase0: opts.phase0 ?? Math.random() * 6.28, variation: opts.variation });
     this.time = 0;
     this.breath = { phase: Math.random() * 6.28, f: 1.0, amp: 1.0 };
-    // per-individual variation hooks (spec 5.8)
-    this.var = { A_scale: 1, lambda: 0.9, head_gain: 1, ...(opts.variation || {}) };
     // fin pose targets (1 = fully erect / abducted)
     this.fin = { pecAbd: 0.08, pelAbd: 0.1, dorsalErect: 1, analErect: 1, caudalSpread: 0.7 };
     this.finState = { pecAbd: 0.08, pelAbd: 0.1, dorsalErect: 1, analErect: 1, caudalSpread: 0.7 };
     this.jawOpen = 0; this.opercleFlare = 0;
     this.eyeLook = { yaw: 0, pitch: 0 };
-    // world kinematics (metres, radians): the glTF scene node is moved so that the fish swims through the world
-    this.pos = new THREE.Vector3(); this.heading = 0; this.speed = 0; this.esc = null;
   }
 
-  /** Feeding strike (5.6.2). T_strike seconds (default 0.12). */
-  triggerStrike(T = 0.12) { this.strike = { t: 0, T }; }
+  // world kinematics live in Locomotion (metres, radians); the glTF scene node follows them
+  get pos() { return this.loco.pos; } get wave() { return this.loco.wave; }
+  get heading() { return this.loco.heading; } set heading(v) { this.loco.heading = v; }
+  get pitch() { return this.loco.pitch; } set pitch(v) { this.loco.pitch = v; }
+  get speed() { return this.loco.speed; } get esc() { return this.loco.esc; }
 
-  /** C-start escape (5.3.3). side: +1 = bend left. */
-  triggerEscape(side = 1, opts = {}) { this.esc = { t: 0, side, T12: opts.T12 ?? 0.088, type: Math.random() < 0.7 ? 'C' : 'S', vPeak: opts.vPeak ?? 1.4, yaw0: this.heading }; }
+  /** Feeding strike (5.6.2). T_strike seconds (default 0.12). */
+  triggerStrike(T = 0.12) { this.loco.triggerStrike(T); }
+
+  /** C-start escape (05 §5.3.3). side: +1 = bend left. */
+  triggerEscape(side = 1, opts = {}) { this.loco.triggerEscape(side, opts); }
 
   /** intent: { U_bl, turn (1/SL, left +), boost, jawOpen (deg 0..), fins:{...} } */
   update(dt, intent = {}) {
     dt = Math.min(dt, 1 / 20); this.time += dt;
-    const mode = intent.mode ? { ...intent.mode, ...intent } : intent;
-    intent = mode;
-    const w = this.wave.update(dt, { U_target: intent.U_bl ?? 1.0, turn: intent.turn ?? 0, boost: intent.boost ?? 1, A_override: intent.A_override ?? null, f_override: intent.f_override ?? null });
-    let res = spineWave({ phase: w.phase, A_tail: w.A * this.var.A_scale, lambda: this.var.lambda, turn: w.turn, head_gain: this.var.head_gain });
-    let U_ms = (w.U - (intent.flow_bl ?? 0)) * this.SL, yawRate = w.U * w.turn;          // m/s ; rad/s = U[BL/s] * kappa[1/SL] (left turn: kappa>0 -> +yaw about +Y)
-    if (this.esc) {
-      const e = this.esc; e.t += dt;
-      const sh = cStartShape(e.t, { T12: e.T12, side: e.side, type: e.type });
-      // blend the swimming wave back in during stage 3
-      const mix = e.t < e.T12 ? 0 : Math.min(1, (e.t - e.T12) / 0.15);
-      const rel = new Float64Array(SPINE_COUNT); for (let j = 0; j < SPINE_COUNT; j++) rel[j] = sh.rel[j] * (1 - mix) + res.rel[j] * mix;
-      res = { ...res, rel, recoil: res.recoil * mix };
-      const T = e.T12; const a = e.t < T ? 4 * (e.vPeak / T) * Math.sin(Math.PI * e.t / T) ** 2 / 2 : 0;       // sin^2 acceleration profile, integrates to ~vPeak
-      this.speed = e.t < T ? Math.min(e.vPeak, this.speed + a * dt) : Math.max(w.U * this.SL, this.speed - 1.0 * dt);
-      U_ms = this.speed;
-      yawRate = e.t < 0.45 * e.T12 ? e.side * 0.87 / (0.45 * e.T12) : (e.t < e.T12 ? -e.side * 0.25 / (0.55 * e.T12) : 0);   // head turns ~50 deg toward the bend in stage 1, partly back in stage 2 [E]
-      if (!sh.active) this.esc = null;
-    } else this.speed = U_ms;
-    const strike = this.strike ? (this.strike.t += dt, strikePose(this.strike.t / this.strike.T)) : null; if (this.strike && this.strike.t > this.strike.T) this.strike = null;
-    this.strikePose = strike;
+    if (intent.mode && typeof intent.mode === 'object') intent = { ...intent.mode, ...intent };
+    const { res, w } = this.loco.update(dt, intent);
+    this.strikePose = this.loco.strikePose;
     for (let j = 0; j < SPINE_COUNT; j++) {
       const b = this.spine[j]; q.setFromAxisAngle(AXIS_Y, res.rel[j]); b.quaternion.copy(this.rest[b.name].q).multiply(q);
     }
     if (this.rootBone) this.rootBone.position.copy(this.rest.fish_root.p).add(new THREE.Vector3(0, 0, res.recoil * this.SL));
-    this.heading += yawRate * dt;
-    this.pos.x += Math.cos(this.heading) * U_ms * dt; this.pos.z += -Math.sin(this.heading) * U_ms * dt;
-    if (!intent.hold) { this.root.position.copy(this.pos); this.root.rotation.y = this.heading; }
+    this.root.position.set(this.pos.x, this.pos.y, this.pos.z); this.root.rotation.order = 'YXZ'; this.root.rotation.set(0, this.heading, this.pitch);
     this.#headAndGills(dt, intent, w);
     this.#fins(dt, intent, w, res);
     return res;

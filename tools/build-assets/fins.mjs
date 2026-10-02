@@ -346,7 +346,7 @@ function specDorsal(ctx) {
   const tilt = (rng() - 0.5) * 2 * 2.2 * DEG * vary;            // fin leans slightly to one side [E]
   const A1 = [-1, 0, 0], A2 = [0, Math.cos(tilt), Math.sin(tilt)]; F.A1 = A1; F.A2 = A2; F.Nf = [0, -Math.sin(tilt), Math.cos(tilt)];
   F.Cv = A1;
-  const thF = (44 + (rng() - 0.5) * 6 * vary) * DEG, thR = (60 + (rng() - 0.5) * 6 * vary) * DEG;   // rays lean back and fan out: ~44 deg at the front edge, ~60 deg at the rear [P: p049 dorsal crop]
+  const thF = (42 + (rng() - 0.5) * 6 * vary) * DEG, thR = (60 + (rng() - 0.5) * 6 * vary) * DEG;   // rays lean back and fan out: ~44 deg at the front edge, ~60 deg at the rear [P: p049 dorsal crop]
   const H = fp.height * SL; const tgt = [];
   const bow = (rng() - 0.5) * 0.03 * vary;
   for (let j = 0; j < n; j++) {
@@ -368,7 +368,7 @@ function specAnal(ctx) {
   F.bites = makeBites(rng, ctx.damage * 0.4, 1);
   const tilt = (rng() - 0.5) * 2 * 2 * DEG * vary;
   const A1 = [-1, 0, 0], A2 = [0, -Math.cos(tilt), Math.sin(tilt)]; F.A1 = A1; F.A2 = A2; F.Nf = [0, Math.sin(tilt), Math.cos(tilt)]; F.Cv = A1;
-  const thF = (56 + (rng() - 0.5) * 5 * vary) * DEG, thR = (60 + (rng() - 0.5) * 5 * vary) * DEG;   // longest ray 0.113-0.119 SL for 0.064 SL height => ~56 deg [P: r10 F-14]
+  const thF = (51 + (rng() - 0.5) * 5 * vary) * DEG, thR = (58 + (rng() - 0.5) * 5 * vary) * DEG;   // longest ray 0.113-0.119 SL for 0.064 SL height => ~56 deg [P: r10 F-14]
   const H = fp.height * SL; const tgt = [];
   for (let j = 0; j < n; j++) {
     const u = j / (n - 1); const s = fp.origin_s + fp.base_len * u;
@@ -396,7 +396,7 @@ function specPelvic(ctx, sideSeed) {
     const u = j / (n - 1); const s = fp.origin_s + baseW * u; const ph = lerp(phF, phR, Math.pow(u, 0.9));
     const e = u < 0.08 ? 0.93 + (u / 0.08) * 0.07 : 1 - 0.6 * Math.pow((u - 0.08) / 0.92, 1.05);
     F.rays.push({ B: surface.point(s, aP, -EMBED), D: add(mul(A1, Math.cos(ph)), mul(A2, Math.sin(ph))), L: 1, kap: 0.12 + 0.06 * (rng() - 0.5) * vary, bnd: 0.035 + 0.03 * (2 * u - 1) });
-    tgt.push(fp.length * SL * e * (1 + 0.03 * (rng() - 0.5) * 2 * vary));
+    tgt.push(fp.length * SL * e * 1.04 * (1 + 0.03 * (rng() - 0.5) * 2 * vary));
   }
   finishRays(F); fitRays(F, tgt, null); prepFin(F);
   F.clearance = (p, r) => (r > 0.08 ? pushOut(body, p, 0.5 * MM) : p);
@@ -448,15 +448,19 @@ function specCaudal(ctx) {
     const sec = surface.section(s_);
     return [surface.sToX(s_), (sec.c + v * sec.h) * SL - Math.sign(v) * EMBED * Math.pow(Math.abs(v), 4), 0];
   };
-  const xS1 = surface.sToX(1.0); const tipX = xS1 - fp.length * SL; const Yh = (fp.span * SL) / 2; const fork = fp.fork_depth * SL;
+  const xS1 = surface.sToX(1.0); const tipX = xS1 - fp.length * SL; const Yh = (fp.span * SL) / 2 * 1.015; const fork = fp.fork_depth * SL;
   const yC = surface.section(1).c * SL;
   const lobeU = 1 + 0.015 * (rng() - 0.5) * 2 * vary, lobeL = 1 + 0.015 * (rng() - 0.5) * 2 * vary;
+  const gOf = (v) => Math.pow(Math.max(1 - Math.pow(Math.abs(v), 2.2), 0), 1.4);
+  const hOf = (v) => 0.012 * SL * Math.pow(sstep(0.78, 1, Math.abs(v)), 1.5);       // outermost rays slightly shorter => rounded lobe tips
+  const depthFor = (a) => { let m = Infinity; for (let k = 0; k < n; k++) { const v = 1 - 2 * k / (n - 1); m = Math.min(m, a * gOf(v) + hOf(v)); } return a * gOf(0) + hOf(0) - m; };
+  let lo = fork, hi = fork * 3; for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (depthFor(mid) < fork) lo = mid; else hi = mid; }
+  const forkAmp = (lo + hi) / 2; let rawMin = Infinity; for (let k = 0; k < n; k++) { const v = 1 - 2 * k / (n - 1); rawMin = Math.min(rawMin, forkAmp * gOf(v) + hOf(v)); }
   const twist = (rng() < 0.5 ? -1 : 1) * (0.02 + 0.02 * rng()) * vary; const cup = 0.02 + 0.02 * rng();
   for (let k = 0; k < n; k++) {
     const u = k / (n - 1); const v = 1 - 2 * u;                     // +1 upper lobe .. -1 lower lobe
-    const g = Math.pow(Math.max(1 - Math.pow(Math.abs(v), 2.2), 0), 1.4);
     const lobe = v > 0 ? lobeU : lobeL;
-    const tip = [tipX + fork * g + SL * (-0.008 + 0.012 * Math.pow(sstep(0.78, 1, Math.abs(v)), 1.5)), yC + Yh * v * lobe, 0];   // rounded lobe tips (outermost rays slightly shorter)
+    const tip = [tipX + forkAmp * gOf(v) + hOf(v) - rawMin, yC + Yh * v * lobe, 0];
     const root = rootOf(v);
     const kap = 0.2 * Math.pow(Math.abs(v), 1.6) + 0.02 * (rng() - 0.5), bnd = cup * (v * v - 0.35) + twist * v + 0.01 * (rng() - 0.5), Cv = [0, v >= 0 ? 1 : -1, 0];
     // choose D and L so that the curved ray still ends exactly at `tip` (in the fin plane)
@@ -493,7 +497,7 @@ function buildAdiposeMesh(ctx, lod) {
   const shape = (u) => Math.pow(Math.sin(Math.PI * Math.pow(u, 0.8)), 0.8);
   const rows = [];
   for (let i = 0; i <= nu; i++) {
-    const u = i / nu; const s = fp.origin_s + fp.base_len * u; const sh = i === 0 || i === nu ? 0 : shape(u);
+    const u = i / nu; const s = fp.origin_s + fp.base_len * u; const sh = Math.max(shape(u), 0.04);   // tiny (not zero) end rings keep the normals defined
     const hh = H * sh * (1 + 0.04 * vnoise(u * 5, 1.3, ctx.seed + 3)); const ww = W0 * Math.pow(sh, 0.75);
     const top = surface.point(s, 0)[1];
     const row = [];
@@ -696,7 +700,17 @@ function lodParams(d) {
   return { cpr: 1, rowsMul: 0.7, sides: 0, tubeRowsMul: 0, collar: null, adipose: [6, 3], notch: false, pleat: false, stride: 2, name: 'LOD2' };                  // ray-pair columns, no pleat / notch geometry
 }
 
-export function buildFins({ surface, params, genome = {}, seed = 1, detail = 1 } = {}) {
+/**
+ * @param {object} o
+ * @param {object} o.surface  createSurface() result (the canonical body loft)
+ * @param {object} o.params   assets/src/params.json (fins.* are used)
+ * @param {object} [o.genome] optional: fin_ray_count {dorsal,pectoral,pelvic,anal} | fin_damage 0..1 | caudal_margin_sat 0..1 |
+ *                            fins: { ray_count, white_edge:{pelvic,anal,dorsal,pectoral}, caudal_margin_sat, damage, pectoral_color:[r,g,b], dorsal_dots, variation }
+ * @param {number} [o.seed]
+ * @param {number} [o.detail] 1 = LOD0 (~4.9k tris for all fins), 0.5 = LOD1 (~2.4k), 0.25 = LOD2 (~0.7k); >1 adds columns / rows
+ * @param {boolean} [o.skipTextures] true: do not paint the atlas (textures: null) - the atlas does not depend on `detail`
+ */
+export function buildFins({ surface, params, genome = {}, seed = 1, detail = 1, skipTextures = false } = {}) {
   const ctx = makeCtx({ surface, params, genome, seed });
   const { body, SL } = ctx;
   const lod = lodParams(detail);
@@ -743,7 +757,7 @@ export function buildFins({ surface, params, genome = {}, seed = 1, detail = 1 }
     caudal: physOf(specs.caudal), dorsal: physOf(specs.dorsal), anal: physOf(specs.anal), pectoral: physOf(specs.pectoral_R), pelvic: physOf(specs.pelvic_R),
   };
   const T = texSpecs(ctx, { dorsal: specs.dorsal, anal: specs.anal, caudal: specs.caudal, pectoral: specs.pectoral_R, pelvic: specs.pelvic_R });
-  const textures = paintAtlas(ctx, T, phys, {});
+  const textures = skipTextures ? null : paintAtlas(ctx, T, phys, {});
 
   const nv = out.p.length;
   const positions = new Float32Array(nv * 3), normals = new Float32Array(nv * 3), uvs = new Float32Array(nv * 2);
@@ -767,7 +781,7 @@ export function buildFins({ surface, params, genome = {}, seed = 1, detail = 1 }
       adipose: { note: 'adipose_01/02: _FINR 0..1 (height above the base) blends 01 (base) -> 02 (tip); _FINT is the front-to-back position', ids: [1] },
     },
     atlas: { size: ATLAS_SIZE, cells: Object.fromEntries(Object.entries(ATLAS_CELLS).map(([k, c]) => [k, { ...c, uv: [(c.x + 0.5) / ATLAS_SIZE, (c.y + 0.5) / ATLAS_SIZE, (c.x + c.w - 0.5) / ATLAS_SIZE, (c.y + c.h - 0.5) / ATLAS_SIZE] }])), note: 'cell x = t (leading -> trailing), y = r (root at the top row).  pectoral_R/L, pelvic_R/L share a cell.' },
-    colours: { note: 'albedo is the fin\'s own colour (sRGB); the renderer composites with alpha. Pectoral amber ~ (224,176,84) vs 03 median (185,155,85) measured through the membrane.', white_edge: T.pelvic.white, caudal_margin_sat: T.caudal.sat },
+    colours: { note: 'albedo is the fin\'s own colour (sRGB, alpha-composited by the renderer); brighter than the 03 §3.5.1 medians, which were measured through the translucent membrane. Pectoral: grey-yellow membrane (210,178,112), amber (214,140,44) only near the root and along the leading edge.', white_edge: T.pelvic.white, caudal_margin_sat: T.caudal.sat },
     alpha: { membrane: [T.dorsal.aMem, T.pectoral.aMem], ray: [T.dorsal.aRay, T.pectoral.aRay], base: T.dorsal.aBase, note: '06 §6.5: membrane 0.45 (0.3-0.7), ray 0.80, base 0.85' },
     material: { transparent: true, depthWrite: false, side: 'DoubleSide', castShadow: false, normalScaleY: -1, note: 'three needs normalScale.y = -1 for derivative tangents (as GLTFLoader does)' },
     root_embed_mm: EMBED / MM,

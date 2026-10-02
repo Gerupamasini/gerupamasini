@@ -69,13 +69,13 @@ export class WaveDriver {
     this.f = 0.6; this.A = 0.055; this.U = 0; this.phase = opts.phase0 ?? 0; this.accel = 0; this.turn = 0;
     this.opts = { tauF: 0.25, tauA: 0.30, tauU: 0.5, fDispMax: 20, lambda: 0.9, ...opts };
   }
-  update(dt, { U_target = 1.0, turn = 0, boost = 1, A_override = null, f_override = null } = {}) {
-    const o = this.opts;
+  update(dt, { U_target = 1.0, turn = 0, boost = 1, A_override = null, f_override = null, fast = false } = {}) {
+    const o = fast ? { ...this.opts, tauU: 0.12, tauF: 0.10, tauA: 0.12 } : this.opts;      // fast: strike / flee onset (acceleration ~10 BL/s^2 or more, 05 §5.3.1)
     const Uprev = this.U; this.U = lag(this.U, U_target, dt, o.tauU); this.accel = (this.U - Uprev) / Math.max(dt, 1e-4);
     const fT = f_override ?? freqFromSpeed(this.U);
     const aT = (A_override ?? ampFromSpeed(this.U)) * boost;
     this.f = lag(this.f, fT, dt, o.tauF); this.A = lag(this.A, aT, dt, o.tauA);
-    this.turn = lag(this.turn, turn, dt, 0.2);
+    this.turn = lag(this.turn, turn, dt, fast ? 0.07 : 0.2);
     const fDisp = Math.min(this.f, o.fDispMax);
     this.phase += 2 * Math.PI * fDisp * Math.min(dt, 0.05);
     return this;
