@@ -70,7 +70,7 @@ export const joints = {
 export const bodySculpt = {
   smooth: 7.5,
   prims: [
-    // (19 → 21.5 wide: from above the back is a broad rounded dome over which the wings fold, widest at mid-body and
+    // (19 → 22.5 wide: from above the back is a broad rounded dome over which the wings fold, widest at mid-body and
     // tapering smoothly to the tail, not a narrow spindle with the folded wings pressed flat against its sides —
     // validation §Y. The front view is unchanged: the breast and its sides set the width there)
     { type: 'ellipsoid', name: 'torso', c: [0, 66, -12], r: [22.5, 19.5, 39.5], rx: 29 },
@@ -78,10 +78,6 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'belly', c: [0, 47, -11], r: [15.5, 11.5, 21.5] },
     { type: 'ellipsoid', name: 'mantleNape', c: [0, 86.5, 6], r: [15, 7.5, 13.5] },
     { type: 'ellipsoid', name: 'rump', c: [0, 61, -48], r: [9.5, 6.5, 16], rx: 24 },
-    // fuller lower back / rump sides under the folded wing (z −30…−55, y 57–66, well under the back line, which it
-    // leaves within 0.2 mm): the plan outline tapers from the mid-body to the tail in one convex curve instead of
-    // narrowing to a 25 mm stem at z −45 (validation §Y)
-    { type: 'ellipsoid', name: 'backFull', c: [0, 61.5, -37], r: [16, 4.5, 18], rx: 10, k: 6 },
     { type: 'ellipsoid', name: 'undertail', c: [0, 59.5, -52.5], r: [7, 2, 13], rx: 15 }, // under-tail keel, covered by the LTC
     { type: 'ellipsoid', name: 'head', c: [0, 93.5, 24], r: [12.5, 12.5, 15], k: 5 },
     // lores pulled back so the feathering meets the bill at the photographed feather line (z 39.6: eye → bill

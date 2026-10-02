@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { KentishPloverModel } from '../birds/kentishPlover/KentishPloverModel.js';
-import { KentishPloverAnimator, PREEN_VARIANTS } from '../birds/kentishPlover/KentishPloverAnimator.js';
+import { KentishPloverAnimator, PREEN_VARIANTS, tailLagStep } from '../birds/kentishPlover/KentishPloverAnimator.js';
 import { GLSL, getPalette, plumageAlbedo } from '../birds/kentishPlover/KentishPloverMaterials.js';
 import { animation as ANIM } from '../birds/kentishPlover/KentishPloverConfig.js';
 
@@ -115,9 +115,20 @@ function bakeClips(model) {
       sample = (t) => A.previewAction(pose, t / duration, variant);
     }
     const frames = Math.max(2, Math.round(duration * fps) + 1);
+    // actions are sampled frozen at each t (the posture settled on it), which leaves the tail's lag behind the trunk
+    // (Animator tailLagStep) at rest: it is replayed over the sampled frames instead
+    const frozen = !['walk', 'run', 'flight'].includes(pose) && dur === null;
+    let lag = null;
+    const X = new THREE.Vector3(1, 0, 0);
+    const Y = new THREE.Vector3(0, 1, 0);
+    const q = new THREE.Quaternion();
     for (let f = 0; f < frames; f++) {
       const t = Math.min(duration, f / fps);
       sample(t);
+      if (frozen && A._tailIn) {
+        lag = tailLagStep(lag, f ? 1 / fps : 0, ...A._tailIn);
+        model.bones.tail.quaternion.multiply(q.setFromAxisAngle(X, -lag.x[0])).multiply(q.setFromAxisAngle(Y, lag.x[1]));
+      }
       for (const bone of model.boneList) {
         let tr = tracks.get(bone.name);
         if (!tr) tracks.set(bone.name, (tr = { t: [], p: [], q: [], s: [] }));

@@ -186,6 +186,45 @@ function wingQuat(sweep, elev, twist, out = new THREE.Quaternion()) {
   return out;
 }
 
+/**
+ * Secondary motion of the tail: the tail is a stiff, light appendage on the pygostyle, so it lags the trunk a little —
+ * it dips as the body rises on each step and flicks against the pitch of a peck or the start of a turn, then settles
+ * (a well-damped spring, ANIM.tailLag). Inputs: the trunk's height (m), pitch and heading (rad) this frame; the spring
+ * is driven by their accelerations (second differences), so a steady posture leaves the tail where the pose puts it.
+ * Returns the state; state.x = [pitch, yaw] (rad) added to the tail bone (Animator._poseTail; a bone rotation, so the
+ * GLB carries it too — exportGLB replays it over frozen action frames). The folded wings stay on the body.
+ */
+export function tailLagStep(s, dt, height, pitch, heading) {
+  const T = ANIM.tailLag;
+  // (a state started on a zero step — the previews' update(0) — gets a nominal one: 0/0 velocities made the tail NaN)
+  s ??= { h: [height, height], p: [pitch, pitch], y: [heading, heading], x: [0, 0], v: [0, 0], dt: [dt || 1 / 60, dt || 1 / 60] };
+  if (!(dt > 0)) return s;
+  const acc = (q, x) => {
+    const v1 = (x - q[0]) / dt;
+    const v0 = (q[0] - q[1]) / s.dt[0];
+    q[1] = q[0];
+    q[0] = x;
+    return (v1 - v0) / (0.5 * (dt + s.dt[0]));
+  };
+  const aUp = acc(s.h, height);
+  const aPitch = acc(s.p, pitch);
+  const aYaw = acc(s.y, s.y[0] + wrapAngle(heading - s.y[0]));
+  s.dt[1] = s.dt[0];
+  s.dt[0] = dt;
+  // forcing: rising → the tail dips; a nose-down pitch acceleration → it lags the other way; a turn's yaw acceleration
+  // → it swings outward. Capped so a jolt (teleport, first frame) cannot fling it
+  const F = [clamp(-T.lift * aUp - T.pitch * aPitch, -T.maxForce, T.maxForce), clamp(-T.yaw * aYaw, -T.maxForce, T.maxForce)];
+  const w = 2 * Math.PI * T.hz;
+  const n = Math.max(1, Math.ceil(dt / (1 / 240)));
+  const h = dt / n;
+  for (let i = 0; i < n; i++)
+    for (let k = 0; k < 2; k++) {
+      s.v[k] += h * (F[k] - w * w * s.x[k] - 2 * T.damping * w * s.v[k]);
+      s.x[k] = clamp(s.x[k] + h * s.v[k], -T.max, T.max);
+    }
+  return s;
+}
+
 // ---------------------------------------------------------------- the animator
 export class KentishPloverAnimator {
   constructor(model, { seed = 1, individual = {} } = {}) {
@@ -959,43 +998,10 @@ export class KentishPloverAnimator {
     }
   }
 
-  /**
-   * Secondary motion of the tail: the tail is a stiff, light appendage on the pygostyle, so it lags the trunk a little
-   * — it dips as the body rises on each step and flicks against the pitch of a peck or the start of a turn, then
-   * settles (a well-damped spring, ANIM.tailLag). Inputs: the trunk's height (m), pitch and heading (rad); the
-   * spring is driven by their accelerations, so a steady posture leaves the tail where the pose puts it. Bone
-   * rotation only (in the GLB too); the folded wings stay on the body (their tips slide over the tail).
-   */
+  /** Secondary motion of the tail (tailLagStep): driven by the trunk's height, pitch and heading of this frame. */
   _tailSecondary(dt, height, pitch, heading) {
-    const T = ANIM.tailLag;
-    const s = (this._tail ??= { h: [height, height], p: [pitch, pitch], y: [heading, heading], x: [0, 0], v: [0, 0], dt: [dt, dt] });
-    if (!(dt > 0)) return;
-    // second differences over the last two frames (dt may vary)
-    const acc = (q, x) => {
-      const v1 = (x - q[0]) / dt;
-      const v0 = (q[0] - q[1]) / s.dt[0];
-      q[1] = q[0];
-      q[0] = x;
-      return (v1 - v0) / (0.5 * (dt + s.dt[0]));
-    };
-    const aUp = acc(s.h, height);
-    const aPitch = acc(s.p, pitch);
-    const dy = wrapAngle(heading - s.y[0]);
-    const aYaw = acc(s.y, s.y[0] + dy);
-    s.dt[1] = s.dt[0];
-    s.dt[0] = dt;
-    // forcing: rising → the tail dips (− = down); nose-down pitch acceleration → the tail lags up-down the other way;
-    // a turn's yaw acceleration → it swings outward. Clamped so a jolt (teleport, first frame) cannot fling it
-    const F = [clamp(-T.lift * aUp + T.pitch * -aPitch, -T.maxForce, T.maxForce), clamp(-T.yaw * aYaw, -T.maxForce, T.maxForce)];
-    const w = 2 * Math.PI * T.hz;
-    const n = Math.max(1, Math.ceil(dt / (1 / 240)));
-    const h = dt / n;
-    for (let i = 0; i < n; i++)
-      for (let k = 0; k < 2; k++) {
-        s.v[k] += h * (F[k] - w * w * s.x[k] - 2 * T.damping * w * s.v[k]);
-        s.x[k] += h * s.v[k];
-        s.x[k] = clamp(s.x[k], -T.max, T.max);
-      }
+    this._tailIn = [height, pitch, heading];
+    this._tail = tailLagStep(this._tail, dt, height, pitch, heading);
   }
 
   _poseTail(act) {
