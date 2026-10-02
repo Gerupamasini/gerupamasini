@@ -89,13 +89,28 @@ vec4 groundMat(vec2 xz) {
 }
 // kind of the nearest water (1 pool, 2 sea, 3 creek), per-body variation, fetch (0…1), distance to water (m)
 vec4 waterInfo(vec2 xz);
+// Interpolated over the texels that have water near them only (a creek's surface slopes smoothly downstream and
+// meets the sea without steps; a dry texel never drags the level down).
+vec2 levelsLerp(highp sampler2D t, vec2 g, float n) {
+  g = clamp(g, vec2(0.0), vec2(n - 1.001));
+  ivec2 i = ivec2(floor(g)); vec2 f = g - vec2(i);
+  vec2 a = texelFetch(t, i, 0).rg, b = texelFetch(t, i + ivec2(1, 0), 0).rg;
+  vec2 c = texelFetch(t, i + ivec2(0, 1), 0).rg, d = texelFetch(t, i + ivec2(1, 1), 0).rg;
+  vec4 wt = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+  vec4 ok = step(vec4(-50.0), vec4(a.x, b.x, c.x, d.x));
+  vec4 wv = wt * ok;
+  float sw = wv.x + wv.y + wv.z + wv.w;
+  float lvl = sw > 1e-4 ? dot(wv, vec4(a.x, b.x, c.x, d.x)) / sw : -100.0;
+  // nearest texel decides whether there is any water here at all (the shore stays where the bake put it)
+  vec2 nn = texelFetch(t, ivec2(floor(g + 0.5)), 0).rg;
+  return vec2(nn.x > -50.0 ? lvl : -100.0, dot(wt, vec4(a.y, b.y, c.y, d.y)));
+}
 // The water level that applies here — the nearest water's own level, within a band around it (wide enough for the
 // swash to run up the sand at the sea's edge), very low elsewhere — and the nearest water's level. The shore line
 // itself is wherever the ground rises above this level, so it is as smooth as the ground.
 vec2 waterLevels(vec2 xz) {
   float w = fineW(xz);
-  vec2 lv = w > 0.5 ? texelFetch(tLvFine, ivec2(clamp(floor(fineGrid(xz) + 0.5), vec2(0.0), vec2(uFineN - 1.0))), 0).rg
-                    : texelFetch(tLvFar, ivec2(clamp(floor(farGrid(xz) + 0.5), vec2(0.0), vec2(uFarN - 1.0))), 0).rg;
+  vec2 lv = w > 0.5 ? levelsLerp(tLvFine, fineGrid(xz), uFineN) : levelsLerp(tLvFar, farGrid(xz), uFarN);
   vec4 wi = waterInfo(xz);
   float band = wi.x > 1.5 && wi.x < 2.5 ? 6.0 : 1.2;
   return vec2(wi.w < band ? lv.x : -100.0, lv.y);

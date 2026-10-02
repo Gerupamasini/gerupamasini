@@ -19,14 +19,16 @@ import { SHADOW_GLSL, type ShadowUniforms } from './Shadow';
 const GRID = 32;
 const L0 = 3.2;          // finest node (m): 0.1 m between vertices
 const LEVELS = 12;       // root covers 6.5 km
-const R0 = 10;           // finest level's range (m)
-const MAX_NODES = 1600;
+const R0_DEFAULT = 20;   // finest level's range (m); twice that at each coarser level
+const MAX_NODES = 2400;
 
 export interface TerrainOptions {
   /** 0…1: grains, parallax and micro-shadows */
   detail: number;
   /** debug view (see the end of the fragment shader) */
   debug?: number;
+  /** the finest level's range (m): longer ranges keep the far levels fine enough to hold a pool's narrow rim */
+  range0?: number;
 }
 
 export class TerrainRenderer {
@@ -39,8 +41,10 @@ export class TerrainRenderer {
   private count = 0;
   private readonly cam = new Vector3();
   nodeCount = 0;
+  private readonly r0: number;
 
   constructor(field: FieldUniforms, sky: SkyUniforms, waves: WaveUniforms, shared: { uNoise: IUniform<Texture>; uTime: IUniform<number>; uEnv: IUniform<Texture | null> }, shadow: ShadowUniforms, envHeight: number, opts: TerrainOptions) {
+    this.r0 = opts.range0 ?? R0_DEFAULT;
     const geo = new InstancedBufferGeometry();
     const n = GRID + 1;
     const pos = new Float32Array(n * n * 3);
@@ -62,7 +66,7 @@ export class TerrainRenderer {
 
     this.material = new ShaderMaterial({
       glslVersion: GLSL3,
-      defines: { ...cubeUVDefines(envHeight), GRID_N: GRID.toFixed(1), RANGE0: R0.toFixed(1) },
+      defines: { ...cubeUVDefines(envHeight), GRID_N: GRID.toFixed(1), RANGE0: this.r0.toFixed(1) },
       uniforms: { ...field, ...sky, ...waves, ...shared, ...shadow, uDetailK: { value: opts.detail }, uDebug: { value: opts.debug ?? 0 } },
       vertexShader: /* glsl */ `
         ${COMMON_GLSL}
@@ -165,7 +169,9 @@ export class TerrainRenderer {
           vec4 wi = waterInfo(xz);
           float kind = wi.x, distW = wi.w;
           float level = lv.x;
-          float depth = level - yMega;
+          // under water against the same ground the water pass uses (the baked grid, without the sand waves): the two
+          // must agree on where the water is, or a pool shows patches of dark wet bed with no surface over them
+          float depth = level - yBase;
           float under = (level > -50.0) ? smoothstep(0.0, 0.002, depth) : 0.0;
           float wt = lv.y + 0.004 + 0.0022 * distW;
           wt += mud * 0.012 * exp(-distW * 0.08);
@@ -359,7 +365,7 @@ export class TerrainRenderer {
     const c = this.cam;
     const dx = Math.max(x0 - c.x, 0, c.x - (x0 + size)), dz = Math.max(z0 - c.z, 0, c.z - (z0 + size)), dy = Math.max(-9 - c.y, 0, c.y - 6);
     const d = Math.hypot(dx, dy, dz);
-    if (level === 0 || d > R0 * Math.pow(2, level - 1)) {
+    if (level === 0 || d > this.r0 * Math.pow(2, level - 1)) {
       if (this.count >= MAX_NODES) return;
       const a = this.nodes.array as Float32Array, o = this.count * 4;
       a[o] = x0; a[o + 1] = z0; a[o + 2] = size; a[o + 3] = level;

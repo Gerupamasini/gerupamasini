@@ -31,11 +31,11 @@ const params = new URLSearchParams(location.search);
 const num = (k: string, d: number) => (params.has(k) && params.get(k) !== '' && Number.isFinite(Number(params.get(k))) ? Number(params.get(k)) : d);
 
 type Quality = 'low' | 'mid' | 'high' | 'ultra';
-const QUALITY: Record<Quality, { dpr: number; msaa: number; detail: number; ssr: boolean; bloom: number }> = {
-  low: { dpr: 0.75, msaa: 0, detail: 0, ssr: false, bloom: 4 },
-  mid: { dpr: 1, msaa: 4, detail: 1, ssr: true, bloom: 5 },
-  high: { dpr: 1.5, msaa: 4, detail: 1, ssr: true, bloom: 6 },
-  ultra: { dpr: 2, msaa: 4, detail: 1, ssr: true, bloom: 6 },
+const QUALITY: Record<Quality, { dpr: number; msaa: number; detail: number; ssr: boolean; bloom: number; lod: number }> = {
+  low: { dpr: 0.75, msaa: 0, detail: 0, ssr: false, bloom: 4, lod: 10 },
+  mid: { dpr: 1, msaa: 4, detail: 1, ssr: true, bloom: 5, lod: 14 },
+  high: { dpr: 1.5, msaa: 4, detail: 1, ssr: true, bloom: 6, lod: 20 },
+  ultra: { dpr: 2, msaa: 4, detail: 1, ssr: true, bloom: 6, lod: 24 },
 };
 
 export interface FlatState {
@@ -181,7 +181,7 @@ function setup(data: FlatData, normals: { fine: Uint8Array; far: Uint8Array }, w
   shared.uEnv.value = sky.env;
   const waves = createWaves(data.wind, data.seed % 997, state.wind);
   const shadow = new SunShadow(renderer, q.detail > 0 ? 2048 : 1024, 16);
-  const terrain = new TerrainRenderer(field.uniforms, sky.uniforms, waves, shared, shadow.uniforms, sky.envHeight, { detail: q.detail, debug: num('debug', 0) });
+  const terrain = new TerrainRenderer(field.uniforms, sky.uniforms, waves, shared, shadow.uniforms, sky.envHeight, { detail: q.detail, debug: num('debug', 0), range0: q.lod });
   scene.add(terrain.mesh);
   const waterPass = new WaterPass(field.uniforms, sky.uniforms, waves, shared, sky.envHeight, { ssr: q.ssr });
   const scenery = new Scenery(data, sky.uniforms, shared, field.uniforms.uTide, sky.envHeight);

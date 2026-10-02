@@ -131,7 +131,6 @@ function solveGrid(H: Float32Array, n: number, cell: number, tide: number, wind:
   // ---- pools: filled depressions above the tide
   const F = fillDepressions(H, n);
   const poolId = new Int32Array(N2).fill(-1);
-  const core = new Uint8Array(N2);
   let pools = 0;
   const comp: number[] = [];
   for (let s = 0; s < N2; s++) {
@@ -153,14 +152,12 @@ function solveGrid(H: Float32Array, n: number, cell: number, tide: number, wind:
       if (j < n - 1) take(c + n);
     }
     const area = comp.length * cell * cell;
-    // slivers (a groove along a bank, one or two cells wide) do not read as water: the pool is opened (eroded and
-    // dilated by a cell), and a pool needs a body
+    // a sliver on its own (a groove one or two cells wide) does not read as a pool: a pool needs a body. (Grooves that
+    // run out of a pool stay: cutting them off would leave holes in its surface.)
     let interior = 0;
     for (const c of comp) {
       const i = c % n;
-      const inn = i > 0 && i < n - 1 && c >= n && c < N2 - n && poolId[c - 1] === -2 && poolId[c + 1] === -2 && poolId[c - n] === -2 && poolId[c + n] === -2;
-      core[c] = inn ? 1 : 0;
-      if (inn) interior++;
+      if (i > 0 && i < n - 1 && c >= n && c < N2 - n && poolId[c - 1] === -2 && poolId[c + 1] === -2 && poolId[c - n] === -2 && poolId[c + n] === -2) interior++;
     }
     const keep = area >= 0.4 && maxD >= 0.006 && interior * cell * cell >= 0.3;
     // the level sits a little under the sill: the water seeps away through the sand between tides
@@ -169,16 +166,35 @@ function solveGrid(H: Float32Array, n: number, cell: number, tide: number, wind:
     for (const c of comp) {
       poolId[c] = id;
       if (!keep) continue;
-      const opened = core[c] === 1 || core[c - 1] === 1 || core[c + 1] === 1 || (c >= n && core[c - n] === 1) || (c < N2 - n && core[c + n] === 1);
       const L = F[c] - drop;
-      if (opened && L > H[c]) { level[c] = L; kind[c] = KIND_POOL; }
+      if (L > H[c]) { level[c] = L; kind[c] = KIND_POOL; }
     }
-    for (const c of comp) core[c] = 0;
   }
-  // ---- creeks: the ebb trickle (fine grid only)
-  if (creek) for (let k = 0; k < N2; k++) {
-    const c = creek[k];
-    if (c > H[k] + 0.001 && c > level[k]) { level[k] = c; if (kind[k] === KIND_DRY) kind[k] = KIND_CREEK; }
+  // ---- creeks: the ebb trickle (fine grid only), where no pool or sea already stands: a trickle running into a
+  // pool joins its surface instead of standing above it in a strip
+  if (creek) {
+    for (let k = 0; k < N2; k++) {
+      const c = creek[k];
+      if (kind[k] === KIND_DRY && c > H[k] + 0.001) { level[k] = c; kind[k] = KIND_CREEK; }
+    }
+    // running water does not stand in steps: where two reaches touch (a meander neck, a junction, the mouth) the
+    // higher one spills toward the lower, so no creek cell stands more than 2 cm per metre above a wet neighbour
+    // (pools and the sea hold their levels)
+    const s1 = 0.02 * cell, s2 = s1 * Math.SQRT2;
+    const relax = (k: number, o: number, s: number) => { if (level[o] > DRY && level[k] > level[o] + s) level[k] = level[o] + s; };
+    for (let it = 0; it < 2; it++) {
+      for (let j = 1; j < n - 1; j++) for (let i = 1; i < n - 1; i++) {
+        const k = j * n + i;
+        if (kind[k] !== KIND_CREEK) continue;
+        relax(k, k - 1, s1); relax(k, k - n, s1); relax(k, k - n - 1, s2); relax(k, k - n + 1, s2);
+      }
+      for (let j = n - 2; j >= 1; j--) for (let i = n - 2; i >= 1; i--) {
+        const k = j * n + i;
+        if (kind[k] !== KIND_CREEK) continue;
+        relax(k, k + 1, s1); relax(k, k + n, s1); relax(k, k + n + 1, s2); relax(k, k + n - 1, s2);
+      }
+    }
+    for (let k = 0; k < N2; k++) if (kind[k] === KIND_CREEK && level[k] <= H[k] + 0.0005) { level[k] = DRY; kind[k] = KIND_DRY; }
   }
   // ---- fetch: open-water distance upwind, swept in the order the wind crosses the grid
   const fetch = new Float32Array(N2);
@@ -226,8 +242,11 @@ function solveGrid(H: Float32Array, n: number, cell: number, tide: number, wind:
   for (let k = 0; k < N2; k++) {
     // around a shore the nearest water's level carries on over the dry ground (the shader finds the exact shore line
     // where the smooth ground rises through it); but ground lower than that level and not part of the water is a
-    // hollow of its own, cut off by a sill (a dropped puddle, a groove beside a bank): no water spills into it
-    levels[k * 2] = dist[k] > 0 && H[k] < near[k] - 0.0005 ? DRY : near[k];
+    // hollow of its own, cut off by a sill (a dropped puddle, a groove beside a bank): no water spills into it.
+    // A creek's surface slopes and the sea's swash runs, so beside those only a clearly lower hollow is cut off (a
+    // millimetre would punch holes in the running water)
+    const cut = nearKind[k] === KIND_POOL ? 0.0005 : 0.02;
+    levels[k * 2] = dist[k] > 0 && H[k] < near[k] - cut ? DRY : near[k];
     const t = Math.min(1, Math.max(0, (dist[k] - 1) / 7));
     levels[k * 2 + 1] = near[k] + (blurred[k] - near[k]) * t * t * (3 - 2 * t);
     const kd = kind[k];

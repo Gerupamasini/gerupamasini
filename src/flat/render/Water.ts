@@ -102,6 +102,10 @@ export class WaterPass {
                 }
                 vec4 cb = uViewProj * vec4(S + R * b, 1.0);
                 vec2 ub = cb.xy / cb.w * 0.5 + 0.5;
+                // a hit on ground that lies under water (a pool's bed further on, drawn dark before this pass) is not
+                // what the ray meets: it meets that water's surface, whose reflection is the sky's
+                vec3 Ph = worldAt(ub, min(textureLod(tDepth, ub, 0.0).r, 0.99999));
+                if (Ph.y < waterLevels(Ph.xz).x - 0.002) return vec4(0.0);
                 vec2 edge = smoothstep(0.0, 0.06, ub) * smoothstep(1.0, 0.94, ub);
                 return vec4(textureLod(tColor, ub, 0.0).rgb, edge.x * edge.y);
               }
@@ -129,7 +133,9 @@ export class WaterPass {
         void main() {
           vec2 uv = vUv;
           float d = texture(tDepth, uv).r;
-          vec3 base = texture(tColor, uv).rgb;
+          vec4 base4 = texture(tColor, uv);
+          vec3 base = base4.rgb;
+          bool prop = base4.a < 0.75;   // the props write 0.5, the ground 1
           bool skyPix = d >= 0.99999;
           vec3 P = worldAt(uv, skyPix ? 0.99999 : d);
           vec3 rd = normalize(P - uCamPos);
@@ -148,8 +154,9 @@ export class WaterPass {
           if (level < -50.0) return;
           // the swash breathes at the sea's edge
           float swash = 0.0, swashRate = 0.0;
-          // the ground under the pixel as the baked grid has it (independent of the mesh's level of detail)
-          float gP = skyPix ? -30.0 : max(groundHeight(P.xz), P.y - 0.03);
+          // the ground under the pixel as the baked grid has it (never the mesh, whose far levels of detail stray from
+          // it by centimetres across a pool's rim), or the top of a prop standing on it (a stone, a post, a shell)
+          float gP = skyPix ? -30.0 : prop ? max(groundHeight(P.xz), P.y - 0.03) : groundHeight(P.xz);
           if (kind > 1.5 && kind < 2.5 && !skyPix) {
             float d0 = uTide - gP;
             swash = swashAt(P.xz, uTime, d0);
@@ -212,9 +219,12 @@ export class WaterPass {
             vec2 uv2 = uv + (c1.xy / c1.w - c0.xy / c0.w) * 0.5;
             float d2 = texture(tDepth, uv2).r;
             vec3 P2 = worldAt(uv2, min(d2, 0.99999));
-            if (d2 < 0.99999 && P2.y < lvl && all(greaterThan(uv2, vec2(0.0))) && all(lessThan(uv2, vec2(1.0)))) {
+            // the displaced sample must be the bed near where this ray enters the water: at grazing angles it can land
+            // on another hollow metres away, whose distance would read as metres of water (black blotches)
+            if (d2 < 0.99999 && P2.y < lvl && all(greaterThan(uv2, vec2(0.0))) && all(lessThan(uv2, vec2(1.0)))
+                && distance(P2.xz, S.xz) < len * 2.0 + 0.3) {
               under = texture(tColor, uv2).rgb;
-              thickR = max(length(P2 - uCamPos) - t, 0.0);
+              thickR = min(max(length(P2 - uCamPos) - t, 0.0), thick * 1.5 + 0.05);
             }
           }
           vec3 sigT, alb;
@@ -276,11 +286,12 @@ export class WaterPass {
             vec3 foamC = (uSunE * max(uSunDir.y, 0.0) * cs * 0.75 + envIrradiance(vec3(0.0, 1.0, 0.0)) * 0.9) * 0.8;
             col = mix(col, foamC, foam * 0.85);
           }
-          // drifting flecks on the pools and in the creeks
-          // (tiny: a few millimetres, a few per square metre, only near the eye)
+          // drifting flecks on the pools and in the creeks (tiny: a few millimetres, only near the eye), gathered by the
+          // wind into drifts here and there rather than sprinkled evenly
           vec2 fc = S.xz * 60.0 - uWind.xy * uTime * 1.2;
           vec4 fh = hash24(floor(fc) + 17.0);
-          float fleck = step(0.985, fh.x) * smoothstep(0.32, 0.18, length(fract(fc) - 0.5 - (fh.yz - 0.5) * 0.4)) * (1.0 - smoothstep(3.0, 9.0, t));
+          float drift = smoothstep(0.55, 0.85, fbm(S.xz * 0.6 - uWind.xy * uTime * 0.02 + 4.0, 3));
+          float fleck = step(0.993 - 0.02 * drift, fh.x) * drift * smoothstep(0.32, 0.18, length(fract(fc) - 0.5 - (fh.yz - 0.5) * 0.4)) * (1.0 - smoothstep(3.0, 9.0, t));
           col = mix(col, vec3(0.5, 0.48, 0.42) * (uSunE * uSunDir.y * 0.3 + envIrradiance(vec3(0.0, 1.0, 0.0))) * 0.5, fleck * 0.6 * (kind < 1.5 || kind > 2.5 ? 1.0 : 0.3));
 
           col = aerial(col, t, rd);

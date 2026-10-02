@@ -435,6 +435,19 @@ export function generateFlat(seed: number, progress?: (label: string, f: number)
       },
       stop: (x, z) => nearestOn(parent, x, z).d < 0.6,
     });
+    // an accordant junction: over its last metres the tributary grades down to the parent's bed instead of hanging
+    // above it (its trickle would stand centimetres over the creek it runs into)
+    const nb = trib.bed.length;
+    if (nb > 2) {
+      const q = nearestOn(parent, trib.pts[(nb - 1) * 2], trib.pts[(nb - 1) * 2 + 1]);
+      const pb = parent.bed[q.i];
+      const L = Math.min(nb - 1, Math.round(10 / STEP));
+      const b0 = trib.bed[nb - 1 - L];
+      for (let i = 1; i <= L; i++) {
+        const k = nb - 1 - L + i, t = i / L;
+        trib.bed[k] = Math.min(trib.bed[k], lerp(b0, Math.min(pb, b0), t * t));
+      }
+    }
     channels.push(trib);
   }
 

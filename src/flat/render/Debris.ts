@@ -117,7 +117,8 @@ void main() {
   vec2 eb = envBRDF(max(dot(N, V), 1e-3), rough);
   vec3 spec = vec3(specGGX(N, V, L, rough, 0.04)) * sun + envRadiance(reflect(-V, N), rough) * (0.04 * eb.x + eb.y) * ao;
   vec3 col = aerial(diff + spec, dist, -V);
-  fragColor = vec4(col, 1.0);
+  // alpha 0.5 marks a prop (the water pass lets it stand out of the water by its own height)
+  fragColor = vec4(col, 0.5);
 }
 `;
 

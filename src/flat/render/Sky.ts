@@ -202,7 +202,8 @@ float cloudShadow(vec3 wp) {
   vec2 q = wp.xz * 0.001 + L.xz / max(L.y, 0.1) * hk;
   vec2 gq;
   float tau = acTau(q, 0.06, gq);
-  return exp(-tau / max(L.y, 0.1) * 0.8);
+  // the scattering is strongly forward: much of the light knocked out of the beam still reaches the ground near it
+  return exp(-tau / max(L.y, 0.1) * 0.35);
 }
 `;
 
