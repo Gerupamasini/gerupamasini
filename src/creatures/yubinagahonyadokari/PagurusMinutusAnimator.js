@@ -74,6 +74,7 @@ export class Animator {
     this.bodyXf = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
     this.tipState = { angle: 0, pivot: new THREE.Vector3(), lift: 0 };
     this.tipT = 0;
+    this.tipV = 0;
     this.hiddenFor = 0;
     this.retractTarget = 0;
     this.retractDir = 0;
@@ -221,10 +222,18 @@ export class Animator {
     const crab = this.crab;
     this.hiddenFor = this.ch.body > 0.98 ? this.hiddenFor + dt : 0;
     const want = hp && this.hiddenFor > 0.6 && !cmd.noTip ? 1 : 0;
-    this.tipT = damp(this.tipT, want, want ? 2.6 : 4.5, dt);
-    if (!hp || this.tipT < 1e-3) { crab.anim.tip = null; return; }
+    // a critically damped spring: the shell eases over, picks up speed and settles without a bounce
+    // (≈ 0.8 s); it rights itself a little faster when the crab comes out
+    const wn = want ? 5 : 6;
+    const sub = Math.max(1, Math.ceil(dt / (1 / 120)));
+    for (let i = 0; i < sub; i++) {
+      const h = dt / sub;
+      this.tipV += (wn * wn * (want - this.tipT) - 2 * wn * this.tipV) * h;
+      this.tipT = clamp(this.tipT + this.tipV * h, 0, 1);
+    }
+    if (!hp || this.tipT < 1e-3) { crab.anim.tip = null; if (!hp) { this.tipT = 0; this.tipV = 0; } return; }
     const tip = this.tipState;
-    const w = smoothstep(0, 1, this.tipT);
+    const w = this.tipT;
     tip.angle = hp.tipSign * hp.tipMax * w;
     // pivot on the substrate under the shell's centre of mass, in the body-group frame (SL)
     const h = crab.loco.bodyHeight;

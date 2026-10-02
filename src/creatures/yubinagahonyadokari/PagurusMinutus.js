@@ -12,7 +12,7 @@ import { Rig } from './PagurusMinutusRig.js';
 import { buildBodyGeometry } from './PagurusMinutusModel.js';
 import { createCrabMaterials, createContactShadowMaterial, adoptForeignMaterial, chainForeignHook } from './PagurusMinutusMaterial.js';
 import { Shell, ShellDynamics, chooseShellFor, evaluateShell } from './PagurusMinutusShell.js';
-import { Locomotion } from './PagurusMinutusLocomotion.js';
+import { Locomotion, POSTURE } from './PagurusMinutusLocomotion.js';
 import { Animator } from './PagurusMinutusAnimator.js';
 import { Behavior, STATE } from './PagurusMinutusBehavior.js';
 import { PagurusWorld } from './PagurusMinutusWorld.js';
@@ -157,11 +157,46 @@ export class HermitCrab {
   }
 
   // ── shell ────────────────────────────────────────────────────────────────────────────────────
-  /** move the grip point to the carry pose of this shell species */
+  /** move the grip point to the carry pose of this shell species, and tilt the shell for its size */
   applyCarryAnchor(shell) {
     const c = shell.data.sp.carry;
     this.rig.shellAnchorRest.set(MORPH.shellAnchor.x, c.anchorY ?? MORPH.shellAnchor.y, c.anchorZ ?? MORPH.shellAnchor.z);
     this.rig.shellAnchor.position.copy(this.rig.shellAnchorRest);
+    this.carryQ = this.carryTiltFor(shell).multiply(shell.carry.quaternion);
+  }
+
+  /**
+   * A crab carries a big shell with its apex raised so that it just clears the substrate while walking
+   * (its lowest point ≈ 0.04 SL above the ground at the standing height); smaller shells keep the species'
+   * carry pose. Rotation about the grip (aperture centroid), the smallest that clears [S].
+   */
+  carryTiltFor(shell) {
+    const sl = this.shieldLength_mm;
+    const wRatio = shell.props.mass_g / (MORPH.bodyVolumeK * sl * sl * sl * 1.06e-3);
+    const h = POSTURE.stand.height * (1 - 0.14 * clamp((wRatio - 1) / 4, 0, 1));
+    const a = this.rig.shellAnchorRest, SLm = this.SL;
+    const pts = shell.hull.map((p) => p.clone().divideScalar(SLm).applyQuaternion(shell.carry.quaternion));
+    const q = new THREE.Quaternion(), qx = new THREE.Quaternion(), p = new THREE.Vector3();
+    const X = new THREE.Vector3(1, 0, 0), Z = new THREE.Vector3(0, 0, 1);
+    const clearance = (rx, rz) => {
+      q.setFromAxisAngle(X, rx).multiply(qx.setFromAxisAngle(Z, rz));
+      let m = Infinity;
+      for (const v of pts) m = Math.min(m, h + a.y + p.copy(v).applyQuaternion(q).y);
+      return m;
+    };
+    const margin = 0.04;
+    if (clearance(0, 0) >= margin) return new THREE.Quaternion();
+    let best = null, bc = Infinity, bestClr = -Infinity, fallback = null;
+    for (let rx = -0.6; rx <= 0.601; rx += 0.02) {
+      for (let rz = -0.4; rz <= 0.401; rz += 0.04) {
+        const clr = clearance(rx, rz);
+        const cost = Math.abs(rx) + 1.5 * Math.abs(rz);
+        if (clr >= margin && cost < bc) { bc = cost; best = [rx, rz]; }
+        if (clr > bestClr) { bestClr = clr; fallback = [rx, rz]; }
+      }
+    }
+    const [rx, rz] = best ?? fallback;
+    return new THREE.Quaternion().setFromAxisAngle(X, rx).multiply(new THREE.Quaternion().setFromAxisAngle(Z, rz));
   }
 
   setShell(shell) {
@@ -169,6 +204,7 @@ export class HermitCrab {
     this.applyCarryAnchor(shell);
     this.root.attach(shell.object3D);
     this.shellDyn = new ShellDynamics(shell);
+    this._hidePose = null;
     this.shellMode = 'carried';
     if (this.lod >= 0) shell.setLOD(LOD_TIERS[this.lod].shellLOD);
     this.behavior.internal.shellSatisfaction = evaluateShell(this.shellNeeds(), shell.props).score;
@@ -182,7 +218,7 @@ export class HermitCrab {
     const a = this.rig.shellAnchor;
     a.updateMatrixWorld(true);
     a.matrixWorld.decompose(_v, _q, _s);
-    _q.multiply(shell.carry.quaternion);
+    _q.multiply(shell === this.shell && this.carryQ ? this.carryQ : shell.carry.quaternion);
     _m.compose(_v, _q, _s.set(1, 1, 1));
     if (shell.object3D.parent) _m.premultiply(_m.clone().copy(shell.object3D.parent.matrixWorld).invert());
     _m.decompose(shell.object3D.position, shell.object3D.quaternion, shell.object3D.scale);
@@ -236,16 +272,24 @@ export class HermitCrab {
     return out.addScaledVector(d.normalize(), 0.5 * Math.min(sh.props.apertureWidth, sh.props.apertureHeight));
   }
 
-  /** female: follow the guarding male's minor chela, aperture facing him */
-  followGuard() {
+  /**
+   * female: follow the guarding male's minor chela, aperture facing him. She is turned and drawn to the
+   * chela at a limited rate, so the grasp and the male's shaking bouts move her shell without jumps.
+   */
+  followGuard(dt = 1 / 60) {
     const male = this.guardedBy;
     if (!male.active || male.partner !== this) { this.releaseFromGuard(); return; }
     const tip = male.animator.chelaTipWorld('L', _gt);
     const lp = this.loco.position, mp = male.loco.position;
-    this.loco.heading = Math.atan2(mp.x - lp.x, mp.z - lp.z);
+    const want = Math.atan2(mp.x - lp.x, mp.z - lp.z);
+    const dh = Math.atan2(Math.sin(want - this.loco.heading), Math.cos(want - this.loco.heading));
+    this.loco.heading += clamp(dh, -2.5 * dt, 2.5 * dt);
     const grip = this.gripPointWorld(mp, _gp);
-    lp.x += tip.x - grip.x;
-    lp.z += tip.z - grip.z;
+    const dx = tip.x - grip.x, dz = tip.z - grip.z;
+    const d = Math.hypot(dx, dz), maxStep = 6 * this.SL * dt;
+    const k = d > maxStep ? maxStep / d : 1;
+    lp.x += dx * k;
+    lp.z += dz * k;
   }
 
   /** end of guarding (release, takeover, or either crab gone) */
@@ -324,7 +368,7 @@ export class HermitCrab {
     const a = this.rig.shellAnchor;
     a.updateMatrixWorld(true);
     a.matrixWorld.decompose(outP, outQ, _s);
-    outQ.multiply(shell.carry.quaternion);
+    outQ.multiply(this.carryTiltFor(shell).multiply(shell.carry.quaternion));
     if (backSL) {
       const back = _w.set(0, -0.15, -1).applyQuaternion(this.rig.root.getWorldQuaternion(_q2)).normalize();
       outP.addScaledVector(back, backSL * this.SL);
@@ -489,7 +533,7 @@ export class HermitCrab {
     for (const id of this.behavior.events) this.emit(id);
     this.behavior.events.length = 0;
     // a guarded female is carried by the male's minor chela: keep her aperture rim at its tip
-    if (this.guardedBy) this.followGuard();
+    if (this.guardedBy) this.followGuard(dt);
     // locomotion and pose
     env.exposed = this.behavior.envInfo.exposed;
     this.loco.update(dt, cmd.loco, env);
@@ -498,7 +542,7 @@ export class HermitCrab {
     // shell
     if (this.shell && this.shellMode === 'carried') {
       const hold = 1 - 0.5 * clamp(Math.abs(this.loco.speed) / 4, 0, 1);
-      this.shellDyn.update(dt, this.rig.shellAnchor, env.groundAt, { holdStrength: this.animator.closed ? 1.4 : hold });
+      this.shellDyn.update(dt, this.rig.shellAnchor, env.groundAt, { holdStrength: this.animator.closed ? 1.4 : hold, carryQ: this.carryQ });
     }
     if (this.lod < 2 || this.change) this.animator.poseAbdomen();
     this.updateShading(dt, env);

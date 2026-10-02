@@ -941,56 +941,45 @@ export class ShellDynamics {
     if (alphaW.length() > 400) alphaW.setLength(400);
     this.prevAnchorOmega.copy(omegaW);
     this.prevAnchorQuat.copy(anchorQuat);
-    const invQ = _q1.copy(anchorQuat).invert();
-    const accA = acc.applyQuaternion(invQ); // anchor frame
+    const invQ = anchorQuat.clone().invert();
+    const accA = acc.applyQuaternion(invQ).clone(); // anchor frame
     const alphaA = alphaW.applyQuaternion(invQ);
-    const gA = _v1.set(0, -9.81, 0).applyQuaternion(invQ);
+    const gA = new THREE.Vector3(0, -9.81, 0).applyQuaternion(invQ);
     const w0 = TAU * this.f0;
     const hold = o.holdStrength ?? 1;
     const k = w0 * w0 * (0.6 + 0.8 * hold);
     const c = 2 * this.zeta * w0 * (0.8 + 0.4 * hold);
     const m = shell.props.mass;
-    const carryQ = shell.carry.quaternion;
+    const carryQ = o.carryQ ?? shell.carry.quaternion;
     const comRest = shell.props.centerOfMass.clone().applyQuaternion(carryQ);
-    // gravity torque at rest is held by the crab's grip; only its change acts on the shell
-    const comNow = shell.props.centerOfMass.clone().applyQuaternion(_q1.copy(this.qOff).multiply(carryQ));
     const sub = Math.max(1, Math.ceil(h / (1 / 240)));
     const sh = h / sub;
-    const groundY = [];
-    // ground contact (world → anchor frame torques), evaluated once per frame
-    const contactTorque = new THREE.Vector3();
-    const contactForce = new THREE.Vector3();
-    this.contactCount = 0;
-    this.contactDepth = 0;
-    obj.updateMatrixWorld(true);
-    const hw = shell.hullWorld(this.hullW);
-    this.lastContactPoints.length = 0;
-    for (let i = 0; i < hw.length; i++) {
-      const p = hw[i];
-      const gy = groundAt(p.x, p.z);
-      groundY[i] = gy;
-      const pen = gy - p.y;
-      if (pen > 0) {
-        this.contactCount++;
-        this.contactDepth = Math.max(this.contactDepth, pen);
-        this.lastContactPoints.push(p.clone());
-        // lever arm from the grip, in anchor frame
-        const r = _v2.copy(p).sub(anchorPos).applyQuaternion(invQ);
-        const up = _v3.set(0, 1, 0).applyQuaternion(invQ);
-        // normalised: penetration over shell size → acceleration
-        const f = up.multiplyScalar(this.contactStiffness * w0 * w0 * 3.0 * pen / Math.max(1e-5, shell.radius));
-        contactTorque.add(new THREE.Vector3().crossVectors(r, f).divideScalar(Math.max(1e-6, r.lengthSq() / shell.radius)));
-        contactForce.add(f.multiplyScalar(shell.radius * 0.6));
-      }
+    // hull points in the anchor frame before the deviation (carried pose), and the ground under each one
+    // (sampled once per frame where the point is now; the shell moves little within a frame)
+    const hull = shell.hull;
+    if (!this.hullA || this.hullA.length !== hull.length) this.hullA = hull.map(() => new THREE.Vector3());
+    if (!this.groundY || this.groundY.length !== hull.length) this.groundY = new Float32Array(hull.length);
+    const upA = _v3.set(0, 1, 0).applyQuaternion(invQ).clone();
+    const pA = new THREE.Vector3(), pw = new THREE.Vector3();
+    for (let i = 0; i < hull.length; i++) {
+      this.hullA[i].copy(hull[i]).applyQuaternion(carryQ);
+      pw.copy(this.hullA[i]).applyQuaternion(this.qOff).add(this.pOff).applyQuaternion(anchorQuat).add(anchorPos);
+      this.groundY[i] = groundAt(pw.x, pw.z);
     }
+    const R = Math.max(1e-5, shell.radius);
+    // contact: a stiff, well-damped spring per penetrating hull point, evaluated every sub-step so the
+    // shell is lifted smoothly instead of being kicked once per frame [S]
+    const wc = 1.7 * w0, zc = 1.1;
+    const softMax = this.maxAngle, hardMax = this.maxAngle * 2.2;
+    const axis = new THREE.Vector3(), tauC = new THREE.Vector3(), fC = new THREE.Vector3(), dev = new THREE.Vector3();
+    const qid = new THREE.Quaternion();
     for (let s = 0; s < sub; s++) {
-      // rotational deviation as axis-angle
-      const dev = rotationError(new THREE.Quaternion(), this.qOff, new THREE.Vector3());
+      rotationError(qid, this.qOff, dev);
       // pseudo-torques per unit inertia
-      const r = comNow; // lever arm to CoM (anchor frame)
+      const comNow = _v2.copy(shell.props.centerOfMass).applyQuaternion(_q1.copy(this.qOff).multiply(carryQ));
       const fInertial = accA.clone().multiplyScalar(-m * this.inertialGain);
-      const tauInertial = new THREE.Vector3().crossVectors(r, fInertial);
-      const tauGravity = new THREE.Vector3().crossVectors(r, gA.clone().multiplyScalar(m)).sub(new THREE.Vector3().crossVectors(comRest, new THREE.Vector3(0, -9.81 * m, 0)));
+      const tauInertial = new THREE.Vector3().crossVectors(comNow, fInertial);
+      const tauGravity = new THREE.Vector3().crossVectors(comNow, gA.clone().multiplyScalar(m)).sub(new THREE.Vector3().crossVectors(comRest, new THREE.Vector3(0, -9.81 * m, 0)));
       const alpha = new THREE.Vector3(
         (tauInertial.x + tauGravity.x * 0.35) / this.Igrip.x,
         (tauInertial.y + tauGravity.y * 0.35) / this.Igrip.y,
@@ -1000,26 +989,63 @@ export class ShellDynamics {
       alpha.multiplyScalar(0.02);
       alpha.addScaledVector(alphaA, -0.35 * this.inertialGain); // lag behind body rotation
       alpha.addScaledVector(dev, -k).addScaledVector(this.omega, -c);
-      alpha.add(contactTorque);
+      // contacts
+      tauC.set(0, 0, 0); fC.set(0, 0, 0);
+      let nC = 0, maxPen = 0;
+      for (let i = 0; i < hull.length; i++) {
+        pA.copy(this.hullA[i]).applyQuaternion(this.qOff).add(this.pOff);
+        pw.copy(pA).applyQuaternion(anchorQuat).add(anchorPos);
+        const pen = this.groundY[i] - pw.y;
+        if (pen <= 0) continue;
+        nC++;
+        maxPen = Math.max(maxPen, pen);
+        // rotating about the grip lifts this point at |r × up| per radian
+        axis.crossVectors(pA, upA);
+        const lever = axis.length();
+        if (lever > 1e-7) {
+          axis.divideScalar(lever);
+          const vn = this.omega.dot(axis) * lever + this.vel.dot(upA); // upward speed of the point
+          const a = wc * wc * (pen / lever) - 2 * zc * wc * (vn / lever);
+          if (a > 0) tauC.addScaledVector(axis, a);
+        }
+        // and the grip yields upward a little
+        const vy = this.vel.dot(upA);
+        fC.addScaledVector(upA, Math.max(0, wc * wc * pen * 0.5 - 2 * zc * wc * vy));
+      }
+      if (nC) { alpha.addScaledVector(tauC, 1 / nC); }
+      // soft limit: a progressive spring beyond the free range and damping of the outward motion (no snapping)
+      const ang = dev.length();
+      if (ang > softMax) {
+        const dir = _v1.copy(dev).divideScalar(ang);
+        const out = this.omega.dot(dir);
+        alpha.addScaledVector(dir, -(k * 6) * (ang - softMax) - (out > 0 ? 4 * c * out : 0));
+      }
       this.omega.addScaledVector(alpha, sh);
       const wl = this.omega.length();
-      if (wl > 1e-9) {
-        _q1.setFromAxisAngle(_v2.copy(this.omega).divideScalar(wl), wl * sh);
+      if (wl > 8) this.omega.multiplyScalar(8 / wl);
+      const wl2 = Math.min(wl, 8);
+      if (wl2 > 1e-9) {
+        _q1.setFromAxisAngle(_v2.copy(this.omega).divideScalar(Math.max(wl, 1e-9)), wl2 * sh);
         this.qOff.premultiply(_q1).normalize();
       }
-      // soft limit
-      const ang = 2 * Math.acos(clamp(Math.abs(this.qOff.w), -1, 1));
-      if (ang > this.maxAngle) {
-        this.qOff.slerp(_q1.identity(), 1 - this.maxAngle / ang);
-        this.omega.multiplyScalar(0.5);
-      }
+      // hard stop far beyond the free range (safety)
+      const ang2 = 2 * Math.acos(clamp(Math.abs(this.qOff.w), -1, 1));
+      if (ang2 > hardMax) this.qOff.slerp(qid, 1 - hardMax / ang2);
       // translational compliance (grip yields a little)
       const kl = w0 * w0 * 1.6, cl = 2 * 0.7 * w0 * 1.2;
-      const aLin = accA.clone().multiplyScalar(-0.04 * this.inertialGain).addScaledVector(this.pOff, -kl).addScaledVector(this.vel, -cl).add(contactForce);
+      const aLin = accA.clone().multiplyScalar(-0.04 * this.inertialGain).addScaledVector(this.pOff, -kl).addScaledVector(this.vel, -cl);
+      if (nC) aLin.addScaledVector(fC, 1 / nC);
       this.vel.addScaledVector(aLin, sh);
       this.pOff.addScaledVector(this.vel, sh);
       const lim = this.gripCompliance * shell.size_mm * 1e-3;
-      if (this.pOff.length() > lim) this.pOff.setLength(lim);
+      if (this.pOff.length() > lim) { this.pOff.setLength(lim); this.vel.multiplyScalar(0.5); }
+      if (s === sub - 1) { this.contactCount = nC; this.contactDepth = maxPen; }
+    }
+    // contact points for the debug view
+    this.lastContactPoints.length = 0;
+    for (let i = 0; i < hull.length; i++) {
+      pw.copy(this.hullA[i]).applyQuaternion(this.qOff).add(this.pOff).applyQuaternion(anchorQuat).add(anchorPos);
+      if (this.groundY[i] - pw.y > 0) this.lastContactPoints.push(pw.clone());
     }
     // compose world transform: anchor * offset * carry
     _q1.copy(anchorQuat).multiply(this.qOff).multiply(carryQ);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Scene, Vector3 } from 'three';
+import { Quaternion, Scene, Vector3 } from 'three';
 import { HermitCrab, PagurusWorld, STATE } from '../../src/creatures/yubinagahonyadokari/PagurusMinutus.js';
 import { SHELL_SPECIES, SHELL_SPECIES_KEYS, Shell, buildShellGeometry, chooseShellFor, classifyShellPoint, evaluateShell, minFitSize } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusShell.js';
 import { SeededRandom } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusUtil.js';
@@ -189,6 +189,37 @@ describe('body ↔ shell geometry', () => {
     // lying low, under the cephalothorax
     for (const p of pts.slice(3)) expect(p.y).toBeLessThan(0.05);
     expect(crab.shell).toBeNull();
+  });
+
+  it('the carried shell stays calm on rough ground: no thrashing, not pinned at its wobble limit', () => {
+    // ripples and pebbles like the lab substrate
+    const peb = Array.from({ length: 30 }, (_, i) => ({ x: Math.sin(i * 12.9898) * 0.12, z: Math.sin(i * 78.233) * 0.12, r: 0.003 + 0.006 * Math.abs(Math.sin(i * 3.1)), h: 0.0012 + 0.003 * Math.abs(Math.sin(i * 7.7)) }));
+    const rough = (x: number, z: number) => {
+      let h = 0.0006 * Math.sin(x * 160 + Math.sin(z * 40) * 1.5) + 0.0004 * Math.sin(z * 230 + x * 30) + 0.015 * Math.sin(x * 6) * Math.cos(z * 5);
+      for (const p of peb) { const d2 = ((x - p.x) ** 2 + (z - p.z) ** 2) / (p.r * p.r); if (d2 < 1) h += p.h * Math.sqrt(1 - d2); }
+      return h;
+    };
+    for (const key of SHELL_SPECIES_KEYS) {
+      const size = Math.min(SHELL_SPECIES[key as keyof typeof SHELL_SPECIES].size_mm[1], minFitSize(key, 4.6) * 1.1);
+      const { crab } = makeCrab({ shieldLength_mm: 4.6, shell: { species: key, size_mm: size, seed: 5 } });
+      const c = crab as unknown as { shellDyn: { qOff: { w: number } }; shell: Shell };
+      let prev: Quaternion | null = null, maxW = 0, pinned = 0, n = 0;
+      for (let f = 0; f < 60 * 9; f++) {
+        const t = f / 60;
+        const B = crab.behavior as unknown as { state: string; enter(s: string, e: unknown): void; stateDur: number; moveTarget: Vector3 };
+        if (t < 5) { if (B.state !== STATE.EXPLORE) B.enter(STATE.EXPLORE, { groundAt: rough }); B.stateDur = 1e9; B.moveTarget.set(Math.sin(t * 0.4) * 0.05, 0, Math.cos(t * 0.4) * 0.05); }
+        if (Math.abs(t - 5) < 1e-6) crab.behavior.suggest({ kind: 'flee', urgency: 1, from: crab.loco.position.clone() });
+        crab.update(1 / 60, { groundAt: rough, waterAt: () => 0.05, player: new Vector3(8, 1.5, 8), frame: f });
+        const q = c.shell.object3D.getWorldQuaternion(new Quaternion()).premultiply(crab.root.quaternion.clone().invert());
+        if (prev) { const d = prev.clone().invert().multiply(q); maxW = Math.max(maxW, (2 * Math.acos(Math.min(1, Math.abs(d.w)))) * 60); }
+        prev = q;
+        if (2 * Math.acos(Math.min(1, Math.abs(c.shellDyn.qOff.w))) > (10.5 * Math.PI) / 180) pinned++;
+        n++;
+      }
+      expect(maxW).toBeLessThan(5); // rad/s relative to the crab (the topple when it hides is ≈ 4)
+      expect(pinned / n).toBeLessThan(0.02);
+      crab.dispose();
+    }
   });
 
   it('the baked withdrawal table matches the current morphology and shells', () => {

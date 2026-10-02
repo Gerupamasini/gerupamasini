@@ -177,7 +177,9 @@ function decodePose(a) {
 /** the hidden pose of this crab in its shell: table or search, then the crab-specific frames */
 function buildHiddenPose(crab) {
   const ctx = shellContext(crab);
-  const { sh, SLm, n, carryQ } = ctx;
+  const { sh, SLm, n } = ctx;
+  // the crab's actual carry pose (species carry pose, tilted for big shells)
+  const carryQ = crab.carryQ ?? ctx.carryQ;
   const key = `${sh.key}|${lookupBin(crab)}`;
   let best = SEARCH_CACHE.get(key);
   if (!best) {

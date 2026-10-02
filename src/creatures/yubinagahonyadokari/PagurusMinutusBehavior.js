@@ -346,7 +346,7 @@ export class Behavior {
     // defaults
     L.moveTarget = null; L.speed = 1.4; L.posture = 'stand'; L.freeze = false; L.legsActive = true; L.backward = false; L.urgent = false; L.shuffle = false; L.face = null; L.heightScale = 1;
     A.retract = 0; A.urgent = false; A.attention.length = 0; A.sniff = 0.15; A.explore = 0.45; A.chelaR = { mode: 'rest' }; A.chelaL = { mode: 'rest' }; A.mouth = 0; A.alert = 0; A.lean = 0;
-    A.restless = false; A.holdBody = false;
+    A.restless = false; A.holdBody = false; A.noTip = false;
     const pos = crab.loco.position;
     if (this.threat.has) A.attention.push({ pos: this.threat.pos, w: clamp(this.threat.level * 1.5, 0, 1), kind: 'threat' });
     // weak tracking of a nearby player and of walking neighbours, also when they pose no threat [S]
@@ -456,7 +456,7 @@ export class Behavior {
       case STATE.GUARDED: {
         // held by the rim of her shell: withdrawn, legs folded, carried along
         L.freeze = true; L.legsActive = false; L.posture = 'rest';
-        A.retract = 1; A.explore = 0;
+        A.retract = 1; A.explore = 0; A.noTip = true; // held up by the rim: her shell does not fall over
         break;
       }
     }
