@@ -3,8 +3,7 @@ import {
   Float32BufferAttribute, FloatType, HalfFloatType, HemisphereLight, LineBasicMaterial, LinearFilter, LinearMipmapLinearFilter,
   LineSegments, Mesh, MeshStandardMaterial, Object3D, OneFactor, OneMinusSrcAlphaFactor, PerspectiveCamera, PlaneGeometry, Plane,
   PMREMGenerator, Points, PointsMaterial, Raycaster, RGBAFormat, Scene, ShaderMaterial, SpotLight, SrcColorFactor, UnsignedByteType,
-  Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer,
-} from 'three';
+  Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer, Spherical } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GPUComputationRenderer, type Variable } from 'three/addons/misc/GPUComputationRenderer.js';
@@ -41,7 +40,9 @@ export interface Occupant {
 // Beer–Lambert absorption and scatters a little of the caustic light sheets toward the eye (light shafts).
 const TX = TANK_W / 2, TZ = TANK_D / 2, W_LEVEL = WATER_H, W_IOR = 1.333;
 /** absorption per metre: red goes first, so a long path looks blue-green; the tank is small, so the tint stays faint */
-const W_ABSORB = [0.6, 0.1, 0.055];
+const W_ABSORB = [0.26, 0.055, 0.032];
+/** depth of the sand bed (m) */
+export const SAND_H = 0.05;
 const SIM: [number, number] = [192, 96]; // ripple grid: 3 mm cells
 const CAUS: [number, number] = [512, 256]; // caustics texture: 1.2 mm texels
 const W_LAMP_Y = TANK_H + 0.063, W_LAMP_HALF = TANK_W / 2 - 0.02;
@@ -199,7 +200,9 @@ export class TankScene {
   readonly camera: PerspectiveCamera;
   private controls: OrbitControls | null = null;
   readonly occupants: Occupant[] = [];
-  private readonly floor: Floor = { heightAt: () => 0, waterAt: () => WATER_H };
+  /** top of the substrate: the animals, the decorations and the caustics all sit on it */
+  private sandTop = SAND_H;
+  private readonly floor: Floor = { heightAt: () => this.sandTop, waterAt: () => WATER_H };
   private readonly hitBox: Mesh;
   private readonly raycaster = new Raycaster();
   private readonly waterPlane = new Plane(new Vector3(0, 1, 0), -W_LEVEL);
@@ -207,6 +210,8 @@ export class TankScene {
   // layout: substrate and decorations
   private layout: TankLayout = defaultTankLayout();
   private readonly itemsRoot = new Group();
+  private readonly nudgeV = new Vector3();
+  private readonly nudgeS = new Spherical();
   private readonly itemObjects = new Map<string, Object3D>();
   private readonly sandMesh: Mesh;
   private readonly sandMat: MeshStandardMaterial;
@@ -382,8 +387,9 @@ export class TankScene {
     // sand, lit by the caustics
     const sandMat = new MeshStandardMaterial({ color: 0xb09c78, roughness: 0.95 });
     lightByCaustics(sandMat, U, 'tank-sand', true);
-    const sand = new Mesh(new PlaneGeometry(TANK_W, TANK_D, 1, 1), sandMat);
-    sand.rotation.x = -Math.PI / 2;
+    // a 5 cm bed of sand, not a sheet: the box's top is the floor the animals and the decorations stand on
+    const sand = new Mesh(new BoxGeometry(TANK_W - 0.002, SAND_H, TANK_D - 0.002), sandMat);
+    sand.position.y = SAND_H / 2;
     sand.receiveShadow = true;
     this.scene.add(sand);
     this.sandMesh = sand; this.sandMat = sandMat;
@@ -554,6 +560,9 @@ export class TankScene {
     const s = this.layout.substrate;
     this.sandMesh.visible = s !== 'none';
     this.bottomMesh.visible = s === 'none';
+    this.sandTop = s === 'none' ? 0 : SAND_H;
+    this.itemsRoot.position.y = this.sandTop;
+    for (const o of this.occupants) o.ind.pos.y = this.sandTop;
     if (s === 'mud') { this.sandMat.color.set(0x4a4034); this.sandMat.roughness = 1.0; }
     else { this.sandMat.color.set(0xb09c78); this.sandMat.roughness = 0.95; }
   }
@@ -802,6 +811,24 @@ export class TankScene {
     gl.render(this.causScene, this.flatCam);
     gl.setClearColor(prevClear, prevAlpha);
     gl.setRenderTarget(prevRT);
+  }
+
+  /** The camera alone: keyboard orbit (A/D), dolly (W/S) and tilt around the tank. */
+  nudgeCamera(orbit: number, dolly: number, tilt: number, dt: number): void {
+    const c = this.controls;
+    if (!c || (orbit === 0 && dolly === 0 && tilt === 0)) return;
+    const off = this.nudgeV.copy(this.camera.position).sub(c.target);
+    const sph = this.nudgeS.setFromVector3(off);
+    sph.theta -= orbit * 1.5 * dt;
+    sph.phi = Math.max(0.15, Math.min(c.maxPolarAngle, sph.phi - tilt * 1.2 * dt));
+    sph.radius = Math.max(c.minDistance, Math.min(c.maxDistance, sph.radius * Math.exp(-dolly * 1.3 * dt)));
+    this.camera.position.setFromSpherical(sph).add(c.target);
+    c.update();
+  }
+
+  /** Everything stands still (the edit screen): only the camera moves. */
+  updateFrozen(): void {
+    this.controls?.update();
   }
 
   update(dt: number, simScale: number): void {

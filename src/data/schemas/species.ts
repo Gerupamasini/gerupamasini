@@ -62,7 +62,7 @@ export const SpeciesSchema = z.object({
   encyclopedia: z.object({
     description: z.string(),
     habitatHint: z.string(),
-    behaviors: z.array(z.object({ id: z.string(), ja: z.string(), hint: z.string().optional() })),
+    behaviors: z.array(z.object({ id: z.string(), ja: z.string(), hint: z.string().optional(), /** animation clip that shows it in the 図鑑 preview */ clip: z.string().optional() })),
     placeholderModel: z.boolean().default(false),
   }),
 });

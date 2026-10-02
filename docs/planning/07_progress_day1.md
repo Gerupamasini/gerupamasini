@@ -96,3 +96,12 @@
 - 昼寝跡: `FeedingPits` を解析形（`pitShape`）にし、`Terrain.heightAt` は基準グリッド + 穴の形。穴ごとに 60×60 の細かいパッチを粗いチャンクの上に描く（粗いほうは深く押し込んで隠す、polygonOffset）。潮だまりの水位は縁の足元より下に抑える。spill テクスチャは Nearest。殻は InstancedMesh 2 つ。
 - 質感: MahazeViewer の粒（Worley）・糞粒・微細凹凸（導関数ノイズ）を移植、巣穴（穴＋襟／砂山）を追加。風紋の分岐は位相転位のペア（長い層 2 m セル、短い層 1 m セル）。ハッシュは整数版（座標が大きいので）。
 - 直したバグ: ゲーム時刻を過去に動かすと Habitat が更新されなくなっていた（差の絶対値で判定）。
+
+## 8 回目（道具、物理的なタモ、アサリ、水槽の編集画面）
+- 道具: `ui.tool`（hand_net / shovel）、[1][2] で切り替え、HUD 右上にチップ。`App.useTool` が道具別に `swingNet` / `dig`。
+- タモ: `Capture` は判定を持たない（swing → lift → check → done の演出だけ）。`App.swingNet` が `NetView.sweep`（カメラ空間の dip→scoop をワールドへ、地面に押し下げ）で掃いた線分から半径 24 cm + 体長/2 に入る生物を集め、逃げる確率 = baseDifficulty×0.45 + alertPenalty×alert + 0.35×(縁への近さ) (+0.25 警戒中) で決める。入らなかった近くの個体は flee。`capture.forceCatch` はスモーク用。
+- スコップ: `ShovelView`（柄・刃・砂のスコップ・掘り出した貝）。`App.dig` が `ShovelView.digPoint` の位置で `ClamField.dig`（半径 14 cm）。水深 15 cm 超は掘れない。
+- アサリ: branch vigilant-johnson の手続きモデル・ドライバ・種データを取り込み。`Spawner` は locomotion=burrow を飛ばし、`ClamField`（貝床 30 か所、約 2,700 個、4 m セルの空間ハッシュ）が位置・体長・seed を持つ。5 m 以内だけ水管（InstancedMesh、水中かつ驚いていないとき）と穴（InstancedMesh）を描く。足音（0.6 m 以内・2.2 m 以内で速い）で引っ込む。[F] で `observeClam`: その場に一時的な Individual を spawn（pitId=-2 で cull 対象外）して観察、終わると despawn。
+- 水槽: `SAND_H` 5 cm の箱、`floor.heightAt` は砂の上面。`W_ABSORB` を下げた。`tankEdit` 画面（`App.openTankEdit/closeTankEdit`、`App.transition` の暗転 320 ms + 240 ms、`tank.updateFrozen`）。`tankPut` も暗転。`tank.nudgeCamera` で WASD。`tank.onBehavior` は mode==='home' のときだけ記録。
+- 図鑑: `behaviors[].clip` で観察済み行動の再生（`ModelPreview.show(sp, clip)`）。
+- 干潟の水: `uFogW` 2.0→1.1、`uFogPool` 1.0→0.35、`uEnvI` 0.72→0.6。

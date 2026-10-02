@@ -108,6 +108,9 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .minimap { display: block; width: 200px; height: 200px; border-radius: 50%; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--line-2); }
 .hud-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; color: var(--fg-2); letter-spacing: 0.06em; padding: 8px 14px; border-radius: var(--r-m); background: rgba(5, 11, 14, 0.64); border: 1px solid var(--line); backdrop-filter: blur(10px); }
 .hud-stats b { color: var(--fg); font-family: var(--font-mono); font-weight: 500; font-size: 14px; margin-left: 6px; }
+.hud-tools { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+.tool-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 999px; background: rgba(5, 11, 14, 0.5); border: 1px solid var(--line); color: var(--dim); font-size: 12px; letter-spacing: 0.06em; cursor: pointer; transition: all 0.25s var(--ease); }
+.tool-chip.on { background: rgba(127, 227, 210, 0.14); border-color: rgba(127, 227, 210, 0.45); color: var(--fg); }
 .hud-stats .fps { font-family: var(--font-mono); color: var(--dim-2); font-size: 11px; }
 .reticle { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.85); box-shadow: 0 0 4px rgba(0, 0, 0, 0.8); }
 .hud-cb { position: fixed; left: 0; right: 0; bottom: 16vh; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
@@ -123,6 +126,8 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .toast { background: rgba(5, 11, 14, 0.82); border: 1px solid var(--line); border-left: 3px solid var(--accent); backdrop-filter: blur(10px); padding: 9px 14px; border-radius: var(--r-s); font-size: 13px; letter-spacing: 0.02em; animation: toast-in 0.3s var(--ease); }
 .toast.success { border-left-color: var(--ok); }
 .toast.warn { border-left-color: var(--warn); }
+.screen.transition { z-index: 60; animation: fade 0.3s var(--ease) both; }
+.edit-badge { position: fixed; left: 24px; top: 22px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .toast.update { display: flex; align-items: center; gap: 14px; border-left-color: var(--sand); pointer-events: auto; }
 .toast.update .btn { padding: 6px 12px; font-size: 12px; }
 
@@ -283,6 +288,11 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .capture-msg { margin-top: 10px; font-size: 13px; color: var(--dim); letter-spacing: 0.06em; }
 .capture-msg.success { color: var(--ok); font-weight: 700; }
 .capture-msg.fail { color: var(--warn); font-weight: 700; }
+.behaviors .beh { display: grid; grid-template-columns: 18px auto 1fr; gap: 8px; align-items: baseline; width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; padding: 2px 0; cursor: default; border-radius: 6px; }
+.behaviors li.on .beh { cursor: pointer; }
+.behaviors li.on .beh:hover, .behaviors li.playing .beh { background: rgba(127, 227, 210, 0.08); }
+.behaviors li.playing .bname { color: var(--accent); }
+.beh-note { margin-top: 10px; padding: 10px 12px; border-left: 2px solid var(--accent); background: rgba(127, 227, 210, 0.06); border-radius: 0 var(--r-s) var(--r-s) 0; font-size: 13px; line-height: 1.6; }
 .capture-reveal { position: fixed; left: 0; right: 0; top: 17vh; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; pointer-events: none; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85), 0 0 24px rgba(0, 0, 0, 0.5); animation: rise 0.45s var(--ease) both; }
 .capture-reveal .eyebrow { color: var(--fg-2); }
 .capture-reveal.wait .eyebrow { color: var(--dim); animation: pulse 1.6s ease-in-out infinite; }

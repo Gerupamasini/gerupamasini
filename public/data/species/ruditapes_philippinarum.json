@@ -1,0 +1,54 @@
+{
+  "id": "ruditapes_philippinarum",
+  "names": { "ja": "アサリ", "sci": "Ruditapes philippinarum", "en": "Manila clam" },
+  "taxon": { "group": "mollusc", "family": "Veneridae" },
+  "locomotion": "burrow",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "asari",
+    "modelLength_mm": 35,
+    "viewDistance_m": 6,
+    "driver": "asari",
+    "clips": { "idle": "Idle", "move": "Move", "special": [] }
+  },
+  "size": {
+    "length_mm": { "min": 18, "max": 48, "mean": 33, "sd": 6 },
+    "weightCoef": { "a": 0.00018, "b": 3.0 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": false },
+  "stages": [
+    { "id": "juvenile", "ja": "稚貝", "maxLength_mm": 20 },
+    { "id": "adult", "ja": "成貝" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    {
+      "tags": ["exposed_sand", "waterline", "shallow"],
+      "substrate": ["sand", "muddy_sand"],
+      "tide": "any",
+      "density_per_100m2": 4,
+      "group": [2, 6],
+      "maxPopulation": 40
+    }
+  ],
+  "brain": { "tree": "bivalve_buried", "params": { "threatDistance_m": 0.6, "restMean_s": 25 } },
+  "capture": { "tools": [], "baseDifficulty": 0.2, "alertPenalty": 0.2 },
+  "encyclopedia": {
+    "description": "内湾の干潟の砂や砂泥に浅く潜ってすむ二枚貝。殻はやや横長の丸みのある三角形で、布目のような細かい放射肋と成長線がある。模様と色は個体ごとに大きく異なり、網目・放射状の帯・まだら模様、褐色・灰色・白・黒・紫などがある。砂の中では殻の後ろ側を上にして、短い入水管と出水管だけを砂の表面に出し、水中の植物プランクトンを濾しとって食べる。干潮の干潟では砂の上に並んだ二つの小さな穴が目印。",
+    "habitatHint": "砂や砂泥の干潟。水管の穴を探す。",
+    "behaviors": [
+      { "id": "filter_feeding", "ja": "濾過摂食", "hint": "水管を砂の上に出して水を吸い込む" },
+      { "id": "siphon_extend", "ja": "水管を伸ばす", "hint": "潜ったまま水管をそっと伸ばす" },
+      { "id": "siphon_retract", "ja": "水管を引っ込める", "hint": "気配を感じるとすばやく水管を引っ込める" },
+      { "id": "close_shell", "ja": "殻を閉じる", "hint": "殻をぴったり閉じてじっとする" },
+      { "id": "burrow", "ja": "潜砂", "hint": "足を砂に差し込み、殻を揺らしながら潜っていく" },
+      { "id": "emerge", "ja": "浅く出る", "hint": "殻の後ろ側が少しだけ砂から出る" }
+    ],
+    "placeholderModel": false
+  }
+}

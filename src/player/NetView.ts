@@ -23,6 +23,8 @@ const P_READY = pose(0.3, -0.3, -0.72, 0.32, -0.46, -0.02);
 const P_DIP = pose(-0.12, -0.52, -0.88, 0.28, -0.44, -0.04);
 const P_SCOOP = pose(-0.05, -0.27, -0.6, 0.3, -0.44, -0.02);
 const P_CHECK = pose(0.0, -0.09, -0.42, 0.02, -0.5, -0.1);
+/** how far from the hoop's path through the water an animal can be and still end up in the bag (m) */
+export const SWEEP_RADIUS = 0.24;
 
 const ease = (t: number) => t * t * (3 - 2 * t);
 function lerpPose(a: Pose, b: Pose, t: number, out: Pose): Pose {
@@ -80,6 +82,7 @@ export class NetView {
   private readonly cur: Pose = pose(0, 0, 0, 0, 0, 0);
   private readonly from: Pose = pose(0, 0, 0, 0, 0, 0);
   private visible = false;
+  private held = true;
   private shown = 0;
   private time = 0;
   private splashed = false;
@@ -173,6 +176,18 @@ export class NetView {
     return geo;
   }
 
+  /**
+   * Where the hoop goes through the water for this view: the segment from the dip to the scoop, in world space,
+   * pressed down to the ground so a swing from a standing eye still sweeps the bed.
+   */
+  static sweep(camera: PerspectiveCamera, groundAt: (x: number, z: number) => number, outA: Vector3, outB: Vector3): void {
+    camera.updateMatrixWorld();
+    outA.copy(P_DIP.p).applyMatrix4(camera.matrixWorld);
+    outB.copy(P_SCOOP.p).applyMatrix4(camera.matrixWorld);
+    outA.y = Math.min(outA.y, groundAt(outA.x, outA.z) + 0.05);
+    outB.y = Math.min(outB.y, groundAt(outB.x, outB.z) + 0.05);
+  }
+
   /** Put the caught animal's model in the bag (scaled to its real length). */
   setCatch(obj: Object3D | null, scale = 1): void {
     if (this.catchObj) { this.catchObj.removeFromParent(); this.catchObj = null; }
@@ -184,6 +199,11 @@ export class NetView {
     this.catchHolder.add(obj);
     this.catchObj = obj;
     this.flopSeed = Math.random() * 100;
+  }
+
+  /** The net is the tool in hand (shown at rest) or stowed. */
+  setHeld(held: boolean): void {
+    this.held = held;
   }
 
   show(): void {
@@ -201,7 +221,7 @@ export class NetView {
   /** Place the net for this frame from the capture state (null = at rest, out of sight). */
   update(camera: PerspectiveCamera, dt: number, st: CaptureState | null, waterY: number): void {
     this.time += dt;
-    const want = this.visible && !!st;
+    const want = (this.visible && !!st) || (this.held && !st);
     this.shown = MathUtils.damp(this.shown, want ? 1 : 0, 9, dt);
     if (this.shown < 0.01 && !want) { this.group.visible = false; this.updateDrops(dt, null); return; }
     this.group.visible = true;
@@ -209,7 +229,7 @@ export class NetView {
     const sway = this.time;
     let dripping = false;
     let roll = 0;
-    if (!st || st.phase === 'aim') {
+    if (!st) {
       lerpPose(P_HIDDEN, P_READY, ease(this.shown), cur);
       cur.p.y += Math.sin(sway * 1.9) * 0.008;
       cur.p.x += Math.sin(sway * 1.3 + 0.5) * 0.005;

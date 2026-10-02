@@ -137,14 +137,13 @@ try {
     await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, near.id);
     await waitFrames(page, 12);
     await page.screenshot({ path: path.join(outDir, '09-observe.png') });
-    await page.evaluate((id) => { const a = window.__higata; a.exitObserve(); a.startCapture(a.creatures.get(id)); }, near.id);
+    await page.evaluate(() => { window.__higata.exitObserve(); });
     await waitFrames(page, 4);
     await page.screenshot({ path: path.join(outDir, '10-capture.png') });
-    const beforeAttempt = await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, frames: a.frameCount, state: a.capture.state.value }; });
-    console.log('before attempt', JSON.stringify(beforeAttempt));
-    await page.evaluate(() => { const a = window.__higata; const st = a.capture.state.value; a.capture.state.value = { ...st, cursor: (st.bandStart + st.bandEnd) / 2 }; a.capture.attempt(); });
+    // swing the net at the goby ahead (every animal in the sweep is caught in the smoke, so the sequence is deterministic)
+    await page.evaluate(() => { const a = window.__higata; a.capture.forceCatch = true; a.swingNet(); });
     const afterAttempt = await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, state: a.capture.state.value }; });
-    console.log('after attempt', JSON.stringify(afterAttempt));
+    console.log('after swing', JSON.stringify(afterAttempt));
     await page.waitForFunction(() => { const s = window.__higata.capture.state.value; return !!s && s.phase === 'check' && s.revealed; }, null, { timeout: 60000 });
     await waitFrames(page, 2);
     console.log('reveal', JSON.stringify(await page.evaluate(() => { const a = window.__higata; const s = a.capture.state.value; return { phase: s?.phase, revealed: s?.revealed, text: s?.catchText, net: a.net?.group.visible }; })));

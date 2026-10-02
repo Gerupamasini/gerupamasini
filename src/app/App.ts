@@ -13,7 +13,11 @@ import { World } from './World';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
-import { NetView, NET_LAYER } from '../player/NetView';
+import { NetView, NET_LAYER, SWEEP_RADIUS } from '../player/NetView';
+import { ShovelView } from '../player/ShovelView';
+import { ClamField } from '../world/ClamField';
+import { generateIndividual } from '../creatures/Individual';
+import { hashInts } from '../core/Rng';
 import { instantiateModel } from '../creatures/models/ModelLoader';
 import { DRIVERS } from '../creatures/drivers';
 import type { SpeciesDef } from '../data/schemas';
@@ -22,7 +26,7 @@ import type { Individual, IndividualRecord } from '../creatures/Individual';
 import { Encyclopedia } from '../systems/Encyclopedia';
 import { Observation } from '../systems/Observation';
 import { Capture } from '../systems/Capture';
-import { ui, t, toast, type Screen, type Marker } from '../ui/store';
+import { ui, t, toast, type Screen, type Marker, type ToolId } from '../ui/store';
 import { checkForNewBuild } from '../core/Build';
 import { Root } from '../ui/Root';
 import { HeroPipeline, type HeroLighting } from '../render/HeroPipeline';
@@ -55,6 +59,13 @@ export class App {
   private field: FieldRenderer | null = null;
   /** the タモ in the player's hands */
   net: NetView | null = null;
+  shovel: ShovelView | null = null;
+  /** the buried clams of the flat */
+  clams: ClamField | null = null;
+  /** the clam the player is looking at (index into the field), or -1 */
+  targetClam = -1;
+  /** a clam built in full for observation */
+  private watchedClam: { index: number; id: string } | null = null;
   world: World | null = null;
   player: FPSController | null = null;
   creatures: CreatureSystem | null = null;
@@ -76,6 +87,8 @@ export class App {
   private curveCacheMin = -1;
   private readonly anchor = new Vector3();
   private readonly tmp = new Vector3();
+  private readonly tmp2 = new Vector3();
+  private readonly tmp3 = new Vector3();
   private dragItem: string | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement, readonly uiRoot: HTMLElement) {
@@ -92,7 +105,7 @@ export class App {
     canvas.addEventListener('pointerdown', (e) => {
       this.pointerDown = { x: e.clientX, y: e.clientY, t: performance.now() };
       // in the layout editor a press on a decoration starts dragging it over the sand
-      if (this.mode === 'home' && ui.homePanel.value === 'tank' && ui.tankTab.value === 'layout' && e.button === 0) {
+      if (this.mode === 'tankEdit' && ui.tankTab.value === 'layout' && e.button === 0) {
         const [nx, ny] = this.ndcOf(e.clientX, e.clientY);
         const id = this.tank.pickItem(nx, ny);
         if (id) { this.dragItem = id; ui.tankSelected.value = id; this.tank.setControlsEnabled(false); canvas.setPointerCapture(e.pointerId); }
@@ -112,7 +125,7 @@ export class App {
         this.commitTankLayout();
         return;
       }
-      if (!d || this.mode !== 'home') return;
+      if (!d || (this.mode !== 'home' && this.mode !== 'tankEdit')) return;
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6 || performance.now() - d.t > 350) return;
       this.onHomeClick(e.clientX, e.clientY);
     });
@@ -134,15 +147,15 @@ export class App {
   /** true when the tank should be on screen (home, or an overlay opened from home) */
   private tankVisible(): boolean {
     const m = this.mode;
-    if (m === 'home' || m === 'title') return true;
-    if (m === 'zukan' || m === 'menu' || m === 'ticket' || m === 'tidetable') return ui.overlayFrom.value === 'home' || !this.world;
+    if (m === 'home' || m === 'title' || m === 'tankEdit') return true;
+    if (m === 'zukan' || m === 'menu' || m === 'ticket' || m === 'tidetable') return ui.overlayFrom.value === 'home' || ui.overlayFrom.value === 'tankEdit' || !this.world;
     return false;
   }
 
   private setMode(m: Screen): void {
     ui.screen.value = m;
     this.input.dragLook = m === 'field';
-    const overlay = m !== 'field' && m !== 'observe' && m !== 'capture' && m !== 'home';
+    const overlay = m !== 'field' && m !== 'observe' && m !== 'capture' && m !== 'home' && m !== 'tankEdit';
     this.input.blocked = overlay;
     if (m !== 'field' && m !== 'capture') this.input.exitPointerLock();
     if (this.player) this.player.enabled = m === 'field';
@@ -172,7 +185,9 @@ export class App {
     this.encyclopedia = new Encyclopedia(this.data);
     this.encyclopedia.onChanged = () => this.requestSave();
     this.tank = new TankScene(this.canvas, this.renderer.aspect, this.renderer.gl);
-    this.tank.onBehavior = (e, rec) => { this.encyclopedia.onBehavior(rec.speciesId, e.behaviorId, this.clock.nowGame()); };
+    // what the animals do in the tank only counts as observed while the player is looking at the tank (home or its
+    // edit screen), not from behind the 図鑑, the menu or the title
+    this.tank.onBehavior = (e, rec) => { if (this.mode === 'home') this.encyclopedia.onBehavior(rec.speciesId, e.behaviorId, this.clock.nowGame()); };
     if (this.renderer.caps.floatRT) this.hero = new HeroPipeline(this.renderer.gl);
     if (this.renderer.caps.floatRT) this.field = new FieldRenderer(this.renderer.gl);
     this.applyHeroSetting();
@@ -246,8 +261,13 @@ export class App {
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
       this.net = new NetView(this.world.scene);
-      this.capture.onSwung = (ind, ok) => this.onNetSwung(ind, ok);
-      this.capture.onResolved = (ind, ok) => this.onCaptureResolved(ind, ok);
+      this.shovel = new ShovelView(this.world.scene);
+      this.net.setHeld(this.tool === 'hand_net');
+      this.shovel.setHeld(this.tool === 'shovel');
+      this.clams = new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
+      this.world.scene.add(this.clams.group);
+      this.capture.onSwung = (caught) => this.onToolSwung(caught);
+      this.capture.onResolved = (caught) => this.onCaptureResolved(caught);
       this.applyHeroSetting();
       if (this.pendingPose) { this.player.setPose(this.pendingPose.x, this.pendingPose.z, this.pendingPose.heading); this.pendingPose = null; }
       ui.loading.value = { frac: 0.95, label: t('loading.models') };
@@ -275,7 +295,7 @@ export class App {
 
   closeOverlay(): void {
     const from = ui.overlayFrom.value;
-    if (from === 'observe' || from === 'home' || from === 'field') this.setMode(from);
+    if (from === 'observe' || from === 'home' || from === 'field' || from === 'tankEdit') this.setMode(from);
     else this.setMode(this.world ? 'field' : this.save ? 'home' : 'title');
   }
 
@@ -380,7 +400,38 @@ export class App {
     p.setPose(x, z, yaw, -0.15);
   }
 
+  /** A short curtain over a change of screen: the word, the work, and a beat before it lifts. */
+  async transition(label: string, work: () => Promise<void> | void): Promise<void> {
+    ui.transition.value = label;
+    await new Promise((r) => setTimeout(r, 320));
+    try { await work(); } finally {
+      await new Promise((r) => setTimeout(r, 240));
+      ui.transition.value = null;
+    }
+  }
+
+  /** The tank's edit screen: everything in the tank stands still while it is arranged. */
+  openTankEdit(): void {
+    if (this.mode === 'tankEdit') return;
+    void this.transition(t('transition.tank'), () => {
+      ui.homeInfo.value = null;
+      ui.homePanel.value = 'tank';
+      this.tank.setAutoRotate(false);
+      this.setMode('tankEdit');
+    });
+  }
+
+  closeTankEdit(): void {
+    if (this.mode !== 'tankEdit') return;
+    void this.transition(t('transition.home'), () => {
+      ui.homePanel.value = 'none';
+      ui.tankSelected.value = null;
+      this.setMode('home');
+    });
+  }
+
   setHomePanel(panel: 'none' | 'tank'): void {
+    if (panel === 'tank') { this.openTankEdit(); return; }
     ui.homePanel.value = panel;
   }
 
@@ -405,29 +456,124 @@ export class App {
   exitObserve(): void {
     this.observation.exit();
     this.lockedId = null;
+    if (this.watchedClam) {
+      this.creatures?.despawn(this.watchedClam.id);
+      this.clams?.setWatched(this.watchedClam.index, false);
+      this.watchedClam = null;
+    }
     this.setMode('field');
   }
 
-  startCapture(ind: Individual): void {
+  get tool(): ToolId {
+    return ui.tool.value;
+  }
+
+  setTool(id: ToolId): void {
+    if (ui.tool.value === id) return;
+    ui.tool.value = id;
+    this.net?.setHeld(id === 'hand_net');
+    this.shovel?.setHeld(id === 'shovel');
+  }
+
+  /** [E] on the flat: use the tool in hand where the player is looking. */
+  useTool(): void {
+    if (this.tool === 'hand_net') this.swingNet();
+    else this.dig();
+  }
+
+  /**
+   * Swing the net ahead. Like the real thing: whatever is where the hoop goes through the water ends up in the
+   * bag unless it gets away — calm animals near the middle of the sweep are caught, wary ones and those at the
+   * rim slip out, and everything nearby bolts.
+   */
+  swingNet(): void {
     const tool = this.data.tools.get('hand_net');
-    if (!tool || !ind.species.collectable) return;
-    if (this.encyclopedia.caseItems.value.length >= this.encyclopedia.caseMax) { toast(t('capture.caseFull'), 'warn'); return; }
-    this.capture.start(ind, tool);
+    const creatures = this.creatures, player = this.player, world = this.world;
+    if (!tool || !creatures || !player || !world || this.capture.active) return;
+    const a = new Vector3(), b = new Vector3();
+    NetView.sweep(this.camera, (x, z) => world.terrain.heightAt(x, z), a, b);
+    const ab = new Vector3().subVectors(b, a), abLen2 = Math.max(1e-6, ab.lengthSq());
+    const free = Math.max(0, this.encyclopedia.caseMax - this.encyclopedia.caseItems.value.length);
+    const caught: Individual[] = [], startled: Individual[] = [];
+    const tmp = new Vector3();
+    for (const ind of creatures.individuals) {
+      if (ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
+      const d = ind.pos.distanceTo(player.position);
+      if (d > 3) continue;
+      // distance from the animal to the hoop's path (in the ground plane), and how high it sits above the bed
+      const u = Math.max(0, Math.min(1, tmp.subVectors(ind.pos, a).dot(ab) / abLen2));
+      tmp.copy(a).addScaledVector(ab, u);
+      const off = Math.hypot(ind.pos.x - tmp.x, ind.pos.z - tmp.z);
+      const reach = SWEEP_RADIUS + ind.length_mm / 2000;
+      if (off <= reach && ind.species.collectable && ind.pos.y - world.terrain.heightAt(ind.pos.x, ind.pos.z) < 0.3) {
+        // wary animals and those at the rim of the sweep get out from under the hoop
+        const cap = ind.species.capture;
+        const escape = cap.baseDifficulty * 0.45 + cap.alertPenalty * ind.alert + 0.35 * (off / reach) + (ind.alert > 0.8 ? 0.25 : 0);
+        if (this.capture.forceCatch || (ind.rng.next() > escape && caught.length < free)) { caught.push(ind); continue; }
+      }
+      if (d < 2.5) startled.push(ind);
+    }
+    for (const ind of startled) {
+      const away = new Vector3().subVectors(ind.pos, player.position).setY(0).normalize().multiplyScalar(1.5);
+      creatures.forceIntent(ind.id, { id: -1, kind: 'flee', urgency: 1, seconds: 4, target: ind.pos.clone().add(away), from: player.position.clone() });
+    }
+    if (caught.length === 0 && free === 0) toast(t('capture.caseFull'), 'warn');
+    this.capture.start(tool, caught);
     this.net?.show();
     this.setMode('capture');
   }
 
-  /** The net has gone through the water: the animal is in the bag (and shown there) or has bolted. */
-  private onNetSwung(ind: Individual, ok: boolean): void {
+  /**
+   * Dig where the player is looking (the shovel). A clam whose siphon holes are under the blade comes up in the
+   * scoop; the flat keeps the hole for a while.
+   */
+  dig(): void {
+    const tool = this.data.tools.get('shovel');
+    const world = this.world, player = this.player, clams = this.clams;
+    if (!tool || !world || !player || !clams || this.capture.active) return;
+    const p = new Vector3();
+    ShovelView.digPoint(this.camera, (x, z) => world.terrain.heightAt(x, z), p);
+    if (world.habitat.depthAt(p.x, p.z) > 0.15) { toast(t('hud.tooDeepToDig'), 'warn'); return; }
+    const nowSec = this.clock.nowGame() / 1000;
+    const k = clams.dig(p.x, p.z, tool.params.radius ?? 0.14, nowSec);
+    clams.startle(p.x, p.z, 1.5, nowSec);
+    const caught: Individual[] = [];
+    const sp = this.data.species.get('ruditapes_philippinarum');
+    if (k >= 0 && sp) {
+      if (this.encyclopedia.caseItems.value.length >= this.encyclopedia.caseMax) toast(t('capture.caseFull'), 'warn');
+      else caught.push(generateIndividual(sp, clams.seed[k], clams.xs[k], clams.zs[k], -1, 0, this.clock.nowGame(), [clams.len[k], clams.len[k]]));
+    }
+    this.capture.start(tool, caught);
+    this.shovel?.show();
+    this.setMode('capture');
+  }
+
+  /** Watch a buried clam: it is built in full (siphons, breathing, digging) just for the observation. */
+  observeClam(index: number): void {
+    const sp = this.data.species.get('ruditapes_philippinarum');
+    const clams = this.clams, creatures = this.creatures;
+    if (!sp || !clams || !creatures || index < 0 || clams.state[index] !== 0) return;
+    const ind = generateIndividual(sp, clams.seed[index], clams.xs[index], clams.zs[index], -1, 0, this.clock.nowGame(), [clams.len[index], clams.len[index]]);
+    ind.pitId = -2;   // not the spawner's to cull
+    creatures.spawn(ind);
+    clams.setWatched(index, true);
+    this.watchedClam = { index, id: ind.id };
+    this.enterObserve(ind);
+  }
+
+  /** The tool has gone through: the caught animals leave the world and the first shows in the net or on the scoop. */
+  private onToolSwung(caught: Individual[]): void {
     if (!this.creatures || !this.player) return;
     this.player.applyKick(0.06);
-    if (ok) {
-      this.creatures.remove(ind.id);
-      void this.displayModelFor(ind.species).then((obj) => { if (obj && this.capture.targetIndividual === ind) this.net?.setCatch(obj, ind.length_mm / ind.species.model.modelLength_mm); });
-    } else {
-      const away = new Vector3().subVectors(ind.pos, this.player.position).setY(0).normalize().multiplyScalar(1.5);
-      this.creatures.forceIntent(ind.id, { id: -1, kind: 'flee', urgency: 1, seconds: 4, target: ind.pos.clone().add(away), from: this.player.position.clone() });
-    }
+    const shovel = this.capture.state.value?.toolId === 'shovel';
+    if (!shovel) for (const ind of caught) this.creatures.remove(ind.id);
+    const first = caught[0];
+    if (first) void this.displayModelFor(first.species).then((obj) => {
+      if (!obj || this.capture.catches[0] !== first) return;
+      // the clam's shape is built in shell lengths; the others at their model length
+      const scale = first.species.model.driver === 'asari' ? first.length_mm / 1000 : first.length_mm / first.species.model.modelLength_mm;
+      if (shovel) this.shovel?.setCatch(obj, scale); else this.net?.setCatch(obj, scale);
+    });
   }
 
   /** A fresh model of the species to lie in the net (the detailed tier, or the driver's own geometry). */
@@ -437,21 +583,27 @@ export class App {
       try { return (await instantiateModel(rel)).root; } catch (err) { console.warn(err); }
     }
     const entry = DRIVERS[sp.model.driver ?? ''];
+    // drivers that build their own geometry: the preview shape (a clam lies closed in the scoop)
+    if (entry?.preview) return entry.preview();
     return entry?.placeholder ? entry.placeholder().root : null;
   }
 
-  private onCaptureResolved(ind: Individual, ok: boolean): void {
+  private onCaptureResolved(caught: Individual[]): void {
     if (!this.creatures || !this.world) return;
     this.net?.hide();
-    if (ok) this.encyclopedia.onCaptured(ind, this.clock.nowGame(), this.world.tideLevel);
+    this.shovel?.hide();
+    for (const ind of caught) this.encyclopedia.onCaptured(ind, this.clock.nowGame(), this.world.tideLevel);
     this.setMode('field');
     this.requestSave();
   }
 
   async tankPut(rec: IndividualRecord): Promise<void> {
     if (this.encyclopedia.tankItems.value.length >= this.tankMax) return;
-    this.encyclopedia.moveToTank(rec);
-    await this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
+    // the animal's model loads behind a curtain rather than in a stutter
+    await this.transition(t('transition.put'), async () => {
+      this.encyclopedia.moveToTank(rec);
+      await this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
+    });
   }
 
   async tankRelease(rec: IndividualRecord): Promise<void> {
@@ -508,7 +660,7 @@ export class App {
     }
     const hit = this.tank.pick(nx, ny);
     if (hit?.kind === 'occupant') ui.homeInfo.value = hit.occupant.record;
-    else if (hit?.kind === 'tank') { ui.homeInfo.value = null; ui.homePanel.value = 'tank'; this.tank.pokeAt(nx, ny); }
+    else if (hit?.kind === 'tank') { ui.homeInfo.value = null; if (this.mode === 'tankEdit') this.tank.pokeAt(nx, ny); else this.openTankEdit(); }
     else ui.homeInfo.value = null;
   }
 
@@ -590,7 +742,10 @@ export class App {
         else if (this.input.pressed('ticket')) this.openOverlay('ticket');
         else if (this.input.pressed('home')) this.enterHome();
         else if (this.input.pressed('observe') && this.target) this.enterObserve(this.target);
-        else if (this.input.pressed('interact') && this.target && this.target.species.collectable && player && this.target.pos.distanceTo(player.position) <= CAPTURE_RANGE) this.startCapture(this.target);
+        else if (this.input.pressed('observe') && this.targetClam >= 0) this.observeClam(this.targetClam);
+        else if (this.input.pressed('tool1')) this.setTool('hand_net');
+        else if (this.input.pressed('tool2')) this.setTool('shovel');
+        else if (this.input.pressed('interact')) this.useTool();
         break;
       case 'observe':
         if (this.input.pressed('observe') || this.input.pressed('menu')) this.exitObserve();
@@ -603,17 +758,22 @@ export class App {
         this.observation.update(dt);
         break;
       case 'capture':
-        if (this.input.mouseClicked || this.input.pressed('interact')) this.capture.attempt();
-        if (this.input.pressed('menu') && this.capture.cancel()) { this.net?.hide(); this.setMode('field'); }
         this.capture.update(dt);
         break;
       case 'home':
-        this.tank.setAutoRotate(ui.homePanel.value !== 'tank');
+        this.tank.setAutoRotate(!this.tankKeys(dt));
         if (this.input.pressed('zukan')) this.openOverlay('zukan');
         else if (this.input.pressed('ticket')) this.openOverlay('ticket');
         else if (this.input.pressed('menu')) {
           if (ui.homePanel.value !== 'none' || ui.homeInfo.value) { ui.homePanel.value = 'none'; ui.homeInfo.value = null; }
           else this.openOverlay('menu');
+        }
+        break;
+      case 'tankEdit':
+        this.tankKeys(dt);
+        if (this.input.pressed('menu')) {
+          if (ui.tankSelected.value) ui.tankSelected.value = null;
+          else this.closeTankEdit();
         }
         break;
       case 'menu': case 'zukan': case 'ticket': case 'tidetable':
@@ -629,7 +789,7 @@ export class App {
     this.renderer.gl.toneMappingExposure = this.tankVisible() ? 0.6 : (world?.exposure ?? 0.5);
 
     if (this.tankVisible()) {
-      this.tank.update(dt, 1);
+      if (mode === 'tankEdit') this.tank.updateFrozen(); else this.tank.update(dt, 1);
       if (this.hero && this.tank.heroActive) {
         this.hero.setLighting(this.tank.lighting);
         this.hero.render(this.tank.scene, this.tank.camera, dt);
@@ -637,7 +797,9 @@ export class App {
     } else if (world && player && creatures) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       else if (mode === 'capture') player.idle(dt);
-      this.net?.update(this.camera, dt, mode === 'capture' ? this.capture.state.value : null, world.tideLevel);
+      this.net?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'hand_net' ? this.capture.state.value : null, world.tideLevel);
+      this.shovel?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'shovel' ? this.capture.state.value : null);
+      this.clams?.update(player.position, this.worldVisible() ? dt : 0, gameMs / 1000, (x, z) => world.habitat.waterAt(x, z));
       creatures.update({
         dt: this.worldVisible() ? dt : 0, gameMs, playerPos: player.position, camera: this.camera, simScale: this.simScale,
         tod: world.tod, season: world.season, tidePhase: this.tidePhase(), lockedId: this.lockedId,
@@ -648,7 +810,7 @@ export class App {
         this.hero.render(world.scene, this.camera, dt, world.water);
       } else if (this.field) this.field.render(world.scene, this.camera, world.water);
       else this.renderer.gl.render(world.scene, this.camera);
-      if (this.net?.group.visible && mode === 'capture') this.renderNetOverlay(world.scene);
+      if ((this.net?.group.visible || this.shovel?.group.visible) && (mode === 'capture' || mode === 'field')) this.renderNetOverlay(world.scene);
       if (ui.debug.value && ui.debugState.value.markers) {
         this.markerAcc += dt;
         if (this.markerAcc >= 1 / MARKER_HZ) { this.markerAcc = 0; this.updateMarkers(); }
@@ -679,6 +841,29 @@ export class App {
     scene.background = background;
     gl.shadowMap.enabled = shadows;
     gl.autoClear = autoClear;
+  }
+
+  /** WASD around the tank: A/D orbit, W/S closer and further. True while a key is held. */
+  private tankKeys(dt: number): boolean {
+    const i = this.input;
+    const orbit = (i.held('right') ? 1 : 0) - (i.held('left') ? 1 : 0);
+    const dolly = (i.held('forward') ? 1 : 0) - (i.held('back') ? 1 : 0);
+    this.tank.nudgeCamera(orbit, dolly, 0, dt);
+    return orbit !== 0 || dolly !== 0;
+  }
+
+  /** Where the view's centre meets the ground within `maxDist` (marching the ray), or null. */
+  private groundUnderReticle(maxDist: number): Vector3 | null {
+    const world = this.world;
+    if (!world) return null;
+    const dir = this.camera.getWorldDirection(this.tmp2);
+    const p = this.tmp3.copy(this.camera.position);
+    const step = 0.08;
+    for (let d = 0; d < maxDist; d += step) {
+      p.addScaledVector(dir, step);
+      if (p.y <= world.terrain.heightAt(p.x, p.z)) return p;
+    }
+    return null;
   }
 
   private updateMarkers(): void {
@@ -719,13 +904,27 @@ export class App {
     let prompt: string | null = null;
     if (this.mode === 'field' && this.creatures && player) {
       this.target = this.creatures.pickTarget(this.camera, 7);
+      // the net: something catchable close ahead
+      const fwd = player.forward;
+      let inReach = false;
+      for (const ind of this.creatures.individuals) {
+        if (!ind.species.collectable || ind.species.locomotion === 'burrow') continue;
+        const dx = ind.pos.x - player.position.x, dz = ind.pos.z - player.position.z, d = Math.hypot(dx, dz);
+        if (d <= CAPTURE_RANGE && (dx * fwd.x + dz * fwd.z) / Math.max(d, 1e-3) > 0.6) { inReach = true; break; }
+      }
+      const toolHint = this.tool === 'hand_net' ? (inReach ? `[E] ${t('hud.swing')}` : '') : `[E] ${t('hud.dig')}`;
+      // a clam's siphon holes under the reticle
+      this.targetClam = -1;
+      if (this.clams && this.world) {
+        const g = this.groundUnderReticle(3.5);
+        if (g) this.targetClam = this.clams.nearest(g.x, g.z, 0.16);
+      }
       if (this.target) {
         const sp = this.target.species;
-        const near = this.target.pos.distanceTo(player.position) <= CAPTURE_RANGE;
-        prompt = sp.collectable
-          ? `${sp.names.ja}   [F] ${t('hud.observe')}   ${near ? `[E] ${t('hud.interact')}` : '（近づくと採集）'}`
-          : `${sp.names.ja}   [F] ${t('hud.observe')}   ${t('hud.observeOnly')}`;
-      }
+        prompt = `${sp.names.ja}   [F] ${t('hud.observe')}${sp.collectable ? (toolHint ? `   ${toolHint}` : '') : `   ${t('hud.observeOnly')}`}`;
+      } else if (this.targetClam >= 0) {
+        prompt = `${t('clam.siphon')}   [F] ${t('hud.observe')}   ${this.tool === 'shovel' ? `[E] ${t('hud.dig')}` : `[2] ${this.data.tools.get('shovel')?.ja ?? ''}`}`;
+      } else if (toolHint) prompt = toolHint;
     }
     const fps = this.fpsCount / Math.max(1e-3, this.fpsAcc);
     this.fpsAcc = 0; this.fpsCount = 0;
