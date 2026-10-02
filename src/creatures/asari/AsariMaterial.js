@@ -102,26 +102,29 @@ vec3 asPalette(float k){
 // stack: ~100 radial ribs, finer commarginal threads crossing them into small beads, and granules over all.
 // Each layer fades out as it falls below a pixel; what is filtered away is returned in lost and turned into
 // roughness, so the shell stays matte and gritty at any distance instead of turning smooth and glossy.
-// extra = (granule, bead, grit)
+// extra = (granule, bead, grit); asRibVis / asLamVis: the lattice as the eye still resolves it (for colour)
+float asRibVis, asLamVis;
 float asSculpt(vec2 uv, vec3 lp, float seed, float detail, out float checks, out float lost, out vec3 extra){
   float u = uv.x, s = uv.y;
   float post = smoothstep(0.45, 0.75, u) * (1.0 - smoothstep(0.9, 1.0, u));
   // radial ribs: ~100 fine flat-topped ribs, stronger on the posterior slope
   // ribs wander a little and vary in strength, as on a real shell
-  float ribC = u * 104.0 + (asFbmU(u, s*3.0 + seed*9.0, 12.0) - 0.5) * 1.6;
+  float ribC = u * 76.0 + (asFbmU(u, s*3.0 + seed*9.0, 12.0) - 0.5) * 1.4;
   float aR = 1.0 - smoothstep(0.12, 0.35, fwidth(ribC));
   float ribW = pow(0.5 + 0.5*cos(6.2831853*ribC), 1.6) * mix(0.55, 1.2, asH(vec2(floor(ribC + 0.5), seed*3.0)));
   float ribA = mix(0.45, 1.0, post) * smoothstep(0.03, 0.5, s);
   // commarginal threads with irregular spacing (growth rate varies)
-  float g = s*s*70.0 + s*48.0 + asFbmU(u, s*9.0 + seed*7.0, 3.0) * 2.2;
+  float g = s*s*34.0 + s*30.0 + asFbmU(u, s*9.0 + seed*7.0, 3.0) * 1.8;
   float aG = 1.0 - smoothstep(0.12, 0.35, fwidth(g));
   float lamW = pow(0.5 + 0.5*cos(6.2831853*g), 3.0) * mix(0.5, 1.3, asH(vec2(floor(g + 0.5), seed*7.0)));
   float lamA = mix(0.5, 1.0, smoothstep(0.2, 0.9, s)) * mix(0.8, 1.25, 1.0 - post);
   // finer threads between them (about two per lamella)
-  float g2 = g * 2.0 + 0.25;
+  float g2 = g * 3.0 + 0.25;
   float aT = 1.0 - smoothstep(0.08, 0.25, fwidth(g2));
   float thrW = pow(0.5 + 0.5*cos(6.2831853*g2), 2.0);
   // beads where ribs and threads cross
+  asRibVis = mix(0.45, ribW, aR) * ribA;
+  asLamVis = mix(0.3, lamW, aG) * lamA;
   float bead = ribW * max(lamW, thrW*0.7) * (0.6 + 0.8*asN(vec2(ribC*1.7, g*1.3)));
   float aB = aR * min(aG, aT);
   // granules: isotropic noise on the shell's own surface (shell-length units), ~260 grains per length
@@ -256,6 +259,7 @@ ${SAND_CLIP}
   vec3 asCol = asShellColor(vAsUv, AS_SEED, asChecks, asHt, asWorn);
   // grit in the colour: grain pits hold dirt, bead crests are abraded paler; sub-pixel grit greys the surface slightly
   asCol *= 1.0 + asX.x * 0.45;
+  asCol *= mix(0.74, 1.08, clamp(asRibVis*0.8 + asLamVis*0.35, 0.0, 1.0));
   asCol = mix(asCol, asCol * 1.18 + 0.03, clamp(asX.y, 0.0, 1.0) * 0.35);
   asCol = mix(asCol, asCol * 0.93 + 0.03, clamp(asLost, 0.0, 1.0) * 0.25);
   float asWet = uSand.w;
@@ -275,7 +279,7 @@ ${SAND_TINT}`)
   material.clearcoat *= asWet * (1.0 - asBand) * (1.0 - clamp(asX.z * 0.6 + asLost * 0.5, 0.0, 0.85));`);
   };
   if (o.instanced) mat.defines = { AS_INSTANCED: '' };
-  mat.customProgramCacheKey = () => 'asari-shell-out-v2' + (o.instanced ? 'i' : '');
+  mat.customProgramCacheKey = () => 'asari-shell-out-v3' + (o.instanced ? 'i' : '');
   mat.userData.uniforms = uniforms;
   return mat;
 }
@@ -425,11 +429,15 @@ ${SAND_CLIP}
   vec3 col;
   float t = vAsUv.x;
   if (uKind > 1.5) {
-    col = mix(vec3(0.80, 0.75, 0.64), vec3(0.60, 0.46, 0.30), smoothstep(0.35, 0.95, t));
-    col *= 0.92 + 0.08*sin(vAsUv.y*6.2831853*9.0);    // faint longitudinal muscle lines
-    float spk = smoothstep(0.58, 0.72, asFbm(vec2(t*16.0, sin(vAsUv.y*6.2831853)*3.0 + cos(vAsUv.y*6.2831853)*3.0))) * smoothstep(0.3, 0.8, t);
-    col = mix(col, vec3(0.16, 0.12, 0.10), spk*0.85);
-    col = mix(col, vec3(0.78, 0.66, 0.50), vAsTent);
+    // cream-white translucent sheath; the last fifth tan-orange with dark brown speckles and a dark band at the rim
+    float ang = vAsUv.y*6.2831853;
+    col = mix(vec3(0.90, 0.87, 0.79), vec3(0.80, 0.64, 0.44), smoothstep(0.8, 0.97, t));
+    col *= 0.94 + 0.06*sin(ang*9.0);    // faint longitudinal muscle lines
+    float spk = smoothstep(0.6, 0.72, asFbm(vec2(t*26.0, sin(ang)*3.5 + cos(ang)*3.5))) * smoothstep(0.82, 0.95, t);
+    col = mix(col, vec3(0.32, 0.22, 0.14), spk*0.7);
+    col = mix(col, vec3(0.42, 0.30, 0.19), smoothstep(0.94, 0.975, t) * (1.0 - smoothstep(0.99, 1.0, t)) * 0.5);
+    // tentacles: brown with darker tips (photos 043, 050)
+    col = mix(col, mix(vec3(0.72, 0.58, 0.40), vec3(0.45, 0.32, 0.20), smoothstep(0.4, 1.0, vAsTent)), step(0.01, vAsTent));
     if (!gl_FrontFacing) col *= mix(0.25, 0.6, smoothstep(0.85, 1.0, t));   // inside of the tube, dark below the rim
   } else if (uKind > 0.5) {
     col = vec3(0.93, 0.88, 0.80) * (0.92 + 0.1*asN(vAsUv*vec2(14.0, 6.0)));
@@ -460,7 +468,7 @@ ${SAND_TINT}`)
     totalEmissiveRadiance += diffuseColor.rgb * (0.03 + thin * pow(1.0 - ndv, 2.0));
   }`);
   };
-  mat.customProgramCacheKey = () => 'asari-soft-v2-' + kind;
+  mat.customProgramCacheKey = () => 'asari-soft-v3-' + kind;
   mat.userData.uniforms = uniforms;
   return mat;
 }
@@ -490,14 +498,20 @@ export function makeDecalMaterial() {
   hq = vec2(ca*hq.x - sa*hq.y, sa*hq.x + ca*hq.y);
   float sep = uDecal.z;
   float hr = mix(0.045, 0.075, uHole.w);
-  float h1 = 1.0 - smoothstep(hr*0.6, hr, length(hq - vec2(sep*0.55, 0.0)));
-  float h2 = 1.0 - smoothstep(hr*0.5, hr*0.85, length(hq + vec2(sep*0.45, 0.0)));
-  float ring = (1.0 - smoothstep(0.0, hr*1.6, abs(length(hq) - sep*0.7))) * 0.25;
-  float holes = max(max(h1, h2), ring) * uDecal.y;
-  diffuseColor = vec4(vec3(0.05, 0.04, 0.03), clamp(shadow*0.45 + disturb*0.3 + holes*0.85, 0.0, 0.9));`)
+  // two openings (inhalant larger): dark throat, a fringe of pale radial tentacle streaks round each (photo 049)
+  vec2 d1 = hq - vec2(sep*0.55, 0.0), d2 = hq + vec2(sep*0.45, 0.0);
+  float r1 = length(d1), r2 = length(d2) / 0.8;
+  float h1 = 1.0 - smoothstep(hr*0.55, hr*0.85, r1);
+  float h2 = 1.0 - smoothstep(hr*0.55, hr*0.85, r2);
+  float f1 = smoothstep(hr*0.7, hr*0.9, r1) * (1.0 - smoothstep(hr*1.1, hr*1.45, r1)) * smoothstep(0.2, 0.8, sin(atan(d1.y, d1.x)*13.0));
+  float f2 = smoothstep(hr*0.7, hr*0.9, r2) * (1.0 - smoothstep(hr*1.05, hr*1.3, r2)) * smoothstep(0.3, 0.9, sin(atan(d2.y, d2.x)*10.0));
+  float holes = max(h1, h2) * uDecal.y;
+  float fringe = max(f1, f2 * 0.7) * uDecal.y * uHole.w;
+  vec3 c = mix(vec3(0.05, 0.04, 0.03), vec3(0.78, 0.72, 0.62), fringe);
+  diffuseColor = vec4(c, clamp(max(shadow*0.45 + disturb*0.3 + holes*0.9, fringe*0.75), 0.0, 0.92));`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix(0.9, 0.25, clamp(disturb + holes, 0.0, 1.0));');
   };
-  mat.customProgramCacheKey = () => 'asari-decal-v1';
+  mat.customProgramCacheKey = () => 'asari-decal-v2';
   mat.userData.uniforms = uniforms;
   return mat;
 }

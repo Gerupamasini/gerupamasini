@@ -22,7 +22,7 @@ const OUTLINE = [
   [-0.410, 0.172], [-0.270, 0.258], [-0.090, 0.326], [0.080, 0.356],
 ];
 const GROWTH_ORIGIN = new Vector3(0.17, 0.315, 0);
-const HALF_WIDTH = 0.235;
+const HALF_WIDTH = 0.25;
 /** major growth checks modelled in LOD0 geometry (the shader draws its own set close to these) */
 const GEOM_CHECKS = [0.54, 0.68, 0.82];
 
@@ -222,11 +222,11 @@ function buildSiphon(radius, tentacles, papillae, partner, nt, nr) {
   for (let i = 0; i <= nt; i++) {
     const t = i / nt;
     const r0 = radius * (1 - 0.14 * t) * (1 + 0.06 * Math.exp(-(((t - 0.97) / 0.035) ** 2)));
-    const fuse = 1 - smooth(0.62, 0.9, t);
+    const fuse = 1 - smooth(0.84, 0.96, t);
     for (let j = 0; j <= nr; j++) {
       const a = (j / nr) * Math.PI * 2;
       const toward = Math.max(0, Math.cos(a) * partner);
-      const r = r0 * (1 + 0.42 * fuse * toward * toward);
+      const r = r0 * (1 + 0.62 * fuse * toward * toward);
       pos.push(t, Math.cos(a) * r, Math.sin(a) * r);
       uv.push(t, j / nr);
       tent.push(0);
@@ -250,13 +250,14 @@ function buildSiphon(radius, tentacles, papillae, partner, nt, nr) {
     const n = pap ? papillae : tentacles, kk = pap ? k - tentacles : k;
     const a = ((kk + 0.5 + (pap ? 0 : 0.2 * Math.sin(kk * 2.3))) / n) * Math.PI * 2;
     // tentacles alternate long and short (branched look); papillae are short knobs
-    const len = pap ? radius * (0.16 + 0.06 * (kk % 2)) : radius * (0.38 + 0.32 * (((kk * 7) % 5) / 4)) * (kk % 2 ? 0.7 : 1);
+    const len = pap ? radius * (0.14 + 0.05 * (kk % 2)) : radius * (0.26 + 0.24 * (((kk * 7) % 5) / 4)) * (kk % 2 ? 0.65 : 1);
     // tentacles fan outward over the sand, papillae stand up round the rim
-    const out = pap ? new Vector3(0.55, Math.cos(a) * 0.83, Math.sin(a) * 0.83) : new Vector3(0.22, Math.cos(a) * 0.97, Math.sin(a) * 0.97);
+    // tentacles lean in over the opening like a fringe, papillae stand up round the rim
+    const out = pap ? new Vector3(0.55, Math.cos(a) * 0.83, Math.sin(a) * 0.83) : new Vector3(0.75, -Math.cos(a) * 0.66, -Math.sin(a) * 0.66);
     const side = new Vector3(0, -Math.sin(a), Math.cos(a));
     const base = new Vector3(1, Math.cos(a) * radius * 0.92, Math.sin(a) * radius * 0.92);
     const b0 = pos.length / 3;
-    const segs = 3, w = radius * (pap ? 0.1 : 0.12);
+    const segs = 3, w = radius * (pap ? 0.09 : 0.085);
     for (let i = 0; i <= segs; i++) {
       const f = i / segs, r = w * (1 - f * 0.85);
       for (let s = 0; s < 4; s++) {
@@ -292,10 +293,11 @@ export function sharedGeometry() {
   const body = withTent(new SphereGeometry(1, 18, 12));
   body.scale(0.27, 0.2, 0.13);
   body.translate(-0.02, -0.01, 0);
-  const lig = new CapsuleGeometry(0.011, 0.17, 3, 6);
-  lig.rotateZ(Math.PI / 2 + Math.atan2(0.035, 0.3));
+  const lig = new CapsuleGeometry(0.014, 0.26, 3, 6);
+  // along the posterodorsal margin behind the beaks, half sunk between the valves
+  lig.rotateZ(Math.PI / 2 + Math.atan2(0.28, 1));
   lig.scale(1, 1, 0.8);
-  lig.translate(-0.02, 0.322, 0);
+  lig.translate(-0.07, 0.306, 0);
   lig.setAttribute('aTent', new BufferAttribute(new Float32Array(lig.attributes.position.count).fill(1), 1));
   shared = {
     valve: LODS.map((_, i) => buildValve(i)),
@@ -304,8 +306,8 @@ export function sharedGeometry() {
     ligament: lig,
     foot: [buildFoot(20, 14), buildFoot(8, 8)],
     // local +y of a siphon points ventrally, so the exhalant's partner is +y and the inhalant's −y
-    siphonIn: [buildSiphon(ANATOMY.siphonIn.radius, 22, 0, -1, 18, 20), buildSiphon(ANATOMY.siphonIn.radius, 0, 0, -1, 5, 8)],
-    siphonOut: [buildSiphon(ANATOMY.siphonOut.radius, 0, 12, 1, 18, 18), buildSiphon(ANATOMY.siphonOut.radius, 0, 0, 1, 5, 8)],
+    siphonIn: [buildSiphon(ANATOMY.siphonIn.radius, 26, 0, -1, 22, 20), buildSiphon(ANATOMY.siphonIn.radius, 0, 0, -1, 5, 8)],
+    siphonOut: [buildSiphon(ANATOMY.siphonOut.radius, 0, 14, 1, 22, 18), buildSiphon(ANATOMY.siphonOut.radius, 0, 0, 1, 5, 8)],
     decal: new PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
   };
   return shared;

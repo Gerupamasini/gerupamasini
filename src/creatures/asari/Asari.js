@@ -141,24 +141,21 @@ export class AsariDriver {
     m.root.position.set((this.drift.x + v1.x * b.pull) * L, centreY * L, (this.drift.z + v1.z * b.pull) * L);
 
     // ---- siphons long enough to just break the surface
-    m.root.updateMatrixWorld(true);
+    root.updateMatrixWorld(true);
     const siphonLen = (spec, grp) => {
       v2.copy(spec.root).applyMatrix4(m.root.matrixWorld);
       v3.set(1, 0, 0).transformDirection(grp.matrixWorld);
       const below = (ground - v2.y) / L;
       const up = Math.max(0.35, v3.y);
-      return Math.min(0.9, Math.max(0.12, below / up + 0.09));
+      // the openings sit just proud of the sand (reference 049: two fringed holes almost flush)
+      return Math.min(0.9, Math.max(0.12, below / up + 0.012));
     };
     const reach = b.burial > 0.5 ? siphonLen(ANATOMY.siphonIn, m.siphonIn.grp) : 0.16;
     const reachOut = b.burial > 0.5 ? siphonLen(ANATOMY.siphonOut, m.siphonOut.grp) : 0.13;
     const ext = b.extOut, open = b.openOut;
-    m.pose(
-      b.gapeOut,
-      b.foot,
-      { len: 0.03 + ext * reach, open, swayY: b.swayY, swayZ: b.swayZ },
-      { len: 0.03 + ext * (reachOut + 0.015), open: open * 0.8 + 0.1, swayY: b.swayY, swayZ: b.swayZ * 1.08 },   // fused: they move together
-      b.breath * b.gapeOut,
-    );
+    const sIn = { len: 0.03 + ext * reach, open, swayY: b.swayY, swayZ: b.swayZ };
+    const sOut = { len: 0.03 + ext * (reachOut + 0.015), open: open * 0.8 + 0.1, swayY: b.swayY, swayZ: b.swayZ * 1.08 };   // fused: they move together
+    m.pose(b.gapeOut, b.foot, sIn, sOut, b.breath * b.gapeOut);
     // fully under the sand: skip the shell draws altogether
     const buriedDeep = b.burial > 0.97;
     m.left.pivot.visible = m.right.pivot.visible = !buriedDeep;
@@ -171,15 +168,9 @@ export class AsariDriver {
     const holes = smooth(0.85, 1, b.burial);
     du.uDecal.value.set(b.disturb * 0.75, holes, 0, (1 - smooth(0.4, 0.9, b.burial)) * 0.6);
     if (holes > 0) {
-      v2.set(0, 0, 0).applyMatrix4(m.siphonIn.grp.matrixWorld);
-      v3.set(0, 0, 0).applyMatrix4(m.siphonOut.grp.matrixWorld);
-      // where each siphon axis crosses the sand
-      const cross = (p, grp) => {
-        const d = new Vector3(1, 0, 0).transformDirection(grp.matrixWorld);
-        const k = (ground - p.y) / Math.max(0.2, d.y);
-        return p.addScaledVector(d, k);
-      };
-      cross(v2, m.siphonIn.grp); cross(v3, m.siphonOut.grp);
+      // the holes sit under the deformed siphon tips (same bend as the vertex shader: offset = sway · L at t = 1)
+      const tip = (out, s, grp) => out.set(s.len, s.swayY * s.len, s.swayZ * s.len).applyMatrix4(grp.matrixWorld);
+      tip(v2, sIn, m.siphonIn.grp); tip(v3, sOut, m.siphonOut.grp);
       root.worldToLocal(v2); root.worldToLocal(v3);
       const half = this.scale * 0.8;
       const mx = (v2.x + v3.x) / (2 * half), mz = (v2.z + v3.z) / (2 * half);
