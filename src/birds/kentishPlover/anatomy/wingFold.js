@@ -440,9 +440,9 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
     if (f.type === 'primary') {
       // tips converge over the tail: longest primaries meet near the midline at the tail tip (±5 mm)
       const zTip = V(f.base).z - 0; // unused
-      // (drawn 0.6–2.4 mm closer to the midline than 4.8 + 0.9·(10 − i): from above the folded wings taper to a point
+      // (drawn 0.3–0.9 mm closer to the midline than 4.8 + 0.9·(10 − i): from above the folded wings taper to a point
       // over the tail instead of running on as a parallel-sided stem — validation §Y)
-      const x = 4.2 + (10 - f.index) * 0.7;
+      const x = 4.5 + (10 - f.index) * 0.8;
       // p9 tip (−84, 57.4), spec §10.3; the chord ends higher by the shaft's ventral bend (featherOffset)
       const y = 57.0 + (10 - f.index) * 0.35 + f.curve * L * 0.83;
       const dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));
