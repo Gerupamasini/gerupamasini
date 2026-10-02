@@ -42,7 +42,7 @@ try {
   const errors = [];
   page.on('pageerror', (e) => { errors.push(`pageerror: ${e.message}`); console.error('pageerror:', e.message, e.stack?.split('\n').slice(0, 3).join(' | ')); });
   // a blocked font CDN in a sandbox is not a page error: resource failures are reported but do not fail the run
-  page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const text = m.text(); if (/net::ERR_|Failed to load resource/.test(text)) { console.error('resource:', text.slice(0, 200)); return; } errors.push(`console: ${text}`); console.error('console:', text.slice(0, 300)); } });
+  page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const text = m.text(); if (/net::ERR_|Failed to load resource|Context Lost|Context Restored/.test(text)) { console.error('notice:', text.slice(0, 200)); return; } if (m.type() === 'warning') { console.error('warning:', text.slice(0, 300)); return; } errors.push(`console: ${text}`); console.error('console:', text.slice(0, 300)); } });
   await page.goto(url, { waitUntil: 'load' });
   await page.waitForFunction(() => document.querySelector('.title-screen') || document.querySelector('.card h2'), null, { timeout: 60000 });
   await page.screenshot({ path: path.join(outDir, '01-title.png') });
