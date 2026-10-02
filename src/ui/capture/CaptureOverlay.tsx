@@ -7,7 +7,7 @@ export function CaptureOverlay({ app }: { app: App }) {
   if (!st) return null;
   return (
     <div class="capture-box">
-      <div class="capture-title">{st.toolName}: {st.speciesName}</div>
+      <div class="capture-title"><span class="tool">{st.toolName}</span>{st.speciesName}</div>
       <div class="capture-bar">
         <div class="band" style={{ left: `${st.bandStart * 100}%`, width: `${(st.bandEnd - st.bandStart) * 100}%` }} />
         <div class="cursor" style={{ left: `${st.cursor * 100}%` }} />

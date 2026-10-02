@@ -12,14 +12,14 @@ export function ObserveOverlay({ app }: { app: App }) {
   return (
     <Fragment>
       <div class="observe-top">
-        <div class="observe-name">{st.speciesName} <span class="dim small">{sp?.names.sci}</span></div>
-        <div class="dim small">{stage}{sp?.sex.dimorphic ? ` / ${t(`sex.${st.sex}`)}` : ''}</div>
+        <div class="observe-name">{st.speciesName}<span class="sci">{sp?.names.sci}</span></div>
+        <div class="observe-sub">{stage}{sp?.sex.dimorphic ? ` ・ ${t(`sex.${st.sex}`)}` : ''}</div>
       </div>
       <div class="observe-right">
-        <div class="small dim">{t('zukan.behaviors')}</div>
+        <div class="eyebrow">{t('zukan.behaviors')}</div>
         <ul class="behaviors compact">
           {sp?.encyclopedia.behaviors.map((b) => (
-            <li key={b.id} class={recorded[b.id] ? 'on' : ''}>{recorded[b.id] ? '✓' : '○'} {b.ja}</li>
+            <li key={b.id} class={recorded[b.id] ? 'on' : ''}><span class="mark">{recorded[b.id] ? '✓' : ''}</span>{b.ja}</li>
           ))}
         </ul>
       </div>
@@ -33,7 +33,7 @@ export function ObserveOverlay({ app }: { app: App }) {
           <button onClick={() => app.observation.nudge(-1)} title="+">{t('observe.closer')}</button>
           <button onClick={() => app.observation.nudge(1)} title="-">{t('observe.farther')}</button>
         </div>
-        <span class="dim small">{t('observe.hint')} / {t('observe.exit')}</span>
+        <span class="hint">{t('observe.hint')} ・ {t('observe.exit')}</span>
       </div>
     </Fragment>
   );

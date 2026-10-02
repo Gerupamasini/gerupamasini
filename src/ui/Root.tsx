@@ -15,6 +15,8 @@ import { CaptureOverlay } from './capture/CaptureOverlay';
 import { HomeMenu } from './home/HomeMenu';
 import { DebugPanel } from './debug/DebugPanel';
 import { CreatureMarkers } from './debug/CreatureMarkers';
+import { ArrowIcon, Key, KeyHint, MoonIcon } from './common/Icons';
+import { tideName } from '../core/Moon';
 import './ui.css';
 
 export function Root({ app }: { app: App }) {
@@ -49,12 +51,10 @@ export function Root({ app }: { app: App }) {
 function Loading() {
   const { frac, label } = ui.loading.value;
   return (
-    <div class="screen center">
-      <div class="card">
-        <h1 class="title">{t('app.title')}</h1>
-        <div class="progress"><i style={{ width: `${Math.round(frac * 100)}%` }} /></div>
-        <div class="dim">{label}</div>
-      </div>
+    <div class="screen loading">
+      <h1 class="wordmark rise">{t('app.title')}</h1>
+      <div class="progress rise d1"><i style={{ width: `${Math.round(frac * 100)}%` }} /></div>
+      <div class="label rise d2">{label}</div>
     </div>
   );
 }
@@ -62,29 +62,51 @@ function Loading() {
 function ErrorScreen() {
   return (
     <div class="screen center">
-      <div class="card"><h2>起動できません</h2><p>{ui.error.value}</p></div>
+      <div class="card"><h2 class="card-title">起動できません</h2><p>{ui.error.value}</p></div>
     </div>
   );
 }
 
+/** The title: the wordmark over the quiet tank, a drawn tide line, and what the real flat is doing right now. */
 function Title({ app }: { app: App }) {
   const hud = ui.hud.value;
+  const now = app.clock.nowGame();
+  const level = hud.tideLevel;
   return (
     <div class="screen title-screen">
-      <div class="title-block">
-        <h1 class="title big">{t('app.title')}</h1>
-        <div class="dim">{t('app.subtitle')}</div>
-        <div class="title-buttons">
-          <button class="primary" onClick={() => void app.startNewGame()}>{t('title.start')}</button>
-          {ui.hasSave.value && <button onClick={() => void app.continueGame()}>{t('title.continue')}</button>}
-          <button onClick={() => app.openOverlay('menu')}>{t('title.settings')}</button>
+      <div class="title-wrap">
+        <h1 class="wordmark rise">{t('app.title')}</h1>
+        <svg class="title-rule rise d1" viewBox="0 0 120 36" aria-hidden="true">
+          <path pathLength="1" d="M2 24 C 18 24, 22 10, 36 10 S 54 26, 68 26 S 86 8, 100 8 S 112 20, 118 20" />
+        </svg>
+        <div class="tagline rise d2">{t('title.tagline')}</div>
+        <div class="title-now rise d3">
+          <span>{t('title.place')}</span>
+          <span class="sep" />
+          <span class="num">{hud.dateText} {hud.timeText}</span>
+          <span class="sep" />
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><MoonIcon ms={now} /> {tideName(now)}</span>
+          <span class="sep" />
+          <span>{t('hud.tide')} <span class="num">{level >= 0 ? '+' : ''}{(level * 100).toFixed(0)} cm</span></span>
         </div>
-        <div class="dim small">{hud.dateText} {hud.timeText}</div>
+        <div class="title-actions rise d4">
+          <button class="btn primary lg" onClick={() => void app.startNewGame()}>{t('title.start')} <ArrowIcon /></button>
+          {ui.hasSave.value && <button class="btn lg" onClick={() => void app.continueGame()}>{t('title.continue')}</button>}
+          <button class="btn ghost lg" onClick={() => app.openOverlay('menu')}>{t('title.settings')}</button>
+        </div>
       </div>
-      <div class="version">v0.2 身内テスト版</div>
+      <div class="title-foot rise d5">
+        <span>v0.2 — 身内テスト版</span>
+        <span>{t('home.station')} ・ 潮汐の予測</span>
+      </div>
     </div>
   );
 }
+
+const KEY_HINTS: [string[], string][] = [
+  [['W', 'A', 'S', 'D'], '移動'], [['Shift'], '走る'], [['C'], '視点'], [['E'], '採集'], [['F'], '観察'],
+  [['M'], '地図'], [['Tab'], '図鑑'], [['H'], '自宅'], [['T'], 'チケット'], [['Esc'], 'メニュー'],
+];
 
 function Hud({ app }: { app: App }) {
   const hud = ui.hud.value;
@@ -93,33 +115,41 @@ function Hud({ app }: { app: App }) {
     <Fragment>
       {!hud.pointerLocked && screen === 'field' && (
         <div class="screen center transparent" onClick={() => app.focusGame()}>
-          <div class="hint-big">{t('hud.clickToPlay')}</div>
-          <div class="dim small">{t('hud.clickToPlay.sub')}</div>
+          <div class="ready">
+            <div class="ready-pill">{t('hud.ready')} <Key k="Enter" /></div>
+            <div class="ready-sub">{t('hud.ready.sub')}</div>
+          </div>
         </div>
       )}
-      <div class="hud-top-left">
-        <div class="clock">{hud.dateText} <b>{hud.timeText}</b> <span class="dim">{t(`tod.${hud.tod}`)} / {t(`season.${hud.season}`)}</span></div>
+      <div class="hud-tl">
+        <div class="hud-clock">
+          <span class="num">{hud.timeText}</span>
+          <span class="date num">{hud.dateText}</span>
+          <span class="meta">{t(`tod.${hud.tod}`)} ・ {t(`season.${hud.season}`)}</span>
+        </div>
         <TideGauge />
         {hud.ticket && (
           <div class={`ticket-badge ${hud.ticket.phase}`}>
-            {t('hud.ticket')}: {hud.ticket.phase === 'ending' ? t('ticket.ending') : `${hud.ticket.targetText}  ${t('ticket.remaining')} ${Math.floor(hud.ticket.remainingSec / 60)}:${String(hud.ticket.remainingSec % 60).padStart(2, '0')}`}
+            {t('hud.ticket')} ・ {hud.ticket.phase === 'ending' ? t('ticket.ending') : <span><span class="num">{hud.ticket.targetText}</span> {t('ticket.remaining')} <span class="num">{Math.floor(hud.ticket.remainingSec / 60)}:{String(hud.ticket.remainingSec % 60).padStart(2, '0')}</span></span>}
           </div>
         )}
       </div>
-      <div class="hud-top-right">
-        <Minimap app={app} />
-        <div class="stats">
-          <div>{t('progress.research')} <b>{hud.research}</b></div>
-          <div>{t('hud.case')} <b>{hud.caseCount}</b>/{hud.caseMax}</div>
-          <div class="dim small">{hud.fps} fps</div>
+      <div class="hud-tr">
+        <div class="minimap-wrap"><Minimap app={app} /></div>
+        <div class="hud-stats">
+          <div>{t('progress.research')}<b>{hud.research}</b></div>
+          <div>{t('hud.case')}<b>{hud.caseCount}<span class="dim">/{hud.caseMax}</span></b></div>
+          <div class="fps">{hud.fps} fps</div>
         </div>
       </div>
       <div class="reticle" />
-      <div class="hud-center-bottom">
-        {hud.tooDeep && <div class="warn">{t('hud.tooDeep')}</div>}
+      <div class="hud-cb">
+        {hud.tooDeep && <div class="prompt warn">{t('hud.tooDeep')}</div>}
         {hud.prompt && <div class="prompt">{hud.prompt}</div>}
       </div>
-      <div class="hud-bottom dim small">{t('hud.hint.move')}<br />{t('hud.hint.view')}</div>
+      <div class="hud-keys">
+        {KEY_HINTS.map(([keys, label]) => <KeyHint key={label} keys={keys} label={label} />)}
+      </div>
     </Fragment>
   );
 }
