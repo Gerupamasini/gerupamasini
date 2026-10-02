@@ -3,6 +3,7 @@ import type { App } from '../../app/App';
 import { t } from '../store';
 import type { Quality } from '../../core/Settings';
 import { CardHead, KeyHint } from '../common/Icons';
+import { buildLabel } from '../../core/Build';
 
 const KEYS: [string[], string][] = [
   [['W', 'A', 'S', 'D'], '移動'], [['Shift'], '走る'], [['C'], '低い視点 ⇄ 立つ'], [['右クリック', 'Z'], '望遠'],
@@ -14,7 +15,7 @@ export function Menu({ app }: { app: App }) {
   return (
     <div class="screen center">
       <div class="card wide menu">
-        <CardHead eyebrow={t('menu.settings')} title={t('menu.title')} onClose={() => app.closeOverlay()} />
+        <CardHead eyebrow={t('menu.settings')} title={t('menu.title')} aside={<span class="num dim">{buildLabel}</span>} onClose={() => app.closeOverlay()} />
         <div class="setting">
           <span class="label">{t('menu.quality')}</span>
           <div class="seg">

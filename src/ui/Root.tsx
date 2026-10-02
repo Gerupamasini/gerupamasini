@@ -17,6 +17,7 @@ import { DebugPanel } from './debug/DebugPanel';
 import { CreatureMarkers } from './debug/CreatureMarkers';
 import { ArrowIcon, Key, KeyHint, MoonIcon } from './common/Icons';
 import { tideName } from '../core/Moon';
+import { BUILD, versionLabel } from '../core/Build';
 import './ui.css';
 
 export function Root({ app }: { app: App }) {
@@ -96,7 +97,9 @@ function Title({ app }: { app: App }) {
         </div>
       </div>
       <div class="title-foot rise d5">
-        <span>v0.2 — 身内テスト版</span>
+        <span class="build" title={BUILD.builtAt ? `ビルド ${BUILD.builtAt}` : undefined}>
+          <span class="num">{versionLabel}</span> ・ 身内テスト版{BUILD.commit && <span class="num commit">{BUILD.commit}</span>}
+        </span>
         <span>{t('home.station')} ・ 潮汐の予測</span>
       </div>
     </div>
