@@ -84,7 +84,7 @@ export class Yamame {
     this.lodLevels = levels.filter(Boolean).length;
     if (this.lodLevels < 2 || opts.lod === false) return;
     const lod = new THREE.LOD(); lod.name = 'YamameLOD';
-    const dist = opts.lodDistances ?? [0, 4 * this.SL, 12 * this.SL];
+    const dist = opts.lodDistances ?? [0, 3 * this.SL, 8 * this.SL, 20 * this.SL];
     levels.forEach((nodes, L) => {
       if (!nodes) return;
       const g = new THREE.Group(); g.name = `LOD${L}`; nodes.forEach((n) => g.add(n));

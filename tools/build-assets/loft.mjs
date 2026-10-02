@@ -37,18 +37,27 @@ export function buildBody(surface, params, opts = {}) {
   const alphaM = (() => { // right-side angle of the mouth line (constant: depends only on rM and the exponent)
     const n = rM >= 0 ? 2.2 : 2.0; return Math.acos(Math.max(-1, Math.min(1, sgnPow(rM, n / 2))));
   })();
-  const alphaOf = (j) => {
-    if (j <= n1) return (j / n1) * alphaM;
-    if (j <= n1 + n2) return alphaM + ((j - n1) / n2) * (Math.PI - alphaM);
-    if (j <= jL) return Math.PI + ((j - n1 - n2) / n2) * (Math.PI - alphaM);
-    return (TAU - alphaM) + ((j - jL) / n1) * alphaM;
+  // with a head spec the mouth line follows the measured gape line, so its column angle differs from ring to ring
+  const head = opts.head || null;
+  const alphaMRing = rings.map((r) => {
+    if (!head || !head.line) return alphaM;
+    const sRing = Math.max(r.s, 0), yM = head.mouthLineHeight(sRing); if (yM == null) return alphaM;
+    return surface.alphaAtHeight(sRing, yM * SL);
+  });
+  const alphaOf = (j, i = 0) => {
+    const aM = alphaMRing[i];
+    if (j <= n1) return (j / n1) * aM;
+    if (j <= n1 + n2) return aM + ((j - n1) / n2) * (Math.PI - aM);
+    if (j <= jL) return Math.PI + ((j - n1 - n2) / n2) * (Math.PI - aM);
+    return (TAU - aM) + ((j - jL) / n1) * aM;
   };
 
   // ---- displacement field (outward, metres) ------------------------------------------------------------------------
-  const sE = eyeP.center_s.v, hFracE = eyeP.center_height_frac_from_top.v;
+  let sE = eyeP.center_s.v, hFracE = eyeP.center_height_frac_from_top.v;
   const eyeOuterR = 0.5 * eyeP.outer_d_over_sl.v * SL;
-  const eyeSecs = surface.section(sE);
-  const eyeY = (eyeSecs.c + eyeSecs.h * (1 - 2 * hFracE)) * SL;            // y of eye centre
+  let eyeY;
+  if (head && head.eye) { const [ex, ey] = head.fromUV(head.eye.u, head.eye.v); sE = surface.xToS(ex); eyeY = ey; }
+  else { const eyeSecs = surface.section(sE); eyeY = (eyeSecs.c + eyeSecs.h * (1 - 2 * hFracE)) * SL; }           // y of eye centre
   const eyeAlphaR = surface.alphaAtHeight(sE, eyeY);
   const eyeAlpha = [eyeAlphaR, TAU - eyeAlphaR];
   const eyeCentersSurf = eyeAlpha.map((a) => surface.point(sE, a));
@@ -67,6 +76,7 @@ export function buildBody(surface, params, opts = {}) {
 
   const mk = opts.morph || {};
   function displacement(s, alpha) {
+    if (head) return headDisplacement(s, alpha);
     let d = 0;
     for (const n of naresSurf) {
       const p0 = surface.point(s, alpha); const rr = Math.hypot(p0[0] - n.c[0], p0[1] - n.c[1], p0[2] - n.c[2]);
@@ -109,6 +119,15 @@ export function buildBody(surface, params, opts = {}) {
     return d;
   }
 
+  // spec-driven head: all head features come from head.mjs; the morph shapes stay here
+  function headDisplacement(s, alpha) {
+    const p = surface.point(s, alpha), n = surface.normal(s, alpha);
+    let d = head.displacement(s, alpha, { p, n, eyeCenters: eyeCentersSurf, eyeRo: eyeOuterR });
+    if (mk.cheek) d += mk.cheek * 0.0014 * smooth(0.06, 0.14, s) * (1 - smooth(0.18, 0.26, s)) * latMask(alpha);
+    if (mk.branch) d += mk.branch * 0.0016 * smooth(0.05, 0.10, s) * (1 - smooth(0.17, 0.24, s)) * smooth(0.35, 0.8, -Math.cos(alpha));
+    return d;
+  }
+
   // ---- vertices ---------------------------------------------------------------------------------------------------
   const pos = [], uv = [], sAttr = [], aAttr = [], jawAttr = [], regAttr = [];
   const up = Array.from({ length: R }, () => new Int32Array(N + 1).fill(-1));
@@ -126,9 +145,13 @@ export function buildBody(surface, params, opts = {}) {
   for (let i = 0; i < R; i++) {
     const { s } = rings[i];
     for (let j = 0; j <= N; j++) {
-      const alpha = alphaOf(j);
+      const alpha = alphaOf(j, i);
       const d = displacement(s, alpha);
       const p = surface.point(s, alpha, d);
+      if (head && head.spec.mouth?.overbite_over_hl && j > n1 && j < jL) {      // upper jaw overhangs: the free part of the lower jaw sits behind the upper tip, fading out with distance from the tip and from the gape line
+        const uu = (s + cap) / head.HLs, aM = alphaMRing[i], aa = alpha <= Math.PI ? alpha : TAU - alpha;
+        p[0] -= head.spec.mouth.overbite_over_hl * head.HLm * (1 - smooth(0, 0.30, uu)) * smooth(aM, aM + 0.35, aa);
+      }
       const isMouthCol = (j === n1 || j === jL) && seamRings(i);
       const lowerStart = (j >= n1 && j < jL);        // sectors beginning at column j that belong to the lower arc
       if (isMouthCol) {
@@ -145,8 +168,10 @@ export function buildBody(surface, params, opts = {}) {
   }
   // apex vertices (two coincident points: upper lip tip / lower lip tip)
   const apexX = surface.point(-cap, 0)[0], apexY = surface.section(0).c * SL;
-  const apexU = addVertex([apexX, apexY, 0], -cap, 0, 0, 0);
-  const apexL = addVertex([apexX, apexY, 0], -cap, Math.PI, 0, 1);
+  const apexYh = head ? head.y0 : apexY;
+  const obApex = head && head.spec.mouth?.overbite_over_hl ? head.spec.mouth.overbite_over_hl * head.HLm : 0;
+  const apexU = addVertex([apexX, apexYh, 0], -cap, 0, 0, 0);
+  const apexL = addVertex([apexX - obApex, apexYh - (head ? 0.004 * head.HLm : 0), 0], -cap, Math.PI, 0, 1);
 
   // ---- triangles --------------------------------------------------------------------------------------------------
   const idx = [];
@@ -197,8 +222,8 @@ export function buildBody(surface, params, opts = {}) {
   // ---- landmarks --------------------------------------------------------------------------------------------------
   const landmarks = {
     eye: eyeAlpha.map((a, k) => ({ side: k === 0 ? 'R' : 'L', alpha: a, surface: eyeCentersSurf[k], outerRadius: eyeOuterR })),
-    eyeY, jaw_hinge: [surface.sToX(cornerS), surface.section(cornerS).c * SL + rM * surface.section(cornerS).h * SL * 1.0, 0],
-    mouth_line_r: rM, alpha_mouth: alphaM, corner_s: cornerS, opercle_edge_s: params.operculum.edge_s.v,
+    eyeY, jaw_hinge: head && head.line ? [...head.fromUV(head.corner[0] - 0.01, head.corner[1] - 0.01), 0] : [surface.sToX(cornerS), surface.section(cornerS).c * SL + rM * surface.section(cornerS).h * SL * 1.0, 0],
+    mouth_line_r: rM, alpha_mouth: alphaM, alpha_mouth_ring: alphaMRing, head_landmarks: head ? head.landmarks() : null, corner_s: cornerS, opercle_edge_s: params.operculum.edge_s.v,
     seam_end_ring: seamEnd, ring_s: rings.map((r) => r.s), N, n1, n2, jL,
   };
   return {

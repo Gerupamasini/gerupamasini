@@ -40,6 +40,10 @@ export function createSurface(params, overrides = {}) {
   const dVentral = makeInterp(sil.s, sil.ventral);
   const wd = makeInterp(params.section.width_over_depth_by_s.s, params.section.width_over_depth_by_s.v);
   const nD = params.section.exponent_dorsal.v, nV = params.section.exponent_ventral.v;
+  // optional per-station section shape (head sculpt): widest-point height (fraction of the section height, 0 = ventral .. 1 = dorsal), separate dorsal / ventral exponents, width / depth
+  const hsec = params.section.stations || null;
+  const ywF = hsec ? makeInterp(hsec.s, hsec.yw) : null, nTF = hsec ? makeInterp(hsec.s, hsec.nT) : null, nBF = hsec ? makeInterp(hsec.s, hsec.nB) : null, wdH = hsec && hsec.wd ? makeInterp(hsec.s, hsec.wd) : null;
+  const hsBlend = (sc) => (hsec ? 1 - (sc <= hsec.s_end - 0.04 ? 0 : Math.min(1, (sc - (hsec.s_end - 0.04)) / 0.04)) : 0);   // 1 inside the head, fades to the body parameters over 0.04 SL
   const depthScale = overrides.depth_scale ?? 1;       // individual variation hooks
   const widthScale = overrides.width_scale ?? 1;
 
@@ -53,8 +57,23 @@ export function createSurface(params, overrides = {}) {
     const c = (top + bot) / 2, h = (top - bot) / 2;
     // caudal peduncle is laterally compressed into the fin base: width falls to w_end x normal over the last ~7 % of SL (so the open end is a thin vertical edge that the caudal fin root covers) [E]
     const tt = params.section.tail_taper || { s0: 0.93, w_end: 0.12 }; const tp = Math.min(1, Math.max(0, (sc - tt.s0) / (1 - tt.s0)));
-    const w = h * wd(sc) * widthScale * (1 - (1 - tt.w_end) * tp * tp * (3 - 2 * tp));
-    return { c, h, w };
+    const hb = hsBlend(sc), wdBody = wd(sc);
+    const wdSc = hb > 0 && wdH ? wdBody + (wdH(sc) - wdBody) * hb : wdBody;
+    const w = h * wdSc * widthScale * (1 - (1 - tt.w_end) * tp * tp * (3 - 2 * tp));
+    // widest-point height and exponents (defaults reproduce the plain superellipse centred on c)
+    const ywf = hb > 0 ? 0.5 + (ywF(sc) - 0.5) * hb : 0.5;
+    const yw = c - h + 2 * h * ywf;
+    const nT = hb > 0 ? nD + (nTF(sc) - nD) * hb : nD, nB = hb > 0 ? nV + (nBF(sc) - nV) * hb : nV;
+    return { c, h, w, yw, nT, nB };
+  }
+
+  // section outline: piecewise superellipse through the widest point (yw); dorsal half uses nT, ventral half nB; the width exponent follows the half
+  function yz(sec, alpha, scale) {
+    const ca = Math.cos(alpha), sa = Math.sin(alpha), up = ca >= 0, n = up ? sec.nT : sec.nB;
+    const top = sec.c + sec.h, bot = sec.c - sec.h;
+    const y = sec.yw + (up ? top - sec.yw : sec.yw - bot) * scale * sgnPow(ca, 2 / n);
+    const z = sec.w * scale * sgnPow(sa, 2 / n);
+    return [y, z];
   }
 
   // point on the skin. 'offset' pushes outwards along the (approximate) section normal (metres).
@@ -62,13 +81,7 @@ export function createSurface(params, overrides = {}) {
     let scale = 1, sx = s;
     if (s < 0) { const t = Math.min(-s / cap, 1); scale = Math.sqrt(Math.max(1 - t * t, 0)); sx = s; }
     const sec = section(Math.max(s, 0));
-    const ca = Math.cos(alpha), sa = Math.sin(alpha);
-    const n = ca >= 0 ? nD : nV;
-    // superellipse: y spans dorsal/ventral extents, z spans width
-    const yy = sec.c + sec.h * scale * sgnPow(ca, 2 / n);
-    const cc = sec.c;
-    const y = cc + (yy - cc) ;
-    const z = sec.w * scale * sgnPow(sa, 2 / n);
+    const [y, z] = yz(sec, alpha, scale);
     let X = sToX(Math.max(s, -cap)) , Y = y * SL, Z = z * SL;
     if (s < 0) X = sToX(0) + (-s) * SL;   // cap bulges forward (x increases as s decreases)
     if (offset !== 0) {
@@ -82,8 +95,7 @@ export function createSurface(params, overrides = {}) {
     const p = (ss, aa) => {
       // un-offset point
       let scale = 1; if (ss < 0) { const t = Math.min(-ss / cap, 1); scale = Math.sqrt(Math.max(1 - t * t, 0)); }
-      const sec = section(Math.max(ss, 0)); const ca = Math.cos(aa), sa = Math.sin(aa); const n = ca >= 0 ? nD : nV;
-      const y = sec.c + sec.h * scale * sgnPow(ca, 2 / n); const z = sec.w * scale * sgnPow(sa, 2 / n);
+      const sec = section(Math.max(ss, 0)); const [y, z] = yz(sec, aa, scale);
       const X = ss < 0 ? sToX(0) + (-ss) * SL : sToX(ss);
       return [X, y * SL, z * SL];
     };
@@ -93,7 +105,7 @@ export function createSurface(params, overrides = {}) {
     let nx = t1[1] * t2[2] - t1[2] * t2[1], ny = t1[2] * t2[0] - t1[0] * t2[2], nz = t1[0] * t2[1] - t1[1] * t2[0];
     const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
     // orient outward using the radial direction from the section centre
-    const pc = p(s, alpha); const sec = section(Math.max(s, 0)); const cy = sec.c * SL;
+    const pc = p(s, alpha); const sec = section(Math.max(s, 0)); const cy = sec.yw * SL;
     const rx = 0, ry = pc[1] - cy, rz = pc[2];
     if (nx * rx + ny * ry + nz * rz < 0) { nx = -nx; ny = -ny; nz = -nz; }
     return [nx, ny, nz];
@@ -101,9 +113,10 @@ export function createSurface(params, overrides = {}) {
 
   // find alpha (right side, 0..PI) whose skin height equals y (metres) at section s
   function alphaAtHeight(s, yMetres) {
-    const sec = section(s); const c = sec.c * SL, h = sec.h * SL;
-    const r = Math.max(-1, Math.min(1, (yMetres - c) / h));
-    const n = r >= 0 ? nD : nV;
+    const sec = section(s); const yw = sec.yw * SL;
+    const up = yMetres >= yw, ext = up ? (sec.c + sec.h) * SL - yw : yw - (sec.c - sec.h) * SL;
+    const r = Math.max(-1, Math.min(1, (yMetres - yw) / Math.max(ext, 1e-9)));
+    const n = up ? sec.nT : sec.nB;
     // r = sgnPow(cos a, 2/n) => cos a = sgnPow(r, n/2)
     return Math.acos(Math.max(-1, Math.min(1, sgnPow(r, n / 2))));
   }

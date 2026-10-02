@@ -1,0 +1,1449 @@
+{
+ "rater": "A",
+ "group": "g2",
+ "photos": [
+  {
+   "id": "p018",
+   "facing": "right",
+   "yaw_deg": 25,
+   "pitch_deg": 20,
+   "usable_for_profile": false,
+   "mouth_state": "closed",
+   "landmarks": {
+    "snout_tip": [
+     178,
+     25
+    ],
+    "lower_jaw_tip": [
+     177,
+     40
+    ],
+    "mouth_corner": [
+     148,
+     49
+    ],
+    "maxilla_post_end": [
+     136,
+     53
+    ],
+    "eye_center": [
+     143,
+     25.5
+    ],
+    "eye_ant": [
+     137.5,
+     25.5
+    ],
+    "eye_post": [
+     149.3,
+     25.5
+    ],
+    "eye_top": [
+     143.5,
+     19
+    ],
+    "eye_bottom": [
+     143,
+     32.3
+    ],
+    "nostril": [
+     159,
+     9
+    ],
+    "opercle_post_mid": [
+     73,
+     45
+    ],
+    "opercle_top": [
+     87,
+     17
+    ],
+    "opercle_bottom": [
+     80,
+     63
+    ],
+    "preopercle_top": [
+     112,
+     18
+    ],
+    "preopercle_mid": [
+     108,
+     40
+    ],
+    "preopercle_bottom": [
+     112,
+     62
+    ],
+    "head_dorsal_25": [
+     154,
+     5
+    ],
+    "head_dorsal_50": [
+     132,
+     8
+    ],
+    "head_dorsal_75": [
+     110,
+     11
+    ],
+    "head_ventral_25": [
+     153,
+     60
+    ],
+    "head_ventral_50": [
+     129.5,
+     71
+    ],
+    "head_ventral_75": [
+     106,
+     82
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "頭は右上を向き、側面からやや下方寄りの視点。眼は小さく高い位置、眼の下に淡青色のやや長い上顎骨(主上顎骨)の帯があり、その下に口裂(暗線)と淡青色の下顎。口裂は眼の中心の少し後ろ〜直下で終わり、口は閉じ気味。鰓蓋は青灰色の光沢面で後縁に橙赤色の弧。胸鰭は橙色。体側に青灰色の斑(パーマーク)。",
+   "notes": "Snout tip and jaw tips are overlapped by a net strand at x~176-180 so both tips are +-5 px; the nostril is a tentative dark patch; preopercle points are low confidence (+-5 px) because the cheek/opercle boundary is a soft colour change; pectoral base not clearly delineated (fin overlaps body) so null. Head dorsal outline partly clipped by dark background."
+  },
+  {
+   "id": "p019",
+   "facing": "right",
+   "yaw_deg": 40,
+   "pitch_deg": 35,
+   "usable_for_profile": false,
+   "mouth_state": "closed",
+   "landmarks": {
+    "snout_tip": [
+     197,
+     127
+    ],
+    "lower_jaw_tip": [
+     191,
+     134
+    ],
+    "mouth_corner": [
+     143,
+     147
+    ],
+    "maxilla_post_end": [
+     139,
+     151
+    ],
+    "eye_center": [
+     151,
+     124
+    ],
+    "eye_ant": [
+     140.5,
+     126
+    ],
+    "eye_post": [
+     161,
+     118
+    ],
+    "eye_top": [
+     153,
+     114.5
+    ],
+    "eye_bottom": [
+     146,
+     133.5
+    ],
+    "nostril": null,
+    "opercle_post_mid": [
+     53,
+     168
+    ],
+    "opercle_top": [
+     76,
+     118
+    ],
+    "opercle_bottom": [
+     72,
+     197
+    ],
+    "preopercle_top": [
+     99,
+     120
+    ],
+    "preopercle_mid": [
+     92,
+     155
+    ],
+    "preopercle_bottom": [
+     96,
+     182
+    ],
+    "head_dorsal_25": [
+     166,
+     82
+    ],
+    "head_dorsal_50": [
+     136,
+     77
+    ],
+    "head_dorsal_75": [
+     106,
+     77
+    ],
+    "head_ventral_25": [
+     165,
+     162
+    ],
+    "head_ventral_50": [
+     134,
+     181
+    ],
+    "head_ventral_75": [
+     103,
+     197
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "小型個体(パーマーク/黒点が背に見える)。頭は右下を向き、背面がやや上から見える。眼は大きく、口は小さく閉じ、口裂は眼の前縁の下あたりで終わる(眼の中心より前)。上顎骨は眼の下から吻に向かう細い淡色の帯、下顎は白く幅広い。吻端は半透明で細い暗い縁取り。鰓蓋後縁は明瞭な暗い弧(凸が後方)で滑らか、上端の尖りは不明。頬は白〜灰色。",
+   "notes": "Photo is a hand-held fish with a lure (green/orange minnow) under the jaw; the lure hides the throat so head_ventral_75 and opercle_bottom are at the lure contact (+-4 px). Snout tip taken at the thin dark curve at the front of the translucent snout (+-3 px). Preopercle edge is only a faint colour boundary (+-6 px). Gape-end / maxilla end are low confidence (+-4 px). Nostril and pectoral not visible. Yaw about 40 deg (head foreshortened, dorsal surface visible) so not usable for profile."
+  },
+  {
+   "id": "p020",
+   "facing": "right",
+   "yaw_deg": 40,
+   "pitch_deg": 35,
+   "usable_for_profile": false,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": [
+     245,
+     183
+    ],
+    "lower_jaw_tip": [
+     233,
+     221
+    ],
+    "mouth_corner": [
+     131,
+     194
+    ],
+    "maxilla_post_end": null,
+    "eye_center": [
+     174.5,
+     160
+    ],
+    "eye_ant": [
+     162,
+     157
+    ],
+    "eye_post": [
+     189,
+     162
+    ],
+    "eye_top": [
+     176,
+     151.5
+    ],
+    "eye_bottom": [
+     178,
+     168
+    ],
+    "nostril": null,
+    "opercle_post_mid": [
+     49,
+     117
+    ],
+    "opercle_top": [
+     78,
+     87
+    ],
+    "opercle_bottom": [
+     65,
+     158
+    ],
+    "preopercle_top": [
+     112,
+     118
+    ],
+    "preopercle_mid": [
+     87,
+     142
+    ],
+    "preopercle_bottom": [
+     99,
+     173
+    ],
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": [
+     200.7,
+     216
+    ],
+    "head_ventral_50": [
+     155.5,
+     206
+    ],
+    "head_ventral_75": [
+     110,
+     190
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "手持ちで口を大きく開けた個体を斜め前上方から。上顎(白い主上顎骨の帯)は眼の下から吻端まで長く伸び、背面(オリーブ褐色)の吻が上に被さる。下顎は下に大きく落ちて白い。鰓蓋は大きな銀白色の板で後縁は滑らかな円弧、前鰓蓋の内側の弧が見える。胸鰭は黄褐色で鰓蓋の後下にある。眼は暗色の眼窩縁に囲まれ、白い虹彩リング。",
+   "notes": "Dorsal head outline is indistinguishable from the olive-brown background so head_dorsal_* are null. The leader/line (white diagonal) and a second white object near the mouth confuse the jaw tip: lower_jaw_tip +-8 px. Mouth corner is low confidence (+-8 px); with the mouth open and strong perspective the white maxilla band merges with the cheek so maxilla_post_end is null. Ventral points follow the white lower-jaw edge (+-5 px). Head is seen from front-above (dorsal surface of snout visible) so yaw ~40 deg; not usable for profile."
+  },
+  {
+   "id": "p021",
+   "facing": "left",
+   "yaw_deg": 20,
+   "pitch_deg": 35,
+   "usable_for_profile": false,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": [
+     152.5,
+     359
+    ],
+    "lower_jaw_tip": [
+     188,
+     418
+    ],
+    "mouth_corner": [
+     335,
+     352
+    ],
+    "maxilla_post_end": [
+     392,
+     338
+    ],
+    "eye_center": [
+     297,
+     285
+    ],
+    "eye_ant": [
+     270,
+     285
+    ],
+    "eye_post": [
+     322.5,
+     281
+    ],
+    "eye_top": [
+     298,
+     265.5
+    ],
+    "eye_bottom": [
+     297,
+     300
+    ],
+    "nostril": [
+     213,
+     295
+    ],
+    "opercle_post_mid": null,
+    "opercle_top": null,
+    "opercle_bottom": null,
+    "preopercle_top": [
+     410,
+     214
+    ],
+    "preopercle_mid": [
+     470,
+     272
+    ],
+    "preopercle_bottom": [
+     452,
+     316
+    ],
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": null,
+    "head_ventral_50": null,
+    "head_ventral_75": null,
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "口を大きく開けた個体(水槽/撮影ケース越し、左向き、やや上方から)。上顎は紫がかった厚い唇で小さな歯の列が見え、淡褐色の長い主上顎骨(上縁に暗い溝線)が眼の下から眼の後方(眼中心の約1.8眼径後方)まで伸びる。口角は眼の後縁よりやや後ろ。下顎先端は上顎先端より約35px後退(口開き+遠近のため過信不可)。口腔内に歯のある淡い舌。眼は金色の虹彩で大きく、鼻孔は眼の前の暗い小窩(光る縁)。前鰓蓋縁は後方に凸の滑らかなD字弧、鰓蓋後縁は画像右端で切れて見えない。頭背面は暗いオリーブ褐色で背が体へ連続。",
+   "notes": "Opercle rear margin lies beyond the right edge of the frame, so opercle_post_mid / opercle_top / opercle_bottom are null, and consequently head_dorsal_* and head_ventral_* (defined relative to opercle_top / opercle_bottom) are null; whole head is not visible so usable_for_profile=false. Dorsal head outline is merged with a dark band (back) seen from above (pitch ~35 deg). Snout tip +-3 px, lower_jaw_tip +-6 px (open mouth, tongue and far-side tissue nearby), maxilla_post_end +-8 px (tapering end), preopercle arc points +-4 px."
+  },
+  {
+   "id": "p022",
+   "facing": "left",
+   "yaw_deg": 25,
+   "pitch_deg": 20,
+   "usable_for_profile": false,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": [
+     206,
+     124
+    ],
+    "lower_jaw_tip": [
+     230,
+     167
+    ],
+    "mouth_corner": [
+     362,
+     113
+    ],
+    "maxilla_post_end": [
+     405,
+     102
+    ],
+    "eye_center": [
+     325,
+     58
+    ],
+    "eye_ant": [
+     301,
+     58
+    ],
+    "eye_post": [
+     337.5,
+     57
+    ],
+    "eye_top": [
+     326,
+     46.5
+    ],
+    "eye_bottom": [
+     323,
+     70
+    ],
+    "nostril": [
+     259,
+     70
+    ],
+    "opercle_post_mid": null,
+    "opercle_top": null,
+    "opercle_bottom": null,
+    "preopercle_top": [
+     432,
+     3
+    ],
+    "preopercle_mid": [
+     471.5,
+     58
+    ],
+    "preopercle_bottom": [
+     455,
+     85
+    ],
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": null,
+    "head_ventral_50": null,
+    "head_ventral_75": null,
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "水中で口を大きく開けた、暗色・婚姻色気味の大型個体(オス?)を左向きに撮影。口は眼の後縁より後ろまで裂け(口角は眼後縁の約0.7眼径後方)、白い長い主上顎骨(上縁に暗い弧状の溝)が口角より更に後ろ(約x=405)まで続く。上唇は前端で下方に鉤状に巻き込み白い縁、下顎は前方に突き出し下唇の先に白い鉤状の縁。唇は青白く、口内は暗色。眼は金色の虹彩に黒い瞳、眼の上に緑がかった反射。前鰓蓋縁は後方に凸の大きな円弧で滑らか。頬は褐色〜灰色で斑がある。",
+   "notes": "Opercle margin and the nape are outside the frame (right and top edges) so opercle_* and the dorsal/ventral 25-75% points (defined relative to opercle_top / opercle_bottom) are null; usable_for_profile=false. Snout tip (white hooked rim of the upper lip) +-4 px; lower_jaw_tip +-6 px; mouth corner +-5 px; maxilla end +-8 px (gradual taper). Photo is dark with underwater colour cast; nostril is the small pale pit in front of the eye (tentative, +-4 px)."
+  },
+  {
+   "id": "p023",
+   "facing": "left",
+   "yaw_deg": 22,
+   "pitch_deg": 25,
+   "usable_for_profile": true,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": [
+     214,
+     262
+    ],
+    "lower_jaw_tip": [
+     238,
+     320
+    ],
+    "mouth_corner": [
+     412,
+     254
+    ],
+    "maxilla_post_end": [
+     438,
+     240
+    ],
+    "eye_center": [
+     337,
+     175.5
+    ],
+    "eye_ant": [
+     319,
+     176
+    ],
+    "eye_post": [
+     355,
+     172
+    ],
+    "eye_top": [
+     338,
+     160.5
+    ],
+    "eye_bottom": [
+     335,
+     191
+    ],
+    "nostril": [
+     259,
+     191
+    ],
+    "opercle_post_mid": [
+     569,
+     108
+    ],
+    "opercle_top": [
+     548,
+     57
+    ],
+    "opercle_bottom": [
+     505,
+     235
+    ],
+    "preopercle_top": [
+     430,
+     83
+    ],
+    "preopercle_mid": [
+     523,
+     158
+    ],
+    "preopercle_bottom": [
+     492,
+     216
+    ],
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": [
+     287,
+     336
+    ],
+    "head_ventral_50": [
+     359.5,
+     332
+    ],
+    "head_ventral_75": [
+     432,
+     306
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "p022と同一個体(暗色・オス的)をより引いた構図、左向き・口を大きく開ける。口角は眼の後縁よりかなり後方(約0.8眼径後)、長い淡色の主上顎骨は上縁に暗い弧状溝を持ち口角のさらに後ろまで伸びる。上唇は先端で下に鉤状に巻き、下顎は鉤状の先端で長い(オスの鼻曲がり様)。唇は青白い。眼は金色の虹彩、前方に鼻孔の白っぽい小窩。前鰓蓋縁は後方に凸の細い淡褐色の弧(複数の薄い二重線)、鰓蓋は広く滑らかな円弧で後縁は黄橙色の帯、その外側に薄い膜状のフラップ。頬には暗い斑。体側は橙色(婚姻色)。",
+   "notes": "Head upper outline merges with a dark background and the nape runs out of the top edge, so head_dorsal_* are null and opercle_top is approximate (+-8 px). Opercle_post_mid follows the yellow-orange margin band; a translucent membrane flap extends ~25 px further back (x~597) and was not used (if the flap is counted as the gill-cover margin the rear-most x would be ~597). Opercle_bottom +-8 px (margin dissolves into branchiostegal lines). Lower jaw tip +-6 px because foam/water splash sits at the tip. Mouth open widely so jaw landmarks are not comparable with closed-mouth photos. Pectoral base not visible."
+  },
+  {
+   "id": "p024",
+   "facing": "right",
+   "yaw_deg": 25,
+   "pitch_deg": 30,
+   "usable_for_profile": true,
+   "mouth_state": "closed",
+   "landmarks": {
+    "snout_tip": [
+     464,
+     160
+    ],
+    "lower_jaw_tip": [
+     463,
+     177
+    ],
+    "mouth_corner": [
+     361,
+     257
+    ],
+    "maxilla_post_end": [
+     366,
+     238
+    ],
+    "eye_center": [
+     381,
+     185
+    ],
+    "eye_ant": [
+     367,
+     187
+    ],
+    "eye_post": [
+     397,
+     182
+    ],
+    "eye_top": [
+     385,
+     170
+    ],
+    "eye_bottom": [
+     377,
+     197.5
+    ],
+    "nostril": [
+     427,
+     142
+    ],
+    "opercle_post_mid": [
+     226,
+     238
+    ],
+    "opercle_top": [
+     238,
+     185
+    ],
+    "opercle_bottom": [
+     250,
+     278
+    ],
+    "preopercle_top": [
+     283,
+     206
+    ],
+    "preopercle_mid": [
+     274,
+     240
+    ],
+    "preopercle_bottom": [
+     288,
+     274
+    ],
+    "head_dorsal_25": [
+     407.5,
+     127
+    ],
+    "head_dorsal_50": [
+     351,
+     121
+    ],
+    "head_dorsal_75": [
+     294.5,
+     122
+    ],
+    "head_ventral_25": [
+     410,
+     237
+    ],
+    "head_ventral_50": [
+     357,
+     296
+    ],
+    "head_ventral_75": [
+     303.5,
+     305
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "網の中の小型個体(パーマーク/黒点あり)を右向きにやや上方から。口は閉じ、口裂は吻端から後下方へ約45度で眼の少し後ろ(眼中心より約20px後方)まで。細長く尖った吻で、上顎(白い主上顎骨の細い帯)が下顎よりわずかに前に出るように見える。下顎は青紫がかった幅広い帯。眼は大きく暗色の眼窩に囲まれ、金色の虹彩輪。鰓蓋は丸く、後縁は金色の細い弧、頬は淡緑色で前鰓蓋縁が後方に凸の弧。頭背面はオリーブ色で黒点。",
+   "notes": "Net strand touches the snout tip (+-4 px); the head is tilted (jaw slopes ~45 deg in the image) which makes mouth_corner/maxilla_post_end uncertain (+-8 px). Nostril is a tentative pale speck on the dorsal snout (+-6 px). Opercle top is where the margin fades into the silvery nape (+-8 px); opercle_bottom +-6 px. Dorsal outline points are the silhouette against the net/leaves (back seen partly from above). Pectoral base not visible (hidden by net/gill region)."
+  },
+  {
+   "id": "p025",
+   "facing": "right",
+   "yaw_deg": 50,
+   "pitch_deg": 35,
+   "usable_for_profile": false,
+   "mouth_state": "closed",
+   "landmarks": {
+    "snout_tip": [
+     159,
+     87
+    ],
+    "lower_jaw_tip": null,
+    "mouth_corner": null,
+    "maxilla_post_end": [
+     95,
+     86
+    ],
+    "eye_center": [
+     101,
+     63
+    ],
+    "eye_ant": [
+     80,
+     62
+    ],
+    "eye_post": [
+     119,
+     61
+    ],
+    "eye_top": [
+     99,
+     42
+    ],
+    "eye_bottom": [
+     100,
+     81.5
+    ],
+    "nostril": [
+     130,
+     44
+    ],
+    "opercle_post_mid": null,
+    "opercle_top": null,
+    "opercle_bottom": null,
+    "preopercle_top": null,
+    "preopercle_mid": null,
+    "preopercle_bottom": null,
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": null,
+    "head_ventral_50": null,
+    "head_ventral_75": null,
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "小型の幼魚(?)を前方やや上から。眼は非常に大きく、金色の虹彩に黒い点(反射/斑点)が並ぶ。吻は短く丸い(淡褐色)で、吻の上面にオリーブ褐色の黒点。眼のすぐ下から吻へ明るい白い帯(主上顎骨?)が斜めに走り、その下に半透明の灰色の唇/下顎。口は閉じ気味で口角は不明瞭。",
+   "notes": "Blurry, small, strongly foreshortened view from the front-above (yaw ~50 deg), with bright water-surface reflections over the nape. The jaw region (translucent grey flap with white streaks) cannot be split into upper/lower jaw, so lower_jaw_tip and mouth_corner are null; snout_tip is the right-most extent of the head (+-6 px). maxilla_post_end is the lower-left end of a bright diagonal streak under the eye (low confidence, +-6 px). Opercle / preopercle are outside or not distinguishable (head cut at left edge), so all profile outline points are null. Nostril is a tentative dark pit with fold (+-4 px)."
+  },
+  {
+   "id": "p026",
+   "facing": "right",
+   "yaw_deg": 30,
+   "pitch_deg": 40,
+   "usable_for_profile": false,
+   "mouth_state": "closed",
+   "landmarks": {
+    "snout_tip": [
+     269,
+     173
+    ],
+    "lower_jaw_tip": null,
+    "mouth_corner": null,
+    "maxilla_post_end": [
+     172,
+     255
+    ],
+    "eye_center": [
+     198.5,
+     224
+    ],
+    "eye_ant": [
+     165,
+     212
+    ],
+    "eye_post": [
+     227,
+     207
+    ],
+    "eye_top": [
+     198,
+     191
+    ],
+    "eye_bottom": [
+     195,
+     240
+    ],
+    "nostril": null,
+    "opercle_post_mid": null,
+    "opercle_top": null,
+    "opercle_bottom": null,
+    "preopercle_top": null,
+    "preopercle_mid": null,
+    "preopercle_bottom": null,
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": null,
+    "head_ventral_50": null,
+    "head_ventral_75": null,
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "水中(水面越しの屈折)で撮影された右向きの個体を上方・側方から。吻は丸く短めで先端に赤いフライ(ハックル付き)が掛かる。眼は大きく、暗青色の瞳と金色の縁、眼の前上方に青白い眼窩縁。眼の下から吻端へ向かって白い光沢のある帯(上顎・唇)が斜めに走り、その下に透明感のある下顎・頬。頭背面は褐色〜オリーブ色。左側(鰓蓋・頬)は水面の光の反射で輝点が多く構造が不明瞭。",
+   "notes": "Refracted underwater view with sparkle highlights over the cheek/opercle: opercle, preopercle and outline points could not be located (null). A fly with hackle fibres covers the front of the jaws, so lower_jaw_tip and mouth_corner are null; snout_tip is the blue-edged front of the snout just before the fly (+-4 px). maxilla_post_end is the fading end of the white lip band (+-10 px). Not usable for profile: yaw ~30 deg plus ~40 deg pitch and front obstructed."
+  },
+  {
+   "id": "p027",
+   "facing": "left",
+   "yaw_deg": 40,
+   "pitch_deg": 55,
+   "usable_for_profile": false,
+   "mouth_state": "closed",
+   "landmarks": {
+    "snout_tip": [
+     10,
+     272
+    ],
+    "lower_jaw_tip": null,
+    "mouth_corner": null,
+    "maxilla_post_end": null,
+    "eye_center": [
+     95.6,
+     273.3
+    ],
+    "eye_ant": [
+     69,
+     272
+    ],
+    "eye_post": [
+     121,
+     270
+    ],
+    "eye_top": [
+     97,
+     259
+    ],
+    "eye_bottom": [
+     92,
+     286
+    ],
+    "nostril": null,
+    "opercle_post_mid": [
+     278,
+     224
+    ],
+    "opercle_top": [
+     240,
+     178
+    ],
+    "opercle_bottom": [
+     260,
+     258
+    ],
+    "preopercle_top": null,
+    "preopercle_mid": null,
+    "preopercle_bottom": null,
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": [
+     72.5,
+     326
+    ],
+    "head_ventral_50": [
+     135,
+     323.5
+    ],
+    "head_ventral_75": [
+     197.5,
+     303
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "水面近くで撮影された幼魚〜小型個体を真上寄りから見た像(左向き)。眼は金色の虹彩・暗い瞳で比較的大きく、吻は眼の前に眼径の約1倍の長さで丸く下に巻く。頭背面は褐色で、鰓蓋は丸い淡色の円弧の板(後縁は滑らかな円弧、上角の尖りなし)。鰓蓋の上に褐色の雲状斑。口は上からは見えず開閉・口角は判定不能。体側後方にパーマークと橙色の斑、腹縁は黄色。",
+   "notes": "Seen from far above through a rippled/reflecting water surface (pitch ~55 deg, yaw ~40 deg): mouth, jaws, maxilla and nostril are not visible (null). The white surface reflection covers the dorsal outline (head_dorsal_* null). snout_tip is the left-most dark arc of the head (+-10 px, concentric reflection arcs make the true tip uncertain). Opercle points are on a faint round pale arc (+-8 px). head_ventral_* are on the near-side lower silhouette of the cheek/jaw in this top-down view, so they are not comparable with a true lateral profile (+-6 px). Mouth state is an assumption from the closed-looking snout outline."
+  },
+  {
+   "id": "p028",
+   "facing": "left",
+   "yaw_deg": 15,
+   "pitch_deg": 25,
+   "usable_for_profile": true,
+   "mouth_state": "closed",
+   "landmarks": {
+    "snout_tip": [
+     101,
+     205
+    ],
+    "lower_jaw_tip": [
+     104,
+     222
+    ],
+    "mouth_corner": [
+     189,
+     232
+    ],
+    "maxilla_post_end": [
+     197,
+     230
+    ],
+    "eye_center": [
+     172,
+     206.5
+    ],
+    "eye_ant": [
+     157,
+     207
+    ],
+    "eye_post": [
+     183.5,
+     206
+    ],
+    "eye_top": [
+     171,
+     197
+    ],
+    "eye_bottom": [
+     173,
+     216
+    ],
+    "nostril": [
+     143,
+     198
+    ],
+    "opercle_post_mid": [
+     309,
+     222
+    ],
+    "opercle_top": [
+     280,
+     171
+    ],
+    "opercle_bottom": [
+     278,
+     263
+    ],
+    "preopercle_top": [
+     248,
+     193
+    ],
+    "preopercle_mid": [
+     264,
+     215
+    ],
+    "preopercle_bottom": [
+     272,
+     238
+    ],
+    "head_dorsal_25": [
+     146,
+     161
+    ],
+    "head_dorsal_50": [
+     190.5,
+     141
+    ],
+    "head_dorsal_75": [
+     235,
+     127
+    ],
+    "head_ventral_25": [
+     146,
+     257
+    ],
+    "head_ventral_50": [
+     190,
+     272
+    ],
+    "head_ventral_75": [
+     235,
+     282
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "網の上の個体を左向きほぼ側面(やや上方)から。吻は丸く鈍い。口は閉じ、口裂は吻端から眼の下を通り眼の後縁の少し後ろ(眼後縁より約10px後方)まで。白い主上顎骨の帯が眼の下に見え、上顎が下顎先端よりわずかに前へ出る。下顎には淡黄色(レモン色)の縁取りのある唇。眼は金色の虹彩に黒い瞳で比較的小さく、前方に淡い鼻孔の隆起。鰓蓋は広く滑らかな円弧で後縁に黄金色の縁、上角に尖りなし。頬は白〜淡黄色で細かな金色の粒状模様。体側にパーマークと黒点、胸鰭は黄橙色。",
+   "notes": "Good side view; the dorsal silhouette is partly covered by a bluish water-film, so head_dorsal_* are taken on the lower edge of the film (+-3 px). Nostril is a pale raised patch in front of the eye (tentative, +-4 px). Preopercle points follow a faint darker arc inside the opercle (low confidence, +-6 px). Opercle top where the gold margin meets the olive dorsal surface (+-6 px). Mouth corner / maxilla end are read from a faint grey line under the eye (+-5 px). Pectoral base not clearly visible (fin starts at lower right x~330)."
+  },
+  {
+   "id": "p029",
+   "facing": "left",
+   "yaw_deg": 8,
+   "pitch_deg": 5,
+   "usable_for_profile": true,
+   "mouth_state": "slightly_open",
+   "landmarks": {
+    "snout_tip": [
+     90,
+     50
+    ],
+    "lower_jaw_tip": [
+     85.5,
+     68
+    ],
+    "mouth_corner": [
+     142,
+     91
+    ],
+    "maxilla_post_end": [
+     151,
+     93
+    ],
+    "eye_center": [
+     146.5,
+     60
+    ],
+    "eye_ant": [
+     132,
+     60
+    ],
+    "eye_post": [
+     165,
+     62
+    ],
+    "eye_top": [
+     146.5,
+     44
+    ],
+    "eye_bottom": [
+     147,
+     79
+    ],
+    "nostril": [
+     115,
+     46
+    ],
+    "opercle_post_mid": [
+     234.5,
+     101
+    ],
+    "opercle_top": [
+     228,
+     68
+    ],
+    "opercle_bottom": [
+     213,
+     139
+    ],
+    "preopercle_top": [
+     193,
+     67
+    ],
+    "preopercle_mid": [
+     180,
+     92
+    ],
+    "preopercle_bottom": [
+     190,
+     115
+    ],
+    "head_dorsal_25": [
+     124.5,
+     34
+    ],
+    "head_dorsal_50": [
+     159,
+     27.3
+    ],
+    "head_dorsal_75": [
+     193.5,
+     24.6
+    ],
+    "head_ventral_25": [
+     120.8,
+     101
+    ],
+    "head_ventral_50": [
+     151.5,
+     121
+    ],
+    "head_ventral_75": [
+     182.2,
+     142
+    ],
+    "pectoral_base_top": [
+     215,
+     139
+    ],
+    "pectoral_base_bottom": null
+   },
+   "features": "黒背景の水槽写真、左向きのほぼ純側面。口はわずかに開き、下顎先端が上顎先端より約5px前後(下顎がやや突出して見える)。口裂は眼の前縁〜中央の真下を過ぎ眼の後縁手前(眼中心の少し前)で終わる(口は小さい)。上顎(主上顎骨)は褐桃色の帯で口角手前に終わる。唇・下顎は青白く淡い。眼は暗青〜黒の虹彩に金白色の細い輪、眼窩の縁は暗青。吻は鈍く丸い。鰓蓋は丸く桃褐色の板で後縁は滑らかな円弧、上角の尖りなし。頬は淡褐灰色、鰓蓋前方に淡い前鰓蓋の弧。体側に黒点とパーマーク、胸鰭は黄橙色。",
+   "notes": "Clean lateral view on black background; most points good to +-2-3 px. Gape end and maxilla end are read from a dark slit that fades (+-5 px). The nostril is a tentative lighter nasal patch on the snout (+-4 px). Opercle_top is where the pink opercle plate fades into the olive nape (+-8 px; silhouette is higher up). Opercle_bottom taken at the pectoral-base notch (+-8 px). Preopercle points follow the paler cheek/opercle boundary (+-5 px). Eye outer rim uses the dark-blue iris/orbit ring rather than the inner golden ring."
+  },
+  {
+   "id": "p030",
+   "facing": "left",
+   "yaw_deg": 5,
+   "pitch_deg": 5,
+   "usable_for_profile": true,
+   "mouth_state": "slightly_open",
+   "landmarks": {
+    "snout_tip": [
+     99.5,
+     198
+    ],
+    "lower_jaw_tip": [
+     103.8,
+     218
+    ],
+    "mouth_corner": [
+     248,
+     259.5
+    ],
+    "maxilla_post_end": [
+     252,
+     254
+    ],
+    "eye_center": [
+     234.5,
+     189
+    ],
+    "eye_ant": [
+     208,
+     190
+    ],
+    "eye_post": [
+     262,
+     189
+    ],
+    "eye_top": [
+     235,
+     164
+    ],
+    "eye_bottom": [
+     235,
+     217.5
+    ],
+    "nostril": [
+     146,
+     188
+    ],
+    "opercle_post_mid": [
+     413,
+     210
+    ],
+    "opercle_top": [
+     380,
+     145
+    ],
+    "opercle_bottom": [
+     392.5,
+     272.5
+    ],
+    "preopercle_top": [
+     309,
+     170
+    ],
+    "preopercle_mid": [
+     300,
+     205
+    ],
+    "preopercle_bottom": [
+     285,
+     238
+    ],
+    "head_dorsal_25": [
+     169.6,
+     146
+    ],
+    "head_dorsal_50": [
+     239.8,
+     124
+    ],
+    "head_dorsal_75": [
+     310,
+     111.5
+    ],
+    "head_ventral_25": [
+     172.8,
+     258
+    ],
+    "head_ventral_50": [
+     246,
+     278
+    ],
+    "head_ventral_75": [
+     319.3,
+     293
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "水槽内の純側面(左向き)の大型個体。吻は長く鈍い楕円形(眼前縁まで約2眼径)、鼻孔は吻上の小さな暗い点。口裂は吻端から後下方へゆるく傾き、眼の下の後半(眼の後縁の少し手前)まで達するが、口角は眼中心よりずっと下(約70px下)。上顎先端が下顎先端よりわずかに前に出る(口は少し開く)。下顎はピンク白色で厚く深い。眼は大きく金色〜橙の虹彩に暗い縁取り。鰓蓋は丸く大きく、後縁は滑らかな円弧で尖りなし、鰓蓋表面と頬には黄褐色の斑模様と細いひび状の線。背面は灰オリーブ色。胸鰭は橙色。",
+   "notes": "Very clear lateral view (camera slightly above eye level, head not rotated). Most points +-2-3 px. Opercle_top is where the dark nape scales begin (+-8 px); opercle_bottom is where the rounded opercle edge merges into the pectoral base/isthmus (+-8 px). The preopercle points follow a faint pale/blue cheek boundary with crack-like lines (+-8 px, low confidence). Maxilla_post_end is inferred near the gape end (+-6 px). Dorsal/ventral 25-75% points are on the silhouette against the dark background (ventral end of the belly merges with the substrate at 75%, +-4 px)."
+  },
+  {
+   "id": "p031",
+   "facing": "left",
+   "yaw_deg": 35,
+   "pitch_deg": 0,
+   "usable_for_profile": false,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": [
+     63,
+     178
+    ],
+    "lower_jaw_tip": [
+     58,
+     198
+    ],
+    "mouth_corner": null,
+    "maxilla_post_end": null,
+    "eye_center": [
+     93.5,
+     167
+    ],
+    "eye_ant": [
+     78.5,
+     168
+    ],
+    "eye_post": [
+     109,
+     166
+    ],
+    "eye_top": [
+     93,
+     156
+    ],
+    "eye_bottom": [
+     95,
+     187
+    ],
+    "nostril": null,
+    "opercle_post_mid": null,
+    "opercle_top": null,
+    "opercle_bottom": null,
+    "preopercle_top": null,
+    "preopercle_mid": null,
+    "preopercle_bottom": null,
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": null,
+    "head_ventral_50": null,
+    "head_ventral_75": null,
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "手の上に乗せた小型のパーマーク個体(幼魚)、左向き。口を開けており、赤褐色の口腔内と灰青色の下顎先端(左下に突出)が見える。眼は比較的大きく黄白色の虹彩、吻は短く眼の直前で終わる(眼前縁〜吻端が約15px)。鰓蓋には暗い斑点群があり、体側には大きな楕円形のパーマーク(青黒色)が並ぶ。体色は半透明で淡いピンク〜褐色。",
+   "notes": "Small translucent parr held in a hand: the head is turned toward the camera (yaw ~35 deg) with the mouth open, the upper jaw tip is hard to separate from the background (snout_tip +-6 px), opercle margin is not distinguishable from the translucent body and the first parr mark (so opercle_*, preopercle_*, dorsal/ventral outline points are null), and the fingers cover the throat. The reddish mouth cavity hides the gape corner (null). Lower jaw tip is the grey-blue lip end (+-3 px)."
+  },
+  {
+   "id": "p032",
+   "facing": "right",
+   "yaw_deg": 30,
+   "pitch_deg": 45,
+   "usable_for_profile": false,
+   "mouth_state": "closed",
+   "landmarks": {
+    "snout_tip": [
+     267,
+     68
+    ],
+    "lower_jaw_tip": null,
+    "mouth_corner": null,
+    "maxilla_post_end": null,
+    "eye_center": [
+     203,
+     72.5
+    ],
+    "eye_ant": [
+     190,
+     72
+    ],
+    "eye_post": [
+     217,
+     71
+    ],
+    "eye_top": [
+     203,
+     58
+    ],
+    "eye_bottom": [
+     203,
+     81.5
+    ],
+    "nostril": null,
+    "opercle_post_mid": [
+     104,
+     72
+    ],
+    "opercle_top": null,
+    "opercle_bottom": null,
+    "preopercle_top": null,
+    "preopercle_mid": null,
+    "preopercle_bottom": null,
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": null,
+    "head_ventral_50": null,
+    "head_ventral_75": null,
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "水面付近で手に持たれた個体を右向き・上方から撮影(釣り針とラインが口元に掛かる)。頭背面は黒褐色の幅広い帯として見え、その下に青白い反射。眼は黒い瞳に細い金色の輪で、青い水面反射が角膜に乗る。鰓蓋〜頬はオリーブ褐色で紫・橙の混じる模様、鰓蓋後縁に沿って明るい細線。口は閉じているように見えるが吻先は針とラインで隠れる。吻端は丸い。",
+   "notes": "Heavily affected by water refraction, blue reflections and the hook/line over the mouth, with the head seen from well above (pitch ~45 deg). Only the eye (+-2 px) and the right-most point of the snout (+-5 px) are reliable. Jaw tips, mouth corner and maxilla are hidden by hook/line and meniscus (null). opercle_post_mid follows a bright arc along the rear edge of the olive gill-cover (low confidence, +-8 px). Outline points are null because the dorsal band and the water film do not give a true profile. Mouth state is an assumption (closed-looking snout)."
+  },
+  {
+   "id": "p033",
+   "facing": "left",
+   "yaw_deg": 10,
+   "pitch_deg": 5,
+   "usable_for_profile": true,
+   "mouth_state": "slightly_open",
+   "landmarks": {
+    "snout_tip": [
+     68,
+     53
+    ],
+    "lower_jaw_tip": [
+     64,
+     68
+    ],
+    "mouth_corner": [
+     136,
+     101
+    ],
+    "maxilla_post_end": [
+     133,
+     97
+    ],
+    "eye_center": [
+     121.2,
+     70
+    ],
+    "eye_ant": [
+     106.5,
+     71
+    ],
+    "eye_post": [
+     140,
+     70
+    ],
+    "eye_top": [
+     121,
+     61.5
+    ],
+    "eye_bottom": [
+     122,
+     82.5
+    ],
+    "nostril": [
+     91,
+     56
+    ],
+    "opercle_post_mid": [
+     213.8,
+     90
+    ],
+    "opercle_top": [
+     187,
+     48
+    ],
+    "opercle_bottom": [
+     207,
+     112
+    ],
+    "preopercle_top": null,
+    "preopercle_mid": null,
+    "preopercle_bottom": null,
+    "head_dorsal_25": [
+     97.8,
+     36
+    ],
+    "head_dorsal_50": [
+     127.5,
+     28
+    ],
+    "head_dorsal_75": [
+     157.2,
+     23.5
+    ],
+    "head_ventral_25": [
+     102.8,
+     94
+    ],
+    "head_ventral_50": [
+     137.5,
+     108
+    ],
+    "head_ventral_75": [
+     172.2,
+     117
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "小型のパーマーク個体(幼魚)の左向きほぼ純側面。吻は丸く短め(吻端〜眼前縁 約38px=眼径の約1.1倍)、口はわずかに開いて下顎先端が上顎先端より約4px前に出る。口裂は吻端から後下がりに伸び、眼の後縁直下(眼中心の約14px後ろ)で終わる。唇は薄く淡色。眼は大きく金色の虹彩に黒い瞳、上に暗い影。鼻孔は吻上の暗い三日月形の小窩。鰓蓋は広く滑らかで後縁はピンク橙色の細い弧、上角は尖らない。頬は淡黄色、体側に青灰色の大きなパーマークと黒点。",
+   "notes": "Good lateral view of a parr; most points +-2-3 px. Opercle top is poorly defined (the pink margin line fades into the nape; +-8 px) and opercle_bottom sits next to the pectoral-fin base (+-8 px). Preopercle edge is only a few faint pale marks, so null. Ventral outline is blurred against a green background (+-4 px). Gape end read from a thin dark cleft line (+-4 px)."
+  },
+  {
+   "id": "p034",
+   "facing": "left",
+   "yaw_deg": 10,
+   "pitch_deg": 25,
+   "usable_for_profile": true,
+   "mouth_state": "slightly_open",
+   "landmarks": {
+    "snout_tip": [
+     2,
+     201
+    ],
+    "lower_jaw_tip": [
+     7,
+     245
+    ],
+    "mouth_corner": [
+     148,
+     266
+    ],
+    "maxilla_post_end": [
+     153,
+     268
+    ],
+    "eye_center": [
+     126.6,
+     219
+    ],
+    "eye_ant": [
+     93.5,
+     222
+    ],
+    "eye_post": [
+     159,
+     218
+    ],
+    "eye_top": [
+     125,
+     204
+    ],
+    "eye_bottom": [
+     125,
+     232
+    ],
+    "nostril": [
+     52,
+     198
+    ],
+    "opercle_post_mid": [
+     346,
+     229
+    ],
+    "opercle_top": [
+     255,
+     158
+    ],
+    "opercle_bottom": [
+     300,
+     287
+    ],
+    "preopercle_top": [
+     253,
+     203
+    ],
+    "preopercle_mid": [
+     278,
+     240
+    ],
+    "preopercle_bottom": [
+     274,
+     276
+    ],
+    "head_dorsal_25": [
+     66,
+     152
+    ],
+    "head_dorsal_50": [
+     129,
+     122
+    ],
+    "head_dorsal_75": [
+     192,
+     93
+    ],
+    "head_ventral_25": [
+     77,
+     283
+    ],
+    "head_ventral_50": [
+     151.5,
+     299
+    ],
+    "head_ventral_75": [
+     225.8,
+     300
+    ],
+    "pectoral_base_top": [
+     322,
+     265
+    ],
+    "pectoral_base_bottom": null
+   },
+   "features": "網の上の成魚(オレンジの体側・黒点の多い頭部)を左向きほぼ側面(やや上方)から。頭は大きく吻は鈍くやや長い(吻端〜眼の前縁 約90px、眼の暗色部径約65pxの1.4倍)。口はわずかに開き、下唇に白い歯列が見える。口裂は眼の下を斜め後方へ伸び、眼の後縁の少し手前(眼後縁直下付近)で終わる。主上顎骨は長い淡黄色の帯。眼は小さめで暗い虹彩、周囲に透明な厚い眼瞼(脂瞼)輪。頬と鰓蓋は黄緑〜黄色で、暗斑が数個(頬に大・中の斑)。鰓蓋後縁は大きく滑らかな円弧(半透明の縁)、上角は尖らない。胸鰭は鮮やかな橙色。",
+   "notes": "Good lateral-oblique view. Snout tip is at the very left edge of the frame (x~2; may be slightly clipped, +-3 px). Eye outer rim uses the dark iris (a large translucent adipose-lid ring surrounds it, outer ring spans roughly x 81-172, y 178-239). Opercle margin is a translucent pale arc (+-5 px); opercle_top is where the pale ridge starts at the nape (+-8 px; the silhouette is ~60 px higher because of the broad dorsal surface). Preopercle points are low confidence (+-8 px, subtle tonal boundary). Mouth corner / maxilla end read from a thin pale line (+-6 px). Pectoral base top is where the orange fin meets the gill-cover margin (+-6 px); the bottom is hidden."
+  }
+ ]
+}

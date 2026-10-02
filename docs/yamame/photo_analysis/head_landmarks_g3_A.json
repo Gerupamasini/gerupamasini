@@ -1,0 +1,834 @@
+{
+ "rater": "A",
+ "group": "g3",
+ "photos": [
+  {
+   "id": "p035",
+   "facing": "left",
+   "yaw_deg": 30,
+   "pitch_deg": 0,
+   "usable_for_profile": false,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": [
+     383,
+     172
+    ],
+    "lower_jaw_tip": [
+     379,
+     208
+    ],
+    "mouth_corner": [
+     472,
+     236
+    ],
+    "maxilla_post_end": [
+     518,
+     246
+    ],
+    "eye_center": [
+     494,
+     176
+    ],
+    "eye_ant": [
+     462,
+     180
+    ],
+    "eye_post": [
+     527,
+     176
+    ],
+    "eye_top": [
+     494,
+     150
+    ],
+    "eye_bottom": [
+     494,
+     206
+    ],
+    "nostril": [
+     425,
+     168
+    ],
+    "opercle_post_mid": null,
+    "opercle_top": null,
+    "opercle_bottom": null,
+    "preopercle_top": null,
+    "preopercle_mid": null,
+    "preopercle_bottom": null,
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": null,
+    "head_ventral_50": null,
+    "head_ventral_75": null,
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "Mouth open: gape (pink-red lining, pale lilac lips) ends at x~472, i.e. before/below the front half of the eye (pupil centre x 494); a skin crease continues back to ~x 518 below the rear of the eye (probable hind end of the maxilla). Lower jaw tip sits ~4 px ahead of the snout tip when open; snout blunt with a pale-rimmed premaxilla; nostril is a small pink pit with a pale ring ~70 px in front of the eye centre. Eye large (iris ring ~65 px) with olive-gold iris ring and dark orbit shade.",
+   "notes": "Two fish in frame; the large sharp foreground fish (right) was measured, a blurred second fish lies behind (snout ~(200,140), eye ~(265,135)) and was NOT measured. Foreground head is cut off by the right image edge (x=602): opercle, preopercle, pectoral base and nape are outside the frame, so head dorsal/ventral points (defined relative to the opercle) are null. Eye rim points are the outer edge of the pale iris ring; the dark orbit shade extends ~6-10 px further out. Yaw is a rough estimate (head seen from the side but turned slightly toward camera)."
+  },
+  {
+   "id": "p036",
+   "facing": "left",
+   "yaw_deg": 25,
+   "pitch_deg": 5,
+   "usable_for_profile": true,
+   "mouth_state": "slightly_open",
+   "landmarks": {
+    "snout_tip": [
+     34,
+     99
+    ],
+    "lower_jaw_tip": [
+     32,
+     115
+    ],
+    "mouth_corner": [
+     70,
+     122
+    ],
+    "maxilla_post_end": null,
+    "eye_center": [
+     78,
+     97.5
+    ],
+    "eye_ant": [
+     68,
+     97
+    ],
+    "eye_post": [
+     89,
+     98
+    ],
+    "eye_top": [
+     78,
+     87
+    ],
+    "eye_bottom": [
+     78,
+     108.5
+    ],
+    "nostril": [
+     51,
+     93
+    ],
+    "opercle_post_mid": [
+     147,
+     107
+    ],
+    "opercle_top": null,
+    "opercle_bottom": null,
+    "preopercle_top": [
+     116,
+     90
+    ],
+    "preopercle_mid": [
+     121,
+     106
+    ],
+    "preopercle_bottom": [
+     128,
+     124
+    ],
+    "head_dorsal_25": [
+     62,
+     76
+    ],
+    "head_dorsal_50": [
+     90,
+     64
+    ],
+    "head_dorsal_75": [
+     119,
+     58
+    ],
+    "head_ventral_25": [
+     62,
+     141
+    ],
+    "head_ventral_50": [
+     90,
+     146
+    ],
+    "head_ventral_75": [
+     119,
+     147
+    ],
+    "pectoral_base_top": [
+     134,
+     136
+    ],
+    "pectoral_base_bottom": [
+     141,
+     150
+    ]
+   },
+   "features": "Mouth slightly open (dark gape line from ~(45,111) to the corner (70,122)); the gape ends just below the front rim of the eye (corner x 70 vs eye front rim 68, pupil centre 78), i.e. well in front of the pupil. Lower jaw protrudes marginally ahead of the snout tip (pale blue-white lip); upper snout tip also whitish-blue. Eye round with a bright white iris ring; a small bright spot at (51,93) on the snout (nostril or reflection). Gill cover appears as a dark olive oval (x 124-147, y 95-130) behind a faint pale preopercle arc; parr marks and dark spots on the flank.",
+   "notes": "Small, soft image (210x216). A second fish overlaps the left edge but does not hide the snout tip. Opercle top/bottom could not be located (margin fades into the flank), so they are null and the head_dorsal/ventral fractions were computed with x_ref = opercle_post_mid.x = 147 (snout 34 -> 147) instead; outline y read directly from the silhouette. Preopercle arc and pectoral base are faint, low confidence (+-4 px). Nostril is a pale spot, uncertain whether reflection."
+  },
+  {
+   "id": "p037",
+   "facing": "left",
+   "yaw_deg": 45,
+   "pitch_deg": 0,
+   "usable_for_profile": false,
+   "mouth_state": "closed",
+   "landmarks": {
+    "snout_tip": [
+     250,
+     75
+    ],
+    "lower_jaw_tip": [
+     250,
+     85
+    ],
+    "mouth_corner": null,
+    "maxilla_post_end": null,
+    "eye_center": [
+     288,
+     75.5
+    ],
+    "eye_ant": [
+     274,
+     76
+    ],
+    "eye_post": [
+     301,
+     73
+    ],
+    "eye_top": [
+     288,
+     59
+    ],
+    "eye_bottom": [
+     290,
+     100
+    ],
+    "nostril": null,
+    "opercle_post_mid": [
+     380,
+     100
+    ],
+    "opercle_top": [
+     358,
+     28
+    ],
+    "opercle_bottom": [
+     362,
+     138
+    ],
+    "preopercle_top": null,
+    "preopercle_mid": null,
+    "preopercle_bottom": null,
+    "head_dorsal_25": [
+     277,
+     44
+    ],
+    "head_dorsal_50": [
+     304,
+     35
+    ],
+    "head_dorsal_75": [
+     331,
+     30
+    ],
+    "head_ventral_25": [
+     278,
+     107
+    ],
+    "head_ventral_50": [
+     306,
+     125
+    ],
+    "head_ventral_75": [
+     334,
+     134
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "Snout very short and blunt in this view (eye front rim only ~17 px behind the snout tip vs eye width ~27 px); lower jaw seen as a long pale diagonal band running down-back from the snout to the throat; mouth closed, gape line not distinguishable. Large round eye with olive-gold iris; head dark olive on top, flank with big dark parr marks. Gill cover translucent grey-blue with white glare patches; its hind margin is a thin dark line curving from the nape (~358,28) through (380,100) to the throat (~362,138).",
+   "notes": "Aquarium photo through a hazy plastic divider; two fish face each other, the right one (clear, parr-marked) was measured; the left fish (faces right, blurry, head x 70-225) was NOT measured. The measured fish touches the divider at the snout, so snout/lower-jaw tips are uncertain (+-5 px; snout tip vs lower jaw tip not clearly separable). Eye appears horizontally compressed (width ~27 vs height ~41), suggesting yaw 40-50 even though the trunk is nearly lateral. Opercle top (358,28) is inferred from a faint diagonal hatch line, low confidence. Mouth corner, maxilla, nostril and preopercle hidden by glare/haze."
+  },
+  {
+   "id": "p038",
+   "facing": "left",
+   "yaw_deg": 15,
+   "pitch_deg": 15,
+   "usable_for_profile": true,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": [
+     131,
+     267
+    ],
+    "lower_jaw_tip": [
+     138,
+     312
+    ],
+    "mouth_corner": [
+     258,
+     305
+    ],
+    "maxilla_post_end": [
+     268,
+     304
+    ],
+    "eye_center": [
+     219,
+     263
+    ],
+    "eye_ant": [
+     194,
+     262
+    ],
+    "eye_post": [
+     246,
+     262
+    ],
+    "eye_top": [
+     219,
+     238
+    ],
+    "eye_bottom": [
+     219,
+     276
+    ],
+    "nostril": [
+     157,
+     260
+    ],
+    "opercle_post_mid": [
+     397,
+     252
+    ],
+    "opercle_top": [
+     390,
+     212
+    ],
+    "opercle_bottom": [
+     365,
+     299
+    ],
+    "preopercle_top": null,
+    "preopercle_mid": null,
+    "preopercle_bottom": null,
+    "head_dorsal_25": [
+     196,
+     201
+    ],
+    "head_dorsal_50": [
+     260,
+     151
+    ],
+    "head_dorsal_75": [
+     325,
+     119
+    ],
+    "head_ventral_25": [
+     190,
+     332
+    ],
+    "head_ventral_50": [
+     248,
+     326
+    ],
+    "head_ventral_75": [
+     307,
+     318
+    ],
+    "pectoral_base_top": [
+     399,
+     281
+    ],
+    "pectoral_base_bottom": [
+     399,
+     297
+    ]
+   },
+   "features": "Mouth wide open: gape ends at x~258, i.e. behind the eye (eye rear rim x 246), so the maxilla/mouth extends past the eye. Upper jaw (snout) overhangs the lower jaw tip by ~7 px; thin lips; long pale maxilla band along the upper lip; inside of lower jaw dark grey with fine vertical striations. Gill cover a smooth rounded translucent plate with a bright golden rim on top and a dark curved hind margin at x~393-397 (no pointed upper corner). Two blue-grey parr-like blotches on the cheek at ~(277,238) and ~(285,272); black spots on the dorsal head; iris golden with dark orbit ring.",
+   "notes": "Sharp, well-lit photo, fish held in a hand (finger above the nape does not hide the head). Dorsal outline is the back/nape seen from slightly above (pitch ~15), so head_dorsal points lie on the long diagonal back outline. opercle_top is the upper-rear rim corner (390,212), not on the nape outline (which is far above and hidden by the finger); dorsal fractions use x from snout 131 to 390. opercle_bottom (365,299) is approximately where the dark margin line meets the throat. Preopercle not identifiable (glare, translucent cheek). Pectoral base only the front edge of the fin, low confidence. Nostril = dark patch at (155-160, 258-265), moderate confidence. Eye rim = outer edge of the golden iris, not the dark orbit shade."
+  },
+  {
+   "id": "p039",
+   "facing": "right",
+   "yaw_deg": 25,
+   "pitch_deg": -15,
+   "usable_for_profile": false,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": null,
+    "lower_jaw_tip": [
+     294,
+     29
+    ],
+    "mouth_corner": [
+     224,
+     52
+    ],
+    "maxilla_post_end": null,
+    "eye_center": [
+     233,
+     14.5
+    ],
+    "eye_ant": [
+     222,
+     13
+    ],
+    "eye_post": [
+     245,
+     15
+    ],
+    "eye_top": [
+     233,
+     4
+    ],
+    "eye_bottom": [
+     234,
+     24
+    ],
+    "nostril": null,
+    "opercle_post_mid": [
+     137,
+     55
+    ],
+    "opercle_top": null,
+    "opercle_bottom": [
+     150,
+     88
+    ],
+    "preopercle_top": [
+     186,
+     14
+    ],
+    "preopercle_mid": [
+     172,
+     45
+    ],
+    "preopercle_bottom": [
+     186,
+     72
+    ],
+    "head_dorsal_25": null,
+    "head_dorsal_50": null,
+    "head_dorsal_75": null,
+    "head_ventral_25": null,
+    "head_ventral_50": null,
+    "head_ventral_75": null,
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "Mouth gaped very wide (~40-45 deg): slender pale lower jaw with pointed tip at (294,29) and pink-red mouth lining; the upper jaw/maxilla is the long pale diagonal band rising from about (222,48) to the top edge at (265,0). Gape corner lies under the front of the eye (x 224 vs eye centre 233). Eye has a white-gold iris ring, small black pupil. Gill cover is a translucent pale blue-lilac plate with a smooth rounded hind margin at x~137; a thin convex preopercle arc runs at x~172-186; lilac patch on the cheek at (155-175, 28-45). Orange pectoral fin at lower left, parr marks and dark spots on the flank.",
+   "notes": "Fish held in fingers, head tilted up with mouth gaped; the snout tip (upper jaw) lies outside the frame (top edge, x>265) so snout_tip, nostril, dorsal head points and opercle_top are null; the dorsal head outline is also cut by the top edge. The eye is just inside the frame (top of iris at y~4). Mouth corner = vertex where upper and lower jaw bands meet, moderate/low confidence (+-6 px). Opercle margin read from a faint arc on the left; opercle_bottom at the junction with the orange fin/finger, approximate. Camera looks slightly from below (lower jaw inner side visible)."
+  },
+  {
+   "id": "p040",
+   "facing": "right",
+   "yaw_deg": 10,
+   "pitch_deg": 0,
+   "usable_for_profile": true,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": [
+     365,
+     205
+    ],
+    "lower_jaw_tip": [
+     377,
+     233
+    ],
+    "mouth_corner": [
+     298,
+     257
+    ],
+    "maxilla_post_end": [
+     262,
+     272
+    ],
+    "eye_center": [
+     297,
+     199
+    ],
+    "eye_ant": [
+     276,
+     198
+    ],
+    "eye_post": [
+     315,
+     200
+    ],
+    "eye_top": [
+     297,
+     176
+    ],
+    "eye_bottom": [
+     297,
+     220
+    ],
+    "nostril": [
+     337,
+     186
+    ],
+    "opercle_post_mid": [
+     146,
+     250
+    ],
+    "opercle_top": [
+     172,
+     197
+    ],
+    "opercle_bottom": [
+     162,
+     280
+    ],
+    "preopercle_top": [
+     204,
+     214
+    ],
+    "preopercle_mid": [
+     185,
+     240
+    ],
+    "preopercle_bottom": [
+     200,
+     270
+    ],
+    "head_dorsal_25": [
+     314,
+     164
+    ],
+    "head_dorsal_50": [
+     264,
+     150
+    ],
+    "head_dorsal_75": [
+     213,
+     141
+    ],
+    "head_ventral_25": [
+     313,
+     289
+    ],
+    "head_ventral_50": [
+     261,
+     305
+    ],
+    "head_ventral_75": [
+     210,
+     316
+    ],
+    "pectoral_base_top": [
+     166,
+     297
+    ],
+    "pectoral_base_bottom": [
+     135,
+     312
+    ]
+   },
+   "features": "Open-mouthed juvenile: lower jaw dropped and thrust ~12 px beyond the upper jaw tip, pale lilac inner lip, dark purple mouth lining. Gape ends under the pupil (corner x 298 vs pupil 297); the crescent-shaped pale maxilla/supramaxilla plate runs back past the front rim of the eye to ~x 262 (hind end well behind the gape corner). Nasal flap = small pale raised oval at (337,186) ~40 px ahead of the eye. Eye large (diameter ~40 px) with silver-grey iris ring and dark shade anterior-below. Head dorsum olive-gold with black spots, no parr marks on the head; gill cover silver with purple sheen and a smooth rounded hind margin (no pointed upper corner), preopercle a thin bright convex arc inside it; yellow pectoral fin.",
+   "notes": "Sharp, near-pure lateral photo, best-quality image of this block. opercle_top = upper-rear corner of the free margin (172,197), not on the nape outline (nape lies ~y 125). Dorsal outline read from the silhouette; ventral outline from the lower jaw/throat silhouette. Mouth corner and maxilla end are moderately certain (+-5 px) because the lip lines converge softly. Two concentric arcs are visible inside the opercle; the one chosen as preopercle is the thin bright line at x~185-200 (a second arc at x~222 is probably the cheek bone edge). Pectoral base low confidence."
+  },
+  {
+   "id": "p041",
+   "facing": "right",
+   "yaw_deg": 10,
+   "pitch_deg": 10,
+   "usable_for_profile": false,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": [
+     263,
+     71
+    ],
+    "lower_jaw_tip": [
+     267,
+     84
+    ],
+    "mouth_corner": [
+     178,
+     108
+    ],
+    "maxilla_post_end": null,
+    "eye_center": [
+     200,
+     84
+    ],
+    "eye_ant": [
+     183,
+     80
+    ],
+    "eye_post": [
+     218,
+     81
+    ],
+    "eye_top": [
+     200,
+     64
+    ],
+    "eye_bottom": [
+     200,
+     92
+    ],
+    "nostril": [
+     238,
+     69
+    ],
+    "opercle_post_mid": [
+     80,
+     86
+    ],
+    "opercle_top": null,
+    "opercle_bottom": [
+     96,
+     110
+    ],
+    "preopercle_top": [
+     131,
+     78
+    ],
+    "preopercle_mid": [
+     122,
+     97
+    ],
+    "preopercle_bottom": [
+     126,
+     112
+    ],
+    "head_dorsal_25": [
+     217,
+     34
+    ],
+    "head_dorsal_50": [
+     171,
+     16
+    ],
+    "head_dorsal_75": null,
+    "head_ventral_25": [
+     221,
+     112
+    ],
+    "head_ventral_50": [
+     179,
+     118
+    ],
+    "head_ventral_75": [
+     138,
+     118
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "Mouth wide open: long slender lower jaw with pale blue-grey inner surface projecting ~4 px beyond the upper jaw tip; thin lips. Gape corner is uncertain but lies well behind the front of the eye (x~178 vs eye front rim 183). Upper jaw blunt and rounded; nasal flap a pale grey oval at (238,69) ~45 px ahead of the eye. Eye with golden iris and a horizontally elongated dark pupil. Head olive-brown/gold with warm light; gill cover rounded, pale, with a thin pale convex preopercle arc at x~122-130. Yellow pectoral fin below the gill cover.",
+   "notes": "Fish in a stream among stones, warm yellow light; the top edge of the frame cuts the dorsal outline of the head behind x~150 (outline is above y=0 there), so opercle_top and head_dorsal_75 are null and head_dorsal_25/50 were computed with x_ref = opercle_post_mid.x = 80 (snout 263 -> 80); dorsal points at the stone boundary are low confidence (+-5 px). Ventral fractions use opercle_bottom (96,110) -> snout 263. Opercle margin is a faint bright arc (x~80-85). Mouth corner and lower-jaw geometry uncertain (+-8 px). Pectoral base ambiguous -> null. usable_for_profile=false because the nape/dorsal outline is cropped."
+  },
+  {
+   "id": "p042",
+   "facing": "left",
+   "yaw_deg": 15,
+   "pitch_deg": -5,
+   "usable_for_profile": true,
+   "mouth_state": "open",
+   "landmarks": {
+    "snout_tip": [
+     45,
+     136
+    ],
+    "lower_jaw_tip": [
+     45,
+     165
+    ],
+    "mouth_corner": [
+     105,
+     155
+    ],
+    "maxilla_post_end": [
+     120,
+     147
+    ],
+    "eye_center": [
+     99,
+     129.5
+    ],
+    "eye_ant": [
+     90,
+     130
+    ],
+    "eye_post": [
+     108,
+     129
+    ],
+    "eye_top": [
+     99,
+     122
+    ],
+    "eye_bottom": [
+     99,
+     138
+    ],
+    "nostril": [
+     60,
+     129
+    ],
+    "opercle_post_mid": [
+     214,
+     140
+    ],
+    "opercle_top": [
+     200,
+     119
+    ],
+    "opercle_bottom": [
+     198,
+     165
+    ],
+    "preopercle_top": [
+     158,
+     115
+    ],
+    "preopercle_mid": [
+     180,
+     141
+    ],
+    "preopercle_bottom": [
+     170,
+     165
+    ],
+    "head_dorsal_25": [
+     84,
+     90
+    ],
+    "head_dorsal_50": [
+     122,
+     71
+    ],
+    "head_dorsal_75": [
+     161,
+     52
+    ],
+    "head_ventral_25": [
+     83,
+     179
+    ],
+    "head_ventral_50": [
+     121,
+     180
+    ],
+    "head_ventral_75": [
+     160,
+     174
+    ],
+    "pectoral_base_top": [
+     210,
+     160
+    ],
+    "pectoral_base_bottom": [
+     203,
+     172
+    ]
+   },
+   "features": "Adult-like Yamame with a pink-red wash on the gill cover. Mouth open: slender pale-blue lower jaw (tip at the same x as the blunt pink-white snout), dark purple mouth lining; a pale maxilla strip below the eye runs to ~x 120 (just behind the eye rear rim 108) and a dark crease continues down-back to (135,172); gape corner ~x 105, i.e. below/just behind the pupil centre (x 99). Opercle is a rounded pinkish plate with a dark fleshy rim at x~205-215 and a smooth, un-pointed upper corner; the preopercle is a bright white-blue arc convex backward at x~170-180; the cheek is silvery white; blue iris shade behind the eye; small black spots on the back; dark pectoral fin.",
+   "notes": "Good lateral photo (small, 360x249). opercle_top = upper-rear corner of the opercle margin (200,119) where the posterior rim turns into a diagonal crease that rises forward to ~(172,98); the nape outline itself is ~y 45, much higher. Dorsal and ventral outline y values were checked by brightness profiles (+-2 px). Nostril is a pale spot at (60,129), moderate confidence. Pectoral base low confidence. Eye rim = outer edge of the pale iris ring (blue orbit shade extends a few px further up/back)."
+  },
+  {
+   "id": "p043",
+   "facing": "left",
+   "yaw_deg": 10,
+   "pitch_deg": 0,
+   "usable_for_profile": true,
+   "mouth_state": "slightly_open",
+   "landmarks": {
+    "snout_tip": [
+     23,
+     73
+    ],
+    "lower_jaw_tip": [
+     21,
+     98
+    ],
+    "mouth_corner": [
+     108,
+     114
+    ],
+    "maxilla_post_end": [
+     103,
+     109
+    ],
+    "eye_center": [
+     84,
+     74
+    ],
+    "eye_ant": [
+     69,
+     74
+    ],
+    "eye_post": [
+     101,
+     75
+    ],
+    "eye_top": [
+     85,
+     61
+    ],
+    "eye_bottom": [
+     85,
+     90
+    ],
+    "nostril": [
+     45,
+     70
+    ],
+    "opercle_post_mid": [
+     196,
+     98
+    ],
+    "opercle_top": null,
+    "opercle_bottom": [
+     182,
+     125
+    ],
+    "preopercle_top": [
+     155,
+     80
+    ],
+    "preopercle_mid": [
+     163,
+     100
+    ],
+    "preopercle_bottom": [
+     162,
+     112
+    ],
+    "head_dorsal_25": [
+     66,
+     37
+    ],
+    "head_dorsal_50": [
+     109,
+     21
+    ],
+    "head_dorsal_75": [
+     153,
+     10
+    ],
+    "head_ventral_25": [
+     63,
+     130
+    ],
+    "head_ventral_50": [
+     103,
+     136
+    ],
+    "head_ventral_75": [
+     142,
+     137
+    ],
+    "pectoral_base_top": null,
+    "pectoral_base_bottom": null
+   },
+   "features": "Pale translucent small fish with a very large dark eye (diameter ~32 px, ~19% of head length) and a rounded blunt snout; lower jaw tip ~2 px ahead of the snout tip with a visible gap between the jaws (slightly open); lips pale blue-lilac. The maxilla is long: a bright specular line along the upper lip runs from (75,96) to (103,109) and a dark lip crease continues to (110,117), so the gape reaches behind the rear rim of the eye (x 101). Nostril region at (45,70) shows small dark/white streaks. A thin pale preopercle arc at x~155-165 and a darker pinkish-brown gill-cover patch (x 165-198) behind it; dark parr marks follow on the flank.",
+   "notes": "Small image (296x290); the fish is pale and translucent against gravel, so opercle edges are low contrast. opercle_post_mid (196,98) and opercle_bottom (182,125) are low-confidence; opercle_top could not be identified -> null, and head_dorsal fractions use x_ref = opercle_post_mid.x = 196 (snout 23 -> 196; dorsal outline y read from silhouette, +-3 px; at x>200 the dorsal outline reaches the top frame edge). head_ventral fractions use opercle_bottom (182,125). The bright 'Y' glare under the pupil is a reflection; eye centre = pupil centre. Nostril uncertain."
+  }
+ ]
+}
