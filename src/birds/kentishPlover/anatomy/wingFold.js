@@ -345,7 +345,7 @@ let CACHE = null;
 // tools/dev/wingfold-cache.mjs) under a key of what it depends on: the solver version, the wing layout and the
 // body outline (sampled). Whenever either changes the key no longer matches and the solution is computed
 // here instead (with a console warning to regenerate the cache).
-export const WING_FOLD_SOLVER = 21; // bump with any change of the solver below
+export const WING_FOLD_SOLVER = 23; // bump with any change of the solver below
 export function wingFoldKey(wingFeathers, sdf, torsoSdf = sdf) {
   const probe = [];
   for (let x = 0; x <= 24; x += 6) for (let y = 40; y <= 90; y += 10) for (let z = -50; z <= 50; z += 10) probe.push(Math.round(sdf(x, y, z) * 100), Math.round(torsoSdf(x, y, z) * 100));
@@ -440,7 +440,9 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
     if (f.type === 'primary') {
       // tips converge over the tail: longest primaries meet near the midline at the tail tip (±5 mm)
       const zTip = V(f.base).z - 0; // unused
-      const x = 4.8 + (10 - f.index) * 0.9;
+      // (drawn 0.3–0.9 mm closer to the midline than 4.8 + 0.9·(10 − i): from above the folded wings taper to a point
+      // over the tail instead of running on as a parallel-sided stem — validation §Y)
+      const x = 4.5 + (10 - f.index) * 0.8;
       // p9 tip (−84, 57.4), spec §10.3; the chord ends higher by the shaft's ventral bend (featherOffset)
       const y = 57.0 + (10 - f.index) * 0.35 + f.curve * L * 0.83;
       const dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));

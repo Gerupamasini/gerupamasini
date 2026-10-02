@@ -60,11 +60,42 @@ function primDist(p, x, y, z) {
   return p.type === 'capsule' ? sdCapsule(x, y, z, p.a, p.b, p.r) : sdEllipsoid(x, y, z, p.c, p.r, p.rx);
 }
 
+const smoothstep = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * Bed of the folded wing and the scapulars (sculpt.bed): the outline sunk by `depth` mm where they lie on it — away
+ * from the dorsal midline (|x| from x[0] to x[1]), above the wing's lower edge (the polyline `edge` of (z, y), from
+ * y[0] to y[1] over it) and between the rump and the shoulders (z ramps z[0]→z[1] in, z[2]→z[3] out). The feathers lie
+ * 1–2 mm deep on it, the mantle between the scapulars does not: without the bed the plumage over the back was a
+ * flat-topped plateau, flatter than the belly in cross-section (validation §Y). ≤ depth / ramp per mm of slope, so
+ * the field stays nearly a distance.
+ */
+function bedDepth(b, x, y, z) {
+  const mx = smoothstep(b.x[0], b.x[1], Math.abs(x));
+  if (mx <= 0) return 0;
+  const mz = smoothstep(b.z[0], b.z[1], z) * (1 - smoothstep(b.z[2], b.z[3], z));
+  if (mz <= 0) return 0;
+  const e = b.edge;
+  let ye = e[0][1];
+  if (z <= e[e.length - 1][0]) ye = e[e.length - 1][1];
+  else
+    for (let i = 0; i < e.length - 1; i++)
+      if (z <= e[i][0] && z >= e[i + 1][0]) {
+        ye = e[i][1] + ((e[i + 1][1] - e[i][1]) * (z - e[i][0])) / (e[i + 1][0] - e[i][0]);
+        break;
+      }
+  return b.depth * mx * mz * smoothstep(ye + b.y[0], ye + b.y[1], y);
+}
+
 /** Build the SDF function (mm → mm) from the sculpt description. */
 export function makeBodySDF(sculpt) {
   const prims = sculpt.prims;
   const cuts = sculpt.cuts || [];
   const adds = sculpt.adds || []; // smooth-unioned after the cuts (eyelid folds over the eye openings)
+  const bed = sculpt.bed;
   const k = sculpt.smooth;
   return (x, y, z) => {
     let d = 1e9;
@@ -77,7 +108,7 @@ export function makeBodySDF(sculpt) {
       d = smax(d, -primDist(c, x, y, z), c.k ?? 1.5);
     }
     for (let i = 0; i < adds.length; i++) d = smin(d, primDist(adds[i], x, y, z), adds[i].k ?? 1);
-    return d;
+    return bed ? d + bedDepth(bed, x, y, z) : d;
   };
 }
 

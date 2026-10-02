@@ -70,7 +70,10 @@ export const joints = {
 export const bodySculpt = {
   smooth: 7.5,
   prims: [
-    { type: 'ellipsoid', name: 'torso', c: [0, 66, -12], r: [19, 19.5, 39.5], rx: 29 },
+    // (19 → 21.5 wide: from above the back is a broad rounded dome over which the wings fold, widest at mid-body and
+    // tapering smoothly to the tail, not a narrow spindle with the folded wings pressed flat against its sides —
+    // validation §Y. The front view is unchanged: the breast and its sides set the width there)
+    { type: 'ellipsoid', name: 'torso', c: [0, 66, -12], r: [21.5, 19.5, 39.5], rx: 29 },
     { type: 'ellipsoid', name: 'breast', c: [0, 66, 11], r: [19.5, 21.5, 20.5] },
     { type: 'ellipsoid', name: 'belly', c: [0, 47, -11], r: [15.5, 11.5, 21.5] },
     { type: 'ellipsoid', name: 'mantleNape', c: [0, 86.5, 6], r: [15, 7.5, 13.5] },
@@ -90,8 +93,10 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'cheekL', c: [9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3 },
     { type: 'ellipsoid', name: 'cheekR', c: [-9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3 },
     { type: 'ellipsoid', name: 'foreBreast', c: [0, 76, 24], r: [14, 14, 13] },
-    { type: 'ellipsoid', name: 'breastSideL', c: [11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
-    { type: 'ellipsoid', name: 'breastSideR', c: [-11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
+    // (1 mm in from x 11.5: from above the shoulders round off into the wider mid-body instead of standing out as
+    // square corners in front of the folded wings — validation §Y; front width unchanged, the torso sets it now)
+    { type: 'ellipsoid', name: 'breastSideL', c: [10.5, 66, 10], r: [8.5, 12, 11], k: 6 },
+    { type: 'ellipsoid', name: 'breastSideR', c: [-10.5, 66, 10], r: [8.5, 12, 11], k: 6 },
     { type: 'ellipsoid', name: 'flankPocketL', c: [12, 53, -14], r: [7.3, 7.5, 18], k: 6 },
     { type: 'ellipsoid', name: 'flankPocketR', c: [-12, 53, -14], r: [7.3, 7.5, 18], k: 6 },
     // fill the top-view waist and keep the tibia inside the belly (spec §5, §9)
@@ -145,6 +150,10 @@ export const bodySculpt = {
     res: 0.3,
     maxBaseRes: 1.5,
   },
+  // Bed of the folded wing and the scapulars (anatomy/sdf.js bedDepth): the outline 1 mm down under them, so the back
+  // over the plumage lying on it is as round in cross-section as the belly (validation §Y). edge: the wing's lower edge
+  // (z, y), body_shape_spec.md §10.1
+  bed: { depth: 1.0, x: [6, 11], y: [2, 7], z: [-58, -46, 2, 12], edge: [[20, 63], [5, 60], [-10, 57], [-25, 55.5], [-40, 57], [-55, 60]] },
   // the SDF spans x ±21, y 36–105, z −66…41
   bounds: { min: [-24, 32, -70], max: [24, 109, 46] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
@@ -313,6 +322,11 @@ export const animation = {
   // Acceleration lean: forward on starting, back on braking. Low-passed input and a small gain → a slight rock
   // (≈1.5°) on starts/stops instead of a 6° nod that followed every speed change (D; gaitjitter.mjs)
   lean: { gain: 0.008, max: 0.06, inputRate: 10, rate: 6 }, // rad per m/s², clamp (rad), smoothing rates (1/s)
+  // Tail secondary motion (Animator._tailSecondary): a stiff, well-damped spring (6 Hz, ζ 0.5) driven by the trunk's
+  // vertical, pitch and yaw accelerations — ≈0.01 rad dip per 1.5 m/s² of step bob, ≈0.04 rad against a peck's pitch,
+  // ≈0.03 rad outward at the start of a 100 rad/s² turn. Per unit acceleration: lift rad/(m/s²)·ω², pitch and yaw
+  // rad/(rad/s²)·ω²; max rad; maxForce caps a jolt
+  tailLag: { hz: 6, damping: 0.5, lift: 9.5, pitch: 0.7, yaw: 0.43, max: 0.06, maxForce: 85 },
   gaitCentreOffset: mm(7), // mid-stance foot position lies under the centre of mass, ahead of the hip (D)
   heelLift: { walk: mm(4), run: mm(6) }, // late-stance heel-off (MTP joint rises, toes stay down)
   stopDecel: 12,
