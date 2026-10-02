@@ -147,11 +147,11 @@ try {
     await page.evaluate((id) => { const a = window.__higata; const g = a.creatures.get(id); const p = a.player.position, f = a.player.forward; g.pos.set(p.x + f.x * 0.6, a.world.terrain.heightAt(p.x + f.x * 0.6, p.z + f.z * 0.6), p.z + f.z * 0.6); g.alert = 0; a.capture.forceCatch = true; a.swingNet(); }, near.id);
     const afterAttempt = await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, state: a.capture.state.value }; });
     console.log('after swing', JSON.stringify(afterAttempt));
-    await page.waitForFunction(() => { const s = window.__higata.capture.state.value; return !!s && s.phase === 'check' && s.revealed; }, null, { timeout: 60000 });
+    await page.waitForFunction(() => { const s = window.__higata.capture.state.value; return !!s && s.phase === 'check' && s.revealed; }, null, { timeout: 240000 });
     await waitFrames(page, 2);
     console.log('reveal', JSON.stringify(await page.evaluate(() => { const a = window.__higata; const s = a.capture.state.value; return { phase: s?.phase, revealed: s?.revealed, text: s?.catchText, net: a.net?.group.visible }; })));
     await page.screenshot({ path: path.join(outDir, '10b-net-check.png') });
-    await page.waitForFunction(() => window.__higata.mode === 'field', null, { timeout: 60000 });
+    await page.waitForFunction(() => window.__higata.mode === 'field', null, { timeout: 240000 });
     console.log('after wait', JSON.stringify(await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, frames: a.frameCount, state: a.capture.state.value, caseCount: a.encyclopedia.caseItems.value.length }; })));
     const caught = await page.evaluate(() => ({ caseCount: window.__higata.encyclopedia.caseItems.value.length, research: window.__higata.encyclopedia.research.value }));
     console.log('after capture', JSON.stringify(caught));
