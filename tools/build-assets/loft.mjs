@@ -292,22 +292,23 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
     loop.push(addV([x, yLip, zR], u, 0.625, 1));
     // right ribbon: from LR up to UR
     for (let k = 1; k <= K2; k++) { const q = k / (K2 + 1); loop.push(addV([x, yLip, zR - Math.sign(zR || 1) * bulge * Math.sin(Math.PI * q)], u, 0.625 + 0.125 * q, 1 - q)); }
+    loop.push(addV([x, yLip, zR], u, 0.75, 0));                // duplicate of the first vertex closes the texture wrap (v = 0.75): no stripe across one quad
     loops.push(loop);
   }
   // apex point(s) at the front
   const apex = addV([P[apexU * 3], P[apexU * 3 + 1], P[apexU * 3 + 2]], 0, 0.5, 0.5);
-  const M = loops[0].length;
+  const M = loops[0].length - 1;                           // unique vertices per loop; loop[M] repeats loop[0] (texture seam)
   // fan from apex to first loop (inward-facing)
   // (no front wall: the sleeve stays open at the lip tips so that the gape shows the cavity, not a curtain; loop 0 is only ~0.7 mm wide when the mouth is closed)
   for (let li = 0; li < loops.length - 1; li++) {
     for (let m = 0; m < M; m++) {
-      const a = loops[li][m], b = loops[li][(m + 1) % M], c = loops[li + 1][(m + 1) % M], d = loops[li + 1][m];
+      const a = loops[li][m], b = loops[li][m + 1], c = loops[li + 1][m + 1], d = loops[li + 1][m];
       idx.push(a, d, c, a, c, b);
     }
   }
   const last = loops[loops.length - 1];
   const throat = addV([positions[last[0] * 3] - 0.002, positions[last[0] * 3 + 1], 0], 1, 0.5, 0);
-  for (let m = 0; m < M; m++) idx.push(throat, last[m], last[(m + 1) % M]);
+  for (let m = 0; m < M; m++) idx.push(throat, last[m], last[m + 1]);
   // normals: accumulate and flip so they face the cavity axis (inward)
   const Pm = Float32Array.from(positions); const nv = Pm.length / 3; const nrm = new Float64Array(nv * 3);
   for (let t = 0; t < idx.length; t += 3) {
@@ -317,6 +318,7 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
     const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
     for (const o of [a, b, c]) { nrm[o] += nx; nrm[o + 1] += ny; nrm[o + 2] += nz; }
   }
+  for (const lp of loops) { const a = lp[0] * 3, b = lp[M] * 3; for (let k = 0; k < 3; k++) { const m = nrm[a + k] + nrm[b + k]; nrm[a + k] = m; nrm[b + k] = m; } }      // the seam duplicates share one normal
   const normals = new Float32Array(nv * 3);
   for (let v = 0; v < nv; v++) { const l = Math.hypot(nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]) || 1; normals[v * 3] = nrm[v * 3] / l; normals[v * 3 + 1] = nrm[v * 3 + 1] / l; normals[v * 3 + 2] = nrm[v * 3 + 2] / l; }
   return { positions: Pm, normals, uvs: Float32Array.from(uvs), indices: Uint32Array.from(idx), attrs: { _JAW: Float32Array.from(jawF) }, lips };

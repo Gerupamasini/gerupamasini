@@ -48,3 +48,20 @@ strap ~ 136,116,94), see `report.regions` (photo-equivalent medians as painted) 
   so features there (eye, upper cheek) are stretched; this cannot be fixed from the texture side.
 * The polylines of the spec (preopercle, opercle margin, maxilla/dentary) have corners; the painter follows them exactly so paint and relief agree, which shows the corners.
 * Time at 1536 x 2048: ~20 s on one core (+ 0.4 s bake); textures add ~3 MB to the GLB (albedo/ORM JPEG ~0.5 MB each, normal PNG ~2 MB).
+
+## Round 2 (critic review against the 50 photos)
+
+* **Dark mask**: cap border `LOOK.capFrac` 0.255 (per seed 0.21-0.30, photos 15-25 % of the head height at the cheek column, ragged, soft 0.065 edge) and `snoutFrac` 0.30 over the snout / lore with the transition at u 0.05-0.30 (was 0.60 and 0.16-0.46; dark fraction at u 0.06-0.16 is now ~0.30, was ~0.6).
+  The lore is the grey-tan of the cheek (`PAL.snout` 112,102,84 mixed into the cap colour over the snout); the cap is lighter olive-bronze (`capMid` 94,76,46) and dull (roughness 0.62).
+  Orbit: thin dark rim + soft olive ring, both from `params.eye.orbit_rgb` (88,74,52), darker at the upper-front / rear arcs, nothing below the eye; painted AO halo 0.22.
+* **Gill cover**: the painter follows Chaikin-smoothed copies of the spec polylines (preopercle, opercle margin, maxilla / dentary outlines, gape line, suture); colour changes use 0.04-0.07 HL feathers
+  instead of polygon edges; the preopercle line (faint, pale 0.13 + faint dark side) ends at the top / bottom of the spec line; reliefGain 0.4 (0.2 inside the gill-cover zone), cavity AO x0.15 there; opercle plate colour is a soft overlay on the cheek tone, thin gold free edge (0.22).
+* **Snout tip**: the cap texels (s < 0) repeat the s = 0 ring of the same row (snout colour above, jaw colour below), flat normals, rough 0.6, metal 0, AO 0.45 (AO also removes the clearcoat environment reflection).
+  Column 0 of the atlas repeats the last column: glTF samplers default to REPEAT, a lookup at u = 1 averaged the last column with the pole column and drew the 1 px line at s = sEnd.
+* **Lips**: gape line 0.0042 HL wide, near-black violet (26,17,35), roughness 0.8, metal 0, AO 0.15; strap -> lip -> jaw blend is soft (0.02 HL), jaw is pearly grey (190,186,186), suture faint.
+* **Hue**: pale field gradient less yellow (gold 0.42, green 0.26 weights), `silver` default ~0.15-0.35, iridescence 0.2 (`RENDER_HEAD`), copper flecks sit on the scale lattice (cheek 1.1 mm, nape 1.25 mm pitch).
+* **Throat**: palette (230,226,226), rays only for u > 0.4, fading towards the midline, relief on the throat reduced to 30 %.
+* **Spots**: 22-37 small irregular spots (median ~0.075 eye diameters = 0.9 mm, 0.03-0.17) + 2-4 larger soft smudges (0.15-0.27, opacity 0.55-0.8), 0.9 opacity, harmonic outlines; speckle dots on a 3-D lattice.
+* **Seam**: behind the gill cover the body atlas takes over right behind the free margin (weight from 0.2 mm to 2.4 mm behind it, `max()` with the s-based fade 0.226-0.256 on nape / belly so there is no step where the gill-cover span ends), the colour of the head converges to the body colour (60 %) 5 mm in front of it.
+* **Post-orbital smear**: ~64 % of seeds (seed 1 included), soft maroon patch (84,52,50) 0.5 eye diameters behind the eye.
+* **Mouth lining**: period 0.75 in v (the tube's loop is v 0 -> 0.75), dark violet pharynx gradient from the lips (47,48,59 -> 18,16,28), pearly rim 0.06 u, magenta commissure, pale tongue bump, soft palate ridges, tooth dots; the first 0.03 u is dark violet.

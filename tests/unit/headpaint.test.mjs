@@ -114,3 +114,27 @@ test('mouth lining texture: size, wrap, pale at the lips and dark at the throat'
   const lum = (x, y) => (m.data[(y * 64 + x) * 4] + m.data[(y * 64 + x) * 4 + 1] + m.data[(y * 64 + x) * 4 + 2]) / 3;
   assert.ok(lum(2, 32) > lum(62, 32) + 40, 'lips brighter than the throat');
 });
+
+test('snout cap: the cap texels (s < 0) repeat the s = 0 ring; column 0 repeats the last column (REPEAT sampler at u = 1); no relief on the cap', () => {
+  const xc = Math.round(surface.cap / (S_END + surface.cap) * (W - 1)); assert.ok(xc >= 1);
+  for (const k of ['albedo', 'orm']) for (let y = 0; y < H; y += 5) for (let x = 1; x < xc; x++) for (let c = 0; c < 3; c++) assert.ok(Math.abs(A[k].data[(y * W + x) * 4 + c] - A[k].data[(y * W + xc) * 4 + c]) <= (k === "orm" && c === 0 ? 2 : 0), `${k} cap texel ${x},${y}`);          // (ORM red = AO gets the cavity term of its own column afterwards)
+  for (const k of ['albedo', 'orm', 'normal']) for (let y = 0; y < H; y += 3) for (let c = 0; c < 3; c++) assert.equal(A[k].data[(y * W) * 4 + c], A[k].data[(y * W + W - 1) * 4 + c], `${k} column 0 == last column`);
+  for (let y = 0; y < H; y += 7) for (let x = 1; x < Math.max(2, xc - 2); x++) assert.ok(Math.abs(A.normal.data[(y * W + x) * 4] - 127.5) < 4 && Math.abs(A.normal.data[(y * W + x) * 4 + 1] - 127.5) < 4, 'flat normal on the snout cap');
+});
+
+test('look: head spots are small (<= 0.27 eye diameters), the post-orbital smear is on for seed 1, cap border is in the 15-30 % band', () => {
+  const l = A.report.look; assert.ok(l.smear > 0.3, `smear ${l.smear}`);
+  assert.ok(Math.max(...l.spotsPainted) <= 0.27 + 1e-6 && Math.min(...l.spotsPainted) >= 0.03 - 1e-6, JSON.stringify(l.spotsPainted));
+  assert.ok(l.nSpots >= 20, 'many small spots');
+  const med = l.spotsPainted.slice().sort((a, b) => a - b)[l.spotsPainted.length >> 1]; assert.ok(med < 0.12, `median spot size ${med} eye diameters`);
+  assert.ok(A.report.coverage.cap_frac_cheek_column >= 0.15 && A.report.coverage.cap_frac_cheek_column <= 0.32, `cap fraction ${A.report.coverage.cap_frac_cheek_column}`);
+  assert.ok(A.report.coverage.dark_frac_snout_u006_016 <= 0.34, `dark fraction at the snout ${A.report.coverage.dark_frac_snout_u006_016}`);
+});
+
+test('mouth lining: periodic in v (period 0.75), dark pharynx, pale lip rim', () => {
+  const m = generateMouthTexture({ seed: 1, size: 64 }); assert.equal(m.period_v, 0.75);
+  const px = (x, y) => { const o = (y * 64 + x) * 4; return [m.albedo.data[o], m.albedo.data[o + 1], m.albedo.data[o + 2]]; };
+  const y0 = 0, y1 = Math.round(0.75 * 63);                          // v = 0 and v = 0.75 are the same place of the tube
+  for (let x = 0; x < 64; x += 3) { const a = px(x, y0), b = px(x, y1); for (let c = 0; c < 3; c++) assert.ok(Math.abs(a[c] - b[c]) < 20, `v-period at x=${x}: ${a} vs ${b}`); }
+  const lum = (p) => (p[0] + p[1] + p[2]) / 3; assert.ok(lum(px(62, 31)) < 60, 'pharynx is dark'); assert.ok(lum(px(4, 31)) > lum(px(62, 31)) + 40);
+});
