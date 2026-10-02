@@ -1,13 +1,13 @@
 # ヤマメ (Oncorhynchus masou masou) 3D — Three.js
 
 河川型ヤマメの写実的な 3D モデル、手続き遊泳、行動 AI。Node のみで GLB を生成し（Blender 不要）、Three.js r186 で表示します。
-調査・仕様は `docs/yamame/`、実装の現状は `docs/yamame/impl/STATUS.md`。
+調査・仕様は `docs/yamame/`、実装の現状は `docs/yamame/impl/STATUS.md`。頭部の作り直し（50 枚の頭部写真から測定）は `docs/yamame/impl/HEAD.md`。
 
 ## すぐ動かす
 
 ```bash
 npm ci
-npm run build:assets      # assets/generated/yamame.glb を生成（成魚・seed 1・LOD0-2・モーフ・アニメクリップ付き）
+npm run build:assets      # assets/generated/yamame.glb を生成（成魚・seed 1・ヒーロー LOD0-3・モーフ・アニメクリップ付き。約 1 分。`-- --dev` で軽量 3 段）
 npm test                  # 単体テスト + GLB 検査
 npm run serve             # http://127.0.0.1:<port>/viewer/index.html（手動モード）, /viewer/behavior.html（自律行動）
 ```
