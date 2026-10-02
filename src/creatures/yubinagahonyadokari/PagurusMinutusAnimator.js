@@ -14,12 +14,13 @@
 //  * the hidden abdomen: bones laid along the whorl centre line of the shell actually carried
 import * as THREE from 'three';
 import { Rig, solveChelipedIK, quatFromDir, yawFor } from './PagurusMinutusRig.js';
-import { MORPH } from './PagurusMinutusMorphology.js';
-import { classifyShellPoint } from './PagurusMinutusShell.js';
+import { MORPH, abdomenRadius } from './PagurusMinutusMorphology.js';
+import { CHELA_POSES, JOINT_KEYS, hiddenPoseFor, legFoldsFor, chelaLidsFor } from './PagurusMinutusHide.js';
 import { clamp, damp, lerp, smoothstep, fbm1, noise1, Twitch, SeededRandom } from './PagurusMinutusUtil.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _m = new THREE.Matrix4();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qi = new THREE.Quaternion(), _m = new THREE.Matrix4();
+const _Z = new THREE.Vector3(0, 0, 1);
 const Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 
 /** withdrawal / emergence staging [S]: delay (s) and duration (s) per channel */
@@ -33,77 +34,35 @@ const STAGE = {
 };
 const CHANNELS = Object.keys(STAGE.withdraw);
 
-/** nominal body retreat into the shell when fully withdrawn (SL); the actual vector is fitted per shell */
-const RETREAT_DEPTH = 1.55;
-
-/** folded-leg joints, shared by all crabs with the same shell geometry */
-const FOLD_CACHE = new Map();
-function shellGeomKey(crab) {
-  const sh = crab.shell;
-  return sh ? `${sh.key}|${(sh.size_mm / crab.shieldLength_mm).toFixed(2)}|${crab.rig.shellAnchorRest.y.toFixed(2)},${crab.rig.shellAnchorRest.z.toFixed(2)}` : 'none';
-}
-/** classifier (lumen / wall / outside) for points in the fully withdrawn body frame */
-function bodyToShell(crab, R) {
-  const sh = crab.shell;
-  const carryInv = sh.carry.quaternion.clone().invert();
-  const seat = crab.rig.shellAnchorRest.clone().sub(R); // aperture centroid in the withdrawn body frame
-  const tmp = new THREE.Vector3();
-  return (p) => classifyShellPoint(sh.key, sh.size_mm, tmp.copy(p).sub(seat).applyQuaternion(carryInv).multiplyScalar(crab.SL));
-}
-/** body displacement when fully withdrawn (SL): straight back along the body axis, slightly lowered */
-const RETREAT = new THREE.Vector3(0, -0.08, -RETREAT_DEPTH);
-
 /**
- * P2/P3 folded at the aperture when withdrawn: the merus and carpus are drawn into the body whorl and
- * the propodi and long dactyli close the opening beside the major chela, steep and side by side, P2
- * inside P3 (photos 018, 019, 021, 053, 054) [D]. Found once per shell by a joint-space search checked
- * against the analytic shell (lumen / wall / outside): knees inside the lumen, no article in the wall,
- * nothing above the shell, tips not below the substrate.
- * @param {object} leg rig leg chain
- * @param {{c: THREE.Vector3, classify: (p: THREE.Vector3) => string, groundY: number}} ap aperture centroid
- *   and a classifier for body-frame points
- * @param {THREE.Object3D} body rig root (Body bone)
+ * The naked abdomen (out of the shell) as in the photos of crabs taken out of their shells (01–04): it
+ * leaves the posterior carapace backward, bends to the animal's RIGHT and coils clockwise seen from above,
+ * lying on the substrate, the curl tightening toward the tail fan (one turn; outer diameter ≈ one
+ * carapace length) [P]. Centreline sampled every FREE_CURL_STEP SL from the abdomen base (body frame).
  */
-const _kM = new THREE.Matrix4();
-/** substrate below the body origin when standing (SL), see POSTURE in the locomotion */
-const POSTURE_GROUND = 0.48;
-const _fp = Array.from({ length: 8 }, () => new THREE.Vector3());
-const FOLD_GRID = { dyaw: [-0.5, -0.25, 0, 0.25], lift: [-0.2, 0.15, 0.5, 0.85], knee: [-1.5, -1.9, -2.3], cp: [-0.3, -0.85], pd: [-0.6, -1.1, -1.5] };
-function legFold(leg, ap, body) {
-  const saved = [leg.coxa, leg.basis, leg.merus, leg.carpus, leg.propodus, leg.dactylus].map((b) => b.quaternion.clone());
-  const wantX = leg.side * (leg.n === 1 ? 0.3 : 0.6);
-  _kM.copy(body.matrixWorld).invert();
-  const pos = (b, v) => v.setFromMatrixPosition(b.matrixWorld).applyMatrix4(_kM);
-  let best = null, bestScore = Infinity;
-  const j = { yaw: 0, lift: 0, knee: 0, cp: 0, pd: 0 };
-  for (const dyaw of FOLD_GRID.dyaw) for (const lift of FOLD_GRID.lift) for (const knee of FOLD_GRID.knee) for (const cp of FOLD_GRID.cp) for (const pd of FOLD_GRID.pd) {
-    j.yaw = leg.restYaw + dyaw * leg.side; j.lift = lift; j.knee = knee; j.cp = cp; j.pd = pd;
-    Rig.applyLeg(leg, j);
-    leg.coxa.updateMatrixWorld(true);
-    const m = pos(leg.merus, _fp[0]), k = pos(leg.carpus, _fp[1]), c = pos(leg.propodus, _fp[2]), d = pos(leg.dactylus, _fp[3]), t = pos(leg.tip, _fp[4]);
-    let score = 0;
-    const kc = ap.classify(k);
-    score += kc === 'lumen' ? 0 : kc === 'wall' ? 4 : 1.5;
-    for (const q of [_fp[5].lerpVectors(m, k, 0.5), _fp[6].lerpVectors(k, c, 0.5), c, _fp[7].lerpVectors(c, d, 0.5)]) if (ap.classify(q) === 'wall') score += 3;
-    score += 3 * Math.max(0, ap.groundY - t.y) + 2 * Math.max(0, k.y - (ap.c.y + 0.75));
-    // closing the opening: propodus and dactyl steep, tips near the front of the aperture, P2 inside P3
-    const steep = Math.abs(_fp[5].subVectors(t, c).normalize().y);
-    score += 0.8 * (1 - steep) + 0.6 * Math.abs(t.x - wantX) + 0.3 * Math.max(0, Math.abs(t.z - ap.c.z) - 0.6);
-    if (score < bestScore) { bestScore = score; best = { ...j }; }
+const FREE_CURL_STEP = 0.05;
+const FREE_CURL = (() => {
+  const pts = [];
+  const p = new THREE.Vector3();
+  let phi = 0;
+  const L = MORPH.abdomen.length + 0.5;
+  for (let s = 0; s <= L + 1e-9; s += FREE_CURL_STEP) {
+    pts.push(p.clone());
+    const R = 1.15 * Math.exp(-s / 4.5); // radius of curvature shrinks toward the tail (≈ one turn)
+    const k = s < 0.25 ? 0 : 1 / R;
+    phi += k * FREE_CURL_STEP;
+    // heading starts backward (−Z) and turns toward −X (the animal's right): clockwise from above
+    p.x += -Math.sin(phi) * FREE_CURL_STEP;
+    p.z += -Math.cos(phi) * FREE_CURL_STEP;
+    p.y = -0.2 * smoothstep(0, 1.2, s); // settles onto the substrate
   }
-  [leg.coxa, leg.basis, leg.merus, leg.carpus, leg.propodus, leg.dactylus].forEach((b, i) => b.quaternion.copy(saved[i]));
-  leg.coxa.updateMatrixWorld(true);
-  return best;
-}
+  return pts;
+})();
 
-const CHELA_POSES = {
-  // held flexed in front of the cephalothorax, chela tips near the substrate
-  rest: { R: { yaw: yawFor(-0.35, 0.94), lift: 0.62, roll: 0.25, knee: -1.4, swing: -0.7, pitch: 0.15, gape: 0.04 }, L: { yaw: yawFor(0.42, 0.9), lift: 0.4, roll: 0.15, knee: -1.05, swing: -0.5, pitch: 0.38, gape: 0.06 } },
-  alert: { R: { yaw: yawFor(-0.5, 0.85), lift: 0.7, roll: 0.0, knee: -0.9, swing: -0.3, pitch: 0.45, gape: 0.12 }, L: { yaw: yawFor(0.5, 0.85), lift: 0.65, roll: 0.0, knee: -0.95, swing: -0.35, pitch: 0.4, gape: 0.1 } },
-  // aperture closed: major chela laid across the opening, minor tucked behind [D]
-  block: { R: { yaw: yawFor(-0.15, 1.0), lift: -0.15, roll: 0.35, knee: -1.95, swing: -1.05, pitch: 0.2, gape: 0.0 }, L: { yaw: yawFor(0.2, 1.0), lift: -0.05, roll: 0.3, knee: -2.25, swing: -1.2, pitch: 0.25, gape: 0.0 } },
-};
-const JOINT_KEYS = ['yaw', 'lift', 'roll', 'knee', 'swing', 'pitch', 'gape'];
+/** how far in front of its hidden place the body lines up before sliding in (SL) */
+const ENTRY_RUN = 1.1;
+/** body retreat when there is no shell to hide in (SL) */
+const RETREAT_DEPTH = 1.55;
 
 export class Animator {
   constructor(crab) {
@@ -111,7 +70,11 @@ export class Animator {
     this.rig = crab.rig;
     const rng = (this.rng = new SeededRandom(crab.seed * 31 + 7));
     // outputs consumed by locomotion / crab
-    crab.anim = { bodyLift: 0, bodyRetreat: 0, bodyPitch: 0 };
+    crab.anim = { bodyLift: 0, bodyRetreat: 0, bodyPitch: 0, bodyXf: null, tip: null };
+    this.bodyXf = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
+    this.tipState = { angle: 0, pivot: new THREE.Vector3(), lift: 0 };
+    this.tipT = 0;
+    this.hiddenFor = 0;
     this.retractTarget = 0;
     this.retractDir = 0;
     this.stageTime = 0;
@@ -175,18 +138,46 @@ export class Animator {
     this.time += dt;
     const lod = env.lod ?? 1;
     this.setRetractTarget(cmd.retract ?? 0);
-    this.updateStaging(dt, cmd.urgent);
+    this.updateStaging(dt, cmd.urgent, cmd.holdBody);
     const ch = this.ch;
     const crab = this.crab;
-    // body retreat: the body slides back and up into the body whorl, the grip point moves the other way so
-    // the shell stays put
-    const R = RETREAT;
-    crab.anim.bodyRetreat = R.z * ch.body;
-    crab.anim.bodyPitch = 0.18 * ch.body + (cmd.lean ?? 0);
-    crab.anim.bodyLift = R.y * ch.body;
+    // body into the shell: rigid path from the standing pose to the hidden pose; the grip point moves the
+    // other way so the shell stays put
+    const hp = crab.shell && crab.shellMode === 'carried' && ch.body > 0 ? hiddenPoseFor(crab) : null;
     const a = this.rig.shellAnchor;
-    a.position.copy(this.rig.shellAnchorRest).addScaledVector(R, -ch.body);
+    crab.anim.bodyPitch = cmd.lean ?? 0;
+    crab.anim.bodyLift = 0;
+    crab.anim.bodyRetreat = 0;
+    if (hp) {
+      // path: from standing, turn and line up in front of the opening (first half), then slide in along
+      // the body's own axis (second half) – the body enters and leaves through the opening, not the wall
+      const w = smoothstep(0, 1, ch.body);
+      const X = this.bodyXf;
+      _v.set(0, 0, ENTRY_RUN).applyQuaternion(hp.X.quat).add(hp.X.pos); // lined up, still outside
+      if (w > 0.5) {
+        X.pos.lerpVectors(_v, hp.X.pos, smoothstep(0.5, 1, w));
+        X.quat.copy(hp.X.quat);
+      } else {
+        const u = smoothstep(0, 0.5, w);
+        X.pos.copy(_v).multiplyScalar(u);
+        X.quat.identity().slerp(hp.X.quat, u);
+      }
+      crab.anim.bodyXf = X;
+      this.rig.carapacePosterior.quaternion.identity().slerp(hp.bendQ, w);
+      _qi.copy(X.quat).invert();
+      a.quaternion.copy(_qi);
+      a.position.copy(this.rig.shellAnchorRest).sub(X.pos).applyQuaternion(_qi);
+    } else {
+      // no shell: the body only tucks back a little
+      crab.anim.bodyXf = null;
+      this.rig.carapacePosterior.quaternion.identity();
+      crab.anim.bodyRetreat = crab.shell ? 0 : -0.3 * ch.body;
+      a.quaternion.identity();
+      a.position.copy(this.rig.shellAnchorRest);
+    }
     a.position.z += cmd.anchorOffsetZ ?? 0;
+    this.updateTip(dt, hp, cmd);
+    crab.loco.updateBodyMatrix();
 
     // ── walking legs: IK (from locomotion) blended toward the folded pose ───────────────────────
     const loco = crab.loco;
@@ -221,27 +212,51 @@ export class Animator {
     this.updateEyes(dt, cmd);
   }
 
-  /** folded-leg joints for the current shell (shared cache per shell geometry) */
+  /**
+   * Hidden for a moment, the shell with the crab in it tips onto its heavy side and rests on the substrate,
+   * the closed aperture facing sideways and up (as withdrawn crabs lie, photos 018, 019); it rights itself
+   * as the crab comes out [S].
+   */
+  updateTip(dt, hp, cmd) {
+    const crab = this.crab;
+    this.hiddenFor = this.ch.body > 0.98 ? this.hiddenFor + dt : 0;
+    const want = hp && this.hiddenFor > 0.6 && !cmd.noTip ? 1 : 0;
+    this.tipT = damp(this.tipT, want, want ? 2.6 : 4.5, dt);
+    if (!hp || this.tipT < 1e-3) { crab.anim.tip = null; return; }
+    const tip = this.tipState;
+    const w = smoothstep(0, 1, this.tipT);
+    tip.angle = hp.tipSign * hp.tipMax * w;
+    // pivot on the substrate under the shell's centre of mass, in the body-group frame (SL)
+    const h = crab.loco.bodyHeight;
+    tip.pivot.set(hp.comB.x, 0, hp.comB.z);
+    // lift so that the lowest point of the tipped shell rests on the substrate
+    _qi.setFromAxisAngle(_Z, tip.angle);
+    let minY = Infinity;
+    for (const p of hp.hullB) {
+      _u.set(p.x, p.y + h, p.z).sub(tip.pivot).applyQuaternion(_qi).add(tip.pivot);
+      if (_u.y < minY) minY = _u.y;
+    }
+    tip.lift = -minY * w + 0.02;
+    crab.anim.tip = tip;
+  }
+
+  /** claw lid joints for the current shell; null without a shell */
+  chelaLids() {
+    const crab = this.crab;
+    return crab.shell && crab.shellMode === 'carried' ? chelaLidsFor(crab) : null;
+  }
+
+  /** folded-leg joints for the current shell (drawn in under the body without one) */
   legFolds() {
-    const crab = this.crab, shell = crab.shell;
-    const key = shellGeomKey(crab);
-    const hit = FOLD_CACHE.get(key);
-    if (hit) return hit;
-    // aperture centroid (= ShellAnchor) in the body frame at full withdrawal; the shell is posed by its
-    // carry rotation about it, so body-frame points map to shell-local ones for the classifier
-    const R = RETREAT;
-    const ap = {
-      c: this.rig.shellAnchorRest.clone().sub(R),
-      groundY: -POSTURE_GROUND - R.y,
-      classify: shell ? bodyToShell(crab, R) : () => 'outside',
-    };
+    const crab = this.crab;
+    if (crab.shell && crab.shellMode === 'carried') return legFoldsFor(crab);
     const joints = {};
-    for (const leg of Object.values(crab.loco.legs)) joints[leg.key] = legFold(leg.chain, ap, this.rig.root);
-    FOLD_CACHE.set(key, joints);
+    for (const leg of Object.values(crab.loco.legs)) joints[leg.key] = { yaw: leg.chain.restYaw, lift: 0.5, knee: -2.2, cp: -0.6, pd: -1.2 };
     return joints;
   }
 
-  updateStaging(dt, urgent) {
+  /** @param {boolean} [holdBody] emerging: keep body, chelipeds and legs in while antennae and eyes come out */
+  updateStaging(dt, urgent, holdBody) {
     this.stageTime += dt;
     const target = this.retractTarget;
     const withdrawing = this.retractDir > 0;
@@ -253,6 +268,7 @@ export class Animator {
       // partial retraction keeps body/legs/chelipeds out less than antennae/eyes
       const tgt = c === 'antennae' || c === 'antennules' || c === 'eyes' ? clamp(target * 1.6, 0, 1) : clamp((target - 0.25) / 0.75, 0, 1);
       const rate = 1 / (dur * speedScale);
+      if (holdBody && tgt < this.ch[c] && (c === 'body' || c === 'chelipeds' || c === 'legs')) continue;
       this.ch[c] += clamp(tgt - this.ch[c], -rate * dt, rate * dt);
     }
     this.retract = (this.ch.body + this.ch.legs + this.ch.chelipeds + this.ch.eyes) / 4;
@@ -299,8 +315,8 @@ export class Animator {
         }
       }
       if (task.mode === 'hold') goal.gape = 0;
-      // withdrawal overrides everything
-      const bp = CHELA_POSES.block[side];
+      // withdrawal overrides everything: the claws close the aperture
+      const bp = (block > 0 ? this.chelaLids()?.[side] : null) ?? CHELA_POSES.block[side];
       for (const k of JOINT_KEYS) {
         const g = lerp(goal[k], bp[k], block);
         const rate = task.fast || block > 0.01 ? 22 : task.mode === 'rest' ? 5 : 9;
@@ -346,8 +362,8 @@ export class Animator {
         }
       }
       // withdrawn: peduncles turned down and in, toward the aperture
-      const yawGoal = lerp(st.yawT + 0.08 * fbm1(this.time * 0.7, st.seed), -0.35, fold);
-      const pitchGoal = lerp(st.pitchT + 0.06 * fbm1(this.time * 0.6, st.seed + 2) + st.lift, -1.0, fold);
+      const yawGoal = lerp(st.yawT + 0.08 * fbm1(this.time * 0.7, st.seed), 2.4, fold);
+      const pitchGoal = lerp(st.pitchT + 0.06 * fbm1(this.time * 0.6, st.seed + 2) + st.lift, -0.45, fold);
       st.prevYaw = st.yaw;
       st.prevPitch = st.pitch;
       st.yaw = damp(st.yaw, yawGoal, fold > 0.05 ? 18 : 3.2, dt);
@@ -380,7 +396,7 @@ export class Animator {
       }
       // the long flagellum is drawn in through the aperture with the body (coiled inside; in photos of
       // withdrawn crabs it is not visible): shortened from the base as the antennae fold [S]
-      a.flagellum[0].scale.setScalar(lerp(1, 0.06, smoothstep(0.35, 1, fold)));
+      a.flagellum[0].scale.setScalar(lerp(1, 0.02, smoothstep(0.35, 1, fold)));
       // ground contact: lift the antenna if its distal half would sink into the substrate
       if (env.groundAt) {
         a.peduncle[0].updateMatrixWorld(true);
@@ -402,7 +418,7 @@ export class Animator {
       st.yaw = damp(st.yaw, lerp(0.1 * fbm1(this.time * 0.5, st.seed), -0.35, fold), 4, dt);
       _q.copy(a.restQ[0]).premultiply(_q2.setFromAxisAngle(Y, st.yaw * a.side));
       a.peduncle[0].quaternion.copy(_q).multiply(_q2.setFromAxisAngle(Z, -1.0 * fold));
-      a.flagellum[0].scale.setScalar(lerp(1, 0.06, smoothstep(0.35, 1, fold)));
+      a.flagellum[0].scale.setScalar(lerp(1, 0.02, smoothstep(0.35, 1, fold)));
     }
   }
 
@@ -477,7 +493,7 @@ export class Animator {
       const tr = 0.004 * Math.sin(this.time * 2 * Math.PI * (3.1 + (side === 'L' ? 0 : 0.7)) + noise1(this.time, st.seed) * 2);
       _u.set(goal.x + st.off.x * e.side, goal.y + st.off.y + tr, goal.z).normalize();
       // withdrawal: stalks lowered and swung back along the shield
-      _w.set(e.side * 0.55, -0.35, 0.45).normalize();
+      _w.set(e.side * 0.45, -0.85, 0.15).normalize(); // folded down against the front of the shield
       _u.lerp(_w, Math.max(fold, st.dip)).normalize();
       st.dir.lerp(_u, 1 - Math.exp(-dt * 30)).normalize();
       quatFromDir(st.dir, Y, e.stalk.quaternion);
@@ -523,10 +539,12 @@ export class Animator {
     const segL = this.rig.abdomenSegLen;
     const SL = crab.SL;
     const bodyInv = crab.loco.bodyMatrixInv;
-    const base = ab[0].position; // body frame
+    // abdomen base: the end of the (bending) posterior carapace, body frame
+    const base = _w.copy(this.rig.abdomenBaseRest).applyQuaternion(this.rig.carapacePosterior.quaternion).clone();
     const shellM = shell && crab.shellMode !== 'none' ? shell.object3D.matrixWorld : null;
     const exit = this.abdomenExit;
     const curl = this.freeCurl;
+    // the soft abdomen shortens when the body is pulled deep into a short shell (≥ 60 % of its length)
     // where the abdomen enters the tube: while seated, the path point closest to the abdomen base;
     // when partly pulled out (shell exchange), the aperture seat itself
     let u0 = 0;
@@ -536,12 +554,17 @@ export class Animator {
       if (exit <= 1e-3) {
         let best = Infinity;
         for (let k = 0; k <= 24; k++) {
-          const u = (k / 24) * shell.abdomenPath.total * 0.5;
+          const u = (k / 24) * shell.abdomenPath.total * 0.75;
           shell.abdomenPath(u, _v).applyMatrix4(shellM).applyMatrix4(bodyInv);
           const d = _v.distanceToSquared(base);
           if (d < best) { best = d; u0 = u; }
         }
       }
+    }
+    let squeeze = 1;
+    if (shellM && curl < 0.5) {
+      const room = shell.abdomenPath.total - u0, need = Math.max(1e-6, (n * segL - exit) * SL);
+      squeeze = clamp((room * 0.97) / need, 0.6, 1);
     }
     const pts = [];
     for (let i = 0; i <= n; i++) {
@@ -555,7 +578,7 @@ export class Animator {
         p = new THREE.Vector3().lerpVectors(base, seatB, f);
         p.y -= Math.sin(Math.PI * f) * Math.min(0.5, exit * 0.18);
       } else {
-        const u = u0 + (arc - exit) * SL;
+        const u = u0 + (arc - exit) * SL * squeeze;
         p = shell.abdomenPath(Math.min(u, shell.abdomenPath.total), new THREE.Vector3()).applyMatrix4(shellM).applyMatrix4(bodyInv);
       }
       pts.push(p.lerp(pFree, curl));
@@ -578,10 +601,16 @@ export class Animator {
       let lum = null;
       up.copy(axisB);
       if (inside) {
-        const u = u0 + (arc - exit) * SL;
+        const u = u0 + (arc - exit) * SL * squeeze;
         lum = shell.abdomenPath.lumenAt(u, radial);
         radialB.copy(radial).transformDirection(shellM).transformDirection(bodyInv).normalize();
         up.lerp(radialB, smoothstep(0.05, 0.45, i / n)).normalize();
+      }
+      if (curl > 0 && !inside) {
+        // free coil: the pleon lies on its side, dorsum toward the centre of the coil, venter (orange
+        // visceral mass) outward – grey inner edge, orange outer edge in photo 03
+        const toCentre = yAx.set(0, 1, 0).cross(dir).normalize();
+        up.lerp(toCentre, curl * smoothstep(0.05, 0.3, i / n)).normalize();
       }
       quatFromDir(dir, up, ab[i].quaternion);
       let ky = 1, kz = 1;
@@ -590,11 +619,11 @@ export class Animator {
         zAx.set(0, 0, 1).applyQuaternion(ab[i].quaternion);
         const ra = lum.ra / SL, rb = lum.rb / SL;
         const half = (d) => 1 / Math.sqrt(Math.pow(d.dot(radialB) / ra, 2) + Math.pow(d.dot(axisB) / rb, 2) + 1e-9);
-        const r = lerp(AB.radiusBase, AB.radiusEnd, Math.pow((i + 0.5) / n, 0.9));
+        const r = abdomenRadius((i + 0.5) / n);
         ky = clamp((0.88 * half(yAx)) / (r * AB.flatten), 0.3, 1);
         kz = clamp((0.88 * half(zAx)) / (r * 1.1), 0.3, 1);
       }
-      ab[i].scale.set(1, ky, kz);
+      ab[i].scale.set(squeeze, ky, kz);
     }
     const lastLen = pts[n].distanceTo(pts[n - 1]);
     this.rig.telson.position.set(Math.min(lastLen, segL * 1.3), 0, 0);
@@ -604,10 +633,10 @@ export class Animator {
 
   /** free curl of a naked abdomen (shell exchange): coils under and to the right of the body [G] */
   freeCurlPoint(arc, out) {
-    const R = 0.75;
-    const a = arc / R;
-    // starts going backward, curls down and to the animal's right (−X) – dextral
-    return out.set(-0.35 * (1 - Math.cos(a)) * R - 0.04 * arc, -Math.sin(a) * R * 0.85 - 0.1 * arc, -Math.sin(a) * R * 0.9 - 0.15 * arc * 0.2);
+    const tab = FREE_CURL;
+    const f = clamp(arc / FREE_CURL_STEP, 0, tab.length - 1.001);
+    const i = Math.floor(f), w = f - i;
+    return out.lerpVectors(tab[i], tab[i + 1], w);
   }
 }
 

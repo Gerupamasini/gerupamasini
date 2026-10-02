@@ -147,18 +147,25 @@ function buildScene() {
     // breeding season: a larger male and a smaller female (mate guarding)
     addCrab({ seed: seed + 1, sex: 'm', shieldLength_mm: 5.2, shell: { species: 'reishia_clavigera', size_mm: 20, seed: 4, fouling: 0.3 } }, new THREE.Vector3(0, 0, 0), 0);
     addCrab({ seed: seed + 2, sex: 'f', shieldLength_mm: 3.8, shell: { species: 'umbonium_moniliferum', size_mm: 12.5, seed: 8, fouling: 0.2 } }, new THREE.Vector3(0.012, 0, 0.04), Math.PI);
+  } else if (mode === 'naked') {
+    // out of the shell: compare with photos of crabs taken out of their shells (abdomen coiled on the substrate)
+    addCrab({ seed, sex: P('sex', 'm'), shieldLength_mm: Number(P('sl', '4.8')) }, new THREE.Vector3(0, 0, 0), Number(P('heading', '0')));
+    crabs[0].removeShell();
   } else if (mode === 'change') {
     addCrab({ seed, sex: 'm', shieldLength_mm: 4.8, shell: { species: 'reticunassa_festiva', size_mm: 10, damage: 0.75, seed: 3 } }, new THREE.Vector3(0, 0, 0), 0);
     world.addShell({ species: 'umbonium_moniliferum', size_mm: 14.5, seed: 9, fouling: 0.1 }, new THREE.Vector3(0.004, 0, 0.032), groundAt);
   } else {
-    addCrab({ seed, sex: P('sex', 'm'), shieldLength_mm: Number(P('sl', '4.8')), shell: { species: shellKey, size_mm: Number(P('size', Math.min(SHELL_SPECIES[shellKey].size_mm[1], minFitSize(shellKey, Number(P('sl', '4.8'))) * 1.12).toFixed(1))), seed: 5, fouling: Number(P('fouling', '0.35')), ...(P('silt', '') !== '' ? { silt: Number(P('silt', '0')) } : {}) } }, new THREE.Vector3(0, 0, 0), Number(P('heading', '0')));
+    // a crab that can withdraw completely into the largest shell of this species (unless sl/size are given)
+    const spk = SHELL_SPECIES[shellKey];
+    const sl = Number(P('sl', Math.min(4.8, spk.size_mm[1] / (minFitSize(shellKey, 1) * 1.08)).toFixed(2)));
+    addCrab({ seed, sex: P('sex', 'm'), shieldLength_mm: sl, shell: { species: shellKey, size_mm: Number(P('size', Math.min(spk.size_mm[1], minFitSize(shellKey, sl) * 1.08).toFixed(1))), seed: 5, fouling: Number(P('fouling', '0.35')), ...(P('silt', '') !== '' ? { silt: Number(P('silt', '0')) } : {}) } }, new THREE.Vector3(0, 0, 0), Number(P('heading', '0')));
   }
   main = crabs[0];
   frame = 0;
   simTime = 0;
-  const preSim = Number(cfg.t ?? (mode === 'pose' ? '1.5' : '0'));
+  const preSim = Number(cfg.t ?? (mode === 'pose' || mode === 'naked' ? '1.5' : '0'));
   for (let t = 0; t < preSim; t += 1 / 60) step(1 / 60);
-  applyView(cfg.view ?? (mode === 'shells' || mode === 'group' ? 'wide' : 'oblique'));
+  applyView(cfg.view ?? (mode === 'shells' || mode === 'group' ? 'wide' : mode === 'naked' ? 'top' : 'oblique'));
   syncUI();
   if (window.__lab) { window.__lab.crabs = crabs; window.__lab.world = world; }
 }
@@ -167,7 +174,7 @@ function buildScene() {
 function scriptAI(crab, t) {
   const B = crab.behavior;
   const mode = cfg.mode;
-  if (mode === 'pose') {
+  if (mode === 'pose' || mode === 'naked') {
     if (B.state !== STATE.IDLE) B.enter(STATE.IDLE, crab.lastEnv ?? { groundAt });
     B.stateDur = 1e9;
     B.internal.fear = 0;
@@ -179,7 +186,10 @@ function scriptAI(crab, t) {
   } else if (mode === 'guard') {
     playerOverride = new THREE.Vector3(5, 1.5, 5); // keep the observer out of the pair's way
   } else if (mode === 'retract') {
-    playerOverride = t > 1.0 ? new THREE.Vector3(main.loco.position.x + 0.15, 0.3, main.loco.position.z + 0.15) : new THREE.Vector3(5, 1.5, 5);
+    // a hand looms at t = 1 s; with `calm=s` it goes away again, and `hideFor=s` caps the hiding time
+    const calm = Number(P('calm', '1e9'));
+    playerOverride = t > 1.0 && t < calm ? new THREE.Vector3(main.loco.position.x + 0.15, 0.3, main.loco.position.z + 0.15) : new THREE.Vector3(5, 1.5, 5);
+    if (P('hideFor', '') !== '' && B.state === STATE.HIDE_IN_SHELL) B.stateDur = Math.min(B.stateDur, Number(P('hideFor', '3')));
   }
 }
 

@@ -10,7 +10,7 @@
 //   aSeg    : vec4   (t along the article 0..1, angle around it 0..1 (0.25 = dorsal), article kind, side ±1)
 //   position (bind pose) doubles as the domain for procedural granules, mottling and setae.
 import * as THREE from 'three';
-import { MORPH } from './PagurusMinutusMorphology.js';
+import { MORPH, abdomenRadius } from './PagurusMinutusMorphology.js';
 import { BASIS_FRACTION } from './PagurusMinutusRig.js';
 import { TAU, clamp, lerp, hash1, smoothstep } from './PagurusMinutusUtil.js';
 
@@ -206,14 +206,15 @@ function spine(acc, bi, M, base, dir, len, rad, region, side, radial = 5) {
 
 function buildCephalothorax(acc, rig, lod) {
   const bi = rig.list.indexOf(rig.root);
+  const pci = rig.list.indexOf(rig.carapacePosterior);
   const [nz, nr] = lod.carapace;
   const S = MORPH.shield, PC = MORPH.posteriorCarapace;
   // stations: z, half width, top, bottom, squareness
   const st = [
-    [-PC.length, PC.widthEnd * 0.5, 0.1, -0.12, 2.2],
-    [-0.75, 0.34, 0.14, -0.18, 2.4],
-    [-0.5, 0.4, 0.17, -0.24, 2.6],
-    [-0.2, 0.44, 0.19, -0.28, 2.8],
+    [-PC.length, PC.widthEnd * 0.32, 0.08, -0.1, 2.2],
+    [-0.76, PC.widthEnd * 0.47, 0.13, -0.17, 2.3],
+    [-0.5, 0.45, 0.17, -0.24, 2.5],
+    [-0.2, 0.46, 0.19, -0.28, 2.8],
     [-0.02, 0.45, 0.17, -0.3, 3.0],
     [0.02, 0.455, 0.185, -0.3, 3.0],
     [0.25, 0.47, 0.205, -0.31, 3.1],
@@ -261,7 +262,9 @@ function buildCephalothorax(acc, rig, lod) {
       else if (upness < -0.72) region = REGION.STERNUM;
       else if (z >= -0.01) region = REGION.BRANCHIO;
       else region = REGION.SOFT_CARAPACE;
-      acc.vert(_p, [[bi, 1]], region, t, j / nr, KIND.OTHER, Math.sign(x) || 1);
+      // the soft posterior carapace follows its own (bending) bone, blended over the cervical groove
+      const wp = smoothstep(0.02, -0.3, z);
+      acc.vert(_p, wp > 0 ? [[bi, 1 - wp], [pci, wp]] : [[bi, 1]], region, t, j / nr, KIND.OTHER, Math.sign(x) || 1);
     }
   }
   for (let i = 0; i < nz - 1; i++) for (let j = 0; j < nr; j++) {
@@ -275,7 +278,7 @@ function buildCephalothorax(acc, rig, lod) {
   // posterior opening is closed by the abdomen; add a cap only when the abdomen is not built
   if (!lod.abdomen) {
     const first = rs[0];
-    const bc = acc.vert(new THREE.Vector3(0, -0.01, z0 - 0.04), [[bi, 1]], REGION.SOFT_CARAPACE, 0, 0.25, KIND.OTHER, 1);
+    const bc = acc.vert(new THREE.Vector3(0, -0.01, z0 - 0.04), [[pci, 1]], REGION.SOFT_CARAPACE, 0, 0.25, KIND.OTHER, 1);
     for (let j = 0; j < nr; j++) acc.tri(bc, first + j, first + j + 1);
   }
 }
@@ -591,7 +594,7 @@ function abdomen(acc, rig, lod) {
     const M = boneM(rig, b);
     const bi = rig.list.indexOf(b);
     // soft pleon: tapering, dorso-ventrally flattened, faint segment folds; swollen on the left (pleopods side)
-    const r = lerp(AB.radiusBase, AB.radiusEnd, Math.pow(t, 0.9)) * (1 + 0.04 * Math.sin(t * Math.PI * 10) ** 2);
+    const r = abdomenRadius(t) * (1 + 0.035 * Math.sin(t * Math.PI * AB.segments * 1.5) ** 2);
     const kp = Math.max(0, k - 1), kn = Math.min(n - 1, k + 1);
     let skin;
     if (f < 0.5 && kp !== k) skin = [[bi, 0.5 + f], [rig.list.indexOf(chain[kp]), 0.5 - f]];
@@ -626,7 +629,7 @@ function abdomen(acc, rig, lod) {
     for (let k = 2; k < 6 && k < n; k++) {
       const b = chain[k];
       const M = boneM(rig, b);
-      const r = lerp(AB.radiusBase, AB.radiusEnd, (k + 0.5) / n);
+      const r = abdomenRadius((k + 0.5) / n);
       spine(acc, rig.list.indexOf(b), M, new THREE.Vector3(segLen * 0.5, -r * 0.4, r * 0.85), new THREE.Vector3(0.3, -0.6, 0.6), r * 0.75, r * 0.12, REGION.UROPOD, 1, 4);
     }
   }

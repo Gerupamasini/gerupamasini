@@ -18,6 +18,7 @@ import { clamp, damp, lerp, smoothstep, wrapAngle, fbm1 } from './PagurusMinutus
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion();
 const _e = new THREE.Euler(0, 0, 0, 'YXZ');
+const _Z = new THREE.Vector3(0, 0, 1);
 const UP = new THREE.Vector3(0, 1, 0);
 
 /** neutral foot positions in the body frame (SL units, x lateral (left +), z forward) [P][S] */
@@ -143,6 +144,20 @@ export class Locomotion {
     b.position.set(this.bodySway, this.bodyHeight + this.bodyBob + crab.anim.bodyLift, crab.anim.bodyRetreat);
     _e.set(this.bodyPitch + crab.anim.bodyPitch, 0, this.bodyRoll, 'YXZ');
     b.quaternion.setFromEuler(_e);
+    // withdrawn: the shell (with the crab in it) tipped onto its side about a pivot on the substrate
+    const tip = crab.anim.tip;
+    if (tip && tip.angle !== 0) {
+      _q.setFromAxisAngle(_Z, tip.angle);
+      b.position.sub(tip.pivot).applyQuaternion(_q).add(tip.pivot);
+      b.position.y += tip.lift;
+      b.quaternion.premultiply(_q);
+    }
+    // withdrawn: the body inside the shell (rigid displacement from the standing pose)
+    const X = crab.anim.bodyXf;
+    if (X) {
+      b.position.add(_v.copy(X.pos).applyQuaternion(b.quaternion));
+      b.quaternion.multiply(X.quat);
+    }
     crab.root.updateMatrixWorld(true);
     this.bodyMatrix.copy(b.matrixWorld);
     this.bodyMatrixInv.copy(this.bodyMatrix).invert();

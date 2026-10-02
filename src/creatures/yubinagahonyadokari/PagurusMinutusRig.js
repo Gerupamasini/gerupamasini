@@ -183,6 +183,10 @@ export class Rig {
       }
     }
 
+    // ── posterior carapace: membranous and flexible [G]; bends with the whorl when the crab withdraws.
+    // Carries the P4/P5 bases and the abdomen base.
+    this.carapacePosterior = add('CarapacePosterior', root, new THREE.Vector3(0, 0, 0));
+
     // ── reduced legs (P4 = *3, P5 = *4) ─────────────────────────────────────────────────────────
     this.reduced = {};
     for (const n of [3, 4]) {
@@ -193,7 +197,7 @@ export class Rig {
         const name = `Leg_${side}${n}`;
         // tucked back along the posterior carapace, propodal rasps braced against the inner shell wall [G]
         const dir = n === 3 ? [0.32, -0.95] : [0.22, -0.97];
-        const coxa = add(`${name}_Coxa`, root, new THREE.Vector3(s * cp.x, cp.y, cp.z), new THREE.Quaternion().setFromAxisAngle(Y, yawFor(s * dir[0], dir[1])));
+        const coxa = add(`${name}_Coxa`, this.carapacePosterior, new THREE.Vector3(s * cp.x, cp.y, cp.z), new THREE.Quaternion().setFromAxisAngle(Y, yawFor(s * dir[0], dir[1])));
         const basis = add(`${name}_Basis`, coxa, new THREE.Vector3(D.coxa, 0, 0), new THREE.Quaternion().setFromAxisAngle(Z, 0.35));
         const ischium = add(`${name}_Ischium`, basis, new THREE.Vector3(D.basis * BASIS_FRACTION, 0, 0));
         const merus = add(`${name}_Merus`, ischium, new THREE.Vector3(D.basis * (1 - BASIS_FRACTION), 0, 0));
@@ -212,6 +216,7 @@ export class Rig {
     this.abdomen = [];
     let parent = root;
     const z0 = -MORPH.posteriorCarapace.length + 0.05;
+    this.abdomenBaseRest = new THREE.Vector3(0, 0.02, z0);
     for (let i = 0; i < AB.segments; i++) {
       const b = add(`Abdomen${i}`, root, new THREE.Vector3(0, 0.02, z0 - i * segL), quatFromDir(new THREE.Vector3(0, 0, -1)));
       this.abdomen.push(b);

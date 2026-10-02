@@ -23,6 +23,9 @@ export const SHELL_DENSITY_KG_M3 = 2700; // aragonite/calcite with organic matri
 /**
  * carry: apex elevation and the crab's grip point (ShellAnchor, SL units in the body frame), chosen so the
  * body leaves the aperture without intersecting the shell (verified geometrically, see tests).
+ * hideFit: shell size / shield length at which the crab withdraws completely (cephalothorax, folded legs
+ * and antennae inside, claws closing the opening); measured with the analytic shell and the withdrawal
+ * search in PagurusMinutusAnimator.js (≤ ≈ 3 % of the body mesh left outside the opening) [S].
  *
  * The five shell species built first. Field use of P. minutus (see docs/creatures/yubinagahonyadokari/01_research.md):
  *  - Batillaria (ホソウミニナ/ウミニナ): ~40 % (Waka River) to 77.5 % (Azuma et al. 2013)  [本種で直接確認]
@@ -36,7 +39,8 @@ export const SHELL_DENSITY_KG_M3 = 2700; // aragonite/calcite with organic matri
 export const SHELL_SPECIES = {
   batillaria_attramentaria: {
     ja: 'ホソウミニナ', sci: 'Batillaria attramentaria', family: 'Batillariidae',
-    evidence: 'direct', sizeMeasure: 'height', size_mm: [12, 30], typical_mm: 18,
+    evidence: 'direct', sizeMeasure: 'height', size_mm: [12, 34], typical_mm: 18,
+    hideFit: 6.6,
     whorls: 12, W: 1.42, T: 8.8, a: 0.98, b: 1.9, tilt: 0.1, profileN: 2.7,
     canal: { phi: -1.95, len: 0.22, width: 0.38 }, shoulder: null,
     thickness: 0.16, lip: { amp: 0.04, span: 0.12 }, apexErosion: 0.25,
@@ -50,7 +54,8 @@ export const SHELL_SPECIES = {
   },
   umbonium_moniliferum: {
     ja: 'イボキサゴ', sci: 'Umbonium moniliferum', family: 'Trochidae',
-    evidence: 'direct', sizeMeasure: 'width', size_mm: [7, 16], typical_mm: 11,
+    evidence: 'direct', sizeMeasure: 'width', size_mm: [7, 20], typical_mm: 13, // shell diameter ≈ 2 cm max (field guides)
+    hideFit: 4.2,
     whorls: 7, W: 1.8, T: 1.6, a: 0.75, b: 0.55, tilt: -0.35,
     canal: null, shoulder: { phi: 0.55, amp: 0.1, width: 0.5 },
     thickness: 0.24, lip: { amp: 0.0, span: 0.1 }, apexErosion: 0,
@@ -65,7 +70,8 @@ export const SHELL_SPECIES = {
   },
   reticunassa_festiva: {
     ja: 'アラムシロ', sci: 'Reticunassa festiva', family: 'Nassariidae',
-    evidence: 'direct', sizeMeasure: 'height', size_mm: [8, 18], typical_mm: 12,
+    evidence: 'direct', sizeMeasure: 'height', size_mm: [8, 21], typical_mm: 14, // shell height ≈ 2 cm max (field guides)
+    hideFit: 4.55,
     whorls: 8, W: 1.6, T: 3.6, a: 0.75, b: 1.0, tilt: 0.15,
     canal: { phi: -2.0, len: 0.3, width: 0.32 }, shoulder: null,
     thickness: 0.23, lip: { amp: 0.1, span: 0.14 }, apexErosion: 0.05,
@@ -80,6 +86,7 @@ export const SHELL_SPECIES = {
   reishia_clavigera: {
     ja: 'イボニシ', sci: 'Reishia clavigera', family: 'Muricidae',
     evidence: 'direct', sizeMeasure: 'height', size_mm: [12, 30], typical_mm: 20,
+    hideFit: 4.0,
     whorls: 7, W: 1.95, T: 2.6, a: 0.72, b: 1.05, tilt: 0.18,
     canal: { phi: -1.9, len: 0.5, width: 0.3 }, shoulder: { phi: 0.75, amp: 0.12, width: 0.45 },
     thickness: 0.24, lip: { amp: 0.08, span: 0.12 }, apexErosion: 0.15,
@@ -97,6 +104,7 @@ export const SHELL_SPECIES = {
   lunella_coreensis: {
     ja: 'スガイ', sci: 'Lunella coreensis', family: 'Turbinidae',
     evidence: 'photo', sizeMeasure: 'width', size_mm: [8, 25], typical_mm: 14,
+    hideFit: 3.7,
     whorls: 6, W: 2.2, T: 2.3, a: 0.95, b: 1.05, tilt: -0.05,
     canal: null, shoulder: { phi: 0.85, amp: 0.05, width: 0.6 },
     thickness: 0.2, lip: { amp: 0.03, span: 0.1 }, apexErosion: 0.1,
@@ -575,11 +583,25 @@ export function buildShellGeometry(key, lod = 1, damage = 0, variant = 0) {
   let geo = g;
   if (sp.umbilicalCallus) {
     const uc = sp.umbilicalCallus;
-    const lens = new THREE.SphereGeometry(uc.radius * norm, lod === 0 ? 28 : lod === 1 ? 16 : 8, lod === 0 ? 10 : 6, 0, TAU, Math.PI * 0.5, Math.PI * 0.5);
-    lens.scale(1, (uc.height / uc.radius), 1);
-    // base of the shell: lowest point of the last whorl near the axis
-    const baseY = (data.meas.minY + sp.b * 0.25) * norm;
-    lens.translate(-seat.x, baseY - seat.y + uc.height * norm * 0.55, -seat.z);
+    // the umbilicus: the gap at the axis under the inner (columellar) side of the body whorl. Find the
+    // inner-base points of the last whorl closest to the axis; the callus lens fills the gap among them.
+    const q = new THREE.Vector3();
+    let ySum = 0, rSum = 0, cnt = 0;
+    for (let i = 0; i < 24; i++) {
+      const th = -TAU * (i / 24);
+      let best = Infinity, by = 0;
+      for (let k = 0; k <= 8; k++) {
+        shellPoint(sp, th, Math.PI + (k / 8) * Math.PI * 0.5, 0, q);
+        const rho = Math.hypot(q.x, q.z);
+        if (rho < best) { best = rho; by = q.y; }
+      }
+      ySum += by; rSum += best; cnt++;
+    }
+    const yC = ySum / cnt, rC = rSum / cnt;
+    const R = Math.max(uc.radius, rC * 1.2);
+    const lens = new THREE.SphereGeometry(R * norm, lod === 0 ? 28 : lod === 1 ? 16 : 8, lod === 0 ? 10 : 6, 0, TAU, Math.PI * 0.5, Math.PI * 0.5);
+    lens.scale(1, uc.height / R, 1);
+    lens.translate(-seat.x, yC * norm - seat.y, -seat.z);
     const n = lens.attributes.position.count;
     const aS = new Float32Array(n * 4), aR = new Float32Array(n);
     for (let k = 0; k < n; k++) { aS[k * 4 + 2] = 4; }
@@ -1067,10 +1089,72 @@ const smoothstep01 = (x) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * 
  */
 export const PASSAGE_SL = 0.75;
 
-/** smallest shell (mm, in the species' size measure) a crab can withdraw into */
+/**
+ * Room the withdrawn crab needs in the lumen, from the aperture inward (SL): the cephalothorax (shield +
+ * posterior carapace ≈ 1.85 SL, width ≈ 0.92 SL, height ≈ 0.5 SL) with the face ≈ 0.6 SL behind the
+ * lid, then the soft abdomen, which can shorten to ≈ 60 % of its relaxed 4.4 SL [S].
+ */
+const HIDE_ROOM = [
+  { depth: 0.8, narrow: 0.27, wide: 0.42 },
+  { depth: 1.8, narrow: 0.22, wide: 0.34 },
+  { depth: 2.4, narrow: 0.17, wide: 0.26 },
+];
+const HIDE_PATH_SL = 2.6 + 0.6 * 4.4;
+
+/** lumen centreline and half-widths per mm of shell size, from the aperture inward (cached) */
+const LUMEN_PROFILE = new Map();
+function lumenProfile(key) {
+  let pr = LUMEN_PROFILE.get(key);
+  if (pr) return pr;
+  const d = shellSpeciesData(key);
+  const L = d.lumenPath;
+  const N = L.length;
+  const arc = new Float32Array(N), narrow = new Float32Array(N), wide = new Float32Array(N);
+  let prev = null;
+  for (let i = 0; i < N; i++) {
+    const e = L[i];
+    const rho = e.s * (1 + e.u), h = e.s * (-d.sp.T + e.v);
+    // shell units are normalised so that size_mm = 1 ↔ 1 mm: positions × norm are mm per mm of size
+    const p = new THREE.Vector3(rho * Math.cos(e.th), h, rho * Math.sin(e.th)).multiplyScalar(d.norm);
+    arc[i] = prev ? arc[i - 1] + p.distanceTo(prev) : 0;
+    prev = p;
+    narrow[i] = Math.min(e.ra, e.rb) * d.norm;
+    wide[i] = Math.max(e.ra, e.rb) * d.norm;
+  }
+  const at = (a) => {
+    let i = 0;
+    while (i < N - 2 && arc[i + 1] < a) i++;
+    const f = clamp((a - arc[i]) / Math.max(1e-9, arc[i + 1] - arc[i]), 0, 1);
+    return [lerp(narrow[i], narrow[i + 1], f), lerp(wide[i], wide[i + 1], f)];
+  };
+  pr = { total: arc[N - 1], at };
+  LUMEN_PROFILE.set(key, pr);
+  return pr;
+}
+
+/**
+ * Smallest shell (mm, in the species' size measure) a crab can withdraw into completely: the narrow side
+ * of the aperture passes the cephalothorax, and the lumen behind it is wide and long enough to hold the
+ * hidden body and the (shortened) abdomen.
+ */
 export function minFitSize(key, shieldLength_mm) {
   const d = shellSpeciesData(key);
-  return (PASSAGE_SL * shieldLength_mm) / Math.min(d.apertureWidth, d.apertureHeight);
+  const SLm = shieldLength_mm;
+  const s0 = (PASSAGE_SL * SLm) / Math.min(d.apertureWidth, d.apertureHeight);
+  const pr = lumenProfile(key);
+  const ok = (S) => pr.total * S >= HIDE_PATH_SL * SLm && HIDE_ROOM.every((r) => {
+    const [n, w] = pr.at((r.depth * SLm) / S);
+    return n * S >= r.narrow * SLm && w * S >= r.wide * SLm;
+  });
+  let fit = s0;
+  if (!ok(s0)) {
+    let lo = s0, hi = s0 * 1.1;
+    while (!ok(hi) && hi < s0 * 6) { lo = hi; hi *= 1.1; }
+    for (let k = 0; k < 24; k++) { const m = 0.5 * (lo + hi); if (ok(m)) hi = m; else lo = m; }
+    fit = hi;
+  }
+  // complete withdrawal (claws closing the opening) needs more room than these minimum dimensions
+  return Math.max(fit, (d.sp.hideFit ?? 0) * SLm);
 }
 
 /** pick a natural shell for a crab of given shield length (field-like distribution) */

@@ -12,13 +12,14 @@ npm run build        # dist/ を生成（GitHub Pages 用のベースパス /ger
 npm run smoke        # ヘッドレス Chromium で起動し tests/smoke/out/ にスクリーンショット
 node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボを撮影（tests/smoke/out/pagurus-*.png）
 npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / lod1 / lod2）
+npm run model:pagurus-hide            # ユビナガホンヤドカリの「殻に閉じこもる姿勢」の表を再生成（形態・殻を変えたあと）
 npm run terrain:bake # 地形 PNG の再生成
 ```
 
 ローカルや別ホストでは `VITE_BASE=/ npm run build` のようにベースパスを変えられます。
 
 ユビナガホンヤドカリ単体のラボは `hermit-lab.html`（開発時は http://localhost:5173/gerupamasini/hermit-lab.html）。
-殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガードを再現します。
+殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガード、`?mode=naked` で殻から出した体、`?mode=retract` で殻に閉じこもる様子を見られます。
 
 ## 文書
 - `docs/spec/` 仕様書 4 本（ゲームと MVP、アーキテクチャとデータ、生物 AI とモデル、潮位・セーブ・進行）

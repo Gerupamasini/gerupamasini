@@ -97,7 +97,7 @@ uniform float uPmCaus, uPmWaterY, uPmTime;
 uniform vec3 uPmCausColor;
 uniform vec3 uShield, uShieldDark, uBranchio, uSoft, uSternum, uLegBase, uLegStripe, uLegBand, uLegPale;
 uniform vec3 uDactBase, uDactWhite, uDactTip, uChel, uGran, uFinger, uFingerTip, uMembrane, uEyestalk, uEyeBand;
-uniform vec3 uCornea, uCorneaStripe, uAntenna, uAntennaWhite, uAntennule, uMxp, uMxpBand, uAbd, uAbdDeep, uUropod, uSetae;
+uniform vec3 uCornea, uCorneaStripe, uAntenna, uAntennaWhite, uAntennule, uMxp, uMxpBand, uAbd, uAbdDeep, uAbdVisc, uUropod, uSetae;
 uniform float uAnnuli, uWhitePeriod;
 float pmThin = 0.1;
 float pmClear = 1.0;
@@ -128,6 +128,8 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     c = uShield * (0.9 + 0.2 * mott);
     float gs = 1.0 - smoothstep(0.035, 0.1, length(vec2(p.x * 1.25, p.z - 0.55)));
     c = mix(c, uShieldDark, gs * 0.88);
+    // pale median mark on the gastric region (photo 01)
+    c = mix(c, uSternum * 1.1, (1.0 - smoothstep(0.02, 0.05, abs(p.x))) * smoothstep(0.35, 0.5, p.z) * (1.0 - smoothstep(0.72, 0.85, p.z)) * 0.5);
     float lat = smoothstep(0.12, 0.42, abs(p.x)) * smoothstep(0.5, 0.72, pmFbm(p * 7.0 + 3.1));
     c = mix(c, uShieldDark, lat * 0.65 * uPmContrast);
     c *= 1.0 - 0.4 * exp(-pow(p.z / 0.022, 2.0));
@@ -140,6 +142,7 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     pmRough = 0.5; pmThin = 0.32;
   } else if (R == 2) {
     c = uSoft * (0.8 + 0.4 * mott);
+    c = mix(c, uShieldDark, step(0.78, pmNoise(p * 40.0)) * 0.55); // dark spots (photos 01, 02, 07)
     pmHeight = (pmNoise(p * 50.0) - 0.5) * 0.004;
     pmRough = 0.56; pmThin = 0.5; pmClear = 0.7;
   } else if (R == 3) {
@@ -224,10 +227,18 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     c = mix(uMxp, uMxpBand, step(0.5, fract(t * 2.0 + kind * 0.5)) * 0.85);
     pmRough = 0.5; pmThin = 0.45;
   } else if (R == 16) {
+    // dorsum grey-olive with fine transverse lines; the orange-amber visceral mass shows through the
+    // sides and the venter (photos 01–05); greener individuals look olive and glossy alive (06)
+    float ventral = smoothstep(0.35, -0.6, dors);
     c = mix(uAbdDeep, uAbd, smoothstep(0.3, 0.75, pmFbm(p * 6.0)));
-    c = mix(c, uMembrane, smoothstep(0.75, 0.95, pmNoise(p * 26.0)) * 0.25);
-    pmHeight = (pmNoise(p * vec3(30.0, 120.0, 30.0)) - 0.5) * 0.004;
-    pmRough = 0.55; pmThin = 0.62; pmClear = 0.8;
+    float lines = smoothstep(0.8, 0.97, abs(fract(t * 34.0) - 0.5) * 2.0);
+    c *= 1.0 - 0.2 * lines * (1.0 - ventral);
+    float visc = ventral * (0.55 + 0.45 * smoothstep(0.05, 0.35, t) * (1.0 - smoothstep(0.75, 1.0, t)));
+    visc *= 0.7 + 0.3 * pmFbm(p * 9.0 + 3.0);
+    c = mix(c, uAbdVisc, clamp(visc * (1.15 - 0.6 * uPmGreen), 0.0, 1.0));
+    c = mix(c, uMembrane, smoothstep(0.78, 0.95, pmNoise(p * 26.0)) * 0.2);
+    pmHeight = (pmNoise(p * vec3(30.0, 120.0, 30.0)) - 0.5) * 0.004 - 0.002 * lines;
+    pmRough = 0.42; pmThin = 0.66; pmClear = 0.9;
   } else if (R == 17) {
     c = uUropod * (0.9 + 0.2 * mott); pmRough = 0.38; pmThin = 0.35;
   } else if (R == 18) {
@@ -288,7 +299,7 @@ function paletteUniforms() {
     uChel: u(P.cheliped), uGran: u(P.chelaGranule), uFinger: u(P.chelaFinger), uFingerTip: u(P.chelaFingerTip),
     uMembrane: u(P.membrane), uEyestalk: u(P.eyestalk), uEyeBand: u(P.eyeBand), uCornea: u(P.cornea), uCorneaStripe: u(P.corneaStripe),
     uAntenna: u(P.antenna), uAntennaWhite: u(P.antennaWhite), uAntennule: u(P.antennule), uMxp: u(P.mxp), uMxpBand: u(P.mxpBand),
-    uAbd: u(P.abdomen), uAbdDeep: u(P.abdomenDeep), uUropod: u(P.uropod), uSetae: u(P.setae),
+    uAbd: u(P.abdomen), uAbdDeep: u(P.abdomenDeep), uAbdVisc: u(P.abdomenViscera), uUropod: u(P.uropod), uSetae: u(P.setae),
     uAnnuli: { value: 108 }, uWhitePeriod: { value: 3 },
   };
 }

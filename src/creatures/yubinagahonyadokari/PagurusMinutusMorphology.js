@@ -28,7 +28,9 @@ export const MORPH = {
     lateralProjection: { x: 0.36, len: 0.055, halfWidth: 0.07 }, // bluntly rounded [D]
     gastricSpot: { z: 0.55, radius: 0.09 }, // dark-brown median spot on gastric region [D]
   },
-  posteriorCarapace: { length: 0.85, widthEnd: 0.66, heightEnd: 0.42 }, // membranous, weakly calcified [G]
+  // total carapace length / shield length = 1.74–1.87 (6.3/3.5, 5.6/3.0, 4.7/2.7 mm) [D: out-of-shell photos];
+  // the soft posterior carapace is a broad oval about as wide as the shield, membranous, weakly calcified [D][G]
+  posteriorCarapace: { length: 0.85, widthEnd: 0.82, heightEnd: 0.42 },
 
   // ── coxa positions (body frame) ───────────────────────────────────────────────────────────────
   // anomuran sternum is narrow; P1–P3 under the shield's posterior half, P4–P5 under the posterior carapace [G][P]
@@ -136,12 +138,16 @@ export const MORPH = {
 
   // ── abdomen (pleon) ───────────────────────────────────────────────────────────────────────────
   // membranous, dextrally coiled; uropods asymmetrical; telson with median terminal cleft [D]
+  // read from the out-of-shell photos (dorsal 01–04, ventral 05, live 06): long, thick, soft and dextrally
+  // coiled – centreline ≈ 4.4 SL, widest (≈ 0.58 SL) in its anterior third, tapering to the tail fan [P]
   abdomen: {
-    length: 2.3, // [S] no ratio published
-    segments: 8,
-    radiusBase: 0.34,
-    radiusEnd: 0.16,
-    flatten: 0.78, // dorso-ventral flattening of the soft pleon [G]
+    length: 4.4,
+    segments: 12,
+    radiusBase: 0.23, // narrower junction with the posterior carapace
+    radiusMax: 0.33, // ≈ half the carapace width (photos 01–03)
+    radiusMaxAt: 0.3, // fraction of the length
+    radiusEnd: 0.13,
+    flatten: 0.9, // slightly flattened dorso-ventrally [P]
     telson: 0.16,
     uropodL: 0.2, // left better developed [G: Calcinus]
     uropodR: 0.14,
@@ -167,31 +173,32 @@ export const PALETTE = {
   shield: '#a3906f',
   shieldDark: '#5b4027',
   branchio: '#999380',
-  softCarapace: '#8c8f74',
+  softCarapace: '#a39373', // tan, mottled with dark spots (photos 01, 02, 07)
   sternum: '#c9c0a2',
   legBase: '#8a8670',
   legStripe: '#3b2e22',
-  legBand: '#4d3f2d',
-  legPale: '#ada58c',
+  legBand: '#4a3a28',
+  legPale: '#d0c8b0',
   dactylBase: '#737458',
-  dactylWhite: '#c9c3ad',
+  dactylWhite: '#d9d3bf',
   dactylTip: '#5a4a32',
-  cheliped: '#7f7b5e',
-  chelaGranule: '#ddd6c0',
+  cheliped: '#a8a386', // pale cream-olive; white in some (photos 01, 02 out of water)
+  chelaGranule: '#cfdbe0', // bluish-white granules (photos 01, 02, 04; 033, 038)
   chelaFinger: '#a09679',
   chelaFingerTip: '#6b5130',
   membrane: '#8e8a72',
   eyestalk: '#cbc2a6',
   eyeBand: '#6e5a40',
-  cornea: '#8d8975',
-  corneaStripe: '#3b362c',
+  cornea: '#5b4136', // dark reddish brown (photos 01, 02, 04)
+  corneaStripe: '#231915',
   antenna: '#615c48',
   antennaWhite: '#cdc7b6',
   antennule: '#a8946a',
   mxp: '#c4bda6',
   mxpBand: '#4c3a26',
-  abdomen: '#8b8a63',
-  abdomenDeep: '#5d6942',
+  abdomen: '#9b9a86', // dorsum: grey-olive, translucent, fine transverse lines (photos 03, 06)
+  abdomenDeep: '#716b4d',
+  abdomenViscera: '#c9832f', // orange-amber visceral mass seen through the sides and venter (photos 01–05)
   uropod: '#9c9468',
   setae: '#c9bf9f',
 };
@@ -208,6 +215,14 @@ export const COLORWAYS = [
   { id: 'paleyellow', weight: 0.05, hue: 0.02, sat: 0.9, val: 1.22, green: 0.25 },
   { id: 'orange', weight: 0.03, hue: 0.09, sat: 1.25, val: 1.0, green: 0.0 },
 ];
+
+/** abdomen radius (SL) at fraction t (0 = junction with the carapace, 1 = tail fan) */
+export function abdomenRadius(t) {
+  const A = MORPH.abdomen;
+  if (t < A.radiusMaxAt) return A.radiusBase + (A.radiusMax - A.radiusBase) * Math.sin((Math.PI / 2) * (t / A.radiusMaxAt));
+  const u = (t - A.radiusMaxAt) / (1 - A.radiusMaxAt);
+  return A.radiusMax + (A.radiusEnd - A.radiusMax) * u * u * (3 - 2 * u);
+}
 
 /** derive per-individual dimensions (SL units) */
 export function individualMorph(sex = 'f', variation = 0) {

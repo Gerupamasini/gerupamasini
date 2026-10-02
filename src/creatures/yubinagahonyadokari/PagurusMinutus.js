@@ -208,6 +208,21 @@ export class HermitCrab {
   }
 
   // ── precopulatory mate guarding ─────────────────────────────────────────────────────────────
+  /**
+   * Take the crab out of its shell (observation of the naked body, as in photos of crabs removed from
+   * their shells). The abdomen relaxes into its free dextral coil on the substrate.
+   */
+  removeShell() {
+    if (!this.shell || this.change) return;
+    this.shell.object3D.removeFromParent();
+    this.shell.dispose();
+    this.shell = null;
+    this.shellDyn = null;
+    this.shellMode = 'none';
+    this.animator.freeCurl = 1;
+    this.radius = 4 * this.SL;
+  }
+
   /** the point of our aperture rim nearest to `toward` (world); the male's minor chela grips here [D] */
   gripPointWorld(toward, out) {
     const sh = this.shell;

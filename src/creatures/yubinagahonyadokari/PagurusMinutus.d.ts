@@ -84,6 +84,8 @@ export class HermitCrab {
   placeAt(pos: Vector3, heading: number, env: CrabEnv): void;
   update(dt: number, env: CrabEnv): void;
   setLOD(i: number): void;
+  /** take the crab out of its shell (the abdomen relaxes into its free dextral coil) */
+  removeShell(): void;
   adoptMaterials(): void;
   chainForeignMaterials(from: HermitCrab): void;
   onEvent(cb: (id: string, crab: HermitCrab) => void): () => void;

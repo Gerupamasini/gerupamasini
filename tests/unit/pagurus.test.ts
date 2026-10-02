@@ -6,6 +6,8 @@ import { SeededRandom } from '../../src/creatures/yubinagahonyadokari/PagurusMin
 import { Rig, solveLegIK, legTipFK } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusRig.js';
 import { individualMorph, MORPH } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusMorphology.js';
 import { buildBodyGeometry, REGION } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusModel.js';
+import { hideSignature } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusHide.js';
+import { HIDE_TABLE } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusHideTable.js';
 
 const flat = () => 0;
 const SIZES: Record<string, number> = { batillaria_attramentaria: 24, umbonium_moniliferum: 14.5, reticunassa_festiva: 15, reishia_clavigera: 22, lunella_coreensis: 15 };
@@ -69,7 +71,9 @@ describe('shells (analytic model → physics)', () => {
 describe('body ↔ shell geometry', () => {
   it('the hidden abdomen and shell-holding legs stay inside the lumen of every shell', () => {
     for (const key of SHELL_SPECIES_KEYS) {
-      const { crab } = makeCrab({ shell: { species: key, size_mm: SIZES[key], seed: 5 } });
+      // a shell this crab (SL 4.8 mm) can actually withdraw into, as chosen in the field
+      const size = Math.min(SHELL_SPECIES[key as keyof typeof SHELL_SPECIES].size_mm[1], minFitSize(key, 4.8) * 1.1);
+      const { crab } = makeCrab({ shell: { species: key, size_mm: size, seed: 5 } });
       run(crab, 0.4);
       crab.root.updateMatrixWorld(true);
       const c = crab as unknown as { meshes: { geometry: { attributes: { aRegion: { count: number; getX(i: number): number } } }; getVertexPosition(i: number, v: Vector3): Vector3; matrixWorld: never }[]; shell: Shell & { apertureNormal: Vector3 } };
@@ -84,7 +88,7 @@ describe('body ↔ shell geometry', () => {
         mesh.getVertexPosition(i, v).applyMatrix4(mesh.matrixWorld).applyMatrix4(inv);
         if (v.dot(c.shell.apertureNormal) > -0.0015) continue; // at the aperture
         hidden++;
-        if (classifyShellPoint(key, SIZES[key], v) !== 'lumen') out++;
+        if (classifyShellPoint(key, size, v) !== 'lumen') out++;
       }
       expect(hidden).toBeGreaterThan(20);
       expect(out / hidden).toBeLessThan(0.03);
@@ -133,6 +137,63 @@ describe('body ↔ shell geometry', () => {
         expect(Math.min(p.apertureWidth_mm, p.apertureHeight_mm)).toBeGreaterThanOrEqual(0.75 * sl * 0.999);
       }
     }
+  });
+
+  it('withdrawn into a shell it fits, the crab is shut in: only the claw lid and leg tips show at the opening', () => {
+    const NAME = Object.fromEntries(Object.entries(REGION).map(([k, v]) => [v, k]));
+    const LID = new Set(['CHELA_PALM', 'CHELA_FINGER', 'CHELA_ARM', 'DACTYL', 'LEG', 'MEMBRANE', 'SPINE', 'SETA']);
+    for (const key of SHELL_SPECIES_KEYS) {
+      const size = minFitSize(key, 4.8) * 1.1; // shells are chosen 1.0–1.3 × the smallest that fits
+      const { crab } = makeCrab({ shell: { species: key, size_mm: size, seed: 5 } });
+      run(crab, 0.4);
+      crab.behavior.suggest({ kind: 'flee', urgency: 1, from: new Vector3(0.05, 0.05, 0.05) });
+      run(crab, 2.2);
+      expect(crab.behavior.state).toBe(STATE.HIDE_IN_SHELL);
+      crab.root.updateMatrixWorld(true);
+      const c = crab as unknown as { SL: number; meshes: { geometry: { attributes: { aRegion: { count: number; getX(i: number): number } } }; getVertexPosition(i: number, v: Vector3): Vector3; matrixWorld: never }[]; shell: Shell & { apertureNormal: Vector3 } };
+      const mesh = c.meshes[1];
+      const inv = c.shell.object3D.matrixWorld.clone().invert();
+      const n = c.shell.apertureNormal;
+      const p = c.shell.props as unknown as Record<string, number>;
+      const apR = (0.5 * Math.max(p.apertureWidth_mm, p.apertureHeight_mm)) / 4.8;
+      const reg = mesh.geometry.attributes.aRegion;
+      const v = new Vector3();
+      let shown = 0;
+      for (let i = 0; i < reg.count; i++) {
+        mesh.getVertexPosition(i, v).applyMatrix4(mesh.matrixWorld).applyMatrix4(inv);
+        if (classifyShellPoint(key, size, v) !== 'outside') continue; // in the lumen or behind the opaque wall
+        const dep = v.dot(n) / c.SL;
+        const inPlane = v.clone().addScaledVector(n, -v.dot(n)).length() / c.SL;
+        const atOpening = inPlane < apR * 1.15 && dep > -0.6 && dep < 0.45;
+        if (!(atOpening && LID.has(NAME[reg.getX(i)]))) shown++;
+      }
+      expect(shown / reg.count).toBeLessThan(0.04);
+      crab.dispose();
+    }
+  });
+
+  it('out of the shell, the long abdomen coils to the right on the substrate (photos of naked crabs)', () => {
+    const { crab } = makeCrab();
+    (crab as unknown as { removeShell(): void }).removeShell();
+    run(crab, 1);
+    crab.root.updateMatrixWorld(true);
+    const rig = crab.rig as unknown as { abdomen: { matrixWorld: never }[] };
+    const inv = (crab.rig.root as unknown as { matrixWorld: { clone(): { invert(): never } } }).matrixWorld.clone().invert();
+    const pts = rig.abdomen.map((b) => new Vector3().setFromMatrixPosition(b.matrixWorld).applyMatrix4(inv));
+    // goes backward, then turns to the animal's right (−X): clockwise seen from above (dextral)
+    expect(pts[2].z).toBeLessThan(pts[0].z);
+    const tail = pts[pts.length - 1];
+    expect(tail.x).toBeLessThan(-0.6);
+    // one tight turn: the tail comes back toward the body, within about a carapace length
+    expect(Math.hypot(tail.x, tail.z)).toBeLessThan(2.4);
+    // lying low, under the cephalothorax
+    for (const p of pts.slice(3)) expect(p.y).toBeLessThan(0.05);
+    expect(crab.shell).toBeNull();
+  });
+
+  it('the baked withdrawal table matches the current morphology and shells', () => {
+    // regenerate with `npm run model:pagurus-hide` after changing them
+    expect(HIDE_TABLE.sig).toBe(hideSignature());
   });
 
   it('LOD triangle budgets (docs/spec/02 §7)', () => {

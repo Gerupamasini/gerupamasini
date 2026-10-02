@@ -346,7 +346,7 @@ export class Behavior {
     // defaults
     L.moveTarget = null; L.speed = 1.4; L.posture = 'stand'; L.freeze = false; L.legsActive = true; L.backward = false; L.urgent = false; L.shuffle = false; L.face = null; L.heightScale = 1;
     A.retract = 0; A.urgent = false; A.attention.length = 0; A.sniff = 0.15; A.explore = 0.45; A.chelaR = { mode: 'rest' }; A.chelaL = { mode: 'rest' }; A.mouth = 0; A.alert = 0; A.lean = 0;
-    A.restless = false;
+    A.restless = false; A.holdBody = false;
     const pos = crab.loco.position;
     if (this.threat.has) A.attention.push({ pos: this.threat.pos, w: clamp(this.threat.level * 1.5, 0, 1), kind: 'threat' });
     // weak tracking of a nearby player and of walking neighbours, also when they pose no threat [S]
@@ -437,10 +437,10 @@ export class Behavior {
         L.legsActive = crab.animator.ch.legs < 0.5;
         if (this.sub === 'peek') {
           // antennae and eyes come out first, then a hesitation before the body follows [G, S]
-          A.retract = 0.3;
+          A.retract = 0; A.holdBody = true;
           if (crab.animator.ch.eyes < 0.05) { this.sub = 'look'; this.subTime = 0; }
         } else if (this.sub === 'look') {
-          A.retract = 0.3;
+          A.retract = 0; A.holdBody = true;
           A.explore = 0.3;
           if (this.subTime > this.data.hesitate) { this.sub = 'out'; this.subTime = 0; }
         } else {
