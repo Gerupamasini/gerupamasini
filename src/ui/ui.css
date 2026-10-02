@@ -126,7 +126,8 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .toast { background: rgba(5, 11, 14, 0.82); border: 1px solid var(--line); border-left: 3px solid var(--accent); backdrop-filter: blur(10px); padding: 9px 14px; border-radius: var(--r-s); font-size: 13px; letter-spacing: 0.02em; animation: toast-in 0.3s var(--ease); }
 .toast.success { border-left-color: var(--ok); }
 .toast.warn { border-left-color: var(--warn); }
-.screen.transition { z-index: 60; animation: fade 0.3s var(--ease) both; }
+.screen.transition { z-index: 60; background: var(--ink-0); animation: curtain 0.25s var(--ease) both; }
+@keyframes curtain { from { opacity: 0.7; } to { opacity: 1; } }
 .edit-badge { position: fixed; left: 24px; top: 22px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .toast.update { display: flex; align-items: center; gap: 14px; border-left-color: var(--sand); pointer-events: auto; }
 .toast.update .btn { padding: 6px 12px; font-size: 12px; }
