@@ -107,6 +107,10 @@ const PRIMARY_TIP_X = [17, 16, 15, 13, 9.5, 9.2, 6.6, 5.1, 4.35, 3.6];
 // mm: the middle secondaries' tips lowered, under the fuller flank of the rear body (validation §Z)
 const SEC_DROP = -2.5;
 const OVER_RUMP = 2; // mm: the primaries' rise over the upper-tail coverts behind the rump
+// the folded wing's front at the shoulder (validation §AA): from z[0] to z[1] (mm) the layer heights (foldLayer) of the
+// coverts and remiges shrink to `keep` of theirs and sink by `depth` mm — the stack keeps its order but lies just under
+// the outline at the wing's bend, so from above the shoulders are the body's round outline, not a covert edge 1 mm out
+const SHOULDER = { z: [0, 17], keep: 0.3, depth: 0.2 };
 
 /**
  * Bend of a folded feather onto its shell layer: world displacement (mm) of the point `p` (folded, world) at
@@ -123,11 +127,15 @@ export function conformAt(f, p, t, a, sdf, torso = sdf, normal = null) {
   // (the primaries' rear half lies over the upper-tail coverts on the rump, not on the rump itself: the top
   // outline runs on from the tertial tips to the wing tip over the tail, photos, spec §2, §10.3)
   const overRump = f.type === 'primary' ? OVER_RUMP * smooth01(-50, -62, p.z) : 0;
-  const H = foldLayer(f) + overRump + FLAT * (featherOffset(f, t, a)[2] - featherOffset(f, t, 0)[2]);
-  if (H < 0) sdf = torso;
+  const H0 = foldLayer(f) + overRump + FLAT * (featherOffset(f, t, a)[2] - featherOffset(f, t, 0)[2]);
+  if (H0 < 0) sdf = torso;
+  // the bend of the wing at the shoulder: the stack thins and goes in under the breast-side and flank plumage in front
+  // of SHOULDER.z (the plan outline rounds off there instead of the coverts standing out as a square shoulder)
+  const ks = H0 >= 0 && f.type !== 'tertial' ? smooth01(SHOULDER.z[0], SHOULDER.z[1], p.z) : 0;
+  const H = H0 * (1 - (1 - SHOULDER.keep) * ks) - SHOULDER.depth * ks;
   const d = sdf(p.x, p.y, p.z);
   let target;
-  if (H < 0) target = Math.min(d, H);
+  if (H0 < 0) target = Math.min(d, H);
   else {
     const shell = d > H ? d + (H - d) * (1 - smooth01(H + 2.5, H + 6, d)) : H;
     // (from 0.33 of the length on: from 0.28 the inner primaries' inner vanes grazed out of the flank 0.1–0.2 mm
@@ -350,7 +358,7 @@ let CACHE = null;
 // tools/dev/wingfold-cache.mjs) under a key of what it depends on: the solver version, the wing layout and the
 // body outline (sampled). Whenever either changes the key no longer matches and the solution is computed
 // here instead (with a console warning to regenerate the cache).
-export const WING_FOLD_SOLVER = 24; // bump with any change of the solver below
+export const WING_FOLD_SOLVER = 25; // bump with any change of the solver below
 export function wingFoldKey(wingFeathers, sdf, torsoSdf = sdf) {
   const probe = [];
   for (let x = 0; x <= 24; x += 6) for (let y = 40; y <= 90; y += 10) for (let z = -50; z <= 50; z += 10) probe.push(Math.round(sdf(x, y, z) * 100), Math.round(torsoSdf(x, y, z) * 100));
