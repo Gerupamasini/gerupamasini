@@ -57,7 +57,7 @@ const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / 
 // Eye socket of loft.mjs (displacement(): pocket + raised orbital rim), in units of the eye OUTER RADIUS Ro.
 // The orbit ring and the ball depth are fitted to the skin *including* this pocket. Pass genome.socket = null to fit to the
 // bare surface, or an object with the same keys if loft.mjs changes.      [E: mirrors loft.mjs displacement() eye section; wide + gentle so that the LOD0 loft mesh (~1 mm spacing) resolves it]
-export const SOCKET_LOFT = { pocket_depth: 0.30, pocket_radius: 1.55, rim_height: 0.06, rim_radius: 1.40, rim_width: 0.50 };
+export const SOCKET_LOFT = { pocket_depth: 0.25, pocket_radius: 1.30, rim_height: 0.05, rim_radius: 1.15, rim_width: 0.45 };
 export function socketDisplacement(rr, Ro, sk = SOCKET_LOFT) { return socketDisp(rr, Ro, sk); }
 function socketDisp(rr, Ro, sk) {
   if (!sk) return 0;
@@ -341,15 +341,15 @@ export function buildEyes({ surface, params, genome = {}, seed = 1, detail }) {
   let ti = genome.iris_ring_d_over_outer ?? clamp(E.iris_ring_over_outer?.v ?? E.iris_ring_d_over_outer?.v ?? 0.64, 0.52, 0.9);
   let tp = genome.pupil_d_over_outer ?? (E.pupil_over_outer?.v ?? E.pupil_d_over_outer?.v ?? 0.50);
   if (genome.iris_ring_d_over_outer == null) ti = clamp(ti + vr * 0.03 * gauss(draws[0], draws[1]), 0.54, 0.80);
-  if (genome.pupil_d_over_outer == null) tp = clamp(tp + vr * 0.03 * gauss(draws[2], draws[3]), 0.38, 0.62);
+  if (genome.pupil_d_over_outer == null) tp = clamp(tp + vr * 0.03 * gauss(draws[2], draws[3]), 0.28, 0.62);
   const adjusted = [];
   if (tp > ti - 0.04) { tp = ti - 0.04; adjusted.push('pupil clamped to iris_ring - 0.04 (06 §6.6.1)'); }
   const irisL = genome.iris_L ?? clamp(44 + vr * 7 * gauss(draws[4], draws[5]), 26, 58);
-  const gold = genome.iris_gold ?? clamp(0.62 + vr * 0.18 * gauss(draws[6], draws[7]), 0.2, 1);
+  const gold = genome.iris_gold ?? clamp((E.iris_gold?.v ?? 0.62) + vr * 0.18 * gauss(draws[6], draws[7]), 0.2, 1);
   const scleraBright = genome.sclera_bright ?? clamp(0.25 + vr * 0.15 * gauss(draws[8], draws[9]), 0, 1);
   const sheen = genome.iris_sheen ?? 0.25;
   const yaw = (genome.eye_yaw_deg ?? 10) * Math.PI / 180;
-  const headRgb = genome.head_rgb ?? [128, 112, 90];
+  const headRgb = genome.head_rgb ?? E.orbit_rgb?.v ?? [128, 112, 90];
   const socket = genome.socket === undefined ? SOCKET_LOFT : genome.socket;
 
   // ---- placement on the right flank (CONTRACT §1) ----

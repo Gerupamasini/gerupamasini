@@ -2,72 +2,72 @@
  "_doc": "Adult head spec v2 in chord coordinates (u from snout tip toward the rear-most opercle margin, v up from the snout-tip height, both in HL). Numbers: median of 11 clean lateral photos (docs/yamame/photo_analysis/head_profile_curves.json, landmark medians) smoothed by hand; PROXY for an adult (photos are mostly juveniles/adults of unknown SL).",
  "HL_over_SL": 0.254,
  "tip_y_over_sl": 0.0,
- "cap_over_sl": 0.007,
+ "cap_over_sl": 0.004,
  "fit_min": 0.95,
  "fit_max": 1.05,
  "stations": [
   {
    "u": 0,
-   "top": 0.045,
-   "bot": -0.075,
+   "top": 0.03,
+   "bot": -0.06,
    "ywf": 0.55,
    "nT": 2.4,
    "nB": 2.0,
-   "wd": 0.8
+   "wd": 0.56
   },
   {
    "u": 0.005,
-   "top": 0.052,
-   "bot": -0.08,
+   "top": 0.04,
+   "bot": -0.068,
    "ywf": 0.55,
    "nT": 2.41,
    "nB": 2.0,
-   "wd": 0.78
+   "wd": 0.56
   },
   {
    "u": 0.01,
-   "top": 0.06,
-   "bot": -0.088,
+   "top": 0.05,
+   "bot": -0.078,
    "ywf": 0.55,
    "nT": 2.42,
    "nB": 2.01,
-   "wd": 0.76
+   "wd": 0.56
   },
   {
    "u": 0.02,
-   "top": 0.073,
-   "bot": -0.1,
+   "top": 0.063,
+   "bot": -0.092,
    "ywf": 0.55,
    "nT": 2.43,
    "nB": 2.01,
-   "wd": 0.74
+   "wd": 0.57
   },
   {
    "u": 0.04,
-   "top": 0.088,
-   "bot": -0.12,
+   "top": 0.083,
+   "bot": -0.115,
    "ywf": 0.52,
    "nT": 2.46,
    "nB": 2.02,
-   "wd": 0.72
+   "wd": 0.58
   },
   {
    "u": 0.06,
-   "top": 0.1,
-   "bot": -0.137,
+   "top": 0.097,
+   "bot": -0.135,
    "ywf": 0.52,
    "nT": 2.5,
    "nB": 2.04,
-   "wd": 0.71
+   "wd": 0.58
   },
   {
    "u": 0.08,
-   "top": 0.11,
-   "bot": -0.152,
+   "top": 0.108,
+   "bot": -0.15,
    "ywf": 0.52,
    "nT": 2.53,
    "nB": 2.05,
-   "wd": 0.7
+   "wd": 0.58
   },
   {
    "u": 0.1,
@@ -76,7 +76,7 @@
    "ywf": 0.47,
    "nT": 2.56,
    "nB": 2.06,
-   "wd": 0.7
+   "wd": 0.58
   },
   {
    "u": 0.2,
@@ -85,7 +85,7 @@
    "ywf": 0.47,
    "nT": 2.72,
    "nB": 2.12,
-   "wd": 0.7
+   "wd": 0.6
   },
   {
    "u": 0.3,
@@ -94,7 +94,7 @@
    "ywf": 0.47,
    "nT": 2.88,
    "nB": 2.18,
-   "wd": 0.7
+   "wd": 0.62
   },
   {
    "u": 0.4,
@@ -103,7 +103,7 @@
    "ywf": 0.47,
    "nT": 3.04,
    "nB": 2.24,
-   "wd": 0.71
+   "wd": 0.64
   },
   {
    "u": 0.5,
@@ -112,7 +112,7 @@
    "ywf": 0.47,
    "nT": 3.2,
    "nB": 2.3,
-   "wd": 0.72
+   "wd": 0.66
   },
   {
    "u": 0.6,
@@ -121,7 +121,7 @@
    "ywf": 0.47,
    "nT": 3.2,
    "nB": 2.3,
-   "wd": 0.74
+   "wd": 0.68
   },
   {
    "u": 0.7,
@@ -130,7 +130,7 @@
    "ywf": 0.47,
    "nT": 3.2,
    "nB": 2.3,
-   "wd": 0.76
+   "wd": 0.7
   },
   {
    "u": 0.8,
@@ -139,7 +139,7 @@
    "ywf": 0.47,
    "nT": 3.2,
    "nB": 2.3,
-   "wd": 0.78
+   "wd": 0.72
   },
   {
    "u": 0.9,
@@ -148,7 +148,7 @@
    "ywf": 0.47,
    "nT": 3.2,
    "nB": 2.3,
-   "wd": 0.79
+   "wd": 0.73
   },
   {
    "u": 1.0,
@@ -157,7 +157,7 @@
    "ywf": 0.47,
    "nT": 3.2,
    "nB": 2.3,
-   "wd": 0.8
+   "wd": 0.74
   }
  ],
  "mouth": {
@@ -187,8 +187,8 @@
    0.434,
    -0.181
   ],
-  "overbite_over_hl": 0.012,
-  "lip_ridge_mm": 0.45
+  "overbite_over_hl": 0.03,
+  "lip_ridge_mm": 0.3
  },
  "maxilla": {
   "outline": [
@@ -233,7 +233,7 @@
     -0.04
    ]
   ],
-  "height_mm": 0.9,
+  "height_mm": 0.6,
   "groove_mm": 0.45,
   "edge": 0.014
  },
@@ -295,7 +295,7 @@
    ]
   ],
   "height_mm": 0.8,
-  "suture_mm": 0.3,
+  "suture_mm": 0.15,
   "edge": 0.014
  },
  "cheek": {
@@ -328,7 +328,7 @@
     -0.2
    ]
   ],
-  "groove_mm": 0.45,
+  "groove_mm": 0.2,
   "width": 0.007
  },
  "opercle": {
@@ -366,7 +366,15 @@
  "eye": {
   "u": 0.365,
   "v": 0.031,
-  "d_over_hl": 0.2
+  "d_over_hl": 0.243,
+  "iris_ring_over_outer": 0.76,
+  "pupil_over_outer": 0.35,
+  "iris_gold": 0.85,
+  "orbit_rgb": [
+   88,
+   74,
+   52
+  ]
  },
  "nostrils": {
   "anterior": [
@@ -377,14 +385,14 @@
    0.205,
    0.088
   ],
-  "radius_mm": 0.55,
-  "depth_mm": 0.5
+  "radius_mm": 0.4,
+  "depth_mm": 0.25
  },
  "branchiostegal": {
   "apex_u": 0.18,
   "end_u": 0.95,
   "pitch": 0.08,
-  "height_mm": 0.25
+  "height_mm": 0.08
  },
  "pectoral_base_u": 0.95,
  "blend_len_over_sl": 0.14

@@ -89,10 +89,10 @@ export function buildBody(surface, params, opts = {}) {
       const rr = Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]);
       // gentle, wide socket + soft orbital rim: every feature is wider than ~3 ring/sector spacings so the loft mesh resolves it
       // (a narrow rim, sigma 0.22 Ro, faceted). Keep eyes.mjs SOCKET_LOFT in sync with these numbers.
-      const r0 = eyeOuterR * 1.55;
-      if (rr < r0) { const q = 1 - (rr / r0) ** 2; d -= 0.30 * eyeOuterR * q * q; }
+      const r0 = eyeOuterR * 1.30;
+      if (rr < r0) { const q = 1 - (rr / r0) ** 2; d -= 0.25 * eyeOuterR * q * q; }
       // raised orbital rim just outside the socket
-      const rim = Math.exp(-(((rr - eyeOuterR * 1.40) / (eyeOuterR * 0.50)) ** 2)); d += 0.06 * eyeOuterR * rim;
+      const rim = Math.exp(-(((rr - eyeOuterR * 1.15) / (eyeOuterR * 0.45)) ** 2)); d += 0.05 * eyeOuterR * rim;
     }
     // cheek swelling in front of the gill cover
     if (s > 0.10 && s < 0.27) { d += 0.00030 * smooth(0.10, 0.17, s) * (1 - smooth(0.20, 0.26, s)) * latMask(alpha); }

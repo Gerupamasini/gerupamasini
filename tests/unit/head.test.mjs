@@ -44,13 +44,13 @@ function makeBody(extra = {}) {
 }
 
 test('loft: the closing fans at the snout and the tail face outward (no hole in the cap)', () => {
-  const { b } = makeBody(); const P = b.positions, I = b.indices;
+  const { S, b } = makeBody(); const P = b.positions, I = b.indices, xTip = S.sToX(-S.cap);
   let tipBad = 0, tipN = 0, tailBad = 0, tailN = 0;
   for (let t = 0; t < I.length; t += 3) {
     const a = I[t] * 3, c = I[t + 1] * 3, d = I[t + 2] * 3;
     const ux = P[c] - P[a], uy = P[c + 1] - P[a + 1], uz = P[c + 2] - P[a + 2], vx = P[d] - P[a], vy = P[d + 1] - P[a + 1], vz = P[d + 2] - P[a + 2];
     const nx = uy * vz - uz * vy; const cx = (P[a] + P[c] + P[d]) / 3;
-    if (cx > 0.0961) { tipN++; if (nx < 0) tipBad++; }          // the closing fan and the first cap rings (x > 96.1 mm)
+    if (cx > xTip - 0.0003) { tipN++; if (nx < 0) tipBad++; }          // the closing fan and the first cap rings (within 0.3 mm of the tip)
     if (cx < -0.0945) { tailN++; if (nx > 0) tailBad++; }
   }
   assert.ok(tipN >= 20 && tailN > 10, `fans found ${tipN}/${tailN}`);

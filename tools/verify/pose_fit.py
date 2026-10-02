@@ -71,7 +71,9 @@ def main():
         plm = photo_landmarks(pid); names = [n for n in plm if n in mlm]
         if len(names) < 5: print(pid, 'too few landmarks', names); continue
         M = np.array([mlm[n] for n in names]); P = np.array([plm[n] for n in names])
-        r, T = fit(names, M, P, (W, H), rater_prior(pid)); p = r.x; proj = project(M, p, T); err = np.linalg.norm(proj - P, axis=1)
+        prior = rater_prior(pid)
+        if prior[2] == 'left': M = M * np.array([1.0, 1.0, -1.0])        # the photo shows the fish's LEFT flank: use the mirrored (left-side) landmarks
+        r, T = fit(names, M, P, (W, H), prior); p = r.x; proj = project(M, p, T); err = np.linalg.norm(proj - P, axis=1)
         hl_px = p[3] * HL_M
         R = rot(p[0], p[1], p[2]); ox, oy, k = p[4], p[5], p[3]
         # look-at point so that the render centre = photo centre

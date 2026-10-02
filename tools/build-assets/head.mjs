@@ -99,7 +99,10 @@ export function applyHead(params, spec) {
   p.section.stations = { s: sNew, yw: ywNew, nT: nTNew, nB: nBNew, wd: wdNew, s_end: sMax };
   // landmarks the other modules read from `params`
   if (spec.mouth?.corner) p.mouth.corner_s = { v: spec.mouth.corner[0] * HL - cap, prov: 'P', src: 'head_adult.json' };
-  if (spec.eye) { p.eye.center_s = { v: spec.eye.u * HL - cap, prov: 'P', src: 'head_adult.json' }; p.eye.outer_d_over_sl = { v: spec.eye.d_over_hl * HL, prov: 'P', src: 'head_adult.json' }; }
+  if (spec.eye) {
+    p.eye.center_s = { v: spec.eye.u * HL - cap, prov: 'P', src: 'head_adult.json' }; p.eye.outer_d_over_sl = { v: spec.eye.d_over_hl * HL, prov: 'P', src: 'head_adult.json' };
+    for (const k of ['iris_ring_over_outer', 'pupil_over_outer', 'iris_gold', 'orbit_rgb']) if (spec.eye[k] != null) p.eye[k] = { v: spec.eye[k], prov: 'P', src: 'head_adult.json (50 head photos: pupil ~0.09 HL, iris band 0.19-0.20 HL, critic B)' };
+  }
   if (spec.opercle) { const um = Math.max(...spec.opercle.margin.map((q) => q[0])); p.operculum.edge_s = { v: um * HL - cap, prov: 'P', src: 'head_adult.json' }; }
   if (spec.pectoral_base_u && p.fins?.pectoral) p.fins.pectoral = { ...p.fins.pectoral, origin_s: spec.pectoral_base_u * HL - cap };
   p.head_fit = { top: fTop, bottom: fBot };
@@ -275,7 +278,7 @@ export function createHead(surface, params, spec0) {
   function landmarks3d() {
     const out = {}, at = (u, v, off = 0) => { const s = u * HLs - surface.cap, a = surface.alphaAtHeight(s, y0 + v * HLm); return surface.point(s, a, off); };
     out.snout_tip = [tipX, y0, 0];
-    if (line) { out.mouth_corner = at(corner[0], corner[1]); out.lower_jaw_tip = at(0.0, polyV(line, 0.0) - 0.06); }
+    if (line) { out.mouth_corner = at(corner[0], corner[1]); const st = spec.stations, chin = st.length ? st[0].bot + (st.length > 1 ? (st[1].bot - st[0].bot) * (0.012 / Math.max(st[1].u, 0.012)) : 0) : -0.06; out.lower_jaw_tip = at(0.012, chin + 0.012); }       // chin = lowest point of the closed lower jaw's front
     if (spec.maxilla) { const o = spec.maxilla.outline; let b = o[0]; for (const q of o) if (q[0] > b[0]) b = q; out.maxilla_post_end = at(b[0], b[1]); }
     if (spec.nostrils?.anterior) out.nostril = at(spec.nostrils.anterior[0], spec.nostrils.anterior[1]);
     if (eye) {
