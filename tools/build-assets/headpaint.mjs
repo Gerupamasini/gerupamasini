@@ -110,7 +110,7 @@ export const LOOK = {
   capRagged: 0.06, capEdge: 0.04,
   palette: {
     capDark: [60, 46, 26], capMid: [92, 72, 42], capLight: [124, 100, 60], fleck: [176, 142, 88], snout: [84, 76, 60], band: [146, 120, 76], smudge: [104, 92, 100],
-    cheekBronze: [160, 128, 72], cheekPearl: [176, 156, 130], cheekLilac: [160, 142, 152], cheekGreen: [140, 136, 84], cheekGold: [186, 152, 86], cheekBlue: [140, 150, 164],
+    cheekBronze: [160, 128, 72], cheekPearl: [176, 156, 130], cheekLilac: [164, 140, 160], cheekGreen: [130, 134, 70], cheekGold: [198, 164, 74], cheekBlue: [128, 148, 172], cheekPink: [206, 152, 142],
     opercle: [172, 158, 132], opercleLilac: [184, 172, 178], rimGold: [200, 168, 98], copper: [186, 128, 84], preLine: [226, 206, 184],
     jaw: [200, 190, 182], throat: [190, 186, 182], ventral: [200, 194, 184], bran: [176, 174, 180],
     strap: [144, 122, 100], strapLight: [178, 158, 134], groove: [56, 40, 28], gape: [22, 15, 30], lip: [200, 188, 206],
@@ -438,11 +438,13 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
       let pr, pg, pb;
       { const tt = clamp01((t - 0.2) / 0.75), k = tt * 4, i0 = Math.min(Math.floor(k), 3), f = k - i0, A = GRAD[i0], B = GRAD[i0 + 1];
         pr = lerp(A[0], B[0], f); pg = lerp(A[1], B[1], f); pb = lerp(A[2], B[2], f); }
-      const wGold = sstep(0.52, 0.78, n1 * 0.6 + nh * 0.4 + 0.1 * L.hueBias) * 0.6, wLil = sstep(0.52, 0.78, nh2) * 0.7, wGrn = sstep(0.5, 0.78, n2 * 0.5 + nh * 0.5) * 0.55, wBlue = sstep(0.55, 0.82, nh2 * 0.5 + n1 * 0.5) * 0.5 * sstep(0.4, 0.8, t);
+      const wGold = sstep(0.50, 0.76, n1 * 0.6 + nh * 0.4 + 0.1 * L.hueBias) * 0.75, wLil = sstep(0.52, 0.78, nh2) * 0.75, wGrn = sstep(0.50, 0.76, n2 * 0.5 + nh * 0.5) * 0.65, wBlue = sstep(0.55, 0.82, nh2 * 0.5 + n1 * 0.5) * 0.55 * sstep(0.4, 0.8, t);
+      const wPink = sstep(0.58, 0.85, nh * 0.5 + (1 - n1) * 0.5) * 0.6 * sstep(0.3, 0.55, t) * (1 - sstep(0.85, 0.98, t));
       pr += (PAL.cheekGold[0] - pr) * wGold; pg += (PAL.cheekGold[1] - pg) * wGold; pb += (PAL.cheekGold[2] - pb) * wGold;
       pr += (PAL.cheekLilac[0] - pr) * wLil; pg += (PAL.cheekLilac[1] - pg) * wLil; pb += (PAL.cheekLilac[2] - pb) * wLil;
       pr += (PAL.cheekGreen[0] - pr) * wGrn; pg += (PAL.cheekGreen[1] - pg) * wGrn; pb += (PAL.cheekGreen[2] - pb) * wGrn;
       pr += (PAL.cheekBlue[0] - pr) * wBlue; pg += (PAL.cheekBlue[1] - pg) * wBlue; pb += (PAL.cheekBlue[2] - pb) * wBlue;
+      pr += (PAL.cheekPink[0] - pr) * wPink; pg += (PAL.cheekPink[1] - pg) * wPink; pb += (PAL.cheekPink[2] - pb) * wPink;
       const lumP = 0.92 + 0.16 * n1 + 0.06 * (n2 - 0.5); pr *= lumP; pg *= lumP; pb *= lumP;
       const vent = sstep(0.60, 0.95, t);
       pr = lerp(pr, PAL.throat[0], vent); pg = lerp(pg, PAL.throat[1], vent); pb = lerp(pb, PAL.throat[2], vent);

@@ -101,9 +101,10 @@ test('bakeHeadIntoBody: head region replaced by the down-sampled head atlas, res
   }
   assert.ok(md / cnt < 14, `baked region matches the head atlas (mean |d| ${(md / cnt).toFixed(1)})`);
   assert.ok(md / cnt >= 0, 'sampled');
-  // continuous at the end of the baked zone (no step vs the original body)
-  let step = 0; const xs = Math.round(0.262 * (Wb - 1)); for (let y = 0; y < Hb - 1; y += 3) for (let c = 0; c < 3; c++) step = Math.max(step, Math.abs(bt.albedo.data[(y * Wb + xs) * 4 + c] - bt.albedo.data[(y * Wb + xs + 3) * 4 + c]));
-  assert.ok(step < 40, `step at the end of the bake zone ${step}`);
+  // continuous at the end of the baked zone: no new step compared with the original body atlas
+  const stepAt = (img, y, x) => { let m = 0; for (let c = 0; c < 3; c++) m = Math.max(m, Math.abs(img.data[(y * Wb + x) * 4 + c] - img.data[(y * Wb + x + 1) * 4 + c])); return m; };
+  let worstNew = 0; for (let y = 0; y < Hb - 1; y += 2) for (let x = Math.round(0.257 * (Wb - 1)); x < Math.round(0.268 * (Wb - 1)); x++) worstNew = Math.max(worstNew, stepAt(bt.albedo, y, x) - stepAt({ data: before }, y, x));
+  assert.ok(worstNew < 14, `new step introduced by the bake ${worstNew}`);
   for (const k of ['albedo', 'normal', 'orm']) for (let i = 0; i < Wb * 4; i++) assert.equal(bt[k].data[(Hb - 1) * Wb * 4 + i], bt[k].data[i], `${k} wrap row`);
 });
 
