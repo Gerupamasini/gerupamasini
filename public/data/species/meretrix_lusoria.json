@@ -1,0 +1,46 @@
+{
+  "id": "meretrix_lusoria",
+  "names": { "ja": "ハマグリ", "sci": "Meretrix lusoria", "en": "Common orient clam" },
+  "taxon": { "group": "mollusc", "family": "Veneridae" },
+  "locomotion": "burrow",
+  "collectable": true,
+  "protected": false,
+  "model": { "placeholder": "hamaguri", "modelLength_mm": 60, "viewDistance_m": 8, "driver": "hamaguri" },
+  "size": {
+    "length_mm": { "min": 25, "max": 90, "mean": 55, "sd": 12 },
+    "weightCoef": { "a": 0.00015, "b": 3.0 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": false },
+  "stages": [
+    { "id": "juvenile", "ja": "稚貝", "maxLength_mm": 30 },
+    { "id": "adult", "ja": "成貝" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "spawn": [
+    {
+      "tags": ["shallow", "waterline", "exposed_sand"],
+      "substrate": ["sand", "muddy_sand"],
+      "depth_m": [-0.3, 0.5],
+      "tide": "any",
+      "density_per_100m2": 1.5,
+      "group": [2, 6],
+      "maxPopulation": 40
+    }
+  ],
+  "brain": { "tree": "bivalve_buried", "params": { "fleeDistance_m": 0.8, "restMean_s": 12 } },
+  "capture": { "tools": ["hand_net"], "baseDifficulty": 0.2, "alertPenalty": 0.2 },
+  "encyclopedia": {
+    "description": "内湾の河口近くの砂泥干潟にすむ二枚貝。殻は丸みのある三角形で、表面はなめらかで光沢がある。模様と色は個体ごとに大きく異なる。砂に浅く潜り、水管だけを砂の上に出して海水中の植物プランクトンをこし取って食べる。驚くと水管を引っこめて殻を閉じ、足を使ってさらに深く潜る。",
+    "habitatHint": "水際や浅い水中の砂地。砂の表面に小さな水管の穴が二つ並ぶ。",
+    "behaviors": [
+      { "id": "siphon_extend", "ja": "水管を出す", "hint": "砂の上に水管がのぞく" },
+      { "id": "filter_feeding", "ja": "ろ過摂食", "hint": "水管をゆっくり伸び縮みさせる" },
+      { "id": "close_shell", "ja": "殻を閉じる", "hint": "近づくと水管を引っこめる" },
+      { "id": "burrow", "ja": "潜砂", "hint": "足を伸ばして砂に潜る" }
+    ],
+    "placeholderModel": false
+  }
+}

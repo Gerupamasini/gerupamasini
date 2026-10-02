@@ -1,0 +1,19 @@
+{
+  "id": "bivalve_buried",
+  "tickHz": { "near": 2, "mid": 1, "far": 0.25 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$fleeDistance_m" } },
+      { "type": "action", "name": "flee", "args": { "distance_m": 0, "urgency": 1 }, "interrupt": true }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "exposed" },
+      { "type": "action", "name": "rest", "args": { "seconds": [10, 20] } }
+    ]},
+    { "type": "random", "weights": [0.75, 0.15, 0.1], "children": [
+      { "type": "action", "name": "forage", "args": { "seconds": [15, 40] } },
+      { "type": "action", "name": "rest", "args": { "seconds": "$restMean_s" } },
+      { "type": "cooldown", "seconds": 90, "child": { "type": "action", "name": "burrow", "args": { "seconds": [6, 10] } } }
+    ]}
+  ]}
+}
