@@ -28,7 +28,7 @@ export function createWaves({ windDir = 0.7, depth = 0.6, seed = 7 }: { windDir?
     const ln = Math.log(lambda / 0.2);
     // near-calm: the viewer's pool uses 0.012; a light breeze on the bay is not much steeper (gusts roughen patches)
     const steep = 0.004 + 0.009 * Math.exp(-(ln * ln) / 0.9);
-    const amp = (steep * lambda) / (2 * Math.PI) * (0.8 + 0.4 * rnd());
+    const amp = (steep * lambda) / (2 * Math.PI) * (0.8 + 0.4 * rnd()) * (lambda < 0.05 ? 0.55 : 1);
     // the long components come from one side; the short ones spread wider
     const spread = 0.35 + 0.95 * (i / (lambdas.length - 1));
     const a = windDir + (rnd() * 2 - 1) * spread;
@@ -109,7 +109,8 @@ vec3 waveHess(vec2 p, float t, float minLambda) {
 // the surface curvature focuses the light, dimmer cells between them.
 float waveCaustic(vec2 p, vec3 L, float D, float t, float fp, float gain) {
   vec2 s = p + L.xz * D;
-  vec3 H = waveHess(s, t, fp * 5.0) * (D * gain);
+  // capillaries (under ~5 cm) are damped before they focus anything; the net on the bed comes from the 5–30 cm ripples
+  vec3 H = waveHess(s, t, max(fp * 5.0, 0.05)) * (D * gain);
   float g = 0.2513;
   float det = (1.0 + H.x * g) * (1.0 + H.z * g) - H.y * H.y * g * g;
   float soft = 0.09 + 6.0 * fp / max(D, 1e-3);
