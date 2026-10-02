@@ -90,13 +90,75 @@ function bedDepth(b, x, y, z) {
   return b.depth * mx * mz * smoothstep(ye + b.y[0], ye + b.y[1], y);
 }
 
+/**
+ * Plan-view (top) widening of the sculpt (sculpt.plan): the outline is stretched across (x) by a factor s(z) — a
+ * Catmull-Rom curve through the knots [[z, s], …] (front to rear), 1 in front of the first and held at the last
+ * behind it. Every cross-section keeps its shape (scaled in width), so the side silhouette (the y–z projection) is
+ * exactly the same, and a factor of 1 in front of the trunk leaves the shoulders and the neck base — the neck
+ * sleeve's field (bodyMesh.sleeveAt) — untouched. Returns s(z) and ds/dz.
+ */
+export function planScale(plan, z) {
+  const K = plan.knots;
+  if (z >= K[0][0]) return [K[0][1], 0];
+  if (z <= K[K.length - 1][0]) return [K[K.length - 1][1], 0];
+  let i = 0;
+  while (z < K[i + 1][0]) i++;
+  const P = (j) => K[Math.max(0, Math.min(K.length - 1, j))];
+  const [z0, s0] = P(i - 1);
+  const [z1, s1] = P(i);
+  const [z2, s2] = P(i + 1);
+  const [z3, s3] = P(i + 2);
+  const h = z2 - z1;
+  // tangents (per unit of z) from the neighbouring knots; flat at the ends
+  const m1 = i === 0 ? 0 : (s2 - s0) / (z2 - z0);
+  const m2 = i + 1 === K.length - 1 ? 0 : (s3 - s1) / (z3 - z1);
+  const t = (z - z1) / h;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const s = (2 * t3 - 3 * t2 + 1) * s1 + (t3 - 2 * t2 + t) * h * m1 + (-2 * t3 + 3 * t2) * s2 + (t3 - t2) * h * m2;
+  const ds = ((6 * t2 - 6 * t) * s1 + (3 * t2 - 4 * t + 1) * h * m1 + (-6 * t2 + 6 * t) * s2 + (3 * t2 - 2 * t) * h * m2) / h;
+  return [s, ds];
+}
+
+/** Height weight of the plan widening (sculpt.plan.y = [y0, y1, y2, y3], base) and its derivative. */
+function planBand(plan, y) {
+  const [y0, y1, y2, y3] = plan.y;
+  const b = plan.base;
+  const a = smoothstep(y0, y1, y);
+  const e = 1 - smoothstep(y2, y3, y);
+  const da = y > y0 && y < y1 ? (6 * (y - y0) * (y1 - y)) / (y1 - y0) ** 3 : 0;
+  const de = y > y2 && y < y3 ? (-6 * (y - y2) * (y3 - y)) / (y3 - y2) ** 3 : 0;
+  return [b + (1 - b) * a * e, (1 - b) * (da * e + a * de)];
+}
+
 /** Build the SDF function (mm → mm) from the sculpt description. */
 export function makeBodySDF(sculpt) {
   const prims = sculpt.prims;
   const cuts = sculpt.cuts || [];
   const adds = sculpt.adds || []; // smooth-unioned after the cuts (eyelid folds over the eye openings)
   const bed = sculpt.bed;
+  const plan = sculpt.plan;
   const k = sculpt.smooth;
+  const field = makeField(prims, cuts, adds, k);
+  return (x, y, z) => {
+    let d;
+    if (plan) {
+      const [c, dc] = planScale(plan, z);
+      if (c !== 1) {
+        // across-scale s(y, z) = 1 + (c(z) − 1)·w(y): full in the band of the folded wing, `base` of it under the belly
+        const [w, dw] = planBand(plan, y);
+        const s = 1 + (c - 1) * w;
+        const u = x / s;
+        // (the stretched field, divided by its gradient's growth along y and z so it stays ≈ a distance; across it
+        // is s times flatter, which only errs toward the outline)
+        d = field(u, y, z) / Math.hypot(1, (u * dc * w) / s, (u * (c - 1) * dw) / s);
+      } else d = field(x, y, z);
+    } else d = field(x, y, z);
+    return bed ? d + bedDepth(bed, x, y, z) : d;
+  };
+}
+
+function makeField(prims, cuts, adds, k) {
   return (x, y, z) => {
     let d = 1e9;
     for (let i = 0; i < prims.length; i++) {
@@ -108,7 +170,7 @@ export function makeBodySDF(sculpt) {
       d = smax(d, -primDist(c, x, y, z), c.k ?? 1.5);
     }
     for (let i = 0; i < adds.length; i++) d = smin(d, primDist(adds[i], x, y, z), adds[i].k ?? 1);
-    return bed ? d + bedDepth(bed, x, y, z) : d;
+    return d;
   };
 }
 
