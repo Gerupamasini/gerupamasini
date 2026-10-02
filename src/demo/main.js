@@ -4,6 +4,7 @@ import { Environment } from '../world/Environment.js';
 import { Tide } from '../world/Tide.js';
 import { Terrain } from '../world/Terrain.js';
 import { PreyField } from '../world/PreyField.js';
+import { flockSpawnPoints, findShoreZ as shoreZAt } from '../world/spawn.js';
 import { KentishPloverManager } from '../birds/kentishPlover/KentishPloverLOD.js';
 import { getGeometries } from '../birds/kentishPlover/KentishPloverModel.js';
 import { GROUND_BOUNCE } from '../birds/kentishPlover/KentishPloverMaterials.js';
@@ -47,23 +48,18 @@ document.getElementById('loading').remove();
 
 function findShoreZ(x) {
   // z where the ground is ~0.25 m above the current water level (feeding band near the edge)
-  for (let z = 80; z > -140; z -= 0.5) if (terrain.heightAt(x, z) < tide.level + 0.25) return z;
-  return 0;
+  return shoreZAt(terrain, tide.level, x);
 }
 
 let seedBase = Number(q.get('seed') ?? 3);
 function spawnFlock(n) {
   for (const b of birds.all) scene.remove(b.model.object);
   birds.all.length = 0;
-  const cx = Number(q.get('bx') ?? 0);
-  const cz = findShoreZ(cx) + 1.5;
+  // always on exposed ground, whatever the hour / tide (src/world/spawn.js)
+  const pts = flockSpawnPoints(terrain, tide, n, { cx: Number(q.get('bx') ?? 0) });
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + i;
-    const r = 1.5 + (i % 5) * 1.4;
-    const x = cx + Math.cos(a) * r * 2.2;
-    const z = cz + Math.sin(a) * r * 0.8;
     const palette = i % 3 === 1 ? 'femaleBreeding' : 'maleBreeding';
-    birds.spawn({ seed: seedBase * 100 + i, palette, position: new THREE.Vector3(x, 0, z), heading: Math.random() * 6.28 });
+    birds.spawn({ seed: seedBase * 100 + i, palette, position: new THREE.Vector3(pts[i].x, 0, pts[i].z), heading: Math.random() * 6.28 });
   }
 }
 spawnFlock(Number(q.get('birds') ?? 14));

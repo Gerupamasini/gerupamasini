@@ -21,6 +21,7 @@ import { makeRng, wrapAngle } from '../../src/core/math.js';
 import { Tide } from '../../src/world/Tide.js';
 import { Terrain } from '../../src/world/Terrain.js';
 import { PreyField } from '../../src/world/PreyField.js';
+import { flockSpawnPoints, findShoreZ as shoreZAt } from '../../src/world/spawn.js';
 import { KentishPloverManager } from '../../src/birds/kentishPlover/KentishPloverLOD.js';
 import { KentishPloverModel } from '../../src/birds/kentishPlover/KentishPloverModel.js';
 import { KentishPloverAnimator } from '../../src/birds/kentishPlover/KentishPloverAnimator.js';
@@ -132,17 +133,12 @@ function makeWorld() {
   const prey = new PreyField(terrain, tide);
   const world = { terrain, tide, prey, threats: [], time: 0, context: 'foraging', birds: null, player: null };
   const mgr = new KentishPloverManager(world, new THREE.Scene());
-  const findShoreZ = (x) => {
-    for (let z = 80; z > -140; z -= 0.5) if (terrain.heightAt(x, z) < tide.level + 0.25) return z;
-    return 0;
-  };
+  const findShoreZ = (x) => shoreZAt(terrain, tide.level, x);
   // src/demo/main.js spawnFlock(14), seed 3
   const n = 14;
-  const cz = findShoreZ(0) + 1.5;
+  const pts = flockSpawnPoints(terrain, tide, n);
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + i;
-    const r = 1.5 + (i % 5) * 1.4;
-    mgr.spawn({ seed: 300 + i, palette: i % 3 === 1 ? 'femaleBreeding' : 'maleBreeding', position: new THREE.Vector3(Math.cos(a) * r * 2.2, 0, cz + Math.sin(a) * r * 0.8), heading: Math.random() * 6.28, lods: [2], shadows: false });
+    mgr.spawn({ seed: 300 + i, palette: i % 3 === 1 ? 'femaleBreeding' : 'maleBreeding', position: new THREE.Vector3(pts[i].x, 0, pts[i].z), heading: Math.random() * 6.28, lods: [2], shadows: false });
   }
   const player = { type: 'human', pos: new THREE.Vector3(6, 0, findShoreZ(0) + 55), vel: new THREE.Vector3() };
   world.threats.push(player);
