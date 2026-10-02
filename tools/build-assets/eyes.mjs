@@ -57,7 +57,7 @@ const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / 
 // Eye socket of loft.mjs (displacement(): pocket + raised orbital rim), in units of the eye OUTER RADIUS Ro.
 // The orbit ring and the ball depth are fitted to the skin *including* this pocket. Pass genome.socket = null to fit to the
 // bare surface, or an object with the same keys if loft.mjs changes.      [E: mirrors loft.mjs displacement() eye section; wide + gentle so that the LOD0 loft mesh (~1 mm spacing) resolves it]
-export const SOCKET_LOFT = { pocket_depth: 0.25, pocket_radius: 1.30, rim_height: 0.05, rim_radius: 1.15, rim_width: 0.45 };
+export const SOCKET_LOFT = { pocket_depth: 0.18, pocket_radius: 1.30, rim_height: 0.03, rim_radius: 1.15, rim_width: 0.45 };
 export function socketDisplacement(rr, Ro, sk = SOCKET_LOFT) { return socketDisp(rr, Ro, sk); }
 function socketDisp(rr, Ro, sk) {
   if (!sk) return 0;
@@ -192,8 +192,8 @@ function makeIrisTextures(rng, P) {
   for (let i = 0; i < nb; i++) blotches.push({ ph: rng() * TAU, t: P.ti + 0.04 + rng() * 0.10, r: 0.04 + rng() * 0.06, k: 0.6 + rng() * 0.4, el: 1 + rng() * 1.2 });
   const g = P.gold, Lf = Math.pow(clamp(P.irisL / 44, 0.45, 1.5), 0.8);
   const C = {
-    rimPale: [214, 205, 178], rimGold: [248, 212, 112], midPale: [158, 146, 120], midGold: [204, 158, 56],
-    outPale: [90, 82, 68], outGold: [124, 88, 34], limbus: [30, 25, 18], pupil: [15, 16, 20],
+    rimPale: [214, 205, 178], rimGold: [236, 196, 112], midPale: [150, 136, 110], midGold: [184, 130, 52],
+    outPale: [84, 74, 60], outGold: [108, 70, 30], limbus: [30, 25, 18], pupil: [15, 16, 20],
     sclDark: [52, 49, 40], sclBright: [140, 136, 118], vign: [22, 20, 17], sheen: [60, 118, 120],
   };
   const m3 = (a, b, t) => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
@@ -289,7 +289,7 @@ function makeOrbitTexture(rng, headRgb, w = 64, h = 64) {
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const v = (y + 0.5) / h, ph = (x + 0.5) / w * TAU;
     const up = 0.5 + 0.5 * Math.cos(ph - Math.PI / 2);                 // ring top (psi = 90 deg) a little darker (shadowed by the brow)
-    const k = smoothstep(0.30, 0.97, v);
+    const k = smoothstep(0.10, 0.62, v);
     const shade = mix(1 - 0.22 * up + 0.08 * nz(ph), 1, k);
     const o = (y * w + x) * 4;
     for (let c = 0; c < 3; c++) data[o + c] = Math.round(clamp(mix(dark[c], headRgb[c], k) * shade, 0, 255));
@@ -344,7 +344,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1, detail }) {
   if (genome.pupil_d_over_outer == null) tp = clamp(tp + vr * 0.03 * gauss(draws[2], draws[3]), 0.28, 0.62);
   const adjusted = [];
   if (tp > ti - 0.04) { tp = ti - 0.04; adjusted.push('pupil clamped to iris_ring - 0.04 (06 §6.6.1)'); }
-  const irisL = genome.iris_L ?? clamp(44 + vr * 7 * gauss(draws[4], draws[5]), 26, 58);
+  const irisL = genome.iris_L ?? clamp((E.iris_L?.v ?? 44) + vr * 7 * gauss(draws[4], draws[5]), 26, 62);
   const gold = genome.iris_gold ?? clamp((E.iris_gold?.v ?? 0.62) + vr * 0.18 * gauss(draws[6], draws[7]), 0.2, 1);
   const scleraBright = genome.sclera_bright ?? clamp(0.25 + vr * 0.15 * gauss(draws[8], draws[9]), 0, 1);
   const sheen = genome.iris_sheen ?? 0.25;

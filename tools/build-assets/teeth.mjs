@@ -25,7 +25,7 @@ function cone(out, c, dir, up, len, rad, sides = 5, bend = 0.25) {
  * lips: body.mouth.lips (per mouth loop: x, y = lip height, zR, zL); cornerX: x of the mouth corner.
  * Returns { positions, normals, uvs, indices, attrs: { _JAW } } in body coordinates.
  */
-export function buildTeeth({ lips, SL = 0.19, nDentary = 10, nMaxilla = 6, seed = 1 }) {
+export function buildTeeth({ lips, SL = 0.19, nDentary = 14, nMaxilla = 12, nPremax = 4, seed = 1 }) {
   const out = { positions: [], normals: [], uvs: [], indices: [], jaw: [], curJaw: 1 };
   const usable = lips.filter((l) => l.shrink >= 0.999);                       // rings between the snout and the corner (not the throat taper)
   if (usable.length < 4) return null;
@@ -33,18 +33,26 @@ export function buildTeeth({ lips, SL = 0.19, nDentary = 10, nMaxilla = 6, seed 
   const at = (t) => { const x = x0 + (x1 - x0) * t; let i = 0; while (i < usable.length - 2 && usable[i + 1].x > x) i++;
     const a = usable[i], b = usable[i + 1], f = Math.min(1, Math.max(0, (a.x - x) / (a.x - b.x || 1))); return { x, y: a.y + (b.y - a.y) * f, zR: a.zR + (b.zR - a.zR) * f, zL: a.zL + (b.zL - a.zL) * f }; };
   let rs = (seed * 9301 + 49297) % 233280; const rnd = () => ((rs = (rs * 9301 + 49297) % 233280) / 233280);
-  const len = 0.0009, rad = 0.00018;
-  // dentary: follows the lower jaw (_JAW = 1), tips point up and slightly forward-inward; recurved backwards
+  const len = 0.0011, rad = 0.0002;
+  // dentary: follows the lower jaw (_JAW = 1), tips point up and slightly forward-inward; recurved backwards.  Salmonid dentary teeth are a single row of ~10-15 per side.
   out.curJaw = 1;
   for (let k = 0; k < nDentary; k++) for (const side of [1, -1]) {
-    const t = (k + 0.5) / nDentary * 0.92, p = at(t), z = side > 0 ? p.zR : p.zL, inward = -Math.sign(z) * 0.00055 * (0.6 + 0.4 * (1 - t));
-    cone(out, [p.x, p.y - 0.0001, z + inward], [0.1, 1, -Math.sign(z) * 0.25], [1, 0, 0], len * (0.8 + 0.4 * rnd()), rad);
+    const t = (k + 0.5 + 0.25 * (rnd() - 0.5)) / nDentary * 0.94, p = at(t), z = side > 0 ? p.zR : p.zL, inward = -Math.sign(z) * 0.0006 * (0.6 + 0.4 * (1 - t));
+    cone(out, [p.x, p.y - 0.0001, z + inward], [0.1, 1, -Math.sign(z) * 0.25], [1, 0, 0], len * (0.75 + 0.5 * rnd()) * (1 - 0.25 * t), rad * (0.9 + 0.2 * rnd()));
   }
-  // maxilla: static (upper jaw), shorter row in the front half, tips pointing down
+  // maxilla (upper jaw, static): a row along its whole length, tips pointing down; premaxilla: a few at the very front
   out.curJaw = 0;
   for (let k = 0; k < nMaxilla; k++) for (const side of [1, -1]) {
-    const t = (k + 0.5) / nMaxilla * 0.55, p = at(t), z = side > 0 ? p.zR : p.zL, inward = -Math.sign(z) * 0.0006;
-    cone(out, [p.x, p.y + 0.0001, z + inward], [0.1, -1, -Math.sign(z) * 0.2], [1, 0, 0], len * 0.8 * (0.8 + 0.4 * rnd()), rad * 0.9);
+    const t = 0.16 + (k + 0.5 + 0.25 * (rnd() - 0.5)) / nMaxilla * 0.78, p = at(t), z = side > 0 ? p.zR : p.zL, inward = -Math.sign(z) * 0.0007;
+    cone(out, [p.x, p.y + 0.0001, z + inward], [0.1, -1, -Math.sign(z) * 0.2], [1, 0, 0], len * 0.8 * (0.8 + 0.4 * rnd()) * (1 - 0.3 * t), rad * 0.9);
   }
+  for (let k = 0; k < nPremax; k++) for (const side of [1, -1]) {
+    const t = 0.02 + (k + 0.5) / nPremax * 0.13, p = at(t), z = side > 0 ? p.zR : p.zL, inward = -Math.sign(z) * 0.0005;
+    cone(out, [p.x, p.y + 0.0001, z + inward], [0.15, -1, -Math.sign(z) * 0.15], [1, 0, 0], len * 0.9 * (0.8 + 0.4 * rnd()), rad);
+  }
+  // vomerine patch on the roof and tongue teeth on the floor, a few small teeth on the midline (static / jaw-following), pointing inward
+  const mid = at(0.55);
+  out.curJaw = 0; for (let k = 0; k < 3; k++) cone(out, [mid.x - k * 0.0006, mid.y + 0.0022, (rnd() - 0.5) * 0.0006], [0.05, -1, 0], [1, 0, 0], len * 0.55, rad * 0.8);
+  out.curJaw = 1; for (let k = 0; k < 3; k++) cone(out, [mid.x - k * 0.0006 - 0.0006, mid.y - 0.0024, (rnd() - 0.5) * 0.0006], [0.05, 1, 0], [1, 0, 0], len * 0.55, rad * 0.8);
   return { positions: Float32Array.from(out.positions), normals: Float32Array.from(out.normals), uvs: Float32Array.from(out.uvs), indices: Uint32Array.from(out.indices), attrs: { _JAW: Float32Array.from(out.jaw) } };
 }
