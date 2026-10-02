@@ -55,6 +55,7 @@ export class World {
     grid.baseHeights = grid.heights.slice();
     grid.pitMask = carveCoarse(grid, pits);
     const terrain = new Terrain(grid, map.substrate.palette, pits);
+    terrain.setDetail(preset.surfaceDetail > 0);
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain, 5, pits);
     terrain.setSpill(habitat.poolLevels);

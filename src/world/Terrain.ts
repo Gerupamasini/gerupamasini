@@ -98,6 +98,8 @@ export class Terrain {
   private readonly uSunUp: IUniform<number> = { value: 1 };
   private readonly uSunDirT: IUniform<Vector3> = { value: new Vector3(0, 1, 0) };
   private readonly uCausticGain: IUniform<number> = { value: 2.6 };
+  /** 1: grains, burrows and micro relief up close; 0: the cheap far-field shading only (low quality) */
+  private readonly uDetail: IUniform<number> = { value: 1 };
   private waves: WaveSet | null = null;
 
   constructor(grid: TerrainGrid, palette: Substrate[], pits: FeedingPit[] = []) {
@@ -327,6 +329,7 @@ export class Terrain {
       shader.uniforms.uSunUp = this.uSunUp;
       shader.uniforms.uSunDirT = this.uSunDirT;
       shader.uniforms.uCausticGain = this.uCausticGain;
+      shader.uniforms.uDetail = this.uDetail;
       if (this.waves) Object.assign(shader.uniforms, this.waves.uniforms);
       shader.uniforms.uSpillTex = this.uSpill;
       shader.uniforms.uHalf = { value: this.half };
@@ -344,6 +347,7 @@ uniform float uTime;
 uniform float uSunUp;
 uniform vec3 uSunDirT;
 uniform float uCausticGain;
+uniform float uDetail;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
 ${WAVES_GLSL}
@@ -454,8 +458,8 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   diffuseColor.rgb *= detail;
   // ---- up close: the grains themselves (after MahazeViewer's sediment). Medium quartz grains and coarser shell
   // bits sit on a silty base; each is a disc with a dark rim and a dome in the normal. Faded by pixel footprint.
-  float det1 = 1.0 - smoothstep(0.1, 0.35, fw * 0.5 / 1.4);
-  float det2 = 1.0 - smoothstep(0.08, 0.3, fw * 0.5 / 3.4);
+  float det1 = (1.0 - smoothstep(0.1, 0.35, fw * 0.5 / 1.4)) * uDetail;
+  float det2 = (1.0 - smoothstep(0.08, 0.3, fw * 0.5 / 3.4)) * uDetail;
   if (det2 > 0.001) {
     vec2 o1, o2;
     vec3 g1 = grains(mm / 1.4, o1);
@@ -481,7 +485,7 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     gQuartz = disc1 * step(0.85, g1.z) * step(g1.z, 0.95) + disc2 * step(0.82, g2.z) * step(g2.z, 0.93);
   }
   // mud: faecal pellets (small dark ovals) on the smooth silt
-  float det4 = 1.0 - smoothstep(0.1, 0.4, fw * 0.5 / 5.0);
+  float det4 = (1.0 - smoothstep(0.1, 0.4, fw * 0.5 / 5.0)) * uDetail;
   if (det4 > 0.001 && isSand < 0.999) {
     vec2 o4;
     vec3 g4 = grains(mm / 5.0 + 41.0, o4);
@@ -491,7 +495,7 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   }
   // ---- burrow openings: the holes of アナジャコ, スナモグリ and worms, dark with a low collar or a mound of
   // ejected sand; thick on muddy sand, a few on clean sand, none in a pit
-  {
+  if (uDetail > 0.5) {
     vec2 ob;
     vec3 gb = grains(vWorldPos.xz / 0.3 + 3.0, ob);
     float holeP = mix(0.1, 0.7, muddy) * (1.0 - vPit) * (1.0 - 0.5 * smoothstep(2.5, 3.5, vSubstrate));
@@ -510,7 +514,7 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     gNrmAdd += away * (0.6 + 0.6 * mound) * collar - away * 1.2 * hole;
   }
   // ---- micro relief: silt lumps at the millimetre and centimetre scale, faded with distance
-  {
+  if (uDetail > 0.5) {
     vec3 nd = vnoiseD(mm * 0.35) * 0.5 + vnoiseD(mm * 1.1 + 7.0) * 0.25;
     float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand));
     vec3 nd2 = vnoiseD(mm * 0.055 + 3.0);
@@ -602,6 +606,11 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     this.uTime.value = time;
     this.uSunUp.value = sunUp;
     if (sunDir) this.uSunDirT.value.copy(sunDir);
+  }
+
+  /** Close-up surface detail on or off (quality preset). */
+  setDetail(on: boolean): void {
+    this.uDetail.value = on ? 1 : 0;
   }
 
   /** Share the water's wave set so the caustics follow the ripples (call before the first frame). */

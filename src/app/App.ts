@@ -277,6 +277,7 @@ export class App {
   async updateSettings(patch: Partial<SettingsData>): Promise<void> {
     this.settings = { ...this.settings, ...patch };
     this.renderer.setQuality(this.settings.quality);
+    this.world?.terrain.setDetail(this.renderer.preset.surfaceDetail > 0);
     if (this.player) this.player.eyeHeight = this.settings.eyeHeight;
     this.applyHeroSetting();
     await saveSettings(this.settings);

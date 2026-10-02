@@ -39,6 +39,8 @@ try {
     args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl', '--no-sandbox'],
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  // the software renderer can stall for a long time on a heavy frame (shader compiles, environment refresh)
+  page.setDefaultTimeout(180000);
   const errors = [];
   page.on('pageerror', (e) => { errors.push(`pageerror: ${e.message}`); console.error('pageerror:', e.message, e.stack?.split('\n').slice(0, 3).join(' | ')); });
   // a blocked font CDN in a sandbox is not a page error: resource failures are reported but do not fail the run
