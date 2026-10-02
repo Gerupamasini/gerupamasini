@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import type { Terrain } from './Terrain';
+import { WAVES_GLSL, type WaveSet } from './Waves';
 
 /** Tiling wave-slope map from a small random spectrum (two-sided, so it tiles), with mipmaps against far shimmer. */
 export function makeWaveNormal(S = 256): DataTexture {
@@ -48,6 +49,8 @@ export interface WaterLight {
   fogColor: Color;
   fogDensity: number;
   env: CubeTexture | null;
+  /** 0 at night, 1 in full day: scales the glow of the water itself */
+  day: number;
 }
 
 const NOISE_GLSL = /* glsl */ `
@@ -70,11 +73,13 @@ export class WaterPass {
   private readonly quad: FullScreenQuad;
   level = 0;
 
-  constructor(terrain: Terrain) {
+  constructor(terrain: Terrain, waves: WaveSet) {
     this.uniforms = {
       tColor: { value: null as unknown },
       tDepth: { value: null as unknown },
-      tNormal: { value: makeWaveNormal() },
+      uWaveA: waves.uniforms.uWaveA,
+      uWaveB: waves.uniforms.uWaveB,
+      uWaveGain: waves.uniforms.uWaveGain,
       tHeight: { value: terrain.heightTexture },
       tSpill: { value: terrain.spillTexture },
       tEnv: { value: null as CubeTexture | null },
@@ -90,9 +95,10 @@ export class WaterPass {
       uAmbient: { value: 0.7 },
       uFogColor: { value: new Color() },
       uFogDensity: { value: 0.0024 },
-      uWaterCol: { value: new Color(0.12, 0.22, 0.19) },
-      uAbsorb: { value: new Vector3(1.1, 0.42, 0.5) },
-      uScatter: { value: 0.45 },
+      // the water itself: silty, olive-green, seen wherever the view path through it is long (after MahazeViewer)
+      uWaterFog: { value: new Color(0.16, 0.172, 0.14) },
+      uFogW: { value: 2.0 },      // per metre of path through the open water
+      uFogPool: { value: 1.0 },   // tide pools have settled and are clearer
       uRefr: { value: 0.6 },
       uRes: { value: new Vector2(1, 1) },
       uEnvI: { value: 0.9 },
@@ -103,14 +109,15 @@ export class WaterPass {
       depthWrite: false,
       vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
       fragmentShader: /* glsl */ `
-        uniform sampler2D tColor, tDepth, tNormal, tHeight, tSpill;
+        uniform sampler2D tColor, tDepth, tHeight, tSpill;
         uniform samplerCube tEnv;
         uniform mat4 uProjInv, uCamWorld;
-        uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterCol, uAbsorb;
-        uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uScatter, uEnvI, uHalf, uRefr;
+        uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog;
+        uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr;
         uniform vec2 uRes;
         varying vec2 vUv;
         ${NOISE_GLSL}
+        ${WAVES_GLSL}
 
         vec3 worldPos(vec2 uv, float d) {
           vec4 c = vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
@@ -120,17 +127,22 @@ export class WaterPass {
         vec2 tuv(vec2 xz) { return (xz + uHalf) / (2.0 * uHalf); }
         float groundAt(vec2 xz) { return texture2D(tHeight, tuv(xz)).r; }
         float spillAt(vec2 xz) { return texture2D(tSpill, tuv(xz)).r; }
-        vec2 nrm(vec2 p) { return texture2D(tNormal, p).xy * 2.0 - 1.0; }
-
-        // ripples: four scales drifting in different directions; gusts make the surface rougher in patches; pools are calm
+        // the surface slope from the wave set (random directions and speeds, nothing periodic), band-limited to the
+        // pixel footprint so distant water does not shimmer; gusts roughen the surface in drifting patches; pools are calm
         vec3 waterNormal(vec2 p, float dist, float calm) {
-          float gust = smoothstep(-0.4, 0.6, snoise(p * 0.08 + uTime * vec2(0.03, 0.02)));
-          vec2 s = nrm(p * 2.0 + uTime * vec2(0.35, 0.2)) * 0.5;
-          s += nrm(p * 5.2 + uTime * vec2(-0.5, 0.38)) * 0.35;
-          s += nrm(p * 14.8 + uTime * vec2(0.9, -0.7)) * 0.25 * (1.0 - smoothstep(8.0, 40.0, dist));
-          s += nrm(p * 36.0 + uTime * vec2(-1.3, 1.1)) * 0.08 * (1.0 - smoothstep(2.0, 12.0, dist));
-          float amp = mix(0.05, 0.2, gust) * mix(1.0, 0.1, calm);
-          return normalize(vec3(-s.x * amp, 1.0, -s.y * amp));
+          float fp = max(length(fwidth(p)), dist * 0.0015);
+          float gust = 0.65 + 0.7 * smoothstep(-0.4, 0.6, snoise(p * 0.08 + uTime * vec2(0.03, 0.02)));
+          float gain = gust * mix(1.0, 0.22, calm);
+          vec3 g = waveGrad(p, uTime, fp * 4.0) * gain;
+          return normalize(vec3(-g.y, 1.0, -g.z));
+        }
+        // Henyey-Greenstein phase function: the silt scatters the sun forward
+        float hgPhase(float cosT, float g) { float g2 = g * g; return (1.0 - g2) / (4.0 * 3.14159265 * pow(max(1.0 + g2 - 2.0 * g * cosT, 1e-4), 1.5)); }
+        // what the water column itself radiates along a view direction: the silt's olive glow, brighter looking up
+        // toward the lit surface, with the sun's forward-scattered halo
+        vec3 waterGlow(vec3 d) {
+          float mu = dot(d, uSunDir);
+          return uWaterFog * (0.75 + 0.35 * smoothstep(-0.6, 0.8, -d.y)) + uSunCol * 0.035 * hgPhase(mu, 0.72) * uSunUp;
         }
 
         void main() {
@@ -168,13 +180,10 @@ export class WaterPass {
               vec3 refr = texture2D(tColor, uv2).rgb;
               float thick = sky2 ? 1e4 : max(length(P2 - uCamPos) - t, 0.0);
 
-              // absorption and scattering: shallow water is nearly clear, thicker water turns green-grey; pools are clearer
-              vec3 absorb = uAbsorb * mix(1.0, 0.5, calm);
-              float scatterK = uScatter * mix(1.0, 0.4, calm);
-              vec3 T = exp(-absorb * thick);
-              float sc = 1.0 - exp(-scatterK * thick);
-              vec3 inscatter = uWaterCol * (0.3 + 0.7 * uSunUp) * uAmbient;
-              vec3 under = refr * T + inscatter * sc;
+              // turbidity: the bottom fades into the silty water over the length of the view path through it
+              // (a few tens of centimetres); tide pools have settled and stay clearer
+              float fogW = mix(uFogW, uFogPool, calm);
+              vec3 under = mix(waterGlow(rd), refr, exp(-thick * fogW));
 
               // the sky, reflected (the sun's disc is handled by the glitter below) and weighted by Fresnel
               vec3 R = reflect(rd, N);
@@ -216,6 +225,15 @@ export class WaterPass {
           }
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
+          {
+            // a light grade (warm highlights, cool shadows) and a soft vignette, as in the viewer
+            vec3 c = gl_FragColor.rgb;
+            float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+            c = mix(c * vec3(0.97, 1.0, 1.03), c * vec3(1.03, 1.0, 0.95), smoothstep(0.2, 0.8, l));
+            vec2 q = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
+            c *= mix(0.84, 1.0, smoothstep(1.15, 0.3, length(q)));
+            gl_FragColor.rgb = c;
+          }
           #include <colorspace_fragment>
         }`,
     });
@@ -237,6 +255,7 @@ export class WaterPass {
     u.uFogColor.value.copy(light.fogColor);
     u.uFogDensity.value = light.fogDensity;
     u.tEnv.value = light.env;
+    u.uWaterFog.value.setRGB(0.16, 0.172, 0.14).multiplyScalar(0.06 + 0.94 * light.day);
   }
 
   /** Composite the water over a rendered frame (colour + depth) into `output` (null = the screen). */
