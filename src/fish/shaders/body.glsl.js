@@ -339,6 +339,7 @@ struct FishSurf {
   float thin;
   vec3 tissue;   // colour of light that has diffused through the body (interior x exit filter)
   float whiteness;
+  float pearl;   // silvery gill cover / cheek of a white head (sheen and guanine fill kept there)
 };
 
 FishSurf gFS;
@@ -830,11 +831,29 @@ void computeFishSurface() {
   // white head: its skin inherits the flank's pearly reflector strength, so
   // over the nape and the top of the gill cover (behind the forehead term
   // above) it still mirrored like a lacquered dome: a little weaker, broader
+  // (not over the gill cover: its upper half keeps the plate's sheen below)
   {
     float dome = headSkin * whiteness * smoothstep(0.1, 0.75, a) * smoothstep(0.01, 0.08, sB) * (lip > -0.5 ? 1.0 : 0.0);
+    dome *= 1.0 - 0.7 * operc;
     spec *= 1.0 - 0.4 * dome;
     rough += 0.08 * dome;
   }
+  // white head: the gill cover and the cheek below the eye are where its
+  // skin carries a real silvery reflector (p12_0, p11_1: the opercle shines
+  // as a pearly-silver plate, the cheek more softly). Opaque and matte all
+  // over, the white head read as putty next to the pearly trunk. A modest,
+  // view-dependent sheen there only: a smoother lobe and a neutral silver
+  // tint here, and in the light loop the environment reflection and part of
+  // the guanine fill back. The brow and the snout stay matte (above), and
+  // nothing lets light through the skin (no glow, no flesh pink).
+  float cheek = headSkin * smoothstep(0.075, 0.13, sB) * smoothstep(0.22, -0.12, a) * smoothstep(-0.92, -0.55, a);
+  float pearlHead = headSkinW * clamp(max(operc, 0.7 * cheek), 0.0, 1.0);
+  rough -= 0.2 * pearlHead;
+  spec *= 1.0 + 0.4 * pearlHead;
+  spec = mix(spec, dot(spec, vec3(0.3333)) * vec3(0.97, 0.99, 1.02), 0.6 * pearlHead);
+  // (a silvery plate, not cream skin: a little less diffuse and without the
+  // warm flesh cast of the rest of the head, like the pearly trunk behind it)
+  col *= mix(vec3(1.0), vec3(0.93, 0.95, 0.98), pearlHead);
   // ventral xanthophore wash behind the pectorals (yellowish belly in sarasa)
   float bellyY = smoothstep(-0.2, -0.75, a) * smoothstep(0.2, 0.36, -rp.x) * smoothstep(0.62, 0.42, -rp.x);
   col = mix(col, col * vec3(1.05, 0.95, 0.62), bellyY * 0.35 * whiteness);
@@ -895,7 +914,7 @@ void computeFishSurface() {
   gFS.albedo = col;
   gFS.rough = clamp(rough, 0.06, 1.0);
   gFS.spec = spec;
-  gFS.irid = uIridescence * mix(0.35, 1.0, whiteness) * mix(0.6 + 0.4 * rnd.y, 0.93 + 0.07 * rnd.y, whiteness) * mix(0.4, 1.0, max(scaleMask, max(operc * 0.85, whiteness * 0.75)));
+  gFS.irid = uIridescence * mix(0.35, 1.0, whiteness) * mix(0.6 + 0.4 * rnd.y, 0.93 + 0.07 * rnd.y, whiteness) * mix(0.4, 1.0, max(max(scaleMask, pearlHead), max(operc * 0.85, whiteness * 0.75)));
   // film thickness: a narrow spread (warm gold to pale green glints on
   // pigmented scales); white scales: a pearly film whose thickness drifts
   // slowly over the body (faint pink / green shifts, no per-scale mosaic)
@@ -910,30 +929,73 @@ void computeFishSurface() {
   gFS.thin = thin;
   gFS.tissue = interior * exitF;
   gFS.whiteness = whiteness;
+  gFS.pearl = pearlHead;
 }
 `;
 
 export const bodyFragmentShadowPars = /* glsl */ `
 uniform mat4 uKeyShadowMatrix;
 uniform float uKeyShadowOn;
-// Key-light visibility at an arbitrary world position (4-tap PCF). Used to
-// shadow light that enters the body somewhere else than the shaded point.
+// Key-light shadow on the body, split by the distance of the blocker. The
+// hood light is a long LED panel, not a point: a blocker close above the
+// receiver (the fish's own back, its own fins, a leaf just over it) casts a
+// defined shadow, but one several centimetres higher (another fish passing
+// overhead, a plant high in the water) only a broad, faint penumbra. With the
+// point-like shadow map, a fish swimming across above another laid a sharp
+// dark stripe over its flank that read as a painted band / body segment.
+// Two depth comparisons per tap tell the two apart: one at the receiver
+// depth (every blocker) and one moved toward the light by FAR_BLOCKER_M
+// (only the distant ones).
+float gKeyFarDim = 1.0; // dimming by distant blockers (wide kernel), shared by every key tap of this pixel
+#if defined( USE_SHADOWMAP ) && ( NUM_DIR_LIGHT_SHADOWS > 0 ) && defined( SHADOWMAP_TYPE_PCF )
+#define FAR_BLOCKER_M 0.05
+#define FAR_SHADOW 0.3
+// shadow-map depth units per metre along the key (orthographic shadow camera)
+float keyZPerM() { return length(vec3(uKeyShadowMatrix[0][2], uKeyShadowMatrix[1][2], uKeyShadowMatrix[2][2])); }
+// lit fraction counting only the blockers less than FAR_BLOCKER_M above c
+float keyNearLit(sampler2DShadow sm, vec3 c, vec2 ts, float r, float phi) {
+  float zF = c.z - FAR_BLOCKER_M * keyZPerM();
+  float lAll = 0.0, lFar = 0.0;
+  for (int k = 0; k < 4; k++) {
+    vec2 o = vogelDiskSample(k, 4, phi) * ts * r;
+    lAll += texture(sm, vec3(c.xy + o, c.z));
+    lFar += texture(sm, vec3(c.xy + o, zF));
+  }
+  // per tap, a near blocker is one that shadows the receiver but not a
+  // point FAR_BLOCKER_M closer to the light
+  return clamp(1.0 - 0.25 * (lFar - lAll), 0.0, 1.0);
+}
+// replaces getShadow() for the key light on the body (lights_fragment_begin)
+float fishKeyShadow(sampler2DShadow shadowMap, vec2 shadowMapSize, float shadowIntensity, float shadowBias, float shadowRadius, vec4 shadowCoord) {
+  shadowCoord.xyz /= shadowCoord.w;
+  shadowCoord.z += shadowBias;
+  if (shadowCoord.x < 0.0 || shadowCoord.x > 1.0 || shadowCoord.y < 0.0 || shadowCoord.y > 1.0 || shadowCoord.z > 1.0) return 1.0;
+  vec2 ts = 1.0 / shadowMapSize;
+  float phi = interleavedGradientNoise(gl_FragCoord.xy) * PI2;
+  // distant blockers: a wide (about +-1.5 cm), faint penumbra only
+  float zF = shadowCoord.z - FAR_BLOCKER_M * keyZPerM();
+  float wide = 0.0;
+  for (int k = 0; k < 6; k++) wide += texture(shadowMap, vec3(shadowCoord.xy + vogelDiskSample(k, 6, phi + 1.7) * ts * 22.0, zF));
+  gKeyFarDim = mix(1.0, wide / 6.0, FAR_SHADOW);
+  return mix(1.0, keyNearLit(shadowMap, shadowCoord.xyz, ts, shadowRadius, phi) * gKeyFarDim, shadowIntensity);
+}
+#else
+#define fishKeyShadow getShadow
+#endif
+// Key-light visibility at an arbitrary world position (4-tap PCF with the
+// same near / far split; the distant-blocker dimming is the shaded point's).
+// Used to shadow light that enters the body somewhere else than the shaded
+// point.
 float keyShadowAt(vec3 pw, float radiusTexels) {
 #if defined( USE_SHADOWMAP ) && ( NUM_DIR_LIGHT_SHADOWS > 0 ) && defined( SHADOWMAP_TYPE_PCF )
   if (uKeyShadowOn < 0.5) return 1.0;
   vec4 c = uKeyShadowMatrix * vec4(pw, 1.0);
   c.xyz /= c.w;
   if (c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0 || c.z > 1.0) return 1.0;
-  vec2 ts = radiusTexels / directionalLightShadows[ 0 ].shadowMapSize;
+  vec2 ts = 1.0 / directionalLightShadows[ 0 ].shadowMapSize;
   float z = c.z + directionalLightShadows[ 0 ].shadowBias;
   float r = interleavedGradientNoise(gl_FragCoord.xy) * 6.2831853;
-  vec2 o1 = vec2(cos(r), sin(r)) * ts;
-  vec2 o2 = vec2(-o1.y, o1.x);
-  return 0.25 * (
-    texture(directionalShadowMap[ 0 ], vec3(c.xy + o1, z)) +
-    texture(directionalShadowMap[ 0 ], vec3(c.xy - o1, z)) +
-    texture(directionalShadowMap[ 0 ], vec3(c.xy + o2 * 0.5, z)) +
-    texture(directionalShadowMap[ 0 ], vec3(c.xy - o2 * 0.5, z)));
+  return keyNearLit(directionalShadowMap[ 0 ], vec3(c.xy, z), ts, radiusTexels, r) * gKeyFarDim;
 #else
   return 1.0;
 #endif
@@ -1004,7 +1066,8 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     // (white skin: the dense iridophore stack scatters every wavelength back
     // near the surface, so its wrap is short and nearly neutral; a red-only
     // wrap there paints a dark red band along the terminator of the belly)
-    vec3 w = mix(vec3(0.55, 0.24, 0.14), vec3(0.3, 0.26, 0.23), gFS.whiteness) * uSSS * (1.0 - 0.45 * headW);
+    // (the silvery gill cover keeps a little more: a soft terminator, no glow)
+    vec3 w = mix(vec3(0.55, 0.24, 0.14), vec3(0.3, 0.26, 0.23), gFS.whiteness) * uSSS * (1.0 - 0.45 * headW * (1.0 - 0.5 * gFS.pearl));
     vec3 wrapD = saturate((vec3(NL) + w) / (1.0 + w)) / (1.0 + w);
     #if FISH_LOD >= 2
       float sScat = 1.0;
@@ -1031,7 +1094,10 @@ export const bodyFragmentLightsEnd = /* glsl */ `
     float lateral = gFS.whiteness * mix(0.45, 1.0, smoothstep(-0.95, -0.2, aV)) * (1.0 - 0.45 * saturate(NL));
     // (head: a thin skin over bone has no deep platelet stack to spread the
     // light around; what is left keeps its shadow side from going grey)
-    lateral *= 1.0 - 0.5 * headW;
+    // (the silvery gill cover and cheek keep it: their platelet layer is
+    // the trunk's, and a shadowed opercle reads as a dim pearly plate, not
+    // grey putty)
+    lateral *= 1.0 - 0.5 * headW * (1.0 - gFS.pearl);
     vec3 pearlT = mix(vec3(0.97, 0.98, 1.02), vec3(0.86, 0.96, 1.1), spow(1.0 - gNV, 1.5));
     // (the multiply-scattered part does not need the shadow map tap from
     // just under this point: it entered the lit side and spread around)
@@ -1111,8 +1177,9 @@ export const bodyFragmentLightsEnd = /* glsl */ `
   }
   reflectedLight.indirectSpecular *= mix(1.0, gFS.ao, 0.8);
   // white head: the even environment sheen coated the whole face in pearl;
-  // keep the sheen mostly where the key light hits (direct specular)
-  reflectedLight.indirectSpecular *= 1.0 - 0.3 * headW;
+  // keep the sheen mostly where the key light hits (direct specular); the
+  // silvery gill cover and cheek reflect their surroundings like the flank
+  reflectedLight.indirectSpecular *= 1.0 - 0.3 * headW * (1.0 - gFS.pearl);
   reflectedLight.directDiffuse *= mix(1.0, gFS.ao, 0.5);
   gFS.thin = cV; // debug: view thickness in mm
 }
