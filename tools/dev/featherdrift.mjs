@@ -17,7 +17,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { KentishPloverModel } from '../../src/birds/kentishPlover/KentishPloverModel.js';
 import { KentishPloverAnimator, PREEN_VARIANTS } from '../../src/birds/kentishPlover/KentishPloverAnimator.js';
 import { FEATHER_TYPE } from '../../src/birds/kentishPlover/anatomy/feathers.js';
-import { bodyDisplacementMasks, FLUFF_REST } from '../../src/birds/kentishPlover/anatomy/bodyMesh.js';
+import { bodyDisplacementMasks, FLUFF_REST, getBodySDF } from '../../src/birds/kentishPlover/anatomy/bodyMesh.js';
+import { KentishPloverConfig as CFG } from '../../src/birds/kentishPlover/KentishPloverConfig.js';
 import { CONFORM_FOLD } from '../../src/birds/kentishPlover/anatomy/wingFold.js';
 import { animation as ANIM } from '../../src/birds/kentishPlover/KentishPloverConfig.js';
 
@@ -89,6 +90,7 @@ for (let i = 0; i < fA.position.count; i++) {
   const a = fA.uv.getX(i);
   const v = fA.uv.getY(i);
   if (Math.abs(a) < 1e-4 && v < 1e-4) f.root = i;
+  if (Math.abs(a) < 1e-4) (f.shaft ??= []).push([v, i]);
   if (Math.abs(a) < 1e-4 && v > 1 - 1e-4) f.tip = i;
 }
 const F = [...feathers.values()].filter((f) => f.root >= 0 && f.tip >= 0);
@@ -133,11 +135,31 @@ function anchor(p) {
   const cp = new THREE.Vector3().fromArray(ref, c * 3);
   const patch = near(cp, ANCHOR_R * 0.001).map((e) => e[0]);
   // (the side of the body under the point: a patch straddling the midline of the back is fine, it is rigid there)
-  return { patch, p: p.clone(), depth: cand[0][1] };
+  // outward normal of the outline there (rest = the stand's posed frame: relaxed is the bind)
+  const n = new THREE.Vector3(bNrm.getX(c), bNrm.getY(c), bNrm.getZ(c)).normalize();
+  return { patch, p: p.clone(), depth: cand[0][1], n };
 }
+// The point that is anchored is where the feather comes out of the plumage: the first shaft vertex (from the base) that
+// lies outside the resting outline less BURIED mm. The base of a remex or covert lies hidden under the body plumage —
+// the skin moving over it there is plumage sliding over a hidden base; what shows is where it emerges. Feathers that
+// stay under the outline over their whole length (the folded lesser and primary coverts) are left out (penetration.mjs
+// checks they stay hidden).
+const BURIED = Number(args.buried ?? 1.0);
+const SDF = getBodySDF(CFG);
 for (const f of F) {
+  f.shaft.sort((p, q) => p[0] - q[0]);
+  f.buried = true;
+  for (const [, i] of f.shaft) {
+    const p = featherPoint(i, _v);
+    const d = SDF(p.x * 1000, p.y * 1000, p.z * 1000);
+    if (d > -BURIED) {
+      [f.root, f.rootSdf, f.buried] = [i, d, false];
+      break;
+    }
+  }
   f.aRoot = anchor(featherPoint(f.root, _v).clone());
   f.aTip = anchor(featherPoint(f.tip, _v).clone());
+  f.rootSdf ??= SDF(f.aRoot.p.x * 1000, f.aRoot.p.y * 1000, f.aRoot.p.z * 1000);
 }
 
 // Kabsch (Horn's quaternion method) on a patch: rotation + translation carrying ref → current
@@ -176,6 +198,7 @@ function carried(a, out) {
     q = nq.map((x) => x / l);
   }
   const Q = new THREE.Quaternion(q[1], q[2], q[3], q[0]);
+  a.nCur = (a.nCur ?? new THREE.Vector3()).copy(a.n).applyQuaternion(Q);
   return out.set(a.p.x - c0[0], a.p.y - c0[1], a.p.z - c0[2]).applyQuaternion(Q).add(_v.set(c1[0], c1[1], c1[2]));
 }
 
@@ -268,16 +291,22 @@ for (const name of CLIPS) {
       const s = st[f.type];
       const dr = featherPoint(f.root, _a).distanceTo(carried(f.aRoot, _b)) * 1000;
       const dtp = featherPoint(f.tip, _a).distanceTo(carried(f.aTip, _b)) * 1000;
-      s.rootSq += dr * dr;
-      s.n++;
+      // off the skin along its normal: + lifted (floating), − pressed in (sinking)
+      const lift = _a.sub(_b).dot(f.aTip.nCur) * 1000;
+      s.tipUp = Math.max(s.tipUp ?? 0, lift);
+      s.tipDown = Math.min(s.tipDown ?? 0, lift);
+      if (!f.buried) {
+        s.rootSq += dr * dr;
+        s.n++;
+      }
       s.tipSq += dtp * dtp;
       s.nT++;
-      if (dr > s.rootMax) {
+      if (!f.buried && dr > s.rootMax) {
         s.rootMax = dr;
         s.at = `f${frame}`;
       }
       s.tipMax = Math.max(s.tipMax, dtp);
-      fmax[f.type] = Math.max(fmax[f.type] ?? 0, dr);
+      if (!f.buried) fmax[f.type] = Math.max(fmax[f.type] ?? 0, dr);
       if (f.type === args.detail) {
         f.dmax = Math.max(f.dmax ?? 0, dr);
         f.tmax = Math.max(f.tmax ?? 0, dtp);
@@ -286,14 +315,14 @@ for (const name of CLIPS) {
     csv.push([name, frame, ...groups.map((g) => (fmax[g] ?? 0).toFixed(3))].join(','));
     frame++;
   }
-  result[name] = Object.fromEntries(groups.map((g) => [g, { rootMax: st[g].rootMax, rootRms: Math.sqrt(st[g].rootSq / Math.max(1, st[g].n)), tipMax: st[g].tipMax, tipRms: Math.sqrt(st[g].tipSq / Math.max(1, st[g].nT)), at: st[g].at }]));
+  result[name] = Object.fromEntries(groups.map((g) => [g, { rootMax: st[g].rootMax, rootRms: Math.sqrt(st[g].rootSq / Math.max(1, st[g].n)), tipMax: st[g].tipMax, tipRms: Math.sqrt(st[g].tipSq / Math.max(1, st[g].nT)), tipUp: st[g].tipUp ?? 0, tipDown: st[g].tipDown ?? 0, at: st[g].at }]));
 }
 
 // ------------------------------------------------------------ report
 const cmp = args.compare ? JSON.parse(readFileSync(args.compare, 'utf8')) : null;
 const fmt = (x) => x.toFixed(2).padStart(6);
 const short = { primary: 'prim', secondary: 'sec', tertial: 'tert', primaryCovert: 'pcov', greaterCovert: 'gcov', medianCovert: 'mcov', lesserCovert: 'lcov', alula: 'alula', rectrix: 'rect', upperTailCovert: 'utc', underTailCovert: 'ltc', scapular: 'scap' };
-console.log(`LOD${LOD}  root drift from the skin under it, max / rms (mm)${cmp ? '  [before → now]' : ''}`);
+console.log(`LOD${LOD}  drift of each feather's emergence point (first shaft point out of the plumage) from the skin under it, max / rms (mm)${cmp ? '  [before → now]' : ''}; feathers under the outline over their whole length left out (${groups.map((g) => `${short[g] ?? g} ${F.filter((f) => f.type === g && !f.buried).length}/${F.filter((f) => f.type === g).length}`).join(', ')})`);
 console.log('clip'.padEnd(16) + groups.map((g) => (short[g] ?? g).padStart(cmp ? 22 : 14)).join(''));
 const all = Object.fromEntries(groups.map((g) => [g, { max: 0, sq: 0, n: 0 }]));
 for (const [name, r] of Object.entries(result)) {
@@ -309,14 +338,15 @@ for (const [name, r] of Object.entries(result)) {
   console.log(line);
 }
 console.log('ALL'.padEnd(16) + groups.map((g) => `${fmt(all[g].max)}/${fmt(Math.sqrt(all[g].sq / all[g].n)).trim()}`.padStart(cmp ? 22 : 14)).join(''));
-console.log('\ntip drift max (mm):');
-for (const [name, r] of Object.entries(result)) console.log(name.padEnd(16) + groups.map((g) => fmt(r[g].tipMax).padStart(cmp ? 22 : 14)).join(''));
+console.log('\ntip drift max (mm), and its largest lift off / press into the skin under the tip (+/−):');
+console.log('clip'.padEnd(16) + groups.map((g) => (short[g] ?? g).padStart(17)).join(''));
+for (const [name, r] of Object.entries(result)) console.log(name.padEnd(16) + groups.map((g) => `${fmt(r[g].tipMax).trim()} +${r[g].tipUp.toFixed(1)}/${r[g].tipDown.toFixed(1)}`.padStart(17)).join(''));
 if (args.detail) {
   const sl = BG.getAttribute('aSleeve');
   for (const f of F.filter((f) => f.type === args.detail)) {
     const sv = f.aRoot.patch.reduce((a, i) => a + sl.getX(i), 0) / f.aRoot.patch.length;
     const r = [fA.position.getX(f.root), fA.position.getY(f.root), fA.position.getZ(f.root)].map((x) => (x * 1000).toFixed(1)).join(',');
-    console.log(`${f.side} root ${r}  depth ${(f.aRoot.depth * 1000).toFixed(2)}  patch sleeve ${sv.toFixed(3)}  max ${(f.dmax ?? 0).toFixed(2)} tip ${(f.tmax ?? 0).toFixed(2)}`);
+    console.log(`${f.side} root ${r}  sdf ${f.rootSdf.toFixed(2)}${f.buried ? ' (buried)' : ''}  depth ${(f.aRoot.depth * 1000).toFixed(2)}  patch sleeve ${sv.toFixed(3)}  max ${(f.dmax ?? 0).toFixed(2)} tip ${(f.tmax ?? 0).toFixed(2)}`);
   }
 }
 if (args.save) writeFileSync(args.save, JSON.stringify(result, null, 1));

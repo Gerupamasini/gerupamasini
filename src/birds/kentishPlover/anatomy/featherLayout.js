@@ -197,8 +197,11 @@ export function buildScapularLayout() {
   const out = [];
   // two rows over the relaxed mantle (spec §10.3)
   const rows = [
-    { x0: 6.5, x1: 9.5, z0: 5, z1: -23, n: 6, len: [15, 21], w: 8.8, out: 0.2, y: 88 },
-    { x0: 11.5, x1: 14.5, z0: 7, z1: -17, n: 5, len: [13, 18], w: 8.0, out: 0.42, y: 85.5 },
+    // (the front of the cape starts behind the base of the neck — z −2 / +1 instead of +5 / +7: rooted further
+    // forward the first feathers grew out of the neck plumage itself (neck-sleeve position 0.2–0.65), and riding the
+    // skin there they were dragged round by every turn of the head, validation §Y)
+    { x0: 6.5, x1: 9.5, z0: -2, z1: -23, n: 6, len: [15, 21], w: 8.8, out: 0.2, y: 88 },
+    { x0: 11.5, x1: 14.5, z0: 1, z1: -17, n: 5, len: [13, 18], w: 8.0, out: 0.42, y: 85.5 },
   ];
   rows.forEach((r, ri) => {
     for (let side = 0; side < 2; side++) {

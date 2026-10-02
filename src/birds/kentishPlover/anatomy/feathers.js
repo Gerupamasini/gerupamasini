@@ -37,6 +37,9 @@ export const FEATHER_TYPE = {
 
 const deg = Math.PI / 180;
 
+// shaft positions over which a scapular's skinning goes from the body surface under its root to the trunk alone
+export const SCAP_ROOT = [0.0, 0.6];
+
 // LOD2 draws every other remex / greater covert as a wider card (the wing-fold solver clears both shapes)
 export const LOD2_CARD = { types: new Set(['primary', 'secondary', 'greaterCovert']), width: 1.9, rows: 4 };
 
@@ -167,7 +170,7 @@ export const rowT = (i, n) => 1 - (1 - i / (n - 1)) ** 1.6;
 /**
  * Emit one feather as a grid (nL along × nW across).
  * frame: { base, dir (unit, along shaft), side (unit, toward outer vane), normal (unit, dorsal) }
- * bone: { idx[], w[] } for the whole feather, or a function of the vertex position returning one.
+ * bone: { idx[], w[] } for the whole feather, or a function of the vertex position (and shaft position t) returning one.
  * conform(p) optional → [p', n'] projects vertices onto a surface (scapulars).
  */
 function emitFeather(gb, f, frame, bone, typeId, rnd, opts = {}) {
@@ -199,7 +202,7 @@ function emitFeather(gb, f, frame, bone, typeId, rnd, opts = {}) {
         const l = Math.hypot(n[0], n[1], n[2]);
         n = [n[0] / l, n[1] / l, n[2] / l];
       }
-      const sk = typeof bone === 'function' ? bone(p) : bone;
+      const sk = typeof bone === 'function' ? bone(p, t) : bone;
       gb.vertex(p, n, [a, t], [typeId, f.index ?? 0, rnd, f.side ?? 0], sk.idx, sk.w);
     }
   }
@@ -301,11 +304,22 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
     const w = computeSpineWeights(p, boneIndex);
     return { idx: w.map((e) => e[0]), w: w.map((e) => e[1]) };
   };
-  // the scapulars lie on the trunk: they do not ride up with the neck plumage when the head is turned back
-  // (preening the wing, resting) — the neck lies over them instead
-  const trunkSkin = (p) => {
-    const w = trunkWeights(p, boneIndex);
-    return { idx: w.map((e) => e[0]), w: w.map((e) => e[1]) };
+  // Scapulars: rooted in the skin, lying on the trunk. The base of each feather is skinned exactly like the body surface
+  // under it (computeSpineWeights at the closest point of the outline: the trunk bones, and the neck sleeve's helpers
+  // where the front of the cape lies on the base of the neck), blending to the trunk alone by 0.6 of its length — so
+  // the root never slides over the skin it grows from while the head turns, the neck stretches to peck or the bird
+  // walks with its head carried low (trunk-only skinning left the front scapulars' bases standing still while the
+  // mantle skin under them moved by up to 18–28 mm, validation §Y), and the vane still lies on the trunk: it is not
+  // dragged round with the neck plumage when the head is turned back (preening, resting) — the neck lies over it.
+  const scapSkin = (p, t) => {
+    const [q] = projectToSurface(sdf, p[0], p[1], p[2]);
+    const k = smooth01(SCAP_ROOT[0], SCAP_ROOT[1], t);
+    const W = new Map();
+    for (const [bi, v] of computeSpineWeights(q, boneIndex)) W.set(bi, (W.get(bi) ?? 0) + (1 - k) * v);
+    for (const [bi, v] of trunkWeights(p, boneIndex)) W.set(bi, (W.get(bi) ?? 0) + k * v);
+    const top = [...W].sort((a, b) => b[1] - a[1]).slice(0, 4);
+    const sum = top.reduce((acc, e) => acc + e[1], 0) || 1;
+    return { idx: top.map((e) => e[0]), w: top.map((e) => e[1] / sum) };
   };
   const torso = fold?.torso ?? sdf; // trunk outline without the neck (wingFold.conformAt)
   const segs = detail === 0 ? { nL: 10, nW: 3 } : detail === 1 ? { nL: 5, nW: 1 } : { nL: LOD2_CARD.rows, nW: 1 };
@@ -444,7 +458,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
         return [[pp[0] + nn[0] * lift, pp[1] + nn[1] * lift, pp[2] + nn[2] * lift], nn];
       };
       const m = gb.mark();
-      emitFeather(gb, f, { base: bp, dir, side, normal: bn }, trunkSkin, FEATHER_TYPE.scapular, rng(), { ...segs, conform });
+      emitFeather(gb, f, { base: bp, dir, side, normal: bn }, scapSkin, FEATHER_TYPE.scapular, rng(), { ...segs, conform });
       for (let v = m.v; v < gb.count; v++) gb.setContact(v, ...contact(bindMM(v)));
     }
   }
