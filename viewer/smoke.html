@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>smoke</title>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const r = new THREE.WebGLRenderer({antialias:true}); r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color(0x203040);
+const c = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 100); c.position.set(0,0,3);
+const m = new THREE.Mesh(new THREE.SphereGeometry(1,64,32), new THREE.MeshPhysicalMaterial({color:0xcc8844, roughness:0.3, clearcoat:1, iridescence:0.5}));
+s.add(m); s.add(new THREE.DirectionalLight(0xffffff, 3).translateX(2).translateY(3).translateZ(4)); s.add(new THREE.AmbientLight(0x889999, 1));
+r.render(s, c);
+const gl = r.getContext();
+window.__info = { renderer: gl.getParameter(gl.RENDERER), version: gl.getParameter(gl.VERSION), maxTex: gl.getParameter(gl.MAX_TEXTURE_SIZE), maxUnits: gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS), three: THREE.REVISION };
+window.__ready = true;
+</script>
