@@ -59,8 +59,18 @@ export function buildBody(surface, params, opts = {}) {
     const a = Math.abs(Math.sin(alpha)); return smooth(0.25, 0.75, a);
   };
 
+  // nares: two pits per side on the snout (anterior one with a raised rim); positions [E], from photo impression: ~0.45 and ~0.65 of the way snout->eye
+  const naresSurf = [];
+  for (const side of [1, -1]) for (const [ns, na, rad, depth, rim] of [[0.040, 0.78, 0.0009, 0.00055, 0.00018], [0.062, 0.82, 0.0008, 0.0005, 0.0]]) {
+    const a = side > 0 ? na : TAU - na; naresSurf.push({ c: surface.point(ns, a), rad, depth, rim });
+  }
+
   function displacement(s, alpha) {
     let d = 0;
+    for (const n of naresSurf) {
+      const p0 = surface.point(s, alpha); const rr = Math.hypot(p0[0] - n.c[0], p0[1] - n.c[1], p0[2] - n.c[2]);
+      if (rr < n.rad * 2.2) { const q = Math.max(0, 1 - (rr / n.rad) ** 2); d -= n.depth * q * q; if (n.rim) d += n.rim * Math.exp(-(((rr - n.rad * 1.35) / (n.rad * 0.35)) ** 2)); }
+    }
     // eye pocket (skin pushed in so the eyeball sits in a socket; orbit ring hides the junction)
     for (let k = 0; k < 2; k++) {
       const p = surface.point(s, alpha); const c = eyeCentersSurf[k];
@@ -213,7 +223,7 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
     const secS = Math.max(sRing, 0);
     const top = surface.point(secS, 0)[1], bot = surface.point(secS, Math.PI)[1];
     const roofH = 0.42 * (top - yLip) * shrink, floorH = 0.40 * (yLip - bot) * shrink;
-    const bulge = 0.0012 * (shrink);
+    const bulge = Math.min(0.0012 * shrink, 0.45 * Math.abs(UR[2]));
     const u = li / (totalLoops - 1);
     const loop = [];
     const zR = UR[2], zL = UL[2], x = UR[0];
@@ -222,7 +232,7 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
     for (let k = 1; k <= K1; k++) { const t = k / (K1 + 1); loop.push(addV([x, yLip + roofH * Math.sin(Math.PI * t), zR + (zL - zR) * t], u, 0.25 * t, 0)); }
     // left ribbon: from UL down to LL (inward bulge)
     loop.push(addV([x, yLip, zL], u, 0.25, 0));
-    for (let k = 1; k <= K2; k++) { const q = k / (K2 + 1); loop.push(addV([x, yLip, zL - Math.sign(zL || -1) * bulge * Math.sin(Math.PI * q) * -1], u, 0.25 + 0.125 * q, q)); }
+    for (let k = 1; k <= K2; k++) { const q = k / (K2 + 1); loop.push(addV([x, yLip, zL - Math.sign(zL || -1) * bulge * Math.sin(Math.PI * q)], u, 0.25 + 0.125 * q, q)); }
     // floor: from LL to LR (tongue raised in the middle slightly)
     loop.push(addV([x, yLip, zL], u, 0.375, 1));
     for (let k = 1; k <= K1; k++) { const t = k / (K1 + 1); const tongue = 0.35 * Math.sin(Math.PI * t); loop.push(addV([x, yLip - floorH * Math.sin(Math.PI * t) + floorH * tongue * 0.6, zL + (zR - zL) * t], u, 0.375 + 0.25 * t, 1)); }

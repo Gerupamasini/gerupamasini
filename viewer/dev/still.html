@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>yamame still</title>
+<style>html,body{margin:0;background:#cfd6da}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+// Neutral studio still (bright grey, orthographic side) for comparing colour/pattern with reference photos. ?view=side|head|top|belly  &flip=1 mirrors to face right.
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const q = new URLSearchParams(location.search), W = innerWidth, H = innerHeight, view = q.get('view') || 'side';
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); r.setSize(W, H); r.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(parseInt(q.get('bg') || 'c8d0d4', 16));
+scene.environment = new THREE.PMREMGenerator(r).fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = parseFloat(q.get('env') || '0.9');
+const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(0.2, 0.8, 1); scene.add(dl);
+const gltf = await new GLTFLoader().loadAsync(q.get('file') || '/assets/generated/yamame.glb'); scene.add(gltf.scene);
+if (q.get('jaw')) gltf.scene.traverse((o) => { if (o.isBone && o.name === 'jaw_lower') o.rotation.z = -parseFloat(q.get('jaw')) * Math.PI / 180; });
+gltf.scene.updateMatrixWorld(true);
+const half = parseFloat(q.get('half') || '0.0.12'.slice(0, 4)), cx = parseFloat(q.get('cx') || '0'), cy = parseFloat(q.get('cy') || '0');
+const cam = new THREE.OrthographicCamera(-half * W / H, half * W / H, half, -half, 0.001, 5);
+if (view === 'side') cam.position.set(cx, cy, 1); if (view === 'top') { cam.position.set(cx, 1, 0); cam.up.set(1, 0, 0); } if (view === 'belly') { cam.position.set(cx, -1, 0); cam.up.set(1, 0, 0); }
+cam.lookAt(cx, cy, 0); if (q.get('flip') === '1') cam.scale.x = -1;
+r.render(scene, cam); window.__ready = true;
+</script>

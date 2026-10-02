@@ -18,6 +18,11 @@ export class Yamame {
       if (o.isBone) { this.bones[o.name] = o; this.rest[o.name] = { p: o.position.clone(), q: o.quaternion.clone() }; }
       if (o.isSkinnedMesh) { o.frustumCulled = false; (this.skinned ??= []).push(o); }
     });
+    // material fix-ups that glTF cannot express (eye module spec: cornea = black, additive, no depth write, weak specular)
+    this.materials = {};
+    this.root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) this.materials[m.name] = m; });
+    const cor = this.materials.M_Eye_Cornea;
+    if (cor) { cor.color.set(0x000000); cor.blending = THREE.AdditiveBlending; cor.transparent = true; cor.opacity = 1; cor.depthWrite = false; cor.roughness = 0.03; if ('specularIntensity' in cor) cor.specularIntensity = 0.1; cor.needsUpdate = true; }
     this.spine = Array.from({ length: SPINE_COUNT }, (_, j) => this.bones[`spine_${String(j).padStart(2, '0')}`]);
     this.rootBone = this.bones.fish_root;
     this.wave = new WaveDriver({ phase0: opts.phase0 ?? Math.random() * 6.28 });
@@ -82,7 +87,7 @@ export class Yamame {
     this.breath.phase += 2 * Math.PI * this.breath.f * dt;
     const ph = this.breath.phase, amp = this.breath.amp;
     const pump = 0.5 + 0.5 * Math.sin(ph), gill = 0.5 + 0.5 * Math.sin(ph - 1.1);
-    const sk = this.strikePose; const jawDeg = (intent.jawOpen ?? 0) + (sk ? sk.jaw : 0) + 3.0 * amp * pump * pump;
+    const sk = this.strikePose; const jawDeg = (intent.jawOpen ?? 0) + (sk ? sk.jaw : 0) + 2.0 * amp * pump * pump;
     this.#setRot('jaw_lower', AXIS_Z, -jawDeg * Math.PI / 180);       // opens: tip rotates down (negative about +Z, see viewer/dev/body.html)
     const flare = (intent.opercle ?? 0) + (sk ? sk.opercle : 0) + 7 * amp * gill;                    // degrees
     this.#setRot('opercle_R', AXIS_Y, flare * Math.PI / 180); this.#setRot('opercle_L', AXIS_Y, -flare * Math.PI / 180);

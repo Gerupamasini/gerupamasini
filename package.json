@@ -9,7 +9,7 @@
     "build:assets": "node tools/build-assets/build.mjs",
     "serve": "node tools/headless/serve.mjs",
     "snapshot": "node tools/headless/render-snapshot.mjs",
-    "test": "node --test tests/unit tests/asset"
+    "test": "node --test \"tests/**/*.test.mjs\""
   },
   "dependencies": {
     "three": "0.186.1"

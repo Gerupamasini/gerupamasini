@@ -17,11 +17,11 @@
   },
   "cap_length_over_sl": { "v": 0.016, "prov": "E", "note": "rounded snout cap before s=0" },
   "fins": {
-    "dorsal":   { "origin_s": 0.504, "base_len": 0.150, "height": 0.100, "rays": 12, "prov": "P/A", "src": "spec02 §2.5" },
+    "dorsal":   { "origin_s": 0.504, "base_len": 0.150, "height": 0.100, "rays": 13, "prov": "P/A+skeleton", "src": "spec02 §2.5 (12); skeleton_new k02/k06: 13 (12-14, med)" },
     "adipose":  { "origin_s": 0.843, "base_len": 0.054, "height": 0.026, "prov": "P" },
     "pectoral": { "origin_s": 0.258, "length": 0.127, "rays": 13, "prov": "P/A" },
     "pelvic":   { "origin_s": 0.574, "length": 0.114, "rays": 9, "prov": "P/A" },
-    "anal":     { "origin_s": 0.751, "base_len": 0.116, "height": 0.064, "rays": 13, "prov": "P/A" },
+    "anal":     { "origin_s": 0.751, "base_len": 0.116, "height": 0.064, "rays": 12, "prov": "P/A+skeleton", "src": "photos 13; skeleton_new k02: 11 (10-12, low), radials 12 (11-13); literature Aomori 12-14 -> overlap 12" },
     "caudal":   { "origin_s": 1.0, "length": 0.125, "span": 0.211, "fork_depth": 0.028, "principal_rays": 19, "prov": "P/B" }
   },
   "eye": {

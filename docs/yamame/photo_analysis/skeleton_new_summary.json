@@ -1,0 +1,157 @@
+{
+  "meta": {
+    "source_doc": "docs/yamame/photo_analysis/skeleton_new_analysis.md",
+    "images": ["x01", "k01", "k02", "k03", "k04", "k05", "k06"],
+    "date": "2026-10-02",
+    "confidence_scale": "high=独立に一致 / med=明瞭だが不確かさの要因あり / low=推定・外挿・解像度不足",
+    "coordinate_system": "各画像の元画素（左上原点、x右・y下）",
+    "specimen_note": "k標本は透明工房の瓶(高さ6.0 cm)内の小型個体。ラベル文字 'ヤマメ' / 'masou masou' は写るが種・SL・成熟状態は未確認。x01は冷凍個体の軟X線側面像。"
+  },
+  "vertebrae": {
+    "abdominal": 30,
+    "caudal": 27,
+    "total": 57,
+    "confidence": "low",
+    "notes": "k06(ほぼ純側面、頭下)の中心線 (130,157)→(197,500) で椎体を直接数えて50個(49〜51、パラメータ・別手法で安定; k02でも約46+尾柄約5=約51)。これに、尾端の癒合部1〜2(k06 y136〜157)と、頭側で隠れる椎体3〜7(胸鰭帯のレベルから頭蓋後縁まで)を加えて総数57(53〜63)。全体が写る画像は無いため総数は推定。腹椎/尾椎の境界は k06 y≈339(範囲325〜370)で、血管棘から肋骨への移行が不鮮明。文献(O. masou 63〜66, Cランク)より6〜9少ない側だが、否定も確認もできない。",
+    "total_range": [53, 63],
+    "abdominal_range": [26, 34],
+    "caudal_range": [25, 30],
+    "resolved_visible": 50,
+    "resolved_visible_range": [49, 51],
+    "resolved_visible_confidence": "high",
+    "terminal_complex_est": [1, 2],
+    "hidden_anterior_est": [3, 7],
+    "abdominal_caudal_boundary_k06": {"x": 137, "y": 339, "y_range": [325, 370], "visible_caudal_side": 25, "visible_head_side": 25},
+    "centrum_pitch_px_k06": {"peduncle_y157_196": [5.0, 6.5], "y200_280": 7.5, "y280_400": 7.0, "y400_500": 6.2, "note": "傾きで頭側が縮んで見える。絶対長は使えない"},
+    "centrum_width_px": {"k06": 14, "k02": 13.5},
+    "centrum_length_over_width": [0.5, 0.6],
+    "spine_geometry": "1椎体に神経棘・血管棘が各1本、尾側へ傾く弓状。基部で水平から約35〜40度、可視長2.5〜3.7椎体周期(k02 (150-230, 250-310))",
+    "fin_origin_vertebra_from_head": {
+      "assumption": "可視端からの順番に、隠れ分 h=5(3〜7)を足した値。各±3程度(視点の傾きによる)",
+      "dorsal_origin": 21,
+      "dorsal_end": 31,
+      "pelvic_girdle": [26, 29],
+      "anal_origin": 38,
+      "anal_end": 46,
+      "adipose": [43, 49],
+      "first_caudal": 31
+    },
+    "fin_origin_from_hypural_end_in_centra": {
+      "dorsal_origin": 38.0, "dorsal_end": 28.3, "pelvic_girdle": [30.1, 33.7],
+      "anal_origin": 21.9, "anal_end": 13.8, "adipose": [10.1, 16.6], "abd_caudal_boundary": 28.5
+    },
+    "literature_comparison": {
+      "o_masou_literature": "63-66 (C, r15 F-12)",
+      "difference_from_estimate": "6〜9少ない",
+      "rainbow_trout_proxy": "33+30=63 (r15 F-33)",
+      "s01": "頭の入口〜臀鰭起点が約36椎体(k06は約33)。s01は種不明、外挿を含みlow"
+    }
+  },
+  "fin_rays": {
+    "dorsal": 13,
+    "anal": 11,
+    "pelvic": 9,
+    "pectoral": 13,
+    "caudal_principal": 19,
+    "adipose": 0,
+    "adipose_fin_count": 1,
+    "range": {
+      "dorsal": [12, 14], "anal": [10, 12], "pelvic": [8, 10], "pectoral": [12, 14],
+      "caudal_principal": [18, 20]
+    },
+    "confidence": {
+      "dorsal": "med", "anal": "low", "pelvic": "low", "pectoral": "med",
+      "caudal_principal": "med", "adipose": "med"
+    },
+    "radials": {
+      "dorsal": {"est": 12, "range": [11, 14], "confidence": "low", "note": "基部の暗い粒の数。鰭条と1対1で、近位/中間/遠位は区別できない"},
+      "anal": {"est": 12, "range": [11, 13], "confidence": "low", "note": "k02 基部の粒12個"},
+      "pelvic": {"est": null, "confidence": "low", "note": "担鰭骨なし。鰭条は黒い腰帯(基鰭骨, k02 x88-115 y395-415)に直接つく。前突起あり"},
+      "pectoral": {"est": null, "confidence": "low", "note": "基部が暗い塊で読めない"}
+    },
+    "image_refs": {
+      "dorsal": "k02 (225-290,375-455); k06 (172-236,336-405)",
+      "anal": "k02 (70-140,245-312); k06はピンボケ",
+      "pelvic": "k02 (60-115,350-415)",
+      "pectoral": "k01 (125-190,270-340) 中心(162,354)から半径65 pxの円弧で12検出+欠損1",
+      "caudal_principal": "k02 y=115で19, y=120で20, y=130で19 (x113-225); k06 y=100で18",
+      "adipose": "k06 (160-180,200-250) 涙滴形(約20x45 px)、鰭条なし"
+    },
+    "caudal_shape": {"form": "forked", "central_over_longest_ray": 0.6, "image": "k02 中央の切れ込み(172,85)、両葉の先端 y≈48、基部 y≈160-165"},
+    "caudal_skeleton": {
+      "hypural_count": null, "uroneural_count": null, "epural_count": null,
+      "note": "k06 (95-155,138-178) の紫の楔形に斜めの明暗縞(左3〜5/右3〜4)が見えるが骨との対応は不明。最後の約5〜7椎体の棘が幅広の扇に開き尾鰭の上下縁を支える。r15 F-17 の下尾骨6・尾神経棘3は肯定も否定もできない"
+    },
+    "notes": "背13・胸13・腹9は青森ヤマメ(r15 F-15: 背12-13, 胸12-14, 腹9, 臀12-14)の範囲内。臀11はやや下。痕跡的な前縁の短い条は小型個体で数えにくく、各値は下限寄りの可能性。"
+  },
+  "jaw": {
+    "gape_deg_estimate": 32,
+    "gape_deg_range": [27, 38],
+    "lower_jaw_rotation_deg": 28,
+    "lower_jaw_rotation_range": [24, 34],
+    "confidence": {"gape": "med", "lower_jaw_rotation": "low"},
+    "landmarks_x01": {
+      "upper_tip_U": [167, 209],
+      "lower_tip_L": [175, 252.5],
+      "joint_candidate_J": [232, 253],
+      "joint_alt_J_foot": [232, 262]
+    },
+    "vertical_gape_over_SL": 0.049,
+    "lower_jaw_length_over_SL": 0.064,
+    "upper_tip_to_joint_over_SL": 0.089,
+    "method": "開口角はU-J-L(顎関節から上顎先端と下顎先端を見込む角)。J→Uは水平から34.1度、J→Lは0.5度、差33.6度。Jを足状部(232,262)にとると29.7度。下顎の回転量は閉口位でLがUの直下(170,217)に来ると仮定した角度差(約30度)から実測(0.5度)を引いた約28度。",
+    "assumptions": ["上顎(前上顎骨・主上顎骨)は閉口位から動いていない", "冷凍個体の死後の開口で、生理的な最大値とは限らない"],
+    "not_measurable": ["主上顎骨の回転量", "頭蓋の挙上量(閉口位の基準像なし)", "歯の本数・向き"],
+    "compare_spec05": "spec05 jaw_lower 0〜28度(既定18度)の上限と同程度"
+  },
+  "head": {
+    "head_length_over_SL": null,
+    "orbit_d_over_HL": null,
+    "orbit_d_over_SL": null,
+    "orbit_ring_k05": {
+      "outer_px": [50, 53], "inner_lens_disc_px": [35, 33], "inner_over_outer": 0.65,
+      "image_box": [122, 405, 172, 458], "confidence": "low",
+      "note": "前斜視のため頭長比は出さない。ほぼ円。椎体幅(17〜19 px)の約2.8倍"
+    },
+    "orbit_over_SL_rough": {"value": 0.07, "range": [0.05, 0.09], "confidence": "low", "note": "k05とk06の尺度連鎖(不確実)。spec02の0.056(幼魚0.058)より大きく、小型個体で相対的に大きい可能性"},
+    "cranial_roof_end_over_SL": 0.195,
+    "snout_dorsal_profile_deg": {"tip_to_x230": 26, "x230_to_x330": 8.5, "body": 3.8, "confidence": "low"},
+    "teeth": "下顎(歯骨)縁に小さな淡色の歯が鋸歯状に並ぶ(約8〜12個、数は分解不能)。k05 (234-256,465-500)、k04 (160-195,485-520)。x01では見えない。",
+    "dentary_k05": {"box": [215, 405, 260, 500], "tip": [250, 497], "note": "暗青の細長い刃状"},
+    "opercle": "k05 (170-265,340-470) 幅広の扇状領域。上縁に暗い細い弧 (130,350)->(215,332)->(255,365)。鰓蓋・前鰓蓋・間鰓蓋・下鰓蓋は分離して見えない。",
+    "branchiostegal_rays": {"count": null, "note": "k05 (200-250,395-470) に暗い斜めの筋が8本以上。数えられない"},
+    "spine_entry_to_head_k05": [150, 360],
+    "confidence": "low"
+  },
+  "body_ratios_from_xray": {
+    "image": "x01",
+    "SL_px": 884,
+    "SL_px_range": [869, 899],
+    "SL_endpoints": {"snout": [166.5, 209], "hypural_end": [1050, 185]},
+    "body_depth_max_over_SL": 0.21,
+    "body_depth_max_over_SL_range": [0.2, 0.22],
+    "body_depth_max_px": 181,
+    "body_depth_max_pos_s": 0.43,
+    "head_length_over_SL": null,
+    "cranial_roof_end_over_SL": 0.195,
+    "caudal_peduncle_depth_over_SL": 0.071,
+    "caudal_peduncle_note": "X線で薄い縁が消えるため過小の可能性が大きい(low)",
+    "predorsal_s": 0.527,
+    "dorsal_base_over_SL": 0.122,
+    "profile_ratio_to_photo_mean": {"value": 0.87, "range": [0.83, 0.95], "note": "s=0.2〜0.9 の体高が写真集計(profile_mean.json)の何倍か。閾値で変わる。形はほぼ相似"},
+    "compare_spec02": {"body_depth_max_over_SL": 0.241, "head_length_over_SL": 0.264, "caudal_peduncle_over_SL": 0.092, "verdict": "体高は-0.4〜-1.5 SD の範囲で一致。既定の変更根拠にはならない。頭長は比較不能。"},
+    "body_axis_tilt_deg": 4.0,
+    "confidence": {"SL": "med", "body_depth": "med", "peduncle": "low", "head_length": null}
+  },
+  "limits": [
+    "全体が写る画像が無く、頭側(鰓蓋・肩帯の陰)と尾端(癒合部)が隠れるため、総椎骨数は53〜63の幅を持つ推定(最大の限界)",
+    "腹椎/尾椎の境界は血管棘から肋骨への移行が不鮮明で、腹椎30・尾椎27は各±3",
+    "k標本は瓶(高さ6.0 cm)内の小型個体で、SL・成熟状態・河川型/降海型・染色法が不明。mm換算はしていない。ラベル文字以外に種の確認なし",
+    "k画像は瓶と保存液の屈折・遠近・傾きを含む。椎体周期の絶対値は使えない(計数は影響を受けにくい)",
+    "x01は粗い印刷物で椎体・鰭条・歯が分解できず、頭長(鰓蓋後縁)も写らない。口が開いた冷凍個体で死後変化が不明",
+    "頭部寸法(頭長・眼窩径・顎の個別の長さ・主上顎骨の回転・頭蓋挙上)は真横の骨格像が無く出していない。k04・k05は前斜視で寸法を出さない",
+    "担鰭骨は基部の粒の数のみ(鰭条と同数で独立の確認ではない)。胸鰭の担鰭骨は不可",
+    "尾部骨格(下尾骨・尾神経棘・上尾骨)の枚数は不明",
+    "1個体の値を種の代表値にできない(集団差・個体差)"
+  ]
+}

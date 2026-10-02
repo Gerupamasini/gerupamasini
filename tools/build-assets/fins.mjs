@@ -14,7 +14,7 @@
 //    makes each ray a ridge; the distal margin is scalloped (V notches between ray tips) and wobbles; the leading ray
 //    is a thin tapered tube (rounded front edge); the root is buried 0.4 mm in the body and covered by a fleshy "collar"
 //    bump that is draped over the skin (alpha fades to 0 at its rim, so it blends into the body).
-//  * The adipose fin is an opaque closed lobe; the caudal fin has a fleshy sleeve that covers the peduncle.
+//  * The adipose fin is an opaque closed lobe; the caudal sheet overlaps the peduncle (outer rays start on the outline ahead of s = 1).
 //  * Vertex attributes: _FINID (fin id), _FINT (0 leading .. 1 trailing), _FINR (0 root .. 1 tip).
 export const FIN_IDS = { dorsal: 0, adipose: 1, pectoral_R: 2, pectoral_L: 3, pelvic_R: 4, pelvic_L: 5, anal: 6, caudal: 7 };
 
@@ -82,7 +82,6 @@ export const ATLAS_CELLS = {
   col_pectoral:{ x: 336, y: 712, w: 144, h: 304 },
   col_pelvic:  { x: 488, y: 712, w: 144, h: 304 },
   col_anal:    { x: 640, y: 712, w: 144, h: 304 },
-  sleeve:      { x: 792, y: 712, w: 152, h: 304 },
 };
 function cellUV(cell, t, r) {
   const W = ATLAS_SIZE;
@@ -183,23 +182,29 @@ const edgeWobble = (F, t) => F.wob * (0.5 + 0.5 * fbm(t * F.wobFreq + 3.7, 0.5, 
 /** r at which the membrane ends for column t (V notches between ray tips, wobble, damage bites) */
 function columnEnd(F, t) {
   const jf = t * (F.n - 1);
-  const nv = 0.5 - 0.5 * Math.cos(TAU * jf);               // 0 on a ray, 1 between rays
-  const nv2 = 0.5 - 0.5 * Math.cos(2 * TAU * jf + 1.3);     // finer irregular notches (branch tips) [E]
-  let e = 1 - F.notch * Math.pow(nv, 1.25) - F.notch2 * nv2 * (0.4 + 0.6 * hash2(Math.floor(jf), 7, F.seed)) - edgeWobble(F, t);
+  let e = 1 - edgeWobble(F, t);
+  if (F.lod.notch) {
+    const nv = 0.5 - 0.5 * Math.cos(TAU * jf);               // 0 on a ray, 1 between rays
+    const nv2 = 0.5 - 0.5 * Math.cos(2 * TAU * jf + 1.3);     // finer irregular notches (branch tips) [E]
+    e -= F.notch * Math.pow(nv, 1.25) + F.notch2 * nv2 * (0.4 + 0.6 * hash2(Math.floor(jf), 7, F.seed));
+  }
   for (const b of F.bites) { const d = Math.abs(t - b.t) / b.w; if (d < 1) e -= b.depth * 0.5 * (1 + Math.cos(Math.PI * d)); }
   return clamp(e, 0.2, 1);
 }
-/** pleat (ray = ridge) + gentle warp, displacement along Nf in metres */
+/** pleat (ray = ridge) + gentle warp, displacement along Nf in metres.  The pleat is only meshed at detail >= ~0.5; the normal map always carries it. */
 function reliefAt(F, t, r) {
   const jf = t * (F.n - 1);
-  const bb = sstep(0.6, 0.95, r) * 0.5;                      // rays divide near the tip: the pleat frequency doubles [E]
-  const ridge = (1 - bb) * Math.cos(TAU * jf) + bb * Math.cos(2 * TAU * jf);
   const env = sstep(0.05, 0.22, r) * (1 - 0.6 * sstep(0.45, 1.0, r));
-  const lead = 1 + F.leadBoost * Math.exp(-Math.pow(jf / 0.45, 2)) + F.trailBoost * Math.exp(-Math.pow((F.n - 1 - jf) / 0.45, 2));
+  let pleat = 0;
+  if (F.lod.pleat) {
+    const bb = sstep(0.6, 0.95, r) * 0.5;                      // rays divide near the tip: the pleat frequency doubles [E]
+    const ridge = (1 - bb) * Math.cos(TAU * jf) + bb * Math.cos(2 * TAU * jf);
+    const lead = 1 + F.leadBoost * Math.exp(-Math.pow(jf / 0.45, 2)) + F.trailBoost * Math.exp(-Math.pow((F.n - 1 - jf) / 0.45, 2));
+    // keep the pleat slope moderate where the ray pitch is small: amplitude <= 0.14 * pitch   [E]
+    pleat = Math.min(F.amp, 0.14 * F.pitchAt(r)) * env * ridge * lead;
+  }
   const warp = F.warp * sstep(0.1, 0.5, r) * r * fbm(t * F.warpFreq, r * 0.9 + 4.1, F.seed + 29, 2);
-  // keep the pleat slope moderate where the ray pitch is small: amplitude <= 0.14 * pitch   [E]
-  const amp = Math.min(F.amp, 0.14 * F.pitchAt(r));
-  return amp * env * ridge * lead + warp;
+  return pleat + warp;
 }
 /** tabulate the ray pitch (chord / (n-1)) along r so that the pleat amplitude can follow it */
 function prepFin(F) {
@@ -210,8 +215,8 @@ function prepFin(F) {
 }
 
 // ----------------------------------------------------------------------------------------------- sheet / tube / collar builders
-function addSheet(M, F, cpr, rows) {
-  const n = F.n, nc = (n - 1) * cpr + 1; const cell = ATLAS_CELLS[F.cell];
+function addSheet(M, F, nc, rows) {
+  const n = F.n; const cell = ATLAS_CELLS[F.cell];
   const v0 = M.nv, i0 = M.idx.length;
   const colEnd = [];
   for (let c = 0; c < nc; c++) {
@@ -243,9 +248,9 @@ function addSheet(M, F, cpr, rows) {
   return { v0, v1: M.nv, nc, rows };
 }
 
-function addTube(M, F, j, rad0, rows) {
+function addTube(M, F, j, rad0, rows, sides = 4) {
   const t = j / (F.n - 1); const cell = ATLAS_CELLS[F.cell];
-  const e = columnEnd(F, t); const sides = 6;
+  const e = columnEnd(F, t);
   const rings = [];
   const pts = [];
   for (let k = 0; k <= rows; k++) {
@@ -283,7 +288,7 @@ function addTube(M, F, j, rad0, rows) {
 
 /** Skin-hugging flesh bump around a fin root; rim sits 0.4 mm inside the skin with alpha 0 */
 function addCollar(M, body, surface, C, attrs) {
-  const nu = C.nu ?? 22, nv = C.nv ?? 9; const v0 = M.nv, i0 = M.idx.length; const cell = ATLAS_CELLS[C.cell];
+  const nu = C.nu, nv = C.nv; const v0 = M.nv, i0 = M.idx.length; const cell = ATLAS_CELLS[C.cell];
   const SL = body.SL;
   for (let i = 0; i <= nu; i++) {
     const u = i / nu; const shp = Math.pow(Math.max(1 - Math.pow(Math.abs(2 * u - 1), C.endPow ?? 2.4), 0), 0.75);
@@ -294,7 +299,7 @@ function addCollar(M, body, surface, C, attrs) {
       else if (C.mode === 'ventral') a = body.alphaForZ(s, vv * hw, true);
       else if (C.mode === 'alpha') { const fr = body.frame(s, a); a += (vv * hw) / len(fr.Pa); }
       else if (C.mode === 's') { const fr = body.frame(s, a); s += (vv * hw) / len(fr.Ps); }
-      const bump = shp * Math.pow(Math.max(1 - vv * vv, 0), 1.1);
+      const bump = shp * Math.pow(Math.max(1 - vv * vv, 0), 1.0);
       const off = -EMBED + (C.H + EMBED) * bump;
       M.vert(surface.point(s, a, off), cellUV(cell, u, (vv + 1) / 2), u, 0);
     }
@@ -336,51 +341,51 @@ const rngFor = (ctx, off) => mulberry32((ctx.seed * 1000003 + off * 7727) >>> 0)
 
 function specDorsal(ctx) {
   const { surface, P, SL, vary } = ctx; const fp = P.fins.dorsal; const n = ctx.rayCount('dorsal', fp.rays);
-  const rng = rngFor(ctx, 1); const F = baseSpec(ctx, 'dorsal', 'dorsal', n, 1, { amp: 0.15 * MM, notch: 0.05, warp: 0.4 * MM, tubeRad: 0.3 * MM });
+  const rng = rngFor(ctx, 1); const F = baseSpec(ctx, 'dorsal', 'dorsal', n, 1, { amp: 0.15 * MM, notch: 0.022, notch2: 0.012, warp: 0.4 * MM, tubeRad: 0.3 * MM });
   F.bites = makeBites(rng, ctx.damage, 2);
   const tilt = (rng() - 0.5) * 2 * 2.2 * DEG * vary;            // fin leans slightly to one side [E]
   const A1 = [-1, 0, 0], A2 = [0, Math.cos(tilt), Math.sin(tilt)]; F.A1 = A1; F.A2 = A2; F.Nf = [0, -Math.sin(tilt), Math.cos(tilt)];
   F.Cv = A1;
-  const thF = (47 + (rng() - 0.5) * 6 * vary) * DEG, thR = (25 + (rng() - 0.5) * 6 * vary) * DEG;   // lean from vertical [P: p049/p029 rays lean back 25-47 deg]
+  const thF = (44 + (rng() - 0.5) * 6 * vary) * DEG, thR = (60 + (rng() - 0.5) * 6 * vary) * DEG;   // rays lean back and fan out: ~44 deg at the front edge, ~60 deg at the rear [P: p049 dorsal crop]
   const H = fp.height * SL; const tgt = [];
   const bow = (rng() - 0.5) * 0.03 * vary;
   for (let j = 0; j < n; j++) {
     const u = j / (n - 1); const s = fp.origin_s + fp.base_len * u;
-    const th = lerp(thF, thR, Math.pow(u, 0.85));
-    const e = u < 0.06 ? 0.93 + (u / 0.06) * 0.07 : 1 - 0.56 * Math.pow((u - 0.06) / 0.94, 1.2);   // trapezoid: tall front, low rear [P: p049]
+    const th = lerp(thF, thR, Math.pow(u, 0.9));
+    const e = u < 0.06 ? 0.93 + (u / 0.06) * 0.07 : 1 - 0.74 * Math.pow((u - 0.06) / 0.94, 1.45);   // tall front edge, low rear: convex distal margin [P: p049/p016]
     F.rays.push({ B: surface.point(s, 0, -EMBED), D: add(mul(A1, Math.sin(th)), mul(A2, Math.cos(th))), L: 1, kap: 0.2 + 0.1 * (rng() - 0.5) * vary, bnd: 0.03 + bow + 0.03 * (2 * u - 1) });
     tgt.push(H * e * (1 + 0.025 * (rng() - 0.5) * 2 * vary));
   }
   finishRays(F); fitRays(F, tgt, A2); prepFin(F);
-  F.collar = { cell: 'col_dorsal', mode: 'dorsal', s: (u) => fp.origin_s - 0.004 + (fp.base_len + 0.008) * u, hw: (u) => 3.0 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.8 * MM, nu: 30, nv: 10 };
+  F.collar = { cell: 'col_dorsal', mode: 'dorsal', s: (u) => fp.origin_s - 0.004 + (fp.base_len + 0.008) * u, hw: (u) => 3.4 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.7 * MM };
   F.dims = { base_len: fp.base_len, height: fp.height, origin_s: fp.origin_s };
   return F;
 }
 
 function specAnal(ctx) {
   const { surface, P, SL, vary } = ctx; const fp = P.fins.anal; const n = ctx.rayCount('anal', fp.rays);
-  const rng = rngFor(ctx, 2); const F = baseSpec(ctx, 'anal', 'anal', n, 2, { amp: 0.14 * MM, notch: 0.05, warp: 0.4 * MM, tubeRad: 0.27 * MM });
+  const rng = rngFor(ctx, 2); const F = baseSpec(ctx, 'anal', 'anal', n, 2, { amp: 0.14 * MM, notch: 0.025, notch2: 0.012, warp: 0.4 * MM, tubeRad: 0.27 * MM });
   F.bites = makeBites(rng, ctx.damage * 0.4, 1);
   const tilt = (rng() - 0.5) * 2 * 2 * DEG * vary;
   const A1 = [-1, 0, 0], A2 = [0, -Math.cos(tilt), Math.sin(tilt)]; F.A1 = A1; F.A2 = A2; F.Nf = [0, Math.sin(tilt), Math.cos(tilt)]; F.Cv = A1;
-  const thF = (56 + (rng() - 0.5) * 5 * vary) * DEG, thR = (28 + (rng() - 0.5) * 5 * vary) * DEG;   // longest ray 0.113-0.119 SL for 0.064 SL height => ~56 deg [P: r10 F-14]
+  const thF = (56 + (rng() - 0.5) * 5 * vary) * DEG, thR = (60 + (rng() - 0.5) * 5 * vary) * DEG;   // longest ray 0.113-0.119 SL for 0.064 SL height => ~56 deg [P: r10 F-14]
   const H = fp.height * SL; const tgt = [];
   for (let j = 0; j < n; j++) {
     const u = j / (n - 1); const s = fp.origin_s + fp.base_len * u;
     const th = lerp(thF, thR, Math.pow(u, 0.8));
-    const e = u < 0.05 ? 0.94 + (u / 0.05) * 0.06 : 1 - 0.62 * Math.pow((u - 0.05) / 0.95, 1.1);
+    const e = u < 0.05 ? 0.94 + (u / 0.05) * 0.06 : 1 - 0.7 * Math.pow((u - 0.05) / 0.95, 1.25);
     F.rays.push({ B: surface.point(s, Math.PI, -EMBED), D: add(mul(A1, Math.sin(th)), mul(A2, Math.cos(th))), L: 1, kap: 0.16 + 0.08 * (rng() - 0.5) * vary, bnd: 0.03 + 0.03 * (2 * u - 1) });
     tgt.push(H * e * (1 + 0.025 * (rng() - 0.5) * 2 * vary));
   }
   finishRays(F); fitRays(F, tgt, A2); prepFin(F);
-  F.collar = { cell: 'col_anal', mode: 'ventral', s: (u) => fp.origin_s - 0.004 + (fp.base_len + 0.008) * u, hw: (u) => 2.8 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.7 * MM, nu: 28, nv: 10 };
+  F.collar = { cell: 'col_anal', mode: 'ventral', s: (u) => fp.origin_s - 0.004 + (fp.base_len + 0.008) * u, hw: (u) => 3.2 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.6 * MM };
   F.dims = { base_len: fp.base_len, height: fp.height, origin_s: fp.origin_s };
   return F;
 }
 
 function specPelvic(ctx, sideSeed) {
   const { surface, P, SL, vary, body } = ctx; const fp = P.fins.pelvic; const n = ctx.rayCount('pelvic', fp.rays);
-  const rng = rngFor(ctx, 3 + sideSeed * 13); const F = baseSpec(ctx, 'pelvic', 'pelvic', n, 3 + sideSeed * 13, { amp: 0.13 * MM, notch: 0.04, warp: 0.35 * MM, tubeRad: 0.26 * MM });
+  const rng = rngFor(ctx, 3 + sideSeed * 13); const F = baseSpec(ctx, 'pelvic', 'pelvic', n, 3 + sideSeed * 13, { amp: 0.13 * MM, notch: 0.02, notch2: 0.01, warp: 0.35 * MM, tubeRad: 0.26 * MM });
   F.bites = makeBites(rng, ctx.damage * 0.3, 1);
   const baseW = 0.03;                                              // base length along the belly [E: 02 gives only length]
   const aP = Math.PI - (0.55 + 0.04 * (rng() - 0.5) * vary);       // ventro-lateral attachment [E]
@@ -395,14 +400,14 @@ function specPelvic(ctx, sideSeed) {
   }
   finishRays(F); fitRays(F, tgt, null); prepFin(F);
   F.clearance = (p, r) => (r > 0.08 ? pushOut(body, p, 0.5 * MM) : p);
-  F.collar = { cell: 'col_pelvic', mode: 'alpha', s: (u) => fp.origin_s - 0.004 + (baseW + 0.008) * u, a: () => aP, hw: (u) => 3.6 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.9 * MM, nu: 22, nv: 10 };
+  F.collar = { cell: 'col_pelvic', mode: 'alpha', s: (u) => fp.origin_s - 0.004 + (baseW + 0.008) * u, a: () => aP, hw: (u) => 3.8 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.7 * MM };
   F.dims = { length: fp.length, origin_s: fp.origin_s };
   return F;
 }
 
 function specPectoral(ctx, sideSeed) {
   const { surface, P, SL, vary, body } = ctx; const fp = P.fins.pectoral; const n = ctx.rayCount('pectoral', fp.rays);
-  const rng = rngFor(ctx, 4 + sideSeed * 17); const F = baseSpec(ctx, 'pectoral', 'pectoral', n, 4 + sideSeed * 17, { amp: 0.1 * MM, notch: 0.03, warp: 0.45 * MM, tubeRad: 0.26 * MM, leadBoost: 1.0 });
+  const rng = rngFor(ctx, 4 + sideSeed * 17); const F = baseSpec(ctx, 'pectoral', 'pectoral', n, 4 + sideSeed * 17, { amp: 0.1 * MM, notch: 0.016, notch2: 0.01, warp: 0.45 * MM, tubeRad: 0.26 * MM, leadBoost: 1.0 });
   F.bites = makeBites(rng, ctx.damage, 2);
   // base: centre at 1/6 of the body depth above the belly line, runs down and slightly back; upper end at s = 0.258 [P: r10 F-14, 02 §2.5]
   const sec = surface.section(fp.origin_s); const baseH = 0.038 * SL;   // base height on the flank [E]
@@ -425,18 +430,24 @@ function specPectoral(ctx, sideSeed) {
   }
   finishRays(F); fitRays(F, tgt, null); prepFin(F);
   F.clearance = (p, r) => (r > 0.06 ? pushOut(body, p, 0.5 * MM) : p);
-  F.collar = { cell: 'col_pectoral', mode: 's', s: sOf, a: aOf, hw: (u) => 3.4 * MM * (0.6 + 0.4 * Math.sin(Math.PI * u)), H: 1.0 * MM, nu: 18, nv: 10 };
+  F.collar = { cell: 'col_pectoral', mode: 's', s: sOf, a: aOf, hw: (u) => 3.8 * MM * (0.6 + 0.4 * Math.sin(Math.PI * u)), H: 0.8 * MM };
   F.dims = { length: fp.length, origin_s: fp.origin_s };
   return F;
 }
 
 function specCaudal(ctx) {
   const { surface, P, SL, vary } = ctx; const fp = P.fins.caudal; const n = ctx.rayCount('caudal', fp.principal_rays);
-  const rng = rngFor(ctx, 5); const F = baseSpec(ctx, 'caudal', 'caudal', n, 5, { amp: 0.13 * MM, notch: 0.035, notch2: 0.012, warp: 0.55 * MM, tubeRad: 0.24 * MM, leadBoost: 0.8, trailBoost: 0.8, tubes: [0, n - 1] });
+  const rng = rngFor(ctx, 5); const F = baseSpec(ctx, 'caudal', 'caudal', n, 5, { amp: 0.13 * MM, notch: 0.02, notch2: 0.012, warp: 0.55 * MM, tubeRad: 0.24 * MM, leadBoost: 0.8, trailBoost: 0.8, tubes: [0, n - 1] });
   F.bites = makeBites(rng, ctx.damage * 0.5, 1);
   F.A1 = [-1, 0, 0]; F.A2 = [0, 1, 0]; F.Nf = [0, 0, 1]; F.Cv = [0, 1, 0];
-  const sR = 0.972;                                                // fin root covers the peduncle: rays start ahead of s = 1 [spec task: 基部は尾柄に被さる]
-  const yTop = surface.point(sR, 0, -EMBED)[1], yBot = surface.point(sR, Math.PI, -EMBED)[1], xR = surface.sToX(sR);
+  // The fin sheet overlaps the peduncle: the outer rays start on the dorsal / ventral outline well ahead of s = 1 (procurrent rays),
+  // the inner rays start 2-3 mm inside the body, so the peduncle outline flows into the fin margins without a cuff. [task: 基部は尾柄に被さる]
+  const sR = 0.985;
+  const rootOf = (v) => {
+    const s_ = sR - 0.027 * Math.pow(Math.abs(v), 3);
+    const sec = surface.section(s_);
+    return [surface.sToX(s_), (sec.c + v * sec.h) * SL - Math.sign(v) * EMBED * Math.pow(Math.abs(v), 4), 0];
+  };
   const xS1 = surface.sToX(1.0); const tipX = xS1 - fp.length * SL; const Yh = (fp.span * SL) / 2; const fork = fp.fork_depth * SL;
   const yC = surface.section(1).c * SL;
   const lobeU = 1 + 0.015 * (rng() - 0.5) * 2 * vary, lobeL = 1 + 0.015 * (rng() - 0.5) * 2 * vary;
@@ -445,8 +456,8 @@ function specCaudal(ctx) {
     const u = k / (n - 1); const v = 1 - 2 * u;                     // +1 upper lobe .. -1 lower lobe
     const g = Math.pow(Math.max(1 - Math.pow(Math.abs(v), 2.2), 0), 1.4);
     const lobe = v > 0 ? lobeU : lobeL;
-    const tip = [tipX + fork * g - (v === 0 ? 0 : 0) , yC + Yh * v * lobe, 0];
-    const root = [xR, lerp(yTop, yBot, u), 0];
+    const tip = [tipX + fork * g + 0.012 * SL * Math.pow(sstep(0.78, 1, Math.abs(v)), 1.5), yC + Yh * v * lobe, 0];   // rounded lobe tips
+    const root = rootOf(v);
     const kap = 0.2 * Math.pow(Math.abs(v), 1.6) + 0.02 * (rng() - 0.5), bnd = cup * (v * v - 0.35) + twist * v + 0.01 * (rng() - 0.5), Cv = [0, v >= 0 ? 1 : -1, 0];
     // choose D and L so that the curved ray still ends exactly at `tip` (in the fin plane)
     let d = sub(tip, root), L = len(d), D = norm(d);
@@ -458,7 +469,7 @@ function specCaudal(ctx) {
   }
   finishRays(F); prepFin(F);
   F.collar = null;
-  F.dims = { length: fp.length, span: fp.span, fork_depth: fp.fork_depth, origin_s: 1.0, sR };
+  F.dims = { length: fp.length, span: fp.span, fork_depth: fp.fork_depth, origin_s: 1.0 };
   return F;
 }
 
@@ -472,11 +483,11 @@ function pushOut(body, p, clr) {
   return [p[0], p[1], sgn * Math.max(Math.abs(p[2]), hi + clr * 0.5)];
 }
 
-// ----------------------------------------------------------------------------------------------- adipose fin + caudal sleeve
-function buildAdiposeMesh(ctx) {
+// ----------------------------------------------------------------------------------------------- adipose fin
+function buildAdiposeMesh(ctx, lod) {
   const { surface, P, SL, vary, body } = ctx; const fp = P.fins.adipose; const rng = rngFor(ctx, 6);
   const M = new Mesh(); const cell = ATLAS_CELLS.adipose;
-  const nu = 30, nphi = 14; const H = fp.height * SL;
+  const nu = lod.adipose[0], nphi = lod.adipose[1]; const H = fp.height * SL;
   const lean = (0.5 + 0.15 * (rng() - 0.5) * 2 * vary);            // laid back (p049) .. upright (p016) [P: r10 F-13]
   const W0 = 1.3 * MM;                                             // half-thickness at the base: a fleshy lobe, not a plate [E]
   const shape = (u) => Math.pow(Math.sin(Math.PI * Math.pow(u, 0.8)), 0.8);
@@ -503,39 +514,6 @@ function buildAdiposeMesh(ctx) {
   return { M, dims: { base_len: fp.base_len, height: fp.height, origin_s: fp.origin_s } };
 }
 
-function buildSleeveMesh(ctx, sR) {
-  const { surface, SL } = ctx; const M = new Mesh(); const cell = ATLAS_CELLS.sleeve;
-  const na = 28, nsA = 8, nsB = 9; const sA = 0.958; const qm = 0.05;   // sleeve ahead of s = 1 and a tapering wedge behind it [E]
-  const p1 = surface.section(1); const yC = p1.c * SL; const x1 = surface.sToX(1.0);
-  const stations = [];
-  for (let i = 0; i <= nsA; i++) { const f = i / nsA; stations.push({ kind: 0, s: lerp(sA, 1.0, f), off: lerp(-0.35 * MM, 0.3 * MM, sstep(0, 1, f)), f: f * 0.6 }); }
-  for (let i = 1; i <= nsB; i++) { const f = i / nsB; stations.push({ kind: 1, q: qm * f, f: 0.6 + 0.4 * f }); }
-  const rings = [];
-  for (const st of stations) {
-    const ring = [];
-    for (let j = 0; j < na; j++) {
-      const a = (j / na) * TAU; let p;
-      if (st.kind === 0) p = surface.point(st.s, a, st.off);
-      else {
-        const b = surface.point(1.0, a, 0.3 * MM); const f = st.q / qm;
-        const fh = 1 - 0.05 * f * f, fw = Math.pow(Math.max(1 - Math.pow(f, 1.5), 0.015), 1.0);
-        p = [x1 - st.q * SL, yC + (b[1] - yC) * fh, b[2] * fw];
-      }
-      const yTop = surface.point(1.0, 0)[1], yBot = surface.point(1.0, Math.PI)[1];
-      const tt = clamp((yTop - p[1]) / (yTop - yBot), 0, 1);
-      ring.push(M.vert(p, cellUV(cell, st.f, a / TAU), tt, st.kind === 1 ? 0.12 * st.q / qm : 0));
-    }
-    rings.push(ring);
-  }
-  for (let i = 0; i < rings.length - 1; i++) for (let j = 0; j < na; j++) {
-    const a = rings[i][j], b = rings[i][(j + 1) % na], c = rings[i + 1][(j + 1) % na], d = rings[i + 1][j]; M.tri(a, b, c); M.tri(a, c, d);
-  }
-  M.computeNormals(0, M.nv, 0, M.idx.length);
-  // outward check at the dorsal-most vertex of ring 3
-  const top = rings[3][0]; if (M.n[top][1] < 0) M.flip(0, M.nv, 0, M.idx.length);
-  return M;
-}
-
 // ----------------------------------------------------------------------------------------------- texture synthesis
 // All colours below are sRGB 0..255 of the fin's own albedo (alpha-composited by the renderer).  They are brighter /
 // more saturated than the 03 §3.5.1 medians because those were measured through the translucent membrane over a background
@@ -548,22 +526,22 @@ function texSpecs(ctx, finSpecs) {
   const sat = G.caudal_margin_sat ?? ctx.genome.caudal_margin_sat ?? 0.3;                                          // [03 §3.4.3 caudal_margin_sat]
   const mk = (kind, F, extra) => {
     const rb = []; const rng = mulberry32(ctx.seed * 31 + kind.length * 17);
-    for (let j = 0; j < F.n; j++) rb.push(0.5 + 0.3 * rng());
+    for (let j = 0; j < F.n; j++) rb.push((kind === 'caudal' ? 0.28 : 0.42) + 0.3 * rng());
     return Object.assign({ kind, n: F.n, rb, seed: ctx.seed + F.seed, cell: F.cell }, extra);
   };
   const T = {};
-  T.dorsal = mk('dorsal', finSpecs.dorsal, { mem: rgb(124, 112, 100), ray: rgb(84, 74, 64), flesh: rgb(88, 78, 62), aMem: 0.4, aRay: 0.74, aBase: 0.86, ridgeH: 0.09, rough: 0.55, white: we.dorsal, dots: G.dorsal_dots ?? 1, rayTint: rgb(150, 110, 70), rayTintAmt: 0.0 });
-  T.anal = mk('anal', finSpecs.anal, { mem: rgb(168, 154, 148), ray: rgb(138, 112, 100), flesh: rgb(176, 168, 156), aMem: 0.42, aRay: 0.74, aBase: 0.86, ridgeH: 0.09, rough: 0.52, white: we.anal, rayTint: rgb(214, 128, 78), rayTintAmt: 0.22 });
-  T.pelvic = mk('pelvic', finSpecs.pelvic, { mem: rgb(166, 146, 122), ray: rgb(132, 104, 82), flesh: rgb(176, 168, 156), aMem: 0.44, aRay: 0.76, aBase: 0.86, ridgeH: 0.09, rough: 0.52, white: we.pelvic, rayTint: rgb(214, 128, 78), rayTintAmt: 0.22 });
-  T.pectoral = mk('pectoral', finSpecs.pectoral, { mem: G.pectoral_color ?? rgb(224, 176, 84), ray: rgb(176, 124, 52), flesh: rgb(196, 176, 148), aMem: 0.5, aRay: 0.8, aBase: 0.88, ridgeH: 0.08, rough: 0.5, white: we.pectoral, rayTint: rgb(200, 120, 40), rayTintAmt: 0.0, leadDark: 0.45 });
-  T.caudal = mk('caudal', finSpecs.caudal, { mem: rgb(124, 112, 98), ray: rgb(86, 76, 66), flesh: rgb(104, 96, 80), aMem: 0.42, aRay: 0.74, aBase: 0.9, ridgeH: 0.09, rough: 0.55, white: 0, sat: sat, orange: rgb(190, 100, 48) });
+  T.dorsal = mk('dorsal', finSpecs.dorsal, { mem: rgb(132, 120, 110), ray: rgb(176, 160, 150), flesh: rgb(92, 82, 66), aMem: 0.4, aRay: 0.74, aBase: 0.86, ridgeH: 0.09, rough: 0.55, white: we.dorsal, dots: G.dorsal_dots ?? 1, rayTint: rgb(150, 110, 70), rayTintAmt: 0.0 });
+  T.anal = mk('anal', finSpecs.anal, { mem: rgb(196, 186, 180), ray: rgb(230, 222, 214), flesh: rgb(176, 168, 156), aMem: 0.42, aRay: 0.74, aBase: 0.86, ridgeH: 0.09, rough: 0.52, white: we.anal, rayTint: rgb(214, 128, 78), rayTintAmt: 0.22 });
+  T.pelvic = mk('pelvic', finSpecs.pelvic, { mem: rgb(194, 178, 160), ray: rgb(232, 220, 206), flesh: rgb(176, 168, 156), aMem: 0.44, aRay: 0.76, aBase: 0.86, ridgeH: 0.09, rough: 0.52, white: we.pelvic, rayTint: rgb(214, 128, 78), rayTintAmt: 0.22 });
+  T.pectoral = mk('pectoral', finSpecs.pectoral, { mem: G.pectoral_color ?? rgb(222, 172, 82), ray: rgb(236, 196, 120), flesh: rgb(196, 176, 148), aMem: 0.5, aRay: 0.8, aBase: 0.88, ridgeH: 0.08, rough: 0.5, white: we.pectoral, rayTint: rgb(200, 120, 40), rayTintAmt: 0.0, leadDark: 0.45 });
+  T.caudal = mk('caudal', finSpecs.caudal, { mem: rgb(134, 122, 112), ray: rgb(180, 166, 156), flesh: rgb(104, 96, 80), aMem: 0.42, aRay: 0.74, aBase: 0.9, ridgeH: 0.09, rough: 0.55, white: 0, sat: sat, orange: rgb(190, 100, 48) });
   return T;
 }
 
 /** evaluate one fin pixel at fin coordinates (t, r); w/l: physical size (m) of the cell */
 function evalFinPixel(T, t, r, phys, out) {
   const n = T.n; const jf = t * (n - 1); const k = clamp(Math.round(jf), 0, n - 1); const d = jf - k;
-  const rb = T.rb[k]; const sp = 0.3 * sstep(rb, 1.0, r); const sig = lerp(0.16, 0.1, r);
+  const rb = T.rb[k]; const sp = 0.3 * sstep(rb, 1.0, r); const sig = lerp(0.13, 0.08, r) * (0.8 + 0.4 * hash2(k, 3, T.seed));
   const dl = Math.abs(Math.abs(d) - sp); const rayFade = 1 - 0.4 * sstep(0.78, 1.0, r);
   const kvar = 0.85 + 0.3 * hash2(k, 5, T.seed);
   const ray = Math.exp(-Math.pow(dl / sig, 2)) * rayFade * kvar;
@@ -572,7 +550,7 @@ function evalFinPixel(T, t, r, phys, out) {
   const stri = 0.5 + 0.5 * vnoise(jf * 3.1, r * 14, T.seed + 9);
   // root flesh -> membrane
   const rootW = 1 - sstep(0.0, 0.3, r);
-  let col = mixc(T.mem, T.ray, ray * 0.78);
+  let col = mixc(T.mem, T.ray, ray * 0.6);
   col = mixc(col, T.flesh, rootW * 0.75);
   // gentle distal fading / darkening
   let a = lerp(T.aMem, T.aRay, ray);
@@ -624,7 +602,7 @@ function evalFinPixel(T, t, r, phys, out) {
   const lead = Math.exp(-Math.pow(t * (n - 1) / 0.5, 2)); a = Math.max(a, 0.82 * lead * (1 - 0.6 * edge));
   if (kind === 'caudal') a = Math.max(a, 0.8 * Math.exp(-Math.pow((1 - t) * (n - 1) / 0.5, 2)) * (1 - 0.6 * edge));
   // dark absorption on rays (ray lines visible "うっすら" [06 §1-9])
-  const absorb = 1 - 0.13 * ray; col = [col[0] * absorb, col[1] * absorb, col[2] * absorb];
+  const absorb = 1 - 0.06 * ray; col = [col[0] * absorb, col[1] * absorb, col[2] * absorb];
   // subtle lightness mottling
   const lm = 0.96 + 0.08 * mott; col = [col[0] * lm, col[1] * lm, col[2] * lm];
   out.r = col[0]; out.g = col[1]; out.b = col[2]; out.a = clamp(a, 0, 1);
@@ -661,19 +639,18 @@ function paintAtlas(ctx, T, physByCell, extra) {
       const X = cell.x - PAD + gx, Y = cell.y - PAD + gy; if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
       const hx = (hmap[gy * gw + gx + 1] - hmap[gy * gw + gx - 1]) / (2 * dx), hy = (hmap[(gy + 1) * gw + gx] - hmap[(gy - 1) * gw + gx]) / (2 * dy);
       // glTF: green = up in the image, so n.y = +dH/dy_img;  n.x = -dH/dx
-      const nx = -hx * 2.0, ny = hy * 2.0, nz = 1; const il = 1 / Math.hypot(nx, ny, nz);
+      const nx = -hx * 1.4, ny = hy * 1.4, nz = 1; const il = 1 / Math.hypot(nx, ny, nz);
       const px = data[gy * gw + gx];
       put(X, Y, [px.r, px.g, px.b], px.a, nx * il, ny * il, nz * il, px.ao, px.rough);
     }
   }
-  // opaque lobe (adipose) and collar / sleeve swatches
+  // opaque lobe (adipose) and collar swatches
   const fleshCells = [
     ['adipose', rgb(152, 150, 126), rgb(112, 108, 92), 1.0, 0.68, true],
     ['col_dorsal', rgb(104, 94, 76), rgb(96, 86, 70), 0.0, 0.62, false],
     ['col_pectoral', rgb(194, 176, 150), rgb(176, 156, 134), 0.0, 0.6, false],
     ['col_pelvic', rgb(190, 184, 170), rgb(176, 170, 156), 0.0, 0.6, false],
     ['col_anal', rgb(190, 184, 170), rgb(176, 170, 156), 0.0, 0.6, false],
-    ['sleeve', null, null, 0.0, 0.6, false],
   ];
   for (const [key, c0, c1, , ro, opaque] of fleshCells) {
     const cell = ATLAS_CELLS[key];
@@ -682,20 +659,14 @@ function paintAtlas(ctx, T, physByCell, extra) {
       const uu = clamp(gx / (cell.w - 1), 0, 1), vv = clamp(gy / (cell.h - 1), 0, 1);
       const nz_ = vnoise(uu * 11, vv * 13, ctx.seed + 41) * 0.5 + vnoise(uu * 29, vv * 31, ctx.seed + 43) * 0.25;
       let col, a;
-      if (key === 'sleeve') {
-        // dorsal (v = 0 / 1) dark olive-grey -> flank silver-pink -> belly pale  (matches 03 §3.5.1 tail-end colours) [E]
-        const vd = Math.abs(vv - 0.5) * 2;    // 0 belly .. 1 dorsal
-        const back = rgb(108, 98, 80), flank = rgb(170, 150, 132), belly = rgb(190, 186, 172);
-        col = vd > 0.5 ? mixc(flank, back, sstep(0.5, 0.95, vd)) : mixc(belly, flank, sstep(0.0, 0.5, vd));
-        a = sstep(0.0, 0.42, uu) * 0.98;
-      } else if (opaque) {
+      if (opaque) {
         // adipose lobe: grey-cream, darker toward the base / lower flanks, lighter crest [03 §3.5.1: (137,137,110); 02: grey-cream]
         const crest = Math.pow(Math.sin(Math.PI * vv), 1.5); col = mixc(c1, c0, crest); a = 1;
         col = mixc(col, rgb(168, 164, 140), 0.25 * Math.exp(-Math.pow((uu - 0.4) / 0.25, 2)) * crest);
       } else {
         col = mixc(c1, c0, 0.5 + 0.5 * nz_);
-        const rim = Math.min(sstep(0.0, 0.3, uu), sstep(0.0, 0.3, 1 - uu), sstep(0.0, 0.34, 1 - Math.abs(2 * vv - 1)));
-        a = Math.pow(rim, 0.9) * 0.97;
+        const dE = Math.hypot(2 * uu - 1, 2 * vv - 1);
+        a = (1 - sstep(0.25, 1.0, dE)) * 0.9;
       }
       const m = 0.97 + 0.06 * nz_; col = [col[0] * m, col[1] * m, col[2] * m];
       put(X, Y, col, a, nz_ * 0.04, nz_ * 0.04, 1, 0.9 + 0.1 * (0.5 + nz_), ro);
@@ -709,15 +680,28 @@ function paintAtlas(ctx, T, physByCell, extra) {
 }
 
 // ----------------------------------------------------------------------------------------------- main entry
+/** level of detail from the `detail` argument: 1 = LOD0 (~5k tris for all fins), 0.5 = LOD1 (~2k), 0.25 = LOD2 (~0.8k) */
+function lodParams(d) {
+  if (d >= 0.75) {      // LOD0: 2 columns per ray (ridge + valley => the pleat is in the mesh), leading-ray tubes, collars
+    const x = Math.min(d, 2); const cpr = x >= 1.75 ? 4 : x >= 1.25 ? 3 : 2;
+    return { cpr, rowsMul: 0.9 + 0.1 * x, sides: 4, tubeRowsMul: 1, collar: [Math.round(10 * x), 4], adipose: [Math.round(14 * x), 6], notch: true, pleat: true, stride: 1, name: 'LOD0' };
+  }
+  if (d >= 0.4) return { cpr: 2, rowsMul: 0.6, sides: 0, tubeRowsMul: 0, collar: [6, 3], adipose: [8, 4], notch: true, pleat: true, stride: 1, name: 'LOD1' };   // pleat only as a zig-zag; tubes dropped
+  return { cpr: 1, rowsMul: 0.4, sides: 0, tubeRowsMul: 0, collar: null, adipose: [6, 3], notch: false, pleat: false, stride: 2, name: 'LOD2' };                  // ray-pair columns, no pleat / notch geometry
+}
+
 export function buildFins({ surface, params, genome = {}, seed = 1, detail = 1 } = {}) {
   const ctx = makeCtx({ surface, params, genome, seed });
   const { body, SL } = ctx;
-  const cpr = Math.max(4, Math.round(6 * detail));
+  const lod = lodParams(detail);
   const specs = {
     dorsal: specDorsal(ctx), anal: specAnal(ctx), caudal: specCaudal(ctx),
     pectoral_R: specPectoral(ctx, 0), pectoral_L: specPectoral(ctx, 1), pelvic_R: specPelvic(ctx, 0), pelvic_L: specPelvic(ctx, 1),
   };
-  const rowsOf = (k) => Math.max(10, Math.round({ dorsal: 30, anal: 28, caudal: 36, pectoral_R: 30, pectoral_L: 30, pelvic_R: 26, pelvic_L: 26 }[k] * detail));
+  for (const F of Object.values(specs)) F.lod = lod;
+  const ROWS = { dorsal: 12, anal: 12, caudal: 14, pectoral_R: 10, pectoral_L: 10, pelvic_R: 9, pelvic_L: 9 };
+  const rowsOf = (k) => Math.max(4, Math.round(ROWS[k] * lod.rowsMul));
+  const colsOf = (F) => (lod.stride === 1 ? (F.n - 1) * lod.cpr + 1 : Math.max(4, Math.round((F.n - 1) / lod.stride) + 1));
   const out = { p: [], n: [], uv: [], id: [], t: [], r: [], idx: [] };
   const ranges = []; const finReports = {};
   const append = (name, id, M, extra = {}) => {
@@ -731,21 +715,15 @@ export function buildFins({ surface, params, genome = {}, seed = 1, detail = 1 }
   const meshes = {};
   for (const name of rayFinNames) {
     const F = specs[name]; const M = new Mesh(); const rows = rowsOf(name);
-    const sheet = addSheet(M, F, cpr, rows);
-    const tubeRows = Math.round(rows * 1.1);
-    for (const j of F.tubes) addTube(M, F, j, F.tubeRad, tubeRows);
-    if (F.collar) addCollar(M, body, surface, F.collar);
-    else if (name === 'caudal') {
-      const sl = buildSleeveMesh(ctx, F.dims.sR); const vb = M.nv; const ib = M.idx.length;
-      for (let v = 0; v < sl.nv; v++) M.vert(sl.p[v], sl.uv[v], sl.t[v], sl.r[v], sl.n[v]);
-      for (const i of sl.idx) M.idx.push(i + vb);
-    }
+    const sheet = addSheet(M, F, colsOf(F), rows);
+    if (lod.sides > 0) for (const j of F.tubes) addTube(M, F, j, F.tubeRad, Math.max(4, Math.round(rows * 0.8 * lod.tubeRowsMul)), lod.sides);
+    if (F.collar && lod.collar) addCollar(M, body, surface, Object.assign({ nu: lod.collar[0], nv: lod.collar[1] }, F.collar));
     // statistics measured on the sheet (right-side frame, before mirroring)
     F.stats = sheetStats(F, sheet, M, surface, SL);
     if (name.endsWith('_L')) M.mirrorZ();
     meshes[name] = M;
   }
-  const ad = buildAdiposeMesh(ctx);
+  const ad = buildAdiposeMesh(ctx, lod);
   // draw order inside the geometry follows 06 §6.5: dorsal, adipose, pectoral R/L, pelvic R/L, anal, caudal  (ids 0..7)
   const order = ['dorsal', 'adipose', 'pectoral_R', 'pectoral_L', 'pelvic_R', 'pelvic_L', 'anal', 'caudal'];
   for (const name of order) {
@@ -770,7 +748,7 @@ export function buildFins({ surface, params, genome = {}, seed = 1, detail = 1 }
   }
   const indices = new Uint32Array(out.idx);
   const report = {
-    seed, sl_m: SL, detail, columnsPerRay: cpr,
+    seed, sl_m: SL, detail, lod: lod.name, columnsPerRay: lod.cpr,
     counts: { vertices: nv, triangles: indices.length / 3 },
     fins: finReports,
     rayGroups: {

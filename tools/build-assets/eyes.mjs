@@ -20,10 +20,16 @@
 // Disc mapping of ball/cornea UV: uv = (0.5 + x/(2*Ro), 0.5 - y/(2*Ro)) with x,y the eye-local coordinates, Ro = outer radius
 //   (glTF convention: v measured from the top row of the image, so use flipY = false in three.js).
 //
-// genome keys (all optional): eye_outer_d_over_sl, mt_eye_size (-1 adult .. +1 parr), iris_ring_d_over_outer, pupil_d_over_outer,
-//   iris_L (22..61, brightness), iris_gold (0..1), sclera_bright (0..1), iris_sheen (0..1, blue-green sheen baked into the albedo),
-//   eye_yaw_deg (10), head_rgb [r,g,b] sRGB (orbit ring outer colour), socket (object or null, see SOCKET_LOFT),
-//   variation (0..1, default 1: seeded individual jitter of gold/L/pupil/ring; 0 = exact spec defaults), iris_tex_size (512).
+// genome keys (all optional): eye_outer_d_over_sl, mt_eye_size (-1 adult .. +1 parr; linear 0.046..0.058 [E]), iris_ring_d_over_outer,
+//   pupil_d_over_outer (clamped to <= iris_ring - 0.04, 06 §6.6.1), iris_L (22..61, brightness), iris_gold (0..1 gold density),
+//   sclera_bright (0..1), iris_sheen (0..1 blue-green sheen baked into the albedo), eye_yaw_deg (10), eye_center_s, eye_height_frac,
+//   head_rgb [r,g,b] sRGB (outer colour of the orbit ring strip), socket (object | null, see SOCKET_LOFT),
+//   variation (0..1, default 1: seeded individual jitter of gold / L / sclera / pupil / ring width; 0 = exact spec defaults),
+//   iris_tex_size (512).
+//
+// Rest-pose use:   body_position = eye.matrix * local_position   (eyePartToBody() does it for you).
+// Parenting: ball + cornea -> bone eye_L/eye_R (pivot = EyeAsset.center, rotate about local Y/X, +-10 deg); orbit -> head bone (it must not
+// rotate with the eyeball).   Materials: see the dev page viewer/dev/eyes.html.
 
 const TAU = Math.PI * 2;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -291,6 +297,18 @@ function makeOrbitTexture(rng, headRgb, w = 64, h = 64) {
   return { width: w, height: h, data };
 }
 
+// Convert one part of an EyeAsset (eye-local) to body-local coordinates at rest: { positions, normals, uvs, indices }.
+export function eyePartToBody(asset, part) {
+  const g = asset.parts[part], m = asset.matrix;
+  const positions = new Float32Array(g.positions.length), normals = new Float32Array(g.normals.length);
+  for (let i = 0; i < g.positions.length; i += 3) {
+    const x = g.positions[i], y = g.positions[i + 1], z = g.positions[i + 2], nx = g.normals[i], ny = g.normals[i + 1], nz = g.normals[i + 2];
+    positions[i] = m[0] * x + m[4] * y + m[8] * z + m[12]; positions[i + 1] = m[1] * x + m[5] * y + m[9] * z + m[13]; positions[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+    normals[i] = m[0] * nx + m[4] * ny + m[8] * nz; normals[i + 1] = m[1] * nx + m[5] * ny + m[9] * nz; normals[i + 2] = m[2] * nx + m[6] * ny + m[10] * nz;
+  }
+  return { positions, normals, uvs: g.uvs, indices: g.indices };
+}
+
 // ---- main -------------------------------------------------------------------------------------------------------------
 export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   const SL = surface.SL;
@@ -331,7 +349,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   const patch = makeSkinPatch({ surface, P0, e1, e2, Ro, socket });
 
   // ---- ball size & depth: sphere meets the (pocketed) skin at the aperture radius ----
-  const Rb = 0.90 * Ro;                                              // [E] eyeball (sclera sphere) radius
+  const Rb = 0.90 * Ro;                                              // [E] eyeball (sclera sphere) radius (the skin/orbit hides the rest of the Ro)
   const apTarget = 0.80 * Ro;                                        // [E] visible aperture (dark iris margin + sclera rim) radius
   const NPSI = 72;
   const apertureAt = (C, psi) => {
@@ -358,8 +376,8 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   const toLocal = (p) => { const d = sub(p, Cb); return [dot(d, Xl), dot(d, Yl), dot(d, Zl)]; };
 
   // ---- ball (sclera sphere with a recessed iris dish; dense in front) ----
-  const recess = (E.iris_recess_over_outer?.v ?? 0.065) * D;           // [E] 06 §6.6.1: iris plane below the corneal apex
-  const corneaGap = 0.35 * recess, dishDepth = recess - corneaGap, pupilExtra = 0.04 * Ro;
+  const recess = (E.iris_recess_over_outer?.v ?? 0.065) * D;           // [E] 06 §6.6.1 (0.03-0.08 D): iris plane below the corneal apex
+  const corneaGap = 0.35 * recess, dishDepth = recess - corneaGap, pupilExtra = 0.04 * Ro;   // [E] cornea shell / iris dish / pupil floor split of the recess
   const tLim = ti + 0.05;
   const dish = (rho) => {
     const t = rho / Ro; if (t > tLim + 0.06) return 0;

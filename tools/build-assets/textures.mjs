@@ -88,14 +88,15 @@ export const GENOME_DEFAULTS = Object.freeze({
   pmCount: 9, pmCountOffset: 0, pmCountLrDelta: null,            // §3.1.7（null = 分布 (0.15,0.70,0.15) から seed で抽選）
   pmSFirst: null, pmSLast: null, pmSpacingCv: 0.29,               // null = 正規分布から抽選
   pmContrast: 1.0, pmSize: 1.0,                                   // 個体差の倍率（コントラスト・大きさ）
-  pmDL: -18, pmDa: -2.9, pmDb: -11.3,                             // 地色との差 [P: color n=35]
+  pmHeightScale: 1.10, pmWidthScale: 1.12,                        // [E] 写真(p002/p010/p049)のぼかし縁込みの外形は集計(核)より約1割大きい
+  pmDL: -24, pmDa: -1.8, pmDb: -13,   // [E] p002(-18..-20) p049(-40) の中間。p10-p90(-32..-7.8)内                             // 地色との差 [P: color n=35]
   pmEdgeSoftness: 0.15, pmFuseP: 0.31, pmFrontFaintP: 0.45, pmFadeOnsetCm: 25, flCm: null,
-  spotDorsalN: 40, spotDensity: 1.0, spotDorsalDiamEyeD: 0.15, spotDorsalRows: 3,
+  spotDorsalN: 40, spotDensity: 1.0, spotDorsalDiamEyeD: 0.13, spotDorsalRows: 3,
   spotBelowN: 8, spotBelowDiamEyeD: 0.3, spotBelowBlackP: 0.25,
   spotHeadN: null, spotHeadDiamEyeD: 0.08,
   orangeSpotMode: null,                                           // null = 0.96 none / 0.04 trace を seed で抽選。'none'|'trace'|'region_hybrid'
-  pinkBandStrength: 0.35, nuptialIntensity: 0,
-  dorsalL: 44, flankUpperL: 66, bellyL: 78, flankHueA: 3.3, flankHueB: 9.8, hueOffsetDeg: 0,
+  pinkBandStrength: 0.55, nuptialIntensity: 0,
+  dorsalL: 44, flankUpperL: 66, bellyL: 82, flankHueA: 3.3, flankHueB: 9.8, hueOffsetDeg: 0,
   silverS: 0.1,
   scalePitchPctSl: 0.7, scaleTiltDeg: 5, scaleAoDepth: 0.15, scaleRoughVar: 0.06,
   mouthLineR: -0.25,
@@ -184,15 +185,16 @@ function designPalette(G) {
   const nb = 5 * G.nuptialIntensity;
   // 体（鰓蓋より後ろ）: 背=暗いオリーブ褐 -> 体側上半=黄みの銀/桃杏 -> 体側下半=クリーム白 -> 腹=冷たい白 [P: color n=35/36, p024]
   const body = makeStopsInterp([
-    { r: 1.00, L: D - 10, a: 0.6, b: 9.0 }, { r: 0.86, L: D - 3, a: 1.2, b: 11.5 }, { r: 0.70, L: D + 3, a: 1.8, b: 12.5 },
-    { r: 0.54, L: lerp(D, F, 0.55), a: 2.4, b: 12.5 }, { r: 0.38, L: F - 4, a: fa, b: fb + 2 + nb },
-    { r: 0.15, L: F, a: fa + 0.5, b: fb + 1.5 + nb }, { r: -0.10, L: F + 6, a: fa - 1.0, b: fb + 2.5 },
-    { r: -0.40, L: Math.min(F + 18, 90), a: fa - 4.0, b: 12 }, { r: -0.65, L: B + 4, a: -1.8, b: 9 },
-    { r: -0.85, L: B, a: -1.8, b: 5 }, { r: -1.00, L: B - 2, a: -1.5, b: 3.5 }]);
+    { r: 1.00, L: D - 10, a: -0.2, b: 13.0 }, { r: 0.88, L: D - 4, a: -0.4, b: 19 }, { r: 0.76, L: D + 2, a: 0.0, b: 22 },      // 背: 暗いオリーブ褐 [P: color n=35 / p024]
+    { r: 0.64, L: lerp(D, F, 0.62), a: 0.4, b: 21 }, { r: 0.52, L: F - 4, a: fa - 2.0, b: fb + 10 + nb },                  // 背/体側の境は狭い（対陰影）
+    { r: 0.38, L: F, a: fa - 2.0, b: fb + 8 + nb }, { r: 0.15, L: F + 3, a: fa - 2.0, b: fb + 7 + nb },
+    { r: -0.10, L: F + 8, a: fa - 3.5, b: fb + 8 },                                                                           // 黄みの銀（体側上半）[E: p002/p016/p040 の黄緑〜クリーム黄]
+    { r: -0.40, L: Math.min(F + 19, 92), a: -3.8, b: 17 }, { r: -0.65, L: B + 4, a: -3.0, b: 11 },                          // 体側下半=クリーム白 [P: p024 L87-89 b13-18]
+    { r: -0.85, L: B, a: -2.0, b: 5.5 }, { r: -1.00, L: B - 2, a: -1.6, b: 4 }]);
   // 頭部: 背面=最も暗い、頬=金銀、下面=白 [P: 頭部背面 L22-65(38.8), cheek 59]
   const head = makeStopsInterp([
-    { r: 1.00, L: 24 + 0.5 * (D - 44), a: 2.5, b: 10 }, { r: 0.75, L: 31 + 0.5 * (D - 44), a: 3, b: 13 }, { r: 0.50, L: 44, a: 2.8, b: 14 },
-    { r: 0.20, L: 62, a: 2, b: 12 }, { r: -0.20, L: 72, a: 1.5, b: 9 }, { r: -0.60, L: 80, a: 0.5, b: 6 }, { r: -1.00, L: 82, a: 0, b: 4 }]);
+    { r: 1.00, L: 26 + 0.5 * (D - 44), a: 1.5, b: 11 }, { r: 0.75, L: 33 + 0.5 * (D - 44), a: 1.5, b: 15 }, { r: 0.50, L: 46, a: 0.8, b: 19 },
+    { r: 0.20, L: 67, a: 0.0, b: 21 }, { r: -0.20, L: 75, a: -0.5, b: 14 }, { r: -0.60, L: 80, a: -1.0, b: 7 }, { r: -1.00, L: 82, a: -1.0, b: 4 }]);
   const hue = G.hueOffsetDeg;
   return {
     body, head, hue, bodyLut: lutFromInterp(body, hue), headLut: lutFromInterp(head, hue),
@@ -202,8 +204,8 @@ function designPalette(G) {
     silver: lutScalar([[1, 0.0], [0.8, 0.06], [0.55, 0.30], [0.25, 0.52], [-0.1, 0.68], [-0.4, 0.85], [-0.7, 1.0], [-1, 1.0]]),
     silverHead: lutScalar([[1, 0.0], [0.6, 0.04], [0.2, 0.40], [-0.3, 0.70], [-1, 0.90]]),
     labBody: (r) => { const [a, b] = rotAB(body.a(r), body.b(r), hue); return [body.L(r), a, b]; },
-    opercle: [72, 4.5, 3.5], jaw: [80, 1.5, 7], pink: [72, 17, 21],
-    markBlack: [12, 1.0, 2.0], spotBelow: [62, -5.5, -1.5], spotBelowBlack: [28, 0, 0], orange: [62, 19, 28],
+    opercle: [79, 0.5, 11], jaw: [82, 0.5, 9], pink: [73, 19, 22],
+    markBlack: [12, 1.0, 2.0], spotBelow: [58, -5.0, -2.0], spotBelowBlack: [28, 0, 0], orange: [62, 19, 28],
   };
 }
 
@@ -249,11 +251,13 @@ function genMarks(side, seed, ind, G, pal, geo, surface) {
   const marks = [];
   for (let i = 0; i < n; i++) {
     const s = sPos[i];
-    const h = clamp(logNormal(rng, interpLin(PM_S, PM_H, s) * G.pmSize, 0.38), 0.016, 0.156);
-    const w = clamp(logNormal(rng, interpLin(PM_S, PM_W, s) * G.pmSize, 0.28), 0.012, 0.077);
+    const zh = gauss(rng), zw = 0.5 * zh + Math.sqrt(0.75) * gauss(rng);               // h と w は正の相関 -> h/w の CV を観測(0.33)に合わせる
+    const lnv = (mean, cv, z) => { const s2 = Math.log(1 + cv * cv); return mean * Math.exp(Math.sqrt(s2) * z - 0.5 * s2); };
+    const h = clamp(lnv(interpLin(PM_S, PM_H, s) * G.pmSize * G.pmHeightScale, 0.38, zh), 0.016, 0.17);
+    const w = clamp(lnv(interpLin(PM_S, PM_W, s) * G.pmSize * G.pmWidthScale, 0.28, zw), 0.012, 0.08);
     const sec = surface.section(s);
     let yc = 0.007 + 0.019 * gauss(rng) + (i % 2 ? 1 : -1) * ind.stagger;
-    yc = Math.min(yc, 0.62 * sec.h - h / 2); yc = Math.max(yc, -0.35 * sec.h + h / 2 * 0.6);
+    yc = Math.min(yc, 0.66 * sec.h - h / 2); yc = Math.max(yc, -0.35 * sec.h + h / 2 * 0.6);
     const tilt = (i < 2 ? 7 : 0) + 4.5 * gauss(rng);                   // deg, +: 上端が頭側へ傾く [E: 前方ほど傾く [r04 F-06]]
     let op = clamp(0.93 * Math.exp(0.12 * gauss(rng)) * (1 - ind.fade), 0.25, 1.0);
     if (ind.frontFaint && (i === 0 || (i === 1 && rng() < 0.4))) op *= 0.5;
@@ -263,7 +267,7 @@ function genMarks(side, seed, ind, G, pal, geo, surface) {
     const lab = [gL + dL, gA + ind.dA + 0.8 * gauss(rng), gB + ind.dB + 1.5 * gauss(rng)];
     const lin = labToLin(lab[0], lab[1], lab[2], [0, 0, 0]);
     marks.push({ s, yc, h, w, tilt, op, lab, lin, parts: [{ ds: 0, dy: 0, w, h, tilt: 0 }], cut: null, events: [],
-      ph: [rng() * TAU, rng() * TAU, rng() * TAU], amp: [0.05 + 0.03 * rng(), 0.04 + 0.03 * rng(), 0.03 + 0.03 * rng()], nseed: Math.floor(rng() * 65535) });
+      ph: [rng() * TAU, rng() * TAU, rng() * TAU], amp: [0.025 + 0.02 * rng(), 0.02 + 0.02 * rng(), 0.015 + 0.02 * rng()], nseed: Math.floor(rng() * 65535) });
   }
   // 融合・分裂・二重化 [P: 31%]
   for (const ev of ind.events) {
@@ -302,7 +306,7 @@ function placeSpots({ rng, count, sMin, sMax, dens, rows, rTop, rStep, rJit, sca
     let ok = true;
     for (const o of out) { const dd = Math.hypot(o.xm - xm, o.dm - dm); if (dd < gapF * 0.5 * (o.dia + dia)) { ok = false; break; } }
     if (!ok) continue;
-    const el = 1 + 0.35 * rng();                                     // 体軸方向に少し長い [P: 03 §3.2.1]
+    const el = 1 + 0.25 * rng();                                     // 体軸方向に少し長い [P: 03 §3.2.1]
     out.push({ s, r, x, j, xm, dm, dia, rx: dia / 2 * el, rd: dia / 2 / Math.sqrt(el), rot: 0.3 * gauss(rng), side, tone: 0.85 + 0.3 * rng() });
   }
   return out;
@@ -380,18 +384,19 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
       const d = right ? Av[idx] : circ[x] - Av[idx]; const xm = x * mmU; const tt = d / (circ[x] * 0.5 + 1e-6);
       // 体 / 頭 の混合
       const sop = opEdgeRow[j];
-      const hw = 1 - sstep(sop - 0.012, sop + 0.016, s); headW[idx] = hw;
+      const hwN = 1 - sstep(sop - 0.012, sop + 0.016, s), hwW = 1 - sstep(sop - 0.045, sop + 0.04, s);
+      const hw = lerp(hwN, hwW, sstep(0.1, 0.5, r)); headW[idx] = hw;      // 背側は広くぼかして頭部の暗色が箱に見えないようにする
       let cr = lerp(pal.bodyLut[li * 3], pal.bodyLut[l2 * 3], lf), cg = lerp(pal.bodyLut[li * 3 + 1], pal.bodyLut[l2 * 3 + 1], lf), cb = lerp(pal.bodyLut[li * 3 + 2], pal.bodyLut[l2 * 3 + 2], lf);
       if (hw > 0) {
         const hr = lerp(pal.headLut[li * 3], pal.headLut[l2 * 3], lf), hg = lerp(pal.headLut[li * 3 + 1], pal.headLut[l2 * 3 + 1], lf), hb = lerp(pal.headLut[li * 3 + 2], pal.headLut[l2 * 3 + 2], lf);
         cr = lerp(cr, hr, hw); cg = lerp(cg, hg, hw); cb = lerp(cb, hb, hw);
         // 鰓蓋: 銀〜桃の金属光沢
-        const sFront = 0.135 + 0.02 * r * r;
-        const om = sstep(sFront - 0.02, sFront + 0.03, s) * (1 - sstep(sop - 0.008, sop + 0.002, s)) * sstep(-0.72, -0.50, r) * (1 - sstep(0.38, 0.58, r));
+        const sFront = 0.135 + 0.02 * r * r; const sMid = 0.5 * (sFront + sop + 0.004), aS = 0.5 * (sop + 0.004 - sFront);
+        const qo = ((s - sMid) / aS) ** 2 + ((r + 0.06) / 0.64) ** 2; const om = (1 - sstep(0.35, 1.0, qo)) * hwN;
         if (om > 0) {
           opM[idx] = om;
           const sheen = 0.9 + 0.22 * fbm2(xm / 3.2, d / 3.2, sdA, 2) + 0.10 * Math.sin(5.5 * (s - sFront) / (sop - sFront + 1e-3) + 2 * r);
-          cr = lerp(cr, opLin[0] * sheen, om * 0.92); cg = lerp(cg, opLin[1] * sheen, om * 0.92); cb = lerp(cb, opLin[2] * sheen, om * 0.92);
+          cr = lerp(cr, opLin[0] * sheen, om * 0.75); cg = lerp(cg, opLin[1] * sheen, om * 0.75); cb = lerp(cb, opLin[2] * sheen, om * 0.75);
         }
         // 下顎・吻先: 淡色 / 唇線
         const jm = (1 - sstep(0.115, 0.14, s)) * (1 - sstep(G.mouthLineR - 0.10, G.mouthLineR + 0.06, r)) * hw;
@@ -403,7 +408,7 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
         // 眼窩の暗輪（眼球メッシュは別。ここは縁の馴染ませ）
         const ex = (s - eyeS) * slMm, ey = (Y[idx] - (rEye * hS[Math.round(eyeS * (W - 1))])) * slMm;
         const er = Math.hypot(ex, ey) / (eyeMm * 0.5);
-        const em = (1 - sstep(1.05, 1.55, er)) * 0.55; if (em > 0) { cr = lerp(cr, orbitLin[0], em); cg = lerp(cg, orbitLin[1], em); cb = lerp(cb, orbitLin[2], em); }
+        const em = (1 - sstep(1.1, 1.65, er)) * 0.40; if (em > 0) { cr = lerp(cr, orbitLin[0], em); cg = lerp(cg, orbitLin[1], em); cb = lerp(cb, orbitLin[2], em); }
       }
       // 低周波のむら（背は暗色素のまだら）
       const dorsalness = sstep(0.4, 0.95, r);
@@ -412,7 +417,7 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
       cr *= k; cg *= k; cb *= k;
       // 桃色の面的な染み（側線沿い〜パーマーク間、弱く）[P: 03 §3.4.1]
       if (pinkS > 0) {
-        const rLL = llY[x] / h + 0.10; const pr = (r - rLL) / 0.24; const prof = Math.exp(-0.5 * pr * pr);
+        const rLL = llY[x] / h + 0.10; const pr = (r - rLL) / 0.17; const prof = Math.exp(-0.5 * pr * pr);
         if (prof > 0.02) {
           const along = (0.45 + 0.55 * sstep(0.25, 0.48, s)) * (1 + 0.30 * sstep(0.86, 0.97, s)) * (1 - 0.5 * hw);
           // 左右で独立なむら（継ぎ目=背/腹正中線付近は左右対称に収束）
@@ -483,7 +488,7 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
         const idx = j * W + x; const xm = x * mmU, d = sp.side === 'right' ? Av[idx] : circ[x] - Av[idx];
         const dx = xm - sp.xm, dd = d - sp.dm; const ex = (dx * cs + dd * sn) / rx, ey = (-dx * sn + dd * cs) / rd;
         const rho = Math.sqrt(ex * ex + ey * ey); if (rho > 1.5) continue;
-        const wob = 1 + 0.07 * Math.sin(3 * Math.atan2(ey, ex) + sp.rot * 7);
+        const wob = 1 + 0.035 * Math.sin(2 * Math.atan2(ey, ex) + sp.rot * 7);
         const m = 1 - sstep(1 - edgeSoft, 1 + edgeSoft, rho / wob); if (m <= 0) continue;
         const a = clamp(m * sp.tone * (sp.opacity ?? 1), 0, 1);
         R[idx] = lerp(R[idx], lin[0], a); Gc[idx] = lerp(Gc[idx], lin[1], a); B[idx] = lerp(B[idx], lin[2], a);
@@ -500,8 +505,8 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
     const nD = clamp(Math.round(G.spotDorsalN * G.spotDensity * Math.exp(0.12 * gauss(rngD))), 0, 150);
     const rows = clamp(Math.round(G.spotDorsalRows), 2, 5);
     const diamD = clamp(G.spotDorsalDiamEyeD * eyeMm, 0.4, 3.8);
-    const dorsal = placeSpots({ rng: rngD, count: nD, sMin: 0.255, sMax: 0.985, dens: (s) => 1 - 0.65 * sstep(0.35, 1.0, s), rows, rTop: 0.80, rStep: 0.115, rJit: 0.035, rScatter: [0.3, 0.95],
-      diamMm: () => clamp(diamD * Math.exp(0.30 * gauss(rngD)), 0.45, 3.9), gapF: 2.0, ctx, rejectMask: maskPM });
+    const dorsal = placeSpots({ rng: rngD, count: nD, sMin: 0.255, sMax: 0.985, dens: (s) => 1 - 0.65 * sstep(0.35, 1.0, s), rows, rTop: 0.78, rStep: 0.105, rJit: 0.03, scatterP: 0.07, rScatter: [0.4, 0.95],
+      diamMm: () => clamp(diamD * Math.exp(0.24 * gauss(rngD)), 0.45, 3.9), gapF: 2.0, ctx, rejectMask: maskPM });
     drawSpots(dorsal, spotLin, 0.28, maskSpot);
     // 体側下半の丸斑（青灰, 一部黒灰）: 前方ほど大きい, 1-4 列
     const rngB = makeRng(seed, 'spots:below:' + side);
@@ -595,7 +600,7 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
     const li = ((r + 1) * 0.5 * (NL - 1)) | 0; const sil = lerp(pal.silver[li], pal.silverHead[li], hw) * (1 - 0.4 * maskPM[idx]) * (1 - maskSpot[idx]) + opM[idx] * 0.7;
     const sv = clamp01(sil) * 0.8 + 0.2 * (1 - sstep(0.5, 0.9, r)); // 鱗の光沢ゆらぎは銀の領域で強く, 背でも少し
     let f = 1 + scaleVisAlbedo * sv * ((srand[idx] - 0.5) * 0.12 - 0.075 * crease[idx] + 0.035 * rim[idx]);
-    f *= 1 - 0.20 * maskLL[idx];
+    f *= 1 - 0.10 * maskLL[idx];
     // 弱い虹色（銀の領域の青紫〜桃, 03 §3.6.2）
     const ir = (vnoise(x / 70, j / 40, 4001) - 0.5) * 0.05 * clamp01(sil);
     const o4 = idx * 4;
@@ -705,7 +710,7 @@ function buildReport({ seed, G, ind, pal, marksBySide, spotReport, W, H, SL, pit
 // ───────────────────────────── 側面直交プレビュー（CPU）─────────────────────────────
 // side 'right': 右体側(+Z)を +Z 側から見る（頭は画像の右）。'left': 左体側を -Z 側から見る（頭は画像の左, 参照写真と同じ向き）。
 // 体の外形は surface、色・法線・ORM はテクスチャから。簡易ライティング（shading:'lit'）か、素の albedo（'albedo'）。
-export function renderLateralPreview({ surface, textures, side = 'right', pxPerMeter = 8000, shading = 'lit', background = [0.78, 0.82, 0.85], margin = 0.008, ss = 2 } = {}) {
+export function renderLateralPreview({ surface, textures, side = 'right', pxPerMeter = 8000, shading = 'lit', background = [0.78, 0.82, 0.85], margin = 0.008, ss = 2, eyes = true } = {}) {
   const SL = surface.SL, cap = surface.cap; const ppm = pxPerMeter;
   let yMin = 1e9, yMax = -1e9;
   for (let i = 0; i <= 200; i++) { const s = i / 200; yMax = Math.max(yMax, surface.point(s, 0)[1]); yMin = Math.min(yMin, surface.point(s, Math.PI)[1]); }
@@ -725,11 +730,28 @@ export function renderLateralPreview({ surface, textures, side = 'right', pxPerM
   const lightDir = (() => { const v = [0.25, 0.80, 0.55 * sgn]; const l = Math.hypot(...v); return v.map((q) => q / l); })();
   const V = [0, 0, sgn];
   const env = (dx, dy, dz, rough) => { // 簡易スタジオ環境: 上が明るい空, 下が暗い川底, 光源方向に面光源
-    const up = dy * 0.5 + 0.5; let r = lerp(0.10, 0.62, Math.pow(up, 1.2)), g = lerp(0.10, 0.68, Math.pow(up, 1.2)), b = lerp(0.09, 0.78, Math.pow(up, 1.2));
+    const up = dy * 0.5 + 0.5; let r = lerp(0.30, 0.62, Math.pow(up, 1.1)), g = lerp(0.30, 0.68, Math.pow(up, 1.1)), b = lerp(0.27, 0.78, Math.pow(up, 1.1));
     const k = Math.max(0, dx * lightDir[0] + dy * lightDir[1] + dz * lightDir[2]); const lobe = Math.pow(k, lerp(60, 4, rough)) * lerp(2.5, 0.5, rough);
     r += lobe; g += lobe; b += lobe * 0.95; const avg = 0.33; const m = rough * rough * 0.6; return [lerp(r, avg, m), lerp(g, avg, m), lerp(b, avg * 1.05, m)];
   };
   const c3 = [0, 0, 0], n3 = [0, 0, 0], o3 = [0, 0, 0];
+  // 目（プレビュー専用の平面近似: 暗い眼窩縁・金の細い虹彩環・黒い瞳孔・ハイライト）。本物の眼球は eyes.mjs。
+  const eyeP = (surface.params ?? {}).eye ?? {}; const eyeS = eyeP.center_s?.v ?? 0.095, eyeR = 0.5 * (eyeP.outer_d_over_sl?.v ?? 0.056) * SL;
+  const eyeSec = surface.section(eyeS); const eyeX = surface.sToX(eyeS), eyeY = (eyeSec.c + eyeSec.h * (1 - 2 * (eyeP.center_height_frac_from_top?.v ?? 0.33))) * SL;
+  const eyeAA = 1.2 / ppm / eyeR;
+  const eyeLin = (X, Y, base, albedoMode) => {
+    if (!eyes) return base;
+    const dx = X - eyeX, dy = Y - eyeY; const rho = Math.hypot(dx, dy) / eyeR; if (rho > 1.0 + eyeAA) return base;
+    const ring = [0.035, 0.03, 0.025]; const gold = [0.52, 0.34, 0.07]; const pup = [0.004, 0.004, 0.005];
+    let col = ring.slice();
+    const mix = (c, t) => { col = [lerp(col[0], c[0], t), lerp(col[1], c[1], t), lerp(col[2], c[2], t)]; };
+    mix(gold, 1 - sstep(0.64 - eyeAA, 0.64 + eyeAA, rho) );
+    mix(pup, 1 - sstep(0.5 - eyeAA, 0.5 + eyeAA, rho));
+    const hl = Math.hypot(dx / eyeR + 0.22, dy / eyeR - 0.26); mix([1, 1, 1], 0.9 * (1 - sstep(0.08, 0.13, hl)));
+    const a = 1 - sstep(1.0 - eyeAA, 1.0 + eyeAA, rho);
+    const out = [lerp(base[0], col[0], a), lerp(base[1], col[1], a), lerp(base[2], col[2], a)];
+    return out;
+  };
   const shadeAt = (X, Y) => {
     const s = surface.xToS(X); if (s > 1 || s < -cap) return null;
     const sec = surface.section(Math.max(s, 0)); let scale = 1; if (s < 0) { const t = Math.min(-s / cap, 1); scale = Math.sqrt(Math.max(1 - t * t, 0)); if (scale < 1e-4) return null; }
@@ -738,7 +760,10 @@ export function renderLateralPreview({ surface, textures, side = 'right', pxPerM
     const alpha = side === 'right' ? a0 : TAU - a0;
     const u = clamp(s, 0, 1), v = alpha / TAU;
     samp(A, u, v, c3);
-    if (shading === 'albedo') return [c3[0], c3[1], c3[2], true];
+    if (shading === 'albedo') {
+      const lin = eyeLin(X, Y, [SRGB_DEC[Math.round(c3[0] * 255)], SRGB_DEC[Math.round(c3[1] * 255)], SRGB_DEC[Math.round(c3[2] * 255)]]);
+      return [encSrgb(lin[0]), encSrgb(lin[1]), encSrgb(lin[2]), true];
+    }
     const al = [SRGB_DEC[Math.round(c3[0] * 255)], SRGB_DEC[Math.round(c3[1] * 255)], SRGB_DEC[Math.round(c3[2] * 255)]];
     samp(O, u, v, o3); const ao = o3[0], rough = o3[1], metal = o3[2];
     // 幾何法線 + 法線マップ
@@ -766,7 +791,7 @@ export function renderLateralPreview({ surface, textures, side = 'right', pxPerM
       const diff = al[c] * (1 - metal) * (hemi + 0.85 * nl) * ao;
       col[c] = diff + F * e[c] * (0.55 + 0.45 * ao);
     }
-    return [col[0], col[1], col[2], false];
+    const ce = eyeLin(X, Y, col); return [ce[0], ce[1], ce[2], false];
   };
   const bg = background.map((v) => v);
   for (let j = 0; j < Hp; j++) for (let i = 0; i < Wp; i++) {
