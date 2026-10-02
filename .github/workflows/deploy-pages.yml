@@ -30,6 +30,7 @@ jobs:
       - run: npm run build
         env:
           VITE_COMMIT: ${{ github.sha }}
+          VITE_BUILD: ${{ github.run_number }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
