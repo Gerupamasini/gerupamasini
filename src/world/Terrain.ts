@@ -83,7 +83,7 @@ export class Terrain {
   private readonly uTime: IUniform<number> = { value: 0 };
   private readonly uSunUp: IUniform<number> = { value: 1 };
   private readonly uSunDirT: IUniform<Vector3> = { value: new Vector3(0, 1, 0) };
-  private readonly uCausticGain: IUniform<number> = { value: 2.2 };
+  private readonly uCausticGain: IUniform<number> = { value: 2.6 };
   private waves: WaveSet | null = null;
 
   constructor(grid: TerrainGrid, palette: Substrate[]) {

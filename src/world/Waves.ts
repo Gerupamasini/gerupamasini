@@ -110,7 +110,7 @@ vec3 waveHess(vec2 p, float t, float minLambda) {
 float waveCaustic(vec2 p, vec3 L, float D, float t, float fp, float gain) {
   vec2 s = p + L.xz * D;
   // capillaries (under ~5 cm) are damped before they focus anything; the net on the bed comes from the 5–30 cm ripples
-  vec3 H = waveHess(s, t, max(fp * 5.0, 0.05)) * (D * gain);
+  vec3 H = waveHess(s, t, max(fp * 5.0, 0.04)) * (D * gain);
   float g = 0.2513;
   float det = (1.0 + H.x * g) * (1.0 + H.z * g) - H.y * H.y * g * g;
   float soft = 0.09 + 6.0 * fp / max(D, 1e-3);

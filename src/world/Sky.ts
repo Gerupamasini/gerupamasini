@@ -97,7 +97,7 @@ export class SkyDome {
     this.overcast = overcast;
     this.sky.material.uniforms.sunPosition.value.copy(sunDir);
     this.uCloudTime.value += 1 / 60;
-    this.uCloudAmt.value = 0.45 + 0.55 * MathUtils.clamp(overcast, 0, 1);
+    this.uCloudAmt.value = 0.62 + 0.38 * MathUtils.clamp(overcast, 0, 1);
     const day = MathUtils.smoothstep(elevation, -4, 10);
     const dusk = 1 - MathUtils.smoothstep(elevation, -2, 18);
     const cloud = MathUtils.clamp(overcast, 0, 1);
