@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import { makeBaseImage, WaterLayer, SUB_COLORS } from './mapImages';
+import { CardHead } from '../common/Icons';
 
 const PX = 720;
 
@@ -77,7 +78,7 @@ export function MapOverlay({ app }: { app: App }) {
   return (
     <div class="map-overlay" onClick={(e) => { if (e.target === e.currentTarget) app.toggleMap(); }}>
       <div class="map-card glass">
-        <div class="row"><h2>{t('map.title')}</h2><button onClick={() => app.toggleMap()}>{t('map.close')}</button></div>
+        <CardHead title={t('map.title')} onClose={() => app.toggleMap()} closeKey="M" />
         <canvas ref={ref} class="map-canvas" width={PX} height={PX} />
         <div class="map-legend">{legend.map(([c, label]) => <span key={label}><i style={{ background: c }} />{label}</span>)}</div>
       </div>

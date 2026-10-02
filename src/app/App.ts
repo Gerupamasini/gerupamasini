@@ -127,7 +127,7 @@ export class App {
   /** true when the tank should be on screen (home, or an overlay opened from home) */
   private tankVisible(): boolean {
     const m = this.mode;
-    if (m === 'home') return true;
+    if (m === 'home' || m === 'title') return true;
     if (m === 'zukan' || m === 'menu' || m === 'ticket' || m === 'tidetable') return ui.overlayFrom.value === 'home' || !this.world;
     return false;
   }
@@ -170,6 +170,13 @@ export class App {
     ui.hasSave.value = !!existing;
     this.setMode('title');
     this.updateHud(this.clock.nowGame());
+    // the title sits over the quiet tank, slowly turning
+    this.tank.setAspect(this.renderer.aspect);
+    this.tank.activate(true);
+    this.tank.frameTank();
+    this.tank.setLayout(existing?.tank.layout ?? defaultTankLayout());
+    this.lastFrame = performance.now();
+    if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
   }
 
   async startNewGame(): Promise<void> {
