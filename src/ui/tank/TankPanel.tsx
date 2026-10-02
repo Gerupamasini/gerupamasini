@@ -22,7 +22,7 @@ export function TankPanel({ app }: { app: App }) {
     <aside class="glass drawer">
       <div class="drawer-head">
         <h2>{t('tank.title')}</h2>
-        <button class="icon-btn" onClick={() => { ui.homePanel.value = 'none'; ui.tankSelected.value = null; }} aria-label={t('ui.close')}><CloseIcon /></button>
+        <button class="icon-btn" onClick={() => app.closeTankEdit()} aria-label={t('ui.close')}><CloseIcon /></button>
       </div>
       <div class="seg">
         <button class={tab === 'fish' ? 'on' : ''} onClick={() => { ui.tankTab.value = 'fish'; ui.tankSelected.value = null; }}>{t('tank.tab.fish')}</button>
@@ -31,7 +31,7 @@ export function TankPanel({ app }: { app: App }) {
       <div class="drawer-body">
         {tab === 'fish' ? <FishTab app={app} /> : <LayoutTab app={app} />}
       </div>
-      <div class="foot">{tab === 'fish' ? 'ドラッグで回転 ・ ホイールで接近' : t('tank.dragHint')}</div>
+      <div class="foot">{tab === 'fish' ? 'ドラッグで回転 ・ ホイールで接近 ・ WASD で視点' : t('tank.dragHint')}</div>
     </aside>
   );
 }

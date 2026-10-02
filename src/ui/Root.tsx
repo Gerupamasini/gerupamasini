@@ -13,6 +13,7 @@ import { Zukan } from './zukan/Zukan';
 import { ObserveOverlay } from './observe/ObserveOverlay';
 import { CaptureOverlay } from './capture/CaptureOverlay';
 import { HomeMenu } from './home/HomeMenu';
+import { TankPanel } from './tank/TankPanel';
 import { DebugPanel } from './debug/DebugPanel';
 import { CreatureMarkers } from './debug/CreatureMarkers';
 import { ArrowIcon, Key, KeyHint, MoonIcon } from './common/Icons';
@@ -34,6 +35,8 @@ export function Root({ app }: { app: App }) {
       {screen === 'error' && <ErrorScreen />}
       {screen === 'title' && <Title app={app} />}
       {screen === 'home' && <HomeMenu app={app} />}
+      {screen === 'tankEdit' && <TankEdit app={app} />}
+      {ui.transition.value && <Transition label={ui.transition.value} />}
       {(screen === 'field' || screen === 'capture') && <Hud app={app} />}
       {screen === 'observe' && <ObserveOverlay app={app} />}
       {screen === 'capture' && <CaptureOverlay app={app} />}
@@ -46,6 +49,29 @@ export function Root({ app }: { app: App }) {
       {ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}
       <Toasts />
     </Fragment>
+  );
+}
+
+/** The tank's edit screen: the drawer, a badge saying time stands still, and a way back. */
+function TankEdit({ app }: { app: App }) {
+  return (
+    <Fragment>
+      <div class="edit-badge rise">
+        <span class="eyebrow">{t('tank.editing')}</span>
+        <button class="btn ghost sm" onClick={() => app.closeTankEdit()}>{t('home.back')} <Key k="Esc" /></button>
+      </div>
+      <TankPanel app={app} />
+    </Fragment>
+  );
+}
+
+/** The curtain between screens. */
+function Transition({ label }: { label: string }) {
+  return (
+    <div class="screen loading transition">
+      <h1 class="wordmark">{t('app.title')}</h1>
+      <div class="label rise d1">{label}</div>
+    </div>
   );
 }
 
@@ -143,6 +169,11 @@ function Hud({ app }: { app: App }) {
           <div>{t('progress.research')}<b>{hud.research}</b></div>
           <div>{t('hud.case')}<b>{hud.caseCount}<span class="dim">/{hud.caseMax}</span></b></div>
           <div class="fps">{hud.fps} fps</div>
+        </div>
+        <div class="hud-tools">
+          {(['hand_net', 'shovel'] as const).map((id, i) => (
+            <button key={id} class={`tool-chip ${ui.tool.value === id ? 'on' : ''}`} onClick={() => app.setTool(id)}><Key k={String(i + 1)} />{app.data.tools.get(id)?.ja ?? id}</button>
+          ))}
         </div>
       </div>
       <div class="reticle" />

@@ -5,6 +5,7 @@ import type { App } from '../../app/App';
 import { t } from '../store';
 import type { IndividualRecord } from '../../creatures/Individual';
 import { CardHead } from '../common/Icons';
+import { formatJst } from '../../core/Time';
 
 /** The encyclopedia: every species down the left, the chosen one as a plate on the right. */
 export function Zukan({ app }: { app: App }) {
@@ -12,6 +13,7 @@ export function Zukan({ app }: { app: App }) {
   const progress = enc.progress.value;
   const species = [...app.data.species.values()];
   const [sel, setSel] = useState(species[0]?.id ?? '');
+  const [playing, setPlaying] = useState<string | null>(null);
   const sp = app.data.species.get(sel);
   const p = sp ? progress[sp.id] : undefined;
   const known = !!(p?.discovered || p?.captured);
@@ -29,8 +31,17 @@ export function Zukan({ app }: { app: App }) {
   useEffect(() => {
     const pv = previewRef.current;
     if (!pv || !sp) return;
+    setPlaying(null);
     if (known) void pv.show(sp, sp.model.clips.idle); else pv.clear();
   }, [sp?.id, known]);
+  // a recorded behaviour plays its clip in the plate (species whose shapes have no clips just show the note)
+  const play = (b: { id: string; clip?: string }) => {
+    const pv = previewRef.current;
+    if (!sp || !p?.behaviors[b.id]) return;
+    setPlaying(b.id);
+    if (pv && b.clip) void pv.show(sp, b.clip);
+  };
+  const playingDef = sp?.encyclopedia.behaviors.find((b) => b.id === playing);
   const found = species.filter((s) => progress[s.id]?.discovered || progress[s.id]?.captured).length;
   const largest = inds.reduce<IndividualRecord | null>((a, b) => (!a || b.length_mm > a.length_mm ? b : a), null);
   const smallest = inds.reduce<IndividualRecord | null>((a, b) => (!a || b.length_mm < a.length_mm ? b : a), null);
@@ -80,14 +91,25 @@ export function Zukan({ app }: { app: App }) {
               <div class="habitat">{t('zukan.habitat')} ・ {known ? sp.encyclopedia.habitatHint : '？'}</div>
               <h4>{t('zukan.behaviors')} <span class="num" style={{ marginLeft: '8px' }}>{recordedCount} / {sp.encyclopedia.behaviors.length}</span></h4>
               <ul class="behaviors">
-                {sp.encyclopedia.behaviors.map((b) => (
-                  <li key={b.id} class={p?.behaviors[b.id] ? 'on' : ''}>
-                    <span class="mark">{p?.behaviors[b.id] ? '✓' : ''}</span>
-                    <span class="bname">{b.ja}</span>
-                    <span class="bhint">{b.hint ?? ''}</span>
-                  </li>
-                ))}
+                {sp.encyclopedia.behaviors.map((b) => {
+                  const seen = p?.behaviors[b.id];
+                  return (
+                    <li key={b.id} class={`${seen ? 'on' : ''} ${playing === b.id ? 'playing' : ''}`}>
+                      <button class="beh" disabled={!seen} onClick={() => play(b)} title={seen ? '観察の記録を見る' : undefined}>
+                        <span class="mark">{seen ? '✓' : ''}</span>
+                        <span class="bname">{b.ja}</span>
+                        <span class="bhint">{seen ? b.hint ?? '' : '？'}</span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
+              {playingDef && p?.behaviors[playingDef.id] && (
+                <div class="beh-note rise">
+                  <span class="eyebrow">観察の記録 ・ <span class="num">{formatJst(p.behaviors[playingDef.id], { date: true })}</span></span>
+                  <div><b>{playingDef.ja}</b> — {playingDef.hint}{playingDef.clip ? '' : '（この種は動きを再生できないので記録だけ）'}</div>
+                </div>
+              )}
               {sp.collectable && (
                 <div>
                   <h4>{t('zukan.individuals')} <span class="num" style={{ marginLeft: '8px' }}>{inds.length}</span></h4>

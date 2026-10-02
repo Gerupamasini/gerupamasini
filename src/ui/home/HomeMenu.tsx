@@ -64,7 +64,7 @@ export function HomeMenu({ app }: { app: App }) {
         <button class="nav-item" onClick={() => app.openOverlay('zukan')}>{t('zukan.title')}<Key k="Tab" /></button>
         <button class="nav-item" onClick={() => app.openShop()}>{t('home.shop')}<span class="key" style={{ visibility: 'hidden' }}>·</span></button>
         <button class="nav-primary" onClick={() => void app.enterField()}>{t('home.goShort')} <ArrowIcon size={16} /></button>
-        <button class={`nav-item ${panel === 'tank' ? 'on' : ''}`} onClick={() => app.setHomePanel(panel === 'tank' ? 'none' : 'tank')}>{t('home.tankShort')}<span class="key" style={{ visibility: 'hidden' }}>·</span></button>
+        <button class={`nav-item ${panel === 'tank' ? 'on' : ''}`} onClick={() => app.openTankEdit()}>{t('home.tankShort')}<span class="key" style={{ visibility: 'hidden' }}>·</span></button>
         <button class="nav-item" onClick={() => app.openOverlay('tidetable')}>{t('home.tideTable')}<Key k="T" /></button>
       </nav>
       <div class="home-hint">{t('home.hint')}</div>

@@ -80,6 +80,7 @@ export class Spawner {
         const d = Math.hypot(cx - px, cz - pz);
         if (d > SPAWN_RADIUS || d < minDist) continue;
         for (const sp of this.speciesList) {
+          if (sp.locomotion === 'burrow') continue;   // buried bivalves are placed by the clam field
           if (occupied.has(`${sp.id}:${cell}`)) continue;
           for (let ri = 0; ri < sp.spawn.length; ri++) {
             const rule = sp.spawn[ri];

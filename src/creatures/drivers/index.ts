@@ -4,6 +4,7 @@ import type { PlaceholderModel } from '../models/placeholders';
 import { MahazeDriver } from '../species/mahaze/MahazeDriver';
 import { ShrimpDriver } from '../species/shrimp/ShrimpDriver';
 import { PloverDriver } from '../species/plover/PloverDriver';
+import { AsariDriver } from '../asari/Asari.js';
 
 export interface DriverEntry {
   create(): Driver;
@@ -18,4 +19,5 @@ export const DRIVERS: Record<string, DriverEntry> = {
   mahaze: { create: () => new MahazeDriver() },
   shrimp: { create: () => new ShrimpDriver(), placeholder: () => ShrimpDriver.makeModel(), preview: () => ShrimpDriver.makePreview() },
   plover: { create: () => new PloverDriver(), placeholder: () => PloverDriver.makeModel() },
+  asari: { create: () => new AsariDriver() as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: () => AsariDriver.makePreview() },
 };

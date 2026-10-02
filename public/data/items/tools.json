@@ -4,10 +4,29 @@
       "id": "hand_net",
       "ja": "タモ",
       "type": "capture",
-      "targets": ["fish", "crustacean"],
-      "minigame": "timing",
-      "params": { "barSpeed": 1.1, "bandWidth": 0.24 },
-      "description": "浅い水中の魚やエビをすくう基本の道具。帯に入った瞬間に振り、網を引き上げて中を確かめる。近づきすぎると逃げられる。"
+      "targets": [
+        "fish",
+        "crustacean"
+      ],
+      "minigame": "none",
+      "params": {
+        "barSpeed": 1.1,
+        "bandWidth": 0.24
+      },
+      "description": "浅い水中の魚やエビをすくう基本の道具。狙った先に振り、網に入った生物を引き上げて中を確かめる。驚かせると逃げられる。"
+    },
+    {
+      "id": "shovel",
+      "ja": "スコップ",
+      "type": "dig",
+      "targets": [
+        "mollusc"
+      ],
+      "minigame": "none",
+      "params": {
+        "radius": 0.14
+      },
+      "description": "砂を掘ってアサリなどの貝をとる。砂の上に並んだ水管の穴を狙って掘る。"
     }
   ]
 }

@@ -2,7 +2,10 @@ import { signal } from '@preact/signals';
 import type { TideExtremum } from '../tide/TideModel';
 import type { IndividualRecord } from '../creatures/Individual';
 
-export type Screen = 'boot' | 'title' | 'home' | 'field' | 'observe' | 'capture' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'error';
+/** the tool in the player's hands on the flat */
+export type ToolId = 'hand_net' | 'shovel';
+
+export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'error';
 
 export interface HudState {
   timeText: string;
@@ -58,6 +61,9 @@ export const ui = {
     caseCount: 0, caseMax: 6, prompt: null, tooDeep: false, research: 0, money: 0, tod: 'day', season: 'autumn', fps: 0, pointerLocked: false,
   }),
   toasts: signal<Toast[]>([]),
+  tool: signal<ToolId>('hand_net'),
+  /** a short dark curtain with a word on it while screens change (null = none) */
+  transition: signal<string | null>(null),
   /** a newer deploy than the one running (see Build.checkForNewBuild) */
   newBuild: signal<import('../core/Build').BuildInfo | null>(null),
   /** debug mode on (F3 or ?debug=1) */

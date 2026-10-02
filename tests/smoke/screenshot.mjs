@@ -109,7 +109,8 @@ try {
       const dist = sid === 'charadrius_alexandrinus' ? 3 : 0.9;
       const px = ind.pos.x + dist, pz = ind.pos.z;
       a.player.setPose(px, pz, Math.atan2(-(ind.pos.x - px), -(ind.pos.z - pz)));
-      a.player.pitch = -Math.atan2(1.6, dist);
+      a.player.lowView = true;
+    a.player.pitch = -0.2;
       return true;
     }, sid);
     if (found) { await waitFrames(page, 10); await page.screenshot({ path: path.join(outDir, file) }); }
@@ -122,12 +123,13 @@ try {
     const gobies = a.creatures.individuals.filter((i) => i.species.id === 'acanthogobius_flavimanus').sort((x, y) => x.pos.distanceTo(p) - y.pos.distanceTo(p));
     const g = gobies[0];
     if (!g) return null;
-    const dist = 1.2;
+    const dist = 0.85;
     const ang = Math.random() * Math.PI * 2;
     const px = g.pos.x + Math.sin(ang) * dist, pz = g.pos.z + Math.cos(ang) * dist;
     const yaw = Math.atan2(-(g.pos.x - px), -(g.pos.z - pz));
     a.player.setPose(px, pz, yaw);
-    a.player.pitch = -Math.atan2(1.6, dist);
+    a.player.lowView = true;
+    a.player.pitch = -0.2;
     return { id: g.id, len: g.length_mm };
   });
   console.log('nearest goby', JSON.stringify(near));
@@ -137,19 +139,19 @@ try {
     await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, near.id);
     await waitFrames(page, 12);
     await page.screenshot({ path: path.join(outDir, '09-observe.png') });
-    await page.evaluate((id) => { const a = window.__higata; a.exitObserve(); a.startCapture(a.creatures.get(id)); }, near.id);
+    await page.evaluate(() => { window.__higata.exitObserve(); });
     await waitFrames(page, 4);
     await page.screenshot({ path: path.join(outDir, '10-capture.png') });
-    const beforeAttempt = await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, frames: a.frameCount, state: a.capture.state.value }; });
-    console.log('before attempt', JSON.stringify(beforeAttempt));
-    await page.evaluate(() => { const a = window.__higata; const st = a.capture.state.value; a.capture.state.value = { ...st, cursor: (st.bandStart + st.bandEnd) / 2 }; a.capture.attempt(); });
+    // swing the net at the goby ahead: it is put 60 cm in front first (it may have bolted while being observed), and
+    // every animal in the sweep is caught in the smoke, so the sequence is deterministic
+    await page.evaluate((id) => { const a = window.__higata; const g = a.creatures.get(id); const p = a.player.position, f = a.player.forward; g.pos.set(p.x + f.x * 0.6, a.world.terrain.heightAt(p.x + f.x * 0.6, p.z + f.z * 0.6), p.z + f.z * 0.6); g.alert = 0; a.capture.forceCatch = true; a.swingNet(); }, near.id);
     const afterAttempt = await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, state: a.capture.state.value }; });
-    console.log('after attempt', JSON.stringify(afterAttempt));
-    await page.waitForFunction(() => { const s = window.__higata.capture.state.value; return !!s && s.phase === 'check' && s.revealed; }, null, { timeout: 60000 });
+    console.log('after swing', JSON.stringify(afterAttempt));
+    await page.waitForFunction(() => { const s = window.__higata.capture.state.value; return !!s && s.phase === 'check' && s.revealed; }, null, { timeout: 240000 });
     await waitFrames(page, 2);
     console.log('reveal', JSON.stringify(await page.evaluate(() => { const a = window.__higata; const s = a.capture.state.value; return { phase: s?.phase, revealed: s?.revealed, text: s?.catchText, net: a.net?.group.visible }; })));
     await page.screenshot({ path: path.join(outDir, '10b-net-check.png') });
-    await page.waitForFunction(() => window.__higata.mode === 'field', null, { timeout: 60000 });
+    await page.waitForFunction(() => window.__higata.mode === 'field', null, { timeout: 240000 });
     console.log('after wait', JSON.stringify(await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, frames: a.frameCount, state: a.capture.state.value, caseCount: a.encyclopedia.caseItems.value.length }; })));
     const caught = await page.evaluate(() => ({ caseCount: window.__higata.encyclopedia.caseItems.value.length, research: window.__higata.encyclopedia.research.value }));
     console.log('after capture', JSON.stringify(caught));

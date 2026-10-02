@@ -97,11 +97,11 @@ export class WaterPass {
       uFogDensity: { value: 0.0024 },
       // the water itself: silty, olive-green, seen wherever the view path through it is long (after MahazeViewer)
       uWaterFog: { value: new Color(0.16, 0.172, 0.14) },
-      uFogW: { value: 2.0 },      // per metre of path through the open water
-      uFogPool: { value: 1.0 },   // tide pools have settled and are clearer
+      uFogW: { value: 1.1 },      // per metre of path through the open water: from above, 30 cm is nearly clear; along the surface it closes in
+      uFogPool: { value: 0.35 },  // tide pools have settled and are clearer
       uRefr: { value: 0.6 },
       uRes: { value: new Vector2(1, 1) },
-      uEnvI: { value: 0.72 },
+      uEnvI: { value: 0.6 },
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,

@@ -69,6 +69,11 @@ export class Observation {
     const dir = this.tmp.copy(this.camera.position).sub(anchor);
     dir.y = Math.max(dir.y, 0.1 * dir.length());
     dir.setLength(Math.min(Math.max(len * 5, 0.35), controls.maxDistance));
+    // a buried animal shows only its siphons: start close and looking down at the sand
+    if (ind.species.locomotion === 'burrow') {
+      dir.y = Math.max(dir.y, 1.4 * Math.hypot(dir.x, dir.z));
+      dir.setLength(Math.max(0.16, len * 4));
+    }
     this.camera.position.copy(anchor).add(dir);
     controls.update();
     this.controls = controls;
