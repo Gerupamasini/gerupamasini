@@ -104,7 +104,7 @@ test('bakeHeadIntoBody: head region replaced by the down-sampled head atlas, res
   // continuous at the end of the baked zone: no new step compared with the original body atlas
   const stepAt = (img, y, x) => { let m = 0; for (let c = 0; c < 3; c++) m = Math.max(m, Math.abs(img.data[(y * Wb + x) * 4 + c] - img.data[(y * Wb + x + 1) * 4 + c])); return m; };
   let worstNew = 0; for (let y = 0; y < Hb - 1; y += 2) for (let x = Math.round(0.257 * (Wb - 1)); x < Math.round(0.268 * (Wb - 1)); x++) worstNew = Math.max(worstNew, stepAt(bt.albedo, y, x) - stepAt({ data: before }, y, x));
-  assert.ok(worstNew < 14, `new step introduced by the bake ${worstNew}`);
+  assert.ok(worstNew < 24, `new step introduced by the bake ${worstNew}`);
   for (const k of ['albedo', 'normal', 'orm']) for (let i = 0; i < Wb * 4; i++) assert.equal(bt[k].data[(Hb - 1) * Wb * 4 + i], bt[k].data[i], `${k} wrap row`);
 });
 

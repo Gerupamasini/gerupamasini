@@ -73,11 +73,12 @@ test('scale lattice has the physical pitch 0.7 %SL (~1.33 mm) along the body axi
   assert.ok(Math.abs(bl - pitchPx) <= 1.6, `autocorrelation peak ${bl}px vs pitch ${pitchPx}px`);
 });
 
-test('ORM: R=AO weak, G=roughness (back rough, flank/belly lower), B=metalness (silver belly/flank high, back ~0)', () => {
+test('ORM: R=AO (low on the dark back to cut the env-reflection veil, 1 on the silver flank/belly), G=roughness (back rough, flank/belly lower), B=metalness (silver belly/flank high, back ~0)', () => {
   const o = base.orm; let aoMin = 255, gMin = 255, gMax = 0, bMax = 0;
   for (let i = 0; i < o.data.length; i += 4) { aoMin = Math.min(aoMin, o.data[i]); gMin = Math.min(gMin, o.data[i + 1]); gMax = Math.max(gMax, o.data[i + 1]); bMax = Math.max(bMax, o.data[i + 2]); }
-  assert.ok(aoMin >= 255 * 0.7, `AO weak (${aoMin})`);
-  assert.ok(gMin / 255 >= 0.15 && gMax / 255 <= 0.75, `roughness range ${gMin / 255}..${gMax / 255}`);
+  // 背側の AO は意図的に小さい（M_Body の環境反射・クリアコートのベールを抑え, 暗色を暗いまま見せる。three.js は aoMap を間接拡散・間接鏡面・クリアコート間接に掛ける）。最小でも 0.05
+  assert.ok(aoMin >= 255 * 0.05, `AO floor (${aoMin})`);
+  assert.ok(gMin / 255 >= 0.15 && gMax / 255 <= 0.85, `roughness range ${gMin / 255}..${gMax / 255}`);
   assert.ok(bMax / 255 <= 0.7, `metalness <= silver_gain max (${bMax / 255})`);
   const band = (rLo, rHi, ch) => { // 側面投影 r の帯での平均（右体側, s=0.4..0.8）
     let s = 0, n = 0;
@@ -89,7 +90,9 @@ test('ORM: R=AO weak, G=roughness (back rough, flank/belly lower), B=metalness (
   assert.ok(metBack < 0.05, `back metalness ${metBack}`); assert.ok(metBelly > 0.25, `belly metalness ${metBelly}`); assert.ok(metFlank > 0.18);
   const rBack = band(0.85, 1.0, 1), rBelly = band(-1.0, -0.8, 1), rFlank = band(-0.5, -0.2, 1);
   assert.ok(rBack > rFlank + 0.08 && rBack > rBelly + 0.08, `back rougher (${rBack} vs ${rFlank}, ${rBelly})`);
-  assert.ok(rBack <= 0.62 && rBelly >= 0.2);
+  assert.ok(rBack <= 0.85 && rBelly >= 0.2);
+  const aoBack = band(0.85, 1.0, 0), aoBelly = band(-1.0, -0.8, 0), aoFlank = band(-0.5, -0.2, 0);
+  assert.ok(aoBack < 0.4 && aoBelly > 0.9 && aoFlank > 0.8, `AO back ${aoBack} flank ${aoFlank} belly ${aoBelly}`);
 });
 
 test('albedo: counter-shading (dark back -> silver flank -> bright belly), sRGB, Lab bands in the spec ranges', () => {
@@ -117,9 +120,10 @@ test('UV seams: dorsal seam (row 0 vs row H-1) and ventral midline are continuou
   for (let x = Math.floor(0.3 * W); x < W; x++) { for (let c = 0; c < 3; c++) { belly += Math.abs(base.albedo.data[((H / 2 - 1) * W + x) * 4 + c] - base.albedo.data[((H / 2) * W + x) * 4 + c]); n++; } }
   assert.ok(belly / n < 12, `ventral seam ${belly / n}`);
   // 尾端 1% には斑・黒点が掛からない（地色のまま連続）: 右体側の中段で最後の列に暗い斑が無い
-  const ys = []; for (let y = Math.round(0.20 * H); y <= Math.round(0.32 * H); y++) ys.push(luminance(base.albedo, W - 1, y));
-  const med = [...ys].sort((p, q) => p - q)[Math.floor(ys.length / 2)];
-  assert.ok(Math.min(...ys) > 0.55 * med, `no mark/spot in the last column (min ${Math.min(...ys)} vs median ${med})`);
+  // （地色だけの生成 = debugGround と比べる。アルベドは背→腹で大きく変わるので行ごとの比で見る）
+  const ground = gen({ genome: { debugGround: true } });
+  let worst = 1; for (let y = Math.round(0.14 * H); y <= Math.round(0.36 * H); y++) worst = Math.min(worst, luminance(base.albedo, W - 1, y) / luminance(ground.albedo, W - 1, y));
+  assert.ok(worst > 0.8, `no mark/spot in the last column (darkest ratio to the bare ground ${worst})`);
 });
 
 test('report: parr marks per side (count 5-12, |L-R|<=1, spec 03 §3.1.3 geometry), independent sides, colours', () => {

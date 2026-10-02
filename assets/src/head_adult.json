@@ -377,8 +377,8 @@
    0.205,
    0.088
   ],
-  "radius_mm": 1.0,
-  "depth_mm": 0.8
+  "radius_mm": 0.55,
+  "depth_mm": 0.5
  },
  "branchiostegal": {
   "apex_u": 0.18,

@@ -89,7 +89,8 @@ export async function writeGLB({ file, body, teeth = null, gills = null, fins, e
     mats.head.setExtension('KHR_materials_iridescence', iridExt.createIridescence().setIridescenceFactor(hc.iridescence ?? 0.10).setIridescenceIOR(1.33));
     mats.head.setExtension('KHR_materials_ior', iorExt.createIOR().setIOR(1.4));
   }
-  mats.mouth = doc.createMaterial('M_Mouth').setBaseColorTexture(tex('mouth_albedo', mouthTexture())).setRoughnessFactor(0.55).setMetallicFactor(0).setDoubleSided(true);
+  const hm = textures?.head?.mouth;       // lining texture from the head painter (along-u: lips -> throat, v around the cavity); the built-in one is the fallback
+  mats.mouth = doc.createMaterial('M_Mouth').setBaseColorTexture(tex('mouth_albedo', hm?.albedo || mouthTexture())).setRoughnessFactor(hm?.roughness ?? 0.55).setMetallicFactor(0).setDoubleSided(true);
   mats.gill = doc.createMaterial('M_Gill').setBaseColorFactor([0.30, 0.025, 0.03, 1]).setRoughnessFactor(0.55).setMetallicFactor(0).setDoubleSided(true);
   mats.teeth = doc.createMaterial('M_Teeth').setBaseColorFactor([0.93, 0.9, 0.82, 1]).setRoughnessFactor(0.3).setMetallicFactor(0).setDoubleSided(true);
   mats.fin = doc.createMaterial('M_Fin').setAlphaMode('BLEND').setDoubleSided(true).setRoughnessFactor(0.5).setMetallicFactor(0);
