@@ -29,8 +29,13 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: false,
     chunkSizeWarningLimit: 1500,
-    rollupOptions: { output: { manualChunks: { three: ['three'] } } },
+    rollupOptions: {
+      // the game, and the walkable fictional flat (flat.html)
+      input: { main: fileURLToPath(new URL('./index.html', import.meta.url)), flat: fileURLToPath(new URL('./flat.html', import.meta.url)) },
+      output: { manualChunks: { three: ['three'] } },
+    },
   },
+  worker: { format: 'es' },
   server: { port: 5173, host: true },
   test: {
     include: ['tests/unit/**/*.test.ts'],
