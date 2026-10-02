@@ -75,6 +75,8 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .title-now .sep { width: 1px; height: 12px; background: var(--line-2); }
 .title-actions { display: flex; gap: 12px; margin-top: 30px; flex-wrap: wrap; justify-content: center; }
 .title-foot { position: fixed; left: 28px; right: 28px; bottom: 22px; display: flex; justify-content: space-between; align-items: flex-end; color: var(--dim-2); font-size: 11px; letter-spacing: 0.14em; }
+.title-foot .build { display: inline-flex; align-items: baseline; gap: 8px; }
+.title-foot .commit { padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; letter-spacing: 0.04em; color: var(--dim); }
 
 /* ------------------------------------------------------------------ HUD (the flat) */
 .hud-tl { position: fixed; left: 20px; top: 18px; display: flex; flex-direction: column; gap: 10px; }

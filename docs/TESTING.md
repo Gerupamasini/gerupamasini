@@ -1,4 +1,10 @@
-# 身内テスト手順（金曜版 v0.1）
+# 身内テスト手順（身内テスト版 v0.3）
+
+## いま遊んでいるのがどのビルドか
+- タイトル画面の左下に `v0.3.0 ・ 身内テスト版 7f0c139` のように **バージョンと commit の先頭 7 桁** が出ます。メニュー（Esc）の右上にも同じものが出ます。
+- バージョンは `package.json` の version、commit は GitHub Actions のビルド時に `VITE_COMMIT`（= `github.sha`）から入ります。手元の `npm run build` では `git rev-parse HEAD` を使います。
+- ブラウザの開発者ツール（F12）の Console にも起動時に `干潟図鑑 v0.3.0 (7f0c139) built …` と出ます。
+- GitHub の Actions →「Deploy to GitHub Pages」の最新の run の commit と、この表示が一致していれば最新です。一致しないときは GitHub Pages のキャッシュ（`index.html` は約 10 分）なので、**Ctrl+Shift+R（Mac は Cmd+Shift+R）でハード再読み込み**してください。
 
 ## 動作環境
 - PC の Chrome / Edge / Firefox / Safari 17 以降（WebGL2 必須）。スマホは未対応。

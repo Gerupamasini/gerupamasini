@@ -1,5 +1,8 @@
 import './styles.css';
 import { App } from './app/App';
+import { buildLabel, BUILD } from './core/Build';
+
+console.info(`干潟図鑑 ${buildLabel}${BUILD.builtAt ? ` built ${BUILD.builtAt}` : ''}`);
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui') as HTMLElement;
