@@ -24,7 +24,7 @@ const P_DIP = pose(-0.12, -0.52, -0.88, 0.28, -0.44, -0.04);
 const P_SCOOP = pose(-0.05, -0.27, -0.6, 0.3, -0.44, -0.02);
 const P_CHECK = pose(0.0, -0.09, -0.42, 0.02, -0.5, -0.1);
 /** how far from the hoop's path through the water an animal can be and still end up in the bag (m) */
-export const SWEEP_RADIUS = 0.24;
+export const SWEEP_RADIUS = 0.28;
 
 const ease = (t: number) => t * t * (3 - 2 * t);
 function lerpPose(a: Pose, b: Pose, t: number, out: Pose): Pose {

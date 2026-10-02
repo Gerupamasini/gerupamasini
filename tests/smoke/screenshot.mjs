@@ -109,7 +109,8 @@ try {
       const dist = sid === 'charadrius_alexandrinus' ? 3 : 0.9;
       const px = ind.pos.x + dist, pz = ind.pos.z;
       a.player.setPose(px, pz, Math.atan2(-(ind.pos.x - px), -(ind.pos.z - pz)));
-      a.player.pitch = -Math.atan2(1.6, dist);
+      a.player.lowView = true;
+    a.player.pitch = -0.2;
       return true;
     }, sid);
     if (found) { await waitFrames(page, 10); await page.screenshot({ path: path.join(outDir, file) }); }
@@ -122,7 +123,7 @@ try {
     const gobies = a.creatures.individuals.filter((i) => i.species.id === 'acanthogobius_flavimanus').sort((x, y) => x.pos.distanceTo(p) - y.pos.distanceTo(p));
     const g = gobies[0];
     if (!g) return null;
-    const dist = 1.2;
+    const dist = 0.85;
     const ang = Math.random() * Math.PI * 2;
     const px = g.pos.x + Math.sin(ang) * dist, pz = g.pos.z + Math.cos(ang) * dist;
     const yaw = Math.atan2(-(g.pos.x - px), -(g.pos.z - pz));

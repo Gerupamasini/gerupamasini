@@ -36,7 +36,6 @@ import { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 const HUD_HZ = 4;
 const MARKER_HZ = 10;
 const AUTOSAVE_SEC = 60;
-const CAPTURE_RANGE = 2.6;
 
 export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool';
 
@@ -486,32 +485,42 @@ export class App {
    * bag unless it gets away — calm animals near the middle of the sweep are caught, wary ones and those at the
    * rim slip out, and everything nearby bolts.
    */
+  /** Catchable animals under the hoop's path for the current view, with how far off the path's middle each is (0..1). */
+  private netZoneHits(): { ind: Individual; edge: number }[] {
+    const creatures = this.creatures, world = this.world, player = this.player;
+    const out: { ind: Individual; edge: number }[] = [];
+    if (!creatures || !world || !player) return out;
+    const a = this.tmp2, b = this.tmp3;
+    NetView.sweep(this.camera, (x, z) => world.terrain.heightAt(x, z), a, b);
+    const abx = b.x - a.x, abz = b.z - a.z, abLen2 = Math.max(1e-6, abx * abx + abz * abz);
+    for (const ind of creatures.individuals) {
+      if (!ind.species.collectable || ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
+      if (ind.pos.distanceTo(player.position) > 3) continue;
+      // distance from the animal to the hoop's path (in the ground plane), and how high it sits above the bed
+      const u = Math.max(0, Math.min(1, ((ind.pos.x - a.x) * abx + (ind.pos.z - a.z) * abz) / abLen2));
+      const off = Math.hypot(ind.pos.x - (a.x + abx * u), ind.pos.z - (a.z + abz * u));
+      const reach = SWEEP_RADIUS + ind.length_mm / 2000;
+      if (off <= reach && ind.pos.y - world.terrain.heightAt(ind.pos.x, ind.pos.z) < 0.3) out.push({ ind, edge: off / reach });
+    }
+    return out;
+  }
+
   swingNet(): void {
     const tool = this.data.tools.get('hand_net');
     const creatures = this.creatures, player = this.player, world = this.world;
     if (!tool || !creatures || !player || !world || this.capture.active) return;
-    const a = new Vector3(), b = new Vector3();
-    NetView.sweep(this.camera, (x, z) => world.terrain.heightAt(x, z), a, b);
-    const ab = new Vector3().subVectors(b, a), abLen2 = Math.max(1e-6, ab.lengthSq());
     const free = Math.max(0, this.encyclopedia.caseMax - this.encyclopedia.caseItems.value.length);
     const caught: Individual[] = [], startled: Individual[] = [];
-    const tmp = new Vector3();
+    const hits = this.netZoneHits();
+    for (const { ind, edge } of hits) {
+      // wary animals and those at the rim of the sweep get out from under the hoop
+      const cap = ind.species.capture;
+      const escape = cap.baseDifficulty * 0.45 + cap.alertPenalty * ind.alert + 0.35 * edge + (ind.alert > 0.8 ? 0.25 : 0);
+      if (this.capture.forceCatch || (ind.rng.next() > escape && caught.length < free)) caught.push(ind);
+    }
     for (const ind of creatures.individuals) {
-      if (ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
-      const d = ind.pos.distanceTo(player.position);
-      if (d > 3) continue;
-      // distance from the animal to the hoop's path (in the ground plane), and how high it sits above the bed
-      const u = Math.max(0, Math.min(1, tmp.subVectors(ind.pos, a).dot(ab) / abLen2));
-      tmp.copy(a).addScaledVector(ab, u);
-      const off = Math.hypot(ind.pos.x - tmp.x, ind.pos.z - tmp.z);
-      const reach = SWEEP_RADIUS + ind.length_mm / 2000;
-      if (off <= reach && ind.species.collectable && ind.pos.y - world.terrain.heightAt(ind.pos.x, ind.pos.z) < 0.3) {
-        // wary animals and those at the rim of the sweep get out from under the hoop
-        const cap = ind.species.capture;
-        const escape = cap.baseDifficulty * 0.45 + cap.alertPenalty * ind.alert + 0.35 * (off / reach) + (ind.alert > 0.8 ? 0.25 : 0);
-        if (this.capture.forceCatch || (ind.rng.next() > escape && caught.length < free)) { caught.push(ind); continue; }
-      }
-      if (d < 2.5) startled.push(ind);
+      if (caught.includes(ind) || ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
+      if (ind.pos.distanceTo(player.position) < 2.5) startled.push(ind);
     }
     for (const ind of startled) {
       const away = new Vector3().subVectors(ind.pos, player.position).setY(0).normalize().multiplyScalar(1.5);
@@ -904,14 +913,8 @@ export class App {
     let prompt: string | null = null;
     if (this.mode === 'field' && this.creatures && player) {
       this.target = this.creatures.pickTarget(this.camera, 7);
-      // the net: something catchable close ahead
-      const fwd = player.forward;
-      let inReach = false;
-      for (const ind of this.creatures.individuals) {
-        if (!ind.species.collectable || ind.species.locomotion === 'burrow') continue;
-        const dx = ind.pos.x - player.position.x, dz = ind.pos.z - player.position.z, d = Math.hypot(dx, dz);
-        if (d <= CAPTURE_RANGE && (dx * fwd.x + dz * fwd.z) / Math.max(d, 1e-3) > 0.6) { inReach = true; break; }
-      }
+      // the net: something catchable where the hoop would go through the water
+      const inReach = this.tool === 'hand_net' && this.netZoneHits().length > 0;
       const toolHint = this.tool === 'hand_net' ? (inReach ? `[E] ${t('hud.swing')}` : '') : `[E] ${t('hud.dig')}`;
       // a clam's siphon holes under the reticle
       this.targetClam = -1;
