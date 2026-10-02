@@ -44,7 +44,10 @@ export class TAA {
         vec3 tm(vec3 c) { return c / (1.0 + max(c.r, max(c.g, c.b))); }
         vec3 itm(vec3 c) { return c / max(1.0 - max(c.r, max(c.g, c.b)), 1e-3); }
         void main() {
-          vec3 cur = tm(texture2D(tCur, vUv).rgb);
+          vec4 cur4 = texture2D(tCur, vUv);
+          vec3 cur = tm(cur4.rgb);
+          // reactive: water moves every frame, keep little of its history
+          float react = cur4.a;
           if (uValid < 0.5) { gl_FragColor = vec4(itm(cur), 1.0); return; }
           // neighbourhood: mean and deviation in YCoCg (variance clipping)
           vec3 m1 = vec3(0.0), m2 = vec3(0.0);
@@ -69,7 +72,7 @@ export class TAA {
           vec3 u = abs(c / e);
           float mx = max(u.x, max(u.y, u.z));
           if (mx > 1.0) hist = m1 + c / mx;
-          float a = mix(uAlpha, 1.0, off);
+          float a = mix(mix(uAlpha, 0.55, react), 1.0, off);
           vec3 outc = fromYCoCg(mix(hist, toYCoCg(cur), a));
           gl_FragColor = vec4(itm(max(outc, 0.0)), 1.0);
         }

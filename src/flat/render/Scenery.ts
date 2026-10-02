@@ -124,10 +124,12 @@ void main() {
     if (gap > 0.86 - 0.5 * rim) discard;
     // black pine needles: dark, slightly blue-green, lighter where the sun catches the tips
     alb = vec3(0.038, 0.056, 0.034) * (0.75 + 0.5 * vSeed) * (0.8 + 0.4 * n2.y);
+    alb *= 0.85 + 0.3 * vnoise(P.xz * 7.0 + P.y * 5.0);
     vec3 nd = vec3(vnoise(P.xz * 3.1 + P.y) - 0.5, 0.0, vnoise(P.zy * 3.3 - P.x) - 0.5);
-    N = normalize(N + nd * 1.4);
+    // a pad is lit from above as a whole: its normal leans up, the underside and the inside stay in shade
+    N = normalize(N + nd * 1.4 + vec3(0.0, 0.5, 0.0));
     float inner = normalize(vN).y * 0.5 + 0.5;
-    ao = mix(0.4, 1.0, inner) * (0.7 + 0.3 * n2.z);
+    ao = mix(0.28, 1.0, inner * inner) * (0.7 + 0.3 * n2.z);
     rough = 0.8;
     trans = 0.35;
     wrap = 0.4;
@@ -170,7 +172,13 @@ export class Scenery {
     for (const m of this.pines(shore, mk('BARK', {}, true), mk('FOLIAGE', { FOLIAGE: '' }, true))) this.group.add(m);
     this.group.add(this.breakwater(mk('ROCK', { ROCKY: '' }, true)));
     this.group.add(this.poles(mk('WOOD')));
-    this.group.traverse((o) => { o.frustumCulled = o instanceof InstancedMesh ? false : o.frustumCulled; });
+    // instanced props are culled as a whole by the bounds of all their instances (the pines behind the wall are
+    // skipped while one looks out to sea); the vertex shader's lumps reach a little past the geometry
+    this.group.traverse((o) => {
+      if (!(o instanceof InstancedMesh)) return;
+      o.computeBoundingSphere();
+      if (o.boundingSphere) o.boundingSphere.radius += 2;
+    });
   }
 
   setEnv(env: Texture, envHeight: number): void {
@@ -287,6 +295,17 @@ export class Scenery {
       const q = new Quaternion().setFromUnitVectors(up, d.normalize());
       woods.push(new Matrix4().compose(a, q, new Vector3(rad0 * 2, len, rad0 * 2)));
     };
+    // a pad of needles (the tiers of a black pine): a few overlapping lumps around the branch end, so its outline is
+    // ragged and its top uneven — never one smooth disc
+    const pad = (c: Vector3, R: number, T: number) => {
+      const k = 3 + Math.floor(r() * 3);
+      for (let i = 0; i < k; i++) {
+        const a = r() * Math.PI * 2, d = Math.sqrt(r()) * R * 0.6;
+        const p = c.clone().add(new Vector3(Math.cos(a) * d, (r() - 0.4) * T * 0.35, Math.sin(a) * d));
+        const rh = R * (0.42 + 0.3 * r()), rv = T * (0.55 + 0.35 * r());
+        clumps.push(new Matrix4().compose(p, new Quaternion().setFromAxisAngle(up, r() * 6.28), new Vector3(rh, rv, rh * (0.75 + 0.4 * r()))));
+      }
+    };
     for (const tr of trees) {
       const base = new Vector3(tr.x, 4.5, tr.z);
       const dir = r() * Math.PI * 2, lean1 = r() * 0.25, lean2 = lean1 + (r() - 0.3) * 0.35;
@@ -308,16 +327,14 @@ export class Scenery {
         const nc = 1 + Math.floor(r() * 2.2);
         for (let c = 0; c < nc; c++) {
           const p = end.clone().add(new Vector3((r() - 0.5) * 1.2, 0.2 + r() * 0.4, (r() - 0.5) * 1.2));
-          const rx = 0.9 + r() * 1.1 + len * 0.15, ry = 0.4 + r() * 0.35;
-          clumps.push(new Matrix4().compose(p, new Quaternion().setFromAxisAngle(up, r() * 6.28), new Vector3(rx, ry, rx * (0.7 + r() * 0.5))));
+          pad(p, 1.0 + r() * 1.2 + len * 0.15, 0.6 + r() * 0.5);
         }
       }
       // the crown
       const nt = 1 + Math.floor(r() * 2);
       for (let c = 0; c < nt; c++) {
         const p = top.clone().add(new Vector3((r() - 0.5) * 1.5, -0.2 + r() * 0.5, (r() - 0.5) * 1.5));
-        const rx = 1.1 + r() * 1.3;
-        clumps.push(new Matrix4().compose(p, new Quaternion().setFromAxisAngle(up, r() * 6.28), new Vector3(rx, 0.5 + r() * 0.4, rx * (0.7 + r() * 0.4))));
+        pad(p, 1.3 + r() * 1.4, 0.75 + r() * 0.5);
       }
     }
     const wood = new InstancedMesh(cyl, bark, woods.length);

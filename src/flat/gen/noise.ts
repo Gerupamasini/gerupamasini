@@ -27,6 +27,23 @@ export function hash01(x: number, y: number, seed: number): number {
   return hash2i(x, y, seed) / 4294967296;
 }
 
+const f32 = new Float32Array(1), u32 = new Uint32Array(f32.buffer);
+/** IEEE 754 half-float bits of x (rounded), for the half-float textures. */
+export function toHalf(x: number): number {
+  f32[0] = x;
+  const b = u32[0];
+  const sign = (b >>> 16) & 0x8000;
+  const e = ((b >>> 23) & 0xff) - 112;
+  let m = b & 0x7fffff;
+  if (e >= 31) return sign | 0x7c00;
+  if (e <= 0) {
+    if (e < -10) return sign;
+    m = (m | 0x800000) >> (1 - e);
+    return sign | ((m + 0x1000) >> 13);
+  }
+  return (sign | (e << 10) | (m >> 13)) + ((m >> 12) & 1);
+}
+
 export const clamp = (x: number, a: number, b: number): number => (x < a ? a : x > b ? b : x);
 export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 export function smoothstep(a: number, b: number, x: number): number {

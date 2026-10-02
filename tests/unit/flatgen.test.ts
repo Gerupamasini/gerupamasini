@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateFlat, shoreLine, WALK_HALF, type FlatData } from '../../src/flat/gen/generate';
 import { computeWater, fillDepressions, KIND_DRY, KIND_POOL, KIND_SEA, LAST_HIGH_WATER } from '../../src/flat/gen/water';
+import { toHalf } from '../../src/flat/gen/noise';
 
 let cached: FlatData | null = null;
 function flat(): FlatData {
@@ -101,5 +102,19 @@ describe('depression filling', () => {
     expect(F[4 * n + 4]).toBeCloseTo(1.02, 5);
     expect(F[0]).toBeCloseTo(H[0], 6);
     expect(F[8 * n + 8]).toBeCloseTo(H[8 * n + 8], 6);
+  });
+});
+
+describe('half floats', () => {
+  const fromHalf = (h: number) => {
+    const e = (h >> 10) & 31, m = h & 1023, sg = h & 0x8000 ? -1 : 1;
+    return e === 0 ? sg * m * 2 ** -24 : e === 31 ? sg * Infinity : sg * (1 + m / 1024) * 2 ** (e - 15);
+  };
+  it('encodes exactly representable values exactly and the rest to the nearest half', () => {
+    expect(toHalf(1)).toBe(0x3c00);
+    expect(toHalf(-2)).toBe(0xc000);
+    expect(toHalf(0)).toBe(0);
+    expect(toHalf(65504)).toBe(0x7bff);
+    for (const v of [0.07, -0.731, 0.123456, 0.999, 1e-5, 0.2]) expect(Math.abs(fromHalf(toHalf(v)) - v)).toBeLessThanOrEqual(Math.abs(v) * 2 ** -11 + 2 ** -25);
   });
 });

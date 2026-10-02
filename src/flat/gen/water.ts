@@ -131,6 +131,7 @@ function solveGrid(H: Float32Array, n: number, cell: number, tide: number, wind:
   // ---- pools: filled depressions above the tide
   const F = fillDepressions(H, n);
   const poolId = new Int32Array(N2).fill(-1);
+  const core = new Uint8Array(N2);
   let pools = 0;
   const comp: number[] = [];
   for (let s = 0; s < N2; s++) {
@@ -152,16 +153,27 @@ function solveGrid(H: Float32Array, n: number, cell: number, tide: number, wind:
       if (j < n - 1) take(c + n);
     }
     const area = comp.length * cell * cell;
-    const keep = area >= 0.4 && maxD >= 0.006;
+    // slivers (a groove along a bank, one or two cells wide) do not read as water: the pool is opened (eroded and
+    // dilated by a cell), and a pool needs a body
+    let interior = 0;
+    for (const c of comp) {
+      const i = c % n;
+      const inn = i > 0 && i < n - 1 && c >= n && c < N2 - n && poolId[c - 1] === -2 && poolId[c + 1] === -2 && poolId[c - n] === -2 && poolId[c + n] === -2;
+      core[c] = inn ? 1 : 0;
+      if (inn) interior++;
+    }
+    const keep = area >= 0.4 && maxD >= 0.006 && interior * cell * cell >= 0.3;
     // the level sits a little under the sill: the water seeps away through the sand between tides
     const drop = Math.min(0.005, maxD * 0.22);
     const id = keep ? pools++ : -3;
     for (const c of comp) {
       poolId[c] = id;
       if (!keep) continue;
+      const opened = core[c] === 1 || core[c - 1] === 1 || core[c + 1] === 1 || (c >= n && core[c - n] === 1) || (c < N2 - n && core[c + n] === 1);
       const L = F[c] - drop;
-      if (L > H[c]) { level[c] = L; kind[c] = KIND_POOL; }
+      if (opened && L > H[c]) { level[c] = L; kind[c] = KIND_POOL; }
     }
+    for (const c of comp) core[c] = 0;
   }
   // ---- creeks: the ebb trickle (fine grid only)
   if (creek) for (let k = 0; k < N2; k++) {
@@ -212,7 +224,10 @@ function solveGrid(H: Float32Array, n: number, cell: number, tide: number, wind:
   const info = new Uint8Array(N2 * 4);
   let wet = 0, walkCells = 0;
   for (let k = 0; k < N2; k++) {
-    levels[k * 2] = near[k];
+    // around a shore the nearest water's level carries on over the dry ground (the shader finds the exact shore line
+    // where the smooth ground rises through it); but ground lower than that level and not part of the water is a
+    // hollow of its own, cut off by a sill (a dropped puddle, a groove beside a bank): no water spills into it
+    levels[k * 2] = dist[k] > 0 && H[k] < near[k] - 0.0005 ? DRY : near[k];
     const t = Math.min(1, Math.max(0, (dist[k] - 1) / 7));
     levels[k * 2 + 1] = near[k] + (blurred[k] - near[k]) * t * t * (3 - 2 * t);
     const kd = kind[k];

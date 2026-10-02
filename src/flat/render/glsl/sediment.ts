@@ -16,7 +16,8 @@
 export const SEDIMENT_GLSL = /* glsl */ `
 mat2 rot2(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
 
-// Phasor noise: vec4(phase, dphase/dx, dphase/dz, normalised contrast 0…~1.5)
+// Phasor noise: vec4(phase, dphase/dx, dphase/dz, normalised contrast 0…~1.5). The Gaussian kernels are windowed to
+// reach exactly zero one cell away, so the 3×3 search never cuts one off (that would draw seams along the cells).
 vec4 phasor(vec2 p, vec2 kdir, float lam, float cellK, float seed, float jitA, float jitF) {
   float kf = TAU / lam;
   float C = lam * cellK;
@@ -31,15 +32,16 @@ vec4 phasor(vec2 p, vec2 kdir, float lam, float cellK, float seed, float jitA, f
       vec4 h = hash24(c + vec2(float(m) * 7919.0 + seed, seed * 3.0));
       vec2 xi = (c + h.xy) * C;
       vec2 d = p - xi;
-      float g = exp(-a2 * dot(d, d));
-      if (g < 0.003) continue;
+      float e = exp(-a2 * dot(d, d));
+      float g = e - 0.0498;
+      if (g <= 0.0) continue;
       float an = (h.z - 0.5) * jitA;
       vec2 kd = vec2(kdir.x * cos(an) - kdir.y * sin(an), kdir.x * sin(an) + kdir.y * cos(an));
       vec2 kv = kd * kf * (1.0 + (h.w - 0.5) * jitF);
       float th = dot(kv, d) + h.w * 43.0;
       float cs = cos(th), sn = sin(th);
       S += g * vec2(cs, sn);
-      vec2 gg = -2.0 * a2 * d * g;
+      vec2 gg = -2.0 * a2 * d * e;
       dSx += vec2(gg.x * cs - g * sn * kv.x, gg.x * sn + g * cs * kv.x);
       dSz += vec2(gg.y * cs - g * sn * kv.y, gg.y * sn + g * cs * kv.y);
       g2 += g * g;
@@ -49,13 +51,36 @@ vec4 phasor(vec2 p, vec2 kdir, float lam, float cellK, float seed, float jitA, f
   vec2 dphi = vec2(S.x * dSx.y - S.y * dSx.x, S.x * dSz.y - S.y * dSz.x) / m2;
   return vec4(atan(S.y, S.x), dphi, sqrt(m2 / max(g2, 1e-9)));
 }
+// where the kernels cancel, the phase winds fast and in any direction: squeezed stripes, closed loops, sharp
+// chevrons. A real ripple cannot be much shorter or longer than its neighbours, nor turn across the flow: its crest
+// ends there instead (the field's Y-joins and terminations). 0 where the local wave vector is implausible.
+float phasorSane(vec4 R, vec2 kdir, float lam) {
+  float k = length(R.yz);
+  float f = k * lam / TAU;
+  float along = dot(R.yz, kdir) / max(k, 1e-6);
+  return smoothstep(1.9, 1.35, f) * smoothstep(0.35, 0.6, f) * smoothstep(0.55, 0.8, along);
+}
+// The crests wander: a smooth displacement along the wave vector, metre-scale, bends neighbouring crests together
+// (so it never kinks one); the phasor's singularities draw the forks. (s, ds/dx, ds/dz), s in metres.
+vec3 rippleWarp(vec2 p, float lam) {
+  const float e = 0.03;
+  vec3 s = vec3(0.0);
+  for (int i = 0; i < 3; i++) {
+    vec2 q = p + (i == 1 ? vec2(e, 0.0) : i == 2 ? vec2(0.0, e) : vec2(0.0));
+    float v = (vnoise(q * 2.0 + 5.0) - 0.5) + 0.5 * (vnoise(q * 4.4 - 3.0) - 0.5);
+    s[i] = v;
+  }
+  float a = lam * 0.7;
+  return vec3(a * s.x, a * (s.y - s.x) / e, a * (s.z - s.x) / e);
+}
 
-// ripple profile for a phase: 1 at the crest, -1 in the trough. asym leans the crest downstream (steep lee face),
-// sharp gives trochoidal crests and flat troughs, cap planes the crests off (late-stage drainage, swash)
+// ripple profile for a phase: 1 at the crest, -1 in the trough. asym (signed) leans the crest: > 0 puts the steep
+// (lee) face toward +k, the way the phase grows; sharp gives trochoidal crests and flat troughs, cap planes the
+// crests off (late-stage drainage, swash)
 float ripProfile(float ph, float asym, float sharp, float cap, out float dP) {
   float b = asym * 0.62;
-  float u = ph + b * cos(ph);
-  float du = 1.0 - b * sin(ph);
+  float u = ph - b * cos(ph);
+  float du = 1.0 + b * sin(ph);
   float P = (cos(u) + sharp * cos(2.0 * u)) / (1.0 + sharp);
   dP = (-sin(u) - 2.0 * sharp * sin(2.0 * u)) * du / (1.0 + sharp);
   if (P > cap) {
@@ -78,22 +103,25 @@ struct Ripples {
   float asym, sharp, cap;
   float crest;    // 0 trough … 1 crest (for colour)
   float inter;    // interference set amount here
+  float pomW;     // how much of the relief the 1D parallax may take (1 but where two fields cross-fade)
 };
 
 // the small ripple field at p; detail fades it out once a ripple is smaller than a few pixels
 Ripples ripplesAt(vec2 p, vec2 kdir, float lam, float ampF, float asym, float lod) {
   Ripples r;
-  r.h = 0.0; r.grad = vec2(0.0); r.phase = 0.0; r.gphi = kdir * TAU / lam; r.amp = 0.0; r.asym = asym; r.sharp = 0.2; r.cap = 1.0; r.crest = 0.5; r.inter = 0.0;
+  r.h = 0.0; r.grad = vec2(0.0); r.phase = 0.0; r.gphi = kdir * TAU / lam; r.amp = 0.0; r.asym = asym; r.sharp = 0.2; r.cap = 1.0; r.crest = 0.5; r.inter = 0.0; r.pomW = 1.0;
   if (ampF < 0.01 || lod <= 0.0) return r;
   vec4 nz = vnoise4(p * 0.31 + 41.0);
   vec4 nz2 = vnoise4(p * 1.7 - 13.0);
-  // orientation jitter and defect density vary in patches: some ripple fields are straight and regular, some
-  // wander and fork every few wavelengths
-  float jit = mix(0.12, 0.55, smoothstep(0.3, 0.8, nz.x));
-  vec4 R = phasor(p, kdir, lam, 2.4, 1.0, jit, 0.12 + 0.12 * nz.y);
-  float contrast = smoothstep(0.08, 0.5, R.w);
+  // big kernels and little jitter: long crests, forks every few wavelengths; the orientation jitter varies in
+  // patches (some fields straight and regular, some wandering), the warp bends them all
+  vec3 sw = rippleWarp(p, lam);
+  float jit = mix(0.15, 0.4, smoothstep(0.3, 0.8, nz.x));
+  vec4 R = phasor(p + kdir * sw.x, kdir, lam, 5.5, 1.0, jit, 0.08 + 0.08 * nz.y);
+  R.yz += dot(kdir, R.yz) * sw.yz;
+  float contrast = smoothstep(0.05, 0.4, R.w) * phasorSane(R, kdir, lam);
   // ripple index (wavelength / height): wave ripples ~6–7, current ripples ~8–10, wind (dry) ripples ~18
-  float index = mix(6.5, 9.5, asym);
+  float index = mix(6.5, 9.5, abs(asym));
   float A = ampF * lam / (2.0 * index) * contrast * (0.7 + 0.6 * nz.z) * lod;
   r.sharp = mix(0.1, 0.32, nz2.x);
   r.cap = mix(1.0, 0.25, smoothstep(0.6, 0.78, fbm(p * 0.24 + 61.0, 3)));
@@ -106,14 +134,14 @@ Ripples ripplesAt(vec2 p, vec2 kdir, float lam, float ampF, float asym, float lo
   r.amp = A;
   r.crest = P * 0.5 + 0.5;
   // interference ripples: a finer set at a large angle, in the troughs only, in patches near standing water
-  float inter = smoothstep(0.6, 0.76, fbm(p * 0.09 + 77.0, 3)) * (1.0 - asym * 0.7);
+  float inter = smoothstep(0.6, 0.76, fbm(p * 0.09 + 77.0, 3)) * (1.0 - abs(asym) * 0.7);
   if (inter > 0.01) {
     vec2 k2 = rot2(1.35 + 0.5 * (nz2.y - 0.5)) * kdir;
-    vec4 R2 = phasor(p, k2, lam * 0.62, 2.0, 9.0, 0.25, 0.15);
+    vec4 R2 = phasor(p, k2, lam * 0.62, 3.0, 9.0, 0.25, 0.15);
     float dP2;
     float P2 = ripProfile(R2.x, 0.1, 0.15, 1.0, dP2);
     float inTrough = 1.0 - smoothstep(-0.55, 0.25, P);
-    float A2 = A * 0.42 * inter * smoothstep(0.08, 0.5, R2.w);
+    float A2 = A * 0.42 * inter * smoothstep(0.05, 0.4, R2.w) * phasorSane(R2, k2, lam * 0.62);
     r.h += A2 * P2 * inTrough;
     r.grad += A2 * dP2 * R2.yz * inTrough;
     r.inter = inter * inTrough;
@@ -121,24 +149,58 @@ Ripples ripplesAt(vec2 p, vec2 kdir, float lam, float ampF, float asym, float lo
   return r;
 }
 
+// Wave ripples on the flat, current ripples in the creeks (fl: the flow texture: direction, strength, creek weight):
+// two separate fields cross-faded over the banks, lower where they meet. (One field turning from one direction to
+// the other over a metre winds its phase into rings and chevrons.) The current ripples are longer, with the steep
+// face downstream.
+Ripples ripplesHere(vec2 p, vec2 kw, float lamW, float ampF, float asymW, vec4 fl, float lod) {
+  float tc = fl.a;
+  if (tc < 0.01) return ripplesAt(p, kw, lamW, ampF, asymW, lod);
+  vec2 kc = fl.rg / max(length(fl.rg), 1e-4);
+  float lamC = mix(0.1, 0.15, fl.b);
+  if (tc > 0.99) return ripplesAt(p, kc, lamC, ampF, 0.85, lod);
+  Ripples a = ripplesAt(p, kw, lamW, ampF * sq(1.0 - tc), asymW, lod);
+  Ripples b = ripplesAt(p, kc, lamC, ampF * sq(tc), 0.85, lod);
+  // the stronger field carries the parallax and the colour, the other only adds its relief (no ?: on structs in WebGL)
+  Ripples m = a, o = b;
+  if (tc > 0.5) { m = b; o = a; }
+  m.h += o.h;
+  m.grad += o.grad;
+  m.inter = max(m.inter, o.inter);
+  m.pomW = smoothstep(0.1, 0.35, abs(tc - 0.5));
+  return m;
+}
+
 // megaripple amplitude: the creeks' and lower flat's sand waves (baked), and low, patchy ones on any sand
 float megaAmpAt(vec2 p, float baked, float mud) {
   float low = (1.0 - smoothstep(0.25, 0.6, mud)) * 0.32 * smoothstep(0.42, 0.62, fbm(p * 0.03 + 31.0, 3));
   return max(baked, low);
 }
-// megaripples (sand waves, 0.6–1.5 m): (height, dh/dx, dh/dz)
-vec3 megaAt(vec2 p, vec2 kdir, float amp) {
+// megaripples (sand waves, 0.6–1.5 m): (height, dh/dx, dh/dz); lean: -1…1, the side of the steep face along kdir
+vec3 megaAt(vec2 p, vec2 kdir, float amp, float lean) {
   if (amp < 0.01) return vec3(0.0);
   vec4 nn = vnoise4(p * 0.045 + 7.0);
   float lam = 0.65 + 0.75 * nn.x;
   vec2 kd = rot2((nn.y - 0.5) * 1.1) * kdir;
-  vec4 R = phasor(p, kd, lam, 2.2, 19.0, 0.35, 0.18);
+  vec4 R = phasor(p, kd, lam, 3.4, 19.0, 0.35, 0.18);
   float dP;
-  float P = ripProfile(R.x, 0.55, 0.12, 1.0, dP);
+  float P = ripProfile(R.x, 0.55 * lean, 0.12, 1.0, dP);
   // linguoid: the height swells and fades along each crest
   float lobe = 0.55 + 0.45 * vnoise(p * (0.9 / lam) + 17.0);
-  float A = amp * 0.028 * (0.6 + 0.8 * nn.z) * smoothstep(0.08, 0.5, R.w) * lobe;
+  float A = amp * 0.028 * (0.6 + 0.8 * nn.z) * smoothstep(0.05, 0.4, R.w) * phasorSane(R, kd, lam) * lobe;
   return vec3(A * P, A * dP * R.yz);
+}
+
+// the sand waves here (height, dh/dx, dh/dz): across the flow in the creeks, across the waves elsewhere, none along
+// the banks between (rp, mt, fl: the ripple, material and flow textures here; fade: overall amount)
+vec3 megaHere(vec2 p, vec4 rp, vec4 mt, vec4 fl, float fade) {
+  float amp = megaAmpAt(p, rp.a, mt.r) * fade;
+  if (amp < 0.01) return vec3(0.0);
+  bool creek = fl.a > 0.5;
+  vec2 kd = creek ? fl.rg : rp.rg;
+  kd /= max(length(kd), 1e-4);
+  float lean = creek ? 1.0 : clamp((mt.a * 2.0 - 1.0) * 4.0, -1.0, 1.0);
+  return megaAt(p, kd, amp * smoothstep(0.1, 0.35, abs(fl.a - 0.5)), lean);
 }
 
 // Parallax along the local ripple direction: march the view ray down through the ripple layer and return the
@@ -265,10 +327,10 @@ Grains grainsAt(vec2 p, float fw, float shell, float sand, float trough, inout v
     vec2 o, id;
     vec3 c = cellNearest(p / 0.07, o, id);
     vec4 h = hash24(id + 3301.0);
-    float has = step(0.985 - 0.03 * shell - 0.02 * trough, h.x) * sand;
+    float has = step(0.993 - 0.03 * shell - 0.01 * trough, h.x) * sand;
     float r = 0.12 + 0.18 * h.y;
     float peb = smoothstep(r, r - 0.04, c.x) * has * det3;
-    vec3 pc = h.z > 0.5 ? vec3(0.13, 0.125, 0.12) : vec3(0.22, 0.17, 0.13);
+    vec3 pc = h.z > 0.7 ? vec3(0.13, 0.125, 0.12) : h.z > 0.35 ? vec3(0.24, 0.19, 0.15) : vec3(0.33, 0.31, 0.28);
     pc *= 0.75 + 0.5 * h.w;
     alb = mix(alb, pc, peb); G.cover = max(G.cover, peb);
     G.nrm += -o / r * 1.1 * peb;

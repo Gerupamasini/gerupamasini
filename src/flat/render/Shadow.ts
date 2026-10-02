@@ -1,6 +1,6 @@
 import {
   DepthTexture, LessEqualCompare, LinearFilter, Matrix4, MeshDepthMaterial, OrthographicCamera, UnsignedIntType, Vector3, WebGLRenderTarget,
-  type IUniform, type Scene, type Texture, type WebGLRenderer,
+  type IUniform, type Material, type Mesh, type Scene, type Texture, type WebGLRenderer,
 } from 'three';
 
 /**
@@ -79,14 +79,22 @@ export class SunShadow {
     c.updateMatrixWorld();
     c.updateProjectionMatrix();
     this.uniforms.uShadowVP.value.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse);
-    const gl = this.renderer, prev = gl.getRenderTarget(), prevOverride = scene.overrideMaterial, prevBg = scene.background;
-    scene.overrideMaterial = this.depthMat;
+    // casters draw depth only: their own depth material when their vertex shader places them (userData.shadowMaterial),
+    // the plain one otherwise
+    const swapped: [Mesh, Material | Material[]][] = [];
+    scene.traverse((o) => {
+      const m = o as Mesh;
+      if (!m.isMesh || !m.layers.test(c.layers)) return;
+      swapped.push([m, m.material]);
+      m.material = (m.userData.shadowMaterial as Material | undefined) ?? this.depthMat;
+    });
+    const gl = this.renderer, prev = gl.getRenderTarget(), prevBg = scene.background;
     scene.background = null;
     gl.setRenderTarget(this.rt);
     gl.clear(true, true, false);
     gl.render(scene, c);
     gl.setRenderTarget(prev);
-    scene.overrideMaterial = prevOverride;
     scene.background = prevBg;
+    for (const [m, mat] of swapped) m.material = mat;
   }
 }

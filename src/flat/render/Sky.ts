@@ -39,7 +39,7 @@ const RG = 6360, RT = 6460;
 const RAY = [5.802e-3, 13.558e-3, 33.1e-3];
 const OZONE = [0.65e-3, 1.881e-3, 0.085e-3];
 const MIE_S = 3.996e-3, MIE_A = 0.444e-3;
-const HAZE_BG = 5, H_BG = 1.2, H_BL = 0.45;
+const HAZE_BG = 9, H_BG = 1.2, H_BL = 0.45;
 /** top-of-atmosphere sun irradiance in scene units (linear sRGB): the exposure is set for this */
 export const SUN_E0 = new Vector3(4.2, 4.08, 3.92);
 
@@ -87,22 +87,27 @@ float shellDist(vec3 d, float h) {
   float r0 = R_EARTH + 0.002, rc = R_EARTH + h, mu = d.y;
   return -r0 * mu + sqrt(max(r0 * r0 * mu * mu + rc * rc - r0 * r0, 0.0));
 }
-// soft round cloudlets: per cell a blob of random size, slightly offset (smooth Worley)
-float cloudlets(vec2 p) {
+// soft round cloudlets: per cell a blob of random size, slightly offset (smooth Worley); grad: d/dp
+float cloudlets(vec2 p, out vec2 grad) {
   vec2 ip = floor(p), fp = fract(p);
   float v = 0.0;
+  grad = vec2(0.0);
   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
     vec2 g = vec2(float(i), float(j));
     vec4 h = hash24(ip + g + 311.0);
     vec2 r = g + 0.2 + h.xy * 0.6 - fp;
-    float rad = 0.35 + 0.4 * h.z;
-    v = max(v, (1.0 - smoothstep(0.0, rad, length(r * vec2(1.0, 1.25)))) * (0.6 + 0.4 * h.w));
+    float rad = 0.35 + 0.4 * h.z, amp = 0.6 + 0.4 * h.w;
+    float L = length(r * vec2(1.0, 1.25));
+    float t = sat(L / rad);
+    float b = (1.0 - t * t * (3.0 - 2.0 * t)) * amp;
+    if (b > v) { v = b; grad = amp * 6.0 * t * (1.0 - t) / rad * (r * vec2(1.0, 1.5625)) / max(L, 1e-4); }
   }
   return v;
 }
 // Vertical optical depth of the altocumulus sheet at layer coordinates q (km). fp: the pixel's footprint on the
-// layer (km): octaves finer than it are replaced by their mean.
-float acTau(vec2 q, float fp) {
+// layer (km): octaves finer than it are replaced by their mean. gq: its gradient (1/km) from the cloudlets, which
+// carry the sharp edges (the larger structure is smooth enough to leave out).
+float acTau(vec2 q, float fp, out vec2 gq) {
   vec2 s = q + uCloudShift;
   // large structure: patches and broad bands with clear lanes (tens of km), wavering
   vec2 b = mat2(0.92, 0.39, -0.39, 0.92) * s;
@@ -117,12 +122,22 @@ float acTau(vec2 q, float fp) {
   // edges of a patch and merging into a smooth sheet where it is thick
   float kC = 1.0 - smoothstep(0.06, 0.3, fp);
   vec2 c = s * 2.3 + vec2(sfbm(s * 0.6, 2), sfbm(s * 0.6 + 5.0, 2)) * 1.3;
-  float cl = kC > 0.0 ? mix(0.55, cloudlets(c) * 0.7 + cloudlets(c * 2.1 + 7.3) * 0.3, kC) : 0.55;
+  float cl = 0.55;
+  vec2 gcl = vec2(0.0);
+  if (kC > 0.0) {
+    vec2 g1, g2;
+    float c1 = cloudlets(c, g1), c2 = cloudlets(c * 2.1 + 7.3, g2);
+    cl = mix(0.55, c1 * 0.7 + c2 * 0.3, kC);
+    gcl = (g1 * 0.7 + g2 * 0.35) * 2.3 * kC;
+  }
   float kF = 1.0 - smoothstep(0.012, 0.05, fp);
   float fine = kF > 0.0 ? mix(0.5, fbm(s * 12.0, 3), kF) : 0.5;
   float sheet = smoothstep(0.75, 1.0, cover) * 0.35;
   float d = cover * (cl * 1.15 + sheet) - (1.0 - cover) * 0.3 + (fine - 0.5) * 0.35 * cover;
-  return 5.5 * pow(sat(d), 1.7);
+  // thin at the edges, optically thick (grey from below) in the cores of the bigger cloudlets
+  float dd = clamp(d, 0.0, 1.3);
+  gq = d > 0.0 && d < 1.3 ? 13.0 * 1.7 * pow(dd, 0.7) * cover * 1.15 * gcl : vec2(0.0);
+  return 13.0 * pow(dd, 1.7);
 }
 float ciTau(vec2 q, float fp) {
   vec2 s = q * 0.6 + uCloudShift * 1.6;
@@ -134,8 +149,9 @@ float ciTau(vec2 q, float fp) {
   float patchy = smoothstep(0.42, 0.75, fbm(s * 0.12 + 40.0, 3));
   return 0.3 * sat((streak - 0.48) * 2.6) * patchy * uCirrus;
 }
-// light of a cloud layer with vertical optical depth tau, seen along d from below: (radiance, opacity)
-vec4 cloudLight(vec3 d, float tau, vec3 sunE, float g) {
+// light of a cloud layer with vertical optical depth tau (horizontal gradient gq, 1/km), seen along d from below:
+// (radiance, opacity)
+vec4 cloudLight(vec3 d, float tau, vec2 gq, vec3 sunE, float g) {
   float mv = max(d.y, 0.035);
   float ms = max(uSunDir.y, 0.05);
   float tv = tau / mv;
@@ -143,7 +159,11 @@ vec4 cloudLight(vec3 d, float tau, vec3 sunE, float g) {
   // two-stream: the diffuse part of the sunlight that comes out of the bottom of the sheet
   float Td = (1.0 - exp(-tau / ms)) / (1.0 + 0.75 * (1.0 - 0.85) * tau);
   float mu = dot(d, uSunDir);
-  vec3 diffuse = sunE * ms * Td * INV_PI * 1.15;
+  // the sides of a cloudlet: the light reaching its far side has crossed more cloud on a slanting path (~100 m
+  // across), the side toward the sun less: shading that gives the sheet its relief
+  float cotE = min(length(uSunDir.xz) / ms, 4.0);
+  float side = dot(gq, uSunDir.xz / max(length(uSunDir.xz), 1e-3)) * 0.1 * cotE;
+  vec3 diffuse = sunE * ms * Td * INV_PI * 1.15 * clamp(exp(-0.3 * side), 0.68, 1.3);
   // single forward scattering: thin parts glow toward the sun
   vec3 forward = sunE * hgPhase(mu, g) * exp(-tau * 0.45 / ms) * 2.2;
   // the blue sky above shines through; the bright flat and bay below light the base
@@ -155,9 +175,10 @@ vec4 cloudAC(vec3 d, vec3 sunE, float fpAng) {
   if (d.y < 0.006) return vec4(0.0);
   float t = shellDist(d, 3.8);
   float fp = t * fpAng / max(d.y, 0.02);
-  float tau = acTau(d.xz * t, fp);
+  vec2 gq;
+  float tau = acTau(d.xz * t, fp, gq);
   if (tau <= 1e-3) return vec4(0.0);
-  vec4 c = cloudLight(d, tau, sunE, 0.75);
+  vec4 c = cloudLight(d, tau, gq, sunE, 0.75);
   // the far sheet sinks into the haze (and its texture with it)
   float haze = 1.0 - exp(-t / 45.0);
   c.rgb = mix(c.rgb, atmosphere(d) * c.a * 1.15, haze * 0.85);
@@ -169,7 +190,7 @@ vec4 cloudCI(vec3 d, vec3 sunE, float fpAng) {
   float fp = t * fpAng / max(d.y, 0.02);
   float tau = ciTau(d.xz * t * 0.1, fp * 0.1);
   if (tau <= 1e-3) return vec4(0.0);
-  vec4 c = cloudLight(d, tau, sunE, 0.8);
+  vec4 c = cloudLight(d, tau, vec2(0.0), sunE, 0.8);
   c.rgb = mix(c.rgb, atmosphere(d) * c.a, (1.0 - exp(-t / 90.0)) * 0.8);
   return c;
 }
@@ -179,7 +200,8 @@ float cloudShadow(vec3 wp) {
   vec3 L = uSunDir;
   float hk = 3.8 - wp.y * 0.001;
   vec2 q = wp.xz * 0.001 + L.xz / max(L.y, 0.1) * hk;
-  float tau = acTau(q, 0.06);
+  vec2 gq;
+  float tau = acTau(q, 0.06, gq);
   return exp(-tau / max(L.y, 0.1) * 0.8);
 }
 `;

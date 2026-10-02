@@ -11,7 +11,7 @@
  * Everything that can vary is random within physical bounds and seeded per feature, so one seed always gives the
  * same flat and changing one feature never reshuffles another.
  */
-import { Noise2, MonotoneCurve, mulberry32, clamp, lerp, smoothstep } from './noise';
+import { Noise2, MonotoneCurve, mulberry32, clamp, lerp, smoothstep, toHalf } from './noise';
 
 export const WALK_HALF = 150;
 export const FINE_SIZE = 400;
@@ -33,19 +33,22 @@ export interface Grid {
 
 export interface FineGrid extends Grid {
   height: Float32Array;
-  /** RGBA8: mud, shell, ripple amplitude, ripple asymmetry (0 wave ripples … 1 current ripples) */
+  /** RGBA8: mud, shell, ripple amplitude, ripple asymmetry (signed along the wave vector, 0.5 = symmetric: wave ripples
+   * a little, current and wind ripples strongly) */
   mat: Uint8Array;
-  /** RGBA8: ripple wave-vector direction (x, z encoded), wavelength (3…20 cm), megaripple amplitude */
-  rip: Uint8Array;
-  /** per cell: creek flow direction (x, z) and influence, for the water's surface flow */
-  flow: Float32Array;
+  /** RGBA half floats: the wave ripples' wave-vector direction (x, z), wavelength (m), megaripple amplitude. Half
+   * floats, not bytes: the phasor's phase moves with these over a whole kernel, so a byte's step draws a kink. */
+  rip: Uint16Array;
+  /** RGBA half floats: creek flow direction (x, z, smoothed), strength of the water's flow, weight of the creek's
+   * current ripples (they cross-fade with the flat's wave ripples over the banks) */
+  flow: Uint16Array;
   /** per cell: surface of the water still running down a creek at low tide (-100 where there is none) */
   creek: Float32Array;
 }
 
 export interface FarGrid extends Grid {
   height: Float32Array;
-  /** RGBA8: mud, shell, 0, 0 */
+  /** RGBA8: mud, shell, 0, 0.5 */
   mat: Uint8Array;
 }
 
@@ -499,10 +502,13 @@ export function generateFlat(seed: number, progress?: (label: string, f: number)
       const half = side < nt ? wl + nt : wl - nt;
       const u = (side - nt) / Math.max(half, 0.05);
       const outer = (side < nt) === (ck > 0);
+      // the asymmetry grows with the bend: a straight reach is symmetric, so the banks do not jump where the
+      // curvature changes sign
+      const bend = smoothstep(0, 0.3, Math.abs(ck));
       const au = Math.abs(u);
       let carved: number;
-      if (au < 1) carved = bed + D * (1 - Math.pow(1 - au * au, outer ? 0.45 : 1.7));
-      else carved = bed + D + (Math.abs(side - nt) - half) * (outer ? 0.55 : 0.12);
+      if (au < 1) carved = bed + D * (1 - Math.pow(1 - au * au, lerp(1, outer ? 0.45 : 1.7, bend)));
+      else carved = bed + D + (Math.abs(side - nt) - half) * lerp(0.3, outer ? 0.55 : 0.12, bend);
       if (carved < H[k]) H[k] = carved;
       else if (c.order < 2 && au > 1) {
         // muddy levees: a few centimetres along the banks of the bigger creeks
@@ -521,7 +527,7 @@ export function generateFlat(seed: number, progress?: (label: string, f: number)
           chanW[k] = infl;
           chanT[k * 2] = tx; chanT[k * 2 + 1] = tz;
           chanBed[k] = au < 1 ? 1 - au : 0;
-          chanInner[k] = !outer && au < 1.6 ? 1 - au / 1.6 : 0;
+          chanInner[k] = !outer && au < 1.6 ? (1 - au / 1.6) * bend : 0;
           chanSize[k] = w;
         }
       }
@@ -543,6 +549,9 @@ export function generateFlat(seed: number, progress?: (label: string, f: number)
   // ---------------------------------------------------------------- sediment, ripple and flow fields
   progress?.('底質', 0.58);
   const blurred = boxBlur(fineH, fineN, Math.round(5 / FINE_CELL), 2);
+  // the big depth contours (bars, creek banks, the beach face) that turn the waves: ~10 m smoothing, so a pool or a
+  // hummock never draws ripples in rings around itself
+  const contour = boxBlur(fineH, fineN, Math.round(10 / FINE_CELL), 3);
   const N = fineN;
   // smooth fields on the 2 m lattice
   const warpX = (x: number, z: number) => x + 18 * nWarp.fbm(x / 90 + 11, z / 90 - 4, 2);
@@ -566,8 +575,8 @@ export function generateFlat(seed: number, progress?: (label: string, f: number)
     colWrack2s[i] = smoothstep(0.2, 0.6, nShell.noise(x / 21, 8.8) * 0.5 + 0.5);
   }
   const mat = new Uint8Array(N * N * 4);
-  const rip = new Uint8Array(N * N * 4);
-  const flow = new Float32Array(N * N * 3);
+  const rip = new Uint16Array(N * N * 4);
+  const flowF = new Float32Array(N * N * 4);
   for (let j = 0; j < N; j++) {
     const z = fineO + j * FINE_CELL;
     for (let i = 0; i < N; i++) {
@@ -575,7 +584,7 @@ export function generateFlat(seed: number, progress?: (label: string, f: number)
       const h = fineH[k], hs = blurred[k];
       const zz = z - colShore[i];
       const rel = h - hs;
-      // depth gradient of the smoothed ground: wave ripples form with crests along the depth contours
+      // slope of the 5 m-smoothed ground (sorting: the slopes are sandier)
       const il = Math.max(0, i - 8), ir = Math.min(N - 1, i + 8), jd = Math.max(0, j - 8), ju = Math.min(N - 1, j + 8);
       const gx = (blurred[j * N + ir] - blurred[j * N + il]) / ((ir - il) * FINE_CELL);
       const gz = (blurred[ju * N + i] - blurred[jd * N + i]) / ((ju - jd) * FINE_CELL);
@@ -599,27 +608,30 @@ export function generateFlat(seed: number, progress?: (label: string, f: number)
       sh += 0.5 * smoothstep(0.55, 0.85, shellL.at(x, z)) * (1 - mud);
       sh = clamp(sh, 0, 1);
       // ---- ripples
-      let dx = -gx, dz = -gz;
-      const dl = Math.hypot(dx, dz);
-      if (dl < 1e-6) { dx = 0; dz = -1; } else { dx /= dl; dz /= dl; }
-      const sn = smoothstep(0.0005, 0.004, slope);
-      dx = lerp(0, dx, sn); dz = lerp(-1, dz, sn);
-      { const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l; }
+      // Wave ripples. The wave vector is a smooth vector field: it points landward, crests along the wave crests
+      // that last crossed the flat (the bay's swell refracted toward the shore normal, a little oblique with the
+      // wind), turned further along the big depth contours. The turn is the contour normal's projection
+      // (v v^T q), the same for v and -v, so the field never flips over a ridge or a hollow (a flip would draw a seam
+      // or chevrons, and rings around every bump). asym is signed along the wave vector: > 0 the steep face looks
+      // along +k. The creeks' current ripples are a field of their own (flow, below), cross-faded in the shader: a
+      // single field turning from one direction to the other over a bank winds its phase into rings.
+      const i0 = Math.max(0, i - 4), i1 = Math.min(N - 1, i + 4);
+      let qx = (colShore[i1] - colShore[i0]) / ((i1 - i0) * FINE_CELL) + 0.3 * wind[0], qz = -1;
+      { const l = Math.hypot(qx, qz); qx /= l; qz /= l; }
+      const cgx = (contour[j * N + ir] - contour[j * N + il]) / ((ir - il) * FINE_CELL);
+      const cgz = (contour[ju * N + i] - contour[jd * N + i]) / ((ju - jd) * FINE_CELL);
+      const cs = Math.hypot(cgx, cgz);
+      let dx = qx, dz = qz;
+      if (cs > 1e-6) {
+        const vx = cgx / cs, vz = cgz / cs, vq = vx * qx + vz * qz;
+        const turn = 2.5 * smoothstep(0.0015, 0.01, cs);
+        dx += turn * vq * vx; dz += turn * vq * vz;
+        const l = Math.hypot(dx, dz); dx /= l; dz /= l;
+      }
       const ra = raL.at(x, z);
       let rx = dx * Math.cos(ra) - dz * Math.sin(ra), rz = dx * Math.sin(ra) + dz * Math.cos(ra);
       let lam = 0.062 + 0.018 * lamL.at(x, z);
       let asym = 0.12 + 0.2 * smoothstep(0.2, 0.8, asymL.at(x, z));
-      // creeks: current ripples, crests across the ebb flow, longer and asymmetric
-      if (cw > 0.01) {
-        const t = smoothstep(0.15, 0.85, cw);
-        const tx = chanT[k * 2], tz = chanT[k * 2 + 1];
-        const sgn = tx * rx + tz * rz < 0 ? -1 : 1;
-        rx = lerp(rx * sgn, tx, t); rz = lerp(rz * sgn, tz, t);
-        const l = Math.hypot(rx, rz) || 1;
-        rx /= l; rz /= l;
-        lam = lerp(lam, 0.1 + 0.05 * smoothstep(0.5, 3, chanSize[k]), t);
-        asym = lerp(asym, 0.85, t);
-      }
       // amplitude: sand only; patches of plane bed; the swash-planed beach face has none
       let amp = (1 - mud) * smoothstep(0.25, 0.65, ampL.at(x, z) + 0.25);
       amp *= smoothstep(-118, -104, zz);
@@ -640,17 +652,33 @@ export function generateFlat(seed: number, progress?: (label: string, f: number)
       mat[o] = Math.round(mud * 255);
       mat[o + 1] = Math.round(sh * 255);
       mat[o + 2] = Math.round(clamp(amp, 0, 1) * 255);
-      mat[o + 3] = Math.round(clamp(asym, 0, 1) * 255);
-      rip[o] = Math.round((rx * 0.5 + 0.5) * 255);
-      rip[o + 1] = Math.round((rz * 0.5 + 0.5) * 255);
-      rip[o + 2] = Math.round(clamp((lam - 0.03) / 0.17, 0, 1) * 255);
-      rip[o + 3] = Math.round(clamp(mega, 0, 1) * 255);
-      flow[k * 3] = chanT[k * 2];
-      flow[k * 3 + 1] = chanT[k * 2 + 1];
-      flow[k * 3 + 2] = cw * smoothstep(0.15, 1.2, chanSize[k]);
+      mat[o + 3] = Math.round(clamp(asym * 0.5 + 0.5, 0, 1) * 255);
+      rip[o] = toHalf(rx);
+      rip[o + 1] = toHalf(rz);
+      rip[o + 2] = toHalf(lam);
+      rip[o + 3] = toHalf(clamp(mega, 0, 1));
+      flowF[k * 4 + 2] = cw * smoothstep(0.15, 1.2, chanSize[k]);
+      flowF[k * 4 + 3] = smoothstep(0.15, 0.85, cw);
     }
     if ((j & 127) === 0) progress?.('底質', 0.58 + 0.32 * (j / N));
   }
+  // the flow direction, smoothed over a couple of metres: the nearest centre-line segment jumps at the confluences and
+  // inside tight bends, the current (and its ripples) turns gradually. Where the limbs of a bend meet, the flows
+  // cancel: no current ripples there.
+  {
+    const fx = new Float32Array(N * N), fz = new Float32Array(N * N), fw = new Float32Array(N * N);
+    for (let k = 0; k < N * N; k++) { const w = chanW[k]; fx[k] = chanT[k * 2] * w; fz[k] = chanT[k * 2 + 1] * w; fw[k] = w; }
+    const r = Math.round(1.5 / FINE_CELL);
+    const bx = boxBlur(fx, N, r, 2), bz = boxBlur(fz, N, r, 2), bw = boxBlur(fw, N, r, 2);
+    for (let k = 0; k < N * N; k++) {
+      const l = Math.hypot(bx[k], bz[k]);
+      if (l > 1e-6) { flowF[k * 4] = bx[k] / l; flowF[k * 4 + 1] = bz[k] / l; } else { flowF[k * 4] = chanT[k * 2]; flowF[k * 4 + 1] = chanT[k * 2 + 1]; }
+      flowF[k * 4 + 3] *= smoothstep(0.55, 0.85, l / Math.max(bw[k], 1e-6));
+    }
+  }
+  const flow = new Uint16Array(N * N * 4);
+  for (let k = 0; k < flow.length; k++) flow[k] = toHalf(flowF[k]);
+
   // far grid material: the same rules from the coarse relief (no ripples that far)
   const farMat = new Uint8Array(farN * farN * 4);
   const farBlur = boxBlur(farH, farN, 2, 2);
@@ -673,6 +701,7 @@ export function generateFlat(seed: number, progress?: (label: string, f: number)
       }
       farMat[k * 4] = Math.round(mud * 255);
       farMat[k * 4 + 1] = Math.round(clamp(sh, 0, 1) * 255);
+      farMat[k * 4 + 3] = 128;   // no ripple asymmetry (signed, 0.5 = none)
     }
   }
 

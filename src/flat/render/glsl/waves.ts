@@ -5,7 +5,8 @@ import { mulberry32 } from '../../gen/noise';
  * Wind ripples (さざ波) on the sea, the creeks and every pool, after MahazeViewer's wave set: sinusoidal
  * components with random directions and phases, each moving at its own speed from the capillary–gravity
  * dispersion relation ω² = (g k + σ/ρ k³) tanh(k h). On top of that, nothing about them is uniform:
- *  - each component's phase and amplitude wander slowly across the water (crests bend, no lattice ever forms);
+ *  - each component's phase and amplitude wander across the water over a few of its own wavelengths, so its crests
+ *    are short and bent (a cat's paw texture, never a lattice of long straight crests);
  *  - gusts (cat's paws) drift downwind as patches of roughened water between glassy calms;
  *  - every water body only grows the waves its fetch allows: a pool is glassy on its upwind side and rippled
  *    downwind, a 2 m puddle never shows the sea's long components;
@@ -35,7 +36,7 @@ export function createWaves(windDir: [number, number], seed = 7, strength = 1): 
     const steep = (0.012 + 0.075 * Math.exp(-(ln * ln) / 1.6)) * (0.75 + 0.5 * rnd()) * (lambda < 0.03 ? 0.75 : 1);
     const amp = (steep * lambda) / (2 * Math.PI);
     // the long components come from the wind's side, the short ones spread wider
-    const spread = 0.35 + 0.95 * (i / (N_WAVES - 1));
+    const spread = 0.3 + 0.7 * (i / (N_WAVES - 1));
     const a = base + (rnd() * 2 - 1) * spread;
     const w = Math.sqrt((G * k + SIGMA_RHO * k * k * k) * Math.tanh(k * 1.0));
     A.push(new Vector4(Math.cos(a), Math.sin(a), k, amp));
@@ -64,7 +65,9 @@ float gustAt(vec2 p, float t) {
 // per water body: components the fetch has not let grow are absent, the rest scale with fetch, gust and depth
 // fetchM: metres of open water upwind; depth: water depth (m); calm: 1 for sheltered (pools) multiplier
 float waveWeight(int i, float lam, float fetchM, float depth, float gust) {
-  float lamMax = 0.035 + fetchM * 0.055;
+  // the fetch-limited peak (JONSWAP, a light breeze): ~5 cm over 5 m of water, ~27 cm over 60 m; the open bay
+  // (the solver's full fetch) has them all
+  float lamMax = fetchM >= 59.0 ? 4.0 : 0.052 * pow(max(fetchM, 0.3) / 5.0, 0.66);
   float w = 1.0 - smoothstep(lamMax * 0.7, lamMax * 1.5, lam);
   w *= smoothstep(0.0, 1.0, depth / max(lam * 0.12, 0.002));
   // short ripples answer the gusts at once; long ones carry the average wind
@@ -75,9 +78,11 @@ float waveWeight(int i, float lam, float fetchM, float depth, float gust) {
 vec4 waveGrad(vec2 p, float t, float minLam, float fetchM, float depth, float gust) {
   vec4 r = vec4(0.0);
   for (int q = 0; q < N_WAVES / 4; q++) {
-    // four components share one noise fetch for their phase and amplitude wander
-    vec4 nz = vnoise4(p * (0.07 + 0.045 * float(q)) + float(q) * 17.3) - 0.5;
-    vec4 na = vnoise4(p * (0.13 + 0.05 * float(q)) - float(q) * 9.1);
+    // four components of about the same length share one noise fetch for their phase and amplitude wander, which
+    // runs over a few of their wavelengths
+    float kq = uWaveA[q * 4].z;
+    vec4 nz = vnoise4(p * (kq * 0.035) + float(q) * 17.3) - 0.5;
+    vec4 na = vnoise4(p * (kq * 0.05) - float(q) * 9.1);
     for (int j = 0; j < 4; j++) {
       int i = q * 4 + j;
       vec4 A = uWaveA[i], B = uWaveB[i];
@@ -101,8 +106,9 @@ vec4 waveGrad(vec2 p, float t, float minLam, float fetchM, float depth, float gu
 vec3 waveHess(vec2 p, float t, float minLam, float fetchM, float depth, float gust) {
   vec3 H = vec3(0.0);
   for (int q = 0; q < N_WAVES / 4; q++) {
-    vec4 nz = vnoise4(p * (0.07 + 0.045 * float(q)) + float(q) * 17.3) - 0.5;
-    vec4 na = vnoise4(p * (0.13 + 0.05 * float(q)) - float(q) * 9.1);
+    float kq = uWaveA[q * 4].z;
+    vec4 nz = vnoise4(p * (kq * 0.035) + float(q) * 17.3) - 0.5;
+    vec4 na = vnoise4(p * (kq * 0.05) - float(q) * 9.1);
     for (int j = 0; j < 4; j++) {
       int i = q * 4 + j;
       vec4 A = uWaveA[i], B = uWaveB[i];

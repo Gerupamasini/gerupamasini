@@ -195,7 +195,7 @@ function setup(data: FlatData, normals: { fine: Uint8Array; far: Uint8Array }, w
   if (cam.length >= 4 && cam.every(Number.isFinite)) {
     if (cam.length >= 5) walker.eye = cam[4];
     walker.setPose(cam[0], cam[1], (cam[2] * Math.PI) / 180, (cam[3] * Math.PI) / 180);
-  } else walker.setPose(-8, -60, Math.PI * 0.93, -0.06);
+  } else walker.setPose(-40, 70, (188 * Math.PI) / 180, (-6 * Math.PI) / 180);
   world = { field, terrain, water: waterPass, walker, debris, shadow };
   (waves.uWind.value).z = state.wind;
   ui.ready(data, field);

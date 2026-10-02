@@ -113,6 +113,19 @@ export class WaterPass {
         }
         #endif
 
+        // nearest Voronoi feature: (F1, F2) for the foam's bubble lace
+        vec3 cellNearestW(vec2 p, out vec2 off, out vec2 id) {
+          vec2 ip = floor(p), fp = fract(p);
+          float best = 9.0, second = 9.0;
+          off = vec2(0.0); id = vec2(0.0);
+          for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+            vec2 g = vec2(float(i), float(j));
+            vec2 r = g + hash22(ip + g) * 0.85 + 0.075 - fp;
+            float d = dot(r, r);
+            if (d < best) { second = best; best = d; id = ip + g; off = r; } else if (d < second) second = d;
+          }
+          return vec3(sqrt(best), sqrt(second), 0.0);
+        }
         void main() {
           vec2 uv = vUv;
           float d = texture(tDepth, uv).r;
@@ -121,7 +134,7 @@ export class WaterPass {
           vec3 P = worldAt(uv, skyPix ? 0.99999 : d);
           vec3 rd = normalize(P - uCamPos);
           float sceneDist = skyPix ? 1e7 : length(P - uCamPos);
-          fragColor = vec4(base, 1.0);
+          fragColor = vec4(base, 0.0);
           if (rd.y >= -1e-5) return;
 
           // the water here: at the ground point, or the open bay beyond the map
@@ -158,14 +171,21 @@ export class WaterPass {
           float fetchM = fetchN * 60.0;
           if (kind > 2.5) fetchM = max(fetchM, 8.0);
           float gust = gustAt(S.xz, uTime);
-          vec2 flowP = S.xz;
+          vec4 wg;
           if (kind > 2.5) {
-            // creek water runs downstream: advect the ripple pattern with the flow
+            // creek water runs downstream and carries its ripples along: two copies of the pattern advected with the
+            // flow over a 4 s cycle, each faded out while it is reset (a flow map; advecting by the clock alone would
+            // shear the pattern a little more every second wherever the current turns)
             vec4 fl = texture(tFlow, fineUV(S.xz));
-            vec2 fd = fl.rg * 2.0 - 1.0;
-            flowP -= fd * uTime * (0.12 + 0.25 * fl.b);
-          }
-          vec4 wg = waveGrad(flowP, uTime, fp * 2.5, fetchM, depthS, gust);
+            vec2 vel = fl.rg * (0.12 + 0.25 * fl.b);
+            float c0 = fract(uTime * 0.25), c1 = fract(uTime * 0.25 + 0.5);
+            vec4 wA = waveGrad(S.xz - vel * c0 * 4.0, uTime, fp * 2.5, fetchM, depthS, gust);
+            vec4 wB = waveGrad(S.xz - vel * c1 * 4.0 + vec2(3.7, -5.1), uTime, fp * 2.5, fetchM, depthS, gust);
+            float wb = abs(1.0 - 2.0 * c0);
+            wg = mix(wA, wB, wb);
+            // two uncorrelated patterns averaged lose some contrast: give it back
+            wg.yz *= inversesqrt(sq(1.0 - wb) + sq(wb));
+          } else wg = waveGrad(S.xz, uTime, fp * 2.5, fetchM, depthS, gust);
           // capillary texture riding on the gusts (too fine for the wave set)
           float capK = smoothstep(0.02, 0.003, fp) * gust * 0.5;
           vec2 cp = S.xz * 38.0 + uWind.xy * uTime * 6.0;
@@ -184,8 +204,12 @@ export class WaterPass {
           vec3 under = base;
           float thickR = thick;
           if (!skyPix) {
-            vec2 off = N.xz * 0.9 * min(thick, 0.6) / max(t, 1.0);
-            vec2 uv2 = uv + off * vec2(uRes.y / uRes.x, 1.0) * 0.6;
+            // the bed point seen along the refracted ray, against the one along the flat-surface ray: their screen
+            // positions differ by what the ripples bend the view by (millimetres in shallow water)
+            vec3 T = refract(rd, N, 1.0 / 1.333), T0 = refract(rd, vec3(0.0, 1.0, 0.0), 1.0 / 1.333);
+            float len = min(vdepth / max(-T0.y, 0.15), 1.5);
+            vec4 c1 = uViewProj * vec4(S + T * len, 1.0), c0 = uViewProj * vec4(S + T0 * len, 1.0);
+            vec2 uv2 = uv + (c1.xy / c1.w - c0.xy / c0.w) * 0.5;
             float d2 = texture(tDepth, uv2).r;
             vec3 P2 = worldAt(uv2, min(d2, 0.99999));
             if (d2 < 0.99999 && P2.y < lvl && all(greaterThan(uv2, vec2(0.0))) && all(lessThan(uv2, vec2(1.0)))) {
@@ -206,8 +230,10 @@ export class WaterPass {
           // ---- reflection
           vec3 R = reflect(rd, N);
           R.y = max(R.y, 0.004 + abs(R.y) * 0.3);
-          float rough = sqrt(sqrt(2.0 * sig2));
-          vec3 refl = rough < 0.18 ? skyColor(R, false, max(length(fwidth(R)), 5e-4)) : envRadiance(R, rough * 0.8);
+          // the sky with its clouds, blurred by the ripples too small to resolve (their slope spread widens the cone
+          // of reflected directions, and the clouds are filtered to it)
+          float spread = sqrt(2.0 * sig2) * 1.6;
+          vec3 refl = skyColor(R, false, max(length(fwidth(R)), max(spread, 5e-4)));
           #if SSR
           if (t < 400.0) {
             vec4 hit = ssrTrace(S, R);
@@ -233,17 +259,22 @@ export class WaterPass {
           float edge = smoothstep(0.0, 0.0025, vdepth);
           float men = smoothstep(0.0, 0.002, vdepth) * (1.0 - smoothstep(0.002, 0.012, vdepth)) * (0.5 + 0.5 * vnoise(S.xz * 4.0));
           col += refl * men * 0.06;
-          // swash: foam lace on the advancing front, bubbles and a glassy sheet behind it
+          // swash: a thin line of foam on the advancing front (a reticulate lace of bubbles, broken into pieces),
+          // a fading trail behind it, and thin white lines where the small waves trip on the bars offshore
           if (kind > 1.5 && kind < 2.5 && !skyPix) {
-            float front = smoothstep(0.0, 0.002, vdepth) * (1.0 - smoothstep(0.003, 0.012, vdepth)) * smoothstep(0.0, 0.02, swashRate);
-            float lace = smoothstep(0.45, 0.8, fbm(S.xz * vec2(9.0, 5.0) + vec2(0.0, -uTime * 0.6), 3));
-            float foam = sat(front * (0.4 + 0.8 * lace));
-            // broken crests offshore: thin white lines where the small waves trip on the bars
-            float crestLine = smoothstep(0.75, 0.98, sin(dot(S.xz, vec2(0.12, -1.58)) - uTime * 2.6 + 0.3 * sin(S.xz.x * 0.05)) * 0.5 + 0.5);
-            float breaking = crestLine * smoothstep(0.012, 0.03, vdepth) * (1.0 - smoothstep(0.05, 0.12, vdepth)) * smoothstep(0.5, 0.7, vnoise(S.xz * 0.35 + uTime * 0.05));
-            foam = max(foam, breaking * 0.55 * lace);
+            float rising = smoothstep(0.0, 0.015, swashRate);
+            float front = smoothstep(0.0, 0.0005, vdepth) * (1.0 - smoothstep(0.0008, 0.0035, vdepth)) * rising;
+            float trail = smoothstep(0.0005, 0.002, vdepth) * (1.0 - smoothstep(0.002, 0.009, vdepth)) * (1.0 - rising) * 0.35;
+            vec2 o2, i2;
+            vec3 cb = cellNearestW(S.xz / 0.018, o2, i2);
+            float bubbles = smoothstep(0.02, 0.12, cb.y - cb.x) * 0.7 + 0.3;
+            float pieces = smoothstep(0.35, 0.6, fbm(S.xz * vec2(1.6, 0.7) + vec2(uTime * 0.05, 0.0), 3));
+            float foam = sat((front + trail) * pieces * bubbles * 1.6);
+            float crestLine = smoothstep(0.86, 0.99, sin(dot(S.xz, vec2(0.12, -1.58)) - uTime * 2.6 + 0.3 * sin(S.xz.x * 0.05)) * 0.5 + 0.5);
+            float breaking = crestLine * smoothstep(0.015, 0.03, vdepth) * (1.0 - smoothstep(0.045, 0.1, vdepth)) * smoothstep(0.5, 0.75, fbm(S.xz * 0.3 + uTime * 0.05, 3));
+            foam = max(foam, breaking * 0.5 * bubbles);
             vec3 foamC = (uSunE * max(uSunDir.y, 0.0) * cs * 0.75 + envIrradiance(vec3(0.0, 1.0, 0.0)) * 0.9) * 0.8;
-            col = mix(col, foamC, foam * 0.9);
+            col = mix(col, foamC, foam * 0.85);
           }
           // drifting flecks on the pools and in the creeks
           // (tiny: a few millimetres, a few per square metre, only near the eye)
@@ -254,7 +285,8 @@ export class WaterPass {
 
           col = aerial(col, t, rd);
           col = mix(base, col, skyPix ? 1.0 : edge);
-          fragColor = vec4(col, 1.0);
+          // alpha: this pixel is water (TAA keeps less history here: the surface moves every frame)
+          fragColor = vec4(col, skyPix ? 0.6 : edge);
         }
       `,
       depthTest: false,

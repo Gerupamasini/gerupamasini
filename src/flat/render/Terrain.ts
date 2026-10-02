@@ -83,10 +83,8 @@ export class TerrainRenderer {
           // megaripples as real relief up close (faded before the vertices get too sparse for them)
           float mf = 1.0 - smoothstep(7.0, 13.0, distance(cameraPosition.xz, xz));
           if (mf > 0.0 && fineW(xz) > 0.0) {
-            vec4 m = texture(tMFine, fineUV(xz));
-            vec4 rp = texture(tRip, fineUV(xz));
-            vec2 kd = rp.rg * 2.0 - 1.0;
-            h += megaAt(xz, kd / max(length(kd), 1e-4), megaAmpAt(xz, rp.a, m.r) * fineW(xz)).x * mf;
+            vec2 uv = fineUV(xz);
+            h += megaHere(xz, texture(tRip, uv), texture(tMFine, uv), texture(tFlow, uv), fineW(xz)).x * mf;
           }
           vWorld = vec3(xz.x, h, xz.y);
           gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0);
@@ -122,9 +120,11 @@ export class TerrainRenderer {
           float mud = mt.r, shell = mt.g;
           float fineK = fineW(xz);
           vec4 rp = texture(tRip, fineUV(xz));
-          float ripAmp = mt.b * fineK, asym = mt.a;
-          vec2 kdir = rp.rg * 2.0 - 1.0; kdir /= max(length(kdir), 1e-4);
-          float lam = 0.03 + rp.b * 0.17;
+          vec4 fl = texture(tFlow, fineUV(xz));
+          fl.a *= fineK;
+          float ripAmp = mt.b * fineK, asym = mt.a * 2.0 - 1.0;
+          vec2 kdir = rp.rg / max(length(rp.rg), 1e-4);
+          float lam = clamp(rp.b, 0.03, 0.2);
           float megaAmp = megaAmpAt(xz, rp.a, mud) * fineK;
           vec4 nA = vnoise4(xz * 0.061 + 5.0), nB = vnoise4(xz * 0.53 - 3.0), nC = vnoise4(xz * 4.1 + 11.0), nD = vnoise4(xz * 0.19 + 21.0);
           // organic masks (warped fbm: single-octave value noise, thresholded, draws grid-aligned crosses)
@@ -132,16 +132,16 @@ export class TerrainRenderer {
           float fMud = fbm(wq * 0.9 + 3.0, 4), fFilm = fbm(wq * 0.37 - 8.0, 4), fShell = fbm(wq * 2.3 + 5.0, 3), fIron = fbm(wq * 0.11 + 2.0, 3);
 
           // ---- relief: megaripples (geometry near, shading far) and the ripples
-          vec3 mg = megaAt(xz, kdir, megaAmp * (1.0 - smoothstep(0.06, 0.2, fw)));
+          vec3 mg = megaHere(xz, rp, mt, fl, fineK * (1.0 - smoothstep(0.06, 0.2, fw)));
           // the exact ground from the baked grid (not the vertex-interpolated one, which differs by millimetres
           // between levels of detail and would draw the wet edges along the tile borders)
           float yBase = groundHeight(xz);
           float yMega = yBase + mg.x;
           float lodR = (1.0 - smoothstep(lam * 0.2, lam * 0.6, fw));
-          Ripples R = ripplesAt(xz, kdir, lam, ripAmp, asym, lodR);
+          Ripples R = ripplesHere(xz, kdir, lam, ripAmp, asym, fl, lodR);
           float shiftS = 0.0;
           float ph = R.phase;
-          float pomK = (1.0 - smoothstep(lam * 0.02, lam * 0.07, fw)) * uDetailK;
+          float pomK = (1.0 - smoothstep(lam * 0.02, lam * 0.07, fw)) * uDetailK * R.pomW;
           if (pomK > 0.0 && R.amp > 1e-4) {
             float s;
             ripplePOM(R, V, s);
@@ -221,6 +221,12 @@ export class TerrainRenderer {
           alb = mix(alb, vec3(0.58, 0.55, 0.5), shell * (0.18 + 0.3 * smoothstep(0.5, 0.7, fShell)) * smoothstep(0.004, 0.02, fw) * (1.0 - mudMix));
           // metre-scale tone: coarser or finer sand, iron-stained or grey patches
           alb *= 0.92 + 0.16 * nD.y;
+          // between the grains and the metre: centimetre mottling of paler and darker sand (gone once a pixel covers it)
+          float mottleK = 1.0 - smoothstep(0.004, 0.02, fw);
+          if (mottleK > 0.0) {
+            vec4 m1 = vnoise4(xzS * 31.0 + 7.0), m2 = vnoise4(xzS * 97.0 - 5.0);
+            alb *= 1.0 + mottleK * (0.08 * (m1.x - 0.5) + 0.06 * (m2.y - 0.5)) * (1.0 - 0.5 * mudMix);
+          }
           // rippled ground too far for its ripples reads a touch darker (shadowed, wet troughs)
           alb *= 1.0 - 0.07 * ripAmp * (1.0 - lodR);
           // the strand line of the last spring tide: dried eelgrass and seaweed, dark, in broken streaks
@@ -311,6 +317,8 @@ export class TerrainRenderer {
           else if (uDebug == 8) col = vec3(sunVis, cshade, ao);
           else if (uDebug == 9) col = vec3(caus * 0.5, wi.z, Tdown);
           else if (uDebug == 10) col = vec3(sunShadow(P), cshade, 0.0);
+          else if (uDebug == 11) col = vec3(0.5 + 0.5 * cos(R.phase), R.inter, 0.5 + 0.5 * mg.x / max(megaAmp * 0.028, 1e-4));
+          else if (uDebug == 12) col = vec3(kdir * 0.5 + 0.5, fl.a);
           if (uDebug > 0) col *= 0.4;
           fragColor = vec4(col, 1.0);
         }

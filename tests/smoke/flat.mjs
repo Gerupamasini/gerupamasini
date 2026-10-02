@@ -31,7 +31,12 @@ const SHOTS = {
   'block': [21, -98.6, 0, -24, 1.6],
   'beach-north': [0, -100, 0, -3, 1.6],
   'waterline': [0, 110, 180, -8, 1.6],
+  'swash': [-10, 128, 175, -20, 1.6],
   'evening': [-8, 40, 250, -3, 1.6, null, 17.4],
+  'morning': [10, -30, 120, -18, 1.6, null, 7.2],
+  'crouch': [-42, 30, 250, -32, 0.5],
+  'creek-close': [-40, 20, 95, -35, 1.6],
+  'mud': [-92, 40, 175, -28, 1.6],
 };
 
 const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });

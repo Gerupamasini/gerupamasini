@@ -1,12 +1,13 @@
 import {
-  ClampToEdgeWrapping, DataTexture, FloatType, LinearFilter, LinearMipmapLinearFilter, NearestFilter, RedFormat, RGFormat, RGBAFormat,
+  ClampToEdgeWrapping, DataTexture, FloatType, HalfFloatType, LinearFilter, LinearMipmapLinearFilter, NearestFilter, RedFormat, RGFormat, RGBAFormat,
   UnsignedByteType, type IUniform, type MagnificationTextureFilter, type MinificationTextureFilter, type Texture,
 } from 'three';
 import type { FlatData } from './gen/generate';
 import { KIND_DRY, type WaterState, type WaterGrid } from './gen/water';
 
-function tex(data: Float32Array | Uint8Array, n: number, format: typeof RedFormat | typeof RGFormat | typeof RGBAFormat, filter: 'nearest' | 'linear' | 'mip'): DataTexture {
-  const t = new DataTexture(data, n, n, format, data instanceof Float32Array ? FloatType : UnsignedByteType);
+/** Uint16Array data is half floats */
+function tex(data: Float32Array | Uint16Array | Uint8Array, n: number, format: typeof RedFormat | typeof RGFormat | typeof RGBAFormat, filter: 'nearest' | 'linear' | 'mip'): DataTexture {
+  const t = new DataTexture(data, n, n, format, data instanceof Float32Array ? FloatType : data instanceof Uint16Array ? HalfFloatType : UnsignedByteType);
   const mag: MagnificationTextureFilter = filter === 'nearest' ? NearestFilter : LinearFilter;
   const min: MinificationTextureFilter = filter === 'nearest' ? NearestFilter : filter === 'mip' ? LinearMipmapLinearFilter : LinearFilter;
   t.magFilter = mag;
@@ -123,13 +124,6 @@ export class FlatField {
 
   constructor(readonly data: FlatData, normals: { fine: Uint8Array; far: Uint8Array }, water: WaterState) {
     const f = data.fine, g = data.far;
-    const flow8 = new Uint8Array(f.n * f.n * 4);
-    for (let k = 0; k < f.n * f.n; k++) {
-      flow8[k * 4] = Math.round((f.flow[k * 3] * 0.5 + 0.5) * 255);
-      flow8[k * 4 + 1] = Math.round((f.flow[k * 3 + 1] * 0.5 + 0.5) * 255);
-      flow8[k * 4 + 2] = Math.round(Math.min(1, f.flow[k * 3 + 2]) * 255);
-      flow8[k * 4 + 3] = 255;
-    }
     this.water = water;
     this.uniforms = {
       tHFine: { value: tex(f.height, f.n, RedFormat, 'nearest') },
@@ -139,7 +133,7 @@ export class FlatField {
       tMFine: { value: tex(f.mat, f.n, RGBAFormat, 'mip') },
       tMFar: { value: tex(g.mat, g.n, RGBAFormat, 'mip') },
       tRip: { value: tex(f.rip, f.n, RGBAFormat, 'linear') },
-      tFlow: { value: tex(flow8, f.n, RGBAFormat, 'linear') },
+      tFlow: { value: tex(f.flow, f.n, RGBAFormat, 'linear') },
       tLvFine: { value: tex(water.fine.levels, water.fine.n, RGFormat, 'nearest') },
       tLvFar: { value: tex(water.far.levels, water.far.n, RGFormat, 'nearest') },
       tInFine: { value: tex(water.fine.info, water.fine.n, RGBAFormat, 'linear') },
