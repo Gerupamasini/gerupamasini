@@ -47,7 +47,7 @@ export function HomeMenu({ app }: { app: App }) {
         <div class="level">
           <span class="dim">{t('hud.tide')}</span>
           <span class="num">{hud.tideLevel >= 0 ? '+' : ''}{(hud.tideLevel * 100).toFixed(0)}</span><span class="unit">cm</span>
-          <span class="gauge-trend"><TrendIcon dir={trend} />{trend === 'up' ? t('hud.rising') : trend === 'down' ? t('hud.falling') : ''}</span>
+          <span class={`gauge-trend trend-${trend}`}><TrendIcon dir={trend} />{trend === 'up' ? t('hud.rising') : trend === 'down' ? t('hud.falling') : ''}</span>
         </div>
         {next && (
           <div class="next">

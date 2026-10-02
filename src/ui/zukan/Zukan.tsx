@@ -68,14 +68,15 @@ export function Zukan({ app }: { app: App }) {
             <div class="zukan-detail">
               <h3>{known ? sp.names.ja : t('zukan.unknown')}</h3>
               <div class="sci">{known ? sp.names.sci : ''}</div>
-              <canvas ref={canvasRef} class="zukan-preview" style={{ visibility: known ? 'visible' : 'hidden' }} />
+              <canvas ref={canvasRef} class="zukan-preview" style={{ display: known ? 'block' : 'none' }} />
+              {!known && <div class="zukan-preview empty">まだ出会っていない</div>}
               <div class="tags">
                 {!sp.collectable && <span class="tag">{t('zukan.notCollectable')}</span>}
                 {sp.encyclopedia.placeholderModel && <span class="tag warn">{t('zukan.placeholder')}</span>}
                 {sp.sex.dimorphic && <span class={`tag ${p?.maleSeen ? 'on' : ''}`}>{t('zukan.male')}</span>}
                 {sp.sex.dimorphic && <span class={`tag ${p?.femaleSeen ? 'on' : ''}`}>{t('zukan.female')}</span>}
               </div>
-              <p class="desc">{known ? sp.encyclopedia.description : '―'}</p>
+              <p class="desc">{known ? sp.encyclopedia.description : '干潟で出会うと、ここに姿と暮らしが記されます。'}</p>
               <div class="habitat">{t('zukan.habitat')} ・ {known ? sp.encyclopedia.habitatHint : '？'}</div>
               <h4>{t('zukan.behaviors')} <span class="num" style={{ marginLeft: '8px' }}>{recordedCount} / {sp.encyclopedia.behaviors.length}</span></h4>
               <ul class="behaviors">

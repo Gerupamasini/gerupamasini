@@ -39,7 +39,8 @@ export function Menu({ app }: { app: App }) {
           <button class="btn primary" onClick={() => app.closeOverlay()}>{t('menu.resume')}</button>
           {app.save && <button class="btn" onClick={() => exportSave(app)}>{t('menu.export')}</button>}
           <button class="btn" onClick={() => importSave(app)}>{t('menu.import')}</button>
-          {app.save && <button class="btn ghost" onClick={() => { if (confirm('セーブデータを消しますか？')) void app.resetSave(); }}>{t('menu.reset')}</button>}
+          <span class="spacer" />
+          {app.save && <button class="btn ghost sm danger" onClick={() => { if (confirm('セーブデータを消しますか？')) void app.resetSave(); }}>{t('menu.reset')}</button>}
         </div>
       </div>
     </div>

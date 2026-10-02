@@ -27,7 +27,7 @@ export function TideGauge({ variant = 'hud' }: { variant?: 'hud' | 'almanac' }) 
           <span class="num">{hud.tideLevel >= 0 ? '+' : ''}{(hud.tideLevel * 100).toFixed(0)}</span>
           <span class="unit">cm</span>
         </div>
-        <span class="gauge-trend"><TrendIcon dir={trend} />{trend === 'up' ? t('hud.rising') : trend === 'down' ? t('hud.falling') : ''}</span>
+        <span class={`gauge-trend trend-${trend}`}><TrendIcon dir={trend} />{trend === 'up' ? t('hud.rising') : trend === 'down' ? t('hud.falling') : ''}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} aria-hidden="true">
         <defs>
