@@ -20,6 +20,12 @@ float asN(vec2 p){
   vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(asH(i), asH(i+vec2(1,0)), f.x), mix(asH(i+vec2(0,1)), asH(i+vec2(1,1)), f.x), f.y);
 }
+float asH3(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
+float asN3(vec3 x){
+  vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
+  return mix(mix(mix(asH3(i), asH3(i+vec3(1,0,0)), f.x), mix(asH3(i+vec3(0,1,0)), asH3(i+vec3(1,1,0)), f.x), f.y),
+             mix(mix(asH3(i+vec3(0,0,1)), asH3(i+vec3(1,0,1)), f.x), mix(asH3(i+vec3(0,1,1)), asH3(i+vec3(1,1,1)), f.x), f.y), f.z);
+}
 float asFbm(vec2 p){ float a = 0.5, s = 0.0; for(int i=0;i<4;i++){ s += a*asN(p); p = p*2.03+17.1; a *= 0.5; } return s; }
 // u wraps around the margin: evaluate noise on a circle so there is no seam at the umbo
 float asFbmU(float u, float v, float freq){ float a = u*6.2831853; return asFbm(vec2(cos(a), sin(a))*freq*0.16 + vec2(v, v*0.37)); }
@@ -73,6 +79,7 @@ function sandUniforms() {
 const SHELL_OUTER_FRAG = /* glsl */ `
 uniform vec4 uSeed;      // patternSeed, colorSeed, valve side (+1 left / -1 right), detail (0 far .. 1 macro)
 varying vec2 vAsUv;
+varying vec3 vAsLocal;
 // seeds are hashed, so they must be bit-exact across the surface: a uniform, or a flat varying per instance
 #ifdef AS_INSTANCED
 flat varying vec4 vAsSeed;
@@ -91,20 +98,40 @@ vec3 asPalette(float k){
   return mix(a, b, smoothstep(0.55, 1.0, fract(k)) * 0.6);
 }
 
-// height of the cancellate sculpture (0..1) and the growth checks; fw* = filter widths for antialiasing
-float asSculpt(vec2 uv, float seed, float detail, out float checks){
+// Height of the shell sculpture (≈0..1) and the growth checks. アサリ feel rough (布目状) because three scales
+// stack: ~100 radial ribs, finer commarginal threads crossing them into small beads, and granules over all.
+// Each layer fades out as it falls below a pixel; what is filtered away is returned in lost and turned into
+// roughness, so the shell stays matte and gritty at any distance instead of turning smooth and glossy.
+// extra = (granule, bead, grit)
+float asSculpt(vec2 uv, vec3 lp, float seed, float detail, out float checks, out float lost, out vec3 extra){
   float u = uv.x, s = uv.y;
-  // radial ribs: ~100 fine flat-topped ribs, stronger on the posterior slope
-  float ribC = u * 104.0;
-  float fwR = fwidth(ribC);
   float post = smoothstep(0.45, 0.75, u) * (1.0 - smoothstep(0.9, 1.0, u));
-  float rib = pow(0.5 + 0.5*cos(6.2831853*ribC), 1.6) * (1.0 - smoothstep(0.12, 0.35, fwR));
-  rib *= mix(0.45, 1.0, post) * smoothstep(0.1, 0.35, s);
-  // commarginal lamellae with irregular spacing (growth rate varies)
+  // radial ribs: ~100 fine flat-topped ribs, stronger on the posterior slope
+  // ribs wander a little and vary in strength, as on a real shell
+  float ribC = u * 104.0 + (asFbmU(u, s*3.0 + seed*9.0, 12.0) - 0.5) * 1.6;
+  float aR = 1.0 - smoothstep(0.12, 0.35, fwidth(ribC));
+  float ribW = pow(0.5 + 0.5*cos(6.2831853*ribC), 1.6) * mix(0.55, 1.2, asH(vec2(floor(ribC + 0.5), seed*3.0)));
+  float ribA = mix(0.45, 1.0, post) * smoothstep(0.1, 0.35, s);
+  // commarginal threads with irregular spacing (growth rate varies)
   float g = s*s*70.0 + s*48.0 + asFbmU(u, s*9.0 + seed*7.0, 3.0) * 2.2;
-  float fwG = fwidth(g);
-  float lam = pow(0.5 + 0.5*cos(6.2831853*g), 3.0) * (1.0 - smoothstep(0.12, 0.35, fwG));
-  lam *= mix(0.5, 1.0, smoothstep(0.2, 0.9, s)) * mix(0.8, 1.25, 1.0 - post);
+  float aG = 1.0 - smoothstep(0.12, 0.35, fwidth(g));
+  float lamW = pow(0.5 + 0.5*cos(6.2831853*g), 3.0) * mix(0.5, 1.3, asH(vec2(floor(g + 0.5), seed*7.0)));
+  float lamA = mix(0.5, 1.0, smoothstep(0.2, 0.9, s)) * mix(0.8, 1.25, 1.0 - post);
+  // finer threads between them (about two per lamella)
+  float g2 = g * 2.0 + 0.25;
+  float aT = 1.0 - smoothstep(0.08, 0.25, fwidth(g2));
+  float thrW = pow(0.5 + 0.5*cos(6.2831853*g2), 2.0);
+  // beads where ribs and threads cross
+  float bead = ribW * max(lamW, thrW*0.7) * (0.6 + 0.8*asN(vec2(ribC*1.7, g*1.3)));
+  float aB = aR * min(aG, aT);
+  // granules: isotropic noise on the shell's own surface (shell-length units), ~260 grains per length
+  vec3 m = lp * 260.0 + seed * 31.0;
+  float aM = 1.0 - smoothstep(0.2, 0.5, length(fwidth(m)));
+  // discrete grains rather than smooth noise: they catch light on one side and shadow on the other
+  float n1 = asN3(m), n2 = asN3(m * 2.2 + 7.3);
+  float gran = smoothstep(0.35, 0.8, n1) * 0.7 + smoothstep(0.4, 0.85, n2) * 0.5 * (1.0 - smoothstep(0.2, 0.5, length(fwidth(m * 2.2))));
+  // how gritty this part is: patchy, strongest on the posterior slope and the younger margin, polished at the umbo
+  float grit = mix(0.55, 1.0, post) * smoothstep(0.05, 0.3, s) * (0.55 + 0.7*asFbmU(u, s*4.0 + seed*17.0, 5.0));
   // a few strong growth checks (winter / spawning stops): grooves and a colour break
   checks = 0.0;
   for (int i = 0; i < 4; i++) {
@@ -115,8 +142,15 @@ float asSculpt(vec2 uv, float seed, float detail, out float checks){
     float present = step(asH(vec2(seed*5.0, float(i)+0.5)), 0.6) * smoothstep(0.25, 0.6, asFbmU(u, float(i)*5.3 + seed, 3.0));
     checks = max(checks, (1.0 - smoothstep(0.0, w, abs(s - c + wob + wob2))) * present);
   }
-  // lattice: ribs read where the lamellae cross them
-  float h = rib * (0.35 + 0.65*lam) * 0.55 + lam * 0.45 - checks * 0.8;
+  float h = ribW * ribA * 0.4 * aR
+          + lamW * lamA * 0.38 * aG
+          + thrW * 0.12 * aT
+          + bead * ribA * 0.45 * aB
+          + (gran - 0.4) * 0.9 * grit * aM * mix(0.5, 1.0, detail)
+          - checks * 0.8;
+  lost = ribA * 0.4 * (1.0 - aR) + lamA * 0.38 * (1.0 - aG) + 0.12 * (1.0 - aT)
+       + ribA * 0.45 * (1.0 - aB) + 0.6 * grit * (1.0 - aM);
+  extra = vec3((gran - 0.4) * aM * grit, bead * ribA * aB, grit);
   return h;
 }
 
@@ -181,6 +215,7 @@ vec3 asShellColor(vec2 uv, vec4 seed, float checks, float h, out float worn){
 const SHELL_OUTER_VERT_DECL = /* glsl */ `
 uniform vec4 uSeed;
 varying vec2 vAsUv;
+varying vec3 vAsLocal;
 #ifdef AS_INSTANCED
 flat varying vec4 vAsSeed;
 attribute vec4 aSeed;
@@ -196,7 +231,7 @@ export function makeShellOuterMaterial(o = {}) {
   const mat = new MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.55, metalness: 0,
     ior: 1.53, specularIntensity: 0.4,
-    clearcoat: 0.55, clearcoatRoughness: 0.32,
+    clearcoat: 0.4, clearcoatRoughness: 0.38,
   });
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms);
@@ -204,6 +239,7 @@ export function makeShellOuterMaterial(o = {}) {
       .replace('#include <common>', '#include <common>\n' + SAND_VERT_DECL + SHELL_OUTER_VERT_DECL)
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n' + SAND_VERT + `
   vAsUv = uv;
+  vAsLocal = position;
 #ifdef AS_INSTANCED
   vAsSeed = aSeed;
 #endif
@@ -212,28 +248,34 @@ export function makeShellOuterMaterial(o = {}) {
       .replace('#include <common>', '#include <common>\n' + COMMON + SAND_FRAG_DECL + SHELL_OUTER_FRAG)
       .replace('#include <map_fragment>', `#include <map_fragment>
 ${SAND_CLIP}
-  float asChecks;
+  float asChecks, asLost;
+  vec3 asX;
   float asDetail = AS_SEED.w;
-  float asHt = asSculpt(vAsUv, AS_SEED.x, asDetail, asChecks);
-  float asMicro = asN(vAsUv * vec2(900.0, 420.0)) - 0.5;
-  float asMicroAA = 1.0 - smoothstep(0.12, 0.35, fwidth(vAsUv.x * 900.0));
+  float asHt = asSculpt(vAsUv, vAsLocal, AS_SEED.x, asDetail, asChecks, asLost, asX);
   float asWorn;
   vec3 asCol = asShellColor(vAsUv, AS_SEED, asChecks, asHt, asWorn);
+  // grit in the colour: grain pits hold dirt, bead crests are abraded paler; sub-pixel grit greys the surface slightly
+  asCol *= 1.0 + asX.x * 0.45;
+  asCol = mix(asCol, asCol * 1.18 + 0.03, clamp(asX.y, 0.0, 1.0) * 0.35);
+  asCol = mix(asCol, asCol * 0.93 + 0.03, clamp(asLost, 0.0, 1.0) * 0.25);
   float asWet = uSand.w;
-  diffuseColor.rgb = asLin(asCol) * mix(1.0, 0.68, asWet);
+  diffuseColor.rgb = asLin(asCol) * mix(1.0, 0.7, asWet);
 ${SAND_TINT}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-  roughnessFactor = clamp(0.5 + (0.55 - asHt)*0.3 + asWorn*0.2 + asMicro*0.15*asMicroAA, 0.25, 0.95);
-  roughnessFactor = mix(roughnessFactor, roughnessFactor*0.6, asWet);
+  // matte calcite; pits rougher than crests; relief filtered below a pixel becomes microfacet roughness
+  roughnessFactor = 0.58 + (0.4 - asHt)*0.25 + asWorn*0.15 - asX.y*0.12 - asX.x*0.3 + asLost*0.35 + asX.z*0.08;
+  roughnessFactor = clamp(roughnessFactor, 0.4, 0.97);
+  roughnessFactor = mix(roughnessFactor, roughnessFactor*0.8, asWet);
   roughnessFactor = mix(roughnessFactor, 0.9, asBand);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
   // sculpture relief ~0.35 % of the shell length (≈0.12 mm on a 35 mm clam)
-  normal = asBump(-vViewPosition, normal, (asHt + asMicro*0.22*asDetail*asMicroAA) * 0.0035 * vAsScale * mix(0.6, 1.0, asDetail), faceDirection);`)
+  normal = asBump(-vViewPosition, normal, asHt * 0.0035 * vAsScale * mix(0.6, 1.0, asDetail), faceDirection);`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
-  material.clearcoat *= asWet * (1.0 - asBand);`);
+  // the water film is broken up by the grit: only the smoother patches keep a wet sheen
+  material.clearcoat *= asWet * (1.0 - asBand) * (1.0 - clamp(asX.z * 0.6 + asLost * 0.5, 0.0, 0.85));`);
   };
   if (o.instanced) mat.defines = { AS_INSTANCED: '' };
-  mat.customProgramCacheKey = () => 'asari-shell-out-v1' + (o.instanced ? 'i' : '');
+  mat.customProgramCacheKey = () => 'asari-shell-out-v2' + (o.instanced ? 'i' : '');
   mat.userData.uniforms = uniforms;
   return mat;
 }
