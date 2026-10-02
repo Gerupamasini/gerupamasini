@@ -128,7 +128,8 @@ try {
     const px = g.pos.x + Math.sin(ang) * dist, pz = g.pos.z + Math.cos(ang) * dist;
     const yaw = Math.atan2(-(g.pos.x - px), -(g.pos.z - pz));
     a.player.setPose(px, pz, yaw);
-    a.player.pitch = -Math.atan2(1.6, dist);
+    a.player.lowView = true;
+    a.player.pitch = -0.2;
     return { id: g.id, len: g.length_mm };
   });
   console.log('nearest goby', JSON.stringify(near));
