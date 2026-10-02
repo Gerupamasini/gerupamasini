@@ -1,0 +1,43 @@
+<!doctype html><meta charset="utf-8"><title>compare</title>
+<style>html,body{margin:0;background:#222}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { createSurface } from '/tools/build-assets/surface.mjs';
+import { applyStage } from '/tools/build-assets/stages.mjs';
+import { buildBody } from '/tools/build-assets/loft.mjs';
+const q = new URLSearchParams(location.search);
+const ref = q.get('ref') || 'a01', stage = q.get('stage') || 'adult', mode = q.get('mode') || 'outline';
+let params = await (await fetch('/assets/src/params.json')).json();
+if (stage === 'adult') params = applyStage(params, await (await fetch('/assets/src/stage_adult.json')).json());
+const S = createSurface(params); const body = buildBody(S, params);
+const lmA = (await (await fetch(`/docs/yamame/photo_analysis/landmarks_${q.get('lm') || 'a01'}_A.json`)).json()).photos.find(p => p.id === (q.get('id') || ref));
+const sn = lmA.landmarks.snout, cb = lmA.landmarks.caudal_base;
+const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = `/viewer/dev/ref/${ref}.jpg`; });
+const tex = new THREE.Texture(img); tex.colorSpace = THREE.SRGBColorSpace; tex.needsUpdate = true;
+const SLpx = Math.hypot(cb[0]-sn[0], cb[1]-sn[1]); const k = S.SL / SLpx; const th = Math.atan2(cb[1]-sn[1], cb[0]-sn[0]);
+const e1 = [Math.cos(th), Math.sin(th)], e2 = [-Math.sin(th), Math.cos(th)];
+const Xs = S.sToX(0), Ys = 0 /* snout y: use section centre at s=0 */ + S.section(0).c * S.SL;
+const toWorld = (px, py) => { const u = (px-sn[0])*e1[0] + (py-sn[1])*e1[1]; const v = (px-sn[0])*e2[0] + (py-sn[1])*e2[1]; return [Xs - k*u, Ys - k*v]; };
+const W0 = img.width, H0 = img.height; const c = [[0,0],[W0,0],[W0,H0],[0,H0]].map(([x,y]) => toWorld(x,y));
+const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(c.flatMap(p => [p[0], p[1], -0.01]), 3));
+pg.setAttribute('uv', new THREE.Float32BufferAttribute([0,1, 1,1, 1,0, 0,0], 2)); pg.setIndex([0,2,1, 0,3,2]);
+const w = innerWidth, h = innerHeight; const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(w, h); document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x303030);
+scene.add(new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })));
+// model silhouette: dorsal and ventral outline polylines + landmarks
+const line = (pts, col) => { const g = new THREE.BufferGeometry().setFromPoints(pts.map(p => new THREE.Vector3(p[0], p[1], 0.01))); return new THREE.Line(g, new THREE.LineBasicMaterial({ color: col })); };
+const dors = [], vent = [];
+for (let i = -S.cap*1000; i <= 1000; i += 4) { const s = i / 1000; dors.push(S.point(s, 0)); vent.push(S.point(s, Math.PI)); }
+scene.add(line(dors, 0xff3030)); scene.add(line(vent, 0x30ff30));
+if (mode === 'mesh') { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(body.positions, 3)); g.setIndex(new THREE.BufferAttribute(body.indices, 1)); scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x3399ff, wireframe: true, transparent: true, opacity: 0.35 }))); }
+// key positions along the axis
+for (const [s, col] of [[params.fins.dorsal.origin_s, 0xffff00], [params.fins.pelvic.origin_s, 0xff00ff], [params.fins.anal.origin_s, 0x00ffff], [params.operculum.edge_s.v, 0xffa500], [params.fins.adipose.origin_s, 0xffffff]]) {
+  const x = S.sToX(s); scene.add(line([[x, -0.03], [x, 0.03]], col)); }
+// eye
+for (const e of body.landmarks.eye.slice(0,1)) { const g = new THREE.RingGeometry(e.outerRadius*0.98, e.outerRadius, 32); const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xff8800 })); m.position.set(e.surface[0], e.surface[1], 0.02); scene.add(m); }
+const bx = (S.sToX(0) + S.sToX(1)) / 2, half = (S.SL * 0.70) / 2 * (w / h) > 0 ? S.SL * 0.62 : 0;
+const cam = new THREE.OrthographicCamera(bx - half*(w/h)/1.0*0.5*2/2, bx + half*(w/h)/1.0*0.5*2/2, half*0.5*2/ (w/h) , -half*0.5*2/(w/h), 0.001, 5);
+const cx = bx, vw = S.SL * 1.5, vh = vw * h / w; cam.left = cx - vw/2; cam.right = cx + vw/2; cam.top = vh/2; cam.bottom = -vh/2; cam.position.set(0, 0, 1); cam.updateProjectionMatrix();
+r.render(scene, cam); window.__ready = true;
+</script>

@@ -18,3 +18,9 @@ export function newImage(width, height, fill = [0, 0, 0, 255]) {
   for (let i = 0; i < width * height; i++) { data[i * 4] = fill[0]; data[i * 4 + 1] = fill[1]; data[i * 4 + 2] = fill[2]; data[i * 4 + 3] = fill[3]; }
   return { width, height, data };
 }
+
+export function encodePng(img) {
+  const png = new PNG({ width: img.width, height: img.height });
+  png.data = Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength);
+  return new Uint8Array(PNG.sync.write(png));
+}
