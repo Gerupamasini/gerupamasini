@@ -180,7 +180,7 @@ export function createHead(surface, params, spec0) {
     if (line && u > -0.05 && u < corner[0] + 0.03) {
       const vl = polyV(line, clamp(u, line[0][0], line[line.length - 1][0]));
       const dv = v - vl;                                         // + = above the gape line (upper lip / maxilla side)
-      const fade = smooth(corner[0] + 0.03, corner[0] - 0.04, u) * smooth(0.0, 0.07, u);      // lips fade out at the very tip, where the cap rings are thinner than the crease is deep
+      const fade = smooth(corner[0] + 0.03, corner[0] - 0.04, u) * smooth(0.0, 0.10, u);      // lips fade out towards the very tip, where the cap rings are thinner than the crease is deep
       const mm = (mouth.lip_ridge_mm ?? 0.18) * 1e-3, WL = (w) => (fine ? w : Math.max(w, GEO_LIP));   // the loft clusters its columns at the mouth line, so lips can be narrower than other features
       d += mm * 1.5 * gauss(dv - 0.021, WL(0.014)) * fade * lat;      // upper lip pad (rolled lip)
       d += mm * 1.1 * gauss(dv + 0.019, WL(0.013)) * fade * lat;      // lower lip pad
@@ -189,13 +189,13 @@ export function createHead(surface, params, spec0) {
     // ---- maxilla plate -------------------------------------------------------------------------------------------------
     if (spec.maxilla) {
       const sd = sdPolygon(spec.maxilla.outline, u, v), e = W(spec.maxilla.edge ?? 0.014);
-      d += (spec.maxilla.height_mm ?? 0.35) * 1e-3 * smooth(-e, e, sd) * lat;
+      d += (spec.maxilla.height_mm ?? 0.35) * 1e-3 * smooth(-e, e, sd) * lat * smooth(0.0, 0.16, u);
       d -= (spec.maxilla.groove_mm ?? 0.10) * 1e-3 * gauss(sd, e * 0.8) * lat;                  // groove along the plate's border
     }
     // ---- dentary (lower jaw) -------------------------------------------------------------------------------------------
     if (spec.dentary) {
       const sd = sdPolygon(spec.dentary.outline, u, v), e = W(spec.dentary.edge ?? 0.014);
-      d += (spec.dentary.height_mm ?? 0.25) * 1e-3 * smooth(-e, e, sd) * lat;
+      d += (spec.dentary.height_mm ?? 0.25) * 1e-3 * smooth(-e, e, sd) * lat * smooth(0.0, 0.16, u);
       if (spec.dentary.suture) { const r = distPolyline(spec.dentary.suture, u, v); d -= (spec.dentary.suture_mm ?? 0.10) * 1e-3 * gauss(r.d, W(0.006)) * lat; }
     }
     // ---- cheek (suborbital) bulge ----------------------------------------------------------------------------------------
@@ -242,7 +242,7 @@ export function createHead(surface, params, spec0) {
         d += (b.height_mm ?? 0.12) * 1e-3 * ridge * vent * smooth(b.apex_u + 0.02, b.apex_u + 0.1, u) * smooth(b.end_u ?? 1.0, (b.end_u ?? 1.0) - 0.12, u) * smooth(0.55, 0.15, th);
       }
     }
-    return d * smooth(0.0, 0.07, u);                              // the cap rings at the tip are thinner than any feature: no relief there
+    return d * smooth(0.0, 0.045, u);                              // the cap rings at the tip are thinner than any feature: no relief there
   }
 
   /** skin-weight masks from the chord coordinates of a vertex (x, y metres) and its body angle alpha */
@@ -271,7 +271,23 @@ export function createHead(surface, params, spec0) {
     return out;
   }
 
-  return { HLm, HLs, y0, tipX, toUV, fromUV, displacement, mouthLineHeight, landmarks, opercleWeight, maxillaWeight, corner, line, eye, spec };
+  /** 3-D positions (metres, right side) of the named photo landmarks: chord coordinates -> point on the skin (relief ignored, eye rim at the eye radius) */
+  function landmarks3d() {
+    const out = {}, at = (u, v, off = 0) => { const s = u * HLs - surface.cap, a = surface.alphaAtHeight(s, y0 + v * HLm); return surface.point(s, a, off); };
+    out.snout_tip = [tipX, y0, 0];
+    if (line) { out.mouth_corner = at(corner[0], corner[1]); out.lower_jaw_tip = at(0.0, polyV(line, 0.0) - 0.06); }
+    if (spec.maxilla) { const o = spec.maxilla.outline; let b = o[0]; for (const q of o) if (q[0] > b[0]) b = q; out.maxilla_post_end = at(b[0], b[1]); }
+    if (spec.nostrils?.anterior) out.nostril = at(spec.nostrils.anterior[0], spec.nostrils.anterior[1]);
+    if (eye) {
+      const ro = (eye.d_over_hl * 0.8) / 2;                                                   // visible aperture radius (HL)
+      out.eye_center = at(eye.u, eye.v, 0.0012);
+      out.eye_ant = at(eye.u - ro, eye.v, 0.0006); out.eye_post = at(eye.u + ro, eye.v, 0.0006); out.eye_top = at(eye.u, eye.v + ro, 0.0006); out.eye_bottom = at(eye.u, eye.v - ro, 0.0006);
+    }
+    if (spec.opercle) { const m = spec.opercle.margin; let b = m[0]; for (const q of m) if (q[0] > b[0]) b = q; out.opercle_post_mid = at(b[0], b[1]); out.opercle_top = at(m[0][0], m[0][1]); out.opercle_bottom = at(m[m.length - 1][0], m[m.length - 1][1]); }
+    if (spec.preopercle) { const l = spec.preopercle.line; out.preopercle_top = at(l[0][0], l[0][1]); out.preopercle_mid = at(l[Math.floor(l.length / 2)][0], l[Math.floor(l.length / 2)][1]); out.preopercle_bottom = at(l[l.length - 1][0], l[l.length - 1][1]); }
+    return out;
+  }
+  return { HLm, HLs, y0, tipX, toUV, fromUV, displacement, landmarks3d, mouthLineHeight, landmarks, opercleWeight, maxillaWeight, corner, line, eye, spec };
 }
 
 /** margin polyline given top -> bottom as [[u,v]...] with v decreasing: u at height v */

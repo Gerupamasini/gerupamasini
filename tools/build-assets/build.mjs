@@ -109,7 +109,7 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
     const d = new Float32Array(body.positions.length); let mx = 0; for (let i = 0; i < d.length; i++) { d[i] = bM.positions[i] - body.positions[i]; mx = Math.max(mx, Math.abs(d[i])); }
     morphs.push({ name: M.name, dPos: d }); console.log(`[build] morph ${M.name} max delta ${(mx * 1000).toFixed(2)} mm`);
   }
-  if (head) fs.writeFileSync(path.join(path.dirname(out), 'head_landmarks.json'), JSON.stringify(head.landmarks(), null, 1));
+  if (head) { fs.writeFileSync(path.join(path.dirname(out), 'head_landmarks.json'), JSON.stringify(head.landmarks(), null, 1)); fs.writeFileSync(path.join(path.dirname(out), 'head_landmarks3d.json'), JSON.stringify(head.landmarks3d(), null, 1)); }
   // lower LODs
   const lodBodies = [], lodFins = [], lodEyes = [];
   if (withLods) {

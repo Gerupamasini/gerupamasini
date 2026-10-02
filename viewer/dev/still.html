@@ -21,13 +21,18 @@ if (dbg) gltf.scene.traverse((o) => { if (o.isMesh && o.material && (o.material.
 if (q.get('morph')) { const [mn, mv] = q.get('morph').split(':'); gltf.scene.traverse((o) => { if (o.isMesh && o.morphTargetDictionary && mn in o.morphTargetDictionary) o.morphTargetInfluences[o.morphTargetDictionary[mn]] = parseFloat(mv); }); }
 gltf.scene.updateMatrixWorld(true);
 const half = parseFloat(q.get('half') || '0.0.12'.slice(0, 4)), cx = parseFloat(q.get('cx') || '0'), cy = parseFloat(q.get('cy') || '0');
-const cam = (view === 'persp3' || view === 'orbit') ? new THREE.PerspectiveCamera(parseFloat(q.get('fov') || '25'), W / H, 0.002, 5) : new THREE.OrthographicCamera(-half * W / H, half * W / H, half, -half, 0.001, 5);
+const cam = view === 'pose' ? new THREE.OrthographicCamera(-half * W / H, half * W / H, half, -half, 0.001, 5) : (view === 'persp3' || view === 'orbit') ? new THREE.PerspectiveCamera(parseFloat(q.get('fov') || '25'), W / H, 0.002, 5) : new THREE.OrthographicCamera(-half * W / H, half * W / H, half, -half, 0.001, 5);
 if (view === 'side') cam.position.set(cx, cy, 1); if (view === 'top') { cam.position.set(cx, 1, 0); cam.up.set(1, 0, 0); } if (view === 'persp3') { const a = parseFloat(q.get('az') || '50') * Math.PI / 180, d = parseFloat(q.get('dist') || '0.08'); cam.position.set(cx + Math.cos(a) * d, cy + 0.02, Math.sin(a) * d); cam.lookAt(cx, cy, 0); }
 if (view === 'orbit') {   // camera on a sphere around the head: yaw 0 = pure flank view, 90 = from the front; pitch + = from above; side=L|R flank
   const yaw = parseFloat(q.get('yaw') || '0') * Math.PI / 180, pit = parseFloat(q.get('pitch') || '0') * Math.PI / 180, d = parseFloat(q.get('dist') || '0.12'), sd = q.get('side') === 'L' ? -1 : 1;
   const dx = Math.sin(yaw), dz = sd * Math.cos(yaw); cam.position.set(cx + d * dx * Math.cos(pit), cy + d * Math.sin(pit), d * dz * Math.cos(pit)); cam.up.set(0, 1, 0); cam.lookAt(cx, cy, 0);
 }
+if (view === 'pose') {   // exact weak-perspective camera used by tools/verify/pose_fit.py: yaw (about +Y, 0 = camera on +Z looking at the right flank, 180 = left flank), pitch (+ from above), roll, look-at (tx,ty,tz), half = half image height in metres
+  const D = Math.PI / 180, e = new THREE.Euler(-parseFloat(q.get('pitch') || '0') * D, parseFloat(q.get('yaw') || '0') * D, parseFloat(q.get('roll') || '0') * D, 'YXZ');
+  cam.quaternion.setFromEuler(e); const T = new THREE.Vector3(parseFloat(q.get('tx') || '0'), parseFloat(q.get('ty') || '0'), parseFloat(q.get('tz') || '0'));
+  cam.position.copy(T).add(new THREE.Vector3(0, 0, 1).applyQuaternion(cam.quaternion)); cam.updateMatrixWorld(true);
+}
 if (view === 'front') { cam.position.set(1, cy, 0); cam.up.set(0, 1, 0); cam.lookAt(0, cy, 0); } if (view === 'belly') { cam.position.set(cx, -1, 0); cam.up.set(1, 0, 0); }
-if (view !== 'front' && view !== 'persp3' && view !== 'orbit') cam.lookAt(cx, cy, 0); if (q.get('flip') === '1') cam.scale.x = -1;
+if (view !== 'front' && view !== 'persp3' && view !== 'orbit' && view !== 'pose') cam.lookAt(cx, cy, 0); if (q.get('flip') === '1') cam.scale.x = -1;
 r.render(scene, cam); window.__ready = true;
 </script>
