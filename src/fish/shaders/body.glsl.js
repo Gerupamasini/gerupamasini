@@ -632,10 +632,19 @@ void computeFishSurface() {
     // (closed, the lower lip keeps mostly the chin colour, pale only along
     // its moist margin: a full pale lower lip drew a crescent under the
     // cleft that read as a cartoon smile from the front and above)
-    float lipW = lip * mix(mix(0.55, mix(0.4, 0.85, margin), 1.0 - upperW), mix(1.0, lip, upperW), lipOpen);
+    // (the pale moist margin of the closed lower lip only a little paler:
+    // seen from in front and above, a bright line under the upper lip read
+    // as teeth in a grin)
+    float lipW = lip * mix(mix(0.55, mix(0.4, 0.62, margin), 1.0 - upperW), mix(1.0, lip, upperW), lipOpen);
     col = mix(col, lc, lipW);
     spec *= 1.0 - 0.7 * lip;
-    rough = mix(rough, 0.3, lip);
+    // only the moist margin (and the everted open lips) is wet and glossy;
+    // the rounded outer upper lip is the same matte skin as the snout above
+    // it (glossy, it lit up as a warm knob on the front of a white face)
+    float lipOuter = lip * upperW * (1.0 - margin) * (1.0 - lipOpen);
+    rough = mix(rough, 0.3, lip * mix(margin, 1.0, lipOpen));
+    rough += 0.14 * lipOuter;
+    spec *= 1.0 - 0.5 * lipOuter;
     // closed mouth: the lips meet in a soft shadowed line, not a lit edge
     // (the same vertices form the inner margin of the open lips)
     float closed = 1.0 - smoothstep(0.04, 0.3, vHead.x);
@@ -650,6 +659,20 @@ void computeFishSurface() {
     col *= 1.0 - 0.35 * cleftLine;
     ao *= 1.0 - 0.4 * cleftLine;
     spec *= 1.0 - 0.8 * cleftLine;
+    // the top of the lower lip, tucked under the overhang of the upper lip,
+    // gets little of the light from above (shadow maps are far too coarse
+    // for it): seen from above it stays in shade instead of a lit pale rim
+    float tuck = smoothstep(0.0, -0.001, dyC) * smoothstep(-0.0055, -0.002, dyC) * (1.0 - upperW) * closed;
+    tuck *= 1.0 - smoothstep(0.6, 1.1, abs(rp.z) / MOUTH_RW);
+    ao *= 1.0 - 0.35 * tuck;
+    col *= 1.0 - 0.12 * tuck;
+    spec *= 1.0 - 0.6 * tuck;
+    // the folded corners (rictus) are tucked in shade too: a glint on each
+    // tight fold marked the two ends of the mouth like points of a grin
+    float zc = abs(rp.z) / MOUTH_RW;
+    float rictus = smoothstep(0.65, 0.95, zc) * smoothstep(1.5, 1.05, zc) * smoothstep(0.005, 0.001, abs(dyC));
+    spec *= 1.0 - 0.75 * rictus;
+    ao *= 1.0 - 0.25 * rictus;
   }
   // chin and throat: warm white (or the body colour), lit from the dark
   // ground below it reflects little; keep it from going grey-mauve
@@ -780,8 +803,11 @@ void computeFishSurface() {
     col = mix(col, flesh, 0.7 * band);
     // the skin's free edge against the ball: a fine moist contact shadow
     // (hard toward the eye, fading over ~0.06 R outward)
-    float contact = (1.0 - smoothstep(0.0, 0.06 + aaE, eu)) * front;
-    col *= 1.0 - 0.35 * contact;
+    // (a little wider under the eye: the lower lid of the slightly raised
+    // orbit faces up toward the eye and, lit, read as a pale crescent)
+    float ventE = smoothstep(0.1, 0.85, -upE);
+    float contact = (1.0 - smoothstep(0.0, mix(0.06, 0.13, ventE) + aaE, eu)) * front;
+    col *= 1.0 - mix(0.35, 0.45, ventE) * contact;
     ao *= 1.0 - 0.45 * contact;
     // a faint soft crease just outside the band (shading only, no colour)
     float crE = (eu - bandO - 0.18) / 0.12; // (pow of a negative base is undefined)
@@ -823,9 +849,11 @@ void computeFishSurface() {
     rough += 0.22 * brow;
     // the rounded front of the snout above the lips faces the viewer in
     // every frontal view: kept matte as well, or it shows as a glossy knob
-    float snoutF = headSkin * smoothstep(0.05, 0.015, sB) * smoothstep(-0.4, 0.0, a) * (lip > 0.5 ? 0.0 : 1.0);
-    spec *= 1.0 - 0.5 * snoutF;
-    rough += 0.1 * snoutF;
+    // (fading smoothly into the lips, whose outer part is matte too: a hard
+    // switch at the edge of the lip mask drew the top edge of a glossy patch)
+    float snoutF = headSkin * smoothstep(0.05, 0.015, sB) * smoothstep(-0.4, 0.0, a) * (1.0 - smoothstep(0.55, 1.0, lip));
+    spec *= 1.0 - 0.65 * snoutF;
+    rough += 0.14 * snoutF;
     nT = normalize(nT + vec3(mn, mn2, 0.0) * 0.03 * brow);
   }
   // white head: its skin inherits the flank's pearly reflector strength, so
