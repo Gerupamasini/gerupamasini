@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { Yamame } from '/src/yamame/Yamame.js';
+import { Yamame } from '../src/yamame/Yamame.js';
 
 function gravelTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 1024; const g = c.getContext('2d');
@@ -14,7 +14,15 @@ function gravelTexture() {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(14, 14); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
 }
 
-export async function createScene({ q = new URLSearchParams(location.search), glb = '/assets/generated/yamame.glb', bedY = -0.075, rock = null, fogDensity = 0.12 } = {}) {
+/** Load a GLB from a URL or from bytes already in memory (single-file builds). Bytes path avoids fetch(): ImageBitmapLoader would fetch blob: URLs, so it is switched off while parsing. */
+async function loadGLB({ url, bytes }) {
+  const loader = new GLTFLoader();
+  if (!bytes) return loader.loadAsync(url);
+  const cib = window.createImageBitmap; window.createImageBitmap = undefined;
+  try { return await new Promise((res, rej) => loader.parse(bytes, '', res, rej)); } finally { window.createImageBitmap = cib; }
+}
+
+export async function createScene({ q = new URLSearchParams(location.search), glb = '/assets/generated/yamame.glb', glbBytes = null, bedY = -0.075, rock = null, fogDensity = 0.12 } = {}) {
   const W = innerWidth, H = innerHeight;
   const r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   r.setPixelRatio(Math.min(devicePixelRatio, 2)); r.setSize(W, H); r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05;
@@ -35,10 +43,10 @@ export async function createScene({ q = new URLSearchParams(location.search), gl
     g.computeVertexNormals();
     rockMesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x585a52, roughness: 0.9, bumpMap: tex, bumpScale: 4 })); rockMesh.position.set(rock.x, bedY + rock.r * 0.55, rock.z); rockMesh.castShadow = rockMesh.receiveShadow = true; scene.add(rockMesh);
   }
-  const gltf = await new GLTFLoader().loadAsync(q.get('file') || glb);
+  const gltf = await loadGLB({ url: q.get('file') || glb, bytes: glbBytes });
   scene.add(gltf.scene); gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   const fish = new Yamame(gltf, { phase0: 0 });
-  const cam = new THREE.PerspectiveCamera(32, W / H, 0.005, 60); cam.position.set(0.34, 0.12, 0.42);
+  const cam = new THREE.PerspectiveCamera(32, W / H, 0.005, 60); cam.position.set(0.26, 0.09, 0.30);
   const ctl = new OrbitControls(cam, r.domElement); ctl.enableDamping = true; ctl.minDistance = 0.08; ctl.maxDistance = 6;
   addEventListener('resize', () => { r.setSize(innerWidth, innerHeight); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); });
   return { THREE, r, scene, cam, ctl, fish, gltf, sun, bed, rockMesh };

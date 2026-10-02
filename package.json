@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Photoreal Yamame (Oncorhynchus masou masou) 3D model for Three.js — procedural build pipeline, viewer and tests",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build:assets": "node tools/build-assets/build.mjs",
     "serve": "node tools/headless/serve.mjs",
@@ -19,8 +21,9 @@
     "@gltf-transform/extensions": "4.5.1",
     "@gltf-transform/functions": "4.5.1",
     "@napi-rs/canvas": "1.0.9",
-    "pngjs": "7.0.0",
+    "esbuild": "^0.28.2",
+    "gltf-validator": "2.0.0-dev.3.10",
     "playwright-core": "1.63.0",
-    "gltf-validator": "2.0.0-dev.3.10"
+    "pngjs": "7.0.0"
   }
 }

@@ -82,7 +82,7 @@ export async function writeGLB({ file, body, teeth = null, fins, eyes, rig, text
   if (textures?.fins) {
     mats.fin.setBaseColorTexture(tex('fin_albedo', textures.fins.albedo));
     if (textures.fins.normal) mats.fin.setNormalTexture(tex('fin_normal', textures.fins.normal));
-    if (textures.fins.orm) mats.fin.setOcclusionTexture(tex('fin_orm', textures.fins.orm)).setMetallicRoughnessTexture(tex('fin_orm2', textures.fins.orm));
+    if (textures.fins.orm) { const o = tex('fin_orm', textures.fins.orm); mats.fin.setOcclusionTexture(o).setMetallicRoughnessTexture(o); }
   } else mats.fin.setBaseColorFactor([0.7, 0.65, 0.5, 0.6]);
   const E = textures?.eyes;
   mats.iris = doc.createMaterial('M_Eye_Iris').setRoughnessFactor(1).setMetallicFactor(1);
