@@ -52,7 +52,7 @@ async function optional(name) {
   try { return await import(`./${name}.mjs`); } catch (e) { console.log(`[build] module ${name} unavailable: ${e.message.split('\n')[0]}`); return null; }
 }
 
-export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, 'assets/generated/yamame.glb'), withTextures = true, withLods = true, individual = false, sl = null, legacyHead = false, hero = false } = {}) {
+export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, 'assets/generated/yamame.glb'), withTextures = true, withLods = true, individual = false, sl = null, legacyHead = false, hero = true } = {}) {
   LODS = hero ? LODS_HERO : LODS_DEV;
   let params = loadParams();
   if (stage === 'adult') params = applyStage(params, JSON.parse(fs.readFileSync(path.join(ROOT, 'assets/src/stage_adult.json'), 'utf8')), 'adult');
@@ -135,5 +135,5 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await build({ stage: arg('stage', 'adult'), seed: Number(arg('seed', 1)), individual: process.argv.includes('--individual'), sl: arg('sl', null) ? Number(arg('sl')) : null, legacyHead: process.argv.includes('--legacy-head'), hero: process.argv.includes('--hero'), out: arg('out', path.join(ROOT, 'assets/generated/yamame.glb')) });
+  await build({ stage: arg('stage', 'adult'), seed: Number(arg('seed', 1)), individual: process.argv.includes('--individual'), sl: arg('sl', null) ? Number(arg('sl')) : null, legacyHead: process.argv.includes('--legacy-head'), hero: !process.argv.includes('--dev'), out: arg('out', path.join(ROOT, 'assets/generated/yamame.glb')) });
 }

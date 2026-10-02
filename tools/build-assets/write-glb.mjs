@@ -62,13 +62,13 @@ export async function writeGLB({ file, body, teeth = null, gills = null, fins, e
 
   // ---- textures & materials ----
   const tex = (name, img) => doc.createTexture(name).setImage(encodePng(img)).setMimeType('image/png');
-  // big colour / ORM atlases go out as JPEG (4:4:4, q93) to keep the GLB small enough for a single-file page; normal maps stay lossless PNG
+  // big colour / ORM / normal atlases go out as JPEG (4:4:4, q93-96) to keep the GLB small enough for a single-file page (< 16 MB with base64)
   const jpegBytes = async (img, q = 93) => new Uint8Array(await sharp(Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength), { raw: { width: img.width, height: img.height, channels: 4 } }).removeAlpha().jpeg({ quality: q, chromaSubsampling: '4:4:4', mozjpeg: true }).toBuffer());
   const texJ = async (name, img, q) => doc.createTexture(name).setImage(await jpegBytes(img, q)).setMimeType('image/jpeg');
   const mats = {};
   const T = {};
   if (textures?.body) {
-    T.albedo = await texJ('body_albedo', textures.body.albedo); T.normal = tex('body_normal', textures.body.normal); T.orm = await texJ('body_orm', textures.body.orm, 95);
+    T.albedo = await texJ('body_albedo', textures.body.albedo); T.normal = await texJ('body_normal', textures.body.normal, 96); T.orm = await texJ('body_orm', textures.body.orm, 95);
   }
   mats.body = doc.createMaterial('M_Body').setRoughnessFactor(1).setMetallicFactor(1).setDoubleSided(false);
   if (T.albedo) mats.body.setBaseColorTexture(T.albedo);
@@ -83,7 +83,7 @@ export async function writeGLB({ file, body, teeth = null, gills = null, fins, e
   if (textures?.head && body.split) {
     const H = textures.head; const hc = params.render?.head || params.render?.body || {};
     mats.head = doc.createMaterial('M_Head').setRoughnessFactor(1).setMetallicFactor(1).setDoubleSided(false)
-      .setBaseColorTexture(await texJ('head_albedo', H.albedo)).setNormalTexture(tex('head_normal', H.normal)).setNormalScale(1);
+      .setBaseColorTexture(await texJ('head_albedo', H.albedo)).setNormalTexture(await texJ('head_normal', H.normal, 96)).setNormalScale(1);
     const ho = await texJ('head_orm', H.orm, 95); mats.head.setOcclusionTexture(ho).setOcclusionStrength(1).setMetallicRoughnessTexture(ho);
     mats.head.setExtension('KHR_materials_clearcoat', clearcoatExt.createClearcoat().setClearcoatFactor(hc.clearcoat ?? 0.2).setClearcoatRoughnessFactor(hc.clearcoat_roughness ?? 0.12));
     mats.head.setExtension('KHR_materials_iridescence', iridExt.createIridescence().setIridescenceFactor(hc.iridescence ?? 0.10).setIridescenceIOR(1.33));

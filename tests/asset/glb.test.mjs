@@ -50,10 +50,10 @@ test('morph targets on the LOD0 body (same count on every primitive) and LOD1/LO
   }
 });
 
-test('triangle budget report (informational; spec 06 6.8.1 targets ~8k, 6-12k)', { skip }, () => {
+test('triangle budget report (informational; spec 06 6.8.1 targets ~8k, 6-12k; the hero close-up LOD0 is deliberately ~45k: head sculpt, see docs/yamame/impl/HEAD.md)', { skip }, () => {
   const tri = (m) => m.listPrimitives().reduce((a, p) => a + p.getIndices().getCount() / 3, 0);
   const by = Object.fromEntries(doc.getRoot().listMeshes().map((m) => [m.getName(), tri(m)]));
   const lod0 = (by.Body_LOD0 || 0) + (by.Fins_LOD0 || 0) + (by.Eye_L || 0) + (by.Eye_R || 0) + (by.EyeOrbit_L || 0) + (by.EyeOrbit_R || 0);
   console.log('# triangles', JSON.stringify(by), 'LOD0 total', lod0);
-  assert.ok(lod0 < 40000);
+  assert.ok(lod0 < 60000);
 });

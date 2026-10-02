@@ -100,6 +100,9 @@ const toByte = (v) => SRGB_ENC[(clamp01(v) * 4095 + 0.5) | 0];
 const lin3 = (r, g, b) => Float64Array.of(decS(r / 255), decS(g / 255), decS(b / 255));
 
 /** Look-development constants: photo-like sRGB colours of the painted regions (adult, non-spawning, dark-ish olive-bronze).  See head_color_markings.md. */
+/** material settings the painter was calibrated with (KHR clearcoat / iridescence on M_Head); written to params.render.head unless the caller already set them */
+export const RENDER_HEAD = { clearcoat: 0.3, clearcoat_roughness: 0.09, iridescence: 0.12 };
+
 export const LOOK = {
   gain: 0.42,                 // photo appearance -> linear albedo (photos include light and highlights); calibrated against renders of the viewer still
   capFrac: 0.235,             // dorsal cap: lower border at this fraction of the head height (cheek column)
@@ -109,9 +112,9 @@ export const LOOK = {
     capDark: [60, 46, 26], capMid: [92, 72, 42], capLight: [124, 100, 60], fleck: [176, 142, 88], snout: [84, 76, 60], band: [146, 120, 76], smudge: [104, 92, 100],
     cheekBronze: [160, 128, 72], cheekPearl: [176, 156, 130], cheekLilac: [160, 142, 152], cheekGreen: [140, 136, 84], cheekGold: [186, 152, 86], cheekBlue: [140, 150, 164],
     opercle: [172, 158, 132], opercleLilac: [184, 172, 178], rimGold: [200, 168, 98], copper: [186, 128, 84], preLine: [226, 206, 184],
-    jaw: [196, 188, 178], throat: [190, 186, 182], ventral: [200, 194, 184], bran: [176, 174, 180],
+    jaw: [200, 190, 182], throat: [190, 186, 182], ventral: [200, 194, 184], bran: [176, 174, 180],
     strap: [144, 122, 100], strapLight: [178, 158, 134], groove: [56, 40, 28], gape: [22, 15, 30], lip: [200, 188, 206],
-    nostril: [38, 32, 28], nostrilRim: [126, 124, 128], orbit: [50, 40, 30], smear: [88, 62, 56], spot: [18, 15, 12], poreDark: [46, 38, 34], porePale: [222, 214, 206],
+    nostril: [38, 32, 28], nostrilRim: [126, 124, 128], orbit: [50, 44, 28], smear: [88, 62, 56], spot: [18, 15, 12], poreDark: [46, 38, 34], porePale: [222, 214, 206], pinkFlush: [214, 168, 172],
   },
 };
 const PAL = {}; for (const [k, c] of Object.entries(LOOK.palette)) PAL[k] = lin3(c[0], c[1], c[2]);
@@ -176,6 +179,7 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
   const T0 = Date.now(), timing = {};
   const tick = (k) => { timing[k] = Date.now() - T0; };
   const L = makeLook(seed, look);
+  if (params && !params.render?.head) params.render = { ...(params.render || {}), head: { ...RENDER_HEAD } };       // picked up by write-glb (params.render.head)
   const devScale = Number(process.env.HEADPAINT_SCALE) || 1;                          // dev switch: 0.5 = quarter the texels (fast look-dev builds)
   const W = Math.max(64, Math.round(width * devScale)), H = Math.max(64, Math.round(height * devScale)), N = W * H;
   const SL = surface.SL, cap = surface.cap, HLs = spec.HL_over_SL, HLm = head.HLm, SLmm = SL * 1000, HLmm = HLm * 1000;
@@ -434,7 +438,7 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
       let pr, pg, pb;
       { const tt = clamp01((t - 0.2) / 0.75), k = tt * 4, i0 = Math.min(Math.floor(k), 3), f = k - i0, A = GRAD[i0], B = GRAD[i0 + 1];
         pr = lerp(A[0], B[0], f); pg = lerp(A[1], B[1], f); pb = lerp(A[2], B[2], f); }
-      const wGold = sstep(0.52, 0.78, n1 * 0.6 + nh * 0.4 + 0.1 * L.hueBias) * 0.55, wLil = sstep(0.55, 0.8, nh2) * 0.6, wGrn = sstep(0.55, 0.82, n2 * 0.5 + nh * 0.5) * 0.45, wBlue = sstep(0.6, 0.85, nh2 * 0.5 + n1 * 0.5) * 0.35 * sstep(0.45, 0.8, t);
+      const wGold = sstep(0.52, 0.78, n1 * 0.6 + nh * 0.4 + 0.1 * L.hueBias) * 0.6, wLil = sstep(0.52, 0.78, nh2) * 0.7, wGrn = sstep(0.5, 0.78, n2 * 0.5 + nh * 0.5) * 0.55, wBlue = sstep(0.55, 0.82, nh2 * 0.5 + n1 * 0.5) * 0.5 * sstep(0.4, 0.8, t);
       pr += (PAL.cheekGold[0] - pr) * wGold; pg += (PAL.cheekGold[1] - pg) * wGold; pb += (PAL.cheekGold[2] - pb) * wGold;
       pr += (PAL.cheekLilac[0] - pr) * wLil; pg += (PAL.cheekLilac[1] - pg) * wLil; pb += (PAL.cheekLilac[2] - pb) * wLil;
       pr += (PAL.cheekGreen[0] - pr) * wGrn; pg += (PAL.cheekGreen[1] - pg) * wGrn; pb += (PAL.cheekGreen[2] - pb) * wGrn;
@@ -445,7 +449,7 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
       const bandW = bell(t, tb + bOff + 0.07, 0.07) * (1 - vent) * sstep(0.2, 0.45, u);
       pr = lerp(pr, PAL.band[0], bandW * 0.7); pg = lerp(pg, PAL.band[1], bandW * 0.7); pb = lerp(pb, PAL.band[2], bandW * 0.7);
       cr += (pr - cr) * pale; cg += (pg - cg) * pale; cb += (pb - cb) * pale;
-      rough = lerp(0.60, 0.34, pale); metal = lerp(0.02, 0.22, pale);
+      rough = lerp(0.52, 0.27, pale); metal = lerp(0.02, 0.22, pale);
       // cheek: faint embedded scales (irregular, patchy), nothing like a regular mesh
       const cheekM = pale * lat * (1 - vent) * sstep(0.36, 0.5, u) * (1 - sstep(0.72, 0.8, u)) * sstep(0.30, 0.62, n2 * 0.5 + n1 * 0.5 + 0.1);
       if (cheekM > 0.02) {
@@ -481,7 +485,7 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
           const nn = 0.94 + 0.12 * n2, mx = 0.4 * wLil;
           const jr = lerp(PAL.jaw[0], PAL.cheekLilac[0], mx) * nn, jg = lerp(PAL.jaw[1], PAL.cheekLilac[1], mx) * nn, jb = lerp(PAL.jaw[2], PAL.cheekLilac[2], mx) * nn;
           cr += (jr - cr) * jawW; cg += (jg - cg) * jawW; cb += (jb - cb) * jawW;
-          rough = lerp(rough, 0.30, jawW); metal = lerp(metal, 0.2, jawW);
+          rough = lerp(rough, 0.25, jawW); metal = lerp(metal, 0.2, jawW);
           // faint suture line between dentary and angular, pale granular speckle on the chin
           const su = R.sut[x]; if (su < 0.03) { const sl = bell(su, 0, 0.0042) * jawW; mul(1 - 0.16 * sl); aoP *= 1 - 0.25 * sl; }
           const tub = dots3(px, py, pz, 0.30, 0.07, 0.30, sdTub) * jawW * (1 - sstep(0.30, 0.42, u)); mixTo(PAL.porePale, tub * 0.28);
@@ -506,7 +510,7 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
           const op = sstep(0.4, 0.7, nh2 * 0.6 + nh * 0.4);
           const orr = lerp(PAL.opercle[0], PAL.opercleLilac[0], op * 0.6), og = lerp(PAL.opercle[1], PAL.opercleLilac[1], op * 0.6), ob = lerp(PAL.opercle[2], PAL.opercleLilac[2], op * 0.6);
           const nn = (0.95 + 0.1 * n3) * (1 + 0.10 * sstep(-0.12, -0.01, du)), m = opW * 0.8; cr += (orr * nn - cr) * m; cg += (og * nn - cg) * m; cb += (ob * nn - cb) * m;
-          rough = lerp(rough, 0.26, opW); metal = lerp(metal, 0.42, opW);
+          rough = lerp(rough, 0.21, opW); metal = lerp(metal, 0.42, opW);
           // striations of the bone: rays from the hinge + concentric growth lines; soft melanophore smudges on the upper plate
           const dh = u - hinge[0], vh = v - hinge[1], rho = Math.hypot(dh, vh), th = Math.atan2(vh, dh);
           const ray = Math.sin(th * 80 + 9 * (nh2 - 0.5) + 14 * (n3 - 0.5)), grow = Math.sin(rho * (TAU / 0.0125) + 9 * (nh - 0.5));
@@ -542,7 +546,7 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
       if (eyeC) {
         const er = R.eR[x], ea = R.eA[x];
         const ang = 0.6 + 0.4 * Math.cos(ea - 2.3) + 0.25 * Math.cos(ea - 0.2);              // thicker at the upper front and rear
-        orbW = bell(er, 1.18, 0.20) * ang * 0.85 * (1 - sstep(1.9, 2.4, er)); mixTo(PAL.orbit, clamp01(orbW)); aoP *= 1 - 0.5 * (1 - sstep(1.0, 2.0, er));
+        orbW = bell(er, 1.28, 0.28) * ang * 0.9 * (1 - sstep(1.9, 2.4, er)); mixTo(PAL.orbit, clamp01(orbW)); aoP *= (1 - 0.5 * (1 - sstep(1.0, 2.0, er))) * (1 - 0.3 * clamp01(orbW));
         if (L.smear > 0) {
           const sm = bell(er, 2.2, 0.8) * sstep(-0.3, 0.6, Math.cos(ea - 0.45)) * sstep(0.55, 0.15, Math.abs(Math.sin(ea - 0.3) * 0.4 + (nh2 - 0.5) * 0.3)) * L.smear * lat * (0.6 + 0.8 * n2);
           mixTo(PAL.smear, clamp01(sm) * 0.45);
@@ -554,11 +558,11 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
         if (vt > 0) {
           const w = sstep(bran.apex_u + 0.02, bran.apex_u + 0.1, u) * sstep(bran.end_u ?? 1, (bran.end_u ?? 1) - 0.12, u) * vt;
           const ridge = 0.5 + 0.5 * Math.cos((R.th[x] / (bran.pitch ?? 0.07)) * TAU);
-          mixTo(PAL.bran, w * 0.5); mul(1 - 0.035 * w * (1 - ridge) * (0.5 + n3));
+          mixTo(PAL.bran, w * 0.5); mixTo(PAL.pinkFlush, w * 0.22 * (0.4 + 0.6 * n1)); mul(1 - 0.035 * w * (1 - ridge) * (0.5 + n3));
         }
       }
       // ---- dark head spots and pores --------------------------------------------------------------------------------------
-      const sp = maskSpot[idx]; if (sp > 0) { mixTo(PAL.spot, sp * 0.95); rough = lerp(rough, 0.55, sp); metal *= 1 - sp; }
+      const sp = maskSpot[idx]; if (sp > 0) { mixTo(PAL.spot, sp * 0.95); rough = lerp(rough, 0.55, sp); metal *= 1 - sp; aoP *= 1 - 0.55 * sp; }   // AO also cuts the env-reflection veil, so black pigment stays black
       const pd = maskPoreD[idx], pp = maskPoreP[idx];
       if (pd > 0 || pp > 0) { mixTo(PAL.porePale, pp * 0.14); mixTo(PAL.poreDark, pd * 0.7); aoP *= 1 - 0.4 * pd; }
       // snout tip (the pole of the atlas): the chord coordinates degenerate there, so the colour is set from the height fraction alone (dark snout, gape ring, pale jaw tip)
@@ -572,7 +576,10 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
       const g1 = vn3(px / 0.16, py / 0.16, pz / 0.16, sdG) - 0.5, g2 = vn3(px / 0.07, py / 0.07, pz / 0.07, sdG2) - 0.5;
       const spk = dots3(px, py, pz, 0.16, 0.05, 0.6, sdSp) * 0.9;          // melanophore speckle: dense on the cap, thin on the pale field
       const drip = 1 - sstep(0.0, 0.14, t - (tb + bOff));
-      mul(1 - spk * (0.34 * capW + (0.16 + 0.30 * drip) * pale * (1 - vent)));
+      mul(1 - spk * (0.34 * capW + (0.20 + 0.30 * drip) * pale * (1 - vent * 0.6)));
+      // clustered mid-size melanophore flecks (0.1-0.25 mm) and mid-scale tonal mottling of the pale skin
+      { const cl = sstep(0.45, 0.7, n2 * 0.6 + n3 * 0.4), fk = dots3(px, py, pz, 0.30, 0.085, 0.45, sdSp + 77) * cl; mul(1 - 0.26 * fk * (pale * (1 - vent * 0.5) + 0.3 * capW));
+        mul(1 + 0.10 * (n3 - 0.5) * pale + 0.05 * (n2 - 0.5)); }
       const pearlM = clamp01(pale * (1 - vent * 0.4) + opW * 0.6);                        // iridophore glitter: low-amplitude pink / lilac / green hue shifts
       const i1 = vn3(px / 0.2, py / 0.2, pz / 0.2, sdIr1) - 0.5, i2 = vn3(px / 0.33, py / 0.33, pz / 0.33, sdIr2) - 0.5;
       cr *= 1 + pearlM * (0.22 * i1 + 0.12 * i2); cg *= 1 + pearlM * (-0.08 * i1 - 0.12 * i2); cb *= 1 + pearlM * (-0.24 * i1 + 0.14 * i2);
@@ -590,8 +597,8 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
         sampleAtlas(bodyTex.albedo, s, vTex, bodyTmp);
         const br = SRGB_DEC[Math.round(bodyTmp[0])], bg = SRGB_DEC[Math.round(bodyTmp[1])], bb = SRGB_DEC[Math.round(bodyTmp[2])];
         cr = br + (cr - br) * swr; cg = bg + (cg - bg) * swr; cb = bb + (cb - bb) * swr;
-        sampleAtlas(bodyTex.orm, s, vTex, bodyTmp);
-        aoP = bodyTmp[0] / 255 + (aoP - bodyTmp[0] / 255) * swr; rough = bodyTmp[1] / 255 + (rough - bodyTmp[1] / 255) * swr; metal = bodyTmp[2] / 255 + (metal - bodyTmp[2] / 255) * swr;
+        sampleAtlas(bodyTex.orm, s, vTex, bodyTmp);                                       // (AO is cross-faded in the cavity pass below)
+        rough = bodyTmp[1] / 255 + (rough - bodyTmp[1] / 255) * swr; metal = bodyTmp[2] / 255 + (metal - bodyTmp[2] / 255) * swr;
         micro *= swr;
       }
       albedo[o4] = toByte(cr); albedo[o4 + 1] = toByte(cg); albedo[o4 + 2] = toByte(cb); albedo[o4 + 3] = 255;
@@ -643,7 +650,12 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
   // cavity AO from the grid (fine relief) multiplies the painted AO
   for (let y = 0; y < H; y++) {
     up.row(F.ao, y, Rres);
-    for (let x = 0; x < W; x++) { const o4 = (y * W + x) * 4; ormB[o4] = Math.round(ormB[o4] * Rres[x]); }
+    for (let x = 0; x < W; x++) {
+      const o4 = (y * W + x) * 4, s = (x / (W - 1)) * sSpan - cap, swr = 1 - sstep(sB1, sB2, s);
+      let ao = 0.18 + 0.82 * clamp01((ormB[o4] / 255) * Rres[x]);                          // painted pigment AO x cavity AO of the relief, with a floor
+      if (bodyTex && swr < 1) { sampleAtlas(bodyTex.orm, s, y / (H - 1), bodyTmp); ao = bodyTmp[0] / 255 + (ao - bodyTmp[0] / 255) * swr; }
+      ormB[o4] = Math.round(255 * ao);
+    }
   }
   tick('normal');
 
@@ -667,7 +679,7 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
     normal: { max_tilt_deg: +(maxTilt * 180 / Math.PI).toFixed(1), mean_tilt_deg: +(sumTilt / N * 180 / Math.PI).toFixed(2) },
     regions,
   };
-  return { albedo: { width: W, height: H, data: albedo }, normal: { width: W, height: H, data: normal }, orm: { width: W, height: H, data: ormB }, mouth: generateMouthTexture({ seed, size: 256, gain: L.gain }), report };
+  return { albedo: { width: W, height: H, data: albedo }, normal: { width: W, height: H, data: normal }, orm: { width: W, height: H, data: ormB }, mouth: generateMouthTexture({ seed, size: 256, gain: L.gain }), render: RENDER_HEAD, report };
 }
 
 // ------------------------------------------------------------------------------------------------------------------

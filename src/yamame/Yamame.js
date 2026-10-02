@@ -38,6 +38,7 @@ export class Yamame {
     this.fin = { pecAbd: 0.08, pelAbd: 0.1, dorsalErect: 1, analErect: 1, caudalSpread: 0.7 };
     this.finState = { pecAbd: 0.08, pelAbd: 0.1, dorsalErect: 1, analErect: 1, caudalSpread: 0.7 };
     this.jawOpen = 0; this.opercleFlare = 0;
+    this.jawRest = 3.5;     // deg: the resting mouth of a living fish is slightly open (6 of 8 rated head photos 'slightly open'; pose fit: chin ~0.065 HL below the closed bind pose)
     this.eyeLook = { yaw: 0, pitch: 0 };
   }
 
@@ -127,7 +128,7 @@ export class Yamame {
     this.breath.phase += 2 * Math.PI * this.breath.f * dt;
     const ph = this.breath.phase, amp = this.breath.amp;
     const pump = 0.5 + 0.5 * Math.sin(ph), gill = 0.5 + 0.5 * Math.sin(ph - 1.1);
-    const sk = this.strikePose; const jawDeg = (intent.jawOpen ?? 0) + (sk ? sk.jaw : 0) + 2.0 * amp * pump * pump;
+    const sk = this.strikePose; const jawDeg = this.jawRest + (intent.jawOpen ?? 0) + (sk ? sk.jaw : 0) + 2.0 * amp * pump * pump;
     this.#setRot('jaw_lower', AXIS_Z, -jawDeg * Math.PI / 180);       // opens: tip rotates down (negative about +Z, see viewer/dev/body.html)
     this.#setRot('maxilla_R', AXIS_Z, 0.18 * jawDeg * Math.PI / 180); this.#setRot('maxilla_L', AXIS_Z, 0.18 * jawDeg * Math.PI / 180);       // the maxilla follows the lower jaw a little (its rear end swings down)
     const flare = (intent.opercle ?? 0) + (sk ? sk.opercle : 0) + 7 * amp * gill;                    // degrees

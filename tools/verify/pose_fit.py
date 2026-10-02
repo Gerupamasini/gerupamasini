@@ -55,12 +55,13 @@ def fit(names, M, P, size, prior):
     return best, T
 
 def main():
-    a = sys.argv[1:]; ids = []; glb = '/assets/generated/yamame.glb'; lmf = 'assets/generated/head_landmarks3d.json'; out = '/tmp/pose_fit'; tex = None; i = 0
+    a = sys.argv[1:]; ids = []; glb = '/assets/generated/yamame.glb'; lmf = 'assets/generated/head_landmarks3d.json'; out = '/tmp/pose_fit'; tex = None; norender = False; i = 0
     while i < len(a):
         if a[i] == '--glb': glb = a[i + 1]; i += 2
         elif a[i] == '--lm': lmf = a[i + 1]; i += 2
         elif a[i] == '--out': out = a[i + 1]; i += 2
         elif a[i] == '--tex': tex = a[i + 1]; i += 2
+        elif a[i] == '--no-render': norender = True; i += 1
         else: ids.append(a[i]); i += 1
     os.makedirs(out, exist_ok=True)
     mlm = json.load(open(os.path.join(ROOT, lmf)))
@@ -75,6 +76,12 @@ def main():
         R = rot(p[0], p[1], p[2]); ox, oy, k = p[4], p[5], p[3]
         # look-at point so that the render centre = photo centre
         xc, yc = (W / 2 - ox) / k, -(H / 2 - oy) / k; L = T + R @ np.array([xc, yc, 0.0])
+        # signed residuals in the head frame: du forward (towards the snout) positive, dv up positive, in head lengths
+        fwd = 1.0 if (R[:, 0] @ np.array([1.0, 0, 0])) > 0 else -1.0                     # camera right = +x -> the snout is to the right of the image
+        res_hl = {n: [float((q[0] - e[0]) * fwd / hl_px), float(-(q[1] - e[1]) / hl_px)] for n, q, e in zip(names, P, proj)}
+        if norender:
+            res[pid] = {'yaw': math.degrees(p[0]), 'pitch': math.degrees(p[1]), 'roll': math.degrees(p[2]), 'k': p[3], 'hl_px': hl_px, 'n': len(names), 'rms_hl': float(np.sqrt((err ** 2).mean()) / hl_px), 'err_hl': {n: float(e / hl_px) for n, e in zip(names, err)}, 'res_hl': res_hl}
+            print(pid, 'rms', round(res[pid]['rms_hl'], 3)); continue
         url = f"/viewer/dev/still.html?view=pose&yaw={math.degrees(p[0]):.3f}&pitch={math.degrees(p[1]):.3f}&roll={math.degrees(p[2]):.3f}&half={H / (2 * k):.6f}&tx={L[0]:.6f}&ty={L[1]:.6f}&tz={L[2]:.6f}&bg=7d8a90&file={glb}" + (f"&tex={tex}" if tex else '')
         f = os.path.join(out, f'render_{pid}.png')
         subprocess.run(['node', os.path.join(ROOT, 'tools/headless/render-snapshot.mjs'), url, f, '--w', str(W), '--h', str(H)], cwd=ROOT, capture_output=True)
@@ -91,7 +98,7 @@ def main():
         sc = max(1, 640 // W) if W < 640 else 1
         if sc > 1: sheet = sheet.resize((sheet.width * sc, sheet.height * sc), Image.LANCZOS)
         sheet.save(os.path.join(out, f'fit_{pid}.png'))
-        res[pid] = {'yaw': math.degrees(p[0]), 'pitch': math.degrees(p[1]), 'roll': math.degrees(p[2]), 'k': p[3], 'hl_px': hl_px, 'n': len(names), 'rms_hl': float(np.sqrt((err ** 2).mean()) / hl_px), 'err_hl': {n: float(e / hl_px) for n, e in zip(names, err)}}
+        res[pid] = {'yaw': math.degrees(p[0]), 'pitch': math.degrees(p[1]), 'roll': math.degrees(p[2]), 'k': p[3], 'hl_px': hl_px, 'n': len(names), 'rms_hl': float(np.sqrt((err ** 2).mean()) / hl_px), 'err_hl': {n: float(e / hl_px) for n, e in zip(names, err)}, 'res_hl': res_hl}
         print(pid, f"yaw {math.degrees(p[0]):.0f} pitch {math.degrees(p[1]):.0f} roll {math.degrees(p[2]):.0f}  n={len(names)}  rms={res[pid]['rms_hl']:.3f} HL", ' '.join(f'{n}:{v:.2f}' for n, v in sorted(res[pid]['err_hl'].items(), key=lambda t: -t[1])[:3]))
     json.dump(res, open(os.path.join(out, 'fit.json'), 'w'), indent=1)
 main()
