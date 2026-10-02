@@ -353,6 +353,8 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
       const Rinv = F.R.clone().invert();
       for (let v = m.v; v < gb.count; v++) {
         const pf = new THREE.Vector3(...bindMM(v)).sub(new THREE.Vector3(...f.base)).applyQuaternion(F.R).add(F.base);
+        const [n, mask] = contact(pf.toArray());
+        gb.setContact(v, new THREE.Vector3(...n).applyQuaternion(Rinv).toArray(), mask);
         // bent onto its layer of the folded-wing shell
         // (LOD1/2: the visible layers a little higher over their coarser body, whose facets stand up to about half
         // a millimetre off the outline — invisible from the distances they are shown at; the hidden ones as at
@@ -360,11 +362,6 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
         const nb = new THREE.Vector3();
         const cw = conformAt(fr, pf, gb.uv[v * 2 + 1], gb.uv[v * 2], sdf, torso, nb);
         if (detail) cw.addScaledVector(nb, (foldLayer(f) >= 0 ? 0.35 * smooth01(0, 0.22, gb.uv[v * 2 + 1]) : 0) * detail);
-        // contact where the vertex lies once bent onto its layer (not at its straight folded place, up to a few mm off
-        // the outline: there the body shader's fluffing masks — which change fast round the lower flank — differed from
-        // the plumage the feather actually lies on, and sleeking / fluffing moved the two apart by up to 0.8 mm)
-        const [n, mask] = contact(pf.clone().add(cw).toArray());
-        gb.setContact(v, new THREE.Vector3(...n).applyQuaternion(Rinv).toArray(), mask);
         const c = cw.applyQuaternion(Rinv).multiplyScalar(0.001);
         gb.conform.splice(v * 3, 3, c.x, c.y, c.z);
         // …and shaded like the surface it lies on (a trace of its own vane's tilt kept), so neighbouring

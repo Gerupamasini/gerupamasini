@@ -70,18 +70,18 @@ export const joints = {
 export const bodySculpt = {
   smooth: 7.5,
   prims: [
-    // (19 → 22 wide: from above the back is a broad rounded dome over which the wings fold, widest at mid-body and
+    // (19 → 21.5 wide: from above the back is a broad rounded dome over which the wings fold, widest at mid-body and
     // tapering smoothly to the tail, not a narrow spindle with the folded wings pressed flat against its sides —
     // validation §Y. The front view is unchanged: the breast and its sides set the width there)
-    { type: 'ellipsoid', name: 'torso', c: [0, 66, -12], r: [22, 19.5, 39.5], rx: 29 },
+    { type: 'ellipsoid', name: 'torso', c: [0, 66, -12], r: [22.5, 19.5, 39.5], rx: 29 },
     { type: 'ellipsoid', name: 'breast', c: [0, 66, 11], r: [19.5, 21.5, 20.5] },
     { type: 'ellipsoid', name: 'belly', c: [0, 47, -11], r: [15.5, 11.5, 21.5] },
     { type: 'ellipsoid', name: 'mantleNape', c: [0, 86.5, 6], r: [15, 7.5, 13.5] },
     { type: 'ellipsoid', name: 'rump', c: [0, 61, -48], r: [9.5, 6.5, 16], rx: 24 },
-    // fuller lower back and rump under the folded tertials (z −30…−55, below the back line, which is unchanged): the
-    // plan outline tapers from the mid-body to the tail in one convex curve instead of narrowing to a 25 mm stem at
-    // z −40 (validation §Y)
-    { type: 'ellipsoid', name: 'backFull', c: [0, 63, -38], r: [17.5, 4.8, 24], rx: 16, k: 3.5 },
+    // fuller lower back / rump sides under the folded wing (z −30…−55, y 57–66, well under the back line, which it
+    // leaves within 0.2 mm): the plan outline tapers from the mid-body to the tail in one convex curve instead of
+    // narrowing to a 25 mm stem at z −45 (validation §Y)
+    { type: 'ellipsoid', name: 'backFull', c: [0, 61.5, -37], r: [16, 4.5, 18], rx: 10, k: 6 },
     { type: 'ellipsoid', name: 'undertail', c: [0, 59.5, -52.5], r: [7, 2, 13], rx: 15 }, // under-tail keel, covered by the LTC
     { type: 'ellipsoid', name: 'head', c: [0, 93.5, 24], r: [12.5, 12.5, 15], k: 5 },
     // lores pulled back so the feathering meets the bill at the photographed feather line (z 39.6: eye → bill
@@ -154,6 +154,10 @@ export const bodySculpt = {
     res: 0.3,
     maxBaseRes: 1.5,
   },
+  // Bed of the folded wing and the scapulars (anatomy/sdf.js bedDepth): the outline 1 mm down under them, so the back
+  // over the plumage lying on it is as round in cross-section as the belly (validation §Y). edge: the wing's lower edge
+  // (z, y), body_shape_spec.md §10.1
+  bed: { depth: 1.0, x: [6, 11], y: [2, 7], z: [-58, -46, 2, 12], edge: [[20, 63], [5, 60], [-10, 57], [-25, 55.5], [-40, 57], [-55, 60]] },
   // the SDF spans x ±21, y 36–105, z −66…41
   bounds: { min: [-24, 32, -70], max: [24, 109, 46] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
