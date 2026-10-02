@@ -7,6 +7,7 @@ import { applyStage } from './stages.mjs';
 import { buildBody, meshStats } from './loft.mjs';
 import { buildRig, bodyWeights, finWeights } from './rig.mjs';
 import { writeGLB } from './write-glb.mjs';
+import { sampleBodyGenome } from './genome.mjs';
 
 // LOD presets (spec 06 §6.8.1): body loft density; fins use the fin module's `detail`. LOD0 is the hero mesh.
 export const LODS = [
@@ -23,10 +24,12 @@ async function optional(name) {
   try { return await import(`./${name}.mjs`); } catch (e) { console.log(`[build] module ${name} unavailable: ${e.message.split('\n')[0]}`); return null; }
 }
 
-export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, 'assets/generated/yamame.glb'), withTextures = true, withLods = true } = {}) {
+export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, 'assets/generated/yamame.glb'), withTextures = true, withLods = true, individual = false } = {}) {
   let params = loadParams();
   if (stage === 'adult') params = applyStage(params, JSON.parse(fs.readFileSync(path.join(ROOT, 'assets/src/stage_adult.json'), 'utf8')), 'adult');
-  const surface = createSurface(params);
+  const bodyGenome = individual ? sampleBodyGenome(seed) : {};
+  if (individual) { console.log('[build] individual', seed, JSON.stringify(bodyGenome)); params = structuredClone(params); params.sl_m = { ...params.sl_m, v: bodyGenome.sl_m }; }
+  const surface = createSurface(params, bodyGenome);
   const body = buildBody(surface, params, LODS[0].loft);
   console.log('[build] body', JSON.stringify(meshStats(body)), 'mouth', JSON.stringify(meshStats(body.mouth)));
 
@@ -35,7 +38,7 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
   if (mods.fins?.buildFins) { try { fins = mods.fins.buildFins({ surface, params, seed }); console.log('[build] fins tris', fins.geometry.indices.length / 3); } catch (e) { console.log('[build] fins failed:', e.message); } }
   if (mods.eyes?.buildEyes) { try { eyes = mods.eyes.buildEyes({ surface, params, seed }); console.log('[build] eyes ok'); } catch (e) { console.log('[build] eyes failed:', e.message); } }
   if (withTextures && mods.textures?.generateBodyTextures) {
-    try { const t = mods.textures.generateBodyTextures({ surface, params, seed }); textures.body = t; console.log('[build] textures ok'); } catch (e) { console.log('[build] textures failed:', e.message); }
+    try { const genome = individual && mods.textures.sampleGenome ? mods.textures.sampleGenome(seed) : {}; const t = mods.textures.generateBodyTextures({ surface, params, seed, genome }); textures.body = t; console.log('[build] textures ok'); } catch (e) { console.log('[build] textures failed:', e.message); }
   }
   if (fins?.textures) textures.fins = fins.textures;
   if (eyes?.textures) textures.eyes = eyes.textures;
@@ -70,5 +73,5 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await build({ stage: arg('stage', 'adult'), seed: Number(arg('seed', 1)), out: arg('out', path.join(ROOT, 'assets/generated/yamame.glb')) });
+  await build({ stage: arg('stage', 'adult'), seed: Number(arg('seed', 1)), individual: process.argv.includes('--individual'), out: arg('out', path.join(ROOT, 'assets/generated/yamame.glb')) });
 }

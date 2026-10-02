@@ -43,7 +43,7 @@ export async function writeGLB({ file, body, fins, eyes, rig, textures, params, 
   if (T.orm) { mats.body.setOcclusionTexture(T.orm).setOcclusionStrength(1).setMetallicRoughnessTexture(T.orm); }
   else { mats.body.setBaseColorFactor([0.62, 0.58, 0.42, 1]).setRoughnessFactor(0.4).setMetallicFactor(0.3); }
   const bc = params.render?.body || {};
-  mats.body.setExtension('KHR_materials_clearcoat', clearcoatExt.createClearcoat().setClearcoatFactor(bc.clearcoat ?? 0.35).setClearcoatRoughnessFactor(bc.clearcoat_roughness ?? 0.12));
+  mats.body.setExtension('KHR_materials_clearcoat', clearcoatExt.createClearcoat().setClearcoatFactor(bc.clearcoat ?? 0.2).setClearcoatRoughnessFactor(bc.clearcoat_roughness ?? 0.12));
   mats.body.setExtension('KHR_materials_iridescence', iridExt.createIridescence().setIridescenceFactor(bc.iridescence ?? 0.10).setIridescenceIOR(1.33));
   mats.body.setExtension('KHR_materials_ior', iorExt.createIOR().setIOR(1.4));
 

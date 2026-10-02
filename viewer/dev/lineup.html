@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8"><title>yamame lineup</title>
+<style>html,body{margin:0;background:#cfd6da}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+// Side-view line-up of several generated individuals (?files=ind_11,ind_12,... in assets/generated/), absolute scale, 2 columns.
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const q = new URLSearchParams(location.search), W = innerWidth, H = innerHeight;
+const names = (q.get('files') || 'yamame').split(','), cols = parseInt(q.get('cols') || '2'), rows = Math.ceil(names.length / cols);
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, H); r.setScissorTest(true); r.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xc8d0d4);
+scene.environment = new THREE.PMREMGenerator(r).fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.9;
+const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(0.2, 0.8, 1); scene.add(dl);
+const half = parseFloat(q.get('half') || '0.075'), tw = Math.floor(W / cols), th = Math.floor(H / rows);
+const gl = await Promise.all(names.map((n) => new GLTFLoader().loadAsync(`/assets/generated/${n}.glb`)));
+for (let i = 0; i < names.length; i++) {
+  const g = gl[i]; scene.add(g.scene); g.scene.updateMatrixWorld(true);
+  const cx = (i % cols) * tw, cy = H - (Math.floor(i / cols) + 1) * th; r.setViewport(cx, cy, tw, th); r.setScissor(cx, cy, tw, th);
+  const cam = new THREE.OrthographicCamera(-half * tw / th, half * tw / th, half, -half, 0.001, 5); cam.position.set(0, 0, 1); cam.lookAt(0, 0, 0);
+  r.render(scene, cam); scene.remove(g.scene);
+}
+window.__ready = true;
+</script>

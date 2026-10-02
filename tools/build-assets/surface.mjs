@@ -51,7 +51,9 @@ export function createSurface(params, overrides = {}) {
     const sc = Math.min(Math.max(s, 0), 1);
     const top = dDorsal(sc) * depthScale, bot = dVentral(sc) * depthScale;
     const c = (top + bot) / 2, h = (top - bot) / 2;
-    const w = h * wd(sc) * widthScale;
+    // caudal peduncle is laterally compressed into the fin base: width falls to w_end x normal over the last ~7 % of SL (so the open end is a thin vertical edge that the caudal fin root covers) [E]
+    const tt = params.section.tail_taper || { s0: 0.93, w_end: 0.12 }; const tp = Math.min(1, Math.max(0, (sc - tt.s0) / (1 - tt.s0)));
+    const w = h * wd(sc) * widthScale * (1 - (1 - tt.w_end) * tp * tp * (3 - 2 * tp));
     return { c, h, w };
   }
 

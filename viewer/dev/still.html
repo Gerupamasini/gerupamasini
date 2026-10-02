@@ -13,6 +13,8 @@ scene.environment = new THREE.PMREMGenerator(r).fromScene(new RoomEnvironment(),
 const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(0.2, 0.8, 1); scene.add(dl);
 const gltf = await new GLTFLoader().loadAsync(q.get('file') || '/assets/generated/yamame.glb'); scene.add(gltf.scene);
 if (q.get('jaw')) gltf.scene.traverse((o) => { if (o.isBone && o.name === 'jaw_lower') o.rotation.z = -parseFloat(q.get('jaw')) * Math.PI / 180; });
+const dbg = q.get('tex');   // albedo | normal | orm | white: debug views of the body textures
+if (dbg) gltf.scene.traverse((o) => { if (o.isMesh && o.material && o.material.name === 'M_Body') { const m = o.material; const map = dbg === 'albedo' ? m.map : dbg === 'normal' ? m.normalMap : dbg === 'orm' ? m.metalnessMap : null; o.material = dbg === 'white' ? new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5, normalMap: m.normalMap }) : new THREE.MeshBasicMaterial({ map }); } });
 gltf.scene.updateMatrixWorld(true);
 const half = parseFloat(q.get('half') || '0.0.12'.slice(0, 4)), cx = parseFloat(q.get('cx') || '0'), cy = parseFloat(q.get('cy') || '0');
 const cam = new THREE.OrthographicCamera(-half * W / H, half * W / H, half, -half, 0.001, 5);
