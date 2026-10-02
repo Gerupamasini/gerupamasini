@@ -89,3 +89,10 @@
 ## 次
 - 水面の起伏（頂点変位）と水中視点、浮遊物
 - 写真、痕跡、ショップ
+
+## 7 回目（タモの演出、エイの昼寝跡、質感）
+- タモ: `Capture` を aim → swing → lift → check → done の段階にし、`NetView`（D 型の枠・柄・結び目の網袋・しずく）をカメラ空間の姿勢（枠の位置と手の位置）で動かす。網は最後に別レイヤーで描く（`App.renderNetOverlay`）。網に入った生物は lod1 モデル（またはドライバの形）を袋の底に寝かせて暴れさせる。
+- 道具の計画: `docs/planning/08_tools_roadmap.md`。`ToolSchema.type` に dig / fishing / optic を追加。
+- 昼寝跡: `FeedingPits` を解析形（`pitShape`）にし、`Terrain.heightAt` は基準グリッド + 穴の形。穴ごとに 60×60 の細かいパッチを粗いチャンクの上に描く（粗いほうは深く押し込んで隠す、polygonOffset）。潮だまりの水位は縁の足元より下に抑える。spill テクスチャは Nearest。殻は InstancedMesh 2 つ。
+- 質感: MahazeViewer の粒（Worley）・糞粒・微細凹凸（導関数ノイズ）を移植、巣穴（穴＋襟／砂山）を追加。風紋の分岐は位相転位のペア（長い層 2 m セル、短い層 1 m セル）。ハッシュは整数版（座標が大きいので）。
+- 直したバグ: ゲーム時刻を過去に動かすと Habitat が更新されなくなっていた（差の絶対値で判定）。

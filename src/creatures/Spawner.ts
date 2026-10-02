@@ -123,22 +123,23 @@ export class Spawner {
         }
       }
     }
-    // stingray feeding pits: now and then one holds a small goby or shrimp (deterministic per pit and day)
+    // stingray pits: about one in three holds something small left behind by the tide (deterministic per pit and day)
     for (const pit of h.pits) {
       const d = Math.hypot(pit.x - px, pit.z - pz);
       if (d > SPAWN_RADIUS || d < minDist) continue;
       if (live.some((i) => i.pitId === pit.id)) continue;
       const roll = hashInts(pit.id * 31 + 7, env.day, 977) % 1000;
-      if (roll >= 180) continue;
+      if (roll >= 330) continue;
       if (h.sample(pit.x, pit.z, env.gameMs).depth < 0.025) continue;
-      const goby = roll % 5 < 3;
-      const sp = this.speciesList.find((q) => q.id === (goby ? 'acanthogobius_flavimanus' : 'exopalaemon_orientis'));
+      const pick = roll % 7;
+      const spId = pick < 3 ? 'acanthogobius_flavimanus' : pick < 5 ? 'exopalaemon_orientis' : 'gymnogobius_macrognathos';
+      const sp = this.speciesList.find((q) => q.id === spId);
       if (!sp) continue;
       if ((counts.get(sp.id) ?? 0) >= 60) continue;
       const seed = hashInts(pit.id, env.day, 991);
       const id = `${sp.id}#${hashInts(seed, 7).toString(16).padStart(8, '0')}`;
       if (this.removed.has(id)) continue;
-      out.push({ species: sp, ruleIndex: 0, cell: h.coarseIndex(pit.x, pit.z), seed, x: pit.x, z: pit.z, pitId: pit.id, lengthRange: goby ? [26, 40] : [26, 42] });
+      out.push({ species: sp, ruleIndex: 0, cell: h.coarseIndex(pit.x, pit.z), seed, x: pit.x, z: pit.z, pitId: pit.id, lengthRange: pick < 3 ? [26, 40] : pick < 5 ? [26, 42] : [24, 36] });
       counts.set(sp.id, (counts.get(sp.id) ?? 0) + 1);
     }
     return out;

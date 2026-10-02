@@ -6,7 +6,8 @@ import { WaterPass } from '../world/Water';
 import { createWaves } from '../world/Waves';
 import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
-import { carveFeedingPits } from '../world/FeedingPits';
+import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
+import { createPitDebris } from '../world/PitDebris';
 import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
 import { jstParts, seasonOf, type Season } from '../core/Time';
@@ -45,12 +46,16 @@ export class World {
     this.scene.add(terrain.mesh);
   }
 
-  static async create(map: MapDef, station: TideStationDef | TideModel, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void): Promise<World> {
+  static async create(map: MapDef, station: TideStationDef | TideModel, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void, pitSeed = 20261001): Promise<World> {
     onProgress?.('地形');
     const grid = await loadTerrainGrid(map);
-    // アカエイの食痕: dug into the flat before the terrain is built, so pools, tags and shading all see them
-    const pits = carveFeedingPits(grid, map.substrate.palette, hashInts(map.id.length * 7919, 20261001));
-    const terrain = new Terrain(grid, map.substrate.palette);
+    // アカエイの昼寝跡: dug into the flat before the terrain is built, so pools, tags and shading all see them;
+    // the seed is the day's, so the rays have been somewhere else by the next visit
+    const pits = placeFeedingPits(grid, map.substrate.palette, hashInts(map.id.length * 7919, pitSeed));
+    grid.baseHeights = grid.heights.slice();
+    grid.pitMask = carveCoarse(grid, pits);
+    const terrain = new Terrain(grid, map.substrate.palette, pits);
+    terrain.setDetail(preset.surfaceDetail > 0);
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain, 5, pits);
     terrain.setSpill(habitat.poolLevels);
@@ -61,6 +66,7 @@ export class World {
     const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
+    for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
     (w as { sky: SkyDome }).sky = sky;
     return w;
@@ -74,7 +80,8 @@ export class World {
     if (this.timeAcc > 1 || this.tideRate === 0) this.tideRate = this.tideOverride !== null ? 0 : this.tide.rate(gameMs);
     this.water.setLevel(this.tideLevel);
     this.terrain.updateLod(anchor.x, anchor.z);
-    if (gameMs - this.lastHabitatMs > 2000 || this.lastHabitatMs === 0) {
+    // (absolute: a ticket or the debug clock can move game time backwards, and the pools must follow at once)
+    if (Math.abs(gameMs - this.lastHabitatMs) > 2000 || this.lastHabitatMs === 0) {
       this.lastHabitatMs = gameMs;
       this.habitat.update(gameMs, this.tideLevel);
     }

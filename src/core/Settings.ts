@@ -26,6 +26,8 @@ export const DEFAULT_SETTINGS: SettingsData = {
 export interface QualityPreset {
   maxDpr: number;
   shadows: boolean;
+  /** 0: no close-up surface detail (grains, burrows, micro relief); 1: full */
+  surfaceDetail: number;
   shadowMapSize: number;
   post: boolean;
   creatureScale: number;
@@ -34,9 +36,9 @@ export interface QualityPreset {
 }
 
 export const QUALITY_PRESETS: Record<Quality, QualityPreset> = {
-  low: { maxDpr: 1, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, waterNormals: true },
-  mid: { maxDpr: 1.5, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, waterNormals: true },
-  high: { maxDpr: 2, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, waterNormals: true },
+  low: { maxDpr: 1, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, waterNormals: true, surfaceDetail: 0 },
+  mid: { maxDpr: 1.5, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, waterNormals: true, surfaceDetail: 1 },
+  high: { maxDpr: 2, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, waterNormals: true, surfaceDetail: 1 },
 };
 
 const KEY = 'settings';

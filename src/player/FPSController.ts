@@ -32,6 +32,8 @@ export class FPSController {
   private bob = 0;
   private fov = FOV_NORMAL;
   zooming = false;
+  /** short pitch nudge (radians) that decays: the swing of the net */
+  private kick = 0;
   private readonly tmpForward = new Vector3();
   private readonly tmpRight = new Vector3();
 
@@ -57,6 +59,17 @@ export class FPSController {
     this.yaw = yaw;
     if (pitch !== undefined) this.pitch = pitch;
     this.syncCamera(0);
+  }
+
+  /** Nudge the view down (or up when negative); it settles back over a few frames. */
+  applyKick(radians: number): void {
+    this.kick += radians;
+  }
+
+  /** Hold still (capture, dialogs) but keep the camera settled on the body. */
+  idle(dt: number): void {
+    this.speedNow = 0;
+    this.syncCamera(dt);
   }
 
   /** Reset the field of view (e.g. when leaving the field). */
@@ -144,6 +157,7 @@ export class FPSController {
     this.camera.position.set(this.position.x, this.position.y + this.eye + bobY, this.position.z);
     this.camera.rotation.set(0, 0, 0, 'YXZ');
     this.camera.rotation.y = this.yaw;
-    this.camera.rotation.x = this.pitch;
+    if (dt > 0) this.kick = MathUtils.damp(this.kick, 0, 7, dt);
+    this.camera.rotation.x = this.pitch + this.kick;
   }
 }
