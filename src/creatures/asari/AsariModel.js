@@ -30,7 +30,7 @@ export const ANATOMY = {
   hingePoint: new Vector3(0.05, 0.338, 0),
   hingeAxis: new Vector3(-0.3, -0.035, 0).normalize(),
   /** full gape (both valves) at gape = 1, radians (≈ 2 mm at the ventral margin of a 35 mm clam) */
-  maxGape: 0.12,
+  maxGape: 0.17,
   footRoot: new Vector3(0.24, -0.17, 0),
   footDir: Math.atan2(-0.83, 0.55),
   footLength: 0.62,
@@ -73,6 +73,12 @@ function valveZ(s, m, checks = false) {
   return z;
 }
 
+/** prosogyrate beaks: the oldest shell curls forward and slightly up over the hinge */
+function beak(s) {
+  const k = (1 - s) ** 3;
+  return [0.032 * k, 0.009 * k];
+}
+
 /** One valve (left, z ≥ 0). Groups: 0 outer surface, 1 inner surface + rim. */
 function buildValve(lod) {
   const { nu, ns, checks, inner } = LODS[lod];
@@ -88,7 +94,8 @@ function buildValve(lod) {
     const s = sAt(i);
     for (let j = 0; j < cols; j++) {
       const m = M[j % nu];
-      pos.push(G.x + s * (m.x - G.x), G.y + s * (m.y - G.y), zOut(s, j));
+      const [bx, by] = beak(s);
+      pos.push(G.x + s * (m.x - G.x) + bx, G.y + s * (m.y - G.y) + by, zOut(s, j));
       uv.push(j / nu, s);
     }
   }
@@ -107,9 +114,11 @@ function buildValve(lod) {
       for (let j = 0; j < cols; j++) {
         const m = M[j % nu];
         const A = Math.max(0.05, Math.hypot(m.x - G.x, m.y - G.y));
-        const k = Math.max(0.6, 1 - 0.022 / A);
+        // shell thickness at the margin: ~0.022 L, never more than a few percent of the ray (lunule, hinge)
+        const k = 1 - Math.min(0.022 / A, 0.05);
         const t = 0.03 * (1 - 0.5 * s);
-        pos.push(G.x + s * k * (m.x - G.x), G.y + s * k * (m.y - G.y), Math.max(0, Math.min(zOut(s, j) * 0.8, zOut(s * k, j) - t)));
+        const [bx, by] = beak(s);
+        pos.push(G.x + s * k * (m.x - G.x) + bx, G.y + s * k * (m.y - G.y) + by, Math.max(0, Math.min(zOut(s, j) * 0.8, zOut(s * k, j) - t)));
         uv.push(j / nu, s);
       }
     }
@@ -146,7 +155,8 @@ function buildMantle(nu) {
   const M = outline(nu);
   const G = GROWTH_ORIGIN;
   const pos = [], uv = [], idx = [];
-  const j0 = Math.round(nu * 0.16), j1 = Math.round(nu * 0.8);
+  // ventral and posterior margin only (where the gape is): the anterior end stays closed over the lunule
+  const j0 = Math.round(nu * 0.27), j1 = Math.round(nu * 0.73);
   const across = 4;
   for (let j = j0; j <= j1; j++) {
     const m = M[j];
@@ -201,14 +211,22 @@ function buildFoot(nt, nr) {
   return g;
 }
 
-/** open tube along +x over [0, 1] with a thickened lip; the inhalant one carries a ring of short tentacles */
-function buildSiphon(radius, tentacles, nt, nr) {
+/**
+ * Open tube along +x over [0, 1] with a thickened lip. In アサリ the two siphons are fused for most of their
+ * length and part only near the tips, so the wall facing the partner (local ±y) swells into it, giving one
+ * figure-of-eight sheath with a shallow groove. The inhalant tip carries a fringe of tentacles, the exhalant
+ * a ring of small papillae.
+ */
+function buildSiphon(radius, tentacles, papillae, partner, nt, nr) {
   const pos = [], uv = [], tent = [], idx = [];
   for (let i = 0; i <= nt; i++) {
     const t = i / nt;
-    const r = radius * (1 - 0.14 * t) * (1 + 0.12 * Math.exp(-(((t - 0.97) / 0.035) ** 2)));
+    const r0 = radius * (1 - 0.14 * t) * (1 + 0.06 * Math.exp(-(((t - 0.97) / 0.035) ** 2)));
+    const fuse = 1 - smooth(0.62, 0.9, t);
     for (let j = 0; j <= nr; j++) {
       const a = (j / nr) * Math.PI * 2;
+      const toward = Math.max(0, Math.cos(a) * partner);
+      const r = r0 * (1 + 0.42 * fuse * toward * toward);
       pos.push(t, Math.cos(a) * r, Math.sin(a) * r);
       uv.push(t, j / nr);
       tent.push(0);
@@ -226,14 +244,19 @@ function buildSiphon(radius, tentacles, nt, nr) {
     pos.push(0.75, Math.cos(a) * r, Math.sin(a) * r); uv.push(0.2, 0); tent.push(0);
   }
   for (let j = 0; j < nr; j++) idx.push(plug, plug + 1 + j, plug + 2 + j);
-  for (let k = 0; k < tentacles; k++) {
-    const a = ((k + 0.5) / tentacles) * Math.PI * 2;
-    const len = radius * (0.45 + 0.25 * ((k * 7) % 3) / 2);
-    const out = new Vector3(0.55, Math.cos(a) * 0.83, Math.sin(a) * 0.83);
+  const fringe = tentacles + papillae;
+  for (let k = 0; k < fringe; k++) {
+    const pap = k >= tentacles;
+    const n = pap ? papillae : tentacles, kk = pap ? k - tentacles : k;
+    const a = ((kk + 0.5 + (pap ? 0 : 0.2 * Math.sin(kk * 2.3))) / n) * Math.PI * 2;
+    // tentacles alternate long and short (branched look); papillae are short knobs
+    const len = pap ? radius * (0.16 + 0.06 * (kk % 2)) : radius * (0.38 + 0.32 * (((kk * 7) % 5) / 4)) * (kk % 2 ? 0.7 : 1);
+    // tentacles fan outward over the sand, papillae stand up round the rim
+    const out = pap ? new Vector3(0.55, Math.cos(a) * 0.83, Math.sin(a) * 0.83) : new Vector3(0.22, Math.cos(a) * 0.97, Math.sin(a) * 0.97);
     const side = new Vector3(0, -Math.sin(a), Math.cos(a));
     const base = new Vector3(1, Math.cos(a) * radius * 0.92, Math.sin(a) * radius * 0.92);
     const b0 = pos.length / 3;
-    const segs = 3, w = radius * 0.13;
+    const segs = 3, w = radius * (pap ? 0.1 : 0.12);
     for (let i = 0; i <= segs; i++) {
       const f = i / segs, r = w * (1 - f * 0.85);
       for (let s = 0; s < 4; s++) {
@@ -280,8 +303,9 @@ export function sharedGeometry() {
     body,
     ligament: lig,
     foot: [buildFoot(20, 14), buildFoot(8, 8)],
-    siphonIn: [buildSiphon(ANATOMY.siphonIn.radius, 14, 14, 16), buildSiphon(ANATOMY.siphonIn.radius, 0, 5, 8)],
-    siphonOut: [buildSiphon(ANATOMY.siphonOut.radius, 0, 14, 14), buildSiphon(ANATOMY.siphonOut.radius, 0, 5, 8)],
+    // local +y of a siphon points ventrally, so the exhalant's partner is +y and the inhalant's −y
+    siphonIn: [buildSiphon(ANATOMY.siphonIn.radius, 22, 0, -1, 18, 20), buildSiphon(ANATOMY.siphonIn.radius, 0, 0, -1, 5, 8)],
+    siphonOut: [buildSiphon(ANATOMY.siphonOut.radius, 0, 12, 1, 18, 18), buildSiphon(ANATOMY.siphonOut.radius, 0, 0, 1, 5, 8)],
     decal: new PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
   };
   return shared;
@@ -409,14 +433,16 @@ export class AsariModel {
    * Pose the rig. gape 0..1; foot = {ext, swell, bend}; siphons = {len (shell lengths), open, swayY, swayZ}.
    */
   pose(gape, foot, sIn, sOut, mantleBreath) {
-    const a = gape * ANATOMY.maxGape * 0.5;
+    // the siphons leave through the posterior gape: while they are out the valves cannot be shut on them
+    const clearance = smooth(0.03, 0.14, Math.max(sIn.len, sOut.len));
+    const a = Math.max(gape, clearance) * ANATOMY.maxGape * 0.5;
     this.left.pivot.quaternion.copy(qa.setFromAxisAngle(ANATOMY.hingeAxis, a));
     this.right.pivot.quaternion.copy(qa.setFromAxisAngle(ANATOMY.hingeAxis, -a));
     this.mats.foot.userData.uniforms.uDeform.value.set(foot.ext, foot.swell, foot.bend, ANATOMY.footLength);
     this.footMesh.visible = foot.ext > 0.02 && this.lod < 2;
     this.mats.sIn.userData.uniforms.uDeform.value.set(sIn.len, sIn.open, sIn.swayY, sIn.swayZ);
     this.mats.sOut.userData.uniforms.uDeform.value.set(sOut.len, sOut.open, sOut.swayY, sOut.swayZ);
-    const showSiphons = this.lod < 2 && (sIn.len > 0.06 || gape > 0.2);
+    const showSiphons = this.lod < 2 && (sIn.len > 0.06 || Math.max(gape, clearance) > 0.2);
     this.siphonIn.mesh.visible = showSiphons;
     this.siphonOut.mesh.visible = showSiphons;
     this.mats.soft.userData.uniforms.uDeform.value.x = mantleBreath;

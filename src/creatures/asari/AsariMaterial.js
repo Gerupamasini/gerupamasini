@@ -328,6 +328,8 @@ ${SAND_CLIP}
   // the hinge plate: worn and chalky near the umbo
   float hinge = 1.0 - smoothstep(0.06, 0.16, s);
   col = mix(col, vec3(0.80, 0.77, 0.72), hinge*0.6);
+  // the broken edge of the shell: outer prismatic layer and periostracum, not porcelain
+  col = mix(col, vec3(0.42, 0.35, 0.29) * (0.8 + 0.4*asN(vAsUv*vec2(300.0, 2.0))), smoothstep(0.975, 0.998, s));
   diffuseColor.rgb = asLin(col);
   float asScar = scar; float asHinge = hinge;
 ${SAND_TINT}`)
@@ -383,6 +385,8 @@ vec3 asDeform(vec3 p){
     float ap = mix(0.5, 1.0, uDeform.y);
     float rim = smoothstep(0.75, 1.0, t);
     p.yz *= mix(1.0, ap, rim);
+    // squeezed where it passes between the valve margins (~0.12 shell lengths from its root)
+    if (aTent == 0.0) p.yz *= 1.0 - 0.42*exp(-pow((t*L - 0.12) / 0.05, 2.0));
     if (aTent > 0.0) {
       // tentacles fold over the opening when closed
       float r = length(p.yz);
@@ -405,7 +409,7 @@ export function makeSoftMaterial(kind) {
   const mat = new MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.42, metalness: 0,
     sheen: 0.6, sheenRoughness: 0.5, sheenColor: new Color(0.95, 0.8, 0.75),
-    clearcoat: 0.7, clearcoatRoughness: 0.2,
+    clearcoat: kind === 2 ? 0.4 : 0.7, clearcoatRoughness: kind === 2 ? 0.3 : 0.2,
     side: kind === 1 ? FrontSide : DoubleSide,
   });
   mat.onBeforeCompile = (sh) => {
@@ -426,7 +430,7 @@ ${SAND_CLIP}
     float spk = smoothstep(0.58, 0.72, asFbm(vec2(t*16.0, sin(vAsUv.y*6.2831853)*3.0 + cos(vAsUv.y*6.2831853)*3.0))) * smoothstep(0.3, 0.8, t);
     col = mix(col, vec3(0.16, 0.12, 0.10), spk*0.85);
     col = mix(col, vec3(0.78, 0.66, 0.50), vAsTent);
-    if (!gl_FrontFacing) col *= 0.35;   // inside of the tube
+    if (!gl_FrontFacing) col *= mix(0.25, 0.6, smoothstep(0.85, 1.0, t));   // inside of the tube, dark below the rim
   } else if (uKind > 0.5) {
     col = vec3(0.93, 0.88, 0.80) * (0.92 + 0.1*asN(vAsUv*vec2(14.0, 6.0)));
     col = mix(col, vec3(0.95, 0.78, 0.68), smoothstep(0.6, 1.0, t) * 0.35);
@@ -437,10 +441,26 @@ ${SAND_CLIP}
   }
   diffuseColor.rgb = asLin(col);
 ${SAND_TINT}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  if (uKind > 1.5 && vAsTent == 0.0) {
+    // annular wrinkles of the siphon wall: crowded when contracted, smoothing out as it stretches
+    float stretch = smoothstep(0.08, 0.45, uDeform.x);
+    float wr = vAsUv.x * uDeform.x * mix(320.0, 150.0, stretch) + asN(vAsUv*vec2(20.0, 9.0))*2.0;
+    float hw = sin(wr) * mix(1.0, 0.35, stretch) + (asN(vAsUv*vec2(60.0, 40.0)) - 0.5)*0.5;
+    normal = asBump(-vViewPosition, normal, hw * 0.0018 * vAsScale, faceDirection);
+  } else if (uKind > 0.5 && uKind < 1.5) {
+    float hw = sin(vAsUv.x*90.0 + asN(vAsUv*vec2(12.0, 7.0))*3.0) * (1.0 - uDeform.x*0.6) + (asN(vAsUv*vec2(70.0, 30.0)) - 0.5);
+    normal = asBump(-vViewPosition, normal, hw * 0.0012 * vAsScale, faceDirection);
+  }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-  totalEmissiveRadiance += diffuseColor.rgb * 0.035;   // a hint of light scattered through thin tissue`);
+  {
+    // thin living tissue: light scattered through it shows most at grazing angles (cheap translucency)
+    float ndv = abs(dot(normal, normalize(vViewPosition)));
+    float thin = uKind > 1.5 ? 0.22 : uKind > 0.5 ? 0.12 : 0.06;
+    totalEmissiveRadiance += diffuseColor.rgb * (0.03 + thin * pow(1.0 - ndv, 2.0));
+  }`);
   };
-  mat.customProgramCacheKey = () => 'asari-soft-v1-' + kind;
+  mat.customProgramCacheKey = () => 'asari-soft-v2-' + kind;
   mat.userData.uniforms = uniforms;
   return mat;
 }

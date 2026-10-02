@@ -134,7 +134,8 @@ export class AsariBehavior {
         break;
       }
       case STATE.SIPHON_EXTEND: {
-        gapeT = 0.45; extT = 1; openT = 0.55; extRate = 0.9;
+        // the valves part first; only then do the siphons push out through the posterior gape
+        gapeT = 0.65; extT = this.gape > 0.45 ? 1 : 0; openT = this.gape > 0.45 ? 0.55 : 0; extRate = 0.9;
         if (threat || !env.submerged) { this.go(STATE.SIPHON_RETRACT, 0.6); break; }
         if (this.timer <= 0 && this.siphonExt > 0.9) this.go(STATE.FILTER_FEEDING, 20 + this.rand() * 50);
         break;
@@ -155,7 +156,8 @@ export class AsariBehavior {
       }
       case STATE.SIPHON_RETRACT: {
         // withdrawal is fast: the siphon retractors snap the tubes back under the sand
-        gapeT = 0.35; extT = 0; openT = 0; extRate = 9;
+        // the valves stay parted until the siphons are in
+        gapeT = Math.max(0.12, this.siphonExt); extT = 0; openT = 0; extRate = 9;
         if (this.timer <= 0 && this.siphonExt < 0.08) {
           if (threat || !env.submerged) this.go(STATE.CLOSE_SHELL, 0.4);
           else this.go(STATE.BURIED, 3 + this.rand() * 6);

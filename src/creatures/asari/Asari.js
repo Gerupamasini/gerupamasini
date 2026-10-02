@@ -156,7 +156,7 @@ export class AsariDriver {
       b.gapeOut,
       b.foot,
       { len: 0.03 + ext * reach, open, swayY: b.swayY, swayZ: b.swayZ },
-      { len: 0.03 + ext * (reachOut + 0.015), open: open * 0.8 + 0.1, swayY: b.swayY * 0.8, swayZ: b.swayZ * 1.1 },
+      { len: 0.03 + ext * (reachOut + 0.015), open: open * 0.8 + 0.1, swayY: b.swayY, swayZ: b.swayZ * 1.08 },   // fused: they move together
       b.breath * b.gapeOut,
     );
     // fully under the sand: skip the shell draws altogether
