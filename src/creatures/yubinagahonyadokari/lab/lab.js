@@ -2,7 +2,7 @@
 // tidal-flat substrate for close inspection, screenshots and tuning. Not part of the game loop.
 //
 // URL parameters:
-//   mode=single|pose|walk|retract|shells|group|change   scenario
+//   mode=single|pose|walk|retract|shells|group|change|guard   scenario
 //   view=oblique|front|side|top|back|macro|dactyl|follow camera preset
 //   lod=0|1|2   seed=n   shell=<species key>   water=0|1   debug=1   t=<seconds to pre-simulate>   shot=1
 import * as THREE from 'three';
@@ -13,10 +13,21 @@ import { SHELL_SPECIES, SHELL_SPECIES_KEYS, Shell, minFitSize } from '../Pagurus
 
 const params = new URLSearchParams(location.search);
 const P = (k, d) => params.get(k) ?? d;
-const mode = P('mode', 'single');
+/** scenario settings; the panel changes them and rebuilds the scene in place (no reload) */
+const cfg = {
+  mode: P('mode', 'single'),
+  shell: P('shell', 'batillaria_attramentaria'),
+  water: P('water', '1') === '1',
+  lod: P('lod', null),
+  view: P('view', null),
+  t: P('t', null),
+  // the camera is ~10 cm from the crab: as an observer it would keep it hidden; off unless asked for
+  cameraThreat: P('camThreat', '0') === '1',
+};
+const FAR_OBSERVER = new THREE.Vector3(5, 1.5, 5);
 if (P('shot', '0') === '1') document.body.classList.add('shot');
 
-// ── renderer / scene ─────────────────────────────────────────────────────────────────────────
+// ── renderer / camera (built once) ───────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -25,25 +36,12 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
-document.body.appendChild(renderer.domElement);
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x9fb4b8);
+(document.getElementById('stage') ?? document.body).appendChild(renderer.domElement);
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.35;
+const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.0008, 20);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-const sun = new THREE.DirectionalLight(0xfff4e0, 2.2);
-sun.position.set(0.35, 0.9, 0.25);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -0.12; sun.shadow.camera.right = 0.12; sun.shadow.camera.top = 0.12; sun.shadow.camera.bottom = -0.12;
-sun.shadow.camera.near = 0.1; sun.shadow.camera.far = 3;
-sun.shadow.bias = -0.0002;
-sun.shadow.normalBias = 0.0004;
-scene.add(sun, sun.target);
-scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x5a4b38, 0.35));
 
 // ── substrate: muddy sand with ripples, pebbles and shell grit ────────────────────────────────
 const pebbles = [];
@@ -60,10 +58,9 @@ const groundAt = (x, z) => {
   }
   return h;
 };
-const waterOn = P('water', '1') === '1';
-let waterY = 0.03;
-const waterAt = () => (waterOn ? waterY : -1);
-{
+const waterY = 0.03;
+const waterAt = () => (cfg.water ? waterY : -1);
+const ground = (() => {
   const N = 260, S = 0.4;
   const g = new THREE.PlaneGeometry(S, S, N, N).rotateX(-Math.PI / 2);
   const pos = g.attributes.position;
@@ -81,23 +78,37 @@ const waterAt = () => (waterOn ? waterY : -1);
   }
   g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   g.computeVertexNormals();
-  const ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }));
-  ground.receiveShadow = true;
-  scene.add(ground);
-}
-let water = null;
-if (waterOn) {
-  water = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4).rotateX(-Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: 0x6f9a92, roughness: 0.04, transparent: true, opacity: 0.18, depthWrite: false, clearcoat: 1 }));
-  water.position.y = waterY;
-  water.renderOrder = 5;
-  scene.add(water);
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }));
+  m.receiveShadow = true;
+  return m;
+})();
+const water = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4).rotateX(-Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: 0x6f9a92, roughness: 0.04, transparent: true, opacity: 0.18, depthWrite: false, clearcoat: 1 }));
+water.position.y = waterY;
+water.renderOrder = 5;
+
+/** a fresh scene with light, substrate and (optionally) a shallow pool */
+function makeScene() {
+  const sc = new THREE.Scene();
+  sc.background = new THREE.Color(0x9fb4b8);
+  sc.environment = envTexture;
+  sc.environmentIntensity = 0.35;
+  const sun = new THREE.DirectionalLight(0xfff4e0, 2.2);
+  sun.position.set(0.35, 0.9, 0.25);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -0.12; sun.shadow.camera.right = 0.12; sun.shadow.camera.top = 0.12; sun.shadow.camera.bottom = -0.12;
+  sun.shadow.camera.near = 0.1; sun.shadow.camera.far = 3;
+  sun.shadow.bias = -0.0002;
+  sun.shadow.normalBias = 0.0004;
+  sc.add(sun, sun.target);
+  sc.add(new THREE.HemisphereLight(0xcfe6ff, 0x5a4b38, 0.35));
+  sc.add(ground);
+  if (cfg.water) sc.add(water);
+  return sc;
 }
 
 // ── crabs ────────────────────────────────────────────────────────────────────────────────────
-const world = PagurusWorld.of(scene);
-world.autoSpawn = false;
-const crabs = [];
-const lodSel = Number(P('lod', mode === 'group' ? '1' : '0'));
+let scene = null, world = null, crabs = [], main = null, lodSel = 0;
 function addCrab(opts, pos, heading) {
   const crab = new HermitCrab({ lod: lodSel, ...opts });
   scene.add(crab.root);
@@ -109,34 +120,53 @@ function addCrab(opts, pos, heading) {
   return crab;
 }
 const seed = Number(P('seed', '7'));
-const shellKey = P('shell', 'batillaria_attramentaria');
-const player = new THREE.Vector3(0.6, 1.5, 1.2);
 let playerOverride = null;
 
-if (mode === 'shells') {
-  SHELL_SPECIES_KEYS.forEach((k, i) => {
-    const sp = SHELL_SPECIES[k];
-    addCrab({ seed: seed + i, sex: i % 2 ? 'f' : 'm', shieldLength_mm: 4.6, shell: { species: k, size_mm: Math.min(sp.size_mm[1], minFitSize(k, 4.6) * 1.12), seed: i + 1, fouling: 0.3 } }, new THREE.Vector3((i - 2) * 0.042, 0, 0.0), 0);
-    world.addShell({ species: k, size_mm: sp.typical_mm, seed: 20 + i, fouling: 0.1 }, new THREE.Vector3((i - 2) * 0.042, 0, -0.045), groundAt);
-  });
-} else if (mode === 'group') {
-  for (let i = 0; i < 9; i++) addCrab({ seed: seed + i * 13 }, new THREE.Vector3(((i % 3) - 1) * 0.04, 0, (Math.floor(i / 3) - 1) * 0.04), i * 1.3);
-  world.addFood('carrion', new THREE.Vector3(0.01, 0, 0.02), groundAt);
-  world.addFood('algae', new THREE.Vector3(-0.05, 0, -0.03), groundAt);
-} else if (mode === 'guard') {
-  // breeding season: a larger male and a smaller female (mate guarding)
-  addCrab({ seed: seed + 1, sex: 'm', shieldLength_mm: 5.2, shell: { species: 'reishia_clavigera', size_mm: 20, seed: 4, fouling: 0.3 } }, new THREE.Vector3(0, 0, 0), 0);
-  addCrab({ seed: seed + 2, sex: 'f', shieldLength_mm: 3.8, shell: { species: 'umbonium_moniliferum', size_mm: 12.5, seed: 8, fouling: 0.2 } }, new THREE.Vector3(0.012, 0, 0.04), Math.PI);
-} else if (mode === 'change') {
-  addCrab({ seed, sex: 'm', shieldLength_mm: 4.8, shell: { species: 'reticunassa_festiva', size_mm: 10, damage: 0.75, seed: 3 } }, new THREE.Vector3(0, 0, 0), 0);
-  world.addShell({ species: 'umbonium_moniliferum', size_mm: 14.5, seed: 9, fouling: 0.1 }, new THREE.Vector3(0.004, 0, 0.032), groundAt);
-} else {
-  addCrab({ seed, sex: P('sex', 'm'), shieldLength_mm: Number(P('sl', '4.8')), shell: { species: shellKey, size_mm: Number(P('size', Math.min(SHELL_SPECIES[shellKey].size_mm[1], minFitSize(shellKey, Number(P('sl', '4.8'))) * 1.12).toFixed(1))), seed: 5, fouling: Number(P('fouling', '0.35')), ...(P('silt', '') !== '' ? { silt: Number(P('silt', '0')) } : {}) } }, new THREE.Vector3(0, 0, 0), Number(P('heading', '0')));
+/** (re)build the scenario in `cfg`: new scene, world and crabs; the old ones are disposed */
+function buildScene() {
+  for (const c of crabs) c.dispose();
+  if (world) for (const e of world.shells) e.shell.dispose?.();
+  scene = makeScene();
+  world = PagurusWorld.of(scene);
+  world.autoSpawn = false;
+  crabs = [];
+  playerOverride = null;
+  const mode = cfg.mode, shellKey = cfg.shell;
+  lodSel = Number(cfg.lod ?? (mode === 'group' ? '1' : '0'));
+  if (mode === 'shells') {
+    SHELL_SPECIES_KEYS.forEach((k, i) => {
+      const sp = SHELL_SPECIES[k];
+      addCrab({ seed: seed + i, sex: i % 2 ? 'f' : 'm', shieldLength_mm: 4.6, shell: { species: k, size_mm: Math.min(sp.size_mm[1], minFitSize(k, 4.6) * 1.12), seed: i + 1, fouling: 0.3 } }, new THREE.Vector3((i - 2) * 0.042, 0, 0.0), 0);
+      world.addShell({ species: k, size_mm: sp.typical_mm, seed: 20 + i, fouling: 0.1 }, new THREE.Vector3((i - 2) * 0.042, 0, -0.045), groundAt);
+    });
+  } else if (mode === 'group') {
+    for (let i = 0; i < 9; i++) addCrab({ seed: seed + i * 13 }, new THREE.Vector3(((i % 3) - 1) * 0.04, 0, (Math.floor(i / 3) - 1) * 0.04), i * 1.3);
+    world.addFood('carrion', new THREE.Vector3(0.01, 0, 0.02), groundAt);
+    world.addFood('algae', new THREE.Vector3(-0.05, 0, -0.03), groundAt);
+  } else if (mode === 'guard') {
+    // breeding season: a larger male and a smaller female (mate guarding)
+    addCrab({ seed: seed + 1, sex: 'm', shieldLength_mm: 5.2, shell: { species: 'reishia_clavigera', size_mm: 20, seed: 4, fouling: 0.3 } }, new THREE.Vector3(0, 0, 0), 0);
+    addCrab({ seed: seed + 2, sex: 'f', shieldLength_mm: 3.8, shell: { species: 'umbonium_moniliferum', size_mm: 12.5, seed: 8, fouling: 0.2 } }, new THREE.Vector3(0.012, 0, 0.04), Math.PI);
+  } else if (mode === 'change') {
+    addCrab({ seed, sex: 'm', shieldLength_mm: 4.8, shell: { species: 'reticunassa_festiva', size_mm: 10, damage: 0.75, seed: 3 } }, new THREE.Vector3(0, 0, 0), 0);
+    world.addShell({ species: 'umbonium_moniliferum', size_mm: 14.5, seed: 9, fouling: 0.1 }, new THREE.Vector3(0.004, 0, 0.032), groundAt);
+  } else {
+    addCrab({ seed, sex: P('sex', 'm'), shieldLength_mm: Number(P('sl', '4.8')), shell: { species: shellKey, size_mm: Number(P('size', Math.min(SHELL_SPECIES[shellKey].size_mm[1], minFitSize(shellKey, Number(P('sl', '4.8'))) * 1.12).toFixed(1))), seed: 5, fouling: Number(P('fouling', '0.35')), ...(P('silt', '') !== '' ? { silt: Number(P('silt', '0')) } : {}) } }, new THREE.Vector3(0, 0, 0), Number(P('heading', '0')));
+  }
+  main = crabs[0];
+  frame = 0;
+  simTime = 0;
+  const preSim = Number(cfg.t ?? (mode === 'pose' ? '1.5' : '0'));
+  for (let t = 0; t < preSim; t += 1 / 60) step(1 / 60);
+  applyView(cfg.view ?? (mode === 'shells' || mode === 'group' ? 'wide' : 'oblique'));
+  syncUI();
+  if (window.__lab) { window.__lab.crabs = crabs; window.__lab.world = world; }
 }
 
-const main = crabs[0];
+
 function scriptAI(crab, t) {
   const B = crab.behavior;
+  const mode = cfg.mode;
   if (mode === 'pose') {
     if (B.state !== STATE.IDLE) B.enter(STATE.IDLE, crab.lastEnv ?? { groundAt });
     B.stateDur = 1e9;
@@ -161,44 +191,55 @@ const VIEWS = {
   face: [0.006, 0.01, 0.034], profile: [0.05, 0.008, 0.004],
 };
 const RELATIVE_VIEWS = new Set(['face', 'profile']);
-let viewName = P('view', mode === 'shells' ? 'wide' : 'oblique');
+let viewName = 'oblique';
 function applyView(name) {
   viewName = name;
   const v = VIEWS[name] ?? VIEWS.oblique;
-  const tgt = mode === 'shells' || mode === 'group' ? new THREE.Vector3(0, 0.006, -0.01) : main.root.position.clone().add(new THREE.Vector3(0, 0.006, 0.004));
+  const tgt = cfg.mode === 'shells' || cfg.mode === 'group' ? new THREE.Vector3(0, 0.006, -0.01) : main.root.position.clone().add(new THREE.Vector3(0, 0.006, 0.004));
   controls.target.copy(tgt);
   const off = new THREE.Vector3(...v);
   if (RELATIVE_VIEWS.has(name)) off.applyAxisAngle(new THREE.Vector3(0, 1, 0), main.loco.heading);
   camera.position.copy(tgt).add(off);
-  if (name === 'macro' || name === 'dactyl' || RELATIVE_VIEWS.has(name)) camera.fov = 28;
+  camera.fov = name === 'macro' || name === 'dactyl' || RELATIVE_VIEWS.has(name) ? 28 : 35;
   camera.updateProjectionMatrix();
   controls.update();
 }
 
 // ── UI ───────────────────────────────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
+const on = (id, ev, fn) => { const el = $(id); if (el) el[ev] = fn; };
 for (const k of SHELL_SPECIES_KEYS) {
   const o = document.createElement('option');
   o.value = k; o.textContent = `${SHELL_SPECIES[k].ja} ${SHELL_SPECIES[k].sci}`;
-  if (k === shellKey) o.selected = true;
-  $('shell').appendChild(o);
+  $('shell')?.appendChild(o);
 }
-$('shell').onchange = () => { params.set('shell', $('shell').value); location.search = params.toString(); };
-$('lod').value = String(lodSel);
-$('lod').onchange = () => crabs.forEach((c) => c.setLOD(Number($('lod').value)));
-$('debug').checked = P('debug', '0') === '1';
-$('debug').onchange = () => crabs.forEach((c) => (c.debugEnabled = $('debug').checked));
-$('water').checked = waterOn;
-$('water').onchange = () => { params.set('water', $('water').checked ? '1' : '0'); location.search = params.toString(); };
+/** reflect `cfg` and the current scene in the panel */
+function syncUI() {
+  if ($('shell')) $('shell').value = cfg.shell;
+  if ($('mode')) $('mode').value = cfg.mode;
+  if ($('view')) $('view').value = viewName;
+  if ($('lod')) $('lod').value = String(lodSel);
+  if ($('water')) $('water').checked = cfg.water;
+  if ($('camThreat')) $('camThreat').checked = cfg.cameraThreat;
+}
+const rebuild = (patch) => { Object.assign(cfg, { view: null, t: null, lod: null }, patch); buildScene(); };
+on('shell', 'onchange', () => rebuild({ shell: $('shell').value }));
+on('mode', 'onchange', () => rebuild({ mode: $('mode').value, t: $('mode').value === 'guard' ? '2' : null }));
+on('view', 'onchange', () => applyView($('view').value));
+on('lod', 'onchange', () => crabs.forEach((c) => c.setLOD(Number($('lod').value))));
+if ($('debug')) $('debug').checked = P('debug', '0') === '1';
+on('debug', 'onchange', () => crabs.forEach((c) => (c.debugEnabled = $('debug').checked)));
+on('water', 'onchange', () => rebuild({ water: $('water').checked, mode: cfg.mode }));
+on('camThreat', 'onchange', () => (cfg.cameraThreat = $('camThreat').checked));
 let timeScale = 1;
-$('speed').oninput = () => (timeScale = Number($('speed').value));
-$('scare').onclick = () => crabs.forEach((c) => c.behavior.suggest({ kind: 'flee', urgency: 1, seconds: 3, from: camera.position.clone() }));
-$('food').onclick = () => world.addFood(Math.random() < 0.6 ? 'carrion' : 'algae', new THREE.Vector3(main.loco.position.x + (Math.random() - 0.5) * 0.06, 0, main.loco.position.z + 0.03), groundAt);
-$('emptyShell').onclick = () => {
+on('speed', 'oninput', () => (timeScale = Number($('speed').value)));
+on('scare', 'onclick', () => crabs.forEach((c) => c.behavior.suggest({ kind: 'flee', urgency: 1, seconds: 3, from: camera.position.clone() })));
+on('food', 'onclick', () => world.addFood(Math.random() < 0.6 ? 'carrion' : 'algae', new THREE.Vector3(main.loco.position.x + (Math.random() - 0.5) * 0.06, 0, main.loco.position.z + 0.03), groundAt));
+on('emptyShell', 'onclick', () => {
   const k = SHELL_SPECIES_KEYS[Math.floor(Math.random() * SHELL_SPECIES_KEYS.length)];
   world.addShell({ species: k, size_mm: SHELL_SPECIES[k].typical_mm * 1.2, seed: Math.floor(Math.random() * 1000) }, new THREE.Vector3(main.loco.position.x + 0.03, 0, main.loco.position.z + 0.02), groundAt);
-};
-$('more').onclick = () => addCrab({ seed: Math.floor(Math.random() * 1e6) }, new THREE.Vector3((Math.random() - 0.5) * 0.1, 0, (Math.random() - 0.5) * 0.1), Math.random() * 6);
+});
+on('more', 'onclick', () => addCrab({ seed: Math.floor(Math.random() * 1e6) }, new THREE.Vector3((Math.random() - 0.5) * 0.1, 0, (Math.random() - 0.5) * 0.1), Math.random() * 6));
 
 // ── loop ─────────────────────────────────────────────────────────────────────────────────────
 let frame = 0, simTime = 0;
@@ -208,19 +249,17 @@ function step(dt) {
   for (const c of crabs) {
     if (c === main) scriptAI(c, simTime);
     c.update(dt, {
-      groundAt, waterAt, player: playerOverride ?? camera.position, frame, season: 'summer', month: mode === 'guard' ? 1 : Number(P('month', '7')), sunElevation: 50,
-      closeup: c.lod === 0, tank: mode === 'pose',
+      groundAt, waterAt, player: playerOverride ?? (cfg.cameraThreat ? camera.position : FAR_OBSERVER), frame, season: 'summer', month: cfg.mode === 'guard' ? 1 : Number(P('month', '7')), sunElevation: 50,
+      closeup: c.lod === 0, tank: cfg.mode === 'pose',
     });
     if (P('hideAbd', '0') === '1') { for (const b of c.rig.abdomen) b.scale.setScalar(0.001); c.rig.root.updateMatrixWorld(true); }
   }
 }
-const preSim = Number(P('t', mode === 'pose' ? '1.5' : '0'));
-for (let t = 0; t < preSim; t += 1 / 60) step(1 / 60);
-applyView(viewName);
-let last = performance.now();
+buildScene();
+let last = performance.now(), lastHud = -1e9;
 const hud = $('hud');
 window.__lab = {
-  ready: false, frames: 0, crabs, world, step: (s) => { for (let t = 0; t < s; t += 1 / 60) step(1 / 60); }, view: applyView,
+  ready: false, frames: 0, crabs, world, step: (s) => { for (let t = 0; t < s; t += 1 / 60) step(1 / 60); }, view: applyView, rebuild,
   stats: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, programs: renderer.info.programs?.length }),
 };
 function loop(now) {
@@ -232,9 +271,10 @@ function loop(now) {
   renderer.render(scene, camera);
   window.__lab.frames++;
   if (window.__lab.frames > 2) window.__lab.ready = true;
-  if (frame % 10 === 0) {
+  if (now - lastHud > 200) {
+    lastHud = now;
     const s = main.behavior.snapshot();
-    hud.textContent = `${s.state} ${s.sub}  LOD${main.lod}  shell ${main.shell?.props.ja} ${main.shell?.size_mm.toFixed(1)}mm ${main.shell?.props.mass_g.toFixed(2)}g\n` +
+    if (hud) hud.textContent = `${s.state} ${s.sub}  LOD${main.lod}  shell ${main.shell?.props.ja} ${main.shell?.size_mm.toFixed(1)}mm ${main.shell?.props.mass_g.toFixed(2)}g\n` +
       `fear ${s.fear.toFixed(2)} hunger ${s.hunger.toFixed(2)} shellSat ${s.shellSatisfaction.toFixed(2)} curiosity ${s.curiosity.toFixed(2)} energy ${s.energy.toFixed(2)} activity ${s.activity.toFixed(2)}\n` +
       `draw calls ${renderer.info.render.calls}  tris ${renderer.info.render.triangles}`;
   }
