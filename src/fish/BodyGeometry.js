@@ -49,7 +49,9 @@ export const HEAD_RELIEF = {
   // (both kept faint: from the front, deeper ones read as the wings of an
   // upper-lip "moustache")
   cleftFold: 0.0006, // short fold continuing the cleft behind the corner
-  rictusDimple: 0.0007,
+  // (shallow: in front view a dimple at each end of the mouth reads as the
+  // dimples of a smile)
+  rictusDimple: 0.0004,
   jawCrease: 0.0004,
   nareDepth: 0.0042, // pit of the paired nostrils
   nareRadius: 0.0055,
@@ -87,8 +89,11 @@ export const HEAD_RELIEF = {
   // the head swells softly around the orbit (a broad fleshy socket), so the
   // eye sits in the head surface instead of on it: from the front it bulges
   // only a little beyond the outline (p09_1, p29_0)
-  orbitSwell: 0.1,
+  // (low: a broad swell carried the outline out with the eye, so the eye
+  // stood barely clear of it from the front)
+  orbitSwell: 0.05,
   orbitSwellW: 0.42, // half-width of the swell outside the visible edge
+  orbitSwellVentral: 1.2, // ...and this much stronger under the eye
 };
 
 // ---------------------------------------------------------------------------
@@ -127,6 +132,10 @@ function mouthRing(theta, state, out) {
   out.y = head.mouthY + (sa >= 0 ? head.mouthOpenTop * sa : head.mouthOpenBot * sa);
   // a round-topped oval: narrowest at the arch of the upper lip
   out.z = head.mouthOpenRW * sb * (1 - 0.18 * upper);
+  // the corners stay as low as in the closed mouth, about 40 % of the way
+  // down the opening (p09_1): a breathing gape parts the lips under the arch
+  // of the upper lip instead of lifting the corners into a grin
+  out.y -= head.mouthClosedDroop * b2;
   // the open lips stand slightly proud of the face as a short tube; the
   // corners and the dropped lower jaw sit a little further back
   out.x = head.mouthOpenFwd - 0.003 * b2 - 0.0035 * lower;
@@ -307,9 +316,14 @@ export function eyeRest(side = 1) {
   // from the front only the outer bulge of each eye shows on the sides of
   // the head, the pupil a dark sliver at most (p09_1, p29_0); ~20 deg more
   // forward made the two pupils look at the viewer, a cartoon face)
-  const axis = new THREE.Vector3(0.19 + 0.25 * N.x, 0.11 + 0.25 * N.y, Math.sign(N.z) * 1).normalize();
+  // (the head below the eye now tapers toward the chin, so the normal there
+  // tilts down; the constant keeps the axis ~7 deg dorsal as before)
+  const axis = new THREE.Vector3(0.19 + 0.25 * N.x, 0.13 + 0.25 * N.y, Math.sign(N.z) * 1).normalize();
   const R = head.eyeR;
-  const center = P.clone().addScaledVector(axis, (head.eyeProtrusion - 1) * R);
+  // (the whole orbit stands a little proud of the head surface, eyeLift:
+  // the skin rises to meet the edge of the cap, so the low cap keeps its
+  // shape in side view while the eye clears the head outline from the front)
+  const center = P.clone().addScaledVector(axis, (head.eyeProtrusion - 1) * R + head.eyeLift);
   // nominal radius of the exposed cap (where the ball leaves the skin)
   const visR = R * Math.sqrt(1 - (1 - head.eyeProtrusion) ** 2);
   return { center, axis, radius: R, visR, surface: P };
@@ -367,11 +381,13 @@ function detailDisplacement(u, x, y, z, asymSeed, masks) {
   const yC = head.mouthY - head.mouthClosedDroop;
   // (both start just behind the corner: on the folded lips themselves they
   // would buckle the thin cleft)
+  // (~27 deg: seen from the front and above, a shallower fold running back
+  // around the snout turned up at its outer end like the line of a smile)
   if (s > sC && s < sC + 0.032 && lateral > 0.3) {
-    const ry = yC - (s - sC) * 0.36;
+    const ry = yC - (s - sC) * 0.5;
     d -= HEAD_RELIEF.cleftFold * gauss(y - ry, 0.0026) * smoothstep(sC + 0.001, sC + 0.006, s) * smoothstep(sC + 0.032, sC + 0.01, s);
   }
-  d -= HEAD_RELIEF.rictusDimple * gauss(Math.hypot(s - sC - 0.0065, y - yC + 0.0022), 0.003) * smoothstep(0.3, 0.6, lateral) * smoothstep(sC + 0.001, sC + 0.004, s);
+  d -= HEAD_RELIEF.rictusDimple * gauss(Math.hypot(s - sC - 0.0065, y - yC + 0.0033), 0.003) * smoothstep(0.3, 0.6, lateral) * smoothstep(sC + 0.001, sC + 0.004, s);
 
   // lower jaw: the posterior outline of the dentary below the mouth corner,
   // only a faint softening (a strong crease reads as a smile wrinkle)
@@ -686,18 +702,21 @@ export function buildBodyGeometry({ nBody = 200, nCavity = 12, nTheta = 128, asy
       // crossing the ball where the head surface happens to lie near it)
       const inside = smoothstep(rv - 0.06 * R, rv - 0.16 * R, rho);
       hn = sminK(hn, hb - HEAD_RELIEF.orbitCover * R + (1 - inside) * R, 0.06 * R);
+      const upE = (q.y - h * E.axis.y) / Math.max(rho, 1e-6); // radial dir . dorsal
+      const dorsalE = smoothstep(0.1, 0.8, upE);
       {
         const tr = (rho - rv - HEAD_RELIEF.orbitRimOff * R) / (HEAD_RELIEF.orbitRimW * R);
         hn += HEAD_RELIEF.orbitRim * R * Math.exp(-Math.pow(tr * tr, 1.5));
         // (smooth all the way to the mesh: the swell rises from the rim
         // outward, faded to nothing by the edge of the region, 1.6 R)
+        // (fuller below the eye, where the cheek falls away from the raised
+        // orbit: a steep lower lid caught the light as a pale crescent)
         const sw = smoothstep(rv, rv + 0.25 * R, rho) * smoothstep(1.6 * R, 1.25 * R, rho);
-        hn += HEAD_RELIEF.orbitSwell * R * gauss(rho - rv - 0.25 * R, HEAD_RELIEF.orbitSwellW * R) * sw;
+        const swV = 1 + HEAD_RELIEF.orbitSwellVentral * smoothstep(0.1, 0.8, -upE);
+        hn += HEAD_RELIEF.orbitSwell * swV * R * gauss(rho - rv - 0.25 * R, HEAD_RELIEF.orbitSwellW * R) * sw;
       }
       // the crease is deeper below / in front of the eye and fades out over
       // the top, where the ring merges softly into the forehead
-      const upE = (q.y - h * E.axis.y) / Math.max(rho, 1e-6); // radial dir . dorsal
-      const dorsalE = smoothstep(0.1, 0.8, upE);
       hn -= HEAD_RELIEF.orbitCrease * R * (1 - 0.7 * dorsalE) * gauss(rho - rv - HEAD_RELIEF.orbitCreaseOff * R, HEAD_RELIEF.orbitCreaseW * R);
       hn -= HEAD_RELIEF.orbitSink * R * smoothstep(HEAD_RELIEF.orbitSinkR[0] * rv, HEAD_RELIEF.orbitSinkR[1] * rv, rho);
       const push = h - hn; // negative => outward along the axis
