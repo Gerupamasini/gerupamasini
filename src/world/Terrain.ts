@@ -5,6 +5,7 @@ import {
 import { makeSpillTexture } from './Water';
 import { WAVES_GLSL, type WaveSet } from './Waves';
 import type { MapDef, Substrate } from '../data/schemas';
+import { pitMaskAt, pitShape, type FeedingPit } from './FeedingPits';
 import { DATA_BASE } from '../data/loader';
 
 export interface TerrainGrid {
@@ -12,6 +13,10 @@ export interface TerrainGrid {
   size: number;
   heights: Float32Array;
   substrate: Uint8Array;
+  /** 0..1 per vertex: dug sediment (stingray pits) — darker, unrippled */
+  pitMask?: Float32Array;
+  /** the heights before the pits were pressed in (sampling adds the pits' exact shape) */
+  baseHeights?: Float32Array;
 }
 
 async function loadImageData(url: string): Promise<ImageData> {
@@ -68,6 +73,15 @@ export class Terrain {
   readonly cell: number;
   readonly heights: Float32Array;
   readonly substrate: Uint8Array;
+  readonly pitMask: Float32Array | null;
+  /** undisturbed grid used by heightAt; the pits are added analytically */
+  readonly base: Float32Array;
+  readonly pits: FeedingPit[];
+  /** pits by 8 m cell (a pit is listed in every cell its reach touches) */
+  private readonly pitCells = new Map<number, FeedingPit[]>();
+  private readonly pitCell = 8;
+  private readonly patches: { mesh: Mesh; x: number; z: number }[] = [];
+  readonly patchMaterial: MeshStandardMaterial;
   readonly palette: Substrate[];
   /** the flat as chunks (frustum-culled, three levels of detail by distance) */
   readonly mesh = new Group();
@@ -86,13 +100,26 @@ export class Terrain {
   private readonly uCausticGain: IUniform<number> = { value: 2.6 };
   private waves: WaveSet | null = null;
 
-  constructor(grid: TerrainGrid, palette: Substrate[]) {
+  constructor(grid: TerrainGrid, palette: Substrate[], pits: FeedingPit[] = []) {
     this.n = grid.n;
     this.size = grid.size;
     this.half = grid.size / 2;
     this.cell = grid.size / (grid.n - 1);
     this.heights = grid.heights;
     this.substrate = grid.substrate;
+    this.pitMask = grid.pitMask ?? null;
+    this.base = grid.baseHeights ?? grid.heights;
+    this.pits = pits;
+    for (const pit of pits) {
+      const c = this.pitCell, i0 = Math.floor((pit.x - pit.reach + this.half) / c), i1 = Math.floor((pit.x + pit.reach + this.half) / c);
+      const j0 = Math.floor((pit.z - pit.reach + this.half) / c), j1 = Math.floor((pit.z + pit.reach + this.half) / c);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const key = j * 4096 + i;
+        let list = this.pitCells.get(key);
+        if (!list) { list = []; this.pitCells.set(key, list); }
+        list.push(pit);
+      }
+    }
     this.palette = palette;
 
     this.heightTexture = new DataTexture(this.heights, this.n, this.n, RedFormat, FloatType);
@@ -104,9 +131,92 @@ export class Terrain {
     this.spillTexture = makeSpillTexture(new Float32Array(this.n * this.n).fill(-1e3), this.n);
     this.uSpill = { value: this.spillTexture };
 
-    this.material = this.buildMaterial();
+    this.material = this.buildMaterial(false);
+    this.patchMaterial = this.buildMaterial(true);
     this.mesh.name = 'terrain';
     this.buildChunks();
+    this.buildPitPatches();
+  }
+
+  /** Pits whose shape reaches a point. */
+  private pitsNear(x: number, z: number): FeedingPit[] | undefined {
+    const c = this.pitCell;
+    return this.pitCells.get(Math.floor((z + this.half) / c) * 4096 + Math.floor((x + this.half) / c));
+  }
+
+  /** The pits' exact relief at a point (0 away from them). */
+  pitReliefAt(x: number, z: number): number {
+    const list = this.pitsNear(x, z);
+    if (!list) return 0;
+    let dh = 0;
+    for (const pit of list) dh += pitShape(pit, x, z);
+    return dh;
+  }
+
+  pitMaskAt(x: number, z: number): number {
+    const list = this.pitsNear(x, z);
+    if (!list) return 0;
+    let m = 0;
+    for (const pit of list) m = Math.max(m, pitMaskAt(pit, x, z));
+    return m;
+  }
+
+  /**
+   * One fine mesh per pit (4 cm steps) carrying its true shape, laid over the coarse mesh, which was pressed a
+   * little deeper so it never shows through. The border follows the coarse triangles exactly, and the patch is
+   * drawn with a polygon offset so it wins where the two coincide.
+   */
+  private buildPitPatches(): void {
+    const M = 60;
+    for (const pit of this.pits) {
+      const R = pit.reach, step = (2 * R) / M, count = (M + 1) * (M + 1);
+      const pos = new Float32Array(count * 3), nor = new Float32Array(count * 3), uv = new Float32Array(count * 2);
+      const col = new Float32Array(count * 3), sub = new Float32Array(count), pm = new Float32Array(count);
+      for (let j = 0; j <= M; j++) for (let i = 0; i <= M; i++) {
+        const x = pit.x - R + i * step, z = pit.z - R + j * step, v = j * (M + 1) + i;
+        const edge = Math.max(Math.abs(x - pit.x), Math.abs(z - pit.z)) / R;
+        const blend = Math.min(1, Math.max(0, (edge - 0.86) / 0.14));
+        const y = blend >= 1 ? this.coarseMeshHeight(x, z) : blend <= 0 ? this.heightAt(x, z) : this.heightAt(x, z) * (1 - blend) + this.coarseMeshHeight(x, z) * blend;
+        pos[v * 3] = x; pos[v * 3 + 1] = y; pos[v * 3 + 2] = z;
+        const e = 0.03;
+        const hx = this.heightAt(x + e, z) - this.heightAt(x - e, z), hz = this.heightAt(x, z + e) - this.heightAt(x, z - e);
+        const len = Math.hypot(hx, 2 * e, hz);
+        nor[v * 3] = -hx / len; nor[v * 3 + 1] = (2 * e) / len; nor[v * 3 + 2] = -hz / len;
+        uv[v * 2] = (x + this.half) / this.size; uv[v * 2 + 1] = (z + this.half) / this.size;
+        const si = this.substrateIndexAt(x, z), c = SUBSTRATE_COLORS[this.palette[si] ?? 'mud'];
+        col[v * 3] = c[0]; col[v * 3 + 1] = c[1]; col[v * 3 + 2] = c[2];
+        sub[v] = si;
+        pm[v] = this.pitMaskAt(x, z);
+      }
+      const idx: number[] = [];
+      for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
+        const a = j * (M + 1) + i, b = a + M + 1;
+        idx.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+      const geo = new BufferGeometry();
+      geo.setAttribute('position', new BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new BufferAttribute(nor, 3));
+      geo.setAttribute('uv', new BufferAttribute(uv, 2));
+      geo.setAttribute('color', new BufferAttribute(col, 3));
+      geo.setAttribute('substrate', new BufferAttribute(sub, 1));
+      geo.setAttribute('pit', new BufferAttribute(pm, 1));
+      geo.setIndex(idx);
+      geo.computeBoundingSphere();
+      const mesh = new Mesh(geo, this.patchMaterial);
+      mesh.receiveShadow = true;
+      mesh.name = `pit-${pit.id}`;
+      mesh.visible = false;
+      this.mesh.add(mesh);
+      this.patches.push({ mesh, x: pit.x, z: pit.z });
+    }
+  }
+
+  /** Height of the coarse chunk mesh (its triangles, not the bilinear surface) at a point. */
+  private coarseMeshHeight(x: number, z: number): number {
+    const { i, j, fx, fz } = this.gridIndex(x, z);
+    const n = this.n, h = this.heights;
+    const a = h[j * n + i], b = h[(j + 1) * n + i], c = h[j * n + i + 1], d = h[(j + 1) * n + i + 1];
+    return fx + fz <= 1 ? a + (c - a) * fx + (b - a) * fz : d + (b - d) * (1 - fx) + (c - d) * (1 - fz);
   }
 
   /** Pick each chunk's level of detail from its distance to the player. Cheap; call every frame. */
@@ -123,6 +233,8 @@ export class Terrain {
       // and freed again once the chunk is well out of range
       if (d > LOD_DIST[1] + 40) for (const l of [0, 1]) { const g = c.lods[l]; if (g) { g.dispose(); c.lods[l] = null; } }
     }
+    // the pits' fine patches only matter up close; the coarse hollow stands in beyond that
+    for (const p of this.patches) p.mesh.visible = Math.hypot(p.x - px, p.z - pz) < 70;
   }
 
   get chunkStats(): { chunks: number; lod0: number; lod1: number; lod2: number } {
@@ -170,7 +282,7 @@ export class Terrain {
     for (let r = rows - 2; r >= 1; r--) ring.push([0, r]);
     const count = cols * rows + ring.length;
     const pos = new Float32Array(count * 3), nor = new Float32Array(count * 3), uv = new Float32Array(count * 2);
-    const col = new Float32Array(count * 3), sub = new Float32Array(count);
+    const col = new Float32Array(count * 3), sub = new Float32Array(count), pit = new Float32Array(count);
     const put = (v: number, i: number, j: number, drop: number) => {
       const k = j * n + i;
       pos[v * 3] = -this.half + i * this.cell; pos[v * 3 + 1] = this.heights[k] - drop; pos[v * 3 + 2] = -this.half + j * this.cell;
@@ -179,6 +291,7 @@ export class Terrain {
       const c = SUBSTRATE_COLORS[this.palette[this.substrate[k]] ?? 'mud'];
       col[v * 3] = c[0]; col[v * 3 + 1] = c[1]; col[v * 3 + 2] = c[2];
       sub[v] = this.substrate[k];
+      pit[v] = this.pitMask ? this.pitMask[k] : 0;
     };
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) put(r * cols + c, is[c], js[r], 0);
     ring.forEach(([c, r], q) => put(cols * rows + q, is[c], js[r], SKIRT));
@@ -198,13 +311,14 @@ export class Terrain {
     geo.setAttribute('uv', new BufferAttribute(uv, 2));
     geo.setAttribute('color', new BufferAttribute(col, 3));
     geo.setAttribute('substrate', new BufferAttribute(sub, 1));
+    geo.setAttribute('pit', new BufferAttribute(pit, 1));
     geo.setIndex(idx);
     geo.computeBoundingSphere();
     return geo;
   }
 
-  private buildMaterial(): MeshStandardMaterial {
-    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: DoubleSide });
+  private buildMaterial(patch: boolean): MeshStandardMaterial {
+    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: DoubleSide, polygonOffset: patch, polygonOffsetFactor: patch ? -1 : 0, polygonOffsetUnits: patch ? -2 : 0 });
     const uWater = this.uWater, uWet = this.uWet, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
@@ -217,12 +331,13 @@ export class Terrain {
       shader.uniforms.uSpillTex = this.uSpill;
       shader.uniforms.uHalf = { value: this.half };
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nattribute float substrate;\nvarying float vSubstrate;')
-        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvSubstrate = substrate;');
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nattribute float substrate;\nattribute float pit;\nvarying float vSubstrate;\nvarying float vPit;')
+        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvSubstrate = substrate;\nvPit = pit;');
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
 varying vec3 vWorldPos;
 varying float vSubstrate;
+varying float vPit;
 uniform float uWaterLevel;
 uniform float uWetLevel;
 uniform float uTime;
@@ -257,9 +372,16 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   float patchN = vnoise(vWorldPos.xz * 0.35) - 0.5;
   float isSand = 1.0 - smoothstep(0.5, 1.5, vSubstrate);
   // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
-  float ripple = cos(ripplePhase(vWorldPos.xz)) * rippleAmp(vWorldPos.xz) * (0.3 + 0.7 * isSand);
+  float ripple = cos(ripplePhase(vWorldPos.xz)) * rippleAmp(vWorldPos.xz) * (0.3 + 0.7 * isSand) * (1.0 - vPit);
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 - ripple * 0.05;
   diffuseColor.rgb *= detail;
+  // a stingray's pit: the ray blew the oxidised skin off, so the bowl shows the darker, wetter sand beneath,
+  // strewn with the chalky grit of the clams it crushed
+  if (vPit > 0.001) {
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.25, 0.235, 0.21), vPit * 0.4);
+    float grit = step(0.93, hash21(floor(vWorldPos.xz * 260.0) + 3.1)) * smoothstep(0.3, 0.9, vPit);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.86, 0.82), grit * 0.75);
+  }
   // diatom film: a patchy golden-brown bloom on undisturbed mud and muddy sand; reduced (black) mud in the
   // lowest, longest-wet hollows (after MahazeViewer's sediment)
   float muddy = smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate));
@@ -294,7 +416,7 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
 {
   // ripple marks: one continuous warped field (see rippleWarp); sand carries them, mud only faintly
   float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
-  float strength = (0.12 + 0.88 * sandy) * rippleAmp(vWorldPos.xz) * 0.26;
+  float strength = (0.12 + 0.88 * sandy) * rippleAmp(vWorldPos.xz) * 0.26 * (1.0 - vPit);
   vec2 rp = vWorldPos.xz;
   float ph = ripplePhase(rp);
   // the crest line's local direction comes from the warp gradient, so the shading follows the bends
@@ -349,12 +471,12 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     return { i, j, fx: Math.max(0, Math.min(1, gx - i)), fz: Math.max(0, Math.min(1, gz - j)) };
   }
 
-  /** T.P. height at a world position (bilinear). */
+  /** T.P. height at a world position: the undisturbed grid (bilinear) plus the pits' exact shape. */
   heightAt(x: number, z: number): number {
     const { i, j, fx, fz } = this.gridIndex(x, z);
-    const n = this.n, h = this.heights;
+    const n = this.n, h = this.base;
     const a = h[j * n + i], b = h[j * n + i + 1], c = h[(j + 1) * n + i], d = h[(j + 1) * n + i + 1];
-    return (a * (1 - fx) + b * fx) * (1 - fz) + (c * (1 - fx) + d * fx) * fz;
+    return (a * (1 - fx) + b * fx) * (1 - fz) + (c * (1 - fx) + d * fx) * fz + this.pitReliefAt(x, z);
   }
 
   normalAt(x: number, z: number, out = new Vector3()): Vector3 {

@@ -204,17 +204,26 @@ export class Habitat {
         if (best > -1e2) out[k] = best;
       }
     }
-    // feeding pits: too small for the pool search, but each holds water up to the lowest point of its rim, which
-    // the flood already computed as the spill height of its centre cell
+    // stingray pits: too small for the pool search. Each holds water up to just under the foot of its rim (the
+    // flood's spill height of its centre cell, capped a little below the undisturbed ground, so the coarse cells
+    // around the bowl never read as a sheet of water lying on the flat)
     const cell = this.terrain.cell, half = this.terrain.half;
     for (const pit of this.pits) {
       const ci = Math.round((pit.x + half) / cell), cj = Math.round((pit.z + half) / cell);
       if (ci < 0 || cj < 0 || ci >= n || cj >= n) continue;
-      const level = this.spill[cj * n + ci];
-      const span = Math.ceil((pit.r * 1.1) / cell);
+      const span = Math.ceil((pit.r * 1.15 + cell * 0.5) / cell);
+      // never above the lowest undisturbed ground among the cells it is written to, so a slope cannot leave a
+      // film of water lying on the flat beside the bowl
+      let level = Math.min(this.spill[cj * n + ci], pit.rim - 0.035);
       for (let j = cj - span; j <= cj + span; j++) for (let i = ci - span; i <= ci + span; i++) {
         if (i < 0 || j < 0 || i >= n || j >= n) continue;
-        if (Math.hypot(-half + i * cell - pit.x, -half + j * cell - pit.z) > pit.r * 1.1) continue;
+        const dd = Math.hypot(-half + i * cell - pit.x, -half + j * cell - pit.z);
+        if (dd > pit.r * 1.15 + cell * 0.5 || dd < pit.r * 0.8) continue;
+        level = Math.min(level, this.terrain.base[j * n + i] - 0.008);
+      }
+      for (let j = cj - span; j <= cj + span; j++) for (let i = ci - span; i <= ci + span; i++) {
+        if (i < 0 || j < 0 || i >= n || j >= n) continue;
+        if (Math.hypot(-half + i * cell - pit.x, -half + j * cell - pit.z) > pit.r * 1.15 + cell * 0.5) continue;
         const k = j * n + i;
         out[k] = Math.max(out[k], level);
       }

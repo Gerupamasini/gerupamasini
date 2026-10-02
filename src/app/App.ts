@@ -231,7 +231,8 @@ export class App {
       this.setMode('boot');
       ui.loading.value = { frac: 0.35, label: t('loading.map') };
       const map = this.data.maps.get(this.data.manifest.defaultMap)!;
-      this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; });
+      const dayNo = Math.floor((this.clock.nowGame() + 9 * 3600000) / 86400000);
+      this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; }, dayNo);
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
       this.player.eyeHeight = this.settings.eyeHeight;
       ui.loading.value = { frac: 0.7, label: t('loading.models') };

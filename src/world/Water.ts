@@ -1,5 +1,5 @@
 import {
-  ClampToEdgeWrapping, Color, CubeTexture, DataTexture, FloatType, LinearFilter, LinearMipmapLinearFilter, Matrix4, RedFormat,
+  ClampToEdgeWrapping, Color, CubeTexture, DataTexture, FloatType, LinearFilter, NearestFilter, LinearMipmapLinearFilter, Matrix4, RedFormat,
   RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer, type WebGLRenderTarget,
 } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
@@ -280,8 +280,10 @@ export class WaterPass {
 /** Spill-level texture (R, metres) for the terrain and water shaders. */
 export function makeSpillTexture(spill: Float32Array, n: number): DataTexture {
   const t = new DataTexture(spill, n, n, RedFormat, FloatType);
-  t.minFilter = LinearFilter;
-  t.magFilter = LinearFilter;
+  // a pool's level is one number; between a pool cell and a dry one the blend would dive to the dry sentinel, so
+  // the level is read unfiltered and the shoreline comes from the ground alone (exact under the pits' fine patches)
+  t.minFilter = NearestFilter;
+  t.magFilter = NearestFilter;
   t.wrapS = t.wrapT = ClampToEdgeWrapping;
   t.needsUpdate = true;
   return t;
