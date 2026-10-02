@@ -133,7 +133,11 @@ function anchor(p) {
   cand.sort((a, b) => a[1] - b[1]);
   const c = cand[0][0];
   const cp = new THREE.Vector3().fromArray(ref, c * 3);
-  const patch = near(cp, ANCHOR_R * 0.001).map((e) => e[0]);
+  // (at least 12 vertices, not all in a line: on the coarse LOD2 body a 3.5 mm patch held one or two, whose fit
+  // rotation is undetermined — the whole bird turning then read as drift)
+  let rr = ANCHOR_R * 0.001;
+  let patch = near(cp, rr).map((e) => e[0]);
+  while (patch.length < 12 && rr < 0.015) patch = near(cp, (rr *= 1.25)).map((e) => e[0]);
   // (the side of the body under the point: a patch straddling the midline of the back is fine, it is rigid there)
   // outward normal of the outline there (rest = the stand's posed frame: relaxed is the bind)
   const n = new THREE.Vector3(bNrm.getX(c), bNrm.getY(c), bNrm.getZ(c)).normalize();
