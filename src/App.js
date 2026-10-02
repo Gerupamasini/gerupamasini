@@ -577,6 +577,9 @@ export class App {
     const vh = H / rows;
     this.camera.aspect = vw / vh;
     this.camera.updateProjectionMatrix();
+    // (one plain frame first: the shadow maps exist before the first surface
+    // mirror is drawn, which reuses them)
+    if (this.world) r.render(this.scene, this.camera);
     r.setScissorTest(true);
     r.autoClear = true;
     // direct rendering (no post-processing): the fins are drawn with the scene
@@ -589,6 +592,8 @@ export class App {
         for (let i = 0; i < nc; i++) this._updateCamera(sdt / nc);
       }
       this.fishSystem.update(this.camera, r);
+      // the surface TIR mirror for this frame (as in the live view)
+      if (this.world) this.world.surface.renderReflection(this.camera);
       const x = (k % cols) * vw;
       const y = H - (Math.floor(k / cols) + 1) * vh;
       r.setViewport(x, y, vw, vh);
