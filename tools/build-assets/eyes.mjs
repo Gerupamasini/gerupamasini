@@ -56,8 +56,9 @@ const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / 
 
 // Eye socket of loft.mjs (displacement(): pocket + raised orbital rim), in units of the eye OUTER RADIUS Ro.
 // The orbit ring and the ball depth are fitted to the skin *including* this pocket. Pass genome.socket = null to fit to the
-// bare surface, or an object with the same keys if loft.mjs changes.      [E: mirrors loft.mjs, 2026-10 version]
-export const SOCKET_LOFT = { pocket_depth: 0.9, pocket_radius: 1.30, rim_height: 0.10, rim_radius: 1.18, rim_width: 0.22 };
+// bare surface, or an object with the same keys if loft.mjs changes.      [E: mirrors loft.mjs displacement() eye section; gentle/wide so that the loft mesh resolves it]
+export const SOCKET_LOFT = { pocket_depth: 0.55, pocket_radius: 1.65, rim_height: 0.08, rim_radius: 1.45, rim_width: 0.50 };
+export function socketDisplacement(rr, Ro, sk = SOCKET_LOFT) { return socketDisp(rr, Ro, sk); }
 function socketDisp(rr, Ro, sk) {
   if (!sk) return 0;
   let d = 0; const r0 = Ro * sk.pocket_radius;
@@ -284,29 +285,17 @@ function makeIrisTextures(rng, P) {
 // orbit ring colour strip: u (x) = around the ring, v (y) = inner edge (dark rim) -> outer edge (head colour)
 function makeOrbitTexture(rng, headRgb, w = 64, h = 64) {
   const data = new Uint8Array(w * h * 4); const nz = makePeriodicNoise(rng, 7);
-  const dark = [46, 38, 31];
+  const dark = [40, 33, 27];
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const v = (y + 0.5) / h, ph = (x + 0.5) / w * TAU;
-    const up = 0.5 + 0.5 * Math.cos(ph - Math.PI / 2);                 // ring top (psi = 90 deg) a little darker (shadowed by the brow)
+    // the head is darker above the eye and lighter below it (textures.mjs: back 59,50,36 -> flank 105,93,75): ring top psi = 90 deg
     const k = smoothstep(0.30, 0.97, v);
-    const shade = mix(1 - 0.22 * up + 0.08 * nz(ph), 1, k);
+    const shade = 1 - 0.26 * Math.sin(ph) + 0.05 * nz(ph);
     const o = (y * w + x) * 4;
-    for (let c = 0; c < 3; c++) data[o + c] = Math.round(clamp(mix(dark[c], headRgb[c], k) * shade, 0, 255));
+    for (let c = 0; c < 3; c++) data[o + c] = Math.round(clamp(mix(dark[c], headRgb[c] * shade, k), 0, 255));
     data[o + 3] = 255;
   }
   return { width: w, height: h, data };
-}
-
-// Convert one part of an EyeAsset (eye-local) to body-local coordinates at rest: { positions, normals, uvs, indices }.
-export function eyePartToBody(asset, part) {
-  const g = asset.parts[part], m = asset.matrix;
-  const positions = new Float32Array(g.positions.length), normals = new Float32Array(g.normals.length);
-  for (let i = 0; i < g.positions.length; i += 3) {
-    const x = g.positions[i], y = g.positions[i + 1], z = g.positions[i + 2], nx = g.normals[i], ny = g.normals[i + 1], nz = g.normals[i + 2];
-    positions[i] = m[0] * x + m[4] * y + m[8] * z + m[12]; positions[i + 1] = m[1] * x + m[5] * y + m[9] * z + m[13]; positions[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
-    normals[i] = m[0] * nx + m[4] * ny + m[8] * nz; normals[i + 1] = m[1] * nx + m[5] * ny + m[9] * nz; normals[i + 2] = m[2] * nx + m[6] * ny + m[10] * nz;
-  }
-  return { positions, normals, uvs: g.uvs, indices: g.indices };
 }
 
 // ---- main -------------------------------------------------------------------------------------------------------------
@@ -333,7 +322,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   const scleraBright = genome.sclera_bright ?? clamp(0.25 + vr * 0.15 * gauss(draws[8], draws[9]), 0, 1);
   const sheen = genome.iris_sheen ?? 0.25;
   const yaw = (genome.eye_yaw_deg ?? 10) * Math.PI / 180;
-  const headRgb = genome.head_rgb ?? [128, 112, 90];
+  const headRgb = genome.head_rgb ?? [88, 76, 58];                   // [P] body albedo around the eye in textures.mjs (flank 105,93,75 .. back 59,50,36)
   const socket = genome.socket === undefined ? SOCKET_LOFT : genome.socket;
 
   // ---- placement on the right flank (CONTRACT §1) ----
@@ -370,7 +359,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   const apert = Array.from({ length: NPSI }, (_, i) => apertureAt(Cb, TAU * i / NPSI));
   const apertureMean = apert.reduce((a, b) => a + b, 0) / NPSI;
   // smooth the aperture curve a little (box filter, circular)
-  const apS = apert.map((_, i) => { let s = 0; for (let k = -2; k <= 2; k++) s += apert[(i + k + NPSI) % NPSI]; return s / 5; });
+  const apS = apert.map((_, i) => { let s = 0; for (let k = -4; k <= 4; k++) s += apert[(i + k + NPSI) % NPSI]; return s / 9; });
 
   // body-space -> eye-local
   const toLocal = (p) => { const d = sub(p, Cb); return [dot(d, Xl), dot(d, Yl), dot(d, Zl)]; };
@@ -406,7 +395,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   const cornea = buildRevolved(corFn, cthetas, 96, (th, ph) => uvFn(th)(ph));
 
   // ---- orbit ring: swept lip that follows the true skin, covering the ball/skin junction ----
-  const NW = 96;                                                       // around
+  const NW = 144;                                                      // around
   const topPts = 18, botPts = 8;
   const bump = (u) => Math.pow(Math.sin(Math.PI * Math.pow(u, 0.75)), 1.2);
   const Hc = 0.10 * Ro, Bd = 0.12 * Ro, sink = 0.02 * Ro, Dd = 0.12 * Ro;              // crest height above skin / buried depth / whole-ring sink
@@ -419,7 +408,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   const apAt = (psi) => { const f = ((psi / TAU) % 1 + 1) % 1 * NPSI; const i = Math.floor(f), t = f - i; return mix(apS[i % NPSI], apS[(i + 1) % NPSI], t); };
   for (let i = 0; i <= NW; i++) {                                      // column NW duplicates column 0 (continuous UV across the seam)
     const psi = TAU * (i % NW) / NW; const a = apAt(psi);
-    const rin = a - 0.10 * Ro, rout = Math.max(1.0 * Ro, a + 0.17 * Ro);
+    const rin = a - 0.10 * Ro, rout = 1.05 * Ro;                      // round outer outline; the inner edge follows the true aperture
     for (const [u, h, v] of prof) {
       const r = mix(rin, rout, u);
       const base = patch.sample(r * Math.cos(psi), r * Math.sin(psi)); const n = lift(psi, r);
@@ -474,6 +463,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
     return {
       side, bone: L ? 'eye_L' : 'eye_R', center, axis: bz, radius: Rb, outer_radius: Ro, aperture_radius: apertureMean,
       basis: { x: bx, y: by, z: bz }, quaternion: qFromBasis(bx, by, bz), matrix, orbit_normal: mz(n0), parts,
+      orbit_layout: { around: NW, profile: NP, outer_index: topPts, columns: NW + 1 },   // vertex = column * profile + k; k = outer_index is the outer edge
     };
   };
   const right = mk('R'), left = mk('L');

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSurface, loadParams } from '../../tools/build-assets/surface.mjs';
-import { buildEyes, eyePartToBody } from '../../tools/build-assets/eyes.mjs';
+import { buildEyes, eyePartToBody, socketDisplacement, SOCKET_LOFT } from '../../tools/build-assets/eyes.mjs';
+import { buildBody } from '../../tools/build-assets/loft.mjs';
 
 const params = loadParams();
 const surface = createSurface(params);
@@ -218,4 +219,44 @@ test('deterministic by seed; different seeds make different individuals', () => 
   const lo = buildEyes({ surface, params, genome: { iris_gold: 0.1 } }), hi = buildEyes({ surface, params, genome: { iris_gold: 1.0 } });
   const sat = (img) => { let s = 0, n = 0; for (let y = 0; y < 512; y += 7) for (let x = 0; x < 512; x += 7) { const k = (y * 512 + x) * 4; if (luma(img, x, y) > 100) { s += img.data[k] - img.data[k + 2]; n++; } } return s / n; };
   assert.ok(sat(hi.textures.iris) > sat(lo.textures.iris) + 20, 'more gold = more saturated');
+});
+
+test('orbit outline is a smooth round curve (no polygon / notches)', () => {
+  for (const side of ['left', 'right']) {
+    const e = eyes[side], o = e.parts.orbit, L = e.orbit_layout, rep = eyes.report;
+    const P0 = side === 'right' ? rep.skin_point_right : [rep.skin_point_right[0], rep.skin_point_right[1], -rep.skin_point_right[2]];
+    const nr = side === 'right' ? rep.skin_normal_right : [rep.skin_normal_right[0], rep.skin_normal_right[1], -rep.skin_normal_right[2]];
+    const rad = [];
+    for (let i = 0; i < L.around; i++) {
+      const p = apply(e.matrix, o.positions, (i * L.profile + L.outer_index) * 3); const d = [p[0] - P0[0], p[1] - P0[1], p[2] - P0[2]];
+      const h = d[0] * nr[0] + d[1] * nr[1] + d[2] * nr[2]; rad.push(Math.hypot(d[0] - h * nr[0], d[1] - h * nr[1], d[2] - h * nr[2]));
+    }
+    const mean = rad.reduce((a, b) => a + b, 0) / rad.length;
+    near(mean, 1.05 * Ro, 0.04 * Ro, 'mean outer radius');
+    for (const r of rad) near(r, mean, 0.02 * mean, 'round outline');
+    assert.ok(L.around >= 128, 'enough segments around the ring');
+    // UV seam duplicate column has the same position
+    const a = o.positions.slice(0, 3), b = o.positions.slice(L.around * L.profile * 3, L.around * L.profile * 3 + 3);
+    for (let k = 0; k < 3; k++) near(a[k], b[k], 1e-9, 'seam');
+  }
+});
+
+test('loft eye socket in loft.mjs matches SOCKET_LOFT (kept in sync) and is resolved by the loft mesh', () => {
+  const body = buildBody(surface, params); const Ro2 = Ro;
+  const P0 = eyes.report.skin_point_right; let worst = 0, n = 0;
+  for (let v = 0; v < body.positions.length / 3; v++) {
+    const s = body.attrs._S[v], a = body.attrs._ALPHA[v]; if (s < 0 || a < 0.2 || a > 1.6) continue; // right flank around the eye
+    const plain = surface.point(s, a); const rr = Math.hypot(plain[0] - P0[0], plain[1] - P0[1], plain[2] - P0[2]); if (rr > 2.4 * Ro2) continue;
+    const nrm = surface.normal(s, a); const p = [body.positions[v * 3], body.positions[v * 3 + 1], body.positions[v * 3 + 2]];
+    const d = (p[0] - plain[0]) * nrm[0] + (p[1] - plain[1]) * nrm[1] + (p[2] - plain[2]) * nrm[2];
+    worst = Math.max(worst, Math.abs(d - socketDisplacement(rr, Ro2, SOCKET_LOFT))); n++;
+  }
+  assert.ok(n > 100, `loft vertices around the eye: ${n}`); assert.ok(worst < 0.15e-3, `loft vs SOCKET_LOFT displacement mismatch ${worst * 1e3} mm`);
+  // smoothness: the socket's curvature per loft ring spacing stays moderate (< 20 degrees of slope change per 0.76 mm ring)
+  const step = 0.004 * SL; let maxSlopeChange = 0;
+  for (let r = 0.2 * Ro2; r < 2.6 * Ro2; r += 0.05 * Ro2) {
+    const d0 = socketDisplacement(r - step, Ro2), d1 = socketDisplacement(r, Ro2), d2 = socketDisplacement(r + step, Ro2);
+    maxSlopeChange = Math.max(maxSlopeChange, Math.abs(Math.atan2(d2 - d1, step) - Math.atan2(d1 - d0, step)));
+  }
+  assert.ok(maxSlopeChange * 180 / Math.PI < 12, `socket slope change per ring ${maxSlopeChange * 180 / Math.PI} deg`);
 });

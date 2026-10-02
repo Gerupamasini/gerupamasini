@@ -21,8 +21,13 @@ export class Yamame {
     // material fix-ups that glTF cannot express (eye module spec: cornea = black, additive, no depth write, weak specular)
     this.materials = {};
     this.root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) this.materials[m.name] = m; });
+    this.root.traverse((o) => { if (o.isMesh && /^Fins_LOD/.test(o.parent?.name === 'Yamame' ? o.name : o.parent?.name || o.name)) o.castShadow = false; });   // translucent membranes cast no shadow (fin module note)
     const cor = this.materials.M_Eye_Cornea;
     if (cor) { cor.color.set(0x000000); cor.blending = THREE.AdditiveBlending; cor.transparent = true; cor.opacity = 1; cor.depthWrite = false; cor.roughness = 0.03; if ('specularIntensity' in cor) cor.specularIntensity = 0.1; cor.needsUpdate = true; }
+    // fixed clips on the fin ray-group bones (05 §5.7.1); procedural code never writes these bones
+    this.mixer = new THREE.AnimationMixer(this.root); this.actions = {};
+    for (const clip of gltf.animations || []) { const a = this.mixer.clipAction(clip); a.play(); a.time = Math.random() * clip.duration; this.actions[clip.name] = a; }
+    if (this.actions.PectoralScull) this.actions.PectoralScull.setEffectiveWeight(0);
     this.#buildLOD(opts);
     this.spine = Array.from({ length: SPINE_COUNT }, (_, j) => this.bones[`spine_${String(j).padStart(2, '0')}`]);
     this.rootBone = this.bones.fish_root;
@@ -59,6 +64,14 @@ export class Yamame {
     }
     if (this.rootBone) this.rootBone.position.copy(this.rest.fish_root.p).add(new THREE.Vector3(0, 0, res.recoil * this.SL));
     this.root.position.set(this.pos.x, this.pos.y, this.pos.z); this.root.rotation.order = 'YXZ'; this.root.rotation.set(0, this.heading, this.pitch);
+    if (this.mixer) {
+      // w_hover (05 §5.5.2): pectoral sculling only while holding in (almost) still water: ground speed ~ 0 and U < 0.8 BL/s
+      const still = Math.abs(this.wave.U - (intent.flow_bl ?? 0)) < 0.1 && !intent.flowVec, U = this.wave.U;
+      const hover = still ? 1 - Math.min(1, Math.max(0, (U - 0.3) / 0.5)) ** 2 * (3 - 2 * Math.min(1, Math.max(0, (U - 0.3) / 0.5))) : 0;
+      const sc = this.actions.PectoralScull; if (sc) sc.setEffectiveWeight(sc.getEffectiveWeight() + (hover - sc.getEffectiveWeight()) * (1 - Math.exp(-dt / 0.3)));
+      this.mixer.update(dt);
+    }
+    this.#syncEyeLOD();
     this.#headAndGills(dt, intent, w);
     this.#fins(dt, intent, w, res);
     return res;
@@ -83,11 +96,27 @@ export class Yamame {
       });
     });
     holder.add(lod); this.lod = lod;
+    // eyes live under bones, not under the LOD object: their lower-detail twins (*_LODn) are switched by hand in update()
+    this.eyeLods = {}; this.root.traverse((o) => { const m = /^Eye(?:Orbit)?_[LR](?:_LOD(\d))?$/.exec(o.name); if (m && o.isObject3D && (o.isMesh || o.isGroup)) (this.eyeLods[m[1] ?? 0] ??= []).push(o); });
   }
+
+  #syncEyeLOD() {
+    if (!this.lod || !this.eyeLods) return;
+    const levels = Object.keys(this.eyeLods).map(Number); if (levels.length < 2) return;
+    let cur = this.forcedLOD ?? this.lod.getCurrentLevel(); cur = levels.filter((l) => l <= cur).pop() ?? 0;
+    for (const l of levels) for (const o of this.eyeLods[l]) o.visible = l === cur;
+  }
+
+  /** Relative morph targets of the LOD0 body (05 §5.1.3): mt_body_depth, mt_belly, mt_peduncle, mt_buccal_swell, mt_branchiostegal. v in [-1, 1] (negative = opposite direction). */
+  setMorph(name, v) {
+    this.morphMeshes ??= (() => { const a = []; this.root.traverse((o) => { if (o.isMesh && o.morphTargetDictionary) a.push(o); }); return a; })();
+    for (const m of this.morphMeshes) { const i = m.morphTargetDictionary[name]; if (i != null) m.morphTargetInfluences[i] = v; }
+  }
+  get morphNames() { this.setMorph('', 0); return this.morphMeshes[0] ? Object.keys(this.morphMeshes[0].morphTargetDictionary) : []; }
 
   /** Force a LOD level (null = automatic by camera distance). */
   setLOD(level) {
-    if (!this.lod) return; this.lod.autoUpdate = level == null;
+    if (!this.lod) return; this.forcedLOD = level; this.lod.autoUpdate = level == null;
     if (level != null) this.lod.levels.forEach((lv, i) => { lv.object.visible = i === level; });
   }
 

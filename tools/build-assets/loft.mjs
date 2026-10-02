@@ -65,6 +65,7 @@ export function buildBody(surface, params, opts = {}) {
     const a = side > 0 ? na : TAU - na; naresSurf.push({ c: surface.point(ns, a), rad, depth, rim });
   }
 
+  const mk = opts.morph || {};
   function displacement(s, alpha) {
     let d = 0;
     for (const n of naresSurf) {
@@ -75,10 +76,12 @@ export function buildBody(surface, params, opts = {}) {
     for (let k = 0; k < 2; k++) {
       const p = surface.point(s, alpha); const c = eyeCentersSurf[k];
       const rr = Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]);
-      const r0 = eyeOuterR * 1.30;
-      if (rr < r0) { const q = 1 - (rr / r0) ** 2; d -= 0.9 * eyeOuterR * q * q; }
+      // gentle, wide socket + soft orbital rim: every feature is wider than ~3 ring/sector spacings so the loft mesh resolves it
+      // (the previous narrow rim, sigma 0.22 Ro, faceted). Keep eyes.mjs SOCKET_LOFT in sync with these numbers.
+      const r0 = eyeOuterR * 1.65;
+      if (rr < r0) { const q = 1 - (rr / r0) ** 2; d -= 0.55 * eyeOuterR * q * q; }
       // raised orbital rim just outside the socket
-      const rim = Math.exp(-(((rr - eyeOuterR * 1.18) / (eyeOuterR * 0.22)) ** 2)); d += 0.10 * eyeOuterR * rim;
+      const rim = Math.exp(-(((rr - eyeOuterR * 1.45) / (eyeOuterR * 0.50)) ** 2)); d += 0.08 * eyeOuterR * rim;
     }
     // cheek swelling in front of the gill cover
     if (s > 0.10 && s < 0.27) { d += 0.00030 * smooth(0.10, 0.17, s) * (1 - smooth(0.20, 0.26, s)) * latMask(alpha); }
@@ -89,6 +92,9 @@ export function buildBody(surface, params, opts = {}) {
     // preopercle groove (arc in front of the gill cover)
     const sp = e - 0.052 + 0.016 * Math.pow(Math.abs(Math.cos(alpha)), 1.5);
     d -= 0.00012 * Math.exp(-(((s - sp) / 0.0022) ** 2)) * latMask(alpha) * smooth(0.05, 0.3, Math.abs(Math.cos(alpha)) + 0.15);
+    // morph-target shapes (05 §5.1.3): cheek = mt_buccal_swell, branch = mt_branchiostegal (used only when building the morph deltas)
+    if (mk.cheek) d += mk.cheek * 0.0014 * smooth(0.06, 0.14, s) * (1 - smooth(0.18, 0.26, s)) * latMask(alpha);
+    if (mk.branch) d += mk.branch * 0.0016 * smooth(0.05, 0.10, s) * (1 - smooth(0.17, 0.24, s)) * smooth(0.35, 0.8, -Math.cos(alpha));
     // maxilla / supramaxilla plate: a slightly raised band above the mouth line, widening towards the corner (visible as the pale bar in reference photos)
     if (s > 0.012 && s < cornerS + 0.014) {
       const da = Math.min(alphaM - alpha, TAU - alphaM - (TAU - alpha)) ; const dr = (alpha <= Math.PI) ? alphaM - alpha : alpha - (TAU - alphaM);

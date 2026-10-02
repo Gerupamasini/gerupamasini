@@ -49,7 +49,7 @@ export function createSurface(params, overrides = {}) {
   // section parameters at s >= 0 (SL fractions)
   function section(s) {
     const sc = Math.min(Math.max(s, 0), 1);
-    const top = dDorsal(sc) * depthScale, bot = dVentral(sc) * depthScale;
+    const top = dDorsal(sc) * depthScale * (overrides.dorsal_mul ? overrides.dorsal_mul(sc) : 1), bot = dVentral(sc) * depthScale * (overrides.ventral_mul ? overrides.ventral_mul(sc) : 1);   // morph hooks (05 §5.1.3)
     const c = (top + bot) / 2, h = (top - bot) / 2;
     // caudal peduncle is laterally compressed into the fin base: width falls to w_end x normal over the last ~7 % of SL (so the open end is a thin vertical edge that the caudal fin root covers) [E]
     const tt = params.section.tail_taper || { s0: 0.93, w_end: 0.12 }; const tp = Math.min(1, Math.max(0, (sc - tt.s0) / (1 - tt.s0)));

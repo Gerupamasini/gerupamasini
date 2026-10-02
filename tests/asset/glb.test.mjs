@@ -38,3 +38,22 @@ test('no NaN positions and normals are unit length', { skip }, () => {
     const n = prim.getAttribute('NORMAL').getArray(); for (let i = 0; i < n.length; i += 3) assert.ok(Math.abs(Math.hypot(n[i], n[i + 1], n[i + 2]) - 1) < 1e-3);
   }
 });
+
+test('morph targets on the LOD0 body (same count on every primitive) and LOD1/LOD2 share the one skin', { skip }, () => {
+  const names = ['mt_body_depth', 'mt_belly', 'mt_peduncle', 'mt_buccal_swell', 'mt_branchiostegal'];
+  const body = doc.getRoot().listMeshes().find((m) => m.getName() === 'Body_LOD0');
+  assert.deepEqual(body.getExtras().targetNames, names);
+  for (const p of body.listPrimitives()) assert.equal(p.listTargets().length, names.length);
+  const skin = doc.getRoot().listSkins()[0];
+  for (const n of ['Body_LOD1', 'Body_LOD2', 'Fins_LOD0', 'Fins_LOD1', 'Fins_LOD2']) {
+    const node = doc.getRoot().listNodes().find((x) => x.getName() === n); assert.ok(node, n); assert.equal(node.getSkin(), skin, `${n} shares the skin`);
+  }
+});
+
+test('triangle budget report (informational; spec 06 6.8.1 targets ~8k, 6-12k)', { skip }, () => {
+  const tri = (m) => m.listPrimitives().reduce((a, p) => a + p.getIndices().getCount() / 3, 0);
+  const by = Object.fromEntries(doc.getRoot().listMeshes().map((m) => [m.getName(), tri(m)]));
+  const lod0 = (by.Body_LOD0 || 0) + (by.Fins_LOD0 || 0) + (by.Eye_L || 0) + (by.Eye_R || 0) + (by.EyeOrbit_L || 0) + (by.EyeOrbit_R || 0);
+  console.log('# triangles', JSON.stringify(by), 'LOD0 total', lod0);
+  assert.ok(lod0 < 40000);
+});

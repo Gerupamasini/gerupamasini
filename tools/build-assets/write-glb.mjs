@@ -11,7 +11,7 @@ function quatFromZ(dir) {
   const w = 1 + z; const q = [-y, x, 0, w]; const n = Math.hypot(...q); return q.map((v) => v / n);
 }
 
-export async function writeGLB({ file, body, fins, eyes, rig, textures, params, meta = {}, weights, lodBodies = [], lodFins = [] }) {
+export async function writeGLB({ file, body, fins, eyes, rig, textures, params, meta = {}, weights, lodBodies = [], lodFins = [], lodEyes = [], morphs = [] }) {
   const doc = new Document();
   const clearcoatExt = doc.createExtension(KHRMaterialsClearcoat), iridExt = doc.createExtension(KHRMaterialsIridescence), iorExt = doc.createExtension(KHRMaterialsIOR), specExt = doc.createExtension(KHRMaterialsSpecular);
   const buffer = doc.createBuffer('main');
@@ -29,6 +29,35 @@ export async function writeGLB({ file, body, fins, eyes, rig, textures, params, 
   const skin = doc.createSkin('YamameSkin').setSkeleton(boneNodes[0]);
   boneNodes.forEach((n) => skin.addJoint(n));
   skin.setInverseBindMatrices(doc.createAccessor('IBM', buffer).setType('MAT4').setArray(inverseBindMatrices(rig)));
+
+  // ---- animation clips (05 §5.7.1): only on bones the procedural pass does NOT own (fin ray-group bones), so there is one owner per bone ----
+  const qEuler = (x, y, z) => { const cx = Math.cos(x / 2), sx = Math.sin(x / 2), cy = Math.cos(y / 2), sy = Math.sin(y / 2), cz = Math.cos(z / 2), sz = Math.sin(z / 2);
+    return [sx * cy * cz + cx * sy * sz, cx * sy * cz - sx * cy * sz, cx * cy * sz + sx * sy * cz, cx * cy * cz - sx * sy * sz]; };
+  const makeClip = (name, T, keys, tracks) => {      // tracks: [{bone, f(t01) -> [rx, ry, rz] radians}]
+    const anim = doc.createAnimation(name); const times = new Float32Array(keys + 1).map((_, i) => (i / keys) * T);
+    const input = doc.createAccessor(`${name}_t`, buffer).setType('SCALAR').setArray(times);
+    for (const tr of tracks) {
+      const out = new Float32Array((keys + 1) * 4); for (let i = 0; i <= keys; i++) out.set(qEuler(...tr.f((i % keys) / keys)), i * 4);       // last key == first key: seamless loop
+      const sampler = doc.createAnimationSampler().setInput(input).setOutput(doc.createAccessor(`${name}_${tr.bone}`, buffer).setType('VEC4').setArray(out)).setInterpolation('LINEAR');
+      anim.addSampler(sampler); anim.addChannel(doc.createAnimationChannel().setTargetNode(boneNodes[rig.index.get(tr.bone)]).setTargetPath('rotation').setSampler(sampler));
+    }
+    return anim;
+  };
+  const D = Math.PI / 180, TAU2 = Math.PI * 2, tracksFlutter = [], tracksScull = [];
+  let ph = 0.3;
+  for (const side of ['R', 'L']) {
+    const sg = side === 'R' ? 1 : -1;
+    for (let r = 0; r < 3; r++) {
+      const p0 = ph += 1.7;
+      tracksFlutter.push({ bone: `pectoral_${side}_r${r}`, f: (t) => [0, sg * 2.2 * D * Math.sin(TAU2 * t + p0), 1.6 * D * Math.sin(2 * TAU2 * t + p0 * 0.7)] });
+      tracksScull.push({ bone: `pectoral_${side}_r${r}`, f: (t) => [0, sg * 7 * D * Math.sin(TAU2 * t + r * 0.55), 5 * D * Math.sin(TAU2 * t + r * 0.55 + 1.2)] });
+    }
+    for (let r = 0; r < 2; r++) { const p0 = ph += 1.3; tracksFlutter.push({ bone: `pelvic_${side}_r${r}`, f: (t) => [0, sg * 1.8 * D * Math.sin(TAU2 * t + p0), 1.2 * D * Math.sin(TAU2 * t + p0 + 0.9)] }); }
+  }
+  for (let r = 0; r < 3; r++) { const p0 = ph += 1.1; tracksFlutter.push({ bone: `dorsal_r${r}`, f: (t) => [1.3 * D * Math.sin(TAU2 * t + p0), 0, 2.0 * D * Math.sin(TAU2 * t + p0 + 0.6)] }); }
+  for (let r = 0; r < 2; r++) { const p0 = ph += 1.9; tracksFlutter.push({ bone: `anal_r${r}`, f: (t) => [1.2 * D * Math.sin(TAU2 * t + p0), 0, 1.8 * D * Math.sin(TAU2 * t + p0 + 0.6)] }); }
+  makeClip('FinFlutter', 3.0, 24, tracksFlutter);       // 2-4 s loop, small ray-group wobble of every fin (05 §5.7.1)
+  makeClip('PectoralScull', 2.0, 24, tracksScull);      // hover scull of the pectoral ray groups (weight = w_hover at runtime)
 
   // ---- textures & materials ----
   const tex = (name, img) => doc.createTexture(name).setImage(encodePng(img)).setMimeType('image/png');
@@ -82,8 +111,13 @@ export async function writeGLB({ file, body, fins, eyes, rig, textures, params, 
 
   // ---- body (skinned): body skin + mouth tube ----
   const bodyMesh = doc.createMesh('Body_LOD0');
-  bodyMesh.addPrimitive(makePrim(body, mats.body, weights.body, 'body'));
-  bodyMesh.addPrimitive(makePrim(body.mouth, mats.mouth, weights.mouth, 'mouth'));
+  const bodyPrim = makePrim(body, mats.body, weights.body, 'body');
+  for (const M of morphs) bodyPrim.addTarget(doc.createPrimitiveTarget(M.name).setAttribute('POSITION', accessor(`morph_${M.name}`, 'VEC3', M.dPos)));
+  bodyMesh.addPrimitive(bodyPrim);
+  if (morphs.length) { bodyMesh.setWeights(morphs.map(() => 0)); bodyMesh.setExtras({ targetNames: morphs.map((M) => M.name) }); }
+  const mouthPrim = makePrim(body.mouth, mats.mouth, weights.mouth, 'mouth');
+  for (const M of morphs) mouthPrim.addTarget(doc.createPrimitiveTarget(M.name).setAttribute('POSITION', accessor(`morph0_${M.name}`, 'VEC3', new Float32Array(body.mouth.positions.length))));   // glTF: every primitive of a mesh needs the same target count
+  bodyMesh.addPrimitive(mouthPrim);
   const bodyNode = doc.createNode('Body_LOD0').setMesh(bodyMesh).setSkin(skin); rootNode.addChild(bodyNode);
 
   // lower LODs share the skin (same Skeleton / bindMatrix); the runtime assembles THREE.LOD from the *_LODn nodes
@@ -100,24 +134,27 @@ export async function writeGLB({ file, body, fins, eyes, rig, textures, params, 
     const finMesh = doc.createMesh('Fins_LOD0'); finMesh.addPrimitive(makePrim(fins.geometry, mats.fin, weights.fins, 'fins'));
     const finNode = doc.createNode('Fins_LOD0').setMesh(finMesh).setSkin(skin); rootNode.addChild(finNode);
   }
-  if (eyes) {
+  // eyes: LOD0 nodes are named Eye_L / Eye_R / EyeOrbit_L / EyeOrbit_R; lower detail levels get a _LODn suffix (the runtime toggles their visibility with the body LOD)
+  const addEyes = (E, suffix) => {
     for (const side of ['L', 'R']) {
-      const e = side === 'L' ? eyes.left : eyes.right;
+      const e = side === 'L' ? E.left : E.right;
       const eyeBone = boneNodes[rig.index.get(`eye_${side}`)], headBoneIdx = rig.index.get(rig.bones[rig.index.get(`eye_${side}`)].parent), headBone = boneNodes[headBoneIdx];
       // ball + cornea rotate with the eye bone (pivot = eyeball centre, which is the bone position)
-      const ballNode = doc.createNode(`Eye_${side}`).setRotation(e.quaternion);
-      const bm = doc.createMesh(`Eye_${side}`);
-      if (e.parts.ball) bm.addPrimitive(makePrim(e.parts.ball, mats.iris, null, `eye${side}_ball`));
-      if (e.parts.cornea) bm.addPrimitive(makePrim(e.parts.cornea, mats.cornea, null, `eye${side}_cornea`));
+      const ballNode = doc.createNode(`Eye_${side}${suffix}`).setRotation(e.quaternion);
+      const bm = doc.createMesh(`Eye_${side}${suffix}`);
+      if (e.parts.ball) bm.addPrimitive(makePrim(e.parts.ball, mats.iris, null, `eye${side}${suffix}_ball`));
+      if (e.parts.cornea) bm.addPrimitive(makePrim(e.parts.cornea, mats.cornea, null, `eye${side}${suffix}_cornea`));
       ballNode.setMesh(bm); eyeBone.addChild(ballNode);
       // orbit ring stays with the head
       if (e.parts.orbit) {
         const hp = rig.bones[headBoneIdx].pos, c = e.center;
-        const on = doc.createNode(`EyeOrbit_${side}`).setTranslation([c[0] - hp[0], c[1] - hp[1], c[2] - hp[2]]).setRotation(e.quaternion);
-        const om = doc.createMesh(`EyeOrbit_${side}`); om.addPrimitive(makePrim(e.parts.orbit, mats.orbit, null, `eye${side}_orbit`)); on.setMesh(om); headBone.addChild(on);
+        const on = doc.createNode(`EyeOrbit_${side}${suffix}`).setTranslation([c[0] - hp[0], c[1] - hp[1], c[2] - hp[2]]).setRotation(e.quaternion);
+        const om = doc.createMesh(`EyeOrbit_${side}${suffix}`); om.addPrimitive(makePrim(e.parts.orbit, mats.orbit, null, `eye${side}${suffix}_orbit`)); on.setMesh(om); headBone.addChild(on);
       }
     }
-  }
+  };
+  if (eyes) addEyes(eyes, '');
+  for (const L of lodEyes) addEyes(L.eyes, `_LOD${L.level}`);
   const io = new NodeIO().registerExtensions([KHRMaterialsClearcoat, KHRMaterialsIridescence, KHRMaterialsIOR, KHRMaterialsSpecular, KHRTextureTransform]).setVertexLayout(VertexLayout.SEPARATE);
   await io.write(file, doc);
   return { file };

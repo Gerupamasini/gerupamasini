@@ -136,17 +136,21 @@ export function sampleGenome(seed = 1) {
 // Y[idx]: 断面中心線からの高さ(SL比, 側面投影), Av[idx]: 行方向に単調増加する弧長 mm（row0 = 背正中線）, circ[x]: 周長 mm
 function buildGeometry(surface, W, H) {
   const SL = surface.SL; const ns = Math.min(W - 1, 256), nc = ns + 1;
-  const Yc = new Float32Array(nc * H), Ar = new Float32Array(nc * H);
+  const Yc = new Float32Array(nc * H), Ar = new Float32Array(nc * H), Ax = new Float32Array(nc * H);
+  let prevCol = null;
   for (let ci = 0; ci < nc; ci++) {
-    const s = ci / ns; const sec = surface.section(s); let prev = null, acc = 0;
+    const s = ci / ns; const sec = surface.section(s); let prev = null, acc = 0; const col = new Array(H);
     for (let j = 0; j < H; j++) {
-      const p = surface.point(s, TAU * j / (H - 1));
+      const p = surface.point(s, TAU * j / (H - 1)); col[j] = p;
       Yc[ci * H + j] = p[1] / SL - sec.c;
       if (prev) acc += Math.hypot(p[1] - prev[1], p[2] - prev[2]) * 1000;
       Ar[ci * H + j] = acc; prev = p;
+      // 体軸方向の実距離（テーパー部では断面が痩せるぶん x だけより長い）[mm]
+      Ax[ci * H + j] = prevCol ? Ax[(ci - 1) * H + j] + Math.hypot(p[0] - prevCol[j][0], p[1] - prevCol[j][1], p[2] - prevCol[j][2]) * 1000 : 0;
     }
+    prevCol = col;
   }
-  const Y = new Float32Array(W * H), Av = new Float32Array(W * H);
+  const Y = new Float32Array(W * H), Av = new Float32Array(W * H), Xm = new Float32Array(W * H);
   const cS = new Float32Array(W), hS = new Float32Array(W), circ = new Float32Array(W);
   for (let x = 0; x < W; x++) {
     const fx = x / (W - 1) * ns; const i0 = Math.min(Math.floor(fx), ns - 1); const f = fx - i0;
@@ -154,10 +158,11 @@ function buildGeometry(surface, W, H) {
     for (let j = 0; j < H; j++) {
       Y[j * W + x] = lerp(Yc[i0 * H + j], Yc[(i0 + 1) * H + j], f);
       Av[j * W + x] = lerp(Ar[i0 * H + j], Ar[(i0 + 1) * H + j], f);
+      Xm[j * W + x] = lerp(Ax[i0 * H + j], Ax[(i0 + 1) * H + j], f);
     }
     circ[x] = Av[(H - 1) * W + x];
   }
-  return { W, H, SL, Y, Av, cS, hS, circ, mmU: SL * 1000 / (W - 1), halfRow: (H - 1) / 2 };
+  return { W, H, SL, Y, Av, Xm, cS, hS, circ, mmU: SL * 1000 / (W - 1), halfRow: (H - 1) / 2 };
 }
 // (s, r) -> 行 j（r = 側面投影の相対高さ -1..1, side 'right'|'left'）
 function rowForR(surface, G, s, r, side) {
@@ -316,7 +321,7 @@ function placeSpots({ rng, count, sMin, sMax, dens, rows, rTop, rStep, rJit, sca
     const j = rowForR(surface, G, s, r, side); const x = Math.round(s * (W - 1));
     const idx = j * W + x;
     if (rejectMask && rejectMask[idx] > 0.25) continue;
-    const xm = x * G.mmU, dm = side === 'right' ? G.Av[idx] : G.circ[x] - G.Av[idx];
+    const xm = G.Xm[idx], dm = side === 'right' ? G.Av[idx] : G.circ[x] - G.Av[idx];
     let ok = true;
     for (const o of out) { const dd = Math.hypot(o.xm - xm, o.dm - dm); if (dd < gapF * 0.5 * (o.dia + dia)) { ok = false; break; } }
     if (!ok) continue;
@@ -327,29 +332,49 @@ function placeSpots({ rng, count, sMin, sMax, dens, rows, rTop, rStep, rJit, sca
 }
 
 // ───────────────────────────── 口内テクスチャ 256x256 ─────────────────────────────
-// 前(唇側)v=0 -> 喉 v=1。u=0.5 が正中（舌は中央の帯）。口内は暗く舌は淡桃 [P: p012 注記, 03 §3.5.2 / 禁止 #12: 鮮やかな赤にしない]
-function buildMouthTexture(seed, size = 256) {
+// 既定 orientation:'along-u'（loft.mjs の口腔チューブの UV に一致）: 画像 x = u（唇先端 0 -> 喉 1）, y = v（周方向）。
+//   v: 0-0.25 口蓋（中心 0.125 = 鋤骨の正中）, 0.25-0.375 左頬, 0.375-0.625 口腔底/舌（中心 0.5）, 0.625-0.75 右頬, 0.75-1 は継ぎ目のなじませ用（頬->口蓋）。
+// 'along-v': 上の転置（x = v, y = u: 上端が唇, 下端が喉, 舌は中央 x=0.5）。
+// 色: 白みの淡桃の内張り, 奥(喉)だけ暗い赤褐。鮮やかな赤にしない [03 §3.8.3 #12; p012 の注記: 口内は暗く舌は桃色; 統合側の指摘: 実物の内張りは白桃色]。
+// 歯: 既定なし（06 §6.2.3 (d) 歯は描画しない）。opts.teeth=true で鋤骨・舌に小さな淡色の歯点を数個。
+function buildMouthTexture(seed, size = 256, opts = {}) {
+  const orientation = opts.orientation ?? 'along-u'; const teeth = !!opts.teeth;
   const img = new Uint8Array(size * size * 4); const sd = seedInt(seed, 'mouth'); const o = [0, 0, 0];
+  const rng = makeRng(seed, 'mouth-teeth'); const dots = [];
+  if (teeth) { for (let i = 0; i < 6; i++) dots.push({ u: 0.10 + 0.26 * rng(), v: 0.125 + (rng() - 0.5) * 0.02, r: 0.006 }); for (let i = 0; i < 8; i++) dots.push({ u: 0.08 + 0.22 * rng(), v: 0.5 + (rng() - 0.5) * 0.10, r: 0.005 }); }
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const u = x / (size - 1), v = y / (size - 1);
-    const nz = fbm2(u * 14, v * 14, sd, 3), nz2 = vnoise(u * 60, v * 60, sd + 3);
-    // 口蓋/頬側: 前は淡い桃, 奥へ暗い赤褐
-    const depth = sstep(0.0, 0.95, v);
-    let L = lerp(66, 16, Math.pow(depth, 0.8)) + 5 * (nz - 0.5), a = lerp(15, 20, depth) + 3 * (nz - 0.5), b = lerp(4, 6, depth);
-    // 舌: 中央の帯（前が幅広い）, 淡桃
-    const tw = lerp(0.20, 0.10, v); const du = Math.abs(u - 0.5);
-    const tm = (1 - sstep(tw - 0.04, tw + 0.03, du)) * sstep(0.04, 0.12, v) * (1 - sstep(0.80, 0.97, v));
-    L = lerp(L, 74 - 18 * Math.pow(v, 1.5) + 4 * (nz2 - 0.5), tm); a = lerp(a, 19, tm); b = lerp(b, 2, tm);
-    // 唇縁(前)と左右縁は明るい
-    const rim = 1 - sstep(0.0, 0.06, v); L = lerp(L, 78, rim * 0.6);
-    const edge = sstep(0.82, 1.0, Math.abs(u - 0.5) * 2); L = lerp(L, L * 0.6, edge * 0.6);
-    labToLin(L, a, b, o); const i = (y * size + x) * 4; img[i] = toByte(o[0]); img[i + 1] = toByte(o[1]); img[i + 2] = toByte(o[2]); img[i + 3] = 255;
+    const q = v > 0.75 ? 0.75 : v; const wrapMix = v > 0.75 ? sstep(0.75, 1.0, v) : 0;            // 0.75-1 は頬 -> 口蓋へ連続的に
+    // 領域ごとの基調色 (L,a,b)
+    const roof = [80, 9, 5], cheek = [71, 16, 6], tongue = [84, 8, 4];
+    let base;
+    if (q < 0.25) base = roof;
+    else if (q < 0.375) { const t = sstep(0.25, 0.375, q); base = [lerp(roof[0], cheek[0], t), lerp(roof[1], cheek[1], t), lerp(roof[2], cheek[2], t)]; }
+    else if (q < 0.625) { const t = sstep(0.375, 0.45, q) * (1 - sstep(0.55, 0.625, q)); base = [lerp(cheek[0], tongue[0], t), lerp(cheek[1], tongue[1], t), lerp(cheek[2], tongue[2], t)]; }
+    else { const t = sstep(0.625, 0.75, q); base = [lerp(cheek[0], cheek[0], t), cheek[1], cheek[2]]; }
+    if (wrapMix > 0) base = [lerp(cheek[0], roof[0], wrapMix), lerp(cheek[1], roof[1], wrapMix), lerp(cheek[2], roof[2], wrapMix)];
+    let [L, a, b] = base;
+    // 舌の正中はわずかに桃が濃く, 口蓋の正中に縦の隆起（淡色）
+    const tc = Math.exp(-Math.pow((q - 0.5) / 0.05, 2)); L -= 2.5 * tc; a += 3 * tc;
+    const rc = Math.exp(-Math.pow((q - 0.125) / 0.025, 2)) * (q < 0.25 ? 1 : 0); L += 3 * rc;
+    // 奥(喉)だけ暗く: 先端〜u=0.6 はほぼ一定, 以降 暗い赤褐へ
+    const deep = Math.pow(sstep(0.58, 1.0, u), 1.25);
+    L = lerp(L + 3 * (1 - sstep(0, 0.08, u)), 30, deep * 0.9); a = lerp(a, 20, deep); b = lerp(b, 8, deep);
+    // 唇縁は白っぽく
+    L = lerp(L, 88, (1 - sstep(0.0, 0.035, u)) * 0.6); a = lerp(a, 5, (1 - sstep(0.0, 0.035, u)) * 0.5);
+    // むら
+    const nz = fbm2(u * 18, v * 30, sd, 3) - 0.5, nz2 = vnoise(u * 90, v * 90, sd + 3) - 0.5;
+    L += 5 * nz + 1.5 * nz2; a += 2.5 * nz;
+    labToLin(L, a, b, o);
+    for (const d of dots) { const dd = Math.hypot(u - d.u, (v - d.v) * 0.8); if (dd < d.r * 1.6) { const m = 1 - sstep(d.r * 0.6, d.r * 1.6, dd); o[0] = lerp(o[0], 0.80, m); o[1] = lerp(o[1], 0.78, m); o[2] = lerp(o[2], 0.72, m); } }
+    const xx = orientation === 'along-v' ? y : x, yy = orientation === 'along-v' ? x : y;     // 転置
+    const i = (yy * size + xx) * 4; img[i] = toByte(o[0]); img[i + 1] = toByte(o[1]); img[i + 2] = toByte(o[2]); img[i + 3] = 255;
   }
   return { width: size, height: size, data: img };
 }
 
 // ───────────────────────────── メイン生成 ─────────────────────────────
-export function generateBodyTextures({ surface, params, genome = {}, seed = 1, width = 2048, height = 1024 } = {}) {
+export function generateBodyTextures({ surface, params, genome = {}, seed = 1, width = 2048, height = 1024, mouth: mouthOpts = {} } = {}) {
   const t0 = Date.now(); const timing = {};
   const P = params ?? surface.params;
   const W = width, H = height; const SL = surface.SL; const slMm = SL * 1000;
@@ -357,15 +382,22 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
   G0.stage = STAGES[G0.lifeStage] ? G0.lifeStage : (P?.stage === 'adult' ? 'adult' : 'parr'); const STG = STAGES[G0.stage];
   const ind = planIndividual(seed, G0);
   const G = Object.assign(G0, { W, H, SL });
-  const geo = buildGeometry(surface, W, H); Object.assign(G, { Av: geo.Av, circ: geo.circ, mmU: geo.mmU });
+  const geo = buildGeometry(surface, W, H); Object.assign(G, { Av: geo.Av, Xm: geo.Xm, circ: geo.circ, mmU: geo.mmU });
+  const uvStats = (() => { // UV の物理的な歪み: u 方向（体軸 3D 距離/テクセル ÷ 公称）と, 周方向テクセル幅 / 軸方向テクセル幅
+    let xMax = 0, xMaxTail = 0; const xs = geo.Xm;
+    for (let j = 0; j < H; j += 4) for (let x = 0; x < W - 1; x++) { const ratio = (xs[j * W + x + 1] - xs[j * W + x]) / geo.mmU; if (ratio > xMax) xMax = ratio; if (x / (W - 1) > 0.9 && ratio > xMaxTail) xMaxTail = ratio; }
+    let vMin = 1e9, vMax = 0, vMinTail = 1e9, vMaxTail = 0;
+    for (let x = 0; x < W; x++) { const q = geo.circ[x] / (H - 1) / geo.mmU; if (x / (W - 1) > 0.02) { vMin = Math.min(vMin, q); vMax = Math.max(vMax, q); } if (x / (W - 1) > 0.9) { vMinTail = Math.min(vMinTail, q); vMaxTail = Math.max(vMaxTail, q); } }
+    return { u_metric_max: +xMax.toFixed(4), u_metric_max_s_gt_0p9: +xMaxTail.toFixed(4), v_over_u_texel: [+vMin.toFixed(3), +vMax.toFixed(3)], v_over_u_texel_s_gt_0p9: [+vMinTail.toFixed(3), +vMaxTail.toFixed(3)], note: 'patterns are laid out in true surface mm (arc length around, 3D distance along); u metric > 1 only where the section tapers' };
+  })();
   const pal = designPalette(G);
-  const { Y, Av, cS, hS, circ, mmU, halfRow } = geo;
+  const { Y, Av, Xm, cS, hS, circ, mmU, halfRow } = geo;
   timing.geometry = Date.now() - t0;
 
   const N = W * H;
   const R = new Float32Array(N), Gc = new Float32Array(N), B = new Float32Array(N);     // 線形 albedo
   const maskPM = new Float32Array(N), maskSpot = new Float32Array(N), maskLow = new Float32Array(N), maskLL = new Float32Array(N);
-  const sheenM = new Float32Array(N), opStreak = new Float32Array(N);
+  const sheenM = new Float32Array(N), opStreak = new Float32Array(N), axil = new Float32Array(N);
   const rr = new Float32Array(N);                                                       // r = Y/h
   const headW = new Float32Array(N);                                                    // 頭部重み
   const opM = new Float32Array(N);                                                      // 鰓蓋マスク
@@ -381,6 +413,8 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
   const phX = rngScale() * pitchMm, phY = rngScale() * pitchMm;
   const pinkLin = labToLin(pal.pink[0], pal.pink[1], pal.pink[2], [0, 0, 0]);
   const opLin = labToLin(...pal.opercle, [0, 0, 0]), opBlueLin = labToLin(...pal.opercleBlue, [0, 0, 0]), jawLin = labToLin(...pal.jaw, [0, 0, 0]);
+  const bellyLin = [0, 1, 2].map((c) => pal.bodyLut[(Math.round(0.05 * (NL - 1))) * 3 + c]);   // r=-0.9 の腹色
+  const axS = (P.fins?.pectoral?.origin_s ?? 0.258) + 0.004;
   const shBlue = labToLin(...pal.sheenBlue, [0, 0, 0]), shLilac = labToLin(...pal.sheenLilac, [0, 0, 0]);
   const lipLin = labToLin(26, 8, 8, [0, 0, 0]), orbitLin = labToLin(22, 2, 6, [0, 0, 0]);
   const orLin = labToLin(...pal.orange, [0, 0, 0]);
@@ -398,7 +432,7 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
       const idx = j * W + x; const s = x / (W - 1);
       const h = Math.max(hS[x], 1e-4); const r = clamp(Y[idx] / h, -1, 1); rr[idx] = r;
       const li = ((r + 1) * 0.5 * (NL - 1)) | 0; const lf = ((r + 1) * 0.5 * (NL - 1)) - li; const l2 = Math.min(li + 1, NL - 1);
-      const d = right ? Av[idx] : circ[x] - Av[idx]; const xm = x * mmU; const tt = d / (circ[x] * 0.5 + 1e-6);
+      const d = right ? Av[idx] : circ[x] - Av[idx]; const xm = Xm[idx]; const tt = d / (circ[x] * 0.5 + 1e-6);
       // 体 / 頭 の混合
       const sop = opEdgeRow[j];
       const hwN = 1 - sstep(sop - 0.012, sop + 0.016, s), hwW = 1 - sstep(sop - 0.045, sop + 0.04, s);
@@ -465,6 +499,9 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
           sheenM[idx] = pr2 * sstep(0.26, 0.36, s);
         }
       }
+      // 胸鰭基部（腋部）: 鰭モジュールの襟(collar)と明度が揃うよう, 腹と同じ淡い銀白にする（s≈0.26, r≈-0.84..-0.49）
+      { const qa = ((s - axS) / 0.026) ** 2 + ((r + 0.66) / 0.36) ** 2; const ax = 1 - sstep(0.2, 1.0, qa);
+        if (ax > 0) { axil[idx] = ax; const wa = 0.9 * ax; cr = lerp(cr, bellyLin[0], wa); cg = lerp(cg, bellyLin[1], wa); cb = lerp(cb, bellyLin[2], wa); } }
       R[idx] = cr; Gc[idx] = cg; B[idx] = cb;
     }
   }
@@ -502,9 +539,9 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
           const dx = s - m.s, dy = yv - m.yc; const ey = (-dx * st + dy * ct) / m.h + 0.5; // 0 下端 .. 1 上端
           best *= 1 - m.cut.depth * (1 - sstep(m.cut.t * 0.5, m.cut.t, Math.abs(ey - m.cut.f)));
         }
-        const xm = x * mmU, d = side === 'right' ? Av[idx] : circ[x] - Av[idx];
+        const xm = Xm[idx], d = side === 'right' ? Av[idx] : circ[x] - Av[idx];
         const tex = 0.94 + 0.12 * fbm2(xm / 2.6 + 3.1, d / 2.6, m.nseed, 2) + 0.06 * best;   // 濃淡のゆらぎ（格子状に見えない低振幅）+ 中心がやや濃い
-        const a = clamp(m.op * best * tex, 0, 1) * (1 - sstep(0.962, 0.99, s));      // 尾端リングは地色のまま連続させる
+        const a = clamp(m.op * best * tex, 0, 1) * (1 - sstep(0.945, 0.99, s));      // 最後の斑は尾端へ向けてなだらかに消え, 尾端リングは地色のまま連続
         R[idx] = lerp(R[idx], m.lin[0], a); Gc[idx] = lerp(Gc[idx], m.lin[1], a); B[idx] = lerp(B[idx], m.lin[2], a);
         if (a > maskPM[idx]) maskPM[idx] = a;
       }
@@ -521,7 +558,7 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
       const j0 = sp.side === 'right' ? 0 : Math.ceil(halfRow), j1 = sp.side === 'right' ? Math.floor(halfRow) : H - 1;
       const rowSpan = span * 6;
       for (let j = Math.max(j0, sp.j - rowSpan); j <= Math.min(j1, sp.j + rowSpan); j++) for (let x = Math.max(0, sp.x - span); x <= Math.min(W - 1, sp.x + span); x++) {
-        const idx = j * W + x; const xm = x * mmU, d = sp.side === 'right' ? Av[idx] : circ[x] - Av[idx];
+        const idx = j * W + x; const xm = Xm[idx], d = sp.side === 'right' ? Av[idx] : circ[x] - Av[idx];
         const dx = xm - sp.xm, dd = d - sp.dm; const ex = (dx * cs + dd * sn) / rx, ey = (-dx * sn + dd * cs) / rd;
         const rho = Math.sqrt(ex * ex + ey * ey); if (rho > 1.5) continue;
         const wob = 1 + 0.035 * Math.sin(2 * Math.atan2(ey, ex) + sp.rot * 7);
@@ -591,7 +628,7 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
     for (let j = 0; j < H; j++) {
       const right = j < halfRow;
       for (let x = x0; x < W; x++) {
-        const idx = j * W + x; const xm = x * mmU + phX; const dm = (right ? Av[idx] : circ[x] - Av[idx]) + phY;
+        const idx = j * W + x; const xm = Xm[idx] + phX; const dm = (right ? Av[idx] : circ[x] - Av[idx]) + phY;
         const j0 = Math.round(dm / q); let n = 0;
         for (let jj = j0 - 2; jj <= j0 + 2; jj++) {
           const off = (jj & 1) ? 0.5 * p : 0; const kc = Math.floor((xm - off) / p);
@@ -619,12 +656,12 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
     for (let k = 0; k < llNLL; k++) {
       const s = 0.265 + k * 0.0058; const x = Math.round(s * (W - 1));
       const jc = rowForR(surface, G, s, llOffset(s) / Math.max(hS[x], 1e-4), side) + jOff;
-      const idc = jc * W + x; const xc = x * mmU, dc = side === 'right' ? Av[idc] : circ[x] - Av[idc];
+      const idc = jc * W + x; const xc = Xm[idc], dc = side === 'right' ? Av[idc] : circ[x] - Av[idc];
       const span = Math.ceil(0.7 / mmU) + 1;
       for (let j = Math.max(0, jc - 12); j <= Math.min(H - 1, jc + 12); j++) for (let xx = Math.max(0, x - span); xx <= Math.min(W - 1, x + span); xx++) {
         if ((side === 'right') !== (j < halfRow)) continue;
         const id2 = j * W + xx; const d2 = side === 'right' ? Av[id2] : circ[xx] - Av[id2];
-        const ddx = xx * mmU - xc, ddd = d2 - dc; const g = Math.exp(-(ddx * ddx + ddd * ddd) / (2 * llSigma * llSigma));
+        const ddx = Xm[id2] - xc, ddd = d2 - dc; const g = Math.exp(-(ddx * ddx + ddd * ddd) / (2 * llSigma * llSigma));
         hgt[id2] -= pitDepth * g; if (g > maskLL[id2]) maskLL[id2] = g;
       }
     }
@@ -645,7 +682,8 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
     // 弱い虹色（銀の領域の青紫〜桃, 03 §3.6.2）
     const ir = (vnoise(x / 70, j / 40, 4001) - 0.5) * 0.05 * clamp01(sil);
     const o4 = idx * 4;
-    const ag = f * G.albedoGain * (G.photoExposure ? 1 : pal.gain[((r + 1) * 0.5 * (NL - 1)) | 0]);
+    const gi = ((r + 1) * 0.5 * (NL - 1)) | 0;
+    const ag = f * G.albedoGain * (G.photoExposure ? 1 : lerp(pal.gain[gi], pal.gain[0], axil[idx]));
     albedo[o4] = toByte(R[idx] * ag * (1 + ir)); albedo[o4 + 1] = toByte(Gc[idx] * ag); albedo[o4 + 2] = toByte(B[idx] * ag * (1 - ir)); albedo[o4 + 3] = 255;
   }
   timing.albedo = Date.now() - t0;
@@ -663,7 +701,7 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
     const jm = j === 0 ? H - 2 : j - 1, jp = j === H - 1 ? 1 : j + 1;
     for (let x = 0; x < W; x++) {
       const idx = j * W + x; const xm1 = Math.max(0, x - 1), xp1 = Math.min(W - 1, x + 1);
-      const gx = (hb[j * W + xp1] - hb[j * W + xm1]) / ((xp1 - xm1) * mmU);
+      const gx = (hb[j * W + xp1] - hb[j * W + xm1]) / Math.max(Xm[j * W + xp1] - Xm[j * W + xm1], 1e-6);
       const aM = j === 0 ? Av[jm * W + x] - circ[x] : Av[jm * W + x], aP = j === H - 1 ? Av[jp * W + x] + circ[x] : Av[jp * W + x];
       let ga = (hb[jp * W + x] - hb[jm * W + x]) / Math.max(aP - aM, 1e-6);
       let gxx = gx;
@@ -685,9 +723,9 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
       const idx = j * W + x; const r = rr[idx]; const hw = headW[idx]; const s = x / (W - 1);
       const li = ((r + 1) * 0.5 * (NL - 1)) | 0;
       let sil = lerp(pal.silver[li], pal.silverHead[li], hw);
-      sil = lerp(sil, 0.50, opM[idx]) + 0.15 * sheenM[idx];
+      sil = lerp(sil, 0.50, opM[idx]) + 0.15 * sheenM[idx]; sil = lerp(sil, 0.85, 0.7 * axil[idx]);
       let rough = lerp(pal.rough[li], pal.roughHead[li], hw); rough = lerp(rough, 0.40 + 0.04 * opStreak[idx], opM[idx]) - 0.04 * sheenM[idx];
-      const xm = x * mmU, d = right ? Av[idx] : circ[x] - Av[idx];
+      const xm = Xm[idx], d = right ? Av[idx] : circ[x] - Av[idx];
       rough += G.scaleRoughVar * (rim[idx] - 0.3 * crease[idx]) + 0.025 * (vnoise(xm / 2.2, d / 2.2, sdR) - 0.5);
       // パーマーク: 地色 +0.05, 金属度 ×0.3 / 黒点: 粗さ 0.5, 金属度 0 / 側線の窪み
       const mpm = maskPM[idx], msp = maskSpot[idx], mlw = maskLow[idx];
@@ -701,9 +739,9 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
   timing.orm = Date.now() - t0;
 
   // --- 8) 口内 / レポート ----------------------------------------------------------------------------------------
-  const mouth = { albedo: buildMouthTexture(seed) };
+  const mouth = { albedo: buildMouthTexture(seed, 256, mouthOpts), orientation: mouthOpts.orientation ?? 'along-u' };
   const albedoImg = { width: W, height: H, data: albedo };
-  const report = buildReport({ seed, G, ind, pal, marksBySide, spotReport, W, H, SL, pitchMm, maxTilt, silverGain, timing, albedoImg, rr, maskPM, maskSpot, Av, circ, mmU, llY, hS, P, eyeMm });
+  const report = buildReport({ uvStats, seed, G, ind, pal, marksBySide, spotReport, W, H, SL, pitchMm, maxTilt, silverGain, timing, albedoImg, rr, maskPM, maskSpot, Av, circ, mmU, llY, hS, P, eyeMm });
   return { albedo: albedoImg, normal: { width: W, height: H, data: normal }, orm: { width: W, height: H, data: orm }, mouth, report };
 }
 
@@ -717,7 +755,7 @@ function bandStat(albedoImg, rr, maskPM, maskSpot, W, H, rLo, rHi, sLo, sHi) {
   return { lab: [+lab.L.toFixed(1), +lab.a.toFixed(1), +lab.b.toFixed(1)], srgb: [toByte(sr / n), toByte(sg / n), toByte(sb / n)], n };
 }
 
-function buildReport({ seed, G, ind, pal, marksBySide, spotReport, W, H, SL, pitchMm, maxTilt, silverGain, timing, albedoImg, rr, maskPM, maskSpot, eyeMm }) {
+function buildReport({ uvStats, seed, G, ind, pal, marksBySide, spotReport, W, H, SL, pitchMm, maxTilt, silverGain, timing, albedoImg, rr, maskPM, maskSpot, eyeMm }) {
   const fmtMark = (m, i) => ({ index: i, s: +m.s.toFixed(4), y_center_sl: +m.yc.toFixed(4), h_sl: +m.h.toFixed(4), w_sl: +m.w.toFixed(4), tilt_deg: +m.tilt.toFixed(1), opacity: +m.op.toFixed(3),
     lab: m.lab.map((v) => +v.toFixed(1)), srgb: labToSrgb8(...m.lab), events: m.events.slice(), split: !!m.cut });
   const c = (lab) => ({ lab: lab.map((v) => +v.toFixed(1)), srgb: labToSrgb8(...lab) });
@@ -725,7 +763,7 @@ function buildReport({ seed, G, ind, pal, marksBySide, spotReport, W, H, SL, pit
   return {
     module: 'textures.mjs', seed, width: W, height: H,
     genome: Object.fromEntries(Object.entries(G).filter(([k]) => !['Av', 'circ', 'mmU', 'W', 'H', 'slM'].includes(k))),
-    uv: { u: 's (0 = snout, 1 = caudal base)', v: 'alpha/2pi (0 = dorsal midline, 0.25 = right flank, 0.5 = ventral, 0.75 = left flank)', imageOrigin: 'top-left', x: 'u*(W-1)', y: 'v*(H-1)', normalGreen: 'image-up (glTF)', ormMetalnessBakedWithSilverGain: true },
+    uv: { stats: uvStats, u: 's (0 = snout, 1 = caudal base)', v: 'alpha/2pi (0 = dorsal midline, 0.25 = right flank, 0.5 = ventral, 0.75 = left flank)', imageOrigin: 'top-left', x: 'u*(W-1)', y: 'v*(H-1)', normalGreen: 'image-up (glTF)', ormMetalnessBakedWithSilverGain: true },
     scale: { pitch_mm: +pitchMm.toFixed(3), pitch_pct_sl: G.scalePitchPctSl, pitch_px_u: +(pitchMm / (SL * 1000 / (W - 1))).toFixed(2), row_spacing_mm: +(pitchMm / 2).toFixed(3), max_normal_tilt_deg: +(maxTilt / deg).toFixed(2), tilt_param_deg: G.scaleTiltDeg, amplitude_mm_at_sl: +(0.1 * SL * 1000 / 300).toFixed(3) },
     parrMarks: { countRight: marksBySide.right.length, countLeft: marksBySide.left.length, lrDelta: marksBySide.left.length - marksBySide.right.length,
       sFirst: +ind.sFirst.toFixed(3), sLast: +ind.sLast.toFixed(3), frontFaint: ind.frontFaint, fadeFactor: +ind.fade.toFixed(3), flCm: +ind.flCm.toFixed(1),
