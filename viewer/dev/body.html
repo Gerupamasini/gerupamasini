@@ -1,0 +1,52 @@
+<!doctype html><meta charset="utf-8"><title>body dev</title>
+<style>html,body{margin:0;background:#1a2a33}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { createSurface } from '/tools/build-assets/surface.mjs';
+import { buildBody } from '/tools/build-assets/loft.mjs';
+const q = new URLSearchParams(location.search);
+const view = q.get('view') || 'side', jaw = parseFloat(q.get('jaw') || '0'), wire = q.get('wire') === '1';
+const params = await (await fetch('/assets/src/params.json')).json();
+const S = createSurface(params);
+const body = buildBody(S, params);
+const rot = (pos, jawF, hinge, deg) => { // rotate lower-jaw vertices about the z axis through the hinge (+angle = opens, tip goes down)
+  const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); const out = Float32Array.from(pos);
+  for (let i = 0; i < pos.length / 3; i++) { const f = jawF[i]; if (f <= 0) continue;
+    const x = pos[i*3] - hinge[0], y = pos[i*3+1] - hinge[1];
+    // jaw tip is at +x; opening rotates it towards -y: rotation by -a about z... x' = x c + y s ; y' = -x s + y c
+    const xr = x * c + y * s, yr = -x * s + y * c;
+    out[i*3] = hinge[0] + x + (xr - x) * f; out[i*3+1] = hinge[1] + y + (yr - y) * f; }
+  return out;
+};
+const g = new THREE.BufferGeometry();
+g.setAttribute('position', new THREE.BufferAttribute(rot(body.positions, body.attrs._JAW, body.landmarks.jaw_hinge, jaw), 3));
+g.setAttribute('normal', new THREE.BufferAttribute(body.normals, 3));
+g.setIndex(new THREE.BufferAttribute(body.indices, 1)); g.computeVertexNormals();
+const gm = new THREE.BufferGeometry();
+gm.setAttribute('position', new THREE.BufferAttribute(rot(body.mouth.positions, body.mouth.attrs._JAW, body.landmarks.jaw_hinge, jaw), 3));
+gm.setAttribute('normal', new THREE.BufferAttribute(body.mouth.normals, 3)); gm.setIndex(new THREE.BufferAttribute(body.mouth.indices, 1));
+const W = innerWidth, H = innerHeight;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, H); document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x24343d);
+const mat = new THREE.MeshStandardMaterial({ color: 0xb0a890, roughness: 0.45, metalness: 0.2, wireframe: wire, side: THREE.FrontSide });
+scene.add(new THREE.Mesh(g, mat));
+scene.add(new THREE.Mesh(gm, new THREE.MeshStandardMaterial({ color: 0xcc5555, roughness: 0.6, side: THREE.DoubleSide })));
+// eye balls (placeholder spheres)
+for (const e of body.landmarks.eye) { const m = new THREE.Mesh(new THREE.SphereGeometry(e.outerRadius*0.95, 24, 16), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 })); const n = S.normal(params.eye.center_s.v, e.alpha); m.position.set(e.surface[0] - n[0]*e.outerRadius*0.5, e.surface[1] - n[1]*e.outerRadius*0.5, e.surface[2] - n[2]*e.outerRadius*0.5); scene.add(m); }
+scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x303820, 1.4)); const dl = new THREE.DirectionalLight(0xffffff, 3); dl.position.set(0.3, 0.6, 0.5); scene.add(dl);
+let cam;
+const tgt = new THREE.Vector3(0, 0, 0);
+if (view === 'side' || view === 'top' || view === 'front' ) {
+  const half = view === 'front' ? 0.04 : 0.11; cam = new THREE.OrthographicCamera(-half*W/H, half*W/H, half, -half, 0.001, 5);
+  if (view === 'side') cam.position.set(0, 0, 1); if (view === 'top') { cam.position.set(0, 1, 0); cam.up.set(1, 0, 0); } if (view === 'front') cam.position.set(1, 0, 0);
+} else { cam = new THREE.PerspectiveCamera(30, W/H, 0.001, 5); }
+if (view === 'head') { cam = new THREE.PerspectiveCamera(30, W/H, 0.001, 5); cam.position.set(0.20, 0.03, 0.17); tgt.set(0.06, -0.002, 0); }
+if (view === 'persp') { cam.position.set(0.20, 0.10, 0.28); tgt.set(0, 0, 0); }
+if (view === 'headside') { cam = new THREE.OrthographicCamera(-0.04*W/H, 0.04*W/H, 0.04, -0.04, 0.001, 5); cam.position.set(0.06, 0, 1); tgt.set(0.06, 0, 0); }
+cam.lookAt(tgt); if (view==='headside') cam.position.set(0.06,0,1);
+if (view==='headside') cam.lookAt(0.06,0,0);
+r.render(scene, cam);
+window.__info = { tris: body.indices.length/3, mouthTris: body.mouth.indices.length/3, hinge: body.landmarks.jaw_hinge };
+window.__ready = true;
+</script>

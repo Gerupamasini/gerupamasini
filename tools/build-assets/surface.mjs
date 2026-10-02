@@ -2,12 +2,9 @@
 // Coordinates: metres. +X forward (snout), +Y up, +Z right. Body-local origin at s = s_origin.
 //   s     : body position along SL, 0 = snout tip (upper jaw), 1 = caudal base. Negative s (down to -cap) is the rounded snout cap.
 //   alpha : angle around the body axis, 0 = dorsal midline, PI/2 = right flank (+Z), PI = ventral midline, 3PI/2 = left flank.
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-export function loadParams(file = path.join(HERE, '../../assets/src/params.json')) {
+// Browser-safe: Node built-ins are only touched inside loadParams() (Node >= 22.3 getBuiltinModule).
+export function loadParams(file = new URL('../../assets/src/params.json', import.meta.url)) {
+  const fs = process.getBuiltinModule('node:fs');
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
@@ -33,7 +30,8 @@ function makeInterp(xs, ys) {
 
 const sgnPow = (x, p) => Math.sign(x) * Math.pow(Math.abs(x), p);
 
-export function createSurface(params = loadParams(), overrides = {}) {
+export function createSurface(params, overrides = {}) {
+  if (!params) params = loadParams();
   const SL = overrides.sl_m ?? params.sl_m.v;
   const s0 = params.s_origin.v;
   const cap = params.cap_length_over_sl.v;
