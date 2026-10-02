@@ -18,6 +18,7 @@
 //            inward normal ray hits exposed feather surface within 2.5 mm while its outward ray (15 mm)
 //            hits no feather at all (depth = distance to the feather behind it)
 //   fin      a tertial / scapular tip more than FIN (10) mm straight above the body: stands up like a fin off the back
+//            (tertials: only while rising from their root by more than 0.35 of their horizontal run)
 //            (clear of the body, so the measures above do not see it)
 //   neck     the same two measures where the covering body surface is neck/head plumage (moved > 0.5 mm by
 //            the neck bones relative to the chest): the neck lying on the scapulars / shoulder when it bends
@@ -606,6 +607,11 @@ function measure(model, S, anim) {
       for (const line of I.lines) {
         const a = line[line.length - 1];
         const vi = Array.isArray(a) ? a[0] : a;
+        // (a tertial counts only when it rises off its root — stands up: one trailing level in the raised wing of the
+        // upstroke lies 20–30 mm over the fuller flank of the rear body without standing up, validation §Z)
+        const r0 = Array.isArray(line[0]) ? line[0][0] : line[0];
+        const run = Math.hypot(FP[vi * 3] - FP[r0 * 3], FP[vi * 3 + 2] - FP[r0 * 3 + 2]);
+        if (I.type === 'tertial' && FP[vi * 3 + 1] - FP[r0 * 3 + 1] < 0.35 * run) continue;
         const d = dropToBody(FP[vi * 3], FP[vi * 3 + 1], FP[vi * 3 + 2]);
         if (d > r.fin) { r.fin = d; r.finAt = [FP[vi * 3], FP[vi * 3 + 1], FP[vi * 3 + 2]].map((x) => +x.toFixed(1)); }
       }

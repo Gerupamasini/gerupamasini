@@ -449,7 +449,7 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
       // shoulder where p6 / p5 ended (validation §Z)
       const x = PRIMARY_TIP_X[f.index - 1];
       // p9 tip (−84, 57.4), spec §10.3; the chord ends higher by the shaft's ventral bend (featherOffset)
-      const y = 57.0 + (10 - f.index) * 0.35 + (f.index <= 6 ? -SEC_DROP : 0) + f.curve * L * 0.83;
+      const y = 57.0 + (10 - f.index) * 0.35 + (f.index <= 6 ? -SEC_DROP : 0) + (f.index === 10 ? 1.5 : 0) + f.curve * L * 0.83;
       const dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));
       tip = new THREE.Vector3(x, y, base.z - dz);
       n = V([0.55, 0.83, 0]).normalize();
