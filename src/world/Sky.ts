@@ -26,7 +26,7 @@ export class SkyDome {
     // the Preetham model comes out far brighter than the ground at any exposure; scale the dome so the sky keeps its
     // blue and the environment maps built from it stop washing the flat out
     const mat = this.sky.material;
-    mat.uniforms.uSkyScale = { value: 0.4 };
+    mat.uniforms.uSkyScale = { value: 0.32 };
     mat.uniforms.uCloudTime = this.uCloudTime;
     mat.uniforms.uCloudAmt = this.uCloudAmt;
     // a few soft cumulus (fBm on a plane high above, after MahazeViewer's analytic sky), lit by the sun's side,

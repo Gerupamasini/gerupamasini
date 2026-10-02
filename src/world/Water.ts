@@ -101,7 +101,7 @@ export class WaterPass {
       uFogPool: { value: 1.0 },   // tide pools have settled and are clearer
       uRefr: { value: 0.6 },
       uRes: { value: new Vector2(1, 1) },
-      uEnvI: { value: 0.9 },
+      uEnvI: { value: 0.72 },
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,

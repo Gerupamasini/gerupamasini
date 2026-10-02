@@ -67,6 +67,12 @@ float phaseWander(vec2 p, int i) {
   float fi = float(i);
   return 2.6 * (vnoiseWv(p * (0.12 + 0.05 * fract(fi * 0.37)) + fi * 7.31) - 0.5) + 0.9 * (vnoiseWv(p * 0.55 + fi * 3.17) - 0.5);
 }
+// Each train also waxes and wanes across the water (a few metres), so no single family of stripes dominates a view:
+// where one component fades, others of a different direction show through.
+float ampWander(vec2 p, int i) {
+  float fi = float(i);
+  return 0.45 + 1.1 * vnoiseWv(p * (0.22 + 0.08 * fract(fi * 0.61)) + fi * 5.73);
+}
 // h, dh/dx, dh/dz
 vec3 waveGrad(vec2 p, float t, float minLambda) {
   vec3 r = vec3(0.0);
@@ -76,7 +82,7 @@ vec3 waveGrad(vec2 p, float t, float minLambda) {
     float f = smoothstep(minLambda, minLambda * 2.0, lam);
     if (f <= 0.0) continue;
     float th = A.z * dot(A.xy, p) - uWaveB[i].x * t + uWaveB[i].y + phaseWander(p, i);
-    float a = A.w * uWaveGain * f;
+    float a = A.w * uWaveGain * f * ampWander(p, i);
     r.x += a * sin(th);
     float c = a * A.z * cos(th);
     r.y += c * A.x;
@@ -93,7 +99,7 @@ vec3 waveHess(vec2 p, float t, float minLambda) {
     float f = smoothstep(minLambda, minLambda * 2.0, lam);
     if (f <= 0.0) continue;
     float th = A.z * dot(A.xy, p) - uWaveB[i].x * t + uWaveB[i].y + phaseWander(p, i);
-    float s = -A.w * uWaveGain * f * A.z * A.z * sin(th);
+    float s = -A.w * uWaveGain * f * ampWander(p, i) * A.z * A.z * sin(th);
     H += s * vec3(A.x * A.x, A.x * A.y, A.y * A.y);
   }
   return H;
