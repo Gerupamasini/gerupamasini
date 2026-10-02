@@ -50,7 +50,7 @@ export function buildWingLayout() {
   // from the wrist; p9 = wing chord (S1,S3: 105–108 flattened, ≈100 projected when folded, spec §10.3): the
   // folded p7–p10 tips converge on the tail tip (z ≈ −83.5) as one blunt dark cluster — 3 mm shorter, the
   // rectrices ran on alone as a thin needle (p020, p070, p006)
-  const pTipDist = [60, 64, 69, 75, 82, 90, 100, 103.2, 103.6, 102];
+  const pTipDist = [60, 64, 69, 75, 82, 90, 99.6, 102, 103.2, 100.4];
   const prim = [];
   for (let i = 10; i >= 1; i--) {
     const t = 0.06 + (0.9 * (i - 1)) / 9;
@@ -124,12 +124,15 @@ export function buildTailLayout(tailPivot) {
   const feathers = [];
   // S2,S3 (tail 45 mm); closed, the tips end level (square tail, p020, p070, p006): the graduated 45…41 mm put
   // the central pair 4 mm past the rest as a single point
-  const lengths = [43.8, 43.8, 43.7, 43.6, 43.4, 43.2];
+  // (outer pairs 1–3 mm shorter: closed, the outer feathers end under the central ones, so from above the tail ends in a
+  // short rounded point under the crossed wing tips instead of a square 15 mm end standing out past them as a stem —
+  // validation §Z; from the side the tips still end level within 1 mm under the dark central pair)
+  const lengths = [43.8, 43.7, 43.4, 42.9, 42.2, 41.3];
   for (let side = 0; side < 2; side++) {
     const sgn = side === 0 ? 1 : -1;
     for (let i = 1; i <= 6; i++) {
-      // closed tail 14–18 mm wide (spec §11)
-      const x = sgn * (0.5 + 0.55 * (i - 1));
+      // closed tail ≈13 mm wide (spec §11: 14–18, low confidence; the outer vanes tuck under the central pair)
+      const x = sgn * (0.5 + 0.45 * (i - 1));
       // outer pairs step down under the central ones (closed tail slightly roofed): from the side the white outer
       // rectrices show as a pale lower edge under the dark tail (p020, p070)
       const base = [tailPivot[0] + x, tailPivot[1] + 0.9 - (i - 1) * 0.42, tailPivot[2] + 1.5];
@@ -138,7 +141,7 @@ export function buildTailLayout(tailPivot) {
         bone: `r${i}_${side ? 'R' : 'L'}`,
         type: 'rectrix',
         base,
-        yaw: sgn * (i - 1) * 0.35 * deg, // fanned slightly outward
+        yaw: -sgn * (i - 1) * 0.2 * deg, // closed in under the central pair (fanned out 0.35°/feather, the closed tip was 15 mm wide)
         length: lengths[i - 1],
         width: 8.2,
         innerVane: 0.58,
@@ -158,8 +161,10 @@ export function buildTailLayout(tailPivot) {
         bone: 'tail',
         type: 'upperTailCovert',
         // (closed over the narrow closed tail and the rump, 16 mm wide at z −60)
-        base: [tailPivot[0] + sgn * (1.0 + i * 2.0), tailPivot[1] + 3.2 - i * 0.6, tailPivot[2] + 12 - i * 2.0],
-        yaw: sgn * (3 + i * 5) * deg,
+        // (fanned 2/5/8°, not 3/8/13°: under the converging wing tips, whose outline they set from above at z −55…−65 —
+        // a 25 mm parallel-sided stem behind the rump, validation §Z)
+        base: [tailPivot[0] + sgn * (1.0 + i * 1.8), tailPivot[1] + 3.2 - i * 0.6, tailPivot[2] + 12 - i * 2.0],
+        yaw: sgn * (2 + i * 3) * deg,
         length: 32 - i * 3, // (tips at z ≈ −63: 22 mm of tail beyond, spec §11; the top outline runs on to the primaries)
         width: 10,
         innerVane: 0.55,

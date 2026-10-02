@@ -102,6 +102,11 @@ export function foldLayer(f) {
 export const CONFORM_FOLD = [0.6, 0.8];
 export const conformWeight = (fold) => smooth01(CONFORM_FOLD[0], CONFORM_FOLD[1], fold);
 const FLAT = 0.12; // folded vanes pressed flat: this much of the camber is kept
+// folded primary tips' distance from the midline (mm), p1 … p10
+const PRIMARY_TIP_X = [17, 16, 15, 13, 9.5, 9.2, 6.6, 5.1, 4.35, 3.6];
+// mm: the middle secondaries' tips lowered, under the fuller flank of the rear body (validation §Z)
+const SEC_DROP = -2.5;
+const OVER_RUMP = 2; // mm: the primaries' rise over the upper-tail coverts behind the rump
 
 /**
  * Bend of a folded feather onto its shell layer: world displacement (mm) of the point `p` (folded, world) at
@@ -117,7 +122,7 @@ const FLAT = 0.12; // folded vanes pressed flat: this much of the camber is kept
 export function conformAt(f, p, t, a, sdf, torso = sdf, normal = null) {
   // (the primaries' rear half lies over the upper-tail coverts on the rump, not on the rump itself: the top
   // outline runs on from the tertial tips to the wing tip over the tail, photos, spec §2, §10.3)
-  const overRump = f.type === 'primary' ? 3 * smooth01(-50, -62, p.z) : 0;
+  const overRump = f.type === 'primary' ? OVER_RUMP * smooth01(-50, -62, p.z) : 0;
   const H = foldLayer(f) + overRump + FLAT * (featherOffset(f, t, a)[2] - featherOffset(f, t, 0)[2]);
   if (H < 0) sdf = torso;
   const d = sdf(p.x, p.y, p.z);
@@ -345,7 +350,7 @@ let CACHE = null;
 // tools/dev/wingfold-cache.mjs) under a key of what it depends on: the solver version, the wing layout and the
 // body outline (sampled). Whenever either changes the key no longer matches and the solution is computed
 // here instead (with a console warning to regenerate the cache).
-export const WING_FOLD_SOLVER = 23; // bump with any change of the solver below
+export const WING_FOLD_SOLVER = 24; // bump with any change of the solver below
 export function wingFoldKey(wingFeathers, sdf, torsoSdf = sdf) {
   const probe = [];
   for (let x = 0; x <= 24; x += 6) for (let y = 40; y <= 90; y += 10) for (let z = -50; z <= 50; z += 10) probe.push(Math.round(sdf(x, y, z) * 100), Math.round(torsoSdf(x, y, z) * 100));
@@ -438,17 +443,16 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
     let tip;
     let n;
     if (f.type === 'primary') {
-      // tips converge over the tail: longest primaries meet near the midline at the tail tip (±5 mm)
-      const zTip = V(f.base).z - 0; // unused
-      // (drawn 0.3–0.9 mm closer to the midline than 4.8 + 0.9·(10 − i): from above the folded wings taper to a point
-      // over the tail instead of running on as a parallel-sided stem — validation §Y)
-      const x = 4.5 + (10 - f.index) * 0.8;
+      // tips converge over the tail: the longest primaries meet near the midline at the tail tip, the shorter ones end
+      // in steps further out (PRIMARY_TIP_X), so from above the folded wing tapers from the round rump to one short point
+      // over the tail — no parallel-sided stem behind the rump (4.8 + 0.9·(10 − i) for all ran on 25 mm wide), and no
+      // shoulder where p6 / p5 ended (validation §Z)
+      const x = PRIMARY_TIP_X[f.index - 1];
       // p9 tip (−84, 57.4), spec §10.3; the chord ends higher by the shaft's ventral bend (featherOffset)
-      const y = 57.0 + (10 - f.index) * 0.35 + f.curve * L * 0.83;
+      const y = 57.0 + (10 - f.index) * 0.35 + (f.index <= 6 ? -SEC_DROP : 0) + (f.index === 10 ? 2.5 : f.index === 8 ? 0.8 : f.index === 7 ? 1.2 : 0) + f.curve * L * 0.83;
       const dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));
       tip = new THREE.Vector3(x, y, base.z - dz);
       n = V([0.55, 0.83, 0]).normalize();
-      void zTip;
     } else if (COVERT_ARM[f.type]) {
       // same tip and dorsal side as when it rode on its remex, but rooted on the arm
       const r = remex.get(f.bone);
@@ -471,7 +475,7 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
       // lowest at z −20…−35, and rises toward the tail
       const sTip = (j) => {
         const u = (j - 1) / 10;
-        return V([12, 55.5 + 8 * u ** 1.6, -23 - 37 * u]);
+        return V([12, 55.5 + 8 * u ** 1.6 - SEC_DROP * Math.sin(Math.PI * u), -23 - 37 * u]);
       };
       const guess = f.type === 'tertial' ? V([[10.5, 65.5, -53], [8, 67, -52], [5.5, 68, -50.5]][f.index - 1]) : f.type === 'secondary' ? sTip(f.index) : base.clone().addScaledVector(dirHint, L);
       const [pp, nn] = projectToSurface(sdf, guess.x, guess.y, guess.z);
