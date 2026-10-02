@@ -24,7 +24,7 @@ const OUTLINE = [
 const GROWTH_ORIGIN = new Vector3(0.17, 0.315, 0);
 const HALF_WIDTH = 0.235;
 /** major growth checks modelled in LOD0 geometry (the shader draws its own set close to these) */
-const GEOM_CHECKS = [0.3, 0.47, 0.64, 0.81];
+const GEOM_CHECKS = [0.54, 0.68, 0.82];
 
 export const ANATOMY = {
   hingePoint: new Vector3(0.05, 0.338, 0),
@@ -34,8 +34,8 @@ export const ANATOMY = {
   footRoot: new Vector3(0.24, -0.17, 0),
   footDir: Math.atan2(-0.83, 0.55),
   footLength: 0.62,
-  siphonIn: { root: new Vector3(-0.38, -0.055, 0), radius: 0.058 },
-  siphonOut: { root: new Vector3(-0.38, 0.068, 0), radius: 0.044 },
+  siphonIn: { root: new Vector3(-0.38, -0.04, 0), radius: 0.058 },
+  siphonOut: { root: new Vector3(-0.38, 0.048, 0), radius: 0.044 },
   siphonDir: Math.PI - 0.12,
   /** posterior margin point that must stay below the sand when buried */
   posteriorTip: new Vector3(-0.5, 0.0, 0),
@@ -54,12 +54,23 @@ function outline(n) {
 }
 
 function dome(s) {
-  // heart-shaped section: fullest about a third of the way down from the hinge
-  return Math.pow(Math.max(0, 1 - Math.pow(s, 1.9)), 0.7) * (0.86 + 0.14 * smooth(0, 0.4, s));
+  // the inflated umbo is the high point; rounded (elliptic) toward the margin so the valves meet in an ovate section
+  return Math.pow(Math.max(0, 1 - Math.pow(s, 2.4)), 0.5);
 }
 function smooth(a, b, x) {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
+}
+
+/** outer surface height of the valve at growth coordinate s along the ray to margin point m */
+function valveZ(s, m, checks = false) {
+  const G = GROWTH_ORIGIN;
+  const A = Math.hypot(m.x - G.x, m.y - G.y);
+  // flattened toward the hinge (lunule / escutcheon), but every direction meets smoothly at the umbo
+  const sector = 1 + (0.5 + 0.5 * Math.pow(smooth(0.0, 0.45, A), 0.8) - 1) * smooth(0.0, 0.55, s);
+  let z = HALF_WIDTH * sector * dome(s);
+  if (checks) for (const c of GEOM_CHECKS) z -= 0.0012 * Math.exp(-(((s - c) / 0.012) ** 2)) * sector;
+  return z;
 }
 
 /** One valve (left, z ≥ 0). Groups: 0 outer surface, 1 inner surface + rim. */
@@ -71,15 +82,7 @@ function buildValve(lod) {
   const rows = ns + 1;
   const pos = [], uv = [], idx = [];
   const sAt = (i) => Math.pow(i / ns, 0.85);
-  const zOut = (s, j) => {
-    const m = M[j % nu];
-    const A = Math.hypot(m.x - G.x, m.y - G.y);
-    // flattened toward the hinge (lunule / escutcheon), but every direction meets smoothly at the umbo
-    const sector = 1 + (Math.pow(smooth(0.0, 0.45, A), 0.8) - 1) * smooth(0.0, 0.55, s);
-    let z = HALF_WIDTH * sector * dome(s);
-    if (checks) for (const c of GEOM_CHECKS) z -= 0.0012 * Math.exp(-(((s - c) / 0.012) ** 2)) * sector;
-    return z;
-  };
+  const zOut = (s, j) => valveZ(s, M[j % nu], checks);
   // outer
   for (let i = 0; i < rows; i++) {
     const s = sAt(i);
@@ -106,7 +109,7 @@ function buildValve(lod) {
         const A = Math.max(0.05, Math.hypot(m.x - G.x, m.y - G.y));
         const k = Math.max(0.6, 1 - 0.022 / A);
         const t = 0.03 * (1 - 0.5 * s);
-        pos.push(G.x + s * k * (m.x - G.x), G.y + s * k * (m.y - G.y), Math.max(0.0015, Math.min(zOut(s, j) - 0.006, zOut(s * k, j) - t)));
+        pos.push(G.x + s * k * (m.x - G.x), G.y + s * k * (m.y - G.y), Math.max(0, Math.min(zOut(s, j) * 0.8, zOut(s * k, j) - t)));
         uv.push(j / nu, s);
       }
     }
@@ -143,14 +146,15 @@ function buildMantle(nu) {
   const M = outline(nu);
   const G = GROWTH_ORIGIN;
   const pos = [], uv = [], idx = [];
-  const j0 = Math.round(nu * 0.16), j1 = Math.round(nu * 0.9);
+  const j0 = Math.round(nu * 0.16), j1 = Math.round(nu * 0.8);
   const across = 4;
   for (let j = j0; j <= j1; j++) {
     const m = M[j];
     for (let k = 0; k <= across; k++) {
       const f = k / across;
       const s = 0.86 + f * 0.12;
-      const z = (1 - f) * HALF_WIDTH * dome(0.86) * 0.82 + f * 0.004;
+      // lines the inside of the valve, then curls in to the commissure
+      const z = (1 - f) * valveZ(0.86, m) * 0.6 + f * 0.004;
       pos.push(G.x + s * (m.x - G.x), G.y + s * (m.y - G.y), z);
       uv.push(j / nu, f);
     }

@@ -111,7 +111,7 @@ float asSculpt(vec2 uv, vec3 lp, float seed, float detail, out float checks, out
   float ribC = u * 104.0 + (asFbmU(u, s*3.0 + seed*9.0, 12.0) - 0.5) * 1.6;
   float aR = 1.0 - smoothstep(0.12, 0.35, fwidth(ribC));
   float ribW = pow(0.5 + 0.5*cos(6.2831853*ribC), 1.6) * mix(0.55, 1.2, asH(vec2(floor(ribC + 0.5), seed*3.0)));
-  float ribA = mix(0.45, 1.0, post) * smoothstep(0.1, 0.35, s);
+  float ribA = mix(0.45, 1.0, post) * smoothstep(0.03, 0.5, s);
   // commarginal threads with irregular spacing (growth rate varies)
   float g = s*s*70.0 + s*48.0 + asFbmU(u, s*9.0 + seed*7.0, 3.0) * 2.2;
   float aG = 1.0 - smoothstep(0.12, 0.35, fwidth(g));
@@ -131,11 +131,11 @@ float asSculpt(vec2 uv, vec3 lp, float seed, float detail, out float checks, out
   float n1 = asN3(m), n2 = asN3(m * 2.2 + 7.3);
   float gran = smoothstep(0.35, 0.8, n1) * 0.7 + smoothstep(0.4, 0.85, n2) * 0.5 * (1.0 - smoothstep(0.2, 0.5, length(fwidth(m * 2.2))));
   // how gritty this part is: patchy, strongest on the posterior slope and the younger margin, polished at the umbo
-  float grit = mix(0.55, 1.0, post) * smoothstep(0.05, 0.3, s) * (0.55 + 0.7*asFbmU(u, s*4.0 + seed*17.0, 5.0));
+  float grit = mix(0.55, 1.0, post) * smoothstep(0.0, 0.45, s) * (0.55 + 0.7*asFbmU(u, s*4.0 + seed*17.0, 5.0));
   // a few strong growth checks (winter / spawning stops): grooves and a colour break
   checks = 0.0;
   for (int i = 0; i < 4; i++) {
-    float c = 0.3 + 0.17*float(i) + (asH(vec2(seed*31.0, float(i))) - 0.5)*0.1;
+    float c = 0.4 + 0.14*float(i) + (asH(vec2(seed*31.0, float(i))) - 0.5)*0.1;
     float w = 0.004 + 0.004*asH(vec2(float(i), seed*13.0));
     float wob = (asFbmU(u, float(i)*3.1 + seed, 2.0) - 0.5) * 0.012;
     float wob2 = (asFbmU(u, float(i)*1.7 + seed*3.0, 6.0) - 0.5) * 0.02;
@@ -147,7 +147,7 @@ float asSculpt(vec2 uv, vec3 lp, float seed, float detail, out float checks, out
           + thrW * 0.12 * aT
           + bead * ribA * 0.45 * aB
           + (gran - 0.4) * 0.9 * grit * aM * mix(0.5, 1.0, detail)
-          - checks * 0.8;
+          - checks * 0.45;
   lost = ribA * 0.4 * (1.0 - aR) + lamA * 0.38 * (1.0 - aG) + 0.12 * (1.0 - aT)
        + ribA * 0.45 * (1.0 - aB) + 0.6 * grit * (1.0 - aM);
   extra = vec3((gran - 0.4) * aM * grit, bead * ribA * aB, grit);
@@ -204,8 +204,8 @@ vec3 asShellColor(vec2 uv, vec4 seed, float checks, float h, out float worn){
   // growth checks show as darker lines
   col *= 1.0 - checks*0.22;
   // worn umbo: periostracum gone, chalky
-  worn = (1.0 - smoothstep(0.03, 0.16, s + (asN(vec2(u*40.0, ps)) - 0.5)*0.05));
-  col = mix(col, vec3(0.74, 0.71, 0.66), worn * 0.75);
+  worn = (1.0 - smoothstep(0.0, 0.14, s + (asN(vec2(u*40.0, ps)) - 0.5)*0.05));
+  col = mix(col, vec3(0.74, 0.71, 0.66), worn * 0.55);
   // dirt sits in the grooves
   col *= mix(0.72, 1.0, clamp(h*1.3 + 0.2, 0.0, 1.0));
   return clamp(col, 0.0, 1.0);
