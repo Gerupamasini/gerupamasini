@@ -58,6 +58,18 @@ void finDeform() {
   float Lr = aFinRoot.w * SL; // true ray length (m)
   float foldPh = rc * 0.85 + seed * 3.0 + t * 3.5;
   P += N * ((aFinIdx.w < 0.5 ? 0.03 : 0.012) * t * t * Lr * cos(foldPh));
+  // paired fins: the base is set into the body wall, but the rest-pose roots
+  // lie only just under the skin, so the first millimetres of the fin (its
+  // opaque fleshy base) stood outside the body as a pale tab at the front
+  // of the pectoral. Sink them a little deeper, toward the body axis at the
+  // root (not along the membrane normal: a spread pectoral lies almost
+  // horizontal, and its normal points along the flank, not into it).
+  if (aFinIdx.w > 2.5) {
+    vec3 Ps; vec4 Qs;
+    spineSample(aFinRoot.x, Ps, Qs);
+    vec3 inW = -normalize(qrot(Qs, vec3(0.0, aFinRoot.y, aFinRoot.z)) + 1e-6);
+    P += inW * (0.0045 * SL * (1.0 - smoothstep(0.0, 0.04, t * aFinRoot.w)));
+  }
 #ifndef DEPTH_ONLY
   // sarasa: body pattern where the fin attaches (the caudal samples it out to
   // the margin of the fleshy tongue that covers its base), per vertex
@@ -154,7 +166,9 @@ void computeFinSurface() {
   // body over the first few millimetres of the rays (absolute length, so the
   // short central caudal rays and the long lobe rays share one base line)
   float tAbs = t * vFinRoot.w;
-  float fleshL = type < 0.5 ? 0.15 : 0.022;
+  // (paired fins: only the part still under the flank skin; what leaves the
+  // body is membrane and rays, so no opaque tab shows at the insertion)
+  float fleshL = type < 0.5 ? 0.15 : (type > 2.5 ? 0.011 : 0.022);
   float flesh = 1.0 - smoothstep(0.2 * fleshL, fleshL, tAbs);
 
   float fwr = max(fwidth(rc), 1e-4);
@@ -269,12 +283,15 @@ void computeFinSurface() {
   // outer ray): a 1.5 px coverage ramp instead of a hard, stair-stepped
   // geometric edge against the black studio background
   float edgeC = min(rc, nRays - 1.0 - rc);
-  alpha *= smoothstep(0.0, 1.5 * fwr, edgeC) * (1.0 - flesh) + flesh;
+  float edgeAA = smoothstep(0.0, 1.5 * fwr, edgeC);
+  alpha *= edgeAA * (1.0 - flesh) + flesh;
   // rays fade into the membrane toward the margin (thin distal segments)
   ray *= 1.0 - 0.55 * smoothstep(0.55, 1.0, t);
   alpha *= uFinOpacity;
-  // the fleshy base is opaque tissue (the end of the body lies inside it)
-  alpha = max(alpha, flesh * 0.985);
+  // the fleshy base is opaque tissue (the end of the body lies inside it);
+  // a paired fin's base lies under the skin of the flank: whatever of it
+  // shows keeps the soft edge ramp (no hard-edged opaque tab)
+  alpha = max(alpha, flesh * 0.985 * (type > 2.5 ? edgeAA : 1.0));
 
   gFinAlpha = clamp(alpha, 0.0, 1.0);
   gFinAlbedo = col;

@@ -151,8 +151,19 @@ export function buildFinGeometry(layout, quality = 1) {
         const fleshy = 0.012 * (1 - smoothstep(0, 0.12, tAbs)) * smoothstep(0.98, 0.72, d);
         th = Math.max(th, fleshy + 0.0009 * (1 - t) + 0.00022);
       }
+      if (type === 3 || type === 4) {
+        // paired fins: the fleshy base is set into the body wall (the roots
+        // sit only ~0.004 SL under the skin). At the full median-fin base
+        // thickness the shell's outer layer and its end caps stood proud of
+        // the body there, and the opaque base of the thick leading ray
+        // showed as a pale folded quad at the front of the pectoral. Thin
+        // at the root, the shell stays under the skin until the membrane
+        // leaves the body; the leading ray thickens a little way out.
+        th = 0.0034 * Math.pow(1 - t, 3) + 0.0009 * (1 - t) + 0.00022;
+        if (col.isRay) th += (0.0021 * (1 - t) * (1 - t) + 0.00028) * (col.lead ? 1 + 1.1 * smoothstep(0.02, 0.18, t) : 1) * smoothstep(-0.05, 0.12, t);
+        return th * 0.85;
+      }
       if (col.isRay) th += (0.0021 * (1 - t) * (1 - t) + 0.00028) * (col.lead ? (type === 0 ? 1.2 : 2.1) : 1);
-      if (type === 3 || type === 4) th *= 0.85;
       return th;
     };
 

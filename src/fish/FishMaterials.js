@@ -42,6 +42,15 @@ function attachUniforms(shader, names) {
   for (const n of names) shader.uniforms[n] = U[n];
 }
 
+// the standard light loop, with the directional key's shadow lookup on the
+// body replaced by one that softens distant blockers (other fish overhead)
+const BODY_LIGHTS_BEGIN = mustReplace(
+  THREE.ShaderChunk.lights_fragment_begin,
+  'getShadow( directionalShadowMap[ i ]',
+  'fishKeyShadow( directionalShadowMap[ i ]',
+  'key shadow',
+);
+
 const UW_UNIFORMS = ['uCaustics', 'uCausticParams', 'uCausticLightDir', 'uWaterMin', 'uWaterMax', 'uWaterAbsorb', 'uWaterScatter', 'uWaterDensity'];
 
 // ---------------------------------------------------------------------------
@@ -96,6 +105,8 @@ export function createBodyMaterial(layout, { lod = 0 } = {}) {
     fs = mustReplace(fs, '#include <metalnessmap_fragment>', 'float metalnessFactor = 0.0;', 'metalness');
     fs = mustReplace(fs, '#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + bodyFragmentNormal, 'normal');
     fs = mustReplace(fs, '#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n' + bodyFragmentMaterial, 'lights_physical');
+    // key-light shadow split by blocker distance (fishKeyShadow, body.glsl.js)
+    fs = mustReplace(fs, '#include <lights_fragment_begin>', BODY_LIGHTS_BEGIN, 'lights_begin');
     fs = mustReplace(fs, '#include <lights_fragment_end>', '#include <lights_fragment_end>\n' + bodyFragmentLightsEnd, 'lights_end');
     fs = mustReplace(fs, '#include <opaque_fragment>', bodyFragmentOutput + '\n#include <opaque_fragment>', 'opaque');
     shader.fragmentShader = fs;
