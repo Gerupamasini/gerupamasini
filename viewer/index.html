@@ -6,101 +6,53 @@
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:13px/1.4 system-ui,sans-serif;overflow:hidden}
 canvas{display:block}
 #ui{position:fixed;left:8px;top:8px;max-width:calc(100vw - 16px);background:#0c1a21cc;border:1px solid #2c4a57;border-radius:8px;padding:8px 10px;backdrop-filter:blur(4px)}
-#ui button{background:#1b3844;color:var(--fg);border:1px solid #356273;border-radius:5px;padding:3px 8px;margin:2px;cursor:pointer;font:inherit}
+#ui button,#ui select{background:#1b3844;color:var(--fg);border:1px solid #356273;border-radius:5px;padding:3px 8px;margin:2px;cursor:pointer;font:inherit}
 #ui button.on{background:var(--ac);color:#04161d}
 #ui label{display:inline-block;margin:2px 8px 2px 0}
+#ui a{color:var(--ac)}
 #hud{position:fixed;right:8px;bottom:8px;font:11px/1.35 ui-monospace,monospace;background:#0c1a21cc;border:1px solid #2c4a57;border-radius:6px;padding:4px 8px;white-space:pre}
-@media (max-width:600px){#ui{font-size:12px}}
 </style>
 <script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
 </head><body>
 <div id="ui"></div><div id="hud"></div>
 <script type="module">
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { Yamame } from '/src/yamame/Yamame.js';
+import { createScene, presetCamera } from '/viewer/scene.js';
 import { MODES } from '/src/yamame/modes.js';
-
 const q = new URLSearchParams(location.search);
-const W = innerWidth, H = innerHeight;
-const r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-r.setPixelRatio(Math.min(devicePixelRatio, 2)); r.setSize(W, H); r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
-r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap; document.body.appendChild(r.domElement);
-const scene = new THREE.Scene();
-const WATER = new THREE.Color(0x1d4a55); scene.background = WATER.clone().multiplyScalar(0.9); scene.fog = new THREE.FogExp2(WATER.getHex(), 0.55);
-const pm = new THREE.PMREMGenerator(r); scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.55;
-scene.add(new THREE.HemisphereLight(0xbfe6f2, 0x1a2b24, 0.9));
-const sun = new THREE.DirectionalLight(0xfff3dc, 3.0); sun.position.set(0.6, 2.0, 0.8); sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: 0.1, far: 6 }); sun.shadow.bias = -0.0004;
-scene.add(sun);
-// river bed: procedural gravel
-{
-  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
-  g.fillStyle = '#4b4a40'; g.fillRect(0, 0, 512, 512);
-  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 5200; i++) { const x = rnd() * 512, y = rnd() * 512, rr = 3 + rnd() * 11, l = 28 + rnd() * 36, hh = 30 + rnd() * 20; g.fillStyle = `hsl(${hh},${10 + rnd() * 14}%,${l}%)`; g.beginPath(); g.ellipse(x, y, rr, rr * (0.6 + rnd() * 0.3), rnd() * 3, 0, 6.28); g.fill(); }
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(8, 8); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
-  const bed = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.MeshStandardMaterial({ map: t, roughness: 0.95, bumpMap: t, bumpScale: 2 }));
-  bed.rotation.x = -Math.PI / 2; bed.position.y = -0.55; bed.receiveShadow = true; scene.add(bed);
-}
-const gltf = await new GLTFLoader().loadAsync(q.get('file') || '/assets/generated/yamame.glb');
-scene.add(gltf.scene);
-gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-const fish = new Yamame(gltf, { phase0: 0 });
-
-const cam = new THREE.PerspectiveCamera(32, W / H, 0.005, 40); cam.position.set(0.34, 0.12, 0.42);
-const ctl = new OrbitControls(cam, r.domElement); ctl.enableDamping = true; ctl.minDistance = 0.08; ctl.maxDistance = 4; ctl.target.set(0, 0, 0);
-
-// ---- UI ----------------------------------------------------------------------------------------------------------------
-const st = { mode: q.get('mode') || 'Idle', follow: q.get('follow') !== '0', wander: q.get('wander') === '1', slow: parseFloat(q.get('slow') || '1') };
-const ui = document.getElementById('ui'); const btns = {};
-ui.innerHTML = '<b>ヤマメ (Oncorhynchus masou masou) — 手続き遊泳デモ</b><br>';
+const S = await createScene({ q }); const { r, scene, cam, ctl, fish, THREE } = S;
+const st = { mode: q.get('mode') || 'Idle', follow: q.get('follow') !== '0', slow: parseFloat(q.get('slow') || '1') };
+const ui = document.getElementById('ui'), btns = {};
+ui.innerHTML = '<b>ヤマメ (Oncorhynchus masou masou) — 手続き遊泳</b> &nbsp; <a href="/viewer/behavior.html">→ 自律行動デモ</a><br>';
 for (const k of Object.keys(MODES)) { const b = document.createElement('button'); b.textContent = MODES[k].label; b.onclick = () => setMode(k); ui.appendChild(b); btns[k] = b; }
-const act = (txt, fn) => { const b = document.createElement('button'); b.textContent = txt; b.onclick = fn; ui.appendChild(b); return b; };
+const act = (txt, fn) => { const b = document.createElement('button'); b.textContent = txt; b.onclick = fn; ui.appendChild(b); };
 ui.appendChild(document.createElement('br'));
 act('FeedingAttack (開口)', () => fish.triggerStrike(0.12 / st.slow)); act('CStartEscape ←', () => fish.triggerEscape(1)); act('CStartEscape →', () => fish.triggerEscape(-1));
-const lab = (txt, el) => { const l = document.createElement('label'); l.textContent = txt + ' '; l.appendChild(el); ui.appendChild(l); };
-const chk = (key) => { const c = document.createElement('input'); c.type = 'checkbox'; c.checked = st[key]; c.onchange = () => { st[key] = c.checked; }; return c; };
 const lodSel = document.createElement('select'); ['auto', '0', '1', '2'].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = 'LOD ' + v; lodSel.appendChild(o); }); lodSel.value = q.get('lod') || 'auto';
 lodSel.onchange = () => fish.setLOD(lodSel.value === 'auto' ? null : +lodSel.value); ui.appendChild(lodSel);
-lab('追従', chk('follow')); lab('自動周回', chk('wander'));
+const lab = (txt, el) => { const l = document.createElement('label'); l.textContent = txt + ' '; l.appendChild(el); ui.appendChild(l); };
+const chk = (key) => { const c = document.createElement('input'); c.type = 'checkbox'; c.checked = st[key]; c.onchange = () => { st[key] = c.checked; }; return c; };
+lab('追従', chk('follow'));
 const sl = document.createElement('input'); sl.type = 'range'; sl.min = 0.1; sl.max = 1; sl.step = 0.05; sl.value = st.slow; sl.oninput = () => { st.slow = +sl.value; }; lab('時間倍率', sl);
 function setMode(k) { st.mode = k; for (const n in btns) btns[n].classList.toggle('on', n === k); }
 setMode(st.mode);
-
-// ---- loop --------------------------------------------------------------------------------------------------------------
-const hud = document.getElementById('hud'); const clock = new THREE.Clock(); const tmp = new THREE.Vector3(); let tsim = 0;
+const hud = document.getElementById('hud'), clock = new THREE.Timer(); let wanderOn = q.get('wander') !== '0';
 function step(dt) {
-  const m = MODES[st.mode]; const intent = { mode: m };
-  if (st.wander) { // keep inside a 0.9 m circle: steer toward the centre when too far out
-    const d = Math.hypot(fish.pos.x, fish.pos.z);
-    if (d > 0.9) { const want = Math.atan2(-(-fish.pos.z), -fish.pos.x); const diff = Math.atan2(Math.sin(want - fish.heading), Math.cos(want - fish.heading)); intent.turn = Math.max(-0.9, Math.min(0.9, diff * 1.5)); }
-  }
-  fish.update(dt, intent); tsim += dt;
+  const intent = { mode: MODES[st.mode] };
+  const d = Math.hypot(fish.pos.x, fish.pos.z);
+  if (wanderOn && MODES[st.mode].flow_bl === 0 && d > 0.9) { const want = Math.atan2(fish.pos.z, -fish.pos.x), diff = Math.atan2(Math.sin(want - fish.heading), Math.cos(want - fish.heading)); intent.turn = Math.max(-0.9, Math.min(0.9, diff * 1.5)); }
+  fish.update(dt, intent);
 }
-function frame() {
-  const dt = Math.min(clock.getDelta(), 0.05) * st.slow; step(dt);
-  if (st.follow) { tmp.copy(fish.pos); const d = tmp.clone().sub(ctl.target); ctl.target.add(d); cam.position.add(d); }
+function frame(ts) {
+  clock.update(ts); const dt = Math.min(clock.getDelta(), 0.05) * st.slow; step(dt);
+  if (st.follow) { const d = new THREE.Vector3(fish.pos.x, fish.pos.y, fish.pos.z).sub(ctl.target); ctl.target.add(d); cam.position.add(d); }
   ctl.update(); r.render(scene, cam);
   hud.textContent = `mode ${st.mode}\nU ${fish.wave.U.toFixed(2)} BL/s  f ${fish.wave.f.toFixed(2)} Hz  A ${fish.wave.A.toFixed(3)} SL\nground ${(fish.speed / fish.SL).toFixed(2)} BL/s  heading ${(fish.heading * 57.3).toFixed(0)}°`;
   requestAnimationFrame(frame);
 }
 window.__fish = fish; if (q.get('lod') && q.get('lod') !== 'auto') fish.setLOD(+q.get('lod'));
-// headless: ?sim=3 steps 3 s then freezes; ?cam=side|top|front|head|persp|tail
-const preset = q.get('cam');
-if (q.has('sim')) {
-  const T = parseFloat(q.get('sim')); const dt = 1 / 60; const strikeAt = parseFloat(q.get('strike') ?? '-1'); const escAt = parseFloat(q.get('escape') ?? '-1');
-  let struck = false, esc = false;
-  for (let t = 0; t < T; t += dt) { if (!struck && strikeAt >= 0 && t >= strikeAt) { fish.triggerStrike(0.12 * (parseFloat(q.get('stretch') || '1'))); struck = true; } if (!esc && escAt >= 0 && t >= escAt) { fish.triggerEscape(1); esc = true; } step(dt); }
-  gltf.scene.updateMatrixWorld(true);
-  const p = fish.pos, h = fish.heading, fwd = new THREE.Vector3(Math.cos(h), 0, -Math.sin(h)), right = new THREE.Vector3(-Math.sin(h) * 0 + Math.sin(h) * 0, 0, 0).set(Math.sin(h), 0, Math.cos(h));
-  const at = (f, u, rr, y) => p.clone().addScaledVector(fwd, f).addScaledVector(right, rr).add(new THREE.Vector3(0, y, 0));
-  cam.fov = 32;
-  const tgt = at(0, 0, 0, 0);
-  const views = { side: [at(0, 0, 0.55, 0.03), tgt], top: [at(0, 0, 0.001, 0.62), tgt], front: [at(0.5, 0, 0, 0.02), tgt], head: [at(0.20, 0, 0.10, 0.05), at(0.06, 0, 0, 0)], persp: [at(0.18, 0, 0.30, 0.16), tgt], tail: [at(-0.35, 0, 0.30, 0.10), at(-0.05, 0, 0, 0)], close: [at(0.10, 0, 0.18, 0.03), at(0.04, 0, 0, 0)] };
-  const v = views[preset || 'persp']; cam.position.copy(v[0]); ctl.target.copy(v[1]); if (preset === 'top') cam.up.set(fwd.x, 0, fwd.z); cam.lookAt(v[1]); ctl.update();
-  r.render(scene, cam); window.__ready = true;
-} else { frame(); window.__ready = true; }
+if (q.has('sim')) { // headless: ?sim=3 steps 3 s of simulation and freezes; &cam=side|top|front|head|persp|tail|close|wide|low
+  const T = parseFloat(q.get('sim')), strikeAt = parseFloat(q.get('strike') ?? '-1'), escAt = parseFloat(q.get('escape') ?? '-1'); let struck = false, esc = false;
+  for (let t = 0; t < T; t += 1 / 60) { if (!struck && strikeAt >= 0 && t >= strikeAt) { fish.triggerStrike(0.12 * parseFloat(q.get('stretch') || '1')); struck = true; } if (!esc && escAt >= 0 && t >= escAt) { fish.triggerEscape(1); esc = true; } step(1 / 60); }
+  S.gltf.scene.updateMatrixWorld(true); presetCamera(S, q.get('cam') || 'persp'); r.render(scene, cam); window.__ready = true;
+} else { requestAnimationFrame(frame); window.__ready = true; }
 </script></body></html>

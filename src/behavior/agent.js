@@ -160,7 +160,7 @@ export class YamameAgent {
       t: this.sim, layer: 'L3', event: `${from}->${to}`, state: { from, to, interrupt, dwell_s: dwell }, candidates: cands || [], needs: { ...this.needs },
       why_here: { focalId: 'F0', u_cms: u * 100, depth_m: 0.4, heightBD: (this.body.pos.y - this.world.bedY - 0.0211) / 0.043, coverDist_m: this.coverDist(), scoreTerms: {}, rejectedAlt: [] },
       why_heading: { source: to === 'Alert' || to === 'CStartFlee' ? 'threat' : to === 'StrikeAttack' ? 'prey' : to === 'Hide' || to === 'FleeBurst' ? 'cover' : 'rheotaxis', flowDir: [-1, 0, 0], headingErr_deg: Math.abs(wrap(this.body.heading)) * 57.3 },
-      why_now: why, paramsUsed: prov(names), env: { temp_C: this.world.temp_C, light_lx: 10000 * this.world.daylight, visibility_m: this.cfg.visibility_m.v, u_local: u },
+      why_now: why, paramsUsed: prov(names, this.cfg), env: { temp_C: this.world.temp_C, light_lx: 10000 * this.world.daylight, visibility_m: this.cfg.visibility_m.v, u_local: u },
     });
   }
 

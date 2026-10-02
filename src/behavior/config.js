@@ -41,7 +41,7 @@ export const CFG = {
   height_above_bed_BD: P(0.8, 'body depths', 'P', '04 §4.2.1 (n=5, range 0.25-1)'),
 };
 
-export const prov = (names) => names.map((n) => ({ name: n, value: CFG[n].v, prov: CFG[n].prov, proxy: CFG[n].proxy }));
+export const prov = (names, cfg = CFG) => names.map((n) => ({ name: n, value: cfg[n].v, prov: cfg[n].prov, proxy: cfg[n].proxy }));
 
 /** cap_prob(u): linear between the two published endpoints, clamped (no extrapolation: 04 §4.6.4). */
 export function capProb(u, c = CFG) {

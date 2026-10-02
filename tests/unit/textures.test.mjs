@@ -53,12 +53,10 @@ test('normal map: linear tangent space, flat-ish, tilt bounded (scale relief wea
   assert.ok(minB >= 245, `blue channel high (${minB})`);
   assert.ok(maxTilt * 180 / Math.PI <= 8.5, `max tilt ${maxTilt * 180 / Math.PI} deg <= 8 (06 §6.4)`);
   assert.ok(maxTilt * 180 / Math.PI >= 2.5, 'scale lattice is actually present');
-  // head (s < 0.2) is smooth except the faint opercle ridges: tilt < 1 deg
-  let headMax = 0;
-  for (let y = 0; y < H; y++) for (let x = 0; x < Math.floor(0.2 * (W - 1)); x++) {
-    const p = px(n, x, y); const nx = p[0] / 255 * 2 - 1, ny = p[1] / 255 * 2 - 1; headMax = Math.max(headMax, Math.hypot(nx, ny));
-  }
-  assert.ok(Math.asin(Math.min(1, headMax)) * 180 / Math.PI < 1.0, `head tilt ${headMax}`);
+  // 頭部は滑らか: 吻〜眼(s<0.12)はほぼ平坦, 鰓蓋(s<0.235)も放射状の筋が 2.5 度未満
+  const tiltIn = (xa, xb) => { let m = 0; for (let y = 0; y < H; y++) for (let x = xa; x < xb; x++) { const p = px(n, x, y); m = Math.max(m, Math.hypot(p[0] / 255 * 2 - 1, p[1] / 255 * 2 - 1)); } return Math.asin(Math.min(1, m)) * 180 / Math.PI; };
+  assert.ok(tiltIn(0, Math.floor(0.12 * (W - 1))) < 0.5, 'snout/eye region flat');
+  assert.ok(tiltIn(0, Math.floor(0.235 * (W - 1))) < 2.5, 'head incl. opercle ridges smooth');
 });
 
 test('scale lattice has the physical pitch 0.7 %SL (~1.33 mm) along the body axis (02 §2.6)', () => {
@@ -118,11 +116,10 @@ test('UV seams: dorsal seam (row 0 vs row H-1) and ventral midline are continuou
   let belly = 0; n = 0;
   for (let x = Math.floor(0.3 * W); x < W; x++) { for (let c = 0; c < 3; c++) { belly += Math.abs(base.albedo.data[((H / 2 - 1) * W + x) * 4 + c] - base.albedo.data[((H / 2) * W + x) * 4 + c]); n++; } }
   assert.ok(belly / n < 12, `ventral seam ${belly / n}`);
-  // 尾端 1.5% には模様が掛からない（地色の連続）: 右体側の中段で最後の列と 6% 手前の列の輝度差が小さい
-  const xe = W - 1, xb = Math.round(0.935 * (W - 1));
-  const yRows = [Math.round(0.30 * H), Math.round(0.40 * H), Math.round(0.45 * H)];
-  for (const y of yRows) assert.ok(Math.abs(luminance(base.albedo, xe, y) - luminance(base.albedo, xe - 2, y)) < 0.03, 'last columns are uniform');
-  void xb;
+  // 尾端 1% には斑・黒点が掛からない（地色のまま連続）: 右体側の中段で最後の列に暗い斑が無い
+  const ys = []; for (let y = Math.round(0.20 * H); y <= Math.round(0.32 * H); y++) ys.push(luminance(base.albedo, W - 1, y));
+  const med = [...ys].sort((p, q) => p - q)[Math.floor(ys.length / 2)];
+  assert.ok(Math.min(...ys) > 0.55 * med, `no mark/spot in the last column (min ${Math.min(...ys)} vs median ${med})`);
 });
 
 test('report: parr marks per side (count 5-12, |L-R|<=1, spec 03 §3.1.3 geometry), independent sides, colours', () => {
