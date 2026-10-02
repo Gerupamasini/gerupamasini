@@ -29,7 +29,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('photo'); ap.add_argument('--landmarks'); ap.add_argument('--model', required=True)
     ap.add_argument('--cx', type=float, required=True); ap.add_argument('--cy', type=float, required=True); ap.add_argument('--half', type=float, required=True)
-    ap.add_argument('--mlm', required=True); ap.add_argument('--out', default='overlay.png'); ap.add_argument('--alpha', type=float, default=0.6)
+    ap.add_argument('--mlm', required=True); ap.add_argument('--out', default='overlay.png'); ap.add_argument('--alpha', type=float, default=0.6); ap.add_argument('--no-reaim', action='store_true')
     a = ap.parse_args()
     photo = Image.open(os.path.join(PH, a.photo + '.jpg')).convert('RGB')
     lm = json.load(open(a.landmarks)) if a.landmarks else photo_landmarks(a.photo)
@@ -38,7 +38,17 @@ def main():
     if not (S and O): sys.exit('photo needs snout_tip and opercle_post_mid')
     ux, uy = O[0] - S[0], O[1] - S[1]; hl = math.hypot(ux, uy); ux, uy = ux / hl, uy / hl; vx, vy = -uy, ux
     if E and ((E[0] - S[0]) * vx + (E[1] - S[1]) * vy) < 0: vx, vy = -vx, -vy
-    ms, mo = mlm['snout_tip'], mlm['opercle_post_mid']; hlm = math.hypot(ms[0] - mo[0], ms[1] - mo[1])
+    # re-aim the photo axis at the centre of the head height at u = 0.9 (GrabCut outline, same convention as head_profile_curves.py); the model axis is its own x axis
+    if not a.no_reaim:
+        try:
+            oc = json.load(open(os.path.join(D, 'head_outlines.json')))[a.photo]
+            import numpy as np
+            uu = np.array(oc['u']); tt = np.array([np.nan if x is None else x for x in oc['top']]); bb = np.array([np.nan if x is None else x for x in oc['bot']]); ok = ~np.isnan(tt) & ~np.isnan(bb)
+            cref = float(np.interp(0.9, uu[ok], ((tt + bb) / 2)[ok])); th = math.atan2(cref, 0.9)
+            ux, uy, vx, vy = math.cos(th) * ux + math.sin(th) * vx, math.cos(th) * uy + math.sin(th) * vy, -math.sin(th) * ux + math.cos(th) * vx, -math.sin(th) * uy + math.cos(th) * vy
+            print('re-aim', round(math.degrees(th), 1), 'deg')
+        except Exception as e: print('no outline for re-aim', e)
+    ms, mo = mlm['snout_tip'], mlm['opercle_post_mid']; hlm = abs(ms[0] - mo[0])
     m = Image.open(a.model).convert('RGBA'); W, H = m.size
     # model render pixel -> model metres
     def px2m(px, py): return (a.cx + (px - W / 2) / (W / 2) * a.half * W / H, a.cy - (py - H / 2) / (H / 2) * a.half)

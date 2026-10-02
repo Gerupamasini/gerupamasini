@@ -74,14 +74,21 @@ export function applyHead(params, spec) {
   const lo = spec.fit_min ?? 0.85, hi = spec.fit_max ?? 1.3;
   const fTop = clamp((bodyDorsal(HL - cap) - y0) / Math.max(splineV(top, 1) * HL, 1e-6), lo, hi), fBot = clamp((bodyVentral(HL - cap) - y0) / Math.min(splineV(bot, 1) * HL, -1e-6), lo, hi);
   const fit = (u, f) => 1 + (f - 1) * smooth(0.35, 1.0, u);
-  const blendLen = spec.blend_len_over_sl ?? 0.07, sEnd = HL - cap;                    // end of the head (opercle rear) in s
+  const blendLen = spec.blend_len_over_sl ?? 0.09, sEnd = HL - cap;                    // end of the head (opercle rear) in s
   const step = 0.004, sNew = [], dNew = [], vNew = [], wdNew = [], ywNew = [], nTNew = [], nBNew = [];
   const sMax = sEnd + blendLen;
+  const headD = (s) => { const uu = clamp((s + cap) / HL, 0, 1); return y0 + splineV(top, uu) * HL * fit(uu, fTop); };
+  const headV = (s) => { const uu = clamp((s + cap) / HL, 0, 1); return y0 + splineV(bot, uu) * HL * fit(uu, fBot); };
+  // cubic Hermite from the head end (value + slope) to the body table (value + slope): no nape hump / step at the junction
+  const hermite = (f0, m0, f1, m1, t, L) => { const t2 = t * t, t3 = t2 * t; return (2 * t3 - 3 * t2 + 1) * f0 + (t3 - 2 * t2 + t) * L * m0 + (-2 * t3 + 3 * t2) * f1 + (t3 - t2) * L * m1; };
+  const eps = 0.006, slope = (f, s) => (f(s + eps) - f(s - eps)) / (2 * eps);
+  const dE = headD(sEnd), vE = headV(sEnd), mdE = (headD(sEnd) - headD(sEnd - 0.02)) / 0.02, mvE = (headV(sEnd) - headV(sEnd - 0.02)) / 0.02;
+  const dB = bodyDorsal(sMax), vB = bodyVentral(sMax), mdB = slope(bodyDorsal, sMax), mvB = slope(bodyVentral, sMax);
   for (let k = 0; ; k++) {
     const s = Math.min(k * step, sMax); const u = (s + cap) / HL, uu = clamp(u, 0, 1);
-    const hd = y0 + splineV(top, uu) * HL * fit(uu, fTop), hv = y0 + splineV(bot, uu) * HL * fit(uu, fBot);
-    const t = clamp((s - sEnd) / blendLen, 0, 1), w = t * t * (3 - 2 * t);                // blend into the body table behind the opercle
-    sNew.push(s); dNew.push(lerp(hd, bodyDorsal(s), w)); vNew.push(lerp(hv, bodyVentral(s), w));
+    const t = clamp((s - sEnd) / blendLen, 0, 1), w = t * t * (3 - 2 * t);
+    if (s <= sEnd) { sNew.push(s); dNew.push(headD(s)); vNew.push(headV(s)); }
+    else { sNew.push(s); dNew.push(hermite(dE, mdE, dB, mdB, t, blendLen)); vNew.push(hermite(vE, mvE, vB, mvB, t, blendLen)); }
     ywNew.push(lerp(splineV(ywf, uu), 0.5, w)); nTNew.push(lerp(splineV(nT, uu), p.section.exponent_dorsal.v, w)); nBNew.push(lerp(splineV(nB, uu), p.section.exponent_ventral.v, w));
     wdNew.push(lerp(splineV(wdS, uu), interpTable(p.section.width_over_depth_by_s.s, p.section.width_over_depth_by_s.v, s), w));
     if (s >= sMax) break;
@@ -93,6 +100,7 @@ export function applyHead(params, spec) {
   if (spec.mouth?.corner) p.mouth.corner_s = { v: spec.mouth.corner[0] * HL - cap, prov: 'P', src: 'head_adult.json' };
   if (spec.eye) { p.eye.center_s = { v: spec.eye.u * HL - cap, prov: 'P', src: 'head_adult.json' }; p.eye.outer_d_over_sl = { v: spec.eye.d_over_hl * HL, prov: 'P', src: 'head_adult.json' }; }
   if (spec.opercle) { const um = Math.max(...spec.opercle.margin.map((q) => q[0])); p.operculum.edge_s = { v: um * HL - cap, prov: 'P', src: 'head_adult.json' }; }
+  if (spec.pectoral_base_u && p.fins?.pectoral) p.fins.pectoral = { ...p.fins.pectoral, origin_s: spec.pectoral_base_u * HL - cap };
   p.head_fit = { top: fTop, bottom: fBot };
   return p;
 }
