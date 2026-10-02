@@ -183,14 +183,16 @@ export function buildTank({ glassEnv = null } = {}) {
         // bright crest just under the contact line, fading down the curve
         float y = vUv.y;
         float a = smoothstep(0.0, 0.75, y) * (1.0 - smoothstep(0.85, 1.0, y));
-        float shimmer = 0.75 + 0.25 * sin(vUv.x * 900.0 + y * 4.0);
+        // (the contact line wavers a little with the ripples: a slow,
+        // irregular variation along it, not a dotted line)
+        float shimmer = 0.82 + 0.1 * sin(vUv.x * 310.0 + y * 4.0) + 0.08 * sin(vUv.x * 1130.0 + 1.7);
         gl_FragColor = vec4(uColor * a * a * shimmer * outside, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
   });
   const menH = 0.0035;
-  const men = new THREE.Mesh(new THREE.PlaneGeometry(L, menH), meniscusMat(new THREE.Color(0.5, 0.55, 0.55), new THREE.Vector3(0, 0, 1), D / 2 + glass));
+  const men = new THREE.Mesh(new THREE.PlaneGeometry(L, menH), meniscusMat(new THREE.Color(0.85, 0.9, 0.9), new THREE.Vector3(0, 0, 1), D / 2 + glass));
   men.position.set(0, TANK.water - menH * 0.35, D / 2 - 0.0006);
   men.renderOrder = 4;
   men.name = 'meniscus';

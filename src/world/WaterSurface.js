@@ -2,8 +2,11 @@
 // Seen from below (typical front view through the glass) the surface acts as a
 // mirror beyond the critical angle (48.6°, total internal reflection) and shows
 // the bright hood light only inside Snell's window. The TIR mirror is a real
-// planar reflection of the underwater content (half-resolution pass with an
-// oblique near plane). Seen from above it is a weak Fresnel reflector.
+// planar reflection of the underwater content (half-resolution, mip-mapped
+// pass with an oblique near plane), read back smeared and blurred by the
+// ripples; with the glow of the lit layer under the surface it draws the
+// silvery band below the water line of front-on tank photographs. Seen from
+// above the surface is a weak Fresnel reflector.
 // Interactive ripple rings are spawned by food drops and surface-feeding gulps.
 
 import * as THREE from 'three';
@@ -70,6 +73,10 @@ uniform vec4 uLedBar; // LED strip: centre z, height above the water, half lengt
 uniform vec3 uDeepColor;
 uniform float uWaveAmp;
 uniform float uDebugRefl;
+uniform vec3 uReflSmear; // ripple smear of the mirror image (uv): vertical spread, upward bias, sideways swing
+uniform float uReflBlur; // mip level of the mirror image seen along the surface
+uniform vec3 uSheenColor; // in-scattered light of the bright layer under the surface
+uniform float uSheenLayer; // its thickness (m)
 ${noiseCommon}
 ${underwaterCommon}
 
@@ -96,8 +103,37 @@ void main() {
     }
     // soften the Snell-window edge (surface micro-roughness)
     F = mix(F, 1.0, smoothstep(0.62, 0.66, sinI) * 0.0);
+    // Mirror image. The filter keeps fine ripples running over the surface;
+    // their slopes in the plane of incidence swing the mirrored ray up and
+    // down by twice the slope (across it the image hardly moves), so seen
+    // along the surface the mirror image is smeared and broken up vertically
+    // and shimmers: the band under the water line shows soft, stretched,
+    // upside-down plants and fish rather than a crisp copy, reaching a
+    // little deeper into the lit tank than a calm plane would. Looking
+    // steeply up the swing is small (the image stays coherent).
     vec2 ruv = vReflUv.xy / vReflUv.w + N.xz * 0.06;
-    vec3 refl = uUseReflection > 0.5 ? texture(uReflection, ruv).rgb : uDeepColor;
+    vec3 refl = uDeepColor;
+    float graze = 1.0 - smoothstep(0.3, 0.75, cosI);
+    if (uUseReflection > 0.5) {
+      // wave fronts drift across the surface; the swing varies along them
+      float w1 = vnoise2(vec2(p.x * 34.0 + uTime * 0.31, p.y * 8.0 - uTime * 0.7));
+      float w2 = vnoise2(vec2(p.x * 90.0 - uTime * 0.55, p.y * 26.0 + uTime * 1.2));
+      float swing = (w1 - 0.5) * 0.8 + (w2 - 0.5) * 0.4;
+      float sv = uReflSmear.x * graze * uWaveAmp;
+      vec2 c = ruv + vec2(swing * uReflSmear.z * graze, uReflSmear.y * graze + swing * sv);
+      // a soft (mip-blurred) image, stretched along the vertical by taps
+      // closer together than the blur radius (no ghost copies)
+      float lod = uReflBlur * (0.4 + 0.6 * graze);
+      vec3 acc = vec3(0.0);
+      float wsum = 0.0;
+      for (int i = 0; i < 5; i++) {
+        float k = (float(i) - 2.0) * 0.4;
+        float wgt = exp(-1.4 * k * k);
+        acc += textureLod(uReflection, c + vec2(0.0, sv * k), lod).rgb * wgt;
+        wsum += wgt;
+      }
+      refl = acc / wsum;
+    }
     // light above the surface (inside Snell's window): the dim room ceiling
     // and the hood LED bar, traced along the refracted ray to the bar's
     // actual position so it appears as a small, sharp, very bright strip
@@ -135,6 +171,29 @@ void main() {
     }
     col = mix(trans, refl, F);
     col = waterAttenuate(col, vWorld);
+    // The top centimetres of water right under the hood light are the
+    // brightest water in the tank. The mirrored ray runs a long way through
+    // that layer (layer / sin(angle), cut by the glass it reaches), so the
+    // band under the water line carries a faint silvery glow over its mirror
+    // image, strongest just under the meniscus and fading out over the far
+    // part toward the far waterline, where the mirrored path ends at the back
+    // glass (the band joins the direct view of the back wall without a seam,
+    // and the bright part of the band stays a narrow strip). Looking
+    // steeply up the path through the layer is short and the term vanishes.
+    {
+      vec3 d = -V; // camera ray (upward)
+      float reach = uSheenLayer / max(d.y, 0.03);
+      vec3 r = vec3(d.x, -d.y, d.z) + vec3(1e-6);
+      vec3 tExit = max((uWaterMin - vWorld) / r, (uWaterMax - vWorld) / r);
+      float lOut = max(0.0, min(min(tExit.x, tExit.y), tExit.z));
+      float layer = (1.0 - exp(-reach * 8.0)) * smoothstep(0.0, 1.8 * reach, lOut);
+      // (the bar's light spreads in the layer: only a gentle fall-off away
+      // from it). The ripples break the glow into long, faint streaks along
+      // the surface (crests catch more of it than troughs), drifting slowly.
+      float streak = vnoise2(vec2(p.x * 18.0 - uTime * 0.12, p.y * 45.0 + uTime * 0.9)) * 0.65
+                   + vnoise2(vec2(p.x * 47.0 + uTime * 0.2, p.y * 120.0 - uTime * 1.4)) * 0.35;
+      col += uSheenColor * layer * F * mix(0.45, 1.0, lampPool(vWorld)) * graze * (0.7 + 0.6 * streak);
+    }
     if (uDebugRefl > 0.5) col = texture(uReflection, vReflUv.xy / vReflUv.w).rgb * 4.0;
     alpha = 1.0;
   } else {
@@ -160,7 +219,13 @@ export class WaterSurface {
     this.rippleIdx = 0;
     const size = new THREE.Vector2();
     renderer.getDrawingBufferSize(size);
-    this.rt = new THREE.WebGLRenderTarget(Math.max(2, size.x >> 1), Math.max(2, size.y >> 1), { type: THREE.HalfFloatType, samples: 2 });
+    // (mip-mapped: the ripple-smeared mirror image is read from a blurred level)
+    this.rt = new THREE.WebGLRenderTarget(Math.max(2, size.x >> 1), Math.max(2, size.y >> 1), {
+      type: THREE.HalfFloatType,
+      samples: 2,
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter,
+    });
     this.textureMatrix = new THREE.Matrix4();
     this.virtualCamera = new THREE.PerspectiveCamera();
     this.useReflection = true;
@@ -187,6 +252,12 @@ export class WaterSurface {
         uDeepColor: { value: new THREE.Color(0.05, 0.12, 0.12) },
         uWaveAmp: { value: 1 },
         uDebugRefl: { value: 0 },
+        // ±0.6° of ripple swing about an image tilted 0.4° deeper (uv of a
+        // ~35° field of view), a little sideways; blurred over ~4 texels
+        uReflSmear: { value: new THREE.Vector3(0.018, 0.012, 0.004) },
+        uReflBlur: { value: 2.0 },
+        uSheenColor: { value: new THREE.Color(0.048, 0.055, 0.053) },
+        uSheenLayer: { value: 0.015 },
         uCaustics: U.uCaustics,
         uCausticParams: U.uCausticParams,
         uCausticLightDir: U.uCausticLightDir,

@@ -255,9 +255,11 @@ function ribbonBlade(rng, base, len, width, xr) {
   // Rooted blades end well below the surface. (Blades that reached it arced
   // over and floated, and the underside of the surface mirrors the arc: seen
   // through the front glass every such blade read as a hook hanging back
-  // down from the waterline. Flat floating pieces are separate strips, see
-  // floatingStrip.) The highest tips stop 5–9 cm below the water line, cut
-  // there as old blades are (torn off / decayed tips).
+  // down from the waterline. Detached strips floating in the surface film
+  // were tried as well: seen from below the surface they read as sticks
+  // hanging in mid-water, so the surface is kept clear.) The highest tips
+  // stop 5–9 cm below the water line, cut there as old blades are (torn off
+  // / decayed tips).
   const ceilY = TANK.water - 0.05 - xr.range(0, 0.004) * 10;
   // the longest blades are the old, broad ones
   if (len > 0.4) width *= 1.3;
@@ -353,25 +355,6 @@ function ribbonVerts(pts, width, sa, twist) {
     }
   }
   return { pos, uv };
-}
-
-// A detached piece of tape grass floating flat in the surface film (torn
-// off old blades drift there for days): a gently curved strip, both ends
-// blunt, whose mirror image in the underside of the surface coincides with
-// it, so from below it reads as one flat band, never as a hook.
-function floatingStrip(rng, center, len, width) {
-  const y = TANK.water - 0.0018;
-  const az = rng.range(0, Math.PI * 2);
-  const bendK = rng.range(-2.5, 2.5); // curvature (1/m)
-  const pts = [];
-  for (let i = 0; i <= RIBBON_SEGS; i++) {
-    const s = (i / RIBBON_SEGS - 0.5) * len;
-    const a = az + bendK * s;
-    const x = THREE.MathUtils.clamp(center.x + Math.cos(a) * s, -TANK.L / 2 + 0.015, TANK.L / 2 - 0.015);
-    const z = THREE.MathUtils.clamp(center.z + Math.sin(a) * s, -TANK.D / 2 + 0.015, TANK.D / 2 - 0.015);
-    pts.push(new THREE.Vector3(x, y, z));
-  }
-  return ribbonVerts(pts, width, az + Math.PI / 2, 0);
 }
 
 // Amazon-sword leaf: long petiole, lanceolate blade with a slightly wavy
@@ -691,38 +674,6 @@ export function buildPlants() {
       for (const v of uv) vUv.push(v);
     }
     colliders.push({ type: 'cylinder', center: new THREE.Vector3(c.x, 0, c.z), radius: 0.05, height: 0.4, soft: true });
-  }
-  // a few detached blades floating flat over the old clumps (own stream:
-  // the planting keeps its layout)
-  const fr = new RNG(7171);
-  for (const c of [
-    { x: -0.44, z: -0.16 },
-    { x: -0.3, z: -0.06 },
-    { x: 0.14, z: -0.11 },
-    { x: 0.47, z: -0.03 },
-  ]) {
-    const len = fr.range(0.14, 0.26);
-    const center = new THREE.Vector3(c.x + fr.normal(0, 0.02), 0, c.z + fr.normal(0, 0.02));
-    const { pos, uv } = floatingStrip(fr, center, len, 0.009 * fr.range(0.9, 1.3));
-    // older, paler blades (leafColor would draw from the planting stream)
-    col.setHSL(0.17 + fr.range(-0.03, 0.03), fr.range(0.3, 0.45), fr.range(0.11, 0.16));
-    const v0 = vPos.length / 3;
-    const nv = pos.length / 3;
-    // (barely any sway: it drifts with the surface film)
-    const ph = fr.range(0, 6.28);
-    for (let j = 0; j < nv; j++) {
-      vCol.push(col.r, col.g, col.b);
-      vPlant.push(ph, 0.12, len, 0.85); // (old: yellowing, a few dead spots)
-    }
-    for (let s = 0; s < RIBBON_SEGS; s++) {
-      for (let j = 0; j < 2; j++) {
-        const a0 = v0 + s * 3 + j;
-        const b0 = a0 + 3;
-        vIdx.push(a0, a0 + 1, b0, a0 + 1, b0 + 1, b0);
-      }
-    }
-    for (const v of pos) vPos.push(v);
-    for (const v of uv) vUv.push(v);
   }
   const leaf = new THREE.BufferGeometry();
   leaf.setAttribute('position', new THREE.Float32BufferAttribute(vPos, 3));
