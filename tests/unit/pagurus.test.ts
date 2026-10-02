@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Scene, Vector3 } from 'three';
 import { HermitCrab, PagurusWorld, STATE } from '../../src/creatures/yubinagahonyadokari/PagurusMinutus.js';
-import { SHELL_SPECIES_KEYS, Shell, classifyShellPoint, evaluateShell } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusShell.js';
+import { SHELL_SPECIES, SHELL_SPECIES_KEYS, Shell, buildShellGeometry, chooseShellFor, classifyShellPoint, evaluateShell, minFitSize } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusShell.js';
+import { SeededRandom } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusUtil.js';
 import { Rig, solveLegIK, legTipFK } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusRig.js';
 import { individualMorph, MORPH } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusMorphology.js';
 import { buildBodyGeometry, REGION } from '../../src/creatures/yubinagahonyadokari/PagurusMinutusModel.js';
@@ -88,6 +89,49 @@ describe('body ↔ shell geometry', () => {
       expect(hidden).toBeGreaterThan(20);
       expect(out / hidden).toBeLessThan(0.03);
       crab.dispose();
+    }
+  });
+
+  it('shell surfaces face the right way: outer surface outward, lumen wall inward', () => {
+    for (const key of SHELL_SPECIES_KEYS) {
+      const g = buildShellGeometry(key, 1, 0, 0) as unknown as { attributes: Record<string, { count: number; getX(i: number): number; getY(i: number): number; getZ(i: number): number }> };
+      const pos = g.attributes.position, nrm = g.attributes.normal, sh = g.attributes.aShell;
+      // per growth-angle ring: compare each normal with the direction from the ring centroid
+      const rings = new Map<string, { c: Vector3; idx: number[] }>();
+      for (let i = 0; i < pos.count; i++) {
+        const part = Math.round(sh.getZ(i));
+        if (part > 1) continue;
+        const k = `${part}:${Math.round(sh.getX(i) * 200)}`;
+        if (!rings.has(k)) rings.set(k, { c: new Vector3(), idx: [] });
+        const r = rings.get(k)!;
+        r.c.add(new Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)));
+        r.idx.push(i);
+      }
+      const right = [0, 0], total = [0, 0];
+      for (const [k, r] of rings) {
+        const part = Number(k.split(':')[0]);
+        r.c.divideScalar(r.idx.length);
+        for (const i of r.idx) {
+          const out = new Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).sub(r.c).dot(new Vector3(nrm.getX(i), nrm.getY(i), nrm.getZ(i))) > 0;
+          total[part]++;
+          if (out === (part === 0)) right[part]++;
+        }
+      }
+      expect(right[0] / total[0]).toBeGreaterThan(0.9);
+      expect(right[1] / total[1]).toBeGreaterThan(0.9);
+    }
+  });
+
+  it('chosen shells let the cephalothorax pass the aperture (so the crab can withdraw)', () => {
+    const rng = new SeededRandom(11);
+    for (const sl of [2.5, 3.5, 4.2, 5, 6]) {
+      for (let k = 0; k < 20; k++) {
+        const spec = chooseShellFor(sl, rng) as unknown as { species: string; size_mm: number };
+        const sp = SHELL_SPECIES[spec.species as keyof typeof SHELL_SPECIES];
+        if (minFitSize(spec.species, sl) > sp.size_mm[1]) continue; // only when no species is big enough
+        const p = new Shell({ species: spec.species, size_mm: spec.size_mm }).props as unknown as Record<string, number>;
+        expect(Math.min(p.apertureWidth_mm, p.apertureHeight_mm)).toBeGreaterThanOrEqual(0.75 * sl * 0.999);
+      }
     }
   });
 
@@ -193,6 +237,57 @@ describe('behaviour', () => {
     expect(crab.shell).toBe(entry.shell);
     expect(w.shells.some((s) => s.shell.key === 'reticunassa_festiva' && s.free)).toBe(true);
     crab.dispose();
+  });
+
+  it('breeding season: a male takes a smaller female by her shell rim with the minor chela and carries her', () => {
+    const scene = new Scene();
+    const world = PagurusWorld.of(scene);
+    world.autoSpawn = false;
+    const male = new HermitCrab({ seed: 21, sex: 'm', shieldLength_mm: 5.2, lod: 1 });
+    const female = new HermitCrab({ seed: 22, sex: 'f', shieldLength_mm: 4.0, lod: 1 });
+    for (const c of [male, female]) { scene.add(c.root); c.world = world; world.register(c); }
+    male.placeAt(new Vector3(0, 0, 0), 0, { groundAt: flat });
+    female.placeAt(new Vector3(0.01, 0, 0.035), Math.PI, { groundAt: flat });
+    const events: string[] = [];
+    male.onEvent((id) => events.push(id));
+    const env = (f: number) => ({ groundAt: flat, waterAt: () => 0.05, player: new Vector3(8, 1.5, 8), frame: f, month: 1 });
+    let guardedAt = -1, maxGap = 0;
+    const start = female.loco.position.clone();
+    for (let f = 0; f < 60 * 120; f++) {
+      male.update(1 / 60, env(f));
+      female.update(1 / 60, env(f));
+      if (female.guardedBy === male) {
+        if (guardedAt < 0) guardedAt = f / 60;
+        if (f / 60 > guardedAt + 1) {
+          const tip = male.animator.chelaTipWorld('L', new Vector3());
+          const grip = female.gripPointWorld(male.loco.position, new Vector3());
+          maxGap = Math.max(maxGap, Math.hypot(tip.x - grip.x, tip.z - grip.z));
+        }
+        if (f / 60 > guardedAt + 25) break;
+      }
+    }
+    expect(guardedAt).toBeGreaterThan(0);
+    expect(events).toContain('mate_guard');
+    expect(male.behavior.state).toBe(STATE.MATE_GUARD);
+    expect(female.behavior.state).toBe(STATE.GUARDED);
+    expect(maxGap).toBeLessThan(0.5 * male.SL); // her rim stays in his minor chela
+    expect(female.loco.position.distanceTo(start)).toBeGreaterThan(male.SL); // and she is carried along
+  });
+
+  it('no mate guarding outside the breeding season (Nov–Apr)', () => {
+    const scene = new Scene();
+    const world = PagurusWorld.of(scene);
+    world.autoSpawn = false;
+    const male = new HermitCrab({ seed: 21, sex: 'm', shieldLength_mm: 5.2, lod: 1 });
+    const female = new HermitCrab({ seed: 22, sex: 'f', shieldLength_mm: 4.0, lod: 1 });
+    for (const c of [male, female]) { scene.add(c.root); c.world = world; world.register(c); }
+    male.placeAt(new Vector3(0, 0, 0), 0, { groundAt: flat });
+    female.placeAt(new Vector3(0.01, 0, 0.035), Math.PI, { groundAt: flat });
+    for (let f = 0; f < 60 * 60; f++) {
+      male.update(1 / 60, { groundAt: flat, waterAt: () => 0.05, player: new Vector3(8, 1.5, 8), frame: f, month: 7 });
+      female.update(1 / 60, { groundAt: flat, waterAt: () => 0.05, player: new Vector3(8, 1.5, 8), frame: f, month: 7 });
+      expect(female.guardedBy).toBeNull();
+    }
   });
 
   it('antennule flicks are irregular and the two sides are not synchronised', () => {

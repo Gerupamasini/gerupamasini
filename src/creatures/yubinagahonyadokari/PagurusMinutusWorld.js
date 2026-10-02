@@ -220,7 +220,7 @@ export class PagurusWorld {
     const out = [];
     const tmp = new THREE.Vector3();
     for (const c of this.crabs) {
-      if (c === except || !c.active) continue;
+      if (c === except || !c.active || (except && except.partner === c)) continue; // a guarding pair touches
       const sp = c.shellCenterOffset(tmp).add(c.loco.position);
       if (Math.hypot(sp.x - x, sp.z - z) < r + c.radius) out.push({ x: sp.x, z: sp.z, r: c.shell ? c.shell.radius * 0.5 : 0.6 * c.SL, soft: true });
       if (Math.hypot(c.loco.position.x - x, c.loco.position.z - z) < r + c.radius) out.push({ x: c.loco.position.x, z: c.loco.position.z, r: 0.9 * c.SL, soft: true });

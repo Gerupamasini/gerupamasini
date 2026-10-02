@@ -8,8 +8,10 @@
 // Removed as separate states: WALK (it is the locomotion layer used by every state) and CLIMB (an
 // automatic locomotion mode on slopes and objects – P. minutus climbs walls and algae [D], but climbing
 // is not a distinct decision).
-// Documented but deferred: precopulatory mate guarding (male carries a female by her shell rim with the
-// minor cheliped, Nov–Apr [D]) – hook: `Behavior.guardTarget`.
+// Breeding season (Nov–Apr [D]): precopulatory mate guarding – MATE_GUARD (male: approach, grasp the
+// female's shell rim with the minor (left) chela [D], carry her, shake bouts [G: P. filholi]; a rival
+// with a larger major chela may take her over [D: escalation decided by major-chela size]) and GUARDED
+// (female: held, withdrawn). Real guarding lasts days [D]; the game compresses it to a few minutes [S].
 import * as THREE from 'three';
 import { evaluateShell } from './PagurusMinutusShell.js';
 import { clamp, damp, lerp, smoothstep, fbm1, SeededRandom, wrapAngle } from './PagurusMinutusUtil.js';
@@ -17,7 +19,7 @@ import { clamp, damp, lerp, smoothstep, fbm1, SeededRandom, wrapAngle } from './
 export const STATE = {
   IDLE: 'IDLE', EXPLORE: 'EXPLORE', FORAGE: 'FORAGE', FEED: 'FEED', INVESTIGATE: 'INVESTIGATE', REST: 'REST',
   THREAT_ALERT: 'THREAT_ALERT', RETREAT: 'RETREAT', HIDE_IN_SHELL: 'HIDE_IN_SHELL', EMERGE: 'EMERGE',
-  SHELL_INSPECT: 'SHELL_INSPECT', SHELL_CHANGE: 'SHELL_CHANGE',
+  SHELL_INSPECT: 'SHELL_INSPECT', SHELL_CHANGE: 'SHELL_CHANGE', MATE_GUARD: 'MATE_GUARD', GUARDED: 'GUARDED',
 };
 const CALM = new Set([STATE.IDLE, STATE.EXPLORE, STATE.FORAGE, STATE.FEED, STATE.INVESTIGATE, STATE.REST, STATE.SHELL_INSPECT]);
 
@@ -72,7 +74,8 @@ export class Behavior {
       anim: { retract: 0, urgent: false, attention: [], sniff: 0.15, explore: 0.5, chelaR: { mode: 'rest' }, chelaL: { mode: 'rest' }, mouth: 0, alert: 0, lean: 0 },
     };
     this.moveTarget = new THREE.Vector3();
-    this.guardTarget = null;
+    this.guardCooldownUntil = 0;
+    this.lastEnv = null;
   }
 
   emit(id) {
@@ -167,8 +170,10 @@ export class Behavior {
     this.stateTime += dt;
     this.subTime += dt;
     if (this.suggestion && this.time > this.suggestion.until) this.suggestion = null;
+    this.lastEnv = env;
     this.perceive(dt, env);
     this.metabolize(dt);
+    if (this.state === STATE.GUARDED) { this.run(dt, env); return this.cmd; }
     const I = this.internal;
     const fear = I.fear, S = this.threat.level;
     // ── reflex layer ──
@@ -202,7 +207,8 @@ export class Behavior {
   choose(env) {
     const I = this.internal, P = this.personality, e = this.envInfo;
     // withdrawal ends only through EMERGE (run); emergence and shell exchange end when their sequence is done
-    if (this.state === STATE.HIDE_IN_SHELL) return;
+    if (this.state === STATE.HIDE_IN_SHELL || this.state === STATE.GUARDED) return;
+    if (this.state === STATE.MATE_GUARD && !this.stateDone()) return;
     if ((this.state === STATE.EMERGE || this.state === STATE.SHELL_CHANGE) && !this.data.done && this.stateTime < this.stateDur) return;
     if (this.state === STATE.THREAT_ALERT || this.state === STATE.RETREAT) {
       if (!this.stateDone()) return;
@@ -220,6 +226,7 @@ export class Behavior {
     const shells = world ? world.nearbyShells(pos, 24 * SL) : [];
     const shell = shells.find((s) => !s.entry.handledBy && (!s.entry.rejectedBy.has(crab.id) || this.time - s.entry.rejectedBy.get(crab.id) > 240));
     const seekWater = e.exposed && (e.distToWater ?? 99) < 3 ? 0.55 : 0;
+    const mate = this.findMate();
     const sub = SUBSTRATE_FOOD[e.substrate] ?? 0.6;
     const sug = this.suggestion?.kind;
     const scores = {
@@ -230,6 +237,7 @@ export class Behavior {
       [STATE.FEED]: food ? (0.45 + 1.2 * I.hunger) * calm * (1 - smoothstep(0, smellR, food.d) * 0.5) : 0,
       [STATE.SHELL_INSPECT]: shell ? (0.2 + 1.3 * (1 - I.shellSatisfaction)) * (0.6 + 0.4 * I.curiosity) * calm : 0,
       [STATE.INVESTIGATE]: 0,
+      [STATE.MATE_GUARD]: mate ? (0.55 + 0.75 * I.activity) * calm * (1 - 0.4 * I.hunger) : 0,
     };
     // first contact with a neighbour or a novel object: brief investigation
     const nb = world ? world.neighbors(pos, 4 * SL, crab) : [];
@@ -242,6 +250,7 @@ export class Behavior {
     if (best === STATE.FEED) this.data.next = { food: food.food };
     else if (best === STATE.SHELL_INSPECT) this.data.next = { entry: shell.entry };
     else if (best === STATE.INVESTIGATE) this.data.next = { other: nb[0].crab };
+    else if (best === STATE.MATE_GUARD) this.data.next = { female: mate };
     else this.data.next = {};
     this.enter(best, env, this.data.next);
   }
@@ -252,6 +261,11 @@ export class Behavior {
     if (prev === STATE.SHELL_INSPECT && this.data.entry && state !== STATE.SHELL_CHANGE) this.releaseInspected();
     if (prev === STATE.FEED && this.data.food) this.data.food.claimedBy?.delete(this.crab.id);
     if (prev === STATE.SHELL_CHANGE && this.sub !== 'done') this.crab.abortShellChange?.();
+    if (prev === STATE.MATE_GUARD) {
+      const f = this.crab.partner;
+      if (f && f.guardedBy === this.crab) f.releaseFromGuard();
+      this.guardCooldownUntil = this.time + this.rng.range(30, 90);
+    }
     this.state = state;
     this.stateTime = 0;
     this.sub = '';
@@ -278,6 +292,9 @@ export class Behavior {
         if (this.data.entry) this.data.entry.handledBy = this.crab;
         break;
       case STATE.SHELL_CHANGE: this.stateDur = 15; this.sub = 'exit'; this.crab.beginShellChange(this.data.entry); break;
+      // guarding lasts days in the field [D]; compressed for the game [S]
+      case STATE.MATE_GUARD: this.stateDur = r.range(150, 320); this.sub = 'approach'; this.data.jerkAt = r.wait(10, 0.6); break;
+      case STATE.GUARDED: this.stateDur = Infinity; break;
       default: this.stateDur = 3;
     }
     if (EVENT_OF[state]) this.emit(EVENT_OF[state]);
@@ -435,9 +452,116 @@ export class Behavior {
       }
       case STATE.SHELL_INSPECT: this.runInspect(dt, env); break;
       case STATE.SHELL_CHANGE: this.runShellChange(dt, env); break;
+      case STATE.MATE_GUARD: this.runGuard(dt, env); break;
+      case STATE.GUARDED: {
+        // held by the rim of her shell: withdrawn, legs folded, carried along
+        L.freeze = true; L.legsActive = false; L.posture = 'rest';
+        A.retract = 1; A.explore = 0;
+        break;
+      }
     }
     // exposed for long: crouch and keep still more (shell resting on the substrate)
     if (this.envInfo.exposed && this.state === STATE.IDLE) L.posture = 'low';
+  }
+
+  // ── precopulatory mate guarding ────────────────────────────────────────────────────────────
+  /** male in the breeding season: nearest smaller female that is free or held by a male with a smaller major chela */
+  findMate() {
+    const crab = this.crab, world = crab.world;
+    if (crab.sex !== 'm' || !crab.breeding || !world || crab.partner || this.time < this.guardCooldownUntil) return null;
+    const mine = crab.morph.chelaR * crab.shieldLength_mm;
+    let best = null, bd = Infinity;
+    for (const { crab: o, d } of world.neighbors(crab.loco.position, 22 * crab.SL, crab)) {
+      if (o.sex !== 'f' || !o.active || o.change || o.shieldLength_mm > crab.shieldLength_mm * 0.98) continue;
+      const g = o.guardedBy;
+      // contests escalate only against a guard with a smaller major chela [D]
+      if (g && g.morph.chelaR * g.shieldLength_mm >= mine * 1.05) continue;
+      if (d < bd) { bd = d; best = o; }
+    }
+    return best;
+  }
+
+  /** female: grasped by a guarding male */
+  beGuarded(male, env) {
+    const crab = this.crab;
+    const old = crab.guardedBy;
+    if (old && old !== male) { old.partner = null; old.behavior.onLostFemale(); }
+    crab.guardedBy = male;
+    crab.partner = male;
+    male.partner = crab;
+    this.enter(STATE.GUARDED, env);
+  }
+
+  /** female: let go – stays in her shell a little, then emerges */
+  onReleased() {
+    if (this.state !== STATE.GUARDED) return;
+    this.enter(STATE.HIDE_IN_SHELL, this.lastEnv ?? {});
+    this.stateDur = this.rng.range(2.6, 9);
+  }
+
+  /** male: the female was taken over by a rival */
+  onLostFemale() {
+    if (this.state === STATE.MATE_GUARD) { this.data.done = true; this.data.female = null; }
+  }
+
+  runGuard(dt, env) {
+    const crab = this.crab, SL = crab.SL, r = this.rng;
+    const L = this.cmd.loco, A = this.cmd.anim;
+    const pos = crab.loco.position;
+    const f = this.data.female;
+    if (!f || !f.active) { this.data.done = true; return; }
+    const fp = f.loco.position;
+    A.attention.push({ pos: fp, w: 0.9, kind: 'object' });
+    const reachD = (f.shell ? f.shell.radius * 0.6 : SL) + 1.8 * SL;
+    const d = Math.hypot(fp.x - pos.x, fp.z - pos.z);
+    if (this.sub === 'approach') {
+      if (f.guardedBy && f.guardedBy !== crab) { this.sub = 'contest'; this.subTime = 0; return; }
+      L.moveTarget = fp; L.speed = 1.8; L.arrive = reachD;
+      A.explore = 0.8; A.sniff = 0.7;
+      if (d < reachD * 1.1) { this.sub = 'grasp'; this.subTime = 0; }
+      else if (this.subTime > 40) this.data.done = true;
+    } else if (this.sub === 'contest') {
+      // rival and guard raise their major chelae; the larger usually wins [D: decided by major-chela size]
+      const g = f.guardedBy;
+      if (!g) { this.sub = 'approach'; this.subTime = 0; return; }
+      L.moveTarget = fp; L.speed = 1.2; L.arrive = reachD * 1.4; L.face = g.loco.position;
+      A.alert = 1; A.chelaR = { mode: 'alert' };
+      A.attention.push({ pos: g.loco.position, w: 1, kind: 'threat' });
+      if (this.subTime > 2.2) {
+        const mine = crab.morph.chelaR * crab.shieldLength_mm, theirs = g.morph.chelaR * g.shieldLength_mm;
+        const pWin = 1 / (1 + Math.exp(-(mine / theirs - 1) * 14));
+        this.emit('male_contest');
+        if (r.chance(pWin)) { g.behavior.onLostFemale(); f.releaseFromGuard(); this.sub = 'grasp'; this.subTime = 0; }
+        else { this.data.done = true; this.guardCooldownUntil = this.time + 60; }
+      }
+    } else if (this.sub === 'grasp') {
+      if (f.guardedBy && f.guardedBy !== crab) { this.sub = 'contest'; this.subTime = 0; return; }
+      L.face = fp;
+      // the minor (left) chela takes the rim of her aperture [D]
+      A.chelaL = { mode: 'reach', target: f.gripPointWorld(pos, _v), pitch: -0.55, gape: this.subTime < 0.6 ? 0.45 : 0.0 };
+      if (this.subTime > 0.9) {
+        f.behavior.beGuarded(crab, env);
+        this.sub = 'guard'; this.subTime = 0;
+        this.emit('mate_guard');
+      }
+    } else {
+      // carrying her in front on the left; slow walks between pauses
+      if (crab.partner !== f) { this.data.done = true; return; }
+      if (this.subTime > (this.data.walkFor ?? 0)) { this.pickWaypoint(env, 0.6); this.data.walkFor = r.range(4, 12); this.subTime = 0; }
+      L.moveTarget = this.moveTarget; L.speed = 0.9;
+      // shaking bouts: the male jerks the female's shell to and fro [G: P. filholi]
+      let jerk = 0;
+      if (this.stateTime > this.data.jerkAt) {
+        jerk = Math.sin((this.stateTime - this.data.jerkAt) * Math.PI * 2 * 4.5);
+        if (this.stateTime > this.data.jerkAt + 0.8) this.data.jerkAt = this.stateTime + r.wait(12, 0.6);
+      }
+      const carry = _w.set(0.8, -0.34 + 0.22 * jerk, 2.0).applyMatrix4(crab.loco.bodyMatrix);
+      A.chelaL = { mode: 'reach', target: carry, pitch: -0.4, gape: 0.0, fast: jerk !== 0 };
+      // a rival close by: raise the major chela at him
+      const rival = crab.world?.neighbors(pos, 6 * SL, crab).find((n) => n.crab.sex === 'm' && n.crab !== f);
+      if (rival) { A.chelaR = { mode: 'alert' }; A.alert = 0.6; A.attention.push({ pos: rival.crab.loco.position, w: 1, kind: 'threat' }); }
+      if (this.stateTime > this.stateDur) this.data.done = true;
+    }
   }
 
   runForage(dt, env) {

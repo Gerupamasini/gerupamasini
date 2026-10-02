@@ -717,6 +717,35 @@ function buildSetae(rig, lod, bodyAcc) {
       }
     }
   }
+  // short fine setae all round the articles: the fuzzy outline of the legs and chelipeds in close-up
+  // photos (001, 002, 021, 022); tilted distally [P]
+  const fuzz = (bone, L, sec, n, side, t0 = 0.05, t1 = 0.95, taper = null) => {
+    const bi = rig.list.indexOf(bone), M = boneM(rig, bone);
+    for (let k = 0; k < Math.round(n * density); k++) {
+      const t = t0 + (t1 - t0) * rnd();
+      const f = taper ? taper(t) : t;
+      const h = lerp(sec[0][0], sec[1][0], f), w = lerp(sec[0][1], sec[1][1], f);
+      const th = rnd() * Math.PI * 2;
+      const base = new THREE.Vector3(t * L, h * 0.93 * Math.sin(th), w * 0.93 * Math.cos(th));
+      const nrm = new THREE.Vector3(0, Math.sin(th) / h, Math.cos(th) / w).normalize();
+      const dir = nrm.addScaledVector(new THREE.Vector3(1, 0, 0), 0.7 + 0.6 * rnd()).normalize();
+      sa.card(bi, M, base, dir, side, 0.045 + rnd() * 0.06, 0.03, rnd());
+    }
+  };
+  for (const key of Object.keys(rig.legs)) {
+    const leg = rig.legs[key];
+    fuzz(leg.merus, leg.len.merus, S.merus, 22, leg.side);
+    fuzz(leg.carpus, leg.len.carpus, S.carpus, 14, leg.side);
+    fuzz(leg.propodus, leg.len.propodus, S.propodus, 18, leg.side);
+    fuzz(leg.dactylus, leg.len.dactylus, S.dactylus, 12, leg.side, 0.04, 0.7, (t) => Math.pow(t, 1.45));
+  }
+  for (const side of ['L', 'R']) {
+    const ch = rig.chelipeds[side];
+    const C = MORPH.chelipeds[side];
+    const k = side === 'R' ? 1 : 0.6;
+    fuzz(ch.merus, ch.len.merus, [[C.merusSection[1] * 0.85, C.merusSection[0] * 0.8], [C.merusSection[1], C.merusSection[0]]], 16 * k, ch.side);
+    fuzz(ch.carpus, ch.len.carpus, [[C.carpusSection[1] * 0.75, C.carpusSection[0] * 0.7], [C.carpusSection[1], C.carpusSection[0]]], 18 * k, ch.side);
+  }
   // chelipeds: setal tufts on the palm and fingers, fringes on the carpus [D]
   for (const side of ['L', 'R']) {
     const ch = rig.chelipeds[side];
@@ -725,7 +754,7 @@ function buildSetae(rig, lod, bodyAcc) {
     const chelaW = (isMajor ? rig.ind.chelaRWidth : rig.ind.chelaLWidth) * 0.5;
     const chelaH = ch.len.chela * C.thicknessRatio * 0.5;
     const pb = rig.list.indexOf(ch.propodus), PM = boneM(rig, ch.propodus);
-    const n = Math.round((isMajor ? 22 : 12) * density);
+    const n = Math.round((isMajor ? 40 : 20) * density);
     for (let k = 0; k < n; k++) {
       const u = rnd();
       const v = (rnd() - 0.5) * 1.6;

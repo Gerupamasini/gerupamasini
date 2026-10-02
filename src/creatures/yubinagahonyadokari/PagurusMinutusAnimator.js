@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { Rig, solveChelipedIK, quatFromDir, yawFor } from './PagurusMinutusRig.js';
 import { MORPH } from './PagurusMinutusMorphology.js';
+import { classifyShellPoint } from './PagurusMinutusShell.js';
 import { clamp, damp, lerp, smoothstep, fbm1, noise1, Twitch, SeededRandom } from './PagurusMinutusUtil.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();
@@ -32,19 +33,72 @@ const STAGE = {
 };
 const CHANNELS = Object.keys(STAGE.withdraw);
 
-/** body retreat into the shell when fully withdrawn (SL) */
+/** nominal body retreat into the shell when fully withdrawn (SL); the actual vector is fitted per shell */
 const RETREAT_DEPTH = 1.55;
 
-const legFold = (leg) => {
-  // P2/P3 folded in front of the aperture: propodus and long dactyl hanging vertically [D: photos]
-  const s = leg.side;
-  const front = leg.n === 1 ? 0.55 : 0.75;
-  return { yaw: yawFor(s * front, 0.85), lift: leg.n === 1 ? 0.05 : -0.05, knee: -2.35, cp: -0.35, pd: -0.95 };
-};
+/** folded-leg joints, shared by all crabs with the same shell geometry */
+const FOLD_CACHE = new Map();
+function shellGeomKey(crab) {
+  const sh = crab.shell;
+  return sh ? `${sh.key}|${(sh.size_mm / crab.shieldLength_mm).toFixed(2)}|${crab.rig.shellAnchorRest.y.toFixed(2)},${crab.rig.shellAnchorRest.z.toFixed(2)}` : 'none';
+}
+/** classifier (lumen / wall / outside) for points in the fully withdrawn body frame */
+function bodyToShell(crab, R) {
+  const sh = crab.shell;
+  const carryInv = sh.carry.quaternion.clone().invert();
+  const seat = crab.rig.shellAnchorRest.clone().sub(R); // aperture centroid in the withdrawn body frame
+  const tmp = new THREE.Vector3();
+  return (p) => classifyShellPoint(sh.key, sh.size_mm, tmp.copy(p).sub(seat).applyQuaternion(carryInv).multiplyScalar(crab.SL));
+}
+/** body displacement when fully withdrawn (SL): straight back along the body axis, slightly lowered */
+const RETREAT = new THREE.Vector3(0, -0.08, -RETREAT_DEPTH);
+
+/**
+ * P2/P3 folded at the aperture when withdrawn: the merus and carpus are drawn into the body whorl and
+ * the propodi and long dactyli close the opening beside the major chela, steep and side by side, P2
+ * inside P3 (photos 018, 019, 021, 053, 054) [D]. Found once per shell by a joint-space search checked
+ * against the analytic shell (lumen / wall / outside): knees inside the lumen, no article in the wall,
+ * nothing above the shell, tips not below the substrate.
+ * @param {object} leg rig leg chain
+ * @param {{c: THREE.Vector3, classify: (p: THREE.Vector3) => string, groundY: number}} ap aperture centroid
+ *   and a classifier for body-frame points
+ * @param {THREE.Object3D} body rig root (Body bone)
+ */
+const _kM = new THREE.Matrix4();
+/** substrate below the body origin when standing (SL), see POSTURE in the locomotion */
+const POSTURE_GROUND = 0.48;
+const _fp = Array.from({ length: 8 }, () => new THREE.Vector3());
+const FOLD_GRID = { dyaw: [-0.5, -0.25, 0, 0.25], lift: [-0.2, 0.15, 0.5, 0.85], knee: [-1.5, -1.9, -2.3], cp: [-0.3, -0.85], pd: [-0.6, -1.1, -1.5] };
+function legFold(leg, ap, body) {
+  const saved = [leg.coxa, leg.basis, leg.merus, leg.carpus, leg.propodus, leg.dactylus].map((b) => b.quaternion.clone());
+  const wantX = leg.side * (leg.n === 1 ? 0.3 : 0.6);
+  _kM.copy(body.matrixWorld).invert();
+  const pos = (b, v) => v.setFromMatrixPosition(b.matrixWorld).applyMatrix4(_kM);
+  let best = null, bestScore = Infinity;
+  const j = { yaw: 0, lift: 0, knee: 0, cp: 0, pd: 0 };
+  for (const dyaw of FOLD_GRID.dyaw) for (const lift of FOLD_GRID.lift) for (const knee of FOLD_GRID.knee) for (const cp of FOLD_GRID.cp) for (const pd of FOLD_GRID.pd) {
+    j.yaw = leg.restYaw + dyaw * leg.side; j.lift = lift; j.knee = knee; j.cp = cp; j.pd = pd;
+    Rig.applyLeg(leg, j);
+    leg.coxa.updateMatrixWorld(true);
+    const m = pos(leg.merus, _fp[0]), k = pos(leg.carpus, _fp[1]), c = pos(leg.propodus, _fp[2]), d = pos(leg.dactylus, _fp[3]), t = pos(leg.tip, _fp[4]);
+    let score = 0;
+    const kc = ap.classify(k);
+    score += kc === 'lumen' ? 0 : kc === 'wall' ? 4 : 1.5;
+    for (const q of [_fp[5].lerpVectors(m, k, 0.5), _fp[6].lerpVectors(k, c, 0.5), c, _fp[7].lerpVectors(c, d, 0.5)]) if (ap.classify(q) === 'wall') score += 3;
+    score += 3 * Math.max(0, ap.groundY - t.y) + 2 * Math.max(0, k.y - (ap.c.y + 0.75));
+    // closing the opening: propodus and dactyl steep, tips near the front of the aperture, P2 inside P3
+    const steep = Math.abs(_fp[5].subVectors(t, c).normalize().y);
+    score += 0.8 * (1 - steep) + 0.6 * Math.abs(t.x - wantX) + 0.3 * Math.max(0, Math.abs(t.z - ap.c.z) - 0.6);
+    if (score < bestScore) { bestScore = score; best = { ...j }; }
+  }
+  [leg.coxa, leg.basis, leg.merus, leg.carpus, leg.propodus, leg.dactylus].forEach((b, i) => b.quaternion.copy(saved[i]));
+  leg.coxa.updateMatrixWorld(true);
+  return best;
+}
 
 const CHELA_POSES = {
   // held flexed in front of the cephalothorax, chela tips near the substrate
-  rest: { R: { yaw: yawFor(-0.4, 0.92), lift: 0.45, roll: 0.15, knee: -1.0, swing: -0.6, pitch: 0.42, gape: 0.04 }, L: { yaw: yawFor(0.42, 0.9), lift: 0.4, roll: 0.15, knee: -1.05, swing: -0.5, pitch: 0.38, gape: 0.06 } },
+  rest: { R: { yaw: yawFor(-0.35, 0.94), lift: 0.62, roll: 0.25, knee: -1.4, swing: -0.7, pitch: 0.15, gape: 0.04 }, L: { yaw: yawFor(0.42, 0.9), lift: 0.4, roll: 0.15, knee: -1.05, swing: -0.5, pitch: 0.38, gape: 0.06 } },
   alert: { R: { yaw: yawFor(-0.5, 0.85), lift: 0.7, roll: 0.0, knee: -0.9, swing: -0.3, pitch: 0.45, gape: 0.12 }, L: { yaw: yawFor(0.5, 0.85), lift: 0.65, roll: 0.0, knee: -0.95, swing: -0.35, pitch: 0.4, gape: 0.1 } },
   // aperture closed: major chela laid across the opening, minor tucked behind [D]
   block: { R: { yaw: yawFor(-0.15, 1.0), lift: -0.15, roll: 0.35, knee: -1.95, swing: -1.05, pitch: 0.2, gape: 0.0 }, L: { yaw: yawFor(0.2, 1.0), lift: -0.05, roll: 0.3, knee: -2.25, swing: -1.2, pitch: 0.25, gape: 0.0 } },
@@ -124,19 +178,22 @@ export class Animator {
     this.updateStaging(dt, cmd.urgent);
     const ch = this.ch;
     const crab = this.crab;
-    // body retreat: body slides back into the shell, the grip point slides forward so the shell stays put
-    crab.anim.bodyRetreat = -RETREAT_DEPTH * ch.body;
+    // body retreat: the body slides back and up into the body whorl, the grip point moves the other way so
+    // the shell stays put
+    const R = RETREAT;
+    crab.anim.bodyRetreat = R.z * ch.body;
     crab.anim.bodyPitch = 0.18 * ch.body + (cmd.lean ?? 0);
-    crab.anim.bodyLift = -0.08 * ch.body;
+    crab.anim.bodyLift = R.y * ch.body;
     const a = this.rig.shellAnchor;
-    a.position.copy(this.rig.shellAnchorRest);
-    a.position.z += RETREAT_DEPTH * ch.body + (cmd.anchorOffsetZ ?? 0);
+    a.position.copy(this.rig.shellAnchorRest).addScaledVector(R, -ch.body);
+    a.position.z += cmd.anchorOffsetZ ?? 0;
 
     // ── walking legs: IK (from locomotion) blended toward the folded pose ───────────────────────
     const loco = crab.loco;
+    const folds = ch.legs > 0 ? this.legFolds() : null;
     for (const leg of Object.values(loco.legs)) {
-      const f = legFold(leg.chain);
       const w = smoothstep(0, 1, ch.legs);
+      const f = folds ? folds[leg.key] : leg.joints;
       const j = leg.joints;
       // unloaded legs (withdrawn, emerging, or not stepping) relax a little between IK and fold
       Rig.applyLeg(leg.chain, {
@@ -162,6 +219,26 @@ export class Animator {
       this.updateMouth(dt, cmd);
     } else this.updateAntennaeCheap(dt, cmd);
     this.updateEyes(dt, cmd);
+  }
+
+  /** folded-leg joints for the current shell (shared cache per shell geometry) */
+  legFolds() {
+    const crab = this.crab, shell = crab.shell;
+    const key = shellGeomKey(crab);
+    const hit = FOLD_CACHE.get(key);
+    if (hit) return hit;
+    // aperture centroid (= ShellAnchor) in the body frame at full withdrawal; the shell is posed by its
+    // carry rotation about it, so body-frame points map to shell-local ones for the classifier
+    const R = RETREAT;
+    const ap = {
+      c: this.rig.shellAnchorRest.clone().sub(R),
+      groundY: -POSTURE_GROUND - R.y,
+      classify: shell ? bodyToShell(crab, R) : () => 'outside',
+    };
+    const joints = {};
+    for (const leg of Object.values(crab.loco.legs)) joints[leg.key] = legFold(leg.chain, ap, this.rig.root);
+    FOLD_CACHE.set(key, joints);
+    return joints;
   }
 
   updateStaging(dt, urgent) {
@@ -268,8 +345,9 @@ export class Animator {
           st.pitchT = (this.rng.next() - 0.55) * 0.5 * explore;
         }
       }
-      const yawGoal = lerp(st.yawT + 0.08 * fbm1(this.time * 0.7, st.seed), 2.3, fold);
-      const pitchGoal = lerp(st.pitchT + 0.06 * fbm1(this.time * 0.6, st.seed + 2) + st.lift, -0.3, fold);
+      // withdrawn: peduncles turned down and in, toward the aperture
+      const yawGoal = lerp(st.yawT + 0.08 * fbm1(this.time * 0.7, st.seed), -0.35, fold);
+      const pitchGoal = lerp(st.pitchT + 0.06 * fbm1(this.time * 0.6, st.seed + 2) + st.lift, -1.0, fold);
       st.prevYaw = st.yaw;
       st.prevPitch = st.pitch;
       st.yaw = damp(st.yaw, yawGoal, fold > 0.05 ? 18 : 3.2, dt);
@@ -300,6 +378,9 @@ export class Animator {
         b.quaternion.setFromAxisAngle(Y, st.segY[i]);
         b.quaternion.multiply(_q2.setFromAxisAngle(Z, st.segZ[i] + (i === 0 ? 0.05 : 0)));
       }
+      // the long flagellum is drawn in through the aperture with the body (coiled inside; in photos of
+      // withdrawn crabs it is not visible): shortened from the base as the antennae fold [S]
+      a.flagellum[0].scale.setScalar(lerp(1, 0.06, smoothstep(0.35, 1, fold)));
       // ground contact: lift the antenna if its distal half would sink into the substrate
       if (env.groundAt) {
         a.peduncle[0].updateMatrixWorld(true);
@@ -318,9 +399,10 @@ export class Animator {
     for (const side of ['L', 'R']) {
       const a = this.rig.antennae[side];
       const st = this.ant[side];
-      st.yaw = damp(st.yaw, lerp(0.1 * fbm1(this.time * 0.5, st.seed), 1.25, fold), 4, dt);
+      st.yaw = damp(st.yaw, lerp(0.1 * fbm1(this.time * 0.5, st.seed), -0.35, fold), 4, dt);
       _q.copy(a.restQ[0]).premultiply(_q2.setFromAxisAngle(Y, st.yaw * a.side));
-      a.peduncle[0].quaternion.copy(_q);
+      a.peduncle[0].quaternion.copy(_q).multiply(_q2.setFromAxisAngle(Z, -1.0 * fold));
+      a.flagellum[0].scale.setScalar(lerp(1, 0.06, smoothstep(0.35, 1, fold)));
     }
   }
 

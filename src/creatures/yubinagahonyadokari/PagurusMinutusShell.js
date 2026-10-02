@@ -37,7 +37,7 @@ export const SHELL_SPECIES = {
   batillaria_attramentaria: {
     ja: 'ホソウミニナ', sci: 'Batillaria attramentaria', family: 'Batillariidae',
     evidence: 'direct', sizeMeasure: 'height', size_mm: [12, 30], typical_mm: 18,
-    whorls: 12, W: 1.42, T: 8.8, a: 0.98, b: 1.9, tilt: 0.1,
+    whorls: 12, W: 1.42, T: 8.8, a: 0.98, b: 1.9, tilt: 0.1, profileN: 2.7,
     canal: { phi: -1.95, len: 0.22, width: 0.38 }, shoulder: null,
     thickness: 0.16, lip: { amp: 0.04, span: 0.12 }, apexErosion: 0.25,
     sculpture: { cords: { n: 5, amp: 0.022, sharp: 2.5 }, ribs: { n: 18, amp: 0.014, sharp: 2, focus: 0.9 }, nodules: 0.012, varix: 0.0 },
@@ -125,7 +125,10 @@ function genCurve(sp, phi, out) {
   let r = 1;
   if (sp.canal) r += sp.canal.len * bump(angDiff(phi, sp.canal.phi), sp.canal.width);
   if (sp.shoulder) r += sp.shoulder.amp * bump(angDiff(phi, sp.shoulder.phi), sp.shoulder.width);
-  const u0 = sp.a * Math.cos(phi) * r, v0 = sp.b * Math.sin(phi) * r;
+  // superellipse section: profileN > 2 flattens the whorl's sides (flat-sided Batillaria whorls) [P]
+  const e = 2 / (sp.profileN ?? 2);
+  const cp = Math.cos(phi), sn = Math.sin(phi);
+  const u0 = sp.a * Math.sign(cp) * Math.pow(Math.abs(cp), e) * r, v0 = sp.b * Math.sign(sn) * Math.pow(Math.abs(sn), e) * r;
   const c = Math.cos(sp.tilt), s = Math.sin(sp.tilt);
   out[0] = u0 * c - v0 * s;
   out[1] = u0 * s + v0 * c;
@@ -209,7 +212,10 @@ function insideGen(sp, du, dv, shrink) {
   // polar test against the generating curve at the same polar angle (curve is star-shaped)
   const c = Math.cos(-sp.tilt), s = Math.sin(-sp.tilt);
   const x = du * c - dv * s, y = du * s + dv * c;
-  const phi = Math.atan2(y / sp.b, x / sp.a);
+  // parameter of the curve point on this ray (inverse of the superellipse mapping in genCurve)
+  const ie = (sp.profileN ?? 2) / 2;
+  const tx = x / sp.a, ty = y / sp.b;
+  const phi = ie === 1 ? Math.atan2(ty, tx) : Math.atan2(Math.sign(ty) * Math.pow(Math.abs(ty), ie), Math.sign(tx) * Math.pow(Math.abs(tx), ie));
   genCurve(sp, phi, _g0);
   const R = Math.hypot(_g0[0], _g0[1]) - shrink;
   return Math.hypot(du, dv) <= R;
@@ -495,7 +501,8 @@ export function buildShellGeometry(key, lod = 1, damage = 0, variant = 0) {
   for (let i = 0; i < rows - 1; i++) {
     for (let j = 0; j < ring; j++) {
       const a = outerStart + i * W + j, b = a + 1, c = a + W, d = c + 1;
-      idx.push(a, c, b, b, c, d);
+      // (x, z) = ρ(cos θ, sin θ) with θ growing toward the aperture is left-handed in φ: this order faces out
+      idx.push(a, b, c, b, d, c);
     }
   }
   // inner surface (lumen wall), last `inner` whorls only – deeper is never visible
@@ -514,7 +521,7 @@ export function buildShellGeometry(key, lod = 1, damage = 0, variant = 0) {
   for (let i = 0; i < innerRows - 1; i++) {
     for (let j = 0; j < ring; j++) {
       const a = innerStart + i * W + j, b = a + 1, c = a + W, d = c + 1;
-      idx.push(a, b, c, b, d, c); // reversed winding: faces into the lumen
+      idx.push(a, c, b, b, c, d); // reversed winding: faces into the lumen
     }
   }
   // lip: strip joining outer last row and inner last row (rounded with a mid row)
@@ -537,7 +544,7 @@ export function buildShellGeometry(key, lod = 1, damage = 0, variant = 0) {
   for (let k = 0; k < 2; k++) {
     for (let j = 0; j < ring; j++) {
       const a = lipStart + k * W + j, b = a + 1, c = a + W, d = c + 1;
-      idx.push(a, b, c, b, d, c);
+      idx.push(a, c, b, b, c, d);
     }
   }
   // apex cap (fan) closing the first outer ring
@@ -552,7 +559,7 @@ export function buildShellGeometry(key, lod = 1, damage = 0, variant = 0) {
     nor.push(0, 0, 0);
     aSh.push(theta0 / TAU, 0, 3, 0);
     aRel.push(0);
-    for (let j = 0; j < ring; j++) idx.push(tip, outerStart + j, outerStart + j + 1);
+    for (let j = 0; j < ring; j++) idx.push(tip, outerStart + j + 1, outerStart + j);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -638,7 +645,7 @@ export function setShellMaterialFactory(fn) {
  */
 export class Shell {
   /**
-   * @param {{species: string, size_mm?: number, damage?: number, fouling?: number, seed?: number, lod?: number}} o
+   * @param {{species: string, size_mm?: number, damage?: number, fouling?: number, silt?: number, seed?: number, lod?: number}} o
    */
   constructor(o) {
     const key = o.species;
@@ -650,6 +657,8 @@ export class Shell {
     this.size_mm = o.size_mm ?? sp.typical_mm;
     this.damage = clamp(o.damage ?? 0, 0, 1);
     this.fouling = clamp(o.fouling ?? rng.range(0, 0.5), 0, 1);
+    // film of fine mud on shells carried over sand-mud flats: matte, grey-beige, thickest in the sutures (photos 008, 050, 064)
+    this.silt = clamp(o.silt ?? 0.35 + 0.45 * hash1((o.seed ?? 1) * 31 + 7), 0, 1);
     this.variant = (o.seed ?? 1) & 3;
     this.seed = o.seed ?? 1;
     this.lod = o.lod ?? 1;
@@ -680,6 +689,7 @@ export class Shell {
       inertia: data.inertia.clone().multiplyScalar(SHELL_DENSITY_KG_M3 * k ** 5), // kg·m² about CoM
       damage: this.damage,
       fouling: this.fouling,
+      silt: this.silt,
       thicknessIndex: sp.thickness,
       evidence: sp.evidence,
     };
@@ -1032,10 +1042,11 @@ export function evaluateShell(crab, p) {
   // abdomen + retracted cephalothorax need about 1.3× body volume of usable lumen (last ~1.5 whorls)
   const volRatio = p.usableVolume_mm3 / Math.max(1e-6, crab.bodyVolume_mm3 * 1.3);
   const volume = Math.exp(-Math.pow(Math.log(Math.max(1e-3, volRatio)) / 0.45, 2));
-  // aperture: the cephalothorax must pass and the major chela must close it; effective size ≈ SL [S]
+  // aperture: the cephalothorax must pass through its narrow side and the major chela must close it [S]
   const apEff = Math.sqrt(p.apertureWidth_mm * p.apertureHeight_mm);
   const apRatio = apEff / Math.max(1e-3, crab.shieldLength_mm * 1.05);
-  const aperture = Math.exp(-Math.pow(Math.log(Math.max(1e-3, apRatio)) / 0.35, 2));
+  const passRatio = Math.min(p.apertureWidth_mm, p.apertureHeight_mm) / Math.max(1e-3, crab.shieldLength_mm * PASSAGE_SL);
+  const aperture = Math.exp(-Math.pow(Math.log(Math.max(1e-3, apRatio)) / 0.35, 2)) * smoothstep01((passRatio - 0.8) / 0.2);
   // weight relative to body: heavy shells cost locomotion [G: Coenobita, Pagurus]
   const bodyMass_g = crab.bodyVolume_mm3 * 1.06e-3;
   const wRatio = p.mass_g / Math.max(1e-6, bodyMass_g);
@@ -1045,7 +1056,21 @@ export function evaluateShell(crab, p) {
   let speciesBias = 1;
   if (crab.breeding && crab.sex === 'm' && p.species === 'umbonium_moniliferum') speciesBias = 1.08;
   const score = clamp(volume * 0.38 + aperture * 0.27 + weight * 0.15 + integrity * 0.2, 0, 1) * durability * speciesBias;
-  return { score: clamp(score, 0, 1), volume, aperture, weight, integrity, volRatio, apRatio, wRatio };
+  return { score: clamp(score, 0, 1), volume, aperture, weight, integrity, volRatio, apRatio, passRatio, wRatio };
+}
+
+const smoothstep01 = (x) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
+
+/**
+ * The narrow side of the aperture must let the cephalothorax pass so the crab can withdraw completely:
+ * ≈ 0.75 SL (shield width ≈ SL / 1.05; the branchiostegites and leg bases fold in) [S]
+ */
+export const PASSAGE_SL = 0.75;
+
+/** smallest shell (mm, in the species' size measure) a crab can withdraw into */
+export function minFitSize(key, shieldLength_mm) {
+  const d = shellSpeciesData(key);
+  return (PASSAGE_SL * shieldLength_mm) / Math.min(d.apertureWidth, d.apertureHeight);
 }
 
 /** pick a natural shell for a crab of given shield length (field-like distribution) */
@@ -1053,16 +1078,21 @@ export function chooseShellFor(shieldLength_mm, rng, prefer = null) {
   const keys = SHELL_SPECIES_KEYS;
   // field frequencies (Waka River / Azuma et al.): Batillaria and Umbonium dominate
   const weights = { batillaria_attramentaria: 0.42, umbonium_moniliferum: 0.36, reticunassa_festiva: 0.1, reishia_clavigera: 0.06, lunella_coreensis: 0.06 };
+  // only species that come large enough for this crab to withdraw into (large crabs leave the small
+  // Umbonium and Reticunassa shells) [S]
+  const fits = (k) => minFitSize(k, shieldLength_mm) <= SHELL_SPECIES[k].size_mm[1] * 1.04;
   let key = prefer;
   if (!key) {
-    let r = rng.next(), acc = 0;
-    for (const k of keys) { acc += weights[k] ?? 0; if (r <= acc) { key = k; break; } }
-    key = key ?? keys[0];
+    const cand = keys.filter(fits);
+    const pool = cand.length ? cand : keys;
+    const total = pool.reduce((a, k) => a + (weights[k] ?? 0), 0);
+    let r = rng.next() * total, acc = 0;
+    for (const k of pool) { acc += weights[k] ?? 0; if (r <= acc) { key = k; break; } }
+    key = key ?? pool[0];
   }
   const sp = SHELL_SPECIES[key];
-  // shell size scales with crab size; tall shells are measured by height, low shells by width
-  const factor = sp.sizeMeasure === 'height' ? 5.0 : 3.0;
-  const size = clamp(shieldLength_mm * factor * (0.85 + rng.next() * 0.3), sp.size_mm[0], sp.size_mm[1]);
+  // from just big enough to withdraw into, up to ~30 % roomier
+  const size = clamp(minFitSize(key, shieldLength_mm) * (1.0 + rng.next() * 0.3), sp.size_mm[0], sp.size_mm[1]);
   const damage = rng.chance(0.25) ? rng.range(0.15, 0.7) : rng.range(0, 0.1);
   return { species: key, size_mm: size, damage, fouling: rng.range(0.05, 0.75), seed: Math.floor(rng.next() * 1e6) };
 }

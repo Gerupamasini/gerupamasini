@@ -146,11 +146,14 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     c = uSternum * (0.92 + 0.15 * mott); pmRough = 0.5; pmThin = 0.25;
   } else if (R == 4 || R == 5) {
     c = uChel * (0.82 + 0.36 * mott);
-    float cell = pmCell(p * 23.0);
-    float g = 1.0 - smoothstep(0.16, 0.42, cell);
+    // irregular brown blotches under the granules (photos 001, 002)
+    c = mix(c, uLegStripe, smoothstep(0.58, 0.74, pmFbm(p * 12.0 + 4.7)) * 0.4 * uPmContrast);
+    // dense small granules (photos 001, 002, 033), a few larger tubercles among them
+    float cell = pmCell(p * 38.0);
+    float g = 1.0 - smoothstep(0.12, 0.32, cell);
     float big = 1.0 - smoothstep(0.1, 0.3, pmCell(p * 11.0 + 5.0));
     pmHeight = g * 0.011 + big * 0.006;
-    c = mix(c, uGran, g * (R == 5 ? 0.92 : 0.6) * (0.55 + 0.45 * max(dors, 0.0)));
+    c = mix(c, uGran, g * (R == 5 ? 0.78 : 0.5) * (0.55 + 0.45 * max(dors, 0.0)));
     if (R == 5) c = mix(c, uShieldDark, smoothstep(0.42, 0.58, t) * 0.45 * smoothstep(0.1, 0.7, dors) * (1.0 - g));
     pmRough = 0.47 - g * 0.17; pmThin = 0.06;
   } else if (R == 6) {
@@ -161,13 +164,15 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     pmRough = mix(0.4, 0.26, smoothstep(0.75, 1.0, t)); pmThin = mix(0.12, 0.55, smoothstep(0.7, 1.0, t));
   } else if (R == 7) {
     c = uLegBase * (0.84 + 0.32 * mott);
+    // irregular dark-brown mottling over the whole article (photos 001, 021, 038)
+    c = mix(c, uLegStripe, smoothstep(0.56, 0.72, pmFbm(p * 14.0 + 7.3)) * 0.5 * uPmContrast);
     float stripe = smoothstep(0.45, 0.8, ant) * step(1.5, kind);
     c = mix(c, uLegStripe, stripe * 0.88 * uPmContrast);
     if (kind > 1.5 && kind < 2.5) c = mix(c, uLegBand, smoothstep(0.55, 0.62, t) * (1.0 - smoothstep(0.78, 0.85, t)) * 0.65 * uPmContrast);
-    if (kind > 2.5 && kind < 3.5) c = mix(c, uLegPale, smoothstep(0.8, 0.9, t) * 0.75);
+    if (kind > 2.5 && kind < 3.5) c = mix(c, uLegPale, smoothstep(0.8, 0.9, t) * 0.55);
     if (kind > 3.5 && kind < 4.5) {
       c = mix(c, uLegBand, smoothstep(0.3, 0.38, t) * (1.0 - smoothstep(0.62, 0.7, t)) * 0.6 * uPmContrast);
-      c = mix(c, uLegPale, smoothstep(0.9, 0.97, t) * 0.55);
+      c = mix(c, uLegPale, smoothstep(0.9, 0.97, t) * 0.42);
     }
     float g = (1.0 - smoothstep(0.14, 0.34, pmCell(p * 32.0))) * smoothstep(-0.1, 0.6, dors);
     c = mix(c, uGran, g * 0.3);
@@ -175,8 +180,9 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     pmRough = 0.42; pmThin = 0.2;
   } else if (R == 8) {
     c = uDactBase * (0.88 + 0.24 * mott);
+    c = mix(c, uLegStripe, smoothstep(0.58, 0.74, pmFbm(p * 16.0 + 2.1)) * 0.35 * uPmContrast);
     float w = smoothstep(0.24, 0.3, t) * (1.0 - smoothstep(0.47, 0.53, t));
-    c = mix(c, uDactWhite, w * 0.92);
+    c = mix(c, uDactWhite, w * 0.82);
     c = mix(c, uLegStripe, smoothstep(0.62, 0.88, ant) * (1.0 - w) * (1.0 - smoothstep(0.75, 0.86, t)) * 0.7 * uPmContrast);
     c = mix(c, uDactTip, smoothstep(0.8, 0.95, t));
     pmRough = mix(0.4, 0.24, smoothstep(0.85, 1.0, t)); pmThin = mix(0.28, 0.85, t);
@@ -193,7 +199,7 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     c = uCornea;
     float s1 = smoothstep(0.34, 0.4, t) * (1.0 - smoothstep(0.47, 0.53, t));
     float s2 = smoothstep(0.58, 0.64, t) * (1.0 - smoothstep(0.71, 0.77, t));
-    c = mix(c, uCorneaStripe, max(s1, s2) * 0.9);
+    c = mix(c, uCorneaStripe, max(s1, s2) * 0.75);
     float f = pmCell(p * 150.0);
     c *= 0.82 + 0.18 * smoothstep(0.15, 0.5, f);
     float pp = smoothstep(0.86, 0.985, dot(nView, vView));
@@ -208,7 +214,7 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     float ann = t * uAnnuli; float idx = floor(ann); float ph = fract(ann);
     c = uAntenna * (0.9 + 0.2 * mott);
     float isW = 1.0 - step(0.5, mod(idx, uWhitePeriod));
-    c = mix(c, uAntennaWhite, isW * 0.9);
+    c = mix(c, uAntennaWhite, isW * 0.72);
     c *= 0.78 + 0.22 * smoothstep(0.0, 0.14, ph) * smoothstep(1.0, 0.86, ph);
     pmRough = 0.42; pmThin = 0.75;
   } else if (R == 14) {
@@ -257,7 +263,7 @@ ${EXO_FRAG_PARS}`)
 vec3 pmAlbedo = pmSurface(vPmBind, vPmSeg, vPmRegion, normalize(vNormal), normalize(vViewPosition));
 float pmWetDark = mix(1.0, 0.8, uPmWet * (1.0 - pmThin * 0.4));
 diffuseColor.rgb = pmAlbedo * pmWetDark;
-pmTransColor = mix(vec3(1.0, 0.95, 0.75), vec3(0.85, 1.0, 0.7), 0.5) * pmAlbedo;`)
+pmTransColor = vec3(1.0, 0.93, 0.78) * pmAlbedo;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = mix(pmRough, pmRough * 0.55, uPmWet);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -283,7 +289,7 @@ function paletteUniforms() {
     uMembrane: u(P.membrane), uEyestalk: u(P.eyestalk), uEyeBand: u(P.eyeBand), uCornea: u(P.cornea), uCorneaStripe: u(P.corneaStripe),
     uAntenna: u(P.antenna), uAntennaWhite: u(P.antennaWhite), uAntennule: u(P.antennule), uMxp: u(P.mxp), uMxpBand: u(P.mxpBand),
     uAbd: u(P.abdomen), uAbdDeep: u(P.abdomenDeep), uUropod: u(P.uropod), uSetae: u(P.setae),
-    uAnnuli: { value: 72 }, uWhitePeriod: { value: 4 },
+    uAnnuli: { value: 108 }, uWhitePeriod: { value: 3 },
   };
 }
 
@@ -385,7 +391,8 @@ varying vec3 vPmObj;
 varying vec3 vPmWorld;
 varying float vPmScale;
 uniform vec3 uBase, uAlt, uBand, uInterior, uInteriorBand, uLip, uCallus, uFoul;
-uniform float uPattern, uBandPhi, uBandWidth, uGloss, uNacre, uFouling, uPmWet, uSeed, uDamage;
+uniform float uPattern, uBandPhi, uBandWidth, uGloss, uNacre, uFouling, uPmWet, uSeed, uDamage, uSilt;
+uniform vec3 uSiltColor;
 uniform float uPmCaus, uPmWaterY, uPmTime;
 uniform vec3 uPmCausColor;
 float pmThin = 0.0;
@@ -427,7 +434,7 @@ vec3 pmShell() {
     // eroded / worn tops of the sculpture and the apex region are chalky
     c = mix(c, vec3(0.62, 0.6, 0.56), smoothstep(-4.0, -9.0, whorl) * 0.5 + uDamage * smoothstep(0.6, 1.0, vPmRelief) * 0.3);
     pmHeight = vPmRelief * 0.0;
-    pmRough = mix(0.62, 0.18, uGloss) + mott * 0.1;
+    pmRough = mix(0.68, 0.22, uGloss) + mott * 0.1;
     // biofouling: diatom/algal film and spirorbid tubes
     float film = smoothstep(0.35, 0.75, pmFbm(vPmObj * 9.0 + uSeed) + uFouling * 0.45 - 0.3) * uFouling;
     c = mix(c, uFoul, film * 0.85);
@@ -435,6 +442,10 @@ vec3 pmShell() {
     float sp = pmCell(vPmObj * 26.0 + uSeed);
     float ring = smoothstep(0.08, 0.05, abs(sp - 0.18)) * step(0.94, pmHash(floor(vPmObj * 26.0 + uSeed)));
     c = mix(c, vec3(0.86, 0.84, 0.78), ring * smoothstep(0.45, 0.8, uFouling));
+    // silt film: settles in the sutures and between the cords, rubbed off the crests
+    float silt = smoothstep(0.15, 0.6, pmFbm(vPmObj * 7.0 + uSeed * 1.3) * 0.7 + (1.0 - vPmRelief) * 0.45 + uSilt * 0.5 - 0.25) * uSilt;
+    c = mix(c, uSiltColor * (0.85 + 0.3 * mott), silt * 0.85);
+    pmRough = mix(pmRough, 0.92, silt);
     pmThin = 0.05;
   } else if (part == 1) {
     c = mix(uInterior, uInteriorBand, smoothstep(0.75, 0.95, cos(phi - uBandPhi)) * 0.6);
@@ -446,7 +457,7 @@ vec3 pmShell() {
     c = uLip * (0.9 + 0.2 * mott);
     pmRough = 0.3;
   } else if (part == 3) {
-    c = vec3(0.6, 0.58, 0.54) * (0.85 + 0.3 * mott);
+    c = mix(vec3(0.6, 0.58, 0.54), uSiltColor, uSilt * 0.5) * (0.85 + 0.3 * mott);
     pmRough = 0.85;
   } else {
     c = uCallus * (0.95 + 0.1 * mott);
@@ -506,10 +517,10 @@ export function createShellMaterial(shell) {
     uCallus: { value: col(C.callus ?? sp.umbilicalCallus?.color ?? C.lipColor) }, uFoul: { value: col('#5d6a3a') },
     uPattern: { value: PATTERN_ID[C.pattern] ?? 0 }, uBandPhi: { value: C.bandPhi }, uBandWidth: { value: C.bandWidth || 0.3 },
     uGloss: { value: C.gloss }, uNacre: { value: C.nacre }, uFouling: { value: shell.fouling }, uSeed: { value: (shell.seed % 997) * 0.37 },
-    uDamage: { value: shell.damage },
+    uDamage: { value: shell.damage }, uSilt: { value: shell.silt ?? 0 }, uSiltColor: { value: col('#8a8273') },
   };
   const m = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff, roughness: 0.45, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.08,
+    color: 0xffffff, roughness: 0.45, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.08, envMapIntensity: 0.6,
     iridescence: C.nacre > 0 ? 0.01 : 0, iridescenceIOR: 1.6, iridescenceThicknessRange: [180, 520],
     side: THREE.FrontSide,
   });

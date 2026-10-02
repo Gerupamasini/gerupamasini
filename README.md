@@ -18,7 +18,7 @@ npm run terrain:bake # 地形 PNG の再生成
 ローカルや別ホストでは `VITE_BASE=/ npm run build` のようにベースパスを変えられます。
 
 ユビナガホンヤドカリ単体のラボは `hermit-lab.html`（開発時は http://localhost:5173/gerupamasini/hermit-lab.html）。
-殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。
+殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガードを再現します。
 
 ## 文書
 - `docs/spec/` 仕様書 4 本（ゲームと MVP、アーキテクチャとデータ、生物 AI とモデル、潮位・セーブ・進行）

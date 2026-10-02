@@ -9,6 +9,8 @@ export interface CrabEnv {
   tank?: boolean;
   sunElevation?: number;
   season?: string;
+  /** calendar month 1–12 (JST); breeding season Nov–Apr */
+  month?: number;
   frame?: number;
   lodDistance?: number;
   locked?: boolean;
@@ -20,6 +22,7 @@ export interface ShellSpec {
   size_mm?: number;
   damage?: number;
   fouling?: number;
+  silt?: number;
   seed?: number;
 }
 
@@ -54,6 +57,15 @@ export class HermitCrab {
   readonly root: Group;
   readonly SL: number;
   readonly shieldLength_mm: number;
+  readonly sex: 'm' | 'f';
+  /** breeding season (Nov–Apr) as of the last update */
+  breeding: boolean;
+  /** mate guarding: the male holding this female */
+  guardedBy: HermitCrab | null;
+  /** mate guarding: the female held (male) or the male holding (female) */
+  partner: HermitCrab | null;
+  animator: { chelaTipWorld(side: 'L' | 'R', out: Vector3): Vector3 };
+  gripPointWorld(toward: Vector3, out: Vector3): Vector3;
   shell: Shell | null;
   world: PagurusWorld | null;
   lod: number;

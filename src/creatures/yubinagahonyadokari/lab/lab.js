@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { HermitCrab, PagurusWorld, STATE } from '../PagurusMinutus.js';
-import { SHELL_SPECIES, SHELL_SPECIES_KEYS, Shell } from '../PagurusMinutusShell.js';
+import { SHELL_SPECIES, SHELL_SPECIES_KEYS, Shell, minFitSize } from '../PagurusMinutusShell.js';
 
 const params = new URLSearchParams(location.search);
 const P = (k, d) => params.get(k) ?? d;
@@ -116,18 +116,22 @@ let playerOverride = null;
 if (mode === 'shells') {
   SHELL_SPECIES_KEYS.forEach((k, i) => {
     const sp = SHELL_SPECIES[k];
-    addCrab({ seed: seed + i, sex: i % 2 ? 'f' : 'm', shieldLength_mm: 4.6, shell: { species: k, size_mm: sp.sizeMeasure === 'height' ? 23 : 14, seed: i + 1, fouling: 0.3 } }, new THREE.Vector3((i - 2) * 0.042, 0, 0.0), 0);
+    addCrab({ seed: seed + i, sex: i % 2 ? 'f' : 'm', shieldLength_mm: 4.6, shell: { species: k, size_mm: Math.min(sp.size_mm[1], minFitSize(k, 4.6) * 1.12), seed: i + 1, fouling: 0.3 } }, new THREE.Vector3((i - 2) * 0.042, 0, 0.0), 0);
     world.addShell({ species: k, size_mm: sp.typical_mm, seed: 20 + i, fouling: 0.1 }, new THREE.Vector3((i - 2) * 0.042, 0, -0.045), groundAt);
   });
 } else if (mode === 'group') {
   for (let i = 0; i < 9; i++) addCrab({ seed: seed + i * 13 }, new THREE.Vector3(((i % 3) - 1) * 0.04, 0, (Math.floor(i / 3) - 1) * 0.04), i * 1.3);
   world.addFood('carrion', new THREE.Vector3(0.01, 0, 0.02), groundAt);
   world.addFood('algae', new THREE.Vector3(-0.05, 0, -0.03), groundAt);
+} else if (mode === 'guard') {
+  // breeding season: a larger male and a smaller female (mate guarding)
+  addCrab({ seed: seed + 1, sex: 'm', shieldLength_mm: 5.2, shell: { species: 'reishia_clavigera', size_mm: 20, seed: 4, fouling: 0.3 } }, new THREE.Vector3(0, 0, 0), 0);
+  addCrab({ seed: seed + 2, sex: 'f', shieldLength_mm: 3.8, shell: { species: 'umbonium_moniliferum', size_mm: 12.5, seed: 8, fouling: 0.2 } }, new THREE.Vector3(0.012, 0, 0.04), Math.PI);
 } else if (mode === 'change') {
   addCrab({ seed, sex: 'm', shieldLength_mm: 4.8, shell: { species: 'reticunassa_festiva', size_mm: 10, damage: 0.75, seed: 3 } }, new THREE.Vector3(0, 0, 0), 0);
   world.addShell({ species: 'umbonium_moniliferum', size_mm: 14.5, seed: 9, fouling: 0.1 }, new THREE.Vector3(0.004, 0, 0.032), groundAt);
 } else {
-  addCrab({ seed, sex: P('sex', 'm'), shieldLength_mm: Number(P('sl', '4.8')), shell: { species: shellKey, size_mm: Number(P('size', SHELL_SPECIES[shellKey].sizeMeasure === 'height' ? 24 : 14.5)), seed: 5, fouling: Number(P('fouling', '0.35')) } }, new THREE.Vector3(0, 0, 0), Number(P('heading', '0')));
+  addCrab({ seed, sex: P('sex', 'm'), shieldLength_mm: Number(P('sl', '4.8')), shell: { species: shellKey, size_mm: Number(P('size', Math.min(SHELL_SPECIES[shellKey].size_mm[1], minFitSize(shellKey, Number(P('sl', '4.8'))) * 1.12).toFixed(1))), seed: 5, fouling: Number(P('fouling', '0.35')), ...(P('silt', '') !== '' ? { silt: Number(P('silt', '0')) } : {}) } }, new THREE.Vector3(0, 0, 0), Number(P('heading', '0')));
 }
 
 const main = crabs[0];
@@ -142,6 +146,8 @@ function scriptAI(crab, t) {
     B.stateDur = 1e9;
     const a = t * 0.25;
     B.moveTarget.set(Math.sin(a) * 0.06, 0, Math.cos(a) * 0.06);
+  } else if (mode === 'guard') {
+    playerOverride = new THREE.Vector3(5, 1.5, 5); // keep the observer out of the pair's way
   } else if (mode === 'retract') {
     playerOverride = t > 1.0 ? new THREE.Vector3(main.loco.position.x + 0.15, 0.3, main.loco.position.z + 0.15) : new THREE.Vector3(5, 1.5, 5);
   }
@@ -151,15 +157,20 @@ function scriptAI(crab, t) {
 const VIEWS = {
   oblique: [0.045, 0.032, 0.07], front: [0.0, 0.012, 0.075], side: [0.085, 0.012, -0.004], top: [0.0, 0.095, 0.002],
   back: [-0.045, 0.035, -0.07], macro: [0.022, 0.012, 0.042], dactyl: [0.04, 0.006, 0.03], wide: [0.12, 0.12, 0.2],
+  // close-ups that follow the crab's heading (rotated into its frame)
+  face: [0.006, 0.01, 0.034], profile: [0.05, 0.008, 0.004],
 };
+const RELATIVE_VIEWS = new Set(['face', 'profile']);
 let viewName = P('view', mode === 'shells' ? 'wide' : 'oblique');
 function applyView(name) {
   viewName = name;
   const v = VIEWS[name] ?? VIEWS.oblique;
   const tgt = mode === 'shells' || mode === 'group' ? new THREE.Vector3(0, 0.006, -0.01) : main.root.position.clone().add(new THREE.Vector3(0, 0.006, 0.004));
   controls.target.copy(tgt);
-  camera.position.copy(tgt).add(new THREE.Vector3(...v));
-  if (name === 'macro' || name === 'dactyl') camera.fov = 28;
+  const off = new THREE.Vector3(...v);
+  if (RELATIVE_VIEWS.has(name)) off.applyAxisAngle(new THREE.Vector3(0, 1, 0), main.loco.heading);
+  camera.position.copy(tgt).add(off);
+  if (name === 'macro' || name === 'dactyl' || RELATIVE_VIEWS.has(name)) camera.fov = 28;
   camera.updateProjectionMatrix();
   controls.update();
 }
@@ -197,7 +208,7 @@ function step(dt) {
   for (const c of crabs) {
     if (c === main) scriptAI(c, simTime);
     c.update(dt, {
-      groundAt, waterAt, player: playerOverride ?? camera.position, frame, season: 'summer', sunElevation: 50,
+      groundAt, waterAt, player: playerOverride ?? camera.position, frame, season: 'summer', month: mode === 'guard' ? 1 : Number(P('month', '7')), sunElevation: 50,
       closeup: c.lod === 0, tank: mode === 'pose',
     });
     if (P('hideAbd', '0') === '1') { for (const b of c.rig.abdomen) b.scale.setScalar(0.001); c.rig.root.updateMatrixWorld(true); }

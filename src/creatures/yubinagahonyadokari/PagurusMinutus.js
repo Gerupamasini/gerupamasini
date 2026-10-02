@@ -26,6 +26,7 @@ let nextCrabId = 1;
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const _m = new THREE.Matrix4(), _s = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+const _gn = new THREE.Vector3(), _gd = new THREE.Vector3(), _gt = new THREE.Vector3(), _gp = new THREE.Vector3();
 
 function pickColorway(rng) {
   let r = rng.next(), acc = 0;
@@ -76,6 +77,9 @@ export class HermitCrab {
     this.world = null;
     this.home = new THREE.Vector3();
     this.breeding = false;
+    /** mate guarding: the male holding this female (`guardedBy`) / the crab held or holding (`partner`) */
+    this.guardedBy = null;
+    this.partner = null;
     this.loco = new Locomotion(this);
     this.animator = new Animator(this);
     this.behavior = new Behavior(this);
@@ -201,6 +205,42 @@ export class HermitCrab {
   shellCenterOffset(out) {
     if (!this.shell || this.shellMode !== 'carried') return out.set(0, 0, 0);
     return out.copy(this.shell.props.centerOfMass).applyMatrix4(this.shell.object3D.matrixWorld).sub(this.loco.position);
+  }
+
+  // ── precopulatory mate guarding ─────────────────────────────────────────────────────────────
+  /** the point of our aperture rim nearest to `toward` (world); the male's minor chela grips here [D] */
+  gripPointWorld(toward, out) {
+    const sh = this.shell;
+    if (!sh || this.shellMode !== 'carried') return out.copy(this.loco.position);
+    const m = sh.object3D.matrixWorld;
+    out.setFromMatrixPosition(m); // shell origin = aperture (lip) centroid
+    const n = _gn.copy(sh.apertureNormal).transformDirection(m);
+    const d = _gd.copy(toward).sub(out);
+    d.addScaledVector(n, -d.dot(n));
+    if (d.lengthSq() < 1e-14) return out;
+    return out.addScaledVector(d.normalize(), 0.5 * Math.min(sh.props.apertureWidth, sh.props.apertureHeight));
+  }
+
+  /** female: follow the guarding male's minor chela, aperture facing him */
+  followGuard() {
+    const male = this.guardedBy;
+    if (!male.active || male.partner !== this) { this.releaseFromGuard(); return; }
+    const tip = male.animator.chelaTipWorld('L', _gt);
+    const lp = this.loco.position, mp = male.loco.position;
+    this.loco.heading = Math.atan2(mp.x - lp.x, mp.z - lp.z);
+    const grip = this.gripPointWorld(mp, _gp);
+    lp.x += tip.x - grip.x;
+    lp.z += tip.z - grip.z;
+  }
+
+  /** end of guarding (release, takeover, or either crab gone) */
+  releaseFromGuard() {
+    const male = this.guardedBy;
+    this.guardedBy = null;
+    if (male && male.partner === this) male.partner = null;
+    this.partner = null;
+    this.loco.initialised = false; // re-plant the feet where she was put down
+    this.behavior.onReleased();
   }
 
   // ── shell handling during inspection ─────────────────────────────────────────────────────────
@@ -424,7 +464,8 @@ export class HermitCrab {
     this.time += dt;
     this.frame++;
     if (envIn.lodDistance !== undefined) this.setLOD(chooseLOD(envIn.lodDistance, { locked: envIn.locked, closeup: envIn.closeup, current: this.lod }));
-    this.breeding = envIn.season === 'winter' || envIn.season === 'spring';
+    // breeding season Nov–Apr (Wakayama) [D]; from the month when the host gives it, else the season
+    this.breeding = envIn.month !== undefined ? envIn.month >= 11 || envIn.month <= 4 : envIn.season === 'winter' || envIn.season === 'spring';
     const env = this.makeEnv(envIn);
     this.lastEnv = env;
     if (this.world) this.world.update(dt, envIn.frame ?? this.frame, env.groundAt, env.waterAt);
@@ -432,6 +473,8 @@ export class HermitCrab {
     const cmd = this.behavior.update(dt, env);
     for (const id of this.behavior.events) this.emit(id);
     this.behavior.events.length = 0;
+    // a guarded female is carried by the male's minor chela: keep her aperture rim at its tip
+    if (this.guardedBy) this.followGuard();
     // locomotion and pose
     env.exposed = this.behavior.envInfo.exposed;
     this.loco.update(dt, cmd.loco, env);
@@ -491,7 +534,7 @@ export class HermitCrab {
     return {
       pos: this.loco.position.clone(), heading: this.loco.heading, home: this.home.clone(),
       internal: { ...this.behavior.internal },
-      shell: this.shell ? { species: this.shell.key, size_mm: this.shell.size_mm, damage: this.shell.damage, fouling: this.shell.fouling, seed: this.shell.seed } : null,
+      shell: this.shell ? { species: this.shell.key, size_mm: this.shell.size_mm, damage: this.shell.damage, fouling: this.shell.fouling, silt: this.shell.silt, seed: this.shell.seed } : null,
     };
   }
 
@@ -508,6 +551,9 @@ export class HermitCrab {
 
   dispose() {
     this.active = false;
+    // let go of a guarded female / be let go
+    if (this.guardedBy) this.releaseFromGuard();
+    else if (this.partner?.guardedBy === this) this.partner.releaseFromGuard();
     if (this.world) this.world.unregister(this);
     if (this.change) this.abortShellChange();
     this.debug?.dispose();

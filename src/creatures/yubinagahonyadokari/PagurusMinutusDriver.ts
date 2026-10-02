@@ -5,7 +5,7 @@ import type { PlaceholderModel } from '../models/placeholders';
 import { HermitCrab, PagurusWorld, createPreviewCrab, type CrabState } from './PagurusMinutus.js';
 import { MORPH, slFromLength } from './PagurusMinutusMorphology.js';
 import { sunPosition } from '../../world/Sun';
-import { seasonOf } from '../../core/Time';
+import { jstParts, seasonOf } from '../../core/Time';
 import { ui } from '../../ui/store';
 
 /** map origin of kasai_west (sun position for the activity model) */
@@ -37,6 +37,7 @@ export class PagurusMinutusDriver implements Driver {
   private sunTimer = 0;
   private sunElevation = 30;
   private season = 'summer';
+  private month = 7;
   private sampleTimer = 0;
   private sample: ReturnType<NonNullable<DriverContext['floor']['sampleAt']>> | null = null;
   private readonly tmp = new Vector3();
@@ -106,6 +107,7 @@ export class PagurusMinutusDriver implements Driver {
       this.sunTimer = 5;
       this.sunElevation = sunPosition(ctx.nowMs, ORIGIN.lat, ORIGIN.lon).elevation;
       this.season = seasonOf(ctx.nowMs);
+      this.month = jstParts(ctx.nowMs).month;
     }
     this.sampleTimer -= dt;
     if (this.sampleTimer <= 0 && ctx.floor.sampleAt) {
@@ -128,6 +130,7 @@ export class PagurusMinutusDriver implements Driver {
       tank: inTank,
       sunElevation: this.sunElevation,
       season: this.season,
+      month: this.month,
       frame: ctx.nowMs,
       lodDistance: dist,
       locked: ind.lod === 0,

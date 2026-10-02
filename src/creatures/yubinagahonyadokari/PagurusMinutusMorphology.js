@@ -114,12 +114,13 @@ export const MORPH = {
     L2: { coxa: 0.18, basis: 0.28, merus: 0.94, carpus: 0.51, propodus: 0.72, dactylus: 1.08 },
     section: {
       // [half-height (dorso-ventral, in the leg plane), half-width (antero-posterior)] at proximal → distal
-      coxa: [[0.13, 0.115], [0.12, 0.1]],
-      basis: [[0.1, 0.085], [0.11, 0.085]],
-      merus: [[0.125, 0.072], [0.135, 0.076]], // laterally compressed [G]
-      carpus: [[0.105, 0.066], [0.118, 0.07]],
-      propodus: [[0.098, 0.062], [0.08, 0.054]],
-      dactylus: [[0.068, 0.052], [0.008, 0.007]],
+      // stout, as in the dorsal-view photos 063/064 (article width ≈ 0.2 SL) [P]
+      coxa: [[0.14, 0.13], [0.13, 0.12]],
+      basis: [[0.115, 0.105], [0.125, 0.105]],
+      merus: [[0.14, 0.1], [0.152, 0.106]], // laterally compressed [G]
+      carpus: [[0.118, 0.092], [0.132, 0.098]],
+      propodus: [[0.11, 0.087], [0.09, 0.075]],
+      dactylus: [[0.076, 0.07], [0.009, 0.008]],
     },
     dactylCurve: 0.2, // ventral curvature (rad over the length) [D: slightly curved]
     dactylTwist: 0.28, // weak twist (rad) [D]
@@ -152,7 +153,8 @@ export const MORPH = {
 };
 
 /**
- * Colour palette (linear-ish sRGB hex). Values read from the photographs and descriptions [D]:
+ * Colour palette (sRGB hex). Values read from the photographs and descriptions [D]; matched against
+ * photos 001, 002, 021, 022, 050 and 063: a muted grey-olive/khaki, never lime, with brown mottling.
  *  - overall pale greenish-brown; shield light yellowish-brown with a dark-brown gastric spot
  *  - chelipeds olive-brown with dense white/cream granules
  *  - walking legs olive/grey-brown with one dark-brown median longitudinal stripe on the lateral face,
@@ -162,36 +164,36 @@ export const MORPH = {
  *  - antennal flagellum olive with regularly spaced white annuli
  */
 export const PALETTE = {
-  shield: '#b49a6c',
+  shield: '#a3906f',
   shieldDark: '#5b4027',
-  branchio: '#a7a07c',
-  softCarapace: '#8f9a74',
+  branchio: '#999380',
+  softCarapace: '#8c8f74',
   sternum: '#c9c0a2',
-  legBase: '#8a8a5c',
-  legStripe: '#3d3221',
-  legBand: '#4a4128',
-  legPale: '#b9b48e',
-  dactylBase: '#6e7a48',
-  dactylWhite: '#e4e1cc',
-  dactylTip: '#5b4a2a',
-  cheliped: '#77754a',
-  chelaGranule: '#efe9d2',
-  chelaFinger: '#a69b74',
+  legBase: '#8a8670',
+  legStripe: '#3b2e22',
+  legBand: '#4d3f2d',
+  legPale: '#ada58c',
+  dactylBase: '#737458',
+  dactylWhite: '#c9c3ad',
+  dactylTip: '#5a4a32',
+  cheliped: '#7f7b5e',
+  chelaGranule: '#ddd6c0',
+  chelaFinger: '#a09679',
   chelaFingerTip: '#6b5130',
-  membrane: '#b7b597',
-  eyestalk: '#e4dcc0',
-  eyeBand: '#7a6040',
-  cornea: '#a8a490',
-  corneaStripe: '#262420',
-  antenna: '#6f7448',
-  antennaWhite: '#efece0',
-  antennule: '#c7a457',
-  mxp: '#d8d2bd',
+  membrane: '#8e8a72',
+  eyestalk: '#cbc2a6',
+  eyeBand: '#6e5a40',
+  cornea: '#8d8975',
+  corneaStripe: '#3b362c',
+  antenna: '#615c48',
+  antennaWhite: '#cdc7b6',
+  antennule: '#a8946a',
+  mxp: '#c4bda6',
   mxpBand: '#4c3a26',
   abdomen: '#8b8a63',
   abdomenDeep: '#5d6942',
   uropod: '#9c9468',
-  setae: '#d6c99c',
+  setae: '#c9bf9f',
 };
 
 /**
