@@ -30,7 +30,7 @@
 | ロフト | `loft.mjs` | 体 + 頭（眼窩・頬・鰓蓋縁・鼻孔・上顎板・唇）。**口は唇の線で縫い目を持ち、下顎が回転すると口腔内が見える** | 目視（`viewer/dev/*`） |
 | 眼 | `eyes.mjs` | 眼球（虹彩・瞳孔・金環）、角膜、眼窩リング。左右は鏡像 | `tests/unit/eyes.test.mjs` |
 | 鰭 | `fins.mjs` | 背・脂・胸×2・腹×2・臀・尾。鰭条ごとのプリーツ、V 字縁、鰭膜アトラス | `tests/unit/fins.test.mjs` |
-| 体表 | `textures.mjs` | albedo/normal/ORM（2048×1024）。背のオリーブ、銀色の側面、桃色帯、パーマーク（縦長、左右別）、黒点、鱗の格子、鰓蓋の放射筋 | `tests/unit/textures.test.mjs` |
+| 体表 | `textures.mjs` | albedo/normal/ORM（2048×1024）。背の暗いオリーブ褐、金桃の体側上半、銀クリームの下半、青灰のパーマーク（縦長、左右別）、背の黒点、鱗の格子、側線、虹色の光沢。**2026-10 に作り直し・描画校正**（`BODY.md`） | `tests/unit/textures.test.mjs`, `tools/verify/body_calibrate.mjs` |
 | リグ | `rig.mjs` | **62 ボーン**（脊椎 24、顎・上顎・舌骨・鰓蓋・眼、鰭の条群ボーン、脂鰭 2、尾 5 本）。影響 ≤4、Σw=1。鰓蓋縁は `opercle_*` ボーンで外転 | `tests/asset/glb.test.mjs` |
 | GLB | `write-glb.mjs`, `build.mjs` | glTF-Transform で書出し。LOD0–2、モーフ 5 種、AnimationClip 2 種、PBR（clearcoat / iridescence / ior） | `gltf-validator` エラー 0 |
 | 個体差 | `genome.mjs` + 各モジュールの seed | 体高・幅・体長（`--individual`）、パーマーク・黒点・色、鰭、眼 | `viewer/dev/lineup.html` |

@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSurface, loadParams } from '../../tools/build-assets/surface.mjs';
-import { generateBodyTextures, renderLateralPreview, sampleGenome, resolveGenome } from '../../tools/build-assets/textures.mjs';
+import { generateBodyTextures, renderLateralPreview, sampleGenome, resolveGenome, acesInverse } from '../../tools/build-assets/textures.mjs';
 
 const params = loadParams();
 const surface = createSurface(params);
@@ -169,7 +169,7 @@ test('genome: pm_count / contrast / spot density / pink band / hue / life stage 
   assert.ok(Math.abs(hi.deltaLab[0]) > Math.abs(lo.deltaLab[0]), 'contrast');
   const sd = (k) => gen({ genome: { spotDensity: k } }).report.spots.dorsalRight;
   assert.ok(sd(3) > 2 * sd(0.5), 'spot density');
-  const pinkLo = gen({ genome: { pinkBandStrength: 0, sheenBand: 0 } }), pinkHi = gen({ genome: { pinkBandStrength: 1 } });
+  const pinkLo = gen({ genome: { pinkBandStrength: 0, sheenBand: 0 } }), pinkHi = gen({ genome: { pinkBandStrength: 1, sheenBand: 0 } });   // 虹色の光沢(青紫)は R-B を下げるので両方オフにして桃だけを比べる
   const ay = (r) => { let s = 0, n = 0; for (let y = 90; y < 150; y++) for (let x = Math.floor(0.4 * W); x < 0.8 * W; x++) { const p = px(r.albedo, x, y); s += (p[0] - p[2]); n++; } return s / n; };
   assert.ok(ay(pinkHi) > ay(pinkLo) + 1, 'pink band raises R-B on the flank');
   const hue = gen({ genome: { hueOffsetDeg: 15 } }).report.measured.flankUpper_r0p3.lab, hue0 = R.measured.flankUpper_r0p3.lab;
@@ -244,4 +244,53 @@ test('size / aspect robustness: 512x256 and non-default sizes run and keep the p
   assert.ok(Math.abs(small.report.scale.pitch_mm - R.scale.pitch_mm) < 1e-9);
   assert.ok(Math.abs(small.report.scale.pitch_px_u - R.scale.pitch_px_u / 2) < 0.05);
   const odd = generateBodyTextures({ surface, params, seed: 4, width: 600, height: 300 }); assert.equal(odd.albedo.data.length, 600 * 300 * 4);
+});
+
+// ───────── 体表の作り直し（2026-10）: 校正した albedo・青灰のパーマーク・背の黒点 ─────────
+const linOf = (v) => dec(v);
+const labOf = (p) => { // sRGB8 -> CIE Lab (D65)
+  const r = linOf(p[0]), g = linOf(p[1]), b = linOf(p[2]);
+  const X = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047, Y = 0.2126729 * r + 0.7151522 * g + 0.072175 * b, Z = (0.0193339 * r + 0.119192 * g + 0.9503041 * b) / 1.08883;
+  const f = (t) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116); const fx = f(X), fy = f(Y), fz = f(Z);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+};
+
+test('acesInverse inverts three.js ACESFilmicToneMapping (the albedo calibration depends on it)', () => {
+  const IN = [[0.59719, 0.35458, 0.04823], [0.07600, 0.90834, 0.01566], [0.02840, 0.13383, 0.83777]], OUT = [[1.60475, -0.53108, -0.07367], [-0.10208, 1.10813, -0.00605], [-0.00327, -0.07276, 1.07602]];
+  const mv = (M, v) => [0, 1, 2].map((i) => M[i][0] * v[0] + M[i][1] * v[1] + M[i][2] * v[2]);
+  const fit = (v) => (v * (v + 0.0245786) - 0.000090537) / (v * (0.983729 * v + 0.432951) + 0.238081);
+  const aces = (c) => mv(OUT, mv(IN, c.map((q) => q / 0.6)).map(fit)).map((q) => Math.min(1, Math.max(0, q)));
+  for (const c of [[0.02, 0.015, 0.01], [0.1, 0.12, 0.09], [0.3, 0.2, 0.1], [0.5, 0.5, 0.5], [0.05, 0.2, 0.4]]) {
+    const back = acesInverse(...aces(c), [0, 0, 0]);
+    for (let i = 0; i < 3; i++) assert.ok(Math.abs(back[i] - c[i]) < 0.004 * Math.max(1, c[i] / 0.1), `channel ${i} of ${c}: ${back[i]}`);
+  }
+});
+
+test('albedo is physically sane: linear albedo <= 0.85 everywhere on the body (s >= 0.3), dark on the back, bright but not white on the belly', () => {
+  const a = base.albedo; let mx = 0;
+  for (let y = 0; y < H; y += 3) for (let x = Math.floor(0.3 * W); x < W; x += 3) { const p = px(a, x, y); mx = Math.max(mx, dec(Math.max(p[0], p[1], p[2]))); }
+  assert.ok(mx <= 0.86, `max linear albedo ${mx}`);
+  assert.ok(R.measured.dorsal_r0p85.srgb[0] < 140 && R.measured.belly_r_m0p9.lab[0] > 80);
+});
+
+test('parr marks are blue-slate: clearly darker and bluer than the ground colour around them (03 §3.1.4: dL -18, db -11; adults darker here)', () => {
+  const ph = gen({ genome: { photoExposure: true } }); const gr = gen({ genome: { photoExposure: true, debugGround: true } });
+  let checked = 0;
+  for (const m of ph.report.parrMarks.right.slice(1, 7)) {
+    const sec = surface.section(m.s); const a = surface.alphaAtHeight(m.s, (sec.c + m.y_center_sl) * SL); const y = Math.round(a / (2 * Math.PI) * (H - 1)), x = Math.round(m.s * (W - 1));
+    const avg = (img) => { const o = [0, 0, 0]; for (let dy = -3; dy <= 3; dy++) for (let dx = -2; dx <= 2; dx++) { const p = px(img, x + dx, y + dy); o[0] += p[0]; o[1] += p[1]; o[2] += p[2]; } return o.map((v) => v / 35); };
+    const lm = labOf(avg(ph.albedo)), lg = labOf(avg(gr.albedo)); checked++;
+    assert.ok(lm[0] < lg[0] - 8 || m.opacity < 0.4, `mark L ${lm[0]} vs ground ${lg[0]}`);
+    assert.ok(lm[2] < lg[2] - 6 || m.opacity < 0.4, `mark b* ${lm[2]} vs ground ${lg[2]} (blue shift)`);
+  }
+  assert.ok(checked >= 5);
+});
+
+test('dorsal black spots: dense (>= 40 per side), small, only on the upper body; a few spots below the lateral line', () => {
+  const sp = R.spots; assert.ok(sp.dorsalRight >= 40 && sp.dorsalLeft >= 40, `dorsal ${sp.dorsalRight}/${sp.dorsalLeft}`);
+  assert.ok(sp.belowRight + sp.belowLeft >= 4 && sp.belowRight + sp.belowLeft <= 60);
+  // bare ground vs painted: the dark spot pixels (luminance < 0.4 x ground) cover a small fraction (spots are ~1 mm)
+  const gr = gen({ genome: { debugGround: true } }); let dark = 0, tot = 0;
+  for (let y = 0; y < H / 2; y += 2) for (let x = Math.floor(0.3 * W); x < 0.95 * W; x += 2) { tot++; if (luminance(base.albedo, x, y) < 0.2 * luminance(gr.albedo, x, y)) dark++; }
+  assert.ok(dark / tot > 0.002 && dark / tot < 0.06, `dark fraction ${dark / tot}`);
 });

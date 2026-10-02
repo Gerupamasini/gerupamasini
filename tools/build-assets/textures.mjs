@@ -7,10 +7,14 @@
 //   x=0 = 吻端(s=0), x=W-1 = 尾鰭基部(s=1)。頭は左(u=0)。s<0 の吻キャップは u=0 列に潰れる。
 //   模様は物理スケール: x 方向 0.19 m / (W-1)、y 方向は各 s の断面周長を数値積分して物理座標(背正中線からの弧長 d)へ写して作る。
 // ── チャンネル（CONTRACT §3 / 06 §6.2.4）─────────────────────────────────────────────────────────────────
-//   albedo: sRGB 8bit RGBA（A=255）。
+//   albedo: sRGB 8bit RGBA（A=255）。値は「見かけの色を統合描画で再現する」よう逆算した線形 albedo（下の校正を参照）。
 //   normal: 線形・タンジェント空間。glTF 規約 = R:+U(尾方向), G:画像の「上」(= v 減少方向 = 背側へ向かう側が +), B:+法線。
 //           three.js の GLTFLoader 経由なら補正される。DataTexture 等で直接使うなら normalScale.y = -1 が必要になる場合がある。
 //   orm   : 線形。R=AO, G=roughness, B=metalness（= silver_map × silver_gain を焼いた値。material.metalness=1 で使う）。
+//           R(AO) は背側で小さい（~0.25）: three.js は aoMap を間接拡散・間接鏡面・クリアコート間接に掛けるので, 環境反射のベール（M_Body の clearcoat 0.2 + 環境光）を抑えて暗い体色を暗く保つ。
+// ── 色の設計と校正（2026-10 体表の作り直し）──────────────────────────────────────────────────────────────────────
+//   設計色 = 「写真に写る見かけの色」(BODY_STOPS, sRGB, 成魚の非繁殖期)。albedo 画像はその色を viewer/dev/still.html（ACES + RoomEnvironment 0.9 + 平行光 1.6, M_Body の clearcoat 0.2）で
+//   再現するよう逆算した線形 albedo（CAL_KNOTS: シーン線形 S = a(r)·albedo + v(r), 表示 = ACES(S)）。ORM を変えたら tools/verify/body_calibrate.mjs で校正し直す。genome.photoExposure=true は校正なし(albedo=設計色)。
 import { makeInterp } from './surface.mjs';
 
 const TAU = Math.PI * 2;
@@ -95,7 +99,7 @@ export const GENOME_DEFAULTS = Object.freeze({
   spotBelowN: 9, spotBelowDiamEyeD: 0.24, spotBelowBlackP: 0.25,
   spotHeadN: null, spotHeadDiamEyeD: 0.08,
   orangeSpotMode: null,                                           // null = 0.96 none / 0.04 trace を seed で抽選。'none'|'trace'|'region_hybrid'
-  pinkBandStrength: 0.65, nuptialIntensity: 0,
+  pinkBandStrength: 0.80, nuptialIntensity: 0,
   dorsalL: 38, flankUpperL: 66, bellyL: 82, flankHueA: 3.3, flankHueB: 9.8, hueOffsetDeg: 0,
   calKnots: null, debugGround: false, calFlat: null,                              // 校正用: calKnots=[[r,kR,kG,kB],...] で見かけ->albedo 倍率を差し替え / debugGround=true で斑・鱗・黒点を描かない
   silverS: 0.10,                                                  // silver_gain = 0.35+2*silver_s = 0.55 [E: 校正した統合描画(ACES+環境光+clearcoat)で白飛びしない値。河川型 0-0.15 の範囲内。0.41 -> 0.55: 体側下半の銀の鏡面反射を強める]
@@ -195,8 +199,8 @@ function lutScalar(pts) { // [[r,val],...] -> Float32Array(NL)
 // r = 側面投影の相対高さ (+1 背正中線 ... -1 腹正中線)。成魚・非繁殖期・野生: 背=暗いオリーブ褐(頭部のキャップ (74,60,40)/(60,46,26) へ連続),
 // 体側上半=青銅〜金桃(頬 (160,128,72)〜(176,156,130) へ連続), 体側下半=銀クリーム, 腹=冷たい白。[P: p024 背 (86,70,46)-(107,96,71) 上半 (182,147,107)-(208,174,135) 下半 (223,220,195) 腹 (201,205,200); a01 背 (30-45); 03 §3.5]
 const BODY_STOPS = [   // [r, R, G, B]
-  [1.00, 68, 57, 40], [0.90, 74, 62, 43], [0.78, 86, 72, 50], [0.64, 102, 86, 59], [0.50, 116, 99, 69], [0.38, 131, 113, 81], [0.26, 152, 132, 102],
-  [0.14, 176, 152, 120], [0.02, 194, 171, 139], [-0.12, 205, 188, 156], [-0.30, 211, 201, 174], [-0.50, 214, 209, 188], [-0.72, 214, 213, 203], [-1.00, 210, 211, 207]];
+  [1.00, 66, 56, 41], [0.90, 72, 61, 44], [0.78, 83, 71, 50], [0.64, 96, 82, 58], [0.50, 112, 97, 69], [0.38, 129, 112, 82], [0.26, 152, 132, 102],
+  [0.14, 182, 153, 117], [0.02, 200, 172, 135], [-0.12, 208, 189, 154], [-0.30, 210, 202, 177], [-0.50, 213, 209, 192], [-0.72, 214, 213, 204], [-1.00, 210, 211, 207]];
 const srgbToLab = (R8, G8, B8) => { const l = linToLab(SRGB_DEC[R8], SRGB_DEC[G8], SRGB_DEC[B8]); return [l.L, l.a, l.b]; };
 const bellW = (x, c, w) => Math.exp(-(((x - c) / w) ** 2));
 function designPalette(G) {
@@ -219,7 +223,7 @@ function designPalette(G) {
     // 鱗・光沢の層（r 方向）。rough/silver は ORM, cal は「見かけの色 -> 線形 albedo」の校正（スタジオ照明下の描画で見かけ=設計色になるよう実測で決めた RGB 倍率）
     rough: lutScalar([[1, 0.78], [0.8, 0.78], [0.55, 0.75], [0.3, 0.68], [0.1, 0.56], [-0.15, 0.44], [-0.4, 0.34], [-0.7, 0.30], [-1, 0.30]]),
     roughHead: lutScalar([[1, 0.58], [0.5, 0.52], [0.2, 0.44], [-0.3, 0.38], [-1, 0.34]]),
-    ao: lutScalar([[1, 0.32], [0.85, 0.32], [0.65, 0.33], [0.45, 0.36], [0.25, 0.44], [0.05, 0.58], [-0.2, 0.80], [-0.5, 1.0], [-1, 1.0]]),
+    ao: lutScalar([[1, 0.27], [0.85, 0.26], [0.65, 0.24], [0.45, 0.22], [0.25, 0.30], [0.05, 0.52], [-0.2, 0.80], [-0.5, 1.0], [-1, 1.0]]),
     gain: lutCal(G.calKnots ?? CAL_KNOTS),
     silver: lutScalar([[1, 0.0], [0.8, 0.0], [0.55, 0.05], [0.3, 0.16], [0.1, 0.32], [-0.15, 0.52], [-0.45, 0.80], [-0.75, 1.0], [-1, 1.0]]),
     silverHead: lutScalar([[1, 0.0], [0.6, 0.0], [0.2, 0.25], [-0.3, 0.55], [-1, 0.80]]),
@@ -241,21 +245,21 @@ const CAL_KNOTS = [
   [-0.70, 0.8687, 0.01177],
   [-0.60, 0.8991, 0.00920],
   [-0.50, 0.9386, 0.00535],
-  [-0.40, 1.0167, 0.00506],
-  [-0.30, 1.0939, 0.00646],
-  [-0.20, 1.1674, 0.01095],
-  [-0.10, 1.2971, 0.02039],
-  [0.00, 1.3983, 0.03438],
-  [0.10, 1.3073, 0.04232],
-  [0.20, 1.0860, 0.05036],
-  [0.30, 0.9112, 0.07165],
-  [0.40, 0.8243, 0.06030],
-  [0.50, 0.7815, 0.04147],
-  [0.60, 0.7786, 0.01924],
-  [0.70, 0.7783, 0.01616],
-  [0.80, 0.7833, 0.01337],
-  [0.90, 0.7624, 0.01277],
-  [1.00, 0.7624, 0.01277]];
+  [-0.40, 1.0204, 0.00510],
+  [-0.30, 1.1042, 0.00657],
+  [-0.20, 1.1920, 0.01118],
+  [-0.10, 1.3295, 0.02093],
+  [0.00, 1.4397, 0.03558],
+  [0.10, 1.3399, 0.04363],
+  [0.20, 1.0937, 0.05070],
+  [0.30, 0.9112, 0.07164],
+  [0.40, 0.8380, 0.06206],
+  [0.50, 0.8427, 0.04683],
+  [0.60, 0.8865, 0.02228],
+  [0.70, 0.9286, 0.01970],
+  [0.80, 0.9597, 0.01664],
+  [0.90, 0.9438, 0.01692],
+  [1.00, 0.9438, 0.01692]];
 function lutCal(knots) { // -> Float32Array(NL*2): a, v
   const xs = knots.map((k) => k[0]); const f = [1, 2].map((c) => makeInterp(xs, knots.map((k) => k[c])));
   const o = new Float32Array(NL * 2); for (let i = 0; i < NL; i++) { const r = -1 + 2 * i / (NL - 1); o[i * 2] = f[0](r); o[i * 2 + 1] = f[1](r); } return o;
@@ -268,7 +272,7 @@ const inv3 = (m) => { const [[a, b, c], [d, e, f], [g, h, i]] = m; const A = e *
 const ACES_IN_INV = inv3(ACES_IN), ACES_OUT_INV = inv3(ACES_OUT);
 const acesFit = (v) => (v * (v + 0.0245786) - 0.000090537) / (v * (0.983729 * v + 0.432951) + 0.238081);
 const acesFitInv = (y) => { y = clamp(y, 0, 0.9995); const A = 1 - 0.983729 * y, B = 0.0245786 - 0.432951 * y, C = -(9.0537e-5 + 0.238081 * y); return Math.max(0, (-B + Math.sqrt(B * B - 4 * A * C)) / (2 * A)); };
-function acesInverse(r, g, b, out) {
+export function acesInverse(r, g, b, out = [0, 0, 0]) {   // 校正ツール (tools/verify/body_calibrate.mjs) とテストが使う
   const u0 = ACES_OUT_INV[0][0] * r + ACES_OUT_INV[0][1] * g + ACES_OUT_INV[0][2] * b, u1 = ACES_OUT_INV[1][0] * r + ACES_OUT_INV[1][1] * g + ACES_OUT_INV[1][2] * b, u2 = ACES_OUT_INV[2][0] * r + ACES_OUT_INV[2][1] * g + ACES_OUT_INV[2][2] * b;
   const f0 = acesFitInv(u0), f1 = acesFitInv(u1), f2 = acesFitInv(u2);
   out[0] = Math.max(0, 0.6 * (ACES_IN_INV[0][0] * f0 + ACES_IN_INV[0][1] * f1 + ACES_IN_INV[0][2] * f2));
@@ -769,10 +773,10 @@ export function generateBodyTextures({ surface, params, genome = {}, seed = 1, w
   timing.scales = Date.now() - t0;
 
   // --- 5) 鱗の光沢ゆらぎ・側線を albedo へ, 色を 8bit へ -------------------------------------------------------------------
-  // 設計色(R,Gc,B: 線形, 「写真に写る見かけの色」) × 校正倍率 cal(r) = 線形 albedo。倍率は統合描画(ACES + 環境光 + クリアコート)で見かけ=設計色になるよう実測で決めた。
+  // 設計色(R,Gc,B: 線形, 「写真に写る見かけの色」) -> 線形 albedo は CAL_KNOTS（統合描画で見かけ=設計色になるよう実測）で逆算する。上限 ALB_MAX。
   const albedo = new Uint8Array(N * 4);
   const scaleVisAlbedo = STG.scaleVis;
-  const dorsalSpark = new Float32Array(N), sceneC = [0, 0, 0];
+  const sceneC = [0, 0, 0];
   for (let j = 0; j < H; j++) for (let x = 0; x < W; x++) {
     const idx = j * W + x; const r = rr[idx]; const hw = headW[idx];
     const li = ((r + 1) * 0.5 * (NL - 1)) | 0; const sil = clamp01(lerp(pal.silver[li], pal.silverHead[li], hw) * (1 - 0.5 * maskPM[idx]) * (1 - maskSpot[idx]) + opM[idx] * 0.7);
