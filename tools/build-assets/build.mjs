@@ -37,7 +37,7 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
   const rig = buildRig(surface, params, { jawHinge: body.landmarks.jaw_hinge, eyeCenters });
   const nBody = body.positions.length / 3;
   const weights = {
-    body: bodyWeights(rig, body.attrs, nBody),
+    body: bodyWeights(rig, body.attrs, nBody, { operculumEdge: params.operculum.edge_s.v }),
     mouth: bodyWeights(rig, { _S: new Float32Array(body.mouth.positions.length / 3).fill(0.06), _JAW: body.mouth.attrs._JAW }, body.mouth.positions.length / 3),
     fins: fins ? finWeights(rig, fins.geometry.attrs, fins.geometry.positions.length / 3) : null,
   };

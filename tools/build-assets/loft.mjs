@@ -24,10 +24,10 @@ export function buildBody(surface, params, opts = {}) {
 
   // ---- ring list --------------------------------------------------------------------------------------------------
   const rings = [];
-  const capT = [0.985, 0.93, 0.85, 0.74, 0.60, 0.45, 0.30, 0.16, 0.06];       // t = -s/cap; scale = sqrt(1-t^2)
+  const capT = opts.capT ?? [0.985, 0.93, 0.85, 0.74, 0.60, 0.45, 0.30, 0.16, 0.06];       // t = -s/cap; scale = sqrt(1-t^2)
   for (const t of capT) rings.push({ s: -t * cap, cap: true });
   const pushRange = (a, b, step) => { for (let s = a; s < b - 1e-9; s += step) rings.push({ s: +s.toFixed(6), cap: false }); };
-  pushRange(0, 0.30, 0.004); pushRange(0.30, 0.90, 0.010); pushRange(0.90, 1.0, 0.0125);
+  for (const [a, b, st] of (opts.steps ?? [[0, 0.30, 0.004], [0.30, 0.90, 0.010], [0.90, 1.0, 0.0125]])) pushRange(a, b, st);
   rings.push({ s: 1.0, cap: false });
   const R = rings.length;
   const seamEnd = rings.findIndex((r) => !r.cap && r.s >= cornerS - 1e-9);  // first ring at/after the corner: lips merge here
@@ -53,7 +53,7 @@ export function buildBody(surface, params, opts = {}) {
   const eyeAlpha = [eyeAlphaR, TAU - eyeAlphaR];
   const eyeCentersSurf = eyeAlpha.map((a) => surface.point(sE, a));
   const opEdge = (alpha) => { // s of the gill-cover trailing edge as a function of alpha (bowed backwards at mid-height)
-    const lat = Math.sin(alpha); return params.operculum.edge_s.v + 0.010 * Math.pow(Math.abs(lat), 1.5) - 0.004 * Math.pow(Math.abs(Math.cos(alpha)), 2);
+    const lat = Math.sin(alpha); return params.operculum.edge_s.v + 0.020 * Math.pow(Math.abs(lat), 1.4) - 0.010 * Math.pow(Math.abs(Math.cos(alpha)), 2);
   };
   const latMask = (alpha) => { // 1 on the flanks, fades towards the dorsal / ventral midlines
     const a = Math.abs(Math.sin(alpha)); return smooth(0.25, 0.75, a);
@@ -73,7 +73,7 @@ export function buildBody(surface, params, opts = {}) {
     // cheek swelling in front of the gill cover
     if (s > 0.10 && s < 0.27) { d += 0.0006 * smooth(0.10, 0.17, s) * (1 - smooth(0.20, 0.26, s)) * latMask(alpha); }
     // gill-cover trailing edge: body behind it sits slightly lower
-    const e = opEdge(alpha); d -= 0.00045 * smooth(e - 0.004, e + 0.006, s) * (1 - smooth(e + 0.02, e + 0.07, s)) * latMask(alpha);
+    const e = opEdge(alpha); d -= 0.00032 * smooth(e - 0.007, e + 0.011, s) * (1 - smooth(e + 0.02, e + 0.08, s)) * latMask(alpha);
     // thin raised flap right at the edge
     d += 0.00022 * Math.exp(-(((s - (e - 0.002)) / 0.0035) ** 2)) * latMask(alpha);
     // preopercle groove (arc in front of the gill cover)

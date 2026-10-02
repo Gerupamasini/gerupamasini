@@ -1,0 +1,128 @@
+<!doctype html><meta charset="utf-8"><title>fins dev viewer</title>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<!-- fins.mjs is pure; surface.mjs imports node:fs/path/url only for loadParams() (unused here) -> stub them for the browser -->
+<script type="importmap">{"imports":{
+  "three":"/node_modules/three/build/three.module.js",
+  "three/addons/":"/node_modules/three/examples/jsm/",
+  "node:fs":"data:text/javascript;base64,ZXhwb3J0IGRlZmF1bHQge307",
+  "node:path":"data:text/javascript;base64,ZXhwb3J0IGRlZmF1bHQgeyBkaXJuYW1lOiAocCk9PnAsIGpvaW46ICguLi5hKT0+YS5qb2luKCIvIikgfTs=",
+  "node:url":"data:text/javascript;base64,ZXhwb3J0IGNvbnN0IGZpbGVVUkxUb1BhdGggPSAodSk9PnU7"
+}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { createSurface } from '/tools/build-assets/surface.mjs';
+import { buildFins } from '/tools/build-assets/fins.mjs';
+
+const q = new URLSearchParams(location.search);
+const seed = Number(q.get('seed') ?? 1), detail = Number(q.get('detail') ?? 1);
+const only = q.get('only') ? q.get('only').split(',') : null;
+const dbg = q.get('dbg'); const wire = q.get('wire') === '1'; const noBody = q.get('nobody') === '1';
+const bgHex = q.get('bg') ? parseInt(q.get('bg'), 16) : 0x35505a;
+const genome = q.get('genome') ? JSON.parse(q.get('genome')) : {};
+
+const params = await (await fetch('/assets/src/params.json')).json();
+const surface = createSurface(params);
+const t0 = performance.now();
+const fins = buildFins({ surface, params, genome, seed, detail });
+const buildMs = performance.now() - t0;
+const G = fins.geometry;
+
+const W = innerWidth, H = innerHeight;
+const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(W, H); document.body.appendChild(renderer.domElement);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(bgHex);
+const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.55;
+const camera = new THREE.PerspectiveCamera(30, W / H, 0.005, 5);
+const key = new THREE.DirectionalLight(0xfff4e6, 2.6); scene.add(key, key.target);
+const rim = new THREE.DirectionalLight(0x9fd0ff, 1.0); scene.add(rim, rim.target);
+scene.add(new THREE.HemisphereLight(0xbfd8e0, 0x24323a, 0.6));
+
+// ---- textures from the atlas
+const mkTex = (img, srgb) => {
+  const t = new THREE.DataTexture(new Uint8Array(img.data), img.width, img.height, THREE.RGBAFormat);
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.flipY = false; t.generateMipmaps = true;
+  t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.anisotropy = 8; t.needsUpdate = true; return t;
+};
+const tAlb = mkTex(fins.textures.albedo, true), tNrm = mkTex(fins.textures.normal, false), tOrm = mkTex(fins.textures.orm, false);
+
+// ---- fin meshes (one per range, drawn in the 06 §6.5 order: dorsal, caudal, anal, pelvic, pectoral)
+const mkGeo = (r) => {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(G.positions, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(G.normals, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(G.uvs, 2));
+  for (const [k, v] of Object.entries(G.attrs)) g.setAttribute(k.toLowerCase(), new THREE.BufferAttribute(v, 1));
+  g.setIndex(new THREE.BufferAttribute(G.indices.subarray(r.start, r.start + r.count), 1));
+  if (dbg) { const col = new Float32Array(G.positions.length); for (let i = 0; i < G.positions.length / 3; i++) { const v = dbg === 't' ? G.attrs._FINT[i] : dbg === 'r' ? G.attrs._FINR[i] : G.attrs._FINID[i] / 7; col[i * 3] = v; col[i * 3 + 1] = 1 - Math.abs(v - 0.5) * 2; col[i * 3 + 2] = 1 - v; } g.setAttribute('color', new THREE.BufferAttribute(col, 3)); }
+  return g;
+};
+const finMat = new THREE.MeshPhysicalMaterial({ map: tAlb, normalMap: tNrm, normalScale: new THREE.Vector2(1, -1), roughnessMap: tOrm, metalnessMap: tOrm, aoMap: null, roughness: 1, metalness: 1,
+  transparent: true, depthWrite: false, side: THREE.DoubleSide, specularIntensity: 0.5, forceSinglePass: true });
+const adiMat = new THREE.MeshPhysicalMaterial({ map: tAlb, normalMap: tNrm, normalScale: new THREE.Vector2(1, -1), roughnessMap: tOrm, roughness: 1, metalness: 0, side: THREE.DoubleSide });
+const dbgMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+const finGroup = new THREE.Group(); scene.add(finGroup);
+const renderOrder = { dorsal: 1, adipose: 0, caudal: 2, anal: 3, pelvic_R: 4, pelvic_L: 4, pectoral_R: 5, pectoral_L: 5 };
+for (const r of fins.ranges) {
+  const m = new THREE.Mesh(mkGeo(r), dbg ? dbgMat : (r.name === 'adipose' ? adiMat : finMat)); m.name = r.name; m.renderOrder = renderOrder[r.name] ?? 0; m.frustumCulled = false; finGroup.add(m);
+  if (wire) { const wm = new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true, transparent: true, opacity: 0.35 })); wm.renderOrder = 9; finGroup.add(wm); }
+}
+
+// ---- simple body stub (lofted from the surface) for the attachment check
+if (!noBody) {
+  const ns = 120, na = 64; const pos = [], col = [], idx = []; const c = (r, g, b) => new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
+  const back = c(104, 92, 70), flank = c(176, 156, 132), belly = c(196, 192, 180);
+  for (let i = 0; i <= ns; i++) {
+    const s = -surface.cap + (1 + surface.cap) * (i / ns);
+    for (let j = 0; j < na; j++) {
+      const a = (j / na) * Math.PI * 2; const p = surface.point(s, a); pos.push(p[0], p[1], p[2]);
+      const k = 1 - Math.abs(a / Math.PI - 1);   // 0 at dorsal .. 1 at ventral
+      const cc = k < 0.5 ? back.clone().lerp(flank, THREE.MathUtils.smoothstep(k, 0.12, 0.45)) : flank.clone().lerp(belly, THREE.MathUtils.smoothstep(k, 0.55, 0.85));
+      col.push(cc.r, cc.g, cc.b);
+    }
+  }
+  for (let i = 0; i < ns; i++) for (let j = 0; j < na; j++) { const a = i * na + j, b = i * na + (j + 1) % na, cI = (i + 1) * na + (j + 1) % na, d = (i + 1) * na + j; idx.push(a, d, cI, a, cI, b); }
+  const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); bg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); bg.setIndex(idx); bg.computeVertexNormals();
+  const body = new THREE.Mesh(bg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.1, side: THREE.DoubleSide })); scene.add(body);
+  // blunt tail end: a cap so the peduncle end is not see-through
+  const x1 = surface.sToX(1), cy = surface.section(1).c * surface.SL;
+  const capG = new THREE.CircleGeometry(1, 24); const sec = surface.section(1);
+  const cap = new THREE.Mesh(capG, new THREE.MeshStandardMaterial({ color: 0x6c6250, roughness: 0.7 })); cap.scale.set(sec.w * surface.SL, sec.h * surface.SL, 1); cap.rotation.y = Math.PI / 2; cap.position.set(x1, cy, 0); scene.add(cap);
+}
+
+// ---- camera shots
+const SL = surface.SL; const F = fins.report.fins;
+const look = (pos, target, fov = 30, lightAz = 0) => ({ pos, target, fov, lightAz });
+const rep = (n) => F[n];
+const P = (n) => rep(n).pivot;
+const V = (a, b, c) => new THREE.Vector3(a, b, c);
+const shots = {
+  side_R: look(V(-0.01, 0.01, 0.62), V(-0.02, -0.002, 0), 22),
+  side_L: look(V(-0.01, 0.01, -0.62), V(-0.02, -0.002, 0), 22),
+  tq_rear: look(V(-0.34, 0.14, 0.30), V(-0.04, 0, 0), 24),
+  tq_front: look(V(0.34, 0.12, 0.30), V(-0.01, -0.005, 0), 24),
+  top: look(V(-0.02, 0.6, 0.001), V(-0.02, 0, 0), 22),
+  dorsal: look(V(P('dorsal')[0] - 0.03, P('dorsal')[1] + 0.02, 0.15), V(P('dorsal')[0] - 0.012, P('dorsal')[1] + 0.012, 0), 24),
+  dorsal_34: look(V(P('dorsal')[0] - 0.17, P('dorsal')[1] + 0.08, 0.12), V(P('dorsal')[0] - 0.012, P('dorsal')[1] + 0.012, 0), 24),
+  caudal: look(V(-0.19, 0.03, 0.2), V(-0.1, 0, 0), 24),
+  caudal_rear: look(V(-0.33, 0.07, 0.12), V(-0.105, 0, 0), 24),
+  pectoral: look(V(0.02, -0.03, 0.2), V(0.034, -0.017, 0.006), 24),
+  pectoral_front: look(V(0.17, -0.03, 0.17), V(0.034, -0.017, 0.006), 24),
+  pelvic_anal: look(V(-0.04, -0.04, 0.22), V(-0.04, -0.018, 0), 26),
+  adipose: look(V(-0.05, 0.035, 0.12), V(-0.07, 0.013, 0), 24),
+  adipose_34: look(V(-0.13, 0.05, 0.1), V(-0.07, 0.013, 0), 24),
+};
+const names = (only ?? Object.keys(shots)).filter((n) => shots[n]);
+const apply = (name) => {
+  const s = shots[name]; camera.fov = s.fov; camera.position.copy(s.pos); camera.lookAt(s.target); camera.updateProjectionMatrix();
+  const d = new THREE.Vector3().copy(s.pos).sub(s.target).normalize();
+  const right = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize();
+  key.position.copy(s.target).addScaledVector(d, 0.6).addScaledVector(right, -0.35).add(new THREE.Vector3(0, 0.6, 0)); key.target.position.copy(s.target);
+  rim.position.copy(s.target).addScaledVector(d, -0.5).addScaledVector(right, 0.4).add(new THREE.Vector3(0, 0.3, 0)); rim.target.position.copy(s.target);
+  renderer.render(scene, camera);
+};
+window.__shots = names.map((name) => ({ name, apply: async () => { apply(name); window.__shotReady = true; } }));
+window.__info = { buildMs: Math.round(buildMs), counts: fins.report.counts, ranges: fins.ranges.map((r) => `${r.name}:${r.count / 3}`).join(' ') };
+apply(names[0]);
+window.__ready = true;
+</script>

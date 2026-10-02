@@ -181,17 +181,18 @@ function makeIrisTextures(rng, P) {
   const n2 = makeNoise2(rng);
   // dark pigment blotches in the outer iris margin (p067: black patches beside the gold ring)
   const blotches = [];
-  const nb = 2 + Math.floor(rng() * 3);
-  for (let i = 0; i < nb; i++) blotches.push({ ph: rng() * TAU, t: P.ti + 0.03 + rng() * 0.08, r: 0.035 + rng() * 0.05, k: 0.55 + rng() * 0.4 });
+  const nb = 3 + Math.floor(rng() * 3);
+  for (let i = 0; i < nb; i++) blotches.push({ ph: rng() * TAU, t: P.ti + 0.04 + rng() * 0.10, r: 0.04 + rng() * 0.06, k: 0.6 + rng() * 0.4, el: 1 + rng() * 1.2 });
   const g = P.gold, Lf = Math.pow(clamp(P.irisL / 44, 0.45, 1.5), 0.8);
   const C = {
-    rimPale: [206, 197, 172], rimGold: [238, 200, 108], midPale: [152, 140, 114], midGold: [178, 136, 54],
-    outPale: [86, 78, 64], outGold: [100, 70, 30], limbus: [32, 26, 20], pupil: [15, 16, 20],
-    sclDark: [84, 85, 80], sclBright: [158, 158, 148], vign: [24, 22, 19], sheen: [64, 118, 126],
+    rimPale: [214, 205, 178], rimGold: [248, 212, 112], midPale: [158, 146, 120], midGold: [204, 158, 56],
+    outPale: [90, 82, 68], outGold: [124, 88, 34], limbus: [30, 25, 18], pupil: [15, 16, 20],
+    sclDark: [52, 49, 40], sclBright: [140, 136, 118], vign: [22, 20, 17], sheen: [60, 118, 120],
   };
   const m3 = (a, b, t) => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
   const rim = m3(C.rimPale, C.rimGold, g), mid = m3(C.midPale, C.midGold, g), out = m3(C.outPale, C.outGold, g);
   const sclera = m3(C.sclDark, C.sclBright, P.scleraBright);
+  const edgeWob = makePeriodicNoise(rng, 23);
 
   const alb = new Float32Array(W * H * 3), rough = new Float32Array(W * H), metal = new Float32Array(W * H), ao = new Float32Array(W * H), height = new Float32Array(W * H);
   const aa = 1.0 / (W * 0.5); // 1 px in t units
@@ -199,8 +200,9 @@ function makeIrisTextures(rng, P) {
     const x = (i + 0.5) / W * 2 - 1, y = 1 - (j + 0.5) / H * 2;
     const t = Math.hypot(x, y), ph = Math.atan2(y, x);
     const o = j * W + i;
+    const tiW = P.ti + 0.008 * wob(ph) + 0.005 * edgeWob(ph);            // the outer edge of the gold ring is not a perfect circle
     // fibres: radial striations, slightly curved with radius
-    const gg = clamp((t - P.tp) / (P.ti - P.tp), 0, 1);
+    const gg = clamp((t - P.tp) / (tiW - P.tp), 0, 1);
     const phc = ph + 0.18 * wob(ph * 1.0) * gg;
     const f1 = fib1(phc), f2 = fib2(phc), f3 = fib3(phc + 0.7 * gg);
     const fib = 0.20 * f1 + 0.13 * f2 + 0.08 * f3;
@@ -208,52 +210,50 @@ function makeIrisTextures(rng, P) {
     const cw = 0.5 + 0.5 * Math.sin(ph * 17 + 2.4 * wob(ph));
     const gc = 0.40 + 0.07 * (cw - 0.5) * 2;
     const coll = Math.exp(-(((gg - gc) / 0.085) ** 2)) * (0.12 + 0.12 * cw);
-    // --- colours (sRGB) ---
-    let c;
-    // gold ring
+    // --- gold ring ---
     const wRimMid = smoothstep(0.0, 0.26, gg), wMidOut = smoothstep(0.34, 1.0, gg);
     const ring = m3(m3(rim, mid, wRimMid), out, wMidOut);
-    const fibAmp = 1.0 - 0.45 * smoothstep(0.0, 0.1, 0.1 - gg) ;  // (kept at 1; rim fibre handled below)
-    const ringL = (1 + (fib * (0.55 + 0.9 * smoothstep(0.05, 0.5, gg)) + coll)) * Lf * fibAmp;
+    const ringL = (1 + (fib * (0.55 + 0.9 * smoothstep(0.05, 0.5, gg)) + coll)) * Lf;
     const ringC = [ring[0] * ringL, ring[1] * ringL, ring[2] * ringL];
-    // limbus (dark outer margin of the iris)
-    const wLimbus = smoothstep(P.ti - 0.012, P.ti + 0.012, t) * (1 - smoothstep(P.ti + 0.045, P.ti + 0.11, t));
-    // sclera: silver, speckled with guanine, dark vignette towards the orbit rim
-    const sp = n2(x * 38 + 5, y * 38 + 9) * 0.5 + n2(x * 90, y * 90 + 3) * 0.5;
-    const sFib = fib2(ph) * 0.12 + fib1(ph) * 0.10;
-    const sL = (0.92 + 0.22 * sp + sFib) * (0.75 + 0.5 * smoothstep(P.ti + 0.03, P.ti + 0.14, t));
+    // --- outside the ring: dark limbus, then striated olive/silver iris-sclera, dark vignette at the orbit ---
+    const tt = t - tiW;                                                  // distance outside the gold ring
+    const sp = n2(x * 22 + 5, y * 22 + 9) * 0.6 + n2(x * 60, y * 60 + 3) * 0.4;
+    const sRad = 0.55 + 0.45 * smoothstep(0.0, 0.14, tt);
+    const sF = 1 + 0.30 * fib2(ph + 0.4 * tt) + 0.22 * fib1(ph) + 0.12 * fib3(ph - 0.5 * tt);
+    const sL = (0.85 + 0.12 * sp) * sF * sRad;
     let scC = [sclera[0] * sL, sclera[1] * sL, sclera[2] * sL];
-    const vg = smoothstep(0.74, 0.97, t);
+    const wLimbus = smoothstep(-0.012, 0.012, tt) * (1 - smoothstep(0.05, 0.10, tt));
+    scC = m3(scC, C.limbus, wLimbus * (0.80 + 0.15 * f2));
+    const vg = smoothstep(0.76, 0.97, t);
     scC = m3(scC, C.vign, vg * 0.9);
     // blue-green sheen on the upper outer iris / sclera (sky reflected in the guanine layer)
     const upper = clamp(0.5 + 0.9 * (y / Math.max(t, 1e-3)), 0, 1);
-    const sheenMask = P.sheen * smoothstep(0.55, 1.0, upper) * smoothstep(P.ti + 0.01, P.ti + 0.08, t) * (1 - smoothstep(0.80, 0.95, t));
-    scC = m3(scC, C.sheen, 0.55 * sheenMask * (0.6 + 0.4 * (0.5 + 0.5 * col(ph))));
+    const sheenMask = P.sheen * smoothstep(0.55, 1.0, upper) * smoothstep(0.05, 0.14, tt) * (1 - smoothstep(0.80, 0.95, t));
+    scC = m3(scC, C.sheen, 0.5 * sheenMask * (0.6 + 0.4 * (0.5 + 0.5 * col(ph))));
     // assemble by radius
     const wP = 1 - smoothstep(P.tp - aa * 1.2, P.tp + aa * 1.2, t);          // pupil weight
-    const wI = (1 - smoothstep(P.ti - aa * 1.5, P.ti + aa * 1.5, t));         // inside gold ring outer edge
-    c = m3(scC, ringC, wI);
-    c = m3(c, C.limbus, wLimbus * 0.92 * (1 - wI));
-    // blotches
+    const wI = (1 - smoothstep(tiW - aa * 1.5, tiW + aa * 1.5, t));          // inside the gold ring's outer edge
+    let c = m3(scC, ringC, wI);
+    // blotches (soft irregular dark pigment patches)
     for (const b of blotches) {
-      const dph = Math.atan2(Math.sin(ph - b.ph), Math.cos(ph - b.ph)) * Math.max(t, 0.3);
-      const d2 = (dph * dph + (t - b.t) ** 2) / (b.r * b.r);
-      const bm = Math.exp(-d2 * d2 * 0.7) * b.k * (1 - wP);
-      if (bm > 0.001) c = m3(c, [20, 18, 16], bm);
+      const dph = Math.atan2(Math.sin(ph - b.ph), Math.cos(ph - b.ph)) * Math.max(t, 0.3) / b.el;
+      const warp = 1 + 0.35 * n2(x * 40 + b.ph * 10, y * 40);
+      const d2 = (dph * dph + (t - b.t) ** 2) / (b.r * b.r) * warp;
+      const bm = Math.exp(-d2 * d2 * 0.8) * b.k * (1 - wP) * (1 - 0.8 * wI);
+      if (bm > 0.001) c = m3(c, [18, 16, 14], bm);
     }
-    // darker pupillary margin ruffle just inside the rim, then the black pupil
     c = m3(c, C.pupil, wP);
     alb[o * 3] = c[0]; alb[o * 3 + 1] = c[1]; alb[o * 3 + 2] = c[2];
     // --- ORM ---
     const inGold = wI * (1 - wP);
-    rough[o] = mix(mix(0.30 + 0.12 * sp + 0.18 * vg, 0.38 + 0.08 * fib, wI), 0.10, wP);
-    rough[o] = mix(rough[o], 0.55, wLimbus * (1 - wI));
-    metal[o] = mix(0.30 + 0.35 * P.scleraBright, 0.25 * (0.5 + g * 0.5), wI) * (1 - wP) * (1 - 0.8 * wLimbus * (1 - wI));
+    rough[o] = mix(mix(0.44 + 0.08 * sp + 0.18 * vg, 0.38 + 0.08 * fib, wI), 0.10, wP);
+    rough[o] = mix(rough[o], 0.58, wLimbus * (1 - wI));
+    metal[o] = mix(0.16 + 0.35 * P.scleraBright, 0.25 * (0.5 + g * 0.5), wI) * (1 - wP) * (1 - 0.8 * wLimbus * (1 - wI));
     const topBias = 0.65 + 0.35 * upper;
-    ao[o] = 1 - 0.72 * smoothstep(0.66, 0.97, t) * topBias;
+    ao[o] = 1 - 0.78 * smoothstep(0.62, 0.97, t) * topBias;
     // --- height (for the normal map) ---
     height[o] = inGold * (0.5 * fib + 0.6 * coll) * 0.5 + 0.9 * Math.exp(-(((t - P.tp) / 0.012) ** 2)) * wI * 0.6
-      + 0.5 * Math.exp(-(((t - P.ti) / 0.014) ** 2)) - 1.2 * wP + 0.15 * sp * (1 - wI) * (1 - vg);
+      + 0.5 * Math.exp(-(((t - tiW) / 0.014) ** 2)) - 1.2 * wP + (0.15 * sp + 0.25 * (sF - 1)) * (1 - wI) * (1 - vg);
   }
   const albedo = new Uint8Array(W * H * 4), orm = new Uint8Array(W * H * 4), normal = new Uint8Array(W * H * 4);
   const q = (v) => Math.round(clamp(v, 0, 255));
@@ -275,17 +275,17 @@ function makeIrisTextures(rng, P) {
   };
 }
 
-// orbit ring colour strip: u (x) = around the ring, v (y) = inner edge (dark) -> outer edge (head colour)
+// orbit ring colour strip: u (x) = around the ring, v (y) = inner edge (dark rim) -> outer edge (head colour)
 function makeOrbitTexture(rng, headRgb, w = 64, h = 64) {
   const data = new Uint8Array(w * h * 4); const nz = makePeriodicNoise(rng, 7);
-  const dark = [44, 36, 29];
+  const dark = [46, 38, 31];
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const v = (y + 0.5) / h, ph = (x + 0.5) / w * TAU;
-    const up = 0.5 + 0.5 * Math.cos(ph - Math.PI / 2);                 // ring top (psi = 90 deg) slightly darker (shadowed)
-    const k = smoothstep(0.0, 0.82, v);
-    const topShade = 1 - 0.14 * up + 0.05 * nz(ph);
+    const up = 0.5 + 0.5 * Math.cos(ph - Math.PI / 2);                 // ring top (psi = 90 deg) a little darker (shadowed by the brow)
+    const k = smoothstep(0.30, 0.97, v);
+    const shade = mix(1 - 0.22 * up + 0.08 * nz(ph), 1, k);
     const o = (y * w + x) * 4;
-    for (let c = 0; c < 3; c++) data[o + c] = Math.round(clamp(mix(dark[c], headRgb[c], k) * (0.7 + 0.3 * k) * topShade / (0.7 + 0.3 * k) * 1.0, 0, 255));
+    for (let c = 0; c < 3; c++) data[o + c] = Math.round(clamp(mix(dark[c], headRgb[c], k) * shade, 0, 255));
     data[o + 3] = 255;
   }
   return { width: w, height: h, data };
@@ -312,8 +312,8 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   if (tp > ti - 0.04) { tp = ti - 0.04; adjusted.push('pupil clamped to iris_ring - 0.04 (06 §6.6.1)'); }
   const irisL = genome.iris_L ?? clamp(44 + vr * 7 * gauss(draws[4], draws[5]), 26, 58);
   const gold = genome.iris_gold ?? clamp(0.62 + vr * 0.18 * gauss(draws[6], draws[7]), 0.2, 1);
-  const scleraBright = genome.sclera_bright ?? clamp(0.35 + vr * 0.15 * gauss(draws[8], draws[9]), 0, 1);
-  const sheen = genome.iris_sheen ?? 0.35;
+  const scleraBright = genome.sclera_bright ?? clamp(0.25 + vr * 0.15 * gauss(draws[8], draws[9]), 0, 1);
+  const sheen = genome.iris_sheen ?? 0.25;
   const yaw = (genome.eye_yaw_deg ?? 10) * Math.PI / 180;
   const headRgb = genome.head_rgb ?? [128, 112, 90];
   const socket = genome.socket === undefined ? SOCKET_LOFT : genome.socket;
@@ -358,7 +358,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   const toLocal = (p) => { const d = sub(p, Cb); return [dot(d, Xl), dot(d, Yl), dot(d, Zl)]; };
 
   // ---- ball (sclera sphere with a recessed iris dish; dense in front) ----
-  const recess = (E.iris_recess_over_outer?.v ?? 0.05) * D;           // [E] 06 §6.6.1: iris plane below the corneal apex
+  const recess = (E.iris_recess_over_outer?.v ?? 0.065) * D;           // [E] 06 §6.6.1: iris plane below the corneal apex
   const corneaGap = 0.35 * recess, dishDepth = recess - corneaGap, pupilExtra = 0.04 * Ro;
   const tLim = ti + 0.05;
   const dish = (rho) => {
@@ -389,41 +389,47 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
 
   // ---- orbit ring: swept lip that follows the true skin, covering the ball/skin junction ----
   const NW = 96;                                                       // around
-  const topPts = 14, botPts = 8;
+  const topPts = 18, botPts = 8;
   const bump = (u) => Math.pow(Math.sin(Math.PI * Math.pow(u, 0.75)), 1.2);
-  const Hc = 0.10 * Ro, Bd = 0.14 * Ro;                                // crest height above skin / buried depth
-  const prof = []; // [u, h]
-  for (let i = 0; i <= topPts; i++) { const u = i / topPts; prof.push([u, Hc * bump(u)]); }
-  for (let i = 1; i <= botPts; i++) { const u = 1 - i / (botPts + 1); prof.push([u, -Bd * Math.sin(Math.PI * u) ** 0.8]); }
-  const oPos = [], oUv = [], oIdx = [];
+  const Hc = 0.10 * Ro, Bd = 0.12 * Ro, sink = 0.02 * Ro, Dd = 0.12 * Ro;              // crest height above skin / buried depth / whole-ring sink
+  const prof = []; // [u (radial position inner 0 -> outer 1), h (height above the skin), v (texture coordinate)]
+  for (let i = 0; i <= topPts; i++) { const u = i / topPts; prof.push([u, Hc * bump(u) - Dd * smoothstep(0.62, 1.0, u), u]); }
+  // buried underside: textured with the outer (head) colour so that a dip of the loft skin never exposes a dark band
+  for (let i = 1; i <= botPts; i++) { const u = 1 - i / (botPts + 1); prof.push([u, -Bd * Math.sin(Math.PI * u) ** 0.8, 0.55 + 0.45 * u]); }
+  const oPos = [], oUv = [];
   const lift = (psi, r) => patch.normalAt(r * Math.cos(psi), r * Math.sin(psi), n0);
   const apAt = (psi) => { const f = ((psi / TAU) % 1 + 1) % 1 * NPSI; const i = Math.floor(f), t = f - i; return mix(apS[i % NPSI], apS[(i + 1) % NPSI], t); };
-  for (let i = 0; i < NW; i++) {
-    const psi = TAU * i / NW; const a = apAt(psi);
+  for (let i = 0; i <= NW; i++) {                                      // column NW duplicates column 0 (continuous UV across the seam)
+    const psi = TAU * (i % NW) / NW; const a = apAt(psi);
     const rin = a - 0.10 * Ro, rout = Math.max(1.0 * Ro, a + 0.17 * Ro);
-    for (const [u, h] of prof) {
+    for (const [u, h, v] of prof) {
       const r = mix(rin, rout, u);
       const base = patch.sample(r * Math.cos(psi), r * Math.sin(psi)); const n = lift(psi, r);
-      const p = add(base, scl(n, h));
-      oPos.push(...toLocal(p)); oUv.push(i / NW, u);
+      const p = add(base, scl(n, h - sink));
+      oPos.push(...toLocal(p)); oUv.push(i / NW, v);
     }
   }
   const NP = prof.length;
+  const oIdx = [], oIdxWrap = [];
   for (let i = 0; i < NW; i++) for (let k = 0; k < NP; k++) {
-    const i1 = (i + 1) % NW, k1 = (k + 1) % NP;
-    const a = i * NP + k, b = i1 * NP + k, c = i * NP + k1, d = i1 * NP + k1;
+    const k1 = (k + 1) % NP;
+    const a = i * NP + k, b = (i + 1) * NP + k, c = i * NP + k1, d = (i + 1) * NP + k1;
     oIdx.push(a, b, c, b, d, c);
+    const bw = ((i + 1) % NW) * NP + k, dw = ((i + 1) % NW) * NP + k1;
+    oIdxWrap.push(a, bw, c, bw, dw, c);
   }
-  // orient outward: the lip crest normals should point away from the eye centre in the tangent plane / outward from the skin
-  let orbit = geo(oPos, new Float32Array(oPos.length), oUv, oIdx);
+  // orient outward (crest normals should agree with the skin normal) and smooth the normals across the seam
+  let flip = false;
   {
-    const nn = smoothNormals(orbit.positions, orbit.indices);
-    // majority test against the skin normal in local coordinates
+    const nn = smoothNormals(Float32Array.from(oPos), Uint32Array.from(oIdxWrap));
     const nl = [dot(n0, Xl), dot(n0, Yl), dot(n0, Zl)]; let votes = 0;
     for (let i = 0; i < NW; i++) { const v = (i * NP + Math.floor(topPts * 0.4)) * 3; votes += nn[v] * nl[0] + nn[v + 1] * nl[1] + nn[v + 2] * nl[2] > 0 ? 1 : -1; }
-    if (votes < 0) { for (let t = 0; t < orbit.indices.length; t += 3) { const q = orbit.indices[t + 1]; orbit.indices[t + 1] = orbit.indices[t + 2]; orbit.indices[t + 2] = q; } }
-    orbit = { ...orbit, normals: smoothNormals(orbit.positions, orbit.indices) };
+    flip = votes < 0;
   }
+  if (flip) for (const arr of [oIdx, oIdxWrap]) for (let t = 0; t < arr.length; t += 3) { const q2 = arr[t + 1]; arr[t + 1] = arr[t + 2]; arr[t + 2] = q2; }
+  const oNor = smoothNormals(Float32Array.from(oPos), Uint32Array.from(oIdxWrap));
+  for (let k = 0; k < NP; k++) for (let c3 = 0; c3 < 3; c3++) oNor[(NW * NP + k) * 3 + c3] = oNor[k * 3 + c3];
+  const orbit = geo(oPos, oNor, oUv, oIdx);
 
   // ---- textures ----
   const texRng = mulberry32((seed * 40503) ^ 0x1215);

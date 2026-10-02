@@ -96,15 +96,26 @@ export function spineEntries(rig, s, scale = 1) {
   return [[b0, (1 - t) * scale], [b1, t * scale]];
 }
 
-export function bodyWeights(rig, attrs, count) {
+export function bodyWeights(rig, attrs, count, extra = {}) {
   const J = new Uint16Array(count * 4), W = new Float32Array(count * 4);
   const jaw = rig.index.get('jaw_lower');
+  const opR = rig.index.get('opercle_R'), opL = rig.index.get('opercle_L');
+  const e = extra.operculumEdge;           // s of the free rear edge of the gill cover
   for (let v = 0; v < count; v++) {
     const f = attrs._JAW ? attrs._JAW[v] : 0; const s = attrs._S[v];
-    const e = [];
-    if (f > 0) e.push([jaw, f]);
-    e.push(...spineEntries(rig, s, 1 - f));
-    const p = pack(e);
+    const list = [];
+    // gill-cover flap: weight grows from the hinge (e-0.045) to the free edge, lateral sectors only (alpha ~ right flank pi/2 .. ventral, mirrored on the left)
+    let wop = 0, opBone = opR;
+    if (e !== undefined && attrs._ALPHA && f === 0) {
+      const a = attrs._ALPHA[v]; const right = a <= Math.PI; const aa = right ? a : 2 * Math.PI - a;   // 0 dorsal .. pi ventral
+      const lat = smooth(0.45, 0.85, aa) * (1 - smooth(2.35, 2.75, aa));
+      wop = smooth(e - 0.045, e - 0.004, s) * (1 - smooth(e + 0.002, e + 0.012, s)) * lat * 0.9;
+      opBone = right ? opR : opL;
+    }
+    if (f > 0) list.push([jaw, f]);
+    list.push(...spineEntries(rig, s, (1 - f) * (1 - wop)));
+    if (wop > 0) list.push([opBone, (1 - f) * wop]);
+    const p = pack(list);
     for (let k = 0; k < 4; k++) { J[v * 4 + k] = p[k][0]; W[v * 4 + k] = p[k][1]; }
   }
   return { joints: J, weights: W };

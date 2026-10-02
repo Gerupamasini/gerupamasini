@@ -1,0 +1,37 @@
+<!doctype html><meta charset="utf-8"><title>yamame swim dev</title>
+<style>html,body{margin:0;background:#1a2a33}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { Yamame } from '/src/yamame/Yamame.js';
+const q = new URLSearchParams(location.search);
+const U = parseFloat(q.get('U') || '2.5'), view = q.get('view') || 'top', turn = parseFloat(q.get('turn') || '0'), jaw = parseFloat(q.get('jaw') || '0');
+const tiles = parseInt(q.get('tiles') || '8'), W = innerWidth, H = innerHeight;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, H); r.setScissorTest(true); r.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x24343d);
+const pm = new THREE.PMREMGenerator(r); scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.7;
+const dl = new THREE.DirectionalLight(0xffffff, 2); dl.position.set(0.3, 0.6, 0.5); scene.add(dl);
+const gltf = await new GLTFLoader().loadAsync(q.get('file') || '/assets/generated/yamame.glb');
+scene.add(gltf.scene);
+const fish = new Yamame(gltf, { phase0: 0 });
+// settle to steady state
+for (let i = 0; i < 240; i++) fish.update(1 / 60, { U_bl: U, turn, jawOpen: jaw });
+const f = fish.wave.f; const T = 1 / Math.max(f, 0.3);
+const cols = 4, rows = Math.ceil(tiles / cols), tw = Math.floor(W / cols), th = Math.floor(H / rows);
+const half = 0.13;
+for (let i = 0; i < tiles; i++) {
+  // advance by one n-th of the beat period
+  const steps = Math.round((T / tiles) * 120); for (let k = 0; k < steps; k++) fish.update(1 / 120, { U_bl: U, turn, jawOpen: jaw });
+  gltf.scene.updateMatrixWorld(true);
+  const cx = (i % cols) * tw, cy = H - (Math.floor(i / cols) + 1) * th;
+  r.setViewport(cx, cy, tw, th); r.setScissor(cx, cy, tw, th);
+  const cam = new THREE.OrthographicCamera(-half * tw / th, half * tw / th, half, -half, 0.001, 5);
+  if (view === 'top') { cam.position.set(0, 1, 0); cam.up.set(1, 0, 0); } else cam.position.set(0, 0, 1);
+  if (view === 'persp') { cam.position.set(0.18, 0.12, 0.26); }
+  cam.lookAt(0, 0, 0); r.render(scene, cam);
+}
+window.__info = { f: fish.wave.f, A: fish.wave.A, U: fish.wave.U, T };
+window.__fish = fish; window.__ready = true;
+</script>

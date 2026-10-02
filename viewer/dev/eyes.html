@@ -1,0 +1,150 @@
+<!doctype html><meta charset="utf-8"><title>eyes dev</title>
+<style>html,body{margin:0;background:#16222a}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+// Dev page for tools/build-assets/eyes.mjs.
+//   ?head=stub (default: bare surface + loft-style eye socket) | loft (real buildBody from loft.mjs) | none
+//   ?shot=<name>  render a single view; without it all views are exposed through window.__shots (render-snapshot --multi)
+//   views: eye_front eye_oblique eye_side head_side head_oblique head_close head_front
+import * as THREE from 'three';
+import { createSurface } from '/tools/build-assets/surface.mjs';
+import { buildEyes, SOCKET_LOFT } from '/tools/build-assets/eyes.mjs';
+
+const q = new URLSearchParams(location.search);
+const headMode = q.get('head') || 'stub';
+const seed = parseInt(q.get('seed') || '1');
+const genome = q.get('genome') ? JSON.parse(q.get('genome')) : {};
+const params = await (await fetch('/assets/src/params.json')).json();
+const S = createSurface(params);
+const eyes = buildEyes({ surface: S, params, genome, seed });
+const W = innerWidth, H = innerHeight;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x1d2b33);
+
+// ---- procedural sky environment (blue sky, bright sun patch, warm gravel below) ----
+{
+  const envScene = new THREE.Scene();
+  const g = new THREE.SphereGeometry(10, 48, 24); const pos = g.attributes.position; const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 10; const c = new THREE.Color();
+    // dark surroundings (water, gravel, bank) around the horizon; bright blue sky only well above the horizon
+    if (y > 0) { const k = Math.pow(y, 0.9), sk = THREE.MathUtils.smoothstep(y, 0.15, 0.7); c.setRGB(0.10 + 0.5 * k + 0.5 * sk, 0.12 + 0.75 * k + 0.7 * sk, 0.13 + 1.0 * k + 1.1 * sk); }
+    else c.setRGB(0.10, 0.09, 0.075);
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  envScene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const sun = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(60, 56, 48) }));
+  sun.position.set(4.5, 6.5, 5.5); envScene.add(sun);
+  const win = new THREE.Mesh(new THREE.PlaneGeometry(3, 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(8, 8, 8), side: THREE.DoubleSide }));
+  win.position.set(-2, 3, 8.5); win.lookAt(0, 0, 0); envScene.add(win);
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(envScene, 0.02).texture; scene.environmentIntensity = 1.0;
+}
+const sunL = new THREE.DirectionalLight(0xfff4e0, 2.2); sunL.position.set(0.45, 0.65, 0.55); scene.add(sunL);
+scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x4a4030, 0.5));
+
+// ---- textures ----
+const tex = (img, srgb, mips = true) => {
+  const t = new THREE.DataTexture(img.data, img.width, img.height, THREE.RGBAFormat);
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.flipY = false; t.generateMipmaps = mips;
+  t.minFilter = mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter; t.magFilter = THREE.LinearFilter;
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.anisotropy = 8; t.needsUpdate = true; return t;
+};
+const T = eyes.textures;
+const irisT = tex(T.iris, true), irisN = tex(T.iris_normal, false), irisO = tex(T.iris_orm, false), orbitT = tex(T.orbit, true);
+const ballMat = new THREE.MeshPhysicalMaterial({
+  map: irisT, normalMap: irisN, normalScale: new THREE.Vector2(0.6, 0.6), roughnessMap: irisO, metalnessMap: irisO, aoMap: irisO,
+  roughness: 1, metalness: 1, envMapIntensity: 1.0, iridescence: 0.0,
+});
+const corneaMat = new THREE.MeshPhysicalMaterial({
+  color: 0x000000, roughness: 0.03, metalness: 0, specularIntensity: 1.0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  envMapIntensity: 0.55, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+});
+const orbitMat = new THREE.MeshStandardMaterial({ map: orbitT, roughness: 0.5, metalness: 0.12 });
+const headRgb = (genome.head_rgb || [128, 112, 90]).map((v) => v / 255);
+const headCol = new THREE.Color().setRGB(headRgb[0], headRgb[1], headRgb[2], THREE.SRGBColorSpace);
+const headMat = new THREE.MeshStandardMaterial({ color: headCol, roughness: 0.5, metalness: 0.12 });
+
+const toGeo = (g) => {
+  const b = new THREE.BufferGeometry();
+  b.setAttribute('position', new THREE.BufferAttribute(g.positions, 3)); b.setAttribute('normal', new THREE.BufferAttribute(g.normals, 3));
+  b.setAttribute('uv', new THREE.BufferAttribute(g.uvs, 2)); b.setIndex(new THREE.BufferAttribute(g.indices, 1)); return b;
+};
+const eyeGroups = {};
+for (const side of ['left', 'right']) {
+  const a = eyes[side]; const grp = new THREE.Group(); grp.matrixAutoUpdate = false; grp.matrix.fromArray(a.matrix);
+  const ball = new THREE.Mesh(toGeo(a.parts.ball), ballMat); const cor = new THREE.Mesh(toGeo(a.parts.cornea), corneaMat); cor.renderOrder = 2;
+  const orb = new THREE.Mesh(toGeo(a.parts.orbit), orbitMat);
+  grp.add(ball, cor, orb); scene.add(grp); eyeGroups[side] = grp;
+}
+
+// ---- head ----
+const state = { head: null };
+async function buildHead() {
+  if (headMode === 'none') return;
+  const g = new THREE.BufferGeometry();
+  if (headMode === 'loft') {
+    const { buildBody } = await import('/tools/build-assets/loft.mjs');
+    const body = buildBody(S, params);
+    g.setAttribute('position', new THREE.BufferAttribute(body.positions, 3)); g.setAttribute('normal', new THREE.BufferAttribute(body.normals, 3));
+    g.setIndex(new THREE.BufferAttribute(body.indices, 1));
+  } else {
+    // bare surface + the same eye socket that loft.mjs pushes in (so that the eye fits)
+    const NA = 160, sList = []; const cap = S.cap;
+    for (let k = 0; k <= 12; k++) { const t = 0.985 * (1 - k / 12) ** 0.8; sList.push(-t * cap); }
+    for (let s = 0; s <= 0.40001; s += 0.004) sList.push(s);
+    const p = [], idx = [];
+    const Ro = eyes.right.outer_radius; const ctr = [eyes.report.skin_point_right, [eyes.report.skin_point_right[0], eyes.report.skin_point_right[1], -eyes.report.skin_point_right[2]]];
+    const disp = (pt) => { let d = 0; for (const c of ctr) { const rr = Math.hypot(pt[0] - c[0], pt[1] - c[1], pt[2] - c[2]); const sk = SOCKET_LOFT;
+      if (rr < Ro * sk.pocket_radius) { const qq = 1 - (rr / (Ro * sk.pocket_radius)) ** 2; d -= sk.pocket_depth * Ro * qq * qq; }
+      d += sk.rim_height * Ro * Math.exp(-(((rr - Ro * sk.rim_radius) / (Ro * sk.rim_width)) ** 2)); } return d; };
+    for (const s of sList) for (let j = 0; j <= NA; j++) {
+      const a = (j / NA) * Math.PI * 2; const pt = S.point(s, a); const d = disp(pt); p.push(...S.point(s, a, d));
+    }
+    for (let i = 0; i < sList.length - 1; i++) for (let j = 0; j < NA; j++) {
+      const a = i * (NA + 1) + j, b = a + 1, c = a + NA + 1, d = c + 1; idx.push(a, c, b, b, c, d);
+    }
+    g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); g.setIndex(idx); g.computeVertexNormals();
+  }
+  const m = new THREE.Mesh(g, headMat); scene.add(m); state.head = m;
+}
+await buildHead();
+
+// ---- cameras / views ----
+const R = eyes.right, c = new THREE.Vector3(...R.center), ax = new THREE.Vector3(...R.axis);
+const views = {
+  eye_front: () => ({ pos: c.clone().addScaledVector(ax, 0.07), tgt: c.clone(), fov: 12 }),
+  eye_oblique: () => { const d = ax.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.75).applyAxisAngle(new THREE.Vector3(0, 0, 1), 0.2); return { pos: c.clone().addScaledVector(d, 0.07), tgt: c.clone(), fov: 12 }; },
+  eye_side: () => ({ pos: c.clone().add(new THREE.Vector3(0.0, 0, 0.07)), tgt: c.clone(), fov: 12 }),
+  head_close: () => ({ pos: c.clone().add(new THREE.Vector3(0.0, 0.006, 0.075)), tgt: c.clone().add(new THREE.Vector3(0, 0, -0.004)), fov: 17 }),
+  head_side: () => ({ pos: new THREE.Vector3(0.062, 0.0, 0.30), tgt: new THREE.Vector3(0.062, 0.0, 0), fov: 14 }),
+  head_oblique: () => ({ pos: new THREE.Vector3(0.20, 0.07, 0.17), tgt: c.clone().add(new THREE.Vector3(-0.002, 0, 0)), fov: 16 }),
+  head_oblique_close: () => ({ pos: new THREE.Vector3(0.115, 0.03, 0.075), tgt: c.clone(), fov: 12 }),
+  head_front: () => ({ pos: new THREE.Vector3(0.30, 0.02, 0.0), tgt: new THREE.Vector3(0.06, 0.0, 0), fov: 12 }),
+  head_front_close: () => ({ pos: new THREE.Vector3(0.20, 0.012, 0.0), tgt: new THREE.Vector3(0.07, 0.004, 0), fov: 14 }),
+  head_left: () => { const cl = new THREE.Vector3(...eyes.left.center); return { pos: cl.clone().add(new THREE.Vector3(0.0, 0.006, -0.075)), tgt: cl.clone().add(new THREE.Vector3(0, 0, 0.004)), fov: 17 }; },
+  head_left_oblique: () => { const cl = new THREE.Vector3(...eyes.left.center); return { pos: new THREE.Vector3(0.115, 0.03, -0.075), tgt: cl, fov: 12 }; },
+};
+const cam = new THREE.PerspectiveCamera(20, W / H, 0.0005, 5);
+function show(name) {
+  const v = views[name](); cam.fov = v.fov; cam.position.copy(v.pos); cam.up.set(0, 1, 0); cam.lookAt(v.tgt); cam.updateProjectionMatrix();
+  renderer.render(scene, cam);
+}
+window.__info = { report: eyes.report, tris: Object.fromEntries(Object.entries(eyes.right.parts).map(([k, g]) => [k, g.indices.length / 3])) };
+const rotDeg = parseFloat(q.get('rot') || '0'), pitchDeg = parseFloat(q.get('pitch') || '0');
+if (rotDeg || pitchDeg) for (const side of ['left', 'right']) { // rotate ball + cornea about the eyeball centre (eye bone), orbit stays on the head
+  const grp = eyeGroups[side]; const [ball, cor] = grp.children;
+  for (const m of [ball, cor]) { m.rotation.set(pitchDeg * Math.PI / 180, rotDeg * Math.PI / 180, 0, 'YXZ'); }
+}
+const only = q.get('shot');
+if (only) { show(only); window.__ready = true; }
+else {
+  const names = (q.get('views') || 'eye_front,eye_oblique,head_side,head_oblique,head_close').split(',');
+  window.__shots = names.map((n) => ({ name: n, apply: () => { show(n); window.__shotReady = true; } }));
+  show(names[0]); window.__ready = true;
+}
+</script>
