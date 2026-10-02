@@ -81,14 +81,20 @@ export function buildBody(surface, params, opts = {}) {
       const rim = Math.exp(-(((rr - eyeOuterR * 1.18) / (eyeOuterR * 0.22)) ** 2)); d += 0.10 * eyeOuterR * rim;
     }
     // cheek swelling in front of the gill cover
-    if (s > 0.10 && s < 0.27) { d += 0.0006 * smooth(0.10, 0.17, s) * (1 - smooth(0.20, 0.26, s)) * latMask(alpha); }
+    if (s > 0.10 && s < 0.27) { d += 0.00030 * smooth(0.10, 0.17, s) * (1 - smooth(0.20, 0.26, s)) * latMask(alpha); }
     // gill-cover trailing edge: body behind it sits slightly lower
-    const e = opEdge(alpha); d -= 0.00032 * smooth(e - 0.007, e + 0.011, s) * (1 - smooth(e + 0.02, e + 0.08, s)) * latMask(alpha);
+    const e = opEdge(alpha); d -= 0.00020 * smooth(e - 0.007, e + 0.011, s) * (1 - smooth(e + 0.02, e + 0.08, s)) * latMask(alpha);
     // thin raised flap right at the edge
-    d += 0.00022 * Math.exp(-(((s - (e - 0.002)) / 0.0035) ** 2)) * latMask(alpha);
+    d += 0.00012 * Math.exp(-(((s - (e - 0.002)) / 0.0035) ** 2)) * latMask(alpha);
     // preopercle groove (arc in front of the gill cover)
     const sp = e - 0.052 + 0.016 * Math.pow(Math.abs(Math.cos(alpha)), 1.5);
-    d -= 0.00022 * Math.exp(-(((s - sp) / 0.0022) ** 2)) * latMask(alpha) * smooth(0.05, 0.3, Math.abs(Math.cos(alpha)) + 0.15);
+    d -= 0.00012 * Math.exp(-(((s - sp) / 0.0022) ** 2)) * latMask(alpha) * smooth(0.05, 0.3, Math.abs(Math.cos(alpha)) + 0.15);
+    // maxilla / supramaxilla plate: a slightly raised band above the mouth line, widening towards the corner (visible as the pale bar in reference photos)
+    if (s > 0.012 && s < cornerS + 0.014) {
+      const da = Math.min(alphaM - alpha, TAU - alphaM - (TAU - alpha)) ; const dr = (alpha <= Math.PI) ? alphaM - alpha : alpha - (TAU - alphaM);
+      const wA = 0.10 + 0.30 * smooth(0.02, cornerS, s);
+      d += 0.00030 * smooth(0.0, 0.05, dr) * (1 - smooth(wA * 0.55, wA, dr)) * smooth(0.012, 0.035, s) * (1 - smooth(cornerS - 0.004, cornerS + 0.014, s));
+    }
     // lips: slightly raised ridge at the mouth line, fading out at the corner
     if (s < cornerS + 0.01) {
       const am = Math.min(Math.abs(alpha - alphaM), Math.abs(alpha - (TAU - alphaM)));

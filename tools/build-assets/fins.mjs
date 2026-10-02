@@ -200,8 +200,8 @@ function reliefAt(F, t, r) {
     const bb = sstep(0.6, 0.95, r) * 0.5;                      // rays divide near the tip: the pleat frequency doubles [E]
     const ridge = (1 - bb) * Math.cos(TAU * jf) + bb * Math.cos(2 * TAU * jf);
     const lead = 1 + F.leadBoost * Math.exp(-Math.pow(jf / 0.45, 2)) + F.trailBoost * Math.exp(-Math.pow((F.n - 1 - jf) / 0.45, 2));
-    // keep the pleat slope moderate where the ray pitch is small: amplitude <= 0.14 * pitch   [E]
-    pleat = Math.min(F.amp, 0.14 * F.pitchAt(r)) * env * ridge * lead;
+    // keep the pleat slope moderate where the ray pitch is small: amplitude <= 0.09 * pitch   [E]
+    pleat = Math.min(F.amp, 0.09 * F.pitchAt(r)) * env * ridge * lead;
   }
   const warp = F.warp * sstep(0.1, 0.5, r) * r * fbm(t * F.warpFreq, r * 0.9 + 4.1, F.seed + 29, 2);
   return pleat + warp;
@@ -357,7 +357,7 @@ function specDorsal(ctx) {
     tgt.push(H * e * (1 + 0.025 * (rng() - 0.5) * 2 * vary));
   }
   finishRays(F); fitRays(F, tgt, A2); prepFin(F);
-  F.collar = { cell: 'col_dorsal', mode: 'dorsal', s: (u) => fp.origin_s - 0.004 + (fp.base_len + 0.008) * u, hw: (u) => 3.4 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.7 * MM };
+  F.collar = { cell: 'col_dorsal', mode: 'dorsal', s: (u) => fp.origin_s - 0.004 + (fp.base_len + 0.008) * u, hw: (u) => 3.4 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.55 * MM };
   F.dims = { base_len: fp.base_len, height: fp.height, origin_s: fp.origin_s };
   return F;
 }
@@ -378,7 +378,7 @@ function specAnal(ctx) {
     tgt.push(H * e * (1 + 0.025 * (rng() - 0.5) * 2 * vary));
   }
   finishRays(F); fitRays(F, tgt, A2); prepFin(F);
-  F.collar = { cell: 'col_anal', mode: 'ventral', s: (u) => fp.origin_s - 0.004 + (fp.base_len + 0.008) * u, hw: (u) => 3.2 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.6 * MM };
+  F.collar = { cell: 'col_anal', mode: 'ventral', s: (u) => fp.origin_s - 0.004 + (fp.base_len + 0.008) * u, hw: (u) => 3.2 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.5 * MM };
   F.dims = { base_len: fp.base_len, height: fp.height, origin_s: fp.origin_s };
   return F;
 }
@@ -400,7 +400,7 @@ function specPelvic(ctx, sideSeed) {
   }
   finishRays(F); fitRays(F, tgt, null); prepFin(F);
   F.clearance = (p, r) => (r > 0.08 ? pushOut(body, p, 0.5 * MM) : p);
-  F.collar = { cell: 'col_pelvic', mode: 'alpha', s: (u) => fp.origin_s - 0.004 + (baseW + 0.008) * u, a: () => aP, hw: (u) => 3.8 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.7 * MM };
+  F.collar = { cell: 'col_pelvic', mode: 'alpha', s: (u) => fp.origin_s - 0.004 + (baseW + 0.008) * u, a: () => aP, hw: (u) => 3.8 * MM * (0.55 + 0.45 * Math.sin(Math.PI * u)), H: 0.5 * MM };
   F.dims = { length: fp.length, origin_s: fp.origin_s };
   return F;
 }
@@ -430,7 +430,7 @@ function specPectoral(ctx, sideSeed) {
   }
   finishRays(F); fitRays(F, tgt, null); prepFin(F);
   F.clearance = (p, r) => (r > 0.06 ? pushOut(body, p, 0.5 * MM) : p);
-  F.collar = { cell: 'col_pectoral', mode: 's', s: sOf, a: aOf, hw: (u) => 3.8 * MM * (0.6 + 0.4 * Math.sin(Math.PI * u)), H: 0.8 * MM };
+  F.collar = { cell: 'col_pectoral', mode: 's', s: sOf, a: aOf, hw: (u) => 3.8 * MM * (0.6 + 0.4 * Math.sin(Math.PI * u)), H: 0.6 * MM };
   F.dims = { length: fp.length, origin_s: fp.origin_s };
   return F;
 }
@@ -456,7 +456,7 @@ function specCaudal(ctx) {
     const u = k / (n - 1); const v = 1 - 2 * u;                     // +1 upper lobe .. -1 lower lobe
     const g = Math.pow(Math.max(1 - Math.pow(Math.abs(v), 2.2), 0), 1.4);
     const lobe = v > 0 ? lobeU : lobeL;
-    const tip = [tipX + fork * g + 0.012 * SL * Math.pow(sstep(0.78, 1, Math.abs(v)), 1.5), yC + Yh * v * lobe, 0];   // rounded lobe tips
+    const tip = [tipX + fork * g + SL * (-0.008 + 0.012 * Math.pow(sstep(0.78, 1, Math.abs(v)), 1.5)), yC + Yh * v * lobe, 0];   // rounded lobe tips (outermost rays slightly shorter)
     const root = rootOf(v);
     const kap = 0.2 * Math.pow(Math.abs(v), 1.6) + 0.02 * (rng() - 0.5), bnd = cup * (v * v - 0.35) + twist * v + 0.01 * (rng() - 0.5), Cv = [0, v >= 0 ? 1 : -1, 0];
     // choose D and L so that the curved ray still ends exactly at `tip` (in the fin plane)
@@ -533,8 +533,8 @@ function texSpecs(ctx, finSpecs) {
   T.dorsal = mk('dorsal', finSpecs.dorsal, { mem: rgb(132, 120, 110), ray: rgb(176, 160, 150), flesh: rgb(92, 82, 66), aMem: 0.4, aRay: 0.74, aBase: 0.86, ridgeH: 0.09, rough: 0.55, white: we.dorsal, dots: G.dorsal_dots ?? 1, rayTint: rgb(150, 110, 70), rayTintAmt: 0.0 });
   T.anal = mk('anal', finSpecs.anal, { mem: rgb(196, 186, 180), ray: rgb(230, 222, 214), flesh: rgb(176, 168, 156), aMem: 0.42, aRay: 0.74, aBase: 0.86, ridgeH: 0.09, rough: 0.52, white: we.anal, rayTint: rgb(214, 128, 78), rayTintAmt: 0.22 });
   T.pelvic = mk('pelvic', finSpecs.pelvic, { mem: rgb(194, 178, 160), ray: rgb(232, 220, 206), flesh: rgb(176, 168, 156), aMem: 0.44, aRay: 0.76, aBase: 0.86, ridgeH: 0.09, rough: 0.52, white: we.pelvic, rayTint: rgb(214, 128, 78), rayTintAmt: 0.22 });
-  T.pectoral = mk('pectoral', finSpecs.pectoral, { mem: G.pectoral_color ?? rgb(222, 172, 82), ray: rgb(236, 196, 120), flesh: rgb(196, 176, 148), aMem: 0.5, aRay: 0.8, aBase: 0.88, ridgeH: 0.08, rough: 0.5, white: we.pectoral, rayTint: rgb(200, 120, 40), rayTintAmt: 0.0, leadDark: 0.45 });
-  T.caudal = mk('caudal', finSpecs.caudal, { mem: rgb(134, 122, 112), ray: rgb(180, 166, 156), flesh: rgb(104, 96, 80), aMem: 0.42, aRay: 0.74, aBase: 0.9, ridgeH: 0.09, rough: 0.55, white: 0, sat: sat, orange: rgb(190, 100, 48) });
+  T.pectoral = mk('pectoral', finSpecs.pectoral, { mem: G.pectoral_color ?? rgb(210, 178, 112), ray: rgb(228, 198, 140), flesh: rgb(196, 160, 110), aMem: 0.42, aRay: 0.78, aBase: 0.88, ridgeH: 0.08, rough: 0.5, white: we.pectoral, rayTint: rgb(200, 120, 40), rayTintAmt: 0.0, leadDark: 0.45 });
+  T.caudal = mk('caudal', finSpecs.caudal, { mem: rgb(134, 122, 112), ray: rgb(180, 166, 156), flesh: rgb(148, 136, 122), aMem: 0.42, aRay: 0.74, aBase: 0.75, ridgeH: 0.09, rough: 0.55, white: 0, sat: sat, orange: rgb(190, 100, 48) });
   return T;
 }
 
@@ -556,7 +556,9 @@ function evalFinPixel(T, t, r, phys, out) {
   let a = lerp(T.aMem, T.aRay, ray);
   a *= 0.9 + 0.2 * mott; a *= 0.92 + 0.12 * stri;
   a = Math.max(a, T.aBase * (1 - sstep(0.0, 0.3, r)));
-  const edge = sstep(0.8, 1.0, r); a *= 1 - 0.78 * edge;                        // margin and tip fade [06 §6.5 ④]
+  const edge = sstep(0.86, 1.0, r); a *= 1 - 0.6 * edge;                        // margin and tip fade [06 §6.5 ④]
+  const vcut = 0.5 - 0.5 * Math.cos(TAU * jf);                                   // small V notches between ray tips (also kept in alpha for the low LODs)
+  a *= 1 - sstep(0.965, 1.0, r + 0.05 * Math.pow(vcut, 1.2));
   a *= 1 - 0.3 * sstep(0.55, 1.0, Math.abs(t - 0.5) * 2) * sstep(0.5, 1.0, r);   // outer edges thinner
   let rough = T.rough - 0.07 * ray;
   const kind = T.kind;
@@ -579,10 +581,12 @@ function evalFinPixel(T, t, r, phys, out) {
     }
     if (T.white > 0) col = mixc(col, rgb(228, 224, 214), T.white * sstep(0.7, 0.98, r) * Math.exp(-Math.pow(t / 0.25, 2)));
   } else if (kind === 'pectoral') {
-    // amber, deeper at the base; olive-brown leading band on some individuals [03 §3.5.4]
-    col = mixc(col, rgb(204, 132, 40), 0.35 * (1 - sstep(0, 0.6, r)));
-    col = mixc(col, rgb(214, 190, 120), 0.35 * sstep(0.5, 1.0, r));
-    col = mixc(col, rgb(128, 104, 56), T.leadDark * Math.exp(-Math.pow(t / 0.06, 2)) * (0.5 + 0.5 * sstep(0.05, 0.4, r)));
+    // greyish-yellow translucent membrane; amber only toward the base and along the leading edge ("基部ほど濃い") [03 §3.5.4]
+    col = mixc(col, rgb(214, 140, 44), 0.6 * (1 - sstep(0.0, 0.55, r)));
+    col = mixc(col, rgb(208, 186, 140), 0.4 * sstep(0.45, 1.0, r));
+    col = mixc(col, rgb(196, 138, 52), 0.5 * Math.exp(-Math.pow(t / 0.09, 2)) * (0.4 + 0.6 * sstep(0.0, 0.6, r)));
+    col = mixc(col, rgb(128, 104, 56), T.leadDark * 0.6 * Math.exp(-Math.pow(t / 0.04, 2)) * (0.5 + 0.5 * sstep(0.05, 0.4, r)));
+    a *= 1 - 0.3 * sstep(0.35, 1.0, r);
     if (T.white > 0) col = mixc(col, rgb(236, 232, 220), T.white * Math.exp(-Math.pow(t / 0.1, 2)));
   } else if (kind === 'pelvic' || kind === 'anal') {
     col = mixc(col, T.rayTint, T.rayTintAmt * ray * sstep(0.15, 0.8, r));
@@ -608,7 +612,9 @@ function evalFinPixel(T, t, r, phys, out) {
   out.r = col[0]; out.g = col[1]; out.b = col[2]; out.a = clamp(a, 0, 1);
   // ray ridge height (mm) for the normal map: narrow line on each ray, fades toward the tip
   const hr = T.ridgeH * Math.exp(-Math.pow(dl / (sig * 0.8), 2)) * sstep(0.0, 0.12, r) * (1 - 0.55 * sstep(0.5, 1.0, r)) * (0.85 + 0.3 * hash2(k, 6, T.seed));
-  out.h = hr + 0.012 * vnoise(jf * 5, r * 30, T.seed + 17);
+  const pitchMm = (phys.w / (n - 1)) / MM * (0.35 + 0.65 * sstep(0.0, 0.5, r));                     // approximate local ray pitch (mm)
+  const hp = 0.035 * pitchMm * Math.cos(TAU * jf) * sstep(0.05, 0.25, r) * (1 - 0.5 * sstep(0.5, 1, r));   // broad pleat, slope ~0.3
+  out.h = hr + hp + 0.012 * vnoise(jf * 5, r * 30, T.seed + 17);
   out.rough = rough; out.ao = 1 - 0.28 * rootW - 0.07 * (1 - ray) * 0.6;
   return out;
 }
@@ -639,7 +645,7 @@ function paintAtlas(ctx, T, physByCell, extra) {
       const X = cell.x - PAD + gx, Y = cell.y - PAD + gy; if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
       const hx = (hmap[gy * gw + gx + 1] - hmap[gy * gw + gx - 1]) / (2 * dx), hy = (hmap[(gy + 1) * gw + gx] - hmap[(gy - 1) * gw + gx]) / (2 * dy);
       // glTF: green = up in the image, so n.y = +dH/dy_img;  n.x = -dH/dx
-      const nx = -hx * 1.4, ny = hy * 1.4, nz = 1; const il = 1 / Math.hypot(nx, ny, nz);
+      const nx = -hx * 1.1, ny = hy * 1.1, nz = 1; const il = 1 / Math.hypot(nx, ny, nz);
       const px = data[gy * gw + gx];
       put(X, Y, [px.r, px.g, px.b], px.a, nx * il, ny * il, nz * il, px.ao, px.rough);
     }
@@ -647,10 +653,10 @@ function paintAtlas(ctx, T, physByCell, extra) {
   // opaque lobe (adipose) and collar swatches
   const fleshCells = [
     ['adipose', rgb(152, 150, 126), rgb(112, 108, 92), 1.0, 0.68, true],
-    ['col_dorsal', rgb(104, 94, 76), rgb(96, 86, 70), 0.0, 0.62, false],
-    ['col_pectoral', rgb(194, 176, 150), rgb(176, 156, 134), 0.0, 0.6, false],
-    ['col_pelvic', rgb(190, 184, 170), rgb(176, 170, 156), 0.0, 0.6, false],
-    ['col_anal', rgb(190, 184, 170), rgb(176, 170, 156), 0.0, 0.6, false],
+    ['col_dorsal', rgb(100, 90, 74), rgb(92, 83, 68), 0.0, 0.8, false],
+    ['col_pectoral', rgb(178, 160, 138), rgb(166, 146, 126), 0.0, 0.8, false],
+    ['col_pelvic', rgb(178, 172, 160), rgb(166, 160, 148), 0.0, 0.8, false],
+    ['col_anal', rgb(178, 172, 160), rgb(166, 160, 148), 0.0, 0.8, false],
   ];
   for (const [key, c0, c1, , ro, opaque] of fleshCells) {
     const cell = ATLAS_CELLS[key];
@@ -666,7 +672,7 @@ function paintAtlas(ctx, T, physByCell, extra) {
       } else {
         col = mixc(c1, c0, 0.5 + 0.5 * nz_);
         const dE = Math.hypot(2 * uu - 1, 2 * vv - 1);
-        a = (1 - sstep(0.25, 1.0, dE)) * 0.9;
+        a = (1 - sstep(0.2, 1.0, dE)) * 0.42;
       }
       const m = 0.97 + 0.06 * nz_; col = [col[0] * m, col[1] * m, col[2] * m];
       put(X, Y, col, a, nz_ * 0.04, nz_ * 0.04, 1, 0.9 + 0.1 * (0.5 + nz_), ro);
@@ -687,7 +693,7 @@ function lodParams(d) {
     return { cpr, rowsMul: 0.9 + 0.1 * x, sides: 4, tubeRowsMul: 1, collar: [Math.round(10 * x), 4], adipose: [Math.round(14 * x), 6], notch: true, pleat: true, stride: 1, name: 'LOD0' };
   }
   if (d >= 0.4) return { cpr: 2, rowsMul: 0.6, sides: 0, tubeRowsMul: 0, collar: [6, 3], adipose: [8, 4], notch: true, pleat: true, stride: 1, name: 'LOD1' };   // pleat only as a zig-zag; tubes dropped
-  return { cpr: 1, rowsMul: 0.4, sides: 0, tubeRowsMul: 0, collar: null, adipose: [6, 3], notch: false, pleat: false, stride: 2, name: 'LOD2' };                  // ray-pair columns, no pleat / notch geometry
+  return { cpr: 1, rowsMul: 0.7, sides: 0, tubeRowsMul: 0, collar: null, adipose: [6, 3], notch: false, pleat: false, stride: 2, name: 'LOD2' };                  // ray-pair columns, no pleat / notch geometry
 }
 
 export function buildFins({ surface, params, genome = {}, seed = 1, detail = 1 } = {}) {
@@ -791,11 +797,14 @@ function sheetStats(F, sheet, M, surface, SL) {
 }
 
 function finReport(name, F, ctx) {
-  const SL = ctx.SL; const st = F.stats; const base = name.split('_')[0];
+  const SL = ctx.SL; const st = F.stats; const base = name.split('_')[0]; const left = name.endsWith('_L'); const zs = left ? -1 : 1;
   const rep = { rays: F.n, origin_s: F.dims.origin_s };
   const r0 = F.rays[0].B, r1 = F.rays[F.n - 1].B;
-  rep.pivot = [(r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2, (r0[2] + r1[2]) / 2];      // centre of the root line (body-local, right-side frame)
-  rep.bbox = st.bbox;
+  rep.pivot = [(r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2, zs * (r0[2] + r1[2]) / 2];      // centre of the root line (body-local metres) = hinge for the base bone
+  const b = st.bbox; rep.bbox = left ? [b[0], b[1], -b[5], b[3], b[4], -b[2]] : b;      // [minX, minY, minZ, maxX, maxY, maxZ]
+  // mean rest direction of the rays (hinge axis reference) and the fin-plane normal (body-local)
+  const mean = F.rays.reduce((a, q) => add(a, q.D), [0, 0, 0]);
+  rep.restDir = norm([mean[0], mean[1], zs * mean[2]]); rep.planeNormal = [F.Nf[0], F.Nf[1], zs * F.Nf[2]];
   if (base === 'dorsal' || base === 'anal') {
     rep.base_len_over_SL = len(sub(r1, r0)) / SL; rep.height_over_SL = st.maxVert / SL; rep.target = { base_len: F.dims.base_len, height: F.dims.height };
     rep.longest_ray_over_SL = st.maxChord / SL;
@@ -803,7 +812,7 @@ function finReport(name, F, ctx) {
     rep.length_over_SL = st.maxChord / SL; rep.target = { length: F.dims.length };
   } else if (base === 'caudal') {
     rep.span_over_SL = (st.bbox[4] - st.bbox[1]) / SL; rep.length_over_SL = (ctx.surface.sToX(1.0) - st.bbox[0]) / SL;
-    const mid = F.rays[(F.n - 1) >> 1]; const tipMid = rayPoint(F, (F.n - 1) >> 1, 1);
+    const tipMid = rayPoint(F, (F.n - 1) >> 1, 1);
     rep.fork_depth_over_SL = (tipMid[0] - st.bbox[0]) / SL; rep.target = { span: F.dims.span, length: F.dims.length, fork_depth: F.dims.fork_depth };
   }
   return rep;

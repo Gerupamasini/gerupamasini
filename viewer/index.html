@@ -63,6 +63,8 @@ ui.appendChild(document.createElement('br'));
 act('FeedingAttack (開口)', () => fish.triggerStrike(0.12 / st.slow)); act('CStartEscape ←', () => fish.triggerEscape(1)); act('CStartEscape →', () => fish.triggerEscape(-1));
 const lab = (txt, el) => { const l = document.createElement('label'); l.textContent = txt + ' '; l.appendChild(el); ui.appendChild(l); };
 const chk = (key) => { const c = document.createElement('input'); c.type = 'checkbox'; c.checked = st[key]; c.onchange = () => { st[key] = c.checked; }; return c; };
+const lodSel = document.createElement('select'); ['auto', '0', '1', '2'].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = 'LOD ' + v; lodSel.appendChild(o); }); lodSel.value = q.get('lod') || 'auto';
+lodSel.onchange = () => fish.setLOD(lodSel.value === 'auto' ? null : +lodSel.value); ui.appendChild(lodSel);
 lab('追従', chk('follow')); lab('自動周回', chk('wander'));
 const sl = document.createElement('input'); sl.type = 'range'; sl.min = 0.1; sl.max = 1; sl.step = 0.05; sl.value = st.slow; sl.oninput = () => { st.slow = +sl.value; }; lab('時間倍率', sl);
 function setMode(k) { st.mode = k; for (const n in btns) btns[n].classList.toggle('on', n === k); }
@@ -85,7 +87,7 @@ function frame() {
   hud.textContent = `mode ${st.mode}\nU ${fish.wave.U.toFixed(2)} BL/s  f ${fish.wave.f.toFixed(2)} Hz  A ${fish.wave.A.toFixed(3)} SL\nground ${(fish.speed / fish.SL).toFixed(2)} BL/s  heading ${(fish.heading * 57.3).toFixed(0)}°`;
   requestAnimationFrame(frame);
 }
-window.__fish = fish;
+window.__fish = fish; if (q.get('lod') && q.get('lod') !== 'auto') fish.setLOD(+q.get('lod'));
 // headless: ?sim=3 steps 3 s then freezes; ?cam=side|top|front|head|persp|tail
 const preset = q.get('cam');
 if (q.has('sim')) {

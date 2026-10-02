@@ -23,6 +23,7 @@ export class Yamame {
     this.root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) this.materials[m.name] = m; });
     const cor = this.materials.M_Eye_Cornea;
     if (cor) { cor.color.set(0x000000); cor.blending = THREE.AdditiveBlending; cor.transparent = true; cor.opacity = 1; cor.depthWrite = false; cor.roughness = 0.03; if ('specularIntensity' in cor) cor.specularIntensity = 0.1; cor.needsUpdate = true; }
+    this.#buildLOD(opts);
     this.spine = Array.from({ length: SPINE_COUNT }, (_, j) => this.bones[`spine_${String(j).padStart(2, '0')}`]);
     this.rootBone = this.bones.fish_root;
     this.wave = new WaveDriver({ phase0: opts.phase0 ?? Math.random() * 6.28 });
@@ -78,6 +79,33 @@ export class Yamame {
     this.#headAndGills(dt, intent, w);
     this.#fins(dt, intent, w, res);
     return res;
+  }
+
+  /** Group the *_LODn skinned meshes (same Skeleton / bindMatrix, 07 §7.5) into one THREE.LOD; distances are in SL multiples (06 §6.8.1). */
+  #buildLOD(opts) {
+    const holder = this.root.getObjectByName('Yamame') || this.root, levels = [];
+    for (const c of [...holder.children]) { const m = /^(Body|Fins)_LOD(\d)$/.exec(c.name); if (m) (levels[+m[2]] ??= []).push(c); }
+    this.lodLevels = levels.filter(Boolean).length;
+    if (this.lodLevels < 2 || opts.lod === false) return;
+    const lod = new THREE.LOD(); lod.name = 'YamameLOD';
+    const dist = opts.lodDistances ?? [0, 4 * this.SL, 12 * this.SL];
+    levels.forEach((nodes, L) => {
+      if (!nodes) return;
+      const g = new THREE.Group(); g.name = `LOD${L}`; nodes.forEach((n) => g.add(n));
+      lod.addLevel(g, dist[L] ?? dist[dist.length - 1], L ? 0.1 : 0);
+      if (L >= 1) g.traverse((m) => {   // cheaper material variants (06 §6.8.1): no iridescence at LOD1, no clearcoat / normal map at LOD2
+        if (!m.isMesh) return;
+        const cheap = (mat) => { const c = mat.clone(); if ('iridescence' in c) c.iridescence = 0; if (L >= 2) { if ('clearcoat' in c) c.clearcoat = 0; c.normalMap = null; } return c; };
+        m.material = Array.isArray(m.material) ? m.material.map(cheap) : cheap(m.material);
+      });
+    });
+    holder.add(lod); this.lod = lod;
+  }
+
+  /** Force a LOD level (null = automatic by camera distance). */
+  setLOD(level) {
+    if (!this.lod) return; this.lod.autoUpdate = level == null;
+    if (level != null) this.lod.levels.forEach((lv, i) => { lv.object.visible = i === level; });
   }
 
   #setRot(name, axis, ang) { const b = this.bones[name]; if (!b) return; q.setFromAxisAngle(axis, ang); b.quaternion.copy(this.rest[name].q).multiply(q); }

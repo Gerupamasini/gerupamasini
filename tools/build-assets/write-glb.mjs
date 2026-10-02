@@ -11,7 +11,7 @@ function quatFromZ(dir) {
   const w = 1 + z; const q = [-y, x, 0, w]; const n = Math.hypot(...q); return q.map((v) => v / n);
 }
 
-export async function writeGLB({ file, body, fins, eyes, rig, textures, params, meta = {}, weights }) {
+export async function writeGLB({ file, body, fins, eyes, rig, textures, params, meta = {}, weights, lodBodies = [], lodFins = [] }) {
   const doc = new Document();
   const clearcoatExt = doc.createExtension(KHRMaterialsClearcoat), iridExt = doc.createExtension(KHRMaterialsIridescence), iorExt = doc.createExtension(KHRMaterialsIOR), specExt = doc.createExtension(KHRMaterialsSpecular);
   const buffer = doc.createBuffer('main');
@@ -86,6 +86,16 @@ export async function writeGLB({ file, body, fins, eyes, rig, textures, params, 
   bodyMesh.addPrimitive(makePrim(body.mouth, mats.mouth, weights.mouth, 'mouth'));
   const bodyNode = doc.createNode('Body_LOD0').setMesh(bodyMesh).setSkin(skin); rootNode.addChild(bodyNode);
 
+  // lower LODs share the skin (same Skeleton / bindMatrix); the runtime assembles THREE.LOD from the *_LODn nodes
+  for (const L of lodBodies) {
+    const m = doc.createMesh(`Body_LOD${L.level}`); m.addPrimitive(makePrim(L.body, mats.body, L.weights.body, `body${L.level}`));
+    if (L.withMouth) m.addPrimitive(makePrim(L.body.mouth, mats.mouth, L.weights.mouth, `mouth${L.level}`));
+    rootNode.addChild(doc.createNode(`Body_LOD${L.level}`).setMesh(m).setSkin(skin));
+  }
+  for (const L of lodFins) {
+    const m = doc.createMesh(`Fins_LOD${L.level}`); m.addPrimitive(makePrim(L.fins.geometry, mats.fin, L.weights, `fins${L.level}`));
+    rootNode.addChild(doc.createNode(`Fins_LOD${L.level}`).setMesh(m).setSkin(skin));
+  }
   if (fins) {
     const finMesh = doc.createMesh('Fins_LOD0'); finMesh.addPrimitive(makePrim(fins.geometry, mats.fin, weights.fins, 'fins'));
     const finNode = doc.createNode('Fins_LOD0').setMesh(finMesh).setSkin(skin); rootNode.addChild(finNode);
