@@ -103,7 +103,7 @@ export const CONFORM_FOLD = [0.6, 0.8];
 export const conformWeight = (fold) => smooth01(CONFORM_FOLD[0], CONFORM_FOLD[1], fold);
 const FLAT = 0.12; // folded vanes pressed flat: this much of the camber is kept
 // folded primary tips' distance from the midline (mm), p1 … p10
-const PRIMARY_TIP_X = [17, 16, 15, 13, 9.5, 9.2, 7.2, 5.1, 4.35, 3.6];
+const PRIMARY_TIP_X = [17, 16, 15, 13, 9.5, 9.2, 7.7, 5.1, 4.35, 3.6];
 // mm: the middle secondaries' tips lowered, under the fuller flank of the rear body (validation §Z)
 const SEC_DROP = -2.5;
 const OVER_RUMP = 2; // mm: the primaries' rise over the upper-tail coverts behind the rump
@@ -449,7 +449,7 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
       // shoulder where p6 / p5 ended (validation §Z)
       const x = PRIMARY_TIP_X[f.index - 1];
       // p9 tip (−84, 57.4), spec §10.3; the chord ends higher by the shaft's ventral bend (featherOffset)
-      const y = 57.0 + (10 - f.index) * 0.35 + (f.index <= 6 ? -SEC_DROP : 0) + (f.index === 10 ? 2.5 : f.index === 8 ? 0.8 : 0) + f.curve * L * 0.83;
+      const y = 57.0 + (10 - f.index) * 0.35 + (f.index <= 6 ? -SEC_DROP : 0) + (f.index === 10 ? 2.5 : f.index === 8 ? 0.8 : f.index === 7 ? 1.2 : 0) + f.curve * L * 0.83;
       const dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));
       tip = new THREE.Vector3(x, y, base.z - dz);
       n = V([0.55, 0.83, 0]).normalize();

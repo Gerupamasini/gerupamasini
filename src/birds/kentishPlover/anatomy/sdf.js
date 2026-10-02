@@ -137,21 +137,30 @@ export function makeBodySDF(sculpt) {
   const cuts = sculpt.cuts || [];
   const adds = sculpt.adds || []; // smooth-unioned after the cuts (eyelid folds over the eye openings)
   const bed = sculpt.bed;
-  const plan = sculpt.plan;
+  const plans = sculpt.plan ? [].concat(sculpt.plan) : null; // one layer or several
   const k = sculpt.smooth;
   const field = makeField(prims, cuts, adds, k);
   return (x, y, z) => {
     let d;
-    if (plan) {
-      const [c, dc] = planScale(plan, z);
-      if (c !== 1) {
-        // across-scale s(y, z) = 1 + (c(z) − 1)·w(y): full in the band of the folded wing, `base` of it under the belly
-        const [w, dw] = planBand(plan, y);
-        const s = 1 + (c - 1) * w;
-        const u = x / s;
+    if (plans) {
+      // across-scale s(y, z) = Π (1 + (c(z) − 1)·w(y)) over the layers: c from the layer's knots, w its height band
+      let sc = 1;
+      let sz = 0;
+      let sy = 0;
+      for (const p of plans) {
+        const [c, dc] = planScale(p, z);
+        if (c === 1 && !dc) continue;
+        const [w, dw] = planBand(p, y);
+        const f = 1 + (c - 1) * w;
+        sc *= f;
+        sz += (dc * w) / f;
+        sy += ((c - 1) * dw) / f;
+      }
+      if (sc !== 1 || sz || sy) {
+        const u = x / sc;
         // (the stretched field, divided by its gradient's growth along y and z so it stays ≈ a distance; across it
         // is s times flatter, which only errs toward the outline)
-        d = field(u, y, z) / Math.hypot(1, (u * dc * w) / s, (u * (c - 1) * dw) / s);
+        d = field(u, y, z) / Math.hypot(1, u * sz, u * sy);
       } else d = field(x, y, z);
     } else d = field(x, y, z);
     return bed ? d + bedDepth(bed, x, y, z) : d;
