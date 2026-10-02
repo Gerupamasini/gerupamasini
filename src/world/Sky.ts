@@ -5,6 +5,8 @@ import { Sky } from 'three/addons/objects/Sky.js';
 export class SkyDome {
   readonly sky: Sky;
   readonly sunLight: DirectionalLight;
+  private readonly uCloudTime = { value: 0 };
+  private readonly uCloudAmt = { value: 0.5 };
   readonly hemi: HemisphereLight;
   readonly fogColor = new Color();
   private readonly pmrem: PMREMGenerator;
@@ -24,10 +26,33 @@ export class SkyDome {
     // the Preetham model comes out far brighter than the ground at any exposure; scale the dome so the sky keeps its
     // blue and the environment maps built from it stop washing the flat out
     const mat = this.sky.material;
-    mat.uniforms.uSkyScale = { value: 0.4 };
+    mat.uniforms.uSkyScale = { value: 0.32 };
+    mat.uniforms.uCloudTime = this.uCloudTime;
+    mat.uniforms.uCloudAmt = this.uCloudAmt;
+    // a few soft cumulus (fBm on a plane high above, after MahazeViewer's analytic sky), lit by the sun's side,
+    // drifting slowly; they also end up in the environment cube, so the water reflects them
     mat.fragmentShader = mat.fragmentShader
-      .replace('uniform float mieDirectionalG;', 'uniform float mieDirectionalG;\n\t\tuniform float uSkyScale;')
-      .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( texColor * uSkyScale, 1.0 );');
+      .replace('uniform float mieDirectionalG;', `uniform float mieDirectionalG;
+		uniform float uSkyScale;
+		uniform float uCloudTime;
+		uniform float uCloudAmt;
+		float hashC(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+		float vnoiseC(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+		  return mix(mix(hashC(i), hashC(i + vec2(1, 0)), f.x), mix(hashC(i + vec2(0, 1)), hashC(i + vec2(1, 1)), f.x), f.y); }
+		float fbmC(vec2 p, int oct) { float s = 0.0, a = 0.5; for (int k = 0; k < 6; k++) { if (k >= oct) break; s += a * vnoiseC(p); p = p * 2.03 + 7.1; a *= 0.5; } return s; }`)
+      .replace('gl_FragColor = vec4( texColor, 1.0 );', `vec3 skyCol = texColor * uSkyScale;
+			{
+				vec3 d = normalize(direction);
+				if (d.y > 0.02) {
+					vec2 cp = d.xz / (d.y + 0.08) * 1.4 + vec2(uCloudTime * 0.004, uCloudTime * 0.0015);
+					float cl = smoothstep(0.55 + 0.25 * (1.0 - uCloudAmt), 0.85, fbmC(cp, 5));
+					float mu = max(dot(d, vSunDirection), 0.0);
+					vec3 horizonCol = texColor * uSkyScale;
+					vec3 cloud = mix(vec3(1.0), vec3(0.72, 0.75, 0.8), smoothstep(0.6, 1.0, fbmC(cp * 1.7 + 3.0, 3))) * (horizonCol * 1.15 + vec3(0.6, 0.57, 0.5) * 0.12 * pow(mu, 6.0));
+					skyCol = mix(skyCol, cloud, cl * smoothstep(0.02, 0.2, d.y));
+				}
+			}
+			gl_FragColor = vec4( skyCol, 1.0 );`);
     mat.needsUpdate = true;
     const u = this.sky.material.uniforms;
     u.turbidity.value = 3;
@@ -71,6 +96,8 @@ export class SkyDome {
     this.elevation = elevation;
     this.overcast = overcast;
     this.sky.material.uniforms.sunPosition.value.copy(sunDir);
+    this.uCloudTime.value += 1 / 60;
+    this.uCloudAmt.value = 0.62 + 0.38 * MathUtils.clamp(overcast, 0, 1);
     const day = MathUtils.smoothstep(elevation, -4, 10);
     const dusk = 1 - MathUtils.smoothstep(elevation, -2, 18);
     const cloud = MathUtils.clamp(overcast, 0, 1);

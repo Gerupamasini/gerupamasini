@@ -3,6 +3,7 @@ import type { MapDef, TideStationDef } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { Terrain, loadTerrainGrid } from '../world/Terrain';
 import { WaterPass } from '../world/Water';
+import { createWaves } from '../world/Waves';
 import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
 import { carveFeedingPits } from '../world/FeedingPits';
@@ -53,7 +54,10 @@ export class World {
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain, 5, pits);
     terrain.setSpill(habitat.poolLevels);
-    const water = new WaterPass(terrain);
+    // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
+    const waves = createWaves({ windDir: 0.7, depth: 0.6, seed: map.id.length * 131 + 7 });
+    terrain.setWaves(waves);
+    const water = new WaterPass(terrain, waves);
     const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
@@ -81,15 +85,16 @@ export class World {
     this.tod = timeOfDay(sp.elevation, jstParts(gameMs).hour);
     this.season = seasonOf(gameMs);
     const sunUp = Math.max(0, Math.min(1, (sp.elevation + 2) / 14)) * (1 - 0.8 * this.overcast);
-    this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.timeAcc, sunUp);
     this.sky.update(this.sunDir, sp.elevation, anchor, this.overcast);
     this.fog.color.copy(this.sky.fogColor);
     this.fog.density = 0.0024 * (1 + 2.5 * this.overcast);
     const day = Math.max(0, Math.min(1, (sp.elevation + 4) / 14));
     this.water.update(dt, {
       sunUp, sunDir: this.sunDir, sunCol: this.sky.sunColorHdr(this.sunColTmp), ambient: this.sky.hemi.intensity * (0.5 + 0.6 * day),
-      fogColor: this.sky.fogColor, fogDensity: this.fog.density, env: this.sky.envCube,
+      fogColor: this.sky.fogColor, fogDensity: this.fog.density, env: this.sky.envCube, day,
     });
+    // the bed's caustics run on the water's clock so they sit under the ripples that cast them
+    this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.water.uniforms.uTime.value, sunUp, this.sunDir);
     // lift the exposure at night so the flat stays readable under the moon
     this.exposure = 0.58 + 0.32 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
     this.scene.background = this.sky.fogColor;

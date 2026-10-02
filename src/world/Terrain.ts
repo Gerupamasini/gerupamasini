@@ -3,6 +3,7 @@ import {
   type IUniform, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
 import { makeSpillTexture } from './Water';
+import { WAVES_GLSL, type WaveSet } from './Waves';
 import type { MapDef, Substrate } from '../data/schemas';
 import { DATA_BASE } from '../data/loader';
 
@@ -81,6 +82,9 @@ export class Terrain {
   private readonly uWet: IUniform<number> = { value: -10 };
   private readonly uTime: IUniform<number> = { value: 0 };
   private readonly uSunUp: IUniform<number> = { value: 1 };
+  private readonly uSunDirT: IUniform<Vector3> = { value: new Vector3(0, 1, 0) };
+  private readonly uCausticGain: IUniform<number> = { value: 2.6 };
+  private waves: WaveSet | null = null;
 
   constructor(grid: TerrainGrid, palette: Substrate[]) {
     this.n = grid.n;
@@ -207,6 +211,9 @@ export class Terrain {
       shader.uniforms.uWetLevel = uWet;
       shader.uniforms.uTime = uTime;
       shader.uniforms.uSunUp = this.uSunUp;
+      shader.uniforms.uSunDirT = this.uSunDirT;
+      shader.uniforms.uCausticGain = this.uCausticGain;
+      if (this.waves) Object.assign(shader.uniforms, this.waves.uniforms);
       shader.uniforms.uSpillTex = this.uSpill;
       shader.uniforms.uHalf = { value: this.half };
       shader.vertexShader = shader.vertexShader
@@ -220,8 +227,11 @@ uniform float uWaterLevel;
 uniform float uWetLevel;
 uniform float uTime;
 uniform float uSunUp;
+uniform vec3 uSunDirT;
+uniform float uCausticGain;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
+${WAVES_GLSL}
 float hash21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y); }
@@ -250,6 +260,13 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   float ripple = cos(ripplePhase(vWorldPos.xz)) * rippleAmp(vWorldPos.xz) * (0.3 + 0.7 * isSand);
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 - ripple * 0.05;
   diffuseColor.rgb *= detail;
+  // diatom film: a patchy golden-brown bloom on undisturbed mud and muddy sand; reduced (black) mud in the
+  // lowest, longest-wet hollows (after MahazeViewer's sediment)
+  float muddy = smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate));
+  float filmP = muddy * smoothstep(0.35, 0.75, vnoise(vWorldPos.xz * 0.11 - 11.0)) * smoothstep(0.3, 0.7, vnoise(vWorldPos.xz * 0.9 + 4.0));
+  diffuseColor.rgb *= mix(vec3(1.0), vec3(0.78, 0.68, 0.42), filmP * 0.6);
+  float reducedP = smoothstep(1.5, 2.5, vSubstrate) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.058, 0.056, 0.052), reducedP * 0.7);
   // the water level here: the tide, or a tide pool's own level above it
   float spillH = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
   float lvl = (spillH > uWaterLevel + 0.01 && spillH > vWorldPos.y + 0.003) ? spillH : uWaterLevel;
@@ -258,16 +275,19 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
   diffuseColor.rgb *= mix(1.0, 0.68, wet);
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.88, 0.93, 1.0), 0.3 * wet);
-  // sunlight caustics on the submerged bed: moving cell edges that fade with depth
+  // sunlight caustics on the submerged bed, focused by the same ripples that bend the view of it: the inverse
+  // Jacobian of the refraction map from the wave field's curvature (pools are calm: broad, slow, soft bands)
   float depth = lvl - vWorldPos.y;
-  float under = smoothstep(0.0, 0.04, depth) * exp(-depth * 0.9) * uSunUp;
+  float under = smoothstep(0.0, 0.006, depth) * uSunUp;
   if (under > 0.001) {
-    vec2 cp = vWorldPos.xz * 2.2;
-    float n1 = vnoise(cp + vec2(uTime * 0.22, uTime * 0.17));
-    float n2 = vnoise(cp * 1.31 + vec2(-uTime * 0.19, uTime * 0.13) + 5.7);
-    float n3 = vnoise(cp * 0.7 + vec2(uTime * 0.08, -uTime * 0.1) + 11.3);
-    float caustic = pow(1.0 - abs(n1 - n2), 9.0) * 1.6 + pow(1.0 - abs(n2 - n3), 12.0) * 0.8;
-    diffuseColor.rgb *= 1.0 + caustic * under * 0.9;
+    float calmC = (spillH > uWaterLevel + 0.01 && spillH > vWorldPos.y + 0.003) ? 1.0 : 0.0;
+    vec3 L = normalize(uSunDirT);
+    float D = depth / max(L.y, 0.2);
+    float fp = length(fwidth(vWorldPos));
+    float caustic = waveCaustic(vWorldPos.xz, L, D, uTime, fp, uCausticGain * mix(1.0, 0.35, calmC));
+    // the silt dims the light on its way down; what is left arrives focused
+    float reach = exp(-D * mix(1.1, 0.6, calmC));
+    diffuseColor.rgb *= mix(1.0, caustic, under * (0.35 + 0.65 * reach));
   }
 }`)
         .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
@@ -308,11 +328,17 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     this.uSpill.value = this.spillTexture;
   }
 
-  setWater(level: number, wetLevel: number, time: number, sunUp = 1): void {
+  setWater(level: number, wetLevel: number, time: number, sunUp = 1, sunDir?: Vector3): void {
     this.uWater.value = level;
     this.uWet.value = Math.max(level, wetLevel);
     this.uTime.value = time;
     this.uSunUp.value = sunUp;
+    if (sunDir) this.uSunDirT.value.copy(sunDir);
+  }
+
+  /** Share the water's wave set so the caustics follow the ripples (call before the first frame). */
+  setWaves(waves: WaveSet): void {
+    this.waves = waves;
   }
 
   private gridIndex(x: number, z: number): { i: number; j: number; fx: number; fz: number } {
