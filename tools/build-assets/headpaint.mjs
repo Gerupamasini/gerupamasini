@@ -80,6 +80,16 @@ function scaleCell(x, y, pitch, sd, jit = 0.18) {
   return LAT;
 }
 
+/** sparse round dots on a 3-D lattice (cell and radius in the units of x, y, z): coverage 0..1 of the dot the point falls in (dots never straddle cells) */
+function dots3(x, y, z, cell, rad, dens, sd) {
+  const gx = x / cell, gy = y / cell, gz = z / cell, ix = Math.floor(gx), iy = Math.floor(gy), iz = Math.floor(gz);
+  if (h3(ix, iy, iz, sd) > dens) return 0;
+  const r = (rad / cell) * (0.55 + 0.9 * h3(ix, iy, iz, sd + 11)), j = 1 - 2 * r;
+  const cx = ix + r + j * h3(ix, iy, iz, sd + 3), cy = iy + r + j * h3(ix, iy, iz, sd + 5), cz = iz + r + j * h3(ix, iy, iz, sd + 7);
+  const d = Math.hypot(gx - cx, gy - cy, gz - cz);
+  return d >= r ? 0 : 1 - sstep(r * 0.45, r, d);
+}
+
 // ------------------------------------------------------------------------------------------------------------------
 // colour
 const decS = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
@@ -91,22 +101,22 @@ const lin3 = (r, g, b) => Float64Array.of(decS(r / 255), decS(g / 255), decS(b /
 
 /** Look-development constants: photo-like sRGB colours of the painted regions (adult, non-spawning, dark-ish olive-bronze).  See head_color_markings.md. */
 export const LOOK = {
-  gain: 0.45,                 // photo appearance -> linear albedo (photos include light and highlights); calibrated against renders of the viewer still
+  gain: 0.42,                 // photo appearance -> linear albedo (photos include light and highlights); calibrated against renders of the viewer still
   capFrac: 0.235,             // dorsal cap: lower border at this fraction of the head height (cheek column)
   snoutFrac: 0.60,            // ... and in front of the eye (down to the maxilla strap)
-  capRagged: 0.055, capEdge: 0.028,
+  capRagged: 0.06, capEdge: 0.04,
   palette: {
-    capDark: [56, 43, 22], capMid: [90, 71, 38], capLight: [122, 98, 56], fleck: [176, 142, 88], snout: [84, 76, 60], band: [146, 120, 76], smudge: [104, 92, 100],
-    cheekBronze: [160, 128, 72], cheekPearl: [176, 156, 130], cheekLilac: [170, 150, 162], cheekGreen: [146, 142, 86], cheekGold: [196, 160, 88], cheekBlue: [150, 160, 172],
-    opercle: [170, 156, 130], opercleLilac: [182, 170, 176], rimGold: [200, 168, 98], copper: [186, 128, 84], preLine: [226, 206, 184],
-    jaw: [200, 192, 184], throat: [208, 202, 196], ventral: [214, 208, 198], bran: [176, 174, 180],
-    strap: [156, 134, 108], strapLight: [194, 174, 150], groove: [56, 40, 28], gape: [22, 15, 30], lip: [200, 188, 206],
+    capDark: [60, 46, 26], capMid: [92, 72, 42], capLight: [124, 100, 60], fleck: [176, 142, 88], snout: [84, 76, 60], band: [146, 120, 76], smudge: [104, 92, 100],
+    cheekBronze: [160, 128, 72], cheekPearl: [176, 156, 130], cheekLilac: [160, 142, 152], cheekGreen: [140, 136, 84], cheekGold: [186, 152, 86], cheekBlue: [140, 150, 164],
+    opercle: [160, 146, 120], opercleLilac: [172, 160, 166], rimGold: [200, 168, 98], copper: [186, 128, 84], preLine: [226, 206, 184],
+    jaw: [178, 170, 160], throat: [178, 174, 172], ventral: [200, 194, 184], bran: [176, 174, 180],
+    strap: [144, 122, 100], strapLight: [178, 158, 134], groove: [56, 40, 28], gape: [22, 15, 30], lip: [200, 188, 206],
     nostril: [38, 32, 28], nostrilRim: [126, 124, 128], orbit: [50, 40, 30], smear: [88, 62, 56], spot: [18, 15, 12], poreDark: [46, 38, 34], porePale: [222, 214, 206],
   },
 };
 const PAL = {}; for (const [k, c] of Object.entries(LOOK.palette)) PAL[k] = lin3(c[0], c[1], c[2]);
 // vertical gradient of the pale field in height fraction t = 0.2 .. 0.95 (bronze -> pearl-warm -> silver-cream -> white)
-const GRAD = [lin3(162, 132, 90), lin3(172, 148, 112), lin3(184, 168, 146), lin3(198, 190, 176), lin3(210, 204, 194)];
+const GRAD = [lin3(138, 112, 70), lin3(152, 126, 88), lin3(162, 142, 116), lin3(178, 166, 150), lin3(200, 194, 182)];
 
 // ------------------------------------------------------------------------------------------------------------------
 // geometry helpers on the spec
@@ -119,7 +129,7 @@ function polyUofV(m, v) {     // u at height v of a polyline given top -> bottom
 function makeLook(seed, over = {}) {
   const r = rngOf(seed, 'headlook');
   const L = {
-    capFrac: LOOK.capFrac + 0.03 * (r() - 0.5), snoutFrac: LOOK.snoutFrac, capRagged: LOOK.capRagged, capEdge: LOOK.capEdge, reliefGain: 0.7,
+    capFrac: LOOK.capFrac + 0.03 * (r() - 0.5), snoutFrac: LOOK.snoutFrac, capRagged: LOOK.capRagged, capEdge: LOOK.capEdge, reliefGain: 0.7, metalScale: 0.7,
     nSpots: 9 + Math.floor(r() * 9),              // 5-20 per head
     smear: r() < 0.5 ? 0.45 + 0.55 * r() : 0.12,  // dark post-orbital smear (some fish only)
     warm: 0.45 + 0.55 * r(),                      // copper / salmon flush on the upper rear opercle
@@ -334,7 +344,7 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
   // sensory-canal pores: mandibular row (lower jaw), preopercle row, supraorbital / snout row, infraorbital arc
   {
     const rng = rngOf(seed, 'pores'); const pts = [];
-    const addP = (u, v) => { for (const side of [1, -1]) { const t = toTexel(u, v, side); if (t) pts.push({ x: t[0] + 0.0, y: t[1], r: 0.085 + 0.04 * rng(), pale: 0.16 + 0.07 * rng() }); } };
+    const addP = (u, v) => { for (const side of [1, -1]) { const t = toTexel(u, v, side); if (t) pts.push({ x: t[0] + 0.0, y: t[1], r: 0.06 + 0.03 * rng(), pale: 0.14 + 0.05 * rng() }); } };
     if (line) for (let n = 0; n < 5; n++) { const u = 0.07 + n * 0.075 + (rng() - 0.5) * 0.02; const vL = polyV(line, clamp(u, 0, corner[0])); addP(u, vL - 0.062 - 0.012 * n + (rng() - 0.5) * 0.008); }
     if (preL) for (let n = 0; n < 6; n++) { const q = 0.08 + n * 0.16 + (rng() - 0.5) * 0.04; const idx = q * (preL.length - 1), i0 = Math.min(Math.floor(idx), preL.length - 2), f = idx - i0; addP(lerp(preL[i0][0], preL[i0 + 1][0], f) - 0.028, lerp(preL[i0][1], preL[i0 + 1][1], f)); }
     if (nos?.anterior) for (let n = 0; n < 4; n++) addP(nos.anterior[0] - 0.05 + n * 0.075 + (rng() - 0.5) * 0.015, nos.anterior[1] + 0.06 + 0.012 * n + (rng() - 0.5) * 0.01);
@@ -356,7 +366,7 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
   const R = {}; for (const k of rowKeys) R[k] = new Float32Array(W);
   const RN = {}; for (const k of Object.keys(Nz)) RN[k] = new Float32Array(W);
   const Rres = new Float32Array(W);
-  const sdG = sd('grain'), sdG2 = sd('grain2'), sdSp = sd('speck'), sdIr1 = sd('iri1'), sdIr2 = sd('iri2'), sdSc = sd('scales'), sdSc2 = sd('scales2'), sdFl = sd('fleck'), sdRg = sd('rough'), sdRg2 = sd('rough2');
+  const sdG = sd('grain'), sdG2 = sd('grain2'), sdSp = sd('speck'), sdIr1 = sd('iri1'), sdIr2 = sd('iri2'), sdSc = sd('scales'), sdSc2 = sd('scales2'), sdFl = sd('fleck'), sdRg = sd('rough'), sdRg2 = sd('rough2'), sdNet = sd('net'), sdCu = sd('copper');
   const capLo = PAL.capDark, capMi = PAL.capMid, capHi = PAL.capLight;
   // hinge of the opercle (radial striations fan out from it): between the top of the preopercle line and the top of the free margin
   const hinge = (preL && opM) ? [0.5 * (preL[0][0] + opM[0][0]), 0.5 * (preL[0][1] + opM[0][1])] : [0.77, 0.11];
@@ -391,10 +401,10 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
       const lw = sstep(0.55, 0.85, n1 * 0.5 + n3 * 0.5) * 0.5; cr += (capHi[0] - cr) * lw; cg += (capHi[1] - cg) * lw; cb += (capHi[2] - cb) * lw;
       const nape = sstep(0.30, 0.62, u);
       if (capW > 0.02 && nape > 0) {
-        const c = scaleCell(px, R.ddm[x], 0.95, sdSc);
-        const edge = sstep(0.30, 0.50, c.d) * (0.55 + 0.45 * sstep(0.1, -0.25, c.ox));
-        mul(1 + capW * nape * (0.16 * (c.id - 0.5) + 0.22 * edge - 0.05));
-        const fl = sstep(0.78, 0.95, vn3(px / 0.32, py / 0.32, pz / 0.32, sdFl)) * capW * (0.25 + 0.75 * nape); mixTo(PAL.fleck, fl * 0.42);
+        const c = scaleCell(px, R.ddm[x], 0.95, sdSc, 0.32);
+        const edge = sstep(0.30, 0.52, c.d) * (0.55 + 0.45 * sstep(0.1, -0.25, c.ox));
+        mul(1 + capW * nape * (0.14 * (c.id - 0.5) + 0.16 * edge * (0.5 + n2) - 0.04));
+        const fl = dots3(px, py, pz, 0.36, 0.09, 0.5, sdFl) * capW * (0.15 + 0.85 * nape) * sstep(0.3, 0.7, n2 + 0.25 * (n1 - 0.5)); mixTo(PAL.fleck, fl * 0.6);
       }
       // snout side (grey-olive), lighter than the cap, towards the strap
       const snW = (1 - sstep(0.22, 0.5, u)) * sstep(0.06, 0.40, t);
@@ -415,15 +425,21 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
       pr = lerp(pr, PAL.band[0], bandW * 0.7); pg = lerp(pg, PAL.band[1], bandW * 0.7); pb = lerp(pb, PAL.band[2], bandW * 0.7);
       cr += (pr - cr) * pale; cg += (pg - cg) * pale; cb += (pb - cb) * pale;
       rough = lerp(0.60, 0.34, pale); metal = lerp(0.02, 0.22, pale);
-      // cheek: faint scale cells (small, embedded), tiny pigment dot in each cell
-      const cheekM = pale * lat * (1 - vent) * sstep(0.36, 0.5, u) * (1 - sstep(0.72, 0.8, u));
+      // cheek: faint embedded scales (irregular, patchy), nothing like a regular mesh
+      const cheekM = pale * lat * (1 - vent) * sstep(0.36, 0.5, u) * (1 - sstep(0.72, 0.8, u)) * sstep(0.30, 0.62, n2 * 0.5 + n1 * 0.5 + 0.1);
       if (cheekM > 0.02) {
-        const c = scaleCell(px, py, 0.62, sdSc2, 0.12);
-        const edge = sstep(0.30, 0.50, c.d), rimL = edge * (0.5 + 0.5 * sstep(0.05, -0.25, c.ox));
-        mul(1 + cheekM * (0.07 * (c.id - 0.5) + 0.075 * rimL - 0.03 * edge * sstep(-0.05, 0.25, c.ox) - 0.02));
-        const dot = (1 - sstep(0.05, 0.12, c.d)) * (c.id > 0.55 ? 1 : 0.4); mul(1 - 0.12 * dot * cheekM);
-        micro += cheekM * (9 * rimL - 6 * (1 - edge) * 0 - 3 * dot);
+        const c = scaleCell(px, py, 0.72, sdSc2, 0.34);
+        const edge = sstep(0.30, 0.52, c.d), rimL = edge * (0.5 + 0.5 * sstep(0.05, -0.25, c.ox));
+        mul(1 + cheekM * (0.045 * (c.id - 0.5) + 0.05 * rimL - 0.02 * edge * sstep(-0.05, 0.25, c.ox)));
+        micro += cheekM * 5 * rimL;
       }
+      // upper cheek / opercle: reticulate melanophore network (olive-brown, ~1 mm mesh) fading out towards the silver below, copper-gold flecks
+      { const rw = pale * lat * (1 - vent) * (1 - sstep(0.40, 0.70, t)) * sstep(0.34, 0.5, u) * (0.5 + n1);
+        if (rw > 0.02) {
+          const c = scaleCell(px, py, 1.05, sdNet, 0.45), net = sstep(0.28, 0.55, c.d) * (0.6 + 0.8 * n3);
+          mul(1 - 0.20 * rw * net * (0.5 + 0.5 * c.id));
+          const cu = dots3(px, py, pz, 0.40, 0.075, 0.45, sdCu) * rw; mixTo(PAL.fleck, cu * 0.55);
+        } }
       // ---- maxilla strap -------------------------------------------------------------------------------------
       let strapW = 0, jawW = 0;
       if (maxP) {
@@ -444,7 +460,7 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
           const nn = 0.94 + 0.12 * n2, mx = 0.4 * wLil;
           const jr = lerp(PAL.jaw[0], PAL.cheekLilac[0], mx) * nn, jg = lerp(PAL.jaw[1], PAL.cheekLilac[1], mx) * nn, jb = lerp(PAL.jaw[2], PAL.cheekLilac[2], mx) * nn;
           cr += (jr - cr) * jawW; cg += (jg - cg) * jawW; cb += (jb - cb) * jawW;
-          rough = lerp(rough, 0.28, jawW); metal = lerp(metal, 0.3, jawW);
+          rough = lerp(rough, 0.30, jawW); metal = lerp(metal, 0.2, jawW);
         }
       }
       // ---- gape line, lips ---------------------------------------------------------------------------------------
@@ -469,21 +485,21 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
           rough = lerp(rough, 0.26, opW); metal = lerp(metal, 0.42, opW);
           // striations of the bone: rays from the hinge + concentric growth lines; soft melanophore smudges on the upper plate
           const dh = u - hinge[0], vh = v - hinge[1], rho = Math.hypot(dh, vh), th = Math.atan2(vh, dh);
-          const ray = Math.sin(th * 120 + 4 * (nh2 - 0.5) + 6 * (n3 - 0.5)), grow = Math.sin(rho * (TAU / 0.0105) + 5 * (nh - 0.5));
+          const ray = Math.sin(th * 80 + 9 * (nh2 - 0.5) + 14 * (n3 - 0.5)), grow = Math.sin(rho * (TAU / 0.0125) + 9 * (nh - 0.5));
           const sw = opW * sstep(0.04, 0.12, rho);
-          mul(1 + sw * (0.035 * ray + 0.02 * grow)); micro += sw * (7 * ray + 4 * grow);
+          mul(1 + sw * (0.02 * ray + 0.012 * grow) * (0.4 + 1.2 * n2)); micro += sw * (3.5 * ray + 2 * grow);
           const smud = sstep(0.60, 0.80, n2 * 0.5 + nh2 * 0.5) * (1 - sstep(0.25, 0.7, t)); mixTo(PAL.smudge, 0.32 * smud * opW);
         }
         rimW = bell(du, -0.007, 0.0075) * inside * lat * (preL ? sstep(-0.004, 0.01, R.preDu[x]) : 1);
-        mixTo(PAL.rimGold, rimW * 0.5); metal = lerp(metal, 0.5, rimW * 0.6); rough = lerp(rough, 0.24, rimW);
+        mixTo(PAL.rimGold, rimW * 0.36); metal = lerp(metal, 0.5, rimW * 0.6); rough = lerp(rough, 0.24, rimW);
         const gapB = bell(du, 0.008, 0.0055) * inside * lat;                  // groove under the free edge: the body tucks under
-        mul(1 - 0.30 * gapB); aoP *= 1 - 0.45 * gapB;
+        mul(1 - 0.18 * gapB); aoP *= 1 - 0.4 * gapB;
         const fl = bell(du, -0.05, 0.05) * sstep(0.02, 0.08, v) * sstep(0.2, 0.9, RN.warm[x]) * inside * lat * L.warm;       // warm copper / salmon flush on the upper rear opercle
         mixTo(PAL.copper, fl * 0.3);
       }
       if (preL) {
-        const pd = R.preDu[x], pl = bell(pd, 0.0, 0.0030) * lat * (1 - sstep(0.80, 0.90, u));
-        mixTo(PAL.preLine, pl * 0.32); metal = lerp(metal, 0.5, pl * 0.4);
+        const pd = R.preDu[x], pl = bell(pd, 0.0, 0.0042) * lat * (1 - sstep(0.80, 0.90, u));
+        mixTo(PAL.preLine, pl * 0.16); metal = lerp(metal, 0.5, pl * 0.4);
         mul(1 - 0.18 * bell(pd, -0.009, 0.006) * lat);
       }
       // ---- nostrils -----------------------------------------------------------------------------------------------------
@@ -514,25 +530,29 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
         if (vt > 0) {
           const w = sstep(bran.apex_u + 0.02, bran.apex_u + 0.1, u) * sstep(bran.end_u ?? 1, (bran.end_u ?? 1) - 0.12, u) * vt;
           const ridge = 0.5 + 0.5 * Math.cos((R.th[x] / (bran.pitch ?? 0.07)) * TAU);
-          mixTo(PAL.bran, w * 0.5); mul(1 - 0.06 * w * (1 - ridge));
+          mixTo(PAL.bran, w * 0.5); mul(1 - 0.035 * w * (1 - ridge) * (0.5 + n3));
         }
       }
       // ---- dark head spots and pores --------------------------------------------------------------------------------------
       const sp = maskSpot[idx]; if (sp > 0) { mixTo(PAL.spot, sp * 0.95); rough = lerp(rough, 0.55, sp); metal *= 1 - sp; }
       const pd = maskPoreD[idx], pp = maskPoreP[idx];
-      if (pd > 0 || pp > 0) { mixTo(PAL.porePale, pp * 0.35); mixTo(PAL.poreDark, pd * 0.85); aoP *= 1 - 0.6 * pd; }
+      if (pd > 0 || pp > 0) { mixTo(PAL.porePale, pp * 0.14); mixTo(PAL.poreDark, pd * 0.7); aoP *= 1 - 0.4 * pd; }
+      // snout tip (the pole of the atlas): the chord coordinates degenerate there, so the pale lower jaw tip / gape ring are set from the height fraction
+      { const tipW = 1 - sstep(0.012, 0.06, u);
+        if (tipW > 0) { const jt = sstep(0.54, 0.60, t) * tipW; mixTo(PAL.jaw, jt * 0.9); mixTo(PAL.gape, bell(t, 0.52, 0.02) * tipW * 0.7); } }
       // ---- fine structure ------------------------------------------------------------------------------------------------------
       const g1 = vn3(px / 0.16, py / 0.16, pz / 0.16, sdG) - 0.5, g2 = vn3(px / 0.07, py / 0.07, pz / 0.07, sdG2) - 0.5;
-      const spk = sstep(0.74, 0.92, vn3(px / 0.12, py / 0.12, pz / 0.12, sdSp));          // melanophore speckle: dense on the cap, thin on the pale field
-      mul(1 - spk * (0.34 * capW + 0.16 * pale * (1 - vent)));
+      const spk = dots3(px, py, pz, 0.16, 0.05, 0.6, sdSp) * 0.9;          // melanophore speckle: dense on the cap, thin on the pale field
+      const drip = 1 - sstep(0.0, 0.14, t - (tb + bOff));
+      mul(1 - spk * (0.34 * capW + (0.16 + 0.30 * drip) * pale * (1 - vent)));
       const pearlM = clamp01(pale * (1 - vent * 0.4) + opW * 0.6);                        // iridophore glitter: low-amplitude pink / lilac / green hue shifts
       const i1 = vn3(px / 0.2, py / 0.2, pz / 0.2, sdIr1) - 0.5, i2 = vn3(px / 0.33, py / 0.33, pz / 0.33, sdIr2) - 0.5;
       cr *= 1 + pearlM * (0.22 * i1 + 0.12 * i2); cg *= 1 + pearlM * (-0.08 * i1 - 0.12 * i2); cb *= 1 + pearlM * (-0.24 * i1 + 0.14 * i2);
       mul(1 + 0.10 * g1 + 0.06 * g2);
-      micro += 7 * g1 + 4 * g2 + pitH[idx];
+      micro += 3.2 * g1 + 1.8 * g2 + pitH[idx];
       // ---- roughness variation (water-film streaks along the body axis) -----------------------------------------------------------------
       const streak = vn3(px / 3.2, py / 0.9, pz / 0.9, sdRg) - 0.5, st2 = vn3(px / 0.5, py / 0.5, pz / 0.5, sdRg2) - 0.5;
-      rough += 0.07 * streak + 0.03 * st2; metal *= 0.9 + 0.3 * i1;
+      rough += 0.07 * streak + 0.03 * st2; metal *= (0.9 + 0.3 * i1) * L.metalScale;
       // ---- cross-fade into the body atlas at the rear of the head -----------------------------------------------------------------------
       const s = (x / (W - 1)) * sSpan - cap;
       const photoEq = [cr, cg, cb];
@@ -548,7 +568,8 @@ export function generateHeadTextures({ surface, params, head, spec, seed = 1, bo
       }
       albedo[o4] = toByte(cr); albedo[o4 + 1] = toByte(cg); albedo[o4 + 2] = toByte(cb); albedo[o4 + 3] = 255;
       ormB[o4] = Math.round(clamp01(aoP) * 255); ormB[o4 + 1] = Math.round(clamp(rough, 0.05, 1) * 255); ormB[o4 + 2] = Math.round(clamp01(metal) * 255); ormB[o4 + 3] = 255;
-      microH[idx] = micro; reliefR[idx] = Rres[x] * swr * L.reliefGain;
+      const poleF = sstep(0.0, 0.05, u);
+      microH[idx] = micro * poleF; reliefR[idx] = Rres[x] * swr * L.reliefGain * (1 - 0.6 * R.vent[x] * (0.35 + 0.65 * n3)) * poleF;
       if (idx % statStep === 0 && swr > 0.99) {
         const px8 = [toByte(photoEq[0]), toByte(photoEq[1]), toByte(photoEq[2])];
         if (capW > 0.9 && strapW < 0.05 && jawW < 0.05 && sp < 0.05 && u > 0.4 && lat < 0.3) stats.cap.push(px8);

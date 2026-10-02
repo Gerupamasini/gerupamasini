@@ -18,6 +18,6 @@ export const MODES = {
 export function strikePose(tn) {
   const bump = (t, t0, tp, t1) => t <= t0 ? 0 : t < tp ? Math.sin((t - t0) / (tp - t0) * Math.PI / 2) : t < t1 ? Math.cos((t - tp) / (t1 - tp) * Math.PI / 2) : 0;
   return {
-    jaw: 18 * bump(tn, 0, 0.33, 1.0), hyoid: 12 * bump(tn, 0.05, 0.45, 1.0), opercle: 15 * bump(tn, 0.10, 0.55, 1.0), cranial: 8 * bump(tn, 0, 0.30, 1.0),
+    jaw: 18 * bump(tn, 0, 0.33, 1.0), hyoid: 12 * bump(tn, 0.05, 0.45, 1.0), opercle: 8 * bump(tn, 0.10, 0.55, 1.0), cranial: 8 * bump(tn, 0, 0.30, 1.0),
   };
 }

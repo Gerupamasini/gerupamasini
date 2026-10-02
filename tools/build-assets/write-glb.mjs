@@ -12,7 +12,7 @@ function quatFromZ(dir) {
   const w = 1 + z; const q = [-y, x, 0, w]; const n = Math.hypot(...q); return q.map((v) => v / n);
 }
 
-export async function writeGLB({ file, body, teeth = null, fins, eyes, rig, textures, params, meta = {}, weights, lodBodies = [], lodFins = [], lodEyes = [], morphs = [] }) {
+export async function writeGLB({ file, body, teeth = null, gills = null, fins, eyes, rig, textures, params, meta = {}, weights, lodBodies = [], lodFins = [], lodEyes = [], morphs = [] }) {
   const doc = new Document();
   const clearcoatExt = doc.createExtension(KHRMaterialsClearcoat), iridExt = doc.createExtension(KHRMaterialsIridescence), iorExt = doc.createExtension(KHRMaterialsIOR), specExt = doc.createExtension(KHRMaterialsSpecular);
   const buffer = doc.createBuffer('main');
@@ -90,6 +90,7 @@ export async function writeGLB({ file, body, teeth = null, fins, eyes, rig, text
     mats.head.setExtension('KHR_materials_ior', iorExt.createIOR().setIOR(1.4));
   }
   mats.mouth = doc.createMaterial('M_Mouth').setBaseColorTexture(tex('mouth_albedo', mouthTexture())).setRoughnessFactor(0.55).setMetallicFactor(0).setDoubleSided(true);
+  mats.gill = doc.createMaterial('M_Gill').setBaseColorFactor([0.30, 0.025, 0.03, 1]).setRoughnessFactor(0.55).setMetallicFactor(0).setDoubleSided(true);
   mats.teeth = doc.createMaterial('M_Teeth').setBaseColorFactor([0.93, 0.9, 0.82, 1]).setRoughnessFactor(0.3).setMetallicFactor(0).setDoubleSided(true);
   mats.fin = doc.createMaterial('M_Fin').setAlphaMode('BLEND').setDoubleSided(true).setRoughnessFactor(0.5).setMetallicFactor(0);
   if (textures?.fins) {
@@ -140,6 +141,11 @@ export async function writeGLB({ file, body, teeth = null, fins, eyes, rig, text
   const mouthPrim = makePrim(body.mouth, mats.mouth, weights.mouth, 'mouth');
   for (const M of morphs) mouthPrim.addTarget(doc.createPrimitiveTarget(M.name).setAttribute('POSITION', accessor(`morph0_${M.name}`, 'VEC3', new Float32Array(body.mouth.positions.length))));   // glTF: every primitive of a mesh needs the same target count
   bodyMesh.addPrimitive(mouthPrim);
+  if (gills) {
+    const gp = makePrim({ ...gills, indices: gills.indices }, mats.gill, weights.gills, 'gills');
+    for (const M of morphs) gp.addTarget(doc.createPrimitiveTarget(M.name).setAttribute('POSITION', accessor(`morph2_${M.name}`, 'VEC3', new Float32Array(gills.positions.length))));
+    bodyMesh.addPrimitive(gp);
+  }
   if (teeth) {
     const tp = makePrim(teeth, mats.teeth, weights.teeth, 'teeth');
     for (const M of morphs) tp.addTarget(doc.createPrimitiveTarget(M.name).setAttribute('POSITION', accessor(`morph1_${M.name}`, 'VEC3', new Float32Array(teeth.positions.length))));
@@ -188,16 +194,25 @@ export async function writeGLB({ file, body, teeth = null, fins, eyes, rig, text
 }
 
 function mouthTexture() {
-  const W = 64, H = 64; const data = new Uint8Array(W * H * 4);
+  // u along the cavity (0 lips .. 1 throat), v around the loop (0 roof, 0.25 left cheek, 0.375-0.625 tongue / floor, 0.75 right cheek).
+  // Pale pink-grey mucosa at the lips falling off to a dark violet throat (reference photos: lit tissue ~(163,133,139), cavity ~(47,48,59)).
+  const W = 128, H = 128; const data = new Uint8Array(W * H * 4);
+  const hash = (x, y) => { let h = Math.imul(x * 374761393 + y * 668265263, 1274126177); h = (h ^ (h >>> 13)) >>> 0; return (h & 0xffff) / 65535; };
+  const vn = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1); return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy; };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const u = x / (W - 1), v = y / (H - 1);   // u along the mouth (tip..throat), v around the loop (0 roof .. 0.375 left floor ...)
+    const u = x / (W - 1), v = y / (H - 1);
     let c;
-    if (v < 0.25) c = [214, 168, 160];          // palate
-    else if (v < 0.375) c = [196, 140, 136];       // left inner cheek
-    else if (v < 0.625) c = [228, 206, 200];     // tongue / floor
-    else c = [196, 140, 136];                      // right inner cheek
-    const dark = 1 - 0.55 * Math.pow(u, 1.5);
-    const o = (y * W + x) * 4; data[o] = c[0] * dark; data[o + 1] = c[1] * dark; data[o + 2] = c[2] * dark; data[o + 3] = 255;
+    if (v < 0.25) c = [196, 158, 158];          // palate
+    else if (v < 0.375) c = [170, 122, 128];     // left inner cheek
+    else if (v < 0.625) c = [214, 190, 186];     // tongue / floor
+    else c = [170, 122, 128];                    // right inner cheek
+    const lipBand = 1 - Math.min(1, u / 0.05);   // pale lip rim at the very front
+    const depth = Math.pow(Math.min(1, Math.max(0, (u - 0.04) / 0.96)), 0.7);
+    const dark = 1 - 0.86 * depth;
+    const n = 0.88 + 0.24 * vn(u * 18, v * 40);
+    const o = (y * W + x) * 4;
+    for (let k = 0; k < 3; k++) { const base = c[k] * (1 - lipBand) + [230, 210, 205][k] * lipBand; data[o + k] = Math.min(255, base * dark * n + [40, 22, 32][k] * depth * 0.5); }
+    data[o + 3] = 255;
   }
   return { width: W, height: H, data };
 }

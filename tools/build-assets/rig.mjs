@@ -7,6 +7,8 @@ const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 export const SPINE_COUNT = 24;
 export const FIN_IDS = { dorsal: 0, adipose: 1, pectoral_R: 2, pectoral_L: 3, pelvic_R: 4, pelvic_L: 5, anal: 6, caudal: 7 };
 
+function polyVLocal(pts, u) { for (let i = 1; i < pts.length; i++) if (u <= pts[i][0]) { const t = (u - pts[i - 1][0]) / (pts[i][0] - pts[i - 1][0] || 1); return pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t; } return pts[pts.length - 1][1]; }
+
 export function buildRig(surface, params, extra = {}) {
   const SL = surface.SL; const F = params.fins;
   const bones = []; const index = new Map();
@@ -24,16 +26,25 @@ export function buildRig(surface, params, extra = {}) {
   // head
   const hinge = extra.jawHinge || [surface.sToX(params.mouth.corner_s.v), yAt(params.mouth.corner_s.v) - 0.003, 0];
   add('jaw_lower', 'spine_03', hinge);
+  const head = extra.head || null, HLs = head ? head.HLs : null;
+  // surface point at chord coordinates (u, v) on the given side (head spec) or a generic fallback
+  const atChord = (u, v, side, fb) => {
+    if (!head) return fb();
+    const s = u * HLs - surface.cap, yM = (head.y0 + v * head.HLm), a = surface.alphaAtHeight(s, yM);
+    return P(s, side === 'R' ? a : 2 * Math.PI - a);
+  };
   for (const side of ['L', 'R']) {
-    const z = side === 'R' ? 1 : -1;
-    const lip = P(0.04, side === 'R' ? 1.65 : (2 * Math.PI - 1.65));
+    // maxilla bone pivots at the front of the maxilla strap (above the gape line, ~0.12 HL from the tip)
+    const lineV = head && head.line ? polyVLocal(head.line, 0.12) : 0;
+    const lip = atChord(0.12, lineV + 0.05, side, () => P(0.04, side === 'R' ? 1.65 : (2 * Math.PI - 1.65)));
     add(`maxilla_${side}`, 'spine_01', [lip[0], lip[1], lip[2]]);
   }
   add('hyoid', 'spine_03', [surface.sToX(0.13), P(0.13, Math.PI)[1] + 0.002, 0]);
   const opS = params.operculum.edge_s.v - 0.04;
   for (const side of ['L', 'R']) {
-    const a = side === 'R' ? 0.72 : (2 * Math.PI - 0.72);
-    const hp = P(opS, a);
+    // gill-cover bone sits on the hinge line of the plate (top of the preopercle line)
+    const pfTop = head && head.spec.preopercle ? head.spec.preopercle.line[0] : null;
+    const hp = pfTop ? atChord(pfTop[0], pfTop[1] - 0.02, side, () => P(opS, 0.72)) : P(opS, side === 'R' ? 0.72 : (2 * Math.PI - 0.72));
     add(`opercle_${side}`, 'spine_05', [hp[0], hp[1], hp[2]]);
   }
   for (const side of ['L', 'R']) {
@@ -99,22 +110,29 @@ export function spineEntries(rig, s, scale = 1) {
 export function bodyWeights(rig, attrs, count, extra = {}) {
   const J = new Uint16Array(count * 4), W = new Float32Array(count * 4);
   const jaw = rig.index.get('jaw_lower');
-  const opR = rig.index.get('opercle_R'), opL = rig.index.get('opercle_L');
+  const opR = rig.index.get('opercle_R'), opL = rig.index.get('opercle_L'), mxR = rig.index.get('maxilla_R'), mxL = rig.index.get('maxilla_L');
   const e = extra.operculumEdge;           // s of the free rear edge of the gill cover
+  const head = extra.head, pos = extra.positions;   // spec-driven head: plate / maxilla masks come from the chord coordinates
   for (let v = 0; v < count; v++) {
     const f = attrs._JAW ? attrs._JAW[v] : 0; const s = attrs._S[v];
     const list = [];
-    // gill-cover flap: weight grows from the hinge (e-0.045) to the free edge, lateral sectors only (alpha ~ right flank pi/2 .. ventral, mirrored on the left)
-    let wop = 0, opBone = opR;
-    if (e !== undefined && attrs._ALPHA && f === 0) {
+    let wop = 0, opBone = opR, wmx = 0, mxBone = mxR;
+    if (attrs._ALPHA && f === 0) {
       const a = attrs._ALPHA[v]; const right = a <= Math.PI; const aa = right ? a : 2 * Math.PI - a;   // 0 dorsal .. pi ventral
-      const lat = smooth(0.45, 0.85, aa) * (1 - smooth(2.35, 2.75, aa));
-      wop = smooth(e - 0.045, e - 0.004, s) * (1 - smooth(e + 0.002, e + 0.012, s)) * lat * 0.9;
-      opBone = right ? opR : opL;
+      opBone = right ? opR : opL; mxBone = right ? mxR : mxL;
+      if (head && pos) {
+        wop = head.opercleWeight(pos[v * 3], pos[v * 3 + 1], a);
+        wmx = mxR !== undefined ? head.maxillaWeight(pos[v * 3], pos[v * 3 + 1], a) * 0.8 : 0;
+      } else if (e !== undefined) {
+        // gill-cover flap: weight grows from the hinge (e-0.045) to the free edge, lateral sectors only
+        const lat = smooth(0.45, 0.85, aa) * (1 - smooth(2.35, 2.75, aa));
+        wop = smooth(e - 0.045, e - 0.004, s) * (1 - smooth(e + 0.002, e + 0.012, s)) * lat * 0.9;
+      }
     }
     if (f > 0) list.push([jaw, f]);
-    list.push(...spineEntries(rig, s, (1 - f) * (1 - wop)));
+    list.push(...spineEntries(rig, s, (1 - f) * (1 - wop - wmx)));
     if (wop > 0) list.push([opBone, (1 - f) * wop]);
+    if (wmx > 0) list.push([mxBone, (1 - f) * wmx]);
     const p = pack(list);
     for (let k = 0; k < 4; k++) { J[v * 4 + k] = p[k][0]; W[v * 4 + k] = p[k][1]; }
   }

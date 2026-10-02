@@ -10,6 +10,7 @@ import { writeGLB } from './write-glb.mjs';
 import { sampleBodyGenome } from './genome.mjs';
 import { buildTeeth } from './teeth.mjs';
 import { applyHead, createHead, syncEyeParams } from './head.mjs';
+import { buildGillSlit } from './gills.mjs';
 
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 // Relative morph targets on the LOD0 body skin (05 §5.1.3). Amplitudes: body depth +-1 SD = 0.024/0.241 = 10 % [P, n=27]; peduncle +-0.013/0.091 = 14 % [P]; belly / cheek / branchiostegal [E].
@@ -40,6 +41,12 @@ import { newImage } from './png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i > 0 ? process.argv[i + 1] : d; };
+
+function gillNormals(g) {   // area-weighted vertex normals of the sheet
+  const P = g.positions, I = g.indices, N = new Float64Array(P.length);
+  for (let t = 0; t < I.length; t += 3) { const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3; const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2]; const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; for (const o of [a, b, c]) { N[o] += nx; N[o + 1] += ny; N[o + 2] += nz; } }
+  const out = new Float32Array(P.length); for (let i = 0; i < P.length; i += 3) { const l = Math.hypot(N[i], N[i + 1], N[i + 2]) || 1; out[i] = N[i] / l; out[i + 1] = N[i + 1] / l; out[i + 2] = N[i + 2] / l; } return out;
+}
 
 async function optional(name) {
   try { return await import(`./${name}.mjs`); } catch (e) { console.log(`[build] module ${name} unavailable: ${e.message.split('\n')[0]}`); return null; }
@@ -82,14 +89,16 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
   if (eyes?.textures) textures.eyes = eyes.textures;
 
   const eyeCenters = eyes ? { L: eyes.left.center, R: eyes.right.center } : undefined;
-  const rig = buildRig(surface, params, { jawHinge: body.landmarks.jaw_hinge, eyeCenters });
+  const rig = buildRig(surface, params, { jawHinge: body.landmarks.jaw_hinge, eyeCenters, head });
   const nBody = body.positions.length / 3;
   const weights = {
-    body: bodyWeights(rig, body.attrs, nBody, { operculumEdge: params.operculum.edge_s.v }),
+    body: bodyWeights(rig, body.attrs, nBody, { operculumEdge: params.operculum.edge_s.v, head, positions: body.positions }),
     mouth: bodyWeights(rig, { _S: new Float32Array(body.mouth.positions.length / 3).fill(0.06), _JAW: body.mouth.attrs._JAW }, body.mouth.positions.length / 3),
     teeth: null,
     fins: fins ? finWeights(rig, fins.geometry.attrs, fins.geometry.positions.length / 3) : null,
   };
+  const gills = head ? buildGillSlit({ surface, head }) : null;
+  if (gills) { const n = gills.positions.length / 3; gills.normals = gillNormals(gills); weights.gills = bodyWeights(rig, { _S: gills.attrs._S, _ALPHA: gills.attrs._ALPHA }, n); console.log('[build] gill slit tris', gills.indices.length / 3); }
   const teeth = body.mouth.lips ? buildTeeth({ lips: body.mouth.lips, SL: surface.SL, seed }) : null;
   if (teeth) { const n = teeth.positions.length / 3; weights.teeth = bodyWeights(rig, { _S: new Float32Array(n).fill(0.06), _JAW: teeth.attrs._JAW }, n); console.log('[build] teeth tris', teeth.indices.length / 3); }
   // morph targets (LOD0 body skin only): same topology, positions differ
@@ -107,7 +116,7 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
     for (const L of LODS.slice(1)) {
       const b = buildBody(surface, params, loftOf(L)); const n = b.positions.length / 3;
       lodBodies.push({ level: L.level, body: b, withMouth: L.withMouth, weights: {
-        body: bodyWeights(rig, b.attrs, n, { operculumEdge: params.operculum.edge_s.v }),
+        body: bodyWeights(rig, b.attrs, n, { operculumEdge: params.operculum.edge_s.v, head, positions: b.positions }),
         mouth: bodyWeights(rig, { _S: new Float32Array(b.mouth.positions.length / 3).fill(0.06), _JAW: b.mouth.attrs._JAW }, b.mouth.positions.length / 3) } });
       console.log(`[build] LOD${L.level} body tris`, b.indices.length / 3, L.withMouth ? `+ mouth ${b.mouth.indices.length / 3}` : '');
       if (mods.eyes?.buildEyes && eyes && L.eyeDetail != null) {
@@ -119,7 +128,7 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
     }
   }
   fs.mkdirSync(path.dirname(out), { recursive: true });
-  await writeGLB({ file: out, body, teeth, fins, eyes, rig, textures, params, weights, lodBodies, lodFins, lodEyes, morphs, meta: { seed, bones: rig.bones.length } });
+  await writeGLB({ file: out, body, teeth, gills, fins, eyes, rig, textures, params, weights, lodBodies, lodFins, lodEyes, morphs, meta: { seed, bones: rig.bones.length } });
   const kb = (fs.statSync(out).size / 1024).toFixed(0);
   console.log(`[build] wrote ${out} (${kb} KB), bones=${rig.bones.length}`);
   return { out, rig, body, params };

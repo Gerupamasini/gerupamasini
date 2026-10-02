@@ -120,6 +120,22 @@ function interpStations(st, key, u) {
   if (u <= st[0].u) return st[0][key]; for (let i = 1; i < st.length; i++) if (u <= st[i].u) { const t = (u - st[i - 1].u) / (st[i].u - st[i - 1].u); return lerp(st[i - 1][key], st[i][key], t); } return st[st.length - 1][key];
 }
 
+
+/** Catmull-Rom densification of the spec polylines whose u is a function of v (opercle margin, preopercle line) and v a function of u (mouth line):
+ *  the hand-placed control points would otherwise leave visible kinks in the relief, the weights and the painted lines. Returns a deep copy. */
+function smoothSpec(spec0, n = 26) {
+  const spec = structuredClone(spec0);
+  const byV = (pts) => {                                              // pts top -> bottom (v decreasing); resample u(v)
+    const asc = pts.map(([u, v]) => [v, u]).reverse(); const out = [];
+    for (let i = 0; i < n; i++) { const v = asc[asc.length - 1][0] - (asc[asc.length - 1][0] - asc[0][0]) * (i / (n - 1)); out.push([splineV(asc, v), v]); }
+    return out;
+  };
+  if (spec.opercle?.margin?.length >= 3) spec.opercle.margin = byV(spec.opercle.margin);
+  if (spec.preopercle?.line?.length >= 3) spec.preopercle.line = byV(spec.preopercle.line);
+  if (spec.mouth?.line?.length >= 3) { const l = spec.mouth.line, out = []; for (let i = 0; i < n; i++) { const u = l[0][0] + (l[l.length - 1][0] - l[0][0]) * (i / (n - 1)); out.push([u, splineV(l, u)]); } spec.mouth.line = out; }
+  return spec;
+}
+
 // ---- the head object used by the loft ---------------------------------------------------------------------------------
 import { socketDisplacement } from './eyes.mjs';
 
@@ -127,7 +143,8 @@ import { socketDisplacement } from './eyes.mjs';
  * createHead(surface, params, spec): features and landmark queries in chord coordinates.
  * u = (s_tip_x - x)/HL, v = (y - y_tip)/HL where the tip is the foremost point of the snout (x of s = -cap).
  */
-export function createHead(surface, params, spec) {
+export function createHead(surface, params, spec0) {
+  const spec = smoothSpec(spec0);
   const SL = surface.SL, HLs = spec.HL_over_SL, HLm = HLs * SL, y0 = (spec.tip_y_over_sl ?? 0) * SL;
   const tipX = surface.sToX(-surface.cap);                       // snout tip
   const toUV = (x, y) => [(tipX - x) / HLm, (y - y0) / HLm];
@@ -228,6 +245,22 @@ export function createHead(surface, params, spec) {
     return d * smooth(0.0, 0.07, u);                              // the cap rings at the tip are thinner than any feature: no relief there
   }
 
+  /** skin-weight masks from the chord coordinates of a vertex (x, y metres) and its body angle alpha */
+  const flank = (alpha) => { const aa = alpha <= Math.PI ? alpha : TAU - alpha; return smooth(0.45, 0.85, aa) * (1 - smooth(2.35, 2.75, aa)); };
+  function opercleWeight(x, y, alpha) {
+    if (!spec.opercle) return 0;
+    const [u, v] = toUV(x, y), m = spec.opercle.margin, pf = spec.preopercle?.line, vTop = m[0][1], vBot = m[m.length - 1][1];
+    if (v > vTop + 0.03 || v < vBot - 0.03) return 0;
+    const um = polyUofV(m, clamp(v, vBot, vTop)), uf = pf ? polyUofV(pf, clamp(v, pf[pf.length - 1][1], pf[0][1])) : um - 0.2;
+    const inV = smooth(vBot - 0.03, vBot + 0.015, v) * smooth(vTop + 0.03, vTop - 0.015, v);
+    return smooth(uf, um - 0.015, u) * (1 - smooth(um + 0.0, um + 0.05, u)) * inV * flank(alpha) * 0.9;     // plate: 0 at the preopercle hinge line .. 1 at the free margin
+  }
+  function maxillaWeight(x, y, alpha) {
+    if (!spec.maxilla) return 0;
+    const [u, v] = toUV(x, y), sd = sdPolygon(spec.maxilla.outline, u, v);
+    return smooth(0.12, corner[0], u) * smooth(-0.01, 0.02, sd) * smooth(0.45, 0.85, alpha <= Math.PI ? alpha : TAU - alpha) * (1 - smooth(2.0, 2.4, alpha <= Math.PI ? alpha : TAU - alpha));
+  }
+
   function landmarks() {
     const out = {};
     out.snout_tip = [tipX, y0];
@@ -238,7 +271,7 @@ export function createHead(surface, params, spec) {
     return out;
   }
 
-  return { HLm, HLs, y0, tipX, toUV, fromUV, displacement, mouthLineHeight, landmarks, corner, line, eye, spec };
+  return { HLm, HLs, y0, tipX, toUV, fromUV, displacement, mouthLineHeight, landmarks, opercleWeight, maxillaWeight, corner, line, eye, spec };
 }
 
 /** margin polyline given top -> bottom as [[u,v]...] with v decreasing: u at height v */

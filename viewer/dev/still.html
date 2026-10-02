@@ -13,7 +13,7 @@ const scene = new THREE.Scene(); if (!ALPHA) scene.background = new THREE.Color(
 scene.environment = new THREE.PMREMGenerator(r).fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = parseFloat(q.get('env') || '0.9');
 const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(0.2, 0.8, 1); scene.add(dl);
 const gltf = await new GLTFLoader().loadAsync(q.get('file') || '/assets/generated/yamame.glb'); scene.add(gltf.scene);
-if (q.get('jaw')) gltf.scene.traverse((o) => { if (o.isBone && o.name === 'jaw_lower') o.rotation.z = -parseFloat(q.get('jaw')) * Math.PI / 180; });
+if (q.get('jaw') || q.get('flare')) gltf.scene.traverse((o) => { if (!o.isBone) return; const jd = parseFloat(q.get('jaw') || '0'), fl = parseFloat(q.get('flare') || '0'); if (o.name === 'jaw_lower') o.rotation.z = -jd * Math.PI / 180; if (o.name === 'maxilla_R' || o.name === 'maxilla_L') o.rotation.z = 0.18 * jd * Math.PI / 180; if (o.name === 'opercle_R') o.rotation.y = fl * Math.PI / 180; if (o.name === 'opercle_L') o.rotation.y = -fl * Math.PI / 180; });   // pose: jaw=deg (maxilla follows), flare=deg
 gltf.scene.traverse((o) => { if (/_LOD[12]$/.test(o.name)) o.visible = false; });   // LOD12HIDE: lower LODs coincide with LOD0 and z-fight when drawn together
 if (q.get('nomouth')) gltf.scene.traverse((o) => { if (o.isMesh && o.material && /M_Mouth|M_Teeth/.test(o.material.name)) o.visible = false; });
 const dbg = q.get('tex');   // albedo | normal | orm | white: debug views of the body textures

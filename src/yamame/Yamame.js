@@ -129,6 +129,7 @@ export class Yamame {
     const pump = 0.5 + 0.5 * Math.sin(ph), gill = 0.5 + 0.5 * Math.sin(ph - 1.1);
     const sk = this.strikePose; const jawDeg = (intent.jawOpen ?? 0) + (sk ? sk.jaw : 0) + 2.0 * amp * pump * pump;
     this.#setRot('jaw_lower', AXIS_Z, -jawDeg * Math.PI / 180);       // opens: tip rotates down (negative about +Z, see viewer/dev/body.html)
+    this.#setRot('maxilla_R', AXIS_Z, 0.18 * jawDeg * Math.PI / 180); this.#setRot('maxilla_L', AXIS_Z, 0.18 * jawDeg * Math.PI / 180);       // the maxilla follows the lower jaw a little (its rear end swings down)
     const flare = (intent.opercle ?? 0) + (sk ? sk.opercle : 0) + 7 * amp * gill;                    // degrees
     this.#setRot('opercle_R', AXIS_Y, flare * Math.PI / 180); this.#setRot('opercle_L', AXIS_Y, -flare * Math.PI / 180);
     this.#setRot('hyoid', AXIS_Z, -(1.5 * amp * pump + (sk ? sk.hyoid : 0)) * Math.PI / 180);

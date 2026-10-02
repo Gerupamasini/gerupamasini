@@ -274,7 +274,7 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
     const secS = Math.max(sRing, 0);
     const top = surface.point(secS, 0)[1], bot = surface.point(secS, Math.PI)[1];
     const tipTaper = li < ringIdx.length ? smooth(-surface.cap, 0.012, sRing) : 1;     // behind the tip the cavity opens gradually, so the closed lips hide the lining
-    const roofH = 0.42 * (top - yLip) * shrink * tipTaper, floorH = 0.40 * (yLip - bot) * shrink * tipTaper;
+    const roofH = 0.55 * (top - yLip) * shrink * tipTaper, floorH = 0.50 * (yLip - bot) * shrink * tipTaper;
     const bulge = Math.min(0.0012 * shrink, 0.45 * Math.abs(UR[2])) * tipTaper;
     const u = li / (totalLoops - 1);
     const loop = [];
