@@ -4,6 +4,12 @@
 
 ![水槽](docs/images/aquarium_overview.jpg)
 
+![R0（左）と最終版（右）の比較](docs/images/before_after_r0_r8.jpg)
+
+最終版の動き（0.1 秒間隔）：泳ぐ個体と、胸鰭だけで静止している個体が混在する。
+
+![動き](docs/images/motion_strip.jpg)
+
 | | |
 |---|---|
 | ![あくび](docs/images/yawn.jpg) | ![あくび（正面）](docs/images/mouth_front_yawn.jpg) |
@@ -73,7 +79,7 @@ HUD（左下、スマートフォンでは非表示）：FPS、フレーム時�
 
 - [docs/RESEARCH_REPORT.md](docs/RESEARCH_REPORT.md) — 写真 100 枚の計測と文献調査（形態・光学・運動学・行動）
 - [docs/TECH_DESIGN.md](docs/TECH_DESIGN.md) — モデル構造、リグ、シェーダ、アニメーション、AI、LOD の設計
-- [docs/QA_REPORT.md](docs/QA_REPORT.md) — 実写比較と修正、動き・行動の検証、不具合、性能計測
+- [docs/QA_REPORT.md](docs/QA_REPORT.md) — 実写比較と修正、動き・行動の検証、不具合、性能計測、CG 感の除去と「動と静」の評価ループ（§9、R0 3/10 → R8 7/10）
 
 ## 開発用ツール
 
@@ -82,6 +88,7 @@ npm run dev                                            # 別ターミナルで�
 node tools/dev/shot.mjs "/?test=1&t=5" out.png         # 決定的な静止画
 node tools/dev/shot.mjs "/?mode=studio&test=1&t=1.6&anim=startle&view=top&strip=8&stripDt=0.012" strip.png
 node tools/dev/shot.mjs "/?test=1&probe=120&fish=10" p.png   # 行動統計（コンソールに PROBE）
+node tools/dev/render-set.mjs out/                     # 評価用の固定 9 ビュー（BASE= で別サーバー、第 2 引数でビュー名を指定）
 node tools/dev/shot.mjs "/?test=1&t=6&cine=head34" head.png   # シネマのショットを固定して撮影
 node tools/dev/shot.mjs "/?mode=studio&test=1&t=2&view=gillrear&zoom=0.8&operc=1.6&dof=0" gill.png   # 鰓蓋を開いた状態で接写（mouth= / operc= / wire=1）
 npm run perf                                           # 性能計測（--gpu で実 GPU）
