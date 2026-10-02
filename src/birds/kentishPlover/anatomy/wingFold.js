@@ -105,7 +105,7 @@ const FLAT = 0.12; // folded vanes pressed flat: this much of the camber is kept
 // folded primary tips' distance from the midline (mm), p1 … p10
 const PRIMARY_TIP_X = [17, 16, 15, 13, 9.5, 9.2, 7.2, 5.1, 4.35, 3.6];
 // mm: the middle secondaries' tips lowered, under the fuller flank of the rear body (validation §Z)
-const SEC_DROP = -1.5;
+const SEC_DROP = -2.5;
 const OVER_RUMP = 2; // mm: the primaries' rise over the upper-tail coverts behind the rump
 
 /**
