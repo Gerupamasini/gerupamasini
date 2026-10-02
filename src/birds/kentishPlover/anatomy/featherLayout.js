@@ -50,7 +50,7 @@ export function buildWingLayout() {
   // from the wrist; p9 = wing chord (S1,S3: 105–108 flattened, ≈100 projected when folded, spec §10.3): the
   // folded p7–p10 tips converge on the tail tip (z ≈ −83.5) as one blunt dark cluster — 3 mm shorter, the
   // rectrices ran on alone as a thin needle (p020, p070, p006)
-  const pTipDist = [60, 64, 69, 75, 82, 90, 99.6, 102.8, 103.2, 101.6];
+  const pTipDist = [60, 64, 69, 75, 82, 90, 99.6, 102, 103.2, 100.4];
   const prim = [];
   for (let i = 10; i >= 1; i--) {
     const t = 0.06 + (0.9 * (i - 1)) / 9;

@@ -153,7 +153,7 @@ export const bodySculpt = {
   // over the plumage lying on it is as round in cross-section as the belly (validation §Y). edge: the wing's lower edge
   // (z, y), body_shape_spec.md §10.1
   bed: { depth: 1.0, x: [6, 11], y: [2, 7], z: [-58, -46, -17, -9], edge: [[20, 63], [5, 60], [-10, 57], [-25, 55.5], [-40, 57], [-55, 60]] },
-  plan: { knots: [[-6, 1], [-12, 1.055], [-18, 1.09], [-24, 1.125], [-30, 1.21], [-40, 1.54], [-46, 1.6], [-52, 1.54], [-58, 1.45], [-64, 1.3]], y: [46, 60, 76, 94], base: 0.3 },
+  plan: { knots: [[-6, 1], [-12, 1.05], [-18, 1.09], [-24, 1.14], [-30, 1.247], [-40, 1.6], [-46, 1.66], [-52, 1.565], [-58, 1.5], [-64, 1.3]], y: [45, 64, 76, 94], base: 0.3 },
   // the SDF spans x ±21, y 36–105, z −66…41
   bounds: { min: [-24, 32, -70], max: [24, 109, 46] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
