@@ -70,11 +70,18 @@ export const joints = {
 export const bodySculpt = {
   smooth: 7.5,
   prims: [
-    { type: 'ellipsoid', name: 'torso', c: [0, 66, -12], r: [19, 19.5, 39.5], rx: 29 },
+    // (19 → 22 wide: from above the back is a broad rounded dome over which the wings fold, widest at mid-body and
+    // tapering smoothly to the tail, not a narrow spindle with the folded wings pressed flat against its sides —
+    // validation §Y. The front view is unchanged: the breast and its sides set the width there)
+    { type: 'ellipsoid', name: 'torso', c: [0, 66, -12], r: [22, 19.5, 39.5], rx: 29 },
     { type: 'ellipsoid', name: 'breast', c: [0, 66, 11], r: [19.5, 21.5, 20.5] },
     { type: 'ellipsoid', name: 'belly', c: [0, 47, -11], r: [15.5, 11.5, 21.5] },
     { type: 'ellipsoid', name: 'mantleNape', c: [0, 86.5, 6], r: [15, 7.5, 13.5] },
     { type: 'ellipsoid', name: 'rump', c: [0, 61, -48], r: [9.5, 6.5, 16], rx: 24 },
+    // fuller lower back and rump under the folded tertials (z −30…−55, below the back line, which is unchanged): the
+    // plan outline tapers from the mid-body to the tail in one convex curve instead of narrowing to a 25 mm stem at
+    // z −40 (validation §Y)
+    { type: 'ellipsoid', name: 'backFull', c: [0, 63, -38], r: [17.5, 4.8, 24], rx: 16, k: 3.5 },
     { type: 'ellipsoid', name: 'undertail', c: [0, 59.5, -52.5], r: [7, 2, 13], rx: 15 }, // under-tail keel, covered by the LTC
     { type: 'ellipsoid', name: 'head', c: [0, 93.5, 24], r: [12.5, 12.5, 15], k: 5 },
     // lores pulled back so the feathering meets the bill at the photographed feather line (z 39.6: eye → bill
@@ -90,8 +97,10 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'cheekL', c: [9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3 },
     { type: 'ellipsoid', name: 'cheekR', c: [-9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3 },
     { type: 'ellipsoid', name: 'foreBreast', c: [0, 76, 24], r: [14, 14, 13] },
-    { type: 'ellipsoid', name: 'breastSideL', c: [11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
-    { type: 'ellipsoid', name: 'breastSideR', c: [-11.5, 66, 12], r: [8.5, 12, 11], k: 6 },
+    // (1 mm in from x 11.5: from above the shoulders round off into the wider mid-body instead of standing out as
+    // square corners in front of the folded wings — validation §Y; front width unchanged, the torso sets it now)
+    { type: 'ellipsoid', name: 'breastSideL', c: [10.5, 66, 10], r: [8.5, 12, 11], k: 6 },
+    { type: 'ellipsoid', name: 'breastSideR', c: [-10.5, 66, 10], r: [8.5, 12, 11], k: 6 },
     { type: 'ellipsoid', name: 'flankPocketL', c: [12, 53, -14], r: [7.3, 7.5, 18], k: 6 },
     { type: 'ellipsoid', name: 'flankPocketR', c: [-12, 53, -14], r: [7.3, 7.5, 18], k: 6 },
     // fill the top-view waist and keep the tibia inside the belly (spec §5, §9)
