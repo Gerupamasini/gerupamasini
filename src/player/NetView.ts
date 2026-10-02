@@ -25,6 +25,8 @@ const P_SCOOP = pose(-0.05, -0.27, -0.6, 0.3, -0.44, -0.02);
 const P_CHECK = pose(0.0, -0.09, -0.42, 0.02, -0.5, -0.1);
 /** how far from the hoop's path through the water an animal can be and still end up in the bag (m) */
 export const SWEEP_RADIUS = 0.28;
+/** where the hoop leaves the water (camera space): the sweep runs from the dip back to here, about 30 cm */
+const SWEEP_END = new Vector3(-0.03, -0.4, -0.38);
 
 const ease = (t: number) => t * t * (3 - 2 * t);
 function lerpPose(a: Pose, b: Pose, t: number, out: Pose): Pose {
@@ -183,7 +185,7 @@ export class NetView {
   static sweep(camera: PerspectiveCamera, groundAt: (x: number, z: number) => number, outA: Vector3, outB: Vector3): void {
     camera.updateMatrixWorld();
     outA.copy(P_DIP.p).applyMatrix4(camera.matrixWorld);
-    outB.copy(P_SCOOP.p).applyMatrix4(camera.matrixWorld);
+    outB.copy(SWEEP_END).applyMatrix4(camera.matrixWorld);
     outA.y = Math.min(outA.y, groundAt(outA.x, outA.z) + 0.05);
     outB.y = Math.min(outB.y, groundAt(outB.x, outB.z) + 0.05);
   }
