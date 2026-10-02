@@ -44,12 +44,13 @@ export function buildBody(surface, params, opts = {}) {
     const sRing = Math.max(r.s, 0), yM = head.mouthLineHeight(sRing); if (yM == null) return alphaM;
     return surface.alphaAtHeight(sRing, yM * SL);
   });
+  const colWarp = opts.col_warp ?? 1.0;                           // > 1 clusters the columns towards the mouth line (lips need ~0.25 mm spacing)
   const alphaOf = (j, i = 0) => {
-    const aM = alphaMRing[i];
-    if (j <= n1) return (j / n1) * aM;
-    if (j <= n1 + n2) return aM + ((j - n1) / n2) * (Math.PI - aM);
-    if (j <= jL) return Math.PI + ((j - n1 - n2) / n2) * (Math.PI - aM);
-    return (TAU - aM) + ((j - jL) / n1) * aM;
+    const aM = alphaMRing[i], q = colWarp;
+    if (j <= n1) return aM * (1 - Math.pow(1 - j / n1, q));
+    if (j <= n1 + n2) return aM + (Math.PI - aM) * Math.pow((j - n1) / n2, q);
+    if (j <= jL) return Math.PI + (Math.PI - aM) * (1 - Math.pow(1 - (j - n1 - n2) / n2, q));
+    return (TAU - aM) + aM * Math.pow((j - jL) / n1, q);
   };
 
   // ---- displacement field (outward, metres) ------------------------------------------------------------------------
@@ -150,7 +151,7 @@ export function buildBody(surface, params, opts = {}) {
       const p = surface.point(s, alpha, d);
       if (head && head.spec.mouth?.overbite_over_hl && j > n1 && j < jL) {      // upper jaw overhangs: the free part of the lower jaw sits behind the upper tip, fading out with distance from the tip and from the gape line
         const uu = (s + cap) / head.HLs, aM = alphaMRing[i], aa = alpha <= Math.PI ? alpha : TAU - alpha;
-        p[0] -= head.spec.mouth.overbite_over_hl * head.HLm * (1 - smooth(0, 0.30, uu)) * smooth(aM, aM + 0.35, aa);
+        p[0] -= head.spec.mouth.overbite_over_hl * head.HLm * (1 - smooth(0, 0.30, uu)) * smooth(aM + 0.05, aM + 1.1, aa);
       }
       const isMouthCol = (j === n1 || j === jL) && seamRings(i);
       const lowerStart = (j >= n1 && j < jL);        // sectors beginning at column j that belong to the lower arc
@@ -168,32 +169,35 @@ export function buildBody(surface, params, opts = {}) {
   }
   // apex vertices (two coincident points: upper lip tip / lower lip tip)
   const apexX = surface.point(-cap, 0)[0], apexY = surface.section(0).c * SL;
-  const apexYh = head ? head.y0 : apexY;
-  const obApex = head && head.spec.mouth?.overbite_over_hl ? head.spec.mouth.overbite_over_hl * head.HLm : 0;
+  const r0y = (up[0][0] >= 0 && up[0][Math.round(N / 2)] >= 0) ? 0.5 * (pos[up[0][0] * 3 + 1] + pos[up[0][Math.round(N / 2)] * 3 + 1]) : apexY;
+  const apexYh = head ? r0y : apexY;                               // the closing point sits on the axis of the first (tiny) cap ring
+  const obApex = head && head.spec.mouth?.overbite_over_hl ? head.spec.mouth.overbite_over_hl * head.HLm * 0.45 : 0;
   const apexU = addVertex([apexX, apexYh, 0], -cap, 0, 0, 0);
-  const apexL = addVertex([apexX - obApex, apexYh - (head ? 0.004 * head.HLm : 0), 0], -cap, Math.PI, 0, 1);
+  const apexL = addVertex([apexX, apexYh, 0], -cap, Math.PI, 0, 1);       // coincident with apexU in the rest pose (no slot at the lip tips); it follows the jaw when the mouth opens
 
   // ---- triangles --------------------------------------------------------------------------------------------------
-  const idx = [];
-  const quad = (a, b, c, d) => { idx.push(a, b, c, a, c, d); };
+  const idx = [], idxHead = [], idxBody = [];
+  const headSplit = opts.headSplit ?? null;                      // s (SL) where the dedicated head texture atlas ends; rings behind it use the body atlas
+  const quad = (a, b, c, d, toHead) => { idx.push(a, b, c, a, c, d); (toHead ? idxHead : idxBody).push(a, b, c, a, c, d); };
   for (let i = 0; i < R - 1; i++) {
+    const toHead = headSplit != null && rings[i + 1].s <= headSplit + 1e-9;
     for (let j = 0; j < N; j++) {
       const lowerArc = j >= n1 && j < jL;
       const T = lowerArc ? lo : up;
       // winding for outward normals: s increases towards the tail; alpha increases dorsal->right->ventral
-      quad(T[i][j], T[i + 1][j], T[i + 1][j + 1], T[i][j + 1]);
+      quad(T[i][j], T[i + 1][j], T[i + 1][j + 1], T[i][j + 1], toHead);
     }
   }
   // snout fans (ring 0 -> apex)
   for (let j = 0; j < N; j++) {
     const lowerArc = j >= n1 && j < jL; const T = lowerArc ? lo : up; const apex = lowerArc ? apexL : apexU;
-    idx.push(apex, T[0][j + 1], T[0][j]);
+    idx.push(apex, T[0][j], T[0][j + 1]); idxHead.push(apex, T[0][j], T[0][j + 1]);       // winding: the closing fan faces +x (outward)
   }
   // tail end is left open (caudal fin base covers it); close with a small fan so the mesh is watertight
   const tailCenterS = 1.0; const tc = surface.point(tailCenterS, 0);
   const tcY = surface.section(1).c * SL;
   const tailC = addVertex([surface.sToX(1), tcY, 0], 1, 0, 0, 0);
-  for (let j = 0; j < N; j++) idx.push(tailC, up[R - 1][j], up[R - 1][j + 1]);
+  for (let j = 0; j < N; j++) { idx.push(tailC, up[R - 1][j + 1], up[R - 1][j]); idxBody.push(tailC, up[R - 1][j + 1], up[R - 1][j]); }       // faces -x (outward)
 
   // ---- normals (triangle accumulation; dorsal UV-seam duplicates share normals) -----------------------------------
   const P = Float32Array.from(pos); const nVert = P.length / 3; const nrm = new Float64Array(nVert * 3);
@@ -226,11 +230,18 @@ export function buildBody(surface, params, opts = {}) {
     mouth_line_r: rM, alpha_mouth: alphaM, alpha_mouth_ring: alphaMRing, head_landmarks: head ? head.landmarks() : null, corner_s: cornerS, opercle_edge_s: params.operculum.edge_s.v,
     seam_end_ring: seamEnd, ring_s: rings.map((r) => r.s), N, n1, n2, jL,
   };
-  return {
+  const out = {
     positions: P, normals, uvs: Float32Array.from(uv), indices: Uint32Array.from(idx),
     attrs: { _S: Float32Array.from(sAttr), _ALPHA: Float32Array.from(aAttr), _JAW: Float32Array.from(jawAttr) },
     mouth, landmarks,
   };
+  if (headSplit != null) {
+    // dedicated head atlas: u_h = (s + cap) / (headSplit + cap), v as in the body atlas
+    const uvH = new Float32Array(uv.length);
+    for (let v = 0; v < sAttr.length; v++) { uvH[v * 2] = Math.min(1, Math.max(0, (sAttr[v] + cap) / (headSplit + cap))); uvH[v * 2 + 1] = uv[v * 2 + 1]; }
+    out.split = { s_end: headSplit, cap, indicesHead: Uint32Array.from(idxHead), indicesBody: Uint32Array.from(idxBody), uvsHead: uvH };
+  }
+  return out;
 }
 
 // ---- mouth tube -------------------------------------------------------------------------------------------------
@@ -250,6 +261,8 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
     if (li < ringIdx.length) {
       const i = ringIdx[li]; sRing = rings[i].s;
       UR = pt(up[i][n1]); UL = pt(up[i][jL]);
+      const tk = smooth(-surface.cap, 0.02, sRing);               // tuck the first loops inside the lip tips: the closed mouth must show no lining
+      UR = [UR[0] - 0.0005 * (1 - tk), UR[1], UR[2] * (0.45 + 0.55 * tk)]; UL = [UL[0] - 0.0005 * (1 - tk), UL[1], UL[2] * (0.45 + 0.55 * tk)];
     } else {
       const i = seamEnd; const k = li - ringIdx.length + 1; sRing = rings[i].s + 0.0125 * k;
       const t = k / extra; shrink = Math.max(1 - t, 0.02);
@@ -260,8 +273,9 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
     const yLip = UR[1];
     const secS = Math.max(sRing, 0);
     const top = surface.point(secS, 0)[1], bot = surface.point(secS, Math.PI)[1];
-    const roofH = 0.42 * (top - yLip) * shrink, floorH = 0.40 * (yLip - bot) * shrink;
-    const bulge = Math.min(0.0012 * shrink, 0.45 * Math.abs(UR[2]));
+    const tipTaper = li < ringIdx.length ? smooth(-surface.cap, 0.012, sRing) : 1;     // behind the tip the cavity opens gradually, so the closed lips hide the lining
+    const roofH = 0.42 * (top - yLip) * shrink * tipTaper, floorH = 0.40 * (yLip - bot) * shrink * tipTaper;
+    const bulge = Math.min(0.0012 * shrink, 0.45 * Math.abs(UR[2])) * tipTaper;
     const u = li / (totalLoops - 1);
     const loop = [];
     const zR = UR[2], zL = UL[2], x = UR[0];

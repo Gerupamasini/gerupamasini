@@ -57,7 +57,7 @@ const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / 
 // Eye socket of loft.mjs (displacement(): pocket + raised orbital rim), in units of the eye OUTER RADIUS Ro.
 // The orbit ring and the ball depth are fitted to the skin *including* this pocket. Pass genome.socket = null to fit to the
 // bare surface, or an object with the same keys if loft.mjs changes.      [E: mirrors loft.mjs displacement() eye section; wide + gentle so that the LOD0 loft mesh (~1 mm spacing) resolves it]
-export const SOCKET_LOFT = { pocket_depth: 0.55, pocket_radius: 1.65, rim_height: 0.07, rim_radius: 1.45, rim_width: 0.50 };
+export const SOCKET_LOFT = { pocket_depth: 0.30, pocket_radius: 1.55, rim_height: 0.06, rim_radius: 1.40, rim_width: 0.50 };
 export function socketDisplacement(rr, Ro, sk = SOCKET_LOFT) { return socketDisp(rr, Ro, sk); }
 function socketDisp(rr, Ro, sk) {
   if (!sk) return 0;

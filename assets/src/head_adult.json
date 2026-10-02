@@ -2,81 +2,117 @@
  "_doc": "Adult head spec v2 in chord coordinates (u from snout tip toward the rear-most opercle margin, v up from the snout-tip height, both in HL). Numbers: median of 11 clean lateral photos (docs/yamame/photo_analysis/head_profile_curves.json, landmark medians) smoothed by hand; PROXY for an adult (photos are mostly juveniles/adults of unknown SL).",
  "HL_over_SL": 0.254,
  "tip_y_over_sl": 0.0,
- "cap_over_sl": 0.004,
+ "cap_over_sl": 0.007,
  "fit_min": 0.95,
  "fit_max": 1.05,
  "stations": [
   {
    "u": 0,
    "top": 0.0,
-   "bot": -0.06,
+   "bot": -0.05,
    "ywf": 0.55,
    "nT": 2.2,
-   "nB": 1.8,
-   "wd": 0.36
+   "nB": 2.0,
+   "wd": 0.55
+  },
+  {
+   "u": 0.005,
+   "top": 0.02,
+   "bot": -0.065,
+   "ywf": 0.55,
+   "nT": 2.2,
+   "nB": 2.0,
+   "wd": 0.58
+  },
+  {
+   "u": 0.01,
+   "top": 0.032,
+   "bot": -0.08,
+   "ywf": 0.55,
+   "nT": 2.21,
+   "nB": 2.01,
+   "wd": 0.6
   },
   {
    "u": 0.02,
-   "top": 0.035,
-   "bot": -0.095,
+   "top": 0.047,
+   "bot": -0.098,
    "ywf": 0.55,
-   "nT": 2.21,
-   "nB": 1.82,
-   "wd": 0.42
+   "nT": 2.22,
+   "nB": 2.01,
+   "wd": 0.62
   },
   {
-   "u": 0.05,
-   "top": 0.065,
-   "bot": -0.125,
+   "u": 0.04,
+   "top": 0.07,
+   "bot": -0.118,
    "ywf": 0.52,
    "nT": 2.23,
-   "nB": 1.85,
-   "wd": 0.46
+   "nB": 2.02,
+   "wd": 0.66
+  },
+  {
+   "u": 0.06,
+   "top": 0.086,
+   "bot": -0.134,
+   "ywf": 0.52,
+   "nT": 2.25,
+   "nB": 2.04,
+   "wd": 0.68
+  },
+  {
+   "u": 0.08,
+   "top": 0.097,
+   "bot": -0.15,
+   "ywf": 0.52,
+   "nT": 2.26,
+   "nB": 2.05,
+   "wd": 0.69
   },
   {
    "u": 0.1,
-   "top": 0.105,
+   "top": 0.108,
    "bot": -0.165,
    "ywf": 0.47,
-   "nT": 2.27,
-   "nB": 1.9,
-   "wd": 0.5
+   "nT": 2.28,
+   "nB": 2.06,
+   "wd": 0.7
   },
   {
    "u": 0.2,
-   "top": 0.165,
+   "top": 0.168,
    "bot": -0.235,
    "ywf": 0.47,
-   "nT": 2.33,
-   "nB": 2.0,
-   "wd": 0.54
+   "nT": 2.36,
+   "nB": 2.12,
+   "wd": 0.7
   },
   {
    "u": 0.3,
    "top": 0.212,
    "bot": -0.275,
    "ywf": 0.47,
-   "nT": 2.4,
-   "nB": 2.1,
-   "wd": 0.56
+   "nT": 2.44,
+   "nB": 2.18,
+   "wd": 0.7
   },
   {
    "u": 0.4,
    "top": 0.25,
    "bot": -0.3,
    "ywf": 0.47,
-   "nT": 2.47,
-   "nB": 2.2,
-   "wd": 0.57
+   "nT": 2.52,
+   "nB": 2.24,
+   "wd": 0.71
   },
   {
    "u": 0.5,
    "top": 0.278,
    "bot": -0.318,
    "ywf": 0.47,
-   "nT": 2.53,
+   "nT": 2.6,
    "nB": 2.3,
-   "wd": 0.58
+   "wd": 0.72
   },
   {
    "u": 0.6,
@@ -84,8 +120,8 @@
    "bot": -0.328,
    "ywf": 0.47,
    "nT": 2.6,
-   "nB": 2.4,
-   "wd": 0.58
+   "nB": 2.3,
+   "wd": 0.74
   },
   {
    "u": 0.7,
@@ -93,8 +129,8 @@
    "bot": -0.336,
    "ywf": 0.47,
    "nT": 2.6,
-   "nB": 2.4,
-   "wd": 0.57
+   "nB": 2.3,
+   "wd": 0.76
   },
   {
    "u": 0.8,
@@ -102,8 +138,8 @@
    "bot": -0.34,
    "ywf": 0.47,
    "nT": 2.6,
-   "nB": 2.4,
-   "wd": 0.56
+   "nB": 2.3,
+   "wd": 0.78
   },
   {
    "u": 0.9,
@@ -111,8 +147,8 @@
    "bot": -0.343,
    "ywf": 0.47,
    "nT": 2.6,
-   "nB": 2.4,
-   "wd": 0.55
+   "nB": 2.3,
+   "wd": 0.79
   },
   {
    "u": 1.0,
@@ -120,8 +156,8 @@
    "bot": -0.345,
    "ywf": 0.47,
    "nT": 2.6,
-   "nB": 2.4,
-   "wd": 0.54
+   "nB": 2.3,
+   "wd": 0.8
   }
  ],
  "mouth": {
@@ -151,8 +187,8 @@
    0.434,
    -0.181
   ],
-  "overbite_over_hl": 0.035,
-  "lip_ridge_mm": 0.18
+  "overbite_over_hl": 0.012,
+  "lip_ridge_mm": 0.45
  },
  "maxilla": {
   "outline": [
@@ -197,8 +233,8 @@
     -0.04
    ]
   ],
-  "height_mm": 0.35,
-  "groove_mm": 0.1,
+  "height_mm": 0.9,
+  "groove_mm": 0.45,
   "edge": 0.014
  },
  "dentary": {
@@ -258,8 +294,8 @@
     -0.215
    ]
   ],
-  "height_mm": 0.25,
-  "suture_mm": 0.1,
+  "height_mm": 0.8,
+  "suture_mm": 0.3,
   "edge": 0.014
  },
  "cheek": {
@@ -271,7 +307,7 @@
    0.22,
    0.17
   ],
-  "height_mm": 0.35
+  "height_mm": 0.9
  },
  "preopercle": {
   "line": [
@@ -292,7 +328,7 @@
     -0.245
    ]
   ],
-  "groove_mm": 0.14,
+  "groove_mm": 0.45,
   "width": 0.007
  },
  "opercle": {
@@ -318,9 +354,9 @@
     -0.194
    ]
   ],
-  "plate_mm": 0.5,
-  "rim_mm": 0.14,
-  "shadow_mm": 0.16,
+  "plate_mm": 1.0,
+  "rim_mm": 0.35,
+  "shadow_mm": 0.45,
   "edge": 0.01
  },
  "eye": {
@@ -337,14 +373,14 @@
    0.205,
    0.052
   ],
-  "radius_mm": 0.85,
-  "depth_mm": 0.5
+  "radius_mm": 1.0,
+  "depth_mm": 0.8
  },
  "branchiostegal": {
   "apex_u": 0.18,
   "end_u": 0.95,
   "pitch": 0.08,
-  "height_mm": 0.12
+  "height_mm": 0.25
  },
  "pectoral_base_u": 0.95,
  "blend_len_over_sl": 0.14

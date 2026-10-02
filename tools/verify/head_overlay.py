@@ -29,7 +29,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('photo'); ap.add_argument('--landmarks'); ap.add_argument('--model', required=True)
     ap.add_argument('--cx', type=float, required=True); ap.add_argument('--cy', type=float, required=True); ap.add_argument('--half', type=float, required=True)
-    ap.add_argument('--mlm', required=True); ap.add_argument('--out', default='overlay.png'); ap.add_argument('--alpha', type=float, default=0.6); ap.add_argument('--no-reaim', action='store_true')
+    ap.add_argument('--mlm', required=True); ap.add_argument('--out', default='overlay.png'); ap.add_argument('--alpha', type=float, default=0.6); ap.add_argument('--no-reaim', action='store_true'); ap.add_argument('--layout', default='overlay')
     a = ap.parse_args()
     photo = Image.open(os.path.join(PH, a.photo + '.jpg')).convert('RGB')
     lm = json.load(open(a.landmarks)) if a.landmarks else photo_landmarks(a.photo)
@@ -81,7 +81,9 @@ def main():
         q = m2photo(p[0], p[1]); do.ellipse((q[0] - 2.5, q[1] - 2.5, q[0] + 2.5, q[1] + 2.5), outline=(0, 255, 255))
     for k, p in lm.items(): do.ellipse((p[0] - 2, p[1] - 2, p[0] + 2, p[1] + 2), outline=(255, 255, 0))
     sc = max(1, 600 // max(photo.size)) if max(photo.size) < 600 else 1
-    sheet = Image.new('RGB', (photo.width * 3, photo.height)); sheet.paste(photo, (0, 0)); sheet.paste(outl, (photo.width, 0)); sheet.paste(over, (photo.width * 2, 0))
+    grey = Image.new('RGBA', photo.size, (125, 138, 144, 255)); grey = Image.alpha_composite(grey, warped).convert('RGB')
+    mid = grey if a.layout == 'cmp' else outl
+    sheet = Image.new('RGB', (photo.width * 3, photo.height)); sheet.paste(photo, (0, 0)); sheet.paste(mid, (photo.width, 0)); sheet.paste(over, (photo.width * 2, 0))
     if sc > 1: sheet = sheet.resize((sheet.width * sc, sheet.height * sc), Image.LANCZOS)
     sheet.save(a.out); print(a.out, 'HL_px', round(hl, 1), 'HL_model_mm', round(hlm * 1000, 2))
 

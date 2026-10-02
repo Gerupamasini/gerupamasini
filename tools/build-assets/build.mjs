@@ -30,7 +30,7 @@ export const LODS_DEV = [   // quick iteration (no hero level)
   { level: 2, loft: { n_upper: 5, n_lower: 5, steps: [[0, 0.30, 0.03], [0.30, 0.90, 0.10], [0.90, 1.0, 0.10]], capT: [0.8, 0.4] }, withMouth: false, finDetail: 0.25, eyeDetail: 0.25 },
 ];
 export const LODS_HERO = [  // 4 levels (06 §6.8.1 High / Medium / Low / Far-skinned): hero close-up level first
-  { level: 0, loft: { n_upper: 22, n_lower: 20, steps: [[0, 0.30, 0.0025], [0.30, 0.90, 0.012], [0.90, 1.0, 0.02]] }, withMouth: true, finDetail: 1.0, eyeDetail: 1 },
+  { level: 0, loft: { n_upper: 24, n_lower: 22, col_warp: 1.35, steps: [[0, 0.30, 0.0025], [0.30, 0.90, 0.012], [0.90, 1.0, 0.02]] }, withMouth: true, finDetail: 1.0, eyeDetail: 1 },
   { level: 1, loft: { n_upper: 12, n_lower: 14, steps: [[0, 0.30, 0.005], [0.30, 0.90, 0.0167], [0.90, 1.0, 0.025]] }, withMouth: true, finDetail: 0.5, eyeDetail: 0.5 },
   { level: 2, loft: { n_upper: 8, n_lower: 8, steps: [[0, 0.30, 0.012], [0.30, 0.90, 0.04], [0.90, 1.0, 0.05]], capT: [0.9, 0.7, 0.4, 0.1] }, withMouth: true, finDetail: 0.25, eyeDetail: 0.25 },
   { level: 3, loft: { n_upper: 5, n_lower: 5, steps: [[0, 0.30, 0.03], [0.30, 0.90, 0.10], [0.90, 1.0, 0.10]], capT: [0.8, 0.4] }, withMouth: false, finDetail: 0.25, eyeDetail: null },
@@ -58,16 +58,25 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
   const surface = createSurface(params, bodyGenome);
   if (headSpec) syncEyeParams(surface, params, headSpec);
   const head = headSpec ? createHead(surface, params, headSpec) : null;
-  const loftOf = (L) => ({ ...L.loft, head });
-  const body = buildBody(surface, params, loftOf(LODS[0]));
+  const S_H = 0.27;                                                // head atlas covers s < S_H (SL); the body atlas the rest
+  const loftOf = (L, split = false) => ({ ...L.loft, head, ...(split && head ? { headSplit: S_H } : {}) });
+  const body = buildBody(surface, params, loftOf(LODS[0], true));
   console.log('[build] body', JSON.stringify(meshStats(body)), 'mouth', JSON.stringify(meshStats(body.mouth)));
 
-  const mods = { fins: await optional('fins'), eyes: await optional('eyes'), textures: await optional('textures') };
+  const mods = { fins: await optional('fins'), eyes: await optional('eyes'), textures: await optional('textures'), headpaint: head ? await optional('headpaint') : null };
   let fins = null, eyes = null, textures = {};
   if (mods.fins?.buildFins) { try { fins = mods.fins.buildFins({ surface, params, seed }); console.log('[build] fins tris', fins.geometry.indices.length / 3); } catch (e) { console.log('[build] fins failed:', e.message); } }
   if (mods.eyes?.buildEyes) { try { eyes = mods.eyes.buildEyes({ surface, params, seed }); console.log('[build] eyes ok'); } catch (e) { console.log('[build] eyes failed:', e.message); } }
   if (withTextures && mods.textures?.generateBodyTextures) {
     try { const genome = individual && mods.textures.sampleGenome ? mods.textures.sampleGenome(seed) : {}; const t = mods.textures.generateBodyTextures({ surface, params, seed, genome }); textures.body = t; console.log('[build] textures ok'); } catch (e) { console.log('[build] textures failed:', e.message); }
+  }
+  if (textures.body && mods.headpaint?.generateHeadTextures) {
+    try {
+      const t0 = Date.now();
+      textures.head = mods.headpaint.generateHeadTextures({ surface, params, head, spec: headSpec, seed, bodyTex: textures.body, sEnd: S_H });
+      if (mods.headpaint.bakeHeadIntoBody) mods.headpaint.bakeHeadIntoBody({ surface, bodyTex: textures.body, headTex: textures.head, sEnd: S_H });
+      console.log(`[build] head textures ok ${textures.head.albedo.width}x${textures.head.albedo.height} (${Date.now() - t0} ms)`);
+    } catch (e) { console.log('[build] head textures failed:', e.stack.split('\n').slice(0, 4).join(' | ')); }
   }
   if (fins?.textures) textures.fins = fins.textures;
   if (eyes?.textures) textures.eyes = eyes.textures;

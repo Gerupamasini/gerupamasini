@@ -1,6 +1,7 @@
 // Assemble the Yamame GLB with glTF-Transform (Node only; no Blender). Structure: spec07 §7.3.4.
 import { Document, NodeIO, VertexLayout } from '@gltf-transform/core';
 import { KHRMaterialsClearcoat, KHRMaterialsIridescence, KHRMaterialsIOR, KHRMaterialsSpecular, KHRTextureTransform } from '@gltf-transform/extensions';
+import sharp from 'sharp';
 import { encodePng } from './png.mjs';
 import { boneLocalTranslations, inverseBindMatrices } from './rig.mjs';
 
@@ -61,10 +62,13 @@ export async function writeGLB({ file, body, teeth = null, fins, eyes, rig, text
 
   // ---- textures & materials ----
   const tex = (name, img) => doc.createTexture(name).setImage(encodePng(img)).setMimeType('image/png');
+  // big colour / ORM atlases go out as JPEG (4:4:4, q93) to keep the GLB small enough for a single-file page; normal maps stay lossless PNG
+  const jpegBytes = async (img, q = 93) => new Uint8Array(await sharp(Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength), { raw: { width: img.width, height: img.height, channels: 4 } }).removeAlpha().jpeg({ quality: q, chromaSubsampling: '4:4:4', mozjpeg: true }).toBuffer());
+  const texJ = async (name, img, q) => doc.createTexture(name).setImage(await jpegBytes(img, q)).setMimeType('image/jpeg');
   const mats = {};
   const T = {};
   if (textures?.body) {
-    T.albedo = tex('body_albedo', textures.body.albedo); T.normal = tex('body_normal', textures.body.normal); T.orm = tex('body_orm', textures.body.orm);
+    T.albedo = await texJ('body_albedo', textures.body.albedo); T.normal = tex('body_normal', textures.body.normal); T.orm = await texJ('body_orm', textures.body.orm, 95);
   }
   mats.body = doc.createMaterial('M_Body').setRoughnessFactor(1).setMetallicFactor(1).setDoubleSided(false);
   if (T.albedo) mats.body.setBaseColorTexture(T.albedo);
@@ -76,6 +80,15 @@ export async function writeGLB({ file, body, teeth = null, fins, eyes, rig, text
   mats.body.setExtension('KHR_materials_iridescence', iridExt.createIridescence().setIridescenceFactor(bc.iridescence ?? 0.10).setIridescenceIOR(1.33));
   mats.body.setExtension('KHR_materials_ior', iorExt.createIOR().setIOR(1.4));
 
+  if (textures?.head && body.split) {
+    const H = textures.head; const hc = params.render?.head || params.render?.body || {};
+    mats.head = doc.createMaterial('M_Head').setRoughnessFactor(1).setMetallicFactor(1).setDoubleSided(false)
+      .setBaseColorTexture(await texJ('head_albedo', H.albedo)).setNormalTexture(tex('head_normal', H.normal)).setNormalScale(1);
+    const ho = await texJ('head_orm', H.orm, 95); mats.head.setOcclusionTexture(ho).setOcclusionStrength(1).setMetallicRoughnessTexture(ho);
+    mats.head.setExtension('KHR_materials_clearcoat', clearcoatExt.createClearcoat().setClearcoatFactor(hc.clearcoat ?? 0.2).setClearcoatRoughnessFactor(hc.clearcoat_roughness ?? 0.12));
+    mats.head.setExtension('KHR_materials_iridescence', iridExt.createIridescence().setIridescenceFactor(hc.iridescence ?? 0.10).setIridescenceIOR(1.33));
+    mats.head.setExtension('KHR_materials_ior', iorExt.createIOR().setIOR(1.4));
+  }
   mats.mouth = doc.createMaterial('M_Mouth').setBaseColorTexture(tex('mouth_albedo', mouthTexture())).setRoughnessFactor(0.55).setMetallicFactor(0).setDoubleSided(true);
   mats.teeth = doc.createMaterial('M_Teeth').setBaseColorFactor([0.93, 0.9, 0.82, 1]).setRoughnessFactor(0.3).setMetallicFactor(0).setDoubleSided(true);
   mats.fin = doc.createMaterial('M_Fin').setAlphaMode('BLEND').setDoubleSided(true).setRoughnessFactor(0.5).setMetallicFactor(0);
@@ -112,9 +125,17 @@ export async function writeGLB({ file, body, teeth = null, fins, eyes, rig, text
 
   // ---- body (skinned): body skin + mouth tube ----
   const bodyMesh = doc.createMesh('Body_LOD0');
-  const bodyPrim = makePrim(body, mats.body, weights.body, 'body');
-  for (const M of morphs) bodyPrim.addTarget(doc.createPrimitiveTarget(M.name).setAttribute('POSITION', accessor(`morph_${M.name}`, 'VEC3', M.dPos)));
+  const bodyPrim = makePrim(body.split ? { ...body, indices: body.split.indicesBody } : body, mats.body, weights.body, 'body');
+  const morphTargets = morphs.map((M) => doc.createPrimitiveTarget(M.name).setAttribute('POSITION', accessor(`morph_${M.name}`, 'VEC3', M.dPos)));
+  for (const t of morphTargets) bodyPrim.addTarget(t);
   bodyMesh.addPrimitive(bodyPrim);
+  if (mats.head) {
+    // head primitive: same vertices / skin / morph targets, its own index list and the head-atlas UVs
+    const headPrim = doc.createPrimitive().setMaterial(mats.head).setIndices(accessor('head_idx', 'SCALAR', body.split.indicesHead)).setAttribute('TEXCOORD_0', accessor('head_uv', 'VEC2', body.split.uvsHead));
+    for (const sem of bodyPrim.listSemantics()) if (sem !== 'TEXCOORD_0') headPrim.setAttribute(sem, bodyPrim.getAttribute(sem));
+    for (const t of morphTargets) headPrim.addTarget(t);
+    bodyMesh.addPrimitive(headPrim);
+  }
   if (morphs.length) { bodyMesh.setWeights(morphs.map(() => 0)); bodyMesh.setExtras({ targetNames: morphs.map((M) => M.name) }); }
   const mouthPrim = makePrim(body.mouth, mats.mouth, weights.mouth, 'mouth');
   for (const M of morphs) mouthPrim.addTarget(doc.createPrimitiveTarget(M.name).setAttribute('POSITION', accessor(`morph0_${M.name}`, 'VEC3', new Float32Array(body.mouth.positions.length))));   // glTF: every primitive of a mesh needs the same target count

@@ -56,6 +56,7 @@ export function sdPolygon(poly, u, v) {
   return inside ? best : -best;
 }
 const gauss = (x, w) => Math.exp(-(x / w) * (x / w));
+const GEO_MIN = 0.03, GEO_LIP = 0.009;       // narrowest feature (in HL) the loft grid is asked to carry
 
 // ---- applying the spec to the parameter set --------------------------------------------------------------------------
 /**
@@ -149,34 +150,36 @@ export function createHead(surface, params, spec) {
   // lateral face mask from the outward normal
   const NZ = (n) => Math.abs(n[2]);
 
-  /** displacement (metres, outward) at a vertex.  ctx: { p: unoffset surface point [x,y,z], n: unit normal } */
+  /** displacement (metres, outward) at a vertex.  ctx: { p: unoffset surface point [x,y,z], n: unit normal, fine?: boolean }
+   *  Geometry (fine = false) is band-limited: every feature is at least GEO_MIN HL wide so the loft grid resolves it without aliasing.
+   *  The texture painter evaluates fine = true; (fine - geometry) is the residual that belongs in the normal map. */
   function displacement(s, alpha, ctx) {
-    const p = ctx.p, n = ctx.n;
+    const p = ctx.p, n = ctx.n, fine = !!ctx.fine;
+    const W = (w) => (fine ? w : Math.max(w, GEO_MIN));
     const [u, v] = toUV(p[0], p[1]);
     const lat = smooth(0.30, 0.78, NZ(n));                       // lateral face only
-    const front = smooth(0.1, 0.7, n[0]);
     let d = 0;
     // ---- gape: lip ridges along the mouth line -----------------------------------------------------------------------
     if (line && u > -0.05 && u < corner[0] + 0.03) {
       const vl = polyV(line, clamp(u, line[0][0], line[line.length - 1][0]));
       const dv = v - vl;                                         // + = above the gape line (upper lip / maxilla side)
-      const fade = smooth(corner[0] + 0.03, corner[0] - 0.04, u);
-      const mm = (mouth.lip_ridge_mm ?? 0.18) * 1e-3;
-      d += mm * 0.8 * gauss(dv - 0.006, 0.010) * fade * lat;      // upper lip rim
-      d += mm * 0.6 * gauss(dv + 0.008, 0.010) * fade * lat;      // lower lip rim
-      d -= mm * 0.7 * gauss(dv, 0.0035) * fade * lat;             // the gape crease itself
+      const fade = smooth(corner[0] + 0.03, corner[0] - 0.04, u) * smooth(0.0, 0.07, u);      // lips fade out at the very tip, where the cap rings are thinner than the crease is deep
+      const mm = (mouth.lip_ridge_mm ?? 0.18) * 1e-3, WL = (w) => (fine ? w : Math.max(w, GEO_LIP));   // the loft clusters its columns at the mouth line, so lips can be narrower than other features
+      d += mm * 1.5 * gauss(dv - 0.021, WL(0.014)) * fade * lat;      // upper lip pad (rolled lip)
+      d += mm * 1.1 * gauss(dv + 0.019, WL(0.013)) * fade * lat;      // lower lip pad
+      d -= mm * 1.1 * gauss(dv, WL(0.0035)) * fade * lat;             // the gape crease itself
     }
     // ---- maxilla plate -------------------------------------------------------------------------------------------------
     if (spec.maxilla) {
-      const sd = sdPolygon(spec.maxilla.outline, u, v), e = spec.maxilla.edge ?? 0.014;
+      const sd = sdPolygon(spec.maxilla.outline, u, v), e = W(spec.maxilla.edge ?? 0.014);
       d += (spec.maxilla.height_mm ?? 0.35) * 1e-3 * smooth(-e, e, sd) * lat;
       d -= (spec.maxilla.groove_mm ?? 0.10) * 1e-3 * gauss(sd, e * 0.8) * lat;                  // groove along the plate's border
     }
     // ---- dentary (lower jaw) -------------------------------------------------------------------------------------------
     if (spec.dentary) {
-      const sd = sdPolygon(spec.dentary.outline, u, v), e = spec.dentary.edge ?? 0.014;
+      const sd = sdPolygon(spec.dentary.outline, u, v), e = W(spec.dentary.edge ?? 0.014);
       d += (spec.dentary.height_mm ?? 0.25) * 1e-3 * smooth(-e, e, sd) * lat;
-      if (spec.dentary.suture) { const r = distPolyline(spec.dentary.suture, u, v); d -= (spec.dentary.suture_mm ?? 0.10) * 1e-3 * gauss(r.d, 0.006) * lat; }
+      if (spec.dentary.suture) { const r = distPolyline(spec.dentary.suture, u, v); d -= (spec.dentary.suture_mm ?? 0.10) * 1e-3 * gauss(r.d, W(0.006)) * lat; }
     }
     // ---- cheek (suborbital) bulge ----------------------------------------------------------------------------------------
     if (spec.cheek) {
@@ -186,7 +189,7 @@ export function createHead(surface, params, spec) {
     // ---- preopercle line ------------------------------------------------------------------------------------------------
     if (spec.preopercle) {
       const r = distPolyline(spec.preopercle.line, u, v);
-      d -= (spec.preopercle.groove_mm ?? 0.14) * 1e-3 * gauss(r.d, spec.preopercle.width ?? 0.007) * lat;
+      d -= (spec.preopercle.groove_mm ?? 0.14) * 1e-3 * gauss(r.d, W(spec.preopercle.width ?? 0.007)) * lat;
     }
     // ---- opercle plate and its free margin -------------------------------------------------------------------------------
     if (spec.opercle) {
@@ -194,17 +197,18 @@ export function createHead(surface, params, spec) {
       const vv = clamp(v, vBot, vTop), um = polyUofV(m, vv);                                    // margin position at this height
       const du = u - um;                                                                         // < 0 in front of (on) the plate, > 0 on the body behind
       const inside = smooth(vBot - 0.03, vBot + 0.02, v) * smooth(vTop + 0.03, vTop - 0.02, v);  // margin only spans its own height range
-      const plate = (o.plate_mm ?? 0.5) * 1e-3, w = o.edge ?? 0.010;
-      d += plate * (1 - smooth(-w, w * 0.5, du)) * inside * lat;                                 // plate sits proud of the body
+      const plate = (o.plate_mm ?? 0.5) * 1e-3, w = W(o.edge ?? 0.010);
+      const pf = spec.preopercle?.line;                                                          // the plate begins at the preopercle line
+      const front = pf ? smooth(polyUofV(pf, clamp(v, pf[pf.length - 1][1], pf[0][1])) - w * 1.2, polyUofV(pf, clamp(v, pf[pf.length - 1][1], pf[0][1])) + w * 1.2, u) : 1;
+      d += plate * front * (1 - smooth(-w, w * 0.5, du)) * inside * lat;                         // plate sits proud of the body, between preopercle line and free margin
       d += (o.rim_mm ?? 0.14) * 1e-3 * gauss(du + w * 0.55, w * 0.55) * inside * lat;           // thin raised rim
       d -= (o.shadow_mm ?? 0.16) * 1e-3 * gauss(du - w * 0.9, w * 0.7) * inside * lat;           // groove under the free edge (body tucks under)
     }
     // ---- nostrils ---------------------------------------------------------------------------------------------------------
     if (spec.nostrils) {
       const a = spec.nostrils.anterior, b = spec.nostrils.posterior;
-      const topMask = smooth(0.15, 0.6, Math.abs(n[1]) + 0.25 * (1 - lat) + lat * 0.8);
-      if (a) { const r = Math.hypot((u - a[0]) * HLm, (v - a[1]) * HLm), R = (spec.nostrils.radius_mm ?? 0.85) * 1e-3; if (r < R * 2.4) { d -= (spec.nostrils.depth_mm ?? 0.5) * 1e-3 * Math.max(0, 1 - (r / R) ** 2) ** 2; d += 0.16e-3 * gauss(r - R * 1.3, R * 0.35) * smooth(-0.2, 0.6, (u - a[0]) * 20); } }
-      if (b) { const du = (u - b[0]) * HLm, dv = (v - b[1]) * HLm, R = (spec.nostrils.radius_mm ?? 0.85) * 1e-3 * 0.8; const r = Math.hypot(du / 1.5, dv); if (r < R * 2.2) d -= (spec.nostrils.depth_mm ?? 0.5) * 1e-3 * 0.8 * Math.max(0, 1 - (r / R) ** 2) ** 2; }
+      if (a) { const r = Math.hypot((u - a[0]) * HLm, (v - a[1]) * HLm), R = Math.max(spec.nostrils.radius_mm ?? 0.85, fine ? 0 : GEO_MIN * HLm * 1e3 * 0.8) * 1e-3; if (r < R * 2.4) { d -= (spec.nostrils.depth_mm ?? 0.5) * 1e-3 * Math.max(0, 1 - (r / R) ** 2) ** 2; d += 0.25e-3 * gauss(r - R * 1.3, R * 0.35) * smooth(-0.2, 0.6, (u - a[0]) * 20); } }
+      if (b) { const du = (u - b[0]) * HLm, dv = (v - b[1]) * HLm, R = Math.max(spec.nostrils.radius_mm ?? 0.85, fine ? 0 : GEO_MIN * HLm * 1e3 * 0.8) * 1e-3 * 0.8; const r = Math.hypot(du / 1.5, dv); if (r < R * 2.2) d -= (spec.nostrils.depth_mm ?? 0.5) * 1e-3 * 0.8 * Math.max(0, 1 - (r / R) ** 2) ** 2; }
     }
     // ---- orbit: socket + rim around the eyeball (shared constants with eyes.mjs) ------------------------------------------------
     if (eye && ctx.eyeCenters) for (const c of ctx.eyeCenters) {
@@ -212,7 +216,7 @@ export function createHead(surface, params, spec) {
       if (rr < ctx.eyeRo * 3.2) d += socketDisplacement(rr, ctx.eyeRo);
     }
     // ---- branchiostegal rays on the throat -----------------------------------------------------------------------------------
-    if (spec.branchiostegal) {
+    if (spec.branchiostegal && fine) {                                                          // too fine for the loft grid: normal map only
       const b = spec.branchiostegal, vent = smooth(0.35, 0.85, -n[1]);
       const du = u - b.apex_u, dz = p[2] / HLm;
       if (vent > 0 && du > 0.02) {
@@ -221,7 +225,7 @@ export function createHead(surface, params, spec) {
         d += (b.height_mm ?? 0.12) * 1e-3 * ridge * vent * smooth(b.apex_u + 0.02, b.apex_u + 0.1, u) * smooth(b.end_u ?? 1.0, (b.end_u ?? 1.0) - 0.12, u) * smooth(0.55, 0.15, th);
       }
     }
-    return d;
+    return d * smooth(0.0, 0.07, u);                              // the cap rings at the tip are thinner than any feature: no relief there
   }
 
   function landmarks() {
