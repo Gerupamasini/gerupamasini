@@ -347,34 +347,176 @@ uniform float uCausticGain;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
 ${WAVES_GLSL}
-float hash21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+// shared between the colour, normal and roughness stages (the colour stage runs first)
+float gFilm = 0.0;
+float gQuartz = 0.0;
+vec2 gNrmAdd = vec2(0.0);
+vec4 gDis = vec4(0.0);
+// integer hash: the flat is 320 m wide and the grains are a millimetre, so cell ids run into the hundreds of
+// thousands — float tricks fall apart there, integer mixing does not
+float hash21(vec2 p) {
+  uvec2 v = uvec2(ivec2(floor(p + 0.5)));
+  uint h = v.x * 0x27d4eb2du ^ v.y * 0x165667b1u;
+  h = (h ^ (h >> 15u)) * 0x2c1b3c6du; h ^= h >> 12u; h *= 0x297a2d39u; h ^= h >> 15u;
+  return float(h) * (1.0 / 4294967296.0);
+}
+vec2 hash22(vec2 p) { return vec2(hash21(p), hash21(p + vec2(1013.0, 7177.0))); }
 float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y); }
+// value noise with its derivative (quintic), for micro relief
+vec3 vnoiseD(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0), du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+  float a = hash21(i), b = hash21(i + vec2(1, 0)), c = hash21(i + vec2(0, 1)), d = hash21(i + vec2(1, 1));
+  float k1 = b - a, k2 = c - a, k3 = a - b - c + d;
+  return vec3(a + k1 * u.x + k2 * u.y + k3 * u.x * u.y, du * vec2(k1 + k3 * u.y, k2 + k3 * u.x));
+}
+// grain field (after MahazeViewer): distance to the nearest grain centre in cell units, two ids, and the offset to it
+vec3 grains(vec2 p, out vec2 off) {
+  vec2 ip = floor(p), fp = fract(p);
+  float best = 9.0; vec2 id = vec2(0.0); off = vec2(0.0);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j));
+    vec2 o = hash22(ip + g);
+    vec2 r = g + o * 0.8 + 0.1 - fp;
+    float d = dot(r, r);
+    if (d < best) { best = d; id = ip + g; off = r; }
+  }
+  return vec3(sqrt(best), hash21(id + vec2(31.0, 17.0)), hash21(id + vec2(59.0, 3.0)));
+}
 // Ripple marks as one continuous scalar field over the whole flat: shore-parallel crests (wavelength ~8 cm) whose
-// line is bent by three layers of noise displacement. Bending the phase instead of the direction keeps the local
-// wavelength bounded, so the crests swerve, split and merge without ever breaking, and chunks share the same field.
+// line is bent by layers of noise displacement. Bending the phase instead of the direction keeps the local
+// wavelength bounded, so the crests swerve without ever breaking, and chunks share the same field.
 float rippleWarp(vec2 p) {
   float w = 2.2 * (vnoise(p * 0.04 + 1.7) - 0.5);          // broad swerves, tens of metres
   w += 0.55 * (vnoise(p * 0.125 - 3.1) - 0.5);            // metre-scale bends
   w += 0.2 * (vnoise(p * 0.65 + 8.9) - 0.5);              // crest waviness at the 1.5 m scale
-  w += 0.09 * (vnoise(p * 1.7 - 5.3) - 0.5);              // 60 cm: crests split and merge
+  w += 0.09 * (vnoise(p * 1.7 - 5.3) - 0.5);              // 60 cm wiggles
   w += 0.03 * (vnoise(p * 4.6 + 2.2) - 0.5);              // 20 cm wiggles
   return p.y + w;
 }
-float ripplePhase(vec2 p) { return rippleWarp(p) * 78.5; }
+#define RIPPLE_K 78.5
+// Crests that split and merge. Real wave ripples are full of Y-junctions: a crest forks, or two run together.
+// In a phase field that is a pair of dislocations — one extra crest inserted between two cores, a fork at each
+// end. Pairs are laid along the crest direction in cells of a few metres; the far field of a pair cancels, so
+// each is windowed to its cell without a seam (the 2π step between the cores lies where the window is still
+// exactly 1). Two layers: long inserted crests every few metres, and short ones in between.
+// Accumulates (phase, d/dx, d/dy, nearness to a core) — the cores get a smooth saddle instead of a vanishing wavelength.
+void dipoleLayer(vec2 p, float cell, float prob, float sepMin, float sepMax, vec2 seed, inout vec4 acc) {
+  vec2 cellF = floor(p / cell);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 c = cellF + vec2(float(i), float(j));
+    if (hash21(c + seed) > prob) continue;
+    vec2 ctr = (c + 0.15 + 0.7 * hash22(c + seed + vec2(21.0, 5.0))) * cell;
+    float sep = mix(sepMin, sepMax, hash21(c + seed + vec2(13.0, 1.0)));
+    float sgn = hash21(c + seed + vec2(2.0, 27.0)) < 0.5 ? 1.0 : -1.0;
+    float R = min(cell * 0.95, 1.6 * sep + 0.3);
+    vec2 d = p - ctr;
+    float r = length(d);
+    if (r > R) continue;
+    vec2 da = d - vec2(sep * 0.5, 0.0), db = d + vec2(sep * 0.5, 0.0);
+    float ra2 = max(dot(da, da), 1e-6), rb2 = max(dot(db, db), 1e-6);
+    // principal value of the angle difference: its only 2π step is on the segment between the cores
+    vec2 q = vec2(da.x * db.x + da.y * db.y, da.y * db.x - da.x * db.y);
+    float pv = atan(q.y, q.x);
+    vec2 gpv = vec2(-da.y, da.x) / ra2 - vec2(-db.y, db.x) / rb2;
+    float t = clamp((r - 0.5 * R) / (0.5 * R), 0.0, 1.0);
+    float w = 1.0 - t * t * (3.0 - 2.0 * t);
+    vec2 gw = -(6.0 * t * (1.0 - t) / (0.5 * R)) * d / max(r, 1e-4);
+    acc.x += sgn * w * pv;
+    acc.yz += sgn * (w * gpv + pv * gw);
+    acc.w = max(acc.w, max(exp(-ra2 / 0.0016), exp(-rb2 / 0.0016)));
+  }
+}
+vec4 rippleDisloc(vec2 p) {
+  vec4 acc = vec4(0.0);
+  dipoleLayer(p, 2.0, 0.8, 0.5, 1.3, vec2(3.0, 9.0), acc);
+  dipoleLayer(p, 1.0, 0.3, 0.14, 0.36, vec2(41.0, 23.0), acc);
+  return acc;
+}
+float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
 // where the ripples are: patches of flat sand in between, crests fading in and out at the metre scale
-float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * smoothstep(0.15, 0.6, vnoise(p * 0.9 + 2.9)) * (0.6 + 0.4 * vnoise(p * 0.2 + 7.1)); }`)
+float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * smoothstep(0.15, 0.6, vnoise(p * 0.9 + 2.9)) * (0.6 + 0.4 * vnoise(p * 0.2 + 7.1)); }
+`)
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
   // surface detail: grain, patches and ripple shading, all procedural
-  // grain: millimetre speckle plus centimetre mottling (the old 1.7 cm cells read as a checkerboard up close)
-  float grain = (hash21(floor(vWorldPos.xz * 450.0)) - 0.5) * 0.6 + (vnoise(vWorldPos.xz * 35.0) - 0.5) * 0.8;
+  vec2 mm = vWorldPos.xz * 1000.0;
+  float fw = max(length(fwidth(mm)), 1e-4);   // pixel footprint in millimetres
+  float grain = (hash21(floor(vWorldPos.xz * 450.0)) - 0.5) * 0.5 + (vnoise(vWorldPos.xz * 35.0) - 0.5) * 0.8;
   float patchN = vnoise(vWorldPos.xz * 0.35) - 0.5;
   float isSand = 1.0 - smoothstep(0.5, 1.5, vSubstrate);
+  float muddy = smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate));
+  gDis = rippleDisloc(vWorldPos.xz);
   // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
-  float ripple = cos(ripplePhase(vWorldPos.xz)) * rippleAmp(vWorldPos.xz) * (0.3 + 0.7 * isSand) * (1.0 - vPit);
+  float ripple = cos(ripplePhase(vWorldPos.xz)) * rippleAmp(vWorldPos.xz) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit);
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 - ripple * 0.05;
   diffuseColor.rgb *= detail;
+  // ---- up close: the grains themselves (after MahazeViewer's sediment). Medium quartz grains and coarser shell
+  // bits sit on a silty base; each is a disc with a dark rim and a dome in the normal. Faded by pixel footprint.
+  float det1 = 1.0 - smoothstep(0.1, 0.35, fw * 0.5 / 1.4);
+  float det2 = 1.0 - smoothstep(0.08, 0.3, fw * 0.5 / 3.4);
+  if (det2 > 0.001) {
+    vec2 o1, o2;
+    vec3 g1 = grains(mm / 1.4, o1);
+    vec3 g2 = grains(mm / 3.4 + 17.0, o2);
+    float grainy = (0.3 + 0.5 * isSand) * (1.0 - 0.5 * vPit);
+    vec3 alb = diffuseColor.rgb;
+    vec3 quartz = alb * 1.3 + vec3(0.06), shell = alb * 1.15 + vec3(0.05, 0.04, 0.03), black = alb * 0.4;
+    vec3 c1 = alb * (0.8 + 0.5 * g1.y);
+    c1 = g1.z > 0.982 ? black : (g1.z > 0.9 ? quartz : (g1.z > 0.85 ? shell : c1));
+    vec3 c2 = alb * (0.75 + 0.6 * g2.y);
+    c2 = g2.z > 0.975 ? black : (g2.z > 0.88 ? quartz : (g2.z > 0.82 ? shell : c2));
+    float r1 = 0.3 + 0.17 * fract(g1.y * 7.3), r2 = 0.24 + 0.2 * fract(g2.y * 5.1);
+    float has1 = step(0.3, fract(g1.z * 3.7)) * grainy, has2 = step(0.68, fract(g2.z * 2.9)) * grainy;
+    float disc1 = smoothstep(r1, r1 - 0.07, g1.x) * det1 * has1;
+    float disc2 = smoothstep(r2, r2 - 0.05, g2.x) * det2 * has2;
+    float ring1 = (smoothstep(r1 + 0.14, r1, g1.x) - smoothstep(r1, r1 - 0.07, g1.x)) * det1 * has1;
+    float ring2 = (smoothstep(r2 + 0.12, r2, g2.x) - smoothstep(r2, r2 - 0.05, g2.x)) * det2 * has2;
+    alb *= 1.0 - 0.1 * max(ring1, 0.0) - 0.14 * max(ring2, 0.0);
+    alb = mix(alb, c1, disc1);
+    alb = mix(alb, c2, disc2);
+    diffuseColor.rgb = alb;
+    gNrmAdd += (-o1 / r1) * 0.9 * disc1 * (1.0 - disc2) + (-o2 / r2) * disc2;
+    gQuartz = disc1 * step(0.85, g1.z) * step(g1.z, 0.95) + disc2 * step(0.82, g2.z) * step(g2.z, 0.93);
+  }
+  // mud: faecal pellets (small dark ovals) on the smooth silt
+  float det4 = 1.0 - smoothstep(0.1, 0.4, fw * 0.5 / 5.0);
+  if (det4 > 0.001 && isSand < 0.999) {
+    vec2 o4;
+    vec3 g4 = grains(mm / 5.0 + 41.0, o4);
+    float pel = smoothstep(0.3, 0.2, length(o4 * vec2(1.0, 1.9))) * step(0.72, g4.z) * (1.0 - isSand) * det4;
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.6, pel * 0.8);
+    gNrmAdd += -o4 * 1.4 * pel;
+  }
+  // ---- burrow openings: the holes of アナジャコ, スナモグリ and worms, dark with a low collar or a mound of
+  // ejected sand; thick on muddy sand, a few on clean sand, none in a pit
+  {
+    vec2 ob;
+    vec3 gb = grains(vWorldPos.xz / 0.3 + 3.0, ob);
+    float holeP = mix(0.1, 0.7, muddy) * (1.0 - vPit) * (1.0 - 0.5 * smoothstep(2.5, 3.5, vSubstrate));
+    float hasHole = step(gb.z, holeP);
+    float mound = step(0.5, gb.y);                       // half the holes sit on a volcano of ejecta
+    float holeR = (0.0045 + 0.0045 * fract(gb.y * 3.1)) / 0.3;
+    float detH = 1.0 - smoothstep(0.3, 1.0, fw * 0.5 / (holeR * 300.0));
+    float detM = 1.0 - smoothstep(0.3, 1.0, fw * 0.5 / 20.0);
+    float hole = smoothstep(holeR, holeR * 0.6, gb.x) * hasHole * detH;
+    float collarR = holeR * mix(2.2, 4.5, mound);
+    float collar = (smoothstep(collarR, holeR * 1.1, gb.x) - smoothstep(holeR * 1.1, holeR * 0.7, gb.x)) * hasHole * detM;
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * mix(vec3(0.92, 0.9, 0.88), vec3(1.12, 1.08, 1.02), mound), collar * 0.8);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.048, 0.045), hole * 0.9);
+    // the mound's slope: up toward the hole, then the funnel down into it
+    vec2 away = -ob / max(gb.x, 1e-3);
+    gNrmAdd += away * (0.6 + 0.6 * mound) * collar - away * 1.2 * hole;
+  }
+  // ---- micro relief: silt lumps at the millimetre and centimetre scale, faded with distance
+  {
+    vec3 nd = vnoiseD(mm * 0.35) * 0.5 + vnoiseD(mm * 1.1 + 7.0) * 0.25;
+    float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand));
+    vec3 nd2 = vnoiseD(mm * 0.055 + 3.0);
+    float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand));
+    gNrmAdd += nd.yz * bump + nd2.yz * bump2;
+  }
   // a stingray's pit: the ray blew the oxidised skin off, so the bowl shows the darker, wetter sand beneath,
   // strewn with the chalky grit of the clams it crushed
   if (vPit > 0.001) {
@@ -384,8 +526,8 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   }
   // diatom film: a patchy golden-brown bloom on undisturbed mud and muddy sand; reduced (black) mud in the
   // lowest, longest-wet hollows (after MahazeViewer's sediment)
-  float muddy = smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate));
   float filmP = muddy * smoothstep(0.35, 0.75, vnoise(vWorldPos.xz * 0.11 - 11.0)) * smoothstep(0.3, 0.7, vnoise(vWorldPos.xz * 0.9 + 4.0));
+  gFilm = filmP;
   diffuseColor.rgb *= mix(vec3(1.0), vec3(0.78, 0.68, 0.42), filmP * 0.6);
   float reducedP = smoothstep(1.5, 2.5, vSubstrate) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0));
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.058, 0.056, 0.052), reducedP * 0.7);
@@ -414,19 +556,21 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
 }`)
         .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
 {
-  // ripple marks: one continuous warped field (see rippleWarp); sand carries them, mud only faintly
+  // ripple marks: one continuous warped field (see rippleWarp) with its dislocations; sand carries them, mud faintly
   float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
-  float strength = (0.12 + 0.88 * sandy) * rippleAmp(vWorldPos.xz) * 0.26 * (1.0 - vPit);
+  float strength = (0.12 + 0.88 * sandy) * rippleAmp(vWorldPos.xz) * 0.26 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w);
   vec2 rp = vWorldPos.xz;
   float ph = ripplePhase(rp);
-  // the crest line's local direction comes from the warp gradient, so the shading follows the bends
+  // the crest line's local direction comes from the phase gradient (warp plus dislocations), so the shading
+  // follows the bends and the forks; where crests crowd the slope grows, where they spread it eases
   float e = 0.02;
-  vec2 grad = vec2(rippleWarp(rp + vec2(e, 0.0)) - rippleWarp(rp - vec2(e, 0.0)), rippleWarp(rp + vec2(0.0, e)) - rippleWarp(rp - vec2(0.0, e))) / (2.0 * e);
-  grad = normalize(grad + vec2(0.0, 1e-4));
-  float slope = cos(ph) * strength;
+  vec2 gph = vec2(rippleWarp(rp + vec2(e, 0.0)) - rippleWarp(rp - vec2(e, 0.0)), rippleWarp(rp + vec2(0.0, e)) - rippleWarp(rp - vec2(0.0, e))) / (2.0 * e) * RIPPLE_K + gDis.yz;
+  float kRel = clamp(length(gph) / RIPPLE_K, 0.4, 1.6);
+  vec2 grad = normalize(gph + vec2(0.0, 1e-4));
+  float slope = cos(ph) * strength * kRel;
   // the lee side is steeper
   slope += cos(ph * 2.0 + 0.6) * strength * 0.35;
-  vec3 worldPerturb = vec3(grad.x * slope, 0.0, grad.y * slope);
+  vec3 worldPerturb = vec3(grad.x * slope + gNrmAdd.x, 0.0, grad.y * slope + gNrmAdd.y);
   vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
   normal = normalize(normal + viewPerturb);
 }`)
@@ -437,6 +581,8 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   float wetR = 1.0 - smoothstep(lvlR + 0.02, max(lvlR, uWetLevel) + 0.05, vWorldPos.y);
   wetR = max(wetR, 1.0 - smoothstep(lvlR - 0.05, lvlR + 0.12, vWorldPos.y));
   roughnessFactor = mix(roughnessFactor, 0.42, wetR);   // damp sand has a soft sheen, not a mirror
+  roughnessFactor = mix(roughnessFactor, 0.5, gFilm * 0.5);   // the organic film has a wet sheen of its own
+  roughnessFactor = mix(roughnessFactor, 0.28, gQuartz);      // quartz and shell grains glint
 }`);
     };
     mat.customProgramCacheKey = () => 'higata-terrain';

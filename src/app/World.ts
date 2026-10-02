@@ -79,7 +79,8 @@ export class World {
     if (this.timeAcc > 1 || this.tideRate === 0) this.tideRate = this.tideOverride !== null ? 0 : this.tide.rate(gameMs);
     this.water.setLevel(this.tideLevel);
     this.terrain.updateLod(anchor.x, anchor.z);
-    if (gameMs - this.lastHabitatMs > 2000 || this.lastHabitatMs === 0) {
+    // (absolute: a ticket or the debug clock can move game time backwards, and the pools must follow at once)
+    if (Math.abs(gameMs - this.lastHabitatMs) > 2000 || this.lastHabitatMs === 0) {
       this.lastHabitatMs = gameMs;
       this.habitat.update(gameMs, this.tideLevel);
     }
