@@ -70,10 +70,10 @@ export const joints = {
 export const bodySculpt = {
   smooth: 7.5,
   prims: [
-    // (19 → 22.5 wide: from above the back is a broad rounded dome over which the wings fold, widest at mid-body and
+    // (19 → 21.5 wide: from above the back is a broad rounded dome over which the wings fold, widest at mid-body and
     // tapering smoothly to the tail, not a narrow spindle with the folded wings pressed flat against its sides —
     // validation §Y. The front view is unchanged: the breast and its sides set the width there)
-    { type: 'ellipsoid', name: 'torso', c: [0, 66, -12], r: [22.5, 19.5, 39.5], rx: 29 },
+    { type: 'ellipsoid', name: 'torso', c: [0, 66, -12], r: [21.5, 19.5, 39.5], rx: 29 },
     { type: 'ellipsoid', name: 'breast', c: [0, 66, 11], r: [19.5, 21.5, 20.5] },
     { type: 'ellipsoid', name: 'belly', c: [0, 47, -11], r: [15.5, 11.5, 21.5] },
     { type: 'ellipsoid', name: 'mantleNape', c: [0, 86.5, 6], r: [15, 7.5, 13.5] },
