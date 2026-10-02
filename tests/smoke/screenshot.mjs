@@ -143,7 +143,11 @@ try {
     await page.evaluate(() => { const a = window.__higata; const st = a.capture.state.value; a.capture.state.value = { ...st, cursor: (st.bandStart + st.bandEnd) / 2 }; a.capture.attempt(); });
     const afterAttempt = await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, state: a.capture.state.value }; });
     console.log('after attempt', JSON.stringify(afterAttempt));
-    await waitFrames(page, 14);
+    await page.waitForFunction(() => { const s = window.__higata.capture.state.value; return !!s && s.phase === 'check' && s.revealed; }, null, { timeout: 60000 });
+    await waitFrames(page, 2);
+    console.log('reveal', JSON.stringify(await page.evaluate(() => { const a = window.__higata; const s = a.capture.state.value; return { phase: s?.phase, revealed: s?.revealed, text: s?.catchText, net: a.net?.group.visible }; })));
+    await page.screenshot({ path: path.join(outDir, '10b-net-check.png') });
+    await page.waitForFunction(() => window.__higata.mode === 'field', null, { timeout: 60000 });
     console.log('after wait', JSON.stringify(await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, frames: a.frameCount, state: a.capture.state.value, caseCount: a.encyclopedia.caseItems.value.length }; })));
     const caught = await page.evaluate(() => ({ caseCount: window.__higata.encyclopedia.caseItems.value.length, research: window.__higata.encyclopedia.research.value }));
     console.log('after capture', JSON.stringify(caught));

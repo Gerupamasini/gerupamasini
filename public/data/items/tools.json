@@ -2,12 +2,12 @@
   "tools": [
     {
       "id": "hand_net",
-      "ja": "手網",
+      "ja": "タモ",
       "type": "capture",
       "targets": ["fish", "crustacean"],
       "minigame": "timing",
       "params": { "barSpeed": 1.1, "bandWidth": 0.24 },
-      "description": "浅い水中の魚やエビをすくう。近づきすぎると逃げられる。"
+      "description": "浅い水中の魚やエビをすくう基本の道具。帯に入った瞬間に振り、網を引き上げて中を確かめる。近づきすぎると逃げられる。"
     }
   ]
 }

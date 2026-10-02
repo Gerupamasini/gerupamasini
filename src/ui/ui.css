@@ -272,7 +272,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .observe-bottom { position: fixed; left: 0; right: 0; bottom: 22px; display: flex; flex-direction: column; align-items: center; gap: 10px; animation: rise 0.4s var(--ease) both; pointer-events: none; }
 .observe-bottom > * { pointer-events: auto; }
 .observe-bottom .hint { color: var(--dim); font-size: 12px; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
-.capture-box { position: fixed; left: 0; right: 0; margin: 0 auto; bottom: 22vh; width: min(80vw, 460px); background: rgba(5, 11, 14, 0.7); border: 1px solid var(--line); backdrop-filter: blur(12px); border-radius: var(--r-l); padding: 14px 18px 16px; text-align: center; animation: rise 0.3s var(--ease) both; }
+.capture-box { position: fixed; left: 0; right: 0; margin: 0 auto; top: 14vh; width: min(80vw, 460px); background: rgba(5, 11, 14, 0.7); border: 1px solid var(--line); backdrop-filter: blur(12px); border-radius: var(--r-l); padding: 14px 18px 16px; text-align: center; animation: rise 0.3s var(--ease) both; }
 .capture-title { font-weight: 500; margin-bottom: 10px; letter-spacing: 0.06em; }
 .capture-title .tool { color: var(--dim); font-size: 12px; margin-right: 8px; letter-spacing: 0.1em; }
 .capture-bar { position: relative; height: 10px; background: rgba(236, 244, 244, 0.1); border-radius: 5px; overflow: hidden; }
@@ -281,6 +281,13 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .capture-msg { margin-top: 10px; font-size: 13px; color: var(--dim); letter-spacing: 0.06em; }
 .capture-msg.success { color: var(--ok); font-weight: 700; }
 .capture-msg.fail { color: var(--warn); font-weight: 700; }
+.capture-reveal { position: fixed; left: 0; right: 0; top: 17vh; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; pointer-events: none; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85), 0 0 24px rgba(0, 0, 0, 0.5); animation: rise 0.45s var(--ease) both; }
+.capture-reveal .eyebrow { color: var(--fg-2); }
+.capture-reveal.wait .eyebrow { color: var(--dim); animation: pulse 1.6s ease-in-out infinite; }
+.capture-reveal .display { font-size: 30px; }
+.capture-reveal.success .display { color: var(--accent); }
+.capture-reveal.fail .display { color: var(--sand); }
+@keyframes pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 
 /* ------------------------------------------------------------------ full map (M) */
 .map-overlay { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(5, 11, 14, 0.55); backdrop-filter: blur(10px); animation: fade 0.25s var(--ease) both; }

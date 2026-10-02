@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Vector3 } from 'three';
+import { PerspectiveCamera, Vector3, type Object3D } from 'three';
 import { render, h } from 'preact';
 import { GameRenderer } from '../render/Renderer';
 import { Input } from '../core/Input';
@@ -13,6 +13,10 @@ import { World } from './World';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
+import { NetView, NET_LAYER } from '../player/NetView';
+import { instantiateModel } from '../creatures/models/ModelLoader';
+import { DRIVERS } from '../creatures/drivers';
+import type { SpeciesDef } from '../data/schemas';
 import { CreatureSystem, type SpawnEnv } from '../creatures/CreatureSystem';
 import type { Individual, IndividualRecord } from '../creatures/Individual';
 import { Encyclopedia } from '../systems/Encyclopedia';
@@ -48,6 +52,8 @@ export class App {
   tank: TankScene = null!;
   hero: HeroPipeline | null = null;
   private field: FieldRenderer | null = null;
+  /** the タモ in the player's hands */
+  net: NetView | null = null;
   world: World | null = null;
   player: FPSController | null = null;
   creatures: CreatureSystem | null = null;
@@ -233,6 +239,8 @@ export class App {
       await this.creatures.preload();
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
+      this.net = new NetView(this.world.scene);
+      this.capture.onSwung = (ind, ok) => this.onNetSwung(ind, ok);
       this.capture.onResolved = (ind, ok) => this.onCaptureResolved(ind, ok);
       this.applyHeroSetting();
       if (this.pendingPose) { this.player.setPose(this.pendingPose.x, this.pendingPose.z, this.pendingPose.heading); this.pendingPose = null; }
@@ -398,19 +406,37 @@ export class App {
     if (!tool || !ind.species.collectable) return;
     if (this.encyclopedia.caseItems.value.length >= this.encyclopedia.caseMax) { toast(t('capture.caseFull'), 'warn'); return; }
     this.capture.start(ind, tool);
+    this.net?.show();
     this.setMode('capture');
+  }
+
+  /** The net has gone through the water: the animal is in the bag (and shown there) or has bolted. */
+  private onNetSwung(ind: Individual, ok: boolean): void {
+    if (!this.creatures || !this.player) return;
+    this.player.applyKick(0.06);
+    if (ok) {
+      this.creatures.remove(ind.id);
+      void this.displayModelFor(ind.species).then((obj) => { if (obj && this.capture.targetIndividual === ind) this.net?.setCatch(obj, ind.length_mm / ind.species.model.modelLength_mm); });
+    } else {
+      const away = new Vector3().subVectors(ind.pos, this.player.position).setY(0).normalize().multiplyScalar(1.5);
+      this.creatures.forceIntent(ind.id, { id: -1, kind: 'flee', urgency: 1, seconds: 4, target: ind.pos.clone().add(away), from: this.player.position.clone() });
+    }
+  }
+
+  /** A fresh model of the species to lie in the net (the detailed tier, or the driver's own geometry). */
+  private async displayModelFor(sp: SpeciesDef): Promise<Object3D | null> {
+    const rel = sp.model.lod1 ?? sp.model.hero ?? sp.model.lod2;
+    if (rel) {
+      try { return (await instantiateModel(rel)).root; } catch (err) { console.warn(err); }
+    }
+    const entry = DRIVERS[sp.model.driver ?? ''];
+    return entry?.placeholder ? entry.placeholder().root : null;
   }
 
   private onCaptureResolved(ind: Individual, ok: boolean): void {
     if (!this.creatures || !this.world) return;
-    if (ok) {
-      this.encyclopedia.onCaptured(ind, this.clock.nowGame(), this.world.tideLevel);
-      this.creatures.remove(ind.id);
-    } else {
-      const away = new Vector3().subVectors(ind.pos, this.player!.position).setY(0).normalize().multiplyScalar(1.5);
-      this.creatures.forceIntent(ind.id, { id: -1, kind: 'flee', urgency: 1, seconds: 4, target: ind.pos.clone().add(away), from: this.player!.position.clone() });
-      toast(t('capture.fail'), 'warn');
-    }
+    this.net?.hide();
+    if (ok) this.encyclopedia.onCaptured(ind, this.clock.nowGame(), this.world.tideLevel);
     this.setMode('field');
     this.requestSave();
   }
@@ -571,7 +597,7 @@ export class App {
         break;
       case 'capture':
         if (this.input.mouseClicked || this.input.pressed('interact')) this.capture.attempt();
-        if (this.input.pressed('menu')) { this.capture.cancel(); this.setMode('field'); }
+        if (this.input.pressed('menu') && this.capture.cancel()) { this.net?.hide(); this.setMode('field'); }
         this.capture.update(dt);
         break;
       case 'home':
@@ -603,6 +629,8 @@ export class App {
       } else this.renderer.gl.render(this.tank.scene, this.tank.camera);
     } else if (world && player && creatures) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
+      else if (mode === 'capture') player.idle(dt);
+      this.net?.update(this.camera, dt, mode === 'capture' ? this.capture.state.value : null, world.tideLevel);
       creatures.update({
         dt: this.worldVisible() ? dt : 0, gameMs, playerPos: player.position, camera: this.camera, simScale: this.simScale,
         tod: world.tod, season: world.season, tidePhase: this.tidePhase(), lockedId: this.lockedId,
@@ -613,6 +641,7 @@ export class App {
         this.hero.render(world.scene, this.camera, dt, world.water);
       } else if (this.field) this.field.render(world.scene, this.camera, world.water);
       else this.renderer.gl.render(world.scene, this.camera);
+      if (this.net?.group.visible && mode === 'capture') this.renderNetOverlay(world.scene);
       if (ui.debug.value && ui.debugState.value.markers) {
         this.markerAcc += dt;
         if (this.markerAcc >= 1 / MARKER_HZ) { this.markerAcc = 0; this.updateMarkers(); }
@@ -626,6 +655,23 @@ export class App {
     if (this.saveAcc >= AUTOSAVE_SEC) { this.saveAcc = 0; void this.writeSave(); }
     if (this.save) this.save.stats.playSeconds += dt;
     this.input.endFrame();
+  }
+
+  /** The タモ over the finished frame: its own depth, no water on it, never cut by the ground. */
+  private renderNetOverlay(scene: import('three').Scene): void {
+    const gl = this.renderer.gl;
+    const autoClear = gl.autoClear, shadows = gl.shadowMap.enabled;
+    const background = scene.background;
+    scene.background = null;   // a colour background would clear the frame
+    gl.autoClear = false;
+    gl.shadowMap.enabled = false;
+    gl.clearDepth();
+    this.camera.layers.set(NET_LAYER);
+    gl.render(scene, this.camera);
+    this.camera.layers.set(0);
+    scene.background = background;
+    gl.shadowMap.enabled = shadows;
+    gl.autoClear = autoClear;
   }
 
   private updateMarkers(): void {
