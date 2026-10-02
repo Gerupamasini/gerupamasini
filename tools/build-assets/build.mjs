@@ -8,6 +8,7 @@ import { buildBody, meshStats } from './loft.mjs';
 import { buildRig, bodyWeights, finWeights } from './rig.mjs';
 import { writeGLB } from './write-glb.mjs';
 import { sampleBodyGenome } from './genome.mjs';
+import { buildTeeth } from './teeth.mjs';
 
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 // Relative morph targets on the LOD0 body skin (05 §5.1.3). Amplitudes: body depth +-1 SD = 0.024/0.241 = 10 % [P, n=27]; peduncle +-0.013/0.091 = 14 % [P]; belly / cheek / branchiostegal [E].
@@ -36,10 +37,11 @@ async function optional(name) {
   try { return await import(`./${name}.mjs`); } catch (e) { console.log(`[build] module ${name} unavailable: ${e.message.split('\n')[0]}`); return null; }
 }
 
-export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, 'assets/generated/yamame.glb'), withTextures = true, withLods = true, individual = false } = {}) {
+export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, 'assets/generated/yamame.glb'), withTextures = true, withLods = true, individual = false, sl = null } = {}) {
   let params = loadParams();
   if (stage === 'adult') params = applyStage(params, JSON.parse(fs.readFileSync(path.join(ROOT, 'assets/src/stage_adult.json'), 'utf8')), 'adult');
   const bodyGenome = individual ? sampleBodyGenome(seed) : {};
+  if (sl) { bodyGenome.sl_m = sl; params = structuredClone(params); params.sl_m = { ...params.sl_m, v: sl }; }
   if (individual) { console.log('[build] individual', seed, JSON.stringify(bodyGenome)); params = structuredClone(params); params.sl_m = { ...params.sl_m, v: bodyGenome.sl_m }; }
   const surface = createSurface(params, bodyGenome);
   const body = buildBody(surface, params, LODS[0].loft);
@@ -61,8 +63,11 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
   const weights = {
     body: bodyWeights(rig, body.attrs, nBody, { operculumEdge: params.operculum.edge_s.v }),
     mouth: bodyWeights(rig, { _S: new Float32Array(body.mouth.positions.length / 3).fill(0.06), _JAW: body.mouth.attrs._JAW }, body.mouth.positions.length / 3),
+    teeth: null,
     fins: fins ? finWeights(rig, fins.geometry.attrs, fins.geometry.positions.length / 3) : null,
   };
+  const teeth = body.mouth.lips ? buildTeeth({ lips: body.mouth.lips, SL: surface.SL, seed }) : null;
+  if (teeth) { const n = teeth.positions.length / 3; weights.teeth = bodyWeights(rig, { _S: new Float32Array(n).fill(0.06), _JAW: teeth.attrs._JAW }, n); console.log('[build] teeth tris', teeth.indices.length / 3); }
   // morph targets (LOD0 body skin only): same topology, positions differ
   const morphs = [];
   for (const M of MORPHS) {
@@ -89,12 +94,12 @@ export async function build({ stage = 'adult', seed = 1, out = path.join(ROOT, '
     }
   }
   fs.mkdirSync(path.dirname(out), { recursive: true });
-  await writeGLB({ file: out, body, fins, eyes, rig, textures, params, weights, lodBodies, lodFins, lodEyes, morphs, meta: { seed, bones: rig.bones.length } });
+  await writeGLB({ file: out, body, teeth, fins, eyes, rig, textures, params, weights, lodBodies, lodFins, lodEyes, morphs, meta: { seed, bones: rig.bones.length } });
   const kb = (fs.statSync(out).size / 1024).toFixed(0);
   console.log(`[build] wrote ${out} (${kb} KB), bones=${rig.bones.length}`);
   return { out, rig, body, params };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await build({ stage: arg('stage', 'adult'), seed: Number(arg('seed', 1)), individual: process.argv.includes('--individual'), out: arg('out', path.join(ROOT, 'assets/generated/yamame.glb')) });
+  await build({ stage: arg('stage', 'adult'), seed: Number(arg('seed', 1)), individual: process.argv.includes('--individual'), sl: arg('sl', null) ? Number(arg('sl')) : null, out: arg('out', path.join(ROOT, 'assets/generated/yamame.glb')) });
 }

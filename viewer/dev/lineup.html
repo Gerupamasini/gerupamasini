@@ -15,7 +15,7 @@ const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(0.2, 0.8, 
 const half = parseFloat(q.get('half') || '0.075'), tw = Math.floor(W / cols), th = Math.floor(H / rows);
 const gl = await Promise.all(names.map((n) => new GLTFLoader().loadAsync(`/assets/generated/${n}.glb`)));
 for (let i = 0; i < names.length; i++) {
-  const g = gl[i]; scene.add(g.scene); g.scene.updateMatrixWorld(true);
+  const g = gl[i]; g.scene.traverse((o) => { if (/_LOD[12]$/.test(o.name)) o.visible = false; }); /* LOD12HIDE */ scene.add(g.scene); g.scene.updateMatrixWorld(true);
   const cx = (i % cols) * tw, cy = H - (Math.floor(i / cols) + 1) * th; r.setViewport(cx, cy, tw, th); r.setScissor(cx, cy, tw, th);
   const cam = new THREE.OrthographicCamera(-half * tw / th, half * tw / th, half, -half, 0.001, 5); cam.position.set(0, 0, 1); cam.lookAt(0, 0, 0);
   r.render(scene, cam); scene.remove(g.scene);

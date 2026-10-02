@@ -16,6 +16,7 @@ const dl = new THREE.DirectionalLight(0xffffff, 2); dl.position.set(0.3, 0.6, 0.
 const gltf = await new GLTFLoader().loadAsync(file);
 const root = gltf.scene; scene.add(root);
 const bones = {}; root.traverse((o) => { if (o.isBone) bones[o.name] = o; if (o.isMesh && wire) o.material.wireframe = true; });
+root.traverse((o) => { if (/_LOD[12]$/.test(o.name)) o.visible = false; }); // LOD12HIDE
 root.updateMatrixWorld(true);
 if (jaw) bones.jaw_lower.rotation.z = -jaw * Math.PI / 180;
 const pose = q.get('pose');

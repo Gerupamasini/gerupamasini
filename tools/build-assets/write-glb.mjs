@@ -11,7 +11,7 @@ function quatFromZ(dir) {
   const w = 1 + z; const q = [-y, x, 0, w]; const n = Math.hypot(...q); return q.map((v) => v / n);
 }
 
-export async function writeGLB({ file, body, fins, eyes, rig, textures, params, meta = {}, weights, lodBodies = [], lodFins = [], lodEyes = [], morphs = [] }) {
+export async function writeGLB({ file, body, teeth = null, fins, eyes, rig, textures, params, meta = {}, weights, lodBodies = [], lodFins = [], lodEyes = [], morphs = [] }) {
   const doc = new Document();
   const clearcoatExt = doc.createExtension(KHRMaterialsClearcoat), iridExt = doc.createExtension(KHRMaterialsIridescence), iorExt = doc.createExtension(KHRMaterialsIOR), specExt = doc.createExtension(KHRMaterialsSpecular);
   const buffer = doc.createBuffer('main');
@@ -77,6 +77,7 @@ export async function writeGLB({ file, body, fins, eyes, rig, textures, params, 
   mats.body.setExtension('KHR_materials_ior', iorExt.createIOR().setIOR(1.4));
 
   mats.mouth = doc.createMaterial('M_Mouth').setBaseColorTexture(tex('mouth_albedo', mouthTexture())).setRoughnessFactor(0.55).setMetallicFactor(0).setDoubleSided(true);
+  mats.teeth = doc.createMaterial('M_Teeth').setBaseColorFactor([0.93, 0.9, 0.82, 1]).setRoughnessFactor(0.3).setMetallicFactor(0).setDoubleSided(true);
   mats.fin = doc.createMaterial('M_Fin').setAlphaMode('BLEND').setDoubleSided(true).setRoughnessFactor(0.5).setMetallicFactor(0);
   if (textures?.fins) {
     mats.fin.setBaseColorTexture(tex('fin_albedo', textures.fins.albedo));
@@ -118,6 +119,11 @@ export async function writeGLB({ file, body, fins, eyes, rig, textures, params, 
   const mouthPrim = makePrim(body.mouth, mats.mouth, weights.mouth, 'mouth');
   for (const M of morphs) mouthPrim.addTarget(doc.createPrimitiveTarget(M.name).setAttribute('POSITION', accessor(`morph0_${M.name}`, 'VEC3', new Float32Array(body.mouth.positions.length))));   // glTF: every primitive of a mesh needs the same target count
   bodyMesh.addPrimitive(mouthPrim);
+  if (teeth) {
+    const tp = makePrim(teeth, mats.teeth, weights.teeth, 'teeth');
+    for (const M of morphs) tp.addTarget(doc.createPrimitiveTarget(M.name).setAttribute('POSITION', accessor(`morph1_${M.name}`, 'VEC3', new Float32Array(teeth.positions.length))));
+    bodyMesh.addPrimitive(tp);
+  }
   const bodyNode = doc.createNode('Body_LOD0').setMesh(bodyMesh).setSkin(skin); rootNode.addChild(bodyNode);
 
   // lower LODs share the skin (same Skeleton / bindMatrix); the runtime assembles THREE.LOD from the *_LODn nodes

@@ -56,8 +56,8 @@ const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / 
 
 // Eye socket of loft.mjs (displacement(): pocket + raised orbital rim), in units of the eye OUTER RADIUS Ro.
 // The orbit ring and the ball depth are fitted to the skin *including* this pocket. Pass genome.socket = null to fit to the
-// bare surface, or an object with the same keys if loft.mjs changes.      [E: mirrors loft.mjs displacement() eye section; gentle/wide so that the loft mesh resolves it]
-export const SOCKET_LOFT = { pocket_depth: 0.55, pocket_radius: 1.65, rim_height: 0.08, rim_radius: 1.45, rim_width: 0.50 };
+// bare surface, or an object with the same keys if loft.mjs changes.      [E: mirrors loft.mjs displacement() eye section; wide + gentle so that the LOD0 loft mesh (~1 mm spacing) resolves it]
+export const SOCKET_LOFT = { pocket_depth: 0.55, pocket_radius: 1.65, rim_height: 0.07, rim_radius: 1.45, rim_width: 0.50 };
 export function socketDisplacement(rr, Ro, sk = SOCKET_LOFT) { return socketDisp(rr, Ro, sk); }
 function socketDisp(rr, Ro, sk) {
   if (!sk) return 0;
@@ -285,21 +285,48 @@ function makeIrisTextures(rng, P) {
 // orbit ring colour strip: u (x) = around the ring, v (y) = inner edge (dark rim) -> outer edge (head colour)
 function makeOrbitTexture(rng, headRgb, w = 64, h = 64) {
   const data = new Uint8Array(w * h * 4); const nz = makePeriodicNoise(rng, 7);
-  const dark = [40, 33, 27];
+  const dark = [46, 38, 31];
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const v = (y + 0.5) / h, ph = (x + 0.5) / w * TAU;
-    // the head is darker above the eye and lighter below it (textures.mjs: back 59,50,36 -> flank 105,93,75): ring top psi = 90 deg
+    const up = 0.5 + 0.5 * Math.cos(ph - Math.PI / 2);                 // ring top (psi = 90 deg) a little darker (shadowed by the brow)
     const k = smoothstep(0.30, 0.97, v);
-    const shade = 1 - 0.26 * Math.sin(ph) + 0.05 * nz(ph);
+    const shade = mix(1 - 0.22 * up + 0.08 * nz(ph), 1, k);
     const o = (y * w + x) * 4;
-    for (let c = 0; c < 3; c++) data[o + c] = Math.round(clamp(mix(dark[c], headRgb[c] * shade, k), 0, 255));
+    for (let c = 0; c < 3; c++) data[o + c] = Math.round(clamp(mix(dark[c], headRgb[c], k) * shade, 0, 255));
     data[o + 3] = 255;
   }
   return { width: w, height: h, data };
 }
 
+// Convert one part of an EyeAsset (eye-local) to body-local coordinates at rest: { positions, normals, uvs, indices }.
+export function eyePartToBody(asset, part) {
+  const g = asset.parts[part]; if (!g) return null; const m = asset.matrix;
+  const positions = new Float32Array(g.positions.length), normals = new Float32Array(g.normals.length);
+  for (let i = 0; i < g.positions.length; i += 3) {
+    const x = g.positions[i], y = g.positions[i + 1], z = g.positions[i + 2], nx = g.normals[i], ny = g.normals[i + 1], nz = g.normals[i + 2];
+    positions[i] = m[0] * x + m[4] * y + m[8] * z + m[12]; positions[i + 1] = m[1] * x + m[5] * y + m[9] * z + m[13]; positions[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+    normals[i] = m[0] * nx + m[4] * ny + m[8] * nz; normals[i + 1] = m[1] * nx + m[5] * ny + m[9] * nz; normals[i + 2] = m[2] * nx + m[6] * ny + m[10] * nz;
+  }
+  return { positions, normals, uvs: g.uvs, indices: g.indices };
+}
+
+// ---- level of detail --------------------------------------------------------------------------------------------------
+// buildEyes({ ..., detail }) (also genome.detail): >= 1.5 'hero' (close-up stills, ~28k tris/eye, full sphere), >= 0.75 LOD0 (default, 1),
+// >= 0.375 LOD1 (0.5), else LOD2 (0.25, no cornea). Placement, aperture, textures' look and UV mapping are identical at every level
+// (only resolution differs), so LOD switches do not pop. Crisp edges (pupil, gold ring, limbus) come from the texture + normal map;
+// the geometry keeps the silhouette of the bulge, the iris dish and the cornea gap.   [E: triangle budgets from the integration request]
+//   tris per eye (ball + cornea + orbit): LOD0 ~1.2k (ball 644, cornea 252, orbit 288), LOD1 408, LOD2 108.
+const LOD_SPECS = {
+  hero: { name: 'hero', az: 96, tex: 512, hero: true, orbit: { around: 96, closed: true, top: 18, bot: 8 } },
+  lod0: { name: 'LOD0', az: 28, tex: 512, minGap: 2.4, base: [0, 14, 24, 66, 'C', 92, 104, 115], keys: ['p-', 'p+', 'l-', 'l0', 'l+'], orbit: { around: 36, u: [0, 0.25, 0.5, 0.78, 1] } },
+  lod1: { name: 'LOD1', az: 16, tex: 256, minGap: 5, base: [0, 22, 66, 'C', 100], keys: ['p+', 'l-', 'l+'], orbit: { around: 20, u: [0, 0.4, 0.75, 1] } },
+  lod2: { name: 'LOD2', az: 12, tex: 128, minGap: 5, base: [0, 30, 60, 100], keys: [], noCornea: true, orbit: { around: 12, u: [0, 0.45, 1] } },
+};
+const pickLod = (d) => (d >= 1.5 ? LOD_SPECS.hero : d >= 0.75 ? LOD_SPECS.lod0 : d >= 0.375 ? LOD_SPECS.lod1 : LOD_SPECS.lod2);
+
 // ---- main -------------------------------------------------------------------------------------------------------------
-export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
+export function buildEyes({ surface, params, genome = {}, seed = 1, detail }) {
+  const lodSpec = pickLod(detail ?? genome.detail ?? 1);
   const SL = surface.SL;
   const E = params.eye;
   const rng = mulberry32((seed * 2654435761) ^ 0x45594553);
@@ -322,7 +349,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   const scleraBright = genome.sclera_bright ?? clamp(0.25 + vr * 0.15 * gauss(draws[8], draws[9]), 0, 1);
   const sheen = genome.iris_sheen ?? 0.25;
   const yaw = (genome.eye_yaw_deg ?? 10) * Math.PI / 180;
-  const headRgb = genome.head_rgb ?? [88, 76, 58];                   // [P] body albedo around the eye in textures.mjs (flank 105,93,75 .. back 59,50,36)
+  const headRgb = genome.head_rgb ?? [128, 112, 90];
   const socket = genome.socket === undefined ? SOCKET_LOFT : genome.socket;
 
   // ---- placement on the right flank (CONTRACT §1) ----
@@ -359,7 +386,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   const apert = Array.from({ length: NPSI }, (_, i) => apertureAt(Cb, TAU * i / NPSI));
   const apertureMean = apert.reduce((a, b) => a + b, 0) / NPSI;
   // smooth the aperture curve a little (box filter, circular)
-  const apS = apert.map((_, i) => { let s = 0; for (let k = -4; k <= 4; k++) s += apert[(i + k + NPSI) % NPSI]; return s / 9; });
+  const apS = apert.map((_, i) => { let s = 0; for (let k = -2; k <= 2; k++) s += apert[(i + k + NPSI) % NPSI]; return s / 5; });
 
   // body-space -> eye-local
   const toLocal = (p) => { const d = sub(p, Cb); return [dot(d, Xl), dot(d, Yl), dot(d, Zl)]; };
@@ -372,43 +399,71 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
     const t = rho / Ro; if (t > tLim + 0.06) return 0;
     return dishDepth * (1 - smoothstep(tLim - 0.05, tLim + 0.05, t)) + pupilExtra * (1 - smoothstep(tp - 0.03, tp + 0.01, t));
   };
-  const thetas = [0];
-  for (let d = 1; d <= 76; d++) thetas.push(d * Math.PI / 180);
-  for (let d = 82; d <= 172; d += 6) thetas.push(d * Math.PI / 180);
-  thetas.push(Math.PI);
+  const thC = Math.asin(Math.min(0.97, (apTarget + 0.12 * Ro) / Rb));    // cornea edge (rad)
+  const thCa = Math.asin(0.45 * Ro / Rb);
+  const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+  let thetas;
+  if (lodSpec.hero) {
+    thetas = [0]; for (let d = 1; d <= 76; d++) thetas.push(d * D2R);
+    for (let d = 82; d <= 172; d += 6) thetas.push(d * D2R); thetas.push(Math.PI);
+  } else {
+    // rings are placed where the dish / pupil / limbus transitions are, so that a coarse mesh keeps the recess shape
+    const tAt = { 'p-': tp - 0.03, 'p+': tp + 0.01, 'l-': tLim - 0.05, 'l0': tLim, 'l+': tLim + 0.06 };
+    const cand = [];
+    for (const b of lodSpec.base) cand.push({ deg: b === 'C' ? thC * R2D : b, pri: b === 'C' ? 3 : 2 });
+    for (const k of lodSpec.keys) cand.push({ deg: Math.asin(Math.min(0.999, tAt[k] * Ro / Rb)) * R2D, pri: 1 });
+    cand.sort((x, y) => x.deg - y.deg);
+    const kept = [];
+    for (const c of cand) {
+      const last = kept[kept.length - 1];
+      if (last && c.deg - last.deg < lodSpec.minGap) { if (c.pri > last.pri) kept[kept.length - 1] = c; } else kept.push(c);
+    }
+    thetas = kept.map((c) => c.deg * D2R);
+  }
   const ballFn = (th, ph) => {
     const rho = Rb * Math.sin(th); let z = Rb * Math.cos(th);
     if (th < Math.PI / 2) z -= dish(rho);
     return [rho * Math.cos(ph), rho * Math.sin(ph), z];
   };
   const uvFn = (th) => (ph) => { const rho = Rb * Math.sin(Math.min(th, Math.PI / 2)) / Ro; return [0.5 + 0.5 * rho * Math.cos(ph), 0.5 - 0.5 * rho * Math.sin(ph)]; };
-  const ball = buildRevolved(ballFn, thetas, 96, (th, ph) => uvFn(th)(ph));
+  const ball = buildRevolved(ballFn, thetas, lodSpec.az, (th, ph) => uvFn(th)(ph));
 
   // ---- cornea (thin transparent cap, front only; merges into the ball surface at its edge) ----
-  const thC = Math.asin(Math.min(0.97, (apTarget + 0.12 * Ro) / Rb));
-  const thCa = Math.asin(0.45 * Ro / Rb);
-  const cthetas = []; for (let k = 0; k <= 56; k++) cthetas.push(thC * k / 56);
+  // Its rings are a subset of the ball rings, so that the chords of both meshes stay offset from each other (no intersection).
+  let cthetas;
+  if (lodSpec.hero) { cthetas = []; for (let k = 0; k <= 56; k++) cthetas.push(thC * k / 56); }
+  else {
+    const front = thetas.filter((t) => t < thC - 1e-6); cthetas = front.filter((_, i) => i % 2 === 0); cthetas.push(thC);
+  }
   const corFn = (th, ph) => {
     const gap = corneaGap * (mix(1, 0.18, smoothstep(thCa, thC, th)));
     const R = Rb + gap; return [R * Math.sin(th) * Math.cos(ph), R * Math.sin(th) * Math.sin(ph), R * Math.cos(th)];
   };
-  const cornea = buildRevolved(corFn, cthetas, 96, (th, ph) => uvFn(th)(ph));
+  const cornea = lodSpec.noCornea ? null : buildRevolved(corFn, cthetas, lodSpec.az, (th, ph) => uvFn(th)(ph));
 
   // ---- orbit ring: swept lip that follows the true skin, covering the ball/skin junction ----
-  const NW = 144;                                                      // around
-  const topPts = 18, botPts = 8;
+  // hero: closed tube with a buried underside; LOD0-2: open ribbon (inner edge hidden in the ball, outer edge dips under the skin)
+  const NW = lodSpec.orbit.around;
   const bump = (u) => Math.pow(Math.sin(Math.PI * Math.pow(u, 0.75)), 1.2);
-  const Hc = 0.10 * Ro, Bd = 0.12 * Ro, sink = 0.02 * Ro, Dd = 0.12 * Ro;              // crest height above skin / buried depth / whole-ring sink
+  const Hc = 0.10 * Ro, Bd = 0.12 * Ro, sink = 0.02 * Ro, Dd = 0.12 * Ro;   // [E] crest height above skin / buried depth / whole-ring sink / outer dip
+  const topH = (u) => Hc * bump(u) - Dd * smoothstep(0.62, 1.0, u);
   const prof = []; // [u (radial position inner 0 -> outer 1), h (height above the skin), v (texture coordinate)]
-  for (let i = 0; i <= topPts; i++) { const u = i / topPts; prof.push([u, Hc * bump(u) - Dd * smoothstep(0.62, 1.0, u), u]); }
-  // buried underside: textured with the outer (head) colour so that a dip of the loft skin never exposes a dark band
-  for (let i = 1; i <= botPts; i++) { const u = 1 - i / (botPts + 1); prof.push([u, -Bd * Math.sin(Math.PI * u) ** 0.8, 0.55 + 0.45 * u]); }
+  const closed = !!lodSpec.orbit.closed; let topPts;
+  if (closed) {
+    topPts = lodSpec.orbit.top; const botPts = lodSpec.orbit.bot;
+    for (let i = 0; i <= topPts; i++) { const u = i / topPts; prof.push([u, topH(u), u]); }
+    // buried underside: textured with the outer (head) colour so that a dip of the loft skin never exposes a dark band
+    for (let i = 1; i <= botPts; i++) { const u = 1 - i / (botPts + 1); prof.push([u, -Bd * Math.sin(Math.PI * u) ** 0.8, 0.55 + 0.45 * u]); }
+  } else {
+    for (const u of lodSpec.orbit.u) prof.push([u, topH(u), u]); topPts = prof.length - 1;
+  }
+  const crestK = prof.reduce((best, pr, k) => (k <= topPts && Math.abs(pr[0] - 0.4) < Math.abs(prof[best][0] - 0.4) ? k : best), 0);
   const oPos = [], oUv = [];
   const lift = (psi, r) => patch.normalAt(r * Math.cos(psi), r * Math.sin(psi), n0);
   const apAt = (psi) => { const f = ((psi / TAU) % 1 + 1) % 1 * NPSI; const i = Math.floor(f), t = f - i; return mix(apS[i % NPSI], apS[(i + 1) % NPSI], t); };
   for (let i = 0; i <= NW; i++) {                                      // column NW duplicates column 0 (continuous UV across the seam)
     const psi = TAU * (i % NW) / NW; const a = apAt(psi);
-    const rin = a - 0.10 * Ro, rout = 1.05 * Ro;                      // round outer outline; the inner edge follows the true aperture
+    const rin = a - 0.10 * Ro, rout = Math.max(1.0 * Ro, a + 0.17 * Ro);
     for (const [u, h, v] of prof) {
       const r = mix(rin, rout, u);
       const base = patch.sample(r * Math.cos(psi), r * Math.sin(psi)); const n = lift(psi, r);
@@ -416,9 +471,9 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
       oPos.push(...toLocal(p)); oUv.push(i / NW, v);
     }
   }
-  const NP = prof.length;
+  const NP = prof.length, NS = closed ? NP : NP - 1;                  // profile segments
   const oIdx = [], oIdxWrap = [];
-  for (let i = 0; i < NW; i++) for (let k = 0; k < NP; k++) {
+  for (let i = 0; i < NW; i++) for (let k = 0; k < NS; k++) {
     const k1 = (k + 1) % NP;
     const a = i * NP + k, b = (i + 1) * NP + k, c = i * NP + k1, d = (i + 1) * NP + k1;
     oIdx.push(a, b, c, b, d, c);
@@ -430,7 +485,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
   {
     const nn = smoothNormals(Float32Array.from(oPos), Uint32Array.from(oIdxWrap));
     const nl = [dot(n0, Xl), dot(n0, Yl), dot(n0, Zl)]; let votes = 0;
-    for (let i = 0; i < NW; i++) { const v = (i * NP + Math.floor(topPts * 0.4)) * 3; votes += nn[v] * nl[0] + nn[v + 1] * nl[1] + nn[v + 2] * nl[2] > 0 ? 1 : -1; }
+    for (let i = 0; i < NW; i++) { const v = (i * NP + crestK) * 3; votes += nn[v] * nl[0] + nn[v + 1] * nl[1] + nn[v + 2] * nl[2] > 0 ? 1 : -1; }
     flip = votes < 0;
   }
   if (flip) for (const arr of [oIdx, oIdxWrap]) for (let t = 0; t < arr.length; t += 3) { const q2 = arr[t + 1]; arr[t + 1] = arr[t + 2]; arr[t + 2] = q2; }
@@ -440,7 +495,7 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
 
   // ---- textures ----
   const texRng = mulberry32((seed * 40503) ^ 0x1215);
-  const tex = makeIrisTextures(texRng, { size: genome.iris_tex_size ?? 512, tp, ti, gold, irisL, scleraBright, sheen });
+  const tex = makeIrisTextures(texRng, { size: genome.iris_tex_size ?? lodSpec.tex, tp, ti, gold, irisL, scleraBright, sheen });
   const orbitTex = makeOrbitTexture(mulberry32((seed * 977) ^ 0x0AB17), headRgb);
 
   // ---- assemble the two assets ----
@@ -458,22 +513,23 @@ export function buildEyes({ surface, params, genome = {}, seed = 1 }) {
     const mz = (v) => (L ? [v[0], v[1], -v[2]] : v);
     const bz = mz(Zl), by = mz(Yl), bx = norm(cross(by, bz));
     const center = mz(Cb);
-    const parts = L ? { ball: mirrorX(ball), cornea: mirrorX(cornea), orbit: mirrorX(orbit) } : { ball, cornea, orbit };
+    const parts = L ? { ball: mirrorX(ball), cornea: cornea && mirrorX(cornea), orbit: mirrorX(orbit) } : { ball, cornea, orbit };
     const matrix = [bx[0], bx[1], bx[2], 0, by[0], by[1], by[2], 0, bz[0], bz[1], bz[2], 0, center[0], center[1], center[2], 1];
     return {
       side, bone: L ? 'eye_L' : 'eye_R', center, axis: bz, radius: Rb, outer_radius: Ro, aperture_radius: apertureMean,
       basis: { x: bx, y: by, z: bz }, quaternion: qFromBasis(bx, by, bz), matrix, orbit_normal: mz(n0), parts,
-      orbit_layout: { around: NW, profile: NP, outer_index: topPts, columns: NW + 1 },   // vertex = column * profile + k; k = outer_index is the outer edge
+      orbit_layout: { around: NW, profile: NP, outer_index: topPts, columns: NW + 1, closed },   // vertex = column * profile + k; k = outer_index is the outer edge
+      lod: lodSpec.name,
     };
   };
   const right = mk('R'), left = mk('L');
-  const tris = (a) => ({ ball: a.parts.ball.indices.length / 3, cornea: a.parts.cornea.indices.length / 3, orbit: a.parts.orbit.indices.length / 3 });
+  const tris = (a) => { const t = { ball: a.parts.ball.indices.length / 3, cornea: a.parts.cornea ? a.parts.cornea.indices.length / 3 : 0, orbit: a.parts.orbit.indices.length / 3 }; t.total = t.ball + t.cornea + t.orbit; return t; };
   const report = {
     outer_d_m: D, outer_d_over_sl: outerRatio, outer_radius_m: Ro, ball_radius_m: Rb, ball_depth_below_skin_m: depth, aperture_mean_m: apertureMean,
     aperture_min_over_Ro: Math.min(...apert) / Ro, aperture_max_over_Ro: Math.max(...apert) / Ro,
     iris_ring_d_over_outer: ti, pupil_d_over_outer: tp, iris_L: irisL, iris_gold: gold, sclera_bright: scleraBright, sheen,
     yaw_deg: yaw * 180 / Math.PI, centre_right: right.center, centre_left: left.center, skin_point_right: P0, skin_normal_right: n0,
-    cornea_gap_m: corneaGap, iris_recess_m: recess, socket, tris: tris(right), blotches: tex.blotches.length, adjusted,
+    cornea_gap_m: corneaGap, iris_recess_m: recess, socket, lod: lodSpec.name, tris: tris(right), tex_size: tex.iris.width, blotches: tex.blotches.length, adjusted,
   };
   return {
     left, right,

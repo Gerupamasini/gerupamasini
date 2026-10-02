@@ -17,13 +17,14 @@ const gltf = await new GLTFLoader().loadAsync(q.get('file') || '/assets/generate
 scene.add(gltf.scene);
 const fish = new Yamame(gltf, { phase0: 0 });
 // settle to steady state
-for (let i = 0; i < 240; i++) fish.update(1 / 60, { U_bl: U, turn, jawOpen: jaw });
+for (let i = 0; i < 240; i++) fish.update(1 / 60, { U_bl: U, turn, jawOpen: jaw, flow_bl: turn ? 0 : U });
+fish.pos.set(0, 0, 0); fish.heading = 0;
 const f = fish.wave.f; const T = 1 / Math.max(f, 0.3);
-const cols = 4, rows = Math.ceil(tiles / cols), tw = Math.floor(W / cols), th = Math.floor(H / rows);
-const half = 0.13;
+const cols = parseInt(q.get('cols') || '4'), rows = Math.ceil(tiles / cols), tw = Math.floor(W / cols), th = Math.floor(H / rows);
+const half = parseFloat(q.get('half') || '0.13');
 for (let i = 0; i < tiles; i++) {
   // advance by one n-th of the beat period
-  const steps = Math.round((T / tiles) * 120); for (let k = 0; k < steps; k++) fish.update(1 / 120, { U_bl: U, turn, jawOpen: jaw });
+  const steps = Math.round((T / tiles) * 120); for (let k = 0; k < steps; k++) fish.update(1 / 120, { U_bl: U, turn, jawOpen: jaw, flow_bl: turn ? 0 : U });
   gltf.scene.updateMatrixWorld(true);
   const cx = (i % cols) * tw, cy = H - (Math.floor(i / cols) + 1) * th;
   r.setViewport(cx, cy, tw, th); r.setScissor(cx, cy, tw, th);

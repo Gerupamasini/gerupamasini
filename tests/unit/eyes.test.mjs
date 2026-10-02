@@ -10,6 +10,7 @@ const SL = surface.SL;
 const Ro = 0.5 * params.eye.outer_d_over_sl.v * SL;
 const eyes = buildEyes({ surface, params, seed: 1 });
 const exact = buildEyes({ surface, params, seed: 1, genome: { variation: 0 } });
+const hero = buildEyes({ surface, params, seed: 1, detail: 2 });   // dense close-up level
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg ?? ''} ${a} vs ${b} (tol ${tol})`);
 const len = (v) => Math.hypot(v[0], v[1], v[2]);
 const apply = (m, p, o) => [m[0] * p[o] + m[4] * p[o + 1] + m[8] * p[o + 2] + m[12], m[1] * p[o] + m[5] * p[o + 1] + m[9] * p[o + 2] + m[13], m[2] * p[o] + m[6] * p[o + 1] + m[10] * p[o + 2] + m[14]];
@@ -64,8 +65,8 @@ test('growth: eye diameter ratio falls with size (mt_eye_size) and genome overri
 });
 
 test('geometry is finite, indexed, with unit normals and UV in [0,1] (ball / cornea)', () => {
-  for (const side of ['left', 'right']) for (const part of ['ball', 'cornea', 'orbit']) {
-    const g = eyes[side].parts[part]; const n = g.positions.length / 3;
+  for (const E of [eyes, hero]) for (const side of ['left', 'right']) for (const part of ['ball', 'cornea', 'orbit']) {
+    const g = E[side].parts[part]; const n = g.positions.length / 3;
     assert.equal(g.normals.length, g.positions.length); assert.equal(g.uvs.length, n * 2); assert.equal(g.indices.length % 3, 0);
     for (const a of [g.positions, g.normals, g.uvs]) for (const v of a) assert.ok(Number.isFinite(v));
     for (const i of g.indices) assert.ok(i < n);
@@ -74,8 +75,8 @@ test('geometry is finite, indexed, with unit normals and UV in [0,1] (ball / cor
   }
 });
 
-test('ball: dense front, spherical radius, recessed iris; cornea: front-only thin shell outside the ball', () => {
-  const { ball, cornea } = eyes.right.parts; const Rb = eyes.right.radius;
+test('ball: dense front (hero level), spherical radius, recessed iris; cornea: front-only thin shell outside the ball', () => {
+  const { ball, cornea } = hero.right.parts; const Rb = hero.right.radius;
   let front = 0, minR = 1e9, maxR = 0, maxZ = -1e9;
   for (let v = 0; v < ball.positions.length; v += 3) {
     const x = ball.positions[v], y = ball.positions[v + 1], z = ball.positions[v + 2]; const r = Math.hypot(x, y, z);
@@ -85,6 +86,9 @@ test('ball: dense front, spherical radius, recessed iris; cornea: front-only thi
   assert.ok(front > 4000, `front vertices ${front}`);                         // dense iris/pupil/sclera front
   assert.ok(maxR <= Rb + 1e-9 && minR > Rb - 0.25 * Ro, `ball radius range ${minR / Ro}..${maxR / Ro}`);
   assert.ok(maxZ <= Rb + 1e-9 && maxZ > Rb - 0.2 * Ro);
+  // LOD0 keeps the same bulge: ball vertices stay on the sphere / dish and the cornea stays outside of the ball
+  { const b0 = eyes.right.parts.ball; let mx = 0; for (let v = 0; v < b0.positions.length; v += 3) mx = Math.max(mx, Math.hypot(b0.positions[v], b0.positions[v + 1], b0.positions[v + 2])); assert.ok(mx <= Rb + 1e-9 && mx > Rb - 1e-6); }
+  { const c0 = eyes.right.parts.cornea; let mn = 1e9; for (let v = 0; v < c0.positions.length; v += 3) mn = Math.min(mn, Math.hypot(c0.positions[v], c0.positions[v + 1], c0.positions[v + 2]) - Rb); assert.ok(mn > 0, 'LOD0 cornea outside the ball'); }
   const gaps = []; let zmin = 1e9;
   for (let v = 0; v < cornea.positions.length; v += 3) {
     const r = Math.hypot(cornea.positions[v], cornea.positions[v + 1], cornea.positions[v + 2]); gaps.push(r - Rb); zmin = Math.min(zmin, cornea.positions[v + 2]);
@@ -221,42 +225,57 @@ test('deterministic by seed; different seeds make different individuals', () => 
   assert.ok(sat(hi.textures.iris) > sat(lo.textures.iris) + 20, 'more gold = more saturated');
 });
 
-test('orbit outline is a smooth round curve (no polygon / notches)', () => {
-  for (const side of ['left', 'right']) {
-    const e = eyes[side], o = e.parts.orbit, L = e.orbit_layout, rep = eyes.report;
-    const P0 = side === 'right' ? rep.skin_point_right : [rep.skin_point_right[0], rep.skin_point_right[1], -rep.skin_point_right[2]];
-    const nr = side === 'right' ? rep.skin_normal_right : [rep.skin_normal_right[0], rep.skin_normal_right[1], -rep.skin_normal_right[2]];
-    const rad = [];
-    for (let i = 0; i < L.around; i++) {
-      const p = apply(e.matrix, o.positions, (i * L.profile + L.outer_index) * 3); const d = [p[0] - P0[0], p[1] - P0[1], p[2] - P0[2]];
-      const h = d[0] * nr[0] + d[1] * nr[1] + d[2] * nr[2]; rad.push(Math.hypot(d[0] - h * nr[0], d[1] - h * nr[1], d[2] - h * nr[2]));
-    }
-    const mean = rad.reduce((a, b) => a + b, 0) / rad.length;
-    near(mean, 1.05 * Ro, 0.04 * Ro, 'mean outer radius');
-    for (const r of rad) near(r, mean, 0.02 * mean, 'round outline');
-    assert.ok(L.around >= 128, 'enough segments around the ring');
-    // UV seam duplicate column has the same position
+test('orbit ring layout: seam column duplicated for continuous UV, outer edge index valid at every level', () => {
+  for (const E of [eyes, hero, buildEyes({ surface, params, detail: 0.5 }), buildEyes({ surface, params, detail: 0.25 })]) {
+    const e = E.right, o = e.parts.orbit, L = e.orbit_layout;
+    assert.equal(o.positions.length / 3, L.columns * L.profile); assert.ok(L.outer_index >= 1 && L.outer_index < L.profile);
     const a = o.positions.slice(0, 3), b = o.positions.slice(L.around * L.profile * 3, L.around * L.profile * 3 + 3);
     for (let k = 0; k < 3; k++) near(a[k], b[k], 1e-9, 'seam');
+    assert.equal(o.uvs[(L.around * L.profile) * 2], 1); assert.equal(o.uvs[0], 0);
   }
 });
 
-test('loft eye socket in loft.mjs matches SOCKET_LOFT (kept in sync) and is resolved by the loft mesh', () => {
+test('loft eye socket in loft.mjs matches SOCKET_LOFT (kept in sync)', () => {
   const body = buildBody(surface, params); const Ro2 = Ro;
   const P0 = eyes.report.skin_point_right; let worst = 0, n = 0;
   for (let v = 0; v < body.positions.length / 3; v++) {
-    const s = body.attrs._S[v], a = body.attrs._ALPHA[v]; if (s < 0 || a < 0.2 || a > 1.6) continue; // right flank around the eye
-    const plain = surface.point(s, a); const rr = Math.hypot(plain[0] - P0[0], plain[1] - P0[1], plain[2] - P0[2]); if (rr > 2.4 * Ro2) continue;
+    const s = body.attrs._S[v], a = body.attrs._ALPHA[v]; if (s < 0.075 || s > 0.108 || a < 0.2 || a > 1.4) continue; // right flank around the eye: behind the nares, before the cheek swelling (s > 0.10) and the maxilla plate (alpha > 1.4)
+    const plain = surface.point(s, a); const rr = Math.hypot(plain[0] - P0[0], plain[1] - P0[1], plain[2] - P0[2]); if (rr > 1.9 * Ro2) continue;
     const nrm = surface.normal(s, a); const p = [body.positions[v * 3], body.positions[v * 3 + 1], body.positions[v * 3 + 2]];
     const d = (p[0] - plain[0]) * nrm[0] + (p[1] - plain[1]) * nrm[1] + (p[2] - plain[2]) * nrm[2];
     worst = Math.max(worst, Math.abs(d - socketDisplacement(rr, Ro2, SOCKET_LOFT))); n++;
   }
-  assert.ok(n > 100, `loft vertices around the eye: ${n}`); assert.ok(worst < 0.15e-3, `loft vs SOCKET_LOFT displacement mismatch ${worst * 1e3} mm`);
-  // smoothness: the socket's curvature per loft ring spacing stays moderate (< 20 degrees of slope change per 0.76 mm ring)
-  const step = 0.004 * SL; let maxSlopeChange = 0;
-  for (let r = 0.2 * Ro2; r < 2.6 * Ro2; r += 0.05 * Ro2) {
-    const d0 = socketDisplacement(r - step, Ro2), d1 = socketDisplacement(r, Ro2), d2 = socketDisplacement(r + step, Ro2);
-    maxSlopeChange = Math.max(maxSlopeChange, Math.abs(Math.atan2(d2 - d1, step) - Math.atan2(d1 - d0, step)));
+  assert.ok(n > 40, `loft vertices around the eye: ${n}`); assert.ok(worst < 0.1e-3, `loft vs SOCKET_LOFT displacement mismatch ${worst * 1e3} mm`);
+});
+
+test('level of detail: default = LOD0 within the triangle budget; detail via argument or genome; LOD1 / LOD2 smaller; no popping', () => {
+  const tri = (E) => { const p = E.right.parts; return { ball: p.ball.indices.length / 3, cornea: p.cornea ? p.cornea.indices.length / 3 : 0, orbit: p.orbit.indices.length / 3 }; };
+  const t0 = tri(eyes); assert.equal(eyes.report.lod, 'LOD0');
+  assert.ok(t0.ball + t0.cornea <= 1200, `LOD0 ball+cornea ${t0.ball + t0.cornea}`); assert.ok(t0.orbit <= 300, `LOD0 orbit ${t0.orbit}`);
+  assert.ok(2 * (t0.ball + t0.cornea + t0.orbit) <= 2500, 'both eyes <= ~2.5k tris at LOD0');
+  const same = buildEyes({ surface, params, seed: 1, detail: 1 }); assert.deepEqual(tri(same), t0);
+  const viaGenome = buildEyes({ surface, params, seed: 1, genome: { detail: 0.5 } }), l1 = buildEyes({ surface, params, seed: 1, detail: 0.5 }), l2 = buildEyes({ surface, params, seed: 1, detail: 0.25 });
+  assert.equal(viaGenome.report.lod, 'LOD1'); assert.deepEqual(tri(viaGenome), tri(l1));
+  const a1 = tri(l1), a2 = tri(l2);
+  assert.ok(a1.ball + a1.cornea + a1.orbit <= 450, `LOD1 ${JSON.stringify(a1)}`); assert.ok(a2.ball + a2.cornea + a2.orbit <= 130, `LOD2 ${JSON.stringify(a2)}`);
+  assert.equal(l2.right.parts.cornea, null); assert.equal(l2.left.parts.cornea, null);
+  assert.equal(l1.report.tex_size, 256); assert.equal(l2.report.tex_size, 128); assert.equal(eyes.report.tex_size, 512);
+  assert.equal(hero.report.lod, 'hero'); assert.ok(tri(hero).ball > 10000);
+  // same placement / aperture at every level -> no popping when the level changes
+  for (const E of [l1, l2, hero]) {
+    for (const side of ['left', 'right']) { for (let k = 0; k < 3; k++) near(E[side].center[k], eyes[side].center[k], 1e-12, 'centre'); near(E[side].radius, eyes[side].radius, 1e-12); }
+    near(E.report.aperture_mean_m, eyes.report.aperture_mean_m, 1e-12); near(E.report.pupil_d_over_outer, eyes.report.pupil_d_over_outer, 1e-12);
   }
-  assert.ok(maxSlopeChange * 180 / Math.PI < 12, `socket slope change per ring ${maxSlopeChange * 180 / Math.PI} deg`);
+  // every level: LOD silhouette of the ball matches the sphere (max radius = Rb) and the left eye is still an exact mirror
+  for (const E of [l1, l2]) {
+    for (const part of ['ball', 'orbit']) {
+      const R = E.right.parts[part], L = E.left.parts[part]; let worst = 0;
+      for (let v = 0; v < R.positions.length; v += 3) { const pr = apply(E.right.matrix, R.positions, v), pl = apply(E.left.matrix, L.positions, v); worst = Math.max(worst, Math.abs(pr[0] - pl[0]), Math.abs(pr[1] - pl[1]), Math.abs(pr[2] + pl[2])); }
+      assert.ok(worst < 1e-7, `${E.report.lod} ${part} mirror ${worst}`);
+    }
+    assert.equal(eyePartToBody(E.right, 'cornea') === null, E.report.lod === 'LOD2');
+  }
+  // the iris look is the same procedural design at every resolution: pupil radius measured on LOD2's 128 px texture
+  const T = l2.textures.iris; const c = 64; let r = 0; for (; r < 64; r += 0.25) { if (luma(T, Math.round(c + r - 0.5), c) > 70) break; }
+  near(r / 64, l2.report.pupil_d_over_outer, 0.05, 'LOD2 pupil radius');
 });

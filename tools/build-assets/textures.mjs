@@ -366,7 +366,7 @@ function buildMouthTexture(seed, size = 256, opts = {}) {
     const nz = fbm2(u * 18, v * 30, sd, 3) - 0.5, nz2 = vnoise(u * 90, v * 90, sd + 3) - 0.5;
     L += 5 * nz + 1.5 * nz2; a += 2.5 * nz;
     labToLin(L, a, b, o);
-    for (const d of dots) { const dd = Math.hypot(u - d.u, (v - d.v) * 0.8); if (dd < d.r * 1.6) { const m = 1 - sstep(d.r * 0.6, d.r * 1.6, dd); o[0] = lerp(o[0], 0.80, m); o[1] = lerp(o[1], 0.78, m); o[2] = lerp(o[2], 0.72, m); } }
+    for (const d of dots) { const dd = Math.hypot(u - d.u, (v - d.v) * 0.8); if (dd < d.r * 1.6) { const m = 1 - sstep(d.r * 0.6, d.r * 1.6, dd); o[0] = lerp(o[0], 0.96, m); o[1] = lerp(o[1], 0.94, m); o[2] = lerp(o[2], 0.88, m); } }
     const xx = orientation === 'along-v' ? y : x, yy = orientation === 'along-v' ? x : y;     // 転置
     const i = (yy * size + xx) * 4; img[i] = toByte(o[0]); img[i + 1] = toByte(o[1]); img[i + 2] = toByte(o[2]); img[i + 3] = 255;
   }

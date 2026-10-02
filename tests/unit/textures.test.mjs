@@ -183,12 +183,38 @@ test('orange spots: default none (seed 1); trace mode gives 1-5 tiny spots only 
   const tr = gen({ genome: { orangeSpotMode: 'trace' } }).report.spots.orange; assert.equal(tr.mode, 'trace'); assert.ok(tr.count >= 1 && tr.count <= 5, `count ${tr.count}`);
 });
 
-test('mouth texture: dark deep end, lighter lips, pink tongue band, no saturated red (03 §3.8.3 #12)', () => {
-  const m = base.mouth.albedo; const lum = (x, y) => luminance(m, x, y);
-  assert.ok(lum(40, 8) > lum(40, 240) * 1.5, 'lips lighter than throat'); assert.ok(lum(128, 100) > lum(128, 235), 'tongue lighter toward the front');
+test('mouth texture: loft layout (u tip->throat, v around), whitish-pink lining, dark only deep in the throat, no saturated red (03 §3.8.3 #12)', () => {
+  const m = base.mouth.albedo; assert.equal(base.mouth.orientation, 'along-u');
+  const lum = (x, y) => luminance(m, x, y);
+  assert.ok(lum(10, 32) > lum(250, 32) * 3, 'lips/palate far lighter than the throat'); assert.ok(lum(10, 128) > lum(250, 128) * 3);
+  assert.ok(lum(100, 32) > 0.25 && lum(100, 128) > 0.25, 'palate and tongue stay pale in the front/middle (lining is whitish-pink)');
+  assert.ok(lum(100, 32) > lum(100, 76) && lum(100, 128) > lum(100, 76), 'cheek (v 0.25-0.375) is pinker/darker than palate and tongue');
   let maxRedness = 0; for (let i = 0; i < m.data.length; i += 4) maxRedness = Math.max(maxRedness, m.data[i] - Math.max(m.data[i + 1], m.data[i + 2]));
-  assert.ok(maxRedness < 150, `not saturated red (${maxRedness})`);
-  const p = px(m, 128, 60); assert.ok(p[0] > p[2], 'pinkish');
+  assert.ok(maxRedness < 110, `not saturated red (${maxRedness})`);
+  const p = px(m, 100, 32); assert.ok(p[0] > p[2] && p[0] > 170, 'pale pink');
+  // 継ぎ目: v=0 と v=1 が似た色（loft のループ閉じで補間が跨ぐ）
+  assert.ok(Math.abs(lum(100, 0) - lum(100, 255)) < 0.08);
+  // 転置レイアウト
+  const t = gen({ mouth: { orientation: 'along-v' } }); assert.equal(t.mouth.orientation, 'along-v');
+  for (const [x, y] of [[10, 40], [100, 200], [250, 128]]) assert.deepEqual(px(t.mouth.albedo, y, x), px(m, x, y));
+  // 歯は既定なし, opts.teeth で淡色の点が増える
+  const tt = gen({ mouth: { teeth: true } }).mouth.albedo; let diff = 0; for (let i = 0; i < m.data.length; i += 4) if (Math.abs(tt.data[i] - m.data[i]) > 6) diff++;
+  assert.ok(diff > 3 && diff < 600, `teeth dots ${diff}`);
+});
+
+test('UV metric: patterns are laid out in true surface mm; tail taper (s>0.9) stretch is small and compensated', () => {
+  const st = R.uv.stats; assert.ok(st.u_metric_max_s_gt_0p9 >= 1.0 && st.u_metric_max_s_gt_0p9 < 1.15, `tail u metric ${st.u_metric_max_s_gt_0p9}`);
+  assert.ok(st.v_over_u_texel_s_gt_0p9[0] > 0.25 && st.v_over_u_texel_s_gt_0p9[1] < 1.1, `tail circumferential texel ratio ${st.v_over_u_texel_s_gt_0p9}`);
+});
+
+test('pectoral axil is belly-pale (matches the pectoral collar of the fin module)', () => {
+  const rowAtR = (r, s) => { // 右体側で側面投影の相対高さが r になる行
+    const sec = surface.section(s); const a = surface.alphaAtHeight(s, (sec.c + r * sec.h) * SL); return Math.round(a / (2 * Math.PI) * (H - 1));
+  };
+  const y = rowAtR(-0.66, 0.262); const xa = Math.round(0.262 * (W - 1)), xr = Math.round(0.34 * (W - 1));
+  const lumAvg = (x, yy) => { let q = 0, n = 0; for (let dy = -3; dy <= 3; dy++) for (let dx = -6; dx <= 6; dx++) { q += luminance(base.albedo, x + dx, yy + dy); n++; } return q / n; };
+  const yr = rowAtR(-0.66, 0.34);
+  assert.ok(lumAvg(xa, y) > lumAvg(xr, yr) * 1.03, `axil ${lumAvg(xa, y)} vs lower flank ${lumAvg(xr, yr)}`);
 });
 
 test('renderLateralPreview: both flanks, head orientation, size follows pxPerMeter, asymmetric, deterministic', () => {

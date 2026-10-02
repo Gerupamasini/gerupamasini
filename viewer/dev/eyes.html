@@ -16,7 +16,8 @@ const seed = parseInt(q.get('seed') || '1');
 const genome = q.get('genome') ? JSON.parse(q.get('genome')) : {};
 const params = await (await fetch('/assets/src/params.json')).json();
 const S = createSurface(params);
-const eyes = buildEyes({ surface: S, params, genome, seed });
+const detail = parseFloat(q.get('detail') || '1');   // 1 = LOD0 (default), 0.5 LOD1, 0.25 LOD2, 2 = hero (close-up stills)
+const eyes = buildEyes({ surface: S, params, genome, seed, detail });
 const W = innerWidth, H = innerHeight;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -77,7 +78,8 @@ const toGeo = (g) => {
 const eyeGroups = {};
 for (const side of ['left', 'right']) {
   const a = eyes[side]; const grp = new THREE.Group(); grp.matrixAutoUpdate = false; grp.matrix.fromArray(a.matrix);
-  const ball = new THREE.Mesh(toGeo(a.parts.ball), ballMat); const cor = new THREE.Mesh(toGeo(a.parts.cornea), corneaMat); cor.renderOrder = 2;
+  const ball = new THREE.Mesh(toGeo(a.parts.ball), ballMat);
+  const cor = a.parts.cornea ? new THREE.Mesh(toGeo(a.parts.cornea), corneaMat) : new THREE.Object3D(); cor.renderOrder = 2;
   const orb = new THREE.Mesh(toGeo(a.parts.orbit), orbitMat);
   grp.add(ball, cor, orb); scene.add(grp); eyeGroups[side] = grp;
 }
@@ -134,7 +136,7 @@ function show(name) {
   const v = views[name](); cam.fov = v.fov; cam.position.copy(v.pos); cam.up.set(0, 1, 0); cam.lookAt(v.tgt); cam.updateProjectionMatrix();
   renderer.render(scene, cam);
 }
-window.__info = { report: eyes.report, tris: Object.fromEntries(Object.entries(eyes.right.parts).map(([k, g]) => [k, g.indices.length / 3])) };
+window.__info = { tris: eyes.report.tris, lod: eyes.report.lod };
 const rotDeg = parseFloat(q.get('rot') || '0'), pitchDeg = parseFloat(q.get('pitch') || '0');
 if (rotDeg || pitchDeg) for (const side of ['left', 'right']) { // rotate ball + cornea about the eyeball centre (eye bone), orbit stays on the head
   const grp = eyeGroups[side]; const [ball, cor] = grp.children;

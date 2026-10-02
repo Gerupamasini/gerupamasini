@@ -77,11 +77,11 @@ export function buildBody(surface, params, opts = {}) {
       const p = surface.point(s, alpha); const c = eyeCentersSurf[k];
       const rr = Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]);
       // gentle, wide socket + soft orbital rim: every feature is wider than ~3 ring/sector spacings so the loft mesh resolves it
-      // (the previous narrow rim, sigma 0.22 Ro, faceted). Keep eyes.mjs SOCKET_LOFT in sync with these numbers.
+      // (a narrow rim, sigma 0.22 Ro, faceted). Keep eyes.mjs SOCKET_LOFT in sync with these numbers.
       const r0 = eyeOuterR * 1.65;
       if (rr < r0) { const q = 1 - (rr / r0) ** 2; d -= 0.55 * eyeOuterR * q * q; }
       // raised orbital rim just outside the socket
-      const rim = Math.exp(-(((rr - eyeOuterR * 1.45) / (eyeOuterR * 0.50)) ** 2)); d += 0.08 * eyeOuterR * rim;
+      const rim = Math.exp(-(((rr - eyeOuterR * 1.45) / (eyeOuterR * 0.50)) ** 2)); d += 0.07 * eyeOuterR * rim;
     }
     // cheek swelling in front of the gill cover
     if (s > 0.10 && s < 0.27) { d += 0.00030 * smooth(0.10, 0.17, s) * (1 - smooth(0.20, 0.26, s)) * latMask(alpha); }
@@ -213,6 +213,7 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
   const K1 = 7, K2 = 4;                                    // roof/floor samples, ribbon samples (excluding the lip points)
   const positions = [], uvs = [], jawF = [], idx = [];
   const loops = [];                                         // each loop = array of vertex ids (closed)
+  const lips = [];                                          // per loop: lip-line anchor points (x, yLip, zR, zL) for the teeth module
   const extra = 6;                                          // rings behind the corner that shrink to the throat
   const ringIdx = []; for (let i = 0; i < seamEnd; i++) ringIdx.push(i);
   const totalLoops = ringIdx.length + extra;
@@ -239,6 +240,7 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
     const u = li / (totalLoops - 1);
     const loop = [];
     const zR = UR[2], zL = UL[2], x = UR[0];
+    lips.push({ x, y: yLip, zR, zL, shrink });
     // roof: from UR over the top to UL
     loop.push(addV([x, yLip, zR], u, 0.0, 0));
     for (let k = 1; k <= K1; k++) { const t = k / (K1 + 1); loop.push(addV([x, yLip + roofH * Math.sin(Math.PI * t), zR + (zL - zR) * t], u, 0.25 * t, 0)); }
@@ -257,7 +259,7 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
   const apex = addV([P[apexU * 3], P[apexU * 3 + 1], P[apexU * 3 + 2]], 0, 0.5, 0.5);
   const M = loops[0].length;
   // fan from apex to first loop (inward-facing)
-  for (let m = 0; m < M; m++) idx.push(apex, loops[0][(m + 1) % M], loops[0][m]);
+  // (no front wall: the sleeve stays open at the lip tips so that the gape shows the cavity, not a curtain; loop 0 is only ~0.7 mm wide when the mouth is closed)
   for (let li = 0; li < loops.length - 1; li++) {
     for (let m = 0; m < M; m++) {
       const a = loops[li][m], b = loops[li][(m + 1) % M], c = loops[li + 1][(m + 1) % M], d = loops[li + 1][m];
@@ -278,7 +280,7 @@ function buildMouthTube({ surface, rings, seamEnd, up, lo, P, n1, jL, cornerS, S
   }
   const normals = new Float32Array(nv * 3);
   for (let v = 0; v < nv; v++) { const l = Math.hypot(nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]) || 1; normals[v * 3] = nrm[v * 3] / l; normals[v * 3 + 1] = nrm[v * 3 + 1] / l; normals[v * 3 + 2] = nrm[v * 3 + 2] / l; }
-  return { positions: Pm, normals, uvs: Float32Array.from(uvs), indices: Uint32Array.from(idx), attrs: { _JAW: Float32Array.from(jawF) } };
+  return { positions: Pm, normals, uvs: Float32Array.from(uvs), indices: Uint32Array.from(idx), attrs: { _JAW: Float32Array.from(jawF) }, lips };
 }
 
 export function meshStats(g) {
