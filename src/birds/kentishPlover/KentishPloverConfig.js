@@ -322,6 +322,11 @@ export const animation = {
   // Acceleration lean: forward on starting, back on braking. Low-passed input and a small gain → a slight rock
   // (≈1.5°) on starts/stops instead of a 6° nod that followed every speed change (D; gaitjitter.mjs)
   lean: { gain: 0.008, max: 0.06, inputRate: 10, rate: 6 }, // rad per m/s², clamp (rad), smoothing rates (1/s)
+  // Tail secondary motion (Animator._tailSecondary): a stiff, well-damped spring (6 Hz, ζ 0.5) driven by the trunk's
+  // vertical, pitch and yaw accelerations — ≈0.01 rad dip per 1.5 m/s² of step bob, ≈0.04 rad against a peck's pitch,
+  // ≈0.03 rad outward at the start of a 100 rad/s² turn. Per unit acceleration: lift rad/(m/s²)·ω², pitch and yaw
+  // rad/(rad/s²)·ω²; max rad; maxForce caps a jolt
+  tailLag: { hz: 6, damping: 0.5, lift: 9.5, pitch: 0.7, yaw: 0.43, max: 0.06, maxForce: 85 },
   gaitCentreOffset: mm(7), // mid-stance foot position lies under the centre of mass, ahead of the hip (D)
   heelLift: { walk: mm(4), run: mm(6) }, // late-stance heel-off (MTP joint rises, toes stay down)
   stopDecel: 12,

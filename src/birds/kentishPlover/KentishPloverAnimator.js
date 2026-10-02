@@ -341,6 +341,7 @@ export class KentishPloverAnimator {
   previewAction(name, t = 0.5, variant) {
     this.setRoot(new THREE.Vector3(), 0, new THREE.Vector3());
     this._initFeet = true;
+    this._tail = null;
     // reset transient state so previews are independent of each other
     this.action = null;
     this.flight.active = false;
@@ -480,6 +481,7 @@ export class KentishPloverAnimator {
     this.model.setBreath(breath * (0.6 + 0.4 * this.p.sleep));
 
     // -------------------------------------------------- wings & tail
+    this._tailSecondary(dt, this.p.height + bob - this.p.sit * SIT_DROP, this.p.pitch + this.lean + (act?.pitchAdd ?? 0), this.heading);
     this._poseWings(dt, act);
     this._poseTail(act);
 
@@ -957,11 +959,52 @@ export class KentishPloverAnimator {
     }
   }
 
+  /**
+   * Secondary motion of the tail: the tail is a stiff, light appendage on the pygostyle, so it lags the trunk a little
+   * — it dips as the body rises on each step and flicks against the pitch of a peck or the start of a turn, then
+   * settles (a well-damped spring, ANIM.tailLag). Inputs: the trunk's height (m), pitch and heading (rad); the
+   * spring is driven by their accelerations, so a steady posture leaves the tail where the pose puts it. Bone
+   * rotation only (in the GLB too); the folded wings stay on the body (their tips slide over the tail).
+   */
+  _tailSecondary(dt, height, pitch, heading) {
+    const T = ANIM.tailLag;
+    const s = (this._tail ??= { h: [height, height], p: [pitch, pitch], y: [heading, heading], x: [0, 0], v: [0, 0], dt: [dt, dt] });
+    if (!(dt > 0)) return;
+    // second differences over the last two frames (dt may vary)
+    const acc = (q, x) => {
+      const v1 = (x - q[0]) / dt;
+      const v0 = (q[0] - q[1]) / s.dt[0];
+      q[1] = q[0];
+      q[0] = x;
+      return (v1 - v0) / (0.5 * (dt + s.dt[0]));
+    };
+    const aUp = acc(s.h, height);
+    const aPitch = acc(s.p, pitch);
+    const dy = wrapAngle(heading - s.y[0]);
+    const aYaw = acc(s.y, s.y[0] + dy);
+    s.dt[1] = s.dt[0];
+    s.dt[0] = dt;
+    // forcing: rising → the tail dips (− = down); nose-down pitch acceleration → the tail lags up-down the other way;
+    // a turn's yaw acceleration → it swings outward. Clamped so a jolt (teleport, first frame) cannot fling it
+    const F = [clamp(-T.lift * aUp + T.pitch * -aPitch, -T.maxForce, T.maxForce), clamp(-T.yaw * aYaw, -T.maxForce, T.maxForce)];
+    const w = 2 * Math.PI * T.hz;
+    const n = Math.max(1, Math.ceil(dt / (1 / 240)));
+    const h = dt / n;
+    for (let i = 0; i < n; i++)
+      for (let k = 0; k < 2; k++) {
+        s.v[k] += h * (F[k] - w * w * s.x[k] - 2 * T.damping * w * s.v[k]);
+        s.x[k] += h * s.v[k];
+        s.x[k] = clamp(s.x[k], -T.max, T.max);
+      }
+  }
+
   _poseTail(act) {
     const b = this.b;
     const spread = clamp(this.p.tailSpread + (act?.tailSpread ?? 0), 0, 1.2);
-    const pitch = this.p.tailPitch + (act?.tailPitch ?? 0) + this.n2(this.time * 0.4) * 0.02;
+    const lag = this._tail?.x ?? [0, 0];
+    const pitch = this.p.tailPitch + (act?.tailPitch ?? 0) + this.n2(this.time * 0.4) * 0.02 + lag[0];
     b.tail.quaternion.multiply(qAxis(X, -pitch, _q));
+    if (lag[1]) b.tail.quaternion.multiply(qAxis(Y, lag[1], _q));
     for (let i = 1; i <= 6; i++) {
       for (const s of ['L', 'R']) {
         const bone = b[`r${i}_${s}`];

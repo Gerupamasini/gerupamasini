@@ -346,7 +346,8 @@ if (args.detail) {
   for (const f of F.filter((f) => f.type === args.detail)) {
     const sv = f.aRoot.patch.reduce((a, i) => a + sl.getX(i), 0) / f.aRoot.patch.length;
     const r = [fA.position.getX(f.root), fA.position.getY(f.root), fA.position.getZ(f.root)].map((x) => (x * 1000).toFixed(1)).join(',');
-    console.log(`${f.side} root ${r}  sdf ${f.rootSdf.toFixed(2)}${f.buried ? ' (buried)' : ''}  depth ${(f.aRoot.depth * 1000).toFixed(2)}  patch sleeve ${sv.toFixed(3)}  max ${(f.dmax ?? 0).toFixed(2)} tip ${(f.tmax ?? 0).toFixed(2)}`);
+    const pr = [f.aRoot.p.x, f.aRoot.p.y, f.aRoot.p.z].map((x) => (x * 1000).toFixed(1)).join(",");
+    console.log(`${f.side} root ${r} @${pr} lie ${fA.aLieMask.getX(f.root).toFixed(2)}  sdf ${f.rootSdf.toFixed(2)}${f.buried ? ' (buried)' : ''}  depth ${(f.aRoot.depth * 1000).toFixed(2)}  patch sleeve ${sv.toFixed(3)}  max ${(f.dmax ?? 0).toFixed(2)} tip ${(f.tmax ?? 0).toFixed(2)}`);
   }
 }
 if (args.save) writeFileSync(args.save, JSON.stringify(result, null, 1));
