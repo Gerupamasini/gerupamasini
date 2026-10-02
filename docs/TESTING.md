@@ -1,10 +1,12 @@
 # 身内テスト手順（身内テスト版 v0.3）
 
 ## いま遊んでいるのがどのビルドか
-- タイトル画面の左下に `v0.3.0 ・ 身内テスト版 7f0c139` のように **バージョンと commit の先頭 7 桁** が出ます。メニュー（Esc）の右上にも同じものが出ます。
-- バージョンは `package.json` の version、commit は GitHub Actions のビルド時に `VITE_COMMIT`（= `github.sha`）から入ります。手元の `npm run build` では `git rev-parse HEAD` を使います。
-- ブラウザの開発者ツール（F12）の Console にも起動時に `干潟図鑑 v0.3.0 (7f0c139) built …` と出ます。
-- GitHub の Actions →「Deploy to GitHub Pages」の最新の run の commit と、この表示が一致していれば最新です。一致しないときは GitHub Pages のキャッシュ（`index.html` は約 10 分）なので、**Ctrl+Shift+R（Mac は Cmd+Shift+R）でハード再読み込み**してください。
+- タイトル画面の左下に `v0.4.0 ・ 身内テスト版 build 9 08b3d4e 10/2 17:07` のように **バージョン・デプロイ番号・commit の先頭 7 桁・ビルド日時（JST）** が出ます。メニュー（Esc）の右上にも `v0.4.0 build 9 (08b3d4e)` が出ます。
+- **デプロイ番号（build）は GitHub Actions の run 番号**で、main にマージするたびに必ず 1 つ増えます。バージョン番号（`package.json`）は節目ごとに上げるので、マージしても変わらないことがあります。「更新されたか」は build の番号で見てください。
+- commit は Actions のビルド時に `VITE_COMMIT`（= `github.sha`）、build は `VITE_BUILD`（= `github.run_number`）から入ります。手元の `npm run build` では commit は `git rev-parse HEAD`、build は空です。
+- ブラウザの開発者ツール（F12）の Console にも起動時に `干潟図鑑 v0.4.0 build 9 (08b3d4e) built …` と出ます。
+- 古いページを開いたままでも、起動 4 秒後と 10 分ごとに `version.json` をキャッシュを使わずに読み、新しいデプロイがあれば右下に「新しい版があります — 再読み込み」が出ます。押せば最新になります。
+- それでも Actions の最新 run の番号と合わないときは、**Ctrl+Shift+R（Mac は Cmd+Shift+R）でハード再読み込み**してください（GitHub Pages は `index.html` を約 10 分キャッシュします）。
 
 ## 動作環境
 - PC の Chrome / Edge / Firefox / Safari 17 以降（WebGL2 必須）。スマホは未対応。

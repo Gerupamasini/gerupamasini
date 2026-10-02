@@ -58,6 +58,8 @@ export const ui = {
     caseCount: 0, caseMax: 6, prompt: null, tooDeep: false, research: 0, money: 0, tod: 'day', season: 'autumn', fps: 0, pointerLocked: false,
   }),
   toasts: signal<Toast[]>([]),
+  /** a newer deploy than the one running (see Build.checkForNewBuild) */
+  newBuild: signal<import('../core/Build').BuildInfo | null>(null),
   /** debug mode on (F3 or ?debug=1) */
   debug: signal(false),
   debugState: signal<DebugState>({ timeOverride: false, tideOverride: null, overcast: 0, markers: true, stats: { calls: 0, tris: 0, creatures: 0, visible: 0, lod1: 0 } }),

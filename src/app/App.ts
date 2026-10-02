@@ -23,6 +23,7 @@ import { Encyclopedia } from '../systems/Encyclopedia';
 import { Observation } from '../systems/Observation';
 import { Capture } from '../systems/Capture';
 import { ui, t, toast, type Screen, type Marker } from '../ui/store';
+import { checkForNewBuild } from '../core/Build';
 import { Root } from '../ui/Root';
 import { HeroPipeline, type HeroLighting } from '../render/HeroPipeline';
 import { FieldRenderer } from '../render/FieldRenderer';
@@ -162,6 +163,10 @@ export class App {
     this.data = await loadGameData((frac, label) => { ui.loading.value = { frac: 0.02 + frac * 0.3, label }; });
     ui.strings.value = this.data.strings;
     document.title = t('app.title');
+    // a stale page (the host caches index.html for a while) learns about the newer deploy and offers a reload
+    const poll = async () => { const nb = await checkForNewBuild(); if (nb) ui.newBuild.value = nb; };
+    setTimeout(() => void poll(), 4000);
+    setInterval(() => void poll(), 10 * 60000);
     const map = this.data.maps.get(this.data.manifest.defaultMap)!;
     this.tide = new TideModel(this.data.stations.get(map.station)!);
     this.encyclopedia = new Encyclopedia(this.data);
