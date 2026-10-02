@@ -131,6 +131,25 @@ function planBand(plan, y) {
   return [b + (1 - b) * a * e, (1 - b) * (da * e + a * de)];
 }
 
+/**
+ * Lateral pinch of the shoulders (sculpt.pinch): the outline beyond |x| = x[0] is drawn in, the field sampled at
+ * g(|x|) = |x| + (c − 1)·w(y, z)·∫ smoothstep(x[0], x[1], t) dt — nothing nearer the midline than x[0] moves, so the
+ * neck plumage and the sleeve's field (bodyMesh.sleeveAt: the trunk is held at |x| > 15 below y 79) stay as they are;
+ * w is the product of the height band y and the length band z (ramps in [0]→[1], out [2]→[3]). Divided by g' the
+ * field stays ≈ a distance. Returns the remapped |x| and g'.
+ */
+function pinchAt(p, ax, y, z) {
+  if (ax <= p.x[0]) return [ax, 1];
+  const w = smoothstep(p.y[0], p.y[1], y) * (1 - smoothstep(p.y[2], p.y[3], y)) * smoothstep(p.z[0], p.z[1], z) * (1 - smoothstep(p.z[2], p.z[3], z));
+  if (w <= 0) return [ax, 1];
+  const [x0, x1] = p.x;
+  const h = x1 - x0;
+  const t = Math.min(1, (ax - x0) / h);
+  const R = ax >= x1 ? h / 2 + (ax - x1) : h * (t ** 3 - t ** 4 / 2);
+  const k = (p.c - 1) * w;
+  return [ax + k * R, 1 + k * smoothstep(x0, x1, ax)];
+}
+
 /** Build the SDF function (mm → mm) from the sculpt description. */
 export function makeBodySDF(sculpt) {
   const prims = sculpt.prims;
@@ -139,7 +158,14 @@ export function makeBodySDF(sculpt) {
   const bed = sculpt.bed;
   const plans = sculpt.plan ? [].concat(sculpt.plan) : null; // one layer or several
   const k = sculpt.smooth;
-  const field = makeField(prims, cuts, adds, k);
+  const pinch = sculpt.pinch;
+  const field0 = makeField(prims, cuts, adds, k);
+  const field = pinch
+    ? (x, y, z) => {
+        const [g, gp] = pinchAt(pinch, Math.abs(x), y, z);
+        return gp === 1 ? field0(x, y, z) : field0(Math.sign(x) * g, y, z) / gp;
+      }
+    : field0;
   return (x, y, z) => {
     let d;
     if (plans) {

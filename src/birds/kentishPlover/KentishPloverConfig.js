@@ -153,7 +153,17 @@ export const bodySculpt = {
   // over the plumage lying on it is as round in cross-section as the belly (validation §Y). edge: the wing's lower edge
   // (z, y), body_shape_spec.md §10.1
   bed: { depth: 1.0, x: [6, 11], y: [2, 7], z: [-58, -46, -17, -9], edge: [[20, 63], [5, 60], [-10, 57], [-25, 55.5], [-40, 57], [-55, 60]] },
-  plan: { knots: [[-6, 1], [-12, 1.05], [-18, 1.09], [-24, 1.14], [-30, 1.247], [-40, 1.6], [-46, 1.66], [-52, 1.565], [-58, 1.5], [-64, 1.3]], y: [45, 64, 76, 94], base: 0.3 },
+  // Plan view (anatomy/sdf.js planScale / planBand / pinchAt): an egg from above, widest mid-body (validation §Z, §AA).
+  // Layer 1: the rear body round over the rump (§Z). Layer 2: the mid body widened (z 0…−38), the widest point at
+  // z −13 instead of the shoulders. Layer 3: y 61–81 mid-body, carries the front view's width at y 64–72 where the
+  // shoulders are pinched (without it the front outline dented 0.4–0.6 mm there). pinch: only the outer side of the
+  // breast / shoulder (|x| > 15, y < 74) drawn in — the neck sleeve's field and the front outline above y 74 untouched
+  plan: [
+    { knots: [[-6, 1], [-12, 1.05], [-18, 1.09], [-24, 1.14], [-30, 1.247], [-40, 1.6], [-46, 1.66], [-52, 1.565], [-58, 1.5], [-64, 1.3]], y: [45, 64, 76, 94], base: 0.3 },
+    { knots: [[6, 1], [0, 1.016], [-6, 1.048], [-12, 1.06], [-18, 1.064], [-24, 1.062], [-30, 1.058], [-38, 1.03], [-46, 1.01], [-54, 1]], y: [52, 62, 72, 82], base: 0 },
+    { knots: [[4, 1], [-2, 1.008], [-8, 1.015], [-14, 1.027], [-20, 1.007], [-28, 1.004], [-36, 1]], y: [61, 70.5, 75.5, 81], base: 0 },
+  ],
+  pinch: { c: 1.16, x: [15, 18], y: [54, 58, 66, 74], z: [2, 8, 18, 26] },
   // the SDF spans x ±21, y 36–105, z −66…41
   bounds: { min: [-24, 32, -70], max: [24, 109, 46] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
