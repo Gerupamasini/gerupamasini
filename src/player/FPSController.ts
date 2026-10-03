@@ -88,7 +88,8 @@ export class FPSController {
       this.pitch = MathUtils.clamp(this.pitch, -Math.PI / 2 + 0.05, Math.PI / 2 - 0.05);
     }
     if (this.enabled && input.pressed('crouch')) this.lowView = !this.lowView;
-    this.crouching = this.enabled && this.lowView;
+    // the low view is a stance, not a key held: it stays while a tool is used
+    this.crouching = this.lowView;
     this.running = this.enabled && !this.crouching && input.held('run');
     this.zooming = this.enabled && (input.mouseRightDown || input.held('zoom'));
     const targetFov = this.zooming ? FOV_ZOOM : FOV_NORMAL;

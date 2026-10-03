@@ -1,8 +1,8 @@
 import {
-  BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, CylinderGeometry, DoubleSide, Group, MathUtils, Matrix4, Mesh,
+  BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, CylinderGeometry, DoubleSide, Group, MathUtils, Matrix4, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneGeometry, Points, PointsMaterial, Quaternion, RepeatWrapping, Scene, TubeGeometry, Vector3,
 } from 'three';
-import { CAPTURE_PHASE_SEC, REVEAL_SEC, type CaptureState } from '../systems/Capture';
+import { CAPTURE_PHASE_SEC, EMPTY_PHASE_SEC, REVEAL_SEC, type CaptureState } from '../systems/Capture';
 
 /** D-frame hoop: 36 cm across the flat front edge, 30 cm deep; the handle leaves from the back. */
 const HOOP: [number, number, number][] = [
@@ -15,23 +15,38 @@ const DROPS = 64;
 /** the net is drawn in a pass of its own over the finished frame, so it never clips into the ground or the water */
 export const NET_LAYER = 1;
 
-/** A pose is where the hoop's centre is and where the hands hold the handle, both in camera space (x right, y up, −z ahead). */
-interface Pose { p: Vector3; hands: Vector3 }
-const pose = (x: number, y: number, z: number, hx: number, hy: number, hz: number): Pose => ({ p: new Vector3(x, y, z), hands: new Vector3(hx, hy, hz) });
-const P_HIDDEN = pose(0.46, -0.72, -0.5, 0.4, -0.62, 0.12);
-const P_READY = pose(0.3, -0.3, -0.72, 0.32, -0.46, -0.02);
-const P_DIP = pose(-0.12, -0.52, -0.88, 0.28, -0.44, -0.04);
-const P_SCOOP = pose(-0.05, -0.27, -0.6, 0.3, -0.44, -0.02);
-const P_CHECK = pose(0.0, -0.09, -0.42, 0.02, -0.5, -0.1);
-/** how far from the hoop's path through the water an animal can be and still end up in the bag (m) */
-export const SWEEP_RADIUS = 0.28;
-/** where the hoop leaves the water (camera space): the sweep runs from the dip back to here, about 30 cm */
-const SWEEP_END = new Vector3(-0.03, -0.4, -0.38);
+/** how far the hoop reaches from the eye (handle plus arm), metres */
+export const REACH = 1.2;
+/** the hoop as the catch zone: a vertical ellipse around the line of sight (half width, half height), metres */
+export const ZONE_A = 0.19;
+export const ZONE_B = 0.26;
+/** nothing closer than this to the eye is under the hoop */
+export const ZONE_NEAR = 0.25;
+
+/** A pose: where the hoop's centre is and how the net is turned, both in camera space (x right, y up, −z ahead). */
+interface Pose { p: Vector3; q: Quaternion }
+const tmpBasis = new Matrix4();
+/** the handle (local +z) runs from the hoop to the hands; the hoop plane holds it, the opening faces local +y */
+function orientFromHands(p: Vector3, hands: Vector3, roll = 0): Quaternion {
+  const az = new Vector3().subVectors(hands, p).normalize();
+  const up = new Vector3(Math.sin(roll), Math.cos(roll), 0);
+  const ax = new Vector3().crossVectors(up, az).normalize();
+  const ay = new Vector3().crossVectors(az, ax);
+  return new Quaternion().setFromRotationMatrix(tmpBasis.makeBasis(ax, ay, az));
+}
+const pose = (x: number, y: number, z: number, q: Quaternion): Pose => ({ p: new Vector3(x, y, z), q });
+const P_HIDDEN = pose(0.46, -0.72, -0.5, orientFromHands(new Vector3(0.46, -0.72, -0.5), new Vector3(0.4, -0.62, 0.12)));
+const P_READY = pose(0.3, -0.3, -0.72, orientFromHands(new Vector3(0.3, -0.3, -0.72), new Vector3(0.32, -0.46, -0.02)));
+/** the thrust: hoop upright across the line of sight, opening ahead, handle straight down to the hands */
+const Q_THRUST = new Quaternion().setFromRotationMatrix(tmpBasis.makeBasis(new Vector3(-1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, -1, 0)));
+const P_THRUST = pose(0.0, -0.04, -0.95, Q_THRUST);
+const P_CHECK = pose(0.0, -0.09, -0.42, orientFromHands(new Vector3(0.0, -0.09, -0.42), new Vector3(0.02, -0.5, -0.1)));
+const P_SCOOP = pose(0.0, -0.22, -0.56, new Quaternion().slerpQuaternions(Q_THRUST, P_CHECK.q, 0.45));
 
 const ease = (t: number) => t * t * (3 - 2 * t);
 function lerpPose(a: Pose, b: Pose, t: number, out: Pose): Pose {
   out.p.lerpVectors(a.p, b.p, t);
-  out.hands.lerpVectors(a.hands, b.hands, t);
+  out.q.slerpQuaternions(a.q, b.q, t);
   return out;
 }
 
@@ -81,8 +96,8 @@ export class NetView {
   private readonly dropVel: Float32Array;
   private readonly dropLife: Float32Array;
   private readonly weeds: Mesh[] = [];
-  private readonly cur: Pose = pose(0, 0, 0, 0, 0, 0);
-  private readonly from: Pose = pose(0, 0, 0, 0, 0, 0);
+  private readonly cur: Pose = { p: new Vector3(), q: new Quaternion() };
+  private readonly zone: Mesh;
   private visible = false;
   private held = true;
   private shown = 0;
@@ -93,10 +108,7 @@ export class NetView {
   private readonly tmpM = new Matrix4();
   private readonly tmpQ = new Quaternion();
   private readonly tmpV = new Vector3();
-  private readonly ax = new Vector3();
-  private readonly ay = new Vector3();
-  private readonly az = new Vector3();
-  private readonly up = new Vector3();
+  private readonly rollQ = new Quaternion();
 
   constructor(scene: Scene) {
     this.group.name = 'tamo';
@@ -141,6 +153,14 @@ export class NetView {
     this.drops = new Points(dg, new PointsMaterial({ color: 0xdcecf2, size: 0.0045, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false }));
     this.drops.frustumCulled = false;
     this.drops.visible = false;
+    // debug: the catch zone, an elliptical tube along the line of sight out to the hoop's reach
+    const tube = new CylinderGeometry(1, 1, 1, 28, 1, true);
+    tube.rotateX(-Math.PI / 2);
+    this.zone = new Mesh(tube, new MeshBasicMaterial({ color: 0x7fe3d2, wireframe: true, transparent: true, opacity: 0.45, depthTest: false, depthWrite: false }));
+    this.zone.visible = false;
+    this.zone.frustumCulled = false;
+    this.zone.renderOrder = 50;
+    scene.add(this.zone);
     this.group.traverse((o) => o.layers.set(NET_LAYER));
     this.drops.layers.set(NET_LAYER);
     // the lights must shine on that layer too
@@ -179,15 +199,20 @@ export class NetView {
   }
 
   /**
-   * Where the hoop goes through the water for this view: the segment from the dip to the scoop, in world space,
-   * pressed down to the ground so a swing from a standing eye still sweeps the bed.
+   * Is a point under the hoop for this view? The zone is the hoop's outline — a vertical ellipse — carried along the
+   * line of sight from just in front of the eye out to the reach of the handle. Returns how far out toward the
+   * rim the point is (0 centre … 1 rim), or -1 when it is outside; `margin` widens the ellipse by the animal's size.
    */
-  static sweep(camera: PerspectiveCamera, groundAt: (x: number, z: number) => number, outA: Vector3, outB: Vector3): void {
+  static inZone(camera: PerspectiveCamera, p: Vector3, margin: number): number {
     camera.updateMatrixWorld();
-    outA.copy(P_DIP.p).applyMatrix4(camera.matrixWorld);
-    outB.copy(SWEEP_END).applyMatrix4(camera.matrixWorld);
-    outA.y = Math.min(outA.y, groundAt(outA.x, outA.z) + 0.05);
-    outB.y = Math.min(outB.y, groundAt(outB.x, outB.z) + 0.05);
+    const m = camera.matrixWorld.elements;
+    const dx = p.x - m[12], dy = p.y - m[13], dz = p.z - m[14];
+    // camera axes from the world matrix: right (column 0), up (column 1), back (column 2)
+    const t = -(dx * m[8] + dy * m[9] + dz * m[10]);
+    if (t < ZONE_NEAR || t > REACH + margin) return -1;
+    const ex = (dx * m[0] + dy * m[1] + dz * m[2]) / (ZONE_A + margin), ey = (dx * m[4] + dy * m[5] + dz * m[6]) / (ZONE_B + margin);
+    const e = Math.sqrt(ex * ex + ey * ey);
+    return e <= 1 ? e : -1;
   }
 
   /** Put the caught animal's model in the bag (scaled to its real length). */
@@ -221,8 +246,16 @@ export class NetView {
   }
 
   /** Place the net for this frame from the capture state (null = at rest, out of sight). */
-  update(camera: PerspectiveCamera, dt: number, st: CaptureState | null, waterY: number): void {
+  update(camera: PerspectiveCamera, dt: number, st: CaptureState | null, waterY: number, showZone = false): void {
     this.time += dt;
+    // debug: the zone tube rides along the line of sight
+    this.zone.visible = showZone;
+    if (showZone) {
+      camera.updateMatrixWorld();
+      this.zone.position.set(0, 0, -(ZONE_NEAR + REACH) / 2).applyMatrix4(camera.matrixWorld);
+      this.zone.quaternion.copy(camera.quaternion);
+      this.zone.scale.set(ZONE_A, ZONE_B, REACH - ZONE_NEAR);
+    }
     const want = (this.visible && !!st) || (this.held && !st);
     this.shown = MathUtils.damp(this.shown, want ? 1 : 0, 9, dt);
     if (this.shown < 0.01 && !want) { this.group.visible = false; this.updateDrops(dt, null); return; }
@@ -231,6 +264,7 @@ export class NetView {
     const sway = this.time;
     let dripping = false;
     let roll = 0;
+    const empty = !!st && st.result === 'fail';
     if (!st) {
       lerpPose(P_HIDDEN, P_READY, ease(this.shown), cur);
       cur.p.y += Math.sin(sway * 1.9) * 0.008;
@@ -238,40 +272,38 @@ export class NetView {
       roll = Math.sin(sway * 1.3) * 0.03;
       this.bagMat.roughness = MathUtils.damp(this.bagMat.roughness, 0.6, 2, dt);
     } else if (st.phase === 'swing') {
+      // thrust straight ahead along the line of sight, then turn the hoop up and draw it back
       const t = st.elapsed / CAPTURE_PHASE_SEC.swing;
-      if (t < 0.5) lerpPose(P_READY, P_DIP, ease(t / 0.5), cur);
-      else lerpPose(P_DIP, P_SCOOP, ease((t - 0.5) / 0.5), cur);
+      if (t < 0.5) lerpPose(P_READY, P_THRUST, ease(t / 0.5), cur);
+      else lerpPose(P_THRUST, P_SCOOP, ease((t - 0.5) / 0.5), cur);
       if (t >= 0.42 && !this.splashed) { this.splashed = true; this.splash(camera, waterY); }
       this.bagMat.roughness = 0.3;
     } else if (st.phase === 'lift') {
-      const t = ease(st.elapsed / CAPTURE_PHASE_SEC.lift);
-      lerpPose(P_SCOOP, P_CHECK, t, cur);
-      dripping = t > 0.5;
+      const t = ease(st.elapsed / (empty ? EMPTY_PHASE_SEC.lift : CAPTURE_PHASE_SEC.lift));
+      lerpPose(P_SCOOP, empty ? P_READY : P_CHECK, t, cur);
+      dripping = !empty && t > 0.5;
     } else if (st.phase === 'check') {
-      lerpPose(P_CHECK, P_CHECK, 0, cur);
-      // the hands are not quite still
-      cur.p.x += Math.sin(sway * 3.1) * 0.0025;
-      cur.p.y += Math.sin(sway * 2.4 + 0.7) * 0.003;
-      cur.hands.x += Math.sin(sway * 2.0 + 2) * 0.004;
-      roll = Math.sin(sway * 1.7) * 0.015;
-      dripping = st.elapsed < REVEAL_SEC + 0.9;
+      if (empty) lerpPose(P_READY, P_READY, 0, cur);
+      else {
+        lerpPose(P_CHECK, P_CHECK, 0, cur);
+        // the hands are not quite still
+        cur.p.x += Math.sin(sway * 3.1) * 0.0025;
+        cur.p.y += Math.sin(sway * 2.4 + 0.7) * 0.003;
+        roll = Math.sin(sway * 1.7) * 0.015;
+        dripping = st.elapsed < REVEAL_SEC + 0.9;
+      }
     } else {
-      const t = ease(st.elapsed / CAPTURE_PHASE_SEC.done);
-      lerpPose(P_CHECK, P_HIDDEN, t, cur);
+      const t = ease(st.elapsed / (empty ? EMPTY_PHASE_SEC.done : CAPTURE_PHASE_SEC.done));
+      lerpPose(empty ? P_READY : P_CHECK, empty ? P_READY : P_HIDDEN, t, cur);
     }
     // the bag is on the far side of the hoop from the eye while checking; only then is the catch lit for the eye
     this.catchHolder.visible = !!st && (st.phase === 'check' || st.phase === 'done') && st.revealed;
     if (this.catchObj && this.catchHolder.visible) this.flop(st!.elapsed);
-    // the handle (local +z) runs from the hoop to the hands; the hoop plane holds it, the opening faces local +y
-    this.az.subVectors(cur.hands, cur.p).normalize();
-    this.up.set(Math.sin(roll), Math.cos(roll), 0);
-    this.ax.crossVectors(this.up, this.az).normalize();
-    this.ay.crossVectors(this.az, this.ax);
-    this.tmpM.makeBasis(this.ax, this.ay, this.az);
-    this.tmpQ.setFromRotationMatrix(this.tmpM);
     // camera space → world
     camera.updateMatrixWorld();
     this.group.position.copy(cur.p).applyMatrix4(camera.matrixWorld);
+    this.rollQ.setFromAxisAngle(this.tmpV.set(0, 0, 1), roll);
+    this.tmpQ.copy(cur.q).premultiply(this.rollQ);
     this.group.quaternion.copy(camera.quaternion).multiply(this.tmpQ);
     this.group.updateMatrixWorld();
     this.updateDrops(dt, dripping ? this.group.matrixWorld : null);
@@ -293,7 +325,7 @@ export class NetView {
   /** The hoop breaking the water: a burst of droplets from the front edge. */
   private splash(camera: PerspectiveCamera, waterY: number): void {
     camera.updateMatrixWorld();
-    const base = this.tmpV.copy(P_DIP.p).applyMatrix4(camera.matrixWorld);
+    const base = this.tmpV.copy(P_THRUST.p).applyMatrix4(camera.matrixWorld);
     base.y = Math.min(base.y, waterY + 0.02);
     base.y = Math.max(waterY + 0.01, base.y);
     let n = 0;
@@ -336,6 +368,8 @@ export class NetView {
     this.group.removeFromParent();
     this.drops.removeFromParent();
     this.group.traverse((o) => { const m = o as Mesh; if (m.isMesh) m.geometry.dispose(); });
+    this.zone.removeFromParent();
+    this.zone.geometry.dispose();
     this.bagMat.alphaMap?.dispose();
     this.bagMat.dispose();
   }

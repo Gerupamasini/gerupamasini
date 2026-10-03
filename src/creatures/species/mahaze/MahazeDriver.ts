@@ -170,6 +170,20 @@ export class MahazeDriver implements Driver {
     }
   }
 
+  holdAt(x: number, z: number, heading?: number): void {
+    const beh = this.beh, ind = this.ind;
+    if (!beh || !ind) return;
+    const st = beh.state;
+    st.pos.x = x; st.pos.z = z;
+    if (heading !== undefined) beh.setHeading(heading);
+    // a short rest gives up the dart or glide that carried it out
+    beh.setRestFor(0.6);
+    if (this.root) this.root.position.set(x, this.root.position.y, z);
+    ind.pos.x = x; ind.pos.z = z;
+    this.busy = false;
+    this.waitingForPerch = false;
+  }
+
   onEvent(cb: (e: BehaviorEvent) => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);

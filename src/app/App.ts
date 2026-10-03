@@ -13,7 +13,7 @@ import { World } from './World';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
-import { NetView, NET_LAYER, SWEEP_RADIUS } from '../player/NetView';
+import { NetView, NET_LAYER, REACH } from '../player/NetView';
 import { ShovelView } from '../player/ShovelView';
 import { ClamField } from '../world/ClamField';
 import { generateIndividual } from '../creatures/Individual';
@@ -37,7 +37,7 @@ const HUD_HZ = 4;
 const MARKER_HZ = 10;
 const AUTOSAVE_SEC = 60;
 
-export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool';
+export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool' | 'clams';
 
 export class App {
   readonly renderer: GameRenderer;
@@ -381,7 +381,7 @@ export class App {
     const w = this.world, p = this.player;
     if (!w || !p) return;
     const map = w.map;
-    let x = map.spawnStart.x, z = map.spawnStart.z, yaw = Math.PI;
+    let x = map.spawnStart.x, z = map.spawnStart.z, yaw = Math.PI, pitch = -0.15;
     switch (target) {
       case 'waterline': {
         x = 0;
@@ -394,9 +394,19 @@ export class App {
       case 'runnel': x = 0; z = -8 + 8 * Math.sin(0); break;
       case 'creek': x = -70 + 25 * Math.sin(100 / 70) + 9; z = 0; yaw = Math.PI / 2; break;
       case 'pool': { const pool = w.habitat.pools[0]; if (pool) { x = pool.cx + 6; z = pool.cz; yaw = Math.PI / 2; } break; }
+      case 'clams': {
+        // the nearest clam bed, stood at its edge and looking down at the sand
+        let best: { x: number; z: number } | null = null, bestD = Infinity;
+        for (const b of this.clams?.beds ?? []) {
+          const d = Math.hypot(b.x - p.position.x, b.z - p.position.z);
+          if (d < bestD) { bestD = d; best = b; }
+        }
+        if (best) { x = best.x + 1.5; z = best.z; yaw = Math.PI / 2; pitch = -0.55; p.lowView = true; }
+        break;
+      }
       default: break;
     }
-    p.setPose(x, z, yaw, -0.15);
+    p.setPose(x, z, yaw, pitch);
   }
 
   /** A short curtain over a change of screen: the word, the work, and a beat before it lifts. */
@@ -485,22 +495,19 @@ export class App {
    * bag unless it gets away — calm animals near the middle of the sweep are caught, wary ones and those at the
    * rim slip out, and everything nearby bolts.
    */
-  /** Catchable animals under the hoop's path for the current view, with how far off the path's middle each is (0..1). */
+  /**
+   * Catchable animals the net reaches from this view: inside the hoop's upright ellipse carried down the line of
+   * sight (the reticle) out to the length of the handle. `edge` is how far out toward the rim each sits (0..1).
+   */
   private netZoneHits(): { ind: Individual; edge: number }[] {
-    const creatures = this.creatures, world = this.world, player = this.player;
+    const creatures = this.creatures, player = this.player;
     const out: { ind: Individual; edge: number }[] = [];
-    if (!creatures || !world || !player) return out;
-    const a = this.tmp2, b = this.tmp3;
-    NetView.sweep(this.camera, (x, z) => world.terrain.heightAt(x, z), a, b);
-    const abx = b.x - a.x, abz = b.z - a.z, abLen2 = Math.max(1e-6, abx * abx + abz * abz);
+    if (!creatures || !player) return out;
     for (const ind of creatures.individuals) {
       if (!ind.species.collectable || ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
-      if (ind.pos.distanceTo(player.position) > 3) continue;
-      // distance from the animal to the hoop's path (in the ground plane), and how high it sits above the bed
-      const u = Math.max(0, Math.min(1, ((ind.pos.x - a.x) * abx + (ind.pos.z - a.z) * abz) / abLen2));
-      const off = Math.hypot(ind.pos.x - (a.x + abx * u), ind.pos.z - (a.z + abz * u));
-      const reach = SWEEP_RADIUS + ind.length_mm / 2000;
-      if (off <= reach && ind.pos.y - world.terrain.heightAt(ind.pos.x, ind.pos.z) < 0.3) out.push({ ind, edge: off / reach });
+      if (ind.pos.distanceTo(player.position) > REACH + 1.5) continue;
+      const e = NetView.inZone(this.camera, ind.pos, ind.length_mm / 2000);
+      if (e >= 0) out.push({ ind, edge: e });
     }
     return out;
   }
@@ -767,6 +774,8 @@ export class App {
         this.observation.update(dt);
         break;
       case 'capture':
+        // a tap moves on from the look into the net (an empty one is over in a blink anyway)
+        if (this.input.pressed('interact') || this.input.mouseClicked) this.capture.skip();
         this.capture.update(dt);
         break;
       case 'home':
@@ -806,7 +815,7 @@ export class App {
     } else if (world && player && creatures) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       else if (mode === 'capture') player.idle(dt);
-      this.net?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'hand_net' ? this.capture.state.value : null, world.tideLevel);
+      this.net?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'hand_net' ? this.capture.state.value : null, world.tideLevel, ui.debug.value && this.tool === 'hand_net' && (mode === 'field' || mode === 'capture'));
       this.shovel?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'shovel' ? this.capture.state.value : null);
       this.clams?.update(player.position, this.worldVisible() ? dt : 0, gameMs / 1000, (x, z) => world.habitat.waterAt(x, z));
       creatures.update({
@@ -893,6 +902,22 @@ export class App {
       });
       if (out.length >= 80) break;
     }
+    // buried clams nearby: their spot on the sand (the siphon holes are too small to find in a screenshot)
+    const clams = this.clams, world = this.world;
+    if (clams && world) {
+      let n = 0;
+      for (const k of clams.nearIndices(p.position.x, p.position.z, 12)) {
+        const x = clams.xs[k], z = clams.zs[k];
+        this.tmp.set(x, world.terrain.heightAt(x, z), z).project(this.camera);
+        if (this.tmp.z > 1 || Math.abs(this.tmp.x) > 1.05 || Math.abs(this.tmp.y) > 1.05) continue;
+        const d = Math.hypot(x - p.position.x, z - p.position.z);
+        out.push({
+          id: `clam-${k}`, x: ((this.tmp.x + 1) / 2) * w, y: ((1 - this.tmp.y) / 2) * h - 8,
+          text: `アサリ ${d.toFixed(1)}m${clams.state[k] === 1 ? ' 掘済' : ''}`, kind: 'mollusc',
+        });
+        if (++n >= 40) break;
+      }
+    }
     ui.markers.value = out;
   }
 
@@ -956,7 +981,8 @@ export class App {
     if (ui.debug.value) {
       const info = (this.field?.lastStats ?? this.renderer.gl.info.render);
       const cs = this.creatures?.stats() ?? { total: 0, visible: 0, lod1: 0 };
-      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1 } };
+      const clamsNear = this.clams && player ? this.clams.nearIndices(player.position.x, player.position.z, 12).length : 0;
+      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0 } };
     }
   }
 }

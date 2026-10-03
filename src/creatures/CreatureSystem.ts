@@ -30,7 +30,11 @@ interface Entry {
   view: View | null;
   pendingTier: string | null;
   unsub: () => void;
+  /** the last spot where an aquatic animal had enough water under it */
+  lastWet?: Vector3;
 }
+
+const isAquatic = (sp: SpeciesDef): boolean => sp.locomotion === 'swim' || sp.taxon.group === 'crustacean';
 
 export interface CreatureFrame {
   dt: number;
@@ -124,7 +128,6 @@ export class CreatureSystem {
       this.spawnAcc = 0;
       const live = this.individuals;
       for (const ind of this.spawner.cull(f.playerPos.x, f.playerPos.z, env, live)) if (ind.id !== f.lockedId) this.despawn(ind.id);
-      this.followTheWater(f);
       const scale = this.preset.creatureScale;
       const requests = this.spawner.plan(f.playerPos.x, f.playerPos.z, env, this.individuals);
       let n = 0;
@@ -139,6 +142,7 @@ export class CreatureSystem {
       this.lodAcc = 0;
       this.assignTiers(f);
     }
+    this.keepInWater(f);
     // brains and drivers
     const nowSec = f.gameMs / 1000;
     for (const e of this.entries.values()) {
@@ -165,13 +169,23 @@ export class CreatureSystem {
       // driver update (near every frame, mid every 2nd, far every 4th)
       if (e.view) {
         const every = ind.lod <= 1 ? 1 : ind.lod === 2 ? 2 : 4;
-        if (this.frameIndex % every === 0) e.driver.update(f.dt * every, { floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs, locked: e.ind.id === f.lockedId });
+        if (this.frameIndex % every === 0) {
+          e.driver.update(f.dt * every, {
+            floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs, locked: e.ind.id === f.lockedId,
+            minDepth: isAquatic(ind.species) ? minDepthFor(ind.species, ind.length_mm) : undefined,
+          });
+        }
         if (e.view.hero) e.view.hero.update(f.camera, e.driver.openings ?? { mouth: 0, gill: 0 });
       }
     }
   }
 
   private issue(e: Entry, intent: Intent, nowSec: number): void {
+    // an aquatic animal is never sent out of the water: the move stops where the water does
+    if (intent.target && isAquatic(e.ind.species)) {
+      const t = this.waterBound(e.ind, intent.target, intent.kind === 'flee');
+      if (t !== intent.target) intent = { ...intent, target: t };
+    }
     const b = e.ind.brain;
     b.done = false;
     b.intentId = intent.id;
@@ -263,26 +277,80 @@ export class CreatureSystem {
   }
 
   /**
-   * Aquatic animals never sit on dry ground: when the water under one gets too shallow it heads for the nearest water
-   * that is deep enough; when there is none nearby, it has been dry for a while, or nobody is close enough to see it,
-   * it simply leaves (slipped off with the tide). Pit residents leave when their pit dries.
+   * Aquatic animals stay in the water. Each remembers the last spot that was deep enough for it; the moment it is
+   * out (its own dart, a flight from the net, the ebb pulling back) it is set back there, turned toward the nearest
+   * water and sent that way. The ebb is followed, never a beach; only one with no water anywhere near and nobody
+   * watching is quietly gone with the tide.
    */
-  private followTheWater(f: CreatureFrame): void {
-    for (const e of [...this.entries.values()]) {
+  private keepInWater(f: CreatureFrame): void {
+    for (const e of this.entries.values()) {
       const ind = e.ind;
-      if (ind.id === f.lockedId) continue;
-      if (!(ind.species.locomotion === 'swim' || ind.species.taxon.group === 'crustacean')) continue;
+      if (!isAquatic(ind.species) || ind.id === f.lockedId) continue;
+      // near animals every frame (a dart is fast), the rest at a few hertz
+      if (ind.lod > 1 && (this.frameIndex & 7) !== 0) continue;
       const need = minDepthFor(ind.species, ind.length_mm);
-      if (this.habitat.depthAt(ind.pos.x, ind.pos.z) >= need) { ind.strandedSince = 0; continue; }
+      if (this.habitat.depthAt(ind.pos.x, ind.pos.z) >= need) {
+        ind.strandedSince = 0;
+        (e.lastWet ??= new Vector3()).copy(ind.pos);
+        continue;
+      }
       if (!ind.strandedSince) ind.strandedSince = f.gameMs;
-      const dist = ind.pos.distanceTo(f.playerPos);
-      const wet = ind.pitId === undefined ? this.habitat.nearestWater(ind.pos.x, ind.pos.z, need + 0.02, 6) : null;
-      if (!wet || dist > 25 || f.gameMs - ind.strandedSince > 12000) { this.despawn(ind.id); continue; }
-      if (ind.brain.lastIntentKind !== 'moveTo' || !e.driver.busy) {
-        ind.alert = Math.max(ind.alert, 0.5);
-        this.issue(e, { id: this.tmpIntent.id--, kind: 'moveTo', urgency: 0.9, seconds: 6, target: wet }, f.gameMs / 1000);
+      const wet = e.lastWet;
+      const back = !!wet && this.habitat.depthAt(wet.x, wet.z) >= need;
+      const fx = back && wet ? wet.x : ind.pos.x, fz = back && wet ? wet.z : ind.pos.z;
+      const dest = this.habitat.nearestWater(fx, fz, need + 0.02, 3) ?? this.habitat.nearestWater(fx, fz, need + 0.02, 12) ?? this.habitat.nearestWater(fx, fz, need + 0.02, 25);
+      if (back && wet) {
+        e.driver.holdAt?.(wet.x, wet.z, dest ? Math.atan2(dest.x - wet.x, dest.z - wet.z) : undefined);
+        ind.pos.x = wet.x; ind.pos.z = wet.z;
+        ind.strandedSince = 0;
+      }
+      if (dest) {
+        if (!back && ind.pos.distanceTo(f.playerPos) > 20) {
+          // left high and dry out of sight (the ebb outran it): it is simply in the water again
+          e.driver.holdAt?.(dest.x, dest.z);
+          ind.pos.x = dest.x; ind.pos.z = dest.z;
+          ind.strandedSince = 0;
+        } else if (back || ind.brain.lastIntentKind !== 'moveTo' || !e.driver.busy) {
+          ind.alert = Math.max(ind.alert, 0.5);
+          this.issue(e, { id: this.tmpIntent.id--, kind: 'moveTo', urgency: 0.9, seconds: 6, target: dest }, f.gameMs / 1000);
+        }
+      } else if (f.gameMs - ind.strandedSince > 30000 && ind.pos.distanceTo(f.playerPos) > 30) {
+        this.despawn(ind.id);
       }
     }
+  }
+
+  /**
+   * The point along the way to `target` where the water still holds the animal (its own spot when the first step is
+   * already dry). A flight that would run aground is turned to the side with the longest run of water instead.
+   */
+  private waterBound(ind: Individual, target: Vector3, flee: boolean): Vector3 {
+    const need = minDepthFor(ind.species, ind.length_mm);
+    if (this.habitat.depthAt(target.x, target.z) >= need) return target;
+    const run = (dx: number, dz: number, len: number): number => {
+      const n = Math.max(1, Math.ceil(len / 0.1));
+      let ok = 0;
+      for (let i = 1; i <= n; i++) {
+        const u = i / n;
+        if (this.habitat.depthAt(ind.pos.x + dx * u, ind.pos.z + dz * u) < need) break;
+        ok = u;
+      }
+      return ok;
+    };
+    let dx = target.x - ind.pos.x, dz = target.z - ind.pos.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 1e-4) return target;
+    let u = run(dx, dz, len);
+    if (flee && u * len < 0.3) {
+      // try the sides, away from the threat still: the longest wet run wins
+      const a0 = Math.atan2(dx, dz);
+      for (const off of [0.9, -0.9, 1.6, -1.6, 2.3, -2.3]) {
+        const ax = Math.sin(a0 + off) * len, az = Math.cos(a0 + off) * len;
+        const ua = run(ax, az, len);
+        if (ua > u) { u = ua; dx = ax; dz = az; }
+      }
+    }
+    return new Vector3(ind.pos.x + dx * u, target.y, ind.pos.z + dz * u);
   }
 
   /** The water jumped (a ticket, a debug time): everyone but the watched animal leaves and the flat is repopulated. */

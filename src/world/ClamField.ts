@@ -29,6 +29,8 @@ export class ClamField {
   private readonly retractUntil: Float32Array;
   private readonly ext: Float32Array;
   private readonly cells = new Map<number, number[]>();
+  /** the beds the clams were laid in (centre, radius, how many) */
+  readonly beds: { x: number; z: number; r: number; n: number }[] = [];
   readonly group = new Group();
   private readonly siphons: InstancedMesh;
   private readonly holes: InstancedMesh;
@@ -44,7 +46,7 @@ export class ClamField {
   private readonly lastPlayer = new Vector3();
   private playerSpeed = 0;
 
-  constructor(private readonly terrain: Terrain, seed: number, beds = 30) {
+  constructor(private readonly terrain: Terrain, seed: number, beds = 45) {
     const rng = new Rng(seed);
     const xs: number[] = [], zs: number[] = [], len: number[] = [], seeds: number[] = [];
     const half = terrain.half;
@@ -58,6 +60,7 @@ export class ClamField {
       for (let tries = 0; tries < 60 && !found; tries++) { cx = rng.range(-half + 12, half - 12); cz = rng.range(-half + 12, half - 12); found = okBed(cx, cz); }
       if (!found) continue;
       const r = rng.range(3, 7), n = Math.min(260, Math.round(Math.PI * r * r * rng.range(0.9, 1.6)));
+      const before = xs.length;
       for (let i = 0; i < n; i++) {
         const a = rng.range(0, Math.PI * 2), d = Math.sqrt(rng.next()) * r;
         const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
@@ -66,6 +69,7 @@ export class ClamField {
         len.push(Math.max(18, Math.min(48, 33 + rng.normal() * 6)));
         seeds.push(Math.floor(rng.next() * 4294967295) >>> 0);
       }
+      if (xs.length > before) this.beds.push({ x: cx, z: cz, r, n: xs.length - before });
     }
     this.count = xs.length;
     this.xs = Float32Array.from(xs); this.zs = Float32Array.from(zs); this.len = Float32Array.from(len); this.seed = Uint32Array.from(seeds);

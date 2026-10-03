@@ -36,6 +36,15 @@ export function MapOverlay({ app }: { app: App }) {
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fillText(t('map.legend.pool'), x, z - 6);
       }
+      // clam beds (debug): rings on the sand where the siphon holes are
+      if (ui.debug.value && app.clams) {
+        ctx.strokeStyle = 'rgba(232,207,154,0.9)';
+        ctx.lineWidth = 1;
+        for (const b of app.clams.beds) {
+          const [x, z] = toPx(b.x, b.z);
+          ctx.beginPath(); ctx.arc(x, z, Math.max(2, b.r * scale), 0, Math.PI * 2); ctx.stroke();
+        }
+      }
       // creatures (debug)
       if (ui.debug.value && ui.debugState.value.markers && app.creatures) {
         for (const ind of app.creatures.individuals) {

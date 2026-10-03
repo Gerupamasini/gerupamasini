@@ -30,13 +30,25 @@ class ShrimpWorld {
   puff(): void {}
   wake(): void {}
   stimulus(): void {}
+  /** the depth the shrimp must keep under it (0 = no water fence, e.g. the tank) */
+  minDepth = 0;
+  private readonly lastWet = new Vector3();
+  private hasWet = false;
+  /** forget the last wet spot (the shrimp was moved by hand) */
+  resetWet(): void { this.hasWet = false; }
   constrain(p: Vector3, _onGround: boolean, vel?: Vector3): void {
     const b = this.bounds;
-    if (!b) return;
-    if (p.x > b.maxX) { p.x = b.maxX; if (vel && vel.x > 0) vel.x *= -0.3; }
-    if (p.x < b.minX) { p.x = b.minX; if (vel && vel.x < 0) vel.x *= -0.3; }
-    if (p.z > b.maxZ) { p.z = b.maxZ; if (vel && vel.z > 0) vel.z *= -0.3; }
-    if (p.z < b.minZ) { p.z = b.minZ; if (vel && vel.z < 0) vel.z *= -0.3; }
+    if (b) {
+      if (p.x > b.maxX) { p.x = b.maxX; if (vel && vel.x > 0) vel.x *= -0.3; }
+      if (p.x < b.minX) { p.x = b.minX; if (vel && vel.x < 0) vel.x *= -0.3; }
+      if (p.z > b.maxZ) { p.z = b.maxZ; if (vel && vel.z > 0) vel.z *= -0.3; }
+      if (p.z < b.minZ) { p.z = b.minZ; if (vel && vel.z < 0) vel.z *= -0.3; }
+    }
+    // the water's edge: every step that would leave the water is undone, so a tail flip stops at the shallows
+    if (this.minDepth > 0 && this.floor) {
+      if (this.floor.waterAt(p.x, p.z) - this.floor.heightAt(p.x, p.z) >= this.minDepth) { this.lastWet.set(p.x, p.y, p.z); this.hasWet = true; }
+      else if (this.hasWet) { p.x = this.lastWet.x; p.z = this.lastWet.z; if (vel) { vel.x *= -0.2; vel.z *= -0.2; } }
+    }
   }
 }
 
@@ -208,6 +220,7 @@ export class ShrimpDriver implements Driver {
     if (!ind || !sh || !w) return;
     w.floor = ctx.floor;
     w.bounds = ctx.bounds;
+    w.minDepth = ctx.minDepth ?? 0;
     const dist = ctx.player.distanceTo(sh.position);
     w.cheap = dist > 12 && !ctx.locked;
     const level = ctx.locked || ctx.bounds ? 0 : dist < 3 ? 0 : dist < 6 ? 1 : 2;
@@ -256,6 +269,23 @@ export class ShrimpDriver implements Driver {
       this.idleFor += sdt;
       if (this.idleFor > 10 && !this.restSent) { this.restSent = true; this.emit('rest'); }
     }
+  }
+
+  holdAt(x: number, z: number, heading?: number): void {
+    const ind = this.ind, sh = this.shrimp, w = this.world, it = this.brain.intent;
+    if (!ind || !sh || !w) return;
+    sh.position.set(x, w.heightAt(x, z) + sh.standH, z);
+    sh.vel.set(0, 0, 0);
+    sh.flip = null;
+    sh.mode = 'ground';
+    if (heading !== undefined) sh.yaw = headingToYaw(heading);
+    sh.plantAllFeet();
+    w.resetWet();
+    ind.pos.copy(sh.position);
+    ind.heading = yawToHeading(sh.yaw);
+    it.target = null; it.speed = 0; it.mode = 'ground'; it.arms = 'rest';
+    this.mode = 'idle';
+    this.busy = false;
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

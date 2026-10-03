@@ -5,7 +5,7 @@ import { t } from '../store';
 /** While the tool comes up: a quiet line, then what was in it. */
 export function CaptureOverlay({ app }: { app: App }) {
   const st = app.capture.state.value;
-  if (!st || st.phase === 'swing') return null;
+  if (!st || st.phase === 'swing' || st.result === 'fail') return null;
   const cls = !st.revealed ? 'wait' : st.result === 'success' ? 'success' : 'fail';
   const checking = st.toolId === 'shovel' ? '砂の中は…' : t('capture.checking');
   const empty = st.toolId === 'shovel' ? t('capture.sandOnly') : t('capture.empty');

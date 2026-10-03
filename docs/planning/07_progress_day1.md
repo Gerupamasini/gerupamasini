@@ -105,3 +105,11 @@
 - 水槽: `SAND_H` 5 cm の箱、`floor.heightAt` は砂の上面。`W_ABSORB` を下げた。`tankEdit` 画面（`App.openTankEdit/closeTankEdit`、`App.transition` の暗転 320 ms + 240 ms、`tank.updateFrozen`）。`tankPut` も暗転。`tank.nudgeCamera` で WASD。`tank.onBehavior` は mode==='home' のときだけ記録。
 - 図鑑: `behaviors[].clip` で観察済み行動の再生（`ModelPreview.show(sp, clip)`）。
 - 干潟の水: `uFogW` 2.0→1.1、`uFogPool` 1.0→0.35、`uEnvI` 0.72→0.6。
+
+## 9 回目（網の判定、空振り、しゃがみ、アサリの見える化、水から出ない）
+- 網の判定: `NetView.inZone(camera, p, margin)`。カメラ空間で視線（画面中央）に沿った縦長の楕円（半径 0.19 × 0.26 m + 体長/2）を、目の前 0.25 m から柄の長さ `REACH` 1.2 m まで伸ばした筒。`App.netZoneHits` がこれに入る採集可能な個体を集め、逃げる確率は `edge`（楕円の中心 0 〜 縁 1）で重み付け。旧 `sweep`（地面に押し下げた線分）は削除。網の姿勢は「突き出す」（`Q_THRUST`: 枠が視線に垂直）→ すくう → 確認、の slerp。デバッグ中はワイヤーフレームの筒（`NetView.zone`）を表示。
+- 空振り: `Capture.EMPTY_PHASE_SEC`（swing .42 / lift .35 / check .2 / done .2）。`CaptureOverlay` は result==='fail' のとき描かない。`Capture.skip()` で check → done（[E]・クリック）。
+- しゃがみ: `FPSController.crouching = lowView`（以前は `enabled && lowView` だったので、捕獲中に update が 1 回走ると立ち上がっていた）。
+- アサリ: `ClamField.beds` を公開（45 床）、`teleport('clams')`、デバッグ統計に `clamsNear/clamsTotal`、12 m 以内のマーカー（kind: mollusc）、全体地図の貝床の輪。
+- 水から出ない: `CreatureSystem.keepInWater`（毎フレーム、遠い個体は 8 フレームごと）。Entry ごとに `lastWet` を覚え、必要水深（体長の 15 %）を切ったら `Driver.holdAt(x, z, heading)` でそこへ戻し、`Habitat.nearestWater`（3 → 12 → 25 m）へ moveTo。`issue()` は水中種の目標を `waterBound` で水の切れる位置に手前で止め、flee は横方向のうち水の続く向きへ。`ShrimpWorld.constrain` に水際のフェンス（`DriverContext.minDepth`）を追加して尾扇の逃避も水際で止まる。視界外（20 m 超）で干上がった個体は最寄りの水へ置き直し、25 m 以内に水がなく 30 m より遠い個体だけ 30 秒後に消える。
+- バージョン 0.6.0。
