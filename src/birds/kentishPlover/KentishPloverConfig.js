@@ -81,7 +81,7 @@ export const bodySculpt = {
     // front of the ball: the broad breast under the head
     { type: 'ellipsoid', name: 'breast', c: [0.0, 68.06, 12.43], r: [31.77, 21.25, 21.89] },
     // broad, rounded underside, lowest at z −10
-    { type: 'ellipsoid', name: 'belly', c: [0.0, 52.53, -8.63], r: [34.05, 17.65, 23.77] },
+    { type: 'ellipsoid', name: 'belly', c: [0.0, 52.53, -8.63], r: [31.0, 17.6, 23.8] },
     // rear body tapering to the tail, as wide as the folded wings over it
     { type: 'ellipsoid', name: 'rump', c: [0.0, 61.79, -37.95], r: [23.72, 6.18, 25.06], rx: 19.61 },
     // under-tail keel, covered by the LTC
@@ -140,7 +140,7 @@ export const bodySculpt = {
   // neck under the ear coverts down and inward over the front of the broad breast, ending 9 mm off the midline —
   // from the front the two frame the white face and throat as an almost closed ring (the user's front photo, p013,
   // p063); the grey-brown upperparts begin behind it (kpPatchZ). Shaders: kpPlumage; wing-fold solver: underPatch.
-  breastPatch: [[20.2, 91.7, 17.1], [21.6, 88.4, 20.2], [22.2, 85.2, 24.2], [21.8, 81.7, 27.4], [18.9, 76, 31.1], [14.3, 70.6, 33.2], [9, 67, 34.2]],
+  breastPatch: [[20.2, 91.7, 17.1], [22.4, 86.8, 24.8], [21.6, 82.4, 29], [17.7, 76.4, 32.4], [13.4, 71, 33.5], [8.4, 67.6, 34.1]],
   // head zone (bodyMesh.headness, the shaders' kpHeadness): rigid with the head inside, blending into the neck sleeve
   // over the outer 0.35 — wide enough for the full cheeks (x ±18.7)
   headZone: { c: [0, 93.5, 24], r: [17, 13, 15.5] },
@@ -301,7 +301,7 @@ export const animation = {
   // crown − back 5.9 (spec +6 ± 4); run 91, +3.8; contact correction 0 in both (Frame-A walk IoU 0.892)
   // relaxed stand: the trunk lowered on flexed legs (belly 29 mm, crown 99 mm: the user's front photo, spec v4 §12);
   // walking / running raise it to the bind height
-  relaxedDrop: mm(7),
+  relaxedDrop: mm(9),
   walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.19, neck: -0.25, headDown: mm(2), headFwd: mm(6) },
   run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.2, neck: -0.28, headDown: mm(3.5), headFwd: mm(8.5) },
   sway: mm(0.6), // lateral trunk sway per stride (D)
