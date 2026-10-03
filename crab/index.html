@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ミナミコメツキガニ 3D</title>
+<style>
+:root{--bg:#1b1d20;--fg:#d9dde2}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1d20;--fg:#d9dde2}}
+:root[data-theme="dark"]{--bg:#1b1d20;--fg:#d9dde2}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;overflow:hidden}
+#ui{position:fixed;left:16px;right:16px;top:12px;display:flex;gap:8px;flex-wrap:wrap;font-size:13px}
+button{background:#2c3036;color:var(--fg);border:1px solid #444a52;border-radius:6px;padding:6px 10px;font:inherit;cursor:pointer}
+#info{position:fixed;left:16px;right:16px;bottom:10px;font-size:12px;opacity:.7}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head><body>
+<div id="ui"><button data-v="persp">斜め</button><button data-v="top">上面</button><button data-v="front">正面</button><button data-v="side">側面</button><button id="walk">歩行テスト</button></div>
+<div id="info">Mictyris brevidactylus LOD0 ／ GLTFLoader + MeshStandardMaterial + DirectionalLight + AmbientLight のみ</div>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+const r=new THREE.WebGLRenderer({antialias:true});r.setPixelRatio(Math.min(2,devicePixelRatio));r.setSize(innerWidth,innerHeight);
+r.shadowMap.enabled=true;r.outputColorSpace=THREE.SRGBColorSpace;document.body.appendChild(r.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x1b1d20);
+const cam=new THREE.PerspectiveCamera(35,innerWidth/innerHeight,0.001,10);
+const ctl=new OrbitControls(cam,r.domElement);ctl.target.set(0,0.009,0);ctl.enableDamping=true;
+scene.add(new THREE.AmbientLight(0xffffff,0.9));
+const sun=new THREE.DirectionalLight(0xffffff,2.6);sun.position.set(0.05,0.12,0.08);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-.04,right:.04,top:.04,bottom:-.04,near:.01,far:.4});sun.shadow.bias=-0.0002;scene.add(sun);
+const fill=new THREE.DirectionalLight(0xbcd4ff,0.6);fill.position.set(-0.08,0.05,-0.05);scene.add(fill);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.3),new THREE.MeshStandardMaterial({color:0xcbbd9f,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+const views={persp:[0.035,0.03,0.045],top:[0,0.09,0.0001],front:[0,0.012,0.08],side:[0.08,0.012,0]};
+function setView(v){const p=views[v];cam.position.set(...p);ctl.target.set(0,v==='top'?0:0.008,0);ctl.update();}
+setView('persp');document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight);});
+let bones={},rest={},walking=false;document.getElementById('walk').onclick=()=>walking=!walking;
+new GLTFLoader().load('mictyris_brevidactylus_LOD0.glb?v='+Date.now(),g=>{g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}if(o.isBone){bones[o.name]=o;rest[o.name]=o.quaternion.clone();}});scene.add(g.scene);window.__crab=g;});
+const clock=new THREE.Clock(),q=new THREE.Quaternion(),ax=new THREE.Vector3();
+function loop(){const t=clock.getElapsedTime();
+ for(const n in bones){bones[n].quaternion.copy(rest[n]);}
+ if(walking){for(let i=1;i<=4;i++)for(const s of['L','R']){const ph=t*9+i*Math.PI/2+(s==='L'?Math.PI:0);
+   const cx=bones[`leg${i}_${s}_coxa`],me=bones[`leg${i}_${s}_merus`];if(!cx)continue;
+   cx.quaternion.multiply(q.setFromAxisAngle(ax.set(0,1,0),Math.sin(ph)*0.25));
+   me.quaternion.multiply(q.setFromAxisAngle(ax.set(0,0,1),Math.max(0,Math.cos(ph))*0.3*(s==='L'?-1:1)));}}
+ ctl.update();r.render(scene,cam);requestAnimationFrame(loop);}
+loop();
+</script></body></html>
