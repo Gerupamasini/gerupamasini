@@ -368,7 +368,7 @@ let CACHE = null;
 // tools/dev/wingfold-cache.mjs) under a key of what it depends on: the solver version, the wing layout and the
 // body outline (sampled). Whenever either changes the key no longer matches and the solution is computed
 // here instead (with a console warning to regenerate the cache).
-export const WING_FOLD_SOLVER = 25; // bump with any change of the solver below
+export const WING_FOLD_SOLVER = 26; // bump with any change of the solver below
 export function wingFoldKey(wingFeathers, sdf, torsoSdf = sdf) {
   const probe = [];
   for (let x = 0; x <= 24; x += 6) for (let y = 40; y <= 90; y += 10) for (let z = -50; z <= 50; z += 10) probe.push(Math.round(sdf(x, y, z) * 100), Math.round(torsoSdf(x, y, z) * 100));
@@ -465,10 +465,18 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
       // in steps further out (PRIMARY_TIP_X), so from above the folded wing tapers from the round rump to one short point
       // over the tail — no parallel-sided stem behind the rump (4.8 + 0.9·(10 − i) for all ran on 25 mm wide), and no
       // shoulder where p6 / p5 ended (validation §Z)
-      const x = PRIMARY_TIP_X[f.index - 1];
+      let x = PRIMARY_TIP_X[f.index - 1];
       // p9 tip (−84, 57.4), spec §10.3; the chord ends higher by the shaft's ventral bend (featherOffset)
-      const y = 57.0 + (10 - f.index) * 0.35 + (f.index <= 6 ? -SEC_DROP : 0) + (f.index === 10 ? 2.5 : f.index === 8 ? 0.8 : f.index === 7 ? 1.2 : 0) + f.curve * L * 0.83;
-      const dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));
+      let y = 57.0 + (10 - f.index) * 0.35 + (f.index <= 6 ? -SEC_DROP : 0) + (f.index === 10 ? 2.5 : f.index === 8 ? 0.8 : f.index === 7 ? 1.2 : 0) + f.curve * L * 0.83;
+      let dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));
+      // (v4: the inner primaries, ending over the broad rear body, lie on its side under the secondaries — their tips
+      // at the wing's lower edge and outside the outline there, not at the narrow tail's x)
+      for (let it = 0; it < 3; it++) {
+        const z = base.z - dz;
+        y = Math.max(y, wingEdgeY(z) - 2 + f.curve * L * 0.83);
+        x = Math.max(PRIMARY_TIP_X[f.index - 1], onSide(sdf, y - f.curve * L * 0.83, z) + 1.0);
+        dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));
+      }
       tip = new THREE.Vector3(x, y, base.z - dz);
       n = V([0.55, 0.83, 0]).normalize();
     } else if (COVERT_ARM[f.type]) {
