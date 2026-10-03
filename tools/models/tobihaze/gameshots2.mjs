@@ -42,28 +42,62 @@ const pick = await page.evaluate(() => {
   const w = a.world;
   const rows = all.map((i) => ({ id: i.id, d: i.pos.distanceTo(a.player.position), depth: w.habitat.depthAt(i.pos.x, i.pos.z) }));
   rows.sort((x, y) => (x.depth < 0 ? 0 : 1) - (y.depth < 0 ? 0 : 1) || x.d - y.d);
-  return { n: all.length, first: rows[0] };
+  const hist = rows.map((r) => r.depth.toFixed(3)).join(' ');
+  return { n: all.length, first: rows[0], hist };
 });
 console.log('pick', JSON.stringify(pick));
 if (!pick.first) { await browser.close(); process.exit(1); }
 const id = pick.first.id;
 // the player stands 3 m off so the animal stays calm; the observation camera goes close
-await page.evaluate((id) => {
+const land = await page.evaluate((id) => {
   const a = window.__higata;
   const g = a.creatures.get(id);
   const ang = g.heading + Math.PI / 2;
   const px = g.pos.x + Math.sin(ang) * 3, pz = g.pos.z + Math.cos(ang) * 3;
   a.player.setPose(px, pz, Math.atan2(-(g.pos.x - px), -(g.pos.z - pz)));
   a.player.pitch = -0.1;
-  a.enterObserve(g);
-  a.observation.nudge(-1); a.observation.nudge(-1); a.observation.nudge(-1);
+  // the nearest patch of wet, exposed mud: where a fish in the shallows would climb out
+  const h = a.world.habitat;
+  for (let r = 0.25; r <= 3; r += 0.125) {
+    for (let k = 0; k < 24; k++) {
+      const t = (k / 24) * Math.PI * 2;
+      const x = g.pos.x + Math.sin(t) * r, z = g.pos.z + Math.cos(t) * r;
+      const d = h.depthAt(x, z);
+      if (d < -0.012 && d > -0.08) return { x, z, d, r };
+    }
+  }
+  return null;
 }, id);
+console.log('land', JSON.stringify(land));
+await frames(3);
+await page.evaluate((id) => {
+  const a = window.__higata;
+  a.enterObserve(a.creatures.get(id));
+}, id);
+await frames(3);
+const camDist = () => page.evaluate((id) => {
+  const a = window.__higata;
+  const p = a.creatures.anchorOf(id);
+  return p ? +a.observation.camera.position.distanceTo(p).toFixed(3) : null;
+}, id);
+console.log('cam before nudge', await camDist());
+await page.evaluate(() => { const a = window.__higata; a.observation.nudge(-1); a.observation.nudge(-1); });
+await frames(2);
+console.log('cam after nudge', await camDist());
 const dbg = () => page.evaluate((id) => window.__higata.creatures.driverOf(id)?.debug, id);
-const shots = (process.env.SHOTS ?? 'rest:40,forage:60,forage:60,crawl:50,flee:25,flee:25,flee:40').split(',');
+const shots = (process.env.SHOTS ?? 'land:30,land:60,land:90,rest:40,forage:60,forage:60,crawl:50,flee:25,flee:25,burrow:60,rest:80,rest:120').split(',');
+let landSent = false;
 let k = 0;
 for (const s of shots) {
   const [what, n] = s.split(':');
-  if (what !== 'rest') {
+  if (what === 'land' && land && !landSent) {
+    landSent = true;
+    await page.evaluate(({ id, land }) => {
+      const a = window.__higata;
+      const g = a.creatures.get(id);
+      a.creatures.forceIntent(id, { id: -1, kind: 'moveTo', urgency: 0.35, seconds: 30, target: g.pos.clone().set(land.x, g.pos.y, land.z) });
+    }, { id, land });
+  } else if (what !== 'rest' && what !== 'land') {
     await page.evaluate(({ id, what }) => {
       const a = window.__higata;
       const g = a.creatures.get(id);
@@ -78,6 +112,6 @@ for (const s of shots) {
   await frames(Number(n));
   const file = `${String(k++).padStart(2, '0')}-${what}.png`;
   await page.screenshot({ path: path.join(outDir, file) });
-  console.log(file, JSON.stringify(await dbg()));
+  console.log(file, JSON.stringify(await dbg()), 'cam', await camDist());
 }
 await browser.close();

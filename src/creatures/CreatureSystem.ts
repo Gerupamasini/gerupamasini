@@ -327,7 +327,7 @@ export class CreatureSystem {
     const e = this.entries.get(id);
     if (!e) return;
     e.ind.alert = 1;
-    this.issue(e, { ...intent, id: this.tmpIntent.id-- }, Date.now() / 1000);
+    this.issue(e, { ...intent, id: this.tmpIntent.id-- }, this.nowMs / 1000);
   }
 
   /** Remove an individual permanently (captured). */

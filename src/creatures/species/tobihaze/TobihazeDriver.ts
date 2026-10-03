@@ -162,9 +162,9 @@ export class TobihazeDriver implements Driver {
   anchor(): Vector3 {
     const m = this.motor;
     if (m && this.root) {
-      // the head end, a little above the body (cameras look at the eyes and pectorals)
+      // just ahead of the pectoral girdle, a little above the body (cameras look at the eyes and pectorals)
       const f = this.nrm.set(Math.sin(m.heading), 0, Math.cos(m.heading));
-      return this.tmp.set(m.pos.x - f.x * 0.12 * m.L, m.pos.y + 0.06 * m.L, m.pos.z - f.z * 0.12 * m.L);
+      return this.tmp.set(m.pos.x + f.x * 0.04 * m.L, m.pos.y + 0.06 * m.L, m.pos.z + f.z * 0.04 * m.L);
     }
     return this.ind ? this.ind.pos : this.tmp.set(0, 0, 0);
   }
