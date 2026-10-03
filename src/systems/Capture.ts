@@ -21,6 +21,8 @@ export interface CaptureState {
 
 /** seconds each phase takes */
 export const CAPTURE_PHASE_SEC: Record<CapturePhase, number> = { swing: 0.42, lift: 0.8, check: 2.3, done: 0.3 };
+/** an empty net or scoop comes straight back: no looking, no words */
+export const EMPTY_PHASE_SEC: Record<CapturePhase, number> = { swing: 0.42, lift: 0.35, check: 0.2, done: 0.2 };
 /** seconds into `check` at which what came up can be seen */
 export const REVEAL_SEC = 0.55;
 
@@ -62,11 +64,18 @@ export class Capture {
     };
   }
 
+  /** Seen enough: lower the tool now (while looking at what came up). */
+  skip(): void {
+    const st = this.state.value;
+    if (!st || st.phase !== 'check') return;
+    this.state.value = { ...st, phase: 'done', elapsed: 0, revealed: true };
+  }
+
   update(dt: number): void {
     const st = this.state.value;
     if (!st || !this.running) return;
     const elapsed = st.elapsed + dt;
-    const limit = CAPTURE_PHASE_SEC[st.phase];
+    const limit = (st.result === 'fail' ? EMPTY_PHASE_SEC : CAPTURE_PHASE_SEC)[st.phase];
     if (elapsed < limit) {
       const revealed = st.revealed || (st.phase === 'check' && elapsed >= REVEAL_SEC);
       this.state.value = { ...st, elapsed, revealed };

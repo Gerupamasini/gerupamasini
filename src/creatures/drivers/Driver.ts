@@ -37,6 +37,8 @@ export interface DriverContext {
   nowMs: number;
   /** the observed / locked animal: keep full detail whatever the distance to the player */
   locked?: boolean;
+  /** the water this animal must stay in (metres of depth); drivers that fence their own motion use it */
+  minDepth?: number;
 }
 
 export interface Driver {
@@ -47,6 +49,11 @@ export interface Driver {
   /** true while the current intent is still being executed */
   readonly busy: boolean;
   update(dt: number, ctx: DriverContext): void;
+  /**
+   * Put the animal at (x, z), facing `heading` when given, and drop whatever move took it there: the water's edge
+   * (an aquatic animal is never left on the sand).
+   */
+  holdAt?(x: number, z: number, heading?: number): void;
   onEvent(cb: (e: BehaviorEvent) => void): () => void;
   /** anchor point for cameras (world) */
   anchor(): Vector3;
