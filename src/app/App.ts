@@ -906,11 +906,13 @@ export class App {
     const clams = this.clams, world = this.world;
     if (clams && world) {
       let n = 0;
-      for (const k of clams.nearIndices(p.position.x, p.position.z, 12)) {
+      const near = clams.nearIndices(p.position.x, p.position.z, 12)
+        .map((k) => ({ k, d: Math.hypot(clams.xs[k] - p.position.x, clams.zs[k] - p.position.z) }))
+        .sort((a, b) => a.d - b.d);
+      for (const { k, d } of near) {
         const x = clams.xs[k], z = clams.zs[k];
         this.tmp.set(x, world.terrain.heightAt(x, z), z).project(this.camera);
         if (this.tmp.z > 1 || Math.abs(this.tmp.x) > 1.05 || Math.abs(this.tmp.y) > 1.05) continue;
-        const d = Math.hypot(x - p.position.x, z - p.position.z);
         out.push({
           id: `clam-${k}`, x: ((this.tmp.x + 1) / 2) * w, y: ((1 - this.tmp.y) / 2) * h - 8,
           text: `アサリ ${d.toFixed(1)}m${clams.state[k] === 1 ? ' 掘済' : ''}`, kind: 'mollusc',
