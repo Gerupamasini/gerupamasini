@@ -100,7 +100,7 @@ try {
     await waitFrames(page, 10);
   }
   // close-ups of the placeholder species when they are around
-  for (const [sid, file] of [['exopalaemon_orientis', '14-shrimp.png'], ['charadrius_alexandrinus', '15-plover.png']]) {
+  for (const [sid, file] of [['exopalaemon_orientis', '14-shrimp.png'], ['charadrius_alexandrinus', '15-plover.png'], ['periophthalmus_modestus', '16-tobihaze.png']]) {
     const found = await page.evaluate((sid) => {
       const a = window.__higata;
       const p = a.player.position;

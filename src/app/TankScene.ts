@@ -681,16 +681,19 @@ export class TankScene {
     ind.home.copy(ind.pos);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     let hero: HeroInstance | null = null;
-    const useHero = !!this.heroApply && !!species.model.hero && !this.occupants.some((o) => o.hero);
+    let info: { tier: 'hero' | 'lod1' | 'lod2'; parser: LoadedModel['parser'] } | undefined;
+    const useHero = !!this.heroApply && !!species.model.hero && !entry.ownMaterials && !this.occupants.some((o) => o.hero);
     const rel = useHero ? species.model.hero : species.model.lod1 ?? species.model.hero ?? species.model.lod2;
     if (rel) {
       const model = await instantiateModel(rel);
       root = model.root; bones = model.bones as Record<string, Object3D>; meshes = model.meshes; extras = model.extras;
+      info = { tier: model.tier, parser: model.parser };
       for (const m of meshes) m.castShadow = true;
       if (useHero && this.heroApply) {
         try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] tank fallback', err); hero = null; }
       }
-      if (!hero) this.lightMeshesByCaustics(meshes as Mesh[]);
+      // drivers that dress their own models (wet skin) keep them as they are
+      if (!hero && !entry.ownMaterials) this.lightMeshesByCaustics(meshes as Mesh[]);
     } else if (entry.placeholder) {
       const ph = entry.placeholder();
       ph.root.userData.placeholder = ph;
@@ -700,7 +703,7 @@ export class TankScene {
     const driver = entry.create();
     const unsub = driver.onEvent((e) => this.onBehavior?.(e, record));
     this.scene.add(root);
-    driver.attach(root, ind, extras, bones, meshes);
+    driver.attach(root, ind, extras, bones, meshes, info);
     if (!rel) {
       // procedural models are built by the driver in attach(); light them now
       const ms: Mesh[] = [];

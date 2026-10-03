@@ -98,6 +98,13 @@ const smooth = (a: number, b: number, x: number) => { const t = clamp((x - a) / 
 const wrap = (a: number) => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
 const ease = (u: number) => 0.5 - 0.5 * Math.cos(Math.PI * clamp(u, 0, 1));
 const G = 9.81;
+/** smooth 1D value noise in [-1, 1] (idle sway, gaze drift) */
+function noise1(t: number, seed: number): number {
+  const i = Math.floor(t), f = t - i;
+  const h = (n: number) => { const x = Math.sin((n + seed * 57.13) * 127.1) * 43758.5453; return (x - Math.floor(x)) * 2 - 1; };
+  const u = f * f * (3 - 2 * f);
+  return h(i) * (1 - u) + h(i + 1) * u;
+}
 
 /** posterior joints in chain order (each bends the body behind it) */
 const CHAIN = SPINE.slice(1).map(([n]) => n);
@@ -180,6 +187,7 @@ export class Motor {
   // eyes
   readonly eyes: [Eye, Eye];
   private nextBlink = 3;
+  private seed = 0;
   // geometry
   private readonly segLen: number[] = [];
   private readonly belly: number[] = [];
@@ -241,6 +249,7 @@ export class Motor {
     this.fins = [mkFin(1), mkFin(-1)];
     const mkEye = (): Eye => ({ yaw: 0, pitch: 0, vy: 0, vp: 0, tYaw: 0, tPitch: 0, nextSac: this.rnd() * 2, scanYaw: 0, scanPitch: 0, retract: 0, cup: 0, blinkT: -1, blinkDur: 0.56 });
     this.eyes = [mkEye(), mkEye()];
+    this.seed = Math.floor(this.rnd() * 1000);
   }
 
   // ------------------------------------------------------------------------------------------------ commands
@@ -453,11 +462,12 @@ export class Motor {
       head = Math.max(head, clamp(need / this.L * 2.5, 0, 0.35));
     }
     // breathing sway and small adjustments of the weight between the fins
-    lift += 0.0012 * this.L * Math.sin(this.t * 1.7) * (this.posture === 'low' ? 0.3 : 1);
+    lift += 0.0012 * this.L * (0.6 * Math.sin(this.t * 1.7) + 0.4 * noise1(this.t * 0.9, this.seed)) * (this.posture === 'low' ? 0.3 : 1);
     this.liftT = lift;
     this.headPitchT = head;
     this.pitchT = this.posture === 'low' ? 0.0 : 0.025 + (this.posture === 'alert' ? 0.06 : 0);
-    this.headYawT = 0.06 * Math.sin(this.t * 0.37) + 0.04 * Math.sin(this.t * 0.91);
+    this.headYawT = 0.07 * noise1(this.t * 0.35, this.seed + 1) + 0.03 * noise1(this.t * 1.3, this.seed + 2);
+    this.headPitchT += 0.025 * noise1(this.t * 0.5, this.seed + 3);
     this.finMode = 'plant';
     this.plantRest(false, w);
     this.stepFins(dt, w, 0.03 * this.L);
@@ -469,7 +479,7 @@ export class Motor {
     this.anal.to(0.6, 6, dt);
     this.caud.to(this.posture === 'alert' ? 0.1 : 0.35, 6, dt);
     // the tail lies as a skid; a slow wag now and then
-    const wag = 0.04 * Math.sin(this.t * 0.8) * Math.sin(this.t * 0.23);
+    const wag = 0.05 * noise1(this.t * 0.45, this.seed + 4);
     for (const n of ['J_sp6', 'J_sp7', 'J_sp8', 'J_caudal']) this.bendT[n] = wag;
     if (shallow) for (const n of ['J_sp6', 'J_sp7', 'J_sp8', 'J_caudal', 'J_caudal2']) this.bendT[n] += 0.06 * Math.sin(this.t * 6 + CHAIN.indexOf(n));
     this.jaw.to(0, 20, dt);
@@ -965,8 +975,9 @@ export class Motor {
             tp = tp * (1 - gain) + pitch * gain;
           }
         }
-        e.tYaw = clamp(ty, -0.7, 0.7);
-        e.tPitch = clamp(tp, -0.55, 0.6);
+        // fixational drift: the eyes never sit perfectly still
+        e.tYaw = clamp(ty + 0.015 * noise1(this.t * 2.3, this.seed + 7 + i), -0.7, 0.7);
+        e.tPitch = clamp(tp + 0.012 * noise1(this.t * 2.1, this.seed + 9 + i), -0.55, 0.6);
         // saccade (fast) when far off target, otherwise slow pursuit
         const err = Math.hypot(e.tYaw - e.yaw, e.tPitch - e.pitch);
         const om = err > 0.12 ? 45 : 9;
