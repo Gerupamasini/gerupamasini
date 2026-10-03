@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { KentishPloverConfig as CFG } from './KentishPloverConfig.js';
 import { KentishPlover } from './KentishPlover.js';
 import { getPalette, plumageAlbedo } from './KentishPloverMaterials.js';
-import { getBodySDF } from './anatomy/bodyMesh.js';
+import { getBodySDF, wingEdgeY } from './anatomy/bodyMesh.js';
 
 // Flock manager: LOD policy + update scheduling + spatial queries + far-LOD instanced impostors.
 // docs/optimization.md
@@ -176,7 +176,7 @@ export class KentishPloverManager {
     for (const s of [1, -1]) {
       // tarsus from the foot (MTP, spec §9) to the heel, tibia to where it leaves the belly
       const leg = new THREE.BoxGeometry(0.0022, 0.038, 0.0022);
-      leg.translate(0.0078 * s, 0.019, -0.01);
+      leg.translate(((CFG.joints.foot[0] + CFG.joints.ankle[0]) / 2000) * s, 0.019, -0.01);
       add(leg, pal.legs);
       const wing = new THREE.BufferGeometry();
       // wing panel in the bind (spread) frame: root at the shoulder, pivot handled in the shader
@@ -276,7 +276,7 @@ function farBodyGeometry(pal) {
     rings.push({ z, yc, hy: (top - bot) / 2, hx });
   }
   const colour = (x, y, z) => {
-    const hex = z > 14 ? (y > 92 ? pal.crown : pal.underparts) : y > 58 + Math.max(0, z) * 0.6 ? pal.mantle : pal.underparts;
+    const hex = z > 14 ? (y > 92 ? pal.crown : pal.underparts) : y > wingEdgeY(z) ? pal.mantle : pal.underparts;
     return plumageAlbedo(hex);
   };
   const pos = [];

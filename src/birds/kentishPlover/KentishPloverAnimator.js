@@ -988,7 +988,7 @@ export class KentishPloverAnimator {
         apply(bone, blend(f, root(f, _q2.identity())));
         // the shoulder-end marginal coverts slightly shortened (≥ 0.8) where the spread wing presses them against
         // the neck / breast
-        bone.scale.setScalar((SP.has(f.name) ? lerp(spreadScaleAt(SP.get(f.name), elev, hSweep, hTwist), 1, effFold) : 1) * (f.type === 'lesserCovert' ? lerp(1, LESSER_FOLDED, smoothstep(0.85, 1, effFold)) : 1));
+        bone.scale.setScalar((SP.has(f.name) ? lerp(spreadScaleAt(SP.get(f.name), elev, hSweep, hTwist), 1, effFold) : 1) * (f.type === 'lesserCovert' ? lerp(1, LESSER_FOLDED, smoothstep(0.6, 0.95, effFold)) : 1));
       }
       // alula raised during braking/landing (slow flight)
       apply(b[`alula_${side}`], qAxis(Y, -brake * 0.4 * spread, _q2));

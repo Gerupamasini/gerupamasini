@@ -46,7 +46,7 @@ const farMeshes = () => {
   for (let i = 0; i < pos.count; i++) if (Math.abs(w.getX(i)) > 0.5) pos.setX(i, 0.008 * w.getX(i) + (pos.getX(i) - 0.008 * w.getX(i)) * 0.08);
   g.setIndex([...Array(pos.count).keys()]);
   // its legs (boxes below the belly) are left out like the other levels' (aPart 1)
-  g.setAttribute('aPart', new THREE.Float32BufferAttribute(Array.from({ length: pos.count }, (_, i) => (pos.getY(i) < 0.0385 && Math.abs(Math.abs(pos.getX(i)) - 0.0078) < 0.0012 ? 1 : 9)), 1));
+  g.setAttribute('aPart', new THREE.Float32BufferAttribute(Array.from({ length: pos.count }, (_, i) => (pos.getY(i) < 0.0385 && Math.abs(Math.abs(pos.getX(i)) - (CFG.joints.foot[0] + CFG.joints.ankle[0]) / 2000) < 0.0012 ? 1 : 9)), 1));
   far.updateMatrixWorld(true);
   far.applyBoneTransform = () => {};
   return [far];
