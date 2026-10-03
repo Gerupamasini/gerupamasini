@@ -361,7 +361,8 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
         // LOD0: pressed deeper, they came out with a dip when the wing is raised off the flank)
         const nb = new THREE.Vector3();
         const cw = conformAt(fr, pf, gb.uv[v * 2 + 1], gb.uv[v * 2], sdf, torso, nb);
-        if (detail) cw.addScaledVector(nb, (foldLayer(f) >= 0 ? 0.35 * smooth01(0, 0.22, gb.uv[v * 2 + 1]) : 0) * detail);
+        // (v4: twice that at the front of the folded wing, z > 5, where the coarse broad shoulder swells most when fluffed)
+        if (detail) cw.addScaledVector(nb, (foldLayer(f) >= 0 ? 0.35 * smooth01(0, 0.22, gb.uv[v * 2 + 1]) * (1 + smooth01(5, 15, pf.z)) : 0) * detail);
         const c = cw.applyQuaternion(Rinv).multiplyScalar(0.001);
         gb.conform.splice(v * 3, 3, c.x, c.y, c.z);
         // …and shaded like the surface it lies on (a trace of its own vane's tilt kept), so neighbouring
