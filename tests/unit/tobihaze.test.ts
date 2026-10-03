@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Object3D, Vector3 } from 'three';
 import { computePose, defaultPose, bendFromMidline, SPINE } from '../../src/creatures/species/tobihaze/pose.js';
 import { Motor, type MotorWorld, type TobiRig } from '../../src/creatures/species/tobihaze/Motor';
+import { Mind, type MindWorld } from '../../src/creatures/species/tobihaze/Mind';
 
 const rig: TobiRig = {
   tlMM: 80, slMM: 64, s0MM: 17, spine: SPINE, eyeRetract_m: 0.0025, eyeRadius_m: 0.0021,
@@ -102,5 +103,28 @@ describe('tobihaze motor', () => {
     const wet: MotorWorld = { ...flat(0.05), ground: () => -0.06 };
     for (let k = 0; k < 120; k++) m.update(1 / 60, wet);
     expect(m.moisture).toBeGreaterThan(0.99);
+  });
+});
+
+describe('tobihaze mind', () => {
+  it('a threat interrupts a walk at once: the first escape hop starts within a fraction of a second', () => {
+    const m = motor(Math.PI);
+    let now = 0;
+    const base = flat(-10);
+    const w: MindWorld = { ...base, sample: () => null, burrows: null, player: new Vector3(0, 0, 3), get nowSec() { return now; } };
+    m.place(0, 0, Math.PI, w);
+    let s = 7;
+    const mind = new Mind(m, 'test', 1, () => { s = (s * 16807) % 2147483647; return s / 2147483647; });
+    mind.setIntent({ id: 1, kind: 'moveTo', urgency: 0.3, seconds: 20, target: new Vector3(0, 0, -0.4) }, w);
+    const dt = 1 / 60;
+    for (let k = 0; k < 60; k++) { mind.update(dt, w); m.update(dt, w); now += dt; }
+    expect(m.gait).toBe('crawl');
+    // something looms ahead of it
+    mind.setIntent({ id: 2, kind: 'flee', urgency: 1, seconds: 6, from: new Vector3(m.pos.x, 0, m.pos.z - 0.3) }, w);
+    let hopAt = -1;
+    for (let k = 0; k < 30 && hopAt < 0; k++) { mind.update(dt, w); m.update(dt, w); now += dt; if (m.gait === 'hop') hopAt = k * dt; }
+    expect(mind.state).toBe('ESCAPE');
+    expect(hopAt).toBeGreaterThanOrEqual(0);
+    expect(hopAt).toBeLessThan(0.2);
   });
 });
