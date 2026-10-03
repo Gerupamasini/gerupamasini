@@ -11,9 +11,11 @@ import { KentishPloverConfig as CFG } from '../KentishPloverConfig.js';
 // (body_shape_spec.md §3, §17.1).
 export const BILL_TIP_MM = [0, 83.4, 54];
 
-// neck-side plumage of the sculpt (KentishPloverConfig.bodySculpt): like mantleNape and foreBreast it fills the neck
-// at rest and moves with the neck sleeve, not with the trunk
-export const NECK_FILL = ['neckSideL', 'neckSideR', 'neckUpperL', 'neckUpperR'];
+// Plumage of the sculpt that fills the neck at rest (KentishPloverConfig.bodySculpt prims with role 'neck'): it moves
+// with the neck sleeve, not with the trunk, and the trunk-only outline (getTorsoSDF trunkOnly) leaves it out. Prims
+// with role 'head' (head, face, cheeks) are left out of every torso outline.
+export const NECK_FILL = CFG.bodySculpt.prims.filter((p) => p.role === 'neck').map((p) => p.name);
+const HEAD_PRIMS = CFG.bodySculpt.prims.filter((p) => p.role === 'head').map((p) => p.name);
 
 // Spine influence segments (mm) and falloff sigma — distance-weighted skinning (spec §17.1).
 const SPINE = [
@@ -39,14 +41,71 @@ function segDist(p, a, b) {
  * Head membership: inside an enlarged head ellipsoid → rigid with the head bone; the outer 0.35 band blends
  * into the neck bones (nape and throat, spec §7, §17.1). Mirrored in the body shader (kpHeadness).
  */
+const HZ = CFG.bodySculpt.headZone;
 export function headness(p) {
-  const x = p[0] / 13;
-  const y = (p[1] - 93.5) / 13;
-  const z = (p[2] - 24) / 15.5;
+  const x = (p[0] - HZ.c[0]) / HZ.r[0];
+  const y = (p[1] - HZ.c[1]) / HZ.r[1];
+  const z = (p[2] - HZ.c[2]) / HZ.r[2];
   const r = Math.sqrt(x * x + y * y + z * z);
   // Throat below the head is shared with the neck; the fore-breast / chin band (y 74–83) stays off the head.
   const below = Math.max(0, (83 - p[1]) / 5);
   return Math.max(0, Math.min(1, (1.25 - r) / 0.35)) * Math.max(0, 1 - below);
+}
+
+/** Visible lower edge of the folded wing at z (bodySculpt.wingEdge, linear between its points, held at the ends). */
+export function wingEdgeY(z) {
+  const e = CFG.bodySculpt.wingEdge;
+  if (z >= e[0][0]) return e[0][1];
+  for (let i = 0; i < e.length - 1; i++) if (z >= e[i + 1][0]) return e[i][1] + ((e[i + 1][1] - e[i][1]) * (z - e[i][0])) / (e[i + 1][0] - e[i][0]);
+  return e[e.length - 1][1];
+}
+/** The same as a GLSL function float `name`(float z). */
+export function wingEdgeGLSL(name) {
+  const e = CFG.bodySculpt.wingEdge;
+  const f = (v) => v.toFixed(2);
+  let s = `float ${name}(float z) {\n  if (z >= ${f(e[0][0])}) return ${f(e[0][1])};\n`;
+  for (let i = 0; i < e.length - 1; i++) s += `  if (z >= ${f(e[i + 1][0])}) return mix(${f(e[i][1])}, ${f(e[i + 1][1])}, (z - ${f(e[i][0])}) / (${f(e[i + 1][0] - e[i][0])}));\n`;
+  return s + `  return ${f(e[e.length - 1][1])};\n}\n`;
+}
+
+/**
+ * Breast-side patch (bodySculpt.breastPatch) at rest point p (mm, either side): [t (0 top … 1 bottom along the line),
+ * distance (mm) from the line].
+ */
+export function patchAt(p) {
+  const P = CFG.bodySculpt.breastPatch;
+  const q = [Math.abs(p[0]), p[1], p[2]];
+  let best = [0, Infinity];
+  let acc = 0;
+  const L = P.slice(1).reduce((a, b, i) => a + Math.hypot(b[0] - P[i][0], b[1] - P[i][1], b[2] - P[i][2]), 0);
+  for (let i = 0; i < P.length - 1; i++) {
+    const a = P[i];
+    const b = P[i + 1];
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const l2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2;
+    const u = Math.max(0, Math.min(1, ((q[0] - a[0]) * ab[0] + (q[1] - a[1]) * ab[1] + (q[2] - a[2]) * ab[2]) / l2));
+    const d = Math.hypot(q[0] - a[0] - ab[0] * u, q[1] - a[1] - ab[1] * u, q[2] - a[2] - ab[2] * u);
+    if (d < best[1]) best = [(acc + u * Math.sqrt(l2)) / L, d];
+    acc += Math.sqrt(l2);
+  }
+  return best;
+}
+/** GLSL: float kpPatchT(vec3 q, out float d) (q = (|x|, y, z)) and float kpPatchZ(float y) — the patch line's z at
+ *  height y (held at the ends): the grey-brown upperparts lie behind it. */
+export function patchGLSL() {
+  const P = CFG.bodySculpt.breastPatch;
+  const f = (v) => v.toFixed(2);
+  const v3 = (a) => `vec3(${a.map(f).join(', ')})`;
+  const L = P.slice(1).reduce((a, b, i) => a + Math.hypot(b[0] - P[i][0], b[1] - P[i][1], b[2] - P[i][2]), 0);
+  let s = 'float kpPatchT(vec3 q, out float d) {\n  d = 1e9; float t = 0.0; float acc = 0.0;\n';
+  for (let i = 0; i < P.length - 1; i++) {
+    const l = Math.hypot(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1], P[i + 1][2] - P[i][2]);
+    s += `  { vec3 a = ${v3(P[i])}; vec3 ab = ${v3(P[i + 1].map((v, k) => v - P[i][k]))}; float u = clamp(dot(q - a, ab) / ${f(l * l)}, 0.0, 1.0); float dd = length(q - a - ab * u); if (dd < d) { d = dd; t = (acc + u * ${f(l)}) / ${f(L)}; } acc += ${f(l)}; }\n`;
+  }
+  s += '  return t;\n}\nfloat kpPatchZ(float y) {\n';
+  s += `  if (y >= ${f(P[0][1])}) return ${f(P[0][2])};\n`;
+  for (let i = 0; i < P.length - 1; i++) s += `  if (y >= ${f(P[i + 1][1])}) return mix(${f(P[i][2])}, ${f(P[i + 1][2])}, (${f(P[i][1])} - y) / ${f(P[i][1] - P[i + 1][1])});\n`;
+  return s + `  return ${f(P[P.length - 1][2])};\n}\n`;
 }
 
 const smooth = (a, b, x) => {
@@ -81,9 +140,9 @@ const trunkSDF = () => (TRUNK_SDF ??= getTorsoSDF(CFG, { trunkOnly: true }));
  */
 export function sleeveRatio(p) {
   const a = Math.max(0, trunkSDF()(p[0], p[1], p[2]) - 1);
-  const x = p[0] / 13;
-  const y = (p[1] - 93.5) / 13;
-  const z = (p[2] - 24) / 15.5;
+  const x = (p[0] - HZ.c[0]) / HZ.r[0];
+  const y = (p[1] - HZ.c[1]) / HZ.r[1];
+  const z = (p[2] - HZ.c[2]) / HZ.r[2];
   const face = smooth(30, 34, p[2]) * smooth(81, 85, p[1]);
   const bh = Math.max(0, Math.sqrt(x * x + y * y + z * z) - 1.05) * 13 * (1 - face);
   // (and below it, y < 89: the lower cheeks and the chin behind the bill base are sleeve too, so the neck's turn has room
@@ -104,7 +163,7 @@ export const sleeveParam = (p) => ease(sleeveRatio(p));
 // bald patch when the neck stretched, and swept through them when it turned). Elsewhere a trunk-core surface within
 // 1 mm of the outline (the breast-side ellipsoids at the base of the neck) would pin single points at 0 in the middle
 // of the sleeve
-const trunkHeld = (x, y, z) => y < 72 || z < -9 || (Math.abs(x) > 15 && y < 79) || (z < 5 && y < 89 && Math.abs(x) > 3);
+const trunkHeld = (x, y, z) => y < 68 || z < -9 || (Math.abs(x) > 30 && y < 78) || (Math.abs(x) > 21 && z < 14 && y < 86) || (z < 5 && y < 89 && Math.abs(x) > 3);
 
 let SLEEVE = null;
 /**
@@ -118,8 +177,8 @@ function sleeveGrid() {
   if (SLEEVE) return SLEEVE;
   const sdf = makeBodySDF(CFG.bodySculpt);
   const h = 1.0;
-  const o = [-27, 57, -26];
-  const N = [Math.ceil(54 / h) + 1, Math.ceil(56 / h) + 1, Math.ceil(74 / h) + 1];
+  const o = [-46, 55, -30];
+  const N = [Math.ceil(92 / h) + 1, Math.ceil(58 / h) + 1, Math.ceil(80 / h) + 1];
   const id = (i, j, k) => i + N[0] * (j + N[1] * k);
   const val = new Float32Array(N[0] * N[1] * N[2]).fill(NaN);
   const state = new Uint8Array(val.length); // 0 outside the shell, 1 free, 2 held
@@ -377,7 +436,7 @@ export function getBodySDF(cfg) {
  * only the trunk underneath.
  */
 export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
-  const drop = new Set(['neck', 'head', 'lores', 'billCuff', 'chin', 'cheekL', 'cheekR', ...(trunkOnly ? ['mantleNape', 'foreBreast', ...NECK_FILL] : [])]);
+  const drop = new Set([...HEAD_PRIMS, ...(trunkOnly ? NECK_FILL : [])]);
   return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [], adds: [] });
 }
 
@@ -431,7 +490,7 @@ function shellCovered(p, n, sleeve = 0) {
   const er = Math.hypot(q[0] - 0.954 * es, q[1] - 0.13 * es, q[2] - 0.27 * es);
   if (er + Math.max(0, 2 - es) < 3.6) return true;
   const z = p[2];
-  const yb = z > 5 ? 60 + 3 * Math.min(1, (z - 5) / 15) : z > -25 ? 55.5 + 4.5 * ((z + 25) / 30) : 60 - 4.5 * Math.min(1, Math.max(0, (z + 55) / 30));
+  const yb = wingEdgeY(z);
   // (neck plumage — on the sleeve — is never under the scapulars: drawn out by a stretched or turned neck it is in view)
   return headness(p) < 0.01 && p[1] + n[1] * 3 > yb - 1 && z < 8 && sleeve < 0.04;
 }

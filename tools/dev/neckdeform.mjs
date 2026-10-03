@@ -8,7 +8,8 @@
 //   flip      triangles turned over (posed normal against the skinned rest normal: a fold)
 //   crease    largest increase (deg) of the angle between neighbouring triangles over rest (a fold / pinch)
 //   area      posed / rest area of the whole region (volume of plumage preserved: ≈1)
-// usage: node tools/dev/neckdeform.mjs [--lod=0,1,2] [--pose=regex] [--json=out.json]
+// usage: node tools/dev/neckdeform.mjs [--lod=0,1,2] [--pose=regex] [--json=out.json] [--where]
+//   --where: per pose, the 5 mm rest-space cells (|x|, y, z) holding the most turned-over triangles
 import * as THREE from 'three';
 import { writeFileSync } from 'node:fs';
 import { KentishPloverModel } from '../../src/birds/kentishPlover/KentishPloverModel.js';
@@ -118,6 +119,7 @@ for (const d of LODS) {
       Np[i * 3] = v.x; Np[i * 3 + 1] = v.y; Np[i * 3 + 2] = v.z;
     }
     let sMax = 0, qMin = Infinity, aMax = 0, flip = 0, aRest = 0, aPose = 0;
+    const where = new Map();
     const an = [];
     let worstAt = null;
     for (const T of tris) {
@@ -151,7 +153,13 @@ for (const d of LODS) {
       const rn = [0, 1, 2].map((k) => RN[a * 3 + k] + RN[b * 3 + k] + RN[c * 3 + k]);
       const restFlip = nn[0] * rn[0] + nn[1] * rn[1] + nn[2] * rn[2] < 0;
       const flipped = (pn[0] * sn[0] + pn[1] * sn[1] + pn[2] * sn[2] < 0) !== restFlip;
-      if (flipped) flip++;
+      if (flipped) {
+        flip++;
+        if (args.where) {
+          const k = [Math.abs(R[a * 3]), R[a * 3 + 1], R[a * 3 + 2]].map((x) => Math.floor(x / 5) * 5).join(',');
+          where.set(k, (where.get(k) ?? 0) + 1);
+        }
+      }
       aRest += A0;
       aPose += Math.hypot(...pn) / 2;
       const ani = s1 / Math.max(1e-3, s2);
@@ -173,6 +181,7 @@ for (const d of LODS) {
     });
     const row = { pose: P[0], stretch: +sMax.toFixed(2), squash: +qMin.toFixed(2), aniso: +aMax.toFixed(1), p99: +p99.toFixed(2), flip, crease: +crease.toFixed(0), creaseN, area: +(aPose / aRest).toFixed(3), worstAt };
     rows.push(row);
+    if (args.where && where.size) console.log('   flips at |x|,y,z:', [...where].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `${k}:${v}`).join('  '));
     console.log(`${P[0].padEnd(22)} ${row.stretch.toFixed(2).padStart(6)}  ${row.squash.toFixed(2).padStart(6)}  ${row.aniso.toFixed(1).padStart(5)}  ${row.p99.toFixed(2).padStart(5)}  ${String(flip).padStart(4)}  ${String(row.crease).padStart(6)}  ${String(creaseN).padStart(7)}  ${row.area.toFixed(3)}  @${worstAt}`);
   }
   const agg = (k, f) => rows.reduce((a, r) => f(a, r[k]), rows[0]?.[k] ?? 0);

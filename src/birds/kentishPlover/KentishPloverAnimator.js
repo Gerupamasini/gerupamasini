@@ -61,7 +61,7 @@ export const GAZE_YAW_MAX = 1.92;
 // fore-breast (no visible neck, body_shape_spec.md §7), so each point may sink no deeper than it does at rest.
 // (both outlines through a lazily filled 1.5 mm grid: the contact passes sample them some 10⁴ times a frame —
 // exact evaluation made a walking bird's update 9× slower than before the redesign: 4.7 ms, now 0.7 vs 0.54)
-const CONTACT_BOUNDS = { min: [-40, -10, -110], max: [40, 130, 75] };
+const CONTACT_BOUNDS = { min: [-50, -10, -110], max: [50, 130, 75] };
 const TORSO_SDF = gridCachedSDF(getTorsoSDF(CFG, { trunkOnly: true }), CONTACT_BOUNDS);
 const PLUMAGE = 3.5; // mm: scapulars, lesser coverts and tertials above the outline
 // mm: how much deeper than at rest a head / neck point on or near the trunk at rest may go — the neck-filling
@@ -100,7 +100,8 @@ const sinkLimit = (rest, need) => Math.min(rest, need) - SINK * smoothstep(need 
 // sink deeper than at rest, measured on the whole body outline (the wing lies on the neck-filling plumage at the
 // shoulder, above the trunk-only outline).
 const BODY_SDF = gridCachedSDF(getBodySDF(CFG), CONTACT_BOUNDS);
-const wingZone = (p) => smoothstep(9, 12, Math.abs(p.x)) * smoothstep(50, 54, p.y) * (1 - smoothstep(80, 84, p.y)) * (1 - smoothstep(20, 26, p.z)) * smoothstep(-70, -64, p.z);
+// (v4: the folded wing lies high on the side of the broad body, |x| > 17, y 60–90)
+const wingZone = (p) => smoothstep(15, 19, Math.abs(p.x)) * smoothstep(58, 62, p.y) * (1 - smoothstep(86, 90, p.y)) * (1 - smoothstep(20, 26, p.z)) * smoothstep(-70, -64, p.z);
 /** How far (mm) a head / neck point at p (rest space) is below where it may be; `contactDeficit.sdf` is the
  *  outline that decided it (the push goes along its gradient). */
 const contactDeficit = (s, need, p) => {
@@ -589,6 +590,9 @@ export class KentishPloverAnimator {
         Object.assign(t, { height: 0, pitch: 0, neck: -1, fluff: 1.35, sleep: 0.8, sit: 1 });
         break;
       default:
+        // relaxed: the trunk settled low on flexed legs, the belly 0.29 of the crown height (v4, user's front photo):
+        // up to the bind height as the bird walks or runs off
+        t.height = -ANIM.relaxedDrop * (1 - Math.max(this.stride.amount, run));
         break;
     }
     // walking levels the body and lowers the head (12 walking photos: axis −1°, crown ≈6 mm over the back)
@@ -961,7 +965,8 @@ export class KentishPloverAnimator {
       // tertials ride the humerus, but on the flight upstroke / a raised wing they stay with the back instead of
       // standing up as fins (the elevation above level and most of the twist are taken back out): qH⁻¹ · qLevel
       // (nor swung in across the back by the upstroke's sweep: they keep the glide's)
-      const tElev = Math.min(elev, 0.06);
+      // (nor down the broad v4 flank on the downstroke: they stop 0.45 rad below level — lower they dip into it)
+      const tElev = Math.max(Math.min(elev, 0.06), -0.45);
       const tTwist = hTwist * 0.3;
       const tSweep = Math.min(hSweep, -0.05);
       const tComp = wingQuat(tSweep, tElev, tTwist, _q4).premultiply(_q3.copy(wingQuat(hSweep, elev, hTwist, _q3)).invert());
@@ -983,7 +988,7 @@ export class KentishPloverAnimator {
         apply(bone, blend(f, root(f, _q2.identity())));
         // the shoulder-end marginal coverts slightly shortened (≥ 0.8) where the spread wing presses them against
         // the neck / breast
-        bone.scale.setScalar((SP.has(f.name) ? lerp(spreadScaleAt(SP.get(f.name), elev, hSweep, hTwist), 1, effFold) : 1) * (f.type === 'lesserCovert' ? lerp(1, LESSER_FOLDED, smoothstep(0.85, 1, effFold)) : 1));
+        bone.scale.setScalar((SP.has(f.name) ? lerp(spreadScaleAt(SP.get(f.name), elev, hSweep, hTwist), 1, effFold) : 1) * (f.type === 'lesserCovert' ? lerp(1, LESSER_FOLDED, smoothstep(0.4, 0.9, effFold)) : 1));
       }
       // alula raised during braking/landing (slow flight)
       apply(b[`alula_${side}`], qAxis(Y, -brake * 0.4 * spread, _q2));
@@ -1266,6 +1271,7 @@ export class KentishPloverAnimator {
     }
     // stretch of the sleeve (its centre line, posed over rest): the body shader keeps the plumage pattern's ends
     this.model.setSleeveStretch?.(len / A0);
+    this.model.setNeckTurn?.(turn);
   }
 
   /** Head pivot (world) the posture and gaze ask for: relative to the ROOT, not the bobbing body (head stabilisation). */
@@ -1635,19 +1641,19 @@ function preenTarget(variant) {
   // between nibble phases; from these pivots it moves 1–4 mm.
   switch (variant) {
     case 'breast':
-      return { p: [6, 74, 33], head: [-10, 98, 34], roll: 0.2 };
+      return { p: [6, 74.3, 34.8], head: [-10, 98, 34], roll: 0.2 };
     case 'belly':
-      return { p: [8, 56, 22], head: [-10, 96, 34], roll: 0.5 };
+      return { p: [8, 57, 28.6], head: [-10, 96, 36], roll: 0.5 };
     case 'flank':
-      return { p: [16, 56, 4], roll: 0.9, wingLift: 0.5 };
+      return { p: [32.5, 58.2, 1.8], roll: 0.9, wingLift: 0.5 };
     case 'scapulars':
-      return { p: [11, 82, -22], head: [-2, 99, 12], roll: 1.4 };
+      return { p: [10.5, 80, -20.7], head: [-2, 99, 12], roll: 1.4 };
     case 'wing':
-      return { p: [17, 64, -26], head: [8, 98, 2], roll: 1.4, wingLift: 0.35 };
+      return { p: [28.8, 70.7, -23.2], head: [13, 98, 2], roll: 1.4, wingLift: 0.35 };
     case 'tail':
-      return { p: [0, 67, -52], roll: 0.4 };
+      return { p: [0, 65, -51], roll: 0.4 };
     default:
-      return { p: [3, 66, 30], roll: 0.2 };
+      return { p: [3, 66.4, 33], roll: 0.2 };
   }
 }
 
@@ -1781,7 +1787,7 @@ export const ACTIONS = {
       const scr = Math.sin(u * Math.PI * 2 * 9) * 0.002;
       const out = {
         legRaise: { [side]: k },
-        legRaiseTarget: { [side]: A.bodyPoint([sg * 12, 87 + scr * 1000, 14]) },
+        legRaiseTarget: { [side]: A.bodyPoint([sg * 26, 88 + scr * 1000, 14]) }, // (v4: beside the broad shoulder)
         wing: { [side]: { raise: 0.15 * k } }, // folded wing held slightly off the flank
         posture: { roll: -sg * 0.12 * k, pitch: 0.12 * k, neck: -0.3 },
       };

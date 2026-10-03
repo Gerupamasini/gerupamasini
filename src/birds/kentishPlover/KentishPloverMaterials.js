@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { plumage as PLUMAGE, animation as ANIM } from './KentishPloverConfig.js';
-import { FLUFF_REST } from './anatomy/bodyMesh.js';
+import { plumage as PLUMAGE, animation as ANIM, bodySculpt as SCULPT } from './KentishPloverConfig.js';
+import { FLUFF_REST, wingEdgeGLSL, patchGLSL } from './anatomy/bodyMesh.js';
 import { CONFORM_FOLD } from './anatomy/wingFold.js';
 
 // breathing displacement amplitude (m): fractional expansion × body half-width
@@ -10,6 +10,10 @@ const ANIM_BREATH = (ANIM.breathAmp * 0.021).toFixed(6);
 // REST space (mm), so markings stay crisp at any distance and follow the skin when it deforms.
 // Evidence for each marking: docs/research.md §3 (S5, S6, S7, S10); colours are estimates (C–D).
 
+// head zone (bodyMesh.headness): centre and radii as GLSL vec3 literals
+const glv = (a) => `vec3(${a.map((v) => v.toFixed(2)).join(', ')})`;
+const HZ_C = glv(SCULPT.headZone.c);
+const HZ_R = glv(SCULPT.headZone.r);
 const srgb = (hex) => new THREE.Color(hex); // THREE.Color(hex) converts sRGB → linear working space
 
 // Palette colours are photo APPEARANCES: white-balanced medians in which the most sunlit white is linear 0.82
@@ -75,7 +79,7 @@ float kpNoiseP(vec2 p, float per) {
 // mirrors bodyMesh.bodyDisplacementMasks / headness
 const GLSL_FLUFF = /* glsl */ `
 float kpFluffMM(vec3 p, vec3 n) {
-  vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
+  vec3 e = (p - ${HZ_C}) / ${HZ_R};
   float head = clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - clamp((83.0 - p.y) / 5.0, 0.0, 1.0));
   return (2.5 + 4.5 * smoothstep(-0.2, -0.9, n.y) + (1.5 - 1.8 * smoothstep(5.0, -5.0, p.z)) * smoothstep(0.2, 0.9, n.y)) * (1.0 - 0.7 * head) * (1.0 - 0.8 * smoothstep(-25.0, -55.0, p.z)) * (1.0 - 0.6 * smoothstep(15.0, 30.0, p.z));
 }
@@ -97,6 +101,7 @@ uniform vec3 uForehead, uFrontalBar, uCrown, uCrownRear, uNape, uSupercilium, uE
 uniform vec3 uMantle, uMantleDark, uFringe, uBreastPatch, uUnder, uEyeRing, uEyeRingUp, uHeadPat;
 uniform float uMelanin, uWear, uSeed, uDetail, uFluff, uFringeMix, uSubterminal, uCapStreak, uCapDrop;
 varying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;
+uniform float uNeckTurn; varying float vSleeveV;
 `;
 
 const BODY_FRAG_FUNCS = /* glsl */ `
@@ -109,7 +114,7 @@ float sdSeg2(vec2 p, vec2 a, vec2 b) {
 // Head membership: the enlarged head ellipsoid and throat cut of bodyMesh.headness (skinning), sharpened to
 // a zone (body_shape_spec.md §17.2)
 float kpHeadness(vec3 p) {
-  vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
+  vec3 e = (p - ${HZ_C}) / ${HZ_R};
   float below = clamp((83.0 - p.y) / 5.0, 0.0, 1.0);
   return clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - below);
 }
@@ -174,15 +179,9 @@ vec2 kpLattice(vec3 p) {
 }
 
 // Lower edge of the grey-brown upperparts on the side = visible lower edge of the folded wing, (z, y)
-// (20,63) (5,60) (−10,57) (−25,55.5) (−40,57) (−55,60) (photos, spec §10.1)
-float kpUpperEdge(float z) {
-  if (z > 5.0) return mix(60.0, 63.0, clamp((z - 5.0) / 15.0, 0.0, 1.0));
-  if (z > -10.0) return mix(57.0, 60.0, (z + 10.0) / 15.0);
-  if (z > -25.0) return mix(55.5, 57.0, (z + 25.0) / 15.0);
-  if (z > -40.0) return mix(57.0, 55.5, (z + 40.0) / 15.0);
-  return mix(60.0, 57.0, clamp((z + 55.0) / 15.0, 0.0, 1.0));
-}
-
+// (bodySculpt.wingEdge, spec v4 §10.1)
+${wingEdgeGLSL('kpUpperEdge')}
+${patchGLSL()}
 // Feathery boundary offset (−1…1) on the body surface: noise in the lattice (circumference, along-flow) mm,
 // streaked along the flow like overlapping feather tips; weaker on the far LODs (no shimmer)
 float kpEdgeN(vec3 p) {
@@ -195,6 +194,10 @@ float kpEdgeN(vec3 p) {
 
 // cap / hood membership of the last kpPlumage call (fine crown streaks, applied with screen-space fading)
 float kpHoodM = 0.0;
+// share of the breast-side patch faded out (body shader: the ring's upper part lies on the neck sleeve; with the head
+// turned far round — preening the back or the tail, tucked asleep — that plumage is drawn round the neck and the
+// patch would sweep across the front as a black X: its feathers part there and the white bases show)
+float kpPatchFade = 0.0;
 
 vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   kpHoodM = 0.0;
@@ -202,11 +205,13 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   vec3 col = uUnder;
 
   // Upperparts: grey-brown above the wing's lower edge, behind the collar and behind the breast-side patch
-  // axis (z, y) (6, 86) → (24, 63): white in front of it (spec §14, §17.2; p006, p066)
+  // (bodySculpt.breastPatch, kpPatchZ): white in front of it (spec v4 §14; the user's front photo, p006, p066)
   float yb = kpUpperEdge(p.z);
   float dorsal = smoothstep(yb - 1.5, yb + 2.0, p.y + n.y * 3.0 + jitter);
-  float q = kpCollarQ(p) + jitter * 0.6;
-  float sFront = ((p.z - 6.0) * 23.0 + (p.y - 86.0) * 18.0) / 29.2;
+  // (v4: on the front of the broad shoulders the collar is pushed up under the ear coverts — from the front the grey-
+  // brown shoulders meet the breast-side patch with no white between them, the user's front photo, p013, p063)
+  float q = kpCollarQ(p) + jitter * 0.6 - 3.5 * smoothstep(12.0, 19.0, ax) * smoothstep(6.0, 16.0, p.z);
+  float sFront = p.z - kpPatchZ(p.y) + 1.0;
   float qMantle = -3.2 + 2.2 * smoothstep(4.0, 8.0, ax) * smoothstep(0.1, 0.5, n.y);
   float bodyZone = (1.0 - smoothstep(-1.0, 1.5, sFront + jitter * 0.5)) * (1.0 - smoothstep(qMantle - 0.8, qMantle + 0.2, q));
   col = mix(col, uMantle, dorsal * bodyZone);
@@ -328,18 +333,17 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   // Breast-side patches (male: black rhombus 29 mm long along (z, y) (6, 86) → (24, 63), 52° from horizontal,
   // half-width 3 at the ends and 5 in the middle, |x| ≥ 7, 9 mm short of the breast front — never meeting in the
   // centre; it covers the carpal joint and meets the wing's lower edge at (20, 63)) (S7, S10; spec §14)
-  vec2 pa = vec2(p.z - 8.0, p.y - 85.5);
-  vec2 ba = vec2(17.0, -21.0);
-  float tt = dot(pa, ba) / dot(ba, ba);
-  float dPerp = abs(pa.x * ba.y - pa.y * ba.x) / length(ba);
-  // (tapering rhombus, not a parallel bar; its top stays under the white hind-collar: p003, p006, p020, p070)
-  // (a wedge 6 mm across at most, broadest in its upper third under the collar and tapering to a point toward the
-  // wing bend — the 10 mm parallel blade read as a black plate, p012, p006, p070, p043; feathery edges)
+  float dPerp;
+  float tt = kpPatchT(vec3(ax, p.y, p.z), dPerp);
+  // (a band ≈6 mm across at most, thin under the ear coverts and broadest on the sides of the breast, tapering toward
+  // its inner end on the front of the breast — from the front a ring round the white throat, as in the user's photo;
+  // feathery edges)
   float tc = clamp(tt, 0.0, 1.0);
-  float hw = (0.9 + 2.6 * smoothstep(0.0, 0.28, tc) * (1.0 - smoothstep(0.32, 0.98, tc))) * uMelanin;
-  float ends = smoothstep(0.0, 0.08, tt) * (1.0 - smoothstep(0.86, 0.98, tt));
+  float hw = (1.1 + 2.2 * smoothstep(0.08, 0.35, tc) * (1.0 - smoothstep(0.6, 1.0, tc))) * uMelanin;
+  float ends = smoothstep(0.0, 0.04, tt) * (1.0 - smoothstep(0.93, 1.0, tt));
   float bEdge = kpEdgeN(p) * 0.55 + jitter * 0.4;
-  float patchM = (1.0 - smoothstep(hw - 0.45, hw + 0.45, dPerp + bEdge)) * ends * smoothstep(6.0, 8.0, ax) * (1.0 - smoothstep(-6.5, -4.5, q + bEdge * 0.6));
+  float patchM = (1.0 - smoothstep(hw - 0.45, hw + 0.45, dPerp + bEdge)) * ends * smoothstep(6.0, 8.0, ax) * (1.0 - smoothstep(5.5, 7.0, q + bEdge * 0.6));
+  patchM *= 1.0 - kpPatchFade;
   // denser black at the top, a little browner where it thins toward the wing bend
   col = mix(col, mix(uBreastPatch, uBreastPatch * 1.6 + 0.012, smoothstep(0.45, 0.95, tc)), patchM);
   return col;
@@ -409,12 +413,13 @@ float kpSleevePattern(float s) {
 
 const GLSL_SHELL_VERT = /* glsl */ `
 attribute float aShell; varying float vShell;
+${wingEdgeGLSL('kpWingEdgeS')}
 ${GLSL_WISP}
 float kpShellMM(vec3 p, vec3 n, float sleeve) {
   // neck-sleeve plumage (aSleeve > 0) is never under the scapulars or the wing: drawn out by a stretched or turned
   // neck it is in view, and without its fringe it showed as a bald pale patch
   float neck = smoothstep(0.04, 0.2, sleeve);
-  vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
+  vec3 e = (p - ${HZ_C}) / ${HZ_R};
   float head = clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - clamp((83.0 - p.y) / 5.0, 0.0, 1.0));
   float under = smoothstep(0.35, -0.3, n.y);       // breast, belly, flanks
   float len = mix(0.3, 0.6, under);
@@ -426,8 +431,8 @@ float kpShellMM(vec3 p, vec3 n, float sleeve) {
   len *= smoothstep(3.6, 5.0, er + max(0.0, 2.0 - es));  // keep the eye opening clear
   len *= smoothstep(-60.0, -50.0, p.z);              // not under the tail coverts
   // nor under the folded wing and the scapulars (they would stand through the gaps between the feathers): above
-  // the wing's lower edge (kpUpperEdge, (z, y) (20, 63) … (−55, 60)) and behind the shoulder
-  float yb = p.z > 5.0 ? mix(60.0, 63.0, clamp((p.z - 5.0) / 15.0, 0.0, 1.0)) : p.z > -25.0 ? mix(55.5, 60.0, (p.z + 25.0) / 30.0) : mix(60.0, 55.5, clamp((p.z + 55.0) / 30.0, 0.0, 1.0));
+  // the wing's lower edge (bodySculpt.wingEdge) and behind the shoulder
+  float yb = kpWingEdgeS(p.z);
   len *= 1.0 - smoothstep(yb - 3.0, yb - 1.0, p.y + n.y * 3.0) * (1.0 - smoothstep(8.0, 16.0, p.z)) * (1.0 - head) * (1.0 - neck);
   return len * (1.0 + 2.6 * kpWisp(p, n));
 }
@@ -498,6 +503,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
     uFluff: { value: 0 },
     uBreath: { value: 0 },
     uNapeFill: { value: 0 },
+    uNeckTurn: { value: 0 },
     uSleeveStretch: { value: 1 },
     uBounce: GROUND_BOUNCE,
   };
@@ -505,11 +511,11 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec3 aRest; attribute vec3 aFlow; attribute float aSleeve; attribute vec3 aSleeveG;\nuniform float uFluff; uniform float uBreath; uniform float uNapeFill; uniform float uSleeveStretch;\n${GLSL_SLEEVE_PATTERN}\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;\n${GLSL_FLUFF}\n${GLSL_NAPE}\n${shell ? GLSL_SHELL_VERT : ''}`)
+      .replace('#include <common>', `#include <common>\nattribute vec3 aRest; attribute vec3 aFlow; attribute float aSleeve; attribute vec3 aSleeveG;\nuniform float uFluff; uniform float uBreath; uniform float uNapeFill; uniform float uSleeveStretch;\nvarying float vSleeveV;\n${GLSL_SLEEVE_PATTERN}\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;\n${GLSL_FLUFF}\n${GLSL_NAPE}\n${shell ? GLSL_SHELL_VERT : ''}`)
       .replace(
         '#include <defaultnormal_vertex>',
         `#include <defaultnormal_vertex>
-        vRest = aRest + aSleeveG * kpSleevePattern(aSleeve); vRestN = normal; vFlowR = aFlow;
+        vRest = aRest + aSleeveG * kpSleevePattern(aSleeve); vRestN = normal; vFlowR = aFlow; vSleeveV = aSleeve;
         vec3 kpFl = aFlow;
         #ifdef USE_SKINNING
           kpFl = (skinMatrix * vec4(kpFl, 0.0)).xyz;
@@ -549,6 +555,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
         float kpScallop = smoothstep(0.3, 0.65, kpN.y) * (1.0 - kpHeadZ) * smoothstep(8.0, 2.0, vRest.z) * (1.0 - smoothstep(-13.0, -7.0, kpCollarQ(vRest)));
         vec3 kpRootP = vRest - normalize(vFlowR) * kpFxy.y * kpTr.x * 0.9 * mix(0.15, 1.0, kpScallop);
         float kpJit = (kpRnd - 0.5) * 0.6;
+        kpPatchFade = smoothstep(1.95, 2.4, uNeckTurn) * smoothstep(0.04, 0.2, vSleeveV);
         vec3 kpCol = kpPlumage(kpRootP, kpN, kpJit);
         // Within-feather tone: darker shaft streak & pale fringe on the grey-brown upperparts only.
         float kpLum = dot(kpCol, vec3(0.2126, 0.7152, 0.0722));

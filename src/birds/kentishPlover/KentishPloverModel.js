@@ -179,6 +179,12 @@ export class KentishPloverModel {
     if (c?.body) c.body.userData.uniforms.uSleeveStretch.value = k;
   }
 
+  /** Head turn relative to the chest (rad, animator _poseSleeve): the breast-side patch on the neck sleeve fades on far turns. */
+  setNeckTurn(a) {
+    const c = this.current;
+    if (c?.body) c.body.userData.uniforms.uNeckTurn.value = a;
+  }
+
   /** Prey in the bill while it is handled (anatomy/heldPrey.js; null hides it). Built on first use. */
   setHeldPrey(state) {
     if (!state && !this._held) return;
