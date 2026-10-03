@@ -95,8 +95,8 @@ export const bodySculpt = {
     { type: 'capsule', name: 'billCuff', a: [0.0, 91.6, 35.8], b: [0.0, 89.9, 39.9], r: 2.0, k: 2.4, role: 'head' },
     { type: 'ellipsoid', name: 'chin', c: [0.0, 84.0, 31.0], r: [9.0, 6.0, 7.0], k: 4, role: 'head' },
     // ear-covert / cheek plumage behind and below the eye: the head ≈ half the body width from the front
-    { type: 'ellipsoid', name: 'cheekL', c: [10.54, 90.13, 20.8], r: [9.47, 12.75, 11.53], k: 4, role: 'head' },
-    { type: 'ellipsoid', name: 'cheekR', c: [-10.54, 90.13, 20.8], r: [9.47, 12.75, 11.53], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'cheekL', c: [10.5, 92.0, 20.8], r: [9.5, 9.5, 11.5], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'cheekR', c: [-10.5, 92.0, 20.8], r: [9.5, 9.5, 11.5], k: 4, role: 'head' },
     // fore-neck and upper breast round the base of the neck (neck fill): no neck seen from any side
     { type: 'ellipsoid', name: 'collar', c: [0.0, 80.95, 17.87], r: [24.34, 12.12, 19.71], role: 'neck' },
     // PRIMS-END

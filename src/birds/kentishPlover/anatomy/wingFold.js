@@ -468,12 +468,13 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
       let x = PRIMARY_TIP_X[f.index - 1];
       // p9 tip (−84, 57.4), spec §10.3; the chord ends higher by the shaft's ventral bend (featherOffset)
       let y = 57.0 + (10 - f.index) * 0.35 + (f.index <= 6 ? -SEC_DROP : 0) + (f.index === 10 ? 2.5 : f.index === 8 ? 0.8 : f.index === 7 ? 1.2 : 0) + f.curve * L * 0.83;
+      const y0 = y;
       let dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));
       // (v4: the inner primaries, ending over the broad rear body, lie on its side under the secondaries — their tips
       // at the wing's lower edge and outside the outline there, not at the narrow tail's x)
       for (let it = 0; it < 3; it++) {
         const z = base.z - dz;
-        y = Math.max(y, wingEdgeY(z) - 2 + f.curve * L * 0.83);
+        if (sdf(0, wingEdgeY(z) - 4, z) < 0) y = Math.max(y0, wingEdgeY(z) - 2 + f.curve * L * 0.83); // (over the body only)
         x = Math.max(PRIMARY_TIP_X[f.index - 1], onSide(sdf, y - f.curve * L * 0.83, z) + 1.0);
         dz = Math.sqrt(Math.max(1, L * L - (x - base.x) ** 2 - (y - base.y) ** 2));
       }

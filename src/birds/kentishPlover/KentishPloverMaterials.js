@@ -333,7 +333,7 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   // (a band 5–6 mm across at most, broadest in its upper third under the collar and tapering toward its inner end on
   // the front of the breast — feathery edges)
   float tc = clamp(tt, 0.0, 1.0);
-  float hw = (1.2 + 1.9 * smoothstep(0.0, 0.25, tc) * (1.0 - smoothstep(0.45, 1.0, tc))) * uMelanin;
+  float hw = (1.2 + 2.3 * smoothstep(0.05, 0.3, tc) * (1.0 - smoothstep(0.4, 1.0, tc))) * uMelanin;
   float ends = smoothstep(0.0, 0.04, tt) * (1.0 - smoothstep(0.93, 1.0, tt));
   float bEdge = kpEdgeN(p) * 0.55 + jitter * 0.4;
   float patchM = (1.0 - smoothstep(hw - 0.45, hw + 0.45, dPerp + bEdge)) * ends * smoothstep(6.0, 8.0, ax) * (1.0 - smoothstep(5.5, 7.0, q + bEdge * 0.6));

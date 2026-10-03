@@ -965,7 +965,8 @@ export class KentishPloverAnimator {
       // tertials ride the humerus, but on the flight upstroke / a raised wing they stay with the back instead of
       // standing up as fins (the elevation above level and most of the twist are taken back out): qH⁻¹ · qLevel
       // (nor swung in across the back by the upstroke's sweep: they keep the glide's)
-      const tElev = Math.min(elev, 0.06);
+      // (nor down the broad v4 flank on the downstroke: they stop 0.45 rad below level — lower they dip into it)
+      const tElev = Math.max(Math.min(elev, 0.06), -0.45);
       const tTwist = hTwist * 0.3;
       const tSweep = Math.min(hSweep, -0.05);
       const tComp = wingQuat(tSweep, tElev, tTwist, _q4).premultiply(_q3.copy(wingQuat(hSweep, elev, hTwist, _q3)).invert());
