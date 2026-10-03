@@ -84,8 +84,20 @@ export class ScopimeraGlobosa {
   get pos() { return this.animator.pos; }
   get heading() { return this.animator.heading; }
 
+  /**
+   * Camera anchor: the body centre — but while the crab is down its burrow the view stays on the mouth, never
+   * following the body below the sand (inBurrow eases 0 ↔ 1, so the anchor moves continuously)
+   */
   anchor(out) {
-    return this.animator.anchor(out);
+    const a = this.animator;
+    a.anchor(out);
+    if (a.inBurrow > 0) {
+      const k = a.inBurrow;
+      out.x += (a.pos.x - out.x) * k;
+      out.z += (a.pos.z - out.z) * k;
+      out.y = Math.max(out.y, a.pos.y + this.cw * 0.2);
+    }
+    return out;
   }
 
   setLod(lod) { this.lod = lod; this.model.setLod(lod); }

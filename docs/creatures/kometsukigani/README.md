@@ -112,6 +112,7 @@ CrabRoot
 
 - 種データ `public/data/species/scopimera_globosa.json`（`placement: "world"`、`aquatic: false`、`observeDistance_m: 0.05`（観察は甲幅の約 6 倍の距離から始まる。Z で望遠）、行動 10 種）。行動ツリー `crab_burrow`（何もしない。判断は個体の状態機械）。
 - `ScopimeraColony` を `App.enterField` で作り、毎フレーム `CreatureSystem.update` の前に更新する。近くの個体は `Individual`（`managed: 'colony'`）として CreatureSystem に入り、観察・図鑑・タモ・マーカーがそのまま使える。巣穴の奥の個体は狙えず、網にも入らない。
+- 観察カメラはカニの体の中心を追うが、巣穴に入っている間は口の上に留まる（カメラが砂の下へ潜らない）。
 - スコップで巣穴を掘ると、中にいる個体を捕まえられる（外にいた個体は家を失って走る）。
 - 時刻・潮位の飛び（チケット、デバッグ）では個体群を記録に戻して置き直す。
 - 自宅の水槽では個体が自分で歩き、水中なので摂食・ウェービングはしない。

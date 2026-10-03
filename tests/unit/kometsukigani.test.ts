@@ -172,7 +172,7 @@ describe('コメツキガニ: behaviour', () => {
     const events: string[] = [];
     crab.on((id: string) => events.push(id));
     const prev = new Vector3(), cur = new Vector3();
-    let worst = 0, fedAt = -1;
+    let worst = 0, fedAt = -1, lowest = Infinity;
     crab.update(DT, env);
     crab.anchor(prev);
     for (let k = 0; k < 60 * 300; k++) {
@@ -182,14 +182,17 @@ describe('コメツキガニ: behaviour', () => {
       crab.update(DT, env);
       crab.anchor(cur);
       worst = Math.max(worst, cur.distanceTo(prev) / crab.cw);
+      lowest = Math.min(lowest, cur.y);
       prev.copy(cur);
       if (events.includes('retreat') && crab.hidden && k > fedAt + 400) break;
     }
     expect(events).toContain('emerge');
     expect(events).toContain('pellet');
     expect(events).toContain('retreat');
-    // a sprint covers ~0.37 CW a frame at 60 fps; nothing else may move the body faster
+    // a sprint covers ~0.37 CW a frame at 60 fps; nothing else may move the body (or the camera's anchor) faster
     expect(worst).toBeLessThan(0.45);
+    // and the observation camera's anchor never follows the crab below the sand
+    expect(lowest).toBeGreaterThan(0);
   });
 
   it('waves only in the breeding season, males with a burrow', () => {

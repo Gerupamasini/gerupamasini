@@ -651,7 +651,8 @@ float pelH = 0.0;`)
   vec3 off; float id;
   float g = kgDome(vPelLocal * 7.0, 0.85, 0.38, fw * 7.0, off, id);
   vec3 c = uPelSand * (0.85 + 0.3 * kgH31(floor(vPelLocal * 7.0)));
-  c = id > 0.93 ? vec3(0.8, 0.77, 0.72) : (id > 0.88 ? c * 0.35 : c);
+  // the odd pale quartz or shell grain and dark mineral grain, as in the sand around (not salt and pepper)
+  c = id > 0.95 ? mix(c, vec3(0.78, 0.75, 0.7), 0.6) : (id > 0.92 ? c * 0.62 : c);
   c = mix(uPelSand * 0.9, c, smoothstep(0.0, 0.3, g) * uPelDetail + (1.0 - uPelDetail) * 0.5);
   // the sorted pellet is a touch paler than the surface it came from (organic film removed)
   c *= mix(1.06, 0.9, vPel.z);
@@ -666,7 +667,7 @@ roughnessFactor = mix(0.92, 0.35, pelWet);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = kgPerturb(normal, -vViewPosition, pelH * uPelScale * uPelDetail);`);
   };
-  mat.customProgramCacheKey = () => 'kg-pellet-v1';
+  mat.customProgramCacheKey = () => 'kg-pellet-v2';
   return mat;
 }
 

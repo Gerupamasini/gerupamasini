@@ -22,8 +22,11 @@ export const RENDER_ORDER = { shaft: -30, crab: -30, cap: -20 };
 const _m = new Matrix4(), _q = new Quaternion(), _q2 = new Quaternion(), _p = new Vector3(), _s = new Vector3(), _n = new Vector3();
 const UP = new Vector3(0, 1, 0);
 
-/** the shaft: a tube along the tilted axis, its top ring lying in the ground plane, flared at the mouth; plus the cap */
-function shaftGeometry(tilt, radial = 28, rings = 22) {
+/**
+ * the shaft: a tube along the tilted axis, its top ring lying in the ground plane, flared at the mouth; plus the
+ * cap. 56 around: the crumbled rim (up to 13 lobes) stays round, not a polygon, a few centimetres from the camera.
+ */
+function shaftGeometry(tilt, radial = 56, rings = 22) {
   const A = new Vector3(0, -Math.cos(tilt), -Math.sin(tilt));          // down the shaft
   const U = new Vector3(1, 0, 0);
   const V = new Vector3().crossVectors(A, U).normalize();
