@@ -291,7 +291,7 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     vec2 la = vec2(41.6, 90.2);
     vec2 lb = vec2(28.6, 95.4);
     float tl = clamp(dot(zy - la, lb - la) / dot(lb - la, lb - la), 0.0, 1.0);
-    float lore = 1.0 - smoothstep(-0.3, 0.3, length(zy - mix(la, lb, tl)) + ej - mix(1.05, 1.6, tl) * uMelanin * mix(0.5, 1.0, clamp((uHeadPat.y - 0.4) / 0.6, 0.0, 1.0)));
+    float lore = 1.0 - smoothstep(-0.3, 0.3, length(zy - mix(la, lb, tl)) + ej - mix(1.1, 1.9, tl) * uMelanin * mix(0.5, 1.0, clamp((uHeadPat.y - 0.4) / 0.6, 0.0, 1.0)));
     // (narrower where the loral stripe is pale: a thin brown line in females, p050)
     // (on the sides of the bill base only — over the culmen the two met as a moustache across the forehead)
     lore *= smoothstep(1.6, 2.7, ax) * smoothstep(0.12, 0.35, abs(n.x)) * uHeadPat.y;
@@ -356,7 +356,7 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   hw *= uMelanin;
   // (females, non-breeding birds and juveniles: a lateral patch only — the line ends at uPatchReach, short of the
   // throat, with softer edges: p021, p037, p063, p009, p062)
-  float ends = smoothstep(0.0, 0.05, tt) * (1.0 - smoothstep(uPatchReach - 0.14, uPatchReach + 0.02, tt));
+  float ends = smoothstep(0.0, 0.05, tt) * (uPatchReach > 0.999 ? 1.0 : 1.0 - smoothstep(uPatchReach - 0.14, uPatchReach + 0.02, tt));
   float soft = 1.0 + 0.9 * clamp((1.0 - uPatchReach) * 3.0, 0.0, 1.0);
   float bEdge = kpEdgeN(p) * 0.55 + jitter * 0.45;
   float patchM = (1.0 - smoothstep(hw - 1.0 * soft, hw + 0.9 * soft, dPerp + bEdge)) * ends * smoothstep(0.6, 1.6, ax) * (1.0 - smoothstep(5.5, 7.0, q + bEdge * 0.6));
