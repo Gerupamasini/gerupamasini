@@ -17,6 +17,8 @@ export interface PerceptionContext {
   playerDist: number;
   nowSec: number;
   aquatic: boolean;
+  /** lives on the mud and in the water (mudskippers): targets favour wet ground near the water's edge */
+  amphibious?: boolean;
 }
 
 type ArgVal = number | string | boolean | number[];
@@ -112,6 +114,15 @@ export class BehaviorTree {
       case 'time_is': return Array.isArray(a.v) ? false : String(a.v).split(',').includes(ctx.tod);
       case 'tide_is': return String(a.v) === 'any' || String(a.v) === ctx.tidePhase;
       case 'energy_below': return ind.energy < num(a.v, 0.3);
+      case 'moisture_below': return (ind.moisture ?? 1) < num(a.v, 0.3);
+      case 'season_is': return String(a.v).split(',').includes(ctx.season);
+      // minutes since the ground here was last under water (mudskippers withdraw as the mud dries and warms)
+      case 'exposed_minutes_above': {
+        if (!ctx.sample.exposed) return false;
+        const k = ctx.habitat.coarseIndex(ind.pos.x, ind.pos.z);
+        return (ctx.nowSec * 1000 - ctx.habitat.lastWet[k]) / 60000 > num(a.m, 60);
+      }
+      case 'hidden': return !!ind.hidden;
       case 'random_chance': return ind.rng.chance(num(a.p, 0.5));
       case 'neighbor_within': return false; // reserved for interaction rules
       default: console.warn(`[bt] unknown condition ${name}`); return false;
@@ -172,6 +183,7 @@ export class BehaviorTree {
   private pickTarget(ctx: PerceptionContext, dist: number, stayNear: number, alongWaterline: boolean): Vector3 | null {
     const ind = ctx.ind;
     const homeDist = ind.pos.distanceTo(ind.home);
+    if (ctx.amphibious) return this.pickAmphibious(ctx, dist, stayNear, homeDist);
     for (let i = 0; i < 6; i++) {
       let ang: number;
       if (homeDist > stayNear && ind.rng.chance(0.7)) {
@@ -182,6 +194,28 @@ export class BehaviorTree {
       if (ctx.aquatic ? s.depth >= 0.03 : s.exposed && (!alongWaterline || s.distToWater <= 10)) return new Vector3(x, 0, z);
     }
     return null;
+  }
+
+  /**
+   * Amphibious target: of several candidates, the one with the best ground for a mudskipper — wet, soft mud near the
+   * water's edge, shallow water at most, not too far from home.
+   */
+  private pickAmphibious(ctx: PerceptionContext, dist: number, stayNear: number, homeDist: number): Vector3 | null {
+    const ind = ctx.ind;
+    let best: Vector3 | null = null, bs = -Infinity;
+    for (let i = 0; i < 9; i++) {
+      const toHome = homeDist > stayNear && ind.rng.chance(0.6);
+      const ang = toHome ? Math.atan2(ind.home.x - ind.pos.x, ind.home.z - ind.pos.z) + ind.rng.range(-0.7, 0.7) : ind.heading + ind.rng.range(-2.2, 2.2);
+      const d = dist * ind.rng.range(0.6, 1.25);
+      const x = ind.pos.x + Math.sin(ang) * d, z = ind.pos.z + Math.cos(ang) * d;
+      if (!ctx.habitat.terrain.inside(x, z, 3)) continue;
+      const s = ctx.habitat.sample(x, z, ctx.nowSec * 1000);
+      if (s.depth > 0.15) continue;
+      const sub = s.substrate === 'mud' ? 0.6 : s.substrate === 'muddy_sand' ? 0.45 : s.substrate === 'channel' ? 0.3 : s.substrate === 'sand' ? 0.1 : 0;
+      const score = s.wetness * 1.2 + Math.exp(-s.distToWater / 3) * 0.8 + sub + (s.depth > 0 ? 0.3 : 0) - (toHome ? 0 : 0.002 * Math.hypot(x - ind.home.x, z - ind.home.z)) + ind.rng.range(0, 0.35);
+      if (score > bs) { bs = score; best = new Vector3(x, 0, z); }
+    }
+    return best;
   }
 
   /** Sample points on rings around the individual and return the best scoring one above a threshold. */

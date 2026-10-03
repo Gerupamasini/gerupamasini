@@ -6,7 +6,7 @@ export const TimeOfDaySchema = z.enum(['dawn', 'day', 'dusk', 'night']);
 export const SeasonSchema = z.enum(['spring', 'summer', 'autumn', 'winter']);
 export const TidePhaseSchema = z.enum(['any', 'low', 'rising', 'high', 'falling']);
 export const TaxonGroupSchema = z.enum(['fish', 'crustacean', 'bird', 'mollusc', 'worm', 'other']);
-export const LocomotionSchema = z.enum(['swim', 'walk', 'burrow', 'fly', 'sessile']);
+export const LocomotionSchema = z.enum(['swim', 'walk', 'burrow', 'fly', 'sessile', 'amphibious']);
 
 export const SpawnRuleSchema = z.object({
   tags: z.array(HabitatTagSchema).min(1),

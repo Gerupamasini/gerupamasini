@@ -1,6 +1,8 @@
 import type { Object3D, Vector3 } from 'three';
 import type { Individual } from '../Individual';
 import type { HabitatSample } from '../../world/Habitat';
+import type { MudFx } from '../../world/MudFx';
+import type { BurrowField } from '../../world/Burrows';
 
 export type IntentKind = 'rest' | 'wander' | 'moveTo' | 'flee' | 'forage' | 'display' | 'burrow' | 'special';
 
@@ -28,6 +30,14 @@ export interface Floor {
   sampleAt?(x: number, z: number): HabitatSample | null;
 }
 
+/** Shared services of the flat that some drivers use (traces in the mud, burrows, the light). */
+export interface CreatureWorld {
+  fx: MudFx | null;
+  burrows: BurrowField | null;
+  /** 0 at night … 1 in full sun: how strongly the air dries an animal out of the water */
+  sunUp: number;
+}
+
 export interface DriverContext {
   /** keep the animal inside this box (the home tank) */
   bounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
@@ -37,11 +47,18 @@ export interface DriverContext {
   nowMs: number;
   /** the observed / locked animal: keep full detail whatever the distance to the player */
   locked?: boolean;
+  world?: CreatureWorld;
+}
+
+/** What a driver may need from the loaded model beyond the scene graph (tier, texture dependencies). */
+export interface DriverModelInfo {
+  tier: 'hero' | 'lod1' | 'lod2';
+  parser: { getDependency(type: string, index: number): Promise<unknown> };
 }
 
 export interface Driver {
   /** attach to a model root placed in the scene; sets up the rig and the individual's scale */
-  attach(root: Object3D, individual: Individual, extras: Record<string, unknown>, bones: Record<string, Object3D>, meshes: Object3D[]): void;
+  attach(root: Object3D, individual: Individual, extras: Record<string, unknown>, bones: Record<string, Object3D>, meshes: Object3D[], model?: DriverModelInfo): void;
   detach(): void;
   setIntent(intent: Intent): void;
   /** true while the current intent is still being executed */

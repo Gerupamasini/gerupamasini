@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "species": ["acanthogobius_flavimanus", "gymnogobius_macrognathos", "exopalaemon_orientis", "charadrius_alexandrinus", "ruditapes_philippinarum"],
-  "behaviors": ["fish_benthic", "shrimp_shallow", "shorebird_waterline", "bivalve_buried"],
+  "species": ["acanthogobius_flavimanus", "gymnogobius_macrognathos", "periophthalmus_modestus", "exopalaemon_orientis", "charadrius_alexandrinus", "ruditapes_philippinarum"],
+  "behaviors": ["fish_benthic", "shrimp_shallow", "shorebird_waterline", "bivalve_buried", "mudskipper_amphibious"],
   "maps": ["kasai_west"],
   "stations": ["jma_tokyo"],
   "items": "items/tools.json",

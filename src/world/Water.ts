@@ -1,6 +1,6 @@
 import {
   ClampToEdgeWrapping, Color, CubeTexture, DataTexture, FloatType, LinearFilter, NearestFilter, LinearMipmapLinearFilter, Matrix4, RedFormat,
-  RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer, type WebGLRenderTarget,
+  RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, Vector4, type PerspectiveCamera, type WebGLRenderer, type WebGLRenderTarget,
 } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import type { Terrain } from './Terrain';
@@ -67,6 +67,8 @@ float snoise(vec2 p) { return vnoiseW(p) * 2.0 - 1.0; }
  * the sky is reflected from a cube map with Fresnel; the sun glitters; the shoreline gets a bright rim and bubbles;
  * far water fades into the fog. Pools are calm (little ripple) and clearer, so their bottoms are easy to see.
  */
+const N_RIPPLES = 12;
+
 export class WaterPass {
   readonly uniforms;
   private readonly material: ShaderMaterial;
@@ -102,6 +104,8 @@ export class WaterPass {
       uRefr: { value: 0.6 },
       uRes: { value: new Vector2(1, 1) },
       uEnvI: { value: 0.6 },
+      // ripple rings from animals breaking the surface: (x, z, start time, strength)
+      uRip: { value: Array.from({ length: N_RIPPLES }, () => new Vector4(0, 0, -1e4, 0)) },
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,
@@ -115,6 +119,7 @@ export class WaterPass {
         uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog;
         uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr;
         uniform vec2 uRes;
+        uniform vec4 uRip[${N_RIPPLES}];
         varying vec2 vUv;
         ${NOISE_GLSL}
         ${WAVES_GLSL}
@@ -134,6 +139,19 @@ export class WaterPass {
           float gust = 0.65 + 0.7 * smoothstep(-0.4, 0.6, snoise(p * 0.08 + uTime * vec2(0.03, 0.02)));
           float gain = gust * mix(1.0, 0.22, calm);
           vec3 g = waveGrad(p, uTime, fp * 4.0) * gain;
+          // ripple rings: a short capillary wave train spreading at ~0.23 m/s, dying out over a second or two
+          for (int i = 0; i < ${N_RIPPLES}; i++) {
+            vec4 R = uRip[i];
+            float age = uTime - R.z;
+            if (age < 0.0 || age > 2.5) continue;
+            vec2 d = p - R.xy;
+            float r = length(d) + 1e-5;
+            float front = 0.012 + 0.23 * age;
+            float x = (r - front) / (0.012 + 0.02 * age);
+            float env = exp(-x * x) * R.w * exp(-age * 1.6) / (1.0 + 18.0 * front);
+            float dh = env * cos(x * 3.2) * 0.55;
+            g.yz += d / r * dh;
+          }
           return normalize(vec3(-g.y, 1.0, -g.z));
         }
         // Henyey-Greenstein phase function: the silt scatters the sun forward
@@ -238,6 +256,14 @@ export class WaterPass {
         }`,
     });
     this.quad = new FullScreenQuad(this.material);
+  }
+
+  /** Start a ripple ring at (x, z) (an animal entering, leaving or swimming at the surface). */
+  addRipple(x: number, z: number, strength: number): void {
+    const rip = this.uniforms.uRip.value;
+    let k = 0;
+    for (let i = 1; i < rip.length; i++) if (rip[i].z < rip[k].z) k = i;
+    rip[k].set(x, z, this.uniforms.uTime.value, Math.min(1.5, strength));
   }
 
   setLevel(y: number): void {

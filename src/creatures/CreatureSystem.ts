@@ -15,6 +15,9 @@ import type { BehaviorEvent, Driver, Floor, Intent } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
 import type { HeroInstance } from './species/mahaze/hero/applyHero';
+import { MudFx, type RippleSink } from '../world/MudFx';
+import { BurrowField } from '../world/Burrows';
+import { setTobihazeEnvironment } from './species/tobihaze/TobihazeMaterial';
 
 interface View {
   tier: Tier | 'placeholder';
@@ -42,6 +45,8 @@ export interface CreatureFrame {
   season: Season;
   tidePhase: TidePhase;
   lockedId: string | null;
+  /** 0 at night … 1 in full sun (drying of amphibious animals) */
+  sunUp?: number;
 }
 
 const LOD1_DIST = 6;
@@ -65,6 +70,12 @@ export class CreatureSystem {
   private readonly tmpIntent = { id: 0 };
   /** when set, hero-tier models get the volumetric materials (observation lock) */
   heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
+  /** traces in the mud and on the water, and the mudskippers' burrows */
+  readonly fx: MudFx;
+  readonly burrows: BurrowField;
+  private nowMs = 0;
+  private burrowAcc = 1;
+  private readonly world: { fx: MudFx; burrows: BurrowField; sunUp: number };
 
   constructor(
     private readonly scene: Scene,
@@ -82,7 +93,14 @@ export class CreatureSystem {
     this.floor = {
       heightAt: (x, z) => terrain.heightAt(x, z),
       waterAt: (x, z) => habitat.waterAt(x, z),
+      sampleAt: (x, z) => habitat.sample(x, z, this.nowMs),
     };
+    this.fx = new MudFx(scene);
+    this.fx.groundAt = (x, z) => terrain.heightAt(x, z);
+    this.burrows = new BurrowField(terrain, habitat, scene);
+    this.world = { fx: this.fx, burrows: this.burrows, sunUp: 0.7 };
+    // fish lying in shallow water get the bed's caustics
+    setTobihazeEnvironment(terrain.causticUniforms());
   }
 
   /** Warm the model cache for the distance tiers. */
@@ -115,8 +133,19 @@ export class CreatureSystem {
     return sp.model.lod2 ? 'lod2' : sp.model.lod1 ? 'lod1' : 'hero';
   }
 
+  /** ripple rings go to the water pass */
+  setRipples(sink: RippleSink | null): void {
+    this.fx.ripples = sink;
+  }
+
   update(f: CreatureFrame): void {
     this.frameIndex++;
+    this.nowMs = f.gameMs;
+    this.world.sunUp = f.sunUp ?? 0.7;
+    this.fx.viewer.copy(f.camera.position);
+    this.fx.update(f.dt, f.camera.fov, 720);
+    this.burrowAcc += f.dt;
+    if (this.burrowAcc > 1) { this.burrowAcc = 0; this.burrows.update(f.camera.position); }
     const env: SpawnEnv = { tod: f.tod, season: f.season, tidePhase: f.tidePhase, mapId: this.mapId, gameMs: f.gameMs, day: Math.floor(f.gameMs / 86400000) };
     // spawning (1 Hz)
     this.spawnAcc += f.dt;
@@ -158,6 +187,7 @@ export class CreatureSystem {
         const ctx: PerceptionContext = {
           ind, sample: this.habitat.sample(ind.pos.x, ind.pos.z, f.gameMs), habitat: this.habitat, tidePhase: f.tidePhase, tod: f.tod, season: f.season,
           playerPos: f.playerPos, playerDist: dist, nowSec, aquatic: ind.species.locomotion === 'swim' || ind.species.taxon.group === 'crustacean',
+          amphibious: ind.species.locomotion === 'amphibious',
         };
         const intent = tree.tick(ctx);
         if (intent) this.issue(e, intent, nowSec);
@@ -165,7 +195,7 @@ export class CreatureSystem {
       // driver update (near every frame, mid every 2nd, far every 4th)
       if (e.view) {
         const every = ind.lod <= 1 ? 1 : ind.lod === 2 ? 2 : 4;
-        if (this.frameIndex % every === 0) e.driver.update(f.dt * every, { floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs, locked: e.ind.id === f.lockedId });
+        if (this.frameIndex % every === 0) e.driver.update(f.dt * every, { floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs, locked: e.ind.id === f.lockedId, world: this.world });
         if (e.view.hero) e.view.hero.update(f.camera, e.driver.openings ?? { mouth: 0, gill: 0 });
       }
     }
@@ -211,7 +241,7 @@ export class CreatureSystem {
       try { model = await instantiateModel(rel); } catch (err) { console.warn(err); e.pendingTier = null; return; }
       if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
       let hero: HeroInstance | null = null;
-      if (tier === 'hero' && this.heroApply) {
+      if (tier === 'hero' && this.heroApply && !DRIVERS[sp.model.driver ?? '']?.ownMaterials) {
         try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] falling back to standard materials', err); hero = null; }
         if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { hero?.dispose(); model.root.removeFromParent(); return; }
       }
@@ -223,7 +253,7 @@ export class CreatureSystem {
     this.group.add(view.root);
     const bones = view.model?.bones ?? {};
     const meshes = view.model?.meshes ?? [];
-    e.driver.attach(view.root, e.ind, view.model?.extras ?? {}, bones as Record<string, Object3D>, meshes);
+    e.driver.attach(view.root, e.ind, view.model?.extras ?? {}, bones as Record<string, Object3D>, meshes, view.model ? { tier: view.model.tier, parser: view.model.parser } : undefined);
   }
 
   private dropView(e: Entry): void {
@@ -251,6 +281,7 @@ export class CreatureSystem {
     this.dropView(e);
     e.unsub();
     e.driver.dispose();
+    this.burrows.release(id);
     this.entries.delete(id);
     this.events.emit('despawn', e.ind);
   }
@@ -271,7 +302,7 @@ export class CreatureSystem {
     for (const e of [...this.entries.values()]) {
       const ind = e.ind;
       if (ind.id === f.lockedId) continue;
-      if (!(ind.species.locomotion === 'swim' || ind.species.taxon.group === 'crustacean')) continue;
+      if (!(ind.species.locomotion === 'swim' || ind.species.taxon.group === 'crustacean')) continue;   // (amphibious animals cross dry ground themselves)
       const need = minDepthFor(ind.species, ind.length_mm);
       if (this.habitat.depthAt(ind.pos.x, ind.pos.z) >= need) { ind.strandedSince = 0; continue; }
       if (!ind.strandedSince) ind.strandedSince = f.gameMs;
@@ -311,7 +342,7 @@ export class CreatureSystem {
     this.ray.set(camera.position, this.tmp);
     let best: Individual | null = null, bestD = Infinity;
     for (const e of this.entries.values()) {
-      if (!e.view) continue;
+      if (!e.view || e.ind.hidden) continue;
       const scale = e.ind.length_mm / e.ind.species.model.modelLength_mm;
       const r = Math.max(0.12, e.view.radius * scale * 1.6);
       this.sphere.set(e.driver.anchor(), r);
@@ -343,5 +374,8 @@ export class CreatureSystem {
   dispose(): void {
     for (const id of [...this.entries.keys()]) this.despawn(id);
     this.scene.remove(this.group);
+    this.fx.dispose();
+    this.burrows.dispose();
+    setTobihazeEnvironment(null);
   }
 }

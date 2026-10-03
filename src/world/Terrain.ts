@@ -618,6 +618,17 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     this.waves = waves;
   }
 
+  /**
+   * The live uniforms that drive the bed's caustics (wave set, water clock, sun), for other materials that light
+   * submerged surfaces the same way (e.g. a fish lying in shallow water). Shared objects: they stay in step.
+   */
+  causticUniforms(): Record<string, IUniform> {
+    return {
+      uTime: this.uTime, uSunUp: this.uSunUp, uSunDirT: this.uSunDirT, uCausticGain: this.uCausticGain,
+      ...(this.waves ? (this.waves.uniforms as unknown as Record<string, IUniform>) : {}),
+    };
+  }
+
   private gridIndex(x: number, z: number): { i: number; j: number; fx: number; fz: number } {
     const gx = (x + this.half) / this.cell;
     const gz = (z + this.half) / this.cell;

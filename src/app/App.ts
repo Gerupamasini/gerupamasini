@@ -256,6 +256,7 @@ export class App {
       this.player.eyeHeight = this.settings.eyeHeight;
       ui.loading.value = { frac: 0.7, label: t('loading.models') };
       this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed);
+      this.creatures.setRipples(this.world.water);
       await this.creatures.preload();
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
@@ -495,6 +496,7 @@ export class App {
     const abx = b.x - a.x, abz = b.z - a.z, abLen2 = Math.max(1e-6, abx * abx + abz * abz);
     for (const ind of creatures.individuals) {
       if (!ind.species.collectable || ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
+      if (ind.hidden) continue;   // down its burrow
       if (ind.pos.distanceTo(player.position) > 3) continue;
       // distance from the animal to the hoop's path (in the ground plane), and how high it sits above the bed
       const u = Math.max(0, Math.min(1, ((ind.pos.x - a.x) * abx + (ind.pos.z - a.z) * abz) / abLen2));
@@ -812,6 +814,7 @@ export class App {
       creatures.update({
         dt: this.worldVisible() ? dt : 0, gameMs, playerPos: player.position, camera: this.camera, simScale: this.simScale,
         tod: world.tod, season: world.season, tidePhase: this.tidePhase(), lockedId: this.lockedId,
+        sunUp: Math.max(0, Math.min(1, (world.sunElevation + 2) / 30)) * (1 - 0.7 * world.overcast),
       });
       if (mode === 'observe' && this.hero && creatures.heroActive(this.lockedId)) {
         const anchor = creatures.anchorOf(this.lockedId!) ?? player.position;

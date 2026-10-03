@@ -55,6 +55,10 @@ export interface Individual {
   pitId?: number;
   /** game time at which the water under an aquatic animal became too shallow (0 = fine) */
   strandedSince: number;
+  /** skin moisture 0..1 of an amphibious animal (its driver keeps it) */
+  moisture?: number;
+  /** out of sight and reach (inside its burrow) */
+  hidden?: boolean;
 }
 
 /** The least water an aquatic animal is placed in or will stay in: about 15 % of its length, never under 1.5 cm. */

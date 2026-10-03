@@ -1,0 +1,39 @@
+{
+  "id": "mudskipper_amphibious",
+  "tickHz": { "near": 4, "mid": 1.5, "far": 0.4 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$fleeDistance_m" } },
+      { "type": "action", "name": "flee", "args": { "distance_m": 1.2, "urgency": 1 }, "interrupt": true }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "moisture_below", "args": { "v": 0.3 } },
+      { "type": "action", "name": "special", "args": { "param": "rewet" } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "time_is", "args": { "v": "night" } },
+      { "type": "action", "name": "burrow", "args": { "seconds": [120, 400] } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "depth_above", "args": { "m": 0.05 } },
+      { "type": "action", "name": "move_to_waterline", "args": { "distance_m": 6, "urgency": 0.4 } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "alert_above", "args": { "v": 0.5 } },
+      { "type": "action", "name": "display", "args": { "param": "alert", "seconds": [2, 6] } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "exposed_minutes_above", "args": { "m": "$retreatAfter_min" } },
+      { "type": "condition", "name": "random_chance", "args": { "p": 0.25 } },
+      { "type": "action", "name": "burrow", "args": { "seconds": [40, 160] } }
+    ]},
+    { "type": "random", "weights": [0.32, 0.34, 0.2, 0.06, 0.04, 0.04], "children": [
+      { "type": "action", "name": "rest", "args": { "seconds": "$restMean_s" } },
+      { "type": "action", "name": "forage", "args": { "seconds": [8, 25] } },
+      { "type": "action", "name": "wander", "args": { "distance_m": "$wanderDistance_m", "stayNearHome_m": 3 } },
+      { "type": "cooldown", "seconds": 90, "child": { "type": "action", "name": "burrow", "args": { "seconds": [10, 40] } } },
+      { "type": "cooldown", "seconds": 60, "child": { "type": "action", "name": "special", "args": { "param": "rewet" } } },
+      { "type": "cooldown", "seconds": 45, "child": { "type": "action", "name": "display", "args": { "param": "display", "seconds": [2, 4] } } }
+    ]}
+  ]}
+}
