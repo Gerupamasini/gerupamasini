@@ -142,9 +142,16 @@ try {
     await page.evaluate(() => { window.__higata.exitObserve(); });
     await waitFrames(page, 4);
     await page.screenshot({ path: path.join(outDir, '10-capture.png') });
-    // swing the net at the goby ahead: it is put 60 cm in front first (it may have bolted while being observed), and
-    // every animal in the sweep is caught in the smoke, so the sequence is deterministic
-    await page.evaluate((id) => { const a = window.__higata; const g = a.creatures.get(id); const p = a.player.position, f = a.player.forward; g.pos.set(p.x + f.x * 0.6, a.world.terrain.heightAt(p.x + f.x * 0.6, p.z + f.z * 0.6), p.z + f.z * 0.6); g.alert = 0; a.capture.forceCatch = true; a.swingNet(); }, near.id);
+    // swing the net at the goby: the reticle is aimed at the bed about 75 cm ahead and the goby put right there (it may
+    // have bolted while being observed); every animal under the reticle is caught in the smoke, so the sequence is deterministic
+    await page.evaluate(() => { window.__higata.player.pitch = -0.64; });
+    await waitFrames(page, 3);
+    await page.evaluate((id) => {
+      const a = window.__higata, g = a.creatures.get(id);
+      const p = a.groundUnderReticle(1.1);
+      if (p) { a.creatures.driverOf(id)?.holdAt?.(p.x, p.z); g.pos.set(p.x, p.y + 0.01, p.z); }
+      g.alert = 0; a.capture.forceCatch = true; a.swingNet();
+    }, near.id);
     const afterAttempt = await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, state: a.capture.state.value }; });
     console.log('after swing', JSON.stringify(afterAttempt));
     await page.waitForFunction(() => { const s = window.__higata.capture.state.value; return !!s && s.phase === 'check' && s.revealed; }, null, { timeout: 240000 });
