@@ -286,8 +286,8 @@ export class CreatureSystem {
     for (const e of this.entries.values()) {
       const ind = e.ind;
       if (!isAquatic(ind.species) || ind.id === f.lockedId) continue;
-      // near animals every frame (a dart is fast), the rest at a few hertz
-      if (ind.lod > 1 && (this.frameIndex & 7) !== 0) continue;
+      // every animal in view every frame (a dart is fast); the unseen ones at a few hertz
+      if (ind.lod > 2 && (this.frameIndex & 7) !== 0) continue;
       const need = minDepthFor(ind.species, ind.length_mm);
       if (this.habitat.depthAt(ind.pos.x, ind.pos.z) >= need) {
         ind.strandedSince = 0;
