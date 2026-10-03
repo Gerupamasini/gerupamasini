@@ -354,6 +354,7 @@ export class Motor {
 
   private setGait(g: Gait): void {
     if (g !== this.gait) {
+      if (this.gait === 'roll') this.rollT = 0;   // a roll cut short: back onto the belly
       this.gait = g; this.gaitT = 0;
       if (g === 'crawl' || g === 'swim') this.onEvent(g);
     }

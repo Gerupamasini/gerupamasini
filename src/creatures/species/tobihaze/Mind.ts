@@ -95,12 +95,13 @@ export class Mind {
       default:
         this.task = { kind: 'rest', until: now + 2, posture: 'prop' };
     }
-    // the new task takes over at once: a walk or swim under way turns to the new target, or stops
+    // the new task takes over at once: a walk or swim under way turns to the new target, or stops; a fright also
+    // cuts a bite or a roll short
     const m = this.m, tk = this.task;
     if (m.gait === 'crawl' || (m.gait === 'swim' && !m.done)) {
       if (tk?.kind === 'travel') m.travel(tk.target, tk.speed, tk.urgency);
       else m.stand('prop');
-    }
+    } else if (tk?.kind === 'escape' && (m.gait === 'strike' || m.gait === 'roll')) m.stand('alert');
   }
 
   // -------------------------------------------------------------------------------------------- update
