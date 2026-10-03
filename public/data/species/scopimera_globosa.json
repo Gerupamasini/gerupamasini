@@ -1,0 +1,61 @@
+{
+  "id": "scopimera_globosa",
+  "names": { "ja": "コメツキガニ", "sci": "Scopimera globosa", "en": "Sand bubbler crab" },
+  "taxon": { "group": "crustacean", "family": "Dotillidae" },
+  "locomotion": "walk",
+  "aquatic": false,
+  "placement": "world",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "kometsukigani",
+    "modelLength_mm": 10,
+    "viewDistance_m": 14,
+    "observeDistance_m": 0.09,
+    "driver": "kometsukigani",
+    "clips": { "idle": "Idle", "move": "Move", "special": [] }
+  },
+  "size": {
+    "length_mm": { "min": 3.5, "max": 10.5, "mean": 8, "sd": 1.2 },
+    "weightCoef": { "a": 0.00072, "b": 3.0 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": true },
+  "stages": [
+    { "id": "juvenile", "ja": "稚ガニ", "maxLength_mm": 5.5 },
+    { "id": "adult", "ja": "成体" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    {
+      "tags": ["exposed_sand"],
+      "substrate": ["sand", "muddy_sand"],
+      "tide": "any",
+      "density_per_100m2": 600,
+      "group": [1, 1],
+      "maxPopulation": 52
+    }
+  ],
+  "brain": { "tree": "crab_burrow", "params": { "fleeDistance_m": 1.2 } },
+  "capture": { "tools": ["hand_net", "shovel"], "baseDifficulty": 0.62, "alertPenalty": 0.5 },
+  "encyclopedia": {
+    "description": "砂質の干潟の中ほどから上にすむ、甲幅 1 cm ほどの小さなカニ（スナガニ上科コメツキガニ科）。甲は丸くふくらみ、眼柄が長い。歩脚の長節には膜の窓（鼓膜）があり、空気呼吸を助ける。干潮になると巣穴から出て、はさみで砂をすくって口へ運び、砂粒についた有機物をこし取って食べ、残った砂を団子にして捨てる。巣穴のまわりに放射状に並ぶ砂団子はその跡。繁殖期（春〜夏）には巣穴を持つ雄が脚を伸ばして体を持ち上げ、両方のはさみを高く振り上げて前へ振り下ろすウェービングをする。人や鳥が近づくと横歩きで巣穴へ逃げ込み、満ち潮の前には巣穴に入って入り口をふさぐ。",
+    "habitatHint": "干潮時の、砂の多い干潟の中ほどから上。巣穴と砂団子が目印。立ったまま近づくと逃げ込むので、しゃがんで静かに待つ。",
+    "behaviors": [
+      { "id": "peek", "ja": "巣穴から目を出す", "hint": "眼柄だけを出してあたりをうかがう" },
+      { "id": "emerge", "ja": "巣穴から出る", "hint": "干潮になってしばらくすると出てくる" },
+      { "id": "feed", "ja": "砂をすくって食べる", "hint": "はさみで交互に砂を口へ運ぶ（米つきのような動き）" },
+      { "id": "pellet", "ja": "砂団子を捨てる", "hint": "口の上にできた砂団子をはさみで取って置く" },
+      { "id": "dig", "ja": "巣穴の砂を運び出す", "hint": "湿った砂の塊を入り口の脇に置く" },
+      { "id": "freeze", "ja": "身構えて静止", "hint": "気配に気づくと止まって眼柄を向ける" },
+      { "id": "retreat", "ja": "巣穴に逃げ込む", "hint": "横歩きで駆け戻り、横向きに滑り込む" },
+      { "id": "wave", "ja": "ウェービング", "hint": "繁殖期の雄。体を持ち上げ両方のはさみを振り上げる" },
+      { "id": "fight", "ja": "なわばり争い", "hint": "巣穴に近づいた個体を追い払う" },
+      { "id": "plug", "ja": "巣穴にふたをする", "hint": "満ち潮の前に入り口をふさぐ" }
+    ],
+    "placeholderModel": false
+  }
+}

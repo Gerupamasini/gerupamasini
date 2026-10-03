@@ -125,6 +125,34 @@ export class SkyDome {
     this.sky.visible = elevation > -7;
   }
 
+  private focused = false;
+
+  /**
+   * Pull the sun's shadow map in around a small subject (observing a crab a centimetre across: legs and pellets
+   * cast real shadows on the sand), or give it back to the whole view (null). Call after update(), every frame.
+   */
+  focusShadow(center: Vector3 | null, half = 0.15): void {
+    const light = this.sunLight, cam = light.shadow.camera;
+    if (!light.castShadow) return;
+    if (center) {
+      const lightDir = this.elevation > -2 ? this.sunDir : new Vector3(0.3, 1, 0.2).normalize();
+      light.position.copy(center).addScaledVector(lightDir, 2);
+      light.target.position.copy(center);
+      light.target.updateMatrixWorld();
+      cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half; cam.near = 0.5; cam.far = 3.5;
+      light.shadow.bias = -0.00002;
+      light.shadow.normalBias = 0.00004;
+      cam.updateProjectionMatrix();
+      this.focused = true;
+    } else if (this.focused) {
+      cam.left = -45; cam.right = 45; cam.top = 45; cam.bottom = -45; cam.near = 1; cam.far = 300;
+      light.shadow.bias = -0.0005;
+      light.shadow.normalBias = 0.05;
+      cam.updateProjectionMatrix();
+      this.focused = false;
+    }
+  }
+
   /** Rebuild the environment map when the sun moved enough (throttled by the caller). */
   refreshEnvironment(): void {
     if (Math.abs(this.elevation - this.lastEnvElevation) < 1.5 && Math.abs(this.overcast - this.lastEnvOvercast) < 0.15 && this.envTex) return;

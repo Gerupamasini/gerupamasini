@@ -5,6 +5,7 @@ import { MahazeDriver } from '../species/mahaze/MahazeDriver';
 import { ShrimpDriver } from '../species/shrimp/ShrimpDriver';
 import { PloverDriver } from '../species/plover/PloverDriver';
 import { AsariDriver } from '../asari/Asari.js';
+import { ScopimeraDriver } from '../kometsukigani/ScopimeraGlobosa.js';
 
 export interface DriverEntry {
   create(): Driver;
@@ -20,4 +21,5 @@ export const DRIVERS: Record<string, DriverEntry> = {
   shrimp: { create: () => new ShrimpDriver(), placeholder: () => ShrimpDriver.makeModel(), preview: () => ShrimpDriver.makePreview() },
   plover: { create: () => new PloverDriver(), placeholder: () => PloverDriver.makeModel() },
   asari: { create: () => new AsariDriver() as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: () => AsariDriver.makePreview() },
+  kometsukigani: { create: () => new ScopimeraDriver() as unknown as Driver, placeholder: () => ScopimeraDriver.makeModel(), preview: () => ScopimeraDriver.makePreview() },
 };

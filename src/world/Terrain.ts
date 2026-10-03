@@ -634,6 +634,23 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     return (a * (1 - fx) + b * fx) * (1 - fz) + (c * (1 - fx) + d * fx) * fz + this.pitReliefAt(x, z);
   }
 
+  /**
+   * Height of the surface as drawn: the chunk triangles (finest level), or the pit's fine patch where one is. Small
+   * animals stand on this rather than on the bilinear field, which can differ from the triangles by millimetres.
+   */
+  surfaceAt(x: number, z: number): number {
+    const list = this.pitsNear(x, z);
+    if (list) {
+      for (const pit of list) {
+        const edge = Math.max(Math.abs(x - pit.x), Math.abs(z - pit.z)) / pit.reach;
+        if (edge >= 1) continue;
+        const blend = Math.min(1, Math.max(0, (edge - 0.86) / 0.14));
+        return this.heightAt(x, z) * (1 - blend) + this.coarseMeshHeight(x, z) * blend;
+      }
+    }
+    return this.coarseMeshHeight(x, z);
+  }
+
   normalAt(x: number, z: number, out = new Vector3()): Vector3 {
     const e = this.cell;
     const hx = this.heightAt(x + e, z) - this.heightAt(x - e, z);

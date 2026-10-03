@@ -10,7 +10,7 @@ import { EventBus } from '../core/EventBus';
 import { BehaviorTree, type PerceptionContext } from './brain/BehaviorTree';
 import { Spawner, type SpawnEnv } from './Spawner';
 export type { SpawnEnv };
-import { minDepthFor, type Individual } from './Individual';
+import { isAquatic, minDepthFor, type Individual } from './Individual';
 import type { BehaviorEvent, Driver, Floor, Intent } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
@@ -157,14 +157,14 @@ export class CreatureSystem {
         if (!e.driver.busy) ind.brain.done = true;
         const ctx: PerceptionContext = {
           ind, sample: this.habitat.sample(ind.pos.x, ind.pos.z, f.gameMs), habitat: this.habitat, tidePhase: f.tidePhase, tod: f.tod, season: f.season,
-          playerPos: f.playerPos, playerDist: dist, nowSec, aquatic: ind.species.locomotion === 'swim' || ind.species.taxon.group === 'crustacean',
+          playerPos: f.playerPos, playerDist: dist, nowSec, aquatic: isAquatic(ind.species),
         };
         const intent = tree.tick(ctx);
         if (intent) this.issue(e, intent, nowSec);
       }
       // driver update (near every frame, mid every 2nd, far every 4th)
       if (e.view) {
-        const every = ind.lod <= 1 ? 1 : ind.lod === 2 ? 2 : 4;
+        const every = ind.lod <= 1 || e.driver.everyFrame ? 1 : ind.lod === 2 ? 2 : 4;
         if (this.frameIndex % every === 0) e.driver.update(f.dt * every, { floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs, locked: e.ind.id === f.lockedId });
         if (e.view.hero) e.view.hero.update(f.camera, e.driver.openings ?? { mouth: 0, gill: 0 });
       }
@@ -271,7 +271,7 @@ export class CreatureSystem {
     for (const e of [...this.entries.values()]) {
       const ind = e.ind;
       if (ind.id === f.lockedId) continue;
-      if (!(ind.species.locomotion === 'swim' || ind.species.taxon.group === 'crustacean')) continue;
+      if (!isAquatic(ind.species) || ind.managed) continue;
       const need = minDepthFor(ind.species, ind.length_mm);
       if (this.habitat.depthAt(ind.pos.x, ind.pos.z) >= need) { ind.strandedSince = 0; continue; }
       if (!ind.strandedSince) ind.strandedSince = f.gameMs;
@@ -305,19 +305,27 @@ export class CreatureSystem {
     this.despawn(id);
   }
 
-  /** Nearest individual under the screen centre within `maxDist` metres. */
+  /**
+   * The individual under the screen centre within `maxDist` metres: of those whose pick sphere the view ray
+   * passes through, the one closest to the ray (relative to its sphere), then the nearer. Animals out of sight
+   * (down a burrow) are skipped.
+   */
   pickTarget(camera: Camera, maxDist = 8): Individual | null {
     camera.getWorldDirection(this.tmp);
     this.ray.set(camera.position, this.tmp);
-    let best: Individual | null = null, bestD = Infinity;
+    let best: Individual | null = null, bestScore = Infinity;
     for (const e of this.entries.values()) {
-      if (!e.view) continue;
+      if (!e.view || e.driver.hidden) continue;
       const scale = e.ind.length_mm / e.ind.species.model.modelLength_mm;
       const r = Math.max(0.12, e.view.radius * scale * 1.6);
-      this.sphere.set(e.driver.anchor(), r);
+      const a = e.driver.anchor();
+      this.sphere.set(a, r);
       const d = e.ind.pos.distanceTo(camera.position);
       if (d > maxDist) continue;
-      if (this.ray.intersectsSphere(this.sphere) && d < bestD) { bestD = d; best = e.ind; }
+      if (!this.ray.intersectsSphere(this.sphere)) continue;
+      const off = Math.sqrt(this.ray.distanceSqToPoint(a)) / r;
+      const score = off + d / maxDist * 0.25;
+      if (score < bestScore) { bestScore = score; best = e.ind; }
     }
     return best;
   }

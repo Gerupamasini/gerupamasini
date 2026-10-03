@@ -68,7 +68,7 @@ export class Observation {
     // start from the player's eye, pulled in to a sensible distance along the same direction
     const dir = this.tmp.copy(this.camera.position).sub(anchor);
     dir.y = Math.max(dir.y, 0.1 * dir.length());
-    dir.setLength(Math.min(Math.max(len * 5, 0.35), controls.maxDistance));
+    dir.setLength(Math.min(ind.species.model.observeDistance_m ?? Math.max(len * 5, 0.35), controls.maxDistance));
     // a buried animal shows only its siphons: start close and looking down at the sand
     if (ind.species.locomotion === 'burrow') {
       dir.y = Math.max(dir.y, 1.4 * Math.hypot(dir.x, dir.z));

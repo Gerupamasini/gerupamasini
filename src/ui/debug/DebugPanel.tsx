@@ -59,7 +59,18 @@ export function DebugPanel({ app }: { app: App }) {
         <button onClick={() => app.teleport('creek')}>水路</button>
         <button onClick={() => app.teleport('pool')}>潮だまり</button>
         <button onClick={() => app.forceSpawn()}>周囲に生物</button>
+        <button onClick={() => app.teleport('crabs')}>カニの群れ</button>
       </div>
+      {app.crabs && (() => {
+        const cs = app.crabs.stats();
+        return (
+          <div class="debug-row seg">
+            <span>コメツキガニ</span>
+            <span class="dim small">巣穴 {cs.burrows} / 個体 {cs.live}（地表 {cs.out}） / 砂団子 {cs.pellets}</span>
+            <label><input type="checkbox" checked={app.crabs.seasonOverride !== null} onChange={(e) => app.setCrabSeason((e.target as HTMLInputElement).checked ? 190 : null)} /> 繁殖期にする</label>
+          </div>
+        );
+      })()}
       <div class="debug-row dim small">
         draw {d.stats.calls} / tris {(d.stats.tris / 1000).toFixed(0)}k / 生物 {d.stats.creatures}（表示 {d.stats.visible}、近距離 {d.stats.lod1}） / {hud.fps} fps / 次の満干 {hud.extrema.slice(0, 2).map((e) => `${e.kind === 'high' ? '満' : '干'} ${formatJst(e.t)}`).join(' ')}
       </div>

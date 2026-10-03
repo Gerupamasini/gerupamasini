@@ -16,6 +16,7 @@ import { FPSController } from '../player/FPSController';
 import { NetView, NET_LAYER, SWEEP_RADIUS } from '../player/NetView';
 import { ShovelView } from '../player/ShovelView';
 import { ClamField } from '../world/ClamField';
+import { ScopimeraColony } from '../creatures/kometsukigani/ScopimeraColony.js';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 import { instantiateModel } from '../creatures/models/ModelLoader';
@@ -37,7 +38,8 @@ const HUD_HZ = 4;
 const MARKER_HZ = 10;
 const AUTOSAVE_SEC = 60;
 
-export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool';
+export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool' | 'crabs';
+const CRAB_SPECIES = 'scopimera_globosa';
 
 export class App {
   readonly renderer: GameRenderer;
@@ -65,6 +67,12 @@ export class App {
   targetClam = -1;
   /** a clam built in full for observation */
   private watchedClam: { index: number; id: string } | null = null;
+  /** the コメツキガニ of the flat: burrows, pellets, the live crabs near the player */
+  crabs: ScopimeraColony | null = null;
+  /** the crab burrow under the reticle (index into the colony), or -1 */
+  targetBurrow = -1;
+  private birdsAcc = 0;
+  private birds: Vector3[] = [];
   world: World | null = null;
   player: FPSController | null = null;
   creatures: CreatureSystem | null = null;
@@ -265,6 +273,17 @@ export class App {
       this.shovel.setHeld(this.tool === 'shovel');
       this.clams = new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
       this.world.scene.add(this.clams.group);
+      const crabSp = this.data.species.get(CRAB_SPECIES);
+      if (crabSp) {
+        const q = this.settings.quality === 'low' ? 0 : this.settings.quality === 'high' ? 2 : 1;
+        this.crabs = new ScopimeraColony({
+          scene: this.world.scene, terrain: this.world.terrain, habitat: this.world.habitat, tide: this.world.tide, creatures: this.creatures,
+          species: crabSp, removed: this.removed, seed: hashInts(map.id.length * 53, 1003), quality: q, shadows: this.renderer.preset.shadows,
+        });
+        // the creature system let one of the colony's crabs go (captured, or a time jump cleared the flat)
+        this.creatures.events.on('despawn', (ind) => { if (ind.managed === 'colony') this.crabs?.forget(ind.id); });
+        this.crabs.prewarm(this.renderer.gl, this.camera);
+      }
       this.capture.onSwung = (caught) => this.onToolSwung(caught);
       this.capture.onResolved = (caught) => this.onCaptureResolved(caught);
       this.applyHeroSetting();
@@ -274,7 +293,7 @@ export class App {
     }
     this.tank.deactivate();
     // away long enough for the tide to have moved: the population is rebuilt for the water as it is now
-    if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.creatures?.resetPopulation(null);
+    if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.resetLife(null);
     this.leftFieldAt = 0;
     this.setMode('field');
     this.lastFrame = performance.now();
@@ -329,7 +348,7 @@ export class App {
     const now = this.clock.nowReal();
     if (Math.abs(targetGameMs - now) > TICKET_RANGE_DAYS * 86400000) return false;
     this.clock.useTicket(targetGameMs);
-    this.creatures?.resetPopulation(this.lockedId);
+    this.resetLife(this.lockedId);
     if (this.save) this.save.ticket.usedCount++;
     toast(`${t('ticket.active')}: ${formatJst(targetGameMs, { date: true })}`, 'info');
     this.requestSave();
@@ -338,8 +357,19 @@ export class App {
 
   cancelTicket(): void {
     this.clock.cancelTicket();
-    this.creatures?.resetPopulation(this.lockedId);
+    this.resetLife(this.lockedId);
     this.requestSave();
+  }
+
+  /** The water or the clock jumped: everyone but the watched animal is placed again for the flat as it is now. */
+  private resetLife(lockedId: string | null): void {
+    this.creatures?.resetPopulation(lockedId);
+    this.crabs?.reset(lockedId);
+  }
+
+  /** debug: force the breeding season for the crabs (waving) or let the calendar decide */
+  setCrabSeason(doy: number | null): void {
+    if (this.crabs) this.crabs.seasonOverride = doy;
   }
 
   // ------------------------------------------------------------------ debug
@@ -356,14 +386,14 @@ export class App {
 
   setDebugTime(ms: number | null): void {
     this.clock.setDebugTime(ms);
-    this.creatures?.resetPopulation(this.lockedId);
+    this.resetLife(this.lockedId);
     ui.debugState.value = { ...ui.debugState.value, timeOverride: ms !== null };
     this.curveCacheMin = -1;
   }
 
   setTideOverride(level: number | null): void {
     if (this.world) this.world.tideOverride = level;
-    this.creatures?.resetPopulation(this.lockedId);
+    this.resetLife(this.lockedId);
     ui.debugState.value = { ...ui.debugState.value, tideOverride: level };
   }
 
@@ -394,6 +424,7 @@ export class App {
       case 'runnel': x = 0; z = -8 + 8 * Math.sin(0); break;
       case 'creek': x = -70 + 25 * Math.sin(100 / 70) + 9; z = 0; yaw = Math.PI / 2; break;
       case 'pool': { const pool = w.habitat.pools[0]; if (pool) { x = pool.cx + 6; z = pool.cz; yaw = Math.PI / 2; } break; }
+      case 'crabs': { const c = this.crabs?.nearestPatch(p.position.x, p.position.z); if (c) { x = c[0]; z = c[1] - 1.6; yaw = Math.PI; } break; }
       default: break;
     }
     p.setPose(x, z, yaw, -0.15);
@@ -495,6 +526,7 @@ export class App {
     const abx = b.x - a.x, abz = b.z - a.z, abLen2 = Math.max(1e-6, abx * abx + abz * abz);
     for (const ind of creatures.individuals) {
       if (!ind.species.collectable || ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
+      if (creatures.driverOf(ind.id)?.hidden) continue;   // down its burrow
       if (ind.pos.distanceTo(player.position) > 3) continue;
       // distance from the animal to the hoop's path (in the ground plane), and how high it sits above the bed
       const u = Math.max(0, Math.min(1, ((ind.pos.x - a.x) * abx + (ind.pos.z - a.z) * abz) / abLen2));
@@ -544,9 +576,21 @@ export class App {
     ShovelView.digPoint(this.camera, (x, z) => world.terrain.heightAt(x, z), p);
     if (world.habitat.depthAt(p.x, p.z) > 0.15) { toast(t('hud.tooDeepToDig'), 'warn'); return; }
     const nowSec = this.clock.nowGame() / 1000;
+    const caught: Individual[] = [];
+    const full = this.encyclopedia.caseItems.value.length >= this.encyclopedia.caseMax;
+    // a コメツキガニ burrow under the blade: the crab at home in it comes up with the sand
+    const crab = this.crabs?.burrowNear(p.x, p.z, 0.06) ?? -1;
+    if (crab >= 0 && this.crabs) {
+      const ind = this.crabs.dig(p.x, p.z, 0.06);
+      if (ind) { if (full) toast(t('capture.caseFull'), 'warn'); else caught.push(ind); }
+      this.capture.start(tool, caught);
+      this.shovel?.show();
+      this.setMode('capture');
+      return;
+    }
+    this.crabs?.startleAt(p, 1.2, 0.9);
     const k = clams.dig(p.x, p.z, tool.params.radius ?? 0.14, nowSec);
     clams.startle(p.x, p.z, 1.5, nowSec);
-    const caught: Individual[] = [];
     const sp = this.data.species.get('ruditapes_philippinarum');
     if (k >= 0 && sp) {
       if (this.encyclopedia.caseItems.value.length >= this.encyclopedia.caseMax) toast(t('capture.caseFull'), 'warn');
@@ -809,6 +853,7 @@ export class App {
       this.net?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'hand_net' ? this.capture.state.value : null, world.tideLevel);
       this.shovel?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'shovel' ? this.capture.state.value : null);
       this.clams?.update(player.position, this.worldVisible() ? dt : 0, gameMs / 1000, (x, z) => world.habitat.waterAt(x, z));
+      if (this.crabs) this.updateCrabs(this.worldVisible() ? dt : 0, gameMs);
       creatures.update({
         dt: this.worldVisible() ? dt : 0, gameMs, playerPos: player.position, camera: this.camera, simScale: this.simScale,
         tod: world.tod, season: world.season, tidePhase: this.tidePhase(), lockedId: this.lockedId,
@@ -833,6 +878,26 @@ export class App {
     if (this.saveAcc >= AUTOSAVE_SEC) { this.saveAcc = 0; void this.writeSave(); }
     if (this.save) this.save.stats.playSeconds += dt;
     this.input.endFrame();
+  }
+
+  /** The crab colony's frame: perception inputs (player, birds, sun, tide) and the observation's close shadows. */
+  private updateCrabs(dt: number, gameMs: number): void {
+    const world = this.world!, player = this.player!, creatures = this.creatures!, crabs = this.crabs!;
+    this.birdsAcc += dt;
+    if (this.birdsAcc > 0.25) {
+      this.birdsAcc = 0;
+      this.birds = creatures.individuals.filter((i) => i.species.taxon.group === 'bird').map((i) => i.pos);
+    }
+    crabs.update({
+      dt, gameMs, simScale: this.simScale, camera: this.camera, player: player.position, eyeHeight: this.camera.position.y - player.position.y,
+      sunDir: world.sunDir, sunElevation: world.sunElevation, tideLevel: world.tideLevel, tideRate: world.tideRate, lockedId: this.lockedId, birds: this.birds,
+    });
+    // watching a crab up close: the sun's shadow map is pulled in around it, so legs cast real shadows on the sand
+    const locked = this.lockedId ? creatures.get(this.lockedId) : null;
+    const focus = this.mode === 'observe' && !!locked && locked.species.id === CRAB_SPECIES && this.renderer.preset.shadows;
+    crabs.shadowFocus = focus;
+    crabs.pellets.setShadows(focus);
+    world.sky.focusShadow(focus ? creatures.anchorOf(this.lockedId!) : null, 0.16);
   }
 
   /** The タモ over the finished frame: its own depth, no water on it, never cut by the ground. */
@@ -888,7 +953,7 @@ export class App {
       if (this.tmp.z > 1 || Math.abs(this.tmp.x) > 1.05 || Math.abs(this.tmp.y) > 1.05) continue;
       out.push({
         id: ind.id, x: ((this.tmp.x + 1) / 2) * w, y: ((1 - this.tmp.y) / 2) * h - 8,
-        text: `${ind.species.names.ja} ${d.toFixed(1)}m L${ind.lod}${ind.sex === 'm' ? '♂' : '♀'}`,
+        text: `${ind.species.names.ja} ${d.toFixed(1)}m L${ind.lod}${ind.sex === 'm' ? '♂' : '♀'}${c.driverOf(ind.id)?.debugText ? ` ${c.driverOf(ind.id)!.debugText}` : ''}`,
         kind: ind.species.taxon.group,
       });
       if (out.length >= 80) break;
@@ -916,15 +981,19 @@ export class App {
       // the net: something catchable where the hoop would go through the water
       const inReach = this.tool === 'hand_net' && this.netZoneHits().length > 0;
       const toolHint = this.tool === 'hand_net' ? (inReach ? `[E] ${t('hud.swing')}` : '') : `[E] ${t('hud.dig')}`;
-      // a clam's siphon holes under the reticle
+      // a clam's siphon holes under the reticle, or a crab's burrow
       this.targetClam = -1;
+      this.targetBurrow = -1;
       if (this.clams && this.world) {
         const g = this.groundUnderReticle(3.5);
         if (g) this.targetClam = this.clams.nearest(g.x, g.z, 0.16);
+        if (g && this.crabs) this.targetBurrow = this.crabs.burrowNear(g.x, g.z, 0.05);
       }
       if (this.target) {
         const sp = this.target.species;
         prompt = `${sp.names.ja}   [F] ${t('hud.observe')}${sp.collectable ? (toolHint ? `   ${toolHint}` : '') : `   ${t('hud.observeOnly')}`}`;
+      } else if (this.targetBurrow >= 0) {
+        prompt = `${t('crab.burrow')}   ${this.tool === 'shovel' ? `[E] ${t('hud.dig')}` : `[2] ${this.data.tools.get('shovel')?.ja ?? ''}`}`;
       } else if (this.targetClam >= 0) {
         prompt = `${t('clam.siphon')}   [F] ${t('hud.observe')}   ${this.tool === 'shovel' ? `[E] ${t('hud.dig')}` : `[2] ${this.data.tools.get('shovel')?.ja ?? ''}`}`;
       } else if (toolHint) prompt = toolHint;

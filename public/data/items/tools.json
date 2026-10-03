@@ -20,13 +20,14 @@
       "ja": "スコップ",
       "type": "dig",
       "targets": [
-        "mollusc"
+        "mollusc",
+        "crustacean"
       ],
       "minigame": "none",
       "params": {
         "radius": 0.14
       },
-      "description": "砂を掘ってアサリなどの貝をとる。砂の上に並んだ水管の穴を狙って掘る。"
+      "description": "砂を掘ってアサリなどの貝をとる。砂の上に並んだ水管の穴を狙って掘る。コメツキガニの巣穴を掘れば、中にいるカニも出てくる。"
     }
   ]
 }

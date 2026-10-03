@@ -3,7 +3,7 @@ import type { Habitat } from '../world/Habitat';
 import type { TimeOfDay } from '../world/Sun';
 import type { Season } from '../core/Time';
 import { Rng, hashInts } from '../core/Rng';
-import { generateIndividual, type Individual, minDepthFor } from './Individual';
+import { generateIndividual, isAquatic, type Individual, minDepthFor } from './Individual';
 
 export interface SpawnEnv {
   tod: TimeOfDay;
@@ -80,7 +80,7 @@ export class Spawner {
         const d = Math.hypot(cx - px, cz - pz);
         if (d > SPAWN_RADIUS || d < minDist) continue;
         for (const sp of this.speciesList) {
-          if (sp.locomotion === 'burrow') continue;   // buried bivalves are placed by the clam field
+          if (sp.locomotion === 'burrow' || sp.placement === 'world') continue;   // clam beds, crab colonies: placed by their world systems
           if (occupied.has(`${sp.id}:${cell}`)) continue;
           for (let ri = 0; ri < sp.spawn.length; ri++) {
             const rule = sp.spawn[ri];
@@ -109,7 +109,7 @@ export class Spawner {
                 x = cx + rng.range(-cs / 2, cs / 2);
                 z = cz + rng.range(-cs / 2, cs / 2);
                 const s = h.sample(x, z, env.gameMs);
-                const aquatic = sp.locomotion === 'swim' || sp.taxon.group === 'crustacean';
+                const aquatic = isAquatic(sp);
                 // aquatic animals need water over their backs: the rule's floor or the size-based minimum, whichever is more
                 const need = aquatic ? Math.max(rule.depth_m?.[0] ?? 0, minDepthFor(sp, rule.length_mm ? rule.length_mm[1] : sp.size.length_mm.mean)) : 0;
                 ok = rule.depth_m ? s.depth >= Math.max(rule.depth_m[0], need) && s.depth <= rule.depth_m[1] : aquatic ? s.depth >= need : s.exposed;
@@ -152,7 +152,7 @@ export class Spawner {
     for (const ind of live) {
       const d = Math.hypot(ind.pos.x - px, ind.pos.z - pz);
       if (d > DESPAWN_RADIUS) { out.push(ind); continue; }
-      if (ind.pitId !== undefined) continue;   // pit residents stay as long as the player is around
+      if (ind.pitId !== undefined || ind.managed) continue;   // pit residents stay as long as the player is around; world systems manage their own
       const rule = ind.species.spawn[ind.ruleIndex];
       const cell = this.habitat.coarseIndex(ind.pos.x, ind.pos.z);
       const matches = rule ? this.ruleMatches(rule, cell, env) || ind.species.spawn.some((r) => this.ruleMatches(r, cell, env)) : true;

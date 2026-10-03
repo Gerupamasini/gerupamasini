@@ -28,6 +28,10 @@ export const SpeciesSchema = z.object({
   names: z.object({ ja: z.string(), sci: z.string(), en: z.string().optional() }),
   taxon: z.object({ group: TaxonGroupSchema, family: z.string().optional() }),
   locomotion: LocomotionSchema,
+  /** lives under water (default: swimmers and crustaceans); false for semi-terrestrial crabs on the exposed flat */
+  aquatic: z.boolean().optional(),
+  /** who puts individuals on the flat: the spawner (default) or a world system (clam beds, crab colonies) */
+  placement: z.enum(['spawner', 'world']).default('spawner'),
   collectable: z.boolean(),
   protected: z.boolean().default(false),
   model: z.object({
@@ -38,6 +42,8 @@ export const SpeciesSchema = z.object({
     modelLength_mm: z.number().positive(),
     /** beyond this distance from the player the animal has no view (default from its size) */
     viewDistance_m: z.number().positive().optional(),
+    /** observation: the camera's starting distance (default from the animal's length) */
+    observeDistance_m: z.number().positive().optional(),
     driver: z.string().optional(),
     clips: z.object({ idle: z.string().default('Idle'), move: z.string().default('Move'), special: z.array(z.string()).default([]) }).default({ idle: 'Idle', move: 'Move', special: [] }),
   }),

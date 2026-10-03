@@ -169,5 +169,7 @@
   "zukan.found": "発見済み",
   "tidetable.sub": "東京 ・ 気象庁の調和定数による予測",
   "ticket.pick": "日時を選ぶ",
-  "menu.settings": "設定"
+  "menu.settings": "設定",
+  "crab.burrow": "コメツキガニの巣穴",
+  "crab.burrowOccupied": "コメツキガニの巣穴（中にいる）"
 }

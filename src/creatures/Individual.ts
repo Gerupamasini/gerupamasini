@@ -55,6 +55,15 @@ export interface Individual {
   pitId?: number;
   /** game time at which the water under an aquatic animal became too shallow (0 = fine) */
   strandedSince: number;
+  /** placed and removed by a world system (e.g. 'colony'), not by the spawner */
+  managed?: string;
+  /** the world system's own index for this animal */
+  colonyRef?: number;
+}
+
+/** Whether a species lives under water: its own flag, else swimmers and crustaceans. */
+export function isAquatic(species: SpeciesDef): boolean {
+  return species.aquatic ?? (species.locomotion === 'swim' || species.taxon.group === 'crustacean');
 }
 
 /** The least water an aquatic animal is placed in or will stay in: about 15 % of its length, never under 1.5 cm. */

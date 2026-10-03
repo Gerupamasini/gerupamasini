@@ -52,6 +52,12 @@ export interface Driver {
   anchor(): Vector3;
   /** mouth / gill opening for hero interior materials (species that have them) */
   readonly openings?: { mouth: number; gill: number };
+  /** out of sight (e.g. down its burrow): not pickable, not catchable */
+  readonly hidden?: boolean;
+  /** wants an update every frame whatever its distance tier (procedural gaits that plant feet) */
+  readonly everyFrame?: boolean;
+  /** a line of state for the debug markers */
+  readonly debugText?: string;
   dispose(): void;
 }
 
