@@ -97,6 +97,9 @@ export const bodySculpt = {
     // ear-covert / cheek plumage behind and below the eye: the head ≈ half the body width from the front
     { type: 'ellipsoid', name: 'cheekL', c: [10.5, 92.0, 20.8], r: [9.5, 9.5, 11.5], k: 4, role: 'head' },
     { type: 'ellipsoid', name: 'cheekR', c: [-10.5, 92.0, 20.8], r: [9.5, 9.5, 11.5], k: 4, role: 'head' },
+    // v4.1: broad, round crown behind and above the eyes — from the front a wide cap over the full cheeks, the eyes
+    // at the widest point of the head (the user's front photo, p013, p063); kept inside the side profile
+    { type: 'ellipsoid', name: 'crown', c: [0.0, 97.0, 20.0], r: [15.0, 6.0, 7.5], k: 4, role: 'head' },
     // fore-neck and upper breast round the base of the neck (neck fill): no neck seen from any side
     { type: 'ellipsoid', name: 'collar', c: [0.0, 80.95, 17.87], r: [24.34, 12.12, 19.71], role: 'neck' },
     // PRIMS-END
@@ -135,12 +138,16 @@ export const bodySculpt = {
   // (v4: the folded wing sits high on the broad body — from the front only its upper edge shows at the shoulders,
   // the white flanks below it form the widest part of the outline; spec v4 §10.1). Read by the plumage shader
   // (kpUpperEdge), the fringe shell, the wing-fold solver (secondary tips) and the far impostor.
-  wingEdge: [[20, 76], [5, 72], [-10, 68], [-25, 65.5], [-40, 64.5], [-55, 64]],
-  // Breast-side patch (left; mirrored): its centre line on the outline, top to bottom (mm). v4: from the side of the
-  // neck under the ear coverts down and inward over the front of the broad breast, ending 9 mm off the midline —
-  // from the front the two frame the white face and throat as an almost closed ring (the user's front photo, p013,
-  // p063); the grey-brown upperparts begin behind it (kpPatchZ). Shaders: kpPlumage; wing-fold solver: underPatch.
-  breastPatch: [[20.2, 91.7, 17.1], [22.4, 86.8, 24.8], [21.6, 82.4, 29], [17.7, 76.4, 32.4], [13.4, 71, 33.5], [8.4, 67.6, 34.1]],
+  wingEdge: [[20, 76], [5, 71.5], [-10, 66], [-25, 63], [-40, 62], [-55, 62]],
+  // Breast-side patch (left; mirrored): its centre line on the outline, top to bottom (mm). v4.1 (validation §AC): a
+  // horseshoe collar round the white face and throat, as in the user's front photo (p013, p012): from under the ear
+  // coverts behind the cheek straight down the side of the throat (x ≈ 20–22, thickest there), then turning in under
+  // the throat across the upper breast, nearly meeting its mirror 2.5 mm off the midline. The grey-brown shoulder
+  // begins right behind it (kpPatchZ). Shader: kpPlumage (width profile there).
+  breastPatch: [[21.8, 89.5, 21.5], [21.3, 85.5, 27.5], [20, 80, 31], [18, 75, 32], [14.8, 72, 33.1], [10.5, 69.4, 34.1], [6, 68.2, 34.6], [2.5, 67.8, 34.8]],
+  // The folded wing's bend goes in under the breast-side plumage here (wing-fold solver underPatch): the v4 patch line,
+  // kept for the wing when the patch itself became the horseshoe above.
+  wingTuck: [[20.2, 91.7, 17.1], [22.4, 86.8, 24.8], [21.6, 82.4, 29], [17.7, 76.4, 32.4], [13.4, 71, 33.5], [8.4, 67.6, 34.1]],
   // head zone (bodyMesh.headness, the shaders' kpHeadness): rigid with the head inside, blending into the neck sleeve
   // over the outer 0.35 — wide enough for the full cheeks (x ±18.7)
   headZone: { c: [0, 93.5, 24], r: [17, 13, 15.5] },
@@ -170,7 +177,7 @@ export const plumage = {
       mantleDark: '#72665c',
       fringe: '#bda88e',
       fringeMix: 0.12, // faint: the closed wing of the breeding male reads smooth (p006, p012, p070)
-      breastPatch: '#1f1c1b',
+      breastPatch: '#271f1b', // dark brown-black (the user's front photo, p012)
       underparts: '#e9e8e3',
       flightDark: '#3a3632',
       flightMid: '#5b5046',
