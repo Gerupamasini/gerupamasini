@@ -8,15 +8,16 @@ const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const deg = Math.PI / 180;
 
-// Spread bind moved by (0, +13, −14) onto the relaxed body (body_shape_spec.md §10.2): folded (FOLD_TARGET)
-// the shoulder is at (10, 77, 6), the elbow (11, 67, −28) and the carpal joint (16, 71, 16), under the rear
-// lower end of the breast-side patch.
+// Spread bind (v4, body_shape_spec.md v4 §10.2): the wing is rooted high on the side of the broad body — folded
+// (FOLD_TARGET) the shoulder is at (18.5, 83, 7.4), the elbow (22, 73.5, −27) and the carpal joint (26, 76, 17.3),
+// under the breast-side plumage, so the closed wing lies on the upper flank and from the front only its upper edge
+// shows at the shoulders. Bone lengths as before (humerus 35.4, ulna 44.4, hand 26.3 mm).
 export const WING = {
-  shoulder: [7.5, 76.5, 7],
-  humerus: [10, 77, 6],
-  elbow: [45, 77, 1.5], // humerus 35.4 mm
-  wrist: [89, 77, 7.5], // forearm (ulna) 44.4 mm
-  handTip: [115, 77, 3.5], // carpometacarpus + digits 26.3 mm
+  shoulder: [16, 82.5, 8.4],
+  humerus: [18.5, 83, 7.4],
+  elbow: [53.5, 83, 2.9], // humerus 35.4 mm
+  wrist: [97.5, 83, 8.9], // forearm (ulna) 44.4 mm
+  handTip: [123.5, 83, 4.9], // carpometacarpus + digits 26.3 mm
 };
 
 // Direction in the wing plane: angle measured from +X (distal) toward −Z (trailing edge).
@@ -202,11 +203,12 @@ export function buildScapularLayout() {
   const out = [];
   // two rows over the relaxed mantle (spec §10.3)
   const rows = [
-    // (the front of the cape starts behind the base of the neck — z −2 / +1 instead of +5 / +7: rooted further
-    // forward the first feathers grew out of the neck plumage itself (neck-sleeve position 0.2–0.65), and riding the
-    // skin there they were dragged round by every turn of the head, validation §Y)
-    { x0: 6.5, x1: 9.5, z0: -2, z1: -23, n: 6, len: [15, 21], w: 8.8, out: 0.2, y: 88 },
-    { x0: 11.5, x1: 14.5, z0: 1, z1: -17, n: 5, len: [13, 18], w: 8.0, out: 0.42, y: 85.5 },
+    // (v4: three rows over the broad back, from the midline out to the folded wing's upper edge at |x| ≈ 20; the front
+    // of the cape starts behind the base of the neck — rooted further forward the first feathers grew out of the neck
+    // plumage itself and riding the skin there were dragged round by every turn of the head, validation §Y)
+    { x0: 4.5, x1: 7, z0: -2, z1: -24, n: 6, len: [15, 21], w: 9, out: 0.15, y: 89 },
+    { x0: 10.5, x1: 13, z0: 0, z1: -22, n: 6, len: [14, 20], w: 8.8, out: 0.3, y: 87 },
+    { x0: 16, x1: 18.5, z0: 2, z1: -17, n: 5, len: [13, 18], w: 8.0, out: 0.45, y: 85 },
   ];
   rows.forEach((r, ri) => {
     for (let side = 0; side < 2; side++) {
@@ -225,7 +227,7 @@ export function buildScapularLayout() {
           innerVane: 0.5,
           curve: 0.12,
           index: i,
-          layer: ri === 0 ? 2 - t : 1 - t,
+          layer: (2 - ri) - t,
         });
       }
     }

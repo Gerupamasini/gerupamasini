@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WING } from './featherLayout.js';
 import { projectToSurface } from './sdf.js';
+import { wingEdgeY } from './bodyMesh.js';
 import { featherOffset, wingFrame, LOD2_CARD, rowT } from './feathers.js';
 import { COVERT_ARM } from './skeleton.js';
 import { frameQuat } from '../../../core/math.js';
@@ -34,14 +35,27 @@ const smooth01 = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+/** Half-width (mm) of the outline at height y, z (bisection; ≥ 4 behind the rump, where the body has ended). */
+function onSide(sdf, y, z) {
+  if (sdf(0, y, z) > 0) return 4;
+  let lo = 0;
+  let hi = 60;
+  for (let i = 0; i < 24; i++) {
+    const m = (lo + hi) / 2;
+    if (sdf(m, y, z) < 0) lo = m;
+    else hi = m;
+  }
+  return Math.max(4, lo);
+}
 const Y = new THREE.Vector3(0, 1, 0);
 
-// folded arm bone directions (x) and dorsal hints (y): shoulder (10, 77, 6) → elbow (11, 67, −28) → carpal joint
-// (16, 71, 16) → hand tip (16.5, 67.8, −11); the folded wing falls ≈9° toward the rear (spec §10.2)
+// folded arm bone directions (x) and dorsal hints (y, ≈ the outward body normal over the bone): shoulder
+// (18.5, 83, 7.4) → elbow (22, 73.5, −27) → carpal joint (26, 76, 17.3) → hand tip (30, 73, −8.5) — high on the side of
+// the broad v4 body (spec v4 §10.2)
 export const FOLD_TARGET = {
-  humerus: { x: [0.028, -0.282, -0.959], y: [0.8, 0.5, 0.2] },
-  forearm: { x: [0.115, 0.092, 0.989], y: [0.8, 0.6, 0] },
-  hand: { x: [0.02, -0.12, -0.99], y: [0.55, 0.83, 0] },
+  humerus: { x: [0.098, -0.265, -0.959], y: [0.55, 0.82, 0.1] },
+  forearm: { x: [0.09, 0.056, 0.994], y: [0.78, 0.6, 0] },
+  hand: { x: [0.152, -0.114, -0.982], y: [0.73, 0.68, 0] },
 };
 
 function armFold() {
@@ -57,7 +71,7 @@ function armFold() {
 // Folded wing raised off the flank as a whole (preening under it, scratching over it; animator): the shoulder
 // turns about a hinge along the body's long axis on the wing's dorsal edge (left wing, mm). Every feather
 // gets a re-aim per raise step so it stays clear of the flank all the way (raiseAt).
-export const WING_RAISE = { hinge: [8, 84, -12], steps: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3] };
+export const WING_RAISE = { hinge: [17, 84, -12], steps: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3] };
 // mm: how much the flank swells under the raised wing when preening (fluff 0.7: 2.5 mm per unit of fluff on the
 // sides beyond the rest fluff 0.15, bodyMesh.bodyDisplacementMasks)
 const RAISE_FLUFF = 1.4;
@@ -481,11 +495,14 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
       // breast-side patch) run steeply down and back, the inner ones nearly level, so the wing's lower edge
       // (s1's outer vane, then the tips) runs 1–2 mm below the brown/white boundary of the photos (spec §10.1),
       // lowest at z −20…−35, and rises toward the tail
+      // (v4: the tips 1.5 mm under the visible edge bodySculpt.wingEdge, on the outline at that height — onSide)
       const sTip = (j) => {
         const u = (j - 1) / 10;
-        return V([12, 55.5 + 8 * u ** 1.6 - SEC_DROP * Math.sin(Math.PI * u), -23 - 37 * u]);
+        const z = -23 - 37 * u;
+        const y = wingEdgeY(z) - 1.5 + 1.5 * u ** 1.6;
+        return V([onSide(sdf, y, z), y, z]);
       };
-      const guess = f.type === 'tertial' ? V([[10.5, 65.5, -53], [8, 67, -52], [5.5, 68, -50.5]][f.index - 1]) : f.type === 'secondary' ? sTip(f.index) : base.clone().addScaledVector(dirHint, L);
+      const guess = f.type === 'tertial' ? V([[16, 64.5, -53], [13, 66.5, -52], [10, 67.5, -50.5]][f.index - 1]) : f.type === 'secondary' ? sTip(f.index) : base.clone().addScaledVector(dirHint, L);
       const [pp, nn] = projectToSurface(sdf, guess.x, guess.y, guess.z);
       const lift = f.type === 'alula' ? -0.6 : f.type === 'lesserCovert' && f.bone === 'hand' ? 1.2 : f.type === 'lesserCovert' ? 2.6 : f.type === 'tertial' ? 3.4 : 2.2 + (order[f.name] ?? 0) * 0.05;
       const surfTip = V(pp).addScaledVector(V(nn), lift);

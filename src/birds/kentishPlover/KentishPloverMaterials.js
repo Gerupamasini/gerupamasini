@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { plumage as PLUMAGE, animation as ANIM } from './KentishPloverConfig.js';
-import { FLUFF_REST } from './anatomy/bodyMesh.js';
+import { plumage as PLUMAGE, animation as ANIM, bodySculpt as SCULPT } from './KentishPloverConfig.js';
+import { FLUFF_REST, wingEdgeGLSL } from './anatomy/bodyMesh.js';
 import { CONFORM_FOLD } from './anatomy/wingFold.js';
 
 // breathing displacement amplitude (m): fractional expansion × body half-width
@@ -10,6 +10,10 @@ const ANIM_BREATH = (ANIM.breathAmp * 0.021).toFixed(6);
 // REST space (mm), so markings stay crisp at any distance and follow the skin when it deforms.
 // Evidence for each marking: docs/research.md §3 (S5, S6, S7, S10); colours are estimates (C–D).
 
+// head zone (bodyMesh.headness): centre and radii as GLSL vec3 literals
+const glv = (a) => `vec3(${a.map((v) => v.toFixed(2)).join(', ')})`;
+const HZ_C = glv(SCULPT.headZone.c);
+const HZ_R = glv(SCULPT.headZone.r);
 const srgb = (hex) => new THREE.Color(hex); // THREE.Color(hex) converts sRGB → linear working space
 
 // Palette colours are photo APPEARANCES: white-balanced medians in which the most sunlit white is linear 0.82
@@ -75,7 +79,7 @@ float kpNoiseP(vec2 p, float per) {
 // mirrors bodyMesh.bodyDisplacementMasks / headness
 const GLSL_FLUFF = /* glsl */ `
 float kpFluffMM(vec3 p, vec3 n) {
-  vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
+  vec3 e = (p - ${HZ_C}) / ${HZ_R};
   float head = clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - clamp((83.0 - p.y) / 5.0, 0.0, 1.0));
   return (2.5 + 4.5 * smoothstep(-0.2, -0.9, n.y) + (1.5 - 1.8 * smoothstep(5.0, -5.0, p.z)) * smoothstep(0.2, 0.9, n.y)) * (1.0 - 0.7 * head) * (1.0 - 0.8 * smoothstep(-25.0, -55.0, p.z)) * (1.0 - 0.6 * smoothstep(15.0, 30.0, p.z));
 }
@@ -109,7 +113,7 @@ float sdSeg2(vec2 p, vec2 a, vec2 b) {
 // Head membership: the enlarged head ellipsoid and throat cut of bodyMesh.headness (skinning), sharpened to
 // a zone (body_shape_spec.md §17.2)
 float kpHeadness(vec3 p) {
-  vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
+  vec3 e = (p - ${HZ_C}) / ${HZ_R};
   float below = clamp((83.0 - p.y) / 5.0, 0.0, 1.0);
   return clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - below);
 }
@@ -174,15 +178,8 @@ vec2 kpLattice(vec3 p) {
 }
 
 // Lower edge of the grey-brown upperparts on the side = visible lower edge of the folded wing, (z, y)
-// (20,63) (5,60) (−10,57) (−25,55.5) (−40,57) (−55,60) (photos, spec §10.1)
-float kpUpperEdge(float z) {
-  if (z > 5.0) return mix(60.0, 63.0, clamp((z - 5.0) / 15.0, 0.0, 1.0));
-  if (z > -10.0) return mix(57.0, 60.0, (z + 10.0) / 15.0);
-  if (z > -25.0) return mix(55.5, 57.0, (z + 25.0) / 15.0);
-  if (z > -40.0) return mix(57.0, 55.5, (z + 40.0) / 15.0);
-  return mix(60.0, 57.0, clamp((z + 55.0) / 15.0, 0.0, 1.0));
-}
-
+// (bodySculpt.wingEdge, spec v4 §10.1)
+${wingEdgeGLSL('kpUpperEdge')}
 // Feathery boundary offset (−1…1) on the body surface: noise in the lattice (circumference, along-flow) mm,
 // streaked along the flow like overlapping feather tips; weaker on the far LODs (no shimmer)
 float kpEdgeN(vec3 p) {
@@ -409,12 +406,13 @@ float kpSleevePattern(float s) {
 
 const GLSL_SHELL_VERT = /* glsl */ `
 attribute float aShell; varying float vShell;
+${wingEdgeGLSL('kpWingEdgeS')}
 ${GLSL_WISP}
 float kpShellMM(vec3 p, vec3 n, float sleeve) {
   // neck-sleeve plumage (aSleeve > 0) is never under the scapulars or the wing: drawn out by a stretched or turned
   // neck it is in view, and without its fringe it showed as a bald pale patch
   float neck = smoothstep(0.04, 0.2, sleeve);
-  vec3 e = (p - vec3(0.0, 93.5, 24.0)) / vec3(13.0, 13.0, 15.5);
+  vec3 e = (p - ${HZ_C}) / ${HZ_R};
   float head = clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - clamp((83.0 - p.y) / 5.0, 0.0, 1.0));
   float under = smoothstep(0.35, -0.3, n.y);       // breast, belly, flanks
   float len = mix(0.3, 0.6, under);
@@ -426,8 +424,8 @@ float kpShellMM(vec3 p, vec3 n, float sleeve) {
   len *= smoothstep(3.6, 5.0, er + max(0.0, 2.0 - es));  // keep the eye opening clear
   len *= smoothstep(-60.0, -50.0, p.z);              // not under the tail coverts
   // nor under the folded wing and the scapulars (they would stand through the gaps between the feathers): above
-  // the wing's lower edge (kpUpperEdge, (z, y) (20, 63) … (−55, 60)) and behind the shoulder
-  float yb = p.z > 5.0 ? mix(60.0, 63.0, clamp((p.z - 5.0) / 15.0, 0.0, 1.0)) : p.z > -25.0 ? mix(55.5, 60.0, (p.z + 25.0) / 30.0) : mix(60.0, 55.5, clamp((p.z + 55.0) / 30.0, 0.0, 1.0));
+  // the wing's lower edge (bodySculpt.wingEdge) and behind the shoulder
+  float yb = kpWingEdgeS(p.z);
   len *= 1.0 - smoothstep(yb - 3.0, yb - 1.0, p.y + n.y * 3.0) * (1.0 - smoothstep(8.0, 16.0, p.z)) * (1.0 - head) * (1.0 - neck);
   return len * (1.0 + 2.6 * kpWisp(p, n));
 }

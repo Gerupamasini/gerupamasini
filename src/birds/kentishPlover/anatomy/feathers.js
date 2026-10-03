@@ -450,11 +450,12 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
       const dl = Math.hypot(...dir);
       dir = dir.map((v) => v / dl);
       const side = [dir[1] * bn[2] - dir[2] * bn[1], dir[2] * bn[0] - dir[0] * bn[2], dir[0] * bn[1] - dir[1] * bn[0]].map((v) => v * f.side);
-      // over the folded-wing shell (wingFold.foldLayer ≤ 1.5 mm) where it lies under them, from |x| ≈ 10 on;
-      // close on the mantle nearer the midline (the back line of the photos, spec §2); row 0 over row 1
+      // over the folded-wing shell (wingFold.foldLayer ≤ 1.5 mm) where it lies under them, from |x| ≈ 17 on (v4: the
+      // wing's upper edge on the broad back); close on the mantle nearer the midline (the back line of the photos,
+      // spec §2); inner rows over outer ones
       const conform = (p) => {
         const [pp, nn] = projectToSurface(sdf, p[0], p[1], p[2]);
-        const lift = 0.5 + f.layer * 0.1 + 1.1 * smooth01(8, 12, Math.abs(pp[0]));
+        const lift = 0.7 + f.layer * 0.1 + 1.1 * smooth01(15, 20, Math.abs(pp[0]));
         return [[pp[0] + nn[0] * lift, pp[1] + nn[1] * lift, pp[2] + nn[2] * lift], nn];
       };
       const m = gb.mark();

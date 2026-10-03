@@ -5,6 +5,7 @@
 // usage: node tools/dev/fitcheck.mjs [out.json] [pose=stand] [t=0.25] [gaze=0.02] [lod=0|1|2|3] [landmarks=lod0.json]
 //   lod 1/2: that detail level posed the same way; lod 3: the far impostor (one static stand, KentishPloverLOD);
 //   landmarks: take bill tip / tail tip (the Frame-A scale) from an LOD0 export, so all levels share one frame
+//   legs=1: keep the legs and feet (front-view photo fit, tools/dev/frontfit.py)
 import * as THREE from 'three';
 import { writeFileSync } from 'node:fs';
 import { KentishPloverModel } from '../../src/birds/kentishPlover/KentishPloverModel.js';
@@ -31,7 +32,7 @@ a.previewAction(pose, Number(opt.t ?? 0.25));
 m.object.updateMatrixWorld(true);
 
 // bare parts: aPart 0 bill, 4 mouth lining are kept; 1 leg skin, 2 claw, 3 feathered thigh, 5 foot pad are legs
-const LEG_PARTS = new Set([1, 2, 3, 5]);
+const LEG_PARTS = opt.legs === '1' ? new Set() : new Set([1, 2, 3, 5]);
 const v = new THREE.Vector3();
 const meshes = {};
 let billTip = null;
