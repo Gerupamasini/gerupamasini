@@ -23,7 +23,8 @@ async function waitServer() {
   }
   throw new Error('server did not start');
 }
-async function waitFrames(page, n, timeoutMs = 180000) {
+// the software renderer can take minutes per frame in the macro observation view: FRAME_TIMEOUT (ms) lifts the wait
+async function waitFrames(page, n, timeoutMs = Number(process.env.FRAME_TIMEOUT ?? 180000)) {
   const start = await page.evaluate(() => window.__higata?.frameCount ?? 0);
   await page.waitForFunction((target) => (window.__higata?.frameCount ?? 0) >= target, start + n, { timeout: timeoutMs });
 }
@@ -37,7 +38,7 @@ try {
     args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl', '--no-sandbox'],
   });
   const page = await browser.newPage({ viewport: { width: Number(process.env.W ?? 1280), height: Number(process.env.H ?? 720) } });
-  page.setDefaultTimeout(240000);
+  page.setDefaultTimeout(Math.max(240000, Number(process.env.FRAME_TIMEOUT ?? 0)));
   const errors = [];
   page.on('pageerror', (e) => { errors.push(`pageerror: ${e.message}`); console.error('pageerror:', e.message, e.stack?.split('\n').slice(0, 3).join(' | ')); });
   page.on('console', (m) => {

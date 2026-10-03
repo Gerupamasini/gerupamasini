@@ -845,6 +845,8 @@ export class ScopimeraColony {
   /** compile the crab, pellet and burrow programs up front (no hitch when the first crab appears) */
   prewarm(gl, camera) {
     const crab = new ScopimeraGlobosa({ seed: 1, sex: 'm', cw_mm: 8 });
+    // the legs' reach tables are shared by every crab: build them now, not on the first crab's first step
+    for (const leg of crab.model.rig.legs) leg.reachTables();
     crab.root.position.copy(camera.position).add(new Vector3(0, -0.3, -0.5));
     for (const m of crab.model.lods) m.visible = true;
     crab.model.setae.visible = true;
