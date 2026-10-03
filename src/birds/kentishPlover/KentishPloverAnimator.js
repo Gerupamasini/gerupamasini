@@ -1271,6 +1271,7 @@ export class KentishPloverAnimator {
     }
     // stretch of the sleeve (its centre line, posed over rest): the body shader keeps the plumage pattern's ends
     this.model.setSleeveStretch?.(len / A0);
+    this.model.setNeckTurn?.(turn);
   }
 
   /** Head pivot (world) the posture and gaze ask for: relative to the ROOT, not the bobbing body (head stabilisation). */

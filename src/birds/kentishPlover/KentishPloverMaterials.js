@@ -101,6 +101,7 @@ uniform vec3 uForehead, uFrontalBar, uCrown, uCrownRear, uNape, uSupercilium, uE
 uniform vec3 uMantle, uMantleDark, uFringe, uBreastPatch, uUnder, uEyeRing, uEyeRingUp, uHeadPat;
 uniform float uMelanin, uWear, uSeed, uDetail, uFluff, uFringeMix, uSubterminal, uCapStreak, uCapDrop;
 varying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;
+uniform float uNeckTurn; varying float vSleeveV;
 `;
 
 const BODY_FRAG_FUNCS = /* glsl */ `
@@ -193,6 +194,10 @@ float kpEdgeN(vec3 p) {
 
 // cap / hood membership of the last kpPlumage call (fine crown streaks, applied with screen-space fading)
 float kpHoodM = 0.0;
+// share of the breast-side patch faded out (body shader: the ring's upper part lies on the neck sleeve; with the head
+// turned far round — preening the back or the tail, tucked asleep — that plumage is drawn round the neck and the
+// patch would sweep across the front as a black X: its feathers part there and the white bases show)
+float kpPatchFade = 0.0;
 
 vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   kpHoodM = 0.0;
@@ -338,6 +343,7 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   float ends = smoothstep(0.0, 0.04, tt) * (1.0 - smoothstep(0.93, 1.0, tt));
   float bEdge = kpEdgeN(p) * 0.55 + jitter * 0.4;
   float patchM = (1.0 - smoothstep(hw - 0.45, hw + 0.45, dPerp + bEdge)) * ends * smoothstep(6.0, 8.0, ax) * (1.0 - smoothstep(5.5, 7.0, q + bEdge * 0.6));
+  patchM *= 1.0 - kpPatchFade;
   // denser black at the top, a little browner where it thins toward the wing bend
   col = mix(col, mix(uBreastPatch, uBreastPatch * 1.6 + 0.012, smoothstep(0.45, 0.95, tc)), patchM);
   return col;
@@ -497,6 +503,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
     uFluff: { value: 0 },
     uBreath: { value: 0 },
     uNapeFill: { value: 0 },
+    uNeckTurn: { value: 0 },
     uSleeveStretch: { value: 1 },
     uBounce: GROUND_BOUNCE,
   };
@@ -504,11 +511,11 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec3 aRest; attribute vec3 aFlow; attribute float aSleeve; attribute vec3 aSleeveG;\nuniform float uFluff; uniform float uBreath; uniform float uNapeFill; uniform float uSleeveStretch;\n${GLSL_SLEEVE_PATTERN}\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;\n${GLSL_FLUFF}\n${GLSL_NAPE}\n${shell ? GLSL_SHELL_VERT : ''}`)
+      .replace('#include <common>', `#include <common>\nattribute vec3 aRest; attribute vec3 aFlow; attribute float aSleeve; attribute vec3 aSleeveG;\nuniform float uFluff; uniform float uBreath; uniform float uNapeFill; uniform float uSleeveStretch;\nvarying float vSleeveV;\n${GLSL_SLEEVE_PATTERN}\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;\n${GLSL_FLUFF}\n${GLSL_NAPE}\n${shell ? GLSL_SHELL_VERT : ''}`)
       .replace(
         '#include <defaultnormal_vertex>',
         `#include <defaultnormal_vertex>
-        vRest = aRest + aSleeveG * kpSleevePattern(aSleeve); vRestN = normal; vFlowR = aFlow;
+        vRest = aRest + aSleeveG * kpSleevePattern(aSleeve); vRestN = normal; vFlowR = aFlow; vSleeveV = aSleeve;
         vec3 kpFl = aFlow;
         #ifdef USE_SKINNING
           kpFl = (skinMatrix * vec4(kpFl, 0.0)).xyz;
@@ -548,6 +555,7 @@ export function createBodyMaterial(pal, individual = {}, detail = 0, { shellOf =
         float kpScallop = smoothstep(0.3, 0.65, kpN.y) * (1.0 - kpHeadZ) * smoothstep(8.0, 2.0, vRest.z) * (1.0 - smoothstep(-13.0, -7.0, kpCollarQ(vRest)));
         vec3 kpRootP = vRest - normalize(vFlowR) * kpFxy.y * kpTr.x * 0.9 * mix(0.15, 1.0, kpScallop);
         float kpJit = (kpRnd - 0.5) * 0.6;
+        kpPatchFade = smoothstep(1.95, 2.4, uNeckTurn) * smoothstep(0.04, 0.2, vSleeveV);
         vec3 kpCol = kpPlumage(kpRootP, kpN, kpJit);
         // Within-feather tone: darker shaft streak & pale fringe on the grey-brown upperparts only.
         float kpLum = dot(kpCol, vec3(0.2126, 0.7152, 0.0722));
