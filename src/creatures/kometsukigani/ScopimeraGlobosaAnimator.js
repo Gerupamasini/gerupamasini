@@ -166,6 +166,22 @@ export class CrabAnimator {
     this.height.reset(this.cmd.height);
   }
 
+  /**
+   * Out of the burrow pose onto the gait, where the crab is: the feet stay planted where the climb left them,
+   * the body keeps its height and offset (they ease to the stance from there) — nothing jumps.
+   */
+  settleFromBurrow() {
+    const body = this.rig.body;
+    this.inBurrow = 0;
+    this.vel.set(0, 0, 0);
+    this.cmd.burrow = null;
+    this.sway.set(body.position.x, 0, body.position.z);
+    this.height.reset(body.position.y);
+    this.pitch.reset(0);
+    this.roll.reset(0);
+    for (const f of this.feet) { f.planted = true; f.since = 0; }
+  }
+
   updateRootMatrix() {
     const root = this.model.root;
     root.position.copy(this.pos);
@@ -286,6 +302,11 @@ export class CrabAnimator {
       this.vel.set(0, 0, 0);
       this.yawRate = 0;
       this.yawLeft = 0;
+      // the root (the shaft's reference) slides onto the mouth — a crab arriving a little off it is drawn in,
+      // never moved in a jump
+      const e = cmd.burrow.e, k = 1 - Math.exp(-14 * dt);
+      this.pos.x += (e.x - this.pos.x) * k;
+      this.pos.z += (e.z - this.pos.z) * k;
     }
     this.speed = Math.hypot(this.vel.x, this.vel.z);
     this.ground = probe.heightAt(this.pos.x, this.pos.z);

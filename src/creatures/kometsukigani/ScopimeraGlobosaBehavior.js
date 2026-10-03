@@ -138,6 +138,7 @@ export class CrabBehavior {
    */
   update(dt, env, anim) {
     this.t += dt;
+    this.dtLast = dt;
     this.timer -= dt;
     const cmd = anim.cmd;
     this.updateDrives(dt, env, anim);
@@ -237,7 +238,11 @@ export class CrabBehavior {
     const b = env.burrow;
     if (!b) return null;
     const c = this._bcmd ??= { e: new Vector3(), axis: new Vector3(), r: 0, d: 0, roll: 0, headUp: 1 };
-    c.e.copy(b.e); c.axis.copy(b.axis); c.r = b.r; c.d = d; c.roll = roll; c.headUp = headUp;
+    c.e.copy(b.e); c.axis.copy(b.axis); c.r = b.r; c.d = d;
+    // how it lies in the shaft (rolled onto a side, head up) changes over a moment, never at once
+    const k = 1 - Math.exp(-7 * (this.dtLast || 1 / 60));
+    c.roll += (roll - c.roll) * k;
+    c.headUp += (headUp - c.headUp) * k;
     return c;
   }
 
@@ -302,7 +307,7 @@ export class CrabBehavior {
       if (this.d <= -0.6) {
         cmd.burrow = null;
         this.d = 0;
-        anim.placeAt(env.burrow.e.x + this.feedDir.x * this.cw * 0.3, env.burrow.e.z + this.feedDir.z * this.cw * 0.3, anim.heading, env.probe);
+        anim.settleFromBurrow();
         this.emit('emerge');
         this.sinceSurface = 0;
         this.setState(STATE.IDLE);
@@ -633,7 +638,7 @@ export class CrabBehavior {
       cmd.eyeFold = 0;
       if (this.d <= -0.6) {
         cmd.burrow = null;
-        anim.placeAt(env.burrow.e.x, env.burrow.e.z, anim.heading, env.probe);
+        anim.settleFromBurrow();
         this.sub = 4;
         const side = this.rand() < 0.5 ? 0 : 1;
         const a = rrange(this.rand, 0, Math.PI * 2);
@@ -752,7 +757,6 @@ export class CrabBehavior {
     _v.subVectors(env.burrow.e, anim.pos);
     const right = Math.cos(anim.heading) * _v.x - Math.sin(anim.heading) * _v.z;
     this.enterSide = right >= 0 ? -1 : 1;
-    anim.placeAt(env.burrow.e.x, env.burrow.e.z, anim.heading, env.probe);
     if (!fast) this.emit('enter');
   }
 
@@ -774,7 +778,7 @@ export class CrabBehavior {
       cmd.eyeFold = this.fear > 0.5 ? 1 : 0;
       if (this.timer <= 0 && this.fear < 0.15 && this.activityOk(env)) {
         this.d = 0; cmd.burrow = null;
-        anim.placeAt(anim.pos.x, anim.pos.z, anim.heading, env.probe);
+        anim.settleFromBurrow();
         this.sub = 0;
       }
       return;

@@ -11,7 +11,7 @@
     "placeholder": "kometsukigani",
     "modelLength_mm": 10,
     "viewDistance_m": 14,
-    "observeDistance_m": 0.09,
+    "observeDistance_m": 0.05,
     "driver": "kometsukigani",
     "clips": { "idle": "Idle", "move": "Move", "special": [] }
   },

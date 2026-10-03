@@ -4,7 +4,7 @@ import { BurrowRenderer, RENDER_ORDER, shaftAxis } from './Burrows.js';
 import { SandPellets } from './SandPellets.js';
 import { BURROW, PELLET, SIZE } from './ScopimeraGlobosaMorphology.js';
 import { lodFor, updateEvery } from './ScopimeraGlobosaLOD.js';
-import { lin } from './ScopimeraGlobosaMaterial.js';
+import { SAND_LINEAR } from './ScopimeraGlobosaMaterial.js';
 import { clamp, hash01, mulberry, rrange, smoothstep } from './util.js';
 import { generateIndividual } from '../Individual';
 import { jstParts } from '../../core/Time';
@@ -61,7 +61,7 @@ export class ScopimeraColony {
     this.crabGroup.name = 'kometsukigani-crabs';
     this.renderer = new BurrowRenderer();
     this.pellets = new SandPellets({ quality });
-    const sand = lin(0.62, 0.52, 0.36);
+    const sand = SAND_LINEAR.clone();
     this.pellets.setSandColor(sand);
     this.sand = sand;
     this.group.add(this.renderer.group, this.pellets.group, this.crabGroup);
@@ -713,18 +713,30 @@ export class ScopimeraColony {
       this.pellets.add(x, this.terrain.surfaceAt(x, z), z, this.B.r[b] * rrange(rand, 0.35, 0.65), 'dig', -rrange(rand, 60, 3000), rand());
     }
     while (made < n) {
-      a += turn * rrange(rand, 0.25, 0.7);
-      const len = rrange(rand, 5, 14) * cw;
-      let s = cw * 0.9;
+      // each trip leaves on a bearing turned a little further the same way, with some scatter [L]
+      a += turn * rrange(rand, 0.2, 0.75) + (rand() - 0.5) * 0.3;
+      // most trips are short, a few go far: the pellets crowd round the mouth and thin out in rows beyond
+      const len = cw * (2.2 + 9 * Math.pow(rand(), 2.2));
+      let s = cw * rrange(rand, 0.7, 1.1), dir = a;
+      let x = bx + Math.sin(dir) * s, z = bz + Math.cos(dir) * s;
+      let side = rand() < 0.5 ? 1 : -1;
       while (s < len && made < n) {
-        const side = (made % 2 ? 1 : -1) * rrange(rand, 0.3, 0.55) * cw;
-        const x = bx + Math.sin(a) * s + Math.cos(a) * side + (rand() - 0.5) * 0.15 * cw;
-        const z = bz + Math.cos(a) * s - Math.sin(a) * side + (rand() - 0.5) * 0.15 * cw;
-        // older trips dried long ago; the last ones are still damp
-        const age = (n - made) / Math.max(1, rate) ;
-        this.pellets.add(x, this.terrain.surfaceAt(x, z), z, pr * rrange(rand, 0.8, 1.2), 'feed', this.pellets.time - age, rand());
-        made++;
-        s += cw * rrange(rand, 0.18, 0.32);
+        // a short step between pellets, the heading wandering but pulled back toward the trip's bearing
+        const step = cw * rrange(rand, 0.12, 0.32);
+        dir += (rand() - 0.5) * 0.35 + (a - dir) * 0.12;
+        x += Math.sin(dir) * step; z += Math.cos(dir) * step; s += step;
+        // dropped beside the leading legs: mostly alternating sides, now and then the same side twice
+        if (rand() < 0.75) side = -side;
+        const clump = rand() < 0.12 ? 2 : 1;
+        for (let c = 0; c < clump && made < n; c++) {
+          const off = side * rrange(rand, 0.28, 0.62) * cw;
+          const px = x + Math.cos(dir) * off + (rand() - 0.5) * 0.14 * cw;
+          const pz = z - Math.sin(dir) * off + (rand() - 0.5) * 0.14 * cw;
+          // older trips dried long ago; the last ones are still damp
+          const age = (n - made) / Math.max(1e-3, rate);
+          this.pellets.add(px, this.terrain.surfaceAt(px, pz), pz, pr * rrange(rand, 0.8, 1.2), 'feed', this.pellets.time - age, rand());
+          made++;
+        }
       }
     }
     this.B.pellets[b] = made;
@@ -763,7 +775,7 @@ export class ScopimeraColony {
           if (np > 4) {
             const cw = ci >= 0 ? this.crabs[ci].cw_mm / 1000 : 0.008;
             const fade = smoothstep(2.2, 3.2, d);
-            R.addDecal(_v, _n, cw * 11, cw * 11, this.B.az[b], 3, fade * Math.min(1, np / this.q.pelMax), (this.B.seed[b] % 977) / 977, 1);
+            R.addDecal(_v, _n, cw * 16, cw * 16, this.B.az[b], 3, fade * Math.min(1, np / this.q.pelMax), (this.B.seed[b] % 977) / 977, 1);
           }
         }
       }

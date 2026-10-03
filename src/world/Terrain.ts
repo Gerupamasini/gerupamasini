@@ -447,7 +447,12 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   // surface detail: grain, patches and ripple shading, all procedural
   vec2 mm = vWorldPos.xz * 1000.0;
   float fw = max(length(fwidth(mm)), 1e-4);   // pixel footprint in millimetres
-  float grain = (hash21(floor(vWorldPos.xz * 450.0)) - 0.5) * 0.5 + (vnoise(vWorldPos.xz * 35.0) - 0.5) * 0.8;
+  // macro range (a pixel under ~1 mm: the observation camera within a few tens of centimetres): the clean sand
+  // is fine sand — its 0.1–0.3 mm grains a fine mottle, resolved only when the camera is right down on it — and
+  // the coarse grains thin out to a scatter of shell bits and quartz; from the crouched view and further off
+  // nothing changes
+  float macro = (1.0 - smoothstep(0.45, 1.0, fw)) * uDetail;
+  float grain = (hash21(floor(vWorldPos.xz * 450.0)) - 0.5) * 0.5 * (1.0 - 0.7 * macro) + (vnoise(vWorldPos.xz * 35.0) - 0.5) * 0.8;
   float patchN = vnoise(vWorldPos.xz * 0.35) - 0.5;
   float isSand = 1.0 - smoothstep(0.5, 1.5, vSubstrate);
   float muddy = smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate));
@@ -472,17 +477,42 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     vec3 c2 = alb * (0.75 + 0.6 * g2.y);
     c2 = g2.z > 0.975 ? black : (g2.z > 0.88 ? quartz : (g2.z > 0.82 ? shell : c2));
     float r1 = 0.3 + 0.17 * fract(g1.y * 7.3), r2 = 0.24 + 0.2 * fract(g2.y * 5.1);
-    float has1 = step(0.3, fract(g1.z * 3.7)) * grainy, has2 = step(0.68, fract(g2.z * 2.9)) * grainy;
+    // at macro range on clean sand only some of the coarse grains stay (the rest were the average of fine ones)
+    float sandMacro = macro * isSand;
+    float keep1 = step(fract(g1.y * 13.1), mix(1.0, 0.12, sandMacro)), keep2 = step(fract(g2.y * 11.7), mix(1.0, 0.1, sandMacro));
+    float has1 = step(0.3, fract(g1.z * 3.7)) * grainy * keep1, has2 = step(0.68, fract(g2.z * 2.9)) * grainy * keep2;
     float disc1 = smoothstep(r1, r1 - 0.07, g1.x) * det1 * has1;
     float disc2 = smoothstep(r2, r2 - 0.05, g2.x) * det2 * has2;
     float ring1 = (smoothstep(r1 + 0.14, r1, g1.x) - smoothstep(r1, r1 - 0.07, g1.x)) * det1 * has1;
     float ring2 = (smoothstep(r2 + 0.12, r2, g2.x) - smoothstep(r2, r2 - 0.05, g2.x)) * det2 * has2;
-    alb *= 1.0 - 0.1 * max(ring1, 0.0) - 0.14 * max(ring2, 0.0);
+    // up close a grain is a rounded pebble sitting in the fine sand, not a dish: fainter rim, gentler dome
+    float rimK = 1.0 - 0.8 * sandMacro, domeK = 1.0 - 0.5 * sandMacro;
+    alb *= 1.0 - (0.1 * max(ring1, 0.0) + 0.14 * max(ring2, 0.0)) * rimK;
     alb = mix(alb, c1, disc1);
     alb = mix(alb, c2, disc2);
     diffuseColor.rgb = alb;
-    gNrmAdd += (-o1 / r1) * 0.9 * disc1 * (1.0 - disc2) + (-o2 / r2) * disc2;
+    gNrmAdd += ((-o1 / r1) * 0.9 * disc1 * (1.0 - disc2) + (-o2 / r2) * disc2) * domeK;
     gQuartz = disc1 * step(0.85, g1.z) * step(g1.z, 0.95) + disc2 * step(0.82, g2.z) * step(g2.z, 0.93);
+    // the fine sand itself: a mottle of sub-millimetre patches while the grains are below a pixel or two, the
+    // grains (0.32 mm cells, 0.15–0.3 mm) themselves when the camera is right down on them
+    if (sandMacro > 0.001) {
+      float coarse = max(disc1, disc2);
+      float mott = (vnoise(mm * 1.6 + 5.0) - 0.5) * 0.7 + (vnoise(mm * 3.3 - 2.0) - 0.5) * 0.3 * (1.0 - smoothstep(0.25, 0.5, fw));
+      diffuseColor.rgb *= 1.0 + mott * 0.16 * sandMacro * (1.0 - smoothstep(0.35, 0.8, fw)) * (1.0 - coarse);
+      vec2 o5;
+      vec3 g5 = grains(mm / 0.32 + 71.0, o5);
+      float r5 = 0.3 + 0.18 * fract(g5.y * 5.3);
+      float fineVis = 1.0 - smoothstep(0.1, 0.24, fw);
+      float disc5 = smoothstep(r5, r5 - max(0.1, fw / 0.32), g5.x) * sandMacro * fineVis * (1.0 - coarse) * (1.0 - 0.5 * vPit);
+      vec3 base = diffuseColor.rgb;
+      vec3 c5 = base * (0.78 + 0.44 * g5.y);
+      c5 = g5.z > 0.986 ? base * 0.42 : (g5.z > 0.94 ? base * 1.3 + vec3(0.04) : c5);
+      diffuseColor.rgb = mix(base, c5, disc5 * 0.9);
+      // and the hollows between grains a shade darker
+      diffuseColor.rgb *= 1.0 - 0.06 * sandMacro * fineVis * (1.0 - disc5) * (1.0 - coarse);
+      gNrmAdd += (-o5 / r5) * 0.55 * disc5;
+      gQuartz = max(gQuartz, disc5 * step(0.94, g5.z) * step(g5.z, 0.986));
+    }
   }
   // mud: faecal pellets (small dark ovals) on the smooth silt
   float det4 = (1.0 - smoothstep(0.1, 0.4, fw * 0.5 / 5.0)) * uDetail;

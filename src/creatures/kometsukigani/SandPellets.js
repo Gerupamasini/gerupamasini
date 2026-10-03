@@ -1,5 +1,5 @@
 import { Group, InstancedBufferAttribute, InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
-import { makePelletMaterial, lin } from './ScopimeraGlobosaMaterial.js';
+import { makePelletMaterial, SAND_LINEAR } from './ScopimeraGlobosaMaterial.js';
 import { pelletGeometry } from './ScopimeraGlobosaModel.js';
 
 /**
@@ -48,7 +48,7 @@ export class SandPellets {
     this.time = 0;
     this.total = 0;
     this.castShadow = false;
-    this.sand = lin(0.55, 0.46, 0.33);
+    this.sand = SAND_LINEAR.clone();
   }
 
   setSandColor(c) { this.material.userData.uniforms.uPelSand.value.copy(c); }

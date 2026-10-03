@@ -22,6 +22,11 @@ import { Color, DoubleSide, FrontSide, MeshBasicMaterial, MeshPhysicalMaterial, 
  */
 
 const lin = (r, g, b) => new Color(r, g, b).convertSRGBToLinear();
+/**
+ * The flat's clean sand as the terrain draws it (Terrain SUBSTRATE_COLORS.sand — a linear vertex colour, not
+ * sRGB): pellets are that same sand, sorted and pressed; burrow walls are it, wet.
+ */
+const SAND_LINEAR = new Color(0.68, 0.56, 0.36);
 
 const COMMON = /* glsl */ `
 float kgH31(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -574,7 +579,7 @@ export function crabPalette(rand) {
 export function makePelletMaterial({ detail = 1 } = {}) {
   const uniforms = {
     uPelTime: { value: 0 },
-    uPelSand: { value: lin(0.55, 0.46, 0.33) },
+    uPelSand: { value: SAND_LINEAR.clone() },
     uPelDissolve: { value: 0 },
     uPelDetail: { value: detail },
     uPelScale: { value: 0.002 },
@@ -647,7 +652,7 @@ float pelH = 0.0;`)
   float g = kgDome(vPelLocal * 7.0, 0.85, 0.38, fw * 7.0, off, id);
   vec3 c = uPelSand * (0.85 + 0.3 * kgH31(floor(vPelLocal * 7.0)));
   c = id > 0.93 ? vec3(0.8, 0.77, 0.72) : (id > 0.88 ? c * 0.35 : c);
-  c = mix(uPelSand * 0.8, c, smoothstep(0.0, 0.3, g) * uPelDetail + (1.0 - uPelDetail) * 0.5);
+  c = mix(uPelSand * 0.9, c, smoothstep(0.0, 0.3, g) * uPelDetail + (1.0 - uPelDetail) * 0.5);
   // the sorted pellet is a touch paler than the surface it came from (organic film removed)
   c *= mix(1.06, 0.9, vPel.z);
   c *= mix(1.0, 0.62, pelWet);
@@ -669,7 +674,7 @@ normal = kgPerturb(normal, -vViewPosition, pelH * uPelScale * uPelDetail);`);
 
 /** inside of a burrow shaft (instanced tube): wet sand, darker with depth; aDepth (vertex) 0 at the mouth … 1 deep */
 export function makeShaftMaterial() {
-  const uniforms = { uShaftSand: { value: lin(0.42, 0.35, 0.26) } };
+  const uniforms = { uShaftSand: { value: SAND_LINEAR.clone().multiplyScalar(0.62) } };
   const mat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0, side: DoubleSide });
   mat.name = 'kg-shaft';
   mat.userData.uniforms = uniforms;
@@ -768,20 +773,25 @@ ${COMMON}`)
     float edge = 1.0 - smoothstep(0.5, 1.0, r);
     k = 1.0 - edge * vDec.y * 0.22 * (0.7 + 0.3 * kgN3(vec3(p * 4.0, vDec.z * 7.0)));
   } else {
-    // a pellet field seen from afar: radiating rows of specks (shadowed pellets) thinning toward the edge
+    // a pellet field seen from afar: no single pellet resolves, but the trips do — wandering radial streaks,
+    // dense by the mouth, ragged where the trips end (each bearing its own length); sunlit pellets darken the
+    // sand a little with their shadows and break it into specks
     float ang = atan(p.y, p.x);
-    float rays = 0.5 + 0.5 * cos(ang * 7.0 + vDec.z * 40.0 + kgN3(vec3(p * 2.0, vDec.z)) * 4.0);
+    vec2 cs = vec2(cos(ang), sin(ang));
+    float sd = vDec.z * 17.0;
+    float reach = 0.4 + 0.55 * kgN3(vec3(cs * 1.7, sd));
+    float streak = smoothstep(0.38, 0.78, kgN3(vec3(cs * 5.5, r * 1.3 + sd)));
+    float cover = smoothstep(reach, reach * 0.35, r) * smoothstep(0.07, 0.18, r) * (0.3 + 0.7 * streak);
     float fw = max(length(fwidth(p)), 1e-4);
     float id;
-    float specks = kgSpeck(vec3(p * 22.0, vDec.z * 13.0), 0.7, 0.32, fw * 22.0, id);
-    float cover = smoothstep(1.0, 0.15, r) * smoothstep(0.06, 0.2, r) * (0.45 + 0.55 * rays);
-    k = 1.0 - vDec.y * cover * (0.08 + 0.3 * specks);
+    float specks = kgSpeck(vec3(p * 30.0, sd), 0.7, 0.3, fw * 30.0, id);
+    k = 1.0 - vDec.y * cover * (0.05 + 0.12 * specks);
   }
   diffuseColor = vec4(vec3(k), 1.0);
 }`);
   };
-  mat.customProgramCacheKey = () => 'kg-decal-v2';
+  mat.customProgramCacheKey = () => 'kg-decal-v3';
   return mat;
 }
 
-export { lin };
+export { lin, SAND_LINEAR };

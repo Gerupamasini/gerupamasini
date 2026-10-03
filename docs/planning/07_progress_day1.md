@@ -105,3 +105,13 @@
 - 水槽: `SAND_H` 5 cm の箱、`floor.heightAt` は砂の上面。`W_ABSORB` を下げた。`tankEdit` 画面（`App.openTankEdit/closeTankEdit`、`App.transition` の暗転 320 ms + 240 ms、`tank.updateFrozen`）。`tankPut` も暗転。`tank.nudgeCamera` で WASD。`tank.onBehavior` は mode==='home' のときだけ記録。
 - 図鑑: `behaviors[].clip` で観察済み行動の再生（`ModelPreview.show(sp, clip)`）。
 - 干潟の水: `uFogW` 2.0→1.1、`uFogPool` 1.0→0.35、`uEnvI` 0.72→0.6。
+
+## 9 回目（コメツキガニ *Scopimera globosa*）
+- 調査: `docs/creatures/kometsukigani/RESEARCH.md`（文献、[確認]/[近縁]/[補完]）、`REFERENCES.md`（写真 70 枚と巣穴の写真の使い道、計測した比）。実装の説明は `README.md`。
+- `src/creatures/kometsukigani/`: 形態（甲幅単位、出典印つき）、手続き形状（LOD0 約 94k＋剛毛、LOD1 22k、LOD2 5.7k、全個体で共有）、外骨格の PBR シェーダー、79 本の骨格（歩脚は解析 IK と届く範囲の表、鉗脚は姿勢プリセット＋CCD、眼柄は左右独立）、歩行（交互四脚のクロック、立脚の足は砂に固定、着地点は届く範囲と底節の振れ幅の中）、行動（巣穴・出現・摂食・歩き・調べる・警戒・逃避・隠れる・掘る・守る・ウェービング・放浪、内部状態と性格）。
+- `ScopimeraColony`: 4 m セルの遅延生成、生息域の密度場、近くの N 個体だけを `Individual`（`managed: 'colony'`）として CreatureSystem に入れ、残りは記録だけ（出入りと団子の数）。知覚（人の距離・速さ・接近・立っているか、慣れ、シロチドリ、人の影、近くの個体の逃避）。観察中は太陽の影をカニの周りに寄せる（`Sky.focusShadow`）。
+- 巣穴: 地形シェーダーを変えずに本物の穴（坑道とカニ → 深度だけのキャップ → 地形）。団子: 0.5 m セルの InstancedMesh、足が乗る、乾く、潮で崩れる。遠くは団子の野のデカール。
+- 地形: `Terrain.surfaceAt`（描かれている三角形の高さ）、接写の距離だけ細砂の粒（0.15〜0.3 mm）を出し、粗い粒を減らす。
+- 種データ・行動ツリー・道具（スコップの対象に甲殻類）・文字列、`placement: 'world'` と `aquatic` を種スキーマに追加、`CreatureSystem` は `managed`・`hidden`・`everyFrame` を尊重。
+- テスト: `tests/unit/kometsukigani.test.ts`（IK、立脚の足が滑らない、ワープしない、行動の流れ、季節）、`tests/smoke/crabs.mjs`（実ゲームの群れ・観察・逃避の撮影）、開発用ビューア `tools/viewers/kometsukigani/`。
+

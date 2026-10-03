@@ -164,6 +164,34 @@ describe('コメツキガニ: behaviour', () => {
     expect(crab.hidden).toBe(true);
   });
 
+  it('never warps: out of the burrow, feeding, bolting and back in, the body moves continuously', () => {
+    const crab = new ScopimeraGlobosa({ seed: 77, sex: 'm', cw_mm: 9 });
+    const env = burrowEnv(crab.cw);
+    crab.placeAt(0, 0, 0, env.probe, true);
+    crab.behavior.plugged = false;
+    const events: string[] = [];
+    crab.on((id: string) => events.push(id));
+    const prev = new Vector3(), cur = new Vector3();
+    let worst = 0, fedAt = -1;
+    crab.update(DT, env);
+    crab.anchor(prev);
+    for (let k = 0; k < 60 * 300; k++) {
+      // once it has fed a while, something large comes close
+      if (fedAt < 0 && events.includes('pellet')) fedAt = k;
+      if (fedAt >= 0 && k === fedAt + 120) env.threat = { pos: new Vector3(crab.cw * 6, 0, crab.cw * 6), level: 1, kind: 'player' };
+      crab.update(DT, env);
+      crab.anchor(cur);
+      worst = Math.max(worst, cur.distanceTo(prev) / crab.cw);
+      prev.copy(cur);
+      if (events.includes('retreat') && crab.hidden && k > fedAt + 400) break;
+    }
+    expect(events).toContain('emerge');
+    expect(events).toContain('pellet');
+    expect(events).toContain('retreat');
+    // a sprint covers ~0.37 CW a frame at 60 fps; nothing else may move the body faster
+    expect(worst).toBeLessThan(0.45);
+  });
+
   it('waves only in the breeding season, males with a burrow', () => {
     const run = (sex: 'm' | 'f', doy: number) => {
       const crab = new ScopimeraGlobosa({ seed: 5, sex, cw_mm: 9.5 });
