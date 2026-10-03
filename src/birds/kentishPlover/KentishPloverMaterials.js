@@ -99,7 +99,7 @@ const BODY_UNIFORMS_GLSL = /* glsl */ `
 uniform vec3 uBounce;
 uniform vec3 uForehead, uFrontalBar, uCrown, uCrownRear, uNape, uSupercilium, uEyeStripe, uEarCoverts, uCollar;
 uniform vec3 uMantle, uMantleDark, uFringe, uBreastPatch, uUnder, uEyeRing, uEyeRingUp, uHeadPat;
-uniform float uMelanin, uWear, uSeed, uDetail, uFluff, uFringeMix, uSubterminal, uCapStreak, uCapDrop;
+uniform float uMelanin, uWear, uSeed, uDetail, uFluff, uFringeMix, uSubterminal, uCapStreak, uCapDrop, uPatchReach;
 varying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;
 uniform float uNeckTurn; varying float vSleeveV;
 `;
@@ -256,7 +256,7 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     // the eye's top, it read as a second eye-stripe parallel to the lores: p012, p070, p006, p065, p066.)
     // Male black, the crown colour otherwise
     float fz = smoothstep(36.0, 26.0, p.z);
-    float barW = smoothstep(24.6, 26.6, p.z + ej * 2.0); // the bar's rear end
+    float barW = smoothstep(26.6, 28.8, p.z + ej * 2.0); // the bar's rear end (v4.1: ends ahead of the eye — a white supercilium between it and the eye from the front, the user's photo)
     // (females / juveniles: no bar, the cap itself comes down to ≈1 mm above the eye — uCapDrop, p050, p062)
     float barLo = mix(100.0, 100.8, fz) - uCapDrop * smoothstep(34.0, 26.0, p.z);
     float barHi = barLo + mix(2.6, 2.2, fz) * mix(0.9, 1.1, uMelanin) * mix(1.0, 0.6, smoothstep(28.0, 25.0, p.z));
@@ -348,10 +348,18 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   float hw = mix(1.8, 4.2, smoothstep(0.0, 0.25, tc));
   hw = mix(hw, 2.4, smoothstep(0.5, 0.8, tc));
   hw = mix(hw, 1.4, smoothstep(0.8, 1.0, tc));
+  // (on the sides of the throat and breast the patch reaches further back toward the shoulder than in front of its
+  // line: from the side a broad dark patch in front of the brown, p070, p006, p012; from the front that part lies on
+  // the outline)
+  float rear = smoothstep(0.0, -1.5, p.z - kpPatchZ(p.y));
+  hw += rear * 1.7 * smoothstep(0.0, 0.2, tc) * (1.0 - smoothstep(0.45, 0.7, tc));
   hw *= uMelanin;
-  float ends = smoothstep(0.0, 0.05, tt);
+  // (females, non-breeding birds and juveniles: a lateral patch only — the line ends at uPatchReach, short of the
+  // throat, with softer edges: p021, p037, p063, p009, p062)
+  float ends = smoothstep(0.0, 0.05, tt) * (1.0 - smoothstep(uPatchReach - 0.14, uPatchReach + 0.02, tt));
+  float soft = 1.0 + 0.9 * clamp((1.0 - uPatchReach) * 3.0, 0.0, 1.0);
   float bEdge = kpEdgeN(p) * 0.55 + jitter * 0.45;
-  float patchM = (1.0 - smoothstep(hw - 1.0, hw + 0.9, dPerp + bEdge)) * ends * smoothstep(0.6, 1.6, ax) * (1.0 - smoothstep(5.5, 7.0, q + bEdge * 0.6));
+  float patchM = (1.0 - smoothstep(hw - 1.0 * soft, hw + 0.9 * soft, dPerp + bEdge)) * ends * smoothstep(0.6, 1.6, ax) * (1.0 - smoothstep(5.5, 7.0, q + bEdge * 0.6));
   patchM *= 1.0 - kpPatchFade;
   // densest on the sides of the throat, a little browner toward the inner ends where it thins
   col = mix(col, mix(uBreastPatch, uBreastPatch * 1.45 + 0.01, smoothstep(0.6, 1.0, tc)), patchM);
@@ -391,6 +399,7 @@ function paletteUniforms(pal, individual = {}) {
     uSubterminal: { value: pal.subterminalDark ? 1 : 0 },
     uCapStreak: { value: pal.capStreak ?? 0.4 },
     uCapDrop: { value: pal.capDrop ?? 0 },
+    uPatchReach: { value: pal.patchReach ?? 1 },
   };
 }
 

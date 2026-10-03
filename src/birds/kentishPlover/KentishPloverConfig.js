@@ -207,6 +207,7 @@ export const plumage = {
       fringe: '#ad988f',
       fringeMix: 0.5, // pale-edged coverts and tertials (p039, p052)
       breastPatch: '#6c5a4f',
+      patchReach: 0.74, // breast-side patch drawn to this fraction of its line: a lateral patch, not across the breast (p021, p016)
       underparts: '#e9e8e3',
       flightDark: '#3c3834',
       flightMid: '#5d5248',
@@ -236,6 +237,7 @@ export const plumage = {
       fringe: '#c6bcb1',
       fringeMix: 0.6,
       breastPatch: '#6e6258',
+      patchReach: 0.66, // breast-side patch drawn to this fraction of its line (p037, p001)
       underparts: '#e9e8e3',
       flightDark: '#3c3834',
       flightMid: '#5d5248',
@@ -266,6 +268,7 @@ export const plumage = {
       fringeMix: 0.9,
       subterminalDark: true,
       breastPatch: '#8f7d70',
+      patchReach: 0.58, // breast-side patch drawn to this fraction of its line: a diffuse lateral patch only (p063, p009, p062)
       underparts: '#e9e8e3',
       flightDark: '#3c3834',
       flightMid: '#5d5248',

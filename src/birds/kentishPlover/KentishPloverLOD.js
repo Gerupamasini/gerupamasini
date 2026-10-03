@@ -276,7 +276,9 @@ function farBodyGeometry(pal) {
     rings.push({ z, yc, hy: (top - bot) / 2, hx });
   }
   const colour = (x, y, z) => {
-    const hex = z > 14 ? (y > 92 ? pal.crown : pal.underparts) : y > wingEdgeY(z) ? pal.mantle : pal.underparts;
+    // (v4.1: the grey-brown shoulders come down to y 74.5 in front of the wing, outside the breast-side horseshoe)
+    const shoulder = z > 14 && z < 30 && Math.abs(x) > 18 && y > 74.5 && y < 90;
+    const hex = shoulder ? pal.mantle : z > 14 ? (y > 92 ? pal.crown : pal.underparts) : y > wingEdgeY(z) ? pal.mantle : pal.underparts;
     return plumageAlbedo(hex);
   };
   const pos = [];
