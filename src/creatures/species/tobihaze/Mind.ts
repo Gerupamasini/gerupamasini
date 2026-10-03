@@ -42,7 +42,8 @@ export class Mind {
   private task: Task | null = null;
   private transitionUntil = 0;
   private transitionState: TobiState | null = null;
-  private lastMedium: Medium;
+  /** the medium at the last update (null until the first one: the motor is placed after the mind is made) */
+  private lastMedium: Medium | null = null;
   /** the animal's own burrow */
   home: Burrow | null = null;
   /** hunger and thirst: after a meal it goes to drink */
@@ -52,9 +53,7 @@ export class Mind {
   busy = false;
   onEvent: (id: string) => void = () => {};
 
-  constructor(public m: Motor, private readonly owner: string, private readonly seed: number, private readonly rnd: () => number) {
-    this.lastMedium = m.medium;
-  }
+  constructor(public m: Motor, private readonly owner: string, private readonly seed: number, private readonly rnd: () => number) {}
 
   // -------------------------------------------------------------------------------------------- intents
   setIntent(intent: Intent, w: MindWorld): void {
@@ -110,6 +109,7 @@ export class Mind {
     const now = w.nowSec;
     // the medium changed under it: show the transition for a moment. Each step from the water toward the land
     // (swimming → propped in the shallows → out on the mud) is emergence, each step back is entry
+    if (this.lastMedium === null) this.lastMedium = m.medium;
     if (m.medium !== this.lastMedium && !m.inBurrow) {
       const out = MEDIUM_RANK[m.medium] < MEDIUM_RANK[this.lastMedium];
       this.transitionState = out ? 'WATER_EXIT' : 'WATER_ENTRY';
