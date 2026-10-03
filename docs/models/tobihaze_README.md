@@ -137,6 +137,9 @@ node tools/models/tobihaze/gameshots2.mjs out/   # ゲーム内（低潮・観�
 npx vite build --outDir /tmp/dist && npx vite preview --outDir /tmp/dist --port 5200 &
 VIRT=50 W=960 H=540 node tools/models/tobihaze/probe.mjs /tmp/probe   # /tmp/probe/cmd/NNN.js を順に実行（先頭行 //shot x.png で撮影）
 npx vitest run tests/unit/tobihaze.test.ts        # 姿勢・歩行速度・跳躍・水陸の切り替え・皮膚の乾燥
+# 単体のショーケース（ゲームと同じドライバを小さな干潟で動かすページ。潮位・行動ボタン・タップで驚かす）
+OUT=/tmp/showcase npx vite build --config tools/models/tobihaze/showcase/vite.config.mjs
+#   page.html（本文のみ）と showcase.js、tobihaze.lod1.glb を同じ場所に置いて配信する
 ```
 
 ## 既知の限界

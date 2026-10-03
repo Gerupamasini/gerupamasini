@@ -1,0 +1,168 @@
+<title>トビハゼの干潟</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@600&display=swap">
+<style>
+  /* Layout: the flat fills the window; a specimen label floats top-left, the field controls sit along the bottom edge */
+  :root {
+    --glass: rgba(233, 237, 233, 0.86);
+    --glass-strong: rgba(242, 245, 242, 0.95);
+    --ink: #1c231f;
+    --muted: #56625b;
+    --line: rgba(28, 35, 31, 0.14);
+    --accent: #23708f;          /* the pale blue spots on its cheeks, deepened to read on silt */
+    --accent-ink: #f4f8f6;
+    --wet: #3d6f84;
+    --ground: #2b2a24;
+    --font-display: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+    --font-ui: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --r: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --glass: rgba(20, 25, 23, 0.82); --glass-strong: rgba(24, 30, 27, 0.95); --ink: #e6ece8; --muted: #9ba8a1;
+      --line: rgba(230, 236, 232, 0.14); --accent: #79c0dd; --accent-ink: #0f1a1f; --wet: #8cc6db; --ground: #141613;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --glass: rgba(20, 25, 23, 0.82); --glass-strong: rgba(24, 30, 27, 0.95); --ink: #e6ece8; --muted: #9ba8a1;
+    --line: rgba(230, 236, 232, 0.14); --accent: #79c0dd; --accent-ink: #0f1a1f; --wet: #8cc6db; --ground: #141613;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--font-ui); font-size: 14px; overflow: hidden; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #scene:active { cursor: grabbing; }
+  .panel { background: var(--glass); backdrop-filter: blur(10px) saturate(1.1); -webkit-backdrop-filter: blur(10px) saturate(1.1); border: 1px solid var(--line); border-radius: var(--r); }
+
+  /* specimen label */
+  .label { position: fixed; left: 16px; top: calc(16px + env(safe-area-inset-top, 0px)); width: min(300px, calc(100% - 32px)); padding: 14px 16px 12px; display: grid; gap: 10px; }
+  .label h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 26px; letter-spacing: 0.04em; line-height: 1.1; text-wrap: balance; }
+  .sci { margin: 2px 0 0; font-style: italic; color: var(--muted); font-size: 13px; }
+  .meta { margin: 0; color: var(--muted); font-size: 12px; }
+  .state { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
+  .code { font-family: var(--font-data); font-size: 12px; font-weight: 500; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); }
+  .state-ja { font-weight: 700; font-size: 15px; }
+  dl.read { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; }
+  dl.read dt { color: var(--muted); }
+  dl.read dd { margin: 0; font-family: var(--font-data); font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .bar { flex: 1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; min-width: 40px; }
+  .bar i { display: block; height: 100%; background: var(--wet); transform-origin: left center; }
+  details.log { border-top: 1px solid var(--line); padding-top: 8px; }
+  details.log summary { cursor: pointer; color: var(--muted); font-size: 12px; letter-spacing: 0.06em; list-style: none; }
+  details.log summary::-webkit-details-marker { display: none; }
+  details.log summary::after { content: "▾"; margin-left: 6px; font-size: 10px; }
+  details.log:not([open]) summary::after { content: "▸"; }
+  #log { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 3px; font-size: 13px; }
+  #log .t { display: inline-block; width: 3.2em; font-family: var(--font-data); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #log .n { font-family: var(--font-data); font-size: 11px; color: var(--muted); }
+
+  /* field controls */
+  .controls { position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); padding: 12px 14px; display: grid; gap: 10px; max-height: 46%; overflow-y: auto; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+  .group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+  .group > span { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; margin-right: 2px; }
+  button { font: inherit; font-size: 13px; color: var(--ink); background: var(--glass-strong); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.scare { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
+  button[aria-pressed="true"] { background: var(--ink); color: var(--glass-strong); border-color: transparent; }
+  .seg { display: inline-flex; gap: 0; }
+  .seg button { border-radius: 0; padding: 5px 10px; font-size: 12px; margin-left: -1px; }
+  .seg button:first-child { border-radius: 999px 0 0 999px; margin-left: 0; }
+  .seg button:last-child { border-radius: 0 999px 999px 0; }
+  .tide { display: flex; align-items: center; gap: 8px; }
+  .tide label { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
+  .tide input { width: 150px; accent-color: var(--accent); }
+  #tide-val { font-family: var(--font-data); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 5.2em; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .switch input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .hint { margin: 0; font-size: 12px; color: var(--muted); }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; font-size: 14px; color: var(--ink); background: var(--ground); z-index: 5; padding-inline: 16px; text-align: center; }
+  #loading::before { content: ""; position: absolute; inset: 0; background: var(--glass); z-index: -1; }
+
+  @media (max-width: 640px) {
+    .label { padding: 10px 12px; gap: 8px; }
+    .label h1 { font-size: 21px; }
+    .meta, details.log, .hint { display: none; }
+    dl.read { grid-template-columns: auto 1fr auto 1fr; }
+    .controls { padding: 10px; gap: 8px; max-height: 44%; }
+    .tide input { width: 110px; }
+    button { padding: 5px 10px; font-size: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+</style>
+
+<canvas id="scene" data-model="tobihaze.lod1.glb" aria-label="干潟のトビハゼ（ドラッグで視点を回す、ホイールやピンチで寄る）"></canvas>
+<div id="loading">モデルを読み込み中…</div>
+
+<section class="label panel" aria-label="観察中の個体">
+  <div>
+    <h1>トビハゼ</h1>
+    <p class="sci">Periophthalmus modestus</p>
+  </div>
+  <p class="meta">全長 80 mm の成魚・干潮の泥干潟。胸びれで這い、尾の反動で跳び、水際を出入りします。</p>
+  <div class="state" aria-live="polite"><span class="code" id="st-code">IDLE</span><span class="state-ja" id="st-ja">休んでいる</span></div>
+  <dl class="read">
+    <dt>位置</dt><dd id="v-depth">—</dd>
+    <dt>速さ</dt><dd id="v-speed">—</dd>
+    <dt>皮膚の湿り</dt><dd><span id="v-moist">—</span><span class="bar"><i id="b-moist"></i></span></dd>
+    <dt>泥</dt><dd id="v-mud">—</dd>
+  </dl>
+  <details class="log" open>
+    <summary>最近の行動 <span id="v-clock" style="font-family:var(--font-data)">0:00</span></summary>
+    <ul id="log"></ul>
+  </details>
+</section>
+
+<section class="controls panel" aria-label="観察の操作">
+  <div class="row">
+    <div class="group" role="group" aria-label="移動">
+      <span>移動</span>
+      <button type="button" data-act="crawl">這って移動</button>
+      <button type="button" data-act="water">水に入る</button>
+      <button type="button" data-act="exit">上陸する</button>
+      <button type="button" data-act="burrow">巣穴にもぐる</button>
+    </div>
+    <div class="group" role="group" aria-label="ふるまい">
+      <span>ふるまい</span>
+      <button type="button" data-act="forage">餌をとる</button>
+      <button type="button" data-act="rewet">体を濡らす</button>
+      <button type="button" data-act="display">背びれを立てる</button>
+      <button type="button" data-act="rest">休む</button>
+    </div>
+    <button type="button" class="scare" data-act="flee">近づいて驚かす</button>
+  </div>
+  <div class="row">
+    <div class="tide">
+      <label for="tide">潮位</label>
+      <input id="tide" type="range" min="-4" max="8" step="0.5" value="0">
+      <span id="tide-val">+0.0 cm</span>
+    </div>
+    <div class="group" role="group" aria-label="視点">
+      <span>視点</span>
+      <span class="seg">
+        <button type="button" data-view="oblique" aria-pressed="true">斜め</button>
+        <button type="button" data-view="side" aria-pressed="false">横</button>
+        <button type="button" data-view="front" aria-pressed="false">正面</button>
+        <button type="button" data-view="low" aria-pressed="false">低く</button>
+        <button type="button" data-view="top" aria-pressed="false">真上</button>
+      </span>
+    </div>
+    <div class="group" role="group" aria-label="再生速度">
+      <span>速さ</span>
+      <span class="seg">
+        <button type="button" data-speed="0.25" aria-pressed="false">¼</button>
+        <button type="button" data-speed="0.5" aria-pressed="false">½</button>
+        <button type="button" data-speed="1" aria-pressed="true">1×</button>
+      </span>
+    </div>
+    <label class="switch"><input id="auto" type="checkbox" checked> 自分で動く</label>
+  </div>
+  <p class="hint">泥や水面をタップすると、その場所から驚いて逃げます。ドラッグで回り込み、ホイールやピンチで寄れます。</p>
+</section>
+
+<script type="module" src="showcase.js"></script>
