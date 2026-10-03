@@ -642,7 +642,7 @@ export class Motor {
     this.d1.to(1, 8, dt); this.d2.to(0.35, 8, dt); this.anal.to(0.35, 8, dt); this.caud.to(0, 8, dt);
     this.jaw.to(0, 20, dt);
     // rings where the head breaks the surface
-    this.rippleAcc += dt * (0.8 + 6 * sp / L);
+    this.rippleAcc += dt * (0.35 + 6 * sp / L);
     if (this.rippleAcc > 1 && w.fx && this.pos.y + this.eyeTop > this.waterY - 0.002) {
       this.rippleAcc = 0;
       w.fx.ripple(this.pos.x + f.x * 0.15 * L, this.pos.z + f.z * 0.15 * L, 0.25 + 1.5 * sp / L * 0.2);
