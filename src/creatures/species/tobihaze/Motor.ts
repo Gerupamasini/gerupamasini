@@ -654,7 +654,8 @@ export class Motor {
     this.rippleAcc += dt * (0.35 + 6 * sp / L);
     if (this.rippleAcc > 1 && w.fx && this.pos.y + this.eyeTop > this.waterY - 0.002) {
       this.rippleAcc = 0;
-      w.fx.ripple(this.pos.x + f.x * 0.15 * L, this.pos.z + f.z * 0.15 * L, 0.25 + 1.5 * sp / L * 0.2);
+      // a small fish makes small rings
+      w.fx.ripple(this.pos.x + f.x * 0.15 * L, this.pos.z + f.z * 0.15 * L, (0.18 + 0.2 * sp / L) * Math.min(1.2, L / 0.08));
     }
   }
 
