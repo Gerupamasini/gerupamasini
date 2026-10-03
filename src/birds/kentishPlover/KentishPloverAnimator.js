@@ -589,6 +589,9 @@ export class KentishPloverAnimator {
         Object.assign(t, { height: 0, pitch: 0, neck: -1, fluff: 1.35, sleep: 0.8, sit: 1 });
         break;
       default:
+        // relaxed: the trunk settled low on flexed legs, the belly 0.29 of the crown height (v4, user's front photo):
+        // up to the bind height as the bird walks or runs off
+        t.height = -ANIM.relaxedDrop * (1 - Math.max(this.stride.amount, run));
         break;
     }
     // walking levels the body and lowers the head (12 walking photos: axis −1°, crown ≈6 mm over the back)

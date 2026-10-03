@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { plumage as PLUMAGE, animation as ANIM, bodySculpt as SCULPT } from './KentishPloverConfig.js';
-import { FLUFF_REST, wingEdgeGLSL } from './anatomy/bodyMesh.js';
+import { FLUFF_REST, wingEdgeGLSL, patchGLSL } from './anatomy/bodyMesh.js';
 import { CONFORM_FOLD } from './anatomy/wingFold.js';
 
 // breathing displacement amplitude (m): fractional expansion × body half-width
@@ -180,6 +180,7 @@ vec2 kpLattice(vec3 p) {
 // Lower edge of the grey-brown upperparts on the side = visible lower edge of the folded wing, (z, y)
 // (bodySculpt.wingEdge, spec v4 §10.1)
 ${wingEdgeGLSL('kpUpperEdge')}
+${patchGLSL()}
 // Feathery boundary offset (−1…1) on the body surface: noise in the lattice (circumference, along-flow) mm,
 // streaked along the flow like overlapping feather tips; weaker on the far LODs (no shimmer)
 float kpEdgeN(vec3 p) {
@@ -199,11 +200,13 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   vec3 col = uUnder;
 
   // Upperparts: grey-brown above the wing's lower edge, behind the collar and behind the breast-side patch
-  // axis (z, y) (6, 86) → (24, 63): white in front of it (spec §14, §17.2; p006, p066)
+  // (bodySculpt.breastPatch, kpPatchZ): white in front of it (spec v4 §14; the user's front photo, p006, p066)
   float yb = kpUpperEdge(p.z);
   float dorsal = smoothstep(yb - 1.5, yb + 2.0, p.y + n.y * 3.0 + jitter);
-  float q = kpCollarQ(p) + jitter * 0.6;
-  float sFront = ((p.z - 6.0) * 23.0 + (p.y - 86.0) * 18.0) / 29.2;
+  // (v4: on the front of the broad shoulders the collar is pushed up under the ear coverts — from the front the grey-
+  // brown shoulders meet the breast-side patch with no white between them, the user's front photo, p013, p063)
+  float q = kpCollarQ(p) + jitter * 0.6 - 3.5 * smoothstep(12.0, 19.0, ax) * smoothstep(6.0, 16.0, p.z);
+  float sFront = p.z - kpPatchZ(p.y) + 1.0;
   float qMantle = -3.2 + 2.2 * smoothstep(4.0, 8.0, ax) * smoothstep(0.1, 0.5, n.y);
   float bodyZone = (1.0 - smoothstep(-1.0, 1.5, sFront + jitter * 0.5)) * (1.0 - smoothstep(qMantle - 0.8, qMantle + 0.2, q));
   col = mix(col, uMantle, dorsal * bodyZone);
@@ -325,18 +328,15 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   // Breast-side patches (male: black rhombus 29 mm long along (z, y) (6, 86) → (24, 63), 52° from horizontal,
   // half-width 3 at the ends and 5 in the middle, |x| ≥ 7, 9 mm short of the breast front — never meeting in the
   // centre; it covers the carpal joint and meets the wing's lower edge at (20, 63)) (S7, S10; spec §14)
-  vec2 pa = vec2(p.z - 8.0, p.y - 85.5);
-  vec2 ba = vec2(17.0, -21.0);
-  float tt = dot(pa, ba) / dot(ba, ba);
-  float dPerp = abs(pa.x * ba.y - pa.y * ba.x) / length(ba);
-  // (tapering rhombus, not a parallel bar; its top stays under the white hind-collar: p003, p006, p020, p070)
-  // (a wedge 6 mm across at most, broadest in its upper third under the collar and tapering to a point toward the
-  // wing bend — the 10 mm parallel blade read as a black plate, p012, p006, p070, p043; feathery edges)
+  float dPerp;
+  float tt = kpPatchT(vec3(ax, p.y, p.z), dPerp);
+  // (a band 5–6 mm across at most, broadest in its upper third under the collar and tapering toward its inner end on
+  // the front of the breast — feathery edges)
   float tc = clamp(tt, 0.0, 1.0);
-  float hw = (0.9 + 2.6 * smoothstep(0.0, 0.28, tc) * (1.0 - smoothstep(0.32, 0.98, tc))) * uMelanin;
-  float ends = smoothstep(0.0, 0.08, tt) * (1.0 - smoothstep(0.86, 0.98, tt));
+  float hw = (1.2 + 1.9 * smoothstep(0.0, 0.25, tc) * (1.0 - smoothstep(0.45, 1.0, tc))) * uMelanin;
+  float ends = smoothstep(0.0, 0.04, tt) * (1.0 - smoothstep(0.93, 1.0, tt));
   float bEdge = kpEdgeN(p) * 0.55 + jitter * 0.4;
-  float patchM = (1.0 - smoothstep(hw - 0.45, hw + 0.45, dPerp + bEdge)) * ends * smoothstep(6.0, 8.0, ax) * (1.0 - smoothstep(-6.5, -4.5, q + bEdge * 0.6));
+  float patchM = (1.0 - smoothstep(hw - 0.45, hw + 0.45, dPerp + bEdge)) * ends * smoothstep(6.0, 8.0, ax) * (1.0 - smoothstep(5.5, 7.0, q + bEdge * 0.6));
   // denser black at the top, a little browner where it thins toward the wing bend
   col = mix(col, mix(uBreastPatch, uBreastPatch * 1.6 + 0.012, smoothstep(0.45, 0.95, tc)), patchM);
   return col;

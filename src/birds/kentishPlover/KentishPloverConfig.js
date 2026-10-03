@@ -77,28 +77,28 @@ export const bodySculpt = {
   prims: [
     // PRIMS-BEGIN
     // the ball of the body: breast to rump, widest (±38) at mid-height, 17° tail-down
-    { type: 'ellipsoid', name: 'core', c: [0.0, 64.38, -9.33], r: [37.88, 22.32, 42.3], rx: 17.22 },
+    { type: 'ellipsoid', name: 'core', c: [0.0, 64.14, -9.12], r: [37.88, 21.38, 42.3], rx: 19.66 },
     // front of the ball: the broad breast under the head
-    { type: 'ellipsoid', name: 'breast', c: [0.0, 69.28, 12.57], r: [30.51, 21.19, 22.25] },
+    { type: 'ellipsoid', name: 'breast', c: [0.0, 68.06, 12.43], r: [31.77, 21.25, 21.89] },
     // broad, rounded underside, lowest at z −10
-    { type: 'ellipsoid', name: 'belly', c: [0.0, 51.44, -6.95], r: [31.97, 18.31, 20.86] },
+    { type: 'ellipsoid', name: 'belly', c: [0.0, 52.53, -8.63], r: [34.05, 17.65, 23.77] },
     // rear body tapering to the tail, as wide as the folded wings over it
-    { type: 'ellipsoid', name: 'rump', c: [0.0, 63.16, -38.81], r: [24.22, 7.52, 20.25], rx: 21.54 },
+    { type: 'ellipsoid', name: 'rump', c: [0.0, 61.79, -37.95], r: [23.72, 6.18, 25.06], rx: 19.61 },
     // under-tail keel, covered by the LTC
     { type: 'ellipsoid', name: 'undertail', c: [0.0, 59.5, -52.5], r: [7.0, 2.0, 13.0], rx: 15.0 },
     // broad flat back between the folded wings
-    { type: 'ellipsoid', name: 'mantle', c: [0.0, 79.0, -8.4], r: [25.8, 6.0, 18.9], rx: 17.82 },
+    { type: 'ellipsoid', name: 'mantle', c: [0.0, 78.72, -4.54], r: [26.13, 4.43, 15.94], rx: 26.05 },
     // hind neck / upper mantle: the head sits on it (neck fill)
-    { type: 'ellipsoid', name: 'mantleNape', c: [0.0, 87.4, 9.7], r: [20.1, 6.0, 15.1], role: 'neck' },
+    { type: 'ellipsoid', name: 'mantleNape', c: [0.0, 85.64, 10.35], r: [24.32, 5.66, 17.11], role: 'neck' },
     { type: 'ellipsoid', name: 'head', c: [0.0, 93.5, 24.0], r: [12.5, 12.5, 15.0], k: 5, role: 'head' },
     { type: 'ellipsoid', name: 'lores', c: [0.0, 90.4, 35.3], r: [5.6, 4.9, 4.8], k: 3.2, role: 'head' },
     { type: 'capsule', name: 'billCuff', a: [0.0, 91.6, 35.8], b: [0.0, 89.9, 39.9], r: 2.0, k: 2.4, role: 'head' },
     { type: 'ellipsoid', name: 'chin', c: [0.0, 84.0, 31.0], r: [9.0, 6.0, 7.0], k: 4, role: 'head' },
     // ear-covert / cheek plumage behind and below the eye: the head ≈ half the body width from the front
-    { type: 'ellipsoid', name: 'cheekL', c: [10.76, 91.87, 17.81], r: [7.95, 8.45, 13.45], k: 4, role: 'head' },
-    { type: 'ellipsoid', name: 'cheekR', c: [-10.76, 91.87, 17.81], r: [7.95, 8.45, 13.45], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'cheekL', c: [10.54, 90.13, 20.8], r: [9.47, 12.75, 11.53], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'cheekR', c: [-10.54, 90.13, 20.8], r: [9.47, 12.75, 11.53], k: 4, role: 'head' },
     // fore-neck and upper breast round the base of the neck (neck fill): no neck seen from any side
-    { type: 'ellipsoid', name: 'collar', c: [0.0, 80.56, 19.04], r: [23.05, 12.03, 15.8], role: 'neck' },
+    { type: 'ellipsoid', name: 'collar', c: [0.0, 80.95, 17.87], r: [24.34, 12.12, 19.71], role: 'neck' },
     // PRIMS-END
   ],
   // Subtractive details (smooth subtraction)
@@ -135,7 +135,12 @@ export const bodySculpt = {
   // (v4: the folded wing sits high on the broad body — from the front only its upper edge shows at the shoulders,
   // the white flanks below it form the widest part of the outline; spec v4 §10.1). Read by the plumage shader
   // (kpUpperEdge), the fringe shell, the wing-fold solver (secondary tips) and the far impostor.
-  wingEdge: [[20, 72], [5, 69], [-10, 66.5], [-25, 65], [-40, 64.5], [-55, 64]],
+  wingEdge: [[20, 76], [5, 72], [-10, 68], [-25, 65.5], [-40, 64.5], [-55, 64]],
+  // Breast-side patch (left; mirrored): its centre line on the outline, top to bottom (mm). v4: from the side of the
+  // neck under the ear coverts down and inward over the front of the broad breast, ending 9 mm off the midline —
+  // from the front the two frame the white face and throat as an almost closed ring (the user's front photo, p013,
+  // p063); the grey-brown upperparts begin behind it (kpPatchZ). Shaders: kpPlumage; wing-fold solver: underPatch.
+  breastPatch: [[20.2, 91.7, 17.1], [21.6, 88.4, 20.2], [22.2, 85.2, 24.2], [21.8, 81.7, 27.4], [18.9, 76, 31.1], [14.3, 70.6, 33.2], [9, 67, 34.2]],
   // head zone (bodyMesh.headness, the shaders' kpHeadness): rigid with the head inside, blending into the neck sleeve
   // over the outer 0.35 — wide enough for the full cheeks (x ±18.7)
   headZone: { c: [0, 93.5, 24], r: [17, 13, 15.5] },
@@ -294,6 +299,9 @@ export const animation = {
   // had a nape notch up to 0.066 L low (photos p003, p017, p006: crown clearly above the back).
   // The hind-neck fill (animator napeFill) closes the rest of that notch. tools/dev/posture.mjs: walk crown 96.4,
   // crown − back 5.9 (spec +6 ± 4); run 91, +3.8; contact correction 0 in both (Frame-A walk IoU 0.892)
+  // relaxed stand: the trunk lowered on flexed legs (belly 29 mm, crown 99 mm: the user's front photo, spec v4 §12);
+  // walking / running raise it to the bind height
+  relaxedDrop: mm(7),
   walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.19, neck: -0.25, headDown: mm(2), headFwd: mm(6) },
   run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.2, neck: -0.28, headDown: mm(3.5), headFwd: mm(8.5) },
   sway: mm(0.6), // lateral trunk sway per stride (D)

@@ -68,6 +68,46 @@ export function wingEdgeGLSL(name) {
   return s + `  return ${f(e[e.length - 1][1])};\n}\n`;
 }
 
+/**
+ * Breast-side patch (bodySculpt.breastPatch) at rest point p (mm, either side): [t (0 top … 1 bottom along the line),
+ * distance (mm) from the line].
+ */
+export function patchAt(p) {
+  const P = CFG.bodySculpt.breastPatch;
+  const q = [Math.abs(p[0]), p[1], p[2]];
+  let best = [0, Infinity];
+  let acc = 0;
+  const L = P.slice(1).reduce((a, b, i) => a + Math.hypot(b[0] - P[i][0], b[1] - P[i][1], b[2] - P[i][2]), 0);
+  for (let i = 0; i < P.length - 1; i++) {
+    const a = P[i];
+    const b = P[i + 1];
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const l2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2;
+    const u = Math.max(0, Math.min(1, ((q[0] - a[0]) * ab[0] + (q[1] - a[1]) * ab[1] + (q[2] - a[2]) * ab[2]) / l2));
+    const d = Math.hypot(q[0] - a[0] - ab[0] * u, q[1] - a[1] - ab[1] * u, q[2] - a[2] - ab[2] * u);
+    if (d < best[1]) best = [(acc + u * Math.sqrt(l2)) / L, d];
+    acc += Math.sqrt(l2);
+  }
+  return best;
+}
+/** GLSL: float kpPatchT(vec3 q, out float d) (q = (|x|, y, z)) and float kpPatchZ(float y) — the patch line's z at
+ *  height y (held at the ends): the grey-brown upperparts lie behind it. */
+export function patchGLSL() {
+  const P = CFG.bodySculpt.breastPatch;
+  const f = (v) => v.toFixed(2);
+  const v3 = (a) => `vec3(${a.map(f).join(', ')})`;
+  const L = P.slice(1).reduce((a, b, i) => a + Math.hypot(b[0] - P[i][0], b[1] - P[i][1], b[2] - P[i][2]), 0);
+  let s = 'float kpPatchT(vec3 q, out float d) {\n  d = 1e9; float t = 0.0; float acc = 0.0;\n';
+  for (let i = 0; i < P.length - 1; i++) {
+    const l = Math.hypot(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1], P[i + 1][2] - P[i][2]);
+    s += `  { vec3 a = ${v3(P[i])}; vec3 ab = ${v3(P[i + 1].map((v, k) => v - P[i][k]))}; float u = clamp(dot(q - a, ab) / ${f(l * l)}, 0.0, 1.0); float dd = length(q - a - ab * u); if (dd < d) { d = dd; t = (acc + u * ${f(l)}) / ${f(L)}; } acc += ${f(l)}; }\n`;
+  }
+  s += '  return t;\n}\nfloat kpPatchZ(float y) {\n';
+  s += `  if (y >= ${f(P[0][1])}) return ${f(P[0][2])};\n`;
+  for (let i = 0; i < P.length - 1; i++) s += `  if (y >= ${f(P[i + 1][1])}) return mix(${f(P[i][2])}, ${f(P[i + 1][2])}, (${f(P[i][1])} - y) / ${f(P[i][1] - P[i + 1][1])});\n`;
+  return s + `  return ${f(P[P.length - 1][2])};\n}\n`;
+}
+
 const smooth = (a, b, x) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);

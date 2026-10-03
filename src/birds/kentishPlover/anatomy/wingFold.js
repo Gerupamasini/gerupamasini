@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WING } from './featherLayout.js';
 import { projectToSurface } from './sdf.js';
-import { wingEdgeY } from './bodyMesh.js';
+import { wingEdgeY, patchAt } from './bodyMesh.js';
 import { featherOffset, wingFrame, LOD2_CARD, rowT } from './feathers.js';
 import { COVERT_ARM } from './skeleton.js';
 import { frameQuat } from '../../../core/math.js';
@@ -174,16 +174,12 @@ export function conformAt(f, p, t, a, sdf, torso = sdf, normal = null) {
   return q.sub(p);
 }
 
-// Breast-side patch (KentishPloverMaterials kpPlumage): axis (z, y) (6, 86) → (24, 63), half-width 3 at the ends
-// and 5 in the middle. 1 under it and up to 1 mm behind its rear edge, 0 from 2.5 mm behind it on.
+// Breast-side patch (bodySculpt.breastPatch, KentishPloverMaterials kpPlumage): 1 under it and up to 1 mm beyond its
+// edge (half-width ≈3 mm), 0 from 2.5 mm beyond it on.
 function underPatch(p) {
   if (Math.abs(p.x) < 6) return 0;
-  const pz = p.z - 6;
-  const py = p.y - 86;
-  const tt = Math.max(0, Math.min(1, (pz * 18 - py * 23) / (18 * 18 + 23 * 23)));
-  const hw = 3 + 2 * (1 - Math.abs(2 * tt - 1));
-  const behind = (-pz * 23 - py * 18) / Math.hypot(18, 23); // signed distance from the axis toward the rear / below
-  return 1 - smooth01(hw + 1.0, hw + 2.5, behind);
+  const [, d] = patchAt([p.x, p.y, p.z]);
+  return 1 - smooth01(4, 5.5, d);
 }
 
 /** Sample lines bent onto the shell (bind offsets), for a wing folded to `w` of the bend (conformWeight). */
