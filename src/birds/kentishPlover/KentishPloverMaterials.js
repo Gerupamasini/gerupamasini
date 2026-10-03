@@ -99,7 +99,7 @@ const BODY_UNIFORMS_GLSL = /* glsl */ `
 uniform vec3 uBounce;
 uniform vec3 uForehead, uFrontalBar, uCrown, uCrownRear, uNape, uSupercilium, uEyeStripe, uEarCoverts, uCollar;
 uniform vec3 uMantle, uMantleDark, uFringe, uBreastPatch, uUnder, uEyeRing, uEyeRingUp, uHeadPat;
-uniform float uMelanin, uWear, uSeed, uDetail, uFluff, uFringeMix, uSubterminal, uCapStreak, uCapDrop;
+uniform float uMelanin, uWear, uSeed, uDetail, uFluff, uFringeMix, uSubterminal, uCapStreak, uCapDrop, uPatchReach;
 varying vec3 vRest; varying vec3 vRestN; varying vec3 vFlowV; varying vec3 vFlowR;
 uniform float uNeckTurn; varying float vSleeveV;
 `;
@@ -206,13 +206,20 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
 
   // Upperparts: grey-brown above the wing's lower edge, behind the collar and behind the breast-side patch
   // (bodySculpt.breastPatch, kpPatchZ): white in front of it (spec v4 §14; the user's front photo, p006, p066)
+  // (v4.1: in front of the wing the grey-brown shoulder comes down to y 74.5 right behind the patch — from the front a
+  // brown band over each upper shoulder, outside the horseshoe, sloping down to the widest part of the outline; the
+  // user's front photo, p013, p012)
   float yb = kpUpperEdge(p.z);
+  yb = mix(yb, min(yb, 74.5), smoothstep(4.0, 16.0, p.z));
   float dorsal = smoothstep(yb - 1.5, yb + 2.0, p.y + n.y * 3.0 + jitter);
   // (v4: on the front of the broad shoulders the collar is pushed up under the ear coverts — from the front the grey-
   // brown shoulders meet the breast-side patch with no white between them, the user's front photo, p013, p063)
   float q = kpCollarQ(p) + jitter * 0.6 - 3.5 * smoothstep(12.0, 19.0, ax) * smoothstep(6.0, 16.0, p.z);
   float sFront = p.z - kpPatchZ(p.y) + 1.0;
-  float qMantle = -3.2 + 2.2 * smoothstep(4.0, 8.0, ax) * smoothstep(0.1, 0.5, n.y);
+  // (v4.1: on the sides of the neck in front of z 8 the white collar gives way to the shoulder up to the head: the
+  // brown lies against the whole outer edge of the horseshoe, up to under the ear coverts)
+  float qSide = 2.0 * smoothstep(14.0, 19.0, ax) * smoothstep(6.0, 14.0, p.z);
+  float qMantle = -3.2 + 2.2 * smoothstep(4.0, 8.0, ax) * smoothstep(0.1, 0.5, n.y) + qSide;
   float bodyZone = (1.0 - smoothstep(-1.0, 1.5, sFront + jitter * 0.5)) * (1.0 - smoothstep(qMantle - 0.8, qMantle + 0.2, q));
   col = mix(col, uMantle, dorsal * bodyZone);
   // White sides to the rump (S7, S27): grey-brown only along the centre line of rump/upper-tail
@@ -222,7 +229,7 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   // White collar 5–7 mm wide, from the nape obliquely round to the throat sides (S7; spec §14)
   // (on the upper sides, where the front scapulars lie, the band is narrower behind: the mantle colour reaches up
   // under the scapular tips so no white shows between them, p006, p029)
-  float qBack = -3.2 + 2.2 * smoothstep(4.0, 8.0, ax) * smoothstep(0.1, 0.5, n.y);
+  float qBack = qMantle;
   float collar = smoothstep(qBack, qBack + 0.8, q) * (1.0 - smoothstep(2.4, 3.2, q));
   float headZone = smoothstep(2.4, 3.2, q);
   // (the collar tint — buff-grey in juveniles — only on the hind-neck and sides: throat and fore-neck stay white
@@ -249,10 +256,10 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     // the eye's top, it read as a second eye-stripe parallel to the lores: p012, p070, p006, p065, p066.)
     // Male black, the crown colour otherwise
     float fz = smoothstep(36.0, 26.0, p.z);
-    float barW = smoothstep(24.6, 26.6, p.z + ej * 2.0); // the bar's rear end
+    float barW = smoothstep(26.6, 28.8, p.z + ej * 2.0); // the bar's rear end (v4.1: ends ahead of the eye — a white supercilium between it and the eye from the front, the user's photo)
     // (females / juveniles: no bar, the cap itself comes down to ≈1 mm above the eye — uCapDrop, p050, p062)
     float barLo = mix(100.0, 100.8, fz) - uCapDrop * smoothstep(34.0, 26.0, p.z);
-    float barHi = barLo + mix(3.5, 2.9, fz) * mix(0.9, 1.1, uMelanin) * mix(1.0, 0.6, smoothstep(28.0, 25.0, p.z));
+    float barHi = barLo + mix(2.6, 2.2, fz) * mix(0.9, 1.1, uMelanin) * mix(1.0, 0.6, smoothstep(28.0, 25.0, p.z));
     float bar = smoothstep(barLo - 0.3, barLo + 0.3, p.y + ej) * (1.0 - smoothstep(barHi - 0.25, barHi + 0.25, p.y + ej)) * barW;
     // Cap (crown + nape hood): above the bar in front; behind the bar its lower edge runs back over the
     // supercilium (y 100 at z 24, 99 at z 13) and wraps down the hind-head to the collar. Where the supercilium
@@ -284,19 +291,19 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     vec2 la = vec2(41.6, 90.2);
     vec2 lb = vec2(28.6, 95.4);
     float tl = clamp(dot(zy - la, lb - la) / dot(lb - la, lb - la), 0.0, 1.0);
-    float lore = 1.0 - smoothstep(-0.3, 0.3, length(zy - mix(la, lb, tl)) + ej - mix(1.5, 2.35, tl) * uMelanin * mix(0.5, 1.0, clamp((uHeadPat.y - 0.4) / 0.6, 0.0, 1.0)));
+    float lore = 1.0 - smoothstep(-0.3, 0.3, length(zy - mix(la, lb, tl)) + ej - mix(1.1, 1.9, tl) * uMelanin * mix(0.5, 1.0, clamp((uHeadPat.y - 0.4) / 0.6, 0.0, 1.0)));
     // (narrower where the loral stripe is pale: a thin brown line in females, p050)
     // (on the sides of the bill base only — over the culmen the two met as a moustache across the forehead)
-    lore *= smoothstep(1.6, 2.7, ax) * smoothstep(0.35, 0.65, abs(n.x)) * uHeadPat.y;
+    lore *= smoothstep(1.6, 2.7, ax) * smoothstep(0.12, 0.35, abs(n.x)) * uHeadPat.y;
     // round the eye: 1.3 mm of mask beyond the lids, a little more below and behind (the eye sits in the mask,
     // p012, p070, p043; females / juveniles only behind it)
-    float surround = (1.0 - smoothstep(-0.3, 0.3, length((zy - vec2(26.2, 95.2)) * vec2(0.92, 1.0)) + ej - 4.0 * uMelanin)) * uHeadPat.z;
+    float surround = (1.0 - smoothstep(-0.3, 0.3, length((zy - vec2(26.2, 95.2)) * vec2(0.92, 1.0)) + ej - 3.0 * uMelanin)) * uHeadPat.z;
     // behind the eye the mask is as deep as the eye and runs on into the ear coverts (p012, p070, p065: no pale gap
     // between the eye and the ear patch)
     {
       vec2 pa = zy - vec2(25.6, 95.4); vec2 ba = vec2(-6.0, -0.4);
       float tb = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-      surround = max(surround, (1.0 - smoothstep(-0.3, 0.3, length(pa - ba * tb) + ej - mix(2.7, 2.4, tb) * uMelanin)) * uHeadPat.z);
+      surround = max(surround, (1.0 - smoothstep(-0.3, 0.3, length(pa - ba * tb) + ej - mix(1.9, 1.8, tb) * uMelanin)) * uHeadPat.z);
     }
     // ear coverts: behind the eye, as deep as the eye with its lids (≈5 mm) and ending ≈8 mm behind the eye
     // centre (p012, p006, p065: 14 mm reached the hind-crown)
@@ -330,22 +337,32 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     col = mix(col, h, headZone);
   }
 
-  // Breast-side patches (male: black rhombus 29 mm long along (z, y) (6, 86) → (24, 63), 52° from horizontal,
-  // half-width 3 at the ends and 5 in the middle, |x| ≥ 7, 9 mm short of the breast front — never meeting in the
-  // centre; it covers the carpal joint and meets the wing's lower edge at (20, 63)) (S7, S10; spec §14)
+  // Breast-side patch (bodySculpt.breastPatch, v4.1): a horseshoe collar round the white face and throat — from under
+  // the ear coverts down the side of the throat, then in under it across the upper breast, nearly meeting in the
+  // centre; dark brown-black (male), soft-edged, thickest (≈7 mm) on the sides of the throat and tapering toward its
+  // inner ends ≈2 mm apart, the white throat running on into the white breast between them (the user's front photo,
+  // p013, p012; S7, S10)
   float dPerp;
   float tt = kpPatchT(vec3(ax, p.y, p.z), dPerp);
-  // (a band ≈6 mm across at most, thin under the ear coverts and broadest on the sides of the breast, tapering toward
-  // its inner end on the front of the breast — from the front a ring round the white throat, as in the user's photo;
-  // feathery edges)
   float tc = clamp(tt, 0.0, 1.0);
-  float hw = (1.1 + 2.2 * smoothstep(0.08, 0.35, tc) * (1.0 - smoothstep(0.6, 1.0, tc))) * uMelanin;
-  float ends = smoothstep(0.0, 0.04, tt) * (1.0 - smoothstep(0.93, 1.0, tt));
-  float bEdge = kpEdgeN(p) * 0.55 + jitter * 0.4;
-  float patchM = (1.0 - smoothstep(hw - 0.45, hw + 0.45, dPerp + bEdge)) * ends * smoothstep(6.0, 8.0, ax) * (1.0 - smoothstep(5.5, 7.0, q + bEdge * 0.6));
+  float hw = mix(1.8, 4.2, smoothstep(0.0, 0.25, tc));
+  hw = mix(hw, 2.4, smoothstep(0.5, 0.8, tc));
+  hw = mix(hw, 1.4, smoothstep(0.8, 1.0, tc));
+  // (on the sides of the throat and breast the patch reaches further back toward the shoulder than in front of its
+  // line: from the side a broad dark patch in front of the brown, p070, p006, p012; from the front that part lies on
+  // the outline)
+  float rear = smoothstep(0.0, -1.5, p.z - kpPatchZ(p.y));
+  hw += rear * 1.7 * smoothstep(0.0, 0.2, tc) * (1.0 - smoothstep(0.45, 0.7, tc));
+  hw *= uMelanin;
+  // (females, non-breeding birds and juveniles: a lateral patch only — the line ends at uPatchReach, short of the
+  // throat, with softer edges: p021, p037, p063, p009, p062)
+  float ends = smoothstep(0.0, 0.05, tt) * (uPatchReach > 0.999 ? 1.0 : 1.0 - smoothstep(uPatchReach - 0.14, uPatchReach + 0.02, tt));
+  float soft = 1.0 + 0.9 * clamp((1.0 - uPatchReach) * 3.0, 0.0, 1.0);
+  float bEdge = kpEdgeN(p) * 0.55 + jitter * 0.45;
+  float patchM = (1.0 - smoothstep(hw - 1.0 * soft, hw + 0.9 * soft, dPerp + bEdge)) * ends * smoothstep(0.6, 1.6, ax) * (1.0 - smoothstep(5.5, 7.0, q + bEdge * 0.6));
   patchM *= 1.0 - kpPatchFade;
-  // denser black at the top, a little browner where it thins toward the wing bend
-  col = mix(col, mix(uBreastPatch, uBreastPatch * 1.6 + 0.012, smoothstep(0.45, 0.95, tc)), patchM);
+  // densest on the sides of the throat, a little browner toward the inner ends where it thins
+  col = mix(col, mix(uBreastPatch, uBreastPatch * 1.45 + 0.01, smoothstep(0.6, 1.0, tc)), patchM);
   return col;
 }
 `;
@@ -382,6 +399,7 @@ function paletteUniforms(pal, individual = {}) {
     uSubterminal: { value: pal.subterminalDark ? 1 : 0 },
     uCapStreak: { value: pal.capStreak ?? 0.4 },
     uCapDrop: { value: pal.capDrop ?? 0 },
+    uPatchReach: { value: pal.patchReach ?? 1 },
   };
 }
 

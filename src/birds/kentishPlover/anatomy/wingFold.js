@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WING } from './featherLayout.js';
 import { projectToSurface } from './sdf.js';
 import { wingEdgeY, patchAt } from './bodyMesh.js';
+import { bodySculpt as SCULPT } from '../KentishPloverConfig.js';
 import { featherOffset, wingFrame, LOD2_CARD, rowT } from './feathers.js';
 import { COVERT_ARM } from './skeleton.js';
 import { frameQuat } from '../../../core/math.js';
@@ -174,11 +175,11 @@ export function conformAt(f, p, t, a, sdf, torso = sdf, normal = null) {
   return q.sub(p);
 }
 
-// Breast-side patch (bodySculpt.breastPatch, KentishPloverMaterials kpPlumage): 1 under it and up to 1 mm beyond its
+// Under the breast-side plumage at the wing's bend (bodySculpt.wingTuck — the v4 breast-side patch line): 1 under it and up to 1 mm beyond its
 // edge (half-width ≈3 mm), 0 from 2.5 mm beyond it on.
 function underPatch(p) {
   if (Math.abs(p.x) < 6) return 0;
-  const [, d] = patchAt([p.x, p.y, p.z]);
+  const [, d] = patchAt([p.x, p.y, p.z], SCULPT.wingTuck);
   return 1 - smooth01(4, 5.5, d);
 }
 
@@ -368,11 +369,11 @@ let CACHE = null;
 // tools/dev/wingfold-cache.mjs) under a key of what it depends on: the solver version, the wing layout and the
 // body outline (sampled). Whenever either changes the key no longer matches and the solution is computed
 // here instead (with a console warning to regenerate the cache).
-export const WING_FOLD_SOLVER = 26; // bump with any change of the solver below
+export const WING_FOLD_SOLVER = 27; // bump with any change of the solver below
 export function wingFoldKey(wingFeathers, sdf, torsoSdf = sdf) {
   const probe = [];
   for (let x = 0; x <= 24; x += 6) for (let y = 40; y <= 90; y += 10) for (let z = -50; z <= 50; z += 10) probe.push(Math.round(sdf(x, y, z) * 100), Math.round(torsoSdf(x, y, z) * 100));
-  const text = JSON.stringify([WING_FOLD_SOLVER, wingFeathers, probe]);
+  const text = JSON.stringify([WING_FOLD_SOLVER, wingFeathers, probe, SCULPT.wingEdge, SCULPT.wingTuck]);
   let h1 = 0x811c9dc5;
   let h2 = 0x01000193;
   for (let i = 0; i < text.length; i++) {

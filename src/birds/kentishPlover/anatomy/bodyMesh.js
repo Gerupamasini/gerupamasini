@@ -69,11 +69,10 @@ export function wingEdgeGLSL(name) {
 }
 
 /**
- * Breast-side patch (bodySculpt.breastPatch) at rest point p (mm, either side): [t (0 top … 1 bottom along the line),
+ * Breast-side patch (bodySculpt.breastPatch, or another line P) at rest point p (mm, either side): [t (0 top … 1 bottom along the line),
  * distance (mm) from the line].
  */
-export function patchAt(p) {
-  const P = CFG.bodySculpt.breastPatch;
+export function patchAt(p, P = CFG.bodySculpt.breastPatch) {
   const q = [Math.abs(p[0]), p[1], p[2]];
   let best = [0, Infinity];
   let acc = 0;
