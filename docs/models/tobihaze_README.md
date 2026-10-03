@@ -139,7 +139,8 @@ VIRT=50 W=960 H=540 node tools/models/tobihaze/probe.mjs /tmp/probe   # /tmp/pro
 npx vitest run tests/unit/tobihaze.test.ts        # 姿勢・歩行速度・跳躍・水陸の切り替え・皮膚の乾燥
 # 単体のショーケース（ゲームと同じドライバを小さな干潟で動かすページ。潮位・行動ボタン・タップで驚かす）
 OUT=/tmp/showcase npx vite build --config tools/models/tobihaze/showcase/vite.config.mjs
-#   page.html（本文のみ）と showcase.js、tobihaze.lod1.glb を同じ場所に置いて配信する
+#   page.html（本文のみ）と showcase.js、モデル（canvas の data-model。.glb、または base64 にした .txt）を同じ場所に置いて配信する
+#   base64 -w 0 src/assets/models/tobihaze/tobihaze.lod1.glb > /tmp/showcase/tobihaze.lod1.b64.txt
 ```
 
 ## 既知の限界

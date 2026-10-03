@@ -4,10 +4,10 @@
 import {
   ACESFilmicToneMapping, BackSide, CanvasTexture, Color, DirectionalLight, Fog, HemisphereLight, Mesh,
   MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, PMREMGenerator, Raycaster, RepeatWrapping,
-  RingGeometry, MeshBasicMaterial, Scene, ShaderMaterial, SphereGeometry, SRGBColorSpace, Vector2, Vector3, Vector4, WebGLRenderer,
+  RingGeometry, MeshBasicMaterial, Scene, ShaderMaterial, SphereGeometry, SRGBColorSpace, TextureLoader, Vector2, Vector3, Vector4, WebGLRenderer,
   type Bone, type IUniform, type Object3D, type SkinnedMesh,
 } from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TobihazeDriver } from '../../../../src/creatures/species/tobihaze/TobihazeDriver';
 import { setTobihazeEnvironment } from '../../../../src/creatures/species/tobihaze/TobihazeMaterial';
@@ -256,8 +256,17 @@ ${H_GLSL}`)
   const motor = () => (driver as unknown as { motor: Motor | null }).motor;
   const ctx = { floor: { heightAt: h, waterAt: () => tide, sampleAt: sample }, player: camera.position, simScale: 1, nowMs: 0, locked: true, world: { fx, burrows, sunUp: 0.85 } };
 
+  // the model: a GLB, or (where .glb is not served) the same bytes as base64 text. Textures are decoded through image
+  // elements rather than fetch() of blob URLs, which a sandboxed viewer may refuse
   const modelUrl = canvas.dataset.model ?? 'tobihaze.glb';
-  new GLTFLoader().load(modelUrl, (gltf) => {
+  const loader = new GLTFLoader();
+  loader.register((parser) => {
+    (parser as unknown as { textureLoader: TextureLoader }).textureLoader = new TextureLoader(parser.options.manager);
+    return { name: 'showcase_image_elements' };
+  });
+  const progress = (f: number) => { if (loading) loading.textContent = `モデルを読み込み中… ${Math.round(f * 100)} %`; };
+  const fail = () => { if (loading) loading.textContent = 'モデルを読み込めませんでした。ページを再読み込みしてください。'; };
+  const onModel = (gltf: GLTF) => {
     const root = gltf.scene;
     const bones: Record<string, Bone> = {};
     const meshes: Mesh[] = [];
@@ -275,11 +284,12 @@ ${H_GLSL}`)
     setView('oblique', true);
     loading?.setAttribute('hidden', '');
     document.body.classList.add('ready');
-  }, (p) => {
-    if (loading && p.total) loading.textContent = `モデルを読み込み中… ${Math.round((p.loaded / p.total) * 100)} %`;
-  }, () => {
-    if (loading) loading.textContent = 'モデルを読み込めませんでした。ページを再読み込みしてください。';
-  });
+  };
+  if (/\.txt$/.test(modelUrl)) {
+    fetchBase64(modelUrl, progress).then((buf) => loader.parse(buf, '', onModel, fail)).catch(fail);
+  } else {
+    loader.load(modelUrl, onModel, (p) => { if (p.total) progress(p.loaded / p.total); }, fail);
+  }
 
   // ---------------------------------------------------------------------------------------------- intents
   let nextId = 1;
@@ -470,6 +480,31 @@ ${H_GLSL}`)
     renderer.render(scene, camera);
   };
   requestAnimationFrame(tick);
+}
+
+/** Bytes from a base64 text file, with download progress (0–1) when the size is known. */
+async function fetchBase64(url: string, onProgress: (f: number) => void): Promise<ArrayBuffer> {
+  const res = await fetch(url);
+  if (!res.ok || !res.body) throw new Error(`${url}: ${res.status}`);
+  const total = Number(res.headers.get('content-length') ?? 0);
+  const reader = res.body.getReader();
+  const parts: Uint8Array[] = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+    got += value.length;
+    if (total) onProgress(Math.min(1, got / total));
+  }
+  let text = '';
+  const dec = new TextDecoder();
+  for (const p of parts) text += dec.decode(p, { stream: true });
+  text += dec.decode();
+  const bin = atob(text.replace(/\s+/g, ''));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
 }
 
 /** Tiled mud (0.5 m): silty grey-brown with fine grain, crab pellets and pits, shell grit; relief as a normal map. */
