@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import type { Intent } from '../../drivers/Driver';
 import type { HabitatSample } from '../../../world/Habitat';
 import type { Burrow, BurrowField } from '../../../world/Burrows';
-import type { Motor, MotorWorld } from './Motor';
+import type { Medium, Motor, MotorWorld } from './Motor';
 
 /**
  * Behaviour of the トビハゼ on the flat. The brain (behaviour tree, data) hands down intents; this turns each into a
@@ -33,6 +33,7 @@ type Task =
   | { kind: 'rewet'; target: Vector3 | null; step: 'go' | 'roll'; until: number }
   | { kind: 'edge'; target: Vector3; until: number };
 
+const MEDIUM_RANK: Record<Medium, number> = { land: 0, shallow: 1, water: 2 };
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 const wrap = (a: number) => { a = (a + Math.PI) % (Math.PI * 2); if (a < 0) a += Math.PI * 2; return a - Math.PI; };
 
@@ -41,7 +42,7 @@ export class Mind {
   private task: Task | null = null;
   private transitionUntil = 0;
   private transitionState: TobiState | null = null;
-  private lastMedium: string;
+  private lastMedium: Medium;
   /** the animal's own burrow */
   home: Burrow | null = null;
   /** hunger and thirst: after a meal it goes to drink */
@@ -101,10 +102,13 @@ export class Mind {
   update(dt: number, w: MindWorld): void {
     const m = this.m;
     const now = w.nowSec;
-    // the medium changed under it: show the transition (water exit / entry) for a moment
+    // the medium changed under it: show the transition for a moment. Each step from the water toward the land
+    // (swimming → propped in the shallows → out on the mud) is emergence, each step back is entry
     if (m.medium !== this.lastMedium && !m.inBurrow) {
-      if (this.lastMedium === 'water' && m.medium !== 'water') { this.transitionState = 'WATER_EXIT'; this.transitionUntil = now + 1.4; this.onEvent('water_exit'); }
-      else if (this.lastMedium !== 'water' && m.medium === 'water') { this.transitionState = 'WATER_ENTRY'; this.transitionUntil = now + 1.4; this.onEvent('water_entry'); }
+      const out = MEDIUM_RANK[m.medium] < MEDIUM_RANK[this.lastMedium];
+      this.transitionState = out ? 'WATER_EXIT' : 'WATER_ENTRY';
+      this.transitionUntil = now + 1.4;
+      this.onEvent(out ? 'water_exit' : 'water_entry');
       this.lastMedium = m.medium;
     }
     // how long the ground here has been out of the water
@@ -517,10 +521,12 @@ export class Mind {
     const depth = w.water(x, z) - w.ground(x, z);
     const s = w.sample(x, z);
     let score = 0;
+    // at low water they sit mostly on the wet mud at the edge, half in a film of water at most (not swimming)
     if (depth > 2 * H) score -= 1.5;
-    else if (depth > 0) score += 0.6;
+    else if (depth > H) score -= 0.3;
+    else if (depth > 0) score += 0.1;
     if (s) {
-      score += s.wetness * 1.2;
+      score += (depth > 0 ? 0.7 : s.wetness) * 1.2;
       score += Math.exp(-s.distToWater / 3) * 0.8;
       score += s.substrate === 'mud' ? 0.6 : s.substrate === 'muddy_sand' ? 0.45 : s.substrate === 'sand' ? 0.1 : 0;
     }

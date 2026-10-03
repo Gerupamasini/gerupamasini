@@ -81,6 +81,13 @@ const WET_TAU_MS: Record<Substrate, number> = {
  */
 /** pools smaller than this (m²) count as 'small_pool' habitat */
 const SMALL_POOL_M2 = 40;
+/**
+ * A pool holds water at a point when its level stands this far above the tide and above the ground there — the same
+ * test the water shader uses, so the water an animal stands in is the water on screen (coarse cells keep their own,
+ * stricter 2 cm rule for what counts as pool habitat).
+ */
+const POOL_ABOVE_TIDE = 0.01;
+const POOL_MIN_DEPTH = 0.003;
 
 export class Habitat {
   readonly spill: Float32Array;
@@ -259,7 +266,7 @@ export class Habitat {
   waterAt(x: number, z: number): number {
     const ground = this.terrain.heightAt(x, z);
     const spill = this.spillAt(x, z);
-    if (spill > this.tideLevel && spill > ground + 0.02) return spill;
+    if (spill > this.tideLevel + POOL_ABOVE_TIDE && spill > ground + POOL_MIN_DEPTH) return spill;
     return this.tideLevel;
   }
 
@@ -353,7 +360,7 @@ export class Habitat {
   sample(x: number, z: number, nowMs: number): HabitatSample {
     const ground = this.terrain.heightAt(x, z);
     const spill = this.spillAt(x, z);
-    const inPool = spill > this.tideLevel && spill > ground + 0.02;
+    const inPool = spill > this.tideLevel + POOL_ABOVE_TIDE && spill > ground + POOL_MIN_DEPTH;
     const water = inPool ? spill : this.tideLevel;
     const depth = water - ground;
     const k = this.coarseIndex(x, z);

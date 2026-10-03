@@ -210,9 +210,11 @@ export class BehaviorTree {
       const x = ind.pos.x + Math.sin(ang) * d, z = ind.pos.z + Math.cos(ang) * d;
       if (!ctx.habitat.terrain.inside(x, z, 3)) continue;
       const s = ctx.habitat.sample(x, z, ctx.nowSec * 1000);
-      if (s.depth > 0.15) continue;
+      if (s.depth > 0.04) continue;
       const sub = s.substrate === 'mud' ? 0.6 : s.substrate === 'muddy_sand' ? 0.45 : s.substrate === 'channel' ? 0.3 : s.substrate === 'sand' ? 0.1 : 0;
-      const score = s.wetness * 1.2 + Math.exp(-s.distToWater / 3) * 0.8 + sub + (s.depth > 0 ? 0.3 : 0) - (toHome ? 0 : 0.002 * Math.hypot(x - ind.home.x, z - ind.home.z)) + ind.rng.range(0, 0.35);
+      // freshly exposed wet mud at the edge ranks a little above a film of water; dry ground well below both
+      const wet = s.depth > 0 ? 0.7 + (s.depth < 0.015 ? 0.12 : 0) : s.wetness;
+      const score = wet * 1.2 + Math.exp(-s.distToWater / 3) * 0.8 + sub - (toHome ? 0 : 0.002 * Math.hypot(x - ind.home.x, z - ind.home.z)) + ind.rng.range(0, 0.35);
       if (score > bs) { bs = score; best = new Vector3(x, 0, z); }
     }
     return best;

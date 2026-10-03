@@ -195,6 +195,8 @@ export class Motor {
   private readonly rest: Record<string, Vector3> = {};
   private readonly eyeAxis: [Vector3, Vector3];
   private readonly H: number;
+  /** water deeper than this (~0.26 TL) floats it: in a shallower puddle it sits propped on its fins, eyes out */
+  private readonly Hswim: number;
   private readonly eyeTop: number;
   // scratch
   private readonly v1 = new Vector3();
@@ -212,6 +214,7 @@ export class Motor {
     this.scale = scale;
     this.L = (rig.tlMM / 1000) * scale;
     this.H = 0.145 * this.L;
+    this.Hswim = 0.19 * this.L;
     this.eyeTop = 0.17 * this.L;
     this.heading = heading;
     for (const [n] of SPINE) { this.bend[n] = new Spring(0); this.bendT[n] = 0; }
@@ -364,25 +367,30 @@ export class Motor {
 
   // ------------------------------------------------------------------------------------------------ update
   update(dt: number, w: MotorWorld): void {
-    dt = Math.min(dt, 0.05);
+    dt = Math.min(dt, 0.25);
     if (dt <= 0) return;
     this.groundFn = w.ground;
-    this.t += dt;
-    this.gaitT += dt;
-    this.sense(w);
-    for (const n of CHAIN) this.bendT[n] = 0;
-    this.bendT.J_head = 0;
-    switch (this.gait) {
-      case 'stand': this.doStand(dt, w); break;
-      case 'crawl': this.doCrawl(dt, w); break;
-      case 'swim': this.doSwim(dt, w); break;
-      case 'hop': this.doHop(dt, w); break;
-      case 'strike': this.doStrike(dt, w); break;
-      case 'dive': case 'emerge': case 'hidden': this.doBurrow(dt, w); break;
-      case 'roll': this.doRoll(dt, w); break;
+    // far animals are updated every 2nd or 4th frame with a longer step: the gait runs in sub-steps of at most
+    // 50 ms so they keep their real pace, the skeleton is posed once (its springs are implicit and stable)
+    const n = Math.ceil(dt / 0.05 - 1e-6), h = dt / n;
+    for (let i = 0; i < n; i++) {
+      this.t += h;
+      this.gaitT += h;
+      this.sense(w);
+      for (const c of CHAIN) this.bendT[c] = 0;
+      this.bendT.J_head = 0;
+      switch (this.gait) {
+        case 'stand': this.doStand(h, w); break;
+        case 'crawl': this.doCrawl(h, w); break;
+        case 'swim': this.doSwim(h, w); break;
+        case 'hop': this.doHop(h, w); break;
+        case 'strike': this.doStrike(h, w); break;
+        case 'dive': case 'emerge': case 'hidden': this.doBurrow(h, w); break;
+        case 'roll': this.doRoll(h, w); break;
+      }
+      this.doSkin(h, w);
+      this.doBreath(h);
     }
-    this.doSkin(dt, w);
-    this.doBreath(dt);
     this.solve(dt, w);
   }
 
@@ -390,12 +398,12 @@ export class Motor {
     this.groundY = w.ground(this.pos.x, this.pos.z);
     this.waterY = w.water(this.pos.x, this.pos.z);
     this.depth = this.waterY - this.groundY;
-    const H = this.H;
+    const H = this.H, Hs = this.Hswim;
     // hysteresis between the media so the gait does not flicker at the edge
     const d = this.depth;
-    if (this.medium === 'land') { if (d > 0.35 * H) this.medium = d > 1.35 * H ? 'water' : 'shallow'; }
-    else if (this.medium === 'shallow') { if (d < 0.2 * H) this.medium = 'land'; else if (d > 1.35 * H) this.medium = 'water'; }
-    else if (d < 1.15 * H) this.medium = d < 0.2 * H ? 'land' : 'shallow';
+    if (this.medium === 'land') { if (d > 0.35 * H) this.medium = d > 1.35 * Hs ? 'water' : 'shallow'; }
+    else if (this.medium === 'shallow') { if (d < 0.2 * H) this.medium = 'land'; else if (d > 1.35 * Hs) this.medium = 'water'; }
+    else if (d < 1.15 * Hs) this.medium = d < 0.2 * H ? 'land' : 'shallow';
   }
 
   private fwd(h = this.heading, out = this.v1): Vector3 { return out.set(Math.sin(h), 0, Math.cos(h)); }
