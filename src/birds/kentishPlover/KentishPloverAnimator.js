@@ -101,7 +101,7 @@ const sinkLimit = (rest, need) => Math.min(rest, need) - SINK * smoothstep(need 
 // shoulder, above the trunk-only outline).
 const BODY_SDF = gridCachedSDF(getBodySDF(CFG), CONTACT_BOUNDS);
 // (v4: the folded wing lies high on the side of the broad body, |x| > 17, y 60–90)
-const wingZone = (p) => smoothstep(15, 19, Math.abs(p.x)) * smoothstep(58, 62, p.y) * (1 - smoothstep(86, 90, p.y)) * (1 - smoothstep(20, 26, p.z)) * smoothstep(-70, -64, p.z);
+const wingZone = (p) => smoothstep(12, 16, Math.abs(p.x)) * smoothstep(58, 62, p.y) * (1 - smoothstep(86, 90, p.y)) * (1 - smoothstep(20, 26, p.z)) * smoothstep(-70, -64, p.z);
 /** How far (mm) a head / neck point at p (rest space) is below where it may be; `contactDeficit.sdf` is the
  *  outline that decided it (the push goes along its gradient). */
 const contactDeficit = (s, need, p) => {
@@ -1641,19 +1641,19 @@ function preenTarget(variant) {
   // between nibble phases; from these pivots it moves 1–4 mm.
   switch (variant) {
     case 'breast':
-      return { p: [6, 74.3, 34.8], head: [-10, 98, 34], roll: 0.2 };
+      return { p: [5, 74.3, 34.8], head: [-10, 98, 34], roll: 0.2 };
     case 'belly':
-      return { p: [8, 57, 28.6], head: [-10, 96, 36], roll: 0.5 };
+      return { p: [6.2, 57, 28.6], head: [-10, 96, 36], roll: 0.5 };
     case 'flank':
-      return { p: [32.5, 58.2, 1.8], roll: 0.9, wingLift: 0.5 };
+      return { p: [25.5, 58.2, 1.8], roll: 0.9, wingLift: 0.5 };
     case 'scapulars':
-      return { p: [10.5, 80, -20.7], head: [-2, 99, 12], roll: 1.4 };
+      return { p: [8.1, 80, -20.7], head: [-2, 99, 12], roll: 1.4 };
     case 'wing':
-      return { p: [28.8, 70.7, -23.2], head: [13, 98, 2], roll: 1.4, wingLift: 0.35 };
+      return { p: [22.3, 70.7, -23.2], head: [10.5, 98, 2], roll: 1.4, wingLift: 0.35 };
     case 'tail':
       return { p: [0, 65, -51], roll: 0.4 };
     default:
-      return { p: [3, 66.4, 33], roll: 0.2 };
+      return { p: [2.4, 66.4, 33], roll: 0.2 };
   }
 }
 
@@ -1787,7 +1787,7 @@ export const ACTIONS = {
       const scr = Math.sin(u * Math.PI * 2 * 9) * 0.002;
       const out = {
         legRaise: { [side]: k },
-        legRaiseTarget: { [side]: A.bodyPoint([sg * 26, 88 + scr * 1000, 14]) }, // (v4: beside the broad shoulder)
+        legRaiseTarget: { [side]: A.bodyPoint([sg * 22, 88 + scr * 1000, 14]) }, // (v4: beside the broad shoulder)
         wing: { [side]: { raise: 0.15 * k } }, // folded wing held slightly off the flank
         posture: { roll: -sg * 0.12 * k, pitch: 0.12 * k, neck: -0.3 },
       };

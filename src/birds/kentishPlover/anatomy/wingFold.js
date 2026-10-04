@@ -54,9 +54,9 @@ const Y = new THREE.Vector3(0, 1, 0);
 // (18.5, 83, 7.4) → elbow (22, 73.5, −27) → carpal joint (26, 76, 17.3) → hand tip (30, 73, −8.5) — high on the side of
 // the broad v4 body (spec v4 §10.2)
 export const FOLD_TARGET = {
-  humerus: { x: [0.098, -0.265, -0.959], y: [0.55, 0.82, 0.1] },
-  forearm: { x: [0.09, 0.056, 0.994], y: [0.78, 0.6, 0] },
-  hand: { x: [0.152, -0.114, -0.982], y: [0.73, 0.68, 0] },
+  humerus: { x: [0.07, -0.266, -0.962], y: [0.55, 0.82, 0.1] },
+  forearm: { x: [0.065, 0.056, 0.996], y: [0.78, 0.6, 0] },
+  hand: { x: [0.11, -0.115, -0.987], y: [0.73, 0.68, 0] },
 };
 
 function armFold() {
@@ -72,7 +72,7 @@ function armFold() {
 // Folded wing raised off the flank as a whole (preening under it, scratching over it; animator): the shoulder
 // turns about a hinge along the body's long axis on the wing's dorsal edge (left wing, mm). Every feather
 // gets a re-aim per raise step so it stays clear of the flank all the way (raiseAt).
-export const WING_RAISE = { hinge: [17, 84, -12], steps: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3] };
+export const WING_RAISE = { hinge: [14, 84, -12], steps: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3] };
 // mm: how much the flank swells under the raised wing when preening (fluff 0.7: 2.5 mm per unit of fluff on the
 // sides beyond the rest fluff 0.15, bodyMesh.bodyDisplacementMasks)
 const RAISE_FLUFF = 1.4;
@@ -369,7 +369,7 @@ let CACHE = null;
 // tools/dev/wingfold-cache.mjs) under a key of what it depends on: the solver version, the wing layout and the
 // body outline (sampled). Whenever either changes the key no longer matches and the solution is computed
 // here instead (with a console warning to regenerate the cache).
-export const WING_FOLD_SOLVER = 27; // bump with any change of the solver below
+export const WING_FOLD_SOLVER = 28; // bump with any change of the solver below
 export function wingFoldKey(wingFeathers, sdf, torsoSdf = sdf) {
   const probe = [];
   for (let x = 0; x <= 24; x += 6) for (let y = 40; y <= 90; y += 10) for (let z = -50; z <= 50; z += 10) probe.push(Math.round(sdf(x, y, z) * 100), Math.round(torsoSdf(x, y, z) * 100));
@@ -508,7 +508,7 @@ export function computeWingFold(wingFeathers, sdf, torsoSdf = sdf, { useCache = 
         const y = wingEdgeY(z) - 1.5 + 1.5 * u ** 1.6;
         return V([onSide(sdf, y, z), y, z]);
       };
-      const guess = f.type === 'tertial' ? V([[16, 64.5, -53], [13, 66.5, -52], [10, 67.5, -50.5]][f.index - 1]) : f.type === 'secondary' ? sTip(f.index) : base.clone().addScaledVector(dirHint, L);
+      const guess = f.type === 'tertial' ? V([[13, 64.5, -53], [10.5, 66.5, -52], [8, 67.5, -50.5]][f.index - 1]) : f.type === 'secondary' ? sTip(f.index) : base.clone().addScaledVector(dirHint, L);
       const [pp, nn] = projectToSurface(sdf, guess.x, guess.y, guess.z);
       const lift = f.type === 'alula' ? -0.6 : f.type === 'lesserCovert' && f.bone === 'hand' ? 1.2 : f.type === 'lesserCovert' ? 2.6 : f.type === 'tertial' ? 3.4 : 2.2 + (order[f.name] ?? 0) * 0.05;
       const surfTip = V(pp).addScaledVector(V(nn), lift);
