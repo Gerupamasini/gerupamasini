@@ -55,7 +55,7 @@ const Y = new THREE.Vector3(0, 1, 0);
 // the broad v4 body (spec v4 §10.2)
 export const FOLD_TARGET = {
   humerus: { x: [0.07, -0.266, -0.962], y: [0.55, 0.82, 0.1] },
-  forearm: { x: [0.085, 0.056, 0.995], y: [0.78, 0.6, 0] },
+  forearm: { x: [0.065, 0.056, 0.996], y: [0.78, 0.6, 0] },
   hand: { x: [0.11, -0.115, -0.987], y: [0.73, 0.68, 0] },
 };
 
@@ -369,7 +369,7 @@ let CACHE = null;
 // tools/dev/wingfold-cache.mjs) under a key of what it depends on: the solver version, the wing layout and the
 // body outline (sampled). Whenever either changes the key no longer matches and the solution is computed
 // here instead (with a console warning to regenerate the cache).
-export const WING_FOLD_SOLVER = 29; // bump with any change of the solver below
+export const WING_FOLD_SOLVER = 30; // bump with any change of the solver below
 export function wingFoldKey(wingFeathers, sdf, torsoSdf = sdf) {
   const probe = [];
   for (let x = 0; x <= 24; x += 6) for (let y = 40; y <= 90; y += 10) for (let z = -50; z <= 50; z += 10) probe.push(Math.round(sdf(x, y, z) * 100), Math.round(torsoSdf(x, y, z) * 100));
