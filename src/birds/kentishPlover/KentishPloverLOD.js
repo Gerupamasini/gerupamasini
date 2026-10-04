@@ -277,7 +277,7 @@ function farBodyGeometry(pal) {
   }
   const colour = (x, y, z) => {
     // (v4.1: the grey-brown shoulders come down to y 74.5 in front of the wing, outside the breast-side horseshoe)
-    const shoulder = z > 14 && z < 30 && Math.abs(x) > 18 && y > 74.5 && y < 90;
+    const shoulder = z > 14 && z < 30 && Math.abs(x) > 14.5 && y > 74.5 && y < 90;
     const hex = shoulder ? pal.mantle : z > 14 ? (y > 92 ? pal.crown : pal.underparts) : y > wingEdgeY(z) ? pal.mantle : pal.underparts;
     return plumageAlbedo(hex);
   };

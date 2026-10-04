@@ -214,11 +214,11 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
   float dorsal = smoothstep(yb - 1.5, yb + 2.0, p.y + n.y * 3.0 + jitter);
   // (v4: on the front of the broad shoulders the collar is pushed up under the ear coverts — from the front the grey-
   // brown shoulders meet the breast-side patch with no white between them, the user's front photo, p013, p063)
-  float q = kpCollarQ(p) + jitter * 0.6 - 3.5 * smoothstep(12.0, 19.0, ax) * smoothstep(6.0, 16.0, p.z);
+  float q = kpCollarQ(p) + jitter * 0.6 - 3.5 * smoothstep(10.0, 16.0, ax) * smoothstep(6.0, 16.0, p.z);
   float sFront = p.z - kpPatchZ(p.y) + 1.0;
   // (v4.1: on the sides of the neck in front of z 8 the white collar gives way to the shoulder up to the head: the
   // brown lies against the whole outer edge of the horseshoe, up to under the ear coverts)
-  float qSide = 2.0 * smoothstep(14.0, 19.0, ax) * smoothstep(6.0, 14.0, p.z);
+  float qSide = 2.0 * smoothstep(12.0, 16.0, ax) * smoothstep(6.0, 14.0, p.z);
   float qMantle = -3.2 + 2.2 * smoothstep(4.0, 8.0, ax) * smoothstep(0.1, 0.5, n.y) + qSide;
   float bodyZone = (1.0 - smoothstep(-1.0, 1.5, sFront + jitter * 0.5)) * (1.0 - smoothstep(qMantle - 0.8, qMantle + 0.2, q));
   col = mix(col, uMantle, dorsal * bodyZone);

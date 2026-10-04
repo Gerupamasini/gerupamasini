@@ -13,11 +13,11 @@ const deg = Math.PI / 180;
 // under the breast-side plumage, so the closed wing lies on the upper flank and from the front only its upper edge
 // shows at the shoulders. Bone lengths as before (humerus 35.4, ulna 44.4, hand 26.3 mm).
 export const WING = {
-  shoulder: [16, 82.5, 8.4],
-  humerus: [18.5, 83, 7.4],
-  elbow: [53.5, 83, 2.9], // humerus 35.4 mm
-  wrist: [97.5, 83, 8.9], // forearm (ulna) 44.4 mm
-  handTip: [123.5, 83, 4.9], // carpometacarpus + digits 26.3 mm
+  shoulder: [13.5, 82.5, 8.4],
+  humerus: [16, 83, 7.4],
+  elbow: [51, 83, 2.9], // humerus 35.4 mm
+  wrist: [95, 83, 8.9], // forearm (ulna) 44.4 mm
+  handTip: [121, 83, 4.9], // carpometacarpus + digits 26.3 mm
 };
 
 // Direction in the wing plane: angle measured from +X (distal) toward −Z (trailing edge).
@@ -206,9 +206,9 @@ export function buildScapularLayout() {
     // (v4: three rows over the broad back, from the midline out to the folded wing's upper edge at |x| ≈ 20; the front
     // of the cape starts behind the base of the neck — rooted further forward the first feathers grew out of the neck
     // plumage itself and riding the skin there were dragged round by every turn of the head, validation §Y)
-    { x0: 4.5, x1: 7, z0: -2, z1: -24, n: 6, len: [15, 21], w: 9, out: 0.15, y: 89 },
-    { x0: 10.5, x1: 13, z0: 0, z1: -22, n: 6, len: [14, 20], w: 8.8, out: 0.3, y: 87 },
-    { x0: 16, x1: 18.5, z0: 2, z1: -17, n: 5, len: [13, 18], w: 8.0, out: 0.45, y: 85 },
+    { x0: 4, x1: 6.2, z0: -2, z1: -24, n: 6, len: [15, 21], w: 9, out: 0.15, y: 89 },
+    { x0: 9, x1: 11.2, z0: 0, z1: -22, n: 6, len: [14, 20], w: 8.8, out: 0.3, y: 87 },
+    { x0: 13.5, x1: 15.5, z0: 2, z1: -17, n: 5, len: [13, 18], w: 8.0, out: 0.45, y: 85 },
   ];
   rows.forEach((r, ri) => {
     for (let side = 0; side < 2; side++) {

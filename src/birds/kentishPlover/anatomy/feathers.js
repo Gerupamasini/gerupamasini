@@ -456,7 +456,7 @@ export function buildFeatherGeometry(spec, boneIndex, sdf, detail = 0, fold = nu
       // spec §2); inner rows over outer ones
       const conform = (p) => {
         const [pp, nn] = projectToSurface(sdf, p[0], p[1], p[2]);
-        const lift = 0.7 + f.layer * 0.1 + 1.1 * smooth01(15, 20, Math.abs(pp[0]));
+        const lift = 0.7 + f.layer * 0.1 + 1.1 * smooth01(12, 16, Math.abs(pp[0]));
         return [[pp[0] + nn[0] * lift, pp[1] + nn[1] * lift, pp[2] + nn[2] * lift], nn];
       };
       const m = gb.mark();
