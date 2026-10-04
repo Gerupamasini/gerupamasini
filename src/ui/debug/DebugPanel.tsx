@@ -61,6 +61,20 @@ export function DebugPanel({ app }: { app: App }) {
         <button onClick={() => app.teleport('clams')}>貝床</button>
         <button onClick={() => app.forceSpawn()}>周囲に生物</button>
       </div>
+      <div class="debug-row seg">
+        <span>習熟</span>
+        {(['hand_net', 'shovel'] as const).map((id) => {
+          const n = app.encyclopedia.skillCount(id), lv = app.encyclopedia.skillLevel(id);
+          return (
+            <span key={id} style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+              <b>{app.data.tools.get(id)?.ja ?? id} Lv{lv}</b><span class="dim small">({n})</span>
+              <button onClick={() => app.setSkill(id, 0)}>0</button>
+              <button onClick={() => app.setSkill(id, n + 5)}>+5</button>
+              <button onClick={() => app.setSkill(id, 40)}>最大</button>
+            </span>
+          );
+        })}
+      </div>
       <div class="debug-row dim small">
         draw {d.stats.calls} / tris {(d.stats.tris / 1000).toFixed(0)}k / 生物 {d.stats.creatures}（表示 {d.stats.visible}、近距離 {d.stats.lod1}） / アサリ 近く {d.stats.clamsNear}（全 {d.stats.clamsTotal}） / {hud.fps} fps / 次の満干 {hud.extrema.slice(0, 2).map((e) => `${e.kind === 'high' ? '満' : '干'} ${formatJst(e.t)}`).join(' ')}
       </div>

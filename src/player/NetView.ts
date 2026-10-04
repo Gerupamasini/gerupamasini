@@ -203,14 +203,14 @@ export class NetView {
    * line of sight from just in front of the eye out to the reach of the handle. Returns how far out toward the
    * rim the point is (0 centre … 1 rim), or -1 when it is outside; `margin` widens the ellipse by the animal's size.
    */
-  static inZone(camera: PerspectiveCamera, p: Vector3, margin: number): number {
+  static inZone(camera: PerspectiveCamera, p: Vector3, margin: number, scale = 1): number {
     camera.updateMatrixWorld();
     const m = camera.matrixWorld.elements;
     const dx = p.x - m[12], dy = p.y - m[13], dz = p.z - m[14];
     // camera axes from the world matrix: right (column 0), up (column 1), back (column 2)
     const t = -(dx * m[8] + dy * m[9] + dz * m[10]);
     if (t < ZONE_NEAR || t > REACH + margin) return -1;
-    const ex = (dx * m[0] + dy * m[1] + dz * m[2]) / (ZONE_A + margin), ey = (dx * m[4] + dy * m[5] + dz * m[6]) / (ZONE_B + margin);
+    const ex = (dx * m[0] + dy * m[1] + dz * m[2]) / (ZONE_A * scale + margin), ey = (dx * m[4] + dy * m[5] + dz * m[6]) / (ZONE_B * scale + margin);
     const e = Math.sqrt(ex * ex + ey * ey);
     return e <= 1 ? e : -1;
   }
@@ -246,7 +246,7 @@ export class NetView {
   }
 
   /** Place the net for this frame from the capture state (null = at rest, out of sight). */
-  update(camera: PerspectiveCamera, dt: number, st: CaptureState | null, waterY: number, showZone = false): void {
+  update(camera: PerspectiveCamera, dt: number, st: CaptureState | null, waterY: number, showZone = false, zoneScale = 1): void {
     this.time += dt;
     // debug: the zone tube rides along the line of sight
     this.zone.visible = showZone;
@@ -254,7 +254,7 @@ export class NetView {
       camera.updateMatrixWorld();
       this.zone.position.set(0, 0, -(ZONE_NEAR + REACH) / 2).applyMatrix4(camera.matrixWorld);
       this.zone.quaternion.copy(camera.quaternion);
-      this.zone.scale.set(ZONE_A, ZONE_B, REACH - ZONE_NEAR);
+      this.zone.scale.set(ZONE_A * zoneScale, ZONE_B * zoneScale, REACH - ZONE_NEAR);
     }
     const want = (this.visible && !!st) || (this.held && !st);
     this.shown = MathUtils.damp(this.shown, want ? 1 : 0, 9, dt);
@@ -273,7 +273,7 @@ export class NetView {
       this.bagMat.roughness = MathUtils.damp(this.bagMat.roughness, 0.6, 2, dt);
     } else if (st.phase === 'swing') {
       // thrust straight ahead along the line of sight, then turn the hoop up and draw it back
-      const t = st.elapsed / CAPTURE_PHASE_SEC.swing;
+      const t = st.elapsed / st.swingSec;
       if (t < 0.5) lerpPose(P_READY, P_THRUST, ease(t / 0.5), cur);
       else lerpPose(P_THRUST, P_SCOOP, ease((t - 0.5) / 0.5), cur);
       if (t >= 0.42 && !this.splashed) { this.splashed = true; this.splash(camera, waterY); }

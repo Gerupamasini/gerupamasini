@@ -170,9 +170,9 @@ function Hud({ app }: { app: App }) {
           <div>{t('hud.case')}<b>{hud.caseCount}<span class="dim">/{hud.caseMax}</span></b></div>
           <div class="fps">{hud.fps} fps</div>
         </div>
-        <div class="hud-tools">
+        <div class="hud-tools" data-skills={Object.values(app.encyclopedia.skills.value).join(',')}>
           {(['hand_net', 'shovel'] as const).map((id, i) => (
-            <button key={id} class={`tool-chip ${ui.tool.value === id ? 'on' : ''}`} onClick={() => app.setTool(id)}><Key k={String(i + 1)} />{app.data.tools.get(id)?.ja ?? id}</button>
+            <button key={id} class={`tool-chip ${ui.tool.value === id ? 'on' : ''}`} onClick={() => app.setTool(id)}><Key k={String(i + 1)} />{app.data.tools.get(id)?.ja ?? id}{app.encyclopedia.skillLevel(id) > 0 && <span class="lv">Lv{app.encyclopedia.skillLevel(id)}</span>}</button>
           ))}
         </div>
       </div>

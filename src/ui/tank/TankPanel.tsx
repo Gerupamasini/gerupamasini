@@ -1,3 +1,4 @@
+import { researchFor } from '../../systems/Encyclopedia';
 import { h, Fragment } from 'preact';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
@@ -59,7 +60,14 @@ function FishTab({ app }: { app: App }) {
       <h4>{t('hud.case')} <span class="num" style={{ marginLeft: '8px' }}>{inCase.length} / {enc.caseMax}</span></h4>
       <ul class="case-list">
         {inCase.map((r) => (
-          <li key={r.id}><Name app={app} r={r} />{!full && <button onClick={() => void app.tankPut(r)}>{t('tank.put')}</button>}</li>
+          <li key={r.id}>
+            <Name app={app} r={r} />
+            <span class="acts">
+              {!full && <button onClick={() => void app.tankPut(r)}>{t('tank.put')}</button>}
+              <button onClick={() => app.caseRelease(r)}>{t('case.release')}</button>
+              <button onClick={() => app.caseToResearch(r)} title={`+${researchFor(r)} ${t('progress.research')}`}>{t('case.toResearch')} +{researchFor(r)}</button>
+            </span>
+          </li>
         ))}
       </ul>
     </Fragment>

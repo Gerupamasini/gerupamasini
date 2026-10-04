@@ -20,12 +20,12 @@ import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 import { instantiateModel } from '../creatures/models/ModelLoader';
 import { DRIVERS } from '../creatures/drivers';
-import type { SpeciesDef } from '../data/schemas';
+import type { SpeciesDef, ToolDef } from '../data/schemas';
 import { CreatureSystem, type SpawnEnv } from '../creatures/CreatureSystem';
 import type { Individual, IndividualRecord } from '../creatures/Individual';
 import { Encyclopedia } from '../systems/Encyclopedia';
 import { Observation } from '../systems/Observation';
-import { Capture } from '../systems/Capture';
+import { CAPTURE_PHASE_SEC, Capture } from '../systems/Capture';
 import { ui, t, toast, type Screen, type Marker, type ToolId } from '../ui/store';
 import { checkForNewBuild } from '../core/Build';
 import { Root } from '../ui/Root';
@@ -61,6 +61,8 @@ export class App {
   shovel: ShovelView | null = null;
   /** the buried clams of the flat */
   clams: ClamField | null = null;
+  /** the tool of the capture in progress (its proficiency grows with what it brings up) */
+  private lastTool: ToolDef | null = null;
   /** the clam the player is looking at (index into the field), or -1 */
   targetClam = -1;
   /** a clam built in full for observation */
@@ -507,13 +509,23 @@ export class App {
       if (!ind.species.collectable || ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
       if (ind.pos.distanceTo(player.position) > REACH + 1.5) continue;
       // the hoop is judged against the body as drawn (the anchor) as well as the logical position, with the animal's own size as margin
-      const margin = Math.max(0.06, ind.length_mm / 2000);
-      let e = NetView.inZone(this.camera, ind.pos, margin);
+      const margin = Math.max(0.06, ind.length_mm / 2000), scale = this.netZoneScale();
+      let e = NetView.inZone(this.camera, ind.pos, margin, scale);
       const anchor = creatures.anchorOf(ind.id);
-      if (anchor) { const ea = NetView.inZone(this.camera, anchor, margin); if (ea >= 0 && (e < 0 || ea < e)) e = ea; }
+      if (anchor) { const ea = NetView.inZone(this.camera, anchor, margin, scale); if (ea >= 0 && (e < 0 || ea < e)) e = ea; }
       if (e >= 0) out.push({ ind, edge: e });
     }
     return out;
+  }
+
+  /** The hoop grows with the hand's proficiency: ×1 untrained, ×1.6 at the top level. */
+  netZoneScale(): number {
+    return 1 + 0.12 * this.encyclopedia.skillLevel('hand_net');
+  }
+
+  /** How much deep water slows the swing at the player's feet: 0 in the shallows, 1 at knee depth and beyond. */
+  swingSlow(): number {
+    return Math.max(0, Math.min(1, ((this.player?.depthHere ?? 0) - 0.15) / 0.45));
   }
 
   swingNet(): void {
@@ -523,6 +535,9 @@ export class App {
     const free = Math.max(0, this.encyclopedia.caseMax - this.encyclopedia.caseItems.value.length);
     const caught: Individual[] = [], startled: Individual[] = [];
     const hits = this.netZoneHits();
+    // deep water drags on the net, a practised hand is quicker
+    const slow = this.swingSlow(), skill = this.encyclopedia.skillLevel('hand_net');
+    const swingSec = CAPTURE_PHASE_SEC.swing * (1 + 1.2 * slow) * (1 - 0.05 * skill);
     for (const { ind, edge } of hits) {
       // an animal under the hoop is in the bag unless it was already alarmed enough to bolt in time: the odds of
       // getting away grow with the square of its alertness, a little at the rim of the hoop, and less from behind
@@ -530,6 +545,8 @@ export class App {
       const dx = player.position.x - ind.pos.x, dz = player.position.z - ind.pos.z, len = Math.hypot(dx, dz) || 1;
       const facing = (Math.sin(ind.heading) * dx + Math.cos(ind.heading) * dz) / len;
       let escape = 0.6 * ind.alert * ind.alert * (0.5 + cap.alertPenalty) + 0.25 * edge * edge + 0.1 * cap.baseDifficulty + (facing > 0.3 ? 0.05 : facing < -0.3 ? -0.08 : 0);
+      // a slow swing in deep water gives everything time to go; a practised hand gives less
+      escape = (escape + 0.35 * slow * (0.5 + ind.alert)) * (1 - 0.1 * skill);
       escape = Math.min(0.85, Math.max(0, escape));
       if (this.capture.forceCatch || (ind.rng.next() > escape && caught.length < free)) caught.push(ind);
     }
@@ -542,7 +559,8 @@ export class App {
       creatures.forceIntent(ind.id, { id: -1, kind: 'flee', urgency: 1, seconds: 4, target: ind.pos.clone().add(away), from: player.position.clone() });
     }
     if (caught.length === 0 && free === 0) toast(t('capture.caseFull'), 'warn');
-    this.capture.start(tool, caught);
+    this.lastTool = tool;
+    this.capture.start(tool, caught, swingSec);
     this.net?.show();
     this.setMode('capture');
   }
@@ -559,7 +577,8 @@ export class App {
     ShovelView.digPoint(this.camera, (x, z) => world.terrain.heightAt(x, z), p);
     if (world.habitat.depthAt(p.x, p.z) > 0.15) { toast(t('hud.tooDeepToDig'), 'warn'); return; }
     const nowSec = this.clock.nowGame() / 1000;
-    const k = clams.dig(p.x, p.z, tool.params.radius ?? 0.14, nowSec);
+    // a practised hand finds the clam under a wider blade
+    const k = clams.dig(p.x, p.z, (tool.params.radius ?? 0.14) * (1 + 0.1 * this.encyclopedia.skillLevel('shovel')), nowSec);
     clams.startle(p.x, p.z, 1.5, nowSec);
     const caught: Individual[] = [];
     const sp = this.data.species.get('ruditapes_philippinarum');
@@ -567,6 +586,7 @@ export class App {
       if (this.encyclopedia.caseItems.value.length >= this.encyclopedia.caseMax) toast(t('capture.caseFull'), 'warn');
       else caught.push(generateIndividual(sp, clams.seed[k], clams.xs[k], clams.zs[k], -1, 0, this.clock.nowGame(), [clams.len[k], clams.len[k]]));
     }
+    this.lastTool = tool;
     this.capture.start(tool, caught);
     this.shovel?.show();
     this.setMode('capture');
@@ -617,6 +637,7 @@ export class App {
     this.net?.hide();
     this.shovel?.hide();
     for (const ind of caught) this.encyclopedia.onCaptured(ind, this.clock.nowGame(), this.world.tideLevel);
+    if (caught.length && this.lastTool) this.encyclopedia.addSkill(this.lastTool.id, this.lastTool.ja, caught.length);
     this.setMode('field');
     this.requestSave();
   }
@@ -628,6 +649,21 @@ export class App {
       this.encyclopedia.moveToTank(rec);
       await this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
     });
+  }
+
+  /** debug: set a tool's catch count (its proficiency) by hand */
+  setSkill(toolId: ToolId, count: number): void {
+    this.encyclopedia.setSkill(toolId, count, this.data.tools.get(toolId)?.ja);
+  }
+
+  caseRelease(rec: IndividualRecord): void {
+    this.encyclopedia.release(rec);
+    this.requestSave();
+  }
+
+  caseToResearch(rec: IndividualRecord): void {
+    this.encyclopedia.toResearch(rec);
+    this.requestSave();
   }
 
   async tankRelease(rec: IndividualRecord): Promise<void> {
@@ -823,7 +859,7 @@ export class App {
     } else if (world && player && creatures) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       else if (mode === 'capture') player.idle(dt);
-      this.net?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'hand_net' ? this.capture.state.value : null, world.tideLevel, ui.debug.value && this.tool === 'hand_net' && (mode === 'field' || mode === 'capture'));
+      this.net?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'hand_net' ? this.capture.state.value : null, world.tideLevel, ui.debug.value && this.tool === 'hand_net' && (mode === 'field' || mode === 'capture'), this.netZoneScale());
       this.shovel?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'shovel' ? this.capture.state.value : null);
       this.clams?.update(player.position, this.worldVisible() ? dt : 0, gameMs / 1000, (x, z) => world.habitat.waterAt(x, z));
       creatures.update({
@@ -906,7 +942,7 @@ export class App {
       if (this.tmp.z > 1 || Math.abs(this.tmp.x) > 1.05 || Math.abs(this.tmp.y) > 1.05) continue;
       out.push({
         id: ind.id, x: ((this.tmp.x + 1) / 2) * w, y: ((1 - this.tmp.y) / 2) * h - 8,
-        text: `${ind.species.names.ja} ${d.toFixed(1)}m L${ind.lod}${ind.sex === 'm' ? '♂' : '♀'}`,
+        text: `${ind.species.names.ja} ${d.toFixed(1)}m L${ind.lod}${ind.sex === 'm' ? '♂' : '♀'} 警${ind.alert.toFixed(1)}/${ind.wariness.toFixed(1)}`,
         kind: ind.species.taxon.group,
       });
       if (out.length >= 80) break;
@@ -951,7 +987,8 @@ export class App {
       this.target = this.creatures.pickTarget(this.camera, 7);
       // the net: something catchable where the hoop would go through the water
       const inReach = this.tool === 'hand_net' && this.netZoneHits().length > 0;
-      const toolHint = this.tool === 'hand_net' ? (inReach ? `[E] ${t('hud.swing')}` : '') : `[E] ${t('hud.dig')}`;
+      const deep = this.tool === 'hand_net' && this.swingSlow() >= 0.5 ? `　${t('hud.deepSlow')}` : '';
+      const toolHint = this.tool === 'hand_net' ? (inReach ? `[E] ${t('hud.swing')}${deep}` : deep.trim()) : `[E] ${t('hud.dig')}`;
       // a clam's siphon holes under the reticle
       this.targetClam = -1;
       if (this.clams && this.world) {

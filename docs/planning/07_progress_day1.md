@@ -114,3 +114,10 @@
 - 水から出ない: `CreatureSystem.keepInWater`（毎フレーム、遠い個体は 8 フレームごと）。Entry ごとに `lastWet` を覚え、必要水深（体長の 15 %）を切ったら `Driver.holdAt(x, z, heading)` でそこへ戻し、`Habitat.nearestWater`（3 → 12 → 25 m）へ moveTo。`issue()` は水中種の目標を `waterBound` で水の切れる位置に手前で止め、flee は横方向のうち水の続く向きへ。`ShrimpWorld.constrain` に水際のフェンス（`DriverContext.minDepth`）を追加して尾扇の逃避も水際で止まる。視界外（20 m 超）で干上がった個体は最寄りの水へ置き直し、25 m 以内に水がなく 30 m より遠い個体だけ 30 秒後に消える。
 - 「何も取れない」への対応: 逃走距離（マハゼ 1.6 m）が網の届く距離（1.2 m）より長く、しかも近づくだけで警戒度が 2 秒で 1 になっていた。`CreatureFrame` にプレイヤーの速度・姿勢・走りを渡し、警戒度の上がり方を「静止 0 / しゃがみ 0.4 / 歩き 1 / 走り 2.2」倍に。`player_within` の距離は `fleeDistance × (0.4 + 0.6 × alert) × (走り 1.6)`。逃げる確率は「楕円内なら基本的に入る」に変更: `0.6×alert²×(0.5+alertPenalty) + 0.25×edge² + 0.1×base ± 向き（後ろから −0.08、正面 +0.05）`、0〜0.85。判定は `ind.pos` に加えて描画上の体の位置（`anchorOf`）でも行い、余裕は max(6 cm, 体長/2)。網の届く距離 1.6 m、楕円 0.21 × 0.28 m。
 - バージョン 0.6.0。「何も取れない」対応は 0.6.1。
+
+## 10 回目（警戒心の個体差、道具の習熟度、水深の難易度、ケースの生物の処遇）
+- 警戒心: `Individual.wariness = 0.7 + 0.6 × lengthPct/100`（`warinessFor`）。警戒度の上昇率と `player_within` の逃走距離に掛ける。
+- 習熟度: `SaveV1.player.skills`（道具 id → 採集数、migrate で {} を補う）。`Encyclopedia.skills` signal、`SKILL_STEPS = [3, 8, 15, 25, 40]`、`skillLevelFor`、`addSkill`（Lv が上がるとトースト）、`setSkill`（デバッグ）。`App.onCaptureResolved` が `lastTool` で数える。効果: `App.netZoneScale = 1 + 0.12 × Lv`（`NetView.inZone` / 筒の scale 引数）、振り時間 × (1 − 0.05 Lv)、逃走率 × (1 − 0.1 Lv)、スコップの半径 × (1 + 0.1 Lv)。HUD チップの `.lv` バッジ、DebugPanel の「習熟」行。
+- 水深: `App.swingSlow = clamp((depthHere − 0.15) / 0.45)`。`CaptureState.swingSec`（`Capture.start` の第 3 引数、swing の長さ、`NetView` もこれで補間）= 0.42 × (1 + 1.2 slow) × (1 − 0.05 Lv)。逃走率 += 0.35 × slow × (0.5 + alert)。HUD の `hud.deepSlow`。
+- ケース: `Encyclopedia.release(rec)`、`toResearch(rec)`（`researchFor = 5 + cm`）、`App.caseRelease / caseToResearch`、`TankPanel` の観察ケース一覧にボタン。
+- 単体テスト `tests/unit/progress.test.ts`。バージョン 0.7.0。

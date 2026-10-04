@@ -156,7 +156,7 @@ export class CreatureSystem {
       // soon forgotten, a slow crouched approach barely registers, a walk is noticed, a run sends everything off
       const fleeD = Number(ind.species.brain.params.fleeDistance_m ?? 2);
       const menace = f.playerRunning ? 2.2 : f.playerSpeed < 0.05 ? 0 : f.playerCrouched ? 0.4 : 1;
-      if (dist < fleeD * 2.5 && menace > 0) ind.alert = Math.min(1, ind.alert + f.dt * menace * (dist < fleeD * 1.3 ? 0.4 : 0.12));
+      if (dist < fleeD * 2.5 && menace > 0) ind.alert = Math.min(1, ind.alert + f.dt * menace * ind.wariness * (dist < fleeD * 1.3 ? 0.4 : 0.12));
       else ind.alert = Math.max(0, ind.alert - f.dt * (dist < fleeD * 2.5 ? 0.05 : 0.08));
       ind.energy = Math.max(0, ind.energy - f.dt * 0.001);
       // brain tick at the tree's rate for this LOD

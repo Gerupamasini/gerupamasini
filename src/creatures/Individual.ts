@@ -41,6 +41,8 @@ export interface Individual {
   traits: string[];
   /** percentile of length within the species distribution, 0..100 */
   lengthPct: number;
+  /** how easily this one takes alarm: the big old ones are wary (1.3), the small ones not so much (0.7) */
+  wariness: number;
   alert: number;
   energy: number;
   lod: 0 | 1 | 2 | 3;
@@ -85,6 +87,11 @@ function evalTraitCondition(expr: string, vars: Record<string, number>): boolean
   }
 }
 
+/** The big old ones are wary, the small ones not so much: 0.7 at the bottom of the size range to 1.3 at the top. */
+export function warinessFor(lengthPct: number): number {
+  return 0.7 + 0.6 * Math.max(0, Math.min(100, lengthPct)) / 100;
+}
+
 /** Deterministically generate an individual from a species definition and a seed. */
 export function generateIndividual(species: SpeciesDef, seed: number, x: number, z: number, cell: number, ruleIndex: number, nowMs: number, lengthRange?: [number, number]): Individual {
   const rng = new Rng(seed);
@@ -102,6 +109,7 @@ export function generateIndividual(species: SpeciesDef, seed: number, x: number,
   return {
     id, species, pos: new Vector3(x, 0, z), home: new Vector3(x, 0, z), heading: rng.range(0, Math.PI * 2),
     length_mm: Math.round(len * 10) / 10, weight_g: Math.round(weight * 10) / 10, sex, stage, traits, lengthPct: pct,
+    wariness: warinessFor(pct),
     alert: 0, energy: rng.range(0.3, 0.9), lod: 3,
     brain: { busyUntil: 0, intentId: 0, cooldowns: new Map(), nextTick: 0, done: true, lastIntentKind: '' },
     rng: new Rng(seed ^ 0x9e3779b9), cell, ruleIndex, mismatchSince: 0, spawnedAt: nowMs, strandedSince: 0,
