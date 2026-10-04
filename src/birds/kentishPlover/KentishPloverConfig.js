@@ -56,8 +56,8 @@ export const joints = {
   // sunk 0.4 mm so the cornea apex (x 11.5) stays inside the head outline (photos: the eye sits in the dark stripe)
   shoulder: [10, 77, 6],
   tail: [0, 61, -42], // pygostyle (spec §11)
-  // legs (spec v4 §9): spread to the front photos' stance — the tarsi leave the broad belly 27 mm apart (0.27 of the
-  // crown-to-foot height, user's photo) and the feet stand 23 mm apart; the knee sits deep in the belly plumage.
+  // legs (spec v4.2): midway between v3 (±9.5 … ±7) and v4.1 (±14 … ±11.5), as the body width is — the tarsi leave the
+  // belly inside its front outline, the feet stand ≈ 19 mm apart; the knee sits deep in the belly plumage.
   // Bone lengths unchanged (femur 18.2, tibiotarsus 35.7, tarsus 29.85)
   hip: [11.75, 63.5, -10],
   knee: [11.25, 56.5, 6.8],
@@ -132,7 +132,7 @@ export const bodySculpt = {
     res: 0.3,
     maxBaseRes: 1.5,
   },
-  // the SDF spans x ±38, y 33–106, z −66…42
+  // the SDF spans x ±30, y 34–106, z −66…42 (v4.2)
   bounds: { min: [-34, 29, -71], max: [34, 109, 46] },
   // Visible lower edge of the folded wing = lower edge of the grey-brown upperparts on the side, (z, y) front to rear
   // (v4: the folded wing sits high on the broad body — from the front only its upper edge shows at the shoulders,
@@ -149,7 +149,7 @@ export const bodySculpt = {
   // kept for the wing when the patch itself became the horseshoe above.
   wingTuck: [[17.2, 91.7, 17.1], [19, 86.8, 24.8], [18.2, 82.4, 29], [14.5, 76.4, 32.4], [10.6, 71, 33.5], [6.6, 67.6, 34.1]],
   // head zone (bodyMesh.headness, the shaders' kpHeadness): rigid with the head inside, blending into the neck sleeve
-  // over the outer 0.35 — wide enough for the full cheeks (x ±18.7)
+  // over the outer 0.35 — wide enough for the cheeks (x ±17.6, v4.2)
   headZone: { c: [0, 93.5, 24], r: [15, 13, 15.5] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
   // mantleNape and foreBreast at rest), but when the head turns or stretches the neck bones carry this tube
@@ -309,8 +309,8 @@ export const animation = {
   // had a nape notch up to 0.066 L low (photos p003, p017, p006: crown clearly above the back).
   // The hind-neck fill (animator napeFill) closes the rest of that notch. tools/dev/posture.mjs: walk crown 96.4,
   // crown − back 5.9 (spec +6 ± 4); run 91, +3.8; contact correction 0 in both (Frame-A walk IoU 0.892)
-  // relaxed stand: the trunk lowered on flexed legs (belly 29 mm, crown 99 mm: the user's front photo, spec v4 §12);
-  // walking / running raise it to the bind height
+  // relaxed stand: the trunk lowered on flexed legs (v4.2: 4.5 mm, midway between v3's 0 and v4.1's 9 — belly 0.335 of the
+  // crown-to-foot height, spec v4.2); walking / running raise it to the bind height
   relaxedDrop: mm(4.5),
   walk: { speed: 0.25, strideHz: 2.8, duty: 0.62, bob: mm(1.2), footLift: mm(6), bodyPitch: 0.19, neck: -0.25, headDown: mm(2), headFwd: mm(6) },
   run: { speed: 1.3, maxSpeed: 2.0, strideHz: 9.5, duty: 0.4, bob: mm(2.5), footLift: mm(5), bodyPitch: 0.2, neck: -0.28, headDown: mm(3.5), headFwd: mm(8.5) },
