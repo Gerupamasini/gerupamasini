@@ -55,13 +55,13 @@ export function Root({ app }: { app: App }) {
 /** The tank's edit screen: the drawer, a badge saying time stands still, and a way back. */
 function TankEdit({ app }: { app: App }) {
   return (
-    <Fragment>
+    <div class="tank-edit">
       <div class="edit-badge rise">
         <span class="eyebrow">{t('tank.editing')}</span>
         <button class="btn ghost sm" onClick={() => app.closeTankEdit()}>{t('home.back')} <Key k="Esc" /></button>
       </div>
       <TankPanel app={app} />
-    </Fragment>
+    </div>
   );
 }
 
