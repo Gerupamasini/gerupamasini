@@ -13,11 +13,11 @@ const deg = Math.PI / 180;
 // under the breast-side plumage, so the closed wing lies on the upper flank and from the front only its upper edge
 // shows at the shoulders. Bone lengths as before (humerus 35.4, ulna 44.4, hand 26.3 mm).
 export const WING = {
-  shoulder: [12.5, 82.5, 8.4],
-  humerus: [15, 83, 7.4],
-  elbow: [50, 83, 2.9], // humerus 35.4 mm
-  wrist: [94, 83, 8.9], // forearm (ulna) 44.4 mm
-  handTip: [120, 83, 4.9], // carpometacarpus + digits 26.3 mm
+  shoulder: [13.5, 82.5, 8.4],
+  humerus: [16, 83, 7.4],
+  elbow: [51, 83, 2.9], // humerus 35.4 mm
+  wrist: [95, 83, 8.9], // forearm (ulna) 44.4 mm
+  handTip: [121, 83, 4.9], // carpometacarpus + digits 26.3 mm
 };
 
 // Direction in the wing plane: angle measured from +X (distal) toward −Z (trailing edge).
