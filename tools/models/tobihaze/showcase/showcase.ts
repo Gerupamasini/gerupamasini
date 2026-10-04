@@ -385,7 +385,7 @@ ${H_GLSL}`)
   const target = new Vector3();
   const VIEWS: Record<string, [number, number, number, number]> = {
     // offset (fish's left, up, forward) and distance
-    oblique: [0.7, 0.45, 0.55, 0.3], side: [1, 0.14, 0.05, 0.26], front: [0.08, 0.2, 1, 0.22], top: [0.02, 1, 0.12, 0.34], low: [0.75, 0.04, 0.45, 0.22],
+    oblique: [0.7, 0.42, 0.6, 0.2], side: [1, 0.14, 0.05, 0.2], front: [0.06, 0.16, 1, 0.14], top: [0.02, 1, 0.12, 0.3], low: [0.75, 0.04, 0.45, 0.17],
   };
   function setView(name: string, snap = false): void {
     const m = motor();
