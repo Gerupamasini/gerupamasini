@@ -65,6 +65,8 @@
 - 正面の比率: `node tools/dev/fitcheck.mjs fit.json legs=1 gaze=0` → `python3 tools/dev/frontfit.py fit.json --mask <写真の
   マスク> --el 5`。断面: `node tools/dev/section.mjs`。
 - 比較シート（scratchpad `mid/`）: `rv6.py`（6 方向と顔、`TREE=` で v3 / v4.1 の木）→ `sheets.py`、動き `act.py`。
+  最終の画像は `mid/final/`: `front_v3_v42_v41_photo.png`、`views6_v42_vs_v41.png`、`face_v42_vs_v41.png`、
+  `motion_v42_left_vs_v41_right.png`、`front_silhouette_vs_photo_iou0.707.png`、`side_silhouette_iou0.939.png`。
 
 ### AD5. 残る課題（未解決）
 - 正面から見ると、眼窩の縁が頭の輪郭のすぐ内側にあり、頭の両端に眼が見える（v3 も同じ。v4.1 は太い頬で内側に
