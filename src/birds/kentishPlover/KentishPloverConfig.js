@@ -81,7 +81,7 @@ export const bodySculpt = {
     // front of the ball: the broad breast under the head
     { type: 'ellipsoid', name: 'breast', c: [0.0, 68.06, 12.43], r: [24.62, 21.25, 21.89] },
     // broad, rounded underside, lowest at z −10
-    { type: 'ellipsoid', name: 'belly', c: [0.0, 52.53, -8.63], r: [24.03, 17.6, 23.8] },
+    { type: 'ellipsoid', name: 'belly', c: [0.0, 53.53, -8.63], r: [24.03, 17.6, 23.8] },
     // rear body tapering to the tail, as wide as the folded wings over it
     { type: 'ellipsoid', name: 'rump', c: [0.0, 61.79, -37.95], r: [18.38, 6.18, 25.06], rx: 19.61 },
     // under-tail keel, covered by the LTC
