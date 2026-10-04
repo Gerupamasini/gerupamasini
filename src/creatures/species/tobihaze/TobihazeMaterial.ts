@@ -147,8 +147,9 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
   roughnessFactor = mix(roughnessFactor, mix(0.92, 0.38, tobiWet), tobiMud);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 #ifndef TOBI_FIN
-  // the uv rows converge at the snout tip, where the coarse mips of the normal map would streak: geometry normal there
-  float tobiTip = smoothstep(0.012, 0.05, vMapUv.x);
+  // the uv columns converge on the very tip of the snout, where the coarse mips of the normal map would streak:
+  // geometry normal over its last half millimetre (u is arc length along the body)
+  float tobiTip = smoothstep(0.002, 0.006, vMapUv.x);
   normal = normalize(mix(nonPerturbedNormal, normal, tobiTip));
 #endif
 #ifdef TOBI_DROPS
@@ -171,7 +172,7 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
     material.clearcoatRoughness = clamp(mix(0.32, 0.03, tobiWet) + 0.25 * tobiMud + geometryRoughness, 0.0525, 1.0);
     #ifndef TOBI_FIN
     // the papillose snout tip (and the uv pole there) never gives a mirror reflection
-    material.clearcoatRoughness = max(material.clearcoatRoughness, 0.22 * (1.0 - smoothstep(0.01, 0.045, vMapUv.x)));
+    material.clearcoatRoughness = max(material.clearcoatRoughness, 0.22 * (1.0 - smoothstep(0.0015, 0.005, vMapUv.x)));
     #endif
   }
 #endif`);
@@ -216,7 +217,8 @@ export class TobihazeMaterials {
         // the cornea is kept wet by blinking: always a sharp, bright reflection
         m.clearcoat = 1;
         m.clearcoatRoughness = 0.015;
-        m.roughness = 0.32;
+        // the baked metallic-roughness map carries the copper ring and the glossy pupil
+        if (!m.roughnessMap) m.roughness = 0.32;
         out = m;
       }
       if (out !== src) this.made.push(out);

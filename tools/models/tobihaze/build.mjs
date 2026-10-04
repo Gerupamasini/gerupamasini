@@ -15,7 +15,7 @@ import { encodePNG } from '../../lib/png.mjs';
 import { S0, Y0, SL, S_END, TL, EYE, BODY_U, toObject, dirToObject, botY } from './anatomy.mjs';
 import { buildSkin, skinParts, skinTarget, buildMouth, bakeSkinTextures, SPLIT } from './body.mjs';
 import { finDefinitions, buildFinMesh, buildFinFold, paintFinAtlas, buildArm, armPaint, mirrorMesh, PEC, PELVIC } from './fins.mjs';
-import { buildEyeMesh, eyeRotation, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './eye.mjs';
+import { buildEyeMesh, eyeRotation, paintEye, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './eye.mjs';
 import { JOINTS, J, skinWeights, mouthWeights, armWeights, finWeights, buildClips, CLIP_SPEED } from './rig.mjs';
 import { MORPHS, SPINE } from '../../../src/creatures/species/tobihaze/pose.js';
 
@@ -24,8 +24,8 @@ const args = process.argv.slice(2);
 const tierIdx = args.indexOf('--tier');
 const tierName = tierIdx >= 0 ? args[tierIdx + 1] : 'hero';
 const TIERS = {
-  hero: { NS: 420, NV: 232, tex: [2048, 1024], fin: 2048, finSub: 5, finNT: 28, iris: 512, eye: [48, 64], arm: [22, 24], mouth: true, finMask: false },
-  lod1: { NS: 200, NV: 112, tex: [1024, 512], fin: 1024, finSub: 3, finNT: 14, iris: 256, eye: [24, 32], arm: [12, 14], mouth: true, finMask: false },
+  hero: { NS: 420, NV: 232, tex: [2048, 1024], fin: 2048, finSub: 5, finNT: 28, iris: 1024, eye: [48, 64], arm: [22, 24], mouth: true, finMask: false },
+  lod1: { NS: 200, NV: 112, tex: [1024, 512], fin: 1024, finSub: 3, finNT: 14, iris: 512, eye: [24, 32], arm: [12, 14], mouth: true, finMask: false },
   lod2: { NS: 56, NV: 30, tex: [512, 256], fin: 512, finSub: 1, finNT: 4, iris: 128, eye: [8, 10], arm: [4, 6], mouth: false, finMask: true },
 };
 const tier = TIERS[tierName];
@@ -52,6 +52,7 @@ function image(gb, name, w, h, ch, data, fmt = 'png', quality = 92) {
 const gb = new GLBBuilder('tobihaze-procedural-builder');
 gb.useExtension('KHR_materials_clearcoat');
 gb.useExtension('KHR_materials_ior');
+gb.useExtension('KHR_materials_iridescence');
 const LINEAR = 9729, MIPMAP = 9987, CLAMP = 33071, REPEAT = 10497;
 const sBody = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAMP, wrapT: REPEAT });
 const sClamp = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAMP, wrapT: CLAMP });
@@ -203,12 +204,22 @@ let pelvicLowY = Infinity;
 
 // ---------------------------------------------------------------- eyes (rigid, children of the eye joints)
 log('eyes');
-const iris = paintIris(tier.iris);
-const tIris = gb.addTexture(image(gb, 'eye_iris', iris.size, iris.size, 3, iris.rgb, 'jpeg', 94), sClamp, 'eye_iris');
+const eyeTex = paintEye(tier.iris);
+const tIris = gb.addTexture(image(gb, 'eye_basecolor', eyeTex.size, eyeTex.size, 3, eyeTex.rgb, 'jpeg', 95), sClamp, 'eye_basecolor');
+const tEyeMR = gb.addTexture(image(gb, 'eye_metal_rough', eyeTex.size, eyeTex.size, 3, eyeTex.mr, 'png'), sClamp, 'eye_metal_rough');
+const tEyeIr = gb.addTexture(image(gb, 'eye_iridescence', eyeTex.size, eyeTex.size, 3, eyeTex.irid, 'png'), sClamp, 'eye_iridescence');
 const mEye = gb.addMaterial({
   name: 'Tobihaze_Eye',
-  pbrMetallicRoughness: { baseColorTexture: { index: tIris }, metallicFactor: 0, roughnessFactor: 0.35 },
-  extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: 0.02 }, KHR_materials_ior: { ior: 1.376 } },
+  pbrMetallicRoughness: { baseColorTexture: { index: tIris }, metallicRoughnessTexture: { index: tEyeMR }, metallicFactor: 1, roughnessFactor: 1 },
+  extensions: {
+    KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: 0.02 },
+    KHR_materials_ior: { ior: 1.376 },
+    // structural colour of the iris ring and the lens glow: copper ↔ turquoise-blue with the angle
+    KHR_materials_iridescence: {
+      iridescenceFactor: 1, iridescenceTexture: { index: tEyeIr }, iridescenceIor: 1.4,
+      iridescenceThicknessMinimum: 220, iridescenceThicknessMaximum: 560, iridescenceThicknessTexture: { index: tEyeIr },
+    },
+  },
   extras: { tobihaze: { role: 'eye', radiusMM: EYE.radius, pupilAngle: PUPIL_ANGLE, irisAngle: IRIS_ANGLE, corneaBulge: CORNEA_BULGE } },
 });
 const eye = buildEyeMesh(tier.eye[0], tier.eye[1]);

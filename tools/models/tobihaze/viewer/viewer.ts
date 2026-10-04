@@ -6,6 +6,8 @@ import {
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { instantiateModel } from '../../../../src/creatures/models/ModelLoader';
+import { TobihazeMaterials } from '../../../../src/creatures/species/tobihaze/TobihazeMaterial';
+import type { Texture } from 'three';
 
 const q = new URLSearchParams(location.search);
 const tier = q.get('tier') ?? 'hero';
@@ -32,17 +34,39 @@ const controls = new OrbitControls(camera, canvas);
 const views: Record<string, [number, number, number]> = {
   side: [0.2, 0.02, 0.0], front: [0.0, 0.03, 0.2], top: [0.0, 0.22, 0.001], oblique: [0.12, 0.08, 0.12], rear: [-0.06, 0.07, -0.16],
   head: [0.05, 0.035, 0.07], headtop: [0.01, 0.09, 0.03], eye: [0.035, 0.03, 0.03], belly: [0.05, -0.08, 0.02],
+  // close-ups framed like field photographs: the face head-on at eye level, and the head in profile
+  face: [0.0, 0.004, 0.075], profile: [0.075, 0.004, 0.0], faceup: [0.0, 0.025, 0.07], chin: [0.012, -0.03, 0.05],
 };
 const v = views[q.get('view') ?? 'oblique'] ?? views.oblique;
-const target = new Vector3(0, 0.006, q.get('view')?.startsWith('head') || q.get('view') === 'eye' ? 0.008 : -0.008);
+const vName = q.get('view') ?? 'oblique';
+const target = new Vector3(0, 0.006, vName.startsWith('head') || vName === 'eye' ? 0.008 : vName.startsWith('face') || vName === 'profile' || vName === 'chin' ? 0.006 : -0.008);
+if (vName.startsWith('face') || vName === 'profile') target.y = 0.0065;
+if (vName === 'chin') target.set(0, 0.003, 0.012);
 const zoom = Number(q.get('zoom') ?? 1);
 camera.position.set(v[0] / zoom, v[1] / zoom, v[2] / zoom).add(target);
 controls.target.copy(target);
 controls.update();
-if (q.get('view') === 'belly') ground.visible = false;
+if (q.get('view') === 'belly' || q.get('view') === 'chin') ground.visible = false;
 
 const model = await instantiateModel(`tobihaze/tobihaze.${tier}.glb`);
 scene.add(model.root);
+if (q.get('mat') === 'runtime') {
+  // the game's wet-skin materials (mucus film, wet gloss, eye cornea), fully wet
+  const mats = new TobihazeMaterials(model.tier as 'hero' | 'lod1' | 'lod2');
+  const skin = model.meshes.find((m) => ((Array.isArray(m.material) ? m.material[0] : m.material)?.userData?.tobihaze as { role?: string } | undefined)?.role === 'skin');
+  const di = ((skin && (Array.isArray(skin.material) ? skin.material[0] : skin.material))?.userData?.tobihaze as { dataTexture?: number } | undefined)?.dataTexture;
+  mats.apply(model.meshes, di !== undefined ? (model.parser.getDependency('texture', di) as Promise<Texture | null>) : null);
+  mats.update({ wet: Number(q.get('wet') ?? 1), mud: 0, waterY: -1, mudColor: new Color(0x4a4236) });
+}
+if (q.get('mat') === 'flat' || q.get('mat') === 'normal') {
+  // debugging: untextured surfaces (geometry and shading only)
+  const { MeshPhysicalMaterial, MeshNormalMaterial } = await import('three');
+  const flat = q.get('mat') === 'flat' ? new MeshPhysicalMaterial({ color: 0x9a9a96, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.1 }) : new MeshNormalMaterial();
+  for (const m of model.meshes) if (!m.name.startsWith('Eye')) m.material = flat;
+}
+if (q.get('bind')) model.root.traverse((o) => { const sm = o as import('three').SkinnedMesh; if (sm.isSkinnedMesh) sm.skeleton.pose(); });
+for (const name of (q.get('hide') ?? '').split(',').filter(Boolean)) model.root.traverse((o) => { if (o.name === name) o.visible = false; });
+if (q.get('bg')) scene.background = new Color(`#${q.get('bg')}`);
 const mixer = new AnimationMixer(model.root);
 const clipName = q.get('clip');
 const clipT = q.get('t');

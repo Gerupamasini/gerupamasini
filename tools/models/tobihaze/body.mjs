@@ -1,6 +1,6 @@
 // Skin mesh (head / trunk / tail), mouth interior and baked skin textures for the adult トビハゼ.
 import {
-  S_END, SL, BODY_U, EYE, MOUTH, RICTUS_S, OPERCLE, PREOPERCLE, FEAT,
+  S_END, SL, BODY_U, EYE, MOUTH, RICTUS_S, OPERCLE, PREOPERCLE, FEAT, uvS, uvT,
   section, basePoint, project, field, fieldGrad, toObject, dirToObject, gapeY, sideZ, normHeight, topY, botY, norm3,
 } from './anatomy.mjs';
 import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEachCell3 } from '../../lib/noise.mjs';
@@ -70,6 +70,87 @@ export function invPhi(s, y, z) {
   return phi;
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Texture u along the body: on every loft column, the arc length along the sculpted surface from the snout tip,
+// normalised (and smoothed over neighbouring columns). Walls that face along the axis — the snout's face, the eye
+// sockets, the lips — get texels in proportion to their real size, not to their short extent in s.
+let UVMAP = null;
+function uvMap() {
+  if (UVMAP) return UVMAP;
+  const N = 420, M = 96, R = 3;
+  const S = new Float64Array(N + 1);
+  for (let i = 0; i <= N; i++) S[i] = Math.min(S_END - 0.002, Math.max(0.002, uvS(i / N)));
+  const raw = [], len = new Float64Array(M);
+  for (let j = 0; j < M; j++) {
+    const phi = (j / M) * TAU;
+    const T = new Float64Array(N + 1);
+    let prev = project(basePoint(S[0], phi));
+    for (let i = 1; i <= N; i++) {
+      const p = project(basePoint(S[i], phi));
+      T[i] = T[i - 1] + Math.hypot(p[0] - prev[0], p[1] - prev[1], p[2] - prev[2]);
+      prev = p;
+    }
+    len[j] = T[N];
+    for (let i = 0; i <= N; i++) T[i] /= T[N];
+    raw.push(T);
+  }
+  // circular Gaussian smoothing across columns (the sockets would otherwise shear the texture sideways)
+  const T = [], L = new Float64Array(M);
+  for (let j = 0; j < M; j++) {
+    const t = new Float64Array(N + 1);
+    let wsum = 0;
+    for (let k = -R; k <= R; k++) {
+      const w = Math.exp(-((k / (R * 0.6)) ** 2));
+      const src = raw[(j + k + M) % M];
+      for (let i = 0; i <= N; i++) t[i] += src[i] * w;
+      L[j] += len[(j + k + M) % M] * w;
+      wsum += w;
+    }
+    for (let i = 0; i <= N; i++) t[i] /= wsum;
+    t[0] = 0; t[N] = 1;
+    L[j] /= wsum;
+    T.push(t);
+  }
+  UVMAP = { N, M, S, T, L };
+  return UVMAP;
+}
+function uvColumns(phi) {
+  const { M, T } = uvMap();
+  const fj = ((((phi / TAU) % 1) + 1) % 1) * M;
+  const j0 = Math.floor(fj) % M, j1 = (j0 + 1) % M, g = fj - Math.floor(fj);
+  return { a: T[j0], b: T[j1], g, j0, j1 };
+}
+/** texture t (u = t · BODY_U) of the loft parameter (s, phi) */
+export function uvTof(s, phi) {
+  const { N, S } = uvMap();
+  const { a, b, g } = uvColumns(phi);
+  let lo = 0, hi = N;
+  if (s <= S[0]) return 0;
+  if (s >= S[N]) return 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m] > s) hi = m; else lo = m; }
+  const f = (s - S[lo]) / (S[hi] - S[lo]);
+  const tl = a[lo] * (1 - g) + b[lo] * g, th = a[hi] * (1 - g) + b[hi] * g;
+  return tl + (th - tl) * f;
+}
+/** inverse of uvTof along the column at phi */
+export function uvSof(t, phi) {
+  const { N, S } = uvMap();
+  const { a, b, g } = uvColumns(phi);
+  const at = (i) => a[i] * (1 - g) + b[i] * g;
+  if (t <= 0) return S[0];
+  if (t >= 1) return S[N];
+  let lo = 0, hi = N;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (at(m) > t) hi = m; else lo = m; }
+  const f = (t - at(lo)) / Math.max(at(hi) - at(lo), 1e-12);
+  return S[lo] + (S[hi] - S[lo]) * f;
+}
+/** arc length (mm) of the loft column at phi: the surface distance per unit t */
+function uvArc(phi) {
+  const { L } = uvMap();
+  const { g, j0, j1 } = uvColumns(phi);
+  return L[j0] * (1 - g) + L[j1] * g;
+}
+
 const S_FRONT = MOUTH[0][0];
 /** phi of the gape on the +z side at s (0 in front of the lower jaw) */
 function gapePhi(s) {
@@ -118,7 +199,7 @@ export function buildSkin(NS, NV, log = () => {}) {
       verts.push({ i, j, s, phi, base: b, fish: p, n, jaw: 0, cut: '' });
     }
     // seam column NV duplicates column 0 (u wraps)
-    const v0 = verts[i * NV];
+    const v0 = verts[i * cols];
     verts.push({ ...v0, j: NV, phi: TAU });
     if (i % 60 === 0) log(`    skin row ${i}/${NS}`);
   }
@@ -194,7 +275,7 @@ function vertexAttributes(list, flipCheck) {
     t = sub(t, nn.map((c) => c * dot(nn, t)));
     const tl = Math.hypot(...t) || 1;
     tangent.set([t[0] / tl, t[1] / tl, t[2] / tl, v.tw ?? 1], k * 4);
-    uv[k * 2] = clamp(v.s / S_END, 0, 1) * BODY_U;
+    uv[k * 2] = clamp(uvTof(v.s, v.phi), 0, 1) * BODY_U;
     uv[k * 2 + 1] = v.phi / TAU;
   });
   return { position, normal, tangent, uv };
@@ -330,16 +411,17 @@ const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 
 
 // colours read from the photos (wet animal in daylight, sRGB)
 const COL = {
-  dorsal: C(104, 98, 84),
-  flank: C(128, 121, 104),
-  belly: C(200, 196, 184),
-  throat: C(184, 178, 164),
-  dark: C(46, 42, 36),
-  speck: C(58, 52, 44),
-  pale: C(214, 218, 212),
-  blue: C(170, 200, 214),
-  lip: C(150, 142, 126),
-  arm: C(176, 160, 132),
+  dorsal: C(88, 84, 78),
+  flank: C(120, 116, 108),
+  belly: C(206, 202, 194),
+  throat: C(192, 186, 176),
+  dark: C(44, 41, 37),
+  speck: C(50, 46, 42),
+  pale: C(218, 222, 218),
+  blue: C(172, 202, 216),
+  lip: C(198, 188, 174),
+  arm: C(172, 160, 142),
+  grain: C(236, 234, 226),
 };
 
 /** jittered dot field on the surface (3D cells): returns coverage 0..1 of dots of radius r (mm) at density */
@@ -392,11 +474,11 @@ function skinPoint(s, phi, p, n, ao) {
   // head: fine reticulate mottling
   if (s < 18) {
     const r = ridged3(p[0] * 0.65, p[1] * 0.65, p[2] * 0.65, 3, 41);
-    dark = Math.max(dark, smoothstep(0.72, 0.9, r) * 0.5 * (1 - ventral) * smoothstep(17.5, 13, s));
+    dark = Math.max(dark, smoothstep(0.74, 0.92, r) * 0.32 * (1 - ventral) * smoothstep(17.5, 13, s));
   }
   col = lerp3(col, COL.dark, clamp(dark) * 0.66);
   // melanophore speckle: dense, fine, stronger on the back and head
-  const sp = dots(p, 0.42, 0.11, 101, 0.8) * (0.35 + 0.65 * (1 - ventral)) * (s < 16 ? 1.1 : 1);
+  const sp = dots(p, 0.3, 0.085, 101, 0.9) * (0.35 + 0.65 * (1 - ventral)) * (s < 16 ? 1.2 : 1);
   col = lerp3(col, COL.speck, sp * 0.75);
   const sp2 = dots(p, 0.9, 0.16, 131, 0.5) * (1 - ventral);
   col = lerp3(col, COL.dark, sp2 * 0.6);
@@ -413,13 +495,25 @@ function skinPoint(s, phi, p, n, ao) {
     const lo = dy <= 0 ? smoothstep(0.7, 0.2, -dy) * along : 0;
     col = lerp3(col, COL.lip, up * 0.55);
     col = lerp3(col, COL.belly, lo * 0.6);
+    col = lerp3(col, COL.dark, smoothstep(0.32, 0.05, Math.abs(dy)) * along * 0.8);
   }
-  // eye turrets: the dermal cup's rim is paler and smoother
+  // upper-lip pads: pale, studded with dark sensory pores
+  {
+    const L = FEAT.lipPad;
+    const d = Math.hypot((p[0] - L[0]) / 1.9, (p[1] - L[1]) / 1.25, (Math.abs(z) - L[2]) / 1.2);
+    const pad = smoothstep(1.15, 0.55, d);
+    col = lerp3(col, COL.lip, pad * 0.75);
+    col = lerp3(col, COL.speck, pad * dots(p, 0.22, 0.045, 163, 0.7) * 0.7);
+  }
+  // eye sockets: where the globe comes out of the skin the cup's rim is paler and smoother
   for (const e of FEAT.eyes) {
     const dE = Math.hypot(p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2]);
-    const rim = smoothstep(EYE.radius + 0.75, EYE.radius + 0.12, dE);
-    col = lerp3(col, lerp3(col, COL.lip, 0.6), rim * 0.6);
+    const rim = smoothstep(EYE.radius + 0.7, EYE.radius + 0.1, dE);
+    col = lerp3(col, lerp3(col, COL.lip, 0.55), rim * 0.65);
   }
+  // sand grains stuck in the mucus: tiny white specks, densest on the head, the turrets and the back
+  const grains = dots(p, 0.4, 0.06, 151, 0.5) * (0.25 + 0.75 * smoothstep(-0.5, 0.4, nh)) * (s < 18 ? 1 : 0.6);
+  col = lerp3(col, COL.grain, grains * 0.85);
   // pectoral lobe: pale, fleshy
   {
     const L = FEAT.pecLobe;
@@ -443,6 +537,8 @@ function skinPoint(s, phi, p, n, ao) {
     const side = 1 - Math.pow(Math.abs(fv - 0.5) * 2, 3);
     h += 0.018 * dome * side * smoothstep(16.5, 19, s);
   }
+  // sand grains stand proud of the skin
+  h += 0.03 * grains;
   // head: sensory papillae rows and pores, fine wrinkles
   if (s < 18) {
     h += 0.02 * dots(p, 0.55, 0.09, 307, 0.6) + 0.012 * ridged3(p[0] * 2.2, p[1] * 2.2, p[2] * 2.2, 2, 53);
@@ -458,7 +554,7 @@ function skinPoint(s, phi, p, n, ao) {
   }
 
   // ---------------- roughness and skin data
-  let rough = 0.52 + 0.08 * fbm3(p[0] * 0.9, p[1] * 0.9, p[2] * 0.9, 2, 91) + 0.06 * dorsal;
+  let rough = 0.52 + 0.08 * fbm3(p[0] * 0.9, p[1] * 0.9, p[2] * 0.9, 2, 91) + 0.06 * dorsal - 0.25 * grains;
   const mudAff = clamp(ventral * 0.8 + smoothstep(0.0, -0.6, nh) * 0.35 + (1 - ao) * 0.6 + 0.25 * fbm3(p[0] * 0.4, p[1] * 0.4, p[2] * 0.4, 3, 97));
   const mucus = clamp(0.55 + 0.35 * (1 - ao) + 0.2 * ventral - 0.25 * dorsal + 0.2 * fbm3(p[0] * 0.7, p[1] * 0.7, p[2] * 0.7, 3, 103));
   // what dries first in the sun and wind: the top of the head, the eye turrets and the back
@@ -468,20 +564,20 @@ function skinPoint(s, phi, p, n, ao) {
 }
 
 /**
- * Bake the skin textures over the uv layout (u = s / S_END · BODY_U, v = phi / 2π) plus the pectoral arm strip
+ * Bake the skin textures over the uv layout (u = uvTof(s, phi) · BODY_U, v = phi / 2π) plus the pectoral arm strip
  * (u ∈ [BODY_U, 1]), from a projected grid.
  */
 export function bakeSkinTextures({ W, H, armPaint, log = () => {} }) {
-  // projected bake grid, regular in s and phi
-  const NSb = Math.max(160, Math.round(W * BODY_U * 0.16)), NVb = Math.max(96, Math.round(H * 0.16));
+  // projected bake grid, regular in the texture's t (arc length along each column, see uvTof) and phi, so it
+  // follows the surface up steep walls (eye sockets, the snout's face) instead of cutting through the air
+  const NSb = Math.max(240, Math.round(W * BODY_U * 0.2)), NVb = Math.max(128, Math.round(H * 0.2));
   log(`  bake grid ${NSb}×${NVb} …`);
   const GP = new Float32Array((NSb + 1) * (NVb + 1) * 3), GN = new Float32Array((NSb + 1) * (NVb + 1) * 3), GA = new Float32Array((NSb + 1) * (NVb + 1));
   for (let i = 0; i <= NSb; i++) {
-    const s = Math.min(S_END - 0.005, Math.max(0.005, (i / NSb) * S_END));
-    const q = section(s);
     for (let j = 0; j <= NVb; j++) {
       const phi = (j / NVb) * TAU;
-      const p = project(basePoint(s, phi, q));
+      const s = Math.min(S_END - 0.005, Math.max(0.003, uvSof(i / NSb, phi)));
+      const p = project(basePoint(s, phi));
       const nn = fieldGrad(p[0], p[1], p[2]);
       const k = i * (NVb + 1) + j;
       GP.set(p, k * 3); GN.set(nn, k * 3);
@@ -528,9 +624,9 @@ export function bakeSkinTextures({ W, H, armPaint, log = () => {} }) {
     const v = (y + 0.5) / H;
     const phi = v * TAU;
     for (let x = 0; x < WB; x++) {
-      const u = (x + 0.5) / WB;
-      const s = u * S_END;
-      const { p, n, ao } = sample(u, v);
+      const t = (x + 0.5) / WB;
+      const s = uvSof(t, phi);
+      const { p, n, ao } = sample(t, v);
       const r = skinPoint(s, phi, p, n, ao);
       const k = y * W + x;
       for (let c = 0; c < 3; c++) albedo[k * 3 + c] = clamp(Math.round(r.col[c]), 0, 255);
@@ -565,13 +661,15 @@ export function bakeSkinTextures({ W, H, armPaint, log = () => {} }) {
     const yu = (y + H - 1) % H, yd = (y + 1) % H;
     let mmU, mmV;
     if (inArm) { mmU = 6.0 / WA; mmV = 7.0 / H; } else {
+      // u is arc length along the column, so a texel spans the column's length / WB on the surface
+      const phi = ((y + 0.5) / H) * TAU;
       const i = Math.min(NSb, Math.round(((x + 0.5) / WB) * NSb));
-      mmU = S_END / WB; mmV = (arcPerRad[i] * TAU) / H;
+      mmU = Math.max(uvArc(phi) / WB, 1e-4); mmV = Math.max((arcPerRad[i] * TAU) / H, 1e-4);
     }
     const dhdu = (height[y * W + xr] - height[y * W + xl]) / ((xr - xl) * mmU || 1);
     const dhdv = (height[yu * W + x] - height[yd * W + x]) / (2 * mmV);
-    // the uv rows converge at the snout tip: fade the relief out there (the texel metric degenerates)
-    const kTip = inArm ? 1 : smoothstep(1.2, 4.0, ((x + 0.5) / WB) * S_END);
+    // the uv columns still converge on the very tip: fade the relief out over its last half millimetre
+    const kTip = inArm ? 1 : smoothstep(0.1, 0.5, uvSof((x + 0.5) / WB, ((y + 0.5) / H) * TAU));
     const nn = norm3([-dhdu * kTip, dhdv * kTip, 1]);
     normal[k * 3] = Math.round((nn[0] * 0.5 + 0.5) * 255);
     normal[k * 3 + 1] = Math.round((nn[1] * 0.5 + 0.5) * 255);
