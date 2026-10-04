@@ -162,7 +162,7 @@ export const sleeveParam = (p) => ease(sleeveRatio(p));
 // bald patch when the neck stretched, and swept through them when it turned). Elsewhere a trunk-core surface within
 // 1 mm of the outline (the breast-side ellipsoids at the base of the neck) would pin single points at 0 in the middle
 // of the sleeve
-const trunkHeld = (x, y, z) => y < 68 || z < -9 || (Math.abs(x) > 24 && y < 78) || (Math.abs(x) > 17 && z < 18 && y < 86) || (z < 5 && y < 89 && Math.abs(x) > 3);
+const trunkHeld = (x, y, z) => y < 68 || z < -9 || (Math.abs(x) > 27 && y < 78) || (Math.abs(x) > 17 && z < 14 && y < 86) || (z < 5 && y < 89 && Math.abs(x) > 3);
 
 let SLEEVE = null;
 /**
