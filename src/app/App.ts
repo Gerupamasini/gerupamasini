@@ -520,9 +520,12 @@ export class App {
     const caught: Individual[] = [], startled: Individual[] = [];
     const hits = this.netZoneHits();
     for (const { ind, edge } of hits) {
-      // wary animals and those at the rim of the sweep get out from under the hoop
+      // wary animals and those at the rim of the hoop get out from under it; one netted from behind rarely does
       const cap = ind.species.capture;
-      const escape = cap.baseDifficulty * 0.45 + cap.alertPenalty * ind.alert + 0.35 * edge + (ind.alert > 0.8 ? 0.25 : 0);
+      const dx = player.position.x - ind.pos.x, dz = player.position.z - ind.pos.z, len = Math.hypot(dx, dz) || 1;
+      const facing = (Math.sin(ind.heading) * dx + Math.cos(ind.heading) * dz) / len;
+      let escape = cap.baseDifficulty * 0.35 + cap.alertPenalty * ind.alert * 0.8 + 0.3 * edge + (facing > 0.3 ? 0.1 : facing < -0.3 ? -0.12 : 0);
+      escape = Math.min(0.92, Math.max(0.05, escape));
       if (this.capture.forceCatch || (ind.rng.next() > escape && caught.length < free)) caught.push(ind);
     }
     for (const ind of creatures.individuals) {
@@ -820,6 +823,7 @@ export class App {
       this.clams?.update(player.position, this.worldVisible() ? dt : 0, gameMs / 1000, (x, z) => world.habitat.waterAt(x, z));
       creatures.update({
         dt: this.worldVisible() ? dt : 0, gameMs, playerPos: player.position, camera: this.camera, simScale: this.simScale,
+        playerSpeed: player.speedNow, playerCrouched: player.crouching, playerRunning: player.running,
         tod: world.tod, season: world.season, tidePhase: this.tidePhase(), lockedId: this.lockedId,
       });
       if (mode === 'observe' && this.hero && creatures.heroActive(this.lockedId)) {

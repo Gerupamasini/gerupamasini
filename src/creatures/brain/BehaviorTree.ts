@@ -15,6 +15,7 @@ export interface PerceptionContext {
   season: Season;
   playerPos: Vector3;
   playerDist: number;
+  playerRunning: boolean;
   nowSec: number;
   aquatic: boolean;
 }
@@ -102,7 +103,9 @@ export class BehaviorTree {
   private condition(name: string, a: Args, ctx: PerceptionContext): boolean {
     const ind = ctx.ind;
     switch (name) {
-      case 'player_within': return ctx.playerDist <= num(a.m, 2);
+      // the flight distance is the species' figure for an alarmed animal; a calm one lets the player much closer,
+      // and a running player is fled from further out
+      case 'player_within': return ctx.playerDist <= num(a.m, 2) * (0.4 + 0.6 * ind.alert) * (ctx.playerRunning ? 1.6 : 1);
       case 'player_beyond': return ctx.playerDist > num(a.m, 2);
       case 'alert_above': return ind.alert > num(a.v, 0.5);
       case 'depth_below': return ctx.sample.depth < num(a.m, 0.05);
