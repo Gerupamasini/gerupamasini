@@ -506,7 +506,11 @@ export class App {
     for (const ind of creatures.individuals) {
       if (!ind.species.collectable || ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
       if (ind.pos.distanceTo(player.position) > REACH + 1.5) continue;
-      const e = NetView.inZone(this.camera, ind.pos, ind.length_mm / 2000);
+      // the hoop is judged against the body as drawn (the anchor) as well as the logical position, with the animal's own size as margin
+      const margin = Math.max(0.06, ind.length_mm / 2000);
+      let e = NetView.inZone(this.camera, ind.pos, margin);
+      const anchor = creatures.anchorOf(ind.id);
+      if (anchor) { const ea = NetView.inZone(this.camera, anchor, margin); if (ea >= 0 && (e < 0 || ea < e)) e = ea; }
       if (e >= 0) out.push({ ind, edge: e });
     }
     return out;
@@ -520,9 +524,13 @@ export class App {
     const caught: Individual[] = [], startled: Individual[] = [];
     const hits = this.netZoneHits();
     for (const { ind, edge } of hits) {
-      // wary animals and those at the rim of the sweep get out from under the hoop
+      // an animal under the hoop is in the bag unless it was already alarmed enough to bolt in time: the odds of
+      // getting away grow with the square of its alertness, a little at the rim of the hoop, and less from behind
       const cap = ind.species.capture;
-      const escape = cap.baseDifficulty * 0.45 + cap.alertPenalty * ind.alert + 0.35 * edge + (ind.alert > 0.8 ? 0.25 : 0);
+      const dx = player.position.x - ind.pos.x, dz = player.position.z - ind.pos.z, len = Math.hypot(dx, dz) || 1;
+      const facing = (Math.sin(ind.heading) * dx + Math.cos(ind.heading) * dz) / len;
+      let escape = 0.6 * ind.alert * ind.alert * (0.5 + cap.alertPenalty) + 0.25 * edge * edge + 0.1 * cap.baseDifficulty + (facing > 0.3 ? 0.05 : facing < -0.3 ? -0.08 : 0);
+      escape = Math.min(0.85, Math.max(0, escape));
       if (this.capture.forceCatch || (ind.rng.next() > escape && caught.length < free)) caught.push(ind);
     }
     for (const ind of creatures.individuals) {
@@ -820,6 +828,7 @@ export class App {
       this.clams?.update(player.position, this.worldVisible() ? dt : 0, gameMs / 1000, (x, z) => world.habitat.waterAt(x, z));
       creatures.update({
         dt: this.worldVisible() ? dt : 0, gameMs, playerPos: player.position, camera: this.camera, simScale: this.simScale,
+        playerSpeed: player.speedNow, playerCrouched: player.crouching, playerRunning: player.running,
         tod: world.tod, season: world.season, tidePhase: this.tidePhase(), lockedId: this.lockedId,
       });
       if (mode === 'observe' && this.hero && creatures.heroActive(this.lockedId)) {

@@ -16,10 +16,10 @@ const DROPS = 64;
 export const NET_LAYER = 1;
 
 /** how far the hoop reaches from the eye (handle plus arm), metres */
-export const REACH = 1.2;
+export const REACH = 1.6;
 /** the hoop as the catch zone: a vertical ellipse around the line of sight (half width, half height), metres */
-export const ZONE_A = 0.19;
-export const ZONE_B = 0.26;
+export const ZONE_A = 0.21;
+export const ZONE_B = 0.28;
 /** nothing closer than this to the eye is under the hoop */
 export const ZONE_NEAR = 0.25;
 
