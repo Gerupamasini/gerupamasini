@@ -89,17 +89,19 @@ export const bodySculpt = {
     // broad flat back between the folded wings
     { type: 'ellipsoid', name: 'mantle', c: [0.0, 78.72, -4.54], r: [20.25, 4.43, 15.94], rx: 26.05 },
     // hind neck / upper mantle: the head sits on it (neck fill)
-    { type: 'ellipsoid', name: 'mantleNape', c: [0.0, 85.64, 10.35], r: [20.67, 5.66, 17.11], role: 'neck' },
+    { type: 'ellipsoid', name: 'mantleNape', c: [0.0, 85.64, 10.35], r: [17.0, 5.66, 17.11], role: 'neck' },
     { type: 'ellipsoid', name: 'head', c: [0.0, 93.5, 24.0], r: [12.5, 12.5, 15.0], k: 5, role: 'head' },
     { type: 'ellipsoid', name: 'lores', c: [0.0, 90.4, 35.3], r: [5.6, 4.9, 4.8], k: 3.2, role: 'head' },
     { type: 'capsule', name: 'billCuff', a: [0.0, 91.6, 35.8], b: [0.0, 89.9, 39.9], r: 2.0, k: 2.4, role: 'head' },
     { type: 'ellipsoid', name: 'chin', c: [0.0, 84.0, 31.0], r: [9.0, 6.0, 7.0], k: 4, role: 'head' },
-    // ear-covert / cheek plumage behind and below the eye: the head ≈ half the body width from the front
-    { type: 'ellipsoid', name: 'cheekL', c: [9.4, 93.0, 22.0], r: [8.2, 9.5, 11.5], k: 4, role: 'head' },
-    { type: 'ellipsoid', name: 'cheekR', c: [-9.4, 93.0, 22.0], r: [8.2, 9.5, 11.5], k: 4, role: 'head' },
-    // v4.1: broad, round crown behind and above the eyes — from the front a wide cap over the full cheeks, the eyes
-    // at the widest point of the head (the user's front photo, p013, p063); kept inside the side profile
-    { type: 'ellipsoid', name: 'crown', c: [0.0, 97.0, 20.0], r: [14.5, 6.0, 7.5], k: 4, role: 'head' },
+    // ear-covert / cheek plumage behind and below the eye, a little fuller than the head's ellipsoid (v4.3: the v3 head
+    // restored — from the front the eyes sit inside the outline of the head, the cheeks the widest part at eye level,
+    // p037, p058, p063)
+    { type: 'ellipsoid', name: 'cheekL', c: [9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3, role: 'head' },
+    { type: 'ellipsoid', name: 'cheekR', c: [-9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3, role: 'head' },
+    // v4.3: top of the neck fill under the v3-sized head (below and behind the ear coverts): the front outline widens
+    // smoothly from the head into the v4.2 shoulders instead of stepping out at y 90
+    { type: 'ellipsoid', name: 'neckTop', c: [0.0, 90.3, 17.5], r: [15.1, 3.5, 9.1], k: 3.15, role: 'neck' },
     // fore-neck and upper breast round the base of the neck (neck fill): no neck seen from any side
     { type: 'ellipsoid', name: 'collar', c: [0.0, 80.95, 17.87], r: [20.69, 12.12, 19.71], role: 'neck' },
     // PRIMS-END
@@ -150,7 +152,7 @@ export const bodySculpt = {
   wingTuck: [[17.2, 91.7, 17.1], [19, 86.8, 24.8], [18.2, 82.4, 29], [14.5, 76.4, 32.4], [10.6, 71, 33.5], [6.6, 67.6, 34.1]],
   // head zone (bodyMesh.headness, the shaders' kpHeadness): rigid with the head inside, blending into the neck sleeve
   // over the outer 0.35 — wide enough for the cheeks (x ±17.6, v4.2)
-  headZone: { c: [0, 93.5, 24], r: [15, 13, 15.5] },
+  headZone: { c: [0, 93.5, 24], r: [13, 13, 15.5] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
   // mantleNape and foreBreast at rest), but when the head turns or stretches the neck bones carry this tube
   neckContact: { a: [0, 74, 0], b: [0, 88.5, 14], r: 9 },
