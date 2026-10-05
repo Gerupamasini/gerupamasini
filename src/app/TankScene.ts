@@ -863,7 +863,7 @@ export class TankScene {
     if (this.view === 'shelf') return;
     this.view = 'shelf';
     const c = this.shelf.center;
-    this.startCamera(new Vector3(c.x + 0.42, c.y + 0.1, c.z + 1.08), new Vector3(c.x + 0.26, c.y - 0.02, c.z));
+    this.startCamera(new Vector3(c.x + 0.42, c.y + 0.14, c.z + 1.1), new Vector3(c.x + 0.26, c.y + 0.04, c.z));
   }
 
   focusTank(): void {
