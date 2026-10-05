@@ -22,7 +22,7 @@ const J = CFG.joints;
 const deg = (r) => (r * 180) / Math.PI;
 const m = new KentishPloverModel({ lods: [1], shadows: false });
 const local = (a, bone, p) => new THREE.Vector3(...p.map((x, i) => (x - J[bone][i]) * 0.001)).applyMatrix4(a.b[bone].matrixWorld).multiplyScalar(1000);
-const headPrim = CFG.bodySculpt.prims.find((p) => p.name === 'head');
+const headPrim = CFG.bodySculpt.headContact;
 const _v = new THREE.Vector3();
 // crown (highest head-ellipsoid point), back (highest posed body vertex behind the shoulder), breast front, eye
 function shape(a) {

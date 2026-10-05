@@ -56,8 +56,11 @@ export const joints = {
   // mouth stays nearly closed as the bill opens (≈0.1 mm at 0.2 rad) and the lower mandible's feathered base turns with
   // it under the chin feathering, instead of swinging down about a point 2.6 mm below and 4 mm behind the corner
   jaw: [0, 90.6, 37.25],
-  eyeCenter: [7.6, 95, 25.5], // eyeball centre (spec §6); head surface at x 12.3, eye 9.5 mm behind the breast front;
-  // sunk 0.4 mm so the cornea apex (x 11.5) stays inside the head outline (photos: the eye sits in the dark stripe)
+  // eyeball centre (spec §6, v4.5): the eye assembly (eyeball, sockets, lid folds, face patch, shader eye frame) moved
+  // 1.8 mm toward the midline and turned 6° forward about this centre (was (7.6, 95, 25.5), axis 15.7° forward): seen
+  // from the front the eyes sit inside the outline of a round head, the ear coverts behind them the widest part (head
+  // width at eye level / eye spacing 1.38, the user's photos 1.37–1.41; v4.4 1.15). Cornea apex x 10.1
+  eyeCenter: [5.8, 95, 25.5],
   shoulder: [10, 77, 6],
   tail: [0, 61, -42], // pygostyle (spec §11)
   // legs (spec v4.2): midway between v3 (±9.5 … ±7) and v4.1 (±14 … ±11.5), as the body width is — the tarsi leave the
@@ -94,20 +97,25 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'mantle', c: [0.0, 78.72, -4.54], r: [20.25, 4.43, 15.94], rx: 26.05 },
     // hind neck / upper mantle: the head sits on it (neck fill)
     { type: 'ellipsoid', name: 'mantleNape', c: [0.0, 85.64, 10.35], r: [20.67, 5.66, 17.11], role: 'neck' },
-    { type: 'ellipsoid', name: 'head', c: [0.0, 93.5, 24.0], r: [12.5, 12.5, 15.0], k: 5, role: 'head' },
-    { type: 'ellipsoid', name: 'lores', c: [0.0, 90.6, 33.0], r: [5.6, 4.9, 4.5], k: 3.2, role: 'head' },
-    { type: 'ellipsoid', name: 'chin', c: [0.0, 84.0, 30.0], r: [9.0, 6.0, 7.0], k: 4, role: 'head' },
-    // ear-covert / cheek plumage behind and below the eye, a little fuller than the head's ellipsoid (v4.3: the v3 head
-    // restored — from the front the eyes sit inside the outline of the head, the cheeks the widest part at eye level,
-    // p037, p058, p063)
-    // v4.4 (2026-10, the user's front photo): the crown is a broad, flat-rounded dome — seen from the front the sides of
-    // the head rise nearly vertically above the eyes and the cap spans almost the full head width (front outline half-
-    // width / eye-row half-width at 25 / 50 / 75 / 88 % of the height from the eye row to the crown: photo 0.98 / 0.95 /
-    // 0.78 / 0.56, v4.3 0.91 / 0.75 / 0.55 / 0.40, now 0.93 / 0.97 / 0.79 / 0.53; SDF, bind). Eye-row width (28.2 mm)
-    // and the side profile as v4.3, crown top +0.4 mm; k 2: a sharper join drew a mushroom-like lip under the cap
-    { type: 'ellipsoid', name: 'crown', c: [0.0, 100.59, 23.94], r: [13.65, 5.15, 7.9], k: 2, role: 'head' },
-    { type: 'ellipsoid', name: 'cheekL', c: [9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3, role: 'head' },
-    { type: 'ellipsoid', name: 'cheekR', c: [-9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3, role: 'head' },
+    // The head (role head), v4.5 (body_shape_spec.md v4.5, validation §AH): rebuilt from the user's front, front-3/4 and
+    // side photos. v4.3/v4.4 read as a small cap on a face that narrowed into a wedge toward the bill, the eyes on the
+    // outline; now a round ball with a broad, blunt face: from the front a semicircular dome, the eyes inside its outline
+    // and the ear coverts behind them the widest part (28.4 mm); from above the face is blunt round the bill base and
+    // the sides behind the eyes are nearly parallel; the side profile (crown, forehead, nape) is the v4.4 one (Frame-A).
+    // Fitted to profile targets (top-view and front half-widths, side top, the field round the moved eye sockets kept)
+    // by random search (scratchpad head4/tools/opt.mjs). The v4.4 crown ledge is gone.
+    // the round skull: widest behind the eye (ear coverts), the eyes on the sides of the ball
+    { type: 'ellipsoid', name: 'skull', c: [0.00, 92.59, 22.17], r: [10.77, 12.60, 13.46], k: 5, role: 'head' },
+    // the steep forehead and fore-crown rising from the bill base into the rounded crown
+    { type: 'ellipsoid', name: 'forehead', c: [0.00, 100.03, 25.30], r: [10.25, 5.62, 9.15], k: 4, role: 'head' },
+    // the broad, blunt face round the bill base (lores, rictus): no wedge toward the bill
+    { type: 'ellipsoid', name: 'face', c: [0.00, 93.23, 33.95], r: [9.66, 7.64, 5.40], k: 3.5, role: 'head' },
+    // chin and upper throat under the bill base, as broad as the face
+    { type: 'ellipsoid', name: 'chin', c: [0.00, 84.79, 30.15], r: [9.29, 7.58, 6.69], k: 4, role: 'head' },
+    // ear coverts behind and above the eye: the widest part of the head seen from the front or above
+    { type: 'ellipsoid', name: 'cheekL', c: [7.89, 96.61, 18.43], r: [5.98, 5.34, 6.93], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'cheekR', c: [-7.89, 96.61, 18.43], r: [5.98, 5.34, 6.93], k: 4, role: 'head' },
+    // HEAD-END
     // v4.3: top of the neck fill under the v3-sized head (below and behind the ear coverts), with the collar 1.5 mm
     // narrower: from the front the outline widens smoothly from the head into the v4.2 shoulders instead of stepping out
     // at y 90 (mantleNape stays as v4.2: narrowing it let the median coverts sink into the shoulder when preening the wing)
@@ -125,26 +133,26 @@ export const bodySculpt = {
   // margin, as the photographed eye of the pale-faced birds: 6.7–7.8 × 3.8–5.4 mm, median height 4.7 (p062,
   // p035, p018, p045, p050, p006, p039 on the eye → bill-tip scale). The round 6.4 mm opening read as a black ball)
   cuts: [
-    { type: 'vesica', name: 'eyeSocketL', a: [9.03, 95.2, 25.9], b: [16.19, 96.17, 27.93], r: 3.4, off: [0.17, -1.36, 0.05], k: 0.9 },
-    { type: 'vesica', name: 'eyeSocketR', a: [-9.03, 95.2, 25.9], b: [-16.19, 96.17, 27.93], r: 3.4, off: [-0.17, -1.36, 0.05], k: 0.9 },
+    { type: 'vesica', name: 'eyeSocketL', a: [7.18, 95.2, 26.047], b: [14.089, 96.17, 28.815], r: 3.4, off: [0.164, -1.36, 0.067], k: 0.9 },
+    { type: 'vesica', name: 'eyeSocketR', a: [-7.18, 95.2, 26.047], b: [-14.089, 96.17, 28.815], r: 3.4, off: [-0.164, -1.36, 0.067], k: 0.9 },
   ],
   // Upper eyelid fold: the feathered upper lid stands a little proud of the opening, merged into its upper arc (a
   // separate ridge above it read as a shelf) (p012, p043, p050)
   adds: [
-    { type: 'ellipsoid', name: 'upperLidL', c: [10.95, 97.95, 26.4], r: [0.8, 0.65, 3.0], k: 0.6 },
-    { type: 'ellipsoid', name: 'upperLidR', c: [-10.95, 97.95, 26.4], r: [0.8, 0.65, 3.0], k: 0.6 },
+    { type: 'ellipsoid', name: 'upperLidL', c: [9.038, 97.95, 26.745], r: [0.8, 0.65, 3.0], k: 0.6 },
+    { type: 'ellipsoid', name: 'upperLidR', c: [-9.038, 97.95, 26.745], r: [0.8, 0.65, 3.0], k: 0.6 },
   ],
   // Bill base (anatomy/bill.js makeBillBlend, docs/morphology.md §6.2): round the bill the face is morphed into the
   // feathered sheath that tapers onto the keratin along the slanted feather line — the sheath alone up to d0 mm behind
   // the line, the face again from d1 mm behind it and beyond rA … rB mm off the keratin; below the keel the station is
   // sheared back by `shear` per mm (the throat stays); no plumage in the mouth's slot (±slot mm round the commissure,
   // up to mouthBack mm from the tip)
-  billBlend: { d0: 0.5, d1: 6, rA: 11, rB: 18, shear: 2.5, slot: 0.35, mouthBack: 18.2 },
+  billBlend: { d0: 0.5, d1: 4.5, rA: 11, rB: 18, shear: 2.5, slot: 0.35, mouthBack: 18.2 },
   // LOD0 face patches (anatomy/bodyMesh.js): eye sockets and bill base polygonised at 0.3 mm over the base mesh
   facePatch: {
     patches: [
-      { c: [12.1, 95.6, 26.8], r: 5.5 },
-      { c: [-12.1, 95.6, 26.8], r: 5.5 },
+      { c: [10.139, 95.6, 27.263], r: 5.5 },
+      { c: [-10.139, 95.6, 27.263], r: 5.5 },
       { c: [0, 90.3, 39.2], r: 5.5 },
     ],
     res: 0.3,
@@ -170,11 +178,15 @@ export const bodySculpt = {
   // over the outer 0.35. v4.3 (v3 head on the v4.2 neck): x 14, 1 mm wider than v3's 13 — the lower rim of the eye socket
   // (x 13–15, y 92–93) stays rigid with the eye when the head turns (at 13 it slid 0.3–0.8 mm against the eyeball under
   // the broad neck fill; at 15 the neck folded more when preening)
-  // v4.4: x 14.6, y 14 — the broad crown dome (prim crown, its sides at x 13.7, y 100) stays inside the rigid head
-  headZone: { c: [0, 93.5, 24], r: [14.6, 14, 15.5] },
+  // v4.5: c (0, 94, 23.5), r (15.4, 14, 16.5) — round the wider ear coverts behind the eye (x 14.3 at z 19) and the
+  // blunt face; the skin within 3 mm of the moved eye sockets stays rigid with the eye (0.00 mm drift)
+  headZone: { c: [0, 94, 23.5], r: [15.4, 14, 16.5] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
   // mantleNape and foreBreast at rest), but when the head turns or stretches the neck bones carry this tube
   neckContact: { a: [0, 74, 0], b: [0, 88.5, 14], r: 9 },
+  // Head outline for the head contact checks (animator: sample points on this ellipsoid, carried by the head bone)
+  // and the crown-height tools: an ellipsoid round the v4.5 head (skull, forehead, face and ear coverts)
+  headContact: { c: [0, 93.5, 23.5], r: [13.2, 12.5, 15.2] },
 };
 
 // Plumage palettes (sRGB hex): white-balanced medians of 19 reference photos (body_shape_spec.md §13).

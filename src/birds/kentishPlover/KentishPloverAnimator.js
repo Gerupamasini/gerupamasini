@@ -119,7 +119,7 @@ const sdfNormal = (sdf, p, out) => {
   return out.set(sdf(p.x + e, p.y, p.z) - sdf(p.x - e, p.y, p.z), sdf(p.x, p.y + e, p.z) - sdf(p.x, p.y - e, p.z), sdf(p.x, p.y, p.z + e) - sdf(p.x, p.y, p.z - e)).normalize();
 };
 const HEAD_PTS = (() => {
-  const head = CFG.bodySculpt.prims.find((p) => p.name === 'head');
+  const head = CFG.bodySculpt.headContact;
   const c = [head.c[0] - J.head[0], head.c[1] - J.head[1], head.c[2] - J.head[2]];
   const pts = [new THREE.Vector3(c[0], c[1] + head.r[1], c[2]), new THREE.Vector3(c[0], c[1] - head.r[1], c[2])];
   // (every 15°: the cheek must not slip between the samples onto the bend of the wing)
