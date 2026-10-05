@@ -58,12 +58,13 @@ const LOD_STEP = [1, 2, 4];
 const LOD_DIST = [60, 130];
 const SKIRT = 0.35;
 
+// the dark grey-brown of the real flat (葛西 at low water: wet muddy sand, almost black where it stays wet)
 const SUBSTRATE_COLORS: Record<Substrate, [number, number, number]> = {
-  sand: [0.68, 0.56, 0.36],
-  muddy_sand: [0.48, 0.38, 0.25],
-  mud: [0.28, 0.24, 0.19],
-  gravel: [0.48, 0.46, 0.42],
-  channel: [0.22, 0.2, 0.16],
+  sand: [0.4, 0.355, 0.285],
+  muddy_sand: [0.29, 0.255, 0.21],
+  mud: [0.165, 0.15, 0.13],
+  gravel: [0.33, 0.32, 0.29],
+  channel: [0.13, 0.12, 0.105],
 };
 
 export class Terrain {

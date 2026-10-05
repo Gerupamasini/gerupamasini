@@ -1,8 +1,8 @@
 {
   "tools": [
     {
-      "id": "hand_net",
-      "ja": "タモ",
+      "id": "net_small",
+      "ja": "小型タモ",
       "type": "capture",
       "targets": [
         "fish",
@@ -11,36 +11,70 @@
       "minigame": "none",
       "price_cr": 0,
       "params": {
-        "reach_m": 1.5,
-        "hoop": 1.0,
-        "swing": 1.0,
-        "quiet": 1.0,
-        "deep": 1.0
+        "reach_m": 1.0,
+        "hoop": 0.75,
+        "swing": 0.7,
+        "quiet": 0.8,
+        "deep": 1.25,
+        "mouth_w": 0.2,
+        "mouth_h": 0.2,
+        "bag_depth": 0.15,
+        "handle_m": 0.504
       },
-      "description": "浅い水中の魚やエビをすくう基本のタモ。柄は 1 m ほどで、足元から 1.5 m 先まで届く。"
+      "model": "nets/net_small",
+      "description": "四角い口の小さな手網。柄は 45 cm と短く、足元から 1 m 先まで。素早く振れて逃げられにくい。小さなハゼやエビに。"
     },
     {
-      "id": "hand_net_short",
-      "ja": "ショートタモ",
+      "id": "net_shallow",
+      "ja": "浅瀬タモ",
       "type": "capture",
       "targets": [
         "fish",
         "crustacean"
       ],
       "minigame": "none",
-      "price_cr": 200,
+      "price_cr": 150,
       "params": {
-        "reach_m": 1.1,
-        "hoop": 0.85,
-        "swing": 0.7,
-        "quiet": 0.75,
-        "deep": 1.2
+        "reach_m": 1.4,
+        "hoop": 1.0,
+        "swing": 0.9,
+        "quiet": 0.9,
+        "deep": 1.05,
+        "mouth_w": 0.3,
+        "mouth_h": 0.3,
+        "bag_depth": 0.28,
+        "handle_m": 0.925
       },
-      "description": "柄が短く網も小さいが、素早く振れて逃げられにくい。小さなハゼやエビに。足元から 1.1 m。"
+      "model": "nets/net_shallow",
+      "description": "直径 30 cm の丸枠に 80 cm の柄。浅瀬の小魚やエビをすくう万能のタモで、足元から 1.4 m 先まで届く。"
     },
     {
-      "id": "hand_net_long",
-      "ja": "ロングタモ",
+      "id": "net_fine",
+      "ja": "微細目タモ",
+      "type": "capture",
+      "targets": [
+        "fish",
+        "crustacean"
+      ],
+      "minigame": "none",
+      "price_cr": 220,
+      "params": {
+        "reach_m": 1.2,
+        "hoop": 0.9,
+        "swing": 1.0,
+        "quiet": 0.7,
+        "deep": 1.1,
+        "mouth_w": 0.25,
+        "mouth_h": 0.25,
+        "bag_depth": 0.22,
+        "handle_m": 0.694
+      },
+      "model": "nets/net_fine",
+      "description": "目合 0.8 mm の細かい網。稚魚や小さな甲殻類が網目から抜けず、静かに寄せられる。柄は 60 cm、足元から 1.2 m。"
+    },
+    {
+      "id": "net_deep",
+      "ja": "深場タモ",
       "type": "capture",
       "targets": [
         "fish",
@@ -50,12 +84,65 @@
       "price_cr": 300,
       "params": {
         "reach_m": 2.2,
-        "hoop": 1.0,
+        "hoop": 1.15,
         "swing": 1.3,
         "quiet": 1.1,
-        "deep": 0.8
+        "deep": 0.7,
+        "mouth_w": 0.35,
+        "mouth_h": 0.34,
+        "bag_depth": 0.42,
+        "handle_m": 1.676
       },
-      "description": "長い柄で 2.2 m 先まで届き、深いところでも振りが鈍りにくい。そのぶん振りは遅く、少し逃げられやすい。"
+      "model": "nets/net_deep",
+      "description": "三角の口で底をさらえる長柄の網。150 cm の柄で 2.2 m 先の水路や深みまで届き、深いところでも振りが鈍りにくい。そのぶん振りは遅い。"
+    },
+    {
+      "id": "net_dframe",
+      "ja": "D型底さらい網",
+      "type": "capture",
+      "targets": [
+        "fish",
+        "crustacean"
+      ],
+      "minigame": "none",
+      "price_cr": 350,
+      "params": {
+        "reach_m": 1.5,
+        "hoop": 1.1,
+        "swing": 1.35,
+        "quiet": 1.2,
+        "deep": 0.9,
+        "mouth_w": 0.35,
+        "mouth_h": 0.25,
+        "bag_depth": 0.3,
+        "handle_m": 0.962
+      },
+      "model": "nets/net_dframe",
+      "description": "D 型の鋼枠と帆布の縁布で底を押しさらう定量採集用の網。重くて振りは遅いが口が広く、底生生物に強い。柄は 90 cm、足元から 1.5 m。"
+    },
+    {
+      "id": "net_carbon",
+      "ja": "カーボン網",
+      "type": "capture",
+      "targets": [
+        "fish",
+        "crustacean"
+      ],
+      "minigame": "none",
+      "price_cr": 600,
+      "params": {
+        "reach_m": 2.1,
+        "hoop": 1.05,
+        "swing": 0.85,
+        "quiet": 0.85,
+        "deep": 0.8,
+        "mouth_w": 0.32,
+        "mouth_h": 0.25,
+        "bag_depth": 0.26,
+        "handle_m": 1.623
+      },
+      "model": "nets/net_carbon",
+      "description": "3 本継ぎのカーボン柄にラバーコート網。軽くて長く、150 cm の柄で 2.1 m 先まで素早く振れる上位の万能網。"
     },
     {
       "id": "shovel",

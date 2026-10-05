@@ -884,8 +884,10 @@ export class TankScene {
   focusShelf(): void {
     if (this.view === 'shelf') return;
     this.view = 'shelf';
-    const c = this.shelf.center;
-    this.startCamera(new Vector3(c.x + 0.42, c.y + 0.14, c.z + 1.1), new Vector3(c.x + 0.26, c.y + 0.04, c.z));
+    const c = this.shelf.center, d = this.shelf.viewDistance;
+    // far enough back to take in the whole rack (two and a half metres of nets when every one is owned)
+    // a little to the right of the rack's middle, so the rack sits clear of the tools drawer on the right
+    this.startCamera(new Vector3(c.x + 0.3, c.y + 0.1 + 0.05 * d, c.z + d), new Vector3(c.x + 0.3, c.y - 0.05, c.z));
   }
 
   focusTank(): void {
