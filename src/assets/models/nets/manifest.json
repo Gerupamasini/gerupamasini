@@ -2,37 +2,43 @@
   "nets": {
     "net_small": {
       "ja": "小型タモ",
-      "en": "Compact hand net",
+      "en": "Compact square hand net",
       "use": "万能・序盤",
       "spec": {
-        "hoop_cm": "20 (Φ)",
+        "hoop_cm": "20 × 20 (角)",
         "handle_cm": 45,
         "mesh_mm": 3,
-        "bagDepth_cm": 16
+        "bagDepth_cm": 15
       },
       "tiers": {
         "hero": {
           "file": "net_small.hero.glb",
           "triangles": 20888,
           "vertices": 11312,
-          "bytes": 2130276
+          "bytes": 2130344
         },
         "lod1": {
           "file": "net_small.lod1.glb",
-          "triangles": 7188,
-          "vertices": 4096,
-          "bytes": 677020
+          "triangles": 7112,
+          "vertices": 4054,
+          "bytes": 675420
         },
         "lod2": {
           "file": "net_small.lod2.glb",
-          "triangles": 3180,
-          "vertices": 1849,
-          "bytes": 229960
+          "triangles": 3044,
+          "vertices": 1773,
+          "bytes": 227016
         }
       },
-      "mass_g": 183,
-      "balancePoint_m": 0.292,
-      "overallLength_m": 0.704
+      "mass_g": 194,
+      "balancePoint_m": 0.302,
+      "overallLength_m": 0.705,
+      "buttZ_m": -0.094,
+      "mouthCentre_m": [
+        0,
+        0,
+        0.504
+      ]
     },
     "net_shallow": {
       "ja": "浅瀬タモ",
@@ -66,7 +72,13 @@
       },
       "mass_g": 291,
       "balancePoint_m": 0.686,
-      "overallLength_m": 1.168
+      "overallLength_m": 1.168,
+      "buttZ_m": -0.09,
+      "mouthCentre_m": [
+        0,
+        0,
+        0.9248
+      ]
     },
     "net_fine": {
       "ja": "微細目タモ",
@@ -100,14 +112,20 @@
       },
       "mass_g": 313,
       "balancePoint_m": 0.47,
-      "overallLength_m": 0.897
+      "overallLength_m": 0.897,
+      "buttZ_m": -0.075,
+      "mouthCentre_m": [
+        0,
+        0,
+        0.6937
+      ]
     },
     "net_deep": {
       "ja": "深場タモ",
-      "en": "Long-reach net",
+      "en": "Long-reach triangle net",
       "use": "水路・深めの場所",
       "spec": {
-        "hoop_cm": "35 (Φ)",
+        "hoop_cm": "35 × 34 (三角)",
         "handle_cm": 150,
         "mesh_mm": 4,
         "bagDepth_cm": 42
@@ -115,26 +133,32 @@
       "tiers": {
         "hero": {
           "file": "net_deep.hero.glb",
-          "triangles": 28088,
-          "vertices": 16111,
-          "bytes": 3619520
+          "triangles": 27752,
+          "vertices": 15901,
+          "bytes": 3611516
         },
         "lod1": {
           "file": "net_deep.lod1.glb",
-          "triangles": 8208,
-          "vertices": 5059,
-          "bytes": 1126104
+          "triangles": 8088,
+          "vertices": 4982,
+          "bytes": 1123256
         },
         "lod2": {
           "file": "net_deep.lod2.glb",
-          "triangles": 3272,
-          "vertices": 2145,
-          "bytes": 398368
+          "triangles": 3192,
+          "vertices": 2097,
+          "bytes": 396596
         }
       },
-      "mass_g": 667,
-      "balancePoint_m": 1.183,
-      "overallLength_m": 1.921
+      "mass_g": 655,
+      "balancePoint_m": 1.18,
+      "overallLength_m": 1.894,
+      "buttZ_m": -0.09,
+      "mouthCentre_m": [
+        0,
+        0,
+        1.6761
+      ]
     },
     "net_dframe": {
       "ja": "D型底さらい網",
@@ -168,41 +192,53 @@
       },
       "mass_g": 988,
       "balancePoint_m": 0.799,
-      "overallLength_m": 1.141
+      "overallLength_m": 1.141,
+      "buttZ_m": -0.08,
+      "mouthCentre_m": [
+        0,
+        -0.0974,
+        0.9624
+      ]
     },
-    "net_premium": {
-      "ja": "高級軽量タモ",
-      "en": "Premium ultralight net",
+    "net_carbon": {
+      "tiers": {
+        "hero": {
+          "file": "net_carbon.hero.glb",
+          "triangles": 21672,
+          "vertices": 12523,
+          "bytes": 2953180
+        },
+        "lod1": {
+          "file": "net_carbon.lod1.glb",
+          "triangles": 7908,
+          "vertices": 4880,
+          "bytes": 992408
+        },
+        "lod2": {
+          "file": "net_carbon.lod2.glb",
+          "triangles": 3888,
+          "vertices": 2554,
+          "bytes": 371748
+        }
+      },
+      "ja": "カーボン網",
+      "en": "Carbon D-frame net",
       "use": "万能上位",
       "spec": {
-        "hoop_cm": "32 (Φ)",
+        "hoop_cm": "32 × 25 (D)",
         "handle_cm": 150,
         "mesh_mm": 2,
         "bagDepth_cm": 26
       },
-      "tiers": {
-        "hero": {
-          "file": "net_premium.hero.glb",
-          "triangles": 21672,
-          "vertices": 12523,
-          "bytes": 2953156
-        },
-        "lod1": {
-          "file": "net_premium.lod1.glb",
-          "triangles": 7984,
-          "vertices": 4922,
-          "bytes": 994080
-        },
-        "lod2": {
-          "file": "net_premium.lod2.glb",
-          "triangles": 4024,
-          "vertices": 2630,
-          "bytes": 374752
-        }
-      },
-      "mass_g": 295,
-      "balancePoint_m": 1.13,
-      "overallLength_m": 1.896
+      "mass_g": 293,
+      "balancePoint_m": 1.12,
+      "overallLength_m": 1.814,
+      "buttZ_m": -0.088,
+      "mouthCentre_m": [
+        0,
+        0,
+        1.6228
+      ]
     }
   },
   "lodDistances_m": {

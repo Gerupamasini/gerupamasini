@@ -21,7 +21,7 @@ function readGlb(file: string): Gltf {
   return JSON.parse(buf.subarray(20, 20 + len).toString('utf8')) as Gltf;
 }
 
-const IDS = ['net_small', 'net_shallow', 'net_fine', 'net_deep', 'net_dframe', 'net_premium'];
+const IDS = ['net_small', 'net_shallow', 'net_fine', 'net_deep', 'net_dframe', 'net_carbon'];
 
 describe('hand-net GLBs', () => {
   it('ships six nets in three LOD tiers with decreasing triangle counts', () => {

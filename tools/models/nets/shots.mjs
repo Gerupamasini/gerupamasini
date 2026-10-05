@@ -1,7 +1,9 @@
-// Camera / pose presets for render.mjs. Units: metres, degrees.
-const LEN = { net_small: 0.70, net_shallow: 1.17, net_fine: 0.90, net_deep: 1.92, net_dframe: 1.14, net_premium: 1.90 };
-const BUTT = { net_small: -0.07, net_shallow: -0.09, net_fine: -0.075, net_deep: -0.09, net_dframe: -0.083, net_premium: -0.088 };
-const IDS = Object.keys(LEN);
+// Camera / pose presets for render.mjs. Units: metres, degrees. Sizes come from the built manifest.
+import fs from 'node:fs';
+const manifest = JSON.parse(fs.readFileSync(new URL('../../../src/assets/models/nets/manifest.json', import.meta.url), 'utf8'));
+const IDS = ['net_small', 'net_shallow', 'net_fine', 'net_deep', 'net_dframe', 'net_carbon'];
+const LEN = Object.fromEntries(IDS.map((id) => [id, manifest.nets[id].overallLength_m]));
+const BUTT = Object.fromEntries(IDS.map((id) => [id, manifest.nets[id].buttZ_m]));
 
 /** a studio product shot: the net held level, the hoop to the left, seen from front-right and above */
 function studio(id, { yaw = -62, height = 0.66, elev = 0.42, side = 0.28, zoom = 1, name = `studio_${id}`, extra = {} } = {}) {
@@ -27,7 +29,7 @@ export const SHOTS = [
 ];
 
 /** close-up of the hoop and bag: the net points along +Z with its hoop centre at (0, 0.62, 0) */
-const HOOP_Z = { net_small: 0.53, net_shallow: 0.93, net_fine: 0.70, net_deep: 1.67, net_dframe: 0.99, net_premium: 1.62 };
+const HOOP_Z = Object.fromEntries(IDS.map((id) => [id, manifest.nets[id].mouthCentre_m[2]]));
 export function closeup(id, { name = `closeup_${id}`, cam = [0.22, 0.12, 0.3], look = [0.06, -0.05, 0.02], fov = 30, extra = {}, scene = 'studio' } = {}) {
   const c = [0, 0.62, 0];
   return { name, scene, fov, nets: [{ id, pos: [0, 0.62, -HOOP_Z[id]], rot: [0, 0, 0], ...extra }], cam: { pos: c.map((v, k) => v + cam[k]), target: c.map((v, k) => v + look[k]) }, keyTarget: c };
@@ -55,8 +57,8 @@ SHOTS.push(
     cam: { pos: [0.75, 0.62, 2.85], target: [0.1, 0.22, 2.2] },
   },
   {
-    name: 'field_net_premium', scene: 'field', fov: 32,
-    nets: [{ id: 'net_premium', rot: [30, -120, 0], mouthAt: [0.2, WATER + 0.03, 0.1], wet: 0.7, mud: 0.05, waterline: WATER, bag: { Stream: 0.25 } }],
+    name: 'field_net_carbon', scene: 'field', fov: 32,
+    nets: [{ id: 'net_carbon', rot: [30, -120, 0], mouthAt: [0.2, WATER + 0.03, 0.1], wet: 0.7, mud: 0.05, waterline: WATER, bag: { Stream: 0.25 } }],
     cam: { pos: [1.2, 0.55, 1.35], target: [0.05, -0.05, 0.0] },
   },
   // bag morph states, left to right: rest, Stream, Invert, Trail, Wet

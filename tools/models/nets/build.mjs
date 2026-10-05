@@ -297,6 +297,8 @@ function buildNet(net, tierName) {
 fs.mkdirSync(outDir, { recursive: true });
 const manifestPath = path.join(outDir, 'manifest.json');
 const manifest = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : { nets: {} };
+// drop nets that are no longer in the catalogue
+for (const id of Object.keys(manifest.nets)) if (!NETS.some((n) => n.id === id)) delete manifest.nets[id];
 const tiers = tierSel === 'all' ? Object.keys(TIERS) : [tierSel];
 for (const net of NETS) {
   if (netSel !== 'all' && netSel !== net.id) continue;
@@ -304,8 +306,8 @@ for (const net of NETS) {
     const { glb, info, stats } = buildNet(net, tier);
     const file = `${net.id}.${tier}.glb`;
     fs.writeFileSync(path.join(outDir, file), glb);
-    manifest.nets[net.id] = manifest.nets[net.id] || { ja: net.ja, en: net.en, use: net.use, spec: net.spec, tiers: {} };
-    if (tier === 'hero') Object.assign(manifest.nets[net.id], { mass_g: info.mass_g, balancePoint_m: info.balancePoint_m, overallLength_m: info.overallLength_m });
+    manifest.nets[net.id] = { ...(manifest.nets[net.id] || { tiers: {} }), ja: net.ja, en: net.en, use: net.use, spec: net.spec };
+    if (tier === 'hero') Object.assign(manifest.nets[net.id], { mass_g: info.mass_g, balancePoint_m: info.balancePoint_m, overallLength_m: info.overallLength_m, buttZ_m: info.buttZ_m, mouthCentre_m: info.mouthCentre_m });
     manifest.nets[net.id].tiers[tier] = { file, triangles: stats.triangles, vertices: stats.vertices, bytes: glb.length };
     log(`${file}: ${stats.triangles} tris, ${(glb.length / 1e6).toFixed(2)} MB, ${info.mass_g} g, balance ${info.balancePoint_m} m, length ${info.overallLength_m} m`);
   }

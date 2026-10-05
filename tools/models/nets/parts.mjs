@@ -28,6 +28,36 @@ export function roundHoop({ R, legHalf, z0, legIn, neck, phi0 = 0.6, samples }) 
 }
 
 /**
+ * A frame bent from one wire along a polyline: pts runs from the right leg's exit (first point) round
+ * the mouth to the left leg's exit (last point); radii[k] fillets corner k (0 = sharp pass-through).
+ * The legs continue straight back into the joint for legIn. Same result shape as roundHoop.
+ */
+export function wireLoopHoop({ pts, radii, legIn, samples }) {
+  const out = [pts[0]];
+  for (let k = 1; k < pts.length - 1; k++) {
+    const P = pts[k], A = pts[k - 1], B = pts[k + 1], r = radii[k] ?? 0;
+    if (!r) { out.push(P); continue; }
+    const u = v3.norm(v3.sub(A, P)), w = v3.norm(v3.sub(B, P));
+    const half = Math.acos(clamp(v3.dot(u, w), -1, 1)) / 2;
+    const t = Math.min(r / Math.tan(half), 0.48 * v3.len(v3.sub(A, P)), 0.48 * v3.len(v3.sub(B, P)));
+    const S = v3.add(P, v3.mul(u, t)), E = v3.add(P, v3.mul(w, t));
+    // a quadratic fillet, close enough to a circular arc for a bent wire
+    for (let q = 0; q <= 10; q++) {
+      const s = q / 10, a = (1 - s) * (1 - s), b = 2 * s * (1 - s), c = s * s;
+      out.push([0, 1, 2].map((i) => a * S[i] + b * P[i] + c * E[i]));
+    }
+  }
+  out.push(pts[pts.length - 1]);
+  const mouth = resample(out, samples, false);
+  const first = mouth[0], last = mouth[mouth.length - 1];
+  const legR = [[first[0], 0, first[2] - legIn], [first[0], 0, first[2] - legIn * 0.5]];
+  const legL = [[last[0], 0, last[2] - legIn * 0.5], [last[0], 0, last[2] - legIn]];
+  const wire = [...legR, ...mouth, ...legL];
+  const center = mouth.reduce((a, q) => v3.add(a, q), [0, 0, 0]).map((c) => c / mouth.length);
+  return { wire, mouth, center };
+}
+
+/**
  * D frame: straight bottom edge (far end, +Z) and a half-ellipse arch back to the apex where the
  * stem enters the socket. Corners between edge and arch are filleted.
  */

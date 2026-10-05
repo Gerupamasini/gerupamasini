@@ -5,7 +5,7 @@
 //   mouth:  centre (frame local); grips: { main, support } (root);  info: catalogue data
 // part = { material, mesh: MeshData, kg }  (kg: estimated mass from the real material density)
 import { lathe, sweep, circleProfile, ring, m4, v3, MeshData, pathLength, TAU, smooth } from './geom.mjs';
-import { roundHoop, dFrame, teardropProfile, offsetLoop, lacing, pipeProfile, sampled, foamGrip, ribs, hexFlats, knurl, latheAlong, roundedBlock } from './parts.mjs';
+import { roundHoop, wireLoopHoop, dFrame, teardropProfile, offsetLoop, lacing, pipeProfile, sampled, foamGrip, ribs, hexFlats, knurl, latheAlong, roundedBlock } from './parts.mjs';
 import { buildBag, subRows } from './bag.mjs';
 
 const RHO = { stainless: 7930, steel: 7850, alu: 2700, beech: 720, eva: 110, tpr: 1150, vinyl: 1300, pom: 1410, carbon: 1550, rubber: 1100 };
@@ -34,8 +34,8 @@ const handleShade = (m, tipZ) => m.shade((p) => ({ dirt: 0.05 + 0.5 * smooth(tip
 
 // ---------------------------------------------------------------- shared assemblies
 
-function wireHoop(Q, { R, rw, legHalf, z0, legIn, neck, phi0, material = 'stainless' }) {
-  const h = roundHoop({ R, legHalf, z0, legIn, neck, phi0, samples: Q.hoopN });
+function wireHoop(Q, { R, rw, legHalf, z0, legIn, neck, phi0, pts, radii, material = 'stainless' }) {
+  const h = pts ? wireLoopHoop({ pts, radii, legIn, samples: Q.hoopN }) : roundHoop({ R, legHalf, z0, legIn, neck, phi0, samples: Q.hoopN });
   const mesh = sweep(h.wire, circleProfile(rw, Q.wireSegs), { up: [0, 1, 0], tile: [rw * TAU, 0.03], capEnds: true });
   return { h, wire: part(material, mesh, wireKg(rw, pathLength(h.wire), RHO.stainless)) };
 }
@@ -106,7 +106,41 @@ function hexFerrule(Q, { zA, zB, zHex0, zHex1, across, rRound, rFront, material 
   return part(material, mesh, mesh.volume() * RHO.stainless * 0.55);
 }
 
-// ---------------------------------------------------------------- 1. 小型タモ
+/** square hand-net frame: the wire splits at the joint into the middle of the back edge */
+function squareFrame(S, rc, lh, z0, neck) {
+  const zb = z0 + neck, zf = zb + S, a = S / 2;
+  return {
+    pts: [[lh, 0, z0], [lh, 0, zb], [a, 0, zb], [a, 0, zf], [-a, 0, zf], [-a, 0, zb], [-lh, 0, zb], [-lh, 0, z0]],
+    radii: [0, 0.006, rc, rc, rc, rc, 0.006, 0],
+  };
+}
+
+/** triangular frame: the two sides run straight out of the joint to a straight front edge */
+function triangleFrame(W, D, rc, lh, z0) {
+  return {
+    pts: [[lh, 0, z0], [lh, 0, z0 + 0.014], [W / 2, 0, z0 + D], [-W / 2, 0, z0 + D], [-lh, 0, z0 + 0.014], [-lh, 0, z0]],
+    radii: [0, 0.012, rc, rc, 0.012, 0],
+  };
+}
+
+/** D frame bent from one tube: the arch leaves the joint sideways, the straight edge is the far end */
+function dWireFrame(W, D, rc, lh, z0, n = 24) {
+  const a = W / 2, zA = z0 + 0.012, zEdge = zA + D;
+  const arch = [];
+  for (let k = 0; k <= n; k++) {
+    const t = (Math.PI / 2) * (k / n);
+    const x = a * Math.sin(t);
+    if (x > lh + 0.012) arch.push([x, 0, zEdge - D * Math.cos(t)]);
+  }
+  arch[arch.length - 1] = [a, 0, zEdge];
+  const right = [[lh, 0, z0], [lh, 0, zA], ...arch];
+  const left = right.map((q) => [-q[0], q[1], q[2]]).reverse();
+  const pts = [...right, ...left];
+  const radii = pts.map((_, k) => (k === 1 || k === pts.length - 2 ? 0.008 : k === right.length - 1 || k === right.length ? rc : 0));
+  return { pts, radii };
+}
+
+// ---------------------------------------------------------------- 1. 小型タモ（角型の手網）
 
 function netSmall(Q) {
   const butt = -0.07, tip = 0.38;
@@ -139,9 +173,9 @@ function netSmall(Q) {
     return 0.0123 - 0.00055 * (g1 + g2);
   }), [0, 0.0121], [0.0015, 0.0105], ...sampled(0.003, 0.012, 5, (z, t) => 0.0098 - 0.0058 * t * (2 - t)), [0.0125, 0.0036], [0.0125, 0.0036], [0.0125, 0]];
   const ferrule = lathe(ferProf, Q.lathe, { tile: [0.03, 0.03] });
-  const { h, wire } = wireHoop(Q, { R: 0.1, rw, legHalf: rw * 1.1, z0: 0.012, legIn: 0.045, neck: 0.03, phi0: 0.55 });
+  const { h, wire } = wireHoop(Q, { rw, legIn: 0.045, ...squareFrame(0.2, 0.028, rw * 1.1, 0.012, 0.016) });
   const hem = tapeHem(Q, h, rw, { material: 'tape_white', extra: 1.3e-3, tail: 6e-3 });
-  const { bag, prims } = netBag(Q, hem.bagMouth, { depth: 0.16, p: 2.2, taper: 0.18, folds: 0.085, seed: 3, material: 'net_white', pitch: 0.0037, cellsPerTile: [8, 8], gsm: 0.045 });
+  const { bag, prims } = netBag(Q, hem.bagMouth, { depth: 0.15, p: 2.6, taper: 0.12, folds: 0.075, seed: 3, flatBottom: 0.25, material: 'net_white', pitch: 0.0037, cellsPerTile: [8, 8], gsm: 0.045 });
   const frame = [part('stainless', ferrule, tubeKg(0.0123, 0.0113, 0.052, RHO.stainless) + 0.004), wire, hem.part];
   return {
     handle: [{ name: 'Handle', z: 0, parts: handleParts }], tipZ: tip, pivotRot: [0, 0, 0, 1], frame, bag: { prims }, bagInfo: bag,
@@ -193,7 +227,7 @@ function netFine(Q) {
   };
 }
 
-// ---------------------------------------------------------------- 4. 深場タモ
+// ---------------------------------------------------------------- 4. 深場タモ（三角の網口）
 
 function netDeep(Q) {
   const butt = -0.09, ro = 0.014, ri = 0.012, zc = 0.69, tip = 1.41;
@@ -210,7 +244,7 @@ function netDeep(Q) {
   const s2 = [part('alu_silver', inner, tubeKg(ri, ri - 0.0008, L2 + 0.12, RHO.alu)), part('stainless', fit, fit.volume() * RHO.stainless * 0.5)];
   const rw = 0.0025;
   const fer = hexFerrule(Q, { zA: 0, zB: 0.05, zHex0: 0.002, zHex1: 0.017, across: 0.021, rRound: 0.0128, rFront: 0.0062 });
-  const { h, wire } = wireHoop(Q, { R: 0.175, rw, legHalf: rw * 1.1, z0: 0.05, legIn: 0.04, neck: 0.05, phi0: 0.62 });
+  const { h, wire } = wireHoop(Q, { rw, legIn: 0.04, ...triangleFrame(0.35, 0.34, 0.03, rw * 1.1, 0.05) });
   // selvage rope laced to the wire with twine
   const rr = 0.0022;
   const ropeLoop = offsetLoop(h.mouth, h.center, 0, -(rw + rr));
@@ -218,7 +252,7 @@ function netDeep(Q) {
   const frame = [fer, wire, part('rope_green', rope, pathLength(ropeLoop, true) * 0.004)];
   if (Q.detail < 2) frame.push(part('twine_green', lacing(h.mouth, { every: Q.detail ? 0.07 : 0.035, rw, rr, twine: 0.0006, segs: Q.detail ? 4 : 6, loopSegs: Q.detail ? 8 : 14 }), 0.004));
   const bagMouth = offsetLoop(h.mouth, h.center, 0, -(rw + 2 * rr) + 0.0005);
-  const { bag, prims } = netBag(Q, bagMouth, { depth: 0.42, p: 2.0, taper: 0.26, folds: 0.1, seed: 9, material: 'net_knotted', pitch: 0.0052, cellsPerTile: [6, 8.05], gsm: 0.12 });
+  const { bag, prims } = netBag(Q, bagMouth, { depth: 0.42, p: 2.1, taper: 0.22, folds: 0.1, seed: 9, material: 'net_knotted', pitch: 0.0052, cellsPerTile: [6, 8.05], gsm: 0.12 });
   // the bottom gathered and tied off with twine
   const knotMesh = lathe(sampled(-0.012, 0.012, Q.steps, (z, t) => 0.0075 * Math.sin(Math.PI * t) ** 0.7 * (1 + 0.12 * Math.sin(t * 19))), Q.latheSmall, { tile: [0.012, 0.012] });
   knotMesh.transform(m4.chain(m4.translate(...v3.add(bag.bottom, [0, 0.004, 0])), m4.rotX(Math.PI / 2)));
@@ -261,9 +295,9 @@ function netDFrame(Q) {
   };
 }
 
-// ---------------------------------------------------------------- 6. 高級軽量タモ
+// ---------------------------------------------------------------- 6. カーボン網（D 型）
 
-function netPremium(Q) {
+function netCarbon(Q) {
   const butt = -0.085, z2 = 0.47, z3 = 0.97, tip = 1.415;
   const capProf = [[butt - 0.003, 0], [butt - 0.003, 0.0105], [butt - 0.003, 0.0105], [butt - 0.0022, 0.0112], [butt, 0.0112], [butt, 0.0112], [butt, 0.0136], [butt + 0.0012, 0.0146], [butt + 0.022, 0.0146], [butt + 0.0245, 0.0132], [butt + 0.0245, 0.0132], [butt + 0.0245, 0.0128]];
   const capM = lathe(capProf.slice(5), Q.lathe, { rMod: knurl(90, 0.0002, butt + 0.005, butt + 0.017), tile: [0.03, 0.03] });
@@ -286,11 +320,11 @@ function netPremium(Q) {
   const knob = latheAlong(knobProf, Q.lathe, [0.0102, 0, 0.0125], [1, 0, 0], { rMod: knurl(48, 0.0003, 0.0008, 0.0072), tile: [0.03, 0.03] });
   const pinHead = latheAlong([[0, 0], [0, 0.0058], [0, 0.0058], [0.0016, 0.0058], [0.0022, 0.005], [0.0024, 0]], Q.latheSmall, [-0.0102, 0, 0.0125], [-1, 0, 0], { tile: [0.02, 0.02] });
   const rw = 0.0035;
-  const { h, wire } = wireHoop(Q, { R: 0.16, rw, legHalf: 0.0046, z0: 0.054, legIn: 0.02, neck: 0.042, phi0: 0.6, material: 'alu_gunmetal' });
+  const { h, wire } = wireHoop(Q, { rw, legIn: 0.02, material: 'alu_gunmetal', ...dWireFrame(0.32, 0.24, 0.028, 0.0046, 0.054) });
   wire.kg = tubeKg(rw, rw - 0.0007, pathLength(h.wire), RHO.alu);
   const hem = tapeHem(Q, h, rw, { material: 'rubber_bead', extra: 1.0e-3, tail: 4.5e-3, th: 1.0e-3 });
   hem.part.kg *= 2.2;
-  const { bag, prims } = netBag(Q, hem.bagMouth, { depth: 0.26, p: 2.3, taper: 0.14, folds: 0.042, seed: 13, material: 'net_rubber', pitch: 0.0026, cellsPerTile: [8, 7.125], gsm: 0.24 });
+  const { bag, prims } = netBag(Q, hem.bagMouth, { depth: 0.26, p: 2.6, taper: 0.1, folds: 0.042, seed: 13, flatBottom: 0.3, material: 'net_rubber', pitch: 0.0026, cellsPerTile: [8, 7.125], gsm: 0.24 });
   const frame = [part('alu_champagne', clevis, clevis.volume() * RHO.alu * 0.8), part('alu_gunmetal', yoke, yoke.volume() * RHO.alu * 0.8), part('alu_champagne', knob.append(pinHead), 0.006), wire, hem.part];
   return {
     handle: [{ name: 'Handle', z: 0, parts: s1 }, { name: 'Handle_Mid', z: z2, parts: s2 }, { name: 'Handle_Tip', z: z3, parts: s3 }], tipZ: tip, pivotRot: [0, 0, 0, 1], frame, bag: { prims }, bagInfo: bag,
@@ -306,9 +340,9 @@ function flipWinding(m) {
 
 export const NETS = [
   {
-    id: 'net_small', ja: '小型タモ', en: 'Compact hand net', build: netSmall,
-    spec: { hoop_cm: '20 (Φ)', handle_cm: 45, mesh_mm: 3, bagDepth_cm: 16 },
-    materials: 'ステンレス SUS304 線 Φ3.2 mm の丸枠、ブナ丸棒 Φ22 mm の柄、圧着ステンレス口金、ポリエステル無結節（ラッセル）網 3 mm、ポリエステル縁テープ、組紐ストラップ',
+    id: 'net_small', ja: '小型タモ', en: 'Compact square hand net', build: netSmall,
+    spec: { hoop_cm: '20 × 20 (角)', handle_cm: 45, mesh_mm: 3, bagDepth_cm: 15 },
+    materials: 'ステンレス SUS304 線 Φ3.2 mm の角枠（四角い手網、角 R28 mm）、ブナ丸棒 Φ22 mm の柄、圧着ステンレス口金、ポリエステル無結節（ラッセル）網 3 mm、ポリエステル縁テープ、組紐ストラップ',
     use: '万能・序盤',
   },
   {
@@ -324,9 +358,9 @@ export const NETS = [
     use: '稚魚・小型甲殻類',
   },
   {
-    id: 'net_deep', ja: '深場タモ', en: 'Long-reach net', build: netDeep,
-    spec: { hoop_cm: '35 (Φ)', handle_cm: 150, mesh_mm: 4, bagDepth_cm: 42 },
-    materials: 'ステンレス線 Φ5 mm の丸枠、PE 撚りロープの縁を撚糸で枠に綴じ付け、PE 有結節網 4 mm（底を絞り結び）、2 段伸縮アルミ柄 Φ28/24 mm（ツイストロック）、EVA グリップ',
+    id: 'net_deep', ja: '深場タモ', en: 'Long-reach triangle net', build: netDeep,
+    spec: { hoop_cm: '35 × 34 (三角)', handle_cm: 150, mesh_mm: 4, bagDepth_cm: 42 },
+    materials: 'ステンレス線 Φ5 mm の三角枠（前辺 35 cm、柄から前辺まで 34 cm）、PE 撚りロープの縁を撚糸で枠に綴じ付け、PE 有結節網 4 mm（底を絞り結び）、2 段伸縮アルミ柄 Φ28/24 mm（ツイストロック）、EVA グリップ',
     use: '水路・深めの場所',
   },
   {
@@ -336,9 +370,9 @@ export const NETS = [
     use: '底生生物',
   },
   {
-    id: 'net_premium', ja: '高級軽量タモ', en: 'Premium ultralight net', build: netPremium,
-    spec: { hoop_cm: '32 (Φ)', handle_cm: 150, mesh_mm: 2, bagDepth_cm: 26 },
-    materials: 'アルミ 7075 パイプ Φ7 mm の丸枠（ガンメタアルマイト）、削り出し折りたたみジョイント（シャンパンゴールド）、3 本継ぎカーボン柄（2×2 綾織・クリア塗装）、高密度 EVA、ラバーコート無結節網 2 mm',
+    id: 'net_carbon', ja: 'カーボン網', en: 'Carbon D-frame net', build: netCarbon,
+    spec: { hoop_cm: '32 × 25 (D)', handle_cm: 150, mesh_mm: 2, bagDepth_cm: 26 },
+    materials: 'アルミ 7075 パイプ Φ7 mm の D 型枠（ガンメタアルマイト）、削り出し折りたたみジョイント（シャンパンゴールド）、3 本継ぎカーボン柄（2×2 綾織・クリア塗装）、高密度 EVA、ラバーコート無結節網 2 mm',
     use: '万能上位',
   },
 ];

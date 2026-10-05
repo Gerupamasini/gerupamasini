@@ -11,8 +11,8 @@ import { prepareNet, BAG_TARGETS } from '../../src/assets/models/nets/netMateria
 const URLS = Object.fromEntries(
   Object.entries(import.meta.glob('../../src/assets/models/nets/*.glb', { eager: true, query: '?url', import: 'default' })).map(([k, v]) => [k.split('/').pop().replace('.glb', ''), v]),
 );
-const NET_IDS = ['net_small', 'net_shallow', 'net_fine', 'net_deep', 'net_dframe', 'net_premium'];
-const NET_JA = { net_small: '小型タモ', net_shallow: '浅瀬タモ', net_fine: '微細目タモ', net_deep: '深場タモ', net_dframe: 'D型底さらい網', net_premium: '高級軽量タモ' };
+const NET_IDS = ['net_small', 'net_shallow', 'net_fine', 'net_deep', 'net_dframe', 'net_carbon'];
+const NET_JA = { net_small: '小型タモ', net_shallow: '浅瀬タモ', net_fine: '微細目タモ', net_deep: '深場タモ', net_dframe: 'D型底さらい網', net_carbon: 'カーボン網' };
 const params = new URLSearchParams(location.search);
 const capture = params.has('capture');
 if (capture) document.body.classList.add('capture');
