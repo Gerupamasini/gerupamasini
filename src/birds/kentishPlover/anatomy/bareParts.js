@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildBill } from './bill.js';
 
 // Bill, legs/toes/claws and eyes. Units: mm while building, metres in the output geometry.
 // aPart: 0 bill keratin, 1 leg skin (reticulate scales), 2 claw, 3 feathered thigh, 4 mouth lining,
@@ -13,11 +14,14 @@ class Skinned {
     this.si = [];
     this.sw = [];
     this.index = [];
+    this.aux = [];
   }
   get count() {
     return this.pos.length / 3;
   }
-  v(p, n, uv, part, bones) {
+  /** aux: per-vertex scalar (bill: the plumage's signed distance, mm; 99 elsewhere) */
+  v(p, n, uv, part, bones, aux = 99) {
+    this.aux.push(aux);
     this.pos.push(p[0] / 1000, p[1] / 1000, p[2] / 1000);
     const l = Math.hypot(n[0], n[1], n[2]) || 1;
     this.nrm.push(n[0] / l, n[1] / l, n[2] / l);
@@ -81,6 +85,7 @@ class Skinned {
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setAttribute('aPart', new THREE.Float32BufferAttribute(this.part, 1));
+    g.setAttribute('aBillF', new THREE.Float32BufferAttribute(this.aux, 1));
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.si, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.sw, 4));
     g.setIndex(this.index);
@@ -104,85 +109,8 @@ const smooth = (a, b, x) => {
 };
 
 // ---------------------------------------------------------------- Bill
-// Relaxed bind (spec §3, §6, §16): feather line (0, 89.7, 39.6), tip (0, 83.4, 54) — the bill points 23.6° down
-// in the bind, 25° with the resting gaze pitch. The mesh starts 4.6 mm inside the feathering on the same axis
-// so no seam can open at the lores.
-export const BILL = { base: [0, 91.5, 35.4], featherLine: [0, 89.7, 39.6], tip: [0, 83.4, 54] };
-// Charadrius bill: short, straight; basal part deep with a long nasal groove, mid-bill constriction,
-// swollen distal third (dertrum), blunt-pointed tip; upper tip slightly overhangs the lower.
-// Exposed culmen 15.9 mm (S2,S3; photo bill/L 0.112), depth / width 4.0 / 3.6 at the feather line (photos,
-// body_shape_spec.md §6).
-export function billProfile(t) {
-  // widths & heights (mm) as function of t (0 = feathering, 1 = tip)
-  // t: 0 = inside the feathering (hidden 4.6 mm), ≈0.23 = feather line, 1 = tip
-  // (a straight, deep-based black bill that tapers late: the earlier 1.45 / 1.0 constriction read needle-thin
-  // beyond the feathering, p006, p070, p043, p024)
-  const W = 0.84 * (4.6 * (1 - 0.35 * smooth(0.1, 0.55, t)) * (1 - smooth(0.9, 1.0, t) ** 1.6) + 0.1 * Math.exp(-(((t - 0.8) / 0.1) ** 2)));
-  const Hu = 0.83 * (3.0 - 1.15 * smooth(0.15, 0.62, t) + 0.38 * Math.exp(-(((t - 0.8) / 0.1) ** 2)) - 1.35 * smooth(0.88, 1, t) ** 1.3);
-  const Hl = 0.83 * (2.1 - 0.8 * smooth(0.15, 0.65, t) + 0.12 * Math.exp(-(((t - 0.78) / 0.1) ** 2)) - 0.85 * smooth(0.86, 1, t) ** 1.3);
-  return { W: Math.max(0.05, W), Hu: Math.max(0.12, Hu), Hl: Math.max(0.08, Hl) };
-}
-
-export function buildBill(sk, boneIndex, J, opts = {}) {
-  const segL = opts.segL ?? 22;
-  const segR = opts.segR ?? 14;
-  const { base, tip } = BILL;
-  const axis = norm(sub(tip, base));
-  const up = norm(cross(cross(axis, [0, 1, 0]), axis)); // world-up-ish, perpendicular to the bill axis
-  const side = norm(cross(up, axis));
-  const Ltot = Math.hypot(...sub(tip, base));
-  const head = boneIndex.head;
-  const jaw = boneIndex.jaw;
-  for (const which of ['upper', 'lower']) {
-    const rings = [];
-    const bones = [];
-    for (let i = 0; i < segL; i++) {
-      const tt = i / (segL - 1);
-      const t = tt ** 0.85; // denser near the tip
-      const lenOff = which === 'lower' ? -0.45 * t : 0; // lower mandible slightly shorter
-      const { W, Hu, Hl } = billProfile(t);
-      const c = addv(addv(base, scl(axis, t * Ltot + lenOff)), scl(up, which === 'upper' ? -0.1 * smooth(0.88, 1, t) : 0.05));
-      const ring = [];
-      for (let s = 0; s < segR; s++) {
-        // angle 0..π across the curved outer surface, flat face along the commissure
-        const a = (s / segR) * Math.PI * 2;
-        let x;
-        let y;
-        let nx;
-        let ny;
-        if (a <= Math.PI) {
-          const ca = Math.cos(a);
-          const sa = Math.sin(a);
-          const e = 0.62; // superellipse exponent: flat sides, rounded culmen
-          x = Math.sign(ca) * Math.abs(ca) ** e * W * 0.5;
-          const H = which === 'upper' ? Hu : Hl;
-          y = sa ** 0.9 * H;
-          nx = Math.sign(ca) * Math.abs(ca) ** (2 - e) / W;
-          ny = sa / H;
-          // nasal groove on upper mandible sides (basal 45%)
-          if (which === 'upper' && t > 0.18 && t < 0.58) {
-            const g = Math.exp(-(((Math.abs(ca) - 0.62) / 0.12) ** 2)) * Math.sin(Math.PI * smooth(0.18, 0.58, t));
-            x -= Math.sign(ca) * 0.28 * g;
-          }
-        } else {
-          // commissure face (slightly concave palate / tongue side)
-          const u = Math.cos(a);
-          x = u * W * 0.5;
-          y = -0.08 * (1 - u * u);
-          nx = 0;
-          ny = -1;
-        }
-        const yy = which === 'upper' ? y : -y;
-        const p = addv(addv(c, scl(side, x)), scl(up, yy));
-        const n = addv(scl(side, nx), scl(up, which === 'upper' ? ny : -ny));
-        ring.push({ p, n: norm(addv(n, scl(axis, 0.05))), uv: [s / segR, t], part: a > Math.PI ? 4 : 0 });
-      }
-      rings.push(ring);
-      bones.push([[which === 'upper' ? head : jaw, 1]]);
-    }
-    sk.loft(rings, 0, bones, { capStart: true, capEnd: true });
-  }
-}
+// Rebuilt 2026-10 as parametric mandibles (anatomy/bill.js); BILL / billProfile / buildBill keep their names here.
+export { BILL, billProfile, buildBill } from './bill.js';
 
 // ---------------------------------------------------------------- Legs
 function legFrame(dir) {
@@ -446,9 +374,10 @@ export function buildEyes(boneIndex, J, opts = {}) {
   return { eyeball: eyeball.build(), cornea: cornea.build(), lids: lids.build() };
 }
 
-export function buildBareParts(boneIndex, J, toes, detail = 0) {
+/** sdf (optional): the body SDF, for the feather tips drawn over the bill base (aBillF). */
+export function buildBareParts(boneIndex, J, toes, detail = 0, sdf = null) {
   const sk = new Skinned();
-  buildBill(sk, boneIndex, J, detail === 0 ? {} : detail === 1 ? { segL: 14, segR: 10 } : { segL: 6, segR: 6 });
+  buildBill(sk, boneIndex, J, { detail, sdf });
   buildLegs(sk, boneIndex, J, toes, detail === 0 ? { seg: 10 } : detail === 1 ? { seg: 7, detail: 1 } : { seg: 5, detail: 2 });
   return sk.build();
 }

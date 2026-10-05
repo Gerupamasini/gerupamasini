@@ -8,7 +8,80 @@
 - 歩行・走行中の体のがたつき: `node tools/dev/gaitjitter.mjs`（実際の表示タイミングで駆動し、追従カメラに対する体の動きを計測。§3b）
 - 首・頭まわりの変形: `node tools/dev/neckdeform.mjs --lod=0,1,2`（§V）／極端な首の姿勢での膨らみ: `node tools/dev/neckbulge.mjs`（§X）／重みの色分け: `validate.mjs` の `wdebug=1`、頭の傾き: `gaze=yaw,pitch,roll`
 - 正面の写真との重ね合わせ: `python3 tools/dev/frontfit.py`（§AB）／体の断面: `node tools/dev/section.mjs`（§AB）
+- 嘴: `node tools/dev/billcheck.mjs`（断面、羽毛を出る位置、啄みの接地での嘴先、顎の開き。§AE）／拡大の描画は `validate.mjs` の `jaw=`・`sun=0`・`prey=`
 - 羽が体の動きについてくるか: `node tools/dev/featherdrift.mjs --lod=0`（§Y。`--compare=before.json` で前後比較）／上から見た輪郭: `node tools/dev/planparts.mjs`（部位ごとの |x|、`by=bone` で羽ごと）・`node tools/dev/planprobe.mjs`（SDF の幅と背の断面。`--outline` で羽込みの輪郭の曲率・最大幅の位置・直線の区間、§AA）・`node tools/dev/tips.mjs`（翼端・尾端の位置、§Z）
+
+## AE. 嘴の作り直し（docs/morphology.md §6、2026-10-05）
+
+指摘は「嘴を最高品質に」。前の嘴は上嘴・下嘴とも超楕円の断面を直線の軸に沿ってロフトしたもので、鼻孔溝は
+側面のわずかなへこみだけ、鼻孔・口角・口の中はなく、先端は丸いへら形、材質は粗さ 0.46 の一様な黒だった。
+写真（ユーザーの頭の側面の拡大、前 3/4、カタログの側面 9 枚）を測り、形・材質・LOD を作り直した。嘴の付け根の
+位置と向き（`BILL.base`・`BILL.tip`）、顎の骨、公開名は変えていない（頭の作り直しと並行しているため）。
+写真と写真から作った比較画像はリポジトリ外（scratchpad `bill/`）。
+
+### AE1. 測定（写真、morphology §6.1）
+| 量 | ユーザーの側面写真 | カタログ（9 枚） | 前のモデル | **新しいモデル** |
+|---|---|---|---|---|
+| 露出嘴峰（mm） | 15.2 | – | ≈ 14.5 | **15.1** |
+| 眼 → 嘴基部（mm） | 15.8 | – | （配置は不変） | （不変） |
+| 深さ: 先端から 1 / 3 / 8 mm | 1.0–1.4 / 2.3–2.8 / 3.1–3.6 | 0.17–0.23 L（先端 20 %） | 1.3 / 2.1 / 2.75 | **1.04 / 2.25 / 3.1** |
+| 深さ: 羽毛境界 | 4.0–4.4 | 0.27 L | 4.3 | **4.0** |
+| 鼻孔（先端から） | 9.5–13 mm、上嘴の側面の上半分 | 同（p012、p035、p022、p010） | なし | **9.4–13.4、高さ ≈ 40 %** |
+| 嘴の向き（relaxed） | 26° | 20–27°（spec §6） | 25° | 25°（不変） |
+
+### AE2. 変更
+- `anatomy/bill.js`（新規）: 上嘴・下嘴を (先端からの距離, 断面の周) のパラメトリック曲面にし、法線は曲面の数値微分。
+  断面の値は写真から測った単調 3 次補間の節（`BILL_SHAPE`）。凸の dertrum と細い尖端、中央の細い平行部、幅の広い
+  三角の基部、上嘴の縁が下嘴の外側にかぶさる口角線、先端でわずかに下がる口角線、ゴニス。LOD0 は鼻孔溝・鼻孔・
+  鼻孔蓋をジオメトリで刻む。口の内側（口蓋・下嘴の床）、口角の皮膚（頭 → 顎へ重みを移す膜）、口の奥の壁。
+  頂点ごとに体の SDF の値（`aBillF`）を持つ。上嘴の頂点は `BILL.tip` そのもの。
+- `bareParts.js`: 嘴は bill.js から（`BILL`・`billProfile`・`buildBill` は同じ名前で再輸出）。`aBillF` 属性。
+  `buildBareParts(…, sdf)`（`KentishPloverModel.getGeometries` が体の SDF を渡す）。
+- `KentishPloverMaterials.createBarePartsMaterial`: `MeshPhysicalMaterial`。角質の色・粗さの変化（基部は灰褐色で鈍く、
+  dertrum は暗く光沢、先端はすり減って鈍い）、長さ方向の細い筋（2 px 未満で消える）、嘴に沿った異方性の鏡面、
+  空の映り込み（IBL 鏡面）を角質だけ 2.6 倍、羽毛の際で弱める。鼻孔の暗い溝・鼻孔蓋の明るい鈍い皮膚・鼻孔溝・
+  口角線の暗い線、法線の凹凸。基部に顔の色の細い羽の先を 2 層（額・lores・顎）。
+- `KentishPloverLOD.js`: 遠距離の代理メッシュの嘴を 6 角の扁平な錐に。
+- `src/validation/main.js`: `jaw=rad`（下嘴を開く）、`sun=0`（日陰）/ `sun=elev,az`、`prey=type[,k]`（くわえた獲物）。
+- `tools/dev/billcheck.mjs`（新規）: 断面、羽毛を出る位置、啄みの接地での嘴先、顎の開き。
+
+### AE3. 結果
+- 視覚の確認（11 回、scratchpad `bill/r0`…`r11`、最終 `bill/final/`）: 側面・前 3/4・正面・上・下を閉じた嘴 / 開いた
+  嘴（0.2 rad）、日向 / 日陰で、ユーザーの側面写真と同じ縮尺・向きで並べ（`side_photo_vs_sun_shade_open.png`）、
+  前 3/4 の写真と並べた（`front34_photo_vs_sun_shade.png`）。先端の形（凸の dertrum から細い尖端、下嘴の先が上嘴の
+  先の下に入る）、鼻孔の位置と見え方、嘴峰に沿った長い空の映り込み、基部の幅は写真に合う。LOD1・LOD2 の
+  シルエット（`lod1_lod2.png`）、遠距離（`far_lod0_1_2.png`）、啄みでくわえた獲物（`peck_prey.png`）。
+  `docs/validation/closeup_bill.png`・`closeup_bill_open.png` はモデルだけの描画。
+- `billcheck.mjs`: 露出嘴峰 15.1 mm（上嘴が羽毛を出るところ）、下嘴 14.3 mm。啄みの接地でメッシュの頂点と
+  `BILL.tip` のずれ 0.000 mm（前 0.015）、いちばん低い嘴の頂点は `BILL.tip` の 0.37 / 0.21 / 0.21 mm 下（ゴカイ /
+  カニ / ヨコエビ、少し開いた下嘴。前 0.31 / 0.17 / 0.17）。顎 0.16 rad で先端 2.5 mm、羽毛を出るところで 0.5 mm 開く。
+- 三角形（`tricount.mjs`）: LOD0 の bare 4504 → 12962（嘴 ≈ 8000、口の内側 ≈ 1000）、全体 84125 → 92583。LOD1 2872 → 4076、
+  LOD2 764 → 876。
+
+### AE4. 回帰
+- `penetration.mjs --lod=0,1,2 --fine=2`（4 プロセス、規則は変えていない）: LOD0・LOD1・LOD2 とも 0 件。
+- `peckcurve.mjs`: 前と同じ値（ゴカイ / カニ / ヨコエビの接地誤差 0.5 / 1.0 / 1.5 mm、嘴 61° / 63° / 63°）。Animator の
+  嘴の基準（`BILL.tip`・`BILL_DIR`）は不変。
+- `fitcheck`（側面、Frame A）: IoU 0.939 → 0.935（≥ 0.93）、輪郭 15/17（不変）。嘴の深さの分布が写真の拡大に合わせて
+  変わった分。
+- `gaitjitter.mjs`: 前と同じ出力（diff なし）。
+- `npm run build` OK。デモはページエラーなしで起動する（外部リソースの証明書エラーと 404 だけ）。GLB を再出力した
+  （22 クリップ）。`build-artifact.mjs` OK。
+
+### AE5. 再現
+- `node tools/dev/billcheck.mjs`。拡大: `node tools/validate.mjs "closeup_bill=mode=closeup&pose=stand&gaze=0&fov=12&cam=0.075,0.083,0.047&look=0,0.0822,0.0465"`
+  （`&sun=0` 日陰、`&jaw=0.16` 開いた嘴、`&prey=amph` 獲物）。5 方向: `cams=` に側面・前 3/4・正面・上・下のカメラ
+  （scratchpad `bill/render.sh`）。写真との並べ: scratchpad `bill/tools/cmp_side.py`。
+
+### AE6. 残る課題（未解決）
+- 羽毛と嘴の境の形は顔の SDF（`lores`・`billCuff`・`chin`、頭の作り直しの範囲）で決まる。側面から見ると羽毛の
+  境がほぼ垂直で、写真のように顎の羽毛が下嘴の基部に沿って前へ伸びていない。嘴の側は羽の先の描画で継ぎ目を
+  隠すだけ。頭の作り直しのあとで `billcheck.mjs` の「羽毛を出る位置」を確かめる（`aBillF` は体の SDF から作る
+  ので、頭が変わっても自動で合う）。
+- 顎の関節（`joints.jaw`）は口角の 2.6 mm 下・4 mm 後ろにあり、口を開くと口角でも 0.5 mm 開く（実際の顎関節は
+  眼の下の後ろ）。動きを変えないため不変。
+- 前 3/4 のユーザー写真の個体は頭を下げて嘴をカメラへ向けているので、基部の幅は推定（約 4.9 mm）。
+- 舌はない（開いた嘴の中は口の床の色だけ）。
 
 ## AD. 太さを v3 と v4.1 の中間に（body_shape_spec.md v4.2、2026-10-04）
 
