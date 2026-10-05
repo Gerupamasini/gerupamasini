@@ -248,6 +248,21 @@ for (const v of views) {
   document.body.appendChild(d);
 }
 if (mode !== 'strip') await setupPose();
+// bill close-ups: jaw=rad opens the lower mandible on top of the pose; sun=0 shade (sky only), sun=elev,az moves
+// it; prey=type[,k] shows a held prey item (anatomy/heldPrey.js)
+if (q.has('jaw')) bird.bones.jaw.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Number(q.get('jaw'))));
+if (q.has('sun')) {
+  const s = q.get('sun').split(',').map(Number);
+  if (s.length < 2) env.sun.intensity *= s[0];
+  else {
+    env.setSun(s[0], s[1]);
+    env.follow(new THREE.Vector3(0, 0.04, 0));
+  }
+}
+if (q.has('prey')) {
+  const [type, k = 1] = q.get('prey').split(',');
+  bird.setHeldPrey({ type, k: Number(k), time: 0 });
+}
 const hide = (q.get('hide') || '').split(',').filter(Boolean);
 // fdebug=1: wing / tail feathers in a flat colour per type (feathers.FEATHER_TYPE)
 if (q.get('fdebug')) bird.object.traverse((o) => o.material?.userData?.uniforms?.uDebugType && (o.material.userData.uniforms.uDebugType.value = 1));

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { plumage as PLUMAGE, animation as ANIM, bodySculpt as SCULPT } from './KentishPloverConfig.js';
 import { FLUFF_REST, wingEdgeGLSL, patchGLSL } from './anatomy/bodyMesh.js';
 import { CONFORM_FOLD } from './anatomy/wingFold.js';
+import { BILL_SHAPE } from './anatomy/bill.js';
 
 // breathing displacement amplitude (m): fractional expansion × body half-width
 const ANIM_BREATH = (ANIM.breathAmp * 0.021).toFixed(6);
@@ -953,20 +954,40 @@ export function createFeatherMaterial(pal, individual = {}, detail = 0) {
 }
 
 // ------------------------------------------------------------------ BARE PARTS (bill, legs, claws)
+// Bill keratin (aPart 0; uv = (v, xt): v around the mandible — upper −1…1 with 0 the culmen, lower v + 4 with 0
+// the keel — and xt mm from the tip, anatomy/bill.js) is drawn from the same section constants as the geometry:
+// near-black, slightly greyer and browner toward the base and on the soft operculum, glossier and darker over
+// the hard tip (dertrum), a little worn and matte at the very point; fine lengthwise striations break up the
+// roughness and the highlight is stretched along the bill (anisotropic GGX, the keratin's lengthwise grain) —
+// the photographed bills show a long soft sheen down the culmen and a small sharp catch-light on the tip, never
+// a plastic hot spot (user's side photo, p003, p022, p010, p035). The nostril slit, the nasal groove and the
+// tomia are cut into the normal; the plumage's ragged feather tips lie over the base (aBillF: the plumage's
+// signed distance, mm), coloured as the face round it (white forehead above, lores at the sides, chin below).
+const BS = BILL_SHAPE;
+const f1 = (x) => x.toFixed(3);
+const bandGLSL = (o) => `(smoothstep(${f1(o.front[0])}, ${f1(o.front[1])}, kbXt) * (1.0 - smoothstep(${f1(o.back[0])}, ${f1(o.back[1])}, kbXt)))`;
 const BARE_FRAG = /* glsl */ `
 ${GLSL_COMMON}
-uniform vec3 uBill, uLegs, uUnder, uMouth;
+uniform vec3 uBill, uLegs, uUnder, uMouth, uFore, uLore, uChin;
 uniform float uDetail, uBillRough;
 varying float vPart;
+varying float vBillF;
+float kbG(float x, float c, float w) { float t = (x - c) / w; return exp(-t * t); }
 `;
 
 export function createBarePartsMaterial(pal, detail = 0) {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0 });
+  // physical: the anisotropic specular of the keratin (strength set per part in the shader; legs / claws / mouth
+  // stay isotropic)
+  const mat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0, anisotropy: detail < 2 ? 1 : 0 });
+  const lore = new THREE.Color(pal.forehead).lerp(new THREE.Color(pal.eyeStripe), pal.headPattern?.[1] ?? 1);
   const uniforms = {
     uBill: { value: srgb(pal.bill) },
     uLegs: { value: srgb(pal.legs) },
     uUnder: { value: plumageAlbedo(pal.underparts) },
     uMouth: { value: srgb('#8e6f6a') },
+    uFore: { value: plumageAlbedo(pal.forehead) },
+    uLore: { value: plumageAlbedo('#' + lore.getHexString()) },
+    uChin: { value: plumageAlbedo(pal.underparts) },
     uBillRough: { value: pal.billRoughness ?? 0.46 },
     uDetail: { value: detail },
   };
@@ -975,8 +996,8 @@ export function createBarePartsMaterial(pal, detail = 0) {
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute float aPart;\nvarying float vPart;`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvPart = aPart;`);
+      .replace('#include <common>', `#include <common>\nattribute float aPart;\nattribute float aBillF;\nvarying float vPart;\nvarying float vBillF;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvPart = aPart; vBillF = aBillF;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${BARE_FRAG}`)
       .replace(
@@ -984,12 +1005,79 @@ export function createBarePartsMaterial(pal, detail = 0) {
         `#include <color_fragment>
         float kbP = floor(vPart + 0.5);
         vec3 kbCol = uLegs; float kbRough = 0.55;
+        float kbAniso = 0.0; float kbH = 0.0; vec3 kbAlong = vec3(0.0, 0.0, 1.0);
         // Reticulate (polygonal) scales on the tarsus/toes; pattern cell ≈ 0.45 mm.
         vec2 kbSt = vec2(vUv.x * 16.0, vUv.y * 60.0);
         vec2 kbI = floor(kbSt + vec2(0.5 * mod(floor(kbSt.y), 2.0), 0.0));
         vec2 kbF = fract(kbSt + vec2(0.5 * mod(floor(kbSt.y), 2.0), 0.0)) - 0.5;
         float kbCell = 1.0 - smoothstep(0.28, 0.5, max(abs(kbF.x), abs(kbF.y)));
-        if (kbP < 0.5) { kbCol = uBill; kbRough = uBillRough + 0.08 * kpNoise(vUv * vec2(20.0, 40.0)); }
+        if (kbP < 0.5) {
+          float kbLower = step(2.0, vUv.x);
+          float kbV = vUv.x - 4.0 * kbLower;
+          float kbAv = abs(kbV);
+          float kbXt = vUv.y;
+          // (the grain fades out before a streak is ≈2 px: no moiré / brushed-metal look at a distance)
+          float kbFine = uDetail < 1.5 ? 1.0 : 0.0;
+          float kbGrain = kbFine * (1.0 - smoothstep(0.15, 0.5, fwidth(kbV * 70.0)));
+          // lengthwise grain: fine streaks along the bill (≈0.05 mm across, mm long), and a coarser mottling
+          float kbStreak = kpNoise(vec2(kbV * 70.0 + kbLower * 13.0, kbXt * 0.9)) * 0.6 + kpNoise(vec2(kbV * 160.0, kbXt * 2.3 + 7.0)) * 0.4;
+          float kbMott = kpNoise(vec2(kbV * 9.0 + kbLower * 5.0, kbXt * 0.6 + 3.0));
+          float kbBase = smoothstep(8.5, 15.0, kbXt);           // basal third: greyer, browner, duller
+          float kbTip = 1.0 - smoothstep(2.5, 6.5, kbXt);       // hard tip (dertrum): darker, glossier
+          float kbWear = (1.0 - smoothstep(0.12, 0.75, kbXt)) * (0.55 + 0.45 * kbMott); // worn point
+          kbCol = uBill * mix(1.0, 1.55, kbBase) * mix(vec3(1.0), vec3(1.12, 1.0, 0.86), kbBase) * mix(1.0, 0.82, kbTip);
+          kbCol *= 1.0 + 0.06 * (kbStreak - 0.5) * kbGrain + 0.08 * (kbMott - 0.5);
+          kbRough = uBillRough - 0.18 - 0.14 * kbTip + 0.12 * kbBase + (kbStreak - 0.5) * 0.07 * kbGrain;
+          kbCol = mix(kbCol, uBill * 2.1 + vec3(0.006, 0.0055, 0.005), 0.55 * kbWear);
+          kbRough += 0.22 * kbWear;
+          kbAniso = 0.55 - 0.25 * kbBase - 0.4 * kbWear;
+          // upper mandible: nasal groove, nostril slit and the soft operculum over it
+          float kbUp = 1.0 - kbLower;
+          float kbGr = ${bandGLSL(BS.groove)} * kbUp;
+          float kbNo = ${bandGLSL(BS.nostril)} * kbUp;
+          float kbOp = ${bandGLSL(BS.operculum)} * kbUp;
+          float kbSlit = kbNo * kbG(kbAv, ${f1(BS.nostril.v)}, 0.045);
+          float kbGrL = kbGr * kbG(kbAv, ${f1(BS.groove.v)}, 0.05);
+          float kbOpM = kbOp * kbG(kbAv, ${f1(BS.operculum.v)}, 0.075);
+          kbCol = mix(kbCol, kbCol * vec3(1.55, 1.5, 1.42) + vec3(0.003), kbOpM * 0.7);   // soft skin: greyer
+          kbRough += 0.16 * kbOpM + 0.06 * kbGrL;
+          kbAniso *= 1.0 - kbOpM;
+          kbCol *= 1.0 - 0.3 * kbGrL;
+          kbCol = mix(kbCol, vec3(0.0025, 0.0022, 0.002), smoothstep(0.15, 0.75, kbSlit));
+          kbRough = mix(kbRough, 0.85, smoothstep(0.2, 0.7, kbSlit));
+          // tomia: the gape line reads as a fine dark seam — the lower's edge sits in the shade of the upper's
+          kbCol *= mix(1.0, 0.55, smoothstep(0.93, 1.0, kbAv) * kbUp) * mix(1.0, 0.45, smoothstep(0.8, 0.97, kbAv) * kbLower);
+          // relief for the normal (mm): slit, groove floor, operculum swelling, grain
+          kbH = (-0.09 * kbSlit - 0.03 * kbGrL + 0.035 * kbOpM) * kbFine + (kbStreak - 0.5) * 0.0025 * kbGrain;
+          // Feather tips over the base (no hard seam where the keratin leaves the plumage): two staggered layers of
+          // narrow, pointed feather tips ≈0.16 mm wide reaching 0.1–1 mm onto the keratin, the face colour round
+          // the base (forehead over the culmen, lores at the sides, chin under the lower mandible), each tip
+          // shading the bill just beyond it (user's side photo, p012, p035: the loral feathers lie over the base)
+          if (vBillF < 1.6) {
+            float kbArc = kbV * (2.6 + 1.2 * kbLower);
+            float kbCov = 0.0; float kbSh = 0.0;
+            for (int kbL = 0; kbL < 2; kbL++) {
+              float kbOff = float(kbL) * 0.5;
+              float kbC = floor(kbArc / 0.16 + kbOff);
+              float kbFa = fract(kbArc / 0.16 + kbOff) - 0.5;
+              float kbRh = kpHash(vec2(kbC, 3.0 + kbLower + 7.0 * float(kbL)));
+              float kbReach = (0.12 + 0.9 * kbRh * kbRh) * (kbL == 0 ? 1.0 : 0.7);
+              float kbShape = kbReach * (1.0 - 3.2 * kbFa * kbFa);
+              kbCov = max(kbCov, 1.0 - smoothstep(kbShape - 0.05, kbShape + 0.05, vBillF));
+              kbSh = max(kbSh, 1.0 - smoothstep(kbShape, kbShape + 0.3, vBillF));
+            }
+            kbCov = max(kbCov, 1.0 - smoothstep(0.02, 0.1, vBillF));
+            kbSh *= 1.0 - kbCov;
+            vec3 kbFc = mix(uLore, uFore, smoothstep(0.5, 0.25, kbAv) * kbUp);
+            kbFc = mix(kbFc, uChin, kbLower * smoothstep(0.75, 0.45, kbAv));
+            float kbBarb = kpNoise(vec2(kbArc * 40.0, vBillF * 2.0));
+            kbCol = mix(kbCol * (1.0 - 0.4 * kbSh), kbFc * (0.8 + 0.2 * kbBarb) * mix(0.7, 1.0, smoothstep(-0.2, 0.4, vBillF)), kbCov);
+            kbRough = mix(kbRough + 0.15 * kbSh, 0.9, kbCov);
+            kbAniso *= 1.0 - kbCov;
+            kbH += (0.04 * kbCov - 0.015 * kbSh) * kbFine;
+          }
+          kbRough = clamp(kbRough, 0.12, 0.95);
+        }
         else if (kbP < 1.5) { kbCol = uLegs * (0.9 + 0.12 * kpHash(kbI)); kbRough = 0.5 + 0.1 * (1.0 - kbCell); }
         else if (kbP < 2.5) { kbCol = uBill * 0.85; kbRough = 0.3; }
         else if (kbP < 3.5) {
@@ -1005,7 +1093,11 @@ export function createBarePartsMaterial(pal, detail = 0) {
           kbCol = uUnder * (0.8 + 0.12 * kbShade + 0.035 * kbBarb + 0.04 * kpHash(kbFi)) * mix(0.9, 1.0, smoothstep(0.1, 0.5, vUv.y));
           kbRough = 0.84;
         }
-        else if (kbP < 4.5) { kbCol = uMouth; kbRough = 0.45; }
+        else if (kbP < 4.5) {
+          // mouth lining (palate, floor, rictal skin): pinkish flesh, darker toward the back of the mouth
+          kbCol = uMouth * (vUv.x > 15.5 ? 0.35 : 1.0);
+          kbRough = 0.45;
+        }
         else { kbCol = mix(uLegs, vec3(0.35, 0.33, 0.3), 0.25); kbRough = 0.75; }
         diffuseColor.rgb *= kbCol;`
       )
@@ -1022,10 +1114,25 @@ export function createBarePartsMaterial(pal, detail = 0) {
           float fade = 1.0 - smoothstep(0.2, 0.6, fwidth(kbSt.y));
           vec2 g = -kbF * 2.0 * (1.0 - kbCell) * fade;
           normal = normalize(normal + (T * g.x + B * g.y) * sc * 0.5);
+        }
+        if (kbP < 0.5) {
+          vec3 kbDx = dFdx(-vViewPosition); vec3 kbDy = dFdy(-vViewPosition);
+          // direction of increasing xt on the surface (toward the base): the keratin's grain
+          vec3 kbGb = cross(kbDy, normal) * dFdx(vUv.y) + cross(normal, kbDx) * dFdy(vUv.y);
+          kbAlong = dot(kbGb, kbGb) > 0.0 ? normalize(kbGb) : vec3(0.0, 0.0, 1.0);
+          // bump from the relief (mm → m), faded out once a feature is below a pixel
+          vec3 kbR1 = cross(kbDy, normal); vec3 kbR2 = cross(normal, kbDx);
+          float kbDet = dot(kbDx, kbR1);
+          float kbHm = kbH * 0.001;
+          vec2 kbDh = vec2(dFdx(kbHm), dFdy(kbHm));
+          vec3 kbGrad = sign(kbDet) * (kbDh.x * kbR1 + kbDh.y * kbR2);
+          if (abs(kbDet) > 0.0) normal = normalize(abs(kbDet) * normal - kbGrad);
+          kbAlong = normalize(kbAlong - normal * dot(kbAlong, normal));
         }`
-      );
+      )
+      .replace('#include <lights_physical_fragment>', THREE.ShaderChunk.lights_physical_fragment.replace('vec2 anisotropyV = anisotropyVector;', 'vec2 anisotropyV = anisotropyVector * kbAniso;').replace('material.anisotropyT = tbn[ 0 ] * anisotropyV.x + tbn[ 1 ] * anisotropyV.y;', 'material.anisotropyT = kbAlong;').replace('material.anisotropyB = tbn[ 1 ] * anisotropyV.x - tbn[ 0 ] * anisotropyV.y;', 'material.anisotropyB = normalize(cross(normal, kbAlong));'));
   };
-  mat.customProgramCacheKey = () => `kp-bare-${detail}`;
+  mat.customProgramCacheKey = () => `kp-bare2-${detail}`;
   return mat;
 }
 
