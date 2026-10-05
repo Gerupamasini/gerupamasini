@@ -20,6 +20,7 @@ import type { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 import type { HeroLighting } from '../render/HeroPipeline';
 import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
 import { Group } from 'three';
+import { ToolShelf, type ShelfTool } from './ToolShelf';
 
 export const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
 export const TANK_MAX_OCCUPANTS = 4;
@@ -199,6 +200,13 @@ export class TankScene {
   readonly scene = new Scene();
   readonly camera: PerspectiveCamera;
   private controls: OrbitControls | null = null;
+  /** the tool shelf on the wall, and the camera's move between the tank and it */
+  readonly shelf = new ToolShelf();
+  private view: 'tank' | 'shelf' = 'tank';
+  private readonly camFrom = { p: new Vector3(), t: new Vector3() };
+  private readonly camTo = { p: new Vector3(), t: new Vector3() };
+  private readonly camCur = { t: new Vector3(0, 0.12, 0) };
+  private camT = 1;
   readonly occupants: Occupant[] = [];
   /** top of the substrate: the animals, the decorations and the caustics all sit on it */
   private sandTop = SAND_H;
@@ -288,6 +296,7 @@ export class TankScene {
     const lamp = new Mesh(new BoxGeometry(W_LAMP_HALF * 2, 0.003, 0.03), new MeshStandardMaterial({ color: 0xffffff, emissive: new Color(0.8, 0.95, 1.0), emissiveIntensity: 3 }));
     lamp.position.set(0, W_LAMP_Y, 0);
     this.scene.add(bar, lamp);
+    this.scene.add(this.shelf.group);
 
     // ---- the water: simulation, surface texture and caustics texture (needs float render targets)
     const floatOK = gl.capabilities.isWebGL2 && (gl.extensions.has('EXT_color_buffer_float') || gl.extensions.has('EXT_color_buffer_half_float'));
@@ -826,14 +835,70 @@ export class TankScene {
     c.update();
   }
 
+  /** Hang the tools on the shelf. */
+  setShelfTools(list: ShelfTool[]): void {
+    this.shelf.setTools(list);
+  }
+
+  pickTool(ndcX: number, ndcY: number): string | null {
+    return this.shelf.pick(ndcX, ndcY, this.camera);
+  }
+
+  get viewing(): 'tank' | 'shelf' {
+    return this.view;
+  }
+
+  /** Turn to the shelf: the camera glides over and the orbit lets go until it is back. */
+  focusShelf(): void {
+    if (this.view === 'shelf') return;
+    this.view = 'shelf';
+    const c = this.shelf.center;
+    this.startCamera(new Vector3(c.x + 0.62, c.y + 0.1, c.z + 0.78), c);
+  }
+
+  focusTank(): void {
+    if (this.view === 'tank') return;
+    this.view = 'tank';
+    const hfov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
+    const dist = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
+    this.startCamera(new Vector3(dist * 0.35, 0.16 + dist * 0.28, dist * 0.95), new Vector3(0, 0.12, 0));
+  }
+
+  private startCamera(p: Vector3, t: Vector3): void {
+    this.camFrom.p.copy(this.camera.position);
+    this.camFrom.t.copy(this.controls ? this.controls.target : this.camCur.t);
+    this.camTo.p.copy(p);
+    this.camTo.t.copy(t);
+    this.camT = 0;
+    if (this.controls) this.controls.enabled = false;
+  }
+
+  /** The glide between the tank and the shelf; the orbit takes over again at the tank. */
+  private stepCamera(dt: number): void {
+    if (this.camT >= 1) return;
+    this.camT = Math.min(1, this.camT + dt / 0.9);
+    const u = this.camT, s = u * u * (3 - 2 * u);
+    this.camera.position.lerpVectors(this.camFrom.p, this.camTo.p, s);
+    this.camCur.t.lerpVectors(this.camFrom.t, this.camTo.t, s);
+    this.camera.lookAt(this.camCur.t);
+    if (this.camT >= 1 && this.view === 'tank' && this.controls) {
+      this.controls.target.copy(this.camTo.t);
+      this.controls.enabled = true;
+      this.controls.update();
+    }
+  }
+
   /** Everything stands still (the edit screen): only the camera moves. */
   updateFrozen(): void {
-    this.controls?.update();
+    if (this.camT < 1) this.stepCamera(1 / 60);
+    else if (this.view === 'tank') this.controls?.update();
   }
 
   update(dt: number, simScale: number): void {
     this.drift += dt;
-    if (this.controls) {
+    if (this.camT < 1) this.stepCamera(dt);
+    else if (this.view === 'shelf') this.camera.lookAt(this.camCur.t);
+    else if (this.controls) {
       this.controls.update();
       // gentle vertical breathing of the view on top of the slow orbit
       this.controls.target.y = 0.12 + Math.sin(this.drift * 0.25) * 0.012;

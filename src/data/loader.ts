@@ -1,7 +1,7 @@
 import type { ZodType } from 'zod';
 import {
-  BehaviorTreeSchema, ManifestSchema, MapSchema, SpeciesSchema, StringsSchema, TideStationSchema, ToolsFileSchema,
-  type BehaviorTreeDef, type Manifest, type MapDef, type SpeciesDef, type TideStationDef, type ToolDef,
+  BehaviorTreeSchema, ManifestSchema, MapSchema, SpeciesSchema, SpotsFileSchema, StringsSchema, TideStationSchema, ToolsFileSchema,
+  type BehaviorTreeDef, type Manifest, type MapDef, type SpeciesDef, type SpotDef, type TideStationDef, type ToolDef,
 } from './schemas';
 
 export interface GameData {
@@ -12,6 +12,8 @@ export interface GameData {
   stations: Map<string, TideStationDef>;
   tools: Map<string, ToolDef>;
   strings: Record<string, string>;
+  /** the places to go, in the order they are listed */
+  spots: SpotDef[];
 }
 
 export const DATA_BASE = `${import.meta.env.BASE_URL}data/`;
@@ -42,13 +44,14 @@ export async function loadGameData(onProgress?: (frac: number, label: string) =>
     }));
     return new Map(entries);
   };
-  const [species, behaviors, maps, stations, toolsFile, strings] = await Promise.all([
+  const [species, behaviors, maps, stations, toolsFile, strings, spotsFile] = await Promise.all([
     all(manifest.species, 'species', SpeciesSchema),
     all(manifest.behaviors, 'behaviors', BehaviorTreeSchema),
     all(manifest.maps, 'maps', MapSchema),
     all(manifest.stations, 'tide/stations', TideStationSchema),
     fetchJson(manifest.items, ToolsFileSchema).then((v) => { tick('items'); return v; }),
     fetchJson(manifest.strings, StringsSchema).then((v) => { tick('strings'); return v; }),
+    manifest.spots ? fetchJson(manifest.spots, SpotsFileSchema).then((v) => { tick('spots'); return v; }) : Promise.resolve(null),
   ]);
   const tools = new Map(toolsFile.tools.map((t) => [t.id, t] as const));
   // cross references
@@ -57,5 +60,8 @@ export async function loadGameData(onProgress?: (frac: number, label: string) =>
     for (const t of sp.capture.tools) if (!tools.has(t)) throw new Error(`${sp.id}: 道具 ${t} がありません`);
   }
   for (const m of maps.values()) if (!stations.has(m.station)) throw new Error(`${m.id}: 観測点 ${m.station} がありません`);
-  return { manifest, species, behaviors, maps, stations, tools, strings };
+  // the places: from the file, or one per map
+  const spots: SpotDef[] = spotsFile ? spotsFile.spots : [...maps.values()].map((m) => ({ id: m.id, ja: m.names.ja, en: m.names.en, area: '東京湾', lat: m.origin.lat, lon: m.origin.lon, map: m.id, description: '' }));
+  for (const s of spots) if (s.map && !maps.has(s.map)) throw new Error(`${s.id}: 地図 ${s.map} がありません`);
+  return { manifest, species, behaviors, maps, stations, tools, strings, spots };
 }

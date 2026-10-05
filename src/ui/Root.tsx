@@ -16,6 +16,8 @@ import { CaptureOverlay } from './capture/CaptureOverlay';
 import { HomeMenu } from './home/HomeMenu';
 import { TankPanel } from './tank/TankPanel';
 import { CaseOverlay } from './field/CaseOverlay';
+import { SpotSelect } from './home/SpotSelect';
+import { ShopScreen } from './home/ShopScreen';
 import { DebugPanel } from './debug/DebugPanel';
 import { CreatureMarkers } from './debug/CreatureMarkers';
 import { ArrowIcon, Key, KeyHint, MoonIcon } from './common/Icons';
@@ -47,6 +49,8 @@ export function Root({ app }: { app: App }) {
       {screen === 'field' && ui.mapOpen.value && <MapOverlay app={app} />}
       {screen === 'zukan' && <Zukan app={app} />}
       {screen === 'menu' && <Menu app={app} />}
+      {screen === 'spots' && <SpotSelect app={app} />}
+      {screen === 'shop' && <ShopScreen app={app} />}
       {screen === 'ticket' && <TicketDialog app={app} />}
       {screen === 'tidetable' && <TideTable app={app} />}
       {ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}

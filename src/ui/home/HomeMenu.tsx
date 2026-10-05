@@ -4,10 +4,9 @@ import { t, ui } from '../store';
 import { TankPanel } from '../tank/TankPanel';
 import { ToolsPanel } from './ToolsPanel';
 import { nextLevelAt } from '../../systems/Encyclopedia';
-import { TideGauge } from '../hud/TideGauge';
 import { formatJst } from '../../core/Time';
-import { lunarDay, tideName } from '../../core/Moon';
-import { ArrowIcon, Key, MoonIcon, TrendIcon } from '../common/Icons';
+import { moonAge, tideName } from '../../core/Moon';
+import { BookIcon, CalendarIcon, CapsuleIcon, CartIcon, Key, MoonIcon, TankIcon, ToolboxIcon } from '../common/Icons';
 
 function remaining(ms: number): string {
   const m = Math.max(0, Math.round(ms / 60000));
@@ -15,14 +14,20 @@ function remaining(ms: number): string {
   return hh > 0 ? `${hh} 時間 ${mm} 分` : `${mm} 分`;
 }
 
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+function dateLine(ms: number): string {
+  const d = new Date(ms + 9 * 3600000);
+  return `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${String(d.getUTCDate()).padStart(2, '0')} (${WEEKDAYS[d.getUTCDay()]})`;
+}
+
 /**
- * Home: the showcase tank is the picture. Around it, an almanac of the real tide (top right), the observer's standing
- * (top left), and one line of navigation at the bottom with the flat as the only loud thing on the screen.
+ * Home: the showcase tank is the picture. Around it, the observer's standing (top left), the name (top centre), an
+ * almanac of the real tide (top right), and a row of seven tiles along the bottom with the flat as the loud one.
  */
 export function HomeMenu({ app }: { app: App }) {
   const hud = ui.hud.value;
   const now = app.clock.nowGame();
-  const next = hud.extrema.find((e) => e.t > now);
+  const nextLow = hud.extrema.find((e) => e.t > now && e.kind === 'low');
   const panel = ui.homePanel.value;
   const info = ui.homeInfo.value;
   const enc = app.encyclopedia;
@@ -30,46 +35,52 @@ export function HomeMenu({ app }: { app: App }) {
   const level = enc.level;
   const nextAt = nextLevelAt(level);
   const infoSp = info ? app.data.species.get(info.speciesId) : undefined;
-  const trend: 'up' | 'down' | 'flat' = hud.tideRate > 0.02 ? 'up' : hud.tideRate < -0.02 ? 'down' : 'flat';
   return (
     <Fragment>
       <div class="glass home-status rise">
-        <div class="eyebrow">{t('home.observer')}</div>
-        <div class="level"><span class="lv">LV</span><span class="num">{level}</span></div>
+        <div class="level-row">
+          <span class="lv">Lv.</span><span class="num">{level}</span>
+          <span class="exp-label">EXP</span>
+          <span class="exp-num">{research.toLocaleString()} / {nextAt.toLocaleString()}</span>
+        </div>
         <div class="exp"><i style={{ width: `${Math.min(100, (research / nextAt) * 100)}%` }} /></div>
-        <div class="stat-row"><span>{t('home.research')}</span><span class="num">{research.toLocaleString()} <span class="dim">/ {nextAt.toLocaleString()}</span></span></div>
-        <div class="stat-row"><span>{t('home.money')}</span><span class="num">{enc.money.value.toLocaleString()} CR</span></div>
-        <div class="stat-row"><span>{t('hud.ticket')}</span><span class="num">∞ <span class="dim">{t('home.testVersion')}</span></span></div>
+        <div class="stat-line">
+          <span class="stat"><span class="coin" />{t('home.credits')} <b class="num">{enc.money.value.toLocaleString()}</b></span>
+          <span class="sep" />
+          <span class="stat"><span class="ticket-mark" />{t('hud.ticket')} <b class="num">∞</b></span>
+        </div>
+      </div>
+
+      <div class="home-title rise d1">
+        <div class="jp">干潟図鑑</div>
+        <div class="en">HIGATA ZUKAN</div>
       </div>
 
       <div class="glass home-almanac rise d1" onClick={() => app.openOverlay('tidetable')} title={t('home.tideTable')} role="button" tabIndex={0}>
-        <div class="eyebrow">{t('home.almanac')} ・ {hud.dateText}</div>
-        <div class="time">{hud.timeText}</div>
-        <div class="moonrow"><MoonIcon ms={now} size={15} /> {tideName(now)} <span class="dim">{t('home.lunar')} {lunarDay(now)} 日</span></div>
-        <div class="level">
-          <span class="dim">{t('hud.tide')}</span>
-          <span class="num">{hud.tideLevel >= 0 ? '+' : ''}{(hud.tideLevel * 100).toFixed(0)}</span><span class="unit">cm</span>
-          <span class={`gauge-trend trend-${trend}`}><TrendIcon dir={trend} />{trend === 'up' ? t('hud.rising') : trend === 'down' ? t('hud.falling') : ''}</span>
-        </div>
-        {next && (
-          <div class="next">
-            <span>{t('home.nextTide')}{next.kind === 'high' ? t('hud.high') : t('hud.low')}</span>
-            <span class="num">{formatJst(next.t)}</span>
-            <span>あと <span class="num">{remaining(next.t - now)}</span></span>
+        <div class="row head"><span class="date">{dateLine(now)}</span><span class="time">{hud.timeText}</span></div>
+        <div class="row body">
+          <div class="moon-col">
+            <MoonIcon ms={now} size={46} />
+            <div class="age"><span class="dim">{t('home.moonAge')}</span> <span class="num">{moonAge(now).toFixed(1)}</span></div>
+            <div class="tidename">{tideName(now)}</div>
           </div>
-        )}
-        <TideGauge variant="almanac" />
-        <div class="hint">{t('home.tideTable')} →</div>
+          <div class="tide-col">
+            <div class="kv"><span>{t('home.tideNow')}</span><span class="num">{(hud.tideLevel * 100).toFixed(0)} <small>cm</small></span></div>
+            <div class="kv"><span>{t('home.nextLow')}</span><span class="num">{nextLow ? formatJst(nextLow.t) : '--:--'} <small>{nextLow ? `(${nextLow.level >= 0 ? '+' : ''}${(nextLow.level * 100).toFixed(0)} cm)` : ''}</small></span></div>
+            <div class="kv"><span>{t('home.untilLow')}</span><span class="num">{nextLow ? remaining(nextLow.t - now) : '--'}</span></div>
+          </div>
+        </div>
       </div>
 
-      <nav class="glass home-nav rise d2" aria-label="メニュー">
-        <button class="nav-item" onClick={() => app.openOverlay('zukan')}>{t('zukan.title')}<Key k="Tab" /></button>
-        <button class={`nav-item ${panel === 'tools' ? 'on' : ''}`} onClick={() => app.openShop()}>{t('tools.title')}<span class="key" style={{ visibility: 'hidden' }}>·</span></button>
-        <button class="nav-primary" onClick={() => void app.enterField()}>{t('home.goShort')} <ArrowIcon size={16} /></button>
-        <button class={`nav-item ${panel === 'tank' ? 'on' : ''}`} onClick={() => app.openTankEdit()}>{t('home.tankShort')}<span class="key" style={{ visibility: 'hidden' }}>·</span></button>
-        <button class="nav-item" onClick={() => app.openOverlay('tidetable')}>{t('home.tideTable')}<Key k="T" /></button>
+      <nav class="home-nav rise d2" aria-label="メニュー">
+        <button class="nav-tile" onClick={() => app.openOverlay('zukan')}><BookIcon />{t('zukan.title')}<Key k="Tab" /></button>
+        <button class="nav-tile" onClick={() => app.openShop()}><CartIcon />{t('home.shop')}</button>
+        <button class="nav-tile" onClick={() => app.openGacha()}><CapsuleIcon />{t('home.gacha')}</button>
+        <button class="nav-primary" onClick={() => app.openSpots()}><span class="sea" aria-hidden="true" /><span class="label">{t('home.goShort')}</span></button>
+        <button class={`nav-tile ${panel === 'tools' ? 'on' : ''}`} onClick={() => app.openTools()}><ToolboxIcon />{t('tools.title')}</button>
+        <button class={`nav-tile ${panel === 'tank' ? 'on' : ''}`} onClick={() => app.openTankEdit()}><TankIcon />{t('home.tankShort')}</button>
+        <button class="nav-tile" onClick={() => app.openOverlay('tidetable')}><CalendarIcon />{t('home.tideTable')}<Key k="T" /></button>
       </nav>
-      <div class="home-hint">{t('home.hint')}</div>
 
       {info && infoSp && (
         <div class="glass home-info rise" onClick={() => { ui.homeInfo.value = null; }}>

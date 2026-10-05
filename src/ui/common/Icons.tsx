@@ -76,3 +76,14 @@ export function CardHead({ eyebrow, title, aside, onClose, closeKey = 'Esc' }: {
     </header>
   );
 }
+
+const ico = (d: string, size = 20) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={d} /></svg>
+);
+export function BookIcon({ size = 20 }: { size?: number }) { return ico('M4 5.5A2.5 2.5 0 0 1 6.5 3H12v16H6.5A2.5 2.5 0 0 0 4 21V5.5Z M20 5.5A2.5 2.5 0 0 0 17.5 3H12v16h5.5a2.5 2.5 0 0 1 2.5 2V5.5Z', size); }
+export function CartIcon({ size = 20 }: { size?: number }) { return ico('M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 8H6.2 M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z M17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z', size); }
+export function CapsuleIcon({ size = 20 }: { size?: number }) { return ico('M4 12a8 8 0 0 1 16 0 M4 12a8 8 0 0 0 16 0 M4 12h16 M12 4v3 M12 17v3', size); }
+export function ToolboxIcon({ size = 20 }: { size?: number }) { return ico('M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9Z M9 9V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V9 M3 13h18 M10 12v2 M14 12v2', size); }
+export function TankIcon({ size = 20 }: { size?: number }) { return ico('M3 7h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z M3 10c3 0 3 1.5 6 1.5s3-1.5 6-1.5 3 1.5 6 1.5 M8 15c1 0 1.5-.8 2.5-.8s1.5.8 2.5.8', size); }
+export function CalendarIcon({ size = 20 }: { size?: number }) { return ico('M4 6h16v14H4V6Z M4 10h16 M8 3v5 M16 3v5 M8 14h2 M12 14h2 M16 14h2', size); }
+export function MapPinIcon({ size = 20 }: { size?: number }) { return ico('M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11Z M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z', size); }

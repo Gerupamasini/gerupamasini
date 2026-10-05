@@ -1,12 +1,12 @@
 import { h } from 'preact';
 import type { App } from '../../app/App';
 import type { ToolDef } from '../../data/schemas/items';
-import { t, ui } from '../store';
+import { t } from '../store';
 import { CloseIcon } from '../common/Icons';
 import { LOADOUT_MAX, skillKeyOf } from '../../systems/Encyclopedia';
 
 /** A line of what a tool does: reach, hoop, speed, quietness for a net; the blade for a shovel. */
-function specs(tool: ToolDef): string {
+export function specs(tool: ToolDef): string {
   const p = tool.params;
   if (tool.type === 'capture') {
     const swing = p.swing ?? 1, quiet = p.quiet ?? 1;
@@ -29,7 +29,7 @@ export function ToolsPanel({ app }: { app: App }) {
     <aside class="glass drawer tools-drawer">
       <div class="drawer-head">
         <h2>{t('tools.title')}</h2>
-        <button class="icon-btn" onClick={() => { ui.homePanel.value = 'none'; }} aria-label={t('ui.close')}><CloseIcon /></button>
+        <button class="icon-btn" onClick={() => app.closeTools()} aria-label={t('ui.close')}><CloseIcon /></button>
       </div>
       <div class="drawer-body">
         <div class="stat-row"><span>{t('home.money')}</span><span class="num">{cr.toLocaleString()} CR</span></div>
@@ -49,25 +49,9 @@ export function ToolsPanel({ app }: { app: App }) {
             );
           })}
         </ul>
-        <h4>{t('home.shop')}</h4>
-        {shop.length ? (
-          <ul class="tools-list">
-            {shop.map((tool) => (
-              <li key={tool.id}>
-                <div class="row">
-                  <span class="name">{tool.ja}</span>
-                  <span class="num price">{tool.price_cr} CR</span>
-                  <button disabled={cr < tool.price_cr} onClick={() => app.buyTool(tool.id)}>{t('tools.buy')}</button>
-                </div>
-                <div class="specs">{specs(tool)}</div>
-                <p class="dim small">{tool.description}</p>
-              </li>
-            ))}
-          </ul>
-        ) : <p class="dim small">{t('tools.soldOut')}</p>}
-        <p class="dim small">{t('tools.crHint')}</p>
+        {shop.length > 0 && <p class="dim small">{t('tools.shopHint')}</p>}
       </div>
-      <div class="foot">{t('tools.foot')}</div>
+      <div class="foot">{t('tools.shelfHint')}</div>
     </aside>
   );
 }
