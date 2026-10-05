@@ -5,31 +5,43 @@ import { makeDecalMaterial, makeShellInnerMaterial, makeShellOuterMaterial, make
  * アサリ Ruditapes philippinarum — procedural model in shell-length units (shell length = 1).
  * Frame: +x anterior, +y dorsal, +z left valve; the commissure is the z = 0 plane.
  *
- * Proportions (adult, Japanese populations; reference photo sets and measured shells):
- *   height / length ≈ 0.70, width (both valves) / length ≈ 0.52 (「長楕円形で厚く、膨らみが強い」;
- *   globular populations reach W/L 0.55), umbo ≈ 0.30 L from the anterior end, prosogyrate beaks, short
- *   lunule, long sloping posterodorsal margin with a long brown external ligament, rounded anterior end,
- *   bluntly truncated posterior end (「後縁はやや切断状」), evenly convex ventral margin. Seen from below
- *   the shell is a pointed lens: the valves meet at a fairly acute angle along the ventral margin.
+ * Lateral outline: MEASURED, not drawn. Three valves photographed flat (exterior up, i.e. a true lateral
+ * projection) in the reference sets were segmented, aligned on their anteroposterior axis (anterior end
+ * identified by the umbo / ligament: the ligament lies posterior to the umbones), normalised to L = 1 and
+ * averaged. Result (「長楕円形」): H/L = 0.72; umbo 0.37 L from the anterior end and the highest point; from it the
+ * dorsal margin falls in a long, gentle, nearly straight slope to a broad, bluntly rounded posterior end, while
+ * in front of it the margin drops steeply with a slight lunular concavity to a narrower rounded anterior end
+ * whose tip lies at mid-height; the ventral margin is a long even arc, deepest just behind the middle.
+ *
+ * Inflation: width / length ≈ 0.52 (「厚く、膨らみが強い」). The valve is a dome centred in the middle of the
+ * valve, not at the umbo: fullest a little dorsal of centre, so the umbo reads as a low beak on the dorsal
+ * edge. The valves meet at an acute angle along the ventral margin and at both ends (lens-shaped from below
+ * and from above), while the umbonal region stays full up to the hinge.
  *
  * Geometry is built once per LOD and shared by every clam; the right valve is the left one mirrored.
  */
 
 // valve margin, starting at the umbo and running anterior → ventral → posterior → back along the hinge
+// (measured from photographs, see above)
 const OUTLINE = [
-  [0.200, 0.360], [0.290, 0.312], [0.385, 0.222], [0.458, 0.105], [0.497, -0.020],
-  [0.480, -0.135], [0.400, -0.240], [0.260, -0.318], [0.080, -0.348], [-0.110, -0.338],
-  [-0.275, -0.300], [-0.395, -0.232], [-0.470, -0.140], [-0.503, -0.045], [-0.510, 0.045],
-  [-0.488, 0.122], [-0.420, 0.190], [-0.270, 0.262], [-0.090, 0.328], [0.080, 0.357],
+  [0.133, 0.361], [0.233, 0.331], [0.299, 0.249], [0.370, 0.179], [0.446, 0.110],
+  [0.494, 0.016], [0.492, -0.087], [0.443, -0.179], [0.363, -0.253], [0.275, -0.305],
+  [0.174, -0.339], [0.070, -0.356], [-0.031, -0.361], [-0.134, -0.352], [-0.236, -0.326],
+  [-0.337, -0.284], [-0.419, -0.224], [-0.480, -0.138], [-0.500, -0.036], [-0.486, 0.068],
+  [-0.440, 0.160], [-0.370, 0.240], [-0.279, 0.279], [-0.175, 0.316], [-0.078, 0.342],
+  [0.026, 0.354],
 ];
-const GROWTH_ORIGIN = new Vector3(0.17, 0.315, 0);
+/** growth lines start at the beak tip, which lies on the dorsal outline next to the other valve's beak */
+const GROWTH_ORIGIN = new Vector3(0.128, 0.352, 0);
+/** centre of the inflation dome: the fullest point of the valve */
+const DOME_CENTRE = new Vector3(0.05, 0.06, 0);
 const HALF_WIDTH = 0.26;
 /** major growth checks modelled in LOD0 geometry (the shader draws its own set close to these) */
 const GEOM_CHECKS = [0.54, 0.68, 0.82];
 
 export const ANATOMY = {
-  hingePoint: new Vector3(0.05, 0.338, 0),
-  hingeAxis: new Vector3(-0.3, -0.035, 0).normalize(),
+  hingePoint: new Vector3(0.04, 0.352, 0),
+  hingeAxis: new Vector3(-0.41, -0.082, 0).normalize(),
   /** full gape (both valves) at gape = 1, radians: a relaxed clam in water gapes ~4 mm ventrally (35 mm shell) */
   maxGape: 0.22,
   /** the mantle margins follow the valves only partly, so they close the gape between them */
@@ -58,30 +70,58 @@ function outline(n) {
   return outlineCache.getSpacedPoints(n).slice(0, n);
 }
 
-function dome(s) {
-  // the inflated umbo is the high point; full through the middle, the valves meeting at an acute angle at the margin
-  return Math.pow(Math.max(0, 1 - Math.pow(s, 2.2)), 0.62);
-}
 function smooth(a, b, x) {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 }
 
-/** outer surface height of the valve at growth coordinate s along the ray to margin point m */
-function valveZ(s, m, checks = false) {
-  const G = GROWTH_ORIGIN;
-  const A = Math.hypot(m.x - G.x, m.y - G.y);
-  // flattened toward the hinge (lunule / escutcheon), but every direction meets smoothly at the umbo
-  const sector = 1 + (0.5 + 0.5 * Math.pow(smooth(0.0, 0.45, A), 0.8) - 1) * smooth(0.0, 0.55, s);
-  let z = HALF_WIDTH * sector * dome(s);
-  if (checks) for (const c of GEOM_CHECKS) z -= 0.0012 * Math.exp(-(((s - c) / 0.012) ** 2)) * sector;
-  return z;
+/** distance from DOME_CENTRE to the margin, tabulated by direction */
+let radiusTable = null;
+const RT = 720;
+function marginRadius(theta) {
+  if (!radiusTable) {
+    const M = outline(720);
+    const C = DOME_CENTRE;
+    radiusTable = new Float32Array(RT);
+    for (let i = 0; i < RT; i++) {
+      const a = (i / RT) * Math.PI * 2, dx = Math.cos(a), dy = Math.sin(a);
+      let best = Infinity;
+      for (let k = 0; k < M.length; k++) {
+        const p = M[k], q = M[(k + 1) % M.length];
+        const ex = q.x - p.x, ey = q.y - p.y;
+        const den = dx * ey - dy * ex;
+        if (Math.abs(den) < 1e-12) continue;
+        const wx = p.x - C.x, wy = p.y - C.y;
+        const t = (wx * ey - wy * ex) / den, u = (wx * dy - wy * dx) / den;
+        if (t > 0 && u >= 0 && u <= 1 && t < best) best = t;
+      }
+      radiusTable[i] = best;
+    }
+  }
+  const f = ((theta / (Math.PI * 2)) % 1 + 1) % 1 * RT;
+  const i0 = Math.floor(f) % RT, i1 = (i0 + 1) % RT, w = f - Math.floor(f);
+  return radiusTable[i0] * (1 - w) + radiusTable[i1] * w;
+}
+
+/**
+ * Outer surface height of the valve at a point of the commissure plane: a dome over the outline centred on
+ * DOME_CENTRE. Along the ventral margin and at both ends the profile is ~linear at the edge (the valves meet at
+ * an acute angle); toward the hinge it stays full and then turns down steeply (inflated umbones).
+ */
+function valveZ(x, y) {
+  const C = DOME_CENTRE;
+  const dx = x - C.x, dy = y - C.y;
+  const th = Math.atan2(dy, dx);
+  const rho = Math.min(1, Math.hypot(dx, dy) / marginRadius(th));
+  const dorsal = Math.max(0, Math.sin(th));
+  const q = 0.95 - 0.38 * dorsal * dorsal;
+  return HALF_WIDTH * Math.pow(Math.max(0, 1 - Math.pow(rho, 2.4)), q);
 }
 
 /** prosogyrate beaks: the oldest shell curls forward and slightly up over the hinge */
 function beak(s) {
   const k = (1 - s) ** 3;
-  return [0.032 * k, 0.009 * k];
+  return [0.02 * k, 0.006 * k];
 }
 
 /** One valve (left, z ≥ 0). Groups: 0 outer surface, 1 inner surface + rim. */
@@ -93,14 +133,19 @@ function buildValve(lod) {
   const rows = ns + 1;
   const pos = [], uv = [], idx = [];
   const sAt = (i) => Math.pow(i / ns, 0.85);
-  const zOut = (s, j) => valveZ(s, M[j % nu], checks);
+  const groove = (s) => {
+    let d = 0;
+    if (checks) for (const c of GEOM_CHECKS) d += 0.0012 * Math.exp(-(((s - c) / 0.012) ** 2));
+    return d;
+  };
   // outer
   for (let i = 0; i < rows; i++) {
     const s = sAt(i);
     for (let j = 0; j < cols; j++) {
       const m = M[j % nu];
       const [bx, by] = beak(s);
-      pos.push(G.x + s * (m.x - G.x) + bx, G.y + s * (m.y - G.y) + by, zOut(s, j));
+      const x = G.x + s * (m.x - G.x) + bx, y = G.y + s * (m.y - G.y) + by;
+      pos.push(x, y, Math.max(0, valveZ(x, y) - groove(s)));
       uv.push(j / nu, s);
     }
   }
@@ -123,7 +168,9 @@ function buildValve(lod) {
         const k = 1 - Math.min(0.022 / A, 0.05);
         const t = 0.03 * (1 - 0.5 * s);
         const [bx, by] = beak(s);
-        pos.push(G.x + s * k * (m.x - G.x) + bx, G.y + s * k * (m.y - G.y) + by, Math.max(0, Math.min(zOut(s, j) * 0.8, zOut(s * k, j) - t)));
+        const xo = G.x + s * (m.x - G.x) + bx, yo = G.y + s * (m.y - G.y) + by;
+        const x = G.x + s * k * (m.x - G.x) + bx, y = G.y + s * k * (m.y - G.y) + by;
+        pos.push(x, y, Math.max(0, Math.min(valveZ(xo, yo) * 0.8, valveZ(x, y) - t)));
         uv.push(j / nu, s);
       }
     }
@@ -351,9 +398,9 @@ export function sharedGeometry() {
   body.translate(-0.02, -0.01, 0);
   const lig = new CapsuleGeometry(0.014, 0.26, 3, 6);
   // along the posterodorsal margin behind the beaks, half sunk between the valves
-  lig.rotateZ(Math.PI / 2 + Math.atan2(0.28, 1));
+  lig.rotateZ(Math.PI / 2 + Math.atan2(0.15, 1));
   lig.scale(1, 1, 0.8);
-  lig.translate(-0.07, 0.306, 0);
+  lig.translate(-0.045, 0.334, 0);
   lig.setAttribute('aTent', new BufferAttribute(new Float32Array(lig.attributes.position.count).fill(2), 1));   // 2 = ligament
   shared = {
     valve: LODS.map((_, i) => buildValve(i)),
