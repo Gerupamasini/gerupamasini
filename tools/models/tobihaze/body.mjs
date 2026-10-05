@@ -697,8 +697,8 @@ const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 
 
 // colours read from the photos (wet animal in daylight, sRGB)
 const COL = {
-  dorsal: C(88, 84, 78),
-  flank: C(120, 116, 108),
+  dorsal: C(86, 82, 72),
+  flank: C(122, 117, 103),
   belly: C(206, 202, 194),
   throat: C(192, 186, 176),
   dark: C(44, 41, 37),
@@ -786,7 +786,7 @@ function skinPoint(s, phi, p, n, ao) {
   // upper-lip pads: pale, studded with dark sensory pores
   {
     const L = FEAT.lipPad.c;
-    const d = Math.hypot((p[0] - L[0]) / 1.85, (p[1] - L[1]) / 1.2, (Math.abs(z) - L[2]) / 1.2);
+    const d = Math.hypot((p[0] - L[0]) / 2.1, (p[1] - L[1]) / 1.45, (Math.abs(z) - L[2]) / 1.45);
     const pad = smoothstep(1.1, 0.6, d);
     col = lerp3(col, COL.lip, pad * 0.8);
     // fine dark pores and a darker rim where the cushion meets the cheek

@@ -70,11 +70,12 @@ export function buildEyeMesh(NT = 48, NP = 64) {
 }
 
 /**
- * Rest orientation of an eyeball (object space quaternion): local +Z onto the optical axis, local +X horizontal and
- * local +Y up, so the oval pupil lies level and the lens glow sits in the upper half. side +1 = left, -1 = right.
+ * Rest orientation of an eyeball (object space quaternion): local +Z onto the resting gaze (a little above the cup's
+ * window axis), local +X horizontal and local +Y up, so the oval pupil lies level and the lens glow sits in the upper
+ * half. side +1 = left, -1 = right.
  */
 export function eyeRotation(side) {
-  const a = dirToObject(EYE.axis);
+  const a = dirToObject(EYE.gaze);
   const Z = side > 0 ? a : [-a[0], a[1], a[2]];
   const X = norm3(cross([0, 1, 0], Z));
   const Y = cross(Z, X);
@@ -145,9 +146,10 @@ export function paintEye(size = 512) {
       // the limbus darkens under the rims of the cup
       col = col.map((c) => c * (1 - 0.55 * smoothstep(0.7, 1.0, f)));
       rough = 0.26 + 0.08 * reti;
-      metal = 0.5 + 0.15 * fleck + 0.1 * rim - 0.25 * smoothstep(0.75, 1.0, f);
-      ir = (0.85 - 0.4 * smoothstep(0.7, 1.0, f)) * (0.8 + 0.2 * stri);
-      th = 0.3 + 0.4 * cloud + 0.2 * f;
+      metal = 0.6 + 0.15 * fleck + 0.1 * rim - 0.25 * smoothstep(0.75, 1.0, f);
+      ir = (0.95 - 0.35 * smoothstep(0.7, 1.0, f)) * (0.8 + 0.2 * stri);
+      // the film's thickness drifts across the iris, so its colour runs from teal through green to gold
+      th = 0.12 + 0.7 * cloud + 0.15 * f;
     } else {
       // under the cup: skin-coloured, so a sliver showing at the rim reads as the cup's lid margin
       const n = fbm3(cx * 3, sy * 3, theta * 3, 3, 613);

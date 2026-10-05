@@ -1329,9 +1329,11 @@ export class Motor {
       const fwd = this.fwd(f.yaw - f.side * Math.PI / 2, new Vector3());
       let wh = new Vector3().crossVectors(nh, dh).normalize();
       if (wh.dot(fwd) < 0) { wh.negate(); nh.negate(); }
-      // roll the leading edge up a little (the fin is pressed down along its trailing rays)
+      // roll the leading edge up (the fin is pressed down along its trailing rays, its leading rays arched up), more on
+      // soft mud where the fin is braced on its edge than on firm sand where it lies spread
       const nUp = nh.y >= 0 ? nh : nh.clone().negate();
-      wh.multiplyScalar(Math.cos(0.14)).addScaledVector(nUp, Math.sin(0.14)).normalize();
+      const roll = w.sand ? 0.25 : 0.5;
+      wh.multiplyScalar(Math.cos(roll)).addScaledVector(nUp, Math.sin(roll)).normalize();
       const da = new Vector3().subVectors(W, S).normalize();
       let wa = wh.clone().sub(da.clone().multiplyScalar(wh.dot(da)));
       if (wa.lengthSq() < 1e-8) wa = nh.clone().cross(da);

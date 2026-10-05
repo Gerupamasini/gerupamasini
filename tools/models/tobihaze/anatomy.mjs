@@ -40,13 +40,14 @@ const KS = [0, 0.3, 0.7, 1.2, 1.8, 2.6, 3.6, 4.8, 6, 8, 10, 12, 14, 16, 18, 20, 
 // rounded; the forehead climbs steeply to the eyes; deepest at the first dorsal fin, ~15 % TL; the belly a little
 // below the throat; a long, low caudal peduncle):
 // dorsal profile (without the eyes)
-const KTOP = [4.0, 5.25, 6.3, 7.2, 7.9, 8.55, 9.05, 9.45, 9.8, 10.3, 10.6, 10.8, 10.95, 11.05, 11.15, 11.25, 11.4, 11.4, 11.2, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
+const KTOP = [4.6, 5.9, 6.9, 7.7, 8.3, 8.85, 9.25, 9.55, 9.85, 10.3, 10.6, 10.8, 10.95, 11.05, 11.15, 11.25, 11.4, 11.4, 11.2, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
 // ventral profile: under the snout tip the fleshy upper lip, the lower jaw and the throat curving down to the chest;
 // the belly sags a little below the chest, the tail's lower edge rises to the peduncle
 const KBOT = [3.3, 2.7, 2.15, 1.75, 1.4, 1.1, 0.85, 0.62, 0.44, 0.22, 0.08, 0.0, 0.0, 0.0, 0.0, -0.3, -0.55, -0.6, -0.4, -0.1, 0.25, 0.65, 1.05, 1.4, 1.7, 1.95, 2.1, 2.15, 2.2];
-// half width: the snout is a narrow, rounded muzzle (head-on it stands out from the face); the face widens behind
-// the mouth to smooth, full cheeks (head ~1.05 × as wide as deep); a stout trunk tapering to the peduncle
-const KW = [2.2, 2.75, 3.2, 3.55, 3.85, 4.15, 4.4, 4.65, 4.85, 5.1, 5.3, 5.4, 5.35, 5.25, 5.2, 5.4, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
+// half width: the snout is a rounded bulb about as tall as it is wide (head-on it stands out from the face, in
+// three-quarter view it overhangs the mouth); the face widens behind the mouth to smooth, full cheeks (head ~1.05 ×
+// as wide as deep); a stout trunk tapering to the peduncle
+const KW = [2.4, 2.7, 3.05, 3.35, 3.6, 3.95, 4.25, 4.55, 4.8, 5.1, 5.3, 5.4, 5.35, 5.25, 5.2, 5.4, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
 // superellipse exponents (top / bottom): a rounded muzzle, a domed head with a full, flat-bottomed face, round trunk,
 // oval tail
 const KNT = [2.0, 2.0, 2.0, 2.05, 2.15, 2.3, 2.45, 2.5, 2.5, 2.45, 2.35, 2.25, 2.2, 2.15, 2.15, 2.15, 2.15, 2.1, 2.1, 2.05, 2.05, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
@@ -95,8 +96,8 @@ const fNB = monotone(KS, KNB);
 const fDY = monotone(KS, KDY);
 
 // blunt snout: the front face is almost flat (superelliptic cap over the first ~1.5 mm)
-const SNOUT_CAP = 2.4, SNOUT_E = 2.0;
-const SNOUT_CAP_W = 2.8, SNOUT_E_W = 2.0;
+const SNOUT_CAP = 2.4, SNOUT_E = 2.5;
+const SNOUT_CAP_W = 2.8, SNOUT_E_W = 2.5;
 const TAIL_BLADE0 = 62.5;
 
 function snoutCap(s, len, e) {
@@ -208,12 +209,18 @@ export const EYE = {
   axis: norm3([-0.55, 0.2, 0.81]),
   retract: 2.3,
 };
+// at rest the globe looks ~20° above the window's axis: the pupil rides up under the upper rim of the cup and the
+// window shows mostly the iridescent iris below it, a bright crescent (photographs of resting animals)
+{
+  const fr = eyeFrame(EYE.axis), k = (20 * Math.PI) / 180;
+  EYE.gaze = norm3(EYE.axis.map((x, i) => x * Math.cos(k) + fr.v[i] * Math.sin(k)));
+}
 // dermal cup: skin over the eyeball everywhere except a window around the optical axis, so the globe shows as a
-// horizontal oval on the outer front of a skin dome (half-angles ~54° fore and aft, ~30° up and down: the upper and
+// horizontal oval on the outer front of a skin dome (half-angles ~50° fore and aft, ~23° up and down: the upper and
 // lower rims of the cup cover the top and bottom of the iris, which shows as a band either side of the pupil); the
 // two domes meet over the narrow interorbital. Solid (no cavity): the eyeball mesh fills the window, and a
 // retracting eye simply sinks under it.
-export const CUP = { skin: 0.06, halfH: (54 * Math.PI) / 180, halfV: (30 * Math.PI) / 180 };
+export const CUP = { skin: 0.06, halfH: (50 * Math.PI) / 180, halfV: (23 * Math.PI) / 180 };
 /** window frame of an eye: the axis, a horizontal tangent and the vertical one (fish space) */
 export function eyeFrame(a) {
   const h = norm3([a[2], 0, -a[0]]); // horizontal, perpendicular to the axis
@@ -321,7 +328,7 @@ function buildFeatures() {
   const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], a: aR, fr: eyeFrame(aR) };
   // the posterior lobe of the upper lip: an oval pad on each side just behind the mouth corner (pale, studded with
   // sensory pores)
-  const lp = surfaceAt(4.55, 2.05);
+  const lp = surfaceAt(4.3, 2.25);
   const lipPad = { c: lp.p, n: lp.n };
   return {
     gapeLine: gx, gapeU, gapeLen,
@@ -369,17 +376,17 @@ function lipRelief(p) {
   // upper lip: a roll ~1.1 mm high centred 0.55 mm above the line; lower lip ~0.7 mm, 0.35 mm below
   // (a shallow notch in the middle of the upper lip)
   const notch = 1 - 0.08 * Math.exp(-((p[2] / 0.8) ** 2));
-  const up = g.dy > -0.05 ? (0.36 - 0.14 * g.u) * notch * Math.exp(-(((g.d - 0.6) / 0.55) ** 2)) : 0;
+  const up = g.dy > -0.05 ? (0.32 - 0.12 * g.u) * notch * Math.exp(-(((g.d - 0.6) / 0.55) ** 2)) : 0;
   const lo = g.dy < 0.05 ? (0.17 - 0.05 * g.u) * Math.exp(-(((g.d - 0.35) / 0.32) ** 2)) : 0;
   const crease = 0.07 * Math.exp(-((g.d / 0.11) ** 2));
   let r = (up + lo) * fade - crease * fade;
-  // the lip pad: an oval cushion (~3.4 × 2.2 mm) lying on the skin behind the corner
+  // the lip pad: a plump, glossy oval cushion (~4 × 2.7 mm) standing out of the cheek at the mouth's corner
   const c = FEAT.lipPad.c, n = FEAT.lipPad.n;
   const v = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
   const h = v[0] * n[0] + v[1] * n[1] + v[2] * n[2];
   const t0 = v[0] - n[0] * h, t1 = v[1] - n[1] * h, t2 = v[2] - n[2] * h;
-  const e = (t0 / 1.75) ** 2 + (t1 / 1.1) ** 2 + (t2 / 1.1) ** 2;
-  r += 0.42 * Math.exp(-(e ** 1.6) * 1.2);
+  const e = (t0 / 2.0) ** 2 + (t1 / 1.35) ** 2 + (t2 / 1.35) ** 2;
+  r += 0.62 * Math.exp(-(e ** 2.2) * 1.4);
   return r;
 }
 
@@ -417,7 +424,7 @@ export function field(s, y, z, opts = null) {
     d = smin(d, ellipsoidDist(p, [e.c[0] + 0.25, e.c[1] - 1.5, e.c[2] - 0.1 * sg], [2.6, 1.4, 2.3]), 2.2);
     d = smin(d, cup, 1.8);
     // the lower lid: a thick fold of the cup under the window
-    if (!shut) d = smin(d, ellipsoidDist(p, [e.c[0] + 0.15, e.c[1] - 1.22, e.c[2] + 0.2 * sg], [1.85, 1.05, 1.75]), 0.6);
+    if (!shut) d = smin(d, ellipsoidDist(p, [e.c[0] + 0.15, e.c[1] - 1.42, e.c[2] + 0.2 * sg], [1.85, 1.05, 1.75]), 0.6);
   });
   // upper-lip pads
   // lips and the lip pad: smooth displacements of the surface along the gape line (no creases, no folds)

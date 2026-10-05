@@ -58,8 +58,8 @@ export function buildArm(NA = 18, NR = 20, side = 1) {
     // forearm, then (past the wrist joint) flattening into a broad, thin "hand" where the rays insert along its
     // distal edge (the fin web grows out of that edge, not out of a point)
     const hand = smoothstep((PEC.joint + 1.2 - 0.2) / total, 0.95, f);
-    const rw = mix(mix(2.05, 1.38, smoothstep(0.0, 0.55, f)), 1.62, hand);
-    const rt = mix(mix(1.55, 0.98, smoothstep(0.0, 0.55, f)), 0.5, hand);
+    const rw = mix(mix(2.35, 1.85, smoothstep(0.0, 0.55, f)), 2.0, hand);
+    const rt = mix(mix(1.6, 1.15, smoothstep(0.0, 0.55, f)), 0.55, hand);
     // the distal edge rounds off over the last 0.35 mm
     const cap = f > 0.97 ? Math.sqrt(Math.max(0, 1 - ((f - 0.97) / 0.03) ** 2)) : 1;
     const c = add(start, scl(dir, along));
@@ -104,7 +104,7 @@ export function armPaint(ua, va) {
   const p = [f * 7, Math.cos(a) * 1.5, Math.sin(a) * 0.8];
   const top = Math.cos(a); // +1: the upper (outer) side in the rest pose
   const under = smoothstep(0.2, -0.8, top);
-  let col = [mix(118, 168, under), mix(114, 160, under), mix(104, 142, under)];
+  let col = [mix(116, 146, under), mix(111, 138, under), mix(98, 120, under)];
   const n = fbm3(p[0] * 0.8, p[1] * 0.8, p[2] * 0.8, 3, 401);
   col = col.map((c) => c * (1 + 0.12 * n));
   // melanophore speckle (fine, dense) and a few larger dark freckles, fewer underneath
@@ -174,7 +174,7 @@ function pectoralWeb(rect) {
   for (let i = 0; i < n; i++) {
     const f = i / (n - 1); // 0 = leading (upper) ray
     // the rays insert along the hand's distal edge, their bases sheathed in its skin (they start inside the hand)
-    const along = (0.5 - f) * 2.7;
+    const along = (0.5 - f) * 3.3;
     const base = add(sub(hand, scl(dir, 1.3)), scl(width, along));
     const spread = (0.5 - f) * 112 * DEG; // the open fan spans ~112°
     const d = norm3(rot(dir, normal, spread));
@@ -212,10 +212,10 @@ export const ATLAS = 2048;
 export function finDefinitions() {
   // atlas rectangles in 0..1 (x, y, w, h)
   return [
-    // first dorsal: a tall, rounded fan over the pectorals (leading edge near vertical, the top rounded, the trailing
-    // edge sloping to the back), ~11 mm high in an adult
-    medianFin({ name: 'Fin_Dorsal1', s0: 22.0, s1: 34.0, rays: 14, top: true, spines: 14,
-      heights: [8.6, 10.4, 11.1, 11.3, 11.1, 10.6, 9.8, 8.9, 7.9, 6.9, 5.8, 4.7, 3.6, 2.5], angle0: 6 * DEG, angle1: 62 * DEG, foldAngle: 82 * DEG,
+    // first dorsal: a tall sail over the pectorals (leading edge near vertical, the top rounded, the trailing edge
+    // sloping to the back), ~1.2 × the body's depth when raised, its base ~18 % TL
+    medianFin({ name: 'Fin_Dorsal1', s0: 21.5, s1: 36.0, rays: 14, top: true, spines: 14,
+      heights: [10.6, 12.6, 13.4, 13.5, 13.1, 12.3, 11.3, 10.2, 9.0, 7.8, 6.6, 5.4, 4.2, 3.0], angle0: 9 * DEG, angle1: 60 * DEG, foldAngle: 82 * DEG,
       rect: [0.0, 0.0, 0.5, 0.25], notch: 0.045, bend: 0.1 }),
     // second dorsal: long and even, from above the vent nearly to the peduncle
     medianFin({ name: 'Fin_Dorsal2', s0: 39.0, s1: 58.0, rays: 13, top: true, spines: 1,
