@@ -27,6 +27,8 @@ export class ShovelView {
   private readonly scoop: Mesh;
   private readonly catchHolder = new Group();
   private readonly cur: Pose = pose(0, 0, 0, 0, 0, 0);
+  /** the dig pose for this swing: the blade's centre on the spot under the reticle (camera space), hands as usual */
+  private readonly digPose: Pose = pose(P_DIG.p.x, P_DIG.p.y, P_DIG.p.z, P_DIG.hands.x, P_DIG.hands.y, P_DIG.hands.z);
   private visible = false;
   private held = false;
   private shown = 0;
@@ -83,6 +85,16 @@ export class ShovelView {
     this.held = held;
   }
 
+  /** Aim this swing's blade at a spot on the ground (world); null goes back to the stock pose. */
+  setDigPoint(world: Vector3 | null, camera: PerspectiveCamera): void {
+    if (!world) { this.digPose.p.copy(P_DIG.p); this.digPose.hands.copy(P_DIG.hands); return; }
+    camera.updateMatrixWorld();
+    this.digPose.p.copy(world).applyMatrix4(camera.matrixWorldInverse);
+    this.digPose.p.y += 0.012;
+    // the hands keep their place beside the body; the handle just reaches further
+    this.digPose.hands.copy(P_DIG.hands);
+  }
+
   show(): void {
     this.visible = true;
     this.time = 0;
@@ -119,8 +131,8 @@ export class ShovelView {
       this.scoop.visible = false;
     } else if (st.phase === 'swing') {
       const t = st.elapsed / CAPTURE_PHASE_SEC.swing;
-      if (t < 0.55) lerpPose(P_READY, P_DIG, ease(t / 0.55), cur);
-      else lerpPose(P_DIG, P_LIFT, ease((t - 0.55) / 0.45), cur);
+      if (t < 0.55) lerpPose(P_READY, this.digPose, ease(t / 0.55), cur);
+      else lerpPose(this.digPose, P_LIFT, ease((t - 0.55) / 0.45), cur);
       this.scoop.visible = t > 0.5;
     } else if (st.phase === 'lift') {
       lerpPose(P_LIFT, P_CHECK, ease(st.elapsed / CAPTURE_PHASE_SEC.lift), cur);

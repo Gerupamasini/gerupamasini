@@ -585,13 +585,25 @@ export class App {
    * steeply from 1.5 m up, the hoop still gets to the bed.
    */
   netReach(): number {
-    const horiz = this.netDef()?.params.reach_m ?? 1.5;
+    return this.reachAlongSight(this.netDef()?.params.reach_m ?? 1.5);
+  }
+
+  /** A reach of `horiz` metres over the ground from the feet, as a distance down the line of sight. */
+  private reachAlongSight(horiz: number): number {
     const p = this.player;
     if (!p) return horiz;
     const eyeUp = Math.max(0.3, this.camera.position.y - p.position.y);
     const cos = Math.max(0.08, Math.cos(p.pitch));
     const tMax = Math.sqrt(horiz * horiz + eyeUp * eyeUp) + 0.1;
     return Math.min(horiz / cos, tMax);
+  }
+
+  /** The spot the shovel would dig: the ground under the reticle, and whether the arm gets there. */
+  digTarget(): { p: Vector3; far: boolean } | null {
+    const reach = this.reachAlongSight(this.data.tools.get('shovel')?.params.reach_m ?? 1.2);
+    const p = this.groundUnderReticle(reach + 1.5);
+    if (!p) return null;
+    return { p: p.clone(), far: p.distanceTo(this.camera.position) > reach };
   }
 
   /** How much deep water slows the swing at the player's feet: 0 in the shallows, 1 at knee depth and beyond. */
@@ -645,9 +657,11 @@ export class App {
     const tool = this.data.tools.get('shovel');
     const world = this.world, player = this.player, clams = this.clams;
     if (!tool || !world || !player || !clams || this.capture.active) return;
-    const p = new Vector3();
-    ShovelView.digPoint(this.camera, (x, z) => world.terrain.heightAt(x, z), p);
+    const tg = this.digTarget();
+    if (!tg || tg.far) { toast(t('hud.tooFar'), 'warn'); return; }
+    const p = tg.p;
     if (world.habitat.depthAt(p.x, p.z) > 0.15) { toast(t('hud.tooDeepToDig'), 'warn'); return; }
+    this.shovel?.setDigPoint(p, this.camera);
     const nowSec = this.clock.nowGame() / 1000;
     // a practised hand finds the clam under a wider blade
     const k = clams.dig(p.x, p.z, (tool.params.radius ?? 0.14) * (1 + 0.1 * this.encyclopedia.skillLevel('shovel')), nowSec);
@@ -1152,7 +1166,12 @@ export class App {
       const netInHand = this.toolType() === 'capture';
       const inReach = netInHand && this.netZoneHits().length > 0;
       const deep = netInHand && this.swingSlow() * (this.netDef()?.params.deep ?? 1) >= 0.5 ? `　${t('hud.deepSlow')}` : '';
-      const toolHint = netInHand ? (inReach ? `[E] ${t('hud.swing')}${deep}` : deep.trim()) : `[E] ${t('hud.dig')}`;
+      // the net: a swing when something is under the hoop; "too far" when the animal looked at is beyond the handle
+      const tooFarNet = netInHand && !inReach && !!this.target && this.target.species.collectable && this.target.pos.distanceTo(this.camera.position) > this.netReach() + 0.2;
+      const dg = this.toolType() === 'dig' ? this.digTarget() : null;
+      const toolHint = netInHand
+        ? (inReach ? `[E] ${t('hud.swing')}${deep}` : tooFarNet ? t('hud.tooFar') : deep.trim())
+        : (dg && !dg.far ? `[E] ${t('hud.dig')}` : t('hud.tooFar'));
       // a clam's siphon holes under the reticle
       this.targetClam = -1;
       if (this.clams && this.world) {
@@ -1164,7 +1183,7 @@ export class App {
         prompt = `${sp.names.ja}   [F] ${t('hud.observe')}${sp.collectable ? (toolHint ? `   ${toolHint}` : '') : `   ${t('hud.observeOnly')}`}`;
       } else if (this.targetClam >= 0) {
         const shovelKey = this.encyclopedia.loadout.value.indexOf('shovel');
-        prompt = `${t('clam.siphon')}   [F] ${t('hud.observe')}   ${this.toolType() === 'dig' ? `[E] ${t('hud.dig')}` : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.data.tools.get('shovel')?.ja ?? ''}` : t('tools.noShovel')}`;
+        prompt = `${t('clam.siphon')}   [F] ${t('hud.observe')}   ${this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.data.tools.get('shovel')?.ja ?? ''}` : t('tools.noShovel')}`;
       } else if (toolHint) prompt = toolHint;
     }
     const fps = this.fpsCount / Math.max(1e-3, this.fpsAcc);

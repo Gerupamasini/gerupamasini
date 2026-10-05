@@ -67,7 +67,8 @@
       "minigame": "none",
       "price_cr": 0,
       "params": {
-        "radius": 0.14
+        "radius": 0.14,
+        "reach_m": 1.2
       },
       "description": "砂を掘ってアサリなどの貝をとる。砂の上に並んだ水管の穴を狙って掘る。"
     }
