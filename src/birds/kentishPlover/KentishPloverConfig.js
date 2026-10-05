@@ -170,7 +170,7 @@ export const bodySculpt = {
   // (x 13–15, y 92–93) stays rigid with the eye when the head turns (at 13 it slid 0.3–0.8 mm against the eyeball under
   // the broad neck fill; at 15 the neck folded more when preening)
   // v4.4: x 14.6, y 14 — the broad crown dome (prim crown, its sides at x 13.7, y 100) stays inside the rigid head
-  headZone: { c: [0, 93.5, 24], r: [14.6, 14, 15.5] },
+  headZone: { c: [0, 94, 23.5], r: [15.4, 14, 16.5] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
   // mantleNape and foreBreast at rest), but when the head turns or stretches the neck bones carry this tube
   neckContact: { a: [0, 74, 0], b: [0, 88.5, 14], r: 9 },
