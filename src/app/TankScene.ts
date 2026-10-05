@@ -3,7 +3,7 @@ import {
   Float32BufferAttribute, FloatType, HalfFloatType, HemisphereLight, LineBasicMaterial, LinearFilter, LinearMipmapLinearFilter,
   LineSegments, Mesh, MeshStandardMaterial, Object3D, OneFactor, OneMinusSrcAlphaFactor, PerspectiveCamera, PlaneGeometry, Plane,
   PMREMGenerator, Points, PointsMaterial, Raycaster, RGBAFormat, Scene, ShaderMaterial, SpotLight, SrcColorFactor, UnsignedByteType,
-  Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer, Spherical } from 'three';
+  Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer, Spherical, SRGBColorSpace } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GPUComputationRenderer, type Variable } from 'three/addons/misc/GPUComputationRenderer.js';
@@ -297,6 +297,16 @@ export class TankScene {
     lamp.position.set(0, W_LAMP_Y, 0);
     this.scene.add(bar, lamp);
     this.scene.add(this.shelf.group);
+    // a window on the back wall, the bay at night outside
+    const win = new Mesh(new PlaneGeometry(1.05, 0.72), new MeshStandardMaterial({ map: makeNightWindow(), emissive: new Color(0xffffff), emissiveMap: makeNightWindow(), emissiveIntensity: 0.55, roughness: 1 }));
+    win.position.set(1.05, 0.9, -1.39);
+    this.scene.add(win);
+    const frameMat = new MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.6, metalness: 0.2 });
+    for (const [w, h, x, y] of [[1.11, 0.03, 1.05, 1.275], [1.11, 0.03, 1.05, 0.525], [0.03, 0.78, 0.51, 0.9], [0.03, 0.78, 1.59, 0.9], [0.02, 0.72, 1.05, 0.9]] as [number, number, number, number][]) {
+      const f = new Mesh(new BoxGeometry(w, h, 0.03), frameMat);
+      f.position.set(x, y, -1.38);
+      this.scene.add(f);
+    }
 
     // ---- the water: simulation, surface texture and caustics texture (needs float render targets)
     const floatOK = gl.capabilities.isWebGL2 && (gl.extensions.has('EXT_color_buffer_float') || gl.extensions.has('EXT_color_buffer_half_float'));
@@ -853,7 +863,7 @@ export class TankScene {
     if (this.view === 'shelf') return;
     this.view = 'shelf';
     const c = this.shelf.center;
-    this.startCamera(new Vector3(c.x + 0.62, c.y + 0.1, c.z + 0.78), c);
+    this.startCamera(new Vector3(c.x + 0.42, c.y + 0.1, c.z + 1.08), new Vector3(c.x + 0.26, c.y - 0.02, c.z));
   }
 
   focusTank(): void {
@@ -933,4 +943,31 @@ export class TankScene {
     this.surfRT?.dispose();
     this.causRT?.dispose();
   }
+}
+
+/** The view out of the window: a night sky over the bay, a few lights on the far shore, a moon. */
+function makeNightWindow(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 352;
+  const g = c.getContext('2d')!;
+  const sky = g.createLinearGradient(0, 0, 0, 352);
+  sky.addColorStop(0, '#0b1626'); sky.addColorStop(0.55, '#16304a'); sky.addColorStop(0.62, '#0f2436'); sky.addColorStop(1, '#071018');
+  g.fillStyle = sky; g.fillRect(0, 0, 512, 352);
+  // stars
+  g.fillStyle = 'rgba(255,255,255,0.7)';
+  for (let i = 0; i < 70; i++) { const x = (i * 97) % 512, y = (i * 61) % 180; g.fillRect(x, y, 1.2, 1.2); }
+  // the moon
+  g.fillStyle = '#f2ead6'; g.beginPath(); g.arc(400, 60, 16, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#16304a'; g.beginPath(); g.arc(392, 56, 14, 0, Math.PI * 2); g.fill();
+  // the far shore and its lights
+  g.fillStyle = '#0a1620'; g.fillRect(0, 205, 512, 20);
+  for (let i = 0; i < 40; i++) { const x = (i * 131 + 20) % 500, w = 2 + (i % 3); g.fillStyle = i % 4 === 0 ? 'rgba(255,200,120,0.9)' : 'rgba(255,230,180,0.6)'; g.fillRect(x, 212 + (i % 2) * 3, w, 2); }
+  // the water with the lights' reflections
+  const sea = g.createLinearGradient(0, 225, 0, 352);
+  sea.addColorStop(0, '#0d2535'); sea.addColorStop(1, '#050b10');
+  g.fillStyle = sea; g.fillRect(0, 225, 512, 127);
+  for (let i = 0; i < 40; i++) { const x = (i * 131 + 20) % 500; g.fillStyle = 'rgba(255,220,160,0.12)'; for (let k = 0; k < 6; k++) g.fillRect(x - k, 228 + k * 9, 2 + k, 1.5); }
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
 }

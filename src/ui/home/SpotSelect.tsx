@@ -40,8 +40,8 @@ export function SpotSelect({ app }: { app: App }) {
               <text class="label" x={bx1 + 8} y={by0 + 10}>{t('spots.tokyoBay')}</text>
             </svg>
             <svg class="spots-bay" viewBox="-20 -20 300 380" aria-label="東京湾">
-              <path class="sea" d="M-20 -20 H280 V360 H-20 Z" />
-              <path class="land" d={path(BAY, bay)} />
+              <path class="shore" d="M-20 -20 H280 V360 H-20 Z" />
+              <path class="water" d={path(BAY, bay)} />
               {spots.map((s) => {
                 const [x, y] = bay(s.lon, s.lat);
                 const on = s.id === sel?.id, ready = !!s.map;

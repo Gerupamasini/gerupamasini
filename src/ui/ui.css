@@ -119,7 +119,8 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .spots-maps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-height: 420px; }
 .spots-japan, .spots-bay { width: 100%; height: 100%; border-radius: var(--r-l); background: radial-gradient(120% 90% at 50% 10%, rgba(30, 60, 72, 0.5), rgba(5, 11, 14, 0.9)); border: 1px solid var(--line); }
 .spots-japan .land, .spots-bay .land { fill: rgba(236, 244, 244, 0.1); stroke: rgba(236, 244, 244, 0.45); stroke-width: 1; stroke-linejoin: round; }
-.spots-bay .sea { fill: transparent; }
+.spots-bay .shore { fill: rgba(236, 244, 244, 0.1); }
+.spots-bay .water { fill: rgba(40, 90, 110, 0.55); stroke: rgba(127, 227, 210, 0.5); stroke-width: 1; stroke-linejoin: round; }
 .spots-japan .focus { fill: rgba(127, 227, 210, 0.15); stroke: var(--accent); stroke-width: 1.2; }
 .spots-japan .label { fill: var(--accent); font-size: 12px; letter-spacing: 0.1em; }
 .spots-bay .pin { cursor: pointer; }
@@ -189,8 +190,8 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .home-status .stat-line .sep { width: 1px; height: 18px; background: var(--line); }
 .home-status .coin { width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe9a6, #c99a3a); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3); }
 .home-status .ticket-mark { width: 14px; height: 10px; border-radius: 2px; background: linear-gradient(135deg, #bfe6f2, #6fb6cf); }
-.home-title { position: fixed; left: 50%; top: 26px; transform: translateX(-50%); text-align: center; pointer-events: none; }
-.home-title .jp { font-family: var(--font-display); font-size: clamp(34px, 5vw, 60px); letter-spacing: 0.2em; line-height: 1; color: var(--sand); text-shadow: 0 6px 30px rgba(0, 0, 0, 0.7); padding-left: 0.2em; }
+.home-title { position: fixed; left: 340px; right: 400px; top: 26px; text-align: center; pointer-events: none; }
+.home-title .jp { font-family: var(--font-display); font-size: clamp(30px, 4.2vw, 54px); letter-spacing: 0.2em; line-height: 1; color: var(--sand); text-shadow: 0 6px 30px rgba(0, 0, 0, 0.7); padding-left: 0.2em; }
 .home-title .en { margin-top: 8px; font-size: 12px; letter-spacing: 0.42em; color: var(--dim); padding-left: 0.42em; border-top: 1px solid var(--line); padding-top: 8px; }
 .home-status .level { display: flex; align-items: baseline; gap: 8px; }
 .home-status .level .num { font-size: 30px; font-weight: 400; line-height: 1; }
