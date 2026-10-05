@@ -122,7 +122,11 @@ const headPrims = [gb.primitive({ position: SP.head.position, normal: SP.head.no
   const n = D.position.length / 3;
   const w = { joints: new Uint8Array(n * 4), weights: new Uint8Array(n * 4) };
   for (let k = 0; k < n; k++) { w.joints[k * 4] = J.J_head; w.weights[k * 4] = 255; }
-  headPrims.push(gb.primitive({ position: D.position, normal: D.normal, tangent: D.tangent, uv: D.uv, indices: D.indices, material: mSkin,
+  // the domes' skirts lie on the head's skin where the two have merged: the same skin, drawn over the head with a
+  // depth offset (extras.overlay; the loader sets polygonOffset)
+  const mSkinDome = gb.addMaterial({ ...gb.json.materials[mSkin], name: 'Tobihaze_SkinDome',
+    extras: { tobihaze: { ...gb.json.materials[mSkin].extras.tobihaze, overlay: true } } });
+  headPrims.push(gb.primitive({ position: D.position, normal: D.normal, tangent: D.tangent, uv: D.uv, indices: D.indices, material: mSkinDome,
     extraAttributes: skinAttrs(w), targets: [zeros(n), D.blinkL, D.blinkR] }));
   log(`    ${n} v`);
 }
@@ -234,10 +238,11 @@ const mEye = gb.addMaterial({
   extensions: {
     KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: 0.02 },
     KHR_materials_ior: { ior: 1.376 },
-    // structural colour of the iris ring and the lens glow: copper ↔ turquoise-blue with the angle
+    // the iridescent cornea (as in many gobies): a stack of thin, high-index layers (guanine-like, n ≈ 1.83) that
+    // reflects teal-green head-on and blue at grazing angles, over the black pupil and the dark iris
     KHR_materials_iridescence: {
-      iridescenceFactor: 1, iridescenceTexture: { index: tEyeIr }, iridescenceIor: 1.4,
-      iridescenceThicknessMinimum: 220, iridescenceThicknessMaximum: 560, iridescenceThicknessTexture: { index: tEyeIr },
+      iridescenceFactor: 1, iridescenceTexture: { index: tEyeIr }, iridescenceIor: 1.83,
+      iridescenceThicknessMinimum: 120, iridescenceThicknessMaximum: 320, iridescenceThicknessTexture: { index: tEyeIr },
     },
   },
   extras: { tobihaze: { role: 'eye', radiusMM: EYE.radius, pupilAngle: PUPIL_ANGLE, irisAngle: IRIS_ANGLE, corneaBulge: CORNEA_BULGE } },

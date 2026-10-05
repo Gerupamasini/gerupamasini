@@ -45,15 +45,16 @@ const KTOP = [4.6, 5.9, 6.9, 7.7, 8.3, 8.85, 9.25, 9.55, 9.85, 10.3, 10.6, 10.8,
 // the belly sags a little below the chest, the tail's lower edge rises to the peduncle
 const KBOT = [3.3, 2.7, 2.15, 1.75, 1.4, 1.1, 0.85, 0.62, 0.44, 0.22, 0.08, 0.0, 0.0, 0.0, 0.0, -0.3, -0.55, -0.6, -0.4, -0.1, 0.25, 0.65, 1.05, 1.4, 1.7, 1.95, 2.1, 2.15, 2.2];
 // half width: the snout is a rounded bulb about as tall as it is wide (head-on it stands out from the face, in
-// three-quarter view it overhangs the mouth); the face widens behind the mouth to smooth, full cheeks (head ~1.05 ×
-// as wide as deep); a stout trunk tapering to the peduncle
-const KW = [2.4, 2.7, 3.05, 3.35, 3.6, 3.95, 4.25, 4.55, 4.8, 5.1, 5.3, 5.4, 5.35, 5.25, 5.2, 5.4, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
-// superellipse exponents (top / bottom): a rounded muzzle; behind it a broad, flattish crown (the eyes sit on its upper
-// corners) over a full, flat-bottomed face; round trunk, oval tail
-const KNT = [2.0, 2.0, 2.05, 2.15, 2.3, 2.55, 2.8, 2.95, 2.95, 2.85, 2.6, 2.4, 2.25, 2.15, 2.15, 2.15, 2.15, 2.1, 2.1, 2.05, 2.05, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+// three-quarter view it overhangs the mouth), so the mouth is about half as wide as the face; behind it the face
+// swells to broad, full cheeks (head ~1.05 × as wide as deep); a stout trunk tapering to the peduncle
+const KW = [2.2, 2.45, 2.7, 2.9, 3.1, 3.35, 3.7, 4.25, 4.85, 5.35, 5.6, 5.65, 5.55, 5.4, 5.25, 5.4, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
+// superellipse exponents (top / bottom): a rounded muzzle; head-on the head is bell-shaped, rounded and narrowing up
+// to the eyes over a full, flat-bottomed face (photographs of the face head-on); round trunk, oval tail
+const KNT = [2.0, 2.0, 2.0, 2.0, 2.0, 2.05, 2.1, 2.15, 2.15, 2.1, 2.05, 2.05, 2.05, 2.05, 2.1, 2.15, 2.15, 2.1, 2.1, 2.05, 2.05, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
 const KNB = [2.0, 2.05, 2.1, 2.15, 2.2, 2.3, 2.45, 2.6, 2.75, 2.85, 2.85, 2.8, 2.75, 2.7, 2.65, 2.6, 2.5, 2.45, 2.4, 2.35, 2.3, 2.2, 2.15, 2.1, 2.05, 2.0, 2.0, 2.0, 2.0];
 // height of the widest point relative to the mid-height: round at the muzzle, the cheeks full and low behind the mouth
-const KDY = [0, 0, 0, 0, 0, -0.05, -0.15, -0.35, -0.6, -0.9, -1.05, -1.05, -0.95, -0.8, -0.6, -0.45, -0.25, -0.1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+// (the face is widest at about a third of its height)
+const KDY = [0, 0, 0, 0, -0.05, -0.15, -0.35, -0.7, -1.1, -1.5, -1.65, -1.6, -1.45, -1.2, -0.9, -0.6, -0.3, -0.1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 export function monotone(xs, ys) {
   const n = xs.length;
@@ -98,7 +99,7 @@ const fDY = monotone(KS, KDY);
 // blunt snout: the front face is almost flat (superelliptic cap over the first ~1.5 mm)
 const SNOUT_CAP = 2.4, SNOUT_E = 2.5;
 const SNOUT_CAP_W = 2.8, SNOUT_E_W = 2.5;
-const TAIL_BLADE0 = 62.5;
+const TAIL_BLADE0 = 60.0;
 
 function snoutCap(s, len, e) {
   if (s >= len) return 1;
@@ -203,7 +204,7 @@ export function surfaceAt(s, y) {
 // Retraction ("blinking", Aiello et al. 2023 PNAS): the eyeball sinks ~2.4 mm into the orbit and the dermal cup
 // closes over it.
 export const EYE = {
-  center: [6.4, 10.8, 2.2],
+  center: [6.4, 10.45, 2.1],
   radius: 1.75,
   // the eyes look out to the side, a little forward (~19°) and up (~14°): photographed from the side the pupil
   // faces the camera, head-on the dark eye shows on the outer front of each dome
@@ -241,8 +242,8 @@ export function windowField(o, fr) {
 // corner. A small mouth at the front of the muzzle, under the overhanging snout and its thick upper lip; head-on it
 // is a short arch with the corners turned down (~60 % of the face's width); the jaw itself reaches back under the
 // eye, where the posterior lobe of the upper lip lies over it as a pale pad behind the corner.
-export const MOUTH = [[0.85, 2.95], [1.35, 2.88], [1.9, 2.72], [2.45, 2.47], [2.95, 2.17], [3.4, 1.88]];
-export const RICTUS_S = 3.4;
+export const MOUTH = [[0.85, 2.95], [1.3, 2.88], [1.8, 2.72], [2.3, 2.48], [2.75, 2.2], [3.15, 1.92]];
+export const RICTUS_S = 3.15;
 // gill-cover margin (a groove: goby gill openings are small, ventrolateral) and the preopercle, top → bottom
 export const OPERCLE = [[13.8, 8.6], [15.0, 7.3], [15.8, 5.7], [16.0, 4.2], [15.6, 2.7], [14.6, 1.3], [13.6, 0.5]];
 export const PREOPERCLE = [[10.4, 8.8], [11.2, 7.0], [11.5, 5.0], [11.2, 3.0], [10.2, 1.4]];
@@ -328,7 +329,7 @@ function buildFeatures() {
   const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], a: aR, fr: eyeFrame(aR) };
   // the posterior lobe of the upper lip: an oval pad on each side just behind the mouth corner (pale, studded with
   // sensory pores)
-  const lp = surfaceAt(4.3, 2.25);
+  const lp = surfaceAt(4.5, 2.15);
   const lipPad = { c: lp.p, n: lp.n };
   return {
     gapeLine: gx, gapeU, gapeLen,

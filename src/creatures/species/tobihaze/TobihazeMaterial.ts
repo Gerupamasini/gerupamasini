@@ -127,9 +127,11 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
     vec2 cell = floor(g), f = fract(g) - 0.5;
     float h = tobiHash(cell);
     vec2 o = vec2(tobiHash(cell + 3.7), tobiHash(cell + 9.1)) - 0.5;
-    float r = mix(0.14, 0.34, tobiHash(cell + 1.3));
+    float r = mix(0.1, 0.24, tobiHash(cell + 1.3));
     float d = length(f - o * 0.45) / r;
-    float keep = step(h, mix(0.0, 0.16, smoothstep(0.6, 1.0, tobiWet)) + 0.4 * (1.0 - smoothstep(0.0, 0.01, tobiAbove)));
+    // in air the mucus is a continuous film: only a few small beads (fresh out of the water); they cluster just above
+    // the waterline
+    float keep = step(h, mix(0.0, 0.035, smoothstep(0.8, 1.0, tobiWet)) + 0.3 * (1.0 - smoothstep(0.0, 0.008, tobiAbove)));
     tobiDrop = keep * tipFade * (1.0 - tobiSub) * sqrt(max(0.0, 1.0 - d * d));
   }
   #endif
@@ -171,10 +173,12 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
     float film = tobiWet * (1.0 - tobiSub) * (1.0 - 0.75 * tobiMud);
     film = max(film, tobiDrop);
     material.clearcoat = film;
-    material.clearcoatRoughness = clamp(mix(0.32, 0.03, tobiWet) + 0.25 * tobiMud + geometryRoughness, 0.0525, 1.0);
+    // (the film follows the granular skin, so even fully wet its highlights are a little broken up)
+    material.clearcoatRoughness = clamp(mix(0.34, 0.075, tobiWet) + 0.25 * tobiMud + geometryRoughness, 0.0525, 1.0);
     #ifndef TOBI_FIN
-    // the papillose snout tip (and the uv pole there) never gives a mirror reflection
-    material.clearcoatRoughness = max(material.clearcoatRoughness, 0.22 * (1.0 - smoothstep(0.003, 0.024, vMapUv.x)));
+    // the papillose snout tip (and the uv pole there) never gives a mirror reflection: the film thins out over it
+    // (a rough film there would smear the sky into a pale blob)
+    material.clearcoat *= mix(0.2, 1.0, smoothstep(0.003, 0.026, vMapUv.x));
     #endif
   }
 #endif`);
@@ -209,7 +213,7 @@ export class TobihazeMaterials {
         m.clearcoat = 1;
         m.clearcoatRoughness = 0.04;
         // the mucus film follows the skin's relief (scales, papillae, folds): no glassy shell over it
-        if (m.normalMap) { m.clearcoatNormalMap = m.normalMap; m.clearcoatNormalScale.set(0.8, 0.8); m.normalScale.set(1.6, 1.6); }
+        if (m.normalMap) { m.clearcoatNormalMap = m.normalMap; m.clearcoatNormalScale.set(1.1, 1.1); m.normalScale.set(1.6, 1.6); }
         m.onBeforeCompile = skinShader(this.uniforms, this.tier, role === 'fin');
         m.customProgramCacheKey = () => `tobihaze-${role}-${this.tier}-${ENV.caustics ? 1 : 0}`;
         if (role === 'fin') { m.depthWrite = this.tier === 'lod2'; }

@@ -70,7 +70,20 @@ if (q.get('mat') === 'flat' || q.get('mat') === 'normal') {
   // debugging: untextured surfaces (geometry and shading only)
   const { MeshPhysicalMaterial, MeshNormalMaterial } = await import('three');
   const flat = q.get('mat') === 'flat' ? new MeshPhysicalMaterial({ color: 0x9a9a96, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.1 }) : new MeshNormalMaterial();
-  for (const m of model.meshes) if (!m.name.startsWith('Eye')) m.material = flat;
+  const flatOver = flat.clone();
+  flatOver.polygonOffset = true; flatOver.polygonOffsetFactor = -1; flatOver.polygonOffsetUnits = -2;
+  for (const m of model.meshes) if (!m.name.startsWith('Eye')) m.material = (m.material as import('three').Material).polygonOffset ? flatOver : flat;
+}
+// eye-material tuning: irior=, irmin=, irmax=, irf= override the iridescence of the eyes
+if (q.get('irior') || q.get('irmin') || q.get('irmax') || q.get('irf')) {
+  model.root.traverse((o) => {
+    const m = (o as Mesh).material as import('three').MeshPhysicalMaterial | undefined;
+    if (!m || !(o as Mesh).isMesh || !o.name.startsWith('Eye')) return;
+    if (q.get('irior')) m.iridescenceIOR = Number(q.get('irior'));
+    if (q.get('irmin')) m.iridescenceThicknessRange[0] = Number(q.get('irmin'));
+    if (q.get('irmax')) m.iridescenceThicknessRange[1] = Number(q.get('irmax'));
+    if (q.get('irf')) m.iridescence = Number(q.get('irf'));
+  });
 }
 if (q.get('jaw')) { const jb = model.bones.J_jaw; if (jb) jb.rotation.x = Number(q.get('jaw')); }
 if (q.get('bind')) model.root.traverse((o) => { const sm = o as import('three').SkinnedMesh; if (sm.isSkinnedMesh) sm.skeleton.pose(); });

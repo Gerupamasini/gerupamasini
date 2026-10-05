@@ -121,37 +121,35 @@ export function paintEye(size = 512) {
     let col, rough = 0.3, metal = 0, ir = 0, th = 0.5;
     const grain = fbm3(ax * 9 * (theta + 0.2), sy * 9 * (theta + 0.2), theta * 4, 4, 701) * 0.5 + 0.5;
     if (theta < tp) {
-      // pupil: black, a faint deep blue-green reflection of the lens in its upper half
+      // pupil: black; the iridescent cornea over it glows teal-green when the light falls into it (photographed live
+      // animals: the dark eye reads as a turquoise disc or crescent)
       const q = theta / tp;
-      const up = clamp(0.5 + 0.6 * sy);
-      const glow = smoothstep(1.0, 0.3, q) * up * (0.4 + 0.6 * smoothstep(0.35, 0.8, fbm3(ax * 3 * q + 5, sy * 3 * q, 1.3, 4, 709) * 0.5 + 0.5));
-      col = [5, 6, 8].map((c, i) => mix(c, [12, 30, 36][i], glow * 0.5));
-      rough = 0.12;
-      ir = 0.3 * glow;
-      th = 0.35;
+      col = [6, 8, 10];
+      rough = 0.1;
+      ir = 0.95;
+      th = 0.5 + 0.06 * (fbm3(ax * 3 * q + 5, sy * 3 * q, 1.3, 3, 709));
     } else if (theta < IRIS_ANGLE) {
       const f = (theta - tp) / (IRIS_ANGLE - tp);
       // radial striation and fine reticulation of the iris stroma
       const stri = 0.5 + 0.5 * Math.sin(psi * 56 + 4 * fbm3(ax * 2, sy * 2, f * 2, 3, 727));
       const reti = smoothstep(0.5, 0.78, fbm3(ax * 6 * (1 + f), sy * 6 * (1 + f), f * 7, 4, 607) * 0.5 + 0.5);
-      // dark olive-brown, mottled
-      col = [50, 44, 34].map((c) => c * (0.8 + 0.3 * stri) * (1 - 0.35 * reti) * (0.85 + 0.3 * grain));
-      // the green-gold sheen, strongest low in the iris and toward its outer half
+      const cloud = fbm3(ax * 2.5, sy * 2.5, f * 3, 3, 739) * 0.5 + 0.5;
+      // dark olive-brown, mottled; greener low in the iris
       const low = smoothstep(0.25, -0.7, sy);
-      const sheen = low * smoothstep(0.1, 0.55, f) * (0.55 + 0.45 * smoothstep(0.3, 0.7, fbm3(ax * 4, sy * 4, f * 3, 3, 741) * 0.5 + 0.5));
-      col = col.map((c, i) => mix(c, [104, 112, 58][i], sheen * 0.6));
+      col = [46, 44, 34].map((c, i) => mix(c, [52, 64, 40][i], low) * (0.8 + 0.3 * stri) * (1 - 0.35 * reti) * (0.85 + 0.3 * grain));
       // a few gold flecks
       const fleck = smoothstep(0.7, 0.86, perlin3(ax * 18 * (1 + f), sy * 18 * (1 + f), f * 9, 733) * 0.5 + 0.5);
-      col = col.map((c, i) => mix(c, [168, 136, 74][i], fleck * 0.4));
+      col = col.map((c, i) => mix(c, [150, 124, 70][i], fleck * 0.35));
       // the bright copper pupillary margin
       const rim = smoothstep(tr - tp + 0.008, 0.0, theta - tp);
       col = col.map((c, i) => mix(c, [178, 112, 66][i] * (0.85 + 0.3 * grain), rim * 0.85));
       // the limbus darkens
       col = col.map((c) => c * (1 - 0.4 * smoothstep(0.75, 1.0, f)));
-      rough = 0.24 + 0.08 * reti;
-      metal = 0.25 + 0.4 * sheen + 0.45 * rim + 0.2 * fleck;
-      ir = clamp(0.1 + 0.8 * sheen) * (0.8 + 0.2 * stri);
-      th = 0.35 + 0.4 * (fbm3(ax * 3, sy * 3, f * 2, 3, 739) * 0.5 + 0.5);
+      rough = 0.2 + 0.08 * reti;
+      metal = 0.2 + 0.45 * rim + 0.15 * fleck;
+      // the iridescent cornea continues over the iris, its colour drifting with the film's thickness
+      ir = (0.85 - 0.35 * smoothstep(0.6, 1.0, f)) * (0.85 + 0.15 * stri) * (1 - 0.6 * rim);
+      th = 0.5 + 0.35 * (cloud - 0.5) + 0.15 * low;
     } else {
       // beyond the iris: speckled, skin-coloured tissue over the globe (dark at the limbus), as on the dome
       const g = smoothstep(IRIS_ANGLE, IRIS_ANGLE + 0.22, theta);

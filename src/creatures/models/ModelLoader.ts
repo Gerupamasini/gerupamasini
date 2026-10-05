@@ -56,6 +56,12 @@ function prepareMaterials(gltf: GLTF, tier: Tier): void {
     const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[];
     for (const m of mats) {
       const pm = m as MeshPhysicalMaterial;
+      // a surface laid over another one (e.g. a skin patch on the skin it merges into) wins the depth test there
+      if ((m.userData?.tobihaze as { overlay?: boolean } | undefined)?.overlay || m.userData?.overlay) {
+        m.polygonOffset = true;
+        m.polygonOffsetFactor = -1;
+        m.polygonOffsetUnits = -2;
+      }
       if (tier !== 'hero' && pm.isMeshPhysicalMaterial) {
         // transmission needs an extra scene pass; keep it for the observed hero only
         pm.transmission = 0;

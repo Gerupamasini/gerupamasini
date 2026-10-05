@@ -213,7 +213,7 @@ function pectoralWeb(rect) {
 // the midline and parted by a notch behind, together wider than the body; each I,5, the rays fanning from close to
 // the midline, the inner ones back and the outer spine out to the side; each lobe cupped (concave below), so the
 // pair can be pressed on the mud as a support.
-export const PELVIC = { s: 19.6, len: 7.2 };
+export const PELVIC = { s: 19.6, len: 8.0 };
 function pelvicFins(rect) {
   const R = [];
   const s0 = PELVIC.s, y0 = botY(s0) + 0.25;
@@ -249,12 +249,12 @@ export function finDefinitions() {
     // sloping to the back), ~1.2 × the body's depth when raised, its base ~18 % TL
     medianFin({ name: 'Fin_Dorsal1', s0: 21.5, s1: 36.0, rays: 14, top: true, spines: 14,
       heights: [10.6, 12.6, 13.4, 13.5, 13.1, 12.3, 11.3, 10.2, 9.0, 7.8, 6.6, 5.4, 4.2, 3.0], angle0: 9 * DEG, angle1: 60 * DEG, foldAngle: 82 * DEG,
-      rect: [0.0, 0.0, 0.5, 0.25], notch: 0.045, bend: 0.1 }),
-    // second dorsal: long and even, from above the vent nearly to the peduncle
-    medianFin({ name: 'Fin_Dorsal2', s0: 39.0, s1: 58.0, rays: 13, top: true, spines: 1,
+      rect: [0.0, 0.0, 0.5, 0.25], notch: 0.022, bend: 0.1 }),
+    // second dorsal: long and even, from above the vent to the front of the peduncle (base ~22 % SL)
+    medianFin({ name: 'Fin_Dorsal2', s0: 40.5, s1: 55.5, rays: 13, top: true, spines: 1,
       heights: [5.0, 5.5, 5.75, 5.85, 5.9, 5.9, 5.85, 5.75, 5.6, 5.35, 5.0, 4.5, 3.8], angle0: 32 * DEG, angle1: 64 * DEG, foldAngle: 84 * DEG,
       rect: [0.5, 0.0, 0.5, 0.25], notch: 0.03 }),
-    medianFin({ name: 'Fin_Anal', s0: 41.0, s1: 56.5, rays: 12, top: false, spines: 1,
+    medianFin({ name: 'Fin_Anal', s0: 42.5, s1: 55.5, rays: 12, top: false, spines: 1,
       heights: [3.4, 3.9, 4.2, 4.35, 4.4, 4.4, 4.35, 4.25, 4.1, 3.85, 3.5, 3.0], angle0: 38 * DEG, angle1: 64 * DEG, foldAngle: 84 * DEG,
       rect: [0.0, 0.25, 0.5, 0.25], notch: 0.03 }),
     caudalFin([0.5, 0.25, 0.5, 0.375]),
@@ -417,61 +417,64 @@ export function paintFinAtlas(defs, size = ATLAS, log = () => {}) {
       let col, alpha;
       switch (def.type) {
         case 'median': {
-          // white spots in rows on the rays (each ray carries a string of them, staggered between neighbours)
           const ri = Math.round(a), fr = a - ri;
-          const spotRow = (rows, seed, r0) => {
-            const tv = t * rows + 0.5 * (ri & 1) + 0.3 * hash01(ri, 0, 0, seed);
-            let best = 0;
-            for (const cy of [Math.floor(tv) - 1, Math.floor(tv), Math.floor(tv) + 1]) {
-              if (hash01(ri, cy, 1, seed) < 0.15) continue;
-              const oy = 0.5 + 0.35 * (hash01(ri, cy, 2, seed) - 0.5);
-              const ox = 0.08 * (hash01(ri, cy, 3, seed) - 0.5);
-              const r = r0 * (0.7 + 0.5 * hash01(ri, cy, 4, seed));
-              const d = Math.hypot((fr - ox) / r, (tv - cy - oy) / (r * rows * 0.11));
-              best = Math.max(best, smoothstep(1.0, 0.65, d));
-            }
-            return best;
-          };
           const onRay = smoothstep(0.24, 0.06, Math.abs(fr));
+          // dashes along a ray: short marks spaced along it, staggered between neighbours (photographs: the rays of the
+          // dorsals are marked with orange-brown dashes; the membranes are clear)
+          const dashes = (rows, seed, w0) => {
+            const tv = t * rows + 0.5 * (ri & 1) + 0.4 * hash01(ri, 7, 0, seed);
+            const cy = Math.floor(tv), fy = tv - cy;
+            if (hash01(ri, cy, 1, seed) < 0.2) return 0;
+            const len = 0.28 + 0.2 * hash01(ri, cy, 2, seed);
+            return smoothstep(w0, w0 * 0.45, Math.abs(fr)) * smoothstep(0.5 - len, 0.5 - len * 0.6, fy) * smoothstep(0.5 + len, 0.5 + len * 0.6, fy);
+          };
           if (def.name === 'Fin_Dorsal1') {
-            // orange-brown spines in a dark brown membrane, strings of white spots on the spines, a black blotch high
-            // on the first spines, an orange margin (the spine tips run a little free beyond the membrane)
-            const margin = smoothstep(mt - 0.1, mt - 0.03, t);
-            const blotch = smoothstep(0.5, 0.66, t) * smoothstep(3.8, 1.6, a) * (1 - margin);
-            const pearls = spotRow(9, 11, 0.3) * smoothstep(0.04, 0.1, t) * smoothstep(mt - 0.12, mt - 0.2, t) * (1 - blotch);
-            col = [72, 54, 42].map((c, i) => mix(c, [178, 110, 58][i], onRay * 0.85));
-            col = col.map((c, i) => mix(c, [104, 84, 66][i], smoothstep(0.12, 0.0, t) * 0.6));
-            col = col.map((c, i) => mix(c, [242, 236, 222][i], pearls * 0.95));
-            col = col.map((c, i) => mix(c, [24, 20, 18][i], blotch * 0.92));
-            col = col.map((c, i) => mix(c, [214, 122, 56][i], margin * 0.8));
-            alpha = mix(0.7, 0.92, onRay) + 0.2 * pearls + 0.2 * blotch;
+            // clear, faintly grey membrane; orange-brown dashes along the spines; a dark grey-brown band just inside a
+            // narrow white margin, blackest high on the first spines (FishBase/Murdy: dusky inframarginal stripe;
+            // mudskipper.it: narrow whitish margin)
+            const margin = smoothstep(mt - 0.07, mt - 0.025, t);
+            const band = smoothstep(mt - 0.3, mt - 0.17, t) * smoothstep(mt - 0.03, mt - 0.08, t);
+            const blotch = smoothstep(0.42, 0.62, t) * smoothstep(4.5, 1.2, a) * smoothstep(mt - 0.03, mt - 0.1, t);
+            const dash = dashes(8, 11, 0.2) * smoothstep(0.03, 0.08, t) * (1 - band);
+            col = [132, 124, 114].map((c, i) => mix(c, [146, 120, 94][i], onRay * 0.5));
+            col = col.map((c, i) => mix(c, [160, 92, 50][i], dash * 0.85));
+            col = col.map((c, i) => mix(c, [66, 56, 50][i], band * 0.75));
+            col = col.map((c, i) => mix(c, [22, 18, 18][i], blotch * 0.9));
+            col = col.map((c, i) => mix(c, [226, 222, 214][i], margin * 0.85));
+            alpha = 0.16 + 0.26 * onRay + 0.5 * dash + 0.45 * band + 0.65 * blotch + 0.35 * margin;
           } else if (def.name === 'Fin_Dorsal2') {
-            // pale membrane with strings of cream spots, a black submarginal band and a broad orange-red margin
-            const band = smoothstep(mt - 0.42, mt - 0.32, t) * smoothstep(mt - 0.16, mt - 0.24, t);
-            const orange = smoothstep(mt - 0.26, mt - 0.14, t);
-            const pearls = spotRow(6, 23, 0.32) * smoothstep(0.04, 0.1, t) * smoothstep(mt - 0.36, mt - 0.44, t);
-            col = [120, 98, 76].map((c, i) => mix(c, [168, 120, 76][i], onRay * 0.7));
-            col = col.map((c, i) => mix(c, [236, 228, 208][i], pearls * 0.9));
-            col = col.map((c, i) => mix(c, [30, 26, 24][i], band * 0.88));
-            col = col.map((c, i) => mix(c, [212, 104, 52][i], orange * 0.8));
-            alpha = 0.5 + 0.2 * onRay + 0.3 * pearls + 0.4 * band + 0.25 * orange;
+            // clear; a grey-brown mid stripe of dark dashes, orange-brown dashes along the rays below it and dark specks
+            // at the ray bases; a narrow white margin
+            const stripe = smoothstep(0.32, 0.45, t) * smoothstep(0.72, 0.58, t);
+            const dash = dashes(6, 23, 0.22) * smoothstep(0.04, 0.1, t);
+            const base = smoothstep(0.16, 0.04, t) * dashes(16, 29, 0.25);
+            const margin = smoothstep(mt - 0.07, mt - 0.025, t);
+            col = [134, 126, 118].map((c, i) => mix(c, [150, 128, 104][i], onRay * 0.45));
+            col = col.map((c, i) => mix(c, stripe > 0.5 ? [62, 52, 60][i] : [176, 104, 58][i], dash * 0.85));
+            col = col.map((c, i) => mix(c, [60, 50, 44][i], base * 0.7));
+            col = col.map((c, i) => mix(c, [236, 232, 226][i], margin * 0.8));
+            alpha = 0.14 + 0.24 * onRay + 0.55 * dash + 0.45 * base + 0.3 * margin;
           } else {
-            // anal fin: pale yellowish, nearly clear, the rays yellow
-            const dusk = smoothstep(0.55, 0.95, t);
-            col = [200, 186, 146].map((c, i) => mix(c, [196, 164, 84][i], onRay * 0.6));
-            col = col.map((c, i) => mix(c, [150, 136, 104][i], dusk * 0.35));
-            alpha = 0.3 + 0.2 * onRay + 0.15 * dusk;
+            // anal fin: white, nearly clear
+            col = [196, 190, 180].map((c, i) => mix(c, [206, 198, 184][i], onRay * 0.5));
+            alpha = 0.16 + 0.26 * onRay + 0.12 * smoothstep(0.6, 1.0, t);
           }
           break;
         }
         case 'caudal': {
-          // dusky grey-brown, fine dark speckles along the rays, the lower part darker
-          const lower = smoothstep(0.55, 0.9, u);
-          const sp = smoothstep(0.62, 0.8, perlin3(a * 1.7, t * 13, 5, 531) * 0.5 + 0.5 + 0.15 * n1) * smoothstep(0.05, 0.2, t);
-          col = [132, 124, 110].map((c) => c * (0.92 + 0.12 * n1));
-          col = col.map((c, i) => mix(c, [62, 56, 50][i], sp * 0.6));
-          col = col.map((c, i) => mix(c, [74, 68, 62][i], lower * 0.55));
-          alpha = 0.5 + 0.25 * sp + 0.18 * lower;
+          // dusky: rows of dark streaks along the rays, heaviest in the upper middle of the fin, the margin pale
+          const ri = Math.round(a);
+          const upper = smoothstep(0.85, 0.35, u) * smoothstep(0.0, 0.25, u);
+          const streak = smoothstep(0.55, 0.75, perlin3(ri * 3.1, t * 9, 5, 531) * 0.5 + 0.5 + 0.15 * n1) * smoothstep(0.24, 0.05, rayD) * smoothstep(0.05, 0.2, t);
+          // its base sheathed in the peduncle's skin (opaque, the body's colour), so the fin grows out of the tail
+          const sheath = smoothstep(0.3, 0.1, t);
+          col = [128, 120, 108].map((c) => c * (0.92 + 0.12 * n1));
+          col = col.map((c, i) => mix(c, [58, 50, 46][i], streak * (0.5 + 0.45 * upper)));
+          col = col.map((c, i) => mix(c, [196, 190, 180][i], smoothstep(0.78, 1.0, t) * 0.4));
+          // (the sheath carries the peduncle's speckles)
+          const sk = smoothstep(0.6, 0.75, perlin3(a * 2.3, t * 22, 9, 537) * 0.5 + 0.5);
+          col = col.map((c, i) => mix(c, mix([112, 106, 94][i], [52, 48, 42][i], sk * 0.7), sheath));
+          alpha = 0.2 + 0.25 * smoothstep(0.24, 0.05, rayD) + 0.45 * streak * (0.5 + 0.5 * upper) + 0.12 * upper + 0.85 * sheath;
           break;
         }
         case 'pectoral': {
