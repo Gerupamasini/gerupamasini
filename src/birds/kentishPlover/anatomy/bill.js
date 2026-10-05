@@ -216,7 +216,7 @@ export const BILL_SHEATH = {
   slope: [[-90, 0.5], [-45, 0.38], [0, 0.3], [90, 0.3]], // pad per mm at the feather line, by φ
   // pad growth (per mm²) behind it, by φ: steepest under the bill (the chin falls away to the throat), steep over the
   // culmen (the forehead), least at the sides (the lores taper back to the eye)
-  curve: [[-90, 1.0], [-45, 0.35], [0, 0.12], [45, 0.12], [90, 0.16]],
+  curve: [[-90, 1.0], [-45, 0.4], [0, 0.24], [45, 0.24], [90, 0.2]],
   sink: 0.45, // how far under the keratin the sheath lies ahead of the line (≥ groove + nostril depth)
   back: 27, // capped behind the mesh base (inside the face)
 };

@@ -330,10 +330,10 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     // in females / juveniles (p001, p010, p035, p045), only below the eye in the male's black mask (p012, p043)
     // (the opening is an almond — feathered lid folds above and below, bodySculpt.adds — so the lid margin and
     // the ring are drawn on an ellipse in the eye's frame, 1.5× flatter vertically)
-    vec3 eq = vec3(ax, p.y, p.z) - vec3(7.6, 95.0, 25.5);
-    float es = dot(eq, vec3(0.954, 0.130, 0.270));
-    float eV = dot(eq, vec3(0.125, -0.991, 0.035)); // + ventral
-    float eU = dot(eq, vec3(-0.268, -0.036, 0.963)); // + anterior
+    vec3 eq = vec3(ax, p.y, p.z) - vec3(6.300, 95.000, 25.500);
+    float es = dot(eq, vec3(0.927, 0.13, 0.352));
+    float eV = dot(eq, vec3(0.121, -0.991, 0.046)); // + ventral
+    float eU = dot(eq, vec3(-0.351, -0.036, 0.936)); // + anterior
     float er = length(vec2(eU, (eV - 0.15) * 1.5));
     float eAng = atan(eV, eU); // + ventral, 0 anterior
     float eRim = 1.0 - smoothstep(2.95, 3.25, er + jitter * 0.1 + 0.04 * sin(eAng * 9.0 + jitter * 3.0));

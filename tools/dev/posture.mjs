@@ -12,7 +12,7 @@ const J = CFG.joints;
 const poses = process.argv.slice(2).length ? process.argv.slice(2) : ['stand', 'alert', 'walk@0.25', 'run@0.25', 'forage', 'peck@0.28', 'restOneLeg', 'restTucked', 'sit', 'flight@0.3', 'glide'];
 const m = new KentishPloverModel({ lods: [1], shadows: false });
 const a = new KentishPloverAnimator(m, { seed: 1 });
-const head = CFG.bodySculpt.prims.find((p) => p.name === 'head');
+const head = CFG.bodySculpt.headContact;
 const v = new THREE.Vector3();
 const mm = (p) => p.clone().multiplyScalar(1000);
 const local = (bone, p) => new THREE.Vector3(...p.map((x, i) => (x - J[bone][i]) * 0.001)).applyMatrix4(a.b[bone].matrixWorld).multiplyScalar(1000);
