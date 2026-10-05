@@ -10,6 +10,8 @@ export const ToolSchema = z.object({
   /** false: listed for the shop and the plan, not usable yet */
   available: z.boolean().default(true),
   params: z.record(z.string(), z.number()).default({}),
+  /** CR to buy it in the shop (0 = owned from the start) */
+  price_cr: z.number().default(0),
   description: z.string().default(''),
 });
 

@@ -2,6 +2,8 @@ import { h, Fragment } from 'preact';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import { TankPanel } from '../tank/TankPanel';
+import { ToolsPanel } from './ToolsPanel';
+import { nextLevelAt } from '../../systems/Encyclopedia';
 import { TideGauge } from '../hud/TideGauge';
 import { formatJst } from '../../core/Time';
 import { lunarDay, tideName } from '../../core/Moon';
@@ -25,8 +27,8 @@ export function HomeMenu({ app }: { app: App }) {
   const info = ui.homeInfo.value;
   const enc = app.encyclopedia;
   const research = enc.research.value;
-  const level = Math.floor(Math.sqrt(research / 100)) + 1;
-  const nextAt = 100 * level * level;
+  const level = enc.level;
+  const nextAt = nextLevelAt(level);
   const infoSp = info ? app.data.species.get(info.speciesId) : undefined;
   const trend: 'up' | 'down' | 'flat' = hud.tideRate > 0.02 ? 'up' : hud.tideRate < -0.02 ? 'down' : 'flat';
   return (
@@ -62,7 +64,7 @@ export function HomeMenu({ app }: { app: App }) {
 
       <nav class="glass home-nav rise d2" aria-label="メニュー">
         <button class="nav-item" onClick={() => app.openOverlay('zukan')}>{t('zukan.title')}<Key k="Tab" /></button>
-        <button class="nav-item" onClick={() => app.openShop()}>{t('home.shop')}<span class="key" style={{ visibility: 'hidden' }}>·</span></button>
+        <button class={`nav-item ${panel === 'tools' ? 'on' : ''}`} onClick={() => app.openShop()}>{t('tools.title')}<span class="key" style={{ visibility: 'hidden' }}>·</span></button>
         <button class="nav-primary" onClick={() => void app.enterField()}>{t('home.goShort')} <ArrowIcon size={16} /></button>
         <button class={`nav-item ${panel === 'tank' ? 'on' : ''}`} onClick={() => app.openTankEdit()}>{t('home.tankShort')}<span class="key" style={{ visibility: 'hidden' }}>·</span></button>
         <button class="nav-item" onClick={() => app.openOverlay('tidetable')}>{t('home.tideTable')}<Key k="T" /></button>
@@ -83,6 +85,7 @@ export function HomeMenu({ app }: { app: App }) {
         </div>
       )}
       {panel === 'tank' && <TankPanel app={app} />}
+      {panel === 'tools' && <ToolsPanel app={app} />}
     </Fragment>
   );
 }

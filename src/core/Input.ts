@@ -1,7 +1,7 @@
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'run' | 'crouch'
   | 'interact' | 'observe' | 'zukan' | 'menu' | 'speedUp' | 'speedDown' | 'home' | 'ticket' | 'debug' | 'zoom' | 'zoomIn' | 'zoomOut' | 'map'
-  | 'tool1' | 'tool2';
+  | 'tool1' | 'tool2' | 'caseView';
 
 const BINDINGS: Record<Action, string[]> = {
   forward: ['KeyW', 'ArrowUp'],
@@ -25,6 +25,7 @@ const BINDINGS: Record<Action, string[]> = {
   map: ['KeyM'],
   tool1: ['Digit1'],
   tool2: ['Digit2'],
+  caseView: ['KeyQ'],
 };
 
 /** Keyboard and mouse state with per-frame edge detection. */

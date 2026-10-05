@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Capture, CAPTURE_PHASE_SEC, REVEAL_SEC, catchLabel } from '../../src/systems/Capture';
 
-const tool = { id: 'hand_net', ja: 'タモ', type: 'capture' as const, targets: [], minigame: 'none' as const, available: true, params: {}, description: '' };
+const tool = { id: 'hand_net', ja: 'タモ', type: 'capture' as const, targets: [], minigame: 'none' as const, available: true, params: {}, price_cr: 0, description: '' };
 const ind = (name: string, len: number) => ({ id: name, species: { names: { ja: name } }, length_mm: len }) as unknown as import('../../src/creatures/Individual').Individual;
 
 describe('タモ capture sequence', () => {

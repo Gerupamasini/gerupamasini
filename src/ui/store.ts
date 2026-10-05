@@ -3,9 +3,10 @@ import type { TideExtremum } from '../tide/TideModel';
 import type { IndividualRecord } from '../creatures/Individual';
 
 /** the tool in the player's hands on the flat */
-export type ToolId = 'hand_net' | 'shovel';
+/** a tool id from items/tools.json */
+export type ToolId = string;
 
-export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'error';
+export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'error';
 
 export interface HudState {
   timeText: string;
@@ -71,7 +72,7 @@ export const ui = {
   debugState: signal<DebugState>({ timeOverride: false, tideOverride: null, overcast: 0, markers: true, stats: { calls: 0, tris: 0, creatures: 0, visible: 0, lod1: 0, clamsNear: 0, clamsTotal: 0 } }),
   markers: signal<Marker[]>([]),
   /** side panel shown on the home screen */
-  homePanel: signal<'none' | 'tank'>('none'),
+  homePanel: signal<'none' | 'tank' | 'tools'>('none'),
   /** creature info card on the home screen */
   homeInfo: signal<IndividualRecord | null>(null),
   /** full-map overview on the flat (M) */

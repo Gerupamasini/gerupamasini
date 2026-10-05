@@ -1,3 +1,4 @@
+import { skillKeyOf } from '../systems/Encyclopedia';
 import { h, Fragment } from 'preact';
 import { useEffect } from 'preact/hooks';
 import type { App } from '../app/App';
@@ -14,6 +15,7 @@ import { ObserveOverlay } from './observe/ObserveOverlay';
 import { CaptureOverlay } from './capture/CaptureOverlay';
 import { HomeMenu } from './home/HomeMenu';
 import { TankPanel } from './tank/TankPanel';
+import { CaseOverlay } from './field/CaseOverlay';
 import { DebugPanel } from './debug/DebugPanel';
 import { CreatureMarkers } from './debug/CreatureMarkers';
 import { ArrowIcon, Key, KeyHint, MoonIcon } from './common/Icons';
@@ -28,7 +30,7 @@ export function Root({ app }: { app: App }) {
     app.canvas.addEventListener('click', onClick);
     return () => app.canvas.removeEventListener('click', onClick);
   }, [app]);
-  const inField = screen === 'field' || screen === 'capture' || screen === 'observe';
+  const inField = screen === 'field' || screen === 'capture' || screen === 'observe' || screen === 'caseView';
   return (
     <Fragment>
       {screen === 'boot' && <Loading />}
@@ -39,6 +41,7 @@ export function Root({ app }: { app: App }) {
       {ui.transition.value && <Transition label={ui.transition.value} />}
       {(screen === 'field' || screen === 'capture') && <Hud app={app} />}
       {screen === 'observe' && <ObserveOverlay app={app} />}
+      {screen === 'caseView' && <CaseOverlay app={app} />}
       {screen === 'capture' && <CaptureOverlay app={app} />}
       {inField && <CreatureMarkers />}
       {screen === 'field' && ui.mapOpen.value && <MapOverlay app={app} />}
@@ -134,7 +137,7 @@ function Title({ app }: { app: App }) {
 
 const KEY_HINTS: [string[], string][] = [
   [['W', 'A', 'S', 'D'], '移動'], [['Shift'], '走る'], [['C'], '視点'], [['E'], '採集'], [['F'], '観察'],
-  [['M'], '地図'], [['Tab'], '図鑑'], [['H'], '自宅'], [['T'], 'チケット'], [['Esc'], 'メニュー'],
+  [['Q'], 'ケース'], [['M'], '地図'], [['Tab'], '図鑑'], [['H'], '自宅'], [['T'], 'チケット'], [['Esc'], 'メニュー'],
 ];
 
 function Hud({ app }: { app: App }) {
@@ -171,9 +174,11 @@ function Hud({ app }: { app: App }) {
           <div class="fps">{hud.fps} fps</div>
         </div>
         <div class="hud-tools" data-skills={Object.values(app.encyclopedia.skills.value).join(',')}>
-          {(['hand_net', 'shovel'] as const).map((id, i) => (
-            <button key={id} class={`tool-chip ${ui.tool.value === id ? 'on' : ''}`} onClick={() => app.setTool(id)}><Key k={String(i + 1)} />{app.data.tools.get(id)?.ja ?? id}{app.encyclopedia.skillLevel(id) > 0 && <span class="lv">Lv{app.encyclopedia.skillLevel(id)}</span>}</button>
-          ))}
+          {app.encyclopedia.loadout.value.map((id, i) => {
+            const tool = app.data.tools.get(id);
+            const lv = tool ? app.encyclopedia.skillLevel(skillKeyOf(tool)) : 0;
+            return <button key={id} class={`tool-chip ${ui.tool.value === id ? 'on' : ''}`} onClick={() => app.setTool(id)}><Key k={String(i + 1)} />{tool?.ja ?? id}{lv > 0 && <span class="lv">Lv{lv}</span>}</button>;
+          })}
         </div>
       </div>
       <div class="reticle" />

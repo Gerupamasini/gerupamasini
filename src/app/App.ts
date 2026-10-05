@@ -26,6 +26,10 @@ import type { Individual, IndividualRecord } from '../creatures/Individual';
 import { Encyclopedia } from '../systems/Encyclopedia';
 import { Observation } from '../systems/Observation';
 import { CAPTURE_PHASE_SEC, Capture } from '../systems/Capture';
+import { skillKeyOf } from '../systems/Encyclopedia';
+import { FieldCase } from './FieldCase';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { minDepthFor } from '../creatures/Individual';
 import { ui, t, toast, type Screen, type Marker, type ToolId } from '../ui/store';
 import { checkForNewBuild } from '../core/Build';
 import { Root } from '../ui/Root';
@@ -63,6 +67,10 @@ export class App {
   clams: ClamField | null = null;
   /** the tool of the capture in progress (its proficiency grows with what it brings up) */
   private lastTool: ToolDef | null = null;
+  /** the observation case set down on the flat, and the camera that looks into it */
+  fieldCase: FieldCase | null = null;
+  private caseControls: OrbitControls | null = null;
+  private caseSavedNear = 0.05;
   /** the clam the player is looking at (index into the field), or -1 */
   targetClam = -1;
   /** a clam built in full for observation */
@@ -142,7 +150,7 @@ export class App {
   }
 
   private worldVisible(): boolean {
-    return this.mode === 'field' || this.mode === 'observe' || this.mode === 'capture';
+    return this.mode === 'field' || this.mode === 'observe' || this.mode === 'capture' || this.mode === 'caseView';
   }
 
   /** true when the tank should be on screen (home, or an overlay opened from home) */
@@ -156,7 +164,7 @@ export class App {
   private setMode(m: Screen): void {
     ui.screen.value = m;
     this.input.dragLook = m === 'field';
-    const overlay = m !== 'field' && m !== 'observe' && m !== 'capture' && m !== 'home' && m !== 'tankEdit';
+    const overlay = m !== 'field' && m !== 'observe' && m !== 'capture' && m !== 'home' && m !== 'tankEdit' && m !== 'caseView';
     this.input.blocked = overlay;
     if (m !== 'field' && m !== 'capture') this.input.exitPointerLock();
     if (this.player) this.player.enabled = m === 'field';
@@ -209,6 +217,7 @@ export class App {
   async startNewGame(): Promise<void> {
     this.save = emptySave(this.data.manifest.defaultMap, Date.now());
     this.encyclopedia.applySave(this.save);
+    this.syncLoadout();
     this.removed.clear();
     this.pendingPose = null;
     this.enterHome();
@@ -220,6 +229,7 @@ export class App {
     if (!s) return this.startNewGame();
     this.save = s;
     this.encyclopedia.applySave(s);
+    this.syncLoadout();
     this.removed.clear();
     for (const id of s.removedIndividuals) this.removed.add(id);
     if (Date.now() < s.lastRealMs - 5 * 60 * 1000) {
@@ -263,8 +273,11 @@ export class App {
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
       this.net = new NetView(this.world.scene);
       this.shovel = new ShovelView(this.world.scene);
-      this.net.setHeld(this.tool === 'hand_net');
-      this.shovel.setHeld(this.tool === 'shovel');
+      this.fieldCase = new FieldCase();
+      this.world.scene.add(this.fieldCase.group);
+      this.world.scene.add(this.fieldCase.animals);
+      this.net.setHeld(this.toolType() === 'capture');
+      this.shovel.setHeld(this.toolType() === 'dig');
       this.clams = new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
       this.world.scene.add(this.clams.group);
       this.capture.onSwung = (caught) => this.onToolSwung(caught);
@@ -296,7 +309,7 @@ export class App {
 
   closeOverlay(): void {
     const from = ui.overlayFrom.value;
-    if (from === 'observe' || from === 'home' || from === 'field' || from === 'tankEdit') this.setMode(from);
+    if (from === 'observe' || from === 'home' || from === 'field' || from === 'tankEdit' || from === 'caseView') this.setMode(from);
     else this.setMode(this.world ? 'field' : this.save ? 'home' : 'title');
   }
 
@@ -479,16 +492,60 @@ export class App {
     return ui.tool.value;
   }
 
-  setTool(id: ToolId): void {
-    if (ui.tool.value === id) return;
+  /** the definition of the tool in hand */
+  toolDef(id: ToolId = this.tool): ToolDef | undefined {
+    return this.data.tools.get(id);
+  }
+
+  toolType(id: ToolId = this.tool): ToolDef['type'] | undefined {
+    return this.toolDef(id)?.type;
+  }
+
+  /** the net in hand, or the first net carried (the HUD and the reach are about the net even while digging) */
+  netDef(): ToolDef | undefined {
+    const cur = this.toolDef();
+    if (cur?.type === 'capture') return cur;
+    const id = this.encyclopedia.loadout.value.find((x) => this.toolType(x) === 'capture');
+    return id ? this.toolDef(id) : this.data.tools.get('hand_net');
+  }
+
+  /** The tools carried are on the number keys in loadout order; the hand starts on the first. */
+  syncLoadout(): void {
+    const carried = this.encyclopedia.loadout.value;
+    if (!carried.includes(ui.tool.value)) this.setTool(carried[0] ?? 'hand_net', true);
+  }
+
+  /** debug: CR by hand */
+  addMoney(cr: number): void {
+    this.encyclopedia.addMoney(cr);
+    this.requestSave();
+  }
+
+  buyTool(id: ToolId): void {
+    const tool = this.data.tools.get(id);
+    if (!tool) return;
+    if (!this.encyclopedia.buy(tool)) toast(t('tools.cannotBuy'), 'warn');
+    this.requestSave();
+  }
+
+  toggleCarry(id: ToolId): void {
+    if (!this.encyclopedia.toggleCarry(id)) toast(t('tools.loadoutHint'), 'warn');
+    this.syncLoadout();
+    this.requestSave();
+  }
+
+  setTool(id: ToolId, force = false): void {
+    if (ui.tool.value === id && !force) return;
+    if (!this.data.tools.has(id)) return;
     ui.tool.value = id;
-    this.net?.setHeld(id === 'hand_net');
-    this.shovel?.setHeld(id === 'shovel');
+    const type = this.toolType(id);
+    this.net?.setHeld(type === 'capture');
+    this.shovel?.setHeld(type === 'dig');
   }
 
   /** [E] on the flat: use the tool in hand where the player is looking. */
   useTool(): void {
-    if (this.tool === 'hand_net') this.swingNet();
+    if (this.toolType() === 'capture') this.swingNet();
     else this.dig();
   }
 
@@ -507,20 +564,47 @@ export class App {
     if (!creatures || !player) return out;
     for (const ind of creatures.individuals) {
       if (!ind.species.collectable || ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
-      if (ind.pos.distanceTo(player.position) > REACH + 1.5) continue;
+      if (ind.pos.distanceTo(player.position) > this.netReach() + 1.5) continue;
       // the hoop is judged against the body as drawn (the anchor) as well as the logical position, with the animal's own size as margin
-      const margin = Math.max(0.06, ind.length_mm / 2000), scale = this.netZoneScale();
-      let e = NetView.inZone(this.camera, ind.pos, margin, scale);
+      const margin = Math.max(0.06, ind.length_mm / 2000), scale = this.netZoneScale(), reach = this.netReach();
+      let e = NetView.inZone(this.camera, ind.pos, margin, scale, reach);
       const anchor = creatures.anchorOf(ind.id);
-      if (anchor) { const ea = NetView.inZone(this.camera, anchor, margin, scale); if (ea >= 0 && (e < 0 || ea < e)) e = ea; }
+      if (anchor) { const ea = NetView.inZone(this.camera, anchor, margin, scale, reach); if (ea >= 0 && (e < 0 || ea < e)) e = ea; }
       if (e >= 0) out.push({ ind, edge: e });
     }
     return out;
   }
 
-  /** The hoop grows with the hand's proficiency: ×1 untrained, ×1.6 at the top level. */
+  /** The hoop grows with the hand's proficiency (×1 untrained, ×1.6 at the top level) and with the net itself. */
   netZoneScale(): number {
-    return 1 + 0.12 * this.encyclopedia.skillLevel('hand_net');
+    return (1 + 0.12 * this.encyclopedia.skillLevel('hand_net')) * (this.netDef()?.params.hoop ?? 1);
+  }
+
+  /**
+   * How far down the line of sight the net reaches. The handle and the arm sweep a fixed distance over the ground
+   * (`reach_m`, from the feet), so from a standing eye the same spot is further along the line of sight: looking down
+   * steeply from 1.5 m up, the hoop still gets to the bed.
+   */
+  netReach(): number {
+    return this.reachAlongSight(this.netDef()?.params.reach_m ?? 1.5);
+  }
+
+  /** A reach of `horiz` metres over the ground from the feet, as a distance down the line of sight. */
+  private reachAlongSight(horiz: number): number {
+    const p = this.player;
+    if (!p) return horiz;
+    const eyeUp = Math.max(0.3, this.camera.position.y - p.position.y);
+    const cos = Math.max(0.08, Math.cos(p.pitch));
+    const tMax = Math.sqrt(horiz * horiz + eyeUp * eyeUp) + 0.1;
+    return Math.min(horiz / cos, tMax);
+  }
+
+  /** The spot the shovel would dig: the ground under the reticle, and whether the arm gets there. */
+  digTarget(): { p: Vector3; far: boolean } | null {
+    const reach = this.reachAlongSight(this.data.tools.get('shovel')?.params.reach_m ?? 1.2);
+    const p = this.groundUnderReticle(reach + 1.5);
+    if (!p) return null;
+    return { p: p.clone(), far: p.distanceTo(this.camera.position) > reach };
   }
 
   /** How much deep water slows the swing at the player's feet: 0 in the shallows, 1 at knee depth and beyond. */
@@ -529,15 +613,16 @@ export class App {
   }
 
   swingNet(): void {
-    const tool = this.data.tools.get('hand_net');
+    const tool = this.netDef();
     const creatures = this.creatures, player = this.player, world = this.world;
     if (!tool || !creatures || !player || !world || this.capture.active) return;
     const free = Math.max(0, this.encyclopedia.caseMax - this.encyclopedia.caseItems.value.length);
     const caught: Individual[] = [], startled: Individual[] = [];
     const hits = this.netZoneHits();
-    // deep water drags on the net, a practised hand is quicker
-    const slow = this.swingSlow(), skill = this.encyclopedia.skillLevel('hand_net');
-    const swingSec = CAPTURE_PHASE_SEC.swing * (1 + 1.2 * slow) * (1 - 0.05 * skill);
+    // deep water drags on the net (less on a long handle), a practised hand is quicker, a standing swing bends down first
+    const slow = this.swingSlow() * (tool.params.deep ?? 1), skill = this.encyclopedia.skillLevel('hand_net');
+    const quiet = tool.params.quiet ?? 1, stand = player.crouching ? 1 : 1.15;
+    const swingSec = CAPTURE_PHASE_SEC.swing * (tool.params.swing ?? 1) * stand * (1 + 1.2 * slow) * (1 - 0.05 * skill);
     for (const { ind, edge } of hits) {
       // an animal under the hoop is in the bag unless it was already alarmed enough to bolt in time: the odds of
       // getting away grow with the square of its alertness, a little at the rim of the hoop, and less from behind
@@ -546,7 +631,7 @@ export class App {
       const facing = (Math.sin(ind.heading) * dx + Math.cos(ind.heading) * dz) / len;
       let escape = 0.6 * ind.alert * ind.alert * (0.5 + cap.alertPenalty) + 0.25 * edge * edge + 0.1 * cap.baseDifficulty + (facing > 0.3 ? 0.05 : facing < -0.3 ? -0.08 : 0);
       // a slow swing in deep water gives everything time to go; a practised hand gives less
-      escape = (escape + 0.35 * slow * (0.5 + ind.alert)) * (1 - 0.1 * skill);
+      escape = (escape + 0.35 * slow * (0.5 + ind.alert)) * (1 - 0.1 * skill) * quiet;
       escape = Math.min(0.85, Math.max(0, escape));
       if (this.capture.forceCatch || (ind.rng.next() > escape && caught.length < free)) caught.push(ind);
     }
@@ -573,9 +658,11 @@ export class App {
     const tool = this.data.tools.get('shovel');
     const world = this.world, player = this.player, clams = this.clams;
     if (!tool || !world || !player || !clams || this.capture.active) return;
-    const p = new Vector3();
-    ShovelView.digPoint(this.camera, (x, z) => world.terrain.heightAt(x, z), p);
+    const tg = this.digTarget();
+    if (!tg || tg.far) { toast(t('hud.tooFar'), 'warn'); return; }
+    const p = tg.p;
     if (world.habitat.depthAt(p.x, p.z) > 0.15) { toast(t('hud.tooDeepToDig'), 'warn'); return; }
+    this.shovel?.setDigPoint(p, this.camera);
     const nowSec = this.clock.nowGame() / 1000;
     // a practised hand finds the clam under a wider blade
     const k = clams.dig(p.x, p.z, (tool.params.radius ?? 0.14) * (1 + 0.1 * this.encyclopedia.skillLevel('shovel')), nowSec);
@@ -609,7 +696,7 @@ export class App {
   private onToolSwung(caught: Individual[]): void {
     if (!this.creatures || !this.player) return;
     this.player.applyKick(0.06);
-    const shovel = this.capture.state.value?.toolId === 'shovel';
+    const shovel = this.toolType(this.capture.state.value?.toolId ?? '') === 'dig';
     if (!shovel) for (const ind of caught) this.creatures.remove(ind.id);
     const first = caught[0];
     if (first) void this.displayModelFor(first.species).then((obj) => {
@@ -637,7 +724,7 @@ export class App {
     this.net?.hide();
     this.shovel?.hide();
     for (const ind of caught) this.encyclopedia.onCaptured(ind, this.clock.nowGame(), this.world.tideLevel);
-    if (caught.length && this.lastTool) this.encyclopedia.addSkill(this.lastTool.id, this.lastTool.ja, caught.length);
+    if (caught.length && this.lastTool) this.encyclopedia.addSkill(skillKeyOf(this.lastTool), this.lastTool.type === 'capture' ? t('tools.nets') : this.lastTool.ja, caught.length);
     this.setMode('field');
     this.requestSave();
   }
@@ -651,19 +738,100 @@ export class App {
     });
   }
 
-  /** debug: set a tool's catch count (its proficiency) by hand */
+  /** debug: set a tool's catch count (its proficiency) by hand; nets share one */
   setSkill(toolId: ToolId, count: number): void {
-    this.encyclopedia.setSkill(toolId, count, this.data.tools.get(toolId)?.ja);
+    this.encyclopedia.setSkill(toolId, count, toolId === 'hand_net' ? t('tools.nets') : this.data.tools.get(toolId)?.ja);
   }
 
+  /**
+   * Let an animal in the case go. On the flat it goes back into the nearest water and bolts; at home it is simply
+   * gone.
+   */
   caseRelease(rec: IndividualRecord): void {
     this.encyclopedia.release(rec);
+    const world = this.world, creatures = this.creatures, player = this.player;
+    if (world && creatures && player && this.worldVisible()) {
+      const sp = this.data.species.get(rec.speciesId);
+      if (sp && sp.locomotion !== 'burrow') {
+        const from = this.fieldCase?.visible ? this.fieldCase.group.position : player.position;
+        const need = minDepthFor(sp, rec.length_mm) + 0.02;
+        const wet = world.habitat.nearestWater(from.x, from.z, need, 10) ?? from;
+        const seed = hashInts(rec.number, rec.caughtAt % 100000) ^ 0x5bd1e995;
+        const ind = generateIndividual(sp, seed, wet.x, wet.z, world.habitat.coarseIndex(wet.x, wet.z), 0, this.clock.nowGame(), [rec.length_mm, rec.length_mm]);
+        ind.alert = 0.8;
+        creatures.spawn(ind);
+        const away = new Vector3().subVectors(ind.pos, player.position).setY(0).normalize().multiplyScalar(1.5);
+        creatures.forceIntent(ind.id, { id: -1, kind: 'flee', urgency: 1, seconds: 4, target: ind.pos.clone().add(away), from: player.position.clone() });
+      }
+    }
+    this.refreshCase();
     this.requestSave();
   }
 
   caseToResearch(rec: IndividualRecord): void {
     this.encyclopedia.toResearch(rec);
+    this.refreshCase();
     this.requestSave();
+  }
+
+  private refreshCase(): void {
+    if (this.fieldCase?.visible) void this.fieldCase.setOccupants(this.encyclopedia.caseItems.value, (id) => this.data.species.get(id));
+  }
+
+  /** A dry enough spot for the case near the player, ahead if possible: the base must not float. */
+  private caseSpot(): Vector3 {
+    const world = this.world!, p = this.player!;
+    const f = p.forward.clone();
+    const ok = (x: number, z: number) => world.habitat.depthAt(x, z) < 0.02;
+    const c = new Vector3();
+    for (const d of [0.75, 0.55, 0.95, 1.2, 0.4]) {
+      c.set(p.position.x + f.x * d, 0, p.position.z + f.z * d);
+      if (ok(c.x, c.z)) return c;
+    }
+    for (let ring = 1; ring <= 5; ring++) for (let k = 0; k < 10; k++) {
+      const ang = p.yaw + Math.PI + (k / 10) * Math.PI * 2, r = ring * 0.6;
+      c.set(p.position.x - Math.sin(ang) * r, 0, p.position.z - Math.cos(ang) * r);
+      if (ok(c.x, c.z)) return c;
+    }
+    return c.set(p.position.x + f.x * 0.75, 0, p.position.z + f.z * 0.75);
+  }
+
+  /** Set the observation case down ahead and look into it. */
+  openCase(): void {
+    const world = this.world, player = this.player, fc = this.fieldCase;
+    if (!world || !player || !fc || this.mode !== 'field') return;
+    const spot = this.caseSpot();
+    fc.place(spot.x, world.terrain.heightAt(spot.x, spot.z), spot.z, player.yaw);
+    void fc.setOccupants(this.encyclopedia.caseItems.value, (id) => this.data.species.get(id));
+    const center = fc.center.clone();
+    this.caseSavedNear = this.camera.near;
+    this.camera.near = 0.01;
+    this.camera.updateProjectionMatrix();
+    const controls = new OrbitControls(this.camera, this.canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.1;
+    controls.minDistance = 0.18;
+    controls.maxDistance = 1.6;
+    controls.maxPolarAngle = Math.PI * 0.49;
+    controls.enablePan = false;
+    controls.zoomSpeed = 0.8;
+    controls.target.copy(center);
+    // from the player's side, a little above the water line, like kneeling in front of it
+    const back = player.forward.clone().multiplyScalar(-0.66);
+    this.camera.position.copy(center).add(back).add(new Vector3(0, 0.3, 0));
+    controls.update();
+    this.caseControls = controls;
+    this.setMode('caseView');
+  }
+
+  closeCase(): void {
+    if (this.mode !== 'caseView') return;
+    this.caseControls?.dispose();
+    this.caseControls = null;
+    this.camera.near = this.caseSavedNear;
+    this.camera.updateProjectionMatrix();
+    this.fieldCase?.takeUp();
+    this.setMode('field');
   }
 
   async tankRelease(rec: IndividualRecord): Promise<void> {
@@ -671,8 +839,10 @@ export class App {
     this.tank.removeOccupant(rec.id);
   }
 
+  /** The tools drawer on the home screen: what is owned, what goes to the flat, and the shop. */
   openShop(): void {
-    toast(`${t('home.shop')}: ${t('home.soon')}`, 'info');
+    ui.homeInfo.value = null;
+    ui.homePanel.value = ui.homePanel.value === 'tools' ? 'none' : 'tools';
   }
 
   private ndcOf(clientX: number, clientY: number): [number, number] {
@@ -803,9 +973,15 @@ export class App {
         else if (this.input.pressed('home')) this.enterHome();
         else if (this.input.pressed('observe') && this.target) this.enterObserve(this.target);
         else if (this.input.pressed('observe') && this.targetClam >= 0) this.observeClam(this.targetClam);
-        else if (this.input.pressed('tool1')) this.setTool('hand_net');
-        else if (this.input.pressed('tool2')) this.setTool('shovel');
+        else if (this.input.pressed('tool1') && this.encyclopedia.loadout.value[0]) this.setTool(this.encyclopedia.loadout.value[0]);
+        else if (this.input.pressed('tool2') && this.encyclopedia.loadout.value[1]) this.setTool(this.encyclopedia.loadout.value[1]);
         else if (this.input.pressed('interact')) this.useTool();
+        else if (this.input.pressed('caseView')) this.openCase();
+        break;
+      case 'caseView':
+        if (this.input.pressed('caseView') || this.input.pressed('menu')) this.closeCase();
+        else if (this.input.pressed('zukan')) this.openOverlay('zukan');
+        else this.caseControls?.update();
         break;
       case 'observe':
         if (this.input.pressed('observe') || this.input.pressed('menu')) this.exitObserve();
@@ -859,8 +1035,10 @@ export class App {
     } else if (world && player && creatures) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       else if (mode === 'capture') player.idle(dt);
-      this.net?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'hand_net' ? this.capture.state.value : null, world.tideLevel, ui.debug.value && this.tool === 'hand_net' && (mode === 'field' || mode === 'capture'), this.netZoneScale());
-      this.shovel?.update(this.camera, dt, mode === 'capture' && this.capture.state.value?.toolId === 'shovel' ? this.capture.state.value : null);
+      this.fieldCase?.update(dt, player.position);
+      const capTool = this.capture.state.value ? this.toolType(this.capture.state.value.toolId) : undefined;
+      this.net?.update(this.camera, dt, mode === 'capture' && capTool === 'capture' ? this.capture.state.value : null, world.tideLevel, ui.debug.value && this.toolType() === 'capture' && (mode === 'field' || mode === 'capture'), this.netZoneScale(), this.netReach());
+      this.shovel?.update(this.camera, dt, mode === 'capture' && capTool === 'dig' ? this.capture.state.value : null);
       this.clams?.update(player.position, this.worldVisible() ? dt : 0, gameMs / 1000, (x, z) => world.habitat.waterAt(x, z));
       creatures.update({
         dt: this.worldVisible() ? dt : 0, gameMs, playerPos: player.position, camera: this.camera, simScale: this.simScale,
@@ -986,9 +1164,15 @@ export class App {
     if (this.mode === 'field' && this.creatures && player) {
       this.target = this.creatures.pickTarget(this.camera, 7);
       // the net: something catchable where the hoop would go through the water
-      const inReach = this.tool === 'hand_net' && this.netZoneHits().length > 0;
-      const deep = this.tool === 'hand_net' && this.swingSlow() >= 0.5 ? `　${t('hud.deepSlow')}` : '';
-      const toolHint = this.tool === 'hand_net' ? (inReach ? `[E] ${t('hud.swing')}${deep}` : deep.trim()) : `[E] ${t('hud.dig')}`;
+      const netInHand = this.toolType() === 'capture';
+      const inReach = netInHand && this.netZoneHits().length > 0;
+      const deep = netInHand && this.swingSlow() * (this.netDef()?.params.deep ?? 1) >= 0.5 ? `　${t('hud.deepSlow')}` : '';
+      // the net: a swing when something is under the hoop; "too far" when the animal looked at is beyond the handle
+      const tooFarNet = netInHand && !inReach && !!this.target && this.target.species.collectable && this.target.pos.distanceTo(this.camera.position) > this.netReach() + 0.2;
+      const dg = this.toolType() === 'dig' ? this.digTarget() : null;
+      const toolHint = netInHand
+        ? (inReach ? `[E] ${t('hud.swing')}${deep}` : tooFarNet ? t('hud.tooFar') : deep.trim())
+        : (dg && !dg.far ? `[E] ${t('hud.dig')}` : t('hud.tooFar'));
       // a clam's siphon holes under the reticle
       this.targetClam = -1;
       if (this.clams && this.world) {
@@ -999,7 +1183,8 @@ export class App {
         const sp = this.target.species;
         prompt = `${sp.names.ja}   [F] ${t('hud.observe')}${sp.collectable ? (toolHint ? `   ${toolHint}` : '') : `   ${t('hud.observeOnly')}`}`;
       } else if (this.targetClam >= 0) {
-        prompt = `${t('clam.siphon')}   [F] ${t('hud.observe')}   ${this.tool === 'shovel' ? `[E] ${t('hud.dig')}` : `[2] ${this.data.tools.get('shovel')?.ja ?? ''}`}`;
+        const shovelKey = this.encyclopedia.loadout.value.indexOf('shovel');
+        prompt = `${t('clam.siphon')}   [F] ${t('hud.observe')}   ${this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.data.tools.get('shovel')?.ja ?? ''}` : t('tools.noShovel')}`;
       } else if (toolHint) prompt = toolHint;
     }
     const fps = this.fpsCount / Math.max(1e-3, this.fpsAcc);

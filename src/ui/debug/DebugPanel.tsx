@@ -63,6 +63,7 @@ export function DebugPanel({ app }: { app: App }) {
       </div>
       <div class="debug-row seg">
         <span>習熟</span>
+        <button onClick={() => app.addMoney(500)}>+500 CR</button>
         {(['hand_net', 'shovel'] as const).map((id) => {
           const n = app.encyclopedia.skillCount(id), lv = app.encyclopedia.skillLevel(id);
           return (
