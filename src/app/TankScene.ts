@@ -3,7 +3,7 @@ import {
   Float32BufferAttribute, FloatType, HalfFloatType, HemisphereLight, LineBasicMaterial, LinearFilter, LinearMipmapLinearFilter,
   LineSegments, Mesh, MeshStandardMaterial, Object3D, OneFactor, OneMinusSrcAlphaFactor, PerspectiveCamera, PlaneGeometry, Plane,
   PMREMGenerator, Points, PointsMaterial, Raycaster, RGBAFormat, Scene, ShaderMaterial, SpotLight, SrcColorFactor, UnsignedByteType,
-  Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer, Spherical, SRGBColorSpace } from 'three';
+  Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer, SRGBColorSpace } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GPUComputationRenderer, type Variable } from 'three/addons/misc/GPUComputationRenderer.js';
@@ -21,6 +21,8 @@ import type { HeroLighting } from '../render/HeroPipeline';
 import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
 import { Group } from 'three';
 import { ToolShelf, type ShelfTool } from './ToolShelf';
+
+const UP = new Vector3(0, 1, 0);
 
 export const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
 export const TANK_MAX_OCCUPANTS = 4;
@@ -219,7 +221,9 @@ export class TankScene {
   private layout: TankLayout = defaultTankLayout();
   private readonly itemsRoot = new Group();
   private readonly nudgeV = new Vector3();
-  private readonly nudgeS = new Spherical();
+  private readonly nudgeV2 = new Vector3();
+  private readonly nudgeV3 = new Vector3();
+  private breathPrev = 0;
   private readonly itemObjects = new Map<string, Object3D>();
   private readonly sandMesh: Mesh;
   private readonly sandMat: MeshStandardMaterial;
@@ -533,10 +537,14 @@ export class TankScene {
       this.controls = new OrbitControls(this.camera, this.canvas);
       this.controls.enableDamping = true;
       this.controls.target.set(0, 0.12, 0);
-      this.controls.minDistance = 0.05;
-      this.controls.maxDistance = 2.2;
+      // right up to the glass (the camera's near plane is 3 mm) and back to the far wall
+      this.controls.minDistance = 0.012;
+      this.controls.maxDistance = 3.2;
       this.controls.maxPolarAngle = Math.PI * 0.49;
-      this.controls.enablePan = false;
+      this.controls.enablePan = true;
+      this.controls.panSpeed = 0.6;
+      this.controls.screenSpacePanning = true;
+      this.controls.zoomSpeed = 1.1;
       this.controls.update();
     }
     this.controls.autoRotate = autoRotate;
@@ -832,16 +840,30 @@ export class TankScene {
     gl.setRenderTarget(prevRT);
   }
 
-  /** The camera alone: keyboard orbit (A/D), dolly (W/S) and tilt around the tank. */
-  nudgeCamera(orbit: number, dolly: number, tilt: number, dt: number): void {
+  /**
+   * The viewpoint itself moves (W/S along the way it looks, A/D sideways), the orbit centre coming along so the
+   * angle is kept; the pace scales with how far the centre is, so close up the steps are fine. The camera is held
+   * above the table and short of the walls.
+   */
+  panCamera(right: number, forward: number, dt: number): void {
     const c = this.controls;
-    if (!c || (orbit === 0 && dolly === 0 && tilt === 0)) return;
-    const off = this.nudgeV.copy(this.camera.position).sub(c.target);
-    const sph = this.nudgeS.setFromVector3(off);
-    sph.theta -= orbit * 1.5 * dt;
-    sph.phi = Math.max(0.15, Math.min(c.maxPolarAngle, sph.phi - tilt * 1.2 * dt));
-    sph.radius = Math.max(c.minDistance, Math.min(c.maxDistance, sph.radius * Math.exp(-dolly * 1.3 * dt)));
-    this.camera.position.setFromSpherical(sph).add(c.target);
+    if (!c || c.enabled === false || (right === 0 && forward === 0)) return;
+    const dist = this.camera.position.distanceTo(c.target);
+    const pace = (0.12 + 0.75 * dist) * dt;
+    // along the floor: the way the camera looks, flattened (looking down, the move is still level)
+    const fwd = this.nudgeV.copy(c.target).sub(this.camera.position);
+    fwd.y = 0;
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+    fwd.normalize();
+    const side = this.nudgeV2.crossVectors(fwd, UP).normalize();
+    const move = this.nudgeV3.set(0, 0, 0).addScaledVector(fwd, forward * pace).addScaledVector(side, right * pace);
+    // short of the walls: the centre stays within the room
+    const lim = 2.4;
+    const nx = c.target.x + move.x, nz = c.target.z + move.z;
+    move.x = Math.max(-lim, Math.min(lim, nx)) - c.target.x;
+    move.z = Math.max(-lim, Math.min(lim, nz)) - c.target.z;
+    this.camera.position.add(move);
+    c.target.add(move);
     c.update();
   }
 
@@ -910,8 +932,10 @@ export class TankScene {
     else if (this.view === 'shelf') this.camera.lookAt(this.camCur.t);
     else if (this.controls) {
       this.controls.update();
-      // gentle vertical breathing of the view on top of the slow orbit
-      this.controls.target.y = 0.12 + Math.sin(this.drift * 0.25) * 0.012;
+      // gentle vertical breathing of the view on top of the slow orbit, as a delta so a panned centre keeps its place
+      const breath = Math.sin(this.drift * 0.25) * 0.012;
+      this.controls.target.y += breath - this.breathPrev;
+      this.breathPrev = breath;
     }
     this.stepWater(dt);
     for (const o of this.occupants) {

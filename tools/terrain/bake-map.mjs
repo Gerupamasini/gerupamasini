@@ -90,72 +90,95 @@ function baseProfile(z) {
   return lerp(0.9, -1.9, (z + 125) / 285);
 }
 
-// tidal creek (澪) meandering on the west side, draining south
-function channel(x, z) {
-  if (z < -112) return 0;
-  const t = clamp((z + 110) / 270, 0, 1);
-  const xc = -70 + 25 * Math.sin((z + 100) / 70) + 6 * fbm(z / 40, 3.3, 2);
-  const w = 3 + 5 * t;
-  const D = 0.35 + 0.65 * t;
-  const d = Math.abs(x - xc);
-  const g = Math.exp(-(d * d) / (w * w));
-  const fadeIn = smooth(-112, -95, z);
-  return { depth: D * g * fadeIn, weight: g * fadeIn };
-}
-
-const POOLS = [
-  { cx: -20, cz: -50, rx: 12, rz: 8, depth: 0.22 },
-  { cx: 45, cz: 40, rx: 9, rz: 9, depth: 0.3 },
-  { cx: -115, cz: 55, rx: 14, rz: 7, depth: 0.2 },
-  { cx: 92, cz: -62, rx: 7, rz: 5, depth: 0.18 },
-  { cx: 10, cz: 80, rx: 16, rz: 10, depth: 0.3 },
-  { cx: 120, cz: 100, rx: 10, rz: 8, depth: 0.22 },
-];
-
-// ridge-and-runnel: an offshore sand bar with a trough behind it. Sea water enters the trough through notches in
-// the bar, so water reaches close to the dry beach well before high tide (the "海水が手前に入ってくる" look).
-const BAR = { zc: 15, amp: 8, wavelength: 60, width: 11, height: 0.22, runnelOffset: 22, runnelWidth: 8, runnelDepth: 0.28, gaps: [-60, 70], gapWidth: 6 };
-function barAndRunnel(x, z) {
-  const zc = BAR.zc + BAR.amp * Math.sin(x / BAR.wavelength);
-  const win = smooth(-150, -120, x) * (1 - smooth(120, 150, x));
-  let bar = BAR.height * Math.exp(-(((z - zc) / BAR.width) ** 2)) * win;
-  let gap = 0;
-  for (const gx of BAR.gaps) gap += Math.exp(-(((x - gx) / BAR.gapWidth) ** 2));
-  bar *= 1 - 0.92 * Math.min(1, gap);
-  const runnel = -BAR.runnelDepth * Math.exp(-(((z - (zc - BAR.runnelOffset)) / BAR.runnelWidth) ** 2)) * win;
-  return { bar, runnel, inBar: bar > 0.08, inRunnel: runnel < -0.1 };
-}
-
-// 澪筋: small braided drainage channels running seaward across the flat
-const RUNNELS = [
-  { xs: -130, z0: -75, A: 6, L: 28, phi: 0.3 },
-  { xs: -95, z0: -60, A: 9, L: 35, phi: 2.1 },
-  { xs: -35, z0: -80, A: 7, L: 30, phi: 1.1 },
-  { xs: 5, z0: -70, A: 10, L: 40, phi: 4.0 },
-  { xs: 55, z0: -65, A: 6, L: 26, phi: 0.9 },
-  { xs: 100, z0: -78, A: 8, L: 33, phi: 2.8 },
-  { xs: 140, z0: -60, A: 5, L: 24, phi: 1.7 },
-];
-function drainage(x, z) {
-  let depth = 0, weight = 0;
-  for (const r of RUNNELS) {
-    if (z < r.z0 - 5) continue;
-    const t = clamp((z - r.z0) / 130, 0, 1);
-    const xc = r.xs + r.A * Math.sin((z - r.z0) / r.L + r.phi) + 3 * fbm(z / 15 + r.phi * 7, r.xs / 50, 2);
-    const w = 1.5 + 2.5 * t;
-    const D = 0.06 + 0.16 * t;
-    const d = Math.abs(x - xc);
-    const g = Math.exp(-((d / w) ** 2)) * smooth(r.z0 - 5, r.z0 + 10, z);
-    depth += D * g;
-    weight = Math.max(weight, g);
+// ------------------------------------------------------------------ tidal creeks: a dendritic network
+// Trunks come in from the bay and run up the flat, meandering and branching as they go, each branch narrower and
+// shallower than the one it left; the flat between creeks rises a little away from them, so at half tide the creeks
+// hold water while the banks stand out — the braided, veined look of a real flat from above.
+let creekRand = SEED ^ 0x5bd1e995;
+function crand() { creekRand = (Math.imul(creekRand ^ (creekRand >>> 15), 2246822519) + 374761393) >>> 0; return creekRand / 4294967296; }
+const SEGS = [];   // { x0, z0, x1, z1, w, d, along, phase }: along = distance from the mouth at x0, phase = this creek's own seed
+function growCreek(x, z, heading, order, length, w, d, along0 = 0) {
+  let px = x, pz = z, h = heading, len = 0;
+  const step = 3, wiggle = 0.9 + 0.5 * crand(), phase = crand() * 100;
+  let sinceBranch = 0, side = crand() < 0.5 ? 1 : -1;
+  while (len < length) {
+    const t = len / length;
+    // meander: noise-driven bends, pulled back toward the way up the flat (north is heading π)
+    const bend = 0.55 * wiggle * gnoise(len / 22 + phase, order * 3.7 + 1.3) + 0.25 * gnoise(len / 60 + phase * 2, order + 9.2);
+    h += bend * 0.5 + 0.06 * Math.sin(Math.PI - h);
+    const nx = px + Math.sin(h) * step, nz = pz + Math.cos(h) * step;
+    if (Math.abs(nx) > half - 6 || nz < -118) break;
+    const wt = w * (1 - 0.72 * t), dt = d * (1 - 0.78 * t);
+    SEGS.push({ x0: px, z0: pz, x1: nx, z1: nz, w: wt, d: dt, along: along0 + len, phase });
+    px = nx; pz = nz; len += step; sinceBranch += step;
+    if (order < 4 && sinceBranch > 14 + 10 * order && wt > 1.6 && crand() < 0.16) {
+      const ang = side * (0.55 + 0.55 * crand());
+      growCreek(px, pz, h + ang, order + 1, length * (0.38 + 0.2 * crand()), wt * (0.5 + 0.15 * crand()), dt * (0.62 + 0.15 * crand()), along0 + len);
+      side = -side;
+      sinceBranch = 0;
+    }
   }
-  return { depth: Math.min(depth, 0.26), weight };
 }
+// four trunks from the south edge, their mouths spread across the width
+for (const [x0, len, w, d] of [[-95, 230, 11, 1.25], [-15, 250, 13, 1.4], [60, 215, 10, 1.15], [128, 180, 8, 0.95]]) {
+  growCreek(x0, half - 4, Math.PI + (crand() - 0.5) * 0.4, 0, len, w, d);
+}
+// bucket the segments for fast lookup. A segment is listed in every bucket within DOME_R of it (the bank dome needs
+// the distance to the nearest creek out to that range; past it the dome is flat, so a missing segment costs nothing).
+const BUCKET = 12, NB = Math.ceil(SIZE / BUCKET) + 1, DOME_R = 28;
+const buckets = Array.from({ length: NB * NB }, () => []);
+for (const s of SEGS) {
+  const r = Math.max(3 * s.w + 2, DOME_R + 4);
+  const i0 = Math.max(0, Math.floor((Math.min(s.x0, s.x1) - r + half) / BUCKET)), i1 = Math.min(NB - 1, Math.floor((Math.max(s.x0, s.x1) + r + half) / BUCKET));
+  const j0 = Math.max(0, Math.floor((Math.min(s.z0, s.z1) - r + half) / BUCKET)), j1 = Math.min(NB - 1, Math.floor((Math.max(s.z0, s.z1) + r + half) / BUCKET));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) buckets[j * NB + i].push(s);
+}
+/** the creek cut at a point: depth (m) and a 0..1 weight for how much creek this is; the distance to the nearest creek */
+function creekAt(x, z) {
+  const bi = Math.floor((x + half) / BUCKET), bj = Math.floor((z + half) / BUCKET);
+  let depth = 0, weight = 0, dist = 1e9;
+  if (bi < 0 || bj < 0 || bi >= NB || bj >= NB) return { depth, weight, dist };
+  for (const s of buckets[bj * NB + bi]) {
+    const vx = s.x1 - s.x0, vz = s.z1 - s.z0, L2 = vx * vx + vz * vz || 1e-6;
+    const u = clamp(((x - s.x0) * vx + (z - s.z0) * vz) / L2, 0, 1);
+    const dx = x - (s.x0 + vx * u), dz = z - (s.z0 + vz * u);
+    const dd = Math.sqrt(dx * dx + dz * dz);
+    // a bank slightly ragged with noise
+    const wl = s.w * (1 + 0.22 * fbm(x / 7 + 3, z / 7 - 5, 2));
+    const g = Math.exp(-((dd / wl) ** 2) * 1.1);
+    // scour pools along the bed: stretches where the thalweg is deeper, so the creek keeps a chain of water at low tide
+    const along = s.along + u * Math.sqrt(L2);
+    const scour = smooth(0.15, 0.6, gnoise(along / 16 + s.phase, s.phase * 0.37 + 2.5)) * (0.4 + 0.6 * smooth(0, 60, along));
+    const cut = s.d * (0.35 + 0.65 * g) * (1 + 0.6 * scour * g) * smooth(2.2 * wl, 0.0, dd);
+    if (cut > depth) depth = cut;
+    if (g > weight) weight = g;
+    if (dd - wl < dist) dist = dd - wl;
+  }
+  return { depth, weight, dist: Math.max(0, dist) };
+}
+function channel(x, z) {
+  const c = creekAt(x, z);
+  return c.depth > 0.002 ? { depth: c.depth, weight: c.weight } : 0;
+}
+function drainage() { return { depth: 0, weight: 0 }; }
+function barAndRunnel() { return { bar: 0, runnel: 0, inBar: false, inRunnel: false }; }
 
+// tide pools: seeded hollows on the banks, clear of the creeks, more of them low on the flat
+const POOLS = [];
+{
+  let tries = 0;
+  while (POOLS.length < 14 && tries++ < 400) {
+    const cx = (crand() * 2 - 1) * (half - 25), cz = -95 + crand() * 160;
+    if (creekAt(cx, cz).dist < 9) continue;
+    if (POOLS.some((p) => Math.hypot(p.cx - cx, p.cz - cz) < 28)) continue;
+    const r = 5 + crand() * 9;
+    POOLS.push({ cx, cz, rx: r * (0.8 + 0.5 * crand()), rz: r * (0.7 + 0.5 * crand()), depth: 0.14 + crand() * 0.16, rot: crand() * Math.PI });
+  }
+}
 // random relief (the Minecraft-like part): seeded, domain-warped gradient noise at four scales plus ridged sand waves.
 // Amplitudes are tidal-flat sized (tens of centimetres), so the flat keeps sloping to the sea but gets hummocks, hollows
 // that hold water, and low bars that break the plane.
-const RELIEF = { macro: [110, 0.42], meso: [38, 0.2], fine: [11, 0.055], micro: [4.5, 0.018], ridge: [21, 0.14] };
+const RELIEF = { macro: [120, 0.3], meso: [40, 0.14], fine: [11, 0.045], micro: [4.5, 0.016], ridge: [21, 0.06] };
 function relief(x, z) {
   const [wx, wz] = warp(x, z, 90, 18);
   let h = RELIEF.macro[1] * gfbm(wx / RELIEF.macro[0], wz / RELIEF.macro[0], 3);
@@ -173,16 +196,16 @@ function height(x, z) {
   let h = baseProfile(z);
   const intertidal = smooth(-130, -115, z);
   h += relief(x, z) * intertidal;
-  const br = barAndRunnel(x, z);
-  h += br.bar + br.runnel;
+  const ck = creekAt(x, z);
+  // the banks: the flat rises away from the creeks (a low dome between them), then the creek cuts in
+  h += 0.14 * smooth(0, DOME_R, ck.dist) * intertidal * (1 - 0.6 * smooth(70, 150, z));
   for (const p of POOLS) {
-    const dx = (x - p.cx) / p.rx, dz = (z - p.cz) / p.rz;
+    const rx = (x - p.cx) * Math.cos(p.rot) - (z - p.cz) * Math.sin(p.rot), rz = (x - p.cx) * Math.sin(p.rot) + (z - p.cz) * Math.cos(p.rot);
+    const dx = rx / p.rx, dz = rz / p.rz;
     h -= p.depth * Math.exp(-(dx * dx + dz * dz) * 1.3);
   }
-  h -= drainage(x, z).depth;
-  const ch = channel(x, z);
-  if (ch) h -= ch.depth;
-  return h;
+  h -= ck.depth;
+  return Math.max(h, -3.45);   // the deepest trunk mouths stay inside the encoded range
 }
 
 const PALETTE = mapDef.substrate.palette; // ['sand','muddy_sand','mud','gravel','channel']
@@ -215,7 +238,7 @@ function mudness(x, z, h, rel, slope) {
 
 function substrate(x, z, h, m) {
   const ch = channel(x, z);
-  if (ch && ch.weight > 0.55) return idx.channel;
+  if (ch && ch.weight > 0.5 && ch.depth > 0.12) return idx.channel;
   const n2 = fbm(x / 12 + 50, z / 12 - 20, 3);
   if (h > 0.9 && n2 > 0.5) return idx.gravel;
   if (m > 0.66) return idx.mud;

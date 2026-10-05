@@ -110,7 +110,12 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .hud-stats b { color: var(--fg); font-family: var(--font-mono); font-weight: 500; font-size: 14px; margin-left: 6px; }
 .hud-tools { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
 .tool-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 999px; background: rgba(5, 11, 14, 0.5); border: 1px solid var(--line); color: var(--dim); font-size: 12px; letter-spacing: 0.06em; cursor: pointer; transition: all 0.25s var(--ease); }
-.tool-chip.on { background: rgba(127, 227, 210, 0.14); border-color: rgba(127, 227, 210, 0.45); color: var(--fg); }
+.tool-chip { opacity: 0.72; }
+.tool-chip:hover { opacity: 1; }
+.tool-chip.on { opacity: 1; background: rgba(127, 227, 210, 0.22); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 1px rgba(127, 227, 210, 0.35), 0 0 22px rgba(127, 227, 210, 0.35), inset 0 0 14px rgba(127, 227, 210, 0.12); transform: translateY(-2px) scale(1.04); }
+.tool-chip.on .key { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.tool-chip .use { font-size: 9px; letter-spacing: 0.14em; color: var(--accent); border: 1px solid rgba(127, 227, 210, 0.6); border-radius: 999px; padding: 1px 6px; margin-left: 2px; animation: usePulse 2.4s ease-in-out infinite; }
+@keyframes usePulse { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
 .tool-chip .lv { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 999px; background: rgba(232, 207, 154, 0.18); color: #e8cf9a; }
 .case-drawer { top: 120px; }
 /* the map of the coast */
@@ -324,7 +329,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .ind-table td.dim { font-size: 12px; }
 
 /* ------------------------------------------------------------------ tide table */
-.card.tide-table { width: min(94vw, 680px); }
+.card.tide-table { width: min(94vw, 680px); position: relative; overflow: hidden; }
 .day-chips { display: flex; gap: 6px; margin: 4px 0 14px; overflow-x: auto; padding-bottom: 2px; }
 .tide-chart { width: 100%; height: auto; display: block; border-radius: var(--r-m); background: rgba(236, 244, 244, 0.025); border: 1px solid var(--line); }
 .tide-chart .zero { stroke: rgba(236, 244, 244, 0.18); stroke-width: 1; }
@@ -339,15 +344,30 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .extrema td.num { color: var(--fg); }
 
 /* ------------------------------------------------------------------ ticket / menu */
-.ticket .mini { width: 100%; height: auto; display: block; margin: 10px 0 2px; border-radius: var(--r-m); background: rgba(236, 244, 244, 0.025); border: 1px solid var(--line); }
-.ticket .target { display: flex; align-items: baseline; justify-content: space-between; margin: 12px 0 6px; }
-.ticket .target .when { font-size: 15px; }
-.ticket .target .lvl { font-size: 22px; }
-.ticket .target .lvl .unit { color: var(--dim); font-size: 12px; margin-left: 4px; }
-.ticket .ext-line { color: var(--dim); font-size: 12px; letter-spacing: 0.04em; display: flex; gap: 12px; flex-wrap: wrap; }
-.ticket .ext-line .num { color: var(--fg-2); }
-.ticket .timebar { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
-.ticket .timebar .num { font-size: 22px; min-width: 4em; text-align: right; }
+.tide-table .ticket-now { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tide-table .ticket-now .btn.small { padding: 4px 10px; font-size: 12px; margin-left: auto; }
+.day-chips .chip.past { opacity: 0.6; }
+.day-chips .chip.past.on { opacity: 1; }
+.tide-chart.pickable { cursor: crosshair; }
+.tide-chart .pick-line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; }
+.tide-chart .pick-label { fill: var(--fg); font-size: 11px; font-family: var(--font-mono); paint-order: stroke; stroke: rgba(5, 11, 14, 0.8); stroke-width: 3px; }
+.pick-hint { margin: 8px 0 0; letter-spacing: 0.04em; }
+.extrema tr.pickable { cursor: pointer; transition: background 0.2s var(--ease); }
+.extrema tr.pickable:hover, .extrema tr.pickable:focus-visible { background: rgba(127, 227, 210, 0.08); outline: none; }
+.extrema td.go { text-align: right; color: var(--dim); font-size: 12px; letter-spacing: 0.08em; }
+.extrema tr.pickable:hover td.go { color: var(--accent); }
+.tide-confirm { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(5, 11, 14, 0.55); backdrop-filter: blur(6px); border-radius: inherit; z-index: 3; animation: fade 0.2s var(--ease); }
+.confirm-card { width: min(92%, 380px); padding: 22px 24px 20px; border-radius: var(--r-l); background: rgba(10, 20, 24, 0.96); border: 1px solid rgba(127, 227, 210, 0.35); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); animation: rise 0.3s var(--ease); }
+.confirm-card .eyebrow { font-size: 11px; letter-spacing: 0.2em; color: var(--accent); }
+.confirm-card h3 { margin: 4px 0 12px; font-size: 18px; font-weight: 500; }
+.confirm-card .when { font-size: 22px; margin-bottom: 12px; }
+.confirm-card .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.confirm-card .facts div { display: flex; flex-direction: column; gap: 3px; }
+.confirm-card .facts .dim { font-size: 11px; letter-spacing: 0.1em; }
+.confirm-card .facts b { font-weight: 500; font-size: 16px; }
+.confirm-card .facts .unit { font-size: 11px; color: var(--dim); margin-left: 3px; }
+.confirm-card p { margin: 10px 0 12px; }
+.confirm-card .buttons { display: flex; gap: 8px; }
 .setting { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .setting .label { font-size: 13px; letter-spacing: 0.06em; }
 .setting .label .num { color: var(--dim); margin-left: 8px; font-size: 12px; }

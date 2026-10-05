@@ -168,7 +168,6 @@
   "zukan.species": "種",
   "zukan.found": "発見済み",
   "tidetable.sub": "東京 ・ 気象庁の調和定数による予測",
-  "ticket.pick": "日時を選ぶ",
   "menu.settings": "設定",
   "case.release": "逃がす",
   "case.toResearch": "研究に回す",
@@ -230,5 +229,17 @@
   "shop.item.tank_light": "水槽の照明",
   "shop.item.tank_backdrop": "水槽の背景",
   "tools.shopHint": "新しい道具はショップで。",
-  "tools.shelfHint": "棚の道具をクリックで持っていく／置いていく"
+  "tools.shelfHint": "棚の道具をクリックで持っていく／置いていく",
+  "hud.inUse": "使用中",
+  "case.afloat": "水面に浮かべています",
+  "tidetable.pickHint": "曲線の上や満潮・干潮の行をクリックすると、その潮時を潮時チケットで再現できます（前後3日まで）",
+  "tidetable.today": "今日",
+  "tidetable.phase": "潮の状態",
+  "ticket.useShort": "チケットで再現",
+  "ticket.confirmTitle": "この潮時を再現しますか？",
+  "ticket.confirmDesc": "潮時チケットを1枚使い、干潟の潮位と太陽をこの日時に合わせます。30分たつと現実の時刻へ戻ります。",
+  "ticket.outOfRange": "再現できるのは今日の前後3日までです。",
+  "ticket.durationLabel": "再現時間",
+  "ticket.duration": "30分間",
+  "ticket.no": "やめる"
 }

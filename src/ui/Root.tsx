@@ -8,7 +8,6 @@ import { Minimap } from './hud/Minimap';
 import { MapOverlay } from './hud/MapOverlay';
 import { Toasts } from './hud/Toasts';
 import { Menu } from './menu/Menu';
-import { TicketDialog } from './ticket/TicketDialog';
 import { TideTable } from './tide/TideTable';
 import { Zukan } from './zukan/Zukan';
 import { ObserveOverlay } from './observe/ObserveOverlay';
@@ -51,7 +50,7 @@ export function Root({ app }: { app: App }) {
       {screen === 'menu' && <Menu app={app} />}
       {screen === 'spots' && <SpotSelect app={app} />}
       {screen === 'shop' && <ShopScreen app={app} />}
-      {screen === 'ticket' && <TicketDialog app={app} />}
+      {screen === 'ticket' && <TideTable app={app} />}
       {screen === 'tidetable' && <TideTable app={app} />}
       {ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}
       <Toasts />
@@ -181,7 +180,8 @@ function Hud({ app }: { app: App }) {
           {app.encyclopedia.loadout.value.map((id, i) => {
             const tool = app.data.tools.get(id);
             const lv = tool ? app.encyclopedia.skillLevel(skillKeyOf(tool)) : 0;
-            return <button key={id} class={`tool-chip ${ui.tool.value === id ? 'on' : ''}`} onClick={() => app.setTool(id)}><Key k={String(i + 1)} />{tool?.ja ?? id}{lv > 0 && <span class="lv">Lv{lv}</span>}</button>;
+            const on = ui.tool.value === id;
+            return <button key={id} class={`tool-chip ${on ? 'on' : ''}`} onClick={() => app.setTool(id)} aria-pressed={on}><Key k={String(i + 1)} />{tool?.ja ?? id}{lv > 0 && <span class="lv">Lv{lv}</span>}{on && <span class="use">{t('hud.inUse')}</span>}</button>;
           })}
         </div>
       </div>

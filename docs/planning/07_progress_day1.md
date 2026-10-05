@@ -136,3 +136,12 @@
 - 道具棚: `ToolShelf`（ペグボード、板、ランプ、道具ごとにペグ・タグ・番号・名札、タモは hoop/reach に応じた形、スコップ）。`TankScene.shelf / setShelfTools / pickTool / focusShelf / focusTank`（0.9 秒の smoothstep でカメラを補間、棚を見ている間は OrbitControls を止める）。`App.openTools / closeTools / syncShelf`、ホームのクリックは `tools` パネル中は棚の道具を拾う。
 - ホーム: `HomeMenu` を参考画像の配置に作り直し（status / title / almanac / 7 タイルの nav）。`Icons` にタイル用アイコン。
 - バージョン 0.9.0。
+
+## 13 回目（地形の作り直し、使用中の道具、透明なケース、水面のケース、ホームの視点、潮見表でのチケット）
+- 地形: `bake-map.mjs` の固定の澪筋・7 本の runnel・bar-and-runnel・固定の潮だまりを捨て、`growCreek`（3 m ステップ、gnoise の蛇行、北向きへ引き戻し、幅と深さは上流ほど細く浅い、確率 0.16 で左右交互に分岐、最大 4 次）で 4 本の幹から樹枝状の網を生成。`SEGS` を 12 m のバケツに入れ（各セグメントは土手の範囲 `DOME_R` 28 m まで登録: 届かないバケツでは距離が無限大になって土手が段差になるので注意）、`creekAt(x, z)` が最寄りのセグメントのガウス断面で `depth / weight / dist` を返す。底には `scour`（セグメントの `along` 座標の gnoise）で深みの鎖（河口付近は弱く）。高さ = 浜の断面 + relief（振幅を下げた）+ 土手のドーム 0.14 × smooth(0, 28, dist) − 回転楕円の潮だまり − 澪筋の切れ込み、下限 −3.45。基質は `channel` = weight > 0.5 かつ depth > 0.12。`teleport('creek' / 'runnel')` は基質が channel のセルを探す。`mapImages.ts` の色（岸の緑・上部の明るい砂・深さで濃くなる水・潮だまりの色）、`MapOverlay` のラベルは潮位より上の潮だまりだけ。
+- 道具チップ: `.tool-chip.on` を強調（背景・枠・光・持ち上げ・番号キーの反転）、`hud.inUse`「使用中」のラベル、使っていない方は opacity 0.72。
+- 観察ケース: `FieldCase` を透明なアクリルの箱に（`EdgesGeometry` の縁線、`makeRule` の cm 目盛りを前後の底辺に、`makeLabel`）。`place(x, y, z, yaw, afloat)`、`CASE_DRAFT` 0.11、`floating`。`update` は afloat のとき上下と傾きを付け、`floorY` を追従。`App.caseSpot` は `depthHere > 0.03` なら前方の水面、`openCase` は `max(ground, waterAt − CASE_DRAFT)` に置き、afloat のときは `maxPolarAngle` 0.4π、カメラは 0.36 m 上。
+- ホームの視点: `TankScene.panCamera(right, forward, dt)`（視線方向と横方向にカメラと target を平行移動、距離に比例した速さ、床 −0.04 と ±2.4 m で止める）。`nudgeCamera` は削除。`minDistance` 0.012、`maxDistance` 3.2、`enablePan`（右ドラッグ）。`App.tankKeys` は Shift で 2.2 倍。
+- 潮見表とチケット: `TicketDialog` を削除し、Screen `ticket` も `TideTable` を描く。日付は今日の前後 `TICKET_RANGE_DAYS` 日、曲線の `onMouseMove / onClick`（`getBoundingClientRect` から 10 分刻み）、極値の行もクリック可、`.tide-confirm` の確認カード（`tidePhaseAt` で潮の状態、`inRange` で範囲外は無効）→ `app.useTicket`。再現中は `.ticket-now` に「中断する」。`tidePhaseAt` は `src/tide/TideModel.ts`、単体テスト `tests/unit/tidePhase.test.ts`。
+- バージョン 0.10.0。
+
