@@ -8,6 +8,26 @@ import { toast, t } from '../ui/store';
 
 export const REWARDS = { discover: 100, capture: 50, behavior: 30, sex: 20, perTenIndividuals: 20 };
 
+/** CR handed out each time the observer level goes up */
+export const CR_PER_LEVEL = 150;
+/** at most this many tools go to the flat */
+export const LOADOUT_MAX = 2;
+
+/** the observer level for a research total: 1 at 0, 2 at 100, 3 at 400, 4 at 900 … */
+export function levelFor(research: number): number {
+  return Math.floor(Math.sqrt(Math.max(0, research) / 100)) + 1;
+}
+
+/** the research total at which the next level begins */
+export function nextLevelAt(level: number): number {
+  return 100 * level * level;
+}
+
+/** proficiency is shared by every net (the hand is the same), and separate per other tool */
+export function skillKeyOf(tool: { id: string; type: string }): string {
+  return tool.type === 'capture' ? 'hand_net' : tool.id;
+}
+
 /** catches with a tool at which its proficiency reaches the next level (Lv1 … Lv5) */
 export const SKILL_STEPS = [3, 8, 15, 25, 40];
 export const SKILL_MAX = SKILL_STEPS.length;
@@ -33,6 +53,10 @@ export class Encyclopedia {
   readonly caseMax = 6;
   /** catches made with each tool: the hand grows surer with use */
   readonly skills = signal<Record<string, number>>({});
+  /** tools owned, and the (at most two) carried to the flat in key order */
+  readonly owned = signal<string[]>(['hand_net', 'shovel']);
+  readonly loadout = signal<string[]>(['hand_net', 'shovel']);
+  private levelClaimed = 1;
   stats = { captures: 0, observations: 0 };
   /** called after any change worth saving */
   onChanged: (() => void) | null = null;
@@ -56,6 +80,60 @@ export class Encyclopedia {
   award(points: number, label: string): void {
     this.research.value += points;
     toast(`${label}  +${points} ${t('progress.research')}`, 'success');
+    this.claimLevels();
+  }
+
+  get level(): number {
+    return levelFor(this.research.value);
+  }
+
+  /** Each new observer level pays out CR, once. */
+  private claimLevels(): void {
+    const lv = this.level;
+    while (this.levelClaimed < lv) {
+      this.levelClaimed++;
+      this.money.value += CR_PER_LEVEL;
+      toast(`${t('toast.levelUp')} Lv${this.levelClaimed}  +${CR_PER_LEVEL} CR`, 'success');
+    }
+  }
+
+  /** debug: CR by hand */
+  addMoney(cr: number): void {
+    this.money.value = Math.max(0, this.money.value + cr);
+    this.onChanged?.();
+  }
+
+  owns(toolId: string): boolean {
+    return this.owned.value.includes(toolId);
+  }
+
+  /** Buy a tool with CR; false when it is owned already or the CR is short. */
+  buy(tool: { id: string; ja: string; price_cr: number }): boolean {
+    if (this.owns(tool.id) || this.money.value < tool.price_cr) return false;
+    this.money.value -= tool.price_cr;
+    this.owned.value = [...this.owned.value, tool.id];
+    toast(`${t('toast.bought')}: ${tool.ja}  −${tool.price_cr} CR`, 'success');
+    this.onChanged?.();
+    return true;
+  }
+
+  carries(toolId: string): boolean {
+    return this.loadout.value.includes(toolId);
+  }
+
+  /** Take a tool along or leave it; at most two go, and the last one stays. */
+  toggleCarry(toolId: string): boolean {
+    if (!this.owns(toolId)) return false;
+    const cur = this.loadout.value;
+    if (cur.includes(toolId)) {
+      if (cur.length <= 1) return false;
+      this.loadout.value = cur.filter((id) => id !== toolId);
+    } else {
+      if (cur.length >= LOADOUT_MAX) return false;
+      this.loadout.value = [...cur, toolId];
+    }
+    this.onChanged?.();
+    return true;
   }
 
   species(id: string): SpeciesDef | undefined {
@@ -173,6 +251,10 @@ export class Encyclopedia {
     this.caseItems.value = [...s.case];
     this.tankItems.value = [...s.tank.individuals];
     this.skills.value = { ...(s.player.skills ?? {}) };
+    this.owned.value = [...new Set(['hand_net', 'shovel', ...s.player.tools])];
+    const loadout = (s.player.loadout ?? ['hand_net', 'shovel']).filter((id) => this.owned.value.includes(id)).slice(0, LOADOUT_MAX);
+    this.loadout.value = loadout.length ? loadout : ['hand_net'];
+    this.levelClaimed = s.player.levelClaimed ?? 1;
     this.stats = { captures: s.stats.captures, observations: s.stats.observations };
   }
 
@@ -183,6 +265,9 @@ export class Encyclopedia {
     s.case = [...this.caseItems.value];
     s.tank.individuals = [...this.tankItems.value];
     s.player.skills = { ...this.skills.value };
+    s.player.tools = [...this.owned.value];
+    s.player.loadout = [...this.loadout.value];
+    s.player.levelClaimed = this.levelClaimed;
     s.stats.captures = this.stats.captures;
     s.stats.observations = this.stats.observations;
   }

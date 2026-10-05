@@ -121,3 +121,11 @@
 - 水深: `App.swingSlow = clamp((depthHere − 0.15) / 0.45)`。`CaptureState.swingSec`（`Capture.start` の第 3 引数、swing の長さ、`NetView` もこれで補間）= 0.42 × (1 + 1.2 slow) × (1 − 0.05 Lv)。逃走率 += 0.35 × slow × (0.5 + alert)。HUD の `hud.deepSlow`。
 - ケース: `Encyclopedia.release(rec)`、`toResearch(rec)`（`researchFor = 5 + cm`）、`App.caseRelease / caseToResearch`、`TankPanel` の観察ケース一覧にボタン。
 - 単体テスト `tests/unit/progress.test.ts`。バージョン 0.7.0。
+
+## 11 回目（立ったままの採集、ショップと道具の持ち替え、干潟の観察ケース）
+- 届く距離: `App.netReach()` = min(reach_m / cos(pitch), √(reach_m² + 目の高さ²) + 0.1)。`NetView.inZone` / `update` に `reach` 引数。立ちの振りは ×1.15。
+- 道具データ: `items/tools.json` に `price_cr` と `params.reach_m / hoop / swing / quiet / deep`。hand_net（1.5 m）、hand_net_short（1.1 m、0.85、0.7、0.75、1.2、200 CR）、hand_net_long（2.2 m、1.0、1.3、1.1、0.8、300 CR）、shovel。`ToolId` は string。
+- セーブ: `player.tools`（所持）、`player.loadout`（2 つまで）、`player.levelClaimed`。migrate で補完。`Encyclopedia.owned / loadout / level / buy / toggleCarry / claimLevels（CR_PER_LEVEL 150）/ addMoney`。`skillKeyOf`（タモは共通キー hand_net）。
+- UI: `ToolsPanel`（ホームのナビ「道具」= 旧ショップボタン）、HUD のチップは loadout から、[1][2] は loadout の順。`CaptureOverlay` は道具の type で判定。
+- 観察ケース: `FieldCase`（板・柱 2 本・キャップ・焼印・アクリル 5 面・水と水面、`inner` 枠に生物。drivers は水槽と同じ bounds 方式、hero なし）。`App.openCase / closeCase`（`caseSpot` で水深 5 cm 未満の場所、OrbitControls、near 0.01）、mode `caseView`（Screen に追加、worldVisible に含む）、[Q]。`CaseOverlay` に一覧と逃がす／研究に回す。`caseRelease` は干潟では最寄りの水に `generateIndividual` で戻して flee。
+- 単体テスト `tests/unit/tools.test.ts`。バージョン 0.8.0。

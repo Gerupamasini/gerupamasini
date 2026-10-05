@@ -112,6 +112,20 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .tool-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 999px; background: rgba(5, 11, 14, 0.5); border: 1px solid var(--line); color: var(--dim); font-size: 12px; letter-spacing: 0.06em; cursor: pointer; transition: all 0.25s var(--ease); }
 .tool-chip.on { background: rgba(127, 227, 210, 0.14); border-color: rgba(127, 227, 210, 0.45); color: var(--fg); }
 .tool-chip .lv { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 999px; background: rgba(232, 207, 154, 0.18); color: #e8cf9a; }
+.case-drawer { top: 120px; }
+.case-drawer .drawer-head h2 { font-size: 16px; }
+.tools-list { list-style: none; margin: 0; padding: 0; }
+.tools-list li { padding: 8px 0 8px 10px; border-bottom: 1px solid var(--line); border-left: 2px solid transparent; font-size: 13px; }
+.tools-list li.on { border-left-color: rgba(127, 227, 210, 0.7); }
+.tools-list .row { display: flex; align-items: center; gap: 8px; }
+.tools-list .row .name { flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 6px; }
+.tools-list .row .price { color: #e8cf9a; }
+.tools-list .row button { flex: none; white-space: nowrap; font-size: 11px; padding: 4px 9px; }
+.tools-list .row button:disabled { opacity: 0.4; cursor: default; }
+.tools-list .slot { font-family: var(--font-mono); font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(127, 227, 210, 0.18); color: var(--fg); }
+.tools-list .lv { font-family: var(--font-mono); font-size: 10px; padding: 1px 6px; border-radius: 999px; background: rgba(232, 207, 154, 0.18); color: #e8cf9a; }
+.tools-list .specs { margin-top: 3px; font-size: 11px; color: var(--dim); letter-spacing: 0.02em; }
+.tools-list p { margin: 4px 0 0; }
 .case-list li .acts { display: flex; gap: 6px; flex-wrap: wrap; flex-basis: 100%; margin-top: 4px; }
 .case-list li .acts button { font-size: 11px; padding: 4px 9px; letter-spacing: 0.02em; }
 .hud-stats .fps { font-family: var(--font-mono); color: var(--dim-2); font-size: 11px; }
