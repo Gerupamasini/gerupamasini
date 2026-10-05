@@ -2,7 +2,7 @@
 // URL params: view=front|side|top|q34|back|low|macro|under  pose=stand|feed|wave|fold|walk  lod=0|1|2
 //             wet=0..1 sand=0..1 seed=int sex=m|f sun=elevationDeg az=deg w,h (canvas size) live=1 (run the sim)
 import {
-  ACESFilmicToneMapping, Color, DirectionalLight, HemisphereLight, Mesh, MeshStandardMaterial, PCFSoftShadowMap,
+  ACESFilmicToneMapping, Color, DirectionalLight, HemisphereLight, Mesh, MeshStandardMaterial, MeshPhysicalMaterial, PCFSoftShadowMap,
   PerspectiveCamera, PlaneGeometry, PMREMGenerator, Scene, SRGBColorSpace, Vector3, WebGLRenderer, BackSide, SphereGeometry, ShaderMaterial,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -13,9 +13,30 @@ import { crabTriangles } from '../../../src/creatures/kometsukigani/ScopimeraGlo
 import { ScopimeraGlobosa, makeEnv, seasonFor } from '../../../src/creatures/kometsukigani/ScopimeraGlobosa.js';
 import { BurrowRenderer, shaftAxis, RENDER_ORDER } from '../../../src/creatures/kometsukigani/Burrows.js';
 import { SandPellets } from '../../../src/creatures/kometsukigani/SandPellets.js';
+import { paletteFor } from '../../../src/creatures/kometsukigani/ScopimeraGlobosaMaterial.js';
 
 const Q = new URLSearchParams(location.search);
-const num = (k, d) => (Q.has(k) ? Number(Q.get(k)) : d);
+/**
+ * Photo-match presets: the camera, light, ground, colour morph and pose of the reference photographs, so a render
+ * can be laid beside its photo and judged part by part (tools/viewers/kometsukigani/compare.mjs).
+ *   p1 aquarium, front, just above the floor (pale individual)      p2 on its back on a palm (ventral)
+ *   p3 aquarium, front, a little higher (khaki individual)          p4 field, 3/4 from above, dark sand, pellets
+ *   p5 field, ground level, a dark purple male waving               p6 the pinned specimen from above (plate 007)
+ * Any preset value can be overridden in the URL (e.g. &fov=5 for a close-up, &dbg=1 for the albedo alone).
+ */
+const PRESETS = {
+  p1: { scene: 'studio', pal: 'pale', pose: 'stand', cam: '0,0.55,7.4', tgt: '0,0.36,0', fov: 13, sex: 'm', wet: 0.75, sand: 0.02, tip: 0, sun: 70, az: 175, exp: 1.15, env: 0.6, hemi: 1.5, fill: 0.55 },
+  p2: { scene: 'hand', pal: 'pale', pose: 'flip', cam: '0,2.5,-3.0', tgt: '0,0.45,0.1', fov: 17, sex: 'm', wet: 0.9, sand: 0, tip: 0, sun: 60, az: 200, exp: 0.62, env: 0.5, hemi: 0.9 },
+  p3: { scene: 'studio', pal: 'khaki', pose: 'stand', cam: '0,2.1,7.4', tgt: '0,0.34,0', fov: 13, sex: 'm', wet: 0.75, sand: 0.02, tip: 0, sun: 65, az: 190, exp: 1.15, env: 0.6, hemi: 1.5, fill: 0.55 },
+  p4: { scene: 'dark', pal: 'grey', pose: 'feed', cam: '-3.2,5.2,7.2', tgt: '0,0.25,0.2', fov: 24, sex: 'f', wet: 0.4, sand: 0.5, tip: 0.6, sun: 50, az: 220, exp: 0.95, env: 0.25, hemi: 0.85, pellets: 260, heading: 0.35 },
+  // the pinned specimen seen from above (p-007): dorsal pattern and leg proportions
+  p6: { scene: 'dark', pal: 'brown', pose: 'stand', cam: '0,9.5,-0.01', tgt: '0,0.3,0', fov: 13.7, sex: 'm', wet: 0.3, sand: 0, tip: 0, sun: 80, az: 180, exp: 0.9, env: 0.3, hemi: 0.9 },
+  p5: { scene: 'dark', pal: 'purple', pose: 'wave', cam: '0,0.4,11.5', tgt: '0,0.92,0', fov: 15, sex: 'm', wet: 0.25, sand: 0.35, tip: 0.5, sun: 60, az: 150, exp: 0.75, env: 0.12, hemi: 0.5 },
+};
+const PRE = PRESETS[Q.get('preset')] ?? {};
+const param = (k) => (Q.has(k) ? Q.get(k) : PRE[k] !== undefined ? String(PRE[k]) : null);
+const num = (k, d) => { const v = param(k); return v === null ? d : Number(v); };
+const vec = (k) => { const v = param(k); return v === null ? null : v.split(',').map(Number); };
 const canvas = document.getElementById('c');
 const W = num('w', 0), H = num('h', 0);
 if (W && H) { canvas.style.width = `${W}px`; canvas.style.height = `${H}px`; }
@@ -28,15 +49,20 @@ renderer.toneMappingExposure = num('exp', 0.62);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = PCFSoftShadowMap;
 
+const SCENE = param('scene') ?? 'field';
 const scene = new Scene();
-scene.background = new Color(0x9fb3c0);
+scene.background = new Color(SCENE === 'studio' ? 0xd9dde0 : SCENE === 'hand' ? 0xd9a48c : SCENE === 'dark' ? 0x8a8580 : 0x9fb3c0);
 
 // sky gradient → environment
 const skyMat = new ShaderMaterial({
   side: BackSide, depthWrite: false,
   uniforms: {},
   vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: 'varying vec3 vD; void main(){ float y = vD.y; vec3 c = mix(vec3(0.62,0.66,0.62), vec3(0.32,0.5,0.78), smoothstep(0.0, 0.6, y)); c = mix(c, vec3(0.42,0.38,0.32), smoothstep(0.0, -0.3, y)); gl_FragColor = vec4(c, 1.0); }',
+  fragmentShader: SCENE === 'studio' || SCENE === 'hand'
+    // a bright room seen through the tank: white walls, a window band, the bench below
+    // a room seen from the tank: mid-grey walls, a bright window to the front-left, a ceiling light, the bench
+    ? 'varying vec3 vD; void main(){ float y = vD.y; vec3 c = vec3(0.32,0.33,0.34); c = mix(c, vec3(0.5,0.5,0.5), smoothstep(-0.05, 0.3, y)); float win = smoothstep(0.6, 0.88, dot(vD, normalize(vec3(-0.5,0.35,0.8)))); c += vec3(1.5,1.52,1.55) * win; c += vec3(1.2) * smoothstep(0.88, 0.98, y); c = mix(c, vec3(0.22,0.21,0.2), smoothstep(0.0, -0.4, y)); gl_FragColor = vec4(c, 1.0); }'
+    : 'varying vec3 vD; void main(){ float y = vD.y; vec3 c = mix(vec3(0.62,0.66,0.62), vec3(0.32,0.5,0.78), smoothstep(0.0, 0.6, y)); c = mix(c, vec3(0.42,0.38,0.32), smoothstep(0.0, -0.3, y)); gl_FragColor = vec4(c, 1.0); }',
 });
 const envScene = new Scene();
 envScene.add(new Mesh(new SphereGeometry(10, 32, 16), skyMat));
@@ -57,9 +83,18 @@ sc.left = -0.05; sc.right = 0.05; sc.top = 0.05; sc.bottom = -0.05; sc.near = 0.
 sun.shadow.bias = -0.00002;
 sun.shadow.normalBias = 0.00004;
 scene.add(sun, sun.target);
-scene.add(new HemisphereLight(0x95aec4, 0x5a4a36, num('hemi', 0.5)));
+if (SCENE === 'studio' || SCENE === 'hand') {
+  scene.add(new HemisphereLight(0xf2f5f8, 0x8c857e, num('hemi', 0.5)));
+  // the tank is lit from the room: a broad soft fill from the front
+  const fill = new DirectionalLight(0xffffff, num('fill', 0.9));
+  fill.position.set(0, 0.2, 1);
+  scene.add(fill);
+} else scene.add(new HemisphereLight(0x95aec4, 0x5a4a36, num('hemi', 0.5)));
 
 // sand: a procedural ground close enough to the game's flat to judge the crab against
+const SANDC = SCENE === 'dark' ? [0.2, 0.195, 0.18] : [0.42, 0.34, 0.22];
+// dark tidal sands (5.webp, 6.webp): salt and pepper — quartz and shell white, magnetite black, grey lithics
+const PEPPER = SCENE === 'dark' ? 1 : 0;
 const sandMat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
 sandMat.onBeforeCompile = (s) => {
   s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vW;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -74,9 +109,10 @@ float gH = 0.0; vec2 gN = vec2(0.0);`).replace('#include <color_fragment>', `#in
   float best = 9.0; vec2 id = vec2(0.0), off = vec2(0.0);
   for (int j=-1;j<=1;j++) for (int i=-1;i<=1;i++){ vec2 g = vec2(i,j); vec2 r = g + h22(ip+g)*0.8+0.1 - fp; float d = dot(r,r); if (d<best){best=d; id=ip+g; off=r;} }
   float k = h21(id+3.1);
-  vec3 base = vec3(0.42, 0.34, 0.22);
+  vec3 base = vec3(${SANDC.join(', ')});
   vec3 c = base * (0.75 + 0.5 * k);
-  if (k > 0.94) c = vec3(0.75, 0.72, 0.66); else if (k > 0.9) c = base * 0.35;
+  float pep = ${PEPPER.toFixed(1)};
+  if (k > 0.94 - 0.12 * pep) c = vec3(0.75, 0.72, 0.66) * (0.8 + 0.25 * h21(id + 7.7)); else if (k > 0.9 - 0.12 * pep || k < 0.22 * pep) c = base * 0.3;
   float disc = smoothstep(0.42, 0.3, sqrt(best));
   c = mix(base * 0.8, c, disc);
   diffuseColor.rgb = c * 0.85;
@@ -84,21 +120,50 @@ float gH = 0.0; vec2 gN = vec2(0.0);`).replace('#include <color_fragment>', `#in
 }`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize(normal + (viewMatrix * vec4(gN.x, 0.0, gN.y, 0.0)).xyz * 0.6);`).replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = 0.62;');
 };
-const ground = new Mesh(new PlaneGeometry(0.6, 0.6, 1, 1).rotateX(-Math.PI / 2), sandMat);
+let groundMat = sandMat;
+if (SCENE === 'studio') groundMat = new MeshPhysicalMaterial({ color: new Color(0.62, 0.66, 0.68), roughness: 0.08, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, transmission: 0 });
+else if (SCENE === 'hand') groundMat = new MeshStandardMaterial({ color: new Color(0.62, 0.36, 0.27), roughness: 0.55 });
+const ground = new Mesh(new PlaneGeometry(0.6, 0.6, 1, 1).rotateX(-Math.PI / 2), groundMat);
 ground.receiveShadow = true;
 scene.add(ground);
 
 const seed = num('seed', 7);
-const crab = new CrabModel({ sex: Q.get('sex') ?? 'm', cw_m: CW, seed, juvenile: num('juv', 0) });
+const crab = new CrabModel({ sex: param('sex') ?? 'm', cw_m: CW, seed, juvenile: num('juv', 0) });
+if (param('pal')) crab.applyPalette(paletteFor(param('pal'), seed));
 crab.setLod(num('lod', 0));
 crab.setShadows(true);
 crab.setSurface(num('wet', 0.45), num('sand', 0.4), num('tip', 0.3), 0.5);
+crab.root.rotation.y = num('heading', 0);
+crab.setSandColor(new Color(SANDC[0] * 1.05, SANDC[1] * 1.05, SANDC[2] * 1.05));
+crab.pelletMat.userData.uniforms.uPelPepper.value = PEPPER;
+if (num('dbg', 0)) for (const m of [crab.mat, crab.setaeMat]) m.userData.uniforms.uKgMorph.value.y = 1;
+if (param('fill')) scene.userData.fill = num('fill', 0.9);
 scene.add(crab.root);
+// a static field of pellets around the crab (p4)
+const NPEL = LIVE_CHECK() ? 0 : num('pellets', 0);
+let staticPellets = null;
+if (NPEL > 0) {
+  staticPellets = new SandPellets();
+  staticPellets.setSandColor(new Color(SANDC[0] * 1.05, SANDC[1] * 1.05, SANDC[2] * 1.05));
+  staticPellets.setPepper(PEPPER);
+  staticPellets.setShadows(true);
+  scene.add(staticPellets.group);
+  let rs = seed * 7919 + 13;
+  const rnd = () => { rs = (rs * 16807) % 2147483647; return rs / 2147483647; };
+  for (let i = 0; i < NPEL; i++) {
+    const a = rnd() * Math.PI * 2, d = CW * (1.2 + Math.sqrt(rnd()) * 6);
+    const x = Math.sin(a) * d, z = Math.cos(a) * d;
+    staticPellets.add(x, 0, z, CW * (0.13 + rnd() * 0.05), 'feed', -900 - rnd() * 900, rnd());
+  }
+  staticPellets.update(0, new Vector3(0, 0.05, 0.1), null);
+}
+function LIVE_CHECK() { return Q.get('live') === '1'; }
 
 const v = new Vector3();
 function pose(kind, t = 0) {
   const r = crab.rig;
-  const h = kind === 'feed' ? STANCE.bodyHeight.feed : kind === 'wave' ? STANCE.bodyHeight.alert : STANCE.bodyHeight.calm;
+  if (kind === 'flip') { poseFlip(); return; }
+  const h = kind === 'feed' ? STANCE.bodyHeight.feed : kind === 'wave' ? STANCE.bodyHeight.display : STANCE.bodyHeight.calm;
   r.body.position.set(0, h, 0);
   r.body.rotation.set(kind === 'feed' ? 0.12 : kind === 'wave' ? -0.12 : 0, 0, 0);
   r.root.updateMatrixWorld(true);
@@ -106,7 +171,7 @@ function pose(kind, t = 0) {
   for (let i = 0; i < r.legs.length; i++) {
     const leg = r.legs[i];
     const k = i % 4;
-    const reach = STANCE.footReach[k];
+    const reach = STANCE.footReach[k] * (kind === 'wave' ? 0.95 : 1);
     // home foot on the ground (Root space), then into Body space
     leg.homeFoot(v, reach, 0, 0);
     v.y = 0;
@@ -124,13 +189,43 @@ function pose(kind, t = 0) {
   crab.setMouthPellet(kind === 'feed' ? 0.7 : 0);
 }
 
+/** on its back on a palm (p2): legs folded over the underside, chelae folded, the carapace resting on the hand */
+function poseFlip() {
+  const r = crab.rig;
+  r.body.position.set(0, 0, 0);
+  r.body.rotation.set(0, 0, 0);
+  r.root.updateMatrixWorld(true);
+  // the legs fold over the underside (knees toward the viewer), as a crab held on its back does (3.webp)
+  for (let i = 0; i < r.legs.length; i++) {
+    const leg = r.legs[i];
+    const k = i % 4;
+    // meri swung forward and level, the knee shut so carpus, propodus and dactylus lie folded back over the
+    // merus' ventral edge: from below one sees the slender distal segments, not the broad meri (3.webp)
+    // (yaw > 0 is backward on the left side, forward on the right)
+    leg.ang.yaw = -leg.side * [0.62, 0.55, 0.45, 0.3][k];
+    leg.ang.lev = [0.15, 0.2, 0.25, 0.3][k];
+    leg.ang.knee = -2.55;
+    leg.ang.cp = 0;
+    leg.ang.dac = -1.0;
+    leg.apply();
+  }
+  for (const c of r.chelae) c.setPose(CHELA_POSES.fold);
+  for (const e of r.eyes) e.pose(0.15, null, 0);
+  crab.setMouthPellet(0);
+  // upside down, the dome on the palm
+  crab.root.rotation.set(0, 0, Math.PI);
+  crab.root.position.set(0, (0.58 + 0.02) * CW, 0);
+}
+
 const camera = new PerspectiveCamera(num('fov', 40), (W || innerWidth) / (H || innerHeight), 0.0005, 5);
 const target = new Vector3(0, CW * 0.35, 0);
 const views = {
   front: [0, 0.35, 3.2], side: [3.2, 0.4, 0], top: [0, 3.6, 0.001], q34: [2.1, 1.5, 2.3], back: [-1.6, 1.5, -2.6],
   low: [1.2, 0.15, 3.0], macro: [0.9, 0.7, 1.3], under: [0.4, -0.6, 2.4], eye: [0.5, 0.9, 1.0], chela: [0.6, 0.15, 1.2], leg: [1.6, 0.6, 0.5],
 };
-const vw = views[Q.get('view') ?? 'q34'] ?? views.q34;
+const vw = vec('cam') ?? views[Q.get('view') ?? 'q34'] ?? views.q34;
+const tg = vec('tgt');
+if (tg) target.set(tg[0], tg[1], tg[2]).multiplyScalar(CW);
 camera.position.set(vw[0], vw[1], vw[2]).multiplyScalar(CW * num('dist', 1)).add(target);
 if (Q.get('view') === 'eye') target.set(0, CW * 0.75, CW * 0.4);
 if (Q.get('view') === 'chela') target.set(0, CW * 0.2, CW * 0.55);
@@ -226,9 +321,10 @@ function stepLive(dt) {
   L.burrows.end();
 }
 
-const kind = Q.get('pose') ?? 'stand';
+const kind = param('pose') ?? 'stand';
 let t = 0, frames = 0;
 const hud = document.getElementById('hud');
+if (Q.get('hud') === '0') hud.style.display = 'none';
 const hudText = () => `CW ${(CW * 1000).toFixed(1)} mm  LOD${num('lod', 0)}  tris ${crabTriangles(num('lod', 0))}  ${LIVE ? `t ${live.t.toFixed(1)}s  ${live.c.behavior.debug}  pellets ${live.pellets.total}` : `pose ${kind}`}`;
 hud.textContent = hudText();
 // simulate ahead in fixed steps (screenshots of a given moment)

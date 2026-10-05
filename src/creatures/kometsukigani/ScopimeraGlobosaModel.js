@@ -32,7 +32,7 @@ export class CrabModel {
     this.root.add(this.rig.root);
     this.root.scale.setScalar(cw_m);
     const rand = mulberry(seed);
-    this.palette = crabPalette(rand);
+    this.palette = crabPalette(rand, sex);
     this.mat = makeExoskeletonMaterial({ lod: 0 });
     this.setaeMat = makeSetaeMaterial();
     for (const m of [this.mat, this.setaeMat]) {
@@ -40,6 +40,8 @@ export class CrabModel {
       u.uKgSeed.value.set(this.palette.patternSeed, this.palette.colorSeed, this.palette.purple, this.palette.pale);
       u.uKgTint.value.copy(this.palette.tint);
       u.uKgDark.value.copy(this.palette.dark);
+      u.uKgMorph.value.x = this.palette.red ?? 0;
+      u.uKgMorph.value.z = this.palette.cover ?? 0.6;
       u.uKgFeed.value.z = juvenile;
       u.uKgState.value.w = cw_m;
     }
@@ -79,6 +81,20 @@ export class CrabModel {
     this.root.add(this.carried);
     this.pelletDiam = PELLET.feedDiam[0] + (PELLET.feedDiam[1] - PELLET.feedDiam[0]) * rand();
     this.castShadow = false;
+  }
+
+  /** recolour (palette as made by crabPalette / paletteFor) */
+  applyPalette(p) {
+    if (!p) return;
+    this.palette = { ...this.palette, ...p };
+    for (const m of [this.mat, this.setaeMat]) {
+      const u = m.userData.uniforms;
+      u.uKgSeed.value.set(this.palette.patternSeed, this.palette.colorSeed, this.palette.purple, this.palette.pale);
+      u.uKgTint.value.copy(this.palette.tint);
+      u.uKgDark.value.copy(this.palette.dark);
+      u.uKgMorph.value.x = this.palette.red ?? 0;
+      u.uKgMorph.value.z = this.palette.cover ?? 0.6;
+    }
   }
 
   /** the sand the crab works (its mouth pellet is made of it) — linear colour */

@@ -52,6 +52,8 @@ export class SandPellets {
   }
 
   setSandColor(c) { this.material.userData.uniforms.uPelSand.value.copy(c); }
+  /** grain mix: 0 the flat's sand, 1 salt and pepper */
+  setPepper(p) { this.material.userData.uniforms.uPelPepper.value = p; }
 
   cellKey(x, z) { return Math.floor(z / CELL) * 100003 + Math.floor(x / CELL); }
 

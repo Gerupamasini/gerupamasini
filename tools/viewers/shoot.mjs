@@ -18,6 +18,9 @@ page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') 
 for (const s of shots) {
   const [name, query] = s.split('?');
   const page2 = page;
+  // a shot may ask for its own canvas size (photo-matched renders)
+  const qs = new URLSearchParams(query ?? '');
+  if (qs.has('w') && qs.has('h')) await page2.setViewportSize({ width: Number(qs.get('w')), height: Number(qs.get('h')) });
   await page2.goto(`http://localhost:${PORT}/gerupamasini/tools/viewers/kometsukigani/index.html?${query ?? ''}`, { waitUntil: 'load' });
   await page2.waitForFunction(() => window.__ready === true, null, { timeout: 240000 });
   if (process.env.WAIT) await page2.waitForTimeout(Number(process.env.WAIT));

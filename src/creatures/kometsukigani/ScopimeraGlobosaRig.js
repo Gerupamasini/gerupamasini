@@ -65,22 +65,28 @@ export const LEG_JOINTS = {
  * the sand ahead; mouth: fingertips at the buccal frame; wave: raised high (the male's display) [L].
  */
 export const CHELA_POSES = {
-  fold: [0.02, 0.92, 0, 0.12, 1.62, -1.55, 0.03],
+  /**
+   * fold, fitted to the front views (2.webp, 4.webp, 003–005): the carpus lies across above each palm like a
+   * shoulder, the palm hangs beside the maxillipeds with its broad face forward, the fingers point down to the
+   * midline under them
+   */
+  fold: [-1.29, 1.105, 0, 0.163, 2.6, 0.492, 0.04],
   scoop: [0.05, 0.25, 0, 0.12, 1.25, -1.15, 0.3],
   mouth: [0.1, 0.95, 0, 0.25, 1.8, -1.2, 0.05],
-  wave: [-0.15, 1.6, 0, -0.2, 0.45, 0.1, 0.1],
+  /** wave, fitted to 6.webp: merus vertical beside the carapace, palm high with the fingers hooked inward */
+  wave: [-1.2, 1.38, 0, -0.2, -0.055, 0.92, 0.02],
   guard: [0.0, 1.05, 0, 0.05, 1.2, -0.8, 0.25],
   tuck: [0.18, 0.7, 0, 0.45, 1.85, -1.6, 0.0],
 };
 
 /** cheliped joints: [axis, min, max] */
 export const CHELA_JOINTS = {
-  Coxa: ['y', -0.45, 0.6],
+  Coxa: ['y', -1.4, 0.6],        // swung out laterally when folded or raised
   Basis: ['z', -1.1, 1.75],      // the whole limb up (waving) or down (scooping)
   Ischium: ['z', 0, 0],
   Merus: ['y', -0.35, 0.65],     // swing in front of the face
-  Carpus: ['y', -0.2, 1.85],     // fold the chela medially
-  Propodus: ['z', -1.6, 0.9],    // wrist: fingers down … level
+  Carpus: ['y', -0.2, 2.7],      // fold the chela medially (folded: back across, above the palm)
+  Propodus: ['z', -1.6, 1.0],    // wrist: fingers down … level
   Dactylus: ['z', 0, 0.55],      // gape
 };
 
@@ -112,7 +118,7 @@ export function rigDefinition() {
     add(`Mxp3_${id}`, body, new Vector3(sign * hx, hy, hz), basisQuat(xAx, yAx), { limb: `Mxp3_${id}`, side: sign });
   }
   // where the sorted sand is pressed into a pellet: above the mouth, at the top of the buccal frame [L]
-  add('Mouth', body, new Vector3(0, 0.31, 0.445));
+  add('Mouth', body, new Vector3(0, 0.41, 0.445));
   add('Abdomen_M', body, new Vector3(0, -0.004, ABDOMEN.z0));
   add('Abdomen_F', body, new Vector3(0, -0.004, ABDOMEN.z0));
 
@@ -125,7 +131,7 @@ export function rigDefinition() {
     for (let s = 0; s < SEGMENTS.length; s++) {
       const seg = SEGMENTS[s];
       const pos = s === 0 ? new Vector3(sign * C.base[0], C.base[1], C.base[2])
-        : seg === 'Dactylus' ? new Vector3(C.palm - 0.012, C.palmH * 0.22, 0)
+        : seg === 'Dactylus' ? new Vector3(C.palm - 0.012, C.palmH * 0.15, 0)
           : new Vector3(lens[s - 1], 0, 0);
       // the right limb's local Z points the other way (Z = X × Y); flexions are mirrored by the joint signs
       const quat = s === 0 ? basisQuat(dir, Y) : new Quaternion();
@@ -398,7 +404,7 @@ export class ChelaRig {
     this.axes = SEGMENTS.map((s) => (CHELA_JOINTS[s][0] === 'y' ? Y : Z));
     this.limits = SEGMENTS.map((s) => [CHELA_JOINTS[s][1], CHELA_JOINTS[s][2]]);
     // tip of the closed fingers in the Propodus frame
-    this.tipLocal = new Vector3(CHELIPED.palm + CHELIPED.finger * 0.96, -CHELIPED.palmH * 0.12, 0);
+    this.tipLocal = new Vector3(CHELIPED.palm + CHELIPED.finger * 0.96, -CHELIPED.palmH * 0.02, 0);
     this.frames = SEGMENTS.map(() => ({ p: new Vector3(), q: new Quaternion() }));
     this.error = 0;
     this.scale = 1;

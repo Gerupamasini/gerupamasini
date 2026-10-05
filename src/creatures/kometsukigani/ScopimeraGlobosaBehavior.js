@@ -590,7 +590,8 @@ export class CrabBehavior {
     // stretch up on the legs while the chelae are up: the feet stay where they are, the legs straighten under
     // the body (as far as the planted legs allow) and the dactyli stand on their tips
     cmd.tiptoe = busy ? 1 : 0.3;
-    cmd.height = busy ? STANCE.bodyHeight.alert * 1.12 : STANCE.bodyHeight.alert;
+    // 6.webp: up on tiptoe on nearly straight legs (the animator caps it at what the planted feet allow)
+    cmd.height = busy ? STANCE.bodyHeight.display : STANCE.bodyHeight.alert;
     if (!busy) {
       this.waveGap -= dt;
       if (this.waveGap <= 0) {

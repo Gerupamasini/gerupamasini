@@ -627,7 +627,7 @@ export class CrabAnimator {
 
   /** fingertip target helpers in Body space */
   mouthPoint(out, side) {
-    return out.set(side * 0.03, CARAPACE.marginY - 0.01, 0.47);
+    return out.set(side * 0.03, CARAPACE.marginY + 0.09, 0.47);
   }
 
   updateChelae(dt) {
