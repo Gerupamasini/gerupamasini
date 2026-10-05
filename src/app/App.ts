@@ -28,6 +28,7 @@ import { Observation } from '../systems/Observation';
 import { CAPTURE_PHASE_SEC, Capture } from '../systems/Capture';
 import { skillKeyOf } from '../systems/Encyclopedia';
 import { FieldCase, CASE_DRAFT } from './FieldCase';
+import { ShopScene } from './ShopScene';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { minDepthFor } from '../creatures/Individual';
 import { ui, t, toast, type Screen, type Marker, type ToolId } from '../ui/store';
@@ -69,6 +70,7 @@ export class App {
   private lastTool: ToolDef | null = null;
   /** the observation case set down on the flat, and the camera that looks into it */
   fieldCase: FieldCase | null = null;
+  shop: ShopScene | null = null;
   private caseControls: OrbitControls | null = null;
   private caseSavedNear = 0.05;
   /** the clam the player is looking at (index into the field), or -1 */
@@ -134,9 +136,10 @@ export class App {
         this.commitTankLayout();
         return;
       }
-      if (!d || (this.mode !== 'home' && this.mode !== 'tankEdit')) return;
+      if (!d || (this.mode !== 'home' && this.mode !== 'tankEdit' && this.mode !== 'shop')) return;
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6 || performance.now() - d.t > 350) return;
-      this.onHomeClick(e.clientX, e.clientY);
+      if (this.mode === 'shop') this.onShopClick(e.clientX, e.clientY);
+      else this.onHomeClick(e.clientX, e.clientY);
     });
     (window as unknown as { __higata: App }).__higata = this;
   }
@@ -175,6 +178,7 @@ export class App {
   async start(): Promise<void> {
     render(h(Root, { app: this }), this.uiRoot);
     this.settings = await loadSettings();
+    ui.settings.value = this.settings;
     this.renderer.setQuality(this.settings.quality);
     if (!this.renderer.caps.webgl2) {
       ui.error.value = t('warn.webgl2', 'WebGL2 is required');
@@ -291,6 +295,7 @@ export class App {
       await this.creatures.preload();
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
+      this.world.water.setPolarized(this.settings.sunglasses);
       this.net = new NetView(this.world.scene);
       void this.net.setTool(this.netDef() ?? null);
       for (const id of this.encyclopedia.loadout.value) preloadNet(this.data.tools.get(id));
@@ -337,6 +342,8 @@ export class App {
 
   async updateSettings(patch: Partial<SettingsData>): Promise<void> {
     this.settings = { ...this.settings, ...patch };
+    ui.settings.value = this.settings;
+    this.world?.water.setPolarized(this.settings.sunglasses);
     this.renderer.setQuality(this.settings.quality);
     this.world?.terrain.setDetail(this.renderer.preset.surfaceDetail > 0);
     if (this.player) this.player.eyeHeight = this.settings.eyeHeight;
@@ -560,6 +567,7 @@ export class App {
     if (!tool) return;
     if (!this.encyclopedia.buy(tool)) toast(t('tools.cannotBuy'), 'warn');
     this.syncShelf();
+    this.stockShop();
     this.requestSave();
   }
 
@@ -840,6 +848,25 @@ export class App {
     return c.set(p.position.x + f.x * 0.75, 0, p.position.z + f.z * 0.75);
   }
 
+  /** debug: one animal of a species set down a few metres ahead (on the sand for a walker, in water for a swimmer). */
+  debugSpawn(speciesId: string, dist = 4): boolean {
+    const world = this.world, creatures = this.creatures, player = this.player, sp = this.data.species.get(speciesId);
+    if (!world || !creatures || !player || !sp) return false;
+    const f = player.forward;
+    let x = player.position.x + f.x * dist, z = player.position.z + f.z * dist;
+    if (sp.locomotion === 'swim') { const w = world.habitat.nearestWater(x, z, minDepthFor(sp, sp.size.length_mm.mean) + 0.02, 12); if (w) { x = w.x; z = w.z; } }
+    const ind = generateIndividual(sp, Math.floor(Math.random() * 1e9), x, z, world.habitat.coarseIndex(x, z), 0, this.clock.nowGame());
+    creatures.spawn(ind);
+    return true;
+  }
+
+  /** Polarised sunglasses on or off: the water's glare, and a tint over the view. */
+  toggleSunglasses(): void {
+    const on = !this.settings.sunglasses;
+    void this.updateSettings({ sunglasses: on });
+    toast(t(on ? 'toast.sunglassesOn' : 'toast.sunglassesOff'), 'info', 2500);
+  }
+
   /** Set the observation case down ahead and look into it. */
   openCase(): void {
     const world = this.world, player = this.player, fc = this.fieldCase;
@@ -911,12 +938,31 @@ export class App {
     if (this.mode !== 'home') return;
     ui.homeInfo.value = null;
     ui.homePanel.value = 'none';
-    void this.transition(t('transition.shop'), () => this.openOverlay('shop'));
+    ui.shopSelected.value = null;
+    void this.transition(t('transition.shop'), () => {
+      if (!this.shop) this.shop = new ShopScene(this.renderer.aspect, (id) => t(`shop.item.${id}`));
+      this.stockShop();
+      this.openOverlay('shop');
+    });
   }
 
   closeShop(): void {
     if (this.mode !== 'shop') return;
+    ui.shopSelected.value = null;
     void this.transition(t('transition.home'), () => this.closeOverlay());
+  }
+
+  /** the shop's shelves: every net, priced, the owned ones lit */
+  private stockShop(): void {
+    this.shop?.setStock([...this.data.tools.values()].filter((x) => x.type === 'capture'), (id) => this.encyclopedia.owns(id));
+  }
+
+  /** A click in the shop: the net or parcel under the pointer opens its card. */
+  private onShopClick(clientX: number, clientY: number): void {
+    if (!this.shop) return;
+    const [nx, ny] = this.ndcOf(clientX, clientY);
+    const id = this.shop.pick(nx, ny);
+    if (id) ui.shopSelected.value = id;
   }
 
   openGacha(): void {
@@ -1048,6 +1094,7 @@ export class App {
     this.camera.aspect = this.renderer.aspect;
     this.camera.updateProjectionMatrix();
     this.tank?.setAspect(this.renderer.aspect);
+    this.shop?.setAspect(this.renderer.aspect);
   }
 
   tidePhase(): TidePhase {
@@ -1098,6 +1145,7 @@ export class App {
         else if (this.input.pressed('tool2') && this.encyclopedia.loadout.value[1]) this.setTool(this.encyclopedia.loadout.value[1]);
         else if (this.input.pressed('interact')) this.useTool();
         else if (this.input.pressed('caseView')) this.openCase();
+        else if (this.input.pressed('sunglasses')) this.toggleSunglasses();
         break;
       case 'caseView':
         if (this.input.pressed('caseView') || this.input.pressed('menu')) this.closeCase();
@@ -1155,7 +1203,10 @@ export class App {
     }
     this.renderer.gl.toneMappingExposure = this.tankVisible() ? 0.6 : (world?.exposure ?? 0.5);
 
-    if (this.tankVisible()) {
+    if (mode === 'shop' && this.shop) {
+      this.shop.update(dt);
+      this.renderer.gl.render(this.shop.scene, this.shop.camera);
+    } else if (this.tankVisible()) {
       if (mode === 'tankEdit') this.tank.updateFrozen(); else this.tank.update(dt, 1);
       if (this.hero && this.tank.heroActive) {
         this.hero.setLighting(this.tank.lighting);

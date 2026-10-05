@@ -243,6 +243,8 @@ export class CreatureSystem {
     this.group.add(view.root);
     const bones = view.model?.bones ?? {};
     const meshes = view.model?.meshes ?? [];
+    // the baked clips ride on the root for drivers that play them (the plover)
+    if (view.model) view.root.userData.clips = view.model.clips;
     e.driver.attach(view.root, e.ind, view.model?.extras ?? {}, bones as Record<string, Object3D>, meshes);
   }
 

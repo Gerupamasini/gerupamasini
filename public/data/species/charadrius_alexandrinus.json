@@ -7,7 +7,10 @@
   "protected": true,
   "model": {
     "placeholder": "plover",
-    "modelLength_mm": 170,
+    "hero": "plover/kentish_plover.hero.glb",
+    "lod1": "plover/kentish_plover.hero.glb",
+    "lod2": "plover/kentish_plover.hero.glb",
+    "modelLength_mm": 165,
     "driver": "plover",
     "clips": { "idle": "Idle", "move": "Move", "special": [] }
   },

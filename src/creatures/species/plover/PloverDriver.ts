@@ -1,4 +1,4 @@
-import { MathUtils, Object3D, Vector3 } from 'three';
+import { AnimationAction, AnimationClip, AnimationMixer, LoopOnce, LoopRepeat, MathUtils, Object3D, Vector3 } from 'three';
 import type { Individual } from '../../Individual';
 import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import { makePlover, type PlaceholderModel } from '../../models/placeholders';
@@ -6,7 +6,20 @@ import { turnToward } from '../shrimp/ShrimpDriver';
 
 type Mode = 'idle' | 'walk' | 'run' | 'forage' | 'fly';
 
-/** シロチドリ placeholder driver: walking and running along the waterline, pecking, and a short escape flight. */
+/** the baked clips of the plover model (tools: the kentish-plover project's GLB export), by what they are for */
+const CLIP = {
+  idle: '01_Idle', walk: '02_Walk', run: '03_Run', forage: '05_ForageSearch', peck: ['06_Peck_worm', '06_Peck_crab'],
+  preen: ['07_Preen_breast', '07_Preen_belly', '07_Preen_flank', '07_Preen_scapulars', '07_Preen_wing', '07_Preen_tail', '07_Scratch', '07_WingStretch'],
+  shake: '07_Shake', rest: ['08_Rest_oneLeg', '08_Rest_tucked', '08_Rest_sit'], alert: '09_Alert', takeoff: '10_Takeoff', flight: '11_Flight', landing: '12_Landing',
+} as const;
+/** the model's own pace for the walk and run cycles (m/s): the clips are stretched to the speed the bird moves at */
+const CLIP_WALK_SPEED = 0.35, CLIP_RUN_SPEED = 1.2;
+
+/**
+ * シロチドリ: walking and running along the waterline, pecking, a short escape flight. With the real model the baked
+ * clips are played (a layered mixer: the locomotion loop underneath, pecks, preens and the alert on top); the
+ * placeholder bird is posed by hand as before.
+ */
 export class PloverDriver implements Driver {
   private model: PlaceholderModel | null = null;
   private root: Object3D | null = null;
@@ -25,6 +38,15 @@ export class PloverDriver implements Driver {
   private scale = 1;
   private readonly tmp = new Vector3();
   busy = false;
+  // the clip player
+  private mixer: AnimationMixer | null = null;
+  private clips = new Map<string, AnimationClip>();
+  private loop: AnimationAction | null = null;
+  private loopName = '';
+  private oneShot: AnimationAction | null = null;
+  private restVariant: string | null = null;
+  private idleFor = 0;
+  private nextPreen = 6;
 
   static makeModel(): PlaceholderModel {
     return makePlover();
@@ -38,11 +60,63 @@ export class PloverDriver implements Driver {
     root.scale.setScalar(this.scale);
     root.position.set(individual.pos.x, individual.pos.y, individual.pos.z);
     root.rotation.set(0, individual.heading, 0);
+    this.disposeMixer();
+    const clips = (root.userData.clips as AnimationClip[] | undefined) ?? [];
+    if (!this.model && clips.length) {
+      this.mixer = new AnimationMixer(root);
+      for (const c of clips) this.clips.set(c.name, c);
+      this.play(CLIP.idle, 1);
+    }
   }
 
   detach(): void {
+    this.disposeMixer();
     this.root = null;
     this.model = null;
+  }
+
+  private disposeMixer(): void {
+    if (this.mixer) { this.mixer.stopAllAction(); if (this.root) this.mixer.uncacheRoot(this.root); }
+    this.mixer = null;
+    this.clips.clear();
+    this.loop = null;
+    this.loopName = '';
+    this.oneShot = null;
+  }
+
+  /** The locomotion loop underneath everything, cross-faded when it changes. */
+  private play(name: string, timeScale: number, fade = 0.18): void {
+    const m = this.mixer;
+    if (!m) return;
+    if (this.loopName === name) { if (this.loop) this.loop.timeScale = timeScale; return; }
+    const clip = this.clips.get(name);
+    if (!clip) return;
+    const next = m.clipAction(clip);
+    next.setLoop(LoopRepeat, Infinity);
+    next.enabled = true;
+    next.timeScale = timeScale;
+    next.reset().play();
+    if (this.loop) { this.loop.crossFadeTo(next, fade, false); }
+    this.loop = next;
+    this.loopName = name;
+  }
+
+  /** A gesture laid over the loop: a peck, a preen, the alert, a shake. */
+  private gesture(name: string, timeScale = 1): number {
+    const m = this.mixer, clip = this.clips.get(name);
+    if (!m || !clip) return 0;
+    if (this.oneShot) this.oneShot.fadeOut(0.12);
+    const a = m.clipAction(clip);
+    a.setLoop(LoopOnce, 1);
+    a.clampWhenFinished = true;
+    a.timeScale = timeScale;
+    a.reset().fadeIn(0.1).play();
+    this.oneShot = a;
+    return clip.duration / timeScale;
+  }
+
+  private pickOne(list: readonly string[]): string {
+    return list[Math.floor((this.ind?.rng.next() ?? Math.random()) * list.length)] ?? list[0];
   }
 
   setIntent(intent: Intent): void {
@@ -65,6 +139,7 @@ export class PloverDriver implements Driver {
           this.flyDur = Math.max(2.5, dist / 7 + 1.2);
           this.timer = this.flyDur + 0.5;
           this.emit('flee_flight');
+          this.gesture(CLIP.takeoff);
         } else {
           this.mode = 'run';
           this.emit('run');
@@ -78,9 +153,11 @@ export class PloverDriver implements Driver {
         this.mode = 'idle';
         this.alertPose = 1;
         this.emit('alert');
+        this.gesture(CLIP.alert);
         break;
       default: this.mode = 'idle';
     }
+    if (intent.kind !== 'rest') { this.restVariant = null; this.idleFor = 0; }
   }
 
   update(dt: number, ctx: DriverContext): void {
@@ -108,8 +185,11 @@ export class PloverDriver implements Driver {
       case 'forage': {
         this.peckTimer -= sdt;
         if (this.peckTimer <= 0) {
-          if (this.peck <= 0 && ind.rng.chance(0.6)) { this.peck = 0.45; this.emit('forage_peck'); this.peckTimer = ind.rng.range(0.6, 1.6); }
-          else {
+          if (this.peck <= 0 && ind.rng.chance(0.6)) {
+            this.peck = this.mixer ? this.gesture(this.pickOne(CLIP.peck)) : 0.45;
+            this.emit('forage_peck');
+            this.peckTimer = this.peck + ind.rng.range(0.4, 1.4);
+          } else {
             const ang = ind.heading + ind.rng.range(-1.0, 1.0);
             this.target.set(ind.pos.x + Math.sin(ang) * ind.rng.range(0.3, 1.2), 0, ind.pos.z + Math.cos(ang) * ind.rng.range(0.3, 1.2));
             this.peckTimer = ind.rng.range(0.8, 1.8);
@@ -127,7 +207,11 @@ export class PloverDriver implements Driver {
         height = Math.sin(u * Math.PI) * 4;
         ind.heading = turnToward(ind.heading, Math.atan2(this.target.x - this.flyFrom.x, this.target.z - this.flyFrom.z), 6 * sdt);
         speed = 7;
-        if (u >= 1) { this.mode = 'idle'; this.busy = false; ind.alert = 0.6; }
+        if (this.mixer) {
+          if (u > 0.12 && u < 0.82) this.play(CLIP.flight, 1, 0.25);
+          else if (u >= 0.82 && this.loopName !== CLIP.landing) { this.play(CLIP.landing, 1, 0.2); }
+        }
+        if (u >= 1) { this.mode = 'idle'; this.busy = false; ind.alert = 0.6; if (this.mixer) this.gesture(CLIP.shake); }
         break;
       }
       default: break;
@@ -141,32 +225,61 @@ export class PloverDriver implements Driver {
     root.position.set(ind.pos.x, ind.pos.y, ind.pos.z);
     root.rotation.set(0, ind.heading, 0);
     this.phase += sdt * (speed > 2 ? 50 : speed > 0.8 ? 22 : speed > 0 ? 12 : 0.5);
-    if (m) {
-      const flying = this.mode === 'fly';
-      const legL = m.parts.legL, legR = m.parts.legR;
-      if (legL && legR) {
-        const amp = flying ? 0 : speed > 0 ? 0.6 : 0;
-        legL.rotation.x = Math.sin(this.phase) * amp + (flying ? 1.2 : 0);
-        legR.rotation.x = -Math.sin(this.phase) * amp + (flying ? 1.2 : 0);
+    if (this.mixer) this.animateClips(sdt, speed);
+    else if (m) this.animatePlaceholder(speed);
+  }
+
+  /** The clip player: the loop for what the bird does, a rest pose or a preen when it has stood still a while. */
+  private animateClips(sdt: number, speed: number): void {
+    const ind = this.ind!;
+    if (this.mode === 'fly') { /* takeoff, flight and landing are set in the flight itself */ }
+    else if (speed > 0.8) this.play(CLIP.run, Math.max(0.6, speed / CLIP_RUN_SPEED));
+    else if (speed > 0) this.play(CLIP.walk, Math.max(0.6, speed / CLIP_WALK_SPEED));
+    else if (this.mode === 'forage') this.play(CLIP.forage, 1);
+    else if (this.restVariant) this.play(this.restVariant, 1, 0.5);
+    else this.play(CLIP.idle, 1);
+    if (speed === 0 && this.mode !== 'fly' && this.alertPose < 0.3) {
+      // standing still: now and then a preen or a stretch; after a long while, settle into a rest pose
+      this.idleFor += sdt;
+      this.nextPreen -= sdt;
+      if (this.nextPreen <= 0 && !this.oneShot?.isRunning()) {
+        this.gesture(this.pickOne(CLIP.preen));
+        this.nextPreen = ind.rng.range(5, 14);
       }
-      const body = m.parts.body;
-      if (body) {
-        body.position.y = 0.075 + (speed > 0 && !flying ? Math.abs(Math.sin(this.phase)) * 0.004 : 0) + (flying ? 0.02 : 0);
-        body.rotation.x = flying ? -0.15 : 0;
-      }
-      const neck = m.parts.neck;
-      if (neck) {
-        const peckAng = this.peck > 0 ? Math.sin((this.peck / 0.45) * Math.PI) * 1.1 : 0;
-        neck.rotation.x = peckAng - this.alertPose * 0.25;
-        neck.position.y = 0.016 + this.alertPose * 0.012;
-      }
-      const wl = m.parts.wingL, wr = m.parts.wingR;
-      if (wl && wr) {
-        const fold = flying ? 0 : 1.25;
-        const flap = flying ? Math.sin(this.phase) * 0.9 : 0;
-        wl.rotation.z = fold + flap;
-        wr.rotation.z = -fold - flap;
-      }
+      if (this.mode === 'idle' && this.idleFor > 8 && !this.restVariant && ind.rng.chance(0.015)) this.restVariant = this.pickOne(CLIP.rest);
+    } else {
+      this.idleFor = 0;
+      if (this.restVariant && speed > 0) this.restVariant = null;
+    }
+    this.mixer!.update(sdt);
+  }
+
+  private animatePlaceholder(speed: number): void {
+    const m = this.model!;
+    const flying = this.mode === 'fly';
+    const legL = m.parts.legL, legR = m.parts.legR;
+    if (legL && legR) {
+      const amp = flying ? 0 : speed > 0 ? 0.6 : 0;
+      legL.rotation.x = Math.sin(this.phase) * amp + (flying ? 1.2 : 0);
+      legR.rotation.x = -Math.sin(this.phase) * amp + (flying ? 1.2 : 0);
+    }
+    const body = m.parts.body;
+    if (body) {
+      body.position.y = 0.075 + (speed > 0 && !flying ? Math.abs(Math.sin(this.phase)) * 0.004 : 0) + (flying ? 0.02 : 0);
+      body.rotation.x = flying ? -0.15 : 0;
+    }
+    const neck = m.parts.neck;
+    if (neck) {
+      const peckAng = this.peck > 0 ? Math.sin((this.peck / 0.45) * Math.PI) * 1.1 : 0;
+      neck.rotation.x = peckAng - this.alertPose * 0.25;
+      neck.position.y = 0.016 + this.alertPose * 0.012;
+    }
+    const wl = m.parts.wingL, wr = m.parts.wingR;
+    if (wl && wr) {
+      const fold = flying ? 0 : 1.25;
+      const flap = flying ? Math.sin(this.phase) * 0.9 : 0;
+      wl.rotation.z = fold + flap;
+      wr.rotation.z = -fold - flap;
     }
   }
 
