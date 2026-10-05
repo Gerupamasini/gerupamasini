@@ -166,7 +166,7 @@ const eye = buildEyeMesh();
 const meshEye = gb.addMesh('Eye', [gb.primitive({ ...eye, material: mEye })]);
 for (const [side, name, jn] of [[1, 'Eye_L', 'J_eyeL'], [-1, 'Eye_R', 'J_eyeR']]) {
   const tr = eyeTransform(side);
-  const node = gb.addNode({ name, mesh: meshEye, rotation: tr.rotation });
+  const node = gb.addNode({ name, mesh: meshEye, rotation: tr.rotation, ...(tr.offset ? { translation: tr.offset } : {}) });
   gb.json.nodes[jointNodes[J[jn]]].children.push(node);
 }
 

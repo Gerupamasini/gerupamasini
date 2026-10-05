@@ -79,7 +79,7 @@ export const SPECIES = {
     // long oblique jaw: rictus 2.85 mm, maxilla to 3.6 mm, gape 2.17 → 1.27 mm
     jaw: [2.6, 4.0, 2.3, 3.0],
     // pale, less amber tissue than the juvenile マハゼ (lower blue absorption)
-    sigS: 1.0,
+    sigS: 0.8,
     sigA: [0.02, 0.04, 0.085],
     organs: [
       { name: 'liver', c: [12.9, 1.45, 0.2], r: [1.8, 1.0, 1.65], k: [1.3, 2.3, 2.9] },

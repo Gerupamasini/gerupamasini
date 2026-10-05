@@ -1147,7 +1147,8 @@ function bakeBodyTextures(ctx) {
     g *= 1 - 0.2 * gl; b *= 1 - 0.22 * gl;
     let rough = 0.31 + 0.035 * fbm3(s * 1.7, yy * 1.7, z * 1.7, 3, 91) - 0.04 * head + 0.03 * belly + cavity * 0.25;
     rough += 0.12 * Math.max(lb.up, lb.lo) - 0.06 * lb.rim;
-    return { r, g, b, rough, mb };
+    // overall a little darker (user review against the photos)
+    return { r: r * 0.72, g: g * 0.72, b: b * 0.7, rough, mb };
   }
 
   // ---------------------------------------------------------------------------

@@ -382,7 +382,7 @@ export function field(s, y, z, eyeCut = true) {
   const L = z >= 0;
   let d = baseDist(s, y, z);
   // eye mounds: a tight blend, so the skin does not climb onto the cornea (only a thin rim over its upper edge)
-  if (s < 6.5) for (const e of F.eyes) d = smin(d, sphereDist(p, e.c, F.Rs), 0.12);
+  if (s < 6.5) for (const e of F.eyes) d = smin(d, sphereDist(p, e.c, F.Rs), 0.3); // a smooth turret, no groove round the eye
   // cheeks (adductor muscles) and the gill-cover plate
   // (a swelling that follows the loft, so the cheek rises smoothly out of the narrow snout behind the eye)
   if (s > 1.8 && s < 10.4) d -= 0.4 * Math.exp(-(((s - 5.6) / 1.75) ** 2)) * Math.exp(-(((y - 2.1) / 1.35) ** 2));
@@ -394,8 +394,8 @@ export function field(s, y, z, eyeCut = true) {
   }
   // fleshy lips
   if (s < 4.6 && y < 3.0) {
-    d = smin(d, capsuleChainDist(p, L ? F.lipsU : F.lipsUR), 0.15);
-    d = smin(d, capsuleChainDist(p, L ? F.lipsL : F.lipsLR), 0.15);
+    d = smin(d, capsuleChainDist(p, L ? F.lipsU : F.lipsUR), 0.24);
+    d = smin(d, capsuleChainDist(p, L ? F.lipsL : F.lipsLR), 0.24);
   }
   // pectoral fin base (fleshy lobe)
   if (s > 9.6 && s < 13.0) d = smin(d, ellipsoidDist(pm, F.pecLobe, [0.68, 1.4, 0.42]), 0.28);
@@ -408,12 +408,12 @@ export function field(s, y, z, eyeCut = true) {
 
   // --- subtractions
   if (eyeCut && s < 6.5) for (const e of F.eyes) {
-    d = smax(d, -sphereDist(p, e.cut, F.rho), 0.07);
-    d = smax(d, -sphereDist(p, e.cut2, F.rho2), 0.07);
+    d = smax(d, -sphereDist(p, e.cut, F.rho), 0.03);
+    d = smax(d, -sphereDist(p, e.cut2, F.rho2), 0.03);
   }
   if (s < 4.6 && y < 3.0) {
-    d = smax(d, -capsuleChainDist(p, L ? F.crease : F.creaseR), 0.04);
-    d = smax(d, -capsuleChainDist(p, L ? F.gU : F.gUR), 0.06);
+    // a clean gape line only; the premaxillary groove read as a second, scratchy line
+    d = smax(d, -capsuleChainDist(p, L ? F.crease : F.creaseR), 0.05);
   }
   if (s > 7.5 && s < 11.2 && y > 0.25) d += (smax(d, -capsuleChainDist(p, L ? F.operc : F.opercR), 0.03) - d) * smoothstep(0.25, 0.9, y);
   if (s > 4.8 && s < 8.0) d = smax(d, -capsuleChainDist(p, L ? F.preop : F.preopR), 0.04);
