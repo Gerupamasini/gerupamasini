@@ -1,0 +1,213 @@
+{
+  "nets": {
+    "net_small": {
+      "ja": "小型タモ",
+      "en": "Compact hand net",
+      "use": "万能・序盤",
+      "spec": {
+        "hoop_cm": "20 (Φ)",
+        "handle_cm": 45,
+        "mesh_mm": 3,
+        "bagDepth_cm": 16
+      },
+      "tiers": {
+        "hero": {
+          "file": "net_small.hero.glb",
+          "triangles": 20888,
+          "vertices": 11312,
+          "bytes": 2130276
+        },
+        "lod1": {
+          "file": "net_small.lod1.glb",
+          "triangles": 7188,
+          "vertices": 4096,
+          "bytes": 677020
+        },
+        "lod2": {
+          "file": "net_small.lod2.glb",
+          "triangles": 3180,
+          "vertices": 1849,
+          "bytes": 229960
+        }
+      },
+      "mass_g": 183,
+      "balancePoint_m": 0.292,
+      "overallLength_m": 0.704
+    },
+    "net_shallow": {
+      "ja": "浅瀬タモ",
+      "en": "Shallow-water net",
+      "use": "小魚・エビ",
+      "spec": {
+        "hoop_cm": "30 (Φ)",
+        "handle_cm": 80,
+        "mesh_mm": 2,
+        "bagDepth_cm": 28
+      },
+      "tiers": {
+        "hero": {
+          "file": "net_shallow.hero.glb",
+          "triangles": 20424,
+          "vertices": 11346,
+          "bytes": 2606512
+        },
+        "lod1": {
+          "file": "net_shallow.lod1.glb",
+          "triangles": 7332,
+          "vertices": 4291,
+          "bytes": 869932
+        },
+        "lod2": {
+          "file": "net_shallow.lod2.glb",
+          "triangles": 3620,
+          "vertices": 2223,
+          "bytes": 303080
+        }
+      },
+      "mass_g": 291,
+      "balancePoint_m": 0.686,
+      "overallLength_m": 1.168
+    },
+    "net_fine": {
+      "ja": "微細目タモ",
+      "en": "Fine-mesh net",
+      "use": "稚魚・小型甲殻類",
+      "spec": {
+        "hoop_cm": "25 (Φ)",
+        "handle_cm": 60,
+        "mesh_mm": 0.8,
+        "bagDepth_cm": 22
+      },
+      "tiers": {
+        "hero": {
+          "file": "net_fine.hero.glb",
+          "triangles": 27472,
+          "vertices": 15442,
+          "bytes": 4017184
+        },
+        "lod1": {
+          "file": "net_fine.lod1.glb",
+          "triangles": 7272,
+          "vertices": 4169,
+          "bytes": 1134028
+        },
+        "lod2": {
+          "file": "net_fine.lod2.glb",
+          "triangles": 3460,
+          "vertices": 2080,
+          "bytes": 374700
+        }
+      },
+      "mass_g": 313,
+      "balancePoint_m": 0.47,
+      "overallLength_m": 0.897
+    },
+    "net_deep": {
+      "ja": "深場タモ",
+      "en": "Long-reach net",
+      "use": "水路・深めの場所",
+      "spec": {
+        "hoop_cm": "35 (Φ)",
+        "handle_cm": 150,
+        "mesh_mm": 4,
+        "bagDepth_cm": 42
+      },
+      "tiers": {
+        "hero": {
+          "file": "net_deep.hero.glb",
+          "triangles": 28088,
+          "vertices": 16111,
+          "bytes": 3619520
+        },
+        "lod1": {
+          "file": "net_deep.lod1.glb",
+          "triangles": 8208,
+          "vertices": 5059,
+          "bytes": 1126104
+        },
+        "lod2": {
+          "file": "net_deep.lod2.glb",
+          "triangles": 3272,
+          "vertices": 2145,
+          "bytes": 398368
+        }
+      },
+      "mass_g": 667,
+      "balancePoint_m": 1.183,
+      "overallLength_m": 1.921
+    },
+    "net_dframe": {
+      "ja": "D型底さらい網",
+      "en": "D-frame dip net",
+      "use": "底生生物",
+      "spec": {
+        "hoop_cm": "35 × 25 (D)",
+        "handle_cm": 90,
+        "mesh_mm": 2,
+        "bagDepth_cm": 30
+      },
+      "tiers": {
+        "hero": {
+          "file": "net_dframe.hero.glb",
+          "triangles": 35968,
+          "vertices": 20523,
+          "bytes": 4863640
+        },
+        "lod1": {
+          "file": "net_dframe.lod1.glb",
+          "triangles": 9528,
+          "vertices": 5581,
+          "bytes": 1393832
+        },
+        "lod2": {
+          "file": "net_dframe.lod2.glb",
+          "triangles": 4620,
+          "vertices": 2782,
+          "bytes": 460568
+        }
+      },
+      "mass_g": 988,
+      "balancePoint_m": 0.799,
+      "overallLength_m": 1.141
+    },
+    "net_premium": {
+      "ja": "高級軽量タモ",
+      "en": "Premium ultralight net",
+      "use": "万能上位",
+      "spec": {
+        "hoop_cm": "32 (Φ)",
+        "handle_cm": 150,
+        "mesh_mm": 2,
+        "bagDepth_cm": 26
+      },
+      "tiers": {
+        "hero": {
+          "file": "net_premium.hero.glb",
+          "triangles": 21672,
+          "vertices": 12523,
+          "bytes": 2953156
+        },
+        "lod1": {
+          "file": "net_premium.lod1.glb",
+          "triangles": 7984,
+          "vertices": 4922,
+          "bytes": 994080
+        },
+        "lod2": {
+          "file": "net_premium.lod2.glb",
+          "triangles": 4024,
+          "vertices": 2630,
+          "bytes": 374752
+        }
+      },
+      "mass_g": 295,
+      "balancePoint_m": 1.13,
+      "overallLength_m": 1.896
+    }
+  },
+  "lodDistances_m": {
+    "hero": 0,
+    "lod1": 2.5,
+    "lod2": 9
+  }
+}

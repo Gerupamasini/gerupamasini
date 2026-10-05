@@ -144,7 +144,7 @@ export class GLBBuilder {
    * Adds a triangle primitive and returns the primitive object.
    * Normals / tangents are stored as normalized int8 and UVs as normalized uint16 (KHR_mesh_quantization).
    */
-  primitive({ position, normal, tangent, uv, indices, material, extraAttributes = {}, targets = null }) {
+  primitive({ position, normal, tangent, uv, uvFloat = false, indices, material, extraAttributes = {}, targets = null, normalTargets = null }) {
     this.useExtension('KHR_mesh_quantization');
     this.json.extensionsRequired = this.json.extensionsRequired || [];
     if (!this.json.extensionsRequired.includes('KHR_mesh_quantization')) this.json.extensionsRequired.push('KHR_mesh_quantization');
@@ -161,7 +161,10 @@ export class GLBBuilder {
       for (let i = 0; i < n * 4; i++) tq[i] = q8(tangent[i]);
       attributes.TANGENT = this.addAccessor(tq, 'VEC4', { target: 34962, normalized: true });
     }
-    if (uv) {
+    if (uv && uvFloat) {
+      // tiling uvs (metres / tile) can leave [0, 1]: keep them as floats
+      attributes.TEXCOORD_0 = this.addAccessor(uv instanceof Float32Array ? uv : new Float32Array(uv), 'VEC2', { target: 34962 });
+    } else if (uv) {
       const uq = new Uint16Array(uv.length);
       for (let i = 0; i < uv.length; i++) uq[i] = Math.max(0, Math.min(65535, Math.round(uv[i] * 65535)));
       attributes.TEXCOORD_0 = this.addAccessor(uq, 'VEC2', { target: 34962, normalized: true });
@@ -171,7 +174,13 @@ export class GLBBuilder {
     }
     const idx = this.addAccessor(indices, 'SCALAR', { target: 34963 });
     const prim = { attributes, indices: idx, material, mode: 4 };
-    if (targets && targets.length) prim.targets = targets.map((d) => ({ POSITION: this.addAccessor(d, 'VEC3', { target: 34962, minMax: true }) }));
+    if (targets && targets.length) {
+      prim.targets = targets.map((d, k) => {
+        const t = { POSITION: this.addAccessor(d, 'VEC3', { target: 34962, minMax: true }) };
+        if (normalTargets && normalTargets[k]) t.NORMAL = this.addAccessor(normalTargets[k], 'VEC3', { target: 34962 });
+        return t;
+      });
+    }
     return prim;
   }
 

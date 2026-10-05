@@ -4,9 +4,12 @@ import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 
 export type Tier = 'hero' | 'lod1' | 'lod2';
 
-/** Asset URLs keyed by path relative to src/assets/models (e.g. "mahaze/mahaze_juvenile.lod2.glb"). */
+/**
+ * Asset URLs keyed by path relative to src/assets/models (e.g. "mahaze/mahaze_juvenile.lod2.glb"). Creature
+ * models only: the hand nets are not wired into the game yet and would otherwise all be shipped.
+ */
 const MODEL_URLS: Record<string, string> = Object.fromEntries(
-  Object.entries(import.meta.glob('../../assets/models/**/*.glb', { eager: true, query: '?url', import: 'default' }) as Record<string, string>)
+  Object.entries(import.meta.glob(['../../assets/models/**/*.glb', '!../../assets/models/nets/**'], { eager: true, query: '?url', import: 'default' }) as Record<string, string>)
     .map(([k, v]) => [k.replace(/^.*\/assets\/models\//, ''), v]),
 );
 
