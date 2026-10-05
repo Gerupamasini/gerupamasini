@@ -1,7 +1,7 @@
 // Bill checks (anatomy/bill.js, docs/morphology.md §6, validation §AE):
 //  1. section profile (width, culmen height, lower-mandible depth by distance from the tip)
-//  2. where the keratin leaves the plumage (body SDF at the bind vertices, aBillF): exposed culmen and the
-//     lower mandible's feather line, LOD0
+//  2. where the keratin leaves the plumage (aBillF at the bind vertices): the feather line round the bill — culmen
+//     (exposed culmen), side of the upper mandible, rictus, side of the lower mandible, keel — LOD0
 //  3. the mesh tip against the Animator's bill-tip reference BILL.tip during the three pecks (contact frame):
 //     nearest bill vertex to BILL.tip and the lowest bill vertex below it
 //  4. the gape: tip opening and the opening where the bill leaves the plumage, for jaw angles 0…0.2 rad
@@ -25,14 +25,19 @@ const g = getGeometries(0).bare;
 const part = g.getAttribute('aPart');
 const fea = g.getAttribute('aBillF');
 const uv = g.getAttribute('uv');
-let up = 0;
-let lo = 0;
+// the feather line by position round the bill: station xt + aBillF (aBillF = how far the vertex lies ahead of the
+// plumage's edge along the bill), averaged over the keratin vertices within 1.5 mm of the edge
+const cats = { culmen: [false, 0, 0.08], 'upper side': [false, 0.45, 0.55], rictus: [false, 0.96, 1.01], 'lower side': [true, 0.45, 0.55], keel: [true, 0, 0.08] };
+const acc = Object.fromEntries(Object.keys(cats).map((k) => [k, []]));
 for (let i = 0; i < part.count; i++) {
-  if (Math.round(part.getX(i)) !== 0 || fea.getX(i) > 98 || fea.getX(i) <= 0) continue;
-  if (uv.getX(i) > 2) lo = Math.max(lo, uv.getY(i));
-  else up = Math.max(up, uv.getY(i));
+  const f = fea.getX(i);
+  if (Math.round(part.getX(i)) !== 0 || f > 1.5 || f < -1.5) continue;
+  const lower = uv.getX(i) > 2;
+  const av = Math.abs(uv.getX(i) - (lower ? 4 : 0));
+  for (const [k, [lw, a0, a1]] of Object.entries(cats)) if (lw === lower && av >= a0 && av <= a1) acc[k].push(uv.getY(i) + f);
 }
-console.log(`2. leaves the plumage (LOD0): upper mandible ${up.toFixed(1)} mm from the tip (exposed culmen), lower ${lo.toFixed(1)} mm`);
+const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
+console.log('2. feather line (LOD0, mm from the tip): ' + Object.entries(acc).map(([k, a]) => `${k} ${mean(a).toFixed(1)}`).join(', ') + '  (exposed culmen = culmen)');
 
 const m = new KentishPloverModel({ lods: [0], shadows: false });
 const bare = m.lods[0].meshes.find((x) => x.name.startsWith('bare'));
@@ -67,7 +72,7 @@ for (const type of ['polychaete', 'crab', 'amphipod']) {
   console.log(`   ${type.padEnd(10)}  nearest vertex ${(best.near * 1000).toFixed(3)} mm, lowest bill vertex ${((best.y - best.low) * 1000).toFixed(2)} mm below BILL.tip`);
 }
 
-console.log('4. gape (bind, jaw opened about its bone): opening at the tip / where the lower mandible leaves the plumage (mm)');
+console.log('4. gape (bind, jaw opened about its bone): opening at the tip, where the lower mandible leaves the plumage and at the rictus (mm)');
 const a = new KentishPloverAnimator(m, { seed: 3 });
 a.previewAction('stand', 0.3);
 const q0 = m.bones.jaw.quaternion.clone();
@@ -76,13 +81,13 @@ for (const ang of [0, 0.05, 0.1, 0.16, 0.2]) {
   m.bones.jaw.quaternion.copy(q0).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), ang));
   m.object.updateMatrixWorld(true);
   const out = [];
-  for (const xt of [1, lo]) {
+  for (const xt of [1, mean(acc['lower side']), mean(acc.rictus)]) {
     // rest point on the commissure: carried by the head (upper) and by the jaw (lower)
     const p = lowerTop(xt).multiplyScalar(0.001);
     const up = p.clone().sub(new THREE.Vector3(...J.head).multiplyScalar(0.001)).applyMatrix4(m.bones.head.matrixWorld);
     const lw = p.clone().sub(new THREE.Vector3(...J.jaw).multiplyScalar(0.001)).applyMatrix4(m.bones.jaw.matrixWorld);
     out.push((up.distanceTo(lw) * 1000).toFixed(2));
   }
-  console.log(`   jaw ${ang.toFixed(2)} rad: tip ${out[0]}  rictus ${out[1]}`);
+  console.log(`   jaw ${ang.toFixed(2)} rad: tip ${out[0]}  lower mandible's feather line ${out[1]}  rictus ${out[2]}`);
 }
 m.bones.jaw.quaternion.copy(q0);

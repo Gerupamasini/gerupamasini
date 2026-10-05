@@ -51,7 +51,11 @@ export const joints = {
   // the line, so every cross-section of the sleeve turns about its own centre (no candy-wrapper twist about the
   // vertebrae at the back of the neck).
   sleeve: { a: [0, 74, 16], b: [0, 90, 19], n: 5 },
-  jaw: [0, 87.5, 38],
+  // lower-jaw hinge (2026-10, docs/morphology.md §6.5): on the commissure 0.5 mm behind the rictus (the corner of the
+  // gape, hidden under the loral feathering 17.7 mm from the bill tip, anatomy/bill.js BILL_SHEATH) — the corner of the
+  // mouth stays nearly closed as the bill opens (≈0.1 mm at 0.2 rad) and the lower mandible's feathered base turns with
+  // it under the chin feathering, instead of swinging down about a point 2.6 mm below and 4 mm behind the corner
+  jaw: [0, 90.6, 37.25],
   eyeCenter: [7.6, 95, 25.5], // eyeball centre (spec §6); head surface at x 12.3, eye 9.5 mm behind the breast front;
   // sunk 0.4 mm so the cornea apex (x 11.5) stays inside the head outline (photos: the eye sits in the dark stripe)
   shoulder: [10, 77, 6],
@@ -91,12 +95,17 @@ export const bodySculpt = {
     // hind neck / upper mantle: the head sits on it (neck fill)
     { type: 'ellipsoid', name: 'mantleNape', c: [0.0, 85.64, 10.35], r: [20.67, 5.66, 17.11], role: 'neck' },
     { type: 'ellipsoid', name: 'head', c: [0.0, 93.5, 24.0], r: [12.5, 12.5, 15.0], k: 5, role: 'head' },
-    { type: 'ellipsoid', name: 'lores', c: [0.0, 90.4, 35.3], r: [5.6, 4.9, 4.8], k: 3.2, role: 'head' },
-    { type: 'capsule', name: 'billCuff', a: [0.0, 91.6, 35.8], b: [0.0, 89.9, 39.9], r: 2.0, k: 2.4, role: 'head' },
-    { type: 'ellipsoid', name: 'chin', c: [0.0, 84.0, 31.0], r: [9.0, 6.0, 7.0], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'lores', c: [0.0, 90.6, 33.0], r: [5.6, 4.9, 4.5], k: 3.2, role: 'head' },
+    { type: 'ellipsoid', name: 'chin', c: [0.0, 84.0, 30.0], r: [9.0, 6.0, 7.0], k: 4, role: 'head' },
     // ear-covert / cheek plumage behind and below the eye, a little fuller than the head's ellipsoid (v4.3: the v3 head
     // restored — from the front the eyes sit inside the outline of the head, the cheeks the widest part at eye level,
     // p037, p058, p063)
+    // v4.4 (2026-10, the user's front photo): the crown is a broad, flat-rounded dome — seen from the front the sides of
+    // the head rise nearly vertically above the eyes and the cap spans almost the full head width (front outline half-
+    // width / eye-row half-width at 25 / 50 / 75 / 88 % of the height from the eye row to the crown: photo 0.98 / 0.95 /
+    // 0.78 / 0.56, v4.3 0.91 / 0.75 / 0.55 / 0.40, now 0.93 / 0.97 / 0.79 / 0.53; SDF, bind). Eye-row width (28.2 mm)
+    // and the side profile as v4.3, crown top +0.4 mm; k 2: a sharper join drew a mushroom-like lip under the cap
+    { type: 'ellipsoid', name: 'crown', c: [0.0, 100.59, 23.94], r: [13.65, 5.15, 7.9], k: 2, role: 'head' },
     { type: 'ellipsoid', name: 'cheekL', c: [9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3, role: 'head' },
     { type: 'ellipsoid', name: 'cheekR', c: [-9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3, role: 'head' },
     // v4.3: top of the neck fill under the v3-sized head (below and behind the ear coverts), with the collar 1.5 mm
@@ -125,6 +134,12 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'upperLidL', c: [10.95, 97.95, 26.4], r: [0.8, 0.65, 3.0], k: 0.6 },
     { type: 'ellipsoid', name: 'upperLidR', c: [-10.95, 97.95, 26.4], r: [0.8, 0.65, 3.0], k: 0.6 },
   ],
+  // Bill base (anatomy/bill.js makeBillBlend, docs/morphology.md §6.2): round the bill the face is morphed into the
+  // feathered sheath that tapers onto the keratin along the slanted feather line — the sheath alone up to d0 mm behind
+  // the line, the face again from d1 mm behind it and beyond rA … rB mm off the keratin; below the keel the station is
+  // sheared back by `shear` per mm (the throat stays); no plumage in the mouth's slot (±slot mm round the commissure,
+  // up to mouthBack mm from the tip)
+  billBlend: { d0: 0.5, d1: 6, rA: 11, rB: 18, shear: 2.5, slot: 0.35, mouthBack: 18.2 },
   // LOD0 face patches (anatomy/bodyMesh.js): eye sockets and bill base polygonised at 0.3 mm over the base mesh
   facePatch: {
     patches: [
@@ -155,7 +170,8 @@ export const bodySculpt = {
   // over the outer 0.35. v4.3 (v3 head on the v4.2 neck): x 14, 1 mm wider than v3's 13 — the lower rim of the eye socket
   // (x 13–15, y 92–93) stays rigid with the eye when the head turns (at 13 it slid 0.3–0.8 mm against the eyeball under
   // the broad neck fill; at 15 the neck folded more when preening)
-  headZone: { c: [0, 93.5, 24], r: [14, 13, 15.5] },
+  // v4.4: x 14.6, y 14 — the broad crown dome (prim crown, its sides at x 13.7, y 100) stays inside the rigid head
+  headZone: { c: [0, 93.5, 24], r: [14.6, 14, 15.5] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
   // mantleNape and foreBreast at rest), but when the head turns or stretches the neck bones carry this tube
   neckContact: { a: [0, 74, 0], b: [0, 88.5, 14], r: 9 },

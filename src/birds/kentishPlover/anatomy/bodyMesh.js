@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeBodySDF, surfaceNets } from './sdf.js';
 import { KentishPloverConfig as CFG } from '../KentishPloverConfig.js';
+import { chinJawWeight } from './bill.js';
 
 // Body (head–neck–torso–rump) mesh from the SDF sculpt. Attributes:
 //   position/normal (metres), aRest (rest position, mm) and aFlow (feather flow direction, rest space)
@@ -297,10 +298,17 @@ export const FLUFF_REST = 0.15;
  * flat front / rear at fluff 0.8–0.9 gave 0.846 / 0.857 and 5/17, 3/17 with the belly 0.03 L too shallow).
  */
 export function bodyDisplacementMasks(p, n = [0, 1, 0]) {
-  const fluff = (2.5 + 4.5 * smooth(-0.2, -0.9, n[1]) + (1.5 - 1.8 * smooth(5, -5, p[2])) * smooth(0.2, 0.9, n[1])) * (1 - 0.7 * headness(p)) * (1 - 0.8 * smooth(-25, -55, p[2])) * (1 - 0.6 * smooth(15, 30, p[2]));
+  const fluff = (2.5 + 4.5 * smooth(-0.2, -0.9, n[1]) + (1.5 - 1.8 * smooth(5, -5, p[2])) * smooth(0.2, 0.9, n[1])) * (1 - 0.7 * headness(p)) * (1 - 0.8 * smooth(-25, -55, p[2])) * (1 - 0.6 * smooth(15, 30, p[2])) * billBaseFluff(p);
   // chest and flanks (breast front at z 35, neck base at y ≈ 80 in the relaxed bind)
   const breath = smooth(-40, -15, p[2]) * (1 - smooth(18, 30, p[2])) * (1 - smooth(76, 84, p[1]));
   return [fluff, breath, napeMask(p, n)];
+}
+
+/** The feathering that tapers onto the bill lies flat on it and does not fluff (it would lift off the keratin in a rim,
+ *  or sink into it when sleeked); full fluffing again ≈ 5 mm behind the bill base. Mirrored in GLSL kpFluffMM. */
+export function billBaseFluff(p) {
+  const e = Math.hypot(p[0] / 5.5, (p[1] - 89.8) / 5, (p[2] - 39) / 5);
+  return smooth(0.75, 1.35, e);
 }
 
 /** Hind-neck plumage that fills out when the head tilts back against the body (mm per mm of fill): centred on the
@@ -400,7 +408,14 @@ export function buildBodyGeometry(cfg, boneIndex, resolutionMM) {
       const f = Math.min(1 / (g2 + 1e-6), 40 / Math.sqrt(g2 + 1e-12));
       sleeveG.set([gr[0] * f, gr[1] * f, gr[2] * f], i * 3);
     }
-    const w = computeSpineWeights(p, boneIndex, sv);
+    let w = computeSpineWeights(p, boneIndex, sv);
+    // the chin feathering round the lower mandible's base turns with the jaw (bill.js chinJawWeight)
+    const wj = boneIndex.jaw !== undefined ? chinJawWeight(p[0], p[1], p[2]) : 0;
+    if (wj > 1e-3) {
+      w = w.map(([b, v]) => [b, v * (1 - wj)]).concat([[boneIndex.jaw, wj]]).sort((a, b) => b[1] - a[1]).slice(0, 4);
+      const sw = w.reduce((a, [, v]) => a + v, 0);
+      w = w.map(([b, v]) => [b, v / sw]);
+    }
     for (let k = 0; k < 4; k++) {
       skinIndex[i * 4 + k] = w[k] ? w[k][0] : 0;
       skinWeight[i * 4 + k] = w[k] ? w[k][1] : 0;
@@ -436,7 +451,7 @@ export function getBodySDF(cfg) {
  */
 export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
   const drop = new Set([...HEAD_PRIMS, ...(trunkOnly ? NECK_FILL : [])]);
-  return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [], adds: [] });
+  return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [], adds: [], billBlend: null });
 }
 
 /**

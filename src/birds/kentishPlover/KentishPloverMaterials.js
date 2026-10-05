@@ -82,7 +82,8 @@ const GLSL_FLUFF = /* glsl */ `
 float kpFluffMM(vec3 p, vec3 n) {
   vec3 e = (p - ${HZ_C}) / ${HZ_R};
   float head = clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - clamp((83.0 - p.y) / 5.0, 0.0, 1.0));
-  return (2.5 + 4.5 * smoothstep(-0.2, -0.9, n.y) + (1.5 - 1.8 * smoothstep(5.0, -5.0, p.z)) * smoothstep(0.2, 0.9, n.y)) * (1.0 - 0.7 * head) * (1.0 - 0.8 * smoothstep(-25.0, -55.0, p.z)) * (1.0 - 0.6 * smoothstep(15.0, 30.0, p.z));
+  float billBase = smoothstep(0.75, 1.35, length(vec3(p.x / 5.5, (p.y - 89.8) / 5.0, (p.z - 39.0) / 5.0))); // bodyMesh.billBaseFluff
+  return (2.5 + 4.5 * smoothstep(-0.2, -0.9, n.y) + (1.5 - 1.8 * smoothstep(5.0, -5.0, p.z)) * smoothstep(0.2, 0.9, n.y)) * (1.0 - 0.7 * head) * (1.0 - 0.8 * smoothstep(-25.0, -55.0, p.z)) * (1.0 - 0.6 * smoothstep(15.0, 30.0, p.z)) * billBase;
 }
 `;
 const FLUFF_REST_GLSL = FLUFF_REST.toFixed(3);
@@ -289,13 +290,18 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     // lores: from the side of the bill base (z 39.8, y 90.6), thin there (1.7 mm) and widening into the front of
     // the eye (4.4 mm)
     // (3 mm deep at the bill base — the whole side of the bill base — widening to the eye's height, p012, p070)
-    vec2 la = vec2(41.6, 90.2);
+    // (v2026-10 bill base: the side feather line runs back to the rictus at (z 37.7, y 90.3), anatomy/bill.js)
+    vec2 la = vec2(38.6, 90.9);
     vec2 lb = vec2(28.6, 95.4);
     float tl = clamp(dot(zy - la, lb - la) / dot(lb - la, lb - la), 0.0, 1.0);
     float lore = 1.0 - smoothstep(-0.3, 0.3, length(zy - mix(la, lb, tl)) + ej - mix(1.1, 1.9, tl) * uMelanin * mix(0.5, 1.0, clamp((uHeadPat.y - 0.4) / 0.6, 0.0, 1.0)));
     // (narrower where the loral stripe is pale: a thin brown line in females, p050)
     // (on the sides of the bill base only — over the culmen the two met as a moustache across the forehead)
     lore *= smoothstep(1.6, 2.7, ax) * smoothstep(0.12, 0.35, abs(n.x)) * uHeadPat.y;
+    // the stripe ends at the gape: below the commissure line (carried back from the rictus) the chin is white
+    // and, toward the bill, below the culmen: the white forehead's point runs out along the culmen above it
+    float gapeY = 90.32 - 0.436 * (p.z - 37.71);
+    lore *= mix(1.0, smoothstep(-0.35, 0.25, p.y + ej * 0.5 - gapeY) * (1.0 - smoothstep(1.8, 2.5, p.y + ej * 0.5 - gapeY)), smoothstep(33.0, 36.5, p.z));
     // round the eye: 1.3 mm of mask beyond the lids, a little more below and behind (the eye sits in the mask,
     // p012, p070, p043; females / juveniles only behind it)
     float surround = (1.0 - smoothstep(-0.3, 0.3, length((zy - vec2(26.2, 95.2)) * vec2(0.92, 1.0)) + ej - 3.0 * uMelanin)) * uHeadPat.z;
@@ -1025,7 +1031,8 @@ export function createBarePartsMaterial(pal, detail = 0) {
           float kbBase = smoothstep(8.5, 15.0, kbXt);           // basal third: greyer, browner, duller
           float kbTip = 1.0 - smoothstep(2.5, 6.5, kbXt);       // hard tip (dertrum): darker, glossier
           float kbWear = (1.0 - smoothstep(0.12, 0.75, kbXt)) * (0.55 + 0.45 * kbMott); // worn point
-          kbCol = uBill * mix(1.0, 1.55, kbBase) * mix(vec3(1.0), vec3(1.12, 1.0, 0.86), kbBase) * mix(1.0, 0.82, kbTip);
+          // (2026-10: warmer — the photographed keratin is a brownish black, not blue-black, user's side photo)
+          kbCol = uBill * vec3(1.22, 1.06, 0.94) * mix(1.0, 1.55, kbBase) * mix(vec3(1.0), vec3(1.12, 1.0, 0.86), kbBase) * mix(1.0, 0.82, kbTip);
           kbCol *= 1.0 + 0.06 * (kbStreak - 0.5) * kbGrain + 0.08 * (kbMott - 0.5);
           kbRough = uBillRough - 0.18 - 0.14 * kbTip + 0.12 * kbBase + (kbStreak - 0.5) * 0.07 * kbGrain;
           kbCol = mix(kbCol, uBill * 2.1 + vec3(0.006, 0.0055, 0.005), 0.55 * kbWear);
@@ -1057,33 +1064,45 @@ export function createBarePartsMaterial(pal, detail = 0) {
           kbEnv = 2.6 * (1.0 - 0.55 * kbOpM) * (1.0 - smoothstep(0.2, 0.7, kbSlit)) * mix(0.3, 1.0, smoothstep(0.0, 1.6, vBillF));
           // (the face shades the keratin next to the feathering from the sky: less sky reflection there)
           kbH = (-0.09 * kbSlit - 0.03 * kbGrL + 0.035 * kbOp * kbG(kbAv, ${f1(BS.operculum.v)}, 0.075)) * kbFine + (kbStreak - 0.5) * 0.0025 * kbGrain;
-          // Feather tips over the base (no hard seam where the keratin leaves the plumage): two staggered layers of
-          // narrow, pointed feather tips ≈0.16 mm wide reaching 0.1–1 mm onto the keratin, the face colour round
-          // the base (forehead over the culmen, lores at the sides, chin under the lower mandible), each tip
-          // shading the bill just beyond it (user's side photo, p012, p035: the loral feathers lie over the base)
-          if (vBillF < 1.6) {
-            float kbArc = kbV * (2.6 + 1.2 * kbLower);
-            float kbCov = 0.0; float kbSh = 0.0;
-            for (int kbL = 0; kbL < 2; kbL++) {
-              float kbOff = float(kbL) * 0.5;
-              float kbC = floor(kbArc / 0.2 + kbOff);
-              float kbFa = fract(kbArc / 0.2 + kbOff) - 0.5;
-              float kbRh = kpHash(vec2(kbC, 3.0 + kbLower + 7.0 * float(kbL)));
-              float kbReach = (0.1 + 0.6 * kbRh * kbRh) * (kbL == 0 ? 1.0 : 0.7);
-              float kbShape = kbReach * (1.0 - 3.2 * kbFa * kbFa);
-              kbCov = max(kbCov, 1.0 - smoothstep(kbShape - 0.05, kbShape + 0.05, vBillF));
-              kbSh = max(kbSh, 1.0 - smoothstep(kbShape, kbShape + 0.3, vBillF));
-            }
-            kbCov = max(kbCov, 1.0 - smoothstep(0.02, 0.1, vBillF));
-            kbSh *= 1.0 - kbCov;
+          // Feathering over the base. vBillF: how far (mm, along the bill) the point lies ahead of the plumage's edge
+          // (anatomy/bill.js aBillF; − under it). The face's feathers lie flat along the bill and end in soft barb
+          // tips, not a comb: fine strands (≈0.05 mm, spaced ≈0.07 mm round the bill) of random reach, gathered into
+          // small tufts that reach further or shorter together and lean a little to one side, each thinning to its
+          // tip; the keratin in their shade just ahead (user's side photo, p012, p035, p022). Below ≈1.5 px a strand
+          // gives way to the strands' mean coverage (no stippled or combed edge at a distance). Coloured as the face
+          // round it: forehead over the culmen, lores at the sides, chin under the lower mandible.
+          if (vBillF < 1.2) {
+            float kbArc = kbV * (kbLower > 0.5 ? 3.4 : 4.3);                     // mm round the bill
+            float kbTuftN = kpNoise(vec2(kbArc * 2.6 + 11.0 * kbLower, 3.1));    // tufts ≈0.4 mm
+            float kbTuftL = kpNoise(vec2(kbArc * 1.1 + 5.0 * kbLower, 8.7));     // ≈1 mm waves of the edge
+            float kbLean = (kpNoise(vec2(kbArc * 1.8, 1.3)) - 0.5) * 0.9;        // strands lean round the bill
+            float kbS = (kbArc + kbLean * max(vBillF, 0.0)) / 0.07;
+            float kbC = floor(kbS);
+            float kbF = fract(kbS) - 0.5;
+            float kbRh = kpHash(vec2(kbC, 3.0 + 7.0 * kbLower));
+            float kbReach = (0.08 + 0.42 * kbRh * kbRh + 0.32 * kbTuftN) * (0.75 + 0.5 * kbTuftL);
+            float kbProg = clamp(vBillF / max(kbReach, 1e-3), 0.0, 1.0);
+            float kbW = 0.36 * (1.0 - 0.8 * kbProg);                              // half-width in cells, thinning
+            float kbFoot = max(fwidth(kbS), 1e-4);                                // cells per pixel
+            float kbAA = clamp(kbFoot, 0.05, 0.5);
+            float kbStrand = (1.0 - smoothstep(kbW - kbAA, kbW + kbAA, abs(kbF + (kpHash(vec2(kbC, 9.1)) - 0.5) * 0.25))) * (1.0 - smoothstep(kbReach - 0.04, kbReach + 0.02, vBillF));
+            // mean coverage of the strands at this distance (P(reach > d) · mean width), for sub-pixel strands
+            float kbMeanReach = (0.22 + 0.32 * kbTuftN) * (0.75 + 0.5 * kbTuftL);
+            float kbMean = 0.62 * (1.0 - smoothstep(0.0, kbMeanReach * 1.6, vBillF));
+            float kbCov = mix(kbStrand, kbMean, smoothstep(0.35, 0.8, kbFoot));
+            kbCov = max(kbCov, 1.0 - smoothstep(-0.02, 0.06, vBillF));          // the plumage's own edge
+            // soft contact shade on the keratin round the fringe (the feathers stand a little off the bill)
+            float kbSh = (1.0 - smoothstep(0.0, 0.45 + 0.4 * kbTuftN, vBillF)) * (1.0 - kbCov);
             vec3 kbFc = mix(uLore, uFore, smoothstep(0.5, 0.25, kbAv) * kbUp);
             kbFc = mix(kbFc, uChin, kbLower * smoothstep(0.75, 0.45, kbAv));
-            float kbBarb = kpNoise(vec2(kbArc * 40.0, vBillF * 2.0));
-            kbCol = mix(kbCol * (1.0 - 0.4 * kbSh), kbFc * (0.8 + 0.2 * kbBarb) * mix(0.7, 1.0, smoothstep(-0.2, 0.4, vBillF)), kbCov);
-            kbRough = mix(kbRough + 0.15 * kbSh, 0.9, kbCov);
+            // barbs: a little darker toward the skin, the tips catching light; slight tone per strand
+            float kbTone = (0.86 + 0.1 * kbRh + 0.08 * kbTuftN) * mix(0.78, 1.0, smoothstep(-0.3, 0.25, vBillF));
+            kbCol = mix(kbCol * (1.0 - 0.45 * kbSh), kbFc * kbTone, kbCov);
+            kbRough = mix(kbRough + 0.12 * kbSh, 0.88, kbCov);
             kbAniso *= 1.0 - kbCov;
-            kbEnv = mix(kbEnv, 1.0, kbCov);
-            kbH += (0.04 * kbCov - 0.015 * kbSh) * kbFine;
+            kbEnv = mix(kbEnv * (1.0 - 0.35 * kbSh), 1.0, kbCov);
+            // relief: each strand a tiny round ridge lying on the keratin (≈0.02 mm), only where it is resolved
+            kbH += 0.02 * kbStrand * sqrt(max(0.0, 1.0 - 4.0 * kbF * kbF)) * kbFine * (1.0 - smoothstep(0.3, 0.6, kbFoot));
           }
           kbRough = clamp(kbRough, 0.12, 0.95);
         }
@@ -1106,6 +1125,8 @@ export function createBarePartsMaterial(pal, detail = 0) {
           // mouth lining (palate, floor, rictal skin): pinkish flesh, darker toward the back of the mouth
           kbCol = uMouth * (vUv.x > 15.5 ? 0.35 : 1.0);
           kbRough = 0.45;
+          // tongue (uv.x 18): pinker, moist, a faint median groove
+          if (vUv.x > 17.5) { kbCol = uMouth * vec3(1.25, 1.02, 1.0) * (0.92 + 0.08 * kpNoise(vec2(vUv.y * 6.0, 1.0))); kbRough = 0.32; }
         }
         else { kbCol = mix(uLegs, vec3(0.35, 0.33, 0.3), 0.25); kbRough = 0.75; }
         diffuseColor.rgb *= kbCol;`
@@ -1139,7 +1160,7 @@ export function createBarePartsMaterial(pal, detail = 0) {
           kbAlong = normalize(kbAlong - normal * dot(kbAlong, normal));
         }`
       )
-      .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\nradiance *= kbEnv;')
+      .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\nradiance *= kbEnv;\n// keratin: the sky it mirrors reads as a pale, nearly neutral sheen over the warm black (the image-based sky light is a\n// saturated blue; mirrored at 2.6× it made the bill look like blue plastic in the shade)\nif (kbP < 0.5) radiance = mix(radiance, vec3(dot(radiance, vec3(0.2126, 0.7152, 0.0722))) * vec3(1.04, 1.0, 0.95), 0.65);')
       .replace('#include <lights_physical_fragment>', THREE.ShaderChunk.lights_physical_fragment.replace('vec2 anisotropyV = anisotropyVector;', 'vec2 anisotropyV = anisotropyVector * kbAniso;').replace('material.anisotropyT = tbn[ 0 ] * anisotropyV.x + tbn[ 1 ] * anisotropyV.y;', 'material.anisotropyT = kbAlong;').replace('material.anisotropyB = tbn[ 1 ] * anisotropyV.x - tbn[ 0 ] * anisotropyV.y;', 'material.anisotropyB = normalize(cross(normal, kbAlong));'));
   };
   mat.customProgramCacheKey = () => `kp-bare2-${detail}`;
