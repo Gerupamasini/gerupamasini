@@ -252,16 +252,36 @@ export class App {
     this.tank.frameTank();
     void this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
     this.tank.setLayout(this.save?.tank.layout ?? defaultTankLayout());
+    this.syncShelf();
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
     this.requestSave();
   }
 
-  async enterField(): Promise<void> {
+  /** The map of the coast: pick where to go. */
+  openSpots(): void {
+    if (!ui.spot.value) ui.spot.value = this.data.spots.find((s) => s.map === (this.save?.player.map ?? this.data.manifest.defaultMap))?.id ?? this.data.spots[0]?.id ?? null;
+    this.openOverlay('spots');
+  }
+
+  /** The map a spot opens; the default when the spot is not built yet. */
+  private mapForSpot(spotId: string | null): string {
+    const spot = spotId ? this.data.spots.find((s) => s.id === spotId) : undefined;
+    return spot?.map ?? this.save?.player.map ?? this.data.manifest.defaultMap;
+  }
+
+  async enterField(spotId: string | null = ui.spot.value): Promise<void> {
+    const mapId = this.data.maps.has(this.mapForSpot(spotId)) ? this.mapForSpot(spotId) : this.data.manifest.defaultMap;
+    if (this.world && this.world.map.id !== mapId) {
+      // only one flat is built so far: another map would need the world rebuilt
+      toast(t('spots.notYet'), 'warn');
+      return;
+    }
+    if (this.save) this.save.player.map = mapId;
     if (!this.world) {
       this.setMode('boot');
       ui.loading.value = { frac: 0.35, label: t('loading.map') };
-      const map = this.data.maps.get(this.data.manifest.defaultMap)!;
+      const map = this.data.maps.get(mapId)!;
       const dayNo = Math.floor((this.clock.nowGame() + 9 * 3600000) / 86400000);
       this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; }, dayNo);
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
@@ -525,12 +545,14 @@ export class App {
     const tool = this.data.tools.get(id);
     if (!tool) return;
     if (!this.encyclopedia.buy(tool)) toast(t('tools.cannotBuy'), 'warn');
+    this.syncShelf();
     this.requestSave();
   }
 
   toggleCarry(id: ToolId): void {
     if (!this.encyclopedia.toggleCarry(id)) toast(t('tools.loadoutHint'), 'warn');
     this.syncLoadout();
+    this.syncShelf();
     this.requestSave();
   }
 
@@ -839,10 +861,45 @@ export class App {
     this.tank.removeOccupant(rec.id);
   }
 
-  /** The tools drawer on the home screen: what is owned, what goes to the flat, and the shop. */
+  /** The shop is a room of its own: a curtain, then the counter. */
   openShop(): void {
+    if (this.mode !== 'home') return;
     ui.homeInfo.value = null;
-    ui.homePanel.value = ui.homePanel.value === 'tools' ? 'none' : 'tools';
+    ui.homePanel.value = 'none';
+    void this.transition(t('transition.shop'), () => this.openOverlay('shop'));
+  }
+
+  closeShop(): void {
+    if (this.mode !== 'shop') return;
+    void this.transition(t('transition.home'), () => this.closeOverlay());
+  }
+
+  openGacha(): void {
+    toast(`${t('home.gacha')}: ${t('home.soon')}`, 'info');
+  }
+
+  /** The shelf shows what is owned, with a lit tag and its key on what goes to the flat. */
+  syncShelf(): void {
+    const enc = this.encyclopedia;
+    const list = enc.owned.value.map((id) => this.data.tools.get(id)).filter((x): x is ToolDef => !!x)
+      .map((tool) => ({ tool, carried: enc.carries(tool.id), slot: enc.carries(tool.id) ? enc.loadout.value.indexOf(tool.id) : null }));
+    this.tank.setShelfTools(list);
+  }
+
+  /** The tools: the camera turns to the shelf and the drawer lists what is carried. */
+  openTools(): void {
+    if (this.mode !== 'home') return;
+    ui.homeInfo.value = null;
+    if (ui.homePanel.value === 'tools') { this.closeTools(); return; }
+    ui.homePanel.value = 'tools';
+    this.syncShelf();
+    this.tank.setAutoRotate(false);
+    this.tank.focusShelf();
+  }
+
+  closeTools(): void {
+    if (ui.homePanel.value === 'tools') ui.homePanel.value = 'none';
+    this.tank.focusTank();
   }
 
   private ndcOf(clientX: number, clientY: number): [number, number] {
@@ -882,6 +939,12 @@ export class App {
   }
 
   private onHomeClick(clientX: number, clientY: number): void {
+    if (this.mode === 'home' && ui.homePanel.value === 'tools') {
+      const [nx, ny] = this.ndcOf(clientX, clientY);
+      const id = this.tank.pickTool(nx, ny);
+      if (id) this.toggleCarry(id);
+      return;
+    }
     const [nx, ny] = this.ndcOf(clientX, clientY);
     if (ui.homePanel.value === 'tank' && ui.tankTab.value === 'layout') {
       // in the editor a click selects a decoration (or clears the selection); the panel stays open
@@ -1003,7 +1066,8 @@ export class App {
         if (this.input.pressed('zukan')) this.openOverlay('zukan');
         else if (this.input.pressed('ticket')) this.openOverlay('ticket');
         else if (this.input.pressed('menu')) {
-          if (ui.homePanel.value !== 'none' || ui.homeInfo.value) { ui.homePanel.value = 'none'; ui.homeInfo.value = null; }
+          if (ui.homePanel.value === 'tools') this.closeTools();
+          else if (ui.homePanel.value !== 'none' || ui.homeInfo.value) { ui.homePanel.value = 'none'; ui.homeInfo.value = null; }
           else this.openOverlay('menu');
         }
         break;
@@ -1016,6 +1080,13 @@ export class App {
         break;
       case 'menu': case 'zukan': case 'ticket': case 'tidetable':
         if (this.input.pressed('menu') || (mode === 'zukan' && this.input.keyPressed('Tab'))) this.closeOverlay();
+        break;
+      case 'spots':
+        if (this.input.pressed('menu')) this.closeOverlay();
+        else if (this.input.keyPressed('Enter')) void this.enterField(ui.spot.value);
+        break;
+      case 'shop':
+        if (this.input.pressed('menu')) this.closeShop();
         break;
       default: break;
     }

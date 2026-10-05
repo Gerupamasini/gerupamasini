@@ -6,7 +6,7 @@ import type { IndividualRecord } from '../creatures/Individual';
 /** a tool id from items/tools.json */
 export type ToolId = string;
 
-export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'error';
+export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'error';
 
 export interface HudState {
   timeText: string;
@@ -73,6 +73,8 @@ export const ui = {
   markers: signal<Marker[]>([]),
   /** side panel shown on the home screen */
   homePanel: signal<'none' | 'tank' | 'tools'>('none'),
+  /** the spot picked on the map (its id) */
+  spot: signal<string | null>(null),
   /** creature info card on the home screen */
   homeInfo: signal<IndividualRecord | null>(null),
   /** full-map overview on the flat (M) */

@@ -3,7 +3,7 @@ import {
   Float32BufferAttribute, FloatType, HalfFloatType, HemisphereLight, LineBasicMaterial, LinearFilter, LinearMipmapLinearFilter,
   LineSegments, Mesh, MeshStandardMaterial, Object3D, OneFactor, OneMinusSrcAlphaFactor, PerspectiveCamera, PlaneGeometry, Plane,
   PMREMGenerator, Points, PointsMaterial, Raycaster, RGBAFormat, Scene, ShaderMaterial, SpotLight, SrcColorFactor, UnsignedByteType,
-  Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer, Spherical } from 'three';
+  Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer, Spherical, SRGBColorSpace } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GPUComputationRenderer, type Variable } from 'three/addons/misc/GPUComputationRenderer.js';
@@ -20,6 +20,7 @@ import type { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 import type { HeroLighting } from '../render/HeroPipeline';
 import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
 import { Group } from 'three';
+import { ToolShelf, type ShelfTool } from './ToolShelf';
 
 export const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
 export const TANK_MAX_OCCUPANTS = 4;
@@ -199,6 +200,13 @@ export class TankScene {
   readonly scene = new Scene();
   readonly camera: PerspectiveCamera;
   private controls: OrbitControls | null = null;
+  /** the tool shelf on the wall, and the camera's move between the tank and it */
+  readonly shelf = new ToolShelf();
+  private view: 'tank' | 'shelf' = 'tank';
+  private readonly camFrom = { p: new Vector3(), t: new Vector3() };
+  private readonly camTo = { p: new Vector3(), t: new Vector3() };
+  private readonly camCur = { t: new Vector3(0, 0.12, 0) };
+  private camT = 1;
   readonly occupants: Occupant[] = [];
   /** top of the substrate: the animals, the decorations and the caustics all sit on it */
   private sandTop = SAND_H;
@@ -288,6 +296,17 @@ export class TankScene {
     const lamp = new Mesh(new BoxGeometry(W_LAMP_HALF * 2, 0.003, 0.03), new MeshStandardMaterial({ color: 0xffffff, emissive: new Color(0.8, 0.95, 1.0), emissiveIntensity: 3 }));
     lamp.position.set(0, W_LAMP_Y, 0);
     this.scene.add(bar, lamp);
+    this.scene.add(this.shelf.group);
+    // a window on the back wall, the bay at night outside
+    const win = new Mesh(new PlaneGeometry(1.05, 0.72), new MeshStandardMaterial({ map: makeNightWindow(), emissive: new Color(0xffffff), emissiveMap: makeNightWindow(), emissiveIntensity: 0.55, roughness: 1 }));
+    win.position.set(1.05, 0.9, -1.39);
+    this.scene.add(win);
+    const frameMat = new MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.6, metalness: 0.2 });
+    for (const [w, h, x, y] of [[1.11, 0.03, 1.05, 1.275], [1.11, 0.03, 1.05, 0.525], [0.03, 0.78, 0.51, 0.9], [0.03, 0.78, 1.59, 0.9], [0.02, 0.72, 1.05, 0.9]] as [number, number, number, number][]) {
+      const f = new Mesh(new BoxGeometry(w, h, 0.03), frameMat);
+      f.position.set(x, y, -1.38);
+      this.scene.add(f);
+    }
 
     // ---- the water: simulation, surface texture and caustics texture (needs float render targets)
     const floatOK = gl.capabilities.isWebGL2 && (gl.extensions.has('EXT_color_buffer_float') || gl.extensions.has('EXT_color_buffer_half_float'));
@@ -826,14 +845,70 @@ export class TankScene {
     c.update();
   }
 
+  /** Hang the tools on the shelf. */
+  setShelfTools(list: ShelfTool[]): void {
+    this.shelf.setTools(list);
+  }
+
+  pickTool(ndcX: number, ndcY: number): string | null {
+    return this.shelf.pick(ndcX, ndcY, this.camera);
+  }
+
+  get viewing(): 'tank' | 'shelf' {
+    return this.view;
+  }
+
+  /** Turn to the shelf: the camera glides over and the orbit lets go until it is back. */
+  focusShelf(): void {
+    if (this.view === 'shelf') return;
+    this.view = 'shelf';
+    const c = this.shelf.center;
+    this.startCamera(new Vector3(c.x + 0.42, c.y + 0.14, c.z + 1.1), new Vector3(c.x + 0.26, c.y + 0.04, c.z));
+  }
+
+  focusTank(): void {
+    if (this.view === 'tank') return;
+    this.view = 'tank';
+    const hfov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
+    const dist = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
+    this.startCamera(new Vector3(dist * 0.35, 0.16 + dist * 0.28, dist * 0.95), new Vector3(0, 0.12, 0));
+  }
+
+  private startCamera(p: Vector3, t: Vector3): void {
+    this.camFrom.p.copy(this.camera.position);
+    this.camFrom.t.copy(this.controls ? this.controls.target : this.camCur.t);
+    this.camTo.p.copy(p);
+    this.camTo.t.copy(t);
+    this.camT = 0;
+    if (this.controls) this.controls.enabled = false;
+  }
+
+  /** The glide between the tank and the shelf; the orbit takes over again at the tank. */
+  private stepCamera(dt: number): void {
+    if (this.camT >= 1) return;
+    this.camT = Math.min(1, this.camT + dt / 0.9);
+    const u = this.camT, s = u * u * (3 - 2 * u);
+    this.camera.position.lerpVectors(this.camFrom.p, this.camTo.p, s);
+    this.camCur.t.lerpVectors(this.camFrom.t, this.camTo.t, s);
+    this.camera.lookAt(this.camCur.t);
+    if (this.camT >= 1 && this.view === 'tank' && this.controls) {
+      this.controls.target.copy(this.camTo.t);
+      this.controls.enabled = true;
+      this.controls.update();
+    }
+  }
+
   /** Everything stands still (the edit screen): only the camera moves. */
   updateFrozen(): void {
-    this.controls?.update();
+    if (this.camT < 1) this.stepCamera(1 / 60);
+    else if (this.view === 'tank') this.controls?.update();
   }
 
   update(dt: number, simScale: number): void {
     this.drift += dt;
-    if (this.controls) {
+    if (this.camT < 1) this.stepCamera(dt);
+    else if (this.view === 'shelf') this.camera.lookAt(this.camCur.t);
+    else if (this.controls) {
       this.controls.update();
       // gentle vertical breathing of the view on top of the slow orbit
       this.controls.target.y = 0.12 + Math.sin(this.drift * 0.25) * 0.012;
@@ -868,4 +943,31 @@ export class TankScene {
     this.surfRT?.dispose();
     this.causRT?.dispose();
   }
+}
+
+/** The view out of the window: a night sky over the bay, a few lights on the far shore, a moon. */
+function makeNightWindow(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 352;
+  const g = c.getContext('2d')!;
+  const sky = g.createLinearGradient(0, 0, 0, 352);
+  sky.addColorStop(0, '#0b1626'); sky.addColorStop(0.55, '#16304a'); sky.addColorStop(0.62, '#0f2436'); sky.addColorStop(1, '#071018');
+  g.fillStyle = sky; g.fillRect(0, 0, 512, 352);
+  // stars
+  g.fillStyle = 'rgba(255,255,255,0.7)';
+  for (let i = 0; i < 70; i++) { const x = (i * 97) % 512, y = (i * 61) % 180; g.fillRect(x, y, 1.2, 1.2); }
+  // the moon
+  g.fillStyle = '#f2ead6'; g.beginPath(); g.arc(400, 60, 16, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#16304a'; g.beginPath(); g.arc(392, 56, 14, 0, Math.PI * 2); g.fill();
+  // the far shore and its lights
+  g.fillStyle = '#0a1620'; g.fillRect(0, 205, 512, 20);
+  for (let i = 0; i < 40; i++) { const x = (i * 131 + 20) % 500, w = 2 + (i % 3); g.fillStyle = i % 4 === 0 ? 'rgba(255,200,120,0.9)' : 'rgba(255,230,180,0.6)'; g.fillRect(x, 212 + (i % 2) * 3, w, 2); }
+  // the water with the lights' reflections
+  const sea = g.createLinearGradient(0, 225, 0, 352);
+  sea.addColorStop(0, '#0d2535'); sea.addColorStop(1, '#050b10');
+  g.fillStyle = sea; g.fillRect(0, 225, 512, 127);
+  for (let i = 0; i < 40; i++) { const x = (i * 131 + 20) % 500; g.fillStyle = 'rgba(255,220,160,0.12)'; for (let k = 0; k < 6; k++) g.fillRect(x - k, 228 + k * 9, 2 + k, 1.5); }
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
 }

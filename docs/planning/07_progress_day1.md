@@ -129,3 +129,10 @@
 - UI: `ToolsPanel`（ホームのナビ「道具」= 旧ショップボタン）、HUD のチップは loadout から、[1][2] は loadout の順。`CaptureOverlay` は道具の type で判定。
 - 観察ケース: `FieldCase`（板・柱 2 本・キャップ・焼印・アクリル 5 面・水と水面、`inner` 枠に生物。drivers は水槽と同じ bounds 方式、hero なし）。`App.openCase / closeCase`（`caseSpot` で水深 5 cm 未満の場所、OrbitControls、near 0.01）、mode `caseView`（Screen に追加、worldVisible に含む）、[Q]。`CaseOverlay` に一覧と逃がす／研究に回す。`caseRelease` は干潟では最寄りの水に `generateIndividual` で戻して flee。
 - 単体テスト `tests/unit/tools.test.ts`。バージョン 0.8.0。
+
+## 12 回目（行き先の地図、ショップの部屋、道具棚、ホームの作り直し）
+- 地点: `SpotSchema`（id / ja / area / lat / lon / map|null / description）、`manifest.spots` → `data/spots.json`、`GameData.spots`、validate.mjs で地図参照を確認。`SpotSelect`（日本の輪郭 4 島と東京湾の海岸線を lon/lat の配列から SVG に、ピンと一覧）、`App.openSpots / enterField(spotId)`（地図が違うときは未対応のトースト）。
+- ショップ: Screen `shop`、`App.openShop / closeShop` は `transition` で暗転、`ShopScreen`（CSS の部屋＋カード）。`ToolsPanel` からショップを外した。`openGacha` はトースト。
+- 道具棚: `ToolShelf`（ペグボード、板、ランプ、道具ごとにペグ・タグ・番号・名札、タモは hoop/reach に応じた形、スコップ）。`TankScene.shelf / setShelfTools / pickTool / focusShelf / focusTank`（0.9 秒の smoothstep でカメラを補間、棚を見ている間は OrbitControls を止める）。`App.openTools / closeTools / syncShelf`、ホームのクリックは `tools` パネル中は棚の道具を拾う。
+- ホーム: `HomeMenu` を参考画像の配置に作り直し（status / title / almanac / 7 タイルの nav）。`Icons` にタイル用アイコン。
+- バージョン 0.9.0。

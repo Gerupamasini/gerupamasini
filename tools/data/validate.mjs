@@ -29,6 +29,10 @@ for (const id of manifest.maps) { const v = check(`maps/${id}.json`, schemas.Map
 for (const id of manifest.stations) { const v = check(`tide/stations/${id}.json`, schemas.TideStationSchema, read(`tide/stations/${id}.json`)); if (v) stations.set(id, v); }
 const tools = check(manifest.items, schemas.ToolsFileSchema, read(manifest.items));
 check(manifest.strings, schemas.StringsSchema, read(manifest.strings));
+if (manifest.spots) {
+  const spots = check(manifest.spots, schemas.SpotsFileSchema, read(manifest.spots));
+  if (spots) for (const s of spots.spots) if (s.map && !maps.has(s.map)) { errors++; console.error(`✗ spot ${s.id}: 地図 ${s.map} がありません`); }
+}
 
 // cross references
 const toolIds = new Set((tools?.tools ?? []).map((t) => t.id));
