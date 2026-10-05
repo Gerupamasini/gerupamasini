@@ -132,7 +132,9 @@ export class AsariDriver {
     m.root.quaternion.copy(qTmp);
     // lying on a valve, the foot probes obliquely down into the sand rather than along it
     m.foot.rotation.set(0, this.lieSide * (1 - tilt) * 0.8, ANATOMY.footDir);
-    const centreY = 0.16 + (-0.69 - 0.16) * smooth(0.12, 1, b.burial);
+    // lying on a valve: half-width 0.26 L, sunk ~0.06 L into the sand; buried upright the shell top (~0.46 L above
+    // its centre at this tilt) sits ~0.23 L under the surface
+    const centreY = 0.2 + (-0.69 - 0.2) * smooth(0.12, 1, b.burial);
     // pulled toward the foot during each stroke (a small lasting drift too)
     v1.set(Math.cos(ANATOMY.footDir), Math.sin(ANATOMY.footDir), 0).applyQuaternion(qTmp);
     v1.y = 0;
@@ -223,7 +225,7 @@ export function createAsariBed(items, lod = 2) {
   items.forEach((it, i) => {
     const r = mulberry(i * 7919 + 17);
     // valves lie convex side up, half-sunk
-    o.position.set(it.x, it.y + it.length_m * 0.05, it.z);
+    o.position.set(it.x, it.y - it.length_m * 0.01, it.z);   // the margin rests on (just in) the sand
     o.rotation.set(-Math.PI / 2 + (r() - 0.5) * 0.3, it.yaw ?? r() * Math.PI * 2, (r() - 0.5) * 0.3, 'YXZ');
     o.scale.setScalar(it.length_m);
     o.updateMatrix();
