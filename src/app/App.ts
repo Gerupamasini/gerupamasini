@@ -275,6 +275,7 @@ export class App {
       this.shovel = new ShovelView(this.world.scene);
       this.fieldCase = new FieldCase();
       this.world.scene.add(this.fieldCase.group);
+      this.world.scene.add(this.fieldCase.animals);
       this.net.setHeld(this.toolType() === 'capture');
       this.shovel.setHeld(this.toolType() === 'dig');
       this.clams = new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));

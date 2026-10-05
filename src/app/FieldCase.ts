@@ -29,10 +29,19 @@ interface CaseOccupant {
  */
 export class FieldCase {
   readonly group = new Group();
-  /** the inside of the box: y = 0 on the acrylic bottom; the animals live in this frame */
-  private readonly inner = new Group();
+  /**
+   * The animals live in a group at the world origin (like the flat and the tank), not under the case: the drivers
+   * rest their animal on the floor they are given, measured in their parent's frame, so the parent has to be the
+   * world. The case is set down at a multiple of a right angle so its walls stay axis-aligned for them.
+   */
+  readonly animals = new Group();
   private readonly occupants: CaseOccupant[] = [];
-  private readonly floor: Floor = { heightAt: () => 0, waterAt: () => CASE_WATER };
+  /** the acrylic bottom's top face and the water line, world y */
+  private floorY = 0;
+  private readonly floor: Floor = { heightAt: () => this.floorY, waterAt: () => this.floorY + CASE_WATER };
+  /** half extents of the inside in world x / z (the case may be turned a right angle) */
+  private halfX = CASE_W / 2;
+  private halfZ = CASE_D / 2;
   private readonly surface: Mesh;
   private time = 0;
   private readonly tmp = new Vector3();
@@ -89,17 +98,21 @@ export class FieldCase {
     this.surface.renderOrder = 4;
     this.group.add(this.surface);
 
-    this.inner.position.set(0, y0 + WALL, 0);
-    this.group.add(this.inner);
+    this.animals.name = 'fieldCaseAnimals';
     this.group.visible = false;
   }
 
-  /** Set the case down at a spot on the flat, its long side across the player's view. */
+  /** Set the case down at a spot on the flat, its long side across the player's view (to the nearest right angle). */
   place(x: number, y: number, z: number, yaw: number): void {
+    const snapped = Math.round(yaw / (Math.PI / 2)) * (Math.PI / 2);
     this.group.position.set(x, y, z);
-    this.group.rotation.set(0, yaw, 0);
+    this.group.rotation.set(0, snapped, 0);
     this.group.visible = true;
     this.group.updateMatrixWorld(true);
+    this.floorY = y + BASE_T + WALL;
+    const turned = Math.abs(Math.sin(snapped)) > 0.5;
+    this.halfX = (turned ? CASE_D : CASE_W) / 2 - WALL;
+    this.halfZ = (turned ? CASE_W : CASE_D) / 2 - WALL;
   }
 
   takeUp(): void {
@@ -114,6 +127,11 @@ export class FieldCase {
   /** the middle of the water, world space */
   get center(): Vector3 {
     return this.tmp.set(0, BASE_T + WALL + CASE_WATER / 2, 0).applyMatrix4(this.group.matrixWorld);
+  }
+
+  /** world-space half extents of the inside, for anyone placing things in it */
+  get inside(): { x: number; z: number } {
+    return { x: this.halfX, z: this.halfZ };
   }
 
   get count(): number {
@@ -137,9 +155,12 @@ export class FieldCase {
     const ind = generateIndividual(species, seed, 0, 0, 0, 0, Date.now());
     ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits];
     const slot = this.occupants.length;
-    ind.pos.set((slot % 3 - 1) * 0.09, 0, (slot >= 3 ? 0.03 : -0.03));
+    const c = this.group.position;
+    const long = this.halfX >= this.halfZ;
+    const u = (slot % 3 - 1) * 0.09, v = (slot >= 3 ? 0.03 : -0.03);
+    ind.pos.set(c.x + (long ? u : v), this.floorY, c.z + (long ? v : u));
     ind.home.copy(ind.pos);
-    ind.heading = Math.PI / 2 + (slot % 2 ? Math.PI : 0);
+    ind.heading = (long ? Math.PI / 2 : 0) + (slot % 2 ? Math.PI : 0);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     const rel = species.model.lod1 ?? species.model.lod2 ?? species.model.hero;
     if (rel) {
@@ -153,7 +174,7 @@ export class FieldCase {
     if (!this.group.visible || this.occupants.some((o) => o.record.id === record.id)) { root.removeFromParent(); return; }
     const driver = entry.create();
     const unsub = driver.onEvent(() => {});
-    this.inner.add(root);
+    this.animals.add(root);
     driver.attach(root, ind, extras, bones, meshes);
     root.traverse((o) => { (o as Mesh).castShadow = false; (o as Mesh).frustumCulled = false; });
     this.occupants.push({ record, ind, driver, root, unsub });
@@ -177,29 +198,30 @@ export class FieldCase {
     if (!this.group.visible) return;
     this.time += dt;
     this.surface.position.y = BASE_T + WALL + CASE_WATER + Math.sin(this.time * 1.7) * 0.0006;
+    const c = this.group.position;
     for (const o of this.occupants) {
       const d = o.driver;
       const S = o.ind.length_mm / 1000;
-      const hx = Math.max(0.01, CASE_W / 2 - WALL - 0.008 - S * 0.35), hz = Math.max(0.01, CASE_D / 2 - WALL - 0.008 - S * 0.35);
+      const hx = Math.max(0.01, this.halfX - 0.008 - S * 0.35), hz = Math.max(0.01, this.halfZ - 0.008 - S * 0.35);
+      const minX = c.x - hx, maxX = c.x + hx, minZ = c.z - hz, maxZ = c.z + hz;
       if (!d.busy) {
         const r = o.ind.rng.next();
         if (r < 0.6) d.setIntent({ id: Date.now(), kind: 'rest', urgency: 0, seconds: 4 + o.ind.rng.next() * 12 });
-        else if (r < 0.92) d.setIntent({ id: Date.now(), kind: 'wander', urgency: 0.3, seconds: 6, target: new Vector3((o.ind.rng.next() * 2 - 1) * hx, 0, (o.ind.rng.next() * 2 - 1) * hz) });
+        else if (r < 0.92) d.setIntent({ id: Date.now(), kind: 'wander', urgency: 0.3, seconds: 6, target: new Vector3(c.x + (o.ind.rng.next() * 2 - 1) * hx, 0, c.z + (o.ind.rng.next() * 2 - 1) * hz) });
         else d.setIntent({ id: Date.now(), kind: 'special', urgency: 0, seconds: 3, param: 'yawn' });
       }
-      // the player, in the box's frame, for the drivers that look at where the threat is
-      const p = this.inner.worldToLocal(this.tmp.copy(player));
-      d.update(dt, { floor: this.floor, player: p, simScale: 1, nowMs: Date.now(), bounds: { minX: -hx, maxX: hx, minZ: -hz, maxZ: hz } });
-      o.ind.pos.x = Math.max(-hx, Math.min(hx, o.ind.pos.x));
-      o.ind.pos.z = Math.max(-hz, Math.min(hz, o.ind.pos.z));
-      o.root.position.x = Math.max(-hx, Math.min(hx, o.root.position.x));
-      o.root.position.z = Math.max(-hz, Math.min(hz, o.root.position.z));
+      d.update(dt, { floor: this.floor, player, simScale: 1, nowMs: Date.now(), bounds: { minX, maxX, minZ, maxZ } });
+      o.ind.pos.x = Math.max(minX, Math.min(maxX, o.ind.pos.x));
+      o.ind.pos.z = Math.max(minZ, Math.min(maxZ, o.ind.pos.z));
+      o.root.position.x = Math.max(minX, Math.min(maxX, o.root.position.x));
+      o.root.position.z = Math.max(minZ, Math.min(maxZ, o.root.position.z));
     }
   }
 
   dispose(): void {
     this.clearOccupants();
     this.group.removeFromParent();
+    this.animals.removeFromParent();
   }
 }
 
