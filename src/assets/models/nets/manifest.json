@@ -133,25 +133,25 @@
       "tiers": {
         "hero": {
           "file": "net_deep.hero.glb",
-          "triangles": 27752,
-          "vertices": 15901,
-          "bytes": 3611516
+          "triangles": 27304,
+          "vertices": 15646,
+          "bytes": 3574036
         },
         "lod1": {
           "file": "net_deep.lod1.glb",
-          "triangles": 8088,
-          "vertices": 4982,
-          "bytes": 1123256
+          "triangles": 7928,
+          "vertices": 4883,
+          "bytes": 1107028
         },
         "lod2": {
           "file": "net_deep.lod2.glb",
-          "triangles": 3192,
-          "vertices": 2097,
-          "bytes": 396596
+          "triangles": 3120,
+          "vertices": 2048,
+          "bytes": 386748
         }
       },
-      "mass_g": 655,
-      "balancePoint_m": 1.18,
+      "mass_g": 652,
+      "balancePoint_m": 1.178,
       "overallLength_m": 1.894,
       "buttZ_m": -0.09,
       "mouthCentre_m": [

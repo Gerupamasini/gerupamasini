@@ -81,18 +81,6 @@ function netBag(Q, mouth, { depth, p, taper, folds, seed, material, pitch, cells
   return { bag, prims };
 }
 
-/** a rigid primitive riding along with the bag bottom (gather knot) */
-function bottomRider(bag, mesh, material, kg) {
-  const n = mesh.vertexCount;
-  const targets = bag.targets.map((t, ti) => {
-    const d = bag.bottomDelta[ti];
-    const dpos = new Float32Array(n * 3), dnrm = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { dpos[i * 3] = d[0]; dpos[i * 3 + 1] = d[1]; dpos[i * 3 + 2] = d[2]; }
-    return { name: t.name, dpos, dnrm };
-  });
-  return { material, mesh, targets, kg };
-}
-
 function endCap(Q, z0, z1, r, material = 'rubber_black') {
   const L = z1 - z0;
   const prof = [[z0, 0], ...sampled(z0, z0 + L * 0.35, 6, (z, t) => r * (0.55 + 0.45 * Math.sqrt(1 - (1 - t) ** 2))), [z1 - L * 0.12, r], [z1 - L * 0.04, r * 1.02], [z1, r * 0.92], [z1, r * 0.92], [z1, 0]];
@@ -253,11 +241,6 @@ function netDeep(Q) {
   if (Q.detail < 2) frame.push(part('twine_green', lacing(h.mouth, { every: Q.detail ? 0.07 : 0.035, rw, rr, twine: 0.0006, segs: Q.detail ? 4 : 6, loopSegs: Q.detail ? 8 : 14 }), 0.004));
   const bagMouth = offsetLoop(h.mouth, h.center, 0, -(rw + 2 * rr) + 0.0005);
   const { bag, prims } = netBag(Q, bagMouth, { depth: 0.42, p: 2.1, taper: 0.22, folds: 0.1, seed: 9, material: 'net_knotted', pitch: 0.0052, cellsPerTile: [6, 8.05], gsm: 0.12 });
-  // the bottom gathered and tied off with twine
-  const knotMesh = lathe(sampled(-0.012, 0.012, Q.steps, (z, t) => 0.0075 * Math.sin(Math.PI * t) ** 0.7 * (1 + 0.12 * Math.sin(t * 19))), Q.latheSmall, { tile: [0.012, 0.012] });
-  knotMesh.transform(m4.chain(m4.translate(...v3.add(bag.bottom, [0, 0.004, 0])), m4.rotX(Math.PI / 2)));
-  knotMesh.shade(() => ({ dirt: 1 }));
-  prims.push(bottomRider(bag, knotMesh, 'twine_green', 0.003));
   return {
     handle: [{ name: 'Handle', z: 0, parts: s1 }, { name: 'Handle_Inner', z: zc, parts: s2 }], tipZ: tip, pivotRot: [0, 0, 0, 1], frame, bag: { prims }, bagInfo: bag,
     mouth: h.center, grips: { main: [0, 0, 0], support: [0, 0, 0.5] },
@@ -360,7 +343,7 @@ export const NETS = [
   {
     id: 'net_deep', ja: '深場タモ', en: 'Long-reach triangle net', build: netDeep,
     spec: { hoop_cm: '35 × 34 (三角)', handle_cm: 150, mesh_mm: 4, bagDepth_cm: 42 },
-    materials: 'ステンレス線 Φ5 mm の三角枠（前辺 35 cm、柄から前辺まで 34 cm）、PE 撚りロープの縁を撚糸で枠に綴じ付け、PE 有結節網 4 mm（底を絞り結び）、2 段伸縮アルミ柄 Φ28/24 mm（ツイストロック）、EVA グリップ',
+    materials: 'ステンレス線 Φ5 mm の三角枠（前辺 35 cm、柄から前辺まで 34 cm）、PE 撚りロープの縁を撚糸で枠に綴じ付け、PE 有結節網 4 mm、2 段伸縮アルミ柄 Φ28/24 mm（ツイストロック）、EVA グリップ',
     use: '水路・深めの場所',
   },
   {
