@@ -301,7 +301,7 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     // the stripe ends at the gape: below the commissure line (carried back from the rictus) the chin is white
     // and, toward the bill, below the culmen: the white forehead's point runs out along the culmen above it
     float gapeY = 90.32 - 0.436 * (p.z - 37.71);
-    lore *= mix(1.0, smoothstep(-0.35, 0.25, p.y + ej * 0.5 - gapeY) * (1.0 - smoothstep(1.3, 1.9, p.y + ej * 0.5 - gapeY)), smoothstep(33.0, 36.5, p.z));
+    lore *= mix(1.0, smoothstep(-0.35, 0.25, p.y + ej * 0.5 - gapeY) * (1.0 - smoothstep(1.8, 2.5, p.y + ej * 0.5 - gapeY)), smoothstep(33.0, 36.5, p.z));
     // round the eye: 1.3 mm of mask beyond the lids, a little more below and behind (the eye sits in the mask,
     // p012, p070, p043; females / juveniles only behind it)
     float surround = (1.0 - smoothstep(-0.3, 0.3, length((zy - vec2(26.2, 95.2)) * vec2(0.92, 1.0)) + ej - 3.0 * uMelanin)) * uHeadPat.z;
