@@ -118,7 +118,7 @@ uniform vec4 uKgState;         // wetness, sand coat, detail (0 far … 1 macro)
 uniform vec4 uKgFeed;          // fingertip sand (feeding), mouth wetness, juvenile (0..1), ovigerous (0..1)
 uniform vec3 uKgTint;          // individual ground colour (linear)
 uniform vec3 uKgDark;          // individual marbling colour (linear)
-uniform vec4 uKgMorph;         // breeding red (pink chelae, maroon leg meri; 6.webp), debug view (1 albedo), pale cover of the dorsum, -
+uniform vec4 uKgMorph;         // breeding red (pink chelae, maroon leg meri; 6.webp), debug view (1 albedo), pale cover of the dorsum, leg tint
 varying vec3 vKgLocal;
 varying vec2 vKgUv;
 varying vec3 vKgInfo;
@@ -155,8 +155,11 @@ const FRAG_SURFACE = /* glsl */ `
   float red = uKgMorph.x;
   vec3 pal = mix(ground, vec3(0.62, 0.6, 0.56), 0.35);           // translucent limb ground
   // limbs: grey-white translucent cuticle in pale morphs (2.webp, 4.webp), the body's own colours in dark ones
-  vec3 limbG = mix(mix(vec3(0.6, 0.61, 0.6), ground, 0.18), mix(ground, marb, 0.45), 1.0 - pale);
-  vec3 limbD = mix(mix(vec3(0.08, 0.078, 0.065), marb, 0.3), marb * 0.6, 1.0 - pale);
+  // how far the legs take the body's tint: little in the grey-white legs of 2.webp and 5.webp, much in the khaki
+  // and brown individuals (4.webp, the specimens)
+  float legTint = uKgMorph.w;
+  vec3 limbG = mix(mix(vec3(0.54, 0.555, 0.55), ground * 0.85, legTint), mix(ground, marb, 0.45), 1.0 - pale);
+  vec3 limbD = mix(mix(vec3(0.08, 0.078, 0.065), marb, 0.3 + 0.5 * legTint), marb * 0.6, 1.0 - pale);
   vec3 pink = vec3(0.74, 0.25, 0.27), pinkL = vec3(0.86, 0.5, 0.52), maroon = vec3(0.24, 0.025, 0.035);
   vec3 black = vec3(0.012, 0.010, 0.009);
   vec3 cream = vec3(0.62, 0.55, 0.40);
@@ -214,7 +217,7 @@ const FRAG_SURFACE = /* glsl */ `
     float rimZ = 1.0 - smoothstep(0.24, 0.32, q.y) * (1.0 - smoothstep(0.36, 0.44, q.x));
     float rim = smoothstep(0.39, 0.43, s) * (1.0 - smoothstep(0.5, 0.56, s)) * rimZ;
     float rimLine = (1.0 - smoothstep(0.0, 0.006, abs(s - 0.395))) * rimZ;
-    dcol = mix(dcol, mix(ground * 0.85, vec3(0.6, 0.56, 0.46), 0.3), rim * 0.75);
+    dcol = mix(dcol, mix(ground * 0.75, vec3(0.5, 0.47, 0.4), 0.3), rim * 0.5);
     dcol = mix(dcol, gold * 0.9, rimLine * 0.6);
     // ---- relief: tubercles dense on the branchial regions, cardiac & intestinal smooth [L]
     float branch = smoothstep(0.12, 0.3, q.x) * (1.0 - smoothstep(0.42, 0.5, s)) * smoothstep(-0.38, -0.05, -abs(q.y + 0.08) * 1.4);
@@ -292,7 +295,7 @@ const FRAG_SURFACE = /* glsl */ `
     ao = mix(ao, 0.25, cav);
     // glitter: white chromatophores everywhere on the dorsum, denser on the sides
     if (det > 0.3) glint = kgSpeck(P * 160.0 + seedP + 41.0, 0.32 + 0.3 * side, 0.18, fw * 160.0, idd);
-    trans = 0.08 + 0.4 * rim;
+    trans = 0.08 + 0.2 * rim;
     // the granular dorsum breaks the water film into sparkles: no mirror coat there (2.webp)
     kgCoatK = 1.0 - 0.85 * dorsal - 0.5 * side;
     wetBias = 0.25 * ventral + 0.15 * faceM;
@@ -395,9 +398,13 @@ const FRAG_SURFACE = /* glsl */ `
     float sideS = limb < 8.5 ? 1.0 : -1.0;
     float inner = smoothstep(0.35, 0.7, cos(th) * sideS);
     // merus and carpus: the body's colours, mottled and granular (2.webp: olive-black shoulders; 6.webp: violet)
-    // olive-gold granular shoulders, brighter than the dorsum (2.webp), mottled dark
-    vec3 arm = mix(mix(ground, limbG, 0.3), marb, 0.1 + 0.3 * smoothstep(0.45, 0.65, kgFbm(P * 18.0 + limb)));
-    arm = mix(arm, black, kgSpeck(P * 70.0 + seedP + limb * 7.0 + seg, 0.6, 0.3, fw * 70.0, idd) * 0.35);
+    // the shoulders (merus, carpus) carry the dorsum's livery: a dark ground under dense olive-gold granule tips,
+    // mottled (2.webp, 4.webp); violet-blue with white specks in the breeding purple males (6.webp)
+    float cover = uKgMorph.z;
+    vec3 arm = mix(marb, mix(ground, limbG, 0.3) * 0.75, 0.25 + 0.35 * smoothstep(0.4, 0.7, kgFbm(P * 14.0 + limb)));
+    float gran = kgSpeck(P * 150.0 + seedP + limb * 7.0 + seg, clamp(0.35 + 0.5 * cover, 0.0, 0.95), 0.34, fw * 150.0, idd);
+    arm = mix(arm, ground * 1.1 + 0.015, gran * 0.8);
+    arm = mix(arm, black, kgSpeck(P * 70.0 + seedP + limb * 7.0 + seg, 0.4, 0.28, fw * 70.0, idd) * 0.3);
     arm = mix(arm, mix(arm, vec3(0.3, 0.22, 0.6) * 0.5, 0.6), red * 0.6);
     // granular arm; the palm finely so, the fingers smooth
     if (det > 0.05 && part < 9.5) {
@@ -485,7 +492,7 @@ const FRAG_SURFACE = /* glsl */ `
     // the coxae share the underside's violet
     if (part < 12.5) lg = mix(lg, vec3(0.17, 0.075, 0.33), clamp(0.45 + 0.35 * purple + 0.3 * red, 0.0, 1.0) * 0.55 * (1.0 - smoothstep(0.0, 0.6, sin(th))));
     rough = 0.5;
-    trans = 0.32;
+    trans = 0.45;
     // the merus: one undivided oval tympanum on each broad face [L] — dark, densely speckled, glossier (010)
     if (part > 12.5 && part < 13.5) {
       float faceZ = abs(cos(th));
@@ -701,11 +708,11 @@ export function makeSetaeMaterial() {
  * the displaying male). red: the breeding flush (pink-red chelae, maroon meri) of males in the waving season.
  */
 const MORPHS = {
-  pale: { tint: [0.66, 0.64, 0.44], dark: [0.07, 0.075, 0.065], purple: 0.08, pale: 0.85, red: 0.15, cover: 0.55 },
-  khaki: { tint: [0.7, 0.67, 0.5], dark: [0.3, 0.28, 0.2], purple: 0.0, pale: 0.8, red: 0.05, cover: 0.85 },
-  grey: { tint: [0.74, 0.74, 0.72], dark: [0.16, 0.16, 0.17], purple: 0.1, pale: 0.6, red: 0.35, cover: 0.85 },
-  brown: { tint: [0.68, 0.55, 0.32], dark: [0.12, 0.08, 0.045], purple: 0.0, pale: 0.7, red: 0.1, cover: 0.65 },
-  purple: { tint: [0.56, 0.44, 0.62], dark: [0.22, 0.13, 0.25], purple: 1.0, pale: 0.0, red: 0.9, cover: 0.5 },
+  pale: { tint: [0.66, 0.64, 0.44], dark: [0.25, 0.25, 0.21], purple: 0.08, pale: 0.85, red: 0.15, cover: 0.6, legTint: 0.12 },
+  khaki: { tint: [0.7, 0.67, 0.5], dark: [0.3, 0.28, 0.2], purple: 0.0, pale: 0.8, red: 0.05, cover: 0.85, legTint: 0.5 },
+  grey: { tint: [0.74, 0.74, 0.72], dark: [0.16, 0.16, 0.17], purple: 0.1, pale: 0.6, red: 0.35, cover: 0.85, legTint: 0.1 },
+  brown: { tint: [0.68, 0.58, 0.42], dark: [0.25, 0.19, 0.14], purple: 0.0, pale: 0.7, red: 0.1, cover: 0.72, legTint: 0.6 },
+  purple: { tint: [0.56, 0.44, 0.62], dark: [0.22, 0.13, 0.25], purple: 1.0, pale: 0.0, red: 0.9, cover: 0.5, legTint: 0.5 },
 };
 
 export function paletteFor(name, seed = 1) {
@@ -713,7 +720,7 @@ export function paletteFor(name, seed = 1) {
   if (!P) return null;
   const f = (seed * 0.618) % 1;
   return {
-    tint: lin(...P.tint), dark: lin(...P.dark), purple: P.purple, pale: P.pale, red: P.red, cover: P.cover,
+    tint: lin(...P.tint), dark: lin(...P.dark), purple: P.purple, pale: P.pale, red: P.red, cover: P.cover, legTint: P.legTint,
     patternSeed: f, colorSeed: (f * 7.13) % 1, morph: name,
   };
 }
@@ -732,7 +739,7 @@ export function crabPalette(rand, sex = 'm') {
   return {
     tint: lin(tint[0], tint[1], tint[2]), dark: lin(dark[0], dark[1], dark[2]),
     purple: Math.min(1, P.purple * (0.7 + 0.6 * rand())), pale: P.pale,
-    red: P.red * (sex === 'm' ? 0.6 + 0.4 * rand() : 0.3), cover: Math.min(0.95, P.cover * (0.85 + 0.3 * rand())),
+    red: P.red * (sex === 'm' ? 0.6 + 0.4 * rand() : 0.3), cover: Math.min(0.95, P.cover * (0.85 + 0.3 * rand())), legTint: P.legTint,
     patternSeed: rand(), colorSeed: rand(), morph: name,
   };
 }

@@ -31,7 +31,7 @@ const PRESETS = {
   p4: { scene: 'dark', pal: 'grey', pose: 'feed', cam: '-3.2,5.2,7.2', tgt: '0,0.25,0.2', fov: 24, sex: 'f', wet: 0.4, sand: 0.5, tip: 0.6, sun: 50, az: 220, exp: 0.95, env: 0.25, hemi: 0.85, pellets: 260, heading: 0.35 },
   // the pinned specimen seen from above (p-007): dorsal pattern and leg proportions
   p6: { scene: 'dark', pal: 'brown', pose: 'stand', cam: '0,9.5,-0.01', tgt: '0,0.3,0', fov: 13.7, sex: 'm', wet: 0.3, sand: 0, tip: 0, sun: 80, az: 180, exp: 0.9, env: 0.3, hemi: 0.9 },
-  p5: { scene: 'dark', pal: 'purple', pose: 'wave', cam: '0,0.4,11.5', tgt: '0,0.92,0', fov: 15, sex: 'm', wet: 0.25, sand: 0.35, tip: 0.5, sun: 60, az: 150, exp: 0.75, env: 0.12, hemi: 0.5 },
+  p5: { scene: 'dark', pal: 'purple', pose: 'wave', cam: '0,1.6,11.3', tgt: '0,0.88,0', fov: 15, sex: 'm', wet: 0.25, sand: 0.35, tip: 0.5, sun: 60, az: 150, exp: 0.75, env: 0.12, hemi: 0.5 },
 };
 const PRE = PRESETS[Q.get('preset')] ?? {};
 const param = (k) => (Q.has(k) ? Q.get(k) : PRE[k] !== undefined ? String(PRE[k]) : null);
@@ -165,7 +165,7 @@ function pose(kind, t = 0) {
   if (kind === 'flip') { poseFlip(); return; }
   const h = kind === 'feed' ? STANCE.bodyHeight.feed : kind === 'wave' ? STANCE.bodyHeight.display : STANCE.bodyHeight.calm;
   r.body.position.set(0, h, 0);
-  r.body.rotation.set(kind === 'feed' ? 0.12 : kind === 'wave' ? -0.12 : 0, 0, 0);
+  r.body.rotation.set(num('pitch', kind === 'feed' ? 0.12 : kind === 'wave' ? -0.12 : 0), 0, 0);
   r.root.updateMatrixWorld(true);
   const bodyInv = r.body.matrix.clone().invert();
   for (let i = 0; i < r.legs.length; i++) {

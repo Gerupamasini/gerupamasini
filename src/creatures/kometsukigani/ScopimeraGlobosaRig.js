@@ -70,7 +70,7 @@ export const CHELA_POSES = {
    * shoulder, the palm hangs beside the maxillipeds with its broad face forward, the fingers point down to the
    * midline under them
    */
-  fold: [-1.29, 1.105, 0, 0.163, 2.6, 0.492, 0.04],
+  fold: [-1.4, 1.409, 0, 0.244, 2.561, 0.713, 0.04],
   scoop: [0.05, 0.25, 0, 0.12, 1.25, -1.15, 0.3],
   mouth: [0.1, 0.95, 0, 0.25, 1.8, -1.2, 0.05],
   /** wave, fitted to 6.webp: merus vertical beside the carapace, palm high with the fingers hooked inward */

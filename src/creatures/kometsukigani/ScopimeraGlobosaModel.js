@@ -42,6 +42,7 @@ export class CrabModel {
       u.uKgDark.value.copy(this.palette.dark);
       u.uKgMorph.value.x = this.palette.red ?? 0;
       u.uKgMorph.value.z = this.palette.cover ?? 0.6;
+      u.uKgMorph.value.w = this.palette.legTint ?? 0.3;
       u.uKgFeed.value.z = juvenile;
       u.uKgState.value.w = cw_m;
     }
@@ -94,6 +95,7 @@ export class CrabModel {
       u.uKgDark.value.copy(this.palette.dark);
       u.uKgMorph.value.x = this.palette.red ?? 0;
       u.uKgMorph.value.z = this.palette.cover ?? 0.6;
+      u.uKgMorph.value.w = this.palette.legTint ?? 0.3;
     }
   }
 
