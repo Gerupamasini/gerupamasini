@@ -5,11 +5,12 @@ import { makeDecalMaterial, makeShellInnerMaterial, makeShellOuterMaterial, make
  * アサリ Ruditapes philippinarum — procedural model in shell-length units (shell length = 1).
  * Frame: +x anterior, +y dorsal, +z left valve; the commissure is the z = 0 plane.
  *
- * Proportions (adult, Japanese populations; reference photos 001–042 and measured shells):
- *   height / length ≈ 0.70, width (both valves) / length ≈ 0.47, umbo ≈ 0.30 L from the anterior end,
- *   prosogyrate beaks, short concave lunule, long gently sloping posterodorsal margin with an external
- *   ligament, broad bluntly rounded posterior end, evenly convex ventral margin — a rounded trapezoid,
- *   not an ellipse.
+ * Proportions (adult, Japanese populations; reference photo sets and measured shells):
+ *   height / length ≈ 0.70, width (both valves) / length ≈ 0.52 (「長楕円形で厚く、膨らみが強い」;
+ *   globular populations reach W/L 0.55), umbo ≈ 0.30 L from the anterior end, prosogyrate beaks, short
+ *   lunule, long sloping posterodorsal margin with a long brown external ligament, rounded anterior end,
+ *   bluntly truncated posterior end (「後縁はやや切断状」), evenly convex ventral margin. Seen from below
+ *   the shell is a pointed lens: the valves meet at a fairly acute angle along the ventral margin.
  *
  * Geometry is built once per LOD and shared by every clam; the right valve is the left one mirrored.
  */
@@ -18,25 +19,29 @@ import { makeDecalMaterial, makeShellInnerMaterial, makeShellOuterMaterial, make
 const OUTLINE = [
   [0.200, 0.360], [0.290, 0.312], [0.385, 0.222], [0.458, 0.105], [0.497, -0.020],
   [0.480, -0.135], [0.400, -0.240], [0.260, -0.318], [0.080, -0.348], [-0.110, -0.338],
-  [-0.275, -0.300], [-0.400, -0.228], [-0.478, -0.120], [-0.502, -0.010], [-0.486, 0.085],
-  [-0.410, 0.172], [-0.270, 0.258], [-0.090, 0.326], [0.080, 0.356],
+  [-0.275, -0.300], [-0.395, -0.232], [-0.470, -0.140], [-0.503, -0.045], [-0.510, 0.045],
+  [-0.488, 0.122], [-0.420, 0.190], [-0.270, 0.262], [-0.090, 0.328], [0.080, 0.357],
 ];
 const GROWTH_ORIGIN = new Vector3(0.17, 0.315, 0);
-const HALF_WIDTH = 0.25;
+const HALF_WIDTH = 0.26;
 /** major growth checks modelled in LOD0 geometry (the shader draws its own set close to these) */
 const GEOM_CHECKS = [0.54, 0.68, 0.82];
 
 export const ANATOMY = {
   hingePoint: new Vector3(0.05, 0.338, 0),
   hingeAxis: new Vector3(-0.3, -0.035, 0).normalize(),
-  /** full gape (both valves) at gape = 1, radians (≈ 2 mm at the ventral margin of a 35 mm clam) */
-  maxGape: 0.17,
-  footRoot: new Vector3(0.24, -0.17, 0),
-  footDir: Math.atan2(-0.83, 0.55),
-  footLength: 0.62,
-  siphonIn: { root: new Vector3(-0.38, -0.04, 0), radius: 0.058 },
-  siphonOut: { root: new Vector3(-0.38, 0.048, 0), radius: 0.044 },
+  /** full gape (both valves) at gape = 1, radians: a relaxed clam in water gapes ~4 mm ventrally (35 mm shell) */
+  maxGape: 0.22,
+  /** the mantle margins follow the valves only partly, so they close the gape between them */
+  mantleFollow: 0.2,
+  footRoot: new Vector3(0.2, -0.13, 0),
+  footDir: Math.atan2(-0.8, 0.6),
+  footLength: 0.72,
+  siphonIn: { root: new Vector3(-0.38, -0.045, 0), radius: 0.068 },
+  siphonOut: { root: new Vector3(-0.38, 0.055, 0), radius: 0.052 },
   siphonDir: Math.PI - 0.12,
+  /** sideways parting of each siphon tip from its partner at t = 1 (local y, shell lengths) */
+  siphonFork: 0.075,
   /** posterior margin point that must stay below the sand when buried */
   posteriorTip: new Vector3(-0.5, 0.0, 0),
 };
@@ -54,8 +59,8 @@ function outline(n) {
 }
 
 function dome(s) {
-  // the inflated umbo is the high point; rounded (elliptic) toward the margin so the valves meet in an ovate section
-  return Math.pow(Math.max(0, 1 - Math.pow(s, 2.4)), 0.5);
+  // the inflated umbo is the high point; full through the middle, the valves meeting at an acute angle at the margin
+  return Math.pow(Math.max(0, 1 - Math.pow(s, 2.2)), 0.62);
 }
 function smooth(a, b, x) {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -150,51 +155,98 @@ function weldSeam(g, rows, cols, surfaces) {
   }
 }
 
-/** mantle edge lining the valve along the ventral and posterior margin; uv.y = 1 at the pigmented edge */
-function buildMantle(nu) {
+/**
+ * Mantle margin of one side: a thick rolled lip running inside the ventral and posterior valve margin, cream
+ * yellow with a brown pigmented outer face and a fringe of short papillae (reference: live clams relaxed in
+ * water fill the gape with these lips). It is swept as a tube; `aDir` is the outward direction in the
+ * commissure plane, along which the shader pushes the lip out past the shell edge as the clam relaxes and
+ * pulls it in when the valves close. uv = (u along the margin, section angle / 2π, 0 = facing outward).
+ * aTent: 0 lip, 0..1 along a papilla.
+ */
+function buildMantle(nu, papillae) {
   const M = outline(nu);
   const G = GROWTH_ORIGIN;
-  const pos = [], uv = [], idx = [];
-  // ventral and posterior margin only (where the gape is): the anterior end stays closed over the lunule
-  const j0 = Math.round(nu * 0.27), j1 = Math.round(nu * 0.73);
-  const across = 4;
-  for (let j = j0; j <= j1; j++) {
+  const pos = [], uv = [], dir = [], tent = [], idx = [];
+  const j0 = Math.round(nu * 0.25), j1 = Math.round(nu * 0.79);
+  const nr = 10, rr = 0.021;
+  const frame = (j) => {
     const m = M[j];
-    for (let k = 0; k <= across; k++) {
-      const f = k / across;
-      const s = 0.86 + f * 0.12;
-      // lines the inside of the valve, then curls in to the commissure
-      const z = (1 - f) * valveZ(0.86, m) * 0.6 + f * 0.004;
-      pos.push(G.x + s * (m.x - G.x), G.y + s * (m.y - G.y), z);
-      uv.push(j / nu, f);
+    const ox = m.x - G.x, oy = m.y - G.y, A = Math.hypot(ox, oy);
+    // thinner toward both ends so the lip tucks away at the anterior end and over the siphons
+    const taper = smooth(j0, j0 + nu * 0.06, j) * (1 - smooth(j1 - nu * 0.05, j1, j));
+    return { cx: G.x + ox * (1 - 0.03 / A), cy: G.y + oy * (1 - 0.03 / A), nx: ox / A, ny: oy / A, r: rr * (0.35 + 0.65 * taper) };
+  };
+  for (let j = j0; j <= j1; j++) {
+    const f = frame(j);
+    for (let k = 0; k <= nr; k++) {
+      const a = (k / nr) * Math.PI * 2;
+      const c = Math.cos(a), sn = Math.sin(a);
+      // flattened against the valve on the inside (-z side of the section rests on the shell)
+      pos.push(f.cx + f.nx * c * f.r * 1.25, f.cy + f.ny * c * f.r * 1.25, f.r * 1.05 + sn * f.r);
+      uv.push(j / nu, k / nr);
+      dir.push(f.nx, f.ny, 0);
+      tent.push(0);
     }
   }
-  const w = across + 1;
-  for (let j = 0; j < j1 - j0; j++) for (let k = 0; k < across; k++) {
+  const w = nr + 1;
+  for (let j = 0; j < j1 - j0; j++) for (let k = 0; k < nr; k++) {
     const a = j * w + k;
-    idx.push(a, a + w, a + 1, a + 1, a + w, a + w + 1);
+    idx.push(a, a + 1, a + w, a + 1, a + w + 1, a + w);
+  }
+  // papillae along the outer face of the lip, leaning out and toward the midline
+  for (let q = 0; q < papillae; q++) {
+    const jf = j0 + ((q + 0.5 + 0.35 * Math.sin(q * 2.71)) / papillae) * (j1 - j0);
+    const f = frame(Math.round(jf));
+    const len = 0.006 + 0.011 * (((q * 37) % 7) / 6) * (((q * 11) % 3) ? 1 : 0.5), wd = 0.0021;
+    const bx = f.cx + f.nx * f.r * 1.15, by = f.cy + f.ny * f.r * 1.15, bz = f.r * (0.6 + 0.5 * ((q * 13) % 3) / 2);
+    const ux = f.nx * 0.97, uy = f.ny * 0.97, uz = -0.25;
+    const b0 = pos.length / 3;
+    for (let i = 0; i <= 2; i++) {
+      const t = i / 2, r = wd * (1 - 0.85 * t);
+      for (let s4 = 0; s4 < 4; s4++) {
+        const ang = (s4 / 4) * Math.PI * 2;
+        // side vectors: along the margin (−ny, nx) and z
+        const sx = -f.ny * Math.cos(ang) * r, sy = f.nx * Math.cos(ang) * r, sz = Math.sin(ang) * r;
+        pos.push(bx + ux * len * t + sx, by + uy * len * t + sy, bz + uz * len * t + sz);
+        uv.push(jf / nu, 0); dir.push(f.nx, f.ny, 0); tent.push(Math.max(0.1, t));
+      }
+    }
+    for (let i = 0; i < 2; i++) for (let s4 = 0; s4 < 4; s4++) {
+      const a0 = b0 + i * 4 + s4, a1 = b0 + i * 4 + ((s4 + 1) % 4);
+      idx.push(a0, a1, a0 + 4, a1, a1 + 4, a0 + 4);
+    }
   }
   const g = new BufferGeometry();
   g.setAttribute('position', new Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new Float32BufferAttribute(uv, 2));
-  g.setAttribute('aTent', new BufferAttribute(new Float32Array(pos.length / 3), 1));
+  g.setAttribute('aDir', new Float32BufferAttribute(dir, 3));
+  g.setAttribute('aTent', new Float32BufferAttribute(tent, 1));
   g.setIndex(idx);
   g.computeVertexNormals();
   return g;
 }
 
-/** hatchet-shaped, laterally compressed foot along +x over [0, 1] (length set in the shader) */
+/**
+ * The foot: a large, laterally compressed, cream-white blade along +x over [0, 1] (length set in the shader).
+ * Its dorsal edge (+y) is nearly straight, the ventral edge a convex keel that makes the hatchet "heel", and the
+ * tip is broad and rounded (reference: a relaxed clam's foot is about half the shell height deep). The section
+ * is a lens, sharper along the ventral keel.
+ */
 function buildFoot(nt, nr) {
   const pos = [], uv = [], idx = [];
   for (let i = 0; i <= nt; i++) {
     const t = i / nt;
-    const prof = Math.pow(Math.sin(Math.PI * (0.08 + 0.92 * t)), 0.55);
-    const ry = 0.11 * prof * (0.8 + 0.35 * t), rz = 0.042 * prof;
+    const end = Math.sqrt(Math.max(0, 1 - Math.pow(Math.max(0, (t - 0.55) / 0.45), 2)));   // rounded tip
+    const up = 0.1 * end * (0.85 + 0.15 * t);                                                 // dorsal edge
+    const down = (0.1 + 0.09 * Math.sin(Math.PI * Math.min(1, t * 1.15))) * end;            // ventral keel
+    const thick = 0.055 * (1 - 0.35 * t) * Math.max(end, 0.05);
     for (let j = 0; j <= nr; j++) {
       const a = (j / nr) * Math.PI * 2;
-      // a keel on the ventral (leading) edge: the "hatchet"
-      const keel = 1 + 0.25 * Math.max(0, -Math.sin(a)) ** 3;
-      pos.push(t, Math.sin(a) * ry * keel, Math.cos(a) * rz);
+      const sy = Math.sin(a), cz = Math.cos(a);
+      const y = sy >= 0 ? sy * up : sy * down;
+      // lens section: thinner toward the ventral keel
+      const z = cz * thick * (sy < 0 ? 1 - 0.55 * sy * sy : 1 - 0.25 * sy * sy);
+      pos.push(t, y, z);
       uv.push(t, j / nr);
     }
   }
@@ -214,10 +266,12 @@ function buildFoot(nt, nr) {
 /**
  * Open tube along +x over [0, 1] with a thickened lip. In アサリ the two siphons are fused for most of their
  * length and part only near the tips, so the wall facing the partner (local ±y) swells into it, giving one
- * figure-of-eight sheath with a shallow groove. The inhalant tip carries a fringe of tentacles, the exhalant
- * a ring of small papillae.
+ * figure-of-eight sheath with a shallow groove; over the last fifth the two tips part into a short Y. The
+ * inhalant margin bears one or two rows of dense, stout, short tentacles; the exhalant one row of thin,
+ * sparse ones (Ruditapes philippinarum siphon descriptions).
  */
 function buildSiphon(radius, tentacles, papillae, partner, nt, nr) {
+  const fork = (t) => -partner * ANATOMY.siphonFork * Math.pow(smooth(0.78, 1.0, t), 1.4);
   const pos = [], uv = [], tent = [], idx = [];
   for (let i = 0; i <= nt; i++) {
     const t = i / nt;
@@ -227,7 +281,7 @@ function buildSiphon(radius, tentacles, papillae, partner, nt, nr) {
       const a = (j / nr) * Math.PI * 2;
       const toward = Math.max(0, Math.cos(a) * partner);
       const r = r0 * (1 + 0.62 * fuse * toward * toward);
-      pos.push(t, Math.cos(a) * r, Math.sin(a) * r);
+      pos.push(t, Math.cos(a) * r + fork(t), Math.sin(a) * r);
       uv.push(t, j / nr);
       tent.push(0);
     }
@@ -241,23 +295,25 @@ function buildSiphon(radius, tentacles, papillae, partner, nt, nr) {
   pos.push(0.75, 0, 0); uv.push(0.2, 0); tent.push(0);
   for (let j = 0; j <= nr; j++) {
     const a = (j / nr) * Math.PI * 2, r = radius * 0.86;
-    pos.push(0.75, Math.cos(a) * r, Math.sin(a) * r); uv.push(0.2, 0); tent.push(0);
+    pos.push(0.75, Math.cos(a) * r + fork(0.75), Math.sin(a) * r); uv.push(0.2, 0); tent.push(0);
   }
   for (let j = 0; j < nr; j++) idx.push(plug, plug + 1 + j, plug + 2 + j);
   const fringe = tentacles + papillae;
   for (let k = 0; k < fringe; k++) {
     const pap = k >= tentacles;
     const n = pap ? papillae : tentacles, kk = pap ? k - tentacles : k;
-    const a = ((kk + 0.5 + (pap ? 0 : 0.2 * Math.sin(kk * 2.3))) / n) * Math.PI * 2;
-    // tentacles alternate long and short (branched look); papillae are short knobs
-    const len = pap ? radius * (0.14 + 0.05 * (kk % 2)) : radius * (0.26 + 0.24 * (((kk * 7) % 5) / 4)) * (kk % 2 ? 0.65 : 1);
+    const a = ((kk + 0.5 + (pap ? 0.3 * Math.sin(kk * 1.7) : 0.2 * Math.sin(kk * 2.3))) / n) * Math.PI * 2;
+    // inhalant: two rows, outer stout and longer, inner short; exhalant: thin and sparse
+    const innerRow = !pap && kk % 2 === 1;
+    const len = pap ? radius * (0.22 + 0.1 * (kk % 3) / 2) : radius * (innerRow ? 0.22 : 0.34 + 0.16 * (((kk * 7) % 5) / 4));
     // tentacles fan outward over the sand, papillae stand up round the rim
     // tentacles lean in over the opening like a fringe, papillae stand up round the rim
     const out = pap ? new Vector3(0.55, Math.cos(a) * 0.83, Math.sin(a) * 0.83) : new Vector3(0.75, -Math.cos(a) * 0.66, -Math.sin(a) * 0.66);
     const side = new Vector3(0, -Math.sin(a), Math.cos(a));
-    const base = new Vector3(1, Math.cos(a) * radius * 0.92, Math.sin(a) * radius * 0.92);
+    const rb = radius * (innerRow ? 0.78 : 0.92);
+    const base = new Vector3(innerRow ? 0.985 : 1, Math.cos(a) * rb + fork(1), Math.sin(a) * rb);
     const b0 = pos.length / 3;
-    const segs = 3, w = radius * (pap ? 0.09 : 0.085);
+    const segs = 3, w = radius * (pap ? 0.05 : innerRow ? 0.08 : 0.11);
     for (let i = 0; i <= segs; i++) {
       const f = i / segs, r = w * (1 - f * 0.85);
       for (let s = 0; s < 4; s++) {
@@ -291,23 +347,23 @@ let shared = null;
 export function sharedGeometry() {
   if (shared) return shared;
   const body = withTent(new SphereGeometry(1, 18, 12));
-  body.scale(0.27, 0.2, 0.13);
+  body.scale(0.27, 0.2, 0.14);
   body.translate(-0.02, -0.01, 0);
   const lig = new CapsuleGeometry(0.014, 0.26, 3, 6);
   // along the posterodorsal margin behind the beaks, half sunk between the valves
   lig.rotateZ(Math.PI / 2 + Math.atan2(0.28, 1));
   lig.scale(1, 1, 0.8);
   lig.translate(-0.07, 0.306, 0);
-  lig.setAttribute('aTent', new BufferAttribute(new Float32Array(lig.attributes.position.count).fill(1), 1));
+  lig.setAttribute('aTent', new BufferAttribute(new Float32Array(lig.attributes.position.count).fill(2), 1));   // 2 = ligament
   shared = {
     valve: LODS.map((_, i) => buildValve(i)),
-    mantle: [buildMantle(96), buildMantle(40)],
+    mantle: [buildMantle(140, 95), buildMantle(48, 0)],
     body,
     ligament: lig,
     foot: [buildFoot(20, 14), buildFoot(8, 8)],
     // local +y of a siphon points ventrally, so the exhalant's partner is +y and the inhalant's −y
-    siphonIn: [buildSiphon(ANATOMY.siphonIn.radius, 26, 0, -1, 22, 20), buildSiphon(ANATOMY.siphonIn.radius, 0, 0, -1, 5, 8)],
-    siphonOut: [buildSiphon(ANATOMY.siphonOut.radius, 0, 14, 1, 22, 18), buildSiphon(ANATOMY.siphonOut.radius, 0, 0, 1, 5, 8)],
+    siphonIn: [buildSiphon(ANATOMY.siphonIn.radius, 36, 0, -1, 24, 20), buildSiphon(ANATOMY.siphonIn.radius, 0, 0, -1, 6, 8)],
+    siphonOut: [buildSiphon(ANATOMY.siphonOut.radius, 0, 11, 1, 24, 18), buildSiphon(ANATOMY.siphonOut.radius, 0, 0, 1, 6, 8)],
     decal: new PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
   };
   return shared;
@@ -358,12 +414,15 @@ export class AsariModel {
       pivot.position.copy(H);
       const valve = new Mesh(geo.valve[0], [mat, this.mats.inner]);
       valve.position.copy(H).negate();
+      const mantlePivot = new Group();
+      mantlePivot.position.copy(H);
       const mantle = new Mesh(geo.mantle[0], this.mats.soft);
       mantle.position.copy(valve.position);
       if (mirror) { valve.scale.z = -1; mantle.scale.z = -1; }
-      pivot.add(valve, mantle);
-      root.add(pivot);
-      return { pivot, valve, mantle, outer: mat };
+      pivot.add(valve);
+      mantlePivot.add(mantle);
+      root.add(pivot, mantlePivot);
+      return { pivot, mantlePivot, valve, mantle, outer: mat };
     };
     this.left = mkValve('LeftShell', this.mats.outerL, false);
     this.right = mkValve('RightShell', this.mats.outerR, true);
@@ -437,9 +496,12 @@ export class AsariModel {
   pose(gape, foot, sIn, sOut, mantleBreath) {
     // the siphons leave through the posterior gape: while they are out the valves cannot be shut on them
     const clearance = smooth(0.03, 0.14, Math.max(sIn.len, sOut.len));
-    const a = Math.max(gape, clearance) * ANATOMY.maxGape * 0.5;
+    const g = Math.max(gape, clearance);
+    const a = g * ANATOMY.maxGape * 0.5;
     this.left.pivot.quaternion.copy(qa.setFromAxisAngle(ANATOMY.hingeAxis, a));
     this.right.pivot.quaternion.copy(qa.setFromAxisAngle(ANATOMY.hingeAxis, -a));
+    this.left.mantlePivot.quaternion.copy(qa.setFromAxisAngle(ANATOMY.hingeAxis, a * ANATOMY.mantleFollow));
+    this.right.mantlePivot.quaternion.copy(qa.setFromAxisAngle(ANATOMY.hingeAxis, -a * ANATOMY.mantleFollow));
     this.mats.foot.userData.uniforms.uDeform.value.set(foot.ext, foot.swell, foot.bend, ANATOMY.footLength);
     this.footMesh.visible = foot.ext > 0.02 && this.lod < 2;
     this.mats.sIn.userData.uniforms.uDeform.value.set(sIn.len, sIn.open, sIn.swayY, sIn.swayZ);
@@ -447,7 +509,9 @@ export class AsariModel {
     const showSiphons = this.lod < 2 && (sIn.len > 0.06 || Math.max(gape, clearance) > 0.2);
     this.siphonIn.mesh.visible = showSiphons;
     this.siphonOut.mesh.visible = showSiphons;
+    // uDeform.x: breathing; uDeform.y: how far the mantle lips are pushed out (0 drawn in, 1 relaxed)
     this.mats.soft.userData.uniforms.uDeform.value.x = mantleBreath;
+    this.mats.soft.userData.uniforms.uDeform.value.y = smooth(0.08, 0.6, g);
   }
 
   /** sand level (world y), soft band width in shell lengths, wetness 0..1 */

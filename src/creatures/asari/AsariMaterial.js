@@ -370,6 +370,7 @@ uniform vec4 uDeform;
 uniform float uKind;
 varying vec2 vAsUv;
 attribute float aTent;
+attribute vec3 aDir;
 varying float vAsTent;
 vec3 asDeform(vec3 p){
   if (uKind > 0.5 && uKind < 1.5) {
@@ -402,7 +403,11 @@ vec3 asDeform(vec3 p){
     p.y += uDeform.z * t * t * L;
     p.z += uDeform.w * t * t * L;
   } else {
-    p *= 1.0 + uDeform.x * 0.04 * smoothstep(0.2, 0.0, abs(p.z));
+    // mantle lips (aDir = outward in the commissure plane): drawn in when the valves close, pushed out past the
+    // shell edge when the clam relaxes, swelling slightly with each breath. aDir is zero on the body and ligament.
+    p += aDir * (mix(-0.02, 0.02, uDeform.y) + uDeform.x * 0.004);
+    // relaxed lips also roll in toward the midline until the two sides press together and fill the gape
+    p.z -= length(aDir) * uDeform.y * 0.024;
   }
   return p;
 }
@@ -431,10 +436,10 @@ ${SAND_CLIP}
   if (uKind > 1.5) {
     // cream-white translucent sheath; the last fifth tan-orange with dark brown speckles and a dark band at the rim
     float ang = vAsUv.y*6.2831853;
-    col = mix(vec3(0.90, 0.87, 0.79), vec3(0.80, 0.64, 0.44), smoothstep(0.8, 0.97, t));
+    col = mix(vec3(0.92, 0.88, 0.76), vec3(0.62, 0.50, 0.36), smoothstep(0.8, 0.96, t));
     col *= 0.94 + 0.06*sin(ang*9.0);    // faint longitudinal muscle lines
-    float spk = smoothstep(0.6, 0.72, asFbm(vec2(t*26.0, sin(ang)*3.5 + cos(ang)*3.5))) * smoothstep(0.82, 0.95, t);
-    col = mix(col, vec3(0.32, 0.22, 0.14), spk*0.7);
+    float spk = smoothstep(0.5, 0.68, asFbm(vec2(t*30.0, sin(ang)*3.5 + cos(ang)*3.5))) * smoothstep(0.8, 0.95, t);
+    col = mix(col, vec3(0.20, 0.15, 0.11), spk*0.85);
     col = mix(col, vec3(0.42, 0.30, 0.19), smoothstep(0.94, 0.975, t) * (1.0 - smoothstep(0.99, 1.0, t)) * 0.5);
     // tentacles: brown with darker tips (photos 043, 050)
     col = mix(col, mix(vec3(0.72, 0.58, 0.40), vec3(0.45, 0.32, 0.20), smoothstep(0.4, 1.0, vAsTent)), step(0.01, vAsTent));
@@ -443,9 +448,13 @@ ${SAND_CLIP}
     col = vec3(0.93, 0.88, 0.80) * (0.92 + 0.1*asN(vAsUv*vec2(14.0, 6.0)));
     col = mix(col, vec3(0.95, 0.78, 0.68), smoothstep(0.6, 1.0, t) * 0.35);
   } else {
-    col = vec3(0.86, 0.80, 0.68) * (0.9 + 0.15*asN(vAsUv*vec2(60.0, 8.0)));
-    col = mix(col, vec3(0.36, 0.26, 0.18), smoothstep(0.75, 1.0, vAsUv.y) * (0.5 + 0.5*asN(vAsUv*vec2(140.0, 3.0))));
-    col = mix(col, vec3(0.22, 0.15, 0.09), vAsTent);   // external ligament
+    // mantle: cream yellow, brown pigment streaks on the outward face of the lip, papillae tipped brown
+    col = vec3(0.92, 0.83, 0.60) * (0.9 + 0.15*asN(vAsUv*vec2(60.0, 8.0)));
+    float outward = 0.5 + 0.5*cos(vAsUv.y*6.2831853);
+    float pig = smoothstep(0.55, 0.92, outward) * smoothstep(0.45, 0.8, asFbm(vec2(vAsUv.x*70.0, vAsUv.y*3.0)));
+    col = mix(col, vec3(0.40, 0.29, 0.18), pig * 0.6);
+    if (vAsTent > 0.01 && vAsTent < 1.5) col = mix(vec3(0.92, 0.82, 0.60), vec3(0.50, 0.37, 0.24), smoothstep(0.55, 1.0, vAsTent) * 0.8);
+    if (vAsTent > 1.5) col = vec3(0.22, 0.15, 0.09);   // external ligament
   }
   diffuseColor.rgb = asLin(col);
 ${SAND_TINT}`)
@@ -468,7 +477,7 @@ ${SAND_TINT}`)
     totalEmissiveRadiance += diffuseColor.rgb * (0.03 + thin * pow(1.0 - ndv, 2.0));
   }`);
   };
-  mat.customProgramCacheKey = () => 'asari-soft-v3-' + kind;
+  mat.customProgramCacheKey = () => 'asari-soft-v4-' + kind;
   mat.userData.uniforms = uniforms;
   return mat;
 }
