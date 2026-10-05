@@ -100,6 +100,12 @@ export const bodySculpt = {
     // ear-covert / cheek plumage behind and below the eye, a little fuller than the head's ellipsoid (v4.3: the v3 head
     // restored — from the front the eyes sit inside the outline of the head, the cheeks the widest part at eye level,
     // p037, p058, p063)
+    // v4.4 (2026-10, the user's front photo): the crown is a broad, flat-rounded dome — seen from the front the sides of
+    // the head rise nearly vertically above the eyes and the cap spans almost the full head width (front outline half-
+    // width / eye-row half-width at 25 / 50 / 75 / 88 % of the height from the eye row to the crown: photo 0.98 / 0.95 /
+    // 0.78 / 0.56, v4.3 0.91 / 0.75 / 0.55 / 0.40, now 0.93 / 0.97 / 0.79 / 0.53; SDF, bind). Eye-row width (28.2 mm)
+    // and the side profile as v4.3, crown top +0.4 mm; k 2: a sharper join drew a mushroom-like lip under the cap
+    { type: 'ellipsoid', name: 'crown', c: [0.0, 100.59, 23.94], r: [13.65, 5.15, 7.9], k: 2, role: 'head' },
     { type: 'ellipsoid', name: 'cheekL', c: [9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3, role: 'head' },
     { type: 'ellipsoid', name: 'cheekR', c: [-9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3, role: 'head' },
     // v4.3: top of the neck fill under the v3-sized head (below and behind the ear coverts), with the collar 1.5 mm
@@ -164,7 +170,8 @@ export const bodySculpt = {
   // over the outer 0.35. v4.3 (v3 head on the v4.2 neck): x 14, 1 mm wider than v3's 13 — the lower rim of the eye socket
   // (x 13–15, y 92–93) stays rigid with the eye when the head turns (at 13 it slid 0.3–0.8 mm against the eyeball under
   // the broad neck fill; at 15 the neck folded more when preening)
-  headZone: { c: [0, 93.5, 24], r: [14, 13, 15.5] },
+  // v4.4: x 14.6, y 14 — the broad crown dome (prim crown, its sides at x 13.7, y 100) stays inside the rigid head
+  headZone: { c: [0, 93.5, 24], r: [14.6, 14, 15.5] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
   // mantleNape and foreBreast at rest), but when the head turns or stretches the neck bones carry this tube
   neckContact: { a: [0, 74, 0], b: [0, 88.5, 14], r: 9 },
