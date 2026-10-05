@@ -40,6 +40,7 @@ export function Root({ app }: { app: App }) {
       {screen === 'home' && <HomeMenu app={app} />}
       {screen === 'tankEdit' && <TankEdit app={app} />}
       {ui.transition.value && <Transition label={ui.transition.value} />}
+      {inField && ui.settings.value.sunglasses && <div class="sunglasses-tint" aria-hidden="true" />}
       {(screen === 'field' || screen === 'capture') && <Hud app={app} />}
       {screen === 'observe' && <ObserveOverlay app={app} />}
       {screen === 'caseView' && <CaseOverlay app={app} />}
@@ -140,7 +141,7 @@ function Title({ app }: { app: App }) {
 
 const KEY_HINTS: [string[], string][] = [
   [['W', 'A', 'S', 'D'], '移動'], [['Shift'], '走る'], [['C'], '視点'], [['E'], '採集'], [['F'], '観察'],
-  [['Q'], 'ケース'], [['M'], '地図'], [['Tab'], '図鑑'], [['H'], '自宅'], [['T'], 'チケット'], [['Esc'], 'メニュー'],
+  [['Space'], 'ジャンプ'], [['G'], 'サングラス'], [['Q'], 'ケース'], [['M'], '地図'], [['Tab'], '図鑑'], [['H'], '自宅'], [['T'], 'チケット'], [['Esc'], 'メニュー'],
 ];
 
 function Hud({ app }: { app: App }) {
@@ -163,6 +164,7 @@ function Hud({ app }: { app: App }) {
           <span class="meta">{t(`tod.${hud.tod}`)} ・ {t(`season.${hud.season}`)}</span>
         </div>
         <TideGauge />
+        {ui.settings.value.sunglasses && <div class="glasses-badge">{t('hud.sunglasses')} <span class="key">G</span></div>}
         {hud.ticket && (
           <div class={`ticket-badge ${hud.ticket.phase}`}>
             {t('hud.ticket')} ・ {hud.ticket.phase === 'ending' ? t('ticket.ending') : <span><span class="num">{hud.ticket.targetText}</span> {t('ticket.remaining')} <span class="num">{Math.floor(hud.ticket.remainingSec / 60)}:{String(hud.ticket.remainingSec % 60).padStart(2, '0')}</span></span>}

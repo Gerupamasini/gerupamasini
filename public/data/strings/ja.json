@@ -242,5 +242,11 @@
   "ticket.durationLabel": "再現時間",
   "ticket.duration": "30分間",
   "ticket.no": "やめる",
-  "warn.frameError": "処理中にエラーが起きました。続行しますが、おかしければ F12 の Console を見てください。"
+  "warn.frameError": "処理中にエラーが起きました。続行しますが、おかしければ F12 の Console を見てください。",
+  "hud.sunglasses": "偏光サングラス",
+  "toast.sunglassesOn": "偏光サングラスをかけた: 水面の照り返しが減って水の中が見える",
+  "toast.sunglassesOff": "偏光サングラスを外した",
+  "shop.pickHint": "棚の道具をクリックで説明と購入",
+  "shop.selectHint": "棚の道具をクリックしてください",
+  "shop.closeCard": "閉じる"
 }

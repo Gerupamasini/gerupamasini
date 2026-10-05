@@ -101,6 +101,8 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .gauge-dot-halo { fill: rgba(127, 227, 210, 0.3); }
 .gauge-next { display: flex; gap: 14px; margin-top: 6px; color: var(--dim); font-size: 11px; letter-spacing: 0.06em; }
 .gauge-next .num { color: var(--fg-2); font-size: 12px; }
+.sunglasses-tint { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(120% 90% at 50% 40%, rgba(96, 74, 52, 0.16) 0%, rgba(60, 46, 34, 0.3) 100%); mix-blend-mode: multiply; }
+.glasses-badge { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 999px; font-size: 11px; letter-spacing: 0.08em; color: #d9c7a8; background: rgba(60, 46, 34, 0.45); border: 1px solid rgba(217, 199, 168, 0.35); }
 .ticket-badge { background: rgba(232, 207, 154, 0.12); border: 1px solid rgba(232, 207, 154, 0.4); padding: 6px 10px; border-radius: 999px; font-size: 12px; color: var(--sand); letter-spacing: 0.04em; }
 .ticket-badge.ending { color: var(--accent); background: rgba(127, 227, 210, 0.1); border-color: rgba(127, 227, 210, 0.4); }
 .hud-tr { position: fixed; right: 20px; top: 18px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
@@ -465,7 +467,12 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 }
 
 /* the shop: a room of its own */
-.shop-screen { position: fixed; inset: 0; display: flex; flex-direction: column; padding: 28px 40px 24px; background: radial-gradient(90% 70% at 50% 0%, #2a2118 0%, #120f0c 55%, #07080a 100%); color: var(--fg); animation: fade 0.3s var(--ease) both; overflow: auto; }
+.shop-screen { position: fixed; inset: 0; display: flex; flex-direction: column; padding: 28px 40px 24px; color: var(--fg); animation: fade 0.3s var(--ease) both; pointer-events: none; }
+.shop-screen > * { pointer-events: auto; }
+.shop-pick { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); font-size: 13px; letter-spacing: 0.08em; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); pointer-events: none; }
+.shop-card.float { position: absolute; right: 40px; top: 120px; width: min(92vw, 340px); animation: rise 0.3s var(--ease) both; }
+.shop-card.float .close { align-self: flex-end; margin-top: 4px; }
+.shop-foot { pointer-events: none; }
 .shop-room { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .shop-room .lamp { position: absolute; left: 50%; top: -40px; width: 520px; height: 360px; transform: translateX(-50%); background: radial-gradient(ellipse at 50% 0%, rgba(255, 214, 140, 0.35), rgba(255, 214, 140, 0) 70%); }
 .shop-room .shelf { position: absolute; left: 8%; right: 8%; height: 10px; background: linear-gradient(180deg, #6b4a2e, #3b2616); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); border-radius: 2px; }
@@ -475,7 +482,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .shop-title { margin: 2px 0 0; font-family: var(--font-display); font-size: 34px; letter-spacing: 0.16em; }
 .shop-cr { margin-left: auto; display: inline-flex; align-items: baseline; gap: 8px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 999px; background: rgba(8, 15, 18, 0.6); }
 .shop-cr b { font-size: 22px; font-weight: 400; color: #ffe2a3; }
-.shop-line { position: relative; margin: 18px 0 14px; color: var(--fg-2); font-size: 15px; letter-spacing: 0.04em; }
+.shop-line { position: relative; margin: 18px 0 14px; color: var(--fg-2); font-size: 15px; letter-spacing: 0.04em; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); pointer-events: none; }
 .shop-grid { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
 .shop-card { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-radius: var(--r-l); background: rgba(8, 15, 18, 0.66); border: 1px solid var(--line); backdrop-filter: blur(10px); }
 .shop-card .kind { font-size: 11px; letter-spacing: 0.2em; color: var(--dim); }

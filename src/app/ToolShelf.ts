@@ -5,7 +5,15 @@ import {
 import type { ToolDef } from '../data/schemas';
 import { instantiateModel } from '../creatures/models/ModelLoader';
 
-export interface ShelfTool { tool: ToolDef; carried: boolean; slot: number | null }
+export interface ShelfTool {
+  tool: ToolDef;
+  carried: boolean;
+  slot: number | null;
+  /** text on the tag instead of the key number (the shop's price) */
+  tag?: string;
+  /** the tag lit (default: when carried) */
+  lit?: boolean;
+}
 
 /** where the rack stands in the home room: against the back wall, left of the tank, its base at table height */
 export const SHELF_POS = new Vector3(-1.55, 0.05, -1.1);
@@ -104,12 +112,15 @@ export class ToolShelf {
       clip.position.set(0, isNet ? RAIL_Y : 0.44, isNet ? 0.0 : -0.02);
       root.add(clip);
       const tagX = isNet ? (p.mouth_w ?? 0.3) / 2 + 0.06 : 0.09;
-      const tag = new Mesh(new BoxGeometry(0.05, 0.022, 0.006), st.carried ? this.tagOn : this.tagOff);
-      tag.position.set(tagX, top - 0.03, -0.06);
+      const lit = st.lit ?? st.carried;
+      const text = st.tag ?? (st.carried && st.slot !== null ? String(st.slot + 1) : null);
+      const wide = text !== null && text.length > 2;
+      const tag = new Mesh(new BoxGeometry(wide ? 0.11 : 0.05, 0.022, 0.006), lit ? this.tagOn : this.tagOff);
+      tag.position.set(tagX + (wide ? 0.03 : 0), top - 0.03, -0.06);
       root.add(tag);
-      if (st.carried && st.slot !== null) {
-        const key = new Mesh(new PlaneGeometry(0.03, 0.016), new MeshStandardMaterial({ map: label(String(st.slot + 1), 64, 36, '#05121a', 'bold 28px sans-serif'), transparent: true }));
-        key.position.set(tagX, top - 0.03, -0.0565);
+      if (text !== null) {
+        const key = new Mesh(new PlaneGeometry(wide ? 0.09 : 0.03, 0.016), new MeshStandardMaterial({ map: label(text, wide ? 192 : 64, 36, lit ? '#05121a' : '#dfe6e8', wide ? 'bold 24px sans-serif' : 'bold 28px sans-serif'), transparent: true }));
+        key.position.set(tag.position.x, top - 0.03, -0.0565);
         root.add(key);
       }
       // the tool itself

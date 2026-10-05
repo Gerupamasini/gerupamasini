@@ -1,7 +1,7 @@
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'run' | 'crouch'
   | 'interact' | 'observe' | 'zukan' | 'menu' | 'speedUp' | 'speedDown' | 'home' | 'ticket' | 'debug' | 'zoom' | 'zoomIn' | 'zoomOut' | 'map'
-  | 'tool1' | 'tool2' | 'caseView';
+  | 'tool1' | 'tool2' | 'caseView' | 'jump' | 'sunglasses';
 
 const BINDINGS: Record<Action, string[]> = {
   forward: ['KeyW', 'ArrowUp'],
@@ -26,6 +26,8 @@ const BINDINGS: Record<Action, string[]> = {
   tool1: ['Digit1'],
   tool2: ['Digit2'],
   caseView: ['KeyQ'],
+  jump: ['Space'],
+  sunglasses: ['KeyG'],
 };
 
 /** Keyboard and mouse state with per-frame edge detection. */
@@ -70,17 +72,22 @@ export class Input {
       this.mouseDY += e.movementY;
     });
     document.addEventListener('pointerlockerror', () => { this.onLockError?.('pointerlockerror'); });
-    canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) {
-        this.mouseDown = true;
-        this.mouseClicked = true;
-      }
-      if (e.button === 2) this.mouseRightDown = true;
-    });
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.mouseDown = false;
-      if (e.button === 2) this.mouseRightDown = false;
-    });
+    // the buttons are read from pointer events: when OrbitControls holds the canvas (observing, the case, the home) it
+    // captures the pointer and the browser then drops the compatibility mouse events, so a right button held to zoom
+    // would never be seen through mousedown alone
+    const down = (button: number) => {
+      if (button === 0) { this.mouseDown = true; this.mouseClicked = true; }
+      if (button === 2) this.mouseRightDown = true;
+    };
+    const up = (button: number) => {
+      if (button === 0) this.mouseDown = false;
+      if (button === 2) this.mouseRightDown = false;
+    };
+    canvas.addEventListener('pointerdown', (e) => down(e.button));
+    window.addEventListener('pointerup', (e) => up(e.button));
+    window.addEventListener('pointercancel', () => { this.mouseDown = false; this.mouseRightDown = false; });
+    canvas.addEventListener('mousedown', (e) => down(e.button));
+    window.addEventListener('mouseup', (e) => up(e.button));
     canvas.addEventListener('wheel', (e) => {
       this.wheel += Math.sign(e.deltaY);
       e.preventDefault();

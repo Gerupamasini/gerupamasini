@@ -1,17 +1,17 @@
 import { h } from 'preact';
 import type { App } from '../../app/App';
-import { t } from '../store';
+import { t, ui } from '../store';
 import type { Quality } from '../../core/Settings';
 import { CardHead, KeyHint } from '../common/Icons';
 import { buildLabel } from '../../core/Build';
 
 const KEYS: [string[], string][] = [
-  [['W', 'A', 'S', 'D'], '移動'], [['Shift'], '走る'], [['C'], '低い視点 ⇄ 立つ'], [['右クリック', 'Z'], '望遠'],
+  [['W', 'A', 'S', 'D'], '移動'], [['Shift'], '走る'], [['Space'], 'ジャンプ（走りながらで跳び込み）'], [['C'], '低い視点 ⇄ 立つ'], [['右クリック', 'Z'], '望遠'], [['G'], '偏光サングラス'],
   [['E'], '採集'], [['F'], '観察'], [['M'], '全体図'], [['Tab'], '図鑑'], [['H'], '自宅'], [['T'], '潮時チケット'], [['F3'], 'デバッグ'], [['Esc'], 'メニュー'],
 ];
 
 export function Menu({ app }: { app: App }) {
-  const s = app.settings;
+  const s = ui.settings.value;
   return (
     <div class="screen center">
       <div class="card wide menu">

@@ -11,6 +11,8 @@ export interface SettingsData {
   heroMaterials: boolean;
   /** standing eye height in metres */
   eyeHeight: number;
+  /** polarised sunglasses: the water's glare cut, the bottom in view (G toggles) */
+  sunglasses: boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsData = {
@@ -21,6 +23,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   volume: 0.8,
   heroMaterials: true,
   eyeHeight: 1.5,
+  sunglasses: true,
 };
 
 export interface QualityPreset {

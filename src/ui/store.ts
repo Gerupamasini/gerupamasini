@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS, type SettingsData } from '../core/Settings';
 import { signal } from '@preact/signals';
 import type { TideExtremum } from '../tide/TideModel';
 import type { IndividualRecord } from '../creatures/Individual';
@@ -51,6 +52,10 @@ export interface Toast {
 }
 
 export const ui = {
+  /** the live settings (the menu's sliders and buttons read this) */
+  settings: signal<SettingsData>({ ...DEFAULT_SETTINGS }),
+  /** the tool (id) or parcel ('coming:<id>') picked on the shop's shelves */
+  shopSelected: signal<string | null>(null),
   screen: signal<Screen>('boot'),
   overlayFrom: signal<Screen>('field'),
   loading: signal({ frac: 0, label: '' }),

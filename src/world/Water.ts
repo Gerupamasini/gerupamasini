@@ -97,9 +97,13 @@ export class WaterPass {
       uFogDensity: { value: 0.0024 },
       // the water itself: silty, olive-green, seen wherever the view path through it is long (after MahazeViewer)
       uWaterFog: { value: new Color(0.16, 0.172, 0.14) },
-      uFogW: { value: 1.1 },      // per metre of path through the open water: from above, 30 cm is nearly clear; along the surface it closes in
+      uFogW: { value: 0.8 },      // per metre of path through the open water: from above, 30 cm is nearly clear; along the surface it closes in
       uFogPool: { value: 0.35 },  // tide pools have settled and are clearer
       uRefr: { value: 0.6 },
+      // how much of the sky the surface gives back: 1 = physical Fresnel; the game keeps it lower so the bottom shows,
+      // and polarised sunglasses cut it further (uReflMax caps the glare at grazing angles)
+      uReflK: { value: 0.55 },
+      uReflMax: { value: 0.6 },
       uRes: { value: new Vector2(1, 1) },
       uEnvI: { value: 0.6 },
     };
@@ -113,7 +117,7 @@ export class WaterPass {
         uniform samplerCube tEnv;
         uniform mat4 uProjInv, uCamWorld;
         uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog;
-        uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr;
+        uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax;
         uniform vec2 uRes;
         varying vec2 vUv;
         ${NOISE_GLSL}
@@ -190,7 +194,7 @@ export class WaterPass {
               R.y = max(abs(R.y), 0.06);   // never sample the dome's dark underside at the horizon
               vec3 env = min(textureCube(tEnv, R).rgb * uEnvI, vec3(12.0));
               float cosT = clamp(dot(-rd, N), 0.0, 1.0);
-              float F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
+              float F = min((0.02 + 0.98 * pow(1.0 - cosT, 5.0)) * uReflK, uReflMax);
 
               // sun glitter: small facets tilted at random break the sun's reflection into sparkles
               vec2 gp = S.xz * 40.0 + uTime * vec2(0.7, 0.4);
@@ -238,6 +242,17 @@ export class WaterPass {
         }`,
     });
     this.quad = new FullScreenQuad(this.material);
+  }
+
+  /**
+   * Polarised sunglasses: the surface gives back far less sky and the bottom reads clearer; off, the game's normal
+   * (already softened) reflection.
+   */
+  setPolarized(on: boolean): void {
+    this.uniforms.uReflK.value = on ? 0.22 : 0.55;
+    this.uniforms.uReflMax.value = on ? 0.3 : 0.6;
+    this.uniforms.uFogW.value = on ? 0.6 : 0.8;
+    this.uniforms.uEnvI.value = on ? 0.5 : 0.6;
   }
 
   setLevel(y: number): void {

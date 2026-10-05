@@ -11,6 +11,8 @@ export const LOW_HEIGHT = 0.45;
 export const BOOT_DEPTH = 0.35;
 const WALK = 1.7, RUN = 4.5, CROUCH = 1.3;
 const FOV_NORMAL = 70, FOV_ZOOM = 32;
+/** the jump: take-off speed (m/s) and gravity; a jump out of a run carries the run's speed and a little more */
+const JUMP_V = 2.9, GRAVITY = 13.5, DASH_BOOST = 1.6, DASH_MIN_RUN = 0.6;
 
 /** First-person walker on the terrain with wading limits. */
 export class FPSController {
@@ -34,6 +36,14 @@ export class FPSController {
   zooming = false;
   /** short pitch nudge (radians) that decays: the swing of the net */
   private kick = 0;
+  /** in the air: height above the ground and vertical speed; the dash is the horizontal speed carried through the jump */
+  private airY = 0;
+  private vy = 0;
+  private dashVX = 0;
+  private dashVZ = 0;
+  airborne = false;
+  /** true for the frame the feet leave the ground (the HUD's hop) */
+  jumped = false;
   private readonly tmpForward = new Vector3();
   private readonly tmpRight = new Vector3();
 
@@ -108,7 +118,42 @@ export class FPSController {
     const len = Math.hypot(mx, mz);
     this.blockedByDepth = false;
     this.speedNow = 0;
-    if (len > 0) {
+    this.jumped = false;
+    // the jump: off the ground (not from deep water), a hop; out of a run, a long jump that keeps the run's pace
+    if (this.enabled && !this.airborne && input.pressed('jump') && this.depthHere < 0.25) {
+      this.airborne = true;
+      this.jumped = true;
+      this.vy = JUMP_V * (this.crouching ? 0.85 : 1);
+      this.airY = 0.001;
+      const runFrac = this.running && len > 0 ? 1 : 0;
+      const fwd = this.forward;
+      this.tmpRight.set(-fwd.z, 0, fwd.x);
+      const dx = len > 0 ? (fwd.x * mz + this.tmpRight.x * mx) / len : 0, dz = len > 0 ? (fwd.z * mz + this.tmpRight.z * mx) / len : 0;
+      const carry = Math.max(this.speedNowLast, runFrac * RUN * DASH_MIN_RUN) * (runFrac ? DASH_BOOST : 1);
+      this.dashVX = dx * carry; this.dashVZ = dz * carry;
+      this.kick -= runFrac ? 0.06 : 0.03;
+    }
+    if (this.airborne) {
+      // in the air the feet carry on with the take-off speed; the keys only steer a little
+      this.vy -= GRAVITY * dt;
+      this.airY += this.vy * dt;
+      const steer = 1.2 * dt;
+      if (len > 0) {
+        const fwd = this.forward;
+        this.tmpRight.set(-fwd.z, 0, fwd.x);
+        this.dashVX += (fwd.x * mz + this.tmpRight.x * mx) / len * steer;
+        this.dashVZ += (fwd.z * mz + this.tmpRight.z * mx) / len * steer;
+      }
+      this.tryMove(this.dashVX * dt, this.dashVZ * dt);
+      this.speedNow = Math.hypot(this.dashVX, this.dashVZ);
+      if (this.airY <= 0) {
+        this.airborne = false;
+        this.airY = 0;
+        this.vy = 0;
+        this.dashVX = this.dashVZ = 0;
+        this.kick += 0.05;   // the landing
+      }
+    } else if (len > 0) {
       mx /= len; mz /= len;
       const fwd = this.forward;
       this.tmpRight.set(-fwd.z, 0, fwd.x);
@@ -128,10 +173,13 @@ export class FPSController {
       this.speedNow = speed;
       this.bob += dt * speed * 1.8;
     }
+    this.speedNowLast = this.speedNow;
     this.depthHere = this.habitat.depthAt(this.position.x, this.position.z);
     this.position.y = this.terrain.heightAt(this.position.x, this.position.z);
     this.syncCamera(dt);
   }
+
+  private speedNowLast = 0;
 
   private canStand(x: number, z: number): boolean {
     const b = this.map.bounds.walkable;
@@ -154,8 +202,8 @@ export class FPSController {
   private syncCamera(dt: number): void {
     const targetEye = this.crouching ? LOW_HEIGHT : this.eyeHeight;
     this.eye = dt > 0 ? MathUtils.damp(this.eye, targetEye, 10, dt) : targetEye;
-    const bobY = this.speedNow > 0 ? Math.sin(this.bob * 2) * 0.012 * Math.min(1, this.speedNow / WALK) : 0;
-    this.camera.position.set(this.position.x, this.position.y + this.eye + bobY, this.position.z);
+    const bobY = this.speedNow > 0 && !this.airborne ? Math.sin(this.bob * 2) * 0.012 * Math.min(1, this.speedNow / WALK) : 0;
+    this.camera.position.set(this.position.x, this.position.y + this.eye + bobY + this.airY, this.position.z);
     this.camera.rotation.set(0, 0, 0, 'YXZ');
     this.camera.rotation.y = this.yaw;
     if (dt > 0) this.kick = MathUtils.damp(this.kick, 0, 7, dt);
