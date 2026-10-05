@@ -272,7 +272,7 @@ function sheathFrame(x, y, z) {
   const s = r > 1e-6 ? Math.abs(Y) / r : 0;
   const R = lameRadius(a, b, m, n, c, s);
   const phi = (Math.atan2(Y / b, Math.abs(X) / a) * 180) / Math.PI;
-  return [xt, r, R, xt - featherLineXt(phi), phi, (Math.atan2(Y, Math.abs(X)) * 180) / Math.PI, -Y - heightL(Math.max(XL0, Math.min(F.L, xt)))];
+  return [xt, r, R, xt - featherLineXt(phi), phi, (Math.atan2(Y, Math.abs(X)) * 180) / Math.PI, -Y - heightL(Math.max(XL0, Math.min(F.L, xt))), Y];
 }
 const fCurve = mono(BILL_SHEATH.curve);
 const fSlope = mono(BILL_SHEATH.slope);
@@ -297,118 +297,46 @@ export function billSheathDist(x, y, z, P = BILL_SHEATH, mode = 'sheath') {
 }
 
 /**
- * The face field `face` (bird-local mm → mm) with its front round the bill base remodelled into the feathered
- * sheath (bodySculpt.billBlend). In the bill's frame the face is described by how far it stands off the keratin
- * along each section ray (θ, from the commissure) at each station — tabulated once from `face` itself. That
- * stand-off is morphed from the sheath's pad (from the feather line to d0 behind it, and zero ahead of it: the face's
- * own front reached the keratin in a near-vertical wall well ahead of the slanted line) to the face's own (from d1
- * behind the line), and the radial distance to it replaces the face field within rA … rB of the keratin (under the
- * bill vA … vB: the throat below lies ahead of the bill base along the downward-pointing bill axis and stays as it
- * is). Where the morph has reached the face, both fields share their zero set, so no crease shows where one hands
- * over to the other. (A union with the sheath kept the wall; cutting the face to an envelope left creases and
- * hollows; morphing the two fields directly creased wherever the face stood far off the sheath.)
+ * How much of the lower jaw's turn the face plumage at bird-local p takes (0 … 1): the chin and interramal feathering
+ * round the lower mandible's base, below the commissure and within a few millimetres of the keratin, turns with the
+ * jaw (it is skin on the mandible), fading out behind the bill base and further from it — so the opening bill keeps its
+ * base sheathed instead of sliding out of a fixed chin (bodyMesh skinning).
+ */
+export function chinJawWeight(x, y, z) {
+  const [xt, r, R] = sheathFrame(x, y, z);
+  if (R === null) return 0;
+  const F = billFrame();
+  const B = BILL.base;
+  const U = (x - B[0]) * F.u[0] + (y - B[1]) * F.u[1] + (z - B[2]) * F.u[2];
+  const Y = U - commissure(Math.max(0, Math.min(F.L, xt))) - F.lift;
+  return sm(0.3, -0.3, Y) * (1 - sm(20, 24, xt)) * (1 - sm(R + 2.5, R + 6.5, r));
+}
+
+/**
+ * The face field `face` (bird-local mm → mm) with its front round the bill base remodelled into the feathered sheath
+ * (bodySculpt.billBlend {d0, d1, rA, rB, shear, slot, mouthBack}). The two fields are morphed, not unioned: the sheath
+ * alone up to d0 behind the feather line (and ahead of it), the face again from d1 behind it and beyond rA … rB from
+ * the keratin — a smooth funnel from the face onto the bill. (A union kept the head's, the lores' and the throat's
+ * fronts, which reached the keratin in a near-vertical wall well ahead of the slanted line; cutting the face to an
+ * envelope left creases and hollows.) Below the keel the station is sheared back by `shear` per mm: the throat lies
+ * ahead of the bill base along the downward-pointing bill axis and stays as it is, under the chin wedge.
  */
 export function makeBillBlend(face, o) {
   const P = BILL_SHEATH;
-  const F = billFrame();
-  const XT0 = o.xt[0];
-  const XT1 = o.xt[1];
-  const DX = 0.25;
-  const DA = 3;
-  const nX = Math.round((XT1 - XT0) / DX) + 1;
-  const nA = Math.round(180 / DA) + 1;
-  // per ray (station xt, section angle θ from the commissure, the bird's left side): where the face first stands
-  // off the keratin (exit) and where it is met again beyond that (entry: the throat below lies across the rays that
-  // leave the bill's underside ahead of its base) — both as distances from the keratin, `deep` if never
-  let EX = null;
-  let EN = null;
-  const tables = () => {
-    if (EX) return;
-    EX = new Float32Array(nX * nA);
-    EN = new Float32Array(nX * nA);
-    for (let i = 0; i < nX; i++) {
-      const xt = XT0 + i * DX;
-      const xc = Math.max(0, Math.min(F.L, xt));
-      const O = add(add(BILL.base, scl(F.a, F.L - xt)), scl(F.u, commissure(xc) + F.lift));
-      for (let j = 0; j < nA; j++) {
-        const th = ((-90 + j * DA) * Math.PI) / 180;
-        const dir = add(scl(F.s, Math.cos(th)), scl(F.u, Math.sin(th)));
-        const inside = (r) => face(...add(O, scl(dir, r))) < 0;
-        const [a, b, m, n] = sectionAt(xt, Math.sin(th));
-        const R = lameRadius(a, b, m, n, Math.abs(Math.cos(th)), Math.abs(Math.sin(th)));
-        // first change of state from `state` beyond r0 (0.1 mm steps, refined by bisection), or null
-        const next = (r0, state) => {
-          let lo = r0;
-          for (let r = r0 + 0.1; r <= R + o.deep; r += 0.1) {
-            if (inside(r) !== state) {
-              let hi = r;
-              for (let k = 0; k < 12; k++) {
-                const mid = 0.5 * (lo + hi);
-                if (inside(mid) !== state) hi = mid;
-                else lo = mid;
-              }
-              return hi;
-            }
-            lo = r;
-          }
-          return null;
-        };
-        const ex = inside(R + 0.01) ? next(R + 0.01, true) : R;
-        const en = ex === null ? null : next(ex, false);
-        EX[i * nA + j] = (ex === null ? R + o.deep : ex) - R;
-        EN[i * nA + j] = (en === null ? R + o.deep : en) - R;
-      }
-    }
-    // (smoothed across θ and along the bill: rays grazing the face's curvature jumped from one feature to the next
-    // and the remodelled surface showed them as radial streaks)
-    const K = [1, 4, 6, 4, 1];
-    for (const T of [EX, EN]) {
-      const tmp = new Float32Array(T.length);
-      for (let pass = 0; pass < 2; pass++) {
-        for (let i = 0; i < nX; i++)
-          for (let j = 0; j < nA; j++) {
-            let acc = 0;
-            for (let k = -2; k <= 2; k++) acc += K[k + 2] * T[i * nA + Math.max(0, Math.min(nA - 1, j + k))];
-            tmp[i * nA + j] = acc / 16;
-          }
-        for (let i = 0; i < nX; i++)
-          for (let j = 0; j < nA; j++) {
-            let acc = 0;
-            for (let k = -2; k <= 2; k++) acc += K[k + 2] * tmp[Math.max(0, Math.min(nX - 1, i + k)) * nA + j];
-            T[i * nA + j] = acc / 16;
-          }
-      }
-    }
-  };
-  // (Catmull-Rom across the tables: bilinear interpolation creased the surface along the table's rows and columns)
-  const cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
-  const lookup = (T, xt, th) => {
-    const fi = Math.max(0, Math.min(nX - 1.0001, (xt - XT0) / DX));
-    const fj = Math.max(0, Math.min(nA - 1.0001, (th + 90) / DA));
-    const i = Math.floor(fi);
-    const j = Math.floor(fj);
-    const g = (a, b) => T[Math.max(0, Math.min(nX - 1, a)) * nA + Math.max(0, Math.min(nA - 1, b))];
-    const row = (a) => cr(g(a, j - 1), g(a, j), g(a, j + 1), g(a, j + 2), fj - j);
-    return Math.max(0, cr(row(i - 1), row(i), row(i + 1), row(i + 2), fi - i));
-  };
+  // The mouth: no plumage in the slot between the mandibles (|Y| < slot) inside the keratin, from the tip back to just
+  // behind the jaw's hinge — the face filled the bill's core there and showed white through the opening gape
+  const mouth = (v, xt, r, R, Y) => (xt < o.mouthBack && R !== null ? Math.max(v, Math.min(o.slot - Math.abs(Y), R - 0.3 - r, o.mouthBack - xt)) : v);
   const fn = (x, y, z) => {
     const f = face(x, y, z);
-    const [xt, r, R, d, phi, th, below] = sheathFrame(x, y, z);
+    const [xt, r, R, d, phi, th, below, Y] = sheathFrame(x, y, z);
     if (R === null || r >= R + o.rB) return f;
-    // below the keel the station is sheared back (the throat lies ahead of the bill base along the downward-pointing
-    // bill axis: measured that way it would be remodelled away)
     const dd = d + o.shear * softPlus(below, 1);
     const w = Math.max(sm(o.d0, o.d1, dd), sm(R + o.rA, R + o.rB, r));
-    if (w >= 1) return f;
-    let pad;
-    if (o.table) {
-      tables();
-      pad = d < 0 ? padAt(d, phi, P) : lerp(padAt(d, phi, P), lookup(EX, xt, th), sm(o.d0, o.d1, d));
-    } else pad = padAt(d, phi, P);
+    if (w >= 1) return mouth(f, xt, r, R, Y);
+    const pad = padAt(d, phi, P);
     const S = Math.max(r - R - pad, XF_MIN - 1.6 - xt);
-    return S + (f - S) * w;
+    return mouth(S + (f - S) * w, xt, r, R, Y);
   };
-  fn.standOffTable = () => (tables(), { T: EX, EN, nX, nA, XT0, DX, DA });
   return fn;
 }
 /** Smooth max(0, x) over about ±k. */
@@ -546,7 +474,7 @@ export function buildBill(sk, boneIndex, J, opts = {}) {
   patch(sk, UL, xsU.filter((x) => x > 0), kk, { part: 4, bones: () => head, uvx: (k) => 10 + k, orient: (p, n) => dot(n, F.u) <= 0 });
   patch(sk, LL, xsL.filter((x) => x > XL0), kk, { part: 4, bones: () => jawB, uvx: (k) => 12 + k, orient: (p, n) => dot(n, F.u) >= 0 });
   // Rictal skin: from the inner edge of the upper tomium to that of the lower, both sides, from the corner of the
-  // gape (xt ≈ 13, just ahead of the side feathering) back into the head. Skinned head → jaw across, so it lies
+  // gape (xt ≈ 17, at the rictus under the loral feathering, next to the jaw's hinge) back into the head. Skinned head → jaw across, so it lies
   // flat inside the closed bill and stretches into a membrane at the corner of the open gape (no hole into the
   // head). Its free front edge runs obliquely back from the upper to the lower tomium.
   if (lod.web) {
@@ -554,7 +482,7 @@ export function buildBill(sk, boneIndex, J, opts = {}) {
     for (const side of [1, -1]) {
       const edgeU = (xt) => upperLining(xt, side > 0 ? 0.075 : 0.925);
       const edgeL = (xt) => lowerLining(xt, side > 0 ? 0.075 : 0.925);
-      const front = (k) => 12.8 + 2.4 * k;
+      const front = (k) => 16.9 + 0.8 * k; // the rictus (BILL_SHEATH line at the commissure, 17.7)
       const fn = (sA, k) => {
         const xt = lerp(front(k), L - 0.2, sA);
         const pu = edgeU(xt);
@@ -564,6 +492,20 @@ export function buildBill(sk, boneIndex, J, opts = {}) {
       const w = (sA, k) => (k <= 0 ? head : k >= 1 ? jawB : [[boneIndex.head, 1 - k], [boneIndex.jaw, k]]);
       patch(sk, fn, across(nA, 0, 1), across(nK + 1, 0, 1), { part: 4, bones: w, uvx: (k) => 14 + k, orient: (p, n) => dot(n, F.s) * side >= 0, both: true });
     }
+  }
+  // Tongue: a slender, flat-topped strap lying in the trough of the lower mandible's floor, from ≈7 mm behind the tip
+  // back into the mouth (plovers' tongues are narrow and pointed; seen only in the open bill), pinkish flesh (uv.x 18)
+  if (lod.web) {
+    const [nA] = lod.web;
+    const tongue = (xt, k) => {
+      const hw = Math.min(0.55, 0.22 * widthL(xt)) * sm(6.6, 9.5, xt) ** 0.5; // half-width, pointed tip
+      const kk = 2 * k - 1;
+      const fl = lowerLining(xt, 0.5 - kk * hw / Math.max(0.05, widthL(xt)));
+      const top = 0.16 * sm(6.6, 8, xt) * (1 - kk * kk) ** 0.6; // rounded upper surface over the floor
+      return toBird(xt, fl[0], fl[1] + 0.04 + top);
+    };
+    const xs = stations(6.6, Math.min(L - 0.6, 18.5), Math.max(6, nA + 4), 1);
+    patch(sk, tongue, xs, across(lod.lining + 2, 0, 1), { part: 4, bones: () => jawB, uvx: () => 18, orient: (p, n) => dot(n, F.u) >= 0 });
   }
   // back of the mouth: palate → floor across the bill, facing the tip
   if (lod.throat) {

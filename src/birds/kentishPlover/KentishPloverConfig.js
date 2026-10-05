@@ -51,7 +51,11 @@ export const joints = {
   // the line, so every cross-section of the sleeve turns about its own centre (no candy-wrapper twist about the
   // vertebrae at the back of the neck).
   sleeve: { a: [0, 74, 16], b: [0, 90, 19], n: 5 },
-  jaw: [0, 87.5, 38],
+  // lower-jaw hinge (2026-10, docs/morphology.md §6.5): on the commissure 0.5 mm behind the rictus (the corner of the
+  // gape, hidden under the loral feathering 17.7 mm from the bill tip, anatomy/bill.js BILL_SHEATH) — the corner of the
+  // mouth stays nearly closed as the bill opens (≈0.1 mm at 0.2 rad) and the lower mandible's feathered base turns with
+  // it under the chin feathering, instead of swinging down about a point 2.6 mm below and 4 mm behind the corner
+  jaw: [0, 90.6, 37.25],
   eyeCenter: [7.6, 95, 25.5], // eyeball centre (spec §6); head surface at x 12.3, eye 9.5 mm behind the breast front;
   // sunk 0.4 mm so the cornea apex (x 11.5) stays inside the head outline (photos: the eye sits in the dark stripe)
   shoulder: [10, 77, 6],
@@ -124,10 +128,12 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'upperLidL', c: [10.95, 97.95, 26.4], r: [0.8, 0.65, 3.0], k: 0.6 },
     { type: 'ellipsoid', name: 'upperLidR', c: [-10.95, 97.95, 26.4], r: [0.8, 0.65, 3.0], k: 0.6 },
   ],
-  // Bill base (anatomy/bill.js billBlend, docs/morphology.md §6): within rB of the bill axis the face field is morphed
-  // into the feathered sheath that tapers onto the keratin along the slanted feather line — the sheath alone up to d0
-  // mm behind the line, the face again from d1 mm behind it (and beyond rA … rB from the axis)
-  billBlend: { xt: [12, 27], d0: 0.5, d1: 6, rA: 11, rB: 18, shear: 2.5, table: false, deep: 16 },
+  // Bill base (anatomy/bill.js makeBillBlend, docs/morphology.md §6.2): round the bill the face is morphed into the
+  // feathered sheath that tapers onto the keratin along the slanted feather line — the sheath alone up to d0 mm behind
+  // the line, the face again from d1 mm behind it and beyond rA … rB mm off the keratin; below the keel the station is
+  // sheared back by `shear` per mm (the throat stays); no plumage in the mouth's slot (±slot mm round the commissure,
+  // up to mouthBack mm from the tip)
+  billBlend: { d0: 0.5, d1: 6, rA: 11, rB: 18, shear: 2.5, slot: 0.35, mouthBack: 18.2 },
   // LOD0 face patches (anatomy/bodyMesh.js): eye sockets and bill base polygonised at 0.3 mm over the base mesh
   facePatch: {
     patches: [

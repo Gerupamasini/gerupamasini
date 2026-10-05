@@ -82,7 +82,8 @@ const GLSL_FLUFF = /* glsl */ `
 float kpFluffMM(vec3 p, vec3 n) {
   vec3 e = (p - ${HZ_C}) / ${HZ_R};
   float head = clamp((1.25 - length(e)) / 0.35, 0.0, 1.0) * (1.0 - clamp((83.0 - p.y) / 5.0, 0.0, 1.0));
-  return (2.5 + 4.5 * smoothstep(-0.2, -0.9, n.y) + (1.5 - 1.8 * smoothstep(5.0, -5.0, p.z)) * smoothstep(0.2, 0.9, n.y)) * (1.0 - 0.7 * head) * (1.0 - 0.8 * smoothstep(-25.0, -55.0, p.z)) * (1.0 - 0.6 * smoothstep(15.0, 30.0, p.z));
+  float billBase = smoothstep(0.75, 1.35, length(vec3(p.x / 5.5, (p.y - 89.8) / 5.0, (p.z - 39.0) / 5.0))); // bodyMesh.billBaseFluff
+  return (2.5 + 4.5 * smoothstep(-0.2, -0.9, n.y) + (1.5 - 1.8 * smoothstep(5.0, -5.0, p.z)) * smoothstep(0.2, 0.9, n.y)) * (1.0 - 0.7 * head) * (1.0 - 0.8 * smoothstep(-25.0, -55.0, p.z)) * (1.0 - 0.6 * smoothstep(15.0, 30.0, p.z)) * billBase;
 }
 `;
 const FLUFF_REST_GLSL = FLUFF_REST.toFixed(3);
@@ -1123,6 +1124,8 @@ export function createBarePartsMaterial(pal, detail = 0) {
           // mouth lining (palate, floor, rictal skin): pinkish flesh, darker toward the back of the mouth
           kbCol = uMouth * (vUv.x > 15.5 ? 0.35 : 1.0);
           kbRough = 0.45;
+          // tongue (uv.x 18): pinker, moist, a faint median groove
+          if (vUv.x > 17.5) { kbCol = uMouth * vec3(1.25, 1.02, 1.0) * (0.92 + 0.08 * kpNoise(vec2(vUv.y * 6.0, 1.0))); kbRough = 0.32; }
         }
         else { kbCol = mix(uLegs, vec3(0.35, 0.33, 0.3), 0.25); kbRough = 0.75; }
         diffuseColor.rgb *= kbCol;`
