@@ -17,6 +17,8 @@ export interface CaptureState {
   revealed: boolean;
   /** what came up: "マハゼ 6.9 cm ・ シラタエビ 3.1 cm" */
   catchText: string;
+  /** seconds the swing takes: longer in deep water, where the net is slow */
+  swingSec: number;
 }
 
 /** seconds each phase takes */
@@ -55,12 +57,12 @@ export class Capture {
     return this.caught;
   }
 
-  start(tool: ToolDef, caught: Individual[]): void {
+  start(tool: ToolDef, caught: Individual[], swingSec = CAPTURE_PHASE_SEC.swing): void {
     this.caught = caught;
     this.running = true;
     this.state.value = {
       toolId: tool.id as ToolId, toolName: tool.ja, result: caught.length ? 'success' : 'fail', phase: 'swing', elapsed: 0, revealed: false,
-      catchText: catchLabel(caught),
+      catchText: catchLabel(caught), swingSec,
     };
   }
 
@@ -75,7 +77,7 @@ export class Capture {
     const st = this.state.value;
     if (!st || !this.running) return;
     const elapsed = st.elapsed + dt;
-    const limit = (st.result === 'fail' ? EMPTY_PHASE_SEC : CAPTURE_PHASE_SEC)[st.phase];
+    const limit = st.phase === 'swing' ? st.swingSec : (st.result === 'fail' ? EMPTY_PHASE_SEC : CAPTURE_PHASE_SEC)[st.phase];
     if (elapsed < limit) {
       const revealed = st.revealed || (st.phase === 'check' && elapsed >= REVEAL_SEC);
       this.state.value = { ...st, elapsed, revealed };

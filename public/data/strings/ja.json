@@ -169,5 +169,11 @@
   "zukan.found": "発見済み",
   "tidetable.sub": "東京 ・ 気象庁の調和定数による予測",
   "ticket.pick": "日時を選ぶ",
-  "menu.settings": "設定"
+  "menu.settings": "設定",
+  "case.release": "逃がす",
+  "case.toResearch": "研究に回す",
+  "toast.released": "逃がした",
+  "toast.toResearch": "研究に回した",
+  "toast.skillUp": "道具の扱いに慣れてきた",
+  "hud.deepSlow": "深くて網が鈍い"
 }

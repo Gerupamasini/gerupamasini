@@ -19,7 +19,7 @@ export interface SaveV1 {
   createdAt: number;
   updatedAt: number;
   lastRealMs: number;
-  player: { map: string; pos: [number, number, number]; heading: number; money: number; research: number; tools: string[] };
+  player: { map: string; pos: [number, number, number]; heading: number; money: number; research: number; tools: string[]; skills?: Record<string, number> };
   ticket: { active: TicketState | null; usedCount: number };
   encyclopedia: Record<string, SpeciesProgress>;
   case: IndividualRecord[];
@@ -34,7 +34,7 @@ const KEY = 'save:slot1';
 export function emptySave(map: string, now: number): SaveV1 {
   return {
     version: 1, createdAt: now, updatedAt: now, lastRealMs: now,
-    player: { map, pos: [0, 0, 0], heading: 0, money: 0, research: 0, tools: ['hand_net'] },
+    player: { map, pos: [0, 0, 0], heading: 0, money: 0, research: 0, tools: ['hand_net'], skills: {} },
     ticket: { active: null, usedCount: 0 },
     encyclopedia: {}, case: [], tank: { individuals: [], lastSimMs: now, layout: { substrate: 'sand', items: [] } }, removedIndividuals: [],
     stats: { playSeconds: 0, captures: 0, observations: 0 },
@@ -45,6 +45,7 @@ function migrate(raw: unknown): SaveV1 | null {
   if (!raw || typeof raw !== 'object') return null;
   const s = raw as Partial<SaveV1>;
   if (s.version !== 1) return null;
+  if (s.player && !s.player.skills) s.player.skills = {};
   return s as SaveV1;
 }
 

@@ -8,6 +8,21 @@ import { toast, t } from '../ui/store';
 
 export const REWARDS = { discover: 100, capture: 50, behavior: 30, sex: 20, perTenIndividuals: 20 };
 
+/** catches with a tool at which its proficiency reaches the next level (Lv1 … Lv5) */
+export const SKILL_STEPS = [3, 8, 15, 25, 40];
+export const SKILL_MAX = SKILL_STEPS.length;
+
+export function skillLevelFor(catches: number): number {
+  let lv = 0;
+  for (const step of SKILL_STEPS) if (catches >= step) lv++;
+  return lv;
+}
+
+/** a little research from an animal let go of into the lab instead of the tank: a few points plus one per centimetre */
+export function researchFor(rec: IndividualRecord): number {
+  return 5 + Math.round(rec.length_mm / 10);
+}
+
 /** Species progress, individual records, research points and money. Emits toasts for firsts. */
 export class Encyclopedia {
   readonly progress = signal<Record<string, SpeciesProgress>>({});
@@ -16,6 +31,8 @@ export class Encyclopedia {
   readonly caseItems = signal<IndividualRecord[]>([]);
   readonly tankItems = signal<IndividualRecord[]>([]);
   readonly caseMax = 6;
+  /** catches made with each tool: the hand grows surer with use */
+  readonly skills = signal<Record<string, number>>({});
   stats = { captures: 0, observations: 0 };
   /** called after any change worth saving */
   onChanged: (() => void) | null = null;
@@ -96,6 +113,45 @@ export class Encyclopedia {
     return rec;
   }
 
+  skillCount(toolId: string): number {
+    return this.skills.value[toolId] ?? 0;
+  }
+
+  skillLevel(toolId: string): number {
+    return skillLevelFor(this.skillCount(toolId));
+  }
+
+  /** Count catches made with a tool; says so when the hand gets surer. */
+  addSkill(toolId: string, toolName: string, n = 1): void {
+    this.setSkill(toolId, this.skillCount(toolId) + n, toolName);
+  }
+
+  setSkill(toolId: string, count: number, toolName?: string): void {
+    const before = this.skillLevel(toolId);
+    this.skills.value = { ...this.skills.value, [toolId]: Math.max(0, Math.round(count)) };
+    const after = this.skillLevel(toolId);
+    if (after > before && toolName) toast(`${t('toast.skillUp')}: ${toolName} Lv${after}`, 'success');
+    this.onChanged?.();
+  }
+
+  /** Let an animal in the case go. */
+  release(rec: IndividualRecord): void {
+    const sp = this.species(rec.speciesId);
+    this.caseItems.value = this.caseItems.value.filter((r) => r.id !== rec.id);
+    toast(`${t('toast.released')}: ${sp?.names.ja ?? rec.speciesId} #${String(rec.number).padStart(4, '0')}`, 'info');
+    this.onChanged?.();
+  }
+
+  /** Hand an animal in the case over to the lab: a little research, and it is gone. */
+  toResearch(rec: IndividualRecord): number {
+    const sp = this.species(rec.speciesId);
+    const points = researchFor(rec);
+    this.caseItems.value = this.caseItems.value.filter((r) => r.id !== rec.id);
+    this.award(points, `${t('toast.toResearch')}: ${sp?.names.ja ?? rec.speciesId} #${String(rec.number).padStart(4, '0')}`);
+    this.onChanged?.();
+    return points;
+  }
+
   moveToTank(rec: IndividualRecord): void {
     this.caseItems.value = this.caseItems.value.filter((r) => r.id !== rec.id);
     this.tankItems.value = [...this.tankItems.value, rec];
@@ -116,6 +172,7 @@ export class Encyclopedia {
     this.money.value = s.player.money;
     this.caseItems.value = [...s.case];
     this.tankItems.value = [...s.tank.individuals];
+    this.skills.value = { ...(s.player.skills ?? {}) };
     this.stats = { captures: s.stats.captures, observations: s.stats.observations };
   }
 
@@ -125,6 +182,7 @@ export class Encyclopedia {
     s.player.money = this.money.value;
     s.case = [...this.caseItems.value];
     s.tank.individuals = [...this.tankItems.value];
+    s.player.skills = { ...this.skills.value };
     s.stats.captures = this.stats.captures;
     s.stats.observations = this.stats.observations;
   }
