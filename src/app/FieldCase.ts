@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, Object3D, PlaneGeometry, SRGBColorSpace, Vector3,
+  BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh, MeshStandardMaterial, Object3D, PlaneGeometry, SRGBColorSpace, Vector3,
 } from 'three';
 import type { IndividualRecord, Individual } from '../creatures/Individual';
 import type { SpeciesDef } from '../data/schemas';
@@ -41,12 +41,9 @@ export class FieldCase {
     this.group.name = 'fieldCase';
     const wood = new MeshStandardMaterial({ color: 0xd8bf96, roughness: 0.78, metalness: 0 });
     const woodDark = new MeshStandardMaterial({ color: 0x5a3a26, roughness: 0.7, metalness: 0 });
-    const acrylic = new MeshPhysicalMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.2, roughness: 0.05, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05,
-      envMapIntensity: 1.2, side: DoubleSide, depthWrite: false,
-    });
-    const water = new MeshPhysicalMaterial({ color: 0xa9dcd3, transparent: true, opacity: 0.26, roughness: 0.2, metalness: 0, depthWrite: false });
-    const surfaceMat = new MeshPhysicalMaterial({ color: 0xd6f0ec, transparent: true, opacity: 0.35, roughness: 0.08, metalness: 0, clearcoat: 1, depthWrite: false, side: DoubleSide });
+    const acrylic = new MeshStandardMaterial({ color: 0xf4fbff, transparent: true, opacity: 0.12, roughness: 0.12, metalness: 0, side: DoubleSide, depthWrite: false });
+    const water = new MeshStandardMaterial({ color: 0xcdeee8, transparent: true, opacity: 0.18, roughness: 0.3, metalness: 0, depthWrite: false });
+    const surfaceMat = new MeshStandardMaterial({ color: 0xe6f7f4, transparent: true, opacity: 0.3, roughness: 0.1, metalness: 0, depthWrite: false, side: DoubleSide });
 
     // the board and the two posts, with a dark cap on each
     const board = new Mesh(new BoxGeometry(CASE_W + 2 * POST + 0.03, BASE_T, CASE_D + 0.05), wood);

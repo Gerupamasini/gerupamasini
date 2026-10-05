@@ -767,7 +767,7 @@ export class App {
   private caseSpot(): Vector3 {
     const world = this.world!, p = this.player!;
     const f = p.forward.clone();
-    const ok = (x: number, z: number) => world.habitat.depthAt(x, z) < 0.05;
+    const ok = (x: number, z: number) => world.habitat.depthAt(x, z) < 0.02;
     const c = new Vector3();
     for (const d of [0.75, 0.55, 0.95, 1.2, 0.4]) {
       c.set(p.position.x + f.x * d, 0, p.position.z + f.z * d);
@@ -786,8 +786,7 @@ export class App {
     const world = this.world, player = this.player, fc = this.fieldCase;
     if (!world || !player || !fc || this.mode !== 'field') return;
     const spot = this.caseSpot();
-    const y = Math.max(world.terrain.heightAt(spot.x, spot.z), world.habitat.waterAt(spot.x, spot.z) - 0.012);
-    fc.place(spot.x, y, spot.z, player.yaw);
+    fc.place(spot.x, world.terrain.heightAt(spot.x, spot.z), spot.z, player.yaw);
     void fc.setOccupants(this.encyclopedia.caseItems.value, (id) => this.data.species.get(id));
     const center = fc.center.clone();
     this.caseSavedNear = this.camera.near;
@@ -803,8 +802,8 @@ export class App {
     controls.zoomSpeed = 0.8;
     controls.target.copy(center);
     // from the player's side, a little above the water line, like kneeling in front of it
-    const back = player.forward.clone().multiplyScalar(-0.62);
-    this.camera.position.copy(center).add(back).add(new Vector3(0, 0.16, 0));
+    const back = player.forward.clone().multiplyScalar(-0.66);
+    this.camera.position.copy(center).add(back).add(new Vector3(0, 0.3, 0));
     controls.update();
     this.caseControls = controls;
     this.setMode('caseView');
