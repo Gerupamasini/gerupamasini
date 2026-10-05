@@ -91,9 +91,8 @@ export const bodySculpt = {
     // hind neck / upper mantle: the head sits on it (neck fill)
     { type: 'ellipsoid', name: 'mantleNape', c: [0.0, 85.64, 10.35], r: [20.67, 5.66, 17.11], role: 'neck' },
     { type: 'ellipsoid', name: 'head', c: [0.0, 93.5, 24.0], r: [12.5, 12.5, 15.0], k: 5, role: 'head' },
-    { type: 'ellipsoid', name: 'lores', c: [0.0, 90.4, 35.3], r: [5.6, 4.9, 4.8], k: 3.2, role: 'head' },
-    { type: 'capsule', name: 'billCuff', a: [0.0, 91.6, 35.8], b: [0.0, 89.9, 39.9], r: 2.0, k: 2.4, role: 'head' },
-    { type: 'ellipsoid', name: 'chin', c: [0.0, 84.0, 31.0], r: [9.0, 6.0, 7.0], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'lores', c: [0.0, 90.6, 33.0], r: [5.6, 4.9, 4.5], k: 3.2, role: 'head' },
+    { type: 'ellipsoid', name: 'chin', c: [0.0, 84.0, 30.0], r: [9.0, 6.0, 7.0], k: 4, role: 'head' },
     // ear-covert / cheek plumage behind and below the eye, a little fuller than the head's ellipsoid (v4.3: the v3 head
     // restored — from the front the eyes sit inside the outline of the head, the cheeks the widest part at eye level,
     // p037, p058, p063)
@@ -125,6 +124,10 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'upperLidL', c: [10.95, 97.95, 26.4], r: [0.8, 0.65, 3.0], k: 0.6 },
     { type: 'ellipsoid', name: 'upperLidR', c: [-10.95, 97.95, 26.4], r: [0.8, 0.65, 3.0], k: 0.6 },
   ],
+  // Bill base (anatomy/bill.js billBlend, docs/morphology.md §6): within rB of the bill axis the face field is morphed
+  // into the feathered sheath that tapers onto the keratin along the slanted feather line — the sheath alone up to d0
+  // mm behind the line, the face again from d1 mm behind it (and beyond rA … rB from the axis)
+  billBlend: { xt: [12, 27], d0: 0.5, d1: 6, rA: 11, rB: 18, shear: 2.5, table: false, deep: 16 },
   // LOD0 face patches (anatomy/bodyMesh.js): eye sockets and bill base polygonised at 0.3 mm over the base mesh
   facePatch: {
     patches: [

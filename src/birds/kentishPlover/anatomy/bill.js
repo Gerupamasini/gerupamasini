@@ -194,6 +194,230 @@ function lowerLining(xt, k) {
   return [Math.sign(kk) * (hw - th) * r, lerp(-lc, 0, r * r)];
 }
 
+/** Outer keratin point (bird-local mm) at station xt, around-parameter v (upper: 0 culmen; lower: 0 keel). */
+export function billSurfacePoint(xt, v, lower = false, detail = 1) {
+  return toBird(xt, ...(lower ? lowerOuter(xt, v) : upperOuter(xt, v, detail)));
+}
+
+// ---------------------------------------------------------------- feathered sheath round the bill base
+// The face plumage does not end in a wall where the bill is plugged in: it tapers onto the keratin and meets it
+// along a slanted, curved feather line (user's side photo, p012, p022, p035, p010): the forehead feathering reaches
+// furthest forward, in a short rounded point over the culmen; the line runs back and down the side of the upper
+// mandible to the rictus (the corner of the gape, hidden under the loral feathering), and forward again under the
+// lower mandible, where the interramal (chin) feathering runs out along the keel in a short wedge.
+// The sheath is the bill's own cross-section (the Lamé curves the section functions trace, centred on the
+// commissure) grown by pad(d), d = xt − xf(φ): xf the feather line by section angle φ (normalised: 90° culmen, 0 the
+// commissure, −90° the keel). The pad rises from 0 at the line at a shallow angle (the feathers lie flat on the bill,
+// ≈ 17°) and steepens behind it into the face; ahead of the line it sinks just under the keratin and the sheath is
+// capped inside the bill, so nothing of it shows there. Smooth-unioned with the face (bodySculpt prim 'billSheath').
+export const BILL_SHEATH = {
+  // feather line: [φ (deg), xt (mm from the tip)]
+  line: [[-90, 14.2], [-70, 14.8], [-45, 16.3], [-20, 17.4], [0, 17.7], [20, 17.4], [45, 16.6], [65, 15.8], [80, 15.3], [90, 15.1]],
+  slope: [[-90, 0.5], [-45, 0.38], [0, 0.3], [90, 0.3]], // pad per mm at the feather line, by φ
+  // pad growth (per mm²) behind it, by φ: steepest under the bill (the chin falls away to the throat), steep over the
+  // culmen (the forehead), least at the sides (the lores taper back to the eye)
+  curve: [[-90, 1.0], [-45, 0.35], [0, 0.12], [45, 0.12], [90, 0.16]],
+  sink: 0.45, // how far under the keratin the sheath lies ahead of the line (≥ groove + nostril depth)
+  back: 27, // capped behind the mesh base (inside the face)
+};
+const fXf = mono(BILL_SHEATH.line);
+/** Feather-line station (mm from the tip) at normalised section angle φ (deg). */
+// (looked up by 90°·sin φ: flat at the culmen and the keel, where the two sides meet — a slope there drew a crease
+// along the midline)
+const sinDeg = (phi) => 90 * Math.sin((Math.max(-90, Math.min(90, phi)) * Math.PI) / 180);
+export const featherLineXt = (phiDeg) => fXf(sinDeg(phiDeg));
+const XF_MIN = Math.min(...BILL_SHEATH.line.map((k) => k[1]));
+
+/** Section half-width, height and Lamé exponents at xt (y ≥ 0 upper, < 0 lower). */
+// (upper and lower blended over ±0.4 mm round the commissure: a switch there creased the sheath along the gape line)
+function sectionAt(xt, Y) {
+  const xc = Math.max(0.3, Math.min(billFrame().L, xt));
+  const w = sm(-0.4, 0.4, Y);
+  const px = lerp(lerp(0.72, 0.82, 1 - sm(2, 7, xc)), 1.08, sm(9.5, 14, xc));
+  const a = 0.5 * widthU(xc);
+  return [a, lerp(Math.max(heightL(xc), 0.05), heightU(xc), w), lerp(2 / 0.7, 2 / px, w), lerp(2 / 0.8, 2 / 0.85, w)];
+}
+/** Radius of the Lamé section curve (|x/a|^m + |y/b|^n = 1) along the unit direction (c, s), c, s ≥ 0. */
+function lameRadius(a, b, m, n, c, s) {
+  let R = 1 / Math.sqrt((c / a) ** 2 + (s / b) ** 2); // the ellipse as a start
+  for (let i = 0; i < 6; i++) {
+    const tx = (R * c) / a;
+    const ty = (R * s) / b;
+    const f = tx ** m + ty ** n - 1;
+    const df = (m * tx ** (m - 1) * c) / a + (n * ty ** (n - 1) * s) / b;
+    if (!(df > 1e-9)) break;
+    const R1 = R - f / df;
+    R = R1 > 0.2 * R ? R1 : 0.2 * R;
+    if (Math.abs(f) < 1e-5) break;
+  }
+  return R;
+}
+
+/** Bill-frame coordinates of bird-local p: [xt, r (from the commissure, across the bill), section radius R there,
+ *  feather-line distance d = xt − xf(φ), φ, geometric section angle θ (deg)] (R … null far from the bill). */
+function sheathFrame(x, y, z) {
+  const F = billFrame();
+  const B = BILL.base;
+  const dx = x - B[0];
+  const dy = y - B[1];
+  const dz = z - B[2];
+  const xt = F.L - (dx * F.a[0] + dy * F.a[1] + dz * F.a[2]);
+  const X = dx * F.s[0] + dy * F.s[1] + dz * F.s[2];
+  const U = dx * F.u[0] + dy * F.u[1] + dz * F.u[2];
+  const Y = U - commissure(Math.max(0, Math.min(F.L, xt))) - F.lift;
+  const r = Math.hypot(X, Y);
+  if (r > 26) return [xt, r, null, null, null, null];
+  const [a, b, m, n] = sectionAt(xt, Y);
+  const c = r > 1e-6 ? Math.abs(X) / r : 1;
+  const s = r > 1e-6 ? Math.abs(Y) / r : 0;
+  const R = lameRadius(a, b, m, n, c, s);
+  const phi = (Math.atan2(Y / b, Math.abs(X) / a) * 180) / Math.PI;
+  return [xt, r, R, xt - featherLineXt(phi), phi, (Math.atan2(Y, Math.abs(X)) * 180) / Math.PI, -Y - heightL(Math.max(XL0, Math.min(F.L, xt)))];
+}
+const fCurve = mono(BILL_SHEATH.curve);
+const fSlope = mono(BILL_SHEATH.slope);
+const padAt = (d, phi, P) => {
+  const sl = fSlope(sinDeg(phi));
+  return d < 0 ? Math.max(-P.sink, sl * d) : sl * d + fCurve(sinDeg(phi)) * d * d;
+};
+
+/**
+ * Signed distance (≈, mm) of the feathered sheath at bird-local p (mode 'sheath'); 'bare': the keratin itself (an
+ * implicit bill for the tools); 'section': r − R. Exact enough near the surface, a bound far from the bill.
+ */
+export function billSheathDist(x, y, z, P = BILL_SHEATH, mode = 'sheath') {
+  const F = billFrame();
+  const [xt, r, R, d, phi] = sheathFrame(x, y, z);
+  if (mode === 'bare') return R === null ? r - 9 : Math.max(r - R, -xt, xt - F.L);
+  if (mode === 'section') return R === null ? r - 9 : r - R;
+  const front = XF_MIN - 1.6 - xt; // capped inside the keratin ahead of the line
+  const back = xt - P.back;
+  if (R === null) return Math.max(r - 9, front, back);
+  return Math.max(r - R - padAt(d, phi, P), front, back);
+}
+
+/**
+ * The face field `face` (bird-local mm → mm) with its front round the bill base remodelled into the feathered
+ * sheath (bodySculpt.billBlend). In the bill's frame the face is described by how far it stands off the keratin
+ * along each section ray (θ, from the commissure) at each station — tabulated once from `face` itself. That
+ * stand-off is morphed from the sheath's pad (from the feather line to d0 behind it, and zero ahead of it: the face's
+ * own front reached the keratin in a near-vertical wall well ahead of the slanted line) to the face's own (from d1
+ * behind the line), and the radial distance to it replaces the face field within rA … rB of the keratin (under the
+ * bill vA … vB: the throat below lies ahead of the bill base along the downward-pointing bill axis and stays as it
+ * is). Where the morph has reached the face, both fields share their zero set, so no crease shows where one hands
+ * over to the other. (A union with the sheath kept the wall; cutting the face to an envelope left creases and
+ * hollows; morphing the two fields directly creased wherever the face stood far off the sheath.)
+ */
+export function makeBillBlend(face, o) {
+  const P = BILL_SHEATH;
+  const F = billFrame();
+  const XT0 = o.xt[0];
+  const XT1 = o.xt[1];
+  const DX = 0.25;
+  const DA = 3;
+  const nX = Math.round((XT1 - XT0) / DX) + 1;
+  const nA = Math.round(180 / DA) + 1;
+  // per ray (station xt, section angle θ from the commissure, the bird's left side): where the face first stands
+  // off the keratin (exit) and where it is met again beyond that (entry: the throat below lies across the rays that
+  // leave the bill's underside ahead of its base) — both as distances from the keratin, `deep` if never
+  let EX = null;
+  let EN = null;
+  const tables = () => {
+    if (EX) return;
+    EX = new Float32Array(nX * nA);
+    EN = new Float32Array(nX * nA);
+    for (let i = 0; i < nX; i++) {
+      const xt = XT0 + i * DX;
+      const xc = Math.max(0, Math.min(F.L, xt));
+      const O = add(add(BILL.base, scl(F.a, F.L - xt)), scl(F.u, commissure(xc) + F.lift));
+      for (let j = 0; j < nA; j++) {
+        const th = ((-90 + j * DA) * Math.PI) / 180;
+        const dir = add(scl(F.s, Math.cos(th)), scl(F.u, Math.sin(th)));
+        const inside = (r) => face(...add(O, scl(dir, r))) < 0;
+        const [a, b, m, n] = sectionAt(xt, Math.sin(th));
+        const R = lameRadius(a, b, m, n, Math.abs(Math.cos(th)), Math.abs(Math.sin(th)));
+        // first change of state from `state` beyond r0 (0.1 mm steps, refined by bisection), or null
+        const next = (r0, state) => {
+          let lo = r0;
+          for (let r = r0 + 0.1; r <= R + o.deep; r += 0.1) {
+            if (inside(r) !== state) {
+              let hi = r;
+              for (let k = 0; k < 12; k++) {
+                const mid = 0.5 * (lo + hi);
+                if (inside(mid) !== state) hi = mid;
+                else lo = mid;
+              }
+              return hi;
+            }
+            lo = r;
+          }
+          return null;
+        };
+        const ex = inside(R + 0.01) ? next(R + 0.01, true) : R;
+        const en = ex === null ? null : next(ex, false);
+        EX[i * nA + j] = (ex === null ? R + o.deep : ex) - R;
+        EN[i * nA + j] = (en === null ? R + o.deep : en) - R;
+      }
+    }
+    // (smoothed across θ and along the bill: rays grazing the face's curvature jumped from one feature to the next
+    // and the remodelled surface showed them as radial streaks)
+    const K = [1, 4, 6, 4, 1];
+    for (const T of [EX, EN]) {
+      const tmp = new Float32Array(T.length);
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < nX; i++)
+          for (let j = 0; j < nA; j++) {
+            let acc = 0;
+            for (let k = -2; k <= 2; k++) acc += K[k + 2] * T[i * nA + Math.max(0, Math.min(nA - 1, j + k))];
+            tmp[i * nA + j] = acc / 16;
+          }
+        for (let i = 0; i < nX; i++)
+          for (let j = 0; j < nA; j++) {
+            let acc = 0;
+            for (let k = -2; k <= 2; k++) acc += K[k + 2] * tmp[Math.max(0, Math.min(nX - 1, i + k)) * nA + j];
+            T[i * nA + j] = acc / 16;
+          }
+      }
+    }
+  };
+  // (Catmull-Rom across the tables: bilinear interpolation creased the surface along the table's rows and columns)
+  const cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+  const lookup = (T, xt, th) => {
+    const fi = Math.max(0, Math.min(nX - 1.0001, (xt - XT0) / DX));
+    const fj = Math.max(0, Math.min(nA - 1.0001, (th + 90) / DA));
+    const i = Math.floor(fi);
+    const j = Math.floor(fj);
+    const g = (a, b) => T[Math.max(0, Math.min(nX - 1, a)) * nA + Math.max(0, Math.min(nA - 1, b))];
+    const row = (a) => cr(g(a, j - 1), g(a, j), g(a, j + 1), g(a, j + 2), fj - j);
+    return Math.max(0, cr(row(i - 1), row(i), row(i + 1), row(i + 2), fi - i));
+  };
+  const fn = (x, y, z) => {
+    const f = face(x, y, z);
+    const [xt, r, R, d, phi, th, below] = sheathFrame(x, y, z);
+    if (R === null || r >= R + o.rB) return f;
+    // below the keel the station is sheared back (the throat lies ahead of the bill base along the downward-pointing
+    // bill axis: measured that way it would be remodelled away)
+    const dd = d + o.shear * softPlus(below, 1);
+    const w = Math.max(sm(o.d0, o.d1, dd), sm(R + o.rA, R + o.rB, r));
+    if (w >= 1) return f;
+    let pad;
+    if (o.table) {
+      tables();
+      pad = d < 0 ? padAt(d, phi, P) : lerp(padAt(d, phi, P), lookup(EX, xt, th), sm(o.d0, o.d1, d));
+    } else pad = padAt(d, phi, P);
+    const S = Math.max(r - R - pad, XF_MIN - 1.6 - xt);
+    return S + (f - S) * w;
+  };
+  fn.standOffTable = () => (tables(), { T: EX, EN, nX, nA, XT0, DX, DA });
+  return fn;
+}
+/** Smooth max(0, x) over about ±k. */
+const softPlus = (x, k) => (x > 4 * k ? x : x < -4 * k ? 0 : k * Math.log1p(Math.exp(x / k)));
+const smin = (a, b, k) => {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+};
+
 /**
  * Emit a parametric patch P(i, j) (i along, j across) with numerically differentiated normals.
  * fn(xt, w) → bird-local point; xs: stations; ws: across parameters; orient(p, n, xt, w) → true if n faces out.
@@ -220,7 +444,7 @@ function patch(sk, fn, xs, ws, { part, bones, orient, uvx, aux, both = false, no
   }
   const emit = (flipN) => {
     const s0 = sk.count;
-    for (const q of pts) sk.v(q.p, flipN ? scl(q.n, -1) : q.n, [uvx(q.w), q.xt], part, bones(q.xt, q.w), aux ? aux(q.p) : 99);
+    for (const q of pts) sk.v(q.p, flipN ? scl(q.n, -1) : q.n, [uvx(q.w), q.xt], part, bones(q.xt, q.w), aux ? aux(fn, q.xt, q.w) : 99);
     // one winding for the whole patch (the grid's topology), chosen by majority so that it is CCW seen from the
     // side the normals point to (per-triangle choices flipped faces inside narrow carved features)
     const tris = [];
@@ -275,7 +499,34 @@ export function buildBill(sk, boneIndex, J, opts = {}) {
   const head = [[boneIndex.head, 1]];
   const jawB = [[boneIndex.jaw, 1]];
   const sdf = opts.sdf;
-  const aux = sdf ? (p) => sdf(p[0], p[1], p[2]) : null;
+  // aBillF: how far along the bill (mm, by station) the vertex lies ahead of the plumage's edge on its own line round
+  // the bill (+ exposed, − under the feathering; ±4 at most) — the edge is where the body SDF changes sign along it.
+  // (The plumage now meets the keratin at a shallow angle, so the SDF value itself stayed small for millimetres
+  // ahead of the line and the feather tips drawn from it spread far over the bill.)
+  const aux = sdf
+    ? (fn, xt, w) => {
+        const inside = (x) => sdf(...fn(Math.max(0, Math.min(L, x)), w)) < 0;
+        const s0 = inside(xt);
+        const dir = s0 ? -1 : 1; // covered: look toward the tip for the edge; exposed: toward the base
+        let a = xt;
+        for (let k = 1; k <= 40; k++) {
+          const b = xt + dir * 0.1 * k;
+          if (b < 0 || b > L || inside(b) !== s0) {
+            if (b < 0 || b > L) return s0 ? -4 : 4;
+            let lo = a;
+            let hi = b;
+            for (let it = 0; it < 10; it++) {
+              const m = 0.5 * (lo + hi);
+              if (inside(m) === s0) lo = m;
+              else hi = m;
+            }
+            return Math.max(-4, Math.min(4, (s0 ? -1 : 1) * Math.abs(0.5 * (lo + hi) - xt)));
+          }
+          a = b;
+        }
+        return s0 ? -4 : 4;
+      }
+    : null;
   const carve = lod.carve ? 0 : 1;
   const apexN = (lower) => () => norm(add(F.a, scl(F.u, lower ? -0.6 : -0.15)));
   const xsU = stations(0, L, lod.along);

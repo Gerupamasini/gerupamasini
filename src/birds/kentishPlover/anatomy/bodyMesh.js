@@ -436,7 +436,7 @@ export function getBodySDF(cfg) {
  */
 export function getTorsoSDF(cfg, { trunkOnly = false } = {}) {
   const drop = new Set([...HEAD_PRIMS, ...(trunkOnly ? NECK_FILL : [])]);
-  return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [], adds: [] });
+  return makeBodySDF({ ...cfg.bodySculpt, prims: cfg.bodySculpt.prims.filter((p) => !drop.has(p.name)), cuts: [], adds: [], billBlend: null });
 }
 
 /**

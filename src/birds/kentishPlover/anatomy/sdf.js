@@ -1,5 +1,6 @@
 // Signed-distance sculpting of the feathered body outline + Surface Nets polygonisation.
 // Working unit inside this file: millimetres (converted to metres by the caller).
+import { makeBillBlend } from './bill.js';
 
 function sdEllipsoid(px, py, pz, c, r, rx = 0) {
   // Inigo Quilez' bound-corrected ellipsoid distance. rx (degrees): pitch of the ellipsoid about X, + = front
@@ -166,7 +167,7 @@ export function makeBodySDF(sculpt) {
         return gp === 1 ? field0(x, y, z) : field0(Math.sign(x) * g, y, z) / gp;
       }
     : field0;
-  return (x, y, z) => {
+  const whole = (x, y, z) => {
     let d;
     if (plans) {
       // across-scale s(y, z) = Π (1 + (c(z) − 1)·w(y)) over the layers: c from the layer's knots, w its height band
@@ -191,6 +192,8 @@ export function makeBodySDF(sculpt) {
     } else d = field(x, y, z);
     return bed ? d + bedDepth(bed, x, y, z) : d;
   };
+  // round the bill base the face is remodelled into the feathered sheath that tapers onto the keratin (bill.js)
+  return sculpt.billBlend ? makeBillBlend(whole, sculpt.billBlend) : whole;
 }
 
 function makeField(prims, cuts, adds, k) {
