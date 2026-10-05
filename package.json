@@ -16,6 +16,8 @@
     "model:mahaze": "node tools/models/mahaze/build.mjs",
     "model:nets": "node tools/models/nets/build.mjs",
     "render:nets": "node tools/models/nets/render.mjs",
+    "model:digging": "node tools/models/digging/build.mjs",
+    "render:digging": "node tools/models/nets/render.mjs --shots tools/models/digging/shots.mjs --out docs/models/digging",
     "terrain:bake": "node tools/terrain/bake-map.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tools/**/*.mjs\" \"tests/**/*.{ts,mjs}\""
   },

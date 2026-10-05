@@ -9,10 +9,10 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { prepareNet, BAG_TARGETS } from '../../src/assets/models/nets/netMaterials.ts';
 
 const URLS = Object.fromEntries(
-  Object.entries(import.meta.glob('../../src/assets/models/nets/*.glb', { eager: true, query: '?url', import: 'default' })).map(([k, v]) => [k.split('/').pop().replace('.glb', ''), v]),
+  Object.entries(import.meta.glob(['../../src/assets/models/nets/*.glb', '../../src/assets/models/digging/*.glb'], { eager: true, query: '?url', import: 'default' })).map(([k, v]) => [k.split('/').pop().replace('.glb', ''), v]),
 );
-const NET_IDS = ['net_small', 'net_shallow', 'net_fine', 'net_deep', 'net_dframe', 'net_carbon'];
-const NET_JA = { net_small: '小型タモ', net_shallow: '浅瀬タモ', net_fine: '微細目タモ', net_deep: '深場タモ', net_dframe: 'D型底さらい網', net_carbon: 'カーボン網' };
+const NET_IDS = ['net_small', 'net_shallow', 'net_fine', 'net_deep', 'net_dframe', 'net_carbon', 'dig_mini', 'dig_trowel', 'dig_shovel', 'dig_rake'];
+const NET_JA = { net_small: '小型タモ', net_shallow: '浅瀬タモ', net_fine: '微細目タモ', net_deep: '深場タモ', net_dframe: 'D型底さらい網', net_carbon: 'カーボン網', dig_mini: 'ミニスコップ', dig_trowel: 'スコップ', dig_shovel: 'シャベル', dig_rake: '熊手' };
 const params = new URLSearchParams(location.search);
 const capture = params.has('capture');
 if (capture) document.body.classList.add('capture');
@@ -224,7 +224,8 @@ async function loadNet(id, tier) {
   const root = gltf.scene.clone(true);
   const handle = prepareNet(root);
   handle.clips = gltf.animations;
-  handle.info = gltf.scene.children[0]?.userData?.higataNet;
+  const ud = gltf.scene.children[0]?.userData;
+  handle.info = ud?.higataNet ?? ud?.higataTool;
   return handle;
 }
 
@@ -252,11 +253,11 @@ async function show(items) {
     r.position.fromArray(it.pos ?? [0, 0, 0]);
     const [rx, ry, rz] = (it.rot ?? [0, 0, 0]).map(THREE.MathUtils.degToRad);
     r.rotation.set(rx, ry, rz, 'YXZ');
-    if (it.mouthAt) {
-      // place the net so its hoop centre lands on a given world point
+    if (it.mouthAt || it.anchorAt) {
+      // place the tool so a named node (the hoop centre by default) lands on a given world point
       r.updateMatrixWorld(true);
-      const m = r.getObjectByName('Mouth').getWorldPosition(new THREE.Vector3());
-      r.position.add(new THREE.Vector3().fromArray(it.mouthAt).sub(m));
+      const m = r.getObjectByName(it.anchor ?? 'Mouth').getWorldPosition(new THREE.Vector3());
+      r.position.add(new THREE.Vector3().fromArray(it.mouthAt ?? it.anchorAt).sub(m));
     }
     h.setSurface({ wet: it.wet ?? 0, mud: it.mud ?? 0, waterline: it.waterline ?? null });
     h.setBag(it.bag ?? {});
@@ -322,7 +323,8 @@ if (!capture) {
     const h = state.nets[0];
     mixer.m = new THREE.AnimationMixer(h.root);
     const i = h.info;
-    document.getElementById('info').textContent = i ? `${i.ja} / ${i.en}\n網口 ${i.spec.hoop_cm} cm・柄 ${i.spec.handle_cm} cm・網目 ${i.spec.mesh_mm} mm\n全長 ${(i.overallLength_m * 100).toFixed(0)} cm・推定重量 ${i.mass_g} g\n重心 グリップから ${(i.balancePoint_m * 100).toFixed(0)} cm\n${i.materialsJa}` : '';
+    const sizeLine = i?.spec?.hoop_cm ? `網口 ${i.spec.hoop_cm} cm・柄 ${i.spec.handle_cm} cm・網目 ${i.spec.mesh_mm} mm` : i ? `刃/爪 ${i.spec.blade_cm.join('×')} cm・柄 ${i.spec.handle_cm} cm・最大掘削深度 ${i.spec.maxDepth_cm} cm` : '';
+    document.getElementById('info').textContent = i ? `${i.ja} / ${i.en}\n${sizeLine}\n全長 ${(i.overallLength_m * 100).toFixed(0)} cm・推定重量 ${i.mass_g} g\n重心 グリップから ${(i.balancePoint_m * 100).toFixed(0)} cm\n${i.materialsJa}` : '';
     seg(document.getElementById('clips'), h.clips.map((c) => [c.name, c.name.replace('Bag_', '').replace('Frame_', '')]), null, (name) => {
       mixer.m.stopAllAction();
       const a = mixer.m.clipAction(h.clips.find((c) => c.name === name));
