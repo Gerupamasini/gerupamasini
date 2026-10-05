@@ -27,7 +27,7 @@ import { Encyclopedia } from '../systems/Encyclopedia';
 import { Observation } from '../systems/Observation';
 import { CAPTURE_PHASE_SEC, Capture } from '../systems/Capture';
 import { skillKeyOf } from '../systems/Encyclopedia';
-import { FieldCase } from './FieldCase';
+import { FieldCase, CASE_DRAFT } from './FieldCase';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { minDepthFor } from '../creatures/Individual';
 import { ui, t, toast, type Screen, type Marker, type ToolId } from '../ui/store';
@@ -426,8 +426,20 @@ export class App {
         }
         break;
       }
-      case 'runnel': x = 0; z = -8 + 8 * Math.sin(0); break;
-      case 'creek': x = -70 + 25 * Math.sin(100 / 70) + 9; z = 0; yaw = Math.PI / 2; break;
+      case 'runnel': case 'creek': {
+        // the nearest creek cell to the map's middle (creek) or well up the flat (runnel): beside it, looking across
+        const tr = w.terrain, chan = w.map.substrate.palette.indexOf('channel');
+        const want = target === 'creek' ? { x: 0, z: 10 } : { x: 0, z: -60 };
+        let best = -1, bestD = Infinity;
+        for (let k = 0; k < tr.n * tr.n; k += 3) {
+          if (tr.substrate[k] !== chan) continue;
+          const cx = -tr.half + (k % tr.n) * tr.cell, cz = -tr.half + Math.floor(k / tr.n) * tr.cell;
+          const d = Math.hypot(cx - want.x, cz - want.z);
+          if (d < bestD) { bestD = d; best = k; }
+        }
+        if (best >= 0) { x = -tr.half + (best % tr.n) * tr.cell + 6; z = -tr.half + Math.floor(best / tr.n) * tr.cell; yaw = Math.PI / 2; }
+        break;
+      }
       case 'pool': { const pool = w.habitat.pools[0]; if (pool) { x = pool.cx + 6; z = pool.cz; yaw = Math.PI / 2; } break; }
       case 'clams': {
         // the nearest clam bed, stood at its edge and looking down at the sand
@@ -806,6 +818,13 @@ export class App {
     const f = p.forward.clone();
     const ok = (x: number, z: number) => world.habitat.depthAt(x, z) < 0.02;
     const c = new Vector3();
+    // standing in the water: the case floats right in front, on the surface
+    if (p.depthHere > 0.03) {
+      for (const d of [0.7, 0.55, 0.9]) {
+        c.set(p.position.x + f.x * d, 0, p.position.z + f.z * d);
+        if (world.habitat.depthAt(c.x, c.z) > 0.03) return c;
+      }
+    }
     for (const d of [0.75, 0.55, 0.95, 1.2, 0.4]) {
       c.set(p.position.x + f.x * d, 0, p.position.z + f.z * d);
       if (ok(c.x, c.z)) return c;
@@ -823,7 +842,11 @@ export class App {
     const world = this.world, player = this.player, fc = this.fieldCase;
     if (!world || !player || !fc || this.mode !== 'field') return;
     const spot = this.caseSpot();
-    fc.place(spot.x, world.terrain.heightAt(spot.x, spot.z), spot.z, player.yaw);
+    // on the sand, or, standing in the water, floated on the surface (resting on the bottom where it is too shallow)
+    const ground = world.terrain.heightAt(spot.x, spot.z), depth = world.habitat.depthAt(spot.x, spot.z);
+    const afloat = depth > 0.03;
+    const y = afloat ? Math.max(ground, world.habitat.waterAt(spot.x, spot.z) - CASE_DRAFT) : ground;
+    fc.place(spot.x, y, spot.z, player.yaw, afloat);
     void fc.setOccupants(this.encyclopedia.caseItems.value, (id) => this.data.species.get(id));
     const center = fc.center.clone();
     this.caseSavedNear = this.camera.near;
@@ -834,13 +857,14 @@ export class App {
     controls.dampingFactor = 0.1;
     controls.minDistance = 0.18;
     controls.maxDistance = 1.6;
-    controls.maxPolarAngle = Math.PI * 0.49;
+    // afloat, the view stays above the water: the orbit may not dip under the surface
+    controls.maxPolarAngle = afloat ? Math.PI * 0.4 : Math.PI * 0.49;
     controls.enablePan = false;
     controls.zoomSpeed = 0.8;
     controls.target.copy(center);
     // from the player's side, a little above the water line, like kneeling in front of it
     const back = player.forward.clone().multiplyScalar(-0.66);
-    this.camera.position.copy(center).add(back).add(new Vector3(0, 0.3, 0));
+    this.camera.position.copy(center).add(back).add(new Vector3(0, afloat ? 0.36 : 0.3, 0));
     controls.update();
     this.caseControls = controls;
     this.setMode('caseView');
@@ -1155,13 +1179,13 @@ export class App {
     gl.autoClear = autoClear;
   }
 
-  /** WASD around the tank: A/D orbit, W/S closer and further. True while a key is held. */
+  /** WASD in the room moves the viewpoint itself (the orbit centre comes along); the mouse turns and zooms. True while a key is held. */
   private tankKeys(dt: number): boolean {
     const i = this.input;
-    const orbit = (i.held('right') ? 1 : 0) - (i.held('left') ? 1 : 0);
-    const dolly = (i.held('forward') ? 1 : 0) - (i.held('back') ? 1 : 0);
-    this.tank.nudgeCamera(orbit, dolly, 0, dt);
-    return orbit !== 0 || dolly !== 0;
+    const right = (i.held('right') ? 1 : 0) - (i.held('left') ? 1 : 0);
+    const forward = (i.held('forward') ? 1 : 0) - (i.held('back') ? 1 : 0);
+    this.tank.panCamera(right, forward, dt * (i.held('run') ? 2.2 : 1));
+    return right !== 0 || forward !== 0;
   }
 
   /** Where the view's centre meets the ground within `maxDist` (marching the ray), or null. */

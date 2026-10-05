@@ -119,3 +119,14 @@ export class TideModel {
     return this.active.reduce((s, c) => s + c.H, 0);
   }
 }
+
+export type TidePhase = 'high' | 'low' | 'rising' | 'falling';
+
+/**
+ * What the water is doing at a moment: at a high or low when within `slackMin` minutes of one of the given extremes
+ * (the water is slack around them), else rising or falling by the level's change over the ten minutes either side.
+ */
+export function tidePhaseAt(level: (ms: number) => number, extrema: { t: number; kind: 'high' | 'low' }[], ms: number, slackMin = 20): TidePhase {
+  for (const e of extrema) if (Math.abs(e.t - ms) <= slackMin * 60000) return e.kind;
+  return level(ms + 600000) - level(ms - 600000) >= 0 ? 'rising' : 'falling';
+}

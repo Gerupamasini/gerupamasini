@@ -30,8 +30,11 @@ export function MapOverlay({ app }: { app: App }) {
       // tide pools: label the larger ones
       ctx.font = '11px sans-serif';
       ctx.textAlign = 'center';
-      for (const pool of world.habitat.pools.slice(0, 8)) {
-        if (pool.area < 20) continue;
+      let labelled = 0;
+      for (const pool of world.habitat.pools) {
+        // only pools standing above the tide (a drowned hollow is just sea), the eight largest
+        if (pool.area < 20 || pool.level < world.tideLevel + 0.02) continue;
+        if (++labelled > 8) break;
         const [x, z] = toPx(pool.cx, pool.cz);
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fillText(t('map.legend.pool'), x, z - 6);

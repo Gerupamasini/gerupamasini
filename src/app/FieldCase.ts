@@ -1,5 +1,6 @@
 import {
-  BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh, MeshStandardMaterial, Object3D, PlaneGeometry, SRGBColorSpace, Vector3,
+  BoxGeometry, CanvasTexture, Color, DoubleSide, EdgesGeometry, Group, LineBasicMaterial, LineSegments, Mesh, MeshStandardMaterial, Object3D, PlaneGeometry,
+  SRGBColorSpace, Vector3,
 } from 'three';
 import type { IndividualRecord, Individual } from '../creatures/Individual';
 import type { SpeciesDef } from '../data/schemas';
@@ -9,9 +10,11 @@ import { instantiateModel } from '../creatures/models/ModelLoader';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 
-/** the acrylic box between the posts: 36 cm wide, 16 cm deep, 18 cm tall, water 13 cm */
+/** the clear acrylic case: 36 cm wide, 16 cm deep, 18 cm tall, water 13 cm; 5 mm walls */
 export const CASE_W = 0.36, CASE_D = 0.16, CASE_H = 0.18, CASE_WATER = 0.13;
-const POST = 0.038, POST_H = 0.22, BASE_T = 0.018, WALL = 0.004;
+const WALL = 0.005;
+/** how deep the case sits when it floats: the outside water line a little under the inside one */
+export const CASE_DRAFT = 0.11;
 export const CASE_MAX = 6;
 
 interface CaseOccupant {
@@ -23,9 +26,10 @@ interface CaseOccupant {
 }
 
 /**
- * The observation case set down on the flat: a small acrylic box held between two hinoki posts on a board, filled
- * from the nearest pool, with the day's catch swimming in it. The animals are driven like the tank's, kept inside
- * the glass; the whole thing is placed where the player stands and taken up again when the look is over.
+ * The observation case: a plain clear acrylic box with a centimetre rule along its front edge, filled from the
+ * nearest pool, with the day's catch swimming in it. Set down on the sand, or, when the player stands in the water,
+ * floated on the surface in front of them. The animals are driven like the tank's, kept inside the walls; the case is
+ * taken up again when the look is over.
  */
 export class FieldCase {
   readonly group = new Group();
@@ -36,65 +40,71 @@ export class FieldCase {
    */
   readonly animals = new Group();
   private readonly occupants: CaseOccupant[] = [];
-  /** the acrylic bottom's top face and the water line, world y */
+  /** the acrylic bottom's top face, world y (follows the bob when afloat) */
   private floorY = 0;
   private readonly floor: Floor = { heightAt: () => this.floorY, waterAt: () => this.floorY + CASE_WATER };
   /** half extents of the inside in world x / z (the case may be turned a right angle) */
   private halfX = CASE_W / 2;
   private halfZ = CASE_D / 2;
   private readonly surface: Mesh;
+  private readonly body: Mesh;
   private time = 0;
+  /** afloat: the case bobs on the water around its rest height */
+  private afloat = false;
+  private restY = 0;
   private readonly tmp = new Vector3();
 
   constructor() {
     this.group.name = 'fieldCase';
-    const wood = new MeshStandardMaterial({ color: 0xd8bf96, roughness: 0.78, metalness: 0 });
-    const woodDark = new MeshStandardMaterial({ color: 0x5a3a26, roughness: 0.7, metalness: 0 });
-    const acrylic = new MeshStandardMaterial({ color: 0xf4fbff, transparent: true, opacity: 0.12, roughness: 0.12, metalness: 0, side: DoubleSide, depthWrite: false });
-    const water = new MeshStandardMaterial({ color: 0xcdeee8, transparent: true, opacity: 0.18, roughness: 0.3, metalness: 0, depthWrite: false });
-    const surfaceMat = new MeshStandardMaterial({ color: 0xe6f7f4, transparent: true, opacity: 0.3, roughness: 0.1, metalness: 0, depthWrite: false, side: DoubleSide });
+    const acrylic = new MeshStandardMaterial({ color: 0xf6fcff, transparent: true, opacity: 0.1, roughness: 0.06, metalness: 0, side: DoubleSide, depthWrite: false });
+    const edge = new LineBasicMaterial({ color: new Color(0xdff6ff), transparent: true, opacity: 0.55 });
+    const water = new MeshStandardMaterial({ color: 0xcdeee8, transparent: true, opacity: 0.16, roughness: 0.3, metalness: 0, depthWrite: false });
+    const surfaceMat = new MeshStandardMaterial({ color: 0xe6f7f4, transparent: true, opacity: 0.28, roughness: 0.08, metalness: 0, depthWrite: false, side: DoubleSide });
 
-    // the board and the two posts, with a dark cap on each
-    const board = new Mesh(new BoxGeometry(CASE_W + 2 * POST + 0.03, BASE_T, CASE_D + 0.05), wood);
-    board.position.y = BASE_T / 2;
-    board.castShadow = true; board.receiveShadow = true;
-    this.group.add(board);
-    for (const sx of [-1, 1]) {
-      const post = new Mesh(new BoxGeometry(POST, POST_H, CASE_D + 0.02), wood);
-      post.position.set(sx * (CASE_W / 2 + POST / 2), BASE_T + POST_H / 2, 0);
-      post.castShadow = true; post.receiveShadow = true;
-      this.group.add(post);
-      const cap = new Mesh(new BoxGeometry(POST + 0.004, 0.006, CASE_D + 0.024), woodDark);
-      cap.position.set(post.position.x, BASE_T + POST_H + 0.003, 0);
-      this.group.add(cap);
-    }
-    // the mark burnt into the right post
-    const mark = new Mesh(new PlaneGeometry(POST * 0.7, POST_H * 0.55), new MeshStandardMaterial({ map: makeMark(), transparent: true, roughness: 0.8, side: DoubleSide }));
-    mark.position.set(CASE_W / 2 + POST / 2, BASE_T + POST_H * 0.55, CASE_D / 2 + 0.0105);
-    this.group.add(mark);
-
-    // the acrylic: five thin panels
-    const y0 = BASE_T;
+    // the acrylic: a bottom and four walls, each with its edges drawn so the clear box still reads as a box
     const panel = (w: number, h: number, d: number, x: number, y: number, z: number) => {
-      const m = new Mesh(new BoxGeometry(w, h, d), acrylic);
+      const geo = new BoxGeometry(w, h, d);
+      const m = new Mesh(geo, acrylic);
       m.position.set(x, y, z);
       m.renderOrder = 5;
       this.group.add(m);
+      const lines = new LineSegments(new EdgesGeometry(geo), edge);
+      lines.position.copy(m.position);
+      lines.renderOrder = 6;
+      this.group.add(lines);
     };
-    panel(CASE_W, WALL, CASE_D, 0, y0 + WALL / 2, 0);
-    panel(CASE_W, CASE_H, WALL, 0, y0 + CASE_H / 2, CASE_D / 2 - WALL / 2);
-    panel(CASE_W, CASE_H, WALL, 0, y0 + CASE_H / 2, -CASE_D / 2 + WALL / 2);
-    panel(WALL, CASE_H, CASE_D, CASE_W / 2 - WALL / 2, y0 + CASE_H / 2, 0);
-    panel(WALL, CASE_H, CASE_D, -CASE_W / 2 + WALL / 2, y0 + CASE_H / 2, 0);
+    panel(CASE_W, WALL, CASE_D, 0, WALL / 2, 0);
+    panel(CASE_W, CASE_H, WALL, 0, CASE_H / 2, CASE_D / 2 - WALL / 2);
+    panel(CASE_W, CASE_H, WALL, 0, CASE_H / 2, -CASE_D / 2 + WALL / 2);
+    panel(WALL, CASE_H, CASE_D, CASE_W / 2 - WALL / 2, CASE_H / 2, 0);
+    panel(WALL, CASE_H, CASE_D, -CASE_W / 2 + WALL / 2, CASE_H / 2, 0);
+
+    // the centimetre rule printed along the bottom of the front and the back (either side faces the viewer)
+    // a printed white strip: lit a little from within so it stays readable on the shaded side
+    const ruleTex = makeRule();
+    const ruleMat = new MeshStandardMaterial({ map: ruleTex, emissive: new Color(0xffffff), emissiveMap: ruleTex, emissiveIntensity: 0.35, transparent: true, roughness: 0.6, metalness: 0, side: DoubleSide, depthWrite: false });
+    for (const sz of [1, -1]) {
+      const rule = new Mesh(new PlaneGeometry(CASE_W - 0.004, 0.016), ruleMat);
+      rule.position.set(0, WALL + 0.011, sz * (CASE_D / 2 + 0.0006));
+      rule.rotation.y = sz > 0 ? 0 : Math.PI;
+      rule.renderOrder = 7;
+      this.group.add(rule);
+    }
+    // the small label in the top corner
+    const labelTex = makeLabel();
+    const label = new Mesh(new PlaneGeometry(0.05, 0.014), new MeshStandardMaterial({ map: labelTex, emissive: new Color(0xffffff), emissiveMap: labelTex, emissiveIntensity: 0.3, transparent: true, roughness: 0.7, side: DoubleSide, depthWrite: false }));
+    label.position.set(CASE_W / 2 - 0.035, CASE_H - 0.016, CASE_D / 2 + 0.0006);
+    label.renderOrder = 7;
+    this.group.add(label);
 
     // the water and its surface
-    const body = new Mesh(new BoxGeometry(CASE_W - 2 * WALL, CASE_WATER, CASE_D - 2 * WALL), water);
-    body.position.set(0, y0 + WALL + CASE_WATER / 2, 0);
-    body.renderOrder = 3;
-    this.group.add(body);
+    this.body = new Mesh(new BoxGeometry(CASE_W - 2 * WALL, CASE_WATER, CASE_D - 2 * WALL), water);
+    this.body.position.set(0, WALL + CASE_WATER / 2, 0);
+    this.body.renderOrder = 3;
+    this.group.add(this.body);
     this.surface = new Mesh(new PlaneGeometry(CASE_W - 2 * WALL, CASE_D - 2 * WALL), surfaceMat);
     this.surface.rotation.x = -Math.PI / 2;
-    this.surface.position.set(0, y0 + WALL + CASE_WATER, 0);
+    this.surface.position.set(0, WALL + CASE_WATER, 0);
     this.surface.renderOrder = 4;
     this.group.add(this.surface);
 
@@ -102,14 +112,19 @@ export class FieldCase {
     this.group.visible = false;
   }
 
-  /** Set the case down at a spot on the flat, its long side across the player's view (to the nearest right angle). */
-  place(x: number, y: number, z: number, yaw: number): void {
+  /**
+   * Set the case down with its bottom at `y`, its long side across the player's view (to the nearest right angle).
+   * `afloat` lets it ride the water: a slow bob and a slight roll.
+   */
+  place(x: number, y: number, z: number, yaw: number, afloat = false): void {
     const snapped = Math.round(yaw / (Math.PI / 2)) * (Math.PI / 2);
     this.group.position.set(x, y, z);
     this.group.rotation.set(0, snapped, 0);
     this.group.visible = true;
     this.group.updateMatrixWorld(true);
-    this.floorY = y + BASE_T + WALL;
+    this.restY = y;
+    this.afloat = afloat;
+    this.floorY = y + WALL;
     const turned = Math.abs(Math.sin(snapped)) > 0.5;
     this.halfX = (turned ? CASE_D : CASE_W) / 2 - WALL;
     this.halfZ = (turned ? CASE_W : CASE_D) / 2 - WALL;
@@ -117,6 +132,8 @@ export class FieldCase {
 
   takeUp(): void {
     this.group.visible = false;
+    this.group.rotation.x = 0;
+    this.group.rotation.z = 0;
     this.clearOccupants();
   }
 
@@ -124,9 +141,13 @@ export class FieldCase {
     return this.group.visible;
   }
 
+  get floating(): boolean {
+    return this.afloat;
+  }
+
   /** the middle of the water, world space */
   get center(): Vector3 {
-    return this.tmp.set(0, BASE_T + WALL + CASE_WATER / 2, 0).applyMatrix4(this.group.matrixWorld);
+    return this.tmp.set(0, WALL + CASE_WATER / 2, 0).applyMatrix4(this.group.matrixWorld);
   }
 
   /** world-space half extents of the inside, for anyone placing things in it */
@@ -197,7 +218,15 @@ export class FieldCase {
   update(dt: number, player: Vector3): void {
     if (!this.group.visible) return;
     this.time += dt;
-    this.surface.position.y = BASE_T + WALL + CASE_WATER + Math.sin(this.time * 1.7) * 0.0006;
+    this.surface.position.y = WALL + CASE_WATER + Math.sin(this.time * 1.7) * 0.0006;
+    if (this.afloat) {
+      // riding the water: a slow bob, a slight roll; the animals' floor rides with it
+      const yaw = this.group.rotation.y;
+      this.group.position.y = this.restY + Math.sin(this.time * 1.25) * 0.004 + Math.sin(this.time * 0.53 + 1.1) * 0.002;
+      this.group.rotation.set(Math.sin(this.time * 0.9 + 0.7) * 0.012, yaw, Math.sin(this.time * 1.1) * 0.014);
+      this.group.updateMatrixWorld(true);
+      this.floorY = this.group.position.y + WALL;
+    }
     const c = this.group.position;
     for (const o of this.occupants) {
       const d = o.driver;
@@ -225,26 +254,52 @@ export class FieldCase {
   }
 }
 
-/** The mark burnt into the post: the game's name, the long way down. */
-function makeMark(): CanvasTexture {
+/** The centimetre rule along the bottom edge: millimetre ticks, numbers every centimetre, like a printed scale. */
+function makeRule(): CanvasTexture {
+  const W = 2048, H = 96;
   const c = document.createElement('canvas');
-  c.width = 64; c.height = 256;
+  c.width = W; c.height = H;
   const g = c.getContext('2d')!;
-  g.clearRect(0, 0, 64, 256);
-  g.fillStyle = 'rgba(70, 40, 22, 0.85)';
-  g.strokeStyle = 'rgba(70, 40, 22, 0.85)';
-  g.lineWidth = 3;
-  g.strokeRect(10, 10, 44, 44);
-  g.font = 'bold 22px sans-serif';
+  g.fillStyle = 'rgba(255, 255, 255, 0.92)';
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#1b2226';
+  g.fillStyle = '#1b2226';
+  g.lineWidth = 2;
+  g.beginPath(); g.moveTo(0, H - 2); g.lineTo(W, H - 2); g.stroke();
+  const cm = W / 36;
+  g.font = 'bold 34px sans-serif';
   g.textAlign = 'center';
-  g.fillText('潟', 32, 42);
-  g.font = '18px sans-serif';
-  const word = '干潟図鑑';
-  for (let i = 0; i < word.length; i++) g.fillText(word[i], 32, 92 + i * 26);
-  g.font = '9px sans-serif';
-  g.fillText('HIGATA ZUKAN', 32, 220);
+  for (let mm = 0; mm <= 360; mm++) {
+    const x = (mm / 10) * cm;
+    const long = mm % 10 === 0, mid = mm % 5 === 0;
+    const len = long ? 46 : mid ? 30 : 18;
+    g.lineWidth = long ? 3 : 2;
+    g.beginPath(); g.moveTo(x, H); g.lineTo(x, H - len); g.stroke();
+    if (long && mm > 0 && mm < 360) g.fillText(String(mm / 10), x, 36);
+  }
+  g.font = '26px sans-serif';
+  g.textAlign = 'left';
+  g.fillText('cm', 8, 36);
   const tex = new CanvasTexture(c);
   tex.colorSpace = SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+/** The small label in the corner: the game's name. */
+function makeLabel(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 72;
+  const g = c.getContext('2d')!;
+  g.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  g.fillRect(0, 0, 256, 72);
+  g.fillStyle = '#1b2226';
+  g.font = 'bold 30px sans-serif';
+  g.textAlign = 'center';
+  g.fillText('干潟図鑑', 128, 38);
+  g.font = '16px sans-serif';
+  g.fillText('OBSERVATION CASE', 128, 62);
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
   return tex;
 }
