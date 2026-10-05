@@ -297,7 +297,7 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     float lore = 1.0 - smoothstep(-0.3, 0.3, length(zy - mix(la, lb, tl)) + ej - mix(1.1, 1.9, tl) * uMelanin * mix(0.5, 1.0, clamp((uHeadPat.y - 0.4) / 0.6, 0.0, 1.0)));
     // (narrower where the loral stripe is pale: a thin brown line in females, p050)
     // (on the sides of the bill base only — over the culmen the two met as a moustache across the forehead)
-    lore *= smoothstep(1.6, 2.7, ax) * smoothstep(0.12, 0.35, abs(n.x)) * uHeadPat.y;
+    lore *= smoothstep(1.6, 2.7, ax) * smoothstep(0.03, 0.15, abs(n.x)) * uHeadPat.y;
     // the stripe ends at the gape: below the commissure line (carried back from the rictus) the chin is white
     // and, toward the bill, below the culmen: the white forehead's point runs out along the culmen above it
     float gapeY = 90.32 - 0.436 * (p.z - 37.71);
@@ -330,10 +330,10 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     // in females / juveniles (p001, p010, p035, p045), only below the eye in the male's black mask (p012, p043)
     // (the opening is an almond — feathered lid folds above and below, bodySculpt.adds — so the lid margin and
     // the ring are drawn on an ellipse in the eye's frame, 1.5× flatter vertically)
-    vec3 eq = vec3(ax, p.y, p.z) - vec3(6.300, 95.000, 25.500);
-    float es = dot(eq, vec3(0.927, 0.13, 0.352));
-    float eV = dot(eq, vec3(0.121, -0.991, 0.046)); // + ventral
-    float eU = dot(eq, vec3(-0.351, -0.036, 0.936)); // + anterior
+    vec3 eq = vec3(ax, p.y, p.z) - vec3(5.800, 95.000, 25.500);
+    float es = dot(eq, vec3(0.921, 0.13, 0.368));
+    float eV = dot(eq, vec3(0.121, -0.991, 0.048)); // + ventral
+    float eU = dot(eq, vec3(-0.367, -0.036, 0.93)); // + anterior
     float er = length(vec2(eU, (eV - 0.15) * 1.5));
     float eAng = atan(eV, eU); // + ventral, 0 anterior
     float eRim = 1.0 - smoothstep(2.95, 3.25, er + jitter * 0.1 + 0.04 * sin(eAng * 9.0 + jitter * 3.0));

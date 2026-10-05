@@ -311,7 +311,7 @@ export const EYE = {
   // level of the surrounding feathers, so the eye is set into the face instead of standing out as a ball
   aperture: 2.65,
   corneaR: 3.7,
-  axisL: norm([0.927, 0.13, 0.352]), // lateral, 15.7° forward, 7.5° up (D)
+  axisL: norm([0.921, 0.13, 0.368]), // lateral, 15.7° forward, 7.5° up (D)
 };
 
 function sphereCap(sk, center, axis, R, maxAngle, segA, segR, part, bones, uvMode, hand = 1, flatNormal = false) {

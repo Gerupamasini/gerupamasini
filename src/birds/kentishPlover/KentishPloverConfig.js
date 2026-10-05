@@ -56,7 +56,7 @@ export const joints = {
   // mouth stays nearly closed as the bill opens (≈0.1 mm at 0.2 rad) and the lower mandible's feathered base turns with
   // it under the chin feathering, instead of swinging down about a point 2.6 mm below and 4 mm behind the corner
   jaw: [0, 90.6, 37.25],
-  eyeCenter: [6.3, 95, 25.5], // EYE-MOVED // eyeball centre (spec §6); head surface at x 12.3, eye 9.5 mm behind the breast front;
+  eyeCenter: [5.8, 95, 25.5], // eyeball centre (spec §6); head surface at x 12.3, eye 9.5 mm behind the breast front;
   // sunk 0.4 mm so the cornea apex (x 11.5) stays inside the head outline (photos: the eye sits in the dark stripe)
   shoulder: [10, 77, 6],
   tail: [0, 61, -42], // pygostyle (spec §11)
@@ -96,16 +96,16 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'mantleNape', c: [0.0, 85.64, 10.35], r: [20.67, 5.66, 17.11], role: 'neck' },
     // HEAD-BEGIN
     // the round skull: widest behind the eye (ear coverts), the eyes on the sides of the ball
-    { type: 'ellipsoid', name: 'skull', c: [0.00, 92.66, 22.20], r: [11.42, 12.74, 13.42], k: 5, role: 'head' },
+    { type: 'ellipsoid', name: 'skull', c: [0.00, 92.59, 22.17], r: [10.77, 12.60, 13.46], k: 5, role: 'head' },
     // the steep forehead and fore-crown rising from the bill base into the rounded crown
-    { type: 'ellipsoid', name: 'forehead', c: [0.00, 99.87, 25.64], r: [10.43, 5.60, 8.99], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'forehead', c: [0.00, 100.03, 25.30], r: [10.25, 5.62, 9.15], k: 4, role: 'head' },
     // the broad, blunt face round the bill base (lores, rictus): no wedge toward the bill
-    { type: 'ellipsoid', name: 'face', c: [0.00, 93.16, 33.90], r: [9.61, 7.56, 5.57], k: 3.5, role: 'head' },
+    { type: 'ellipsoid', name: 'face', c: [0.00, 93.23, 33.95], r: [9.66, 7.64, 5.40], k: 3.5, role: 'head' },
     // chin and upper throat under the bill base, as broad as the face
-    { type: 'ellipsoid', name: 'chin', c: [0.00, 84.73, 30.18], r: [9.15, 7.50, 6.68], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'chin', c: [0.00, 84.79, 30.15], r: [9.29, 7.58, 6.69], k: 4, role: 'head' },
     // ear coverts behind and above the eye: the widest part of the head seen from the front or above
-    { type: 'ellipsoid', name: 'cheekL', c: [7.83, 96.75, 18.52], r: [5.99, 4.91, 7.03], k: 4, role: 'head' },
-    { type: 'ellipsoid', name: 'cheekR', c: [-7.83, 96.75, 18.52], r: [5.99, 4.91, 7.03], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'cheekL', c: [7.89, 96.61, 18.43], r: [5.98, 5.34, 6.93], k: 4, role: 'head' },
+    { type: 'ellipsoid', name: 'cheekR', c: [-7.89, 96.61, 18.43], r: [5.98, 5.34, 6.93], k: 4, role: 'head' },
     // HEAD-END
     // v4.3: top of the neck fill under the v3-sized head (below and behind the ear coverts), with the collar 1.5 mm
     // narrower: from the front the outline widens smoothly from the head into the v4.2 shoulders instead of stepping out
@@ -124,14 +124,14 @@ export const bodySculpt = {
   // margin, as the photographed eye of the pale-faced birds: 6.7–7.8 × 3.8–5.4 mm, median height 4.7 (p062,
   // p035, p018, p045, p050, p006, p039 on the eye → bill-tip scale). The round 6.4 mm opening read as a black ball)
   cuts: [
-    { type: 'vesica', name: 'eyeSocketL', a: [7.69, 95.2, 26.023], b: [14.646, 96.17, 28.669], r: 3.4, off: [0.165, -1.36, 0.065], k: 0.9 },
-    { type: 'vesica', name: 'eyeSocketR', a: [-7.69, 95.2, 26.023], b: [-14.646, 96.17, 28.669], r: 3.4, off: [-0.165, -1.36, 0.065], k: 0.9 },
+    { type: 'vesica', name: 'eyeSocketL', a: [7.18, 95.2, 26.047], b: [14.089, 96.17, 28.815], r: 3.4, off: [0.164, -1.36, 0.067], k: 0.9 },
+    { type: 'vesica', name: 'eyeSocketR', a: [-7.18, 95.2, 26.047], b: [-14.089, 96.17, 28.815], r: 3.4, off: [-0.164, -1.36, 0.067], k: 0.9 },
   ],
   // Upper eyelid fold: the feathered upper lid stands a little proud of the opening, merged into its upper arc (a
   // separate ridge above it read as a shelf) (p012, p043, p050)
   adds: [
-    { type: 'ellipsoid', name: 'upperLidL', c: [9.559, 97.95, 26.689], r: [0.8, 0.65, 3.0], k: 0.6 },
-    { type: 'ellipsoid', name: 'upperLidR', c: [-9.559, 97.95, 26.689], r: [0.8, 0.65, 3.0], k: 0.6 },
+    { type: 'ellipsoid', name: 'upperLidL', c: [9.038, 97.95, 26.745], r: [0.8, 0.65, 3.0], k: 0.6 },
+    { type: 'ellipsoid', name: 'upperLidR', c: [-9.038, 97.95, 26.745], r: [0.8, 0.65, 3.0], k: 0.6 },
   ],
   // Bill base (anatomy/bill.js makeBillBlend, docs/morphology.md §6.2): round the bill the face is morphed into the
   // feathered sheath that tapers onto the keratin along the slanted feather line — the sheath alone up to d0 mm behind
@@ -142,8 +142,8 @@ export const bodySculpt = {
   // LOD0 face patches (anatomy/bodyMesh.js): eye sockets and bill base polygonised at 0.3 mm over the base mesh
   facePatch: {
     patches: [
-      { c: [10.67, 95.6, 27.187], r: 5.5 },
-      { c: [-10.67, 95.6, 27.187], r: 5.5 },
+      { c: [10.139, 95.6, 27.263], r: 5.5 },
+      { c: [-10.139, 95.6, 27.263], r: 5.5 },
       { c: [0, 90.3, 39.2], r: 5.5 },
     ],
     res: 0.3,
