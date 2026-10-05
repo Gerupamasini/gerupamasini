@@ -1005,7 +1005,7 @@ export function createBarePartsMaterial(pal, detail = 0) {
         `#include <color_fragment>
         float kbP = floor(vPart + 0.5);
         vec3 kbCol = uLegs; float kbRough = 0.55;
-        float kbAniso = 0.0; float kbH = 0.0; vec3 kbAlong = vec3(0.0, 0.0, 1.0);
+        float kbAniso = 0.0; float kbH = 0.0; vec3 kbAlong = vec3(0.0, 0.0, 1.0); float kbEnv = 1.0;
         // Reticulate (polygonal) scales on the tarsus/toes; pattern cell ≈ 0.45 mm.
         vec2 kbSt = vec2(vUv.x * 16.0, vUv.y * 60.0);
         vec2 kbI = floor(kbSt + vec2(0.5 * mod(floor(kbSt.y), 2.0), 0.0));
@@ -1039,8 +1039,12 @@ export function createBarePartsMaterial(pal, detail = 0) {
           float kbSlit = kbNo * kbG(kbAv, ${f1(BS.nostril.v)}, 0.045);
           float kbGrL = kbGr * kbG(kbAv, ${f1(BS.groove.v)}, 0.05);
           float kbOpM = kbOp * kbG(kbAv, ${f1(BS.operculum.v)}, 0.075);
-          kbCol = mix(kbCol, kbCol * vec3(1.55, 1.5, 1.42) + vec3(0.003), kbOpM * 0.7);   // soft skin: greyer
-          kbRough += 0.16 * kbOpM + 0.06 * kbGrL;
+          // the nasal fossa: soft, duller, greyer-brown skin (operculum) round and above the slit — in the photos it
+          // reads as a paler patch with the dark slit in it (user side photo, p022, p010)
+          float kbFos = kbOp * smoothstep(0.5, 0.62, kbAv) * (1.0 - smoothstep(0.86, 0.93, kbAv));
+          kbOpM = max(kbOpM, kbFos);
+          kbCol = mix(kbCol, kbCol * vec3(2.3, 2.1, 1.85) + vec3(0.004, 0.0035, 0.003), kbOpM * 0.75);
+          kbRough += 0.2 * kbOpM + 0.06 * kbGrL;
           kbAniso *= 1.0 - kbOpM;
           kbCol *= 1.0 - 0.3 * kbGrL;
           kbCol = mix(kbCol, vec3(0.0025, 0.0022, 0.002), smoothstep(0.15, 0.75, kbSlit));
@@ -1048,7 +1052,10 @@ export function createBarePartsMaterial(pal, detail = 0) {
           // tomia: the gape line reads as a fine dark seam — the lower's edge sits in the shade of the upper's
           kbCol *= mix(1.0, 0.55, smoothstep(0.93, 1.0, kbAv) * kbUp) * mix(1.0, 0.45, smoothstep(0.8, 0.97, kbAv) * kbLower);
           // relief for the normal (mm): slit, groove floor, operculum swelling, grain
-          kbH = (-0.09 * kbSlit - 0.03 * kbGrL + 0.035 * kbOpM) * kbFine + (kbStreak - 0.5) * 0.0025 * kbGrain;
+          // (sky reflection: the scene lights the sky through a hemisphere light that has no specular; the glossy
+          // keratin mirrors the sky, so its image-based specular is brought up to the sky's strength)
+          kbEnv = 2.6 * (1.0 - 0.55 * kbOpM) * (1.0 - smoothstep(0.2, 0.7, kbSlit));
+          kbH = (-0.09 * kbSlit - 0.03 * kbGrL + 0.035 * kbOp * kbG(kbAv, ${f1(BS.operculum.v)}, 0.075)) * kbFine + (kbStreak - 0.5) * 0.0025 * kbGrain;
           // Feather tips over the base (no hard seam where the keratin leaves the plumage): two staggered layers of
           // narrow, pointed feather tips ≈0.16 mm wide reaching 0.1–1 mm onto the keratin, the face colour round
           // the base (forehead over the culmen, lores at the sides, chin under the lower mandible), each tip
@@ -1074,6 +1081,7 @@ export function createBarePartsMaterial(pal, detail = 0) {
             kbCol = mix(kbCol * (1.0 - 0.4 * kbSh), kbFc * (0.8 + 0.2 * kbBarb) * mix(0.7, 1.0, smoothstep(-0.2, 0.4, vBillF)), kbCov);
             kbRough = mix(kbRough + 0.15 * kbSh, 0.9, kbCov);
             kbAniso *= 1.0 - kbCov;
+            kbEnv = mix(kbEnv, 1.0, kbCov);
             kbH += (0.04 * kbCov - 0.015 * kbSh) * kbFine;
           }
           kbRough = clamp(kbRough, 0.12, 0.95);
@@ -1130,6 +1138,7 @@ export function createBarePartsMaterial(pal, detail = 0) {
           kbAlong = normalize(kbAlong - normal * dot(kbAlong, normal));
         }`
       )
+      .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\nradiance *= kbEnv;')
       .replace('#include <lights_physical_fragment>', THREE.ShaderChunk.lights_physical_fragment.replace('vec2 anisotropyV = anisotropyVector;', 'vec2 anisotropyV = anisotropyVector * kbAniso;').replace('material.anisotropyT = tbn[ 0 ] * anisotropyV.x + tbn[ 1 ] * anisotropyV.y;', 'material.anisotropyT = kbAlong;').replace('material.anisotropyB = tbn[ 1 ] * anisotropyV.x - tbn[ 0 ] * anisotropyV.y;', 'material.anisotropyB = normalize(cross(normal, kbAlong));'));
   };
   mat.customProgramCacheKey = () => `kp-bare2-${detail}`;

@@ -78,11 +78,11 @@ function mono(knots) {
 // dertrum before the fine point.
 export const BILL_SHAPE = {
   // culmen height above the commissure (upper mandible)
-  Hu: [[0, 0], [0.25, 0.15], [0.6, 0.34], [1, 0.53], [1.6, 0.81], [2.4, 1.13], [3.4, 1.46], [4.6, 1.76], [6, 1.92], [7.5, 1.96], [9, 2.01], [10.5, 2.12], [12, 2.24], [13.5, 2.37], [15, 2.52], [16.5, 2.7], [18, 2.9], [20.3, 3.1]],
+  Hu: [[0, 0], [0.25, 0.2], [0.6, 0.42], [1, 0.62], [1.6, 0.9], [2.4, 1.2], [3.4, 1.5], [4.6, 1.77], [6, 1.92], [7.5, 1.96], [9, 2.01], [10.5, 2.12], [12, 2.24], [13.5, 2.37], [15, 2.52], [16.5, 2.7], [18, 2.9], [20.3, 3.1]],
   // depth of the lower mandible below the commissure (ends 0.45 mm short of the upper tip)
-  Hl: [[0.25, 0], [0.5, 0.17], [1, 0.37], [1.5, 0.53], [2.2, 0.7], [3, 0.83], [4, 0.93], [5, 0.99], [6.5, 1.05], [8, 1.1], [10, 1.19], [12, 1.28], [14, 1.38], [15.5, 1.47], [17, 1.6], [20.3, 1.85]],
+  Hl: [[0.25, 0], [0.5, 0.2], [1, 0.42], [1.5, 0.58], [2.2, 0.75], [3, 0.86], [4, 0.94], [5, 0.99], [6.5, 1.05], [8, 1.1], [10, 1.19], [12, 1.28], [14, 1.38], [15.5, 1.47], [17, 1.6], [20.3, 1.85]],
   // full width (widest, near the tomia)
-  W: [[0, 0], [0.25, 0.3], [0.6, 0.58], [1, 0.82], [1.6, 1.1], [2.4, 1.38], [3.4, 1.6], [4.6, 1.76], [6, 1.72], [7.5, 1.68], [9, 1.8], [10.5, 2.12], [12, 2.65], [13.5, 3.3], [15, 4.0], [16.5, 4.6], [18, 5.1], [20.3, 5.6]],
+  W: [[0, 0], [0.25, 0.3], [0.6, 0.58], [1, 0.82], [1.6, 1.1], [2.4, 1.38], [3.4, 1.6], [4.6, 1.76], [6, 1.72], [7.5, 1.68], [9, 1.8], [10.5, 2.25], [12, 3.1], [13.5, 4.3], [15, 5.5], [16.5, 6.2], [18, 6.5], [20.3, 6.6]],
   // the lower mandible's width toward its tip (it sits inside the upper's tomia elsewhere)
   WlTip: [[0.25, 0], [0.5, 0.38], [1, 0.66], [1.6, 0.95], [2.4, 1.22], [3.4, 1.45], [5, 9]],
   lowerTip: 0.25,
@@ -144,8 +144,8 @@ function upperOuter(xt, v, detail) {
   const th = (v * Math.PI) / 2;
   const sn = Math.abs(Math.sin(th));
   const co = Math.cos(th);
-  // boxier (steep sides, flat-topped culmen ridge) at the base, rounder over the hard tip
-  const px = lerp(0.6, 0.8, 1 - sm(2, 8, xt));
+  // triangular at the broad base (sides converging on a rounded culmen ridge), rounder over the hard tip
+  const px = lerp(lerp(0.72, 0.82, 1 - sm(2, 7, xt)), 1.08, sm(9.5, 14, xt));
   let x = Math.sign(v) * 0.5 * W * sn ** px;
   const y = H * co ** 0.85 - lipDrop(xt) * sn ** 6;
   if (detail === 0 && W > 0) {

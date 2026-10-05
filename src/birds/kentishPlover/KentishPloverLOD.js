@@ -166,10 +166,12 @@ export class KentishPloverManager {
     // (fitcheck.mjs lod=3 vs LOD0 in Frame A). Mantle / wing brown down to the visible wing edge (§10.1),
     // crown cap on the head, white underparts.
     add(farBodyGeometry(pal), null);
-    // bill: base under the forehead → tip (bareParts BILL, 25° down)
+    // bill: base under the forehead → tip (bareParts BILL, 25° down): a six-sided cone, broader than deep at the
+    // base like the bill's (anatomy/bill.js: ≈4.6 × 4 mm where it leaves the plumage)
     const tip = new THREE.Vector3(0, 0.0824, 0.0539);
     const base = new THREE.Vector3(0, 0.0872, 0.0385);
-    const bill = new THREE.ConeGeometry(0.0021, tip.distanceTo(base), 4);
+    const bill = new THREE.ConeGeometry(1, tip.distanceTo(base), 6);
+    bill.scale(0.0023, 1, 0.002);
     bill.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), tip.clone().sub(base).normalize()));
     bill.translate(...base.clone().add(tip).multiplyScalar(0.5).toArray());
     add(bill, pal.bill);
