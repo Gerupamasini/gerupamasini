@@ -385,8 +385,14 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     // lift a few mm while swimming
     root.position.set(st.pos.x, 0, st.pos.z);
     root.updateMatrixWorld(true);
+    // the contacts are measured in the root's parent frame, so a fish in a box set down somewhere (the observation
+    // case) rests on the box's floor and not on where the flat would be
     let lowest = Infinity;
-    for (const c of contacts) lowest = Math.min(lowest, c.bone.localToWorld(tmp.copy(c.p)).y);
+    for (const c of contacts) {
+      c.bone.localToWorld(tmp.copy(c.p));
+      if (root.parent) root.parent.worldToLocal(tmp);
+      lowest = Math.min(lowest, tmp.y);
+    }
     root.position.y = floorAt(st.pos.x, st.pos.z) - lowest + 0.0028 * S * st.lift;
   }
 
