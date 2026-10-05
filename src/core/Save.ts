@@ -43,7 +43,7 @@ const KEY = 'save:slot1';
 export function emptySave(map: string, now: number): SaveV1 {
   return {
     version: 1, createdAt: now, updatedAt: now, lastRealMs: now,
-    player: { map, pos: [0, 0, 0], heading: 0, money: 0, research: 0, tools: ['hand_net', 'shovel'], loadout: ['hand_net', 'shovel'], skills: {}, levelClaimed: 1 },
+    player: { map, pos: [0, 0, 0], heading: 0, money: 0, research: 0, tools: [DEFAULT_NET, 'shovel'], loadout: [DEFAULT_NET, 'shovel'], skills: {}, levelClaimed: 1 },
     ticket: { active: null, usedCount: 0 },
     encyclopedia: {}, case: [], tank: { individuals: [], lastSimMs: now, layout: { substrate: 'sand', items: [] } }, removedIndividuals: [],
     stats: { playSeconds: 0, captures: 0, observations: 0 },
@@ -57,11 +57,25 @@ function migrate(raw: unknown): SaveV1 | null {
   if (s.player) {
     if (!s.player.skills) s.player.skills = {};
     if (!s.player.tools) s.player.tools = [];
-    for (const id of ['hand_net', 'shovel']) if (!s.player.tools.includes(id)) s.player.tools.push(id);
-    if (!s.player.loadout || !s.player.loadout.length) s.player.loadout = ['hand_net', 'shovel'];
+    s.player.tools = migrateTools(s.player.tools);
+    for (const id of [DEFAULT_NET, 'shovel']) if (!s.player.tools.includes(id)) s.player.tools.push(id);
+    s.player.loadout = migrateTools(s.player.loadout ?? []);
+    if (!s.player.loadout.length) s.player.loadout = [DEFAULT_NET, 'shovel'];
     if (s.player.levelClaimed === undefined) s.player.levelClaimed = 1;
   }
   return s as SaveV1;
+}
+
+/** the net everyone starts with */
+export const DEFAULT_NET = 'net_small';
+/** the nets of earlier versions, by what they became (the long net's buyers keep a long net) */
+export const TOOL_RENAMES: Record<string, string> = { hand_net: 'net_small', hand_net_short: 'net_small', hand_net_long: 'net_deep' };
+
+/** Old tool ids become the new ones, without duplicates and in the same order. */
+export function migrateTools(ids: string[]): string[] {
+  const out: string[] = [];
+  for (const id of ids) { const n = TOOL_RENAMES[id] ?? id; if (!out.includes(n)) out.push(n); }
+  return out;
 }
 
 /** IndexedDB-backed single-slot save with a serialised write queue. */

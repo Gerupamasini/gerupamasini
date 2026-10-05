@@ -120,7 +120,7 @@ function growCreek(x, z, heading, order, length, w, d, along0 = 0) {
   }
 }
 // four trunks from the south edge, their mouths spread across the width
-for (const [x0, len, w, d] of [[-95, 230, 11, 1.25], [-15, 250, 13, 1.4], [60, 215, 10, 1.15], [128, 180, 8, 0.95]]) {
+for (const [x0, len, w, d] of [[-95, 230, 11, 0.6], [-15, 250, 13, 0.7], [60, 215, 10, 0.55], [128, 180, 8, 0.45]]) {
   growCreek(x0, half - 4, Math.PI + (crand() - 0.5) * 0.4, 0, len, w, d);
 }
 // bucket the segments for fast lookup. A segment is listed in every bucket within DOME_R of it (the bank dome needs
@@ -149,7 +149,7 @@ function creekAt(x, z) {
     // scour pools along the bed: stretches where the thalweg is deeper, so the creek keeps a chain of water at low tide
     const along = s.along + u * Math.sqrt(L2);
     const scour = smooth(0.15, 0.6, gnoise(along / 16 + s.phase, s.phase * 0.37 + 2.5)) * (0.4 + 0.6 * smooth(0, 60, along));
-    const cut = s.d * (0.35 + 0.65 * g) * (1 + 0.6 * scour * g) * smooth(2.2 * wl, 0.0, dd);
+    const cut = s.d * (0.35 + 0.65 * g) * (1 + 0.5 * scour * g) * smooth(2.2 * wl, 0.0, dd);
     if (cut > depth) depth = cut;
     if (g > weight) weight = g;
     if (dd - wl < dist) dist = dd - wl;
@@ -172,13 +172,42 @@ const POOLS = [];
     if (creekAt(cx, cz).dist < 9) continue;
     if (POOLS.some((p) => Math.hypot(p.cx - cx, p.cz - cz) < 28)) continue;
     const r = 5 + crand() * 9;
-    POOLS.push({ cx, cz, rx: r * (0.8 + 0.5 * crand()), rz: r * (0.7 + 0.5 * crand()), depth: 0.14 + crand() * 0.16, rot: crand() * Math.PI });
+    POOLS.push({ cx, cz, rx: r * (0.8 + 0.5 * crand()), rz: r * (0.7 + 0.5 * crand()), depth: 0.1 + crand() * 0.14, rot: crand() * Math.PI });
   }
 }
+// ------------------------------------------------------------------ dimples: a thin random field of hollows and humps
+// A jittered grid of cells across the flat: most cells get a shallow hollow (5–20 cm deep, 6–18 m across, a little
+// elongated), the rest a low hump. The hollows keep water when the tide leaves, so there is a wadeable pool within a
+// short walk at any tide, and the flat reads as gently uneven rather than a plane.
+const DIMPLE_CELL = 18;
+function dhash(i, j, k) {
+  let n = (Math.imul(i | 0, 374761393) ^ Math.imul(j | 0, 668265263) ^ Math.imul(k | 0, 2246822519) ^ SEED) >>> 0;
+  n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+}
+function dimples(x, z) {
+  const ci = Math.floor(x / DIMPLE_CELL), cj = Math.floor(z / DIMPLE_CELL);
+  let h = 0;
+  for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+    const i = ci + di, j = cj + dj;
+    const cx = (i + 0.1 + 0.8 * dhash(i, j, 1)) * DIMPLE_CELL, cz = (j + 0.1 + 0.8 * dhash(i, j, 2)) * DIMPLE_CELL;
+    const hollow = dhash(i, j, 3) < 0.7;
+    const rx = 3 + 6 * dhash(i, j, 4), rz = rx * (0.6 + 0.6 * dhash(i, j, 5)), rot = dhash(i, j, 6) * Math.PI;
+    const amp = hollow ? -(0.05 + 0.15 * dhash(i, j, 7)) : 0.02 + 0.04 * dhash(i, j, 7);
+    const ux = (x - cx) * Math.cos(rot) - (z - cz) * Math.sin(rot), uz = (x - cx) * Math.sin(rot) + (z - cz) * Math.cos(rot);
+    const q = (ux / rx) ** 2 + (uz / rz) ** 2;
+    if (q > 6) continue;
+    // a flat-bottomed bowl: the floor is level enough to stand in, the rim comes up in the outer third
+    h += amp * (1 - smooth(0.4, 1.0, Math.sqrt(q)));
+  }
+  // fades on the sea bed (the pools matter where the tide leaves) and above the berm
+  return h * (1 - 0.6 * smooth(80, 150, z)) * smooth(-120, -105, z);
+}
+
 // random relief (the Minecraft-like part): seeded, domain-warped gradient noise at four scales plus ridged sand waves.
 // Amplitudes are tidal-flat sized (tens of centimetres), so the flat keeps sloping to the sea but gets hummocks, hollows
 // that hold water, and low bars that break the plane.
-const RELIEF = { macro: [120, 0.3], meso: [40, 0.14], fine: [11, 0.045], micro: [4.5, 0.016], ridge: [21, 0.06] };
+const RELIEF = { macro: [120, 0.16], meso: [40, 0.09], fine: [11, 0.04], micro: [4.5, 0.014], ridge: [21, 0.05] };
 function relief(x, z) {
   const [wx, wz] = warp(x, z, 90, 18);
   let h = RELIEF.macro[1] * gfbm(wx / RELIEF.macro[0], wz / RELIEF.macro[0], 3);
@@ -198,7 +227,8 @@ function height(x, z) {
   h += relief(x, z) * intertidal;
   const ck = creekAt(x, z);
   // the banks: the flat rises away from the creeks (a low dome between them), then the creek cuts in
-  h += 0.14 * smooth(0, DOME_R, ck.dist) * intertidal * (1 - 0.6 * smooth(70, 150, z));
+  h += 0.09 * smooth(0, DOME_R, ck.dist) * intertidal * (1 - 0.6 * smooth(70, 150, z));
+  h += dimples(x, z) * intertidal;
   for (const p of POOLS) {
     const rx = (x - p.cx) * Math.cos(p.rot) - (z - p.cz) * Math.sin(p.rot), rz = (x - p.cx) * Math.sin(p.rot) + (z - p.cz) * Math.cos(p.rot);
     const dx = rx / p.rx, dz = rz / p.rz;
@@ -238,7 +268,7 @@ function mudness(x, z, h, rel, slope) {
 
 function substrate(x, z, h, m) {
   const ch = channel(x, z);
-  if (ch && ch.weight > 0.5 && ch.depth > 0.12) return idx.channel;
+  if (ch && ch.weight > 0.5 && ch.depth > 0.07) return idx.channel;
   const n2 = fbm(x / 12 + 50, z / 12 - 20, 3);
   if (h > 0.9 && n2 > 0.5) return idx.gravel;
   if (m > 0.66) return idx.mud;

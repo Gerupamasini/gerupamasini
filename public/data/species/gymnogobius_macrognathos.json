@@ -151,7 +151,12 @@
   },
   "capture": {
     "tools": [
-      "hand_net"
+      "net_small",
+      "net_shallow",
+      "net_fine",
+      "net_deep",
+      "net_dframe",
+      "net_carbon"
     ],
     "baseDifficulty": 0.45,
     "alertPenalty": 0.4

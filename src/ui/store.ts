@@ -62,7 +62,7 @@ export const ui = {
     caseCount: 0, caseMax: 6, prompt: null, tooDeep: false, research: 0, money: 0, tod: 'day', season: 'autumn', fps: 0, pointerLocked: false,
   }),
   toasts: signal<Toast[]>([]),
-  tool: signal<ToolId>('hand_net'),
+  tool: signal<ToolId>('net_small'),
   /** a short dark curtain with a word on it while screens change (null = none) */
   transition: signal<string | null>(null),
   /** a newer deploy than the one running (see Build.checkForNewBuild) */

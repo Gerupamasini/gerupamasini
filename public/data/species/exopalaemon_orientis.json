@@ -49,7 +49,7 @@
     }
   ],
   "brain": { "tree": "shrimp_shallow", "params": { "fleeDistance_m": 1.0, "restMean_s": 8 } },
-  "capture": { "tools": ["hand_net"], "baseDifficulty": 0.35, "alertPenalty": 0.5 },
+  "capture": { "tools": ["net_small", "net_shallow", "net_fine", "net_deep", "net_dframe", "net_carbon"], "baseDifficulty": 0.35, "alertPenalty": 0.5 },
   "encyclopedia": {
     "description": "河口や内湾の浅い砂泥底にすむ小型のエビ。体は半透明で白っぽく、昼は底近くでじっとしていることが多い。夜になると浅場へ出て活発に餌を探す。驚くと尾扇を強く打って後方へ跳ぶ。",
     "habitatHint": "浅い水中や潮だまり。夜の水際に多い。",

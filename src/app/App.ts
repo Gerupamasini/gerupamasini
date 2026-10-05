@@ -5,7 +5,7 @@ import { Input } from '../core/Input';
 import { GameClock, TICKET_RANGE_DAYS } from '../core/GameClock';
 import { loadSettings, saveSettings, type SettingsData } from '../core/Settings';
 import { formatJst } from '../core/Time';
-import { SaveStore, emptySave, type SaveV1 } from '../core/Save';
+import { SaveStore, emptySave, type SaveV1, DEFAULT_NET } from '../core/Save';
 import { loadGameData, type GameData } from '../data/loader';
 import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
@@ -13,7 +13,7 @@ import { World } from './World';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
-import { NetView, NET_LAYER, REACH } from '../player/NetView';
+import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
 import { ShovelView } from '../player/ShovelView';
 import { ClamField } from '../world/ClamField';
 import { generateIndividual } from '../creatures/Individual';
@@ -292,6 +292,8 @@ export class App {
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
       this.net = new NetView(this.world.scene);
+      void this.net.setTool(this.netDef() ?? null);
+      for (const id of this.encyclopedia.loadout.value) preloadNet(this.data.tools.get(id));
       this.shovel = new ShovelView(this.world.scene);
       this.fieldCase = new FieldCase();
       this.world.scene.add(this.fieldCase.group);
@@ -538,13 +540,13 @@ export class App {
     const cur = this.toolDef();
     if (cur?.type === 'capture') return cur;
     const id = this.encyclopedia.loadout.value.find((x) => this.toolType(x) === 'capture');
-    return id ? this.toolDef(id) : this.data.tools.get('hand_net');
+    return id ? this.toolDef(id) : this.data.tools.get(DEFAULT_NET);
   }
 
   /** The tools carried are on the number keys in loadout order; the hand starts on the first. */
   syncLoadout(): void {
     const carried = this.encyclopedia.loadout.value;
-    if (!carried.includes(ui.tool.value)) this.setTool(carried[0] ?? 'hand_net', true);
+    if (!carried.includes(ui.tool.value)) this.setTool(carried[0] ?? DEFAULT_NET, true);
   }
 
   /** debug: CR by hand */
@@ -575,6 +577,7 @@ export class App {
     const type = this.toolType(id);
     this.net?.setHeld(type === 'capture');
     this.shovel?.setHeld(type === 'dig');
+    if (type === 'capture') void this.net?.setTool(this.data.tools.get(id) ?? null);
   }
 
   /** [E] on the flat: use the tool in hand where the player is looking. */
@@ -878,6 +881,24 @@ export class App {
     this.camera.updateProjectionMatrix();
     this.fieldCase?.takeUp();
     this.setMode('field');
+    // straight back into the walk: the key or the click that closed the case is the gesture the lock needs
+    this.focusGame();
+  }
+
+  /** The keys turn and close in on the case too (A/D around it, W/S nearer and further), for when the mouse will not. */
+  private caseKeys(dt: number): void {
+    const c = this.caseControls, i = this.input;
+    if (!c) return;
+    const orbit = (i.held('right') ? 1 : 0) - (i.held('left') ? 1 : 0);
+    const dolly = (i.held('forward') ? 1 : 0) - (i.held('back') ? 1 : 0);
+    if (orbit === 0 && dolly === 0) { c.update(); return; }
+    const off = this.tmp2.copy(this.camera.position).sub(c.target);
+    const r = Math.max(c.minDistance, Math.min(c.maxDistance, off.length() * Math.exp(-dolly * 1.2 * dt)));
+    const ang = Math.atan2(off.x, off.z) - orbit * 1.6 * dt;
+    const horiz = Math.hypot(off.x, off.z) / Math.max(1e-6, off.length()) * r;
+    off.set(Math.sin(ang) * horiz, (off.y / Math.max(1e-6, off.length())) * r, Math.cos(ang) * horiz);
+    this.camera.position.copy(c.target).add(off);
+    c.update();
   }
 
   async tankRelease(rec: IndividualRecord): Promise<void> {
@@ -1040,6 +1061,19 @@ export class App {
 
   private frame(now: number): void {
     this.raf = requestAnimationFrame((n) => this.frame(n));
+    try {
+      this.step(now);
+    } catch (e) {
+      // a frame that throws must not stop the game: say so once, keep going
+      if (this.frameErrors++ < 3) console.error('[frame]', e);
+      if (this.frameErrors === 1) toast(t('warn.frameError'), 'warn', 8000);
+      this.lastFrame = now;
+    }
+  }
+
+  private frameErrors = 0;
+
+  private step(now: number): void {
     const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
     this.frameCount++;
@@ -1068,7 +1102,7 @@ export class App {
       case 'caseView':
         if (this.input.pressed('caseView') || this.input.pressed('menu')) this.closeCase();
         else if (this.input.pressed('zukan')) this.openOverlay('zukan');
-        else this.caseControls?.update();
+        else this.caseKeys(dt);
         break;
       case 'observe':
         if (this.input.pressed('observe') || this.input.pressed('menu')) this.exitObserve();

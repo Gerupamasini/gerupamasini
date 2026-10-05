@@ -1,6 +1,6 @@
 import type { World } from '../../app/World';
 
-export const SUB_COLORS = ['#cdbb8e', '#a1906a', '#6e6a4c', '#aaa294', '#56604f'];
+export const SUB_COLORS = ['#9a8f7b', '#746a5a', '#4e4a40', '#847f74', '#3e4542'];
 const SHORE = [0x6b, 0x84, 0x45], BEACH = [0xd8, 0xc7, 0x9d], ALGAE = [0x7a, 0x84, 0x4e];
 
 /** Substrate colours shaded by height, one pixel per terrain cell. */

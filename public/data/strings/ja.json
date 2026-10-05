@@ -201,7 +201,7 @@
   "toast.bought": "購入",
   "case.title": "観察ケース",
   "case.empty": "観察ケースは空です。タモやスコップでとった生物がここに入ります。",
-  "case.hint": "ドラッグで回転 ・ ホイールで接近 ・ Q / Esc で戻る",
+  "case.hint": "ドラッグか A / D で回転 ・ ホイールか W / S で接近 ・ Q / Esc / 戻る で閉じる",
   "hud.tooFar": "遠すぎます",
   "spots.eyebrow": "干潟へ",
   "spots.title": "どこへ行く？",
@@ -241,5 +241,6 @@
   "ticket.outOfRange": "再現できるのは今日の前後3日までです。",
   "ticket.durationLabel": "再現時間",
   "ticket.duration": "30分間",
-  "ticket.no": "やめる"
+  "ticket.no": "やめる",
+  "warn.frameError": "処理中にエラーが起きました。続行しますが、おかしければ F12 の Console を見てください。"
 }

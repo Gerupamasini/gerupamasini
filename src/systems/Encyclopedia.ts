@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals';
+import { DEFAULT_NET, migrateTools } from '../core/Save';
 import type { GameData } from '../data/loader';
 import type { SpeciesDef } from '../data/schemas';
 import type { Individual, IndividualRecord } from '../creatures/Individual';
@@ -54,8 +55,8 @@ export class Encyclopedia {
   /** catches made with each tool: the hand grows surer with use */
   readonly skills = signal<Record<string, number>>({});
   /** tools owned, and the (at most two) carried to the flat in key order */
-  readonly owned = signal<string[]>(['hand_net', 'shovel']);
-  readonly loadout = signal<string[]>(['hand_net', 'shovel']);
+  readonly owned = signal<string[]>([DEFAULT_NET, 'shovel']);
+  readonly loadout = signal<string[]>([DEFAULT_NET, 'shovel']);
   private levelClaimed = 1;
   stats = { captures: 0, observations: 0 };
   /** called after any change worth saving */
@@ -251,9 +252,9 @@ export class Encyclopedia {
     this.caseItems.value = [...s.case];
     this.tankItems.value = [...s.tank.individuals];
     this.skills.value = { ...(s.player.skills ?? {}) };
-    this.owned.value = [...new Set(['hand_net', 'shovel', ...s.player.tools])];
-    const loadout = (s.player.loadout ?? ['hand_net', 'shovel']).filter((id) => this.owned.value.includes(id)).slice(0, LOADOUT_MAX);
-    this.loadout.value = loadout.length ? loadout : ['hand_net'];
+    this.owned.value = [...new Set([DEFAULT_NET, 'shovel', ...migrateTools(s.player.tools)])];
+    const loadout = migrateTools(s.player.loadout ?? [DEFAULT_NET, 'shovel']).filter((id) => this.owned.value.includes(id)).slice(0, LOADOUT_MAX);
+    this.loadout.value = loadout.length ? loadout : [DEFAULT_NET];
     this.levelClaimed = s.player.levelClaimed ?? 1;
     this.stats = { captures: s.stats.captures, observations: s.stats.observations };
   }
