@@ -11,7 +11,7 @@ const yc = (s) => section(s).yc;
 const at = (s) => [s, yc(s), 0];
 const mirror = (p) => [p[0], p[1], -p[2]];
 // the lower jaw hinges well behind the visible mouth corner (the quadrate lies under the eye)
-export const JAW_HINGE = [5.6, 1.55, 0];
+export const JAW_HINGE = [6.5, 1.5, 0];
 
 export const JOINTS = [
   { name: 'J_root', parent: null, at: at(17.0) },

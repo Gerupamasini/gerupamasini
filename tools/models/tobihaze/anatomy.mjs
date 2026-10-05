@@ -37,17 +37,18 @@ export const uvT = (s) => (s <= UV_CAP ? Math.sqrt(Math.max(0, s) / UV_A) : UV_T
 // Profile key points (pre-cap dimensions, mm)
 const KS = [0, 0.3, 0.7, 1.2, 1.8, 2.6, 3.6, 4.8, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 63, 64.5, 66];
 // Profiles measured on lateral photographs of live and preserved adults (TL 80 mm; snout tip 4 mm up, blunt and
-// rounded; the forehead climbs steeply to the eyes; deepest at the first dorsal fin, ~15 % TL; the belly a little
-// below the throat; a long, low caudal peduncle):
+// rounded at the upper lip; above it the face recedes at ~35° from the vertical up to the eyes, which sit about half
+// a head length back (photographs overlaid on the model); deepest at the first dorsal fin, ~15 % TL; the belly a
+// little below the throat; a long, low caudal peduncle):
 // dorsal profile (without the eyes)
-const KTOP = [4.6, 5.9, 6.9, 7.7, 8.3, 8.85, 9.25, 9.55, 9.85, 10.3, 10.6, 10.8, 10.95, 11.05, 11.15, 11.25, 11.4, 11.4, 11.2, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
+const KTOP = [4.35, 4.6, 4.95, 5.4, 5.95, 6.65, 7.45, 8.15, 8.75, 9.35, 9.4, 9.5, 9.6, 9.75, 9.95, 10.2, 10.7, 11.2, 11.1, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
 // ventral profile: under the snout tip the fleshy upper lip, the lower jaw and the throat curving down to the chest;
 // the belly sags a little below the chest, the tail's lower edge rises to the peduncle
-const KBOT = [3.3, 2.7, 2.15, 1.75, 1.4, 1.1, 0.85, 0.62, 0.44, 0.22, 0.08, 0.0, 0.0, 0.0, 0.0, -0.3, -0.55, -0.6, -0.4, -0.1, 0.25, 0.65, 1.05, 1.4, 1.7, 1.95, 2.1, 2.15, 2.2];
+const KBOT = [3.3, 2.9, 2.5, 2.05, 1.6, 1.15, 0.65, 0.2, -0.05, -0.3, -0.45, -0.5, -0.5, -0.45, -0.42, -0.5, -0.6, -0.6, -0.4, -0.1, 0.25, 0.65, 1.05, 1.4, 1.7, 1.95, 2.1, 2.15, 2.2];
 // half width: the snout is a rounded bulb about as tall as it is wide (head-on it stands out from the face, in
 // three-quarter view it overhangs the mouth), so the mouth is about half as wide as the face; behind it the face
 // swells to broad, full cheeks (head ~1.05 × as wide as deep); a stout trunk tapering to the peduncle
-const KW = [2.2, 2.45, 2.7, 2.9, 3.1, 3.35, 3.7, 4.25, 4.85, 5.35, 5.6, 5.65, 5.55, 5.4, 5.25, 5.4, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
+const KW = [2.2, 2.2, 2.35, 2.55, 2.8, 3.1, 3.5, 4.1, 5, 5.6, 5.95, 6.05, 5.95, 5.75, 5.55, 5.55, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
 // superellipse exponents (top / bottom): a rounded muzzle; head-on the head is bell-shaped, rounded and narrowing up
 // to the eyes over a full, flat-bottomed face (photographs of the face head-on); round trunk, oval tail
 const KNT = [2.0, 2.0, 2.0, 2.0, 2.0, 2.05, 2.1, 2.15, 2.15, 2.1, 2.05, 2.05, 2.05, 2.05, 2.1, 2.15, 2.15, 2.1, 2.1, 2.05, 2.05, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
@@ -196,54 +197,55 @@ export function surfaceAt(s, y) {
 }
 
 // ---------------------------------------------------------------------------
-// Eyes. Each eyeball sits in a fleshy socket on top of the head; the two sockets almost touch over the narrow
-// interorbital. Eyeball Ø 3.5 mm, centre 6.4 mm behind the snout, nested in the head's upper profile with its upper
-// half standing above it (it can be raised further, and pulled right down into the orbit). Seen from the side
-// and from the front the big pupil faces the camera: the optical axis points forward, outward and a little up
-// (Ø, positions and the axis read from lateral and frontal close-ups of live animals).
+// Eyes. Each eyeball sits on top of the head, about half a head length behind the snout tip (the forehead slopes down
+// in front of it to the blunt snout); the two almost touch over the narrow interorbital. Eyeball Ø 3.5 mm, its centre
+// at the height of the dorsal profile behind it, so its upper half stands above the head (it can be raised further,
+// and pulled right down into the orbit). Positions read from lateral close-ups of live animals.
 // Retraction ("blinking", Aiello et al. 2023 PNAS): the eyeball sinks ~2.4 mm into the orbit and the dermal cup
 // closes over it.
 export const EYE = {
-  center: [6.4, 10.45, 2.1],
+  center: [7.6, 10.15, 2.05],
   radius: 1.75,
   // the eyes look out to the side, a little forward (~19°) and up (~14°): photographed from the side the pupil
-  // faces the camera, head-on the dark eye shows on the outer front of each dome
+  // faces the camera, head-on the dark eye shows on the outer front of each globe
   axis: norm3([-0.32, 0.24, 0.92]),
   retract: 2.3,
 };
-// at rest the globe looks a little above the window's axis (the pupil sits just above the window's middle)
+// at rest the globe looks a little above the optical axis' rest direction
 {
   const fr = eyeFrame(EYE.axis), k = (4 * Math.PI) / 180;
   EYE.gaze = norm3(EYE.axis.map((x, i) => x * Math.cos(k) + fr.v[i] * Math.sin(k)));
 }
-// dermal cup: skin over the eyeball everywhere except a large window around the optical axis, so the globe shows
-// as a big, slightly wide oval on the outer front of a rounded dome (half-angles ~58° fore and aft, ~44° up and
-// down; photographs: most of the eye's lateral face is the dark eye, the skin wraps its lower and rear part, pinkish
-// under it); the two domes meet over the narrow interorbital. Solid (no cavity): the eyeball mesh fills the window,
-// and a retracting eye simply sinks under it.
-export const CUP = { skin: 0.06, halfH: (58 * Math.PI) / 180, halfV: (44 * Math.PI) / 180 };
+// dermal cup: a skin cup holds the lower part of each eyeball (down, in and a little back: half-angle ~72° about
+// that direction), so the globe's whole upper and outer face is bare - its lid margin runs ~40° below the eye's
+// equator at the side, just under the iris; below the margin the cup narrows a little into a short fleshy neck that
+// rises out of the head with a small fillet (lateral photographs). Solid (no cavity): the eyeball mesh fills the
+// rest, and a retracting eye simply sinks into it.
+export const CUP = { skin: 0.07, cover: (72 * Math.PI) / 180, down: [0.1, -1, -0.45] };
 /** window frame of an eye: the axis, a horizontal tangent and the vertical one (fish space) */
 export function eyeFrame(a) {
   const h = norm3([a[2], 0, -a[0]]); // horizontal, perpendicular to the axis
   const v = [a[1] * h[2] - a[2] * h[1], a[2] * h[0] - a[0] * h[2], a[0] * h[1] - a[1] * h[0]];
   return { a, h, v: v[1] < 0 ? v.map((x) => -x) : v };
 }
-/** > 0 inside the (elliptical) window of the cup, < 0 where the skin covers the globe; ~mm near the rim */
-export function windowField(o, fr) {
-  const w = o[0] * fr.a[0] + o[1] * fr.a[1] + o[2] * fr.a[2];
-  const u = o[0] * fr.h[0] + o[1] * fr.h[1] + o[2] * fr.h[2];
-  const v = o[0] * fr.v[0] + o[1] * fr.v[1] + o[2] * fr.v[2];
-  // angular radius in the ellipse's metric, 1 on the rim
-  const k = Math.hypot(Math.atan2(u, w) / CUP.halfH, Math.atan2(v, w) / CUP.halfV);
-  return (1 - k) * EYE.radius * CUP.halfV;
+/** the cup's axis for an eye on the side sg (+1 left): down, medial and a little back */
+export const cupDown = (sg) => norm3([CUP.down[0], CUP.down[1], CUP.down[2] * sg]);
+/** signed angle (rad) of the direction o (from the eye's centre) from the cup's lid margin: > 0 bare globe, < 0 cup */
+export function windowAngle(o, D) {
+  const l = Math.hypot(o[0], o[1], o[2]) || 1;
+  return Math.acos(clamp((o[0] * D[0] + o[1] * D[1] + o[2] * D[2]) / l, -1, 1)) - CUP.cover;
+}
+/** > 0 where the globe is bare, < 0 where the cup covers it; ~mm near the margin */
+export function windowField(o, D) {
+  return windowAngle(o, D) * EYE.radius;
 }
 
 // Gape (where the lips meet), side view on the +z side: from the front midline under the snout back to the mouth
 // corner. A small mouth at the front of the muzzle, under the overhanging snout and its thick upper lip; head-on it
 // is a short arch with the corners turned down (~60 % of the face's width); the jaw itself reaches back under the
 // eye, where the posterior lobe of the upper lip lies over it as a pale pad behind the corner.
-export const MOUTH = [[0.85, 2.95], [1.3, 2.88], [1.8, 2.72], [2.3, 2.48], [2.75, 2.2], [3.15, 1.92]];
-export const RICTUS_S = 3.15;
+export const MOUTH = [[0.85, 2.95], [1.5, 2.86], [2.2, 2.66], [2.9, 2.36], [3.55, 1.98], [4.15, 1.55]];
+export const RICTUS_S = 4.15;
 // gill-cover margin (a groove: goby gill openings are small, ventrolateral) and the preopercle, top → bottom
 export const OPERCLE = [[13.8, 8.6], [15.0, 7.3], [15.8, 5.7], [16.0, 4.2], [15.6, 2.7], [14.6, 1.3], [13.6, 0.5]];
 export const PREOPERCLE = [[10.4, 8.8], [11.2, 7.0], [11.5, 5.0], [11.2, 3.0], [10.2, 1.4]];
@@ -324,12 +326,12 @@ function buildFeatures() {
   // gill slit: the free edge of the cover in front of the pectoral base (short, ventrolateral)
   const slit = capsuleChain(onSurface([[16.0, 4.9], [16.2, 3.9], [15.8, 2.6]], 0.0), [0.06, 0.12, 0.05]);
   const E = EYE;
-  const eyeL = { c: E.center, a: E.axis, fr: eyeFrame(E.axis) };
+  const eyeL = { c: E.center, a: E.axis, fr: eyeFrame(E.axis), D: cupDown(1) };
   const aR = [E.axis[0], E.axis[1], -E.axis[2]];
-  const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], a: aR, fr: eyeFrame(aR) };
+  const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], a: aR, fr: eyeFrame(aR), D: cupDown(-1) };
   // the posterior lobe of the upper lip: an oval pad on each side just behind the mouth corner (pale, studded with
   // sensory pores)
-  const lp = surfaceAt(4.5, 2.15);
+  const lp = surfaceAt(5.45, 1.95);
   const lipPad = { c: lp.p, n: lp.n };
   return {
     gapeLine: gx, gapeU, gapeLen,
@@ -343,7 +345,7 @@ function buildFeatures() {
     pelvicBase: [20.6, 0.3, 0],
     papilla: [36.4, botY(36.4) + 0.02, 0],
     nape: [17.5, topY(17.5) - 0.4, 0],
-    interorb: [7.4, EYE.center[1] + 0.2, 0],
+    interorb: [8.4, EYE.center[1] + 0.2, 0],
     nostril: [1.6, 5.4, 2.6],
   };
 }
@@ -378,7 +380,7 @@ function lipRelief(p) {
   // (a shallow notch in the middle of the upper lip)
   const notch = 1 - 0.08 * Math.exp(-((p[2] / 0.8) ** 2));
   const up = g.dy > -0.05 ? (0.27 - 0.1 * g.u) * notch * Math.exp(-(((g.d - 0.6) / 0.55) ** 2)) : 0;
-  const lo = g.dy < 0.05 ? (0.17 - 0.05 * g.u) * Math.exp(-(((g.d - 0.35) / 0.32) ** 2)) : 0;
+  const lo = g.dy < 0.05 ? (0.11 - 0.04 * g.u) * Math.exp(-(((g.d - 0.3) / 0.3) ** 2)) : 0;
   const crease = 0.07 * Math.exp(-((g.d / 0.11) ** 2));
   let r = (up + lo) * fade - crease * fade;
   // the lip pad: a plump, glossy oval cushion (~4 × 2.7 mm) standing out of the cheek at the mouth's corner
@@ -412,20 +414,19 @@ export function field(s, y, z, opts = null) {
   }
   // eye domes (meshed separately from the body loft, see body.mjs buildDomes): the cup, cut open around the axis;
   // blinking, the eye sinks and the cup closes into a lower dome
-  if (opts?.dome && s < 12) F.eyes.forEach((e, i) => {
+  if (opts?.dome && s < 13.5) F.eyes.forEach((e, i) => {
     const R = EYE.radius + CUP.skin;
     const ox = p[0] - e.c[0], oy = p[1] - e.c[1], oz = p[2] - e.c[2];
     const shut = (i === 0 ? opts?.cupL : opts?.cupR) === false || opts?.cup === false;
     let cup;
     if (shut) cup = Math.hypot(ox + 0.15, oy + 1.15, oz + 0.1 * Math.sign(e.c[2])) - (R - 0.1);
-    // (the margin of the window rolls over like a thick lid's edge)
-    else cup = smax(Math.hypot(ox, oy, oz) - R, windowField([ox, oy, oz], e.fr), 0.3);
-    // a fleshy base under each dome, so the ball rises out of the forehead with a modest fillet (not a cone)
+    // (the lid margin rolls over like a thick lid's edge)
+    else cup = smax(Math.hypot(ox, oy, oz) - R, windowField([ox, oy, oz], e.D), 0.22);
+    // the neck: a fleshy column under the globe, a little narrower than the cup, rising out of the head with a
+    // small fillet; the cup merges into it tightly, so the eye reads as a ball held in a cup on a short neck
     const sg = Math.sign(e.c[2]);
-    d = smin(d, ellipsoidDist(p, [e.c[0] + 0.2, e.c[1] - 1.5, e.c[2] - 0.1 * sg], [2.2, 1.05, 1.9]), 1.2);
-    d = smin(d, cup, 1.1);
-    // the lower lid: a thick fold of the cup under the window
-    if (!shut) d = smin(d, ellipsoidDist(p, [e.c[0] + 0.15, e.c[1] - 1.3, e.c[2] + 0.2 * sg], [1.8, 0.95, 1.7]), 0.5);
+    d = smin(d, ellipsoidDist(p, [e.c[0] + 0.15, e.c[1] - 1.35, e.c[2] - 0.2 * sg], [1.6, 1.4, 1.5]), 1.15);
+    d = smin(d, cup, 0.42);
   });
   // upper-lip pads
   // lips and the lip pad: smooth displacements of the surface along the gape line (no creases, no folds)
@@ -440,7 +441,7 @@ export function field(s, y, z, opts = null) {
   if (s > 35 && s < 38) d = smin(d, sphereDist(p, F.papilla, 0.42), 0.25);
 
   // --- subtractions
-  if (s > 3.5 && s < 11.5) d = smax(d, -ellipsoidDist(p, F.interorb, [3.0, 0.8, 0.32]), 0.35);
+  if (s > 4.5 && s < 12.5) d = smax(d, -ellipsoidDist(p, F.interorb, [3.0, 0.8, 0.32]), 0.35);
   // (no gill-cover grooves: in a live animal the cover's edge does not show through the skin; only the small gill
   // slit, low in front of the pectoral base)
   if (s > 15 && s < 17) d = smax(d, -capsuleChainDist(p, L ? F.slit : F.slitR), 0.05);

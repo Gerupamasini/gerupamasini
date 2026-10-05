@@ -13,8 +13,8 @@ export const PUPIL_H = 0.48, PUPIL_V = 0.29; // its half-angles fore-and-aft and
 export const RING_ANGLE = 0.035; // the copper pupillary margin
 export const IRIS_ANGLE = 0.8; // outer edge of the iris (limbus)
 export const CORNEA_BULGE = 0.06;
-/** the globe is meshed only as far as it can ever show (the window plus eye rotation and the rim) */
-export const CAP_ANGLE = 1.75;
+/** the globe is meshed as far as it can ever show (all but the part deep in the cup) */
+export const CAP_ANGLE = 2.9;
 
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
@@ -156,10 +156,11 @@ export function paintEye(size = 512) {
       const n = fbm3(ax * 3, sy * 3, theta * 3, 3, 613);
       const sp = smoothstep(0.58, 0.76, perlin3(ax * 16, sy * 16, theta * 16, 617) * 0.5 + 0.5);
       const fine = smoothstep(0.62, 0.8, perlin3(ax * 40, sy * 40, theta * 40, 619) * 0.5 + 0.5);
-      col = [112, 106, 92].map((c) => c * (1 + 0.14 * n));
-      col = col.map((c, i) => mix(c, [44, 40, 34][i], Math.max(sp * 0.6, fine * 0.45)));
-      col = col.map((c, i) => mix([46, 42, 34][i], c, g));
-      rough = 0.4;
+      // (as dark as the head's crown: olive-brown, translucent over the dark globe)
+      col = [80, 76, 64].map((c) => c * (1 + 0.14 * n));
+      col = col.map((c, i) => mix(c, [38, 35, 30][i], Math.max(sp * 0.6, fine * 0.45)));
+      col = col.map((c, i) => mix([40, 37, 30][i], c, g));
+      rough = 0.32;
     }
     for (let c = 0; c < 3; c++) rgb[k + c] = clamp(Math.round(col[c]), 0, 255);
     mr[k] = 0; mr[k + 1] = clamp(Math.round(rough * 255), 0, 255); mr[k + 2] = clamp(Math.round(metal * 255), 0, 255);

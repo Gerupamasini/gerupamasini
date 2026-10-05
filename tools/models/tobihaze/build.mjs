@@ -24,9 +24,9 @@ const args = process.argv.slice(2);
 const tierIdx = args.indexOf('--tier');
 const tierName = tierIdx >= 0 ? args[tierIdx + 1] : 'hero';
 const TIERS = {
-  hero: { NS: 420, NV: 232, tex: [2048, 1024], fin: 2048, finSub: 5, finNT: 28, iris: 1024, eye: [48, 64], dome: [84, 192], arm: [32, 28], mouth: true, finMask: false },
-  lod1: { NS: 200, NV: 112, tex: [1024, 512], fin: 1024, finSub: 3, finNT: 14, iris: 512, eye: [24, 32], dome: [52, 120], arm: [22, 18], mouth: true, finMask: false },
-  lod2: { NS: 56, NV: 30, tex: [512, 256], fin: 512, finSub: 1, finNT: 4, iris: 128, eye: [8, 10], dome: [10, 20], arm: [4, 6], mouth: false, finMask: true },
+  hero: { NS: 420, NV: 232, tex: [2048, 1024], fin: 2048, finSub: 5, finNT: 28, iris: 1024, eye: [72, 96], dome: [84, 192], arm: [32, 28], mouth: true, finMask: false },
+  lod1: { NS: 200, NV: 112, tex: [1024, 512], fin: 1024, finSub: 3, finNT: 14, iris: 512, eye: [40, 48], dome: [52, 120], arm: [22, 18], mouth: true, finMask: false },
+  lod2: { NS: 56, NV: 30, tex: [512, 256], fin: 512, finSub: 1, finNT: 4, iris: 128, eye: [14, 16], dome: [10, 20], arm: [4, 6], mouth: false, finMask: true },
 };
 const tier = TIERS[tierName];
 if (!tier) { console.error(`unknown tier ${tierName}`); process.exit(1); }

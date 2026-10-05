@@ -1,6 +1,6 @@
 // Skin mesh (head / trunk / tail), mouth interior and baked skin textures for the adult トビハゼ.
 import {
-  S_END, SL, BODY_U, ARM_U, DOME_U, EYE, CUP, MOUTH, RICTUS_S, FEAT, uvS, uvT,
+  S_END, SL, BODY_U, ARM_U, DOME_U, EYE, CUP, MOUTH, RICTUS_S, FEAT, uvS, uvT, windowAngle,
   section, basePoint, project, field, fieldGrad, toObject, dirToObject, gapeY, sideZ, normHeight, topY, botY, norm3,
 } from './anatomy.mjs';
 import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEachCell3 } from '../../lib/noise.mjs';
@@ -477,9 +477,7 @@ export function meridian(ps, shut) {
     const q = rayExit(fr.c, d, opts, prev.t);
     // (inside the window the exit drops onto the globe's hidden core, and just round it the rays skim the lid's
     // rolled margin: neither is the fillet)
-    const ew = FEAT.eyes[0].fr;
-    const kw = Math.hypot(Math.atan2(dot(d, ew.h), dot(d, ew.a)) / CUP.halfH, Math.atan2(dot(d, ew.v), dot(d, ew.a)) / CUP.halfV);
-    const outer = q.t > EYE.radius + 0.25 && kw > 1.8;
+    const outer = q.t > EYE.radius + 0.25 && windowAngle(d, FEAT.eyes[0].D) < -0.35;
     const graze = (outer && dot(d, q.n) < 0.42) || (prev.t > EYE.radius + 0.25 && q.t - prev.t > 0.25) || q.p[2] < 0.02;
     if (graze) break;
     thc = th; prev = q;
@@ -565,6 +563,14 @@ export function domePoint(fr, a, ps) {
   const M = meridianArc(ps, false);
   const { p: p0, th } = onArc(M, a);
   let n = fieldGrad(p0[0], p0[1], p0[2], DOME_OPTS);
+  // under the bare globe the hidden shell's normals point straight out from the eye's centre: they are those of the
+  // closed cup when a blink pulls the shell over the retracted eye (the morph moves positions, not normals)
+  {
+    const e = FEAT.eyes[0];
+    const o = sub(p0, e.c);
+    const k = smoothstep(0.0, 0.15, windowAngle(o, e.D));
+    if (k > 0) n = norm3(add(scl(n, 1 - k), scl(norm3(o), k)));
+  }
   // where the dome has merged into the head the two surfaces coincide: the dome's skirt runs on over the head's skin
   // (drawn over it with a depth offset, see the 'overlay' material) and its normals turn to the head's, so the dome's
   // edge lies on the head with nothing to show it but the texture, painted from the same 3D pattern
@@ -832,8 +838,8 @@ function skinPoint(s, phi, p, n, ao) {
     const up = dy > 0 ? smoothstep(1.3, 0.5, dy) * along : 0;
     const lo = dy <= 0 ? smoothstep(0.7, 0.2, -dy) * along : 0;
     col = lerp3(col, COL.lip, up * 0.55 * smoothstep(0.2, 1.4, s));
-    col = lerp3(col, COL.belly, lo * 0.6);
-    col = lerp3(col, COL.dark, smoothstep(0.32, 0.05, Math.abs(dy)) * along * 0.8);
+    col = lerp3(col, COL.belly, lo * 0.3);
+    col = lerp3(col, COL.dark, smoothstep(0.2, 0.03, Math.abs(dy)) * along * 0.6);
   }
   // upper-lip pads: pale, studded with dark sensory pores
   {
@@ -847,24 +853,22 @@ function skinPoint(s, phi, p, n, ao) {
   }
   // eye sockets: the cup's skin is paler and smoother toward the window; its margin (and the hidden skin inside the
   // window, which the rim's faces stretch over) a plain darker grey, without speckles
-  // round the window of each eye's cup (k: the window's elliptical angular radius, 1 on its rim): the margin is a
-  // plain dark band (and so is the hidden skin inside the window, which the rim's faces stretch over); just under
-  // the window the cup's skin is thin and unpigmented, pinkish (the blood under it shows)
+  // round each eye's cup (wa: angle from the lid margin, > 0 on the bare globe): the margin is a plain dark band; the
+  // skin under the globe (the shut lid in a blink) is the cup's thin, pinkish skin; the cup under the eye is thin,
+  // unpigmented skin, pinkish grey (the blood under it shows), fading into the head's pattern down the neck
   let lid = 0;
   for (const e of FEAT.eyes) {
     const o = [p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2]];
     const dE = Math.hypot(o[0], o[1], o[2]);
-    const fr = e.fr;
-    const w = o[0] * fr.a[0] + o[1] * fr.a[1] + o[2] * fr.a[2];
-    const u = o[0] * fr.h[0] + o[1] * fr.h[1] + o[2] * fr.h[2];
-    const v = o[0] * fr.v[0] + o[1] * fr.v[1] + o[2] * fr.v[2];
-    const k = Math.hypot(Math.atan2(u, w) / CUP.halfH, Math.atan2(v, w) / CUP.halfV);
-    const near = smoothstep(EYE.radius + 0.9, EYE.radius + 0.3, dE);
-    const rim = smoothstep(1.6, 1.08, k) * near;
-    col = lerp3(col, lerp3(col, COL.lip, 0.3), rim * 0.35);
-    const below = smoothstep(0.0, -0.45, Math.atan2(v, Math.hypot(u, w))) * smoothstep(2.4, 1.2, k) * near;
-    col = lerp3(col, C(170, 128, 120), below * 0.42);
-    lid = Math.max(lid, smoothstep(1.16, 1.0, k) * near);
+    const wa = windowAngle(o, e.D);
+    const near = smoothstep(EYE.radius + 1.0, EYE.radius + 0.3, dE);
+    const cupSkin = smoothstep(0.05, -0.1, wa) * smoothstep(-0.95, -0.45, wa) * near;
+    const below = smoothstep(0.35, -0.35, o[1] / Math.max(dE, 1e-3));
+    const outer = smoothstep(-0.2, 0.5, (o[2] * Math.sign(e.c[2])) / Math.max(dE, 1e-3));
+    col = lerp3(col, lerp3(col, C(150, 124, 116), 0.7), cupSkin * (0.12 + 0.6 * below * outer));
+    // (only a thin band at the margin: the skin under the globe becomes the lid when the cup closes in a blink)
+    lid = Math.max(lid, smoothstep(-0.12, 0.0, wa) * smoothstep(0.14, 0.05, wa) * near);
+    col = lerp3(col, lerp3(col, C(150, 124, 116), 0.6), smoothstep(0.05, 0.15, wa) * near * 0.6);
   }
   col = lerp3(col, C(62, 58, 50), lid * 0.85);
   // sand grains stuck in the mucus: tiny white specks, densest on the head, the turrets and the back

@@ -29,7 +29,7 @@ scene.add(sun, new AmbientLight(0xffffff, 0.05));
 const ground = new Mesh(new PlaneGeometry(2, 2), new MeshStandardMaterial({ color: 0x5c574b, roughness: 0.6 }));
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
-const camera = new PerspectiveCamera(30, innerWidth / innerHeight, 0.002, 20);
+const camera = new PerspectiveCamera(Number(q.get('fov') ?? 30), innerWidth / innerHeight, 0.002, 20);
 const controls = new OrbitControls(camera, canvas);
 const views: Record<string, [number, number, number]> = {
   side: [0.2, 0.02, 0.0], front: [0.0, 0.03, 0.2], top: [0.0, 0.22, 0.001], oblique: [0.12, 0.08, 0.12], rear: [-0.06, 0.07, -0.16],
@@ -54,7 +54,7 @@ const zoom = Number(q.get('zoom') ?? 1);
 camera.position.set(v[0] / zoom, v[1] / zoom, v[2] / zoom).add(target);
 controls.target.copy(target);
 controls.update();
-if (q.get('view') === 'belly' || q.get('view') === 'chin') ground.visible = false;
+if (q.get('view') === 'belly' || q.get('view') === 'chin' || q.get('noground')) ground.visible = false;
 
 const model = await instantiateModel(`tobihaze/tobihaze.${tier}.glb`);
 scene.add(model.root);
