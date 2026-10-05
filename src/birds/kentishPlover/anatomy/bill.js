@@ -256,7 +256,7 @@ const stations = (x0, x1, n, pow = 1.7) => Array.from({ length: n }, (_, i) => x
 const across = (n, a = -1, b = 1) => Array.from({ length: n }, (_, i) => a + ((b - a) * i) / (n - 1));
 
 export const BILL_LOD = [
-  { along: 76, aroundU: 48, aroundL: 32, lining: 9, web: [12, 4], throat: [7, 4], carve: true },
+  { along: 64, aroundU: 40, aroundL: 26, lining: 7, web: [10, 3], throat: [6, 3], carve: true },
   { along: 26, aroundU: 16, aroundL: 12, lining: 5, web: [4, 2], throat: [4, 2], carve: false },
   { along: 9, aroundU: 8, aroundL: 6, lining: 3, web: null, throat: null, carve: false },
 ];

@@ -1036,14 +1036,14 @@ export function createBarePartsMaterial(pal, detail = 0) {
           float kbGr = ${bandGLSL(BS.groove)} * kbUp;
           float kbNo = ${bandGLSL(BS.nostril)} * kbUp;
           float kbOp = ${bandGLSL(BS.operculum)} * kbUp;
-          float kbSlit = kbNo * kbG(kbAv, ${f1(BS.nostril.v)}, 0.045);
+          float kbSlit = kbNo * kbG(kbAv, ${f1(BS.nostril.v)}, 0.055);
           float kbGrL = kbGr * kbG(kbAv, ${f1(BS.groove.v)}, 0.05);
           float kbOpM = kbOp * kbG(kbAv, ${f1(BS.operculum.v)}, 0.075);
           // the nasal fossa: soft, duller, greyer-brown skin (operculum) round and above the slit — in the photos it
           // reads as a paler patch with the dark slit in it (user side photo, p022, p010)
           float kbFos = kbOp * smoothstep(0.5, 0.62, kbAv) * (1.0 - smoothstep(0.86, 0.93, kbAv));
           kbOpM = max(kbOpM, kbFos);
-          kbCol = mix(kbCol, kbCol * vec3(2.3, 2.1, 1.85) + vec3(0.004, 0.0035, 0.003), kbOpM * 0.75);
+          kbCol = mix(kbCol, kbCol * vec3(2.8, 2.55, 2.2) + vec3(0.007, 0.006, 0.005), kbOpM * 0.8);
           kbRough += 0.2 * kbOpM + 0.06 * kbGrL;
           kbAniso *= 1.0 - kbOpM;
           kbCol *= 1.0 - 0.3 * kbGrL;
@@ -1054,7 +1054,8 @@ export function createBarePartsMaterial(pal, detail = 0) {
           // relief for the normal (mm): slit, groove floor, operculum swelling, grain
           // (sky reflection: the scene lights the sky through a hemisphere light that has no specular; the glossy
           // keratin mirrors the sky, so its image-based specular is brought up to the sky's strength)
-          kbEnv = 2.6 * (1.0 - 0.55 * kbOpM) * (1.0 - smoothstep(0.2, 0.7, kbSlit));
+          kbEnv = 2.6 * (1.0 - 0.55 * kbOpM) * (1.0 - smoothstep(0.2, 0.7, kbSlit)) * mix(0.3, 1.0, smoothstep(0.0, 1.6, vBillF));
+          // (the face shades the keratin next to the feathering from the sky: less sky reflection there)
           kbH = (-0.09 * kbSlit - 0.03 * kbGrL + 0.035 * kbOp * kbG(kbAv, ${f1(BS.operculum.v)}, 0.075)) * kbFine + (kbStreak - 0.5) * 0.0025 * kbGrain;
           // Feather tips over the base (no hard seam where the keratin leaves the plumage): two staggered layers of
           // narrow, pointed feather tips ≈0.16 mm wide reaching 0.1–1 mm onto the keratin, the face colour round
@@ -1065,10 +1066,10 @@ export function createBarePartsMaterial(pal, detail = 0) {
             float kbCov = 0.0; float kbSh = 0.0;
             for (int kbL = 0; kbL < 2; kbL++) {
               float kbOff = float(kbL) * 0.5;
-              float kbC = floor(kbArc / 0.16 + kbOff);
-              float kbFa = fract(kbArc / 0.16 + kbOff) - 0.5;
+              float kbC = floor(kbArc / 0.2 + kbOff);
+              float kbFa = fract(kbArc / 0.2 + kbOff) - 0.5;
               float kbRh = kpHash(vec2(kbC, 3.0 + kbLower + 7.0 * float(kbL)));
-              float kbReach = (0.12 + 0.9 * kbRh * kbRh) * (kbL == 0 ? 1.0 : 0.7);
+              float kbReach = (0.1 + 0.6 * kbRh * kbRh) * (kbL == 0 ? 1.0 : 0.7);
               float kbShape = kbReach * (1.0 - 3.2 * kbFa * kbFa);
               kbCov = max(kbCov, 1.0 - smoothstep(kbShape - 0.05, kbShape + 0.05, vBillF));
               kbSh = max(kbSh, 1.0 - smoothstep(kbShape, kbShape + 0.3, vBillF));
