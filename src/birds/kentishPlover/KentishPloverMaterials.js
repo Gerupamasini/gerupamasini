@@ -286,15 +286,15 @@ vec3 kpPlumage(vec3 p, vec3 n, float jitter) {
     h = mix(h, uForehead, fore);
     h = mix(h, uFrontalBar, bar);
     // Eye mask (male black, brown in females / juveniles, S5, S7, S10):
-    // (the visible eye: cornea apex at (z 26.8, y 95.6), 5.3 mm across)
+    // (the visible eye: cornea apex at (x 10.1, z 27.3, y 95.6), 5.3 mm across)
     // lores: from the side of the bill base (z 39.8, y 90.6), thin there (1.7 mm) and widening into the front of
     // the eye (4.4 mm)
     // (3 mm deep at the bill base — the whole side of the bill base — widening to the eye's height, p012, p070)
     // (v2026-10 bill base: the side feather line runs back to the rictus at (z 37.7, y 90.3), anatomy/bill.js)
-    vec2 la = vec2(38.6, 90.9);
+    vec2 la = vec2(38.6, 90.4);
     vec2 lb = vec2(28.6, 95.4);
     float tl = clamp(dot(zy - la, lb - la) / dot(lb - la, lb - la), 0.0, 1.0);
-    float lore = 1.0 - smoothstep(-0.3, 0.3, length(zy - mix(la, lb, tl)) + ej - mix(1.1, 1.9, tl) * uMelanin * mix(0.5, 1.0, clamp((uHeadPat.y - 0.4) / 0.6, 0.0, 1.0)));
+    float lore = 1.0 - smoothstep(-0.3, 0.3, length(zy - mix(la, lb, tl)) + ej - mix(1.15, 2.1, tl) * uMelanin * mix(0.5, 1.0, clamp((uHeadPat.y - 0.4) / 0.6, 0.0, 1.0)));
     // (narrower where the loral stripe is pale: a thin brown line in females, p050)
     // (on the sides of the bill base only — over the culmen the two met as a moustache across the forehead)
     lore *= smoothstep(1.6, 2.7, ax) * smoothstep(0.03, 0.15, abs(n.x)) * uHeadPat.y;
