@@ -1,17 +1,20 @@
 // Eyeball mesh (local frame: +Z = optical axis, +X horizontal, +Y up; metres) and its baked textures.
-// Read from close-ups of live トビハゼ: the visible globe is mostly pupil — a big, horizontally oval, black pupil in
-// which the lens throws a green-blue glow — rimmed by a thin copper ring (the pupillary margin of the iris); the
-// rest of the iris is a narrow dark grey-brown band with bronze flecks. The ring is iridescent: copper in side
-// light, turquoise-blue when lit and seen head-on (structural colour), so it carries a thin-film layer
-// (KHR_materials_iridescence) and is partly metallic. A wet cornea (clearcoat) sits over everything.
+// Read from close-ups of live トビハゼ: only a window of the globe shows, on the outer side of each skin dome (the
+// dermal cup covers the rest; anatomy.mjs). In the window a large black pupil sits in an iris that is dark teal-green
+// with a structural, angle-dependent sheen — turquoise head-on, gold-green to copper in side light, rainbow at
+// grazing angles — and a thin gold margin round the pupil, under a wet, bulging cornea. The iris therefore carries a
+// thin-film layer (KHR_materials_iridescence) over a reflective bronze-olive base. The window is a horizontal oval
+// (the cup's upper and lower rims cover the top and bottom of the iris).
 import { EYE, dirToObject, norm3 } from './anatomy.mjs';
 import { perlin3, fbm3, clamp, mix, smoothstep } from '../../lib/noise.mjs';
 
-export const PUPIL_ANGLE = 0.6; // rad, mean half-angle from the axis
-export const PUPIL_ELONG = 0.15; // the pupil is wider than tall (×1.35)
-export const RING_ANGLE = 0.16; // angular width of the ring: a thin copper margin, then a turquoise band
-export const IRIS_ANGLE = 1.02; // outer edge of the iris (limbus)
-export const CORNEA_BULGE = 0.05;
+export const PUPIL_ANGLE = 0.32; // rad, mean half-angle from the axis
+export const PUPIL_ELONG = 0.1; // the pupil is a little wider than tall
+export const RING_ANGLE = 0.035; // the thin gold pupillary margin
+export const IRIS_ANGLE = 1.08; // outer edge of the iris (limbus), just beyond the fore and aft corners of the window (54°)
+export const CORNEA_BULGE = 0.06;
+/** the globe is meshed only as far as it can ever show (the window plus eye rotation and the rim) */
+export const CAP_ANGLE = 1.75;
 
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
@@ -31,7 +34,7 @@ export function buildEyeMesh(NT = 48, NP = 64) {
   const uv = new Float32Array(cols * rows * 2);
   const e = 1e-4;
   for (let j = 0; j < rows; j++) {
-    const theta = (j / NT) * Math.PI;
+    const theta = (j / NT) * CAP_ANGLE;
     for (let i = 0; i < cols; i++) {
       const psi = (i / NP) * Math.PI * 2;
       const idx = j * cols + i;
@@ -39,7 +42,6 @@ export function buildEyeMesh(NT = 48, NP = 64) {
       position.set(p, idx * 3);
       let n;
       if (j === 0) n = [0, 0, 1];
-      else if (j === NT) n = [0, 0, -1];
       else {
         const a = eyePoint(theta + e, psi), b = eyePoint(theta - e, psi), c = eyePoint(theta, psi + e), d = eyePoint(theta, psi - e);
         n = norm3(cross([a[0] - b[0], a[1] - b[1], a[2] - b[2]], [c[0] - d[0], c[1] - d[1], c[2] - d[2]]));
@@ -114,53 +116,46 @@ export function paintEye(size = 512) {
     const { theta, psi, tp, tr } = polar(x, y, size);
     const cx = Math.cos(psi), sy = Math.sin(psi);
     const k = (y * size + x) * 3;
-    let col, rough = 0.32, metal = 0, ir = 0.15, th = 0.5;
+    let col, rough = 0.3, metal = 0, ir = 0.2, th = 0.5;
     const grain = fbm3(cx * 9 * (theta + 0.2), sy * 9 * (theta + 0.2), theta * 4, 4, 701) * 0.5 + 0.5;
     if (theta < tp) {
-      // pupil: black; the lens glow — a mottled green-teal-blue patch above the centre
+      // pupil: black, a faint deep green-blue reflection of the lens in its upper half
       const q = theta / tp;
-      const up = Math.pow(clamp(0.5 + 0.6 * sy), 0.8);
-      const mot = smoothstep(0.35, 0.8, fbm3(cx * 3.2 * q + 5, sy * 3.2 * q, 1.3, 4, 709) * 0.5 + 0.5);
-      const glow = smoothstep(0.95, 0.25, q) * up * (0.35 + 0.65 * mot);
-      const hue = fbm3(cx * 2 * q, sy * 2 * q, 7.7, 3, 719) * 0.5 + 0.5;
-      const gc = [mix(14, 46, hue), mix(78, 104, hue), mix(96, 52, hue)];
-      col = [5, 6, 7].map((c, i) => mix(c, gc[i], glow * 0.8));
-      rough = 0.18;
-      ir = 0.55 + 0.35 * glow;
-      th = 0.35 + 0.4 * hue;
-    } else if (theta < tr) {
-      // the ring: a thin copper margin round the pupil, then the turquoise band (iridophores) that glows in
-      // frontal light, flecked, fading into the dark iris
-      const f = (theta - tp) / (tr - tp);
-      const fl = 0.75 + 0.35 * grain;
-      const copper = [204, 120, 58].map((c) => c * fl);
-      const teal = [44, 168, 160].map((c, i) => c * (0.8 + 0.3 * grain) * (1 - 0.35 * smoothstep(0.6, 1.0, f)));
-      col = copper.map((c, i) => mix(c, teal[i], smoothstep(0.12, 0.3, f)));
-      col = col.map((c, i) => mix(c, [240, 178, 108][i], smoothstep(0.1, 0.0, f) * 0.6));
-      col = col.map((c, i) => mix(c, [40, 36, 32][i], smoothstep(0.8, 1.0, f) * 0.7));
-      rough = mix(0.28, 0.22, smoothstep(0.12, 0.3, f));
-      metal = 0.55 * (1 - smoothstep(0.12, 0.3, f)) + 0.2;
-      ir = 1.0;
-      th = mix(0.5, 0.36, smoothstep(0.12, 0.3, f)) + 0.12 * grain;
+      const up = clamp(0.5 + 0.6 * sy);
+      const glow = smoothstep(1.0, 0.3, q) * up * (0.4 + 0.6 * smoothstep(0.35, 0.8, fbm3(cx * 3 * q + 5, sy * 3 * q, 1.3, 4, 709) * 0.5 + 0.5));
+      col = [4, 6, 7].map((c, i) => mix(c, [10, 40, 44][i], glow * 0.6));
+      rough = 0.15;
+      ir = 0.45 * glow;
+      th = 0.35;
     } else if (theta < IRIS_ANGLE) {
-      // the rest of the iris: dark grey-brown with radial striation and bronze flecks, darkest at the limbus
-      const f = (theta - tr) / (IRIS_ANGLE - tr);
-      const stri = 0.5 + 0.5 * Math.sin(psi * 70 + 4 * fbm3(cx * 2, sy * 2, f * 2, 3, 727));
-      const fleck = smoothstep(0.62, 0.82, perlin3(cx * 22 * (1 + f), sy * 22 * (1 + f), f * 9, 733) * 0.5 + 0.5);
-      col = [50, 43, 37].map((c) => c * (0.85 + 0.2 * stri) * (1 - 0.45 * smoothstep(0.55, 1.0, f)));
-      col = col.map((c, i) => mix(c, [150, 104, 60][i], fleck * 0.55 * (1 - f)));
-      rough = 0.34;
-      metal = 0.15 * fleck;
-      ir = 0.7 * (1 - 0.6 * f);
-      th = 0.55 + 0.3 * stri;
+      const f = (theta - tp) / (IRIS_ANGLE - tp);
+      // radial striation and fine reticulation of the iris stroma
+      const stri = 0.5 + 0.5 * Math.sin(psi * 58 + 4 * fbm3(cx * 2, sy * 2, f * 2, 3, 727));
+      const reti = smoothstep(0.55, 0.8, fbm3(cx * 6 * (1 + f), sy * 6 * (1 + f), f * 7, 4, 607) * 0.5 + 0.5);
+      const cloud = fbm3(cx * 2.5, sy * 2.5, f * 3, 3, 739) * 0.5 + 0.5;
+      // a reflective, bronze-olive iris (iridophores): the thin film over it turns it teal head-on and green-gold to
+      // copper toward grazing angles; brighter round the pupil, dusky toward the limbus
+      col = [mix(86, 50, f), mix(92, 58, f), mix(72, 48, f)].map((c) => c * (0.85 + 0.25 * stri) * (1 - 0.25 * reti) * (0.8 + 0.4 * cloud));
+      // gold flecks scattered through the iris
+      const fleck = smoothstep(0.64, 0.82, perlin3(cx * 18 * (1 + f), sy * 18 * (1 + f), f * 9, 733) * 0.5 + 0.5);
+      col = col.map((c, i) => mix(c, [184, 152, 84][i], fleck * 0.5));
+      // the thin gold pupillary margin
+      const rim = smoothstep(tr - tp + 0.01, 0.0, theta - tp);
+      col = col.map((c, i) => mix(c, [178, 140, 70][i] * (0.85 + 0.3 * grain), rim * 0.75));
+      // the limbus darkens under the rims of the cup
+      col = col.map((c) => c * (1 - 0.55 * smoothstep(0.7, 1.0, f)));
+      rough = 0.26 + 0.08 * reti;
+      metal = 0.5 + 0.15 * fleck + 0.1 * rim - 0.25 * smoothstep(0.75, 1.0, f);
+      ir = (0.85 - 0.4 * smoothstep(0.7, 1.0, f)) * (0.8 + 0.2 * stri);
+      th = 0.3 + 0.4 * cloud + 0.2 * f;
     } else {
-      // the globe beyond the limbus: dark, finely speckled; the part left uncovered by the socket reads near-black
+      // under the cup: skin-coloured, so a sliver showing at the rim reads as the cup's lid margin
       const n = fbm3(cx * 3, sy * 3, theta * 3, 3, 613);
-      const sp = smoothstep(0.6, 0.75, perlin3(cx * 14, sy * 14, theta * 14, 617) * 0.5 + 0.5);
-      col = [34, 30, 27].map((c, i) => mix(c * (1 + 0.15 * n), [18, 16, 14][i], sp * 0.6));
-      col = col.map((c, i) => mix(c, [70, 62, 52][i], smoothstep(1.45, 1.9, theta)));
-      rough = 0.36;
-      ir = 0.2;
+      const sp = smoothstep(0.62, 0.78, perlin3(cx * 14, sy * 14, theta * 14, 617) * 0.5 + 0.5);
+      col = [62, 60, 55].map((c, i) => mix(c * (1 + 0.12 * n), [34, 32, 30][i], sp * 0.5));
+      col = col.map((c, i) => mix(c, [118, 114, 106][i], smoothstep(IRIS_ANGLE + 0.08, IRIS_ANGLE + 0.4, theta)));
+      rough = 0.45;
+      ir = 0;
     }
     for (let c = 0; c < 3; c++) rgb[k + c] = clamp(Math.round(col[c]), 0, 255);
     mr[k] = 0; mr[k + 1] = clamp(Math.round(rough * 255), 0, 255); mr[k + 2] = clamp(Math.round(metal * 255), 0, 255);

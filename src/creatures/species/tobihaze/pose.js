@@ -80,7 +80,8 @@ export function computePose(p, rig = {}) {
   q.J_head = qmul(qY(p.bend.J_head), qX(-p.lift.J_head));
   q.J_root = qmul(qZ(p.roll), qmul(qY(-p.bend.J_root), qX(p.lift.J_root)));
   for (const n of SPINE.slice(2).map(([k]) => k)) q[n] = qmul(qY(-p.bend[n]), qX(p.lift[n]));
-  q.J_jaw = qX(p.jaw);
+  // the jaw drops at most ~34° (pose value 1 = wide open)
+  q.J_jaw = qX(p.jaw * 0.62);
   for (const [side, key, jn] of [[1, 'eyeL', 'J_eyeL'], [-1, 'eyeR', 'J_eyeR']]) {
     const e = p[key];
     q[jn] = qmul(qY(e.yaw), qX(-e.pitch));

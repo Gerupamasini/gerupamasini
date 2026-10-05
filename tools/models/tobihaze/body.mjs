@@ -1,6 +1,6 @@
 // Skin mesh (head / trunk / tail), mouth interior and baked skin textures for the adult トビハゼ.
 import {
-  S_END, SL, BODY_U, EYE, MOUTH, RICTUS_S, OPERCLE, PREOPERCLE, FEAT, uvS, uvT,
+  S_END, SL, BODY_U, ARM_U, DOME_U, EYE, CUP, MOUTH, RICTUS_S, FEAT, uvS, uvT,
   section, basePoint, project, field, fieldGrad, toObject, dirToObject, gapeY, sideZ, normHeight, topY, botY, norm3,
 } from './anatomy.mjs';
 import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEachCell3 } from '../../lib/noise.mjs';
@@ -9,6 +9,9 @@ const TAU = Math.PI * 2;
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const scl = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const DOME_OPTS = { dome: true };
 
 /** where the skin is split into the glTF parts (fish s, mm) */
 export const SPLIT = { head: 16.8, tail: 56.5 };
@@ -77,19 +80,23 @@ export function invPhi(s, y, z) {
 let UVMAP = null;
 function uvMap() {
   if (UVMAP) return UVMAP;
-  const N = 420, M = 96, R = 3;
+  const N = 420, M = 192, R = 3, RV = 2;
   const S = new Float64Array(N + 1);
   for (let i = 0; i <= N; i++) S[i] = Math.min(S_END - 0.002, Math.max(0.002, uvS(i / N)));
+  // the projected surface on a regular (s-row, phi-column) table
+  const P = [];
+  for (let i = 0; i <= N; i++) {
+    const row = [];
+    const q = section(S[i]);
+    for (let j = 0; j <= M; j++) row.push(j === M ? row[0] : project(basePoint(S[i], (j / M) * TAU, q)));
+    P.push(row);
+  }
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  // u: arc length down each column
   const raw = [], len = new Float64Array(M);
   for (let j = 0; j < M; j++) {
-    const phi = (j / M) * TAU;
     const T = new Float64Array(N + 1);
-    let prev = project(basePoint(S[0], phi));
-    for (let i = 1; i <= N; i++) {
-      const p = project(basePoint(S[i], phi));
-      T[i] = T[i - 1] + Math.hypot(p[0] - prev[0], p[1] - prev[1], p[2] - prev[2]);
-      prev = p;
-    }
+    for (let i = 1; i <= N; i++) T[i] = T[i - 1] + dist(P[i][j], P[i - 1][j]);
     len[j] = T[N];
     for (let i = 0; i <= N; i++) T[i] /= T[N];
     raw.push(T);
@@ -111,7 +118,33 @@ function uvMap() {
     L[j] /= wsum;
     T.push(t);
   }
-  UVMAP = { N, M, S, T, L };
+  // v: arc length around each row (the eye domes' walls and the lips get texels in proportion to their size),
+  // smoothed over neighbouring rows
+  const rawV = [], C = new Float64Array(N + 1);
+  for (let i = 0; i <= N; i++) {
+    const V = new Float64Array(M + 1);
+    for (let j = 1; j <= M; j++) V[j] = V[j - 1] + dist(P[i][j], P[i][j - 1]);
+    C[i] = V[M];
+    for (let j = 0; j <= M; j++) V[j] = V[M] > 1e-9 ? V[j] / V[M] : j / M;
+    rawV.push(V);
+  }
+  const V = [];
+  for (let i = 0; i <= N; i++) {
+    const v = new Float64Array(M + 1);
+    let wsum = 0;
+    for (let k = -RV; k <= RV; k++) {
+      const ii = Math.min(N, Math.max(0, i + k));
+      const w = Math.exp(-((k / (RV * 0.7)) ** 2));
+      for (let j = 0; j <= M; j++) v[j] += rawV[ii][j] * w;
+      wsum += w;
+    }
+    for (let j = 0; j <= M; j++) v[j] /= wsum;
+    // left-right symmetry: v(phi) + v(2π − phi) = 1
+    for (let j = 0; j <= M / 2; j++) { const a = 0.5 * (v[j] + 1 - v[M - j]); v[j] = a; v[M - j] = 1 - a; }
+    v[0] = 0; v[M] = 1;
+    V.push(v);
+  }
+  UVMAP = { N, M, S, T, L, V, C };
   return UVMAP;
 }
 function uvColumns(phi) {
@@ -143,6 +176,48 @@ export function uvSof(t, phi) {
   while (hi - lo > 1) { const m = (lo + hi) >> 1; if (at(m) > t) hi = m; else lo = m; }
   const f = (t - at(lo)) / Math.max(at(hi) - at(lo), 1e-12);
   return S[lo] + (S[hi] - S[lo]) * f;
+}
+/** the row table bracketing s */
+function uvRow(s) {
+  const { N, S } = uvMap();
+  if (s <= S[0]) return { lo: 0, hi: 0, f: 0 };
+  if (s >= S[N]) return { lo: N, hi: N, f: 0 };
+  let lo = 0, hi = N;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m] > s) hi = m; else lo = m; }
+  return { lo, hi, f: (s - S[lo]) / (S[hi] - S[lo]) };
+}
+/** texture v of the loft parameter (s, phi): normalised arc length around the row */
+export function uvVof(s, phi) {
+  const { M, V } = uvMap();
+  const { lo, hi, f } = uvRow(s);
+  const x = Math.min(1, Math.max(0, phi / TAU)) * M;
+  const j = Math.min(M - 1, Math.floor(x)), g = x - j;
+  const at = (i) => V[i][j] * (1 - g) + V[i][j + 1] * g;
+  return at(lo) * (1 - f) + at(hi) * f;
+}
+/** inverse of uvVof around the row at s */
+function uvPhiOfV(v, s) {
+  const { M, V } = uvMap();
+  const { lo, hi, f } = uvRow(s);
+  const at = (j) => V[lo][j] * (1 - f) + V[hi][j] * f;
+  if (v <= 0) return 0;
+  if (v >= 1) return TAU;
+  let a = 0, b = M;
+  while (b - a > 1) { const m = (a + b) >> 1; if (at(m) > v) b = m; else a = m; }
+  const g = (v - at(a)) / Math.max(at(b) - at(a), 1e-12);
+  return ((a + g) / M) * TAU;
+}
+/** (s, phi) of a texel (t, v) */
+export function uvInverse(t, v) {
+  let phi = v * TAU, s = uvSof(t, phi);
+  for (let k = 0; k < 4; k++) { phi = uvPhiOfV(v, s); s = uvSof(t, phi); }
+  return { s, phi };
+}
+/** circumference (mm) of the row at s */
+function uvRowArc(s) {
+  const { C } = uvMap();
+  const { lo, hi, f } = uvRow(s);
+  return C[lo] * (1 - f) + C[hi] * f;
 }
 /** arc length (mm) of the loft column at phi: the surface distance per unit t */
 function uvArc(phi) {
@@ -276,7 +351,7 @@ function vertexAttributes(list, flipCheck) {
     const tl = Math.hypot(...t) || 1;
     tangent.set([t[0] / tl, t[1] / tl, t[2] / tl, v.tw ?? 1], k * 4);
     uv[k * 2] = clamp(uvTof(v.s, v.phi), 0, 1) * BODY_U;
-    uv[k * 2 + 1] = v.phi / TAU;
+    uv[k * 2 + 1] = uvVof(v.s, v.phi);
   });
   return { position, normal, tangent, uv };
 }
@@ -328,6 +403,216 @@ export function skinTarget(part, opts, sMax = Infinity) {
   return d;
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Eye domes. The dermal cup round each eye is meshed on its own, from rays cast out of the eye's centre (the body
+// loft, cast from the body axis, would graze the dome's steep walls). Where a dome blends into the head its mesh
+// dips just under the loft's skin, so the two read as one surface; the texture is painted from the same 3D pattern.
+export const DOME = { thetaMax: 1.95, pole: norm3([0.1, 1.0, 0.3]), sink: 0.1 };
+
+function domeFrame(side) {
+  const e = FEAT.eyes[side > 0 ? 0 : 1];
+  const P = side > 0 ? DOME.pole : [DOME.pole[0], DOME.pole[1], -DOME.pole[2]];
+  const e1 = norm3(sub([1, 0, 0], scl(P, P[0])));
+  const e2 = scl(cross(P, e1), side);
+  return { c: e.c, P, e1, e2 };
+}
+function domeDir(fr, th, ps) {
+  return norm3(add(scl(fr.P, Math.cos(th)), scl(add(scl(fr.e1, Math.cos(ps)), scl(fr.e2, Math.sin(ps))), Math.sin(th))));
+}
+/** first exit of the ray from the eye's centre out of the solid (from about t0 on), and the outward normal there */
+function rayExit(c, d, opts, t0 = 0) {
+  const f = (t) => field(c[0] + d[0] * t, c[1] + d[1] * t, c[2] + d[2] * t, opts);
+  let a = Math.max(0, t0 - 0.4);
+  while (a > 0 && f(a) > 0) a = Math.max(0, a - 0.4);
+  let b = -1;
+  for (let t = a + 0.025; t < 9; t += 0.025) { if (f(t) > 0) { b = t; break; } a = t; }
+  if (b < 0) b = a;
+  for (let k = 0; k < 20; k++) { const m = 0.5 * (a + b); if (f(m) > 0) b = m; else a = m; }
+  const t = 0.5 * (a + b);
+  const p = [c[0] + d[0] * t, c[1] + d[1] * t, c[2] + d[2] * t];
+  return { t, p, n: fieldGrad(p[0], p[1], p[2], opts) };
+}
+
+/** pulls p onto the surface field(·, opts) = 0 along the gradient */
+function toSurface(p, opts) {
+  let q = p;
+  for (let k = 0; k < 6; k++) {
+    const f = field(q[0], q[1], q[2], opts);
+    if (Math.abs(f) < 1e-5) break;
+    const g = fieldGrad(q[0], q[1], q[2], opts);
+    q = sub(q, scl(g, f));
+  }
+  return q;
+}
+
+/** true distance of p above the head's own surface (without the domes), along the head's normal; < 0 under it */
+function headGap(p) {
+  const hn = fieldGrad(p[0], p[1], p[2]);
+  const g = (k) => field(p[0] - hn[0] * k, p[1] - hn[1] * k, p[2] - hn[2] * k);
+  let lo = -0.8, hi = 2.5;
+  if (!(g(lo) > 0 && g(hi) < 0)) return { gap: field(p[0], p[1], p[2]), hn };
+  for (let it = 0; it < 24; it++) { const m = 0.5 * (lo + hi); if (g(m) > 0) lo = m; else hi = m; }
+  return { gap: 0.5 * (lo + hi), hn };
+}
+
+/**
+ * One meridian of the left dome (cached): rays from the eye's centre cover the cup and its upper walls; where they
+ * start to graze the surface (the concave fillet into the head, which central rays cannot follow) the meridian is
+ * continued by walking down the surface itself, in the meridian's plane, until the dome has merged with the head.
+ */
+const WALK = new Map();
+const WALK_STEP = 0.02;
+export function meridian(ps, shut) {
+  const key = `${shut ? 1 : 0}|${ps.toFixed(6)}`;
+  let W = WALK.get(key);
+  if (W) return W;
+  const fr = domeFrame(1);
+  const opts = shut ? { dome: true, cupL: false } : DOME_OPTS;
+  // 1. central rays until they graze (or the exit jumps)
+  let thc = 0.6, prev = rayExit(fr.c, domeDir(fr, thc, ps), opts);
+  for (let th = 0.6 + 0.02; th < 2.9; th += 0.02) {
+    const d = domeDir(fr, th, ps);
+    const q = rayExit(fr.c, d, opts, prev.t);
+    // (inside the window the exit drops onto the globe's hidden core, and just round it the rays skim the lid's
+    // rolled margin: neither is the fillet)
+    const ew = FEAT.eyes[0].fr;
+    const kw = Math.hypot(Math.atan2(dot(d, ew.h), dot(d, ew.a)) / CUP.halfH, Math.atan2(dot(d, ew.v), dot(d, ew.a)) / CUP.halfV);
+    const outer = q.t > EYE.radius + 0.25 && kw > 1.8;
+    const graze = (outer && dot(d, q.n) < 0.42) || (prev.t > EYE.radius + 0.25 && q.t - prev.t > 0.25) || q.p[2] < 0.02;
+    if (graze) break;
+    thc = th; prev = q;
+  }
+  const R = Math.max(prev.t, 0.5);
+  // 2. walk down the surface in the meridian's plane
+  const m = norm3(cross(fr.P, domeDir(fr, thc, ps))); // normal of the meridian plane
+  const down = (th) => { const a = domeDir(fr, th + 1e-3, ps), b = domeDir(fr, th - 1e-3, ps); return norm3(sub(a, b)); };
+  let p = prev.p, tprev = down(thc);
+  const pts = [p];
+  let sEnd = -1, merged = -1;
+  for (let k = 1; k < 400; k++) {
+    const n = fieldGrad(p[0], p[1], p[2], opts);
+    let t = norm3(cross(m, n));
+    if (dot(t, tprev) < 0) t = scl(t, -1);
+    p = toSurface(add(p, scl(t, WALK_STEP)), opts);
+    // stay in the meridian's plane
+    const off = dot(sub(p, fr.c), m);
+    p = toSurface(sub(p, scl(m, off)), opts);
+    if (p[2] <= 0) {
+      // the medial meridians end on the midplane, where the left and right domes meet
+      const a = pts[pts.length - 1], f = a[2] / Math.max(a[2] - p[2], 1e-9);
+      const q = add(a, scl(sub(p, a), f));
+      pts.push([q[0], q[1], 0]);
+      sEnd = (pts.length - 2 + f) * WALK_STEP;
+      break;
+    }
+    pts.push(p);
+    tprev = t;
+    if (merged < 0) { if (headGap(p).gap < 0.015) merged = k; }
+    else if ((k - merged) * WALK_STEP > 0.35) { sEnd = k * WALK_STEP; break; }
+  }
+  if (sEnd < 0) sEnd = (pts.length - 1) * WALK_STEP;
+  W = { thc, R, pts, sEnd, tmax: thc + sEnd / R };
+  WALK.set(key, W);
+  return W;
+}
+
+/** where the dome's surface is at (th, ps), sunk under the head's skin where the two have merged */
+export function domePoint(fr, th, ps, opts = DOME_OPTS) {
+  const side = fr.P[2] >= 0 ? 1 : -1;
+  const shut = opts !== DOME_OPTS && (opts.cupL === false || opts.cupR === false);
+  const W = meridian(ps, shut);
+  const frL = side > 0 ? fr : domeFrame(1);
+  let p0;
+  if (th <= W.thc) {
+    // inside the window the ray's exit lies deep in the hidden core: kept as a shell just under the globe instead, so
+    // the faces from the lid's margin dip under the globe gently and its edge stays smooth
+    const d = domeDir(frL, th, ps);
+    const q = rayExit(frL.c, d, shut ? { dome: true, cupL: false } : DOME_OPTS);
+    p0 = q.t < EYE.radius - 0.3 ? add(frL.c, scl(d, EYE.radius - 0.3)) : q.p;
+  } else {
+    const x = Math.min((th - W.thc) * W.R / WALK_STEP, W.pts.length - 1);
+    const i = Math.min(Math.floor(x), W.pts.length - 2), f = x - i;
+    p0 = add(scl(W.pts[i], 1 - f), scl(W.pts[i + 1], f));
+  }
+  const oL = shut ? { dome: true, cupL: false } : DOME_OPTS;
+  let n = fieldGrad(p0[0], p0[1], p0[2], oL);
+  // near the junction: drawn from the dome's surface down to a fixed depth under the head's as the true gap closes,
+  // so the two cross cleanly where they have already merged
+  let p = p0;
+  if (field(p0[0], p0[1], p0[2]) < 0.35) {
+    const { gap, hn } = headGap(p0);
+    const w = 1 - smoothstep(0.03, 0.12, gap);
+    if (w > 0) p = sub(p0, scl(hn, (gap + 0.1) * w));
+  }
+  if (side < 0) { p = [p[0], p[1], -p[2]]; p0 = [p0[0], p0[1], -p0[2]]; n = [n[0], n[1], -n[2]]; }
+  return { p, n, p0 };
+}
+
+/**
+ * How far from the pole the dome's rows run: one common (virtual) angle for every meridian, so a row lies at the same
+ * height all round; a meridian that ends sooner (merged into the head, or on the midplane) stays at its end.
+ */
+let THETA_MAX = null;
+const NPSI = 128;
+export function domeTheta() {
+  if (THETA_MAX === null) {
+    THETA_MAX = 0;
+    for (let j = 0; j < NPSI; j++) THETA_MAX = Math.max(THETA_MAX, meridian((j / NPSI) * TAU, false).tmax);
+  }
+  return THETA_MAX;
+}
+
+/** both domes: one primitive, left then right (mirrored), with blink targets (left dome, right dome) */
+export function buildDomes(NT = 40, NP = 96) {
+  const cols = NP + 1;
+  const sides = [1, -1];
+  const position = [], normal = [], tangent = [], uv = [], fish = [], blinkL = [], blinkR = [];
+  const tris = [];
+  sides.forEach((side, si) => {
+    const fr = domeFrame(side);
+    const base = fish.length / 3;
+    for (let i = 0; i <= NT; i++) {
+      for (let j = 0; j <= NP; j++) {
+        const ps = (j / NP) * TAU;
+        const tmax = domeTheta(ps);
+        const th = (i / NT) * tmax;
+        const { p, n } = domePoint(fr, th, ps);
+        const shut = domePoint(fr, th, ps, side > 0 ? { dome: true, cupL: false } : { dome: true, cupR: false });
+        fish.push(...p);
+        position.push(...toObject(p));
+        normal.push(...dirToObject(n));
+        // tangent along theta
+        const q = domePoint(fr, Math.min(tmax, th + 0.02), ps).p, q0 = domePoint(fr, Math.max(0, th - 0.02), ps).p;
+        let tg = dirToObject(sub(q, q0));
+        const nn = dirToObject(n);
+        tg = sub(tg, scl(nn, dot(tg, nn)));
+        let tl = Math.hypot(...tg);
+        if (tl < 1e-9) { tg = norm3(cross(nn, Math.abs(nn[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])); tl = 1; }
+        tangent.push(tg[0] / tl, tg[1] / tl, tg[2] / tl, 1);
+        uv.push(DOME_U[0] + (DOME_U[1] - DOME_U[0]) * (0.01 + 0.98 * (i / NT)), j / NP);
+        const a = toObject(p), b = toObject(shut.p);
+        const dd = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        (side > 0 ? blinkL : blinkR).push(...dd);
+        (side > 0 ? blinkR : blinkL).push(0, 0, 0);
+      }
+    }
+    for (let i = 0; i < NT; i++) for (let j = 0; j < NP; j++) {
+      const a = base + i * cols + j, b = base + (i + 1) * cols + j, c = base + (i + 1) * cols + j + 1, d = base + i * cols + j + 1;
+      tris.push(a, b, c, a, c, d);
+    }
+    // outward winding check at mid theta
+    const k = base + Math.floor(NT / 2) * cols + 3;
+    const P = (m) => position.slice(m * 3, m * 3 + 3);
+    const fn = cross(sub(P(k + cols), P(k)), sub(P(k + cols + 1), P(k)));
+    const nk = normal.slice(k * 3, k * 3 + 3);
+    if (dot(fn, nk) < 0) for (let m = (base / cols) * 0 + tris.length - NT * NP * 6; m < tris.length; m += 3) { const t = tris[m + 1]; tris[m + 1] = tris[m + 2]; tris[m + 2] = t; }
+  });
+  return {
+    position: new Float32Array(position), normal: new Float32Array(normal), tangent: new Float32Array(tangent), uv: new Float32Array(uv),
+    indices: new Uint32Array(tris), fish, blinkL: new Float32Array(blinkL), blinkR: new Float32Array(blinkR),
+  };
+}
+
 /**
  * Mouth interior: a pouch hanging from the upper and lower cut edges into the head (palate above, floor below),
  * dark and wet; seen only while the jaw is open.
@@ -368,9 +653,10 @@ export function buildMouth(G) {
         zone.push(upper ? 0 : 1);
         uv.push(k / (edge.length - 1), f * 0.5 + (upper ? 0 : 0.5));
         // the lip margin is skin-coloured; inside, the wet mucosa darkens quickly into the throat
-        const shade = 1 - 0.85 * smoothstep(0.05, 0.8, f);
-        const lip = 1 - smoothstep(0.0, 0.2, f);
-        color.push((0.3 + 0.08 * lip) * shade + 0.02, (0.17 + 0.1 * lip) * shade + 0.02, (0.16 + 0.08 * lip) * shade + 0.02, 1);
+        // (linear colours) a pinkish lip margin, then wet dark mucosa going black toward the throat
+        const shade = 1 - 0.9 * smoothstep(0.04, 0.45, f);
+        const lip = 1 - smoothstep(0.0, 0.14, f);
+        color.push((0.2 + 0.12 * lip) * shade + 0.008, (0.075 + 0.1 * lip) * shade + 0.006, (0.07 + 0.08 * lip) * shade + 0.006, 1);
         normal.push(0, upper ? -1 : 1, 0);
       }
       rows.push(row);
@@ -499,26 +785,32 @@ function skinPoint(s, phi, p, n, ao) {
   }
   // upper-lip pads: pale, studded with dark sensory pores
   {
-    const L = FEAT.lipPad;
-    const d = Math.hypot((p[0] - L[0]) / 1.9, (p[1] - L[1]) / 1.25, (Math.abs(z) - L[2]) / 1.2);
-    const pad = smoothstep(1.15, 0.55, d);
-    col = lerp3(col, COL.lip, pad * 0.75);
-    col = lerp3(col, COL.speck, pad * dots(p, 0.22, 0.045, 163, 0.7) * 0.7);
+    const L = FEAT.lipPad.c;
+    const d = Math.hypot((p[0] - L[0]) / 1.85, (p[1] - L[1]) / 1.2, (Math.abs(z) - L[2]) / 1.2);
+    const pad = smoothstep(1.1, 0.6, d);
+    col = lerp3(col, COL.lip, pad * 0.8);
+    // fine dark pores and a darker rim where the cushion meets the cheek
+    col = lerp3(col, COL.speck, pad * dots(p, 0.17, 0.035, 163, 0.75) * 0.75);
+    col = lerp3(col, COL.dark, smoothstep(0.75, 1.0, d) * smoothstep(1.35, 1.05, d) * 0.25);
   }
-  // eye sockets: where the globe comes out of the skin the cup's rim is paler and smoother
+  // eye sockets: the cup's skin is paler and smoother toward the window; its margin (and the hidden skin inside the
+  // window, which the rim's faces stretch over) a plain darker grey, without speckles
+  let lid = 0;
   for (const e of FEAT.eyes) {
     const dE = Math.hypot(p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2]);
     const rim = smoothstep(EYE.radius + 0.7, EYE.radius + 0.1, dE);
-    col = lerp3(col, lerp3(col, COL.lip, 0.55), rim * 0.65);
+    col = lerp3(col, lerp3(col, COL.lip, 0.4), rim * 0.55);
+    lid = Math.max(lid, smoothstep(EYE.radius + 0.22, EYE.radius + 0.06, dE));
   }
+  col = lerp3(col, C(78, 74, 66), lid);
   // sand grains stuck in the mucus: tiny white specks, densest on the head, the turrets and the back
-  const grains = dots(p, 0.4, 0.06, 151, 0.5) * (0.25 + 0.75 * smoothstep(-0.5, 0.4, nh)) * (s < 18 ? 1 : 0.6);
+  const grains = dots(p, 0.4, 0.06, 151, 0.5) * (0.25 + 0.75 * smoothstep(-0.5, 0.4, nh)) * (s < 18 ? 1 : 0.6) * (1 - lid);
   col = lerp3(col, COL.grain, grains * 0.85);
-  // pectoral lobe: pale, fleshy
+  // pectoral lobe: a little paler where the arm leaves the flank
   {
     const L = FEAT.pecLobe;
     const d = Math.hypot((p[0] - L[0]) / 2.6, (p[1] - L[1]) / 2.2, (Math.abs(z) - L[2]) / 1.4);
-    col = lerp3(col, COL.arm, smoothstep(1.2, 0.6, d) * 0.5);
+    col = lerp3(col, COL.arm, smoothstep(1.2, 0.6, d) * 0.15);
   }
   col = col.map((c) => c * (0.8 + 0.2 * ao));
 
@@ -585,7 +877,7 @@ export function bakeSkinTextures({ W, H, armPaint, log = () => {} }) {
       const dks = [0.12, 0.3, 0.6, 1.1, 1.8], wks = [0.3, 0.27, 0.2, 0.14, 0.09];
       for (let m = 0; m < dks.length; m++) {
         const d = dks[m];
-        occ += (wks[m] * Math.max(0, d - field(p[0] + nn[0] * d, p[1] + nn[1] * d, p[2] + nn[2] * d))) / d;
+        occ += (wks[m] * Math.max(0, d - field(p[0] + nn[0] * d, p[1] + nn[1] * d, p[2] + nn[2] * d, DOME_OPTS))) / d;
       }
       GA[k] = clamp(1 - occ * 1.2, 0.25, 1);
     }
@@ -620,13 +912,14 @@ export function bakeSkinTextures({ W, H, armPaint, log = () => {} }) {
   const albedo = new Uint8Array(W * H * 3), orm = new Uint8Array(W * H * 3), data = new Uint8Array(W * H * 3);
   const height = new Float32Array(W * H);
   const WB = Math.round(W * BODY_U);
+  const TEXSP = new Float32Array(W * H * 2);
   for (let y = 0; y < H; y++) {
     const v = (y + 0.5) / H;
-    const phi = v * TAU;
     for (let x = 0; x < WB; x++) {
       const t = (x + 0.5) / WB;
-      const s = uvSof(t, phi);
-      const { p, n, ao } = sample(t, v);
+      const { s, phi } = uvInverse(t, v);
+      TEXSP[(y * W + x) * 2] = s; TEXSP[(y * W + x) * 2 + 1] = phi;
+      const { p, n, ao } = sample(t, phi / TAU);
       const r = skinPoint(s, phi, p, n, ao);
       const k = y * W + x;
       for (let c = 0; c < 3; c++) albedo[k * 3 + c] = clamp(Math.round(r.col[c]), 0, 255);
@@ -641,7 +934,8 @@ export function bakeSkinTextures({ W, H, armPaint, log = () => {} }) {
     if (y % 128 === 0) log(`    paint row ${y}/${H}`);
   }
   // the pectoral arm strip
-  const WA = W - WB;
+  const WA1 = Math.round(W * ARM_U[1]);
+  const WA = WA1 - WB;
   for (let y = 0; y < H; y++) for (let x = 0; x < WA; x++) {
     const ua = (x + 0.5) / WA, va = (y + 0.5) / H;
     const r = armPaint(ua, va);
@@ -651,25 +945,69 @@ export function bakeSkinTextures({ W, H, armPaint, log = () => {} }) {
     orm[k * 3] = Math.round(255 * r.ao); orm[k * 3 + 1] = Math.round(255 * r.rough); orm[k * 3 + 2] = 0;
     data[k * 3] = Math.round(255 * r.mudAff); data[k * 3 + 1] = Math.round(255 * r.mucus); data[k * 3 + 2] = Math.round(255 * r.sun);
   }
+  // the eye-dome strip (left dome; the right one is its mirror image): a grid of rays from the eye's centre
+  log('  eye domes …');
+  const WD = W - WA1;
+  const NTd = 48, NPd = 160;
+  const fr = domeFrame(1);
+  const DP = [], DN = [], DA = [];
+  for (let i = 0; i <= NTd; i++) for (let j = 0; j <= NPd; j++) {
+    const ps = (j / NPd) * TAU;
+    const { p, n, p0 } = domePoint(fr, (i / NTd) * domeTheta(ps), ps);
+    DP.push(p); DN.push(n);
+    // occlusion from the dome's own surface (a tucked point lies under the head's skin, where it would read as dark)
+    let occ = 0;
+    const dks = [0.12, 0.3, 0.6, 1.1], wks = [0.3, 0.27, 0.2, 0.14];
+    for (let m = 0; m < dks.length; m++) occ += (wks[m] * Math.max(0, dks[m] - field(p0[0] + n[0] * dks[m], p0[1] + n[1] * dks[m], p0[2] + n[2] * dks[m], DOME_OPTS))) / dks[m];
+    DA.push(clamp(1 - occ * 1.2, 0.25, 1));
+  }
+  const dsample = (ti, pj) => {
+    const fi = clamp(ti, 0, 1) * NTd, fj = clamp(pj, 0, 1) * NPd;
+    const i = Math.min(NTd - 1, Math.floor(fi)), j = Math.min(NPd - 1, Math.floor(fj));
+    const a = fi - i, b = fj - j;
+    const ks = [i * (NPd + 1) + j, (i + 1) * (NPd + 1) + j, i * (NPd + 1) + j + 1, (i + 1) * (NPd + 1) + j + 1];
+    const w = [(1 - a) * (1 - b), a * (1 - b), (1 - a) * b, a * b];
+    const p = [0, 0, 0], n = [0, 0, 0];
+    let ao = 0;
+    ks.forEach((kk, m) => { for (let c = 0; c < 3; c++) { p[c] += DP[kk][c] * w[m]; n[c] += DN[kk][c] * w[m]; } ao += DA[kk] * w[m]; });
+    // mm per unit of the texture's u and v here
+    const kk = ks[0];
+    const du = Math.hypot(...sub(DP[Math.min(kk + NPd + 1, DP.length - 1)], DP[kk])) * NTd / 0.98;
+    const dv = Math.hypot(...sub(DP[kk + 1], DP[kk])) * NPd;
+    return { p, n: norm3(n), ao, du, dv };
+  };
+  const DMM = new Float32Array(WD * H * 2);
+  for (let y = 0; y < H; y++) for (let x = 0; x < WD; x++) {
+    const ti = ((x + 0.5) / WD - 0.01) / 0.98, pj = (y + 0.5) / H;
+    const { p, n, ao, du, dv } = dsample(ti, pj);
+    const r = skinPoint(p[0], invPhi(p[0], p[1], p[2]), p, n, ao);
+    const k = y * W + WA1 + x;
+    for (let c = 0; c < 3; c++) albedo[k * 3 + c] = clamp(Math.round(r.col[c]), 0, 255);
+    height[k] = r.h;
+    orm[k * 3] = Math.round(255 * ao); orm[k * 3 + 1] = Math.round(255 * clamp(r.rough)); orm[k * 3 + 2] = 0;
+    data[k * 3] = Math.round(255 * r.mudAff); data[k * 3 + 1] = Math.round(255 * r.mucus); data[k * 3 + 2] = Math.round(255 * r.sun);
+    DMM[(y * WD + x) * 2] = Math.max(du / WD, 1e-4); DMM[(y * WD + x) * 2 + 1] = Math.max(dv / H, 1e-4);
+  }
   // normal map from the height field (metric: mm per texel along u and v)
   log('  normal map …');
   const normal = new Uint8Array(W * H * 3);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const k = y * W + x;
-    const inArm = x >= WB;
-    const xl = inArm ? Math.max(WB, x - 1) : Math.max(0, x - 1), xr = inArm ? Math.min(W - 1, x + 1) : Math.min(WB - 1, x + 1);
+    const inDome = x >= WA1, inArm = x >= WB && !inDome;
+    const x0 = inDome ? WA1 : inArm ? WB : 0, x1 = inDome ? W - 1 : inArm ? WA1 - 1 : WB - 1;
+    const xl = Math.max(x0, x - 1), xr = Math.min(x1, x + 1);
     const yu = (y + H - 1) % H, yd = (y + 1) % H;
     let mmU, mmV;
-    if (inArm) { mmU = 6.0 / WA; mmV = 7.0 / H; } else {
-      // u is arc length along the column, so a texel spans the column's length / WB on the surface
-      const phi = ((y + 0.5) / H) * TAU;
-      const i = Math.min(NSb, Math.round(((x + 0.5) / WB) * NSb));
-      mmU = Math.max(uvArc(phi) / WB, 1e-4); mmV = Math.max((arcPerRad[i] * TAU) / H, 1e-4);
+    if (inDome) { mmU = DMM[(y * WD + x - WA1) * 2]; mmV = DMM[(y * WD + x - WA1) * 2 + 1]; }
+    else if (inArm) { mmU = 6.0 / WA; mmV = 7.0 / H; } else {
+      // u and v are arc lengths along the column and around the row: a texel spans length / texels on the surface
+      const sp = TEXSP[k * 2], phi = TEXSP[k * 2 + 1];
+      mmU = Math.max(uvArc(phi) / WB, 1e-4); mmV = Math.max(uvRowArc(sp) / H, 1e-4);
     }
     const dhdu = (height[y * W + xr] - height[y * W + xl]) / ((xr - xl) * mmU || 1);
     const dhdv = (height[yu * W + x] - height[yd * W + x]) / (2 * mmV);
     // the uv columns still converge on the very tip: fade the relief out over its last half millimetre
-    const kTip = inArm ? 1 : smoothstep(0.1, 0.5, uvSof((x + 0.5) / WB, ((y + 0.5) / H) * TAU));
+    const kTip = inArm || inDome ? 1 : smoothstep(0.1, 0.5, TEXSP[k * 2]);
     const nn = norm3([-dhdu * kTip, dhdv * kTip, 1]);
     normal[k * 3] = Math.round((nn[0] * 0.5 + 0.5) * 255);
     normal[k * 3 + 1] = Math.round((nn[1] * 0.5 + 0.5) * 255);

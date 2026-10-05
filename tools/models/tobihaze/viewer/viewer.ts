@@ -36,12 +36,20 @@ const views: Record<string, [number, number, number]> = {
   head: [0.05, 0.035, 0.07], headtop: [0.01, 0.09, 0.03], eye: [0.035, 0.03, 0.03], belly: [0.05, -0.08, 0.02],
   // close-ups framed like field photographs: the face head-on at eye level, and the head in profile
   face: [0.0, 0.004, 0.075], profile: [0.075, 0.004, 0.0], faceup: [0.0, 0.025, 0.07], chin: [0.012, -0.03, 0.05],
+  // framed like the reference photographs: q7 front-left at head height, q8 front-left from above, lat a plain lateral
+  q7: [0.05, 0.004, 0.055], q7r: [-0.05, 0.004, 0.055], domes: [0.0, 0.05, 0.03], mouth: [0.022, -0.004, 0.03], mouthf: [0.0, -0.002, 0.04], q8: [0.03, 0.045, 0.06], lat: [0.16, 0.0, -0.012], pec: [0.05, -0.004, -0.01], pecfront: [0.02, 0.0, 0.06],
 };
-const v = views[q.get('view') ?? 'oblique'] ?? views.oblique;
+const v = [...(views[q.get('view') ?? 'oblique'] ?? views.oblique)];
 const vName = q.get('view') ?? 'oblique';
-const target = new Vector3(0, 0.006, vName.startsWith('head') || vName === 'eye' ? 0.008 : vName.startsWith('face') || vName === 'profile' || vName === 'chin' ? 0.006 : -0.008);
+const target = new Vector3(0, 0.006, vName.startsWith('head') || vName === 'eye' ? 0.008 : vName.startsWith('face') || vName === 'profile' || vName === 'chin' || vName.startsWith('q7') || vName === 'q8' || vName === 'domes' ? 0.006 : -0.008);
+if (vName === 'pec' || vName === 'pecfront') target.set(0.004, 0.001, -0.002);
+if (vName === 'lat') target.set(0, 0.004, -0.012);
+if (vName === 'mouth' || vName === 'mouthf') target.set(0, 0.0035, 0.0135);
 if (vName.startsWith('face') || vName === 'profile') target.y = 0.0065;
 if (vName === 'chin') target.set(0, 0.003, 0.012);
+// free camera: tgt=x,y,z and cam=x,y,z (offset from the target), object space metres
+if (q.get('tgt')) target.set(...(q.get('tgt')!.split(',').map(Number) as [number, number, number]));
+if (q.get('cam')) v.splice(0, 3, ...q.get('cam')!.split(',').map(Number));
 const zoom = Number(q.get('zoom') ?? 1);
 camera.position.set(v[0] / zoom, v[1] / zoom, v[2] / zoom).add(target);
 controls.target.copy(target);
@@ -64,6 +72,7 @@ if (q.get('mat') === 'flat' || q.get('mat') === 'normal') {
   const flat = q.get('mat') === 'flat' ? new MeshPhysicalMaterial({ color: 0x9a9a96, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.1 }) : new MeshNormalMaterial();
   for (const m of model.meshes) if (!m.name.startsWith('Eye')) m.material = flat;
 }
+if (q.get('jaw')) { const jb = model.bones.J_jaw; if (jb) jb.rotation.x = Number(q.get('jaw')); }
 if (q.get('bind')) model.root.traverse((o) => { const sm = o as import('three').SkinnedMesh; if (sm.isSkinnedMesh) sm.skeleton.pose(); });
 for (const name of (q.get('hide') ?? '').split(',').filter(Boolean)) model.root.traverse((o) => { if (o.name === name) o.visible = false; });
 if (q.get('bg')) scene.background = new Color(`#${q.get('bg')}`);

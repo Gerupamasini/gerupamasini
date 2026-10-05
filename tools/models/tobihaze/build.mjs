@@ -13,7 +13,7 @@ import jpeg from 'jpeg-js';
 import { GLBBuilder } from '../../lib/glb.mjs';
 import { encodePNG } from '../../lib/png.mjs';
 import { S0, Y0, SL, S_END, TL, EYE, BODY_U, toObject, dirToObject, botY } from './anatomy.mjs';
-import { buildSkin, skinParts, skinTarget, buildMouth, bakeSkinTextures, SPLIT } from './body.mjs';
+import { buildSkin, skinParts, skinTarget, buildMouth, buildDomes, bakeSkinTextures, SPLIT } from './body.mjs';
 import { finDefinitions, buildFinMesh, buildFinFold, paintFinAtlas, buildArm, armPaint, mirrorMesh, PEC, PELVIC } from './fins.mjs';
 import { buildEyeMesh, eyeRotation, paintEye, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './eye.mjs';
 import { JOINTS, J, skinWeights, mouthWeights, armWeights, finWeights, buildClips, CLIP_SPEED } from './rig.mjs';
@@ -24,9 +24,9 @@ const args = process.argv.slice(2);
 const tierIdx = args.indexOf('--tier');
 const tierName = tierIdx >= 0 ? args[tierIdx + 1] : 'hero';
 const TIERS = {
-  hero: { NS: 420, NV: 232, tex: [2048, 1024], fin: 2048, finSub: 5, finNT: 28, iris: 1024, eye: [48, 64], arm: [22, 24], mouth: true, finMask: false },
-  lod1: { NS: 200, NV: 112, tex: [1024, 512], fin: 1024, finSub: 3, finNT: 14, iris: 512, eye: [24, 32], arm: [12, 14], mouth: true, finMask: false },
-  lod2: { NS: 56, NV: 30, tex: [512, 256], fin: 512, finSub: 1, finNT: 4, iris: 128, eye: [8, 10], arm: [4, 6], mouth: false, finMask: true },
+  hero: { NS: 420, NV: 232, tex: [2048, 1024], fin: 2048, finSub: 5, finNT: 28, iris: 1024, eye: [48, 64], dome: [56, 128], arm: [22, 24], mouth: true, finMask: false },
+  lod1: { NS: 200, NV: 112, tex: [1024, 512], fin: 1024, finSub: 3, finNT: 14, iris: 512, eye: [24, 32], dome: [32, 72], arm: [12, 14], mouth: true, finMask: false },
+  lod2: { NS: 56, NV: 30, tex: [512, 256], fin: 512, finSub: 1, finNT: 4, iris: 128, eye: [8, 10], dome: [10, 20], arm: [4, 6], mouth: false, finMask: true },
 };
 const tier = TIERS[tierName];
 if (!tier) { console.error(`unknown tier ${tierName}`); process.exit(1); }
@@ -101,8 +101,8 @@ log(`  head ${SP.head.list.length} v, body ${SP.body.list.length} v, tail ${SP.t
 log('  morph targets (breathe, blink) …');
 const headTargets = [
   skinTarget(SP.head, { breathe: 1 }),
-  skinTarget(SP.head, { cupL: false }, 12),
-  skinTarget(SP.head, { cupR: false }, 12),
+  zeros(SP.head.list.length),
+  zeros(SP.head.list.length),
 ];
 const bodyTargets = [skinTarget(SP.body, { breathe: 1 }, 24)];
 
@@ -115,6 +115,17 @@ const mInterior = gb.addMaterial({
   extras: { tobihaze: { role: 'interior' } },
 });
 const headPrims = [gb.primitive({ position: SP.head.position, normal: SP.head.normal, tangent: SP.head.tangent, uv: SP.head.uv, indices: SP.head.indices, material: mSkin, extraAttributes: skinAttrs(skinWeights(SP.head.list)), targets: headTargets })];
+// the eye domes (dermal cups), meshed from the eyes' centres
+{
+  log('  eye domes …');
+  const D = buildDomes(tier.dome[0], tier.dome[1]);
+  const n = D.position.length / 3;
+  const w = { joints: new Uint8Array(n * 4), weights: new Uint8Array(n * 4) };
+  for (let k = 0; k < n; k++) { w.joints[k * 4] = J.J_head; w.weights[k * 4] = 255; }
+  headPrims.push(gb.primitive({ position: D.position, normal: D.normal, tangent: D.tangent, uv: D.uv, indices: D.indices, material: mSkin,
+    extraAttributes: skinAttrs(w), targets: [zeros(n), D.blinkL, D.blinkR] }));
+  log(`    ${n} v`);
+}
 if (tier.mouth) {
   const mouth = buildMouth(G);
   const n = mouth.position.length / 3;
@@ -257,7 +268,7 @@ const rootNode = gb.addNode({
       eyeRetract_m: EYE.retract / 1000,
       eyeRadius_m: EYE.radius / 1000,
       // arm geometry for the IK (object space, metres; left side, the right mirrors X)
-      pec: { base: toObject(PEC.base), wrist: toObject(PEC.wrist), dir: dirToObject(PEC.dir), width: dirToObject(PEC.width), normal: dirToObject(PEC.normal), armLen_m: PEC.len / 1000, handLen_m: 0.0076 },
+      pec: { base: toObject(PEC.base), wrist: toObject(PEC.wrist), dir: dirToObject(PEC.dir), width: dirToObject(PEC.width), normal: dirToObject(PEC.normal), armLen_m: PEC.joint / 1000, handLen_m: (PEC.len - PEC.joint + 0.88 * 7.9) / 1000 },
       // contact geometry: the belly line under the chain and the pelvic fins' lowest point
       contacts: { pelvicY_m: pelvicLowY, bellyY: SPINE.map(([n, s]) => [n, objY(botY(Math.min(s, S_END - 0.5)))]) },
       splits: SPLIT,

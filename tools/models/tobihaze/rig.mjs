@@ -2,7 +2,7 @@
 // The clips (Idle, Crawl, Hop, Swim, Blink, Feed) are sampled from the same pose model the runtime driver uses
 // (src/creatures/species/tobihaze/pose.js); in the game the animal is animated procedurally, the clips serve the
 // 図鑑 preview and any viewer without the driver.
-import { section, botY, toObject, EYE, RICTUS_S } from './anatomy.mjs';
+import { section, botY, toObject, EYE, RICTUS_S, gapeY } from './anatomy.mjs';
 import { PEC, PELVIC } from './fins.mjs';
 import { clamp, smoothstep } from '../../lib/noise.mjs';
 import { SPINE, computePose, defaultPose, swimMidline, bendFromMidline, TL_MM } from '../../../src/creatures/species/tobihaze/pose.js';
@@ -10,7 +10,8 @@ import { SPINE, computePose, defaultPose, swimMidline, bendFromMidline, TL_MM } 
 const yc = (s) => section(s).yc;
 const at = (s) => [s, yc(s), 0];
 const mirror = (p) => [p[0], p[1], -p[2]];
-export const JAW_HINGE = [RICTUS_S + 0.3, 1.75, 0];
+// the lower jaw hinges well behind the visible mouth corner (the quadrate lies under the eye)
+export const JAW_HINGE = [5.6, 1.55, 0];
 
 export const JOINTS = [
   { name: 'J_root', parent: null, at: at(17.0) },
@@ -69,28 +70,44 @@ function withRest(list, s) {
 /** skin vertices: spine chain; the lower jaw (below the gape cut) on J_jaw, sealed toward the mouth corner */
 export function skinWeights(list) {
   return pack(list.map((v) => {
-    const s = v.fish[0];
-    if (v.jaw) {
-      const seal = smoothstep(RICTUS_S - 1.6, RICTUS_S, s);
-      return withRest([[J.J_jaw, 1 - 0.65 * seal]], s);
+    const s = v.fish[0], y = v.fish[1];
+    if (v.cut === 'upper') return spineWeights(s);
+    if (v.jaw || v.cut === 'lower') {
+      const seal = smoothstep(RICTUS_S - 1.0, RICTUS_S, s);
+      return withRest([[J.J_jaw, 1 - 0.3 * seal]], s);
     }
+    // the rest of the lower jaw and the throat: everything below the gape line (continued back under the lip pad
+    // to the hinge) follows the jaw, fading out behind the hinge and up toward the cheek, so the skin stretches
+    // smoothly instead of folding
+    const w = jawWeight(s, y);
+    if (w > 1e-3) return withRest([[J.J_jaw, w]], s);
     return spineWeights(s);
   }), list.length);
+}
+
+/** jaw influence of a skin point outside the gape strip */
+export function jawWeight(s, y) {
+  if (s > JAW_HINGE[0] + 2.4) return 0;
+  const gy = gapeY(Math.min(s, RICTUS_S)) - 0.22 * Math.max(0, s - RICTUS_S);
+  const along = 1 - smoothstep(RICTUS_S + 0.4, JAW_HINGE[0] + 2.4, s);
+  const below = smoothstep(gy + 0.15, gy - 1.3, y);
+  return 0.9 * along * below;
 }
 
 export function mouthWeights(m) {
   return pack(m.fish.map((p, k) => {
     const s = p[0];
     if (m.zone[k] === 0) return spineWeights(s);
-    const depth = clamp((s - 1) / 6);
-    return withRest([[J.J_jaw, 1 - 0.7 * depth]], s);
+    // the floor of the mouth goes with the lower jaw, less toward the back (the hyoid stays)
+    return withRest([[J.J_jaw, 1 - 0.55 * smoothstep(RICTUS_S - 1, JAW_HINGE[0] + 1, s)]], s);
   }), m.fish.length);
 }
 
 export function armWeights(atList, side) {
   const jp = side > 0 ? J.J_pecL : J.J_pecR, jw = side > 0 ? J.J_pecArmL : J.J_pecArmR;
   return pack(atList.map((a) => {
-    const wWrist = smoothstep(4.3, 5.5, a);
+    // the hand (past the wrist joint) moves with the web
+    const wWrist = smoothstep(PEC.joint - 0.7, PEC.joint + 0.5, a);
     const wPec = smoothstep(-0.9, 1.1, a) * (1 - wWrist);
     return withRest([[jp, wPec], [jw, wWrist]], PEC.base[0]);
   }), atList.length);

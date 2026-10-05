@@ -55,9 +55,14 @@ export type Posture = 'prop' | 'low' | 'alert' | 'display';
 interface Fin {
   side: 1 | -1;
   planted: boolean;
+  /** where the wrist is put down (on the mud) */
   contact: Vector3;
   from: Vector3;
   to: Vector3;
+  /** heading (world yaw) of the web's middle ray, laid on the mud back and out from the wrist */
+  yaw: number;
+  yawFrom: number;
+  yawTo: number;
   swing: number;
   swingDur: number;
   ik: number;
@@ -248,7 +253,7 @@ export class Motor {
       return new Vector3(0, 0, 1).applyQuaternion(eye ? eye.quaternion : new Quaternion());
     };
     this.eyeAxis = [axis('J_eyeL'), axis('J_eyeR')];
-    const mkFin = (side: 1 | -1): Fin => ({ side, planted: false, contact: new Vector3(), from: new Vector3(), to: new Vector3(), swing: -1, swingDur: 0.25, ik: 1 });
+    const mkFin = (side: 1 | -1): Fin => ({ side, planted: false, contact: new Vector3(), from: new Vector3(), to: new Vector3(), yaw: 0, yawFrom: 0, yawTo: 0, swing: -1, swingDur: 0.25, ik: 1 });
     this.fins = [mkFin(1), mkFin(-1)];
     const mkEye = (): Eye => ({ yaw: 0, pitch: 0, vy: 0, vp: 0, tYaw: 0, tPitch: 0, nextSac: this.rnd() * 2, scanYaw: 0, scanPitch: 0, retract: 0, cup: 0, blinkT: -1, blinkDur: 0.56 });
     this.eyes = [mkEye(), mkEye()];
@@ -410,7 +415,7 @@ export class Motor {
   private fwd(h = this.heading, out = this.v1): Vector3 { return out.set(Math.sin(h), 0, Math.cos(h)); }
   private left(h = this.heading, out = this.v2): Vector3 { return out.set(Math.cos(h), 0, -Math.sin(h)); }
 
-  /** where a pectoral fin is put down: ahead of / behind the shoulder (fraction of L) and out to the side */
+  /** where a pectoral wrist is put down: ahead of / behind the shoulder (fraction of L) and out to the side */
   private plantPoint(side: number, fwdOff: number, latOff: number, out: Vector3, w: MotorWorld, h = this.heading): Vector3 {
     const L = this.L;
     const f = this.fwd(h, this.v1), l = this.left(h, this.v2);
@@ -419,24 +424,54 @@ export class Motor {
     return out;
   }
 
+  /**
+   * world yaw of a planted web's middle ray: out to the side and swept back by `back` rad (the web lies on the mud
+   * behind the wrist, its leading rays forward, its trailing rays along the flank)
+   */
+  private webYaw(side: number, back: number, h = this.heading): number {
+    // heading h faces +Z at 0; the fish's left is h + π/2
+    return h + side * (Math.PI / 2 + back);
+  }
+
+  /** the resting stance per posture: wrist position (forward, out; fractions of L) and the web's sweep */
+  private stance(): { fwd: number; lat: number; back: number } {
+    switch (this.posture) {
+      case 'low': return { fwd: -0.015, lat: 0.085, back: 0.75 };
+      case 'alert': return { fwd: 0.012, lat: 0.07, back: 0.55 };
+      case 'display': return { fwd: 0.012, lat: 0.075, back: 0.5 };
+      default: return { fwd: 0.0, lat: 0.075, back: 0.62 };
+    }
+  }
+
   private propHeight(): number {
     const L = this.L;
+    // propped on the pectorals the chest rides well clear of the mud (photographs of resting and alert animals);
+    // alert and displaying, it stands tall on near-vertical fins
     switch (this.posture) {
       case 'low': return 0.006 * L;
-      case 'alert': return 0.06 * L;
-      case 'display': return 0.065 * L;
-      default: return 0.028 * L;
+      case 'alert': return 0.085 * L;
+      case 'display': return 0.09 * L;
+      default: return 0.045 * L;
     }
+  }
+
+  /** pelvic disc angle (pose units, + down) that just reaches the mud from the root's height above it */
+  private pelvicReach(lift: number): number {
+    const len = 0.104 * this.L, base = 0.0003 * this.scale;
+    return clamp(Math.asin(clamp((lift + base) / len, 0, 0.97)) - 0.31, -0.2, 1.05);
   }
 
   /** put both fins down at the resting stance (instantly, or as small steps) */
   private plantRest(instant: boolean, w: MotorWorld): void {
-    const wide = this.posture === 'alert' || this.posture === 'display' ? 0.125 : this.posture === 'low' ? 0.11 : 0.12;
-    const fwd = this.posture === 'low' ? 0.03 : 0.06;
+    const st = this.stance();
     for (const f of this.fins) {
-      this.plantPoint(f.side, fwd, wide, this.v3, w);
-      if (instant || !f.planted) { f.contact.copy(this.v3); f.planted = true; f.swing = -1; }
-      else if (f.contact.distanceTo(this.v3) > 0.045 * this.L && f.swing < 0) { f.from.copy(f.contact); f.to.copy(this.v3); f.swing = 0; f.swingDur = 0.22 + this.rnd() * 0.1; f.planted = false; }
+      this.plantPoint(f.side, st.fwd, st.lat, this.v3, w);
+      const yaw = this.webYaw(f.side, st.back);
+      if (instant || !f.planted) { f.contact.copy(this.v3); f.yaw = yaw; f.planted = true; f.swing = -1; }
+      else if ((f.contact.distanceTo(this.v3) > 0.03 * this.L || Math.abs(wrap(yaw - f.yaw)) > 0.35) && f.swing < 0) {
+        f.from.copy(f.contact); f.to.copy(this.v3); f.yawFrom = f.yaw; f.yawTo = f.yaw + wrap(yaw - f.yaw);
+        f.swing = 0; f.swingDur = 0.22 + this.rnd() * 0.1; f.planted = false;
+      }
     }
   }
 
@@ -447,6 +482,7 @@ export class Motor {
       const u = clamp(f.swing, 0, 1);
       f.contact.lerpVectors(f.from, f.to, ease(u));
       f.contact.y = w.ground(f.contact.x, f.contact.z) + lift * Math.sin(Math.PI * u);
+      f.yaw = f.yawFrom + (f.yawTo - f.yawFrom) * ease(u);
       if (f.swing >= 1) { f.swing = -1; f.planted = true; this.printFin(f, w); }
     }
   }
@@ -467,7 +503,7 @@ export class Motor {
     if (shallow) {
       // periscope: hold the eyes above the surface as far as the fins allow
       const need = this.waterY + 0.012 * this.L - (this.groundY + this.eyeTop);
-      lift = clamp(Math.max(lift, need), 0.004 * this.L, 0.075 * this.L);
+      lift = clamp(Math.max(lift, need), 0.004 * this.L, 0.09 * this.L);
       head = Math.max(head, clamp(need / this.L * 2.5, 0, 0.35));
     }
     // breathing sway and small adjustments of the weight between the fins
@@ -480,7 +516,8 @@ export class Motor {
     this.finMode = 'plant';
     this.plantRest(false, w);
     this.stepFins(dt, w, 0.03 * this.L);
-    this.pelvic.to(this.posture === 'low' ? -0.1 : 0.32, 10, dt);
+    // the pelvic disc props the throat on the mud
+    this.pelvic.to(this.posture === 'low' ? -0.1 : this.pelvicReach(lift), 10, dt);
     this.pelvicFold.to(0, 10, dt);
     const erect = this.posture === 'alert' ? 0.05 : this.posture === 'display' ? 0.5 + 0.5 * Math.cos(this.t * 5.5) : 0.85;
     this.d1.to(erect, 12, dt);
@@ -520,7 +557,7 @@ export class Motor {
       const len = Math.min(0.24 * L * (0.85 + 0.25 * this.urgency) * (1 - 0.25 * Math.max(0, slope * 3)), Math.max(0.05 * L, dist)) * (pivot ? 0.35 : 1);
       const side = this.stroke ? -this.stroke.side : 1;
       this.stroke = { p0: this.pos.clone(), h0: this.heading, h1: this.heading + turn, len, tail, side, marked: false, settled: false, swingSet: this.phase < PUSH };
-      if (this.phase < PUSH) for (const fn of this.fins) { if (!fn.planted) { fn.contact.copy(fn.to); fn.planted = true; fn.swing = -1; } }
+      if (this.phase < PUSH) for (const fn of this.fins) { if (!fn.planted) { fn.contact.copy(fn.to); fn.yaw = fn.yawTo; fn.planted = true; fn.swing = -1; } }
     }
     const st = this.stroke!;
     const lift0 = this.propHeight() * (shallow ? 0.6 : 1);
@@ -535,8 +572,9 @@ export class Motor {
       this.liftT = lift0 + 0.05 * L * Math.sin(Math.PI * u) * (shallow ? 0.45 : 1) * (0.7 + 0.3 * this.urgency);
       this.pitchT = 0.02 + 0.05 * Math.sin(Math.PI * u);
       this.headPitchT = 0.12 + 0.05 * Math.sin(Math.PI * u);
-      this.pelvic.to(-0.35, 16, dt);
-      this.pelvicFold.to(0.65, 16, dt);
+      // the pelvic disc lifts off the mud as the body vaults over the pectorals
+      this.pelvic.to(0.0, 12, dt);
+      this.pelvicFold.to(0.3, 12, dt);
       // the tail: a lateral push against the mud at the end of the stroke (recoil), then it follows as a skid
       const k = smooth(0.45, 1, u) * (1 - smooth(0.92, 1.0, u) * 0.5);
       const amp = (0.06 + 0.3 * st.tail) * st.side;
@@ -567,7 +605,8 @@ export class Motor {
         if (this.medium === 'shallow' && w.fx) w.fx.ripple(this.pos.x, this.pos.z, 0.6);
       }
       for (const fn of this.fins) fn.planted = true;
-      this.finFold[0].to(w.sand ? 0.05 : 0.4, 12, dt); this.finFold[1].to(w.sand ? 0.05 : 0.4, 12, dt);
+      // planted, the web is pressed open on the mud (a little gathered on soft mud)
+      this.finFold[0].to(w.sand ? 0.05 : 0.15, 12, dt); this.finFold[1].to(w.sand ? 0.05 : 0.15, 12, dt);
     } else {
       const v = (this.phase - PUSH) / (1 - PUSH);
       if (prevPhase < PUSH || prevPhase > this.phase || !st.swingSet) {
@@ -576,22 +615,28 @@ export class Motor {
         const nextTurn = clamp(err, -0.3, 0.3) * 0.5;
         for (const fn of this.fins) {
           fn.from.copy(fn.contact);
-          this.plantPoint(fn.side, 0.09 + 0.02 * this.urgency, 0.12, fn.to, w, this.heading + nextTurn);
+          // the wrist is put down ahead of the shoulder, the web laid back along the flank (it stays put while the
+          // body vaults over it, the arm swinging from leaning forward to leaning back)
+          this.plantPoint(fn.side, 0.065 + 0.02 * this.urgency, 0.075, fn.to, w, this.heading + nextTurn);
+          fn.yawFrom = fn.yaw;
+          fn.yawTo = fn.yaw + wrap(this.webYaw(fn.side, 0.5, this.heading + nextTurn) - fn.yaw);
           fn.planted = false; fn.swing = 0;
         }
       }
       this.liftT = lift0 * (1 - 0.45 * Math.sin(Math.PI * v));
       this.pitchT = 0.02;
       this.headPitchT = 0.12;
-      this.pelvic.to(0.3, 14, dt);
-      this.pelvicFold.to(0, 14, dt);
+      // recovery: the body rests on the pelvic disc while the pectorals swing forward, half folded
+      this.pelvic.to(this.pelvicReach(this.liftT), 12, dt);
+      this.pelvicFold.to(0, 12, dt);
       for (const fn of this.fins) {
         fn.contact.lerpVectors(fn.from, fn.to, ease(v));
-        fn.contact.y = w.ground(fn.contact.x, fn.contact.z) + 0.05 * L * Math.sin(Math.PI * v);
+        fn.contact.y = w.ground(fn.contact.x, fn.contact.z) + 0.035 * L * Math.sin(Math.PI * v);
+        fn.yaw = fn.yawFrom + (fn.yawTo - fn.yawFrom) * ease(v);
       }
-      this.finFold[0].to(0.6 * Math.sin(Math.PI * v), 14, dt); this.finFold[1].to(0.6 * Math.sin(Math.PI * v), 14, dt);
+      this.finFold[0].to(0.55 * Math.sin(Math.PI * v), 14, dt); this.finFold[1].to(0.55 * Math.sin(Math.PI * v), 14, dt);
       if (!st.settled && v > 0.06) { st.settled = true; if (w.fx && w.soft > 0.4 && w.wetGround > 0.7 && this.medium === 'land' && this.rnd() < 0.35) w.fx.splash('mud', this.pos.x, this.groundY, this.pos.z, 0.2, 2, 0, 0, 0.0008 * this.scale); }
-      if (this.phase + dt * f >= 1) for (const fn of this.fins) { fn.contact.copy(fn.to); fn.planted = true; this.printFin(fn, w); }
+      if (this.phase + dt * f >= 1) for (const fn of this.fins) { fn.contact.copy(fn.to); fn.yaw = fn.yawTo; fn.planted = true; this.printFin(fn, w); }
       if (shallow) {
         this.swimPhase += dt * TAU * 2.4;
         const b = bendFromMidline((x) => swimMidline(x, this.swimPhase, 0.3 * clamp(wetFrac, 0, 1)));
@@ -737,7 +782,7 @@ export class Motor {
         this.lift.x = -0.004 * L; this.lift.v = 0;
         h.stage = 'land'; h.t = 0;
         this.vel.set(0, 0, 0);
-        for (const fn of this.fins) { this.plantPoint(fn.side, 0.06, 0.13, fn.contact, w); fn.planted = true; fn.swing = -1; }
+        for (const fn of this.fins) { this.plantPoint(fn.side, 0.02, 0.085, fn.contact, w); fn.yaw = this.webYaw(fn.side, 0.4); fn.planted = true; fn.swing = -1; }
         this.reflexBlink();
         if (w.fx) {
           const soft = w.soft * w.wetGround;
@@ -755,7 +800,7 @@ export class Motor {
       this.liftT = this.propHeight() * smooth(0.3, 1, u);
       this.pitchT = 0.03;
       this.headPitchT = 0.08 + 0.06 * u;
-      this.pelvic.to(0.3, 12, dt); this.pelvicFold.to(0, 12, dt);
+      this.pelvic.to(this.pelvicReach(this.liftT), 12, dt); this.pelvicFold.to(0, 12, dt);
       this.d1.to(0.6, 6, dt);
       if (u >= 1) {
         this.setGait('stand');
@@ -822,7 +867,7 @@ export class Motor {
       this.breatheBoost = 0.6 * (1 - u);
       if (u >= 1) { this.setGait('stand'); this.done = true; }
     }
-    this.pelvic.to(0.3, 10, dt);
+    this.pelvic.to(this.pelvicReach(this.liftT), 10, dt);
     this.d1.to(0.8, 6, dt);
   }
   private breatheBoost = 0;
@@ -1194,7 +1239,7 @@ export class Motor {
     }
     const want = fold ? 0.8 : paddle ? 0.15 : null;
     if (want !== null) { this.finFold[0].to(want, 10, dt); this.finFold[1].to(want, 10, dt); }
-    else if (this.gait !== 'crawl') { this.finFold[0].to(0.3, 6, dt); this.finFold[1].to(0.3, 6, dt); }
+    else if (this.gait !== 'crawl') { this.finFold[0].to(0.12, 6, dt); this.finFold[1].to(0.12, 6, dt); }
     p.morph.foldPecL = this.finFold[0].x;
     p.morph.foldPecR = this.finFold[1].x;
   }
@@ -1224,9 +1269,12 @@ export class Motor {
   }
 
   /**
-   * Two-bone IK for the planted pectorals: shoulder → wrist (the muscular arm) → contact (the fin's rays, bundled into
-   * a strut on mud, spread on sand). The wrist bows outward and up like an elbow; the fin's plane is turned to lie on
-   * the ground with its leading rays forward.
+   * IK for the planted pectorals (Pace & Gibb 2009; photographs of propped animals): the muscular arm reaches from the
+   * shoulder down to the wrist, put down on the mud beside the body; the fin web lies on the mud behind the wrist,
+   * swept back and out, its leading rays forward, touching down toward its margin. While planted the wrist and the
+   * web's heading stay put in the world, so the body vaults over the fin and the arm swings from leaning forward to
+   * leaning back. Propped high the arm cannot reach the mud: it points at the wrist's spot and the web slopes down
+   * from the wrist to the mud.
    */
   private ikFins(weight: number, w: MotorWorld): void {
     const rig = this.rig.pec;
@@ -1234,46 +1282,56 @@ export class Motor {
     const a = rig.armLen_m * s, b = rig.handLen_m * s;
     const rootBone = this.bones.J_root;
     if (!rootBone) return;
-    const up = this.v3;
+    const hw = 0.0006 * s; // the wrist rests on the mud by half its thickness
     for (const f of this.fins) {
       const sh = this.bones[f.side > 0 ? 'J_pecL' : 'J_pecR'], wr = this.bones[f.side > 0 ? 'J_pecArmL' : 'J_pecArmR'];
       if (!sh || !wr) continue;
       const S = sh.getWorldPosition(new Vector3());
-      const C = f.contact.clone();
-      // never reach below the mud surface (the contact sits on it)
-      const D = new Vector3().subVectors(C, S);
-      let d = D.length();
-      const dMax = (a + b) * 0.995, dMin = Math.abs(a - b) * 1.05 + 1e-5;
-      if (d > dMax) { D.multiplyScalar(dMax / d); d = dMax; C.copy(S).add(D); }
-      if (d < dMin) { D.multiplyScalar(dMin / Math.max(d, 1e-6)); d = dMin; C.copy(S).add(D); }
-      const u = D.clone().divideScalar(d);
-      const cosA = clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1);
-      const sinA = Math.sqrt(1 - cosA * cosA);
-      // the wrist ("elbow") bows down and out so the fin web can lie on the mud; if that would put it into the mud,
-      // the bend swings up toward the outside
       const out = this.left(this.heading, new Vector3()).multiplyScalar(f.side);
+      // the wrist: where it was put down if the arm reaches it there, else as close to it as the arm allows
+      const Wd = f.contact.clone();
+      Wd.y += hw;
+      const D = new Vector3().subVectors(Wd, S);
+      const d = D.length();
       const W = new Vector3();
-      for (let k = 0; k <= 6; k++) {
-        const t = k / 6;
-        const pole = out.clone().multiplyScalar(0.55 + 0.3 * t).add(up.set(0, -0.85 + 1.5 * t, 0));
-        const v = pole.sub(u.clone().multiplyScalar(pole.dot(u)));
-        if (v.lengthSq() < 1e-10) continue;
-        v.normalize();
-        W.copy(S).addScaledVector(u, a * cosA).addScaledVector(v, a * sinA);
-        if (W.y >= w.ground(W.x, W.z) + 0.0007 * s) break;
+      if (d >= a) W.copy(S).addScaledVector(D, a / Math.max(d, 1e-9));
+      else {
+        // the arm is longer than the way down: it splays out sideways (the wrist slides out along the mud)
+        const dy = D.y;
+        const r = Math.sqrt(Math.max(0, a * a - dy * dy));
+        const hz = new Vector3(D.x, 0, D.z);
+        if (hz.lengthSq() < 1e-12) hz.copy(out);
+        hz.normalize();
+        W.copy(S).addScaledVector(hz, r);
+        W.y = S.y + dy;
       }
-      // desired frames (world): the arm along S→W; the web along W→C, lying on the mud (its plane faces up), leading rays forward
-      const fwd = this.fwd(this.heading, new Vector3());
-      const dh = new Vector3().subVectors(C, W).normalize();
+      const gW = w.ground(W.x, W.z);
+      if (W.y < gW + hw) {
+        // never through the mud: lift the wrist and keep the arm's length
+        W.y = gW + hw;
+        const v = new Vector3().subVectors(W, S);
+        W.copy(S).addScaledVector(v, a / Math.max(v.length(), 1e-9));
+      }
+      // the web: its middle ray runs from the wrist along the planted heading and reaches the mud near its margin
+      const hd = new Vector3(Math.sin(f.yaw), 0, Math.cos(f.yaw));
+      const lift = Math.max(0, W.y - gW - hw);
+      // in the air (swinging forward) it is carried level with the wrist rather than dragged down to the mud
+      const drop = Math.min(lift, f.planted || f.swing < 0 ? 0.7 * b : 0.25 * b);
+      const horiz = Math.sqrt(Math.max(1e-12, b * b - drop * drop));
+      const G = new Vector3(W.x + hd.x * horiz, 0, W.z + hd.z * horiz);
+      G.y = Math.max(w.ground(G.x, G.z) + 0.0002 * s, W.y - drop);
+      const dh = new Vector3().subVectors(G, W).normalize();
+      // the web's plane lies on the mud (normal up, square to the middle ray), the leading edge a little raised
       const upv = new Vector3(0, 1, 0);
       let nh = upv.clone().sub(dh.clone().multiplyScalar(upv.dot(dh)));
       if (nh.lengthSq() < 1e-8) nh = out.clone();
       nh.normalize();
-      // on mud the rays are bundled into a strut and the web stands more on edge; on sand it is spread flat
-      const strut = w.sand ? 0.1 : 0.35;
-      nh.lerp(out.clone().sub(dh.clone().multiplyScalar(out.dot(dh))).normalize(), strut).normalize();
+      const fwd = this.fwd(f.yaw - f.side * Math.PI / 2, new Vector3());
       let wh = new Vector3().crossVectors(nh, dh).normalize();
       if (wh.dot(fwd) < 0) { wh.negate(); nh.negate(); }
+      // roll the leading edge up a little (the fin is pressed down along its trailing rays)
+      const nUp = nh.y >= 0 ? nh : nh.clone().negate();
+      wh.multiplyScalar(Math.cos(0.14)).addScaledVector(nUp, Math.sin(0.14)).normalize();
       const da = new Vector3().subVectors(W, S).normalize();
       let wa = wh.clone().sub(da.clone().multiplyScalar(wh.dot(da)));
       if (wa.lengthSq() < 1e-8) wa = nh.clone().cross(da);

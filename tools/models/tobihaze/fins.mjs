@@ -7,7 +7,7 @@
 // transparent with a grey-brown mid stripe and dark speckles at the ray bases; anal I,11, base 19 % SL; pectoral 14
 // rays on a protruding muscular base (elongated radials); pelvics I,5 each, joined in front by a frenum and the inner
 // rays linked by membrane for half their length, length 13 % SL; caudal lanceolate, the lower rays shorter and stouter.
-import { S_END, SL, TL, FEAT, EYE, section, topY, botY, toObject, dirToObject, surfaceAt, norm3, BODY_U } from './anatomy.mjs';
+import { S_END, SL, TL, FEAT, EYE, section, topY, botY, toObject, dirToObject, surfaceAt, norm3, ARM_U } from './anatomy.mjs';
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../../lib/noise.mjs';
 
 const DEG = Math.PI / 180;
@@ -27,16 +27,20 @@ function rot(v, k, ang) {
 
 // ------------------------------------------------------------------------------------------------ pectoral arm
 // The arm (fleshy base over the elongated radials) leaves the flank low behind the gill slit; in the rest pose of the
-// model it points back, down and out. The fin web fans from its distal end ("wrist").
+// model it points back, down and out. It ends in a flat "hand" whose distal edge carries the fin web; the joint
+// between the forearm and the hand (the "wrist", J_pecArm) is where the web turns relative to the arm when it is laid
+// on the mud.
 export const PEC = (() => {
-  const base = [FEAT.pecLobe[0] + 0.2, FEAT.pecLobe[1] - 0.25, FEAT.pecLobe[2] - 0.65];
-  const dir = norm3([0.72, -0.5, 0.48]);
-  const len = 6.4;
-  const wrist = add(base, scl(dir, len));
+  const base = [FEAT.pecLobe[0] + 0.3, FEAT.pecLobe[1] + 0.05, FEAT.pecLobe[2] - 0.95];
+  const dir = norm3([0.6, -0.58, 0.55]);
+  const len = 6.2; // shoulder → distal edge of the hand
+  const joint = 4.4; // shoulder → wrist joint
+  const wrist = add(base, scl(dir, joint));
+  const hand = add(base, scl(dir, len));
   // the fin plane holds the arm axis and its "width" direction (in the rest pose: up and slightly in)
   const width = norm3(sub([0, 1, -0.25], scl(dir, dot([0, 1, -0.25], dir))));
   const normal = norm3(cross(dir, width)); // faces out-and-down for the left fin
-  return { base, dir, len, wrist, width, normal, rays: 14 };
+  return { base, dir, len, joint, wrist, hand, width, normal, rays: 14 };
 })();
 
 /** Arm tube (left side; the right one mirrors z). Returns fish-space vertices with arm parameters for skinning. */
@@ -50,11 +54,14 @@ export function buildArm(NA = 18, NR = 20, side = 1) {
   for (let i = 0; i <= NA; i++) {
     const f = i / NA;
     const along = f * total;
-    // radius profile: wide base, slender middle, a rounded swelling at the wrist where the rays insert
-    const rw = mix(2.1, 1.45, smoothstep(0.0, 0.6, f)) + 0.06 * Math.exp(-(((f - 0.94) / 0.06) ** 2));
-    const rt = mix(1.2, 0.62, smoothstep(0.0, 0.6, f)) + 0.04 * Math.exp(-(((f - 0.94) / 0.06) ** 2));
-    // the distal end rounds off over the last 0.5 mm
-    const cap = f > 0.965 ? Math.sqrt(Math.max(0, 1 - ((f - 0.965) / 0.035) ** 2)) : 1;
+    // a thick, fleshy limb (the muscles over the elongated radials): broad where it leaves the flank, a rounded
+    // forearm, then (past the wrist joint) flattening into a broad, thin "hand" where the rays insert along its
+    // distal edge (the fin web grows out of that edge, not out of a point)
+    const hand = smoothstep((PEC.joint + 1.2 - 0.2) / total, 0.95, f);
+    const rw = mix(mix(2.05, 1.38, smoothstep(0.0, 0.55, f)), 1.62, hand);
+    const rt = mix(mix(1.55, 0.98, smoothstep(0.0, 0.55, f)), 0.5, hand);
+    // the distal edge rounds off over the last 0.35 mm
+    const cap = f > 0.97 ? Math.sqrt(Math.max(0, 1 - ((f - 0.97) / 0.03) ** 2)) : 1;
     const c = add(start, scl(dir, along));
     const row = [];
     for (let j = 0; j <= NR; j++) {
@@ -66,7 +73,7 @@ export function buildArm(NA = 18, NR = 20, side = 1) {
       const nn = side > 0 ? n : [n[0], n[1], -n[2]];
       row.push(fish.length / 3);
       fish.push(...pp); nrm.push(...nn);
-      uv.push(BODY_U + (1 - BODY_U) * (0.02 + 0.96 * f), j / NR);
+      uv.push(ARM_U[0] + (ARM_U[1] - ARM_U[0]) * (0.02 + 0.96 * f), j / NR);
       at.push(along - 1.2);
     }
     rows.push(row);
@@ -86,21 +93,32 @@ export function buildArm(NA = 18, NR = 20, side = 1) {
   return { fish, nrm, uv, at, indices: tris };
 }
 
-/** paint of the arm strip in the body texture: pale, fleshy, finely speckled */
+/**
+ * paint of the arm strip in the body texture: the flank's skin (grey-olive, dense dark melanophores, a few pale
+ * spots) over the muscular forearm, paler underneath, turning yellowish and translucent-looking on the flat hand
+ * where the rays insert
+ */
 export function armPaint(ua, va) {
   const f = ua;
   const a = va * TAU;
-  const p = [f * 6, Math.cos(a) * 1.4, Math.sin(a) * 0.9];
+  const p = [f * 7, Math.cos(a) * 1.5, Math.sin(a) * 0.8];
   const top = Math.cos(a); // +1: the upper (outer) side in the rest pose
-  let col = [mix(112, 150, 0.5 - 0.5 * top), mix(104, 136, 0.5 - 0.5 * top), mix(90, 114, 0.5 - 0.5 * top)];
+  const under = smoothstep(0.2, -0.8, top);
+  let col = [mix(118, 168, under), mix(114, 160, under), mix(104, 142, under)];
   const n = fbm3(p[0] * 0.8, p[1] * 0.8, p[2] * 0.8, 3, 401);
   col = col.map((c) => c * (1 + 0.12 * n));
-  const sp = smoothstep(0.62, 0.8, perlin3(p[0] * 5, p[1] * 5, p[2] * 5, 403) * 0.5 + 0.5);
-  col = col.map((c, i) => mix(c, [58, 52, 44][i], sp * (0.6 + 0.4 * smoothstep(0.3, -0.3, f - 0.4)) * 0.85));
-  // proximally the arm takes the flank colour
-  col = col.map((c, i) => mix(c, [118, 110, 94][i], smoothstep(0.55, 0.0, f) * 0.75));
-  const h = 0.012 * fbm3(p[0] * 4, p[1] * 4, p[2] * 4, 3, 409) + 0.02 * Math.sin(f * 40 + n) * smoothstep(0.2, 0.6, f) * 0.4;
-  return { col, h, ao: mix(0.7, 1, smoothstep(0.0, 0.25, f)), rough: 0.5, mudAff: clamp(0.5 - 0.4 * top), mucus: 0.6, sun: clamp(0.5 + 0.4 * top) };
+  // melanophore speckle (fine, dense) and a few larger dark freckles, fewer underneath
+  const fine = smoothstep(0.6, 0.76, perlin3(p[0] * 9, p[1] * 9, p[2] * 9, 403) * 0.5 + 0.5);
+  const big = smoothstep(0.66, 0.8, perlin3(p[0] * 3.2, p[1] * 3.2, p[2] * 3.2, 405) * 0.5 + 0.5);
+  col = col.map((c, i) => mix(c, [52, 48, 42][i], (fine * 0.7 + big * 0.5) * (1 - 0.7 * under)));
+  // pale spots like the flank's
+  const pale = smoothstep(0.74, 0.84, perlin3(p[0] * 4 + 7, p[1] * 4, p[2] * 4, 407) * 0.5 + 0.5) * (1 - under);
+  col = col.map((c, i) => mix(c, [206, 214, 210][i], pale * 0.45));
+  // the hand: yellowish where the rays insert
+  const hand = smoothstep(0.62, 0.95, f);
+  col = col.map((c, i) => mix(c, [178, 156, 110][i], hand * 0.6));
+  const h = 0.012 * fbm3(p[0] * 4, p[1] * 4, p[2] * 4, 3, 409) + 0.012 * Math.sin(f * 46 + 2 * n) * smoothstep(0.15, 0.55, f) * (1 - hand);
+  return { col, h, ao: mix(0.7, 1, smoothstep(0.0, 0.25, f)), rough: 0.5, mudAff: clamp(0.5 - 0.4 * top), mucus: 0.65, sun: clamp(0.1 + 0.3 * top) };
 }
 
 // ------------------------------------------------------------------------------------------------ fin definitions
@@ -143,25 +161,27 @@ function caudalFin(rect) {
     const fold = [Math.cos(spread * 0.35), -Math.sin(spread * 0.35), 0];
     R.push({ base: [s, y, 0], dir, fold, len, bend: 0, spine: proc });
   }
-  return { name: 'Fin_Caudal', type: 'caudal', rays: R, normal: [0, 0, 1], notch: () => 0.04, rect };
+  return { name: 'Fin_Caudal', type: 'caudal', rays: R, normal: [0, 0, 1], notch: () => 0.018, rect };
 }
 
 function pectoralWeb(rect) {
   // 14 rays fanning from the wrist; rounded fan, the middle rays longest
-  const { wrist, dir, width, normal } = PEC;
+  const { hand, dir, width, normal } = PEC;
   const n = PEC.rays;
   const R = [];
-  const LEN = [5.6, 6.6, 7.3, 7.8, 8.1, 8.25, 8.25, 8.1, 7.8, 7.4, 6.8, 6.1, 5.3, 4.4];
+  // a rounded fan, the leading rays stoutest
+  const LEN = [5.2, 6.3, 7.0, 7.5, 7.8, 7.95, 7.95, 7.8, 7.55, 7.15, 6.6, 5.9, 5.1, 4.2].map((l) => l + 0.9);
   for (let i = 0; i < n; i++) {
     const f = i / (n - 1); // 0 = leading (upper) ray
-    const along = (0.5 - f) * 2.5; // base positions along the wrist's width
-    const base = add(sub(wrist, scl(dir, 0.35)), scl(width, along));
-    const spread = (0.5 - f) * 118 * DEG; // the open fan spans ~118°
+    // the rays insert along the hand's distal edge, their bases sheathed in its skin (they start inside the hand)
+    const along = (0.5 - f) * 2.7;
+    const base = add(sub(hand, scl(dir, 1.3)), scl(width, along));
+    const spread = (0.5 - f) * 112 * DEG; // the open fan spans ~112°
     const d = norm3(rot(dir, normal, spread));
     const fold = norm3(rot(dir, normal, (0.5 - f) * 22 * DEG));
     R.push({ base, dir: d, fold, len: LEN[i], bend: 0.12, spine: false });
   }
-  return { name: 'Fin_Pectoral_L', type: 'pectoral', rays: R, normal, notch: () => 0.07, rect, pec: true };
+  return { name: 'Fin_Pectoral_L', type: 'pectoral', rays: R, normal, notch: () => 0.012, rect, pec: true };
 }
 
 export const PELVIC = { s: 19.6, len: 8.3 };
@@ -192,15 +212,18 @@ export const ATLAS = 2048;
 export function finDefinitions() {
   // atlas rectangles in 0..1 (x, y, w, h)
   return [
-    medianFin({ name: 'Fin_Dorsal1', s0: 25.6, s1: 33.4, rays: 14, top: true, spines: 14,
-      heights: [5.6, 7.4, 8.4, 8.9, 9.0, 8.9, 8.6, 8.1, 7.5, 6.8, 6.0, 5.1, 4.1, 3.0], angle0: 14 * DEG, angle1: 62 * DEG, foldAngle: 82 * DEG,
-      rect: [0.0, 0.0, 0.5, 0.25], notch: 0.018, bend: 0.12 }),
-    medianFin({ name: 'Fin_Dorsal2', s0: 39.2, s1: 53.6, rays: 13, top: true, spines: 1,
-      heights: [3.6, 4.1, 4.4, 4.6, 4.7, 4.75, 4.75, 4.7, 4.6, 4.45, 4.2, 3.8, 3.2], angle0: 38 * DEG, angle1: 66 * DEG, foldAngle: 84 * DEG,
-      rect: [0.5, 0.0, 0.5, 0.25], notch: 0.08 }),
-    medianFin({ name: 'Fin_Anal', s0: 41.4, s1: 53.6, rays: 12, top: false, spines: 1,
-      heights: [3.0, 3.5, 3.8, 3.95, 4.0, 4.0, 3.95, 3.85, 3.7, 3.5, 3.15, 2.7], angle0: 40 * DEG, angle1: 66 * DEG, foldAngle: 84 * DEG,
-      rect: [0.0, 0.25, 0.5, 0.25], notch: 0.08 }),
+    // first dorsal: a tall, rounded fan over the pectorals (leading edge near vertical, the top rounded, the trailing
+    // edge sloping to the back), ~11 mm high in an adult
+    medianFin({ name: 'Fin_Dorsal1', s0: 22.0, s1: 34.0, rays: 14, top: true, spines: 14,
+      heights: [8.6, 10.4, 11.1, 11.3, 11.1, 10.6, 9.8, 8.9, 7.9, 6.9, 5.8, 4.7, 3.6, 2.5], angle0: 6 * DEG, angle1: 62 * DEG, foldAngle: 82 * DEG,
+      rect: [0.0, 0.0, 0.5, 0.25], notch: 0.045, bend: 0.1 }),
+    // second dorsal: long and even, from above the vent nearly to the peduncle
+    medianFin({ name: 'Fin_Dorsal2', s0: 39.0, s1: 58.0, rays: 13, top: true, spines: 1,
+      heights: [5.0, 5.5, 5.75, 5.85, 5.9, 5.9, 5.85, 5.75, 5.6, 5.35, 5.0, 4.5, 3.8], angle0: 32 * DEG, angle1: 64 * DEG, foldAngle: 84 * DEG,
+      rect: [0.5, 0.0, 0.5, 0.25], notch: 0.03 }),
+    medianFin({ name: 'Fin_Anal', s0: 41.0, s1: 56.5, rays: 12, top: false, spines: 1,
+      heights: [3.4, 3.9, 4.2, 4.35, 4.4, 4.4, 4.35, 4.25, 4.1, 3.85, 3.5, 3.0], angle0: 38 * DEG, angle1: 64 * DEG, foldAngle: 84 * DEG,
+      rect: [0.0, 0.25, 0.5, 0.25], notch: 0.03 }),
     caudalFin([0.5, 0.25, 0.5, 0.375]),
     pectoralWeb([0.0, 0.5, 0.5, 0.25]),
     pelvicFins([0.0, 0.75, 0.5, 0.25]),
@@ -236,8 +259,8 @@ export function finPoint(def, a, t, folded = 0) {
     const d = rot(r.dir, n, r.bend * ((k + 0.5) / steps) * tt);
     p = add(p, scl(d, L / steps));
   }
-  // pleats: the membrane between rays sags out of the plane a little (more when folded)
-  const sag = Math.sin(Math.PI * r.f) * (0.05 + 0.25 * folded) * tt * r.len * 0.06;
+  // pleats: the membrane between rays sags out of the plane only when the fin folds (spread, it is taut)
+  const sag = Math.sin(Math.PI * r.f) * (0.012 + 0.25 * folded) * tt * r.len * 0.06;
   const pn = def.type === 'pelvic' ? [0, 1, 0] : n;
   return add(p, scl(pn, sag * (r.i % 2 ? 1 : -1)));
 }
@@ -329,7 +352,7 @@ export function paintFinAtlas(defs, size = ATLAS, log = () => {}) {
       const a = clamp(u) * (nR - 1), t = clamp(v);
       const fa = a - Math.floor(a);
       const rayD = Math.min(fa, 1 - fa); // 0 on a ray
-      const ray = smoothstep(0.16, 0.0, rayD) * (1 - 0.3 * t);
+      const ray = smoothstep(0.11, 0.0, rayD) * (1 - 0.35 * t);
       // segmented, branching soft rays (fine joints), spines unsegmented
       const r = def.rays[Math.min(nR - 1, Math.round(a))];
       const seg = r.spine ? 0 : 0.5 + 0.5 * Math.cos(t * 70 + Math.round(a) * 1.7);
@@ -340,31 +363,50 @@ export function paintFinAtlas(defs, size = ATLAS, log = () => {}) {
       let col, alpha;
       switch (def.type) {
         case 'median': {
+          // white spots in rows on the rays (each ray carries a string of them, staggered between neighbours)
+          const ri = Math.round(a), fr = a - ri;
+          const spotRow = (rows, seed, r0) => {
+            const tv = t * rows + 0.5 * (ri & 1) + 0.3 * hash01(ri, 0, 0, seed);
+            let best = 0;
+            for (const cy of [Math.floor(tv) - 1, Math.floor(tv), Math.floor(tv) + 1]) {
+              if (hash01(ri, cy, 1, seed) < 0.15) continue;
+              const oy = 0.5 + 0.35 * (hash01(ri, cy, 2, seed) - 0.5);
+              const ox = 0.08 * (hash01(ri, cy, 3, seed) - 0.5);
+              const r = r0 * (0.7 + 0.5 * hash01(ri, cy, 4, seed));
+              const d = Math.hypot((fr - ox) / r, (tv - cy - oy) / (r * rows * 0.11));
+              best = Math.max(best, smoothstep(1.0, 0.65, d));
+            }
+            return best;
+          };
+          const onRay = smoothstep(0.24, 0.06, Math.abs(fr));
           if (def.name === 'Fin_Dorsal1') {
-            // grey-brown with a dark band inside a narrow whitish margin; faint mottling at the base
-            const band = smoothstep(mt - 0.24, mt - 0.12, t) * smoothstep(mt - 0.02, mt - 0.08, t);
-            const margin = smoothstep(mt - 0.07, mt - 0.02, t);
-            col = [120, 112, 100];
-            col = col.map((c, i) => mix(c, [48, 42, 38][i], band * 0.85));
-            col = col.map((c, i) => mix(c, [226, 224, 216][i], margin * 0.8));
-            const mott = smoothstep(0.55, 0.75, fbm3(a * 0.9, t * 4, 3, 3, 507) * 0.5 + 0.5) * smoothstep(0.55, 0.2, t);
-            col = col.map((c, i) => mix(c, [70, 62, 54][i], mott * 0.5));
-            alpha = mix(0.62, 0.9, band) + 0.08 * margin;
+            // orange-brown spines in a dark brown membrane, strings of white spots on the spines, a black blotch high
+            // on the first spines, an orange margin (the spine tips run a little free beyond the membrane)
+            const margin = smoothstep(mt - 0.1, mt - 0.03, t);
+            const blotch = smoothstep(0.5, 0.66, t) * smoothstep(3.8, 1.6, a) * (1 - margin);
+            const pearls = spotRow(9, 11, 0.3) * smoothstep(0.04, 0.1, t) * smoothstep(mt - 0.12, mt - 0.2, t) * (1 - blotch);
+            col = [72, 54, 42].map((c, i) => mix(c, [178, 110, 58][i], onRay * 0.85));
+            col = col.map((c, i) => mix(c, [104, 84, 66][i], smoothstep(0.12, 0.0, t) * 0.6));
+            col = col.map((c, i) => mix(c, [242, 236, 222][i], pearls * 0.95));
+            col = col.map((c, i) => mix(c, [24, 20, 18][i], blotch * 0.92));
+            col = col.map((c, i) => mix(c, [214, 122, 56][i], margin * 0.8));
+            alpha = mix(0.7, 0.92, onRay) + 0.2 * pearls + 0.2 * blotch;
           } else if (def.name === 'Fin_Dorsal2') {
-            // transparent with a grey-brown mid stripe and dark speckles at the ray bases, pale edge
-            const stripe = Math.exp(-(((t - 0.52) / 0.13) ** 2));
-            const speck = smoothstep(0.62, 0.8, perlin3(a * 2.2, t * 9, 7, 511) * 0.5 + 0.5) * smoothstep(0.4, 0.05, t);
-            const margin = smoothstep(mt - 0.08, mt - 0.02, t);
-            col = [150, 142, 128];
-            col = col.map((c, i) => mix(c, [72, 64, 54][i], stripe * 0.8));
-            col = col.map((c, i) => mix(c, [40, 36, 32][i], speck * 0.8));
-            col = col.map((c, i) => mix(c, [220, 220, 214][i], margin * 0.6));
-            alpha = 0.32 + 0.45 * stripe + 0.4 * speck + 0.2 * margin;
+            // pale membrane with strings of cream spots, a black submarginal band and a broad orange-red margin
+            const band = smoothstep(mt - 0.42, mt - 0.32, t) * smoothstep(mt - 0.16, mt - 0.24, t);
+            const orange = smoothstep(mt - 0.26, mt - 0.14, t);
+            const pearls = spotRow(6, 23, 0.32) * smoothstep(0.04, 0.1, t) * smoothstep(mt - 0.36, mt - 0.44, t);
+            col = [120, 98, 76].map((c, i) => mix(c, [168, 120, 76][i], onRay * 0.7));
+            col = col.map((c, i) => mix(c, [236, 228, 208][i], pearls * 0.9));
+            col = col.map((c, i) => mix(c, [30, 26, 24][i], band * 0.88));
+            col = col.map((c, i) => mix(c, [212, 104, 52][i], orange * 0.8));
+            alpha = 0.5 + 0.2 * onRay + 0.3 * pearls + 0.4 * band + 0.25 * orange;
           } else {
-            // anal fin: pale, almost clear, a dusky submarginal shade
-            const dusk = smoothstep(0.45, 0.85, t);
-            col = [190, 186, 176].map((c, i) => mix(c, [118, 112, 104][i], dusk * 0.5));
-            alpha = 0.34 + 0.22 * dusk;
+            // anal fin: pale yellowish, nearly clear, the rays yellow
+            const dusk = smoothstep(0.55, 0.95, t);
+            col = [200, 186, 146].map((c, i) => mix(c, [196, 164, 84][i], onRay * 0.6));
+            col = col.map((c, i) => mix(c, [150, 136, 104][i], dusk * 0.35));
+            alpha = 0.3 + 0.2 * onRay + 0.15 * dusk;
           }
           break;
         }
@@ -379,22 +421,28 @@ export function paintFinAtlas(defs, size = ATLAS, log = () => {}) {
           break;
         }
         case 'pectoral': {
-          // pale yellowish, translucent; dark speckles over the proximal rays
-          const sp = smoothstep(0.6, 0.78, perlin3(a * 2.6, t * 10, 11, 521) * 0.5 + 0.5) * smoothstep(0.7, 0.1, t);
-          col = [168, 150, 116];
-          col = col.map((c, i) => mix(c, [74, 62, 50][i], sp * 0.7));
-          alpha = 0.42 + 0.3 * sp;
+          // olive-yellow and translucent, many fine yellow rays; the base sheathed in the arm's thick skin (opaque,
+          // the arm's colour), which fades out over the first fifth of the fin
+          const sheath = smoothstep(0.24, 0.08, t);
+          const sp = smoothstep(0.6, 0.78, perlin3(a * 2.6, t * 10, 11, 521) * 0.5 + 0.5) * smoothstep(0.6, 0.15, t);
+          // each ray branches in its outer half: fine secondary rays between the main ones
+          const fine = t > 0.4 ? smoothstep(0.1, 0.0, Math.abs(fa - 0.5)) * smoothstep(0.4, 0.6, t) : 0;
+          col = [134, 124, 84];
+          col = col.map((c, i) => mix(c, [196, 162, 76][i], Math.max(smoothstep(0.11, 0.0, rayD), fine) * 0.75));
+          col = col.map((c, i) => mix(c, [74, 66, 50][i], sp * 0.6));
+          col = col.map((c, i) => mix(c, [128, 120, 100][i], sheath));
+          alpha = 0.26 + 0.24 * sp + 0.3 * fine + 0.7 * sheath;
           break;
         }
         default: {
-          // pelvic: whitish
-          col = [214, 208, 194];
-          alpha = 0.5;
+          // pelvic: creamy yellow, fleshy at the base
+          col = [212, 194, 150].map((c, i) => mix(c, [196, 176, 140][i], smoothstep(0.3, 0.0, t)));
+          alpha = 0.55 + 0.3 * smoothstep(0.3, 0.0, t);
         }
       }
-      // rays are opaque and a little darker
-      col = col.map((c) => c * (1 - 0.18 * ray));
-      alpha = clamp(Math.max(alpha, ray * 0.92) * inside * (0.9 + 0.1 * n1));
+      // rays are more opaque and a little darker than the membrane
+      col = col.map((c) => c * (1 - 0.12 * ray));
+      alpha = clamp(Math.max(alpha, ray * 0.78) * inside * (0.9 + 0.1 * n1));
       const k = (y0 + y) * size + (x0 + x);
       color[k * 4] = clamp(Math.round(col[0]), 0, 255);
       color[k * 4 + 1] = clamp(Math.round(col[1]), 0, 255);
