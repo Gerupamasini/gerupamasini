@@ -94,14 +94,17 @@ export const bodySculpt = {
     { type: 'ellipsoid', name: 'lores', c: [0.0, 90.4, 35.3], r: [5.6, 4.9, 4.8], k: 3.2, role: 'head' },
     { type: 'capsule', name: 'billCuff', a: [0.0, 91.6, 35.8], b: [0.0, 89.9, 39.9], r: 2.0, k: 2.4, role: 'head' },
     { type: 'ellipsoid', name: 'chin', c: [0.0, 84.0, 31.0], r: [9.0, 6.0, 7.0], k: 4, role: 'head' },
-    // ear-covert / cheek plumage behind and below the eye: the head ≈ half the body width from the front
-    { type: 'ellipsoid', name: 'cheekL', c: [9.4, 93.0, 22.0], r: [8.2, 9.5, 11.5], k: 4, role: 'head' },
-    { type: 'ellipsoid', name: 'cheekR', c: [-9.4, 93.0, 22.0], r: [8.2, 9.5, 11.5], k: 4, role: 'head' },
-    // v4.1: broad, round crown behind and above the eyes — from the front a wide cap over the full cheeks, the eyes
-    // at the widest point of the head (the user's front photo, p013, p063); kept inside the side profile
-    { type: 'ellipsoid', name: 'crown', c: [0.0, 97.0, 20.0], r: [14.5, 6.0, 7.5], k: 4, role: 'head' },
-    // fore-neck and upper breast round the base of the neck (neck fill): no neck seen from any side
-    { type: 'ellipsoid', name: 'collar', c: [0.0, 80.95, 17.87], r: [20.69, 12.12, 19.71], role: 'neck' },
+    // ear-covert / cheek plumage behind and below the eye, a little fuller than the head's ellipsoid (v4.3: the v3 head
+    // restored — from the front the eyes sit inside the outline of the head, the cheeks the widest part at eye level,
+    // p037, p058, p063)
+    { type: 'ellipsoid', name: 'cheekL', c: [9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3, role: 'head' },
+    { type: 'ellipsoid', name: 'cheekR', c: [-9.7, 94.0, 21.0], r: [3.8, 5.4, 5.0], k: 3, role: 'head' },
+    // v4.3: top of the neck fill under the v3-sized head (below and behind the ear coverts), with the collar 1.5 mm
+    // narrower: from the front the outline widens smoothly from the head into the v4.2 shoulders instead of stepping out
+    // at y 90 (mantleNape stays as v4.2: narrowing it let the median coverts sink into the shoulder when preening the wing)
+    { type: 'ellipsoid', name: 'neckTop', c: [0.0, 88.94, 19.25], r: [17.24, 4.48, 7.48], k: 3.95, role: 'neck' },
+    // fore-neck and upper breast round the base of the neck (neck fill): no neck seen from any side (v4.3: r.x 20.69 → 19.14)
+    { type: 'ellipsoid', name: 'collar', c: [0.0, 80.95, 17.87], r: [19.14, 12.12, 19.71], role: 'neck' },
     // PRIMS-END
   ],
   // Subtractive details (smooth subtraction)
@@ -144,13 +147,15 @@ export const bodySculpt = {
   // coverts behind the cheek straight down the side of the throat (x ≈ 20–22, thickest there), then turning in under
   // the throat across the upper breast, nearly meeting its mirror 2.5 mm off the midline. The grey-brown shoulder
   // begins right behind it (kpPatchZ). Shader: kpPlumage (width profile there).
-  breastPatch: [[18.4, 89.5, 21.5], [18.1, 85.5, 27.5], [16.8, 80, 31], [14.6, 75, 32], [11.8, 72, 33.1], [8.3, 69.4, 34.1], [4.7, 68.2, 34.6], [2.3, 67.8, 34.8]],
+  breastPatch: [[18.65, 89.5, 21.5], [17.05, 85.5, 27.5], [16.05, 80, 31], [14.35, 75, 32], [11.8, 72, 33.1], [8.3, 69.4, 34.1], [4.7, 68.2, 34.6], [2.3, 67.8, 34.8]],
   // The folded wing's bend goes in under the breast-side plumage here (wing-fold solver underPatch): the v4 patch line,
   // kept for the wing when the patch itself became the horseshoe above.
   wingTuck: [[17.2, 91.7, 17.1], [19, 86.8, 24.8], [18.2, 82.4, 29], [14.5, 76.4, 32.4], [10.6, 71, 33.5], [6.6, 67.6, 34.1]],
   // head zone (bodyMesh.headness, the shaders' kpHeadness): rigid with the head inside, blending into the neck sleeve
-  // over the outer 0.35 — wide enough for the cheeks (x ±17.6, v4.2)
-  headZone: { c: [0, 93.5, 24], r: [15, 13, 15.5] },
+  // over the outer 0.35. v4.3 (v3 head on the v4.2 neck): x 14, 1 mm wider than v3's 13 — the lower rim of the eye socket
+  // (x 13–15, y 92–93) stays rigid with the eye when the head turns (at 13 it slid 0.3–0.8 mm against the eyeball under
+  // the broad neck fill; at 15 the neck folded more when preening)
+  headZone: { c: [0, 93.5, 24], r: [14, 13, 15.5] },
   // Neck outline for the head/neck contact checks only (animator): the neck is not sculpted (it is filled by
   // mantleNape and foreBreast at rest), but when the head turns or stretches the neck bones carry this tube
   neckContact: { a: [0, 74, 0], b: [0, 88.5, 14], r: 9 },
