@@ -436,10 +436,10 @@ export class Motor {
   /** the resting stance per posture: wrist position (forward, out; fractions of L) and the web's sweep */
   private stance(): { fwd: number; lat: number; back: number } {
     switch (this.posture) {
-      case 'low': return { fwd: -0.015, lat: 0.085, back: 0.75 };
-      case 'alert': return { fwd: 0.012, lat: 0.07, back: 0.55 };
-      case 'display': return { fwd: 0.012, lat: 0.075, back: 0.5 };
-      default: return { fwd: 0.0, lat: 0.075, back: 0.62 };
+      case 'low': return { fwd: -0.015, lat: 0.085, back: 1.1 };
+      case 'alert': return { fwd: 0.012, lat: 0.07, back: 0.95 };
+      case 'display': return { fwd: 0.012, lat: 0.075, back: 0.9 };
+      default: return { fwd: 0.0, lat: 0.075, back: 1.0 };
     }
   }
 
@@ -619,7 +619,7 @@ export class Motor {
           // body vaults over it, the arm swinging from leaning forward to leaning back)
           this.plantPoint(fn.side, 0.065 + 0.02 * this.urgency, 0.075, fn.to, w, this.heading + nextTurn);
           fn.yawFrom = fn.yaw;
-          fn.yawTo = fn.yaw + wrap(this.webYaw(fn.side, 0.5, this.heading + nextTurn) - fn.yaw);
+          fn.yawTo = fn.yaw + wrap(this.webYaw(fn.side, 0.8, this.heading + nextTurn) - fn.yaw);
           fn.planted = false; fn.swing = 0;
         }
       }
@@ -782,7 +782,7 @@ export class Motor {
         this.lift.x = -0.004 * L; this.lift.v = 0;
         h.stage = 'land'; h.t = 0;
         this.vel.set(0, 0, 0);
-        for (const fn of this.fins) { this.plantPoint(fn.side, 0.02, 0.085, fn.contact, w); fn.yaw = this.webYaw(fn.side, 0.4); fn.planted = true; fn.swing = -1; }
+        for (const fn of this.fins) { this.plantPoint(fn.side, 0.02, 0.085, fn.contact, w); fn.yaw = this.webYaw(fn.side, 0.8); fn.planted = true; fn.swing = -1; }
         this.reflexBlink();
         if (w.fx) {
           const soft = w.soft * w.wetGround;
@@ -1332,12 +1332,16 @@ export class Motor {
       // roll the leading edge up (the fin is pressed down along its trailing rays, its leading rays arched up), more on
       // soft mud where the fin is braced on its edge than on firm sand where it lies spread
       const nUp = nh.y >= 0 ? nh : nh.clone().negate();
-      const roll = w.sand ? 0.25 : 0.5;
+      const roll = w.sand ? 0.3 : 0.75;
       wh.multiplyScalar(Math.cos(roll)).addScaledVector(nUp, Math.sin(roll)).normalize();
+      // the arm's broad side faces out (its width runs fore and aft, the muscular paddle seen from the side); the hand
+      // turns from it to the web's frame at the wrist
       const da = new Vector3().subVectors(W, S).normalize();
-      let wa = wh.clone().sub(da.clone().multiplyScalar(wh.dot(da)));
-      if (wa.lengthSq() < 1e-8) wa = nh.clone().cross(da);
+      const bodyFwd = this.fwd(this.heading, new Vector3());
+      let wa = bodyFwd.clone().sub(da.clone().multiplyScalar(bodyFwd.dot(da)));
+      if (wa.lengthSq() < 1e-8) wa = wh.clone().sub(da.clone().multiplyScalar(wh.dot(da)));
       wa.normalize();
+      if (wa.dot(wh) < 0) wa.negate();
       // rest frame (object = J_root local at rest), mirrored for the right fin
       const sx = f.side;
       const D0 = new Vector3(rig.dir[0] * sx, rig.dir[1], rig.dir[2]);

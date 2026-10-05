@@ -528,7 +528,7 @@ export function domePoint(fr, th, ps, opts = DOME_OPTS) {
     // the faces from the lid's margin dip under the globe gently and its edge stays smooth
     const d = domeDir(frL, th, ps);
     const q = rayExit(frL.c, d, shut ? { dome: true, cupL: false } : DOME_OPTS);
-    p0 = q.t < EYE.radius - 0.3 ? add(frL.c, scl(d, EYE.radius - 0.3)) : q.p;
+    p0 = q.t < EYE.radius - 0.15 ? add(frL.c, scl(d, EYE.radius - 0.15)) : q.p;
   } else {
     const x = Math.min((th - W.thc) * W.R / WALK_STEP, W.pts.length - 1);
     const i = Math.min(Math.floor(x), W.pts.length - 2), f = x - i;
@@ -538,11 +538,14 @@ export function domePoint(fr, th, ps, opts = DOME_OPTS) {
   let n = fieldGrad(p0[0], p0[1], p0[2], oL);
   // near the junction: drawn from the dome's surface down to a fixed depth under the head's as the true gap closes,
   // so the two cross cleanly where they have already merged
+  // the normals turn to the head's as the gap closes, so the shading runs on across the crossing without a seam
   let p = p0;
-  if (field(p0[0], p0[1], p0[2]) < 0.35) {
+  if (field(p0[0], p0[1], p0[2]) < 0.6) {
     const { gap, hn } = headGap(p0);
-    const w = 1 - smoothstep(0.03, 0.12, gap);
-    if (w > 0) p = sub(p0, scl(hn, (gap + 0.1) * w));
+    const w = 1 - smoothstep(0.02, 0.2, gap);
+    if (w > 0) p = sub(p0, scl(hn, (gap + 0.08) * w));
+    const wn = 1 - smoothstep(0.04, 0.4, gap);
+    if (wn > 0) n = norm3(add(scl(n, 1 - wn), scl(hn, wn)));
   }
   if (side < 0) { p = [p[0], p[1], -p[2]]; p0 = [p0[0], p0[1], -p0[2]]; n = [n[0], n[1], -n[2]]; }
   return { p, n, p0 };
@@ -763,13 +766,18 @@ function skinPoint(s, phi, p, n, ao) {
     dark = Math.max(dark, smoothstep(0.74, 0.92, r) * 0.32 * (1 - ventral) * smoothstep(17.5, 13, s));
   }
   col = lerp3(col, COL.dark, clamp(dark) * 0.66);
+  // (the texture's columns converge on the snout tip: small dots there would smear into a star)
+  const tipCalm = smoothstep(0.15, 1.3, s);
   // melanophore speckle: dense, fine, stronger on the back and head
-  const sp = dots(p, 0.3, 0.085, 101, 0.9) * (0.35 + 0.65 * (1 - ventral)) * (s < 16 ? 1.2 : 1);
+  const sp = dots(p, 0.3, 0.085, 101, 0.9) * (0.35 + 0.65 * (1 - ventral)) * (s < 16 ? 1.2 : 1) * tipCalm;
   col = lerp3(col, COL.speck, sp * 0.75);
   const sp2 = dots(p, 0.9, 0.16, 131, 0.5) * (1 - ventral);
   col = lerp3(col, COL.dark, sp2 * 0.6);
+  // and a dense, fine pepper of tiny melanophores over everything but the belly
+  const pepper = dots(p, 0.16, 0.042, 109, 0.85) * (0.3 + 0.7 * (1 - ventral)) * tipCalm;
+  col = lerp3(col, COL.speck, pepper * 0.55);
   // small pale (some bluish) spots over cheeks and flanks
-  const pale = dots(p, 1.25, 0.2, 211, 0.55, 0.5) * smoothstep(-0.6, -0.1, nh) * smoothstep(0.85, 0.3, nh) * (1 - ventral * 0.8);
+  const pale = dots(p, s < 18 ? 0.95 : 1.25, 0.21, 211, s < 18 ? 0.8 : 0.55, 0.5) * smoothstep(-0.6, -0.1, nh) * smoothstep(0.85, 0.3, nh) * (1 - ventral * 0.8) * tipCalm;
   const blueish = s < 18 ? 0.65 : 0.25;
   col = lerp3(col, lerp3(COL.pale, COL.blue, blueish), pale * 0.55);
   // lips
@@ -795,16 +803,28 @@ function skinPoint(s, phi, p, n, ao) {
   }
   // eye sockets: the cup's skin is paler and smoother toward the window; its margin (and the hidden skin inside the
   // window, which the rim's faces stretch over) a plain darker grey, without speckles
+  // round the window of each eye's cup (k: the window's elliptical angular radius, 1 on its rim): the margin is a
+  // plain dark band (and so is the hidden skin inside the window, which the rim's faces stretch over); just under
+  // the window the cup's skin is thin and unpigmented, pinkish (the blood under it shows)
   let lid = 0;
   for (const e of FEAT.eyes) {
-    const dE = Math.hypot(p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2]);
-    const rim = smoothstep(EYE.radius + 0.7, EYE.radius + 0.1, dE);
-    col = lerp3(col, lerp3(col, COL.lip, 0.4), rim * 0.55);
-    lid = Math.max(lid, smoothstep(EYE.radius + 0.22, EYE.radius + 0.06, dE));
+    const o = [p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2]];
+    const dE = Math.hypot(o[0], o[1], o[2]);
+    const fr = e.fr;
+    const w = o[0] * fr.a[0] + o[1] * fr.a[1] + o[2] * fr.a[2];
+    const u = o[0] * fr.h[0] + o[1] * fr.h[1] + o[2] * fr.h[2];
+    const v = o[0] * fr.v[0] + o[1] * fr.v[1] + o[2] * fr.v[2];
+    const k = Math.hypot(Math.atan2(u, w) / CUP.halfH, Math.atan2(v, w) / CUP.halfV);
+    const near = smoothstep(EYE.radius + 0.9, EYE.radius + 0.3, dE);
+    const rim = smoothstep(1.6, 1.08, k) * near;
+    col = lerp3(col, lerp3(col, COL.lip, 0.3), rim * 0.35);
+    const below = smoothstep(0.0, -0.45, Math.atan2(v, Math.hypot(u, w))) * smoothstep(2.4, 1.2, k) * near;
+    col = lerp3(col, C(170, 128, 120), below * 0.42);
+    lid = Math.max(lid, smoothstep(1.16, 1.0, k) * near);
   }
-  col = lerp3(col, C(78, 74, 66), lid);
+  col = lerp3(col, C(62, 58, 50), lid * 0.85);
   // sand grains stuck in the mucus: tiny white specks, densest on the head, the turrets and the back
-  const grains = dots(p, 0.4, 0.06, 151, 0.5) * (0.25 + 0.75 * smoothstep(-0.5, 0.4, nh)) * (s < 18 ? 1 : 0.6) * (1 - lid);
+  const grains = dots(p, 0.4, 0.06, 151, 0.5) * (0.25 + 0.75 * smoothstep(-0.5, 0.4, nh)) * (s < 18 ? 1 : 0.6) * (1 - lid) * tipCalm;
   col = lerp3(col, COL.grain, grains * 0.85);
   // pectoral lobe: a little paler where the arm leaves the flank
   {

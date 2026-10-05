@@ -24,8 +24,8 @@ const args = process.argv.slice(2);
 const tierIdx = args.indexOf('--tier');
 const tierName = tierIdx >= 0 ? args[tierIdx + 1] : 'hero';
 const TIERS = {
-  hero: { NS: 420, NV: 232, tex: [2048, 1024], fin: 2048, finSub: 5, finNT: 28, iris: 1024, eye: [48, 64], dome: [56, 128], arm: [22, 24], mouth: true, finMask: false },
-  lod1: { NS: 200, NV: 112, tex: [1024, 512], fin: 1024, finSub: 3, finNT: 14, iris: 512, eye: [24, 32], dome: [32, 72], arm: [12, 14], mouth: true, finMask: false },
+  hero: { NS: 420, NV: 232, tex: [2048, 1024], fin: 2048, finSub: 5, finNT: 28, iris: 1024, eye: [48, 64], dome: [84, 192], arm: [32, 28], mouth: true, finMask: false },
+  lod1: { NS: 200, NV: 112, tex: [1024, 512], fin: 1024, finSub: 3, finNT: 14, iris: 512, eye: [24, 32], dome: [52, 120], arm: [22, 18], mouth: true, finMask: false },
   lod2: { NS: 56, NV: 30, tex: [512, 256], fin: 512, finSub: 1, finNT: 4, iris: 128, eye: [8, 10], dome: [10, 20], arm: [4, 6], mouth: false, finMask: true },
 };
 const tier = TIERS[tierName];
@@ -195,8 +195,17 @@ for (const [side, name] of [[1, 'PectoralFin_L'], [-1, 'PectoralFin_R']]) {
   for (let k = 0; k < n; k++) {
     position.set(toObject(arm.fish.slice(k * 3, k * 3 + 3)), k * 3);
     normal.set(dirToObject(arm.nrm.slice(k * 3, k * 3 + 3)), k * 3);
+    // tangent: along the arm, made square to the normal (at the rounded tip, where the normal turns along the arm,
+    // the arm's width direction instead)
     const d = dirToObject(side > 0 ? PEC.dir : [PEC.dir[0], PEC.dir[1], -PEC.dir[2]]);
-    tangent.set([d[0], d[1], d[2], 1], k * 4);
+    const nn = normal.subarray(k * 3, k * 3 + 3);
+    let t = [0, 1, 2].map((c) => d[c] - nn[c] * (d[0] * nn[0] + d[1] * nn[1] + d[2] * nn[2]));
+    if (Math.hypot(...t) < 0.2) {
+      const wv = dirToObject(side > 0 ? PEC.width : [PEC.width[0], PEC.width[1], -PEC.width[2]]);
+      t = [0, 1, 2].map((c) => wv[c] - nn[c] * (wv[0] * nn[0] + wv[1] * nn[1] + wv[2] * nn[2]));
+    }
+    const tl = Math.hypot(...t) || 1;
+    tangent.set([t[0] / tl, t[1] / tl, t[2] / tl, 1], k * 4);
   }
   const armPrim = gb.primitive({ position, normal, tangent, uv: new Float32Array(arm.uv), indices: new Uint32Array(arm.indices), material: mSkin, extraAttributes: skinAttrs(armWeights(arm.at, side)), targets: [zeros(n)] });
   const web = finPrim(D.Fin_Pectoral_L, null, side, side < 0);

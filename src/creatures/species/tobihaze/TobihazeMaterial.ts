@@ -120,7 +120,9 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
   tobiDrop = 0.0;
   #ifdef TOBI_DROPS
   {
-    vec2 g = tUv * vec2(56.0, 26.0) * uDropScale;
+    // (the arm and eye-dome strips of the skin texture are ~3-4x denser around than the body: drops stay round)
+    float vs = tUv.x > 0.92 ? 0.34 : (tUv.x > 0.84 ? 0.26 : 1.0);
+    vec2 g = tUv * vec2(56.0, 26.0 * vs) * uDropScale;
     float tipFade = smoothstep(0.03, 0.08, tUv.x);
     vec2 cell = floor(g), f = fract(g) - 0.5;
     float h = tobiHash(cell);
@@ -148,8 +150,8 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 #ifndef TOBI_FIN
   // the uv columns converge on the very tip of the snout, where the coarse mips of the normal map would streak:
-  // geometry normal over its last half millimetre (u is arc length along the body)
-  float tobiTip = smoothstep(0.002, 0.006, vMapUv.x);
+  // geometry normal over the front of the snout (u grows with arc length from the tip)
+  float tobiTip = smoothstep(0.004, 0.026, vMapUv.x);
   normal = normalize(mix(nonPerturbedNormal, normal, tobiTip));
 #endif
 #ifdef TOBI_DROPS
@@ -172,7 +174,7 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
     material.clearcoatRoughness = clamp(mix(0.32, 0.03, tobiWet) + 0.25 * tobiMud + geometryRoughness, 0.0525, 1.0);
     #ifndef TOBI_FIN
     // the papillose snout tip (and the uv pole there) never gives a mirror reflection
-    material.clearcoatRoughness = max(material.clearcoatRoughness, 0.22 * (1.0 - smoothstep(0.0015, 0.005, vMapUv.x)));
+    material.clearcoatRoughness = max(material.clearcoatRoughness, 0.22 * (1.0 - smoothstep(0.003, 0.024, vMapUv.x)));
     #endif
   }
 #endif`);

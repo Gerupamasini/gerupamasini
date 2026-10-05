@@ -108,7 +108,9 @@ export function armWeights(atList, side) {
   return pack(atList.map((a) => {
     // the hand (past the wrist joint) moves with the web
     const wWrist = smoothstep(PEC.joint - 0.7, PEC.joint + 0.5, a);
-    const wPec = smoothstep(-0.9, 1.1, a) * (1 - wWrist);
+    // the arm leaves the body's weights inside the flank (its first 1.2 mm are sunk in it): a blend over the visible
+    // arm would pinch it when the shoulder swings and twists it
+    const wPec = smoothstep(-1.1, -0.1, a) * (1 - wWrist);
     return withRest([[jp, wPec], [jw, wWrist]], PEC.base[0]);
   }), atList.length);
 }
