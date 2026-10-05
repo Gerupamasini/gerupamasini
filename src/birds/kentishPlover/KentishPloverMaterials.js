@@ -1031,7 +1031,8 @@ export function createBarePartsMaterial(pal, detail = 0) {
           float kbBase = smoothstep(8.5, 15.0, kbXt);           // basal third: greyer, browner, duller
           float kbTip = 1.0 - smoothstep(2.5, 6.5, kbXt);       // hard tip (dertrum): darker, glossier
           float kbWear = (1.0 - smoothstep(0.12, 0.75, kbXt)) * (0.55 + 0.45 * kbMott); // worn point
-          kbCol = uBill * mix(1.0, 1.55, kbBase) * mix(vec3(1.0), vec3(1.12, 1.0, 0.86), kbBase) * mix(1.0, 0.82, kbTip);
+          // (2026-10: warmer — the photographed keratin is a brownish black, not blue-black, user's side photo)
+          kbCol = uBill * vec3(1.22, 1.06, 0.94) * mix(1.0, 1.55, kbBase) * mix(vec3(1.0), vec3(1.12, 1.0, 0.86), kbBase) * mix(1.0, 0.82, kbTip);
           kbCol *= 1.0 + 0.06 * (kbStreak - 0.5) * kbGrain + 0.08 * (kbMott - 0.5);
           kbRough = uBillRough - 0.18 - 0.14 * kbTip + 0.12 * kbBase + (kbStreak - 0.5) * 0.07 * kbGrain;
           kbCol = mix(kbCol, uBill * 2.1 + vec3(0.006, 0.0055, 0.005), 0.55 * kbWear);
@@ -1159,7 +1160,7 @@ export function createBarePartsMaterial(pal, detail = 0) {
           kbAlong = normalize(kbAlong - normal * dot(kbAlong, normal));
         }`
       )
-      .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\nradiance *= kbEnv;')
+      .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\nradiance *= kbEnv;\n// keratin: the sky it mirrors reads as a pale, nearly neutral sheen over the warm black (the image-based sky light is a\n// saturated blue; mirrored at 2.6× it made the bill look like blue plastic in the shade)\nif (kbP < 0.5) radiance = mix(radiance, vec3(dot(radiance, vec3(0.2126, 0.7152, 0.0722))) * vec3(1.04, 1.0, 0.95), 0.65);')
       .replace('#include <lights_physical_fragment>', THREE.ShaderChunk.lights_physical_fragment.replace('vec2 anisotropyV = anisotropyVector;', 'vec2 anisotropyV = anisotropyVector * kbAniso;').replace('material.anisotropyT = tbn[ 0 ] * anisotropyV.x + tbn[ 1 ] * anisotropyV.y;', 'material.anisotropyT = kbAlong;').replace('material.anisotropyB = tbn[ 1 ] * anisotropyV.x - tbn[ 0 ] * anisotropyV.y;', 'material.anisotropyB = normalize(cross(normal, kbAlong));'));
   };
   mat.customProgramCacheKey = () => `kp-bare2-${detail}`;
