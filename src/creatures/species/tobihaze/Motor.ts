@@ -1077,7 +1077,9 @@ export class Motor {
     const gL = w.ground(this.pos.x + lf.x * 0.08 * L, this.pos.z + lf.z * 0.08 * L);
     const gR = w.ground(this.pos.x - lf.x * 0.08 * L, this.pos.z - lf.z * 0.08 * L);
     const onGround = this.gait !== 'swim' && !(this.gait === 'hop' && this.hop.stage === 'air') && !this.pathPose;
-    const slopeP = onGround ? Math.atan2(gF - gB, 0.45 * L) : 0;
+    // (propped on the arms the fore body keeps its raised attitude: the trunk follows the slope only in part, the arms
+    // and the tail taking up the rest)
+    const slopeP = onGround ? Math.atan2(gF - gB, 0.45 * L) * (1 - 0.5 * smooth(0.03 * L, 0.07 * L, this.lift.x)) : 0;
     const slopeR = onGround ? Math.atan2(gR - gL, 0.16 * L) * 0.7 : 0;
     let pitch = shapedPitch + slopeP;
     if (this.pathPose) pitch = this.pathPose.root;
@@ -1211,7 +1213,7 @@ export class Motor {
     // walk down the chain in 2D (distance back, height): the trunk keeps its direction; behind the girdle the body
     // sags until it rests on the mud, never through it
     // (held up on the arms, the trunk stays nearly straight back to the anal fin; only the tail lies on the mud)
-    const sagMax = 0.09, bendMax = 0.32;
+    const sagMax = 0.12, bendMax = 0.32;
     let beta = -pitch;          // elevation of the backward direction of the current segment
     let prevBeta = -pitch;
     let yPrev = rootY + this.belly[0] * Math.cos(pitch);
