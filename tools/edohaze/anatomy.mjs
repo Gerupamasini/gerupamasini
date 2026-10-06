@@ -75,10 +75,15 @@ export function monotone(xs, ys) {
 // gravid female variant (GOBY_GRAVID=1): the belly swells from s≈0.30 to 0.65 SL and ends abruptly at
 // ≈0.67 (photos 011, 016, 023, 028, 044, 045, 048, 061: max depth 0.178 SL, dorsal half-width ≈0.10 SL)
 export const GRAVID = typeof process !== 'undefined' && process.env.GOBY_GRAVID === '1';
-if (GRAVID) KS.forEach((s, i) => {
-  const g = Math.max(0, Math.min(1, (s - 0.28 * SL) / (0.1 * SL))) * Math.max(0, Math.min(1, (0.665 * SL - s) / (0.07 * SL)));
-  KBOT[i] -= 1.05 * g; KW[i] += 1.25 * g; KTOP[i] += 0.2 * g;
-});
+if (GRAVID) {
+  // a smooth egg-shaped swelling: gentle rise from the pectoral region, fullest at s≈0.48, rounding off
+  // behind into the anus (no flat sides or kinks); rounder belly cross-section (lower superellipse exponent)
+  const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  KS.forEach((s, i) => {
+    const g = ss(0.24 * SL, 0.47 * SL, s) * ss(0.7 * SL, 0.55 * SL, s);
+    KBOT[i] -= 0.95 * g; KW[i] += 0.9 * g; KTOP[i] += 0.15 * g; KNB[i] -= 0.35 * g;
+  });
+}
 const fTop = monotone(KS, KTOP);
 const fBot = monotone(KS, KBOT);
 const fW = monotone(KS, KW);
