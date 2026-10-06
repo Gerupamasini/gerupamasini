@@ -23,7 +23,7 @@ import { makeDecalMaterial, makeShellInnerMaterial, makeShellOuterMaterial, make
 
 // valve margin, starting at the umbo and running anterior → ventral → posterior → back along the hinge
 // (measured from photographs, see above)
-const OUTLINE = [
+const OUTLINE_ASARI = [
   [0.133, 0.361], [0.233, 0.331], [0.299, 0.249], [0.370, 0.179], [0.446, 0.110],
   [0.494, 0.016], [0.492, -0.087], [0.443, -0.179], [0.363, -0.253], [0.275, -0.305],
   [0.174, -0.339], [0.070, -0.356], [-0.031, -0.361], [-0.134, -0.352], [-0.236, -0.326],
@@ -32,14 +32,12 @@ const OUTLINE = [
   [0.026, 0.354],
 ];
 /** growth lines start at the beak tip, which lies on the dorsal outline next to the other valve's beak */
-const GROWTH_ORIGIN = new Vector3(0.128, 0.352, 0);
+const GROWTH_ORIGIN_ASARI = new Vector3(0.128, 0.352, 0);
 /** centre of the inflation dome: the fullest point of the valve */
-const DOME_CENTRE = new Vector3(0.05, 0.06, 0);
-const HALF_WIDTH = 0.26;
+const DOME_CENTRE_ASARI = new Vector3(0.05, 0.06, 0);
 /** major growth checks modelled in LOD0 geometry (the shader draws its own set close to these) */
-const GEOM_CHECKS = [0.54, 0.68, 0.82];
 
-export const ANATOMY = {
+const ANATOMY_ASARI = {
   hingePoint: new Vector3(0.04, 0.352, 0),
   hingeAxis: new Vector3(-0.41, -0.082, 0).normalize(),
   /** full gape (both valves) at gape = 1, radians: a relaxed clam in water gapes ~4 mm ventrally (35 mm shell) */
@@ -58,16 +56,77 @@ export const ANATOMY = {
   posteriorTip: new Vector3(-0.5, 0.0, 0),
 };
 
+
+/**
+ * ハマグリ Meretrix lusoria. Lateral outline MEASURED the same way: four valves photographed flat in the
+ * reference set (ハマグリ 写真資料70枚), segmented, normalised and averaged; front/back taken from the valve whose
+ * ligament is visible (posterior to the umbo) and the others matched to it. Result: a rounded triangle,
+ * H/L = 0.80, umbo almost central (≈0.47 L from the anterior end) at a rounded apex, nearly straight dorsal
+ * slopes, broad evenly curved ventral margin. Smooth, glossy shell with fine growth lines only (no radial
+ * ribs); width/length ≈ 0.48.
+ */
+const OUTLINE_HAMAGURI = [
+  [0.034, 0.395], [0.134, 0.370], [0.209, 0.289], [0.297, 0.234], [0.374, 0.160],
+  [0.442, 0.079], [0.491, -0.016], [0.497, -0.122], [0.455, -0.220], [0.381, -0.296],
+  [0.293, -0.347], [0.188, -0.382], [0.085, -0.396], [-0.021, -0.397], [-0.125, -0.383],
+  [-0.230, -0.352], [-0.320, -0.307], [-0.403, -0.240], [-0.472, -0.151], [-0.500, -0.051],
+  [-0.472, 0.051], [-0.408, 0.134], [-0.330, 0.208], [-0.244, 0.264], [-0.153, 0.315],
+  [-0.066, 0.379],
+];
+
+/** Species shell forms. Everything shape-dependent lives here; geometry is cached per form. */
+export const FORMS = {
+  asari: {
+    id: 'asari', style: 'cancellate',
+    outline: OUTLINE_ASARI, growthOrigin: GROWTH_ORIGIN_ASARI, domeCentre: DOME_CENTRE_ASARI,
+    halfWidth: 0.26, dorsalQ: 0.38, checks: [0.54, 0.68, 0.82], beak: [0.02, 0.006],
+    mantle: [0.25, 0.79], body: [0.27, 0.2, 0.14, -0.02, -0.01],
+    ligament: { r: 0.014, len: 0.26, slope: 0.15, x: -0.045, y: 0.334 },
+    siphonFuse: [0.84, 0.96], tentacles: { in: 36, out: 11 },
+    /** lying on a valve / buried upright: centre height in shell lengths, and the upright tilt */
+    rest: { lying: 0.2, buried: -0.69, tilt: -1.05 },
+    anatomy: ANATOMY_ASARI,
+  },
+  hamaguri: {
+    id: 'hamaguri', style: 'smooth',
+    outline: OUTLINE_HAMAGURI, growthOrigin: new Vector3(0.03, 0.386, 0), domeCentre: new Vector3(0.02, 0.04, 0),
+    halfWidth: 0.24, dorsalQ: 0.34, checks: [0.5, 0.66, 0.8], beak: [0.016, 0.008],
+    mantle: [0.29, 0.78], body: [0.27, 0.24, 0.13, -0.02, -0.02],
+    ligament: { r: 0.017, len: 0.24, slope: 0.48, x: -0.105, y: 0.322 },
+    // ハマグリ: short siphons, joined at the base and separate over the outer half (reference: 殻口・水管)
+    siphonFuse: [0.42, 0.7], tentacles: { in: 28, out: 14 },
+    rest: { lying: 0.19, buried: -0.62, tilt: -0.85 },
+    anatomy: {
+      hingePoint: new Vector3(-0.04, 0.388, 0),
+      hingeAxis: new Vector3(-0.314, -0.154, 0).normalize(),
+      maxGape: 0.18,
+      mantleFollow: 0.2,
+      footRoot: new Vector3(0.17, -0.14, 0),
+      footDir: Math.atan2(-0.82, 0.57),
+      footLength: 0.7,
+      siphonIn: { root: new Vector3(-0.37, -0.1, 0), radius: 0.062 },
+      siphonOut: { root: new Vector3(-0.37, -0.0, 0), radius: 0.05 },
+      siphonDir: Math.PI - 0.02,
+      siphonFork: 0.05,
+      posteriorTip: new Vector3(-0.5, -0.05, 0),
+    },
+  },
+};
+/** the アサリ anatomy (kept for code that predates the form table) */
+export const ANATOMY = FORMS.asari.anatomy;
+
+/** the form whose geometry is being built (geometry building is synchronous) */
+let F = FORMS.asari;
+
 const LODS = [
   { nu: 160, ns: 64, checks: true, inner: true },
   { nu: 64, ns: 20, checks: false, inner: true },
   { nu: 26, ns: 7, checks: false, inner: false },
 ];
 
-let outlineCache = null;
 function outline(n) {
-  outlineCache ??= new CatmullRomCurve3(OUTLINE.map(([x, y]) => new Vector3(x, y, 0)), true, 'centripetal');
-  return outlineCache.getSpacedPoints(n).slice(0, n);
+  F._curve ??= new CatmullRomCurve3(F.outline.map(([x, y]) => new Vector3(x, y, 0)), true, 'centripetal');
+  return F._curve.getSpacedPoints(n).slice(0, n);
 }
 
 function smooth(a, b, x) {
@@ -75,14 +134,13 @@ function smooth(a, b, x) {
   return t * t * (3 - 2 * t);
 }
 
-/** distance from DOME_CENTRE to the margin, tabulated by direction */
-let radiusTable = null;
+/** distance from the dome centre to the margin, tabulated by direction (per form) */
 const RT = 720;
 function marginRadius(theta) {
-  if (!radiusTable) {
+  if (!F._radius) {
     const M = outline(720);
-    const C = DOME_CENTRE;
-    radiusTable = new Float32Array(RT);
+    const C = F.domeCentre;
+    const radiusTable = F._radius = new Float32Array(RT);
     for (let i = 0; i < RT; i++) {
       const a = (i / RT) * Math.PI * 2, dx = Math.cos(a), dy = Math.sin(a);
       let best = Infinity;
@@ -98,6 +156,7 @@ function marginRadius(theta) {
       radiusTable[i] = best;
     }
   }
+  const radiusTable = F._radius;
   const f = ((theta / (Math.PI * 2)) % 1 + 1) % 1 * RT;
   const i0 = Math.floor(f) % RT, i1 = (i0 + 1) % RT, w = f - Math.floor(f);
   return radiusTable[i0] * (1 - w) + radiusTable[i1] * w;
@@ -109,33 +168,33 @@ function marginRadius(theta) {
  * an acute angle); toward the hinge it stays full and then turns down steeply (inflated umbones).
  */
 function valveZ(x, y) {
-  const C = DOME_CENTRE;
+  const C = F.domeCentre;
   const dx = x - C.x, dy = y - C.y;
   const th = Math.atan2(dy, dx);
   const rho = Math.min(1, Math.hypot(dx, dy) / marginRadius(th));
   const dorsal = Math.max(0, Math.sin(th));
-  const q = 0.95 - 0.38 * dorsal * dorsal;
-  return HALF_WIDTH * Math.pow(Math.max(0, 1 - Math.pow(rho, 2.4)), q);
+  const q = 0.95 - F.dorsalQ * dorsal * dorsal;
+  return F.halfWidth * Math.pow(Math.max(0, 1 - Math.pow(rho, 2.4)), q);
 }
 
 /** prosogyrate beaks: the oldest shell curls forward and slightly up over the hinge */
 function beak(s) {
   const k = (1 - s) ** 3;
-  return [0.02 * k, 0.006 * k];
+  return [F.beak[0] * k, F.beak[1] * k];
 }
 
 /** One valve (left, z ≥ 0). Groups: 0 outer surface, 1 inner surface + rim. */
 function buildValve(lod) {
   const { nu, ns, checks, inner } = LODS[lod];
   const M = outline(nu);
-  const G = GROWTH_ORIGIN;
+  const G = F.growthOrigin;
   const cols = nu + 1;
   const rows = ns + 1;
   const pos = [], uv = [], idx = [];
   const sAt = (i) => Math.pow(i / ns, 0.85);
   const groove = (s) => {
     let d = 0;
-    if (checks) for (const c of GEOM_CHECKS) d += 0.0012 * Math.exp(-(((s - c) / 0.012) ** 2));
+    if (checks) for (const c of F.checks) d += 0.0012 * Math.exp(-(((s - c) / 0.012) ** 2));
     return d;
   };
   // outer
@@ -212,9 +271,9 @@ function weldSeam(g, rows, cols, surfaces) {
  */
 function buildMantle(nu, papillae) {
   const M = outline(nu);
-  const G = GROWTH_ORIGIN;
+  const G = F.growthOrigin;
   const pos = [], uv = [], dir = [], tent = [], idx = [];
-  const j0 = Math.round(nu * 0.25), j1 = Math.round(nu * 0.79);
+  const j0 = Math.round(nu * F.mantle[0]), j1 = Math.round(nu * F.mantle[1]);
   const nr = 10, rr = 0.021;
   const frame = (j) => {
     const m = M[j];
@@ -318,12 +377,12 @@ function buildFoot(nt, nr) {
  * sparse ones (Ruditapes philippinarum siphon descriptions).
  */
 function buildSiphon(radius, tentacles, papillae, partner, nt, nr) {
-  const fork = (t) => -partner * ANATOMY.siphonFork * Math.pow(smooth(0.78, 1.0, t), 1.4);
+  const fork = (t) => -partner * F.anatomy.siphonFork * Math.pow(smooth(F.siphonFuse[0] - 0.06, 1.0, t), 1.4);
   const pos = [], uv = [], tent = [], idx = [];
   for (let i = 0; i <= nt; i++) {
     const t = i / nt;
     const r0 = radius * (1 - 0.14 * t) * (1 + 0.06 * Math.exp(-(((t - 0.97) / 0.035) ** 2)));
-    const fuse = 1 - smooth(0.84, 0.96, t);
+    const fuse = 1 - smooth(F.siphonFuse[0], F.siphonFuse[1], t);
     for (let j = 0; j <= nr; j++) {
       const a = (j / nr) * Math.PI * 2;
       const toward = Math.max(0, Math.cos(a) * partner);
@@ -389,28 +448,31 @@ function withTent(g) {
   return g;
 }
 
-let shared = null;
-/** geometry shared by every アサリ (never disposed) */
-export function sharedGeometry() {
-  if (shared) return shared;
+/** geometry shared by every individual of a form (never disposed) */
+export function sharedGeometry(form = FORMS.asari) {
+  if (form._geo) return form._geo;
+  F = form;
+  const A = form.anatomy;
+  const [bx, by, bz, btx, bty] = form.body;
   const body = withTent(new SphereGeometry(1, 18, 12));
-  body.scale(0.27, 0.2, 0.14);
-  body.translate(-0.02, -0.01, 0);
-  const lig = new CapsuleGeometry(0.014, 0.26, 3, 6);
+  body.scale(bx, by, bz);
+  body.translate(btx, bty, 0);
+  const L = form.ligament;
+  const lig = new CapsuleGeometry(L.r, L.len, 3, 6);
   // along the posterodorsal margin behind the beaks, half sunk between the valves
-  lig.rotateZ(Math.PI / 2 + Math.atan2(0.15, 1));
+  lig.rotateZ(Math.PI / 2 + Math.atan2(L.slope, 1));
   lig.scale(1, 1, 0.8);
-  lig.translate(-0.045, 0.334, 0);
+  lig.translate(L.x, L.y, 0);
   lig.setAttribute('aTent', new BufferAttribute(new Float32Array(lig.attributes.position.count).fill(2), 1));   // 2 = ligament
-  shared = {
+  const shared = form._geo = {
     valve: LODS.map((_, i) => buildValve(i)),
     mantle: [buildMantle(140, 95), buildMantle(48, 0)],
     body,
     ligament: lig,
     foot: [buildFoot(20, 14), buildFoot(8, 8)],
     // local +y of a siphon points ventrally, so the exhalant's partner is +y and the inhalant's −y
-    siphonIn: [buildSiphon(ANATOMY.siphonIn.radius, 36, 0, -1, 24, 20), buildSiphon(ANATOMY.siphonIn.radius, 0, 0, -1, 6, 8)],
-    siphonOut: [buildSiphon(ANATOMY.siphonOut.radius, 0, 11, 1, 24, 18), buildSiphon(ANATOMY.siphonOut.radius, 0, 0, 1, 6, 8)],
+    siphonIn: [buildSiphon(A.siphonIn.radius, form.tentacles.in, 0, -1, 24, 20), buildSiphon(A.siphonIn.radius, 0, 0, -1, 6, 8)],
+    siphonOut: [buildSiphon(A.siphonOut.radius, 0, form.tentacles.out, 1, 24, 18), buildSiphon(A.siphonOut.radius, 0, 0, 1, 6, 8)],
     decal: new PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
   };
   return shared;
@@ -432,17 +494,20 @@ const qa = new Quaternion();
  * plus `decal`, a sand quad the driver keeps flat on the ground (not part of the clam's pose).
  */
 export class AsariModel {
-  /** @param {{ shellPatternSeed?: number, shellColorSeed?: number }} [o] */
+  /** @param {{ shellPatternSeed?: number, shellColorSeed?: number, form?: object }} [o] */
   constructor(o = {}) {
-    const geo = sharedGeometry();
+    this.form = o.form ?? FORMS.asari;
+    this.anatomy = this.form.anatomy;
+    const style = this.form.style;
+    const geo = sharedGeometry(this.form);
     this.geo = geo;
     this.shellPatternSeed = o.shellPatternSeed ?? Math.random();
     this.shellColorSeed = o.shellColorSeed ?? Math.random();
     this.mats = {
-      outerL: makeShellOuterMaterial(), outerR: makeShellOuterMaterial(),
-      inner: makeShellInnerMaterial(),
-      soft: makeSoftMaterial(0), foot: makeSoftMaterial(1),
-      sIn: makeSoftMaterial(2), sOut: makeSoftMaterial(2),
+      outerL: makeShellOuterMaterial({ style }), outerR: makeShellOuterMaterial({ style }),
+      inner: makeShellInnerMaterial({ style }),
+      soft: makeSoftMaterial(0, style), foot: makeSoftMaterial(1, style),
+      sIn: makeSoftMaterial(2, style), sOut: makeSoftMaterial(2, style),
       decal: makeDecalMaterial(),
     };
     const ps = this.shellPatternSeed, cs = this.shellColorSeed;
@@ -454,7 +519,7 @@ export class AsariModel {
     const root = new Group();
     root.name = 'ClamRoot';
     this.root = root;
-    const H = ANATOMY.hingePoint;
+    const H = this.anatomy.hingePoint;
     const mkValve = (name, mat, mirror) => {
       const pivot = new Group();
       pivot.name = name;
@@ -484,8 +549,8 @@ export class AsariModel {
 
     this.foot = new Group();
     this.foot.name = 'Foot';
-    this.foot.position.copy(ANATOMY.footRoot);
-    this.foot.rotation.z = ANATOMY.footDir;
+    this.foot.position.copy(this.anatomy.footRoot);
+    this.foot.rotation.z = this.anatomy.footDir;
     this.footMesh = new Mesh(geo.foot[0], this.mats.foot);
     this.foot.add(this.footMesh);
     root.add(this.foot);
@@ -494,14 +559,14 @@ export class AsariModel {
       const grp = new Group();
       grp.name = name;
       grp.position.copy(spec.root);
-      grp.rotation.z = ANATOMY.siphonDir;
+      grp.rotation.z = this.anatomy.siphonDir;
       const mesh = new Mesh(g, mat);
       grp.add(mesh);
       root.add(grp);
       return { grp, mesh };
     };
-    this.siphonIn = mkSiphon('InhalantSiphon', ANATOMY.siphonIn, geo.siphonIn[0], this.mats.sIn);
-    this.siphonOut = mkSiphon('ExhalantSiphon', ANATOMY.siphonOut, geo.siphonOut[0], this.mats.sOut);
+    this.siphonIn = mkSiphon('InhalantSiphon', this.anatomy.siphonIn, geo.siphonIn[0], this.mats.sIn);
+    this.siphonOut = mkSiphon('ExhalantSiphon', this.anatomy.siphonOut, geo.siphonOut[0], this.mats.sOut);
 
     this.decal = new Mesh(geo.decal, this.mats.decal);
     this.decal.name = 'AsariSandDecal';
@@ -544,12 +609,12 @@ export class AsariModel {
     // the siphons leave through the posterior gape: while they are out the valves cannot be shut on them
     const clearance = smooth(0.03, 0.14, Math.max(sIn.len, sOut.len));
     const g = Math.max(gape, clearance);
-    const a = g * ANATOMY.maxGape * 0.5;
-    this.left.pivot.quaternion.copy(qa.setFromAxisAngle(ANATOMY.hingeAxis, a));
-    this.right.pivot.quaternion.copy(qa.setFromAxisAngle(ANATOMY.hingeAxis, -a));
-    this.left.mantlePivot.quaternion.copy(qa.setFromAxisAngle(ANATOMY.hingeAxis, a * ANATOMY.mantleFollow));
-    this.right.mantlePivot.quaternion.copy(qa.setFromAxisAngle(ANATOMY.hingeAxis, -a * ANATOMY.mantleFollow));
-    this.mats.foot.userData.uniforms.uDeform.value.set(foot.ext, foot.swell, foot.bend, ANATOMY.footLength);
+    const a = g * this.anatomy.maxGape * 0.5;
+    this.left.pivot.quaternion.copy(qa.setFromAxisAngle(this.anatomy.hingeAxis, a));
+    this.right.pivot.quaternion.copy(qa.setFromAxisAngle(this.anatomy.hingeAxis, -a));
+    this.left.mantlePivot.quaternion.copy(qa.setFromAxisAngle(this.anatomy.hingeAxis, a * this.anatomy.mantleFollow));
+    this.right.mantlePivot.quaternion.copy(qa.setFromAxisAngle(this.anatomy.hingeAxis, -a * this.anatomy.mantleFollow));
+    this.mats.foot.userData.uniforms.uDeform.value.set(foot.ext, foot.swell, foot.bend, this.anatomy.footLength);
     this.footMesh.visible = foot.ext > 0.02 && this.lod < 2;
     this.mats.sIn.userData.uniforms.uDeform.value.set(sIn.len, sIn.open, sIn.swayY, sIn.swayZ);
     this.mats.sOut.userData.uniforms.uDeform.value.set(sOut.len, sOut.open, sOut.swayY, sOut.swayZ);
@@ -574,8 +639,8 @@ export class AsariModel {
 }
 
 /** Preview for the 図鑑: closed-ish clam lying on its side, siphons slightly out. */
-export function makeAsariPreview(seed = 0.42) {
-  const m = new AsariModel({ shellPatternSeed: seed, shellColorSeed: (seed * 7.31) % 1 });
+export function makeAsariPreview(seed = 0.42, form = FORMS.asari) {
+  const m = new AsariModel({ shellPatternSeed: seed, shellColorSeed: (seed * 7.31) % 1, form });
   m.setLod(0);
   m.pose(0.35, { ext: 0, swell: 0, bend: 0 }, { len: 0.16, open: 0.7, swayY: 0, swayZ: 0 }, { len: 0.12, open: 0.6, swayY: 0, swayZ: 0 }, 0);
   m.setSand(-1e9, 0.04, 0.7, false);

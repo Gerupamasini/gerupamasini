@@ -1,9 +1,9 @@
 // Species identity and viewer metadata for the adult エドハゼ build.
-import { SL, TL, section } from './anatomy.mjs';
+import { SL, TL, section, GRAVID } from './anatomy.mjs';
 
 export const SPECIES = {
   key: 'edohaze',
-  file: 'edohaze.glb',
+  file: GRAVID ? 'edohaze_gravid.glb' : 'edohaze.glb',
   prefix: 'Edohaze',
   rootName: 'Edohaze_Adult',
   generator: 'edohaze-procedural-builder',
@@ -15,7 +15,7 @@ export const SPECIES = {
   pigmentPNG: true,
   animations: 'Idle (loop, breathing), Swim (loop, 9 Hz burst tail beat), Yawn (one-shot)',
   viewer: {
-    title: 'エドハゼ（全長 約45mm）',
+    title: GRAVID ? 'エドハゼ 抱卵メス（全長 約45mm）' : 'エドハゼ（全長 約45mm）',
     subtitle: 'Gymnogobius macrognathos — adult',
     // ground contacts (bone, s mm, y mm | 'rim' = pelvic sucker rim | 'bot' = belly line | 'tail' = lower caudal lobe)
     contacts: [
@@ -79,11 +79,13 @@ export const SPECIES = {
     // long oblique jaw: rictus 2.85 mm, maxilla to 3.6 mm, gape 2.17 → 1.27 mm
     jaw: [2.6, 4.0, 2.3, 3.0],
     // pale, less amber tissue than the juvenile マハゼ (lower blue absorption)
-    sigS: 1.0,
+    sigS: 0.8,
     sigA: [0.02, 0.04, 0.085],
     organs: [
       { name: 'liver', c: [12.9, 1.45, 0.2], r: [1.8, 1.0, 1.65], k: [1.3, 2.3, 2.9] },
-      { name: 'stomach + gut', c: [19.0, 1.35, -0.1], r: [4.3, 0.95, 1.25], k: [1.0, 1.4, 2.3] },
+      GRAVID // the cream-yellow ovary fills the swollen cavity (028, 044, 048)
+        ? { name: 'ovary', c: [18.6, 0.75, 0], r: [4.8, 1.55, 2.2], k: [0.25, 0.45, 1.3] }
+        : { name: 'stomach + gut', c: [19.0, 1.35, -0.1], r: [4.3, 0.95, 1.25], k: [1.0, 1.4, 2.3] },
       { name: 'dark peritoneum roof', c: [17.9, 2.45, 0.0], r: [6.2, 0.28, 1.6], k: [4.2, 4.4, 4.6] },
       { name: 'kidney', c: [18.0, 2.95, 0.0], r: [6.6, 0.2, 0.3], k: [0.8, 2.6, 2.6] },
       { name: 'heart', c: [9.3, 0.85, 0.0], r: [0.62, 0.45, 0.55], k: [0.5, 4.0, 3.6] },

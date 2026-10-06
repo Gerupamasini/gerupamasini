@@ -1,5 +1,5 @@
 import { Group, InstancedBufferAttribute, InstancedMesh, Matrix4, Object3D, Quaternion, Vector3 } from 'three';
-import { AsariModel, ANATOMY, makeAsariPreview, sharedGeometry } from './AsariModel.js';
+import { AsariModel, FORMS, makeAsariPreview, sharedGeometry } from './AsariModel.js';
 import { AsariBehavior, STATE } from './AsariBehavior.js';
 import { makeShellOuterMaterial } from './AsariMaterial.js';
 
@@ -29,11 +29,13 @@ function mulberry(seed) {
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /**
- * アサリ driver: builds the procedural model in attach(), runs AsariBehavior, and poses the rig against the
- * terrain every frame (burial depth, rocking, siphon length to reach the surface, sand clipping and decal).
+ * Burrowing-clam driver (アサリ, ハマグリ — the shell form decides which): builds the procedural model in
+ * attach(), runs AsariBehavior, and poses the rig against the terrain every frame (burial depth, rocking,
+ * siphon length to reach the surface, sand clipping and decal).
  */
 export class AsariDriver {
-  constructor() {
+  constructor(form = FORMS.asari) {
+    this.form = form;
     this.root = null;
     this.ind = null;
     this.model = null;
@@ -54,8 +56,8 @@ export class AsariDriver {
     return { root, parts: {}, length: 0.035 };
   }
 
-  static makePreview() {
-    const m = makeAsariPreview();
+  static makePreview(form = FORMS.asari, seed = 0.42) {
+    const m = makeAsariPreview(seed, form);
     m.root.rotation.set(0, 0.6, 0);
     return m.root;
   }
@@ -66,7 +68,7 @@ export class AsariDriver {
     const h = hashString(individual.id);
     const rand = mulberry(h);
     this.scale = individual.length_mm / 1000;
-    this.model = new AsariModel({ shellPatternSeed: rand(), shellColorSeed: rand() });
+    this.model = new AsariModel({ shellPatternSeed: rand(), shellColorSeed: rand(), form: this.form });
     this.model.root.scale.setScalar(this.scale);
     root.position.set(individual.pos.x, individual.pos.y, individual.pos.z);
     root.rotation.set(0, individual.heading, 0);
@@ -75,7 +77,7 @@ export class AsariDriver {
     // most are found buried; a few lie on the sand (washed out / dropped) and dig in
     const onSurface = rand() < 0.2;
     this.lieSide = rand() < 0.5 ? 1 : -1;
-    this.uprightTilt = -1.05 + (rand() - 0.5) * 0.25;
+    this.uprightTilt = this.form.rest.tilt + (rand() - 0.5) * 0.25;
     this.beh = new AsariBehavior(rand, onSurface);
     this.beh.onEvent((id) => this.emit(id));
     this.drift.set(0, 0, 0);
@@ -131,12 +133,13 @@ export class AsariDriver {
     qTmp.multiply(qRock);
     m.root.quaternion.copy(qTmp);
     // lying on a valve, the foot probes obliquely down into the sand rather than along it
-    m.foot.rotation.set(0, this.lieSide * (1 - tilt) * 0.8, ANATOMY.footDir);
+    m.foot.rotation.set(0, this.lieSide * (1 - tilt) * 0.8, m.anatomy.footDir);
     // lying on a valve: half-width 0.26 L, sunk ~0.06 L into the sand; buried upright the shell top (~0.46 L above
     // its centre at this tilt) sits ~0.23 L under the surface
-    const centreY = 0.2 + (-0.69 - 0.2) * smooth(0.12, 1, b.burial);
+    const rest = this.form.rest, A = m.anatomy;
+    const centreY = rest.lying + (rest.buried - rest.lying) * smooth(0.12, 1, b.burial);
     // pulled toward the foot during each stroke (a small lasting drift too)
-    v1.set(Math.cos(ANATOMY.footDir), Math.sin(ANATOMY.footDir), 0).applyQuaternion(qTmp);
+    v1.set(Math.cos(A.footDir), Math.sin(A.footDir), 0).applyQuaternion(qTmp);
     v1.y = 0;
     if (b.pull > 0) this.drift.addScaledVector(v1, b.pull * sdt * 0.4).clampLength(0, 0.25);
     root.position.set(ind.pos.x, ground, ind.pos.z);
@@ -152,8 +155,8 @@ export class AsariDriver {
       // the openings sit just proud of the sand (reference 049: two fringed holes almost flush)
       return Math.min(0.9, Math.max(0.12, below / up + 0.012));
     };
-    const reach = b.burial > 0.5 ? siphonLen(ANATOMY.siphonIn, m.siphonIn.grp) : 0.16;
-    const reachOut = b.burial > 0.5 ? siphonLen(ANATOMY.siphonOut, m.siphonOut.grp) : 0.13;
+    const reach = b.burial > 0.5 ? siphonLen(A.siphonIn, m.siphonIn.grp) : 0.16;
+    const reachOut = b.burial > 0.5 ? siphonLen(A.siphonOut, m.siphonOut.grp) : 0.13;
     const ext = b.extOut, open = b.openOut;
     const sIn = { len: 0.03 + ext * reach, open, swayY: b.swayY, swayZ: b.swayZ };
     const sOut = { len: 0.03 + ext * (reachOut + 0.015), open: open * 0.8 + 0.1, swayY: b.swayY, swayZ: b.swayZ * 1.08 };   // fused: they move together
@@ -173,7 +176,7 @@ export class AsariDriver {
       // the holes sit under the deformed siphon tips (same bend as the vertex shader: offset = sway · L at t = 1)
       // (plus the Y fork baked into the geometry: the inhalant tip parts ventrally, the exhalant dorsally)
       const tip = (out, s, grp, fork) => out.set(s.len, s.swayY * s.len + fork, s.swayZ * s.len).applyMatrix4(grp.matrixWorld);
-      tip(v2, sIn, m.siphonIn.grp, ANATOMY.siphonFork); tip(v3, sOut, m.siphonOut.grp, -ANATOMY.siphonFork);
+      tip(v2, sIn, m.siphonIn.grp, A.siphonFork); tip(v3, sOut, m.siphonOut.grp, -A.siphonFork);
       root.worldToLocal(v2); root.worldToLocal(v3);
       const half = this.scale * 0.8;
       const mx = (v2.x + v3.x) / (2 * half), mz = (v2.z + v3.z) / (2 * half);
@@ -214,9 +217,9 @@ export class AsariDriver {
  *
  * @param {{ x: number, y: number, z: number, length_m: number, yaw?: number }[]} items
  */
-export function createAsariBed(items, lod = 2) {
-  const geo = sharedGeometry().valve[lod].clone();
-  const mat = makeShellOuterMaterial({ instanced: true });
+export function createAsariBed(items, lod = 2, form = FORMS.asari) {
+  const geo = sharedGeometry(form).valve[lod].clone();
+  const mat = makeShellOuterMaterial({ instanced: true, style: form.style });
   mat.userData.uniforms.uSand.value.set(-1e9, 0.04, 0, 0.8);
   const mesh = new InstancedMesh(geo, mat, items.length);
   const seeds = new Float32Array(items.length * 4);

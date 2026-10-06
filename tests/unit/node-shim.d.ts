@@ -1,4 +1,4 @@
-// The project has no @types/node; tests that read built assets only need these two calls.
+// The project has no @types/node; tests that read built assets only need these few calls.
 declare module 'node:fs' {
   interface FileBuffer {
     readUInt32LE(offset: number): number;
@@ -7,6 +7,7 @@ declare module 'node:fs' {
   }
   export function readFileSync(path: string, encoding: 'utf8'): string;
   export function readFileSync(path: string): FileBuffer;
+  export function existsSync(path: string): boolean;
 }
 declare module 'node:url' {
   export function fileURLToPath(url: URL | string): string;

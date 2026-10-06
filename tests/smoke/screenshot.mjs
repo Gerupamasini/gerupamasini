@@ -162,7 +162,8 @@ try {
     console.log('after wait', JSON.stringify(await page.evaluate(() => { const a = window.__higata; return { mode: a.mode, frames: a.frameCount, state: a.capture.state.value, caseCount: a.encyclopedia.caseItems.value.length }; })));
     const caught = await page.evaluate(() => ({ caseCount: window.__higata.encyclopedia.caseItems.value.length, research: window.__higata.encyclopedia.research.value }));
     console.log('after capture', JSON.stringify(caught));
-    if (caught.caseCount !== 1) errors.push('capture did not add to the case');
+    // the forced swing lands at least the goby; a second fish sitting in the net's zone may come up with it
+    if (caught.caseCount < 1) errors.push('capture did not add to the case');
     await page.evaluate(() => window.__higata.openOverlay('zukan'));
     await waitFrames(page, 2);
     await page.screenshot({ path: path.join(outDir, '11-zukan.png') });
@@ -180,7 +181,7 @@ try {
     await page.waitForFunction(() => window.__higata && window.__higata.world && window.__higata.player && window.__higata.mode === 'field', null, { timeout: 120000 });
     const restored = await page.evaluate(() => ({ research: window.__higata.encyclopedia.research.value, tank: window.__higata.encyclopedia.tankItems.value.length, removed: window.__higata.removed.size }));
     console.log('after reload', JSON.stringify(restored));
-    if (restored.research <= 0 || restored.tank !== 1 || restored.removed !== 1) errors.push('save did not restore progress');
+    if (restored.research <= 0 || restored.tank !== 1 || restored.removed !== caught.caseCount) errors.push('save did not restore progress');
     await waitFrames(page, 6);
     await page.screenshot({ path: path.join(outDir, '13-continue.png') });
   } else errors.push('no goby spawned near the player');

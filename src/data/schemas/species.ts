@@ -46,7 +46,11 @@ export const SpeciesSchema = z.object({
     weightCoef: z.object({ a: z.number(), b: z.number() }),
   }),
   sex: z.object({ maleRatio: z.number().min(0).max(1).default(0.5), dimorphic: z.boolean().default(false) }).default({ maleRatio: 0.5, dimorphic: false }),
-  stages: z.array(z.object({ id: z.string(), ja: z.string(), maxLength_mm: z.number().optional() })).min(1),
+  stages: z.array(z.object({
+    id: z.string(), ja: z.string(), maxLength_mm: z.number().optional(),
+    /** this stage's own model files (a growth form of the species' model; the rest comes from `model`) */
+    model: z.object({ hero: z.string().optional(), lod1: z.string().optional(), lod2: z.string().optional() }).optional(),
+  })).min(1),
   traits: z.array(z.object({ id: z.string(), ja: z.string(), when: z.string() })).default([]),
   variation: z.object({
     scaleFromLength: z.boolean().default(true),

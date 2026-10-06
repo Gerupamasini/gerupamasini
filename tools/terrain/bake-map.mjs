@@ -83,11 +83,28 @@ const SIZE = mapDef.size_m;
 const N = mapDef.resolution;
 const half = SIZE / 2;
 
-// beach profile along z: berm at the north, gentle intertidal slope to the south
+// beach profile along z: the park's land at the north, a steep earthen bank down to the sandy upper beach, then the
+// gentle intertidal slope to the south (the open bay)
+const BANK = { landZ: -152, landH: 5.0, footZ: -144, footH: 1.55 };
 function baseProfile(z) {
-  if (z <= -150) return 2.2;
-  if (z <= -125) return lerp(2.2, 0.9, (z + 150) / 25);
+  if (z <= BANK.landZ) return BANK.landH;
+  if (z <= BANK.footZ) return lerp(BANK.landH, BANK.footH, (z - BANK.landZ) / (BANK.footZ - BANK.landZ));
+  if (z <= -125) return lerp(BANK.footH, 0.9, (z - BANK.footZ) / (-125 - BANK.footZ));
   return lerp(0.9, -1.9, (z + 125) / 285);
+}
+/** 0 on the beach, 1 on the bank and the land behind it (relief, creeks and dimples stop at its foot) */
+function bankMask(z) { return smooth(BANK.footZ + 3, BANK.footZ - 3, z); }
+
+// the east and west edges: low earthen levees (渚の土塁) running from the land down toward the bay, where they sink
+// away so the open sea stays open. Rounded crests, a little roughness, and the flat is blended into them.
+const LEVEE = { inner: 133, crest: 147, crestH: 2.9, sinkZ0: 100, sinkZ1: 148 };
+function leveeAt(x, z) {
+  const ax = Math.abs(x);
+  const m = smooth(LEVEE.inner, LEVEE.crest, ax);
+  if (m <= 0) return { h: 0, m: 0 };
+  const sink = smooth(LEVEE.sinkZ0, LEVEE.sinkZ1, z);
+  const crest = LEVEE.crestH - 4.6 * sink - 0.25 * smooth(LEVEE.crest + 4, half, ax) + 0.12 * fbm(x / 7 + 3, z / 7 - 5, 2);
+  return { h: Math.max(crest, baseProfile(z)), m: m * (1 - smooth(LEVEE.sinkZ1, LEVEE.sinkZ1 + 10, z)) };
 }
 
 // ------------------------------------------------------------------ tidal creeks: a dendritic network
@@ -223,7 +240,7 @@ function relief(x, z) {
 
 function height(x, z) {
   let h = baseProfile(z);
-  const intertidal = smooth(-130, -115, z);
+  const intertidal = smooth(-130, -115, z) * (1 - bankMask(z));
   h += relief(x, z) * intertidal;
   const ck = creekAt(x, z);
   // the banks: the flat rises away from the creeks (a low dome between them), then the creek cuts in
@@ -234,7 +251,12 @@ function height(x, z) {
     const dx = rx / p.rx, dz = rz / p.rz;
     h -= p.depth * Math.exp(-(dx * dx + dz * dz) * 1.3);
   }
-  h -= ck.depth;
+  h -= ck.depth * (1 - bankMask(z));
+  // the bank itself is bare earth with a little roughness
+  h += 0.06 * fbm(x / 5 + 9, z / 5 + 2, 2) * bankMask(z);
+  // the side levees: the flat (creeks and all) is blended into them
+  const lv = leveeAt(x, z);
+  h = lerp(h, lv.h, lv.m);
   return Math.max(h, -3.45);   // the deepest trunk mouths stay inside the encoded range
 }
 
@@ -267,6 +289,9 @@ function mudness(x, z, h, rel, slope) {
 }
 
 function substrate(x, z, h, m) {
+  // the earthen bank, the land behind it and the side levees: packed earth and stone (gravel)
+  const lv = leveeAt(x, z);
+  if (bankMask(z) > 0.5 || (lv.m > 0.5 && lv.h > baseProfile(z) + 0.25)) return idx.gravel;
   const ch = channel(x, z);
   if (ch && ch.weight > 0.5 && ch.depth > 0.07) return idx.channel;
   const n2 = fbm(x / 12 + 50, z / 12 - 20, 3);

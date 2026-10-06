@@ -12,6 +12,7 @@ import type { SpeciesDef } from '../data/schemas';
 import type { Driver, Floor } from '../creatures/drivers/Driver';
 import { DRIVERS } from '../creatures/drivers/index';
 import { instantiateModel } from '../creatures/models/ModelLoader';
+import { modelFor, variantOf } from '../creatures/models/choice';
 import { generateIndividual, type Individual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 import type { BehaviorEvent } from '../creatures/drivers/Driver';
@@ -708,10 +709,11 @@ export class TankScene {
     ind.home.copy(ind.pos);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     let hero: HeroInstance | null = null;
-    const useHero = !!this.heroApply && !!species.model.hero && !this.occupants.some((o) => o.hero);
-    const rel = useHero ? species.model.hero : species.model.lod1 ?? species.model.hero ?? species.model.lod2;
+    const files = modelFor(species, ind.stage);
+    const useHero = !!this.heroApply && !!files.hero && !this.occupants.some((o) => o.hero);
+    const rel = useHero ? files.hero : files.lod1 ?? files.hero ?? files.lod2;
     if (rel) {
-      const model = await instantiateModel(rel);
+      const model = await instantiateModel(rel, variantOf(ind.id));
       root = model.root; bones = model.bones as Record<string, Object3D>; meshes = model.meshes; extras = model.extras;
       for (const m of meshes) m.castShadow = true;
       if (useHero && this.heroApply) {

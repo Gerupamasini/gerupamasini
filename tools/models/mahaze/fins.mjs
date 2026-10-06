@@ -1,6 +1,16 @@
 // Fins: pleated membrane meshes with individual rays + a shared texture atlas.
 import { section, topY, botY, surfaceAt, toObject, dirToObject } from './anatomy.mjs';
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../../lib/noise.mjs';
+import { pick } from './variant.mjs';
+
+// pattern number (1…3) of the atlas being painted: offsets the random streams of the fin markings
+let PS = 0;
+const hp = (a, b, c, seed) => hash01(a, b, c, seed + PS);
+
+// fin markings per growth stage (photos): the adult's dark marks are wider (they cover the ray and the
+// membrane beside it) and line up across the rays into zigzag bars on the caudal fin; the juvenile's are
+// smaller spots on the rays
+const FP = pick({ w: 2.1, skip: 0.06, amp: 1.2, jitter: 0.1, step: 0.6 }, { w: 1.2, skip: 0.25, amp: 0.95, jitter: 0.24, step: 0.8 });
 
 const DEG = Math.PI / 180;
 const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
@@ -69,13 +79,14 @@ function caudalFin(rect) {
     pigment: (r, n, Lr, len, t, dRay, fAcross) => {
       let mel = 0;
       const upper = 1 - fAcross;
-      for (let j = 0; j < 12; j++) {
-        const Lj = 0.8 + j * 0.8 + r * 0.02 + (hash01(r, j, 2, 502) - 0.5) * 0.28;
+      for (let j = 0; j < 16; j++) {
+        // zigzag bars: alternate rays shift the mark by half a step
+        const Lj = 0.8 + j * FP.step + (r % 2) * 0.2 * FP.step + (hp(r, j, 2, 502) - 0.5) * FP.jitter;
         if (Lj > len * 0.9) break;
-        if (hash01(r, j, 1, 501) < 0.3) continue;
-        const ls = 0.1 + 0.09 * hash01(r, j, 3, 503);
-        const amp = 0.45 + 0.55 * hash01(r, j, 4, 504);
-        mel = Math.max(mel, amp * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.075) ** 2)));
+        if (hp(r, j, 1, 501) < FP.skip) continue;
+        const ls = 0.12 + 0.09 * hp(r, j, 3, 503);
+        const amp = (0.55 + 0.45 * hp(r, j, 4, 504)) * FP.amp;
+        mel = Math.max(mel, amp * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.075 * FP.w)) ** 2)));
       }
       mel *= 0.8 * (0.5 + 0.5 * upper) * smoothstep(0.97, 0.75, t);
       // dark spot at the caudal base
@@ -163,37 +174,37 @@ function pelvicDisc(rect) {
 export function finDefinitions() {
   const R = (x, y, w, h) => ({ x, y, w, h });
   const D1 = medianFin({
-    name: 'Fin_Dorsal1', s0: 12.9, s1: 16.8, count: 8, a0: 70, a1: 40, dorsal: true, spines: 8, curv: 0.09, notch: 0.3, pleat: 0.04, sag: 0.02,
+    name: 'Fin_Dorsal1', s0: pick(12.9, 14.0), s1: pick(16.8, 17.8), count: 8, a0: 70, a1: 40, dorsal: true, spines: 8, curv: 0.09, notch: 0.3, pleat: 0.04, sag: 0.02,
     lengths: [3.9, 4.7, 5.0, 4.8, 4.3, 3.6, 2.9, 2.1], rect: R(1024, 1024, 512, 512), branchT: 2, segStart: 2,
     pigment: (r, n, Lr, len, t, dRay) => {
       let mel = 0;
       for (let j = 0; j < 9; j++) {
-        const Lj = 0.55 + j * 0.62 + r * 0.08 + (hash01(r, j, 2, 512) - 0.5) * 0.2;
+        const Lj = 0.55 + j * 0.62 + r * 0.08 + (hp(r, j, 2, 512) - 0.5) * 0.2;
         if (Lj > len * 0.86) break;
-        if (hash01(r, j, 1, 511) < 0.18) continue;
-        const ls = 0.1 + 0.08 * hash01(r, j, 3, 513);
-        mel = Math.max(mel, (0.5 + 0.5 * hash01(r, j, 4, 514)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.1) ** 2)));
+        if (hp(r, j, 1, 511) < 0.18) continue;
+        const ls = 0.1 + 0.08 * hp(r, j, 3, 513);
+        mel = Math.max(mel, FP.amp * (0.5 + 0.5 * hp(r, j, 4, 514)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.1 * FP.w)) ** 2)));
       }
       return { mel: 0.8 * mel + 0.04, xan: 0.25 * smoothstep(0.5, 0.0, t), irid: 0.05 };
     },
   });
   const D2 = medianFin({
-    name: 'Fin_Dorsal2', s0: 19.7, s1: 35.6, count: 14, a0: 60, a1: 27, dorsal: true, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
+    name: 'Fin_Dorsal2', s0: pick(19.7, 20.8), s1: pick(35.6, 35.9), count: 14, a0: 60, a1: 27, dorsal: true, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
     lengths: [2.9, 3.6, 4.0, 4.2, 4.3, 4.35, 4.4, 4.4, 4.45, 4.5, 4.55, 4.5, 4.35, 3.9], rect: R(0, 1024, 1024, 512), branchT: 0.55, segStart: 0.18,
     pigment: (r, n, Lr, len, t, dRay) => {
       let mel = 0;
       for (let j = 0; j < 9; j++) {
-        const Lj = 0.42 + j * 0.55 + r * 0.05 + (hash01(r, j, 2, 522) - 0.5) * 0.2;
+        const Lj = 0.42 + j * 0.55 + r * 0.05 + (hp(r, j, 2, 522) - 0.5) * 0.2;
         if (Lj > len * 0.88) break;
-        if (hash01(r, j, 1, 521) < 0.22) continue;
-        const ls = 0.09 + 0.08 * hash01(r, j, 3, 523);
-        mel = Math.max(mel, (0.45 + 0.55 * hash01(r, j, 4, 524)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.075) ** 2)));
+        if (hp(r, j, 1, 521) < 0.22) continue;
+        const ls = 0.09 + 0.08 * hp(r, j, 3, 523);
+        mel = Math.max(mel, FP.amp * (0.45 + 0.55 * hp(r, j, 4, 524)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.075 * FP.w)) ** 2)));
       }
       return { mel: 0.72 * mel + 0.03, xan: 0.22 * smoothstep(0.6, 0.0, t), irid: 0.05 };
     },
   });
   const AN = medianFin({
-    name: 'Fin_Anal', s0: 21.4, s1: 35.0, count: 12, a0: -58, a1: -27, dorsal: false, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
+    name: 'Fin_Anal', s0: pick(21.4, 22.3), s1: pick(35.0, 35.3), count: 12, a0: -58, a1: -27, dorsal: false, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
     lengths: [2.1, 2.9, 3.3, 3.5, 3.6, 3.65, 3.7, 3.7, 3.75, 3.8, 3.75, 3.5], rect: R(0, 1536, 1024, 512), branchT: 0.55, segStart: 0.18,
     pigment: (r, n, Lr, len, t) => ({ mel: 0.12 * smoothstep(0.72, 0.95, t), xan: 0.14, irid: 0.32 * smoothstep(0.35, 0.0, t) }),
   });
@@ -382,7 +393,8 @@ export function buildFinMesh(def, SUB = 6, NT = 36) {
 // ---------------------------------------------------------------------------
 // Atlas painting
 
-export function paintFinAtlas(defs, log = () => {}) {
+export function paintFinAtlas(defs, log = () => {}, pattern = 1) {
+  PS = (pattern - 1) * 1009;
   const S = ATLAS;
   const color = new Uint8Array(S * S * 4);
   const data = new Uint8Array(S * S * 4);

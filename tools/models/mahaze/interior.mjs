@@ -2,8 +2,11 @@
 //   * buccal cavity (lip mucosa, palate, floor, cheek walls) with teeth
 //   * inner lining + free edge of each gill cover, gill-chamber wall and four gill arches per side
 // Every vertex carries a `zone` + blend parameter that the rig turns into skin weights.
-import { section, toObject, dirToObject, gapeY, RICTUS_S, OPERCLE } from './anatomy.mjs';
+import { section, toObject, dirToObject, gapeY, RICTUS_S, OPERCLE, LIPS } from './anatomy.mjs';
 import { hash01, clamp, smoothstep } from '../../lib/noise.mjs';
+import { pick } from './variant.mjs';
+
+const TOOTH_K = pick(1, 0.72); // the juvenile's teeth are smaller
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -95,7 +98,7 @@ export function buildMouth(mesh) {
       // inner face of the lip roll: the mucosa starts at the gape and curls in behind the lip roll
       // (the roll reaches ~2r - out inward from the skin, see anatomy lipLine)
       const f = clamp(s / RICTUS_S, 0, 1);
-      const reach = upper ? 2 * (0.4 - 0.19 * f - 0.08 * f * f) - 0.18 + 0.06 : 2 * (0.29 - 0.12 * f - 0.07 * f * f) - 0.13 + 0.06;
+      const reach = upper ? 2 * LIPS.ru(f) - LIPS.outU + 0.06 : 2 * LIPS.rl(f) - LIPS.outL + 0.06;
       const az = Math.abs(P[2]);
       // pass over the top of the roll (slightly across the gape line) so the strip never cuts through it;
       // near the snout tip the roll lies across the axis, so step back behind it instead
@@ -186,6 +189,7 @@ export function buildMouth(mesh) {
   const teeth = new Builder();
   const colBase = [0.86, 0.83, 0.74, 1], colTip = [0.93, 0.9, 0.82, 1];
   const addTooth = (base, dir, len, rad, curl, zone) => {
+    len *= TOOTH_K; rad *= TOOTH_K;
     // curved cone: centre line bends from `dir` toward the back of the mouth (+s) and the midline
     const back = nrm([1, 0, -Math.sign(base[2]) * 0.35]);
     const NS = 4, NA = 7;

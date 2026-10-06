@@ -14,6 +14,7 @@ import { minDepthFor, type Individual } from './Individual';
 import type { BehaviorEvent, Driver, Floor, Intent } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
+import { modelFor, variantOf } from './models/choice';
 import type { HeroInstance } from './species/mahaze/hero/applyHero';
 
 interface View {
@@ -98,6 +99,7 @@ export class CreatureSystem {
     const jobs: Promise<unknown>[] = [];
     for (const sp of this.data.species.values()) {
       if (sp.model.lod2) jobs.push(preloadModel(sp.model.lod2));
+      for (const st of sp.stages) if (st.model?.lod2) jobs.push(preloadModel(st.model.lod2));
     }
     await Promise.all(jobs);
   }
@@ -226,9 +228,10 @@ export class CreatureSystem {
       ph.root.userData.placeholder = ph;
       view = { tier, root: ph.root, model: null, radius: ph.length * 0.6, hero: null };
     } else {
-      const rel = sp.model[tier]!;
+      // the growth stage's own model where the species has them, in the individual's pattern variant
+      const rel = modelFor(sp, e.ind.stage)[tier] ?? sp.model[tier]!;
       let model: LoadedModel;
-      try { model = await instantiateModel(rel); } catch (err) { console.warn(err); e.pendingTier = null; return; }
+      try { model = await instantiateModel(rel, variantOf(e.ind.id)); } catch (err) { console.warn(err); e.pendingTier = null; return; }
       if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
       let hero: HeroInstance | null = null;
       if (tier === 'hero' && this.heroApply) {
