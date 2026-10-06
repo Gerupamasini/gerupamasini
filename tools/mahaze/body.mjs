@@ -15,9 +15,20 @@ const MARKS = pick({
   pre: [[0.7, 3.2], [2.6, 3.95], [4.45, 4.75]], sub: [[5.55, 3.95], [5.3, 2.9], [4.9, 1.8]], post: [[6.85, 5.15], [8.1, 5.25], [9.6, 5.1]],
   operc: [10.7, 4.45], spots: [[7.7, 3.0, 0.3], [8.9, 3.8, 0.26], [9.8, 2.5, 0.28], [7.0, 2.1, 0.24], [9.2, 1.6, 0.22]],
 });
-// juvenile: fewer melanophores and more yellow (xanthophores): a paler, golden-olive fish
+// juvenile: fewer melanophores and more yellow (xanthophores): a golden-olive fish
 // and bolder, rounder blotches along the midline with a distinct black spot at the caudal base
-const MEL_K = pick(1, 0.5), MELF_K = pick(1, 0.8), XAN_K = pick(1, 1.45), BLOTCH_K = pick(0, 0.1), CSPOT_K = pick(0, 0.42);
+const MEL_K = pick(1, 0.62), MELF_K = pick(1, 0.85), XAN_K = pick(1, 1.7), CSPOT_K = pick(0.18, 0.42);
+// Pattern of each growth stage, matched to the photos: the adult (photos 03 / 05 / hand) is grey-brown and
+// densely marbled down to the lower flank, with a row of dark midlateral blotches, dark reticulation along
+// the scale pockets and wavy dark lines on the cheek; the juvenile (calibrated lateral photo) is golden
+// olive, more finely mottled, with rounder midline blotches.
+//   mott: large-scale marbling; blot: midlateral blotches; pocket: scale-pocket reticulation;
+//   verm: cheek / gill-cover vermiculation; belly: pale-belly ramp (hn); base/dors: albedo flank / back
+const PAT = pick(
+  { mott: 0.32, blot: 0.36, pocket: 0.5, verm: 0.36, belly: [-0.4, -0.88], base: [0.59, 0.5, 0.39], dors: [0.39, 0.33, 0.25], spots: 1.5 },
+  { mott: 0.18, blot: 0.24, pocket: 0.3, verm: 0.24, belly: [-0.3, -0.82], base: [0.78, 0.58, 0.14], dors: [0.56, 0.44, 0.09], spots: 1.15 },
+);
+const bellyOf = (hn) => smoothstep(PAT.belly[0], PAT.belly[1], hn);
 
 const TAU = Math.PI * 2;
 
@@ -493,7 +504,7 @@ function bakeBodyTextures(ctx) {
     const dy = y - q.yc;
     const hn = dy / Math.max(dy > 0 ? q.t : q.b, 1e-3);
     const dorsal = smoothstep(-0.2, 0.8, hn);
-    const belly = smoothstep(-0.05, -0.7, hn);
+    const belly = bellyOf(hn);
     const head = headF(s, y);
     const { b, sd } = blotchAt(s, y, z, hn);
     const n = fbm3(s * 0.8, y * 0.8, Math.abs(z) * 0.8, 3, 5);
@@ -512,7 +523,7 @@ function bakeBodyTextures(ctx) {
     d = d * (1 - 0.6 * lb.lo) + 32.0 * lb.up + 8.0 * lb.lo;
     d *= 1 - 0.85 * lb.rim;
     const size = (0.8 + 0.5 * dorsal + 0.35 * b) * (1 - 0.15 * lb.up);
-    return [Math.max(0, d * MEL_K), size];
+    return [Math.max(0, d * MEL_K * PAT.spots), size];
   }
 
   // ---------------------------------------------------------------------------
@@ -530,7 +541,7 @@ function bakeBodyTextures(ctx) {
     const hn = clamp(dy / Math.max(dy > 0 ? q.t : q.b, 1e-3), -1.2, 1.2);
     const head = headF(s, yy);
     const dorsal = smoothstep(-0.2, 0.8, hn);
-    const belly = smoothstep(-0.05, -0.7, hn);
+    const belly = bellyOf(hn);
     const { b, sd } = blotchAt(s, yy, z, hn);
     let m = 0.035 * dorsal + 0.075 * b + 0.05 * sd;
     if (head > 0) {
@@ -538,11 +549,18 @@ function bakeBodyTextures(ctx) {
       const verm = smoothstep(0.74, 0.9, ridged3(s * 1.5 + 3.1, yy * 1.5, Math.abs(z) * 1.5, 3, 61)) * smoothstep(-0.8, -0.2, hn) * smoothstep(3.0, 5.0, s);
       // coarse dark reticulation over the head top, snout and cheeks (user close-up photo)
       const retic = smoothstep(0.68, 0.84, ridged3(s * 1.05 + 7.3, yy * 1.05, Math.abs(z) * 1.05, 3, 62)) * smoothstep(-0.45, 0.2, hn) * smoothstep(0.8, 2.5, s);
-      m = mix(m, 0.08 * dorsal + 0.3 * headMarks(s, yy, z, hn) + 0.16 * verm + 0.14 * retic, head);
+      m = mix(m, 0.08 * dorsal + 0.3 * headMarks(s, yy, z, hn) + PAT.verm * verm + 0.14 * retic, head);
     }
     // dusky dorsal reticulation (pigment along scale pockets)
     m += 0.1 * dorsal * smoothstep(0.55, 0.8, ridged3(s * 2.2, yy * 2.2, z * 2.2, 3, 3)) * (1 - head * 0.5);
-    m += BLOTCH_K * b * smoothstep(-0.5, 0.0, hn);
+    // marbling: irregular dark patches over the back and the upper and middle flank
+    {
+      const az = Math.abs(z);
+      const f = fbm3(s * 0.75 + 11.3, yy * 0.75, az * 0.75, 4, 131) + 0.35 * fbm3(s * 2.4, yy * 2.4, az * 2.4, 2, 132);
+      const flank = smoothstep(PAT.belly[0] - 0.05, PAT.belly[0] + 0.45, hn) * (1 - 0.5 * head);
+      m += PAT.mott * smoothstep(0.0, 0.16, f) * flank;
+    }
+    m += PAT.blot * b * smoothstep(-0.6, -0.1, hn);
     m += CSPOT_K * Math.exp(-(((s - 40.5) / 0.75) ** 2) - ((hn - 0.02) / 0.4) ** 2);
     m *= (1 - belly) * MELF_K;
     const ed = eyeDist(s, yy, z);
@@ -558,6 +576,7 @@ function bakeBodyTextures(ctx) {
     let xan = 0.2 + 0.45 * dorsal + 0.35 * head * smoothstep(-0.3, 0.4, hn);
     xan *= 1 - 0.85 * belly;
     xan *= (0.8 + 0.4 * fbm3(s * 0.9, yy * 0.9, z * 0.9, 3, 51)) * XAN_K;
+    xan += pick(0, 0.3) * (1 - belly); // the juvenile's skin is yellow throughout (also tints the light through it)
     // lid fold: dusky above the eye, a golden rim (xanthophores + iridophores) along its lower and rear margin
     // where it meets the cornea, as in the photos
     {
@@ -759,8 +778,8 @@ function bakeBodyTextures(ctx) {
           sh = mix(scaleH(second), scaleH(top), edge);
           // melanophores concentrate along the scale pockets (reticulated look of the upper flank)
           const pocket = Math.exp(-(((top.rr - top.dist) / 0.035) ** 2)) * smoothstep(-0.05, 0.12, top.ds);
-          const dors = smoothstep(-0.1, 0.7, hn);
-          MEL[t] = 1 - (1 - MEL[t]) * (1 - 0.16 * pocket * dors * scMask * (0.6 + 0.4 * hash01(top.hsh & 1023, 0, 0, 7)));
+          const dors = smoothstep(PAT.belly[0], PAT.belly[0] + 0.9, hn);
+          MEL[t] = 1 - (1 - MEL[t]) * (1 - PAT.pocket * pocket * dors * scMask * (0.6 + 0.4 * hash01(top.hsh & 1023, 0, 0, 7)));
         } else sh = 0.3;
         const amp = 0.013 * (1 - 0.45 * smoothstep(-0.3, -0.8, hn)) * (0.75 + 0.25 * zn);
         h += amp * sh * scMask;
@@ -860,11 +879,11 @@ function bakeBodyTextures(ctx) {
   // albedo (linear) + roughness at a surface point
   function shadeAt(s, yy, z, hn, head, MELv, I, X, G, cavity, halfW) {
     const dorsal = smoothstep(-0.2, 0.8, hn);
-    const belly = smoothstep(-0.05, -0.7, hn);
+    const belly = bellyOf(hn);
     const M = MELv * 1.6;
     // pale amber tissue, olive-brown back, milky belly (juvenile photos IMG_1603 / 9176 / user photo 1)
-    let r = pick(0.66, 0.7), g = pick(0.53, 0.6), b = pick(0.3, 0.27);
-    r = mix(r, pick(0.5, 0.54), dorsal * 0.55); g = mix(g, pick(0.44, 0.51), dorsal * 0.55); b = mix(b, pick(0.2, 0.17), dorsal * 0.55);
+    let [r, g, b] = PAT.base;
+    r = mix(r, PAT.dors[0], dorsal * 0.6); g = mix(g, PAT.dors[1], dorsal * 0.6); b = mix(b, PAT.dors[2], dorsal * 0.6);
     r = mix(r, 0.76, belly); g = mix(g, 0.7, belly); b = mix(b, 0.58, belly);
     r *= mix(1, 1.02, X * 0.6); g *= mix(1, 0.9, X * 0.6); b *= mix(1, 0.55, X * 0.6);
     r = mix(r, 0.78, I * 0.4); g = mix(g, 0.77, I * 0.4); b = mix(b, 0.7, I * 0.4);

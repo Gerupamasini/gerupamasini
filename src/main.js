@@ -9,14 +9,15 @@ import { createBehavior } from './fish/Behavior.js';
 import { createBackground, createFloor, createParticles } from './scene/Environment.js';
 import { createPost } from './scene/Post.js';
 
-// Two builds of the same fish: the juvenile (default) and the adult-proportioned one (?model=adult).
+// Three growth stages of the same fish: juvenile (default), subadult (?model=subadult) and adult (?model=adult).
 // window.MAHAZE_MODELS = { juvenile, adult } (or MAHAZE_MODEL_URL for a single model) can point the viewer
 // at other copies of the models (e.g. .gltf with external textures).
-const VARIANT = new URLSearchParams(location.search).get('model') === 'adult' ? 'adult' : 'juvenile';
 const MODEL_URLS = window.MAHAZE_MODELS || {
   juvenile: new URL('../models/mahaze_juvenile.glb', import.meta.url).href,
+  subadult: new URL('../models/mahaze_subadult.glb', import.meta.url).href,
   adult: new URL('../models/mahaze_adult.glb', import.meta.url).href,
 };
+const VARIANT = (() => { const m = new URLSearchParams(location.search).get('model'); return m in MODEL_URLS && m !== 'juvenile' ? m : 'juvenile'; })();
 const MODEL_URL = window.MAHAZE_MODEL_URL || MODEL_URLS[VARIANT];
 const LAYER_FISH = 2; // body, eyes, fins (main pass)
 const LAYER_BEHIND = 3; // fins are also drawn into the background buffer so they show through thin tissue
@@ -547,7 +548,7 @@ if (window.MAHAZE_MODEL_URL && !window.MAHAZE_MODELS) document.getElementById('v
 bindSeg('variant', (v) => {
   if (v === VARIANT) return;
   const u = new URL(location.href);
-  if (v === 'adult') u.searchParams.set('model', 'adult'); else u.searchParams.delete('model');
+  if (v !== 'juvenile') u.searchParams.set('model', v); else u.searchParams.delete('model');
   location.replace(u.href);
 });
 bindRange('light-az', (v) => { state.azOffset = v; });

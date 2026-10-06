@@ -7,8 +7,8 @@
 // Object space of the exported glTF (metres): X = z, Y = y - Y0, Z = S0 - s  (head points to +Z).
 
 import { clamp, smoothstep } from '../lib/noise.mjs';
-import { JUVENILE, pick } from './variant.mjs';
-export { VARIANT, JUVENILE } from './variant.mjs';
+import { pick } from './variant.mjs';
+export { VARIANT, GROWTH, JUVENILE } from './variant.mjs';
 
 export const SL = 41.0; // standard length
 export const S_END = 43.2; // end of the body loft (thin blade overlapping the caudal fin base)
@@ -234,6 +234,7 @@ export const EYE = pick({
   iris: 1.12,
   lid: { r0: 0.08, r1: 0.22, coverD: 0.22, coverV: -0.07, sink: 0.15 },
 });
+EYE.axis = norm3(EYE.axis); // (a blended stage interpolates the axis)
 
 // ring frame of the lid around the left eye's optical axis: u = dorsal direction in the plane ⊥ axis
 const LID_U = (() => {

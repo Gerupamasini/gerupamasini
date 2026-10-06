@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import jpeg from 'jpeg-js';
 import { GLBBuilder } from './lib/glb.mjs';
 import { encodePNG } from './lib/png.mjs';
-import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, MOUTH, RICTUS_S, VARIANT, profileTable, toObject, botY } from './mahaze/anatomy.mjs';
+import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, MOUTH, RICTUS_S, VARIANT, GROWTH, profileTable, toObject, botY } from './mahaze/anatomy.mjs';
 import { buildBody } from './mahaze/body.mjs';
 import { finDefinitions, buildFinMesh, buildFinTargets, paintFinAtlas } from './mahaze/fins.mjs';
 import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './mahaze/eye.mjs';
@@ -24,7 +24,7 @@ const outFile = path.join(root, 'models', `mahaze_${VARIANT}.glb`);
 
 const t0 = Date.now();
 const log = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).padStart(5)}s] ${m}`);
-log(`variant: ${VARIANT}`);
+log(`variant: ${VARIANT} (growth ${GROWTH})`);
 
 function toJPEG(w, h, ch, data, quality) {
   const rgba = Buffer.alloc(w * h * 4);
@@ -211,8 +211,9 @@ const rootNode = gb.addNode({
   children: [jointNodes[J.J_root]],
   extras: {
     species: 'Acanthogobius flavimanus (Temminck & Schlegel, 1845)',
-    commonName: `マハゼ (yellowfin goby), ${VARIANT === 'adult' ? 'adult-proportioned' : 'juvenile'}`,
+    commonName: `マハゼ (yellowfin goby), ${{ juvenile: 'juvenile', subadult: 'subadult (between juvenile and adult)', adult: 'adult-proportioned' }[VARIANT]}`,
     variant: VARIANT,
+    growth: GROWTH,
     totalLength_mm: TL,
     standardLength_mm: SL,
     units: 'metres (+Y dorsal, +Z anterior)',

@@ -3,6 +3,11 @@ import { section, topY, botY, surfaceAt, toObject, dirToObject } from './anatomy
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../lib/noise.mjs';
 import { pick } from './variant.mjs';
 
+// fin markings per growth stage (photos): the adult's dark marks are wider (they cover the ray and the
+// membrane beside it) and line up across the rays into zigzag bars on the caudal fin; the juvenile's are
+// smaller spots on the rays
+const FP = pick({ w: 2.1, skip: 0.06, amp: 1.2, jitter: 0.1, step: 0.6 }, { w: 1.2, skip: 0.25, amp: 0.95, jitter: 0.24, step: 0.8 });
+
 const DEG = Math.PI / 180;
 const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -70,13 +75,14 @@ function caudalFin(rect) {
     pigment: (r, n, Lr, len, t, dRay, fAcross) => {
       let mel = 0;
       const upper = 1 - fAcross;
-      for (let j = 0; j < 12; j++) {
-        const Lj = 0.8 + j * 0.8 + r * 0.02 + (hash01(r, j, 2, 502) - 0.5) * 0.28;
+      for (let j = 0; j < 16; j++) {
+        // zigzag bars: alternate rays shift the mark by half a step
+        const Lj = 0.8 + j * FP.step + (r % 2) * 0.2 * FP.step + (hash01(r, j, 2, 502) - 0.5) * FP.jitter;
         if (Lj > len * 0.9) break;
-        if (hash01(r, j, 1, 501) < 0.3) continue;
-        const ls = 0.1 + 0.09 * hash01(r, j, 3, 503);
-        const amp = 0.45 + 0.55 * hash01(r, j, 4, 504);
-        mel = Math.max(mel, amp * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.075) ** 2)));
+        if (hash01(r, j, 1, 501) < FP.skip) continue;
+        const ls = 0.12 + 0.09 * hash01(r, j, 3, 503);
+        const amp = (0.55 + 0.45 * hash01(r, j, 4, 504)) * FP.amp;
+        mel = Math.max(mel, amp * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.075 * FP.w)) ** 2)));
       }
       mel *= 0.8 * (0.5 + 0.5 * upper) * smoothstep(0.97, 0.75, t);
       // dark spot at the caudal base
@@ -173,7 +179,7 @@ export function finDefinitions() {
         if (Lj > len * 0.86) break;
         if (hash01(r, j, 1, 511) < 0.18) continue;
         const ls = 0.1 + 0.08 * hash01(r, j, 3, 513);
-        mel = Math.max(mel, (0.5 + 0.5 * hash01(r, j, 4, 514)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.1) ** 2)));
+        mel = Math.max(mel, FP.amp * (0.5 + 0.5 * hash01(r, j, 4, 514)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.1 * FP.w)) ** 2)));
       }
       return { mel: 0.8 * mel + 0.04, xan: 0.25 * smoothstep(0.5, 0.0, t), irid: 0.05 };
     },
@@ -188,7 +194,7 @@ export function finDefinitions() {
         if (Lj > len * 0.88) break;
         if (hash01(r, j, 1, 521) < 0.22) continue;
         const ls = 0.09 + 0.08 * hash01(r, j, 3, 523);
-        mel = Math.max(mel, (0.45 + 0.55 * hash01(r, j, 4, 524)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / 0.075) ** 2)));
+        mel = Math.max(mel, FP.amp * (0.45 + 0.55 * hash01(r, j, 4, 524)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.075 * FP.w)) ** 2)));
       }
       return { mel: 0.72 * mel + 0.03, xan: 0.22 * smoothstep(0.6, 0.0, t), irid: 0.05 };
     },
