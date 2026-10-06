@@ -42,7 +42,7 @@ export interface DebugState {
   tideOverride: number | null;
   overcast: number;
   markers: boolean;
-  stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number; clamsNear: number; clamsTotal: number };
+  stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number; clamsNear: number; clamsTotal: number; oysters?: string; oystersTotal?: number };
 }
 
 export interface Toast {

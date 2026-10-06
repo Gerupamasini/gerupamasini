@@ -9,6 +9,10 @@ import { Habitat } from '../world/Habitat';
 import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
 import { createPitDebris } from '../world/PitDebris';
 import { Skyline } from '../world/Skyline';
+import { Riprap } from '../world/Riprap';
+import { OysterAtlas } from '../creatures/oyster/bake';
+import { OysterReef } from '../creatures/oyster/OysterReef';
+import { oysterEnv } from '../creatures/oyster/material';
 import type { FeedingPit } from '../world/FeedingPits';
 import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
@@ -21,6 +25,10 @@ export class World {
   pits: FeedingPit[] = [];
   /** the far scenery on the horizon (landmarks as flat silhouettes) */
   readonly skyline = new Skyline();
+  /** the stones along the levees and the rubble mounds (hard ground for oysters) */
+  riprap: Riprap | null = null;
+  /** the マガキ reef on those stones */
+  oysters: OysterReef | null = null;
 
   readonly scene = new Scene();
   readonly fog: FogExp2;
@@ -76,6 +84,29 @@ export class World {
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
     w.scene.add(w.skyline.group);
+    // hard ground and the oyster reef on it: stones along the levees' toes and on the low flat; every face in the
+    // oyster zone (about mean sea level down to the spring low) grows a clump
+    onProgress?.('牡蠣礁');
+    const quality = preset.surfaceDetail === 0 ? 'low' : preset.shadowMapSize >= 2048 ? 'high' : 'mid';
+    const riprap = new Riprap(terrain, hashInts(map.id.length * 17, 0x51b));
+    for (const m of riprap.group) w.scene.add(m);
+    w.riprap = riprap;
+    try {
+      const atlas = OysterAtlas.shared(renderer, quality);
+      const sites = riprap.attachSites(map.id.length * 101 + 7, 0.38, -1.15, 0.2).map((s) => ({
+        p: s.p, n: s.n, room: s.room,
+        surface: (world: Vector3, outP: Vector3, outN: Vector3) => riprap.surfaceToward(s.stone, world, outP, outN),
+      }));
+      const reef = new OysterReef({
+        atlas, sites, seed: hashInts(map.id.length, 0x0a5), quality, maxOysters: quality === 'low' ? 5000 : 12000,
+        ground: (x, z, n) => { terrain.normalAt(x, z, n); return terrain.heightAt(x, z) + riprap.heightBoost(x, z); },
+      });
+      w.scene.add(reef.group);
+      w.oysters = reef;
+    } catch (e) {
+      // the reef needs float render targets for its texture bake; the flat works without it
+      console.warn('[oysters] reef not built', e);
+    }
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
     (w as { sky: SkyDome }).sky = sky;
     return w;
@@ -88,6 +119,9 @@ export class World {
     this.tideLevel = this.tideOverride ?? this.tide.level(gameMs);
     if (this.timeAcc > 1 || this.tideRate === 0) this.tideRate = this.tideOverride !== null ? 0 : this.tide.rate(gameMs);
     this.water.setLevel(this.tideLevel);
+    oysterEnv.uOyWater.value.set(this.tideLevel, this.habitat.wetLevel);
+    oysterEnv.uOyTime.value += dt;
+    this.riprap?.update(camera);
     this.terrain.updateLod(anchor.x, anchor.z);
     // (absolute: a ticket or the debug clock can move game time backwards, and the pools must follow at once)
     if (Math.abs(gameMs - this.lastHabitatMs) > 2000 || this.lastHabitatMs === 0) {

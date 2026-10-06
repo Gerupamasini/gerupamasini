@@ -44,6 +44,8 @@ export class FPSController {
   airborne = false;
   /** true for the frame the feet leave the ground (the HUD's hop) */
   jumped = false;
+  /** extra ground under the feet (stones of the revetment), metres above the terrain */
+  groundBoost: ((x: number, z: number) => number) | null = null;
   private readonly tmpForward = new Vector3();
   private readonly tmpRight = new Vector3();
 
@@ -65,7 +67,7 @@ export class FPSController {
   }
 
   setPose(x: number, z: number, yaw: number, pitch?: number): void {
-    this.position.set(x, this.terrain.heightAt(x, z), z);
+    this.position.set(x, this.groundAt(x, z), z);
     this.yaw = yaw;
     if (pitch !== undefined) this.pitch = pitch;
     this.syncCamera(0);
@@ -175,18 +177,23 @@ export class FPSController {
     }
     this.speedNowLast = this.speedNow;
     this.depthHere = this.habitat.depthAt(this.position.x, this.position.z);
-    this.position.y = this.terrain.heightAt(this.position.x, this.position.z);
+    this.position.y = this.groundAt(this.position.x, this.position.z);
     this.syncCamera(dt);
   }
 
   private speedNowLast = 0;
+
+  /** the ground the feet stand on: the terrain, or a stone on it */
+  private groundAt(x: number, z: number): number {
+    return this.terrain.heightAt(x, z) + (this.groundBoost ? this.groundBoost(x, z) : 0);
+  }
 
   private canStand(x: number, z: number): boolean {
     const b = this.map.bounds.walkable;
     if (x < b[0][0] || x > b[1][0] || z < b[0][1] || z > b[1][1]) return false;
     for (const ne of this.map.bounds.noEntry) if (x >= ne[0][0] && x <= ne[1][0] && z >= ne[0][1] && z <= ne[1][1]) return false;
     if (this.habitat.depthAt(x, z) > BOOT_DEPTH) return false;
-    const h = this.terrain.heightAt(x, z);
+    const h = this.groundAt(x, z);
     if (h - this.position.y > 0.6) return false; // too steep a step
     return true;
   }

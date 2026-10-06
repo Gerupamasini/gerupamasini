@@ -45,7 +45,7 @@ const AUTOSAVE_SEC = 60;
 /** drivers that build their own clam geometry in shell lengths (the scoop shows them at length / 1000) */
 const CLAM_DRIVERS = new Set(['asari', 'hamaguri']);
 
-export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool' | 'clams';
+export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool' | 'clams' | 'oysters';
 
 export class App {
   readonly renderer: GameRenderer;
@@ -293,6 +293,8 @@ export class App {
       this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; }, dayNo);
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
       this.player.eyeHeight = this.settings.eyeHeight;
+      // the revetment's stones can be stood on
+      this.player.groundBoost = (x, z) => this.world?.riprap?.heightBoost(x, z) ?? 0;
       ui.loading.value = { frac: 0.7, label: t('loading.models') };
       this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed);
       await this.creatures.preload();
@@ -453,6 +455,21 @@ export class App {
         break;
       }
       case 'pool': { const pool = w.habitat.pools[0]; if (pool) { x = pool.cx + 6; z = pool.cz; yaw = Math.PI / 2; } break; }
+      case 'oysters': {
+        // beside the nearest big clump of the reef, crouched and looking at it
+        const reef = w.oysters;
+        const c = reef?.nearestClump(p.position.x, p.position.z);
+        if (c) {
+          // a stride away on the side toward the middle of the flat (the stones stand along its edges)
+          const away = Math.hypot(c.centre.x, c.centre.z - 20) || 1;
+          x = c.centre.x - (c.centre.x / away) * 0.9;
+          z = c.centre.z - ((c.centre.z - 20) / away) * 0.9;
+          yaw = Math.atan2(-(c.centre.x - x), -(c.centre.z - z));
+          pitch = -0.45;
+          p.lowView = true;
+        }
+        break;
+      }
       case 'clams': {
         // the nearest clam bed, stood at its edge and looking down at the sand
         let best: { x: number; z: number } | null = null, bestD = Infinity;
@@ -692,6 +709,14 @@ export class App {
       creatures.forceIntent(ind.id, { id: -1, kind: 'flee', urgency: 1, seconds: 4, target: ind.pos.clone().add(away), from: player.position.clone() });
     }
     if (caught.length === 0 && free === 0) toast(t('capture.caseFull'), 'warn');
+    // oysters the hoop sweeps over snap shut
+    const reef = world.oysters;
+    if (reef) {
+      const scale = this.netZoneScale(), reach = this.netReach();
+      for (const i of reef.near(player.position.x, player.position.z, reach + 1.5)) {
+        if (NetView.inZone(this.camera, reef.centreOf(i, this.tmp), 0.08, scale, reach) >= 0) reef.touchOne(i);
+      }
+    }
     this.lastTool = tool;
     this.capture.start(tool, caught, swingSec);
     this.net?.show();
@@ -715,6 +740,7 @@ export class App {
     // a practised hand finds the clam under a wider blade
     const k = clams.dig(p.x, p.z, (tool.params.radius ?? 0.14) * (1 + 0.1 * this.encyclopedia.skillLevel('shovel')), nowSec);
     clams.startle(p.x, p.z, 1.5, nowSec);
+    world.oysters?.touch(p, 0.35);
     const caught: Individual[] = [];
     const sp = this.data.species.get('ruditapes_philippinarum');
     const full = () => this.encyclopedia.caseItems.value.length + caught.length >= this.encyclopedia.caseMax;
@@ -1236,6 +1262,8 @@ export class App {
       this.net?.update(this.camera, dt, mode === 'capture' && capTool === 'capture' ? this.capture.state.value : null, world.tideLevel, ui.debug.value && this.toolType() === 'capture' && (mode === 'field' || mode === 'capture'), this.netZoneScale(), this.netReach());
       this.shovel?.update(this.camera, dt, mode === 'capture' && capTool === 'dig' ? this.capture.state.value : null);
       this.clams?.update(player.position, this.worldVisible() ? dt : 0, gameMs / 1000, (x, z) => world.habitat.waterAt(x, z));
+      // the oyster reef: open under the water, shut when the tide leaves or when footsteps come near
+      world.oysters?.update(this.worldVisible() ? dt : 0, this.camera, world.tideLevel, { pos: player.position, speed: player.speedNow, running: player.running });
       creatures.update({
         dt: this.worldVisible() ? dt : 0, gameMs, playerPos: player.position, camera: this.camera, simScale: this.simScale,
         playerSpeed: player.speedNow, playerCrouched: player.crouching, playerRunning: player.running,
@@ -1339,6 +1367,19 @@ export class App {
         if (++n >= 40) break;
       }
     }
+    // the oyster reef: its clumps nearby
+    const reef = this.world?.oysters;
+    if (reef) {
+      let n = 0;
+      for (const i of reef.near(p.position.x, p.position.z, 10)) {
+        reef.centreOf(i, this.tmp2);
+        const d = this.tmp2.distanceTo(p.position);
+        this.tmp.copy(this.tmp2).project(this.camera);
+        if (this.tmp.z > 1 || Math.abs(this.tmp.x) > 1.05 || Math.abs(this.tmp.y) > 1.05) continue;
+        out.push({ id: `oyster-${i}`, x: ((this.tmp.x + 1) / 2) * w, y: ((1 - this.tmp.y) / 2) * h - 8, text: `マガキ ${d.toFixed(1)}m ${reef.stateOf(i)}`, kind: 'mollusc' });
+        if (++n >= 30) break;
+      }
+    }
     ui.markers.value = out;
   }
 
@@ -1415,7 +1456,8 @@ export class App {
       const info = (this.field?.lastStats ?? this.renderer.gl.info.render);
       const cs = this.creatures?.stats() ?? { total: 0, visible: 0, lod1: 0 };
       const clamsNear = this.clams && player ? this.clams.nearIndices(player.position.x, player.position.z, 12).length : 0;
-      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0 } };
+      const reef = this.world?.oysters;
+      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0, oysters: reef ? reef.drawn.join('/') : '-', oystersTotal: reef?.count ?? 0 } };
     }
   }
 }
