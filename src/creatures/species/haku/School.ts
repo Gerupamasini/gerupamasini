@@ -74,6 +74,9 @@ export class HakuFish {
   private escTurn = 0;
   private escSide = 1;
   private rollKick = 0;
+  // breathing: phase of the buccal pump and how hard it works (resting ~0.3, 1 after an escape)
+  private breathPh = 0;
+  private effort = 0.3;
   // foraging
   private fgMode: 'seek' | 'peck' | 'pause' = 'pause';
   private fgT = 0;
@@ -187,7 +190,13 @@ export class HakuFish {
     const D = Math.max(0, L.surface - L.bottom);
     const bl = tl;   // one body length
     let peckPitch = 0;
-    this.pose.jaw = damp(this.pose.jaw, 0.1 * (0.5 + 0.5 * Math.sin(this.time * TAU * 2.4 + p.rollPhase)), 12, dt);
+    // breathing, the buccal pump: the mouth opens to draw water in while the gill covers are shut, then closes as they
+    // swing open to drive it out over the gills; faster and wider after a burst
+    this.effort = damp(this.effort, mode === 'ESCAPE' ? 1 : 0.3, mode === 'ESCAPE' ? 3 : 0.35, dt);
+    this.breathPh += TAU * (2.2 + 1.8 * (this.effort - 0.3)) * dt;
+    const br = this.breathPh + p.rollPhase;
+    this.pose.jaw = damp(this.pose.jaw, (0.06 + 0.1 * this.effort) * (0.5 + 0.5 * Math.sin(br)), 12, dt);
+    this.pose.oper = damp(this.pose.oper, this.effort * (0.5 + 0.5 * Math.sin(br - 2.3)), 12, dt);
 
     switch (mode) {
       case 'IDLE': {

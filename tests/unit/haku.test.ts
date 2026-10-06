@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { hakuGeometry, rigRest, triangleCount, chainWeights } from '../../src/creatures/species/haku/geometry';
-import { BONES, MODEL_TL, S_PIVOT } from '../../src/creatures/species/haku/anatomy';
+import { hakuGeometry, rigRest, triangleCount, chainWeights, halfWidthAt } from '../../src/creatures/species/haku/geometry';
+import { BONES, GAPE, MODEL_TL, OPER_BONE, OPER_EDGE, S_PIVOT, boneIndex } from '../../src/creatures/species/haku/anatomy';
 import { chainAngles, envelope, midline } from '../../src/creatures/species/haku/swim';
 import { HakuFish, School, type FishEnv } from '../../src/creatures/species/haku/School';
 import { Rng } from '../../src/core/Rng';
@@ -9,7 +9,7 @@ import { Rng } from '../../src/core/Rng';
 describe('ハク geometry', () => {
   it('stays inside the per-tier triangle budgets and gets cheaper with distance', () => {
     const t0 = triangleCount(0), t1 = triangleCount(1), t2 = triangleCount(2);
-    expect(t0).toBeLessThan(12000);
+    expect(t0).toBeLessThan(14000);
     expect(t1).toBeLessThan(2000);
     expect(t2).toBeLessThan(400);
     expect(t0).toBeGreaterThan(t1);
@@ -29,7 +29,8 @@ describe('ハク geometry', () => {
       let out = 0, total = 0;
       for (let i = 0; i < idx.count; i += 3) {
         const ia = idx.getX(i), ib = idx.getX(i + 1), ic = idx.getX(i + 2);
-        if (part.getX(ia) !== 0) continue;
+        // the skin (aPart below 0.2: the loft, with the near tier's gill chamber), not the eyes, mouth or gill cover
+        if (part.getX(ia) >= 0.2) continue;
         a.fromBufferAttribute(pos, ia); b.fromBufferAttribute(pos, ib); c.fromBufferAttribute(pos, ic);
         n.subVectors(b, a).cross(m.subVectors(c, a));
         if (n.lengthSq() < 1e-16) continue;
@@ -66,6 +67,57 @@ describe('ハク geometry', () => {
     expect(atJoint[0][1]).toBeCloseTo(0.5, 2);
     const mid = chainWeights(0.47);
     expect(mid[0][1]).toBeCloseTo(1, 2);
+  });
+
+  it('splits the near tier\'s head along the gape into two lips over a mouth cavity, the lower jaw on its own bone', () => {
+    const g = hakuGeometry(0).body;
+    const pos = g.getAttribute('position'), part = g.getAttribute('aPart'), si = g.getAttribute('skinIndex'), sw = g.getAttribute('skinWeight');
+    const jaw = boneIndex('J_jaw');
+    // the lips' edge vertices come in pairs at the same place: one on the head, one on the lower jaw
+    let pairs = 0, cavity = 0;
+    const lipEdge = new Map<string, number[]>();
+    for (let i = 0; i < pos.count; i++) {
+      if (part.getX(i) === 3) { cavity++; continue; }
+      if (part.getX(i) >= 0.2) continue;
+      const s = S_PIVOT - pos.getZ(i) / MODEL_TL;
+      if (s > GAPE.s) continue;
+      const key = [pos.getX(i), pos.getY(i), pos.getZ(i)].map((v) => (v / MODEL_TL).toFixed(5)).join();
+      lipEdge.set(key, [...(lipEdge.get(key) ?? []), i]);
+    }
+    for (const ids of lipEdge.values()) {
+      if (ids.length !== 2) continue;
+      const onJaw = ids.map((i) => (si.getX(i) === jaw ? sw.getX(i) : 0));
+      if (Math.max(...onJaw) > 0.99 && Math.min(...onJaw) < 0.01) pairs++;
+    }
+    expect(pairs).toBeGreaterThan(10);
+    expect(cavity).toBeGreaterThan(50);
+    // the far tiers keep a closed snout
+    expect([...Array(hakuGeometry(1).body.getAttribute('aPart').count).keys()].some((i) => hakuGeometry(1).body.getAttribute('aPart').getX(i) === 3)).toBe(false);
+  });
+
+  it('builds the gill cover as plates whose free edges stand off the skin, the opercle on its own bones', () => {
+    const g = hakuGeometry(0).body;
+    const pos = g.getAttribute('position'), part = g.getAttribute('aPart'), si = g.getAttribute('skinIndex');
+    const operL = boneIndex('J_oper_L'), operR = boneIndex('J_oper_R');
+    let preop = 0, oper = 0, rim = 0, onOperBone = 0, standOff = 0;
+    for (let i = 0; i < pos.count; i++) {
+      const p = part.getX(i);
+      if (p > 0.25 && p < 0.32) preop++;
+      if (p > 0.33 && p < 0.45) {
+        oper++;
+        if (si.getX(i) === operL || si.getX(i) === operR || si.getY(i) === operL || si.getY(i) === operR) onOperBone++;
+        // the opercle's flap, from its bony margin to its free edge, stands proud of the body's own surface there
+        const s = S_PIVOT - pos.getZ(i) / MODEL_TL, y = pos.getY(i) / MODEL_TL;
+        if (s > OPER_BONE(y) && s < OPER_EDGE(y) && y < 0.0 && y > -0.03 && Math.abs(pos.getX(i)) / MODEL_TL - halfWidthAt(s, y) > 0.0004) standOff++;
+      }
+      if (p === 4) rim++;
+    }
+    expect(preop).toBeGreaterThan(50);
+    expect(oper).toBeGreaterThan(100);
+    expect(rim).toBeGreaterThan(50);
+    expect(onOperBone / oper).toBeGreaterThan(0.5);
+    expect(standOff).toBeGreaterThan(4);
+    expect(rigRest().parent[operL]).toBe(boneIndex('J_sp1'));
   });
 
   it('puts the rig on the body axis, head forward', () => {

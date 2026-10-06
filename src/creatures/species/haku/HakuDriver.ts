@@ -67,7 +67,7 @@ function buildModel(variant: number, tiers: Lod[] = [0, 1, 2]): Model {
     lod.addLevel(level, t === 0 ? 0 : t === 1 ? LOD1_AT : LOD2_AT, 0.12);
   }
   const by = (n: string) => bones[BONES.indexOf(n as (typeof BONES)[number])];
-  const rig: RigBones = { head: by('J_head'), spine: SPINE.map(([n]) => by(n)), pecL: by('J_pec_L'), pecR: by('J_pec_R'), d1: by('J_d1'), jaw: by('J_jaw') };
+  const rig: RigBones = { head: by('J_head'), spine: SPINE.map(([n]) => by(n)), pecL: by('J_pec_L'), pecR: by('J_pec_R'), d1: by('J_d1'), jaw: by('J_jaw'), operL: by('J_oper_L'), operR: by('J_oper_R') };
   return { bones, rig, lod, skeleton };
 }
 

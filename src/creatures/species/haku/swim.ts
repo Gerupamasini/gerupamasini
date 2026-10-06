@@ -42,10 +42,12 @@ export interface SwimPose {
   d1Fold: number;
   /** jaw drop 0..1 */
   jaw: number;
+  /** gill covers swung open 0 (shut against the shoulder) .. 1 (flared wide) */
+  oper: number;
 }
 
 export function restPose(): SwimPose {
-  return { phase: 0, amp: 0.03, curv: 0, headBend: 0, pecL: 0.3, pecR: 0.3, pecBeat: 0, d1Fold: 0, jaw: 0 };
+  return { phase: 0, amp: 0.03, curv: 0, headBend: 0, pecL: 0.3, pecR: 0.3, pecBeat: 0, d1Fold: 0, jaw: 0, oper: 0 };
 }
 
 /** Segment angles of the axial chain (yaw of each bone relative to the root), radians. */
@@ -67,6 +69,8 @@ export interface RigBones {
   pecR: Object3D;
   d1: Object3D;
   jaw: Object3D;
+  operL: Object3D;
+  operR: Object3D;
 }
 
 const angles: number[] = [];
@@ -88,4 +92,8 @@ export function applyPose(rig: RigBones, p: SwimPose, detail: 0 | 1 | 2): void {
   rig.pecR.rotation.set(0, (0.08 + 1.05 * p.pecR) + beat * 0.35, beat * 0.5);
   rig.d1.rotation.set(-1.15 * p.d1Fold, 0, 0);
   rig.jaw.rotation.set(0.28 * p.jaw, 0, 0);
+  // the gill covers swing out about their articulation, the free edge furthest, the lower part out and down a little
+  const a = 0.17 * p.oper;
+  rig.operL.rotation.set(0, -a, 0.35 * a);
+  rig.operR.rotation.set(0, a, -0.35 * a);
 }

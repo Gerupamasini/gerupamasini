@@ -211,7 +211,7 @@ function holdMatch() {
   f.root.position.copy(f.root.userData.matchPos);
   f.root.rotation.set(f.root.userData.matchTilt, 0, 0);
   const fish = f.driver.fish, model = f.driver.model;
-  Object.assign(fish.pose, { phase: 0, amp: 0, curv: 0, headBend: 0, pecL: matchOpts.pec ?? 0.08, pecR: matchOpts.pec ?? 0.08, pecBeat: 0, d1Fold: 0, jaw: matchOpts.jaw ?? 0.15 });
+  Object.assign(fish.pose, { phase: 0, amp: 0, curv: 0, headBend: 0, pecL: matchOpts.pec ?? 0.08, pecR: matchOpts.pec ?? 0.08, pecBeat: 0, d1Fold: 0, jaw: matchOpts.jaw ?? 0, oper: matchOpts.oper ?? 0 });
   applyPose(model.rig, fish.pose, 0);
   // the photographed fish holds its tail a little raised
   const lift = matchOpts.tailLift ?? 0.1;
@@ -219,6 +219,20 @@ function holdMatch() {
   model.rig.spine[8].rotation.x += lift;
   model.lod.autoUpdate = false;
   model.lod.levels.forEach((l, i) => { l.object.visible = i === (matchOpts.lod ?? 0); });
+  // a close-up of part of the fish: look at (s, h) on it (TL units; side +1 its left, −1 its right) from a direction
+  // in the fish's own frame (+Z forward, +Y up, +X its left), `dist` body lengths away
+  const v = matchOpts.view;
+  if (v) {
+    f.root.updateMatrixWorld(true);
+    const TL = 0.03, side = v.side ?? -1;
+    const at = f.root.localToWorld(new THREE.Vector3(side * (v.x ?? 0.05) * TL, v.at[1] * TL, (0.38 - v.at[0]) * TL));
+    const dir = new THREE.Vector3(...v.from).normalize().applyQuaternion(f.root.getWorldQuaternion(new THREE.Quaternion()));
+    camera.fov = v.fov ?? 20; camera.near = 0.0003; camera.updateProjectionMatrix();
+    camera.position.copy(at).addScaledVector(dir, (v.dist ?? 0.4) * TL);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(at);
+    controls.target.copy(at);
+  }
 }
 
 function setLod(l) {
@@ -304,7 +318,7 @@ window.__haku = {
     controls.update();
     // a studio fish needs a few frames to be placed and posed
     if (mode !== 'shallows') for (let i = 0; i < 20; i++) step(1 / 60);
-    if (pose) for (const f of fishes) Object.assign(f.driver.fish.pose, pose);
+    if (pose) for (const f of fishes) { Object.assign(f.driver.fish.pose, pose); applyPose(f.driver.model.rig, f.driver.fish.pose, 0); }
     renderer.render(scene, camera);
     return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
   },

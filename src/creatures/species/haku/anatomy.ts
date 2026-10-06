@@ -66,7 +66,7 @@ const TOP = curve([
   [0.7, 0.062], [0.745, 0.05], [0.78, 0.0425], [0.82, 0.041], [0.845, 0.045],
 ]);
 const BOT = curve([
-  [0, 0.03], [0.005, 0.0335], [0.01, 0.0365], [0.015, 0.039], [0.02, 0.0415], [0.03, 0.0455], [0.04, 0.0485],
+  [0, 0.034], [0.005, 0.036], [0.01, 0.0365], [0.015, 0.039], [0.02, 0.0415], [0.03, 0.0455], [0.04, 0.0485],
   [0.048, 0.0505], [0.056, 0.053], [0.067, 0.06], [0.078, 0.066], [0.09, 0.071], [0.114, 0.077], [0.137, 0.082],
   [0.173, 0.089], [0.209, 0.094], [0.246, 0.096], [0.282, 0.099], [0.319, 0.1], [0.345, 0.103], [0.38, 0.1], [0.43, 0.091],
   [0.48, 0.088], [0.53, 0.0865], [0.566, 0.085], [0.6, 0.081], [0.65, 0.072], [0.7, 0.059], [0.743, 0.048], [0.78, 0.0415],
@@ -79,14 +79,31 @@ const WIDTH = curve([
   [0.845, 0.04],
 ]);
 /** superellipse exponents of the upper and lower halves of a section: a flat broad head top, a rounded belly */
-const N_TOP = curve([[0, 2.0], [0.06, 2.3], [0.15, 2.35], [0.25, 2.2], [0.4, 2.05], [0.845, 2.0]]);
-const N_BOT = curve([[0, 2.0], [0.1, 2.15], [0.3, 2.2], [0.6, 2.05], [0.845, 2.0]]);
+const N_TOP = curve([[0, 2.7], [0.03, 2.5], [0.07, 2.35], [0.15, 2.35], [0.25, 2.2], [0.4, 2.05], [0.845, 2.0]]);
+const N_BOT = curve([[0, 2.5], [0.03, 2.3], [0.1, 2.15], [0.3, 2.2], [0.6, 2.05], [0.845, 2.0]]);
 
-/** the lips' front is rounded off over S_CAP (an ellipse in profile and in dorsal view) */
-function nose(s: number): number {
-  if (s >= S_CAP) return 1;
-  const u = 1 - s / S_CAP;
+/** the snout's front is rounded off over `cap` (an ellipse): S_CAP in profile, where the lips stand nearly upright */
+function nose(s: number, cap = S_CAP): number {
+  if (s >= cap) return 1;
+  const u = 1 - s / cap;
   return Math.sqrt(Math.max(0, 1 - u * u));
+}
+/** in dorsal view the lips curve round in a broad U, from a front as wide as the mouth's opening (half width, TL) */
+const S_CAP_WIDE = 0.018;
+export const MOUTH_HALF_WIDTH = 0.008;
+
+/**
+ * Height of a section's widest point (TL units). On the snout it is the gape, so the two lips meet at the side of
+ * every section there (the mouth splits the head's surface along one line of the loft); behind the corner of the mouth
+ * it eases back to the body axis.
+ */
+export function axisY(s: number): number {
+  if (s <= GAPE.s) return gapeY(s);
+  const L = 0.06, t = (s - GAPE.s) / L;
+  if (t >= 1) return 0;
+  // cubic Hermite: the gape's height and slope at the corner, level at zero by the front of the eye
+  const slope = (GAPE.y1 - GAPE.y0) / GAPE.s;
+  return GAPE.y1 * (2 * t * t * t - 3 * t * t + 1) + L * slope * (t * t * t - 2 * t * t + t);
 }
 
 export interface Section {
@@ -101,8 +118,10 @@ export interface Section {
 
 export function section(s: number): Section {
   const sc = Math.min(Math.max(s, 0), S_CAUDAL_BASE);
-  const k = nose(s);
-  return { hw: (WIDTH(sc) / 2) * k, top: TOP(sc) * k, bot: BOT(sc) * k, yc: 0, nTop: N_TOP(sc), nBot: N_BOT(sc) };
+  const k = nose(s), yc = axisY(sc);
+  // at s = 0 the section is the front of the gape: a short level line, the lips closing onto it from above and below
+  const hw = MOUTH_HALF_WIDTH + (WIDTH(sc) / 2 - MOUTH_HALF_WIDTH) * nose(s, S_CAP_WIDE);
+  return { hw, top: (TOP(sc) - yc) * k, bot: (BOT(sc) + yc) * k, yc, nTop: N_TOP(sc), nBot: N_BOT(sc) };
 }
 
 /**
@@ -128,17 +147,68 @@ export const ventralY = (s: number): number => { const c = section(s); return c.
  */
 export const EYE = { s: 0.106, y: 0.009, r: 0.0365, bulge: 0.0035, pupil: 0.335 } as const;
 
-/** the mouth: the gape runs from between the lips (h −0.011) back and down to its corner below the front of the eye */
-export const GAPE = { s: 0.032, y0: -0.011, y1: -0.024 } as const;
-export const gapeY = (s: number): number => GAPE.y0 + (GAPE.y1 - GAPE.y0) * Math.min(1, Math.max(0, s / GAPE.s));
+/**
+ * The mouth, measured on the photograph: the gape runs from between the lips at the front (h −0.011) back and down to
+ * its corner (the rictus) below the front of the nostrils; the jaw hinges there.
+ */
+export const GAPE = { s: 0.035, y0: -0.011, y1: -0.031 } as const;
+export function gapeY(s: number): number {
+  return GAPE.y0 + (GAPE.y1 - GAPE.y0) * Math.min(1, Math.max(0, s / GAPE.s));
+}
 
-/** how far (TL) a point of the lower jaw at (s, height y) is pushed forward: the lower lip juts past the upper */
+/**
+ * The lips: thick rolls meeting in the gape. `upper` / `lower` are the radii of the rolls where they meet (how deep the
+ * groove between them is), `margin` the shallow furrow along each lip's outer edge.
+ */
+export const LIPS = { upper: 0.0068, lower: 0.0065, margin: 0.0012 } as const;
+
+const smooth = (a: number, b: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/** how far (TL) a point of the snout at (s, height y) is pushed forward: the lower lip juts past the upper */
 export function lipShift(s: number, y: number): number {
   if (s >= 0.03) return 0;
-  const k = 1 - s / 0.03;
-  const v = (y + 0.019) / 0.0068;
-  return 0.0085 * k * k * Math.exp(-v * v);
+  const k = (1 - s / 0.03) ** 2;
+  const dy = gapeY(s) - y;   // depth below the gape
+  // the lower lip's front is a rounded roll: furthest forward a third of the way down, back in to the chin
+  return 0.0055 * k * smooth(-0.001, 0.011, dy) * (1 - smooth(0.015, 0.032, dy));
 }
+
+/**
+ * How far (TL) the skin at (s, height y) sinks in toward the gape: two rolled lips meeting in a groove along the whole
+ * gape, the groove fading into a dimple at the corner of the mouth, a shallow furrow along each lip's outer edge.
+ */
+export function lipInset(s: number, y: number): number {
+  const end = GAPE.s + 0.012;
+  if (s >= end) return 0;
+  const g = s <= GAPE.s ? gapeY(s) : GAPE.y1;
+  const dy = y - g, a = Math.abs(dy);
+  const r = dy >= 0 ? LIPS.upper : LIPS.lower;
+  let inset = a < r ? r - Math.sqrt(r * r - (r - a) * (r - a)) : 0;
+  inset += LIPS.margin * Math.exp(-(((a - 2 * r) / (0.5 * r)) ** 2));
+  // deep at the front, a fold at the corner, gone a little behind it
+  const depth = s <= GAPE.s ? 1 - 0.6 * smooth(0.4 * GAPE.s, GAPE.s, s) : 0.4 * (1 - smooth(GAPE.s, end, s));
+  return inset * depth;
+}
+
+/*
+ * The gill cover, measured on the photograph. Two plates lie over the cheek, each with a free edge standing off the
+ * skin behind it: the preopercle (its posterior margin a little behind the eye, turning forward below) and the opercle
+ * (its bony margin, then a thin membranous flap whose free edge is the gill opening, from above the pectoral fin's base
+ * round and forward to the throat). Tables: s of the edge at height h (TL units), h ascending.
+ */
+export const PREOP_EDGE_PTS = [[-0.07, 0.15], [-0.055, 0.166], [-0.04, 0.176], [-0.02, 0.18], [0.0, 0.176], [0.02, 0.169], [0.04, 0.163], [0.052, 0.16]] as const;
+export const OPER_BONE_PTS = [[-0.088, 0.18], [-0.075, 0.204], [-0.06, 0.224], [-0.04, 0.241], [-0.02, 0.249], [0.0, 0.252], [0.02, 0.252], [0.05, 0.251]] as const;
+export const OPER_EDGE_PTS = [[-0.088, 0.186], [-0.075, 0.213], [-0.06, 0.24], [-0.045, 0.264], [-0.03, 0.276], [-0.015, 0.279], [0.0, 0.274], [0.015, 0.265], [0.03, 0.258], [0.05, 0.255]] as const;
+export const PREOP_EDGE = curve(PREOP_EDGE_PTS);
+export const OPER_BONE = curve(OPER_BONE_PTS);
+export const OPER_EDGE = curve(OPER_EDGE_PTS);
+export const GILL = {
+  /** the plates' height ranges (top, bottom) */
+  preop: { top: 0.052, bottom: -0.07, width: 0.03, lift: 0.0014 },
+  oper: { top: 0.05, bottom: -0.088, lift: 0.002, membrane: 0.0007 },
+  /** the opercle swings outward about this point (its articulation, high at the front) */
+  hinge: { s: 0.2, y: 0.045 },
+} as const;
 
 /**
  * Axial chain (joint, s). The head is rigid back to J_sp1; the chain bends behind it. Joint spacing narrows toward
@@ -151,7 +221,7 @@ export const SPINE: readonly (readonly [string, number])[] = [
 export const SPINE_S = SPINE.map(([, s]) => s);
 
 /** every bone of the rig, in skeleton order (parents before children) */
-export const BONES = ['J_root', ...SPINE.map(([n]) => n), 'J_pec_L', 'J_pec_R', 'J_d1', 'J_jaw'] as const;
+export const BONES = ['J_root', ...SPINE.map(([n]) => n), 'J_pec_L', 'J_pec_R', 'J_d1', 'J_jaw', 'J_oper_L', 'J_oper_R'] as const;
 export type BoneName = (typeof BONES)[number];
 export const boneIndex = (name: BoneName): number => BONES.indexOf(name);
 

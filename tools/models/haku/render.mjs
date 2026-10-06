@@ -16,6 +16,15 @@ const only = arg('--only', null)?.split(',');
 const W = Number(arg('--width', 1280)), H = Number(arg('--height', 760)), DPR = Number(arg('--dpr', 1));
 fs.mkdirSync(outDir, { recursive: true });
 
+// the photo-match framing: lateral, a long lens, the silver showing a room's light as in a photograph of a fish in a
+// clear case (bright overhead, a darker band just above the horizon, a bright floor)
+const TANK = {
+  w: W, h: H, tl: Math.round(W * 0.78), tilt: 0, snout: [Math.round(W * 0.89), Math.round(H * 0.5)], exposure: 0.85, pec: 0.08,
+  sun: 0.5, hemi: 0.4, skyGain: 1, bg: [0.3, 0.42, 0.2],
+  envStops: [[-90, 0.68, 0.71, 0.76], [-35, 0.68, 0.71, 0.76], [-12, 0.54, 0.55, 0.58], [0, 0.4, 0.4, 0.4], [12, 0.3, 0.29, 0.28],
+    [24, 0.28, 0.27, 0.26], [36, 1.1, 1.1, 1.1], [48, 1.9, 1.9, 1.95], [90, 1.9, 1.9, 1.95]],
+};
+
 // each shot: viewer state, then optional simulated seconds before the picture
 const SHOTS = [
   { name: 'side_lod0', set: { scene: 'side', lod: 0 } },
@@ -30,17 +39,12 @@ const SHOTS = [
   { name: 'escape_1', advance: 0.12 },
   { name: 'escape_2', advance: 0.5, follow: true },
   { name: 'escape_3', advance: 2.5, follow: true },
-  // the photo-match framing: lateral, a long lens, the silver showing a room's light as in a photograph of a fish in a
-  // clear case (bright overhead, a darker band just above the horizon, a bright floor)
-  {
-    name: 'tank_side',
-    match: {
-      w: W, h: H, tl: Math.round(W * 0.78), tilt: 0, snout: [Math.round(W * 0.89), Math.round(H * 0.5)], exposure: 0.85, pec: 0.08,
-      sun: 0.5, hemi: 0.4, skyGain: 1, bg: [0.3, 0.42, 0.2],
-      envStops: [[-90, 0.68, 0.71, 0.76], [-35, 0.68, 0.71, 0.76], [-12, 0.54, 0.55, 0.58], [0, 0.4, 0.4, 0.4], [12, 0.3, 0.29, 0.28],
-        [24, 0.28, 0.27, 0.26], [36, 1.1, 1.1, 1.1], [48, 1.9, 1.9, 1.95], [90, 1.9, 1.9, 1.95]],
-    },
-  },
+  { name: 'tank_side', match: { ...TANK } },
+  // the mouth and gill cover are structure: the lips part over the mouth cavity, the gill covers swing open on their
+  // own bones and show the gills (a breath at its widest)
+  { name: 'tank_mouth_front', match: { ...TANK, view: { at: [0.0, -0.012], x: 0, from: [-0.45, 0.15, 1], dist: 0.25, fov: 30 } } },
+  { name: 'tank_breath', match: { ...TANK, jaw: 0.7, oper: 1, view: { at: [0.15, -0.02], from: [-1, 0.15, 0.6], dist: 0.6, fov: 30 } } },
+  { name: 'tank_gills', match: { ...TANK, oper: 1, view: { at: [0.26, -0.01], from: [-0.7, 0.05, -1], dist: 0.3, fov: 30 } } },
 ];
 
 const PORT = 5198;

@@ -1,7 +1,17 @@
 import { Color, DoubleSide, FrontSide, MeshPhysicalMaterial, type IUniform, type WebGLProgramParametersWithUniforms } from 'three';
-import { EYE, GAPE, MODEL_TL, PEC } from './anatomy';
+import { EYE, GAPE, MODEL_TL, OPER_BONE_PTS, OPER_EDGE_PTS, PEC, PREOP_EDGE_PTS } from './anatomy';
 
 const f = (x: number): string => x.toFixed(5);
+
+/** a GLSL function through a table of (x, y) points, linear between them, clamped at the ends */
+function glslTable(name: string, pts: readonly (readonly [number, number])[]): string {
+  let body = `float y = ${f(pts[0][1])};\n`;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+    body += `  y = mix(y, ${f(y0)} + (${f(y1 - y0)}) * clamp((x - ${f(x0)}) / ${f(x1 - x0)}, 0.0, 1.0), step(${f(x0)}, x));\n`;
+  }
+  return `float ${name}(float x) {\n  ${body}  return y;\n}\n`;
+}
 
 /**
  * Shared materials of the ハク: standard PBR (MeshPhysicalMaterial: metalness/roughness, clearcoat for the mucus and
@@ -42,10 +52,12 @@ const VERT_PARS = /* glsl */ `
 attribute vec3 aBody;
 attribute vec2 aPat;
 attribute float aPart;
+attribute float aOcc;
 varying vec3 vBody;
 varying vec2 vPat;
 varying float vPart;
 varying vec3 vRest;
+varying float vOcc;
 varying vec3 vWPos;
 `;
 
@@ -176,15 +188,36 @@ const CAUSTIC_INJECT = /* glsl */ `
 }
 `;
 
+/** the body's ambient occlusion over the light it receives: indirect fully, direct (sun through the crease) mostly */
+const OCC_DIRECT = /* glsl */ `
+{
+  float od = mix(1.0, hkOcc, 0.75);
+  reflectedLight.directDiffuse *= od;
+  reflectedLight.directSpecular *= od;
+}
+`;
+const OCC_INDIRECT = /* glsl */ `
+irradiance *= hkOcc;
+iblIrradiance *= hkOcc;
+radiance *= hkOcc;
+#ifdef USE_CLEARCOAT
+clearcoatRadiance *= hkOcc;
+#endif
+`;
+
 const BODY_FRAG_PARS = /* glsl */ `
 varying vec3 vBody;
 varying vec2 vPat;
 varying float vPart;
 varying vec3 vRest;
+varying float vOcc;
 uniform vec3 uBack;
 uniform float uPigment;
 uniform float uSilver;
 uniform float uIri;
+${glslTable('hkPreopEdge', PREOP_EDGE_PTS)}
+${glslTable('hkOperEdge', OPER_EDGE_PTS)}
+${glslTable('hkOperBone', OPER_BONE_PTS)}
 `;
 
 /**
@@ -195,15 +228,18 @@ uniform float uIri;
  * the silver where the reflectors stand a little steeper; overlapping cycloid scales, each its own slightly tilted
  * mirror, their free edges showing as scallops low on the flank. On the head: the crown's tan running forward to a pale
  * gold snout with an orange-brown patch before the eye, dark vermiculations where the crown meets the silver, thick
- * pale translucent lips with the gape a dark notch between them, the gill cover a broad silver plate with soft grey
- * folds (the preopercle behind the eye, the opercle's edge) and a crumpled-foil sheen; a brown spot at the pectoral
- * base and another above the gill opening.
+ * pale translucent lips, the cheek and gill cover a sheet of crumpled foil; a brown spot at the pectoral base and
+ * another above the gill opening. The mouth and the gill cover are geometry on the near tier (the lips' groove, the
+ * mouth's lining, the plates' rims and the shadows under their free edges, the red gills in the chamber under the
+ * opercle); the far tiers paint soft stand-ins for their edges.
  * Computed once at the colour stage and read again by the roughness / metalness / normal / clearcoat / iridescence
  * stages. vRest is the rest-pose position in TL units (y = height above the snout–tail axis, z = forward); hkTilt
  * leans the reflector toward the head (x) and the back (y), applied in the body's own frame.
  */
 const BODY_SURFACE = /* glsl */ `
 float hkMetal = 0.0, hkRough = 0.5, hkCoat = 0.15, hkIriAmt = 0.0, hkIriThick = 380.0, hkThin = 0.0;
+// ambient occlusion from the geometry (the gape between the lips, the mouth, under the gill cover's edges)
+float hkOcc = vOcc;
 vec2 hkTilt = vec2(0.0);
 {
   float s = vBody.x, cd = vBody.y;
@@ -238,12 +274,23 @@ vec2 hkTilt = vec2(0.0);
     hkMetal = mix(hkMetal, 0.8, smoothstep(1.0, 1.04, r));
     hkRough = mix(0.26, 0.1, pupil);
     hkCoat = 1.0 - smoothstep(0.985, 1.02, r);
-  } else if (part > 1.5) {
+  } else if (part > 1.5 && part < 2.5) {
     // ---- LOD2's tail sliver: a faint grey fan
     col = vec3(0.3, 0.31, 0.3);
     hkMetal = 0.1; hkRough = 0.6; hkCoat = 0.0;
+  } else if (part > 2.5 && part < 3.5) {
+    // ---- the mouth's lining: pale, wet, in shadow
+    col = vec3(0.42, 0.3, 0.3) * (0.85 + 0.3 * hkNoise(vRest.xz * 900.0));
+    hkMetal = 0.0; hkRough = 0.4; hkCoat = 0.5;
+  } else if (part > 3.5) {
+    // ---- the gill cover's rounded free edge and its inner face: a pale silvery lining
+    col = vec3(0.76, 0.75, 0.77);
+    hkMetal = 0.45; hkRough = 0.3; hkCoat = 0.25;
+    hkThin = 0.35;
   } else {
-    vec2 pat = vPat;
+    // the pattern's coordinates: s and the arc from the dorsal midline, signed by side so that the two sides are not
+    // mirror images of each other (and the crown's patterns run across its top, where the height hardly changes)
+    vec2 pat = vec2(vPat.x, vBody.z < 0.0 ? -vPat.y : vPat.y);
     vec2 q = vec2(s, h);
     float trunk = smoothstep(0.2, 0.28, s);
     float headK = 1.0 - smoothstep(0.24, 0.3, s);
@@ -255,13 +302,17 @@ vec2 hkTilt = vec2(0.0);
     float band = smoothstep(edge - 0.04, edge + 0.05, cd);
     float belly = smoothstep(-0.25, -0.75, cd);
     // ---- the snout and lips
-    float lips = (1.0 - smoothstep(0.022, 0.034, s)) * smoothstep(-0.04, -0.03, h) * (1.0 - smoothstep(0.022, 0.03, h));
+    // the lips: the rolls either side of the gape (geometry), pale and translucent
+    float gapeH = ${f(GAPE.y0)} + (${f(GAPE.y1)} - ${f(GAPE.y0)}) * clamp(s / ${f(GAPE.s)}, 0.0, 1.0);
+    float lips = (1.0 - smoothstep(${f(GAPE.s - 0.004)}, ${f(GAPE.s + 0.006)}, s))
+      * (h > gapeH ? 1.0 - smoothstep(0.011, 0.016, h - gapeH) : 1.0 - smoothstep(0.02, 0.027, gapeH - h));
     float snoutPatch = (1.0 - smoothstep(0.3, 1.0, length(vec2((s - 0.046) / 0.04, (h - 0.03) / 0.022)))) * (0.55 + 0.45 * hkNoise(vec2(s * 120.0, h * 120.0)));
     // forward of the nape the crown is not tan but a pale silver-gold, finely dotted
     float headTop = 1.0 - smoothstep(0.15, 0.2, s);
     float crown = headK * band;
     // ---- melanophores: dense and fine in the band, scattered on the snout, a few down the upper flank, a band at the tail's base
-    float dens = uPigment * (1.9 * band * (1.0 - 0.8 * headTop) + 0.9 * snoutPatch
+    // (none on the lips and the snout's front, where the pattern's s barely changes and its cells would smear into streaks)
+    float dens = smoothstep(0.02, 0.032, s) * uPigment * (1.9 * band * (1.0 - 0.8 * headTop) + 0.9 * snoutPatch
       + 0.06 * smoothstep(0.0, edge, cd) * trunk + 0.5 * smoothstep(0.81, 0.84, s) * (1.0 - belly));
     float mel = 0.0;
 #ifndef HAKU_LOW
@@ -289,7 +340,7 @@ vec2 hkTilt = vec2(0.0);
       vec2 gp = pat * 330.0 + 0.37;
       vec3 gh = hkHash3(floor(gp) + 41.0);
       float gd = length(fract(gp) - 0.2 - 0.6 * gh.xy);
-      gold = (1.0 - smoothstep(0.08, 0.22, gd)) * step(gh.z, 0.4) * band * (1.0 - 0.6 * headTop)
+      gold = (1.0 - smoothstep(0.08, 0.22, gd)) * step(gh.z, 0.4) * band * (1.0 - 0.6 * headTop) * smoothstep(0.02, 0.032, s)
         * (1.0 - smoothstep(0.35, 0.9, max(fwidth(gp.x), fwidth(gp.y))));
     }
 #endif
@@ -299,7 +350,7 @@ vec2 hkTilt = vec2(0.0);
     float chain = (1.0 - smoothstep(0.0025, 0.0065, length(q - mix(vec2(0.174, 0.056), vec2(0.243, 0.08), tch))))
       * smoothstep(0.4, 0.62, hkNoise(q * 170.0)) * smoothstep(0.165, 0.18, s) * (1.0 - smoothstep(0.24, 0.255, s));
     float blot = max(chain, 1.0 - smoothstep(0.45, 1.0, length((q - vec2(0.226, 0.076)) / vec2(0.0065, 0.0055))));
-    float cloud = smoothstep(0.64, 0.8, hkNoise(q * 150.0) * 0.6 + hkNoise(q * 380.0) * 0.4) * headTop * band;
+    float cloud = smoothstep(0.64, 0.8, hkNoise(pat * 150.0) * 0.6 + hkNoise(pat * 380.0) * 0.4) * headTop * band * smoothstep(0.02, 0.035, s);
     blot = max(blot, cloud * 0.45);
     blot = max(blot, (1.0 - smoothstep(0.5, 1.0, length((q - vec2(0.155, 0.061)) / vec2(0.0055, 0.0016)))) * 0.85);
     blot = max(blot, (1.0 - smoothstep(0.5, 1.0, length((q - vec2(0.162, 0.081)) / vec2(0.0018, 0.005)))) * 0.75);
@@ -311,7 +362,7 @@ vec2 hkTilt = vec2(0.0);
     vec3 backCol = uBack * (0.88 + 0.24 * hkNoise(pat * 40.0));
     backCol *= 1.0 - 0.25 * smoothstep(0.88, 1.0, cd) * trunk;
     // over the eye and the snout the crown is a mottled grey-gold, finely dotted
-    vec3 crownCol = vec3(0.6, 0.56, 0.44) * (0.88 + 0.24 * hkNoise(q * 140.0)) * (0.92 + 0.16 * hkNoise(q * 40.0 + 7.0));
+    vec3 crownCol = vec3(0.6, 0.56, 0.44) * (0.88 + 0.24 * hkNoise(pat * 140.0)) * (0.92 + 0.16 * hkNoise(pat * 40.0 + 7.0));
     backCol = mix(backCol, crownCol, headTop);
     // ---- the silver: a translucent grey band under the dorsal band, bright silver-white below
     float upperBand = smoothstep(-0.05, 0.25, cd) * (1.0 - band) * trunk;
@@ -351,7 +402,7 @@ vec2 hkTilt = vec2(0.0);
       streak *= flankK;
       streakUp *= flankK;
       // imbricate cycloid scales: the most anterior scale covering a point lies on top; its free edge is an arc
-      vec2 sc = vec2(s / 0.022, pat.y / 0.017);
+      vec2 sc = vec2(s / 0.022, abs(pat.y) / 0.017);
       float best = 1e9, bestD = 0.0;
       vec2 bestC = vec2(0.0);
       for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
@@ -376,19 +427,26 @@ vec2 hkTilt = vec2(0.0);
     streak = max(streak, streakUp);
     float shoulder = smoothstep(edge - 0.2, edge - 0.08, cd) * (1.0 - smoothstep(edge - 0.06, edge + 0.01, cd)) * trunk * smoothstep(0.82, 0.74, s);
     hkTilt.y += 0.16 * shoulder;
-    // ---- the gill cover: the preopercle fold behind the eye, a second fold over the opercle, the opercle's free edge
-    float brk = smoothstep(0.15, 0.75, hkNoise(vec2(h * 70.0, s * 20.0)));
-    float wob = (hkNoise(vec2(h * 90.0, 1.7)) - 0.5) * 0.004;
-    float sPre = 0.161 + 0.25 * max(0.0, -h - 0.01) * max(0.0, -h - 0.01) / 0.02 + wob;
-    float preop = (1.0 - smoothstep(0.0025, 0.0075, abs(s - sPre))) * smoothstep(0.056, 0.038, h) * smoothstep(-0.06, -0.03, h) * (0.6 + 0.4 * brk);
-    float sFold = 0.248 - 0.17 * h + wob;
-    float fold = (1.0 - smoothstep(0.0015, 0.006, abs(s - sFold))) * smoothstep(0.04, 0.02, h) * smoothstep(-0.06, -0.035, h) * (0.55 + 0.45 * brk);
-    float fold2 = (1.0 - smoothstep(0.002, 0.008, abs(s - 0.205 + 0.05 * h))) * smoothstep(0.03, 0.01, h) * smoothstep(-0.07, -0.04, h) * (0.4 + 0.6 * brk);
-    float sOp = 0.275 - 6.0 * (h + 0.005) * (h + 0.005);
-    float oper = smoothstep(sOp + 0.003, sOp - 0.003, s) * smoothstep(0.13, 0.17, s) * (1.0 - band);
-    // the plate's free edge throws a soft shadow on the flank behind it
-    float opShadow = smoothstep(sOp - 0.001, sOp + 0.002, s) * (1.0 - smoothstep(sOp + 0.002, sOp + 0.013, s)) * smoothstep(0.06, 0.04, h) * smoothstep(-0.09, -0.06, h);
-    float gillPink = oper * smoothstep(-0.02, -0.06, h) * smoothstep(0.2, 0.25, s);
+    // ---- the gill cover is in the geometry: plates (aPart 0.3 the preopercle, 0.35 → 0.39 the opercle's bone → its
+    // membranous flap) over the gill chamber (aPart up to 0.15 on the skin beneath), which shows its red gills when the
+    // cover swings open
+    float near = step(0.005, part) * step(part, 0.2);
+    float preopP = step(0.25, part) * step(part, 0.32);
+    float operP = step(0.33, part) * step(part, 0.45);
+    float membrane = operP * clamp((part - 0.35) / 0.04, 0.0, 1.0);
+    float gills = smoothstep(0.03, 0.12, part) * step(part, 0.2) * (1.0 - smoothstep(-0.006, -0.0025, s - hkOperEdge(h)));
+    float gillPink = operP * smoothstep(-0.02, -0.06, h) * smoothstep(0.2, 0.25, s);
+    // the cheek and gill cover are one mirror sheet of skin over the bones (its edges are geometry)
+    float oper = smoothstep(0.13, 0.17, s) * (1.0 - smoothstep(-0.003, 0.003, s - hkOperEdge(h))) * (1.0 - band);
+    // the skin in the lee of each free edge: behind the opercle's (on the shoulder) and behind the preopercle's (on the
+    // opercle), on the near tier where the edges are real
+    float behindOp = near * smoothstep(-0.0005, 0.001, s - hkOperEdge(h)) * (1.0 - smoothstep(0.0, 0.007, s - hkOperEdge(h)))
+      * smoothstep(-0.09, -0.08, h) * (1.0 - smoothstep(0.04, 0.05, h));
+    float behindPre = operP * (1.0 - smoothstep(0.0, 0.011, s - hkPreopEdge(h))) * smoothstep(-0.075, -0.06, h) * (1.0 - smoothstep(0.035, 0.05, h));
+    // the step down from the opercle's bone to its membranous flap: a crease in the plate's own shadow
+    float behindBone = operP * smoothstep(-0.001, 0.0005, s - hkOperBone(h)) * (1.0 - smoothstep(0.001, 0.006, s - hkOperBone(h)))
+      * smoothstep(-0.08, -0.065, h) * (1.0 - smoothstep(0.035, 0.045, h));
+    hkOcc *= 1.0 - 0.25 * behindOp - 0.35 * behindPre - 0.4 * behindBone;
     // the cheek and gill cover are crumpled foil: broad, soft undulations of the mirror
     float cheek = (1.0 - smoothstep(0.26, 0.3, s)) * smoothstep(0.07, 0.11, s) * (1.0 - band);
     float satin = (1.0 - smoothstep(0.16, 0.26, s)) * smoothstep(0.1, 0.5, cd) * (1.0 - band);
@@ -402,15 +460,8 @@ vec2 hkTilt = vec2(0.0);
     float orbitTop = (1.0 - smoothstep(0.015, 0.04, abs(de - 1.12))) * smoothstep(0.45, 0.85, (h - ${f(EYE.y)}) / ${f(EYE.r)} / max(de, 0.01));
     // ---- the axillary spot: a small brown blotch at the pectoral base
     float axil = 1.0 - smoothstep(0.5, 1.0, length(vec2((s - ${f(PEC.s)}) / 0.008, (h - ${f(PEC.y)}) / 0.007)));
-    // ---- the mouth: a dark notch between the lips at the front, a dark spot at its corner, faint between
-    float gape = ${f(GAPE.y0)} + (${f(GAPE.y1)} - ${f(GAPE.y0)}) * clamp(s / ${f(GAPE.s)}, 0.0, 1.0);
-    float gapeLine = 1.0 - smoothstep(0.0008, 0.0026, abs(h - gape));
-    float mouth = gapeLine * mix(0.25, 1.0, 1.0 - smoothstep(0.002, 0.009, s)) * smoothstep(${f(GAPE.s)} + 0.002, ${f(GAPE.s)} - 0.004, s);
-    mouth = max(mouth, 1.0 - smoothstep(0.5, 1.0, length(vec2((s - ${f(GAPE.s - 0.006)}) / 0.006, (h - ${f(GAPE.y1 - 0.002)}) / 0.0028))));
+    // ---- the nostrils before the eye
     float nostril = 1.0 - smoothstep(0.5, 1.0, length(vec2((s - 0.056) / 0.004, (h - 0.04) / 0.003)));
-    // the lips' margins: a soft grey crease over the upper lip and under the lower
-    float lipLine = (1.0 - smoothstep(0.0008, 0.0028, abs(h - 0.022 + 0.35 * s))) * (1.0 - smoothstep(0.02, 0.03, s))
-      + (1.0 - smoothstep(0.0008, 0.0028, abs(h + 0.031 - 0.2 * s))) * (1.0 - smoothstep(0.018, 0.028, s));
     // a pink blush on the upper jaw below the front of the eye
     float blush = 1.0 - smoothstep(0.3, 1.0, length(vec2((s - 0.058) / 0.02, (h + 0.016) / 0.011)));
 #ifdef HAKU_LOW
@@ -434,21 +485,32 @@ vec2 hkTilt = vec2(0.0);
     col *= 1.0 - 0.04 * mid - 0.03 * scaleEdge - 0.035 * scaleDome;
     col *= 1.0 + 0.04 * streak;
     col = mix(col, vec3(0.34, 0.24, 0.15), axil * 0.75);
-    col = mix(col, vec3(0.3, 0.31, 0.34), max(max(preop * 0.75, fold * 0.65), fold2 * 0.35));
-    col *= 1.0 - 0.4 * opShadow;
-    col = mix(col, vec3(0.08, 0.07, 0.07), max(mouth * 0.85, nostril * 0.55));
-    col = mix(col, vec3(0.45, 0.44, 0.45), lipLine * 0.45);
+    col = mix(col, vec3(0.08, 0.07, 0.07), nostril * 0.55);
+    // the tiers further off have no gill cover or split mouth in their geometry: the edges' shadows and the gape stand
+    // in for them, soft, at the size they are seen there
+    float far = 1.0 - step(0.005, part);
+    float dPre = abs(s - hkPreopEdge(h) - 0.004), dOp = abs(s - hkOperEdge(h) - 0.003);
+    float edgeLines = max((1.0 - smoothstep(0.0, 0.006, dPre)) * smoothstep(-0.07, -0.05, h) * (1.0 - smoothstep(0.035, 0.05, h)),
+      0.7 * (1.0 - smoothstep(0.0, 0.006, dOp)) * smoothstep(-0.09, -0.07, h) * (1.0 - smoothstep(0.035, 0.05, h)));
+    float farGape = (1.0 - smoothstep(0.001, 0.003, abs(h - gapeH))) * (1.0 - smoothstep(${f(GAPE.s - 0.004)}, ${f(GAPE.s)}, s));
+    col *= 1.0 - far * max(0.3 * edgeLines, 0.6 * farGape);
+    // the membranous flap: thinner, a little milky over the silver
+    col = mix(col, col * 0.9 + vec3(0.06, 0.06, 0.07), membrane * 0.6);
     col = mix(col, vec3(0.8, 0.8, 0.79), orbit * 0.25);
     col *= 1.0 - 0.35 * orbitShade;
-    hkMetal = mix(mix(0.16, 0.42, headTop), mix(0.86, 0.6, belly), silverAmt) * (1.0 - 0.25 * upperBand) * (1.0 - 0.55 * gillPink) * (1.0 - 0.75 * lips);
-    hkMetal = mix(hkMetal, 0.9, oper * 0.6 * (1.0 - band));
+    float snoutFront = 1.0 - smoothstep(0.012, 0.04, s);
+    hkMetal = mix(mix(0.16, 0.42, headTop), mix(0.86, 0.6, belly), silverAmt) * (1.0 - 0.6 * snoutFront) * (1.0 - 0.25 * upperBand) * (1.0 - 0.55 * gillPink) * (1.0 - 0.75 * lips);
+    hkMetal = mix(hkMetal, 0.9, oper * 0.6 * (1.0 - membrane));
+    hkMetal = mix(hkMetal, 0.6, membrane);
     hkMetal *= 1.0 - 0.3 * hkThin * (1.0 - lips);
-    hkMetal *= 1.0 - 0.6 * max(preop, fold) - 0.35 * opShadow;
     // pigment lies over the mirror: the blotches are matte
     hkMetal *= 1.0 - 0.85 * blot;
     hkMetal = mix(hkMetal, 0.85, gold * 0.7);
     hkRough = mix(0.48, 0.22 + 0.06 * (sh.x - 0.5), silverAmt) + 0.08 * scaleEdge + 0.06 * belly + 0.15 * lips;
-    hkRough = mix(hkRough, 0.17, oper * 0.7);
+    hkRough = mix(hkRough, 0.17, oper * 0.7 * (1.0 - membrane));
+    hkRough = mix(hkRough, 0.4, snoutFront * 0.7);
+    hkThin = max(hkThin, 0.3 * snoutFront);
+    hkThin = max(hkThin, 0.4 * membrane);
     hkRough = mix(hkRough, 0.6, blot);
     hkMetal = mix(hkMetal, 0.6, satin);
     hkRough = mix(hkRough, 0.3, satin);
@@ -457,6 +519,17 @@ vec2 hkTilt = vec2(0.0);
     hkCoat = 0.12 + 0.08 * band + 0.2 * lips;
     hkIriAmt = uIri * (0.08 * silverAmt * smoothstep(-0.2, 0.5, cd) + 0.18 * gillPink + 0.12 * crown * (1.0 - headTop));
     hkIriThick = 300.0 + 220.0 * hkNoise(pat * 9.0 + 2.0) + 120.0 * oper;
+    if (gills > 0.0) {
+      // gill arches running down the chamber, each fringed with fine blood-red filaments lying back across it; the
+      // clefts between the arches dark
+      float ga = fract(s * 150.0 + h * 25.0);
+      float ridge = smoothstep(0.0, 0.25, ga) * (1.0 - smoothstep(0.75, 1.0, ga));
+      float fil = 0.6 + 0.4 * sin(h * 2300.0 + 3.0 * ga);
+      vec3 gc = mix(vec3(0.16, 0.02, 0.03), vec3(0.72, 0.15, 0.14) * fil, ridge);
+      col = mix(col, gc, gills);
+      hkMetal = mix(hkMetal, 0.0, gills); hkRough = mix(hkRough, 0.35, gills); hkCoat = mix(hkCoat, 0.6, gills);
+      hkIriAmt *= 1.0 - gills; hkTilt *= 1.0 - gills; hkThin *= 1.0 - gills;
+    }
   }
   diffuseColor.rgb = col;
 }
@@ -528,7 +601,7 @@ function bodyMaterial(v: Variant, low: boolean): MeshPhysicalMaterial {
     Object.assign(shader.uniforms, HAKU_UNIFORMS, own);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvBody = aBody; vPat = aPat; vPart = aPart; vRest = position / ${f(MODEL_TL)};`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvBody = aBody; vPat = aPat; vPart = aPart; vOcc = aOcc; vRest = position / ${f(MODEL_TL)};`)
       .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${BODY_FRAG_PARS}`)
@@ -557,8 +630,8 @@ function bodyMaterial(v: Variant, low: boolean): MeshPhysicalMaterial {
   material.iridescence = hkIriAmt;
   material.iridescenceThickness = hkIriThick;
 #endif`)
-      .replace('#include <lights_fragment_begin>', CAUSTIC_INJECT)
-      .replace('#include <lights_fragment_maps>', ENV_INJECT)
+      .replace('#include <lights_fragment_begin>', CAUSTIC_INJECT + OCC_DIRECT)
+      .replace('#include <lights_fragment_maps>', ENV_INJECT + OCC_INDIRECT)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 {
   // the bottom's light through the thin tail and fin bases (subtle translucency), and the sun through them from behind
@@ -568,7 +641,7 @@ function bodyMaterial(v: Variant, low: boolean): MeshPhysicalMaterial {
   totalEmissiveRadiance += hkThin * (through * vec3(0.8, 0.78, 0.66) * 0.45 + hkSunCol() * back * 0.08);
 }`);
   };
-  m.customProgramCacheKey = () => (low ? 'haku-body-lod2-v25' : 'haku-body-v25');
+  m.customProgramCacheKey = () => (low ? 'haku-body-lod2-v33' : 'haku-body-v33');
   return m;
 }
 
