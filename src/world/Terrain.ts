@@ -58,13 +58,14 @@ const LOD_STEP = [1, 2, 4];
 const LOD_DIST = [60, 130];
 const SKIRT = 0.35;
 
-// the dark grey-brown of the real flat (葛西 at low water: wet muddy sand, almost black where it stays wet)
+// the neutral grey of the real flat in daylight (葛西 at low water, measured on the photo: dry sand a mid grey
+// of sRGB ~128, the wet flat a touch bluer where it carries the sky); the mud and the creek beds darker
 const SUBSTRATE_COLORS: Record<Substrate, [number, number, number]> = {
-  sand: [0.4, 0.355, 0.285],
-  muddy_sand: [0.29, 0.255, 0.21],
-  mud: [0.165, 0.15, 0.13],
-  gravel: [0.33, 0.32, 0.29],
-  channel: [0.13, 0.12, 0.105],
+  sand: [0.37, 0.37, 0.355],
+  muddy_sand: [0.29, 0.285, 0.27],
+  mud: [0.19, 0.185, 0.17],
+  gravel: [0.33, 0.305, 0.27],
+  channel: [0.15, 0.145, 0.135],
 };
 
 export class Terrain {
@@ -548,8 +549,11 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   // wet band: everything between the current water level and the recent high-water mark is darker
   float wet = 1.0 - smoothstep(lvl + 0.02, max(lvl, uWetLevel) + 0.05, vWorldPos.y);
   wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
-  diffuseColor.rgb *= mix(1.0, 0.68, wet);
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.88, 0.93, 1.0), 0.3 * wet);
+  diffuseColor.rgb *= mix(1.0, 0.76, wet);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.93, 1.04), 0.45 * wet);
+  // above the bank: the park's land, dry grass and earth over the packed bank
+  float land = smoothstep(3.1, 3.9, vWorldPos.y);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.31, 0.32, 0.2) * (0.8 + 0.4 * vnoise(vWorldPos.xz * 0.9 + 3.0)), land);
   // sunlight caustics on the submerged bed, focused by the same ripples that bend the view of it: the inverse
   // Jacobian of the refraction map from the wave field's curvature (pools are calm: broad, slow, soft bands)
   float depth = lvl - vWorldPos.y;

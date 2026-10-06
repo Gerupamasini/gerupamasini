@@ -167,6 +167,12 @@
 - シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
 - バージョン 0.12.1。
 
+## 18 回目（写真の色、北の土手と左右の土塁、遠景）
+- 色: `Terrain.ts` の `SUBSTRATE_COLORS` を写真の実測（jpeg-js でサンプル: 乾いた砂 (127,131,128)、濡れた平坦部 (128,140,145)、遠くの平坦部 (160,179,195)）に合わせて無彩色系に（sand 0.44/0.44/0.42 など）。濡れ帯は 0.76 倍 + 青み 0.45。`mapImages.ts` の `SUB_COLORS` も灰色系、`BEACH` は砂利を除外、`SHORE`（緑）は h > 3.1 から。
+- 地形: `bake-map.mjs` に `BANK`（landZ −152 / +5.0 m、footZ −144 / +1.55 m）と `bankMask(z)`、`LEVEE`（inner 133、crest 147、+2.9 m、sink z 100→148）と `leveeAt(x,z)`。`height()` は relief / creek / dimple を `(1 − bankMask)` で止め、土塁は `lerp(h, lv.h, lv.m)` で混ぜる。`substrate()` は土手・陸地・（平坦部より 0.25 m 以上高い）土塁を gravel に。`kasai_west.json` の `max_tp_m` 6.0。シェーダーに `land = smoothstep(3.1, 3.9, y)` の草土色。
+- 遠景: `src/world/Skyline.ts`。`plane(bearing, width, height, bottomY, cw, ch, draw, base, haze)` が canvas に輪郭を描いた `MeshBasicMaterial`（`fog: false`、透明、`depthWrite: false`）の板を半径 1900 m の方位に立て、`update(eye, fog, day)` でカメラ xz に追従し `base.lerp(fog, haze) × (0.1 + 0.9 day)`。方位は緯度経度から計算（富士 253°、スカイツリー 332°、東京タワー 284°、観覧車 36°、ゲートブリッジ 225°、舞浜 76°）、大きさは `R·tan(角度)`。街と木立は 15° ごとの板（北半分）。`World` が生成・追従更新。
+- バージョン 0.14.0。
+
 ## 17 回目（ハマグリ、昼寝跡の貝殻、エドハゼ）
 - ハマグリ: 種データ `meretrix_lusoria.json`（ブランチ版の spawn をまばらに: density 0.12、group [1,1]、max 10）、manifest に追加、`DRIVERS.hamaguri`（`AsariDriver(FORMS.hamaguri)`）。`Spawner` は `FIELD_SPECIES`（アサリ）だけ貝床に任せ、他の潜砂種は通常どおり湧かせる。`App.dig` は刃の範囲（半径 + 4 cm）にいる潜砂種の個体（`pitId !== -2`）を 1 匹掘り上げて `creatures.remove`、HUD の案内は潜砂種にスコップのヒント。
 - 昼寝跡の貝殻: `PitDebris` は `sharedGeometry(FORMS.asari).valve[2]` を `valveFragment`（非インデックス化して弦で三角形を選別、全属性を引き継ぐ）で 5 種に切り、`makeShellOuterMaterial({instanced, style})` + `aSeed` のインスタンスで描く。`World.pits` を公開。1 跡あたり 28〜48 片。`Terrain.ts` の跡の砕片（grit）は 4 mm セルの四角から、セル内の丸い粒（半径 0.16〜0.36 セル、位置をずらす、明るさの揺らぎ）に。

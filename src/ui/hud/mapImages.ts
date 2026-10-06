@@ -1,7 +1,7 @@
 import type { World } from '../../app/World';
 
-export const SUB_COLORS = ['#9a8f7b', '#746a5a', '#4e4a40', '#847f74', '#3e4542'];
-const SHORE = [0x6b, 0x84, 0x45], BEACH = [0xd8, 0xc7, 0x9d], ALGAE = [0x7a, 0x84, 0x4e];
+export const SUB_COLORS = ['#9b9b97', '#777772', '#4f4f4a', '#8a8074', '#3e4542'];
+const SHORE = [0x6b, 0x84, 0x45], BEACH = [0xd2, 0xcf, 0xc5], ALGAE = [0x7a, 0x84, 0x4e];
 
 /** Substrate colours shaded by height, one pixel per terrain cell. */
 export function makeBaseImage(world: World): HTMLCanvasElement {
@@ -15,11 +15,11 @@ export function makeBaseImage(world: World): HTMLCanvasElement {
     let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
     const h = t.heights[k];
     // the shore: dry beach, then the green of the embankment
-    if (h > 1.0) { const u = Math.min(1, (h - 1.0) / 0.5); r = r + (BEACH[0] - r) * u; g = g + (BEACH[1] - g) * u; b = b + (BEACH[2] - b) * u; }
-    if (h > 1.7) { const u = Math.min(1, (h - 1.7) / 0.4); r = r + (SHORE[0] - r) * u; g = g + (SHORE[1] - g) * u; b = b + (SHORE[2] - b) * u; }
+    if (h > 1.0 && t.substrate[k] !== 3) { const u = Math.min(1, (h - 1.0) / 0.5); r = r + (BEACH[0] - r) * u; g = g + (BEACH[1] - g) * u; b = b + (BEACH[2] - b) * u; }
+    if (h > 3.1) { const u = Math.min(1, (h - 3.1) / 0.8); r = r + (SHORE[0] - r) * u; g = g + (SHORE[1] - g) * u; b = b + (SHORE[2] - b) * u; }
     // an algal film on the low mud
     if (t.substrate[k] === 2 && h < 0.1) { const u = Math.min(1, (0.1 - h) / 0.6) * 0.5; r = r + (ALGAE[0] - r) * u; g = g + (ALGAE[1] - g) * u; b = b + (ALGAE[2] - b) * u; }
-    const shade = 0.82 + 0.22 * Math.max(-1, Math.min(1, h / 1.5));
+    const shade = 0.82 + 0.22 * Math.max(-1, Math.min(1, h / 1.5)) - 0.12 * Math.max(0, Math.min(1, (h - 2) / 3));
     img.data[k * 4] = r * shade; img.data[k * 4 + 1] = g * shade; img.data[k * 4 + 2] = b * shade; img.data[k * 4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
