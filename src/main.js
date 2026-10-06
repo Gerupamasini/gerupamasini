@@ -16,9 +16,9 @@ const LAYER_BEHIND = 3; // fins are also drawn into the background buffer so the
 const params = new URLSearchParams(location.search);
 // species: ?species=edohaze (local server), else a bare #edohaze / #mahaze token (hosted copies cannot read
 // the query string), else the page default (window.GOBY_SPECIES_DEFAULT), else the juvenile マハゼ
-const SPECIES_LIST = ['mahaze', 'edohaze'];
+const SPECIES_LIST = ['mahaze', 'edohaze', 'edohaze_gravid'];
 const SPECIES_KEY = [params.get('species'), location.hash.slice(1), window.GOBY_SPECIES_DEFAULT].find((k) => SPECIES_LIST.includes(k)) || 'mahaze';
-const MODEL_FILE = { mahaze: 'mahaze_juvenile.glb', edohaze: 'edohaze.glb' }[SPECIES_KEY];
+const MODEL_FILE = { mahaze: 'mahaze_juvenile.glb', edohaze: 'edohaze.glb', edohaze_gravid: 'edohaze_gravid.glb' }[SPECIES_KEY];
 const MODEL_URL = window.MAHAZE_MODEL_URL || window.GOBY_MODEL_URLS?.[SPECIES_KEY] || new URL(`../models/${MODEL_FILE}`, import.meta.url).href;
 // species switch (reloads with the other model); the panel title comes from the model's extras for エドハゼ
 for (const b of document.querySelectorAll('#species button')) {

@@ -72,6 +72,13 @@ export function monotone(xs, ys) {
   };
 }
 
+// gravid female variant (GOBY_GRAVID=1): the belly swells from s≈0.30 to 0.65 SL and ends abruptly at
+// ≈0.67 (photos 011, 016, 023, 028, 044, 045, 048, 061: max depth 0.178 SL, dorsal half-width ≈0.10 SL)
+export const GRAVID = typeof process !== 'undefined' && process.env.GOBY_GRAVID === '1';
+if (GRAVID) KS.forEach((s, i) => {
+  const g = Math.max(0, Math.min(1, (s - 0.28 * SL) / (0.1 * SL))) * Math.max(0, Math.min(1, (0.665 * SL - s) / (0.07 * SL)));
+  KBOT[i] -= 1.05 * g; KW[i] += 1.25 * g; KTOP[i] += 0.2 * g;
+});
 const fTop = monotone(KS, KTOP);
 const fBot = monotone(KS, KBOT);
 const fW = monotone(KS, KW);
@@ -204,6 +211,8 @@ export const EYE = {
   aperture: 60 * (Math.PI / 180),
 };
 // dorsal corneal window (see buildFeatures): axis ~75° above horizontal, slightly forward and outward
+// the skin covers the top of the eye (ref photos): no dorsal window
+export const EYE_DORSAL_OPEN = false;
 export const EYE_DORSAL_AXIS = norm3([-0.15, 0.96, 0.26]);
 const EYE_DORSAL_APERTURE = 50 * (Math.PI / 180);
 
@@ -422,7 +431,7 @@ export function field(s, y, z, eyeCut = true) {
   // --- subtractions
   if (eyeCut && s < 6.5) for (const e of F.eyes) {
     d = smax(d, -sphereDist(p, e.cut, F.rho), 0.07); // rounded eyelid-like dermal rim (ref photos)
-    d = smax(d, -sphereDist(p, e.cut2, F.rho2), 0.07);
+    if (EYE_DORSAL_OPEN) d = smax(d, -sphereDist(p, e.cut2, F.rho2), 0.07);
   }
   if (s < 4.6 && y < 3.0) {
     // a clean gape line only; the premaxillary groove read as a second, scratchy line
@@ -490,7 +499,7 @@ function sinkEyeWindow(p) {
   const e = FEAT.eyes[p[2] >= 0 ? 0 : 1];
   const side = (ax) => (p[2] >= 0 ? ax : [ax[0], ax[1], -ax[2]]);
   p = sinkInto(p, e.cut, FEAT.rho, side(EYE.axis));
-  return sinkInto(p, e.cut2, FEAT.rho2, side(EYE_DORSAL_AXIS));
+  return EYE_DORSAL_OPEN ? sinkInto(p, e.cut2, FEAT.rho2, side(EYE_DORSAL_AXIS)) : p;
 }
 function sinkInto(p, c, rho, a) {
   const q = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];

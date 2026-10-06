@@ -16,8 +16,8 @@ const args = process.argv.slice(2);
 const di = args.indexOf('--default');
 const DEFAULT = di >= 0 ? args[di + 1] : 'edohaze';
 const outDir = path.resolve(args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--default') || path.join(root, 'dist-web'));
-const MODELS = { edohaze: 'edohaze.glb', mahaze: 'mahaze_juvenile.glb' };
-const TITLE = { edohaze: 'エドハゼ 3D', mahaze: 'マハゼ幼魚 3D' };
+const MODELS = { edohaze: 'edohaze.glb', edohaze_gravid: 'edohaze_gravid.glb', mahaze: 'mahaze_juvenile.glb' };
+const TITLE = { edohaze: 'エドハゼ 3D', edohaze_gravid: 'エドハゼ 3D', mahaze: 'マハゼ幼魚 3D' };
 
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
