@@ -30,7 +30,7 @@ export const VERT_COUNT = 31;
 // of the head width and the cheeks swell smoothly behind the eyes.
 // ---- adult (the earlier model: thick lips, long snout, small eye relative to the head)
 const KS = [0.0, 0.41, 0.82, 1.23, 1.64, 2.05, 2.46, 2.87, 3.28, 4.1, 4.9, 6.15, 8.2, 10.25, 12.3, 15, 18, 21, 24, 27, 30, 33, 36, 38.5, 40.5, 42, 43.2];
-const KTOP_A = [2.85, 3.08, 3.42, 3.66, 3.95, 4.23, 4.48, 4.8, 5.05, 5.3, 5.42, 5.63, 6.2, 6.52, 6.74, 6.95, 7.05, 6.95, 6.72, 6.38, 5.98, 5.6, 5.27, 5.05, 4.88, 4.78, 4.66];
+const KTOP_A = [3.12, 3.36, 3.62, 3.84, 4.06, 4.28, 4.5, 4.8, 5.05, 5.3, 5.42, 5.63, 6.2, 6.52, 6.74, 6.95, 7.05, 6.95, 6.72, 6.38, 5.98, 5.6, 5.27, 5.05, 4.88, 4.78, 4.66];
 const KBOT_A = [1.4, 1.2, 0.98, 0.83, 0.68, 0.54, 0.43, 0.33, 0.25, 0.13, 0.07, 0.03, 0.0, 0.0, 0.0, 0.0, 0.02, 0.12, 0.35, 0.7, 1.1, 1.48, 1.8, 2.0, 2.14, 2.24, 2.36];
 const KW_A = [1.45, 1.62, 1.74, 1.84, 1.9, 1.95, 2.02, 2.1, 2.2, 2.42, 2.68, 3.08, 3.34, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
 const KNT_A = [2.2, 2.12, 2.04, 1.97, 1.91, 1.87, 1.84, 1.82, 1.8, 1.8, 1.82, 1.86, 1.92, 1.98, 2.02, 2.03, 2.0, 1.97, 1.95, 1.92, 1.9, 1.87, 1.84, 1.82, 1.8, 1.8, 1.8];
@@ -220,27 +220,62 @@ export const EYE = pick({
   aperture: 60 * (Math.PI / 180),
   pupil: 0.38, // pupil half-angle (rad)
   iris: 1.08, // iris half-angle (rad)
+  // skin fold around the cornea window (gobies have no true eyelids, but the orbital skin forms a thick,
+  // raised rim that overlaps the edge of the eyeball, thickest and furthest over the eye dorsally):
+  // tube radius ventral → dorsal, extra coverage (rad) dorsally / ventrally
+  lid: { r0: 0.07, r1: 0.18, coverD: 0.14, coverV: -0.06, sink: 0.11 },
 }, {
   center: [5.6, 5.05, 1.38],
   axis: norm3([-0.22, 0.42, 0.88]),
   radius: 1.15,
   skin: 0.05,
-  aperture: 72 * (Math.PI / 180),
+  aperture: 70 * (Math.PI / 180),
   pupil: 0.58,
   iris: 1.12,
+  lid: { r0: 0.08, r1: 0.22, coverD: 0.22, coverV: -0.07, sink: 0.15 },
 });
+
+// ring frame of the lid around the left eye's optical axis: u = dorsal direction in the plane ⊥ axis
+const LID_U = (() => {
+  const a = EYE.axis, up = [0, 1, 0];
+  const k = up[0] * a[0] + up[1] * a[1] + up[2] * a[2];
+  const u = [up[0] - a[0] * k, up[1] - a[1] * k, up[2] - a[2] * k];
+  const l = Math.hypot(u[0], u[1], u[2]);
+  return [u[0] / l, u[1] / l, u[2] / l];
+})();
+/**
+ * Lid fold around the eye at a fish-space point (evaluated on the +z eye; mirror z for the right eye).
+ * Returns the signed distance to the fold and where on the ring the point lies (dorsal ∈ [-1, 1]).
+ */
+export function eyeLid(s, y, z) {
+  const E = EYE, L = E.lid, c = E.center, a = E.axis;
+  const v = [s - c[0], y - c[1], Math.abs(z) - c[2]];
+  const h = v[0] * a[0] + v[1] * a[1] + v[2] * a[2];
+  const w = [v[0] - a[0] * h, v[1] - a[1] * h, v[2] - a[2] * h];
+  const rho = Math.hypot(w[0], w[1], w[2]);
+  const dorsal = rho > 1e-6 ? (w[0] * LID_U[0] + w[1] * LID_U[1] + w[2] * LID_U[2]) / rho : 0;
+  const up = smoothstep(-0.25, 1, dorsal), down = smoothstep(0.05, -0.6, dorsal);
+  const ap = E.aperture - L.coverD * up - L.coverV * down;
+  const rt = L.r0 + (L.r1 - L.r0) * up;
+  // dorsally the fold is partly sunk into the eye dome: a thick but low hood, not a ridge on top of it
+  const R = E.radius + E.skin - L.sink * up;
+  return { d: Math.hypot(h - R * Math.cos(ap), rho - R * Math.sin(ap)) - rt, dorsal, h: h / (E.radius + E.skin) };
+}
 
 // Gape (where the lips meet): from the snout tip gently down to the rictus at 8.5 % SL, just in front
 // of the eye (the juvenile maxilla does not reach the eye centre). The upper jaw overhangs slightly.
+// The adult's gape reaches back to below the middle of the eye (species description; front-oblique photo of
+// a larger fish); the juvenile's ends in front of the eye (calibrated lateral photo): the jaws lengthen
+// with growth.
 export const MOUTH = pick(
-  [[0.0, 1.98], [0.3, 1.95], [0.8, 1.87], [1.5, 1.74], [2.2, 1.6], [2.8, 1.49], [3.2, 1.42], [3.5, 1.37]],
-  [[0.0, 2.45], [0.3, 2.4], [0.8, 2.27], [1.5, 2.04], [2.2, 1.78], [2.8, 1.52], [3.1, 1.38], [3.3, 1.3]],
+  [[0.0, 1.98], [0.3, 1.95], [0.8, 1.88], [1.5, 1.76], [2.3, 1.62], [3.1, 1.49], [3.8, 1.38], [4.45, 1.28]],
+  [[0.0, 2.45], [0.3, 2.4], [0.8, 2.27], [1.5, 2.04], [2.2, 1.79], [2.8, 1.56], [3.2, 1.42], [3.5, 1.33]],
 );
 export const RICTUS_S = MOUTH[MOUTH.length - 1][0];
 // lip rolls (radius along the gape, f = 0 front … 1 corner) and how far they protrude from the skin
 export const LIPS = pick(
-  { ru: (f) => 0.4 - 0.19 * f - 0.08 * f * f, rl: (f) => 0.29 - 0.12 * f - 0.07 * f * f, outU: 0.18, outL: 0.13, groove: 0.62, band: [0.62, 0.22, 0.5, 0.18] },
-  { ru: (f) => 0.29 - 0.13 * f - 0.05 * f * f, rl: (f) => 0.22 - 0.08 * f - 0.05 * f * f, outU: 0.12, outL: 0.09, groove: 0.48, band: [0.46, 0.16, 0.38, 0.12] },
+  { ru: (f) => 0.43 - 0.2 * f - 0.08 * f * f, rl: (f) => 0.3 - 0.12 * f - 0.07 * f * f, outU: 0.2, outL: 0.14, groove: 0.66, grooveR: 0.065, band: [0.66, 0.22, 0.5, 0.18] },
+  { ru: (f) => 0.29 - 0.13 * f - 0.05 * f * f, rl: (f) => 0.22 - 0.08 * f - 0.05 * f * f, outU: 0.12, outL: 0.09, groove: 0.48, grooveR: 0.05, band: [0.46, 0.16, 0.38, 0.12] },
 );
 const LIP_YMAX = MOUTH[0][1] + 1.12; // lips and gape creases live below this height
 // Free margin of the gill cover (operculum + subopercle), top → bottom (head length ≈ 28.5 % SL).
@@ -253,9 +288,9 @@ export const PREOPERCLE = pick(
 
 // Rig pivots (fish space, mm)
 export const PIVOTS = {
-  jaw: pick([4.15, 1.0, 0], [3.95, 0.95, 0]),
+  jaw: pick([5.1, 0.95, 0], [4.15, 0.95, 0]),
   premax: pick([0.9, 2.6, 0], [1.0, 3.05, 0]),
-  hyoid: [5.4, 0.45, 0],
+  hyoid: pick([6.0, 0.45, 0], [5.4, 0.45, 0]),
   opercTop: [9.4, 4.9],
   opercBottom: [9.6, 0.45],
 };
@@ -356,7 +391,8 @@ function buildFeatures() {
   const grooveU = onSurface(MOUTH.slice(1).map(([s, y]) => [s, y + LIPS.groove]), -0.02);
   grooveU.unshift([0.4, MOUTH[0][1] + LIPS.groove + 0.04, 0]);
   const grooveL = onSurface(MOUTH.slice(2, -1).map(([s, y]) => [s, y - 0.66]), -0.02);
-  const gU = capsuleChain(grooveU, grooveU.map((_, i) => 0.05 - 0.02 * (i / grooveU.length)));
+  // premaxillary groove: sets the upper lip off from the snout as a distinct band (front-oblique photo)
+  const gU = capsuleChain(grooveU, grooveU.map((_, i) => LIPS.grooveR - 0.02 * (i / grooveU.length)));
   const gL = capsuleChain(grooveL, grooveL.map(() => 0.05));
 
   const operc = capsuleChain(onSurface(OPERCLE.map(([s, y]) => [s + 0.07, y]), 0.0), OPERCLE.map((_, i, a) => (i === 0 || i === a.length - 1 ? 0.012 : 0.03)));
@@ -423,6 +459,8 @@ export function field(s, y, z) {
 
   // --- subtractions
   if (s < 8.5) for (const e of F.eyes) d = smax(d, -sphereDist(p, e.cut, F.rho), 0.08);
+  // lid fold over the rim of the cornea window (after the window is cut, so it overlaps the eyeball edge)
+  if (Math.abs(s - EYE.center[0]) < EYE.radius + 0.8) d = smin(d, eyeLid(s, y, z).d, 0.16);
   if (s < RICTUS_S + 2 && y < LIP_YMAX) {
     d = smax(d, -capsuleChainDist(p, L ? F.crease : F.creaseR), 0.04);
     d = smax(d, -capsuleChainDist(p, L ? F.gU : F.gUR), 0.06);
@@ -473,6 +511,22 @@ export function project(p0) {
   }
   if (!found) return p0.slice();
   let lo = t0, hi = t1;
+  // around the eye the upper lid overhangs the cornea window: take the outermost exit along the ray (the
+  // lid top) instead of the first one (the socket under the lid), so the mesh shows the surface as it is
+  // seen from outside and the lid edge stays smooth (the step down to the socket is hidden under the lid)
+  {
+    const q = [o[0] + dir[0] * t1, o[1] + dir[1] * t1, Math.abs(o[2] + dir[2] * t1)];
+    const c = EYE.center;
+    if (Math.hypot(q[0] - c[0], q[1] - c[1], q[2] - c[2]) < EYE.radius + EYE.skin + 0.5) {
+      let inside = false, prev = t1;
+      for (let t = t1 + 0.015; t < t1 + 1.6; t += 0.015) {
+        const f = at(t);
+        if (f < 0) inside = true;
+        else if (inside) { inside = false; lo = prev; hi = t; }
+        prev = t;
+      }
+    }
+  }
   for (let i = 0; i < 14; i++) {
     const m = 0.5 * (lo + hi);
     if (at(m) > 0) hi = m; else lo = m;

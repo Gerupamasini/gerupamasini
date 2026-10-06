@@ -1,7 +1,7 @@
 // Body mesh + baked surface textures for the juvenile goby.
 import {
   S_END, SL, VERT_START, VERT_COUNT, EYE, MOUTH, OPERCLE, PREOPERCLE, RICTUS_S, LIPS,
-  section, basePoint, project, fieldGrad, field, throughDist, toObject, dirToObject, gapeY,
+  section, basePoint, project, fieldGrad, field, throughDist, toObject, dirToObject, gapeY, eyeLid,
 } from './anatomy.mjs';
 import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEachCell3 } from '../lib/noise.mjs';
 import { pick } from './variant.mjs';
@@ -558,6 +558,17 @@ function bakeBodyTextures(ctx) {
     let xan = 0.2 + 0.45 * dorsal + 0.35 * head * smoothstep(-0.3, 0.4, hn);
     xan *= 1 - 0.85 * belly;
     xan *= (0.8 + 0.4 * fbm3(s * 0.9, yy * 0.9, z * 0.9, 3, 51)) * XAN_K;
+    // lid fold: dusky above the eye, a golden rim (xanthophores + iridophores) along its lower and rear margin
+    // where it meets the cornea, as in the photos
+    {
+      const lid = eyeLid(s, yy, z);
+      const onLid = smoothstep(0.14, -0.02, lid.d);
+      const edge = onLid * smoothstep(0.55, 0.85, lid.h); // inner margin, next to the cornea
+      const up = smoothstep(-0.2, 0.9, lid.dorsal);
+      m += onLid * (0.16 * up + 0.04) - 0.08 * edge * (1 - up);
+      xan = Math.max(xan, edge * (0.75 - 0.5 * up));
+      iri = Math.max(iri, edge * (0.35 - 0.25 * up));
+    }
     // gill region seen through the operculum (used for the fallback albedo only)
     const gill = smoothstep(7.5, 9.0, s) * smoothstep(11.6, 10.6, s) * smoothstep(0.35, -0.2, hn) * smoothstep(-0.95, -0.55, hn);
     return { hn, head, mel: m, iri: clamp(iri), xan: clamp(xan), gill };
