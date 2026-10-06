@@ -2,7 +2,7 @@ import { BufferAttribute, BufferGeometry, InstancedBufferAttribute, InstancedMes
 import { Rng } from '../core/Rng';
 import type { FeedingPit } from './FeedingPits';
 import type { Terrain } from './Terrain';
-import { FORMS, sharedGeometry } from '../creatures/asari/AsariModel.js';
+import { FORMS, coarseValve } from '../creatures/asari/AsariModel.js';
 import { makeShellOuterMaterial } from '../creatures/asari/AsariMaterial.js';
 
 /**
@@ -50,11 +50,12 @@ function valveFragment(base: BufferGeometry, rng: Rng, cuts: number): BufferGeom
 export function createPitDebris(pits: FeedingPit[], terrain: Terrain, seed: number): InstancedMesh[] {
   const rng = new Rng(seed ^ 0x5bd1);
   const form = FORMS.asari;
-  const valve = sharedGeometry(form).valve[2] as BufferGeometry;
+  // a coarse valve: there are thousands of these across the flat, so each is a few dozen triangles
+  const valve = coarseValve(form) as BufferGeometry;
   // whole valves, halves, chips
   const kinds = [valveFragment(valve, rng, 0), valveFragment(valve, rng, 1), valveFragment(valve, rng, 1), valveFragment(valve, rng, 2), valveFragment(valve, rng, 2)];
   const sizes = [1, 0.95, 0.9, 0.8, 0.75];
-  const per = pits.map(() => 24 + rng.int(0, 20) + 4);
+  const per = pits.map(() => 14 + rng.int(0, 12) + 4);
   const total = per.reduce((s, x) => s + x, 0);
   const cap = Math.ceil(total / kinds.length) + 12;
   const meshes = kinds.map((g) => {

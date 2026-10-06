@@ -167,6 +167,15 @@
 - シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
 - バージョン 0.12.1。
 
+## 19 回目（道具棚、当たり判定、ジャンプ、軽量化、濡れた砂、石の土塁、泥干潟、新しい道具）
+- `ToolShelf.loadTool`: type 別に lod2 GLB を置く（網: Mouth の z から `pos = (0, mouth_h/2, 0.08) − up·mz`、基底 side/open/up、傾き 0.1 rad；掘る道具: `length_m × 0.78` を下へ；双眼鏡: 台）。各道具に `hitMat`（opacity 0、colorWrite false）の `BoxGeometry(PITCH×0.92, top, 0.34)` を置き、`pick` はヒット列の最初の toolId。PITCH 0.3。`ShopScene` カメラ (0.3, 1.2, 2.95)、fov 46。
+- `FPSController`: `jumpBaseY`（絶対高さ）で飛び、`airY = jumpBaseY − groundNow`、`held('jump')` で再ジャンプ。`zoomFov`（道具が視野を狭める）、見回し速度は `zoomFov / 70`。
+- `CreatureSystem`: `LOD1_DIST` 10、`placeholderBeyond_m`（スキーマ）で遠くはプレースホルダー（シロチドリ 10 m）。`PitDebris` は `coarseValve(form)`（`AsariModel.js`、lod2 の 1/3 分割）と 18〜30 片。`World` は skyline を scene に入れない。
+- `Terrain.ts`: 濡れ 0.6 倍・青み 0.55・粗さ 0.3。`rock`（index 5）: 布積みのブロック（`vWorldPos.z/0.55, y/0.32`、半ブロックずらし、目地 `joint`、`gRock` で法線にブロックごとの傾き）。`SubstrateSchema` に rock、`Habitat` は rock を exposed_sand 扱い（`WET_TAU_MS` 15 分）、`mapImages` に色。
+- `bake-map.mjs`: 土塁は `idx.rock`、`mudZone()`（楕円 + fbm の縁）で `mudness += 0.5`。
+- 道具: `tools.json` に dig_mini / dig_rake / dig_shovel / obs_binoculars（`length_m`、`depth_cm`、`swing`、`magnification`、`fov_deg`、`reach_m`）、`shovel` は `digging/dig_trowel`。`ShovelView.setTool`: GLB の `Blade_Center` を原点に、y 軸半回転で先端を −z、`prepareNet` で濡れ。`BinocularView`: 胸の前に持ち、`setRaised` で目に（`.binocular-mask`、2 円の mask-composite）。`App`: `digDef()`（手の掘る道具）、`dig()` は `digDepth_cm`（種）> `depth_cm`（道具）で `hud.tooShallow`、`useTool` は optic では何もしない、フィールド更新で E / 右クリック押下中に `zoomFov = 70 / 倍率`、`pickTarget` の距離は構えている間 `reach_m`。`LOADOUT_MAX` 3、`tool3` = Digit3。ショップは `model` のある道具すべて。
+- バージョン 0.15.0。
+
 ## 18 回目（写真の色、北の土手と左右の土塁、遠景）
 - 色: `Terrain.ts` の `SUBSTRATE_COLORS` を写真の実測（jpeg-js でサンプル: 乾いた砂 (127,131,128)、濡れた平坦部 (128,140,145)、遠くの平坦部 (160,179,195)）に合わせて無彩色系に（sand 0.44/0.44/0.42 など）。濡れ帯は 0.76 倍 + 青み 0.45。`mapImages.ts` の `SUB_COLORS` も灰色系、`BEACH` は砂利を除外、`SHORE`（緑）は h > 3.1 から。
 - 地形: `bake-map.mjs` に `BANK`（landZ −152 / +5.0 m、footZ −144 / +1.55 m）と `bankMask(z)`、`LEVEE`（inner 133、crest 147、+2.9 m、sink z 100→148）と `leveeAt(x,z)`。`height()` は relief / creek / dimple を `(1 − bankMask)` で止め、土塁は `lerp(h, lv.h, lv.m)` で混ぜる。`substrate()` は土手・陸地・（平坦部より 0.25 m 以上高い）土塁を gravel に。`kasai_west.json` の `max_tp_m` 6.0。シェーダーに `land = smoothstep(3.1, 3.9, y)` の草土色。

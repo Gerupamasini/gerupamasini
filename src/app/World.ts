@@ -75,7 +75,7 @@ export class World {
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
-    w.scene.add(w.skyline.group);
+    // the far scenery (landmarks on the horizon) is built but not shown for now: `world.scene.add(world.skyline.group)` brings it back
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
     (w as { sky: SkyDome }).sky = sky;
     return w;

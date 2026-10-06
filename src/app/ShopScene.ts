@@ -25,7 +25,7 @@ export class ShopScene {
 
   constructor(aspect: number, names: (id: string) => string) {
     this.scene.background = new Color(0x0b0a09);
-    this.camera = new PerspectiveCamera(36, aspect, 0.05, 30);
+    this.camera = new PerspectiveCamera(46, aspect, 0.05, 30);
     // the room: a dark floor, the back wall, a counter edge in front
     const floor = new Mesh(new PlaneGeometry(10, 8), new MeshStandardMaterial({ color: 0x2a2018, roughness: 0.9 }));
     floor.rotation.x = -Math.PI / 2;
@@ -79,7 +79,7 @@ export class ShopScene {
     const fill = new DirectionalLight(0x9fb4c8, 0.35);
     fill.position.set(-2, 2, 3);
     this.scene.add(fill);
-    this.camBase.set(0.35, 1.15, 2.45);
+    this.camBase.set(0.3, 1.2, 2.95);
     this.camTarget.set(0.25, 0.92, -1.0);
     this.camera.position.copy(this.camBase);
     this.camera.lookAt(this.camTarget);

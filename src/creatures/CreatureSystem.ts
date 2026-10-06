@@ -53,7 +53,7 @@ export interface CreatureFrame {
   lockedId: string | null;
 }
 
-const LOD1_DIST = 6;
+const LOD1_DIST = 10;
 const LOD2_DIST = 40;
 const BIRD_DIST = 120;
 
@@ -121,6 +121,8 @@ export class CreatureSystem {
     if (dist > far) return null;
     if (!sp.model.lod2 && !sp.model.lod1 && !sp.model.hero) return 'placeholder';
     if (locked) return sp.model.hero ? 'hero' : sp.model.lod1 ? 'lod1' : 'lod2';
+    // a species without light tiers (the plover's one dense GLB) shows its driver's placeholder beyond a distance
+    if (sp.model.placeholderBeyond_m !== undefined && dist > sp.model.placeholderBeyond_m && DRIVERS[sp.model.driver ?? '']?.placeholder) return 'placeholder';
     if (dist <= LOD1_DIST && lod1Rank < this.preset.lod1Count && sp.model.lod1) return 'lod1';
     return sp.model.lod2 ? 'lod2' : sp.model.lod1 ? 'lod1' : 'hero';
   }
@@ -385,14 +387,16 @@ export class CreatureSystem {
   }
 
   /** Nearest individual under the screen centre within `maxDist` metres. */
-  pickTarget(camera: Camera, maxDist = 8): Individual | null {
+  pickTarget(camera: Camera, maxDist = 8, coneDeg = 0): Individual | null {
     camera.getWorldDirection(this.tmp);
     this.ray.set(camera.position, this.tmp);
+    const cone = Math.tan(coneDeg * Math.PI / 180);
     let best: Individual | null = null, bestD = Infinity;
     for (const e of this.entries.values()) {
       if (!e.view) continue;
       const scale = e.ind.length_mm / e.ind.species.model.modelLength_mm;
-      const r = Math.max(0.12, e.view.radius * scale * 1.6);
+      // (through the binoculars a small bird far off still counts when it is within a degree or so of the centre)
+      const r = Math.max(0.12, e.view.radius * scale * 1.6, cone * e.ind.pos.distanceTo(camera.position));
       this.sphere.set(e.driver.anchor(), r);
       const d = e.ind.pos.distanceTo(camera.position);
       if (d > maxDist) continue;

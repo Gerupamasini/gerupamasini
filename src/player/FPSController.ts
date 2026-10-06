@@ -34,11 +34,16 @@ export class FPSController {
   private bob = 0;
   private fov = FOV_NORMAL;
   zooming = false;
+  /** a narrower field forced by the tool in hand (the binoculars), degrees; null for the usual zoom key */
+  zoomFov: number | null = null;
   /** short pitch nudge (radians) that decays: the swing of the net */
   private kick = 0;
   /** in the air: height above the ground and vertical speed; the dash is the horizontal speed carried through the jump */
   private airY = 0;
   private vy = 0;
+  /** absolute height of the feet while in the air (m) */
+  private jumpBaseY = 0;
+  private airTime = 0;
   private dashVX = 0;
   private dashVZ = 0;
   airborne = false;
@@ -92,7 +97,7 @@ export class FPSController {
   update(dt: number, sensitivity: number, invertY: boolean): void {
     const input = this.input;
     if (this.enabled && input.looking) {
-      const look = 0.0022 * sensitivity * (this.zooming ? 0.45 : 1);
+      const look = 0.0022 * sensitivity * (this.zoomFov !== null ? Math.max(0.1, this.zoomFov / FOV_NORMAL) : this.zooming ? 0.45 : 1);
       this.yaw -= input.mouseDX * look;
       this.pitch -= input.mouseDY * look * (invertY ? -1 : 1);
       this.pitch = MathUtils.clamp(this.pitch, -Math.PI / 2 + 0.05, Math.PI / 2 - 0.05);
@@ -102,7 +107,7 @@ export class FPSController {
     this.crouching = this.lowView;
     this.running = this.enabled && !this.crouching && input.held('run');
     this.zooming = this.enabled && (input.mouseRightDown || input.held('zoom'));
-    const targetFov = this.zooming ? FOV_ZOOM : FOV_NORMAL;
+    const targetFov = this.zoomFov ?? (this.zooming ? FOV_ZOOM : FOV_NORMAL);
     if (Math.abs(this.fov - targetFov) > 0.05) {
       this.fov = MathUtils.damp(this.fov, targetFov, 12, dt);
       this.camera.fov = this.fov;
@@ -120,23 +125,27 @@ export class FPSController {
     this.speedNow = 0;
     this.jumped = false;
     // the jump: off the ground (not from deep water), a hop; out of a run, a long jump that keeps the run's pace
-    if (this.enabled && !this.airborne && input.pressed('jump') && this.depthHere < 0.25) {
+    // (Space held keeps jumping: the next hop leaves the ground as soon as the feet touch it)
+    if (this.enabled && !this.airborne && (input.pressed('jump') || input.held('jump')) && this.depthHere < 0.25) {
       this.airborne = true;
       this.jumped = true;
       this.vy = JUMP_V * (this.crouching ? 0.85 : 1);
       this.airY = 0.001;
+      this.jumpBaseY = this.position.y;
+      this.airTime = 0;
       const runFrac = this.running && len > 0 ? 1 : 0;
       const fwd = this.forward;
       this.tmpRight.set(-fwd.z, 0, fwd.x);
       const dx = len > 0 ? (fwd.x * mz + this.tmpRight.x * mx) / len : 0, dz = len > 0 ? (fwd.z * mz + this.tmpRight.z * mx) / len : 0;
-      const carry = Math.max(this.speedNowLast, runFrac * RUN * DASH_MIN_RUN) * (runFrac ? DASH_BOOST : 1);
+      // (capped: a chain of jumps must not keep multiplying the speed carried from the last one)
+      const carry = Math.min(RUN * DASH_BOOST, Math.max(this.speedNowLast, runFrac * RUN * DASH_MIN_RUN) * (runFrac ? DASH_BOOST : 1));
       this.dashVX = dx * carry; this.dashVZ = dz * carry;
       this.kick -= runFrac ? 0.06 : 0.03;
     }
     if (this.airborne) {
       // in the air the feet carry on with the take-off speed; the keys only steer a little
       this.vy -= GRAVITY * dt;
-      this.airY += this.vy * dt;
+      this.jumpBaseY += this.vy * dt;
       const steer = 1.2 * dt;
       if (len > 0) {
         const fwd = this.forward;
@@ -146,7 +155,13 @@ export class FPSController {
       }
       this.tryMove(this.dashVX * dt, this.dashVZ * dt);
       this.speedNow = Math.hypot(this.dashVX, this.dashVZ);
-      if (this.airY <= 0) {
+      // the flight is in absolute height: the eye glides over ripples and hollows instead of jittering with the
+      // ground under the feet; it lands where the ground comes up to meet it
+      const groundNow = this.terrain.heightAt(this.position.x, this.position.z);
+      this.airY = this.jumpBaseY - groundNow;
+      this.airTime += dt;
+      // down on the ground: falling onto it, or rising ground catching the feet (not in the first instant of the hop)
+      if (this.airY <= 0 && (this.vy <= 0 || this.airTime > 0.06)) {
         this.airborne = false;
         this.airY = 0;
         this.vy = 0;

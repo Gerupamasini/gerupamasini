@@ -1,0 +1,46 @@
+{
+  "tools": {
+    "obs_binoculars": {
+      "tiers": {
+        "hero": {
+          "file": "obs_binoculars.hero.glb",
+          "triangles": 12584,
+          "vertices": 7366,
+          "bytes": 993744
+        },
+        "lod1": {
+          "file": "obs_binoculars.lod1.glb",
+          "triangles": 4464,
+          "vertices": 2828,
+          "bytes": 342816
+        },
+        "lod2": {
+          "file": "obs_binoculars.lod2.glb",
+          "triangles": 1940,
+          "vertices": 1343,
+          "bytes": 130960
+        }
+      },
+      "ja": "双眼鏡",
+      "en": "Binoculars 8x42",
+      "use": "野鳥観察",
+      "spec": {
+        "magnification": 8,
+        "objective_mm": 42,
+        "fov_deg": 7.5,
+        "total_cm": 15.6,
+        "width_cm": 12.8,
+        "mass_g": 650
+      },
+      "mass_g": 660,
+      "balancePoint_m": 0.083,
+      "overallLength_m": 0.156,
+      "buttZ_m": -0.004
+    }
+  },
+  "lodDistances_m": {
+    "hero": 0,
+    "lod1": 2.5,
+    "lod2": 9
+  }
+}

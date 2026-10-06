@@ -28,7 +28,7 @@ export function ShopScreen({ app }: { app: App }) {
       <p class="shop-line">{t('shop.greeting')}</p>
       {tool ? (
         <div class={`glass shop-card float ${owned ? 'owned' : ''}`}>
-          <div class="kind">{t('tools.nets')}</div>
+          <div class="kind">{t(tool.type === 'dig' ? 'tools.digs' : tool.type === 'optic' ? 'tools.optics' : 'tools.nets')}</div>
           <div class="name">{tool.ja}</div>
           <div class="specs">{specs(tool)}</div>
           <p class="dim small">{tool.description}</p>

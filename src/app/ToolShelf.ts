@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, CanvasTexture, Color, CylinderGeometry, Group, Matrix4, Mesh, MeshStandardMaterial, Object3D, PlaneGeometry, Raycaster, SpotLight, SRGBColorSpace,
+  BoxGeometry, CanvasTexture, Color, CylinderGeometry, Group, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, PlaneGeometry, Raycaster, SpotLight, SRGBColorSpace,
   Vector2, Vector3, type Camera,
 } from 'three';
 import type { ToolDef } from '../data/schemas';
@@ -18,7 +18,7 @@ export interface ShelfTool {
 /** where the rack stands in the home room: against the back wall, left of the tank, its base at table height */
 export const SHELF_POS = new Vector3(-1.55, 0.05, -1.1);
 /** one column per tool, the longest nets standing nearly two metres tall */
-const PITCH = 0.36, RACK_H = 2.05, RACK_D = 0.26, RAIL_Y = 0.6, BUTT = 0.09;
+const PITCH = 0.3, RACK_H = 2.05, RACK_D = 0.26, RAIL_Y = 0.6, BUTT = 0.09;
 
 /**
  * The tool rack: a tall pegboard with a low bench, the nets standing on it in a row (the hoops up, the bags draped
@@ -35,6 +35,8 @@ export class ToolShelf {
   private readonly metal = new MeshStandardMaterial({ color: 0x9aa3a8, roughness: 0.35, metalness: 0.85 });
   private readonly tagOn = new MeshStandardMaterial({ color: 0x7fe3d2, emissive: new Color(0x3fb8a6), emissiveIntensity: 1.6, roughness: 0.4 });
   private readonly tagOff = new MeshStandardMaterial({ color: 0x3a4347, roughness: 0.8 });
+  /** drawn as nothing, found by the raycaster: the click pane in front of each tool */
+  private readonly hitMat = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
   private readonly back: Mesh;
   private readonly bench: Mesh;
   private readonly rail: Mesh;
@@ -84,7 +86,7 @@ export class ToolShelf {
 
   /** world position of the rack's middle, for the camera */
   get center(): Vector3 {
-    return SHELF_POS.clone().add(new Vector3(0, 0.95, 0.05));
+    return SHELF_POS.clone().add(new Vector3(0, 0.62, 0.05));
   }
 
   /** how far back the camera stands to take in the whole rack (metres) */
@@ -106,7 +108,8 @@ export class ToolShelf {
       root.userData.toolId = st.tool.id;
       const isNet = st.tool.type === 'capture';
       const p = st.tool.params;
-      const top = isNet ? BUTT + (p.handle_m ?? 1) + (p.mouth_h ?? 0.3) / 2 : 0.46;
+      // nets lean on the board mouth-down: the tag sits beside the mouth; a tool with a handle is as tall as it is
+      const top = isNet ? Math.min(RACK_H - 0.08, (p.mouth_h ?? 0.3) + 0.12) : st.tool.type === 'dig' ? Math.min(RACK_H - 0.08, 0.1 + (p.length_m ?? 0.45)) : 0.46;
       // the clip on the rail (nets) or the hook (the shovel), and the tag with its key beside the top
       const clip = new Mesh(new BoxGeometry(0.03, 0.03, 0.05), this.metal);
       clip.position.set(0, isNet ? RAIL_Y : 0.44, isNet ? 0.0 : -0.02);
@@ -123,9 +126,13 @@ export class ToolShelf {
         key.position.set(tag.position.x, top - 0.03, -0.0565);
         root.add(key);
       }
-      // the tool itself
-      if (isNet && st.tool.model) void this.loadNet(root, st.tool, gen);
+      // the tool itself (its light GLB where it has one), and a wide invisible pane so a click lands easily
+      if (st.tool.model) void this.loadTool(root, st.tool, gen);
       else root.add(st.tool.type === 'dig' ? this.shovel() : this.generic());
+      const hit = new Mesh(new BoxGeometry(PITCH * 0.92, Math.max(0.6, Math.min(RACK_H, top + 0.1)), 0.34), this.hitMat);
+      hit.position.set(0, hit.geometry.parameters.height / 2, 0.08);
+      hit.name = 'hit';
+      root.add(hit);
       // the name plate on the bench
       const plate = new Mesh(new PlaneGeometry(0.16, 0.036), new MeshStandardMaterial({ map: label(st.tool.ja, 256, 58, '#f0e6d2', '26px sans-serif', '#3a2a1e'), roughness: 0.8 }));
       plate.position.set(0, 0.02, 0.14);
@@ -138,15 +145,46 @@ export class ToolShelf {
   }
 
   /**
-   * A net standing on the bench: its light model (lod2) set grip-down, the handle up (+z → +y), the opening toward
-   * the room, the bag draped down the handle with the Trail morph.
+   * A tool leaning on the board from its light model (lod2). A net rests on its mouth: the hoop on the bench with
+   * the opening toward the room, the handle up the board (the longest reach past the top of the rack — the mouth is
+   * what matters here), the bag draped with the Trail morph. A digging tool stands on its blade, the handle up.
+   * The binoculars lie on the bench.
    */
-  private async loadNet(root: Group, tool: ToolDef, gen: number): Promise<void> {
+  private async loadTool(root: Group, tool: ToolDef, gen: number): Promise<void> {
     let loaded;
     try { loaded = await instantiateModel(`${tool.model}.lod2.glb`); } catch (e) { console.warn(e); return; }
     if (gen !== this.gen || !root.parent) return;
     const model = loaded.root;
-    model.matrix.copy(new Matrix4().makeBasis(new Vector3(-1, 0, 0), new Vector3(0, 0, 1), new Vector3(0, 1, 0)).setPosition(0, BUTT, 0.06));
+    const p = tool.params;
+    const lean = 0.1;   // radians off vertical, the top against the board
+    if (tool.type === 'capture') {
+      // GLB: grip at the origin, handle +z to the mouth, the Mouth node's +y the opening. Mouth → bench, handle → up
+      // and back, opening → toward the room (+z of the rack)
+      model.updateMatrixWorld(true);
+      const mouth = model.getObjectByName('Mouth');
+      const mz = mouth ? mouth.getWorldPosition(new Vector3()).z : (p.handle_m ?? 1);
+      // grip → mouth (+z) runs down the board to the bench, the grip high up against it
+      const down = new Vector3(0, -Math.cos(lean), Math.sin(lean));
+      const open = new Vector3(0, Math.sin(lean), Math.cos(lean));         // where the opening (+y) goes: the room
+      const side = new Vector3().crossVectors(open, down).normalize();
+      const basis = new Matrix4().makeBasis(side, open, down);
+      // the mouth centre at mouth_h/2 over the bench, the hoop's lower edge touching it
+      const pos = new Vector3(0, (p.mouth_h ?? 0.3) / 2 + 0.01, 0.08).sub(down.clone().multiplyScalar(mz));
+      model.matrix.copy(basis.setPosition(pos));
+    } else if (tool.type === 'dig') {
+      // GLB: grip at the origin, +z grip → tip, +y the digging face. Tip down on the bench, the face toward the room
+      const tip = p.tip_m ?? (p.length_m ?? 0.45) * 0.75;
+      const down = new Vector3(0, -Math.cos(lean), Math.sin(lean));        // where +z (toward the tip) goes
+      const face = new Vector3(0, Math.sin(lean), Math.cos(lean));         // where +y goes
+      const side = new Vector3().crossVectors(face, down).normalize();
+      const basis = new Matrix4().makeBasis(side, face, down);
+      // the tip on the bench, the grip up the board
+      const pos = new Vector3(0, 0.012, 0.08).sub(down.clone().multiplyScalar(tip));
+      model.matrix.copy(basis.setPosition(pos));
+    } else {
+      // on the bench, objectives toward the room, tilted up a little
+      model.matrix.copy(new Matrix4().makeRotationX(-0.35).setPosition(0, 0.03, 0.1));
+    }
     model.matrixAutoUpdate = false;
     model.traverse((o) => {
       const m = o as Mesh;
@@ -163,10 +201,12 @@ export class ToolShelf {
   pick(ndcX: number, ndcY: number, camera: Camera): string | null {
     this.raycaster.setFromCamera(new Vector2(ndcX, ndcY), camera);
     const hits = this.raycaster.intersectObjects([...this.props.values()], true);
-    if (!hits.length) return null;
-    let o: Object3D | null = hits[0].object;
-    while (o && o.userData.toolId === undefined) o = o.parent;
-    return o ? (o.userData.toolId as string) : null;
+    for (const h of hits) {
+      let o: Object3D | null = h.object;
+      while (o && o.userData.toolId === undefined) o = o.parent;
+      if (o) return o.userData.toolId as string;
+    }
+    return null;
   }
 
   /** The shovel standing on its blade, the handle up against the board. */

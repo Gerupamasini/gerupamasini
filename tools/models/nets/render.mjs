@@ -7,13 +7,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
-import { SHOTS } from './shots.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const args = process.argv.slice(2);
 const arg = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const outDir = path.resolve(arg('--out', path.join(root, 'docs', 'models', 'nets')));
 const only = arg('--only', null)?.split(',');
+const { SHOTS } = await import(path.resolve(arg('--shots', path.join(path.dirname(fileURLToPath(import.meta.url)), 'shots.mjs'))));
 const W = Number(arg('--width', 1600)), H = Number(arg('--height', 1000)), DPR = Number(arg('--dpr', 1.5));
 fs.mkdirSync(outDir, { recursive: true });
 
