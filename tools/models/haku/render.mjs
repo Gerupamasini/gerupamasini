@@ -30,6 +30,17 @@ const SHOTS = [
   { name: 'escape_1', advance: 0.12 },
   { name: 'escape_2', advance: 0.5, follow: true },
   { name: 'escape_3', advance: 2.5, follow: true },
+  // the photo-match framing: lateral, a long lens, the silver showing a room's light as in a photograph of a fish in a
+  // clear case (bright overhead, a darker band just above the horizon, a bright floor)
+  {
+    name: 'tank_side',
+    match: {
+      w: W, h: H, tl: Math.round(W * 0.78), tilt: 0, snout: [Math.round(W * 0.89), Math.round(H * 0.5)], exposure: 0.85, pec: 0.08,
+      sun: 0.5, hemi: 0.4, skyGain: 1, bg: [0.3, 0.42, 0.2],
+      envStops: [[-90, 0.68, 0.71, 0.76], [-35, 0.68, 0.71, 0.76], [-12, 0.54, 0.55, 0.58], [0, 0.4, 0.4, 0.4], [12, 0.3, 0.29, 0.28],
+        [24, 0.28, 0.27, 0.26], [36, 1.1, 1.1, 1.1], [48, 1.9, 1.9, 1.95], [90, 1.9, 1.9, 1.95]],
+    },
+  },
 ];
 
 const PORT = 5198;
@@ -54,6 +65,7 @@ try {
   for (const shot of SHOTS) {
     const t = Date.now();
     if (shot.set) await page.evaluate((s) => window.__haku.set(s), shot.set);
+    if (shot.match) await page.evaluate((o) => window.__haku.match(o), shot.match);
     if (shot.startle) await page.evaluate(() => window.__haku.startle());
     if (shot.advance) await page.evaluate((s) => window.__haku.advance(s), shot.advance);
     if (shot.follow) await page.evaluate(() => { const st = window.__haku.state()[0]; if (st) window.__haku.set({ target: st.center }); });

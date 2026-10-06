@@ -7,6 +7,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { HakuDriver } from '../../src/creatures/species/haku/HakuDriver.ts';
 import { liveSchools } from '../../src/creatures/species/haku/School.ts';
+import { HAKU_UNIFORMS } from '../../src/creatures/species/haku/materials.ts';
+import { applyPose } from '../../src/creatures/species/haku/swim.ts';
 import { Rng } from '../../src/core/Rng.ts';
 
 const params = new URLSearchParams(location.search);
@@ -35,10 +37,17 @@ function individual(i, x, z, len = 28) {
 
 let scene = null, fishes = [], mode = 'side', lod = 0, floor = null, sun = null, simT = 0, lastIntent = 0, startleAt = -1;
 
+// the materials' light-field uniforms as the game sets them; the photo match changes them, every other scene restores them
+const uniformDefaults = { water: HAKU_UNIFORMS.uWaterTint.value.clone(), sand: HAKU_UNIFORMS.uSandTint.value.clone(), sky: HAKU_UNIFORMS.uSkyGain.value, caustic: HAKU_UNIFORMS.uCaustic.value };
 function clear() {
   for (const f of fishes) f.driver.dispose();
   fishes = [];
   scene = new THREE.Scene();
+  HAKU_UNIFORMS.uWaterTint.value.copy(uniformDefaults.water);
+  HAKU_UNIFORMS.uSandTint.value.copy(uniformDefaults.sand);
+  HAKU_UNIFORMS.uSkyGain.value = uniformDefaults.sky;
+  HAKU_UNIFORMS.uCaustic.value = uniformDefaults.caustic;
+  HAKU_UNIFORMS.uAir.value = 0;
 }
 
 function studio(view) {
@@ -121,6 +130,97 @@ function shallows(n = 26) {
   controls.update();
 }
 
+/**
+ * Photo match: the fish lateral, its right side to the camera (snout to the right of the frame), tilted head-down by
+ * `tilt` degrees, scaled and placed so its snout lands on pixel `snout` with a total length of `tl` pixels in a
+ * `w`×`h` frame (a long lens, as in a macro photograph). Lit like the reference photograph of a ハク in a clear case:
+ * the silver mirrors the room (`envStops`: radiance by elevation, fitted to the photograph's brightness across the
+ * flank), not the water's light field. `mask: true` renders the white silhouette on black.
+ */
+let matchOpts = null;
+function match(o) {
+  clear();
+  matchOpts = o;
+  const green = new THREE.Color(...(o.bg ?? [0.3, 0.42, 0.2]));
+  scene.background = o.mask ? new THREE.Color(0, 0, 0) : green;
+  // surroundings for the reflections: radiance by elevation (degrees), linear between the stops, the same all round
+  const stops = o.envStops ?? [[-90, 0.68, 0.71, 0.76], [-35, 0.68, 0.71, 0.76], [-12, 0.54, 0.55, 0.58], [0, 0.4, 0.4, 0.4],
+    [12, 0.3, 0.29, 0.28], [24, 0.28, 0.27, 0.26], [36, 1.1, 1.1, 1.1], [48, 1.9, 1.9, 1.95], [90, 1.9, 1.9, 1.95]];
+  const N = 10;
+  const el = new Float32Array(N).fill(1e3), cols = [];
+  for (let i = 0; i < N; i++) { const q = stops[Math.min(i, stops.length - 1)]; if (i < stops.length) el[i] = q[0]; cols.push(new THREE.Vector3(q[1], q[2], q[3])); }
+  const envScene = new THREE.Scene();
+  const env = new THREE.Mesh(new THREE.SphereGeometry(50, 64, 64), new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms: { uEl: { value: el }, uCol: { value: cols }, uN: { value: stops.length } },
+    vertexShader: 'varying vec3 vD; void main() { vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform float uEl[${N}]; uniform vec3 uCol[${N}]; uniform int uN; varying vec3 vD;
+void main() {
+  float e = degrees(asin(clamp(normalize(vD).y, -1.0, 1.0)));
+  vec3 c = uCol[0];
+  for (int i = 1; i < ${N}; i++) { if (i >= uN) break; c = mix(c, uCol[i], clamp((e - uEl[i - 1]) / max(uEl[i] - uEl[i - 1], 1e-3), 0.0, 1.0)); }
+  gl_FragColor = vec4(c, 1.0);
+}`,
+  }));
+  envScene.add(env);
+  scene.environment = pmrem.fromScene(envScene, 0.01).texture;
+  scene.environmentIntensity = o.envI ?? 0.06;
+  const sun = new THREE.DirectionalLight(0xfff6ee, o.sun ?? 0.5);
+  sun.position.set(-0.4, 1, 0.25);
+  const hemi = new THREE.HemisphereLight(new THREE.Color(...(o.hemiSky ?? [0.9, 0.95, 1.0])), new THREE.Color(...(o.hemiGround ?? [0.35, 0.36, 0.25])), o.hemi ?? 0.4);
+  scene.add(sun, sun.target, hemi);
+  HAKU_UNIFORMS.uWaterTint.value.set(...(o.waterTint ?? [0.3, 0.38, 0.22]));
+  HAKU_UNIFORMS.uSandTint.value.set(...(o.sandTint ?? [0.45, 0.42, 0.36]));
+  HAKU_UNIFORMS.uSkyGain.value = o.skyGain ?? 1;
+  HAKU_UNIFORMS.uCaustic.value = 0;
+  HAKU_UNIFORMS.uAir.value = o.air ?? 1;
+  floor = { heightAt: () => -0.5, waterAt: () => 0.5 };
+  const root = new THREE.Group();
+  scene.add(root);
+  const d = new HakuDriver();
+  const ind = individual(0, 0, 0, 30);
+  d.attach(root, ind);
+  fishes.push({ driver: d, ind, root });
+  // place: camera on the fish's right (−X) looking +X, so +Z (the snout) is to the right of the frame
+  const W = o.w, H = o.h, fov = 8;
+  const TL = 0.03;
+  const dist = (TL * H) / (2 * Math.tan(THREE.MathUtils.degToRad(fov / 2)) * o.tl);
+  camera.fov = fov; camera.near = 0.01; camera.far = 10;
+  camera.aspect = W / H; camera.updateProjectionMatrix();
+  camera.position.set(-dist, 0, 0); camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0);
+  controls.target.set(0, 0, 0);
+  const mpp = TL / o.tl;   // metres per pixel at the fish
+  const tilt = THREE.MathUtils.degToRad(o.tilt);
+  const snoutModel = 0.38 * TL;
+  const want = new THREE.Vector3(0, -(o.snout[1] - H / 2) * mpp, (o.snout[0] - W / 2) * mpp);
+  const snoutWorld = new THREE.Vector3(0, -Math.sin(tilt) * snoutModel, Math.cos(tilt) * snoutModel);
+  root.userData.matchPos = want.sub(snoutWorld);
+  root.userData.matchTilt = tilt;
+  // settle the fish (placed, posed), then hold it there in the photo's pose
+  for (let i = 0; i < 4; i++) step(1 / 60);
+  holdMatch();
+  if (o.mask) scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  else if (o.debug === 'normal') scene.overrideMaterial = new THREE.MeshNormalMaterial();
+  else if (o.debug === 'chrome') scene.overrideMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.15 });
+  else scene.overrideMaterial = null;
+  renderer.toneMappingExposure = o.exposure ?? 0.85;
+}
+function holdMatch() {
+  const f = fishes[0];
+  if (!f || !matchOpts) return;
+  f.root.position.copy(f.root.userData.matchPos);
+  f.root.rotation.set(f.root.userData.matchTilt, 0, 0);
+  const fish = f.driver.fish, model = f.driver.model;
+  Object.assign(fish.pose, { phase: 0, amp: 0, curv: 0, headBend: 0, pecL: matchOpts.pec ?? 0.08, pecR: matchOpts.pec ?? 0.08, pecBeat: 0, d1Fold: 0, jaw: matchOpts.jaw ?? 0.15 });
+  applyPose(model.rig, fish.pose, 0);
+  // the photographed fish holds its tail a little raised
+  const lift = matchOpts.tailLift ?? 0.1;
+  model.rig.spine[7].rotation.x += lift * 0.35;
+  model.rig.spine[8].rotation.x += lift;
+  model.lod.autoUpdate = false;
+  model.lod.levels.forEach((l, i) => { l.object.visible = i === (matchOpts.lod ?? 0); });
+}
+
 function setLod(l) {
   lod = l;
   for (const f of fishes) {
@@ -194,6 +294,7 @@ requestAnimationFrame(loop);
 
 // scripted renders: advance the simulation by fixed steps, then render once
 window.__haku = {
+  match(o) { match(o); holdMatch(); renderer.render(scene, camera); return { calls: renderer.info.render.calls }; },
   set({ scene: s, lod: l = 0, cam, target, fov, pose }) {
     if (s && s !== mode) setScene(s);
     setLod(l);

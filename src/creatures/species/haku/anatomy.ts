@@ -1,19 +1,21 @@
 /**
- * ハク (the 20–40 mm juvenile of the flathead grey mullet, Mugil cephalus): body plan, read off the reference set
- * (lateral studio shots of 20–30 mm specimens, dorsal views of schools in turbid shallows, frontal head shots).
+ * ハク (the 20–40 mm juvenile of the flathead grey mullet, Mugil cephalus): body plan, measured on a lateral photograph
+ * of a live specimen in a clear case (and checked against the reference set: lateral studio shots of 20–30 mm
+ * specimens, dorsal views of schools in turbid shallows, frontal head shots).
  *
  * Every length is a fraction of total length (TL, snout tip → caudal fork tips) and `s` runs along the body from the
  * snout (0) to the tips of the caudal lobes (1). The model is built at MODEL_TL and scaled per individual.
  *
  * What makes it a ハク and not "a small fish":
- *  - a slender, almost round trunk (depth ≈ 0.18 TL, width ≈ 0.75 of depth), deepest just behind the head
- *  - a broad, flat-topped head with a short blunt snout and a small terminal mouth set slightly low
- *  - a very large eye (≈ 0.085 TL, a third of the head) with a bright silver iris
- *  - two widely separated dorsal fins: a small spiny first dorsal (4 spines) at mid-body, a soft second dorsal over
- *    the anal fin; pectorals set high on the flank right behind the gill cover; small subabdominal pelvics
- *  - a long caudal peduncle and a forked tail
- *  - countershading: a dark olive-grey, finely peppered back over mirror-silver flanks and a white belly, a dark
- *    axillary spot at the pectoral base, the chevron myomeres showing through the thin flank
+ *  - a slender, almost round trunk (depth ≈ 0.21 TL, width ≈ 0.56 of depth), deepest between the pectorals and the
+ *    first dorsal
+ *  - a broad, flat-topped head with a short blunt snout, its front nearly upright: two thick lips, the lower jutting
+ *  - a very large eye (0.073 TL across, a third of the head) with a silver iris and a thin dark rim
+ *  - two widely separated dorsal fins: four spines fanning from a short base at mid-body, a soft second dorsal (high in
+ *    front) over the anal fin; pectorals set high on the flank right behind the gill cover; small subabdominal pelvics
+ *  - a long caudal peduncle and a shallowly forked tail
+ *  - countershading: a golden-olive back densely peppered with melanophores over mirror-silver flanks and a white
+ *    belly, brown spots at the pectoral base and along the crown's edge, an orange-brown patch before the eye
  */
 
 /** total length the geometry is built at (metres); species data gives `modelLength_mm` = 30 */
@@ -21,9 +23,11 @@ export const MODEL_TL = 0.03;
 /** the rig's origin (J_root, the fish's position) sits on the body axis at this s: the centre of mass */
 export const S_PIVOT = 0.38;
 /** caudal fin base (end of the scaled body) */
-export const S_CAUDAL_BASE = 0.835;
-/** below this s the snout is a rounded cap */
-export const S_CAP = 0.075;
+export const S_CAUDAL_BASE = 0.845;
+/** the lips' rounded front: the blunt, nearly upright snout closes over this length */
+export const S_CAP = 0.005;
+/** the head (dense rings in the loft) */
+export const S_HEAD = 0.26;
 
 /** model z (forward +Z) of a point at s, in TL units */
 export const zOf = (s: number): number => S_PIVOT - s;
@@ -47,30 +51,42 @@ export function curve(table: Table): (s: number) => number {
   };
 }
 
-// full body depth (dorsal to ventral) and full width, from S_CAP back to the caudal base
-const DEPTH = curve([[0.075, 0.118], [0.09, 0.13], [0.14, 0.156], [0.2, 0.17], [0.27, 0.178], [0.35, 0.18], [0.43, 0.175], [0.52, 0.161], [0.6, 0.14], [0.68, 0.116], [0.75, 0.097], [0.8, 0.088], [0.835, 0.09]]);
-const WIDTH = curve([[0.075, 0.096], [0.09, 0.106], [0.14, 0.12], [0.2, 0.127], [0.27, 0.126], [0.35, 0.121], [0.43, 0.11], [0.52, 0.094], [0.6, 0.078], [0.68, 0.062], [0.75, 0.051], [0.8, 0.045], [0.835, 0.041]]);
-/** share of the depth above the axis: the head's top is flat and low, the belly full */
-const TOP_SHARE = curve([[0.0, 0.36], [0.075, 0.43], [0.15, 0.46], [0.3, 0.48], [0.6, 0.49], [0.835, 0.5]]);
-/** body axis height: the snout tip sits a little below the axis (the mouth is terminal, slightly low) */
-const AXIS_Y = curve([[0, -0.014], [0.04, -0.009], [0.09, -0.003], [0.14, 0], [1, 0]]);
-/** superellipse exponents of the upper and lower halves of a section: a flat broad head top, a rounded belly */
-const N_TOP = curve([[0.075, 2.3], [0.15, 2.35], [0.25, 2.2], [0.4, 2.05], [0.835, 2.0]]);
-const N_BOT = curve([[0.075, 2.0], [0.3, 2.1], [0.6, 2.05], [0.835, 2.0]]);
-
-/**
- * The snout: a blunt wedge rather than a dome. Depth and width close toward the tip with different exponents (the
- * snout is narrower than the head in dorsal view and its upper profile slopes down to the mouth).
+/*
+ * The outline, traced from a lateral photograph of a live ハク in a clear case (TL ≈ 825 px): heights of the dorsal
+ * and ventral profile above and below the line from the snout tip to the middle of the caudal base, as fractions of
+ * TL. The head is the deepest part of the fish after the shoulder; the snout is blunt and nearly upright, its front
+ * the two thick lips with the lower one jutting a little past the upper (`lipShift`); the belly is fullest over the
+ * pelvic fins; the long peduncle is under half the greatest depth.
  */
-function capDepth(s: number): number {
+const TOP = curve([
+  [0, 0.021], [0.004, 0.0265], [0.008, 0.0305], [0.013, 0.033], [0.018, 0.035], [0.023, 0.038], [0.028, 0.0435],
+  [0.034, 0.05], [0.04, 0.0555], [0.05, 0.061], [0.06, 0.0665], [0.07, 0.0715], [0.08, 0.0765], [0.09, 0.0815],
+  [0.1, 0.0855], [0.12, 0.091], [0.14, 0.0955], [0.164, 0.0985], [0.189, 0.101], [0.214, 0.103], [0.25, 0.1045],
+  [0.3, 0.106], [0.35, 0.107], [0.41, 0.107], [0.45, 0.103], [0.5, 0.096], [0.55, 0.089], [0.6, 0.082], [0.65, 0.073],
+  [0.7, 0.062], [0.745, 0.05], [0.78, 0.0425], [0.82, 0.041], [0.845, 0.045],
+]);
+const BOT = curve([
+  [0, 0.03], [0.005, 0.0335], [0.01, 0.0365], [0.015, 0.039], [0.02, 0.0415], [0.03, 0.0455], [0.04, 0.0485],
+  [0.048, 0.0505], [0.056, 0.053], [0.067, 0.06], [0.078, 0.066], [0.09, 0.071], [0.114, 0.077], [0.137, 0.082],
+  [0.173, 0.089], [0.209, 0.094], [0.246, 0.096], [0.282, 0.099], [0.319, 0.1], [0.345, 0.103], [0.38, 0.1], [0.43, 0.091],
+  [0.48, 0.088], [0.53, 0.0865], [0.566, 0.085], [0.6, 0.081], [0.65, 0.072], [0.7, 0.059], [0.743, 0.048], [0.78, 0.0415],
+  [0.82, 0.041], [0.845, 0.043],
+]);
+/** full width (dorsal view): a broad head, the snout narrower than the head, a slender peduncle */
+const WIDTH = curve([
+  [0, 0.042], [0.02, 0.062], [0.04, 0.078], [0.06, 0.09], [0.09, 0.104], [0.12, 0.114], [0.16, 0.121], [0.2, 0.125],
+  [0.27, 0.124], [0.35, 0.118], [0.43, 0.108], [0.52, 0.092], [0.6, 0.077], [0.68, 0.061], [0.75, 0.05], [0.8, 0.044],
+  [0.845, 0.04],
+]);
+/** superellipse exponents of the upper and lower halves of a section: a flat broad head top, a rounded belly */
+const N_TOP = curve([[0, 2.0], [0.06, 2.3], [0.15, 2.35], [0.25, 2.2], [0.4, 2.05], [0.845, 2.0]]);
+const N_BOT = curve([[0, 2.0], [0.1, 2.15], [0.3, 2.2], [0.6, 2.05], [0.845, 2.0]]);
+
+/** the lips' front is rounded off over S_CAP (an ellipse in profile and in dorsal view) */
+function nose(s: number): number {
   if (s >= S_CAP) return 1;
   const u = 1 - s / S_CAP;
-  return Math.pow(Math.max(0, 1 - Math.pow(u, 1.75)), 1 / 1.75);
-}
-function capWidth(s: number): number {
-  if (s >= S_CAP) return 1;
-  const u = 1 - s / S_CAP;
-  return Math.pow(Math.max(0, 1 - Math.pow(u, 1.55)), 1 / 1.55) * (0.82 + 0.18 * (s / S_CAP));
+  return Math.sqrt(Math.max(0, 1 - u * u));
 }
 
 export interface Section {
@@ -84,10 +100,9 @@ export interface Section {
 }
 
 export function section(s: number): Section {
-  const sc = Math.min(Math.max(s, S_CAP), S_CAUDAL_BASE);
-  const d = DEPTH(sc) * capDepth(s), w = WIDTH(sc) * capWidth(s);
-  const ts = TOP_SHARE(Math.min(s, S_CAUDAL_BASE));
-  return { hw: w / 2, top: d * ts, bot: d * (1 - ts), yc: AXIS_Y(s), nTop: N_TOP(sc), nBot: N_BOT(sc) };
+  const sc = Math.min(Math.max(s, 0), S_CAUDAL_BASE);
+  const k = nose(s);
+  return { hw: (WIDTH(sc) / 2) * k, top: TOP(sc) * k, bot: BOT(sc) * k, yc: 0, nTop: N_TOP(sc), nBot: N_BOT(sc) };
 }
 
 /**
@@ -106,8 +121,24 @@ export function sectionPoint(sec: Section, phi: number): [number, number] {
 export const dorsalY = (s: number): number => { const c = section(s); return c.yc + c.top; };
 export const ventralY = (s: number): number => { const c = section(s); return c.yc - c.bot; };
 
-/** the eye: centre (s, height), radius and how far it bulges out of the head (TL units) */
-export const EYE = { s: 0.09, y: 0.013, r: 0.031, axial: 0.013, bulge: 0.002 } as const;
+/**
+ * The eye: centre (s, height), the radius of its visible disc (to the dark rim where the skin closes over it), and how
+ * far the shallow dome of its cornea stands proud of the head. A big silver disc, 7.3 % of TL across, its pupil a third
+ * of that.
+ */
+export const EYE = { s: 0.106, y: 0.009, r: 0.0365, bulge: 0.0035, pupil: 0.335 } as const;
+
+/** the mouth: the gape runs from between the lips (h −0.011) back and down to its corner below the front of the eye */
+export const GAPE = { s: 0.032, y0: -0.011, y1: -0.024 } as const;
+export const gapeY = (s: number): number => GAPE.y0 + (GAPE.y1 - GAPE.y0) * Math.min(1, Math.max(0, s / GAPE.s));
+
+/** how far (TL) a point of the lower jaw at (s, height y) is pushed forward: the lower lip juts past the upper */
+export function lipShift(s: number, y: number): number {
+  if (s >= 0.03) return 0;
+  const k = 1 - s / 0.03;
+  const v = (y + 0.019) / 0.0068;
+  return 0.0085 * k * k * Math.exp(-v * v);
+}
 
 /**
  * Axial chain (joint, s). The head is rigid back to J_sp1; the chain bends behind it. Joint spacing narrows toward
@@ -124,23 +155,25 @@ export const BONES = ['J_root', ...SPINE.map(([n]) => n), 'J_pec_L', 'J_pec_R', 
 export type BoneName = (typeof BONES)[number];
 export const boneIndex = (name: BoneName): number => BONES.indexOf(name);
 
-/** pectoral fin base: high on the flank right behind the gill cover */
-export const PEC = { s: 0.232, y: 0.008 } as const;
-/** first dorsal fin (4 spines) and the jaw hinge */
-export const D1 = { s0: 0.425, s1: 0.49 } as const;
-export const JAW = { s: 0.045, y: -0.016 } as const;
+/** pectoral fin base: high on the flank behind the gill cover, at the dark axillary spot */
+export const PEC = { s: 0.262, y: 0.028 } as const;
+/** first dorsal fin (4 spines) and the jaw hinge (at the corner of the mouth) */
+export const D1 = { s0: 0.425, s1: 0.447 } as const;
+export const JAW = { s: GAPE.s, y: GAPE.y1 } as const;
 
 /**
- * Median and paired fins. `base` is the attachment along s; lengths are ray lengths (TL) from the front of the base
- * to the back; `rake` is how far the rays lean back from the perpendicular (radians).
+ * Median and paired fins, measured on the photograph. `base` is the attachment along s; lengths are ray lengths (TL)
+ * from the front of the base to the back; `rake` is how far the rays lean back from the perpendicular (radians), at
+ * the front of the base and at its back: the first dorsal's four spines fan out from a short base, the second dorsal
+ * is high in front and low behind, the anal fin's long front rays slope back over its short hind ones.
  */
 export const FINS = {
-  d1: { s0: D1.s0, s1: D1.s1, len: [0.07, 0.066, 0.052, 0.03], rake: 0.62, rays: 4 },
-  d2: { s0: 0.635, s1: 0.705, len: [0.062, 0.058, 0.046, 0.034, 0.026], rake: 0.72, rays: 9 },
-  anal: { s0: 0.6, s1: 0.7, len: [0.056, 0.052, 0.042, 0.03, 0.022], rake: 0.75, rays: 10 },
-  pelvic: { s: 0.37, len: 0.072, spread: 0.022, rays: 6 },
-  pectoral: { len: 0.112, spread: 0.034, rays: 14 },
-  caudal: { s0: 0.815, halfBase: 0.042, fork: 0.925, tip: 1.0, span: 0.118, rays: 18 },
+  d1: { s0: D1.s0, s1: D1.s1, len: [0.1, 0.097, 0.093, 0.05], rake: [0.86, 1.4], rays: 4 },
+  d2: { s0: 0.645, s1: 0.7, len: [0.066, 0.068, 0.062, 0.055, 0.05, 0.047], rake: [0.8, 1.2], rays: 9 },
+  anal: { s0: 0.58, s1: 0.68, len: [0.096, 0.09, 0.075, 0.055, 0.042, 0.034], rake: [0.88, 1.12], rays: 10 },
+  pelvic: { s: 0.333, len: 0.11, spread: 0.024, rake: 1.05, rays: 6 },
+  pectoral: { len: 0.094, spread: 0.03, rays: 14 },
+  caudal: { s0: 0.832, halfBase: 0.044, fork: 0.962, tip: 1.0, span: 0.104, rays: 18 },
 } as const;
 
 /** fin ids (the fin shader's third attribute component) */

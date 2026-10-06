@@ -1,7 +1,7 @@
 import { BufferGeometry, Float32BufferAttribute, Matrix4, Sphere, Uint16BufferAttribute, Vector3 } from 'three';
 import {
-  BONES, D1, EYE, FINS, FIN_ID, JAW, MODEL_TL, PEC, SPINE, SPINE_S, S_CAP, S_CAUDAL_BASE, boneIndex, dorsalY, section, sectionPoint, ventralY, zOf,
-  type BoneName,
+  BONES, D1, EYE, FINS, FIN_ID, JAW, MODEL_TL, PEC, SPINE, SPINE_S, S_CAP, S_CAUDAL_BASE, S_HEAD, boneIndex, dorsalY, gapeY, lipShift, section,
+  sectionPoint, ventralY, zOf, type BoneName,
 } from './anatomy';
 
 /**
@@ -134,20 +134,22 @@ class Builder {
   }
 }
 
-/** jaw influence for a body vertex: the chin and lower lip below the mouth line follow J_jaw */
+/** jaw influence for a body vertex: the chin and lower lip below the gape follow J_jaw */
 function withJaw(s: number, y: number, w: [number, number][]): [number, number][] {
-  const c = section(s);
-  if (s > JAW.s + 0.012 || y > c.yc - 0.003) return w;
-  const k = Math.min(1, Math.max(0, (JAW.s + 0.012 - s) / 0.03)) * Math.min(1, Math.max(0, (c.yc - 0.003 - y) / 0.01));
+  const lim = JAW.s + 0.01, g = gapeY(s);
+  if (s > lim || y > g - 0.001) return w;
+  const k = Math.min(1, Math.max(0, (lim - s) / 0.025)) * Math.min(1, Math.max(0, (g - 0.001 - y) / 0.008));
   if (k <= 0) return w;
   return [...w.map(([b, v]) => [b, v * (1 - k)] as [number, number]), [boneIndex('J_jaw'), k]];
 }
 
-function buildBody(b: Builder, rings: number, tipRings: number, around: number): void {
-  // ring stations: dense through the rounded snout (s ∝ u² so the cap grows like a dome), even along the trunk
+function buildBody(b: Builder, tipRings: number, headRings: number, trunkRings: number, around: number): void {
+  // ring stations: dense through the rounded lips (s ∝ u², so the front grows like a dome), close over the head where
+  // the profile turns fastest, even along the trunk
   const ss: number[] = [];
   for (let i = 1; i <= tipRings; i++) ss.push(S_CAP * Math.pow(i / tipRings, 2));
-  for (let i = 1; i <= rings; i++) ss.push(S_CAP + (S_CAUDAL_BASE - S_CAP) * (i / rings));
+  for (let i = 1; i <= headRings; i++) ss.push(S_CAP + (S_HEAD - S_CAP) * (i / headRings));
+  for (let i = 1; i <= trunkRings; i++) ss.push(S_HEAD + (S_CAUDAL_BASE - S_HEAD) * (i / trunkRings));
   // snout tip
   const yc0 = section(0).yc;
   b.vertex([0, yc0, zOf(0)], withJaw(0, yc0 - 0.004, chainWeights(0)), [0, 0, 0], [0, 0], 0, [0, 0, 1]);
@@ -171,7 +173,7 @@ function buildBody(b: Builder, rings: number, tipRings: number, around: number):
       const phi = (k / around) * Math.PI * 2;
       const [x, y] = sectionPoint(sec, phi);
       const mirror = k <= around / 2 ? arcs[k] : arcs[around - k];
-      b.vertex([x, y, zOf(s)], withJaw(s, y, chainWeights(s)), [s, Math.cos(phi), Math.sin(phi)], [s, mirror], 0);
+      b.vertex([x, y, zOf(s) + lipShift(s, y)], withJaw(s, y, chainWeights(s)), [s, Math.cos(phi), Math.sin(phi)], [s, mirror], 0);
     }
   }
   // tip fan
@@ -191,27 +193,46 @@ function buildBody(b: Builder, rings: number, tipRings: number, around: number):
   for (let k = 0; k < around; k++) b.idx.push(tail, last + k, last + ((k + 1) % around));
 }
 
-/** An eye: the outer part of a flattened ellipsoid bulging out of the head, aBody.y = cos of the angle from its axis. */
+/** the head's surface and its outward normal at (s, height y) on one side */
+function flank(s: number, y: number, side: 1 | -1): { p: Vector3; n: Vector3 } {
+  const e = 0.002;
+  const P = (ss: number, yy: number) => new Vector3(side * halfWidthAt(ss, yy), yy, zOf(ss));
+  const p = P(s, y);
+  const ds = P(s + e, y).sub(P(s - e, y)), dy = P(s, y + e).sub(P(s, y - e));
+  const n = new Vector3().crossVectors(dy, ds).normalize();
+  if (n.x * side < 0) n.negate();
+  return { p, n };
+}
+
+/**
+ * An eye: the flat cornea over a big lens, a shallow dome raised off the head's own curved surface (so the skin closes
+ * over it exactly at the dark rim, wherever the head curves away) and carried a little past the rim under the skin.
+ * aPat = the point on the eye's disc (1 at the visible rim; x toward the snout, y up), aBody.y = 1 − that radius.
+ */
 function buildEye(b: Builder, side: 1 | -1, nTheta: number, nPsi: number): void {
-  const s = EYE.s, y = EYE.y;
-  const out = new Vector3(side, 0.16, 0.1).normalize();
-  const t1 = new Vector3(0, 0, 1).addScaledVector(out, -out.z).normalize();   // forward along the head
-  const t2 = new Vector3().crossVectors(out, t1).multiplyScalar(side);        // up
-  if (t2.y < 0) t2.negate();
-  const surf = halfWidthAt(s, y);
-  const c = new Vector3(side * (surf + EYE.bulge - EYE.axial), y, zOf(s));
+  const RHO = 1.04;
+  // the dome's height over the skin at disc radius rho: a shallow cap meeting the skin at the rim, then sinking under it
+  const lift = (rho: number) => (rho <= 1 ? EYE.bulge * (1 - rho * rho) : -0.003 * (rho - 1) / (RHO - 1));
+  const at = (ex: number, ey: number): Vector3 => {
+    const rho = Math.hypot(ex, ey);
+    const { p, n } = flank(EYE.s - ex * EYE.r, EYE.y + ey * EYE.r, side);
+    return p.addScaledVector(n, lift(rho));
+  };
   const start = b.count;
-  const thetaMax = Math.PI * 0.64;
   const w = chainWeights(0.05);
+  const e = 0.01;
   for (let i = 0; i <= nTheta; i++) {
-    const th = (i / nTheta) * thetaMax;
+    // rings close together toward the rim
+    const rho = RHO * Math.sin((i / nTheta) * Math.PI * 0.5);
     for (let j = 0; j < nPsi; j++) {
       const ps = (j / nPsi) * Math.PI * 2;
-      const lx = Math.cos(ps) * Math.sin(th), ly = Math.sin(ps) * Math.sin(th), lz = Math.cos(th);
-      const p = c.clone().addScaledVector(t1, lx * EYE.r).addScaledVector(t2, ly * EYE.r).addScaledVector(out, lz * EYE.axial);
-      // ellipsoid normal: gradient of (x/r)² + (z/a)²
-      const n = new Vector3().addScaledVector(t1, lx / EYE.r).addScaledVector(t2, ly / EYE.r).addScaledVector(out, lz / EYE.axial).normalize();
-      b.vertex([p.x, p.y, p.z], w, [s, lz, side], [lx, ly], 1, [n.x, n.y, n.z]);
+      const ex = rho * Math.cos(ps), ey = rho * Math.sin(ps);
+      const p = at(ex, ey);
+      // normal from the surface's own tangents (x toward the snout, y up)
+      const tx = at(ex + e, ey).sub(at(ex - e, ey)), ty = at(ex, ey + e).sub(at(ex, ey - e));
+      const n = new Vector3().crossVectors(tx, ty).normalize();
+      if (n.x * side < 0) n.negate();
+      b.vertex([p.x, p.y, p.z], w, [EYE.s, 1 - rho, side], [ex, ey], 1, [n.x, n.y, n.z]);
       if (i === 0) break;   // one pole vertex
     }
   }
@@ -260,44 +281,47 @@ const lerpLen = (len: readonly number[], a: number): number => {
 function caudalAt(a: number, t: number): P3 {
   const C = FINS.caudal;
   const v = a * 2 - 1, av = Math.abs(v);
-  // forked outline: the fork's notch at the middle, lobes reaching back to the tips, rounded lobe ends
-  const edgeS = C.fork + (C.tip - C.fork) * Math.pow(av, 1.25) - 0.016 * Math.pow(Math.max(0, (av - 0.82) / 0.18), 2);
-  const edgeY = Math.sign(v) * C.span * Math.pow(av, 0.92) * (1 - 0.05 * Math.pow(Math.max(0, (av - 0.85) / 0.15), 2));
-  const baseS = C.s0 + 0.01 * (1 - av * av);
+  // a broad, shallowly forked fan: the notch at the middle, pointed lobes, the trailing edge nearly straight
+  const edgeS = C.fork + (C.tip - C.fork) * Math.pow(av, 1.1) - 0.012 * Math.pow(Math.max(0, (av - 0.86) / 0.14), 2);
+  const edgeY = Math.sign(v) * C.span * av;
+  // the base follows the curved end of the scaled body
+  const baseS = C.s0 + 0.012 * (1 - av * av);
   const baseY = v * C.halfBase;
-  // rays bow a little: the membrane is cupped toward the trailing edge
   const s = baseS + (edgeS - baseS) * t;
-  const y = baseY + (edgeY - baseY) * Math.pow(t, 0.9);
-  return [0.0015 * Math.sin(Math.PI * t) * v, y, 0.38 - s];
+  const y = baseY + (edgeY - baseY) * Math.pow(t, 0.85);
+  return [0.0012 * Math.sin(Math.PI * t) * v, y, 0.38 - s];
 }
 
-function medianAt(f: { s0: number; s1: number; len: readonly number[]; rake: number }, dorsal: boolean, a: number, t: number): P3 {
+function medianAt(f: { s0: number; s1: number; len: readonly number[]; rake: readonly number[] }, dorsal: boolean, a: number, t: number): P3 {
   const s = f.s0 + (f.s1 - f.s0) * a;
   const y0 = dorsal ? dorsalY(s) - 0.002 : ventralY(s) + 0.002;
   const L = lerpLen(f.len, a);
-  // the rays rake back more toward the end of the base, and bend slightly at their tips
-  const rake = f.rake + 0.25 * a + 0.15 * t;
+  // the rays rake back more toward the end of the base (a fan), and curve back slightly at their tips
+  const rake = f.rake[0] + (f.rake[1] - f.rake[0]) * a + 0.08 * t;
   const dy = Math.cos(rake) * L * t * (dorsal ? 1 : -1), ds = Math.sin(rake) * L * t;
   return [0, y0 + dy, 0.38 - (s + ds)];
 }
 
 function pelvicAt(side: 1 | -1, a: number, t: number): P3 {
   const P = FINS.pelvic;
-  const s0 = P.s - 0.012 + 0.016 * a;
-  const x0 = side * (0.008 + 0.006 * a), y0 = ventralY(s0) + 0.004;
-  const L = P.len * (1 - 0.35 * a);
-  const dir = new Vector3(side * (0.22 + 0.25 * a), -0.42 + 0.12 * a, -1).normalize();
+  // close together under the belly, swept back and down
+  const s0 = P.s - 0.01 + 0.014 * a;
+  const x0 = side * (0.006 + 0.008 * a), y0 = ventralY(s0) + 0.003;
+  const L = P.len * (1 - 0.4 * a);
+  const rake = P.rake + 0.32 * a;
+  const dir = new Vector3(side * (0.1 + 0.08 * a), -Math.cos(rake), -Math.sin(rake)).normalize();
   return [x0 + dir.x * L * t, y0 + dir.y * L * t, 0.38 - s0 + dir.z * L * t];
 }
 
 function pectoralAt(side: 1 | -1, a: number, t: number): P3 {
   const P = FINS.pectoral;
-  // base runs obliquely down the flank right behind the gill cover; a = 0 the upper (longest) ray
-  const s0 = PEC.s + 0.006 * a, y0 = PEC.y + 0.011 - 0.024 * a;
+  // the base runs obliquely down and back from the axillary spot; a = 0 the upper (longest) ray
+  const s0 = PEC.s + 0.022 * a, y0 = PEC.y + 0.008 - 0.034 * a;
   const x0 = side * halfWidthAt(s0, y0) * 0.97;
-  const L = P.len * (1 - 0.5 * a * a);
-  // at rest the fin lies back along the flank, standing a little off it
-  const dir = new Vector3(side * (0.2 + 0.08 * a), 0.1 - 0.22 * a, -1).normalize();
+  const L = P.len * (1 - 0.62 * a);
+  // at rest the fin lies back along the upper flank, standing just off it, its rays fanning from level (the upper)
+  // to raised (the lower, short ones)
+  const dir = new Vector3(side * (0.1 + 0.04 * a), 0.04 + 0.32 * a, -1).normalize();
   const bend = 0.12 * t * t;   // the fin follows the body's curve toward its tip
   return [x0 + side * (dir.x * L * t - bend * 0.08 * L), y0 + dir.y * L * t, 0.38 - s0 + dir.z * L * t];
 }
@@ -334,9 +358,9 @@ export function hakuGeometry(lod: Lod): HakuGeometry {
   const hit = cache.get(lod);
   if (hit) return hit;
   const body = new Builder();
-  if (lod === 0) { buildBody(body, 64, 10, 40); buildEye(body, 1, 14, 24); buildEye(body, -1, 14, 24); }
-  else if (lod === 1) { buildBody(body, 22, 4, 16); buildEye(body, 1, 4, 10); buildEye(body, -1, 4, 10); }
-  else { buildBody(body, 9, 2, 8); buildTailSliver(body); }
+  if (lod === 0) { buildBody(body, 8, 36, 42, 44); buildEye(body, 1, 14, 28); buildEye(body, -1, 14, 28); }
+  else if (lod === 1) { buildBody(body, 3, 9, 14, 16); buildEye(body, 1, 4, 12); buildEye(body, -1, 4, 12); }
+  else { buildBody(body, 2, 3, 6, 8); buildTailSliver(body); }
   // body normals: computed over the closed loft, then the eyes' analytic normals are restored
   const g = body.build('body', false);
   const eyeNormals = body.nrm.slice();
