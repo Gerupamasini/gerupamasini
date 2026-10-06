@@ -132,7 +132,9 @@ export class AsariDriver {
     m.root.quaternion.copy(qTmp);
     // lying on a valve, the foot probes obliquely down into the sand rather than along it
     m.foot.rotation.set(0, this.lieSide * (1 - tilt) * 0.8, ANATOMY.footDir);
-    const centreY = 0.16 + (-0.69 - 0.16) * smooth(0.12, 1, b.burial);
+    // lying on a valve: half-width 0.26 L, sunk ~0.06 L into the sand; buried upright the shell top (~0.46 L above
+    // its centre at this tilt) sits ~0.23 L under the surface
+    const centreY = 0.2 + (-0.69 - 0.2) * smooth(0.12, 1, b.burial);
     // pulled toward the foot during each stroke (a small lasting drift too)
     v1.set(Math.cos(ANATOMY.footDir), Math.sin(ANATOMY.footDir), 0).applyQuaternion(qTmp);
     v1.y = 0;
@@ -158,7 +160,7 @@ export class AsariDriver {
     m.pose(b.gapeOut, b.foot, sIn, sOut, b.breath * b.gapeOut);
     // fully under the sand: skip the shell draws altogether
     const buriedDeep = b.burial > 0.97;
-    m.left.pivot.visible = m.right.pivot.visible = !buriedDeep;
+    m.left.pivot.visible = m.right.pivot.visible = m.left.mantlePivot.visible = m.right.mantlePivot.visible = !buriedDeep;
     m.softBody.visible = !buriedDeep && lod < 2;
     m.setSand(ground, 0.06, submerged ? 1 : 0.8, true);
 
@@ -169,8 +171,9 @@ export class AsariDriver {
     du.uDecal.value.set(b.disturb * 0.75, holes, 0, (1 - smooth(0.4, 0.9, b.burial)) * 0.6);
     if (holes > 0) {
       // the holes sit under the deformed siphon tips (same bend as the vertex shader: offset = sway · L at t = 1)
-      const tip = (out, s, grp) => out.set(s.len, s.swayY * s.len, s.swayZ * s.len).applyMatrix4(grp.matrixWorld);
-      tip(v2, sIn, m.siphonIn.grp); tip(v3, sOut, m.siphonOut.grp);
+      // (plus the Y fork baked into the geometry: the inhalant tip parts ventrally, the exhalant dorsally)
+      const tip = (out, s, grp, fork) => out.set(s.len, s.swayY * s.len + fork, s.swayZ * s.len).applyMatrix4(grp.matrixWorld);
+      tip(v2, sIn, m.siphonIn.grp, ANATOMY.siphonFork); tip(v3, sOut, m.siphonOut.grp, -ANATOMY.siphonFork);
       root.worldToLocal(v2); root.worldToLocal(v3);
       const half = this.scale * 0.8;
       const mx = (v2.x + v3.x) / (2 * half), mz = (v2.z + v3.z) / (2 * half);
@@ -222,7 +225,7 @@ export function createAsariBed(items, lod = 2) {
   items.forEach((it, i) => {
     const r = mulberry(i * 7919 + 17);
     // valves lie convex side up, half-sunk
-    o.position.set(it.x, it.y + it.length_m * 0.05, it.z);
+    o.position.set(it.x, it.y - it.length_m * 0.01, it.z);   // the margin rests on (just in) the sand
     o.rotation.set(-Math.PI / 2 + (r() - 0.5) * 0.3, it.yaw ?? r() * Math.PI * 2, (r() - 0.5) * 0.3, 'YXZ');
     o.scale.setScalar(it.length_m);
     o.updateMatrix();
