@@ -846,20 +846,22 @@ export class Motor {
         this.onEvent('forage');
       }
     } else if (s.stage === 'lunge') {
-      // a quick push forward; the head pivots down over the prey and the lower jaw swings open as it arrives
+      // a quick push forward; the fore body pivots down on the arms over the prey (the head bows only a little: there
+      // is no neck) and the lower jaw swings open as it arrives
       const u = clamp(s.t / 0.14, 0, 1);
       const e = ease(u);
       this.pos.x = s.p0.x + f.x * s.len * e;
       this.pos.z = s.p0.z + f.z * s.len * e;
-      this.headPitchT = -0.45 * e;
-      this.pitchT = -0.06 * e;
+      this.headPitchT = -0.12 * e;
+      this.pitchT = 0.04 - 0.4 * e;
       this.liftT = this.propHeight() * (1 - 0.4 * e);
       this.jaw.to(u > 0.55 ? 0.95 : 0.1, 60, dt);
       for (const fn of this.fins) fn.planted = true;
       if (u >= 1) { s.stage = 'bite'; s.t = 0; }
     } else if (s.stage === 'bite') {
       const u = clamp(s.t / 0.12, 0, 1);
-      this.headPitchT = -0.5;
+      this.headPitchT = -0.14;
+      this.pitchT = -0.38;
       this.jaw.to(u < 0.3 ? 0.95 : 0, 70, dt);
       if (u >= 1) {
         if (w.fx && this.medium !== 'water') {
@@ -874,7 +876,8 @@ export class Motor {
       // chewing and pumping the mouth water ("hydrodynamic tongue")
       const u = clamp(s.t / s.chew, 0, 1);
       this.attend.prey = null;
-      this.headPitchT = -0.3 * (1 - u) + 0.12 * u;
+      this.headPitchT = -0.08 * (1 - u) + 0.03 * u;
+      this.pitchT = -0.28 * (1 - u) + 0.04 * u;
       this.liftT = this.propHeight() * (0.6 + 0.4 * u);
       this.jaw.to(0.07 * Math.max(0, Math.sin(s.t * 26)) * (1 - u), 40, dt);
       this.breatheBoost = 0.6 * (1 - u);
@@ -1227,7 +1230,7 @@ export class Motor {
     // girdle and fore trunk are one straight, raised piece back to the first dorsal fin (a fish has no neck: the
     // nape never bends), and behind it the trunk curves down ever more steeply to the tail, which rests on the mud.
     // ARCH: elevation of the backward direction of each segment from the girdle back (radians), relative to the fore
-    // body's own line (-pitch)
+    // body's own line (-pitch; pitched nose down to feed, the trunk stays on the mud instead of rising behind)
     const arch = smooth(0.035 * L, 0.07 * L, this.lift.x);
     const ARCH = Motor.ARCH;
     for (let k = 0; k < n; k++) {
@@ -1239,7 +1242,7 @@ export class Motor {
       const need = Math.asin(clamp((floor - yPrev) / len, -1, 1));
       if (yC < floor) b = need;
       else b = Math.max(b - sagMax, need);
-      if (arch > 0 && k < ARCH.length) b = Math.max(need, b + (ARCH[k] - pitch - b) * arch);
+      if (arch > 0 && k < ARCH.length) b = Math.max(need, b + (ARCH[k] - Math.max(pitch, 0) - b) * arch);
       b = clamp(b, prevBeta - bendMax, prevBeta + bendMax);
       out[k] = b - prevBeta;
       yPrev += len * Math.sin(b);
