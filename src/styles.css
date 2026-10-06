@@ -42,7 +42,7 @@ body { font-size: 14px; line-height: 1.55; font-feature-settings: "palt" 1; }
 #ui > * { pointer-events: auto; }
 /* full-screen layers that must let the mouse through to the canvas (they only draw): the id rule above would
    otherwise make them catch every click, wheel and drag — the observation, the case and the shop went dead that way */
-#ui > .markers, #ui > .sunglasses-tint, #ui > .shop-screen, #ui > .observe-bottom, #ui > .capture-reveal, #ui > .hud-cb, #ui > .hud-keys, #ui > .home-title { pointer-events: none; }
+#ui > .markers, #ui > .sunglasses-tint, #ui > .binocular-mask, #ui > .shop-screen, #ui > .observe-bottom, #ui > .capture-reveal, #ui > .hud-cb, #ui > .hud-keys, #ui > .home-title { pointer-events: none; }
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
@@ -69,3 +69,13 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* the binoculars at the eyes: two circles of view, the rest black */
+.binocular-mask {
+  position: fixed; inset: 0; pointer-events: none; background: #000; opacity: 0; transition: opacity 0.12s ease-out;
+  -webkit-mask-image: radial-gradient(circle at 41% 50%, transparent 0 28vmin, #000 29.5vmin), radial-gradient(circle at 59% 50%, transparent 0 28vmin, #000 29.5vmin);
+  -webkit-mask-composite: source-in;
+  mask-image: radial-gradient(circle at 41% 50%, transparent 0 28vmin, #000 29.5vmin), radial-gradient(circle at 59% 50%, transparent 0 28vmin, #000 29.5vmin);
+  mask-composite: intersect;
+}
+.binocular-mask.on { opacity: 0.97; }

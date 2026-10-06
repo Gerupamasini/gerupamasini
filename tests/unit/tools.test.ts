@@ -11,7 +11,7 @@ describe('観察者レベルと CR', () => {
     expect(levelFor(400)).toBe(3);
     expect(nextLevelAt(2)).toBe(400);
     expect(CR_PER_LEVEL).toBeGreaterThan(0);
-    expect(LOADOUT_MAX).toBe(2);
+    expect(LOADOUT_MAX).toBe(3);
   });
   it('every net shares one proficiency, other tools have their own', () => {
     expect(skillKeyOf({ id: 'hand_net_long', type: 'capture' })).toBe('hand_net');

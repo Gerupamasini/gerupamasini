@@ -15,10 +15,11 @@ import { defaultTankLayout, type TankItemType, type TankSubstrate } from './Tank
 import { FPSController } from '../player/FPSController';
 import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
 import { ShovelView } from '../player/ShovelView';
+import { BinocularView } from '../player/BinocularView';
 import { ClamField } from '../world/ClamField';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
-import { instantiateModel } from '../creatures/models/ModelLoader';
+import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { DRIVERS } from '../creatures/drivers';
 import type { SpeciesDef, ToolDef } from '../data/schemas';
@@ -67,6 +68,7 @@ export class App {
   /** the タモ in the player's hands */
   net: NetView | null = null;
   shovel: ShovelView | null = null;
+  binoculars: BinocularView | null = null;
   /** the buried clams of the flat */
   clams: ClamField | null = null;
   /** the tool of the capture in progress (its proficiency grows with what it brings up) */
@@ -301,13 +303,18 @@ export class App {
       this.world.water.setPolarized(this.settings.sunglasses);
       this.net = new NetView(this.world.scene);
       void this.net.setTool(this.netDef() ?? null);
-      for (const id of this.encyclopedia.loadout.value) preloadNet(this.data.tools.get(id));
+      for (const id of this.encyclopedia.loadout.value) { const td = this.data.tools.get(id); preloadNet(td); if (td?.model && td.type !== 'capture') void preloadModel(`${td.model}.hero.glb`).catch((e) => console.warn(e)); }
       this.shovel = new ShovelView(this.world.scene);
+      this.binoculars = new BinocularView(this.world.scene);
       this.fieldCase = new FieldCase();
       this.world.scene.add(this.fieldCase.group);
       this.world.scene.add(this.fieldCase.animals);
       this.net.setHeld(this.toolType() === 'capture');
       this.shovel.setHeld(this.toolType() === 'dig');
+      this.binoculars.setHeld(this.toolType() === 'optic');
+      const first = this.toolDef();
+      if (first?.type === 'dig') void this.shovel.setTool(first);
+      if (first?.type === 'optic') void this.binoculars.setTool(first);
       this.clams = new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
       this.world.scene.add(this.clams.group);
       this.capture.onSwung = (caught) => this.onToolSwung(caught);
@@ -588,13 +595,18 @@ export class App {
     const type = this.toolType(id);
     this.net?.setHeld(type === 'capture');
     this.shovel?.setHeld(type === 'dig');
+    this.binoculars?.setHeld(type === 'optic');
     if (type === 'capture') void this.net?.setTool(this.data.tools.get(id) ?? null);
+    if (type === 'dig') void this.shovel?.setTool(this.data.tools.get(id) ?? null);
+    if (type === 'optic') void this.binoculars?.setTool(this.data.tools.get(id) ?? null);
   }
 
   /** [E] on the flat: use the tool in hand where the player is looking. */
   useTool(): void {
-    if (this.toolType() === 'capture') this.swingNet();
-    else this.dig();
+    const type = this.toolType();
+    if (type === 'capture') this.swingNet();
+    else if (type === 'dig') this.dig();
+    // the binoculars are raised while the key is held (see the field update), not on a press
   }
 
   /**
@@ -648,8 +660,16 @@ export class App {
   }
 
   /** The spot the shovel would dig: the ground under the reticle, and whether the arm gets there. */
+  /** the digging tool in hand, else the first carried, else the stock スコップ */
+  digDef(): ToolDef | undefined {
+    const cur = this.toolDef();
+    if (cur?.type === 'dig') return cur;
+    const id = this.encyclopedia.loadout.value.find((x) => this.toolType(x) === 'dig');
+    return id ? this.toolDef(id) : this.data.tools.get('shovel');
+  }
+
   digTarget(): { p: Vector3; far: boolean } | null {
-    const reach = this.reachAlongSight(this.data.tools.get('shovel')?.params.reach_m ?? 1.2);
+    const reach = this.reachAlongSight(this.digDef()?.params.reach_m ?? 1.2);
     const p = this.groundUnderReticle(reach + 1.5);
     if (!p) return null;
     return { p: p.clone(), far: p.distanceTo(this.camera.position) > reach };
@@ -703,7 +723,7 @@ export class App {
    * scoop; the flat keeps the hole for a while.
    */
   dig(): void {
-    const tool = this.data.tools.get('shovel');
+    const tool = this.digDef();
     const world = this.world, player = this.player, clams = this.clams;
     if (!tool || !world || !player || !clams || this.capture.active) return;
     const tg = this.digTarget();
@@ -729,7 +749,9 @@ export class App {
       buried.sort((a, b) => Math.hypot(a.pos.x - p.x, a.pos.z - p.z) - Math.hypot(b.pos.x - p.x, b.pos.z - p.z));
       const one = buried[0];
       if (one) {
-        if (full()) toast(t('capture.caseFull'), 'warn');
+        // a deep burrower needs a tool that digs deep enough (the rake only scrapes the top few centimetres)
+        if ((one.species.digDepth_cm ?? 8) > (tool.params.depth_cm ?? 20)) toast(t('hud.tooShallow'), 'warn');
+        else if (full()) toast(t('capture.caseFull'), 'warn');
         else { this.creatures.remove(one.id); caught.push(one); }
       }
     }
@@ -970,7 +992,7 @@ export class App {
 
   /** the shop's shelves: every net, priced, the owned ones lit */
   private stockShop(): void {
-    this.shop?.setStock([...this.data.tools.values()].filter((x) => x.type === 'capture'), (id) => this.encyclopedia.owns(id));
+    this.shop?.setStock([...this.data.tools.values()].filter((x) => !!x.model), (id) => this.encyclopedia.owns(id));
   }
 
   /** A click in the shop: the net or parcel under the pointer opens its card. */
@@ -1159,6 +1181,7 @@ export class App {
         else if (this.input.pressed('observe') && this.targetClam >= 0) this.observeClam(this.targetClam);
         else if (this.input.pressed('tool1') && this.encyclopedia.loadout.value[0]) this.setTool(this.encyclopedia.loadout.value[0]);
         else if (this.input.pressed('tool2') && this.encyclopedia.loadout.value[1]) this.setTool(this.encyclopedia.loadout.value[1]);
+        else if (this.input.pressed('tool3') && this.encyclopedia.loadout.value[2]) this.setTool(this.encyclopedia.loadout.value[2]);
         else if (this.input.pressed('interact')) this.useTool();
         else if (this.input.pressed('caseView')) this.openCase();
         else if (this.input.pressed('sunglasses')) this.toggleSunglasses();
@@ -1235,6 +1258,14 @@ export class App {
       const capTool = this.capture.state.value ? this.toolType(this.capture.state.value.toolId) : undefined;
       this.net?.update(this.camera, dt, mode === 'capture' && capTool === 'capture' ? this.capture.state.value : null, world.tideLevel, ui.debug.value && this.toolType() === 'capture' && (mode === 'field' || mode === 'capture'), this.netZoneScale(), this.netReach());
       this.shovel?.update(this.camera, dt, mode === 'capture' && capTool === 'dig' ? this.capture.state.value : null);
+      // the binoculars: up while E or the right button is held, the view narrowed to their field
+      if (this.binoculars && this.player) {
+        const optic = this.toolType() === 'optic' ? this.toolDef() : undefined;
+        const raise = !!optic && mode === 'field' && this.player.enabled && (this.input.held('interact') || this.input.mouseRightDown);
+        this.binoculars.setRaised(raise);
+        this.player.zoomFov = raise ? 70 / (optic?.params.magnification ?? 8) : null;
+        this.binoculars.update(this.camera, dt);
+      }
       this.clams?.update(player.position, this.worldVisible() ? dt : 0, gameMs / 1000, (x, z) => world.habitat.waterAt(x, z));
       creatures.update({
         dt: this.worldVisible() ? dt : 0, gameMs, playerPos: player.position, camera: this.camera, simScale: this.simScale,
@@ -1247,7 +1278,7 @@ export class App {
         this.hero.render(world.scene, this.camera, dt, world.water);
       } else if (this.field) this.field.render(world.scene, this.camera, world.water);
       else this.renderer.gl.render(world.scene, this.camera);
-      if ((this.net?.group.visible || this.shovel?.group.visible) && (mode === 'capture' || mode === 'field')) this.renderNetOverlay(world.scene);
+      if ((this.net?.group.visible || this.shovel?.group.visible || this.binoculars?.group.visible) && (mode === 'capture' || mode === 'field')) this.renderNetOverlay(world.scene);
       if (ui.debug.value && ui.debugState.value.markers) {
         this.markerAcc += dt;
         if (this.markerAcc >= 1 / MARKER_HZ) { this.markerAcc = 0; this.updateMarkers(); }
@@ -1358,7 +1389,7 @@ export class App {
     }
     let prompt: string | null = null;
     if (this.mode === 'field' && this.creatures && player) {
-      this.target = this.creatures.pickTarget(this.camera, 7);
+      this.target = this.binoculars?.raised ? this.creatures.pickTarget(this.camera, this.toolDef()?.params.reach_m ?? 80, 1.2) : this.creatures.pickTarget(this.camera, 7);
       // the net: something catchable where the hoop would go through the water
       const netInHand = this.toolType() === 'capture';
       const inReach = netInHand && this.netZoneHits().length > 0;
@@ -1375,16 +1406,25 @@ export class App {
         const g = this.groundUnderReticle(3.5);
         if (g) this.targetClam = this.clams.nearest(g.x, g.z, 0.16);
       }
-      if (this.target) {
+      const optic = this.toolType() === 'optic';
+      if (optic && !this.binoculars?.raised) {
+        prompt = `[E] ${t('hud.raise')}`;
+      } else if (optic && this.target) {
+        prompt = `${this.target.species.names.ja}   [F] ${t('hud.observe')}`;
+      } else if (optic) {
+        prompt = '';
+      } else if (this.target) {
         const sp = this.target.species;
-        const shovelKey = this.encyclopedia.loadout.value.indexOf('shovel');
-        const digHint = this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.data.tools.get('shovel')?.ja ?? ''}` : t('tools.noShovel');
+        const digId = this.encyclopedia.loadout.value.find((x) => this.toolType(x) === 'dig');
+        const shovelKey = digId ? this.encyclopedia.loadout.value.indexOf(digId) : -1;
+        const digHint = this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.toolDef(digId!)?.ja ?? ''}` : t('tools.noShovel');
         prompt = sp.locomotion === 'burrow'
           ? `${sp.names.ja}   [F] ${t('hud.observe')}   ${digHint}`
           : `${sp.names.ja}   [F] ${t('hud.observe')}${sp.collectable ? (toolHint ? `   ${toolHint}` : '') : `   ${t('hud.observeOnly')}`}`;
       } else if (this.targetClam >= 0) {
-        const shovelKey = this.encyclopedia.loadout.value.indexOf('shovel');
-        prompt = `${t('clam.siphon')}   [F] ${t('hud.observe')}   ${this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.data.tools.get('shovel')?.ja ?? ''}` : t('tools.noShovel')}`;
+        const digId = this.encyclopedia.loadout.value.find((x) => this.toolType(x) === 'dig');
+        const shovelKey = digId ? this.encyclopedia.loadout.value.indexOf(digId) : -1;
+        prompt = `${t('clam.siphon')}   [F] ${t('hud.observe')}   ${this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.toolDef(digId!)?.ja ?? ''}` : t('tools.noShovel')}`;
       } else if (toolHint) prompt = toolHint;
     }
     const fps = this.fpsCount / Math.max(1e-3, this.fpsAcc);

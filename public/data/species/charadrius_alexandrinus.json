@@ -11,6 +11,7 @@
     "lod1": "plover/kentish_plover.hero.glb",
     "lod2": "plover/kentish_plover.hero.glb",
     "modelLength_mm": 165,
+    "placeholderBeyond_m": 10,
     "driver": "plover",
     "clips": { "idle": "Idle", "move": "Move", "special": [] }
   },

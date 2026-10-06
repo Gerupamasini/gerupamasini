@@ -1,6 +1,9 @@
 import { BoxGeometry, CylinderGeometry, Group, IcosahedronGeometry, MathUtils, Matrix4, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera, Quaternion, Scene, Vector3 } from 'three';
 import { CAPTURE_PHASE_SEC, REVEAL_SEC, type CaptureState } from '../systems/Capture';
 import { NET_LAYER } from './NetView';
+import { instantiateModel } from '../creatures/models/ModelLoader';
+import { prepareNet, type NetHandle } from '../assets/models/nets/netMaterials';
+import type { ToolDef } from '../data/schemas';
 
 /** A pose is where the blade's centre is and where the hands hold the handle, both in camera space. */
 interface Pose { p: Vector3; hands: Vector3 }
@@ -34,6 +37,14 @@ export class ShovelView {
   private shown = 0;
   private time = 0;
   private catchObj: Object3D | null = null;
+  /** the procedural parts (shown when the tool in hand has no GLB) */
+  private readonly stock: Object3D[] = [];
+  /** the digging tool's GLB, mounted with its blade centre at the group's origin */
+  private model: Object3D | null = null;
+  private net: NetHandle | null = null;
+  private loadSeq = 0;
+  /** how far out the ready pose holds the blade: a long shovel is held further from the eye */
+  private reachScale = 1;
   private readonly tmpM = new Matrix4();
   private readonly tmpQ = new Quaternion();
   private readonly ax = new Vector3();
@@ -70,6 +81,7 @@ export class ShovelView {
     this.group.add(this.scoop);
     this.catchHolder.position.set(0, 0.026, -0.015);
     this.group.add(this.catchHolder);
+    this.stock.push(blade, lip, neck, handle);
     this.group.traverse((o) => o.layers.set(NET_LAYER));
     scene.add(this.group);
   }
@@ -83,6 +95,36 @@ export class ShovelView {
 
   setHeld(held: boolean): void {
     this.held = held;
+  }
+
+  /** The digging tool in hand: its GLB (grip at the origin, +z grip → tip, +y the digging face) mounted so the
+   * Blade_Center node sits at the group's origin with the tip toward local −z; the stock parts otherwise. */
+  async setTool(tool: ToolDef | null): Promise<void> {
+    const seq = ++this.loadSeq;
+    if (this.model) { this.model.removeFromParent(); this.model = null; this.net = null; }
+    for (const o of this.stock) o.visible = true;
+    const len = tool?.params.length_m ?? 0.45;
+    this.reachScale = 1 + Math.max(0, len - 0.45) * 0.35;
+    if (!tool?.model) return;
+    let loaded;
+    try { loaded = await instantiateModel(`${tool.model}.hero.glb`); } catch (e) { console.warn(e); return; }
+    if (seq !== this.loadSeq) return;
+    const root = loaded.root;
+    root.updateMatrixWorld(true);
+    const bc = root.getObjectByName('Blade_Center');
+    const centre = bc ? bc.getWorldPosition(new Vector3()) : new Vector3(0, 0, len * 0.8);
+    // +z (toward the tip) → local −z, +y stays, so x flips: a half turn about y, then the blade centre to the origin
+    const wrap = new Group();
+    wrap.name = 'digModel';
+    root.rotation.set(0, Math.PI, 0);
+    root.position.set(centre.x, -centre.y, centre.z);
+    wrap.add(root);
+    this.net = prepareNet(root);
+    this.net.setSurface({ wet: 0.2, mud: 0.1, waterline: null });
+    wrap.traverse((o) => { o.layers.set(NET_LAYER); const m = o as Mesh; if (m.isMesh) { m.frustumCulled = false; m.receiveShadow = false; } });
+    this.group.add(wrap);
+    this.model = wrap;
+    for (const o of this.stock) o.visible = false;
   }
 
   /** Aim this swing's blade at a spot on the ground (world); null goes back to the stock pose. */
@@ -126,6 +168,7 @@ export class ShovelView {
     let roll = 0;
     if (!st) {
       lerpPose(P_HIDDEN, P_READY, ease(this.shown), cur);
+      cur.p.z *= this.reachScale;
       cur.p.y += Math.sin(sway * 1.9) * 0.006;
       roll = Math.sin(sway * 1.3) * 0.03;
       this.scoop.visible = false;

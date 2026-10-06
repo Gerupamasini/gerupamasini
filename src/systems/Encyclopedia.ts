@@ -12,7 +12,7 @@ export const REWARDS = { discover: 100, capture: 50, behavior: 30, sex: 20, perT
 /** CR handed out each time the observer level goes up */
 export const CR_PER_LEVEL = 150;
 /** at most this many tools go to the flat */
-export const LOADOUT_MAX = 2;
+export const LOADOUT_MAX = 3;
 
 /** the observer level for a research total: 1 at 0, 2 at 100, 3 at 400, 4 at 900 … */
 export function levelFor(research: number): number {

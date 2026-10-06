@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const HabitatTagSchema = z.enum(['exposed_sand', 'exposed_mud', 'waterline', 'shallow', 'pool', 'small_pool', 'channel', 'deep']);
-export const SubstrateSchema = z.enum(['sand', 'muddy_sand', 'mud', 'gravel', 'channel']);
+export const SubstrateSchema = z.enum(['sand', 'muddy_sand', 'mud', 'gravel', 'channel', 'rock']);
 export const TimeOfDaySchema = z.enum(['dawn', 'day', 'dusk', 'night']);
 export const SeasonSchema = z.enum(['spring', 'summer', 'autumn', 'winter']);
 export const TidePhaseSchema = z.enum(['any', 'low', 'rising', 'high', 'falling']);
@@ -28,6 +28,8 @@ export const SpeciesSchema = z.object({
   names: z.object({ ja: z.string(), sci: z.string(), en: z.string().optional() }),
   taxon: z.object({ group: TaxonGroupSchema, family: z.string().optional() }),
   locomotion: LocomotionSchema,
+  /** how deep a burrower sits (cm): a digging tool must reach at least this far */
+  digDepth_cm: z.number().positive().optional(),
   collectable: z.boolean(),
   protected: z.boolean().default(false),
   model: z.object({
@@ -38,6 +40,8 @@ export const SpeciesSchema = z.object({
     modelLength_mm: z.number().positive(),
     /** beyond this distance from the player the animal has no view (default from its size) */
     viewDistance_m: z.number().positive().optional(),
+    /** beyond this distance the driver's placeholder stands in for the GLB tiers (a species whose only GLB is dense) */
+    placeholderBeyond_m: z.number().positive().optional(),
     driver: z.string().optional(),
     clips: z.object({ idle: z.string().default('Idle'), move: z.string().default('Move'), special: z.array(z.string()).default([]) }).default({ idle: 'Idle', move: 'Move', special: [] }),
   }),

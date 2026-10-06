@@ -14,11 +14,16 @@ export function specs(tool: ToolDef): string {
     const q = quiet <= 0.8 ? t('tools.quietGood') : quiet <= 1.05 ? t('tools.normal') : t('tools.quietBad');
     return `${t('tools.reach')} ${(p.reach_m ?? 1.5).toFixed(1)} m ・ ${t('tools.hoop')} ×${(p.hoop ?? 1).toFixed(2)} ・ ${t('tools.speed')} ${speed} ・ ${q}`;
   }
-  if (tool.type === 'dig') return `${t('tools.blade')} ${((p.radius ?? 0.14) * 100).toFixed(0)} cm`;
+  if (tool.type === 'dig') {
+    const swing = p.swing ?? 1;
+    const speed = swing <= 0.8 ? t('tools.fast') : swing <= 1.05 ? t('tools.normal') : t('tools.slow');
+    return `${t('tools.blade')} ${((p.radius ?? 0.14) * 200).toFixed(0)} cm ・ ${t('tools.depth')} ${(p.depth_cm ?? 20).toFixed(0)} cm ・ ${t('tools.reach')} ${(p.reach_m ?? 1.2).toFixed(1)} m ・ ${t('tools.speed')} ${speed}`;
+  }
+  if (tool.type === 'optic') return `${t('tools.magnification')} ×${(p.magnification ?? 8).toFixed(0)} ・ ${t('tools.fov')} ${(p.fov_deg ?? 7.5).toFixed(1)}° ・ ${t('tools.reach')} ${(p.reach_m ?? 80).toFixed(0)} m`;
   return '';
 }
 
-/** The tools drawer on the home screen: what is owned and carried (two at most, on the number keys), and the shop. */
+/** The tools drawer on the home screen: what is owned and carried (three at most, on the number keys), and the shop. */
 export function ToolsPanel({ app }: { app: App }) {
   const enc = app.encyclopedia;
   const owned = enc.owned.value, loadout = enc.loadout.value, cr = enc.money.value;
