@@ -502,7 +502,7 @@ export class Motor {
     if (this.medium === 'water') { this.setGait('swim'); this.target = null; this.speed = 0; return; }
     const shallow = this.medium === 'shallow';
     let lift = this.propHeight();
-    let head = this.posture === 'alert' ? 0.24 : this.posture === 'display' ? 0.3 : this.posture === 'low' ? 0.03 : 0.12;
+    let head = this.posture === 'alert' ? 0.24 : this.posture === 'display' ? 0.28 : this.posture === 'low' ? 0.03 : 0.16;
     if (shallow) {
       // periscope: hold the eyes above the surface as far as the fins allow
       const need = this.waterY + 0.012 * this.L - (this.groundY + this.eyeTop);
@@ -514,7 +514,7 @@ export class Motor {
     this.liftT = lift;
     this.headPitchT = head;
     // the fore body is raised on the arms, the tail resting on the mud behind
-    this.pitchT = this.posture === 'low' ? 0.0 : 0.28 + (this.posture === 'alert' ? 0.08 : 0);
+    this.pitchT = this.posture === 'low' ? 0.0 : 0.22 + (this.posture === 'alert' ? 0.08 : 0);
     this.headYawT = 0.07 * noise1(this.t * 0.35, this.seed + 1) + 0.03 * noise1(this.t * 1.3, this.seed + 2);
     this.headPitchT += 0.025 * noise1(this.t * 0.5, this.seed + 3);
     this.finMode = 'plant';
@@ -577,8 +577,8 @@ export class Motor {
       this.pos.z = st.p0.z + Math.cos(hm) * st.len * e;
       // the fins press down and lift the body, which vaults forward over them
       this.liftT = lift0 + 0.025 * L * Math.sin(Math.PI * u) * (shallow ? 0.45 : 1) * (0.7 + 0.3 * this.urgency);
-      this.pitchT = 0.26 + 0.05 * Math.sin(Math.PI * u);
-      this.headPitchT = 0.1 + 0.04 * Math.sin(Math.PI * u);
+      this.pitchT = 0.21 + 0.05 * Math.sin(Math.PI * u);
+      this.headPitchT = 0.15 + 0.04 * Math.sin(Math.PI * u);
       // the pelvic disc lifts off the mud as the body vaults over the pectorals
       this.pelvic.to(0.0, 12, dt);
       this.pelvicFold.to(0.3, 12, dt);
@@ -634,8 +634,8 @@ export class Motor {
         }
       }
       this.liftT = lift0 * (1 - 0.3 * Math.sin(Math.PI * v));
-      this.pitchT = 0.26 - 0.05 * Math.sin(Math.PI * v);
-      this.headPitchT = 0.1;
+      this.pitchT = 0.21 - 0.04 * Math.sin(Math.PI * v);
+      this.headPitchT = 0.15;
       // recovery: the body rests on the pelvic disc while the pectorals swing forward, half folded
       this.pelvic.to(this.pelvicReach(this.liftT), 12, dt);
       this.pelvicFold.to(0, 12, dt);
@@ -1219,6 +1219,14 @@ export class Motor {
     let prevBeta = -pitch;
     let yPrev = rootY + this.belly[0] * Math.cos(pitch);
     const nextLen = (k: number) => (k + 1 < n ? this.segLen[k + 1] : 0.1 * L);
+    // propped high on the arms the body is arched like the kana へ (photographs of standing and walking animals): the
+    // trunk rises a little behind the arms to its highest point under the first dorsal fin, then slopes down ever more
+    // steeply to the tail, which rests on the mud. ARCH: elevation of the backward direction of each segment from the
+    // girdle back (radians, world)
+    // (the first segment, over the girdle, shares the fore body's raised attitude with the head, so the nape does not
+    // fold: it slopes down backward at about half the root's pitch, and the trunk rises level from it)
+    const arch = smooth(0.035 * L, 0.07 * L, this.lift.x);
+    const ARCH = [-0.45 * pitch, 0.0, -0.08, -0.19, -0.32, -0.44];
     for (let k = 0; k < n; k++) {
       const len = nextLen(k);
       const dEnd = this.distBack[k] + len;
@@ -1228,6 +1236,7 @@ export class Motor {
       const need = Math.asin(clamp((floor - yPrev) / len, -1, 1));
       if (yC < floor) b = need;
       else b = Math.max(b - sagMax, need);
+      if (arch > 0 && k < ARCH.length) b = Math.max(need, b + (ARCH[k] - b) * arch);
       b = clamp(b, prevBeta - bendMax, prevBeta + bendMax);
       out[k] = b - prevBeta;
       yPrev += len * Math.sin(b);

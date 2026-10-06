@@ -265,7 +265,10 @@ export function buildSkin(NS, NV, log = () => {}) {
     const base = phiBase[j];
     const blend = smoothstep(RICTUS_S + 0.3, RICTUS_S + 4.0, s);
     if (blend >= 1) return base;
-    const pg = gapePhi(s), pr = phiBase[jg];
+    // (in front of the lower jaw the columns ease back to the loft's own spacing toward the snout's tip instead of
+    // being squeezed onto the midline: squeezed, they pleat across the lips' front)
+    const pr = phiBase[jg];
+    const pg = s <= S_FRONT ? pr + (gapePhi(S_FRONT + 1e-3) - pr) * smoothstep(0, S_FRONT, s) : gapePhi(s);
     let pw;
     if (j <= jg) pw = (base / pr) * pg;
     else if (j >= NV - jg) pw = TAU - ((TAU - base) / pr) * pg;
@@ -883,7 +886,12 @@ function skinPoint(s, phi, p, n, ao) {
   // star, so in a small disc round it each pattern of dots gives way to its own average tone - the same shade,
   // without the dots; the relief stays, so the wet film's highlights break up there as everywhere else)
   const rPole = Math.hypot(Math.max(s, 0), p[1] - SNOUT_POLE_Y, p[2]);
-  const tipCalm = smoothstep(0.08, 0.4, rPole);
+  // (the same at the mouth's corners, where the grid's columns gather onto the gape)
+  const RC = FEAT.gapeLine[MOUTH.length - 1];
+  const rCorner = Math.hypot(s - RC[0], p[1] - RC[1], Math.abs(p[2]) - RC[2]);
+  // (and along the lips, where the columns are squeezed together onto the cut: the lips are smooth there anyway)
+  const lipCalm = Math.max(smoothstep(0.08, 0.5, Math.abs(p[1] - gapeY(clamp(s, MOUTH[0][0], RICTUS_S)))), smoothstep(RICTUS_S + 0.2, RICTUS_S + 0.8, s));
+  const tipCalm = smoothstep(0.08, 0.4, rPole) * smoothstep(0.15, 0.75, rCorner) * lipCalm;
   const calmed = (v, cell, r, seed, keep, jitterR) => (tipCalm >= 1 ? v : v * tipCalm + dotMean(cell, r, seed, keep, jitterR) * (1 - tipCalm));
   // melanophore speckle: dense, fine, stronger on the back and head
   const sp = calmed(dots(p, 0.3, 0.085, 101, 0.9), 0.3, 0.085, 101, 0.9) * (0.35 + 0.65 * (1 - ventral)) * (s < 16 ? 1.2 : 1);
@@ -919,9 +927,9 @@ function skinPoint(s, phi, p, n, ao) {
   // upper-lip pads: pale, studded with dark sensory pores
   {
     const L = FEAT.lipPad.c;
-    const d = Math.hypot((p[0] - L[0]) / 2.3, (p[1] - L[1]) / 1.6, (Math.abs(z) - L[2]) / 1.6);
+    const d = Math.hypot((p[0] - L[0]) / 2.1, (p[1] - L[1]) / 1.5, (Math.abs(z) - L[2]) / 1.5);
     const pad = smoothstep(1.1, 0.6, d);
-    col = lerp3(col, lerp3(COL.lip, col, 0.35), pad * 0.65);
+    col = lerp3(col, lerp3(COL.lip, col, 0.45), pad * 0.5);
     // fine dark pores and a darker rim where the cushion meets the cheek
     col = lerp3(col, COL.speck, pad * dots(p, 0.17, 0.035, 163, 0.75) * 0.75);
     col = lerp3(col, COL.dark, smoothstep(0.75, 1.0, d) * smoothstep(1.35, 1.05, d) * 0.25);
@@ -1013,7 +1021,7 @@ function skinPoint(s, phi, p, n, ao) {
 
   // (the fine relief fades out over the snout's tip, where the texels still run long toward the uv pole and would draw
   // it out into radial streaks)
-  h *= smoothstep(0.1, 1.2, rPole);
+  h *= smoothstep(0.1, 1.2, rPole) * smoothstep(0.1, 0.7, rCorner) * lipCalm;
   // (the eye stalks' skin is smooth)
   h *= 1 - 0.7 * stalk;
   // ---------------- roughness and skin data

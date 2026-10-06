@@ -128,8 +128,14 @@ const step = () => {
 const follow = q.get('follow') !== '0';
 const target = new Vector3();
 const place = () => {
-  const a = driver.anchor();
-  if (follow) target.copy(a).add(new Vector3(0, Number(q.get('ty') ?? 0), 0)); else target.set(start.x + Number(q.get('ox') ?? 0), h(start.x, start.z) + 0.01, start.z + Number(q.get('oz') ?? 0));
+  const a = driver.anchor().clone();
+  // (ty raises the target, tf moves it forward along the heading: frame the head)
+  // (teye=1 frames the head: the target is the eyes' midpoint plus the ty / tf offsets)
+  if (follow && q.get('teye')) {
+    const bl = model.bones.J_eyeL as Bone, br = model.bones.J_eyeR as Bone;
+    a.copy(bl.getWorldPosition(new Vector3())).add(br.getWorldPosition(new Vector3())).multiplyScalar(0.5);
+  }
+  if (follow) target.copy(a).add(new Vector3(Math.sin(ind.heading) * Number(q.get('tf') ?? 0), Number(q.get('ty') ?? 0), Math.cos(ind.heading) * Number(q.get('tf') ?? 0))); else target.set(start.x + Number(q.get('ox') ?? 0), h(start.x, start.z) + 0.01, start.z + Number(q.get('oz') ?? 0));
   // camera relative to the fish's heading (or to the start heading when the camera stays put)
   const hd = follow ? ind.heading : start.heading;
   const d = vdir.clone().applyAxisAngle(new Vector3(0, 1, 0), q.get('world') ? 0 : hd);

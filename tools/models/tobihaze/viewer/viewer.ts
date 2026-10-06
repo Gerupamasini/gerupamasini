@@ -73,6 +73,8 @@ if (q.get('mat') === 'flat' || q.get('mat') === 'normal') {
   const flatOver = flat.clone();
   flatOver.polygonOffset = true; flatOver.polygonOffsetFactor = -1; flatOver.polygonOffsetUnits = -2;
   for (const m of model.meshes) if (!m.name.startsWith('Eye')) m.material = (m.material as import('three').Material).polygonOffset ? flatOver : flat;
+  // (wire=1: the triangles)
+  if (q.get('wire')) { flat.wireframe = true; flatOver.wireframe = true; }
 }
 // eye-material tuning: irior=, irmin=, irmax=, irf= override the iridescence of the eyes
 if (q.get('irior') || q.get('irmin') || q.get('irmax') || q.get('irf')) {

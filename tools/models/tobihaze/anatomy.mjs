@@ -38,28 +38,27 @@ export const uvT = (s) => (s <= UV_CAP ? Math.sqrt(Math.max(0, s) / UV_A) : UV_T
 // Profile key points (pre-cap dimensions, mm)
 const KS = [0, 0.3, 0.7, 1.2, 1.8, 2.6, 3.6, 4.8, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 63, 64.5, 66];
 // Profiles measured on lateral photographs of live and preserved adults, overlaid on the model (TL 80 mm): a blunt,
-// rounded snout - no point: its front is a tall bulb (~3.7 mm) whose most forward point lies just above the small,
-// low mouth, and from it the face rises steeply and full to the eyes, which sit about half a head length back; the
-// underside of the head is nearly flat back to the throat; deepest at the first dorsal fin, ~15 % TL; the belly a
+// rounded snout - no point: its front is a tall, round bulb falling to the thick lips low on the face, and from it
+// the forehead rises evenly to the eyes, which sit ~2.3 eye diameters back (profile photographs rendered with the
+// model from the same camera); a deep, full chin and throat; deepest at the first dorsal fin, ~15 % TL; the belly a
 // little below the throat; a long, low caudal peduncle:
 // dorsal profile (without the eyes)
-const KTOP = [5, 5.5, 6, 6.5, 7, 7.8, 8.6, 9.05, 9.35, 9.55, 9.6, 9.65, 9.7, 9.75, 9.95, 10.2, 10.7, 11.2, 11.1, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
+const KTOP = [5.4, 5.95, 6.45, 6.9, 7.3, 7.75, 8.2, 8.6, 8.95, 9.4, 9.6, 9.65, 9.7, 9.75, 9.95, 10.2, 10.7, 11.2, 11.1, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
 // ventral profile: under the snout tip the fleshy upper lip, then a deep, rounded chin and throat (on land the buccal
 // and opercular chambers are kept full of water and air, so the mouth sits about half way up the head: photographs of
 // walking and standing animals), curving up to the chest; the tail's lower edge rises to the peduncle
-const KBOT = [1.2, 0.6, 0.25, -0.45, -0.95, -1.4, -1.8, -2.05, -2.2, -2.15, -1.95, -1.6, -1.15, -0.75, -0.47, -0.5, -0.6, -0.6, -0.4, -0.1, 0.25, 0.65, 1.05, 1.4, 1.7, 1.95, 2.1, 2.15, 2.2];
-// half width: the snout is a rounded bulb narrower than the face (head-on it stands out from the face, in
-// three-quarter view it overhangs the mouth), so the mouth is about half as wide as the face; behind it the face
-// swells to broad, full cheeks (head ~1.05 × as wide as deep); a stout trunk tapering to the peduncle
-const KW = [2.1, 2.55, 2.95, 3.25, 3.5, 3.75, 3.95, 4.7, 5, 5.5, 5.8, 5.9, 5.8, 5.6, 5.55, 5.55, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
+const KBOT = [1.3, 0.75, 0.2, -0.4, -0.9, -1.35, -1.75, -2.0, -2.15, -2.15, -1.95, -1.6, -1.15, -0.75, -0.47, -0.5, -0.6, -0.6, -0.4, -0.1, 0.25, 0.65, 1.05, 1.4, 1.7, 1.95, 2.1, 2.15, 2.2];
+// half width: the muzzle is narrow (head-on the mouth spans about half the face), the face widening behind it into
+// the jowls and broad, full cheeks (head ~1.05 × as wide as deep); a stout trunk tapering to the peduncle
+const KW = [2.0, 2.35, 2.6, 2.8, 3.0, 3.35, 3.9, 4.5, 5.0, 5.5, 5.8, 5.9, 5.8, 5.6, 5.55, 5.55, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
 // superellipse exponents (top / bottom): a rounded muzzle; head-on the head is bell-shaped, rounded and narrowing up
 // to the eyes over a full, flat-bottomed face (photographs of the face head-on); round trunk, oval tail
-const KNT = [1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.7, 1.6, 1.6, 1.62, 1.68, 1.78, 1.95, 2, 2.05, 2.15, 2.1, 2.1, 2.05, 2.05, 2, 2, 2, 2, 2, 2, 2, 2];
+const KNT = [1.65, 1.65, 1.65, 1.65, 1.65, 1.65, 1.62, 1.6, 1.6, 1.6, 1.62, 1.68, 1.78, 1.95, 2, 2.05, 2.15, 2.1, 2.1, 2.05, 2.05, 2, 2, 2, 2, 2, 2, 2, 2];
 const KNB = [2, 2.05, 2.1, 2, 2, 2, 2.15, 2.3, 2.45, 2.5, 2.5, 2.5, 2.45, 2.4, 2.4, 2.6, 2.5, 2.45, 2.4, 2.35, 2.3, 2.2, 2.15, 2.1, 2.05, 2, 2, 2, 2];
-// height of the widest point relative to the mid-height: low on the snout (head-on a bell, broad at the mouth and
-// narrowing up to the eyes), the cheeks full and low behind the mouth (the face is widest at about a third of its
-// height)
-const KDY = [-0.55, -0.55, -0.55, -0.55, -0.6, -0.65, -0.75, -0.95, -1.25, -1.7, -1.85, -1.75, -1.55, -1.25, -0.9, -0.6, -0.3, -0.1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+// height of the widest point relative to the mid-height: low on the snout, at the lips (head-on a bell, broad at the
+// mouth and narrowing up to the eyes), the cheeks full and low behind the mouth (the face is widest at about a third
+// of its height)
+const KDY = [-0.75, -0.8, -0.85, -0.9, -0.9, -0.9, -0.95, -1.05, -1.25, -1.7, -1.85, -1.75, -1.55, -1.25, -0.9, -0.6, -0.3, -0.1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 export function monotone(xs, ys) {
   const n = xs.length;
@@ -201,19 +200,19 @@ export function surfaceAt(s, y) {
 }
 
 // ---------------------------------------------------------------------------
-// Eyes. Each eyeball sits on top of the head, the snout in front of it about as long as the eye is wide (the
-// forehead slopes down in front of it to the blunt snout); the two almost touch over the narrow interorbital. Eyeball Ø 3.0 mm (~0.3 of
+// Eyes. Each eyeball sits on top of the head, the snout in front of it ~2.3 eye diameters long (the forehead slopes
+// down in front of it to the blunt snout); the two almost touch over the narrow interorbital. Eyeball Ø 3.0 mm (~0.3 of
 // the head's depth), raised on a short fleshy stalk ~1 mm above the dorsal profile behind it, so all of the globe
 // stands above the head like a periscope (it can be raised further, and pulled right down into the orbit). Positions
 // read from lateral close-ups of live animals.
 // Retraction ("blinking", Aiello et al. 2023 PNAS): the eyeball sinks ~2.4 mm into the orbit and the dermal cup
 // closes over it.
 export const EYE = {
-  center: [6.4, 10.45, 1.62],
+  center: [7.0, 10.45, 1.62],
   radius: 1.52,
-  // the eyes look out and well forward (~42°) and a little up (~13°): head-on each pupil shows on the front-outer
-  // face of its globe, from the side on the front of the globe (photographs of standing and walking animals)
-  axis: norm3([-0.66, 0.22, 0.72]),
+  // the eyes look out to the side, a little forward (~17°) and up (~13°): photographed from the side the pupil faces
+  // the camera, head-on the dark eye shows on the outer face of each globe
+  axis: norm3([-0.28, 0.22, 0.93]),
   retract: 2.15,
 };
 // at rest the globe looks a little above the optical axis' rest direction
@@ -245,13 +244,14 @@ export function windowField(o, D) {
   return windowAngle(o, D) * EYE.radius;
 }
 
-// Gape (where the lips meet), side view on the +z side: from the front midline under the snout back to the mouth
-// corner. A small mouth low under the blunt, overhanging snout (subterminal: the snout's front stands ~1 mm above
-// and ahead of it): a short gape, head-on a small arch with the corners turned down and in (~40 % of the face's
-// width; photographs head-on and in three-quarter view); the jaw itself reaches on back under the eye, hidden under
-// the posterior lobe of the upper lip, a pale teardrop pad right behind the corner.
-export const MOUTH = [[1.0, 2.7], [1.45, 2.62], [1.95, 2.43], [2.45, 2.12], [2.9, 1.72]];
-export const RICTUS_S = 2.9;
+// Gape (where the lips meet), side view on the +z side: from the front midline back to the mouth corner. A small
+// mouth low on the face, under the blunt snout's bulb: a short gape, head-on an arch with the corners turned down
+// (about half the face's width; photographs head-on and in three-quarter view) between thick, pouting lips; the jaw
+// itself reaches on back under the eye, hidden under the posterior lobe of the upper lip, a pale teardrop pad right
+// behind the corner at the mouth's height. (The jaw's cut starts at the first point, a little behind the face: the
+// lips are laid out on the face itself, see below.)
+export const MOUTH = [[0.8, 2.25], [1.15, 2.16], [1.5, 1.95], [1.85, 1.62], [2.2, 1.2]];
+export const RICTUS_S = 2.2;
 // gill-cover margin, top → bottom: the rear and lower edge of the inflated opercular chamber, which stands proud of
 // the body behind it as a rounded plate with a crisp rim (lateral photographs; the gill opening itself, small and
 // ventrolateral, lies under the rim in front of the pectoral base), and the preopercle
@@ -339,7 +339,7 @@ function buildFeatures() {
   const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], a: aR, fr: eyeFrame(aR), D: cupDown(-1) };
   // the posterior lobe of the upper lip: an oval pad on each side just behind the mouth corner (pale, studded with
   // sensory pores)
-  const lp = surfaceAt(3.9, 1.95);
+  const lp = surfaceAt(3.4, 1.65);
   const lipPad = { c: lp.p, n: lp.n };
   return {
     gapeLine: gx, gapeU, gapeLen,
@@ -348,7 +348,7 @@ function buildFeatures() {
     lipPad,
     // the opercular chamber (inflated with water on land: the breathe morph) and the throat under it
     cheek: [11.6, 4.2, 4.5],
-    jowl: [6.8, 3.0, 3.85],
+    jowl: [6.0, 3.2, 3.9],
     throat: [9.0, 1.05, 0],
     pecLobe: [17.6, 3.15, 4.95],
     pelvicBase: [20.6, 0.3, 0],
@@ -392,26 +392,25 @@ function nearGape(p) {
 function lipRelief(p) {
   const g = nearGape(p);
   const fade = 1 - smoothstep(0.92, 1.25, g.u);
-  // upper lip: a roll ~1.1 mm high centred 0.55 mm above the line; lower lip ~0.7 mm, 0.35 mm below
-  // (the roll is lowest head-on, under the overhanging snout: it shows mainly at the sides of the mouth)
-  const notch = 0.7 + 0.3 * smoothstep(0.4, 1.6, Math.abs(p[2]));
-  // (each lip fades in smoothly across the gape line: a step there would crease the skin)
-  const up = smoothstep(-0.2, 0.05, g.dy) * (0.3 - 0.12 * g.u) * notch * Math.exp(-(((g.d - 0.55) / 0.65) ** 2));
-  const lo = smoothstep(0.2, -0.05, g.dy) * (0.11 - 0.04 * g.u) * Math.exp(-(((g.d - 0.3) / 0.3) ** 2));
-  const crease = 0.07 * Math.exp(-((g.d / 0.09) ** 2));
+  // thick, pouting lips: the upper a roll ~1.4 mm high centred 0.6 mm above the line, the lower ~0.9 mm, 0.4 mm below
+  // (each fades in over ~0.5 mm across the line: switched on more sharply, the skin folds over itself there)
+  const notch = 0.85 + 0.15 * smoothstep(0.4, 1.6, Math.abs(p[2]));
+  const up = smoothstep(-0.35, 0.2, g.dy) * (0.75 - 0.35 * g.u) * notch * Math.exp(-(((g.d - 0.6) / 0.7) ** 2));
+  const lo = smoothstep(0.35, -0.2, g.dy) * (0.36 - 0.14 * g.u) * Math.exp(-(((g.d - 0.42) / 0.45) ** 2));
+  const crease = 0.1 * Math.exp(-((g.d / 0.09) ** 2));
   // the lower jaw is set back under the overhanging upper lip (profile photographs: the outline steps back under
   // the lip), most at the front of the mouth
-  const recess = smoothstep(0.1, -0.15, g.dy) * 0.24 * (1 - smoothstep(0.2, 0.75, g.u)) * Math.exp(-(((g.d - 0.75) / 0.7) ** 2));
+  const recess = smoothstep(0.1, -0.15, g.dy) * 0.12 * (1 - smoothstep(0.2, 0.75, g.u)) * Math.exp(-(((g.d - 0.75) / 0.7) ** 2));
   let r = (up + lo) * fade - crease * fade - recess;
-  // the lip pad: a plump, glossy teardrop cushion (~4.4 × 3 mm) standing out of the cheek at the mouth's corner
+  // the lip pad: a plump, glossy teardrop cushion (~4 × 2.8 mm) standing out of the cheek at the mouth's corner
   const c = FEAT.lipPad.c, n = FEAT.lipPad.n;
   const v = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
   const h = v[0] * n[0] + v[1] * n[1] + v[2] * n[2];
   const t0 = v[0] - n[0] * h, t1 = v[1] - n[1] * h, t2 = v[2] - n[2] * h;
   // (a teardrop: fuller behind, narrowing forward toward the mouth corner)
   const fwd = smoothstep(0.6, -1.6, t0);
-  const e = (t0 / 2.3) ** 2 + (t1 / (1.65 - 0.45 * fwd)) ** 2 + (t2 / (1.65 - 0.45 * fwd)) ** 2;
-  r += 0.78 * Math.exp(-(e ** 2.2) * 1.3);
+  const e = (t0 / 2.0) ** 2 + (t1 / (1.4 - 0.35 * fwd)) ** 2 + (t2 / (1.4 - 0.35 * fwd)) ** 2;
+  r += 0.85 * Math.exp(-(e ** 2.2) * 1.3);
   // (a soft crease round its upper and back edge sets it off from the cheek)
   r -= 0.07 * Math.exp(-(((Math.sqrt(e) - 1.12) / 0.13) ** 2)) * smoothstep(-0.6, 0.4, t1 + 0.4 * t0);
   return r;
@@ -425,8 +424,8 @@ function snoutRidge(p) {
   if (along <= 0) return 0;
   // on the upper face only, fading out toward the mouth
   const up = smoothstep(q.yc + 0.3, q.yc + 2.2, y);
-  const ridge = 0.24 * Math.exp(-((z / 1.25) ** 2));
-  const groove = 0.14 * Math.exp(-(((z - 2.3) / 0.8) ** 2));
+  const ridge = 0.2 * Math.exp(-((z / 1.25) ** 2));
+  const groove = 0.05 * Math.exp(-(((z - 2.3) / 0.8) ** 2));
   return along * up * (ridge - groove);
 }
 
@@ -508,7 +507,7 @@ export function field(s, y, z, opts = null) {
     d = smin(d, ellipsoidDist(pm, F.cheek, [5.0, 3.5 + 0.2 * breathe, 1.25 + 0.5 * breathe]), 0.7);
     // the puffy face under and in front of each eye: head-on it stands out to the side of the narrower snout, so the
     // snout reads as a knob between full cheeks, a soft furrow curving round it from the lip pads (photographs head-on)
-    d = smin(d, ellipsoidDist(pm, F.jowl, [3.6, 2.5, 1.7]), 1.4);
+    d = smin(d, ellipsoidDist(pm, F.jowl, [3.6, 2.8, 2.2]), 1.8);
     d = smin(d, ellipsoidDist(p, [F.throat[0], F.throat[1] - 0.35 * breathe, 0], [4.6, 1.3 + 0.3 * breathe, 4.0]), 1.0);
   }
   // the furrow between the eyes, cut before the eye cups go on (it would notch their inner sides)
@@ -532,7 +531,7 @@ export function field(s, y, z, opts = null) {
   // the stalks are joined low between the eyes: only a shallow cleft parts them (photographs head-on)
   if (opts?.dome && s < 13.5) d = smin(d, ellipsoidDist(p, [EYE.center[0] + 0.1, EYE.center[1] - 1.05, 0], [1.0, 0.6, 0.85]), 0.5);
   // lips and the lip pad: smooth displacements of the surface along the gape line (no creases, no folds)
-  if (s < 8.5 && y < 5.2) d -= lipRelief(pm);
+  if (s < 8.5 && y < 5.2 && !opts?.noLips) d -= lipRelief(pm);
   // the bridge of the snout: a rounded ridge down the middle of the face from between the eyes to the snout's bulb,
   // a shallow groove beside it each side, then the full cheeks (photographs head-on and from above)
   if (s < 8 && y > 3) d -= snoutRidge(pm);
@@ -558,6 +557,31 @@ export function fieldGrad(s, y, z, opts = null, e = 0.004) {
     field(s, y + e, z, opts) - field(s, y - e, z, opts),
     field(s, y, z + e, opts) - field(s, y, z - e, opts),
   ]);
+}
+
+// The gape line and the lip pad are laid out on the loft, but near the mouth's corners the face's swellings (jowls,
+// cheeks) stand out of it: move them out onto the sculpted surface (lips aside), horizontally at their own height, or
+// the lips would be shaped round a line buried under the skin and pleat. (The front midline point too: the jaw's cut
+// runs a little behind it, under the snout's front, but the lips meet on the face.)
+{
+  const NL = { noLips: true };
+  const onSculpt = (p) => {
+    const g = fieldGrad(p[0], p[1], p[2], NL);
+    const h = norm3([g[0], 0, g[2]]);
+    const f = (t) => field(p[0] + h[0] * t, p[1], p[2] + h[2] * t, NL);
+    let a = -1.5, b = 2.5;
+    if (f(a) > 0 || f(b) < 0) return p;
+    for (let k = 0; k < 40; k++) { const m = 0.5 * (a + b); if (f(m) < 0) a = m; else b = m; }
+    const t = 0.5 * (a + b);
+    return [p[0] + h[0] * t, p[1], p[2] + h[2] * t];
+  };
+  const G = FEAT.gapeLine;
+  for (let i = 0; i < G.length; i++) G[i] = onSculpt(G[i]);
+  let acc = 0;
+  G.forEach((p, i) => { FEAT.gapeU[i] = i === 0 ? 0 : (acc += Math.hypot(p[0] - G[i - 1][0], p[1] - G[i - 1][1], p[2] - G[i - 1][2])); });
+  FEAT.gapeLen = FEAT.gapeU[MOUTH.length - 1];
+  FEAT.lipPad.c = onSculpt(FEAT.lipPad.c);
+  FEAT.lipPad.n = fieldGrad(FEAT.lipPad.c[0], FEAT.lipPad.c[1], FEAT.lipPad.c[2], NL);
 }
 
 /** station (s) of the eye sockets' centre, the focus of the head's projection rays */
