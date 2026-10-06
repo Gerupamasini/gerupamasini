@@ -167,6 +167,11 @@
 - シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
 - バージョン 0.12.1。
 
+## 20 回目（ゴロタ場と牡蠣礁）
+- `origin/claude/blissful-planck-cmjqvc` をマージ（`src/creatures/oyster/*`、`src/world/Riprap.ts`、World/App/FPSController の組み込み、ビューア、単体テスト 16 件）。競合は `World.ts` の遠景の行だけ（遠景は非表示のまま）。
+- `Riprap`: `RockShape(seed, rounded)`（丸い礫: 超楕円の指数 1.9〜2.3、浅い面取り 1〜3）、`ROUND_PROTOS` 6 種を割石 8 種の後ろに追加。`layApron(rng)` が両土塁の裾（高さが 1 m で 0.12 m 以上上がる位置を探して）に沿って z 0.3〜0.5 m ごとに 1 個、`u = −ln(1 − r·0.985)·1.9` m 干潟側（6.5 m まで）、裾の近くは 35 % が大きめ、35 % は面の下部にも。`leveeSites(seed, top, bottom, spacing)` が rock 地質・高さ帯・斜面（n.y ≤ 0.97）・まだらノイズで土塁面の付着点を返し、`terrainSurface()` で地形面へ射影。`World` は `attachSites` に加えて `leveeSites` を礁へ渡す。
+- 濡れ帯の減光 0.6 → 0.68。バージョン 0.16.0。
+
 ## 19 回目（道具棚、当たり判定、ジャンプ、軽量化、濡れた砂、石の土塁、泥干潟、新しい道具）
 - `ToolShelf.loadTool`: type 別に lod2 GLB を置く（網: Mouth の z から `pos = (0, mouth_h/2, 0.08) − up·mz`、基底 side/open/up、傾き 0.1 rad；掘る道具: `length_m × 0.78` を下へ；双眼鏡: 台）。各道具に `hitMat`（opacity 0、colorWrite false）の `BoxGeometry(PITCH×0.92, top, 0.34)` を置き、`pick` はヒット列の最初の toolId。PITCH 0.3。`ShopScene` カメラ (0.3, 1.2, 2.95)、fov 46。
 - `FPSController`: `jumpBaseY`（絶対高さ）で飛び、`airY = jumpBaseY − groundNow`、`held('jump')` で再ジャンプ。`zoomFov`（道具が視野を狭める）、見回し速度は `zoomFov / 70`。
