@@ -1,0 +1,137 @@
+{
+  "id": "meretrix_lusoria",
+  "names": {
+    "ja": "ハマグリ",
+    "sci": "Meretrix lusoria",
+    "en": "Common orient clam"
+  },
+  "taxon": {
+    "group": "mollusc",
+    "family": "Veneridae"
+  },
+  "locomotion": "burrow",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "hamaguri",
+    "modelLength_mm": 60,
+    "viewDistance_m": 7,
+    "driver": "hamaguri",
+    "clips": {
+      "idle": "Idle",
+      "move": "Move",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 30,
+      "max": 90,
+      "mean": 60,
+      "sd": 11
+    },
+    "weightCoef": {
+      "a": 0.00022,
+      "b": 3.0
+    }
+  },
+  "sex": {
+    "maleRatio": 0.5,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "juvenile",
+      "ja": "稚貝",
+      "maxLength_mm": 35
+    },
+    {
+      "id": "adult",
+      "ja": "成貝"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true
+  },
+  "spawn": [
+    {
+      "tags": [
+        "waterline",
+        "shallow",
+        "exposed_sand"
+      ],
+      "substrate": [
+        "sand",
+        "muddy_sand"
+      ],
+      "tide": "any",
+      "density_per_100m2": 0.12,
+      "group": [
+        1,
+        1
+      ],
+      "maxPopulation": 10
+    }
+  ],
+  "brain": {
+    "tree": "bivalve_buried",
+    "params": {
+      "threatDistance_m": 0.7,
+      "restMean_s": 30
+    }
+  },
+  "capture": {
+    "tools": [],
+    "baseDifficulty": 0.3,
+    "alertPenalty": 0.2
+  },
+  "encyclopedia": {
+    "description": "河口に近い内湾の砂干潟にすむ大型の二枚貝。殻は丸みのある三角形で殻頂がほぼ中央にあり、表面はなめらかで強い光沢がある。色や模様は個体ごとに大きく異なり、栗色・黒褐色・黄褐色・白などの地に、放射状の帯や細かなジグザグ模様、同心円状の帯が入る。殻の内側は白く、後ろ側の縁が紫褐色を帯びる。砂の中に浅く潜り、短い水管を砂の表面に出して濾過摂食する。各地で数が減っている。",
+    "habitatHint": "河口近くのきれいな砂干潟。水際から浅い水中。",
+    "behaviors": [
+      {
+        "id": "filter_feeding",
+        "ja": "濾過摂食",
+        "hint": "短い水管を砂の上に出して水を吸い込む"
+      },
+      {
+        "id": "siphon_extend",
+        "ja": "水管を伸ばす",
+        "hint": "潜ったまま水管をそっと伸ばす"
+      },
+      {
+        "id": "siphon_retract",
+        "ja": "水管を引っ込める",
+        "hint": "気配を感じると水管を引っ込める"
+      },
+      {
+        "id": "close_shell",
+        "ja": "殻を閉じる",
+        "hint": "殻をぴったり閉じてじっとする"
+      },
+      {
+        "id": "burrow",
+        "ja": "潜砂",
+        "hint": "大きな足を砂に差し込み、殻を揺らしながら潜る"
+      },
+      {
+        "id": "emerge",
+        "ja": "浅く出る",
+        "hint": "殻の後ろ側が少しだけ砂から出る"
+      }
+    ],
+    "placeholderModel": false
+  }
+}

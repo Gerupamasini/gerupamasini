@@ -526,8 +526,14 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   // strewn with the chalky grit of the clams it crushed
   if (vPit > 0.001) {
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.25, 0.235, 0.21), vPit * 0.4);
-    float grit = step(0.93, hash21(floor(vWorldPos.xz * 260.0) + 3.1)) * smoothstep(0.3, 0.9, vPit);
-    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.86, 0.82), grit * 0.75);
+    // (rounded flecks of two sizes, each in its own spot of a 4 mm cell, rather than square confetti)
+    vec2 gp = vWorldPos.xz * 260.0 + 3.1;
+    vec2 gc = floor(gp);
+    vec2 go = vec2(hash21(gc + 7.7), hash21(gc + 9.3)) * 0.5 - 0.25;
+    float gr = 0.16 + 0.2 * hash21(gc + 2.2);
+    float fleck = step(0.9, hash21(gc)) * (1.0 - smoothstep(gr - 0.08, gr + 0.08, length(fract(gp) - 0.5 - go)));
+    float grit = fleck * smoothstep(0.3, 0.9, vPit);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.86, 0.82) * (0.78 + 0.22 * hash21(gc + 1.3)), grit * 0.7);
   }
   // diatom film: a patchy golden-brown bloom on undisturbed mud and muddy sand; reduced (black) mud in the
   // lowest, longest-wet hollows (after MahazeViewer's sediment)

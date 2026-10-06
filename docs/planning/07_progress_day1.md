@@ -167,3 +167,13 @@
 - シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
 - バージョン 0.12.1。
 
+## 17 回目（ハマグリ、昼寝跡の貝殻、エドハゼ）
+- ハマグリ: 種データ `meretrix_lusoria.json`（ブランチ版の spawn をまばらに: density 0.12、group [1,1]、max 10）、manifest に追加、`DRIVERS.hamaguri`（`AsariDriver(FORMS.hamaguri)`）。`Spawner` は `FIELD_SPECIES`（アサリ）だけ貝床に任せ、他の潜砂種は通常どおり湧かせる。`App.dig` は刃の範囲（半径 + 4 cm）にいる潜砂種の個体（`pitId !== -2`）を 1 匹掘り上げて `creatures.remove`、HUD の案内は潜砂種にスコップのヒント。
+- 昼寝跡の貝殻: `PitDebris` は `sharedGeometry(FORMS.asari).valve[2]` を `valveFragment`（非インデックス化して弦で三角形を選別、全属性を引き継ぐ）で 5 種に切り、`makeShellOuterMaterial({instanced, style})` + `aSeed` のインスタンスで描く。`World.pits` を公開。1 跡あたり 28〜48 片。`Terrain.ts` の跡の砕片（grit）は 4 mm セルの四角から、セル内の丸い粒（半径 0.16〜0.36 セル、位置をずらす、明るさの揺らぎ）に。
+- エドハゼ: `edohaze.hero.glb` をブランチの `models/edohaze.glb`（31.4 万三角形、クリップ Idle/Swim/Yawn）に差し替え。ブランチの `tools/edohaze/*.mjs`（眼の盛り上がり `EYE_PROTRUDE`、皮膚のひだ、暗い体色、`GOBY_GRAVID`）を `tools/models/edohaze/` に取り込み（build は `GLBBuilder(SPECIES.generator)` と眼ノードの `translation: tr.offset`）、lod1/lod2 を再生成。
+- マハゼの成長段階: `claude/adoring-faraday-h25n7c` の `tools/mahaze/*.mjs`（`variant.mjs` の `pick()` で幼魚↔成魚の定義を成長度 g で補間、`body.mjs` の `patterns` で模様 3 種のテクスチャ、`fins.mjs` の `paintFinAtlas(defs, log, k)`）を `tools/models/mahaze/` に取り込み、`build.mjs` をブランチ版 + 段階（`--tier`、ひれアトラスを lod1 1/2・lod2 1/4 に `downsample2`）に。出力は `mahaze_<variant>.<tier>.glb`、hero はブランチの GLB をそのままコピー（29〜31 MB、`extras.variant`）。
+  - データ: `SpeciesSchema.stages[].model {hero,lod1,lod2}`（省略分は `model` から）。マハゼは stages を 幼魚 ≤75 / 若魚 ≤145 / 成魚 に変え、それぞれ juvenile / subadult / adult の GLB、`model` 本体は subadult（図鑑用）。size は mean 95 / sd 40。`validate.mjs` は stage のモデルも存在確認。
+  - ランタイム: `creatures/models/choice.ts` の `modelFor(sp, stage)` と `variantOf(id)`（FNV-1a）。`instantiateModel(rel, variant?)` は `userData.gltfExtensions.KHR_materials_variants`（GLTFLoader が未知拡張として userData に残す）の mappings から素材を `parser.getDependency('material')` で取り、`prepareMaterial`（tier 調整）→ `mesh.material` → `parser.assignFinalMaterial(mesh)`。`CreatureSystem.setTier` / `preload`、`App.displayModelFor(ind)`、`FieldCase` / `TankScene` の occupant が stage モデル + id の模様を使う。hero の `BodyMaterial.js` に `uJaws`（`fishFrame.jaws`、無ければ従来値）。
+  - テスト: `tests/unit/growthModels.test.ts`（段階の閾値、modelFor、GLB の variants と extras.variant、variantOf の分布）、ブラウザ確認 `mahaze-stages-check.mjs`。
+- バージョン 0.13.0。
+

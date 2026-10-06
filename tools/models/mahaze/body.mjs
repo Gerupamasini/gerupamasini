@@ -1,9 +1,43 @@
 // Body mesh + baked surface textures for the juvenile goby.
 import {
-  S_END, SL, VERT_START, VERT_COUNT, EYE, MOUTH, OPERCLE, PREOPERCLE, RICTUS_S,
-  section, basePoint, project, fieldGrad, field, throughDist, toObject, dirToObject, gapeY,
+  S_END, SL, VERT_START, VERT_COUNT, EYE, MOUTH, OPERCLE, PREOPERCLE, RICTUS_S, LIPS,
+  section, basePoint, project, fieldGrad, field, throughDist, toObject, dirToObject, gapeY, eyeLid,
 } from './anatomy.mjs';
 import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEachCell3 } from '../../lib/noise.mjs';
+import { pick } from './variant.mjs';
+
+// head markings (fish mm): preorbital streak, subocular bar, postorbital streak, opercular spot, cheek spots.
+// The juvenile's are placed around its larger, higher, further back eye.
+const MARKS = pick({
+  pre: [[0.5, 2.6], [2.2, 3.2], [3.9, 3.95]], sub: [[5.0, 3.45], [4.75, 2.45], [4.4, 1.45]], post: [[6.1, 4.8], [7.6, 4.95], [9.4, 4.9]],
+  operc: [10.6, 4.35], spots: [[7.2, 2.8, 0.32], [8.5, 3.6, 0.28], [9.6, 2.4, 0.3], [6.3, 1.9, 0.25], [9.0, 1.5, 0.24]],
+}, {
+  pre: [[0.7, 3.2], [2.6, 3.95], [4.45, 4.75]], sub: [[5.55, 3.95], [5.3, 2.9], [4.9, 1.8]], post: [[6.85, 5.15], [8.1, 5.25], [9.6, 5.1]],
+  operc: [10.7, 4.45], spots: [[7.7, 3.0, 0.3], [8.9, 3.8, 0.26], [9.8, 2.5, 0.28], [7.0, 2.1, 0.24], [9.2, 1.6, 0.22]],
+});
+// juvenile: fewer melanophores and more yellow (xanthophores): a golden-olive fish
+// and bolder, rounder blotches along the midline with a distinct black spot at the caudal base
+const MEL_K = pick(1, 0.82), MELF_K = pick(1, 0.95), XAN_K = pick(1, 1.6), CSPOT_K = pick(0.18, 0.42);
+// Pattern of each growth stage, matched to the photos: the adult (photos 03 / 05 / hand) is grey-brown and
+// densely marbled down to the lower flank, with a row of dark midlateral blotches, dark reticulation along
+// the scale pockets and wavy dark lines on the cheek; the juvenile (calibrated lateral photo) is golden
+// olive, more finely mottled, with rounder midline blotches.
+//   mott: large-scale marbling; blot: midlateral blotches; pocket: scale-pocket reticulation;
+//   verm: cheek / gill-cover vermiculation; belly: pale-belly ramp (hn); base/dors: albedo flank / back
+const PAT = pick(
+  { mott: 0.32, blot: 0.36, pocket: 0.5, verm: 0.36, belly: [-0.4, -0.88], base: [0.59, 0.5, 0.39], dors: [0.39, 0.33, 0.25], spots: 1.5 },
+  { mott: 0.27, blot: 0.33, pocket: 0.44, verm: 0.3, belly: [-0.34, -0.85], base: [0.7, 0.53, 0.14], dors: [0.45, 0.37, 0.08], spots: 1.4 },
+);
+const bellyOf = (hn) => smoothstep(PAT.belly[0], PAT.belly[1], hn);
+// Three patterns per growth stage: different individuals of the same species pattern. Each has its own random
+// seeds (blotch placement, marbling, melanophores) and a slight style difference:
+//   1: the reference pattern; 2: the midline blotches reach up the flank as saddles, coarser;
+//   3: smaller, more numerous blotches and finer, stronger marbling
+export const PATTERNS = [
+  { shift: 0, rsK: 1, rhK: 1, hn: 0, mottK: 1, freqK: 1, blotK: 1, dorsK: 1 },
+  { shift: 1.1, rsK: 1.1, rhK: 2.0, hn: 0.14, mottK: 0.85, freqK: 0.85, blotK: 1.15, dorsK: 1.5 },
+  { shift: 0.8, rsK: 0.7, rhK: 0.8, hn: -0.04, mottK: 1.25, freqK: 1.4, blotK: 0.9, dorsK: 0.9 },
+];
 
 const TAU = Math.PI * 2;
 
@@ -50,12 +84,13 @@ export function invPhi(s, y, z) {
 
 // Upper / lower lip bands around the gape (0..1), fish-space s, y in mm.
 function lipBands(s, y) {
-  if (s > RICTUS_S + 0.9 || y > 3.6) return { up: 0, lo: 0, rim: 0 };
+  if (s > RICTUS_S + 0.9 || y > MOUTH[0][1] + 1.62) return { up: 0, lo: 0, rim: 0 };
   const g = gapeY(Math.min(Math.max(s, 0.05), RICTUS_S));
   const along = smoothstep(RICTUS_S + 0.7, RICTUS_S - 0.3, s);
   const dy = y - g;
-  const wu = 0.62 - 0.22 * clamp(s / RICTUS_S, 0, 1); // upper lip roll height
-  const wl = 0.5 - 0.18 * clamp(s / RICTUS_S, 0, 1);
+  const [u0, u1, l0, l1] = LIPS.band;
+  const wu = u0 - u1 * clamp(s / RICTUS_S, 0, 1); // upper lip roll height
+  const wl = l0 - l1 * clamp(s / RICTUS_S, 0, 1);
   const up = dy > 0 ? smoothstep(wu, wu * 0.55, dy) * along : 0;
   const lo = dy <= 0 ? smoothstep(wl, wl * 0.55, -dy) * along : 0;
   const rim = Math.exp(-((dy / 0.09) ** 2)) * along; // moist margin where the lips meet
@@ -111,7 +146,7 @@ function projectGrid(sOf, phiOf, NS, NV, log) {
   return { P, N, S, PHI, cols, nVert };
 }
 
-export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, log = () => {} } = {}) {
+export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, patterns = [1], log = () => {} } = {}) {
   // --------------------------------------------------------------------------- bake grid (regular s/φ)
   log('  projecting bake grid …');
   const sListB = distributeSections(NSb);
@@ -146,13 +181,16 @@ export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 204
     for (let j = jt + 1; j <= NVb; j++) QD[i * colsB + j] = QD[i * colsB + j - 1] + Math.hypot(...sub(gpB(i, j), gpB(i, j - 1)));
     for (let j = jt - 1; j >= 0; j--) QD[i * colsB + j] = QD[i * colsB + j + 1] + Math.hypot(...sub(gpB(i, j), gpB(i, j + 1)));
   }
-  log('  baking body textures …');
-  const T = bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log });
+  const TS = patterns.map((pattern) => {
+    log(`  baking body textures (pattern ${pattern}) …`);
+    return bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern });
+  });
+  const T = TS[0];
 
   // --------------------------------------------------------------------------- render mesh (warped grid with cuts)
   log('  render mesh …');
   const mesh = buildWarpedMesh(NS, NV, log);
-  return { ...mesh, textures: T };
+  return { ...mesh, textures: T, patternTextures: TS };
 }
 
 // base-loft surface z on the +z side at height y
@@ -368,7 +406,11 @@ function buildWarpedMesh(NS, NV, log) {
 // Pattern + height baking
 
 function bakeBodyTextures(ctx) {
-  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log } = ctx;
+  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern = 1 } = ctx;
+  // pattern-dependent random streams (shape relief, pores and roughness keep their fixed seeds)
+  const PS = (pattern - 1) * 1009;
+  const ST = PATTERNS[pattern - 1];
+  const hp = (a, b, c, seed) => hash01(a, b, c, seed + PS);
   const nT = texW * texH;
   // per-texel interpolated attributes
   const A = {
@@ -418,11 +460,12 @@ function bakeBodyTextures(ctx) {
 
   // Irregular blotches: clusters of sub-blobs (deterministic), slightly asymmetric L/R via signed z noise.
   const BLOBS = []; // [s, hn, rs, rh, strength]
-  const rnd = (a, b, c) => hash01(a, b, c, 4242);
+  const rnd = (a, b, c) => hp(a, b, c, 4242);
   const MAIN = [[12.9, 0.05, 0.75], [17.4, 0.07, 1], [22.0, 0.05, 1], [26.5, 0.04, 1], [30.9, 0.05, 0.95], [35.1, 0.04, 0.95], [39.1, 0.06, 1]];
-  MAIN.forEach(([bs, bh, st], k) => {
+  MAIN.forEach(([bs0, bh0, st], k) => {
+    const bs = bs0 + (rnd(k, 9, 30) - 0.5) * 2 * ST.shift, bh = bh0 + ST.hn;
     for (let i = 0; i < 5; i++) {
-      BLOBS.push([bs + (rnd(k, i, 1) - 0.5) * 1.5, bh + (rnd(k, i, 2) - 0.5) * 0.3, 0.32 + 0.38 * rnd(k, i, 3), 0.1 + 0.1 * rnd(k, i, 4), st * (0.65 + 0.35 * rnd(k, i, 5))]);
+      BLOBS.push([bs + (rnd(k, i, 1) - 0.5) * 1.5, bh + (rnd(k, i, 2) - 0.5) * 0.3, (0.32 + 0.38 * rnd(k, i, 3)) * ST.rsK, (0.1 + 0.1 * rnd(k, i, 4)) * ST.rhK, st * (0.65 + 0.35 * rnd(k, i, 5))]);
     }
   });
   [15.1, 19.7, 24.3, 28.8, 33.1, 37.1].forEach((bs, k) => {
@@ -432,11 +475,11 @@ function bakeBodyTextures(ctx) {
   });
   const DORSAL = [];
   for (let k = 0; k < 40; k++) {
-    DORSAL.push([9.2 + k * 0.8 + (rnd(k, 0, 21) - 0.5) * 0.6, 0.7 + 0.3 * rnd(k, 0, 22), 0.2 + 0.28 * rnd(k, 0, 23), 0.08 + 0.1 * rnd(k, 0, 24), 0.35 + 0.35 * rnd(k, 0, 25)]);
+    DORSAL.push([9.2 + k * 0.8 + (rnd(k, 0, 21) - 0.5) * 0.6, 0.7 + 0.3 * rnd(k, 0, 22), 0.2 + 0.28 * rnd(k, 0, 23), (0.08 + 0.1 * rnd(k, 0, 24)) * ST.dorsK, 0.35 + 0.35 * rnd(k, 0, 25)]);
   }
 
   function blotchAt(s, y, z, hn) {
-    const nz = fbm3(s * 0.6, y * 0.6, z * 0.6, 3, 11) * 0.7 + fbm3(s * 2.4, y * 2.4, z * 2.4, 2, 12) * 0.35;
+    const nz = fbm3(s * 0.6, y * 0.6, z * 0.6, 3, 11 + PS) * 0.7 + fbm3(s * 2.4, y * 2.4, z * 2.4, 2, 12 + PS) * 0.35;
     let b = 0;
     for (const [bs, bh, rs, rh, st] of BLOBS) {
       const ds = (s - bs) / rs, dh = (hn - bh) / rh;
@@ -457,18 +500,17 @@ function bakeBodyTextures(ctx) {
   function headMarks(s, y, z, hn) {
     // subocular bar, postorbital streak, opercular spot, cheek spots
     let m = 0;
-    const nz = fbm3(s * 1.4, y * 1.4, 3.1, 2, 21) * 0.25;
+    const nz = fbm3(s * 1.4, y * 1.4, 3.1, 2, 21 + PS) * 0.25;
     // dark preorbital streak from the snout to the eye (as in the juvenile photos)
-    const d0 = distToPolyline2(s, y, [[0.5, 2.6], [2.2, 3.2], [3.9, 3.95]]);
+    const d0 = distToPolyline2(s, y, MARKS.pre);
     m = Math.max(m, 0.5 * smoothstep(0.34, 0.1, d0 + nz));
-    const d1 = distToPolyline2(s, y, [[5.0, 3.45], [4.75, 2.45], [4.4, 1.45]]);
+    const d1 = distToPolyline2(s, y, MARKS.sub);
     m = Math.max(m, 0.62 * smoothstep(0.4, 0.12, d1 + nz));
-    const d2 = distToPolyline2(s, y, [[6.1, 4.8], [7.6, 4.95], [9.4, 4.9]]);
+    const d2 = distToPolyline2(s, y, MARKS.post);
     m = Math.max(m, 0.45 * smoothstep(0.3, 0.08, d2 + nz));
-    const d3 = Math.hypot(s - 10.6, y - 4.35);
+    const d3 = Math.hypot(s - MARKS.operc[0], y - MARKS.operc[1]);
     m = Math.max(m, 0.65 * smoothstep(0.55, 0.2, d3 + nz));
-    const spots = [[7.2, 2.8, 0.32], [8.5, 3.6, 0.28], [9.6, 2.4, 0.3], [6.3, 1.9, 0.25], [9.0, 1.5, 0.24]];
-    for (const [ss, yy, r] of spots) m = Math.max(m, 0.45 * smoothstep(r, r * 0.3, Math.hypot(s - ss, y - yy) + nz * 0.5));
+    for (const [ss, yy, r] of MARKS.spots) m = Math.max(m, 0.45 * smoothstep(r, r * 0.3, Math.hypot(s - ss, y - yy) + nz * 0.5));
     return m * smoothstep(-0.9, -0.3, hn);
   }
 
@@ -479,10 +521,10 @@ function bakeBodyTextures(ctx) {
     const dy = y - q.yc;
     const hn = dy / Math.max(dy > 0 ? q.t : q.b, 1e-3);
     const dorsal = smoothstep(-0.2, 0.8, hn);
-    const belly = smoothstep(-0.05, -0.7, hn);
+    const belly = bellyOf(hn);
     const head = headF(s, y);
     const { b, sd } = blotchAt(s, y, z, hn);
-    const n = fbm3(s * 0.8, y * 0.8, Math.abs(z) * 0.8, 3, 5);
+    const n = fbm3(s * 0.8, y * 0.8, Math.abs(z) * 0.8, 3, 5 + PS);
     let d = 3.0 + 24.0 * dorsal * (0.65 + 0.55 * n) + 6.0 * (1 - Math.abs(hn));
     d += 24.0 * b + 16.0 * sd;
     if (head > 0) {
@@ -498,7 +540,7 @@ function bakeBodyTextures(ctx) {
     d = d * (1 - 0.6 * lb.lo) + 32.0 * lb.up + 8.0 * lb.lo;
     d *= 1 - 0.85 * lb.rim;
     const size = (0.8 + 0.5 * dorsal + 0.35 * b) * (1 - 0.15 * lb.up);
-    return [Math.max(0, d), size];
+    return [Math.max(0, d * MEL_K * PAT.spots), size];
   }
 
   // ---------------------------------------------------------------------------
@@ -516,32 +558,54 @@ function bakeBodyTextures(ctx) {
     const hn = clamp(dy / Math.max(dy > 0 ? q.t : q.b, 1e-3), -1.2, 1.2);
     const head = headF(s, yy);
     const dorsal = smoothstep(-0.2, 0.8, hn);
-    const belly = smoothstep(-0.05, -0.7, hn);
+    const belly = bellyOf(hn);
     const { b, sd } = blotchAt(s, yy, z, hn);
     let m = 0.035 * dorsal + 0.075 * b + 0.05 * sd;
     if (head > 0) {
       // fine dark vermiculation on the cheek and gill cover (typical of Acanthogobius heads)
-      const verm = smoothstep(0.74, 0.9, ridged3(s * 1.5 + 3.1, yy * 1.5, Math.abs(z) * 1.5, 3, 61)) * smoothstep(-0.8, -0.2, hn) * smoothstep(3.0, 5.0, s);
+      const verm = smoothstep(0.74, 0.9, ridged3(s * 1.5 + 3.1, yy * 1.5, Math.abs(z) * 1.5, 3, 61 + PS)) * smoothstep(-0.8, -0.2, hn) * smoothstep(3.0, 5.0, s);
       // coarse dark reticulation over the head top, snout and cheeks (user close-up photo)
-      const retic = smoothstep(0.68, 0.84, ridged3(s * 1.05 + 7.3, yy * 1.05, Math.abs(z) * 1.05, 3, 62)) * smoothstep(-0.45, 0.2, hn) * smoothstep(0.8, 2.5, s);
-      m = mix(m, 0.08 * dorsal + 0.3 * headMarks(s, yy, z, hn) + 0.16 * verm + 0.14 * retic, head);
+      const retic = smoothstep(0.68, 0.84, ridged3(s * 1.05 + 7.3, yy * 1.05, Math.abs(z) * 1.05, 3, 62 + PS)) * smoothstep(-0.45, 0.2, hn) * smoothstep(0.8, 2.5, s);
+      m = mix(m, 0.08 * dorsal + 0.3 * headMarks(s, yy, z, hn) + PAT.verm * verm + 0.14 * retic, head);
     }
     // dusky dorsal reticulation (pigment along scale pockets)
-    m += 0.1 * dorsal * smoothstep(0.55, 0.8, ridged3(s * 2.2, yy * 2.2, z * 2.2, 3, 3)) * (1 - head * 0.5);
-    m *= 1 - belly;
+    m += 0.1 * dorsal * smoothstep(0.55, 0.8, ridged3(s * 2.2, yy * 2.2, z * 2.2, 3, 3 + PS)) * (1 - head * 0.5);
+    // marbling: irregular dark patches over the back and the upper and middle flank
+    {
+      const az = Math.abs(z);
+      const fk = ST.freqK;
+      const f = fbm3(s * 0.75 * fk + 11.3, yy * 0.75 * fk, az * 0.75 * fk, 4, 131 + PS) + 0.35 * fbm3(s * 2.4 * fk, yy * 2.4 * fk, az * 2.4 * fk, 2, 132 + PS);
+      const flank = smoothstep(PAT.belly[0] - 0.05, PAT.belly[0] + 0.45, hn) * (1 - 0.5 * head);
+      m += PAT.mott * ST.mottK * smoothstep(0.0, 0.16, f) * flank;
+    }
+    m += PAT.blot * ST.blotK * b * smoothstep(-0.6, -0.1, hn);
+    m += CSPOT_K * Math.exp(-(((s - 40.5) / 0.75) ** 2) - ((hn - 0.02) / 0.4) ** 2);
+    m *= (1 - belly) * MELF_K;
     const ed = eyeDist(s, yy, z);
     m += 0.12 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.3) ** 2));
     let iri = 0.85 * belly + 0.3 * smoothstep(0.25, -0.4, hn) + 0.12 * Math.exp(-(((hn - 0.02) / 0.22) ** 2));
     iri = Math.max(iri, head * 0.55 * smoothstep(0.55, -0.3, hn) * smoothstep(3.0, 5.5, s));
     iri = Math.max(iri, 0.06 * smoothstep(EYE.radius + 0.5, EYE.radius + 0.2, ed) * smoothstep(EYE.radius, EYE.radius + 0.15, ed));
     iri *= 1 - 0.7 * b;
-    iri *= 0.85 + 0.3 * fbm3(s * 1.3, yy * 1.3, z * 1.3, 3, 41);
+    iri *= 0.85 + 0.3 * fbm3(s * 1.3, yy * 1.3, z * 1.3, 3, 41 + PS);
     // lips carry no silvery iridophores; the chin is only faintly silvered
     if (s < 5.5) iri *= 1 - 0.9 * smoothstep(0.75, 0.25, distToPolyline2(s, yy, MOUTH)) * smoothstep(5.2, 4.0, s);
     iri *= 1 - 0.55 * smoothstep(6.0, 3.5, s) * smoothstep(0.1, -0.4, hn);
     let xan = 0.2 + 0.45 * dorsal + 0.35 * head * smoothstep(-0.3, 0.4, hn);
     xan *= 1 - 0.85 * belly;
-    xan *= 0.8 + 0.4 * fbm3(s * 0.9, yy * 0.9, z * 0.9, 3, 51);
+    xan *= (0.8 + 0.4 * fbm3(s * 0.9, yy * 0.9, z * 0.9, 3, 51 + PS)) * XAN_K;
+    xan += pick(0, 0.3) * (1 - belly); // the juvenile's skin is yellow throughout (also tints the light through it)
+    // lid fold: dusky above the eye, a golden rim (xanthophores + iridophores) along its lower and rear margin
+    // where it meets the cornea, as in the photos
+    {
+      const lid = eyeLid(s, yy, z);
+      const onLid = smoothstep(0.14, -0.02, lid.d);
+      const edge = onLid * smoothstep(0.55, 0.85, lid.h); // inner margin, next to the cornea
+      const up = smoothstep(-0.2, 0.9, lid.dorsal);
+      m += onLid * (0.16 * up + 0.04) - 0.08 * edge * (1 - up);
+      xan = Math.max(xan, edge * (0.75 - 0.5 * up));
+      iri = Math.max(iri, edge * (0.35 - 0.25 * up));
+    }
     // gill region seen through the operculum (used for the fallback albedo only)
     const gill = smoothstep(7.5, 9.0, s) * smoothstep(11.6, 10.6, s) * smoothstep(0.35, -0.2, hn) * smoothstep(-0.95, -0.55, hn);
     return { hn, head, mel: m, iri: clamp(iri), xan: clamp(xan), gill };
@@ -552,7 +616,7 @@ function bakeBodyTextures(ctx) {
     const CELL = 0.1;
     const px = s0 / CELL, py = yy / CELL, pz = z / CELL;
     let v = 0;
-    forEachCell3(px, py, pz, 4711, (fx, fy, fz, h) => {
+    forEachCell3(px, py, pz, 4711 + PS, (fx, fy, fz, h) => {
       const [dens, size] = melDensity(Math.max(fx * CELL, 0.21), fy * CELL, fz * CELL);
       if ((h >>> 3) / 536870912 > Math.min(0.95, dens * CELL * CELL * 1.6)) return;
       const dx = (px - fx) * CELL, dy = (py - fy) * CELL, dz = (pz - fz) * CELL;
@@ -628,29 +692,29 @@ function bakeBodyTextures(ctx) {
       if (A.px[t] < 0.55 || A.du[t] / Math.max(A.dv[t], 1e-6) > 3) continue;
       const expected = dens * area;
       let count = Math.floor(expected);
-      if (hash01(cx, cy, 1, 99) < expected - count) count++;
+      if (hp(cx, cy, 1, 99) < expected - count) count++;
       for (let k = 0; k < count; k++) {
-        const hx = hash01(cx, cy, k, 7), hy = hash01(cx, cy, k, 8), hs = hash01(cx, cy, k, 9), ha = hash01(cx, cy, k, 10);
+        const hx = hp(cx, cy, k, 7), hy = hp(cx, cy, k, 8), hs = hp(cx, cy, k, 9), ha = hp(cx, cy, k, 10);
         const fx = x0 + hx * (texW / cellsU), fy = y0 + hy * (texH / cellsV);
         const rCore = (0.012 + 0.016 * hs) * size;
-        const punct = hash01(cx, cy, k, 12) < 0.35;
+        const punct = hp(cx, cy, k, 12) < 0.35;
         // ~30 % lie deeper in the dermis: larger, softer and fainter through the overlying tissue
-        const deep = hash01(cx, cy, k, 16) < 0.3;
-        const nArms = 3 + Math.floor(hash01(cx, cy, k, 11) * 5);
+        const deep = hp(cx, cy, k, 16) < 0.3;
+        const nArms = 3 + Math.floor(hp(cx, cy, k, 11) * 5);
         const arms = [];
         for (let a = 0; a < nArms; a++) {
-          const ang = ha * TAU + (a / nArms) * TAU + (hash01(cx + a, cy, k, 13) - 0.5) * 0.9;
-          const len = rCore * (punct ? 0.9 : 1.8 + 3.0 * hash01(cx, cy + a, k, 14));
+          const ang = ha * TAU + (a / nArms) * TAU + (hp(cx + a, cy, k, 13) - 0.5) * 0.9;
+          const len = rCore * (punct ? 0.9 : 1.8 + 3.0 * hp(cx, cy + a, k, 14));
           const c = Math.cos(ang), sn = Math.sin(ang);
-          const w = rCore * (0.2 + 0.16 * hash01(cx, cy, k + a, 15));
+          const w = rCore * (0.2 + 0.16 * hp(cx, cy, k + a, 15));
           arms.push({ ox: 0, oy: 0, c, s: sn, len, w, k: 0.9 });
           if (!punct && len > rCore * 2.6) {
             // one or two side branches per dendrite
             for (const sgn of [1, -1]) {
-              if (hash01(cx + a, cy, k + (sgn > 0 ? 1 : 2), 17) < 0.45) continue;
-              const f0 = 0.4 + 0.3 * hash01(cx, cy + a, k + (sgn > 0 ? 3 : 4), 18);
-              const ba = ang + sgn * (0.5 + 0.4 * hash01(cx + 2 * a, cy, k, 19));
-              arms.push({ ox: c * len * f0, oy: sn * len * f0, c: Math.cos(ba), s: Math.sin(ba), len: len * (0.35 + 0.25 * hash01(cx, cy, k + a, 20)), w: w * 0.7, k: 0.8 });
+              if (hp(cx + a, cy, k + (sgn > 0 ? 1 : 2), 17) < 0.45) continue;
+              const f0 = 0.4 + 0.3 * hp(cx, cy + a, k + (sgn > 0 ? 3 : 4), 18);
+              const ba = ang + sgn * (0.5 + 0.4 * hp(cx + 2 * a, cy, k, 19));
+              arms.push({ ox: c * len * f0, oy: sn * len * f0, c: Math.cos(ba), s: Math.sin(ba), len: len * (0.35 + 0.25 * hp(cx, cy, k + a, 20)), w: w * 0.7, k: 0.8 });
             }
           }
         }
@@ -732,8 +796,8 @@ function bakeBodyTextures(ctx) {
           sh = mix(scaleH(second), scaleH(top), edge);
           // melanophores concentrate along the scale pockets (reticulated look of the upper flank)
           const pocket = Math.exp(-(((top.rr - top.dist) / 0.035) ** 2)) * smoothstep(-0.05, 0.12, top.ds);
-          const dors = smoothstep(-0.1, 0.7, hn);
-          MEL[t] = 1 - (1 - MEL[t]) * (1 - 0.16 * pocket * dors * scMask * (0.6 + 0.4 * hash01(top.hsh & 1023, 0, 0, 7)));
+          const dors = smoothstep(PAT.belly[0], PAT.belly[0] + 0.9, hn);
+          MEL[t] = 1 - (1 - MEL[t]) * (1 - PAT.pocket * pocket * dors * scMask * (0.6 + 0.4 * hp(top.hsh & 1023, 0, 0, 7)));
         } else sh = 0.3;
         const amp = 0.013 * (1 - 0.45 * smoothstep(-0.3, -0.8, hn)) * (0.75 + 0.25 * zn);
         h += amp * sh * scMask;
@@ -833,11 +897,11 @@ function bakeBodyTextures(ctx) {
   // albedo (linear) + roughness at a surface point
   function shadeAt(s, yy, z, hn, head, MELv, I, X, G, cavity, halfW) {
     const dorsal = smoothstep(-0.2, 0.8, hn);
-    const belly = smoothstep(-0.05, -0.7, hn);
+    const belly = bellyOf(hn);
     const M = MELv * 1.6;
     // pale amber tissue, olive-brown back, milky belly (juvenile photos IMG_1603 / 9176 / user photo 1)
-    let r = 0.66, g = 0.53, b = 0.3;
-    r = mix(r, 0.5, dorsal * 0.55); g = mix(g, 0.44, dorsal * 0.55); b = mix(b, 0.2, dorsal * 0.55);
+    let [r, g, b] = PAT.base;
+    r = mix(r, PAT.dors[0], dorsal * 0.6); g = mix(g, PAT.dors[1], dorsal * 0.6); b = mix(b, PAT.dors[2], dorsal * 0.6);
     r = mix(r, 0.76, belly); g = mix(g, 0.7, belly); b = mix(b, 0.58, belly);
     r *= mix(1, 1.02, X * 0.6); g *= mix(1, 0.9, X * 0.6); b *= mix(1, 0.55, X * 0.6);
     r = mix(r, 0.78, I * 0.4); g = mix(g, 0.77, I * 0.4); b = mix(b, 0.7, I * 0.4);
@@ -856,7 +920,7 @@ function bakeBodyTextures(ctx) {
     }
     r *= Math.exp(-M * 2.0); g *= Math.exp(-M * 2.15); b *= Math.exp(-M * 2.35);
     // shadowed mouth slit
-    if (s < 5.5 && yy < 2.6) {
+    if (s < RICTUS_S + 2 && yy < MOUTH[0][1] + 0.62) {
       const dm = distToPolyline2(Math.max(s, 0.02), yy, MOUTH);
       const slit = 0.6 * Math.exp(-((dm / 0.07) ** 2)) * smoothstep(0.1, 0.35, Math.abs(z) / Math.max(halfW, 1e-3) + (s < 0.6 ? 1 : 0));
       r *= 1 - 0.42 * slit; g *= 1 - 0.44 * slit; b *= 1 - 0.46 * slit;

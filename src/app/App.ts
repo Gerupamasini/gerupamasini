@@ -19,6 +19,7 @@ import { ClamField } from '../world/ClamField';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 import { instantiateModel } from '../creatures/models/ModelLoader';
+import { modelFor, variantOf } from '../creatures/models/choice';
 import { DRIVERS } from '../creatures/drivers';
 import type { SpeciesDef, ToolDef } from '../data/schemas';
 import { CreatureSystem, type SpawnEnv } from '../creatures/CreatureSystem';
@@ -41,6 +42,8 @@ import { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 const HUD_HZ = 4;
 const MARKER_HZ = 10;
 const AUTOSAVE_SEC = 60;
+/** drivers that build their own clam geometry in shell lengths (the scoop shows them at length / 1000) */
+const CLAM_DRIVERS = new Set(['asari', 'hamaguri']);
 
 export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool' | 'clams';
 
@@ -714,9 +717,21 @@ export class App {
     clams.startle(p.x, p.z, 1.5, nowSec);
     const caught: Individual[] = [];
     const sp = this.data.species.get('ruditapes_philippinarum');
+    const full = () => this.encyclopedia.caseItems.value.length + caught.length >= this.encyclopedia.caseMax;
     if (k >= 0 && sp) {
-      if (this.encyclopedia.caseItems.value.length >= this.encyclopedia.caseMax) toast(t('capture.caseFull'), 'warn');
+      if (full()) toast(t('capture.caseFull'), 'warn');
       else caught.push(generateIndividual(sp, clams.seed[k], clams.xs[k], clams.zs[k], -1, 0, this.clock.nowGame(), [clams.len[k], clams.len[k]]));
+    }
+    // the other burrowers (ハマグリ) live in the creature system: the nearest one under the blade comes up too
+    if (this.creatures) {
+      const r = (tool.params.radius ?? 0.14) * (1 + 0.1 * this.encyclopedia.skillLevel('shovel')) + 0.04;
+      const buried = this.creatures.individuals.filter((i) => i.species.locomotion === 'burrow' && i.species.collectable && i.pitId !== -2 && Math.hypot(i.pos.x - p.x, i.pos.z - p.z) <= r);
+      buried.sort((a, b) => Math.hypot(a.pos.x - p.x, a.pos.z - p.z) - Math.hypot(b.pos.x - p.x, b.pos.z - p.z));
+      const one = buried[0];
+      if (one) {
+        if (full()) toast(t('capture.caseFull'), 'warn');
+        else { this.creatures.remove(one.id); caught.push(one); }
+      }
     }
     this.lastTool = tool;
     this.capture.start(tool, caught);
@@ -744,23 +759,24 @@ export class App {
     const shovel = this.toolType(this.capture.state.value?.toolId ?? '') === 'dig';
     if (!shovel) for (const ind of caught) this.creatures.remove(ind.id);
     const first = caught[0];
-    if (first) void this.displayModelFor(first.species).then((obj) => {
+    if (first) void this.displayModelFor(first).then((obj) => {
       if (!obj || this.capture.catches[0] !== first) return;
       // the clam's shape is built in shell lengths; the others at their model length
-      const scale = first.species.model.driver === 'asari' ? first.length_mm / 1000 : first.length_mm / first.species.model.modelLength_mm;
+      const scale = CLAM_DRIVERS.has(first.species.model.driver ?? '') ? first.length_mm / 1000 : first.length_mm / first.species.model.modelLength_mm;
       if (shovel) this.shovel?.setCatch(obj, scale); else this.net?.setCatch(obj, scale);
     });
   }
 
   /** A fresh model of the species to lie in the net (the detailed tier, or the driver's own geometry). */
-  private async displayModelFor(sp: SpeciesDef): Promise<Object3D | null> {
-    const rel = sp.model.lod1 ?? sp.model.hero ?? sp.model.lod2;
+  private async displayModelFor(ind: Individual): Promise<Object3D | null> {
+    const sp = ind.species, m = modelFor(sp, ind.stage);
+    const rel = m.lod1 ?? m.hero ?? m.lod2;
     if (rel) {
-      try { return (await instantiateModel(rel)).root; } catch (err) { console.warn(err); }
+      try { return (await instantiateModel(rel, variantOf(ind.id))).root; } catch (err) { console.warn(err); }
     }
     const entry = DRIVERS[sp.model.driver ?? ''];
     // drivers that build their own geometry: the preview shape (a clam lies closed in the scoop)
-    if (entry?.preview) return entry.preview();
+    if (entry?.preview) return entry.preview((variantOf(ind.id) & 0xffff) / 65536);
     return entry?.placeholder ? entry.placeholder().root : null;
   }
 
@@ -1361,7 +1377,11 @@ export class App {
       }
       if (this.target) {
         const sp = this.target.species;
-        prompt = `${sp.names.ja}   [F] ${t('hud.observe')}${sp.collectable ? (toolHint ? `   ${toolHint}` : '') : `   ${t('hud.observeOnly')}`}`;
+        const shovelKey = this.encyclopedia.loadout.value.indexOf('shovel');
+        const digHint = this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.data.tools.get('shovel')?.ja ?? ''}` : t('tools.noShovel');
+        prompt = sp.locomotion === 'burrow'
+          ? `${sp.names.ja}   [F] ${t('hud.observe')}   ${digHint}`
+          : `${sp.names.ja}   [F] ${t('hud.observe')}${sp.collectable ? (toolHint ? `   ${toolHint}` : '') : `   ${t('hud.observeOnly')}`}`;
       } else if (this.targetClam >= 0) {
         const shovelKey = this.encyclopedia.loadout.value.indexOf('shovel');
         prompt = `${t('clam.siphon')}   [F] ${t('hud.observe')}   ${this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.data.tools.get('shovel')?.ja ?? ''}` : t('tools.noShovel')}`;

@@ -8,6 +8,7 @@ import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
 import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
 import { createPitDebris } from '../world/PitDebris';
+import type { FeedingPit } from '../world/FeedingPits';
 import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
 import { jstParts, seasonOf, type Season } from '../core/Time';
@@ -15,6 +16,9 @@ import type { QualityPreset } from '../core/Settings';
 
 /** The tidal flat: terrain, water, sky, habitat and the tide model bound to a map. */
 export class World {
+  /** the stingray feeding pits (debug, tests) */
+  pits: FeedingPit[] = [];
+
   readonly scene = new Scene();
   readonly fog: FogExp2;
   readonly sunDir = new Vector3(0, 1, 0);
@@ -67,6 +71,7 @@ export class World {
     // the sky needs its own scene reference; create it after the scene exists
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
+    w.pits = pits;
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
     (w as { sky: SkyDome }).sky = sky;
     return w;

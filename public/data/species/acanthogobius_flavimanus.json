@@ -13,9 +13,9 @@
   "collectable": true,
   "protected": false,
   "model": {
-    "hero": "mahaze/mahaze_juvenile.hero.glb",
-    "lod1": "mahaze/mahaze_juvenile.lod1.glb",
-    "lod2": "mahaze/mahaze_juvenile.lod2.glb",
+    "hero": "mahaze/mahaze_subadult.hero.glb",
+    "lod1": "mahaze/mahaze_subadult.lod1.glb",
+    "lod2": "mahaze/mahaze_subadult.lod2.glb",
     "modelLength_mm": 50.5,
     "driver": "mahaze",
     "clips": {
@@ -30,8 +30,8 @@
     "length_mm": {
       "min": 35,
       "max": 200,
-      "mean": 90,
-      "sd": 35
+      "mean": 95,
+      "sd": 40
     },
     "weightCoef": {
       "a": 1e-05,
@@ -46,16 +46,31 @@
     {
       "id": "juvenile",
       "ja": "幼魚",
-      "maxLength_mm": 60
+      "maxLength_mm": 75,
+      "model": {
+        "hero": "mahaze/mahaze_juvenile.hero.glb",
+        "lod1": "mahaze/mahaze_juvenile.lod1.glb",
+        "lod2": "mahaze/mahaze_juvenile.lod2.glb"
+      }
     },
     {
       "id": "young",
       "ja": "若魚",
-      "maxLength_mm": 110
+      "maxLength_mm": 145,
+      "model": {
+        "hero": "mahaze/mahaze_subadult.hero.glb",
+        "lod1": "mahaze/mahaze_subadult.lod1.glb",
+        "lod2": "mahaze/mahaze_subadult.lod2.glb"
+      }
     },
     {
       "id": "adult",
-      "ja": "成魚"
+      "ja": "成魚",
+      "model": {
+        "hero": "mahaze/mahaze_adult.hero.glb",
+        "lod1": "mahaze/mahaze_adult.lod1.glb",
+        "lod2": "mahaze/mahaze_adult.lod2.glb"
+      }
     }
   ],
   "traits": [

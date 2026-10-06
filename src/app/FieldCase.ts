@@ -7,6 +7,7 @@ import type { SpeciesDef } from '../data/schemas';
 import type { Driver, Floor } from '../creatures/drivers/Driver';
 import { DRIVERS } from '../creatures/drivers/index';
 import { instantiateModel } from '../creatures/models/ModelLoader';
+import { modelFor, variantOf } from '../creatures/models/choice';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 
@@ -183,9 +184,10 @@ export class FieldCase {
     ind.home.copy(ind.pos);
     ind.heading = (long ? Math.PI / 2 : 0) + (slot % 2 ? Math.PI : 0);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
-    const rel = species.model.lod1 ?? species.model.lod2 ?? species.model.hero;
+    const files = modelFor(species, ind.stage);
+    const rel = files.lod1 ?? files.lod2 ?? files.hero;
     if (rel) {
-      const model = await instantiateModel(rel);
+      const model = await instantiateModel(rel, variantOf(ind.id));
       root = model.root; bones = model.bones as Record<string, Object3D>; meshes = model.meshes; extras = model.extras;
     } else if (entry.placeholder) {
       const ph = entry.placeholder();

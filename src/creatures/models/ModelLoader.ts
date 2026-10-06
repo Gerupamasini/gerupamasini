@@ -54,46 +54,77 @@ function prepareMaterials(gltf: GLTF, tier: Tier): void {
     const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[];
-    for (const m of mats) {
-      const pm = m as MeshPhysicalMaterial;
-      if (tier !== 'hero' && pm.isMeshPhysicalMaterial) {
-        // transmission needs an extra scene pass; keep it for the observed hero only
-        pm.transmission = 0;
-        pm.thickness = 0;
-      }
-      if (tier === 'lod2') {
-        pm.clearcoat = 0;
-        if (pm.transparent && pm.alphaTest === 0) { pm.transparent = false; pm.alphaTest = 0.5; }
-      }
-      const sm = m as MeshStandardMaterial;
-      sm.envMapIntensity = 0.8;
-    }
+    for (const m of mats) prepareMaterial(m, tier);
     mesh.castShadow = tier !== 'lod2';
     mesh.receiveShadow = false;
   });
 }
 
-/** Instantiate a loaded model (skeleton-aware clone). Materials are shared. */
-export async function instantiateModel(rel: string): Promise<LoadedModel> {
+function prepareMaterial(m: Material, tier: Tier): void {
+  const pm = m as MeshPhysicalMaterial;
+  if (tier !== 'hero' && pm.isMeshPhysicalMaterial) {
+    // transmission needs an extra scene pass; keep it for the observed hero only
+    pm.transmission = 0;
+    pm.thickness = 0;
+  }
+  if (tier === 'lod2') {
+    pm.clearcoat = 0;
+    if (pm.transparent && pm.alphaTest === 0) { pm.transparent = false; pm.alphaTest = 0.5; }
+  }
+  const sm = m as MeshStandardMaterial;
+  sm.envMapIntensity = 0.8;
+}
+
+interface VariantMappings { mappings: { material: number; variants: number[] }[] }
+interface VariantList { variants: { name: string }[] }
+
+/** Number of KHR_materials_variants (pattern variants) a loaded asset carries. */
+function variantCount(gltf: GLTF): number {
+  return (gltf.userData as { gltfExtensions?: { KHR_materials_variants?: VariantList } }).gltfExtensions?.KHR_materials_variants?.variants.length ?? 0;
+}
+
+/**
+ * Instantiate a loaded model (skeleton-aware clone). Materials are shared. `variant` picks one of the asset's
+ * pattern variants (glTF KHR_materials_variants; any integer, taken modulo their number): the mesh stays the same,
+ * the materials (and their textures) are the variant's own.
+ */
+export async function instantiateModel(rel: string, variant?: number): Promise<LoadedModel> {
   const gltf = await preloadModel(rel);
   const tier: Tier = rel.includes('.hero.') ? 'hero' : rel.includes('.lod1.') ? 'lod1' : 'lod2';
   const root = skeletonClone(gltf.scene);
   const bones: Record<string, Bone> = {};
   const meshes: Mesh[] = [];
+  const n = variantCount(gltf);
+  const pick = variant !== undefined && n > 0 ? ((Math.floor(variant) % n) + n) % n : -1;
+  const swaps: Promise<void>[] = [];
   root.traverse((o) => {
     if ((o as Bone).isBone) bones[o.name] = o as Bone;
     if ((o as Mesh).isMesh) {
       const mesh = o as Mesh;
       meshes.push(mesh);
-      // keep the species extras on the mesh so drivers still find them after a material swap
-      const mx = ((Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as Material).userData?.mahaze;
-      if (mx) mesh.userData.mahaze = mx;
-      if ((mesh as SkinnedMesh).isSkinnedMesh) {
-        // skinned bounds move with the animation; keep culling but with a generous sphere set by the caller
-        mesh.frustumCulled = true;
+      if (pick >= 0) {
+        const maps = (mesh.userData as { gltfExtensions?: { KHR_materials_variants?: VariantMappings } }).gltfExtensions?.KHR_materials_variants?.mappings;
+        const map = maps?.find((mp) => mp.variants.includes(pick));
+        if (map) {
+          swaps.push((gltf.parser.getDependency('material', map.material) as Promise<Material>).then((mat) => {
+            prepareMaterial(mat, tier);
+            mesh.material = mat;
+            gltf.parser.assignFinalMaterial(mesh);   // the loader's per-geometry adjustments (tangents, vertex colours)
+          }));
+        }
       }
     }
   });
+  await Promise.all(swaps);
+  for (const mesh of meshes) {
+    // keep the species extras on the mesh so drivers still find them after a material swap
+    const mx = ((Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as Material).userData?.mahaze;
+    if (mx) mesh.userData.mahaze = mx;
+    if ((mesh as SkinnedMesh).isSkinnedMesh) {
+      // skinned bounds move with the animation; keep culling but with a generous sphere set by the caller
+      mesh.frustumCulled = true;
+    }
+  }
   const box = new Box3().setFromObject(root);
   const size = new Vector3();
   box.getSize(size);

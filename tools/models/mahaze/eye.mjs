@@ -1,9 +1,14 @@
 // Eyeball mesh (local frame: +Z = optical axis) and baked iris texture.
 import { EYE, toObject, dirToObject } from './anatomy.mjs';
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../../lib/noise.mjs';
+import { pick } from './variant.mjs';
 
-export const PUPIL_ANGLE = 0.38; // rad (half-angle from the axis)
-export const IRIS_ANGLE = 1.08;
+// photos: dark bronze iris with a bright golden band at its outer edge; the juvenile's large pupil shows a
+// blue-green sheen
+const IRIS_DARK = pick(0.75, 0.8), RIM_GOLD = pick(0.75, 0.9), PUPIL = pick([0.008, 0.01, 0.012], [0.004, 0.016, 0.02]);
+
+export const PUPIL_ANGLE = EYE.pupil; // rad (half-angle from the axis)
+export const IRIS_ANGLE = EYE.iris;
 export const CORNEA_BULGE = 0.075;
 
 const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
@@ -113,7 +118,7 @@ export function paintIris(size = 1024) {
       const upness = ly / Math.max(Math.sin(theta), 1e-3); // +1 dorsal … −1 ventral
       let c;
       if (theta < pupilEdge) {
-        c = [0.008, 0.01, 0.012];
+        c = PUPIL.slice();
       } else if (theta < IRIS_ANGLE) {
         const f = (theta - pupilEdge) / (IRIS_ANGLE - pupilEdge);
         // As in the photos (IMG_1603, 03, user photo 1): brassy golden-cream guanine layer, brightest in a
@@ -122,7 +127,7 @@ export function paintIris(size = 1024) {
         // user close-ups: dark bronze-olive iris, narrow golden rim, pale silvery-cream crescent below the pupil
         const brass = [0.42, 0.33, 0.14], gold = [0.22, 0.16, 0.06], olive = [0.09, 0.075, 0.035], dark = [0.03, 0.026, 0.02];
         const t0 = smoothstep(0.02, 0.3, f), t1 = smoothstep(0.3, 0.75, f);
-        c = brass.map((v, k) => mix(mix(v, gold[k], t0), olive[k], t1));
+        c = brass.map((v, k) => mix(mix(v, gold[k], t0), olive[k], t1) * IRIS_DARK);
         const low = smoothstep(0.1, 0.75, -upness) * smoothstep(0.05, 0.25, f) * smoothstep(0.95, 0.6, f);
         c = c.map((v, k) => mix(v, [0.4, 0.36, 0.26][k], low * 0.4));
         // radial stroma fibres and crypts
@@ -138,8 +143,10 @@ export function paintIris(size = 1024) {
         const capEdge = 0.25 + 0.18 * perlin3(Math.cos(psi) * 5, Math.sin(psi) * 5, 2.5, 15);
         const cap = smoothstep(capEdge, capEdge + 0.3, upness) * smoothstep(0.08, 0.3, f);
         c = c.map((v, k) => mix(v, dark[k] * 1.3, cap * 0.8));
-        // limbal darkening
-        c = c.map((v, k) => mix(v, dark[k], smoothstep(0.8, 1.0, f)));
+        // golden band at the outer edge of the iris (broken by melanophores), then a thin dark limbus
+        const band = smoothstep(0.66, 0.8, f) * smoothstep(0.98, 0.88, f) * (0.65 + 0.35 * smoothstep(-0.25, 0.3, perlin3(Math.cos(psi) * 11, Math.sin(psi) * 11, 4.1, 18))) * (1 - 0.45 * cap);
+        c = c.map((v, k) => mix(v, [0.62, 0.45, 0.13][k], band * RIM_GOLD));
+        c = c.map((v, k) => mix(v, dark[k], smoothstep(0.95, 1.0, f)));
         // pupillary ruff: a bright but broken golden rim
         const ruff = Math.exp(-(((theta - pupilEdge) / 0.022) ** 2)) * (0.55 + 0.45 * smoothstep(-0.2, 0.4, perlin3(Math.cos(psi) * 7, Math.sin(psi) * 7, 3.3, 16))) * (1 - 0.7 * cap);
         c = c.map((v, k) => v + [0.26, 0.19, 0.06][k] * ruff);
