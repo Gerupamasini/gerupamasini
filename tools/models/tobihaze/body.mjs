@@ -987,7 +987,7 @@ function skinPoint(s, phi, p, n, ao) {
  * Bake the skin textures over the uv layout (u = uvTof(s, phi) · BODY_U, v = phi / 2π) plus the pectoral arm strip
  * (u ∈ [BODY_U, 1]), from a projected grid.
  */
-export function bakeSkinTextures({ W, H, armPaint, armPoint = null, armOcclusion = null, log = () => {} }) {
+export function bakeSkinTextures({ W, H, armPaint, armPoint = null, armOcclusion = null, armShare = null, log = () => {} }) {
   // projected bake grid, regular in the texture's t (arc length along each column, see uvTof) and phi, so it
   // follows the surface up steep walls (eye sockets, the snout's face) instead of cutting through the air
   const NSb = Math.max(240, Math.round(W * BODY_U * 0.2)), NVb = Math.max(128, Math.round(H * 0.2));
@@ -1073,7 +1073,7 @@ export function bakeSkinTextures({ W, H, armPaint, armPoint = null, armOcclusion
   if (armPoint) for (let i = 0; i <= NFa; i++) {
     for (let j = 0; j <= NAa; j++) {
       const { p, n, a } = armPoint(i / NFa, (j / NAa) * TAU);
-      AG.push({ p, n, a, ao: armOcclusion(p, n) });
+      AG.push({ p, n, a, ao: armOcclusion(p, n), share: armShare ? armShare(p) : 0 });
     }
     if (i % 32 === 0) log(`    arm grid ${i}/${NFa}`);
   }
@@ -1084,9 +1084,9 @@ export function bakeSkinTextures({ W, H, armPaint, armPoint = null, armOcclusion
     const ks = [i * (NAa + 1) + j, (i + 1) * (NAa + 1) + j, i * (NAa + 1) + j + 1, (i + 1) * (NAa + 1) + j + 1];
     const w = [(1 - a) * (1 - b), a * (1 - b), (1 - a) * b, a * b];
     const p = [0, 0, 0], n = [0, 0, 0];
-    let at = 0, ao = 0;
-    ks.forEach((kk, m) => { for (let c = 0; c < 3; c++) { p[c] += AG[kk].p[c] * w[m]; n[c] += AG[kk].n[c] * w[m]; } at += AG[kk].a * w[m]; ao += AG[kk].ao * w[m]; });
-    return { p, n: norm3(n), at, ao };
+    let at = 0, ao = 0, share = 0;
+    ks.forEach((kk, m) => { for (let c = 0; c < 3; c++) { p[c] += AG[kk].p[c] * w[m]; n[c] += AG[kk].n[c] * w[m]; } at += AG[kk].a * w[m]; ao += AG[kk].ao * w[m]; share += AG[kk].share * w[m]; });
+    return { p, n: norm3(n), at, ao, share };
   };
   // mm per texel along u and v over the arm strip (for the normal map), from the grid's spacing
   const AMM = new Float32Array(WA * H * 2).fill(0.05);
@@ -1106,7 +1106,12 @@ export function bakeSkinTextures({ W, H, armPaint, armPoint = null, armOcclusion
     const ao = Math.min(r.ao, g.ao);
     const w = 1 - smoothstep(3.2, 4.6, g.at);
     if (w > 1e-3) {
-      const b = skinPoint(g.p[0], invPhi(g.p[0], g.p[1], g.p[2]), g.p, g.n, g.ao);
+      // (the arm hangs below the body's mid-height, where the skin would be painted as belly: it wears the flank's
+      // skin instead - painted as if it lay on the flank beside its root - turning into the body's own paint exactly
+      // where its skirt lies on the body)
+      const pc = [g.p[0], g.p[1] + 2.8 * g.share, g.p[2]];
+      const nc = norm3([g.n[0] * (1 - g.share), g.n[1] * (1 - g.share) + 0.15 * g.share, g.n[2] * (1 - g.share) + Math.sign(g.p[2] || 1) * g.share]);
+      const b = skinPoint(pc[0], invPhi(pc[0], pc[1], pc[2]), pc, nc, g.ao);
       r = {
         col: r.col.map((c, i) => mix(c, b.col[i], w)), h: mix(r.h, b.h, w), rough: mix(r.rough, b.rough, w),
         mudAff: mix(r.mudAff, b.mudAff, w), mucus: mix(r.mucus, b.mucus, w), sun: mix(r.sun, b.sun, w),

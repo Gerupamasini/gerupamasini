@@ -16,7 +16,7 @@ import { S0, Y0, SL, S_END, TL, EYE, BODY_U, toObject, dirToObject, botY, pecBin
 import { buildSkin, skinParts, skinTarget, buildMouth, buildDomes, bakeSkinTextures, SPLIT } from './body.mjs';
 import { finDefinitions, buildFinMesh, buildFinFold, paintFinAtlas, armPaint, mirrorMesh, PEC, PELVIC } from './fins.mjs';
 import { buildEyeMesh, eyeRotation, paintEye, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './eye.mjs';
-import { buildArm, armPoint, armOcclusion } from './arm.mjs';
+import { buildArm, armPoint, armOcclusion, pecShare } from './arm.mjs';
 import { JOINTS, J, skinWeights, mouthWeights, armWeights, finWeights, buildClips, CLIP_SPEED } from './rig.mjs';
 import { MORPHS, SPINE } from '../../../src/creatures/species/tobihaze/pose.js';
 
@@ -62,7 +62,7 @@ const sClamp = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAM
 log(`tier ${tierName}`);
 log('skin textures');
 const [TW, TH] = tier.tex;
-const ST = bakeSkinTextures({ W: TW, H: TH, armPaint, armPoint, armOcclusion, log });
+const ST = bakeSkinTextures({ W: TW, H: TH, armPaint, armPoint, armOcclusion, armShare: pecShare, log });
 const tAlb = gb.addTexture(image(gb, 'skin_basecolor', TW, TH, 3, ST.albedo, 'jpeg', 93), sBody, 'skin_basecolor');
 const tNrm = gb.addTexture(image(gb, 'skin_normal', TW, TH, 3, ST.normal, 'png'), sBody, 'skin_normal');
 const tOrm = gb.addTexture(image(gb, 'skin_orm', TW, TH, 3, ST.orm, 'png'), sBody, 'skin_occlusion_roughness');
