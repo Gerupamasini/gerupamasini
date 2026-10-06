@@ -14,11 +14,11 @@ export const LOD_TIERS = [
 ];
 
 export const BUDGET = {
-  trianglesBody: [33400, 10600, 2660],
+  trianglesBody: [33800, 10900, 2400],
   trianglesShell: [40000, 8000, 1300],
   drawCalls: [4, 4, 3], // body, setae, shell, contact shadow (LOD2: no setae)
   skinnedMeshes: [2, 2, 1],
-  bones: 142,
+  bones: 144,
   textures: 0, // all surface detail is procedural
   transparentMaterials: 1, // contact shadow only (setae use alpha test + alpha-to-coverage)
 };

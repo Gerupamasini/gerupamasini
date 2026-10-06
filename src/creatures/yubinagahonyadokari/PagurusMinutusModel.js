@@ -25,9 +25,9 @@ export const REGION = {
 export const KIND = { COXA: 0, BASIS: 1, MERUS: 2, CARPUS: 3, PROPODUS: 4, DACTYLUS: 5, OTHER: 6 };
 
 export const BODY_LOD = [
-  { radial: 16, perSL: 15, carapace: [44, 30], antennaRings: 180, antennaRadial: 6, setae: 1.0, longSetae: true, mouth: true, abdomen: true, p45: true, pleopods: true, spines: true, name: 'LOD0' },
-  { radial: 9, perSL: 7, carapace: [22, 16], antennaRings: 64, antennaRadial: 4, setae: 0.4, longSetae: false, mouth: true, abdomen: true, p45: true, pleopods: false, spines: false, name: 'LOD1' },
-  { radial: 5, perSL: 2.6, carapace: [10, 8], antennaRings: 14, antennaRadial: 3, setae: 0, longSetae: false, mouth: false, abdomen: false, p45: false, pleopods: false, spines: false, name: 'LOD2' },
+  { radial: 16, perSL: 15, carapace: [44, 30], rim: 1, antennaRings: 180, antennaRadial: 6, setae: 1.0, longSetae: true, mouth: true, abdomen: true, p45: true, pleopods: true, spines: true, name: 'LOD0' },
+  { radial: 9, perSL: 7, carapace: [22, 16], rim: 1, antennaRings: 64, antennaRadial: 4, setae: 0.4, longSetae: false, mouth: true, abdomen: true, p45: true, pleopods: false, spines: false, name: 'LOD1' },
+  { radial: 5, perSL: 2.6, carapace: [10, 8], rim: 0, antennaRings: 14, antennaRadial: 3, setae: 0, longSetae: false, mouth: false, abdomen: false, p45: false, pleopods: false, spines: false, name: 'LOD2' },
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -46,12 +46,14 @@ class Acc {
   get count() {
     return this.pos.length / 3;
   }
-  /** v: body-frame position; skin: [[bone, w], ...] up to 2 entries */
+  /** v: body-frame position; skin: [[bone, w], ...] up to 4 entries */
   vert(v, skin, region, t, ang, kind, side) {
     this.pos.push(v.x, v.y, v.z);
-    const b0 = skin[0], b1 = skin[1];
-    this.si.push(b0[0], b1 ? b1[0] : 0, 0, 0);
-    this.sw.push(b0[1], b1 ? b1[1] : 0, 0, 0);
+    for (let k = 0; k < 4; k++) {
+      const b = skin[k];
+      this.si.push(b ? b[0] : 0);
+      this.sw.push(b ? b[1] : 0);
+    }
     this.reg.push(region);
     this.seg.push(t, ang, kind, side);
     return this.count - 1;
@@ -130,19 +132,31 @@ function tube(acc, o) {
     const cx = x0 + t * o.L + (mode === 'tip' ? (which === 'start' ? -1 : 1) * 0.02 * o.L : 0);
     const center = new THREE.Vector3(cx, (pr.oy ?? 0) + dy, (pr.oz ?? 0) + dz).applyMatrix4(o.M);
     if (mode === 'rim') {
-      // inward annulus (articular rim) at 0.7 radius
-      const inner = acc.count;
-      for (let j = 0; j <= m; j++) {
-        const th = (j / m) * TAU + (o.phase ?? 0);
-        const [z, y] = superellipse(th, pr.h * 0.7, pr.w * 0.7, 2.2);
-        const off = which === 'start' ? 0.012 : -0.012;
-        _p.set(x0 + t * o.L + off, y + (pr.oy ?? 0) + dy, z + (pr.oz ?? 0) + dz).applyMatrix4(o.M);
-        acc.vert(_p, skin, region, t, j / m, o.kind, o.side);
+      // articular end: an inward lip at 0.7 radius, then a low dome over the condyles closing the article
+      // (an open rim reads as a hollow pipe end wherever a flexed joint opens up). Far away (lod.rim 0) a
+      // flat disc closes the outer ring directly.
+      const sgn = which === 'start' ? 1 : -1;
+      let last = ringStart[ri];
+      if ((o.rimLevel ?? 1) >= 1) {
+        const lip = acc.count;
+        for (let j = 0; j <= m; j++) {
+          const th = (j / m) * TAU + (o.phase ?? 0);
+          const [z, y] = superellipse(th, pr.h * 0.7, pr.w * 0.7, 2.2);
+          _p.set(x0 + t * o.L + sgn * 0.012, y + (pr.oy ?? 0) + dy, z + (pr.oz ?? 0) + dz).applyMatrix4(o.M);
+          acc.vert(_p, skin, region, t, j / m, o.kind, o.side);
+        }
+        for (let j = 0; j < m; j++) {
+          const a = last + j, b = a + 1, c = lip + j, d = c + 1;
+          if (which === 'start') acc.quad(c, d, a, b);
+          else acc.quad(a, b, c, d);
+        }
+        last = lip;
       }
+      _p.set(x0 + t * o.L + (last === ringStart[ri] ? 0 : sgn * 0.003), (pr.oy ?? 0) + dy, (pr.oz ?? 0) + dz).applyMatrix4(o.M);
+      const ci = acc.vert(_p, skin, region, t, 0.25, o.kind, o.side);
       for (let j = 0; j < m; j++) {
-        const a = ringStart[ri] + j, b = a + 1, c = inner + j, d = c + 1;
-        if (which === 'start') acc.quad(c, d, a, b);
-        else acc.quad(a, b, c, d);
+        if (which === 'start') acc.tri(ci, last + j + 1, last + j);
+        else acc.tri(ci, last + j, last + j + 1);
       }
       return;
     }
@@ -204,39 +218,69 @@ function spine(acc, bi, M, base, dir, len, rad, region, side, radial = 5) {
 // Body parts
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * Cross-section stations of the cephalothorax (SL, body frame): [z, half width, top, bottom, squareness of
+ * the dorsal half]. Dorsal outline and height from photo 01: one smooth egg-shaped outline, narrow at the
+ * front and widest across the posterior carapace – the shield rounded-pentagonal with sloping anterolateral
+ * margins, no waist at the cervical groove (the branchiostegites bulge out below the shield's posterior
+ * corners), the inflated posterior carapace wider than the shield, rounding off to its posterior margin.
+ */
+const CEPH_STATIONS = (() => {
+  const S = MORPH.shield, PC = MORPH.posteriorCarapace;
+  const hwS = S.width / 2; // shield half width
+  const pz = (f) => -PC.length * f; // z at a fraction of the posterior carapace's length
+  return [
+    [-PC.length, 0.1, 0.035, -0.07, 2.2],
+    [pz(0.95), 0.3, 0.1, -0.13, 2.2],
+    [pz(0.85), 0.43, 0.15, -0.19, 2.3],
+    [pz(0.7), 0.52, 0.185, -0.24, 2.4],
+    [pz(PC.maxAt), PC.halfWidthMax, 0.205, -0.275, 2.5],
+    [pz(0.22), PC.halfWidthMax * 0.975, 0.205, -0.29, 2.6],
+    [-0.04, hwS * 1.08, 0.185, -0.3, 2.8],
+    [0.04, hwS * 1.06, 0.188, -0.3, 3.0],
+    [0.25, hwS * 1.03, 0.205, -0.31, 3.1],
+    [0.5, hwS * 0.97, 0.215, -0.3, 3.1],
+    [0.72, hwS * 0.85, 0.205, -0.26, 2.9],
+    [0.9, hwS * 0.68, 0.17, -0.2, 2.6],
+    [1.0, hwS * 0.53, 0.12, -0.12, 2.4],
+  ];
+})();
+
+/** cephalothorax cross-section at z: [z, half width, top, bottom, squareness] (Catmull–Rom through the
+ *  stations: a smooth outline without flat spots at the stations) */
+function cephSection(z) {
+  const st = CEPH_STATIONS;
+  let k = 0;
+  while (k < st.length - 2 && st[k + 1][0] < z) k++;
+  const a = st[Math.max(0, k - 1)], b = st[k], c = st[k + 1], d = st[Math.min(st.length - 1, k + 2)];
+  const h = c[0] - b[0];
+  const f = clamp((z - b[0]) / h, 0, 1);
+  const f2 = f * f, f3 = f2 * f;
+  const out = [z];
+  for (let i = 1; i < b.length; i++) {
+    const m0 = ((c[i] - a[i]) / Math.max(1e-6, c[0] - a[0])) * h;
+    const m1 = ((d[i] - b[i]) / Math.max(1e-6, d[0] - b[0])) * h;
+    out.push((2 * f3 - 3 * f2 + 1) * b[i] + (f3 - 2 * f2 + f) * m0 + (-2 * f3 + 3 * f2) * c[i] + (f3 - f2) * m1);
+  }
+  return out;
+}
+
 function buildCephalothorax(acc, rig, lod) {
   const bi = rig.list.indexOf(rig.root);
   const pci = rig.list.indexOf(rig.carapacePosterior);
+  const bL = rig.list.indexOf(rig.branchio.L), bR = rig.list.indexOf(rig.branchio.R);
   const [nz, nr] = lod.carapace;
   const S = MORPH.shield, PC = MORPH.posteriorCarapace;
-  // stations: z, half width, top, bottom, squareness
-  const st = [
-    [-PC.length, PC.widthEnd * 0.32, 0.08, -0.1, 2.2],
-    [-0.76, PC.widthEnd * 0.47, 0.13, -0.17, 2.3],
-    [-0.5, 0.45, 0.17, -0.24, 2.5],
-    [-0.2, 0.46, 0.19, -0.28, 2.8],
-    [-0.02, 0.45, 0.17, -0.3, 3.0],
-    [0.02, 0.455, 0.185, -0.3, 3.0],
-    [0.25, 0.47, 0.205, -0.31, 3.1],
-    [0.5, 0.48 * S.width / 0.952, 0.215, -0.3, 3.1],
-    [0.75, 0.465, 0.205, -0.26, 2.9],
-    [0.92, 0.41, 0.17, -0.2, 2.6],
-    [1.0, 0.3, 0.12, -0.12, 2.4],
-  ];
-  const sample = (z) => {
-    let k = 0;
-    while (k < st.length - 2 && st[k + 1][0] < z) k++;
-    const a = st[k], b = st[k + 1];
-    const f = clamp((z - a[0]) / (b[0] - a[0]), 0, 1);
-    const g = f * f * (3 - 2 * f);
-    return a.map((v, i) => lerp(v, b[i], i === 0 ? f : g));
-  };
+  const pz = (f) => -PC.length * f;
+  const st = CEPH_STATIONS;
+  const sample = cephSection;
   const z0 = st[0][0], z1 = st[st.length - 1][0];
   const rs = [];
   const M = new THREE.Matrix4();
   for (let i = 0; i < nz; i++) {
     const t = i / (nz - 1);
-    const z = lerp(z0, z1, t);
+    // rings denser toward both rounded ends
+    const z = lerp(z0, z1, t - 0.035 * Math.sin(TAU * t));
     const [, hw, top, bot, sq] = sample(z);
     const cy = (top + bot) / 2, h = (top - bot) / 2;
     rs.push(acc.count);
@@ -245,8 +289,11 @@ function buildCephalothorax(acc, rig, lod) {
       // flatter top on the shield, rounder belly
       const n = Math.sin(th) > 0 ? sq + (z > 0 ? 0.8 : 0) : 2.2;
       let [x, y] = superellipse(th, h, hw, n);
+      const dorsal = smoothstep(0.3, 0.9, Math.sin(th));
       // cervical groove: a shallow dorsal dip at the shield's posterior margin
-      if (y > 0) y -= 0.018 * Math.exp(-Math.pow((z - 0.0) / 0.035, 2)) * smoothstep(0.3, 0.9, Math.sin(th));
+      if (y > 0) y -= 0.018 * Math.exp(-Math.pow(z / 0.035, 2)) * dorsal;
+      // posterior carapace: shallow median (cardiac) furrow
+      if (z < -0.06 && y > 0) y -= 0.012 * Math.exp(-Math.pow(x / 0.06, 2)) * dorsal * smoothstep(-0.06, -0.2, z) * smoothstep(-PC.length, pz(0.8), z);
       let zz = z;
       // rostrum and lateral projections on the front margin of the shield
       if (z > 0.86 && y > -0.02) {
@@ -254,6 +301,8 @@ function buildCephalothorax(acc, rig, lod) {
         zz += f * S.rostrum.len * Math.exp(-Math.pow(x / S.rostrum.halfWidth, 2));
         zz += f * S.lateralProjection.len * Math.exp(-Math.pow((Math.abs(x) - S.lateralProjection.x * 0.62) / S.lateralProjection.halfWidth, 2));
       }
+      // weakly bilobed posterior margin: the midline falls short of the rounded lobes
+      if (z < pz(0.6) && y > cy - 0.05) zz += PC.notch * Math.exp(-Math.pow(x / 0.12, 2)) * smoothstep(pz(0.6), -PC.length, z);
       _p.set(x, y + cy, zz).applyMatrix4(M);
       // regions
       let region;
@@ -262,9 +311,13 @@ function buildCephalothorax(acc, rig, lod) {
       else if (upness < -0.72) region = REGION.STERNUM;
       else if (z >= -0.01) region = REGION.BRANCHIO;
       else region = REGION.SOFT_CARAPACE;
-      // the soft posterior carapace follows its own (bending) bone, blended over the cervical groove
+      // the soft posterior carapace follows its own (bending) bone, blended over the cervical groove; its
+      // sides follow the branchiostegite bones (pressed in while the crab is in its shell)
       const wp = smoothstep(0.02, -0.3, z);
-      acc.vert(_p, wp > 0 ? [[bi, 1 - wp], [pci, wp]] : [[bi, 1]], region, t, j / nr, KIND.OTHER, Math.sign(x) || 1);
+      const wl = smoothstep(0.1, PC.halfWidthMax, Math.abs(x)) * smoothstep(0.0, -0.22, z);
+      const skin = wp > 0 ? [[bi, (1 - wp) * (1 - wl)], [pci, wp * (1 - wl)]] : [[bi, 1]];
+      if (wl > 0) skin.push([x > 0 ? bL : bR, wl]);
+      acc.vert(_p, skin, region, t, j / nr, KIND.OTHER, Math.sign(x) || 1);
     }
   }
   for (let i = 0; i < nz - 1; i++) for (let j = 0; j < nr; j++) {
@@ -275,10 +328,10 @@ function buildCephalothorax(acc, rig, lod) {
   const last = rs[rs.length - 1];
   const fc = acc.vert(new THREE.Vector3(0, 0.0, 0.94), [[bi, 1]], REGION.BRANCHIO, 1, 0.25, KIND.OTHER, 1);
   for (let j = 0; j < nr; j++) acc.tri(fc, last + j + 1, last + j);
-  // posterior opening is closed by the abdomen; add a cap only when the abdomen is not built
+  // the posterior opening is closed by the abdomen; add a cap only when the abdomen is not built
   if (!lod.abdomen) {
     const first = rs[0];
-    const bc = acc.vert(new THREE.Vector3(0, -0.01, z0 - 0.04), [[pci, 1]], REGION.SOFT_CARAPACE, 0, 0.25, KIND.OTHER, 1);
+    const bc = acc.vert(new THREE.Vector3(0, -0.01, z0 - 0.03), [[pci, 1]], REGION.SOFT_CARAPACE, 0, 0.25, KIND.OTHER, 1);
     for (let j = 0; j < nr; j++) acc.tri(bc, first + j, first + j + 1);
   }
 }
@@ -302,7 +355,7 @@ function buildChain(acc, rig, lod, side, parts, opts = {}) {
     });
     tube(acc, {
       bi, M, L: p.L, rings, radial: p.radial ?? lod.radial, profile: prof, bend: p.bend, twist: p.twist,
-      region: p.regionFn ?? (() => p.region), kind: p.kind, side,
+      region: p.regionFn ?? (() => p.region), kind: p.kind, side, rimLevel: lod.rim,
       capStart: p.capStart ?? (k === 0 ? 'flat' : 'rim'), capEnd: p.capEnd ?? (k === parts.length - 1 ? 'tip' : 'rim'),
     });
     if (k > 0 && !p.noMembrane) {
@@ -776,6 +829,37 @@ function buildSetae(rig, lod, bodyAcc) {
     for (let k = 0; k < Math.round(7 * density); k++) {
       const t = 0.15 + 0.8 * rnd();
       sa.card(cb, CM, new THREE.Vector3(t * ch.len.carpus, -C.carpusSection[1] * 0.85, 0), new THREE.Vector3(0.4, -1, (rnd() - 0.5) * 0.6), ch.side, 0.1 + rnd() * 0.08, 0.04, rnd());
+    }
+  }
+  // cephalothorax: a fringe of fine setae along the sides and the posterior margin of the soft posterior
+  // carapace (fuzzy outline in photo 01) and scattered short tufts on the shield [D]
+  {
+    const PC = MORPH.posteriorCarapace;
+    const root = rig.list.indexOf(rig.root), pci = rig.list.indexOf(rig.carapacePosterior);
+    const I = new THREE.Matrix4();
+    const nF = Math.round(26 * density);
+    for (const sd of [1, -1]) {
+      const bLat = rig.list.indexOf(sd > 0 ? rig.branchio.L : rig.branchio.R);
+      for (let k = 0; k < nF; k++) {
+        const z = lerp(-0.12, -PC.length + 0.03, (k + rnd() * 0.7) / nF);
+        const [, hw, top, bot] = cephSection(z);
+        const yv = (top + bot) / 2 + (rnd() - 0.3) * (top - bot) * 0.35;
+        const base = new THREE.Vector3(sd * hw * 0.97, yv, z);
+        const dir = new THREE.Vector3(sd * (0.8 + rnd() * 0.4), (rnd() - 0.5) * 0.5, -0.35 - rnd() * 0.5);
+        const wl = smoothstep(0.1, PC.halfWidthMax, hw);
+        sa.card(wl > 0.45 ? bLat : pci, I, base, dir, sd, 0.06 + rnd() * 0.07, 0.035, rnd());
+      }
+    }
+    for (let k = 0; k < Math.round(16 * density); k++) {
+      const z = lerp(0.12, 0.85, rnd());
+      const [, hw, top, bot, sq] = cephSection(z);
+      const x = (rnd() - 0.5) * 1.5 * hw;
+      const h = (top - bot) / 2, n = sq + 0.8;
+      const y = (top + bot) / 2 + h * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(x / hw), n)), 1 / n);
+      for (let j = 0; j < 3; j++) {
+        const dir = new THREE.Vector3(x * 0.6 + (rnd() - 0.5) * 0.4, 1, 0.5 + (rnd() - 0.5) * 0.5);
+        sa.card(root, I, new THREE.Vector3(x + (rnd() - 0.5) * 0.02, y - 0.003, z + (rnd() - 0.5) * 0.02), dir, Math.sign(x) || 1, 0.04 + rnd() * 0.035, 0.025, rnd());
+      }
     }
   }
   // eyestalks: sparse dorsomesial tufts of short setae [D]

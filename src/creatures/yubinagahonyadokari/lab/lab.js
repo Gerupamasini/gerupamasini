@@ -5,6 +5,7 @@
 //   mode=single|pose|walk|retract|shells|group|change|guard   scenario
 //   view=oblique|front|side|top|back|macro|dactyl|follow camera preset
 //   lod=0|1|2   seed=n   shell=<species key>   water=0|1   debug=1   t=<seconds to pre-simulate>   shot=1
+//   zoom=<camera distance factor>   heading=<rad>   sex=m|f   sl=<shield length mm>   stage=dark (black plate)
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -18,6 +19,7 @@ const cfg = {
   mode: P('mode', 'single'),
   shell: P('shell', 'batillaria_attramentaria'),
   water: P('water', '1') === '1',
+  darkStage: P('stage', '') === 'dark', // black plate as in the photos of crabs out of their shells
   lod: P('lod', null),
   view: P('view', null),
   t: P('t', null),
@@ -80,6 +82,9 @@ const ground = (() => {
   g.computeVertexNormals();
   const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }));
   m.receiveShadow = true;
+  m.userData.sand = m.material;
+  // `stage=dark`: a dark wet plate as in the photographs of crabs taken out of their shells (photo 01)
+  m.userData.plate = new THREE.MeshStandardMaterial({ color: 0x15181a, roughness: 0.55, metalness: 0 });
   return m;
 })();
 const water = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4).rotateX(-Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: 0x6f9a92, roughness: 0.04, transparent: true, opacity: 0.18, depthWrite: false, clearcoat: 1 }));
@@ -89,7 +94,8 @@ water.renderOrder = 5;
 /** a fresh scene with light, substrate and (optionally) a shallow pool */
 function makeScene() {
   const sc = new THREE.Scene();
-  sc.background = new THREE.Color(0x9fb4b8);
+  sc.background = new THREE.Color(cfg.darkStage ? 0x0b0d0e : 0x9fb4b8);
+  ground.material = cfg.darkStage ? ground.userData.plate : ground.userData.sand;
   sc.environment = envTexture;
   sc.environmentIntensity = 0.35;
   const sun = new THREE.DirectionalLight(0xfff4e0, 2.2);
@@ -207,7 +213,7 @@ function applyView(name) {
   const v = VIEWS[name] ?? VIEWS.oblique;
   const tgt = cfg.mode === 'shells' || cfg.mode === 'group' ? new THREE.Vector3(0, 0.006, -0.01) : main.root.position.clone().add(new THREE.Vector3(0, 0.006, 0.004));
   controls.target.copy(tgt);
-  const off = new THREE.Vector3(...v);
+  const off = new THREE.Vector3(...v).multiplyScalar(Number(P('zoom', '1')));
   if (RELATIVE_VIEWS.has(name)) off.applyAxisAngle(new THREE.Vector3(0, 1, 0), main.loco.heading);
   camera.position.copy(tgt).add(off);
   camera.fov = name === 'macro' || name === 'dactyl' || RELATIVE_VIEWS.has(name) ? 28 : 35;
@@ -230,6 +236,7 @@ function syncUI() {
   if ($('view')) $('view').value = viewName;
   if ($('lod')) $('lod').value = String(lodSel);
   if ($('water')) $('water').checked = cfg.water;
+  if ($('darkStage')) $('darkStage').checked = cfg.darkStage;
   if ($('camThreat')) $('camThreat').checked = cfg.cameraThreat;
 }
 const rebuild = (patch) => { Object.assign(cfg, { view: null, t: null, lod: null }, patch); buildScene(); };
@@ -240,6 +247,7 @@ on('lod', 'onchange', () => crabs.forEach((c) => c.setLOD(Number($('lod').value)
 if ($('debug')) $('debug').checked = P('debug', '0') === '1';
 on('debug', 'onchange', () => crabs.forEach((c) => (c.debugEnabled = $('debug').checked)));
 on('water', 'onchange', () => rebuild({ water: $('water').checked, mode: cfg.mode }));
+on('darkStage', 'onchange', () => rebuild({ darkStage: $('darkStage').checked, mode: cfg.mode }));
 on('camThreat', 'onchange', () => (cfg.cameraThreat = $('camThreat').checked));
 let timeScale = 1;
 on('speed', 'oninput', () => (timeScale = Number($('speed').value)));
@@ -284,7 +292,7 @@ function loop(now) {
   if (now - lastHud > 200) {
     lastHud = now;
     const s = main.behavior.snapshot();
-    if (hud) hud.textContent = `${s.state} ${s.sub}  LOD${main.lod}  shell ${main.shell?.props.ja} ${main.shell?.size_mm.toFixed(1)}mm ${main.shell?.props.mass_g.toFixed(2)}g\n` +
+    if (hud) hud.textContent = `${s.state} ${s.sub}  LOD${main.lod}  ${main.shell ? `shell ${main.shell.props.ja} ${main.shell.size_mm.toFixed(1)}mm ${main.shell.props.mass_g.toFixed(2)}g` : 'no shell'}\n` +
       `fear ${s.fear.toFixed(2)} hunger ${s.hunger.toFixed(2)} shellSat ${s.shellSatisfaction.toFixed(2)} curiosity ${s.curiosity.toFixed(2)} energy ${s.energy.toFixed(2)} activity ${s.activity.toFixed(2)}\n` +
       `draw calls ${renderer.info.render.calls}  tris ${renderer.info.render.triangles}`;
   }

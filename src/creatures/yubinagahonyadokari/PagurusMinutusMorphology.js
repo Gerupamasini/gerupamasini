@@ -29,8 +29,17 @@ export const MORPH = {
     gastricSpot: { z: 0.55, radius: 0.09 }, // dark-brown median spot on gastric region [D]
   },
   // total carapace length / shield length = 1.74–1.87 (6.3/3.5, 5.6/3.0, 4.7/2.7 mm) [D: out-of-shell photos];
-  // the soft posterior carapace is a broad oval about as wide as the shield, membranous, weakly calcified [D][G]
-  posteriorCarapace: { length: 0.85, widthEnd: 0.82, heightEnd: 0.42 },
+  // the soft posterior carapace is membranous and weakly calcified [D][G]. Out of the shell (photo 01, dorsal)
+  // it is a broad inflated oval, WIDER than the shield (≈ 1.1 SL across at 40–50 % of its length), its sides
+  // bulging past the shield's posterior corners and its posterior margin rounded with a shallow median
+  // notch [P]. Inside the shell the soft branchiostegites are pressed in to about the shield's width [G].
+  posteriorCarapace: {
+    length: 0.85,
+    halfWidthMax: 0.56, // free (out of the shell)
+    maxAt: 0.45, // fraction of the length behind the cervical groove
+    notch: 0.045, // median notch of the posterior margin [P]
+    inShellSqueeze: 0.1, // lateral compression of each side inside the shell (SL) [S]
+  },
 
   // ── coxa positions (body frame) ───────────────────────────────────────────────────────────────
   // anomuran sternum is narrow; P1–P3 under the shield's posterior half, P4–P5 under the posterior carapace [G][P]
@@ -140,13 +149,17 @@ export const MORPH = {
   // membranous, dextrally coiled; uropods asymmetrical; telson with median terminal cleft [D]
   // read from the out-of-shell photos (dorsal 01–04, ventral 05, live 06): long, thick, soft and dextrally
   // coiled – centreline ≈ 4.4 SL, widest (≈ 0.58 SL) in its anterior third, tapering to the tail fan [P]
+  // photo 01 (dorsal, 甲長 6.3 / 前甲長 3.5 mm): the free coil is a broad, compact ribbon ≈ 0.7–0.8 SL across
+  // at its widest, leaving only a small hole in the middle of the coil; it leaves the carapace narrow, from
+  // under the posterior margin, and swells within its first third [P]
   abdomen: {
     length: 4.4,
     segments: 12,
-    radiusBase: 0.23, // narrower junction with the posterior carapace
-    radiusMax: 0.33, // ≈ half the carapace width (photos 01–03)
+    radiusBase: 0.2, // narrow first pleonite under the posterior margin of the carapace
+    radiusMax: 0.38, // ≈ 0.7 × the free posterior-carapace width (photos 01–03)
     radiusMaxAt: 0.3, // fraction of the length
-    radiusEnd: 0.13,
+    radiusEnd: 0.14,
+    baseY: -0.07, // the abdomen leaves the carapace ventrally, under the posterior margin [P]
     flatten: 0.9, // slightly flattened dorso-ventrally [P]
     telson: 0.16,
     uropodL: 0.2, // left better developed [G: Calcinus]
@@ -170,20 +183,20 @@ export const MORPH = {
  *  - antennal flagellum olive with regularly spaced white annuli
  */
 export const PALETTE = {
-  shield: '#a3906f',
+  shield: '#ab9077', // light yellowish-brown, faintly pinkish out of the water (photo 01)
   shieldDark: '#5b4027',
   branchio: '#999380',
-  softCarapace: '#a39373', // tan, mottled with dark spots (photos 01, 02, 07)
+  softCarapace: '#9e7957', // warm tan, stippled and mottled with dark spots (photos 01, 02, 07)
   sternum: '#c9c0a2',
-  legBase: '#8a8670',
+  legBase: '#958a6b', // tan-olive (photo 01; greyer under water)
   legStripe: '#3b2e22',
   legBand: '#4a3a28',
-  legPale: '#d0c8b0',
+  legPale: '#d8d2c2',
   dactylBase: '#737458',
   dactylWhite: '#d9d3bf',
   dactylTip: '#5a4a32',
-  cheliped: '#a8a386', // pale cream-olive; white in some (photos 01, 02 out of water)
-  chelaGranule: '#cfdbe0', // bluish-white granules (photos 01, 02, 04; 033, 038)
+  cheliped: '#bcb6a0', // pale cream with large brown blotches (photo 01); olive-looking under water
+  chelaGranule: '#bfcbd6', // bluish granules, blue-grey on the brown blotches (photos 01, 02, 04; 033, 038)
   chelaFinger: '#a09679',
   chelaFingerTip: '#6b5130',
   membrane: '#8e8a72',
@@ -196,9 +209,9 @@ export const PALETTE = {
   antennule: '#a8946a',
   mxp: '#c4bda6',
   mxpBand: '#4c3a26',
-  abdomen: '#9b9a86', // dorsum: grey-olive, translucent, fine transverse lines (photos 03, 06)
-  abdomenDeep: '#716b4d',
-  abdomenViscera: '#c9832f', // orange-amber visceral mass seen through the sides and venter (photos 01–05)
+  abdomen: '#93845c', // dorsum: golden grey-olive, translucent, dark transverse lines (photos 01, 03, 06)
+  abdomenDeep: '#62502e',
+  abdomenViscera: '#bd6a22', // orange-brown visceral mass seen through the sides and venter (photos 01–05)
   uropod: '#9c9468',
   setae: '#c9bf9f',
 };

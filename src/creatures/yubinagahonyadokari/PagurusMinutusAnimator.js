@@ -37,8 +37,9 @@ const CHANNELS = Object.keys(STAGE.withdraw);
 /**
  * The naked abdomen (out of the shell) as in the photos of crabs taken out of their shells (01–04): it
  * leaves the posterior carapace backward, bends to the animal's RIGHT and coils clockwise seen from above,
- * lying on the substrate, the curl tightening toward the tail fan (one turn; outer diameter ≈ one
- * carapace length) [P]. Centreline sampled every FREE_CURL_STEP SL from the abdomen base (body frame).
+ * lying on the substrate, the curl tightening toward the tail fan (a compact, flat coil ≈ 1.9 × 1.7 SL
+ * across, about one carapace length) [P]. Centreline sampled every FREE_CURL_STEP SL from the abdomen base
+ * (body frame).
  */
 const FREE_CURL_STEP = 0.05;
 const FREE_CURL = (() => {
@@ -48,8 +49,10 @@ const FREE_CURL = (() => {
   const L = MORPH.abdomen.length + 0.5;
   for (let s = 0; s <= L + 1e-9; s += FREE_CURL_STEP) {
     pts.push(p.clone());
-    const R = 1.15 * Math.exp(-s / 4.5); // radius of curvature shrinks toward the tail (≈ one turn)
-    const k = s < 0.25 ? 0 : 1 / R;
+    // radius of curvature shrinks toward the tail: a compact coil of ≈ 1.4 turns whose centre lies beside
+    // the posterior carapace on the right, the tail fan ending in the small hole in its middle (photo 01)
+    const R = 0.88 * Math.exp(-s / 4.0);
+    const k = s < 0.1 ? 0 : 1 / R;
     phi += k * FREE_CURL_STEP;
     // heading starts backward (−Z) and turns toward −X (the animal's right): clockwise from above
     p.x += -Math.sin(phi) * FREE_CURL_STEP;
@@ -177,6 +180,7 @@ export class Animator {
       a.position.copy(this.rig.shellAnchorRest);
     }
     a.position.z += cmd.anchorOffsetZ ?? 0;
+    this.updateBranchio(dt);
     this.updateTip(dt, hp, cmd);
     crab.loco.updateBodyMatrix();
 
@@ -616,10 +620,13 @@ export class Animator {
         up.lerp(radialB, smoothstep(0.05, 0.45, i / n)).normalize();
       }
       if (curl > 0 && !inside) {
-        // free coil: the pleon lies on its side, dorsum toward the centre of the coil, venter (orange
-        // visceral mass) outward – grey inner edge, orange outer edge in photo 03
-        const toCentre = yAx.set(0, 1, 0).cross(dir).normalize();
-        up.lerp(toCentre, curl * smoothstep(0.05, 0.3, i / n)).normalize();
+        // free coil: the pleon rolls onto its side as it coils, dorsum tilted outward, so from above the
+        // striated golden-olive dorsum forms the outer ring and the orange visceral side fills the middle
+        // of the coil (photo 01)
+        const outward = yAx.set(0, 1, 0).cross(dir).normalize().negate();
+        const roll = 1.3 * smoothstep(0.05, 0.3, i / n);
+        zAx.set(0, 1, 0).multiplyScalar(Math.cos(roll)).addScaledVector(outward, Math.sin(roll));
+        up.lerp(zAx, curl).normalize();
       }
       quatFromDir(dir, up, ab[i].quaternion);
       let ky = 1, kz = 1;
@@ -638,6 +645,23 @@ export class Animator {
     this.rig.telson.position.set(Math.min(lastLen, segL * 1.3), 0, 0);
     ab[0].parent.updateMatrixWorld(true);
     this.exposedAbdomen = exit > 0.1 || curl > 0.1;
+  }
+
+  /**
+   * The soft sides of the posterior carapace: pressed in to about the shield's width while it is inside a
+   * shell, relaxing to the broad free oval of photo 01 once out of it (no shell, or walked out of the old
+   * one during an exchange). Soft tissue: it eases toward the target over ≈ 0.4 s.
+   */
+  updateBranchio(dt) {
+    const crab = this.crab;
+    const PC = MORPH.posteriorCarapace;
+    const inShell = crab.shell && crab.shellMode !== 'none' && this.freeCurl < 0.5 ? 1 - smoothstep(0.3, 1.1, this.abdomenExit) : 0;
+    const k = 1 - Math.exp(-dt / 0.4);
+    this.branchioSqueeze = (this.branchioSqueeze ?? inShell) + (inShell - (this.branchioSqueeze ?? inShell)) * k;
+    const d = this.branchioSqueeze * PC.inShellSqueeze;
+    const b = this.rig.branchio;
+    b.L.position.x = PC.halfWidthMax - d;
+    b.R.position.x = -PC.halfWidthMax + d;
   }
 
   /** free curl of a naked abdomen (shell exchange): coils under and to the right of the body [G] */

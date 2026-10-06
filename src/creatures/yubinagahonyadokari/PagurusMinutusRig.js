@@ -186,6 +186,13 @@ export class Rig {
     // ── posterior carapace: membranous and flexible [G]; bends with the whorl when the crab withdraws.
     // Carries the P4/P5 bases and the abdomen base.
     this.carapacePosterior = add('CarapacePosterior', root, new THREE.Vector3(0, 0, 0));
+    // the soft branchiostegites at its sides: free (inflated) out of the shell, pressed in inside it.
+    // Only translated (never rotated), so the skinned sides move in parallel.
+    const PC = MORPH.posteriorCarapace;
+    this.branchio = {
+      L: add('Branchiostegite_L', this.carapacePosterior, new THREE.Vector3(PC.halfWidthMax, 0, -PC.length * PC.maxAt)),
+      R: add('Branchiostegite_R', this.carapacePosterior, new THREE.Vector3(-PC.halfWidthMax, 0, -PC.length * PC.maxAt)),
+    };
 
     // ── reduced legs (P4 = *3, P5 = *4) ─────────────────────────────────────────────────────────
     this.reduced = {};
@@ -216,9 +223,9 @@ export class Rig {
     this.abdomen = [];
     let parent = root;
     const z0 = -MORPH.posteriorCarapace.length + 0.05;
-    this.abdomenBaseRest = new THREE.Vector3(0, 0.02, z0);
+    this.abdomenBaseRest = new THREE.Vector3(0, AB.baseY, z0);
     for (let i = 0; i < AB.segments; i++) {
-      const b = add(`Abdomen${i}`, root, new THREE.Vector3(0, 0.02, z0 - i * segL), quatFromDir(new THREE.Vector3(0, 0, -1)));
+      const b = add(`Abdomen${i}`, root, new THREE.Vector3(0, AB.baseY, z0 - i * segL), quatFromDir(new THREE.Vector3(0, 0, -1)));
       this.abdomen.push(b);
       parent = b;
     }

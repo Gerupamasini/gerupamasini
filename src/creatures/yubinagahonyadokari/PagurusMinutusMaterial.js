@@ -126,12 +126,22 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
   float dors = sin(ang);
   if (R == 0) {
     c = uShield * (0.9 + 0.2 * mott);
-    float gs = 1.0 - smoothstep(0.035, 0.1, length(vec2(p.x * 1.25, p.z - 0.55)));
+    // dark-brown gastric spot inside a pale horseshoe-shaped halo open to the back, a pale median line
+    // running back from it (photo 01)
+    vec2 gq = vec2(p.x * 1.25, p.z - 0.55) + (vec2(pmNoise(p * 14.0), pmNoise(p * 14.0 + 7.7)) - 0.5) * 0.05;
+    float gd = length(gq);
+    float gs = 1.0 - smoothstep(0.035, 0.1, gd);
+    float halo = smoothstep(0.075, 0.11, gd) * (1.0 - smoothstep(0.15, 0.21, gd)) * smoothstep(-0.12, 0.04, gq.y);
+    c = mix(c, uLegPale, halo * 0.5 * (0.6 + 0.4 * pmNoise(p * 30.0)));
     c = mix(c, uShieldDark, gs * 0.88);
-    // pale median mark on the gastric region (photo 01)
-    c = mix(c, uSternum * 1.1, (1.0 - smoothstep(0.02, 0.05, abs(p.x))) * smoothstep(0.35, 0.5, p.z) * (1.0 - smoothstep(0.72, 0.85, p.z)) * 0.5);
+    c = mix(c, uLegPale, (1.0 - smoothstep(0.018, 0.045, abs(p.x))) * smoothstep(0.2, 0.36, p.z) * (1.0 - smoothstep(0.44, 0.5, p.z)) * 0.55);
+    // dark-brown spots in loose pairs on the lateral parts of the shield's posterior half (photo 01)
+    vec2 sq = vec2(abs(p.x), p.z) + (vec2(pmNoise(p * 17.0 + 2.0), pmNoise(p * 17.0 + 9.0)) - 0.5) * 0.05 + vec2(0.0, 0.035 * sign(p.x));
+    float sp = max(max(1.0 - smoothstep(0.022, 0.045, length(sq - vec2(0.31, 0.3))), 1.0 - smoothstep(0.02, 0.04, length(sq - vec2(0.25, 0.12)))),
+                   max(1.0 - smoothstep(0.018, 0.036, length(sq - vec2(0.36, 0.56))), 1.0 - smoothstep(0.014, 0.03, length(sq - vec2(0.4, 0.2)))));
+    c = mix(c, uShieldDark, sp * 0.8 * uPmContrast);
     float lat = smoothstep(0.12, 0.42, abs(p.x)) * smoothstep(0.5, 0.72, pmFbm(p * 7.0 + 3.1));
-    c = mix(c, uShieldDark, lat * 0.65 * uPmContrast);
+    c = mix(c, uShieldDark, lat * 0.6 * uPmContrast);
     c *= 1.0 - 0.4 * exp(-pow(p.z / 0.022, 2.0));
     c = mix(c, uShieldDark, step(0.82, pmNoise(p * 55.0)) * 0.35);
     pmHeight = (pmNoise(p * 85.0) - 0.5) * 0.004 - 0.006 * exp(-pow(p.z / 0.02, 2.0));
@@ -141,46 +151,63 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     pmHeight = (pmNoise(p * 70.0) - 0.5) * 0.003;
     pmRough = 0.5; pmThin = 0.32;
   } else if (R == 2) {
+    // soft posterior carapace (photo 01): warm tan, finely stippled with pale and dark granules, darker
+    // irregular blotches and scattered dark-brown spots; a darker median (cardiac) band
     c = uSoft * (0.8 + 0.4 * mott);
-    c = mix(c, uShieldDark, step(0.78, pmNoise(p * 40.0)) * 0.55); // dark spots (photos 01, 02, 07)
-    pmHeight = (pmNoise(p * 50.0) - 0.5) * 0.004;
+    float stip = pmCell(p * 95.0);
+    c = mix(c, uLegPale, (1.0 - smoothstep(0.08, 0.26, stip)) * 0.28);
+    c *= 0.88 + 0.24 * smoothstep(0.25, 0.65, pmNoise(p * 150.0));
+    c = mix(c, uShieldDark, smoothstep(0.54, 0.72, pmFbm(p * 9.0 + 4.0)) * 0.5 * uPmContrast);
+    c = mix(c, uShieldDark, smoothstep(0.74, 0.8, pmNoise(p * 34.0)) * 0.65); // dark spots (photos 01, 02, 07)
+    c = mix(c, uShieldDark, (1.0 - smoothstep(0.04, 0.1, abs(p.x))) * smoothstep(-0.1, -0.25, p.z) * 0.18);
+    pmHeight = (1.0 - smoothstep(0.08, 0.26, stip)) * 0.004 + (pmNoise(p * 50.0) - 0.5) * 0.003;
     pmRough = 0.56; pmThin = 0.5; pmClear = 0.7;
   } else if (R == 3) {
     c = uSternum * (0.92 + 0.15 * mott); pmRough = 0.5; pmThin = 0.25;
   } else if (R == 4 || R == 5) {
-    c = uChel * (0.82 + 0.36 * mott);
-    // irregular brown blotches under the granules (photos 001, 002)
-    c = mix(c, uLegStripe, smoothstep(0.58, 0.74, pmFbm(p * 12.0 + 4.7)) * 0.4 * uPmContrast);
-    // dense small granules (photos 001, 002, 033), a few larger tubercles among them
-    float cell = pmCell(p * 38.0);
-    float g = 1.0 - smoothstep(0.12, 0.32, cell);
+    // the chela cream; merus and carpus tan, closer to the walking legs (photo 01)
+    c = (R == 5 ? uChel : mix(uChel, uLegBase, 0.5)) * (0.82 + 0.36 * mott);
+    // large irregular brown blotches on a cream ground (photos 01, 001, 002): two on the palm's dorsal
+    // face, smaller ones on the carpus and merus
+    float blot = smoothstep(0.46, 0.6, pmFbm(p * (R == 5 ? 4.2 : 7.0) + 4.7));
+    blot = max(blot, smoothstep(0.62, 0.74, pmFbm(p * 13.0 + 1.3)) * 0.7);
+    c = mix(c, uLegStripe * 1.35, blot * 0.78 * uPmContrast);
+    // dense granules (photos 01, 001, 002, 033), blue-grey over the blotches, a few larger tubercles
+    float cell = pmCell(p * 24.0);
+    float g = 1.0 - smoothstep(0.1, 0.3, cell);
     float big = 1.0 - smoothstep(0.1, 0.3, pmCell(p * 11.0 + 5.0));
-    pmHeight = g * 0.011 + big * 0.006;
-    c = mix(c, uGran, g * (R == 5 ? 0.78 : 0.5) * (0.55 + 0.45 * max(dors, 0.0)));
-    if (R == 5) c = mix(c, uShieldDark, smoothstep(0.42, 0.58, t) * 0.45 * smoothstep(0.1, 0.7, dors) * (1.0 - g));
-    pmRough = 0.47 - g * 0.17; pmThin = 0.06;
+    pmHeight = g * 0.015 + big * 0.007;
+    c = mix(c, uGran * mix(1.0, 0.72, blot), g * (R == 5 ? 0.8 : 0.55) * (0.55 + 0.45 * max(dors, 0.0)));
+    if (R == 5) c = mix(c, uShieldDark, smoothstep(0.42, 0.58, t) * 0.3 * smoothstep(0.1, 0.7, dors) * (1.0 - g) * (1.0 - blot));
+    pmRough = 0.52 - g * 0.15; pmThin = 0.06; pmClear = 0.55;
   } else if (R == 6) {
-    c = mix(uFinger, uFingerTip, smoothstep(0.8, 0.99, t));
+    // fingers: brown-blotched proximally, pale before the corneous tips (photo 01)
+    c = mix(uFinger, uLegStripe * 1.35, smoothstep(0.52, 0.64, pmFbm(p * 9.0 + 2.2)) * 0.6 * (1.0 - smoothstep(0.55, 0.75, t)));
+    c = mix(c, uChel * 1.08, smoothstep(0.6, 0.75, t) * 0.65);
+    c = mix(c, uFingerTip, smoothstep(0.86, 0.99, t));
     float g = 1.0 - smoothstep(0.2, 0.42, pmCell(p * 30.0));
     c = mix(c, uGran, g * 0.4 * (1.0 - smoothstep(0.7, 0.9, t)));
     pmHeight = g * 0.006;
     pmRough = mix(0.4, 0.26, smoothstep(0.75, 1.0, t)); pmThin = mix(0.12, 0.55, smoothstep(0.7, 1.0, t));
   } else if (R == 7) {
     c = uLegBase * (0.84 + 0.32 * mott);
-    // irregular dark-brown mottling over the whole article (photos 001, 021, 038)
-    c = mix(c, uLegStripe, smoothstep(0.56, 0.72, pmFbm(p * 14.0 + 7.3)) * 0.5 * uPmContrast);
-    float stripe = smoothstep(0.45, 0.8, ant) * step(1.5, kind);
-    c = mix(c, uLegStripe, stripe * 0.88 * uPmContrast);
-    if (kind > 1.5 && kind < 2.5) c = mix(c, uLegBand, smoothstep(0.55, 0.62, t) * (1.0 - smoothstep(0.78, 0.85, t)) * 0.65 * uPmContrast);
-    if (kind > 2.5 && kind < 3.5) c = mix(c, uLegPale, smoothstep(0.8, 0.9, t) * 0.55);
+    // irregular dark-brown mottling over the whole article (photos 01, 001, 021, 038)
+    c = mix(c, uLegStripe, smoothstep(0.56, 0.72, pmFbm(p * 14.0 + 7.3)) * 0.55 * uPmContrast);
+    float stripe = smoothstep(0.55, 0.85, ant) * step(1.5, kind) * (0.75 + 0.25 * pmNoise(p * 25.0));
+    c = mix(c, uLegStripe, stripe * 0.72 * uPmContrast);
+    if (kind > 1.5 && kind < 2.5) c = mix(c, uLegBand, smoothstep(0.55, 0.62, t) * (1.0 - smoothstep(0.78, 0.85, t)) * 0.6 * uPmContrast);
+    // white patches: distal carpus, and the distal half of the propodus (photo 01)
+    float pale = smoothstep(0.42, 0.66, pmFbm(p * 9.0 + 3.0) + 0.2 * dors) * smoothstep(-0.7, 0.1, dors);
+    if (kind > 2.5 && kind < 3.5) c = mix(c, uLegPale, smoothstep(0.7, 0.86, t) * pale * 0.7);
     if (kind > 3.5 && kind < 4.5) {
-      c = mix(c, uLegBand, smoothstep(0.3, 0.38, t) * (1.0 - smoothstep(0.62, 0.7, t)) * 0.6 * uPmContrast);
-      c = mix(c, uLegPale, smoothstep(0.9, 0.97, t) * 0.42);
+      c = mix(c, uLegBand, smoothstep(0.18, 0.26, t) * (1.0 - smoothstep(0.42, 0.5, t)) * 0.5 * uPmContrast);
+      c = mix(c, uLegPale, smoothstep(0.55, 0.7, t) * mix(0.2, 0.85, pale));
     }
-    float g = (1.0 - smoothstep(0.14, 0.34, pmCell(p * 32.0))) * smoothstep(-0.1, 0.6, dors);
-    c = mix(c, uGran, g * 0.3);
-    pmHeight = g * 0.005;
-    pmRough = 0.42; pmThin = 0.2;
+    // pale bluish granules on the dorsal and outer faces
+    float g = (1.0 - smoothstep(0.12, 0.3, pmCell(p * 22.0))) * smoothstep(-0.3, 0.5, dors);
+    c = mix(c, uGran, g * 0.32);
+    pmHeight = g * 0.008 + (pmNoise(p * 90.0) - 0.5) * 0.002;
+    pmRough = 0.52; pmThin = 0.16; pmClear = 0.45;
   } else if (R == 8) {
     c = uDactBase * (0.88 + 0.24 * mott);
     c = mix(c, uLegStripe, smoothstep(0.58, 0.74, pmFbm(p * 16.0 + 2.1)) * 0.35 * uPmContrast);
@@ -188,11 +215,11 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     c = mix(c, uDactWhite, w * 0.82);
     c = mix(c, uLegStripe, smoothstep(0.62, 0.88, ant) * (1.0 - w) * (1.0 - smoothstep(0.75, 0.86, t)) * 0.7 * uPmContrast);
     c = mix(c, uDactTip, smoothstep(0.8, 0.95, t));
-    pmRough = mix(0.4, 0.24, smoothstep(0.85, 1.0, t)); pmThin = mix(0.28, 0.85, t);
+    pmRough = mix(0.46, 0.26, smoothstep(0.85, 1.0, t)); pmThin = mix(0.28, 0.85, t); pmClear = 0.6;
   } else if (R == 9) {
     c = uMembrane * (0.92 + 0.12 * mott);
     pmHeight = (pmNoise(p * vec3(160.0, 40.0, 160.0)) - 0.5) * 0.003;
-    pmRough = 0.62; pmThin = 0.9; pmClear = 0.55;
+    pmRough = 0.62; pmThin = 0.55; pmClear = 0.55;
   } else if (R == 10) {
     c = uEyestalk * (0.93 + 0.12 * mott);
     c = mix(c, uEyeBand, smoothstep(0.36, 0.44, t) * (1.0 - smoothstep(0.6, 0.68, t)) * 0.85);
@@ -229,11 +256,14 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
   } else if (R == 16) {
     // dorsum grey-olive with fine transverse lines; the orange-amber visceral mass shows through the
     // sides and the venter (photos 01–05); greener individuals look olive and glossy alive (06)
-    float ventral = smoothstep(0.35, -0.6, dors);
+    // photo 01: the dorsum golden olive-brown with dark transverse striations, the sides and venter
+    // orange-brown where the visceral mass shows through
+    float ventral = smoothstep(0.6, -0.45, dors);
     c = mix(uAbdDeep, uAbd, smoothstep(0.3, 0.75, pmFbm(p * 6.0)));
-    float lines = smoothstep(0.8, 0.97, abs(fract(t * 34.0) - 0.5) * 2.0);
-    c *= 1.0 - 0.2 * lines * (1.0 - ventral);
-    float visc = ventral * (0.55 + 0.45 * smoothstep(0.05, 0.35, t) * (1.0 - smoothstep(0.75, 1.0, t)));
+    float lines = smoothstep(0.78, 0.97, abs(fract(t * 34.0) - 0.5) * 2.0);
+    float fine = smoothstep(0.6, 0.95, abs(fract(t * 110.0 + pmNoise(p * 30.0) * 0.6) - 0.5) * 2.0);
+    c *= 1.0 - (0.34 * lines + 0.12 * fine) * (1.0 - 0.6 * ventral);
+    float visc = max(ventral, 0.22) * (0.55 + 0.45 * smoothstep(0.05, 0.35, t) * (1.0 - smoothstep(0.75, 1.0, t)));
     visc *= 0.7 + 0.3 * pmFbm(p * 9.0 + 3.0);
     c = mix(c, uAbdVisc, clamp(visc * (1.15 - 0.6 * uPmGreen), 0.0, 1.0));
     c = mix(c, uMembrane, smoothstep(0.78, 0.95, pmNoise(p * 26.0)) * 0.2);
