@@ -441,19 +441,20 @@ export class Motor {
       case 'low': return { fwd: -0.015, lat: 0.085, back: 1.1 };
       case 'alert': return { fwd: 0.012, lat: 0.07, back: 0.95 };
       case 'display': return { fwd: 0.012, lat: 0.075, back: 0.9 };
-      default: return { fwd: 0.0, lat: 0.075, back: 1.0 };
+      // (the arms stand under the shoulders like legs, the webs spread out to the side on the mud)
+      default: return { fwd: 0.005, lat: 0.078, back: 0.35 };
     }
   }
 
   private propHeight(): number {
     const L = this.L;
-    // propped on the pectorals the chest rides well clear of the mud (photographs of resting and alert animals);
-    // alert and displaying, it stands tall on near-vertical fins
+    // propped on the pectorals the chest rides well clear of the mud, the arms standing under it like legs
+    // (photographs of resting, walking and alert animals); alert and displaying, it stands tallest
     switch (this.posture) {
       case 'low': return 0.006 * L;
-      case 'alert': return 0.085 * L;
-      case 'display': return 0.09 * L;
-      default: return 0.045 * L;
+      case 'alert': return 0.1 * L;
+      case 'display': return 0.1 * L;
+      default: return 0.07 * L;
     }
   }
 
@@ -512,7 +513,8 @@ export class Motor {
     lift += 0.0012 * this.L * (0.6 * Math.sin(this.t * 1.7) + 0.4 * noise1(this.t * 0.9, this.seed)) * (this.posture === 'low' ? 0.3 : 1);
     this.liftT = lift;
     this.headPitchT = head;
-    this.pitchT = this.posture === 'low' ? 0.0 : 0.025 + (this.posture === 'alert' ? 0.06 : 0);
+    // the fore body is raised on the arms, the tail resting on the mud behind
+    this.pitchT = this.posture === 'low' ? 0.0 : 0.28 + (this.posture === 'alert' ? 0.08 : 0);
     this.headYawT = 0.07 * noise1(this.t * 0.35, this.seed + 1) + 0.03 * noise1(this.t * 1.3, this.seed + 2);
     this.headPitchT += 0.025 * noise1(this.t * 0.5, this.seed + 3);
     this.finMode = 'plant';
@@ -556,13 +558,16 @@ export class Motor {
       // steeper and softer ground, wetter mud and hurry all bring the tail in
       const slope = (w.ground(this.pos.x + Math.sin(this.heading) * L * 0.3, this.pos.z + Math.cos(this.heading) * L * 0.3) - this.groundY) / (0.3 * L);
       const tail = clamp(0.15 + 1.4 * Math.max(0, slope) + 0.35 * w.soft * w.wetGround + 0.6 * this.urgency + 0.8 * wetFrac, 0, 1);
-      const len = Math.min(0.24 * L * (0.85 + 0.25 * this.urgency) * (1 - 0.25 * Math.max(0, slope * 3)), Math.max(0.05 * L, dist)) * (pivot ? 0.35 : 1);
+      // (short strides: the arms stay nearly upright under the shoulders, the body vaulting only a little over them)
+      const len = Math.min(0.2 * L * (0.85 + 0.25 * this.urgency) * (1 - 0.25 * Math.max(0, slope * 3)), Math.max(0.05 * L, dist)) * (pivot ? 0.35 : 1);
       const side = this.stroke ? -this.stroke.side : 1;
       this.stroke = { p0: this.pos.clone(), h0: this.heading, h1: this.heading + turn, len, tail, side, marked: false, settled: false, swingSet: this.phase < PUSH };
       if (this.phase < PUSH) for (const fn of this.fins) { if (!fn.planted) { fn.contact.copy(fn.to); fn.yaw = fn.yawTo; fn.planted = true; fn.swing = -1; } }
     }
     const st = this.stroke!;
-    const lift0 = this.propHeight() * (shallow ? 0.6 : 1);
+    // walking it stands high on near-vertical arms, the fore body raised and the tail trailing on the mud (photographs
+    // of walking animals)
+    const lift0 = Math.max(this.propHeight(), 0.08 * L) * (shallow ? 0.6 : 1);
     if (this.phase < PUSH) {
       const u = this.phase / PUSH;
       const e = ease(u);
@@ -571,9 +576,9 @@ export class Motor {
       this.pos.x = st.p0.x + Math.sin(hm) * st.len * e;
       this.pos.z = st.p0.z + Math.cos(hm) * st.len * e;
       // the fins press down and lift the body, which vaults forward over them
-      this.liftT = lift0 + 0.05 * L * Math.sin(Math.PI * u) * (shallow ? 0.45 : 1) * (0.7 + 0.3 * this.urgency);
-      this.pitchT = 0.02 + 0.05 * Math.sin(Math.PI * u);
-      this.headPitchT = 0.12 + 0.05 * Math.sin(Math.PI * u);
+      this.liftT = lift0 + 0.025 * L * Math.sin(Math.PI * u) * (shallow ? 0.45 : 1) * (0.7 + 0.3 * this.urgency);
+      this.pitchT = 0.26 + 0.05 * Math.sin(Math.PI * u);
+      this.headPitchT = 0.1 + 0.04 * Math.sin(Math.PI * u);
       // the pelvic disc lifts off the mud as the body vaults over the pectorals
       this.pelvic.to(0.0, 12, dt);
       this.pelvicFold.to(0.3, 12, dt);
@@ -621,15 +626,15 @@ export class Motor {
           fn.from.copy(fn.contact);
           // the wrist is put down ahead of the shoulder, the web laid back along the flank (it stays put while the
           // body vaults over it, the arm swinging from leaning forward to leaning back)
-          this.plantPoint(fn.side, 0.065 + 0.02 * this.urgency, 0.075, fn.to, w, this.heading + nextTurn);
+          this.plantPoint(fn.side, 0.045 + 0.02 * this.urgency, 0.078, fn.to, w, this.heading + nextTurn);
           fn.yawFrom = fn.yaw;
-          fn.yawTo = fn.yaw + wrap(this.webYaw(fn.side, 0.8, this.heading + nextTurn) - fn.yaw);
+          fn.yawTo = fn.yaw + wrap(this.webYaw(fn.side, 0.2, this.heading + nextTurn) - fn.yaw);
           fn.planted = false; fn.swing = 0;
         }
       }
-      this.liftT = lift0 * (1 - 0.45 * Math.sin(Math.PI * v));
-      this.pitchT = 0.02;
-      this.headPitchT = 0.12;
+      this.liftT = lift0 * (1 - 0.3 * Math.sin(Math.PI * v));
+      this.pitchT = 0.26 - 0.05 * Math.sin(Math.PI * v);
+      this.headPitchT = 0.1;
       // recovery: the body rests on the pelvic disc while the pectorals swing forward, half folded
       this.pelvic.to(this.pelvicReach(this.liftT), 12, dt);
       this.pelvicFold.to(0, 12, dt);
@@ -1205,7 +1210,8 @@ export class Motor {
     const g = (d: number) => this.groundAt(this.pos.x - f.x * d, this.pos.z - f.z * d);
     // walk down the chain in 2D (distance back, height): the trunk keeps its direction; behind the girdle the body
     // sags until it rests on the mud, never through it
-    const sagMax = 0.16, bendMax = 0.32;
+    // (held up on the arms, the trunk stays nearly straight back to the anal fin; only the tail lies on the mud)
+    const sagMax = 0.09, bendMax = 0.32;
     let beta = -pitch;          // elevation of the backward direction of the current segment
     let prevBeta = -pitch;
     let yPrev = rootY + this.belly[0] * Math.cos(pitch);
@@ -1296,12 +1302,19 @@ export class Motor {
       const out = this.left(this.heading, new Vector3()).multiplyScalar(f.side);
       // the wrist: where it was put down if the arm reaches it there, else as close to it as the arm allows
       const Wd = f.contact.clone();
-      Wd.y += hw;
+      // propped high, the arm stands on the web like a leg on its foot: the wrist is held above the mud and the web
+      // hangs from it, only its margin on the mud (photographs of standing and walking animals)
+      const prop = smooth(0.035 * this.L, 0.07 * this.L, this.lift.x) * (f.planted || f.swing < 0 ? 1 : 0.3);
+      Wd.y += hw + prop * 0.35 * b;
       const D = new Vector3().subVectors(Wd, S);
       const d = D.length();
       const W = new Vector3();
       if (d >= a) W.copy(S).addScaledVector(D, a / Math.max(d, 1e-9));
-      else {
+      else if (prop > 0.3) {
+        // propped high and the wrist's spot is within reach: the arm keeps pointing at it, the wrist coming to rest
+        // lower (the web under it, standing on its margin, takes up the rest)
+        W.copy(S).addScaledVector(D, a / Math.max(d, 1e-9));
+      } else {
         // the arm is longer than the way down: it splays out sideways (the wrist slides out along the mud)
         const dy = D.y;
         const r = Math.sqrt(Math.max(0, a * a - dy * dy));
@@ -1321,8 +1334,10 @@ export class Motor {
       // the web: its middle ray runs from the wrist along the planted heading and reaches the mud near its margin
       const hd = new Vector3(Math.sin(f.yaw), 0, Math.cos(f.yaw));
       const lift = Math.max(0, W.y - gW - hw);
-      // in the air (swinging forward) it is carried level with the wrist rather than dragged down to the mud
-      const drop = Math.min(lift, f.planted || f.swing < 0 ? 0.7 * b : 0.25 * b);
+      // in the air (swinging forward) it is carried level with the wrist rather than dragged down to the mud; propped
+      // high, the web hangs down from the wrist like a foot, only its margin on the mud (photographs of standing and
+      // walking animals)
+      const drop = Math.min(lift, f.planted || f.swing < 0 ? 0.94 * b : 0.25 * b);
       const horiz = Math.sqrt(Math.max(1e-12, b * b - drop * drop));
       const G = new Vector3(W.x + hd.x * horiz, 0, W.z + hd.z * horiz);
       G.y = Math.max(w.ground(G.x, G.z) + 0.0002 * s, W.y - drop);
@@ -1338,7 +1353,9 @@ export class Motor {
       // roll the leading edge up (the fin is pressed down along its trailing rays, its leading rays arched up), more on
       // soft mud where the fin is braced on its edge than on firm sand where it lies spread
       const nUp = nh.y >= 0 ? nh : nh.clone().negate();
-      const roll = w.sand ? 0.3 : 0.75;
+      // (the steeper the web hangs, the more it stands on its edge: its broad face turned forward and out)
+      const steep = clamp(-dh.y, 0, 1);
+      const roll = (w.sand ? 0.3 : 0.75) + 0.6 * steep;
       wh.multiplyScalar(Math.cos(roll)).addScaledVector(nUp, Math.sin(roll)).normalize();
       // the arm's broad side faces out (its width runs fore and aft, the muscular paddle seen from the side); the hand
       // turns from it to the web's frame at the wrist

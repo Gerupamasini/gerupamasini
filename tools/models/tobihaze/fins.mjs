@@ -30,10 +30,14 @@ function rot(v, k, ang) {
 // pose of the model it stands out from the flank, down and a little back. It ends in a flat "hand" whose distal edge
 // carries the fin web; the joint between the forearm and the hand (the "wrist", J_pecArm) is where the web turns
 // relative to the arm when it is laid on the mud.
+/** pectoral web: the rays' lengths (mm from where they leave the hand), leading ray first */
+export const PEC_WEB_LEN = [5.2, 6.3, 7.0, 7.5, 7.8, 7.95, 7.95, 7.8, 7.55, 7.15, 6.6, 5.9, 5.1, 4.2].map((l) => 0.78 * l + 0.9);
 export const PEC = (() => {
   const { base, dir, width, normal } = PEC_AXIS; // width: the fin plane's second axis; normal faces out of the web
-  const len = 6.0; // shoulder joint → distal edge of the hand
-  const joint = 4.2; // shoulder joint → wrist joint
+  // a long, fleshy limb: standing, it reaches from the flank down to the mud like a leg (photographs of walking and
+  // standing animals), the web spread on the mud at its end
+  const len = 8.0; // shoulder joint → distal edge of the hand
+  const joint = 6.7; // shoulder joint → wrist joint
   const wrist = add(base, scl(dir, joint));
   const hand = add(base, scl(dir, len));
   return { base, dir, len, joint, wrist, hand, width, normal, rays: 14 };
@@ -116,7 +120,7 @@ function pectoralWeb(rect) {
   const n = PEC.rays;
   const R = [];
   // a rounded fan, the leading rays stoutest
-  const LEN = [5.2, 6.3, 7.0, 7.5, 7.8, 7.95, 7.95, 7.8, 7.55, 7.15, 6.6, 5.9, 5.1, 4.2].map((l) => l + 0.9);
+  const LEN = PEC_WEB_LEN;
   for (let i = 0; i < n; i++) {
     const f = i / (n - 1); // 0 = leading (upper) ray
     // the rays insert along the hand's distal edge, their bases sheathed in its skin (they start inside the hand)

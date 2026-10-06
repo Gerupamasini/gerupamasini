@@ -14,7 +14,7 @@ import { GLBBuilder } from '../../lib/glb.mjs';
 import { encodePNG } from '../../lib/png.mjs';
 import { S0, Y0, SL, S_END, TL, EYE, BODY_U, toObject, dirToObject, botY, pecBindFix } from './anatomy.mjs';
 import { buildSkin, skinParts, skinTarget, buildMouth, buildDomes, bakeSkinTextures, SPLIT } from './body.mjs';
-import { finDefinitions, buildFinMesh, buildFinFold, paintFinAtlas, armPaint, mirrorMesh, PEC, PELVIC } from './fins.mjs';
+import { finDefinitions, buildFinMesh, buildFinFold, paintFinAtlas, armPaint, mirrorMesh, PEC, PEC_WEB_LEN, PELVIC } from './fins.mjs';
 import { buildEyeMesh, eyeRotation, paintEye, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './eye.mjs';
 import { buildArm, armPoint, armOcclusion, pecShare } from './arm.mjs';
 import { JOINTS, J, skinWeights, mouthWeights, armWeights, finWeights, buildClips, CLIP_SPEED } from './rig.mjs';
@@ -292,7 +292,7 @@ const rootNode = gb.addNode({
       eyeRadius_m: EYE.radius / 1000,
       // arm geometry for the IK (object space, metres; left side, the right mirrors X)
       pecBindFix: pecBindFix(),
-      pec: { base: toObject(PEC.base), wrist: toObject(PEC.wrist), dir: dirToObject(PEC.dir), width: dirToObject(PEC.width), normal: dirToObject(PEC.normal), armLen_m: PEC.joint / 1000, handLen_m: (PEC.len - PEC.joint + 0.88 * 7.9) / 1000 },
+      pec: { base: toObject(PEC.base), wrist: toObject(PEC.wrist), dir: dirToObject(PEC.dir), width: dirToObject(PEC.width), normal: dirToObject(PEC.normal), armLen_m: PEC.joint / 1000, handLen_m: (PEC.len - PEC.joint + 0.88 * (Math.max(...PEC_WEB_LEN) - 1.3)) / 1000 },
       // contact geometry: the belly line under the chain and the pelvic fins' lowest point
       contacts: { pelvicY_m: pelvicLowY, bellyY: SPINE.map(([n, s]) => [n, objY(botY(Math.min(s, S_END - 0.5)))]) },
       splits: SPLIT,

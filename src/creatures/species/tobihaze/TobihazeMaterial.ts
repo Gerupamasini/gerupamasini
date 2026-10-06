@@ -134,7 +134,7 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop, tobiFilm;`)
     float d = length(f - o * 0.45) / r;
     // in air the mucus is a continuous film: only a few small beads (fresh out of the water); they cluster just above
     // the waterline
-    float keep = step(h, mix(0.0, 0.035, smoothstep(0.8, 1.0, tobiWet)) + 0.3 * (1.0 - smoothstep(0.0, 0.008, tobiAbove)));
+    float keep = step(h, mix(0.0, 0.012, smoothstep(0.8, 1.0, tobiWet)) + 0.3 * (1.0 - smoothstep(0.0, 0.008, tobiAbove)));
     tobiDrop = keep * tipFade * step(tUv.x, uBodyU - 0.005) * (1.0 - tobiSub) * sqrt(max(0.0, 1.0 - d * d));
   }
   #endif

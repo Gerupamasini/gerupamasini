@@ -113,7 +113,9 @@ switch (script) {
 const camera = new PerspectiveCamera(Number(q.get('fov') ?? 28), innerWidth / innerHeight, 0.005, 30);
 const dist = Number(q.get('dist') ?? 0.32);
 const views: Record<string, [number, number, number]> = { side: [1, 0.12, 0], oblique: [0.75, 0.42, 0.55], front: [0, 0.2, 1], top: [0.02, 1, 0.02], rear: [-0.3, 0.35, -1], low: [0.9, 0.06, 0.45], back: [0.4, 0.5, -0.8] };
-const vdir = new Vector3(...(views[view] ?? views.oblique)).normalize();
+// (vdir=x,y,z: any direction, in the fish's heading frame like the presets)
+const vdirQ = q.get('vdir')?.split(',').map(Number) as [number, number, number] | undefined;
+const vdir = new Vector3(...(vdirQ ?? views[view] ?? views.oblique)).normalize();
 let simT = 0;
 const dt = 1 / 60;
 const step = () => {
@@ -127,7 +129,7 @@ const follow = q.get('follow') !== '0';
 const target = new Vector3();
 const place = () => {
   const a = driver.anchor();
-  if (follow) target.copy(a); else target.set(start.x + Number(q.get('ox') ?? 0), h(start.x, start.z) + 0.01, start.z + Number(q.get('oz') ?? 0));
+  if (follow) target.copy(a).add(new Vector3(0, Number(q.get('ty') ?? 0), 0)); else target.set(start.x + Number(q.get('ox') ?? 0), h(start.x, start.z) + 0.01, start.z + Number(q.get('oz') ?? 0));
   // camera relative to the fish's heading (or to the start heading when the camera stays put)
   const hd = follow ? ind.heading : start.heading;
   const d = vdir.clone().applyAxisAngle(new Vector3(0, 1, 0), q.get('world') ? 0 : hd);
@@ -148,6 +150,7 @@ syncDbg();
 if (q.get('noshadow')) scene.traverse((o) => { if (o.name === 'contactShadow') o.visible = false; });
 if (q.get('nofx')) { fx.marks.visible = false; }
 if (q.get('nofish')) model.root.visible = false;
+for (const name of (q.get('hide') ?? '').split(',').filter(Boolean)) model.root.traverse((o) => { if (o.name === name) o.visible = false; });
 if (q.get('dbgnormal')) { const { MeshNormalMaterial } = await import('three'); model.meshes.forEach((m) => { m.material = new MeshNormalMaterial(); }); }
 if (q.get('dbgflat')) { const { MeshStandardMaterial: MSM } = await import('three'); model.meshes.forEach((m) => { m.material = new MSM({ color: 0x888888, roughness: 0.15, metalness: 0 }); }); }
 if (q.get('dbgshadow')) scene.traverse((o) => { if (o.name === 'contactShadow') { const m = (o as Mesh).material as import('three').ShaderMaterial; m.fragmentShader = m.fragmentShader.replace('gl_FragColor = vec4(0.02, 0.018, 0.015, clamp(a, 0.0, 1.0) * uOpacity);', 'gl_FragColor = vec4(clamp(a,0.0,1.0), fract(vP.x*100.0), fract(vP.y*100.0), 1.0);'); m.transparent = false; m.needsUpdate = true; } });

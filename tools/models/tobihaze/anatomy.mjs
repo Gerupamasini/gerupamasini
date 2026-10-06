@@ -44,13 +44,14 @@ const KS = [0, 0.3, 0.7, 1.2, 1.8, 2.6, 3.6, 4.8, 6, 8, 10, 12, 14, 16, 18, 20, 
 // little below the throat; a long, low caudal peduncle:
 // dorsal profile (without the eyes)
 const KTOP = [5, 5.5, 6, 6.5, 7, 7.8, 8.6, 9.05, 9.35, 9.55, 9.6, 9.65, 9.7, 9.75, 9.95, 10.2, 10.7, 11.2, 11.1, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
-// ventral profile: under the snout tip the fleshy upper lip, the lower jaw and the throat curving down to the chest;
-// the belly sags a little below the chest, the tail's lower edge rises to the peduncle
-const KBOT = [1.2, 0.6, 0.25, -0.1, -0.4, -0.65, -0.95, -1.15, -1.3, -1.3, -1.15, -0.98, -0.8, -0.55, -0.47, -0.5, -0.6, -0.6, -0.4, -0.1, 0.25, 0.65, 1.05, 1.4, 1.7, 1.95, 2.1, 2.15, 2.2];
+// ventral profile: under the snout tip the fleshy upper lip, then a deep, rounded chin and throat (on land the buccal
+// and opercular chambers are kept full of water and air, so the mouth sits about half way up the head: photographs of
+// walking and standing animals), curving up to the chest; the tail's lower edge rises to the peduncle
+const KBOT = [1.2, 0.6, 0.25, -0.45, -0.95, -1.4, -1.8, -2.05, -2.2, -2.15, -1.95, -1.6, -1.15, -0.75, -0.47, -0.5, -0.6, -0.6, -0.4, -0.1, 0.25, 0.65, 1.05, 1.4, 1.7, 1.95, 2.1, 2.15, 2.2];
 // half width: the snout is a rounded bulb narrower than the face (head-on it stands out from the face, in
 // three-quarter view it overhangs the mouth), so the mouth is about half as wide as the face; behind it the face
 // swells to broad, full cheeks (head ~1.05 × as wide as deep); a stout trunk tapering to the peduncle
-const KW = [2.1, 2.55, 2.95, 3.25, 3.5, 3.75, 3.95, 4.7, 5.6, 6.35, 6.75, 6.8, 6.5, 6, 5.55, 5.55, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
+const KW = [2.1, 2.55, 2.95, 3.25, 3.5, 3.75, 3.95, 4.7, 5, 5.5, 5.8, 5.9, 5.8, 5.6, 5.55, 5.55, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
 // superellipse exponents (top / bottom): a rounded muzzle; head-on the head is bell-shaped, rounded and narrowing up
 // to the eyes over a full, flat-bottomed face (photographs of the face head-on); round trunk, oval tail
 const KNT = [1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.7, 1.6, 1.6, 1.62, 1.68, 1.78, 1.95, 2, 2.05, 2.15, 2.1, 2.1, 2.05, 2.05, 2, 2, 2, 2, 2, 2, 2, 2];
@@ -208,12 +209,12 @@ export function surfaceAt(s, y) {
 // Retraction ("blinking", Aiello et al. 2023 PNAS): the eyeball sinks ~2.4 mm into the orbit and the dermal cup
 // closes over it.
 export const EYE = {
-  center: [6.4, 10.75, 1.72],
+  center: [6.4, 10.45, 1.62],
   radius: 1.52,
-  // the eyes look out to the side, a little forward (~19°) and up (~14°): photographed from the side the pupil
-  // faces the camera, head-on the dark eye shows on the outer front of each globe
-  axis: norm3([-0.32, 0.24, 0.92]),
-  retract: 2.4,
+  // the eyes look out and well forward (~42°) and a little up (~13°): head-on each pupil shows on the front-outer
+  // face of its globe, from the side on the front of the globe (photographs of standing and walking animals)
+  axis: norm3([-0.66, 0.22, 0.72]),
+  retract: 2.15,
 };
 // at rest the globe looks a little above the optical axis' rest direction
 {
@@ -347,7 +348,7 @@ function buildFeatures() {
     lipPad,
     // the opercular chamber (inflated with water on land: the breathe morph) and the throat under it
     cheek: [11.6, 4.2, 4.5],
-    jowl: [6.8, 3.0, 4.3],
+    jowl: [6.8, 3.0, 3.85],
     throat: [9.0, 1.05, 0],
     pecLobe: [17.6, 3.15, 4.95],
     pelvicBase: [20.6, 0.3, 0],
@@ -485,7 +486,7 @@ export const PEC_AXIS = (() => {
  * shoulder's ball, flattening outward into the forearm
  */
 export function armRadii(a) {
-  return { rw: 2.08 + (1.75 - 2.08) * smoothstep(0.8, 2.8, a), rt: 1.98 + (1.1 - 1.98) * smoothstep(1.2, 3.2, a) };
+  return { rw: 2.08 + (1.75 - 2.08) * smoothstep(0.8, 4.2, a), rt: 1.98 + (0.95 - 1.98) * smoothstep(1.2, 4.6, a) };
 }
 /**
  * Sculpted signed distance field (mm). Negative inside.
@@ -519,13 +520,13 @@ export function field(s, y, z, opts = null) {
     const ox = p[0] - e.c[0], oy = p[1] - e.c[1], oz = p[2] - e.c[2];
     const shut = (i === 0 ? opts?.cupL : opts?.cupR) === false || opts?.cup === false;
     let cup;
-    if (shut) cup = Math.hypot(ox + 0.13, oy + 1.4, oz + 0.09 * Math.sign(e.c[2])) - (R - 0.09);
+    if (shut) cup = Math.hypot(ox + 0.13, oy + 1.15, oz + 0.09 * Math.sign(e.c[2])) - (R - 0.09);
     // (the lid margin rolls over like a thick lid's edge)
     else cup = smax(Math.hypot(ox, oy, oz) - R, windowField([ox, oy, oz], e.D), 0.3);
     // the neck: a fleshy column under the globe, a little narrower than the cup, rising out of the head with a
     // small fillet; the cup merges into it tightly, so the eye reads as a ball held in a cup on a short neck
     const sg = Math.sign(e.c[2]);
-    d = smin(d, ellipsoidDist(p, [e.c[0] + 0.13, e.c[1] - 1.55, e.c[2] - 0.13 * sg], [1.2, 1.65, 1.13]), 1.3);
+    d = smin(d, ellipsoidDist(p, [e.c[0] + 0.13, e.c[1] - 1.3, e.c[2] - 0.13 * sg], [1.15, 1.4, 1.05]), 1.3);
     d = smin(d, cup, 0.38);
   });
   // the stalks are joined low between the eyes: only a shallow cleft parts them (photographs head-on)

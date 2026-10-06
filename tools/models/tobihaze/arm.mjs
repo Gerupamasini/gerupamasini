@@ -179,7 +179,8 @@ function tubeRing(g, phi) {
   const R = armRadii(a);
   const f = (a - ARM.join) / (len - ARM.join);
   const cap = f > 0.55 ? Math.pow(Math.max(0, 1 - ((f - 0.55) / 0.45) ** 2), 0.6) : 1;
-  const rw = (R.rw + (1.7 - R.rw) * hand) * cap, rt = (R.rt + (0.95 - R.rt) * hand) * cap;
+  // (the hand: a broad, flat paddle where the rays insert, photographs head-on)
+  const rw = (R.rw + (2.5 - R.rw) * hand) * cap, rt = (R.rt + (0.75 - R.rt) * hand) * cap;
   const p = add(axisAt(a), add(scl(PEC_AXIS.width, Math.cos(phi) * rw), scl(PEC_AXIS.normal, Math.sin(phi) * rt)));
   return { p, a };
 }
