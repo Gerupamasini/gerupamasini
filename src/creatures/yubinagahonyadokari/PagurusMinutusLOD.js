@@ -14,7 +14,7 @@ export const LOD_TIERS = [
 ];
 
 export const BUDGET = {
-  trianglesBody: [33800, 10900, 2400],
+  trianglesBody: [35600, 10900, 2400],
   trianglesShell: [40000, 8000, 1300],
   drawCalls: [4, 4, 3], // body, setae, shell, contact shadow (LOD2: no setae)
   skinnedMeshes: [2, 2, 1],

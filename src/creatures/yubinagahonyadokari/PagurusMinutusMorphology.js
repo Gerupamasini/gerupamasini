@@ -27,17 +27,32 @@ export const MORPH = {
     rostrum: { len: 0.06, halfWidth: 0.085 }, // broadly rounded-triangular, ≈ level with lateral projections [D]
     lateralProjection: { x: 0.36, len: 0.055, halfWidth: 0.07 }, // bluntly rounded [D]
     gastricSpot: { z: 0.55, radius: 0.09 }, // dark-brown median spot on gastric region [D]
+    // 1.0–1.1 × as long as broad; anterior margin weakly concave between rostrum and lateral projections;
+    // anterolateral margins sloping; posterior margin roundly truncate; dorsal surface weakly inflated,
+    // with sparse tufts of short setae dorsomesially (redescription of P. minutus) [D]
+    setalTuftPairs: 7,
+    // photo 01: only a central zone of the shield (≈ 0.6 SL across) stands out pinkish with the white mark;
+    // beside its posterior half the golden, granular branchiostegites bulge up and run on into the branchial
+    // lobes of the posterior carapace, without a break at the cervical groove [P]
+    centralHalfWidth: 0.26,
   },
   // total carapace length / shield length = 1.74–1.87 (6.3/3.5, 5.6/3.0, 4.7/2.7 mm) [D: out-of-shell photos];
   // the soft posterior carapace is membranous and weakly calcified [D][G]. Out of the shell (photo 01, dorsal)
   // it is a broad inflated oval, WIDER than the shield (≈ 1.1 SL across at 40–50 % of its length), its sides
   // bulging past the shield's posterior corners and its posterior margin rounded with a shallow median
   // notch [P]. Inside the shell the soft branchiostegites are pressed in to about the shield's width [G].
+  // Seen dorsally (photo 01, enlarged) the posterior carapace is a median cardiac strip – reddish, with a
+  // darker median line, wide just behind the cervical groove and narrowing to ≈ 0.2 SL – bounded by the
+  // sulci cardiobranchiales, and on each side an inflated, densely granular branchial lobe; the two lobes
+  // round off separately behind, so the posterior margin is bilobed [P]. Terminology after McLaughlin
+  // (posteromedian plate, sulci cardiobranchiales, branchiostegites) [G].
   posteriorCarapace: {
     length: 0.85,
     halfWidthMax: 0.56, // free (out of the shell)
     maxAt: 0.45, // fraction of the length behind the cervical groove
-    notch: 0.045, // median notch of the posterior margin [P]
+    cardiacHalfWidth: [0.16, 0.1, 0.05], // at the cervical groove, from 30 to 70 % of the length, at the margin [P]
+    lobeRise: 0.026, // how far each branchial lobe domes above the cardiac strip (SL) [P]
+    notch: 0.07, // median notch between the two lobes at the posterior margin [P]
     inShellSqueeze: 0.1, // lateral compression of each side inside the shell (SL) [S]
   },
 
@@ -183,10 +198,11 @@ export const MORPH = {
  *  - antennal flagellum olive with regularly spaced white annuli
  */
 export const PALETTE = {
-  shield: '#ab9077', // light yellowish-brown, faintly pinkish out of the water (photo 01)
+  shield: '#b09885', // light yellowish-brown, pinkish grey in the middle out of the water (photo 01)
   shieldDark: '#5b4027',
   branchio: '#999380',
-  softCarapace: '#9e7957', // warm tan, stippled and mottled with dark spots (photos 01, 02, 07)
+  softCarapace: '#9d7a52', // golden tan, granular, mottled, with a few dark spots (photos 01, 02, 07)
+  cardiac: '#a5674a', // reddish cardiac strip of the posterior carapace (photo 01)
   sternum: '#c9c0a2',
   legBase: '#958a6b', // tan-olive (photo 01; greyer under water)
   legStripe: '#3b2e22',
@@ -228,6 +244,14 @@ export const COLORWAYS = [
   { id: 'paleyellow', weight: 0.05, hue: 0.02, sat: 0.9, val: 1.22, green: 0.25 },
   { id: 'orange', weight: 0.03, hue: 0.09, sat: 1.25, val: 1.0, green: 0.0 },
 ];
+
+/** half width (SL) of the cardiac strip of the posterior carapace at fraction f of its length (0 = cervical
+ *  groove, 1 = posterior margin); the sulci cardiobranchiales run along its edges */
+export function cardiacHalfWidth(f) {
+  const [a, b, c] = MORPH.posteriorCarapace.cardiacHalfWidth;
+  const s = (e0, e1, x) => { const u = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return u * u * (3 - 2 * u); };
+  return f < 0.5 ? a + (b - a) * s(0, 0.3, f) : b + (c - b) * s(0.7, 1, f);
+}
 
 /** abdomen radius (SL) at fraction t (0 = junction with the carapace, 1 = tail fan) */
 export function abdomenRadius(t) {

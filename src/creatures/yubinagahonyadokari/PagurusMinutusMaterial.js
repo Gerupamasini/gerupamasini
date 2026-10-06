@@ -3,10 +3,12 @@
 // Physically based (MeshPhysicalMaterial: PBR, image-based lighting from the scene environment,
 // ACES tone mapping and shadows come from the engine) with the species' surface written procedurally in
 // the shader – no textures, so texture memory is zero and every LOD shares one program:
-//   * pattern: shield gastric spot and lateral markings, olive cheliped with white granules, walking-leg
+//   * pattern: shield gastric spot and lateral markings, granular branchial lobes and reddish cardiac strip
+//     of the posterior carapace, cheliped with brown blotches and bluish granules, walking-leg
 //     longitudinal stripe + transverse bands, dactyl median white section, banded eyestalk with two-striped
 //     corneas, white-ringed antennal flagellum, banded third maxillipeds, translucent olive abdomen
-//   * micro relief: cellular granules / pits / membrane wrinkles via derivative bump mapping
+//   * micro relief: cellular granules / pits / grooves / membrane wrinkles via derivative bump mapping,
+//     faded to the mean tone once finer than a pixel (pmAA, pmLine) so nothing shimmers at a distance
 //   * roughness variation, wet film (clearcoat + darkening) driven by exposure/wetness
 //   * thin-cuticle translucency (membranes, dactyl tips, antennae, abdomen) with a back-light term
 //   * view-dependent pseudopupil on the compound eyes
@@ -14,7 +16,7 @@
 // Per-individual colour (morph, hue/value) is held in uniforms of a per-crab material instance; all
 // instances share the same compiled program (customProgramCacheKey).
 import * as THREE from 'three';
-import { PALETTE } from './PagurusMinutusMorphology.js';
+import { PALETTE, MORPH } from './PagurusMinutusMorphology.js';
 import { SHELL_SPECIES, setShellMaterialFactory } from './PagurusMinutusShell.js';
 
 const col = (hex) => new THREE.Color(hex); // sRGB hex → linear working colour space
@@ -98,6 +100,9 @@ uniform vec3 uPmCausColor;
 uniform vec3 uShield, uShieldDark, uBranchio, uSoft, uSternum, uLegBase, uLegStripe, uLegBand, uLegPale;
 uniform vec3 uDactBase, uDactWhite, uDactTip, uChel, uGran, uFinger, uFingerTip, uMembrane, uEyestalk, uEyeBand;
 uniform vec3 uCornea, uCorneaStripe, uAntenna, uAntennaWhite, uAntennule, uMxp, uMxpBand, uAbd, uAbdDeep, uAbdVisc, uUropod, uSetae;
+uniform vec3 uCardiac;
+uniform vec4 uPC; // posterior carapace: length, cardiac-strip half widths (groove, middle, margin)
+uniform float uShieldC; // half width of the shield's central zone
 uniform float uAnnuli, uWhitePeriod;
 float pmThin = 0.1;
 float pmClear = 1.0;
@@ -117,6 +122,35 @@ vec3 pmAdjust(vec3 c) {
   r.r *= 1.0 - 0.1 * (uPmGreen - 0.5);
   return max(r, vec3(0.0));
 }
+// 1 while a pattern of the given frequency (cycles per SL) is resolved on screen, fading to 0 as it would
+// alias – the pattern then gives way to its mean tone instead of shimmering
+float pmAA(vec3 p, float freq) { vec3 w = fwidth(p) * freq; return 1.0 - smoothstep(0.45, 1.2, max(max(w.x, w.y), w.z)); }
+// a fine groove line of half width w at distance d, widened (and faded) to at least a pixel
+float pmLine(float d, float w) { float fw = max(w, fwidth(d) * 1.2); return exp(-pow(d / fw, 2.0)) * (w / fw); }
+// soft, membranous cuticle of the branchial lobes (photo 01): golden brown, densely set with small pale
+// granules, brown mottling, reddish-brown streaks and a few dark-brown spots
+vec3 pmBranchial(vec3 p, float mott, out float hgt) {
+  vec3 c = uSoft * (0.82 + 0.36 * mott);
+  // coarser granules that stay visible at observation distance: bright granules, darker interstices
+  float aaM = pmAA(p, 48.0);
+  float gm = 1.0 - smoothstep(0.12, 0.34, pmCell(p * 48.0 + 7.1));
+  c *= mix(1.0, 0.8 + 0.42 * gm, aaM);
+  c = mix(c, uLegPale, gm * 0.2 * aaM);
+  // salt-and-pepper granulation: pale granules with darker ones between (mean tone when unresolved)
+  float aa = pmAA(p, 95.0);
+  float g = 1.0 - smoothstep(0.1, 0.3, pmCell(p * 95.0));
+  float gd = 1.0 - smoothstep(0.08, 0.22, pmCell(p * 95.0 + 31.7));
+  c = mix(c, uLegPale, g * 0.38 * aa + 0.07 * (1.0 - aa));
+  c *= 1.0 - 0.22 * gd * aa;
+  float aa2 = pmAA(p, 160.0);
+  c *= 1.0 + (0.24 * smoothstep(0.25, 0.65, pmNoise(p * 160.0)) - 0.12) * aa2;
+  // irregular brown mottling and reddish-brown streaks; a few larger dark-brown spots
+  c = mix(c, uShieldDark, smoothstep(0.43, 0.62, pmFbm(p * 7.0 + 4.0)) * 0.5 * uPmContrast);
+  c = mix(c, uCardiac * 0.85, smoothstep(0.45, 0.62, pmFbm(p * vec3(14.0, 6.0, 5.0) + 11.0)) * 0.55);
+  c = mix(c, uShieldDark, smoothstep(0.84, 0.88, pmNoise(p * 18.0 + 3.3)) * 0.55 * uPmContrast);
+  hgt = (g - 0.6 * gd) * 0.005 * aa + gm * 0.004 * aaM + (pmNoise(p * vec3(26.0, 40.0, 18.0)) - 0.5) * 0.004;
+  return c;
+}
 vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
   int R = int(region + 0.5);
   float t = sg.x, ang = sg.y * 6.2831853, kind = sg.z, side = sg.w;
@@ -125,16 +159,32 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
   float ant = cos(ang) * side; // +1 on the anterior ("lateral") face of a leg article
   float dors = sin(ang);
   if (R == 0) {
-    c = uShield * (0.9 + 0.2 * mott);
+    // the pinkish central zone of the shield; beside its posterior half the golden granular
+    // branchiostegites, toward the front grey-olive mottling among the cheliped bases (photo 01). The
+    // linea anomurica runs along the edge of the central zone.
+    float ax = abs(p.x);
+    // widest over the gastric region, narrowing backward into the cardiac strip of the posterior carapace
+    float xl = mix(uPC.y + 0.01, uShieldC, smoothstep(0.0, 0.55, p.z)) * (1.0 - 0.45 * smoothstep(0.7, 1.0, p.z));
+    float side = smoothstep(xl - 0.06, xl + 0.06, ax + (pmFbm(p * 9.0 + 6.0) - 0.47) * 0.12);
+    float linea = pmLine(ax - xl, 0.01) * smoothstep(0.03, 0.12, p.z) * (1.0 - smoothstep(0.84, 0.95, p.z));
+    c = uShield * (0.85 + 0.3 * pmFbm(p * 12.0 + 5.0));
+    c = mix(c, uCardiac * 1.15, smoothstep(0.44, 0.64, pmFbm(p * 8.0 + 1.7)) * 0.4); // rosy blotches
+    float aaG = pmAA(p, 60.0);
+    c *= mix(1.0, 0.9 + 0.18 * (1.0 - smoothstep(0.1, 0.32, pmCell(p * 60.0 + 2.9))), aaG); // fine granulation
+    float hb;
+    vec3 cb = pmBranchial(p, mott, hb);
+    vec3 front = mix(uBranchio, uLegBase, 0.4) * (0.8 + 0.4 * pmFbm(p * 11.0 + 2.0));
+    c = mix(c, mix(cb, front, smoothstep(0.45, 0.8, p.z)), side);
+    c = mix(c, front, smoothstep(0.78, 0.95, p.z) * 0.45);
     // dark-brown gastric spot inside a pale horseshoe-shaped halo open to the back, a pale median line
     // running back from it (photo 01)
     vec2 gq = vec2(p.x * 1.25, p.z - 0.55) + (vec2(pmNoise(p * 14.0), pmNoise(p * 14.0 + 7.7)) - 0.5) * 0.05;
     float gd = length(gq);
     float gs = 1.0 - smoothstep(0.035, 0.1, gd);
     float halo = smoothstep(0.075, 0.11, gd) * (1.0 - smoothstep(0.15, 0.21, gd)) * smoothstep(-0.12, 0.04, gq.y);
-    c = mix(c, uLegPale, halo * 0.5 * (0.6 + 0.4 * pmNoise(p * 30.0)));
+    c = mix(c, uLegPale, halo * 0.7 * (0.6 + 0.4 * pmNoise(p * 30.0)));
     c = mix(c, uShieldDark, gs * 0.88);
-    c = mix(c, uLegPale, (1.0 - smoothstep(0.018, 0.045, abs(p.x))) * smoothstep(0.2, 0.36, p.z) * (1.0 - smoothstep(0.44, 0.5, p.z)) * 0.55);
+    c = mix(c, uLegPale, (1.0 - smoothstep(0.018, 0.045, abs(p.x))) * smoothstep(0.2, 0.36, p.z) * (1.0 - smoothstep(0.44, 0.5, p.z)) * 0.7);
     // dark-brown spots in loose pairs on the lateral parts of the shield's posterior half (photo 01)
     vec2 sq = vec2(abs(p.x), p.z) + (vec2(pmNoise(p * 17.0 + 2.0), pmNoise(p * 17.0 + 9.0)) - 0.5) * 0.05 + vec2(0.0, 0.035 * sign(p.x));
     float sp = max(max(1.0 - smoothstep(0.022, 0.045, length(sq - vec2(0.31, 0.3))), 1.0 - smoothstep(0.02, 0.04, length(sq - vec2(0.25, 0.12)))),
@@ -142,26 +192,49 @@ vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
     c = mix(c, uShieldDark, sp * 0.8 * uPmContrast);
     float lat = smoothstep(0.12, 0.42, abs(p.x)) * smoothstep(0.5, 0.72, pmFbm(p * 7.0 + 3.1));
     c = mix(c, uShieldDark, lat * 0.6 * uPmContrast);
-    c *= 1.0 - 0.4 * exp(-pow(p.z / 0.022, 2.0));
-    c = mix(c, uShieldDark, step(0.82, pmNoise(p * 55.0)) * 0.35);
-    pmHeight = (pmNoise(p * 85.0) - 0.5) * 0.004 - 0.006 * exp(-pow(p.z / 0.02, 2.0));
-    pmRough = 0.36; pmThin = 0.08;
+    float cerv = pmLine(p.z, 0.016) * (1.0 - side);
+    c *= 1.0 - 0.1 * cerv - 0.25 * linea;
+    // toward the cervical groove the central zone reddens like the cardiac strip it runs into
+    c = mix(c, mix(uShield, uCardiac, 0.4) * (0.85 + 0.3 * mott), (1.0 - smoothstep(0.0, 0.3, p.z)) * (1.0 - side) * 0.7);
+    c = mix(c, uShieldDark, step(0.82, pmNoise(p * 55.0)) * 0.3 * (1.0 - side));
+    // the central plate well calcified: smooth and a little glossy, finely punctate
+    float aa = pmAA(p, 80.0);
+    float pit = (1.0 - smoothstep(0.04, 0.13, pmCell(p * 80.0))) * aa * (1.0 - side);
+    c *= 1.0 - 0.12 * pit;
+    pmHeight = mix(-0.003 * pit + (pmNoise(p * 85.0) - 0.5) * 0.002 * aa, hb, side) - 0.008 * cerv - 0.006 * linea;
+    // calcified: a little smoother and glossier than the membranous parts, but never plastic-looking
+    pmRough = mix(0.46, 0.62, side); pmThin = mix(0.08, 0.35, side); pmClear = mix(0.55, 0.35, side);
   } else if (R == 1) {
-    c = uBranchio * (0.86 + 0.28 * mott);
-    pmHeight = (pmNoise(p * 70.0) - 0.5) * 0.003;
-    pmRough = 0.5; pmThin = 0.32;
+    // branchiostegites beside the shield: golden and granular like the branchial lobes behind, greyer
+    // toward the front among the cheliped bases
+    float hb;
+    vec3 cb = pmBranchial(p, mott, hb);
+    c = mix(uBranchio * (0.86 + 0.28 * mott), cb, smoothstep(0.7, 0.25, p.z));
+    pmHeight = hb * smoothstep(0.7, 0.25, p.z);
+    pmRough = 0.58; pmThin = 0.35; pmClear = 0.6;
   } else if (R == 2) {
-    // soft posterior carapace (photo 01): warm tan, finely stippled with pale and dark granules, darker
-    // irregular blotches and scattered dark-brown spots; a darker median (cardiac) band
-    c = uSoft * (0.8 + 0.4 * mott);
-    float stip = pmCell(p * 95.0);
-    c = mix(c, uLegPale, (1.0 - smoothstep(0.08, 0.26, stip)) * 0.28);
-    c *= 0.88 + 0.24 * smoothstep(0.25, 0.65, pmNoise(p * 150.0));
-    c = mix(c, uShieldDark, smoothstep(0.54, 0.72, pmFbm(p * 9.0 + 4.0)) * 0.5 * uPmContrast);
-    c = mix(c, uShieldDark, smoothstep(0.74, 0.8, pmNoise(p * 34.0)) * 0.65); // dark spots (photos 01, 02, 07)
-    c = mix(c, uShieldDark, (1.0 - smoothstep(0.04, 0.1, abs(p.x))) * smoothstep(-0.1, -0.25, p.z) * 0.18);
-    pmHeight = (1.0 - smoothstep(0.08, 0.26, stip)) * 0.004 + (pmNoise(p * 50.0) - 0.5) * 0.003;
-    pmRough = 0.56; pmThin = 0.5; pmClear = 0.7;
+    // soft posterior carapace (photo 01): a reddish cardiac strip with a darker median line between the
+    // sulci cardiobranchiales, and on each side the inflated, granular, membranous branchial lobe
+    float f = clamp(-p.z / uPC.x, 0.0, 1.0);
+    float xs = f < 0.5 ? mix(uPC.y, uPC.z, smoothstep(0.0, 0.3, f)) : mix(uPC.z, uPC.w, smoothstep(0.7, 1.0, f));
+    float ax = abs(p.x);
+    float top = smoothstep(0.15, 0.6, dors);
+    float hb;
+    c = pmBranchial(p, mott, hb);
+    // the strip keeps the granulation underneath, reddened, finely striate across, darker along the midline
+    float strip = (1.0 - smoothstep(xs - 0.05, xs + 0.01, ax)) * top;
+    vec3 cs = mix(c, uCardiac * (0.9 + 0.2 * mott), 0.42);
+    // where it starts at the cervical groove it is as pale as the shield's central zone it continues
+    cs = mix(cs, mix(uShield, uCardiac, 0.4) * (0.85 + 0.3 * mott), (1.0 - smoothstep(0.0, 0.25, f)) * 0.85);
+    cs *= 1.0 - 0.1 * smoothstep(0.6, 0.95, abs(fract(p.z * 70.0 + pmNoise(p * 20.0) * 0.5) - 0.5) * 2.0) * pmAA(p, 70.0);
+    cs = mix(cs, uCardiac * 0.7, pmLine(ax, 0.014) * 0.8);
+    c = mix(c, cs, strip);
+    float sul = pmLine(ax - xs, 0.012) * top;
+    float med = pmLine(ax, 0.006) * top * smoothstep(0.05, 0.15, f);
+    c *= 1.0 - 0.15 * sul - 0.15 * med;
+    pmHeight = mix(hb, (pmNoise(p * 60.0) - 0.5) * 0.002, strip) - 0.01 * sul - 0.004 * med;
+    // membranous: matte and leathery, a soft sheen rather than the shield's gloss
+    pmRough = mix(0.68, 0.6, strip); pmThin = 0.5; pmClear = mix(0.25, 0.35, strip);
   } else if (R == 3) {
     c = uSternum * (0.92 + 0.15 * mott); pmRough = 0.5; pmThin = 0.25;
   } else if (R == 4 || R == 5) {
@@ -330,6 +403,9 @@ function paletteUniforms() {
     uMembrane: u(P.membrane), uEyestalk: u(P.eyestalk), uEyeBand: u(P.eyeBand), uCornea: u(P.cornea), uCorneaStripe: u(P.corneaStripe),
     uAntenna: u(P.antenna), uAntennaWhite: u(P.antennaWhite), uAntennule: u(P.antennule), uMxp: u(P.mxp), uMxpBand: u(P.mxpBand),
     uAbd: u(P.abdomen), uAbdDeep: u(P.abdomenDeep), uAbdVisc: u(P.abdomenViscera), uUropod: u(P.uropod), uSetae: u(P.setae),
+    uCardiac: u(P.cardiac),
+    uPC: { value: new THREE.Vector4(MORPH.posteriorCarapace.length, ...MORPH.posteriorCarapace.cardiacHalfWidth) },
+    uShieldC: { value: MORPH.shield.centralHalfWidth },
     uAnnuli: { value: 108 }, uWhitePeriod: { value: 3 },
   };
 }

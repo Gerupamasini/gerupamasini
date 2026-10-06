@@ -10,7 +10,7 @@
 //   aSeg    : vec4   (t along the article 0..1, angle around it 0..1 (0.25 = dorsal), article kind, side ±1)
 //   position (bind pose) doubles as the domain for procedural granules, mottling and setae.
 import * as THREE from 'three';
-import { MORPH, abdomenRadius } from './PagurusMinutusMorphology.js';
+import { MORPH, abdomenRadius, cardiacHalfWidth } from './PagurusMinutusMorphology.js';
 import { BASIS_FRACTION } from './PagurusMinutusRig.js';
 import { TAU, clamp, lerp, hash1, smoothstep } from './PagurusMinutusUtil.js';
 
@@ -25,7 +25,7 @@ export const REGION = {
 export const KIND = { COXA: 0, BASIS: 1, MERUS: 2, CARPUS: 3, PROPODUS: 4, DACTYLUS: 5, OTHER: 6 };
 
 export const BODY_LOD = [
-  { radial: 16, perSL: 15, carapace: [44, 30], rim: 1, antennaRings: 180, antennaRadial: 6, setae: 1.0, longSetae: true, mouth: true, abdomen: true, p45: true, pleopods: true, spines: true, name: 'LOD0' },
+  { radial: 16, perSL: 15, carapace: [56, 40], rim: 1, antennaRings: 180, antennaRadial: 6, setae: 1.0, longSetae: true, mouth: true, abdomen: true, p45: true, pleopods: true, spines: true, name: 'LOD0' },
   { radial: 9, perSL: 7, carapace: [22, 16], rim: 1, antennaRings: 64, antennaRadial: 4, setae: 0.4, longSetae: false, mouth: true, abdomen: true, p45: true, pleopods: false, spines: false, name: 'LOD1' },
   { radial: 5, perSL: 2.6, carapace: [10, 8], rim: 0, antennaRings: 14, antennaRadial: 3, setae: 0, longSetae: false, mouth: false, abdomen: false, p45: false, pleopods: false, spines: false, name: 'LOD2' },
 ];
@@ -236,10 +236,10 @@ const CEPH_STATIONS = (() => {
     [pz(0.7), 0.52, 0.185, -0.24, 2.4],
     [pz(PC.maxAt), PC.halfWidthMax, 0.205, -0.275, 2.5],
     [pz(0.22), PC.halfWidthMax * 0.975, 0.205, -0.29, 2.6],
-    [-0.04, hwS * 1.08, 0.185, -0.3, 2.8],
-    [0.04, hwS * 1.06, 0.188, -0.3, 3.0],
-    [0.25, hwS * 1.03, 0.205, -0.31, 3.1],
-    [0.5, hwS * 0.97, 0.215, -0.3, 3.1],
+    [-0.04, hwS * 1.12, 0.185, -0.3, 2.8],
+    [0.04, hwS * 1.11, 0.188, -0.3, 3.0],
+    [0.25, hwS * 1.08, 0.205, -0.31, 3.1],
+    [0.5, hwS * 0.985, 0.215, -0.3, 3.1],
     [0.72, hwS * 0.85, 0.205, -0.26, 2.9],
     [0.9, hwS * 0.68, 0.17, -0.2, 2.6],
     [1.0, hwS * 0.53, 0.12, -0.12, 2.4],
@@ -290,10 +290,26 @@ function buildCephalothorax(acc, rig, lod) {
       const n = Math.sin(th) > 0 ? sq + (z > 0 ? 0.8 : 0) : 2.2;
       let [x, y] = superellipse(th, h, hw, n);
       const dorsal = smoothstep(0.3, 0.9, Math.sin(th));
-      // cervical groove: a shallow dorsal dip at the shield's posterior margin
-      if (y > 0) y -= 0.018 * Math.exp(-Math.pow(z / 0.035, 2)) * dorsal;
-      // posterior carapace: shallow median (cardiac) furrow
-      if (z < -0.06 && y > 0) y -= 0.012 * Math.exp(-Math.pow(x / 0.06, 2)) * dorsal * smoothstep(-0.06, -0.2, z) * smoothstep(-PC.length, pz(0.8), z);
+      const ax = Math.abs(x);
+      if (y > 0) {
+        // cervical groove: a shallow dorsal dip at the shield's posterior margin (across the shield only)
+        y -= 0.011 * Math.exp(-Math.pow(z / 0.035, 2)) * dorsal * (1 - smoothstep(0.3, 0.42, ax));
+        // the branchiostegites bulge up beside the shield's posterior half and run on into the lobes behind
+        if (z > -0.04) y += PC.lobeRise * (1 - smoothstep(0.1, 0.45, z)) * smoothstep(0.26, 0.4, ax) * smoothstep(0.0, 0.5, Math.sin(th));
+        if (z < -0.02) {
+          // posterior carapace: an inflated branchial lobe either side of the cardiac strip, the strip lying
+          // in the shallow valley between them along the sulci cardiobranchiales (fine lines: shader)
+          const f = -z / PC.length;
+          const xs = cardiacHalfWidth(f);
+          const zf = smoothstep(0.02, 0.2, f) * (1 - smoothstep(0.82, 1.0, f));
+          y += PC.lobeRise * zf * Math.exp(-Math.pow((ax - xs - 0.2) / 0.17, 2)) * smoothstep(0.0, 0.5, Math.sin(th));
+          y -= 0.008 * zf * Math.exp(-Math.pow((ax - xs) / 0.04, 2)) * dorsal;
+        } else if (z > 0.02) {
+          // shield: weakly inflated gastric region, a low median ridge on the rostrum
+          y += 0.012 * Math.exp(-Math.pow(x / 0.24, 2) - Math.pow((z - 0.58) / 0.26, 2)) * dorsal;
+          y += 0.008 * Math.exp(-Math.pow(x / 0.035, 2)) * smoothstep(0.86, 1.0, z) * dorsal;
+        }
+      }
       let zz = z;
       // rostrum and lateral projections on the front margin of the shield
       if (z > 0.86 && y > -0.02) {
@@ -301,8 +317,9 @@ function buildCephalothorax(acc, rig, lod) {
         zz += f * S.rostrum.len * Math.exp(-Math.pow(x / S.rostrum.halfWidth, 2));
         zz += f * S.lateralProjection.len * Math.exp(-Math.pow((Math.abs(x) - S.lateralProjection.x * 0.62) / S.lateralProjection.halfWidth, 2));
       }
-      // weakly bilobed posterior margin: the midline falls short of the rounded lobes
-      if (z < pz(0.6) && y > cy - 0.05) zz += PC.notch * Math.exp(-Math.pow(x / 0.12, 2)) * smoothstep(pz(0.6), -PC.length, z);
+      // bilobed posterior margin: the two branchial lobes round off separately, the cardiac strip ends in
+      // the notch between them
+      if (z < pz(0.6) && y > cy - 0.05) zz += PC.notch * Math.exp(-Math.pow(x / 0.1, 2)) * smoothstep(pz(0.6), -PC.length, z);
       _p.set(x, y + cy, zz).applyMatrix4(M);
       // regions
       let region;
@@ -850,15 +867,21 @@ function buildSetae(rig, lod, bodyAcc) {
         sa.card(wl > 0.45 ? bLat : pci, I, base, dir, sd, 0.06 + rnd() * 0.07, 0.035, rnd());
       }
     }
-    for (let k = 0; k < Math.round(16 * density); k++) {
-      const z = lerp(0.12, 0.85, rnd());
-      const [, hw, top, bot, sq] = cephSection(z);
-      const x = (rnd() - 0.5) * 1.5 * hw;
-      const h = (top - bot) / 2, n = sq + 0.8;
-      const y = (top + bot) / 2 + h * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(x / hw), n)), 1 / n);
-      for (let j = 0; j < 3; j++) {
-        const dir = new THREE.Vector3(x * 0.6 + (rnd() - 0.5) * 0.4, 1, 0.5 + (rnd() - 0.5) * 0.5);
-        sa.card(root, I, new THREE.Vector3(x + (rnd() - 0.5) * 0.02, y - 0.003, z + (rnd() - 0.5) * 0.02), dir, Math.sign(x) || 1, 0.04 + rnd() * 0.035, 0.025, rnd());
+    // shield: sparse tufts of short setae in loose pairs, dorsomesially [D]
+    const pairs = lod.longSetae ? MORPH.shield.setalTuftPairs : Math.round(MORPH.shield.setalTuftPairs * 0.6);
+    for (let k = 0; k < pairs; k++) {
+      const z0 = lerp(0.12, 0.88, (k + 0.5) / pairs);
+      const xr = 0.08 + 0.42 * rnd();
+      for (const sd of [1, -1]) {
+        const z = z0 + (rnd() - 0.5) * 0.05;
+        const [, hw, top, bot, sq] = cephSection(z);
+        const x = sd * (xr + (rnd() - 0.5) * 0.06) * hw;
+        const h = (top - bot) / 2, n = sq + 0.8;
+        const y = (top + bot) / 2 + h * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(x / hw), n)), 1 / n);
+        for (let j = 0; j < 3; j++) {
+          const dir = new THREE.Vector3(x * 0.6 + (rnd() - 0.5) * 0.4, 1, 0.5 + (rnd() - 0.5) * 0.5);
+          sa.card(root, I, new THREE.Vector3(x + (rnd() - 0.5) * 0.02, y - 0.003, z + (rnd() - 0.5) * 0.02), dir, sd, 0.04 + rnd() * 0.035, 0.025, rnd());
+        }
       }
     }
   }
