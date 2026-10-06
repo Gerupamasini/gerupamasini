@@ -10,21 +10,22 @@ import { createMaterials } from '../nets/pbr.mjs';
 import { v3 } from '../nets/geom.mjs';
 import { DIG_TOOLS } from './tools.mjs';
 import { OPTICS } from '../optics/binoculars.mjs';
+import { APPAREL } from '../apparel/waders.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const args = process.argv.slice(2);
 const arg = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-// --set digging (default) | optics: which catalogue and output folder
+// --set digging (default) | optics | apparel: which catalogue and output folder
 const SET = arg('--set', 'digging');
-const CATALOGUE = { digging: DIG_TOOLS, optics: OPTICS }[SET];
+const CATALOGUE = { digging: DIG_TOOLS, optics: OPTICS, apparel: APPAREL }[SET];
 const outDir = path.join(root, 'src', 'assets', 'models', SET);
 const sel = arg('--tool', 'all');
 const tierSel = arg('--tier', 'all');
 
 const TIERS = {
-  hero: { bladeU: 48, bladeV: 56, wireSegs: 14, lathe: 40, latheSmall: 14, steps: 14, hoopN: 120, clawN: 16, detail: 0, tex: 1 },
-  lod1: { bladeU: 20, bladeV: 24, wireSegs: 8, lathe: 18, latheSmall: 8, steps: 8, hoopN: 56, clawN: 8, detail: 1, tex: 0.5 },
-  lod2: { bladeU: 8, bladeV: 10, wireSegs: 5, lathe: 10, latheSmall: 6, steps: 5, hoopN: 24, clawN: 4, detail: 2, tex: 0.25 },
+  hero: { clothU: 44, clothV: 56, strapN: 40, bladeU: 48, bladeV: 56, wireSegs: 14, lathe: 40, latheSmall: 14, steps: 14, hoopN: 120, clawN: 16, detail: 0, tex: 1 },
+  lod1: { clothU: 24, clothV: 32, strapN: 20, bladeU: 20, bladeV: 24, wireSegs: 8, lathe: 18, latheSmall: 8, steps: 8, hoopN: 56, clawN: 8, detail: 1, tex: 0.5 },
+  lod2: { clothU: 12, clothV: 14, strapN: 10, bladeU: 8, bladeV: 10, wireSegs: 5, lathe: 10, latheSmall: 6, steps: 5, hoopN: 24, clawN: 4, detail: 2, tex: 0.25 },
 };
 
 const t0 = Date.now();
@@ -63,6 +64,10 @@ function buildTool(tool, tierName) {
     Eye_L: 'left exit pupil (eyecup); put the eye / camera here',
     Eye_R: 'right exit pupil (eyecup)',
     Objective_Center: 'between the objective lenses; the binoculars look along +Z',
+    Hips: 'hip height of the wearer (for attaching to a character)',
+    Chest_Top: 'front of the chest opening',
+    Foot_L: 'left boot, on the ground under the ball of the foot',
+    Foot_R: 'right boot',
   };
   const empties = Object.entries(d.nodes).map(([name, p]) => gb.addNode({ name, translation: r4(p), extras: { higataTool: { note: notes[name] } } }));
   const info = {

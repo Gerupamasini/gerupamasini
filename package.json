@@ -20,6 +20,8 @@
     "render:digging": "node tools/models/nets/render.mjs --shots tools/models/digging/shots.mjs --out docs/models/digging",
     "model:optics": "node tools/models/digging/build.mjs --set optics",
     "render:optics": "node tools/models/nets/render.mjs --shots tools/models/optics/shots.mjs --out docs/models/optics",
+    "model:apparel": "node tools/models/digging/build.mjs --set apparel",
+    "render:apparel": "node tools/models/nets/render.mjs --shots tools/models/apparel/shots.mjs --out docs/models/apparel",
     "terrain:bake": "node tools/terrain/bake-map.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tools/**/*.mjs\" \"tests/**/*.{ts,mjs}\""
   },

@@ -14,6 +14,7 @@ npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / 
 npm run model:nets   # タモ網 6 種の GLB を再生成（docs/models/nets/）
 npm run model:digging   # 掘る道具 4 種の GLB を再生成（docs/models/digging/）
 npm run model:optics    # 双眼鏡の GLB を再生成（docs/models/optics/）
+npm run model:apparel   # 胴長の GLB を再生成（docs/models/apparel/）
 npm run terrain:bake # 地形 PNG の再生成
 ```
 
@@ -23,7 +24,7 @@ npm run terrain:bake # 地形 PNG の再生成
 - `docs/spec/` 仕様書 4 本（ゲームと MVP、アーキテクチャとデータ、生物 AI とモデル、潮位・セーブ・進行）
 - `docs/planning/` 設計質問と回答、マハゼモデル監査
 - `docs/TESTING.md` 身内テスト手順
-- `docs/models/` マハゼモデルの説明、`docs/models/nets/` タモ網 6 種、`docs/models/digging/` 掘る道具 4 種、`docs/models/optics/` 双眼鏡の調査・設計・使い方
+- `docs/models/` マハゼモデルの説明、`docs/models/nets/` タモ網 6 種、`docs/models/digging/` 掘る道具 4 種、`docs/models/optics/` 双眼鏡、`docs/models/apparel/` 胴長の調査・設計・使い方
 
 ## データ駆動
 生物は `public/data/species/*.json`、行動ツリーは `public/data/behaviors/*.json`、地図は `public/data/maps/`、潮位観測点は `public/data/tide/stations/` に置き、`npm run data:validate` で検証します。種の追加はデータと `src/assets/models/<種>/` のモデル追加だけで済み、固有ドライバが必要な場合のみ `src/creatures/drivers/index.ts` に登録します。
