@@ -200,12 +200,12 @@ export const EYE = {
   center: [3.58, 3.81, 1.28],
   axis: norm3([-0.16, 0.37, 0.92]),
   radius: 0.95,
-  skin: 0.05,
-  aperture: 80 * (Math.PI / 180),
+  skin: 0.09,
+  aperture: 60 * (Math.PI / 180),
 };
 // dorsal corneal window (see buildFeatures): axis ~75° above horizontal, slightly forward and outward
 export const EYE_DORSAL_AXIS = norm3([-0.15, 0.96, 0.26]);
-const EYE_DORSAL_APERTURE = 70 * (Math.PI / 180);
+const EYE_DORSAL_APERTURE = 50 * (Math.PI / 180);
 
 // Gape: from the snout tip (h = −0.011 SL) straight down and back at ~25° to the rictus at s 0.081,
 // h −0.042 SL (under the front of the eye; 008 traces s 0.083, h −0.046; 034 s 0.079). The maxilla runs on
@@ -387,6 +387,15 @@ export function field(s, y, z, eyeCut = true) {
   let d = baseDist(s, y, z);
   // eye mounds: a tight blend, so the skin does not climb onto the cornea (only a thin rim over its upper edge)
   if (s < 6.5) for (const e of F.eyes) d = smin(d, sphereDist(p, e.c, F.Rs), 0.3); // a smooth turret, no groove round the eye
+  // fleshy eyelid-like dermal ring round the corneal window (ref photos: a pale rim framing the dome)
+  if (s < 6.5) for (const e of F.eyes) {
+    const ax = e.cut[2] >= 0 ? EYE.axis : [EYE.axis[0], EYE.axis[1], -EYE.axis[2]];
+    const R = EYE.radius + EYE.skin, ap = EYE.aperture;
+    const v = [p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2]];
+    const h = v[0] * ax[0] + v[1] * ax[1] + v[2] * ax[2] - R * Math.cos(ap);
+    const rr = Math.sqrt(Math.max(0, v[0] * v[0] + v[1] * v[1] + v[2] * v[2] - (h + R * Math.cos(ap)) ** 2)) - R * Math.sin(ap);
+    d = smin(d, Math.hypot(h, rr) - 0.1, 0.12);
+  }
   // cheeks (adductor muscles) and the gill-cover plate
   // (a swelling that follows the loft, so the cheek rises smoothly out of the narrow snout behind the eye)
   if (s > 1.8 && s < 10.4) d -= 0.4 * Math.exp(-(((s - 5.6) / 1.75) ** 2)) * Math.exp(-(((y - 2.1) / 1.35) ** 2));
@@ -412,8 +421,8 @@ export function field(s, y, z, eyeCut = true) {
 
   // --- subtractions
   if (eyeCut && s < 6.5) for (const e of F.eyes) {
-    d = smax(d, -sphereDist(p, e.cut, F.rho), 0.03);
-    d = smax(d, -sphereDist(p, e.cut2, F.rho2), 0.03);
+    d = smax(d, -sphereDist(p, e.cut, F.rho), 0.07); // rounded eyelid-like dermal rim (ref photos)
+    d = smax(d, -sphereDist(p, e.cut2, F.rho2), 0.07);
   }
   if (s < 4.6 && y < 3.0) {
     // a clean gape line only; the premaxillary groove read as a second, scratchy line
