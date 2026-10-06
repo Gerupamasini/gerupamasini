@@ -1,6 +1,7 @@
 // Fins: pleated membrane meshes with individual rays + a shared texture atlas.
 import { section, topY, botY, surfaceAt, toObject, dirToObject } from './anatomy.mjs';
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../lib/noise.mjs';
+import { pick } from './variant.mjs';
 
 const DEG = Math.PI / 180;
 const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
@@ -163,7 +164,7 @@ function pelvicDisc(rect) {
 export function finDefinitions() {
   const R = (x, y, w, h) => ({ x, y, w, h });
   const D1 = medianFin({
-    name: 'Fin_Dorsal1', s0: 12.9, s1: 16.8, count: 8, a0: 70, a1: 40, dorsal: true, spines: 8, curv: 0.09, notch: 0.3, pleat: 0.04, sag: 0.02,
+    name: 'Fin_Dorsal1', s0: pick(12.9, 14.0), s1: pick(16.8, 17.8), count: 8, a0: 70, a1: 40, dorsal: true, spines: 8, curv: 0.09, notch: 0.3, pleat: 0.04, sag: 0.02,
     lengths: [3.9, 4.7, 5.0, 4.8, 4.3, 3.6, 2.9, 2.1], rect: R(1024, 1024, 512, 512), branchT: 2, segStart: 2,
     pigment: (r, n, Lr, len, t, dRay) => {
       let mel = 0;
@@ -178,7 +179,7 @@ export function finDefinitions() {
     },
   });
   const D2 = medianFin({
-    name: 'Fin_Dorsal2', s0: 19.7, s1: 35.6, count: 14, a0: 60, a1: 27, dorsal: true, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
+    name: 'Fin_Dorsal2', s0: pick(19.7, 20.8), s1: pick(35.6, 35.9), count: 14, a0: 60, a1: 27, dorsal: true, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
     lengths: [2.9, 3.6, 4.0, 4.2, 4.3, 4.35, 4.4, 4.4, 4.45, 4.5, 4.55, 4.5, 4.35, 3.9], rect: R(0, 1024, 1024, 512), branchT: 0.55, segStart: 0.18,
     pigment: (r, n, Lr, len, t, dRay) => {
       let mel = 0;
@@ -193,7 +194,7 @@ export function finDefinitions() {
     },
   });
   const AN = medianFin({
-    name: 'Fin_Anal', s0: 21.4, s1: 35.0, count: 12, a0: -58, a1: -27, dorsal: false, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
+    name: 'Fin_Anal', s0: pick(21.4, 22.3), s1: pick(35.0, 35.3), count: 12, a0: -58, a1: -27, dorsal: false, spines: 1, curv: 0.03, notch: 0.07, pleat: 0.05, sag: 0.025,
     lengths: [2.1, 2.9, 3.3, 3.5, 3.6, 3.65, 3.7, 3.7, 3.75, 3.8, 3.75, 3.5], rect: R(0, 1536, 1024, 512), branchT: 0.55, segStart: 0.18,
     pigment: (r, n, Lr, len, t) => ({ mel: 0.12 * smoothstep(0.72, 0.95, t), xan: 0.14, irid: 0.32 * smoothstep(0.35, 0.0, t) }),
   });

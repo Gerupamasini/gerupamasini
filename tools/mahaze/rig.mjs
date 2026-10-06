@@ -2,6 +2,7 @@
 // The clips are produced by the same pose model the viewer runs procedurally (src/fish/pose.js).
 import { section, toObject, dirToObject, EYE, PIVOTS, OPERCLE, PREOPERCLE, RICTUS_S, gapeY, surfaceAt, botY } from './anatomy.mjs';
 import { clamp, smoothstep } from '../lib/noise.mjs';
+import { pick } from './variant.mjs';
 import { quat, computePose, defaultPose, breathe, yawnCurves } from '../../src/fish/pose.js';
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -16,11 +17,11 @@ const opHingeL = (() => { const p = surfaceAt(9.0, 2.7).p; return [p[0], p[1], p
 // it swings laterally about the line through its two articulations with the skull, the palatine (front,
 // at the lateral ethmoid) and the hyomandibula (back, under the rear of the orbit). Abduction widens the
 // mouth cavity and the cheeks; the quadrates, and with them the rear ends of the lower-jaw halves, move out.
-const PALATINE = [2.3, 3.4, 0.8];
-const HYOMAND = [7.6, 4.5, 1.2];
+const PALATINE = pick([2.3, 3.4, 0.8], [2.6, 3.95, 0.85]);
+const HYOMAND = pick([7.6, 4.5, 1.2], [7.9, 4.7, 1.25]);
 // lower jaw: each half (dentary + articular) hinges on its quadrate and meets the other at the symphysis
 const JAW_JOINT = [PIVOTS.jaw[0], PIVOTS.jaw[1], 1.55];
-const SYMPHYSIS = [0.35, 1.5, 0];
+const SYMPHYSIS = pick([0.35, 1.5, 0], [0.35, 1.95, 0]);
 const pecBase = (() => { const p = surfaceAt(12.45, 2.6).p; return [p[0], p[1], p[2] - 0.15]; })();
 
 export const JOINTS = [

@@ -2,8 +2,8 @@
 import { EYE, toObject, dirToObject } from './anatomy.mjs';
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../lib/noise.mjs';
 
-export const PUPIL_ANGLE = 0.38; // rad (half-angle from the axis)
-export const IRIS_ANGLE = 1.08;
+export const PUPIL_ANGLE = EYE.pupil; // rad (half-angle from the axis)
+export const IRIS_ANGLE = EYE.iris;
 export const CORNEA_BULGE = 0.075;
 
 const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };

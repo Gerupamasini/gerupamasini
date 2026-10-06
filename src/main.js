@@ -9,8 +9,15 @@ import { createBehavior } from './fish/Behavior.js';
 import { createBackground, createFloor, createParticles } from './scene/Environment.js';
 import { createPost } from './scene/Post.js';
 
-// window.MAHAZE_MODEL_URL can point the viewer at another copy of the model (e.g. a .gltf with external textures)
-const MODEL_URL = window.MAHAZE_MODEL_URL || new URL('../models/mahaze_juvenile.glb', import.meta.url).href;
+// Two builds of the same fish: the juvenile (default) and the adult-proportioned one (?model=adult).
+// window.MAHAZE_MODELS = { juvenile, adult } (or MAHAZE_MODEL_URL for a single model) can point the viewer
+// at other copies of the models (e.g. .gltf with external textures).
+const VARIANT = new URLSearchParams(location.search).get('model') === 'adult' ? 'adult' : 'juvenile';
+const MODEL_URLS = window.MAHAZE_MODELS || {
+  juvenile: new URL('../models/mahaze_juvenile.glb', import.meta.url).href,
+  adult: new URL('../models/mahaze_adult.glb', import.meta.url).href,
+};
+const MODEL_URL = window.MAHAZE_MODEL_URL || MODEL_URLS[VARIANT];
 const LAYER_FISH = 2; // body, eyes, fins (main pass)
 const LAYER_BEHIND = 3; // fins are also drawn into the background buffer so they show through thin tissue
 const params = new URLSearchParams(location.search);
@@ -534,6 +541,15 @@ bindSeg('shading', (v) => { state.custom = v === 'custom'; if (fish.body) applyM
 bindSeg('debug', (v) => { shared.uDebug.value = Number(v); });
 let envName = 'water';
 bindSeg('env', (v) => { envName = v; applyEnv(v); });
+// switching the individual reloads the page with the other model (keeps the other URL parameters)
+for (const b of document.querySelectorAll('#variant button')) b.classList.toggle('on', b.dataset.v === VARIANT);
+if (window.MAHAZE_MODEL_URL && !window.MAHAZE_MODELS) document.getElementById('variant').closest('.group').hidden = true;
+bindSeg('variant', (v) => {
+  if (v === VARIANT) return;
+  const u = new URL(location.href);
+  if (v === 'adult') u.searchParams.set('model', 'adult'); else u.searchParams.delete('model');
+  location.replace(u.href);
+});
 bindRange('light-az', (v) => { state.azOffset = v; });
 bindRange('light-el', (v) => { state.elOffset = v; });
 bindRange('light-int', (v) => {

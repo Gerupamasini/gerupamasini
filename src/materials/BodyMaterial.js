@@ -70,6 +70,7 @@ uniform sampler2D uProfile;
 uniform sampler2D uBg;          // opaque scene behind the fish (rgb) + view distance (a)
 uniform vec2 uResolution;
 uniform vec4 uFrame;            // S0, Y0, SL, SEND (mm)
+uniform vec4 uJaws;             // dense jaw/lip tissue: s ramp (x→y), height ramp (z→w)
 uniform float uVertStart;
 uniform float uVertLen;
 uniform float uSigS;            // base tissue scattering (1/mm)
@@ -391,7 +392,7 @@ void main() {
   // sculpted appendages outside the analytic volume (orbit rims, lips, papilla) are solid tissue
   float outside = smoothstep(0.98, 1.1, bodyR(pIn));
   // lips and jaws are dense (dentary, premaxilla, thick lip tissue)
-  float jaws = (1.0 - smoothstep(3.0, 4.6, pF.x)) * (1.0 - smoothstep(2.4, 3.2, pF.y));
+  float jaws = (1.0 - smoothstep(uJaws.x, uJaws.y, pF.x)) * (1.0 - smoothstep(uJaws.z, uJaws.w, pF.y));
   outside = max(outside, 0.8 * jaws);
   tauE += outside * vec3(4.0);
   tauA += outside * vec3(0.5);
@@ -510,6 +511,7 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uCapRect: { value: new THREE.Vector4(capRect.y0, capRect.y1, capRect.z0, capRect.z1) },
     uProfile: { value: profileTexture },
     uFrame: { value: new THREE.Vector4(frame.S0, frame.Y0, frame.SL, frame.SEND) },
+    uJaws: { value: new THREE.Vector4(...(frame.jaws || [3.0, 4.6, 2.4, 3.2])) },
     uVertStart: { value: vertebrae.start },
     uVertLen: { value: (frame.SL - vertebrae.start) / vertebrae.count },
     uSigS: { value: 1.35 },

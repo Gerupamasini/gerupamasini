@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Builds models/mahaze_juvenile.glb (geometry + baked textures) procedurally.
+// Builds models/mahaze_<variant>.glb (geometry + baked textures) procedurally; --variant juvenile (default) | adult.
 //   node tools/build-model.mjs [--fast] [--dump-textures <dir>]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import jpeg from 'jpeg-js';
 import { GLBBuilder } from './lib/glb.mjs';
 import { encodePNG } from './lib/png.mjs';
-import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, profileTable, toObject, botY } from './mahaze/anatomy.mjs';
+import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, MOUTH, RICTUS_S, VARIANT, profileTable, toObject, botY } from './mahaze/anatomy.mjs';
 import { buildBody } from './mahaze/body.mjs';
 import { finDefinitions, buildFinMesh, buildFinTargets, paintFinAtlas } from './mahaze/fins.mjs';
 import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './mahaze/eye.mjs';
@@ -20,10 +20,11 @@ const args = process.argv.slice(2);
 const fast = args.includes('--fast');
 const dumpIdx = args.indexOf('--dump-textures');
 const dumpDir = dumpIdx >= 0 ? args[dumpIdx + 1] : null;
-const outFile = path.join(root, 'models', 'mahaze_juvenile.glb');
+const outFile = path.join(root, 'models', `mahaze_${VARIANT}.glb`);
 
 const t0 = Date.now();
 const log = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).padStart(5)}s] ${m}`);
+log(`variant: ${VARIANT}`);
 
 function toJPEG(w, h, ch, data, quality) {
   const rgba = Buffer.alloc(w * h * 4);
@@ -97,7 +98,8 @@ const mBody = gb.addMaterial({
       pigmentTexture: tPig,
       // planar (y, z) projected front of the snout, replaces the converging loft UVs at the tip
       snoutCap: { albedoRoughness: tCapAlb, pigment: tCapPig, rectMM: BT.cap.rect },
-      fishFrame: { S0, Y0, SL, SEND: S_END, unitsPerMM: 0.001 },
+      // jaws: s/y ramps of the dense lip and jaw tissue (s0, s1, y0, y1) for the volumetric shader
+      fishFrame: { S0, Y0, SL, SEND: S_END, unitsPerMM: 0.001, jaws: [RICTUS_S - 0.5, RICTUS_S + 1.1, MOUTH[0][1] + 0.42, MOUTH[0][1] + 1.22] },
       vertebrae: { start: VERT_START, count: VERT_COUNT },
       profile: { n: profile.length, fields: ['yc', 't', 'b', 'w', 'nT', 'nB'], data: profile.flat() },
     },
@@ -209,7 +211,8 @@ const rootNode = gb.addNode({
   children: [jointNodes[J.J_root]],
   extras: {
     species: 'Acanthogobius flavimanus (Temminck & Schlegel, 1845)',
-    commonName: 'マハゼ (yellowfin goby), juvenile',
+    commonName: `マハゼ (yellowfin goby), ${VARIANT === 'adult' ? 'adult-proportioned' : 'juvenile'}`,
+    variant: VARIANT,
     totalLength_mm: TL,
     standardLength_mm: SL,
     units: 'metres (+Y dorsal, +Z anterior)',
