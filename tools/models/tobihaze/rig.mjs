@@ -157,9 +157,10 @@ function sampleClip(name, duration, fps, fn) {
   return { name, duration, channels, weights };
 }
 
-/** the land stance: propped on the pectorals, head raised, the trunk arched and the tail resting as a skid */
+/** the land stance: propped on the pectorals, the head in line with the trunk (no neck), the trunk arched and the
+ * tail resting as a skid */
 export function landPose(p = defaultPose()) {
-  p.lift.J_head = 0.1;
+  p.lift.J_head = 0.03;
   p.lift.J_sp1 = -0.05; p.lift.J_sp2 = -0.06; p.lift.J_sp3 = -0.04; p.lift.J_sp4 = -0.02;
   p.pecL.protract = p.pecR.protract = 0.55;
   p.pecL.depress = p.pecR.depress = 1.0;
@@ -193,7 +194,7 @@ export function buildClips() {
     p.pecL.protract = p.pecR.protract = pro;
     p.pecL.depress = p.pecR.depress = push ? 1.05 + 0.2 * Math.sin(Math.PI * u) : 0.7 + 0.1 * Math.sin(Math.PI * u);
     p.pecL.wrist = p.pecR.wrist = push ? 0.7 - 0.5 * e : 0.2 + 0.5 * e;
-    p.lift.J_head = 0.1 + (push ? 0.08 * Math.sin(Math.PI * u) : 0);
+    p.lift.J_head = 0.03 + (push ? 0.03 * Math.sin(Math.PI * u) : 0);
     p.pelvic = push ? 0.15 - 0.45 * Math.sin(Math.PI * u) : 0.15 + 0.2 * Math.sin(Math.PI * u);
     p.morph.foldPelvic = push ? 0.6 * Math.sin(Math.PI * u) : 0;
     const sway = 0.05 * Math.sin(2 * Math.PI * ph);
@@ -209,7 +210,7 @@ export function buildClips() {
     const prof = { J_root: 0.12, J_sp1: 0.18, J_sp2: 0.24, J_sp3: 0.3, J_sp4: 0.36, J_sp5: 0.36, J_sp6: 0.3, J_sp7: 0.2, J_sp8: 0.12, J_caudal: 0.08, J_caudal2: 0.05 };
     for (const [n, a] of Object.entries(prof)) p.bend[n] = (curl + recoil) * a * 1.25;
     p.bend.J_head = -0.25 * curl;
-    p.lift.J_head = 0.1 + 0.12 * curl;
+    p.lift.J_head = 0.03 + 0.12 * curl;
     const air = t > 0.2 && t < 0.58;
     if (air) { p.pecL.protract = p.pecR.protract = -0.9; p.pecL.depress = p.pecR.depress = 0.15; p.morph.foldPecL = p.morph.foldPecR = 0.7; }
     p.morph.foldD1 = air ? 1 : 0.6; p.morph.foldCaudal = air ? 0.1 : 0.4;
@@ -243,7 +244,7 @@ export function buildClips() {
   clips.push(sampleClip('Feed', 1.1, 60, (t) => {
     const p = landPose();
     const down = smoothstep(0.0, 0.18, t) * (1 - smoothstep(0.55, 0.8, t));
-    p.lift.J_head = 0.1 - 0.42 * down;
+    p.lift.J_head = 0.03 - 0.42 * down;
     p.lift.J_root = -0.08 * down;
     p.jaw = 0.95 * smoothstep(0.14, 0.24, t) * (1 - smoothstep(0.28, 0.36, t));
     p.morph.breathe = 0.6 * Math.max(0, Math.sin((t - 0.4) * 14)) * smoothstep(0.4, 0.5, t);

@@ -502,19 +502,22 @@ export class Motor {
     if (this.medium === 'water') { this.setGait('swim'); this.target = null; this.speed = 0; return; }
     const shallow = this.medium === 'shallow';
     let lift = this.propHeight();
-    let head = this.posture === 'alert' ? 0.24 : this.posture === 'display' ? 0.28 : this.posture === 'low' ? 0.03 : 0.16;
+    // (the head is held in line with the raised fore body: only a slight lift of the snout)
+    const head = this.posture === 'alert' ? 0.06 : this.posture === 'display' ? 0.08 : 0.03;
+    let rise = 0;
     if (shallow) {
-      // periscope: hold the eyes above the surface as far as the fins allow
+      // periscope: hold the eyes above the surface as far as the fins allow (raising the whole fore body, not the
+      // head alone)
       const need = this.waterY + 0.012 * this.L - (this.groundY + this.eyeTop);
       lift = clamp(Math.max(lift, need), 0.004 * this.L, 0.09 * this.L);
-      head = Math.max(head, clamp(need / this.L * 2.5, 0, 0.35));
+      rise = clamp(need / this.L * 2.5, 0, 0.35);
     }
     // breathing sway and small adjustments of the weight between the fins
     lift += 0.0012 * this.L * (0.6 * Math.sin(this.t * 1.7) + 0.4 * noise1(this.t * 0.9, this.seed)) * (this.posture === 'low' ? 0.3 : 1);
     this.liftT = lift;
     this.headPitchT = head;
     // the fore body is raised on the arms, the tail resting on the mud behind
-    this.pitchT = this.posture === 'low' ? 0.0 : 0.22 + (this.posture === 'alert' ? 0.08 : 0);
+    this.pitchT = Math.max(rise, this.posture === 'low' ? 0.0 : 0.22 + (this.posture === 'alert' ? 0.06 : 0));
     this.headYawT = 0.07 * noise1(this.t * 0.35, this.seed + 1) + 0.03 * noise1(this.t * 1.3, this.seed + 2);
     this.headPitchT += 0.025 * noise1(this.t * 0.5, this.seed + 3);
     this.finMode = 'plant';
@@ -578,7 +581,7 @@ export class Motor {
       // the fins press down and lift the body, which vaults forward over them
       this.liftT = lift0 + 0.025 * L * Math.sin(Math.PI * u) * (shallow ? 0.45 : 1) * (0.7 + 0.3 * this.urgency);
       this.pitchT = 0.21 + 0.05 * Math.sin(Math.PI * u);
-      this.headPitchT = 0.15 + 0.04 * Math.sin(Math.PI * u);
+      this.headPitchT = 0.03 + 0.02 * Math.sin(Math.PI * u);
       // the pelvic disc lifts off the mud as the body vaults over the pectorals
       this.pelvic.to(0.0, 12, dt);
       this.pelvicFold.to(0.3, 12, dt);
@@ -635,7 +638,7 @@ export class Motor {
       }
       this.liftT = lift0 * (1 - 0.3 * Math.sin(Math.PI * v));
       this.pitchT = 0.21 - 0.04 * Math.sin(Math.PI * v);
-      this.headPitchT = 0.15;
+      this.headPitchT = 0.03;
       // recovery: the body rests on the pelvic disc while the pectorals swing forward, half folded
       this.pelvic.to(this.pelvicReach(this.liftT), 12, dt);
       this.pelvicFold.to(0, 12, dt);
@@ -1189,6 +1192,7 @@ export class Motor {
   }
 
   /** vertical bend per chain joint (local lift angles) */
+  private static readonly ARCH = [0, 0, -0.06, -0.18, -0.32, -0.45];
   private drape(pitch: number, rootY: number, onGround: boolean): number[] {
     const n = CHAIN.length;
     const out = new Array<number>(n).fill(0);
@@ -1219,14 +1223,13 @@ export class Motor {
     let prevBeta = -pitch;
     let yPrev = rootY + this.belly[0] * Math.cos(pitch);
     const nextLen = (k: number) => (k + 1 < n ? this.segLen[k + 1] : 0.1 * L);
-    // propped high on the arms the body is arched like the kana へ (photographs of standing and walking animals): the
-    // trunk rises a little behind the arms to its highest point under the first dorsal fin, then slopes down ever more
-    // steeply to the tail, which rests on the mud. ARCH: elevation of the backward direction of each segment from the
-    // girdle back (radians, world)
-    // (the first segment, over the girdle, shares the fore body's raised attitude with the head, so the nape does not
-    // fold: it slopes down backward at about half the root's pitch, and the trunk rises level from it)
+    // propped high on the arms the body is arched like the kana へ (photographs of standing and walking animals): head,
+    // girdle and fore trunk are one straight, raised piece back to the first dorsal fin (a fish has no neck: the
+    // nape never bends), and behind it the trunk curves down ever more steeply to the tail, which rests on the mud.
+    // ARCH: elevation of the backward direction of each segment from the girdle back (radians), relative to the fore
+    // body's own line (-pitch)
     const arch = smooth(0.035 * L, 0.07 * L, this.lift.x);
-    const ARCH = [-0.45 * pitch, 0.0, -0.08, -0.19, -0.32, -0.44];
+    const ARCH = Motor.ARCH;
     for (let k = 0; k < n; k++) {
       const len = nextLen(k);
       const dEnd = this.distBack[k] + len;
@@ -1236,7 +1239,7 @@ export class Motor {
       const need = Math.asin(clamp((floor - yPrev) / len, -1, 1));
       if (yC < floor) b = need;
       else b = Math.max(b - sagMax, need);
-      if (arch > 0 && k < ARCH.length) b = Math.max(need, b + (ARCH[k] - b) * arch);
+      if (arch > 0 && k < ARCH.length) b = Math.max(need, b + (ARCH[k] - pitch - b) * arch);
       b = clamp(b, prevBeta - bendMax, prevBeta + bendMax);
       out[k] = b - prevBeta;
       yPrev += len * Math.sin(b);
