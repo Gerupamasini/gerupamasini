@@ -12,10 +12,11 @@ import { fileURLToPath } from 'node:url';
 import jpeg from 'jpeg-js';
 import { GLBBuilder } from '../../lib/glb.mjs';
 import { encodePNG } from '../../lib/png.mjs';
-import { S0, Y0, SL, S_END, TL, EYE, BODY_U, toObject, dirToObject, botY } from './anatomy.mjs';
+import { S0, Y0, SL, S_END, TL, EYE, BODY_U, toObject, dirToObject, botY, pecBindFix } from './anatomy.mjs';
 import { buildSkin, skinParts, skinTarget, buildMouth, buildDomes, bakeSkinTextures, SPLIT } from './body.mjs';
-import { finDefinitions, buildFinMesh, buildFinFold, paintFinAtlas, buildArm, armPaint, mirrorMesh, PEC, PELVIC } from './fins.mjs';
+import { finDefinitions, buildFinMesh, buildFinFold, paintFinAtlas, armPaint, mirrorMesh, PEC, PELVIC } from './fins.mjs';
 import { buildEyeMesh, eyeRotation, paintEye, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './eye.mjs';
+import { buildArm, armPoint, armOcclusion } from './arm.mjs';
 import { JOINTS, J, skinWeights, mouthWeights, armWeights, finWeights, buildClips, CLIP_SPEED } from './rig.mjs';
 import { MORPHS, SPINE } from '../../../src/creatures/species/tobihaze/pose.js';
 
@@ -61,7 +62,7 @@ const sClamp = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAM
 log(`tier ${tierName}`);
 log('skin textures');
 const [TW, TH] = tier.tex;
-const ST = bakeSkinTextures({ W: TW, H: TH, armPaint, log });
+const ST = bakeSkinTextures({ W: TW, H: TH, armPaint, armPoint, armOcclusion, log });
 const tAlb = gb.addTexture(image(gb, 'skin_basecolor', TW, TH, 3, ST.albedo, 'jpeg', 93), sBody, 'skin_basecolor');
 const tNrm = gb.addTexture(image(gb, 'skin_normal', TW, TH, 3, ST.normal, 'png'), sBody, 'skin_normal');
 const tOrm = gb.addTexture(image(gb, 'skin_orm', TW, TH, 3, ST.orm, 'png'), sBody, 'skin_occlusion_roughness');
@@ -115,6 +116,10 @@ const mInterior = gb.addMaterial({
   extras: { tobihaze: { role: 'interior' } },
 });
 const headPrims = [gb.primitive({ position: SP.head.position, normal: SP.head.normal, tangent: SP.head.tangent, uv: SP.head.uv, indices: SP.head.indices, material: mSkin, extraAttributes: skinAttrs(skinWeights(SP.head.list)), targets: headTargets })];
+// the skin drawn over the body's with a depth offset (extras.overlay; the loader sets polygonOffset): the eye domes'
+// and the pectoral arms' skirts, which lie on the head's and the flank's skin where they have merged into them
+const mSkinDome = gb.addMaterial({ ...gb.json.materials[mSkin], name: 'Tobihaze_SkinDome',
+  extras: { tobihaze: { ...gb.json.materials[mSkin].extras.tobihaze, overlay: true } } });
 // the eye domes (dermal cups), meshed from the eyes' centres
 {
   log('  eye domes …');
@@ -122,10 +127,6 @@ const headPrims = [gb.primitive({ position: SP.head.position, normal: SP.head.no
   const n = D.position.length / 3;
   const w = { joints: new Uint8Array(n * 4), weights: new Uint8Array(n * 4) };
   for (let k = 0; k < n; k++) { w.joints[k * 4] = J.J_head; w.weights[k * 4] = 255; }
-  // the domes' skirts lie on the head's skin where the two have merged: the same skin, drawn over the head with a
-  // depth offset (extras.overlay; the loader sets polygonOffset)
-  const mSkinDome = gb.addMaterial({ ...gb.json.materials[mSkin], name: 'Tobihaze_SkinDome',
-    extras: { tobihaze: { ...gb.json.materials[mSkin].extras.tobihaze, overlay: true } } });
   headPrims.push(gb.primitive({ position: D.position, normal: D.normal, tangent: D.tangent, uv: D.uv, indices: D.indices, material: mSkinDome,
     extraAttributes: skinAttrs(w), targets: [zeros(n), { position: D.blinkL, normal: D.blinkLn }, { position: D.blinkR, normal: D.blinkRn }] }));
   log(`    ${n} v`);
@@ -211,7 +212,7 @@ for (const [side, name] of [[1, 'PectoralFin_L'], [-1, 'PectoralFin_R']]) {
     const tl = Math.hypot(...t) || 1;
     tangent.set([t[0] / tl, t[1] / tl, t[2] / tl, 1], k * 4);
   }
-  const armPrim = gb.primitive({ position, normal, tangent, uv: new Float32Array(arm.uv), indices: new Uint32Array(arm.indices), material: mSkin, extraAttributes: skinAttrs(armWeights(arm.at, side)), targets: [zeros(n)] });
+  const armPrim = gb.primitive({ position, normal, tangent, uv: new Float32Array(arm.uv), indices: new Uint32Array(arm.indices), material: mSkinDome, extraAttributes: skinAttrs(armWeights(arm, side)), targets: [zeros(n)] });
   const web = finPrim(D.Fin_Pectoral_L, null, side, side < 0);
   const mesh = gb.addMesh(name, [armPrim, web.prim], { targetNames: MORPHS[name] });
   gb.json.meshes[mesh].weights = [0];
@@ -290,6 +291,7 @@ const rootNode = gb.addNode({
       eyeRetract_m: EYE.retract / 1000,
       eyeRadius_m: EYE.radius / 1000,
       // arm geometry for the IK (object space, metres; left side, the right mirrors X)
+      pecBindFix: pecBindFix(),
       pec: { base: toObject(PEC.base), wrist: toObject(PEC.wrist), dir: dirToObject(PEC.dir), width: dirToObject(PEC.width), normal: dirToObject(PEC.normal), armLen_m: PEC.joint / 1000, handLen_m: (PEC.len - PEC.joint + 0.88 * 7.9) / 1000 },
       // contact geometry: the belly line under the chain and the pelvic fins' lowest point
       contacts: { pelvicY_m: pelvicLowY, bellyY: SPINE.map(([n, s]) => [n, objY(botY(Math.min(s, S_END - 0.5)))]) },

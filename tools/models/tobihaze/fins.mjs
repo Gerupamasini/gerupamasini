@@ -7,7 +7,7 @@
 // transparent with a grey-brown mid stripe and dark speckles at the ray bases; anal I,11, base 19 % SL; pectoral 14
 // rays on a protruding muscular base (elongated radials); pelvics I,5 each, joined in front by a frenum and the inner
 // rays linked by membrane for half their length, length 13 % SL; caudal lanceolate, the lower rays shorter and stouter.
-import { S_END, SL, TL, FEAT, EYE, section, topY, botY, toObject, dirToObject, surfaceAt, norm3, ARM_U } from './anatomy.mjs';
+import { S_END, SL, TL, FEAT, EYE, section, topY, botY, toObject, dirToObject, surfaceAt, norm3, ARM_U, PEC_AXIS } from './anatomy.mjs';
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../../lib/noise.mjs';
 
 const DEG = Math.PI / 180;
@@ -26,102 +26,18 @@ function rot(v, k, ang) {
 }
 
 // ------------------------------------------------------------------------------------------------ pectoral arm
-// The arm (fleshy base over the elongated radials) leaves the flank low behind the gill slit; in the rest pose of the
-// model it points back, down and out. It ends in a flat "hand" whose distal edge carries the fin web; the joint
-// between the forearm and the hand (the "wrist", J_pecArm) is where the web turns relative to the arm when it is laid
-// on the mud.
+// The arm (fleshy base over the elongated radials) grows out of a ball of muscle low behind the gill slit; in the bind
+// pose of the model it stands out from the flank, down and a little back. It ends in a flat "hand" whose distal edge
+// carries the fin web; the joint between the forearm and the hand (the "wrist", J_pecArm) is where the web turns
+// relative to the arm when it is laid on the mud.
 export const PEC = (() => {
-  const base = [FEAT.pecLobe[0] + 0.3, FEAT.pecLobe[1] + 0.05, FEAT.pecLobe[2] - 0.95];
-  const dir = norm3([0.6, -0.58, 0.55]);
-  const len = 6.2; // shoulder → distal edge of the hand
-  const joint = 4.4; // shoulder → wrist joint
+  const { base, dir, width, normal } = PEC_AXIS; // width: the fin plane's second axis; normal faces out of the web
+  const len = 6.0; // shoulder joint → distal edge of the hand
+  const joint = 4.2; // shoulder joint → wrist joint
   const wrist = add(base, scl(dir, joint));
   const hand = add(base, scl(dir, len));
-  // the fin plane holds the arm axis and its "width" direction (in the rest pose: up and slightly in)
-  const width = norm3(sub([0, 1, -0.25], scl(dir, dot([0, 1, -0.25], dir))));
-  const normal = norm3(cross(dir, width)); // faces out-and-down for the left fin
   return { base, dir, len, joint, wrist, hand, width, normal, rays: 14 };
 })();
-
-/** Arm tube (left side; the right one mirrors z). Returns fish-space vertices with arm parameters for skinning. */
-export function buildArm(NA = 18, NR = 20, side = 1) {
-  const { base, dir, len, width, normal } = PEC;
-  // sunk deep into the body, its inner end rounded off, so the junction never opens however the arm swings
-  const SINK = 2.4;
-  const start = sub(base, scl(dir, SINK));
-  const total = len + SINK;
-  const rows = [];
-  const fish = [], nrm = [], uv = [], at = [];
-  const tris = [];
-  for (let i = 0; i <= NA; i++) {
-    const f = i / NA;
-    const along = f * total;
-    // a thick, fleshy limb (the muscles over the elongated radials): broad where it leaves the flank, a rounded
-    // forearm, then (past the wrist joint) flattening into a broad, thin "hand" where the rays insert along its
-    // distal edge (the fin web grows out of that edge, not out of a point)
-    const hand = smoothstep((PEC.joint + SINK - 0.2) / total, 0.95, f);
-    const fa = (along - SINK + 1.2) / (len + 1.2); // the visible arm's own parameter (0 a little inside the flank)
-    const inner = Math.sqrt(Math.max(0, 1 - ((Math.max(0, 0.9 - along)) / 0.9) ** 2)); // the rounded inner end
-    const rw = mix(mix(2.35, 1.8, smoothstep(0.0, 0.55, fa)), 1.7, hand) * inner;
-    const rt = mix(mix(1.6, 1.15, smoothstep(0.0, 0.55, fa)), 0.95, hand) * inner;
-    // the hand ends in a rounded lobe (its edge thins and curves round over the last ~1.2 mm), not a cut-off slab
-    const cap = f > 0.84 ? Math.pow(Math.max(0, 1 - ((f - 0.84) / 0.16) ** 2), 0.6) : 1;
-    const c = add(start, scl(dir, along));
-    const row = [];
-    for (let j = 0; j <= NR; j++) {
-      const a = (j / NR) * TAU;
-      const off = add(scl(width, Math.cos(a) * rw * cap), scl(normal, Math.sin(a) * rt * cap));
-      const p = add(c, off);
-      const n = norm3(add(scl(width, Math.cos(a) / rw), scl(normal, Math.sin(a) / rt)));
-      const pp = side > 0 ? p : [p[0], p[1], -p[2]];
-      const nn = side > 0 ? n : [n[0], n[1], -n[2]];
-      row.push(fish.length / 3);
-      fish.push(...pp); nrm.push(...nn);
-      uv.push(ARM_U[0] + (ARM_U[1] - ARM_U[0]) * (0.02 + 0.96 * f), j / NR);
-      at.push(along - SINK);
-    }
-    rows.push(row);
-  }
-  for (let i = 0; i < NA; i++) for (let j = 0; j < NR; j++) {
-    const a = rows[i][j], b = rows[i + 1][j], c = rows[i + 1][j + 1], d = rows[i][j + 1];
-    if (side > 0) tris.push(a, b, c, a, c, d); else tris.push(a, c, b, a, d, c);
-  }
-  // normals from the surface itself (the tube's analytic normals ignore the taper of the rounded end, which would
-  // shade like an open tube): area-weighted face normals, oriented like the analytic ones, the seam column shared
-  {
-    const acc = new Float64Array(fish.length);
-    const P = (k) => [fish[k * 3], fish[k * 3 + 1], fish[k * 3 + 2]];
-    for (let k = 0; k < tris.length; k += 3) {
-      const [a, b, c] = [tris[k], tris[k + 1], tris[k + 2]];
-      const fn = cross(sub(P(b), P(a)), sub(P(c), P(a)));
-      for (const v of [a, b, c]) { acc[v * 3] += fn[0]; acc[v * 3 + 1] += fn[1]; acc[v * 3 + 2] += fn[2]; }
-    }
-    for (const row of rows) {
-      const a = row[0], z = row[row.length - 1];
-      for (let c = 0; c < 3; c++) { const t = acc[a * 3 + c] + acc[z * 3 + c]; acc[a * 3 + c] = t; acc[z * 3 + c] = t; }
-    }
-    for (let v = 0; v < fish.length / 3; v++) {
-      let n = [acc[v * 3], acc[v * 3 + 1], acc[v * 3 + 2]];
-      if (Math.hypot(n[0], n[1], n[2]) < 1e-12) continue;
-      n = norm3(n);
-      if (dot(n, [nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]]) < 0) n = scl(n, -1);
-      nrm[v * 3] = n[0]; nrm[v * 3 + 1] = n[1]; nrm[v * 3 + 2] = n[2];
-    }
-    // the last row collapses to the tip: point its normals along the arm
-    const tipN = side > 0 ? dir : [dir[0], dir[1], -dir[2]];
-    for (const v of rows[rows.length - 1]) { nrm[v * 3] = tipN[0]; nrm[v * 3 + 1] = tipN[1]; nrm[v * 3 + 2] = tipN[2]; }
-  }
-  // make sure the winding faces out (tested on a triangle half way along: the ends are capped to points)
-  {
-    const P = (k) => [fish[k * 3], fish[k * 3 + 1], fish[k * 3 + 2]];
-    const t0 = (Math.floor(NA / 2) * NR + 2) * 6;
-    const a = tris[t0], b = tris[t0 + 1], c = tris[t0 + 2];
-    const fn = cross(sub(dirToObject(P(b)), dirToObject(P(a))), sub(dirToObject(P(c)), dirToObject(P(a))));
-    const n0 = dirToObject([nrm[a * 3], nrm[a * 3 + 1], nrm[a * 3 + 2]]);
-    if (dot(fn, n0) < 0) for (let k = 0; k < tris.length; k += 3) { const t = tris[k + 1]; tris[k + 1] = tris[k + 2]; tris[k + 2] = t; }
-  }
-  return { fish, nrm, uv, at, indices: tris };
-}
 
 /**
  * paint of the arm strip in the body texture: the flank's skin (grey-olive, dense dark melanophores, a few pale

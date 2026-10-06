@@ -28,6 +28,6 @@ export interface Pose {
   };
 }
 export function defaultPose(): Pose;
-export function computePose(p: Pose, rig?: { eyeRetract_m?: number }): { q: Record<string, Quat>; t: Record<string, [number, number, number]>; morph: Record<string, number[]> };
+export function computePose(p: Pose, rig?: { eyeRetract_m?: number; pecBindFix?: number[]; pec?: { dir: number[] } }): { q: Record<string, Quat>; t: Record<string, [number, number, number]>; morph: Record<string, number[]> };
 export function swimMidline(xmm: number, phase: number, amp: number, tl?: number): number;
 export function bendFromMidline(f: (xmm: number) => number, tl?: number): Record<string, number>;

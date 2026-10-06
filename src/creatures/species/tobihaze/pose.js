@@ -69,10 +69,20 @@ export function defaultPose() {
   };
 }
 
+/** the swing part of rotation q relative to the unit axis a (q = swing · twist, the twist about a) */
+export function swingOf(q, a) {
+  const d = q[0] * a[0] + q[1] * a[1] + q[2] * a[2];
+  let t = [a[0] * d, a[1] * d, a[2] * d, q[3]];
+  const l = Math.hypot(t[0], t[1], t[2], t[3]);
+  if (l < 1e-9) return q;
+  t = t.map((x) => x / l);
+  return qmul(q, [-t[0], -t[1], -t[2], t[3]]);
+}
+
 /**
  * Local joint rotations / translations and morph weights for a pose.
  * @param {object} p  see defaultPose()
- * @param {object} rig  { eyeRetract_m, eyeAxisL, eyeAxisR } from the glTF extras
+ * @param {object} rig  { eyeRetract_m, pecBindFix, pec: { dir } } from the glTF extras
  */
 export function computePose(p, rig = {}) {
   const q = {}, t = {};
@@ -88,10 +98,22 @@ export function computePose(p, rig = {}) {
     const d = rig.eyeRetract_m ?? 0.0025;
     t[jn] = [-side * 0.12 * d * e.retract, -d * e.retract, -0.15 * d * e.retract];
   }
+  // (the angles are about the swept-back frame the arm used to be bound in: rig.pecBindFix turns its bind frame onto
+  // it. Of that turn only the swing is kept - the arm points where it did - not the twist about the arm's own axis
+  // the old frame carried, which would wring the arm's root)
+  const fix = rig.pecBindFix ?? null, bindDir = rig.pec?.dir ?? null;
   for (const [side, key, jn, wn] of [[1, 'pecL', 'J_pecL', 'J_pecArmL'], [-1, 'pecR', 'J_pecR', 'J_pecArmR']]) {
     const f = p[key];
-    q[jn] = f.q ?? qmul(qY(-side * f.protract), qmul(qZ(-side * f.depress), qX(f.twist)));
-    q[wn] = f.wq ?? qZ(-side * f.wrist);
+    let qf = qmul(qY(-side * f.protract), qmul(qZ(-side * f.depress), qX(f.twist)));
+    let qw = qZ(-side * f.wrist);
+    if (fix) {
+      const fs = side > 0 ? fix : [fix[0], -fix[1], -fix[2], fix[3]];
+      qf = qmul(qf, fs);
+      qw = qmul(qmul([-fs[0], -fs[1], -fs[2], fs[3]], qw), fs); // the wrist's bend about the same axis as before
+      if (bindDir) qf = swingOf(qf, side > 0 ? bindDir : [-bindDir[0], bindDir[1], bindDir[2]]);
+    }
+    q[jn] = f.q ?? qf;
+    q[wn] = f.wq ?? qw;
   }
   q.J_pelvic = qX(-p.pelvic);
   const m = p.morph;

@@ -153,7 +153,7 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
 #ifndef TOBI_FIN
   // the uv columns converge on the very tip of the snout, where the coarse mips of the normal map would streak:
   // geometry normal over the front of the snout (u grows with arc length from the tip)
-  float tobiTip = smoothstep(0.004, 0.05, vMapUv.x);
+  float tobiTip = smoothstep(0.001, 0.006, vMapUv.x);
   normal = normalize(mix(nonPerturbedNormal, normal, tobiTip));
 #endif
 #ifdef TOBI_DROPS
@@ -178,7 +178,7 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
     #ifndef TOBI_FIN
     // the papillose snout tip (and the uv pole there) never gives a mirror reflection: the film thins out over it
     // (a rough film there would smear the sky into a pale blob)
-    material.clearcoat *= mix(0.15, 1.0, smoothstep(0.003, 0.05, vMapUv.x));
+    material.clearcoat *= mix(0.45, 1.0, smoothstep(0.001, 0.006, vMapUv.x));
     #endif
   }
 #endif`);

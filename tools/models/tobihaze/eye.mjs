@@ -132,18 +132,22 @@ export function paintEye(size = 512) {
       th = 0.5 + 0.06 * (fbm3(ax * 3 * q + 5, sy * 3 * q, 1.3, 3, 709));
     } else if (theta < limbAt(psi)) {
       const f = (theta - tp) / (limbAt(psi) - tp);
-      // radial striation and fine reticulation of the iris stroma
-      const stri = 0.5 + 0.5 * Math.sin(psi * 56 + 4 * fbm3(ax * 2, sy * 2, f * 2, 3, 727));
+      // the stroma: a fine, irregular granulation (no regular radial striae - photographs show a granular, speckled
+      // band) over a faint reticulation
+      const stri = fbm3(ax * 7, sy * 7, f * 5, 3, 727) * 0.5 + 0.5;
       const reti = smoothstep(0.5, 0.78, fbm3(ax * 6 * (1 + f), sy * 6 * (1 + f), f * 7, 4, 607) * 0.5 + 0.5);
       const cloud = fbm3(ax * 2.5, sy * 2.5, f * 3, 3, 739) * 0.5 + 0.5;
       // dark olive-brown, mottled; greener low in the iris
       const low = smoothstep(0.25, -0.7, sy);
-      col = [46, 44, 34].map((c, i) => mix(c, [52, 64, 40][i], low) * (0.8 + 0.3 * stri) * (1 - 0.35 * reti) * (0.85 + 0.3 * grain));
-      // a few gold flecks
-      const fleck = smoothstep(0.7, 0.86, perlin3(ax * 18 * (1 + f), sy * 18 * (1 + f), f * 9, 733) * 0.5 + 0.5);
-      col = col.map((c, i) => mix(c, [150, 124, 70][i], fleck * 0.35));
-      // the bright copper pupillary margin
-      const rim = smoothstep(tr - tp + 0.008, 0.0, theta - tp);
+      col = [50, 47, 35].map((c, i) => mix(c, [54, 66, 42][i], low) * (0.85 + 0.25 * stri) * (1 - 0.3 * reti) * (0.85 + 0.3 * grain));
+      // dense gold-green granules, finer and fewer toward the limbus
+      const g1 = smoothstep(0.62, 0.8, perlin3(ax * 46, sy * 46, f * 11, 733) * 0.5 + 0.5);
+      const g2 = smoothstep(0.66, 0.84, perlin3(ax * 24 + 4, sy * 24, f * 7, 735) * 0.5 + 0.5);
+      const fleck = Math.max(g1, 0.8 * g2) * (1 - 0.5 * smoothstep(0.55, 1.0, f));
+      col = col.map((c, i) => mix(c, mix([150, 130, 72][i], [112, 132, 82][i], low), fleck * 0.5));
+      // the bright copper pupillary margin, its width wavering a little round the pupil
+      const rimW = (tr - tp + 0.008) * (0.75 + 0.5 * (fbm3(cx * 3, sy * 3, 2.7, 2, 741) * 0.5 + 0.5));
+      const rim = smoothstep(rimW, 0.0, theta - tp);
       col = col.map((c, i) => mix(c, [178, 112, 66][i] * (0.85 + 0.3 * grain), rim * 0.85));
       // the limbus darkens
       col = col.map((c) => c * (1 - 0.4 * smoothstep(0.75, 1.0, f)));

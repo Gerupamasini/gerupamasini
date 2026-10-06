@@ -30,6 +30,8 @@ export interface TobiRig {
   eyeRetract_m: number;
   eyeRadius_m: number;
   pec: { base: number[]; wrist: number[]; dir: number[]; width: number[]; normal: number[]; armLen_m: number; handLen_m: number };
+  /** turns the arm's bind frame onto the frame the fixed fin poses are written in (left side, [x, y, z, w]) */
+  pecBindFix?: number[];
   contacts: { pelvicY_m: number; bellyY: [string, number][] };
 }
 
