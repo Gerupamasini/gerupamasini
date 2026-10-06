@@ -770,8 +770,8 @@ const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 
 
 // colours read from the photos (wet animal in daylight, sRGB)
 const COL = {
-  dorsal: C(86, 82, 72),
-  flank: C(122, 117, 103),
+  dorsal: C(92, 89, 80),
+  flank: C(132, 128, 117),
   belly: C(206, 202, 194),
   throat: C(140, 134, 122),
   dark: C(44, 41, 37),
@@ -799,6 +799,25 @@ function dotMean(cell, r, seed, keep = 1, jitterR = 0.4) {
     DOT_MEAN.set(key, m);
   }
   return m;
+}
+/** like dots(), but each grain an irregular, flattened chip (a random axis squashed to 0.5-1 of its width, a crisp edge) */
+function grainDots(p, cell, r, seed, keep = 1) {
+  let cov = 0;
+  const x = p[0] / cell, y = p[1] / cell, z = p[2] / cell;
+  forEachCell3(x, y, z, seed, (fx, fy, fz, h) => {
+    if ((h >>> 3) / 536870912 > keep) return;
+    const rr = (r / cell) * (0.6 + 0.8 * (((h >>> 7) & 255) / 255));
+    const a = norm3([((h >>> 11) & 255) / 127.5 - 1, ((h >>> 19) & 255) / 127.5 - 1, ((h >>> 1) & 63) / 31.5 - 1 + 1e-3]);
+    const k = 0.5 + 0.5 * (((h >>> 15) & 15) / 15);
+    const v = [x - fx, y - fy, z - fz];
+    const t = v[0] * a[0] + v[1] * a[1] + v[2] * a[2];
+    const w = [v[0] - a[0] * t, v[1] - a[1] * t, v[2] - a[2] * t];
+    // a lumpy outline: the radius wobbles with direction
+    const wob = 1 + 0.22 * Math.sin(7 * Math.atan2(w[1], w[0] + 1e-6) + (h & 31));
+    const d = Math.hypot(t / k, w[0], w[1], w[2]) / wob;
+    cov = Math.max(cov, smoothstep(rr, rr * 0.78, d));
+  });
+  return cov;
 }
 function dots(p, cell, r, seed, keep = 1, jitterR = 0.4) {
   let cov = 0;
@@ -869,11 +888,18 @@ function skinPoint(s, phi, p, n, ao) {
   // melanophore speckle: dense, fine, stronger on the back and head
   const sp = calmed(dots(p, 0.3, 0.085, 101, 0.9), 0.3, 0.085, 101, 0.9) * (0.35 + 0.65 * (1 - ventral)) * (s < 16 ? 1.2 : 1);
   col = lerp3(col, COL.speck, sp * 0.75);
+  // a fine, blotchy dark network between the speckles (close-up photographs: the skin reads like grey granite)
+  const net = smoothstep(0.05, 0.42, fbm3(p[0] * 4.2, p[1] * 4.2, p[2] * 4.2, 3, 137)) * (1 - ventral) * tipCalm;
+  col = lerp3(col, COL.speck, net * (s < 18 ? 0.42 : 0.3));
+  // and dark blotches about a millimetre across, between paler, sandier patches
+  const blot = smoothstep(0.08, 0.38, fbm3(p[0] * 1.3 + 9, p[1] * 1.3, p[2] * 1.3, 3, 139)) * (1 - ventral);
+  col = lerp3(col, COL.dark, blot * 0.32);
   const sp2 = dots(p, 0.9, 0.16, 131, 0.5) * (1 - ventral);
   col = lerp3(col, COL.dark, sp2 * 0.6);
-  // and a dense, fine pepper of tiny melanophores over everything but the belly
-  const pepper = calmed(dots(p, 0.16, 0.042, 109, 0.85), 0.16, 0.042, 109, 0.85) * (0.3 + 0.7 * (1 - ventral));
-  col = lerp3(col, COL.speck, pepper * 0.55);
+  // and a dense, fine pepper of tiny melanophores over everything but the belly (close up a fine dark network over
+  // the head and the back)
+  const pepper = calmed(dots(p, 0.16, 0.05, 109, 0.88), 0.16, 0.05, 109, 0.88) * (0.3 + 0.7 * (1 - ventral));
+  col = lerp3(col, COL.speck, pepper * (s < 18 ? 0.72 : 0.6));
   // small pale (some bluish) spots over cheeks and flanks
   const pale = calmed(dots(p, s < 18 ? 0.95 : 1.25, 0.21, 211, s < 18 ? 0.8 : 0.55, 0.5), s < 18 ? 0.95 : 1.25, 0.21, 211, s < 18 ? 0.8 : 0.55, 0.5) * smoothstep(-0.6, -0.1, nh) * smoothstep(0.85, 0.3, nh) * (1 - ventral * 0.8);
   const blueish = s < 18 ? 0.65 : 0.25;
@@ -893,7 +919,7 @@ function skinPoint(s, phi, p, n, ao) {
   // upper-lip pads: pale, studded with dark sensory pores
   {
     const L = FEAT.lipPad.c;
-    const d = Math.hypot((p[0] - L[0]) / 2.0, (p[1] - L[1]) / 1.4, (Math.abs(z) - L[2]) / 1.4);
+    const d = Math.hypot((p[0] - L[0]) / 2.3, (p[1] - L[1]) / 1.6, (Math.abs(z) - L[2]) / 1.6);
     const pad = smoothstep(1.1, 0.6, d);
     col = lerp3(col, lerp3(COL.lip, col, 0.35), pad * 0.65);
     // fine dark pores and a darker rim where the cushion meets the cheek
@@ -905,7 +931,7 @@ function skinPoint(s, phi, p, n, ao) {
   // round each eye's cup (wa: angle from the lid margin, > 0 on the bare globe): the margin is a pale rim; the
   // skin under the globe (the shut lid in a blink) is the cup's thin, pinkish skin; the cup under the eye is thin,
   // unpigmented skin, pinkish grey (the blood under it shows), fading into the head's pattern down the neck
-  let lid = 0;
+  let lid = 0, stalk = 0;
   for (const e of FEAT.eyes) {
     const o = [p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2]];
     const dE = Math.hypot(o[0], o[1], o[2]);
@@ -918,18 +944,32 @@ function skinPoint(s, phi, p, n, ao) {
     // (only a thin band at the margin: the skin under the globe becomes the lid when the cup closes in a blink)
     lid = Math.max(lid, smoothstep(-0.12, 0.0, wa) * smoothstep(0.14, 0.05, wa) * near);
     col = lerp3(col, lerp3(col, C(150, 124, 116), 0.6), smoothstep(0.05, 0.15, wa) * near * 0.6);
+    // the stalk under the cup: smooth, pale, pinkish grey skin without sand down to where it rises out of the head
+    // (photographs from the side)
+    const neck = smoothstep(EYE.radius + 1.7, EYE.radius + 0.5, dE) * smoothstep(0.2, -0.3, o[1] / Math.max(dE, 1e-3)) * smoothstep(-0.1, 0.05, -wa);
+    stalk = Math.max(stalk, neck);
   }
+  col = lerp3(col, C(158, 146, 138), stalk * 0.55);
   // the lid margin: a pale, fleshy rim just under the window (photographs)
   col = lerp3(col, C(164, 150, 138), lid * 0.6);
   // sand grains stuck in the mucus: tiny white specks, densest on the head, the turrets and the back
   // (photographed animals glitter with them: fine quartz grains, white, some grey; densest on the crown, the cheeks,
   // the eye domes and the back, sparse on the belly)
-  const gd = (0.3 + 0.7 * smoothstep(-0.6, 0.3, nh)) * (s < 18 ? 1 : 0.7) * (1 - lid);
-  const grainsA = calmed(dots(p, 0.3, 0.05, 151, 0.55), 0.3, 0.05, 151, 0.55) * gd;
-  const grainsB = calmed(dots(p, 0.55, 0.075, 157, 0.35), 0.55, 0.075, 157, 0.35) * gd;
-  const grains = Math.max(grainsA, grainsB);
-  const grey = hash01(Math.floor(p[0] / 0.3), Math.floor(p[1] / 0.3), Math.floor(p[2] / 0.3), 159) < 0.3;
-  col = lerp3(col, grey ? C(150, 146, 136) : COL.grain, grains * 0.9);
+  // (photographs close up: grains of every size from fine silt to ~0.5 mm quartz, densest on the crown, the cheeks
+  // and round the eyes, in patches where the animal last lay in the sand)
+  const patchy = smoothstep(-0.35, 0.35, fbm3(p[0] * 0.35 + 3, p[1] * 0.35, p[2] * 0.35, 3, 161));
+  const gd = (0.3 + 0.7 * smoothstep(-0.6, 0.3, nh)) * (s < 18 ? 1 : 0.7) * (1 - lid) * (1 - 0.85 * stalk) * (0.45 + 0.55 * patchy);
+  const grainsA = calmed(grainDots(p, 0.26, 0.065, 151, 0.6), 0.26, 0.065, 151, 0.6) * gd;
+  const grainsB = calmed(grainDots(p, 0.5, 0.11, 157, 0.55), 0.5, 0.11, 157, 0.55) * gd;
+  const grainsC = calmed(grainDots(p, 0.9, 0.2, 167, 0.3 * smoothstep(-0.2, 0.4, nh) * (s < 20 ? 1 : 0.35)), 0.9, 0.2, 167, 0.15) * gd;
+  // and a dusting of fine silt: tiny white specks between the grains
+  const silt = calmed(dots(p, 0.12, 0.032, 169, 0.55), 0.12, 0.032, 169, 0.55) * gd * (s < 20 ? 1 : 0.6);
+  col = lerp3(col, COL.grain, silt * 0.7);
+  const grains = Math.max(grainsA, grainsB, grainsC);
+  // quartz white or clear (taking the skin's colour through it), a few grey or buff
+  const gh = hash01(Math.floor(p[0] / 0.26), Math.floor(p[1] / 0.26), Math.floor(p[2] / 0.26), 159);
+  const gcol = gh < 0.2 ? C(150, 146, 136) : gh < 0.32 ? C(196, 176, 140) : gh < 0.55 ? lerp3(col, COL.grain, 0.55) : COL.grain;
+  col = lerp3(col, gcol, grains * 0.92);
   // pectoral lobe: a little paler where the arm leaves the flank
   {
     const L = FEAT.pecLobe;
@@ -953,8 +993,8 @@ function skinPoint(s, phi, p, n, ao) {
     const side = 1 - Math.pow(Math.abs(fv - 0.5) * 2, 3);
     h += 0.018 * dome * side * smoothstep(16.5, 19, s);
   }
-  // sand grains stand proud of the skin
-  h += 0.045 * grains;
+  // sand grains stand proud of the skin, rounded
+  h += 0.04 * Math.max(grainsA, grainsB) + 0.07 * grainsC;
   // the skin itself is finely granular (tiny tubercles under the mucus)
   h += 0.009 * dots(p, 0.13, 0.05, 171, 0.9, 0.5) + 0.005 * dots(p, 0.07, 0.028, 173, 0.9, 0.5);
   // head: sensory papillae rows and pores, fine wrinkles
@@ -974,14 +1014,18 @@ function skinPoint(s, phi, p, n, ao) {
   // (the fine relief fades out over the snout's tip, where the texels still run long toward the uv pole and would draw
   // it out into radial streaks)
   h *= smoothstep(0.1, 1.2, rPole);
+  // (the eye stalks' skin is smooth)
+  h *= 1 - 0.7 * stalk;
   // ---------------- roughness and skin data
-  let rough = 0.52 + 0.08 * fbm3(p[0] * 0.9, p[1] * 0.9, p[2] * 0.9, 2, 91) + 0.06 * dorsal - 0.25 * grains;
+  // (grains are dry, frosted quartz: matte)
+  let rough = 0.52 + 0.08 * fbm3(p[0] * 0.9, p[1] * 0.9, p[2] * 0.9, 2, 91) + 0.06 * dorsal + 0.2 * grains;
   const mudAff = clamp(ventral * 0.8 + smoothstep(0.0, -0.6, nh) * 0.35 + (1 - ao) * 0.6 + 0.25 * fbm3(p[0] * 0.4, p[1] * 0.4, p[2] * 0.4, 3, 97));
   // (right on the snout's tip, where the texture's columns meet, the film is thinner and the skin a little rougher:
   // no sharp glint gathers on the pole)
   const poleMatte = 1 - smoothstep(0.1, 0.7, rPole);
   rough += 0.22 * poleMatte;
-  const mucus = clamp(0.55 + 0.35 * (1 - ao) + 0.2 * ventral - 0.25 * dorsal + 0.2 * fbm3(p[0] * 0.7, p[1] * 0.7, p[2] * 0.7, 3, 103) - 0.45 * poleMatte);
+  // (grains stick out of the mucus film: they dry first)
+  const mucus = clamp(0.55 + 0.35 * (1 - ao) + 0.2 * ventral - 0.25 * dorsal + 0.2 * fbm3(p[0] * 0.7, p[1] * 0.7, p[2] * 0.7, 3, 103) - 0.45 * poleMatte - 0.7 * grains);
   // what dries first in the sun and wind: the top of the head, the eye turrets and the back
   let sun = clamp(smoothstep(0.0, 0.8, n[1]) * 0.8 + 0.2 * dorsal);
   for (const e of FEAT.eyes) sun = Math.max(sun, smoothstep(EYE.radius + 1.6, EYE.radius + 0.3, Math.hypot(p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2])) * 0.9);

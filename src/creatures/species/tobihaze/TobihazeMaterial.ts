@@ -61,6 +61,7 @@ interface Uniforms {
   uMudColor: IUniform<Color>;
   uTobiData: IUniform<Texture>;
   uDropScale: IUniform<number>;
+  uBodyU: IUniform<number>;
 }
 
 export type TobiTier = 'hero' | 'lod1' | 'lod2';
@@ -79,7 +80,7 @@ function skinShader(u: Uniforms, tier: TobiTier, fin: boolean) {
       .replace('#include <common>', `#include <common>
 ${defs}
 varying vec3 vTobiWorld;
-uniform float uWet, uMud, uWaterY, uDropScale;
+uniform float uWet, uMud, uWaterY, uDropScale, uBodyU;
 uniform vec3 uMudColor;
 uniform sampler2D uTobiData;
 ${NOISE}
@@ -88,7 +89,7 @@ uniform float uTime, uSunUp, uCausticGain;
 uniform vec3 uSunDirT;
 ${WAVES_GLSL}
 #endif
-float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
+float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop, tobiFilm;`)
       .replace('#include <map_fragment>', `#include <map_fragment>
 {
   #ifdef TOBI_FIN
@@ -102,6 +103,8 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
   tobiSub = 1.0 - smoothstep(-0.0004, 0.0004, tobiAbove);
   // this patch's wetness: the animal's moisture, more in mucus-rich folds, less where sun and wind dry it first
   tobiWet = clamp(uWet + (tData.g - 0.55) * 0.4 - tData.b * (1.0 - uWet) * 0.6, 0.0, 1.0);
+  // sand grains stuck in the film stand out of it, dry (the data texture's mucus channel is ~0 on them)
+  tobiFilm = mix(0.2, 1.0, smoothstep(0.03, 0.16, tData.g));
   // water wicks a few millimetres up the skin from the surface, and splashes keep the lowest flanks wet
   tobiWet = max(tobiWet, 1.0 - smoothstep(0.0, 0.006, tobiAbove));
   tobiWet = max(tobiWet, tobiSub);
@@ -120,9 +123,9 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
   tobiDrop = 0.0;
   #ifdef TOBI_DROPS
   {
-    // (the arm and eye-dome strips of the skin texture are ~3-4x denser around than the body: drops stay round)
-    float vs = tUv.x > 0.92 ? 0.34 : (tUv.x > 0.84 ? 0.26 : 1.0);
-    vec2 g = tUv * vec2(56.0, 26.0 * vs) * uDropScale;
+    // (only on the body's own skin: the arm and eye-dome strips of the texture are laid out quite differently, and
+    // drops there would come out drawn into streaks)
+    vec2 g = tUv * vec2(56.0, 26.0) * uDropScale;
     float tipFade = smoothstep(0.03, 0.08, tUv.x);
     vec2 cell = floor(g), f = fract(g) - 0.5;
     float h = tobiHash(cell);
@@ -132,7 +135,7 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
     // in air the mucus is a continuous film: only a few small beads (fresh out of the water); they cluster just above
     // the waterline
     float keep = step(h, mix(0.0, 0.035, smoothstep(0.8, 1.0, tobiWet)) + 0.3 * (1.0 - smoothstep(0.0, 0.008, tobiAbove)));
-    tobiDrop = keep * tipFade * (1.0 - tobiSub) * sqrt(max(0.0, 1.0 - d * d));
+    tobiDrop = keep * tipFade * step(tUv.x, uBodyU - 0.005) * (1.0 - tobiSub) * sqrt(max(0.0, 1.0 - d * d));
   }
   #endif
   #ifdef TOBI_CAUSTICS
@@ -171,10 +174,11 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop;`)
   // the air–mucus interface: a clear film while wet and in air; none under water, broken up by mud
   {
     float film = tobiWet * (1.0 - tobiSub) * (1.0 - 0.75 * tobiMud);
+    film *= tobiFilm;
     film = max(film, tobiDrop);
-    material.clearcoat = film;
+    material.clearcoat = film * 0.85;
     // (the film follows the granular skin, so even fully wet its highlights are a little broken up)
-    material.clearcoatRoughness = clamp(mix(0.34, 0.075, tobiWet) + 0.25 * tobiMud + geometryRoughness, 0.0525, 1.0);
+    material.clearcoatRoughness = clamp(mix(0.38, 0.15, tobiWet) + 0.25 * tobiMud + geometryRoughness, 0.0525, 1.0);
     #ifndef TOBI_FIN
     // the papillose snout tip (and the uv pole there) never gives a mirror reflection: the film thins out over it
     // (a rough film there would smear the sky into a pale blob)
@@ -194,6 +198,7 @@ export class TobihazeMaterials {
     uMudColor: { value: new Color(0.24, 0.205, 0.165) },
     uTobiData: { value: neutral() },
     uDropScale: { value: 1 },
+    uBodyU: { value: 0.8 },
   };
   private readonly made: Material[] = [];
   private readonly originals = new Map<Mesh, Material | Material[]>();
@@ -209,6 +214,8 @@ export class TobihazeMaterials {
       const role = (src.userData?.tobihaze as { role?: string } | undefined)?.role;
       let out: Material = src;
       if (role === 'skin' || role === 'fin') {
+        const bodyU = (src.userData?.tobihaze as { bodyU?: number } | undefined)?.bodyU;
+        if (role === 'skin' && typeof bodyU === 'number') this.uniforms.uBodyU.value = bodyU;
         const m = (src as MeshPhysicalMaterial).clone();
         m.clearcoat = 1;
         m.clearcoatRoughness = 0.04;

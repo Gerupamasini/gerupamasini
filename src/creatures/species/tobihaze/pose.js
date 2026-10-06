@@ -96,7 +96,8 @@ export function computePose(p, rig = {}) {
     const e = p[key];
     q[jn] = qmul(qY(e.yaw), qX(-e.pitch));
     const d = rig.eyeRetract_m ?? 0.0025;
-    t[jn] = [-side * 0.12 * d * e.retract, -d * e.retract, -0.15 * d * e.retract];
+    // (down its stalk and a little toward the midline, so it stays inside the closing cup all the way down)
+    t[jn] = [-side * 0.32 * d * e.retract, -d * e.retract, -0.12 * d * e.retract];
   }
   // (the angles are about the swept-back frame the arm used to be bound in: rig.pecBindFix turns its bind frame onto
   // it. Of that turn only the swing is kept - the arm points where it did - not the twist about the arm's own axis
