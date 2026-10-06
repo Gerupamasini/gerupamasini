@@ -42,17 +42,17 @@ const KS = [0, 0.3, 0.7, 1.2, 1.8, 2.6, 3.6, 4.8, 6, 8, 10, 12, 14, 16, 18, 20, 
 // underside of the head is nearly flat back to the throat; deepest at the first dorsal fin, ~15 % TL; the belly a
 // little below the throat; a long, low caudal peduncle:
 // dorsal profile (without the eyes)
-const KTOP = [5.7, 6.25, 6.7, 7.1, 7.5, 8, 8.45, 8.85, 9.2, 9.55, 9.6, 9.65, 9.7, 9.75, 9.95, 10.2, 10.7, 11.2, 11.1, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
+const KTOP = [5, 5.5, 6, 6.5, 7, 7.65, 8.3, 8.8, 9.15, 9.5, 9.6, 9.65, 9.7, 9.75, 9.95, 10.2, 10.7, 11.2, 11.1, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
 // ventral profile: under the snout tip the fleshy upper lip, the lower jaw and the throat curving down to the chest;
 // the belly sags a little below the chest, the tail's lower edge rises to the peduncle
-const KBOT = [1.9, 1.4, 1.05, 0.8, 0.6, 0.4, 0.2, 0.05, -0.1, -0.25, -0.35, -0.5, -0.5, -0.45, -0.42, -0.5, -0.6, -0.6, -0.4, -0.1, 0.25, 0.65, 1.05, 1.4, 1.7, 1.95, 2.1, 2.15, 2.2];
+const KBOT = [1.2, 0.6, 0.25, -0.1, -0.4, -0.65, -0.85, -0.95, -1, -0.95, -0.85, -0.75, -0.65, -0.55, -0.47, -0.5, -0.6, -0.6, -0.4, -0.1, 0.25, 0.65, 1.05, 1.4, 1.7, 1.95, 2.1, 2.15, 2.2];
 // half width: the snout is a rounded bulb narrower than the face (head-on it stands out from the face, in
 // three-quarter view it overhangs the mouth), so the mouth is about half as wide as the face; behind it the face
 // swells to broad, full cheeks (head ~1.05 × as wide as deep); a stout trunk tapering to the peduncle
-const KW = [2, 2.35, 2.7, 3, 3.3, 3.75, 4.35, 4.9, 5.25, 5.6, 5.95, 6.05, 5.95, 5.75, 5.55, 5.55, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
+const KW = [1.7, 2.05, 2.4, 2.75, 3.1, 3.45, 3.95, 4.55, 5.1, 5.6, 5.95, 6.05, 5.95, 5.75, 5.55, 5.55, 5.15, 4.8, 4.4, 3.95, 3.45, 2.95, 2.5, 2.1, 1.75, 1.45, 1.2, 0.95, 0.55];
 // superellipse exponents (top / bottom): a rounded muzzle; head-on the head is bell-shaped, rounded and narrowing up
 // to the eyes over a full, flat-bottomed face (photographs of the face head-on); round trunk, oval tail
-const KNT = [2, 2, 2, 2, 2, 2, 1.95, 1.8, 1.78, 1.75, 1.75, 1.8, 1.88, 1.95, 2, 2.05, 2.15, 2.1, 2.1, 2.05, 2.05, 2, 2, 2, 2, 2, 2, 2, 2];
+const KNT = [1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.8, 1.88, 1.95, 2, 2.05, 2.15, 2.1, 2.1, 2.05, 2.05, 2, 2, 2, 2, 2, 2, 2, 2];
 const KNB = [2, 2.05, 2.1, 2, 2, 2, 2.05, 2.1, 2.15, 2.2, 2.25, 2.3, 2.4, 2.4, 2.4, 2.6, 2.5, 2.45, 2.4, 2.35, 2.3, 2.2, 2.15, 2.1, 2.05, 2, 2, 2, 2];
 // height of the widest point relative to the mid-height: low on the snout (head-on a bell, broad at the mouth and
 // narrowing up to the eyes), the cheeks full and low behind the mouth (the face is widest at about a third of its
@@ -245,10 +245,11 @@ export function windowField(o, D) {
 
 // Gape (where the lips meet), side view on the +z side: from the front midline under the snout back to the mouth
 // corner. A small mouth low under the blunt, overhanging snout (subterminal: the snout's front stands ~1 mm above
-// and ahead of it), head-on a low, flat arch (~60 % of the face's width); the jaw itself reaches back under the eye,
-// where the posterior lobe of the upper lip lies over it as a pale pad behind the corner.
-export const MOUTH = [[1.0, 1.98], [1.6, 1.95], [2.3, 1.88], [3.0, 1.77], [3.6, 1.62], [4.15, 1.42]];
-export const RICTUS_S = 4.15;
+// and ahead of it): a short gape, head-on a small arch with the corners turned down and in (~40 % of the face's
+// width; photographs head-on and in three-quarter view); the jaw itself reaches on back under the eye, hidden under
+// the posterior lobe of the upper lip, a pale teardrop pad right behind the corner.
+export const MOUTH = [[1.0, 2.05], [1.45, 1.99], [1.95, 1.82], [2.45, 1.52], [2.9, 1.12]];
+export const RICTUS_S = 2.9;
 // gill-cover margin, top → bottom: the rear and lower edge of the inflated opercular chamber, which stands proud of
 // the body behind it as a rounded plate with a crisp rim (lateral photographs; the gill opening itself, small and
 // ventrolateral, lies under the rim in front of the pectoral base), and the preopercle
@@ -336,7 +337,7 @@ function buildFeatures() {
   const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], a: aR, fr: eyeFrame(aR), D: cupDown(-1) };
   // the posterior lobe of the upper lip: an oval pad on each side just behind the mouth corner (pale, studded with
   // sensory pores)
-  const lp = surfaceAt(5.4, 1.7);
+  const lp = surfaceAt(3.75, 1.45);
   const lipPad = { c: lp.p, n: lp.n };
   return {
     gapeLine: gx, gapeU, gapeLen,
@@ -345,6 +346,7 @@ function buildFeatures() {
     lipPad,
     // the opercular chamber (inflated with water on land: the breathe morph) and the throat under it
     cheek: [11.6, 4.2, 4.5],
+    jowl: [6.8, 3.2, 3.8],
     throat: [9.0, 1.05, 0],
     pecLobe: [17.6, 3.15, 4.95],
     pelvicBase: [20.6, 0.3, 0],
@@ -360,7 +362,8 @@ export const FEAT = buildFeatures();
 /** closest point on the gape line (+z side): its arc parameter (0 = front midline … 1 = mouth corner), offset vector */
 function nearGape(p) {
   const P = FEAT.gapeLine, U = FEAT.gapeU;
-  let best = Infinity, bu = 0, bq = P[0];
+  const seg = [];
+  let best = Infinity;
   for (let i = 0; i < P.length - 1; i++) {
     const a = P[i], b = P[i + 1];
     const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
@@ -368,9 +371,15 @@ function nearGape(p) {
     const t = clamp(((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / L2, 0, 1);
     const q = [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t];
     const d = Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
-    if (d < best) { best = d; bq = q; bu = (U[i] + (U[i + 1] - U[i]) * t) / FEAT.gapeLen; }
+    seg.push([d, (U[i] + (U[i + 1] - U[i]) * t) / FEAT.gapeLen, p[1] - q[1]]);
+    best = Math.min(best, d);
   }
-  return { d: best, u: bu, dy: p[1] - bq[1] };
+  // (the position along the line and the height above it are blended over the segments nearly as close as the
+  // nearest: taken from the nearest alone they would jump where it changes - inside a bend of the line - and the lips
+  // would step there)
+  let w = 0, u = 0, dy = 0;
+  for (const [d, su, sdy] of seg) { const k = Math.exp(-(((d - best) / 0.12) ** 2)); w += k; u += k * su; dy += k * sdy; }
+  return { d: best, u: u / w, dy: dy / w };
 }
 
 /**
@@ -383,21 +392,24 @@ function lipRelief(p) {
   const fade = 1 - smoothstep(0.92, 1.25, g.u);
   // upper lip: a roll ~1.1 mm high centred 0.55 mm above the line; lower lip ~0.7 mm, 0.35 mm below
   // (the roll is lowest head-on, under the overhanging snout: it shows mainly at the sides of the mouth)
-  const notch = 0.45 + 0.55 * smoothstep(0.4, 1.6, Math.abs(p[2]));
-  const up = g.dy > -0.05 ? (0.16 - 0.06 * g.u) * notch * Math.exp(-(((g.d - 0.75) / 0.85) ** 2)) : 0;
-  const lo = g.dy < 0.05 ? (0.11 - 0.04 * g.u) * Math.exp(-(((g.d - 0.3) / 0.3) ** 2)) : 0;
-  const crease = 0.045 * Math.exp(-((g.d / 0.09) ** 2));
+  const notch = 0.7 + 0.3 * smoothstep(0.4, 1.6, Math.abs(p[2]));
+  // (each lip fades in smoothly across the gape line: a step there would crease the skin)
+  const up = smoothstep(-0.2, 0.05, g.dy) * (0.3 - 0.12 * g.u) * notch * Math.exp(-(((g.d - 0.55) / 0.65) ** 2));
+  const lo = smoothstep(0.2, -0.05, g.dy) * (0.11 - 0.04 * g.u) * Math.exp(-(((g.d - 0.3) / 0.3) ** 2));
+  const crease = 0.07 * Math.exp(-((g.d / 0.09) ** 2));
   // the lower jaw is set back under the overhanging upper lip (profile photographs: the outline steps back under
   // the lip), most at the front of the mouth
-  const recess = g.dy < 0 ? 0.24 * (1 - smoothstep(0.2, 0.75, g.u)) * Math.exp(-(((g.d - 0.75) / 0.7) ** 2)) : 0;
+  const recess = smoothstep(0.1, -0.15, g.dy) * 0.24 * (1 - smoothstep(0.2, 0.75, g.u)) * Math.exp(-(((g.d - 0.75) / 0.7) ** 2));
   let r = (up + lo) * fade - crease * fade - recess;
-  // the lip pad: a plump, glossy oval cushion (~4 × 2.7 mm) standing out of the cheek at the mouth's corner
+  // the lip pad: a plump, glossy teardrop cushion (~3.8 × 2.6 mm) standing out of the cheek at the mouth's corner
   const c = FEAT.lipPad.c, n = FEAT.lipPad.n;
   const v = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
   const h = v[0] * n[0] + v[1] * n[1] + v[2] * n[2];
   const t0 = v[0] - n[0] * h, t1 = v[1] - n[1] * h, t2 = v[2] - n[2] * h;
-  const e = (t0 / 2.0) ** 2 + (t1 / 1.35) ** 2 + (t2 / 1.35) ** 2;
-  r += 0.62 * Math.exp(-(e ** 2.2) * 1.4);
+  // (a teardrop: fuller behind, narrowing forward toward the mouth corner)
+  const fwd = smoothstep(0.6, -1.6, t0);
+  const e = (t0 / 2.0) ** 2 + (t1 / (1.45 - 0.4 * fwd)) ** 2 + (t2 / (1.45 - 0.4 * fwd)) ** 2;
+  r += 0.62 * Math.exp(-(e ** 1.7) * 1.3);
   return r;
 }
 
@@ -473,9 +485,13 @@ export function field(s, y, z, opts = null) {
   const breathe = opts?.breathe ?? 0;
   let d = baseDist(s, y, z);
   // swollen cheeks / opercular chambers and the throat (branchiostegal region)
-  if (s > 3.5 && s < 19) {
+  // (the guard lies well outside every part's reach, or the cut would crease the face)
+  if (s > 0.5 && s < 19) {
     // inside the loft at rest (a smooth, full face); swells out when the chambers are pumped full
     d = smin(d, ellipsoidDist(pm, F.cheek, [5.0, 3.5 + 0.2 * breathe, 1.25 + 0.5 * breathe]), 0.7);
+    // the puffy face under and in front of each eye: head-on it stands out to the side of the narrower snout, so the
+    // snout reads as a knob between full cheeks, a soft furrow curving round it from the lip pads (photographs head-on)
+    d = smin(d, ellipsoidDist(pm, F.jowl, [3.6, 2.5, 1.5]), 1.4);
     d = smin(d, ellipsoidDist(p, [F.throat[0], F.throat[1] - 0.35 * breathe, 0], [4.6, 1.3 + 0.3 * breathe, 4.0]), 1.0);
   }
   // the furrow between the eyes, cut before the eye cups go on (it would notch their inner sides)
@@ -528,7 +544,7 @@ const S_SOCKET = 7.6;
 export function rayOrigin(s) {
   // the snout is projected from one point behind it, so the rays fan out over the front of the face without
   // crossing (per-section rays there would run steeply down through the lips and fold the first rows)
-  const S_TIP = 3.2;
+  const S_TIP = 4.3;
   if (s < S_TIP + 1.5) {
     const qt = section(S_TIP);
     const tip = [S_TIP, qt.yc, 0];

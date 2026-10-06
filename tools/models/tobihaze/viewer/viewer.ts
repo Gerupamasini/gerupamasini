@@ -102,6 +102,8 @@ if (morph) {
   model.root.traverse((o) => { const m = o as Mesh; if (m.morphTargetDictionary && name in m.morphTargetDictionary) m.morphTargetInfluences![m.morphTargetDictionary[name]] = Number(w ?? 1); });
 }
 (window as unknown as { __ready: boolean }).__ready = false;
+// (for scripted checks: the scene and the camera)
+Object.assign(window, { __scene: scene, __camera: camera });
 let frames = 0;
 const hud = document.getElementById('hud')!;
 let tris = 0;

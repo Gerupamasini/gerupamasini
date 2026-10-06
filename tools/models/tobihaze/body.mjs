@@ -229,7 +229,7 @@ function uvArc(phi) {
   return L[j0] * (1 - g) + L[j1] * g;
 }
 /** texture t of arc length a (mm from the snout tip) down a column of length L: denser over the snout's face */
-const UV_TIP = { gain: 4, a0: 1.5 };
+const UV_TIP = { gain: 8, a0: 1.4 };
 const tipArc = (a) => a + UV_TIP.gain * UV_TIP.a0 * (1 - Math.exp(-a / UV_TIP.a0));
 function tipWarp(a, L) { return tipArc(a) / tipArc(L); }
 /** surface distance (mm) per unit t at texture t down the column at phi */
@@ -299,7 +299,7 @@ export function buildSkin(NS, NV, log = () => {}) {
     const P = (i, j) => verts[gid(i, ((j % NV) + NV) % NV)].fish;
     const geo = new Map();
     for (let i = 0; i < NS; i++) {
-      if (sList[i] > 5.5) break;
+      if (sList[i] > 2.8) break;
       for (let j = 0; j < NV; j++) {
         let n;
         if (i === 0) {
@@ -318,7 +318,9 @@ export function buildSkin(NS, NV, log = () => {}) {
     }
     for (const [g, n] of geo) {
       const v = verts[g];
-      const f = smoothstep(2.5, 5.5, v.s);
+      // (where the grid's columns are pinched together - round the mouth corner, where they gather onto the gape -
+      // the differences across a row are unreliable: there the field's own normal is kept)
+      const f = Math.max(smoothstep(1.2, 2.6, v.s), smoothstep(0.85, 0.6, dot(n, v.n)));
       v.n = norm3([n[0] * (1 - f) + v.n[0] * f, n[1] * (1 - f) + v.n[1] * f, n[2] * (1 - f) + v.n[2] * f]);
     }
     for (let i = 0; i < NS; i++) verts[i * cols + NV].n = verts[i * cols].n;
@@ -886,12 +888,12 @@ function skinPoint(s, phi, p, n, ao) {
     // (the pale lip shows at the sides; head-on, under the snout, the lip is the face's own grey)
     col = lerp3(col, COL.lip, up * 0.25 * smoothstep(0.2, 1.4, s) * (0.25 + 0.75 * smoothstep(0.4, 1.6, Math.abs(z))));
     col = lerp3(col, COL.belly, lo * 0.3);
-    col = lerp3(col, COL.dark, smoothstep(0.14, 0.02, Math.abs(dy)) * along * 0.35);
+    col = lerp3(col, COL.dark, smoothstep(0.14, 0.02, Math.abs(dy)) * along * 0.55);
   }
   // upper-lip pads: pale, studded with dark sensory pores
   {
     const L = FEAT.lipPad.c;
-    const d = Math.hypot((p[0] - L[0]) / 2.1, (p[1] - L[1]) / 1.45, (Math.abs(z) - L[2]) / 1.45);
+    const d = Math.hypot((p[0] - L[0]) / 2.0, (p[1] - L[1]) / 1.4, (Math.abs(z) - L[2]) / 1.4);
     const pad = smoothstep(1.1, 0.6, d);
     col = lerp3(col, lerp3(COL.lip, col, 0.35), pad * 0.65);
     // fine dark pores and a darker rim where the cushion meets the cheek
@@ -969,6 +971,9 @@ function skinPoint(s, phi, p, n, ao) {
     h -= 0.01 * Math.pow(Math.abs(Math.sin(m * Math.PI)), 12) * (1 - ventral);
   }
 
+  // (the fine relief fades out over the snout's tip, where the texels still run long toward the uv pole and would draw
+  // it out into radial streaks)
+  h *= smoothstep(0.1, 1.2, rPole);
   // ---------------- roughness and skin data
   let rough = 0.52 + 0.08 * fbm3(p[0] * 0.9, p[1] * 0.9, p[2] * 0.9, 2, 91) + 0.06 * dorsal - 0.25 * grains;
   const mudAff = clamp(ventral * 0.8 + smoothstep(0.0, -0.6, nh) * 0.35 + (1 - ao) * 0.6 + 0.25 * fbm3(p[0] * 0.4, p[1] * 0.4, p[2] * 0.4, 3, 97));
