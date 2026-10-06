@@ -127,7 +127,7 @@ const headPrims = [gb.primitive({ position: SP.head.position, normal: SP.head.no
   const mSkinDome = gb.addMaterial({ ...gb.json.materials[mSkin], name: 'Tobihaze_SkinDome',
     extras: { tobihaze: { ...gb.json.materials[mSkin].extras.tobihaze, overlay: true } } });
   headPrims.push(gb.primitive({ position: D.position, normal: D.normal, tangent: D.tangent, uv: D.uv, indices: D.indices, material: mSkinDome,
-    extraAttributes: skinAttrs(w), targets: [zeros(n), D.blinkL, D.blinkR] }));
+    extraAttributes: skinAttrs(w), targets: [zeros(n), { position: D.blinkL, normal: D.blinkLn }, { position: D.blinkR, normal: D.blinkRn }] }));
   log(`    ${n} v`);
 }
 if (tier.mouth) {
@@ -232,11 +232,19 @@ const eyeTex = paintEye(tier.iris);
 const tIris = gb.addTexture(image(gb, 'eye_basecolor', eyeTex.size, eyeTex.size, 3, eyeTex.rgb, 'jpeg', 95), sClamp, 'eye_basecolor');
 const tEyeMR = gb.addTexture(image(gb, 'eye_metal_rough', eyeTex.size, eyeTex.size, 3, eyeTex.mr, 'png'), sClamp, 'eye_metal_rough');
 const tEyeIr = gb.addTexture(image(gb, 'eye_iridescence', eyeTex.size, eyeTex.size, 3, eyeTex.irid, 'png'), sClamp, 'eye_iridescence');
+// the cornea's clear coat (glTF reads it from R): the irid texture's B channel, copied into its own small image
+const ccSize = Math.min(256, eyeTex.size), cc = new Uint8Array(ccSize * ccSize * 3);
+for (let y = 0; y < ccSize; y++) for (let x = 0; x < ccSize; x++) {
+  const sx = Math.floor((x * eyeTex.size) / ccSize), sy = Math.floor((y * eyeTex.size) / ccSize);
+  const v = eyeTex.irid[(sy * eyeTex.size + sx) * 3 + 2];
+  cc.set([v, v, v], (y * ccSize + x) * 3);
+}
+const tEyeCC = gb.addTexture(image(gb, 'eye_clearcoat', ccSize, ccSize, 3, cc, 'png'), sClamp, 'eye_clearcoat');
 const mEye = gb.addMaterial({
   name: 'Tobihaze_Eye',
   pbrMetallicRoughness: { baseColorTexture: { index: tIris }, metallicRoughnessTexture: { index: tEyeMR }, metallicFactor: 1, roughnessFactor: 1 },
   extensions: {
-    KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: 0.02 },
+    KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatTexture: { index: tEyeCC }, clearcoatRoughnessFactor: 0.02 },
     KHR_materials_ior: { ior: 1.376 },
     // the iridescent cornea (as in many gobies): a stack of thin, high-index layers (guanine-like, n ≈ 1.83) that
     // reflects teal-green head-on and blue at grazing angles, over the black pupil and the dark iris

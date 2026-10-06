@@ -171,7 +171,12 @@ export class GLBBuilder {
     }
     const idx = this.addAccessor(indices, 'SCALAR', { target: 34963 });
     const prim = { attributes, indices: idx, material, mode: 4 };
-    if (targets && targets.length) prim.targets = targets.map((d) => ({ POSITION: this.addAccessor(d, 'VEC3', { target: 34962, minMax: true }) }));
+    // a target is a position-delta array, or { position, normal } with normal deltas as well
+    if (targets && targets.length) prim.targets = targets.map((d) => {
+      const t = { POSITION: this.addAccessor(d.position ?? d, 'VEC3', { target: 34962, minMax: true }) };
+      if (d.normal) t.NORMAL = this.addAccessor(d.normal, 'VEC3', { target: 34962 });
+      return t;
+    });
     return prim;
   }
 

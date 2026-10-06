@@ -575,12 +575,14 @@ export class Motor {
       // the pelvic disc lifts off the mud as the body vaults over the pectorals
       this.pelvic.to(0.0, 12, dt);
       this.pelvicFold.to(0.3, 12, dt);
-      // the tail: a lateral push against the mud at the end of the stroke (recoil), then it follows as a skid
+      // the tail: a lateral push against the mud at the end of the stroke (recoil), then it follows as a skid. The
+      // trunk stays stiff over the pectorals and the belly; the bend is in the rear third of the body, from above the
+      // anal fin to the caudal peduncle
       const k = smooth(0.45, 1, u) * (1 - smooth(0.92, 1.0, u) * 0.5);
-      const amp = (0.06 + 0.3 * st.tail) * st.side;
+      const amp = (0.08 + 0.4 * st.tail) * st.side;
       CHAIN.forEach((n, i) => {
         const x = i / (CHAIN.length - 1);
-        this.bendT[n] = amp * k * Math.sin(Math.PI * (x * 1.2 - (u - 0.45) * 1.6)) * smooth(0.25, 0.7, x);
+        this.bendT[n] = amp * k * Math.sin(Math.PI * (x * 1.7 - 0.55 - (u - 0.45) * 1.4)) * smooth(0.48, 0.78, x);
       });
       this.bendT.J_head = -0.08 * st.side * k * st.tail;
       // shallow water: the body wave helps (swim-crutching)
@@ -933,13 +935,15 @@ export class Motor {
   }
 
   private doRoll(dt: number, w: MotorWorld): void {
-    const dur = 1.1;
+    // a quick flip onto the side and back (~0.45 s), driven by a sharp C-bend of the body that throws the animal over
+    const dur = 0.45;
     const u = clamp(this.gaitT / dur, 0, 1);
-    this.rollT = this.rollSide * 2.3 * Math.pow(Math.sin(Math.PI * u), 1.3);
+    this.rollT = this.rollSide * 2.4 * Math.pow(Math.sin(Math.PI * u), 0.8);
     this.liftT = 0.01 * this.L;
-    this.finMode = 'paddle';
+    this.finMode = 'fold';
     this.headPitchT = 0.02;
-    for (let i = 0; i < CHAIN.length; i++) this.bendT[CHAIN[i]] = 0.12 * Math.sin(this.t * 9 - i * 0.7) * smooth(0.3, 0.8, i / CHAIN.length);
+    const c = Math.sin(Math.PI * u);
+    for (let i = 0; i < CHAIN.length; i++) this.bendT[CHAIN[i]] = this.rollSide * 0.3 * c * smooth(0.3, 0.8, i / CHAIN.length);
     if (this.gaitT < dt * 1.5 && w.fx) { w.fx.ripple(this.pos.x, this.pos.z, 0.8); if (this.depth > 0) w.fx.splash('water', this.pos.x, this.waterY, this.pos.z, 0.4, 8, 0, 0, 0.001 * this.scale); }
     if (this.depth > -0.004) { this.moisture = Math.min(1, this.moisture + dt * 1.2); this.mud = Math.max(0, this.mud - dt * 0.8); }
     else this.moisture = Math.min(1, this.moisture + dt * 0.35 * w.wetGround);
@@ -1055,7 +1059,7 @@ export class Motor {
     // springs toward the gait's targets
     const lift = this.lift.to(this.liftT, this.gait === 'hop' && this.hop.stage === 'land' ? 22 : 14, dt);
     const shapedPitch = this.pitchS.to(this.pitchT, 10, dt);
-    const roll = this.rollS.to(this.rollT, 9, dt);
+    const roll = this.rollS.to(this.rollT, this.gait === 'roll' ? 32 : 9, dt);
     const headPitch = this.headPitch.to(this.headPitchT, 12, dt);
     const headYaw = this.headYaw.to(this.headYawT, 8, dt);
     for (const [n] of SPINE) p.bend[n] = this.bend[n].to(this.bendT[n] ?? 0, this.gait === 'swim' || this.gait === 'hop' ? 60 : 22, dt);

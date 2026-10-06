@@ -593,9 +593,15 @@ function domeShut(fr, a, ps, open) {
   const tOpen = Math.hypot(...sub(pL, frL.c));
   // the shut cup lies inside the open one: a point moves in along its ray to the shut surface (never out)
   const q = rayExit(frL.c, dir, { dome: true, cupL: false });
-  const w = (1 - smoothstep(open.M.aThc - 0.2, open.M.aThc + 0.6, a)) * (q.t < tOpen ? 1 : 0);
+  // (under the window - the hidden shell beneath the bare globe - every point goes to the shut cup, out as well as in)
+  const win = smoothstep(-0.12, 0.04, windowAngle(dir, FEAT.eyes[0].D));
+  const w = (1 - smoothstep(open.M.aThc - 0.2, open.M.aThc + 0.6, a)) * Math.max(win, smoothstep(0.0, 0.25, tOpen - q.t));
   const d = scl(sub(q.p, pL), w);
-  return side > 0 ? d : [d[0], d[1], -d[2]];
+  // the normal deltas: toward the shut cup's normal, by the same weight
+  const nL = side > 0 ? open.n : [open.n[0], open.n[1], -open.n[2]];
+  const nS = norm3(add(scl(nL, 1 - w), scl(q.n, w)));
+  const dn = sub(nS, nL);
+  return side > 0 ? { d, dn } : { d: [d[0], d[1], -d[2]], dn: [dn[0], dn[1], -dn[2]] };
 }
 
 /** the longest meridian's arc length: the dome's rows run from 0 to this (a shorter meridian stays at its end) */
@@ -613,7 +619,7 @@ export function domeArcMax() {
 export function buildDomes(NT = 40, NP = 96) {
   const cols = NP + 1;
   const sides = [1, -1];
-  const position = [], normal = [], tangent = [], uv = [], fish = [], blinkL = [], blinkR = [];
+  const position = [], normal = [], tangent = [], uv = [], fish = [], blinkL = [], blinkR = [], blinkLn = [], blinkRn = [];
   const tris = [];
   sides.forEach((side, si) => {
     const fr = domeFrame(side);
@@ -637,7 +643,11 @@ export function buildDomes(NT = 40, NP = 96) {
         if (tl < 1e-9) { tg = norm3(cross(nn, Math.abs(nn[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])); tl = 1; }
         tangent.push(tg[0] / tl, tg[1] / tl, tg[2] / tl, 1);
         uv.push(domeU(i / NT), j / NP);
-        const dd = scl(dirToObject(domeShut(fr, a, ps, D)), 1 / 1000); // mm → m
+        const sh = domeShut(fr, a, ps, D);
+        const dd = scl(dirToObject(sh.d), 1 / 1000); // mm → m
+        const dnn = dirToObject(sh.dn);
+        (side > 0 ? blinkLn : blinkRn).push(...dnn);
+        (side > 0 ? blinkRn : blinkLn).push(0, 0, 0);
         (side > 0 ? blinkL : blinkR).push(...dd);
         (side > 0 ? blinkR : blinkL).push(0, 0, 0);
       }
@@ -656,6 +666,7 @@ export function buildDomes(NT = 40, NP = 96) {
   return {
     position: new Float32Array(position), normal: new Float32Array(normal), tangent: new Float32Array(tangent), uv: new Float32Array(uv),
     indices: new Uint32Array(tris), fish, blinkL: new Float32Array(blinkL), blinkR: new Float32Array(blinkR),
+    blinkLn: new Float32Array(blinkLn), blinkRn: new Float32Array(blinkRn),
   };
 }
 
@@ -746,7 +757,7 @@ const COL = {
   dorsal: C(86, 82, 72),
   flank: C(122, 117, 103),
   belly: C(206, 202, 194),
-  throat: C(192, 186, 176),
+  throat: C(140, 134, 122),
   dark: C(44, 41, 37),
   speck: C(50, 46, 42),
   pale: C(218, 222, 218),
@@ -778,7 +789,8 @@ function skinPoint(s, phi, p, n, ao) {
   const dorsal = smoothstep(0.1, 0.75, nh);
   // base colour: dark olive-brown back, lighter flanks, pale belly; the throat and chin a little darker than the belly
   let col = lerp3(COL.flank, COL.dorsal, dorsal);
-  col = lerp3(col, lerp3(COL.throat, COL.belly, smoothstep(10, 18, s)), ventral);
+  // (the chin and throat are grey-brown like the face, paling only toward the belly behind the head)
+  col = lerp3(col, lerp3(COL.throat, COL.belly, smoothstep(11, 19, s)), ventral * mix(0.6, 1, smoothstep(6, 14, s)));
   // broad mottling
   const mott = fbm3(p[0] * 0.18, p[1] * 0.18, p[2] * 0.18, 4, 11);
   col = col.map((c) => c * (1 + 0.16 * mott));
@@ -837,9 +849,9 @@ function skinPoint(s, phi, p, n, ao) {
     const along = smoothstep(RICTUS_S + 1.0, RICTUS_S - 0.2, s);
     const up = dy > 0 ? smoothstep(1.3, 0.5, dy) * along : 0;
     const lo = dy <= 0 ? smoothstep(0.7, 0.2, -dy) * along : 0;
-    col = lerp3(col, COL.lip, up * 0.55 * smoothstep(0.2, 1.4, s));
+    col = lerp3(col, COL.lip, up * 0.25 * smoothstep(0.2, 1.4, s));
     col = lerp3(col, COL.belly, lo * 0.3);
-    col = lerp3(col, COL.dark, smoothstep(0.2, 0.03, Math.abs(dy)) * along * 0.6);
+    col = lerp3(col, COL.dark, smoothstep(0.14, 0.02, Math.abs(dy)) * along * 0.35);
   }
   // upper-lip pads: pale, studded with dark sensory pores
   {
@@ -853,7 +865,7 @@ function skinPoint(s, phi, p, n, ao) {
   }
   // eye sockets: the cup's skin is paler and smoother toward the window; its margin (and the hidden skin inside the
   // window, which the rim's faces stretch over) a plain darker grey, without speckles
-  // round each eye's cup (wa: angle from the lid margin, > 0 on the bare globe): the margin is a plain dark band; the
+  // round each eye's cup (wa: angle from the lid margin, > 0 on the bare globe): the margin is a pale rim; the
   // skin under the globe (the shut lid in a blink) is the cup's thin, pinkish skin; the cup under the eye is thin,
   // unpigmented skin, pinkish grey (the blood under it shows), fading into the head's pattern down the neck
   let lid = 0;
@@ -870,7 +882,8 @@ function skinPoint(s, phi, p, n, ao) {
     lid = Math.max(lid, smoothstep(-0.12, 0.0, wa) * smoothstep(0.14, 0.05, wa) * near);
     col = lerp3(col, lerp3(col, C(150, 124, 116), 0.6), smoothstep(0.05, 0.15, wa) * near * 0.6);
   }
-  col = lerp3(col, C(62, 58, 50), lid * 0.85);
+  // the lid margin: a pale, fleshy rim just under the window (photographs)
+  col = lerp3(col, C(164, 150, 138), lid * 0.6);
   // sand grains stuck in the mucus: tiny white specks, densest on the head, the turrets and the back
   // (photographed animals glitter with them: fine quartz grains, white, some grey; densest on the crown, the cheeks,
   // the eye domes and the back, sparse on the belly)

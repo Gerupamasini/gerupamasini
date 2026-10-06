@@ -2,7 +2,7 @@
 // The clips (Idle, Crawl, Hop, Swim, Blink, Feed) are sampled from the same pose model the runtime driver uses
 // (src/creatures/species/tobihaze/pose.js); in the game the animal is animated procedurally, the clips serve the
 // 図鑑 preview and any viewer without the driver.
-import { section, botY, toObject, EYE, RICTUS_S, gapeY } from './anatomy.mjs';
+import { section, botY, toObject, EYE, RICTUS_S, gapeY, PEC_AXIS } from './anatomy.mjs';
 import { PEC, PELVIC } from './fins.mjs';
 import { clamp, smoothstep } from '../../lib/noise.mjs';
 import { SPINE, computePose, defaultPose, swimMidline, bendFromMidline, TL_MM } from '../../../src/creatures/species/tobihaze/pose.js';
@@ -81,8 +81,22 @@ export function skinWeights(list) {
     // smoothly instead of folding
     const w = jawWeight(s, y);
     if (w > 1e-3) return withRest([[J.J_jaw, w]], s);
+    // the shoulder round the pectoral arm's root moves partly with the arm, so the junction stays hidden
+    const ws = shoulderWeight(v.fish);
+    if (ws > 1e-3) return withRest([[v.fish[2] > 0 ? J.J_pecL : J.J_pecR, ws]], s);
     return spineWeights(s);
   }), list.length);
+}
+
+/** pectoral-shoulder influence of a skin point (both sides) */
+export function shoulderWeight(p) {
+  if (p[0] < 11.5 || p[0] > 25 || Math.abs(p[2]) < 0.8) return 0;
+  const A = PEC_AXIS, z = Math.abs(p[2]);
+  const v = [p[0] - A.base[0], p[1] - A.base[1], z - A.base[2]];
+  const a = v[0] * A.dir[0] + v[1] * A.dir[1] + v[2] * A.dir[2];
+  const r = Math.hypot(v[0] - A.dir[0] * a, v[1] - A.dir[1] * a, v[2] - A.dir[2] * a);
+  const k = smoothstep(5.0, 1.6, r);
+  return 0.7 * k * k * (3 - 2 * k) * smoothstep(-2.2, 0.6, a);
 }
 
 /** jaw influence of a skin point outside the gape strip */
@@ -110,7 +124,7 @@ export function armWeights(atList, side) {
     const wWrist = smoothstep(PEC.joint - 0.7, PEC.joint + 0.5, a);
     // the arm leaves the body's weights inside the flank (its first 1.2 mm are sunk in it): a blend over the visible
     // arm would pinch it when the shoulder swings and twists it
-    const wPec = smoothstep(-1.1, -0.1, a) * (1 - wWrist);
+    const wPec = smoothstep(-2.0, -0.2, a) * (1 - wWrist);
     return withRest([[jp, wPec], [jw, wWrist]], PEC.base[0]);
   }), atList.length);
 }

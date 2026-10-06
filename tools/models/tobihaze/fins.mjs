@@ -46,8 +46,10 @@ export const PEC = (() => {
 /** Arm tube (left side; the right one mirrors z). Returns fish-space vertices with arm parameters for skinning. */
 export function buildArm(NA = 18, NR = 20, side = 1) {
   const { base, dir, len, width, normal } = PEC;
-  const start = sub(base, scl(dir, 1.2)); // sunk into the body so the junction never opens
-  const total = len + 1.2;
+  // sunk deep into the body, its inner end rounded off, so the junction never opens however the arm swings
+  const SINK = 2.4;
+  const start = sub(base, scl(dir, SINK));
+  const total = len + SINK;
   const rows = [];
   const fish = [], nrm = [], uv = [], at = [];
   const tris = [];
@@ -57,9 +59,11 @@ export function buildArm(NA = 18, NR = 20, side = 1) {
     // a thick, fleshy limb (the muscles over the elongated radials): broad where it leaves the flank, a rounded
     // forearm, then (past the wrist joint) flattening into a broad, thin "hand" where the rays insert along its
     // distal edge (the fin web grows out of that edge, not out of a point)
-    const hand = smoothstep((PEC.joint + 1.2 - 0.2) / total, 0.95, f);
-    const rw = mix(mix(2.35, 1.8, smoothstep(0.0, 0.55, f)), 1.7, hand);
-    const rt = mix(mix(1.6, 1.15, smoothstep(0.0, 0.55, f)), 0.95, hand);
+    const hand = smoothstep((PEC.joint + SINK - 0.2) / total, 0.95, f);
+    const fa = (along - SINK + 1.2) / (len + 1.2); // the visible arm's own parameter (0 a little inside the flank)
+    const inner = Math.sqrt(Math.max(0, 1 - ((Math.max(0, 0.9 - along)) / 0.9) ** 2)); // the rounded inner end
+    const rw = mix(mix(2.35, 1.8, smoothstep(0.0, 0.55, fa)), 1.7, hand) * inner;
+    const rt = mix(mix(1.6, 1.15, smoothstep(0.0, 0.55, fa)), 0.95, hand) * inner;
     // the hand ends in a rounded lobe (its edge thins and curves round over the last ~1.2 mm), not a cut-off slab
     const cap = f > 0.84 ? Math.pow(Math.max(0, 1 - ((f - 0.84) / 0.16) ** 2), 0.6) : 1;
     const c = add(start, scl(dir, along));
@@ -74,7 +78,7 @@ export function buildArm(NA = 18, NR = 20, side = 1) {
       row.push(fish.length / 3);
       fish.push(...pp); nrm.push(...nn);
       uv.push(ARM_U[0] + (ARM_U[1] - ARM_U[0]) * (0.02 + 0.96 * f), j / NR);
-      at.push(along - 1.2);
+      at.push(along - SINK);
     }
     rows.push(row);
   }
@@ -107,10 +111,11 @@ export function buildArm(NA = 18, NR = 20, side = 1) {
     const tipN = side > 0 ? dir : [dir[0], dir[1], -dir[2]];
     for (const v of rows[rows.length - 1]) { nrm[v * 3] = tipN[0]; nrm[v * 3 + 1] = tipN[1]; nrm[v * 3 + 2] = tipN[2]; }
   }
-  // make sure the winding faces out
+  // make sure the winding faces out (tested on a triangle half way along: the ends are capped to points)
   {
     const P = (k) => [fish[k * 3], fish[k * 3 + 1], fish[k * 3 + 2]];
-    const a = tris[0], b = tris[1], c = tris[2];
+    const t0 = (Math.floor(NA / 2) * NR + 2) * 6;
+    const a = tris[t0], b = tris[t0 + 1], c = tris[t0 + 2];
     const fn = cross(sub(dirToObject(P(b)), dirToObject(P(a))), sub(dirToObject(P(c)), dirToObject(P(a))));
     const n0 = dirToObject([nrm[a * 3], nrm[a * 3 + 1], nrm[a * 3 + 2]]);
     if (dot(fn, n0) < 0) for (let k = 0; k < tris.length; k += 3) { const t = tris[k + 1]; tris[k + 1] = tris[k + 2]; tris[k + 2] = t; }
