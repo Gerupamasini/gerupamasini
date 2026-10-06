@@ -105,7 +105,9 @@ function applyEnv(name) {
 
 // ---------------------------------------------------------------------------- state
 const state = {
-  pattern: Math.max(0, (Number(new URLSearchParams(location.search).get('pattern')) || 1) - 1),
+  // pattern (1…3) and colour morph (1…3) of the fish, from ?pattern= / ?color=
+  pattern: Math.max(1, Number(new URLSearchParams(location.search).get('pattern')) || 1),
+  color: Math.max(1, Number(new URLSearchParams(location.search).get('color')) || 1),
   lightMode: 'front',
   azOffset: 0,
   elOffset: 0,
@@ -213,16 +215,22 @@ async function onLoaded(gltf) {
   }
   if (!fish.body) throw new Error('Body mesh not found in glTF');
 
-  // pattern variants (KHR_materials_variants): the glTF material of a mesh for each pattern
-  const variantMaterials = async (obj) => {
+  // variants (KHR_materials_variants): pattern × colour morph. Only the glTF material indices are read here;
+  // the materials and their textures are loaded the first time a variant is shown (loadVariant).
+  const variantMaterialIndices = (obj) => {
     const a = parser.associations.get(obj);
     const prim = a && a.meshes !== undefined ? parser.json.meshes[a.meshes].primitives[a.primitives ?? 0] : null;
     const maps = prim?.extensions?.KHR_materials_variants?.mappings;
-    if (!maps) return [obj.material];
     const out = [];
-    for (const m of maps) for (const v of m.variants) out[v] = await parser.getDependency('material', m.material);
+    if (maps) for (const m of maps) for (const v of m.variants) out[v] = m.material;
     return out;
   };
+  const variantDefs = parser.json.extensions?.KHR_materials_variants?.variants || [];
+  fish.variants = variantDefs.map((v, i) => {
+    const x = v.extras?.mahaze;
+    const m = /pattern(\d+)/.exec(v.name || '');
+    return { pattern: x?.pattern ?? (m ? Number(m[1]) : i + 1), color: x?.color ?? 1 };
+  });
 
   // body
   const profileTexture = createProfileTexture(fish.body.material.userData.mahaze.profile);
@@ -246,10 +254,7 @@ async function onLoaded(gltf) {
   const bx = fish.body.material.userData.mahaze;
   fish.profile = bx.profile;
   fish.frame = bx.fishFrame;
-  const bodyOrigs = await variantMaterials(fish.body);
-  fish.patterns = bodyOrigs.map((orig) => ({ bodyOrig: orig }));
-  for (const P of fish.patterns) P.body = await bodyVariant(P.bodyOrig);
-  fish.body.userData.custom = fish.patterns[0].body;
+  const bodyIdx = variantMaterialIndices(fish.body);
 
   // eyes
   const eyeOrig = fish.eyes[0].material;
@@ -262,15 +267,28 @@ async function onLoaded(gltf) {
   fish.interiorMat = interiorMat;
 
   // fins (two passes each, both skinned to the same skeleton)
-  const finOrigs = await variantMaterials(fish.fins[0].mesh);
-  for (const [i, finOrig] of finOrigs.entries()) {
-    const finData = await parser.getDependency('texture', finOrig.userData.mahaze.dataTexture);
+  const finIdx = variantMaterialIndices(fish.fins[0].mesh);
+  const finVariant = async (finOrig) => {
+    const fx = finOrig.userData.mahaze;
+    const finData = await parser.getDependency('texture', fx.dataTexture);
     finData.colorSpace = THREE.NoColorSpace;
-    const P = fish.patterns[i] || (fish.patterns[i] = { body: fish.patterns[0].body, bodyOrig: fish.patterns[0].bodyOrig });
-    P.finOrig = finOrig;
-    P.fin = createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finOrig.normalMap }, shared });
-  }
-  const finMats = fish.patterns[0].fin;
+    return createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finOrig.normalMap }, shared, tint: fx.tint, melK: fx.melK });
+  };
+  // materials of variant i (default materials of the meshes when the model has no variants)
+  fish.loadVariant = (i) => {
+    if (!fish.variantCache) fish.variantCache = [];
+    if (!fish.variantCache[i]) {
+      fish.variantCache[i] = (async () => {
+        const bodyOrig = bodyIdx[i] !== undefined ? await parser.getDependency('material', bodyIdx[i]) : fish.originals.get(fish.body);
+        const finOrig = finIdx[i] !== undefined ? await parser.getDependency('material', finIdx[i]) : fish.originals.get(fish.fins[0].mesh);
+        return { bodyOrig, body: await bodyVariant(bodyOrig), finOrig, fin: await finVariant(finOrig) };
+      })();
+    }
+    return fish.variantCache[i];
+  };
+  const V0 = await fish.loadVariant(variantIndex(state.pattern, state.color));
+  fish.body.userData.custom = V0.body;
+  const finMats = V0.fin;
   for (const f of fish.fins) {
     const scatter = new THREE.SkinnedMesh(f.mesh.geometry, finMats.scatter);
     scatter.bind(f.mesh.skeleton, f.mesh.bindMatrix);
@@ -289,7 +307,7 @@ async function onLoaded(gltf) {
     f.center = f.mesh.geometry.boundingSphere.center.clone();
   }
 
-  setPattern(state.pattern, false);
+  await setVariant(state.pattern, state.color, false);
   scene.add(root);
   root.updateMatrixWorld(true);
   for (const bone of Object.values(fish.bones)) bone.userData.restObj = bone.getWorldPosition(new THREE.Vector3());
@@ -324,12 +342,37 @@ async function onLoaded(gltf) {
   window.__mahazeReady = true;
 }
 
-// switch the pattern variant (body, snout cap and fin textures; the mesh is shared)
-function setPattern(k, apply = true) {
-  if (!fish.patterns) { state.pattern = k; return; }
-  k = Math.max(0, Math.min(fish.patterns.length - 1, k));
-  state.pattern = k;
-  const P = fish.patterns[k];
+// index of the variant with this pattern and colour (or the closest one the model has)
+function variantIndex(pattern, color) {
+  const V = fish.variants || [];
+  if (!V.length) return 0;
+  let best = 0, bestD = Infinity;
+  V.forEach((v, i) => {
+    const d = (v.pattern === pattern ? 0 : 10) + (v.color === color ? 0 : 1) + i * 1e-3;
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
+
+// switch pattern and colour morph (body, snout cap and fin textures; the mesh is shared)
+let variantRequest = 0;
+async function setVariant(pattern, color, apply = true) {
+  state.pattern = pattern;
+  state.color = color;
+  for (const b of document.querySelectorAll('#pattern button')) b.classList.toggle('on', Number(b.dataset.v) === pattern);
+  for (const b of document.querySelectorAll('#color button')) b.classList.toggle('on', Number(b.dataset.v) === color);
+  if (!fish.loadVariant) return;
+  const req = ++variantRequest;
+  const i = variantIndex(pattern, color);
+  let P;
+  try {
+    P = await fish.loadVariant(i);
+  } catch (err) {
+    fish.variantCache[i] = null; // let a later click retry
+    console.error('variant could not be loaded', err);
+    return;
+  }
+  if (req !== variantRequest) return; // a newer choice was made while this one was loading
   fish.body.userData.custom = P.body;
   fish.originals.set(fish.body, P.bodyOrig);
   for (const f of fish.fins) {
@@ -337,7 +380,6 @@ function setPattern(k, apply = true) {
     if (f.scatter) f.scatter.material = P.fin.scatter;
     fish.originals.set(f.mesh, P.finOrig);
   }
-  for (const b of document.querySelectorAll('#pattern button')) b.classList.toggle('on', Number(b.dataset.v) === k + 1);
   if (apply) applyMaterialMode();
 }
 
@@ -583,12 +625,19 @@ bindSeg('shading', (v) => { state.custom = v === 'custom'; if (fish.body) applyM
 bindSeg('debug', (v) => { shared.uDebug.value = Number(v); });
 let envName = 'water';
 bindSeg('env', (v) => { envName = v; applyEnv(v); });
-bindSeg('pattern', (v) => {
-  setPattern(Number(v) - 1);
-  // keep the choice in the URL so it survives switching the growth stage (which reloads the page)
+// pattern / colour: keep the choice in the URL so it survives switching the growth stage (a page reload)
+function setURLParam(name, v) {
   const u = new URL(location.href);
-  if (v !== '1') u.searchParams.set('pattern', v); else u.searchParams.delete('pattern');
+  if (v !== '1') u.searchParams.set(name, v); else u.searchParams.delete(name);
   history.replaceState(null, '', u.href);
+}
+bindSeg('pattern', (v) => {
+  setVariant(Number(v), state.color);
+  setURLParam('pattern', v);
+});
+bindSeg('color', (v) => {
+  setVariant(state.pattern, Number(v));
+  setURLParam('color', v);
 });
 // switching the individual reloads the page with the other model (keeps the other URL parameters)
 for (const b of document.querySelectorAll('#variant button')) b.classList.toggle('on', b.dataset.v === VARIANT);
