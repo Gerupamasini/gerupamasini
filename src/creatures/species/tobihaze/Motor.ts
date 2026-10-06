@@ -454,7 +454,7 @@ export class Motor {
       case 'low': return 0.006 * L;
       case 'alert': return 0.1 * L;
       case 'display': return 0.1 * L;
-      default: return 0.07 * L;
+      default: return 0.085 * L;
     }
   }
 
@@ -615,7 +615,8 @@ export class Motor {
       }
       for (const fn of this.fins) fn.planted = true;
       // planted, the web is pressed open on the mud (a little gathered on soft mud)
-      this.finFold[0].to(w.sand ? 0.05 : 0.15, 12, dt); this.finFold[1].to(w.sand ? 0.05 : 0.15, 12, dt);
+      const gather = (w.sand ? 0.05 : 0.15) + 0.35 * smooth(0.035 * L, 0.07 * L, this.lift.x);
+      this.finFold[0].to(gather, 12, dt); this.finFold[1].to(gather, 12, dt);
     } else {
       const v = (this.phase - PUSH) / (1 - PUSH);
       if (prevPhase < PUSH || prevPhase > this.phase || !st.swingSet) {
@@ -1253,7 +1254,8 @@ export class Motor {
     }
     const want = fold ? 0.8 : paddle ? 0.15 : null;
     if (want !== null) { this.finFold[0].to(want, 10, dt); this.finFold[1].to(want, 10, dt); }
-    else if (this.gait !== 'crawl') { this.finFold[0].to(0.12, 6, dt); this.finFold[1].to(0.12, 6, dt); }
+    // (propped high on the arms the web is half gathered, a narrower fan hanging from the arm to the mud)
+    else if (this.gait !== 'crawl') { const g = 0.12 + 0.4 * smooth(0.035 * this.L, 0.07 * this.L, this.lift.x); this.finFold[0].to(g, 6, dt); this.finFold[1].to(g, 6, dt); }
     p.morph.foldPecL = this.finFold[0].x;
     p.morph.foldPecR = this.finFold[1].x;
   }
@@ -1304,10 +1306,8 @@ export class Motor {
       const out = this.left(this.heading, new Vector3()).multiplyScalar(f.side);
       // the wrist: where it was put down if the arm reaches it there, else as close to it as the arm allows
       const Wd = f.contact.clone();
-      // propped high, the arm stands on the web like a leg on its foot: the wrist is held above the mud and the web
-      // hangs from it, only its margin on the mud (photographs of standing and walking animals)
       const prop = smooth(0.035 * this.L, 0.07 * this.L, this.lift.x) * (f.planted || f.swing < 0 ? 1 : 0.3);
-      Wd.y += hw + prop * 0.35 * b;
+      Wd.y += hw;
       const D = new Vector3().subVectors(Wd, S);
       const d = D.length();
       const W = new Vector3();
@@ -1355,10 +1355,39 @@ export class Motor {
       // roll the leading edge up (the fin is pressed down along its trailing rays, its leading rays arched up), more on
       // soft mud where the fin is braced on its edge than on firm sand where it lies spread
       const nUp = nh.y >= 0 ? nh : nh.clone().negate();
-      // (the steeper the web hangs, the more it stands on its edge: its broad face turned forward and out)
-      const steep = clamp(-dh.y, 0, 1);
-      const roll = (w.sand ? 0.3 : 0.75) + 0.6 * steep;
+      const roll = w.sand ? 0.3 : 0.75;
       wh.multiplyScalar(Math.cos(roll)).addScaledVector(nUp, Math.sin(roll)).normalize();
+      // propped high (standing, walking), arm and web stand as one strut splayed out from the shoulder: the arm points
+      // at the spot where the web's tip rests on the mud and the web carries straight on from the wrist, its broad face
+      // turned forward (photographs of standing and walking animals: no kink at the wrist)
+      const strut = smooth(0.3, 0.8, prop);
+      if (strut > 0) {
+        // (the web's tip a little under the wrist's line: the strut stands at ~30° from the vertical, as photographed)
+        const reach = a + 0.55 * b;
+        const C = f.contact.clone();
+        C.y = w.ground(C.x, C.z) + 0.0002 * s;
+        const dy = Math.max(0, S.y - C.y);
+        const need = Math.sqrt(Math.max(0, reach * reach - dy * dy));
+        // move the tip out along the shoulder's outward direction until arm and web just reach it
+        const off = new Vector3(C.x - S.x, 0, C.z - S.z);
+        const po = off.dot(out), q = off.lengthSq() - need * need;
+        const t = q < 0 ? -po + Math.sqrt(Math.max(0, po * po - q)) : 0;
+        C.addScaledVector(out, t);
+        C.y = Math.max(w.ground(C.x, C.z) + 0.0002 * s, C.y);
+        const ds = new Vector3().subVectors(C, S).normalize();
+        const Ws = S.clone().addScaledVector(ds, a);
+        // the web's broad face forward: its plane holds the strut and the sideways direction
+        let ns = this.fwd(this.heading, new Vector3());
+        ns.sub(ds.clone().multiplyScalar(ns.dot(ds))).normalize();
+        let ws = new Vector3().crossVectors(ns, ds).normalize();
+        // the leading rays (the web's width axis) toward the head
+        if (ws.dot(this.fwd(this.heading, new Vector3())) < 0 && ws.y < 0) { ws.negate(); ns.negate(); }
+        W.lerp(Ws, strut);
+        dh.lerp(ds, strut).normalize();
+        wh.lerp(ws, strut);
+        wh.sub(dh.clone().multiplyScalar(wh.dot(dh))).normalize();
+        void ns;
+      }
       // the arm's broad side faces out (its width runs fore and aft, the muscular paddle seen from the side); the hand
       // turns from it to the web's frame at the wrist
       const da = new Vector3().subVectors(W, S).normalize();
@@ -1367,6 +1396,13 @@ export class Motor {
       if (wa.lengthSq() < 1e-8) wa = wh.clone().sub(da.clone().multiplyScalar(wh.dot(da)));
       wa.normalize();
       if (wa.dot(wh) < 0) wa.negate();
+      // propped as a strut, the arm's broad face turns forward with the web's (photographed head-on: broad arms)
+      if (strut > 0) {
+        wa.lerp(wh, strut);
+        wa.sub(da.clone().multiplyScalar(wa.dot(da)));
+        if (wa.lengthSq() < 1e-10) wa.copy(wh);
+        wa.normalize();
+      }
       // rest frame (object = J_root local at rest), mirrored for the right fin
       const sx = f.side;
       const D0 = new Vector3(rig.dir[0] * sx, rig.dir[1], rig.dir[2]);
