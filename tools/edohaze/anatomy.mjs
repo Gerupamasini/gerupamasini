@@ -199,19 +199,20 @@ export function surfaceAt(s, y) {
 export const EYE = {
   center: [3.58, 3.81, 1.28],
   axis: norm3([-0.16, 0.37, 0.92]),
-  radius: 0.86,
+  radius: 0.95,
   skin: 0.05,
-  aperture: 68 * (Math.PI / 180),
+  aperture: 80 * (Math.PI / 180),
 };
 // dorsal corneal window (see buildFeatures): axis ~75° above horizontal, slightly forward and outward
 export const EYE_DORSAL_AXIS = norm3([-0.15, 0.96, 0.26]);
-const EYE_DORSAL_APERTURE = 55 * (Math.PI / 180);
+const EYE_DORSAL_APERTURE = 70 * (Math.PI / 180);
 
 // Gape: from the snout tip (h = −0.011 SL) straight down and back at ~25° to the rictus at s 0.081,
 // h −0.042 SL (under the front of the eye; 008 traces s 0.083, h −0.046; 034 s 0.079). The maxilla runs on
 // to ~0.095 SL (below the eye centre/rear) — the large jaw of "macrognathos"; the lower jaw is level with
 // or slightly ahead of the upper.
-export const MOUTH = [[0.0, 2.17], [0.3, 2.06], [0.8, 1.83], [1.4, 1.56], [2.0, 1.29], [2.45, 1.08], [2.7, 0.97], [2.85, 0.9]];
+// steep oblique gape (user ref photo: ~40° down-back from a high snout tip to a low rictus)
+export const MOUTH = [[0.0, 2.45], [0.25, 2.27], [0.65, 1.96], [1.1, 1.62], [1.6, 1.3], [2.1, 1.05], [2.5, 0.9], [2.85, 0.82]];
 export const RICTUS_S = 2.85;
 export const MAXILLA_END = [3.6, 0.95];
 // Free margin of the gill cover (operculum + subopercle), top → bottom: head length 0.269 SL (s 10.05 mm; spec
@@ -354,8 +355,11 @@ function buildFeatures() {
   // second, dorsal corneal window: from above the eyes show as large dark domes whose medial edges are only
   // 0.038 SL apart (dorsal photos 025, 029, 043); the lateral window alone leaves 0.067 SL of skin between them
   const rho2 = Math.sqrt(Rs * Rs + cutOff * cutOff - 2 * Rs * cutOff * Math.cos(EYE_DORSAL_APERTURE));
-  const at = (ax, D) => [E.center[0] + ax[0] * D, E.center[1] + ax[1] * D, E.center[2] + ax[2] * D];
-  const eyeL = { c: E.center, cut: at(E.axis, cutOffL), cut2: at(EYE_DORSAL_AXIS, cutOff) };
+  // the eyeball sits 0.42 mm proud along its axis (eye.mjs EYE_PROTRUDE): mound and windows move with it so
+  // the skin meets the ball without a socket ring
+  const P0 = E.center.map((v, k) => v + E.axis[k] * 0.42);
+  const at = (ax, D) => [P0[0] + ax[0] * D, P0[1] + ax[1] * D, P0[2] + ax[2] * D];
+  const eyeL = { c: P0, cut: at(E.axis, cutOffL), cut2: at(EYE_DORSAL_AXIS, cutOff) };
   const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], cut: [eyeL.cut[0], eyeL.cut[1], -eyeL.cut[2]], cut2: [eyeL.cut2[0], eyeL.cut2[1], -eyeL.cut2[2]] };
 
   return {

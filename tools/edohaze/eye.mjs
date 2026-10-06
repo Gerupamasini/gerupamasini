@@ -70,7 +70,7 @@ export function buildEyeMesh(NT = 64, NP = 96) {
   return { position, normal, uv, indices: new Uint32Array(tris) };
 }
 
-const EYE_PROTRUDE = 0.2; // mm
+const EYE_PROTRUDE = 0.42; // mm
 
 /** Node transform (object space) for the left (+1) or right (-1) eye. */
 export function eyeTransform(side) {
