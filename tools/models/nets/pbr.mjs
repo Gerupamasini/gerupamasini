@@ -54,6 +54,9 @@ export const MATS = {
   rope_green: { tex: 'cord', color: [0.25, 0.3, 0.19], rough: 1, metal: 0, role: 'fabric', porosity: 0.6, sheen: [[0.35, 0.38, 0.3], 0.6] },
   twine_green: { tex: 'cord', color: [0.22, 0.27, 0.16], rough: 1, metal: 0, role: 'fabric', porosity: 0.6 },
   rubber_bead: { tex: 'plastic', color: [0.085, 0.08, 0.075], rough: 0.7, metal: 0, role: 'rubber', porosity: 0, clearcoat: [0.4, 0.3] },
+  // binoculars
+  armor_olive: { tex: 'plastic', color: [0.17, 0.2, 0.14], rough: 0.95, metal: 0, role: 'rubber', porosity: 0.05 },
+  lens: { tex: 'plastic', color: [0.015, 0.02, 0.022], rough: 0.06, metal: 0, role: 'glass', porosity: 0, clearcoat: [1, 0.02], iridescence: 1 },
   // digging tools
   steel_bare: { tex: 'brushed', color: [0.6, 0.6, 0.59], rough: 1, metal: 1, role: 'metal', porosity: 0 },
   brass: { tex: 'brushed', color: [0.84, 0.66, 0.38], rough: 0.75, metal: 1, role: 'metal', porosity: 0 },
@@ -142,6 +145,7 @@ export function createMaterials(gb, { tierName, texScale, dumpDir = null, extras
       def.alphaMode = 'BLEND';
     }
     const ext = {};
+    if (M.iridescence) { ext.KHR_materials_iridescence = { iridescenceFactor: M.iridescence, iridescenceIor: 1.8, iridescenceThicknessMinimum: 250, iridescenceThicknessMaximum: 420 }; gb.useExtension('KHR_materials_iridescence'); }
     if (M.clearcoat) { ext.KHR_materials_clearcoat = { clearcoatFactor: M.clearcoat[0], clearcoatRoughnessFactor: M.clearcoat[1] }; gb.useExtension('KHR_materials_clearcoat'); }
     if (M.sheen && tierName !== 'lod2') { ext.KHR_materials_sheen = { sheenColorFactor: M.sheen[0], sheenRoughnessFactor: M.sheen[1] }; gb.useExtension('KHR_materials_sheen'); }
     if (Object.keys(ext).length) def.extensions = ext;

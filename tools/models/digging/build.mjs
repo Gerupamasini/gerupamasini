@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Builds the four digging tools as GLB files with LODs:
-//   node tools/models/digging/build.mjs [--tool <id>|all] [--tier hero|lod1|lod2|all]
-// Output: src/assets/models/digging/<id>.<tier>.glb and src/assets/models/digging/manifest.json
+// Builds the digging tools (or, with --set optics, the binoculars) as GLB files with LODs:
+//   node tools/models/digging/build.mjs [--set digging|optics] [--tool <id>|all] [--tier hero|lod1|lod2|all]
+// Output: src/assets/models/<set>/<id>.<tier>.glb and src/assets/models/<set>/manifest.json
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,11 +9,15 @@ import { GLBBuilder } from '../../lib/glb.mjs';
 import { createMaterials } from '../nets/pbr.mjs';
 import { v3 } from '../nets/geom.mjs';
 import { DIG_TOOLS } from './tools.mjs';
+import { OPTICS } from '../optics/binoculars.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const outDir = path.join(root, 'src', 'assets', 'models', 'digging');
 const args = process.argv.slice(2);
 const arg = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
+// --set digging (default) | optics: which catalogue and output folder
+const SET = arg('--set', 'digging');
+const CATALOGUE = { digging: DIG_TOOLS, optics: OPTICS }[SET];
+const outDir = path.join(root, 'src', 'assets', 'models', SET);
 const sel = arg('--tool', 'all');
 const tierSel = arg('--tier', 'all');
 
@@ -56,6 +60,9 @@ function buildTool(tool, tierName) {
     Grip_Support: 'second hand / fingertip position',
     Tip: 'the point that enters the ground first',
     Blade_Center: 'middle of the working face (what a scoop carries)',
+    Eye_L: 'left exit pupil (eyecup); put the eye / camera here',
+    Eye_R: 'right exit pupil (eyecup)',
+    Objective_Center: 'between the objective lenses; the binoculars look along +Z',
   };
   const empties = Object.entries(d.nodes).map(([name, p]) => gb.addNode({ name, translation: r4(p), extras: { higataTool: { note: notes[name] } } }));
   const info = {
@@ -65,8 +72,8 @@ function buildTool(tool, tierName) {
     balancePoint_m: +com[2].toFixed(3),
     overallLength_m: +(zMax - zMin).toFixed(3),
     buttZ_m: +zMin.toFixed(3),
-    tip_m: r4(d.nodes.Tip),
-    maxDigDepth_m: tool.spec.maxDepth_cm / 100,
+    ...(d.nodes.Tip ? { tip_m: r4(d.nodes.Tip) } : {}),
+    ...(tool.spec.maxDepth_cm ? { maxDigDepth_m: tool.spec.maxDepth_cm / 100 } : {}),
     attributes: { COLOR_0: 'baked cavity / occlusion', _DIRT: 'mud propensity 0..1 (see netMaterials.ts / prepareNet)' },
   };
   const rootNode = gb.addNode({ name: tool.id, children: [toolNode, ...empties], extras: { higataTool: info } });
@@ -78,7 +85,7 @@ fs.mkdirSync(outDir, { recursive: true });
 const manifestPath = path.join(outDir, 'manifest.json');
 const manifest = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : { tools: {} };
 const tiers = tierSel === 'all' ? Object.keys(TIERS) : [tierSel];
-for (const tool of DIG_TOOLS) {
+for (const tool of CATALOGUE) {
   if (sel !== 'all' && sel !== tool.id) continue;
   for (const tier of tiers) {
     const { glb, info, stats } = buildTool(tool, tier);
