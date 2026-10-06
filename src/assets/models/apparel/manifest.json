@@ -4,21 +4,21 @@
       "tiers": {
         "hero": {
           "file": "wear_waders.hero.glb",
-          "triangles": 30732,
-          "vertices": 17173,
-          "bytes": 3556780
+          "triangles": 34036,
+          "vertices": 19341,
+          "bytes": 3639332
         },
         "lod1": {
           "file": "wear_waders.lod1.glb",
-          "triangles": 11528,
-          "vertices": 6813,
-          "bytes": 1109324
+          "triangles": 13304,
+          "vertices": 8019,
+          "bytes": 1154824
         },
         "lod2": {
           "file": "wear_waders.lod2.glb",
-          "triangles": 4148,
-          "vertices": 2735,
-          "bytes": 349748
+          "triangles": 5052,
+          "vertices": 3387,
+          "bytes": 373944
         }
       },
       "ja": "胴長",
@@ -30,10 +30,10 @@
         "chest_cm": 130,
         "mass_g": 2400
       },
-      "mass_g": 2360,
-      "balancePoint_m": 0.026,
-      "overallLength_m": 0.33,
-      "buttZ_m": -0.14
+      "mass_g": 2400,
+      "balancePoint_m": 0.02,
+      "overallLength_m": 0.35,
+      "buttZ_m": -0.157
     }
   },
   "lodDistances_m": {

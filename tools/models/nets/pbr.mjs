@@ -55,10 +55,10 @@ export const MATS = {
   twine_green: { tex: 'cord', color: [0.22, 0.27, 0.16], rough: 1, metal: 0, role: 'fabric', porosity: 0.6 },
   rubber_bead: { tex: 'plastic', color: [0.085, 0.08, 0.075], rough: 0.7, metal: 0, role: 'rubber', porosity: 0, clearcoat: [0.4, 0.3] },
   // chest waders
-  wader_pvc: { tex: 'canvas', color: [0.25, 0.28, 0.19], rough: 0.62, metal: 0, role: 'fabric', porosity: 0.1, clearcoat: [0.25, 0.4] },
-  wader_patch: { tex: 'canvas', color: [0.17, 0.19, 0.13], rough: 0.7, metal: 0, role: 'fabric', porosity: 0.1, clearcoat: [0.2, 0.45] },
+  wader_pvc: { tex: 'canvas', color: [0.19, 0.21, 0.145], rough: 0.8, metal: 0, role: 'fabric', porosity: 0.1 },
+  wader_patch: { tex: 'canvas', color: [0.17, 0.185, 0.13], rough: 0.85, metal: 0, role: 'fabric', porosity: 0.1 },
   wader_lining: { tex: 'canvas', color: [0.1, 0.1, 0.1], rough: 0.9, metal: 0, role: 'fabric', porosity: 0.3 },
-  rubber_boot: { tex: 'plastic', color: [0.07, 0.075, 0.07], rough: 0.6, metal: 0, role: 'rubber', porosity: 0, clearcoat: [0.2, 0.4] },
+  rubber_boot: { tex: 'plastic', color: [0.075, 0.078, 0.072], rough: 1, metal: 0, role: 'rubber', porosity: 0 },
   // binoculars
   armor_olive: { tex: 'plastic', color: [0.17, 0.2, 0.14], rough: 0.95, metal: 0, role: 'rubber', porosity: 0.05 },
   lens: { tex: 'plastic', color: [0.015, 0.02, 0.022], rough: 0.06, metal: 0, role: 'glass', porosity: 0, clearcoat: [1, 0.02], iridescence: 1 },

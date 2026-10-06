@@ -48,7 +48,7 @@ function makeStudio() {
   });
   const bg = new THREE.Mesh(new THREE.SphereGeometry(60, 32, 16), bgMat);
   s.add(bg);
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(30, 64), new THREE.MeshStandardMaterial({ color: 0x9aa1a4, roughness: 0.92 }));
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(58, 64), new THREE.MeshStandardMaterial({ color: 0x9aa1a4, roughness: 0.92 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   s.add(floor);
