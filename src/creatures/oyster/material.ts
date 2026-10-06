@@ -198,14 +198,14 @@ if (oyShell && !oyInside) {
   oyCol = mix(ground, pigC * (0.55 + 0.7 * oyM.r), clamp(oyM.g * pigAmt, 0.0, 1.0));
   oyCol = mix(oyCol, pigC * 0.6, oyM.b * 0.4 * (0.4 + pigAmt));
   // worn through the outer layer: chalky white with the purple of the layers beneath
-  vec3 chalk = mix(oyLin(vec3(0.8, 0.78, 0.74)), oyLin(vec3(0.6, 0.53, 0.6)), smoothstep(0.3, 0.8, oyN2(oyUv * 900.0)) * 0.7) * (0.8 + 0.25 * oyM.r);
-  oyCol = mix(oyCol, chalk, oyEro);
+  vec3 chalk = mix(oyLin(vec3(0.72, 0.7, 0.66)), oyLin(vec3(0.56, 0.5, 0.56)), smoothstep(0.3, 0.8, oyN2(oyUv * 900.0)) * 0.7) * (0.78 + 0.25 * oyM.r);
+  oyCol = mix(oyCol, chalk, oyEro * 0.85);
   // dirt and biofilm settle in every hollow of the sculpture
   oyCol *= mix(0.55, 1.0, smoothstep(0.35, 0.95, oyAO));
   // the dead bleach and go grey
   oyCol = mix(oyCol, oyLin(vec3(0.7, 0.69, 0.66)) * (0.7 + 0.4 * oyM.r), oyDead * 0.55);
   // a break: fresh calcite, white-grey in fine layers
-  if (vOyInfo.z > 0.5) oyCol = oyLin(vec3(0.84, 0.82, 0.78)) * (0.85 + 0.15 * sin(vOyWorld.y * 9000.0 + vOyWorld.x * 3000.0)) * mix(1.0, 0.7, oyDead);
+  if (vOyInfo.z > 0.5) oyCol = oyLin(vec3(0.76, 0.74, 0.7)) * (0.85 + 0.15 * sin(vOyWorld.y * 9000.0 + vOyWorld.x * 3000.0)) * mix(1.0, 0.7, oyDead);
   oyRough = texture2D(roughnessMap, oyUv).g;
   oyRough = mix(oyRough, 0.9, oyEro);
   oyPorous = 0.7 + 0.3 * oyEro;

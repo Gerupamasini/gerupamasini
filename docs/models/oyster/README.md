@@ -121,6 +121,7 @@ seed はそれぞれ独立に効きます（たとえば `colorSeed` だけ変�
 | ![上から](hero_top.jpg) 接写（濡れ・摂食中） | ![横から](hero_side.jpg) 横から: 重なった成長脈 |
 | ![開殻](hero_gape.jpg) 摂食中の開殻（約 4 mm）、奥に外套膜 | ![閉殻](hero_closed.jpg) 閉殻: ジグザグの殻縁が噛み合う |
 | ![乾き](hero_dry.jpg) 干出して乾いた殻 | ![死殻](dead_gaping.jpg) 開いた死殻: 内面と閉殻筋痕 |
-| ![LOD0](lod0.jpg) LOD0 | ![LOD1](lod1.jpg) LOD1 |
-| ![LOD2](lod2.jpg) LOD2 | ![群生](cluster_close.jpg) 群生（石の上の 18 個体） |
-| ![牡蠣礁](reef_mid.jpg) 牡蠣礁（ビューア） | ![ゲーム](game_low_tide.jpg) ゲーム内: 干潮の石積み |
+| ![LOD0](lod0.jpg) 接写（単体は hero 詳細、約 75k 三角形） | ![LOD1](lod1.jpg) LOD1（約 1.7k） |
+| ![LOD2](lod2.jpg) LOD2（約 300） | ![群生](cluster_close.jpg) 群生（石の上の 18 個体、開いた死殻を含む） |
+| ![牡蠣礁](reef_mid.jpg) 牡蠣礁（ビューア、1,101 個体） | ![牡蠣礁 遠景](reef_wide.jpg) 牡蠣礁の石積み |
+| ![ゲーム 干潮](game_low_tide.jpg) ゲーム内: 干潮（T.P. −0.9 m）の石積み | ![ゲーム 満ち潮](game_high_tide.jpg) ゲーム内: 上げ潮で水没（開殻へ） |
