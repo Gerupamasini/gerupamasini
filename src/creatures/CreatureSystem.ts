@@ -208,7 +208,8 @@ export class CreatureSystem {
       const locked = e.ind.id === f.lockedId;
       const tier = this.tierFor(e.ind.species, dist, lod1Rank, locked);
       if (tier === 'lod1') lod1Rank++;
-      e.ind.lod = locked ? 0 : tier === 'lod1' ? 1 : tier === null ? 3 : 2;
+      const nearPh = tier === 'placeholder' && dist <= (DRIVERS[e.ind.species.model.driver ?? '']?.nearLod_m ?? -1);
+      e.ind.lod = locked ? 0 : tier === 'lod1' || nearPh ? 1 : tier === null ? 3 : 2;
       if (tier === null) { if (e.view) this.dropView(e); continue; }
       if (e.view?.tier === tier || e.pendingTier === tier) continue;
       void this.setTier(e, tier);

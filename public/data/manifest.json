@@ -5,13 +5,15 @@
     "gymnogobius_macrognathos",
     "exopalaemon_orientis",
     "charadrius_alexandrinus",
-    "ruditapes_philippinarum"
+    "ruditapes_philippinarum",
+    "mugil_cephalus"
   ],
   "behaviors": [
     "fish_benthic",
     "shrimp_shallow",
     "shorebird_waterline",
-    "bivalve_buried"
+    "bivalve_buried",
+    "fish_school"
   ],
   "maps": [
     "kasai_west"

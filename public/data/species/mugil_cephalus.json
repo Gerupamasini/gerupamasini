@@ -1,0 +1,95 @@
+{
+  "id": "mugil_cephalus",
+  "names": { "ja": "ボラ", "sci": "Mugil cephalus", "en": "Flathead grey mullet" },
+  "taxon": { "group": "fish", "family": "Mugilidae" },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "haku",
+    "modelLength_mm": 30,
+    "viewDistance_m": 14,
+    "driver": "haku",
+    "clips": { "idle": "Idle", "move": "Swim", "special": [] }
+  },
+  "size": {
+    "length_mm": { "min": 18, "max": 48, "mean": 27, "sd": 5 },
+    "weightCoef": { "a": 0.0000112, "b": 3.0 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": false },
+  "stages": [
+    { "id": "haku", "ja": "ハク（稚魚）", "maxLength_mm": 35 },
+    { "id": "oboko", "ja": "オボコ（幼魚）" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    {
+      "tags": ["shallow", "channel", "waterline", "pool"],
+      "substrate": ["sand", "muddy_sand", "mud", "channel"],
+      "depth_m": [0.04, 0.8],
+      "season": ["spring"],
+      "tide": "any",
+      "density_per_100m2": 12,
+      "group": [18, 36],
+      "maxPopulation": 110,
+      "length_mm": [20, 32]
+    },
+    {
+      "tags": ["shallow", "channel", "pool"],
+      "substrate": ["sand", "muddy_sand", "mud", "channel"],
+      "depth_m": [0.05, 0.8],
+      "season": ["winter"],
+      "tide": "any",
+      "density_per_100m2": 4,
+      "group": [10, 22],
+      "maxPopulation": 60,
+      "length_mm": [18, 26]
+    },
+    {
+      "tags": ["small_pool"],
+      "depth_m": [0.03, 0.5],
+      "season": ["winter", "spring"],
+      "tide": "any",
+      "density_per_100m2": 6,
+      "group": [5, 12],
+      "maxPopulation": 110,
+      "length_mm": [20, 30]
+    },
+    {
+      "tags": ["shallow", "channel"],
+      "substrate": ["sand", "muddy_sand", "mud", "channel"],
+      "depth_m": [0.06, 0.9],
+      "season": ["summer"],
+      "tide": "any",
+      "density_per_100m2": 3,
+      "group": [8, 16],
+      "maxPopulation": 40,
+      "length_mm": [32, 48]
+    }
+  ],
+  "brain": {
+    "tree": "fish_school",
+    "params": { "fleeDistance_m": 1.9, "restMean_s": 12, "cruiseDistance_m": [0.8, 2.2] }
+  },
+  "capture": {
+    "tools": ["net_small", "net_shallow", "net_fine", "net_deep", "net_dframe", "net_carbon"],
+    "baseDifficulty": 0.62,
+    "alertPenalty": 0.5
+  },
+  "encyclopedia": {
+    "description": "河口や内湾の浅場で群れをつくるボラの稚魚は「ハク」と呼ばれる。冬に沖で生まれ、全長 2〜3 cm になった冬の終わりから春に、銀色の小さな群れになって河口や干潟の浅場に入ってくる。体は細長くほぼ円筒形で、頭は幅広く上が平たい。眼は大きく、背は細かな黒点の散るオリーブ灰色、体側は鏡のような銀色で腹は白い。背びれは 2 基が離れてつき、胸びれは体側の高い位置にある。水面のすぐ下を群れで泳ぎ、浮遊物や底の珪藻をついばむ。驚くと群れ全体が一瞬で向きを変えて逃げる。夏には 5 cm を超えてオボコと呼ばれる。",
+    "habitatHint": "冬の終わりから春、河口や干潟の浅い水面近く。潮だまりに取り残された群れもいる。",
+    "behaviors": [
+      { "id": "school_swim", "ja": "群泳", "hint": "群れがそろって泳ぐ" },
+      { "id": "surface_swim", "ja": "水面直下の遊泳", "hint": "群れが水面すれすれを泳ぐ" },
+      { "id": "forage", "ja": "摂餌", "hint": "底や水面のものをついばむ" },
+      { "id": "idle", "ja": "定位", "hint": "流れに向かって中層にとどまる" },
+      { "id": "escape", "ja": "一斉逃避", "hint": "近づくと群れが一瞬で向きを変えて逃げる" }
+    ],
+    "placeholderModel": false
+  }
+}
