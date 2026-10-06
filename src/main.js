@@ -105,6 +105,7 @@ function applyEnv(name) {
 
 // ---------------------------------------------------------------------------- state
 const state = {
+  pattern: Math.max(0, (Number(new URLSearchParams(location.search).get('pattern')) || 1) - 1),
   lightMode: 'front',
   azOffset: 0,
   elOffset: 0,
@@ -212,26 +213,43 @@ async function onLoaded(gltf) {
   }
   if (!fish.body) throw new Error('Body mesh not found in glTF');
 
+  // pattern variants (KHR_materials_variants): the glTF material of a mesh for each pattern
+  const variantMaterials = async (obj) => {
+    const a = parser.associations.get(obj);
+    const prim = a && a.meshes !== undefined ? parser.json.meshes[a.meshes].primitives[a.primitives ?? 0] : null;
+    const maps = prim?.extensions?.KHR_materials_variants?.mappings;
+    if (!maps) return [obj.material];
+    const out = [];
+    for (const m of maps) for (const v of m.variants) out[v] = await parser.getDependency('material', m.material);
+    return out;
+  };
+
   // body
+  const profileTexture = createProfileTexture(fish.body.material.userData.mahaze.profile);
+  const bodyVariant = async (orig) => {
+    const bx = orig.userData.mahaze;
+    const pigment = await parser.getDependency('texture', bx.pigmentTexture);
+    pigment.colorSpace = THREE.NoColorSpace;
+    const capAlbedo = await parser.getDependency('texture', bx.snoutCap.albedoRoughness);
+    const capPigment = await parser.getDependency('texture', bx.snoutCap.pigment);
+    capAlbedo.colorSpace = THREE.SRGBColorSpace; // rgb decoded to linear on sampling; alpha (roughness) stays linear
+    capPigment.colorSpace = THREE.NoColorSpace;
+    return createBodyMaterial({
+      textures: { albedo: orig.map, normal: orig.normalMap, orm: orig.roughnessMap || orig.aoMap, pigment, capAlbedo, capPigment },
+      capRect: bx.snoutCap.rectMM,
+      profileTexture,
+      frame: bx.fishFrame,
+      vertebrae: bx.vertebrae,
+      shared,
+    });
+  };
   const bx = fish.body.material.userData.mahaze;
-  const pigment = await parser.getDependency('texture', bx.pigmentTexture);
-  pigment.colorSpace = THREE.NoColorSpace;
-  const capAlbedo = await parser.getDependency('texture', bx.snoutCap.albedoRoughness);
-  const capPigment = await parser.getDependency('texture', bx.snoutCap.pigment);
-  capAlbedo.colorSpace = THREE.SRGBColorSpace; // rgb decoded to linear on sampling; alpha (roughness) stays linear
-  capPigment.colorSpace = THREE.NoColorSpace;
   fish.profile = bx.profile;
   fish.frame = bx.fishFrame;
-  const orig = fish.body.material;
-  const bodyMat = createBodyMaterial({
-    textures: { albedo: orig.map, normal: orig.normalMap, orm: orig.roughnessMap || orig.aoMap, pigment, capAlbedo, capPigment },
-    capRect: bx.snoutCap.rectMM,
-    profileTexture: createProfileTexture(bx.profile),
-    frame: bx.fishFrame,
-    vertebrae: bx.vertebrae,
-    shared,
-  });
-  fish.body.userData.custom = bodyMat;
+  const bodyOrigs = await variantMaterials(fish.body);
+  fish.patterns = bodyOrigs.map((orig) => ({ bodyOrig: orig }));
+  for (const P of fish.patterns) P.body = await bodyVariant(P.bodyOrig);
+  fish.body.userData.custom = fish.patterns[0].body;
 
   // eyes
   const eyeOrig = fish.eyes[0].material;
@@ -244,10 +262,15 @@ async function onLoaded(gltf) {
   fish.interiorMat = interiorMat;
 
   // fins (two passes each, both skinned to the same skeleton)
-  const finOrig = fish.fins[0].mesh.material;
-  const finData = await parser.getDependency('texture', finOrig.userData.mahaze.dataTexture);
-  finData.colorSpace = THREE.NoColorSpace;
-  const finMats = createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finOrig.normalMap }, shared });
+  const finOrigs = await variantMaterials(fish.fins[0].mesh);
+  for (const [i, finOrig] of finOrigs.entries()) {
+    const finData = await parser.getDependency('texture', finOrig.userData.mahaze.dataTexture);
+    finData.colorSpace = THREE.NoColorSpace;
+    const P = fish.patterns[i] || (fish.patterns[i] = { body: fish.patterns[0].body, bodyOrig: fish.patterns[0].bodyOrig });
+    P.finOrig = finOrig;
+    P.fin = createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finOrig.normalMap }, shared });
+  }
+  const finMats = fish.patterns[0].fin;
   for (const f of fish.fins) {
     const scatter = new THREE.SkinnedMesh(f.mesh.geometry, finMats.scatter);
     scatter.bind(f.mesh.skeleton, f.mesh.bindMatrix);
@@ -266,6 +289,7 @@ async function onLoaded(gltf) {
     f.center = f.mesh.geometry.boundingSphere.center.clone();
   }
 
+  setPattern(state.pattern, false);
   scene.add(root);
   root.updateMatrixWorld(true);
   for (const bone of Object.values(fish.bones)) bone.userData.restObj = bone.getWorldPosition(new THREE.Vector3());
@@ -298,6 +322,23 @@ async function onLoaded(gltf) {
   // debugging / automated capture: advance the behaviour without waiting for real time
   window.__mahaze = { fish, camera, controls, THREE, step: (sec) => { for (let t = 0; t < sec; t += 1 / 60) fish.behavior.update(1 / 60); } };
   window.__mahazeReady = true;
+}
+
+// switch the pattern variant (body, snout cap and fin textures; the mesh is shared)
+function setPattern(k, apply = true) {
+  if (!fish.patterns) { state.pattern = k; return; }
+  k = Math.max(0, Math.min(fish.patterns.length - 1, k));
+  state.pattern = k;
+  const P = fish.patterns[k];
+  fish.body.userData.custom = P.body;
+  fish.originals.set(fish.body, P.bodyOrig);
+  for (const f of fish.fins) {
+    f.mesh.userData.custom = P.fin.transmit;
+    if (f.scatter) f.scatter.material = P.fin.scatter;
+    fish.originals.set(f.mesh, P.finOrig);
+  }
+  for (const b of document.querySelectorAll('#pattern button')) b.classList.toggle('on', Number(b.dataset.v) === k + 1);
+  if (apply) applyMaterialMode();
 }
 
 function applyMaterialMode() {
@@ -542,6 +583,13 @@ bindSeg('shading', (v) => { state.custom = v === 'custom'; if (fish.body) applyM
 bindSeg('debug', (v) => { shared.uDebug.value = Number(v); });
 let envName = 'water';
 bindSeg('env', (v) => { envName = v; applyEnv(v); });
+bindSeg('pattern', (v) => {
+  setPattern(Number(v) - 1);
+  // keep the choice in the URL so it survives switching the growth stage (which reloads the page)
+  const u = new URL(location.href);
+  if (v !== '1') u.searchParams.set('pattern', v); else u.searchParams.delete('pattern');
+  history.replaceState(null, '', u.href);
+});
 // switching the individual reloads the page with the other model (keeps the other URL parameters)
 for (const b of document.querySelectorAll('#variant button')) b.classList.toggle('on', b.dataset.v === VARIANT);
 if (window.MAHAZE_MODEL_URL && !window.MAHAZE_MODELS) document.getElementById('variant').closest('.group').hidden = true;

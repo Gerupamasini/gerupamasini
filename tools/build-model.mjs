@@ -68,43 +68,54 @@ const sClamp = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAM
 
 // ---------------------------------------------------------------- body
 log('body');
-const body = buildBody({ NS: fast ? 230 : 460, NV: fast ? 112 : 224, NSb: fast ? 200 : 400, NVb: fast ? 96 : 192, texW: fast ? 1024 : 2048, texH: fast ? 512 : 1024, log });
+// three pattern variants per growth stage (glTF KHR_materials_variants): same mesh, own pattern textures
+const PATTERN_IDS = [1, 2, 3];
+const body = buildBody({ NS: fast ? 230 : 460, NV: fast ? 112 : 224, NSb: fast ? 200 : 400, NVb: fast ? 96 : 192, texW: fast ? 1024 : 2048, texH: fast ? 512 : 1024, patterns: PATTERN_IDS, log });
 const BT = body.textures;
-const tAlb = gb.addTexture(image(gb, 'body_basecolor', BT.width, BT.height, 3, BT.albedo, 'jpeg', 93), sBody, 'body_basecolor');
 const tNrm = gb.addTexture(image(gb, 'body_normal', BT.width, BT.height, 3, BT.normal, 'png'), sBody, 'body_normal');
 const orm = downsample2(BT.width, BT.height, 3, BT.orm);
 const tOrm = gb.addTexture(image(gb, 'body_orm', orm.w, orm.h, 3, orm.data, 'png'), sBody, 'body_occlusion_roughness');
 const vol = downsample2(BT.width, BT.height, 3, BT.volume);
 const tVol = gb.addTexture(image(gb, 'body_transmission_thickness', vol.w, vol.h, 3, vol.data, 'png'), sBody, 'body_transmission_thickness');
-const tPig = gb.addTexture(image(gb, 'body_pigment', BT.width, BT.height, 3, BT.pigment, 'jpeg', 95), sBody, 'body_pigment_mel_irid_xan');
-const tCapAlb = gb.addTexture(image(gb, 'snoutcap_basecolor_roughness', BT.cap.size, BT.cap.size, 4, BT.cap.albedo, 'png'), sClamp, 'snoutcap_basecolor_roughness');
-const tCapPig = gb.addTexture(image(gb, 'snoutcap_pigment', BT.cap.size, BT.cap.size, 3, BT.cap.pigment, 'png'), sClamp, 'snoutcap_pigment');
-
 const profile = profileTable(512);
-const mBody = gb.addMaterial({
-  name: 'Mahaze_Body',
-  pbrMetallicRoughness: { baseColorTexture: { index: tAlb }, metallicFactor: 0, roughnessFactor: 1, metallicRoughnessTexture: { index: tOrm } },
-  normalTexture: { index: tNrm, scale: 1 },
-  occlusionTexture: { index: tOrm, strength: 0.85 },
-  extensions: {
-    KHR_materials_transmission: { transmissionFactor: 0.5, transmissionTexture: { index: tVol } },
-    KHR_materials_volume: { thicknessFactor: 0.008, thicknessTexture: { index: tVol }, attenuationDistance: 0.0035, attenuationColor: [0.93, 0.74, 0.5] },
-    KHR_materials_ior: { ior: 1.37 },
-    KHR_materials_clearcoat: { clearcoatFactor: 0.35, clearcoatRoughnessFactor: 0.14 },
-  },
-  extras: {
-    mahaze: {
-      role: 'body',
-      pigmentTexture: tPig,
-      // planar (y, z) projected front of the snout, replaces the converging loft UVs at the tip
-      snoutCap: { albedoRoughness: tCapAlb, pigment: tCapPig, rectMM: BT.cap.rect },
-      // jaws: s/y ramps of the dense lip and jaw tissue (s0, s1, y0, y1) for the volumetric shader
-      fishFrame: { S0, Y0, SL, SEND: S_END, unitsPerMM: 0.001, jaws: [RICTUS_S - 0.5, RICTUS_S + 1.1, MOUTH[0][1] + 0.42, MOUTH[0][1] + 1.22] },
-      vertebrae: { start: VERT_START, count: VERT_COUNT },
-      profile: { n: profile.length, fields: ['yc', 't', 'b', 'w', 'nT', 'nB'], data: profile.flat() },
+// one body material per pattern: albedo, pigment and snout cap differ; normal, ORM and thickness are shared
+const bodyMaterial = (T, k) => {
+  const sfx = k === 1 ? '' : `_p${k}`;
+  const tAlb = gb.addTexture(image(gb, `body_basecolor${sfx}`, T.width, T.height, 3, T.albedo, 'jpeg', 93), sBody, `body_basecolor${sfx}`);
+  const tPig = gb.addTexture(image(gb, `body_pigment${sfx}`, T.width, T.height, 3, T.pigment, 'jpeg', 95), sBody, `body_pigment_mel_irid_xan${sfx}`);
+  const tCapAlb = gb.addTexture(image(gb, `snoutcap_basecolor_roughness${sfx}`, T.cap.size, T.cap.size, 4, T.cap.albedo, 'png'), sClamp, `snoutcap_basecolor_roughness${sfx}`);
+  const tCapPig = gb.addTexture(image(gb, `snoutcap_pigment${sfx}`, T.cap.size, T.cap.size, 3, T.cap.pigment, 'png'), sClamp, `snoutcap_pigment${sfx}`);
+  return gb.addMaterial({
+    name: `Mahaze_Body${sfx}`,
+    pbrMetallicRoughness: { baseColorTexture: { index: tAlb }, metallicFactor: 0, roughnessFactor: 1, metallicRoughnessTexture: { index: tOrm } },
+    normalTexture: { index: tNrm, scale: 1 },
+    occlusionTexture: { index: tOrm, strength: 0.85 },
+    extensions: {
+      KHR_materials_transmission: { transmissionFactor: 0.5, transmissionTexture: { index: tVol } },
+      KHR_materials_volume: { thicknessFactor: 0.008, thicknessTexture: { index: tVol }, attenuationDistance: 0.0035, attenuationColor: [0.93, 0.74, 0.5] },
+      KHR_materials_ior: { ior: 1.37 },
+      KHR_materials_clearcoat: { clearcoatFactor: 0.35, clearcoatRoughnessFactor: 0.14 },
     },
-  },
-});
+    extras: {
+      mahaze: {
+        role: 'body',
+        pattern: k,
+        pigmentTexture: tPig,
+        // planar (y, z) projected front of the snout, replaces the converging loft UVs at the tip
+        snoutCap: { albedoRoughness: tCapAlb, pigment: tCapPig, rectMM: T.cap.rect },
+        // jaws: s/y ramps of the dense lip and jaw tissue (s0, s1, y0, y1) for the volumetric shader
+        fishFrame: { S0, Y0, SL, SEND: S_END, unitsPerMM: 0.001, jaws: [RICTUS_S - 0.5, RICTUS_S + 1.1, MOUTH[0][1] + 0.42, MOUTH[0][1] + 1.22] },
+        vertebrae: { start: VERT_START, count: VERT_COUNT },
+        profile: { n: profile.length, fields: ['yc', 't', 'b', 'w', 'nT', 'nB'], data: profile.flat() },
+      },
+    },
+  });
+};
+const bodyMats = body.patternTextures.map((T, i) => bodyMaterial(T, PATTERN_IDS[i]));
+const mBody = bodyMats[0];
+gb.useExtension('KHR_materials_variants');
+gb.json.extensions = { ...(gb.json.extensions || {}), KHR_materials_variants: { variants: PATTERN_IDS.map((k) => ({ name: `pattern${k}` })) } };
+const variantMappings = (mats) => ({ KHR_materials_variants: { mappings: mats.map((material, i) => ({ material, variants: [i] })) } });
 
 // ---------------------------------------------------------------- skeleton
 log('rig');
@@ -123,6 +134,7 @@ const skinAttrs = (w) => ({ JOINTS_0: { array: w.joints, type: 'VEC4' }, WEIGHTS
 
 const bw = bodyWeights(body);
 const bodyPrim = gb.primitive({ position: body.position, normal: body.normal, tangent: body.tangent, uv: body.uv, indices: body.indices, material: mBody, extraAttributes: skinAttrs(bw) });
+bodyPrim.extensions = variantMappings(bodyMats);
 skinned.push(gb.addNode({ name: 'Body', mesh: gb.addMesh('Body', [bodyPrim]), skin }));
 
 // ---------------------------------------------------------------- mouth & gill interiors
@@ -167,19 +179,24 @@ for (const [side, name, jn] of [[1, 'Eye_L', 'J_eyeL'], [-1, 'Eye_R', 'J_eyeR']]
 // ---------------------------------------------------------------- fins
 log('fins');
 const defs = finDefinitions();
-const atlas = paintFinAtlas(defs, log);
-const tFinCol = gb.addTexture(image(gb, 'fin_basecolor_alpha', atlas.size, atlas.size, 4, atlas.color, 'png'), sClamp, 'fin_basecolor_alpha');
-const tFinNrm = gb.addTexture(image(gb, 'fin_normal', atlas.size, atlas.size, 3, atlas.normal, 'jpeg', 95), sClamp, 'fin_normal');
-const tFinData = gb.addTexture(image(gb, 'fin_data', atlas.size, atlas.size, 4, atlas.data, 'png'), sClamp, 'fin_ray_mel_irid_coverage');
-const mFin = gb.addMaterial({
-  name: 'Mahaze_Fin',
-  pbrMetallicRoughness: { baseColorTexture: { index: tFinCol }, metallicFactor: 0, roughnessFactor: 0.38 },
-  normalTexture: { index: tFinNrm, scale: 1 },
-  alphaMode: 'BLEND',
-  doubleSided: true,
-  extensions: { KHR_materials_ior: { ior: 1.36 } },
-  extras: { mahaze: { role: 'fin', dataTexture: tFinData } },
+let tFinNrm = null;
+const finMats = PATTERN_IDS.map((k) => {
+  const sfx = k === 1 ? '' : `_p${k}`;
+  const atlas = paintFinAtlas(defs, log, k);
+  const tFinCol = gb.addTexture(image(gb, `fin_basecolor_alpha${sfx}`, atlas.size, atlas.size, 4, atlas.color, 'png'), sClamp, `fin_basecolor_alpha${sfx}`);
+  if (tFinNrm === null) tFinNrm = gb.addTexture(image(gb, 'fin_normal', atlas.size, atlas.size, 3, atlas.normal, 'jpeg', 95), sClamp, 'fin_normal');
+  const tFinData = gb.addTexture(image(gb, `fin_data${sfx}`, atlas.size, atlas.size, 4, atlas.data, 'png'), sClamp, `fin_ray_mel_irid_coverage${sfx}`);
+  return gb.addMaterial({
+    name: `Mahaze_Fin${sfx}`,
+    pbrMetallicRoughness: { baseColorTexture: { index: tFinCol }, metallicFactor: 0, roughnessFactor: 0.38 },
+    normalTexture: { index: tFinNrm, scale: 1 },
+    alphaMode: 'BLEND',
+    doubleSided: true,
+    extensions: { KHR_materials_ior: { ior: 1.36 } },
+    extras: { mahaze: { role: 'fin', pattern: k, dataTexture: tFinData } },
+  });
 });
+const mFin = finMats[0];
 const finNodes = {};
 let contactFishY = botY(12.0) - 0.2; // lowest point of the pelvic sucker rim (the fish rests on it)
 for (const def of defs) {
@@ -190,6 +207,7 @@ for (const def of defs) {
   const names = FIN_TARGETS[def.name];
   const targets = buildFinTargets(def, SUB, NT, names);
   const prim = gb.primitive({ ...m, material: mFin, extraAttributes: skinAttrs(w), targets });
+  prim.extensions = variantMappings(finMats);
   const mesh = gb.addMesh(def.name, [prim], { targetNames: names });
   gb.json.meshes[mesh].weights = names.map(() => 0);
   finNodes[def.name] = gb.addNode({ name: def.name, mesh, skin, extras: { mahaze: { fin: def.name } } });

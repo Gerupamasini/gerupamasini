@@ -3,6 +3,10 @@ import { section, topY, botY, surfaceAt, toObject, dirToObject } from './anatomy
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../lib/noise.mjs';
 import { pick } from './variant.mjs';
 
+// pattern number (1…3) of the atlas being painted: offsets the random streams of the fin markings
+let PS = 0;
+const hp = (a, b, c, seed) => hash01(a, b, c, seed + PS);
+
 // fin markings per growth stage (photos): the adult's dark marks are wider (they cover the ray and the
 // membrane beside it) and line up across the rays into zigzag bars on the caudal fin; the juvenile's are
 // smaller spots on the rays
@@ -77,11 +81,11 @@ function caudalFin(rect) {
       const upper = 1 - fAcross;
       for (let j = 0; j < 16; j++) {
         // zigzag bars: alternate rays shift the mark by half a step
-        const Lj = 0.8 + j * FP.step + (r % 2) * 0.2 * FP.step + (hash01(r, j, 2, 502) - 0.5) * FP.jitter;
+        const Lj = 0.8 + j * FP.step + (r % 2) * 0.2 * FP.step + (hp(r, j, 2, 502) - 0.5) * FP.jitter;
         if (Lj > len * 0.9) break;
-        if (hash01(r, j, 1, 501) < FP.skip) continue;
-        const ls = 0.12 + 0.09 * hash01(r, j, 3, 503);
-        const amp = (0.55 + 0.45 * hash01(r, j, 4, 504)) * FP.amp;
+        if (hp(r, j, 1, 501) < FP.skip) continue;
+        const ls = 0.12 + 0.09 * hp(r, j, 3, 503);
+        const amp = (0.55 + 0.45 * hp(r, j, 4, 504)) * FP.amp;
         mel = Math.max(mel, amp * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.075 * FP.w)) ** 2)));
       }
       mel *= 0.8 * (0.5 + 0.5 * upper) * smoothstep(0.97, 0.75, t);
@@ -175,11 +179,11 @@ export function finDefinitions() {
     pigment: (r, n, Lr, len, t, dRay) => {
       let mel = 0;
       for (let j = 0; j < 9; j++) {
-        const Lj = 0.55 + j * 0.62 + r * 0.08 + (hash01(r, j, 2, 512) - 0.5) * 0.2;
+        const Lj = 0.55 + j * 0.62 + r * 0.08 + (hp(r, j, 2, 512) - 0.5) * 0.2;
         if (Lj > len * 0.86) break;
-        if (hash01(r, j, 1, 511) < 0.18) continue;
-        const ls = 0.1 + 0.08 * hash01(r, j, 3, 513);
-        mel = Math.max(mel, FP.amp * (0.5 + 0.5 * hash01(r, j, 4, 514)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.1 * FP.w)) ** 2)));
+        if (hp(r, j, 1, 511) < 0.18) continue;
+        const ls = 0.1 + 0.08 * hp(r, j, 3, 513);
+        mel = Math.max(mel, FP.amp * (0.5 + 0.5 * hp(r, j, 4, 514)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.1 * FP.w)) ** 2)));
       }
       return { mel: 0.8 * mel + 0.04, xan: 0.25 * smoothstep(0.5, 0.0, t), irid: 0.05 };
     },
@@ -190,11 +194,11 @@ export function finDefinitions() {
     pigment: (r, n, Lr, len, t, dRay) => {
       let mel = 0;
       for (let j = 0; j < 9; j++) {
-        const Lj = 0.42 + j * 0.55 + r * 0.05 + (hash01(r, j, 2, 522) - 0.5) * 0.2;
+        const Lj = 0.42 + j * 0.55 + r * 0.05 + (hp(r, j, 2, 522) - 0.5) * 0.2;
         if (Lj > len * 0.88) break;
-        if (hash01(r, j, 1, 521) < 0.22) continue;
-        const ls = 0.09 + 0.08 * hash01(r, j, 3, 523);
-        mel = Math.max(mel, FP.amp * (0.45 + 0.55 * hash01(r, j, 4, 524)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.075 * FP.w)) ** 2)));
+        if (hp(r, j, 1, 521) < 0.22) continue;
+        const ls = 0.09 + 0.08 * hp(r, j, 3, 523);
+        mel = Math.max(mel, FP.amp * (0.45 + 0.55 * hp(r, j, 4, 524)) * Math.exp(-(((Lr - Lj) / ls) ** 2)) * Math.exp(-((dRay / (0.075 * FP.w)) ** 2)));
       }
       return { mel: 0.72 * mel + 0.03, xan: 0.22 * smoothstep(0.6, 0.0, t), irid: 0.05 };
     },
@@ -389,7 +393,8 @@ export function buildFinMesh(def, SUB = 6, NT = 36) {
 // ---------------------------------------------------------------------------
 // Atlas painting
 
-export function paintFinAtlas(defs, log = () => {}) {
+export function paintFinAtlas(defs, log = () => {}, pattern = 1) {
+  PS = (pattern - 1) * 1009;
   const S = ATLAS;
   const color = new Uint8Array(S * S * 4);
   const data = new Uint8Array(S * S * 4);
