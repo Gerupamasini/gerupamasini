@@ -1,4 +1,5 @@
 import { CanvasTexture, ClampToEdgeWrapping, Color, DoubleSide, Group, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, Vector3 } from 'three';
+import { buildHashirimizuSkyline, type ShipMark } from './maps/hashirimizu/skyline';
 
 /**
  * The far scenery around the 西のなぎさ, as flat silhouettes standing on the horizon: 富士山 to the west-south-west,
@@ -26,10 +27,14 @@ const rnd = () => { seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 374761
 export class Skyline {
   readonly group = new Group();
   private readonly marks: Mark[] = [];
+  /** ships passing on the horizon (moved by update) */
+  private readonly ships: ShipMark[] = [];
   private readonly tmp = new Color();
 
-  constructor() {
+  /** `kind`: the map's layout (its own horizon); absent: the 西のなぎさ */
+  constructor(kind?: string) {
     this.group.name = 'skyline';
+    if (kind === 'hashirimizu') { buildHashirimizuSkyline(this.plane.bind(this), this.ships); return; }
     // ---- 富士山: 106 km WSW, 3776 m: a broad flat-topped cone 1.6° high and 12° wide, nearly all haze
     this.plane(253, ang(18), ang(1.65 * 2.4), FOOT, 1024, 160, (c, w, h) => {
       for (let x = 0; x < w; x++) {
@@ -139,7 +144,7 @@ export class Skyline {
   }
 
   /** one flat picture standing on the ring at a bearing (degrees clockwise from north), its bottom at `bottomY` metres */
-  private plane(bearing: number, width: number, height: number, bottomY: number, cw: number, ch: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void, base: Color, haze: number): void {
+  private plane(bearing: number, width: number, height: number, bottomY: number, cw: number, ch: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void, base: Color, haze: number): Mesh {
     const canvas = document.createElement('canvas');
     canvas.width = cw; canvas.height = ch;
     const c = canvas.getContext('2d')!;
@@ -160,11 +165,21 @@ export class Skyline {
     mesh.renderOrder = -10;
     this.group.add(mesh);
     this.marks.push({ mat, base, haze, night: 0.1 });
+    return mesh;
   }
 
   /** Per frame: ride along with the eye and take the sky's haze; at night the land goes dark. */
-  update(eye: Vector3, fog: Color, day: number): void {
+  update(eye: Vector3, fog: Color, day: number, timeSec = 0): void {
     this.group.position.set(eye.x, 0, eye.z);
+    for (const s of this.ships) {
+      // along its lane, round and round the sector it can be seen in (it is a different ship next time)
+      const span = s.sector[1] - s.sector[0];
+      const b = s.sector[0] + ((((s.bearing0 - s.sector[0] + s.degPerSec * timeSec) % span) + span) % span);
+      const a = b * DEG;
+      s.mesh.position.set(Math.sin(a) * R, s.mesh.position.y, -Math.cos(a) * R);
+      s.mesh.lookAt(eye.x, s.mesh.position.y, eye.z);
+      s.mesh.scale.x = s.degPerSec > 0 ? 1 : -1;
+    }
     for (const m of this.marks) {
       this.tmp.copy(m.base).lerp(fog, m.haze);
       this.tmp.multiplyScalar(m.night + (1 - m.night) * day);

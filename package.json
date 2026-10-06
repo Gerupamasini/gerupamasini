@@ -18,6 +18,7 @@
     "render:nets": "node tools/models/nets/render.mjs",
     "render:amamo": "node tools/models/amamo/render.mjs",
     "terrain:bake": "node tools/terrain/bake-map.mjs",
+    "terrain:hashirimizu": "node tools/terrain/bake-hashirimizu.mjs && node tools/terrain/figures-hashirimizu.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tools/**/*.mjs\" \"tests/**/*.{ts,mjs}\""
   },
   "dependencies": {

@@ -6,6 +6,8 @@ import { ShrimpDriver } from '../species/shrimp/ShrimpDriver';
 import { PloverDriver } from '../species/plover/PloverDriver';
 import { AsariDriver } from '../asari/Asari.js';
 import { FORMS } from '../asari/AsariModel.js';
+import { CrabDriver, HermitDriver, SnailDriver } from '../species/shore/crawlers';
+import { MulletDriver, OysterDriver, WormDriver } from '../species/shore/others';
 
 export interface DriverEntry {
   create(): Driver;
@@ -22,4 +24,11 @@ export const DRIVERS: Record<string, DriverEntry> = {
   plover: { create: () => new PloverDriver(), placeholder: () => PloverDriver.makeModel() },
   asari: { create: () => new AsariDriver() as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.asari, seed) },
   hamaguri: { create: () => new AsariDriver(FORMS.hamaguri) as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.hamaguri, seed) },
+  // the 走水 shore: procedural models built per individual by the drivers
+  crab: { create: () => new CrabDriver(), placeholder: () => CrabDriver.makeModel(), preview: (seed) => CrabDriver.makePreview(seed) },
+  hermit: { create: () => new HermitDriver(), placeholder: () => HermitDriver.makeModel(), preview: (seed) => HermitDriver.makePreview(seed) },
+  snail: { create: () => new SnailDriver(), placeholder: () => SnailDriver.makeModel(), preview: (seed) => SnailDriver.makePreview(seed) },
+  mullet: { create: () => new MulletDriver(), placeholder: () => MulletDriver.makeModel(), preview: () => MulletDriver.makePreview() },
+  worm: { create: () => new WormDriver(), placeholder: () => WormDriver.makeModel(), preview: (seed) => WormDriver.makePreview(seed) },
+  oyster: { create: () => new OysterDriver(), placeholder: () => OysterDriver.makeModel(), preview: (seed) => OysterDriver.makePreview(seed) },
 };

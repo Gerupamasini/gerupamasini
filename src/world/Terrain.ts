@@ -105,6 +105,12 @@ export class Terrain {
   /** アマモ cover over the map (0..1), and the distance range over which the drawn blades hand over to a canopy tint */
   private readonly uMeadow: IUniform<Texture> = { value: new DataTexture(new Uint8Array(1), 1, 1, RedFormat) };
   private readonly uMeadowFar: IUniform<Vector2> = { value: new Vector2(1e4, 1e4 + 1) };
+  /** the heights over which the ground turns to the land's grass and earth (the 葛西 bank by default) */
+  private readonly uLand: IUniform<Vector2> = { value: new Vector2(3.1, 3.9) };
+  /** 1: the gravel is a clean stony shore (no black reduced mud among it); 0: the 葛西 gravel, silted */
+  private readonly uStony: IUniform<number> = { value: 0 };
+  /** the sand's colour relative to the 葛西 grey (another shore's sand is another colour) */
+  private readonly uSandTint: IUniform<Vector3> = { value: new Vector3(1, 1, 1) };
   private waves: WaveSet | null = null;
 
   constructor(grid: TerrainGrid, palette: Substrate[], pits: FeedingPit[] = []) {
@@ -337,6 +343,9 @@ export class Terrain {
       shader.uniforms.uDetail = this.uDetail;
       shader.uniforms.uMeadow = this.uMeadow;
       shader.uniforms.uMeadowFar = this.uMeadowFar;
+      shader.uniforms.uLand = this.uLand;
+      shader.uniforms.uStony = this.uStony;
+      shader.uniforms.uSandTint = this.uSandTint;
       if (this.waves) Object.assign(shader.uniforms, this.waves.uniforms);
       shader.uniforms.uSpillTex = this.uSpill;
       shader.uniforms.uHalf = { value: this.half };
@@ -357,6 +366,9 @@ uniform float uCausticGain;
 uniform float uDetail;
 uniform sampler2D uMeadow;
 uniform vec2 uMeadowFar;
+uniform vec2 uLand;
+uniform float uStony;
+uniform vec3 uSandTint;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
 ${WAVES_GLSL}
@@ -460,6 +472,7 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   float patchN = vnoise(vWorldPos.xz * 0.35) - 0.5;
   float isSand = 1.0 - smoothstep(0.5, 1.5, vSubstrate);
   float muddy = smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate));
+  diffuseColor.rgb *= mix(vec3(1.0), uSandTint, 1.0 - smoothstep(1.5, 2.5, vSubstrate));
   gDis = rippleDisloc(vWorldPos.xz);
   // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
   float ripple = cos(ripplePhase(vWorldPos.xz)) * rippleAmp(vWorldPos.xz) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit);
@@ -548,7 +561,7 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   float filmP = muddy * smoothstep(0.35, 0.75, vnoise(vWorldPos.xz * 0.11 - 11.0)) * smoothstep(0.3, 0.7, vnoise(vWorldPos.xz * 0.9 + 4.0));
   gFilm = filmP;
   diffuseColor.rgb *= mix(vec3(1.0), vec3(0.78, 0.68, 0.42), filmP * 0.6);
-  float reducedP = smoothstep(1.5, 2.5, vSubstrate) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0));
+  float reducedP = smoothstep(1.5, 2.5, vSubstrate) * (1.0 - uStony * smoothstep(2.5, 2.9, vSubstrate)) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0));
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.058, 0.056, 0.052), reducedP * 0.7);
   // under an アマモ bed the sediment is finer, darker and richer (trapped silt, detritus, the canopy's shade); past the
   // distance where the blades are drawn, the canopy itself stands in (lying mats at low water, dark green under it)
@@ -567,7 +580,7 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   diffuseColor.rgb *= mix(1.0, 0.76, wet);
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.93, 1.04), 0.45 * wet);
   // above the bank: the park's land, dry grass and earth over the packed bank
-  float land = smoothstep(3.1, 3.9, vWorldPos.y);
+  float land = smoothstep(uLand.x, uLand.y, vWorldPos.y);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.31, 0.32, 0.2) * (0.8 + 0.4 * vnoise(vWorldPos.xz * 0.9 + 3.0)), land);
   // sunlight caustics on the submerged bed, focused by the same ripples that bend the view of it: the inverse
   // Jacobian of the refraction map from the wave field's curvature (pools are calm: broad, slow, soft bands)
@@ -619,6 +632,17 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     return mat;
   }
 
+  /** Free the chunks, the pit patches, the materials and the data textures (leaving the map). */
+  dispose(): void {
+    for (const c of this.chunks) for (const g of c.lods) g?.dispose();
+    for (const p of this.patches) p.mesh.geometry.dispose();
+    this.material.dispose();
+    this.patchMaterial.dispose();
+    this.heightTexture.dispose();
+    this.spillTexture.dispose();
+    this.mesh.removeFromParent();
+  }
+
   /** Give the terrain the habitat's spill levels (tide pools). */
   setSpill(spill: Float32Array): void {
     this.spillTexture.dispose();
@@ -641,6 +665,21 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   setMeadowCover(cover: Texture, drawnTo: number): void {
     this.uMeadow.value = cover;
     this.uMeadowFar.value.set(drawnTo * 0.6, drawnTo);
+  }
+
+  /** The heights (T.P. m) over which the ground becomes the land behind the shore: grass and earth. */
+  setLandLevel(from: number, to: number): void {
+    this.uLand.value.set(from, to);
+  }
+
+  /** Gravel as a clean stony shore (rocks and shingle washed by the open bay) rather than silted. */
+  setStonyGravel(on: boolean): void {
+    this.uStony.value = on ? 1 : 0;
+  }
+
+  /** Tint the sand and muddy sand (multiplies the 葛西 grey). */
+  setSandTint(r: number, g: number, b: number): void {
+    this.uSandTint.value.set(r, g, b);
   }
 
   /** Close-up surface detail on or off (quality preset). */

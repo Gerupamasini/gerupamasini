@@ -1,0 +1,39 @@
+{
+  "id": "jma_yokosuka",
+  "names": {
+    "ja": "横須賀",
+    "en": "Yokosuka"
+  },
+  "lat": 35.283,
+  "lon": 139.65,
+  "phaseReference": "JST135E",
+  "phaseConvention": "zone_speed",
+  "mslAboveChartDatum_cm": null,
+  "constituents": [
+    {
+      "name": "M2",
+      "amplitude_cm": 35.2,
+      "phase_deg": 146.5
+    },
+    {
+      "name": "S2",
+      "amplitude_cm": 17.0,
+      "phase_deg": 173.5
+    },
+    {
+      "name": "K1",
+      "amplitude_cm": 24.4,
+      "phase_deg": 176.0
+    },
+    {
+      "name": "O1",
+      "amplitude_cm": 19.1,
+      "phase_deg": 158.0
+    }
+  ],
+  "source": {
+    "name": "気象庁 潮汐調和定数 横須賀（暫定の推定値）",
+    "url": "https://www.data.jma.go.jp/kaiyou/db/tide/suisan/harms60.php?stn=YK",
+    "note": "暫定: 公式表に接続できない環境で作成したため、東京の主要4分潮から湾口側（横須賀）の振幅比（半日周潮 約0.73、日周潮 約0.97）と位相の進み（半日周潮 約7〜8°、日周潮 約2〜3°）を当てて推定した値。公式の調和定数で置き換えること。"
+  }
+}

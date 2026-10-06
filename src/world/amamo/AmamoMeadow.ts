@@ -33,6 +33,19 @@ export interface MeadowEnv {
   waveGain: number;
 }
 
+/** A map's own say in where the beds go (all optional: the default is the T.P. band and a noise field). */
+export interface MeadowLayout {
+  /** 0..1, replaces the height band (substrate and pits still apply) */
+  suitability?(x: number, z: number): number;
+  /** 0..1, replaces the meadow noise field; with `thresholds` it decides dense / sparse / pioneer / bare */
+  field?(x: number, z: number): number;
+  thresholds?: readonly [number, number, number];
+  /** spacing of the candidate clones (m) */
+  step?: number;
+  /** blow-out holes inside dense clones (default true; a designed field brings its own) */
+  holes?: boolean;
+}
+
 export interface PatchSpec {
   index: number;
   x: number;
@@ -104,12 +117,12 @@ export class AmamoMeadow {
   private readonly cells = new Map<number, number[]>();
   private readonly ground: GroundSampler;
 
-  constructor(private readonly terrain: Terrain, habitat: Habitat | null, seed: number) {
+  constructor(private readonly terrain: Terrain, habitat: Habitat | null, seed: number, private readonly layout: MeadowLayout = {}) {
     this.group.name = 'amamo';
     const suit = (x: number, z: number) => this.suitability(x, z);
     const holeSeed = seed + 77;
     // bare holes in the meadow (blow-outs scoured by waves and rays): a few metres across
-    const hole = (x: number, z: number) => fbm(x / 6.5, z / 6.5, holeSeed) < 0.3;
+    const hole = layout.holes === false ? () => false : (x: number, z: number) => fbm(x / 6.5, z / 6.5, holeSeed) < 0.3;
     this.ground = {
       heightAt: (x, z) => terrain.heightAt(x, z),
       poolAt: habitat ? (x, z) => { const s = habitat.spillAt(x, z); return s > terrain.heightAt(x, z) + 0.02 ? s : -1e3; } : undefined,
@@ -128,9 +141,9 @@ export class AmamoMeadow {
   /** 0..1: how well アマモ would grow here (height band, substrate, no pits, inside the map). */
   suitability(x: number, z: number): number {
     const t = this.terrain;
-    if (!t.inside(x, z, 8)) return 0;
+    if (!t.inside(x, z, this.layout.suitability ? 2 : 8)) return 0;
     const h = t.heightAt(x, z);
-    const band = smoothstep(ZONE.top, ZONE.top - 0.25, h) * smoothstep(ZONE.bottom, ZONE.bottom + 0.3, h);
+    const band = this.layout.suitability ? this.layout.suitability(x, z) : smoothstep(ZONE.top, ZONE.top - 0.25, h) * smoothstep(ZONE.bottom, ZONE.bottom + 0.3, h);
     if (band <= 0) return 0;
     if (t.pitMaskAt(x, z) > 0) return 0;
     return band * SUBSTRATE_WEIGHT[t.substrateAt(x, z)];
@@ -155,18 +168,21 @@ export class AmamoMeadow {
     const t = this.terrain;
     const rng = new Rng(seed);
     const fieldSeed = seed + 11;
-    const step = 2.0;
+    const L = this.layout;
+    const step = L.step ?? 2.0, margin = L.field ? 2 : 8, jit = step * 0.4;
     const cands: { x: number; z: number; q: number }[] = [];
-    for (let z = -t.half + 8; z < t.half - 8; z += step) for (let x = -t.half + 8; x < t.half - 8; x += step) {
-      const px = x + rng.range(-0.8, 0.8), pz = z + rng.range(-0.8, 0.8);
+    for (let z = -t.half + margin; z < t.half - margin; z += step) for (let x = -t.half + margin; x < t.half - margin; x += step) {
+      const px = x + rng.range(-jit, jit), pz = z + rng.range(-jit, jit);
       const s = this.suitability(px, pz);
       if (s < 0.2) continue;
+      if (L.field) { cands.push({ x: px, z: pz, q: L.field(px, pz) }); continue; }
       // meadow field: large beds (~40 m) broken up at the 10 m scale
       const m = 0.7 * fbm(px / 42, pz / 42, fieldSeed) + 0.3 * fbm(px / 11, pz / 11, fieldSeed + 5);
       cands.push({ x: px, z: pz, q: m * (0.55 + 0.45 * s) });
     }
     // dense cores first, so where clones overlap the older (denser) one keeps its ground
-    const kindOf = (q: number): PatchKind | null => (q > 0.6 ? 'dense' : q > 0.53 ? 'sparse' : q > 0.47 ? 'pioneer' : null);
+    const [tD, tS, tP] = L.thresholds ?? [0.6, 0.53, 0.47];
+    const kindOf = (q: number): PatchKind | null => (q > tD ? 'dense' : q > tS ? 'sparse' : q > tP ? 'pioneer' : null);
     const order: PatchKind[] = ['dense', 'sparse', 'pioneer'];
     for (const kind of order) for (const c of cands) {
       if (kindOf(c.q) !== kind) continue;

@@ -1,6 +1,6 @@
 import { Group, Object3D, PerspectiveCamera, Ray, Scene, Sphere, Vector3, type Camera } from 'three';
 import type { GameData } from '../data/loader';
-import type { SpeciesDef, TidePhase } from '../data/schemas';
+import { isAquatic, type SpeciesDef, type TidePhase } from '../data/schemas';
 import type { Habitat } from '../world/Habitat';
 import type { Terrain } from '../world/Terrain';
 import type { TimeOfDay } from '../world/Sun';
@@ -34,8 +34,6 @@ interface Entry {
   /** the last spot where an aquatic animal had enough water under it */
   lastWet?: Vector3;
 }
-
-const isAquatic = (sp: SpeciesDef): boolean => sp.locomotion === 'swim' || sp.taxon.group === 'crustacean';
 
 export interface CreatureFrame {
   dt: number;
@@ -83,6 +81,8 @@ export class CreatureSystem {
     private readonly preset: QualityPreset,
     private readonly mapId: string,
     readonly removed: Set<string>,
+    /** animals never appear closer to the player than this (m); a small, busy shore lets them come nearer */
+    private readonly minSpawnDist?: number,
   ) {
     this.group.name = 'creatures';
     scene.add(this.group);
@@ -135,7 +135,7 @@ export class CreatureSystem {
       const live = this.individuals;
       for (const ind of this.spawner.cull(f.playerPos.x, f.playerPos.z, env, live)) if (ind.id !== f.lockedId) this.despawn(ind.id);
       const scale = this.preset.creatureScale;
-      const requests = this.spawner.plan(f.playerPos.x, f.playerPos.z, env, this.individuals);
+      const requests = this.spawner.plan(f.playerPos.x, f.playerPos.z, env, this.individuals, this.minSpawnDist);
       let n = 0;
       for (const req of requests) {
         if (scale < 1 && (n++ % Math.round(1 / (1 - scale + 1e-6))) === 0 && Math.random() > scale) continue;
@@ -169,7 +169,7 @@ export class CreatureSystem {
         if (!e.driver.busy) ind.brain.done = true;
         const ctx: PerceptionContext = {
           ind, sample: this.habitat.sample(ind.pos.x, ind.pos.z, f.gameMs), habitat: this.habitat, tidePhase: f.tidePhase, tod: f.tod, season: f.season,
-          playerPos: f.playerPos, playerDist: dist, playerRunning: f.playerRunning, nowSec, aquatic: ind.species.locomotion === 'swim' || ind.species.taxon.group === 'crustacean',
+          playerPos: f.playerPos, playerDist: dist, playerRunning: f.playerRunning, nowSec, aquatic: isAquatic(ind.species),
         };
         const intent = tree.tick(ctx);
         if (intent) this.issue(e, intent, nowSec);

@@ -90,7 +90,7 @@ export class App {
   frameCount = 0;
   readonly tankMax = TANK_MAX_OCCUPANTS;
   private pointerDown: { x: number; y: number; t: number } | null = null;
-  private pendingPose: { x: number; z: number; heading: number } | null = null;
+  private pendingPose: { x: number; z: number; heading: number; map: string } | null = null;
   private raf = 0;
   private lastFrame = 0;
   private hudAcc = 0;
@@ -245,7 +245,7 @@ export class App {
       s.ticket.active = null;
     }
     this.clock.restore(s.ticket.active);
-    this.pendingPose = { x: s.player.pos[0], z: s.player.pos[2], heading: s.player.heading };
+    this.pendingPose = { x: s.player.pos[0], z: s.player.pos[2], heading: s.player.heading, map: s.player.map };
     this.enterHome();
   }
 
@@ -280,22 +280,22 @@ export class App {
 
   async enterField(spotId: string | null = ui.spot.value): Promise<void> {
     const mapId = this.data.maps.has(this.mapForSpot(spotId)) ? this.mapForSpot(spotId) : this.data.manifest.defaultMap;
-    if (this.world && this.world.map.id !== mapId) {
-      // only one flat is built so far: another map would need the world rebuilt
-      toast(t('spots.notYet'), 'warn');
-      return;
-    }
+    // another flat: the one built so far is taken down first (its animals, tools and the case with it)
+    if (this.world && this.world.map.id !== mapId) this.leaveWorld();
     if (this.save) this.save.player.map = mapId;
     if (!this.world) {
       this.setMode('boot');
       ui.loading.value = { frac: 0.35, label: t('loading.map') };
       const map = this.data.maps.get(mapId)!;
+      // the tide is the one of the flat's own station (the tide table and tickets follow it)
+      if (this.tide.station.id !== map.station) { this.tide = new TideModel(this.data.stations.get(map.station)!); this.curveCacheMin = -1; }
       const dayNo = Math.floor((this.clock.nowGame() + 9 * 3600000) / 86400000);
       this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; }, dayNo);
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
+      this.player.obstacles = this.world.obstacles;
       this.player.eyeHeight = this.settings.eyeHeight;
       ui.loading.value = { frac: 0.7, label: t('loading.models') };
-      this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed);
+      this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed, map.habitat?.minSpawnDist_m);
       await this.creatures.preload();
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
@@ -309,12 +309,14 @@ export class App {
       this.world.scene.add(this.fieldCase.animals);
       this.net.setHeld(this.toolType() === 'capture');
       this.shovel.setHeld(this.toolType() === 'dig');
-      this.clams = new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
+      const L = this.world.layout;
+      this.clams = L ? new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242), L.clams.beds, L.clams.opts) : new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
       this.world.scene.add(this.clams.group);
       this.capture.onSwung = (caught) => this.onToolSwung(caught);
       this.capture.onResolved = (caught) => this.onCaptureResolved(caught);
       this.applyHeroSetting();
-      if (this.pendingPose) { this.player.setPose(this.pendingPose.x, this.pendingPose.z, this.pendingPose.heading); this.pendingPose = null; }
+      if (this.pendingPose?.map === map.id) this.player.setPose(this.pendingPose.x, this.pendingPose.z, this.pendingPose.heading);
+      this.pendingPose = null;
       ui.loading.value = { frac: 0.95, label: t('loading.models') };
       this.onResize();
     }
@@ -325,6 +327,28 @@ export class App {
     this.setMode('field');
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
+  }
+
+  /** Take down the flat that is built (and everything that lives on it), to build another. */
+  private leaveWorld(): void {
+    if (this.observation?.active) this.observation.exit();
+    this.lockedId = null;
+    this.target = null;
+    this.targetClam = -1;
+    this.watchedClam = null;
+    this.creatures?.dispose();
+    this.creatures = null;
+    this.clams?.dispose();
+    this.clams = null;
+    this.net?.dispose();
+    this.net = null;
+    this.shovel?.dispose();
+    this.shovel = null;
+    this.fieldCase?.dispose();
+    this.fieldCase = null;
+    this.world?.dispose();
+    this.world = null;
+    this.player = null;
   }
 
   focusGame(): void {
@@ -434,9 +458,19 @@ export class App {
     const w = this.world, p = this.player;
     if (!w || !p) return;
     const map = w.map;
-    let x = map.spawnStart.x, z = map.spawnStart.z, yaw = Math.PI, pitch = -0.15;
+    let x = map.spawnStart.x, z = map.spawnStart.z, yaw = (map.spawnStart.heading * Math.PI) / 180, pitch = -0.15;
     switch (target) {
       case 'waterline': {
+        if (w.layout && w.amamo) {
+          // out from the beach toward the sea until the water is ankle deep
+          const s = w.amamo.seaward;
+          for (let t = 0; t < 60; t += 0.5) {
+            const px = map.spawnStart.x + s.x * t, pz = map.spawnStart.z + s.y * t;
+            if (w.habitat.depthAt(px, pz) >= 0.06) { x = px; z = pz; break; }
+          }
+          yaw = Math.atan2(-s.x, -s.y);
+          break;
+        }
         x = 0;
         // the first spot walking seaward that stands in ankle-deep water (the relief makes a fixed offset unreliable)
         for (let zz = -w.terrain.half + 5; zz < w.terrain.half - 5; zz += 0.5) {

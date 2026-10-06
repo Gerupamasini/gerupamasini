@@ -32,10 +32,12 @@
       "tags": ["exposed_sand", "exposed_mud", "waterline"],
       "time": ["dawn", "day", "dusk"],
       "tide": "any",
+      "maps": ["kasai_west"],
       "density_per_100m2": 0.12,
       "group": [1, 4],
       "maxPopulation": 10
-    }
+    },
+    { "tags": ["exposed_sand", "waterline"], "time": ["dawn", "day", "dusk"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.06, "group": [1, 2], "maxPopulation": 4 }
   ],
   "brain": { "tree": "shorebird_waterline", "params": { "fleeDistance_m": 8, "runDistance_m": 14 } },
   "capture": { "tools": [], "baseDifficulty": 1, "alertPenalty": 1 },

@@ -6,19 +6,31 @@
     "exopalaemon_orientis",
     "charadrius_alexandrinus",
     "ruditapes_philippinarum",
-    "meretrix_lusoria"
+    "meretrix_lusoria",
+    "hemigrapsus_penicillatus",
+    "pagurus_minutus",
+    "reticunassa_festiva",
+    "mugil_cephalus",
+    "cirriformia_comosa",
+    "crassostrea_gigas"
   ],
   "behaviors": [
     "fish_benthic",
     "shrimp_shallow",
     "shorebird_waterline",
-    "bivalve_buried"
+    "bivalve_buried",
+    "crab_shore",
+    "hermit_shore",
+    "snail_crawl",
+    "fish_school"
   ],
   "maps": [
-    "kasai_west"
+    "kasai_west",
+    "hashirimizu"
   ],
   "stations": [
-    "jma_tokyo"
+    "jma_tokyo",
+    "jma_yokosuka"
   ],
   "items": "items/tools.json",
   "strings": "strings/ja.json",

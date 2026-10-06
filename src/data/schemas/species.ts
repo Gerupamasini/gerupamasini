@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const HabitatTagSchema = z.enum(['exposed_sand', 'exposed_mud', 'waterline', 'shallow', 'pool', 'small_pool', 'channel', 'deep']);
+export const HabitatTagSchema = z.enum(['exposed_sand', 'exposed_mud', 'waterline', 'shallow', 'pool', 'small_pool', 'channel', 'deep', 'eelgrass', 'eelgrass_edge', 'bare', 'rocky']);
 export const SubstrateSchema = z.enum(['sand', 'muddy_sand', 'mud', 'gravel', 'channel']);
 export const TimeOfDaySchema = z.enum(['dawn', 'day', 'dusk', 'night']);
 export const SeasonSchema = z.enum(['spring', 'summer', 'autumn', 'winter']);
@@ -28,6 +28,8 @@ export const SpeciesSchema = z.object({
   names: z.object({ ja: z.string(), sci: z.string(), en: z.string().optional() }),
   taxon: z.object({ group: TaxonGroupSchema, family: z.string().optional() }),
   locomotion: LocomotionSchema,
+  /** lives in the water and is kept in it (default: swimmers and crustaceans); a crawling snail sets it */
+  aquatic: z.boolean().optional(),
   collectable: z.boolean(),
   protected: z.boolean().default(false),
   model: z.object({
@@ -72,6 +74,11 @@ export const SpeciesSchema = z.object({
 });
 
 export type SpeciesDef = z.infer<typeof SpeciesSchema>;
+
+/** Animals kept in the water: placed in it, fenced by it, fleeing into it. */
+export function isAquatic(sp: Pick<SpeciesDef, 'aquatic' | 'locomotion' | 'taxon'>): boolean {
+  return sp.aquatic ?? (sp.locomotion === 'swim' || sp.taxon.group === 'crustacean');
+}
 export type SpawnRule = z.infer<typeof SpawnRuleSchema>;
 export type HabitatTag = z.infer<typeof HabitatTagSchema>;
 export type Substrate = z.infer<typeof SubstrateSchema>;

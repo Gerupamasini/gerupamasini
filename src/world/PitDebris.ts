@@ -10,7 +10,7 @@ import { makeShellOuterMaterial } from '../creatures/asari/AsariMaterial.js';
  * chords so what is left is a chip, a half, or the whole valve. Every vertex attribute comes along, so the shell
  * material draws the ribs, growth checks and the individual's colour pattern on the fragment as on a live clam.
  */
-function valveFragment(base: BufferGeometry, rng: Rng, cuts: number): BufferGeometry {
+export function valveFragment(base: BufferGeometry, rng: Rng, cuts: number): BufferGeometry {
   const src = base.index ? base.toNonIndexed() : base.clone();
   const pos = src.getAttribute('position');
   const planes: { nx: number; ny: number; d: number }[] = [];

@@ -1,4 +1,4 @@
-import type { SpeciesDef, SpawnRule, TidePhase } from '../data/schemas';
+import { isAquatic, type SpeciesDef, type SpawnRule, type TidePhase } from '../data/schemas';
 import type { Habitat } from '../world/Habitat';
 import type { TimeOfDay } from '../world/Sun';
 import type { Season } from '../core/Time';
@@ -63,7 +63,7 @@ export class Spawner {
   }
 
   /** Decide spawns for the cells around (px, pz). `population` counts live individuals per species. */
-  plan(px: number, pz: number, env: SpawnEnv, live: Individual[], minDist = MIN_SPAWN_DIST): SpawnRequest[] {
+  plan(px: number, pz: number, env: SpawnEnv, live: Individual[], minDist: number = MIN_SPAWN_DIST): SpawnRequest[] {
     const h = this.habitat;
     const cn = h.cn, cs = h.coarse;
     const counts = new Map<string, number>();
@@ -111,11 +111,13 @@ export class Spawner {
               for (let tries = 0; tries < 8 && !ok; tries++) {
                 x = cx + rng.range(-cs / 2, cs / 2);
                 z = cz + rng.range(-cs / 2, cs / 2);
+                if (h.inSolid(x, z)) continue;
                 const s = h.sample(x, z, env.gameMs);
-                const aquatic = sp.locomotion === 'swim' || sp.taxon.group === 'crustacean';
+                const aquatic = isAquatic(sp);
                 // aquatic animals need water over their backs: the rule's floor or the size-based minimum, whichever is more
                 const need = aquatic ? Math.max(rule.depth_m?.[0] ?? 0, minDepthFor(sp, rule.length_mm ? rule.length_mm[1] : sp.size.length_mm.mean)) : 0;
-                ok = rule.depth_m ? s.depth >= Math.max(rule.depth_m[0], need) && s.depth <= rule.depth_m[1] : aquatic ? s.depth >= need : s.exposed;
+                // (depth is negative on exposed ground: a burrower's or a sessile animal's range may start below zero)
+                ok = rule.depth_m ? s.depth >= (aquatic ? Math.max(rule.depth_m[0], need) : rule.depth_m[0]) && s.depth <= rule.depth_m[1] : aquatic ? s.depth >= need : s.exposed;
               }
               if (!ok) continue;
               out.push({ species: sp, ruleIndex: ri, cell, seed: memberSeed, x, z, lengthRange: rule.length_mm });
@@ -138,7 +140,8 @@ export class Spawner {
       const pick = roll % 7;
       const spId = pick < 3 ? 'acanthogobius_flavimanus' : pick < 5 ? 'exopalaemon_orientis' : 'gymnogobius_macrognathos';
       const sp = this.speciesList.find((q) => q.id === spId);
-      if (!sp) continue;
+      // only animals that live on this flat at all
+      if (!sp || !sp.spawn.some((r) => !r.maps || r.maps.includes(env.mapId))) continue;
       if ((counts.get(sp.id) ?? 0) >= 60) continue;
       const seed = hashInts(pit.id, env.day, 991);
       const id = `${sp.id}#${hashInts(seed, 7).toString(16).padStart(8, '0')}`;

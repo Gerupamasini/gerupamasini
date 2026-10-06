@@ -1,0 +1,20 @@
+{
+  "id": "fish_school",
+  "tickHz": { "near": 4, "mid": 1, "far": 0.3 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$fleeDistance_m" } },
+      { "type": "action", "name": "flee", "args": { "distance_m": 2, "urgency": 1, "param": "scatter" }, "interrupt": true }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "depth_below", "args": { "m": 0.06 } },
+      { "type": "action", "name": "move_to_deeper", "args": { "minDepth_m": 0.2 } }
+    ]},
+    { "type": "random", "weights": [0.55, 0.2, 0.2, 0.05], "children": [
+      { "type": "action", "name": "wander", "args": { "distance_m": [0.5, 2], "stayNearHome_m": 6 } },
+      { "type": "action", "name": "rest", "args": { "seconds": "$restMean_s" } },
+      { "type": "action", "name": "forage", "args": { "seconds": [3, 6] } },
+      { "type": "cooldown", "seconds": 40, "child": { "type": "action", "name": "special", "args": { "param": "jump" } } }
+    ]}
+  ]}
+}

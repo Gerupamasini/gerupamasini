@@ -1,4 +1,4 @@
-import { FogExp2, Scene, Vector3, type PerspectiveCamera, type WebGLRenderer } from 'three';
+import { FogExp2, Scene, Vector3, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import type { MapDef, TideStationDef } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { Terrain, loadTerrainGrid } from '../world/Terrain';
@@ -10,6 +10,7 @@ import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
 import { createPitDebris } from '../world/PitDebris';
 import { Skyline } from '../world/Skyline';
 import { AmamoMeadow, MEADOW_QUALITY } from '../world/amamo';
+import { LAYOUTS, type ShoreLayout } from '../world/maps/hashirimizu';
 import type { FeedingPit } from '../world/FeedingPits';
 import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
@@ -24,7 +25,11 @@ export class World {
   /** the stingray feeding pits (debug, tests) */
   pits: FeedingPit[] = [];
   /** the far scenery on the horizon (landmarks as flat silhouettes) */
-  readonly skyline = new Skyline();
+  readonly skyline: Skyline;
+  /** the map's own shore features, when it has them (null: the 葛西 flat) */
+  readonly layout: ShoreLayout | null;
+  /** round obstacles the player walks around (rocks) */
+  obstacles: { x: number; z: number; r: number }[] = [];
   /** the アマモ beds below the low-water mark */
   amamo: AmamoMeadow | null = null;
 
@@ -57,20 +62,26 @@ export class World {
     this.fog = new FogExp2(0xbfd2dc, 0.0024);
     this.scene.fog = this.fog;
     this.scene.add(terrain.mesh);
+    this.layout = map.layout ? LAYOUTS[map.layout] ?? null : null;
+    this.skyline = new Skyline(map.layout);
   }
 
   static async create(map: MapDef, station: TideStationDef | TideModel, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void, pitSeed = 20261001): Promise<World> {
     onProgress?.('地形');
     const grid = await loadTerrainGrid(map);
+    const layout = map.layout ? LAYOUTS[map.layout] ?? null : null;
     // アカエイの昼寝跡: dug into the flat before the terrain is built, so pools, tags and shading all see them;
     // the seed is the day's, so the rays have been somewhere else by the next visit
-    const pits = placeFeedingPits(grid, map.substrate.palette, hashInts(map.id.length * 7919, pitSeed));
+    const pits = layout
+      ? placeFeedingPits(grid, map.substrate.palette, hashInts(map.id.length * 7919, pitSeed), layout.pits.clusters, layout.pits.opts)
+      : placeFeedingPits(grid, map.substrate.palette, hashInts(map.id.length * 7919, pitSeed));
     grid.baseHeights = grid.heights.slice();
     grid.pitMask = carveCoarse(grid, pits);
     const terrain = new Terrain(grid, map.substrate.palette, pits);
     terrain.setDetail(preset.surfaceDetail > 0);
     onProgress?.('潮だまり');
-    const habitat = new Habitat(terrain, 5, pits);
+    const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, pits);
+    if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setStonyGravel(true); terrain.setSandTint(...layout.sandTint); }
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
     const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });
@@ -82,14 +93,39 @@ export class World {
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
     onProgress?.('アマモ場');
-    w.amamo = new AmamoMeadow(terrain, habitat, hashInts(...[...map.id].map((c) => c.charCodeAt(0)), 20261006));
+    const mapSeed = hashInts(...[...map.id].map((c) => c.charCodeAt(0)), 20261006);
+    w.amamo = new AmamoMeadow(terrain, habitat, mapSeed, layout?.meadow);
     w.amamo.setQuality(MEADOW_QUALITY[preset.vegetation]);
     terrain.setMeadowCover(w.amamo.coverTexture, MEADOW_QUALITY[preset.vegetation].lod[2]);
     w.scene.add(w.amamo.group);
+    // the standing features the animals gather at: the eelgrass, its edges, the open sand among it, the rocks
+    const meadow = w.amamo;
+    habitat.setFeatures((x, z) => ({ eelgrass: meadow.coverAt(x, z), zone: meadow.suitability(x, z), rocky: layout ? layout.rockiness(x, z) : 0 }));
+    if (layout) {
+      onProgress?.('浜');
+      for (const o of layout.props(terrain, mapSeed)) w.scene.add(o);
+      w.obstacles = layout.obstacles;
+      habitat.solids = layout.solids;
+    }
     w.scene.add(w.skyline.group);
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
     (w as { sky: SkyDome }).sky = sky;
     return w;
+  }
+
+  /** Free what the flat built (leaving for another map). Animals, tools and the case are freed by their owners. */
+  dispose(): void {
+    this.amamo?.dispose();
+    this.amamo = null;
+    this.skyline.dispose();
+    this.sky.dispose();
+    this.water.dispose();
+    this.terrain.dispose();
+    this.scene.traverse((o) => {
+      // the pit debris and the shore's own props: geometry and materials made for this flat
+      if (o.userData.mapOwned) { const m = o as Mesh; m.geometry?.dispose(); const mat = m.material; if (Array.isArray(mat)) mat.forEach((x) => x.dispose()); else mat?.dispose(); }
+    });
+    this.scene.clear();
   }
 
   /** Advance environment state for a game time (ms) and real dt (s). */
@@ -130,7 +166,7 @@ export class World {
     // the sky refreshes its environment maps itself whenever the sun moved enough (so time jumps show at once)
     this.sky.refreshEnvironment();
     this.sky.sky.position.copy(camera.position);
-    this.skyline.update(camera.position, this.sky.fogColor, day);
+    this.skyline.update(camera.position, this.sky.fogColor, day, gameMs / 1000);
     if (this.timeAcc > 1) this.timeAcc -= 0; // keep accumulating; used as shader time
   }
 }
