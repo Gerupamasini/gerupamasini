@@ -1,4 +1,4 @@
-import { AnimationAction, AnimationClip, AnimationMixer, LoopOnce, LoopRepeat, MathUtils, Object3D, Vector3 } from 'three';
+import { AdditiveAnimationBlendMode, AnimationAction, AnimationClip, AnimationMixer, AnimationUtils, LoopOnce, LoopRepeat, MathUtils, Object3D, Quaternion, Vector3 } from 'three';
 import type { Individual } from '../../Individual';
 import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import { makePlover, type PlaceholderModel } from '../../models/placeholders';
@@ -14,6 +14,46 @@ const CLIP = {
 } as const;
 /** the model's own pace for the walk and run cycles (m/s): the clips are stretched to the speed the bird moves at */
 const CLIP_WALK_SPEED = 0.35, CLIP_RUN_SPEED = 1.2;
+/** the one-shot gestures (played additively over the loop) */
+const GESTURE_CLIPS = new Set<string>([...CLIP.peck, ...CLIP.preen, CLIP.shake, CLIP.alert, CLIP.takeoff, CLIP.landing]);
+/**
+ * How much of the baked neck and head motion each loop keeps (1 = as exported). The export swings the head some 50°
+ * every step and 30° at a 10 Hz run; a plover's head is nearly still as it walks, so the step bob is cut hard and the
+ * slower looking-about of the idle and search loops kept more of.
+ */
+const LOOP_HEAD_GAIN: Record<string, number> = { [CLIP.walk]: 0.3, [CLIP.run]: 0.25, [CLIP.idle]: 0.55, [CLIP.forage]: 0.5, [CLIP.flight]: 0.5 };
+const GESTURE_HEAD_GAIN = 0.75;
+/** time constant of the neck and head smoothing (s): short enough for a peck, long enough to swallow what bob is left */
+const HEAD_SMOOTH_S = 0.12;
+const HEAD_TRACK = /^(neck\d|head)\.(quaternion|position)$/;
+const _q = new Quaternion(), _q2 = new Quaternion(), _ident = new Quaternion();
+
+/**
+ * Scale a clip's neck and head tracks toward a reference pose: the bind pose for a loop, or no motion at all for an
+ * additive gesture (whose values are deltas already). The clip is shared by every bird, so this runs once per clip.
+ */
+function tameHead(clip: AnimationClip, gain: number, rest: Map<string, { q: Quaternion; p: Vector3 }> | null): void {
+  for (const t of clip.tracks) {
+    const m = HEAD_TRACK.exec(t.name);
+    if (!m) continue;
+    const bone = m[1], v = t.values;
+    if (m[2] === 'quaternion') {
+      const ref = rest ? rest.get(bone)?.q : _ident;
+      if (!ref) continue;
+      for (let i = 0; i + 3 < v.length; i += 4) {
+        _q.set(v[i], v[i + 1], v[i + 2], v[i + 3]);
+        _q2.copy(ref).slerp(_q, gain);
+        v[i] = _q2.x; v[i + 1] = _q2.y; v[i + 2] = _q2.z; v[i + 3] = _q2.w;
+      }
+    } else {
+      const ref = rest ? rest.get(bone)?.p : null;
+      const rx = ref?.x ?? 0, ry = ref?.y ?? 0, rz = ref?.z ?? 0;
+      for (let i = 0; i + 2 < v.length; i += 3) {
+        v[i] = rx + (v[i] - rx) * gain; v[i + 1] = ry + (v[i + 1] - ry) * gain; v[i + 2] = rz + (v[i + 2] - rz) * gain;
+      }
+    }
+  }
+}
 
 /**
  * シロチドリ: walking and running along the waterline, pecking, a short escape flight. With the real model the baked
@@ -40,6 +80,8 @@ export class PloverDriver implements Driver {
   busy = false;
   // the clip player
   private mixer: AnimationMixer | null = null;
+  /** the neck chain and the head, smoothed over ~0.1 s after the mixer so the baked bob does not read as a tremble */
+  private readonly steady: { bone: Object3D; q: Quaternion; p: Vector3 }[] = [];
   private clips = new Map<string, AnimationClip>();
   private loop: AnimationAction | null = null;
   private loopName = '';
@@ -64,12 +106,33 @@ export class PloverDriver implements Driver {
     const clips = (root.userData.clips as AnimationClip[] | undefined) ?? [];
     if (!this.model && clips.length) {
       this.mixer = new AnimationMixer(root);
-      for (const c of clips) this.clips.set(c.name, c);
+      // the bind pose of the neck and head, the reference the baked bob is scaled toward
+      const rest = new Map<string, { q: Quaternion; p: Vector3 }>();
+      root.traverse((o) => { if ((o as { isBone?: boolean }).isBone && /^(neck\d|head)$/.test(o.name)) rest.set(o.name, { q: o.quaternion.clone(), p: o.position.clone() }); });
+      for (const c of clips) {
+        this.clips.set(c.name, c);
+        if (c.userData.tamed) continue;
+        c.userData.tamed = true;
+        // gestures are additive deltas from their own first frame, laid over whatever loop is running; blended by
+        // weight instead they would average with the loop, and the head would hover between two poses
+        if (GESTURE_CLIPS.has(c.name)) { AnimationUtils.makeClipAdditive(c); tameHead(c, GESTURE_HEAD_GAIN, null); }
+        else tameHead(c, LOOP_HEAD_GAIN[c.name] ?? 0.55, rest);
+      }
+      // a finished gesture lets go of its tracks: left clamped at full weight it would keep pulling the head and neck
+      // against the walk underneath (a jittery half-blend), so it fades out and the loop has the bird to itself again
+      this.mixer.addEventListener('finished', (e) => {
+        const a = (e as unknown as { action: AnimationAction }).action;
+        a.fadeOut(0.2);
+        if (this.oneShot === a) this.oneShot = null;
+      });
       this.play(CLIP.idle, 1);
+      this.steady.length = 0;
+      root.traverse((o) => { if ((o as { isBone?: boolean }).isBone && /^(neck\d|head)$/.test(o.name)) this.steady.push({ bone: o, q: o.quaternion.clone(), p: o.position.clone() }); });
     }
   }
 
   detach(): void {
+    this.steady.length = 0;
     this.disposeMixer();
     this.root = null;
     this.model = null;
@@ -95,8 +158,9 @@ export class PloverDriver implements Driver {
     next.setLoop(LoopRepeat, Infinity);
     next.enabled = true;
     next.timeScale = timeScale;
+    next.setEffectiveWeight(1);
     next.reset().play();
-    if (this.loop) { this.loop.crossFadeTo(next, fade, false); }
+    if (this.loop && this.loop !== next) this.loop.crossFadeTo(next, fade, false);
     this.loop = next;
     this.loopName = name;
   }
@@ -106,10 +170,12 @@ export class PloverDriver implements Driver {
     const m = this.mixer, clip = this.clips.get(name);
     if (!m || !clip) return 0;
     if (this.oneShot) this.oneShot.fadeOut(0.12);
-    const a = m.clipAction(clip);
+    const a = m.clipAction(clip, undefined, AdditiveAnimationBlendMode);
     a.setLoop(LoopOnce, 1);
     a.clampWhenFinished = true;
     a.timeScale = timeScale;
+    a.enabled = true;
+    a.setEffectiveWeight(1);
     a.reset().fadeIn(0.1).play();
     this.oneShot = a;
     return clip.duration / timeScale;
@@ -122,18 +188,20 @@ export class PloverDriver implements Driver {
   setIntent(intent: Intent): void {
     this.busy = true;
     this.timer = intent.seconds > 0 ? intent.seconds : 6;
+    // an intent can arrive before the model is attached: then the bird's own spot stands in for a missing target
+    const here = this.ind?.pos ?? intent.from ?? this.target;
     switch (intent.kind) {
       case 'rest': this.mode = 'idle'; break;
       case 'wander': case 'moveTo':
         this.mode = 'walk';
-        this.target.copy(intent.target ?? this.ind!.pos);
+        this.target.copy(intent.target ?? here);
         this.emit('walk');
         break;
       case 'flee':
-        this.target.copy(intent.target ?? this.ind!.pos);
+        this.target.copy(intent.target ?? here);
         if (intent.param === 'flight') {
           this.mode = 'fly';
-          this.flyFrom.copy(this.ind!.pos);
+          this.flyFrom.copy(here);
           this.flyT = 0;
           const dist = this.flyFrom.distanceTo(this.target);
           this.flyDur = Math.max(2.5, dist / 7 + 1.2);
@@ -252,6 +320,14 @@ export class PloverDriver implements Driver {
       if (this.restVariant && speed > 0) this.restVariant = null;
     }
     this.mixer!.update(sdt);
+    // the head is steadied: a plover's head hardly bobs; the baked cadence is damped to a sway
+    const k = 1 - Math.exp(-sdt / HEAD_SMOOTH_S);
+    for (const s of this.steady) {
+      s.q.slerp(s.bone.quaternion, k);
+      s.bone.quaternion.copy(s.q);
+      s.p.lerp(s.bone.position, k);
+      s.bone.position.copy(s.p);
+    }
   }
 
   private animatePlaceholder(speed: number): void {

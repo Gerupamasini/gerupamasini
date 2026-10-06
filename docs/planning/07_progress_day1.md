@@ -162,3 +162,8 @@
 - シロチドリ: GLB を `src/assets/models/plover/`、種データの hero/lod1/lod2 に同じファイル、`modelLength_mm` 165。`CreatureSystem` が `root.userData.clips` にクリップを載せ、`PloverDriver` が `AnimationMixer` で再生（ループ: idle / walk / run / forage / rest、ジェスチャー: peck / preen / alert / takeoff / landing / shake、クロスフェード）。プレースホルダーの手付けアニメは残した。
 - バージョン 0.12.0。
 
+## 16 回目（アサリの新モデル、シロチドリの頭）
+- アサリ: `src/creatures/asari/{Asari,AsariMaterial,AsariModel}.js` を `claude/vigilant-johnson-xhb62w` から取り込み（centreY 0.2、mantlePivot の表示切り替え、水管の Y 字の分岐 `ANATOMY.siphonFork`、貝床の殻を砂に少し沈める）。種の説明文も更新。
+- シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
+- バージョン 0.12.1。
+
