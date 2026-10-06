@@ -1,6 +1,6 @@
 import {
-  BufferAttribute, BufferGeometry, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshStandardMaterial, RedFormat, Vector3,
-  type IUniform, LinearFilter, ClampToEdgeWrapping,
+  BufferAttribute, BufferGeometry, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshStandardMaterial, RedFormat, Vector2, Vector3,
+  type IUniform, type Texture, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
 import { makeSpillTexture } from './Water';
 import { WAVES_GLSL, type WaveSet } from './Waves';
@@ -102,6 +102,9 @@ export class Terrain {
   private readonly uCausticGain: IUniform<number> = { value: 2.6 };
   /** 1: grains, burrows and micro relief up close; 0: the cheap far-field shading only (low quality) */
   private readonly uDetail: IUniform<number> = { value: 1 };
+  /** アマモ cover over the map (0..1), and the distance range over which the drawn blades hand over to a canopy tint */
+  private readonly uMeadow: IUniform<Texture> = { value: new DataTexture(new Uint8Array(1), 1, 1, RedFormat) };
+  private readonly uMeadowFar: IUniform<Vector2> = { value: new Vector2(1e4, 1e4 + 1) };
   private waves: WaveSet | null = null;
 
   constructor(grid: TerrainGrid, palette: Substrate[], pits: FeedingPit[] = []) {
@@ -332,6 +335,8 @@ export class Terrain {
       shader.uniforms.uSunDirT = this.uSunDirT;
       shader.uniforms.uCausticGain = this.uCausticGain;
       shader.uniforms.uDetail = this.uDetail;
+      shader.uniforms.uMeadow = this.uMeadow;
+      shader.uniforms.uMeadowFar = this.uMeadowFar;
       if (this.waves) Object.assign(shader.uniforms, this.waves.uniforms);
       shader.uniforms.uSpillTex = this.uSpill;
       shader.uniforms.uHalf = { value: this.half };
@@ -350,6 +355,8 @@ uniform float uSunUp;
 uniform vec3 uSunDirT;
 uniform float uCausticGain;
 uniform float uDetail;
+uniform sampler2D uMeadow;
+uniform vec2 uMeadowFar;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
 ${WAVES_GLSL}
@@ -543,6 +550,14 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   diffuseColor.rgb *= mix(vec3(1.0), vec3(0.78, 0.68, 0.42), filmP * 0.6);
   float reducedP = smoothstep(1.5, 2.5, vSubstrate) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0));
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.058, 0.056, 0.052), reducedP * 0.7);
+  // under an アマモ bed the sediment is finer, darker and richer (trapped silt, detritus, the canopy's shade); past the
+  // distance where the blades are drawn, the canopy itself stands in (lying mats at low water, dark green under it)
+  float meadow = texture2D(uMeadow, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
+  if (meadow > 0.002) {
+    diffuseColor.rgb *= mix(vec3(1.0), vec3(0.66, 0.68, 0.6), meadow);
+    float farM = smoothstep(uMeadowFar.x, uMeadowFar.y, distance(cameraPosition.xz, vWorldPos.xz));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.09, 0.028), farM * meadow * 0.85);
+  }
   // the water level here: the tide, or a tide pool's own level above it
   float spillH = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
   float lvl = (spillH > uWaterLevel + 0.01 && spillH > vWorldPos.y + 0.003) ? spillH : uWaterLevel;
@@ -617,6 +632,15 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     this.uTime.value = time;
     this.uSunUp.value = sunUp;
     if (sunDir) this.uSunDirT.value.copy(sunDir);
+  }
+
+  /**
+   * The アマモ beds' cover (R, 0..1 over the map): darker sediment under them, and their canopy tint beyond `drawnTo`
+   * metres, where the drawn blades end.
+   */
+  setMeadowCover(cover: Texture, drawnTo: number): void {
+    this.uMeadow.value = cover;
+    this.uMeadowFar.value.set(drawnTo * 0.6, drawnTo);
   }
 
   /** Close-up surface detail on or off (quality preset). */

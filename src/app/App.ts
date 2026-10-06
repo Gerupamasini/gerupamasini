@@ -16,6 +16,7 @@ import { FPSController } from '../player/FPSController';
 import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
 import { ShovelView } from '../player/ShovelView';
 import { ClamField } from '../world/ClamField';
+import { MEADOW_QUALITY } from '../world/amamo';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 import { instantiateModel } from '../creatures/models/ModelLoader';
@@ -45,7 +46,7 @@ const AUTOSAVE_SEC = 60;
 /** drivers that build their own clam geometry in shell lengths (the scoop shows them at length / 1000) */
 const CLAM_DRIVERS = new Set(['asari', 'hamaguri']);
 
-export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool' | 'clams';
+export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool' | 'clams' | 'amamo';
 
 export class App {
   readonly renderer: GameRenderer;
@@ -349,6 +350,11 @@ export class App {
     this.world?.water.setPolarized(this.settings.sunglasses);
     this.renderer.setQuality(this.settings.quality);
     this.world?.terrain.setDetail(this.renderer.preset.surfaceDetail > 0);
+    if (this.world?.amamo) {
+      const q = MEADOW_QUALITY[this.renderer.preset.vegetation];
+      this.world.amamo.setQuality(q);
+      this.world.terrain.setMeadowCover(this.world.amamo.coverTexture, q.lod[2]);
+    }
     if (this.player) this.player.eyeHeight = this.settings.eyeHeight;
     this.applyHeroSetting();
     await saveSettings(this.settings);
@@ -461,6 +467,16 @@ export class App {
           if (d < bestD) { bestD = d; best = b; }
         }
         if (best) { x = best.x + 1.5; z = best.z; yaw = Math.PI / 2; pitch = -0.55; p.lowView = true; }
+        break;
+      }
+      case 'amamo': {
+        // the nearest dense アマモ bed, stood a little way off its landward side and looking out over it
+        const bed = w.amamo?.nearest(p.position.x, p.position.z, 'dense');
+        if (bed) {
+          const s = w.amamo!.seaward;
+          x = bed.x - s.x * (bed.r + 3); z = bed.z - s.y * (bed.r + 3);
+          yaw = Math.atan2(-s.x, -s.y); pitch = -0.4; p.lowView = false;
+        }
         break;
       }
       default: break;
@@ -1303,6 +1319,13 @@ export class App {
     return null;
   }
 
+  /** アマモ: patches drawn by tier and the leaf vertices they cost (debug panel). */
+  private amamoStats(): string {
+    const st = this.world?.amamo?.stats();
+    if (!st) return '-';
+    return `${st.visible}/${st.live}/${st.specs} 株 ${(st.shoots / 1000).toFixed(1)}k [${st.lod.join('/')}] 頂点 ${(st.vertices / 1e6).toFixed(2)}M`;
+  }
+
   private updateMarkers(): void {
     const c = this.creatures, p = this.player;
     if (!c || !p) { ui.markers.value = []; return; }
@@ -1415,7 +1438,7 @@ export class App {
       const info = (this.field?.lastStats ?? this.renderer.gl.info.render);
       const cs = this.creatures?.stats() ?? { total: 0, visible: 0, lod1: 0 };
       const clamsNear = this.clams && player ? this.clams.nearIndices(player.position.x, player.position.z, 12).length : 0;
-      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0 } };
+      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0, amamo: this.amamoStats() } };
     }
   }
 }

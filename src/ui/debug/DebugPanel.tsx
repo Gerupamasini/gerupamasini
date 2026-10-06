@@ -59,6 +59,7 @@ export function DebugPanel({ app }: { app: App }) {
         <button onClick={() => app.teleport('creek')}>水路</button>
         <button onClick={() => app.teleport('pool')}>潮だまり</button>
         <button onClick={() => app.teleport('clams')}>貝床</button>
+        <button onClick={() => app.teleport('amamo')}>アマモ場</button>
         <button onClick={() => app.forceSpawn()}>周囲に生物</button>
       </div>
       <div class="debug-row seg">
@@ -77,7 +78,7 @@ export function DebugPanel({ app }: { app: App }) {
         })}
       </div>
       <div class="debug-row dim small">
-        draw {d.stats.calls} / tris {(d.stats.tris / 1000).toFixed(0)}k / 生物 {d.stats.creatures}（表示 {d.stats.visible}、近距離 {d.stats.lod1}） / アサリ 近く {d.stats.clamsNear}（全 {d.stats.clamsTotal}） / {hud.fps} fps / 次の満干 {hud.extrema.slice(0, 2).map((e) => `${e.kind === 'high' ? '満' : '干'} ${formatJst(e.t)}`).join(' ')}
+        draw {d.stats.calls} / tris {(d.stats.tris / 1000).toFixed(0)}k / 生物 {d.stats.creatures}（表示 {d.stats.visible}、近距離 {d.stats.lod1}） / アサリ 近く {d.stats.clamsNear}（全 {d.stats.clamsTotal}） / アマモ {d.stats.amamo} / {hud.fps} fps / 次の満干 {hud.extrema.slice(0, 2).map((e) => `${e.kind === 'high' ? '満' : '干'} ${formatJst(e.t)}`).join(' ')}
       </div>
     </div>
   );

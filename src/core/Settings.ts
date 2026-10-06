@@ -36,12 +36,14 @@ export interface QualityPreset {
   creatureScale: number;
   lod1Count: number;
   waterNormals: boolean;
+  /** アマモ beds: how many shoots, how far each detail tier reaches, which tiers cast shadows (MEADOW_QUALITY) */
+  vegetation: Quality;
 }
 
 export const QUALITY_PRESETS: Record<Quality, QualityPreset> = {
-  low: { maxDpr: 1, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, waterNormals: true, surfaceDetail: 0 },
-  mid: { maxDpr: 1.5, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, waterNormals: true, surfaceDetail: 1 },
-  high: { maxDpr: 2, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, waterNormals: true, surfaceDetail: 1 },
+  low: { maxDpr: 1, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, waterNormals: true, surfaceDetail: 0, vegetation: 'low' },
+  mid: { maxDpr: 1.5, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, waterNormals: true, surfaceDetail: 1, vegetation: 'mid' },
+  high: { maxDpr: 2, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, waterNormals: true, surfaceDetail: 1, vegetation: 'high' },
 };
 
 const KEY = 'settings';

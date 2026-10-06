@@ -213,10 +213,12 @@ export class WaterPass {
 
               // the shoreline: a bright rim where the water is a few millimetres deep, and small bubbles
               float vdepth = level - P.y;
-              float rim = smoothstep(0.0, 0.004, vdepth) * (1.0 - smoothstep(0.004, 0.03, vdepth));
+              // (only where the ground itself meets the water: a blade floating just under the surface is not a shoreline)
+              float onBed = 1.0 - smoothstep(0.015, 0.04, P.y - groundAt(P.xz));
+              float rim = smoothstep(0.0, 0.004, vdepth) * (1.0 - smoothstep(0.004, 0.03, vdepth)) * onBed;
               rim *= smoothstep(-0.2, 0.5, snoise(S.xz * 3.0 + uTime * 0.1));
               col += env * rim * 0.05;
-              float bub = smoothstep(0.86, 0.97, snoise(S.xz * 14.0 + uTime * vec2(0.05, 0.03))) * (1.0 - smoothstep(0.0, 0.06, vdepth)) * smoothstep(0.0, 0.004, vdepth);
+              float bub = smoothstep(0.86, 0.97, snoise(S.xz * 14.0 + uTime * vec2(0.05, 0.03))) * (1.0 - smoothstep(0.0, 0.06, vdepth)) * smoothstep(0.0, 0.004, vdepth) * onBed;
               col = mix(col, vec3(0.85) * (0.4 + 0.6 * uSunUp) * uAmbient, bub * 0.55 * (1.0 - calm * 0.6));
               // flecks floating on the surface, near the viewer
               float speck = smoothstep(0.93, 0.99, snoise(S.xz * 9.0 + uTime * vec2(0.04, 0.025))) * smoothstep(0.02, 0.2, vdepth) * (1.0 - smoothstep(4.0, 14.0, t));

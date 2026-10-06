@@ -16,6 +16,7 @@
     "model:mahaze": "node tools/models/mahaze/build.mjs",
     "model:nets": "node tools/models/nets/build.mjs",
     "render:nets": "node tools/models/nets/render.mjs",
+    "render:amamo": "node tools/models/amamo/render.mjs",
     "terrain:bake": "node tools/terrain/bake-map.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tools/**/*.mjs\" \"tests/**/*.{ts,mjs}\""
   },

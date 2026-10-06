@@ -9,11 +9,15 @@ import { Habitat } from '../world/Habitat';
 import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
 import { createPitDebris } from '../world/PitDebris';
 import { Skyline } from '../world/Skyline';
+import { AmamoMeadow, MEADOW_QUALITY } from '../world/amamo';
 import type { FeedingPit } from '../world/FeedingPits';
 import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
 import { jstParts, seasonOf, type Season } from '../core/Time';
 import type { QualityPreset } from '../core/Settings';
+
+/** direction the breeze drives the ripples and the waves over the eelgrass (radians in the xz plane) */
+const WIND_DIR = 0.7;
 
 /** The tidal flat: terrain, water, sky, habitat and the tide model bound to a map. */
 export class World {
@@ -21,6 +25,8 @@ export class World {
   pits: FeedingPit[] = [];
   /** the far scenery on the horizon (landmarks as flat silhouettes) */
   readonly skyline = new Skyline();
+  /** the アマモ beds below the low-water mark */
+  amamo: AmamoMeadow | null = null;
 
   readonly scene = new Scene();
   readonly fog: FogExp2;
@@ -67,7 +73,7 @@ export class World {
     const habitat = new Habitat(terrain, 5, pits);
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
-    const waves = createWaves({ windDir: 0.7, depth: 0.6, seed: map.id.length * 131 + 7 });
+    const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });
     terrain.setWaves(waves);
     const water = new WaterPass(terrain, waves);
     const tide = station instanceof TideModel ? station : new TideModel(station);
@@ -75,6 +81,11 @@ export class World {
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
+    onProgress?.('アマモ場');
+    w.amamo = new AmamoMeadow(terrain, habitat, hashInts(...[...map.id].map((c) => c.charCodeAt(0)), 20261006));
+    w.amamo.setQuality(MEADOW_QUALITY[preset.vegetation]);
+    terrain.setMeadowCover(w.amamo.coverTexture, MEADOW_QUALITY[preset.vegetation].lod[2]);
+    w.scene.add(w.amamo.group);
     w.scene.add(w.skyline.group);
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
     (w as { sky: SkyDome }).sky = sky;
@@ -111,6 +122,8 @@ export class World {
     });
     // the bed's caustics run on the water's clock so they sit under the ripples that cast them
     this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.water.uniforms.uTime.value, sunUp, this.sunDir);
+    // the eelgrass sways with the same breeze and leans with the tidal current
+    this.amamo?.update(dt, camera, { tideLevel: this.tideLevel, tideRate: this.tideRate, windDir: WIND_DIR, waveGain: this.water.uniforms.uWaveGain.value });
     // lift the exposure at night so the flat stays readable under the moon
     this.exposure = 0.58 + 0.32 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
     this.scene.background = this.sky.fogColor;
