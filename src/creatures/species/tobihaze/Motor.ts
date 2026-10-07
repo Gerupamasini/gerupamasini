@@ -1,5 +1,5 @@
 import { Matrix4, Quaternion, Vector3, type Bone, type Mesh, type Object3D } from 'three';
-import { computePose, defaultPose, swimMidline, bendFromMidline, SPINE, MORPHS, type Pose, type Quat } from './pose.js';
+import { computePose, defaultPose, swimMidline, bendFromMidline, partTurn, swingOf, PEC_HELPERS, SPINE, MORPHS, type Pose, type Quat } from './pose.js';
 import type { MudFx } from '../../../world/MudFx';
 
 /**
@@ -68,6 +68,10 @@ interface Fin {
   swing: number;
   swingDur: number;
   ik: number;
+  /** how far arm and web stand as one strut (smoothed: planting or lifting the fin eases it in and out) */
+  strut: Spring;
+  /** how far the web hangs down from the wrist (planted) rather than being carried level (swinging), smoothed */
+  hang: Spring;
 }
 
 interface Eye {
@@ -170,6 +174,8 @@ export class Motor {
   private readonly breathe = new Spring(0);
   private readonly bend: Record<string, Spring> = {};
   private readonly finFold: [Spring, Spring] = [new Spring(0.3), new Spring(0.3)];
+  /** the fins' FK angles (protract, depress, wrist, twist), sprung toward each gait's pose */
+  private readonly finFK = [0, 1].map(() => [new Spring(0.4), new Spring(1.0), new Spring(0.5), new Spring(0)]);
   private readonly ikW = new Spring(1);
   private bendT: Record<string, number> = {};
   private liftT = 0.003;
@@ -255,7 +261,7 @@ export class Motor {
       return new Vector3(0, 0, 1).applyQuaternion(eye ? eye.quaternion : new Quaternion());
     };
     this.eyeAxis = [axis('J_eyeL'), axis('J_eyeR')];
-    const mkFin = (side: 1 | -1): Fin => ({ side, planted: false, contact: new Vector3(), from: new Vector3(), to: new Vector3(), yaw: 0, yawFrom: 0, yawTo: 0, swing: -1, swingDur: 0.25, ik: 1 });
+    const mkFin = (side: 1 | -1): Fin => ({ side, planted: false, contact: new Vector3(), from: new Vector3(), to: new Vector3(), yaw: 0, yawFrom: 0, yawTo: 0, swing: -1, swingDur: 0.25, ik: 1, strut: new Spring(0), hang: new Spring(1) });
     this.fins = [mkFin(1), mkFin(-1)];
     const mkEye = (): Eye => ({ yaw: 0, pitch: 0, vy: 0, vp: 0, tYaw: 0, tPitch: 0, nextSac: this.rnd() * 2, scanYaw: 0, scanPitch: 0, retract: 0, cup: 0, blinkT: -1, blinkDur: 0.56 });
     this.eyes = [mkEye(), mkEye()];
@@ -1137,8 +1143,10 @@ export class Motor {
     p.pecL.q = null; p.pecL.wq = null; p.pecR.q = null; p.pecR.wq = null;
     this.applyPose();
     root.updateMatrixWorld(true);
-    if (ik > 0.01) this.ikFins(ik, w);
+    if (ik > 0.01) this.ikFins(ik, w, dt);
     if (this.finMode === 'plant' && !w.detail) this.fkPlantedFins();
+    this.limitPecRates(dt);
+    this.syncPecRoots();
     // eyes last: they look from where the head is now
     const head = this.bones.J_head;
     if (head) {
@@ -1264,9 +1272,13 @@ export class Motor {
     const ph = this.t * TAU * (this.gait === 'roll' ? 4 : 1.6);
     for (const [i, key] of [[0, 'pecL'], [1, 'pecR']] as const) {
       const fp = p[key];
-      if (fold) { fp.protract = -1.05; fp.depress = 0.22; fp.wrist = 0.05; fp.twist = 0; }
-      else if (paddle) { fp.protract = -0.25 + 0.55 * Math.sin(ph + i * Math.PI * 0.15); fp.depress = 0.55; fp.wrist = 0.25 + 0.15 * Math.sin(ph + 0.6); fp.twist = 0.2 * Math.sin(ph); }
-      else { fp.protract = 0.4; fp.depress = 1.0; fp.wrist = 0.5; fp.twist = 0; }
+      let t: [number, number, number, number];
+      if (fold) t = [-1.05, 0.22, 0.05, 0];
+      else if (paddle) t = [-0.25 + 0.55 * Math.sin(ph + i * Math.PI * 0.15), 0.55, 0.25 + 0.15 * Math.sin(ph + 0.6), 0.2 * Math.sin(ph)];
+      else t = [0.4, 1.0, 0.5, 0];
+      // (sprung: switching gait - folding for a hop, opening to paddle - the arms move there instead of jumping)
+      const S = this.finFK[i];
+      fp.protract = S[0].to(t[0], 26, dt); fp.depress = S[1].to(t[1], 26, dt); fp.wrist = S[2].to(t[2], 26, dt); fp.twist = S[3].to(t[3], 26, dt);
     }
     const want = fold ? 0.8 : paddle ? 0.15 : null;
     if (want !== null) { this.finFold[0].to(want, 10, dt); this.finFold[1].to(want, 10, dt); }
@@ -1308,7 +1320,34 @@ export class Motor {
    * leaning back. Propped high the arm cannot reach the mud: it points at the wrist's spot and the web slopes down
    * from the wrist to the mud.
    */
-  private ikFins(weight: number, w: MotorWorld): void {
+  /**
+   * The arms and hands turn at most ~1200°/s (a fast fin stroke is well under that): where the solved pose would jump
+   * - switching between planted IK and the folded or paddling FK poses, the throw of a hop - they swing through it
+   * over a few frames instead of snapping.
+   */
+  private readonly pecPrev = new Map<string, Quaternion>();
+  private limitPecRates(dt: number): void {
+    const step = (1200 * Math.PI / 180) * Math.min(dt, 0.05);
+    for (const name of ['J_pecL', 'J_pecArmL', 'J_pecR', 'J_pecArmR']) {
+      const b = this.bones[name];
+      if (!b) continue;
+      const prev = this.pecPrev.get(name);
+      if (prev && !this.hidden) b.quaternion.copy(prev.rotateTowards(b.quaternion, step));
+      this.pecPrev.set(name, b.quaternion.clone());
+    }
+  }
+
+  /** the helper joints turn half as far as the arms and hands (they carry the skin of the arms' fillets and wrists) */
+  private syncPecRoots(): void {
+    for (const [arm, helper, f] of PEC_HELPERS) {
+      const a = this.bones[arm], r = this.bones[helper];
+      if (!a || !r) continue;
+      const h = partTurn([a.quaternion.x, a.quaternion.y, a.quaternion.z, a.quaternion.w], f);
+      r.quaternion.set(h[0], h[1], h[2], h[3]);
+    }
+  }
+
+  private ikFins(weight: number, w: MotorWorld, dt: number): void {
     const rig = this.rig.pec;
     const s = this.scale;
     const a = rig.armLen_m * s, b = rig.handLen_m * s;
@@ -1328,19 +1367,20 @@ export class Motor {
       const d = D.length();
       const W = new Vector3();
       if (d >= a) W.copy(S).addScaledVector(D, a / Math.max(d, 1e-9));
-      else if (prop > 0.3) {
-        // propped high and the wrist's spot is within reach: the arm keeps pointing at it, the wrist coming to rest
-        // lower (the web under it, standing on its margin, takes up the rest)
-        W.copy(S).addScaledVector(D, a / Math.max(d, 1e-9));
-      } else {
-        // the arm is longer than the way down: it splays out sideways (the wrist slides out along the mud)
+      else {
+        // the arm is longer than the way down: low, it splays out sideways (the wrist slides out along the mud);
+        // propped high, it keeps pointing at the wrist's spot, the wrist coming to rest lower (the web under it,
+        // standing on its margin, takes up the rest) - eased from one to the other as the body rises
         const dy = D.y;
         const r = Math.sqrt(Math.max(0, a * a - dy * dy));
-        const hz = new Vector3(D.x, 0, D.z);
+        // (biased outward: as the wrist passes under the shoulder its own horizontal offset is too small to give a
+        // steady direction)
+        const hz = new Vector3(D.x, 0, D.z).addScaledVector(out, 0.002 * s);
         if (hz.lengthSq() < 1e-12) hz.copy(out);
         hz.normalize();
         W.copy(S).addScaledVector(hz, r);
         W.y = S.y + dy;
+        W.lerp(S.clone().addScaledVector(D, a / Math.max(d, 1e-9)), smooth(0.2, 0.4, prop));
       }
       const gW = w.ground(W.x, W.z);
       if (W.y < gW + hw) {
@@ -1355,7 +1395,8 @@ export class Motor {
       // in the air (swinging forward) it is carried level with the wrist rather than dragged down to the mud; propped
       // high, the web hangs down from the wrist like a foot, only its margin on the mud (photographs of standing and
       // walking animals)
-      const drop = Math.min(lift, f.planted || f.swing < 0 ? 0.94 * b : 0.25 * b);
+      const hang = f.hang.to(f.planted || f.swing < 0 ? 1 : 0, 18, dt);
+      const drop = Math.min(lift, (0.25 + 0.69 * hang) * b);
       const horiz = Math.sqrt(Math.max(1e-12, b * b - drop * drop));
       const G = new Vector3(W.x + hd.x * horiz, 0, W.z + hd.z * horiz);
       G.y = Math.max(w.ground(G.x, G.z) + 0.0002 * s, W.y - drop);
@@ -1376,8 +1417,9 @@ export class Motor {
       // propped high (standing, walking), arm and web stand as one strut splayed out from the shoulder: the arm points
       // at the spot where the web's tip rests on the mud and the web carries straight on from the wrist, its broad face
       // turned forward (photographs of standing and walking animals: no kink at the wrist)
-      const strut = smooth(0.3, 0.8, prop);
-      if (strut > 0) {
+      // (eased: the moment the fin is put down or lifted, the arm turns into the strut's attitude or out of it smoothly)
+      const strut = f.strut.to(smooth(0.3, 0.8, prop), 14, dt);
+      if (strut > 1e-3) {
         // (the web's tip a little under the wrist's line: the strut stands at ~30° from the vertical, as photographed)
         const reach = a + 0.55 * b;
         const C = f.contact.clone();
@@ -1395,13 +1437,20 @@ export class Motor {
         // the web's broad face forward: its plane holds the strut and the sideways direction
         let ns = this.fwd(this.heading, new Vector3());
         ns.sub(ds.clone().multiplyScalar(ns.dot(ds))).normalize();
-        let ws = new Vector3().crossVectors(ns, ds).normalize();
-        // the leading rays (the web's width axis) toward the head
-        if (ws.dot(this.fwd(this.heading, new Vector3())) < 0 && ws.y < 0) { ws.negate(); ns.negate(); }
+        const ws = new Vector3().crossVectors(ns, ds).normalize();
+        // (its sign: on the same side as the web's width axis laid on the mud, so the leading rays stay leading as the
+        // fin goes from one attitude to the other)
+        if (ws.dot(wh) < 0) { ws.negate(); ns.negate(); }
         W.lerp(Ws, strut);
-        dh.lerp(ds, strut).normalize();
-        wh.lerp(ws, strut);
-        wh.sub(dh.clone().multiplyScalar(wh.dot(dh))).normalize();
+        // (the web's two attitudes are blended as rotations: blending their axes as vectors collapses when they point
+        // nearly opposite ways, and the hand would flip for a frame)
+        const frame = (d: Vector3, wv: Vector3) => {
+          const wv2 = wv.clone().sub(d.clone().multiplyScalar(wv.dot(d))).normalize();
+          return new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(d, wv2, new Vector3().crossVectors(d, wv2)));
+        };
+        const qW = frame(dh, wh).slerp(frame(ds, ws), strut);
+        dh.set(1, 0, 0).applyQuaternion(qW);
+        wh.set(0, 1, 0).applyQuaternion(qW);
         void ns;
       }
       // the arm's broad side faces out (its width runs fore and aft, the muscular paddle seen from the side); the hand
@@ -1411,13 +1460,16 @@ export class Motor {
       let wa = bodyFwd.clone().sub(da.clone().multiplyScalar(bodyFwd.dot(da)));
       if (wa.lengthSq() < 1e-8) wa = wh.clone().sub(da.clone().multiplyScalar(wh.dot(da)));
       wa.normalize();
-      if (wa.dot(wh) < 0) wa.negate();
-      // propped as a strut, the arm's broad face turns forward with the web's (photographed head-on: broad arms)
-      if (strut > 0) {
-        wa.lerp(wh, strut);
-        wa.sub(da.clone().multiplyScalar(wa.dot(da)));
-        if (wa.lengthSq() < 1e-10) wa.copy(wh);
-        wa.normalize();
+      // propped as a strut, the arm's broad face turns part way forward, toward the web's (photographed head-on: broad
+      // arms) - a turn about the arm's own axis toward the outside, eased in with the strut (the shoulder's twist is
+      // capped below; the hand turns the rest of the way)
+      if (strut > 1e-3) {
+        const op = out.clone().sub(da.clone().multiplyScalar(out.dot(da)));
+        if (op.lengthSq() > 1e-10) {
+          op.normalize();
+          const th = 0.44 * strut;
+          wa.multiplyScalar(Math.cos(th)).addScaledVector(op, Math.sin(th)).normalize();
+        }
       }
       // rest frame (object = J_root local at rest), mirrored for the right fin
       const sx = f.side;
@@ -1437,6 +1489,19 @@ export class Motor {
       const nhR = new Vector3().crossVectors(dh, wh);
       const parentQ = rootBone.getWorldQuaternion(new Quaternion());
       const qArm = toLocal(parentQ, da, wa, naR);
+      // the arm turns about its own axis at the shoulder by at most ~25°: more would wring the skin of its root and
+      // the flank round it; the hand takes the rest of the turn at the wrist (its frame is solved below, relative to
+      // where the arm now points)
+      {
+        const sw = swingOf([qArm.x, qArm.y, qArm.z, qArm.w], [D0.x, D0.y, D0.z]);
+        const swQ = new Quaternion(sw[0], sw[1], sw[2], sw[3]);
+        const tw = swQ.clone().invert().multiply(qArm);
+        if (tw.w < 0) tw.set(-tw.x, -tw.y, -tw.z, -tw.w);
+        const ang = 2 * Math.acos(Math.min(1, tw.w));
+        const MAXT = 0.44;
+        if (ang > MAXT) tw.slerp(new Quaternion(), 1 - MAXT / ang);
+        qArm.copy(swQ.multiply(tw));
+      }
       const armWorldQ = parentQ.clone().multiply(qArm);
       const qHand = toLocal(armWorldQ, dh, wh, nhR);
       // blend with the FK pose

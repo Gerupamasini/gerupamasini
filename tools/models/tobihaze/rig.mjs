@@ -24,6 +24,19 @@ export const JOINTS = [
   { name: 'J_pecArmL', parent: 'J_pecL', at: PEC.wrist },
   { name: 'J_pecR', parent: 'J_root', at: mirror(PEC.base) },
   { name: 'J_pecArmR', parent: 'J_pecR', at: mirror(PEC.wrist) },
+  // helper joints at the shoulder that turn half as far as the arm (pose.js): the arm's fillet and the flank under
+  // its skirt blend from the body through these to the arm, so a big swing or twist of the arm is spread over the
+  // fillet instead of wringing it (linear blend skinning collapses skin weighted between two joints far apart)
+  { name: 'J_pecRootL', parent: 'J_root', at: PEC.base },
+  { name: 'J_pecRootR', parent: 'J_root', at: mirror(PEC.base) },
+  // (and a quarter and three quarters of the way: the fillet steps through all of them)
+  { name: 'J_pecRoot1L', parent: 'J_root', at: PEC.base },
+  { name: 'J_pecRoot1R', parent: 'J_root', at: mirror(PEC.base) },
+  { name: 'J_pecRoot3L', parent: 'J_root', at: PEC.base },
+  { name: 'J_pecRoot3R', parent: 'J_root', at: mirror(PEC.base) },
+  // and at the wrist, half as far as the hand: the skin over the wrist bends through it
+  { name: 'J_pecWristL', parent: 'J_pecL', at: PEC.wrist },
+  { name: 'J_pecWristR', parent: 'J_pecR', at: mirror(PEC.wrist) },
   { name: 'J_pelvic', parent: 'J_root', at: [PELVIC.s, botY(PELVIC.s) + 0.25, 0] },
   ...SPINE.slice(2).map(([name, s], k, arr) => ({ name, parent: k === 0 ? 'J_root' : arr[k - 1][0], at: at(Math.min(s, 64)) })),
 ];
@@ -84,7 +97,7 @@ export function skinWeights(list) {
     if (w > 1e-3) return withRest([[J.J_jaw, w]], s);
     // the flank under the pectoral arm's skirt moves with the skirt (arm.mjs), so it stays hidden under it
     const wp = pecShare(v.fish);
-    if (wp > 1e-3) return withRest([[v.fish[2] > 0 ? J.J_pecL : J.J_pecR, wp]], s);
+    if (wp > 1e-3) return withRest(pecSplit(v.fish[2] > 0 ? 1 : -1, wp), s);
     return spineWeights(s);
   }), list.length);
 }
@@ -113,11 +126,31 @@ export function mouthWeights(m) {
  * under it, like the flank's own skin
  */
 export function armWeights(arm, side) {
-  const jp = side > 0 ? J.J_pecL : J.J_pecR, jw = side > 0 ? J.J_pecArmL : J.J_pecArmR;
+  const jw = side > 0 ? J.J_pecArmL : J.J_pecArmR, jh = side > 0 ? J.J_pecWristL : J.J_pecWristR;
   return pack(arm.at.map((a, k) => {
-    const wWrist = smoothstep(PEC.joint - 0.7, PEC.joint + 0.5, a);
-    return withRest([[jp, (1 - wWrist) * arm.pec[k]], [jw, wWrist]], arm.fish[k * 3]);
+    // (the hand's turn is spread along the whole forearm, through the wrist's half-turning helper: forearm → helper →
+    // hand. The arm turns about its own axis mostly here - the shoulder takes little of it, rig/Motor - and a twist
+    // packed into the short wrist would wring the paddle into a disc)
+    const h = smoothstep(1.6, PEC.joint + 0.5, a);
+    const hand = h <= 0.5 ? [[jh, 2 * h]] : [[jw, 2 * h - 1], [jh, 2 - 2 * h]];
+    const fore = 1 - Math.min(1, 2 * h);
+    return withRest([...pecSplit(side, arm.pec[k]).map(([j, w]) => [j, fore * w]), ...hand], arm.fish[k * 3]);
   }), arm.at.length);
+}
+
+/**
+ * a skin point's share of the shoulder's motion (0 … 1, arm.mjs pecShare) as weights on the shoulder joint and its
+ * half-turning helper: the body (rest) → the helper → the arm, so neighbouring weights never span the arm's whole
+ * rotation
+ */
+export function pecSplit(side, share) {
+  // levels: the body (rest), the helpers turning ¼, ½ and ¾ of the way, the arm
+  const L = side > 0 ? [null, J.J_pecRoot1L, J.J_pecRootL, J.J_pecRoot3L, J.J_pecL] : [null, J.J_pecRoot1R, J.J_pecRootR, J.J_pecRoot3R, J.J_pecR];
+  const t = clamp(share, 0, 1) * 4, k = Math.min(3, Math.floor(t)), f = t - k;
+  const out = [];
+  if (L[k] !== null && 1 - f > 1e-4) out.push([L[k], 1 - f]);
+  if (f > 1e-4) out.push([L[k + 1], f]);
+  return out;
 }
 
 export function finWeights(name, mesh, side = 1) {

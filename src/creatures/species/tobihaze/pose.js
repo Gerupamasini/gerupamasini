@@ -70,6 +70,24 @@ export function defaultPose() {
   };
 }
 
+/** the rotation the fraction f of the way from none to q (q's axis, f of its angle) */
+export function partTurn(q, f) {
+  const s = q[3] < 0 ? -1 : 1;
+  const w = Math.min(1, s * q[3]);
+  const ang = 2 * Math.acos(w), l = Math.hypot(q[0], q[1], q[2]);
+  if (l < 1e-9) return [0, 0, 0, 1];
+  const h = (f * ang) / 2, k = (s * Math.sin(h)) / l;
+  return [q[0] * k, q[1] * k, q[2] * k, Math.cos(h)];
+}
+/** the rotation half way from none to q */
+export const halfTurn = (q) => partTurn(q, 0.5);
+/** the shoulders' and wrists' helper joints and how far each turns with its joint (rig.mjs) */
+export const PEC_HELPERS = [
+  ['J_pecL', 'J_pecRoot1L', 0.25], ['J_pecL', 'J_pecRootL', 0.5], ['J_pecL', 'J_pecRoot3L', 0.75],
+  ['J_pecR', 'J_pecRoot1R', 0.25], ['J_pecR', 'J_pecRootR', 0.5], ['J_pecR', 'J_pecRoot3R', 0.75],
+  ['J_pecArmL', 'J_pecWristL', 0.5], ['J_pecArmR', 'J_pecWristR', 0.5],
+];
+
 /** the swing part of rotation q relative to the unit axis a (q = swing · twist, the twist about a) */
 export function swingOf(q, a) {
   const d = q[0] * a[0] + q[1] * a[1] + q[2] * a[2];
@@ -117,6 +135,8 @@ export function computePose(p, rig = {}) {
     q[jn] = f.q ?? qf;
     q[wn] = f.wq ?? qw;
   }
+  // the helper joints turn part of the way with their joints (they carry the arms' fillets and wrists: rig.mjs)
+  for (const [j, h, f] of PEC_HELPERS) q[h] = partTurn(q[j], f);
   q.J_pelvic = qX(-p.pelvic);
   const m = p.morph;
   const morph = {

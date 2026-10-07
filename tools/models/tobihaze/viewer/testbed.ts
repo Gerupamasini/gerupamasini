@@ -158,6 +158,17 @@ if (q.get('nofx')) { fx.marks.visible = false; }
 if (q.get('nofish')) model.root.visible = false;
 for (const name of (q.get('hide') ?? '').split(',').filter(Boolean)) model.root.traverse((o) => { if (o.name === name) o.visible = false; });
 if (q.get('dbgnormal')) { const { MeshNormalMaterial } = await import('three'); model.meshes.forEach((m) => { m.material = new MeshNormalMaterial(); }); }
+// (dbgflat=1: untextured grey, the overlay parts with their depth offset kept; dbgwire=1 adds the triangles)
+if (q.get('dbgflat')) {
+  const { MeshStandardMaterial } = await import('three');
+  model.meshes.forEach((m) => {
+    if (m.name.startsWith('Eye')) return;
+    const src = m.material as import('three').Material;
+    const f = new MeshStandardMaterial({ color: 0x9a9a96, roughness: 0.5, wireframe: !!q.get('dbgwire') });
+    f.polygonOffset = src.polygonOffset; f.polygonOffsetFactor = src.polygonOffsetFactor; f.polygonOffsetUnits = src.polygonOffsetUnits;
+    m.material = f;
+  });
+}
 if (q.get('dbgflat')) { const { MeshStandardMaterial: MSM } = await import('three'); model.meshes.forEach((m) => { m.material = new MSM({ color: 0x888888, roughness: 0.15, metalness: 0 }); }); }
 if (q.get('dbgshadow')) scene.traverse((o) => { if (o.name === 'contactShadow') { const m = (o as Mesh).material as import('three').ShaderMaterial; m.fragmentShader = m.fragmentShader.replace('gl_FragColor = vec4(0.02, 0.018, 0.015, clamp(a, 0.0, 1.0) * uOpacity);', 'gl_FragColor = vec4(clamp(a,0.0,1.0), fract(vP.x*100.0), fract(vP.y*100.0), 1.0);'); m.transparent = false; m.needsUpdate = true; } });
 burrows.update(camera.position);
@@ -166,4 +177,5 @@ hud.textContent = `t=${simT.toFixed(2)}s ${JSON.stringify(driver.debug)}`;
 (window as unknown as { __ready: boolean }).__ready = true;
 (window as unknown as { __scene: Scene }).__scene = scene;
 (window as unknown as { __fx: MudFx }).__fx = fx;
+(window as unknown as { __driver: TobihazeDriver }).__driver = driver;
 (window as unknown as { __step: (n: number) => void }).__step = (n: number) => { for (let i = 0; i < n; i++) step(); place(); renderer.render(scene, camera); hud.textContent = `t=${simT.toFixed(2)}s ${JSON.stringify(driver.debug)}`; };

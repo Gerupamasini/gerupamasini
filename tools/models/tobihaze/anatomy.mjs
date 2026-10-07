@@ -251,12 +251,12 @@ export function windowField(o, D) {
 }
 
 // Gape (where the lips meet), side view on the +z side: from the front midline back to the mouth corner. A small
-// mouth low on the face, under the blunt snout's bulb: a short gape, head-on an arch with the corners turned down
-// (~40 % of the face's width; photographs head-on and in three-quarter view) between thick, pouting lips; the jaw
+// mouth low on the face, under the blunt snout's bulb: a short gape, head-on a shallow arch, the corners only a
+// little lower than its middle and tucked up under the lip pads (~40 % of the face's width; photographs head-on and in three-quarter view) between thick, pouting lips; the jaw
 // itself reaches on back under the eye, hidden under the posterior lobe of the upper lip, a pale teardrop pad right
 // behind the corner at the mouth's height. (The jaw's cut starts at the first point, a little behind the face: the
 // lips are laid out on the face itself, see below.)
-export const MOUTH = [[0.8, 2.2], [1.05, 2.13], [1.3, 1.97], [1.55, 1.72], [1.8, 1.38]];
+export const MOUTH = [[0.8, 2.2], [1.05, 2.17], [1.3, 2.08], [1.55, 1.94], [1.8, 1.76]];
 export const RICTUS_S = 1.8;
 // gill-cover margin, top → bottom: the rear and lower edge of the inflated opercular chamber, which rolls softly
 // down into the body behind it (lateral photographs: no hard rim; the gill opening itself, small and ventrolateral,
@@ -345,7 +345,7 @@ function buildFeatures() {
   const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], a: aR, fr: eyeFrame(aR), D: cupDown(-1) };
   // the posterior lobe of the upper lip: an oval pad on each side just behind the mouth corner (pale, studded with
   // sensory pores)
-  const lp = surfaceAt(2.85, 1.5);
+  const lp = surfaceAt(2.85, 1.8);
   const lipPad = { c: lp.p, n: lp.n };
   return {
     gapeLine: gx, gapeU, gapeLen,

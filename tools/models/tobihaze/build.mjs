@@ -98,6 +98,17 @@ const zeros = (n) => new Float32Array(n * 3);
 log('skin mesh');
 const G = buildSkin(tier.NS, tier.NV, log);
 const SP = skinParts(G);
+// the head's and the flank's skin well under the pectoral arms' skirts (arm.mjs) is left out: there the skirt is the
+// only surface, so as the arm swings the body's coarser triangles, bent by the same weights, never poke through it.
+// (The skirt reaches past the skin that moves with the arm all round, see pecShare; the hole is kept well inside it,
+// where the skin takes over a sixth of the arm's motion, and the ring of skin left round it moves little.)
+for (const part of [SP.head, SP.body]) {
+  const ix = part.indices, keep = [];
+  const under = part.list.map((v) => pecShare(v.fish) > 0.16);
+  for (let k = 0; k < ix.length; k += 3) if (!(under[ix[k]] && under[ix[k + 1]] && under[ix[k + 2]])) keep.push(ix[k], ix[k + 1], ix[k + 2]);
+  log(`  skin under the arms' skirts: ${(ix.length - keep.length) / 3} triangles left out`);
+  part.indices = new Uint32Array(keep);
+}
 log(`  head ${SP.head.list.length} v, body ${SP.body.list.length} v, tail ${SP.tail.list.length} v`);
 log('  morph targets (breathe, blink) …');
 const headTargets = [
