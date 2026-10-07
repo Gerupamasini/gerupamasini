@@ -2,18 +2,17 @@ import {
   BufferAttribute, BufferGeometry, CanvasTexture, Color, Group, InstancedBufferAttribute, InstancedMesh, LinearMipmapLinearFilter,
   Matrix4, Mesh, MeshLambertMaterial, Object3D, PlaneGeometry, SRGBColorSpace, type Material,
 } from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../../../core/Rng';
 import { COAST_N, COAST_S, HALF, heightAt as shoreHeight, vnoise } from './shape';
 
 /**
  * The land around the 走水 shore, in three dimensions and standing still in the world (it is near enough for the eye to
- * move against it): the shore's own beach, seawall and coast road carried on along the coast; behind the road the
- * steep wooded Miura hills; to the north a wooded headland after 観音崎, jutting out into the bay with a white radar
- * tower on its summit and a lighthouse on the point; to the south a lower wooded point with a harbour wall. Houses line
- * the road. The woods are evergreen broadleaf (スダジイ, タブノキ): rounded crowns packed close, drawn as camera-facing
- * cards in one instanced draw. Nothing casts shadows; the haze is lighter than the scene's fog (that one is for the
- * water's own distance), so the hills stand clear at a few hundred metres and soften toward a kilometre.
+ * move against it): the shore's own beach, seawall and coast road carried on along the coast; behind them a small
+ * seaside town of streets and two- and three-storey houses, climbing gently to the wooded Miura hills; to the north a
+ * wooded headland after 観音崎 jutting out into the bay; to the south a lower wooded point with a harbour wall. The woods
+ * are evergreen broadleaf (スダジイ, タブノキ): rounded crowns packed close, drawn as camera-facing cards in one
+ * instanced draw. Nothing casts shadows; the haze is lighter than the scene's fog (that one is for the water's own
+ * distance), so the hills stand clear at a few hundred metres and soften toward a kilometre.
  */
 
 const sstep = (e0: number, e1: number, x: number): number => {
@@ -23,10 +22,10 @@ const sstep = (e0: number, e1: number, x: number): number => {
 const fbm = (x: number, z: number, seed: number): number => 0.55 * vnoise(x, z, seed) + 0.3 * vnoise(x * 2.03, z * 2.03, seed + 1) + 0.15 * vnoise(x * 4.1, z * 4.1, seed + 2);
 
 // ------------------------------------------------------------------ the shape of the land
-/** where the hills rise behind the coast road (x) */
-export const HILL_FOOT_X = -86;
+/** where the hills rise behind the town (x) */
+export const HILL_FOOT_X = -175;
 
-/** The Miura hills behind the road: a steep wooded front rounding off to a crest some 200–280 m inland. */
+/** The Miura hills behind the town: a steep wooded front rounding off to a crest some 200–280 m further in. */
 export function westHills(x: number, z: number): number {
   const u = HILL_FOOT_X - x;
   if (u <= 0) return 0;
@@ -78,17 +77,60 @@ export function relief(x: number, z: number): number {
   return Math.max(westHills(x, z), ridge(HEADLAND, x, z), ridge(SOUTH_POINT, x, z));
 }
 
-/**
- * The ground (T.P. m) anywhere around the map: the shore's own profile (beach, seawall, the road behind it, the sea
- * floor) carried on along the coast, with the hills and the points on top. Inside the map it is the map's own terrain.
- */
-export function landHeight(x: number, z: number): number {
-  return shoreHeight(x, z) + relief(x, z);
+// ------------------------------------------------------------------ the town behind the beach
+/** streets parallel to the shore (their x) and a cross street every CROSS m along it */
+const STREETS_X = [-52, -90, -130, -168];
+const CROSS = 46;
+
+/** the town's ground rising gently from the coast road toward the hills (0 at the map's edge) */
+export function townRise(x: number): number {
+  return Math.max(0, (-50 - x) * 0.045);
 }
 
-/** the radar tower on the headland's summit and the lighthouse on its point */
-export const TOWER = { x: 92, z: -296 };
-export const LIGHTHOUSE = { x: 348, z: -344 };
+/** whether (x, z) is on one of the town's streets */
+export function onStreet(x: number, z: number): boolean {
+  if (x > -49 || x < HILL_FOOT_X - 4) return false;
+  for (const sx of STREETS_X) if (Math.abs(x - sx) < 3) return true;
+  return (((z - COAST_N) % CROSS) + CROSS) % CROSS < 6;
+}
+
+/**
+ * The ground (T.P. m) anywhere around the map: the shore's own profile (beach, seawall, the road behind it, the sea
+ * floor) carried on along the coast, the town's gentle rise, and the hills and the points on top. Inside the map it is
+ * the map's own terrain.
+ */
+export function landHeight(x: number, z: number): number {
+  return shoreHeight(x, z) + townRise(x) + relief(x, z);
+}
+
+export interface Lot { x: number; z: number; w: number; d: number; h: number; rot: number; kind: 'house' | 'block' | 'garden' }
+
+/**
+ * The town's lots, in rows along both sides of the streets parallel to the shore: mostly two-storey houses, some of
+ * three, now and then a small block of flats over two lots, and here and there a garden with a tree. None on the
+ * hills or the points' slopes, none inside the map. (w runs along the street, d across it.)
+ */
+export function townLots(seed = 0x70e1): Lot[] {
+  const rng = new Rng(seed);
+  const out: Lot[] = [];
+  const rows = [-60.5, -81.5, -98.5, -121.5, -138.5, -159.5];
+  for (const rx of rows) {
+    for (let z = COAST_N + 8; z < COAST_S - 8;) {
+      const zz = (((z - COAST_N) % CROSS) + CROSS) % CROSS;
+      if (zz < 7) { z += 7 - zz; continue; }
+      const roll = rng.next();
+      const w = roll < 0.06 ? rng.range(20, 26) : rng.range(9, 13);
+      const x = rx + rng.range(-1.2, 1.2), cz = z + w / 2;
+      z += w + rng.range(0.5, 2.5);
+      if (Math.abs(x) < HALF + 4 && Math.abs(cz) < HALF + 4) continue;
+      if (relief(x, cz) > 2.5 || relief(x, cz - w / 2) > 2.5 || relief(x, cz + w / 2) > 2.5) continue;
+      if (roll < 0.06) out.push({ x, z: cz, w: w - 2, d: rng.range(10, 12), h: rng.range(10, 14), rot: 0, kind: 'block' });
+      else if (roll < 0.15) out.push({ x, z: cz, w: w - 2, d: 9, h: 0, rot: 0, kind: 'garden' });
+      else out.push({ x, z: cz, w: w - rng.range(1.5, 3.5), d: rng.range(7.5, 10.5), h: roll < 0.3 ? rng.range(8, 9.8) : rng.range(5.4, 7.2), rot: rng.chance(0.5) ? 0 : Math.PI / 2, kind: 'house' });
+    }
+  }
+  return out;
+}
 
 // ------------------------------------------------------------------ haze
 const haze = { uHazeCol: { value: new Color(0.75, 0.8, 0.85) }, uHazeK: { value: 0.0009 } };
@@ -113,11 +155,17 @@ function hazy<T extends Material>(mat: T, key: string, more?: (vs: string) => st
 // (linear colours) the shore's sand as the terrain draws it, the road and its verges, the woods' floor, bare cliff
 const SAND = [0.27, 0.255, 0.21], WET = [0.17, 0.16, 0.13], VERGE = [0.12, 0.15, 0.07], FLOOR = [0.04, 0.065, 0.025], CLIFF = [0.13, 0.12, 0.1];
 
+const ASPHALT = [0.055, 0.055, 0.06], YARD = [0.12, 0.12, 0.11];
+
 function groundColour(x: number, z: number, h: number, steep: number, r: number): number[] {
   const n = 0.85 + 0.3 * vnoise(x * 0.15, z * 0.15, 131);
   let c: number[];
   if (r > 1.5) c = FLOOR;                                   // the woods (their floor, in the crowns' shade)
-  else if (h > 2.2) c = VERGE;                               // the road side and the gardens
+  else if (onStreet(x, z)) c = ASPHALT;
+  else if (x < -49 && h > 2.2) {                            // the town's yards: paving and gardens
+    const g = vnoise(x * 0.3, z * 0.3, 137);
+    c = YARD.map((v, i) => v * (1 - g) + VERGE[i] * g);
+  } else if (h > 2.2) c = VERGE;                             // the road side
   else if (h > -0.2) c = SAND;
   else c = WET;
   // bare rock only where a point drops into the sea: its lowest few metres, steep and wave-washed
@@ -262,6 +310,14 @@ export function treeSites(seed = 0x5eed7): TreeSite[] {
     // a closed canopy: each crown spreads over its neighbours'
     out.push({ x: px, y: h, z: pz, size: s * rng.range(1.55, 2.1), variant: Math.floor(rng.next() * 4), tint: rng.next() });
   }
+  // a tree or two in each of the town's gardens
+  for (const lot of townLots()) {
+    if (lot.kind !== 'garden') continue;
+    for (let k = 0; k < 2; k++) {
+      const x = lot.x + rng.range(-2.5, 2.5), z = lot.z + rng.range(-lot.w / 3, lot.w / 3);
+      out.push({ x, y: landHeight(x, z), z, size: rng.range(4, 6.5), variant: Math.floor(rng.next() * 4), tint: rng.next() });
+    }
+  }
   return out;
 }
 
@@ -305,7 +361,7 @@ function woods(sites: TreeSite[]): InstancedMesh {
   return im;
 }
 
-// ------------------------------------------------------------------ houses, the tower, the lighthouse, the harbour wall
+// ------------------------------------------------------------------ the town's houses and flats, the harbour wall
 /** a box with a gable roof (unit: 1 wide along x, 1 deep, walls 1 high, ridge 0.35 above), its own vertex colours */
 function houseGeometry(wall: number[], roof: number[]): BufferGeometry {
   const box = new BufferGeometry();
@@ -328,25 +384,26 @@ function houseGeometry(wall: number[], roof: number[]): BufferGeometry {
   return box;
 }
 
-/** a white tower of stacked prisms (radius, base height, top height) with a dark band where the glass is */
-function towerGeometry(parts: [number, number, number, number[]][], sides: number): BufferGeometry {
-  const geos: BufferGeometry[] = [];
-  for (const [r, y0, y1, col] of parts) {
-    const P: number[] = [], C: number[] = [];
-    for (let i = 0; i < sides; i++) {
-      const a0 = (i / sides) * Math.PI * 2, a1 = ((i + 1) / sides) * Math.PI * 2;
-      const p = (a: number, y: number) => [Math.cos(a) * r, y, Math.sin(a) * r];
-      P.push(...p(a0, y0), ...p(a1, y0), ...p(a1, y1), ...p(a0, y0), ...p(a1, y1), ...p(a0, y1));
-      P.push(...p(a1, y1), ...p(a0, y1), 0, y1, 0);
-      for (let k = 0; k < 9; k++) C.push(...col);
+/** a block of flats: a box with a flat roof and a parapet, the floors marked by darker bands */
+function blockGeometry(wall: number[]): BufferGeometry {
+  const P: number[] = [], C: number[] = [];
+  const quad = (a: number[], b: number[], c: number[], d: number[], col: number[]) => { P.push(...a, ...b, ...c, ...a, ...c, ...d); for (let i = 0; i < 6; i++) C.push(...col); };
+  const w = 0.5, dd = 0.5, floors = 4;
+  for (let f = 0; f < floors; f++) {
+    const y0 = f / floors, y1 = (f + 1) / floors, ym = y0 + (y1 - y0) * 0.72;
+    const band = wall.map((v) => v * 0.55), dim = wall.map((v) => v * 0.8), dimBand = band.map((v) => v * 0.8);
+    // each storey: wall, then a darker band of windows and balcony rails
+    for (const [y, yy, cf, cs] of [[y0, ym, wall, dim], [ym, y1, band, dimBand]] as [number, number, number[], number[]][]) {
+      quad([-w, y, dd], [w, y, dd], [w, yy, dd], [-w, yy, dd], cf);
+      quad([w, y, -dd], [-w, y, -dd], [-w, yy, -dd], [w, yy, -dd], cs);
+      quad([w, y, dd], [w, y, -dd], [w, yy, -dd], [w, yy, dd], cs);
+      quad([-w, y, -dd], [-w, y, dd], [-w, yy, dd], [-w, yy, -dd], cf);
     }
-    const g = new BufferGeometry();
-    g.setAttribute('position', new BufferAttribute(new Float32Array(P), 3));
-    g.setAttribute('color', new BufferAttribute(new Float32Array(C), 3));
-    geos.push(g);
   }
-  const g = mergeGeometries(geos)!;
-  geos.forEach((x) => x.dispose());
+  quad([-w, 1, dd], [w, 1, dd], [w, 1, -dd], [-w, 1, -dd], [0.2, 0.2, 0.2]);
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(P), 3));
+  g.setAttribute('color', new BufferAttribute(new Float32Array(C), 3));
   g.computeVertexNormals();
   return g;
 }
@@ -354,48 +411,33 @@ function towerGeometry(parts: [number, number, number, number[]][], sides: numbe
 function structures(rng: Rng): Object3D[] {
   const mat = hazy(new MeshLambertMaterial({ vertexColors: true }), 'built');
   const out: Object3D[] = [];
-  // houses along the coast road behind the seawall, and up the valley to the south
+  // the town: houses in the colours of a Japanese seaside street (off-white, beige, grey siding), tiled or sheet roofs
   const walls = [[0.62, 0.6, 0.55], [0.55, 0.5, 0.4], [0.4, 0.4, 0.39], [0.66, 0.64, 0.6], [0.47, 0.42, 0.34]];
   const roofs = [[0.06, 0.06, 0.07], [0.07, 0.09, 0.12], [0.11, 0.065, 0.045], [0.16, 0.16, 0.17]];
-  const kinds = walls.flatMap((w, i) => [houseGeometry(w, roofs[i % roofs.length]), houseGeometry(w, roofs[(i + 2) % roofs.length])]);
-  const placed: [number, number, number, number, number, number][] = [];
-  for (let z = COAST_N + 14; z < COAST_S - 10; z += rng.range(11, 17)) {
-    if (rng.chance(0.18)) continue;
-    const x = rng.range(-78, -66);
-    placed.push([x, z, rng.range(6, 10), rng.range(7, 11), rng.range(4.5, 7.5), rng.chance(0.5) ? 0 : Math.PI / 2]);
-  }
-  for (let k = 0; k < 26; k++) {
-    const z = rng.range(400, 560), x = rng.range(-150, -80);
-    if (relief(x, z) > 18) continue;
-    placed.push([x, z, rng.range(6, 9), rng.range(7, 10), rng.range(4.5, 7), rng.range(0, Math.PI)]);
-  }
+  const kinds = [
+    ...walls.flatMap((w, i) => [houseGeometry(w, roofs[i % roofs.length]), houseGeometry(w, roofs[(i + 2) % roofs.length])]),
+    blockGeometry([0.66, 0.65, 0.62]), blockGeometry([0.56, 0.52, 0.46]),
+  ];
+  const nHouse = walls.length * 2;
   const byKind: Matrix4[][] = kinds.map(() => []);
-  const m = new Matrix4(), q = new Object3D();
-  for (const [x, z, w, d, h, rot] of placed) {
-    q.position.set(x, landHeight(x, z) - 0.2, z);
-    q.rotation.set(0, rot + rng.range(-0.08, 0.08), 0);
-    q.scale.set(w, h, d);
+  const q = new Object3D();
+  for (const lot of townLots()) {
+    if (lot.kind === 'garden') continue;
+    q.position.set(lot.x, landHeight(lot.x, lot.z) - 0.25, lot.z);
+    q.rotation.set(0, lot.rot + rng.range(-0.05, 0.05), 0);
+    // the unit box is x across the street and z along it; turned a quarter, the ridge runs the other way
+    if (lot.rot) q.scale.set(lot.w, lot.h, lot.d); else q.scale.set(lot.d, lot.h, lot.w);
     q.updateMatrix();
-    byKind[Math.floor(rng.next() * kinds.length)].push(m.copy(q.matrix).clone());
+    const k = lot.kind === 'block' ? nHouse + Math.floor(rng.next() * 2) : Math.floor(rng.next() * nHouse);
+    byKind[k].push(q.matrix.clone());
   }
   kinds.forEach((g, i) => {
     if (!byKind[i].length) { g.dispose(); return; }
     const im = new InstancedMesh(g, mat, byKind[i].length);
     byKind[i].forEach((mm, k) => im.setMatrixAt(k, mm));
-    im.name = 'houses';
+    im.name = i < nHouse ? 'houses' : 'flats';
     out.push(im);
   });
-  // the radar tower of the traffic centre on the headland's summit: a white shaft, the radar deck, the mast
-  const W = [0.8, 0.8, 0.78], D = [0.05, 0.06, 0.07];
-  const tower = new Mesh(towerGeometry([[2.4, -2, 26, W], [3.8, 26, 27, W], [3.3, 27, 31, D], [3.9, 31, 32.5, W], [1.2, 32.5, 37, W], [0.25, 37, 44, W]], 8), mat);
-  tower.position.set(TOWER.x, landHeight(TOWER.x, TOWER.z), TOWER.z);
-  tower.name = 'tower';
-  out.push(tower);
-  // the lighthouse on the point: an octagonal white tower, the lamp room, the dome
-  const light = new Mesh(towerGeometry([[2.6, -2, 3, W], [1.9, 3, 14, W], [2.5, 14, 15, W], [1.7, 15, 17.5, D], [1.9, 17.5, 18.2, W], [1.2, 18.2, 19.3, [0.2, 0.2, 0.2]]], 8), mat);
-  light.position.set(LIGHTHOUSE.x, landHeight(LIGHTHOUSE.x, LIGHTHOUSE.z), LIGHTHOUSE.z);
-  light.name = 'lighthouse';
-  out.push(light);
   // the harbour wall off the south point
   const bw = houseGeometry([0.5, 0.49, 0.46], [0.5, 0.49, 0.46]);
   const wall = new Mesh(bw, mat);
