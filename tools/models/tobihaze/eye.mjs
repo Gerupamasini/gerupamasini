@@ -2,7 +2,9 @@
 // Read from close-ups of live トビハゼ (lateral studio photograph, field photographs): most of the eye's outer face
 // shows in the window of the skin cup. A large black pupil, a horizontal oval, is framed by a thin bright copper
 // pupillary margin; the iris round it is narrow and dark olive-brown, with a green-gold structural sheen that is
-// strongest in its lower half (KHR_materials_iridescence over a reflective base); beyond the iris the globe is
+// strongest in its lower half (KHR_materials_iridescence over a reflective base). Through the pupil the eye glows
+// like a squid's, an iridescent crescent that slides across it with the view (the game's eye shader,
+// TobihazeMaterial.ts; only a faint trace of it is baked here); beyond the iris the globe is
 // covered by the head's own skin, darkest at the limbus: it is painted from the head's skin pattern (body.mjs skinAt)
 // at the globe's rest position, so the pattern runs on unbroken from the head and the eye cup over the dome
 // (photographs 3, 8, 10, 12: one skin, the cornea set in it). A wet, bulging cornea over the pupil and iris. (The
@@ -133,12 +135,16 @@ export function paintEye(size = 512, skinAt = null) {
     let col, rough = 0.3, metal = 0, ir = 0, th = 0.5;
     const grain = fbm3(ax * 9 * (theta + 0.2), sy * 9 * (theta + 0.2), theta * 4, 4, 701) * 0.5 + 0.5;
     if (theta < tp) {
-      // pupil: black; the iridescent cornea over it glows teal-green when the light falls into it (photographed live
-      // animals: the dark eye reads as a turquoise disc or crescent)
+      // pupil: black. Its glow - the light of the sky thrown back through it in teal, green and gold by the
+      // iridescent layer deep in the eye, a crescent or patch that slides across it (photographs 1, 3, 7, 8) - is
+      // drawn by the game's eye shader (TobihazeMaterial.ts); here only a faint, granular trace of it, low in the pupil,
+      // for viewers without it. The cornea over it only tints its reflections a little.
       const q = theta / tp;
-      col = [6, 8, 10];
+      const gran = smoothstep(0.45, 0.85, perlin3(ax * 60, sy * 60, 2.1, 711) * 0.5 + 0.5);
+      const glow = smoothstep(0.1, 0.9, -sy * q) * (0.3 + 0.7 * gran);
+      col = [6, 8, 10].map((c, i) => mix(c, [14, 58, 46][i], glow * 0.6));
       rough = 0.1;
-      ir = 0.95;
+      ir = 0.35;
       th = 0.5 + 0.06 * (fbm3(ax * 3 * q + 5, sy * 3 * q, 1.3, 3, 709));
     } else if (theta < limbAt(psi)) {
       const f = (theta - tp) / (limbAt(psi) - tp);

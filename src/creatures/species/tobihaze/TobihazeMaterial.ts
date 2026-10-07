@@ -64,6 +64,90 @@ interface Uniforms {
   uBodyU: IUniform<number>;
 }
 
+/**
+ * The eye's sheen. Photographed live, a mudskipper's dark eye glows like a squid's: through the pupil an iridescent
+ * layer deep in the eye (the lens and the reflective tissue round it) throws back the light of the sky in a band of
+ * colour - teal and green seen head-on, through green-gold to copper at a slant, finely granular - that slides across
+ * the pupil as the eye or the viewer moves: a crescent along its lower edge with the sky above (photograph 7), a patch
+ * in the middle (photograph 3), a teal comma (photographs 1 and 8). It is modelled as a concave mirror behind the
+ * pupil: the ray through each point of the pupil is reflected off the back of the globe, and the light arriving
+ * along the reflected ray (the environment, the hemisphere, the sun) is returned in the layer's colour. The narrow
+ * iris round the pupil has the same green-gold sheen, weaker, off its outer surface (photograph 10).
+ */
+const EYE_SHEEN_PARS = /* glsl */ `
+float tobiEyeHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float tobiEyeNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(tobiEyeHash(i), tobiEyeHash(i + vec2(1.0, 0.0)), f.x), mix(tobiEyeHash(i + vec2(0.0, 1.0)), tobiEyeHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+// the layer's colour: t = 0 deep blue … teal … green … gold … 1 copper
+vec3 tobiEyeFilm(float t) {
+  vec3 c = mix(vec3(0.03, 0.12, 0.42), vec3(0.02, 0.46, 0.5), smoothstep(0.0, 0.3, t));
+  c = mix(c, vec3(0.16, 0.62, 0.2), smoothstep(0.28, 0.55, t));
+  c = mix(c, vec3(0.72, 0.62, 0.12), smoothstep(0.55, 0.8, t));
+  return mix(c, vec3(0.75, 0.36, 0.14), smoothstep(0.82, 1.0, t));
+}
+// light arriving along the (view space) direction r: the bright sky above and the sun (the ground and the eye's own
+// shadowed socket reflect next to nothing, so most of the pupil stays black)
+vec3 tobiEyeLight(vec3 v, vec3 r, vec3 up) {
+  // (the horizon edges the glow into a crescent or comma, softly: photographs 1, 7, 8; a bright light makes a
+  // patch of its own, photograph 3)
+  float sky = smoothstep(-0.35, 0.35, dot(r, up));
+  vec3 l = vec3(0.0);
+  #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+    l += getIBLRadiance(v, normalize(v + r), 0.45) * smoothstep(-0.4, 0.4, dot(r, up)) * 0.8;
+  #endif
+  #if NUM_HEMI_LIGHTS > 0
+    for (int i = 0; i < NUM_HEMI_LIGHTS; i++) l += hemisphereLights[i].skyColor * sky * 0.45;
+  #endif
+  #if NUM_DIR_LIGHTS > 0
+    for (int i = 0; i < NUM_DIR_LIGHTS; i++) { float c = max(dot(r, directionalLights[i].direction), 0.0); l += directionalLights[i].color * (0.12 * pow(c, 3.0) + 0.45 * pow(c, 12.0)); }
+  #endif
+  return l;
+}
+`;
+const EYE_SHEEN_MAIN = /* glsl */ `
+{
+  // the globe's polar texture: centre = optical axis, theta = |uv - 0.5| * 2 pi; the pupil a horizontal oval, the iris
+  // a thin ring round it (half-angles as in tools/models/tobihaze/eye.mjs: PUPIL_H, PUPIL_V, limbAt)
+  vec2 e = (vMapUv - 0.5) * 6.2831853;
+  float pr = length(e / vec2(0.62, 0.46));
+  float ir = length(e / vec2(0.82, 0.68));
+  float pupil = 1.0 - smoothstep(0.9, 1.0, pr);
+  float iris = smoothstep(0.95, 1.08, pr) * (1.0 - smoothstep(0.9, 1.0, ir));
+  if (pupil + iris > 0.0) {
+    vec3 v = geometryViewDir;
+    vec3 n = geometryNormal;
+    vec3 d = -v;
+    float nd = dot(n, d);
+    // the ray through the pupil meets the back of the globe where its normal is n - 2 (n.d) d; reflected there
+    vec3 nq = n - 2.0 * nd * d;
+    vec3 r = normalize(d - 2.0 * dot(d, nq) * nq);
+    // fine granules over a larger mottling (photograph 3)
+    vec2 g = vMapUv * 300.0;
+    float gr = 0.4 * tobiEyeNoise(g) + 0.25 * tobiEyeNoise(g * 2.1 + 7.3) + 0.35 * tobiEyeNoise(vMapUv * 45.0 + 3.1);
+    float low = clamp(e.y / 0.46, -1.0, 1.0);
+    // (head-on green with teal and gold flecks, golder at a slant, bluer along its lower edge: photographs 3 and 7)
+    float hue = tobiEyeNoise(vMapUv * 520.0 + 11.7) * 0.6 + tobiEyeNoise(vMapUv * 210.0 + 4.2) * 0.4;
+    float t = clamp(1.45 - abs(nd) + 0.35 * (gr - 0.5) + 0.7 * (hue - 0.5) - 0.25 * low, 0.0, 1.0);
+    vec3 up = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+    vec3 sheen = tobiEyeFilm(t) * tobiEyeLight(v, r, up) * (0.3 + 0.7 * gr) * 1.2;
+    // the iris: the same colours, golder and much weaker, off its own outer face, mostly in its lower half
+    vec3 ri = reflect(d, n);
+    vec3 irisSheen = tobiEyeFilm(clamp(0.62 + 0.3 * (1.0 - abs(nd)) + 0.3 * (gr - 0.5), 0.0, 1.0)) * tobiEyeLight(v, ri, up) * gr * smoothstep(0.0, 0.9, low);
+    reflectedLight.indirectSpecular += pupil * sheen + 0.05 * iris * irisSheen;
+  }
+}
+`;
+
+/** the eye's material: the sheen through the pupil (see EYE_SHEEN_PARS) */
+function eyeShader(shader: WebGLProgramParametersWithUniforms): void {
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>\n${EYE_SHEEN_MAIN}`)
+    .replace('#include <lights_pars_begin>', `#include <lights_pars_begin>\n${EYE_SHEEN_PARS}`);
+}
+
 export type TobiTier = 'hero' | 'lod1' | 'lod2';
 
 function skinShader(u: Uniforms, tier: TobiTier, fin: boolean) {
@@ -232,6 +316,13 @@ export class TobihazeMaterials {
         m.clearcoatRoughness = 0.015;
         // the baked metallic-roughness map carries the copper ring and the glossy pupil
         if (!m.roughnessMap) m.roughness = 0.32;
+        // (one sharp reflection, the wet cornea's: the layer under it reflects little, or the dark pupil mirrors its
+        // surroundings like a glass marble)
+        m.specularIntensity = 0.35;
+        if (m.map) {
+          m.onBeforeCompile = eyeShader;
+          m.customProgramCacheKey = () => 'tobihaze-eye';
+        }
         out = m;
       }
       if (out !== src) this.made.push(out);
