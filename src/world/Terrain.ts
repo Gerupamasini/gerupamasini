@@ -572,7 +572,7 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   // wet band: everything between the current water level and the recent high-water mark is darker
   float wet = 1.0 - smoothstep(lvl + 0.02, max(lvl, uWetLevel) + 0.05, vWorldPos.y);
   wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
-  diffuseColor.rgb *= mix(1.0, 0.6, wet);
+  diffuseColor.rgb *= mix(1.0, 0.68, wet);
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.84, 0.92, 1.06), 0.55 * wet);
   // above the bank: the park's land, dry grass and earth over the packed bank
   float land = smoothstep(3.1, 3.9, vWorldPos.y);
