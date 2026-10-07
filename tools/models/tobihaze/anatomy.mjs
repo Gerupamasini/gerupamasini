@@ -202,13 +202,13 @@ export function surfaceAt(s, y) {
 // ---------------------------------------------------------------------------
 // Eyes. Each eyeball sits on top of the head, the snout in front of it ~1.8 eye diameters long (the forehead slopes
 // down in front of it to the blunt snout); the two almost touch over the narrow interorbital. Eyeball Ø 3.0 mm (~0.3 of
-// the head's depth), raised on a short fleshy stalk ~1 mm above the dorsal profile behind it, so all of the globe
-// stands above the head like a periscope (it can be raised further, and pulled right down into the orbit). Positions
-// read from lateral close-ups of live animals.
+// the head's depth), raised on a short fleshy stalk: its centre ~0.7 mm above the dorsal profile behind it, so the
+// upper globe stands above the head like a periscope (it can be raised further, and pulled right down into the
+// orbit). Positions read from lateral close-ups of live animals.
 // Retraction ("blinking", Aiello et al. 2023 PNAS): the eyeball sinks ~2.4 mm into the orbit and the dermal cup
 // closes over it.
 export const EYE = {
-  center: [5.6, 10.45, 1.62],
+  center: [5.6, 10.0, 1.62],
   radius: 1.52,
   // the eyes look out to the side, a little forward (~17°) and up (~13°): photographed from the side the pupil faces
   // the camera, head-on the dark eye shows on the outer face of each globe
@@ -252,9 +252,9 @@ export function windowField(o, D) {
 // lips are laid out on the face itself, see below.)
 export const MOUTH = [[0.8, 2.2], [1.05, 2.13], [1.3, 1.97], [1.55, 1.72], [1.8, 1.38]];
 export const RICTUS_S = 1.8;
-// gill-cover margin, top → bottom: the rear and lower edge of the inflated opercular chamber, which stands proud of
-// the body behind it as a rounded plate with a crisp rim (lateral photographs; the gill opening itself, small and
-// ventrolateral, lies under the rim in front of the pectoral base), and the preopercle
+// gill-cover margin, top → bottom: the rear and lower edge of the inflated opercular chamber, which rolls softly
+// down into the body behind it (lateral photographs: no hard rim; the gill opening itself, small and ventrolateral,
+// lies under the margin in front of the pectoral base), and the preopercle
 export const OPERCLE = [[14.4, 8.7], [15.7, 7.4], [16.5, 5.8], [16.75, 4.2], [16.35, 2.7], [15.4, 1.3], [14.3, 0.4]];
 export const PREOPERCLE = [[10.4, 8.8], [11.2, 7.0], [11.5, 5.0], [11.2, 3.0], [10.2, 1.4]];
 
@@ -347,7 +347,7 @@ function buildFeatures() {
     eyes: [eyeL, eyeR],
     lipPad,
     // the opercular chamber (inflated with water on land: the breathe morph) and the throat under it
-    cheek: [11.6, 4.2, 4.5],
+    cheek: [11.6, 3.7, 2.8],
     jowl: [6.0, 3.2, 3.9],
     throat: [9.0, 1.05, 0],
     pecLobe: [17.6, 3.15, 4.95],
@@ -439,21 +439,21 @@ function opercS(y) {
 }
 
 /**
- * Outward displacement (mm) of the gill cover (p on the +z side): a plate over the opercular chamber, domed in its
- * middle, rising sharply at its rear and lower margin (a rim ~0.3 mm proud of the body behind it, with a fine crease
- * under it), fading into the face in front and under the throat.
+ * Outward displacement (mm) of the gill cover (p on the +z side): the puffed opercular chamber, a smooth swelling
+ * domed in its middle that rolls down into the body over ~1.5 mm at its rear margin (a soft fold there, no step:
+ * photographs of live animals show no hard edge), fading into the face in front and under the throat.
  */
 function opercRelief(p, w) {
   const [s, y, z] = p;
   const sc = opercS(clamp(y, OPERCLE[OPERCLE.length - 1][1], OPERCLE[0][1]));
   const sd = sc - s; // > 0 in front of the margin (on the cover)
   const lateral = smoothstep(0.35, 0.65, z / Math.max(w, 1e-3));
-  const span = smoothstep(0.3, 1.3, y) * smoothstep(8.2, 6.2, y);
+  const span = smoothstep(0.0, 1.8, y) * smoothstep(8.6, 5.4, y);
   const front = smoothstep(6.0, 10.5, s);
-  const plate = smoothstep(-0.08, 0.38, sd);
+  const plate = smoothstep(-0.4, 1.4, sd);
   const dome = Math.exp(-(((s - 12.6) / 3.2) ** 2) - (((y - 4.6) / 2.6) ** 2));
-  const crease = Math.exp(-(((sd + 0.1) / 0.15) ** 2));
-  return lateral * span * (front * plate * (0.24 + 0.2 * dome) - 0.05 * crease);
+  const fold = Math.exp(-(((sd + 0.3) / 0.6) ** 2));
+  return lateral * span * (front * plate * (0.14 + 0.2 * dome) - 0.025 * fold);
 }
 
 // the pectoral arm's bind frame (fish space, left side); fins.mjs builds the arm and its web in it, rig.mjs puts the
@@ -501,8 +501,9 @@ export function field(s, y, z, opts = null) {
   // swollen cheeks / opercular chambers and the throat (branchiostegal region)
   // (the guard lies well outside every part's reach, or the cut would crease the face)
   if (s > 0.5 && s < 19) {
-    // inside the loft at rest (a smooth, full face); swells out when the chambers are pumped full
-    d = smin(d, ellipsoidDist(pm, F.cheek, [5.0, 3.5 + 0.2 * breathe, 1.25 + 0.5 * breathe]), 0.7);
+    // inside the loft at rest (a smooth, full face); swells out when the chambers are pumped full. (A thick, rounded
+    // swelling set well in, blended widely: a thin one standing out to the side leaves a shelf along its upper edge.)
+    d = smin(d, ellipsoidDist(pm, F.cheek, [5.2, 3.2 + 0.2 * breathe, 2.6 + 0.5 * breathe]), 1.6);
     // the puffy face under and in front of each eye: head-on it stands out to the side of the narrower snout, so the
     // snout reads as a knob between full cheeks, a soft furrow curving round it from the lip pads (photographs head-on)
     d = smin(d, ellipsoidDist(pm, F.jowl, [3.6, 2.8, 2.2]), 1.8);
@@ -533,7 +534,7 @@ export function field(s, y, z, opts = null) {
   // the bridge of the snout: a low, rounded ridge down the middle of the face from between the eyes to the snout's
   // bulb, which stays a smooth dome on either side of it (photographs head-on and from above)
   if (s < 8 && y > 3) d -= snoutRidge(pm);
-  // the gill cover: a raised plate with a crisp rear and lower rim
+  // the gill cover: the puffed opercular chamber, rolling softly into the body at its margin
   if (s > 5.5 && s < 17.6 && y > 0 && y < 9.4) d -= opercRelief(pm, section(clamp(s, 0.01, S_END - 0.01)).w);
   // nape hump (epaxial muscles behind the skull)
   // fleshy lips
