@@ -111,7 +111,7 @@ function hazy<T extends Material>(mat: T, key: string, more?: (vs: string) => st
 
 // ------------------------------------------------------------------ the ground
 // (linear colours) the shore's sand as the terrain draws it, the road and its verges, the woods' floor, bare cliff
-const SAND = [0.27, 0.255, 0.21], WET = [0.17, 0.16, 0.13], VERGE = [0.12, 0.15, 0.07], FLOOR = [0.018, 0.032, 0.012], CLIFF = [0.13, 0.12, 0.1];
+const SAND = [0.27, 0.255, 0.21], WET = [0.17, 0.16, 0.13], VERGE = [0.12, 0.15, 0.07], FLOOR = [0.04, 0.065, 0.025], CLIFF = [0.13, 0.12, 0.1];
 
 function groundColour(x: number, z: number, h: number, steep: number, r: number): number[] {
   const n = 0.85 + 0.3 * vnoise(x * 0.15, z * 0.15, 131);
@@ -259,7 +259,8 @@ export function treeSites(seed = 0x5eed7): TreeSite[] {
     const len = Math.hypot(px, pz), face = (gx * px + gz * pz) / Math.max(1, len);
     if (face < -0.35 && r < 0.92 * relief(px * 0.9, pz * 0.9)) continue;
     if (HILL_FOOT_X - px > 300) continue;
-    out.push({ x: px, y: h, z: pz, size: s * rng.range(1.25, 1.75), variant: Math.floor(rng.next() * 4), tint: rng.next() });
+    // a closed canopy: each crown spreads over its neighbours'
+    out.push({ x: px, y: h, z: pz, size: s * rng.range(1.55, 2.1), variant: Math.floor(rng.next() * 4), tint: rng.next() });
   }
   return out;
 }
@@ -282,7 +283,7 @@ function woods(sites: TreeSite[]): InstancedMesh {
       vec3 bbRight = vec3(bbToEye.z, 0.0, -bbToEye.x);
       vec2 bbScale = vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz));
       float bbX = position.x * sign(instanceMatrix[0].x + 1e-6);   // a mirrored card for half of them
-      vec3 transformedNormal = normalize(mat3(viewMatrix) * normalize(bbRight * bbX * 1.2 + vec3(0.0, 0.7 + position.y * 0.6, 0.0) + bbToEye * 0.6));`)
+      vec3 transformedNormal = normalize(mat3(viewMatrix) * normalize(bbRight * bbX * 0.5 + vec3(0.0, 1.0 + position.y * 0.35, 0.0) + bbToEye * 0.35));`)
     .replace('#include <project_vertex>', `
       vec4 mvPosition = viewMatrix * vec4(bbCenter + bbRight * bbX * bbScale.x + vec3(0.0, position.y * bbScale.y, 0.0), 1.0);
       gl_Position = projectionMatrix * mvPosition;`));
