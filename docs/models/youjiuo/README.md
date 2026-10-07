@@ -84,4 +84,4 @@
 | ![側面 LOD0](side_lod0.jpg) 側面（LOD0、透明ケースの写真の光） | ![頭部](head_lod0.jpg) 頭部: 筒状の吻、上向きの口、眼窩の盛り上がり、金褐色の虹彩と暗い線、鰓蓋 |
 | ![標本](specimen.jpg) 標本の構図（上から） | ![正面](front_lod0.jpg) 正面 |
 | ![LOD1](side_lod1.jpg) LOD1 | ![LOD2](side_lod2.jpg) LOD2 |
-| ![ゲーム内 しゃがんで](youjiuo-ingame-wade.png) ゲーム内: 走水のアマモ場で、縁からしゃがんで見る | ![ゲーム内 観察](youjiuo-ingame-observe.png) ゲーム内: 観察カメラ |
+| ![ゲーム内 観察](youjiuo-ingame-observe.png) ゲーム内（走水、10 時半、潮位 +90 cm）: 観察カメラで上から。葉と波の焦線の中でほとんど見分けられない（中央やや下の斜めの細い棒） | ![ゲーム内 胴長](youjiuo-ingame-wade.png) 同じ場所を胴長で立って: 水面の反射でアマモ場の中の魚は見えない（`node tests/smoke/youjiuo.mjs`） |
