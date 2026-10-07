@@ -1,6 +1,6 @@
 {
   "name": "higata-zukan",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "description": "干潟図鑑 — real-tide tidal flat creature collecting game (Three.js)",
   "type": "module",
@@ -17,6 +17,7 @@
     "model:nets": "node tools/models/nets/build.mjs",
     "render:nets": "node tools/models/nets/render.mjs",
     "render:oyster": "node tools/models/oyster/render.mjs",
+    "render:akaei": "node tools/models/akaei/render.mjs",
     "terrain:bake": "node tools/terrain/bake-map.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tools/**/*.mjs\" \"tests/**/*.{ts,mjs}\"",
     "model:digging": "node tools/models/digging/build.mjs",

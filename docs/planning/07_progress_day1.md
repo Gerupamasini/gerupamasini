@@ -167,6 +167,14 @@
 - シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
 - バージョン 0.12.1。
 
+## 21 回目（アカエイ）
+- 新種 `hemitrygon_akajei`（`public/data/species/`、行動ツリー `ray_benthic`、manifest）と `src/creatures/species/akaei/*`（`morphology` / `geometry` / `material` / `AkaeiModel` / `AkaeiDriver` / `SandFX`）。`DRIVERS.akaei`（`smoothNear`: 10 m 以内は毎フレーム更新）。詳細は `docs/models/akaei/README.md`。
+- モデル: DW = 1 単位で作り、ルートを体盤幅でスケール。体盤は閉じた殻（LOD0 96 行 × 44 列）、尾は 120 リング × 16 辺。骨格は体盤の格子 12 × 9 と尾 22（計 131）で全部位が共有、ジオメトリは LOD ごとに全個体で共有。皮膚は `aPlan`（bind 時の平面座標・面・輪郭半幅）から色・粗さ・粘液・凹凸・砂・透過をシェーダで計算（`akaei-skin` / `akaei-skin-lod2`）。
+- 姿勢: `AkaeiPose` の解析場（進行波・はためき・反り・吻の持ち上げ・頭のポンプ・呼吸・地面への沿わせ）→ 格子ボーンの位置と傾き、弦長を保つ内寄せ。尾は追従チェーン（各節が前の節の向きへ緩和、付け根と棘が硬い、重さで砂に寝る、地面で止まる）。
+- `CreatureSystem`: `Floor.sampleAt` を渡す、`smoothNear` のドライバの近距離 lod 判定。種スキーマに `size.minDepthFraction`（`minDepthFor` が使う、既定 0.15、アカエイ 0.07）。
+- テスト: `tests/unit/akaei.test.ts`（体盤の比率、各 LOD の有限性・スキン・法線の向き・三角形数、骨格と部位、波で頭が動かず縁が動く、5 行動、LOD と水面）。スモークに `16-akaei` / `16b-akaei-swim` / `16c-akaei-observe`。画像は `npm run render:akaei`。
+- バージョン 0.17.0。
+
 ## 20 回目（ゴロタ場と牡蠣礁）
 - `origin/claude/blissful-planck-cmjqvc` をマージ（`src/creatures/oyster/*`、`src/world/Riprap.ts`、World/App/FPSController の組み込み、ビューア、単体テスト 16 件）。競合は `World.ts` の遠景の行だけ（遠景は非表示のまま）。
 - `Riprap`: `RockShape(seed, rounded)`（丸い礫: 超楕円の指数 1.9〜2.3、浅い面取り 1〜3）、`ROUND_PROTOS` 6 種を割石 8 種の後ろに追加。`layApron(rng)` が両土塁の裾（高さが 1 m で 0.12 m 以上上がる位置を探して）に沿って z 0.3〜0.5 m ごとに 1 個、`u = −ln(1 − r·0.985)·1.9` m 干潟側（6.5 m まで）、裾の近くは 35 % が大きめ、35 % は面の下部にも。`leveeSites(seed, top, bottom, spacing)` が rock 地質・高さ帯・斜面（n.y ≤ 0.97）・まだらノイズで土塁面の付着点を返し、`terrainSurface()` で地形面へ射影。`World` は `attachSites` に加えて `leveeSites` を礁へ渡す。

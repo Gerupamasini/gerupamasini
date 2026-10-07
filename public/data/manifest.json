@@ -6,13 +6,15 @@
     "exopalaemon_orientis",
     "charadrius_alexandrinus",
     "ruditapes_philippinarum",
-    "meretrix_lusoria"
+    "meretrix_lusoria",
+    "hemitrygon_akajei"
   ],
   "behaviors": [
     "fish_benthic",
     "shrimp_shallow",
     "shorebird_waterline",
-    "bivalve_buried"
+    "bivalve_buried",
+    "ray_benthic"
   ],
   "maps": [
     "kasai_west"

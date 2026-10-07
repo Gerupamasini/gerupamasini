@@ -116,6 +116,36 @@ try {
     if (found) { await waitFrames(page, 10); await page.screenshot({ path: path.join(outDir, file) }); }
     else console.log(`no ${sid} nearby for a close-up`);
   }
+  // アカエイ: rare, so put one in the water ahead when none is about; look at it lying on the bottom, then swimming
+  const ray = await page.evaluate(() => {
+    const a = window.__higata;
+    const p = a.player.position;
+    const near = () => a.creatures.individuals.filter((i) => i.species.id === 'hemitrygon_akajei').sort((x, y) => x.pos.distanceTo(p) - y.pos.distanceTo(p))[0];
+    let ind = near();
+    if (!ind || ind.pos.distanceTo(p) > 30) { a.debugSpawn('hemitrygon_akajei', 4); ind = near(); }
+    if (!ind) return null;
+    const px = ind.pos.x + 1.4, pz = ind.pos.z + 0.6;
+    a.player.setPose(px, pz, Math.atan2(-(ind.pos.x - px), -(ind.pos.z - pz)));
+    a.player.lowView = true;
+    a.player.pitch = -0.45;
+    return ind.id;
+  });
+  if (ray) {
+    await waitFrames(page, 30);
+    await page.screenshot({ path: path.join(outDir, '16-akaei.png') });
+    await page.evaluate((id) => {
+      const a = window.__higata, ind = a.creatures.get(id);
+      a.creatures.forceIntent(id, { id: 0, kind: 'wander', urgency: 0.5, seconds: 12, target: ind.pos.clone().add({ x: -2.5, y: 0, z: -1.5 }) });
+    }, ray);
+    await waitFrames(page, 60);
+    await page.screenshot({ path: path.join(outDir, '16b-akaei-swim.png') });
+    // and through the observation camera (the observed animal keeps its full detail)
+    await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, ray);
+    await waitFrames(page, 40);
+    await page.screenshot({ path: path.join(outDir, '16c-akaei-observe.png') });
+    await page.evaluate(() => { window.__higata.exitObserve(); });
+    await waitFrames(page, 4);
+  } else console.log('no water for a ray');
   // walk up to the nearest goby, observe it, catch it, open the zukan and put it in the tank
   const near = await page.evaluate(() => {
     const a = window.__higata;

@@ -91,6 +91,7 @@ export class CreatureSystem {
     this.floor = {
       heightAt: (x, z) => terrain.heightAt(x, z),
       waterAt: (x, z) => habitat.waterAt(x, z),
+      sampleAt: (x, z) => habitat.sample(x, z, 0),
     };
   }
 
@@ -212,7 +213,9 @@ export class CreatureSystem {
       const locked = e.ind.id === f.lockedId;
       const tier = this.tierFor(e.ind.species, dist, lod1Rank, locked);
       if (tier === 'lod1') lod1Rank++;
-      e.ind.lod = locked ? 0 : tier === 'lod1' ? 1 : tier === null ? 3 : 2;
+      // a procedural driver that animates continuously is updated every frame near the camera, like a lod1 model
+      const smooth = tier === 'placeholder' && dist <= LOD1_DIST && !!DRIVERS[e.ind.species.model.driver ?? '']?.smoothNear;
+      e.ind.lod = locked ? 0 : tier === 'lod1' || smooth ? 1 : tier === null ? 3 : 2;
       if (tier === null) { if (e.view) this.dropView(e); continue; }
       if (e.view?.tier === tier || e.pendingTier === tier) continue;
       void this.setTier(e, tier);
