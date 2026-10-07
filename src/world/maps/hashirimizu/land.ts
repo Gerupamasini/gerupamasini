@@ -111,18 +111,18 @@ function hazy<T extends Material>(mat: T, key: string, more?: (vs: string) => st
 
 // ------------------------------------------------------------------ the ground
 // (linear colours) the shore's sand as the terrain draws it, the road and its verges, the woods' floor, bare cliff
-const SAND = [0.27, 0.255, 0.21], WET = [0.17, 0.16, 0.13], VERGE = [0.25, 0.26, 0.16], FLOOR = [0.03, 0.05, 0.02], CLIFF = [0.3, 0.27, 0.22];
+const SAND = [0.27, 0.255, 0.21], WET = [0.17, 0.16, 0.13], VERGE = [0.12, 0.15, 0.07], FLOOR = [0.018, 0.032, 0.012], CLIFF = [0.24, 0.22, 0.18];
 
 function groundColour(x: number, z: number, h: number, steep: number, r: number): number[] {
   const n = 0.85 + 0.3 * vnoise(x * 0.15, z * 0.15, 131);
   let c: number[];
-  if (r > 3) c = FLOOR;                                     // the woods
+  if (r > 1.5) c = FLOOR;                                   // the woods (their floor, in the crowns' shade)
   else if (h > 2.2) c = VERGE;                               // the road side and the gardens
   else if (h > -0.2) c = SAND;
   else c = WET;
-  // bare rock where the ground is too steep to hold soil: the sea cliffs at the points' feet
-  const rock = sstep(0.9, 1.6, steep) * (r > 1 ? 1 : 0);
-  return c.map((v, i) => (v * (1 - rock) + CLIFF[i] * rock) * n);
+  // bare rock only where a point drops into the sea: its lowest few metres, steep and wave-washed
+  const seaCliff = shoreHeight(x, z) < 0.5 ? sstep(0.8, 1.4, steep) * (1 - sstep(4, 9, h)) * (r > 0.5 ? 1 : 0) : 0;
+  return c.map((v, i) => (v * (1 - seaCliff) + CLIFF[i] * seaCliff) * n);
 }
 
 /**
@@ -161,42 +161,67 @@ function groundGeometry(x0: number, x1: number, z0: number, z1: number, cell: nu
 }
 
 // ------------------------------------------------------------------ the woods
-/** four rounded broadleaf crowns in a 2 × 2 atlas: clusters of foliage lit from above, dark between, a ragged rim */
+/**
+ * Four rounded broadleaf crowns in a 2 × 2 atlas (evergreen スダジイ / タブ: dense, dark and glossy): a lumpy outline
+ * of a few lobes, filled with hundreds of small leaf clusters, deep shadow between them, the sunlit tops of the lobes
+ * a little lighter and only a few highlights.
+ */
 function crownAtlas(): CanvasTexture {
   const S = 256, cv = document.createElement('canvas');
   cv.width = cv.height = S * 2;
   const c = cv.getContext('2d')!;
   let seed = 0x7a11;
   const rnd = () => { seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 374761393) >>> 0; return seed / 4294967296; };
+  const rgb = (r: number, g: number, b: number, a = 1) => `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${a})`;
   for (let v = 0; v < 4; v++) {
     const ox = (v % 2) * S, oy = Math.floor(v / 2) * S;
-    // the crown: a few big lobes, broader at the top, the base a little narrower (the card's bottom is the ground)
-    const lobes: [number, number, number][] = [];
-    const nl = 5 + Math.floor(rnd() * 4);
+    // the crown's lobes (sub-crowns), the top ones higher and the outline rounded
+    const lobes: [number, number, number][] = [[S * 0.5, S * 0.46, S * 0.27]];
+    const nl = 6 + Math.floor(rnd() * 4);
     for (let i = 0; i < nl; i++) {
-      const a = (i / nl) * Math.PI * 2 + rnd() * 0.5;
-      lobes.push([S * (0.5 + Math.cos(a) * (0.2 + 0.06 * rnd())), S * (0.44 - Math.sin(a) * (0.17 + 0.07 * rnd())), S * (0.17 + 0.07 * rnd())]);
+      const a = (i / nl) * Math.PI * 2 + rnd() * 0.6;
+      lobes.push([S * (0.5 + Math.cos(a) * (0.22 + 0.05 * rnd())), S * (0.45 - Math.sin(a) * (0.2 + 0.06 * rnd())), S * (0.12 + 0.07 * rnd())]);
     }
-    lobes.push([S * 0.5, S * 0.42, S * 0.24]);
-    const inside = (x: number, y: number) => lobes.some(([lx, ly, lr]) => (x - lx) ** 2 + (y - ly) ** 2 < lr * lr);
-    // foliage clusters, back to front and dark to light: shadowed depth first, the sunlit tops last
-    for (let pass = 0; pass < 3; pass++) {
-      const n = [260, 220, 140][pass];
-      for (let i = 0; i < n; i++) {
-        const x = rnd() * S, y = rnd() * S;
-        if (!inside(x, y)) continue;
-        const r = S * (0.035 + 0.04 * rnd()) * (pass === 2 ? 0.8 : 1);
-        // light from above and a little to the left: the upper side of each cluster bright
-        const up = 1 - y / S;
-        const base = pass === 0 ? 0.32 : pass === 1 ? 0.55 + 0.25 * up : 0.75 + 0.35 * up;
-        const g = c.createRadialGradient(ox + x - r * 0.35, oy + y - r * 0.4, r * 0.1, ox + x, oy + y, r);
-        const L = (k: number) => Math.round(Math.min(255, k * 255));
-        g.addColorStop(0, `rgb(${L(base * 0.62)},${L(base * 0.86)},${L(base * 0.42)})`);
-        g.addColorStop(0.7, `rgb(${L(base * 0.42)},${L(base * 0.62)},${L(base * 0.28)})`);
-        g.addColorStop(1, `rgba(${L(base * 0.3)},${L(base * 0.45)},${L(base * 0.2)},0)`);
-        c.fillStyle = g;
-        c.beginPath(); c.arc(ox + x, oy + y, r, 0, Math.PI * 2); c.fill();
+    // depth of a point inside the crown (0 at the rim) and how much it faces up toward the light, from its lobe
+    const shape = (x: number, y: number): [number, number] => {
+      let best = -1, lit = 0;
+      for (const [lx, ly, lr] of lobes) {
+        const d = 1 - Math.hypot(x - lx, y - ly) / lr;
+        if (d > best) { best = d; lit = (ly - y) / lr * 0.8 + (lx - x) / lr * 0.25; }
       }
+      return [best, lit];
+    };
+    // the dark mass inside the outline first
+    for (let i = 0; i < 900; i++) {
+      const x = rnd() * S, y = rnd() * S;
+      const [d] = shape(x, y);
+      if (d < 0.05) continue;
+      const r = S * (0.02 + 0.025 * rnd());
+      c.fillStyle = rgb(18 + 10 * rnd(), 32 + 12 * rnd(), 14 + 8 * rnd());
+      c.beginPath(); c.arc(ox + x, oy + y, r, 0, Math.PI * 2); c.fill();
+    }
+    // the leaf clusters: small, many; brighter where their lobe faces up, the rim ragged
+    for (let i = 0; i < 2600; i++) {
+      const x = rnd() * S, y = rnd() * S;
+      const [d, lit] = shape(x, y);
+      if (d < -0.02 || (d < 0.12 && rnd() < 0.5)) continue;
+      const r = S * (0.008 + 0.016 * rnd());
+      const k = Math.max(0, Math.min(1, 0.32 + 0.55 * lit + 0.25 * (rnd() - 0.5)));
+      const base: [number, number, number] = [28 + 62 * k, 48 + 78 * k, 20 + 34 * k];
+      const g = c.createRadialGradient(ox + x - r * 0.3, oy + y - r * 0.35, 0, ox + x, oy + y, r);
+      g.addColorStop(0, rgb(base[0] * 1.15, base[1] * 1.12, base[2] * 1.05));
+      g.addColorStop(0.75, rgb(base[0] * 0.8, base[1] * 0.82, base[2] * 0.75));
+      g.addColorStop(1, rgb(base[0] * 0.55, base[1] * 0.6, base[2] * 0.5, 0.9));
+      c.fillStyle = g;
+      c.beginPath(); c.arc(ox + x, oy + y, r, 0, Math.PI * 2); c.fill();
+    }
+    // a few glints of glossy leaves on the sunlit tops
+    for (let i = 0; i < 160; i++) {
+      const x = rnd() * S, y = rnd() * S;
+      const [d, lit] = shape(x, y);
+      if (d < 0.08 || lit < 0.25) continue;
+      c.fillStyle = rgb(120, 150, 80, 0.55);
+      c.fillRect(ox + x, oy + y, 1.5, 1.5);
     }
   }
   const t = new CanvasTexture(cv);
@@ -224,11 +249,12 @@ export function treeSites(seed = 0x5eed7): TreeSite[] {
     const px = x + rng.range(0, G), pz = z + rng.range(0, G);
     if (Math.abs(px) < HALF + 2 && Math.abs(pz) < HALF + 2) continue;
     const r = relief(px, pz);
-    if (r < 4) continue;
+    if (r < 2) continue;
     const h = landHeight(px, pz);
+    if (h < 4.5) continue;                                                 // the wave-washed foot of a point
     const e = 2;
     const gx = (landHeight(px + e, pz) - landHeight(px - e, pz)) / (2 * e), gz = (landHeight(px, pz + e) - landHeight(px, pz - e)) / (2 * e);
-    if (Math.hypot(gx, gz) > 1.25) continue;                               // cliff
+    if (Math.hypot(gx, gz) > 2.4) continue;                                // sheer
     // the slopes that face away from the shore, and the hills' back beyond the crest, cannot be seen
     const len = Math.hypot(px, pz), face = (gx * px + gz * pz) / Math.max(1, len);
     if (face < -0.35 && r < 0.92 * relief(px * 0.9, pz * 0.9)) continue;
@@ -239,7 +265,7 @@ export function treeSites(seed = 0x5eed7): TreeSite[] {
 }
 
 /** the canopy's greens (linear): the dark glossy スダジイ, the lighter タブ, the yellow-green of new growth */
-const TINTS = [[0.62, 0.72, 0.55], [0.5, 0.62, 0.42], [0.78, 0.86, 0.58], [0.58, 0.64, 0.46], [0.9, 0.92, 0.62]];
+const TINTS = [[0.52, 0.56, 0.48], [0.42, 0.48, 0.38], [0.66, 0.7, 0.5], [0.5, 0.52, 0.42], [0.74, 0.76, 0.52], [0.46, 0.5, 0.44]];
 
 function woods(sites: TreeSite[]): InstancedMesh {
   const geo = new PlaneGeometry(1, 1, 1, 1);
