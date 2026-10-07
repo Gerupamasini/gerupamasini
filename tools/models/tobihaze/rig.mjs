@@ -2,7 +2,7 @@
 // The clips (Idle, Crawl, Hop, Swim, Blink, Feed) are sampled from the same pose model the runtime driver uses
 // (src/creatures/species/tobihaze/pose.js); in the game the animal is animated procedurally, the clips serve the
 // 図鑑 preview and any viewer without the driver.
-import { section, botY, toObject, dirToObject, EYE, RICTUS_S, gapeY, pecBindFix } from './anatomy.mjs';
+import { section, botY, toObject, dirToObject, EYE, RICTUS_S, gapeY, pecBindFix, FEAT } from './anatomy.mjs';
 import { PEC, PELVIC } from './fins.mjs';
 import { pecShare } from './arm.mjs';
 import { clamp, smoothstep } from '../../lib/noise.mjs';
@@ -81,19 +81,27 @@ function withRest(list, s) {
   return out;
 }
 
-/** skin vertices: spine chain; the lower jaw (below the gape cut) on J_jaw, sealed toward the mouth corner */
+/**
+ * How far a point of the lower jaw follows it. The open mouth is an oval (photograph 6): the lower lip and the chin drop
+ * fully at the front, less and less toward the mouth's corners, which stay shut; the skin beside and behind the
+ * corners (the lip pads, the cheeks) hardly moves, and the floor of the mouth and the throat behind it follow less
+ * and less toward the back.
+ */
+export function jawFollow(s, z) {
+  const zc = FEAT.gapeLine[FEAT.gapeCorner][2];
+  // (the lower lip drops along an ellipse, so the open mouth is an O: most in the middle, nothing at the corners)
+  const lat = Math.sqrt(Math.max(0, 1 - Math.min(1, Math.abs(z) / zc) ** 2));
+  return lat * (1 - smoothstep(RICTUS_S - 0.3, RICTUS_S + 2.4, s));
+}
+
+/** skin vertices: spine chain; the lower jaw (below the gape cut) and the throat on J_jaw */
 export function skinWeights(list) {
   return pack(list.map((v) => {
-    const s = v.fish[0], y = v.fish[1];
+    const s = v.fish[0], y = v.fish[1], z = v.fish[2];
     if (v.cut === 'upper') return spineWeights(s);
-    if (v.jaw || v.cut === 'lower') {
-      const seal = smoothstep(RICTUS_S - 1.0, RICTUS_S, s);
-      return withRest([[J.J_jaw, 1 - 0.3 * seal]], s);
-    }
-    // the rest of the lower jaw and the throat: everything below the gape line (continued back under the lip pad
-    // to the hinge) follows the jaw, fading out behind the hinge and up toward the cheek, so the skin stretches
-    // smoothly instead of folding
-    const w = jawWeight(s, y);
+    if (v.jaw || v.cut === 'lower') return withRest([[J.J_jaw, jawFollow(s, z)]], s);
+    // below the gape line behind the corners (continued back under the lip pad), fading out up toward the cheek
+    const w = jawWeight(s, y, z);
     if (w > 1e-3) return withRest([[J.J_jaw, w]], s);
     // the flank under the pectoral arm's skirt moves with the skirt (arm.mjs), so it stays hidden under it
     const wp = pecShare(v.fish);
@@ -102,21 +110,19 @@ export function skinWeights(list) {
   }), list.length);
 }
 
-/** jaw influence of a skin point outside the gape strip */
-export function jawWeight(s, y) {
-  if (s > JAW_HINGE[0] + 2.4) return 0;
+/** jaw influence of a skin point outside the lower jaw's quads */
+export function jawWeight(s, y, z) {
   const gy = gapeY(Math.min(s, RICTUS_S)) - 0.22 * Math.max(0, s - RICTUS_S);
-  const along = 1 - smoothstep(RICTUS_S + 0.4, JAW_HINGE[0] + 2.4, s);
-  const below = smoothstep(gy + 0.15, gy - 1.3, y);
-  return 0.9 * along * below;
+  return jawFollow(s, z) * smoothstep(gy + 0.1, gy - 0.8, y);
 }
 
 export function mouthWeights(m) {
   return pack(m.fish.map((p, k) => {
     const s = p[0];
     if (m.zone[k] === 0) return spineWeights(s);
-    // the floor of the mouth goes with the lower jaw, less toward the back (the hyoid stays)
-    return withRest([[J.J_jaw, 1 - 0.55 * smoothstep(RICTUS_S - 1, JAW_HINGE[0] + 1, s)]], s);
+    // the floor of the mouth: at the lip as the lip (so the two never part), less toward the back (the hyoid stays)
+    const q = m.lip[k];
+    return withRest([[J.J_jaw, jawFollow(q[0], q[2]) * (1 - 0.5 * smoothstep(0.1, 1.0, m.depth[k]))]], s);
   }), m.fish.length);
 }
 

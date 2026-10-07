@@ -54,6 +54,7 @@ const gb = new GLBBuilder('tobihaze-procedural-builder');
 gb.useExtension('KHR_materials_clearcoat');
 gb.useExtension('KHR_materials_ior');
 gb.useExtension('KHR_materials_iridescence');
+gb.useExtension('KHR_materials_specular');
 const LINEAR = 9729, MIPMAP = 9987, CLAMP = 33071, REPEAT = 10497;
 const sBody = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAMP, wrapT: REPEAT });
 const sClamp = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAMP, wrapT: CLAMP });
@@ -122,9 +123,12 @@ const bodyTargets = [skinTarget(SP.body, { breathe: 1 }, 24)];
 // mouth interior (hero / lod1)
 const mInterior = gb.addMaterial({
   name: 'Tobihaze_Mouth',
-  pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.35 },
+  // (wet mucosa: a soft sheen, not a mirror - it would show its surroundings as pale streaks across the floor of the
+  // open mouth)
+  pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.55 },
   doubleSided: true,
-  extensions: { KHR_materials_clearcoat: { clearcoatFactor: 0.7, clearcoatRoughnessFactor: 0.05 } },
+  // (and only a faint reflection off its surfaces seen at a slant, or the dark cavity reads as grey)
+  extensions: { KHR_materials_clearcoat: { clearcoatFactor: 0.15, clearcoatRoughnessFactor: 0.25 }, KHR_materials_specular: { specularFactor: 0.25 } },
   extras: { tobihaze: { role: 'interior' } },
 });
 const headPrims = [gb.primitive({ position: SP.head.position, normal: SP.head.normal, tangent: SP.head.tangent, uv: SP.head.uv, indices: SP.head.indices, material: mSkin, extraAttributes: skinAttrs(skinWeights(SP.head.list)), targets: headTargets })];

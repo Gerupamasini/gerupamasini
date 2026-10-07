@@ -346,8 +346,8 @@ function buildFeatures() {
   const aR = [E.axis[0], E.axis[1], -E.axis[2]];
   const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], a: aR, fr: eyeFrame(aR), D: cupDown(-1) };
   // the posterior lobe of the upper lip: a plump, bean-shaped pad on each side, lying along the jaw just outside and
-  // behind the mouth corner and filling the nook between the snout and the jowl (pale, studded with sensory pores).
-  // Its size and place from photographs 2 and 7 (scaled by the eye): ~4.2 mm long, ~2.5 mm high, ~1.8 mm thick; its
+  // behind the mouth corner and filling the nook between the snout and the jowl (the face's own speckled skin).
+  // Its size and place from photographs 2 and 7 (scaled by the eye): ~4.2 mm long, ~2.5 mm high, ~1.5 mm thick; its
   // front end against the corner, its centre ~0.4 mm below the corner's height. Head-on it is a lobe beside each
   // corner (photograph 2); from in front and to the side, a long oval behind the corner (photograph 7).
   const cn = gape[gape.length - 1];
@@ -356,7 +356,7 @@ function buildFeatures() {
   const pu = norm3([1, -0.1, 0.9]);
   const pt = norm3([-pu[2], 0, pu[0]]);
   const pw = norm3([pt[1] * pu[2] - pt[2] * pu[1], pt[2] * pu[0] - pt[0] * pu[2], pt[0] * pu[1] - pt[1] * pu[0]]);
-  const lipPad = { c: [cn[0] + 1.9, cn[1] - 0.4, cn[2] + 1.91], u: pu, w: pw[1] < 0 ? pw.map((x) => -x) : pw, t: pt, R: [2.1, 1.25, 0.9] };
+  const lipPad = { c: [cn[0] + 1.9, cn[1] - 0.4, cn[2] + 1.91], u: pu, w: pw[1] < 0 ? pw.map((x) => -x) : pw, t: pt, R: [2.1, 1.25, 0.75] };
   return {
     gapeLine: gx, gapeU, gapeLen, gapeCorner: gape.length - 1,
     operc, opercR: mirrorZ(operc), preop, preopR: mirrorZ(preop), slit, slitR: mirrorZ(slit),
@@ -426,7 +426,7 @@ function lipRelief(p) {
  * The lip pad's own coordinates (p on the +z side): l along its long axis (back), its height and its thickness
  * (outward), and k its ellipsoidal radius (1 on its surface). Bean-shaped: fuller behind, narrowing toward the corner.
  */
-export function lipPadCoord(p) {
+function lipPadCoord(p) {
   const { c, u, w, t, R } = FEAT.lipPad;
   const v = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
   const l = [v[0] * u[0] + v[1] * u[1] + v[2] * u[2], v[0] * w[0] + v[1] * w[1] + v[2] * w[2], v[0] * t[0] + v[1] * t[1] + v[2] * t[2]];
@@ -438,9 +438,9 @@ export function lipPadCoord(p) {
 /** distance to the lip pad (p on the +z side), and the width of its blend into the face */
 function lipPadDist(p) {
   const { l, r } = lipPadCoord(p);
-  // (blended in narrowly round its back and lower edge, so the pad stands out distinctly there; more broadly at its
-  // front end, which runs in under the corner of the mouth: a narrow blend there pinches the skin into a crease)
-  return [ellipsoidDist(l, [0, 0, 0], r), 0.3 + 0.3 * smoothstep(-0.1, -0.9, l[0] / r[0])];
+  // (blended in broadly all round, so it swells softly out of the face with no edge or crease round it; most
+  // broadly at its front end, which runs in under the corner of the mouth)
+  return [ellipsoidDist(l, [0, 0, 0], r), 0.75 + 0.35 * smoothstep(-0.1, -0.9, l[0] / r[0])];
 }
 
 /** outward displacement (mm) of the snout's median ridge and the grooves beside it (p on the +z side) */
@@ -530,10 +530,11 @@ export function field(s, y, z, opts = null) {
   if (s > 0.5 && s < 19) {
     // inside the loft at rest (a smooth, full face); swells out when the chambers are pumped full. (A thick, rounded
     // swelling set well in, blended widely: a thin one standing out to the side leaves a shelf along its upper edge.)
-    d = smin(d, ellipsoidDist(pm, F.cheek, [5.2, 3.2 + 0.2 * breathe, 2.6 + 0.5 * breathe]), 1.6);
+    d = smin(d, ellipsoidDist(pm, F.cheek, [5.2, 3.2 + 0.2 * breathe, 2.6 + 0.5 * breathe]), 2.1);
     // the puffy face under and in front of each eye: head-on it stands out to the side of the narrower snout, so the
     // snout reads as a knob between full cheeks, a soft furrow curving round it from the lip pads (photographs head-on)
-    d = smin(d, ellipsoidDist(pm, F.jowl, [3.6, 2.8, 2.2]), 1.8);
+    // (blended in broadly: a narrow blend leaves a groove beside the snout and a crease under the jowl)
+    d = smin(d, ellipsoidDist(pm, F.jowl, [3.6, 2.8, 2.2]), 2.6);
     d = smin(d, ellipsoidDist(p, [F.throat[0], F.throat[1] - 0.35 * breathe, 0], [4.6, 1.3 + 0.3 * breathe, 4.0]), 1.0);
   }
   // (no furrow between and behind the eyes: the crown there is smooth and full, the domes joined by the saddle below;
@@ -575,7 +576,7 @@ export function field(s, y, z, opts = null) {
   // lips: smooth displacements of the surface along the gape line (no creases, no folds)
   if (s < 8.5 && y < 5.2 && !opts?.noLips) {
     d -= lipRelief(pm);
-    // the lip pad: a separate cushion, blended in only narrowly so its edge stays distinct
+    // the lip pad: a soft cushion swelling out of the face
     if (s < 6 && y < 4.5) { const [dp, k] = lipPadDist(pm); d = smin(d, dp, k); }
   }
   // the bridge of the snout: a low, rounded ridge down the middle of the face from between the eyes to the snout's
