@@ -615,12 +615,32 @@ function domeShut(fr, a, ps, open) {
   // (under the window - the hidden shell beneath the bare globe - every point goes to the shut cup, out as well as in)
   const win = smoothstep(-0.12, 0.04, windowAngle(dir, FEAT.eyes[0].D));
   const w = (1 - smoothstep(open.M.aThc - 0.2, open.M.aThc + 0.6, a)) * Math.max(win, smoothstep(0.0, 0.25, tOpen - q.t));
-  const d = scl(sub(q.p, pL), w);
-  // the normal deltas: toward the shut cup's normal, by the same weight
   const nL = side > 0 ? open.n : [open.n[0], open.n[1], -open.n[2]];
-  const nS = norm3(add(scl(nL, 1 - w), scl(q.n, w)));
-  const dn = sub(nS, nL);
-  return side > 0 ? { d, dn } : { d: [d[0], d[1], -d[2]], dn: [dn[0], dn[1], -dn[2]] };
+  // past the cup (the walked skirt: the stalk, the web between the eyes) a point sinks straight in along its normal
+  // onto the shut surface, where that lies inside the open one (on the head nothing moves). The web itself, near the
+  // midline, goes to its own target (blinkWeb, driven by either eye's blink), so a one-eyed blink leaves no step.
+  const sink = (SH) => {
+    if (field(pL[0], pL[1], pL[2], SH) <= 0.01) return { dN: [0, 0, 0], nN: nL };
+    const g = (t) => field(pL[0] - nL[0] * t, pL[1] - nL[1] * t, pL[2] - nL[2] * t, SH);
+    let lo = 0, hi = 0.05;
+    while (hi < 3 && g(hi) > 0) { lo = hi; hi += 0.05; }
+    if (hi >= 3) return { dN: [0, 0, 0], nN: nL };
+    for (let k = 0; k < 20; k++) { const m = 0.5 * (lo + hi); if (g(m) > 0) lo = m; else hi = m; }
+    const t = 0.5 * (lo + hi);
+    const pt = sub(pL, scl(nL, t));
+    return { dN: scl(nL, -t), nN: fieldGrad(pt[0], pt[1], pt[2], SH) };
+  };
+  const web = (1 - w) * smoothstep(1.1, 0.35, Math.abs(pL[2]));
+  const S1 = w < 1 && web < 1 ? sink({ dome: true, cupL: false }) : { dN: [0, 0, 0], nN: nL };
+  const S2 = web > 0 ? sink({ dome: true, cup: false }) : { dN: [0, 0, 0], nN: nL };
+  const ws = (1 - w) - web;
+  const d = add(scl(sub(q.p, pL), w), scl(S1.dN, ws));
+  const dW = scl(S2.dN, web);
+  // the normal deltas: toward the shut surface's normal, by the same weights
+  const dn = add(scl(sub(q.n, nL), w), scl(sub(S1.nN, nL), ws));
+  const dnW = scl(sub(S2.nN, nL), web);
+  const m = (v) => (side > 0 ? v : [v[0], v[1], -v[2]]);
+  return { d: m(d), dn: m(dn), dW: m(dW), dnW: m(dnW) };
 }
 
 /** the longest meridian's arc length: the dome's rows run from 0 to this (a shorter meridian stays at its end) */
@@ -638,7 +658,7 @@ export function domeArcMax() {
 export function buildDomes(NT = 40, NP = 96) {
   const cols = NP + 1;
   const sides = [1, -1];
-  const position = [], normal = [], tangent = [], uv = [], fish = [], blinkL = [], blinkR = [], blinkLn = [], blinkRn = [];
+  const position = [], normal = [], tangent = [], uv = [], fish = [], blinkL = [], blinkR = [], blinkLn = [], blinkRn = [], blinkW = [], blinkWn = [];
   const tris = [];
   sides.forEach((side, si) => {
     const fr = domeFrame(side);
@@ -669,6 +689,8 @@ export function buildDomes(NT = 40, NP = 96) {
         (side > 0 ? blinkRn : blinkLn).push(0, 0, 0);
         (side > 0 ? blinkL : blinkR).push(...dd);
         (side > 0 ? blinkR : blinkL).push(0, 0, 0);
+        blinkW.push(...scl(dirToObject(sh.dW), 1 / 1000));
+        blinkWn.push(...dirToObject(sh.dnW));
       }
     }
     for (let i = 0; i < NT; i++) for (let j = 0; j < NP; j++) {
@@ -685,7 +707,7 @@ export function buildDomes(NT = 40, NP = 96) {
   return {
     position: new Float32Array(position), normal: new Float32Array(normal), tangent: new Float32Array(tangent), uv: new Float32Array(uv),
     indices: new Uint32Array(tris), fish, blinkL: new Float32Array(blinkL), blinkR: new Float32Array(blinkR),
-    blinkLn: new Float32Array(blinkLn), blinkRn: new Float32Array(blinkRn),
+    blinkLn: new Float32Array(blinkLn), blinkRn: new Float32Array(blinkRn), blinkW: new Float32Array(blinkW), blinkWn: new Float32Array(blinkWn),
   };
 }
 

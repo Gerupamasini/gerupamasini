@@ -226,7 +226,9 @@ export const EYE = {
 // equator at the side, just under the pupil; below the margin the cup narrows a little into a short fleshy neck that
 // rises out of the head with a small fillet (lateral photographs). Solid (no cavity): the eyeball mesh fills the
 // rest, and a retracting eye simply sinks into it.
-export const CUP = { skin: 0.11, cover: (90 * Math.PI) / 180, down: [0.1, -1, -0.45] };
+// (The cup reaches higher on the globe's inner side - up to the skin web that joins the two eyes ~3/4 of the way up -
+// and a little higher in front; only the outer face round the cornea is bare: photographs 1, 8 and 12.)
+export const CUP = { skin: 0.11, cover: (90 * Math.PI) / 180, medial: (17 * Math.PI) / 180, front: (8 * Math.PI) / 180, down: [0.1, -1, -0.45] };
 /** window frame of an eye: the axis, a horizontal tangent and the vertical one (fish space) */
 export function eyeFrame(a) {
   const h = norm3([a[2], 0, -a[0]]); // horizontal, perpendicular to the axis
@@ -238,7 +240,10 @@ export const cupDown = (sg) => norm3([CUP.down[0], CUP.down[1], CUP.down[2] * sg
 /** signed angle (rad) of the direction o (from the eye's centre) from the cup's lid margin: > 0 bare globe, < 0 cup */
 export function windowAngle(o, D) {
   const l = Math.hypot(o[0], o[1], o[2]) || 1;
-  return Math.acos(clamp((o[0] * D[0] + o[1] * D[1] + o[2] * D[2]) / l, -1, 1)) - CUP.cover;
+  // (D leans medially: the sign of its z picks the eye's inner side)
+  const med = (o[2] * Math.sign(D[2])) / l, ant = -o[0] / l;
+  const cover = CUP.cover + CUP.medial * smoothstep(0.05, 0.7, med) + CUP.front * smoothstep(0.1, 0.8, ant) * smoothstep(-0.45, 0.0, med);
+  return Math.acos(clamp((o[0] * D[0] + o[1] * D[1] + o[2] * D[2]) / l, -1, 1)) - cover;
 }
 /** > 0 where the globe is bare, < 0 where the cup covers it; ~mm near the margin */
 export function windowField(o, D) {
@@ -529,8 +534,9 @@ export function field(s, y, z, opts = null) {
       // cornea set in it (photographs 8 and 12, from above and in front: no rim round the globe).
       const lidW = smoothstep(0.3, 0.75, (oz * sg) / l) * smoothstep(0.1, -0.35, oy / l);
       const wa = windowAngle([ox, oy, oz], e.D);
-      const skin = CUP.skin * lidW + (1 - lidW) * (0.025 + (CUP.skin - 0.025) * smoothstep(-0.05, -0.5, wa));
-      cup = smax(l - (EYE.radius + skin), windowField([ox, oy, oz], e.D), 0.06 + 0.24 * lidW);
+      // (the thin margin is still rounded off over ~0.15 mm: a knife edge would mesh as a jagged line on the globe)
+      const skin = CUP.skin * lidW + (1 - lidW) * (0.05 + (CUP.skin - 0.05) * smoothstep(-0.05, -0.5, wa));
+      cup = smax(l - (EYE.radius + skin), windowField([ox, oy, oz], e.D), 0.15 + 0.15 * lidW);
     }
     // the stalk: a short, thick column of skin nearly as wide as the globe, which the flush cup runs straight down
     // into (no waist, no rim), flaring broadly where it rises out of the crown and the cheek (photographs 1, 3, 7,
@@ -538,9 +544,13 @@ export function field(s, y, z, opts = null) {
     d = smin(d, ellipsoidDist(p, [e.c[0] + 0.1, e.c[1] - 1.2, e.c[2] - 0.08 * sg], [1.4, 1.3, 1.35]), 1.5);
     d = smin(d, cup, 0.45);
   });
-  // the stalks are joined between the eyes by a rounded saddle a third of the way down the globes: from in front and
-  // from above the two domes make one heart-shaped mound (photographs 1, 8, 12)
-  if (opts?.dome && s < 13.5) d = smin(d, ellipsoidDist(p, [EYE.center[0] + 0.15, EYE.center[1] - 0.6, 0], [1.15, 0.75, 0.95]), 0.6);
+  // the two eyes are joined by a web of skin ~3/4 of the way up the globes, dipping only a little between them: from
+  // in front and from above the two domes make one heart-shaped mound (photographs 1, 8, 12)
+  // (blinking, the web sinks with the eye on its side, as the shut cups do)
+  if (opts?.dome && s < 13.5) {
+    const shut = (z >= 0 ? opts?.cupL : opts?.cupR) === false || opts?.cup === false;
+    d = smin(d, ellipsoidDist(p, [EYE.center[0] + 0.1, EYE.center[1] + (shut ? -1.0 : 0.05), 0], shut ? [1.0, 0.6, 0.8] : [1.05, 0.8, 0.8]), 0.45);
+  }
   // lips and the lip pad: smooth displacements of the surface along the gape line (no creases, no folds)
   if (s < 8.5 && y < 5.2 && !opts?.noLips) d -= lipRelief(pm);
   // the bridge of the snout: a low, rounded ridge down the middle of the face from between the eyes to the snout's

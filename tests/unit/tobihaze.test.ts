@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Object3D, Vector3 } from 'three';
-import { computePose, defaultPose, bendFromMidline, SPINE } from '../../src/creatures/species/tobihaze/pose.js';
+import { computePose, defaultPose, bendFromMidline, SPINE, MORPHS } from '../../src/creatures/species/tobihaze/pose.js';
 import { Motor, type MotorWorld, type TobiRig } from '../../src/creatures/species/tobihaze/Motor';
 import { Mind, type MindWorld } from '../../src/creatures/species/tobihaze/Mind';
 
@@ -39,7 +39,9 @@ describe('tobihaze pose model', () => {
     for (const v of Object.values(q)) expect(Math.hypot(...v)).toBeCloseTo(1, 6);
     // a retracted eye sinks into the orbit
     expect(t.J_eyeL[1]).toBeLessThan(-0.002);
-    expect(morph.Head).toHaveLength(3);
+    // one weight per morph target of the head mesh (breathe, blinkL, blinkR, blinkWeb)
+    expect(morph.Head).toHaveLength(MORPHS.Head.length);
+    expect(MORPHS.Head).toContain('blinkWeb');
   });
 
   it('a straight midline gives no bend', () => {

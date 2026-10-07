@@ -104,6 +104,7 @@ const headTargets = [
   skinTarget(SP.head, { breathe: 1 }),
   zeros(SP.head.list.length),
   zeros(SP.head.list.length),
+  zeros(SP.head.list.length),
 ];
 const bodyTargets = [skinTarget(SP.body, { breathe: 1 }, 24)];
 
@@ -128,14 +129,14 @@ const mSkinDome = gb.addMaterial({ ...gb.json.materials[mSkin], name: 'Tobihaze_
   const w = { joints: new Uint8Array(n * 4), weights: new Uint8Array(n * 4) };
   for (let k = 0; k < n; k++) { w.joints[k * 4] = J.J_head; w.weights[k * 4] = 255; }
   headPrims.push(gb.primitive({ position: D.position, normal: D.normal, tangent: D.tangent, uv: D.uv, indices: D.indices, material: mSkinDome,
-    extraAttributes: skinAttrs(w), targets: [zeros(n), { position: D.blinkL, normal: D.blinkLn }, { position: D.blinkR, normal: D.blinkRn }] }));
+    extraAttributes: skinAttrs(w), targets: [zeros(n), { position: D.blinkL, normal: D.blinkLn }, { position: D.blinkR, normal: D.blinkRn }, { position: D.blinkW, normal: D.blinkWn }] }));
   log(`    ${n} v`);
 }
 if (tier.mouth) {
   const mouth = buildMouth(G);
   const n = mouth.position.length / 3;
   headPrims.push(gb.primitive({ position: mouth.position, normal: mouth.normal, uv: mouth.uv, indices: mouth.indices, material: mInterior,
-    extraAttributes: { ...skinAttrs(mouthWeights(mouth)), COLOR_0: { array: mouth.color, type: 'VEC4' } }, targets: [zeros(n), zeros(n), zeros(n)] }));
+    extraAttributes: { ...skinAttrs(mouthWeights(mouth)), COLOR_0: { array: mouth.color, type: 'VEC4' } }, targets: [zeros(n), zeros(n), zeros(n), zeros(n)] }));
   log(`  mouth interior ${n} v`);
 }
 const meshHead = gb.addMesh('Head', headPrims, { targetNames: MORPHS.Head });

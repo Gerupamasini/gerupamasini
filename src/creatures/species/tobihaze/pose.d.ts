@@ -23,7 +23,7 @@ export interface Pose {
   pecR: FinPose;
   pelvic: number;
   morph: {
-    breathe: number; blinkL: number; blinkR: number; foldD1: number; foldD2: number; foldAnal: number; foldCaudal: number;
+    breathe: number; blinkL: number; blinkR: number; blinkWeb: number; foldD1: number; foldD2: number; foldAnal: number; foldCaudal: number;
     foldPecL: number; foldPecR: number; foldPelvic: number;
   };
 }

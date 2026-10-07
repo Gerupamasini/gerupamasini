@@ -236,7 +236,7 @@ export function buildClips() {
     const u = t / 0.56;
     const r = u < 0.35 ? smoothstep(0, 0.35, u) : 1 - smoothstep(0.5, 1.0, u);
     p.eyeL.retract = p.eyeR.retract = r;
-    p.morph.blinkL = p.morph.blinkR = u < 0.35 ? smoothstep(0.05, 0.35, u) : 1 - smoothstep(0.45, 0.95, u);
+    p.morph.blinkL = p.morph.blinkR = p.morph.blinkWeb = u < 0.35 ? smoothstep(0.05, 0.35, u) : 1 - smoothstep(0.45, 0.95, u);
     return p;
   }));
   // Feed: head pivots down over the prey on the propped pectorals, the lower jaw swings wide open, snaps shut,

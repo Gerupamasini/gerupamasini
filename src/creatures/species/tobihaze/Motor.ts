@@ -1060,7 +1060,7 @@ export class Motor {
     }
     p.eyeL.yaw = this.eyes[0].yaw; p.eyeL.pitch = this.eyes[0].pitch; p.eyeL.retract = this.eyes[0].retract;
     p.eyeR.yaw = this.eyes[1].yaw; p.eyeR.pitch = this.eyes[1].pitch; p.eyeR.retract = this.eyes[1].retract;
-    p.morph.blinkL = this.eyes[0].cup; p.morph.blinkR = this.eyes[1].cup;
+    p.morph.blinkL = this.eyes[0].cup; p.morph.blinkR = this.eyes[1].cup; p.morph.blinkWeb = Math.max(this.eyes[0].cup, this.eyes[1].cup);
   }
 
   // ------------------------------------------------------------------------------------------------ pose
@@ -1181,6 +1181,7 @@ export class Motor {
       case 'breathe': return m.breathe;
       case 'blinkL': return m.blinkL;
       case 'blinkR': return m.blinkR;
+      case 'blinkWeb': return m.blinkWeb;
       case 'foldD1': return m.foldD1;
       case 'foldD2': return m.foldD2;
       case 'fold':

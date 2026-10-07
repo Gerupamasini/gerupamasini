@@ -15,7 +15,8 @@ export const POSTERIOR = SPINE.slice(2).map(([n]) => n);
 
 /** morph targets of every mesh, in glTF order */
 export const MORPHS = {
-  Head: ['breathe', 'blinkL', 'blinkR'],
+  // (blinkWeb: the skin web between the eyes sinking as they blink - driven by the larger of the two blinks)
+  Head: ['breathe', 'blinkL', 'blinkR', 'blinkWeb'],
   Body: ['breathe'],
   DorsalFin: ['foldD1', 'foldD2'],
   AnalFin: ['fold'],
@@ -65,7 +66,7 @@ export function defaultPose() {
     pecL: { protract: 0.35, depress: 0.75, twist: 0, wrist: 0.3, q: null, wq: null },
     pecR: { protract: 0.35, depress: 0.75, twist: 0, wrist: 0.3, q: null, wq: null },
     pelvic: 0,
-    morph: { breathe: 0, blinkL: 0, blinkR: 0, foldD1: 0.85, foldD2: 0.6, foldAnal: 0.6, foldCaudal: 0.3, foldPecL: 0, foldPecR: 0, foldPelvic: 0 },
+    morph: { breathe: 0, blinkL: 0, blinkR: 0, blinkWeb: 0, foldD1: 0.85, foldD2: 0.6, foldAnal: 0.6, foldCaudal: 0.3, foldPecL: 0, foldPecR: 0, foldPelvic: 0 },
   };
 }
 
@@ -119,7 +120,7 @@ export function computePose(p, rig = {}) {
   q.J_pelvic = qX(-p.pelvic);
   const m = p.morph;
   const morph = {
-    Head: [m.breathe, m.blinkL, m.blinkR],
+    Head: [m.breathe, m.blinkL, m.blinkR, m.blinkWeb],
     Body: [m.breathe],
     DorsalFin: [m.foldD1, m.foldD2],
     AnalFin: [m.foldAnal],
