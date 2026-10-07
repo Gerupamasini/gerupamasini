@@ -53,6 +53,8 @@ export class FPSController {
   groundBoost: ((x: number, z: number) => number) | null = null;
   private readonly tmpForward = new Vector3();
   private readonly tmpRight = new Vector3();
+  /** the deepest water the player can wade into: boots (35 cm) unless the map says chest waders */
+  readonly wadeDepth: number;
 
   constructor(
     private readonly camera: PerspectiveCamera,
@@ -61,6 +63,7 @@ export class FPSController {
     private readonly input: Input,
     private readonly map: MapDef,
   ) {
+    this.wadeDepth = map.wading?.maxDepth_m ?? BOOT_DEPTH;
     this.position.set(map.spawnStart.x, 0, map.spawnStart.z);
     this.yaw = MathUtils.degToRad(map.spawnStart.heading);
     this.position.y = terrain.heightAt(this.position.x, this.position.z);
@@ -180,7 +183,8 @@ export class FPSController {
       if (sub === 'mud' || sub === 'channel') speed *= 0.65;
       else if (sub === 'muddy_sand') speed *= 0.85;
       const depth = Math.max(0, this.habitat.depthAt(this.position.x, this.position.z));
-      speed *= 1 - 0.6 * MathUtils.clamp(depth / BOOT_DEPTH, 0, 1);
+      // the water holds the legs back: a little at the ankles, a lot at the chest (waders go deeper but no faster)
+      speed *= 1 - 0.6 * MathUtils.clamp(depth / Math.max(BOOT_DEPTH, this.wadeDepth * 0.85), 0, 1);
       // slope: slower uphill
       const n = this.terrain.normalAt(this.position.x, this.position.z);
       const slope = -(n.x * dir.x + n.z * dir.z);
@@ -207,7 +211,7 @@ export class FPSController {
     const b = this.map.bounds.walkable;
     if (x < b[0][0] || x > b[1][0] || z < b[0][1] || z > b[1][1]) return false;
     for (const ne of this.map.bounds.noEntry) if (x >= ne[0][0] && x <= ne[1][0] && z >= ne[0][1] && z <= ne[1][1]) return false;
-    if (this.habitat.depthAt(x, z) > BOOT_DEPTH) return false;
+    if (this.habitat.depthAt(x, z) > this.wadeDepth) return false;
     const h = this.groundAt(x, z);
     if (h - this.position.y > 0.6) return false; // too steep a step
     return true;
@@ -218,14 +222,17 @@ export class FPSController {
     if (this.canStand(x + dx, z + dz)) { this.position.x += dx; this.position.z += dz; return; }
     if (this.canStand(x + dx, z)) { this.position.x += dx; this.blockedByDepth = true; return; }
     if (this.canStand(x, z + dz)) { this.position.z += dz; this.blockedByDepth = true; return; }
-    this.blockedByDepth = this.habitat.depthAt(x + dx, z + dz) > BOOT_DEPTH;
+    this.blockedByDepth = this.habitat.depthAt(x + dx, z + dz) > this.wadeDepth;
   }
 
   private syncCamera(dt: number): void {
     const targetEye = this.crouching ? LOW_HEIGHT : this.eyeHeight;
     this.eye = dt > 0 ? MathUtils.damp(this.eye, targetEye, 10, dt) : targetEye;
     const bobY = this.speedNow > 0 && !this.airborne ? Math.sin(this.bob * 2) * 0.012 * Math.min(1, this.speedNow / WALK) : 0;
-    this.camera.position.set(this.position.x, this.position.y + this.eye + bobY + this.airY, this.position.z);
+    // wading deep, a crouch cannot take the eye under the water: it stops just above the surface
+    const water = this.habitat.waterAt(this.position.x, this.position.z);
+    const eyeY = Math.max(this.position.y + this.eye, water > this.position.y ? water + 0.16 : -Infinity);
+    this.camera.position.set(this.position.x, eyeY + bobY + this.airY, this.position.z);
     this.camera.rotation.set(0, 0, 0, 'YXZ');
     this.camera.rotation.y = this.yaw;
     if (dt > 0) this.kick = MathUtils.damp(this.kick, 0, 7, dt);

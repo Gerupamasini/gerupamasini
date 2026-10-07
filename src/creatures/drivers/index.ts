@@ -8,6 +8,9 @@ import { AsariDriver } from '../asari/Asari.js';
 import { FORMS } from '../asari/AsariModel.js';
 import { PagurusMinutusDriver } from '../yubinagahonyadokari/PagurusMinutusDriver';
 import { OysterDriver } from '../oyster/OysterDriver';
+import { CrabDriver, HermitDriver, SnailDriver } from '../species/shore/crawlers';
+import { WormDriver } from '../species/shore/others';
+import { HakuDriver } from '../species/haku/HakuDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -31,4 +34,11 @@ export const DRIVERS: Record<string, DriverEntry> = {
   hamaguri: { create: () => new AsariDriver(FORMS.hamaguri) as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.hamaguri, seed) },
   pagurus: { create: () => new PagurusMinutusDriver(), placeholder: () => PagurusMinutusDriver.makeModel(), nearDistance: 4.5 },
   oyster: { create: () => new OysterDriver(), placeholder: () => OysterDriver.makeModel(), preview: (seed, renderer) => OysterDriver.makePreview(seed, renderer) },
+  // the 走水 shore: procedural models built per individual by the drivers
+  crab: { create: () => new CrabDriver(), placeholder: () => CrabDriver.makeModel(), preview: (seed) => CrabDriver.makePreview(seed) },
+  hermit: { create: () => new HermitDriver(), placeholder: () => HermitDriver.makeModel(), preview: (seed) => HermitDriver.makePreview(seed) },
+  snail: { create: () => new SnailDriver(), placeholder: () => SnailDriver.makeModel(), preview: (seed) => SnailDriver.makePreview(seed) },
+  worm: { create: () => new WormDriver(), placeholder: () => WormDriver.makeModel(), preview: (seed) => WormDriver.makePreview(seed) },
+  // ハク: the schooling juvenile mullet (its own tiers in the placeholder view; near within 5 m)
+  haku: { create: () => new HakuDriver(), placeholder: () => HakuDriver.makeModel(), preview: () => HakuDriver.makePreview(), nearDistance: 5 },
 };

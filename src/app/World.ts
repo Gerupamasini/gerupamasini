@@ -1,9 +1,11 @@
-import { FogExp2, Scene, Vector3, type PerspectiveCamera, type WebGLRenderer } from 'three';
+import { FogExp2, Scene, Vector3, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import type { MapDef, TideStationDef } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { Terrain, loadTerrainGrid } from '../world/Terrain';
 import { WaterPass } from '../world/Water';
 import { createWaves } from '../world/Waves';
+import { LAYER_MIRROR, reflectInWater } from '../render/Mirror';
+import { surfUniforms } from '../world/Surf';
 import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
 import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
@@ -14,19 +16,28 @@ import { OysterAtlas } from '../creatures/oyster/bake';
 import { OysterReef } from '../creatures/oyster/OysterReef';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import { oysterEnv } from '../creatures/oyster/material';
+import { AmamoMeadow, MEADOW_QUALITY } from '../world/amamo';
+import { LAYOUTS, type ShoreLayout } from '../world/maps/hashirimizu';
 import type { FeedingPit } from '../world/FeedingPits';
 import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
 import { jstParts, seasonOf, type Season } from '../core/Time';
 import type { QualityPreset } from '../core/Settings';
 
+/** direction the breeze drives the ripples and the waves over the eelgrass (radians in the xz plane) */
+const WIND_DIR = 0.7;
+
 /** The tidal flat: terrain, water, sky, habitat and the tide model bound to a map. */
 export class World {
   /** the stingray feeding pits (debug, tests) */
   pits: FeedingPit[] = [];
   /** the far scenery on the horizon (landmarks as flat silhouettes) */
-  readonly skyline = new Skyline();
-  /** the stones along the levees and the rubble mounds (hard ground for oysters) */
+  readonly skyline: Skyline;
+  /** the map's own shore features, when it has them (null: the 葛西 flat) */
+  readonly layout: ShoreLayout | null;
+  /** the アマモ beds below the low-water mark */
+  amamo: AmamoMeadow | null = null;
+  /** the stones along the levees (hard ground for oysters; the 葛西 flat) */
   riprap: Riprap | null = null;
   /** the マガキ reef on those stones */
   oysters: OysterReef | null = null;
@@ -60,60 +71,114 @@ export class World {
     this.fog = new FogExp2(0xbfd2dc, 0.0024);
     this.scene.fog = this.fog;
     this.scene.add(terrain.mesh);
+    this.layout = map.layout ? LAYOUTS[map.layout] ?? null : null;
+    this.skyline = new Skyline(map.layout);
   }
 
   static async create(map: MapDef, station: TideStationDef | TideModel, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void, pitSeed = 20261001): Promise<World> {
     onProgress?.('地形');
     const grid = await loadTerrainGrid(map);
+    const layout = map.layout ? LAYOUTS[map.layout] ?? null : null;
     // アカエイの昼寝跡: dug into the flat before the terrain is built, so pools, tags and shading all see them;
     // the seed is the day's, so the rays have been somewhere else by the next visit
-    const pits = placeFeedingPits(grid, map.substrate.palette, hashInts(map.id.length * 7919, pitSeed));
+    const pits = layout
+      ? placeFeedingPits(grid, map.substrate.palette, hashInts(map.id.length * 7919, pitSeed), layout.pits.clusters, layout.pits.opts)
+      : placeFeedingPits(grid, map.substrate.palette, hashInts(map.id.length * 7919, pitSeed));
     grid.baseHeights = grid.heights.slice();
     grid.pitMask = carveCoarse(grid, pits);
     const terrain = new Terrain(grid, map.substrate.palette, pits);
     terrain.setDetail(preset.surfaceDetail > 0);
     onProgress?.('潮だまり');
-    const habitat = new Habitat(terrain, 5, pits);
+    const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, pits);
+    if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); terrain.setRippleAngle(layout.rippleAngle); }
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
-    const waves = createWaves({ windDir: 0.7, depth: 0.6, seed: map.id.length * 131 + 7 });
+    const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });
     terrain.setWaves(waves);
-    const water = new WaterPass(terrain, waves);
+    // the surf on an open shore: one set of uniforms for the water and the sand it wets
+    const surf = surfUniforms(layout?.surf ?? null);
+    terrain.setSurf(surf);
+    const water = new WaterPass(terrain, waves, surf);
+    if (layout) water.setBody(...layout.water.colour, layout.water.turbidity);
     const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
-    // the far scenery (landmarks on the horizon) is built but not shown for now: `world.scene.add(world.skyline.group)` brings it back
-    // hard ground and the oyster reef on it: stones along the levees' toes and on the low flat; every face in the
-    // oyster zone (about mean sea level down to the spring low) grows a clump
-    onProgress?.('牡蠣礁');
-    const quality = preset.surfaceDetail === 0 ? 'low' : preset.shadowMapSize >= 2048 ? 'high' : 'mid';
-    const riprap = new Riprap(terrain, hashInts(map.id.length * 17, 0x51b));
-    for (const m of riprap.group) w.scene.add(m);
-    w.riprap = riprap;
-    try {
-      const atlas = OysterAtlas.shared(renderer, quality);
-      OysterDriver.atlas = atlas;
-      const sites = riprap.attachSites(map.id.length * 101 + 7, 0.38, -1.15, 0.2).map((s) => ({
-        p: s.p, n: s.n, room: s.room,
-        surface: (world: Vector3, outP: Vector3, outN: Vector3) => riprap.surfaceToward(s.stone, world, outP, outN),
-      }));
-      // and the levees' own faces where the tide covers them
-      for (const s of riprap.leveeSites(map.id.length * 131 + 3, 0.38, -1.15)) sites.push({ p: s.p, n: s.n, room: s.room, surface: (world: Vector3, outP: Vector3, outN: Vector3) => riprap.terrainSurface(world, outP, outN) });
-      const reef = new OysterReef({
-        atlas, sites, seed: hashInts(map.id.length, 0x0a5), quality, maxOysters: quality === 'low' ? 5000 : 12000,
-        ground: (x, z, n) => { terrain.normalAt(x, z, n); return terrain.heightAt(x, z) + riprap.heightBoost(x, z); },
-      });
-      w.scene.add(reef.group);
-      w.oysters = reef;
-    } catch (e) {
-      // the reef needs float render targets for its texture bake; the flat works without it
-      console.warn('[oysters] reef not built', e);
+    if (!layout) {
+      // the 葛西 flat: hard ground and the oyster reef on it — stones along the levees' toes; every face in the
+      // oyster zone (about mean sea level down to the spring low) grows a clump
+      // hard ground and the oyster reef on it: stones along the levees' toes and on the low flat; every face in the
+      // oyster zone (about mean sea level down to the spring low) grows a clump
+      onProgress?.('牡蠣礁');
+      const quality = preset.surfaceDetail === 0 ? 'low' : preset.shadowMapSize >= 2048 ? 'high' : 'mid';
+      const riprap = new Riprap(terrain, hashInts(map.id.length * 17, 0x51b));
+      for (const m of riprap.group) w.scene.add(m);
+      w.riprap = riprap;
+      try {
+        const atlas = OysterAtlas.shared(renderer, quality);
+        OysterDriver.atlas = atlas;
+        const sites = riprap.attachSites(map.id.length * 101 + 7, 0.38, -1.15, 0.2).map((s) => ({
+          p: s.p, n: s.n, room: s.room,
+          surface: (world: Vector3, outP: Vector3, outN: Vector3) => riprap.surfaceToward(s.stone, world, outP, outN),
+        }));
+        // and the levees' own faces where the tide covers them
+        for (const s of riprap.leveeSites(map.id.length * 131 + 3, 0.38, -1.15)) sites.push({ p: s.p, n: s.n, room: s.room, surface: (world: Vector3, outP: Vector3, outN: Vector3) => riprap.terrainSurface(world, outP, outN) });
+        const reef = new OysterReef({
+          atlas, sites, seed: hashInts(map.id.length, 0x0a5), quality, maxOysters: quality === 'low' ? 5000 : 12000,
+          ground: (x, z, n) => { terrain.normalAt(x, z, n); return terrain.heightAt(x, z) + riprap.heightBoost(x, z); },
+        });
+        w.scene.add(reef.group);
+        w.oysters = reef;
+      } catch (e) {
+        // the reef needs float render targets for its texture bake; the flat works without it
+        console.warn('[oysters] reef not built', e);
+      }
+    } else {
+      // a shore map: its アマモ beds (the animals' standing features), its props, its own far scenery
+      onProgress?.('アマモ場');
+      const mapSeed = hashInts(...[...map.id].map((c) => c.charCodeAt(0)), 20261006);
+      w.amamo = new AmamoMeadow(terrain, habitat, mapSeed, layout.meadow);
+      w.amamo.setQuality(MEADOW_QUALITY[preset.vegetation]);
+      terrain.setMeadowCover(w.amamo.coverTexture, MEADOW_QUALITY[preset.vegetation].lod[2]);
+      w.scene.add(w.amamo.group);
+      // the standing features the animals gather at: the eelgrass, its edges, the open sand among it
+      const meadow = w.amamo;
+      habitat.setFeatures((x, z) => ({ eelgrass: meadow.coverAt(x, z), zone: meadow.suitability(x, z) }));
+      onProgress?.('浜');
+      for (const o of layout.props(terrain, mapSeed)) w.scene.add(o);
+      // (the 葛西 flat's far scenery stays off for now: `world.scene.add(world.skyline.group)` brings it back)
+      w.scene.add(reflectInWater(w.skyline.group));
+      if (w.skyline.land) w.scene.add(reflectInWater(w.skyline.land.group));
     }
+    w.scene.add(terrain.mirrorProxy(LAYER_MIRROR));
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
+    // (lights obey layers too: the mirror's camera must see the sun and the sky light, or the land comes out black)
+    reflectInWater(sky.sky); reflectInWater(sky.sunLight); reflectInWater(sky.hemi);
     (w as { sky: SkyDome }).sky = sky;
+    water.setMirror(preset.mirror);
+    water.setSurfSteps(preset.surfSteps);
+    water.mirrorGate = () => !renderer.shadowMap.enabled || !sky.sunLight.castShadow || sky.sunLight.shadow.map !== null;
     return w;
+  }
+
+  /** Free what the flat built (leaving for another map). Animals, tools and the case are freed by their owners. */
+  dispose(): void {
+    this.amamo?.dispose();
+    this.amamo = null;
+    this.oysters?.dispose();
+    this.oysters = null;
+    this.riprap?.dispose();
+    this.riprap = null;
+    this.skyline.dispose();
+    this.sky.dispose();
+    this.water.dispose();
+    this.terrain.dispose();
+    this.scene.traverse((o) => {
+      // the pit debris and the shore's own props: geometry and materials made for this flat
+      if (o.userData.mapOwned) { const m = o as Mesh; m.geometry?.dispose(); const mat = m.material; if (Array.isArray(mat)) mat.forEach((x) => x.dispose()); else mat?.dispose(); }
+    });
+    this.scene.clear();
   }
 
   /** Advance environment state for a game time (ms) and real dt (s). */
@@ -149,13 +214,15 @@ export class World {
     });
     // the bed's caustics run on the water's clock so they sit under the ripples that cast them
     this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.water.uniforms.uTime.value, sunUp, this.sunDir);
+    // the eelgrass sways with the same breeze and leans with the tidal current
+    this.amamo?.update(dt, camera, { tideLevel: this.tideLevel, tideRate: this.tideRate, windDir: WIND_DIR, waveGain: this.water.uniforms.uWaveGain.value });
     // lift the exposure at night so the flat stays readable under the moon
     this.exposure = 0.58 + 0.32 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
     this.scene.background = this.sky.fogColor;
     // the sky refreshes its environment maps itself whenever the sun moved enough (so time jumps show at once)
     this.sky.refreshEnvironment();
     this.sky.sky.position.copy(camera.position);
-    this.skyline.update(camera.position, this.sky.fogColor, day);
+    this.skyline.update(camera.position, this.sky.fogColor, day, gameMs / 1000);
     if (this.timeAcc > 1) this.timeAcc -= 0; // keep accumulating; used as shader time
   }
 }

@@ -8,7 +8,9 @@
     "ruditapes_philippinarum",
     "meretrix_lusoria",
     "pagurus_minutus",
-    "crassostrea_gigas"
+    "crassostrea_gigas",
+    "reticunassa_festiva",
+    "mugil_cephalus"
   ],
   "behaviors": [
     "fish_benthic",
@@ -16,13 +18,17 @@
     "shorebird_waterline",
     "bivalve_buried",
     "hermit_crab_tidal",
-    "oyster_reef"
+    "oyster_reef",
+    "snail_crawl",
+    "fish_school"
   ],
   "maps": [
-    "kasai_west"
+    "kasai_west",
+    "hashirimizu"
   ],
   "stations": [
-    "jma_tokyo"
+    "jma_tokyo",
+    "jma_yokosuka"
   ],
   "items": "items/tools.json",
   "strings": "strings/ja.json",

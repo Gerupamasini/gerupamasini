@@ -16,6 +16,12 @@ export const MapSchema = z.object({
     noEntry: z.array(z.tuple([z.tuple([z.number(), z.number()]), z.tuple([z.number(), z.number()])])).default([]),
   }),
   props: z.array(z.object({ type: z.string(), x: z.number(), z: z.number(), rot: z.number().default(0), scale: z.number().default(1) })).default([]),
+  /** the map's own shore features (src/world/maps/<layout>); absent: the 葛西 features */
+  layout: z.string().optional(),
+  /** how deep the player can wade: boots (the default, 35 cm) or chest waders */
+  wading: z.object({ gear: z.enum(['boots', 'waders']), maxDepth_m: z.number().positive() }).optional(),
+  /** habitat grid (coarse cell size) and how close to the player animals may appear */
+  habitat: z.object({ coarse_m: z.number().positive().default(5), minSpawnDist_m: z.number().nonnegative().default(10) }).optional(),
 });
 
 export type MapDef = z.infer<typeof MapSchema>;
