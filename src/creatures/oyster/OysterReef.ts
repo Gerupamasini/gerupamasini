@@ -4,7 +4,8 @@ import {
 import { Rng, hashInts } from '../../core/Rng';
 import type { OysterAtlas } from './bake';
 import { OysterBehavior, playerStimulus } from './behavior';
-import { makeGenome, seedsFrom, type AgeClass, type OysterGenome } from './genome';
+import { makeGenome, seedsFrom, type AgeClass, type DeadState, type OysterGenome } from './genome';
+import type { OysterState } from './behavior';
 import { buildOysterMerged, DETAIL, OysterShape, triangleCount } from './geometry';
 import { depthOf, type OysterMaterial } from './material';
 import { layoutCluster, type MemberPick, type SubstrateSample } from './OysterCluster';
@@ -49,6 +50,24 @@ export interface OysterReefOptions {
   maxOysters?: number;
 }
 
+/** What the reef knows about one of its oysters: enough to build it again in full (observation). */
+export interface ReefOysterInfo {
+  seed: number;
+  age: AgeClass;
+  dead: DeadState;
+  crowding: number;
+  /** shell length (m) */
+  length: number;
+  /** the instance's world matrix (its scale is the prototype's rescaling) */
+  matrix: Matrix4;
+  /** host plane in the oyster's own frame */
+  plane: Vector4;
+  /** behaviour state now (null when dead) */
+  state: OysterState | null;
+}
+
+const AGES: AgeClass[] = ['spat', 'juvenile', 'adult', 'old'];
+
 interface Proto {
   genome: OysterGenome;
   shape: OysterShape;
@@ -80,6 +99,13 @@ export class OysterReef {
   private readonly slot: Int32Array;          // instance slot in its current mesh (−1 not drawn)
   private readonly lodOf: Int8Array;          // −1 not drawn
   private readonly accDt: Float32Array;
+  private readonly seedOf: Uint32Array;
+  private readonly ageOf: Uint8Array;
+  private readonly crowdOf: Float32Array;
+  private readonly lenOf: Float32Array;
+  /** 1 while the oyster is taken out of the instanced draw (it is being shown in full for observation) */
+  private readonly hidden: Uint8Array;
+  private lastCamera: Camera | null = null;
   // per clump
   private readonly clumps: { first: number; n: number; centre: Vector3; radius: number; lod: number }[] = [];
   private readonly dist: [number, number, number];
@@ -104,6 +130,7 @@ export class OysterReef {
     const rng = new Rng(hashInts(opts.seed, 0x7eef));
     // lay out every clump into flat arrays
     const P: number[] = [], M: number[] = [], C: number[] = [], R: number[] = [], S: number[] = [], Lk: number[] = [], Pl: number[] = [], K: number[] = [];
+    const Sd: number[] = [], Ag: number[] = [], Cr: number[] = [], Ln: number[] = [];
     const genomes: OysterGenome[] = [];
     const maxN = opts.maxOysters ?? 4000;
     const m4 = new Matrix4(), siteM = new Matrix4(), q4 = new Quaternion(), X = new Vector3(), Y = new Vector3(), Z = new Vector3(), up = new Vector3(0, 1, 0);
@@ -156,6 +183,7 @@ export class OysterReef {
         Pl.push(m.plane.x, m.plane.y, m.plane.z, m.plane.w);
         K.push(this.clumps.length);
         genomes.push(m.genome);
+        Sd.push(m.seed ?? 0); Ag.push(AGES.indexOf(m.genome.age)); Cr.push(m.crowding ?? 0.5); Ln.push(m.genome.length);
       }
       const n = P.length - first;
       if (n > 0) {
@@ -194,6 +222,7 @@ export class OysterReef {
           Pl.push(0, 0, 0, 0);
           K.push(this.clumps.length);
           genomes.push(pick.genome);
+          Sd.push(pick.seed ?? 0); Ag.push(AGES.indexOf(pick.genome.age)); Cr.push(pick.crowding ?? 0.5); Ln.push(pick.genome.length);
         }
         const n2 = P.length - firstL;
         if (n2 > 0) {
@@ -218,6 +247,11 @@ export class OysterReef {
     this.slot = new Int32Array(this.count).fill(-1);
     this.lodOf = new Int8Array(this.count).fill(-1);
     this.accDt = new Float32Array(this.count);
+    this.seedOf = Uint32Array.from(Sd);
+    this.ageOf = Uint8Array.from(Ag);
+    this.crowdOf = Float32Array.from(Cr);
+    this.lenOf = Float32Array.from(Ln);
+    this.hidden = new Uint8Array(this.count);
     this.behaviors = genomes.map((g, i) => (g.dead ? null : new OysterBehavior(g.gapeMax, hashInts(opts.seed, i, 0xbe), 'LOW_TIDE_CLOSED')));
     for (let i = 0; i < this.count; i++) {
       const key = this.cellKey(this.pos[i * 3], this.pos[i * 3 + 2]);
@@ -269,9 +303,10 @@ export class OysterReef {
     const young = age === 'spat' || age === 'juvenile';
     const cands = this.protos.map((p, k) => ({ p, k })).filter(({ p }) => (p.genome.age === 'spat' || p.genome.age === 'juvenile') === young && (age !== 'spat' || p.genome.age === 'spat'));
     const { p, k } = cands[rng.int(0, cands.length - 1)];
-    const genome = makeGenome(seedsFrom(hashInts(seed, site, i, 0x3e3)), { age, dead, crowding: crowd });
+    const pseed = hashInts(seed, site, i, 0x3e3);
+    const genome = makeGenome(seedsFrom(pseed), { age, dead, crowding: crowd });
     const scale = Math.min(1.5, Math.max(0.6, genome.length / p.shape.L));
-    return { genome, shape: p.shape, scale, proto: k };
+    return { genome, shape: p.shape, scale, proto: k, seed: pseed, crowding: crowd };
   }
 
   private cellKey(x: number, z: number): number {
@@ -292,6 +327,39 @@ export class OysterReef {
   /** world centre of an oyster */
   centreOf(i: number, out = new Vector3()): Vector3 {
     return out.set(this.pos[i * 3], this.pos[i * 3 + 1], this.pos[i * 3 + 2]);
+  }
+
+  /** Everything needed to build oyster i again in full, or null. */
+  infoOf(i: number): ReefOysterInfo | null {
+    if (i < 0 || i >= this.count) return null;
+    return {
+      seed: this.seedOf[i], age: AGES[this.ageOf[i]] ?? 'adult', dead: this.state[i * 4 + 1] as DeadState, crowding: this.crowdOf[i], length: this.lenOf[i],
+      matrix: new Matrix4().fromArray(this.mat, i * STRIDE), plane: new Vector4().fromArray(this.plane, i * 4), state: this.behaviors[i]?.state ?? null,
+    };
+  }
+
+  /** Take oyster i out of the instanced draw (while it is shown in full), or put it back. */
+  setHidden(i: number, on: boolean): void {
+    if (i < 0 || i >= this.count || this.hidden[i] === (on ? 1 : 0)) return;
+    this.hidden[i] = on ? 1 : 0;
+    if (this.lastCamera) this.assign(this.lastCamera); else this.lodAcc = 1;
+  }
+
+  /** The live oyster nearest along a ray within maxDist (the reticle's pick for observation), or −1. */
+  pickRay(origin: Vector3, dir: Vector3, maxDist: number): number {
+    let best = -1, bt = maxDist;
+    const o = origin, d = dir;
+    for (const i of this.near(o.x + d.x * maxDist * 0.5, o.z + d.z * maxDist * 0.5, maxDist * 0.5 + 0.6)) {
+      if (!this.behaviors[i] || this.hidden[i]) continue;
+      const cx = this.pos[i * 3] - o.x, cy = this.pos[i * 3 + 1] - o.y, cz = this.pos[i * 3 + 2] - o.z;
+      const t = cx * d.x + cy * d.y + cz * d.z;
+      if (t < 0.05 || t > bt) continue;
+      const r = this.rad[i] * 1.15 + 0.012;
+      const px = cx - d.x * t, py = cy - d.y * t, pz = cz - d.z * t;
+      if (px * px + py * py + pz * pz > r * r) continue;
+      bt = t; best = i;
+    }
+    return best;
   }
 
   /** behaviour state of an oyster (debug, markers) */
@@ -317,6 +385,7 @@ export class OysterReef {
    */
   update(dt: number, camera: Camera, waterLevel: number, player?: { pos: Vector3; speed: number; running: boolean }): void {
     this.frame++;
+    this.lastCamera = camera;
     const shock = Number.isFinite(this.lastWater) && Math.abs(waterLevel - this.lastWater) > 0.08;
     this.lastWater = waterLevel;
     this.lodAcc += dt;
@@ -367,7 +436,7 @@ export class OysterReef {
       for (let i = c.first; i < c.first + c.n; i++) {
         this.lodOf[i] = l;
         this.slot[i] = -1;
-        if (l < 0) continue;
+        if (l < 0 || this.hidden[i]) continue;
         const p = this.protos[this.proto[i]];
         const s = p.used[l]++;
         this.slot[i] = s;

@@ -146,9 +146,10 @@ vec3 rkCells(vec2 p) {
 `;
 
 /**
- * Stone material: grey andesite with darker grains, stained in its intertidal band — brown-grey biofilm and silt below
- * the high-water line, the white bases of dead barnacles dotted round mid-tide, green algae low down — and wet as far
- * up as the water lately reached (the same wet mark the flat and the oysters use).
+ * Stone material: grey andesite in broad soft patches (no grain, rings or plates to read from a step away), stained
+ * in its intertidal band — a brown-grey film of silt and biofilm below the high-water line, a pale patchy crust of old
+ * shell round mid-tide, green algae low down — and wet as far up as the water lately reached (the same wet mark the
+ * flat and the oysters use).
  */
 export function makeRockMaterial(): MeshStandardMaterial {
   const m = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 });
@@ -168,68 +169,42 @@ export function makeRockMaterial(): MeshStandardMaterial {
       .replace('#include <common>', `#include <common>\n${ROCK_COMMON}`)
       .replace('#include <map_fragment>', `
 vec3 rkP = vRkWorld;
-float rkBig = rkF(rkP * 2.3), rkMid = rkF(rkP * 11.0), rkFine = rkN(rkP * 260.0);
-// grey andesite, blotched lighter and darker, fine dark and pale grains
-vec3 rkCol = mix(rkLin(vec3(0.5, 0.5, 0.48)), rkLin(vec3(0.66, 0.65, 0.62)), smoothstep(0.25, 0.75, rkBig));
-rkCol *= 0.8 + 0.35 * rkMid;
-rkCol *= 0.88 + 0.24 * rkFine;
-rkCol = mix(rkCol, rkLin(vec3(0.22, 0.22, 0.21)), step(0.86, rkN(rkP * 420.0)) * 0.45);
+float rkBig = rkF(rkP * 1.7), rkMid = rkF(rkP * 7.0), rkSmall = rkF(rkP * 23.0);
+// grey andesite: broad lighter and darker patches and a soft mottle; no grain to see from a step away
+vec3 rkCol = mix(rkLin(vec3(0.46, 0.46, 0.45)), rkLin(vec3(0.62, 0.61, 0.58)), smoothstep(0.2, 0.8, rkBig));
+rkCol *= 0.86 + 0.26 * rkMid;
+rkCol *= 0.93 + 0.14 * rkSmall;
+// a warm, rust-tinged patch here and there (iron weathering)
+rkCol = mix(rkCol, rkCol * rkLin(vec3(1.12, 0.96, 0.8)), smoothstep(0.6, 0.85, rkF(rkP * 2.6 + 31.0)) * 0.6);
 float rkY = rkP.y;
-// intertidal band: biofilm and silt from the high-water line down
-float rkStain = 1.0 - smoothstep(0.55, 1.15, rkY + 0.25 * (rkMid - 0.5));
-rkCol = mix(rkCol, rkCol * rkLin(vec3(0.72, 0.68, 0.6)), rkStain * 0.8);
-// dead barnacle bases: small white rings round mid-tide
-// a 3D cell pattern so the rings are round on every face: one candidate base per cell, most cells empty
-vec3 rkC = rkP * 70.0, rkI = floor(rkC);
-float rkRing = 0.0;
-for (int k = 0; k < 8; k++) {
-  vec3 o = vec3(float(k & 1), float((k >> 1) & 1), float((k >> 2) & 1));
-  vec3 cell = rkI + o;
-  if (rkH(cell + 0.37) < 0.86) continue;
-  vec3 c = cell + vec3(rkH(cell + 1.1), rkH(cell + 2.3), rkH(cell + 3.7)) * 0.6 + 0.2;
-  float r0 = 0.18 + 0.15 * rkH(cell + 5.1);
-  float d = length(rkC - c);
-  rkRing = max(rkRing, 1.0 - smoothstep(0.02, 0.07, abs(d - r0)));
-}
-float rkBarnZone = smoothstep(-0.6, -0.1, rkY) * (1.0 - smoothstep(0.4, 0.9, rkY));
-rkCol = mix(rkCol, rkLin(vec3(0.7, 0.68, 0.64)), rkRing * rkBarnZone * 0.45);
-// green algae low on the stone, on what faces up
 vec3 rkNw = normalize(cross(dFdx(vRkWorld), dFdy(vRkWorld)));
-float rkAlg = (1.0 - smoothstep(-0.7, 0.1, rkY)) * smoothstep(0.2, 0.8, rkNw.y) * smoothstep(0.45, 0.7, rkF(rkP * 5.0 + 11.0));
-rkCol = mix(rkCol, rkLin(vec3(0.16, 0.27, 0.09)), rkAlg * 0.8);
-// the oyster zone: a crust of old shell and cemented lower valves, plates of grey-white with dark seams and
-// growth rings, on every face but the undersides (what the instanced reef stands on, and what it looks like from afar)
-vec3 rkNa = abs(rkNw);
-vec2 rkPl = rkNa.y > max(rkNa.x, rkNa.z) ? rkP.xz : rkNa.x > rkNa.z ? rkP.zy : rkP.xy;
-vec2 rkW = rkPl * 16.0 + (vec2(rkF(rkP * 5.0), rkF(rkP * 5.0 + 9.0)) - 0.5) * 1.4;
-vec3 rkCell = rkCells(rkW);
-vec3 rkCell2 = rkCells(rkW * 2.3 + 5.0);
-float rkZone = smoothstep(-1.35, -1.05, rkY) * (1.0 - smoothstep(0.15, 0.45, rkY + 0.1 * (rkMid - 0.5)));
-float rkCrust = rkZone * smoothstep(-0.35, 0.2, rkNw.y) * smoothstep(0.42, 0.62, rkF(rkP * 3.3 + 21.0) + 0.1) * 0.85;
-// seams between the old valves, fainter between the small ones; growth lines as broken, warped rings
-float rkSeam = (1.0 - smoothstep(0.015, 0.06, rkCell.y)) * 0.7 + (1.0 - smoothstep(0.01, 0.04, rkCell2.y)) * 0.3;
-float rkRings = smoothstep(0.3, 0.7, 0.5 + 0.5 * sin(rkCell.x * 55.0 + rkF(rkP * 60.0) * 6.0));
-vec3 rkShell = mix(rkLin(vec3(0.66, 0.64, 0.6)), rkLin(vec3(0.53, 0.47, 0.5)), step(0.72, rkCell.z) * 0.5) * (0.82 + 0.16 * rkRings) * (0.72 + 0.35 * rkCell2.z) * (0.85 + 0.25 * rkFine);
-rkShell = mix(rkShell, rkLin(vec3(0.24, 0.22, 0.2)), rkSeam * 0.7);
-rkCol = mix(rkCol, rkShell, rkCrust);
+// intertidal band: a brown-grey film of silt and biofilm from the high-water line down, heavier in the hollows
+float rkStain = 1.0 - smoothstep(0.5, 1.2, rkY + 0.3 * (rkMid - 0.5));
+rkCol = mix(rkCol, rkCol * rkLin(vec3(0.7, 0.64, 0.55)), rkStain * (0.55 + 0.3 * (1.0 - rkSmall)));
+// a pale crust of old shell and barnacle bases round mid-tide, in patches on the faces that catch the light
+float rkZone = smoothstep(-1.35, -1.0, rkY) * (1.0 - smoothstep(0.2, 0.5, rkY + 0.1 * (rkMid - 0.5)));
+float rkCrust = rkZone * smoothstep(-0.3, 0.3, rkNw.y) * smoothstep(0.5, 0.7, rkF(rkP * 3.1 + 21.0)) * 0.6;
+rkCol = mix(rkCol, rkLin(vec3(0.64, 0.62, 0.58)) * (0.9 + 0.2 * rkSmall), rkCrust);
+// green algae low on the stone, on what faces up
+float rkAlg = (1.0 - smoothstep(-0.7, 0.1, rkY)) * smoothstep(0.2, 0.8, rkNw.y) * smoothstep(0.45, 0.7, rkF(rkP * 4.0 + 11.0));
+rkCol = mix(rkCol, rkLin(vec3(0.17, 0.26, 0.1)), rkAlg * 0.75);
 float rkDepth = uOyWater.x - rkY;
 float rkUnder = smoothstep(0.0, 0.01, rkDepth);
 float rkWet = max(rkUnder, 1.0 - smoothstep(uOyWater.x + 0.01, max(uOyWater.x, uOyWater.y) + 0.08, rkY));
 rkWet = max(rkWet, 1.0 - smoothstep(0.0, 0.12, -rkDepth));
 if (uOyWetOverride >= 0.0) rkWet = max(rkWet, uOyWetOverride);
-rkCol *= mix(1.0, 0.74, rkWet);
+rkCol *= mix(1.0, 0.72, rkWet);
 diffuseColor.rgb = rkCol;
 `)
       .replace('#include <roughnessmap_fragment>', `
-float roughnessFactor = mix(0.82 + 0.1 * rkMid, 0.38 + 0.15 * rkMid, rkWet * (1.0 - rkUnder * 0.3));
+float roughnessFactor = mix(0.84 + 0.08 * rkMid, 0.4 + 0.15 * rkMid, rkWet * (1.0 - rkUnder * 0.3));
 roughnessFactor = mix(roughnessFactor, 0.45, rkAlg);
-roughnessFactor = mix(roughnessFactor, mix(0.75, 0.4, rkWet), rkCrust);
+roughnessFactor = mix(roughnessFactor, mix(0.8, 0.45, rkWet), rkCrust);
 `)
       .replace('#include <normal_fragment_maps>', `
 {
   // bump from the stone's grain (world-space noise, screen-space derivatives)
-  float h = rkF(rkP * 9.0) * 0.012 + rkF(rkP * 40.0) * 0.005 + rkN(rkP * 160.0) * 0.0015 + rkRing * rkBarnZone * 0.0012;
-  h += rkCrust * (smoothstep(0.0, 0.08, rkCell.y) * 0.005 + smoothstep(0.0, 0.05, rkCell2.y) * 0.002 + rkRings * 0.0005);
+  float h = rkF(rkP * 6.0) * 0.012 + rkF(rkP * 21.0) * 0.004 + rkCrust * rkF(rkP * 40.0) * 0.003;
   vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition);
   vec2 dh = vec2(dFdx(h), dFdy(h));
   vec3 r1 = cross(sy, normal), r2 = cross(normal, sx);
@@ -239,7 +214,7 @@ roughnessFactor = mix(roughnessFactor, mix(0.75, 0.4, rkWet), rkCrust);
 }
 `);
   };
-  m.customProgramCacheKey = () => 'riprap-v1';
+  m.customProgramCacheKey = () => 'riprap-v2';
   return m;
 }
 
@@ -290,7 +265,7 @@ export class Riprap {
     this.rasterTops();
   }
 
-  /** where the stones go: along both levees' inner toes, over their drowned tips, and a few mounds on the low flat */
+  /** where the stones go: along both levees' inner toes and over their drowned tips (nothing out on the open flat) */
   private layRevetment(rng: Rng): void {
     const t = this.terrain;
     const add = (x: number, z: number, size: number, sink: number, tilt = 0.25) => {
@@ -327,22 +302,6 @@ export class Riprap {
         const z = rng.range(118, 152), x = side * rng.range(136, 152);
         if (t.heightAt(x, z) < -1.9) continue;
         add(x, z, rng.range(0.5, 1.0), 0.2, 0.5);
-      }
-    }
-    // old rubble mounds on the low flat, clear of the creek beds
-    const chan = t.palette.indexOf('channel');
-    let mounds = 0;
-    for (let tries = 0; tries < 200 && mounds < 4; tries++) {
-      const cx = rng.range(-100, 100), cz = rng.range(10, 95);
-      if (t.substrateIndexAt(cx, cz) === chan) continue;
-      const h = t.heightAt(cx, cz);
-      if (h > -0.35 || h < -1.25) continue;
-      mounds++;
-      const n = rng.int(14, 26), ax = rng.range(2.5, 5), az = rng.range(1.2, 2.2), rot = rng.range(0, Math.PI);
-      for (let i = 0; i < n; i++) {
-        const a = rng.range(0, Math.PI * 2), r = Math.sqrt(rng.next());
-        const lx = Math.cos(a) * r * ax, lz = Math.sin(a) * r * az;
-        add(cx + lx * Math.cos(rot) - lz * Math.sin(rot), cz + lx * Math.sin(rot) + lz * Math.cos(rot), rng.range(0.45, 0.85) * (1.2 - 0.5 * r), 0.15, 0.45);
       }
     }
   }

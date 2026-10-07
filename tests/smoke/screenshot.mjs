@@ -185,6 +185,50 @@ try {
     await waitFrames(page, 6);
     await page.screenshot({ path: path.join(outDir, '13-continue.png') });
   } else errors.push('no goby spawned near the player');
+  // ユビナガホンヤドカリ: close-up, observation, capture and the home tank
+  await noon();
+  const crab = await page.evaluate(() => {
+    const a = window.__higata;
+    const p = a.player.position;
+    let c = a.creatures.individuals.filter((i) => i.species.id === 'pagurus_minutus').sort((x, y) => x.pos.distanceTo(p) - y.pos.distanceTo(p))[0];
+    if (!c) { a.teleport('pool'); a.forceSpawn(); c = a.creatures.individuals.filter((i) => i.species.id === 'pagurus_minutus')[0]; }
+    if (!c) return null;
+    const dist = 0.7, px = c.pos.x + dist, pz = c.pos.z;
+    a.player.setPose(px, pz, Math.atan2(-(c.pos.x - px), -(c.pos.z - pz)));
+    a.player.pitch = -Math.atan2(1.5, dist);
+    return { id: c.id, len: c.length_mm };
+  });
+  console.log('nearest hermit crab', JSON.stringify(crab));
+  if (crab) {
+    await waitFrames(page, 10);
+    await page.screenshot({ path: path.join(outDir, '20-hermit-near.png') });
+    await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, crab.id);
+    await waitFrames(page, 30);
+    await page.screenshot({ path: path.join(outDir, '21-hermit-observe.png') });
+    // catch it with the net the same way as the goby: the crab is held under the reticle and the swing is forced
+    await page.evaluate(() => { const a = window.__higata; a.exitObserve(); a.player.lowView = true; a.player.pitch = -0.64; });
+    await waitFrames(page, 3);
+    await page.evaluate((id) => {
+      const a = window.__higata, c = a.creatures.get(id);
+      const p = a.groundUnderReticle(1.1);
+      if (p) { a.creatures.driverOf(id)?.holdAt?.(p.x, p.z); c.pos.set(p.x, p.y + 0.005, p.z); }
+      c.alert = 0; a.capture.forceCatch = true; a.swingNet();
+    }, crab.id);
+    await page.waitForFunction(() => { const s = window.__higata.capture.state.value; return !!s && s.phase === 'check' && s.revealed; }, null, { timeout: 240000 });
+    await waitFrames(page, 2);
+    console.log('hermit reveal', JSON.stringify(await page.evaluate(() => window.__higata.capture.state.value?.catchText)));
+    await page.screenshot({ path: path.join(outDir, '22-hermit-net.png') });
+    await page.waitForFunction(() => window.__higata.mode === 'field', null, { timeout: 240000 });
+    const got = await page.evaluate(() => window.__higata.encyclopedia.caseItems.value.some((r) => r.speciesId === 'pagurus_minutus'));
+    if (got) {
+      await page.evaluate(() => { const a = window.__higata; a.enterHome(); a.setHomePanel('tank'); const rec = a.encyclopedia.caseItems.value.find((r) => r.speciesId === 'pagurus_minutus'); return a.tankPut(rec); });
+      // (the tank draws the crab at full detail: a few frames are slow on the software renderer)
+      await waitFrames(page, 14);
+      await page.screenshot({ path: path.join(outDir, '23-hermit-tank.png') });
+      await page.evaluate(() => window.__higata.enterField());
+      await page.waitForFunction(() => window.__higata && window.__higata.mode === 'field', null, { timeout: 120000 });
+    } else errors.push('the forced swing did not catch the hermit crab');
+  } else errors.push('no hermit crab to look at');
   // runnel at mid tide, then debug mode at low tide with markers (daylight)
   await noon();
   await page.evaluate(() => { const a = window.__higata; a.toggleDebug(); a.setTideOverride(0.15); a.teleport('runnel'); a.player.pitch = -0.12; });
