@@ -68,6 +68,10 @@ export function profile(d: number): number {
   return PROFILE[i] * (1 - f) + PROFILE[i + 1] * f;
 }
 
+/** how far the beach and its seawall run on along the coast beyond the map, to the wooded points at either end (z) */
+export const COAST_N = -116;
+export const COAST_S = 284;
+
 /** the seawall's face: its foot at d = -10, its top at -10.6 */
 export const WALL_FOOT = -10;
 export const WALL_TOP_D = -10.6;

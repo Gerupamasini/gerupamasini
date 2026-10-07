@@ -1,10 +1,10 @@
 import { Color, type Mesh } from 'three';
 
 /**
- * The horizon at 走水, drawn on the Skyline's ring (bearings in degrees clockwise from north; the sea is east). Across
- * the 浦賀水道 the 房総 hills run low and blue from 富津岬 to 鋸山; 観音崎 stands close to the north-east, a wooded
- * headland with its white lighthouse; behind the road the Miura hills rise steep and green over the houses of 走水,
- * and the little port lies to the south. Ships pass up and down the channel all day.
+ * The far horizon at 走水, drawn on the Skyline's ring (bearings in degrees clockwise from north; the sea is east).
+ * Across the 浦賀水道 the 房総 hills run low and blue from 富津岬 to 鋸山, the old fort of 第二海堡 lies low in the
+ * channel, and ships pass up and down it all day. The near land (the hills behind the road, the 観音崎 headland, the
+ * point to the south) is real ground with trees on it: see land.ts.
  */
 
 /** the Skyline's ring radius (m) and the angle → width on it */
@@ -54,63 +54,6 @@ export function buildHashirimizuSkyline(plane: Plane, ships: ShipMark[]): void {
   plane(6, ang(1.6), ang(0.22), FOOT, 256, 32, (c, w, h) => {
     ridge(c, w, h, (u) => (u > 0.08 && u < 0.92 ? 0.55 + 0.25 * Math.sin(u * 30) * 0.3 : 0), '#7b7f74');
   }, new Color(0.38, 0.42, 0.38), 0.55);
-  // ---- 観音崎: a wooded headland to the north-east, close (1.1 km); the lighthouse on its shoulder
-  plane(38, ang(36), ang(3.6), FOOT - 1, 1600, 220, (c, w, h) => {
-    ridge(c, w, h, (u) => {
-      // rising from the sea at the right (the point), highest toward the land on the left
-      const land = 0.78 - 0.35 * u + bump(u, 0.22, 0.12, 0.12) + bump(u, 0.55, 0.1, 0.07);
-      return u > 0.93 ? land * Math.max(0, (1 - u) / 0.07) : land;
-    }, '#33402c');
-    // the canopy: rounded crowns along the skyline
-    c.fillStyle = '#2b3826';
-    for (let x = 0; x < w; x += 6) {
-      const u = x / w, top = h * (1 - (0.78 - 0.35 * u)) - 2;
-      if (u > 0.93) continue;
-      c.beginPath(); c.arc(x, top + 4, 5 + rnd() * 6, 0, Math.PI * 2); c.fill();
-    }
-    // the sea cliff at the point: pale rock
-    c.fillStyle = '#8a8475';
-    c.fillRect(w * 0.84, h * 0.82, w * 0.1, h * 0.18);
-    // 観音埼灯台: a white tower and its lamp house on the shoulder of the hill
-    const lx = w * 0.62, base = h * (1 - (0.78 - 0.35 * 0.62)) + 2;
-    c.fillStyle = '#f2f2ee';
-    c.fillRect(lx - 7, base - 46, 14, 46);
-    c.fillRect(lx - 10, base - 52, 20, 7);
-    c.fillStyle = '#3a3a3a';
-    c.fillRect(lx - 6, base - 62, 12, 10);
-    c.fillStyle = '#f2f2ee';
-    c.beginPath(); c.arc(lx, base - 63, 7, Math.PI, 0); c.fill();
-  }, new Color(0.24, 0.31, 0.22), 0.22);
-  // ---- 走水 to the south: the little port's breakwater, houses and the shrine's wooded hill
-  plane(190, ang(42), ang(4.8), FOOT - 1, 1600, 240, (c, w, h) => {
-    ridge(c, w, h, (u) => 0.25 + bump(u, 0.25, 0.14, 0.45) + bump(u, 0.7, 0.2, 0.55) + 0.03 * Math.sin(u * 70), '#344230');
-    // houses along the shore road
-    for (let x = w * 0.05; x < w * 0.95;) {
-      const ww = 14 + rnd() * 26, hh = 10 + rnd() * 18;
-      c.fillStyle = rnd() < 0.5 ? '#d9d6cc' : rnd() < 0.5 ? '#b7b4ab' : '#8f8a80';
-      c.fillRect(x, h - hh - 6, ww, hh);
-      c.fillStyle = '#5b5550'; c.fillRect(x - 1, h - hh - 9, ww + 2, 4);
-      x += ww + rnd() * 18;
-    }
-    // the breakwater
-    c.fillStyle = '#b9b6ad'; c.fillRect(w * 0.0, h - 7, w * 0.3, 7);
-  }, new Color(0.27, 0.33, 0.24), 0.25);
-  // ---- behind the road: the Miura hills, steep, wooded, a few hundred metres away
-  for (const [b, wdeg, hdeg] of [[250, 50, 9], [300, 50, 11], [345, 42, 7]] as const) {
-    plane(b, ang(wdeg), ang(hdeg), FOOT, 1600, 360, (c, w, h) => {
-      ridge(c, w, h, (u) => 0.6 + bump(u, 0.3, 0.2, 0.25) + bump(u, 0.75, 0.15, 0.2) + 0.02 * Math.sin(u * 90) + 0.015 * Math.sin(u * 230), '#2c3a26');
-      c.fillStyle = '#25321f';
-      for (let x = 0; x < w; x += 7) { const y = h * 0.25 + rnd() * h * 0.6; c.beginPath(); c.arc(x, y, 6 + rnd() * 8, 0, Math.PI * 2); c.fill(); }
-      // houses at the foot
-      for (let x = 0; x < w;) {
-        const ww = 18 + rnd() * 30, hh = 14 + rnd() * 22;
-        c.fillStyle = rnd() < 0.5 ? '#d4d0c6' : '#a9a49a';
-        c.fillRect(x, h - hh, ww, hh);
-        c.fillStyle = '#4e4945'; c.fillRect(x - 2, h - hh - 4, ww + 4, 5);
-        x += ww + 4 + rnd() * 30;
-      }
-    }, new Color(0.25, 0.32, 0.21), 0.18);
-  }
   // ---- ships in the 浦賀水道: inbound to Tokyo close to this shore (moving north), outbound further out
   const kinds: { len: number; draw: (c: CanvasRenderingContext2D, w: number, h: number) => void; tall: number }[] = [
     { len: 300, tall: 50, draw: (c, w, h) => { // a container ship: boxes in rows, the bridge aft

@@ -8,7 +8,7 @@ import type { Terrain } from '../../Terrain';
 import { valveFragment } from '../../PitDebris';
 import { FORMS, sharedGeometry } from '../../../creatures/asari/AsariModel.js';
 import { makeShellOuterMaterial } from '../../../creatures/asari/AsariMaterial.js';
-import { ALONG, HALF, WALL_FOOT, WALL_TOP, WALL_TOP_D, ZERO_X, profile, vnoise } from './shape';
+import { ALONG, COAST_N, COAST_S, HALF, WALL_FOOT, WALL_TOP, WALL_TOP_D, ZERO_X, profile, vnoise } from './shape';
 
 const UP = new Vector3(0, 1, 0);
 const own = <T extends Object3D>(o: T): T => { o.traverse((c) => { c.userData.mapOwned = true; }); return o; };
@@ -41,7 +41,8 @@ function seawall(): Object3D[] {
   ];
   const lens = [0];
   for (let i = 1; i < sec.length; i++) lens.push(lens[i - 1] + Math.hypot(sec[i][0] - sec[i - 1][0], sec[i][1] - sec[i - 1][1]));
-  const z0 = -HALF, z1 = HALF, nz = 48;
+  // along the whole beach, past the map's ends to where the wooded points close it in
+  const z0 = COAST_N, z1 = COAST_S, nz = Math.round((z1 - z0) / 2);
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];
   for (let k = 0; k <= nz; k++) {
     const z = z0 + ((z1 - z0) * k) / nz;
@@ -110,7 +111,7 @@ function seawall(): Object3D[] {
   for (const h of [0.55, 0.98]) {
     const rg = new CylinderGeometry(0.02, 0.02, z1 - z0, 8).rotateX(Math.PI / 2);
     const rail = new Mesh(rg, railMat);
-    rail.position.set(xr, yr + h, 0);
+    rail.position.set(xr, yr + h, (z0 + z1) / 2);
     rail.castShadow = true;
     rails.push(rail);
   }

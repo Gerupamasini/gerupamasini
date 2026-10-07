@@ -104,6 +104,7 @@ export class World {
       for (const o of layout.props(terrain, mapSeed)) w.scene.add(o);
     }
     w.scene.add(w.skyline.group);
+    if (w.skyline.land) w.scene.add(w.skyline.land.group);
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
     (w as { sky: SkyDome }).sky = sky;
     return w;
