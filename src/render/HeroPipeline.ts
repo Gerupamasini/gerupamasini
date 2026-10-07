@@ -138,6 +138,8 @@ export class HeroPipeline {
     const prevTone = r.toneMapping;
     const prevBg = scene.background;
     r.toneMapping = NoToneMapping;
+    // 0. what the water mirrors (the land and the sky)
+    if (water) { camera.updateMatrixWorld(); water.prepare(r, scene, camera); }
     // 1. opaque scene plus the fins that must show through the thin body
     camera.layers.set(0);
     camera.layers.enable(LAYER_BEHIND);

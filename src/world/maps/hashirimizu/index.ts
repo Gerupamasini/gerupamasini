@@ -2,6 +2,7 @@ import type { Object3D } from 'three';
 import type { Terrain } from '../../Terrain';
 import type { MeadowLayout } from '../../amamo/AmamoMeadow';
 import type { ClamBedOptions } from '../../ClamField';
+import type { SurfParams } from '../../Surf';
 import { buildHashirimizuProps } from './props';
 import { eelgrassField, eelgrassZone, offshore } from './shape';
 
@@ -19,6 +20,12 @@ export interface ShoreLayout {
   landLevel: readonly [number, number];
   /** the sand's colour against the 葛西 grey (terrain shader) */
   sandTint: readonly [number, number, number];
+  /** the ripple marks' turn from 葛西's (radians; their crests run along x there): crests parallel to this shore */
+  rippleAngle: number;
+  /** the waves breaking on the shore (null: none) */
+  surf: SurfParams | null;
+  /** the water: its colour in depth (linear) and its turbidity against 葛西's silty water */
+  water: { colour: readonly [number, number, number]; turbidity: number };
   /** the shore's own scenery standing on the terrain */
   props(terrain: Terrain, seed: number): Object3D[];
 }
@@ -39,8 +46,14 @@ export const HASHIRIMIZU: ShoreLayout = {
     opts: { ok: (x, z) => { const d = offshore(x); return d > 9 && d < 26 && Math.abs(z) < 37 && eelgrassField(x, z) < 0.35; }, perCluster: [1, 3], spread: 3.5, margin: 6 },
   },
   landLevel: [2.05, 2.4],
-  // the darker, browner sand of the bay mouth (worn from the Miura hills' rock, with shell grit)
-  sandTint: [0.74, 0.69, 0.6],
+  // the bay mouth's sand: browner and warmer than the 葛西 grey (worn from the Miura hills' rock, with shell grit)
+  sandTint: [0.98, 0.9, 0.74],
+  // the coast runs along z, so the crests do too
+  rippleAngle: Math.PI / 2,
+  // the bay mouth's small wind waves and ship wakes: a few tens of centimetres, a few seconds apart
+  surf: { height: 0.2, period: 3.4, slope: 0.05 },
+  // the bay mouth's water: clearer than the silty flat at 葛西 and greener-blue
+  water: { colour: [0.07, 0.125, 0.125], turbidity: 0.55 },
   props: buildHashirimizuProps,
 };
 

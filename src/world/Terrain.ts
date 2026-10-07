@@ -1,9 +1,10 @@
 import {
-  BufferAttribute, BufferGeometry, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshStandardMaterial, RedFormat, Vector2, Vector3,
+  BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, RedFormat, Vector2, Vector3, Vector4,
   type IUniform, type Texture, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
 import { makeSpillTexture } from './Water';
 import { WAVES_GLSL, type WaveSet } from './Waves';
+import { SURF_GLSL, surfUniform } from './Surf';
 import type { MapDef, Substrate } from '../data/schemas';
 import { pitMaskAt, pitShape, type FeedingPit } from './FeedingPits';
 import { DATA_BASE } from '../data/loader';
@@ -109,7 +110,11 @@ export class Terrain {
   private readonly uLand: IUniform<Vector2> = { value: new Vector2(3.1, 3.9) };
   /** the sand's colour relative to the 葛西 grey (another shore's sand is another colour) */
   private readonly uSandTint: IUniform<Vector3> = { value: new Vector3(1, 1, 1) };
+  /** (cos, sin) of the ripple marks' turn from 葛西's: their crests run along x there, parallel to that shore */
+  private readonly uRipRot: IUniform<Vector2> = { value: new Vector2(1, 0) };
   private waves: WaveSet | null = null;
+  /** the surf on an open shore (shared with the water): the sand glistens where the swash has just been */
+  private surf: IUniform<Vector4> = surfUniform(null);
 
   constructor(grid: TerrainGrid, palette: Substrate[], pits: FeedingPit[] = []) {
     this.n = grid.n;
@@ -343,6 +348,8 @@ export class Terrain {
       shader.uniforms.uMeadowFar = this.uMeadowFar;
       shader.uniforms.uLand = this.uLand;
       shader.uniforms.uSandTint = this.uSandTint;
+      shader.uniforms.uRipRot = this.uRipRot;
+      shader.uniforms.uSurf = this.surf;
       if (this.waves) Object.assign(shader.uniforms, this.waves.uniforms);
       shader.uniforms.uSpillTex = this.uSpill;
       shader.uniforms.uHalf = { value: this.half };
@@ -365,11 +372,14 @@ uniform sampler2D uMeadow;
 uniform vec2 uMeadowFar;
 uniform vec2 uLand;
 uniform vec3 uSandTint;
+uniform vec2 uRipRot;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
 ${WAVES_GLSL}
+${SURF_GLSL}
 // shared between the colour, normal and roughness stages (the colour stage runs first)
 float gFilm = 0.0;
+float gSwash = 0.0;
 float gQuartz = 0.0;
 vec2 gNrmAdd = vec2(0.0);
 vec4 gDis = vec4(0.0);
@@ -458,6 +468,9 @@ vec4 rippleDisloc(vec2 p) {
 float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
 // where the ripples are: patches of flat sand in between, crests fading in and out at the metre scale
 float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * smoothstep(0.15, 0.6, vnoise(p * 0.9 + 2.9)) * (0.6 + 0.4 * vnoise(p * 0.2 + 7.1)); }
+// the ripple field's own frame: the world turned so that the crests run along its x, parallel to this map's shore
+vec2 rippleFrame(vec2 p) { return vec2(uRipRot.x * p.x + uRipRot.y * p.y, -uRipRot.y * p.x + uRipRot.x * p.y); }
+vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRipRot.y * g.x + uRipRot.x * g.y); }
 `)
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
@@ -469,9 +482,10 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   float isSand = 1.0 - smoothstep(0.5, 1.5, vSubstrate);
   float muddy = smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate));
   diffuseColor.rgb *= mix(vec3(1.0), uSandTint, 1.0 - smoothstep(1.5, 2.5, vSubstrate));
-  gDis = rippleDisloc(vWorldPos.xz);
+  vec2 rq = rippleFrame(vWorldPos.xz);
+  gDis = rippleDisloc(rq);
   // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
-  float ripple = cos(ripplePhase(vWorldPos.xz)) * rippleAmp(vWorldPos.xz) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit);
+  float ripple = cos(ripplePhase(rq)) * rippleAmp(rq) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit);
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 - ripple * 0.05;
   diffuseColor.rgb *= detail;
   // ---- up close: the grains themselves (after MahazeViewer's sediment). Medium quartz grains and coarser shell
@@ -573,6 +587,20 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   // wet band: everything between the current water level and the recent high-water mark is darker
   float wet = 1.0 - smoothstep(lvl + 0.02, max(lvl, uWetLevel) + 0.05, vWorldPos.y);
   wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
+  // an open shore's swash: the sand the biggest waves reach stays saturated; where this wave's sheet or the last
+  // two's has just drained it still carries a film of water and shines (the water pass runs the same swash)
+  if (uSurf.w > 0.0) {
+    float e = vWorldPos.y - uWaterLevel;
+    if (e > -0.2 && e < 0.3) {
+      vec2 q = vWorldPos.xz;
+      float reach = max(surfSwash(q, uTime).x, max(surfSwash(q, uTime - 0.9).x, surfSwash(q, uTime - 1.8).x));
+      gSwash = 1.0 - smoothstep(reach - 0.004, reach + 0.012, e);
+      // (the reach wanders along the beach in lobes and tongues, as the swash's own front does)
+      float lobes = 0.05 * (vnoise(q * 0.35 + 3.0) - 0.5) + 0.025 * (vnoise(q * 1.3 - 1.0) - 0.5);
+      float zone = 1.0 - smoothstep(0.4 * uSurf.x, 0.8 * uSurf.x, e + lobes);
+      wet = max(wet, max(gSwash, zone * 0.9));
+    }
+  }
   diffuseColor.rgb *= mix(1.0, 0.76, wet);
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.93, 1.04), 0.45 * wet);
   // above the bank: the park's land, dry grass and earth over the packed bank
@@ -597,15 +625,15 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
 {
   // ripple marks: one continuous warped field (see rippleWarp) with its dislocations; sand carries them, mud faintly
   float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
-  float strength = (0.12 + 0.88 * sandy) * rippleAmp(vWorldPos.xz) * 0.26 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w);
-  vec2 rp = vWorldPos.xz;
+  vec2 rp = rippleFrame(vWorldPos.xz);
+  float strength = (0.12 + 0.88 * sandy) * rippleAmp(rp) * 0.26 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w);
   float ph = ripplePhase(rp);
   // the crest line's local direction comes from the phase gradient (warp plus dislocations), so the shading
   // follows the bends and the forks; where crests crowd the slope grows, where they spread it eases
   float e = 0.02;
   vec2 gph = vec2(rippleWarp(rp + vec2(e, 0.0)) - rippleWarp(rp - vec2(e, 0.0)), rippleWarp(rp + vec2(0.0, e)) - rippleWarp(rp - vec2(0.0, e))) / (2.0 * e) * RIPPLE_K + gDis.yz;
   float kRel = clamp(length(gph) / RIPPLE_K, 0.4, 1.6);
-  vec2 grad = normalize(gph + vec2(0.0, 1e-4));
+  vec2 grad = rippleToWorld(normalize(gph + vec2(0.0, 1e-4)));
   float slope = cos(ph) * strength * kRel;
   // the lee side is steeper
   slope += cos(ph * 2.0 + 0.6) * strength * 0.35;
@@ -620,6 +648,7 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   float wetR = 1.0 - smoothstep(lvlR + 0.02, max(lvlR, uWetLevel) + 0.05, vWorldPos.y);
   wetR = max(wetR, 1.0 - smoothstep(lvlR - 0.05, lvlR + 0.12, vWorldPos.y));
   roughnessFactor = mix(roughnessFactor, 0.42, wetR);   // damp sand has a soft sheen, not a mirror
+  roughnessFactor = mix(roughnessFactor, 0.24, gSwash * smoothstep(-0.01, 0.0, vWorldPos.y - uWaterLevel));   // the film the swash left: a soft mirror
   roughnessFactor = mix(roughnessFactor, 0.5, gFilm * 0.5);   // the organic film has a wet sheen of its own
   roughnessFactor = mix(roughnessFactor, 0.28, gQuartz);      // quartz and shell grains glint
 }`);
@@ -628,8 +657,27 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     return mat;
   }
 
+  /**
+   * The flat as the sea's mirror sees it: one coarse mesh (1 m), plainly lit in the substrate colours and the sand's
+   * tint, on the mirror's layer only. Without it the reflection of the beach would be a hole showing the haze
+   * behind, which at grazing angles along the shore reads as a bright band.
+   */
+  mirrorProxy(layer: number): Mesh {
+    if (this.proxy) return this.proxy;
+    const geo = this.buildChunkGeometry(0, 0, this.n - 1, this.n - 1, 4, this.nrm!);
+    const t = this.uSandTint.value;
+    const mesh = new Mesh(geo, new MeshLambertMaterial({ vertexColors: true, color: new Color(t.x, t.y, t.z) }));
+    mesh.layers.set(layer);
+    mesh.name = 'terrain-mirror';
+    this.proxy = mesh;
+    return mesh;
+  }
+
+  private proxy: Mesh | null = null;
+
   /** Free the chunks, the pit patches, the materials and the data textures (leaving the map). */
   dispose(): void {
+    if (this.proxy) { this.proxy.geometry.dispose(); (this.proxy.material as MeshLambertMaterial).dispose(); this.proxy.removeFromParent(); this.proxy = null; }
     for (const c of this.chunks) for (const g of c.lods) g?.dispose();
     for (const p of this.patches) p.mesh.geometry.dispose();
     this.material.dispose();
@@ -668,6 +716,11 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
     this.uLand.value.set(from, to);
   }
 
+  /** Turn the ripple marks by `angle` (radians) from 葛西's, whose crests run along x (parallel to its shore). */
+  setRippleAngle(angle: number): void {
+    this.uRipRot.value.set(Math.cos(angle), Math.sin(angle));
+  }
+
   /** Tint the sand and muddy sand (multiplies the 葛西 grey). */
   setSandTint(r: number, g: number, b: number): void {
     this.uSandTint.value.set(r, g, b);
@@ -676,6 +729,11 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   /** Close-up surface detail on or off (quality preset). */
   setDetail(on: boolean): void {
     this.uDetail.value = on ? 1 : 0;
+  }
+
+  /** Share the surf's uniforms with the water (call before the first frame). */
+  setSurf(surf: IUniform<Vector4>): void {
+    this.surf = surf;
   }
 
   /** Share the water's wave set so the caustics follow the ripples (call before the first frame). */

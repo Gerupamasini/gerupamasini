@@ -26,6 +26,8 @@ export class FieldRenderer {
 
   render(scene: Scene, camera: PerspectiveCamera, water: WaterPass): void {
     const gl = this.gl, rt = this.target();
+    camera.updateMatrixWorld();
+    water.prepare(gl, scene, camera);
     gl.setRenderTarget(rt);
     gl.render(scene, camera);
     this.lastStats.calls = gl.info.render.calls;

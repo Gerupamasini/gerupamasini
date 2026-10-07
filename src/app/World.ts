@@ -4,6 +4,8 @@ import { TideModel } from '../tide/TideModel';
 import { Terrain, loadTerrainGrid } from '../world/Terrain';
 import { WaterPass } from '../world/Water';
 import { createWaves } from '../world/Waves';
+import { LAYER_MIRROR, reflectInWater } from '../render/Mirror';
+import { surfUniform } from '../world/Surf';
 import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
 import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
@@ -79,12 +81,16 @@ export class World {
     terrain.setDetail(preset.surfaceDetail > 0);
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, pits);
-    if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); }
+    if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); terrain.setRippleAngle(layout.rippleAngle); }
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
     const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });
     terrain.setWaves(waves);
-    const water = new WaterPass(terrain, waves);
+    // the surf on an open shore: one set of uniforms for the water and the sand it wets
+    const surf = surfUniform(layout?.surf ?? null);
+    terrain.setSurf(surf);
+    const water = new WaterPass(terrain, waves, surf);
+    if (layout) water.setBody(...layout.water.colour, layout.water.turbidity);
     const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
@@ -103,10 +109,15 @@ export class World {
       onProgress?.('浜');
       for (const o of layout.props(terrain, mapSeed)) w.scene.add(o);
     }
-    w.scene.add(w.skyline.group);
-    if (w.skyline.land) w.scene.add(w.skyline.land.group);
+    w.scene.add(reflectInWater(w.skyline.group));
+    if (w.skyline.land) w.scene.add(reflectInWater(w.skyline.land.group));
+    w.scene.add(terrain.mirrorProxy(LAYER_MIRROR));
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
+    // (lights obey layers too: the mirror's camera must see the sun and the sky light, or the land comes out black)
+    reflectInWater(sky.sky); reflectInWater(sky.sunLight); reflectInWater(sky.hemi);
     (w as { sky: SkyDome }).sky = sky;
+    water.setMirror(preset.mirror);
+    water.mirrorGate = () => !renderer.shadowMap.enabled || !sky.sunLight.castShadow || sky.sunLight.shadow.map !== null;
     return w;
   }
 

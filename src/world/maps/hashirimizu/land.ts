@@ -136,16 +136,18 @@ export function townLots(seed = 0x70e1): Lot[] {
 const haze = { uHazeCol: { value: new Color(0.75, 0.8, 0.85) }, uHazeK: { value: 0.0009 } };
 
 /** The land's own light haze in place of the scene fog: exp² with a quarter of the fog's density. */
-function hazy<T extends Material>(mat: T, key: string, more?: (vs: string) => string): T {
+function hazy<T extends Material>(mat: T, key: string, more?: (vs: string) => string, frag?: (fs: string) => string): T {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uHazeCol = haze.uHazeCol;
     sh.uniforms.uHazeK = haze.uHazeK;
     let vs = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vHaze;');
     if (more) vs = more(vs);
     sh.vertexShader = vs.replace('#include <fog_vertex>', '#include <fog_vertex>\nvHaze = length(mvPosition.xyz);');
-    sh.fragmentShader = sh.fragmentShader
+    let fs = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform vec3 uHazeCol;\nuniform float uHazeK;\nvarying float vHaze;')
       .replace('#include <fog_fragment>', '#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, uHazeCol, 1.0 - exp(-pow(uHazeK * vHaze, 2.0)));');
+    if (frag) fs = frag(fs);
+    sh.fragmentShader = fs;
   };
   mat.customProgramCacheKey = () => `hashirimizu-land-${key}`;
   return mat;
@@ -153,7 +155,7 @@ function hazy<T extends Material>(mat: T, key: string, more?: (vs: string) => st
 
 // ------------------------------------------------------------------ the ground
 // (linear colours) the shore's sand as the terrain draws it, the road and its verges, the woods' floor, bare cliff
-const SAND = [0.27, 0.255, 0.21], WET = [0.17, 0.16, 0.13], VERGE = [0.12, 0.15, 0.07], FLOOR = [0.04, 0.065, 0.025], CLIFF = [0.13, 0.12, 0.1];
+const SAND = [0.36, 0.33, 0.26], WET = [0.23, 0.21, 0.17], VERGE = [0.12, 0.15, 0.07], FLOOR = [0.04, 0.065, 0.025], CLIFF = [0.13, 0.12, 0.1];
 
 const ASPHALT = [0.055, 0.055, 0.06], YARD = [0.12, 0.12, 0.11];
 
@@ -384,22 +386,15 @@ function houseGeometry(wall: number[], roof: number[]): BufferGeometry {
   return box;
 }
 
-/** a block of flats: a box with a flat roof and a parapet, the floors marked by darker bands */
+/** a block of flats: a box with a flat roof (the storeys, windows and balconies are drawn by the facade shader) */
 function blockGeometry(wall: number[]): BufferGeometry {
   const P: number[] = [], C: number[] = [];
   const quad = (a: number[], b: number[], c: number[], d: number[], col: number[]) => { P.push(...a, ...b, ...c, ...a, ...c, ...d); for (let i = 0; i < 6; i++) C.push(...col); };
-  const w = 0.5, dd = 0.5, floors = 4;
-  for (let f = 0; f < floors; f++) {
-    const y0 = f / floors, y1 = (f + 1) / floors, ym = y0 + (y1 - y0) * 0.72;
-    const band = wall.map((v) => v * 0.55), dim = wall.map((v) => v * 0.8), dimBand = band.map((v) => v * 0.8);
-    // each storey: wall, then a darker band of windows and balcony rails
-    for (const [y, yy, cf, cs] of [[y0, ym, wall, dim], [ym, y1, band, dimBand]] as [number, number, number[], number[]][]) {
-      quad([-w, y, dd], [w, y, dd], [w, yy, dd], [-w, yy, dd], cf);
-      quad([w, y, -dd], [-w, y, -dd], [-w, yy, -dd], [w, yy, -dd], cs);
-      quad([w, y, dd], [w, y, -dd], [w, yy, -dd], [w, yy, dd], cs);
-      quad([-w, y, -dd], [-w, y, dd], [-w, yy, dd], [-w, yy, -dd], cf);
-    }
-  }
+  const w = 0.5, dd = 0.5, dim = wall.map((v) => v * 0.8);
+  quad([-w, 0, dd], [w, 0, dd], [w, 1, dd], [-w, 1, dd], wall);
+  quad([w, 0, -dd], [-w, 0, -dd], [-w, 1, -dd], [w, 1, -dd], dim);
+  quad([w, 0, dd], [w, 0, -dd], [w, 1, -dd], [w, 1, dd], dim);
+  quad([-w, 0, -dd], [-w, 0, dd], [-w, 1, dd], [-w, 1, -dd], wall);
   quad([-w, 1, dd], [w, 1, dd], [w, 1, -dd], [-w, 1, -dd], [0.2, 0.2, 0.2]);
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(new Float32Array(P), 3));
@@ -408,8 +403,82 @@ function blockGeometry(wall: number[]): BufferGeometry {
   return g;
 }
 
+/**
+ * The facades of the instanced houses and flats, in metres from each instance's own scale: storeys of 2.85 m, bays
+ * of windows (aluminium frames, the upper panes catching the sky, some with the 雨戸 shutters drawn, some bays
+ * blank), a darker plinth, shade under the eaves, a band at each floor, balconies on the flats, tile rows on the
+ * roofs. All of it fades to the wall's average where a bay is under a few pixels.
+ */
+const FACADE_VS = (vs: string): string => vs
+  .replace('#include <common>', `#include <common>
+varying vec3 vFac;
+varying vec4 vFacInfo;`)
+  .replace('#include <begin_vertex>', `#include <begin_vertex>
+#ifdef USE_INSTANCING
+  {
+    vec3 sc = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+    bool sx = abs(normal.x) > 0.5;
+    vFac = vec3(sx ? position.z * sc.z : position.x * sc.x, position.y * sc.y, normal.y > 0.3 ? 2.0 : (position.y > 1.001 ? 1.0 : 0.0));
+    vFacInfo = vec4(0.5 * (sx ? sc.z : sc.x), sc.y, fract(sin(dot(instanceMatrix[3].xz, vec2(12.9898, 78.233))) * 43758.5453), 1.0);
+  }
+#else
+  vFac = vec3(0.0); vFacInfo = vec4(0.0);
+#endif`);
+
+const FACADE_FS = (fs: string): string => fs
+  .replace('#include <common>', `#include <common>
+varying vec3 vFac;
+varying vec4 vFacInfo;
+float facHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }`)
+  .replace('#include <color_fragment>', `#include <color_fragment>
+if (vFacInfo.w > 0.5 && vFac.z < 0.5) {
+  float y = vFac.y - 0.25, top = vFacInfo.y - 0.25;
+  bool flats = vFacInfo.y > 9.5;
+  float storey = flats ? 2.9 : 2.85;
+  float fl = floor(y / storey), fy = y - fl * storey;
+  float nFl = max(1.0, floor(top / storey + 0.25));
+  float bayW = flats ? 2.6 : 1.7 + 0.7 * vFacInfo.z;
+  float bx = vFac.x / bayW + vFacInfo.z * 7.0;
+  float bay = floor(bx), fx = fract(bx);
+  // (the house's seed rounded first: interpolation leaves it a hair different at every pixel, and the hash would
+  // turn that hair into noise)
+  float h = facHash(vec3(bay, fl, floor(vFacInfo.z * 97.0 + 0.5)));
+  float inside = step(abs(vFac.x), vFacInfo.x - 0.5) * step(fl, nFl - 1.0) * step(0.0, y);
+  float hasWin = inside * step(flats ? 0.08 : 0.3, h);
+  float wx = smoothstep(0.16, 0.18, fx) * (1.0 - smoothstep(0.82, 0.84, fx));
+  float wy = smoothstep(0.85, 0.87, fy) * (1.0 - smoothstep(2.15, 2.17, fy));
+  float win = hasWin * wx * wy;
+  float glass = win * smoothstep(0.2, 0.215, fx) * (1.0 - smoothstep(0.785, 0.8, fx)) * smoothstep(0.91, 0.93, fy) * (1.0 - smoothstep(2.09, 2.11, fy));
+  float mullion = 1.0 - (1.0 - smoothstep(0.0, 0.012, abs(fx - 0.5))) * glass;
+  vec3 glassCol = mix(vec3(0.025, 0.03, 0.04), vec3(0.15, 0.18, 0.21), smoothstep(1.2, 2.1, fy));
+  vec3 paneCol = h > 0.86 && !flats ? vec3(0.3, 0.29, 0.27) : glassCol * mullion + vec3(0.4) * (1.0 - mullion);
+  vec3 wall = diffuseColor.rgb;
+  vec3 c = mix(wall, vec3(0.42, 0.43, 0.43), win);
+  c = mix(c, paneCol, glass);
+  if (flats) {
+    // balconies: a slab at each floor and the rail's darker band across the lower window
+    float slab = step(0.5, fl) * (1.0 - smoothstep(0.0, 0.18, fy)) * inside;
+    float rail = step(0.5, fl) * smoothstep(0.18, 0.2, fy) * (1.0 - smoothstep(1.15, 1.17, fy)) * inside;
+    c = mix(c, wall * 1.15, slab);
+    c = mix(c, c * 0.55 + vec3(0.03), rail * 0.8);
+  } else {
+    c *= 1.0 - 0.16 * (1.0 - smoothstep(0.0, 0.1, abs(fy))) * step(0.5, fl);   // the band at each floor
+  }
+  c *= mix(0.6, 1.0, smoothstep(0.0, 0.45, y));                 // plinth, and the ground's shade
+  c *= mix(0.72, 1.0, smoothstep(0.0, 0.6, top - y));            // under the eaves
+  // a window bay under a few pixels: its average instead of shimmering stripes
+  float far = smoothstep(0.12, 0.35, fwidth(bx));
+  vec3 avg = wall * mix(0.6, 0.83, step(0.0, y)) * mix(1.0, 0.72, inside * 0.55);
+  diffuseColor.rgb = mix(c, avg, far);
+} else if (vFacInfo.w > 0.5 && vFac.z > 1.5) {
+  // the roof: rows of tiles (or the ribs of a sheet roof), fading out with distance
+  float r = vFac.y * 3.3;
+  float rows = 0.86 + 0.14 * smoothstep(0.0, 0.3, fract(r));
+  diffuseColor.rgb *= mix(rows, 0.93, smoothstep(0.2, 0.6, fwidth(r)));
+}`);
+
 function structures(rng: Rng): Object3D[] {
-  const mat = hazy(new MeshLambertMaterial({ vertexColors: true }), 'built');
+  const mat = hazy(new MeshLambertMaterial({ vertexColors: true }), 'built', FACADE_VS, FACADE_FS);
   const out: Object3D[] = [];
   // the town: houses in the colours of a Japanese seaside street (off-white, beige, grey siding), tiled or sheet roofs
   const walls = [[0.62, 0.6, 0.55], [0.55, 0.5, 0.4], [0.4, 0.4, 0.39], [0.66, 0.64, 0.6], [0.47, 0.42, 0.34]];

@@ -8,6 +8,7 @@ import type { Terrain } from '../../Terrain';
 import { valveFragment } from '../../PitDebris';
 import { FORMS, sharedGeometry } from '../../../creatures/asari/AsariModel.js';
 import { makeShellOuterMaterial } from '../../../creatures/asari/AsariMaterial.js';
+import { reflectInWater } from '../../../render/Mirror';
 import { ALONG, COAST_N, COAST_S, HALF, WALL_FOOT, WALL_TOP, WALL_TOP_D, ZERO_X, profile, vnoise } from './shape';
 
 const UP = new Vector3(0, 1, 0);
@@ -115,7 +116,7 @@ function seawall(): Object3D[] {
     rail.castShadow = true;
     rails.push(rail);
   }
-  return [wall, posts, ...rails];
+  return [wall, posts, ...rails].map((o) => reflectInWater(o));
 }
 
 // ------------------------------------------------------------------ shells, driftwood, the wrack line, grass
