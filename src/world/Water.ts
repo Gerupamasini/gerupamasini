@@ -1,6 +1,6 @@
 import {
   ClampToEdgeWrapping, Color, CubeTexture, DataTexture, FloatType, LinearFilter, NearestFilter, LinearMipmapLinearFilter, Matrix4, RedFormat,
-  RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer, type WebGLRenderTarget,
+  RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, type Object3D, type PerspectiveCamera, type Scene, type WebGLRenderer, type WebGLRenderTarget,
 } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { MirrorView } from '../render/Mirror';
@@ -229,27 +229,24 @@ export class WaterPass {
             vec3 q0 = uCamPos + rd * t0, q1 = uCamPos + rd * tEnd;
             if (t0 < tEnd && min(level - groundAt(q0.xz), level - groundAt(q1.xz)) < 1.4) {
               traced = tEnd >= t1 - 1e-3;   // (the whole band seen within reach: the trace has the last word)
-              float ta = t0, fa = q0.y - level - surfEta(q0.xz, level);
-              if (fa <= 0.0) t = t0;
+              // one loop with a run-time bound and a single call of the surface (so the driver neither unrolls it nor
+              // inlines the surf dozens of times): march in even steps until the ray goes under, then refine the bracket
+              // by the secant method
+              float lo = t0, flo = q0.y - level - surfEta(q0.xz, level), hi = -1.0, fhi = 0.0;
+              if (flo <= 0.0) t = t0;
               else {
-                for (int i = 1; i <= 16; i++) {
-                  if (float(i) > uSurfSteps) break;
-                  float tt = mix(t0, tEnd, float(i) / uSurfSteps);
+                int steps = int(uSurfSteps), refined = 0;
+                float dt = (tEnd - t0) / uSurfSteps;
+                for (int i = 1; i <= steps + 4; i++) {
+                  float tt = hi < 0.0 ? t0 + dt * float(i) : lo + (hi - lo) * flo / (flo - fhi);
+                  if (hi < 0.0 && i > steps) break;
                   vec3 qq = uCamPos + rd * tt;
                   float ff = qq.y - level - surfEta(qq.xz, level);
-                  if (ff <= 0.0) {
-                    float lo = ta, flo = fa, hi = tt, fhi = ff;
-                    for (int k = 0; k < 4; k++) {
-                      float tm = lo + (hi - lo) * flo / (flo - fhi);
-                      vec3 qm = uCamPos + rd * tm;
-                      float fmid = qm.y - level - surfEta(qm.xz, level);
-                      if (fmid > 0.0) { lo = tm; flo = fmid; } else { hi = tm; fhi = fmid; }
-                    }
-                    t = lo + (hi - lo) * flo / (flo - fhi);
-                    break;
-                  }
-                  ta = tt; fa = ff;
+                  if (hi >= 0.0) refined++;
+                  if (ff <= 0.0) { hi = tt; fhi = ff; } else { lo = tt; flo = ff; }
+                  if (refined >= 4) break;
                 }
+                if (hi >= 0.0) t = lo + (hi - lo) * flo / (flo - fhi);
                 // (a sliver of water thinner than a step, missed: the bottom of the band is surely under it)
                 if (t < 0.0 && traced && tb < sceneDist) t = tb;
               }
@@ -278,7 +275,7 @@ export class WaterPass {
                 // lie; further off, the main waves' slope along the seaward direction and the chop's)
                 vec2 surfGrad;
                 if (uSurfSteps > 0.5 && t < 35.0) {
-                  float e0 = surfEta(S.xz, level);
+                  float e0 = Ds > 1.4 ? 0.0 : sf.x * (1.0 - smoothstep(0.8, 1.4, Ds));   // (= surfEta here)
                   surfGrad = vec2(surfEta(S.xz + vec2(0.08, 0.0), level) - e0, surfEta(S.xz + vec2(0.0, 0.08), level) - e0) / 0.08;
                 } else surfGrad = (-gg / bs * sf.z + gSurfCrossGrad) * (1.0 - smoothstep(40.0, 120.0, t));
                 vec2 grad = -N.xz / N.y + surfGrad;
@@ -368,7 +365,11 @@ export class WaterPass {
               float speck = smoothstep(0.93, 0.99, snoise(S.xz * 9.0 + uTime * vec2(0.04, 0.025))) * smoothstep(0.02, 0.2, vdepth) * (1.0 - smoothstep(4.0, 14.0, t));
               col = mix(col, vec3(0.75, 0.72, 0.62) * uAmbient, speck * 0.25);
 
-              // the surf's foam: lace from the Voronoi map, in drifting patches; and the climbing swash's frothy edge
+              // a swash sheet only millimetres thick hardly shows: its edges dissolve into the wet sand (the froth on it, below,
+              // stays)
+              if (uSurf.w > 0.0 && Ds < 0.02) col = mix(base, col, smoothstep(0.0, 0.006, vdepth));
+
+              // the surf's foam: lace from the Voronoi map, in drifting patches; and the white froth along the water's edge
               if (surfOn) {
                 // each wave lays its own pattern (the lace shifts with the wave's number)
                 // (looked up through a smooth warp and at a second, turned scale, so no cell pattern repeats in a line)
@@ -376,20 +377,20 @@ export class WaterPass {
                 vec2 fuv = S.xz * 0.85 + vec2(uTime * 0.01, uTime * 0.006) + N.xz * 0.05 + vec2(waveN * 0.37, waveN * 0.61) + fw;
                 vec3 L1 = texture2D(tFoam, fuv).rgb;
                 vec3 L2 = texture2D(tFoam, mat2(0.8, 0.6, -0.6, 0.8) * fuv * 2.13 + vec2(0.4, -uTime * 0.01)).rgb;
-                float lace = max(L1.r * 0.55, L2.g * 0.85);
+                float lf = max(max(L1.r, L2.g * 0.9), L1.b * 0.8);
                 float patches = smoothstep(0.25, 0.7, vnoiseW(S.xz * 0.7 + vec2(waveN * 3.1, uTime * 0.1)));
                 // a little foam reads as lace along the cell walls; more fills the cells in, a roller is solid white.
                 // (far off the lace is finer than a pixel and would average into a veil: the walls alone stay)
                 float fa = foam * mix(0.45, 1.15, patches);
-                float fm = clamp(fa * 1.25 - (1.0 - max(max(L1.r, L2.g * 0.9), L1.b * 0.8)) * 0.95, 0.0, 1.0) * mix(1.0, 0.8, smoothstep(8.0, 30.0, t));
                 if (Ds < 0.25) {
-                  // the climbing sheet's edge: a thin, broken line of froth (little of it once the sheet drains)
+                  // the water's edge: the swash's leading edge is a band of white froth a hand or two wide, thickest while
+                  // it climbs, thinning to lace as it stops and drains; and the sheet behind carries a little up the beach
                   vec2 sw = surfSwash(S.xz, uTime);
-                  float edge = (1.0 - smoothstep(0.0, 0.0045, vdepth)) * smoothstep(0.0, 0.0015, vdepth);
-                  fm += edge * (0.15 + 0.85 * sw.y) * smoothstep(0.35, 0.8, L2.g + 0.6 * L1.r) * onBed * (1.0 - smoothstep(6.0, 20.0, t));
-                  // and the sheet carries what is left of the bore's froth up the beach
-                  fm += (1.0 - smoothstep(-0.02, 0.04, Ds)) * smoothstep(0.3, 0.75, L2.g) * 0.6 * mix(0.3, 1.0, patches) * (0.3 + 0.7 * sw.y) * smoothstep(0.0, 0.003, vdepth) * (1.0 - smoothstep(4.0, 14.0, t));
+                  float band = (1.0 - smoothstep(0.006, 0.022, vdepth)) * smoothstep(0.0, 0.0012, vdepth) * onBed;
+                  float sheet = (1.0 - smoothstep(-0.02, 0.04, Ds)) * smoothstep(0.0, 0.003, vdepth) * 0.4;
+                  fa = max(fa, max(band * mix(0.8, 1.15, sw.y), sheet * (0.45 + 0.55 * sw.y)) * mix(0.7, 1.1, patches));
                 }
+                float fm = clamp(fa * 1.25 - (1.0 - lf) * 0.95, 0.0, 1.0) * mix(1.0, 0.8, smoothstep(8.0, 30.0, t));
                 // foam is a bright, rough body: lit by the sun on its (softened) slope and the sky, darker in the thin lace
                 // where the water shows through and in the hollows of the bubbles
                 vec3 Nf = normalize(mix(N, vec3(0.0, 1.0, 0.0), 0.4));
@@ -397,9 +398,6 @@ export class WaterPass {
                 foamCol *= mix(0.72, 1.0, smoothstep(0.2, 0.9, fm)) * (0.9 + 0.1 * max(L2.g, L2.b));
                 col = mix(col, foamCol, clamp(fm, 0.0, 0.95) * (1.0 - smoothstep(60.0, 150.0, t)));
               }
-
-              // a swash sheet only millimetres thick hardly shows: its edges dissolve into the wet sand
-              if (uSurf.w > 0.0 && Ds < 0.02) col = mix(base, col, smoothstep(0.0, 0.006, vdepth));
 
               // far water fades into the haze
               float fogF = 1.0 - exp(-pow(uFogDensity * t, 2.0));
@@ -450,6 +448,12 @@ export class WaterPass {
     this.tint.setRGB(r, g, b);
     this.clarity = turbidity;
     this.setPolarized(this.polarized);
+  }
+
+  /** The full-screen quad the water is drawn with, to compile its shader ahead of the first frame (the same mesh,
+   * so the same program variant). */
+  compileTarget(): Object3D {
+    return (this.quad as unknown as { _mesh: Object3D })._mesh;
   }
 
   /** Steps of the trace that stands the surf up from the plane near the viewer (0: the surf on the flat plane). */

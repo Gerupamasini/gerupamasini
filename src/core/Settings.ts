@@ -45,9 +45,11 @@ export interface QualityPreset {
 }
 
 export const QUALITY_PRESETS: Record<Quality, QualityPreset> = {
+  // (the 3D view renders at most at these device-pixel ratios: on a high-density screen mid draws at 1×, about half
+  // the pixels of 1.5×; the water, the sand and the surf are per-pixel work)
   low: { maxDpr: 1, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, waterNormals: true, surfaceDetail: 0, vegetation: 'low', mirror: 0, surfSteps: 0 },
-  mid: { maxDpr: 1.5, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, waterNormals: true, surfaceDetail: 1, vegetation: 'mid', mirror: 0.4, surfSteps: 12 },
-  high: { maxDpr: 2, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, waterNormals: true, surfaceDetail: 1, vegetation: 'high', mirror: 0.5, surfSteps: 16 },
+  mid: { maxDpr: 1, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, waterNormals: true, surfaceDetail: 1, vegetation: 'mid', mirror: 0.4, surfSteps: 12 },
+  high: { maxDpr: 1.5, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, waterNormals: true, surfaceDetail: 1, vegetation: 'high', mirror: 0.5, surfSteps: 16 },
 };
 
 const KEY = 'settings';

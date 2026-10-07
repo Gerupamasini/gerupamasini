@@ -54,6 +54,10 @@ export interface CreatureFrame {
 const LOD1_DIST = 6;
 const LOD2_DIST = 40;
 const BIRD_DIST = 120;
+/** an animal in the water is lost in it within this (m) seen from the shore, however large: no need to draw it further */
+const AQUATIC_DIST = 14;
+/** below this length (mm) an animal's shadow is a few pixels on the bed: its parts are not drawn again for the shadows */
+const SHADOWLESS_MM = 80;
 
 /** Owns every live individual on the flat: spawning, brains, drivers, model tiers and targeting. */
 export class CreatureSystem {
@@ -98,6 +102,8 @@ export class CreatureSystem {
   async preload(): Promise<void> {
     const jobs: Promise<unknown>[] = [];
     for (const sp of this.data.species.values()) {
+      // only what lives on this flat (the others load when they are first needed, in the tank or the book)
+      if (!sp.spawn.some((r) => !r.maps || r.maps.includes(this.mapId))) continue;
       if (sp.model.lod2) jobs.push(preloadModel(sp.model.lod2));
       for (const st of sp.stages) if (st.model?.lod2) jobs.push(preloadModel(st.model.lod2));
     }
@@ -117,7 +123,7 @@ export class CreatureSystem {
   }
 
   private tierFor(sp: SpeciesDef, dist: number, lod1Rank: number, locked: boolean): Tier | 'placeholder' | null {
-    const far = sp.model.viewDistance_m ?? (sp.taxon.group === 'bird' ? BIRD_DIST : Math.min(LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400)));
+    const far = sp.model.viewDistance_m ?? (sp.taxon.group === 'bird' ? BIRD_DIST : Math.min(isAquatic(sp) ? AQUATIC_DIST : LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400)));
     if (dist > far) return null;
     if (!sp.model.lod2 && !sp.model.lod1 && !sp.model.hero) return 'placeholder';
     if (locked) return sp.model.hero ? 'hero' : sp.model.lod1 ? 'lod1' : 'lod2';
@@ -249,6 +255,7 @@ export class CreatureSystem {
     // the baked clips ride on the root for drivers that play them (the plover)
     if (view.model) view.root.userData.clips = view.model.clips;
     e.driver.attach(view.root, e.ind, view.model?.extras ?? {}, bones as Record<string, Object3D>, meshes);
+    if (tier !== 'hero' && sp.size.length_mm.mean < SHADOWLESS_MM) view.root.traverse((o) => { o.castShadow = false; });
   }
 
   private dropView(e: Entry): void {
