@@ -46,7 +46,7 @@ export function SpotSelect({ app }: { app: App }) {
                 const [x, y] = bay(s.lon, s.lat);
                 const on = s.id === sel?.id, ready = !!s.map;
                 return (
-                  <g key={s.id} class={`pin ${ready ? 'ready' : 'soon'} ${on ? 'on' : ''}`} transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`} onClick={() => pick(s)} role="button" tabIndex={0}>
+                  <g key={s.id} class={`pin ${ready ? 'open' : 'soon'} ${on ? 'on' : ''}`} transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`} onClick={() => pick(s)} role="button" tabIndex={0}>
                     <circle class="halo" r="14" />
                     <circle class="dot" r="5" />
                     <text class="name" x="10" y="4">{s.ja}</text>
