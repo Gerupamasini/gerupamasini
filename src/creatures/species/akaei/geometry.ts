@@ -383,7 +383,8 @@ function buildSpiracle(spec: LodSpec, sideX: number): BufferGeometry {
     for (let k = 0; k < NA; k++) {
       const a = (k / NA) * Math.PI * 2;
       const [x, z] = at(Math.cos(a) * S.rx * 0.82 * d, Math.sin(a) * S.rz * 0.82 * d);
-      const shade = 0.03 + 0.22 * Math.pow(d, 3);
+      // nearly black inside, a little warm brown only at the lip [PHOTO 005, 006]
+      const shade = 0.018 + 0.1 * Math.pow(d, 4);
       ring.push(b.disc(x, dorsalHeight(x, z) + 0.0005, z, 1, [shade * 0.9, shade * 0.55, shade * 0.45]));
       open.push(0, 0, 0);
     }
@@ -405,7 +406,8 @@ function buildSpiracle(spec: LodSpec, sideX: number): BufferGeometry {
     const row: number[] = [];
     for (let j = 0; j <= NVa; j++) {
       const w = -1 + (2 * j) / NVa;
-      const dv = hingeV - t * S.rz * 1.55;
+      // the valve shuts the front of the opening; a dark crescent stays at the back [PHOTO 006, 011]
+      const dv = hingeV - t * S.rz * 1.12;
       const halfAcross = S.rx * 0.86 * Math.sqrt(Math.max(0.04, 1 - (dv / (S.rz * 0.86)) ** 2));
       const du = w * halfAcross;
       const [x, z] = at(du, dv);

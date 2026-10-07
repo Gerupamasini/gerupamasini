@@ -30,6 +30,22 @@ describe('アカエイ morphology', () => {
   });
 });
 
+describe('アカエイ outline against the photos and the literature', () => {
+  const at = (along: number) => halfWidth(MORPH.zSnout - along);
+  it('has the snout angle and disc ratio of the redescription (Hemitrygon akajei: 110–124°, DW/DL 1.06–1.16)', () => {
+    const angle = (2 * Math.atan(at(0.12) / 0.12) * 180) / Math.PI;
+    expect(angle).toBeGreaterThan(110);
+    expect(angle).toBeLessThan(124);
+    const ratio = 1 / (MORPH.zSnout - MORPH.zRear);
+    expect(ratio).toBeGreaterThan(1.06);
+    expect(ratio).toBeLessThan(1.16);
+  });
+  it('follows the outline traced on photos 045 and 052 (posterior margin)', () => {
+    // [distance behind the snout, half-width] in DW, both photos agree within ~0.01 here
+    for (const [a, w] of [[0.525, 0.45], [0.625, 0.39], [0.72, 0.32], [0.8, 0.24]]) expect(Math.abs(at(a) - w)).toBeLessThan(0.03);
+  });
+});
+
 describe('アカエイ geometry', () => {
   for (const lod of [0, 1, 2] as Lod[]) {
     it(`LOD${lod} is finite, skinned within the skeleton and outward-facing`, () => {
@@ -166,6 +182,33 @@ describe('アカエイ behaviour', () => {
     expect(ind.pos.x).toBeLessThan(start.x);
     expect(d.sand).toBeLessThan(0.3);
     expect(events).toContain(AKAEI_EVENTS.ESCAPE);
+  });
+  it('holds its tail as a firm rod: straight in a straight glide, a gentle arc in a turn, never kinked', () => {
+    const { d, run, intent } = rig('rest');
+    const bends = () => {
+      const P = d.tailPoints;
+      let maxA = 0;
+      for (let j = 2; j < P.length / 3; j++) {
+        const ax = P[j * 3 - 3] - P[j * 3 - 6], ay = P[j * 3 - 2] - P[j * 3 - 5], az = P[j * 3 - 1] - P[j * 3 - 4];
+        const bx = P[j * 3] - P[j * 3 - 3], by = P[j * 3 + 1] - P[j * 3 - 2], bz = P[j * 3 + 2] - P[j * 3 - 1];
+        const c = (ax * bx + ay * by + az * bz) / (Math.hypot(ax, ay, az) * Math.hypot(bx, by, bz));
+        maxA = Math.max(maxA, Math.acos(Math.min(1, c)));
+      }
+      return maxA;
+    };
+    // straight ahead (the ray faces its heading): the tip stays on the line of the body
+    intent('wander', { target: new Vector3(Math.sin(d.heading) * 8, 0, Math.cos(d.heading) * 8) });
+    run(4);
+    const P = d.tailPoints, n = P.length / 3;
+    const bx = P[3] - P[0], bz = P[5] - P[2], L = Math.hypot(bx, bz);
+    const tx = P[(n - 1) * 3] - P[0], tz = P[(n - 1) * 3 + 2] - P[2];
+    const off = Math.abs(tx * bz - tz * bx) / L;
+    expect(off / Math.hypot(tx, tz)).toBeLessThan(0.05);
+    // a hard turn: every joint stays within its limit
+    intent('flee', { target: new Vector3(-6, 0, 0), from: new Vector3(4, 0, 0), seconds: 4 });
+    let worst = 0;
+    for (let i = 0; i < 90; i++) { run(1 / 60); worst = Math.max(worst, bends()); }
+    expect(worst).toBeLessThan(0.17);
   });
   it('switches LOD with distance and never leaves the water surface', () => {
     const { d, run, intent, ind } = rig('rest');

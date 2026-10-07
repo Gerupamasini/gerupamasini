@@ -40,70 +40,81 @@ export class Curve {
 }
 
 const smoothstep = (a: number, b: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-/** polynomial smooth minimum: the rounded corner where two margins meet */
-const smin = (a: number, b: number, k: number): number => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
 
 export const MORPH = {
   // ------------------------------------------------------------------ disc
-  /** snout tip; the snout is triangular and slightly produced [LIT, PHOTO 006, 014, 045] */
+  /** snout tip; the snout is broadly triangular, its very tip a little produced [LIT, PHOTO 006, 014, 045, 052] */
   zSnout: 0.47,
-  /** the broadly rounded outer corner of the pectoral fin, a little ahead of mid-disc [PHOTO 014, 035, 045] */
-  zApex: 0.06,
-  /** the free rear corner of the pectoral fin over the pelvic fins: DW / DL = 1.2 [LIT 1.1–1.2, PHOTO 014, 047] */
-  zRear: -0.36,
-  /** the end of the trunk where the tail tube takes over */
-  zEnd: -0.445,
-  /** anterior margin: nearly straight, a shallow concavity just behind the snout and convex toward the apex [PHOTO 006, 035, 045] */
-  anteriorCurve: 0.32,
-  /** posterior margin convex [LIT], the free rear tip bluntly rounded [PHOTO 012, 029, 047] */
-  posteriorExp: 1.75,
-  rearHalfWidth: 0.12,
-  apexRound: 0.06,
-  /** pelvic fins showing behind the disc either side of the tail base [PHOTO 012, 045, 047, 052] */
-  pelvic: [[-0.36, 0.12], [-0.372, 0.086], [-0.39, 0.1], [-0.41, 0.093], [-0.428, 0.064], [-0.445, 0.034]] as [number, number][],
+  /** the free rear corner of the pectoral fin over the pelvic fins: DL = 0.87 DW, DW/DL = 1.15 [LIT 1.06–1.16; PHOTO 052 1.15] */
+  zRear: -0.40,
+  /** the end of the trunk where the tail tube takes over (behind the pelvic fins) */
+  zEnd: -0.495,
+  /**
+   * The outline, measured: [distance behind the snout, half-width], both in DW, traced on the flat-lying photos 045 and
+   * 052 in the body frame (axis perpendicular to the nostrils) and averaged, then scaled to DL = 0.87 DW. Snout angle
+   * 2·atan(0.195 / 0.12) ≈ 117° [LIT 110–124°]; anterior margins almost straight, slightly convex toward the broadly
+   * rounded outer corner at 0.42 (0.48 DL); posterior margins gently convex down to the bluntly rounded free rear tips
+   * (half-width 0.17, at 0.87 = DL); behind them a notch and the squared pelvic fins (half-width 0.15) flanking the tail
+   * base, which leaves the disc at 0.965 [PHOTO 045, 047, 052].
+   */
+  outline: [
+    [0, 0], [0.004, 0.012], [0.015, 0.03], [0.04, 0.066], [0.08, 0.13], [0.12, 0.195], [0.2, 0.322], [0.28, 0.42], [0.35, 0.476],
+    [0.42, 0.5], [0.47, 0.496], [0.53, 0.46], [0.63, 0.4], [0.72, 0.325], [0.81, 0.245], [0.85, 0.2], [0.87, 0.168],
+    [0.882, 0.134], [0.9, 0.148], [0.93, 0.152], [0.948, 0.132], [0.957, 0.07], [0.965, 0.034],
+  ] as [number, number][],
 
   // ------------------------------------------------------------------ thickness (DW units)
   /** half-width of the trunk (the raised, rigid body over the skull, gills and gut) [PHOTO 005, 006, 056] */
-  trunkHalfWidth: [[0.47, 0.0], [0.43, 0.05], [0.36, 0.105], [0.27, 0.14], [0.2, 0.152], [0.08, 0.158], [-0.05, 0.165], [-0.18, 0.15], [-0.3, 0.122], [-0.37, 0.1], [-0.42, 0.07], [-0.445, 0.034]] as [number, number][],
+  trunkHalfWidth: [[0.47, 0.0], [0.43, 0.05], [0.36, 0.105], [0.27, 0.14], [0.2, 0.152], [0.08, 0.158], [-0.055, 0.165], [-0.198, 0.15], [-0.33, 0.122], [-0.407, 0.1], [-0.462, 0.07], [-0.49, 0.034]] as [number, number][],
   /** dorsal height of the trunk above the margin plane: "disc relatively thick" [LIT], domed behind the spiracles [PHOTO 005, 056, 069] */
-  trunkHeight: [[0.47, 0.003], [0.42, 0.01], [0.34, 0.024], [0.25, 0.039], [0.15, 0.053], [0.02, 0.065], [-0.1, 0.067], [-0.22, 0.06], [-0.32, 0.048], [-0.4, 0.036], [-0.445, 0.024]] as [number, number][],
+  trunkHeight: [[0.47, 0.003], [0.42, 0.01], [0.34, 0.024], [0.25, 0.039], [0.15, 0.053], [0.02, 0.065], [-0.11, 0.067], [-0.242, 0.06], [-0.352, 0.048], [-0.44, 0.036], [-0.49, 0.024]] as [number, number][],
   /** ventral depth of the trunk below the margin plane: the belly is flat, a little full behind the gills [PHOTO 045, 047, 055] */
-  trunkDepth: [[0.47, 0.003], [0.4, 0.008], [0.3, 0.015], [0.2, 0.019], [0.1, 0.023], [-0.05, 0.029], [-0.2, 0.031], [-0.32, 0.026], [-0.4, 0.02], [-0.445, 0.016]] as [number, number][],
+  trunkDepth: [[0.47, 0.003], [0.4, 0.008], [0.3, 0.015], [0.2, 0.019], [0.1, 0.023], [-0.055, 0.029], [-0.22, 0.031], [-0.352, 0.026], [-0.44, 0.02], [-0.49, 0.016]] as [number, number][],
   /** thickness of the pectoral fin where it leaves the trunk, thinning to a rounded edge [PHOTO 004, 008, 069] */
-  finHeight: [[0.47, 0.002], [0.35, 0.012], [0.2, 0.018], [0.05, 0.02], [-0.15, 0.018], [-0.3, 0.012], [-0.37, 0.008], [-0.445, 0.006]] as [number, number][],
+  finHeight: [[0.47, 0.002], [0.35, 0.012], [0.2, 0.018], [0.05, 0.02], [-0.165, 0.018], [-0.33, 0.012], [-0.407, 0.008], [-0.49, 0.006]] as [number, number][],
   rimHalf: 0.0022,
 
   // ------------------------------------------------------------------ head
-  /** eyes on raised orbits ~ a quarter of the disc length behind the snout [PHOTO 005, 006, 014, 037] */
-  eye: { x: 0.08, z: 0.262, r: 0.0165, orbitR: 0.022, orbitH: 0.012 },
-  /** spiracles right behind the eyes and larger than them, opening up and slightly back [PHOTO 005, 006, 011, 027, 056] */
-  spiracle: { x: 0.088, z: 0.208, rx: 0.019, rz: 0.03, yaw: 0.26, depth: 0.007 },
+  /**
+   * eyes on raised orbits 0.21 DW behind the snout; preorbital snout ≈ 1.75 × the interorbital width between the orbits'
+   * inner edges (0.12) [LIT 1.36–2.14; PHOTO 005, 006, 014, 037]
+   */
+  eye: { x: 0.078, z: 0.262, r: 0.0155, orbitR: 0.026, orbitH: 0.019 },
+  /**
+   * spiracles right behind the eyes and a little outside them, 1.3–1.5 × the eye, a large oval opening whose rear
+   * crescent stays dark even when the valve shuts its front [PHOTO 005, 006, 011, 027, 056]
+   */
+  spiracle: { x: 0.09, z: 0.214, rx: 0.022, rz: 0.029, yaw: 0.3, depth: 0.008 },
   /** mouth a transverse, gently arched slit under the eyes; nostrils and the nasal curtain in front [PHOTO 047, 049, 050, 055] */
-  mouth: { z: 0.245, halfW: 0.037, arch: 0.008 },
-  nostril: { x: 0.03, z: 0.268, len: 0.022 },
-  /** five pairs of gill slits in arcs converging backward [PHOTO 047–052, 055] */
+  mouth: { z: 0.258, halfW: 0.045, arch: 0.009 },
+  /** nostrils at the mouth's corners, 0.12 DW apart, 0.19 DW behind the snout [PHOTO 049, 052] */
+  nostril: { x: 0.056, z: 0.278, len: 0.024 },
+  /** five pairs of gill slits, 0.30 → 0.44 DW behind the snout, 0.115 → 0.075 DW off the midline: arcs converging backward [PHOTO 045, 047–052, 055] */
   gills: [
-    { x: 0.098, z: 0.182, len: 0.03, ang: 0.42 },
-    { x: 0.097, z: 0.155, len: 0.029, ang: 0.36 },
-    { x: 0.094, z: 0.128, len: 0.027, ang: 0.3 },
-    { x: 0.089, z: 0.103, len: 0.024, ang: 0.24 },
-    { x: 0.083, z: 0.08, len: 0.02, ang: 0.16 },
+    { x: 0.115, z: 0.17, len: 0.032, ang: 0.42 },
+    { x: 0.108, z: 0.135, len: 0.031, ang: 0.36 },
+    { x: 0.099, z: 0.1, len: 0.029, ang: 0.3 },
+    { x: 0.088, z: 0.065, len: 0.026, ang: 0.24 },
+    { x: 0.076, z: 0.03, len: 0.022, ang: 0.16 },
   ],
-  cloaca: { z: -0.385, halfW: 0.012 },
+  cloaca: { z: -0.43, halfW: 0.012 },
 
   // ------------------------------------------------------------------ tail
   /** tail length from the pelvic fins, intact; tips are often lost [LIT < 1–1.6 DW, PHOTO 012, 014, 029, 061] */
   tailLength: 1.45,
   /** where the tail tube starts (inside the trunk, so the join is hidden) */
-  tailStart: -0.405,
-  /** depressed at the base, tapering to the sting, then a whip [LIT, PHOTO 007, 012, 014] */
-  tailHalfWidth: [[-0.03, 0.037], [0.0, 0.034], [0.1, 0.027], [0.25, 0.019], [0.35, 0.016], [0.5, 0.0115], [0.7, 0.007], [0.9, 0.0038], [1.0, 0.0014]] as [number, number][],
-  tailHalfHeight: [[-0.03, 0.022], [0.0, 0.02], [0.1, 0.018], [0.25, 0.0145], [0.35, 0.0125], [0.5, 0.009], [0.7, 0.0058], [0.9, 0.0034], [1.0, 0.0013]] as [number, number][],
-  /** a skin fold under the tail behind the sting, a low keel on top [LIT, PHOTO 007, 014] */
-  ventralFold: { s0: 0.33, s1: 0.76, h: 0.013 },
+  tailStart: -0.455,
+  /**
+   * a stout, firm tail: broad and depressed at the base (0.062 DW across [PHOTO 045]), tapering steadily to the sting,
+   * still a rod well beyond it, only the last fifth a whip [PHOTO 007, 012, 014, 035, 045, 061]
+   */
+  tailHalfWidth: [[-0.03, 0.036], [0.0, 0.033], [0.1, 0.027], [0.2, 0.0215], [0.3, 0.0175], [0.4, 0.0145], [0.55, 0.0115], [0.7, 0.0088], [0.82, 0.0062], [0.92, 0.0038], [1.0, 0.0016]] as [number, number][],
+  tailHalfHeight: [[-0.03, 0.023], [0.0, 0.021], [0.1, 0.0185], [0.2, 0.0158], [0.3, 0.0137], [0.4, 0.0118], [0.55, 0.0096], [0.7, 0.0076], [0.82, 0.0056], [0.92, 0.0035], [1.0, 0.0015]] as [number, number][],
+  /** a skin fold under the tail behind the sting, ~0.55 DL long [LIT 0.46–0.77 DL], a low keel on top [PHOTO 007, 014] */
+  ventralFold: { s0: 0.34, s1: 0.68, h: 0.012 },
   dorsalKeel: { s0: 0.37, s1: 0.7, h: 0.0045 },
-  /** the serrated sting on top of the tail at about 30 % of its length, ~ 0.13 DW long [LIT, PHOTO 007, 035] */
-  sting: { s: 0.268, len: 0.14, halfW: 0.0082, halfT: 0.002, lift: 0.13, teeth: 26 },
+  /** the serrated sting on top of the tail at about 30 % of its length, ~5 tail widths long [LIT, PHOTO 007, 035] */
+  sting: { s: 0.262, len: 0.165, halfW: 0.0085, halfT: 0.0021, lift: 0.12, teeth: 30 },
   /** small spear-shaped thorns on the midline in front of the sting (adults) [LIT] */
   thorns: [0.165, 0.2, 0.232],
 };
@@ -118,30 +129,14 @@ const trunkW = new Curve(MORPH.trunkHalfWidth);
 const trunkH = new Curve(MORPH.trunkHeight);
 const trunkD = new Curve(MORPH.trunkDepth);
 const finH = new Curve(MORPH.finHeight);
-const pelvic = new Curve(MORPH.pelvic);
+const outline = new Curve(MORPH.outline);
 const tailW = new Curve(MORPH.tailHalfWidth);
 const tailH = new Curve(MORPH.tailHalfHeight);
 
-function rawHalfWidth(z: number): number {
-  const M = MORPH;
-  if (z >= M.zSnout) return 0;
-  if (z < M.zRear) return pelvic.at(z);
-  const q = (M.zSnout - z) / (M.zSnout - M.zApex);
-  const ant = 0.5 * (q + M.anteriorCurve * q * (1 - q) * (q - 0.3));
-  const t = (M.zApex - z) / (M.zApex - M.zRear);
-  const post = t <= 0 ? 0.5 : M.rearHalfWidth + (0.5 - M.rearHalfWidth) * Math.pow(Math.max(0, 1 - Math.pow(t, M.posteriorExp)), 0.85);
-  // the snout tip itself is rounded off a little
-  const tip = smoothstep(0, 0.022, M.zSnout - z);
-  return smin(ant, post, M.apexRound) * (0.45 + 0.55 * tip);
-}
-
-/** the rounded apex pulls the widest point in: rescale so the disc is exactly one DW across */
-const WIDTH_NORM = (() => { let m = 0; for (let z = MORPH.zRear; z < MORPH.zSnout; z += 0.0005) m = Math.max(m, rawHalfWidth(z)); return 0.5 / m; })();
-
 /** half-width of the outline at z (the disc, then the pelvic fins) */
 export function halfWidth(z: number): number {
-  const w = rawHalfWidth(z);
-  return z < MORPH.zRear ? w : w * WIDTH_NORM;
+  const along = MORPH.zSnout - z;
+  return along <= 0 ? 0 : outline.at(along);
 }
 
 const gauss = (dx: number, dz: number, rx: number, rz: number): number => Math.exp(-(dx * dx) / (rx * rx) - (dz * dz) / (rz * rz));
@@ -173,7 +168,7 @@ export function dorsalHeight(x: number, z: number): number {
   const su = sx * cy - sz * sy, sv = sx * sy + sz * cy;
   const sd = Math.hypot(su / S.rx, sv / S.rz);
   h += 0.004 * Math.exp(-((sd - 1.05) ** 2) / 0.08) - S.depth * Math.exp(-sd * sd * 1.6);
-  h += 0.0025 * Math.exp(-(x * x) / (0.02 * 0.02)) * smoothstep(0.15, 0.0, z) * smoothstep(-0.45, -0.3, z);
+  h += 0.0012 * Math.exp(-(x * x) / (0.03 * 0.03)) * smoothstep(0.15, 0.0, z) * smoothstep(-0.48, -0.3, z);
   return h;
 }
 

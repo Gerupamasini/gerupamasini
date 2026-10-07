@@ -138,8 +138,10 @@ AkSkin akSkin(vec4 P) {
     vec2 e = vec2(ax, p.y);
     float eyeHalo = exp(-dot((e - AK_EYE) / vec2(0.03, 0.028), (e - AK_EYE) / vec2(0.03, 0.028)));
     float spiHalo = exp(-dot((e - AK_SPI) / vec2(0.034, 0.045), (e - AK_SPI) / vec2(0.034, 0.045)));
-    float halo = clamp(eyeHalo + spiHalo, 0.0, 1.0) * (0.55 + 0.45 * akN(p * 70.0));
-    c = mix(c, akLin(vec3(0.55, 0.42, 0.2)), halo * 0.45);
+    // a yellowish rim round the eye and the spiracle, not a wash [PHOTO 005, 006, 011]
+    float halo = clamp(eyeHalo + spiHalo, 0.0, 1.0);
+    halo = smoothstep(0.35, 0.75, halo) * (1.0 - smoothstep(0.85, 1.0, halo)) * (0.55 + 0.45 * akN(p * 70.0));
+    c = mix(c, akLin(vec3(0.6, 0.47, 0.22)), halo * 0.55);
     // a thin yellow line along the margin
     float line = smoothstep(0.986, 0.998, u);
     c = mix(c, akLin(vec3(0.7, 0.56, 0.28)), line * 0.8);

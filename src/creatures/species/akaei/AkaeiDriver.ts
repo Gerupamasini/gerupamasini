@@ -211,7 +211,7 @@ export class AkaeiDriver implements Driver {
       this.enter(buried ? 'BURROW_IN_SAND' : 'BOTTOM_REST', buried ? 'buried' : 'rest');
       this.grounded = 1;
       this.sink = buried ? this.sinkMax : 0;
-      this.sand = buried ? 0.9 : individual.rng.range(0, 0.25);
+      this.sand = buried ? 0.9 : individual.rng.range(0, 0.12);
       this.tailSand = buried ? 0.55 : 0;
       this.timer = individual.rng.range(5, 30);
     }
@@ -593,7 +593,7 @@ export class AkaeiDriver implements Driver {
           // slow, low, head down over the bottom
           w.speed = 0.5 * Math.min(1, dist / (0.4 * dw) + 0.2);
           w.clear = 0.012 + 0.02 * dw;
-          w.amp = 0.032; w.freq = 1.0; w.waves = 1.3;
+          w.amp = 0.055; w.freq = 0.9; w.waves = 1.25;
           w.front = -0.004;
           w.camber = 0.002;
           if (!this.target || dist < 0.05 + 0.08 * dw || this.phaseT > 12) this.setPhase('settle');
@@ -655,7 +655,7 @@ export class AkaeiDriver implements Driver {
           w.speed = 4.2;
           w.accel = 9;
           w.clear = 0.06 + 0.3 * dw;
-          w.amp = 0.14; w.freq = 3.1; w.waves = 0.82;
+          w.amp = 0.2; w.freq = 2.8; w.waves = 0.82;
           w.flap = this.phaseT < 0.35 ? 0.05 : 0;
           w.flapFreq = 3;
           w.camber = 0.004;
@@ -669,8 +669,8 @@ export class AkaeiDriver implements Driver {
         if (this.target && Math.hypot(this.target.x - this.pos.x, this.target.z - this.pos.z) < 0.3) this.target = null;
         if (!this.target) w.face = this.heading;
         this.cruiseWave(w);
-        w.amp = Math.max(w.amp, 0.13 * (1 - k));
-        w.freq = Math.max(w.freq, 3.1 * (1 - k));
+        w.amp = Math.max(w.amp, 0.2 * (1 - k));
+        w.freq = Math.max(w.freq, 2.8 * (1 - k));
         w.camber = 0.006;
         break;
       }
@@ -681,8 +681,9 @@ export class AkaeiDriver implements Driver {
   /** the swimming wave for the current speed */
   private cruiseWave(w: AkaeiDriver['wants']): void {
     const v = this.speed / this.dw;
-    w.amp = Math.min(0.11, 0.045 + 0.04 * v);
-    w.freq = Math.min(2.4, 0.75 + 0.95 * v);
+    // a deep wave: the margins rise and fall by 0.1–0.17 DW [PHOTO 004, 008, 018, 069]
+    w.amp = Math.min(0.155, 0.08 + 0.05 * v);
+    w.freq = Math.min(2.1, 0.6 + 0.75 * v);
     w.waves = 1.05;
   }
 
@@ -692,7 +693,7 @@ export class AkaeiDriver implements Driver {
     w.speed = 0.6;
     w.flap = this.phaseT < 0.45 ? 0.045 : 0;
     w.flapFreq = 2.4;
-    w.amp = 0.05; w.freq = 1.6;
+    w.amp = 0.08; w.freq = 1.4;
     w.front = 0.006;
     if (this.phaseT < 0.05 && this.fxOn && this.grounded > 0.6) this.ringPuff(10, 0.12, 0.35);
   }
@@ -839,7 +840,10 @@ export class AkaeiDriver implements Driver {
     const ys = this.model!.ys;
     const baseYModel = ys[(LATTICE_ROWS - 1) * LATTICE_COLS + (LATTICE_COLS - 1) / 2];
     const base = this.tmp.set(0, tailAxisY(0) + baseYModel, MORPH.zEnd).applyMatrix4(this.mtx);
+    // the tail leaves the trunk along the body, but trails level in the water (it does not tilt up with a nose-down body)
     const back = this.tmp2.set(0, 0, -1).applyQuaternion(this.quat);
+    back.y *= 0.35;
+    back.normalize();
     if (!this.tailInit) {
       this.tailInit = true;
       for (let j = 0; j < TAIL_BONES; j++) {
@@ -848,24 +852,41 @@ export class AkaeiDriver implements Driver {
         P[j * 3] = x; P[j * 3 + 1] = y; P[j * 3 + 2] = z;
       }
     }
-    // follow chain: each segment keeps its length and eases toward the direction of the one before it (stiff at the
-    // base and around the sting, a free whip at the end); its last position gives it inertia, so it lags into turns
-    // a little heavier than the water: on the bottom it settles onto the sand, swimming it only sags a touch
-    const drop = dt * (0.12 + 0.9 * this.grounded);
+    // A firm rod, not a string [PHOTO 004, 014, 032, 059, 065, 066: held straight behind the swimming ray]. Each segment
+    // keeps its length and is pulled hard into line with the one before it (very stiff over the base and the sting,
+    // softer only in the last fifth, the whip), eased back toward the body's own axis, and never bent more than a few
+    // degrees at any joint. Its last position gives it inertia, so it trails into a turn as a smooth arc and straightens.
+    // A little heavier than the water: on the bottom it settles onto the sand; swimming it barely sags.
+    const drop = dt * (0.04 + 0.6 * this.grounded);
+    const restK = 1 - Math.exp(-dt * 3);
     P[0] = base.x; P[1] = base.y; P[2] = base.z;
     P[3] = P[0] + back.x * seg; P[4] = P[1] + back.y * seg; P[5] = P[2] + back.z * seg;
     let px = back.x, py = back.y, pz = back.z;
     for (let j = 2; j < TAIL_BONES; j++) {
       const i = j * 3;
       const s = j / (TAIL_BONES - 1);
-      const stingK = Math.exp(-(((s - 0.3) / 0.1) ** 2));
+      const whip = smooth(0.72, 1, s);
       // how strongly this segment lines up with the previous one per second
-      const kb = 1 - Math.exp(-dt * ((14 - 9 * this.grounded) * Math.pow(1 - s, 1.6) + 10 * stingK + 2.6));
-      let dx = P[i] - P[i - 3], dy = P[i + 1] - drop - P[i - 2], dz = P[i + 2] - P[i - 1];
+      const kb = 1 - Math.exp(-dt * (70 * (1 - whip) + 9 * whip));
+      let dx = P[i] - P[i - 3], dy = P[i + 1] - P[i - 2], dz = P[i + 2] - P[i - 1];
       let L = Math.hypot(dx, dy, dz) || 1e-6;
-      dx = dx / L + (px - dx / L) * kb; dy = dy / L + (py - dy / L) * kb; dz = dz / L + (pz - dz / L) * kb;
+      dx /= L; dy = dy / L - drop; dz /= L;
+      dx += (px - dx) * kb; dy += (py - dy) * kb; dz += (pz - dz) * kb;
+      // and back toward the body's line (the tail's own shape)
+      dx += (back.x - dx) * restK; dz += (back.z - dz) * restK;
       L = Math.hypot(dx, dy, dz) || 1e-6;
       dx /= L; dy /= L; dz /= L;
+      // the joint can bend only so far: ~2.5° near the base, ~9° in the whip
+      const maxA = 0.045 + 0.11 * whip;
+      const c = Math.max(-1, Math.min(1, dx * px + dy * py + dz * pz));
+      const ang = Math.acos(c);
+      if (ang > maxA) {
+        const t = maxA / ang, so = Math.sin(ang);
+        const k0 = Math.sin((1 - t) * ang) / so, k1 = Math.sin(t * ang) / so;
+        dx = px * k0 + dx * k1; dy = py * k0 + dy * k1; dz = pz * k0 + dz * k1;
+        L = Math.hypot(dx, dy, dz) || 1e-6;
+        dx /= L; dy /= L; dz /= L;
+      }
       P[i] = P[i - 3] + dx * seg; P[i + 1] = P[i - 2] + dy * seg; P[i + 2] = P[i - 1] + dz * seg;
       px = dx; py = dy; pz = dz;
     }
@@ -923,6 +944,9 @@ export class AkaeiDriver implements Driver {
 
   /** the disc width of the attached individual (m) */
   get discWidth(): number { return this.dw; }
+
+  /** the tail chain in world space (x, y, z per bone), for viewers and tests */
+  get tailPoints(): Float32Array { return this.tailP; }
 
   /** the rig, for viewers and tests */
   get rig(): AkaeiModel | null { return this.model; }

@@ -70,8 +70,9 @@ const NODES: Node[] = (() => {
 export const BELLY = Math.max(...NODES.map((n) => n.belly));
 
 function waveEnvelope(s: number): number {
-  // small at the head, full from about mid-disc back [Blevins & Lauder 2012: amplitude rises to mid-disc, then holds]
-  return 0.18 + 0.82 * smooth(0.04, 0.48, s);
+  // small at the head, full from about mid-disc back [Blevins & Lauder 2012: amplitude rises to mid-disc, then holds;
+  // PHOTO 004, 069: the crest is in the rear half, the front of the disc much flatter]
+  return 0.12 + 0.88 * smooth(0.06, 0.55, s);
 }
 
 /** the static lift of the margins at a node (what the drape replaces on the bottom) */
