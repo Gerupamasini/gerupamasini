@@ -75,6 +75,8 @@ if (q.get('mat') === 'flat' || q.get('mat') === 'normal') {
   for (const m of model.meshes) if (!m.name.startsWith('Eye')) m.material = (m.material as import('three').Material).polygonOffset ? flatOver : flat;
   // (wire=1: the triangles)
   if (q.get('wire')) { flat.wireframe = true; flatOver.wireframe = true; }
+  // (ds=1: both faces, to tell a hole from a face turned over)
+  if (q.get('ds')) { flat.side = 2; flatOver.side = 2; }
 }
 // eye-material tuning: irior=, irmin=, irmax=, irf= override the iridescence of the eyes
 if (q.get('irior') || q.get('irmin') || q.get('irmax') || q.get('irf')) {

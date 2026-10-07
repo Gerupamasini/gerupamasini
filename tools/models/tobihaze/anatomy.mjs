@@ -250,15 +250,29 @@ export function windowField(o, D) {
   return windowAngle(o, D) * EYE.radius;
 }
 
-// Gape (where the lips meet), side view on the +z side: from the front midline back to the mouth corner. A small
-// mouth low on the face, under the blunt snout's bulb (~28 % of the face's width): head-on a shallow smile, lowest
-// in the middle, the corners ~0.15 mm higher and turning up at the very end (photographs 1 and 2), between thick,
-// pouting lips. The jaw itself reaches on back under the eye, hidden under the posterior lobe of the upper lip: a
-// pale, bean-shaped pad standing out of the cheek just behind and a little below the corner (photograph 7).
-// (The jaw's cut starts at the first point, a little behind the face: the lips are laid out on the face itself, see
-// below.)
-export const MOUTH = [[0.7, 2.18], [0.8, 2.19], [0.9, 2.21], [1.0, 2.25], [1.1, 2.32]];
-export const RICTUS_S = 1.1;
+// Gape (where the jaws meet), side view on the +z side: from the front midline round the snout's front and back
+// along the side of the head to the mouth's corner (rictus) under the eye. The mudskipper's mouth is large and
+// horizontal, its gape reaching back to below the eye (descriptions of P. modestus; lateral photographs 4 and 10):
+// head-on only its front shows, a small, shallow smile under the snout's bulb (~28 % of the face's width; the
+// corners turn up as the line bends back, photographs 1 and 2); at the side the upper jaw is covered by a fold of
+// skin, the posterior lobe of the upper lip (the "lip pad"): behind the corner seen head-on the gape curves down
+// and back under its lower edge to the true corner (photographs 7 and 10). Below it the lower jaw - a stout U of bone (the dentaries) - runs
+// back on each side to its joint with the quadrate, just behind the corner under the eye, about which the whole jaw
+// drops (Michel et al. 2014, J. Morphol., on Periophthalmus). (The jaw's cut starts at the first point, a little
+// behind the face: the lips are laid out on the face itself, see below.)
+export const MOUTH = [[0.7, 2.18], [0.8, 2.19], [0.9, 2.21], [1.0, 2.25], [1.1, 2.3], [1.4, 2.24], [1.8, 2.02], [2.3, 1.68], [2.9, 1.34], [3.6, 1.08], [4.3, 0.95], [5.0, 0.92]];
+/** station of the mouth's corner (rictus), under the eye */
+export const RICTUS_S = MOUTH[MOUTH.length - 1][0];
+/** the last point of the gape's front (head-on) part: there it bends back along the side of the head */
+export const MOUTH_FRONT = 4;
+/**
+ * how far back the jaws part when the mouth opens: to the corner seen head-on, under the front of the lip lobe.
+ * Behind it the upper and lower jaws are joined by the skin of the cheek, which stretches as the jaw drops: the open
+ * mouth is a rounded opening in front (photograph 6), the gape behind it a fold closed by skin.
+ */
+export const OPEN_S = 1.8;
+/** the lower jaw's joint with the quadrate (side view; on each side of the head): just behind and below the corner */
+export const JAW_JOINT = [RICTUS_S + 0.55, MOUTH[MOUTH.length - 1][1] - 0.3];
 // gill-cover margin, top → bottom: the rear and lower edge of the inflated opercular chamber, which rolls softly
 // down into the body behind it (lateral photographs: no hard rim; the gill opening itself, small and ventrolateral,
 // lies under the margin in front of the pectoral base), and the preopercle
@@ -321,18 +335,12 @@ function onSurface(poly, inset = 0) {
 }
 
 function buildFeatures() {
-  const n = MOUTH.length;
-  // thick, fleshy upper lip all along the front (the snout's lower edge), thinner toward the corner;
-  // the lower lip is thin and sits inside the upper one
-  const ru = MOUTH.map((_, i) => { const f = i / (n - 1); return 0.72 - 0.22 * f; });
-  const rl = MOUTH.map((_, i) => { const f = i / (n - 1); return 0.44 - 0.1 * f; });
-  void ru; void rl;
-  // the gape line on the skin (front midline → corner), for the lip displacements
+  // the gape line on the skin (front midline → corner), for the lips and the jaw's cut
   const gape = onSurface(MOUTH, 0.0);
   gape[0] = [MOUTH[0][0] - 0.05, MOUTH[0][1], 0];
-  // a short extension behind the corner: the line of the jaw under the lip pad
-  // (turning a little up as it runs in under the lip pad: the corners are tucked up, not drawn down)
-  const gx = [...gape, (() => { const q = surfaceAt(RICTUS_S + 1.1, MOUTH[MOUTH.length - 1][1] + 0.08); return q.p; })()];
+  // a short extension behind the corner: the line of the cheek over the jaw's joint
+  const last = MOUTH[MOUTH.length - 1];
+  const gx = [...gape, surfaceAt(RICTUS_S + 0.9, last[1] - 0.1).p];
   let acc = 0;
   const gapeU = gx.map((p, i) => (i === 0 ? 0 : (acc += Math.hypot(p[0] - gx[i - 1][0], p[1] - gx[i - 1][1], p[2] - gx[i - 1][2]))));
   const gapeLen = gapeU[gape.length - 1];
@@ -345,18 +353,14 @@ function buildFeatures() {
   const eyeL = { c: E.center, a: E.axis, fr: eyeFrame(E.axis), D: cupDown(1) };
   const aR = [E.axis[0], E.axis[1], -E.axis[2]];
   const eyeR = { c: [eyeL.c[0], eyeL.c[1], -eyeL.c[2]], a: aR, fr: eyeFrame(aR), D: cupDown(-1) };
-  // the posterior lobe of the upper lip: a plump, bean-shaped pad on each side, lying along the jaw just outside and
-  // behind the mouth corner and filling the nook between the snout and the jowl (the face's own speckled skin).
-  // Its size and place from photographs 2 and 7 (scaled by the eye): ~4.2 mm long, ~2.5 mm high, ~1.5 mm thick; its
-  // front end against the corner, its centre ~0.4 mm below the corner's height. Head-on it is a lobe beside each
-  // corner (photograph 2); from in front and to the side, a long oval behind the corner (photograph 7).
-  const cn = gape[gape.length - 1];
-  // (its long axis runs back and out across the nook at ~42°, so from the side it lies along the face and head-on
-  // it is a lobe beside the corner; its front end stops ~0.5 mm short of the corner, below and outside it)
-  const pu = norm3([1, -0.1, 0.9]);
-  const pt = norm3([-pu[2], 0, pu[0]]);
-  const pw = norm3([pt[1] * pu[2] - pt[2] * pu[1], pt[2] * pu[0] - pt[0] * pu[2], pt[0] * pu[1] - pt[1] * pu[0]]);
-  const lipPad = { c: [cn[0] + 1.9, cn[1] - 0.4, cn[2] + 1.91], u: pu, w: pw[1] < 0 ? pw.map((x) => -x) : pw, t: pt, R: [2.1, 1.25, 0.75] };
+  // the posterior lobe of the upper lip: the fold of skin over the upper jaw at the side of the head, a plump,
+  // bean-shaped lobe lying along the gape just behind the corner seen head-on, filling the nook between the snout
+  // and the jowl, the gape running back under its lower edge (the face's own speckled skin). Its size and place from
+  // photographs 2, 7 and 10 (scaled by the eye): ~3.8 mm long, ~1.9 mm high, ~1.4 mm thick, its front end at the
+  // corner seen head-on. Head-on it is a lobe beside each corner (photograph 2); from in front and to the side, a long
+  // oval behind the corner (photograph 7). (Its frame follows the gape - its long axis along it, its height up from
+  // it, its thickness outward - and is set once the gape lies on the sculpted face, below.)
+  const lipPad = { c: [0, 0, 0], u: [1, 0, 0], w: [0, 1, 0], t: [0, 0, 1], R: [1.9, 0.95, 0.7], s: 2.9 };
   return {
     gapeLine: gx, gapeU, gapeLen, gapeCorner: gape.length - 1,
     operc, opercR: mirrorZ(operc), preop, preopR: mirrorZ(preop), slit, slitR: mirrorZ(slit),
@@ -401,25 +405,28 @@ function nearGape(p) {
 }
 
 /**
- * Outward displacement (mm) of the lips (p on the +z side): a thick, rounded upper lip just above the gape line,
- * a thinner lower lip below it, a fine crease where they meet; both fade past the mouth corner into the lip pad, an
- * oval cushion on the side of the jaw behind the corner.
+ * Outward displacement (mm) of the lips (p on the +z side): a thick, rounded upper lip just above the gape line
+ * across the front, a thinner lower lip below it all along the gape, a fine crease where they meet. At the side the
+ * upper lip is the lip lobe (lipPadDist), so only a low roll runs on above the gape there; the lower lip runs on to
+ * the corner under the eye.
  */
 function lipRelief(p) {
   const g = nearGape(p);
-  // (the lips end at the corner: they do not run on back along the jaw)
-  const fade = 1 - smoothstep(0.86, 1.08, g.u);
+  const uF = FEAT.gapeU[MOUTH_FRONT] / FEAT.gapeLen;
+  // along the gape: 0 across the front … 1 well back along the side
+  const side = smoothstep(0.6 * uF, 1.6 * uF, g.u);
+  // (the lips end at the corner: they do not run on back along the cheek)
+  const fade = 1 - smoothstep(0.9, 1.04, g.u);
   // thick, pouting lips: the upper a roll ~1.4 mm high centred 0.6 mm above the line, the lower ~0.9 mm, 0.4 mm below
   // (each fades in over ~0.5 mm across the line: switched on more sharply, the skin folds over itself there)
   // (no notch in the middle: head-on the upper lip's edge runs level across the front, photographs 1 and 2)
-  const up = smoothstep(-0.35, 0.2, g.dy) * (0.75 - 0.35 * g.u) * Math.exp(-(((g.d - 0.6) / 0.7) ** 2));
-  const lo = smoothstep(0.35, -0.2, g.dy) * (0.36 - 0.14 * g.u) * Math.exp(-(((g.d - 0.42) / 0.45) ** 2));
+  const up = smoothstep(-0.35, 0.2, g.dy) * (0.75 - 0.55 * side) * Math.exp(-(((g.d - 0.6) / 0.7) ** 2));
+  const lo = smoothstep(0.35, -0.2, g.dy) * (0.36 - 0.12 * side) * Math.exp(-(((g.d - 0.42) / 0.45) ** 2));
   const crease = 0.1 * Math.exp(-((g.d / 0.09) ** 2));
   // the lower jaw is set back under the overhanging upper lip (profile photographs: the outline steps back under
   // the lip), most at the front of the mouth
-  const recess = smoothstep(0.1, -0.15, g.dy) * 0.12 * (1 - smoothstep(0.2, 0.75, g.u)) * Math.exp(-(((g.d - 0.75) / 0.7) ** 2));
-  let r = (up + lo) * fade - crease * fade - recess;
-  return r;
+  const recess = smoothstep(0.1, -0.15, g.dy) * 0.12 * (1 - side) * Math.exp(-(((g.d - 0.75) / 0.7) ** 2));
+  return (up + lo) * fade - crease * fade - recess;
 }
 
 /**
@@ -440,7 +447,7 @@ function lipPadDist(p) {
   const { l, r } = lipPadCoord(p);
   // (blended in broadly all round, so it swells softly out of the face with no edge or crease round it; most
   // broadly at its front end, which runs in under the corner of the mouth)
-  return [ellipsoidDist(l, [0, 0, 0], r), 0.75 + 0.35 * smoothstep(-0.1, -0.9, l[0] / r[0])];
+  return [ellipsoidDist(l, [0, 0, 0], r), 0.9 + 0.35 * smoothstep(-0.1, -0.9, l[0] / r[0])];
 }
 
 /** outward displacement (mm) of the snout's median ridge and the grooves beside it (p on the +z side) */
@@ -612,9 +619,11 @@ export function fieldGrad(s, y, z, opts = null, e = 0.004) {
 // runs a little behind it, under the snout's front, but the lips meet on the face.)
 {
   const NL = { noLips: true };
-  const onSculpt = (p) => {
+  // (round the snout's front along the face's own normal; at the side of the head straight out sideways, at the
+  // gape's own station: along the normal the swollen jowl would pull the gape forward)
+  const onSculpt = (p, lateral = false) => {
     const g = fieldGrad(p[0], p[1], p[2], NL);
-    const h = norm3([g[0], 0, g[2]]);
+    const h = lateral ? [0, 0, 1] : norm3([g[0], 0, g[2]]);
     const f = (t) => field(p[0] + h[0] * t, p[1], p[2] + h[2] * t, NL);
     let a = -1.5, b = 2.5;
     if (f(a) > 0 || f(b) < 0) return p;
@@ -623,10 +632,28 @@ export function fieldGrad(s, y, z, opts = null, e = 0.004) {
     return [p[0] + h[0] * t, p[1], p[2] + h[2] * t];
   };
   const G = FEAT.gapeLine;
-  for (let i = 0; i < G.length; i++) G[i] = onSculpt(G[i]);
+  for (let i = 0; i < G.length; i++) G[i] = onSculpt(G[i], i > MOUTH_FRONT);
   let acc = 0;
   G.forEach((p, i) => { FEAT.gapeU[i] = i === 0 ? 0 : (acc += Math.hypot(p[0] - G[i - 1][0], p[1] - G[i - 1][1], p[2] - G[i - 1][2])); });
   FEAT.gapeLen = FEAT.gapeU[FEAT.gapeCorner];
+  // the lip lobe on the sculpted face: lying along the gape at its station, its lower edge just above the gape line,
+  // standing ~0.35 mm out of the face
+  const P = FEAT.lipPad;
+  let k = MOUTH_FRONT;
+  while (k < FEAT.gapeCorner - 1 && G[k + 1][0] < P.s) k++;
+  const f = clamp((P.s - G[k][0]) / (G[k + 1][0] - G[k][0]), 0, 1);
+  const g = G[k].map((x, c) => x + (G[k + 1][c] - x) * f);
+  const u = norm3(G[k + 1].map((x, c) => x - G[k][c]));
+  const uu = u[1];
+  const w = norm3([-u[0] * uu, 1 - u[1] * uu, -u[2] * uu]);
+  let t = norm3([u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]);
+  if (t[2] < 0) t = t.map((x) => -x);
+  const c0 = g.map((x, c) => x + w[c] * (P.R[1] + 0.05));
+  let a = -2, b = 3;
+  const fs = (x) => field(c0[0] + t[0] * x, c0[1] + t[1] * x, c0[2] + t[2] * x, NL);
+  for (let it = 0; it < 40; it++) { const m = 0.5 * (a + b); if (fs(m) < 0) a = m; else b = m; }
+  const out = 0.5 * (a + b) + 0.35 - P.R[2];
+  Object.assign(P, { c: c0.map((x, c) => x + t[c] * out), u, w, t });
 }
 
 /** station (s) of the eye sockets' centre, the focus of the head's projection rays */

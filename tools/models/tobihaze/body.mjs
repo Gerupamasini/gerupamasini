@@ -1,6 +1,6 @@
 // Skin mesh (head / trunk / tail), mouth interior and baked skin textures for the adult トビハゼ.
 import {
-  S_END, SL, BODY_U, ARM_U, DOME_U, EYE, CUP, MOUTH, RICTUS_S, FEAT, uvS, uvT, windowAngle,
+  S_END, SL, BODY_U, ARM_U, DOME_U, EYE, CUP, MOUTH, RICTUS_S, OPEN_S, FEAT, uvS, uvT, windowAngle,
   section, basePoint, project, field, fieldGrad, toObject, dirToObject, gapeY, sideZ, normHeight, topY, botY, norm3,
 } from './anatomy.mjs';
 import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEachCell3 } from '../../lib/noise.mjs';
@@ -348,30 +348,53 @@ export function buildSkin(NS, NV, log = () => {}) {
     }
     for (let i = 0; i < NS; i++) verts[i * cols + NV].n = verts[i * cols].n;
   }
-  // the gape columns: snap onto the crease between the lips by marching horizontally inward at the gape height
-  for (let i = i0; i <= ir; i++) for (const j of [jg, NV - jg]) {
-    const v = verts[gid(i, j)];
-    const side = j < NV / 2 ? 1 : -1;
-    const sv = v.fish[0], yg = gapeY(Math.min(sv, RICTUS_S));
-    const fwd = smoothstep(2.4, S_FRONT, sv);
-    const d = norm3([fwd, 0, -side * (1 - fwd)]);
-    const o = [sv - d[0] * 3, yg, side * 7 * (1 - fwd)];
-    let t0 = -1;
-    for (let n = 0; n < 500; n++) { const t = n * 0.02; if (field(o[0] + d[0] * t, o[1], o[2] + d[2] * t) < 0) { t0 = t; break; } }
-    if (t0 < 0) continue;
-    let lo = t0 - 0.02, hi = t0;
-    for (let n = 0; n < 16; n++) { const m = 0.5 * (lo + hi); if (field(o[0] + d[0] * m, o[1], o[2] + d[2] * m) < 0) hi = m; else lo = m; }
-    const t = 0.5 * (lo + hi);
-    const p = [o[0] + d[0] * t, o[1], o[2] + d[2] * t];
-    if (Math.abs(p[0] - sv) > 0.8) continue;
-    v.fish = p;
-    v.n = fieldGrad(p[0], p[1], p[2]);
+  // the gape columns onto the gape: the columns are warped to follow it on the loft, but projected onto the
+  // sculpted face (the jowls, the lip lobes) they wander off it. In each row from the front of the mouth to its corner
+  // the columns round the gape column slide along the row (keeping their order) so that the gape column lies on the
+  // gape line, its neighbours spread out evenly on either side.
+  {
+    const gyR = (p) => gapeY(clamp(p[0], MOUTH[0][0], RICTUS_S));
+    const WIN = 6;
+    for (let i = i0; i <= ir; i++) for (const side of [1, -1]) {
+      const col = (k) => (side > 0 ? jg + k : NV - jg - k);
+      const P = [];
+      for (let k = -WIN; k <= WIN; k++) P.push(verts[gid(i, col(k))].fish);
+      const A = [0];
+      for (let k = 1; k < P.length; k++) A.push(A[k - 1] + Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1], P[k][2] - P[k - 1][2]));
+      // where the row crosses the gape height (the crossing nearest the gape column)
+      let best = null;
+      for (let k = 0; k < P.length - 1; k++) {
+        const d0 = P[k][1] - gyR(P[k]), d1 = P[k + 1][1] - gyR(P[k + 1]);
+        if (d0 * d1 > 0 || d0 === d1) continue;
+        const a = A[k] + (A[k + 1] - A[k]) * (d0 / (d0 - d1));
+        if (!best || Math.abs(a - A[WIN]) < Math.abs(best - A[WIN])) best = a;
+      }
+      if (best === null) continue;
+      const aStar = clamp(best, A[2], A[P.length - 3]);
+      const at = (a) => {
+        let k = 0;
+        while (k < P.length - 2 && A[k + 1] < a) k++;
+        const t = clamp((a - A[k]) / Math.max(A[k + 1] - A[k], 1e-9), 0, 1);
+        return P[k].map((x, c) => x + (P[k + 1][c] - x) * t);
+      };
+      const next = [];
+      for (let k = 1; k < P.length - 1; k++) {
+        // piecewise-linear remap of the arc: the ends of the window stay, the gape column goes to the crossing
+        const a = k <= WIN ? A[0] + (aStar - A[0]) * ((A[k] - A[0]) / (A[WIN] - A[0])) : aStar + (A[P.length - 1] - aStar) * ((A[k] - A[WIN]) / (A[P.length - 1] - A[WIN]));
+        let q = at(a);
+        for (let it = 0; it < 2; it++) { const nn = fieldGrad(q[0], q[1], q[2]); const f = field(q[0], q[1], q[2]); q = [q[0] - nn[0] * f, q[1] - nn[1] * f, q[2] - nn[2] * f]; }
+        if (k === WIN) q[1] = gyR(q);
+        next.push([gid(i, col(k - WIN)), q]);
+      }
+      for (const [g, q] of next) { verts[g].fish = q; verts[g].n = fieldGrad(q[0], q[1], q[2]); }
+    }
   }
-  // The lower jaw: every quad below the gape line in front of the mouth corners. The cut runs between these and the
-  // quads above them - along the gape columns at the sides, and across the face in front, where the lips meet
-  // below the grid's pole - so the mouth opens along its whole gape; the corners stay sealed (their vertices are not
-  // split), and behind them the jaw's skin is continuous with the cheek's (it follows the jaw by its weights, rig.mjs).
-  const gyAt = (p) => gapeY(clamp(p[0], MOUTH[0][0], RICTUS_S)) - 0.22 * Math.max(0, p[0] - RICTUS_S);
+  // The lower jaw's lips: every quad below the gape line in front of the corners seen head-on (OPEN_S). The cut runs
+  // between these and the quads above them - along the gape columns at the sides of the snout, and across the face in
+  // front, where the lips meet below the grid's pole - so the front of the mouth opens; the corners stay sealed (their
+  // vertices are not split), and behind them the gape is a fold of continuous skin, the cheek's, which stretches as
+  // the jaw drops (rig.mjs).
+  const gyAt = (p) => gapeY(clamp(p[0], MOUTH[0][0], RICTUS_S)) - 0.1 * Math.max(0, p[0] - RICTUS_S);
   const quadOf = (i, j) => [gid(i, j), gid(i + 1, j), gid(i + 1, j + 1), gid(i, j + 1)];
   const kind = new Map(); // i * NV + j → 'L' lower jaw, 'U' above the gape, 'B' below it behind the corners
   let iMax = 0;
@@ -379,7 +402,7 @@ export function buildSkin(NS, NV, log = () => {}) {
   for (let i = 0; i < iMax; i++) for (let j = 0; j < NV; j++) {
     const q = quadOf(i, j).map((g) => verts[g].fish);
     const c = [0, 1, 2].map((k) => (q[0][k] + q[1][k] + q[2][k] + q[3][k]) / 4);
-    kind.set(i * NV + j, c[1] >= gyAt(c) ? 'U' : c[0] < RICTUS_S ? 'L' : 'B');
+    kind.set(i * NV + j, c[1] >= gyAt(c) ? 'U' : c[0] < OPEN_S ? 'L' : 'B');
   }
   const kindOf = (i, j) => (i < 0 || i >= iMax ? 'U' : kind.get(i * NV + (((j % NV) + NV) % NV)));
   // (the seam column NV is the same skin as column 0)
@@ -395,6 +418,25 @@ export function buildSkin(NS, NV, log = () => {}) {
     if (t.has('L') && t.has('U') && !t.has('B')) cutSet.add(g);
     else if (t.has('L') && !t.has('U')) { verts[g].jaw = 1; if (g % cols === 0) verts[g + NV].jaw = 1; }
   }
+  // whether the quads round grid vertex g stay unfolded with it at p
+  const unfolded = (g, p) => {
+    const v = verts[g];
+    for (const [a0, b0] of [[-1, -1], [-1, 0], [0, -1], [0, 0]]) {
+      const ia = v.i + a0, ja = v.j + b0;
+      if (ia < 0 || ia + 1 >= NS) continue;
+      const q = [[ia, ja], [ia + 1, ja], [ia + 1, ja + 1], [ia, ja + 1]].map(([ii, jj]) => {
+        const h = gid(ii, ((jj % NV) + NV) % NV);
+        return canon(h) === canon(g) ? p : verts[h].fish;
+      });
+      for (const [x, y, z] of [[0, 1, 2], [0, 2, 3]]) {
+        const n = cross(sub(q[y], q[x]), sub(q[z], q[x]));
+        const l = Math.hypot(n[0], n[1], n[2]);
+        if (l < 1e-9) continue;
+        if (dot(n, v.n) / l < 0.15) return false;
+      }
+    }
+    return true;
+  };
   // Slide a vertex along a grid line until it sits `off` above the gape (off < 0: below it), back on the skin, and no
   // further than the quads round it stay unfolded (across the front the grid's rows bunch toward the pole, and a
   // vertex slid past a neighbour's row would turn its quad over). The normal is kept: round the snout's tip it was
@@ -426,23 +468,7 @@ export function buildSkin(NS, NV, log = () => {}) {
     const sgn = Math.sign(dy);
     if (above(onSkin(hi)) === sgn) lo = hi;
     else for (let it = 0; it < 24; it++) { const m = 0.5 * (lo + hi); if (above(onSkin(m)) === sgn) lo = m; else hi = m; }
-    const okAt = (p) => {
-      for (const [a0, b0] of [[-1, -1], [-1, 0], [0, -1], [0, 0]]) {
-        const ia = v.i + a0, ja = v.j + b0;
-        if (ia < 0 || ia + 1 >= NS) continue;
-        const q = [[ia, ja], [ia + 1, ja], [ia + 1, ja + 1], [ia, ja + 1]].map(([ii, jj]) => {
-          const h = gid(ii, ((jj % NV) + NV) % NV);
-          return canon(h) === canon(g) ? p : verts[h].fish;
-        });
-        for (const [x, y, z] of [[0, 1, 2], [0, 2, 3]]) {
-          const n = cross(sub(q[y], q[x]), sub(q[z], q[x]));
-          const l = Math.hypot(n[0], n[1], n[2]);
-          if (l < 1e-9) continue;
-          if (dot(n, v.n) / l < 0.15) return false;
-        }
-      }
-      return true;
-    };
+    const okAt = (p) => unfolded(g, p);
     let tt = lo === hi ? hi : 0.5 * (lo + hi);
     let p = onSkin(tt);
     for (let k = 0; k < 8 && !okAt(p); k++) { tt *= 0.6; p = onSkin(tt); }
@@ -452,7 +478,7 @@ export function buildSkin(NS, NV, log = () => {}) {
   };
   // the cut in front of the gape columns (which were snapped onto the gape above) follows the grid in steps: its
   // vertices slide onto the gape, so the lip's edge runs straight along it instead of in a sawtooth
-  for (const g of cutSet) if (verts[g].i < i0) slideToGape(g, 0);
+  for (const g of cutSet) if (verts[g].i < i0 || Math.abs(verts[g].fish[1] - gyAt(verts[g].fish)) > 0.02) slideToGape(g, 0);
   // and the upper lip's skin is kept above the gape: a vertex of it left below the line (in a quad that straddles
   // it) would hang down out of the upper lip like a tooth when the mouth opens
   for (const [g, t] of touch) {
@@ -483,6 +509,29 @@ export function buildSkin(NS, NV, log = () => {}) {
     const next = adj.get(gape[gape.length - 1]).find((g) => g !== gape[gape.length - 2]);
     if (next === undefined) break;
     gape.push(next);
+  }
+  // the cut's front part steps between the grid's rows, which bunch round the snout's pole: there the lips' edge is
+  // smoothed along the gape (each vertex toward the middle of its neighbours on the cut, at the gape's height, as far
+  // as the quads round it stay unfolded), or the open lower lip shows a sawtooth
+  for (let it = 0; it < 6; it++) for (let k = 1; k < gape.length - 1; k++) {
+    const g = gape[k];
+    const v = verts[g];
+    if (v.i > i0 + 2) continue;
+    const a = verts[gape[k - 1]].fish, b = verts[gape[k + 1]].fish;
+    const tgt = [0.5 * (a[0] + b[0]), gyAt(v.fish), 0.5 * (a[2] + b[2])];
+    let p = v.fish.map((x, c) => x + (tgt[c] - x) * 0.5);
+    // (back onto the skin, horizontally, so its height stays the gape's)
+    const gr = fieldGrad(p[0], p[1], p[2]);
+    const h = norm3([gr[0], 0, gr[2]]);
+    let lo = -0.6, hi = 0.6;
+    const f = (t) => field(p[0] + h[0] * t, p[1], p[2] + h[2] * t);
+    if (f(lo) > 0 || f(hi) < 0) continue;
+    for (let n = 0; n < 30; n++) { const m = 0.5 * (lo + hi); if (f(m) < 0) lo = m; else hi = m; }
+    const t = 0.5 * (lo + hi);
+    p = [p[0] + h[0] * t, p[1], p[2] + h[2] * t];
+    if (!unfolded(g, p)) continue;
+    for (const h2 of [g, jawCopy.get(g)]) if (h2 !== undefined) verts[h2].fish = p;
+    if (g % cols === 0) for (const h2 of [g + NV, jawCopy.get(g + NV)]) if (h2 !== undefined) verts[h2].fish = p;
   }
   log(`    gape cut: ${gape.length} vertices, ${cutSet.size} split`);
   return { verts, sList, cols, NS, NV, jg, i0, ir, gid, jawCopy, isJawQuad, phiOf, gape };
@@ -853,18 +902,18 @@ export function buildMouth(G) {
   const ring = G.gape;
   const up = ring.map((g) => verts[g].fish);
   const lo = ring.map((g) => verts[jawCopy.get(g) ?? g].fish);
-  const NR = 7; // rows from the lip edge into the cavity
+  const NR = 9; // rows from the lip edge into the cavity
   const position = [], normal = [], uv = [], color = [], fishPts = [], zone = [], lipPts = [], depth = [];
   const rows = [];
+  // The mouth cavity, a pouch behind the lips: from each lip point the palate runs back and up under the snout and the
+  // floor back and down into the lower jaw's U, narrowing a little; the deepest rows are joined by the back wall of
+  // the throat, and at each corner the palate's and the floor's first columns by the inner wall of the cheek.
   const cavity = (p, upper, f) => {
-    // pull toward a centre line behind the gape: up into the palate or down into the floor of the mouth
-    // (the floor stays broad - the floor of the mouth and the tongue between the jaws, photograph 6 - and the roof
-    // arches up into the palate)
-    const sC = Math.min(p[0] + 2.6 + 1.2 * f, RICTUS_S + 2.5);
-    const cy = gapeY(Math.min(p[0], RICTUS_S)) + (upper ? 1.1 : -0.5);
-    const tgt = [sC, cy, p[2] * (upper ? 0.25 : 0.7)];
+    const gy = gapeY(clamp(p[0], MOUTH[0][0], RICTUS_S));
     const k = Math.sin(f * Math.PI * 0.5);
-    return [p[0] + (tgt[0] - p[0]) * k, p[1] + (tgt[1] - p[1]) * k * (upper ? 1 : 0.9), p[2] + (tgt[2] - p[2]) * k];
+    const sT = Math.min(p[0] + 2.4, 3.6);
+    const yT = gy + (upper ? 0.9 : -0.7);
+    return [p[0] + (sT - p[0]) * f, p[1] + (yT - p[1]) * k, p[2] * (1 - (upper ? 0.45 : 0.3) * f)];
   };
   for (const upper of [true, false]) {
     const edge = upper ? up : lo;
@@ -898,7 +947,7 @@ export function buildMouth(G) {
   // back into the mouth as ribs: the deeper rows are smoothed along the gape)
   for (const row of rows) {
     const r = rows.indexOf(row) % (NR + 1);
-    if (r < 2) continue;
+    if (r < 1) continue;
     for (let it = 0; it < Math.max(6, Math.round(W / 8)); it++) {
       const P = row.map((v) => position.slice(v * 3, v * 3 + 3));
       for (let k = 1; k < W - 1; k++) for (let c = 0; c < 3; c++) position[row[k] * 3 + c] = 0.5 * P[k][c] + 0.25 * (P[k - 1][c] + P[k + 1][c]);
@@ -912,13 +961,13 @@ export function buildMouth(G) {
       else tris.push(A[k], B[k + 1], B[k], A[k], A[k + 1], B[k + 1]);
     }
   }
-  // the cheeks' walls: at each corner the palate's and the floor's first columns start together and part as they run
-  // in, so the gap between them is closed by a wall (open, the mouth showed the background through its corners)
+  // the cheeks' inner walls: at each corner the palate's and the floor's first columns start together and part as
+  // they run back
   for (const k of [0, W - 1]) for (let r = 0; r < NR; r++) {
     const a0 = rows[r][k], a1 = rows[r + 1][k], b0 = rows[NR + 1 + r][k], b1 = rows[NR + 1 + r + 1][k];
     tris.push(a0, a1, b1, a0, b1, b0);
   }
-  // close the back: join the deepest palate row to the deepest floor row
+  // the back wall of the throat: the deepest palate row joined to the deepest floor row
   const Ap = rows[NR], Bf = rows[2 * NR + 1];
   for (let k = 0; k < W - 1; k++) tris.push(Ap[k], Bf[k], Bf[k + 1], Ap[k], Bf[k + 1], Ap[k + 1]);
   // smooth normals from the triangles
@@ -1090,9 +1139,12 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
     const along = smoothstep(RICTUS_S + 0.3, RICTUS_S - 0.12, s);
     const up = dy > 0 ? smoothstep(1.3, 0.5, dy) * along : 0;
     const lo = dy <= 0 ? smoothstep(0.7, 0.2, -dy) * along : 0;
-    // (the pale lip shows at the sides; head-on, under the snout, the lip is the face's own grey)
-    col = lerp3(col, COL.lip, up * 0.25 * smoothstep(0.2, 1.4, s) * (0.25 + 0.75 * smoothstep(0.4, 1.6, Math.abs(z))));
-    col = lerp3(col, COL.belly, lo * 0.3);
+    // (the pale upper lip shows only round the front, at the sides of the snout; head-on, under the snout, the lip is
+    // the face's own grey, and along the side of the head the upper jaw is under the lip lobe, the face's own skin)
+    const front = 1 - smoothstep(1.2, 1.8, s);
+    col = lerp3(col, COL.lip, up * 0.25 * front * smoothstep(0.2, 1.4, s) * (0.25 + 0.75 * smoothstep(0.4, 1.6, Math.abs(z))));
+    // the lower lip, paler, all along the gape (photograph 10)
+    col = lerp3(col, COL.belly, lo * (0.15 + 0.15 * front));
     col = lerp3(col, COL.dark, smoothstep(0.14, 0.02, Math.abs(dy)) * along * 0.55);
   }
   // (the lip pads are painted as the face round them: the same speckled grey)

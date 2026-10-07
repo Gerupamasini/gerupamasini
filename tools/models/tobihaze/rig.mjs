@@ -2,7 +2,7 @@
 // The clips (Idle, Crawl, Hop, Swim, Blink, Feed) are sampled from the same pose model the runtime driver uses
 // (src/creatures/species/tobihaze/pose.js); in the game the animal is animated procedurally, the clips serve the
 // 図鑑 preview and any viewer without the driver.
-import { section, botY, toObject, dirToObject, EYE, RICTUS_S, gapeY, pecBindFix, FEAT } from './anatomy.mjs';
+import { section, botY, toObject, dirToObject, EYE, RICTUS_S, OPEN_S, gapeY, pecBindFix, JAW_JOINT } from './anatomy.mjs';
 import { PEC, PELVIC } from './fins.mjs';
 import { pecShare } from './arm.mjs';
 import { clamp, smoothstep } from '../../lib/noise.mjs';
@@ -11,8 +11,8 @@ import { SPINE, computePose, defaultPose, swimMidline, bendFromMidline, TL_MM } 
 const yc = (s) => section(s).yc;
 const at = (s) => [s, yc(s), 0];
 const mirror = (p) => [p[0], p[1], -p[2]];
-// the lower jaw hinges well behind the visible mouth corner (the quadrate lies under the eye)
-export const JAW_HINGE = [6.5, 1.5, 0];
+// the lower jaw turns about its joints with the quadrates, just behind the mouth's corners under the eyes
+export const JAW_HINGE = [JAW_JOINT[0], JAW_JOINT[1], 0];
 
 export const JOINTS = [
   { name: 'J_root', parent: null, at: at(17.0) },
@@ -82,26 +82,40 @@ function withRest(list, s) {
 }
 
 /**
- * How far a point of the lower jaw follows it. The open mouth is an oval (photograph 6): the lower lip and the chin drop
- * fully at the front, less and less toward the mouth's corners, which stay shut; the skin beside and behind the
- * corners (the lip pads, the cheeks) hardly moves, and the floor of the mouth and the throat behind it follow less
- * and less toward the back.
+ * How far a point of skin below the gape follows the lower jaw. The jaw is a stout U of bone, so its lips, its sides
+ * and the chin turn with it as one piece about the joint behind the mouth's corners. Between its two halves the skin
+ * of the throat is a membrane over the hyoid: it follows less and less toward the back, and behind the corners the
+ * cheek and the throat let the jaw go over ~1.5 mm and ~3 mm.
  */
-export function jawFollow(s, z) {
-  const zc = FEAT.gapeLine[FEAT.gapeCorner][2];
-  // (the lower lip drops along an ellipse, so the open mouth is an O: most in the middle, nothing at the corners)
-  const lat = Math.sqrt(Math.max(0, 1 - Math.min(1, Math.abs(z) / zc) ** 2));
-  return lat * (1 - smoothstep(RICTUS_S - 0.3, RICTUS_S + 2.4, s));
+export function jawFollow(s, y) {
+  const gy = gapeY(Math.min(s, RICTUS_S)) - 0.1 * Math.max(0, s - RICTUS_S);
+  const low = smoothstep(gy - 0.9, gy - 2.6, y);
+  const jaw = 1 - smoothstep(RICTUS_S - 0.1, RICTUS_S + 1.5, s);
+  const throat = 0.85 - 0.45 * smoothstep(1.2, RICTUS_S, s) - 0.4 * smoothstep(RICTUS_S, RICTUS_S + 3.0, s);
+  return Math.max(0, jaw * (1 - low) + Math.max(0, throat) * low);
+}
+
+/**
+ * The upper jaw's share of the drop. The rear end of the maxilla is tied to the lower jaw (Michel et al. 2014), so as
+ * the jaw drops the side of the upper jaw swings down with it: the upper lip comes down toward the corners of the
+ * open mouth, which are rounded (photograph 6), and along the side of the head, under the lip lobe, the skin of the
+ * upper jaw follows the lower jaw part of the way, so the fold between them only opens a little.
+ */
+export function maxillaShare(s) {
+  return 0.75 * smoothstep(OPEN_S - 0.9, OPEN_S + 0.1, s);
 }
 
 /** skin vertices: spine chain; the lower jaw (below the gape cut) and the throat on J_jaw */
 export function skinWeights(list) {
   return pack(list.map((v) => {
-    const s = v.fish[0], y = v.fish[1], z = v.fish[2];
-    if (v.cut === 'upper') return spineWeights(s);
-    if (v.jaw || v.cut === 'lower') return withRest([[J.J_jaw, jawFollow(s, z)]], s);
-    // below the gape line behind the corners (continued back under the lip pad), fading out up toward the cheek
-    const w = jawWeight(s, y, z);
+    const s = v.fish[0], y = v.fish[1];
+    if (v.cut === 'upper') {
+      const w = jawFollow(s, y) * maxillaShare(s);
+      return w > 1e-3 ? withRest([[J.J_jaw, w]], s) : spineWeights(s);
+    }
+    if (v.jaw || v.cut === 'lower') return withRest([[J.J_jaw, jawFollow(s, y)]], s);
+    // below the gape line behind the corners (continued back over the jaw's joint), fading out up toward the cheek
+    const w = jawWeight(s, y);
     if (w > 1e-3) return withRest([[J.J_jaw, w]], s);
     // the flank under the pectoral arm's skirt moves with the skirt (arm.mjs), so it stays hidden under it
     const wp = pecShare(v.fish);
@@ -110,19 +124,28 @@ export function skinWeights(list) {
   }), list.length);
 }
 
-/** jaw influence of a skin point outside the lower jaw's quads */
-export function jawWeight(s, y, z) {
-  const gy = gapeY(Math.min(s, RICTUS_S)) - 0.22 * Math.max(0, s - RICTUS_S);
-  return jawFollow(s, z) * smoothstep(gy + 0.1, gy - 0.8, y);
+/**
+ * jaw influence of a skin point outside the lower jaw's lips (behind the corners seen head-on): below the gape the
+ * jaw's side, above it the cheek and the lip lobe; across the gape the skin of the fold between them stretches
+ */
+export function jawWeight(s, y) {
+  if (s < OPEN_S - 1.0) return 0;
+  const gy = gapeY(Math.min(s, RICTUS_S)) - 0.1 * Math.max(0, s - RICTUS_S);
+  const below = smoothstep(gy + 0.3, gy - 0.5, y);
+  // (above the gape the side of the upper jaw, following part of the way, less and less up into the lip lobe and the
+  // cheek, which stay)
+  const upper = maxillaShare(s) * smoothstep(gy + 0.6, gy, y);
+  return jawFollow(s, y) * (below + (1 - below) * upper);
 }
 
 export function mouthWeights(m) {
   return pack(m.fish.map((p, k) => {
     const s = p[0];
-    if (m.zone[k] === 0) return spineWeights(s);
-    // the floor of the mouth: at the lip as the lip (so the two never part), less toward the back (the hyoid stays)
     const q = m.lip[k];
-    return withRest([[J.J_jaw, jawFollow(q[0], q[2]) * (1 - 0.5 * smoothstep(0.1, 1.0, m.depth[k]))]], s);
+    // the floor of the mouth lies in the lower jaw's U and goes with it as its lip does (so the two never part); the
+    // palate goes with the upper lip at its edge (down toward the corners with the maxilla) and with the skull deeper in
+    const w = m.zone[k] === 0 ? jawFollow(q[0], q[1]) * maxillaShare(q[0]) * (1 - smoothstep(0.2, 0.8, m.depth[k])) : jawFollow(q[0], q[1]);
+    return w > 1e-3 ? withRest([[J.J_jaw, w]], s) : spineWeights(s);
   }), m.fish.length);
 }
 
