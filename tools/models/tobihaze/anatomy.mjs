@@ -40,10 +40,11 @@ const KS = [0, 0.3, 0.7, 1.2, 1.8, 2.6, 3.6, 4.8, 6, 8, 10, 12, 14, 16, 18, 20, 
 // Profiles measured on lateral photographs of live and preserved adults, overlaid on the model (TL 80 mm): a blunt,
 // rounded snout - no point: its front is a tall, round bulb falling to the thick lips low on the face, and from it
 // the forehead rises evenly to the eyes, which sit ~1.8 eye diameters back (profile photographs rendered with the
-// model from the same camera); a deep, full chin and throat; deepest at the first dorsal fin, ~15 % TL; the belly a
-// little below the throat; a long, low caudal peduncle:
+// model from the same camera); behind the eyes the crown runs back nearly level to the first dorsal fin (lateral
+// photographs 4 and 10: the eyes stand ~0.6 of their height above it); a deep, full chin and throat; deepest at the
+// first dorsal fin, ~15 % TL; the belly a little below the throat; a long, low caudal peduncle:
 // dorsal profile (without the eyes)
-const KTOP = [5.4, 5.95, 6.45, 6.9, 7.3, 7.75, 8.2, 8.6, 8.95, 9.4, 9.6, 9.65, 9.7, 9.75, 9.95, 10.2, 10.7, 11.2, 11.1, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
+const KTOP = [5.4, 5.95, 6.45, 6.9, 7.3, 7.75, 8.2, 8.6, 9.0, 9.6, 9.82, 9.9, 9.97, 10.05, 10.2, 10.4, 10.8, 11.2, 11.1, 10.9, 10.45, 9.95, 9.35, 8.7, 8.1, 7.65, 7.4, 7.25, 7.1];
 // ventral profile: under the snout tip the fleshy upper lip, then a deep, rounded chin and throat (on land the buccal
 // and opercular chambers are kept full of water and air, so the mouth sits about half way up the head: photographs of
 // walking and standing animals), curving up to the chest; the tail's lower edge rises to the peduncle
@@ -202,13 +203,13 @@ export function surfaceAt(s, y) {
 // ---------------------------------------------------------------------------
 // Eyes. Each eyeball sits on top of the head, the snout in front of it ~1.8 eye diameters long (the forehead slopes
 // down in front of it to the blunt snout); the two almost touch over the narrow interorbital. Eyeball Ø 3.0 mm (~0.3 of
-// the head's depth), raised on a short fleshy stalk: its centre ~0.7 mm above the dorsal profile behind it, so the
+// the head's depth), raised on a short, thick stalk: its centre ~0.4 mm above the dorsal profile behind it, so the
 // upper globe stands above the head like a periscope (it can be raised further, and pulled right down into the
 // orbit). Positions read from lateral close-ups of live animals.
 // Retraction ("blinking", Aiello et al. 2023 PNAS): the eyeball sinks ~2.4 mm into the orbit and the dermal cup
 // closes over it.
 export const EYE = {
-  center: [5.6, 10.0, 1.62],
+  center: [5.6, 9.85, 1.62],
   radius: 1.52,
   // the eyes look out to the side, a little forward (~17°) and up (~13°): photographed from the side the pupil faces
   // the camera, head-on the dark eye shows on the outer face of each globe
@@ -509,26 +510,37 @@ export function field(s, y, z, opts = null) {
     d = smin(d, ellipsoidDist(pm, F.jowl, [3.6, 2.8, 2.2]), 1.8);
     d = smin(d, ellipsoidDist(p, [F.throat[0], F.throat[1] - 0.35 * breathe, 0], [4.6, 1.3 + 0.3 * breathe, 4.0]), 1.0);
   }
-  // the furrow between the eyes, cut before the eye cups go on (it would notch their inner sides)
-  if (s > 4.5 && s < 12.5) d = smax(d, -ellipsoidDist(p, F.interorb, [3.0, 0.8, 0.32]), 0.35);
+  // (no furrow between and behind the eyes: the crown there is smooth and full, the domes joined by the saddle below;
+  // photographs 1, 8 and 12)
   // eye domes (meshed separately from the body loft, see body.mjs buildDomes): the cup, cut open around the axis;
   // blinking, the eye sinks and the cup closes into a lower dome
   if (opts?.dome && s < 13.5) F.eyes.forEach((e, i) => {
     const R = EYE.radius + CUP.skin;
     const ox = p[0] - e.c[0], oy = p[1] - e.c[1], oz = p[2] - e.c[2];
     const shut = (i === 0 ? opts?.cupL : opts?.cupR) === false || opts?.cup === false;
-    let cup;
-    if (shut) cup = Math.hypot(ox + 0.13, oy + 1.15, oz + 0.09 * Math.sign(e.c[2])) - (R - 0.09);
-    // (the lid margin rolls over like a thick lid's edge)
-    else cup = smax(Math.hypot(ox, oy, oz) - R, windowField([ox, oy, oz], e.D), 0.3);
-    // the neck: a fleshy column under the globe, a little narrower than the cup, rising out of the head with a
-    // small fillet; the cup merges into it tightly, so the eye reads as a ball held in a cup on a short neck
     const sg = Math.sign(e.c[2]);
-    d = smin(d, ellipsoidDist(p, [e.c[0] + 0.13, e.c[1] - 1.3, e.c[2] - 0.13 * sg], [1.15, 1.4, 1.05]), 1.3);
-    d = smin(d, cup, 0.38);
+    let cup;
+    if (shut) cup = Math.hypot(ox + 0.13, oy + 1.15, oz + 0.09 * sg) - (R - 0.09);
+    else {
+      const l = Math.hypot(ox, oy, oz) || 1;
+      // Only under the cornea, on the eye's outer face, is the cup's margin a thick lower lid rolled over like a
+      // cushion (photographs 3 and 10: a smooth pale band right under the iris). Everywhere else its skin thins out
+      // toward the margin and meets the globe's own skin flush, so the dome reads as one ball of skin with the
+      // cornea set in it (photographs 8 and 12, from above and in front: no rim round the globe).
+      const lidW = smoothstep(0.3, 0.75, (oz * sg) / l) * smoothstep(0.1, -0.35, oy / l);
+      const wa = windowAngle([ox, oy, oz], e.D);
+      const skin = CUP.skin * lidW + (1 - lidW) * (0.025 + (CUP.skin - 0.025) * smoothstep(-0.05, -0.5, wa));
+      cup = smax(l - (EYE.radius + skin), windowField([ox, oy, oz], e.D), 0.06 + 0.24 * lidW);
+    }
+    // the stalk: a short, thick column of skin nearly as wide as the globe, which the flush cup runs straight down
+    // into (no waist, no rim), flaring broadly where it rises out of the crown and the cheek (photographs 1, 3, 7,
+    // 8, 12)
+    d = smin(d, ellipsoidDist(p, [e.c[0] + 0.1, e.c[1] - 1.2, e.c[2] - 0.08 * sg], [1.4, 1.3, 1.35]), 1.5);
+    d = smin(d, cup, 0.45);
   });
-  // the stalks are joined low between the eyes: only a shallow cleft parts them (photographs head-on)
-  if (opts?.dome && s < 13.5) d = smin(d, ellipsoidDist(p, [EYE.center[0] + 0.1, EYE.center[1] - 1.05, 0], [1.0, 0.6, 0.85]), 0.5);
+  // the stalks are joined between the eyes by a rounded saddle a third of the way down the globes: from in front and
+  // from above the two domes make one heart-shaped mound (photographs 1, 8, 12)
+  if (opts?.dome && s < 13.5) d = smin(d, ellipsoidDist(p, [EYE.center[0] + 0.15, EYE.center[1] - 0.6, 0], [1.15, 0.75, 0.95]), 0.6);
   // lips and the lip pad: smooth displacements of the surface along the gape line (no creases, no folds)
   if (s < 8.5 && y < 5.2 && !opts?.noLips) d -= lipRelief(pm);
   // the bridge of the snout: a low, rounded ridge down the middle of the face from between the eyes to the snout's

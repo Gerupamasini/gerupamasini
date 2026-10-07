@@ -13,7 +13,7 @@ import jpeg from 'jpeg-js';
 import { GLBBuilder } from '../../lib/glb.mjs';
 import { encodePNG } from '../../lib/png.mjs';
 import { S0, Y0, SL, S_END, TL, EYE, BODY_U, toObject, dirToObject, botY, pecBindFix } from './anatomy.mjs';
-import { buildSkin, skinParts, skinTarget, buildMouth, buildDomes, bakeSkinTextures, SPLIT } from './body.mjs';
+import { buildSkin, skinParts, skinTarget, buildMouth, buildDomes, bakeSkinTextures, SPLIT, skinAt } from './body.mjs';
 import { finDefinitions, buildFinMesh, buildFinFold, paintFinAtlas, armPaint, mirrorMesh, PEC, PEC_WEB_LEN, PELVIC } from './fins.mjs';
 import { buildEyeMesh, eyeRotation, paintEye, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './eye.mjs';
 import { buildArm, armPoint, armOcclusion, pecShare } from './arm.mjs';
@@ -229,7 +229,7 @@ let pelvicLowY = Infinity;
 
 // ---------------------------------------------------------------- eyes (rigid, children of the eye joints)
 log('eyes');
-const eyeTex = paintEye(tier.iris);
+const eyeTex = paintEye(tier.iris, skinAt);
 const tIris = gb.addTexture(image(gb, 'eye_basecolor', eyeTex.size, eyeTex.size, 3, eyeTex.rgb, 'jpeg', 95), sClamp, 'eye_basecolor');
 const tEyeMR = gb.addTexture(image(gb, 'eye_metal_rough', eyeTex.size, eyeTex.size, 3, eyeTex.mr, 'png'), sClamp, 'eye_metal_rough');
 const tEyeIr = gb.addTexture(image(gb, 'eye_iridescence', eyeTex.size, eyeTex.size, 3, eyeTex.irid, 'png'), sClamp, 'eye_iridescence');
@@ -256,10 +256,10 @@ const mEye = gb.addMaterial({
   },
   extras: { tobihaze: { role: 'eye', radiusMM: EYE.radius, pupilAngle: PUPIL_ANGLE, irisAngle: IRIS_ANGLE, corneaBulge: CORNEA_BULGE } },
 });
-const eye = buildEyeMesh(tier.eye[0], tier.eye[1]);
-const meshEye = gb.addMesh('Eye', [gb.primitive({ ...eye, material: mEye })]);
+// (the skin over each globe is the head's pattern: the right eye's mesh mirrors the texture, as the right dome does)
+const meshEyes = [false, true].map((mirror) => gb.addMesh(mirror ? 'Eye_R' : 'Eye_L', [gb.primitive({ ...buildEyeMesh(tier.eye[0], tier.eye[1], mirror), material: mEye })]));
 for (const [side, name, jn] of [[1, 'Eye_L', 'J_eyeL'], [-1, 'Eye_R', 'J_eyeR']]) {
-  const node = gb.addNode({ name, mesh: meshEye, rotation: eyeRotation(side) });
+  const node = gb.addNode({ name, mesh: meshEyes[side > 0 ? 0 : 1], rotation: eyeRotation(side) });
   gb.json.nodes[jointNodes[J[jn]]].children.push(node);
 }
 

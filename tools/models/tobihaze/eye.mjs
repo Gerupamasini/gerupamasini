@@ -3,8 +3,10 @@
 // shows in the window of the skin cup. A large black pupil, a horizontal oval, is framed by a thin bright copper
 // pupillary margin; the iris round it is narrow and dark olive-brown, with a green-gold structural sheen that is
 // strongest in its lower half (KHR_materials_iridescence over a reflective base); beyond the iris the globe is
-// covered by speckled, skin-coloured tissue, darkest at the limbus, so the window's edge melts into the dome. A wet,
-// bulging cornea over it all. (One mesh serves both eyes, so the pattern is symmetric fore and aft.)
+// covered by the head's own skin, darkest at the limbus: it is painted from the head's skin pattern (body.mjs skinAt)
+// at the globe's rest position, so the pattern runs on unbroken from the head and the eye cup over the dome
+// (photographs 3, 8, 10, 12: one skin, the cornea set in it). A wet, bulging cornea over the pupil and iris. (The
+// iris is symmetric fore and aft; the right eye's mesh mirrors the texture's u, as the right dome mirrors the left.)
 import { EYE, dirToObject, norm3 } from './anatomy.mjs';
 import { perlin3, fbm3, clamp, mix, smoothstep } from '../../lib/noise.mjs';
 
@@ -27,7 +29,8 @@ function eyePoint(theta, psi) {
   return [r * Math.sin(theta) * Math.cos(psi), r * Math.sin(theta) * Math.sin(psi), r * Math.cos(theta)];
 }
 
-export function buildEyeMesh(NT = 48, NP = 64) {
+/** mirror: the right eye's mesh (texture u mirrored fore and aft, see paintEye) */
+export function buildEyeMesh(NT = 48, NP = 64, mirror = false) {
   const cols = NP + 1, rows = NT + 1;
   const position = new Float32Array(cols * rows * 3);
   const normal = new Float32Array(cols * rows * 3);
@@ -49,7 +52,7 @@ export function buildEyeMesh(NT = 48, NP = 64) {
       }
       normal.set(n, idx * 3);
       const r = theta / Math.PI;
-      uv[idx * 2] = 0.5 + 0.5 * r * Math.cos(psi);
+      uv[idx * 2] = 0.5 + (mirror ? -0.5 : 0.5) * r * Math.cos(psi);
       uv[idx * 2 + 1] = 0.5 - 0.5 * r * Math.sin(psi);
     }
   }
@@ -111,7 +114,14 @@ function polar(x, y, size) {
  *   mr   — glTF metallic-roughness (G roughness, B metalness)
  *   irid — iridescence (R strength, G film thickness), B the cornea's clear coat
  */
-export function paintEye(size = 512) {
+export function paintEye(size = 512, skinAt = null) {
+  // the left eye's rest frame: texture direction → fish space (for the skin over the globe)
+  const q = eyeRotation(1);
+  const rot = (v) => {
+    const [x, y, z, w] = q;
+    const t = [2 * (y * v[2] - z * v[1]), 2 * (z * v[0] - x * v[2]), 2 * (x * v[1] - y * v[0])];
+    return [v[0] + w * t[0] + (y * t[2] - z * t[1]), v[1] + w * t[1] + (z * t[0] - x * t[2]), v[2] + w * t[2] + (x * t[1] - y * t[0])];
+  };
   const rgb = new Uint8Array(size * size * 3);
   const mr = new Uint8Array(size * size * 3);
   const irid = new Uint8Array(size * size * 3);
@@ -161,21 +171,31 @@ export function paintEye(size = 512) {
       // melanophores and studded with sand grains; only the cornea over the pupil and iris is glossy), darker in a
       // narrow band round the limbus
       const g = smoothstep(limbAt(psi), limbAt(psi) + 0.18, theta);
-      const n = fbm3(ax * 3, sy * 3, theta * 3, 3, 613);
-      const sp = smoothstep(0.58, 0.76, perlin3(ax * 16, sy * 16, theta * 16, 617) * 0.5 + 0.5);
-      const fine = smoothstep(0.62, 0.8, perlin3(ax * 40, sy * 40, theta * 40, 619) * 0.5 + 0.5);
-      const grain = smoothstep(0.78, 0.86, perlin3(ax * 30 + 3, sy * 30, theta * 30, 621) * 0.5 + 0.5);
-      col = [108, 102, 90].map((c) => c * (1 + 0.14 * n));
-      col = col.map((c, i) => mix(c, [44, 40, 34][i], Math.max(sp * 0.55, fine * 0.5)));
-      col = col.map((c, i) => mix(c, [228, 226, 216][i], grain * 0.8));
+      if (skinAt) {
+        // the head's skin at this point of the globe (left eye at rest; object space → fish space)
+        const o = rot([Math.sin(theta) * Math.cos(psi), Math.sin(theta) * Math.sin(psi), Math.cos(theta)]);
+        const d = [-o[2], o[1], o[0]];
+        const c0 = EYE.center;
+        const sk = skinAt([c0[0] + d[0] * EYE.radius, c0[1] + d[1] * EYE.radius, c0[2] + d[2] * EYE.radius], d);
+        col = sk.col;
+        rough = mix(0.3, sk.rough, g);
+      } else {
+        const n = fbm3(ax * 3, sy * 3, theta * 3, 3, 613);
+        const sp = smoothstep(0.58, 0.76, perlin3(ax * 16, sy * 16, theta * 16, 617) * 0.5 + 0.5);
+        const fine = smoothstep(0.62, 0.8, perlin3(ax * 40, sy * 40, theta * 40, 619) * 0.5 + 0.5);
+        const grain = smoothstep(0.78, 0.86, perlin3(ax * 30 + 3, sy * 30, theta * 30, 621) * 0.5 + 0.5);
+        col = [108, 102, 90].map((c) => c * (1 + 0.14 * n));
+        col = col.map((c, i) => mix(c, [44, 40, 34][i], Math.max(sp * 0.55, fine * 0.5)));
+        col = col.map((c, i) => mix(c, [228, 226, 216][i], grain * 0.8));
+        rough = mix(0.3, 0.55, g);
+      }
       col = col.map((c, i) => mix([34, 31, 27][i], c, g));
-      rough = mix(0.3, 0.55, g);
     }
     for (let c = 0; c < 3; c++) rgb[k + c] = clamp(Math.round(col[c]), 0, 255);
     mr[k] = 0; mr[k + 1] = clamp(Math.round(rough * 255), 0, 255); mr[k + 2] = clamp(Math.round(metal * 255), 0, 255);
     // B: the cornea (glossy clear coat) over the pupil and iris, fading out over the skin-covered rest of the globe
     const cornea = 1 - smoothstep(limbAt(psi) + 0.02, limbAt(psi) + 0.16, theta);
-    irid[k] = clamp(Math.round(ir * 255), 0, 255); irid[k + 1] = clamp(Math.round(th * 255), 0, 255); irid[k + 2] = clamp(Math.round((0.12 + 0.88 * cornea) * 255), 0, 255);
+    irid[k] = clamp(Math.round(ir * 255), 0, 255); irid[k + 1] = clamp(Math.round(th * 255), 0, 255); irid[k + 2] = clamp(Math.round((0.4 + 0.6 * cornea) * 255), 0, 255);
   }
   return { size, rgb, mr, irid };
 }

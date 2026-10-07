@@ -835,7 +835,7 @@ function dots(p, cell, r, seed, keep = 1, jitterR = 0.4) {
 }
 
 /** pattern for one surface point: returns colour (sRGB 0..255), height (mm), roughness, mud affinity, mucus, sun */
-function skinPoint(s, phi, p, n, ao) {
+function skinPoint(s, phi, p, n, ao, globe = false) {
   const nh = normHeight(s, p[1]);
   const z = p[2];
   const lat = Math.abs(n[2]);
@@ -939,34 +939,35 @@ function skinPoint(s, phi, p, n, ao) {
   // round each eye's cup (wa: angle from the lid margin, > 0 on the bare globe): the margin is a pale rim; the
   // skin under the globe (the shut lid in a blink) is the cup's thin, pinkish skin; the cup under the eye is thin,
   // unpigmented skin, pinkish grey (the blood under it shows), fading into the head's pattern down the neck
-  let lid = 0, stalk = 0;
-  for (const e of FEAT.eyes) {
+  // (globe: a point of the eyeball's own skin, painted like the stalk's: the cup's skin running on over it)
+  let lid = 0, stalk = globe ? 1 : 0;
+  if (!globe) for (const e of FEAT.eyes) {
     const o = [p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2]];
     const dE = Math.hypot(o[0], o[1], o[2]);
     const wa = windowAngle(o, e.D);
     const near = smoothstep(EYE.radius + 1.0, EYE.radius + 0.3, dE);
-    const cupSkin = smoothstep(0.05, -0.1, wa) * smoothstep(-0.95, -0.45, wa) * near;
-    const below = smoothstep(0.35, -0.35, o[1] / Math.max(dE, 1e-3));
-    const outer = smoothstep(-0.2, 0.5, (o[2] * Math.sign(e.c[2])) / Math.max(dE, 1e-3));
-    col = lerp3(col, lerp3(col, C(150, 124, 116), 0.7), cupSkin * (0.12 + 0.6 * below * outer));
-    // (only a thin band at the margin: the skin under the globe becomes the lid when the cup closes in a blink)
-    lid = Math.max(lid, smoothstep(-0.12, 0.0, wa) * smoothstep(0.14, 0.05, wa) * near);
+    // the lower lid (the thick rolled part of the cup's margin under the cornea, on the outer face; anatomy.mjs):
+    // a smooth, pale, faintly pink band without sand right under the iris (photographs 3 and 10); elsewhere the
+    // margin lies flush on the globe and shows nothing
+    const lidW = smoothstep(0.3, 0.75, (o[2] * Math.sign(e.c[2])) / Math.max(dE, 1e-3)) * smoothstep(0.1, -0.35, o[1] / Math.max(dE, 1e-3));
+    const band = smoothstep(-0.6, -0.25, wa) * smoothstep(0.08, -0.02, wa) * near;
+    col = lerp3(col, C(166, 152, 144), band * lidW * 0.55);
+    lid = Math.max(lid, band * lidW);
+    // (the skin under the globe, hidden while the eye is open, becomes the lid when the cup closes in a blink)
     col = lerp3(col, lerp3(col, C(150, 124, 116), 0.6), smoothstep(0.05, 0.15, wa) * near * 0.6);
-    // the stalk under the cup: smooth, pale, pinkish grey skin without sand down to where it rises out of the head
-    // (photographs from the side)
+    // the stalk under the cup: the head's own speckled grey skin running on up to the globe, a little paler and
+    // smoother, with less sand (photographs 3, 8 and 12)
     const neck = smoothstep(EYE.radius + 1.7, EYE.radius + 0.5, dE) * smoothstep(0.2, -0.3, o[1] / Math.max(dE, 1e-3)) * smoothstep(-0.1, 0.05, -wa);
     stalk = Math.max(stalk, neck);
   }
-  col = lerp3(col, C(158, 146, 138), stalk * 0.55);
-  // the lid margin: a pale, fleshy rim just under the window (photographs)
-  col = lerp3(col, C(164, 150, 138), lid * 0.6);
+  col = lerp3(col, C(132, 126, 114), stalk * 0.12);
   // sand grains stuck in the mucus: tiny white specks, densest on the head, the turrets and the back
   // (photographed animals glitter with them: fine quartz grains, white, some grey; densest on the crown, the cheeks,
   // the eye domes and the back, sparse on the belly)
   // (photographs close up: grains of every size from fine silt to ~0.5 mm quartz, densest on the crown, the cheeks
   // and round the eyes, in patches where the animal last lay in the sand)
   const patchy = smoothstep(-0.35, 0.35, fbm3(p[0] * 0.35 + 3, p[1] * 0.35, p[2] * 0.35, 3, 161));
-  const gd = (0.3 + 0.7 * smoothstep(-0.6, 0.3, nh)) * (s < 18 ? 1 : 0.7) * (1 - lid) * (1 - 0.85 * stalk) * (0.45 + 0.55 * patchy);
+  const gd = (0.3 + 0.7 * smoothstep(-0.6, 0.3, nh)) * (s < 18 ? 1 : 0.7) * (1 - lid) * (1 - 0.3 * stalk) * (0.45 + 0.55 * patchy);
   const grainsA = calmed(grainDots(p, 0.26, 0.065, 151, 0.6), 0.26, 0.065, 151, 0.6) * gd;
   const grainsB = calmed(grainDots(p, 0.5, 0.11, 157, 0.55), 0.5, 0.11, 157, 0.55) * gd;
   const grainsC = calmed(grainDots(p, 0.9, 0.2, 167, 0.3 * smoothstep(-0.2, 0.4, nh) * (s < 20 ? 1 : 0.35)), 0.9, 0.2, 167, 0.15) * gd;
@@ -1022,8 +1023,8 @@ function skinPoint(s, phi, p, n, ao) {
   // (the fine relief fades out over the snout's tip, where the texels still run long toward the uv pole and would draw
   // it out into radial streaks)
   h *= smoothstep(0.1, 1.2, rPole) * smoothstep(0.1, 0.7, rCorner) * lipCalm;
-  // (the eye stalks' skin is smooth)
-  h *= 1 - 0.7 * stalk;
+  // (the skin of the eyes' base is a little smoother)
+  h *= 1 - 0.35 * stalk;
   // ---------------- roughness and skin data
   // (grains are dry, frosted quartz: matte)
   let rough = 0.52 + 0.08 * fbm3(p[0] * 0.9, p[1] * 0.9, p[2] * 0.9, 2, 91) + 0.06 * dorsal + 0.2 * grains;
@@ -1255,3 +1256,12 @@ export function bakeSkinTextures({ W, H, armPaint, armPoint = null, armOcclusion
 }
 
 export { COL };
+
+/**
+ * The head's skin pattern at a fish-space point p (outward normal n), as baked into the skin texture: albedo (sRGB
+ * 0..255), roughness, relief height. The eyeball's skin-covered dome is painted from it (eye.mjs), so the pattern
+ * runs on unbroken from the head and the eye cup over the globe (photographs: one skin, the cornea set in it).
+ */
+export function skinAt(p, n, ao = 1) {
+  return skinPoint(p[0], invPhi(p[0], p[1], p[2]), p, n, ao, true);
+}
