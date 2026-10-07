@@ -1,0 +1,44 @@
+{
+  "id": "mugil_cephalus",
+  "names": { "ja": "ボラ", "sci": "Mugil cephalus", "en": "Flathead grey mullet" },
+  "taxon": { "group": "fish", "family": "Mugilidae" },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": { "placeholder": "mullet", "modelLength_mm": 40, "viewDistance_m": 18, "driver": "mullet" },
+  "size": {
+    "length_mm": { "min": 18, "max": 170, "mean": 60, "sd": 30 },
+    "weightCoef": { "a": 0.000012, "b": 3.0 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": false },
+  "stages": [
+    { "id": "haku", "ja": "ハク（稚魚）", "maxLength_mm": 45 },
+    { "id": "oboko", "ja": "オボコ（幼魚）", "maxLength_mm": 100 },
+    { "id": "subashiri", "ja": "スバシリ（若魚）" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    { "tags": ["eelgrass_edge", "shallow", "bare"], "depth_m": [0.12, 1.4], "time": ["dawn", "day", "dusk"], "season": ["spring"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 4, "group": [8, 16], "maxPopulation": 70, "length_mm": [20, 45] },
+    { "tags": ["eelgrass_edge", "shallow", "bare"], "depth_m": [0.15, 1.4], "time": ["dawn", "day", "dusk"], "season": ["summer"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 3, "group": [6, 12], "maxPopulation": 60, "length_mm": [40, 95] },
+    { "tags": ["eelgrass_edge", "shallow", "bare"], "depth_m": [0.2, 1.5], "time": ["dawn", "day", "dusk"], "season": ["autumn"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 2, "group": [4, 9], "maxPopulation": 45, "length_mm": [80, 160] }
+  ],
+  "brain": { "tree": "fish_school", "params": { "fleeDistance_m": 2.2, "restMean_s": 3 } },
+  "capture": { "tools": ["net_small", "net_shallow", "net_fine", "net_deep", "net_dframe", "net_carbon"], "baseDifficulty": 0.7, "alertPenalty": 0.6 },
+  "encyclopedia": {
+    "description": "ボラの幼魚。春、2〜3cm ほどの銀色の稚魚（ハク）が群れで岸近くに現れ、夏にはオボコ、秋にはスバシリと呼ばれる大きさに育つ（出世魚）。浅瀬の水面直下を群れで泳ぎ、水面や底の表面についた有機物や藻をついばむ。近づくといっせいに散って、すぐにまた群れに戻る。水面から跳び上がる姿もよく見られる。",
+    "habitatHint": "アマモ場の縁や浅瀬の水面近く。群れで泳ぐ。春は小さなハク、秋は大きく育った若魚。",
+    "behaviors": [
+      { "id": "rest", "ja": "静止", "hint": "群れで漂うように止まる" },
+      { "id": "school", "ja": "群泳", "hint": "群れでそろって泳ぐ" },
+      { "id": "surface_feed", "ja": "水面の餌をついばむ", "hint": "水面すれすれで口を動かす" },
+      { "id": "scatter", "ja": "散って逃げる", "hint": "近づくといっせいに散る" },
+      { "id": "jump", "ja": "跳躍", "hint": "水面から跳び上がる" },
+      { "id": "splash", "ja": "着水", "hint": "跳んだ後に水に落ちる" }
+    ],
+    "placeholderModel": false
+  }
+}

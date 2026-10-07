@@ -167,6 +167,13 @@
 - シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
 - バージョン 0.12.1。
 
+## 23 回目（横須賀 走水海岸）
+- `claude/festive-lamport-hd2row` をマージ（走水マップ `public/data/maps/hashirimizu*`、`src/world/maps/hashirimizu/*`、アマモ場 `src/world/amamo/*`、寄せ波 `Surf.ts`、映り込み `render/Mirror.ts`、`Water.ts`・`Sky.ts`（雲層）・`Terrain.ts`（陸の高さ・砂の色・砂漣の向き・遡上の濡れ）、横須賀の潮位観測点、`App.leaveWorld()` によるマップ切り替え、`World.dispose()`、胴長の限界水深、`Habitat` の地物タグ eelgrass/eelgrass_edge/bare、spawn 規則の `maps`、種の `aquatic`）。衝突 15 ファイルを手で解決。
+- 解決の方針: 葛西はそのまま（`World.create` は `layout` の無いマップで割石・牡蠣礁を作り、遠景は非表示のまま；layout のあるマップでアマモ場・小道具・遠景を作る）。`World.dispose()` で礁と石も解放。濡れた砂の暗さ（0.68）と粗さ（0.58/0.62/0.42）は 22 回目の値を維持し、遡上の水膜は 0.32。`Spawner` は debug の hidden と規則の `maps` の両方を見る。観察開始距離は 21 回目の `len × 7`。`FPSController.canStand` は `wadeDepth` と `groundAt`（石の上）の両方。
+- 生き物の絞り込み: manifest は既存 8 種 + アラムシロ（`snail` ドライバ、`snail_crawl`）。ケフサイソガニ・ボラ・ミズヒキゴカイは manifest 外（ファイルとドライバ登録は残す）。シロチドリの走水規則を削除。ユビナガホンヤドカリは本流の完全モデルのまま、走水向けに eelgrass_edge/bare の規則を追加（一般規則は maps 無しで両方の浜に効く）。`tests/unit/hashirimizu.test.ts` を絞った種に合わせて修正、`AmamoMeadow` の底質表に rock を追加。
+- 行き先は 葛西 西なぎさ と 横須賀 走水海岸 の 2 つ。
+- バージョン 0.19.0。
+
 ## 22 回目（デバッグの生物選択、ホームの戻り先、抱卵エドハゼ、行き先、砂の反射、ケースと水槽の貝）
 - デバッグの生物選択: `DebugState.hidden`（種 id）、`App.setSpeciesShown / setAllSpeciesShown / applyHiddenSpecies`（`CreatureSystem.setHiddenSpecies` → `Spawner.hidden` を飛ばし、いる個体は despawn；アサリは `clams.group.visible`、マガキは `reef.group.visible`；マーカーと HUD の対象も外す）。`DebugPanel` に「出す生物」の行。
 - ホームへ戻る: `enterHome` で `homePanel='none'`、`homeInfo=null`、`TankScene.resetView()`（view='tank'、滑らかな移動なしで既定の水槽の構図、OrbitControls を有効に）。

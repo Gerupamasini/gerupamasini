@@ -86,7 +86,8 @@ export function pitMaskAt(pit: FeedingPit, x: number, z: number): number {
  * Choose where the rays lay last night: clusters of 3–9 on sandy and muddy-sand parts of the intertidal flat,
  * deterministic for a seed — a seed per day means fresh marks on every visit.
  */
-export function placeFeedingPits(grid: TerrainGrid, palette: Substrate[], seed: number, clusters = 56): FeedingPit[] {
+/** `opts`: a map's own say: how many clusters, how many pits in each, how far they spread, and where they may be. */
+export function placeFeedingPits(grid: TerrainGrid, palette: Substrate[], seed: number, clusters = 56, opts: { ok?(x: number, z: number): boolean; perCluster?: readonly [number, number]; spread?: number; margin?: number } = {}): FeedingPit[] {
   const rng = new Rng(seed);
   const n = grid.n, half = grid.size / 2, cell = grid.size / (n - 1);
   const h = grid.heights, sub = grid.substrate;
@@ -101,7 +102,7 @@ export function placeFeedingPits(grid: TerrainGrid, palette: Substrate[], seed: 
     const s = palette[sub[k]];
     if (s !== 'sand' && s !== 'muddy_sand') return false;
     const y = h[k];
-    if (y < -1.3 || y > -0.15) return false;
+    if (opts.ok ? !opts.ok(x, z) : y < -1.3 || y > -0.15) return false;
     // flat ground only: no pits on the slopes of channels or the bar
     const kx = idx(x + cell * 2, z), kz = idx(x, z + cell * 2);
     if (kx < 0 || kz < 0 || Math.abs(h[kx] - y) > 0.06 || Math.abs(h[kz] - y) > 0.06) return false;
@@ -110,14 +111,15 @@ export function placeFeedingPits(grid: TerrainGrid, palette: Substrate[], seed: 
   for (let c = 0; c < clusters; c++) {
     let cx = 0, cz = 0, found = false;
     for (let tries = 0; tries < 40 && !found; tries++) {
-      cx = rng.range(-half + 12, half - 12);
-      cz = rng.range(-half + 12, half - 12);
+      cx = rng.range(-half + (opts.margin ?? 12), half - (opts.margin ?? 12));
+      cz = rng.range(-half + (opts.margin ?? 12), half - (opts.margin ?? 12));
       found = okHere(cx, cz);
     }
     if (!found) continue;
-    const count = rng.int(3, 9);
+    const count = rng.int(opts.perCluster?.[0] ?? 3, opts.perCluster?.[1] ?? 9);
+    const spread = opts.spread ?? 8;
     for (let p = 0; p < count; p++) {
-      const x = cx + rng.range(-8, 8), z = cz + rng.range(-8, 8);
+      const x = cx + rng.range(-spread, spread), z = cz + rng.range(-spread, spread);
       if (!okHere(x, z)) continue;
       if (pits.some((q) => Math.hypot(q.x - x, q.z - z) < q.reach + 1.6)) continue;
       const a = rng.range(0.45, 0.75), b = a * rng.range(0.66, 0.9), rot = rng.range(0, Math.PI);

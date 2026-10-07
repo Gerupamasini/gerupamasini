@@ -167,7 +167,7 @@
   "zukan.progress": "記録",
   "zukan.species": "種",
   "zukan.found": "発見済み",
-  "tidetable.sub": "東京 ・ 気象庁の調和定数による予測",
+  "tidetable.sub": "{station} ・ 気象庁の調和定数による予測",
   "menu.settings": "設定",
   "case.release": "逃がす",
   "case.toResearch": "研究に回す",

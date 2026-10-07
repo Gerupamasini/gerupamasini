@@ -118,6 +118,7 @@
         "night"
       ],
       "tide": "any",
+      "maps": ["kasai_west"],
       "density_per_100m2": 4,
       "group": [
         1,
@@ -145,6 +146,7 @@
         "night"
       ],
       "tide": "any",
+      "maps": ["kasai_west"],
       "density_per_100m2": 0.7,
       "group": [
         1,

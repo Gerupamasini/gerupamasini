@@ -33,6 +33,7 @@
       "tags": ["exposed_sand", "exposed_mud", "waterline"],
       "time": ["dawn", "day", "dusk"],
       "tide": "any",
+      "maps": ["kasai_west"],
       "density_per_100m2": 0.12,
       "group": [1, 4],
       "maxPopulation": 10
