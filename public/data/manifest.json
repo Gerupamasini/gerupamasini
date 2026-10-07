@@ -10,7 +10,8 @@
     "pagurus_minutus",
     "crassostrea_gigas",
     "reticunassa_festiva",
-    "mugil_cephalus"
+    "mugil_cephalus",
+    "rudarius_ercodes"
   ],
   "behaviors": [
     "fish_benthic",
@@ -20,7 +21,8 @@
     "hermit_crab_tidal",
     "oyster_reef",
     "snail_crawl",
-    "fish_school"
+    "fish_school",
+    "fish_seagrass"
   ],
   "maps": [
     "kasai_west",

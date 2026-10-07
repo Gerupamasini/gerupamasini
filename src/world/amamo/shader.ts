@@ -27,6 +27,9 @@ uniform float uAmWater;
 uniform vec2 uAmCurrent;
 uniform vec4 uAmWave;      // xy: direction the waves travel, z: orbital speed (m/s), w: gustiness 0..1
 uniform vec2 uAmSeaward;
+#define AM_PUSH 8
+uniform vec4 uAmPush[AM_PUSH];  // xyz: an animal swimming in the leaves (world), w: how far it pushes them aside (m; 0: none)
+vec3 gAmP = vec3(0.0);           // the centreline point the current step starts from (relative to the base)
 attribute vec4 aShootA;    // x: fan azimuth, y: shoot length (longest leaf, m), z: leaf count, w: seed 0..1
 attribute vec4 aShootB;    // x: leaf width (m), y: age 0..1, zw: ground slope (dh/dx, dh/dz)
 attribute vec4 aShootC;    // x: tide-pool level over the shoot (-1e3: none), y: edge of the patch 0..1, z: sheath height (m), w: layer jitter
@@ -56,6 +59,7 @@ struct AmShoot {
   vec2 grad, flowC, d0, d1, d2, fan, tilt, fallDir;
   vec3 ws, wc;
   float gust;
+  float push;
 };
 
 AmShoot amShoot() {
@@ -106,6 +110,14 @@ AmShoot amShoot() {
   // where it falls when the water goes: down the local slope and toward the sea, as the last of the ebb laid it
   vec2 fd = uAmSeaward - S.grad * 40.0;
   S.fallDir = normalize(amRot(fd, 0.6 * (amHash(S.seed * 53.0) - 0.5)) + 1e-5);
+  // is an animal in among this shoot's leaves? (only those shoots pay for the push below)
+  S.push = 0.0;
+#if AM_LOD < 2
+  for (int i = 0; i < AM_PUSH; i++) {
+    vec4 q = uAmPush[i];
+    if (q.w > 0.0 && length(q.xz - P) < S.L + q.w && q.y > S.base.y - q.w) S.push = 1.0;
+  }
+#endif
   return S;
 }
 
@@ -153,6 +165,23 @@ vec2 amWaveFlow(AmShoot S, float lag) {
   return u * (uAmWave.z * S.gust * S.sway);
 }
 
+// the leaves swept aside by an animal swimming through them: a lean away from it wherever the blade passes within its
+// reach (the step's start point is gAmP), so the blade bends round the body and goes on above it
+vec2 amPush(AmShoot S) {
+  vec3 c = S.base + gAmP;
+  vec2 acc = vec2(0.0);
+  for (int i = 0; i < AM_PUSH; i++) {
+    vec4 q = uAmPush[i];
+    if (q.w <= 0.0) continue;
+    vec3 d = c - q.xyz;
+    float w = 1.0 - smoothstep(0.35 * q.w, q.w, length(d));
+    if (w <= 0.0) continue;
+    vec2 h = d.xz + 1e-4 * S.fan;
+    acc += normalize(h) * w * 1.6;
+  }
+  return acc;
+}
+
 // unit tangent of the centreline at arc length s (m); D: its horizontal direction; lw: 0 inside the sheath, 1 on the free blade
 vec3 amTangent(AmShoot S, AmLeaf B, float s, float lw, out vec2 D) {
   float uL = s / B.L;
@@ -162,6 +191,9 @@ vec3 amTangent(AmShoot S, AmLeaf B, float s, float lw, out vec2 D) {
   // buoyant blades arch out of the fan; in shallow water they stand straighter
   float arch = smoothstep(S.hs * 0.8, B.L, s);
   vec2 H = S.tilt + B.splay * (B.splayK * (0.6 + 2.2 * arch) * (0.55 + 0.45 * S.deep) * lw) + V * (AM_BEND * g);
+#if AM_LOD < 2
+  if (S.push > 0.5) H += amPush(S) * lw;
+#endif
 #if AM_LOD == 0
   // flutter: a quick ripple running down the free end
   H += B.flDir * (0.07 * uL * uL * sin(uAmTime * B.fl - 9.0 * uL + B.mPhase) * (S.sway + 0.12) * lw);
@@ -241,12 +273,14 @@ void amDeform(out vec3 amPos, out vec3 amNrm) {
     if (len <= 0.0) continue;
     float sm = sa + 0.5 * len;
     float lw = smoothstep(S.hs * 0.7, S.hs * 1.3, sm);
+    gAmP = p;
     vec3 T = amTangent(S, B, sm, lw, D);
     p = amStep(S, p, T, D, len, ceilY, wet, B.layer * lw, flatF);
   }
   float sv = s0 + float(kv) * ds;
   float lwv = smoothstep(S.hs * 0.7, S.hs * 1.3, sv);
   vec2 Dv;
+  gAmP = p;
   vec3 Tv = amTangent(S, B, sv, lwv, Dv);
   if (flatF > 0.5) Tv = normalize(vec3(Dv.x, dot(S.grad, Dv), Dv.y));
   // the ribbon's width lies across the bend (its easy way), turned a little round the centreline: blades twist

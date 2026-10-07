@@ -216,13 +216,16 @@ export class WaterPass {
           bool surfOn = uSurf.w > 0.0 && calm < 0.5;
           float surface = level;
           if (surfOn && !sky) surface += surfEta(P.xz, level);
+          // is the camera itself under the water (watching a fish down among the eelgrass)?
+          float camLevel = uWater + (uSurf.w > 0.0 ? surfEta(uCamPos.xz, uWater) : 0.0);
+          bool underCam = uCamPos.y < camLevel - 0.003;
 
           // Near the viewer the surf stands up from the plane: the view ray is traced through the band of heights the
           // waves can take (12–16 steps and a few secant refinements), so a crest hides the water behind it and its
           // face is seen as a face. Only where that band lies in the surf and within ~35 m; beyond, the plane.
           float t = -1.0;
           bool traced = false;
-          if (surfOn && uSurfSteps > 0.5 && rd.y < -1e-5) {
+          if (surfOn && uSurfSteps > 0.5 && rd.y < -1e-5 && !underCam) {
             float top = level + 2.2 * uSurf.x, bot = level - 1.5 * uSurf.x;
             float t0 = max((top - uCamPos.y) / rd.y, 0.0), tb = (bot - uCamPos.y) / rd.y;
             float t1 = min(tb, sceneDist), tEnd = min(t1, 35.0);
@@ -260,7 +263,23 @@ export class WaterPass {
             if (tp < sceneDist) t = tp;
           }
 
-          if (t >= 0.0) {
+          if (underCam) {
+            // the view runs through the water itself: everything fades into the water's glow over the path, and the
+            // surface seen from below is the sky inside Snell's window and the water mirrored outside it
+            float tUp = rd.y > 1e-4 ? (camLevel - uCamPos.y) / rd.y : 1e5;
+            float path = min(sceneDist, tUp);
+            vec3 glow = waterGlow(rd);
+            vec3 seen = base;
+            if (tUp < sceneDist) {
+              vec3 S = uCamPos + rd * tUp;
+              vec3 N = waterNormal(S.xz, tUp, calm);
+              vec3 rr = refract(rd, -N, 1.333);
+              float win = dot(rr, rr) > 0.0 ? smoothstep(0.0, 0.25, rr.y) : 0.0;
+              vec3 skyC = min(textureCube(tEnv, rr).rgb * uEnvI, vec3(8.0));
+              seen = mix(glow * 1.15, mix(skyC, base, 0.3) * 0.8, win);
+            }
+            col = mix(glow, seen, exp(-path * uFogW));
+          } else if (t >= 0.0) {
             {
               vec3 S = uCamPos + rd * t;
               vec3 N = waterNormal(S.xz, t, calm);
