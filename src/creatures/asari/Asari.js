@@ -74,8 +74,9 @@ export class AsariDriver {
     root.rotation.set(0, individual.heading, 0);
     root.add(this.model.root, this.model.decal);
     this.model.decal.scale.setScalar(this.scale * 0.8);
-    // most are found buried; a few lie on the sand (washed out / dropped) and dig in
-    const onSurface = rand() < 0.2;
+    // most are found buried; a few lie on the sand (washed out / dropped) and dig in; one set down in a case or a
+    // tank is seen whole first
+    const onSurface = rand() < 0.2 || root.userData.startOnSurface === true;
     this.lieSide = rand() < 0.5 ? 1 : -1;
     this.uprightTilt = this.form.rest.tilt + (rand() - 0.5) * 0.25;
     this.beh = new AsariBehavior(rand, onSurface);
@@ -115,7 +116,7 @@ export class AsariDriver {
     this.lastPlayer.copy(ctx.player);
     const threat = dist < THREAT_NEAR || (dist < THREAT_FAST_DIST && this.playerSpeed > THREAT_FAST_SPEED) || ind.alert > 0.7;
 
-    b.update(sdt, { threat, submerged });
+    b.update(sdt, { threat, submerged, canBurrow: ctx.canBurrow ?? true });
 
     // ---- LOD
     const lod = ctx.locked || dist < LOD0_DIST ? 0 : dist < LOD1_DIST ? 1 : 2;

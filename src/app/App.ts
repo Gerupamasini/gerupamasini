@@ -262,10 +262,12 @@ export class App {
     if (this.mode === 'field' || this.mode === 'observe' || this.mode === 'capture') this.leftFieldAt = performance.now();
     this.player?.resetFov();
     this.setMode('home');
+    // whatever was open when the player left (the tools rack, an animal's card), home opens on the tank
     ui.homePanel.value = 'none';
+    ui.homeInfo.value = null;
     this.tank.setAspect(this.renderer.aspect);
     this.tank.activate(true);
-    this.tank.frameTank();
+    this.tank.resetView();
     void this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
     this.tank.setLayout(this.save?.tank.layout ?? defaultTankLayout());
     this.syncShelf();
@@ -438,6 +440,29 @@ export class App {
   setMarkers(on: boolean): void {
     ui.debugState.value = { ...ui.debugState.value, markers: on };
     if (!on) ui.markers.value = [];
+  }
+
+  /** debug: which species appear (the clam field and the reef are shown or hidden as a whole) */
+  setSpeciesShown(id: string, on: boolean): void {
+    const hidden = new Set(ui.debugState.value.hidden);
+    if (on) hidden.delete(id); else hidden.add(id);
+    this.applyHiddenSpecies([...hidden]);
+  }
+
+  setAllSpeciesShown(on: boolean): void {
+    this.applyHiddenSpecies(on ? [] : [...this.data.species.keys()]);
+  }
+
+  private applyHiddenSpecies(hidden: string[]): void {
+    ui.debugState.value = { ...ui.debugState.value, hidden };
+    const set = new Set(hidden);
+    this.creatures?.setHiddenSpecies(set);
+    if (this.clams) this.clams.group.visible = !set.has('ruditapes_philippinarum');
+    if (this.world?.oysters) this.world.oysters.group.visible = !set.has('crassostrea_gigas');
+  }
+
+  private speciesHidden(id: string): boolean {
+    return ui.debugState.value.hidden.includes(id);
   }
 
   teleport(target: TeleportTarget): void {
@@ -848,7 +873,7 @@ export class App {
 
   /** A fresh model of the species to lie in the net (the detailed tier, or the driver's own geometry). */
   private async displayModelFor(ind: Individual): Promise<Object3D | null> {
-    const sp = ind.species, m = modelFor(sp, ind.stage);
+    const sp = ind.species, m = modelFor(sp, ind.stage, ind.gravid);
     const rel = m.lod1 ?? m.hero ?? m.lod2;
     if (rel) {
       try { return (await instantiateModel(rel, variantOf(ind.id))).root; } catch (err) { console.warn(err); }
@@ -1401,7 +1426,7 @@ export class App {
     const out: Marker[] = [];
     for (const ind of c.individuals) {
       const d = ind.pos.distanceTo(p.position);
-      if (d > 80) continue;
+      if (d > 80 || this.speciesHidden(ind.species.id)) continue;
       const a = c.anchorOf(ind.id) ?? ind.pos;
       this.tmp.copy(a).project(this.camera);
       if (this.tmp.z > 1 || Math.abs(this.tmp.x) > 1.05 || Math.abs(this.tmp.y) > 1.05) continue;
@@ -1414,7 +1439,7 @@ export class App {
     }
     // buried clams nearby: their spot on the sand (the siphon holes are too small to find in a screenshot)
     const clams = this.clams, world = this.world;
-    if (clams && world) {
+    if (clams && world && clams.group.visible) {
       let n = 0;
       const near = clams.nearIndices(p.position.x, p.position.z, 12)
         .map((k) => ({ k, d: Math.hypot(clams.xs[k] - p.position.x, clams.zs[k] - p.position.z) }))
@@ -1432,7 +1457,7 @@ export class App {
     }
     // the oyster reef: its clumps nearby
     const reef = this.world?.oysters;
-    if (reef) {
+    if (reef && reef.group.visible) {
       let n = 0;
       for (const i of reef.near(p.position.x, p.position.z, 10)) {
         reef.centreOf(i, this.tmp2);
@@ -1475,14 +1500,14 @@ export class App {
         : (dg && !dg.far ? `[E] ${t('hud.dig')}` : t('hud.tooFar'));
       // a clam's siphon holes under the reticle
       this.targetClam = -1;
-      if (this.clams && this.world) {
+      if (this.clams && this.world && this.clams.group.visible) {
         const g = this.groundUnderReticle(3.5);
         if (g) this.targetClam = this.clams.nearest(g.x, g.z, 0.16);
       }
       const optic = this.toolType() === 'optic';
       // an oyster of the reef under the reticle (within arm's reach and a step)
       this.targetOyster = -1;
-      if (!this.target && this.targetClam < 0 && !optic && this.world?.oysters) {
+      if (!this.target && this.targetClam < 0 && !optic && this.world?.oysters?.group.visible) {
         this.targetOyster = this.world.oysters.pickRay(this.camera.position, this.camera.getWorldDirection(reticleDir), 2.6);
       }
       if (optic && !this.binoculars?.raised) {

@@ -12,6 +12,8 @@ npm run build        # dist/ を生成（GitHub Pages 用のベースパス /ger
 npm run smoke        # ヘッドレス Chromium で起動し tests/smoke/out/ にスクリーンショット
 node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボを撮影（tests/smoke/out/pagurus-*.png）
 npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / lod1 / lod2）
+npm run model:edohaze -- --tier hero  # エドハゼモデルの再生成（hero / lod1 / lod2）
+npm run model:edohaze-gravid -- --tier hero   # エドハゼの抱卵雌（edohaze_gravid.*.glb）
 npm run model:nets   # タモ網 6 種の GLB を再生成（docs/models/nets/）
 npm run render:oyster # マガキ（個体・群生・牡蠣礁）の画像を再生成（docs/models/oyster/）
 npm run model:pagurus-hide            # ユビナガホンヤドカリの「殻に閉じこもる姿勢」の表を再生成（形態・殻を変えたあと）

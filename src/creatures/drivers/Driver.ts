@@ -39,6 +39,8 @@ export interface DriverContext {
   locked?: boolean;
   /** the water this animal must stay in (metres of depth); drivers that fence their own motion use it */
   minDepth?: number;
+  /** false where there is nothing to dig into (an acrylic case, a bare tank): burrowers stay on the surface */
+  canBurrow?: boolean;
 }
 
 export interface Driver {

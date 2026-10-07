@@ -703,13 +703,13 @@ export class TankScene {
     if (!entry) return;
     const seed = hashInts(record.number, record.caughtAt % 100000);
     const ind = generateIndividual(species, seed, 0, 0, 0, 0, Date.now());
-    ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits];
+    ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits]; ind.gravid = !!record.gravid;
     const slot = this.occupants.length;
     ind.pos.set((slot % 2 === 0 ? -1 : 1) * 0.12 * Math.ceil(slot / 2), 0, (slot >= 2 ? 0.06 : -0.04));
     ind.home.copy(ind.pos);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     let hero: HeroInstance | null = null;
-    const files = modelFor(species, ind.stage);
+    const files = modelFor(species, ind.stage, ind.gravid);
     const useHero = !!this.heroApply && !!files.hero && !this.occupants.some((o) => o.hero);
     const rel = useHero ? files.hero : files.lod1 ?? files.hero ?? files.lod2;
     if (rel) {
@@ -723,6 +723,8 @@ export class TankScene {
     } else if (entry.placeholder) {
       const ph = entry.placeholder();
       ph.root.userData.placeholder = ph;
+      // a clam set into the tank is seen whole first, then digs in (where there is something to dig into)
+      ph.root.userData.startOnSurface = true;
       root = ph.root;
     } else return;
     if (this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); root.removeFromParent(); return; }
@@ -892,6 +894,15 @@ export class TankScene {
     this.startCamera(new Vector3(c.x + 0.3, c.y + 0.1 + 0.05 * d, c.z + d), new Vector3(c.x + 0.3, c.y - 0.05, c.z));
   }
 
+  /** Straight to the default tank view, no glide (coming home from the flat). */
+  resetView(): void {
+    this.view = 'tank';
+    this.camT = 1;
+    this.frameTank();
+    this.camCur.t.set(0, 0.12, 0);
+    if (this.controls) { this.controls.enabled = true; this.controls.target.set(0, 0.12, 0); this.controls.update(); }
+  }
+
   focusTank(): void {
     if (this.view === 'tank') return;
     this.view = 'tank';
@@ -955,7 +966,7 @@ export class TankScene {
       }
       const S = o.ind.length_mm / 1000;
       const hx = TANK_W / 2 - 0.01 - S * 0.55, hz = TANK_D / 2 - 0.01 - S * 0.55;
-      d.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now(), bounds: { minX: -hx, maxX: hx, minZ: -hz, maxZ: hz } });
+      d.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now(), bounds: { minX: -hx, maxX: hx, minZ: -hz, maxZ: hz }, canBurrow: this.sandTop > 0 });
       if (o.hero) o.hero.update(this.camera, d.openings ?? { mouth: 0, gill: 0 });
       o.ind.pos.x = Math.max(-hx, Math.min(hx, o.ind.pos.x));
       o.ind.pos.z = Math.max(-hz, Math.min(hz, o.ind.pos.z));

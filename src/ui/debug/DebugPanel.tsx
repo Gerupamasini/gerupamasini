@@ -63,6 +63,16 @@ export function DebugPanel({ app }: { app: App }) {
         <button onClick={() => app.forceSpawn()}>周囲に生物</button>
       </div>
       <div class="debug-row seg">
+        <span>出す生物</span>
+        <button onClick={() => app.setAllSpeciesShown(true)}>全部</button>
+        <button onClick={() => app.setAllSpeciesShown(false)}>なし</button>
+      </div>
+      <div class="debug-row wrap">
+        {[...app.data.species.values()].map((sp) => (
+          <label key={sp.id}><input type="checkbox" checked={!d.hidden.includes(sp.id)} onChange={(e) => app.setSpeciesShown(sp.id, (e.target as HTMLInputElement).checked)} /> {sp.names.ja}</label>
+        ))}
+      </div>
+      <div class="debug-row seg">
         <span>習熟</span>
         <button onClick={() => app.addMoney(500)}>+500 CR</button>
         {(['hand_net', 'shovel'] as const).map((id) => {

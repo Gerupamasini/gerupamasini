@@ -44,12 +44,16 @@ export const SpeciesSchema = z.object({
     placeholderBeyond_m: z.number().positive().optional(),
     driver: z.string().optional(),
     clips: z.object({ idle: z.string().default('Idle'), move: z.string().default('Move'), special: z.array(z.string()).default([]) }).default({ idle: 'Idle', move: 'Move', special: [] }),
+    /** the gravid female's own model files (an egg-swollen form; the rest comes from `model`) */
+    gravid: z.object({ hero: z.string().optional(), lod1: z.string().optional(), lod2: z.string().optional() }).optional(),
   }),
   size: z.object({
     length_mm: z.object({ min: z.number(), max: z.number(), mean: z.number(), sd: z.number() }),
     weightCoef: z.object({ a: z.number(), b: z.number() }),
   }),
   sex: z.object({ maleRatio: z.number().min(0).max(1).default(0.5), dimorphic: z.boolean().default(false) }).default({ maleRatio: 0.5, dimorphic: false }),
+  /** when adult females carry eggs: the share in the spawning months, and out of them */
+  breeding: z.object({ months: z.array(z.number().int().min(1).max(12)).min(1), gravidShare: z.number().min(0).max(1).default(0.7), offSeasonShare: z.number().min(0).max(1).default(0) }).optional(),
   stages: z.array(z.object({
     id: z.string(), ja: z.string(), maxLength_mm: z.number().optional(),
     /** this stage's own model files (a growth form of the species' model; the rest comes from `model`) */
