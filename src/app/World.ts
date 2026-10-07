@@ -5,7 +5,7 @@ import { Terrain, loadTerrainGrid } from '../world/Terrain';
 import { WaterPass } from '../world/Water';
 import { createWaves } from '../world/Waves';
 import { LAYER_MIRROR, reflectInWater } from '../render/Mirror';
-import { surfUniform } from '../world/Surf';
+import { surfUniforms } from '../world/Surf';
 import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
 import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
@@ -87,7 +87,7 @@ export class World {
     const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });
     terrain.setWaves(waves);
     // the surf on an open shore: one set of uniforms for the water and the sand it wets
-    const surf = surfUniform(layout?.surf ?? null);
+    const surf = surfUniforms(layout?.surf ?? null);
     terrain.setSurf(surf);
     const water = new WaterPass(terrain, waves, surf);
     if (layout) water.setBody(...layout.water.colour, layout.water.turbidity);

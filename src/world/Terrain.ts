@@ -1,10 +1,10 @@
 import {
-  BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, RedFormat, Vector2, Vector3, Vector4,
+  BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, RedFormat, Vector2, Vector3,
   type IUniform, type Texture, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
 import { makeSpillTexture } from './Water';
 import { WAVES_GLSL, type WaveSet } from './Waves';
-import { SURF_GLSL, surfUniform } from './Surf';
+import { SURF_GLSL, surfUniforms, type SurfUniforms } from './Surf';
 import type { MapDef, Substrate } from '../data/schemas';
 import { pitMaskAt, pitShape, type FeedingPit } from './FeedingPits';
 import { DATA_BASE } from '../data/loader';
@@ -114,7 +114,7 @@ export class Terrain {
   private readonly uRipRot: IUniform<Vector2> = { value: new Vector2(1, 0) };
   private waves: WaveSet | null = null;
   /** the surf on an open shore (shared with the water): the sand glistens where the swash has just been */
-  private surf: IUniform<Vector4> = surfUniform(null);
+  private surf: SurfUniforms = surfUniforms(null);
 
   constructor(grid: TerrainGrid, palette: Substrate[], pits: FeedingPit[] = []) {
     this.n = grid.n;
@@ -349,7 +349,8 @@ export class Terrain {
       shader.uniforms.uLand = this.uLand;
       shader.uniforms.uSandTint = this.uSandTint;
       shader.uniforms.uRipRot = this.uRipRot;
-      shader.uniforms.uSurf = this.surf;
+      shader.uniforms.uSurf = this.surf.uSurf;
+      shader.uniforms.uSurfDir = this.surf.uSurfDir;
       if (this.waves) Object.assign(shader.uniforms, this.waves.uniforms);
       shader.uniforms.uSpillTex = this.uSpill;
       shader.uniforms.uHalf = { value: this.half };
@@ -593,7 +594,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     float e = vWorldPos.y - uWaterLevel;
     if (e > -0.2 && e < 0.3) {
       vec2 q = vWorldPos.xz;
-      float reach = max(surfSwash(q, uTime).x, max(surfSwash(q, uTime - 0.9).x, surfSwash(q, uTime - 1.8).x));
+      float reach = max(surfSwash(q, uTime).x, surfSwash(q, uTime - 1.2).x);
       gSwash = 1.0 - smoothstep(reach - 0.004, reach + 0.012, e);
       // (the reach wanders along the beach in lobes and tongues, as the swash's own front does)
       float lobes = 0.05 * (vnoise(q * 0.35 + 3.0) - 0.5) + 0.025 * (vnoise(q * 1.3 - 1.0) - 0.5);
@@ -732,7 +733,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   }
 
   /** Share the surf's uniforms with the water (call before the first frame). */
-  setSurf(surf: IUniform<Vector4>): void {
+  setSurf(surf: SurfUniforms): void {
     this.surf = surf;
   }
 

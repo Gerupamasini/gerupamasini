@@ -1,12 +1,12 @@
 import {
   ClampToEdgeWrapping, Color, CubeTexture, DataTexture, FloatType, LinearFilter, NearestFilter, LinearMipmapLinearFilter, Matrix4, RedFormat,
-  RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, type PerspectiveCamera, type Scene, type Vector4, type WebGLRenderer, type WebGLRenderTarget,
+  RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer, type WebGLRenderTarget,
 } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { MirrorView } from '../render/Mirror';
 import type { Terrain } from './Terrain';
 import { WAVES_GLSL, type WaveSet } from './Waves';
-import { makeFoamTexture, SURF_GLSL } from './Surf';
+import { makeFoamTexture, SURF_GLSL, type SurfUniforms } from './Surf';
 
 /** Tiling wave-slope map from a small random spectrum (two-sided, so it tiles), with mipmaps against far shimmer. */
 export function makeWaveNormal(S = 256): DataTexture {
@@ -82,9 +82,10 @@ export class WaterPass {
   mirrorGate: () => boolean = () => true;
   level = 0;
 
-  constructor(terrain: Terrain, waves: WaveSet, surf: { value: Vector4 }) {
+  constructor(terrain: Terrain, waves: WaveSet, surf: SurfUniforms) {
     this.uniforms = {
-      uSurf: surf,
+      uSurf: surf.uSurf,
+      uSurfDir: surf.uSurfDir,
       tFoam: { value: makeFoamTexture() },
       tColor: { value: null as unknown },
       tDepth: { value: null as unknown },
@@ -222,7 +223,7 @@ export class WaterPass {
           float t = -1.0;
           bool traced = false;
           if (surfOn && uSurfSteps > 0.5 && rd.y < -1e-5) {
-            float top = level + 1.5 * uSurf.x, bot = level - 1.0 * uSurf.x;
+            float top = level + 2.2 * uSurf.x, bot = level - 1.5 * uSurf.x;
             float t0 = max((top - uCamPos.y) / rd.y, 0.0), tb = (bot - uCamPos.y) / rd.y;
             float t1 = min(tb, sceneDist), tEnd = min(t1, 35.0);
             vec3 q0 = uCamPos + rd * t0, q1 = uCamPos + rd * tEnd;
@@ -272,8 +273,15 @@ export class WaterPass {
                 Ds = level - g0;
                 vec4 sf = surfAt(S.xz, Ds, uTime, bs);
                 waveN = gSurfN;
-                // (the surface's gradient: the ripples' plus the surf's along the seaward direction; the normal leans against it)
-                vec2 grad = -N.xz / N.y - gg / bs * sf.z * (1.0 - smoothstep(40.0, 120.0, t));
+                // (the surface's gradient: the ripples' plus the surf's; the normal leans against it. Near the viewer the
+                // surf's is measured on the surface itself, so wandering crests and the chop over them are lit as they
+                // lie; further off, the main waves' slope along the seaward direction and the chop's)
+                vec2 surfGrad;
+                if (uSurfSteps > 0.5 && t < 35.0) {
+                  float e0 = surfEta(S.xz, level);
+                  surfGrad = vec2(surfEta(S.xz + vec2(0.08, 0.0), level) - e0, surfEta(S.xz + vec2(0.0, 0.08), level) - e0) / 0.08;
+                } else surfGrad = (-gg / bs * sf.z + gSurfCrossGrad) * (1.0 - smoothstep(40.0, 120.0, t));
+                vec2 grad = -N.xz / N.y + surfGrad;
                 N = normalize(vec3(-grad.x, 1.0, -grad.y));
                 foam = sf.y;
                 lip = sf.w;

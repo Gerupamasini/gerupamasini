@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeFoamTexture, surfUniform } from '../../src/world/Surf';
+import { makeFoamTexture, surfUniforms } from '../../src/world/Surf';
 import { HASHIRIMIZU } from '../../src/world/maps/hashirimizu';
 import { profile, REF_TIDE } from '../../src/world/maps/hashirimizu/shape';
 
@@ -29,8 +29,9 @@ describe('走水 surf and sand', () => {
   });
 
   it('has no surf on a sheltered flat', () => {
-    expect(surfUniform(null).value.w).toBe(0);
-    expect(surfUniform(HASHIRIMIZU.surf).value.w).toBe(1);
+    expect(surfUniforms(null).uSurf.value.w).toBe(0);
+    expect(surfUniforms(null).uSurfDir.value.w).toBe(0);
+    expect(surfUniforms(HASHIRIMIZU.surf).uSurf.value.w).toBe(1);
   });
 
   it('makes a foam lace that tiles without a seam', () => {
