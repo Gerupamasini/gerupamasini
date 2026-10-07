@@ -151,6 +151,7 @@ function aquarium() {
   }
   floor = { heightAt: () => -0.32, waterAt: () => 0.3, meadow: probe };
   const d = addFish(0, 0.06, 0.03, 190);
+  d.recolor(Number(params.get('morph') ?? 0), 0.4);
   d.behaviour.holdGrass({ floor, t: 0 }, 600);
   state.brain = false;
   renderer.toneMappingExposure = 0.9;
@@ -278,7 +279,9 @@ function meadowScene(n = 5) {
   floor = { heightAt, waterAt: () => state.depth, meadow: probe };
   for (let i = 0; i < n; i++) {
     const a = i * 2.4;
-    addFish(i, -0.12 + 0.18 * Math.cos(a) * (i ? 1.6 : 0), 0.05 + 0.5 * Math.sin(a) * (i ? 1 : 0), 160 + 22 * ((i * 37) % 5));
+    const d = addFish(i, -0.12 + 0.18 * Math.cos(a) * (i ? 1.6 : 0), 0.05 + 0.5 * Math.sin(a) * (i ? 1 : 0), 160 + 22 * ((i * 37) % 5));
+    // the first fish (the one the camera follows) in the golden form of the photograph of a live fish
+    if (i === 0) d.recolor(Number(params.get('morph') ?? GOLDEN_MORPH), 0.2);
   }
   state.brain = true;
   renderer.toneMappingExposure = 0.62;
@@ -440,13 +443,35 @@ window.__yj = {
     render();
     return this.state();
   },
-  /** follow fish i's head: camera at an offset from the snout's base */
-  followHead(i = 0, off = [0.06, 0.01, 0.02]) {
-    const b = fishes[i].driver.behaviour;
-    const a = b.occiput(new THREE.Vector3());
+  /** look at fish i's flank square on from `dist` metres (the side nearer the camera), `along` toward the head */
+  followSide(i = 0, dist = 0.2, along = 0, up = 0) {
+    const f = fishes[i];
+    f.root.updateMatrixWorld(true);
+    const bone = f.root.getObjectByName('Body_3');
+    const q = bone.getWorldQuaternion(new THREE.Quaternion());
+    const a = f.driver.anchor().clone().addScaledVector(new THREE.Vector3(0, 0, 1).applyQuaternion(q), along);
+    const left = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+    if (left.dot(camera.position.clone().sub(a)) < 0) left.negate();
     controls.target.copy(a);
-    camera.position.set(a.x + off[0], a.y + off[1], a.z + off[2]);
+    camera.position.copy(a).addScaledVector(left, dist);
+    camera.position.y += up;
     camera.lookAt(a);
+    render();
+    return this.state();
+  },
+  /** follow fish i's head: camera at an offset in the head's own frame (to its left, up, forward) */
+  followHead(i = 0, off = [0.06, 0.01, 0.02]) {
+    const f = fishes[i], b = f.driver.behaviour;
+    const a = b.occiput(new THREE.Vector3());
+    // aim between the eye and the snout tip
+    const tip = b.snoutTip(new THREE.Vector3());
+    const aim = a.clone().lerp(tip, 0.35);
+    controls.target.copy(aim);
+    f.root.updateMatrixWorld(true);
+    const q = f.root.getObjectByName('Head').getWorldQuaternion(new THREE.Quaternion());
+    camera.position.copy(aim).add(new THREE.Vector3(...off).applyQuaternion(q));
+    camera.up.set(0, 1, 0);
+    camera.lookAt(aim);
     render();
     return this.state();
   },

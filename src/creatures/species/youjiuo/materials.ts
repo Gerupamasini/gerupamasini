@@ -42,7 +42,7 @@ export interface Look {
   band: number; dots: number; ocelli: number; mottle: number;
   /** orange hatching, melanophore pepper, silver-gold sheen, belly translucency 0..1 */
   streak: number; pepper: number; sheen: number; translucency: number;
-  /** pale ivory snout, white granules 0..1 */
+  /** paler, translucent snout; white granules 0..1 */
   snout: number; granules: number;
   seed: number;
 }
@@ -56,10 +56,10 @@ export const MORPHS: readonly Omit<Look, 'seed'>[] = [
   { base: c(0.22, 0.27, 0.045), dark: c(0.05, 0.07, 0.012), pale: c(0.62, 0.68, 0.36), belly: c(0.55, 0.6, 0.25), accent: c(0.28, 0.2, 0.03), band: 0.15, dots: 0.4, ocelli: 0.1, mottle: 0.5, streak: 0.2, pepper: 0.7, sheen: 0.3, translucency: 0.55, snout: 0.45, granules: 0.6 },
   // dark brown, banded
   { base: c(0.08, 0.05, 0.022), dark: c(0.016, 0.011, 0.006), pale: c(0.5, 0.45, 0.34), belly: c(0.42, 0.34, 0.2), accent: c(0.16, 0.06, 0.02), band: 0.9, dots: 0.5, ocelli: 0, mottle: 0.6, streak: 0.15, pepper: 1, sheen: 0.2, translucency: 0.35, snout: 0.15, granules: 0.5 },
-  // golden yellow with orange-brown hatching low on the trunk and an ivory snout (a live fish in eelgrass)
-  { base: c(0.5, 0.38, 0.07), dark: c(0.16, 0.07, 0.015), pale: c(0.85, 0.8, 0.55), belly: c(0.72, 0.62, 0.28), accent: c(0.42, 0.12, 0.02), band: 0.1, dots: 0.7, ocelli: 0, mottle: 0.35, streak: 1, pepper: 0.45, sheen: 0.25, translucency: 0.7, snout: 0.9, granules: 1 },
+  // golden yellow with orange-brown hatching low on the trunk and a pale snout (a live fish in eelgrass)
+  { base: c(0.5, 0.38, 0.07), dark: c(0.16, 0.07, 0.015), pale: c(0.85, 0.8, 0.55), belly: c(0.72, 0.62, 0.28), accent: c(0.42, 0.12, 0.02), band: 0.1, dots: 0.7, ocelli: 0, mottle: 0.35, streak: 1, pepper: 0.45, sheen: 0.25, translucency: 0.7, snout: 0.65, granules: 1 },
   // silvery tan, densely peppered, a gold-silver sheen along the trunk (a fresh specimen)
-  { base: c(0.3, 0.25, 0.15), dark: c(0.05, 0.035, 0.018), pale: c(0.75, 0.72, 0.6), belly: c(0.7, 0.66, 0.5), accent: c(0.25, 0.12, 0.05), band: 0.2, dots: 0.3, ocelli: 0.1, mottle: 0.4, streak: 0.1, pepper: 1, sheen: 1, translucency: 0.55, snout: 0.35, granules: 0.5 },
+  { base: c(0.24, 0.2, 0.12), dark: c(0.045, 0.032, 0.016), pale: c(0.7, 0.67, 0.55), belly: c(0.54, 0.5, 0.36), accent: c(0.25, 0.12, 0.05), band: 0.2, dots: 0.3, ocelli: 0.1, mottle: 0.4, streak: 0.1, pepper: 1, sheen: 0.85, translucency: 0.55, snout: 0.35, granules: 0.5 },
   // reddish brown with white spots
   { base: c(0.24, 0.09, 0.035), dark: c(0.07, 0.025, 0.01), pale: c(0.72, 0.64, 0.5), belly: c(0.62, 0.5, 0.3), accent: c(0.36, 0.1, 0.03), band: 0.3, dots: 1, ocelli: 0.15, mottle: 0.7, streak: 0.3, pepper: 0.8, sheen: 0.3, translucency: 0.5, snout: 0.3, granules: 0.8 },
   // pale tan with a ladder of ocelli
@@ -292,20 +292,21 @@ float yjRough = 0.55, yjCoat = 0.18, yjMetal = 0.0, yjIri = 0.0, yjThin = 0.0, y
     float rr = length(q);
     float ang = atan(q.y, q.x);
     float pupil = 1.0 - smoothstep(${f(EYE.pupil - 0.025)}, ${f(EYE.pupil + 0.012)}, rr * (1.0 + 0.035 * sin(ang * 2.0 + 0.4)));
-    // the iris: fine radial fibres, olive-brown above (the head's own colour), golden below
+    // the iris: fine radial fibres, dark olive-brown (the head's own pigment), a dull bronze below
     float fib = (0.6 + 0.4 * yjNoise(vec2(ang * 22.0, rr * 7.0))) * (0.85 + 0.25 * yjNoise(vec2(ang * 5.0, rr * 2.0) + 4.0));
-    vec3 iris = mix(mix(uBase, uDark, 0.45) * 1.2, vec3(0.62, 0.46, 0.14), smoothstep(0.15, -0.35, q.y)) * fib;
-    // the bright gold ring round the pupil, gold flecks on the outer iris, the lower iris paler gold
-    float ring = smoothstep(0.09, 0.0, abs(rr - ${f(EYE.pupil + 0.07)})) * (0.75 + 0.25 * yjNoise(vec2(ang * 12.0, 1.0)));
-    iris = mix(iris, vec3(0.9, 0.68, 0.22), ring * 0.8);
-    float fl = yjDots(vec2(ang * 7.0, rr * 16.0), 0.55, 0.12, 0.3, 4.0);
-    iris = mix(iris, vec3(0.78, 0.6, 0.24), fl * smoothstep(${f(EYE.pupil + 0.1)}, ${f(EYE.pupil + 0.2)}, rr) * 0.55);
-    iris = mix(iris, vec3(0.82, 0.66, 0.28), smoothstep(0.0, -0.45, q.y) * smoothstep(${f(EYE.pupil + 0.05)}, ${f(EYE.pupil + 0.15)}, rr) * 0.3);
+    vec3 iris = mix(mix(uBase, uDark, 0.6), vec3(0.4, 0.28, 0.08), 0.15 + 0.4 * smoothstep(0.15, -0.35, q.y)) * fib;
+    // a thin gold ring round the pupil, sparse gold flecks on the outer iris, its lower part a little paler
+    float ring = smoothstep(0.05, 0.0, abs(rr - ${f(EYE.pupil + 0.045)})) * (0.7 + 0.3 * yjNoise(vec2(ang * 12.0, 1.0)));
+    iris = mix(iris, vec3(0.72, 0.52, 0.16), ring * 0.75);
+    float fl = yjDots(vec2(ang * 7.0, rr * 16.0), 0.4, 0.12, 0.28, 4.0);
+    iris = mix(iris, vec3(0.62, 0.46, 0.17), fl * smoothstep(${f(EYE.pupil + 0.1)}, ${f(EYE.pupil + 0.2)}, rr) * 0.5);
+    iris = mix(iris, vec3(0.55, 0.43, 0.2), smoothstep(0.0, -0.45, q.y) * smoothstep(${f(EYE.pupil + 0.05)}, ${f(EYE.pupil + 0.15)}, rr) * 0.2);
     // the dark limbus, and the snout's dark line running through the iris
     iris *= mix(1.0, 0.6, smoothstep(0.74, 0.95, rr));
     iris = mix(iris, uDark * 0.4, smoothstep(0.13, 0.05, abs(q.y - 0.02)) * smoothstep(${f(EYE.pupil + 0.12)}, ${f(EYE.pupil + 0.2)}, rr) * 0.75);
     col = mix(iris, vec3(0.003, 0.004, 0.005), pupil);
-    yjRough = 0.05; yjCoat = 1.0;
+    // (the cornea against water barely reflects: its index is nearly the water's)
+    yjRough = 0.05; yjCoat = mix(0.2, 1.0, uYjAir);
   } else if (vPart > 2.5) {
     // ---- LOD2's painted tail fan
     col = mix(uDark, uAccent, 0.5);
@@ -383,9 +384,12 @@ float yjRough = 0.55, yjCoat = 0.18, yjMetal = 0.0, yjIri = 0.0, yjThin = 0.0, y
     // ---- the head
     if (head > 0.0) {
       float lat = abs(sphi);
-      // the snout: ivory and translucent, a little darker along its top
+      // the snout: paler and translucent, a little darker along its top, still peppered with melanophores
       float snoutK = smoothstep(${f(S_SNOUT + 0.008)}, ${f(S_SNOUT - 0.012)}, s);
-      col = mix(col, mix(uPale * 0.95, uBase, 0.25 * dors), uPattern3.x * snoutK * head);
+      float snK = uPattern3.x * snoutK * head * 0.8;
+      vec3 snoutCol = mix(mix(uPale * 0.88, uBase * 1.15, 0.35), uBase, 0.3 * dors) * (0.88 + 0.24 * mott);
+      col = mix(col, snoutCol, snK);
+      col = mix(col, uDark * 0.5, mel * 0.6 * snK);
       // the dark line along the snout's side through the eye, fainter on a pale snout
       float stripe = smoothstep(0.5, 0.8, lat) * smoothstep(0.3, 0.1, abs(cphi - 0.1)) * smoothstep(${f(S_HEAD + 0.004)}, ${f(S_HEAD - 0.012)}, s);
       col = mix(col, uDark * 0.8, stripe * 0.7 * (1.0 - 0.6 * uPattern3.x * snoutK) * head);
@@ -404,7 +408,7 @@ float yjRough = 0.55, yjCoat = 0.18, yjMetal = 0.0, yjIri = 0.0, yjThin = 0.0, y
       plateH += 0.09 * rays * op;
       float slit = op * smoothstep(0.0025, 0.0, abs(s - ${f(S_HEAD - 0.003)})) * smoothstep(0.3, 0.6, cphi);
       col *= 1.0 - 0.7 * slit;
-      yjThin += 0.55 * uPattern3.x * snoutK;
+      yjThin += 0.35 * uPattern3.x * snoutK;
     }
     sheen = max(sheen, op * (0.25 + 0.6 * uPattern2.z));
 #ifndef YJ_LOW
@@ -442,12 +446,12 @@ float yjRough = 0.55, yjCoat = 0.18, yjMetal = 0.0, yjIri = 0.0, yjThin = 0.0, y
     }
 #endif
     // the iridophores' mirror: pale gold to silver, broken by the pigment over it
-    col = mix(col, mix(col, vec3(0.86, 0.78, 0.55), 0.7) * (1.0 - 0.5 * mel), sheen);
+    col = mix(col, mix(col, vec3(0.8, 0.72, 0.48), 0.55) * (1.0 - 0.5 * mel), sheen);
     // ---- the surface: a thin uneven gloss of mucus over granular skin and bone
     float mucus = yjNoise(sk / 0.005 + uSeed * 3.0);
     yjRough = 0.6 - 0.14 * ridge - 0.12 * gran - 0.06 * plateH * body + 0.12 * (mucus - 0.5) - 0.15 * sheen;
-    yjCoat = 0.08 + 0.2 * smoothstep(0.35, 0.8, mucus) + 0.1 * ridge;
-    yjMetal = 0.5 * sheen * (1.0 - 0.6 * mel);
+    yjCoat = (0.08 + 0.2 * smoothstep(0.35, 0.8, mucus) + 0.1 * ridge) * mix(0.5, 1.0, uYjAir);
+    yjMetal = 0.36 * sheen * (1.0 - 0.6 * mel);
     yjIri = 0.75 * sheen;
     yjRough = mix(yjRough, 0.28, sheen * 0.7);
     yjH = (plateH * 0.35 + 0.2 * ridge - 0.28 * joint * body + 0.2 * gran * relief + 0.1 * dotK) * relief * ${f(MODEL_TL * 0.0012)};
@@ -467,6 +471,21 @@ const BODY_LIGHT = /* glsl */ `
 {
   // the relief of the skin: plates, seams, ridges, granules, the orbit's and the gill cover's rays
   normal = yjBump(-vViewPosition, normal, yjH * uScale);
+}
+`;
+/**
+ * Skin in water: the mucus' index (about 1.35) is close to the water's, so its own mirror is far weaker than in air;
+ * what still shines under water is mostly the iridophores' guanine (the metallic sheen), which keeps its reflectance.
+ */
+const WET = /* glsl */ `
+{
+  float yjWet = mix(0.5, 1.0, uYjAir);
+  material.specularColor *= yjWet;
+  material.specularColorBlended = mix(material.specularColor, diffuseColor.rgb, metalnessFactor);
+  material.specularF90 = mix(yjWet, 1.0, metalnessFactor);
+#ifdef USE_CLEARCOAT
+  material.clearcoatF90 = yjWet;
+#endif
 }
 `;
 /** the mucus is smoother than the skin under it: its highlights follow the relief only half way */
@@ -580,6 +599,7 @@ function bodyMaterial(own: YoujiuoMaterials['own'], low: boolean): MeshPhysicalM
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${low ? '' : BODY_LIGHT}`)
       .replace('#include <clearcoat_normal_fragment_maps>', `#include <clearcoat_normal_fragment_maps>\n${low ? '' : COAT_NORMAL}`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+${WET}
 #ifdef USE_CLEARCOAT
   material.clearcoat = yjCoat;
 #endif
