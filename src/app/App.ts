@@ -292,7 +292,6 @@ export class App {
       const dayNo = Math.floor((this.clock.nowGame() + 9 * 3600000) / 86400000);
       this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; }, dayNo);
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
-      this.player.obstacles = this.world.obstacles;
       this.player.eyeHeight = this.settings.eyeHeight;
       ui.loading.value = { frac: 0.7, label: t('loading.models') };
       this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed, map.habitat?.minSpawnDist_m);

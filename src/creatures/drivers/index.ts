@@ -7,7 +7,7 @@ import { PloverDriver } from '../species/plover/PloverDriver';
 import { AsariDriver } from '../asari/Asari.js';
 import { FORMS } from '../asari/AsariModel.js';
 import { CrabDriver, HermitDriver, SnailDriver } from '../species/shore/crawlers';
-import { MulletDriver, OysterDriver, WormDriver } from '../species/shore/others';
+import { MulletDriver, WormDriver } from '../species/shore/others';
 
 export interface DriverEntry {
   create(): Driver;
@@ -30,5 +30,4 @@ export const DRIVERS: Record<string, DriverEntry> = {
   snail: { create: () => new SnailDriver(), placeholder: () => SnailDriver.makeModel(), preview: (seed) => SnailDriver.makePreview(seed) },
   mullet: { create: () => new MulletDriver(), placeholder: () => MulletDriver.makeModel(), preview: () => MulletDriver.makePreview() },
   worm: { create: () => new WormDriver(), placeholder: () => WormDriver.makeModel(), preview: (seed) => WormDriver.makePreview(seed) },
-  oyster: { create: () => new OysterDriver(), placeholder: () => OysterDriver.makeModel(), preview: (seed) => OysterDriver.makePreview(seed) },
 };

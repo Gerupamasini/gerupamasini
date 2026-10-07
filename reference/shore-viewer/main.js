@@ -1,4 +1,4 @@
-// The 走水 shore animals (ケフサイソガニ, ユビナガホンヤドカリ, アラムシロ, ボラ, ミズヒキゴカイ, マガキ) on a patch of
+// The 走水 shore animals (ケフサイソガニ, ユビナガホンヤドカリ, アラムシロ, ボラ, ミズヒキゴカイ) on a patch of
 // sand, run by their game drivers. "flat" is the field (water over the sand, or none), "tank" puts walls round them as
 // the case and the tank do. ?capture hides the panel and exposes window.__shore for scripted renders.
 import * as THREE from 'three';
@@ -45,7 +45,7 @@ scene.add(sand);
 const water = new THREE.Mesh(new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x6f9aa0, transparent: true, opacity: 0.18, roughness: 0.1 }));
 scene.add(water);
 
-const SPECIES = ['hemigrapsus_penicillatus', 'pagurus_minutus', 'reticunassa_festiva', 'mugil_cephalus', 'cirriformia_comosa', 'crassostrea_gigas'];
+const SPECIES = ['hemigrapsus_penicillatus', 'pagurus_minutus', 'reticunassa_festiva', 'mugil_cephalus', 'cirriformia_comosa'];
 const base = import.meta.env.BASE_URL ?? '/';
 const defs = {};
 for (const id of SPECIES) defs[id] = SpeciesSchema.parse(await (await fetch(`${base}data/species/${id}.json`)).json());

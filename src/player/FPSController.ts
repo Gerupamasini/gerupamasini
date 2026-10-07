@@ -48,8 +48,6 @@ export class FPSController {
   private readonly tmpRight = new Vector3();
   /** the deepest water the player can wade into: boots (35 cm) unless the map says chest waders */
   readonly wadeDepth: number;
-  /** round obstacles to walk around (rocks): centre and radius (m) */
-  obstacles: { x: number; z: number; r: number }[] = [];
 
   constructor(
     private readonly camera: PerspectiveCamera,
@@ -192,7 +190,6 @@ export class FPSController {
     if (x < b[0][0] || x > b[1][0] || z < b[0][1] || z > b[1][1]) return false;
     for (const ne of this.map.bounds.noEntry) if (x >= ne[0][0] && x <= ne[1][0] && z >= ne[0][1] && z <= ne[1][1]) return false;
     if (this.habitat.depthAt(x, z) > this.wadeDepth) return false;
-    for (const o of this.obstacles) { const dx = x - o.x, dz = z - o.z, rr = o.r + 0.18; if (dx * dx + dz * dz < rr * rr) return false; }
     const h = this.terrain.heightAt(x, z);
     if (h - this.position.y > 0.6) return false; // too steep a step
     return true;

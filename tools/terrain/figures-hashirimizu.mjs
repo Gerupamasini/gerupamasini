@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Figures for docs/maps/hashirimizu/ straight from the shared shape (src/world/maps/hashirimizu/shape.ts):
-//   plan.png     the shore from above at the exploring tide (sand, clam flat, eelgrass classes, rocks, water depth)
+//   plan.png     the shore from above at the exploring tide (sand, clam flat, eelgrass classes, water depth)
 //   profile.svg  the cross-section with the zones, the tides and how far chest waders go
 //   node tools/terrain/figures-hashirimizu.mjs
 import fs from 'node:fs';
@@ -13,7 +13,7 @@ const shape = await import(path.join(root, 'src', 'world', 'maps', 'hashirimizu'
 const mapDef = JSON.parse(fs.readFileSync(path.join(root, 'public', 'data', 'maps', 'hashirimizu.json'), 'utf8'));
 const outDir = path.join(root, 'docs', 'maps', 'hashirimizu');
 fs.mkdirSync(outDir, { recursive: true });
-const { heightAt, substrateAt, eelgrassField, rockiness, ROCKS, ZERO_X, REF_TIDE, ALONG } = shape;
+const { heightAt, substrateAt, eelgrassField, ZERO_X, REF_TIDE, ALONG } = shape;
 const WADE = mapDef.wading.maxDepth_m;
 
 // ---------------------------------------------------------------- plan: sea to the right (+x), north (-z) up
@@ -40,18 +40,6 @@ for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
   const k = (j * W + i) * 4;
   png.data[k] = c[0]; png.data[k + 1] = c[1]; png.data[k + 2] = c[2]; png.data[k + 3] = 255;
 }
-// rocks as dark discs, oysters on them as pale dots
-for (const r of ROCKS) {
-  for (let j = Math.floor((r.z - r.r - Z0) * S); j <= Math.ceil((r.z + r.r - Z0) * S); j++) for (let i = Math.floor((r.x - r.r - X0) * S); i <= Math.ceil((r.x + r.r - X0) * S); i++) {
-    if (i < 0 || j < 0 || i >= W || j >= H) continue;
-    const x = X0 + (i + 0.5) / S, z = Z0 + (j + 0.5) / S;
-    const rr = Math.hypot(x - r.x, z - r.z) / r.r;
-    if (rr > 1) continue;
-    const k = (j * W + i) * 4;
-    const v = 70 + 40 * (1 - rr) + (r.oysters > 0.3 && rr > 0.7 ? 90 : 0);
-    png.data[k] = v; png.data[k + 1] = v * 0.97; png.data[k + 2] = v * 0.92;
-  }
-}
 fs.writeFileSync(path.join(outDir, 'plan.png'), PNG.sync.write(png));
 
 // ---------------------------------------------------------------- profile
@@ -59,7 +47,7 @@ const D0 = -14, D1 = 42, HLO = -2.2, HHI = 2.8;
 const PW = 1000, PH = 430, ML = 56, MR = 16, MT = 24, MB = 52;
 const px = (d) => ML + ((d - D0) / (D1 - D0)) * (PW - ML - MR);
 const py = (h) => MT + ((HHI - h) / (HHI - HLO)) * (PH - MT - MB);
-const meanH = (d) => { let s = 0, n = 0; for (let z = -ALONG + 4; z <= ALONG - 4; z += 2) { if (rockiness(ZERO_X + d, z) > 0.05) continue; s += heightAt(ZERO_X + d, z); n++; } return n ? s / n : heightAt(ZERO_X + d, 0); };
+const meanH = (d) => { let s = 0, n = 0; for (let z = -ALONG + 4; z <= ALONG - 4; z += 2) { s += heightAt(ZERO_X + d, z); n++; } return s / n; };
 const ground = [];
 for (let d = D0; d <= D1; d += 0.1) ground.push([px(d), py(meanH(d))]);
 const tides = [

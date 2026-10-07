@@ -111,7 +111,6 @@ export class Spawner {
               for (let tries = 0; tries < 8 && !ok; tries++) {
                 x = cx + rng.range(-cs / 2, cs / 2);
                 z = cz + rng.range(-cs / 2, cs / 2);
-                if (h.inSolid(x, z)) continue;
                 const s = h.sample(x, z, env.gameMs);
                 const aquatic = isAquatic(sp);
                 // aquatic animals need water over their backs: the rule's floor or the size-based minimum, whichever is more

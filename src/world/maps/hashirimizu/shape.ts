@@ -1,12 +1,12 @@
 /**
  * 走水 (Hashirimizu, toward 観音崎): the shape of the shore as pure functions, shared by the terrain bake
- * (tools/terrain/bake-hashirimizu.mjs) and the game (eelgrass, clam beds, rocks, habitat). No imports, so Node can
+ * (tools/terrain/bake-hashirimizu.mjs) and the game (eelgrass, clam beds, habitat). No imports, so Node can
  * run it straight from the bake script.
  *
  * A compressed pocket shore, not a survey: 80 m of coast, a low seawall, a small sand beach and then one gentle,
  * nearly constant slope out into the bay, a touch gentler over the clam flat. World frame: the sea lies to +x (east,
  * as at 走水 the sun comes up over the water), the coast runs along z; looking out to sea, left is -z (north, toward
- * the rocks of 観音崎) and right is +z (south, the thicker eelgrass).
+ * 観音崎) and right is +z (south, the thicker eelgrass).
  *
  * Distances "from the shore" (d) are measured seaward from the 0 m line, the foot of the dry beach:
  *     d < -10.6   the road and the grass behind the seawall
@@ -93,61 +93,10 @@ export function vnoise(x: number, z: number, seed: number): number {
 }
 const fbm = (x: number, z: number, seed: number): number => 0.55 * vnoise(x, z, seed) + 0.3 * vnoise(x * 2.03, z * 2.03, seed + 1) + 0.15 * vnoise(x * 4.1, z * 4.1, seed + 2);
 
-// ------------------------------------------------------------------ rocks
-export interface Rock { x: number; z: number; r: number; h: number; seed: number; oysters: number }
-
-/**
- * Small rocks: most of them at the left (north) end, in clusters from the beach out into the eelgrass, a few alone in
- * the middle, hardly any to the right. Oysters crust the ones in the intertidal.
- */
-export const ROCKS: Rock[] = (() => {
-  let s = 0x5eed1234 >>> 0;
-  const rnd = () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const out: Rock[] = [];
-  const add = (x: number, z: number, r: number) => {
-    if (out.some((o) => Math.hypot(o.x - x, o.z - z) < (o.r + r) * 0.9)) return;
-    const d = offshore(x);
-    const ground = profile(d);
-    // oysters live from about mid tide down to the low-water mark
-    const oysters = sstep(0.55, 0.2, ground) * sstep(-1.25, -0.8, ground);
-    out.push({ x, z, r, h: r * (0.55 + 0.6 * rnd()), seed: Math.floor(rnd() * 1e9), oysters });
-  };
-  const clusters: [number, number, number][] = [
-    // [d, z, count]: the rocky north end
-    [1, -36, 9], [5, -31, 12], [9, -36, 8], [3, -24, 7], [12, -27, 9], [16, -34, 7], [7, -19, 6], [19, -26, 5], [-4, -33, 6],
-    // a few in the middle and to the right
-    [8, -6, 3], [14, 4, 2], [3, 9, 2], [10, 22, 2],
-  ];
-  for (const [d, z, n] of clusters) {
-    for (let k = 0; k < n; k++) {
-      const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * (1.2 + n * 0.25);
-      const r = 0.1 + Math.pow(rnd(), 1.8) * (d < 0 ? 0.35 : 0.5);
-      add(ZERO_X + d + Math.cos(a) * rr, z + Math.sin(a) * rr, r);
-    }
-  }
-  // loose stones scattered over the north end
-  for (let k = 0; k < 60; k++) {
-    const z = -ALONG + Math.pow(rnd(), 1.6) * 34, d = -6 + rnd() * 26;
-    add(ZERO_X + d, z, 0.05 + rnd() * 0.12);
-  }
-  return out;
-})();
-
-/** 0..1: how rocky the ground is here (rocks, oyster shell and gravel around them) */
-export function rockiness(x: number, z: number): number {
-  let v = 0;
-  for (const r of ROCKS) {
-    const dd = Math.hypot(x - r.x, z - r.z);
-    if (dd < r.r + 1.6) v = Math.max(v, 1 - sstep(r.r * 0.8, r.r + 1.6, dd));
-  }
-  // the north end in general: stones in the sand
-  return Math.max(v, 0.35 * sstep(-0.35, -0.85, side(z)) * sstep(-8, -4, offshore(x)) * (1 - sstep(18, 26, offshore(x))));
-}
-
 // ------------------------------------------------------------------ ground
 /**
- * Ground height (T.P. m): the profile, the seawall and the land behind it, a few centimetres of slow alongshore
- * undulation (the slope stays one slope), and the shallow scour around the rocks that holds water at low tide.
+ * Ground height (T.P. m): the profile, the seawall and the land behind it, and a few centimetres of slow alongshore
+ * undulation (the slope stays one slope).
  */
 export function heightAt(x: number, z: number): number {
   const d = offshore(x);
@@ -164,13 +113,6 @@ export function heightAt(x: number, z: number): number {
   h += 0.08 * (fbm(z * 0.045 + 3.1, d * 0.04, 7) - 0.5) * sstep(-6, 2, d);
   // a small berm at the top of the beach, where the high tides leave their line
   h += 0.06 * Math.exp(-((d + 5.5) ** 2) / 2.5);
-  // around a rock the water scours a shallow moat (rock pools at low water)
-  for (const r of ROCKS) {
-    if (r.r < 0.2) continue;
-    const dd = Math.hypot(x - r.x, z - r.z);
-    if (dd > r.r * 3) continue;
-    h -= 0.06 * Math.min(1, r.r / 0.4) * sstep(r.r * 3, r.r * 1.1, dd) * sstep(-3, 2, d);
-  }
   return h;
 }
 
@@ -178,8 +120,6 @@ export function heightAt(x: number, z: number): number {
 export function substrateAt(x: number, z: number): number {
   const d = offshore(x), sd = side(z);
   if (d <= WALL_FOOT) return 3;
-  const rk = rockiness(x, z);
-  if (rk > 0.55 && vnoise(x * 1.3, z * 1.3, 17) > 0.35) return 3;
   // finer sediment offshore and to the right, where the eelgrass holds it
   const fines = sstep(9, 16, d) * (0.55 + 0.35 * sd) + 0.25 * (vnoise(x * 0.25, z * 0.25, 23) - 0.5) + 0.25 * sstep(26, 40, d);
   if (fines > 0.95 && sd > 0.2) return 2;
@@ -192,13 +132,13 @@ export function substrateAt(x: number, z: number): number {
 export function eelgrassZone(x: number, z: number): number {
   const d = offshore(x);
   if (Math.abs(z) > ALONG + 4) return 0;
-  return sstep(10.5, 12.5, d) * (1 - sstep(30, 38, d)) * (1 - 0.6 * sstep(0.4, 0.8, rockiness(x, z)));
+  return sstep(10.5, 12.5, d) * (1 - sstep(30, 38, d));
 }
 
 /**
  * The bed's pattern, 0..1 (thresholds: dense > 0.6, sparse > 0.53, a small clump > 0.47, else bare): going out from
  * the clam flat, a dense band, a bare strip, sparse plants, a small sandy gap, and dense again, the bands wavering and
- * broken up along the coast; denser to the right (south), thinner among the rocks on the left.
+ * broken up along the coast; denser to the right (south), thinner to the left.
  */
 export function eelgrassField(x: number, z: number): number {
   const zone = eelgrassZone(x, z);

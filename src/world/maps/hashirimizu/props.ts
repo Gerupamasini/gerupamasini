@@ -1,5 +1,5 @@
 import {
-  BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, Color, CylinderGeometry, DoubleSide, IcosahedronGeometry, InstancedBufferAttribute,
+  BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, Color, CylinderGeometry, DoubleSide, InstancedBufferAttribute,
   InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Object3D, PlaneGeometry, Quaternion, RepeatWrapping, SRGBColorSpace, TubeGeometry, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -8,7 +8,7 @@ import type { Terrain } from '../../Terrain';
 import { valveFragment } from '../../PitDebris';
 import { FORMS, sharedGeometry } from '../../../creatures/asari/AsariModel.js';
 import { makeShellOuterMaterial } from '../../../creatures/asari/AsariMaterial.js';
-import { ALONG, HALF, ROCKS, WALL_FOOT, WALL_TOP, WALL_TOP_D, ZERO_X, profile, rockiness, vnoise } from './shape';
+import { ALONG, HALF, WALL_FOOT, WALL_TOP, WALL_TOP_D, ZERO_X, profile, vnoise } from './shape';
 
 const UP = new Vector3(0, 1, 0);
 const own = <T extends Object3D>(o: T): T => { o.traverse((c) => { c.userData.mapOwned = true; }); return o; };
@@ -117,139 +117,8 @@ function seawall(): Object3D[] {
   return [wall, posts, ...rails];
 }
 
-// ------------------------------------------------------------------ rocks and oysters
-/** A rock: an icosphere roughened by noise, flattened, with a darker, algae-green underside baked into its colours. */
-function rockGeometry(seed: number): BufferGeometry {
-  const g = new IcosahedronGeometry(1, 3);
-  const p = g.getAttribute('position') as BufferAttribute;
-  const col = new Float32Array(p.count * 3);
-  const v = new Vector3();
-  for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i);
-    const n1 = vnoise(v.x * 1.7 + seed, v.z * 1.7 - seed, 101 + seed) - 0.5, n2 = vnoise(v.y * 3.3 + seed * 2, v.x * 3.3, 107 + seed) - 0.5;
-    // facets: a few flat-ish planes cut the sphere, as on a broken stone
-    const facet = Math.max(0, Math.abs(v.x * 0.8 + v.z * 0.5) - 0.75) * 0.6;
-    const r = 1 + 0.32 * n1 + 0.12 * n2 - facet;
-    v.multiplyScalar(r);
-    v.y *= v.y < 0 ? 0.5 : 0.75;
-    p.setXYZ(i, v.x, v.y, v.z);
-    // colour: grey-brown mudstone, lighter on top where it dries, dark and green-tinged below
-    const top = Math.max(0, Math.min(1, v.y * 1.4 + 0.4));
-    const grain = 0.85 + 0.3 * (vnoise(v.x * 6, v.z * 6 + v.y * 4, 113 + seed));
-    col[i * 3] = (0.2 + 0.12 * top) * grain;
-    col[i * 3 + 1] = (0.2 + 0.11 * top) * grain;
-    col[i * 3 + 2] = (0.17 + 0.09 * top) * grain;
-    if (v.y < 0.05) { col[i * 3] *= 0.75; col[i * 3 + 1] *= 0.85; col[i * 3 + 2] *= 0.7; }
-  }
-  g.setAttribute('color', new BufferAttribute(col, 3));
-  g.computeVertexNormals();
-  return g;
-}
-
-/** An oyster valve: an irregular, ruffled, cupped plate (unit length along x). */
-function oysterGeometry(seed: number): BufferGeometry {
-  const rng = new Rng(seed);
-  const rings = 4, segs = 18;
-  const pos: number[] = [], col: number[] = [], idx: number[] = [];
-  pos.push(0, 0.12, 0); col.push(0.2, 0.18, 0.17);
-  const radius: number[] = [];
-  for (let s = 0; s < segs; s++) radius.push(0.75 + 0.3 * rng.next());
-  for (let r = 1; r <= rings; r++) {
-    const t = r / rings;
-    for (let s = 0; s < segs; s++) {
-      const a = (s / segs) * Math.PI * 2;
-      const rr = t * radius[s] * 0.5;
-      // elongated, the ruffled growth edge waving up and down
-      const ruffle = t > 0.7 ? 0.05 * Math.sin(a * 9 + seed) : 0;
-      pos.push(Math.cos(a) * rr * 1.5, 0.12 * (1 - t * t) + ruffle, Math.sin(a) * rr);
-      // (linear) weathered grey-brown, the frilled growing edge purple-black
-      const edge = t > 0.85 ? 1 : 0;
-      const shade = 0.16 + 0.1 * rng.next();
-      col.push(shade * (1 - 0.45 * edge) + 0.01, shade * (0.95 - 0.55 * edge), shade * (0.88 - 0.4 * edge) + 0.02 * edge);
-    }
-  }
-  for (let s = 0; s < segs; s++) idx.push(0, 1 + ((s + 1) % segs), 1 + s);
-  for (let r = 1; r < rings; r++) for (let s = 0; s < segs; s++) {
-    const a = 1 + (r - 1) * segs + s, b = 1 + (r - 1) * segs + ((s + 1) % segs), c = a + segs, d = b + segs;
-    idx.push(a, b, c, b, d, c);
-  }
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
-  g.setAttribute('color', new BufferAttribute(new Float32Array(col), 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  return g;
-}
-
-function rocksAndOysters(terrain: Terrain, rng: Rng): Object3D[] {
-  const variants = [0, 1, 2, 3, 4].map((k) => rockGeometry(k * 7 + 3));
-  const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 });
-  const byVariant: number[][] = variants.map(() => []);
-  ROCKS.forEach((r, i) => byVariant[r.seed % variants.length].push(i));
-  const out: Object3D[] = [];
-  const o = new Object3D(), tilt = new Quaternion(), n = new Vector3(), tint = new Color();
-  const oysterSites: { x: number; y: number; z: number; nx: number; ny: number; nz: number; s: number }[] = [];
-  variants.forEach((geo, vi) => {
-    const list = byVariant[vi];
-    if (!list.length) return;
-    const im = new InstancedMesh(geo, mat, list.length);
-    list.forEach((ri, k) => {
-      const r = ROCKS[ri];
-      const ground = terrain.heightAt(r.x, r.z);
-      terrain.normalAt(r.x, r.z, n);
-      const sx = r.r * (0.85 + 0.3 * ((r.seed >>> 3) % 100) / 100), sz = r.r * (0.85 + 0.3 * ((r.seed >>> 9) % 100) / 100);
-      o.position.set(r.x, ground + r.h * 0.12, r.z);
-      o.quaternion.setFromAxisAngle(UP, ((r.seed >>> 5) % 628) / 100).premultiply(tilt.setFromUnitVectors(UP, n));
-      o.scale.set(sx, r.h, sz);
-      o.updateMatrix();
-      im.setMatrixAt(k, o.matrix);
-      im.setColorAt(k, tint.setScalar(0.85 + 0.3 * (((r.seed >>> 11) % 100) / 100)));
-      // oysters on the lower flanks of the rocks in the oyster zone
-      const count = Math.round(r.oysters * Math.min(40, (r.r * r.r) / 0.0025 * 0.5));
-      for (let c = 0; c < count; c++) {
-        const a = rng.range(0, Math.PI * 2), elev = rng.range(-0.15, 0.55);
-        const lx = Math.cos(a) * Math.cos(elev), ly = Math.sin(elev), lz = Math.sin(a) * Math.cos(elev);
-        oysterSites.push({ x: r.x + lx * sx * 0.95, y: ground + r.h * 0.12 + ly * r.h * 0.72, z: r.z + lz * sz * 0.95, nx: lx / sx, ny: ly / r.h, nz: lz / sz, s: rng.range(0.03, 0.08) });
-      }
-    });
-    im.castShadow = true;
-    im.receiveShadow = true;
-    im.name = `rocks-${vi}`;
-    out.push(im);
-  });
-  // loose oyster shells and clumps on the sand among the rocks (left end)
-  for (let k = 0; k < 220; k++) {
-    const z = -ALONG + Math.pow(rng.next(), 1.4) * 40, d = rng.range(-4, 16), x = ZERO_X + d;
-    if (rockiness(x, z) < 0.25 && rng.chance(0.7)) continue;
-    const y = terrain.heightAt(x, z);
-    terrain.normalAt(x, z, n);
-    oysterSites.push({ x, y: y + 0.004, z, nx: n.x + rng.range(-0.3, 0.3), ny: n.y, nz: n.z + rng.range(-0.3, 0.3), s: rng.range(0.03, 0.07) });
-  }
-  const oGeos = [oysterGeometry(11), oysterGeometry(23), oysterGeometry(37)];
-  const oMat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0, side: DoubleSide });
-  const per = Math.ceil(oysterSites.length / oGeos.length);
-  oGeos.forEach((g, gi) => {
-    const sites = oysterSites.slice(gi * per, (gi + 1) * per);
-    if (!sites.length) return;
-    const im = new InstancedMesh(g, oMat, sites.length);
-    sites.forEach((s, k) => {
-      n.set(s.nx, s.ny, s.nz).normalize();
-      o.position.set(s.x, s.y, s.z);
-      o.quaternion.setFromAxisAngle(UP, rng.range(0, Math.PI * 2)).premultiply(tilt.setFromUnitVectors(UP, n));
-      o.scale.setScalar(s.s);
-      o.updateMatrix();
-      im.setMatrixAt(k, o.matrix);
-      im.setColorAt(k, tint.setRGB(0.95 + rng.range(-0.1, 0.1), 0.92 + rng.range(-0.1, 0.05), 0.95 + rng.range(-0.05, 0.1)));
-    });
-    im.receiveShadow = true;
-    im.name = `oysters-${gi}`;
-    out.push(im);
-  });
-  return out;
-}
-
 // ------------------------------------------------------------------ shells, driftwood, the wrack line, grass
-/** アサリ and ハマグリ valves, whole and broken, thickest along the drift line and among the stones. */
+/** アサリ and ハマグリ valves, whole and broken, thickest along the drift line. */
 function beachShells(terrain: Terrain, rng: Rng): Object3D[] {
   const out: Object3D[] = [];
   for (const form of [FORMS.asari, FORMS.hamaguri]) {
@@ -264,10 +133,10 @@ function beachShells(terrain: Terrain, rng: Rng): Object3D[] {
       const im = new InstancedMesh(geo, mat, N);
       const o = new Object3D(), tilt = new Quaternion(), n = new Vector3();
       for (let k = 0; k < N; k++) {
-        // the drift line at the top of the beach, the clam flat, and among the stones on the left
+        // the drift line at the top of the beach, the clam flat, and the beach toe between
         const which = rng.next();
-        const d = which < 0.45 ? -5.5 + rng.normal() * 0.8 : which < 0.8 ? rng.range(3, 12) : rng.range(-3, 8);
-        const z = which >= 0.8 ? -ALONG + Math.pow(rng.next(), 1.3) * 30 : rng.range(-ALONG, ALONG);
+        const d = which < 0.45 ? -5.5 + rng.normal() * 0.8 : which < 0.8 ? rng.range(3, 12) : rng.range(-3, 3);
+        const z = rng.range(-ALONG, ALONG);
         const x = ZERO_X + d;
         const len = (form === FORMS.asari ? rng.range(0.022, 0.04) : rng.range(0.035, 0.065)) * (1 - 0.15 * ki);
         terrain.normalAt(x, z, n);
@@ -384,8 +253,8 @@ function grass(terrain: Terrain, rng: Rng): Object3D {
   return im;
 }
 
-/** Everything the 走水 shore stands on its terrain: the seawall, rocks and oysters, shells, driftwood, the wrack, grass. */
+/** Everything the 走水 shore stands on its terrain: the seawall, shells, driftwood, the wrack, grass. */
 export function buildHashirimizuProps(terrain: Terrain, seed: number): Object3D[] {
   const rng = new Rng(seed ^ 0x51a7);
-  return [...seawall(), ...rocksAndOysters(terrain, rng), ...beachShells(terrain, rng), ...driftwood(terrain, rng), wrackLine(terrain, rng), grass(terrain, rng)].map(own);
+  return [...seawall(), ...beachShells(terrain, rng), ...driftwood(terrain, rng), wrackLine(terrain, rng), grass(terrain, rng)].map(own);
 }

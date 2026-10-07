@@ -11,8 +11,7 @@
     "pagurus_minutus",
     "reticunassa_festiva",
     "mugil_cephalus",
-    "cirriformia_comosa",
-    "crassostrea_gigas"
+    "cirriformia_comosa"
   ],
   "behaviors": [
     "fish_benthic",

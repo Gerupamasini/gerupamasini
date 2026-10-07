@@ -28,8 +28,6 @@ export class World {
   readonly skyline: Skyline;
   /** the map's own shore features, when it has them (null: the 葛西 flat) */
   readonly layout: ShoreLayout | null;
-  /** round obstacles the player walks around (rocks) */
-  obstacles: { x: number; z: number; r: number }[] = [];
   /** the アマモ beds below the low-water mark */
   amamo: AmamoMeadow | null = null;
 
@@ -81,7 +79,7 @@ export class World {
     terrain.setDetail(preset.surfaceDetail > 0);
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, pits);
-    if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setStonyGravel(true); terrain.setSandTint(...layout.sandTint); }
+    if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); }
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
     const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });
@@ -98,14 +96,12 @@ export class World {
     w.amamo.setQuality(MEADOW_QUALITY[preset.vegetation]);
     terrain.setMeadowCover(w.amamo.coverTexture, MEADOW_QUALITY[preset.vegetation].lod[2]);
     w.scene.add(w.amamo.group);
-    // the standing features the animals gather at: the eelgrass, its edges, the open sand among it, the rocks
+    // the standing features the animals gather at: the eelgrass, its edges, the open sand among it
     const meadow = w.amamo;
-    habitat.setFeatures((x, z) => ({ eelgrass: meadow.coverAt(x, z), zone: meadow.suitability(x, z), rocky: layout ? layout.rockiness(x, z) : 0 }));
+    habitat.setFeatures((x, z) => ({ eelgrass: meadow.coverAt(x, z), zone: meadow.suitability(x, z) }));
     if (layout) {
       onProgress?.('浜');
       for (const o of layout.props(terrain, mapSeed)) w.scene.add(o);
-      w.obstacles = layout.obstacles;
-      habitat.solids = layout.solids;
     }
     w.scene.add(w.skyline.group);
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);

@@ -26,7 +26,7 @@ describe('走水: one gentle, constant slope', () => {
         const h = heightAt(ZERO_X + d, z);
         // never steeper than 1 in 7 over a quarter metre (the beach face), and seaward of the beach no rise worth a step
         expect(prev - h).toBeLessThan(0.25 * 0.15);
-        if (d > 0.5 && shape.rockiness(ZERO_X + d, z) < 0.05) expect(h - prev).toBeLessThan(0.02);
+        if (d > 0.5) expect(h - prev).toBeLessThan(0.02);
         prev = h;
       }
     }
@@ -88,22 +88,23 @@ describe('走水: zones and patches', () => {
     expect((cls.sparse + cls.clump) / n).toBeGreaterThan(0.04);
     expect(inner).toBe(0);
   });
-  it('is rocky toward 観音崎 (left), with denser eelgrass to the right', () => {
-    let rl = 0, rr = 0, gl = 0, gr = 0;
+  it('has denser eelgrass to the right (south) than to the left', () => {
+    let gl = 0, gr = 0;
     for (let d = 0; d <= 28; d += 0.5) for (let z = 13; z <= 38; z += 0.5) {
-      rl += shape.rockiness(ZERO_X + d, -z); rr += shape.rockiness(ZERO_X + d, z);
       gl += shape.eelgrassField(ZERO_X + d, -z); gr += shape.eelgrassField(ZERO_X + d, z);
     }
-    expect(rl).toBeGreaterThan(rr * 4);
     expect(gr).toBeGreaterThan(gl);
   });
-  it('tags the bed, its margin on both sides, the open sand among it and the rocks', () => {
-    expect(featureTagsOf(0.8, 0.7, 0.9, 1, 0)).toEqual(['eelgrass']);
-    expect(featureTagsOf(0.8, 0.02, 0.9, 1, 0)).toEqual(['eelgrass', 'eelgrass_edge']);
-    expect(featureTagsOf(0.2, 0.1, 0.6, 1, 0)).toEqual(['eelgrass_edge']);
-    expect(featureTagsOf(0, 0, 0.7, 1, 0)).toEqual(['eelgrass_edge', 'bare']);
-    expect(featureTagsOf(0, 0, 0, 1, 0)).toEqual(['bare']);
-    expect(featureTagsOf(0, 0, 0, 0, 0.6)).toEqual(['rocky']);
+  it('is open sand between the seawall and the sea: no stone, no gravel', () => {
+    for (let d = -9.5; d <= 40; d += 0.5) for (let z = -38; z <= 38; z += 1) expect(shape.substrateAt(ZERO_X + d, z)).not.toBe(3);
+  });
+  it('tags the bed, its margin on both sides and the open sand among it', () => {
+    expect(featureTagsOf(0.8, 0.7, 0.9, 1)).toEqual(['eelgrass']);
+    expect(featureTagsOf(0.8, 0.02, 0.9, 1)).toEqual(['eelgrass', 'eelgrass_edge']);
+    expect(featureTagsOf(0.2, 0.1, 0.6, 1)).toEqual(['eelgrass_edge']);
+    expect(featureTagsOf(0, 0, 0.7, 1)).toEqual(['eelgrass_edge', 'bare']);
+    expect(featureTagsOf(0, 0, 0, 1)).toEqual(['bare']);
+    expect(featureTagsOf(0, 0, 0, 0)).toEqual([]);
   });
 });
 
@@ -112,10 +113,10 @@ describe('走水: who lives where', () => {
   const species: SpeciesDef[] = manifest.species.map((id) => SpeciesSchema.parse(json(`species/${id}.json`)));
   const here = (tag: string) => species.filter((sp) => sp.spawn.some((r) => r.maps?.includes('hashirimizu') && r.tags.includes(tag as never))).map((sp) => sp.names.ja);
   it('puts the right animals at each hotspot', () => {
-    expect(here('rocky')).toEqual(expect.arrayContaining(['ケフサイソガニ', 'ユビナガホンヤドカリ', 'アラムシロ', 'マガキ']));
-    expect(here('eelgrass_edge')).toEqual(expect.arrayContaining(['マハゼ', 'シラタエビ', 'ボラ']));
-    expect(here('eelgrass')).toEqual(expect.arrayContaining(['シラタエビ']));
-    expect(here('bare')).toEqual(expect.arrayContaining(['マハゼ']));
+    expect(here('eelgrass_edge')).toEqual(expect.arrayContaining(['マハゼ', 'シラタエビ', 'ボラ', 'ケフサイソガニ', 'ユビナガホンヤドカリ']));
+    expect(here('eelgrass')).toEqual(expect.arrayContaining(['シラタエビ', 'ケフサイソガニ']));
+    expect(here('bare')).toEqual(expect.arrayContaining(['マハゼ', 'アラムシロ']));
+    expect([...here('small_pool'), ...here('pool')]).toEqual(expect.arrayContaining(['ケフサイソガニ', 'ユビナガホンヤドカリ', 'アラムシロ']));
     // the clam flat (shallow water and the sand it leaves at low water)
     expect([...here('shallow'), ...here('exposed_sand')]).toEqual(expect.arrayContaining(['ハマグリ', 'ミズヒキゴカイ', 'ユビナガホンヤドカリ']));
   });
@@ -201,11 +202,9 @@ describe('走水: the shore animals move', () => {
     expect(drawn()).toBeGreaterThan(20);
     d.dispose();
   });
-  it('sessile and buried animals stay put', () => {
-    for (const id of ['cirriformia_comosa', 'crassostrea_gigas']) {
-      const r = run(id, 'wander', 4);
-      expect(r.pos.x).toBe(0);
-      expect(r.pos.z).toBe(0);
-    }
+  it('a worm in the flat stays down its burrow', () => {
+    const r = run('cirriformia_comosa', 'wander', 4);
+    expect(r.pos.x).toBe(0);
+    expect(r.pos.z).toBe(0);
   });
 });

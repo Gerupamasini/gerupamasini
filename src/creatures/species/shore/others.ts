@@ -3,7 +3,7 @@ import type { Individual } from '../../Individual';
 import type { Intent } from '../../drivers/Driver';
 import { hashInts } from '../../../core/Rng';
 import { ShoreDriver, ease, seedOf } from './ShoreDriver';
-import { makeFry, makeOyster, makeWorm, type ShoreModel } from './models';
+import { makeFry, makeWorm, type ShoreModel } from './models';
 
 // ------------------------------------------------------------------ ボラ (ハク)
 /**
@@ -247,65 +247,4 @@ export class WormDriver extends ShoreDriver {
   }
 
   protected override anchorHeight(): number { return this.inTank ? this.size * 0.03 : 0.004; }
-}
-
-// ------------------------------------------------------------------ マガキ
-/**
- * マガキ: fixed where it settled, leaning as it grew. Under water it gapes a little to filter, the dark mantle fringe
- * showing between the valves; it shuts at a shadow or a touch, and stays shut in the air.
- */
-export class OysterDriver extends ShoreDriver {
-  static readonly MODEL_MM = 80;
-  static makeModel() { return ShoreDriver.holder(OysterDriver.MODEL_MM / 1000, 'Oyster'); }
-  static makePreview(seed = 0.3): Object3D {
-    const m = makeOyster(OysterDriver.MODEL_MM / 1000, Math.floor(seed * 1e6) + 1);
-    m.root.userData.disposable = true;
-    return m.root;
-  }
-
-  private gape = 0;
-  private closedUntil = 0;
-  private filtering = false;
-
-  constructor() {
-    super();
-    this.turnRate = 0;
-  }
-
-  protected build(ind: Individual): ShoreModel {
-    this.size = ind.length_mm / 1000;
-    const h = seedOf(ind);
-    const m = makeOyster(this.size, h);
-    // grown on its side against the stones: a lean of its own
-    m.root.rotation.set(((h & 0xff) / 255 - 0.5) * 0.5, 0, (((h >>> 8) & 0xff) / 255 - 0.5) * 0.6);
-    // gaping already if it is under water (pose() closes it at once if not)
-    this.gape = 0.085;
-    return m;
-  }
-
-  protected begin(intent: Intent): void {
-    this.target = null;
-    switch (intent.kind) {
-      case 'flee': case 'display': case 'burrow':
-        if (this.gape > 0.02) this.emit('close');
-        this.mode = 'closed';
-        this.closedUntil = this.t + Math.max(4, intent.seconds);
-        break;
-      default:
-        this.mode = 'rest';
-    }
-  }
-
-  protected pose(dt: number): void {
-    const p = this.parts;
-    const want = this.mode !== 'closed' && this.t > this.closedUntil && this.depth > 0.03 ? 0.085 : 0;
-    this.gape = ease(this.gape, want, dt, want > this.gape ? 2.5 : 0.08);
-    p.lid.rotation.x = -this.gape;
-    p.mantle.visible = this.gape > 0.03;
-    const filtering = this.gape > 0.06;
-    if (filtering && !this.filtering) this.emit('filter');
-    this.filtering = filtering;
-  }
-
-  protected override anchorHeight(): number { return this.size * 0.15; }
 }

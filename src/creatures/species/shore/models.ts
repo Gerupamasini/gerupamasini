@@ -8,7 +8,7 @@ import { Rng } from '../../../core/Rng';
 /**
  * Procedural models of the small animals of the 走水 shore (built per individual at its real size, +Z forward, +Y up,
  * origin on the ground under the body): ケフサイソガニ, ユビナガホンヤドカリ in its borrowed shell, アラムシロ, and
- * ボラ fry (ハク), ミズヒキゴカイ and マガキ. Parts the drivers animate are named in `parts`.
+ * ボラ fry (ハク) and ミズヒキゴカイ. Parts the drivers animate are named in `parts`.
  */
 export interface ShoreModel {
   root: Group;
@@ -586,84 +586,5 @@ export function makeWorm(len: number, seed: number): ShoreModel {
     curves.push(pts);
   }
   mesh(keep(threads(curves, rad * 0.14)), wormMats.cirri, tuft, 'tuftThreads');
-  return { root, parts, dispose: () => geos.forEach((g) => g.dispose()) };
-}
-
-// ------------------------------------------------------------------ マガキ
-const oysterMats = {
-  shell: new MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0, side: DoubleSide }),
-  mantle: new MeshStandardMaterial({ color: 0x2e2a2a, roughness: 0.4 }),
-};
-
-/**
- * One valve of a マガキ: an irregular, elongated outline from the hinge (z = 0) to the growing edge, raised in
- * concentric frilled lamellae; `cup` is how deep it is (the left valve, cemented below, is the deep one), `sign` +1
- * builds it bulging up (the lid), -1 bulging down. Grey-white with purple streaks along the growth lines.
- */
-function oysterValve(rng: Rng, outline: number[], cup: number, sign: number): BufferGeometry {
-  const rings = 9, segs = outline.length;
-  const pos: number[] = [], col: number[] = [], idx: number[] = [];
-  pos.push(0, 0, 0.02); col.push(0.5, 0.47, 0.46);
-  const streak = rng.range(0, 6.28);
-  for (let r = 1; r <= rings; r++) {
-    const t = r / rings;
-    for (let s = 0; s < segs; s++) {
-      const a = (s / segs) * Math.PI * 2;
-      const rr = t * outline[s];
-      // the outline grows from the hinge end (z = 0) toward +z
-      // long and narrow, the way they grow crowded on the stones
-      const x = Math.cos(a) * rr * 0.34, z = 0.5 + Math.sin(a) * rr * 0.5 - 0.5 * (1 - t) * 0.9;
-      const lam = 0.012 * Math.max(0, Math.sin(t * 26 + Math.sin(a * 5) * 0.8));
-      const frill = t > 0.8 ? 0.03 * Math.sin(a * 11 + streak) * (t - 0.8) * 5 : 0;
-      const y = sign * (cup * (1 - t * t) + lam) + frill;
-      pos.push(x, y, Math.max(0, z));
-      const purple = 0.5 + 0.5 * Math.sin(a * 7 + streak + t * 4);
-      // (linear) grey-brown, purple along the growth lines, the young edge paler
-      const shade = 0.13 + 0.08 * rng.next() - (lam > 0.008 ? 0.03 : 0) + (t > 0.9 ? 0.07 : 0);
-      col.push(shade * (0.95 + 0.12 * purple), shade * (0.9 - 0.14 * purple), shade * (0.8 + 0.06 * purple));
-    }
-  }
-  for (let s = 0; s < segs; s++) idx.push(0, 1 + s, 1 + ((s + 1) % segs));
-  for (let r = 1; r < rings; r++) for (let s = 0; s < segs; s++) {
-    const a = 1 + (r - 1) * segs + s, b = 1 + (r - 1) * segs + ((s + 1) % segs), c = a + segs, d = b + segs;
-    idx.push(a, c, b, b, c, d);
-  }
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
-  g.setAttribute('color', new BufferAttribute(new Float32Array(col), 3));
-  // wound so the outer face looks out (up for the lid, down for the cup)
-  g.setIndex(sign < 0 ? idx : idx.map((_, i) => idx[i - (i % 3) + (2 - (i % 3))]));
-  g.computeVertexNormals();
-  return g;
-}
-
-/**
- * マガキ (Crassostrea gigas), `len` m from hinge to edge: the deep left valve below and the flat right valve as a lid,
- * hinged at `parts.lid` (rotation.x opens it); between them, when it gapes, the dark fringe of the mantle.
- */
-export function makeOyster(len: number, seed: number): ShoreModel {
-  const rng = new Rng(seed);
-  const root = new Group();
-  root.name = 'Magaki';
-  const parts: Record<string, Object3D> = {};
-  const geos: BufferGeometry[] = [];
-  const keep = <T extends BufferGeometry>(g: T) => { geos.push(g); return g; };
-  const segs = 28, outline: number[] = [];
-  for (let s = 0; s < segs; s++) outline.push(0.85 + 0.3 * rng.next() * (0.6 + 0.4 * Math.sin((s / segs) * 6.28 * 2 + seed)));
-  const shell = new Group();
-  shell.scale.setScalar(len);
-  shell.position.set(0, len * 0.16, -len * 0.5);
-  root.add(shell);
-  mesh(keep(oysterValve(rng, outline, 0.16, -1)), oysterMats.shell, shell, 'leftValve');
-  const lid = new Group();
-  lid.name = 'lid';
-  shell.add(lid);
-  const lv = mesh(keep(oysterValve(rng, outline.map((o) => o * 0.96), 0.05, 1)), oysterMats.shell, lid, 'rightValve');
-  lv.position.y = 0.005;
-  parts.lid = lid;
-  const mantle = mesh(keep(new SphereGeometry(0.5, 16, 6)), oysterMats.mantle, shell, 'mantle');
-  mantle.scale.set(0.34, 0.02, 0.62);
-  mantle.position.set(0, -0.012, 0.5);
-  parts.mantle = mantle;
   return { root, parts, dispose: () => geos.forEach((g) => g.dispose()) };
 }
