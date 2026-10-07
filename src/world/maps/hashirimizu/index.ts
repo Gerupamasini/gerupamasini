@@ -40,11 +40,8 @@ export const HASHIRIMIZU: ShoreLayout = {
       radius: [1.1, 2.4], perM2: [2.6, 4.6], margin: 3,
     },
   },
-  pits: {
-    clusters: 7,
-    // on the open sand among the eelgrass and at the outer edge of the clam flat
-    opts: { ok: (x, z) => { const d = offshore(x); return d > 9 && d < 26 && Math.abs(z) < 37 && eelgrassField(x, z) < 0.35; }, perCluster: [1, 3], spread: 3.5, margin: 6 },
-  },
+  // no stingray resting marks on this shore
+  pits: { clusters: 0, opts: {} },
   landLevel: [2.05, 2.4],
   // the bay mouth's sand: browner and warmer than the 葛西 grey (worn from the Miura hills' rock, with shell grit)
   sandTint: [0.98, 0.9, 0.74],

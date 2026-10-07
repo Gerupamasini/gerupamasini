@@ -19,8 +19,10 @@ export interface MeadowQuality {
 
 export const MEADOW_QUALITY: Record<'low' | 'mid' | 'high', MeadowQuality> = {
   low: { density: 0.6, lod: [3.5, 11, 28], shadowLod: -1 },
-  mid: { density: 1, lod: [5, 16, 40], shadowLod: 0 },
-  high: { density: 1, lod: [7, 22, 52], shadowLod: 1 },
+  // (the blades' shadows on the bed are faint, and drawing them costs more triangles than the blades themselves:
+  // mid casts none, high only from the nearest tier)
+  mid: { density: 1, lod: [4.5, 13, 36], shadowLod: -1 },
+  high: { density: 1, lod: [7, 22, 52], shadowLod: 0 },
 };
 
 /** What the meadow needs from the world each frame. */
