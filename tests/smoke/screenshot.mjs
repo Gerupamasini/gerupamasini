@@ -203,7 +203,8 @@ try {
     await waitFrames(page, 10);
     await page.screenshot({ path: path.join(outDir, '20-hermit-near.png') });
     await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, crab.id);
-    await waitFrames(page, 30);
+    // (the crab at full detail is slow on the software renderer: fewer frames, a longer wait)
+    await waitFrames(page, 14, 240000);
     await page.screenshot({ path: path.join(outDir, '21-hermit-observe.png') });
     // catch it with the net the same way as the goby: the crab is held under the reticle and the swing is forced
     await page.evaluate(() => { const a = window.__higata; a.exitObserve(); a.player.lowView = true; a.player.pitch = -0.64; });

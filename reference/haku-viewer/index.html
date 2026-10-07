@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ハク 3D</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; background: #111; color: #dde8e8; font: 13px/1.45 system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .panel { position: fixed; top: 12px; left: 12px; background: rgba(12, 22, 24, 0.78); border: 1px solid rgba(160, 205, 210, 0.18); border-radius: 10px; padding: 10px 12px; }
+  body.capture .panel { display: none; }
+  .panel button { background: rgba(255,255,255,0.06); color: inherit; border: 1px solid rgba(160,205,210,0.2); border-radius: 6px; padding: 4px 8px; margin: 2px; cursor: pointer; font: inherit; }
+  #info { color: #8fa6a8; font-size: 11.5px; margin-top: 6px; white-space: pre-line; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div class="panel">
+  <div><b>干潟図鑑 ハク</b></div>
+  <div>
+    <button data-scene="side">側面</button><button data-scene="top">背面</button><button data-scene="front">正面</button>
+    <button data-scene="shallows">浅場の群れ</button>
+  </div>
+  <div>
+    <button data-lod="0">LOD0</button><button data-lod="1">LOD1</button><button data-lod="2">LOD2</button>
+    <button id="startle">脅かす</button>
+  </div>
+  <div id="info"></div>
+</div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -9,7 +9,8 @@
     "meretrix_lusoria",
     "pagurus_minutus",
     "crassostrea_gigas",
-    "reticunassa_festiva"
+    "reticunassa_festiva",
+    "mugil_cephalus"
   ],
   "behaviors": [
     "fish_benthic",
@@ -18,7 +19,8 @@
     "bivalve_buried",
     "hermit_crab_tidal",
     "oyster_reef",
-    "snail_crawl"
+    "snail_crawl",
+    "fish_school"
   ],
   "maps": [
     "kasai_west",

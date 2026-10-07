@@ -172,6 +172,7 @@
 - 解決の方針: 葛西はそのまま（`World.create` は `layout` の無いマップで割石・牡蠣礁を作り、遠景は非表示のまま；layout のあるマップでアマモ場・小道具・遠景を作る）。`World.dispose()` で礁と石も解放。濡れた砂の暗さ（0.68）と粗さ（0.58/0.62/0.42）は 22 回目の値を維持し、遡上の水膜は 0.32。`Spawner` は debug の hidden と規則の `maps` の両方を見る。観察開始距離は 21 回目の `len × 7`。`FPSController.canStand` は `wadeDepth` と `groundAt`（石の上）の両方。
 - 生き物の絞り込み: manifest は既存 8 種 + アラムシロ（`snail` ドライバ、`snail_crawl`）。ケフサイソガニ・ボラ・ミズヒキゴカイは manifest 外（ファイルとドライバ登録は残す）。シロチドリの走水規則を削除。ユビナガホンヤドカリは本流の完全モデルのまま、走水向けに eelgrass_edge/bare の規則を追加（一般規則は maps 無しで両方の浜に効く）。`tests/unit/hashirimizu.test.ts` を絞った種に合わせて修正、`AmamoMeadow` の底質表に rock を追加。
 - 行き先は 葛西 西なぎさ と 横須賀 走水海岸 の 2 つ。
+- ハク: `claude/gifted-feynman-uicxj4` をマージ（`src/creatures/species/haku/*`：写真に合わせた体形・口と鰓蓋の構造・銀の反射、群れの 5 状態と一斉逃避、LOD 3 段、接地影；種 `mugil_cephalus`（ボラ、段階 ハク ≤35 mm / オボコ）、行動木 `fish_school`、`DRIVERS.haku`（`nearDistance` 5）、`tests/unit/haku.test.ts`）。走水ブランチの簡易な `mullet` ドライバと種データは置き換え。spawn は晩冬〜夏（秋は出ない；F3 で 3〜5 月にすると見られる）で `maps` 無しの規則が両方の浜に効き、走水向けに eelgrass_edge/bare の規則を追加。衝突は README／TESTING／manifest／CreatureSystem（`nearDistance` に統一）／drivers を手で解決。
 - バージョン 0.19.0。
 
 ## 22 回目（デバッグの生物選択、ホームの戻り先、抱卵エドハゼ、行き先、砂の反射、ケースと水槽の貝）
