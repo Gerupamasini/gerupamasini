@@ -8,12 +8,12 @@ import {
 /**
  * The ヨウジウオ's skinned geometry: three tiers built once and shared by every fish (each fish has its own skeleton).
  *
- *  LOD0  ~16k triangles: 32-sided loft, three rows to every bony ring with a groove at each ring joint (the armour's
+ *  LOD0  16.5k triangles: 32-sided loft, three rows to every bony ring with a groove at each ring joint (the armour's
  *        segmentation reads in the silhouette), the ridges of the heptagonal trunk and the quadrangular tail kept as
  *        edges, the orbit and the gill cover raised, the mouth at the snout tip; eyeballs; the dorsal fin with all 38
  *        rays, pectoral fans of 12 rays, the caudal fan, the tiny anal fin
- *  LOD1  ~2.6k triangles: 16-sided loft one row per ring (the rings are painted), small eyes, dorsal / pectoral / caudal
- *  LOD2  ~0.4k triangles: 8-sided loft with the caudal fan folded into the same mesh (one draw call, opaque)
+ *  LOD1  2.7k triangles: 16-sided loft one row per ring (the rings are painted), small eyes, dorsal / pectoral / caudal
+ *  LOD2  0.5k triangles: 8-sided loft with the caudal fan folded into the same mesh (one draw call, opaque)
  *
  * Body vertices carry aBody = (s, cos φ, sin φ) (φ round the section from the dorsal midline toward the left flank),
  * aPat = (ring coordinate, position round the section in edges 0..8: 0 dorsal midline, 1 superior ridge, 2 lateral
