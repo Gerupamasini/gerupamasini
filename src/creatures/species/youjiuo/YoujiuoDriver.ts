@@ -334,7 +334,10 @@ export class YoujiuoDriver implements Driver {
     if (!own) return;
     const l = lookFor(morph, seed, green);
     own.uBase.value.copy(l.base); own.uDark.value.copy(l.dark); own.uPale.value.copy(l.pale); own.uBelly.value.copy(l.belly);
+    own.uAccent.value.copy(l.accent);
     own.uPattern.value.set(l.band, l.dots, l.ocelli, l.mottle);
+    own.uPattern2.value.set(l.streak, l.pepper, l.sheen, l.translucency);
+    own.uPattern3.value.set(l.snout, l.granules, 0, 0);
     own.uSeed.value = l.seed;
   }
 

@@ -12,7 +12,7 @@ import { WaterPass, makeSpillTexture } from '../../src/world/Water.ts';
 import { createWaves } from '../../src/world/Waves.ts';
 import { surfUniforms } from '../../src/world/Surf.ts';
 import { YoujiuoDriver } from '../../src/creatures/species/youjiuo/YoujiuoDriver.ts';
-import { YJ_UNIFORMS } from '../../src/creatures/species/youjiuo/materials.ts';
+import { GOLDEN_MORPH, SILVER_MORPH, YJ_UNIFORMS } from '../../src/creatures/species/youjiuo/materials.ts';
 import { Rng } from '../../src/core/Rng.ts';
 
 const params = new URLSearchParams(location.search);
@@ -61,6 +61,7 @@ function clear() {
   YJ_UNIFORMS.uYjAir.value = 0;
   YJ_UNIFORMS.uYjCaustic.value = 0.5;
   YJ_UNIFORMS.uYjSkyGain.value = 0.35;
+  YJ_UNIFORMS.uYjWater.value.set(0.085, 0.15, 0.145);
 }
 
 /** the eelgrass the fish see (the game's MeadowProbe over the viewer's patches) */
@@ -100,7 +101,7 @@ function ctx() {
 // ---------------------------------------------------------------- studio: lit like a fish in a clear case
 function studio(view) {
   clear();
-  scene.background = new THREE.Color(view === 'specimen' ? 0xe9e7e1 : 0x0b0e0e);
+  scene.background = new THREE.Color(view === 'specimen' ? 0xf3f1ec : 0x0b0e0e);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.12;
   sun = new THREE.DirectionalLight(0xfff4e6, 2.6);
@@ -108,10 +109,11 @@ function studio(view) {
   scene.add(sun, sun.target, new THREE.HemisphereLight(0xc9d6dc, 0x4a4234, 0.8));
   YJ_UNIFORMS.uYjAir.value = 1;
   YJ_UNIFORMS.uYjCaustic.value = 0;
-  YJ_UNIFORMS.uYjSkyGain.value = 0.06;
+  YJ_UNIFORMS.uYjSkyGain.value = 0.22;
   floor = { heightAt: () => -0.12, waterAt: () => 0.5, meadow: null };
   const d = addFish(0, 0, 0, 200, { id: 1, kind: 'rest', urgency: 0, seconds: 600 });
-  d.recolor(Number(params.get('morph') ?? 0), 0.3);
+  // the specimen view: the silvery, peppered form of the photograph of a fresh specimen on white
+  d.recolor(Number(params.get('morph') ?? (view === 'specimen' ? SILVER_MORPH : 0)), view === 'specimen' ? 0 : 0.3);
   // no bed here: hide the contact shadow
   scene.traverse((o) => { if (o.isInstancedMesh) o.visible = false; });
   const f = d.behaviour;
@@ -121,7 +123,7 @@ function studio(view) {
   renderer.toneMappingExposure = view === 'specimen' ? 0.95 : 1.1;
   camera.fov = 22;
   if (view === 'side') { camera.position.set(-0.035, 0.0, 0.66); controls.target.set(-0.035, 0, 0); }
-  if (view === 'specimen') { camera.position.set(-0.035, 0.64, 0.0001); controls.target.set(-0.035, 0, 0); }
+  if (view === 'specimen') { camera.fov = 12; camera.position.set(-0.035, 0.012, 0.66); controls.target.set(-0.035, 0, 0); }
   if (view === 'head') { camera.fov = 18; camera.position.set(0.05, 0.02, 0.15); controls.target.set(0.05, 0.0, 0); }
   if (view === 'front') { camera.fov = 18; camera.position.set(0.24, 0.035, 0.07); controls.target.set(0.05, 0.0, 0); }
   camera.updateProjectionMatrix();
@@ -154,6 +156,55 @@ function aquarium() {
   renderer.toneMappingExposure = 0.9;
   camera.fov = 30;
   camera.position.set(0.05, -0.08, 0.75); controls.target.set(0.02, -0.12, 0);
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+// ---------------------------------------------------------------- a portrait: the head three-quarters from the front in a
+// public aquarium's eelgrass tank (blue back wall, sand, a lamp above), like the photograph of a golden fish
+function portrait() {
+  clear();
+  scene.background = new THREE.Color(0x0a2a9a).convertSRGBToLinear();
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.1;
+  sun = new THREE.DirectionalLight(0xfff6e8, 2.8);
+  sun.position.set(-0.2, 1, 0.45);
+  scene.add(sun, sun.target, new THREE.HemisphereLight(0x8fa6c8, 0x6a5a44, 0.9));
+  YJ_UNIFORMS.uYjAir.value = 1;
+  YJ_UNIFORMS.uYjCaustic.value = 0.15;
+  YJ_UNIFORMS.uYjSkyGain.value = 0.2;
+  const S = 256, data = new Uint8Array(S * S * 4);
+  let a = 5;
+  const rnd = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  for (let i = 0; i < S * S; i++) { const v = 150 + rnd() * 70 - 35; data[i * 4] = v; data[i * 4 + 1] = v * 0.92; data[i * 4 + 2] = v * 0.8; data[i * 4 + 3] = 255; }
+  const tex = new THREE.DataTexture(data, S, S);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(30, 30); tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.generateMipmaps = true; tex.needsUpdate = true;
+  const sand = new THREE.Mesh(new THREE.PlaneGeometry(3, 3).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: tex, color: new THREE.Color(0.55, 0.5, 0.42), roughness: 0.95 }));
+  sand.position.y = -0.2;
+  scene.add(sand);
+  kit = new AmamoKit();
+  const ground = { heightAt: () => -0.2, poolAt: () => -1e3 };
+  const grid = new ShootGrid();
+  // the shoots behind the fish and to its side, none between it and the camera
+  for (const [x, z, sd] of [[-0.12, -0.16, 41], [0.12, -0.2, 43], [-0.3, -0.05, 47], [0.25, -0.02, 49]]) {
+    const p = new AmamoPatch({ kit, ground, grid, lengthAt: () => 0.5, x, z, radius: 0.08, density: 260, kind: 'pioneer', seed: sd });
+    p.setLod(0, 1, -1);
+    scene.add(p); patches.push(p);
+  }
+  floor = { heightAt: () => -0.2, waterAt: () => 0.35, meadow: null };
+  const d = addFish(0, 0, 0, 200, { id: 1, kind: 'rest', urgency: 0, seconds: 600 });
+  d.recolor(Number(params.get('morph') ?? GOLDEN_MORPH), 0);
+  // (the contact shadow is for the open bed under water; the tank's lamp gives its own)
+  scene.traverse((o) => { if (o.name === 'HakuContactShadows') o.visible = false; });
+  const f = d.behaviour;
+  // swimming toward the camera's right, head down a little, the head turned three-quarters to the camera
+  f.pos.set(-0.03, 0.0, 0); f.heading = 1.05; f.pitch = -0.3; f.restPitch = -0.3;
+  f.pose.girth = 1.16;
+  state.brain = false;
+  renderer.toneMappingExposure = 1.0;
+  camera.fov = 24;
+  camera.position.set(0.075, -0.004, 0.115); controls.target.set(0.008, -0.02, 0.028);
   camera.updateProjectionMatrix();
   controls.update();
 }
@@ -312,12 +363,13 @@ addEventListener('resize', resize);
 resize();
 
 // ---------------------------------------------------------------- panel
-const SCENES = { meadow: 'アマモ場', aquarium: '水槽', side: '側面', specimen: '標本', head: '頭部', front: '正面' };
+const SCENES = { meadow: 'アマモ場', aquarium: '水槽', portrait: '頭部（水槽）', side: '側面', specimen: '標本', head: '頭部', front: '正面' };
 function setScene(k) {
   state.scene = k;
   brainRng = new Rng(77);
   if (k === 'meadow') meadowScene();
   else if (k === 'aquarium') aquarium();
+  else if (k === 'portrait') portrait();
   else studio(k);
   applyLod();
   step(1 / 60);

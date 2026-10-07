@@ -37,13 +37,15 @@ export interface Pose {
   dorsalRaise: number;
   /** caudal fan: 1 open, ~0.7 folded */
   caudal: number;
+  /** the trunk's girth (condition: a well-fed or mature fish is deeper and wider), 1 = the model's */
+  girth: number;
 }
 
 export function restPose(): Pose {
   const pts = STATIONS.map((s) => new Vector3(0, 0, zOf(s) * MODEL_TL));
   return {
     pts, up: new Vector3(0, 1, 0), headPitch: 0, headYaw: 0, snout: 0, jaw: 0, eyeL: [0, 0], eyeR: [0, 0],
-    pecL: 0.5, pecR: 0.5, dorsal: new Float32Array(DORSAL_BONES), dorsalRaise: 1, caudal: 1,
+    pecL: 0.5, pecR: 0.5, dorsal: new Float32Array(DORSAL_BONES), dorsalRaise: 1, caudal: 1, girth: 1,
   };
 }
 
@@ -105,6 +107,7 @@ const m4 = new Matrix4();
 const qHead = new Quaternion(), qSnout = new Quaternion();
 const pHead = new Vector3(), pSnout = new Vector3();
 const snoutScale = new Vector3();
+const girthV = new Vector3();
 
 function frameQ(dir: Vector3, up: Vector3, out: Quaternion): Quaternion {
   vb.crossVectors(up, dir);
@@ -136,7 +139,11 @@ export function applyPose(bones: Bone[], pose: Pose, lod: 0 | 1 | 2 = 0): void {
     b.position.copy(P[k]);
     b.quaternion.copy(segQ[k]);
   }
-  // caudal fan open / folded (the last bone carries it)
+  // the trunk's girth, full over the trunk and tapering into the tail; the caudal fan open / folded (the last bone)
+  for (let k = 0; k < NSEG - 1; k++) {
+    const g = 1 + (pose.girth - 1) * Math.max(0, Math.min(1, (0.44 - STATIONS[k]) / 0.08));
+    bones[k].scale.set(g, g, 1);
+  }
   bones[NSEG - 1].scale.set(1, pose.caudal, 1);
   // head on the trunk: rotated at the occiput
   qHead.copy(segQ[0]).multiply(qa.setFromAxisAngle(Y, pose.headYaw)).multiply(qb.setFromAxisAngle(X, -pose.headPitch));
@@ -169,9 +176,10 @@ export function applyPose(bones: Bone[], pose: Pose, lod: 0 | 1 | 2 = 0): void {
   }
   if (lod === 2) return;
   // pectorals: on the trunk's first segment, swinging out and back
+  const g0 = girthV.set(pose.girth, pose.girth, 1);
   for (const [bi, side, a] of [[B_PEC_L, 1, pose.pecL], [B_PEC_R, -1, pose.pecR]] as const) {
     const b = bones[bi];
-    b.position.copy(place(bi, rest[0], P[0], segQ[0]));
+    b.position.copy(place(bi, rest[0], P[0], segQ[0], g0));
     b.quaternion.copy(segQ[0]).multiply(qa.setFromAxisAngle(Y, side * (a - 0.5) * 0.9)).multiply(qb.setFromAxisAngle(Z, side * (a - 0.5) * 0.25));
   }
   // dorsal fin: each ray bone on the segment under it, the rays swung sideways by the wave, lowered when folded

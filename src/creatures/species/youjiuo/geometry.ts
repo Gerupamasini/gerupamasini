@@ -15,9 +15,9 @@ import {
  *  LOD1  2.7k triangles: 16-sided loft one row per ring (the rings are painted), small eyes, dorsal / pectoral / caudal
  *  LOD2  0.5k triangles: 8-sided loft with the caudal fan folded into the same mesh (one draw call, opaque)
  *
- * Body vertices carry aBody = (s, cos φ, sin φ) (φ round the section from the dorsal midline toward the left flank),
- * aPat = (ring coordinate, position round the section in edges 0..8: 0 dorsal midline, 1 superior ridge, 2 lateral
- * ridge, 3 inferior ridge, 4 ventral midline, 5–7 the right side's), aPart (0 skin, 1 eye, 2 mouth, 3 LOD2's painted
+ * Body vertices carry aBody = (s, cos φ, sin φ) (φ round the section from the dorsal midline toward the left flank,
+ * in eighths: 1 superior ridge, 2 lateral ridge, 3 inferior ridge, 4 ventral midline, 5–7 the right side's),
+ * aPat = (ring coordinate, arc length round the section from the dorsal midline in TL, the same on both sides), aPart (0 skin, 1 eye, 2 mouth, 3 LOD2's painted
  * tail fan). Fin vertices carry aFin = (across the base 0..1, along the ray 0..1, fin id: 0 dorsal, 1 pectoral,
  * 2 caudal, 3 anal) and aRay (1 on a ray, 0 between rays).
  */
@@ -140,7 +140,8 @@ export function sectionUnit(s: number, e: number): [number, number] {
   const ex = b[0] - a[0], ey = b[1] - a[1], el = Math.hypot(ex, ey) || 1;
   // outward normal of the edge (the polygon runs clockwise seen from the front: dorsal → left → ventral → right)
   const nx = ey / el, ny = -ex / el;
-  const bulge = 0.075 * Math.sin(Math.PI * u) * el;
+  // (flat to faintly convex: the photographs show crisp ridges with near-flat plates between)
+  const bulge = 0.035 * Math.sin(Math.PI * u) * el;
   px += nx * bulge; py += ny * bulge;
   // the rounded head section at the matching angle
   const ka = (i: number) => (i <= 4 ? KEY_ANGLES[i] : 2 * Math.PI - KEY_ANGLES[8 - i]);
@@ -148,7 +149,7 @@ export function sectionUnit(s: number, e: number): [number, number] {
   const [hx, hy] = superellipse(th);
   const r = ridgeness(s);
   // the body's ridges softened a little (~0.2), the head fully round
-  const round = 1 - r * 0.8;
+  const round = 1 - r * 0.86;
   return [px * (1 - round) + hx * round, py * (1 - round) + hy * round];
 }
 
@@ -178,7 +179,7 @@ function ringGroove(s: number, depth: number): number {
 
 interface TierSpec { around: number; headRows: number; perRing: number; groove: number; eyes: 0 | 1 | 2; fins: 0 | 1 | 2 }
 const TIERS: Record<Lod, TierSpec> = {
-  0: { around: 32, headRows: 46, perRing: 3, groove: 0.032, eyes: 2, fins: 2 },
+  0: { around: 32, headRows: 46, perRing: 3, groove: 0.02, eyes: 2, fins: 2 },
   1: { around: 16, headRows: 14, perRing: 1, groove: 0, eyes: 1, fins: 1 },
   2: { around: 8, headRows: 5, perRing: 0.34, groove: 0, eyes: 0, fins: 0 },
 };
@@ -221,16 +222,24 @@ function buildBody(lod: Lod, b: Builder): void {
     const D = depthAt(s), Wd = widthAt(s), yc = centreAt(s);
     const tip = s > 0.981 ? (s > 0.985 ? 0.35 : 0.75) : 1;
     const groove = 1 - ringGroove(s, t.groove);
+    const xs: number[] = [], ys: number[] = [];
     for (let j = 0; j < A; j++) {
-      const e = j / per;
-      const [ux, uy] = sectionUnit(s, e);
+      const [ux, uy] = sectionUnit(s, j / per);
       let x = ux * 0.5 * Wd * groove * tip, y = yc + uy * 0.5 * D * groove * tip;
       if (lod < 2) {
         const sw = headSwell(s, y, ux);
         if (sw > 0) { const l = Math.hypot(ux, uy) || 1; x += (ux / l) * sw; y += (uy / l) * sw * 0.6; }
       }
-      const phi = (e / 8) * 2 * Math.PI;
-      ring.push(b.vertex([x, y, zOf(s)], bodyWeights(s, y), [s, Math.cos(phi), Math.sin(phi)], [ringAt(s), e], 0));
+      xs.push(x); ys.push(y);
+    }
+    // arc length round the section from the dorsal midline (TL), the same both ways: the skin's pigment cells are laid
+    // out in it, so they keep their shape on the long flank plates of the polygonal section
+    const arc = new Array<number>(A).fill(0);
+    for (let j = 1; j <= A / 2; j++) arc[j] = arc[j - 1] + Math.hypot(xs[j] - xs[j - 1], ys[j] - ys[j - 1]);
+    for (let j = A - 1; j > A / 2; j--) arc[j] = (j === A - 1 ? 0 : arc[j + 1]) + Math.hypot(xs[j] - xs[(j + 1) % A], ys[j] - ys[(j + 1) % A]);
+    for (let j = 0; j < A; j++) {
+      const phi = (j / A) * 2 * Math.PI;
+      ring.push(b.vertex([xs[j], ys[j], zOf(s)], bodyWeights(s, ys[j]), [s, Math.cos(phi), Math.sin(phi)], [ringAt(s), arc[j]], 0));
     }
     ringIdx.push(ring);
   }
@@ -259,13 +268,15 @@ function buildBody(lod: Lod, b: Builder): void {
     lips.push(b.vertex([ux * 0.5 * W0 * lipS, y, lipZ], bodyWeights(0, y), [0, Math.cos((j / A) * 2 * Math.PI), Math.sin((j / A) * 2 * Math.PI)], [-1, j / per], 0));
   }
   for (let j = 0; j < A; j++) b.quad(lips[j], lips[(j + 1) % A], first[(j + 1) % A], first[j]);
-  const pitZ = zOf(s0) + 0.0004, pitY = y0 + 0.0018;
-  const pit = b.vertex([0, pitY, pitZ], bodyWeights(0, pitY), [0, 1, 0], [-1, 0], 2);
+  // a small mouth set high on the end (upturned), not a hole down the tube
+  const pitZ = zOf(s0) + 0.0006, pitY = y0 + 0.0022;
+  // (the mouth is part -1: blended toward the skin's 0 it never passes through another part's id)
+  const pit = b.vertex([0, pitY, pitZ], bodyWeights(0, pitY), [0, 1, 0], [-1, 0], -1);
   const inner: number[] = [];
   for (let j = 0; j < A; j++) {
     const [ux, uy] = sectionUnit(0, j / per);
-    const y = pitY + uy * 0.5 * D0 * 0.34;
-    inner.push(b.vertex([ux * 0.5 * W0 * 0.34, y, lipZ + 0.0002], bodyWeights(0, y), [0, 1, 0], [-1, j / per], 2));
+    const y = pitY + uy * 0.5 * D0 * 0.2;
+    inner.push(b.vertex([ux * 0.5 * W0 * 0.24, y, lipZ + 0.0002], bodyWeights(0, y), [0, 1, 0], [-1, j / per], -0.55));
   }
   for (let j = 0; j < A; j++) {
     b.quad(inner[j], inner[(j + 1) % A], lips[(j + 1) % A], lips[j]);

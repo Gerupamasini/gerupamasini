@@ -22,6 +22,8 @@ const SHOTS = [
   { name: 'side_lod1', set: { scene: 'side', lod: 1 } },
   { name: 'side_lod2', set: { scene: 'side', lod: 2 } },
   { name: 'specimen', set: { scene: 'specimen', lod: 0 } },
+  { name: 'portrait', set: { scene: 'portrait', lod: 0 } },
+  { name: 'portrait_belly', set: { cam: [0.06, -0.06, 0.16], target: [-0.02, -0.04, 0.0], fov: 26 } },
   { name: 'head_lod0', set: { scene: 'head', lod: 0 } },
   { name: 'front_lod0', set: { scene: 'front', lod: 0 } },
   { name: 'aquarium_hold', set: { scene: 'aquarium', lod: 'auto' }, advance: 9 },

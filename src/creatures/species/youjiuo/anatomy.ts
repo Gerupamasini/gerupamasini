@@ -111,7 +111,7 @@ export const ridgeness = (s: number): number => {
 };
 
 /** eye: centre (s, height above axis), radius of the eyeball (TL), how far its dome stands out of the skin */
-export const EYE = { s: S_EYE, y: 0.0042, r: 0.0079, pupil: 0.36 } as const;
+export const EYE = { s: S_EYE, y: 0.0042, r: 0.0079, pupil: 0.42 } as const;
 
 /** the dorsal fin: base from s0 to s1 on the back over the last trunk and first tail rings, 38 rays */
 export const DORSAL = { s0: 0.372, s1: 0.488, rays: 38, height: 0.0175, lean: 1.0 } as const;

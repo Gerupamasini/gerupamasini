@@ -144,6 +144,8 @@ export class Youjiuo {
     this.heading = rng.range(-Math.PI, Math.PI);
     this.here = { x: 0, y: 0, z: 0, fan: 0, length: 0.5, sheath: 0.09, seed: rng.next(), width: 0.005, pool: -1e3 };
     for (const e of this.eyes) e.next = rng.range(0, 1);
+    // condition: some fish are slim, some well fed (and a brooding male's trunk is no different: his pouch is on the tail)
+    this.pose.girth = rng.range(0.94, 1.16);
   }
 
   private emit(id: string): void { this.onEvent?.(id); }

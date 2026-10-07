@@ -1,23 +1,21 @@
 import { Color, DoubleSide, FrontSide, MeshPhysicalMaterial, Vector4, type IUniform, type WebGLProgramParametersWithUniforms } from 'three';
-import { DORSAL, EYE, MODEL_TL, S_CAUDAL, S_EYE, S_HEAD, S_SNOUT } from './anatomy';
+import { DORSAL, EYE, MODEL_TL, S_CAUDAL, S_EYE, S_HEAD, S_PIVOT, S_SNOUT } from './anatomy';
 
 const f = (x: number): string => x.toFixed(5);
 
 /**
- * The ヨウジウオ's materials: standard PBR (MeshPhysicalMaterial: roughness, clearcoat for the mucus over the bony
- * plates and for the cornea, a thin-film sheen on the gill cover) with the armour, the pattern and the underwater
- * light worked in through onBeforeCompile. One program per tier is shared by every fish; each fish has its own
- * material objects (its own colours: the species is very variable, and a fish living in the eelgrass is greener).
+ * The ヨウジウオ's materials: standard PBR (MeshPhysicalMaterial: roughness, a thin uneven clearcoat for the mucus,
+ * thin-film iridescence for the iridophores, metalness for their mirror) with the skin, the armour, the eye, the
+ * viscera seen through the belly wall and the underwater light worked in through onBeforeCompile. One program per
+ * tier is shared by every fish; each fish has its own material objects (its own colours: the species is very
+ * variable, and a fish living in the eelgrass is greener).
  *
- * Surface (from the photographs): the body is a tube of bony rings, each ring a set of plates between the ridges;
- * the joints between rings are fine dark seams with a groove, the plates are a little convex with faint radial
- * striae, the ridges catch the light. Colour: olive-brown, green, dark brown or tan above, mottled darker and often in
- * irregular bands a few rings wide, peppered with melanophores, small white dots on the plates; a pale cream belly
- * below the inferior ridges; some fish carry a ladder of pale ocelli ringed with brown along the lower flank. On the
- * head: a dark line along the snout's side through the eye, the gill cover a convex plate with radial ridges and a
- * green-silver sheen, the gill opening a dark slit at its upper back. Eye: a golden-brown iris crossed by the dark
- * stripe, a black pupil, a glossy cornea. Fins: thin membranes with fine brown rays; the caudal fan brown with pale
- * tips and white spots. Thin parts (snout, tail tip, fins) pass the light behind them (subtle translucency).
+ * The skin is built in layers like a real fish's, not painted on (see BODY_SURFACE): pigment cells laid out in true
+ * arc length over the polygonal section (xanthophore ground, clustered melanophores of two sizes, raised white
+ * leucophore granules, erythrophore hatching across the rings, an iridophore sheen), over bony plates with fine
+ * grain, ridges and faint joints; the mucus a thin, uneven gloss whose highlights only half follow the relief.
+ * Subsurface scattering is approximated by wrapped, tissue-tinted light and light through the thin parts (snout,
+ * tail, fins, the belly wall, behind which the gut, the liver and the swim bladder show as soft shapes).
  *
  * Under water: the indirect light is the light field of the 走水 shallows (the sky squeezed into Snell's window above,
  * the blue-green glow of the water to the sides, greener inside the eelgrass, the sunlit sand below) and the ripples'
@@ -38,25 +36,38 @@ export const YJ_UNIFORMS = {
 /** One individual's look. */
 export interface Look {
   base: Color; dark: Color; pale: Color; belly: Color;
-  /** banding 0..1, white dots 0..1, ocelli ladder 0..1, mottling 0..1 */
+  /** the erythrophores' orange-brown (the hatching on the lower flank) */
+  accent: Color;
+  /** banding, white spots, ocelli ladder, mottling 0..1 */
   band: number; dots: number; ocelli: number; mottle: number;
+  /** orange hatching, melanophore pepper, silver-gold sheen, belly translucency 0..1 */
+  streak: number; pepper: number; sheen: number; translucency: number;
+  /** pale ivory snout, white granules 0..1 */
+  snout: number; granules: number;
   seed: number;
 }
 
+const c = (r: number, g: number, b: number) => new Color(r, g, b);
 /** The colour morphs seen in the photographs (linear RGB). */
 export const MORPHS: readonly Omit<Look, 'seed'>[] = [
-  // olive-brown, mottled, white dots (the commonest)
-  { base: new Color(0.15, 0.11, 0.04), dark: new Color(0.045, 0.03, 0.012), pale: new Color(0.62, 0.56, 0.42), belly: new Color(0.62, 0.56, 0.38), band: 0.35, dots: 0.8, ocelli: 0.2, mottle: 0.8 },
+  // olive-brown, mottled, peppered, white granules (the commonest)
+  { base: c(0.17, 0.12, 0.045), dark: c(0.04, 0.028, 0.012), pale: c(0.7, 0.64, 0.48), belly: c(0.62, 0.55, 0.34), accent: c(0.3, 0.1, 0.03), band: 0.35, dots: 0.6, ocelli: 0.15, mottle: 0.7, streak: 0.35, pepper: 0.9, sheen: 0.35, translucency: 0.5, snout: 0.3, granules: 0.7 },
   // green: the eelgrass fish (yellow-green with a darker back)
-  { base: new Color(0.2, 0.25, 0.035), dark: new Color(0.055, 0.075, 0.012), pale: new Color(0.55, 0.62, 0.3), belly: new Color(0.5, 0.56, 0.22), band: 0.15, dots: 0.45, ocelli: 0.1, mottle: 0.5 },
+  { base: c(0.22, 0.27, 0.045), dark: c(0.05, 0.07, 0.012), pale: c(0.62, 0.68, 0.36), belly: c(0.55, 0.6, 0.25), accent: c(0.28, 0.2, 0.03), band: 0.15, dots: 0.4, ocelli: 0.1, mottle: 0.5, streak: 0.2, pepper: 0.7, sheen: 0.3, translucency: 0.55, snout: 0.45, granules: 0.6 },
   // dark brown, banded
-  { base: new Color(0.075, 0.045, 0.02), dark: new Color(0.018, 0.012, 0.006), pale: new Color(0.45, 0.4, 0.3), belly: new Color(0.4, 0.33, 0.2), band: 0.9, dots: 0.5, ocelli: 0.0, mottle: 0.6 },
-  // pale tan with a ladder of ocelli
-  { base: new Color(0.3, 0.21, 0.11), dark: new Color(0.1, 0.06, 0.025), pale: new Color(0.72, 0.66, 0.52), belly: new Color(0.7, 0.64, 0.48), band: 0.2, dots: 0.6, ocelli: 0.95, mottle: 0.5 },
+  { base: c(0.08, 0.05, 0.022), dark: c(0.016, 0.011, 0.006), pale: c(0.5, 0.45, 0.34), belly: c(0.42, 0.34, 0.2), accent: c(0.16, 0.06, 0.02), band: 0.9, dots: 0.5, ocelli: 0, mottle: 0.6, streak: 0.15, pepper: 1, sheen: 0.2, translucency: 0.35, snout: 0.15, granules: 0.5 },
+  // golden yellow with orange-brown hatching low on the trunk and an ivory snout (a live fish in eelgrass)
+  { base: c(0.5, 0.38, 0.07), dark: c(0.16, 0.07, 0.015), pale: c(0.85, 0.8, 0.55), belly: c(0.72, 0.62, 0.28), accent: c(0.42, 0.12, 0.02), band: 0.1, dots: 0.7, ocelli: 0, mottle: 0.35, streak: 1, pepper: 0.45, sheen: 0.25, translucency: 0.7, snout: 0.9, granules: 1 },
+  // silvery tan, densely peppered, a gold-silver sheen along the trunk (a fresh specimen)
+  { base: c(0.3, 0.25, 0.15), dark: c(0.05, 0.035, 0.018), pale: c(0.75, 0.72, 0.6), belly: c(0.7, 0.66, 0.5), accent: c(0.25, 0.12, 0.05), band: 0.2, dots: 0.3, ocelli: 0.1, mottle: 0.4, streak: 0.1, pepper: 1, sheen: 1, translucency: 0.55, snout: 0.35, granules: 0.5 },
   // reddish brown with white spots
-  { base: new Color(0.24, 0.09, 0.035), dark: new Color(0.07, 0.025, 0.01), pale: new Color(0.7, 0.62, 0.48), belly: new Color(0.62, 0.5, 0.3), band: 0.3, dots: 1.0, ocelli: 0.15, mottle: 0.7 },
+  { base: c(0.24, 0.09, 0.035), dark: c(0.07, 0.025, 0.01), pale: c(0.72, 0.64, 0.5), belly: c(0.62, 0.5, 0.3), accent: c(0.36, 0.1, 0.03), band: 0.3, dots: 1, ocelli: 0.15, mottle: 0.7, streak: 0.3, pepper: 0.8, sheen: 0.3, translucency: 0.5, snout: 0.3, granules: 0.8 },
+  // pale tan with a ladder of ocelli
+  { base: c(0.3, 0.21, 0.11), dark: c(0.1, 0.06, 0.025), pale: c(0.72, 0.66, 0.52), belly: c(0.7, 0.64, 0.48), accent: c(0.3, 0.14, 0.05), band: 0.2, dots: 0.6, ocelli: 0.95, mottle: 0.5, streak: 0.2, pepper: 0.7, sheen: 0.4, translucency: 0.6, snout: 0.5, granules: 0.7 },
 ];
 export const GREEN_MORPH = 1;
+export const GOLDEN_MORPH = 3;
+export const SILVER_MORPH = 4;
 
 // ------------------------------------------------------------------ GLSL
 
@@ -68,6 +79,8 @@ varying vec3 vBody;
 varying vec2 vPat;
 varying float vPart;
 varying vec3 vWPos;
+varying vec3 vRest;
+varying vec3 vRestN;
 `;
 const FIN_VERT_PARS = /* glsl */ `
 attribute vec3 aFin;
@@ -202,138 +215,249 @@ const BODY_FRAG_PARS = /* glsl */ `
 varying vec3 vBody;
 varying vec2 vPat;
 varying float vPart;
+varying vec3 vRest;
+varying vec3 vRestN;
 uniform vec3 uBase;
 uniform vec3 uDark;
 uniform vec3 uPale;
 uniform vec3 uBelly;
-uniform vec4 uPattern;   // band, dots, ocelli, mottle
+uniform vec3 uAccent;
+uniform vec4 uPattern;    // band, white spots, ocelli, mottle
+uniform vec4 uPattern2;   // orange hatching, melanophore pepper, silver-gold sheen, belly translucency
+uniform vec4 uPattern3;   // ivory snout, white granules
 uniform float uSeed;
 `;
 
+/** functions of the skin, after the helpers */
+const BODY_FNS = /* glsl */ `
+// A lattice of chromatophores: p in cells, density the share of cells holding one, radii in cells. Each is a
+// little star (the cells branch). Where a cell spans a pixel or less the dots give way to their mean cover, so the
+// skin does not sparkle at a distance.
+float yjDots(vec2 p, float density, float rMin, float rMax, float seed) {
+  float rm = 0.5 * (rMin + rMax);
+  float mean = density * 3.14159 * rm * rm * 0.55;
+  float fw = length(fwidth(p));
+  if (fw > 1.6) return mean;
+  vec2 i = floor(p), fr = fract(p);
+  float c = 0.0;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 o = vec2(float(x), float(y));
+      vec2 id = i + o + seed;
+      if (yjHash(id + 5.3) > density) continue;
+      vec2 at = o + 0.1 + 0.8 * vec2(yjHash(id), yjHash(id + 17.1));
+      vec2 dv = fr - at;
+      float r = mix(rMin, rMax, yjHash(id + 9.7));
+      r *= 1.0 + 0.12 * sin(atan(dv.y, dv.x) * 5.0 + yjHash(id + 3.3) * 6.28) + 0.08 * sin(atan(dv.y, dv.x) * 3.0 + yjHash(id + 8.1) * 6.28);
+      c = max(c, smoothstep(r, r * 0.4, length(dv)));
+    }
+  }
+  return mix(c, mean, smoothstep(0.6, 1.6, fw));
+}
+`;
+
 /**
- * Colour, roughness, relief and the thin-part translucency of the body, computed once at the colour stage.
- * s along the body, φ round it (0 dorsal midline, toward the left flank), e = φ in edges (ridges at 1, 2, 3 and 5,
- * 6, 7 on the trunk), r the ring coordinate.
+ * The skin, computed once at the colour stage (and read again by the roughness, metalness, normal, clearcoat,
+ * iridescence and emissive stages). From the photographs of live fish and fresh specimens:
+ *  - not paint over plastic but layers of pigment cells in a thin, wet, slightly translucent skin over bony plates:
+ *    a yellow-olive ground (xanthophores) varying slowly in hue; dense fine melanophores, little branched dots of two
+ *    sizes, thick on the back and thin on the belly; white granules (leucophores) scattered over the plates, raised a
+ *    little; on the lower trunk flank, orange-brown hatching across each ring (erythrophores); a silver-gold sheen of
+ *    iridophores low on the trunk and on the gill cover; dark saddles and bands on some fish, a ladder of ocelli on
+ *    others; the pale belly
+ *  - the armour: ridges at the section's corners, faint seams at the ring joints, the plates a little convex with fine
+ *    radial striae; the granules and striae break the highlights, the mucus is a thin, uneven gloss over it
+ *  - the head: an ivory, translucent snout widening to the mouth; the bony rim of the orbit pale and finely striated;
+ *    the eye a black pupil in a bright gold ring, olive-brown iris flecked with gold, the dark limbus; the gill cover
+ *    with radial ridges and a silver-gold sheen, the gill opening a dark slit
+ *  - the belly's thin wall lets the light through and shows the shadows inside: the gut, the liver at the front, the
+ *    silvery swim bladder above them (seen a little below the surface)
+ * s along the body, φ round it (0 = dorsal midline, toward the left flank), e = φ in edges (ridges at 1, 2, 3 and
+ * 5, 6, 7 on the trunk), r the ring coordinate; vRest the rest-pose position in TL units.
  */
 const BODY_SURFACE = /* glsl */ `
-float yjRough = 0.4, yjCoat = 0.5, yjMetal = 0.0, yjIri = 0.0, yjThin = 0.0, yjH = 0.0;
+float yjRough = 0.55, yjCoat = 0.18, yjMetal = 0.0, yjIri = 0.0, yjThin = 0.0, yjH = 0.0, yjSSS = 0.0;
 {
-  float s = vBody.x;
-  float cphi = vBody.y, sphi = vBody.z;
+  float s = vBody.x, cphi = vBody.y, sphi = vBody.z;
   float phi = atan(sphi, cphi);
-  float side = sign(sphi + 1e-5);
   float e = mod(phi / 6.2831853 * 8.0 + 8.0, 8.0);
   float r = vPat.x;
   float body = smoothstep(${f(S_HEAD - 0.004)}, ${f(S_HEAD + 0.006)}, s);
+  float head = 1.0 - body;
+  float rad = length(vRest.xy);
   vec3 col;
   if (vPart > 0.5 && vPart < 1.5) {
-    // ---- the eye: golden-brown iris with radial streaks, the dark stripe across it, a black pupil
+    // ---- the eye
     vec2 q = vPat;
     float rr = length(q);
-    float pupil = 1.0 - smoothstep(${f(EYE.pupil - 0.03)}, ${f(EYE.pupil + 0.02)}, rr);
     float ang = atan(q.y, q.x);
-    float streak = 0.75 + 0.25 * yjNoise(vec2(ang * 7.0, rr * 3.0)) + 0.12 * sin(ang * 23.0 + rr * 5.0);
-    vec3 iris = mix(vec3(0.42, 0.26, 0.07), vec3(0.62, 0.45, 0.16), smoothstep(0.75, 0.42, rr)) * streak;
-    // a bright gold ring round the pupil, the rim dark
-    iris = mix(iris, vec3(0.85, 0.66, 0.26), smoothstep(0.1, 0.0, abs(rr - 0.44)) * 0.6);
-    iris *= mix(1.0, 0.3, smoothstep(0.78, 0.98, rr));
-    // the stripe running from the snout through the eye
-    iris = mix(iris, uDark * 0.6, smoothstep(0.17, 0.08, abs(q.y + 0.02)) * smoothstep(0.38, 0.5, rr) * 0.8);
-    col = mix(iris, vec3(0.006, 0.007, 0.008), pupil);
-    yjRough = 0.12; yjCoat = 1.0;
-  } else if (vPart > 1.5 && vPart < 2.5) {
-    // ---- the mouth's opening
-    col = vec3(0.02, 0.012, 0.01);
-    yjRough = 0.6; yjCoat = 0.2;
+    float pupil = 1.0 - smoothstep(${f(EYE.pupil - 0.025)}, ${f(EYE.pupil + 0.012)}, rr * (1.0 + 0.035 * sin(ang * 2.0 + 0.4)));
+    // the iris: fine radial fibres, olive-brown above (the head's own colour), golden below
+    float fib = (0.6 + 0.4 * yjNoise(vec2(ang * 22.0, rr * 7.0))) * (0.85 + 0.25 * yjNoise(vec2(ang * 5.0, rr * 2.0) + 4.0));
+    vec3 iris = mix(mix(uBase, uDark, 0.45) * 1.2, vec3(0.62, 0.46, 0.14), smoothstep(0.15, -0.35, q.y)) * fib;
+    // the bright gold ring round the pupil, gold flecks on the outer iris, the lower iris paler gold
+    float ring = smoothstep(0.09, 0.0, abs(rr - ${f(EYE.pupil + 0.07)})) * (0.75 + 0.25 * yjNoise(vec2(ang * 12.0, 1.0)));
+    iris = mix(iris, vec3(0.9, 0.68, 0.22), ring * 0.8);
+    float fl = yjDots(vec2(ang * 7.0, rr * 16.0), 0.55, 0.12, 0.3, 4.0);
+    iris = mix(iris, vec3(0.78, 0.6, 0.24), fl * smoothstep(${f(EYE.pupil + 0.1)}, ${f(EYE.pupil + 0.2)}, rr) * 0.55);
+    iris = mix(iris, vec3(0.82, 0.66, 0.28), smoothstep(0.0, -0.45, q.y) * smoothstep(${f(EYE.pupil + 0.05)}, ${f(EYE.pupil + 0.15)}, rr) * 0.3);
+    // the dark limbus, and the snout's dark line running through the iris
+    iris *= mix(1.0, 0.6, smoothstep(0.74, 0.95, rr));
+    iris = mix(iris, uDark * 0.4, smoothstep(0.13, 0.05, abs(q.y - 0.02)) * smoothstep(${f(EYE.pupil + 0.12)}, ${f(EYE.pupil + 0.2)}, rr) * 0.75);
+    col = mix(iris, vec3(0.003, 0.004, 0.005), pupil);
+    yjRough = 0.05; yjCoat = 1.0;
   } else if (vPart > 2.5) {
     // ---- LOD2's painted tail fan
-    col = mix(uDark, uBase, 0.6) * 0.9;
+    col = mix(uDark, uAccent, 0.5);
     yjThin = 0.6;
   } else {
+    // ---- the armour's shape
     float ridge = 0.0, joint = 0.0, plateH = 0.0;
     float ringId = floor(r);
     float pu = fract(r);
+    float relief = 1.0 - smoothstep(0.08, 0.35, fwidth(r));
     if (body > 0.0) {
-      // ridges: the corners of the section (the head has none)
       float de = min(min(abs(e - 1.0), abs(e - 2.0)), min(abs(e - 3.0), min(abs(e - 5.0), min(abs(e - 6.0), abs(e - 7.0)))));
-      // the tail's lateral corners are no ridges
       float tailK = smoothstep(0.37, 0.44, s);
-      float isLat = (1.0 - step(0.5, min(abs(e - 2.0), abs(e - 6.0))));
-      ridge = exp(-de * de / 0.012) * (1.0 - isLat * tailK);
+      float isLat = 1.0 - step(0.5, min(abs(e - 2.0), abs(e - 6.0)));
+      ridge = exp(-de * de / 0.008) * (1.0 - isLat * tailK);
       float dj = min(pu, 1.0 - pu);
-      // the seams fade out where a ring is only a few pixels long (no tape-measure stripes at a distance)
-      joint = exp(-dj * dj / 0.004) * (1.0 - smoothstep(0.12, 0.45, fwidth(r)));
-      // the plate: convex between the ridges and the joints, faint radial striae from its middle
+      // the joint: a fine line, wandering a little in its darkness
+      joint = exp(-dj * dj / 0.0012) * relief * (0.6 + 0.4 * yjNoise(vec2(ringId * 3.1, vPat.y * 400.0)));
       float pv = fract(e) - 0.5;
       float pw = pu - 0.5;
-      float striae = sin(atan(pv, pw) * 16.0 + yjHash(vec2(ringId, floor(e))) * 6.0) * smoothstep(0.08, 0.3, length(vec2(pv, pw)));
-      plateH = 0.18 * (1.0 - 4.0 * (pv * pv + pw * pw)) + 0.03 * striae * (1.0 - joint);
+      // the bone's surface under the skin: faint, irregular pitting and grain (no regular ornament)
+      float grain = yjNoise(vec2(s * 900.0, vPat.y * 900.0)) * 0.6 + yjNoise(vec2(s * 2300.0, vPat.y * 1800.0)) * 0.4;
+      plateH = 0.06 * (1.0 - 4.0 * (pv * pv + pw * pw)) + 0.08 * (grain - 0.5) * (1.0 - joint);
     }
-    float s_ = s;
-    // ---- body colour
+    // skin coordinates in TL units, about isotropic (s along, arc length round)
+    vec2 sk = vec2(s, vPat.y);
     float dors = smoothstep(-0.55, 0.6, cphi);
-    float bellyK = smoothstep(-0.48, -0.78, cphi) * body + smoothstep(-0.3, -0.7, cphi) * (1.0 - body);
-    vec2 P = vec2(s_ * 60.0, phi * 1.4);
-    float mott = yjFbm(P * vec2(0.9, 1.2) + uSeed * 13.0);
-    // dark saddles over the back, a ring or two wide, and bands a few rings wide (irregular), darker above
+    float lowFl = smoothstep(0.3, -0.1, cphi) * smoothstep(-0.92, -0.62, cphi);
+    float bellyK = smoothstep(-0.5, -0.8, cphi) * body + smoothstep(-0.3, -0.72, cphi) * head;
+    float mott = yjFbm(vec2(s * 60.0, phi * 1.4) * vec2(0.9, 1.2) + uSeed * 13.0);
+    float hue = yjFbm(vec2(s * 12.0, phi * 0.7) + uSeed * 5.0);
+    // the ground: xanthophore yellow, its hue and depth wandering slowly
+    col = mix(uBase, uBase * vec3(1.12, 1.0, 0.78), hue) * (0.8 + 0.4 * mott);
+    // dark saddles over the back, bands a few rings wide, mottling
     float saddle = smoothstep(0.5, 0.72, yjFbm(vec2(r * 0.55 + uSeed * 3.0, phi * 0.6 + 2.0)));
     float band = smoothstep(0.42, 0.62, yjNoise(vec2(r * 0.28 + uSeed * 7.0, 0.5))) * uPattern.x;
-    col = uBase * (0.8 + 0.4 * mott);
-    col = mix(col, uDark, clamp(smoothstep(0.42, 0.72, mott) * uPattern.w * 0.7 + saddle * uPattern.w * 0.55 + band * 0.75, 0.0, 0.92) * dors);
-    // melanophore pepper
-    float pep = yjHash(floor(vec2(s_ * 1400.0, phi * 40.0)));
-    col *= 1.0 - 0.35 * smoothstep(0.82, 0.97, pep) * (0.4 + 0.6 * dors);
-    // small white dots on the plates (one or two to a plate, here and there)
+    col = mix(col, uDark, clamp(smoothstep(0.42, 0.72, mott) * uPattern.w * 0.55 + saddle * uPattern.w * 0.45 + band * 0.7, 0.0, 0.9) * dors);
+    // the orange-brown hatching across each ring on the lower trunk flank, and its wash
+    float hatch = 0.5 + 0.5 * sin(r * 12.566 + 1.6 * yjNoise(vec2(r * 1.7, phi * 3.0) + uSeed * 9.0));
+    hatch = smoothstep(0.45, 0.95, hatch) * (0.55 + 0.45 * yjNoise(vec2(r * 0.6, phi * 2.0) + 7.0));
+    float hatchK = uPattern2.x * lowFl * body * smoothstep(0.5, 0.36, s);
+    col = mix(col, uAccent, hatchK * (0.25 + 0.65 * hatch));
+    // the belly
+    col = mix(col, uBelly * (0.92 + 0.12 * mott), bellyK);
+    // melanophores: fine pepper of two sizes, thick on the back, thin on the belly
+    // (clustered: the cells gather in patches a few millimetres across, which is what reads at a distance)
+    float clump = smoothstep(0.25, 0.75, yjFbm(sk / 0.011 + uSeed * 19.0));
+    float pepD = uPattern2.y * mix(0.3, 1.0, dors) * (1.0 - 0.85 * bellyK) * (0.45 + 0.9 * clump);
+    float mel = yjDots(sk / 0.0022, min(1.0, 0.85 * pepD), 0.16, 0.36, uSeed * 31.0);
+    mel = max(mel, 0.9 * yjDots(sk / 0.0052, min(1.0, 0.5 * pepD), 0.14, 0.3, uSeed * 17.0 + 3.0));
+    col = mix(col, uDark * 0.45, mel * 0.85);
+    col = mix(col, uDark * 0.7, clump * uPattern2.y * 0.18 * dors);
+    // white granules (leucophores), raised a little
+    float gran = yjDots(sk / 0.0016 + 0.37, 0.3 * uPattern3.y, 0.18, 0.36, uSeed * 7.0 + 11.0) * (0.35 + 0.65 * dors) * (1.0 - 0.6 * bellyK);
+    col = mix(col, uPale * 1.08, gran * 0.6);
+    // the larger white spots, one or two to a plate here and there
     vec2 cell = vec2(ringId, floor(e * 1.5));
     vec2 jitter = vec2(yjHash(cell + 3.1), yjHash(cell + 7.7));
-    vec2 inPlate = vec2(pu, fract(e * 1.5));
-    float dotR = 0.07 + 0.06 * yjHash(cell + 1.9);
-    float dotK = (1.0 - smoothstep(dotR * 0.6, dotR, length((inPlate - (0.2 + 0.6 * jitter)) * vec2(1.0, 0.8)))) * step(1.0 - uPattern.y * 0.55, yjHash(cell + 5.3));
-    dotK *= body * smoothstep(-0.7, -0.2, cphi);
-    // the ladder of ocelli along the lower flank: a pale oval in each ring, ringed with brown
-    float lowFlank = exp(-pow((abs(phi) - 2.35) / 0.32, 2.0));
+    float dotR = 0.06 + 0.06 * yjHash(cell + 1.9);
+    float dotK = (1.0 - smoothstep(dotR * 0.5, dotR, length((vec2(pu, fract(e * 1.5)) - (0.2 + 0.6 * jitter)) * vec2(1.0, 0.8)))) * step(1.0 - uPattern.y * 0.5, yjHash(cell + 5.3));
+    dotK *= body * smoothstep(-0.7, -0.2, cphi) * relief;
+    col = mix(col, uPale * 1.05, dotK * 0.7);
+    // the ladder of ocelli along the lower flank
+    float lowRow = exp(-pow((abs(phi) - 2.35) / 0.32, 2.0));
     float oc = length(vec2((pu - 0.5) * 1.15, (abs(phi) - 2.35) * 1.6));
-    float ocK = uPattern.z * lowFlank * body * smoothstep(${f(S_CAUDAL)}, 0.85, s_);
+    float ocK = uPattern.z * lowRow * body * smoothstep(${f(S_CAUDAL)}, 0.85, s);
     col = mix(col, uDark * 0.8, ocK * smoothstep(0.42, 0.3, oc) * smoothstep(0.18, 0.28, oc));
     col = mix(col, uPale, ocK * smoothstep(0.24, 0.14, oc));
-    col = mix(col, uPale, dotK * 0.75);
-    // the belly
-    col = mix(col, uBelly * (0.92 + 0.08 * mott), bellyK);
-    // ridges a little paler, the ring joints dark seams
-    col = mix(col, col * 1.15 + uPale * 0.03, ridge * 0.3 * body);
-    col *= 1.0 - 0.12 * joint * body;
+    // the armour in the colour: ridges a shade paler, seams a shade darker
+    col = mix(col, col * 1.12 + uPale * 0.02, ridge * 0.35 * body);
+    col *= 1.0 - 0.06 * joint * body;
+    // iridophores: a silver-gold sheen low on the trunk flank
+    float sheen = uPattern2.z * body * smoothstep(0.45, 0.3, s) * smoothstep(0.4, 0.0, cphi) * smoothstep(-0.92, -0.55, cphi);
+    float op = 0.0;
     // ---- the head
-    float head = 1.0 - body;
     if (head > 0.0) {
-      // the dark line along the snout's side through the eye, on over the gill cover
       float lat = abs(sphi);
-      float stripe = smoothstep(0.5, 0.8, lat) * smoothstep(0.32, 0.12, abs(cphi - 0.08)) * smoothstep(${f(S_HEAD + 0.004)}, ${f(S_HEAD - 0.012)}, s_);
-      col = mix(col, uDark * 0.8, stripe * 0.8 * head);
-      // the head's top darker, freckled pale
-      col = mix(col, uDark, smoothstep(0.55, 0.9, cphi) * 0.35 * head);
-      // the snout: darker toward the tip, its underside pale; a fine dark rim at the mouth
-      float snout = smoothstep(${f(S_SNOUT + 0.01)}, ${f(S_SNOUT - 0.01)}, s_);
-      col = mix(col, col * 0.75, snout * smoothstep(0.02, 0.0, s_) * head);
-      // the gill cover: radial ridges and a green-silver sheen
-      float op = smoothstep(${f(S_EYE + 0.008)}, ${f(S_EYE + 0.016)}, s_) * smoothstep(${f(S_HEAD + 0.002)}, ${f(S_HEAD - 0.004)}, s_) * smoothstep(0.3, 0.75, lat) * smoothstep(0.75, 0.2, cphi);
-      float rad = sin(atan(cphi + 0.1, (s_ - ${f(S_EYE)}) * 30.0) * 22.0);
-      col = mix(col, mix(col, vec3(0.3, 0.38, 0.24), 0.45), op);
-      yjIri = 0.55 * op; yjMetal = 0.2 * op;
-      plateH += 0.08 * rad * op;
-      // the gill opening: a dark slit high at the cover's back
-      float slit = op * smoothstep(0.0025, 0.0, abs(s_ - ${f(S_HEAD - 0.003)})) * smoothstep(0.3, 0.6, cphi);
+      // the snout: ivory and translucent, a little darker along its top
+      float snoutK = smoothstep(${f(S_SNOUT + 0.008)}, ${f(S_SNOUT - 0.012)}, s);
+      col = mix(col, mix(uPale * 0.95, uBase, 0.25 * dors), uPattern3.x * snoutK * head);
+      // the dark line along the snout's side through the eye, fainter on a pale snout
+      float stripe = smoothstep(0.5, 0.8, lat) * smoothstep(0.3, 0.1, abs(cphi - 0.1)) * smoothstep(${f(S_HEAD + 0.004)}, ${f(S_HEAD - 0.012)}, s);
+      col = mix(col, uDark * 0.8, stripe * 0.7 * (1.0 - 0.6 * uPattern3.x * snoutK) * head);
+      col = mix(col, uDark, smoothstep(0.6, 0.92, cphi) * 0.25 * head);
+      // the orbit: a pale bony rim with fine radial striae round the eye
+      vec2 eo = vec2(vRest.z - ${f(S_PIVOT - S_EYE)}, vRest.y - ${f(EYE.y)});
+      float de = length(eo);
+      float rim = smoothstep(${f(EYE.r * 0.45)}, 0.0, abs(de - ${f(EYE.r * 1.1)})) * smoothstep(0.45, 0.85, lat);
+      float rimStr = 0.5 + 0.5 * sin(atan(eo.y, eo.x) * 30.0 + 2.0 * yjNoise(eo * 900.0));
+      col = mix(col, mix(col, uPale, 0.5), rim * (0.18 + 0.12 * rimStr) * head);
+      plateH += (0.35 * rim + 0.12 * rim * rimStr) * head;
+      // the gill cover: radial ridges from its hinge, a silver-gold sheen
+      op = smoothstep(${f(S_EYE + 0.008)}, ${f(S_EYE + 0.016)}, s) * smoothstep(${f(S_HEAD + 0.002)}, ${f(S_HEAD - 0.004)}, s) * smoothstep(0.3, 0.75, lat) * smoothstep(0.75, 0.2, cphi);
+      float rays = sin(atan(cphi + 0.1, (s - ${f(S_EYE)}) * 30.0) * 24.0);
+      col = mix(col, mix(col, vec3(0.62, 0.58, 0.4), 0.15 + 0.3 * uPattern2.z), op);
+      plateH += 0.09 * rays * op;
+      float slit = op * smoothstep(0.0025, 0.0, abs(s - ${f(S_HEAD - 0.003)})) * smoothstep(0.3, 0.6, cphi);
       col *= 1.0 - 0.7 * slit;
-      // the orbit's rim
-      plateH += 0.4 * smoothstep(0.25, 0.0, abs(s_ - ${f(S_EYE)}) / 0.012 - 0.8) * smoothstep(0.5, 0.9, lat) * head;
+      yjThin += 0.55 * uPattern3.x * snoutK;
     }
-    // ---- surface: mucus over bone; the ridges and the plates' middles glossier
-    yjRough = 0.5 - 0.1 * ridge - 0.05 * plateH * body;
-    yjCoat = 0.3;
-    // the relief fades where a ring is only a few pixels long (it would only shimmer)
-    float relief = 1.0 - smoothstep(0.08, 0.35, fwidth(r));
-    yjH = (plateH * 0.35 + 0.25 * ridge - 0.8 * joint * body) * relief * ${f(MODEL_TL * 0.0012)};
-    // thin parts let the light through: the snout tube, the tail toward its tip
-    yjThin = 0.45 * smoothstep(${f(S_SNOUT)}, 0.0, s_) + 0.75 * smoothstep(0.7, 0.97, s_);
+    sheen = max(sheen, op * (0.25 + 0.6 * uPattern2.z));
+#ifndef YJ_LOW
+    // ---- the belly's thin wall: the shadows of the gut, the liver and the swim bladder a little below the skin
+    float trunk = smoothstep(0.125, 0.145, s) * smoothstep(0.405, 0.385, s);
+    if (trunk > 0.0) {
+      // a short march inward through the wall (Beer-Lambert): what lies nearer the skin shows more
+      vec3 nIn = -normalize(vRestN);
+      vec3 organ = vec3(0.0);
+      float od = 0.0, tr = 1.0;
+      for (int k = 0; k < 4; k++) {
+        float dk = 0.0008 + 0.0015 * float(k);
+        vec3 q = vRest + nIn * dk;
+        // (the body cavity fills most of the lower trunk: the straight gut low in it with its contents, the liver in
+        // front, the silvery swim bladder above)
+        vec2 gc = vec2(0.0006 * sin(s * 70.0), -0.0082 + 0.0006 * sin(s * 95.0 + uSeed * 6.0));
+        float gut = smoothstep(0.0008, -0.0005, length(q.xy - gc) - 0.0038 * smoothstep(0.13, 0.17, s) * smoothstep(0.405, 0.375, s));
+        float food = smoothstep(0.45, 0.8, yjNoise(vec2(s * 160.0 + uSeed * 40.0, 0.5)));
+        float liver = smoothstep(0.001, -0.0005, length((q.xy - vec2(0.0, -0.0045)) * vec2(1.0, 0.85)) - 0.0075 * smoothstep(0.215, 0.14, s));
+        float bladder = smoothstep(0.0008, -0.0005, length((q.xy - vec2(0.0, 0.0032)) * vec2(1.0, 0.9)) - 0.0048 * smoothstep(0.35, 0.24, s) * smoothstep(0.16, 0.21, s));
+        vec3 oc = vec3(0.72, 0.72, 0.68);
+        float a = bladder * 0.55;
+        oc = mix(oc, vec3(0.42, 0.26, 0.08), liver); a = max(a, liver * 0.75);
+        oc = mix(oc, mix(vec3(0.16, 0.11, 0.05), vec3(0.05, 0.035, 0.02), food), gut); a = max(a, gut * 0.95);
+        organ += tr * a * oc;
+        od += tr * a;
+        tr *= (1.0 - a * 0.8) * 0.82;
+      }
+      organ /= max(od, 1e-3);
+      float see = uPattern2.w * smoothstep(0.25, -0.5, cphi) * trunk;
+      col = mix(col, organ * (0.7 + 0.3 * uBelly / max(max(uBelly.r, uBelly.g), 0.01)), clamp(od, 0.0, 1.0) * see * 0.9);
+      sheen *= 1.0 - 0.7 * see;
+      yjThin += see * 0.5;
+      yjSSS += see;
+    }
+#endif
+    // the iridophores' mirror: pale gold to silver, broken by the pigment over it
+    col = mix(col, mix(col, vec3(0.86, 0.78, 0.55), 0.7) * (1.0 - 0.5 * mel), sheen);
+    // ---- the surface: a thin uneven gloss of mucus over granular skin and bone
+    float mucus = yjNoise(sk / 0.005 + uSeed * 3.0);
+    yjRough = 0.6 - 0.14 * ridge - 0.12 * gran - 0.06 * plateH * body + 0.12 * (mucus - 0.5) - 0.15 * sheen;
+    yjCoat = 0.08 + 0.2 * smoothstep(0.35, 0.8, mucus) + 0.1 * ridge;
+    yjMetal = 0.5 * sheen * (1.0 - 0.6 * mel);
+    yjIri = 0.75 * sheen;
+    yjRough = mix(yjRough, 0.28, sheen * 0.7);
+    yjH = (plateH * 0.35 + 0.2 * ridge - 0.28 * joint * body + 0.2 * gran * relief + 0.1 * dotK) * relief * ${f(MODEL_TL * 0.0012)};
+    // light through the thin parts (the snout tube, the tail), scattered in the skin everywhere
+    yjThin += 0.6 * smoothstep(0.0055, 0.0022, rad);
+    yjSSS += 0.6 + 0.4 * bellyK;
+    // the mouth: a small dark opening between the pale lips (part -1 at its middle)
+    float mouthK = clamp(-vPart, 0.0, 1.0);
+    col = mix(col, vec3(0.07, 0.04, 0.025), mouthK * mouthK);
+    yjRough = mix(yjRough, 0.65, mouthK); yjThin *= 1.0 - mouthK; yjH *= 1.0 - mouthK;
   }
   diffuseColor.rgb = col;
 }
@@ -341,18 +465,31 @@ float yjRough = 0.4, yjCoat = 0.5, yjMetal = 0.0, yjIri = 0.0, yjThin = 0.0, yjH
 
 const BODY_LIGHT = /* glsl */ `
 {
-  // the bony relief: the plates, the seams, the ridges, the gill cover's rays (a bump in the fish's own scale)
+  // the relief of the skin: plates, seams, ridges, granules, the orbit's and the gill cover's rays
   normal = yjBump(-vViewPosition, normal, yjH * uScale);
 }
+`;
+/** the mucus is smoother than the skin under it: its highlights follow the relief only half way */
+const COAT_NORMAL = /* glsl */ `
+clearcoatNormal = normalize(mix(clearcoatNormal, normal, 0.5));
 `;
 
 const TRANSLUCENCY = /* glsl */ `
 #include <emissivemap_fragment>
 {
   vec3 vW = inverseTransformDirection(-normalize(vViewPosition), viewMatrix);
+  vec3 nW = inverseTransformDirection(normal, viewMatrix);
+  vec3 L = yjSunDir();
+  float nl = dot(nW, L);
+  // subsurface: light scattered in the skin reaches past the terminator, warmed by the tissue
+  float wrap = max(0.0, (nl + 0.5) / 1.5) - max(0.0, nl);
+  vec3 tissue = diffuseColor.rgb * vec3(1.0, 0.78, 0.55);
+  totalEmissiveRadiance += tissue * yjSunCol() * wrap * 0.3 * yjSSS * RECIPROCAL_PI;
+  totalEmissiveRadiance += tissue * yjUnderwater(-nW, 1.0) * 0.08 * yjSSS;
+  // through the thin parts: what lies behind, and the sun from behind
   vec3 through = yjUnderwater(vW, 0.7);
-  float back = pow(clamp(dot(vW, yjSunDir()), 0.0, 1.0), 5.0);
-  totalEmissiveRadiance += yjThin * diffuseColor.rgb * (through * 0.55 + yjSunCol() * back * 0.12);
+  float back = pow(clamp(dot(vW, L), 0.0, 1.0), 4.0);
+  totalEmissiveRadiance += yjThin * diffuseColor.rgb * (through * 0.45 + yjSunCol() * back * 0.15);
 }
 `;
 
@@ -362,36 +499,41 @@ varying float vRay;
 uniform vec3 uBase;
 uniform vec3 uDark;
 uniform vec3 uPale;
+uniform vec3 uAccent;
 uniform float uFinBlur;
 uniform float uSeed;
 `;
+/** fins: clear membranes with fine rays dotted with melanophores; the caudal fan reddish brown with pale tips */
 const FIN_SURFACE = /* glsl */ `
 float yjThin = 1.0;
 {
   float u = vFin.x, v = vFin.y, id = vFin.z;
   float ray = smoothstep(0.55, 0.98, vRay);
-  vec3 mem = mix(vec3(0.62, 0.6, 0.5), uBase * 1.6, 0.35);
-  vec3 rc = mix(uDark, uBase, 0.35) * 1.2;
+  float mel = yjDots(vec2(u * 60.0, v * 14.0), 0.5, 0.15, 0.3, uSeed * 13.0 + id);
+  vec3 mem = mix(vec3(0.78, 0.76, 0.66), uBase * 2.0, 0.18);
+  vec3 rc = mix(uBase, uAccent, 0.4) * 1.3;
   float a;
   if (id < 0.5) {
-    // dorsal: clear with fine brown rays, a faint dark base; blurred when it buzzes fast
-    a = mix(0.16, 0.6, ray) * smoothstep(1.0, 0.86, v);
-    a = mix(a, a * 0.55 + 0.06, uFinBlur);
+    // dorsal: nearly clear, fine pale-brown rays dotted dark, a pigmented band at the base; blurred when it buzzes
+    a = mix(0.06, 0.38, ray) * smoothstep(1.0, 0.86, v) + 0.18 * ray * mel;
     mem = mix(mem, rc, ray);
-    mem = mix(mem, uDark, smoothstep(0.25, 0.0, v) * 0.4);
+    mem = mix(mem, uDark, max(ray * mel * 0.7, smoothstep(0.2, 0.0, v) * 0.45));
+    a += smoothstep(0.2, 0.0, v) * 0.12;
+    a = mix(a, a * 0.5 + 0.04, uFinBlur);
   } else if (id < 1.5) {
-    // pectoral: nearly clear
-    a = mix(0.1, 0.38, ray) * smoothstep(1.0, 0.8, v);
-    mem = mix(mem, rc, ray * 0.7);
+    // pectoral: clear, the rays faint
+    a = mix(0.04, 0.24, ray) * smoothstep(1.0, 0.8, v);
+    mem = mix(mem, rc, ray * 0.6);
   } else if (id < 2.5) {
-    // caudal: brown rays, pale tips, white spots
+    // caudal: reddish-brown rays densely dotted, a darker membrane, pale tips, a few white spots
     vec2 sp = vec2(u * 9.0, v * 6.0);
-    float spot = smoothstep(0.32, 0.2, length(fract(sp + yjHash(floor(sp) + uSeed) * 0.3) - 0.5)) * step(0.55, yjHash(floor(sp) + 2.0 + uSeed));
-    mem = mix(uDark * 1.3, mix(uBase, uDark, 0.3), ray);
-    mem = mix(mem, uPale, smoothstep(0.8, 0.98, v) * 0.6 + spot * 0.5);
-    a = mix(0.55, 0.92, ray) * smoothstep(1.0, 0.94, v);
+    float spot = smoothstep(0.3, 0.18, length(fract(sp + yjHash(floor(sp) + uSeed) * 0.3) - 0.5)) * step(0.62, yjHash(floor(sp) + 2.0 + uSeed));
+    mem = mix(mix(uDark, uAccent, 0.5) * 1.2, mix(uAccent, uDark, 0.3) * 1.4, ray);
+    mem = mix(mem, uDark * 0.6, mel * 0.6);
+    mem = mix(mem, uPale, smoothstep(0.82, 0.98, v) * 0.5 + spot * 0.45);
+    a = mix(0.5, 0.9, ray) * smoothstep(1.0, 0.94, v);
   } else {
-    a = mix(0.15, 0.5, ray);
+    a = mix(0.1, 0.45, ray);
     mem = mix(mem, rc, ray);
   }
   diffuseColor.rgb = mem;
@@ -406,15 +548,19 @@ export interface YoujiuoMaterials {
   bodyLow: MeshPhysicalMaterial;
   fins: MeshPhysicalMaterial;
   /** the individual's own uniforms */
-  own: { uBase: IUniform<Color>; uDark: IUniform<Color>; uPale: IUniform<Color>; uBelly: IUniform<Color>; uPattern: IUniform<Vector4>; uSeed: IUniform<number>; uCover: IUniform<number>; uFinBlur: IUniform<number>; uScale: IUniform<number> };
+  own: {
+    uBase: IUniform<Color>; uDark: IUniform<Color>; uPale: IUniform<Color>; uBelly: IUniform<Color>; uAccent: IUniform<Color>;
+    uPattern: IUniform<Vector4>; uPattern2: IUniform<Vector4>; uPattern3: IUniform<Vector4>;
+    uSeed: IUniform<number>; uCover: IUniform<number>; uFinBlur: IUniform<number>; uScale: IUniform<number>;
+  };
   dispose(): void;
 }
 
 function bodyMaterial(own: YoujiuoMaterials['own'], low: boolean): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.4, metalness: 0,
-    clearcoat: low ? 0 : 0.3, clearcoatRoughness: 0.25,
-    iridescence: low ? 0 : 0.5, iridescenceIOR: 1.5, iridescenceThicknessRange: [280, 560],
+    clearcoat: low ? 0 : 0.2, clearcoatRoughness: 0.32,
+    iridescence: low ? 0 : 0.5, iridescenceIOR: 1.45, iridescenceThicknessRange: [250, 620],
     side: low ? DoubleSide : FrontSide,
   });
   m.name = low ? 'YoujiuoBodyLOD2' : 'YoujiuoBody';
@@ -423,15 +569,16 @@ function bodyMaterial(own: YoujiuoMaterials['own'], low: boolean): MeshPhysicalM
     Object.assign(shader.uniforms, YJ_UNIFORMS, own);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBody = aBody; vPat = aPat; vPart = aPart;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvBody = aBody; vPat = aPat; vPart = aPart; vRest = position / ${f(MODEL_TL)}; vRestN = normal;`)
       .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${BODY_FRAG_PARS}\nuniform float uScale;`)
-      .replace('void main() {', `${HELPERS}\nvoid main() {`)
+      .replace('void main() {', `${HELPERS}\n${BODY_FNS}\nvoid main() {`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${BODY_SURFACE}`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(yjRough, 0.08, 1.0);')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = yjMetal;')
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${low ? '' : BODY_LIGHT}`)
+      .replace('#include <clearcoat_normal_fragment_maps>', `#include <clearcoat_normal_fragment_maps>\n${low ? '' : COAT_NORMAL}`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
 #ifdef USE_CLEARCOAT
   material.clearcoat = yjCoat;
@@ -444,12 +591,16 @@ function bodyMaterial(own: YoujiuoMaterials['own'], low: boolean): MeshPhysicalM
       .replace('#include <lights_fragment_maps>', ENV_INJECT)
       .replace('#include <emissivemap_fragment>', TRANSLUCENCY);
   };
-  m.customProgramCacheKey = () => (low ? 'youjiuo-body-lod2-v1' : 'youjiuo-body-v1');
+  if (low) m.defines = { YJ_LOW: '' };
+  m.customProgramCacheKey = () => (low ? 'youjiuo-body-lod2-v2' : 'youjiuo-body-v2');
   return m;
 }
 
 function finMaterial(own: YoujiuoMaterials['own']): MeshPhysicalMaterial {
-  const m = new MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0, transparent: true, depthWrite: false, side: DoubleSide });
+  const m = new MeshPhysicalMaterial({
+    color: 0xffffff, roughness: 0.28, metalness: 0, transparent: true, depthWrite: false, side: DoubleSide,
+    iridescence: 0.3, iridescenceIOR: 1.4, iridescenceThicknessRange: [250, 450],
+  });
   m.name = 'YoujiuoFin';
   m.envMapIntensity = 0.25;
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
@@ -460,7 +611,7 @@ function finMaterial(own: YoujiuoMaterials['own']): MeshPhysicalMaterial {
       .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FIN_FRAG_PARS}`)
-      .replace('void main() {', `${HELPERS}\nvoid main() {`)
+      .replace('void main() {', `${HELPERS}\n${BODY_FNS}\nvoid main() {`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${FIN_SURFACE}`)
       .replace('#include <lights_fragment_begin>', CAUSTIC_INJECT)
       .replace('#include <lights_fragment_maps>', ENV_INJECT)
@@ -471,7 +622,7 @@ function finMaterial(own: YoujiuoMaterials['own']): MeshPhysicalMaterial {
   totalEmissiveRadiance += diffuseColor.rgb * (yjUnderwater(nW, 1.0) + yjUnderwater(-nW, 1.0)) * 0.22;
 }`);
   };
-  m.customProgramCacheKey = () => 'youjiuo-fin-v1';
+  m.customProgramCacheKey = () => 'youjiuo-fin-v2';
   return m;
 }
 
@@ -479,7 +630,10 @@ function finMaterial(own: YoujiuoMaterials['own']): MeshPhysicalMaterial {
 export function youjiuoMaterials(look: Look, scale: number): YoujiuoMaterials {
   const own = {
     uBase: { value: look.base.clone() }, uDark: { value: look.dark.clone() }, uPale: { value: look.pale.clone() }, uBelly: { value: look.belly.clone() },
+    uAccent: { value: look.accent.clone() },
     uPattern: { value: new Vector4(look.band, look.dots, look.ocelli, look.mottle) },
+    uPattern2: { value: new Vector4(look.streak, look.pepper, look.sheen, look.translucency) },
+    uPattern3: { value: new Vector4(look.snout, look.granules, 0, 0) },
     uSeed: { value: look.seed }, uCover: { value: 0 }, uFinBlur: { value: 0 }, uScale: { value: scale },
   };
   const body = bodyMaterial(own, false), bodyLow = bodyMaterial(own, true), fins = finMaterial(own);
@@ -490,11 +644,12 @@ export function youjiuoMaterials(look: Look, scale: number): YoujiuoMaterials {
 export function lookFor(morph: number, seed: number, green: number): Look {
   const m = MORPHS[morph % MORPHS.length], g = MORPHS[GREEN_MORPH];
   // a fish living among the blades turns greener over the weeks (not all the way)
-  const k = morph % MORPHS.length === GREEN_MORPH ? 0 : 0.45 * Math.max(0, Math.min(1, green));
-  const mix = (a: Color, b: Color, i: number) => a.clone().lerp(b, k).multiplyScalar(1 + 0.12 * Math.sin(seed * 91.7 + i));
+  const k = morph % MORPHS.length === GREEN_MORPH ? 0 : 0.4 * Math.max(0, Math.min(1, green));
+  const mix = (a: Color, b: Color, i: number) => a.clone().lerp(b, k).multiplyScalar(1 + 0.1 * Math.sin(seed * 91.7 + i));
   return {
-    base: mix(m.base, g.base, 1), dark: mix(m.dark, g.dark, 2), pale: mix(m.pale, g.pale, 3), belly: mix(m.belly, g.belly, 4),
-    band: m.band, dots: m.dots, ocelli: m.ocelli, mottle: m.mottle, seed: seed % 1,
+    base: mix(m.base, g.base, 1), dark: mix(m.dark, g.dark, 2), pale: mix(m.pale, g.pale, 3), belly: mix(m.belly, g.belly, 4), accent: mix(m.accent, g.accent, 5),
+    band: m.band, dots: m.dots, ocelli: m.ocelli, mottle: m.mottle, streak: m.streak, pepper: m.pepper, sheen: m.sheen, translucency: m.translucency,
+    snout: m.snout, granules: m.granules, seed: seed % 1,
   };
 }
 
