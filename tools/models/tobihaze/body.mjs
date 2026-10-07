@@ -1,6 +1,6 @@
 // Skin mesh (head / trunk / tail), mouth interior and baked skin textures for the adult トビハゼ.
 import {
-  S_END, SL, BODY_U, ARM_U, DOME_U, EYE, CUP, MOUTH, RICTUS_S, FEAT, uvS, uvT, windowAngle,
+  S_END, SL, BODY_U, ARM_U, DOME_U, EYE, CUP, MOUTH, RICTUS_S, FEAT, uvS, uvT, windowAngle, lipPadCoord,
   section, basePoint, project, field, fieldGrad, toObject, dirToObject, gapeY, sideZ, normHeight, topY, botY, norm3,
 } from './anatomy.mjs';
 import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEachCell3 } from '../../lib/noise.mjs';
@@ -325,6 +325,26 @@ export function buildSkin(NS, NV, log = () => {}) {
       // the differences across a row are unreliable: there the field's own normal is kept)
       const f = Math.max(smoothstep(1.2, 2.6, v.s), smoothstep(0.85, 0.6, dot(n, v.n)));
       v.n = norm3([n[0] * (1 - f) + v.n[0] * f, n[1] * (1 - f) + v.n[1] * f, n[2] * (1 - f) + v.n[2] * f]);
+    }
+    for (let i = 0; i < NS; i++) verts[i * cols + NV].n = verts[i * cols].n;
+    // Round the tip, where the grid's columns close on their pole just above the lips, the rows are tiny and the
+    // differences across them noisy: the normals there are smoothed over their neighbours (a few rings, fading out
+    // ~1 mm from the pole), or the lips' front shades as a small faceted star.
+    const pole = [0, SNOUT_POLE_Y, 0];
+    for (let it = 0; it < 6; it++) {
+      const next = new Map();
+      for (let i = 0; i < NS && sList[i] < 0.6; i++) for (let j = 0; j < NV; j++) {
+        const v = verts[gid(i, j)];
+        const w = smoothstep(1.0, 0.35, Math.hypot(v.fish[0] - pole[0], v.fish[1] - pole[1], v.fish[2] - pole[2]));
+        if (w <= 0) continue;
+        const acc = [...v.n];
+        const add = (ii, jj) => { const n = verts[gid(ii, ((jj % NV) + NV) % NV)].n; acc[0] += n[0]; acc[1] += n[1]; acc[2] += n[2]; };
+        if (i > 0) { add(i - 1, j); add(i - 1, j - 1); add(i - 1, j + 1); }
+        add(i + 1, j); add(i + 1, j - 1); add(i + 1, j + 1); add(i, j - 1); add(i, j + 1);
+        const m = norm3(acc);
+        next.set(gid(i, j), norm3([v.n[0] + (m[0] - v.n[0]) * w, v.n[1] + (m[1] - v.n[1]) * w, v.n[2] + (m[2] - v.n[2]) * w]));
+      }
+      for (const [g, n] of next) verts[g].n = n;
     }
     for (let i = 0; i < NS; i++) verts[i * cols + NV].n = verts[i * cols].n;
   }
@@ -909,7 +929,7 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
   // without the dots; the relief stays, so the wet film's highlights break up there as everywhere else)
   const rPole = Math.hypot(Math.max(s, 0), p[1] - SNOUT_POLE_Y, p[2]);
   // (the same at the mouth's corners, where the grid's columns gather onto the gape)
-  const RC = FEAT.gapeLine[MOUTH.length - 1];
+  const RC = FEAT.gapeLine[FEAT.gapeCorner];
   const rCorner = Math.hypot(s - RC[0], p[1] - RC[1], Math.abs(p[2]) - RC[2]);
   // (and along the lips, where the columns are squeezed together onto the cut: the lips are smooth there anyway)
   const lipCalm = Math.max(smoothstep(0.08, 0.5, Math.abs(p[1] - gapeY(clamp(s, MOUTH[0][0], RICTUS_S)))), smoothstep(RICTUS_S + 0.2, RICTUS_S + 0.8, s));
@@ -938,7 +958,7 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
   const g = gapeY(Math.min(Math.max(s, MOUTH[0][0]), RICTUS_S));
   if (s < RICTUS_S + 1.2) {
     const dy = p[1] - g;
-    const along = smoothstep(RICTUS_S + 1.0, RICTUS_S - 0.2, s);
+    const along = smoothstep(RICTUS_S + 0.3, RICTUS_S - 0.12, s);
     const up = dy > 0 ? smoothstep(1.3, 0.5, dy) * along : 0;
     const lo = dy <= 0 ? smoothstep(0.7, 0.2, -dy) * along : 0;
     // (the pale lip shows at the sides; head-on, under the snout, the lip is the face's own grey)
@@ -946,15 +966,17 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
     col = lerp3(col, COL.belly, lo * 0.3);
     col = lerp3(col, COL.dark, smoothstep(0.14, 0.02, Math.abs(dy)) * along * 0.55);
   }
-  // upper-lip pads: pale, studded with dark sensory pores
+  // upper-lip pads: a little paler than the face, densely studded with fine dark sensory pores, a darker rim where
+  // the cushion meets the cheek (photograph 7)
   {
-    const L = FEAT.lipPad.c;
-    const d = Math.hypot((p[0] - L[0]) / 2.1, (p[1] - L[1]) / 1.5, (Math.abs(z) - L[2]) / 1.5);
-    const pad = smoothstep(1.1, 0.6, d);
-    col = lerp3(col, lerp3(COL.lip, col, 0.45), pad * 0.5);
-    // fine dark pores and a darker rim where the cushion meets the cheek
-    col = lerp3(col, COL.speck, pad * dots(p, 0.17, 0.035, 163, 0.75) * 0.75);
-    col = lerp3(col, COL.dark, smoothstep(0.75, 1.0, d) * smoothstep(1.35, 1.05, d) * 0.25);
+    const { l, r, k } = lipPadCoord([p[0], p[1], Math.abs(z)]);
+    const pad = smoothstep(1.2, 1.06, k);
+    // (a little paler and warmer than the face, densely peppered with fine dark pores; its outline is a shaded crease,
+    // darkest along the upper and back edge, fading out at the front end where it runs in under the mouth corner)
+    col = lerp3(col, C(172, 158, 140), pad * 0.4);
+    col = lerp3(col, COL.speck, pad * dots(p, 0.12, 0.03, 163, 0.9) * 0.75);
+    const edge = smoothstep(1.12, 1.24, k) * smoothstep(1.55, 1.3, k) * smoothstep(-0.9, -0.3, l[0] / r[0]);
+    col = lerp3(col, COL.dark, edge * (0.25 + 0.2 * smoothstep(-0.4, 0.5, l[1] / r[1] + 0.5 * l[0] / r[0])));
   }
   // eye sockets: the cup's skin is paler and smoother toward the window; its margin (and the hidden skin inside the
   // window, which the rim's faces stretch over) a plain darker grey, without speckles
