@@ -111,7 +111,7 @@ function hazy<T extends Material>(mat: T, key: string, more?: (vs: string) => st
 
 // ------------------------------------------------------------------ the ground
 // (linear colours) the shore's sand as the terrain draws it, the road and its verges, the woods' floor, bare cliff
-const SAND = [0.27, 0.255, 0.21], WET = [0.17, 0.16, 0.13], VERGE = [0.12, 0.15, 0.07], FLOOR = [0.018, 0.032, 0.012], CLIFF = [0.24, 0.22, 0.18];
+const SAND = [0.27, 0.255, 0.21], WET = [0.17, 0.16, 0.13], VERGE = [0.12, 0.15, 0.07], FLOOR = [0.018, 0.032, 0.012], CLIFF = [0.13, 0.12, 0.1];
 
 function groundColour(x: number, z: number, h: number, steep: number, r: number): number[] {
   const n = 0.85 + 0.3 * vnoise(x * 0.15, z * 0.15, 131);
@@ -121,7 +121,7 @@ function groundColour(x: number, z: number, h: number, steep: number, r: number)
   else if (h > -0.2) c = SAND;
   else c = WET;
   // bare rock only where a point drops into the sea: its lowest few metres, steep and wave-washed
-  const seaCliff = shoreHeight(x, z) < 0.5 ? sstep(0.8, 1.4, steep) * (1 - sstep(4, 9, h)) * (r > 0.5 ? 1 : 0) : 0;
+  const seaCliff = shoreHeight(x, z) < 0.5 ? sstep(0.8, 1.4, steep) * (1 - sstep(2.5, 6, h)) * (r > 0.5 ? 1 : 0) : 0;
   return c.map((v, i) => (v * (1 - seaCliff) + CLIFF[i] * seaCliff) * n);
 }
 
@@ -197,7 +197,7 @@ function crownAtlas(): CanvasTexture {
       const [d] = shape(x, y);
       if (d < 0.05) continue;
       const r = S * (0.02 + 0.025 * rnd());
-      c.fillStyle = rgb(18 + 10 * rnd(), 32 + 12 * rnd(), 14 + 8 * rnd());
+      c.fillStyle = rgb(24 + 12 * rnd(), 42 + 14 * rnd(), 18 + 9 * rnd());
       c.beginPath(); c.arc(ox + x, oy + y, r, 0, Math.PI * 2); c.fill();
     }
     // the leaf clusters: small, many; brighter where their lobe faces up, the rim ragged
@@ -206,8 +206,8 @@ function crownAtlas(): CanvasTexture {
       const [d, lit] = shape(x, y);
       if (d < -0.02 || (d < 0.12 && rnd() < 0.5)) continue;
       const r = S * (0.008 + 0.016 * rnd());
-      const k = Math.max(0, Math.min(1, 0.32 + 0.55 * lit + 0.25 * (rnd() - 0.5)));
-      const base: [number, number, number] = [28 + 62 * k, 48 + 78 * k, 20 + 34 * k];
+      const k = Math.max(0, Math.min(1, 0.42 + 0.5 * lit + 0.28 * (rnd() - 0.5)));
+      const base: [number, number, number] = [38 + 78 * k, 66 + 100 * k, 26 + 42 * k];
       const g = c.createRadialGradient(ox + x - r * 0.3, oy + y - r * 0.35, 0, ox + x, oy + y, r);
       g.addColorStop(0, rgb(base[0] * 1.15, base[1] * 1.12, base[2] * 1.05));
       g.addColorStop(0.75, rgb(base[0] * 0.8, base[1] * 0.82, base[2] * 0.75));
@@ -251,7 +251,7 @@ export function treeSites(seed = 0x5eed7): TreeSite[] {
     const r = relief(px, pz);
     if (r < 2) continue;
     const h = landHeight(px, pz);
-    if (h < 4.5) continue;                                                 // the wave-washed foot of a point
+    if (h < 3) continue;                                                   // the wave-washed foot of a point
     const e = 2;
     const gx = (landHeight(px + e, pz) - landHeight(px - e, pz)) / (2 * e), gz = (landHeight(px, pz + e) - landHeight(px, pz - e)) / (2 * e);
     if (Math.hypot(gx, gz) > 2.4) continue;                                // sheer
@@ -265,7 +265,7 @@ export function treeSites(seed = 0x5eed7): TreeSite[] {
 }
 
 /** the canopy's greens (linear): the dark glossy スダジイ, the lighter タブ, the yellow-green of new growth */
-const TINTS = [[0.52, 0.56, 0.48], [0.42, 0.48, 0.38], [0.66, 0.7, 0.5], [0.5, 0.52, 0.42], [0.74, 0.76, 0.52], [0.46, 0.5, 0.44]];
+const TINTS = [[0.66, 0.7, 0.58], [0.55, 0.62, 0.48], [0.8, 0.84, 0.58], [0.62, 0.64, 0.5], [0.88, 0.88, 0.6], [0.58, 0.64, 0.54]];
 
 function woods(sites: TreeSite[]): InstancedMesh {
   const geo = new PlaneGeometry(1, 1, 1, 1);
