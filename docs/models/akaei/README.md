@@ -114,4 +114,4 @@ Akaei               Group（CreatureSystem のホルダー: 位置・向き・�
 | ![埋没 眼](buried_eyes.jpg) 埋没: 眼と噴水孔だけが出る | ![摂餌](forage_pulse.jpg) 摂餌: 頭を押しつけて砂を噴く |
 | ![逃避](escape_burst.jpg) 逃避: 砂から飛び出す | ![逃避 滑空](escape_glide.jpg) 逃避後の低い滑空 |
 | ![LOD0](lod0.jpg) LOD0 | ![LOD1](lod1.jpg) LOD1 |
-| ![LOD2](lod2.jpg) LOD2 | ![ゲーム内](game_rest.jpg) ゲーム内（スクリーンスペースの水を通して） |
+| ![LOD2](lod2.jpg) LOD2 | ゲーム内の見え方はスモークテストの `tests/smoke/out/16-akaei.png`（着底）・`16b-akaei-swim.png`（泳ぎ出し）・`16c-akaei-observe.png`（観察）で確かめる（ゲームの水を通して描かれる） |

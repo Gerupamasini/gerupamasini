@@ -131,20 +131,21 @@ try {
     return ind.id;
   });
   if (ray) {
-    await waitFrames(page, 30);
+    // the shallows are the slowest view under software GL (well under 1 fps): few frames, long timeouts
+    await waitFrames(page, 12, 300000);
     await page.screenshot({ path: path.join(outDir, '16-akaei.png') });
     await page.evaluate((id) => {
       const a = window.__higata, ind = a.creatures.get(id);
       a.creatures.forceIntent(id, { id: 0, kind: 'wander', urgency: 0.5, seconds: 12, target: ind.pos.clone().add({ x: -2.5, y: 0, z: -1.5 }) });
     }, ray);
-    await waitFrames(page, 60);
+    await waitFrames(page, 20, 300000);
     await page.screenshot({ path: path.join(outDir, '16b-akaei-swim.png') });
     // and through the observation camera (the observed animal keeps its full detail)
     await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, ray);
-    await waitFrames(page, 40);
+    await waitFrames(page, 12, 300000);
     await page.screenshot({ path: path.join(outDir, '16c-akaei-observe.png') });
     await page.evaluate(() => { window.__higata.exitObserve(); });
-    await waitFrames(page, 4);
+    await waitFrames(page, 4, 300000);
   } else console.log('no water for a ray');
   // walk up to the nearest goby, observe it, catch it, open the zukan and put it in the tank
   const near = await page.evaluate(() => {
