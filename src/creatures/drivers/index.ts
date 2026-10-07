@@ -1,4 +1,4 @@
-import type { Object3D } from 'three';
+import type { Object3D, WebGLRenderer } from 'three';
 import type { Driver } from './Driver';
 import type { PlaceholderModel } from '../models/placeholders';
 import { MahazeDriver } from '../species/mahaze/MahazeDriver';
@@ -6,13 +6,20 @@ import { ShrimpDriver } from '../species/shrimp/ShrimpDriver';
 import { PloverDriver } from '../species/plover/PloverDriver';
 import { AsariDriver } from '../asari/Asari.js';
 import { FORMS } from '../asari/AsariModel.js';
+import { PagurusMinutusDriver } from '../yubinagahonyadokari/PagurusMinutusDriver';
+import { OysterDriver } from '../oyster/OysterDriver';
 
 export interface DriverEntry {
   create(): Driver;
   /** procedural placeholder model factory when the species has no glTF */
   placeholder?: () => PlaceholderModel;
   /** a representative model for the 図鑑 preview (and the scoop) when the driver builds its own geometry; `seed` in [0, 1) picks the individual's pattern */
-  preview?: (seed?: number) => Object3D;
+  preview?: (seed?: number, renderer?: WebGLRenderer) => Object3D;
+  /**
+   * Procedural models with their own LOD: within this distance (m) the individual counts as near (lod 1:
+   * driver updated every frame, brain at the near rate) although it uses the placeholder tier.
+   */
+  nearDistance?: number;
 }
 
 /** The only place that needs a code change when a species gets a custom driver. */
@@ -22,4 +29,6 @@ export const DRIVERS: Record<string, DriverEntry> = {
   plover: { create: () => new PloverDriver(), placeholder: () => PloverDriver.makeModel() },
   asari: { create: () => new AsariDriver() as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.asari, seed) },
   hamaguri: { create: () => new AsariDriver(FORMS.hamaguri) as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.hamaguri, seed) },
+  pagurus: { create: () => new PagurusMinutusDriver(), placeholder: () => PagurusMinutusDriver.makeModel(), nearDistance: 4.5 },
+  oyster: { create: () => new OysterDriver(), placeholder: () => OysterDriver.makeModel(), preview: (seed, renderer) => OysterDriver.makePreview(seed, renderer) },
 };

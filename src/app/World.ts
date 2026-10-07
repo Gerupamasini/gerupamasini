@@ -12,6 +12,7 @@ import { Skyline } from '../world/Skyline';
 import { Riprap } from '../world/Riprap';
 import { OysterAtlas } from '../creatures/oyster/bake';
 import { OysterReef } from '../creatures/oyster/OysterReef';
+import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import { oysterEnv } from '../creatures/oyster/material';
 import type { FeedingPit } from '../world/FeedingPits';
 import { hashInts } from '../core/Rng';
@@ -93,6 +94,7 @@ export class World {
     w.riprap = riprap;
     try {
       const atlas = OysterAtlas.shared(renderer, quality);
+      OysterDriver.atlas = atlas;
       const sites = riprap.attachSites(map.id.length * 101 + 7, 0.38, -1.15, 0.2).map((s) => ({
         p: s.p, n: s.n, room: s.room,
         surface: (world: Vector3, outP: Vector3, outN: Vector3) => riprap.surfaceToward(s.stone, world, outP, outN),

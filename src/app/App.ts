@@ -22,6 +22,7 @@ import { hashInts } from '../core/Rng';
 import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { DRIVERS } from '../creatures/drivers';
+import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import type { SpeciesDef, ToolDef } from '../data/schemas';
 import { CreatureSystem, type SpawnEnv } from '../creatures/CreatureSystem';
 import type { Individual, IndividualRecord } from '../creatures/Individual';
@@ -45,6 +46,8 @@ const MARKER_HZ = 10;
 const AUTOSAVE_SEC = 60;
 /** drivers that build their own clam geometry in shell lengths (the scoop shows them at length / 1000) */
 const CLAM_DRIVERS = new Set(['asari', 'hamaguri']);
+/** scratch: the camera's forward direction for the reticle picks */
+const reticleDir = new Vector3();
 
 export type TeleportTarget = 'spawn' | 'waterline' | 'runnel' | 'creek' | 'pool' | 'clams' | 'oysters';
 
@@ -82,6 +85,10 @@ export class App {
   targetClam = -1;
   /** a clam built in full for observation */
   private watchedClam: { index: number; id: string } | null = null;
+  /** the reef oyster the player is looking at (index into the reef), or -1 */
+  targetOyster = -1;
+  /** a reef oyster built in full for observation */
+  private watchedOyster: { index: number; id: string } | null = null;
   world: World | null = null;
   player: FPSController | null = null;
   creatures: CreatureSystem | null = null;
@@ -553,6 +560,11 @@ export class App {
       this.clams?.setWatched(this.watchedClam.index, false);
       this.watchedClam = null;
     }
+    if (this.watchedOyster) {
+      this.creatures?.despawn(this.watchedOyster.id);
+      this.world?.oysters?.setHidden(this.watchedOyster.index, false);
+      this.watchedOyster = null;
+    }
     this.setMode('field');
   }
 
@@ -797,6 +809,25 @@ export class App {
     creatures.spawn(ind);
     clams.setWatched(index, true);
     this.watchedClam = { index, id: ind.id };
+    this.enterObserve(ind);
+  }
+
+  /** Watch an oyster of the reef: it is built in full on its stone (hero shell, mantle, the five-state behaviour) just for the observation. */
+  observeOyster(index: number): void {
+    const sp = this.data.species.get('crassostrea_gigas');
+    const reef = this.world?.oysters, creatures = this.creatures;
+    if (!sp || !reef || !creatures || index < 0) return;
+    const info = reef.infoOf(index);
+    if (!info || info.dead) return;
+    const c = reef.centreOf(index);
+    const len = Math.round(info.length * 1000);
+    const ind = generateIndividual(sp, info.seed, c.x, c.z, -1, 0, this.clock.nowGame(), [len, len]);
+    ind.pitId = -2;   // not the spawner's to cull
+    OysterDriver.pending.set(ind.id, info);
+    creatures.spawn(ind);
+    ind.pos.copy(c);   // on its stone (spawn() put it on the terrain under it)
+    reef.setHidden(index, true);
+    this.watchedOyster = { index, id: ind.id };
     this.enterObserve(ind);
   }
 
@@ -1205,6 +1236,7 @@ export class App {
         else if (this.input.pressed('home')) this.enterHome();
         else if (this.input.pressed('observe') && this.target) this.enterObserve(this.target);
         else if (this.input.pressed('observe') && this.targetClam >= 0) this.observeClam(this.targetClam);
+        else if (this.input.pressed('observe') && this.targetOyster >= 0) this.observeOyster(this.targetOyster);
         else if (this.input.pressed('tool1') && this.encyclopedia.loadout.value[0]) this.setTool(this.encyclopedia.loadout.value[0]);
         else if (this.input.pressed('tool2') && this.encyclopedia.loadout.value[1]) this.setTool(this.encyclopedia.loadout.value[1]);
         else if (this.input.pressed('tool3') && this.encyclopedia.loadout.value[2]) this.setTool(this.encyclopedia.loadout.value[2]);
@@ -1375,7 +1407,7 @@ export class App {
       if (this.tmp.z > 1 || Math.abs(this.tmp.x) > 1.05 || Math.abs(this.tmp.y) > 1.05) continue;
       out.push({
         id: ind.id, x: ((this.tmp.x + 1) / 2) * w, y: ((1 - this.tmp.y) / 2) * h - 8,
-        text: `${ind.species.names.ja} ${d.toFixed(1)}m L${ind.lod}${ind.sex === 'm' ? '♂' : '♀'} 警${ind.alert.toFixed(1)}/${ind.wariness.toFixed(1)}`,
+        text: `${ind.species.names.ja} ${d.toFixed(1)}m L${ind.lod}${ind.sex === 'm' ? '♂' : '♀'} 警${ind.alert.toFixed(1)}/${ind.wariness.toFixed(1)}${d < 6 ? ' ' + (c.driverOf(ind.id)?.debugLabel?.() ?? '') : ''}`,
         kind: ind.species.taxon.group,
       });
       if (out.length >= 80) break;
@@ -1448,6 +1480,11 @@ export class App {
         if (g) this.targetClam = this.clams.nearest(g.x, g.z, 0.16);
       }
       const optic = this.toolType() === 'optic';
+      // an oyster of the reef under the reticle (within arm's reach and a step)
+      this.targetOyster = -1;
+      if (!this.target && this.targetClam < 0 && !optic && this.world?.oysters) {
+        this.targetOyster = this.world.oysters.pickRay(this.camera.position, this.camera.getWorldDirection(reticleDir), 2.6);
+      }
       if (optic && !this.binoculars?.raised) {
         prompt = `[E] ${t('hud.raise')}`;
       } else if (optic && this.target) {
@@ -1466,6 +1503,8 @@ export class App {
         const digId = this.encyclopedia.loadout.value.find((x) => this.toolType(x) === 'dig');
         const shovelKey = digId ? this.encyclopedia.loadout.value.indexOf(digId) : -1;
         prompt = `${t('clam.siphon')}   [F] ${t('hud.observe')}   ${this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.toolDef(digId!)?.ja ?? ''}` : t('tools.noShovel')}`;
+      } else if (this.targetOyster >= 0) {
+        prompt = `${this.data.species.get('crassostrea_gigas')?.names.ja ?? 'マガキ'}   [F] ${t('hud.observe')}   ${t('hud.observeOnly')}`;
       } else if (toolHint) prompt = toolHint;
     }
     const fps = this.fpsCount / Math.max(1e-3, this.fpsAcc);

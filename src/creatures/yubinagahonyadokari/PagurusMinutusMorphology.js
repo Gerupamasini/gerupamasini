@@ -1,0 +1,280 @@
+// Morphology of ユビナガホンヤドカリ Pagurus minutus, in shield lengths (SL = 1).
+//
+// Evidence tags (see docs/creatures/yubinagahonyadokari/01_research.md):
+//   [D] directly documented for P. minutus (Komai & Mishima 2003; Jung et al. 2018; Korean NIBR fauna;
+//       Japanese field guides; the 70 reference photographs)
+//   [G] inferred from Pagurus / other hermit crabs
+//   [P] proportion read from the reference photographs (no published measurement)
+//   [S] game supplement (no data found; chosen to be consistent with the above)
+//
+// Body frame: +Z forward (rostrum), +Y up, +X = the animal's LEFT. Origin = posterior margin of the shield
+// at mid-height of the cephalothorax. The model is built in SL units and scaled by SL (metres) at runtime.
+
+export const MORPH = {
+  // ── size distribution ─────────────────────────────────────────────────────────────────────────
+  // SL 3–6 mm typical, max ≈ 7 mm [D]; males larger [D]
+  shieldLength_mm: { mean: 4.2, sd: 0.9, min: 2.0, max: 7.0 },
+  /** game "length" (全長 shown in the zukan) = this × SL: crab in walking posture incl. shell [S] */
+  totalLengthPerSL: 4.5,
+  /** body (incl. abdomen) volume ≈ k·SL³ (mm³) – used by shell evaluation [S] */
+  bodyVolumeK: 1.6,
+
+  // ── cephalothorax ─────────────────────────────────────────────────────────────────────────────
+  shield: {
+    length: 1.0,
+    width: 1 / 1.05, // L:W 1.0–1.1 [D]
+    height: 0.4, // dorsal dome above the branchiostegites [P]
+    rostrum: { len: 0.06, halfWidth: 0.085 }, // broadly rounded-triangular, ≈ level with lateral projections [D]
+    lateralProjection: { x: 0.36, len: 0.055, halfWidth: 0.07 }, // bluntly rounded [D]
+    gastricSpot: { z: 0.55, radius: 0.09 }, // dark-brown median spot on gastric region [D]
+    // 1.0–1.1 × as long as broad; anterior margin weakly concave between rostrum and lateral projections;
+    // anterolateral margins sloping; posterior margin roundly truncate; dorsal surface weakly inflated,
+    // with sparse tufts of short setae dorsomesially (redescription of P. minutus) [D]
+    setalTuftPairs: 7,
+    // photo 01: only a central zone of the shield (≈ 0.6 SL across) stands out pinkish with the white mark;
+    // beside its posterior half the golden, granular branchiostegites bulge up and run on into the branchial
+    // lobes of the posterior carapace, without a break at the cervical groove [P]
+    centralHalfWidth: 0.26,
+  },
+  // total carapace length / shield length = 1.74–1.87 (6.3/3.5, 5.6/3.0, 4.7/2.7 mm) [D: out-of-shell photos];
+  // the soft posterior carapace is membranous and weakly calcified [D][G]. Out of the shell (photo 01, dorsal)
+  // it is a broad inflated oval, WIDER than the shield (≈ 1.1 SL across at 40–50 % of its length), its sides
+  // bulging past the shield's posterior corners and its posterior margin rounded with a shallow median
+  // notch [P]. Inside the shell the soft branchiostegites are pressed in to about the shield's width [G].
+  // Seen dorsally (photo 01, enlarged) the posterior carapace is a median cardiac strip – reddish, with a
+  // darker median line, wide just behind the cervical groove and narrowing to ≈ 0.2 SL – bounded by the
+  // sulci cardiobranchiales, and on each side an inflated, densely granular branchial lobe; the two lobes
+  // round off separately behind, so the posterior margin is bilobed [P]. Terminology after McLaughlin
+  // (posteromedian plate, sulci cardiobranchiales, branchiostegites) [G].
+  posteriorCarapace: {
+    length: 0.85,
+    halfWidthMax: 0.56, // free (out of the shell)
+    maxAt: 0.45, // fraction of the length behind the cervical groove
+    cardiacHalfWidth: [0.16, 0.1, 0.05], // at the cervical groove, from 30 to 70 % of the length, at the margin [P]
+    lobeRise: 0.026, // how far each branchial lobe domes above the cardiac strip (SL) [P]
+    notch: 0.07, // median notch between the two lobes at the posterior margin [P]
+    inShellSqueeze: 0.1, // lateral compression of each side inside the shell (SL) [S]
+  },
+
+  // ── coxa positions (body frame) ───────────────────────────────────────────────────────────────
+  // anomuran sternum is narrow; P1–P3 under the shield's posterior half, P4–P5 under the posterior carapace [G][P]
+  coxae: {
+    cheliped: { x: 0.2, y: -0.24, z: 0.22 },
+    p2: { x: 0.25, y: -0.26, z: 0.02 },
+    p3: { x: 0.25, y: -0.25, z: -0.18 },
+    p4: { x: 0.2, y: -0.2, z: -0.4 },
+    p5: { x: 0.13, y: -0.14, z: -0.6 },
+  },
+
+  // ── eyes ──────────────────────────────────────────────────────────────────────────────────────
+  eye: {
+    base: { x: 0.12, y: 0.07, z: 0.98 },
+    length: 0.8, // 0.7–0.9 SL [D]
+    radiusBase: 0.085, // weakly inflated at base [D]
+    radiusMid: 0.065,
+    corneaRadius: 0.078, // corneas only slightly dilated [D]
+    corneaLength: 0.16,
+    restYaw: 0.3, // splay (rad) [P]
+    restPitch: 0.28, // raised (rad) [P]
+    acicle: 0.05, // ocular acicle, triangular [G]
+  },
+
+  // ── antennules (A1) ───────────────────────────────────────────────────────────────────────────
+  antennule: {
+    base: { x: 0.055, y: -0.03, z: 0.96 },
+    peduncle: [0.27, 0.25, 0.3], // overreaches corneas slightly when extended [D]
+    radius: 0.032,
+    flagellum: 0.24, // short, biramous [G]; orange-yellow in some individuals [D: photos 009, 029]
+  },
+
+  // ── antennae (A2) ─────────────────────────────────────────────────────────────────────────────
+  antenna: {
+    base: { x: 0.27, y: -0.04, z: 0.92 },
+    peduncle: [0.2, 0.22, 0.24, 0.2], // reaches distal margin of cornea [D]
+    radius: 0.042,
+    acicle: 0.26, // arcuate [G]
+    flagellum: 4.8, // longer than the shell in photos [P]
+    flagellumRadius: 0.024,
+    annuli: 72,
+    whitePeriod: 4, // olive annuli regularly interrupted by white ones [D]
+  },
+
+  // ── third maxillipeds ─────────────────────────────────────────────────────────────────────────
+  mxp3: {
+    base: { x: 0.07, y: -0.24, z: 0.78 },
+    segments: [0.2, 0.16, 0.14, 0.1], // banded white/dark brown [D: photos 016, 021, 026]
+    radius: 0.028,
+  },
+
+  // ── chelipeds (P1) ────────────────────────────────────────────────────────────────────────────
+  // right clearly larger [D]; right chela ovate (♀) or elongate with weaker armature (♂) [D];
+  // male major-chela propodus ≈ 1.7 SL (guarding males, 6.38 mm / SL 3.76 mm) [D – verify]
+  chelipeds: {
+    R: {
+      coxa: 0.15, basis: 0.17, merus: 0.7, carpus: 0.6,
+      chela: { female: 1.35, male: 1.7 }, // propodus incl. fixed finger
+      palmFraction: 0.6,
+      dactylFraction: 0.46, // movable finger / chela length
+      widthRatio: { female: 0.6, male: 0.5 }, // palm width / chela length (dorsal view, ovate) [D shape, S value]
+      thicknessRatio: 0.33,
+      merusSection: [0.13, 0.16], carpusSection: [0.15, 0.17],
+    },
+    L: {
+      coxa: 0.13, basis: 0.14, merus: 0.58, carpus: 0.46,
+      chela: { female: 0.85, male: 0.88 }, // smaller and slender [D]; length [P]
+      palmFraction: 0.5,
+      dactylFraction: 0.52,
+      widthRatio: { female: 0.36, male: 0.34 },
+      thicknessRatio: 0.26,
+      merusSection: [0.09, 0.11], carpusSection: [0.09, 0.105],
+    },
+  },
+
+  // ── walking legs P2, P3 (Leg_*1, Leg_*2) ───────────────────────────────────────────────────────
+  // dactyl 1.2–1.5 × propodus (left P3 1.3–1.6) [D]; slender, slightly curved ventrally, weakly twisted [D]
+  // segment ratios merus/carpus/propodus [P][G]
+  walkingLegs: {
+    R1: { coxa: 0.18, basis: 0.28, merus: 0.95, carpus: 0.52, propodus: 0.72, dactylus: 1.0 },
+    L1: { coxa: 0.18, basis: 0.28, merus: 0.97, carpus: 0.53, propodus: 0.73, dactylus: 1.02 },
+    R2: { coxa: 0.18, basis: 0.28, merus: 0.92, carpus: 0.5, propodus: 0.74, dactylus: 0.98 },
+    L2: { coxa: 0.18, basis: 0.28, merus: 0.94, carpus: 0.51, propodus: 0.72, dactylus: 1.08 },
+    section: {
+      // [half-height (dorso-ventral, in the leg plane), half-width (antero-posterior)] at proximal → distal
+      // stout, as in the dorsal-view photos 063/064 (article width ≈ 0.2 SL) [P]
+      coxa: [[0.14, 0.13], [0.13, 0.12]],
+      basis: [[0.115, 0.105], [0.125, 0.105]],
+      merus: [[0.14, 0.1], [0.152, 0.106]], // laterally compressed [G]
+      carpus: [[0.118, 0.092], [0.132, 0.098]],
+      propodus: [[0.11, 0.087], [0.09, 0.075]],
+      dactylus: [[0.076, 0.07], [0.009, 0.008]],
+    },
+    dactylCurve: 0.2, // ventral curvature (rad over the length) [D: slightly curved]
+    dactylTwist: 0.28, // weak twist (rad) [D]
+    carpalSpine: 0.04, // dorsodistal carpal spine [G]
+    dactylSpinules: 9, // ventral corneous spinules [G]
+  },
+
+  // ── reduced legs P4, P5 (Leg_*3, Leg_*4): shell holding, mostly hidden [G] ────────────────────
+  reducedLegs: {
+    P4: { coxa: 0.12, basis: 0.14, merus: 0.38, carpus: 0.2, propodus: 0.24, dactylus: 0.12, section: 0.055 },
+    P5: { coxa: 0.1, basis: 0.1, merus: 0.28, carpus: 0.14, propodus: 0.18, dactylus: 0.08, section: 0.042 },
+  },
+
+  // ── abdomen (pleon) ───────────────────────────────────────────────────────────────────────────
+  // membranous, dextrally coiled; uropods asymmetrical; telson with median terminal cleft [D]
+  // read from the out-of-shell photos (dorsal 01–04, ventral 05, live 06): long, thick, soft and dextrally
+  // coiled – centreline ≈ 4.4 SL, widest (≈ 0.58 SL) in its anterior third, tapering to the tail fan [P]
+  // photo 01 (dorsal, 甲長 6.3 / 前甲長 3.5 mm): the free coil is a broad, compact ribbon ≈ 0.7–0.8 SL across
+  // at its widest, leaving only a small hole in the middle of the coil; it leaves the carapace narrow, from
+  // under the posterior margin, and swells within its first third [P]
+  abdomen: {
+    length: 4.4,
+    segments: 12,
+    radiusBase: 0.2, // narrow first pleonite under the posterior margin of the carapace
+    radiusMax: 0.38, // ≈ 0.7 × the free posterior-carapace width (photos 01–03)
+    radiusMaxAt: 0.3, // fraction of the length
+    radiusEnd: 0.14,
+    baseY: -0.07, // the abdomen leaves the carapace ventrally, under the posterior margin [P]
+    flatten: 0.9, // slightly flattened dorso-ventrally [P]
+    telson: 0.16,
+    uropodL: 0.2, // left better developed [G: Calcinus]
+    uropodR: 0.14,
+  },
+
+  // ── shell seat (aperture grip point) in body frame ─────────────────────────────────────────────
+  // default; each shell species overrides y/z with its own carry pose (PagurusMinutusShell.js)
+  shellAnchor: { x: -0.02, y: 0.15, z: -0.7 },
+};
+
+/**
+ * Colour palette (sRGB hex). Values read from the photographs and descriptions [D]; matched against
+ * photos 001, 002, 021, 022, 050 and 063: a muted grey-olive/khaki, never lime, with brown mottling.
+ *  - overall pale greenish-brown; shield light yellowish-brown with a dark-brown gastric spot
+ *  - chelipeds olive-brown with dense white/cream granules
+ *  - walking legs olive/grey-brown with one dark-brown median longitudinal stripe on the lateral face,
+ *    dark transverse bands mid-leg, dactyl with a median WHITE section (green-white-green from the tip),
+ *    tips NOT white (white tips = P. filholi)
+ *  - eyestalks milky/yellowish-white with a brown mid band; corneas with two transverse dark stripes
+ *  - antennal flagellum olive with regularly spaced white annuli
+ */
+export const PALETTE = {
+  shield: '#b09885', // light yellowish-brown, pinkish grey in the middle out of the water (photo 01)
+  shieldDark: '#5b4027',
+  branchio: '#999380',
+  softCarapace: '#9d7a52', // golden tan, granular, mottled, with a few dark spots (photos 01, 02, 07)
+  cardiac: '#a5674a', // reddish cardiac strip of the posterior carapace (photo 01)
+  sternum: '#c9c0a2',
+  legBase: '#958a6b', // tan-olive (photo 01; greyer under water)
+  legStripe: '#3b2e22',
+  legBand: '#4a3a28',
+  legPale: '#d8d2c2',
+  dactylBase: '#737458',
+  dactylWhite: '#d9d3bf',
+  dactylTip: '#5a4a32',
+  cheliped: '#bcb6a0', // pale cream with large brown blotches (photo 01); olive-looking under water
+  chelaGranule: '#bfcbd6', // bluish granules, blue-grey on the brown blotches (photos 01, 02, 04; 033, 038)
+  chelaFinger: '#a09679',
+  chelaFingerTip: '#6b5130',
+  membrane: '#8e8a72',
+  eyestalk: '#cbc2a6',
+  eyeBand: '#6e5a40',
+  cornea: '#5b4136', // dark reddish brown (photos 01, 02, 04)
+  corneaStripe: '#231915',
+  antenna: '#615c48',
+  antennaWhite: '#cdc7b6',
+  antennule: '#a8946a',
+  mxp: '#c4bda6',
+  mxpBand: '#4c3a26',
+  abdomen: '#93845c', // dorsum: golden grey-olive, translucent, dark transverse lines (photos 01, 03, 06)
+  abdomenDeep: '#62502e',
+  abdomenViscera: '#bd6a22', // orange-brown visceral mass seen through the sides and venter (photos 01–05)
+  uropod: '#9c9468',
+  setae: '#c9bf9f',
+};
+
+/**
+ * Colour morphs seen in the field [D]: brownish, dark green, flesh-coloured (Urayasu); pale yellow and
+ * orange-red individuals in the photo set. `weight` = relative frequency [S].
+ */
+export const COLORWAYS = [
+  { id: 'olive', weight: 0.46, hue: 0.0, sat: 1.0, val: 1.0, green: 0.55 },
+  { id: 'brown', weight: 0.22, hue: 0.03, sat: 0.95, val: 0.92, green: 0.2 },
+  { id: 'darkgreen', weight: 0.16, hue: -0.04, sat: 1.05, val: 0.78, green: 0.9 },
+  { id: 'flesh', weight: 0.08, hue: 0.06, sat: 0.8, val: 1.1, green: 0.05 },
+  { id: 'paleyellow', weight: 0.05, hue: 0.02, sat: 0.9, val: 1.22, green: 0.25 },
+  { id: 'orange', weight: 0.03, hue: 0.09, sat: 1.25, val: 1.0, green: 0.0 },
+];
+
+/** half width (SL) of the cardiac strip of the posterior carapace at fraction f of its length (0 = cervical
+ *  groove, 1 = posterior margin); the sulci cardiobranchiales run along its edges */
+export function cardiacHalfWidth(f) {
+  const [a, b, c] = MORPH.posteriorCarapace.cardiacHalfWidth;
+  const s = (e0, e1, x) => { const u = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return u * u * (3 - 2 * u); };
+  return f < 0.5 ? a + (b - a) * s(0, 0.3, f) : b + (c - b) * s(0.7, 1, f);
+}
+
+/** abdomen radius (SL) at fraction t (0 = junction with the carapace, 1 = tail fan) */
+export function abdomenRadius(t) {
+  const A = MORPH.abdomen;
+  if (t < A.radiusMaxAt) return A.radiusBase + (A.radiusMax - A.radiusBase) * Math.sin((Math.PI / 2) * (t / A.radiusMaxAt));
+  const u = (t - A.radiusMaxAt) / (1 - A.radiusMaxAt);
+  return A.radiusMax + (A.radiusEnd - A.radiusMax) * u * u * (3 - 2 * u);
+}
+
+/** derive per-individual dimensions (SL units) */
+export function individualMorph(sex = 'f', variation = 0) {
+  const m = sex === 'm' ? 'male' : 'female';
+  const v = 1 + variation * 0.06; // ±6 % individual variation of the major chela [S]
+  const R = MORPH.chelipeds.R, L = MORPH.chelipeds.L;
+  return {
+    sex,
+    chelaR: R.chela[m] * v,
+    chelaRWidth: R.chela[m] * v * R.widthRatio[m],
+    chelaL: L.chela[m],
+    chelaLWidth: L.chela[m] * L.widthRatio[m],
+  };
+}
+
+/** SL in mm ↔ game length in mm */
+export const slFromLength = (length_mm) => length_mm / MORPH.totalLengthPerSL;
+export const lengthFromSL = (sl_mm) => sl_mm * MORPH.totalLengthPerSL;

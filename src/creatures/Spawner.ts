@@ -31,8 +31,8 @@ const SPAWN_RADIUS = 60;
 const DESPAWN_RADIUS = 95;
 const MIN_SPAWN_DIST = 10;
 
-/** burrowing species the clam field places (not the spawner) */
-const FIELD_SPECIES = new Set(['ruditapes_philippinarum']);
+/** species the world lays itself (the clam field's アサリ, the reef's マガキ), not the spawner */
+const FIELD_SPECIES = new Set(['ruditapes_philippinarum', 'crassostrea_gigas']);
 
 /** Evaluates spawn rules on the habitat's coarse cells around the player and decides who appears and who leaves. */
 export class Spawner {
@@ -83,7 +83,7 @@ export class Spawner {
         const d = Math.hypot(cx - px, cz - pz);
         if (d > SPAWN_RADIUS || d < minDist) continue;
         for (const sp of this.speciesList) {
-          if (sp.locomotion === 'burrow' && FIELD_SPECIES.has(sp.id)) continue;   // アサリ are laid by the clam field in their thousands; other burrowers spawn here, sparsely
+          if (FIELD_SPECIES.has(sp.id)) continue;   // アサリ are laid by the clam field in their thousands, マガキ by the reef; other burrowers spawn here, sparsely
           if (occupied.has(`${sp.id}:${cell}`)) continue;
           for (let ri = 0; ri < sp.spawn.length; ri++) {
             const rule = sp.spawn[ri];
