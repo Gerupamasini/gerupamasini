@@ -1,5 +1,5 @@
 import {
-  BufferAttribute, BufferGeometry, CanvasTexture, Color, DoubleSide, Group, InstancedBufferAttribute, InstancedMesh, LinearMipmapLinearFilter,
+  BufferAttribute, BufferGeometry, CanvasTexture, Color, Group, InstancedBufferAttribute, InstancedMesh, LinearMipmapLinearFilter,
   Matrix4, Mesh, MeshLambertMaterial, Object3D, PlaneGeometry, SRGBColorSpace, type Material,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -272,9 +272,10 @@ function woods(sites: TreeSite[]): InstancedMesh {
   const geo = new PlaneGeometry(1, 1, 1, 1);
   geo.translate(0, 0.42, 0);
   const variant = new Float32Array(sites.length);
-  const mat = hazy(new MeshLambertMaterial({ map: crownAtlas(), alphaTest: 0.5, side: DoubleSide }), 'crowns', (vs) => vs
+  const mat = hazy(new MeshLambertMaterial({ map: crownAtlas(), alphaTest: 0.5 }), 'crowns', (vs) => vs
     .replace('#include <common>', '#include <common>\nattribute float aVariant;\nvarying vec2 vCell;')
-    .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\nvMapUv = vMapUv * 0.5 + vec2(mod(aVariant, 2.0), floor(aVariant / 2.0)) * 0.5;\n#endif')
+    // atlas cell 0..3; 4..7 the same crowns mirrored (in the texture, so every card stays front-facing and lit from the front)
+    .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\nfloat bbCell = mod(aVariant, 4.0);\nvMapUv.x = mix(vMapUv.x, 1.0 - vMapUv.x, step(3.5, aVariant));\nvMapUv = vMapUv * 0.5 + vec2(mod(bbCell, 2.0), floor(bbCell / 2.0)) * 0.5;\n#endif')
     // a card that turns about its upright to face the eye; its normal leans up and toward the eye, so a crown is lit
     // from the sky above and shaded on the side away from the sun
     .replace('#include <defaultnormal_vertex>', `
@@ -282,7 +283,7 @@ function woods(sites: TreeSite[]): InstancedMesh {
       vec3 bbToEye = cameraPosition - bbCenter; bbToEye.y = 0.0; bbToEye = normalize(bbToEye + vec3(1e-4, 0.0, 0.0));
       vec3 bbRight = vec3(bbToEye.z, 0.0, -bbToEye.x);
       vec2 bbScale = vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz));
-      float bbX = position.x * sign(instanceMatrix[0].x + 1e-6);   // a mirrored card for half of them
+      float bbX = position.x;
       vec3 transformedNormal = normalize(mat3(viewMatrix) * normalize(bbRight * bbX * 0.5 + vec3(0.0, 1.0 + position.y * 0.35, 0.0) + bbToEye * 0.35));`)
     .replace('#include <project_vertex>', `
       vec4 mvPosition = viewMatrix * vec4(bbCenter + bbRight * bbX * bbScale.x + vec3(0.0, position.y * bbScale.y, 0.0), 1.0);
@@ -291,12 +292,12 @@ function woods(sites: TreeSite[]): InstancedMesh {
   const m = new Matrix4(), col = new Color();
   sites.forEach((t, i) => {
     const w = t.size * (0.9 + 0.2 * ((t.tint * 7.3) % 1));
-    m.makeScale(w * (t.variant % 2 ? 1 : -1), t.size * 0.9, 1);
+    m.makeScale(w, t.size * 0.9, 1);
     m.setPosition(t.x, t.y - 0.6, t.z);
     im.setMatrixAt(i, m);
     const tc = TINTS[Math.floor(t.tint * TINTS.length) % TINTS.length];
     im.setColorAt(i, col.setRGB(tc[0], tc[1], tc[2]));
-    variant[i] = t.variant;
+    variant[i] = t.variant + ((t.tint * 13) % 1 < 0.5 ? 4 : 0);
   });
   geo.setAttribute('aVariant', new InstancedBufferAttribute(variant, 1));
   im.frustumCulled = false;
