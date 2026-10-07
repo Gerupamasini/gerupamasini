@@ -42,8 +42,8 @@ try {
   await page.evaluate(() => window.__higata.enterField('hashirimizu'));
   await page.waitForFunction(() => window.__higata.world && window.__higata.creatures, null, { timeout: 300000 });
   await waitFrames(page, 4);
-  // high water over the eelgrass, then into the bed
-  await page.evaluate(() => { const a = window.__higata; a.clock.cancelTicket?.(); a.setTideOverride(0.9); a.teleport('amamo'); });
+  // late morning (JST) whatever the real hour, high water over the eelgrass, then into the bed
+  await page.evaluate(() => { const a = window.__higata; a.clock.cancelTicket?.(); const d = new Date(); a.clock.setDebugTime(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 1, 30)); a.setTideOverride(0.9); a.teleport('amamo'); });
   await waitFrames(page, 6);
   // spawn until there are pipefish, then put one in front of the player
   const fish = await page.evaluate(() => {
@@ -60,7 +60,7 @@ try {
   console.log('pipefish', JSON.stringify(fish));
   if (!fish.length) throw new Error('no pipefish spawned in the eelgrass');
   // a few seconds for it to settle on a blade (software GL runs at a few frames a second)
-  await waitFrames(page, 24);
+  await waitFrames(page, 40);
   const near = await page.evaluate((id) => {
     const a = window.__higata;
     const f = a.creatures.get(id);
