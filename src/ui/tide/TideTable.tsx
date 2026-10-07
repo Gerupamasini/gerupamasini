@@ -56,7 +56,7 @@ export function TideTable({ app }: { app: App }) {
   return (
     <div class="screen center">
       <div class="card tide-table">
-        <CardHead eyebrow={t('tidetable.sub')} title={t('home.tideTable')} onClose={() => app.closeOverlay()} />
+        <CardHead eyebrow={t('tidetable.sub').replace('{station}', app.tide.station.names.ja)} title={t('home.tideTable')} onClose={() => app.closeOverlay()} />
         {active && (
           <p class="warn ticket-now">
             {t('ticket.active')} ・ <span class="num">{active.targetText}</span>（{t('ticket.remaining')} <span class="num">{Math.floor(active.remainingSec / 60)}</span> 分）
