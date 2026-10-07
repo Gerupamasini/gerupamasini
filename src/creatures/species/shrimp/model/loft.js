@@ -80,7 +80,8 @@ export function smoothTable(rows, x) {
  *   station  (t) => { top, bottom, half, y, contour }   t in [0,1] along the segment
  *   rings    rings along the length
  *   half     points on the half contour (dorsal -> ventral)
- *   attrs    (t, zN, yN, side) => { joint, pig, thick }   per-vertex shading data
+ *   attrs    (t, zN, yN, side) => { joint, pig, thick, pat?, patW? }   per-vertex shading data
+ *            (pat/patW: 4-vectors of species stripe coordinates and weights, see materials.js PAT_MODE)
  *   caps     [bool, bool] close ends
  */
 export function loft(o) {
@@ -92,6 +93,8 @@ export function loft(o) {
   const aJoint = [];
   const aPig = [];
   const aThick = [];
+  const aPat = [];
+  const aPatW = [];
   const idx = [];
   const push = (x, y, z, t, zN, yN, side, v) => {
     pos.push(x, y, z);
@@ -100,6 +103,8 @@ export function loft(o) {
     aJoint.push(a.joint ?? 0);
     aPig.push(a.pig ?? 0.5);
     aThick.push(a.thick ?? 1);
+    aPat.push(...(a.pat ?? ZERO4));
+    aPatW.push(...(a.patW ?? ZERO4));
   };
   for (let i = 0; i <= rings; i++) {
     const t = i / rings;
@@ -154,6 +159,8 @@ export function loft(o) {
   g.setAttribute('aJoint', new THREE.Float32BufferAttribute(aJoint, 1));
   g.setAttribute('aPig', new THREE.Float32BufferAttribute(aPig, 1));
   g.setAttribute('aThick', new THREE.Float32BufferAttribute(aThick, 1));
+  g.setAttribute('aPat', new THREE.Float32BufferAttribute(aPat, 4));
+  g.setAttribute('aPatW', new THREE.Float32BufferAttribute(aPatW, 4));
   g.setIndex(idx);
   g.computeVertexNormals();
   return g;
@@ -165,9 +172,28 @@ export function withShellAttrs(g, { joint = 0, pig = 0.5, thick = 1 } = {}) {
   if (!g.attributes.aJoint) g.setAttribute('aJoint', new THREE.Float32BufferAttribute(new Float32Array(n).fill(joint), 1));
   if (!g.attributes.aPig) g.setAttribute('aPig', new THREE.Float32BufferAttribute(new Float32Array(n).fill(pig), 1));
   if (!g.attributes.aThick) g.setAttribute('aThick', new THREE.Float32BufferAttribute(new Float32Array(n).fill(thick), 1));
+  if (!g.attributes.aPat) g.setAttribute('aPat', new THREE.Float32BufferAttribute(new Float32Array(n * 4), 4));
+  if (!g.attributes.aPatW) g.setAttribute('aPatW', new THREE.Float32BufferAttribute(new Float32Array(n * 4), 4));
   return g;
 }
 
+/**
+ * Leg rings on a podomere built along +X from 0 to len: aPat = [t, orange, black, proximal orange] (centres in
+ * t, -1 = none), aPatW.x = weight. Read by the PAT_MODE 2 leg material only.
+ */
+export function ringPodomere(g, len, centres, weight = 1) {
+  withShellAttrs(g, { pig: 0.3 });
+  const p = g.attributes.position;
+  const a = g.attributes.aPat;
+  const w = g.attributes.aPatW;
+  for (let i = 0; i < p.count; i++) {
+    a.setXYZW(i, Math.min(1, Math.max(0, p.getX(i) / len)), centres[0], centres[1], centres[2]);
+    w.setX(i, weight);
+  }
+  return g;
+}
+
+const ZERO4 = [0, 0, 0, 0];
 const LENS = [[0, 1], [0.55, 0.85], [0.9, 0.45], [1, 0], [0.9, -0.45], [0.55, -0.85], [0, -1]];
 
 /**

@@ -23,6 +23,12 @@ function vnoise(x, z) {
   return a + (b - a) * u + (c - a) * w + (a - b - c + d) * u * w;
 }
 
+const ROCK = {
+  coralline: new THREE.Color().setRGB(0.72, 0.47, 0.53, THREE.SRGBColorSpace),
+  red: new THREE.Color().setRGB(0.46, 0.12, 0.14, THREE.SRGBColorSpace),
+  green: new THREE.Color().setRGB(0.36, 0.4, 0.2, THREE.SRGBColorSpace),
+};
+
 const CAUSTIC_GLSL = /* glsl */ `
 uniform float uTime; uniform float uCaustic;
 varying vec3 vWPos;
@@ -76,45 +82,47 @@ export class World {
 
   // ---------------------------------------------------------------- terrain
   heightAt(x, z) {
-    // Rippled sand + a shallow muddy depression.
-    const ripples = Math.sin(x * 140 + Math.sin(z * 30) * 1.5) * 0.0007;
-    const dunes = (vnoise(x * 12, z * 12) - 0.5) * 0.012;
-    const mud = -0.006 * Math.exp(-((x + 0.12) ** 2 + (z - 0.05) ** 2) / 0.004);
-    return dunes + ripples * (1 - this.mudAmount(x, z)) + mud;
+    // Floor of a rocky tide pool: coarse shell grit and gravel between the rocks, gently uneven.
+    const swell = (vnoise(x * 9, z * 9) - 0.5) * 0.014;
+    const grit = (vnoise(x * 160, z * 160) - 0.5) * 0.0012;
+    return swell + grit;
   }
 
-  mudAmount(x, z) {
-    return Math.exp(-((x + 0.12) ** 2 + (z - 0.05) ** 2) / 0.006);
+  mudAmount() {
+    return 0; // no mud in a rock pool
   }
 
   buildTerrain() {
     const size = 0.8;
-    const g = new THREE.PlaneGeometry(size, size, 220, 220);
+    const g = new THREE.PlaneGeometry(size, size, 240, 240);
     g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position;
     const col = new Float32Array(pos.count * 3);
-    const sand = new THREE.Color(0xb9a888);
-    const sand2 = new THREE.Color(0x8f8068);
-    const mud = new THREE.Color(0x4b4032);
+    // dark volcanic grit, pale shell fragments, an olive diatom film [PHOTO 21, 23, 32, 46]
+    const grit = new THREE.Color(0x4a4640);
+    const shell = new THREE.Color(0xb8ad98);
+    const film = new THREE.Color(0x6a6438);
     const c = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
       pos.setY(i, this.heightAt(x, z));
-      c.copy(sand).lerp(sand2, vnoise(x * 90, z * 90) * 0.7 + hash2(x * 1e4, z * 1e4) * 0.3);
-      c.lerp(mud, this.mudAmount(x, z) * 0.85);
+      const h = hash2(x * 1e4, z * 1e4);
+      c.copy(grit).lerp(shell, THREE.MathUtils.smoothstep(h, 0.86, 0.97) * 0.8 + vnoise(x * 70, z * 70) * 0.08);
+      c.lerp(film, vnoise(x * 18 + 3, z * 18) * 0.45);
+      c.multiplyScalar(0.8 + 0.4 * hash2(x * 3e3 + 1, z * 3e3));
       col.set([c.r, c.g, c.b], i * 3);
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.computeVertexNormals();
-    // Grain-scale normal detail via a procedural canvas normal map.
     const nm = this.makeGrainNormalMap();
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, normalMap: nm, normalScale: new THREE.Vector2(0.8, 0.8) });
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, normalMap: nm, normalScale: new THREE.Vector2(1.2, 1.2) });
     addCaustics(mat, this.uniforms);
     const m = new THREE.Mesh(g, mat);
     m.receiveShadow = true;
     this.scene.add(m);
     this.terrain = m;
+    this.buildGravel();
   }
 
   makeGrainNormalMap() {
@@ -142,84 +150,143 @@ export class World {
     return t;
   }
 
+  /** Pebbles and shell fragments as one InstancedMesh each. */
+  buildGravel() {
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const sc = new THREE.Vector3();
+    const p = new THREE.Vector3();
+    const pebG = new THREE.DodecahedronGeometry(1, 1);
+    const pebM = new THREE.MeshStandardMaterial({ roughness: 0.85, vertexColors: false });
+    addCaustics(pebM, this.uniforms);
+    const N = 900;
+    const peb = new THREE.InstancedMesh(pebG, pebM, N);
+    const c = new THREE.Color();
+    for (let i = 0; i < N; i++) {
+      const x = (Math.random() * 2 - 1) * 0.38;
+      const z = (Math.random() * 2 - 1) * 0.3;
+      const r = 0.0012 + Math.pow(Math.random(), 3) * 0.006;
+      q.setFromEuler(new THREE.Euler(Math.random() * 3, Math.random() * 3, Math.random() * 3));
+      sc.set(r, r * (0.45 + Math.random() * 0.4), r * (0.7 + Math.random() * 0.4));
+      p.set(x, this.heightAt(x, z) + sc.y * 0.4, z);
+      peb.setMatrixAt(i, m4.compose(p, q, sc));
+      const k = Math.random();
+      c.setRGB(0.2 + k * 0.22, 0.19 + k * 0.2, 0.17 + k * 0.17, THREE.SRGBColorSpace);
+      if (Math.random() < 0.12) c.setRGB(0.66, 0.62, 0.55, THREE.SRGBColorSpace); // shell fragment
+      peb.setColorAt(i, c);
+    }
+    peb.castShadow = peb.receiveShadow = true;
+    this.scene.add(peb);
+  }
+
+  /** Rock surface colour: dark basalt with pink crustose coralline, green film and red algal crust [PHOTO 09, 22, 26, 27, 31]. */
+  rockColour(v, r, seed, out) {
+    const top = Math.max(0, v.y / r);
+    const n1 = vnoise(v.x * 260 + seed, v.z * 260 + v.y * 180);
+    const n2 = vnoise(v.x * 120 - seed, v.y * 140 + v.z * 90);
+    const n3 = vnoise(v.x * 600 + seed * 2, v.z * 600);
+    out.setRGB(0.2 + n3 * 0.08, 0.19 + n3 * 0.07, 0.17 + n3 * 0.06, THREE.SRGBColorSpace);
+    const coralline = THREE.MathUtils.smoothstep(n1 * (0.7 + 0.6 * n3), 0.62, 0.8);
+    out.lerp(ROCK.coralline, coralline * 0.8);
+    const redCrust = THREE.MathUtils.smoothstep(n2, 0.64, 0.76) * (1 - coralline);
+    out.lerp(ROCK.red, redCrust * 0.8);
+    const green = THREE.MathUtils.smoothstep(top * n2, 0.22, 0.45);
+    out.lerp(ROCK.green, green * 0.55);
+    return out;
+  }
+
   buildRocks() {
-    const mat = new THREE.MeshStandardMaterial({ color: 0x6d675c, roughness: 0.9, vertexColors: true });
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.86, vertexColors: true, flatShading: false });
     addCaustics(mat, this.uniforms);
+    // [x, z, radius, flatten, climbable]: low boulders and a rock shelf the shrimp walk over, a few tall stones
     const specs = [
-      [0.1, -0.05, 0.035],
-      [-0.03, 0.09, 0.025],
-      [0.17, 0.08, 0.02],
-      [-0.2, -0.08, 0.03],
-      [0.02, -0.11, 0.018],
+      [0.02, -0.03, 0.06, 0.32, true],
+      [-0.12, -0.1, 0.045, 0.4, true],
+      [-0.02, 0.1, 0.035, 0.42, true],
+      [0.06, 0.12, 0.022, 0.6, true],
+      [-0.22, 0.02, 0.05, 0.75, false],
+      [0.0, -0.15, 0.03, 0.8, false],
+      [-0.24, -0.12, 0.03, 0.5, true],
     ];
-    for (const [x, z, r] of specs) {
-      let g = new THREE.IcosahedronGeometry(r, 5);
+    const col3 = new THREE.Color();
+    for (const [x, z, r, flat, climbable] of specs) {
+      let g = new THREE.IcosahedronGeometry(r, THREE.MathUtils.clamp(Math.round(r * 260), 6, 16)); // fine enough for the pits
       g.deleteAttribute('normal');
       g.deleteAttribute('uv');
       g = mergeVertices(g);
       const p = g.attributes.position;
       const col = new Float32Array(p.count * 3);
-      const seed = x * 100;
+      const seed = x * 100 + z * 37;
       for (let i = 0; i < p.count; i++) {
         _v.fromBufferAttribute(p, i);
-        const n = vnoise(_v.x * 80 + seed, _v.z * 80 + _v.y * 50) * 0.35 + vnoise(_v.x * 300, _v.y * 300 + seed) * 0.08;
+        // weathered, pitted basalt: broad lumps plus small pits
+        const n = vnoise(_v.x * 60 + seed, _v.z * 60 + _v.y * 40) * 0.35 + vnoise(_v.x * 260, _v.y * 260 + seed) * 0.1 + vnoise(_v.x * 900 + seed, _v.y * 900 - _v.z * 400) * 0.035 - Math.pow(vnoise(_v.x * 520 + seed, _v.z * 520), 4) * 0.14;
         _v.multiplyScalar(1 + n - 0.2);
-        _v.y *= 0.6;
+        _v.y *= flat;
         p.setXYZ(i, _v.x, _v.y, _v.z);
-        // Biofilm/algal tint on upper surfaces.
-        const alg = Math.max(0, _v.y / r) * vnoise(_v.x * 200, _v.z * 200);
-        col.set([0.42 - alg * 0.12, 0.4 + alg * 0.05, 0.36 - alg * 0.12], i * 3);
+        this.rockColour(_v, r * flat, seed, col3);
+        col.set([col3.r, col3.g, col3.b], i * 3);
       }
       g.setAttribute('color', new THREE.BufferAttribute(col, 3));
       g.computeVertexNormals();
       const m = new THREE.Mesh(g, mat);
-      m.position.set(x, this.heightAt(x, z) + r * 0.05, z);
+      m.position.set(x, this.heightAt(x, z) - r * flat * 0.15, z);
       m.castShadow = m.receiveShadow = true;
       this.scene.add(m);
-      this.rocks.push({ center: m.position.clone(), radius: r * 1.05, mesh: m });
+      this.rocks.push({ center: m.position.clone(), radius: r * 1.05, mesh: m, climbable });
       this.walkables.push(m);
     }
-    // Overhanging slab resting on two stones → shelter crevice.
-    const slabG = new THREE.BoxGeometry(0.09, 0.006, 0.06, 12, 1, 8);
+    // Overhanging slab resting on two stones -> the crevice the animals hide in by day [PHOTO 22, 31].
+    const slabG = new THREE.BoxGeometry(0.1, 0.007, 0.07, 14, 1, 10);
     const sp = slabG.attributes.position;
-    for (let i = 0; i < sp.count; i++) sp.setY(i, sp.getY(i) + vnoise(sp.getX(i) * 200, sp.getZ(i) * 200) * 0.003);
+    const sCol = new Float32Array(sp.count * 3);
+    for (let i = 0; i < sp.count; i++) {
+      sp.setY(i, sp.getY(i) + vnoise(sp.getX(i) * 200, sp.getZ(i) * 200) * 0.003);
+      _v.fromBufferAttribute(sp, i);
+      this.rockColour(_v, 0.004, 5, col3);
+      sCol.set([col3.r, col3.g, col3.b], i * 3);
+    }
+    slabG.setAttribute('color', new THREE.BufferAttribute(sCol, 3));
     slabG.computeVertexNormals();
-    const slab = new THREE.Mesh(slabG, new THREE.MeshStandardMaterial({ color: 0x5c574d, roughness: 0.95 }));
-    const sx = -0.15;
-    const sz = 0.08;
-    slab.position.set(sx, this.heightAt(sx, sz) + 0.022, sz);
-    slab.rotation.set(0.05, 0.4, -0.06);
+    const slab = new THREE.Mesh(slabG, mat);
+    const sx = 0.2;
+    const sz = -0.1;
+    slab.position.set(sx, this.heightAt(sx, sz) + 0.024, sz);
+    slab.rotation.set(0.05, -0.5, -0.06);
     slab.castShadow = slab.receiveShadow = true;
     this.scene.add(slab);
     this.walkables.push(slab);
-    for (const dz of [-0.026, 0.026]) {
-      const g = new THREE.DodecahedronGeometry(0.012, 1);
+    for (const dz of [-0.03, 0.03]) {
+      const g = new THREE.DodecahedronGeometry(0.013, 1);
       const m = new THREE.Mesh(g, mat);
-      const px = sx + dz * 0.4;
+      const col = new Float32Array(g.attributes.position.count * 3);
+      for (let i = 0; i < g.attributes.position.count; i++) {
+        _v.fromBufferAttribute(g.attributes.position, i);
+        this.rockColour(_v, 0.013, 9, col3);
+        col.set([col3.r, col3.g, col3.b], i * 3);
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      const px = sx + dz * 0.5;
       const pz = sz + dz;
       m.position.set(px, this.heightAt(px, pz) + 0.009, pz);
       m.castShadow = m.receiveShadow = true;
       this.scene.add(m);
-      this.rocks.push({ center: m.position.clone(), radius: 0.013, mesh: m });
+      this.rocks.push({ center: m.position.clone(), radius: 0.014, mesh: m, climbable: false });
       this.walkables.push(m);
     }
-    this.shelters.push({ position: new THREE.Vector3(sx, this.heightAt(sx, sz), sz), facing: new THREE.Vector3(sx + 0.1, 0, sz + 0.04) });
-    // Rock lees also act as partial shelters.
-    for (const r of this.rocks.slice(0, 3)) {
-      const p = r.center.clone().add(new THREE.Vector3(-r.radius - 0.01, 0, 0));
+    this.shelters.push({ kind: 'crevice', position: new THREE.Vector3(sx, this.heightAt(sx, sz), sz), facing: new THREE.Vector3(sx - 0.1, 0, sz + 0.05) });
+    // The lee of the tall stones also serves as cover.
+    for (const r of this.rocks.filter((k) => !k.climbable && k.radius > 0.025)) {
+      const p = r.center.clone().add(new THREE.Vector3(r.radius + 0.008, 0, 0));
       p.y = this.heightAt(p.x, p.z);
-      this.shelters.push({ position: p, facing: r.center.clone().add(new THREE.Vector3(-0.2, 0, 0)) });
+      this.shelters.push({ kind: 'rock', position: p, facing: r.center.clone().add(new THREE.Vector3(0.2, 0, 0)) });
     }
   }
 
-  buildPlants() {
-    // Eelgrass-like ribbons (Zostera occurs in brackish estuaries), swayed in the vertex shader.
-    const blades = 140;
-    const g = new THREE.PlaneGeometry(0.005, 0.16, 1, 12);
-    g.translate(0, 0.08, 0);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x4f6b2a, roughness: 0.7, side: THREE.DoubleSide, transparent: false });
-    const uniforms = { uTime: this.uniforms.uTime, uFlow: { value: new THREE.Vector3() } };
-    this.plantUniforms = uniforms;
+  /** Sway shader shared by the eelgrass and the algal tufts (vertex displacement in the blade's own frame). */
+  swayMaterial(color, height, o = {}) {
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: o.roughness ?? 0.7, side: THREE.DoubleSide, transparent: false });
+    const uniforms = this.plantUniforms;
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, uniforms);
       sh.vertexShader = sh.vertexShader
@@ -227,7 +294,7 @@ export class World {
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
-          float h = transformed.y / 0.16;
+          float h = transformed.y / ${height.toFixed(4)};
           vec4 ip = instanceMatrix * vec4(0.0,0.0,0.0,1.0);
           float ph = ip.x*40.0 + ip.z*23.0;
           float bend = h*h;
@@ -236,31 +303,126 @@ export class World {
           transformed.y -= bend * 0.01 * length(uFlow.xz)*30.0;`
         );
     };
-    const inst = new THREE.InstancedMesh(g, mat, blades);
+    return mat;
+  }
+
+  buildPlants() {
+    this.plantUniforms = { uTime: this.uniforms.uTime, uFlow: { value: new THREE.Vector3() } };
+    this.buildAlgae();
+    this.buildEelgrass();
+  }
+
+  /** Red and brown algal tufts on and around the rocks [PHOTO 23, 25, 29, 32]. */
+  buildAlgae() {
+    const H = 0.022;
+    const g = new THREE.PlaneGeometry(0.0007, H, 1, 6);
+    g.translate(0, H / 2, 0);
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const s = new THREE.Vector3();
-    const clumps = [[0.2, -0.12], [-0.23, 0.1], [0.23, 0.13]];
-    let k = 0;
-    this.plantPatches = [];
-    for (const [cx, cz] of clumps) {
-      this.plantPatches.push({ center: new THREE.Vector3(cx, 0, cz), radius: 0.04 });
-      for (let i = 0; i < blades / clumps.length; i++) {
+    for (const [color, count, spots] of [
+      [0x4a1614, 1400, [[0.0, -0.06], [-0.1, -0.13], [-0.05, 0.08], [0.09, 0.09], [-0.24, 0.07]]],
+      [0x564220, 900, [[0.06, -0.02], [-0.16, -0.06], [-0.26, -0.14], [0.03, 0.13]]],
+    ]) {
+      const inst = new THREE.InstancedMesh(g, this.swayMaterial(color, H, { roughness: 0.6 }), count);
+      for (let i = 0; i < count; i++) {
+        const [cx, cz] = spots[i % spots.length];
         const a = Math.random() * Math.PI * 2;
-        const r = Math.random() * 0.04;
+        const r = Math.sqrt(Math.random()) * 0.025;
         const x = cx + Math.cos(a) * r;
         const z = cz + Math.sin(a) * r;
-        q.setFromEuler(new THREE.Euler(0, Math.random() * Math.PI, (Math.random() - 0.5) * 0.3));
-        s.set(1, 0.5 + Math.random() * 0.8, 1);
-        m4.compose(new THREE.Vector3(x, this.heightAt(x, z), z), q, s);
-        if (k < blades) inst.setMatrixAt(k++, m4);
+        q.setFromEuler(new THREE.Euler((Math.random() - 0.5) * 1.4, Math.random() * Math.PI, (Math.random() - 0.5) * 1.4));
+        s.set(1, 0.35 + Math.random() * 0.8, 1);
+        m4.compose(new THREE.Vector3(x, this.groundY(x, z, 0.3) - 0.001, z), q, s);
+        inst.setMatrixAt(i, m4);
       }
-      // Plants provide shelter
-      this.shelters.push({ position: new THREE.Vector3(cx, this.heightAt(cx, cz), cz), facing: new THREE.Vector3(0, 0, 0) });
+      inst.castShadow = true;
+      this.scene.add(inst);
+    }
+  }
+
+  /**
+   * アマモ場: eelgrass blades (InstancedMesh + sway shader, as in the シラタエビ viewer). bladeFrame() evaluates
+   * the same sway on the CPU so a shrimp holding a blade moves with it.
+   */
+  buildEelgrass() {
+    const H = 0.16;
+    this.bladeH = H;
+    this.bladeHalfWidth = 0.0028;
+    const g = new THREE.PlaneGeometry(this.bladeHalfWidth * 2, H, 1, 16);
+    g.translate(0, H / 2, 0);
+    const mat = this.swayMaterial(0x4d6229, H, { roughness: 0.55 });
+    const count = 110;
+    const inst = new THREE.InstancedMesh(g, mat, count);
+    this.blades = [];
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3();
+    const meadow = { center: new THREE.Vector3(0.2, 0, 0.08), rx: 0.075, rz: 0.075 };
+    this.meadow = meadow;
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random());
+      const x = meadow.center.x + Math.cos(a) * r * meadow.rx;
+      const z = meadow.center.z + Math.sin(a) * r * meadow.rz;
+      q.setFromEuler(new THREE.Euler(0, Math.random() * Math.PI, (Math.random() - 0.5) * 0.3));
+      s.set(1, 0.6 + Math.random() * 0.7, 1);
+      const pos = new THREE.Vector3(x, this.heightAt(x, z), z);
+      const m4 = new THREE.Matrix4().compose(pos, q, s);
+      inst.setMatrixAt(i, m4);
+      const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+      normal.y = 0;
+      normal.normalize();
+      this.blades.push({ index: i, matrix: m4, base: pos, normal, length: H * s.y, ph: x * 40 + z * 23 });
     }
     inst.castShadow = true;
     inst.receiveShadow = true;
     this.scene.add(inst);
+    this.shelters.push({ kind: 'amamo', position: new THREE.Vector3(meadow.center.x, this.heightAt(meadow.center.x, meadow.center.z), meadow.center.z), facing: new THREE.Vector3(0, 0, 0) });
+  }
+
+  /** Blade centreline point in the blade's local frame, displaced exactly as the vertex shader does. */
+  bladeLocal(b, yLocal, out) {
+    const h = yLocal / this.bladeH;
+    const bend = h * h;
+    const t = this.uniforms.uTime.value;
+    const F = this.plantUniforms.uFlow.value;
+    out.set(bend * (0.02 * Math.sin(t * 0.9 + b.ph) + F.x * 1.2), yLocal - bend * 0.01 * Math.hypot(F.x, F.z) * 30, bend * (0.012 * Math.cos(t * 0.7 + b.ph * 1.3) + F.z * 1.2));
+    return out.applyMatrix4(b.matrix);
+  }
+
+  /**
+   * Frame on blade `index` at distance h (m) up from its base: p (centreline), t (unit tangent, up the blade),
+   * n (unit face normal), e (unit across the blade, t x n).
+   */
+  bladeFrame(index, h, out) {
+    const b = this.blades[index];
+    const sy = b.length / this.bladeH;
+    const y = THREE.MathUtils.clamp(h / sy, 0, this.bladeH);
+    const e = 0.002;
+    this.bladeLocal(b, y, out.p);
+    const a = this.bladeLocal(b, Math.max(0, y - e), new THREE.Vector3());
+    const c = this.bladeLocal(b, Math.min(this.bladeH, y + e), new THREE.Vector3());
+    out.t.subVectors(c, a).normalize();
+    out.n.copy(b.normal).addScaledVector(out.t, -b.normal.dot(out.t)).normalize();
+    out.e.crossVectors(out.t, out.n).normalize();
+    return out;
+  }
+
+  /** Nearest free blade within range (horizontal distance to its base), with the side of it the animal is on. */
+  nearestBlade(p, range) {
+    if (!this.blades) return null;
+    let best = null;
+    let bd = range;
+    for (const b of this.blades) {
+      const d = Math.hypot(p.x - b.base.x, p.z - b.base.z);
+      if (d >= bd) continue;
+      if (this.shrimps.some((s) => s.position !== p && s.brain.cling && s.brain.cling.blade === b.index)) continue;
+      bd = d;
+      best = b;
+    }
+    if (!best) return null;
+    const side = Math.sign((p.x - best.base.x) * best.normal.x + (p.z - best.base.z) * best.normal.z) || 1;
+    return { index: best.index, base: best.base, normal: best.normal, length: best.length, dist: bd, facing: side };
   }
 
   buildParticles() {
@@ -337,6 +499,7 @@ export class World {
   steer(pos, dir, onGround) {
     // Obstacle avoidance with wall-following: blend in tangential direction around rocks.
     for (const r of this.rocks) {
+      if (onGround && r.climbable) continue; // walked over, not around
       _v.subVectors(pos, r.center);
       if (onGround) _v.y = 0;
       const d = _v.length();
@@ -382,6 +545,7 @@ export class World {
     }
     // Push out of rocks (body is not allowed to interpenetrate).
     for (const r of this.rocks) {
+      if (onGround && r.climbable) continue;
       _v.subVectors(p, r.center);
       if (onGround) _v.y = 0;
       const d = _v.length();
@@ -392,6 +556,7 @@ export class World {
 
   isFree(p, margin) {
     for (const r of this.rocks) {
+      if (r.climbable) continue;
       if (Math.hypot(p.x - r.center.x, p.z - r.center.z) < r.radius + margin) return false;
     }
     const B = this.bounds;

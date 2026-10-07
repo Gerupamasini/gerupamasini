@@ -3,7 +3,7 @@ import type { Individual } from '../../Individual';
 import type { BehaviorEvent, Driver, DriverContext, Floor, Intent } from '../../drivers/Driver';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { hashInts } from '../../../core/Rng';
-import { ShrimpModel } from './model/ShrimpModel.js';
+import { ShrimpModel, SHIRATA } from './model/ShrimpModel.js';
 import { Shrimp } from './model/Shrimp.js';
 
 /** the procedural model is built at this total length (metres); individuals scale it */
@@ -63,13 +63,20 @@ class StubBrain {
   stimulus(): void {}
 }
 
+/** a species profile for the shared shrimp model (SHIRATA, or ISOSUJI from model/isosuji.js) */
+type ShrimpSpecies = typeof SHIRATA;
+
 type Mode = 'idle' | 'walk' | 'swim' | 'forage' | 'flee';
 
 // our heading: forward = (sin h, 0, cos h); the shrimp's yaw: forward = (cos yaw, 0, -sin yaw)
 const headingToYaw = (h: number) => Math.atan2(-Math.cos(h), Math.sin(h));
 const yawToHeading = (yaw: number) => Math.atan2(Math.cos(yaw), -Math.sin(yaw));
 
-/** シラタエビ: the photo-traced procedural model with leg-driven walking, swimming and the tail-flip escape. */
+/**
+ * シラタエビ: the photo-traced procedural model with leg-driven walking, swimming and the tail-flip escape.
+ * Other palaemonids reuse it with their species profile (イソスジエビ: model/isosuji.js), which changes the
+ * morphology, colours, stripe pattern and kinematics only.
+ */
 export class ShrimpDriver implements Driver {
   private root: Object3D | null = null;
   private ind: Individual | null = null;
@@ -93,6 +100,9 @@ export class ShrimpDriver implements Driver {
   private readonly tmp = new Vector3();
   busy = false;
 
+  /** the species profile the model is built from (SHIRATA or e.g. ISOSUJI) */
+  constructor(private readonly species: ShrimpSpecies = SHIRATA) {}
+
   /** The real model is built in attach(), once the individual (sex, size) is known; this is only the holder. */
   static makeModel(): PlaceholderModel {
     const root = new Group();
@@ -101,8 +111,8 @@ export class ShrimpDriver implements Driver {
   }
 
   /** A female at the model size, standing, for the 図鑑. */
-  static makePreview(): Object3D {
-    const model = new ShrimpModel({ sex: 'female', berried: false, scale: 1 });
+  static makePreview(species: ShrimpSpecies = SHIRATA): Object3D {
+    const model = new ShrimpModel({ sex: 'female', berried: false, scale: 1, species });
     model.root.name = 'ShrimpPreview';
     model.root.userData.disposable = true;
     return model.root;
@@ -114,7 +124,7 @@ export class ShrimpDriver implements Driver {
     this.scale = individual.length_mm / 1000 / MODEL_TL;
     const sex = individual.sex === 'f' ? 'female' : 'male';
     const berried = sex === 'female' && individual.stage === 'adult' && hashInts(individual.length_mm * 10, 17) % 100 < 35;
-    this.model = new ShrimpModel({ sex, berried, scale: this.scale });
+    this.model = new ShrimpModel({ sex, berried, scale: this.scale, species: this.species });
     root.position.set(0, 0, 0);
     root.rotation.set(0, 0, 0);
     root.add(this.model.root);

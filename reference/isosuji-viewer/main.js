@@ -7,10 +7,18 @@ import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+// イソスジエビ viewer: the シラタエビ viewer (claude/epic-noether-hzhjhj) with the game's shared shrimp model,
+// switched to the イソスジエビ species profile, in a rocky tide pool with an eelgrass meadow.
 import { World } from './World.js';
-import { Shrimp } from './shrimp/Shrimp.js';
+import { Shrimp } from '../../src/creatures/species/shrimp/model/Shrimp.js';
+import { ISOSUJI } from '../../src/creatures/species/shrimp/model/isosuji.js';
+import { IsosujiBrain } from '../../src/creatures/species/shrimp/model/IsosujiBrain.js';
+import { TL as MODEL_TL } from '../../src/creatures/species/shrimp/model/morphology.js';
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const params = new URLSearchParams(location.search);
+const capture = params.has('capture');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: capture });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -20,10 +28,10 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const waterDay = new THREE.Color(0x3d6a66);
+const waterDay = new THREE.Color(0x4a7a74); // clear, green-blue water of a rock pool
 const waterNight = new THREE.Color(0x0a1820);
 scene.background = waterDay.clone();
-scene.fog = new THREE.FogExp2(waterDay.clone(), 3.2);
+scene.fog = new THREE.FogExp2(waterDay.clone(), 2.6);
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.35;
@@ -77,14 +85,22 @@ const lens = new ShaderPass({
 composer.addPass(lens);
 composer.addPass(new OutputPass());
 
-// Individuals: berried female, female, two males (females larger) [R].
+// Individuals (total length mm): berried female (Apr-Sep), females larger than males; one starts in the アマモ場.
 const specs = [
-  { sex: 'female', berried: true, scale: 1.1, name: '♀ 抱卵', position: new THREE.Vector3(0, 0, 0.02) },
-  { sex: 'female', scale: 1.0, name: '♀', position: new THREE.Vector3(0.08, 0, 0.06) },
-  { sex: 'male', scale: 0.88, name: '♂ A', position: new THREE.Vector3(-0.06, 0, -0.05) },
-  { sex: 'male', scale: 0.9, name: '♂ B', position: new THREE.Vector3(0.12, 0, -0.1) },
+  { sex: 'female', berried: true, tl: 50, name: '♀ 抱卵', position: new THREE.Vector3(0.05, 0, 0.05) },
+  { sex: 'female', tl: 47, name: '♀', position: new THREE.Vector3(-0.08, 0, 0.05) },
+  { sex: 'male', tl: 40, name: '♂ A', position: new THREE.Vector3(-0.15, 0, -0.04) },
+  { sex: 'male', tl: 38, name: '♂ アマモ', position: new THREE.Vector3(0.18, 0, 0.1) },
+  { sex: 'female', tl: 44, name: '♀ アマモ', position: new THREE.Vector3(0.22, 0, 0.04) },
 ];
-for (const s of specs) world.shrimps.push(new Shrimp(world, s));
+// ?species=shirata shows the unchanged シラタエビ (the base of this model) for comparison
+const asShirata = params.get('species') === 'shirata';
+for (const s of specs) {
+  const sh = asShirata
+    ? new Shrimp(world, { ...s, scale: (s.tl * 1.25) / 1000 / MODEL_TL })
+    : new Shrimp(world, { ...s, species: ISOSUJI, Brain: IsosujiBrain, scale: s.tl / 1000 / MODEL_TL });
+  world.shrimps.push(sh);
+}
 let selected = world.shrimps[0];
 
 // ---------------------------------------------------------------- UI
@@ -96,6 +112,21 @@ const ui = {
   tool: () => document.querySelector('input[name=tool]:checked').value,
   follow: $('follow'),
   slow: $('slow'),
+  force: $('force'),
+};
+ui.force.onchange = () => {
+  // force a state on the selected animal (for checking each behaviour)
+  const b = selected.brain;
+  const v = ui.force.value;
+  ui.force.value = '';
+  if (!v) return;
+  if (v === 'ESCAPE_BACKWARD') {
+    const back = new THREE.Vector3(Math.cos(selected.yaw), 0, -Math.sin(selected.yaw)).multiplyScalar(0.02).add(selected.position);
+    b.stimulus(back, 1.5);
+    return;
+  }
+  if (v !== 'CLING') b.cling = null;
+  b.setBehavior(v, 20);
 };
 const sel = $('select');
 world.shrimps.forEach((s, i) => sel.add(new Option(s.name, i)));
@@ -173,7 +204,7 @@ function drawHud() {
   hud.innerHTML = `<b>${selected.name}</b> — <span class="beh">${b.behavior}</span> · ${selected.mode}${selected.flip ? ' · TAIL-FLIP #' + (selected.flip.i + 1) : ''}
   <div class="grp">internal state</div>${bars({ hunger: b.s.hunger, fear: b.s.fear, curiosity: b.s.curiosity, fatigue: b.s.fatigue, groomNeed: b.s.dirt, shelterPref: b.s.shelterPreference, flowPref: b.s.flowPreference, activity: b.s.activityLevel })}
   <div class="grp">utility (last decision)</div>${bars(scores)}
-  <div class="grp">speed ${(selected.speed * 100).toFixed(1)} cm/s · ${(selected.speed / (0.055 * selected.scale)).toFixed(2)} BL/s</div>`;
+  <div class="grp">speed ${(selected.speed * 100).toFixed(1)} cm/s · ${(selected.speed / (MODEL_TL * selected.scale)).toFixed(2)} BL/s · TL ${(MODEL_TL * selected.scale * 1000).toFixed(0)} mm</div>`;
 }
 
 // ---------------------------------------------------------------- loop
@@ -204,4 +235,5 @@ function frame() {
   requestAnimationFrame(frame);
 }
 frame();
-window.__app = { world, scene, camera, renderer, controls, composer };
+window.__app = { world, scene, camera, renderer, controls, composer, THREE, select: (i) => (selected = world.shrimps[i]) };
+if (capture) document.body.classList.add('capture');
