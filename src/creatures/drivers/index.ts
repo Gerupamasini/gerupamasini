@@ -11,6 +11,7 @@ import { OysterDriver } from '../oyster/OysterDriver';
 import { CrabDriver, HermitDriver, SnailDriver } from '../species/shore/crawlers';
 import { WormDriver } from '../species/shore/others';
 import { HakuDriver } from '../species/haku/HakuDriver';
+import { YoujiuoDriver } from '../species/youjiuo/YoujiuoDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -41,4 +42,6 @@ export const DRIVERS: Record<string, DriverEntry> = {
   worm: { create: () => new WormDriver(), placeholder: () => WormDriver.makeModel(), preview: (seed) => WormDriver.makePreview(seed) },
   // ハク: the schooling juvenile mullet (its own tiers in the placeholder view; near within 5 m)
   haku: { create: () => new HakuDriver(), placeholder: () => HakuDriver.makeModel(), preview: () => HakuDriver.makePreview(), nearDistance: 5 },
+  // ヨウジウオ: the pipefish of the eelgrass (its own tiers in the placeholder view; near within 6 m)
+  youjiuo: { create: () => new YoujiuoDriver(), placeholder: () => YoujiuoDriver.makeModel(), preview: (seed) => YoujiuoDriver.makePreview(seed), nearDistance: 6 },
 };

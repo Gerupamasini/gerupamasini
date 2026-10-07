@@ -308,6 +308,7 @@ export class App {
       this.player.groundBoost = (x, z) => this.world?.riprap?.heightBoost(x, z) ?? 0;
       ui.loading.value = { frac: 0.7, label: t('loading.models') };
       this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed, map.habitat?.minSpawnDist_m);
+      this.creatures.setMeadow(this.world.amamo);
       await this.creatures.preload();
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
