@@ -457,6 +457,31 @@ function bakeBodyTextures(ctx) {
   for (let i = 0; i < PAT.pearlCount; i++) PEARL.push([P_(25 + 70 * rnd(i, 5, 41)), H2N(0.6 + 0.38 * rnd(i, 6, 42)), P_(0.5 + 0.75 * rnd(i, 7, 43))]);
   const PALE = PAT.paleInterspaces.map(([x, h, k]) => [P_(x), H2N(h), k]);
 
+  // Discrete dark-brown spots (melanophore clusters, Ø 0.5–1.6 mm) densely scattered over the head and the upper
+  // two-thirds of the body, sparse below the axis; the midlateral "blotches" are just denser groups of them
+  // [P user photo 2026-10 (live, lateral), 070, 057, 014]. Lattice in (s, arc) per side, cell ≈ 0.88 mm.
+  function spotField(s, y, z, hn) {
+    if (s < 0.6 || s > S_END - 0.6) return 0;
+    const q = section(s);
+    const r = 0.5 * (Math.max(q.t, q.b) + q.w);
+    const v = Math.atan2(y - q.yc, Math.abs(z)) * r, side = z >= 0 ? 0 : 1;
+    const C = 0.88, ci = Math.floor(s / C), cj = Math.floor(v / C);
+    let best = 0;
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+      const i = ci + di, j = cj + dj;
+      const pres = 0.12 + 0.68 * smoothstep(-0.45, 0.15, Math.max(-1, Math.min(1, (j * C) / Math.max(r, 0.1) / 1.4)));
+      if (hash01(i, j, side, 901) > pres) continue;
+      const cx = (i + 0.15 + 0.7 * hash01(i, j, side, 902)) * C, cy = (j + 0.15 + 0.7 * hash01(i, j, side, 903)) * C;
+      const rad = 0.17 + 0.36 * hash01(i, j, side, 904) ** 1.6 * (1 + 0.35 * smoothstep(12, 6, s)); // larger spots on cheek and snout
+      const ang = hash01(i, j, side, 905) * Math.PI, ca = Math.cos(ang), sa = Math.sin(ang);
+      const dx = s - cx, dy = v - cy, el = 1 + 0.6 * hash01(i, j, side, 906);
+      const u = (dx * ca + dy * sa) / el, w = -dx * sa + dy * ca;
+      const d = Math.hypot(u, w) / rad + 0.35 * fbm3(s * 6, y * 6, z * 6, 2, 907);
+      best = Math.max(best, smoothstep(1.0, 0.55, d) * (0.65 + 0.35 * hash01(i, j, side, 908)));
+    }
+    return best * smoothstep(-0.9, -0.5, hn);
+  }
+
   function blotchAt(s, y, z, hn) {
     let cbs = 0;
     const nz = fbm3(s * 0.7, y * 0.7, z * 0.7, 3, 11) * 0.6 + fbm3(s * 2.6, y * 2.6, z * 2.6, 2, 12) * 0.35;
@@ -574,7 +599,7 @@ function bakeBodyTextures(ctx) {
     const { b, sd, rust, cbs } = blotchAt(s, y, z, hn);
     const n = fbm3(s * 0.8, y * 0.8, Math.abs(z) * 0.8, 3, 5);
     // speckle clusters 4–8 /mm² on the dorsum and upper/mid flank, ~1.6 /mm² low on the flank [P colour report §3.5]
-    let d = PAT.dark * (1.5 + 18.0 * dorsal * (0.65 + 0.55 * n) + 6.0 * (1 - Math.abs(hn)) * smoothstep(-0.35, 0.1, hn)) + 45.0 * b + 14.0 * sd + 4.0 * rust + 40.0 * pecBaseSpot(s, y, z) + 70.0 * cbs;
+    let d = PAT.dark * (1.5 + 18.0 * dorsal * (0.65 + 0.55 * n) + 6.0 * (1 - Math.abs(hn)) * smoothstep(-0.35, 0.1, hn)) + 45.0 * b + 14.0 * sd + 4.0 * rust + 40.0 * pecBaseSpot(s, y, z) + 70.0 * cbs + 90.0 * spotField(s, y, z, hn);
     if (head > 0) {
       const hm = headMarks(s, y, z, hn);
       // cheeks and gill cover finely peppered (salt-and-pepper) [P 041]
@@ -617,7 +642,7 @@ function bakeBodyTextures(ctx) {
     // dusky axial band (internal pigment along the horizontal septum seen through the muscle), h 0.4–0.6, from x≈40 [P §2.5]
     const midLine = Math.exp(-0.5 * ((hn / 0.18) ** 2)) * smoothstep(P_(35), P_(55), s) * smoothstep(P_(100), P_(96), s);
     // blotch cores reach Y ≈ 0.1–0.2 × ground [P colour report §3.1] → strong smooth melanin + dense splats
-    let m = (0.03 * dorsal * PAT.dark + 0.5 * b + 0.12 * sd + 0.03 * rust + 0.03 * midLine + 0.12 * pecBaseSpot(s, yy, z) + 0.45 * cbs) * (1 - 0.5 * pale);
+    let m = (0.03 * dorsal * PAT.dark + 0.3 * b + 0.12 * sd + 0.03 * rust + 0.03 * midLine + 0.12 * pecBaseSpot(s, yy, z) + 0.45 * cbs) * (1 - 0.5 * pale);
     let cheekKeep = 0;
     if (head > 0) {
       const verm = smoothstep(0.74, 0.9, ridged3(s * 1.6 + 3.1, yy * 1.6, Math.abs(z) * 1.6, 3, 61)) * smoothstep(-0.8, -0.2, hn) * smoothstep(2.5, 4.5, s);
@@ -630,6 +655,7 @@ function bakeBodyTextures(ctx) {
     // dusky scale-pocket reticulation on the upper flank
     m += 0.06 * dorsal * smoothstep(0.55, 0.8, ridged3(s * 2.2, yy * 2.2, z * 2.2, 3, 3)) * (1 - head * 0.6) * PAT.dark;
     m *= 1 - belly * (1 - cheekKeep);
+    m = Math.max(m, 0.78 * spotField(s, yy, z, hn));
     const ed = eyeDist(s, yy, z);
     m += 0.1 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.3) ** 2));
     // iridophores: silvery belly and lower flank, pearly opercle patch and pectoral-base lobe [P 025/031/041]
@@ -647,7 +673,7 @@ function bakeBodyTextures(ctx) {
     iri *= 1 - 0.5 * smoothstep(P_(13), P_(7), s) * smoothstep(0.1, -0.4, hn);
     // xanthophores: sandy-yellow ground on the back, strong in the rust spots
     // (raised from 0.3: live fish under neutral light are straw-yellow, sRGB B/R ≈ 0.55 on the mid-flank [P 007/070/003])
-    let xan = 0.45 + 0.35 * dorsal + 0.25 * head * smoothstep(-0.3, 0.4, hn) + PAT.rustXan * rust;
+    let xan = 0.18 + 0.2 * dorsal + 0.25 * head * smoothstep(-0.3, 0.4, hn) + PAT.rustXan * rust;
     xan *= 1 - 0.6 * belly ** 1.6;
     xan *= 0.82 + 0.36 * fbm3(s * 0.9, yy * 0.9, z * 0.9, 3, 51);
     const gill = smoothstep(P_(15.5), P_(19), s) * smoothstep(P_(24.5), P_(22), s) * smoothstep(0.35, -0.2, hn) * smoothstep(-0.95, -0.55, hn);
@@ -967,14 +993,15 @@ function bakeBodyTextures(ctx) {
     // mid-flank (axial band), paler post-anal lower flank, opaque white belly (white peritoneum), darker head
     const upper = smoothstep(0.0, 0.5, hn), lower = smoothstep(-0.2, -0.55, hn);
     // (re-saturated after zone colour checks vs 025/026/004/022: render flank B/R 0.80 vs photos 0.58–0.71)
-    let r = 0.52, g = 0.38, b = 0.19;
-    r = mix(r, 0.6, upper); g = mix(g, 0.45, upper); b = mix(b, 0.2, upper);
-    r = mix(r, 0.62, lower); g = mix(g, 0.5, lower); b = mix(b, 0.3, lower);
+    // pale, nearly colourless translucent ground between the spots (live fish in a clear tank, user photo 2026-10)
+    let r = 0.68, g = 0.62, b = 0.52;
+    r = mix(r, 0.7, upper); g = mix(g, 0.63, upper); b = mix(b, 0.5, upper);
+    r = mix(r, 0.76, lower); g = mix(g, 0.73, lower); b = mix(b, 0.67, lower);
     // the cream-white belly colour is confined to the ventral surface (hn < −0.55); the lower flank stays tan [P 007/070/025]
     const bellyC = smoothstep(-0.55, -0.92, hn);
     r = mix(r, 0.68, bellyC); g = mix(g, 0.64, bellyC); b = mix(b, 0.54, bellyC);
     const headG = head * smoothstep(-0.6, 0.1, hn);
-    r = mix(r, 0.42, headG); g = mix(g, 0.3, headG); b = mix(b, 0.16, headG);
+    r = mix(r, 0.6, headG); g = mix(g, 0.52, headG); b = mix(b, 0.42, headG);
     // pale interspaces / pearly flecks lift the ground
     const lift = 1 + 0.3 * PL;
     r = Math.min(0.85, r * lift); g = Math.min(0.85, g * lift); b = Math.min(0.8, b * lift);

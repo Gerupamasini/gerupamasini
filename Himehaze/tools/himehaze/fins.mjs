@@ -104,7 +104,7 @@ function caudalFin(rect) {
       const lowStreak = Math.exp(-(((fAcross - 0.795) / 0.026) ** 2)) * smoothstep(1.0, 1.6, Lr) * smoothstep(5.8, 4.9, Lr);
       // (d) breeding male / some individuals: blue-black dash at the upper margin (001/014 only) [P, optional]
       const mspot = MALE ? Math.exp(-(((t - 0.5) / 0.12) ** 2) - (((fAcross - 0.14) / 0.06) ** 2)) : 0;
-      return { mel: Math.max(0.28 * d, 0.9 * base, 0.4 * lowStreak, 1.0 * mspot), xan: 0.95 * d, yel: 0.45 * lower, irid: 0.05 };
+      return { mel: Math.max(0.45 * d, 0.9 * base, 0.4 * lowStreak, 1.0 * mspot), xan: 0.95 * d, yel: 0.45 * lower, irid: 0.05 };
     },
   };
 }
@@ -219,7 +219,7 @@ export function finDefinitions() {
       // 3.0 × 1.7 %SL horizontal oval, soft edge, near-black (sRGB ≈ 25,22,22) — absent in juveniles [P 004/006/025/026/007/001]
       const spot = smoothstep(1.0, 0.7, Math.hypot((a - 4.55) / 0.72, (t - 0.46) / 0.12));
       const margin = smoothstep(0.86, 0.97, t);
-      let mel = (Math.max(0.3 * d, 0.75 * band) + 0.03) * (1 - 0.7 * margin);
+      let mel = (Math.max(0.5 * d, 0.75 * band) + 0.03) * (1 - 0.7 * margin);
       let xan = 0.95 * d, yel = 0, irid = 0.05 + 0.3 * margin;
       if (MALE) {
         // breeding male: a little duskier membrane with a pale margin, a yellow-green clear panel, brown basal spots
@@ -258,7 +258,7 @@ export function finDefinitions() {
       const spot = smoothstep(1.0, 0.7, dmin) * smoothstep(0.86, 0.78, t);
       const ring = smoothstep(0.95, 1.1, dmin) * smoothstep(1.55, 1.25, dmin) * smoothstep(0.84, 0.74, t);
       const olive = smoothstep(0.3, 0.9, fAcross);
-      return { mel: 0.28 * spot + 0.03 + 0.15 * olive * spot, xan: 0.95 * spot * (1 - 0.3 * olive), yel: 0.25 * olive * spot, irid: 0.05 + 0.4 * ring };
+      return { mel: 0.5 * spot + 0.03 + 0.15 * olive * spot, xan: 0.95 * spot * (1 - 0.3 * olive), yel: 0.25 * olive * spot, irid: 0.05 + 0.4 * ring };
     },
   });
   // Anal: I,9 [F; P 031 ray crossings]; bases 55–81 %SL; low, even fin h ≈ 7 %SL (0.57 × D2), rays lean 55–60°
@@ -561,7 +561,7 @@ export function paintFinAtlas(defs, log = () => {}) {
         // colours (linear)
         let cr = mix(0.8, 0.78, rayD), cg = mix(0.78, 0.7, rayD), cb = mix(0.72, 0.52, rayD);
         // xantho/erythrophores: brick-red to orange-tan dots (live 014/001/018: R:G:B ≈ 1 : 0.35 : 0.27) [P]
-        cr *= mix(1, 0.95, xan); cg *= mix(1, 0.47, xan); cb *= mix(1, 0.27, xan);
+        cr *= mix(1, 0.8, xan); cg *= mix(1, 0.55, xan); cb *= mix(1, 0.4, xan);
         // pale yellow tint (anal fin, lower caudal third, male D1 panels): xanthophores without erythrophores
         cr *= mix(1, 0.97, yel); cg *= mix(1, 0.9, yel); cb *= mix(1, 0.55, yel);
         cr = mix(cr, 0.9, irid * 0.5); cg = mix(cg, 0.9, irid * 0.5); cb = mix(cb, 0.88, irid * 0.5);

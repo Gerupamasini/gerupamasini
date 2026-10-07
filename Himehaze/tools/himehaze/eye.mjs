@@ -2,7 +2,7 @@
 import { EYE, toObject, dirToObject } from './anatomy.mjs';
 import { perlin3, fbm3, hash01, clamp, mix, smoothstep } from '../lib/noise.mjs';
 
-export const PUPIL_ANGLE = 0.42; // rad (half-angle from the axis): pupil ≈ 0.46 of the iris diameter [P head 065/041]
+export const PUPIL_ANGLE = 0.47; // rad (half-angle from the axis): pupil ≈ 0.46 of the iris diameter [P head 065/041]
 export const IRIS_ANGLE = 1.08;
 export const CORNEA_BULGE = 0.075;
 
@@ -118,7 +118,7 @@ export function paintIris(size = 1024) {
         const f = (theta - pupilEdge) / (IRIS_ANGLE - pupilEdge);
         // ヒメハゼ [P 041, 062, 065, 052L, 017]: olive-gold to khaki iris with radial striations and dark speckling,
         // a thin bright ring at the pupil margin — golden above, silvery below — and a dark dorsal cap.
-        const brass = [0.36, 0.3, 0.12], gold = [0.22, 0.18, 0.07], olive = [0.1, 0.09, 0.04], dark = [0.03, 0.026, 0.02];
+        const brass = [0.13, 0.14, 0.085], gold = [0.085, 0.095, 0.06], olive = [0.045, 0.05, 0.035] /* darker grey-green iris (live, user photo 2026-10) */, dark = [0.03, 0.026, 0.02];
         const t0 = smoothstep(0.02, 0.3, f), t1 = smoothstep(0.3, 0.75, f);
         c = brass.map((v, k) => mix(mix(v, gold[k], t0), olive[k], t1));
         const low = smoothstep(0.1, 0.75, -upness) * smoothstep(0.05, 0.25, f) * smoothstep(0.95, 0.6, f);

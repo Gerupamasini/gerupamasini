@@ -208,11 +208,11 @@ export function surfaceAt(s, y) {
 export const EYE = {
   // x: lateral specimens 7.7–9.9 %SL (snout ≈ eye diameter, Fauna Sinica) → 9 %SL; eye centres 7.4 %SL apart
   // in dorsal view (049/015/052L/058), the eyes sitting ~1.2 %SL inside the cheek outline [P]
-  center: [P(8.6), Y0 + P(3.8), P(3.6)],
+  center: [P(9.0), Y0 + P(3.2), P(3.6)], // slightly back/lower to the live photo 2026-10 (centre ≈ 9, +3.5 %SL)
   axis: norm3([-0.22, 0.64, 0.74]), // ~40° above horizontal, out, slight forward convergence (toe-in 10–15°) [P]
-  radius: 1.17,  // Ø 2.35 mm ≈ 5.5 %SL: visible eye dome 5.9 (4.7–6.7) %SL ≈ 0.245 HL [P head 004/025/031]; 22–26 %HL [F]
+  radius: 1.27,  // enlarged to the live photo 2026-10 (eye ≈ 6 %SL incl. rim); Ø 2.35 mm ≈ 5.5 %SL: visible eye dome 5.9 (4.7–6.7) %SL ≈ 0.245 HL [P head 004/025/031]; 22–26 %HL [F]
   skin: 0.06,
-  aperture: 58 * (Math.PI / 180),
+  aperture: 64 * (Math.PI / 180), // wider visible dome (live photo 2026-10)
 };
 
 // Gape (where the lips meet), closed mouth [P 025/031]: from the snout tip at axis −0.8 %SL obliquely down to
@@ -558,10 +558,10 @@ export const PATTERN = {
   // pale interspaces between the blotches [x, h, lift] and pearly flecks on the dorsum [P §3.7]
   paleInterspaces: [[46, 0.55, 0.25], [63.5, 0.55, 0.3], [79, 0.55, 0.3], [93.5, 0.52, 0.55]],
   pearlCount: 30,
-  head: { preorbital: 0.85, cheekBar: 0.75, opercSpot: 0.6, subocular: 0.8 },
+  head: { preorbital: 0.35, cheekBar: 0.75, opercSpot: 0.6, subocular: 0.8 },
   pecSpot: 0.8,
   headMottle: 1.0,
-  pearl: 0.75,
+  pearl: 0.35,
   // breeding male: cheeks and gill covers turn jet black [F: Sanbanze aquarium, Hiroshima Univ. museum; P 062 lower, 001, 014]
   blackCheek: MALE ? 1.0 : 0.0,
 };
