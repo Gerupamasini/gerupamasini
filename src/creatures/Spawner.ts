@@ -37,6 +37,8 @@ const FIELD_SPECIES = new Set(['ruditapes_philippinarum', 'crassostrea_gigas']);
 /** Evaluates spawn rules on the habitat's coarse cells around the player and decides who appears and who leaves. */
 export class Spawner {
   private speciesList: SpeciesDef[];
+  /** species kept out for now (the debug chooser) */
+  hidden: ReadonlySet<string> = new Set();
   constructor(private readonly habitat: Habitat, species: Iterable<SpeciesDef>, private readonly removed: Set<string>) {
     this.speciesList = [...species];
   }
@@ -83,7 +85,7 @@ export class Spawner {
         const d = Math.hypot(cx - px, cz - pz);
         if (d > SPAWN_RADIUS || d < minDist) continue;
         for (const sp of this.speciesList) {
-          if (FIELD_SPECIES.has(sp.id)) continue;   // アサリ are laid by the clam field in their thousands, マガキ by the reef; other burrowers spawn here, sparsely
+          if (FIELD_SPECIES.has(sp.id) || this.hidden.has(sp.id)) continue;   // アサリ are laid by the clam field in their thousands, マガキ by the reef; other burrowers spawn here, sparsely
           if (occupied.has(`${sp.id}:${cell}`)) continue;
           for (let ri = 0; ri < sp.spawn.length; ri++) {
             const rule = sp.spawn[ri];
@@ -138,7 +140,7 @@ export class Spawner {
       const pick = roll % 7;
       const spId = pick < 3 ? 'acanthogobius_flavimanus' : pick < 5 ? 'exopalaemon_orientis' : 'gymnogobius_macrognathos';
       const sp = this.speciesList.find((q) => q.id === spId);
-      if (!sp) continue;
+      if (!sp || this.hidden.has(sp.id)) continue;
       if ((counts.get(sp.id) ?? 0) >= 60) continue;
       const seed = hashInts(pit.id, env.day, 991);
       const id = `${sp.id}#${hashInts(seed, 7).toString(16).padStart(8, '0')}`;

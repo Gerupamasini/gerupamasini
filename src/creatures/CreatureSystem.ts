@@ -235,7 +235,7 @@ export class CreatureSystem {
       view = { tier, root: ph.root, model: null, radius: ph.length * 0.6, hero: null };
     } else {
       // the growth stage's own model where the species has them, in the individual's pattern variant
-      const rel = modelFor(sp, e.ind.stage)[tier] ?? sp.model[tier]!;
+      const rel = modelFor(sp, e.ind.stage, e.ind.gravid)[tier] ?? sp.model[tier]!;
       let model: LoadedModel;
       try { model = await instantiateModel(rel, variantOf(e.ind.id)); } catch (err) { console.warn(err); e.pendingTier = null; return; }
       if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
@@ -284,6 +284,13 @@ export class CreatureSystem {
     e.driver.dispose();
     this.entries.delete(id);
     this.events.emit('despawn', e.ind);
+  }
+
+  /** debug: keep these species out of the world (the ones here now leave; the spawner skips them) */
+  setHiddenSpecies(ids: Iterable<string>): void {
+    const hidden = new Set(ids);
+    this.spawner.hidden = hidden;
+    for (const e of [...this.entries.values()]) if (hidden.has(e.ind.species.id)) this.despawn(e.ind.id);
   }
 
   /** debug: spawn everything the rules allow right around the player, ignoring the pop-in distance */

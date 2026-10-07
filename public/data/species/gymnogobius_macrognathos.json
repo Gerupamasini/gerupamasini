@@ -16,6 +16,11 @@
     "hero": "edohaze/edohaze.hero.glb",
     "lod1": "edohaze/edohaze.lod1.glb",
     "lod2": "edohaze/edohaze.lod2.glb",
+    "gravid": {
+      "hero": "edohaze/edohaze_gravid.hero.glb",
+      "lod1": "edohaze/edohaze_gravid.lod1.glb",
+      "lod2": "edohaze/edohaze_gravid.lod2.glb"
+    },
     "modelLength_mm": 45.3,
     "driver": "mahaze",
     "clips": {
@@ -40,7 +45,12 @@
   },
   "sex": {
     "maleRatio": 0.5,
-    "dimorphic": false
+    "dimorphic": true
+  },
+  "breeding": {
+    "months": [2, 3, 4, 5],
+    "gravidShare": 0.7,
+    "offSeasonShare": 0.15
   },
   "stages": [
     {
@@ -54,6 +64,11 @@
     }
   ],
   "traits": [
+    {
+      "id": "gravid",
+      "ja": "抱卵",
+      "when": "gravid>=1"
+    },
     {
       "id": "large",
       "ja": "大型個体",

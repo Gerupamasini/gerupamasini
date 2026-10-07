@@ -21,6 +21,8 @@ export const STATE = {
   BURROW: 'BURROW',
   EMERGE_SLIGHTLY: 'EMERGE_SLIGHTLY',
   CLOSE_SHELL: 'CLOSE_SHELL',
+  /** lying whole on the surface: just set down, or nothing to dig into */
+  SURFACE_REST: 'SURFACE_REST',
 };
 
 /** behaviour ids reported to the 図鑑 */
@@ -56,8 +58,10 @@ export class AsariBehavior {
     this.rand = rand;
     this.seed = rand() * 100;
     this.t = 0;
-    this.state = onSurface ? STATE.BURROW : STATE.BURIED;
+    // on the surface: a pause lying whole, then (where it can) the dig
+    this.state = onSurface ? STATE.SURFACE_REST : STATE.BURIED;
     this.timer = onSurface ? 1.5 + rand() * 3 : 1 + rand() * 4;
+    this.canBurrow = true;
     /** 0 lying on the surface .. 1 buried upright */
     this.burial = onSurface ? 0 : 1;
     this.burialTarget = 1;
@@ -78,7 +82,6 @@ export class AsariBehavior {
     this.rollSign = 1;
     this.calm = 0;
     this.listeners = [];
-    if (onSurface) this.beginBurrow();
   }
 
   onEvent(cb) { this.listeners.push(cb); }
@@ -110,11 +113,17 @@ export class AsariBehavior {
 
   /**
    * @param {number} dt seconds (sim time)
-   * @param {{ threat: boolean, submerged: boolean }} env
+   * @param {{ threat: boolean, submerged: boolean, canBurrow?: boolean }} env
    */
   update(dt, env) {
     this.t += dt;
     this.timer -= dt;
+    this.canBurrow = env.canBurrow ?? true;
+    // nothing to dig into (an acrylic floor): whatever it was doing, it comes up and lies whole
+    if (!this.canBurrow && this.state !== STATE.SURFACE_REST) {
+      this.burial = Math.max(0, this.burial - dt * 0.6);
+      if (this.burial <= 0) this.go(STATE.SURFACE_REST, 0);
+    }
     this.threatHold = Math.max(0, (this.threatHold ?? 0) - dt);
     const threat = env.threat || this.threatHold > 0;
     this.calm = threat ? 0 : this.calm + dt;
@@ -123,13 +132,20 @@ export class AsariBehavior {
     let gapeT = 0.12, extT = 0, openT = 0, extRate = 1.2, gapeRate = 2, footT = 0;
 
     switch (this.state) {
+      case STATE.SURFACE_REST: {
+        // valves a little apart, the siphons out a touch when under water; the dig starts once it has settled
+        gapeT = threat ? 0 : 0.3; extT = env.submerged && !threat ? 0.45 : 0; openT = extT > 0 ? 0.4 : 0; extRate = 0.8;
+        if (this.canBurrow && this.timer <= 0 && !threat) this.beginBurrow();
+        break;
+      }
       case STATE.BURROW: {
+        if (!this.canBurrow) break;
         this.dig(dt, threat);
         break;
       }
       case STATE.BURIED: {
         gapeT = threat ? 0 : 0.1;
-        if (this.burial < 0.95) { this.beginBurrow(); break; }
+        if (this.burial < 0.95) { if (this.canBurrow) this.beginBurrow(); break; }
         if (this.timer <= 0 && !threat && env.submerged && this.calm > 2) this.go(STATE.SIPHON_EXTEND, 3 + this.rand() * 2);
         break;
       }

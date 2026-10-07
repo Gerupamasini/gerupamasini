@@ -175,7 +175,7 @@ export class FieldCase {
     if (!entry) return;
     const seed = hashInts(record.number, record.caughtAt % 100000);
     const ind = generateIndividual(species, seed, 0, 0, 0, 0, Date.now());
-    ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits];
+    ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits]; ind.gravid = !!record.gravid;
     const slot = this.occupants.length;
     const c = this.group.position;
     const long = this.halfX >= this.halfZ;
@@ -184,7 +184,7 @@ export class FieldCase {
     ind.home.copy(ind.pos);
     ind.heading = (long ? Math.PI / 2 : 0) + (slot % 2 ? Math.PI : 0);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
-    const files = modelFor(species, ind.stage);
+    const files = modelFor(species, ind.stage, ind.gravid);
     const rel = files.lod1 ?? files.lod2 ?? files.hero;
     if (rel) {
       const model = await instantiateModel(rel, variantOf(ind.id));
@@ -192,6 +192,8 @@ export class FieldCase {
     } else if (entry.placeholder) {
       const ph = entry.placeholder();
       ph.root.userData.placeholder = ph;
+      // the whole shell on the acrylic, nothing to dig into
+      ph.root.userData.startOnSurface = true;
       root = ph.root;
     } else return;
     if (!this.group.visible || this.occupants.some((o) => o.record.id === record.id)) { root.removeFromParent(); return; }
@@ -241,7 +243,7 @@ export class FieldCase {
         else if (r < 0.92) d.setIntent({ id: Date.now(), kind: 'wander', urgency: 0.3, seconds: 6, target: new Vector3(c.x + (o.ind.rng.next() * 2 - 1) * hx, 0, c.z + (o.ind.rng.next() * 2 - 1) * hz) });
         else d.setIntent({ id: Date.now(), kind: 'special', urgency: 0, seconds: 3, param: 'yawn' });
       }
-      d.update(dt, { floor: this.floor, player, simScale: 1, nowMs: Date.now(), bounds: { minX, maxX, minZ, maxZ } });
+      d.update(dt, { floor: this.floor, player, simScale: 1, nowMs: Date.now(), bounds: { minX, maxX, minZ, maxZ }, canBurrow: false });
       o.ind.pos.x = Math.max(minX, Math.min(maxX, o.ind.pos.x));
       o.ind.pos.z = Math.max(minZ, Math.min(maxZ, o.ind.pos.z));
       o.root.position.x = Math.max(minX, Math.min(maxX, o.root.position.x));

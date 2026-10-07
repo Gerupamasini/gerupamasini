@@ -618,12 +618,12 @@ float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) 
   float lvlR = (spillR > uWaterLevel + 0.01 && spillR > vWorldPos.y + 0.003) ? spillR : uWaterLevel;
   float wetR = 1.0 - smoothstep(lvlR + 0.02, max(lvlR, uWetLevel) + 0.05, vWorldPos.y);
   wetR = max(wetR, 1.0 - smoothstep(lvlR - 0.05, lvlR + 0.12, vWorldPos.y));
-  roughnessFactor = mix(roughnessFactor, 0.3, wetR);   // damp sand carries a soft sheen of the sky
-  roughnessFactor = mix(roughnessFactor, 0.5, gFilm * 0.5);   // the organic film has a wet sheen of its own
-  roughnessFactor = mix(roughnessFactor, 0.28, gQuartz);      // quartz and shell grains glint
+  roughnessFactor = mix(roughnessFactor, 0.58, wetR);   // damp sand is darker and only faintly satin, never a mirror of the sun
+  roughnessFactor = mix(roughnessFactor, 0.62, gFilm * 0.5);   // the organic film has a wet sheen of its own
+  roughnessFactor = mix(roughnessFactor, 0.42, gQuartz);       // quartz and shell grains glint a little
 }`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain';
+    mat.customProgramCacheKey = () => 'higata-terrain-v2';
     return mat;
   }
 

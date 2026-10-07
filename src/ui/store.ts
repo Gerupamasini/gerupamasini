@@ -42,6 +42,8 @@ export interface DebugState {
   tideOverride: number | null;
   overcast: number;
   markers: boolean;
+  /** species kept out of the world for now (ids) */
+  hidden: string[];
   stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number; clamsNear: number; clamsTotal: number; oysters?: string; oystersTotal?: number };
 }
 
@@ -74,7 +76,7 @@ export const ui = {
   newBuild: signal<import('../core/Build').BuildInfo | null>(null),
   /** debug mode on (F3 or ?debug=1) */
   debug: signal(false),
-  debugState: signal<DebugState>({ timeOverride: false, tideOverride: null, overcast: 0, markers: true, stats: { calls: 0, tris: 0, creatures: 0, visible: 0, lod1: 0, clamsNear: 0, clamsTotal: 0 } }),
+  debugState: signal<DebugState>({ timeOverride: false, tideOverride: null, overcast: 0, markers: true, hidden: [], stats: { calls: 0, tris: 0, creatures: 0, visible: 0, lod1: 0, clamsNear: 0, clamsTotal: 0 } }),
   markers: signal<Marker[]>([]),
   /** side panel shown on the home screen */
   homePanel: signal<'none' | 'tank' | 'tools'>('none'),
