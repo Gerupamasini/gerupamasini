@@ -51,7 +51,7 @@ export const HASHIRIMIZU: ShoreLayout = {
   // the coast runs along z, so the crests do too
   rippleAngle: Math.PI / 2,
   // the bay mouth's small wind waves and ship wakes: a few tens of centimetres, a few seconds apart
-  surf: { height: 0.2, period: 3.4, slope: 0.05 },
+  surf: { height: 0.24, period: 3.4, slope: 0.05 },
   // the bay mouth's water: clearer than the silty flat at 葛西 and greener-blue
   water: { colour: [0.07, 0.125, 0.125], turbidity: 0.55 },
   props: buildHashirimizuProps,

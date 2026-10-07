@@ -92,12 +92,14 @@ export class WaterPass {
       uWaveB: waves.uniforms.uWaveB,
       uWaveGain: waves.uniforms.uWaveGain,
       tHeight: { value: terrain.heightTexture },
+      uHeightN: { value: terrain.n },
       tSpill: { value: terrain.spillTexture },
       tEnv: { value: null as CubeTexture | null },
       tMirror: { value: null as unknown },
       uMirrorMat: { value: new Matrix4() },
       uMirrorOn: { value: 0 },
       uPolar: { value: 0 },
+      uSurfSteps: { value: 12 },
       uProjInv: { value: new Matrix4() },
       uCamWorld: { value: new Matrix4() },
       uCamPos: { value: new Vector3() },
@@ -131,7 +133,7 @@ export class WaterPass {
         uniform sampler2D tColor, tDepth, tHeight, tSpill, tMirror, tFoam;
         uniform samplerCube tEnv;
         uniform mat4 uProjInv, uCamWorld, uMirrorMat;
-        uniform float uMirrorOn, uPolar;
+        uniform float uMirrorOn, uPolar, uSurfSteps, uHeightN;
         uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog;
         uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax;
         uniform vec2 uRes;
@@ -154,6 +156,18 @@ export class WaterPass {
         vec2 tuv(vec2 xz) { return (xz + uHalf) / (2.0 * uHalf); }
         float groundAt(vec2 xz) { return texture2D(tHeight, tuv(xz)).r; }
         float spillAt(vec2 xz) { return texture2D(tSpill, tuv(xz)).r; }
+        // the bed through a cubic B-spline (four bilinear lookups): smooth in its slope too, so the surf, whose timing
+        // follows the depth, draws its crests without the kinks of the 25 cm grid
+        float groundSmooth(vec2 xz) {
+          vec2 st = tuv(xz) * uHeightN - 0.5, i = floor(st), f = st - i;
+          vec2 f2 = f * f, f3 = f2 * f;
+          vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0, w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+          vec2 w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0, w3 = f3 / 6.0;
+          vec2 g0 = w0 + w1, g1 = w2 + w3;
+          vec2 h0 = (i - 0.5 + w1 / g0) / uHeightN, h1 = (i + 1.5 + w3 / g1) / uHeightN;
+          return g0.y * (g0.x * texture2D(tHeight, vec2(h0.x, h0.y)).r + g1.x * texture2D(tHeight, vec2(h1.x, h0.y)).r)
+               + g1.y * (g0.x * texture2D(tHeight, vec2(h0.x, h1.y)).r + g1.x * texture2D(tHeight, vec2(h1.x, h1.y)).r);
+        }
         // the surface slope from the wave set (random directions and speeds, nothing periodic), band-limited to the
         // pixel footprint so distant water does not shimmer; gusts roughen the surface in drifting patches; pools are calm
         vec3 waterNormal(vec2 p, float dist, float calm) {
@@ -170,6 +184,13 @@ export class WaterPass {
         vec3 waterGlow(vec3 d) {
           float mu = dot(d, uSunDir);
           return uWaterFog * (0.75 + 0.35 * smoothstep(-0.6, 0.8, -d.y)) + uSunCol * 0.035 * hgPhase(mu, 0.72) * uSunUp;
+        }
+
+        // the surf's surface height at a point, relative to the still level (0 beyond the surf, where the sea is the plane)
+        float surfEta(vec2 xz, float level) {
+          float D = level - groundSmooth(xz);
+          if (D > 1.4) return 0.0;
+          return surfAt(xz, D, uTime, uSurf.z).x * (1.0 - smoothstep(0.8, 1.4, D));
         }
 
         void main() {
@@ -191,28 +212,73 @@ export class WaterPass {
 
           // the surf (an open shore only): near the waterline the surface rises and falls with the waves and runs up
           // the beach as the swash sheet, so whether a point of the bed is under water is decided by the surface there
+          bool surfOn = uSurf.w > 0.0 && calm < 0.5;
           float surface = level;
-          if (uSurf.w > 0.0 && calm < 0.5 && !sky) {
-            float Dp = level - groundAt(P.xz);
-            if (Dp < 1.2) surface += surfAt(P.xz, Dp, uTime, uSurf.z).x * (1.0 - smoothstep(0.5, 1.2, Dp));
+          if (surfOn && !sky) surface += surfEta(P.xz, level);
+
+          // Near the viewer the surf stands up from the plane: the view ray is traced through the band of heights the
+          // waves can take (12–16 steps and a few secant refinements), so a crest hides the water behind it and its
+          // face is seen as a face. Only where that band lies in the surf and within ~35 m; beyond, the plane.
+          float t = -1.0;
+          bool traced = false;
+          if (surfOn && uSurfSteps > 0.5 && rd.y < -1e-5) {
+            float top = level + 1.5 * uSurf.x, bot = level - 1.0 * uSurf.x;
+            float t0 = max((top - uCamPos.y) / rd.y, 0.0), tb = (bot - uCamPos.y) / rd.y;
+            float t1 = min(tb, sceneDist), tEnd = min(t1, 35.0);
+            vec3 q0 = uCamPos + rd * t0, q1 = uCamPos + rd * tEnd;
+            if (t0 < tEnd && min(level - groundAt(q0.xz), level - groundAt(q1.xz)) < 1.4) {
+              traced = tEnd >= t1 - 1e-3;   // (the whole band seen within reach: the trace has the last word)
+              float ta = t0, fa = q0.y - level - surfEta(q0.xz, level);
+              if (fa <= 0.0) t = t0;
+              else {
+                for (int i = 1; i <= 16; i++) {
+                  if (float(i) > uSurfSteps) break;
+                  float tt = mix(t0, tEnd, float(i) / uSurfSteps);
+                  vec3 qq = uCamPos + rd * tt;
+                  float ff = qq.y - level - surfEta(qq.xz, level);
+                  if (ff <= 0.0) {
+                    float lo = ta, flo = fa, hi = tt, fhi = ff;
+                    for (int k = 0; k < 4; k++) {
+                      float tm = lo + (hi - lo) * flo / (flo - fhi);
+                      vec3 qm = uCamPos + rd * tm;
+                      float fmid = qm.y - level - surfEta(qm.xz, level);
+                      if (fmid > 0.0) { lo = tm; flo = fmid; } else { hi = tm; fhi = fmid; }
+                    }
+                    t = lo + (hi - lo) * flo / (flo - fhi);
+                    break;
+                  }
+                  ta = tt; fa = ff;
+                }
+                // (a sliver of water thinner than a step, missed: the bottom of the band is surely under it)
+                if (t < 0.0 && traced && tb < sceneDist) t = tb;
+              }
+            }
+          }
+          if (t < 0.0 && !traced && uCamPos.y > surface && rd.y < -1e-5) {
+            float tp = (surface - uCamPos.y) / rd.y;
+            if (tp < sceneDist) t = tp;
           }
 
-          if (uCamPos.y > surface && rd.y < -1e-5) {
-            float t = (surface - uCamPos.y) / rd.y;
-            if (t < sceneDist) {
+          if (t >= 0.0) {
+            {
               vec3 S = uCamPos + rd * t;
               vec3 N = waterNormal(S.xz, t, calm);
-              // the waves of the surf tilt the surface, and the broken ones leave foam
-              float foam = 0.0, Ds = 1e3;
-              if (uSurf.w > 0.0 && calm < 0.5) {
-                float g0 = groundAt(S.xz), gx = groundAt(S.xz + vec2(0.7, 0.0)), gz = groundAt(S.xz + vec2(0.0, 0.7));
+              // the waves of the surf tilt the surface (their slope added to the ripples'), and the broken ones foam
+              float foam = 0.0, lip = 0.0, Ds = 1e3, waveN = 0.0, face = 0.0;
+              if (surfOn) {
+                float g0 = groundSmooth(S.xz), gx = groundSmooth(S.xz + vec2(0.7, 0.0)), gz = groundSmooth(S.xz + vec2(0.0, 0.7));
                 vec2 gg = vec2(gx - g0, gz - g0) / 0.7;
                 float bs = max(length(gg), 0.005);
                 Ds = level - g0;
-                vec3 sf = surfAt(S.xz, Ds, uTime, bs);
-                vec2 gEta = -gg / bs * sf.z;
-                N = normalize(N + vec3(-gEta.x, 0.0, -gEta.y) * (1.0 - smoothstep(40.0, 120.0, t)));
+                vec4 sf = surfAt(S.xz, Ds, uTime, bs);
+                waveN = gSurfN;
+                // (the surface's gradient: the ripples' plus the surf's along the seaward direction; the normal leans against it)
+                vec2 grad = -N.xz / N.y - gg / bs * sf.z * (1.0 - smoothstep(40.0, 120.0, t));
+                N = normalize(vec3(-grad.x, 1.0, -grad.y));
                 foam = sf.y;
+                lip = sf.w;
+                // the front of a wave turned toward the beach: it sees less of the sky and shows the stirred water in it
+                face = smoothstep(0.06, 0.45, sf.z) * (1.0 - smoothstep(25.0, 50.0, t));
               }
 
               // refraction: the bottom's image wobbles in proportion to the water's thickness (things above the surface are left alone)
@@ -230,7 +296,12 @@ export class WaterPass {
               // turbidity: the bottom fades into the silty water over the length of the view path through it
               // (a few tens of centimetres); tide pools have settled and stay clearer
               float fogW = mix(uFogW, uFogPool, calm);
-              vec3 under = mix(waterGlow(rd), refr, exp(-thick * fogW));
+              // the surf stirs the sand up: the breaking water is murkier, its colour going sandy-green
+              float murk = surfOn ? uSurf.w * (1.0 - smoothstep(0.1, 1.0, Ds)) : 0.0;
+              fogW *= 1.0 + 2.5 * murk;
+              vec3 glow = waterGlow(rd) * mix(vec3(1.0), vec3(1.3, 1.15, 0.7), murk * 0.7);
+              // (a steep front shades the water behind it from the sky: the face reads darker than the trough before it)
+              vec3 under = mix(glow, refr, exp(-thick * fogW)) * mix(1.0, 0.5, face);
 
               // the sky, reflected (the sun's disc is handled by the glitter below) and weighted by Fresnel
               vec3 R = reflect(rd, N);
@@ -271,6 +342,8 @@ export class WaterPass {
               vec3 spec = uSunCol * glint * F * uSunUp;
 
               col = mix(under, env, F) + spec;
+              // the light through the thin top of a steepening wave: turquoise, brightest with the sun behind it
+              col += vec3(0.03, 0.11, 0.085) * uSunCol * uSunUp * lip * (0.3 + 0.7 * pow(max(dot(rd, uSunDir), 0.0), 2.0)) * 0.5 * (1.0 - F);
 
               // the shoreline: a bright rim where the water is a few millimetres deep, and small bubbles
               float vdepth = surface - P.y;
@@ -288,13 +361,19 @@ export class WaterPass {
               col = mix(col, vec3(0.75, 0.72, 0.62) * uAmbient, speck * 0.25);
 
               // the surf's foam: lace from the Voronoi map, in drifting patches; and the climbing swash's frothy edge
-              if (uSurf.w > 0.0 && calm < 0.5) {
-                vec2 fuv = S.xz * 0.85 + vec2(uTime * 0.01, uTime * 0.006) + N.xz * 0.05;
-                vec3 L1 = texture2D(tFoam, fuv).rgb, L2 = texture2D(tFoam, fuv * 2.37 + vec2(0.4, -uTime * 0.01)).rgb;
+              if (surfOn) {
+                // each wave lays its own pattern (the lace shifts with the wave's number)
+                // (looked up through a smooth warp and at a second, turned scale, so no cell pattern repeats in a line)
+                vec2 fw = (vec2(vnoiseW(S.xz * 1.6 + waveN * 1.7), vnoiseW(S.xz * 1.6 + vec2(7.3, -waveN))) - 0.5) * 0.18;
+                vec2 fuv = S.xz * 0.85 + vec2(uTime * 0.01, uTime * 0.006) + N.xz * 0.05 + vec2(waveN * 0.37, waveN * 0.61) + fw;
+                vec3 L1 = texture2D(tFoam, fuv).rgb;
+                vec3 L2 = texture2D(tFoam, mat2(0.8, 0.6, -0.6, 0.8) * fuv * 2.13 + vec2(0.4, -uTime * 0.01)).rgb;
                 float lace = max(L1.r * 0.55, L2.g * 0.85);
-                float patches = smoothstep(0.25, 0.7, vnoiseW(S.xz * 0.7 + vec2(0.0, uTime * 0.1)));
-                // (far off the lace is finer than a pixel and would average into a veil: keep the brighter cell walls only)
-                float fm = foam * mix(0.45 + 0.9 * lace, 1.4 * lace, smoothstep(8.0, 30.0, t)) * mix(0.4, 1.0, patches);
+                float patches = smoothstep(0.25, 0.7, vnoiseW(S.xz * 0.7 + vec2(waveN * 3.1, uTime * 0.1)));
+                // a little foam reads as lace along the cell walls; more fills the cells in, a roller is solid white.
+                // (far off the lace is finer than a pixel and would average into a veil: the walls alone stay)
+                float fa = foam * mix(0.45, 1.15, patches);
+                float fm = clamp(fa * 1.25 - (1.0 - max(max(L1.r, L2.g * 0.9), L1.b * 0.8)) * 0.95, 0.0, 1.0) * mix(1.0, 0.8, smoothstep(8.0, 30.0, t));
                 if (Ds < 0.25) {
                   // the climbing sheet's edge: a thin, broken line of froth (little of it once the sheet drains)
                   vec2 sw = surfSwash(S.xz, uTime);
@@ -303,7 +382,11 @@ export class WaterPass {
                   // and the sheet carries what is left of the bore's froth up the beach
                   fm += (1.0 - smoothstep(-0.02, 0.04, Ds)) * smoothstep(0.3, 0.75, L2.g) * 0.6 * mix(0.3, 1.0, patches) * (0.3 + 0.7 * sw.y) * smoothstep(0.0, 0.003, vdepth) * (1.0 - smoothstep(4.0, 14.0, t));
                 }
-                vec3 foamCol = 0.8 * (uSunCol * max(uSunDir.y, 0.0) * 0.32 * uSunUp + uAmbient * vec3(0.55, 0.6, 0.65));
+                // foam is a bright, rough body: lit by the sun on its (softened) slope and the sky, darker in the thin lace
+                // where the water shows through and in the hollows of the bubbles
+                vec3 Nf = normalize(mix(N, vec3(0.0, 1.0, 0.0), 0.4));
+                vec3 foamCol = 0.85 * (uSunCol * max(dot(Nf, uSunDir), 0.0) * 0.32 * uSunUp + uAmbient * vec3(0.55, 0.6, 0.65));
+                foamCol *= mix(0.72, 1.0, smoothstep(0.2, 0.9, fm)) * (0.9 + 0.1 * max(L2.g, L2.b));
                 col = mix(col, foamCol, clamp(fm, 0.0, 0.95) * (1.0 - smoothstep(60.0, 150.0, t)));
               }
 
@@ -359,6 +442,11 @@ export class WaterPass {
     this.tint.setRGB(r, g, b);
     this.clarity = turbidity;
     this.setPolarized(this.polarized);
+  }
+
+  /** Steps of the trace that stands the surf up from the plane near the viewer (0: the surf on the flat plane). */
+  setSurfSteps(n: number): void {
+    this.uniforms.uSurfSteps.value = Math.max(0, Math.min(16, Math.round(n)));
   }
 
   /** Render what the water reflects (before the scene itself, every frame the water is drawn). */

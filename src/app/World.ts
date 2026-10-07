@@ -117,6 +117,7 @@ export class World {
     reflectInWater(sky.sky); reflectInWater(sky.sunLight); reflectInWater(sky.hemi);
     (w as { sky: SkyDome }).sky = sky;
     water.setMirror(preset.mirror);
+    water.setSurfSteps(preset.surfSteps);
     water.mirrorGate = () => !renderer.shadowMap.enabled || !sky.sunLight.castShadow || sky.sunLight.shadow.map !== null;
     return w;
   }

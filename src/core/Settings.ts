@@ -40,12 +40,14 @@ export interface QualityPreset {
   vegetation: Quality;
   /** the sea's mirror of the land and sky: its resolution as a fraction of the screen's (0: the sky cube only) */
   mirror: number;
+  /** steps of the trace that gives the waves at the waterline their relief (0: the surf drawn on the flat plane) */
+  surfSteps: number;
 }
 
 export const QUALITY_PRESETS: Record<Quality, QualityPreset> = {
-  low: { maxDpr: 1, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, waterNormals: true, surfaceDetail: 0, vegetation: 'low', mirror: 0 },
-  mid: { maxDpr: 1.5, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, waterNormals: true, surfaceDetail: 1, vegetation: 'mid', mirror: 0.4 },
-  high: { maxDpr: 2, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, waterNormals: true, surfaceDetail: 1, vegetation: 'high', mirror: 0.5 },
+  low: { maxDpr: 1, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, waterNormals: true, surfaceDetail: 0, vegetation: 'low', mirror: 0, surfSteps: 0 },
+  mid: { maxDpr: 1.5, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, waterNormals: true, surfaceDetail: 1, vegetation: 'mid', mirror: 0.4, surfSteps: 12 },
+  high: { maxDpr: 2, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, waterNormals: true, surfaceDetail: 1, vegetation: 'high', mirror: 0.5, surfSteps: 16 },
 };
 
 const KEY = 'settings';

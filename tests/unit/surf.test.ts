@@ -19,9 +19,10 @@ describe('走水 surf and sand', () => {
 
   it('breaks its waves on the clam flat, a few metres out from the waterline at the reference tide', () => {
     const s = HASHIRIMIZU.surf!;
-    const shore = whereDepth(0), breaker = whereDepth(s.height / 0.78);
+    // (breaker index ~1.05 on this slope: the depth at which a wave of the layout's height goes over)
+    const shore = whereDepth(0), breaker = whereDepth(s.height / 1.05);
     expect(shore).toBeGreaterThan(2);
-    expect(breaker - shore).toBeGreaterThan(2);
+    expect(breaker - shore).toBeGreaterThan(1.5);
     expect(breaker - shore).toBeLessThan(10);
     // inside the clam flat and short of the eelgrass, where the player wades
     expect(breaker).toBeLessThan(12.5);

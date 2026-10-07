@@ -374,6 +374,7 @@ export class App {
     this.renderer.setQuality(this.settings.quality);
     this.world?.terrain.setDetail(this.renderer.preset.surfaceDetail > 0);
     this.world?.water.setMirror(this.renderer.preset.mirror);
+    this.world?.water.setSurfSteps(this.renderer.preset.surfSteps);
     if (this.world?.amamo) {
       const q = MEADOW_QUALITY[this.renderer.preset.vegetation];
       this.world.amamo.setQuality(q);
