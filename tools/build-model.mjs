@@ -10,7 +10,7 @@ import { encodePNG } from './lib/png.mjs';
 import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, MOUTH, RICTUS_S, VARIANT, GROWTH, profileTable, toObject, botY } from './mahaze/anatomy.mjs';
 import { buildBody, COLORS } from './mahaze/body.mjs';
 import { finDefinitions, buildFinMesh, buildFinTargets, paintFinAtlas } from './mahaze/fins.mjs';
-import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './mahaze/eye.mjs';
+import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE, PUPIL_GLOW } from './mahaze/eye.mjs';
 import { buildMouth, buildGills } from './mahaze/interior.mjs';
 import { JOINTS, J, AXES, bodyWeights, interiorWeights, finWeights, buildClips } from './mahaze/rig.mjs';
 import { FIN_TARGETS } from '../src/fish/pose.js';
@@ -179,7 +179,7 @@ const mEye = gb.addMaterial({
   name: 'Mahaze_Eye',
   pbrMetallicRoughness: { baseColorTexture: { index: tIris }, metallicFactor: 0, roughnessFactor: 0.4 },
   extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: 0.03 }, KHR_materials_ior: { ior: 1.376 } },
-  extras: { mahaze: { role: 'eye', radiusMM: EYE.radius, pupilAngle: PUPIL_ANGLE, irisAngle: IRIS_ANGLE, corneaBulge: CORNEA_BULGE } },
+  extras: { mahaze: { role: 'eye', radiusMM: EYE.radius, pupilAngle: PUPIL_ANGLE, irisAngle: IRIS_ANGLE, corneaBulge: CORNEA_BULGE, pupilGlow: PUPIL_GLOW } },
 });
 const eye = buildEyeMesh();
 const meshEye = gb.addMesh('Eye', [gb.primitive({ ...eye, material: mEye })]);

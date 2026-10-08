@@ -99,7 +99,7 @@ export function invPhi(s, y, z) {
 
 // Upper / lower lip bands around the gape (0..1), fish-space s, y in mm.
 function lipBands(s, y) {
-  if (s > RICTUS_S + 0.9 || y > MOUTH[0][1] + 1.62) return { up: 0, lo: 0, rim: 0 };
+  if (s > RICTUS_S + 0.9 || y > MOUTH[0][1] + LIPS.band[0] + 0.7) return { up: 0, lo: 0, rim: 0 };
   const g = gapeY(Math.min(Math.max(s, 0.05), RICTUS_S));
   const along = smoothstep(RICTUS_S + 0.7, RICTUS_S - 0.3, s);
   const dy = y - g;
@@ -548,9 +548,13 @@ function bakeBodyTextures(ctx) {
       const hd = 6.0 + 26.0 * dorsal + 40.0 * hm + 10.0 * smoothstep(3.5, 1.0, s);
       d = mix(d, hd, head);
     }
-    // keep the eye itself and lips clean
-    const ed = eyeDist(s, y, z);
-    d *= 1 + 0.9 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.35) ** 2));
+    // keep the eye itself and lips clean; the skin rim right around the cornea is pale (photos 02 / 03 / hand:
+    // the dark ring around the iris belongs to the eyeball, the orbital rim outside it is cream-grey)
+    {
+      const lid = eyeLid(s, y, z);
+      const rim = smoothstep(0.2, -0.02, lid.d) * smoothstep(0.45, 0.8, lid.h);
+      d *= 1 - 0.85 * rim * (1 - 0.4 * smoothstep(0.3, 1.0, lid.dorsal));
+    }
     d *= 1 - belly * 0.97;
     const lb = lipBands(s, y);
     d = d * (1 - 0.6 * lb.lo) + 32.0 * lb.up + 8.0 * lb.lo;
@@ -598,7 +602,6 @@ function bakeBodyTextures(ctx) {
     m += CSPOT_K * Math.exp(-(((s - 40.5) / 0.75) ** 2) - ((hn - 0.02) / 0.4) ** 2);
     m *= (1 - belly) * MELF_K;
     const ed = eyeDist(s, yy, z);
-    m += 0.12 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.3) ** 2));
     let iri = 0.85 * belly + 0.3 * smoothstep(0.25, -0.4, hn) + 0.12 * Math.exp(-(((hn - 0.02) / 0.22) ** 2));
     iri = Math.max(iri, head * 0.55 * smoothstep(0.55, -0.3, hn) * smoothstep(3.0, 5.5, s));
     iri = Math.max(iri, 0.06 * smoothstep(EYE.radius + 0.5, EYE.radius + 0.2, ed) * smoothstep(EYE.radius, EYE.radius + 0.15, ed));
@@ -618,9 +621,11 @@ function bakeBodyTextures(ctx) {
       const onLid = smoothstep(0.14, -0.02, lid.d);
       const edge = onLid * smoothstep(0.55, 0.85, lid.h); // inner margin, next to the cornea
       const up = smoothstep(-0.2, 0.9, lid.dorsal);
-      m += onLid * (0.16 * up + 0.04) - 0.08 * edge * (1 - up);
-      xan = Math.max(xan, edge * (0.75 - 0.5 * up));
-      iri = Math.max(iri, edge * (0.35 - 0.25 * up));
+      // pigmented skin over the top of the eye dome, but a pale (cream / silvery) margin all round the cornea
+      m += onLid * 0.16 * up * (1 - edge);
+      m *= 1 - 0.75 * edge;
+      xan = Math.max(xan, edge * (0.6 - 0.3 * up));
+      iri = Math.max(iri, edge * (0.4 - 0.15 * up));
     }
     // gill region seen through the operculum (used for the fallback albedo only)
     const gill = smoothstep(7.5, 9.0, s) * smoothstep(11.6, 10.6, s) * smoothstep(0.35, -0.2, hn) * smoothstep(-0.95, -0.55, hn);
