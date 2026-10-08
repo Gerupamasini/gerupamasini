@@ -133,7 +133,7 @@ AmShoot amShoot() {
   S.tilt = S.fan * ((amHashS(S.seed * 91.0) - 0.5) * 0.26) + vec2(-S.fan.y, S.fan.x) * ((amHashS(S.seed * 17.0) - 0.5) * 0.08);
   // where it falls when the water goes: down the local slope and toward the sea, as the last of the ebb laid it
   vec2 fd = uAmSeaward - S.grad * 40.0;
-  S.fallDir = normalize(amRot(fd, 0.6 * (amHash(S.seed * 53.0) - 0.5)) + 1e-5);
+  S.fallDir = normalize(amRot(fd, 0.6 * (amHashS(S.seed * 53.0) - 0.5)) + 1e-5);
   // is an animal in among this shoot's leaves? (only those shoots pay for the push below)
   S.push = 0.0;
 #if AM_LOD < 2

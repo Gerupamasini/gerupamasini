@@ -143,7 +143,7 @@ export class Youjiuo {
     this.bendSeed = rng.next() * 100;
     this.restPitch = rng.range(0.1, 0.42);
     this.heading = rng.range(-Math.PI, Math.PI);
-    this.here = { x: 0, y: 0, z: 0, fan: 0, length: 0.5, sheath: 0.09, seed: rng.next(), width: 0.005, pool: -1e3 };
+    this.here = { x: 0, y: 0, z: 0, fan: 0, length: 0.5, sheath: 0.09, seed: rng.next(), width: 0.005, pool: -1e3, gx: 0, gz: 0 };
     for (const e of this.eyes) e.next = rng.range(0, 1);
     // condition: some fish are slim, some well fed (and a brooding male's trunk is no different: his pouch is on the tail)
     this.pose.girth = rng.range(0.94, 1.16);
@@ -217,7 +217,7 @@ export class Youjiuo {
           if (away) score += Math.hypot(s.x - away.x, s.z - away.z) * 3;
           if (score > bestScore) { bestScore = score; best = s; }
         }
-        ref = { x: best.x, y: best.y, z: best.z, fan: best.fan, length: best.length, sheath: best.sheath, seed: best.seed, width: best.width, pool: best.pool };
+        ref = { x: best.x, y: best.y, z: best.z, fan: best.fan, length: best.length, sheath: best.sheath, seed: best.seed, width: best.width, pool: best.pool, gx: best.gx, gz: best.gz };
       } else if (m.coverAt(p.x, p.z) > 0.25) {
         ref = this.virtualShoot(env);
       }
@@ -243,7 +243,7 @@ export class Youjiuo {
     const x = p.x + Math.sin(a) * r, z = p.z + Math.cos(a) * r;
     const y = env.floor.heightAt(x, z);
     const depth = env.floor.waterAt(x, z) - y;
-    return { x, y, z, fan: this.rng.range(0, Math.PI), length: clamp(depth * 0.9, this.tl * 1.2, 0.9), sheath: this.rng.range(0.06, 0.12), seed: this.rng.next(), width: this.rng.range(0.004, 0.007), pool: -1e3 };
+    return { x, y, z, fan: this.rng.range(0, Math.PI), length: clamp(depth * 0.9, this.tl * 1.2, 0.9), sheath: this.rng.range(0.06, 0.12), seed: this.rng.next(), width: this.rng.range(0.004, 0.007), pool: -1e3, gx: 0, gz: 0 };
   }
 
   /** put the blade between the fish and a threat */

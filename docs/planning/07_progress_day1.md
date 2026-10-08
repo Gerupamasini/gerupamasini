@@ -170,6 +170,7 @@
 ## 26 回目（アマモと寄せ波）
 - `claude/festive-lamport-hd2row` の新しい先端（85f9c79）をマージ: `WaterPass` が寄せ波の水面の高さを 384² の半精度浮動小数の場に毎フレーム描く（`surfField`、`prepare()` で鏡の前に）、`FieldRenderer.compile()` がその quad も先に compile、`AmamoMeadow.setSurf()` → `tAmSurf`/`uAmSurf`、シェーダは `amStep` の終点で `amSurfEta` を読んで葉を水面に沿わせ、`leanM` で鞘より浅い所の株を根元から倒す（`ceilY` は寄せ波ありで 3.5 cm の余裕）。`World` は `setSurf(water.surfField)`。
 - 衝突は World（私の `if (!layout)` 構造に `setSurf` を差し込む）、AmamoMeadow（`shootsNear` と `setSurf` の両方）、kit／shader（`uAmPush` と `tAmSurf` の両方、`amPush` と鞘の倒れの両方）。ヨウジウオの静水の uniforms に `tAmSurf`/`uAmSurf` を追加。
+- レビュー（並列 5 視点）の指摘で、CPU 側の揺れ `flow.ts` に寄せ波ありの余裕（`ceil` 3.5 cm）と鞘の倒れ（`leanM`、`fallDir`）を移植（`ShootRef` に地面の勾配 `gx/gz`）。倒れの向きの乱数はシェーダ側も `amHashS` に揃えた。寄せ波の高さ自体は CPU では読まず平均 0。
 - バージョン 0.22.0。
 
 ## 25 回目（ヒメハゼ、アミメハギ、イソスジエビ、ヨウジウオ）
