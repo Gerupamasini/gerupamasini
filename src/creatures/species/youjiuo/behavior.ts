@@ -207,8 +207,13 @@ export class Youjiuo {
     const m = env.floor.meadow;
     const p = this.pos;
     let ref: ShootRef | null = null;
+    // the room a held fish needs under the still level: its line up the shoot and, on an open shore, the surf's
+    // troughs too (the surf's height is the GPU's; the CPU line holds the mean) — too shallow, it hovers instead
+    const surfRoom = this.uniforms(env).uAmSurf.value.y > 0 ? 0.035 + 0.1 : 0;
+    const roomFor = (sheath: number) => clamp(0.55 * sheath, 0.03, 0.09) + (S_CURL - STATIONS[0]) * this.tl + 0.02 + surfRoom;
+    if (env.floor.waterAt(p.x, p.z) - env.floor.heightAt(p.x, p.z) < roomFor(0.09)) return false;
     if (m) {
-      const near = m.shootsNear(p.x, p.z, 0.8 * Math.max(1, this.scale), 16).filter((s) => s.length > this.tl * 1.05 && s.y + Math.max(0.04, 0.5 * s.sheath) < env.floor.waterAt(s.x, s.z) - 0.05);
+      const near = m.shootsNear(p.x, p.z, 0.8 * Math.max(1, this.scale), 16).filter((s) => s.length > this.tl * 1.05 && s.y + Math.max(0.04, 0.5 * s.sheath) < env.floor.waterAt(s.x, s.z) - 0.05 && env.floor.waterAt(s.x, s.z) - s.y >= roomFor(s.sheath));
       if (near.length) {
         // not the nearest every time; out of the threat's way when there is one
         let best = near[0], bestScore = -1e9;
