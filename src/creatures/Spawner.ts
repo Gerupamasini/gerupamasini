@@ -138,8 +138,8 @@ export class Spawner {
       const roll = hashInts(pit.id * 31 + 7, env.day, 977) % 1000;
       if (roll >= 330) continue;
       if (h.sample(pit.x, pit.z, env.gameMs).depth < 0.025) continue;
-      const pick = roll % 7;
-      const spId = pick < 3 ? 'acanthogobius_flavimanus' : pick < 5 ? 'exopalaemon_orientis' : 'gymnogobius_macrognathos';
+      const pick = roll % 9;
+      const spId = pick < 3 ? 'acanthogobius_flavimanus' : pick < 5 ? 'exopalaemon_orientis' : pick < 7 ? 'gymnogobius_macrognathos' : 'favonigobius_gymnauchen';
       const sp = this.speciesList.find((q) => q.id === spId);
       // only animals that live on this flat at all, and that the debug chooser lets out
       if (!sp || this.hidden.has(sp.id) || !sp.spawn.some((r) => !r.maps || r.maps.includes(env.mapId))) continue;

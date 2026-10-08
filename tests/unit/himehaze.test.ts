@@ -22,12 +22,14 @@ describe('ヒメハゼ', () => {
     }
   });
 
-  it('lives on both shores: rules without a map and one for the 走水 eelgrass edge', () => {
+  it('lives on both shores: a rule without a map, the 葛西 pools and the 走水 eelgrass edge', () => {
     const on = (map: string) => sp.spawn.filter((r) => !r.maps || r.maps.includes(map));
     expect(on('kasai_west').length).toBeGreaterThanOrEqual(2);
-    expect(on('hashirimizu').length).toBeGreaterThanOrEqual(3);
+    expect(on('hashirimizu').length).toBeGreaterThanOrEqual(2);
+    expect(sp.spawn.some((r) => !r.maps && r.tags.includes('shallow'))).toBe(true);
     expect(sp.spawn.some((r) => r.maps?.includes('hashirimizu') && r.tags.includes('eelgrass_edge'))).toBe(true);
-    expect(sp.spawn.some((r) => r.maps?.includes('kasai_west'))).toBe(false);
+    // the tide pools are a 葛西 thing (走水 has none)
+    for (const r of sp.spawn) if (r.tags.includes('small_pool')) expect(r.maps).toEqual(['kasai_west']);
   });
 
   it('adult males wear the nuptial dress mostly in the spawning months and never outside them; females never', () => {

@@ -14,7 +14,7 @@
   "protected": false,
   "model": {
     "placeholder": "shrimp",
-    "modelLength_mm": 48,
+    "modelLength_mm": 60,
     "viewDistance_m": 10,
     "driver": "isosuji",
     "clips": {

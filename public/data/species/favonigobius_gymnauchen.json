@@ -39,7 +39,7 @@
       "sd": 14
     },
     "weightCoef": {
-      "a": 1.0e-05,
+      "a": 1e-05,
       "b": 3.0
     }
   },
@@ -48,7 +48,13 @@
     "dimorphic": true
   },
   "breeding": {
-    "months": [5, 6, 7, 8, 9],
+    "months": [
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
     "gravidShare": 0,
     "offSeasonShare": 0,
     "dressShare": 0.7
@@ -155,6 +161,9 @@
         "autumn"
       ],
       "tide": "any",
+      "maps": [
+        "kasai_west"
+      ],
       "density_per_100m2": 3,
       "group": [
         1,

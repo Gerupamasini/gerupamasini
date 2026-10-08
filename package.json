@@ -23,6 +23,7 @@
     "render:oyster": "node tools/models/oyster/render.mjs",
     "render:amamo": "node tools/models/amamo/render.mjs",
     "render:amimehagi": "node tools/models/amimehagi/render.mjs",
+    "render:youjiuo": "node tools/models/youjiuo/render.mjs",
     "model:pagurus-hide": "node tools/models/pagurus/bake-hide-table.mjs",
     "terrain:bake": "node tools/terrain/bake-map.mjs",
     "terrain:hashirimizu": "node tools/terrain/bake-hashirimizu.mjs && node tools/terrain/figures-hashirimizu.mjs",

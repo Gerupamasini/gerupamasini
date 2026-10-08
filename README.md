@@ -21,6 +21,7 @@ npm run render:oyster # マガキ（個体・群生・牡蠣礁）の画像を�
 npm run model:pagurus-hide            # ユビナガホンヤドカリの「殻に閉じこもる姿勢」の表を再生成（形態・殻を変えたあと）
 npm run render:amamo # アマモの文書画像を再生成（docs/models/amamo/）
 npm run render:amimehagi # アミメハギの文書画像を再生成（docs/models/amimehagi/）
+npm run render:youjiuo # ヨウジウオの文書画像を再生成（docs/models/youjiuo/）
 npm run terrain:bake # 地形 PNG の再生成
 npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（docs/maps/hashirimizu/）を再生成
 ```

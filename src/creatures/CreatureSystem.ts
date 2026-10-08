@@ -113,6 +113,8 @@ export class CreatureSystem {
       if (!sp.spawn.some((r) => !r.maps || r.maps.includes(this.mapId))) continue;
       if (sp.model.lod2) jobs.push(preloadModel(sp.model.lod2));
       for (const st of sp.stages) if (st.model?.lod2) jobs.push(preloadModel(st.model.lod2));
+      // the gravid female's and the breeding male's own forms
+      for (const form of [sp.model.gravid, sp.model.male]) if (form?.lod2) jobs.push(preloadModel(form.lod2));
     }
     await Promise.all(jobs);
   }
