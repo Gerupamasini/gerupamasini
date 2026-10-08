@@ -14,6 +14,7 @@ import { surfUniforms } from '../../src/world/Surf.ts';
 import { YoujiuoDriver } from '../../src/creatures/species/youjiuo/YoujiuoDriver.ts';
 import { GOLDEN_MORPH, SILVER_MORPH, YJ_UNIFORMS } from '../../src/creatures/species/youjiuo/materials.ts';
 import { Rng } from '../../src/core/Rng.ts';
+import { STATIONS } from '../../src/creatures/species/youjiuo/anatomy.ts';
 
 const params = new URLSearchParams(location.search);
 window.THREE = THREE;
@@ -394,6 +395,8 @@ const ACTS = {
   hold: ['アマモに沿う', () => first()?.behaviour.holdGrass({ floor, t: state.time }, 30)],
   forage: ['摂餌', () => first()?.setIntent({ id: 2, kind: 'forage', urgency: 0.3, seconds: 20 })],
   swim: ['ゆっくり泳ぐ', () => { const p = fishes[0].root.position; first()?.setIntent({ id: 3, kind: 'wander', urgency: 0.3, seconds: 14, target: new THREE.Vector3(p.x + 0.7, 0, p.z - 0.2) }); }],
+  // a U-turn: a point behind it and to its left
+  turn: ['旋回', () => { const b = first()?.behaviour; if (!b) return; const a = b.heading + 2.4, p = b.pos; first().setIntent({ id: 5, kind: 'wander', urgency: 0.3, seconds: 14, target: new THREE.Vector3(p.x + Math.sin(a) * 0.45, 0, p.z + Math.cos(a) * 0.45) }); }],
   hover: ['静止', () => first()?.setIntent({ id: 4, kind: 'special', param: 'hover', urgency: 0.1, seconds: 12 })],
   startle: ['脅かす', () => startle()],
 };
@@ -439,6 +442,20 @@ window.__yj = {
     const a = fishes[i].driver.anchor().clone();
     controls.target.copy(a);
     camera.position.set(a.x + off[0], a.y + off[1], a.z + off[2]);
+    camera.lookAt(a);
+    render();
+    return this.state();
+  },
+  /** look at fish i's body at s (0 snout … 1 tail tip) from an offset in its heading's frame (left, up, forward) */
+  followAt(i = 0, s = 0.9, off = [0.08, 0.01, 0]) {
+    const f = fishes[i], b = f.driver.behaviour;
+    let k = 0;
+    while (k < STATIONS.length - 1 && STATIONS[k] < s) k++;
+    const a = b.toWorld(b.pose.pts[k].clone());
+    controls.target.copy(a);
+    const c = Math.cos(b.heading), sn = Math.sin(b.heading);
+    camera.position.set(a.x + c * off[0] + sn * off[2], a.y + off[1], a.z - sn * off[0] + c * off[2]);
+    camera.up.set(0, 1, 0);
     camera.lookAt(a);
     render();
     return this.state();

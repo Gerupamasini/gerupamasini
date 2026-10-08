@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Group, Object3D, SkinnedMesh, Vector2, Vector3, Vector4 } from 'three';
 import { youjiuoGeometry, triangleCount, rigRest, sectionUnit } from '../../src/creatures/species/youjiuo/geometry';
-import { BONES, DORSAL, MODEL_TL, NSEG, PIVOT_K, STATIONS, TAIL_RINGS, TRUNK_RINGS, chainWeights, ringAt, sOfRing } from '../../src/creatures/species/youjiuo/anatomy';
+import { BONES, DORSAL, MODEL_TL, NSEG, PIVOT_K, STATIONS, TAIL_RINGS, TRUNK_RINGS, chainWeights, depthAt, ringAt, sOfRing } from '../../src/creatures/species/youjiuo/anatomy';
 import { SEG_LEN, applyPose, chainFromBends, restPose, respace } from '../../src/creatures/species/youjiuo/pose';
 import { Youjiuo, type FishEnv } from '../../src/creatures/species/youjiuo/behavior';
 import { YoujiuoDriver } from '../../src/creatures/species/youjiuo/YoujiuoDriver';
-import { shootLine, shootState, shootFlow, amNoise } from '../../src/world/amamo/flow';
+import { shootLine, shootState, shootFlow, amNoise, type ShootRef as ShootRefT } from '../../src/world/amamo/flow';
 import type { MeadowProbe } from '../../src/creatures/drivers/Driver';
 import type { ShootSpec } from '../../src/world/amamo/AmamoPatch';
 import { DRIVERS } from '../../src/creatures/drivers/index';
@@ -168,9 +168,12 @@ describe('ヨウジウオ behaviour', () => {
     const f = mk();
     const env: FishEnv = { floor: floorWith(null), t: 0 };
     f.swimTo(new Vector3(0.8, 0.15, 0.2), 20);
-    let maxBend = 0, maxSpeed = 0;
+    let maxBend = 0, maxSpeed = 0, calm = 0;
     run(f, env, 16, undefined, () => {
       maxSpeed = Math.max(maxSpeed, f.speed);
+      // once it has come round and runs straight (the tail has had a second to follow the turn out)
+      calm = Math.abs(f.yawRate) < 0.04 ? calm + 1 / 30 : 0;
+      if (calm < 1) return;
       const P = f.pose.pts;
       // deviation of the body from the straight line head–tail
       const a = P[0], b = P[NSEG];
@@ -182,7 +185,38 @@ describe('ヨウジウオ behaviour', () => {
     expect(maxBend).toBeLessThan(0.2 * 0.05);
     expect(Math.hypot(f.pos.x - 0.8, f.pos.z - 0.2)).toBeLessThan(0.15);
   });
-  it('holds a blade: laid along it, swaying with it, the tail hooked round the sheath', () => {
+  it('turns with the tail: the trunk stays straight, the tail bends into the turn and trails it', () => {
+    const f = mk(4);
+    const env: FishEnv = { floor: floorWith(null), t: 0 };
+    f.heading = 0;
+    run(f, env, 0.3);
+    // a goal behind it to its left: a long turn to the left (heading increasing)
+    f.swimTo(new Vector3(f.pos.x + 0.5, 0.15, f.pos.z - 0.45), 20);
+    const yawOf = (a: Vector3, b: Vector3) => Math.atan2(a.x * b.z - a.z * b.x, a.x * b.x + a.z * b.z);
+    const kb = STATIONS.findIndex((s) => s >= 0.405);
+    let maxTail = 0, maxTrunk = 0, minLag = 1e9;
+    run(f, env, 3, undefined, () => {
+      if (f.yawRate < 0.4) return;
+      const P = f.pose.pts;
+      const trunk = new Vector3().subVectors(P[0], P[kb - 1]);
+      const base = new Vector3().subVectors(P[kb - 1], P[kb]);
+      const end = new Vector3().subVectors(P[NSEG - 2], P[NSEG]);
+      maxTrunk = Math.max(maxTrunk, Math.abs(yawOf(trunk, base)));
+      // turning left, the tail curves to the left too (into the turn): from the tail base on, its line swings left
+      const tail = yawOf(base, end);
+      maxTail = Math.max(maxTail, tail);
+      minLag = Math.min(minLag, tail);
+    });
+    expect(maxTail).toBeGreaterThan(0.45);
+    expect(minLag).toBeGreaterThan(-0.05);
+    expect(maxTrunk).toBeLessThan(0.08);
+    // and it lets the tail swing straight again once round
+    run(f, env, 8);
+    const P = f.pose.pts;
+    const base = new Vector3().subVectors(P[kb - 1], P[kb]), end = new Vector3().subVectors(P[NSEG - 2], P[NSEG]);
+    expect(Math.abs(yawOf(base, end))).toBeLessThan(0.2);
+  });
+  it('holds a shoot: laid along it, swaying with it, the tail coiled round the sheath', () => {
     const m = meadow();
     const f = mk(5);
     f.pos.set(0.05, Number.NaN, 0.05);
@@ -196,9 +230,31 @@ describe('ヨウジウオ behaviour', () => {
     // the body stands up along the blade
     const head = f.toWorld(f.pose.pts[0].clone()), tail = f.toWorld(f.pose.pts[NSEG].clone());
     expect(head.y - tail.y).toBeGreaterThan(0.1);
-    // the tail's end is near the shoot's axis (hooked round it)
-    const h = (f as unknown as { hold: { ref: { x: number; z: number } } }).hold.ref;
+    // the tail's end is near the shoot's axis
+    const hold = (f as unknown as { hold: { ref: ShootRefT; sCurl: number } }).hold;
+    const h = hold.ref;
     expect(Math.hypot(tail.x - h.x, tail.z - h.z)).toBeLessThan(0.02);
+    // the rear of the tail winds round the sheath at least once, close to it but never through it
+    const axis = Array.from({ length: 64 }, () => new Vector3());
+    const na = shootLine(m.kit.uniforms, h, shootState(m.kit.uniforms, h), 0.002, 0.2, axis);
+    let wound = 0, prevA: number | null = null, minClear = 1e9;
+    for (let k = 0; k <= NSEG; k++) {
+      if (STATIONS[k] < hold.sCurl || STATIONS[k] > 0.976) continue;
+      const p = f.toWorld(f.pose.pts[k].clone());
+      let bi = 0;
+      for (let i = 1; i < na; i++) if (axis[i].distanceTo(p) < axis[bi].distanceTo(p)) bi = i;
+      const len = bi * 0.002;
+      // the sheath's half extent there, as drawn (see sheathRadius), and the tail's half depth
+      const foot = 1 - Math.min(1, len / 0.025);
+      const rs = Math.max(h.width * (0.6 + 0.3 * foot) * (1 - (0.12 * Math.min(len, h.sheath)) / h.sheath), 0.0016 + h.width * (0.17 + 0.25 * foot));
+      minClear = Math.min(minClear, axis[bi].distanceTo(p) - rs - 0.5 * 0.2 * depthAt(STATIONS[k]));
+      const a = Math.atan2(p.z - axis[bi].z, p.x - axis[bi].x);
+      if (prevA !== null) wound += Math.atan2(Math.sin(a - prevA), Math.cos(a - prevA));
+      prevA = a;
+    }
+    expect(Math.abs(wound) / (2 * Math.PI)).toBeGreaterThan(1);
+    expect(minClear).toBeGreaterThan(0);
+    expect(minClear).toBeLessThan(0.0015);
     // it moves with the waves while the fins rest
     const p0 = f.toWorld(f.pose.pts[0].clone());
     let travel = 0;
@@ -207,6 +263,22 @@ describe('ヨウジウオ behaviour', () => {
     expect(f.finAmp).toBeLessThan(0.15);
     // the segments keep their length through it all
     for (let k = 0; k < NSEG; k++) expect(f.pose.pts[k].distanceTo(f.pose.pts[k + 1])).toBeCloseTo(SEG_LEN[k], 6);
+    // letting go, the coil unwinds: nothing jumps
+    let prev = f.pose.pts.map((p) => f.toWorld(p.clone()));
+    let first = 0, most = 0, frame = 0;
+    f.swimTo(new Vector3(0.4, 0.15, 0.3), 10);
+    run(f, env, 1.5, m, () => {
+      const cur = f.pose.pts.map((p) => f.toWorld(p.clone()));
+      for (let k = 0; k <= NSEG; k++) {
+        const d = cur[k].distanceTo(prev[k]);
+        most = Math.max(most, d);
+        if (frame === 0) first = Math.max(first, d);
+      }
+      prev = cur;
+      frame++;
+    });
+    expect(first).toBeLessThan(0.005);
+    expect(most).toBeLessThan(0.012);
   });
   it('stalks prey and strikes with a flick of the head and the snout\'s suction', () => {
     const f = mk(11);

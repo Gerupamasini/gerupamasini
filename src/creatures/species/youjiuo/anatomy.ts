@@ -124,7 +124,14 @@ export const ANAL = { s: 0.404, rays: 3, len: 0.0045 } as const;
 
 /** stations of the body chain (s at each bone's front joint); the last segment runs to the tail tip */
 export const BODY_STATIONS = [0.115, 0.165, 0.215, 0.265, 0.315, 0.36] as const;
-export const TAIL_STATIONS = [0.405, 0.45, 0.495, 0.54, 0.585, 0.63, 0.67, 0.71, 0.745, 0.78, 0.81, 0.84, 0.865, 0.89, 0.915, 0.94, 0.96, 0.98] as const;
+/**
+ * Tail stations: wide where the tail is thick and bends little, then every ~1.25 % TL from s 0.645 to the caudal base,
+ * so that the rear of the tail can curl smoothly (a full turn round an eelgrass sheath takes ~10 of them).
+ */
+export const TAIL_STATIONS: readonly number[] = [
+  0.405, 0.45, 0.495, 0.54, 0.58, 0.615, 0.645,
+  ...Array.from({ length: 27 }, (_, i) => +(0.645 + ((0.98 - 0.645) * (i + 1)) / 27).toFixed(5)),
+];
 export const STATIONS: readonly number[] = [...BODY_STATIONS, ...TAIL_STATIONS, 1.0];
 /** number of chain segments (bones) */
 export const NSEG = STATIONS.length - 1;
@@ -133,7 +140,7 @@ export const PIVOT_K = BODY_STATIONS.indexOf(S_PIVOT as (typeof BODY_STATIONS)[n
 export const DORSAL_BONES = 8;
 
 /**
- * Bones. The chain is Body … Body_5 (trunk) and Tail … Tail_17 (tail); Head, Snout (with Jaw at its tip), the eyes,
+ * Bones. The chain is Body … Body_5 (trunk) and Tail … Tail_33 (tail); Head, Snout (with Jaw at its tip), the eyes,
  * the pectoral fins and the dorsal fin's eight ray bones are placed from it. All are children of YoujiuoRoot (the rig
  * is driven in the root's space, see pose.ts).
  */

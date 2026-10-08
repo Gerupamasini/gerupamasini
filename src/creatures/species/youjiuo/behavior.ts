@@ -3,7 +3,7 @@ import type { Rng } from '../../../core/Rng';
 import type { Floor } from '../../drivers/Driver';
 import type { AmamoUniforms } from '../../../world/amamo/kit';
 import { shootFlow, shootLine, shootState, type ShootRef, type ShootState } from '../../../world/amamo/flow';
-import { DORSAL_BONES, MODEL_TL, NSEG, PIVOT_K, STATIONS, S_HEAD, S_PIVOT, widthAt } from './anatomy';
+import { DORSAL_BONES, MODEL_TL, NSEG, PIVOT_K, STATIONS, S_CAUDAL, S_HEAD, S_PIVOT, depthAt, widthAt } from './anatomy';
 import { chainFromBends, respace, restPose, type Pose } from './pose';
 
 /**
@@ -48,8 +48,16 @@ interface Hold {
   /** which flank faces the blade (±1) and which way the tail wraps */
   side: number;
   wrap: number;
-  /** height along the blade where the tail hooks (m from the base) */
+  /** height along the shoot where the coil begins (m from the base), and how far it may creep */
   anchor: number;
+  lo: number;
+  hi: number;
+  /** where it is creeping to along the shoot (m from the base) */
+  goal: number;
+  /** turns of the coil round the sheath, the s where it begins, its rise per turn (m) */
+  turns: number;
+  sCurl: number;
+  pitch: number;
 }
 
 const tmp = new Vector3(), tmp2 = new Vector3(), tmp3 = new Vector3();
@@ -62,8 +70,39 @@ const approach = (x: number, target: number, rate: number, dt: number) => x + (t
 /** the strike's head lift (rad) and the head length (TL) */
 const STRIKE = 0.36;
 const HEAD_LEN = S_HEAD;
-/** where the tail starts to wrap round the sheath (s) */
-const S_CURL = 0.885;
+/**
+ * Pliancy along the body 0..1: the armoured trunk all but rigid, the tail base a little, the tail from about a third
+ * of its length to near its end the most (where pipefishes curl it), the caudal fan's base a little less.
+ */
+function flex(s: number): number {
+  return 0.06 + 0.94 * smooth(0.36, 0.62, s) * (1 - 0.25 * smooth(0.93, 1.0, s));
+}
+/** turning: the tail's bend per unit turning rate (rad/TL per rad/s, as a fraction of the most it takes) */
+const TURN_GAIN = 0.35;
+/** the most a joint bends (rad per TL of length): a tail curled into a C */
+const KAPPA_MAX = 6.5;
+/** an escape's C-bend at its height (rad per TL, times the pliancy) */
+const C_BEND = 3.2;
+/** clearance between the tail and the sheath (m) */
+const GAP = 0.0004;
+/** the coil's slope (rad from level) as the tail first meets the sheath: a loose spiral that winds tight */
+const LOOSE = 0.96;
+/** the tail coils no further forward than this (s): the front of the tail is thick and stiff */
+const S_COIL_MIN = 0.62;
+
+/**
+ * The sheath's half-extent round the shoot's axis at a height (m from the base), as the shader draws it (a flattened
+ * tube, wider and fibrous at the foot); above its mouth, the blades' half width.
+ */
+function sheathRadius(ref: ShootRef, len: number): number {
+  const hs = ref.sheath;
+  const foot = 1 - smooth(0, 0.025, len);
+  const sv = Math.min(len, hs);
+  const a = ref.width * (0.6 + 0.3 * foot) * (1 - (0.12 * sv) / hs);
+  const b = 0.0016 + ref.width * (0.17 + 0.25 * foot);
+  const above = smooth(hs, hs + 0.012, len);
+  return Math.max(a, b) * (1 - above) + 0.5 * ref.width * above;
+}
 
 /** Still water for a fish without a meadow (a tank, the viewer's studio): a slow swell, no current. */
 function stillWater(): AmamoUniforms {
@@ -119,11 +158,24 @@ export class Youjiuo {
   private readonly eyes = [{ fwd: 0, up: 0, tf: 0, tu: 0, next: 0 }, { fwd: 0, up: 0, tf: 0, tu: 0, next: 0 }];
   private readonly yawBend = new Float32Array(NSEG + 1);
   private readonly pitchBend = new Float32Array(NSEG + 1);
+  /** the turn's bend at each joint (rad) and its rate: each joint a damped spring, stiff in the trunk, slow at the tail tip */
+  private readonly turnY = new Float32Array(NSEG + 1);
+  private readonly turnYV = new Float32Array(NSEG + 1);
+  private readonly turnP = new Float32Array(NSEG + 1);
+  private readonly turnPV = new Float32Array(NSEG + 1);
+  private lastPitch = Number.NaN;
+  private pitchRate = 0;
+  /** a held posture being let go of (model space, the pivot at the origin), and seconds since (-1: none) */
+  private readonly relPts = Array.from({ length: NSEG + 1 }, () => new Vector3());
+  private readonly relUp = new Vector3(0, 1, 0);
+  private relT = -1;
+  private relFast = false;
   private readonly freePts = Array.from({ length: NSEG + 1 }, () => new Vector3());
   private readonly holdPts = Array.from({ length: NSEG + 1 }, () => new Vector3());
   private readonly line = Array.from({ length: 64 }, () => new Vector3());
   private lineN = 0;
   private readonly freePos = new Vector3();
+  private readonly frameB = new Vector3();
   private readonly holdPivot = new Vector3();
   private readonly holdUp = new Vector3();
   private readonly drift = new Vector3();
@@ -226,13 +278,33 @@ export class Youjiuo {
     if (!ref) return false;
     const side = this.rng.chance(0.5) ? 1 : -1;
     const depth = env.floor.waterAt(ref.x, ref.z) - ref.y;
-    this.hold = {
-      ref, side, wrap: this.rng.chance(0.5) ? 1 : -1,
-      anchor: clamp(0.55 * ref.sheath, 0.03, Math.min(0.09, depth * 0.35)),
-    };
+    this.hold = this.planCoil(ref, side, depth);
     if (away) this.sideAway(away);
     this.setState('GRASS_HOLD', secs, quick ? 'approach_fast' : 'approach');
     return true;
+  }
+
+  /**
+   * How the tail will hold this shoot: a coil of one to two turns round the sheath (fewer on a short sheath or a small
+   * fish), its rise per turn a little more than the tail's depth so the turns lie side by side, the body above it laid
+   * along the shoot. The coil starts high enough on the sheath that the tail, still loose as it first winds, clears
+   * the sand.
+   */
+  private planCoil(ref: ShootRef, side: number, depth: number): Hold {
+    const tl = this.tl;
+    const pitch = 1.7 * depthAt(0.75) * tl;
+    const r = sheathRadius(ref, 0.6 * ref.sheath) + 0.5 * depthAt(0.8) * tl + GAP;
+    const lTurn = Math.hypot(2 * Math.PI * r, pitch);
+    const hi = Math.max(0.012, Math.min(ref.sheath - 0.005, depth * 0.4, 0.15));
+    const room = Math.max(0.004, (hi - 0.006) / Math.sin(LOOSE));
+    const turns = Math.max(0.5, Math.min(this.rng.range(1.15, 2.1), ((S_CAUDAL - S_COIL_MIN) * tl) / lTurn, room / lTurn));
+    const coil = turns * lTurn;
+    const lo = Math.min(hi, 0.006 + Math.sin(LOOSE) * coil);
+    const anchor = clamp(this.rng.range(0.6, 0.95) * ref.sheath, lo, hi);
+    return {
+      ref, side, wrap: this.rng.chance(0.5) ? 1 : -1, anchor, lo, hi, goal: anchor,
+      turns, sCurl: Math.max(S_COIL_MIN, S_CAUDAL - coil / tl), pitch,
+    };
   }
 
   /** a shoot where the meadow is not grown (camera far) or not modelled: built from the fish's own place */
@@ -254,17 +326,28 @@ export class Youjiuo {
     h.side = s > 0 ? -1 : 1;
   }
 
-  releaseHold(): void {
+  releaseHold(fast = false): void {
     if (!this.hold) return;
     if (this.holdW > 0.01) {
-      // take over the held posture as the free one (no pop)
+      // take over the held posture as the free one (no pop): the pivot's line becomes heading and pitch, and the whole
+      // held shape is kept to unwind from (the tail lets go of the sheath last)
       this.freePos.copy(this.pos);
       const P = this.pose.pts;
       tmp.subVectors(P[PIVOT_K - 1], P[PIVOT_K + 1]).normalize();
-      const c = Math.cos(this.heading), s = Math.sin(this.heading);
+      const h0 = this.heading;
+      const c = Math.cos(h0), s = Math.sin(h0);
       const wx = c * tmp.x + s * tmp.z, wz = -s * tmp.x + c * tmp.z;
       this.pitch = clamp(Math.asin(clamp(tmp.y, -1, 1)), -0.6, 1.2);
       if (Math.hypot(wx, wz) > 0.2) this.heading = Math.atan2(wx, wz);
+      // model space at the old heading → world orientation → model space at the new one
+      const d = this.heading - h0, cd = Math.cos(d), sd = Math.sin(d);
+      const turn = (from: Vector3, to: Vector3) => to.set(cd * from.x - sd * from.z, from.y, sd * from.x + cd * from.z);
+      for (let k = 0; k <= NSEG; k++) turn(P[k], this.relPts[k]);
+      turn(this.pose.up, this.relUp);
+      this.relT = 0;
+      this.relFast = fast;
+      this.lastPitch = this.pitch;
+      this.turnY.fill(0); this.turnYV.fill(0); this.turnP.fill(0); this.turnPV.fill(0);
     }
     this.hold = null;
     this.holdW = 0;
@@ -283,7 +366,7 @@ export class Youjiuo {
     this.alert = 1;
     this.prey.alive = false;
     const wasHolding = !!this.hold && this.holdW > 0.5;
-    this.releaseHold();
+    this.releaseHold(true);
     this.chooseEscape(env, from, wasHolding);
     this.setState('ESCAPE', 0, 'flinch');
   }
@@ -445,8 +528,11 @@ export class Youjiuo {
       this.finBouts(dt, 11, this.alert > 0.4 ? 0.02 : 0.08);
       if (this.alert > 0.4) { this.finAmp = approach(this.finAmp, 0, 6, dt); }
       this.pecHz = 14; this.pecAmp = this.alert > 0.4 ? 0.03 : 0.1;
-      // creep up or down the blade now and then
-      if (this.rng.chance(dt * 0.05)) h.anchor = clamp(h.anchor + this.rng.range(-0.02, 0.025), 0.025, Math.max(0.03, Math.min(0.12, (env.floor.waterAt(h.ref.x, h.ref.z) - h.ref.y) * 0.35)));
+      // creep up or down the shoot now and then, slowly, the coil sliding with it
+      if (this.rng.chance(dt * 0.05)) h.goal = clamp(h.anchor + this.rng.range(-0.012, 0.012), h.lo, h.hi);
+      const creep = clamp(h.goal - h.anchor, -0.004 * dt, 0.004 * dt);
+      h.anchor += creep;
+      if (Math.abs(creep) > 1e-6) { this.pecAmp = 0.18; this.finAmp = Math.max(this.finAmp, 0.1); }
     }
     this.bodyAmp = approach(this.bodyAmp, 0, 2, dt);
     this.headLook(dt, 0.08, 0.12);
@@ -699,27 +785,82 @@ export class Youjiuo {
 
   // ---------------------------------------------------------------- pose
 
+  /**
+   * The turn's bend. A pipefish's trunk is a box of bony rings and barely bends; the long tail is far more pliant.
+   * Turning, the fish swings the head and trunk round and the tail follows behind, bending into the turn (head and tail
+   * both toward its inside), more toward the tip and later the further back. Each joint is a damped spring pulled
+   * toward a bend set by the turning rate and the joint's pliancy, quick in the trunk, slow at the tail's end; as the
+   * turn eases the tail swings straight again with a little overshoot. The same for climbing and diving.
+   */
+  private turning(dt: number): void {
+    if (Number.isNaN(this.lastPitch)) this.lastPitch = this.pitch;
+    const pr = clamp((this.pitch - this.lastPitch) / Math.max(dt, 1e-4), -6, 6);
+    this.lastPitch = this.pitch;
+    this.pitchRate = approach(this.pitchRate, pr, 12, dt);
+    const yr = this.yawRate, pr2 = this.pitchRate;
+    // held fast to the shoot, the free posture does not matter; keep it relaxed
+    const holding = this.state === 'GRASS_HOLD' && this.holdW > 0.98;
+    const h = Math.min(dt, 1 / 30);
+    for (let k = 1; k < NSEG; k++) {
+      const s = STATIONS[k];
+      const ds = 0.5 * (STATIONS[k + 1] - STATIONS[k - 1]);
+      const f = flex(s);
+      const cap = (0.6 + KAPPA_MAX * f) * ds;
+      const ty = holding ? 0 : clamp(TURN_GAIN * f * yr, -1, 1) * KAPPA_MAX * ds;
+      const tp = holding ? 0 : clamp(TURN_GAIN * 0.6 * f * pr2, -1, 1) * KAPPA_MAX * 0.6 * ds;
+      // natural frequency: ~25 rad/s in the trunk, ~6 at the tail tip (the lag grows down the tail)
+      const w0 = 25 - 19 * smooth(0.3, 1.0, s), z = 0.72;
+      // semi-implicit Euler, stable at these rates for steps up to 1/30 s
+      this.turnYV[k] += (w0 * w0 * (ty - this.turnY[k]) - 2 * z * w0 * this.turnYV[k]) * h;
+      this.turnY[k] = clamp(this.turnY[k] + this.turnYV[k] * h, -cap, cap);
+      this.turnPV[k] += (w0 * w0 * (tp - this.turnP[k]) - 2 * z * w0 * this.turnPV[k]) * h;
+      this.turnP[k] = clamp(this.turnP[k] + this.turnPV[k] * h, -cap * 0.6, cap * 0.6);
+    }
+  }
+
   private buildPose(dt: number, env: FishEnv): void {
     const pose = this.pose;
     const t = this.time;
-    // body bends: a slow, small wave (a pipefish's trunk is armoured: it barely bends while the fin drives it), the
-    // turn, the individual's own gentle curve, and in an escape the C-bend and the swimming wave
+    // body bends, as curvature (rad per TL) times each joint's share of the length: a slow, small wave (a pipefish's
+    // trunk is armoured: it barely bends while the fin drives it), the individual's own gentle curve, the turn (below),
+    // and in an escape the C-bend and the swimming wave
     this.bodyPhase = (this.bodyPhase + 2 * Math.PI * this.bodyHz * dt) % (Math.PI * 200);
-    const turnBend = clamp(this.yawRate * 0.012, -0.05, 0.05);
     const cOn = this.state === 'ESCAPE' && this.sub === 'turn' ? Math.sin(Math.PI * clamp(this.subT / 0.24, 0, 1)) : 0;
+    this.turning(dt);
     for (let k = 1; k < NSEG; k++) {
       const s = STATIONS[k];
+      const ds = 0.5 * (STATIONS[k + 1] - STATIONS[k - 1]);
       const tailE = Math.pow(clamp((s - 0.2) / 0.8, 0, 1), 1.3);
-      const wave = this.bodyAmp * (0.25 + 1.6 * tailE) * Math.sin(this.bodyPhase - (2 * Math.PI * s) / this.bodyLambda) * (STATIONS[k + 1] - STATIONS[k - 1]) * 8;
-      const own = 0.012 * Math.sin(this.bendSeed + s * 7.5 + 0.25 * Math.sin(t * 0.17 + this.bendSeed)) * (this.state === 'ESCAPE' ? 0.3 : 1);
-      const c = cOn * this.cBend * 0.11 * Math.exp(-Math.pow((s - 0.45) / 0.3, 2));
-      this.yawBend[k] = wave + turnBend + own + c;
+      const wave = this.bodyAmp * (0.25 + 1.6 * tailE) * Math.sin(this.bodyPhase - (2 * Math.PI * s) / this.bodyLambda) * ds * 16;
+      const own = 0.27 * Math.sin(this.bendSeed + s * 7.5 + 0.25 * Math.sin(t * 0.17 + this.bendSeed)) * (this.state === 'ESCAPE' ? 0.3 : 1) * ds;
+      // the C: the stiff trunk hardly takes it, the tail most
+      const c = cOn * this.cBend * C_BEND * flex(s) * ds;
+      this.yawBend[k] = wave + own + c + this.turnY[k];
       // a hovering pipefish lets the rear of the tail hang a little; when travelling it is straight
-      this.pitchBend[k] = (this.state === 'IDLE_HOVER' ? -0.01 : -0.003) * smooth(0.5, 0.95, s);
+      this.pitchBend[k] = (this.state === 'IDLE_HOVER' ? -0.22 : -0.066) * smooth(0.5, 0.95, s) * ds + this.turnP[k];
     }
     chainFromBends(this.freePts, this.pitch, 0, this.yawBend, this.pitchBend);
+    // a held posture let go of: the free posture takes over from the head back, the tail unwinding last
+    let relK = 0;
+    if (this.relT >= 0) {
+      this.relT += dt;
+      const lag = this.relFast ? 0.06 : 0.45, dur = this.relFast ? 0.2 : 0.95;
+      let any = false;
+      for (let k = 0; k <= NSEG; k++) {
+        const d0 = lag * clamp((STATIONS[k] - 0.3) / 0.7, 0, 1);
+        const r = 1 - smooth(d0, d0 + dur, this.relT);
+        if (r <= 0) continue;
+        any = true;
+        this.freePts[k].lerp(this.relPts[k], r);
+        if (k === PIVOT_K) relK = r;
+      }
+      respace(this.freePts);
+      if (!any) this.relT = -1;
+    }
     const P = pose.pts;
     const w = this.state === 'GRASS_HOLD' ? smooth(0, 1, this.holdW) : 0;
+    // the back: upright when free (or still as it was held, while letting go)
+    pose.up.set(0, 1, 0).lerp(this.relUp, relK);
     if (w > 0 && this.hold) {
       for (let k = 0; k <= NSEG; k++) {
         tmp.copy(this.holdPts[k]);
@@ -733,10 +874,9 @@ export class Youjiuo {
       tmp.copy(this.holdUp);
       const c = Math.cos(this.heading), s = Math.sin(this.heading);
       const ux = c * tmp.x - s * tmp.z, uz = s * tmp.x + c * tmp.z;
-      pose.up.set(ux * w, tmp.y * w + (1 - w), uz * w);
+      pose.up.multiplyScalar(1 - w).add(tmp.set(ux * w, tmp.y * w, uz * w));
     } else {
       for (let k = 0; k <= NSEG; k++) P[k].copy(this.freePts[k]);
-      pose.up.set(0, 1, 0);
     }
     // the head: looking about, the strike's flick (instant up, eased back), the suction
     const striking = this.state === 'FORAGE' && this.sub === 'strike';
@@ -746,46 +886,65 @@ export class Youjiuo {
     pose.jaw = striking ? Math.min(1, pose.jaw + dt * 80) : approach(pose.jaw, 0, 12, dt);
   }
 
-  /** The held posture in world space: the body laid along the blade, the tail tip hooked round the sheath. */
+  /**
+   * The held posture in world space: the body laid along the shoot above the coil, the rear of the tail wound round
+   * the sheath in a helix that follows the shoot as it sways. `curl` winds it: loose and steep as the tail first
+   * meets the sheath, a tight coil of `turns` turns when done.
+   */
   private computeHold(env: FishEnv): void {
     const h = this.hold!;
     const u = this.uniforms(env);
     const ref = h.ref;
     const S = shootState(u, ref, this.holdState);
     const tl = this.tl;
-    const need = h.anchor + (S_CURL - STATIONS[0]) * tl + 0.02;
+    const need = h.anchor + (h.sCurl - STATIONS[0]) * tl + 0.02;
     const step = 0.01;
     this.lineN = shootLine(u, ref, S, step, Math.min(need, step * (this.line.length - 2)), this.line);
     const L = this.line, n = this.lineN;
     const fx = Math.cos(ref.fan), fz = Math.sin(ref.fan);
-    const at = (len: number, out: Vector3, tan: Vector3) => {
+    // the shoot's axis at a height, and a frame round it: N toward the flank's side of the shoot, B across
+    const C = tmp, T = tmp2, N = tmp3, B = this.frameB;
+    const frame = (len: number) => {
       const f = clamp(len / step, 0, n - 1.0001), i = Math.floor(f), r = f - i;
-      out.copy(L[i]).lerp(L[i + 1], r);
-      tan.subVectors(L[i + 1], L[i]).normalize();
-      return out;
+      C.copy(L[i]).lerp(L[i + 1], r);
+      T.subVectors(L[i + 1], L[i]).normalize();
+      N.set(-fz * h.side, 0, fx * h.side).addScaledVector(T, -(-fz * h.side * T.x + fx * h.side * T.z)).normalize();
+      B.crossVectors(T, N);
     };
-    const N = tmp3;
-    for (let k = 0; k <= NSEG; k++) {
+    // the half-thickness that meets the shoot: the flank along the body, the tail's full depth where it coils
+    const half = (s: number) => {
+      const k = smooth(h.sCurl - 0.04, h.sCurl, s);
+      return 0.5 * tl * ((1 - k) * widthAt(s) + k * depthAt(s));
+    };
+    let k = 0;
+    for (; k <= NSEG && STATIONS[k] <= h.sCurl; k++) {
       const s = STATIONS[k];
-      const q = this.holdPts[k];
-      const half = 0.5 * widthAt(s) * tl;
-      if (s <= S_CURL) {
-        at(h.anchor + (S_CURL - s) * tl, q, tmp2);
-        // offset across the blade's face, perpendicular to it
-        N.set(-fz * h.side, 0, fx * h.side).addScaledVector(tmp2, -(-fz * h.side * tmp2.x + fx * h.side * tmp2.z)).normalize();
-        q.addScaledVector(N, 0.5 * ref.width + half + 0.0006);
-      } else {
-        // the hook: round the sheath, sinking a little so it does not meet itself
-        const arc = (s - S_CURL) * tl;
-        const rc = 0.65 * ref.width + half + 0.0008;
-        const drop = arc * (1 - 0.86 * this.curl);
-        at(Math.max(0.004, h.anchor - drop), q, tmp2);
-        const phi = this.curl * (arc / rc) * h.wrap * 0.92;
-        const nx = -fz * h.side, nz = fx * h.side;
-        const bx = fx * h.side, bz = fz * h.side;
-        q.x += rc * (Math.cos(phi) * nx + Math.sin(phi) * bx);
-        q.z += rc * (Math.cos(phi) * nz + Math.sin(phi) * bz);
+      const len = h.anchor + (h.sCurl - s) * tl;
+      frame(len);
+      this.holdPts[k].copy(C).addScaledVector(N, sheathRadius(ref, len) + half(s) + GAP);
+    }
+    // the coil: marched along the tail in short steps (an unrolled helix: round by cos α, down by sin α), leaving
+    // the body's line straight down and turning into the helix over its first third of a turn
+    const wound = smooth(0, 1, this.curl);
+    const r0 = sheathRadius(ref, h.anchor) + half(h.sCurl) + GAP;
+    const alpha = LOOSE + (Math.atan2(h.pitch, 2 * Math.PI * r0) - LOOSE) * wound;
+    const ease = 0.33 * 2 * Math.PI * r0;
+    let len = h.anchor, phi = 0, sAt = h.sCurl;
+    for (; k <= NSEG; k++) {
+      const sk = STATIONS[k];
+      const steps = Math.max(1, Math.ceil(((sk - sAt) * tl) / 0.0015));
+      const ds = ((sk - sAt) * tl) / steps;
+      for (let j = 0; j < steps; j++) {
+        const sm = sAt + ((j + 0.5) * ds) / tl;
+        const a = alpha + (0.5 * Math.PI - alpha) * (1 - smooth(0, ease, (sm - h.sCurl) * tl));
+        const r = sheathRadius(ref, len) + half(Math.min(sm, S_CAUDAL)) + GAP;
+        phi += (h.wrap * Math.cos(a) * ds) / r;
+        len = Math.max(0.004, len - Math.sin(a) * ds);
       }
+      sAt = sk;
+      frame(len);
+      const r = sheathRadius(ref, len) + half(Math.min(sk, S_CAUDAL)) + GAP;
+      this.holdPts[k].copy(C).addScaledVector(N, r * Math.cos(phi)).addScaledVector(B, r * Math.sin(phi));
     }
     this.holdPivot.copy(this.holdPts[PIVOT_K]);
     // the back faces along the blade's width (the flank lies against the blade's face, as a blade's own profile)

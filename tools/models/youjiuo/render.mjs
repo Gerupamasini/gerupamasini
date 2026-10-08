@@ -28,14 +28,18 @@ const SHOTS = [
   { name: 'front_lod0', set: { scene: 'front', lod: 0 } },
   { name: 'aquarium_hold', set: { scene: 'aquarium', lod: 'auto' }, advance: 9 },
   { name: 'aquarium_close', set: { fov: 30 }, advance: 1, side: [0.17, 0.045, 0.01] },
+  { name: 'aquarium_coil', advance: 0.2, at: [0.88, [0.075, 0.012, 0.0]] },
   { name: 'meadow_wide', set: { scene: 'meadow', lod: 'auto' }, advance: 14 },
   { name: 'meadow_hold', act: 'hold', until: ['GRASS_HOLD', 'hold', 20], advance: 0.5, follow: [0.34, 0.02, 0.1] },
   { name: 'meadow_hold_close', advance: 1.3, follow: [0.16, -0.04, 0.06] },
+  { name: 'hold_coil', advance: 0.1, at: [0.88, [0.075, 0.012, 0.0]] },
   { name: 'forage_stalk', act: 'forage', until: ['FORAGE', 'stalk', 10], advance: 1.0, follow: [0.2, 0.03, 0.08] },
   { name: 'forage_strike', until: ['FORAGE', 'strike', 12], follow: [0.2, 0.03, 0.08] },
   { name: 'forage_strike_head', advance: 0.02, head: [0.065, 0.014, 0.035] },
   { name: 'forage_recover_head', advance: 0.12, head: [0.065, 0.014, 0.035] },
   { name: 'swim', act: 'swim', advance: 3, follow: [0.12, 0.08, 0.45] },
+  { name: 'turn_1', act: 'turn', advance: 1.1, follow: [0.0, 0.27, 0.07] },
+  { name: 'turn_2', advance: 0.9, follow: [0.0, 0.27, 0.07] },
   { name: 'escape_0', startle: true, advance: 0.15, follow: [0.45, 0.12, 0.2] },
   { name: 'escape_1', advance: 0.35 },
   { name: 'escape_2', advance: 2.5, follow: [0.45, 0.1, 0.2] },
@@ -72,6 +76,7 @@ try {
     if (shot.follow) await page.evaluate((o) => window.__yj.follow(0, o), shot.follow);
     if (shot.head) await page.evaluate((o) => window.__yj.followHead(0, o), shot.head);
     if (shot.side) await page.evaluate((o) => window.__yj.followSide(0, ...o), shot.side);
+    if (shot.at) await page.evaluate((o) => window.__yj.followAt(0, o[0], o[1]), shot.at);
     const info = await page.evaluate(() => window.__yj.state());
     if (only && !only.includes(shot.name)) continue;
     const file = path.join(outDir, `${shot.name}.jpg`);

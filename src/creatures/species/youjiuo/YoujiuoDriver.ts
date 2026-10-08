@@ -7,7 +7,7 @@ import type { Individual } from '../../Individual';
 import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
-import { BONES, MODEL_TL, NSEG } from './anatomy';
+import { BONES, MODEL_TL, NSEG, STATIONS, segmentOf } from './anatomy';
 import { rigRest, youjiuoGeometry, type Lod } from './geometry';
 import { GREEN_MORPH, MORPHS, lookFor, tickYoujiuoMaterials, youjiuoMaterials, type YoujiuoMaterials } from './materials';
 import { applyPose, chainFromBends, restPose } from './pose';
@@ -126,7 +126,11 @@ export class YoujiuoDriver implements Driver {
     root.add(...m.bones, m.lod);
     const pose = restPose();
     const yb = new Float32Array(NSEG + 1), pb = new Float32Array(NSEG + 1);
-    for (let k = 1; k < NSEG; k++) { yb[k] = 0.035 * Math.sin(k * 0.45); pb[k] = -0.004; }
+    // a gentle S, as curvature (rad per TL) times each joint's share of the length
+    for (let k = 1; k < NSEG; k++) {
+      const ds = 0.5 * (STATIONS[k + 1] - STATIONS[k - 1]);
+      yb[k] = 0.95 * Math.sin(12 * (STATIONS[k] - 0.115)) * ds; pb[k] = -0.11 * ds;
+    }
     chainFromBends(pose.pts, 0.12, 0, yb, pb);
     for (let i = 0; i < pose.dorsal.length; i++) pose.dorsal[i] = 0.25 * Math.sin(1.2 - i * 1.1);
     pose.eyeL = [0.3, 0.1]; pose.eyeR = [-0.1, 0.05];
@@ -316,7 +320,7 @@ export class YoujiuoDriver implements Driver {
     const f = this.fish;
     if (!f || Number.isNaN(f.pos.y)) return this.ind ? this.tmp.copy(this.ind.pos) : this.tmp.set(0, 0, 0);
     // the middle of the body (the pivot is mid-trunk; the camera frames the whole fish)
-    return f.toWorld(this.tmp.copy(f.pose.pts[Math.floor(NSEG * 0.35)]));
+    return f.toWorld(this.tmp.copy(f.pose.pts[segmentOf(0.495)]));
   }
 
   get openings(): { mouth: number; gill: number } {
