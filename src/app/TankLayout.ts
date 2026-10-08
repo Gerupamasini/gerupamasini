@@ -1,9 +1,10 @@
+import type { EquipmentLayout } from '../aquarium/state';
 import { CylinderGeometry, DoubleSide, Group, IcosahedronGeometry, Mesh, MeshStandardMaterial, PlaneGeometry, SphereGeometry, Vector3 } from 'three';
 
 export type TankSubstrate = 'sand' | 'mud' | 'none';
 export type TankItemType = 'stone_s' | 'stone_l' | 'driftwood' | 'shell' | 'plant';
 export interface TankItem { id: string; type: TankItemType; x: number; z: number; rot: number }
-export interface TankLayout { substrate: TankSubstrate; items: TankItem[] }
+export interface TankLayout { substrate: TankSubstrate; items: TankItem[]; equipment?: EquipmentLayout }
 
 export const TANK_SUBSTRATES: TankSubstrate[] = ['sand', 'mud', 'none'];
 export const TANK_ITEM_TYPES: TankItemType[] = ['stone_s', 'stone_l', 'driftwood', 'shell', 'plant'];

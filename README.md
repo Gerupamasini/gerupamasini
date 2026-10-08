@@ -11,6 +11,7 @@ npm run check        # 型検査 + 単体テスト + データ検証
 npm run build        # dist/ を生成（GitHub Pages 用のベースパス /gerupamasini/）
 npm run smoke        # ヘッドレス Chromium で起動し tests/smoke/out/ にスクリーンショット
 node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボを撮影（tests/smoke/out/pagurus-*.png）
+CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium.mjs # 水槽設備・配管・電源・保存復元のブラウザ検証
 npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze -- --tier hero  # エドハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze-gravid -- --tier hero   # エドハゼの抱卵雌（edohaze_gravid.*.glb）
@@ -28,6 +29,7 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガード、`?mode=naked` で殻から出した体（`&stage=dark` で写真と同じ黒い撮影台）、`?mode=retract` で殻に閉じこもる様子を見られます。
 
 ## 文書
+- `docs/models/aquarium/` 水槽基本設備20種、共通材質、LOD、配線・配管、温度・水流API（自宅 → 水槽 → 設備）
 - `docs/spec/` 仕様書 4 本（ゲームと MVP、アーキテクチャとデータ、生物 AI とモデル、潮位・セーブ・進行）
 - `docs/planning/` 設計質問と回答、マハゼモデル監査
 - `docs/TESTING.md` 身内テスト手順

@@ -289,6 +289,26 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .tank-items li.on { background: rgba(127, 227, 210, 0.12); }
 .tank-item-actions { display: flex; gap: 4px; }
 .drawer .foot { color: var(--dim-2); font-size: 11px; letter-spacing: 0.06em; margin-top: 10px; }
+.equipment-summary { display: flex; gap: 16px; flex-wrap: wrap; padding: 14px 0; font-size: 12px; color: var(--dim); }
+.equipment-summary strong { color: var(--fg); margin-left: 5px; }
+.equipment-view, .equipment-actions, .equipment-add { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.equipment-add select { flex: 1; }
+.equipment-card { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.equipment-card summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 13px; }
+.equipment-status { font-size: 10px; color: var(--dim); border: 1px solid var(--line); border-radius: 8px; padding: 2px 7px; }
+.equipment-status.active { color: var(--accent); }
+.equipment-position { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.equipment-position label, .equipment-setting, .equipment-connect label { color: var(--dim); font-size: 11px; display: flex; flex-direction: column; gap: 5px; }
+.equipment-position input, .equipment-setting input, .equipment-add select, .equipment-connect select { width: 100%; min-width: 0; padding: 6px; color: var(--fg); background: #142127; border: 1px solid var(--line); border-radius: 5px; font: inherit; box-sizing: border-box; }
+.equipment-actions button { padding: 5px 9px !important; font-size: 11px !important; }
+.equipment-connect { margin: 12px 0; }
+.equipment-connect summary { cursor: pointer; font-size: 12px; }
+.equipment-connect label { margin: 9px 0; }
+.equipment-connections { list-style: none; padding: 0; margin: 12px 0; }
+.equipment-connections li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.equipment-connections small { display: block; margin-bottom: 3px; color: var(--accent); }
+.equipment-connections button { padding: 4px 8px !important; font-size: 10px !important; flex-shrink: 0; }
+.equipment-warning { color: #e9ba83; }
 
 /* ------------------------------------------------------------------ zukan */
 .card.zukan { width: min(94vw, 980px); max-height: 88vh; display: flex; flex-direction: column; padding-bottom: 22px; }
