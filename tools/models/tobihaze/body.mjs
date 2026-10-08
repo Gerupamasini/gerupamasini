@@ -378,20 +378,40 @@ export function buildSkin(NS, NV, log = () => {}) {
         if (!best || Math.abs(a - A[WIN]) < Math.abs(best - A[WIN])) best = a;
       }
       if (best === null) continue;
-      const aStar = clamp(best, A[2], A[P.length - 3]);
+      let aStar = clamp(best, A[2], A[P.length - 3]);
       const at = (a) => {
         let k = 0;
         while (k < P.length - 2 && A[k + 1] < a) k++;
         const t = clamp((a - A[k]) / Math.max(A[k + 1] - A[k], 1e-9), 0, 1);
         return P[k].map((x, c) => x + (P[k + 1][c] - x) * t);
       };
+      // Behind the corners seen head-on the gape is a fold of skin under the lip lobe, and the fold can lie a little
+      // off the gape line (the lobe's blend fills it in, less at its back end): there the gape column goes into the
+      // fold itself - where the skin turns inward most sharply along the row - or the fold wanders across the grid's
+      // columns and shades as a zigzag along the lobe's lower edge.
+      let inFold = false;
+      if (sList[i] > OPEN_S + 0.2) {
+        const onSkin = (q) => { for (let it = 0; it < 3; it++) { const nn = fieldGrad(q[0], q[1], q[2]); const f = field(q[0], q[1], q[2]); q = q.map((x, c) => x - nn[c] * f); } return q; };
+        const lo = Math.max(A[2], aStar - 0.45), hi = Math.min(A[P.length - 3], aStar + 0.45);
+        const M = Math.max(8, Math.round((hi - lo) / 0.02));
+        const X = [], N = [];
+        for (let m = 0; m <= M; m++) { const q = onSkin(at(lo + ((hi - lo) * m) / M)); X.push(q); N.push(fieldGrad(q[0], q[1], q[2])); }
+        let bestM = -1, bestC = -2;
+        for (let m = 1; m < M; m++) {
+          const dx = sub(X[m + 1], X[m - 1]), dn = sub(N[m + 1], N[m - 1]);
+          // (the turn of the skin's normal along the row, per mm: < 0 where it folds inward)
+          const c = dot(dn, dx) / Math.max(dot(dx, dx), 1e-9);
+          if (c < bestC) { bestC = c; bestM = m; }
+        }
+        if (bestM > 0) { aStar = lo + ((hi - lo) * bestM) / M; inFold = true; }
+      }
       const next = [];
       for (let k = 1; k < P.length - 1; k++) {
         // piecewise-linear remap of the arc: the ends of the window stay, the gape column goes to the crossing
         const a = k <= WIN ? A[0] + (aStar - A[0]) * ((A[k] - A[0]) / (A[WIN] - A[0])) : aStar + (A[P.length - 1] - aStar) * ((A[k] - A[WIN]) / (A[P.length - 1] - A[WIN]));
         let q = at(a);
         for (let it = 0; it < 2; it++) { const nn = fieldGrad(q[0], q[1], q[2]); const f = field(q[0], q[1], q[2]); q = [q[0] - nn[0] * f, q[1] - nn[1] * f, q[2] - nn[2] * f]; }
-        if (k === WIN) q[1] = gyR(q);
+        if (k === WIN && !inFold) q[1] = gyR(q);
         next.push([gid(i, col(k - WIN)), q]);
       }
       for (const [g, q] of next) { verts[g].fish = q; verts[g].n = fieldGrad(q[0], q[1], q[2]); }
@@ -487,11 +507,12 @@ export function buildSkin(NS, NV, log = () => {}) {
   // the cut in front of the gape columns (which were snapped onto the gape above) follows the grid in steps: its
   // vertices slide onto the gape, so the lip's edge runs straight along it instead of in a sawtooth
   for (const g of cutSet) if (verts[g].i < i0 || Math.abs(verts[g].fish[1] - gyAt(verts[g].fish)) > 0.02) slideToGape(g, 0);
-  // and the upper lip's skin is kept above the gape: a vertex of it left below the line (in a quad that straddles
-  // it) would hang down out of the upper lip like a tooth when the mouth opens
+  // and the upper lip's skin is kept above the gape where the lips part: a vertex of it left below the line (in a quad
+  // that straddles it) would hang down out of the upper lip like a tooth when the mouth opens. (Behind the corners
+  // seen head-on the gape is a fold of continuous skin, its column in the fold itself, above.)
   for (const [g, t] of touch) {
     const v = verts[g];
-    if (cutSet.has(g) || t.has('L') || v.i < 1 || v.fish[0] > RICTUS_S) continue;
+    if (cutSet.has(g) || t.has('L') || v.i < 1 || v.fish[0] > OPEN_S + 0.2) continue;
     if (v.fish[1] < gyAt(v.fish) + 0.02) slideToGape(g, 0.04);
   }
   const jawCopy = new Map();
@@ -654,16 +675,78 @@ export function skinParts(G) {
   }
   let iH = 0, iT = 0;
   for (let i = 0; i < NS; i++) { if (Math.abs(sList[i] - SPLIT.head) < Math.abs(sList[iH] - SPLIT.head)) iH = i; if (Math.abs(sList[i] - SPLIT.tail) < Math.abs(sList[iT] - SPLIT.tail)) iT = i; }
+  // Round the snout's tip every column of the grid converges on the pole, so its first rings are cut into slivers
+  // ~20 times longer than wide, and a glint on the lips' front, its normals interpolated across them, draws their edges
+  // as a star of rays. There the rings keep only every 2nd, 4th... column - as many as make each segment about as long
+  // as the ring's spacing - in blocks of columns, coarser toward the pole, never where the lips are cut.
+  // (blocks of 16 columns, the last one shorter where the columns don't divide evenly; a step divides its block)
+  const BLOCK = 16;
+  const NB = Math.ceil(NV / BLOCK);
+  const maxStep = (b) => { const n = Math.min(BLOCK, NV - b * BLOCK); return n & -n; };
+  const step = [];
+  {
+    const P = (i, j) => verts[gid(i, j)].fish;
+    const cutRing = (i, j) => jawCopy.has(gid(i, j)) || verts[gid(i, j)].jaw === 1;
+    for (let i = 0; i < NS; i++) step.push(new Array(NB).fill(1));
+    let iMax = 1;
+    while (iMax < NS - 2 && sList[iMax] < 1.0) iMax++;
+    for (let b = 0; b < NB; b++) {
+      for (let i = 1; i < iMax; i++) {
+        let want = Infinity;
+        for (let j = b * BLOCK; j < Math.min(NV, (b + 1) * BLOCK); j++) {
+          if (isJawQuad(i, j) || isJawQuad(i - 1, j) || cutRing(i, j) || cutRing(i + 1, j) || cutRing(i, j + 1)) { want = 0; break; }
+          const along = Math.hypot(...sub(P(i + 1, j), P(i, j))), across = Math.hypot(...sub(P(i, j + 1), P(i, j)));
+          want = Math.min(want, along / Math.max(across, 1e-6));
+        }
+        if (want < 1) break;
+        let k = 1;
+        while (k * 2 <= Math.min(want, maxStep(b)) && (i === 1 || k * 2 <= step[i - 1][b])) k *= 2;
+        step[i][b] = k;
+      }
+      // (at most halving from one ring to the next, outward, so no ring meets a much finer one in a wide fan)
+      for (let i = iMax - 1; i >= 1; i--) step[i][b] = Math.min(step[i][b], 2 * step[i + 1][b]);
+      step[0][b] = step[1][b];
+    }
+  }
+  const present = (i, j) => j % step[i][Math.floor(Math.min(j, NV - 1) / BLOCK)] === 0;
   const make = (name, ia, ib) => {
     const map = new Map();
     const list = [];
     const take = (g) => { if (!map.has(g)) { map.set(g, list.length); list.push(verts[g]); } return map.get(g); };
     const tris = [];
-    for (let i = ia; i < ib; i++) for (let j = 0; j < NV; j++) {
-      const q = [gid(i, j), gid(i + 1, j), gid(i + 1, j + 1), gid(i, j + 1)];
-      const jq = isJawQuad(i, j);
-      const m = q.map((g) => take(jq && jawCopy.has(g) ? jawCopy.get(g) : g));
-      tris.push(m[0], m[1], m[2], m[0], m[2], m[3]);
+    for (let i = ia; i < ib; i++) {
+      if (step[i].every((k) => k === 1) && step[i + 1].every((k) => k === 1)) {
+        for (let j = 0; j < NV; j++) {
+          const q = [gid(i, j), gid(i + 1, j), gid(i + 1, j + 1), gid(i, j + 1)];
+          const jq = isJawQuad(i, j);
+          const m = q.map((g) => take(jq && jawCopy.has(g) ? jawCopy.get(g) : g));
+          tris.push(m[0], m[1], m[2], m[0], m[2], m[3]);
+        }
+        continue;
+      }
+      // (a band with coarser rings: between each two kept columns of the inner ring, the outer ring's kept columns,
+      // the first half fanned from the one, the second from the other; the inner ring's columns are among the outer's)
+      const inner = [], outer = [];
+      for (let j = 0; j <= NV; j++) { if (present(i, j)) inner.push(j); if (present(i + 1, j)) outer.push(j); }
+      const I = (j) => take(gid(i, j)), O = (j) => take(gid(i + 1, j));
+      for (let n = 0; n < inner.length - 1; n++) {
+        const a = inner[n], b = inner[n + 1];
+        const os = outer.filter((j) => j >= a && j <= b);
+        if (os.length === 2 && b - a === 1) {
+          // (a column kept on both rings: the plain quad, the lower jaw's lips on their own vertices)
+          const q = [gid(i, a), gid(i + 1, a), gid(i + 1, b), gid(i, b)];
+          const jq = isJawQuad(i, a);
+          const m = q.map((g) => take(jq && jawCopy.has(g) ? jawCopy.get(g) : g));
+          tris.push(m[0], m[1], m[2], m[0], m[2], m[3]);
+          continue;
+        }
+        const mid = os[Math.floor((os.length - 1) / 2)];
+        for (let m = 0; m < os.length - 1; m++) {
+          const c = os[m], d = os[m + 1];
+          tris.push(d <= mid ? I(a) : I(b), O(c), O(d));
+        }
+        if (i > 0) tris.push(I(a), O(mid), I(b));
+      }
     }
     // outward winding check (a mid-flank quad)
     const im = Math.floor((ia + ib) / 2), jm = Math.floor(NV / 4);
@@ -1222,21 +1305,24 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
   const lipCalm = Math.max(smoothstep(0.08, 0.5, Math.abs(p[1] - gapeY(clamp(s, MOUTH[0][0], RICTUS_S)))), smoothstep(RICTUS_S + 0.2, RICTUS_S + 0.8, s));
   const tipCalm = smoothstep(0.03, 0.2, rPole) * smoothstep(0.15, 0.75, rCorner) * lipCalm;
   const calmed = (v, cell, r, seed, keep, jitterR) => (tipCalm >= 1 ? v : v * tipCalm + dotMean(cell, r, seed, keep, jitterR) * (1 - tipCalm));
-  // melanophore speckle: dense, fine, stronger on the back and head
-  const sp = calmed(dots(p, 0.3, 0.085, 101, 0.9), 0.3, 0.085, 101, 0.9) * (0.35 + 0.65 * (1 - ventral)) * (s < 16 ? 1.2 : 1);
-  col = lerp3(col, COL.speck, sp * 0.75);
+  // melanophore speckle: dense, fine, stronger on the back and head; on the face below the eyes - cheeks, lips,
+  // chin - sparse and faint (photographs 1, 2 and 7: the wet face is nearly plain, the speckles gather on the snout's
+  // top and the crown)
+  const plainFace = smoothstep(9, 6, s) * smoothstep(0.35, -0.1, nh);
+  const sp = calmed(dots(p, 0.3, 0.085, 101, 0.9), 0.3, 0.085, 101, 0.9) * (0.35 + 0.65 * (1 - ventral)) * (s < 16 ? 1.2 : 1) * (1 - 0.55 * plainFace);
+  col = lerp3(col, COL.speck, sp * 0.62);
   // a fine, blotchy dark network between the speckles (close-up photographs: the skin reads like grey granite)
   const net = smoothstep(0.05, 0.42, fbm3(p[0] * 4.2, p[1] * 4.2, p[2] * 4.2, 3, 137)) * (1 - ventral) * tipCalm;
-  col = lerp3(col, COL.speck, net * (s < 18 ? 0.42 : 0.3));
+  col = lerp3(col, COL.speck, net * (s < 18 ? 0.28 : 0.24) * (1 - 0.6 * plainFace));
   // and dark blotches about a millimetre across, between paler, sandier patches
   const blot = smoothstep(0.08, 0.38, fbm3(p[0] * 1.3 + 9, p[1] * 1.3, p[2] * 1.3, 3, 139)) * (1 - ventral);
   col = lerp3(col, COL.dark, blot * 0.32);
   const sp2 = dots(p, 0.9, 0.16, 131, 0.5) * (1 - ventral);
-  col = lerp3(col, COL.dark, sp2 * 0.6);
+  col = lerp3(col, COL.dark, sp2 * 0.45 * (1 - 0.5 * plainFace));
   // and a dense, fine pepper of tiny melanophores over everything but the belly (close up a fine dark network over
   // the head and the back)
   const pepper = calmed(dots(p, 0.16, 0.05, 109, 0.88), 0.16, 0.05, 109, 0.88) * (0.3 + 0.7 * (1 - ventral));
-  col = lerp3(col, COL.speck, pepper * (s < 18 ? 0.72 : 0.6));
+  col = lerp3(col, COL.speck, pepper * (s < 18 ? 0.5 : 0.48) * (1 - 0.5 * plainFace));
   // small pale (some bluish) spots over cheeks and flanks
   const pale = calmed(dots(p, s < 18 ? 0.95 : 1.25, 0.21, 211, s < 18 ? 0.8 : 0.55, 0.5), s < 18 ? 0.95 : 1.25, 0.21, 211, s < 18 ? 0.8 : 0.55, 0.5) * smoothstep(-0.6, -0.1, nh) * smoothstep(0.85, 0.3, nh) * (1 - ventral * 0.8);
   const blueish = s < 18 ? 0.65 : 0.25;
@@ -1251,7 +1337,7 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
     // (the pale upper lip shows only round the front, at the sides of the snout; head-on, under the snout, the lip is
     // the face's own grey, and along the side of the head the upper jaw is under the lip lobe, the face's own skin)
     const front = 1 - smoothstep(1.2, 1.8, s);
-    col = lerp3(col, COL.lip, up * 0.25 * front * smoothstep(0.2, 1.4, s) * (0.25 + 0.75 * smoothstep(0.4, 1.6, Math.abs(z))));
+    col = lerp3(col, COL.lip, up * 0.32 * front * (0.6 + 0.4 * smoothstep(0.4, 1.6, Math.abs(z))));
     // the lower lip, paler, all along the gape (photograph 10)
     col = lerp3(col, COL.belly, lo * (0.15 + 0.15 * front));
     // the dark line where the lips meet: across the front; behind the corner seen head-on, only faintly, in the fold
@@ -1291,14 +1377,16 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
   // the eye domes and the back, sparse on the belly)
   // (photographs close up: grains of every size from fine silt to ~0.5 mm quartz, densest on the crown, the cheeks
   // and round the eyes, in patches where the animal last lay in the sand)
-  const patchy = smoothstep(-0.35, 0.35, fbm3(p[0] * 0.35 + 3, p[1] * 0.35, p[2] * 0.35, 3, 161));
-  const gd = (0.3 + 0.7 * smoothstep(-0.6, 0.3, nh)) * (s < 18 ? 1 : 0.7) * (1 - lid) * (1 - 0.3 * stalk) * (0.45 + 0.55 * patchy);
-  const grainsA = calmed(grainDots(p, 0.26, 0.065, 151, 0.6), 0.26, 0.065, 151, 0.6) * gd;
-  const grainsB = calmed(grainDots(p, 0.5, 0.11, 157, 0.55), 0.5, 0.11, 157, 0.55) * gd;
-  const grainsC = calmed(grainDots(p, 0.9, 0.2, 167, 0.3 * smoothstep(-0.2, 0.4, nh) * (s < 20 ? 1 : 0.35)), 0.9, 0.2, 167, 0.15) * gd;
+  // (a wet animal fresh out of the water carries only a few, in patches where it last lay: most of the wet face is
+  // clean - photographs 1, 2 and 7 - and only one on sand glitters all over, photograph 3)
+  const patchy = smoothstep(-0.1, 0.45, fbm3(p[0] * 0.35 + 3, p[1] * 0.35, p[2] * 0.35, 3, 161));
+  const gd = (0.3 + 0.7 * smoothstep(-0.6, 0.3, nh)) * (s < 18 ? 1 : 0.7) * (1 - lid) * (1 - 0.3 * stalk) * (0.15 + 0.85 * patchy) * (1 - 0.6 * plainFace);
+  const grainsA = calmed(grainDots(p, 0.26, 0.065, 151, 0.3), 0.26, 0.065, 151, 0.3) * gd;
+  const grainsB = calmed(grainDots(p, 0.5, 0.11, 157, 0.25), 0.5, 0.11, 157, 0.25) * gd;
+  const grainsC = calmed(grainDots(p, 0.9, 0.2, 167, 0.12 * smoothstep(-0.2, 0.4, nh) * (s < 20 ? 1 : 0.35)), 0.9, 0.2, 167, 0.06) * gd;
   // and a dusting of fine silt: tiny white specks between the grains
-  const silt = calmed(dots(p, 0.12, 0.032, 169, 0.55), 0.12, 0.032, 169, 0.55) * gd * (s < 20 ? 1 : 0.6);
-  col = lerp3(col, COL.grain, silt * 0.7);
+  const silt = calmed(dots(p, 0.12, 0.032, 169, 0.3), 0.12, 0.032, 169, 0.3) * gd * (s < 20 ? 1 : 0.6);
+  col = lerp3(col, COL.grain, silt * 0.45);
   const grains = Math.max(grainsA, grainsB, grainsC);
   // quartz white or clear (taking the skin's colour through it), a few grey or buff
   const gh = hash01(Math.floor(p[0] / 0.26), Math.floor(p[1] / 0.26), Math.floor(p[2] / 0.26), 159);
@@ -1333,7 +1421,7 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
   h += 0.009 * dots(p, 0.13, 0.05, 171, 0.9, 0.5) + 0.005 * dots(p, 0.07, 0.028, 173, 0.9, 0.5);
   // head: sensory papillae rows and pores, fine wrinkles
   if (s < 18) {
-    h += 0.02 * dots(p, 0.55, 0.09, 307, 0.6) + 0.012 * ridged3(p[0] * 2.2, p[1] * 2.2, p[2] * 2.2, 2, 53);
+    h += 0.013 * dots(p, 0.55, 0.09, 307, 0.6) + 0.006 * ridged3(p[0] * 2.2, p[1] * 2.2, p[2] * 2.2, 2, 53);
   }
   // skin micro-relief everywhere (mucus-covered, granular)
   h += 0.007 * fbm3(p[0] * 5, p[1] * 5, p[2] * 5, 3, 61) + 0.004 * perlin3(p[0] * 14, p[1] * 14, p[2] * 14, 71);
@@ -1347,19 +1435,17 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
 
   // (the fine relief fades out right on the snout's tip, where the texels converge on the uv pole and would draw it
   // out into radial streaks)
-  h *= smoothstep(0.08, 0.5, rPole) * smoothstep(0.1, 0.7, rCorner) * lipCalm;
+  h *= smoothstep(0.03, 0.25, rPole) * smoothstep(0.1, 0.7, rCorner) * lipCalm;
   // (the skin of the eyes' base is a little smoother)
   h *= 1 - 0.35 * stalk;
   // ---------------- roughness and skin data
   // (grains are dry, frosted quartz: matte)
   let rough = 0.52 + 0.08 * fbm3(p[0] * 0.9, p[1] * 0.9, p[2] * 0.9, 2, 91) + 0.06 * dorsal + 0.2 * grains;
   const mudAff = clamp(ventral * 0.8 + smoothstep(0.0, -0.6, nh) * 0.35 + (1 - ao) * 0.6 + 0.25 * fbm3(p[0] * 0.4, p[1] * 0.4, p[2] * 0.4, 3, 97));
-  // (right on the snout's tip, where the texture's columns meet, the film is thinner and the skin a little rougher:
-  // no sharp glint gathers on the pole)
-  const poleMatte = 1 - smoothstep(0.08, 0.4, rPole);
-  rough += 0.22 * poleMatte;
+  // (the snout's tip, the uv pole, is as wet as the lips round it: drier there, it shaded as a pale patch on the upper
+  // lip - the material lightens drier skin)
   // (grains stick out of the mucus film: they dry first)
-  const mucus = clamp(0.55 + 0.35 * (1 - ao) + 0.2 * ventral - 0.25 * dorsal + 0.2 * fbm3(p[0] * 0.7, p[1] * 0.7, p[2] * 0.7, 3, 103) - 0.45 * poleMatte - 0.7 * grains);
+  const mucus = clamp(0.55 + 0.35 * (1 - ao) + 0.2 * ventral - 0.25 * dorsal + 0.2 * fbm3(p[0] * 0.7, p[1] * 0.7, p[2] * 0.7, 3, 103) - 0.7 * grains);
   // what dries first in the sun and wind: the top of the head, the eye turrets and the back
   let sun = clamp(smoothstep(0.0, 0.8, n[1]) * 0.8 + 0.2 * dorsal);
   for (const e of FEAT.eyes) sun = Math.max(sun, smoothstep(EYE.radius + 1.6, EYE.radius + 0.3, Math.hypot(p[0] - e.c[0], p[1] - e.c[1], p[2] - e.c[2])) * 0.9);

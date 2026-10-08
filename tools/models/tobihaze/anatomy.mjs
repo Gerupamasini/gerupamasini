@@ -421,6 +421,8 @@ function buildFeatures() {
 }
 
 export const FEAT = buildFeatures();
+/** the snout's bulb (field): centre, radii (mm), blend */
+const SNOUT_BULB = { c: [2.1, 4.8, 0], r: [1.6, 1.5, 2.5], k: 1.2 };
 
 /** closest point on the gape line (+z side): its arc parameter (0 = front midline … 1 = mouth corner), offset vector */
 function nearGape(p) {
@@ -458,18 +460,20 @@ function lipRelief(p) {
   const side = smoothstep(0.7 * uF, 1.5 * uF, g.u);
   // (the lips end at the corner: they do not run on back along the cheek)
   const fade = 1 - smoothstep(0.9, 1.04, g.u);
-  // Across the front, thick pouting lips: the upper a roll ~1.4 mm high, its crest ~0.45 mm above the line, the
+  // Across the front, thick pouting lips: the upper a roll ~1.6 mm high, its crest ~0.55 mm above the line, the
   // lower ~0.9 mm, 0.4 mm below (each fades in over ~0.5 mm across the line: switched on more sharply, the skin folds
   // over itself there). No notch in the middle: head-on the upper lip's edge runs level across the front (photographs
   // 1 and 2). Behind the corner seen head-on the upper jaw is under the lip lobe (lipPadDist) and the lower jaw's
   // side runs smoothly up to the gape: only a low roll on either side of the line, which reads as the fold under the
   // lobe (photographs 3, 7 and 10), not as a ledge of lip along the jaw.
-  const up = smoothstep(-0.35, 0.2, g.dy) * (0.75 - 0.6 * side) * Math.exp(-(((g.d - 0.45) / 0.7) ** 2));
+  // (the upper lip's edge is a rounded pout, ~0.4 mm across, not a shelf: from the side and in front it rolls down
+  // into the crease between the lips - photographs 7 and 10)
+  const up = smoothstep(-0.45, 0.4, g.dy) * (0.62 - 0.47 * side) * Math.exp(-(((g.d - 0.55) / 0.8) ** 2));
   const lo = smoothstep(0.35, -0.2, g.dy) * (0.36 - 0.3 * side) * Math.exp(-(((g.d - 0.42) / 0.45) ** 2));
-  const crease = (0.1 - 0.04 * side) * Math.exp(-((g.d / (0.09 + 0.05 * side)) ** 2));
-  // the lower jaw is set back under the overhanging upper lip (profile photographs: the outline steps back under
-  // the lip), most at the front of the mouth
-  const recess = smoothstep(0.1, -0.15, g.dy) * 0.12 * (1 - side) * Math.exp(-(((g.d - 0.75) / 0.7) ** 2));
+  const crease = (0.07 - 0.01 * side) * Math.exp(-((g.d / 0.13) ** 2));
+  // the lower jaw is set back a little under the upper lip (profile photographs: the outline steps back under the
+  // lip), most at the front of the mouth
+  const recess = smoothstep(0.1, -0.15, g.dy) * 0.07 * (1 - side) * Math.exp(-(((g.d - 0.75) / 0.7) ** 2));
   return (up + lo) * fade - crease * fade - recess;
 }
 
@@ -481,17 +485,39 @@ function lipPadCoord(p) {
   const { c, u, w, t, R } = FEAT.lipPad;
   const v = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
   const l = [v[0] * u[0] + v[1] * u[1] + v[2] * u[2], v[0] * w[0] + v[1] * w[1] + v[2] * w[2], v[0] * t[0] + v[1] * t[1] + v[2] * t[2]];
-  // (fuller and thicker behind, where it lies against the jowl, narrowing toward the corner)
+  // (bent along the gape: its height is measured from the gape line under it, which curves down behind the corner,
+  // not from a straight axis - so its lower edge follows the gape)
+  l[1] -= lipPadBend(l[0]);
+  // (fuller and thicker behind, where it lies against the jowl, narrowing toward the corner - from the top: its lower
+  // edge stays on the gape)
   const taper = 1 - 0.22 * smoothstep(0.1, -1.0, l[0] / R[0]);
-  const r = [R[0], R[1] * taper, R[2] * taper * (1 + 0.3 * smoothstep(-0.2, 0.8, l[0] / R[0]))];
+  l[1] += R[1] * (1 - taper);
+  // (its lower half thinner: it sits on the gape and slopes in to it, so the fold under it is soft, not an overhang -
+  // a fold sharper than the skin's mesh shades as a zigzag)
+  const flat = 1 - 0.3 * smoothstep(0.1, -0.7, l[1] / (R[1] * taper));
+  const r = [R[0], R[1] * taper, R[2] * taper * (1 + 0.3 * smoothstep(-0.2, 0.8, l[0] / R[0])) * flat];
   return { l, r, k: Math.hypot(l[0] / r[0], l[1] / r[1], l[2] / r[2]) };
+}
+/** how far the gape line under the lip pad lies above the pad's straight axis, at x along it (0 at its station) */
+function lipPadBend(x) {
+  const B = FEAT.lipPad.bend;
+  if (!B) return 0;
+  const { X, Y } = B;
+  if (x <= X[0]) return Y[0];
+  if (x >= X[X.length - 1]) return Y[Y.length - 1];
+  let k = 0;
+  while (X[k + 1] < x) k++;
+  return Y[k] + (Y[k + 1] - Y[k]) * ((x - X[k]) / (X[k + 1] - X[k]));
 }
 /** distance to the lip pad (p on the +z side), and the width of its blend into the face */
 function lipPadDist(p) {
   const { l, r } = lipPadCoord(p);
   // (blended in over ~0.6 mm all round: a distinct, rounded lobe with a soft fold round it, no edge (photographs 3, 7
   // and 10); most broadly at its front end, which runs in under the corner of the mouth)
-  return [ellipsoidDist(l, [0, 0, 0], r), 0.6 + 0.35 * smoothstep(-0.1, -0.9, l[0] / r[0])];
+  // (and broadly at its back end's lower corner, where its round outline meets the fold running on back along the gape:
+  // blended narrowly, the skin between them pinches into a little cusp)
+  const rearLow = smoothstep(0.2, 0.9, l[0] / r[0]) * smoothstep(0.2, -0.6, l[1] / r[1]);
+  return [ellipsoidDist(l, [0, 0, 0], r), 0.6 + 0.35 * smoothstep(-0.1, -0.9, l[0] / r[0]) + 0.85 * rearLow];
 }
 
 /** outward displacement (mm) of the snout's median ridge and the grooves beside it (p on the +z side) */
@@ -588,6 +614,10 @@ export function field(s, y, z, opts = null) {
     d = smin(d, ellipsoidDist(pm, F.jowl, [3.6, 2.8, 2.2]), 2.6);
     d = smin(d, ellipsoidDist(p, [F.throat[0], F.throat[1] - 0.35 * breathe, 0], [4.6, 1.3 + 0.3 * breathe, 4.0]), 1.0);
   }
+  // the snout's bulb: head-on a broad, rounded mass between the eyes and the upper lip, sloping softly into the full
+  // cheeks on either side (photographs 1, 2 and 8), not a narrow ridge with steep sides standing out of them
+  // (the guard lies well outside its reach and its blend's: it stays above the lips)
+  if (s < 6.5 && y > 1.8 && y < 8.5) d = smin(d, ellipsoidDist(p, SNOUT_BULB.c, SNOUT_BULB.r), SNOUT_BULB.k);
   // (no furrow between and behind the eyes: the crown there is smooth and full, the domes joined by the saddle below;
   // photographs 1, 8 and 12)
   // eye domes (meshed separately from the body loft, see body.mjs buildDomes): the cup, cut open around the axis;
@@ -698,6 +728,18 @@ export function fieldGrad(s, y, z, opts = null, e = 0.004) {
   for (let it = 0; it < 40; it++) { const m = 0.5 * (a + b); if (fs(m) < 0) a = m; else b = m; }
   const out = 0.5 * (a + b) + 0.55 - P.R[2];
   Object.assign(P, { c: c0.map((x, c) => x + t[c] * out), u, w, t });
+  // the gape under the pad, in the pad's frame: its height above the straight axis along the pad's length, relative
+  // to the station (lipPadBend)
+  const X = [], Y = [];
+  for (let i = MOUTH_FRONT; i < G.length - 1; i++) for (let n = 0; n < 8; n++) {
+    const v = G[i].map((x, c) => x + (G[i + 1][c] - x) * (n / 8) - P.c[c]);
+    const x = v[0] * u[0] + v[1] * u[1] + v[2] * u[2];
+    if (X.length && x <= X[X.length - 1]) continue;
+    X.push(x); Y.push(v[0] * w[0] + v[1] * w[1] + v[2] * w[2]);
+  }
+  P.bend = { X, Y };
+  const y0 = lipPadBend(0);
+  P.bend = { X, Y: Y.map((y) => y - y0) };
 }
 
 /** station (s) of the eye sockets' centre, the focus of the head's projection rays */

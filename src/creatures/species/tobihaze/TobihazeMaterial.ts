@@ -238,9 +238,10 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop, tobiFilm;`)
   roughnessFactor = mix(roughnessFactor, mix(0.92, 0.38, tobiWet), tobiMud);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 #ifndef TOBI_FIN
-  // the uv columns converge on the very tip of the snout, where the coarse mips of the normal map would streak:
-  // geometry normal over the front of the snout (u grows with arc length from the tip)
-  float tobiTip = smoothstep(0.001, 0.006, vMapUv.x);
+  // the uv columns converge on the very tip of the snout, where the coarse mips of the normal map would streak into
+  // a star: geometry normal right round it, the relief coming in over the next ~0.3 mm (u grows with arc length from
+  // the tip: u 0.03 is ~0.4 mm out)
+  float tobiTip = smoothstep(0.004, 0.03, vMapUv.x);
   normal = normalize(mix(nonPerturbedNormal, normal, tobiTip));
 #endif
 #ifdef TOBI_DROPS
@@ -264,13 +265,32 @@ float tobiWet, tobiSub, tobiMud, tobiAbove, tobiDrop, tobiFilm;`)
     // (the film follows the granular skin, so even fully wet its highlights are a little broken up)
     material.clearcoatRoughness = clamp(mix(0.38, 0.15, tobiWet) + 0.25 * tobiMud + geometryRoughness, 0.0525, 1.0);
     #ifndef TOBI_FIN
-    // the papillose snout tip (and the uv pole there) never gives a mirror reflection: the film thins out over it
-    // (a rough film there would smear the sky into a pale blob)
-    material.clearcoat *= mix(0.45, 1.0, smoothstep(0.001, 0.006, vMapUv.x));
+    // the papillose snout tip (and the uv pole there) never gives a mirror reflection: the film thins out over it and
+    // its glint spreads (on the fan of thin triangles round the pole a sharp glint picks out their edges as a star of
+    // rays; u 0.025 is ~0.35 mm from the tip)
+    float tobiPole = smoothstep(0.002, 0.025, vMapUv.x);
+    material.clearcoat *= mix(0.6, 1.0, tobiPole);
+    material.clearcoatRoughness = min(material.clearcoatRoughness + 0.22 * (1.0 - tobiPole), 1.0);
     #endif
   }
 #endif`);
   };
+}
+
+/**
+ * Anisotropic filtering for the skin's textures. Seen at a slant - and round the snout's tip, where the texture's
+ * columns converge on a point - a texel's footprint is long and thin, and plain mipmapping picks the level of its
+ * long side: the texture blurs, and at the snout's tip the normal map, averaged over every direction round the point,
+ * draws a star of light rays.
+ */
+const ANISOTROPY = 8;
+function anisotropic(t: Texture | null | undefined): void {
+  if (!t || t.anisotropy >= ANISOTROPY) return;
+  t.anisotropy = ANISOTROPY;
+  t.needsUpdate = true;
+}
+function sharpen(m: MeshPhysicalMaterial): void {
+  for (const t of [m.map, m.normalMap, m.roughnessMap, m.metalnessMap, m.aoMap, m.clearcoatNormalMap]) anisotropic(t);
 }
 
 /** Per-individual materials built from the model's own (glTF) materials. */
@@ -301,10 +321,12 @@ export class TobihazeMaterials {
         const bodyU = (src.userData?.tobihaze as { bodyU?: number } | undefined)?.bodyU;
         if (role === 'skin' && typeof bodyU === 'number') this.uniforms.uBodyU.value = bodyU;
         const m = (src as MeshPhysicalMaterial).clone();
+        sharpen(m);
         m.clearcoat = 1;
         m.clearcoatRoughness = 0.04;
-        // the mucus film follows the skin's relief (scales, papillae, folds): no glassy shell over it
-        if (m.normalMap) { m.clearcoatNormalMap = m.normalMap; m.clearcoatNormalScale.set(1.1, 1.1); m.normalScale.set(1.6, 1.6); }
+        // the mucus film follows the skin's relief (scales, papillae, folds), no glassy shell over it - but smooths its
+        // finest grain: the wet skin's highlights are broad, with ragged edges (photographs 1, 2 and 7), not a glitter
+        if (m.normalMap) { m.clearcoatNormalMap = m.normalMap; m.clearcoatNormalScale.set(0.5, 0.5); m.normalScale.set(1.3, 1.3); }
         m.onBeforeCompile = skinShader(this.uniforms, this.tier, role === 'fin');
         m.customProgramCacheKey = () => `tobihaze-${role}-${this.tier}-${ENV.caustics ? 1 : 0}`;
         if (role === 'fin') { m.depthWrite = this.tier === 'lod2'; }
@@ -333,7 +355,7 @@ export class TobihazeMaterials {
       this.originals.set(mesh, mesh.material);
       mesh.material = Array.isArray(mesh.material) ? mesh.material.map(make) : make(mesh.material);
     }
-    if (dataTexture) void dataTexture.then((t) => { if (t) this.uniforms.uTobiData.value = t; }).catch(() => { /* keep the neutral data */ });
+    if (dataTexture) void dataTexture.then((t) => { if (t) { anisotropic(t); this.uniforms.uTobiData.value = t; } }).catch(() => { /* keep the neutral data */ });
   }
 
   update(s: SkinState): void {
