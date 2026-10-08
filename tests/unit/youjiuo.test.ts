@@ -255,7 +255,7 @@ describe('ヨウジウオ behaviour', () => {
     }
     const mode = (f as unknown as { hold: { mode: string } }).hold.mode;
     const turns = Math.abs(wound) / (2 * Math.PI);
-    if (mode === 'hook') { expect(turns).toBeGreaterThan(0.35); expect(turns).toBeLessThan(0.85); }
+    if (mode === 'hook') { expect(turns).toBeGreaterThan(0.35); expect(turns).toBeLessThan(1.15); }
     else { expect(turns).toBeGreaterThan(0.03); expect(turns).toBeLessThan(0.3); }
     expect(minClear).toBeGreaterThan(0);
     expect(minClear).toBeLessThan(0.0015);
@@ -265,7 +265,8 @@ describe('ヨウジウオ behaviour', () => {
       const a = new Vector3().subVectors(f.pose.pts[k - 1], f.pose.pts[k]).normalize(), b = new Vector3().subVectors(f.pose.pts[k], f.pose.pts[k + 1]).normalize();
       maxRing = Math.max(maxRing, (Math.acos(Math.min(1, a.dot(b))) / (0.5 * (STATIONS[k + 1] - STATIONS[k - 1]))) * 0.014);
     }
-    expect(maxRing).toBeLessThan((25 * Math.PI) / 180);
+    // ~7° a ring is all a pipefish's tail takes evenly along its length; the easing into the curl a little more
+    expect(maxRing).toBeLessThan((18 * Math.PI) / 180);
     // it moves with the waves while the fins rest
     const p0 = f.toWorld(f.pose.pts[0].clone());
     let travel = 0;
@@ -291,7 +292,7 @@ describe('ヨウジウオ behaviour', () => {
     expect(first).toBeLessThan(0.005);
     expect(most).toBeLessThan(0.012);
   });
-  it('mostly clings, sometimes hooks, never coils like a seahorse', () => {
+  it('mostly clings, sometimes winds loosely, never coils like a seahorse', () => {
     const modes: string[] = [];
     for (let seed = 40; seed < 64; seed++) {
       const m = meadow();
@@ -302,12 +303,63 @@ describe('ヨウジウオ behaviour', () => {
       if (!f.holdGrass(env, 40)) continue;
       const h = (f as unknown as { hold: { mode: string; wrapA: number; sCurl: number } }).hold;
       modes.push(h.mode);
-      expect(h.wrapA).toBeLessThan(1.6 * Math.PI);
-      expect(h.sCurl).toBeGreaterThanOrEqual(0.7);
+      // no more than a turn, and no more than the rear half of the body
+      expect(h.wrapA).toBeLessThanOrEqual(2 * Math.PI);
+      expect(h.sCurl).toBeGreaterThanOrEqual(0.45);
     }
     const hooks = modes.filter((x) => x === 'hook').length;
     expect(hooks).toBeGreaterThan(0);
     expect(hooks).toBeLessThan(modes.length * 0.65);
+  });
+  it('takes hold and lets go without a jump, a flip of its back or a fold, at any size', () => {
+    const backOf = (f: Youjiuo) => {
+      const P = f.pose.pts, d = new Vector3().subVectors(P[PIVOT_K], P[PIVOT_K + 1]).normalize();
+      const u = f.pose.up.clone(); u.addScaledVector(d, -u.dot(d)).normalize();
+      const c = Math.cos(f.heading), sn = Math.sin(f.heading);
+      return new Vector3(c * u.x + sn * u.z, u.y, -sn * u.x + c * u.z);
+    };
+    for (const [seed, tl] of [[2, 0.2], [5, 0.2], [9, 0.12], [13, 0.26]] as const) {
+      for (const leave of ['hover', 'swim', 'rest again'] as const) {
+        const m = meadow();
+        const f = new Youjiuo(tl, new Rng(seed));
+        f.pos.set(0.05, Number.NaN, 0.05);
+        const env: FishEnv = { floor: floorWith(m), t: 0 };
+        run(f, env, 0.2, m);
+        expect(f.holdGrass(env, 8)).toBe(true);
+        let prev = f.pose.pts.map((p) => f.toWorld(p.clone())), back = backOf(f);
+        let jump = 0, roll = 0, joint = 0;
+        const watch = () => {
+          const cur = f.pose.pts.map((p) => f.toWorld(p.clone()));
+          for (let k = 0; k <= NSEG; k++) jump = Math.max(jump, cur[k].distanceTo(prev[k]) / tl);
+          const b = backOf(f);
+          roll = Math.max(roll, Math.acos(Math.min(1, b.dot(back))));
+          for (let k = 1; k < NSEG; k++) {
+            if (STATIONS[k] > 0.975) continue;
+            const a = new Vector3().subVectors(f.pose.pts[k - 1], f.pose.pts[k]).normalize(), c = new Vector3().subVectors(f.pose.pts[k], f.pose.pts[k + 1]).normalize();
+            joint = Math.max(joint, Math.acos(Math.min(1, a.dot(c))));
+          }
+          prev = cur; back = b;
+        };
+        run(f, env, 9, m, watch);
+        const shoot = (f as unknown as { hold: { ref: unknown } }).hold.ref;
+        if (leave === 'hover') f.hover(10);
+        else if (leave === 'swim') f.swimTo(new Vector3(0.4, 0.15, -0.3), 10);
+        else { f.holdGrass(env, 8); expect((f as unknown as { hold: { ref: unknown } }).hold.ref).toBe(shoot); }
+        run(f, env, 1.5, m, watch);
+        // at 30 frames a second: no part moves more than a tenth of the body, the back turns under 25°, no joint over 20°
+        expect(jump).toBeLessThan(0.1);
+        expect(roll).toBeLessThan((25 * Math.PI) / 180);
+        expect(joint).toBeLessThan((20 * Math.PI) / 180);
+      }
+    }
+  });
+  it('does not stand along a shoot in water shallower than its length', () => {
+    const m = meadow();
+    const f = mk(5);
+    f.pos.set(0.05, Number.NaN, 0.05);
+    const env: FishEnv = { floor: { heightAt: () => 0, waterAt: () => 0.18, meadow: m }, t: 0 };
+    run(f, env, 0.2, m);
+    expect(f.holdGrass(env, 10)).toBe(false);
   });
   it('stalks prey and strikes with a flick of the head and the snout\'s suction', () => {
     const f = mk(11);

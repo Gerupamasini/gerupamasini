@@ -461,17 +461,23 @@ window.__yj = {
     render();
     return this.state();
   },
-  /** look at where fish i's tail holds its shoot, from the side the curl passes in front of */
+  /** look at where fish i's tail holds its shoot, from the side the middle of the curl passes on */
   followGrip(i = 0, dist = 0.09, up = 0.03) {
     const b = fishes[i].driver.behaviour, h = b.hold;
-    if (!h) return this.followAt(i, 0.9, [0, up, dist]);
-    const fx = Math.cos(h.ref.fan), fz = Math.sin(h.ref.fan);
-    const nx = -fz * h.side, nz = fx * h.side;
-    const m = 0.5 * h.wrap * h.wrapA;
-    const dx = Math.cos(m) * nx + Math.sin(m) * nz, dz = Math.cos(m) * nz - Math.sin(m) * nx;
-    const a = new THREE.Vector3(h.ref.x, h.ref.y + h.anchor - 0.012, h.ref.z);
+    if (!h || !b.lineN) return this.followAt(i, 0.9, [0, up, dist]);
+    // the shoot's axis (its line, as the fish holds it) a little below where the curl begins
+    const L = b.line, f = Math.min(Math.max((h.anchor - 0.012) / 0.01, 0), b.lineN - 1.001), j = Math.floor(f);
+    const a = L[j].clone().lerp(L[j + 1], f - j);
+    // toward the middle of the curl, across the axis
+    let k = 0;
+    const sMid = 0.5 * (h.sCurl + 0.976);
+    while (k < STATIONS.length - 1 && STATIONS[k] < sMid) k++;
+    const m = b.holdPts[k].clone().sub(a);
+    m.y = 0;
+    if (m.lengthSq() < 1e-10) m.set(1, 0, 0);
+    m.normalize();
     controls.target.copy(a);
-    camera.position.set(a.x + dx * dist, a.y + up, a.z + dz * dist);
+    camera.position.set(a.x + m.x * dist, a.y + up, a.z + m.z * dist);
     camera.up.set(0, 1, 0);
     camera.lookAt(a);
     render();
