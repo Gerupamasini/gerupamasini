@@ -1,0 +1,93 @@
+{
+  "id": "platichthys_bicoloratus",
+  "names": {
+    "ja": "イシガレイ",
+    "sci": "Platichthys bicoloratus",
+    "en": "Stone flounder"
+  },
+  "taxon": {
+    "group": "fish",
+    "family": "Pleuronectidae"
+  },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "ishigarei",
+    "modelLength_mm": 70,
+    "viewDistance_m": 10,
+    "driver": "ishigarei",
+    "clips": {
+      "idle": "Rest",
+      "move": "Glide",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": { "min": 18, "max": 130, "mean": 62, "sd": 18 },
+    "weightCoef": { "a": 1.15e-05, "b": 3.05 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": false },
+  "stages": [
+    { "id": "larva", "ja": "着底稚魚", "maxLength_mm": 25 },
+    { "id": "juvenile", "ja": "若魚" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    {
+      "tags": ["shallow", "pool", "bare"],
+      "substrate": ["sand", "muddy_sand"],
+      "depth_m": [0.05, 0.9],
+      "time": ["dawn", "day", "dusk", "night"],
+      "season": ["spring", "summer"],
+      "tide": "any",
+      "maps": ["kasai_west", "hashirimizu"],
+      "density_per_100m2": 1.0,
+      "group": [1, 2],
+      "maxPopulation": 18,
+      "length_mm": [22, 90]
+    },
+    {
+      "tags": ["shallow", "channel", "bare"],
+      "substrate": ["sand", "muddy_sand"],
+      "depth_m": [0.1, 1.2],
+      "time": ["dawn", "day", "dusk", "night"],
+      "season": ["autumn"],
+      "tide": "any",
+      "maps": ["kasai_west", "hashirimizu"],
+      "density_per_100m2": 0.5,
+      "group": [1, 1],
+      "maxPopulation": 8,
+      "length_mm": [60, 130]
+    }
+  ],
+  "brain": {
+    "tree": "flatfish_sand",
+    "params": {
+      "fleeDistance_m": 1.1,
+      "restMean_s": 26,
+      "wanderDistance_m": [0.15, 0.6]
+    }
+  },
+  "capture": {
+    "tools": ["net_small", "net_shallow", "net_fine", "net_deep", "net_dframe", "net_carbon"],
+    "baseDifficulty": 0.5,
+    "alertPenalty": 0.4
+  },
+  "encyclopedia": {
+    "description": "砂泥の浅い干潟や河口に春に着底する、右側に両眼のあるカレイの仲間。若魚は全長 3〜10 cm ほど。体は楕円形で薄く、有眼側は砂粒のような淡い小斑の網目に細かな黒点と暗斑、クリーム色の白点が散り、底の砂に合わせて明るさを変える。無眼側は半透明の白。両眼は頭の右側に盛り上がって並び、上の眼は背の縁にかかる。瞳孔は三日月形。口は吻端の小さな口で唇が厚く、下顎がわずかに前に出る。ふだんは砂の上に伏せてほとんど動かず、体を細かく波打たせて砂をかぶり、眼だけを出して潜む。移動するときは長い背鰭と臀鰭を波打たせて底すれすれを静かに滑るように進み、驚くと砂煙を上げて飛び出し、少し離れた所に降りてまた潜る。ヨコエビやソコミジンコ、ゴカイの触手などを、頭を上げて狙い、短く突進して吸い込む。成魚は体の有眼側に石のような骨質の突起が並ぶ（名の由来）。",
+    "habitatHint": "春から夏、干潮の浅い砂泥底や潮だまり。砂から出た二つの眼を探すか、そっと歩いて飛び出すのを待つ。",
+    "behaviors": [
+      { "id": "rest", "ja": "伏せる", "hint": "砂の上に平たく伏せて鰓蓋と眼だけを動かす" },
+      { "id": "burrow", "ja": "砂に潜る", "hint": "体を波打たせて砂をかぶり、眼だけを出す" },
+      { "id": "glide", "ja": "底すれすれを泳ぐ", "hint": "背鰭と臀鰭を波打たせて静かに移動する" },
+      { "id": "forage", "ja": "ついばむ", "hint": "頭を上げて狙い、小さな生き物を吸い込む" },
+      { "id": "escape", "ja": "飛び出す", "hint": "砂煙を上げて急に泳ぎ出し、すぐまた着底する" }
+    ],
+    "placeholderModel": false
+  }
+}

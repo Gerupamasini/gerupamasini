@@ -14,6 +14,7 @@ import { WormDriver } from '../species/shore/others';
 import { HakuDriver } from '../species/haku/HakuDriver';
 import { AmimehagiDriver } from '../species/amimehagi/AmimehagiDriver';
 import { YoujiuoDriver } from '../species/youjiuo/YoujiuoDriver';
+import { IshigareiDriver } from '../species/ishigarei/IshigareiDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -50,4 +51,6 @@ export const DRIVERS: Record<string, DriverEntry> = {
   amimehagi: { create: () => new AmimehagiDriver(), placeholder: () => AmimehagiDriver.makeModel(), preview: (seed) => AmimehagiDriver.makePreview(seed), nearDistance: 4 },
   // ヨウジウオ: the pipefish of the eelgrass (its own tiers in the placeholder view; near within 6 m)
   youjiuo: { create: () => new YoujiuoDriver(), placeholder: () => YoujiuoDriver.makeModel(), preview: (seed) => YoujiuoDriver.makePreview(seed), nearDistance: 6 },
+  // イシガレイ: the juvenile flounder of the sandy flats (its own tiers in the placeholder view; near within 3 m)
+  ishigarei: { create: () => new IshigareiDriver(), placeholder: () => IshigareiDriver.makeModel(), preview: (seed) => IshigareiDriver.makePreview(seed), nearDistance: 3 },
 };

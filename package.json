@@ -24,6 +24,7 @@
     "render:amamo": "node tools/models/amamo/render.mjs",
     "render:amimehagi": "node tools/models/amimehagi/render.mjs",
     "render:youjiuo": "node tools/models/youjiuo/render.mjs",
+    "render:ishigarei": "node tools/models/ishigarei/render.mjs",
     "model:pagurus-hide": "node tools/models/pagurus/bake-hide-table.mjs",
     "terrain:bake": "node tools/terrain/bake-map.mjs",
     "terrain:hashirimizu": "node tools/terrain/bake-hashirimizu.mjs && node tools/terrain/figures-hashirimizu.mjs",
