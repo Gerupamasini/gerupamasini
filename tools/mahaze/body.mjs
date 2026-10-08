@@ -931,7 +931,7 @@ function bakeBodyTextures(ctx) {
       // upper lip: dusky olive-brown like the snout, speckled (speckles come from MEL below)
       r = mix(r, 0.56 * n, lb.up * 0.35); g = mix(g, 0.46 * n, lb.up * 0.35); b = mix(b, 0.3 * n, lb.up * 0.35);
       // lower lip: pale warm cream (not grey-white), a little translucent
-      r = mix(r, 0.7 * n, lb.lo * 0.4); g = mix(g, 0.6 * n, lb.lo * 0.4); b = mix(b, 0.46 * n, lb.lo * 0.4);
+      r = mix(r, 0.68 * n, lb.lo * 0.55); g = mix(g, 0.5 * n, lb.lo * 0.55); b = mix(b, 0.4 * n, lb.lo * 0.55);
       // moist margin: faint warm translucency, strongly desaturated
       r = mix(r, 0.66, lb.rim * 0.22); g = mix(g, 0.52, lb.rim * 0.22); b = mix(b, 0.45, lb.rim * 0.22);
     }

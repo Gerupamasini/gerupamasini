@@ -49,7 +49,11 @@ const KTOP_J = [2.95, 3.65, 4.15, 4.45, 4.68, 4.86, 5.02, 5.17, 5.3, 5.52, 5.72,
 const KBOT_J = [1.9, 1.62, 1.36, 1.14, 0.95, 0.78, 0.62, 0.48, 0.36, 0.18, 0.08, 0.03, 0.0, 0.0, 0.0, 0.0, 0.02, 0.1, 0.3, 0.58, 0.92, 1.24, 1.5, 1.68, 1.8, 1.88, 1.98];
 const KTOP = pick(KTOP_A, KTOP_J);
 const KBOT = pick(KBOT_A, KBOT_J);
-const KW = KW_A, KNT = KNT_A, KNB = KNB_A, KDY = KDY_A;
+// adult head refit (front / dorsal photos): the head is broad and box-like down to the mouth, whose corners
+// sit wider than the eyes; in dorsal view the snout is a broad, rounded spatula
+const KW_A2 = [1.78, 2.0, 2.14, 2.25, 2.34, 2.42, 2.5, 2.58, 2.67, 2.85, 3.0, 3.2, 3.36, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
+const KNB_A2 = [2.4, 2.6, 2.8, 2.9, 2.95, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 2.95, 2.8, 2.65, 2.55, 2.45, 2.35, 2.2, 2.1, 2.0, 1.95, 1.9, 1.87, 1.85, 1.85, 1.85];
+const KW = pick(KW_A2, KW_A), KNT = KNT_A, KNB = pick(KNB_A2, KNB_A), KDY = KDY_A;
 
 export function monotone(xs, ys) {
   const n = xs.length;
@@ -218,7 +222,7 @@ export const EYE = pick({
   radius: 1.0,
   skin: 0.06,
   aperture: 60 * (Math.PI / 180),
-  pupil: 0.38, // pupil half-angle (rad)
+  pupil: 0.47, // pupil half-angle (rad)
   iris: 1.08, // iris half-angle (rad)
   // skin fold around the cornea window (gobies have no true eyelids, but the orbital skin forms a thick,
   // raised rim that overlaps the edge of the eyeball, thickest and furthest over the eye dorsally):
@@ -275,7 +279,7 @@ export const MOUTH = pick(
 export const RICTUS_S = MOUTH[MOUTH.length - 1][0];
 // lip rolls (radius along the gape, f = 0 front … 1 corner) and how far they protrude from the skin
 export const LIPS = pick(
-  { ru: (f) => 0.43 - 0.2 * f - 0.08 * f * f, rl: (f) => 0.3 - 0.12 * f - 0.07 * f * f, outU: 0.2, outL: 0.14, groove: 0.66, grooveR: 0.065, band: [0.66, 0.22, 0.5, 0.18] },
+  { ru: (f) => 0.52 - 0.24 * f - 0.08 * f * f, rl: (f) => 0.4 - 0.16 * f - 0.08 * f * f, outU: 0.27, outL: 0.22, groove: 0.66, grooveR: 0.065, band: [0.66, 0.22, 0.5, 0.18] },
   { ru: (f) => 0.29 - 0.13 * f - 0.05 * f * f, rl: (f) => 0.22 - 0.08 * f - 0.05 * f * f, outU: 0.12, outL: 0.09, groove: 0.48, grooveR: 0.05, band: [0.46, 0.16, 0.38, 0.12] },
 );
 const LIP_YMAX = MOUTH[0][1] + 1.12; // lips and gape creases live below this height
