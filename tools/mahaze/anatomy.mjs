@@ -30,7 +30,7 @@ export const VERT_COUNT = 31;
 // of the head width and the cheeks swell smoothly behind the eyes.
 // ---- adult (the earlier model: thick lips, long snout, small eye relative to the head)
 const KS = [0.0, 0.41, 0.82, 1.23, 1.64, 2.05, 2.46, 2.87, 3.28, 4.1, 4.9, 6.15, 8.2, 10.25, 12.3, 15, 18, 21, 24, 27, 30, 33, 36, 38.5, 40.5, 42, 43.2];
-const KTOP_A = [3.12, 3.36, 3.62, 3.84, 4.06, 4.28, 4.5, 4.8, 5.05, 5.3, 5.42, 5.63, 6.2, 6.52, 6.74, 6.95, 7.05, 6.95, 6.72, 6.38, 5.98, 5.6, 5.27, 5.05, 4.88, 4.78, 4.66];
+const KTOP_A = [2.95, 3.45, 3.95, 4.32, 4.62, 4.8, 4.98, 5.12, 5.24, 5.38, 5.45, 5.63, 6.2, 6.52, 6.74, 6.95, 7.05, 6.95, 6.72, 6.38, 5.98, 5.6, 5.27, 5.05, 4.88, 4.78, 4.66];
 const KBOT_A = [1.4, 1.2, 0.98, 0.83, 0.68, 0.54, 0.43, 0.33, 0.25, 0.13, 0.07, 0.03, 0.0, 0.0, 0.0, 0.0, 0.02, 0.12, 0.35, 0.7, 1.1, 1.48, 1.8, 2.0, 2.14, 2.24, 2.36];
 const KW_A = [1.45, 1.62, 1.74, 1.84, 1.9, 1.95, 2.02, 2.1, 2.2, 2.42, 2.68, 3.08, 3.34, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
 const KNT_A = [2.2, 2.12, 2.04, 1.97, 1.91, 1.87, 1.84, 1.82, 1.8, 1.8, 1.82, 1.86, 1.92, 1.98, 2.02, 2.03, 2.0, 1.97, 1.95, 1.92, 1.9, 1.87, 1.84, 1.82, 1.8, 1.8, 1.8];
@@ -50,10 +50,18 @@ const KBOT_J = [1.9, 1.62, 1.36, 1.14, 0.95, 0.78, 0.62, 0.48, 0.36, 0.18, 0.08,
 const KTOP = pick(KTOP_A, KTOP_J);
 const KBOT = pick(KBOT_A, KBOT_J);
 // adult head refit (front / dorsal photos): the head is broad and box-like down to the mouth, whose corners
-// sit wider than the eyes; in dorsal view the snout is a broad, rounded spatula
-const KW_A2 = [1.78, 2.0, 2.14, 2.25, 2.34, 2.42, 2.5, 2.58, 2.67, 2.85, 3.0, 3.2, 3.36, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
+// sit wider than the eyes; in dorsal view the snout is U-shaped: wide at the mouth corners, narrowing to a
+// rounded front (oblique photos from above show it wedge-like, not a square-fronted box)
+const KW_A2 = [1.0, 1.48, 1.82, 2.06, 2.25, 2.41, 2.55, 2.67, 2.77, 2.92, 3.02, 3.2, 3.36, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
 const KNB_A2 = [2.4, 2.6, 2.8, 2.9, 2.95, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 2.95, 2.8, 2.65, 2.55, 2.45, 2.35, 2.2, 2.1, 2.0, 1.95, 1.9, 1.87, 1.85, 1.85, 1.85];
-const KW = pick(KW_A2, KW_A), KNT = KNT_A, KNB = pick(KNB_A2, KNB_A), KDY = KDY_A;
+// adult snout refit (true lateral photo 02, aligned at snout tip + pupil, head length checked against the gill
+// cover margin): a tall, fleshy upper-lip lobe forms the front, and behind the groove above it the snout rises
+// steeply (~45° over the first mm, then flatter) to the eye: a high, blunt snout (KTOP_A front, set ~70 % of
+// the way to the photo profile). Front / oblique photos: the snout is widest at the level of the mouth and
+// narrows upward (trapezoidal section) -> lower widest level, somewhat narrower top
+const KDY_A2 = [-0.05, -0.12, -0.19, -0.25, -0.29, -0.32, -0.33, -0.32, -0.29, -0.21, -0.11, -0.02, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const KNT_A2 = [1.9, 1.75, 1.68, 1.64, 1.62, 1.62, 1.64, 1.66, 1.7, 1.74, 1.78, 1.85, 1.92, 1.98, 2.02, 2.03, 2.0, 1.97, 1.95, 1.92, 1.9, 1.87, 1.84, 1.82, 1.8, 1.8, 1.8];
+const KW = pick(KW_A2, KW_A), KNT = pick(KNT_A2, KNT_A), KNB = pick(KNB_A2, KNB_A), KDY = pick(KDY_A2, KDY_A);
 
 export function monotone(xs, ys) {
   const n = xs.length;
@@ -97,7 +105,7 @@ const fDY = monotone(KS, KDY);
 
 const SNOUT_CAP = 0.62;
 const CHEEK = pick(0.36, 0.2); // cheek swelling (mm): the juvenile's cheeks are flatter
-const SNOUT_CAP_W = 1.1;
+const SNOUT_CAP_W = pick(0.8, 1.1); // the adult snout front is broad: full width is reached sooner
 const SNOUT_CAP_WE = 2.0; // the width rounds off over a longer run: rounded snout tip in dorsal view
 const TAIL_BLADE0 = 39.3;
 
@@ -279,9 +287,10 @@ export const MOUTH = pick(
 export const RICTUS_S = MOUTH[MOUTH.length - 1][0];
 // lip rolls (radius along the gape, f = 0 front … 1 corner) and how far they protrude from the skin
 export const LIPS = pick(
-  { ru: (f) => 0.52 - 0.24 * f - 0.08 * f * f, rl: (f) => 0.4 - 0.16 * f - 0.08 * f * f, outU: 0.27, outL: 0.22, groove: 0.66, grooveR: 0.065, band: [0.66, 0.22, 0.5, 0.18] },
+  { ru: (f) => 0.58 - 0.28 * f - 0.08 * f * f, rl: (f) => 0.4 - 0.16 * f - 0.08 * f * f, outU: 0.27, outL: 0.22, groove: 0.66, grooveR: 0.08, band: [0.66, 0.22, 0.5, 0.18] },
   { ru: (f) => 0.29 - 0.13 * f - 0.05 * f * f, rl: (f) => 0.22 - 0.08 * f - 0.05 * f * f, outU: 0.12, outL: 0.09, groove: 0.48, grooveR: 0.05, band: [0.46, 0.16, 0.38, 0.12] },
 );
+const LIP_FRONT = pick(1.6, 1.2); // forward reach of the upper-lip front (× its protrusion)
 const LIP_YMAX = MOUTH[0][1] + 1.12; // lips and gape creases live below this height
 // Free margin of the gill cover (operculum + subopercle), top → bottom (head length ≈ 28.5 % SL).
 export const OPERCLE = [[10.0, 5.1], [10.8, 4.62], [11.4, 3.8], [11.7, 2.8], [11.55, 1.8], [11.1, 0.95], [10.4, 0.38], [9.6, 0.08]];
@@ -362,7 +371,8 @@ function lipLine(sign, radii, out) {
   });
   // front centre (the lips of both sides meet across the snout tip)
   const r0 = radii[0];
-  pts[0] = [r0 - out * 1.2, MOUTH[0][1] + sign * r0 * 0.95, 0];
+  // the upper lip's front is a rounded lobe that protrudes ahead of the snout (lateral photo 02)
+  pts[0] = [r0 - out * (sign > 0 ? LIP_FRONT : 1.2), MOUTH[0][1] + sign * r0 * 0.95, 0];
   return pts;
 }
 
