@@ -70,7 +70,7 @@ function stillWater(): AmamoUniforms {
   return {
     uAmTime: { value: 0 }, uAmWater: { value: 0 }, uAmCurrent: { value: new Vector2() },
     uAmWave: { value: new Vector4(Math.cos(0.7), Math.sin(0.7), 0.035, 0.3) }, uAmSeaward: { value: new Vector2(0, 1) },
-    uAmPush: { value: [] },
+    uAmPush: { value: [] }, tAmSurf: { value: null }, uAmSurf: { value: new Vector2(1, 0) },
   };
 }
 
@@ -143,7 +143,7 @@ export class Youjiuo {
     this.bendSeed = rng.next() * 100;
     this.restPitch = rng.range(0.1, 0.42);
     this.heading = rng.range(-Math.PI, Math.PI);
-    this.here = { x: 0, y: 0, z: 0, fan: 0, length: 0.5, sheath: 0.09, seed: rng.next(), width: 0.005, pool: -1e3 };
+    this.here = { x: 0, y: 0, z: 0, fan: 0, length: 0.5, sheath: 0.09, seed: rng.next(), width: 0.005, pool: -1e3, gx: 0, gz: 0 };
     for (const e of this.eyes) e.next = rng.range(0, 1);
     // condition: some fish are slim, some well fed (and a brooding male's trunk is no different: his pouch is on the tail)
     this.pose.girth = rng.range(0.94, 1.16);
@@ -207,8 +207,13 @@ export class Youjiuo {
     const m = env.floor.meadow;
     const p = this.pos;
     let ref: ShootRef | null = null;
+    // the room a held fish needs under the still level: its line up the shoot and, on an open shore, the surf's
+    // troughs too (the surf's height is the GPU's; the CPU line holds the mean) — too shallow, it hovers instead
+    const surfRoom = this.uniforms(env).uAmSurf.value.y > 0 ? 0.035 + 0.1 : 0;
+    const roomFor = (sheath: number) => clamp(0.55 * sheath, 0.03, 0.09) + (S_CURL - STATIONS[0]) * this.tl + 0.02 + surfRoom;
+    if (env.floor.waterAt(p.x, p.z) - env.floor.heightAt(p.x, p.z) < roomFor(0.09)) return false;
     if (m) {
-      const near = m.shootsNear(p.x, p.z, 0.8 * Math.max(1, this.scale), 16).filter((s) => s.length > this.tl * 1.05 && s.y + Math.max(0.04, 0.5 * s.sheath) < env.floor.waterAt(s.x, s.z) - 0.05);
+      const near = m.shootsNear(p.x, p.z, 0.8 * Math.max(1, this.scale), 16).filter((s) => s.length > this.tl * 1.05 && s.y + Math.max(0.04, 0.5 * s.sheath) < env.floor.waterAt(s.x, s.z) - 0.05 && env.floor.waterAt(s.x, s.z) - s.y >= roomFor(s.sheath));
       if (near.length) {
         // not the nearest every time; out of the threat's way when there is one
         let best = near[0], bestScore = -1e9;
@@ -217,7 +222,7 @@ export class Youjiuo {
           if (away) score += Math.hypot(s.x - away.x, s.z - away.z) * 3;
           if (score > bestScore) { bestScore = score; best = s; }
         }
-        ref = { x: best.x, y: best.y, z: best.z, fan: best.fan, length: best.length, sheath: best.sheath, seed: best.seed, width: best.width, pool: best.pool };
+        ref = { x: best.x, y: best.y, z: best.z, fan: best.fan, length: best.length, sheath: best.sheath, seed: best.seed, width: best.width, pool: best.pool, gx: best.gx, gz: best.gz };
       } else if (m.coverAt(p.x, p.z) > 0.25) {
         ref = this.virtualShoot(env);
       }
@@ -243,7 +248,7 @@ export class Youjiuo {
     const x = p.x + Math.sin(a) * r, z = p.z + Math.cos(a) * r;
     const y = env.floor.heightAt(x, z);
     const depth = env.floor.waterAt(x, z) - y;
-    return { x, y, z, fan: this.rng.range(0, Math.PI), length: clamp(depth * 0.9, this.tl * 1.2, 0.9), sheath: this.rng.range(0.06, 0.12), seed: this.rng.next(), width: this.rng.range(0.004, 0.007), pool: -1e3 };
+    return { x, y, z, fan: this.rng.range(0, Math.PI), length: clamp(depth * 0.9, this.tl * 1.2, 0.9), sheath: this.rng.range(0.06, 0.12), seed: this.rng.next(), width: this.rng.range(0.004, 0.007), pool: -1e3, gx: 0, gz: 0 };
   }
 
   /** put the blade between the fish and a threat */

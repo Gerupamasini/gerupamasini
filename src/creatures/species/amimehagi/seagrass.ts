@@ -109,7 +109,11 @@ export class SeagrassField implements SeagrassQuery {
     const cap = MOTION.maxAngleWet;
     const th = cap * (1 - Math.exp(-m / cap));
     const k = m > 1e-6 ? Math.sin(th) / c.length() : 0;
-    return out.set(s.x + c.x * k * h, s.y + h * Math.cos(th), s.z + c.y * k * h);
+    // held under the water the way the shader holds the blade: on an open shore 3.5 cm under the still level (the
+    // room the surf's troughs need), else 6 mm (the surf's own rise and fall is the GPU's; this is the mean)
+    const u = this.meadow?.kit.uniforms;
+    const ceil = u ? u.uAmWater.value - (u.uAmSurf.value.y > 0 ? 0.035 : 0.006) : Infinity;
+    return out.set(s.x + c.x * k * h, Math.min(s.y + h * Math.cos(th), ceil), s.z + c.y * k * h);
   }
 
   cover(x: number, z: number): number {

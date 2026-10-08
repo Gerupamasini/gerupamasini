@@ -148,6 +148,7 @@ export class World {
       const mapSeed = hashInts(...[...map.id].map((c) => c.charCodeAt(0)), 20261006);
       w.amamo = new AmamoMeadow(terrain, habitat, mapSeed, layout.meadow);
       w.amamo.setQuality(MEADOW_QUALITY[preset.vegetation]);
+      w.amamo.setSurf(water.surfField);
       terrain.setMeadowCover(w.amamo.coverTexture, MEADOW_QUALITY[preset.vegetation].lod[2]);
       w.scene.add(w.amamo.group);
       mark('meadow');

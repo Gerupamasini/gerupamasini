@@ -3,6 +3,7 @@ import { Rng } from '../../core/Rng';
 import type { Substrate } from '../../data/schemas';
 import type { Habitat } from '../Habitat';
 import type { Terrain } from '../Terrain';
+import type { SurfField } from '../Water';
 import { AmamoKit, type Lod } from './kit';
 import { AmamoPatch, patchOutline, type GroundSampler, type Grown, type PatchKind, type PatchOptions, type ShootSpec } from './AmamoPatch';
 import { MOTION, ZONE, smoothstep } from './params';
@@ -411,6 +412,13 @@ export class AmamoMeadow {
     }
     found.sort((a, b) => a.d - b.d);
     return found.slice(0, max).map((o) => o.s);
+  }
+
+  /** On an open shore: the surf's surface, which the blades afloat ride and which the shoots stay under. */
+  setSurf(field: SurfField | null): void {
+    const u = this.kit.uniforms;
+    u.tAmSurf.value = field?.texture ?? null;
+    u.uAmSurf.value.set(field?.half ?? 1, field ? 1 : 0);
   }
 
   /** The nearest clone of a kind (or any), by its centre. */

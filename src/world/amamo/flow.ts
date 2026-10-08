@@ -47,10 +47,12 @@ export interface ShootRef {
   fan: number; length: number; sheath: number; seed: number; width: number;
   /** tide-pool level over the shoot (-1e3: none) */
   pool: number;
+  /** the ground's slope under the shoot (dh/dx, dh/dz): where it falls when pressed over */
+  gx: number; gz: number;
 }
 
 export function shootRef(s: ShootSpec): ShootRef {
-  return { x: s.x, y: s.y, z: s.z, fan: s.fan, length: s.length, sheath: s.sheath, seed: s.seed, width: s.width, pool: s.pool };
+  return { x: s.x, y: s.y, z: s.z, fan: s.fan, length: s.length, sheath: s.sheath, seed: s.seed, width: s.width, pool: s.pool, gx: s.gx, gz: s.gz };
 }
 
 const tmpA = new Vector2(), tmpB = new Vector2(), tmpT = new Vector3(), tmpP = new Vector3();
@@ -65,6 +67,11 @@ export interface ShootState {
   gust: number;
   /** the shoot's own lean (rad, xz) */
   tx: number; tz: number;
+  /** the water surface the line is held under, over the base (m; on an open shore 3.5 cm under the still level, the
+   * room the surf's troughs need; the surf's own rise and fall is read only by the GPU, so the CPU holds the mean) */
+  ceil: number;
+  /** pressed over from the base where the water is shallower than the sheath (the shader's leanM), along (fdx, fdz) */
+  leanM: number; fdx: number; fdz: number;
 }
 
 export function shootState(u: AmamoUniforms, s: ShootRef, out?: ShootState): ShootState {
@@ -73,6 +80,16 @@ export function shootState(u: AmamoUniforms, s: ShootRef, out?: ShootState): Sho
   const lvl = s.pool > water + 0.01 && s.pool > s.y + 0.003 ? s.pool : water;
   const st = postureState(lvl - s.y, s.length);
   o.depth = lvl - s.y; o.deep = smoothstep(0.55, 1.5, st.submergence); o.sway = st.sway; o.cur = st.current;
+  // the ceiling and the sheath lean (shader: S.ceilY, S.leanM; the surf's height at the base is 0 in the mean)
+  const surf = u.uAmSurf.value.y > 0 && lvl === water && o.depth < 1.45;
+  o.ceil = o.depth - (surf ? 0.035 : 0.006);
+  const lean = Math.acos(Math.min(1, Math.max(0, o.ceil / (s.sheath * 1.03))));
+  const cap = MOTION.maxAngleWet;
+  o.leanM = -cap * Math.log(1 - Math.min(lean, 0.95 * cap) / cap);
+  const sea = u.uAmSeaward.value;
+  rot(sea.x - s.gx * 40, sea.y - s.gz * 40, 0.6 * (amHash(s.seed * 53) - 0.5), tmpA);
+  const fl = Math.hypot(tmpA.x, tmpA.y) + 1e-5;
+  o.fdx = tmpA.x / fl; o.fdz = tmpA.y / fl;
   const t = u.uAmTime.value, Px = s.x, Pz = s.z;
   const C = u.uAmCurrent.value, Wv = u.uAmWave.value;
   const m = 0.8 + 0.4 * amNoise(Px * 0.05 + t * 0.01, Pz * 0.05 + t * 0.01);
@@ -116,7 +133,9 @@ export function shootTangent(u: AmamoUniforms, ref: ShootRef, S: ShootState, s: 
   const hs = ref.sheath;
   const g = 0.22 * smoothstep(0, hs, s) + 0.78 * (1 - Math.exp(-Math.max(s - 0.6 * hs, 0) / MOTION.bendLength));
   shootFlow(u, S, (MOTION.tipLag * s) / Math.max(ref.length, 0.05), tmpA);
-  const hx = S.tx + tmpA.x * MOTION.bendPerMps * g, hz = S.tz + tmpA.y * MOTION.bendPerMps * g;
+  // pressed over by shallow water: the sheath (the free blade beyond it floats along the surface by itself)
+  const lw = smoothstep(hs * 0.7, hs * 1.3, s), press = S.leanM * (1 - lw);
+  const hx = S.tx + tmpA.x * MOTION.bendPerMps * g + S.fdx * press, hz = S.tz + tmpA.y * MOTION.bendPerMps * g + S.fdz * press;
   const m = Math.hypot(hx, hz), cap = MOTION.maxAngleWet;
   const th = cap * (1 - Math.exp(-m / cap));
   const dx = m > 1e-4 ? hx / m : Math.cos(ref.fan), dz = m > 1e-4 ? hz / m : Math.sin(ref.fan);
@@ -128,7 +147,7 @@ export function shootTangent(u: AmamoUniforms, ref: ShootRef, S: ShootState, s: 
  * way the shader holds the blade: past the surface it runs along it). Returns the number written.
  */
 export function shootLine(u: AmamoUniforms, ref: ShootRef, S: ShootState, step: number, len: number, out: Vector3[]): number {
-  const ceil = ref.y + S.depth - 0.006;
+  const ceil = ref.y + S.ceil;
   const T = tmpT;
   let n = 0;
   const p = tmpP.set(ref.x, ref.y, ref.z);

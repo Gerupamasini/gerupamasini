@@ -36,8 +36,11 @@ export class FieldRenderer {
     const sceneReady = gl.compileAsync(scene, camera);
     gl.setRenderTarget(null);
     const waterReady = gl.compileAsync(water.compileTarget(), camera);
+    const surf = water.surfCompileTarget();
+    let surfReady: Promise<unknown> = Promise.resolve();
+    if (surf) { gl.setRenderTarget(surf.target); surfReady = gl.compileAsync(surf.mesh, camera); }
     gl.setRenderTarget(prev);
-    await Promise.all([sceneReady, waterReady]);
+    await Promise.all([sceneReady, waterReady, surfReady]);
   }
 
   render(scene: Scene, camera: PerspectiveCamera, water: WaterPass): void {

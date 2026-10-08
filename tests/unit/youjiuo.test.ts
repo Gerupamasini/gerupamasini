@@ -109,7 +109,7 @@ function meadow(): MeadowProbe & { t: number } {
   const uniforms = {
     uAmTime: { value: 0 }, uAmWater: { value: 0.6 }, uAmCurrent: { value: new Vector2(0.05, 0.02) },
     uAmWave: { value: new Vector4(Math.cos(0.7), Math.sin(0.7), 0.1, 0.6) }, uAmSeaward: { value: new Vector2(0, 1) },
-    uAmPush: { value: [] as Vector4[] },
+    uAmPush: { value: [] as Vector4[] }, tAmSurf: { value: null }, uAmSurf: { value: new Vector2(1, 0) },
   };
   const shoots: ShootSpec[] = [];
   const rng = new Rng(9);
@@ -136,7 +136,7 @@ function run(fish: Youjiuo, env: FishEnv, secs: number, m?: { t: number; kit: Me
 describe('アマモ flow twin', () => {
   it('a shoot leans with the current and stays under the water', () => {
     const m = meadow();
-    const ref = { x: 0, y: 0, z: 0, fan: 0.3, length: 0.5, sheath: 0.09, seed: 0.4, width: 0.005, pool: -1e3 };
+    const ref = { x: 0, y: 0, z: 0, fan: 0.3, length: 0.5, sheath: 0.09, seed: 0.4, width: 0.005, pool: -1e3, gx: 0, gz: 0 };
     const S = shootState(m.kit.uniforms, ref);
     const pts = Array.from({ length: 64 }, () => new Vector3());
     const n = shootLine(m.kit.uniforms, ref, S, 0.01, 0.5, pts);
