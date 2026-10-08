@@ -11,7 +11,10 @@ import { GLSL_PARAMS } from './params';
  * (steady, meandering across the meadow) plus the orbital motion of three long-crested wave trains whose phase is
  * delayed toward the tip, so each sway runs up the blade from the base to the tip; the trains cross the meadow as
  * travelling bands (monami) and gusts drift downwind in groups. Then two constraints:
- *  - the water surface: what would rise above it floats along the surface (shallow water: tips lying on the top)
+ *  - the water surface: what would rise above it floats along the surface (shallow water: tips lying on the top);
+ *    on an open shore that surface is the surf's, read from the field the water pass draws (WaterPass.surfField), so
+ *    the blades afloat ride the waves and nothing stands out of a trough. Water shallower than the sheath presses the
+ *    whole shoot over from its base, so the sheath lies under the surface too.
  *  - the sand: what would sink into it lies along it (low water: the blades fallen flat, layered, seaward)
  * The tide state (how freely it sways, how much it stands, whether it has fallen) comes from the water depth over
  * the shoot's base relative to its length (params.postureState is the same function on the CPU).
@@ -30,6 +33,8 @@ uniform vec2 uAmSeaward;
 #define AM_PUSH 8
 uniform vec4 uAmPush[AM_PUSH];  // xyz: an animal swimming in the leaves (world), w: how far it pushes them aside (m; 0: none)
 vec3 gAmP = vec3(0.0);           // the centreline point the current step starts from (relative to the base)
+uniform sampler2D tAmSurf;
+uniform vec2 uAmSurf;      // x: half the terrain's size (m, the field's extent), y: 1 with surf / 0 without
 attribute vec4 aShootA;    // x: fan azimuth, y: shoot length (longest leaf, m), z: leaf count, w: seed 0..1
 attribute vec4 aShootB;    // x: leaf width (m), y: age 0..1, zw: ground slope (dh/dx, dh/dz)
 attribute vec4 aShootC;    // x: tide-pool level over the shoot (-1e3: none), y: edge of the patch 0..1, z: sheath height (m), w: layer jitter
@@ -58,12 +63,19 @@ vec2 amRot(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x 
 struct AmShoot {
   vec3 base;
   float L, depth, ceilY, hs, width, age, seed;
-  float deep, sway, cur, fall;
+  float deep, sway, cur, fall, leanM;
+  bool surf;
   vec2 grad, flowC, d0, d1, d2, fan, tilt, fallDir;
   vec3 ws, wc;
   float gust;
   float push;
 };
+
+// the surf's surface over the still level at an offset from the shoot's base (0 where there is no surf)
+float amSurfEta(AmShoot S, vec2 off) {
+  if (!S.surf) return 0.0;
+  return texture2D(tAmSurf, (S.base.xz + off + uAmSurf.x) / (2.0 * uAmSurf.x)).r;
+}
 
 AmShoot amShoot() {
   AmShoot S;
@@ -77,7 +89,11 @@ AmShoot amShoot() {
   // the water over the shoot: the tide, or a tide pool's own level where the ground holds water above the tide
   float lvl = (aShootC.x > uAmWater + 0.01 && aShootC.x > S.base.y + 0.003) ? aShootC.x : uAmWater;
   S.depth = lvl - S.base.y;
-  S.ceilY = S.depth - 0.006;
+  // on an open shore the surf lifts and drops the surface over the shallows (a pool stays calm): the ceiling follows
+  // it, with more room for the field's 25 cm spacing (read linearly across a bore's steep front, it can stand ~3 cm
+  // above the water's own surface at the front's foot)
+  S.surf = uAmSurf.y > 0.0 && lvl == uAmWater && S.depth < 1.45;
+  S.ceilY = S.depth - (S.surf ? 0.035 : 0.006);
   // tide state (params.postureState)
   float sub = S.depth / max(S.L, 0.05);
   S.deep = smoothstep(0.55, 1.5, sub);
@@ -85,6 +101,11 @@ AmShoot amShoot() {
   S.sway = (0.22 + 0.78 * S.deep) * wet;
   S.cur = (0.45 + 0.55 * S.deep) * wet;
   S.fall = 1.0 - smoothstep(0.005, 0.06, S.depth);
+  // water shallower than the sheath is tall (or a trough passing over): the shoot is pressed over from its base, by
+  // the angle that keeps the sheath's mouth under the surface; amTangent leans it along the fall direction
+  float room = S.ceilY + amSurfEta(S, vec2(0.0));
+  float lean = acos(clamp(room / (S.hs * 1.03), 0.0, 1.0));
+  S.leanM = -AM_MAX_WET * log(1.0 - min(lean, 0.95 * AM_MAX_WET) / AM_MAX_WET);
   vec2 P = S.base.xz;
   float t = uAmTime;
   // the tidal current: streams that meander across the meadow, and each shoot jostled a little on its own
@@ -197,6 +218,8 @@ vec3 amTangent(AmShoot S, AmLeaf B, float s, float lw, out vec2 D) {
 #if AM_LOD < 2
   if (S.push > 0.5) H += amPush(S) * lw;
 #endif
+  // pressed over by shallow water: the sheath (the free blade beyond it floats along the surface by itself)
+  H += S.fallDir * (S.leanM * (1.0 - lw));
 #if AM_LOD == 0
   // flutter: a quick ripple running down the free end
   H += B.flDir * (0.07 * uL * uL * sin(uAmTime * B.fl - 9.0 * uL + B.mPhase) * (S.sway + 0.12) * lw);
@@ -215,16 +238,19 @@ vec3 amTangent(AmShoot S, AmLeaf B, float s, float lw, out vec2 D) {
   return vec3(D.x * sin(th), cos(th), D.y * sin(th));
 }
 
-// one step of the centreline from p along T for 'len', held under the water surface and above the sand
+// one step of the centreline from p along T for 'len', held under the water surface and above the sand (the
+// surface read where the step ends: a blade afloat rises and falls with the surf along its length)
 vec3 amStep(AmShoot S, vec3 p, vec3 T, vec2 D, float len, float ceilY, bool wet, float layer, inout float flatF) {
   vec3 d = T * len;
   vec3 q = p + d;
   flatF = 0.0;
-  if (wet && q.y > ceilY) {
-    float a = d.y > 1e-6 ? clamp((ceilY - p.y) / d.y, 0.0, 1.0) : 0.0;
+  float c = wet ? ceilY + amSurfEta(S, q.xz) : 1e3;
+  if (q.y > c) {
+    float a = d.y > 1e-6 ? clamp((c - p.y) / d.y, 0.0, 1.0) : 0.0;
     q = p + d * a;
     q.xz += D * (len * (1.0 - a));
-    q.y = ceilY;
+    // (the surface where the step really ends, across a steep front too)
+    q.y = ceilY + amSurfEta(S, q.xz);
     flatF = 1.0;
   }
   float fq = dot(S.grad, q.xz) + layer;
@@ -305,7 +331,7 @@ void amDeform(out vec3 amPos, out vec3 amNrm) {
   amNrm = normalize(Nf - W * (2.0 * cup * v));
   vAmA = vec4(uB, v, B.L - sv, sv);
   vAmB = vec4(float(slot), B.h, B.age, hw);
-  vAmC = vec4(B.L, S.hs, S.depth + S.base.y, S.seed);
+  vAmC = vec4(B.L, S.hs, S.depth + S.base.y + amSurfEta(S, p.xz), S.seed);
 }
 `;
 
@@ -324,11 +350,12 @@ void amDeform(out vec3 amPos, out vec3 amNrm) {
     if (k >= kv) break;
     float sm = (float(k) + 0.5) * ds;
     vec3 T = amTangent(S, B, sm, 0.0, D);
-    p = amStep(S, p, T, D, ds, 1e3, false, 0.0, flatF);
+    p = amStep(S, p, T, D, ds, S.ceilY, S.depth > 0.01, 0.0, flatF);
   }
   float sv = float(kv) * ds;
   vec2 Dv;
   vec3 Tv = amTangent(S, B, sv, 0.0, Dv);
+  if (flatF > 0.5) Tv = normalize(vec3(Dv.x, dot(S.grad, Dv), Dv.y));
   vec3 W = vec3(-Dv.y, 0.0, Dv.x);
   vec3 Nf = normalize(cross(W, Tv));
   // flared and fibrous at the foot (old sheaths decaying), tapering a little to the mouth
@@ -340,7 +367,7 @@ void amDeform(out vec3 amPos, out vec3 amNrm) {
   amNrm = normalize(W * (cos(ang) / A) + Nf * (sin(ang) / Bm));
   vAmA = vec4(ang / 6.2832, cos(ang), S.hs - sv, sv);
   vAmB = vec4(-1.0, S.seed, S.age, A);
-  vAmC = vec4(S.hs, S.hs, S.depth + S.base.y, S.seed);
+  vAmC = vec4(S.hs, S.hs, S.depth + S.base.y + amSurfEta(S, p.xz), S.seed);
   vAmD = vec4(S.fall, aShootC.y, S.base.y, 0.0);
 }
 `;

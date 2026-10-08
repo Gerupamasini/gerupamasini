@@ -70,7 +70,7 @@ function stillWater(): AmamoUniforms {
   return {
     uAmTime: { value: 0 }, uAmWater: { value: 0 }, uAmCurrent: { value: new Vector2() },
     uAmWave: { value: new Vector4(Math.cos(0.7), Math.sin(0.7), 0.035, 0.3) }, uAmSeaward: { value: new Vector2(0, 1) },
-    uAmPush: { value: [] },
+    uAmPush: { value: [] }, tAmSurf: { value: null }, uAmSurf: { value: new Vector2(1, 0) },
   };
 }
 

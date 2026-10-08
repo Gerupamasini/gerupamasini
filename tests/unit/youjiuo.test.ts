@@ -109,7 +109,7 @@ function meadow(): MeadowProbe & { t: number } {
   const uniforms = {
     uAmTime: { value: 0 }, uAmWater: { value: 0.6 }, uAmCurrent: { value: new Vector2(0.05, 0.02) },
     uAmWave: { value: new Vector4(Math.cos(0.7), Math.sin(0.7), 0.1, 0.6) }, uAmSeaward: { value: new Vector2(0, 1) },
-    uAmPush: { value: [] as Vector4[] },
+    uAmPush: { value: [] as Vector4[] }, tAmSurf: { value: null }, uAmSurf: { value: new Vector2(1, 0) },
   };
   const shoots: ShootSpec[] = [];
   const rng = new Rng(9);
