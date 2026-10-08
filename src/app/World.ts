@@ -18,6 +18,7 @@ import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import { oysterEnv } from '../creatures/oyster/material';
 import { AmamoMeadow, MEADOW_QUALITY } from '../world/amamo';
 import { LAYOUTS, type ShoreLayout } from '../world/maps/hashirimizu';
+import { seagrass } from '../creatures/species/amimehagi/seagrass';
 import type { FeedingPit } from '../world/FeedingPits';
 import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
@@ -153,6 +154,8 @@ export class World {
       // the standing features the animals gather at: the eelgrass, its edges, the open sand among it
       const meadow = w.amamo;
       habitat.setFeatures((x, z) => ({ eelgrass: meadow.coverAt(x, z), zone: meadow.suitability(x, z) }));
+      // the fish of the eelgrass weave between its shoots and push its leaves aside
+      seagrass.bind(meadow);
       onProgress?.('浜');
       for (const o of layout.props(terrain, mapSeed)) w.scene.add(o);
       mark('props');
@@ -174,6 +177,7 @@ export class World {
 
   /** Free what the flat built (leaving for another map). Animals, tools and the case are freed by their owners. */
   dispose(): void {
+    if (this.amamo) seagrass.bind(null);
     this.amamo?.dispose();
     this.amamo = null;
     this.oysters?.dispose();

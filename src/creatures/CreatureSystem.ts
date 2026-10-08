@@ -11,7 +11,7 @@ import { BehaviorTree, type PerceptionContext } from './brain/BehaviorTree';
 import { Spawner, type SpawnEnv } from './Spawner';
 export type { SpawnEnv };
 import { minDepthFor, type Individual } from './Individual';
-import type { BehaviorEvent, Driver, Floor, Intent } from './drivers/Driver';
+import type { BehaviorEvent, Driver, Floor, Intent, MeadowProbe } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
 import { modelFor, variantOf } from './models/choice';
@@ -100,6 +100,11 @@ export class CreatureSystem {
     };
   }
 
+  /** The flat's eelgrass, for the animals that live among the blades. */
+  setMeadow(meadow: MeadowProbe | null): void {
+    this.floor.meadow = meadow;
+  }
+
   /** Warm the model cache for the distance tiers. */
   async preload(): Promise<void> {
     const jobs: Promise<unknown>[] = [];
@@ -108,6 +113,8 @@ export class CreatureSystem {
       if (!sp.spawn.some((r) => !r.maps || r.maps.includes(this.mapId))) continue;
       if (sp.model.lod2) jobs.push(preloadModel(sp.model.lod2));
       for (const st of sp.stages) if (st.model?.lod2) jobs.push(preloadModel(st.model.lod2));
+      // the gravid female's and the breeding male's own forms
+      for (const form of [sp.model.gravid, sp.model.male]) if (form?.lod2) jobs.push(preloadModel(form.lod2));
     }
     await Promise.all(jobs);
   }
@@ -241,7 +248,7 @@ export class CreatureSystem {
       view = { tier, root: ph.root, model: null, radius: ph.length * 0.6, hero: null };
     } else {
       // the growth stage's own model where the species has them, in the individual's pattern variant
-      const rel = modelFor(sp, e.ind.stage, e.ind.gravid)[tier] ?? sp.model[tier]!;
+      const rel = modelFor(sp, e.ind.stage, e.ind.gravid, e.ind.dress)[tier] ?? sp.model[tier]!;
       let model: LoadedModel;
       try { model = await instantiateModel(rel, variantOf(e.ind.id)); } catch (err) { console.warn(err); e.pendingTier = null; return; }
       if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { model.root.removeFromParent(); return; }

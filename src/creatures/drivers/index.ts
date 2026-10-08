@@ -3,6 +3,7 @@ import type { Driver } from './Driver';
 import type { PlaceholderModel } from '../models/placeholders';
 import { MahazeDriver } from '../species/mahaze/MahazeDriver';
 import { ShrimpDriver } from '../species/shrimp/ShrimpDriver';
+import { ISOSUJI } from '../species/shrimp/model/isosuji.js';
 import { PloverDriver } from '../species/plover/PloverDriver';
 import { AsariDriver } from '../asari/Asari.js';
 import { FORMS } from '../asari/AsariModel.js';
@@ -11,6 +12,8 @@ import { OysterDriver } from '../oyster/OysterDriver';
 import { CrabDriver, HermitDriver, SnailDriver } from '../species/shore/crawlers';
 import { WormDriver } from '../species/shore/others';
 import { HakuDriver } from '../species/haku/HakuDriver';
+import { AmimehagiDriver } from '../species/amimehagi/AmimehagiDriver';
+import { YoujiuoDriver } from '../species/youjiuo/YoujiuoDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -29,6 +32,8 @@ export interface DriverEntry {
 export const DRIVERS: Record<string, DriverEntry> = {
   mahaze: { create: () => new MahazeDriver() },
   shrimp: { create: () => new ShrimpDriver(), placeholder: () => ShrimpDriver.makeModel(), preview: () => ShrimpDriver.makePreview() },
+  // イソスジエビ: the same shrimp rig and locomotion with its species profile (shape, stripes, kinematics)
+  isosuji: { create: () => new ShrimpDriver(ISOSUJI), placeholder: () => ShrimpDriver.makeModel(), preview: () => ShrimpDriver.makePreview(ISOSUJI) },
   plover: { create: () => new PloverDriver(), placeholder: () => PloverDriver.makeModel() },
   asari: { create: () => new AsariDriver() as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.asari, seed) },
   hamaguri: { create: () => new AsariDriver(FORMS.hamaguri) as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.hamaguri, seed) },
@@ -41,4 +46,8 @@ export const DRIVERS: Record<string, DriverEntry> = {
   worm: { create: () => new WormDriver(), placeholder: () => WormDriver.makeModel(), preview: (seed) => WormDriver.makePreview(seed) },
   // ハク: the schooling juvenile mullet (its own tiers in the placeholder view; near within 5 m)
   haku: { create: () => new HakuDriver(), placeholder: () => HakuDriver.makeModel(), preview: () => HakuDriver.makePreview(), nearDistance: 5 },
+  // アミメハギ: the small filefish of the eelgrass (its own tiers in the placeholder view; near within 4 m)
+  amimehagi: { create: () => new AmimehagiDriver(), placeholder: () => AmimehagiDriver.makeModel(), preview: (seed) => AmimehagiDriver.makePreview(seed), nearDistance: 4 },
+  // ヨウジウオ: the pipefish of the eelgrass (its own tiers in the placeholder view; near within 6 m)
+  youjiuo: { create: () => new YoujiuoDriver(), placeholder: () => YoujiuoDriver.makeModel(), preview: (seed) => YoujiuoDriver.makePreview(seed), nearDistance: 6 },
 };

@@ -1,6 +1,8 @@
 import type { Object3D, Vector3 } from 'three';
 import type { Individual } from '../Individual';
 import type { HabitatSample } from '../../world/Habitat';
+import type { AmamoUniforms } from '../../world/amamo/kit';
+import type { ShootSpec } from '../../world/amamo/AmamoPatch';
 
 export type IntentKind = 'rest' | 'wander' | 'moveTo' | 'flee' | 'forage' | 'display' | 'burrow' | 'special';
 
@@ -21,11 +23,22 @@ export interface BehaviorEvent {
   t: number;
 }
 
+/** The eelgrass of the flat as the animals living in it see it (the AmamoMeadow; world/amamo/flow.ts moves a shoot on the CPU). */
+export interface MeadowProbe {
+  readonly kit: { readonly uniforms: AmamoUniforms };
+  /** eelgrass cover 0..1 */
+  coverAt(x: number, z: number): number;
+  /** grown shoots near a point, nearest first (none where the camera is too far for the patch to be grown) */
+  shootsNear(x: number, z: number, r: number, max?: number): ShootSpec[];
+}
+
 /** What drivers need from the world: ground height and water surface at a point. */
 export interface Floor {
   heightAt(x: number, z: number): number;
   waterAt(x: number, z: number): number;
   sampleAt?(x: number, z: number): HabitatSample | null;
+  /** the eelgrass meadow, on a flat that has one */
+  meadow?: MeadowProbe | null;
 }
 
 export interface DriverContext {

@@ -316,6 +316,7 @@ export class App {
       performance.mark('world:player');
       this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed, map.habitat?.minSpawnDist_m);
       performance.mark('world:creatureSystem');
+      this.creatures.setMeadow(this.world.amamo);
       await this.creatures.preload();
       performance.mark('world:creatures');
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
@@ -934,7 +935,7 @@ export class App {
 
   /** A fresh model of the species to lie in the net (the detailed tier, or the driver's own geometry). */
   private async displayModelFor(ind: Individual): Promise<Object3D | null> {
-    const sp = ind.species, m = modelFor(sp, ind.stage, ind.gravid);
+    const sp = ind.species, m = modelFor(sp, ind.stage, ind.gravid, ind.dress);
     const rel = m.lod1 ?? m.hero ?? m.lod2;
     if (rel) {
       try { return (await instantiateModel(rel, variantOf(ind.id))).root; } catch (err) { console.warn(err); }

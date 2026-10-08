@@ -4,7 +4,7 @@ import type { Substrate } from '../../data/schemas';
 import type { Habitat } from '../Habitat';
 import type { Terrain } from '../Terrain';
 import { AmamoKit, type Lod } from './kit';
-import { AmamoPatch, patchOutline, type GroundSampler, type Grown, type PatchKind, type PatchOptions } from './AmamoPatch';
+import { AmamoPatch, patchOutline, type GroundSampler, type Grown, type PatchKind, type PatchOptions, type ShootSpec } from './AmamoPatch';
 import { MOTION, ZONE, smoothstep } from './params';
 
 /** How much of the meadow is drawn, and in how much detail. */
@@ -391,6 +391,26 @@ export class AmamoMeadow {
       if (lod !== -1 && this.hiddenByWater(p, cam.x, cam.y, cam.z, env.tideLevel)) lod = -1;
       if (lod !== p.lod || p.visible !== (lod !== -1)) p.setLod(lod, this.quality.density, this.quality.shadowLod);
     }
+  }
+
+  /**
+   * Grown shoots within r of (x, z) (only patches near the camera are grown), nearest first, at most `max`. For the
+   * animals that live among the blades (flow.ts gives the CPU twin of a shoot's motion).
+   */
+  shootsNear(x: number, z: number, r: number, max = 24): ShootSpec[] {
+    const found: { s: ShootSpec; d: number }[] = [];
+    for (const p of this.live.values()) {
+      if (Math.hypot(p.cx - x, p.cz - z) > r + p.reach + 0.05) continue;
+      // only shoots drawn at the near tiers (the instances are shuffled: the first ones are the ones drawn)
+      const drawn = Math.min(p.shoots.length, Math.round(p.shootCount * this.quality.density * 0.8));
+      for (let i = 0; i < drawn; i++) {
+        const s = p.shoots[i];
+        const d = Math.hypot(s.x - x, s.z - z);
+        if (d <= r) found.push({ s, d });
+      }
+    }
+    found.sort((a, b) => a.d - b.d);
+    return found.slice(0, max).map((o) => o.s);
   }
 
   /** The nearest clone of a kind (or any), by its centre. */
