@@ -39,6 +39,12 @@ export interface Pose {
   caudal: number;
   /** the trunk's girth (condition: a well-fed or mature fish is deeper and wider), 1 = the model's */
   girth: number;
+  /**
+   * the caudal fan's spread (model space), taken by the last bone instead of the back carried down the tail by the
+   * weight `tailUpW` (0..1): holding a shoot, the fan is laid along the shoot's surface rather than into it
+   */
+  tailUp: Vector3;
+  tailUpW: number;
 }
 
 export function restPose(): Pose {
@@ -46,6 +52,7 @@ export function restPose(): Pose {
   return {
     pts, up: new Vector3(0, 1, 0), headPitch: 0, headYaw: 0, snout: 0, jaw: 0, eyeL: [0, 0], eyeR: [0, 0],
     pecL: 0.5, pecR: 0.5, dorsal: new Float32Array(DORSAL_BONES), dorsalRaise: 1, caudal: 1, girth: 1,
+    tailUp: new Vector3(0, 1, 0), tailUpW: 0,
   };
 }
 
@@ -133,6 +140,14 @@ export function applyPose(bones: Bone[], pose: Pose, lod: 0 | 1 | 2 = 0): void {
   orthoUp(pose.up, segDir[PIVOT_K], segUp[PIVOT_K], Y);
   for (let k = PIVOT_K - 1; k >= 0; k--) orthoUp(segUp[k + 1], segDir[k], segUp[k], Y);
   for (let k = PIVOT_K + 1; k < NSEG; k++) orthoUp(segUp[k - 1], segDir[k], segUp[k], Y);
+  if (pose.tailUpW > 0) {
+    // the fan's own spread, the way round nearer the carried back, blended in
+    const k = NSEG - 1;
+    orthoUp(pose.tailUp, segDir[k], vb, segUp[k]);
+    if (vb.dot(segUp[k]) < 0) vb.negate();
+    segUp[k].lerp(vb, pose.tailUpW);
+    orthoUp(segUp[k], segDir[k], segUp[k], Y);
+  }
   for (let k = 0; k < NSEG; k++) {
     frameQ(segDir[k], segUp[k], segQ[k]);
     const b = bones[k];

@@ -56,9 +56,9 @@ interface Hold {
   goal: number;
   /**
    * How the tail holds: 'cling', pressed along the shoot and curled a little way round it, or 'hook', the rear of the
-   * tail wound loosely round the sheath, half a turn to a turn. `wrapA`: how far round the shoot the tail goes (rad); `alpha`: the slope of
-   * the wound tail from level (rad, a steep helix); `ease`: the length over which it leaves the body's line (m);
-   * `sCurl`: where along the body the curl begins.
+   * tail wound loosely round the sheath, half a turn to a turn. `wrapA`: how far round the shoot the tail goes (rad);
+   * `alpha`: the slope of the wound tail from level (rad, a steep helix); `ease`: the length over which it leaves the
+   * body's line (m); `sCurl`: where along the body the curl begins.
    */
   mode: 'cling' | 'hook';
   wrapA: number;
@@ -265,6 +265,8 @@ export class Youjiuo {
   private readonly dFree = new Vector3();
   private readonly upFree = new Vector3();
   private readonly upHold = new Vector3();
+  private readonly tailUpHeld = new Vector3(0, 1, 0);
+  private readonly relTailUp = new Vector3();
   private readonly rollHold = { th: Number.NaN };
   private readonly holdModel = Array.from({ length: NSEG + 1 }, () => new Vector3());
   private relT = -1;
@@ -483,6 +485,8 @@ export class Youjiuo {
       const turn = (from: Vector3, to: Vector3) => to.set(cd * from.x - sd * from.z, from.y, sd * from.x + cd * from.z);
       for (let k = 0; k <= NSEG; k++) turn(P[k], this.relPts[k]);
       turn(this.pose.up, this.relUp);
+      turn(this.pose.tailUp, this.relTailUp);
+      if (this.pose.tailUpW <= 0) this.relTailUp.set(0, 0, 0);
       this.relT = 0;
       this.relFast = fast;
       this.lastPitch = this.pitch;
@@ -1018,6 +1022,15 @@ export class Youjiuo {
     } else {
       for (let k = 0; k <= NSEG; k++) P[k].copy(this.freePts[k]);
     }
+    // the caudal fan's spread: along the shoot's surface while held (and as it lets go)
+    if (w > 0) {
+      const c = Math.cos(this.heading), sn = Math.sin(this.heading), V = this.tailUpHeld;
+      pose.tailUp.set(c * V.x - sn * V.z, V.y, sn * V.x + c * V.z);
+      pose.tailUpW = w;
+    } else if (relK > 0 || this.relW[NSEG] > 0) {
+      pose.tailUp.copy(this.relTailUp);
+      pose.tailUpW = this.relT >= 0 ? this.relW[NSEG] : 0;
+    } else pose.tailUpW = 0;
     // the back: upright when free, along the blade's width when held, and between the two as it lets go or takes
     // hold, turned as a roll: each back is carried onto the posture's pivot segment by the least turn, then rolled
     const d = tmp2.subVectors(P[PIVOT_K], P[PIVOT_K + 1]).normalize();
@@ -1082,6 +1095,8 @@ export class Youjiuo {
         const prev = this.holdPts[k - 1];
         tmp.subVectors(prev, this.holdPts[k - 2]).normalize().addScaledVector(U, 0.3).normalize();
         this.holdPts[k].copy(prev).addScaledVector(tmp, (sk - STATIONS[k - 1]) * tl);
+        // and spread along the shoot's surface, not into it
+        this.tailUpHeld.crossVectors(tmp, U).normalize();
         continue;
       }
       const steps = Math.max(1, Math.ceil(((sk - sAt) * tl) / 0.0025));
