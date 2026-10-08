@@ -1,6 +1,7 @@
 import {
-  ClampToEdgeWrapping, Color, CubeTexture, DataTexture, FloatType, LinearFilter, NearestFilter, LinearMipmapLinearFilter, Matrix4, RedFormat,
-  RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, type Object3D, type PerspectiveCamera, type Scene, type WebGLRenderer, type WebGLRenderTarget,
+  ClampToEdgeWrapping, Color, CubeTexture, DataTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, LinearMipmapLinearFilter, Matrix4,
+  RedFormat, RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, WebGLRenderTarget, type Object3D, type PerspectiveCamera, type Scene,
+  type Texture, type WebGLRenderer,
 } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { MirrorView } from '../render/Mirror';
@@ -62,6 +63,43 @@ float vnoiseW(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 
 float snoise(vec2 p) { return vnoiseW(p) * 2.0 - 1.0; }
 `;
 
+/** GLSL: the terrain's map coordinates and its smoothed height (needs tHeight, uHeightN and uHalf). */
+const GROUND_GLSL = /* glsl */ `
+vec2 tuv(vec2 xz) { return (xz + uHalf) / (2.0 * uHalf); }
+// the bed through a cubic B-spline (four bilinear lookups): smooth in its slope too, so the surf, whose timing
+// follows the depth, draws its crests without the kinks of the 25 cm grid
+float groundSmooth(vec2 xz) {
+  vec2 st = tuv(xz) * uHeightN - 0.5, i = floor(st), f = st - i;
+  vec2 f2 = f * f, f3 = f2 * f;
+  vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0, w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+  vec2 w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0, w3 = f3 / 6.0;
+  vec2 g0 = w0 + w1, g1 = w2 + w3;
+  vec2 h0 = (i - 0.5 + w1 / g0) / uHeightN, h1 = (i + 1.5 + w3 / g1) / uHeightN;
+  return g0.y * (g0.x * texture2D(tHeight, vec2(h0.x, h0.y)).r + g1.x * texture2D(tHeight, vec2(h1.x, h0.y)).r)
+       + g1.y * (g0.x * texture2D(tHeight, vec2(h0.x, h1.y)).r + g1.x * texture2D(tHeight, vec2(h1.x, h1.y)).r);
+}
+`;
+
+/** GLSL: the surf's surface at a point (after GROUND_GLSL and SURF_GLSL; needs uTime). */
+const SURF_ETA_GLSL = /* glsl */ `
+// the surf's surface height at a point, relative to the still level (0 beyond the surf, where the sea is the plane)
+float surfEta(vec2 xz, float level) {
+  float D = level - groundSmooth(xz);
+  if (D > 1.4) return 0.0;
+  return surfAt(xz, D, uTime, uSurf.z).x * (1.0 - smoothstep(0.8, 1.4, D));
+}
+`;
+
+/** Texels across the surf's height field (over the whole terrain: 25 cm on 走水's 96 m). */
+const SURF_FIELD_RES = 384;
+
+/** What floats in the surf reads its surface from here: its height over the still level (R, m), redrawn every frame. */
+export interface SurfField {
+  texture: Texture;
+  /** half the terrain's size (m): the field spans x, z in -half..half */
+  half: number;
+}
+
 /**
  * Screen-space water (after the 葛西の渚 crab viewer): for every pixel, the view ray is met with the water surface,
  * which is the tide plane or, where the ground sits in a tide pool above the tide, that pool's own level. The bottom
@@ -81,6 +119,8 @@ export class WaterPass {
   /** false while the mirror must wait (the sun's shadow map not made yet: its materials would sample nothing) */
   mirrorGate: () => boolean = () => true;
   level = 0;
+  /** the surf's height over the whole terrain, for what floats in it (null: no surf on this shore) */
+  private readonly surf: { target: WebGLRenderTarget; quad: FullScreenQuad; material: ShaderMaterial; half: number } | null = null;
 
   constructor(terrain: Terrain, waves: WaveSet, surf: SurfUniforms) {
     this.uniforms = {
@@ -154,21 +194,9 @@ export class WaterPass {
           vec4 v = uProjInv * c; v /= v.w;
           return (uCamWorld * v).xyz;
         }
-        vec2 tuv(vec2 xz) { return (xz + uHalf) / (2.0 * uHalf); }
+        ${GROUND_GLSL}
         float groundAt(vec2 xz) { return texture2D(tHeight, tuv(xz)).r; }
         float spillAt(vec2 xz) { return texture2D(tSpill, tuv(xz)).r; }
-        // the bed through a cubic B-spline (four bilinear lookups): smooth in its slope too, so the surf, whose timing
-        // follows the depth, draws its crests without the kinks of the 25 cm grid
-        float groundSmooth(vec2 xz) {
-          vec2 st = tuv(xz) * uHeightN - 0.5, i = floor(st), f = st - i;
-          vec2 f2 = f * f, f3 = f2 * f;
-          vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0, w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
-          vec2 w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0, w3 = f3 / 6.0;
-          vec2 g0 = w0 + w1, g1 = w2 + w3;
-          vec2 h0 = (i - 0.5 + w1 / g0) / uHeightN, h1 = (i + 1.5 + w3 / g1) / uHeightN;
-          return g0.y * (g0.x * texture2D(tHeight, vec2(h0.x, h0.y)).r + g1.x * texture2D(tHeight, vec2(h1.x, h0.y)).r)
-               + g1.y * (g0.x * texture2D(tHeight, vec2(h0.x, h1.y)).r + g1.x * texture2D(tHeight, vec2(h1.x, h1.y)).r);
-        }
         // the surface slope from the wave set (random directions and speeds, nothing periodic), band-limited to the
         // pixel footprint so distant water does not shimmer; gusts roughen the surface in drifting patches; pools are calm
         vec3 waterNormal(vec2 p, float dist, float calm) {
@@ -187,12 +215,7 @@ export class WaterPass {
           return uWaterFog * (0.75 + 0.35 * smoothstep(-0.6, 0.8, -d.y)) + uSunCol * 0.035 * hgPhase(mu, 0.72) * uSunUp;
         }
 
-        // the surf's surface height at a point, relative to the still level (0 beyond the surf, where the sea is the plane)
-        float surfEta(vec2 xz, float level) {
-          float D = level - groundSmooth(xz);
-          if (D > 1.4) return 0.0;
-          return surfAt(xz, D, uTime, uSurf.z).x * (1.0 - smoothstep(0.8, 1.4, D));
-        }
+        ${SURF_ETA_GLSL}
 
         void main() {
           vec2 uv = vUv;
@@ -419,6 +442,33 @@ export class WaterPass {
         }`,
     });
     this.quad = new FullScreenQuad(this.material);
+    if (surf.uSurf.value.w > 0) {
+      // the surf's height field: the same surface the water pass draws, 25 cm apart, for the eelgrass afloat in it
+      const u = this.uniforms;
+      const material = new ShaderMaterial({
+        uniforms: { tHeight: u.tHeight, uHeightN: u.uHeightN, uHalf: u.uHalf, uWater: u.uWater, uTime: u.uTime, uSurf: u.uSurf, uSurfDir: u.uSurfDir },
+        depthTest: false,
+        depthWrite: false,
+        vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+        fragmentShader: /* glsl */ `
+          uniform sampler2D tHeight;
+          uniform float uHeightN, uHalf, uWater, uTime;
+          varying vec2 vUv;
+          ${GROUND_GLSL}
+          ${SURF_GLSL}
+          ${SURF_ETA_GLSL}
+          void main() { gl_FragColor = vec4(surfEta((vUv * 2.0 - 1.0) * uHalf, uWater), 0.0, 0.0, 1.0); }`,
+      });
+      const target = new WebGLRenderTarget(SURF_FIELD_RES, SURF_FIELD_RES, {
+        type: HalfFloatType, format: RGBAFormat, depthBuffer: false, minFilter: LinearFilter, magFilter: LinearFilter, generateMipmaps: false,
+      });
+      this.surf = { target, quad: new FullScreenQuad(material), material, half: terrain.half };
+    }
+  }
+
+  /** The surf's height over the still level, redrawn every frame by prepare (null: a sheltered flat). */
+  get surfField(): SurfField | null {
+    return this.surf ? { texture: this.surf.target.texture, half: this.surf.half } : null;
   }
 
   /**
@@ -456,6 +506,11 @@ export class WaterPass {
     return (this.quad as unknown as { _mesh: Object3D })._mesh;
   }
 
+  /** The surf field's quad and the target it is drawn into, to compile ahead too (null: no surf). */
+  surfCompileTarget(): { mesh: Object3D; target: WebGLRenderTarget } | null {
+    return this.surf ? { mesh: (this.surf.quad as unknown as { _mesh: Object3D })._mesh, target: this.surf.target } : null;
+  }
+
   /** Steps of the trace that stands the surf up from the plane near the viewer (0: the surf on the flat plane). */
   setSurfSteps(n: number): void {
     this.uniforms.uSurfSteps.value = Math.max(0, Math.min(16, Math.round(n)));
@@ -463,6 +518,12 @@ export class WaterPass {
 
   /** Render what the water reflects (before the scene itself, every frame the water is drawn). */
   prepare(gl: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): void {
+    if (this.surf) {
+      const prev = gl.getRenderTarget();
+      gl.setRenderTarget(this.surf.target);
+      this.surf.quad.render(gl);
+      gl.setRenderTarget(prev);
+    }
     const m = this.mirror, u = this.uniforms;
     if (!m || !this.mirrorGate()) { u.uMirrorOn.value = 0; return; }
     m.render(gl, scene, camera, this.level);
@@ -506,6 +567,7 @@ export class WaterPass {
     this.material.dispose();
     this.quad.dispose();
     this.mirror?.dispose();
+    if (this.surf) { this.surf.target.dispose(); this.surf.quad.dispose(); this.surf.material.dispose(); }
     (this.uniforms.tFoam.value as DataTexture).dispose();
   }
 }
