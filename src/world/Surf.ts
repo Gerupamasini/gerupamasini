@@ -205,7 +205,11 @@ vec4 surfAt(vec2 p, float D, float t, float slope) {
  * at two sizes, the cells warped by a smooth noise and the walls broken in places, so the lace never reads as a net;
  * B: bubble rims of many sizes, 3 to 40 mm across at the scale the water uses. Everything is periodic, so it tiles.
  */
+const foamCache = new Map<number, Uint8Array>();
 export function makeFoamTexture(S = 512): DataTexture {
+  // (the lace takes a quarter of a second to make: made once a session, then each flat gets its own texture of it)
+  const cached = foamCache.get(S);
+  if (cached) return foamTexture(cached.slice(), S);
   let a = 730 >>> 0;
   const rnd = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   // periodic value noise on a P×P lattice (it tiles with the texture)
@@ -267,6 +271,11 @@ export function makeFoamTexture(S = 512): DataTexture {
     data[k * 4 + 2] = Math.round(Math.min(1, bub[k]) * 255);
     data[k * 4 + 3] = 255;
   }
+  foamCache.set(S, data);
+  return foamTexture(data.slice(), S);
+}
+
+function foamTexture(data: Uint8Array, S: number): DataTexture {
   const t = new DataTexture(data, S, S, RGBAFormat);
   t.wrapS = t.wrapT = RepeatWrapping;
   t.magFilter = LinearFilter;

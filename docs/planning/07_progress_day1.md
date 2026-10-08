@@ -167,6 +167,10 @@
 - シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
 - バージョン 0.12.1。
 
+## 24 回目（走水の軽量化）
+- `claude/festive-lamport-hd2row` の新しい先端（28aba20）をマージ: `MEADOW_QUALITY`（mid の影なし、距離 4.5/13/36）、`CreatureSystem`（`AQUATIC_DIST` 14、`SHADOWLESS_MM` 80、このマップの種だけ preload）、`QUALITY_PRESETS` の maxDpr（mid 1、high 1.5）、`FieldRenderer.compile()` と `WaterPass.compileTarget()`（読み込み中に `compileAsync`）、`Surf.makeFoamTexture` のキャッシュ、水面の泡の帯、走水の pits 0、`performance.mark('world:*')`。衝突は App（`groundBoost` と mark）と World（私の `if (!layout)` 構造に mark を差し込む）の 2 か所。
+- バージョン 0.20.0。
+
 ## 23 回目（横須賀 走水海岸）
 - `claude/festive-lamport-hd2row` をマージ（走水マップ `public/data/maps/hashirimizu*`、`src/world/maps/hashirimizu/*`、アマモ場 `src/world/amamo/*`、寄せ波 `Surf.ts`、映り込み `render/Mirror.ts`、`Water.ts`・`Sky.ts`（雲層）・`Terrain.ts`（陸の高さ・砂の色・砂漣の向き・遡上の濡れ）、横須賀の潮位観測点、`App.leaveWorld()` によるマップ切り替え、`World.dispose()`、胴長の限界水深、`Habitat` の地物タグ eelgrass/eelgrass_edge/bare、spawn 規則の `maps`、種の `aquatic`）。衝突 15 ファイルを手で解決。
 - 解決の方針: 葛西はそのまま（`World.create` は `layout` の無いマップで割石・牡蠣礁を作り、遠景は非表示のまま；layout のあるマップでアマモ場・小道具・遠景を作る）。`World.dispose()` で礁と石も解放。濡れた砂の暗さ（0.68）と粗さ（0.58/0.62/0.42）は 22 回目の値を維持し、遡上の水膜は 0.32。`Spawner` は debug の hidden と規則の `maps` の両方を見る。観察開始距離は 21 回目の `len × 7`。`FPSController.canStand` は `wadeDepth` と `groundAt`（石の上）の両方。
