@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>タコフネの3D水槽</title>
+<meta name="description" content="海水だけを張った60cm水槽の中を、実物大のタコフネ（Argonauta hians）が泳ぐ。水面で屈折した光がコースティクスと光の筋を作る、three.js のリアルタイム描画。">
+<style>
+:root{--bg:#0e1012;--ink:#d9e4e8;--dim:#7f8e95;--cyan:#5fe3ff;--gold:#e5b95a;--cream:#efe6d2;--line:rgba(95,227,255,.16)}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Hiragino Sans","Noto Sans JP",monospace}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab} canvas:active{cursor:grabbing}
+details{position:fixed;left:12px;top:12px;width:236px;padding:12px 16px 14px;background:rgba(14,16,18,.86);border:1px solid var(--line);backdrop-filter:blur(6px)}
+summary{cursor:pointer;list-style:none;font:20px/1.1 Georgia,"Hiragino Mincho ProN",serif;letter-spacing:.06em;color:var(--cream)}
+summary::-webkit-details-marker{display:none} summary b{color:var(--cyan);font-weight:400}
+label{display:flex;justify-content:space-between;margin-top:10px;color:var(--dim)} label span{color:var(--ink)}
+input{width:100%;margin:5px 0 0;accent-color:var(--cyan)}
+input:focus-visible{outline:1px solid var(--gold);outline-offset:2px}
+#stats{margin-top:12px;color:var(--gold);font-variant-numeric:tabular-nums}
+p{margin:6px 0 0;color:var(--dim);font-size:11px} p a{color:var(--cyan)}
+#err{position:fixed;inset:0;display:none;place-items:center;text-align:center;padding:24px;color:var(--dim)}
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="view" role="img" aria-label="海水の入ったガラス水槽の中をタコフネが泳ぎ、水面を通った光が底にコースティクスを描く"></canvas>
+<div id="err">この表示には WebGL 2 が必要です。別のブラウザか端末でお試しください。</div>
+<details id="ui" open>
+  <summary>タコフネ<b>//</b>水槽</summary>
+  <label for="elev">太陽の高さ <span id="elevOut"></span></label><input id="elev" type="range" min="15" max="85" value="58">
+  <label for="az">太陽の向き <span id="azOut"></span></label><input id="az" type="range" min="0" max="360" value="215">
+  <label for="waves">水面の揺れ <span id="wavesOut"></span></label><input id="waves" type="range" min="0" max="2" step="0.01" value="0.8">
+  <label for="count">タコフネの数 <span id="countOut"></span></label><input id="count" type="range" min="1" max="6" step="1" value="4">
+  <div id="stats"></div>
+  <p>60cm水槽（水位32.5cm）に殻長7cm前後のタコフネ。実物大です。</p>
+  <p>ドラッグで回転 · ホイール／ピンチで拡大 · 水面クリックで波紋 · <kbd>Space</kbd> 一時停止 · <kbd>H</kbd> パネルを隠す</p>
+  <p>水の描画は <a href="https://github.com/ScottieFox/caustic-volume">CAUSTIC//VOLUME</a>（MIT, © 2026 Scottie）を元にしています。</p>
+</details>
+<script type="module">
+// =====================================================================================
+// タコフネ（Argonauta）の泳ぐ海水水槽。
+// 水・水面・ガラス・コースティクスの描き方は CAUSTIC//LITE (github.com/ScottieFox/caustic-volume,
+// MIT License, Copyright (c) 2026 Scottie) を元にしています: 水面を通る光線を1本ずつ床まで屈折させて
+// コースティクスのテクスチャを作り、壁や水面のシェーダーが視線を水中で追いかけて吸収と散乱を足す。
+// ここではアヒルの代わりに、水中を泳ぐタコフネを別パスで描き（色と視点からの距離をテクスチャへ）、
+// 水中を進む視線がそれに当たったらその色を使う。タコフネ自身もコースティクスで照らされ、床に影を落とす。
+// 視線に沿って光の筋（ゴッドレイ）も積算する。
+// =====================================================================================
+
+// 60cm 規格水槽（60×30×36cm）に水位 32.5cm。タコフネは殻長 7cm 前後の実物大
+const TX = 0.3, TZ = 0.15, TOP = 0.36;  // 水槽の半幅(x), 半奥行(z), 縁の高さ (m)
+const LEVEL = 0.325, IOR = 1.339;       // 水位, 海水の屈折率
+const ABSORB = [0.75, 0.13, 0.09];      // 1mあたりの吸収（実際の海水より少し強め）: 赤から消えて青緑に
+const TARGET = [0, 0.15, 0], FOV = 40;
+
+// ---------------------------------------------------------------- 水面の動き
+// 大きさも向きもばらばらな波を24本重ねた、ろ過器の水流に揺らされる程度の水面（CAUSTIC//LITE と同じ作り）。
+// 波長 20cm〜1.5cm, 高さは 1mm 前後。水深 30cm ほどで光がちょうど焦点を結ぶ曲率にしてある
+const NW = 24, WAVES = [];
+{
+  let s = 7;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < NW; i++) {
+    const len = 0.2 * 0.075 ** (i / (NW - 1)), k = 2 * Math.PI / len, dir = i * 2.39996 + (rnd() - 0.5) * 0.9;
+    WAVES.push({ k, kx: k * Math.cos(dir), kz: k * Math.sin(dir), w: Math.sqrt(9.81 * k + 0.074 * k ** 3), ph: rnd() * 6.283,
+      a: 2.2 * Math.min(1, (0.14 / len) ** 2) / (k * k) * (0.6 + 0.8 * rnd()), short: len < 0.04,
+      f1: 0.05 + 0.22 * rnd(), f2: 0.09 + 0.3 * rnd(), p1: rnd() * 6.283, p2: rnd() * 6.283 });
+  }
+}
+const waveUniform = new Float32Array(NW * 4), ampUniform = new Float32Array(NW);
+WAVES.forEach((W, i) => waveUniform.set([W.kx, W.kz, W.w, W.ph], i * 4));
+function waveHeights(t, waves) {
+  WAVES.forEach((W, i) => { ampUniform[i] = W.a * Math.max(0.1, 1 + 0.6 * (0.6 * Math.sin(W.f1 * t + W.p1) + 0.4 * Math.sin(W.f2 * t + W.p2)))
+    * waves * (W.short ? 0.9 : 1); });
+}
+
+const $ = (id) => document.getElementById(id);
+const state = { t: 0, paused: false, scale: 1, waves: 0.8, count: 4 };
+const drops = [];
+let splashAcc = 0;
+function addRipple(x, z, h = 1.5, r = 0.01) { drops.push([x, z, r, h]); }
+
+function light() {   // 太陽: 方向, 色, 空の明るさ, 水の散乱光
+  const el = +$('elev').value * Math.PI / 180, az = +$('az').value * Math.PI / 180;
+  const warm = Math.min(1, el / 0.5), day = 0.35 + 0.65 * Math.min(1, el / 0.6), I = 3.2, glow = 0.35 * I * Math.sin(el) + 0.4 * day;
+  return { pos: [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)], col: [I, I * (0.62 + 0.36 * warm), I * (0.38 + 0.56 * warm)],
+    amb: [0.3 * day, 0.42 * day, 0.62 * day], glow: [0.006 * glow, 0.04 * glow, 0.055 * glow], day };
+}
+function refractDown(L) {   // 太陽光が水に入ったあとの向き（下向き）
+  const ix = -L[0], iy = -L[1], iz = -L[2], eta = 1 / IOR, c = -iy, k = 1 - eta * eta * (1 - c * c), m = eta * c - Math.sqrt(k);
+  const r = [eta * ix, eta * iy - m, eta * iz], l = Math.hypot(...r); return r.map((v) => v / l);
+}
+
+// ================================================================= タコフネ（Argonauta hians のメス）
+// 実物に合わせたところ:
+//  殻  殻長 6〜8cm。紙のように薄い飴色の半透明で、巻き始めほど濃い茶色。左右に平たい平巻き。
+//      側面に 40本足らずの粗い放射肋があり、殻口側へ反りながら竜骨の手前で二又に分かれる。
+//      竜骨は幅広く中央が浅い溝になり、両縁に焦げ茶の結節が左右交互に並ぶ。
+//  体  胴（外套膜）は殻の中。殻口から頭・大きな銀色の目・漏斗・腕を出す。
+//      半透明の白地に橙〜赤褐色の色素胞が密に散り、角度によって銀色に光る。
+//  第1腕 先の広い膜（銀色の地に紫褐色の斑点）を殻の両脇に広げて抱えている。
+//  泳ぎ 漏斗から水を噴いて殻を先にゆっくり進み、残り6本の腕は後ろへ流れて先が丸まる。
+const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
+const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const wrap = (x) => x - Math.round(x);
+const TILT = +(new URLSearchParams(location.search).get('tilt') ?? 0);
+const SH = { L: 0.07, b: 0.4, turns: 1.1, ribs: 24 };            // 殻長 7cm, 1周で約12倍に広がる, 最終周の肋 24本
+SH.TH = SH.turns * 2 * Math.PI;
+SH.R = SH.L / (1 + Math.exp(-Math.PI * SH.b));                     // 殻口での竜骨の半径（殻長 = これ + 反対側）
+const RIB = SH.ribs / (2 * Math.PI);
+const keelR = (th) => SH.R * Math.exp(SH.b * (th - SH.TH));
+// らせん面の座標（xy = 巻きの面, z = 左右）で殻の表面の点
+//  u: 断面上の位置 0〜0.45 左の側面（臍→竜骨）, 0.45〜0.55 竜骨, 0.55〜1 右の側面（竜骨→臍）
+function shellAt(th, u, lift = 0) {
+  const R = keelR(th), ri = keelR(th - 2 * Math.PI) * 0.92, K = R * 0.11, ph = th * RIB;
+  const c = Math.cos(th), sn = Math.sin(th);
+  let rho, z, s = 1, rib = 0, knob = 0, keel = 0;
+  if (u < 0.45 || u > 0.55) {
+    const side = u < 0.45 ? -1 : 1;
+    s = u < 0.45 ? u / 0.45 : (1 - u) / 0.45;
+    const q = ph - 0.45 * s * s;                                                        // 肋は殻口側へ反る
+    const main = Math.pow(0.5 + 0.5 * Math.cos(2 * Math.PI * q), 2.5);
+    const fork = Math.pow(0.5 + 0.5 * Math.cos(2 * Math.PI * (q + 0.5)), 2.5) * smooth(0.5, 0.85, s);   // 二又
+    rib = Math.max(main, fork) * smooth(0.6, 3, th) * (1 - smooth(0.9, 1, s));
+    rho = ri + (R * 0.975 - ri) * s;
+    const W = R * (0.03 + 0.08 * s) + R * 0.22 * Math.pow(Math.max(0, Math.sin(Math.PI * s)), 0.85) * (1 - 0.25 * s);
+    z = side * (W + R * 0.022 * (0.3 + 0.7 * s) * rib + lift);
+  } else {
+    const t = (u - 0.45) / 0.1;
+    keel = 1;
+    const q = (ph - 0.45) / 2;                                                           // 結節は肋2本ごと, 左右交互
+    const tooth = (w) => Math.pow(Math.max(0, 1 - Math.abs(w) / 0.3), 1.6);              // 先のとがった歯
+    const kl = Math.pow(Math.max(0, Math.sin(Math.PI * Math.min(t / 0.36, 1))), 1.5) * tooth(wrap(q));
+    const kr = Math.pow(Math.max(0, Math.sin(Math.PI * Math.min((1 - t) / 0.36, 1))), 1.5) * tooth(wrap(q + 0.5));
+    knob = Math.max(kl, kr);
+    const grow = smooth(0.8, 3.5, th);                                                    // 巻き始めの歯は小さい
+    rho = R * (0.975 - 0.016 * Math.sin(Math.PI * t) + (0.03 + 0.09 * grow) * knob);    // 中央は浅い溝, 両縁に歯
+    z = K * (2 * t - 1) + R * 0.02 * (kr - kl) + (t < 0.5 ? -1 : 1) * lift;
+  }
+  return { p: [c * rho, sn * rho, z], s, rib, knob, keel };
+}
+function shellColor(th, g) {
+  // 実物: 半透明の淡いクリーム灰色。臍のまわりと竜骨の縁は煙ったような濃い灰褐色、歯の先はほぼ黒
+  let col = [0.9, 0.86, 0.77];
+  col = mix3(col, [0.38, 0.28, 0.2], Math.pow(1 - smooth(0.02, 0.62, g.s), 1.4) * (0.9 - 0.3 * smooth(3, SH.TH, th)));   // 臍の煙
+  col = mix3(col, [0.46, 0.38, 0.3], smooth(0.72, 1, g.s) * 0.5);                                              // 竜骨側の帯
+  col = mix3(col, [0.36, 0.3, 0.26], (1 - smooth(1.0, 3.2, th)) * 0.7);                                         // 巻き始め
+  col = mix3(col, [0.93, 0.91, 0.86], smooth(SH.TH - 0.9, SH.TH, th) * 0.6);                                    // 殻口の新しい縁は白っぽい
+  const k = 0.93 + 0.12 * g.rib; col = col.map((v) => v * k);
+  if (g.keel) { col = mix3(col, [0.38, 0.32, 0.28], 0.5 * (1 - g.knob)); col = mix3(col, [0.1, 0.085, 0.08], Math.pow(g.knob, 0.7)); }
+  return col.map((v) => v ** 2.2);   // sRGB → linear
+}
+const U_SAMPLES = (() => {   // 断面の刻み: 側面 30, 竜骨 16
+  const u = [];
+  for (let i = 0; i < 30; i++) u.push(0.45 * i / 30);
+  for (let i = 0; i <= 16; i++) u.push(0.45 + 0.1 * i / 16);
+  for (let i = 1; i <= 30; i++) u.push(0.55 + 0.45 * i / 30);
+  return u;
+})();
+function gridGeometry(THREE, nu, nv, at) {   // at(i, j) -> { p, c?, uv? }
+  const P = [], C = [], UV = [], I = [];
+  for (let i = 0; i <= nu; i++) for (let j = 0; j <= nv; j++) {
+    const v = at(i, j); P.push(...v.p); if (v.c) C.push(...v.c); UV.push(...(v.uv || [i / nu, j / nv]));
+  }
+  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+    const a = i * (nv + 1) + j, b = a + nv + 1; I.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  if (C.length) g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
+  g.setIndex(I); g.computeVertexNormals();
+  return g;
+}
+function buildEars(THREE) {   // 殻口の臍側の両脇にある、とがった「耳」
+  const nu = 12, nv = 10;
+  return [-1, 1].map((side) => gridGeometry(THREE, nu, nv, (i, j) => {
+    const e = i / nu, th = SH.TH - 0.04 + 0.34 * e, s = 0.02 + (0.34 * (1 - e) ** 1.3) * j / nv;
+    const g = shellAt(th, side < 0 ? s * 0.45 : 1 - s * 0.45);
+    g.p[2] += side * 0.0025 * e;                                        // 少し外へ反る
+    return { p: g.p, c: mix3([0.88, 0.86, 0.8], [0.35, 0.3, 0.27], e * 0.7).map((v) => v ** 2.2) };
+  }));
+}
+function buildShell(THREE) {
+  const th0 = 0.5, nu = 720, nv = U_SAMPLES.length - 1;
+  return gridGeometry(THREE, nu, nv, (i, j) => {
+    const th = th0 + (SH.TH - th0) * i / nu, g = shellAt(th, U_SAMPLES[j]);
+    return { p: g.p, c: shellColor(th, g) };
+  });
+}
+// 第1腕の膜: 殻の脇を殻口側から覆う。後ろほど竜骨から離れ、縁は波打つ
+const webEdge = (th) => 0.93 - 0.55 * Math.pow((SH.TH - th) / 2.2, 1.3) + 0.02 * Math.sin(th * 11);
+function buildWeb(THREE, side) {
+  const nu = 70, nv = 16, a = SH.TH - 2.2, b = SH.TH - 0.03;
+  return gridGeometry(THREE, nu, nv, (i, j) => {
+    const th = a + (b - a) * i / nu, s = 0.07 + (webEdge(th) - 0.07) * j / nv;
+    return { p: shellAt(th, side < 0 ? s * 0.45 : 1 - s * 0.45, 0.0014 + 0.0006 * j / nv).p, uv: [i / nu * 3, j / nv] };
+  });
+}
+// 先細りの管（静止した腕用）
+function tubeGeometry(THREE, pts, r0, r1, m = 10) {
+  const n = pts.length, P = [], UV = [], I = [];
+  const V = THREE.Vector3, T = [], N = [], B = [];
+  for (let i = 0; i < n; i++) T.push(new V().subVectors(pts[Math.min(n - 1, i + 1)], pts[Math.max(0, i - 1)]).normalize());
+  let nrm = new V(0, 1, 0); if (Math.abs(nrm.dot(T[0])) > 0.9) nrm.set(1, 0, 0);
+  for (let i = 0; i < n; i++) {
+    nrm.addScaledVector(T[i], -nrm.dot(T[i])).normalize();
+    N.push(nrm.clone()); B.push(new V().crossVectors(T[i], nrm));
+  }
+  for (let i = 0; i < n; i++) {
+    const s = i / (n - 1), r = r0 + (r1 - r0) * Math.pow(s, 0.9);
+    for (let j = 0; j <= m; j++) {
+      const a = j / m * Math.PI * 2, o = N[i].clone().multiplyScalar(Math.cos(a)).addScaledVector(B[i], Math.sin(a));
+      P.push(pts[i].x + o.x * r, pts[i].y + o.y * r, pts[i].z + o.z * r); UV.push(s * 4, j / m);
+    }
+  }
+  for (let i = 0; i < n - 1; i++) for (let j = 0; j < m; j++) {
+    const a = i * (m + 1) + j, b = a + m + 1; I.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
+  g.setIndex(I); g.computeVertexNormals();
+  return g;
+}
+// 色素胞・膜・目のテクスチャ（キャンバスに描く）
+function canvasTex(THREE, w, h, draw, repeat = true) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d'); draw(ctx, w, h);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+function dots(ctx, w, h, n, rMin, rMax, colors, rnd) {   // ぼかした縁の点を n 個（端をまたぐ点は反対側にも描いて継ぎ目なく）
+  const faint = colors.map((c) => c.replace(/[\d.]+\)$/, (a) => (parseFloat(a) * 0.35).toFixed(3) + ')'));
+  for (let i = 0; i < n; i++) {
+    const x = rnd() * w, y = rnd() * h, r = rMin + (rMax - rMin) * rnd() ** 2, k = Math.floor(rnd() * colors.length);
+    for (const dx of [0, -w, w]) for (const dy of [0, -h, h]) {
+      const X = x + dx, Y = y + dy;
+      if (X < -r * 1.4 || X > w + r * 1.4 || Y < -r * 1.4 || Y > h + r * 1.4) continue;
+      ctx.fillStyle = faint[k]; ctx.beginPath(); ctx.arc(X, Y, r * 1.35, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = colors[k]; ctx.beginPath(); ctx.arc(X, Y, r * 0.85, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+function makeTextures(THREE) {
+  let q = 4242; const rnd = () => (q = (q * 16807) % 2147483647) / 2147483647;
+  // 皮膚: ガラスのような白地に、橙・赤褐色・臙脂の色素胞がびっしり
+  const speckle = (ctx, w, h, k = 1) => {
+    dots(ctx, w, h, 1100 * k, 3, 9, ['rgba(236,150,70,0.5)', 'rgba(244,178,96,0.45)'], rnd);                        // 黄橙のにじみ
+    dots(ctx, w, h, 5000 * k, 1.6, 5.2, ['rgba(244,122,30,0.97)', 'rgba(232,100,28,0.97)', 'rgba(206,76,30,0.97)'], rnd);  // 橙〜赤褐色
+    dots(ctx, w, h, 500 * k, 1.2, 3.2, ['rgba(110,32,24,0.95)', 'rgba(84,24,20,0.95)'], rnd);                           // 焦げ茶
+  };
+  const skin = canvasTex(THREE, 512, 512, (ctx, w, h) => {
+    ctx.fillStyle = 'rgb(246,232,220)'; ctx.fillRect(0, 0, w, h);
+    speckle(ctx, w, h, 1.25);
+  });
+  // 腕: 片側（v = 0 付近）に白い吸盤が2列, 縁がやや濃い
+  const arm = canvasTex(THREE, 512, 256, (ctx, w, h) => {
+    ctx.fillStyle = 'rgb(232,228,224)'; ctx.fillRect(0, 0, w, h);
+    speckle(ctx, w, h, 0.5);
+    for (let i = 0; i < 10; i++) for (const row of [0, 1]) {
+      const x = (i + row * 0.5) / 10 * w, y = row ? h * 0.9 : h * 0.1, r = h * 0.1;
+      for (const dy of [0, h, -h]) {
+        ctx.fillStyle = 'rgba(214,200,196,1)'; ctx.beginPath(); ctx.ellipse(x, y + dy, r * 1.08, r * 1.2, 0, 0, Math.PI * 2); ctx.fill();
+        const g = ctx.createRadialGradient(x - r * 0.2, y + dy - r * 0.2, 0, x, y + dy, r);
+        g.addColorStop(0, 'rgb(252,250,248)'); g.addColorStop(0.55, 'rgb(240,236,232)'); g.addColorStop(0.8, 'rgb(205,190,186)'); g.addColorStop(1, 'rgb(170,150,146)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y + dy, r, r * 1.1, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(190,175,170,0.9)'; ctx.beginPath(); ctx.ellipse(x, y + dy, r * 0.28, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  });
+  // 第1腕の膜: 半透明の白い薄膜に、ごく淡い橙と小さな色素胞
+  const web = canvasTex(THREE, 512, 256, (ctx, w, h) => {
+    ctx.fillStyle = 'rgba(236,236,240,0.42)'; ctx.fillRect(0, 0, w, h);
+    dots(ctx, w, h, 60, 18, 40, ['rgba(240,170,110,0.12)'], rnd);
+    dots(ctx, w, h, 500, 0.8, 2.2, ['rgba(200,95,50,0.75)', 'rgba(150,60,40,0.75)'], rnd);
+  });
+  // 目: 金色の虹彩に丸みのある黒い瞳、まわりは銀色
+  const eye = canvasTex(THREE, 512, 256, (ctx, w, h) => {
+    ctx.fillStyle = 'rgb(214,214,216)'; ctx.fillRect(0, 0, w, h);
+    speckle(ctx, w, h, 0.35);
+    const cx = w * 0.25, cy = h * 0.5, R = 78;
+    ctx.fillStyle = 'rgb(236,238,240)'; ctx.beginPath(); ctx.ellipse(cx, cy, R * 1.12, R * 1.05, 0, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+    g.addColorStop(0, 'rgb(150,80,20)'); g.addColorStop(0.35, 'rgb(215,130,35)'); g.addColorStop(0.7, 'rgb(240,180,60)'); g.addColorStop(0.92, 'rgb(200,120,40)'); g.addColorStop(1, 'rgb(120,60,30)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 90; i++) {   // 虹彩の放射状の筋
+      const a = rnd() * Math.PI * 2, r0 = R * (0.35 + 0.2 * rnd()), r1 = R * (0.8 + 0.18 * rnd());
+      ctx.strokeStyle = rnd() < 0.5 ? 'rgba(255,215,120,0.5)' : 'rgba(150,70,20,0.45)'; ctx.lineWidth = 1 + rnd() * 1.5;
+      ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgb(6,5,6)'; ctx.beginPath(); ctx.ellipse(cx, cy, R * 0.36, R * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  }, false);
+  return { skin, arm, web, eye };
+}
+
+// 動く腕: 節の鎖を毎フレーム動かし、先細りの管として張り直す
+const ARM_N = 20, ARM_M = 9;
+function makeArmGeometry(THREE) {
+  const nV = ARM_N * (ARM_M + 1), P = new Float32Array(nV * 3), N = new Float32Array(nV * 3), UV = new Float32Array(nV * 2), I = [];
+  for (let i = 0; i < ARM_N; i++) for (let j = 0; j <= ARM_M; j++) { const k = i * (ARM_M + 1) + j; UV[k * 2] = i / (ARM_N - 1) * 1.5; UV[k * 2 + 1] = j / ARM_M; }
+  for (let i = 0; i < ARM_N - 1; i++) for (let j = 0; j < ARM_M; j++) {
+    const a = i * (ARM_M + 1) + j, b = a + ARM_M + 1; I.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(P, 3).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('normal', new THREE.BufferAttribute(N, 3).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('uv', new THREE.BufferAttribute(UV, 2));
+  g.setIndex(I);
+  return g;
+}
+function updateArm(g, pts, r0, ref) {
+  const P = g.attributes.position.array, Nn = g.attributes.normal.array;
+  let nx = ref.x, ny = ref.y, nz = ref.z;
+  for (let i = 0; i < ARM_N; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(ARM_N - 1, i + 1)];
+    let tx = b.x - a.x, ty = b.y - a.y, tz = b.z - a.z; const tl = Math.hypot(tx, ty, tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+    const d = nx * tx + ny * ty + nz * tz; nx -= d * tx; ny -= d * ty; nz -= d * tz;
+    const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+    const bx = ty * nz - tz * ny, by = tz * nx - tx * nz, bz = tx * ny - ty * nx;
+    const s = i / (ARM_N - 1), rad = r0 * (1 - 0.9 * Math.pow(s, 0.9)) + 0.00015;
+    for (let j = 0; j <= ARM_M; j++) {
+      const an = j / ARM_M * Math.PI * 2, ca = Math.cos(an), sa = Math.sin(an), k = (i * (ARM_M + 1) + j) * 3;
+      const ox = nx * ca + bx * sa, oy = ny * ca + by * sa, oz = nz * ca + bz * sa;
+      const flat = ca > 0.5 ? 0.8 : 1;     // 吸盤の並ぶ側（丸まりの内側）は平ら
+      P[k] = pts[i].x + ox * rad * flat; P[k + 1] = pts[i].y + oy * rad * flat; P[k + 2] = pts[i].z + oz * rad * flat;
+      Nn[k] = ox; Nn[k + 1] = oy; Nn[k + 2] = oz;
+    }
+  }
+  g.attributes.position.needsUpdate = true; g.attributes.normal.needsUpdate = true;
+  g.computeBoundingSphere();
+}
+
+// 殻と体を組み立てる（らせん面の座標 → 体の座標: x = 進む向き, y = 上, z = 右）
+function buildArgonautParts(THREE, M) {
+  const V = THREE.Vector3, TH = SH.TH, R = SH.R, ri = keelR(TH - 2 * Math.PI) * 0.92;
+  const o = new V(Math.cos(TH), Math.sin(TH), 0), perp = new V(-Math.sin(TH), Math.cos(TH), 0);
+  const tA = o.clone().multiplyScalar(SH.b).add(perp).normalize();          // 殻口から外へ出る向き
+  const Z = new V(0, 0, 1);
+  const head = o.clone().multiplyScalar(ri + 0.44 * (R - ri)).addScaledVector(tA, 0.0085);   // 殻口から下へ大きくのぞく頭
+  // らせん面座標での各部の位置
+  const parts = {
+    head, tA, o,
+    eyes: [1, -1].map((sd) => head.clone().addScaledVector(Z, sd * 0.0106).addScaledVector(o, -0.0014).addScaledVector(tA, -0.0016)),
+    mantle: head.clone().addScaledVector(tA, -0.017).addScaledVector(o, 0.003),
+    funnel: head.clone().addScaledVector(o, 0.0115).addScaledVector(tA, -0.002),
+    crown: head.clone().addScaledVector(tA, 0.0095).addScaledVector(o, 0.001),
+    dorsal: [1, -1].map((sd) => {   // 第1腕: 頭の背側から殻口の縁を回って膜の縁に沿う
+      const pts = [head.clone().addScaledVector(o, -0.007).addScaledVector(Z, sd * 0.006).addScaledVector(tA, 0.002)];
+      const on = (th, s, lift) => new V(...shellAt(th, sd < 0 ? s * 0.45 : 1 - s * 0.45, lift).p);
+      pts.push(on(TH - 0.02, 0.3, 0.0035), on(TH - 0.03, 0.62, 0.003), on(TH - 0.06, 0.9, 0.0026));   // 殻口の縁を竜骨まで上り
+      for (let th = TH - 0.2; th > TH - 1.3; th -= 0.12) pts.push(on(th, webEdge(th) + 0.01, 0.0022));   // 膜の上縁を後ろへ
+      return new THREE.CatmullRomCurve3(pts).getPoints(60);
+    }),
+  };
+  const toBody = (v) => v.clone().applyMatrix4(M);
+  const dirToBody = (v) => v.clone().transformDirection(M);
+  return { parts, toBody, dirToBody };
+}
+
+class Argonaut {
+  constructor(THREE, kit, i, scene) {
+    let s = 1234 + i * 977; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const V = THREE.Vector3;
+    this.T = THREE; this.kit = kit;
+    this.size = (0.062 + 0.018 * rnd()) / SH.L;   // 殻長 6.2〜8cm
+    this.pos = new V((rnd() * 2 - 1) * (TX - 0.09), 0.08 + rnd() * (LEVEL - 0.16), (rnd() * 2 - 1) * (TZ - 0.06));
+    this.vel = new V();
+    this.fwd = new V(rnd() - 0.5, 0, rnd() - 0.5).normalize();
+    this.target = this.pos.clone();
+    this.phase = rnd(); this.period = 1.8 + rnd() * 0.9; this.contract = 0;
+    this.group = new THREE.Group();
+    this.body = new THREE.Group(); this.group.add(this.body);
+    const m = (g, mat) => new THREE.Mesh(g, mat);
+    this.body.add(m(kit.shellGeo, kit.mat.shell), m(kit.mantleGeo, kit.mat.skin), m(kit.headGeo, kit.mat.skin), m(kit.funnelGeo, kit.mat.skin));
+    for (const g of kit.webGeo) { const w = m(g, kit.mat.web); w.renderOrder = 2; this.body.add(w); }
+    for (const g of kit.earGeo) this.body.add(m(g, kit.mat.shell));
+    for (const g of kit.dorsalGeo) this.body.add(m(g, kit.mat.arm));
+    kit.eyes.forEach((e) => { const eye = m(kit.eyeGeo, kit.mat.eye); eye.position.copy(e.pos); eye.rotation.copy(e.rot); this.body.add(eye); });
+    this.group.scale.setScalar(this.size);
+    scene.add(this.group);
+    // 残り6本の腕（第2〜4腕）
+    this.arms = [];
+    for (let a = 0; a < 6; a++) {
+      const g = makeArmGeometry(THREE), mesh = new THREE.Mesh(g, kit.mat.arm);
+      mesh.frustumCulled = false; scene.add(mesh);
+      this.arms.push({ g, mesh, pts: Array.from({ length: ARM_N }, () => this.pos.clone()), dirs: null,
+        ang: (a / 6) * Math.PI * 2 + 0.5, len: (0.9 + 0.35 * rnd()) * (a === 2 || a === 3 ? 1.12 : 1), ph: rnd() * 6.28 });
+    }
+    this.q = new THREE.Quaternion(); this.m = new THREE.Matrix4();
+    this.up = new V(0, 1, 0);
+  }
+  setVisible(v) { this.group.visible = v; for (const a of this.arms) a.mesh.visible = v; }
+  step(dt, t, others) {
+    const V = this.T.Vector3, p = this.pos, kit = this.kit;
+    if (p.distanceTo(this.target) < 0.04 || Math.random() < dt * 0.05)
+      this.target.set((Math.random() * 2 - 1) * (TX - 0.1), 0.07 + Math.random() * (LEVEL - 0.14), (Math.random() * 2 - 1) * (TZ - 0.065));
+    const want = this.target.clone().sub(p);
+    want.y *= 0.6; want.normalize();
+    const h = Math.hypot(want.x, want.z) || 1e-4, maxT = Math.tan(0.5);   // 上下の傾きは ±30° まで
+    if (Math.abs(want.y) / h > maxT) { want.y = Math.sign(want.y) * h * maxT; want.normalize(); }
+    this.fwd.lerp(want, 1 - Math.exp(-dt * 0.6)).normalize();
+    // 噴射: ゆっくり吸って、すばやく吐く
+    this.phase += dt / this.period;
+    if (this.phase >= 1) { this.phase -= 1; this.period = 1.6 + Math.random() * 1.2; }
+    this.contract = this.phase < 0.2 ? Math.sin(this.phase / 0.2 * Math.PI) : 0;
+    this.vel.addScaledVector(this.fwd, this.contract * 0.2 * dt);
+    this.vel.y -= 0.003 * dt;                                                   // 殻にためた空気でほぼ中性浮力
+    for (const o of others) if (o !== this && o.group.visible) {
+      const d = p.clone().sub(o.pos), l = d.length();
+      if (l < 0.12 && l > 1e-4) this.vel.addScaledVector(d, (0.12 - l) / l * 0.6 * dt);
+    }
+    const wall = (x, lim) => (x > lim ? lim - x : x < -lim ? -lim - x : 0);
+    this.vel.x += wall(p.x, TX - 0.07) * 4 * dt; this.vel.z += wall(p.z, TZ - 0.045) * 4 * dt;
+    this.vel.y += (p.y < 0.05 ? 0.05 - p.y : p.y > LEVEL - 0.045 ? LEVEL - 0.045 - p.y : 0) * 4 * dt;
+    this.vel.multiplyScalar(Math.exp(-dt * 1.5));
+    p.addScaledVector(this.vel, dt);
+    // 向き: 前 = 殻（巻き）の側, 上 = 竜骨
+    const F = this.fwd, Z = new V().crossVectors(F, this.up).normalize(), Y = new V().crossVectors(Z, F);
+    this.m.makeBasis(F, Y, Z); this.q.setFromRotationMatrix(this.m);
+    this.q.multiply(new this.T.Quaternion().setFromAxisAngle(new V(1, 0, 0), Math.sin(t * 0.6 + this.period * 5) * 0.06));
+    this.group.position.copy(p); this.group.quaternion.copy(this.q);
+    const breathe = 1 + this.contract * 0.025; this.body.scale.set(breathe, 1, breathe);
+    // 腕: 口のまわりから出て殻口の外へ流れ、先が丸まる
+    const S = this.size;
+    const toW = (v) => v.clone().multiplyScalar(S).applyQuaternion(this.q).add(p);
+    const crown = toW(kit.crown), back = kit.armDir.clone().applyQuaternion(this.q);
+    const Yw = new V(0, 1, 0).applyQuaternion(this.q), Zw = new V(0, 0, 1).applyQuaternion(this.q);
+    const side1 = new V().crossVectors(back, Zw).normalize(), side2 = new V().crossVectors(back, side1).normalize();
+    const drift = this.vel.clone().multiplyScalar(-6);
+    const want2 = new V();
+    for (const arm of this.arms) {
+      const ca = Math.cos(arm.ang), sa = Math.sin(arm.ang);
+      const radial = side1.clone().multiplyScalar(sa).addScaledVector(side2, ca);
+      const axis = new V().crossVectors(back, radial).normalize();
+      const spread = 0.25 + (1 - this.contract) * 0.3;
+      const seg = 0.0016 * S * arm.len * (1 - this.contract * 0.08), P = arm.pts;
+      const D = arm.dirs || (arm.dirs = Array.from({ length: ARM_N }, () => back.clone()));
+      P[0].copy(crown).addScaledVector(radial, 0.0045 * S);
+      let prev = back.clone().addScaledVector(Yw, -0.2).normalize();
+      for (let k = 1; k < ARM_N; k++) {
+        const kk = k / ARM_N;
+        const wave = Math.sin(t * 2.0 - k * 0.45 + arm.ph) * 0.2 * kk;
+        const curl = Math.pow(kk, 1.3) * (2.2 + 0.8 * Math.sin(t * 0.7 + arm.ph)) * (1 - this.contract * 0.6);
+        want2.copy(prev).applyAxisAngle(axis, (k === 1 ? spread * 1.7 : 0) + curl * 0.24 + wave * 0.3);
+        want2.addScaledVector(new V().copy(back).addScaledVector(Yw, -0.25).add(drift).normalize(), 0.03 + 0.12 * this.contract).normalize();
+        D[k].lerp(want2, 1 - Math.exp(-dt * (9 - 5 * kk))).normalize();
+        P[k].copy(P[k - 1]).addScaledVector(D[k], seg);
+        prev = D[k];
+      }
+      updateArm(arm.g, P, 0.0042 * S, radial);
+    }
+    this.center = p;
+  }
+}
+
+// ================================================================= GPU: three.js
+const f = (v) => (Number.isInteger(v) ? v.toFixed(1) : String(v));
+const SIM = [256, 118];
+const CAUS = [512, 236];
+const MAXA = 6;
+const COMMON = /* glsl */`
+uniform float uDay;
+uniform vec3 uLight, uLightCol, uAmb, uGlow, uRefr;
+uniform sampler2D uSurf, uCaus, uCre;
+uniform vec4 uArgo[${MAXA}];       // タコフネ: 中心と半径（床への影）
+uniform mat4 uVP;                  // 視点の投影（タコフネのテクスチャを引くため）
+uniform vec2 uRes;
+uniform float uCreOn;
+const float PI = 3.14159265, LEVEL = ${f(LEVEL)}, IOR = ${f(IOR)};
+const vec3 TANK = vec3(${f(TX)}, ${f(TOP)}, ${f(TZ)}), ABSORB = vec3(${ABSORB.map(f)});
+
+vec3 wave(vec2 p) { return textureLod(uSurf, p / (2.0 * TANK.xz) + 0.5, 0.0).xyz; }
+vec3 normalOf(vec3 w) { return normalize(vec3(-w.y, 1.0, -w.z)); }
+float fresnel(float c) { return 0.02 + 0.98 * pow(1.0 - clamp(c, 0.0, 1.0), 5.0); }
+
+// タコフネの影: 光線がどれだけ近くを通るか（殻は半透明なので少し光が抜ける）
+float argoClear(vec3 p, vec3 v) {
+  float c = 1.0;
+  for (int i = 0; i < ${MAXA}; i++) {
+    if (uArgo[i].w <= 0.0) continue;
+    vec3 a = p - uArgo[i].xyz; float s = max(-dot(a, v), 0.0);
+    c *= mix(0.35, 1.0, smoothstep(0.55, 1.15, length(a + v * s) / uArgo[i].w));
+  }
+  return c;
+}
+
+vec3 sky(vec3 d, float disk) {
+  float s = dot(d, uLight), g = max(s, 0.0);
+  vec3 c = mix(vec3(0.56, 0.67, 0.8), vec3(0.15, 0.32, 0.68), sqrt(clamp(d.y, 0.0, 1.0))) * uDay;
+  return c + uLightCol * (disk * smoothstep(0.99985, 0.99995, s) * 60.0 + (1.0 - disk) * pow(g, 900.0) * 7.0
+                          + pow(g, 24.0) * 0.12 + g * g * g * g * 0.05 * (1.0 - abs(d.y)));
+}
+vec3 look(vec3 p, vec3 d) { return sky(d, 0.0); }
+vec2 box(vec3 ro, vec3 rd) {
+  vec3 inv = 1.0 / (rd + vec3(1e-7)), t0 = (vec3(-TANK.x, 0.0, -TANK.z) - ro) * inv, t1 = (TANK - ro) * inv;
+  vec3 a = min(t0, t1), b = max(t0, t1);
+  return vec2(max(max(a.x, a.y), a.z), min(min(b.x, b.y), b.z));
+}
+vec3 ground(vec3 p, float px) {
+  vec2 tq = p.xz / 0.3; px /= 0.3;   // 30cm 角の床タイル
+  float e = 0.5 - max(abs(fract(tq.x) - 0.5), abs(fract(tq.y) - 0.5));
+  float line = (1.0 - smoothstep(0.01, 0.01 + px, e)) * min(1.0, 0.012 / px);
+  vec3 alb = vec3(0.2 + 0.03 * mod(floor(tq.x) + floor(tq.y), 2.0)) * (1.0 - 0.45 * line);
+  vec3 E = uLightCol * max(uLight.y, 0.0);
+  vec2 tb = box(p, uLight);
+  if (tb.y > max(tb.x, 0.0)) E *= 0.7 * exp(-ABSORB * 0.7 * (tb.y - max(tb.x, 0.0)));   // 水槽を通った光（影）
+  float dist = length(p - cameraPosition);
+  return mix(alb / PI * (E + uAmb), sky(normalize(vec3(p.x - cameraPosition.x, 0.0, p.z - cameraPosition.z)), 0.0), 1.0 - exp(-0.06 * dist));
+}
+vec3 background(vec3 p, vec3 d) {
+  if (d.y >= 0.0) return look(p, d);
+  vec3 q = p - d * (p.y / d.y);
+  return ground(q, length(q - cameraPosition) * 0.002);
+}
+vec3 wallLight(vec3 q) {   // 水面下のガラス壁から差し込む光
+  vec3 E = vec3(0.0);
+  for (int a = 0; a < 2; a++) {
+    vec3 n = a == 0 ? vec3(sign(uLight.x), 0.0, 0.0) : vec3(0.0, 0.0, sign(uLight.z));
+    float ci = dot(uLight, n);
+    if (ci < 0.02) continue;
+    vec3 t = refract(-uLight, n, 1.0 / IOR);
+    float u = (dot(q, n) - (a == 0 ? TANK.x : TANK.z)) / dot(t, n);
+    vec3 e = q - t * u;
+    if (e.y < LEVEL - 0.008 && abs(a == 0 ? e.z : e.x) < (a == 0 ? TANK.z : TANK.x))
+      E += 0.8 * (1.0 - fresnel(ci)) * -t.y * ci / abs(dot(t, n)) * exp(-ABSORB * u);
+  }
+  return E;
+}
+vec3 caus4(vec2 uv) {
+  vec2 o = 0.6 / vec2(${f(CAUS[0])}, ${f(CAUS[1])});
+  return 0.25 * (texture(uCaus, uv + o).rgb + texture(uCaus, uv - o).rgb + texture(uCaus, uv + vec2(o.x, -o.y)).rgb + texture(uCaus, uv - vec2(o.x, -o.y)).rgb);
+}
+// 水槽の底: 何も敷いていない白っぽいガラス底板。縁に向かって少し暗く、シリコンの目地が薄く見える
+vec3 floorColor(vec3 q) {
+  float edge = min(TANK.x - abs(q.x), TANK.z - abs(q.z));
+  vec3 alb = vec3(0.74, 0.78, 0.78) * (0.6 + 0.4 * smoothstep(0.0, 0.06, edge)) * (1.0 - 0.35 * (1.0 - smoothstep(0.002, 0.005, edge)));
+  vec3 caus = caus4(q.xz / (2.0 * TANK.xz) + 0.5);
+  return alb / PI * (uLightCol * (caus + wallLight(q)) + uAmb * exp(-ABSORB * LEVEL * 1.5));
+}
+float surface(vec3 ro, vec3 rd, float tmax) {
+  float t0 = 0.0, f0 = -1e-4, dt = min(tmax, (LEVEL + 0.012 - ro.y) / rd.y) / 10.0;
+  for (int i = 1; i <= 10; i++) {
+    float t1 = dt * float(i);
+    vec3 p = ro + rd * t1;
+    float f1 = p.y - LEVEL - wave(clamp(p.xz, -TANK.xz, TANK.xz)).x;
+    if (f1 > 0.0) {
+      for (int j = 0; j < 3; j++) {
+        float tm = t0 + (t1 - t0) * f0 / (f0 - f1);
+        vec3 q = ro + rd * tm;
+        float fm = q.y - LEVEL - wave(clamp(q.xz, -TANK.xz, TANK.xz)).x;
+        if (fm > 0.0) { t1 = tm; f1 = fm; } else { t0 = tm; f0 = fm; }
+      }
+      return t0 + (t1 - t0) * f0 / (f0 - f1);
+    }
+    t0 = t1; f0 = f1;
+  }
+  return 1e9;
+}
+// タコフネ: 別パスで描いた色と「視点からの距離」を、水中の視線に沿って画面上で追いかけて当たりを探す
+vec2 toScreen(vec3 p) { vec4 c = uVP * vec4(p, 1.0); return c.xy / c.w * 0.5 + 0.5; }
+float creature(vec3 p, vec3 d, float tmax, out vec3 col) {
+  col = vec3(0.0);
+  if (uCreOn < 0.5) return 1e9;
+  const int N = 28;
+  float prev = 0.0, dt = tmax / float(N);
+  for (int i = 1; i <= N; i++) {
+    float t = dt * float(i);
+    vec3 x = p + d * t;
+    vec2 uv = toScreen(x);
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) continue;
+    vec4 s = texture(uCre, uv);
+    float dx = length(x - cameraPosition);
+    if (s.a > 0.0 && dx >= s.a && dx - s.a < max(dt * 1.6, 0.006)) {
+      // 前後の間を詰める
+      float lo = prev, hi = t;
+      for (int j = 0; j < 5; j++) {
+        float m = 0.5 * (lo + hi); vec3 y = p + d * m; vec4 q = texture(uCre, toScreen(y));
+        if (q.a > 0.0 && length(y - cameraPosition) >= q.a) hi = m; else lo = m;
+      }
+      col = texture(uCre, toScreen(p + d * hi)).rgb;
+      return hi;
+    }
+    prev = t;
+  }
+  return 1e9;
+}
+// 光の筋: 視線に沿って、その場所を通る光（=床のコースティクスを光線方向に引き戻したもの）を足す
+vec3 shafts(vec3 p, vec3 d, float t) {
+  const int N = 14;
+  vec3 acc = vec3(0.0);
+  float dt = t / float(N), j = fract(sin(dot(d.xy * 431.0 + p.xz * 97.0, vec2(12.9898, 78.233))) * 43758.5453);
+  for (int i = 0; i < N; i++) {
+    float s = (float(i) + j) * dt;
+    vec3 x = p + d * s;
+    vec3 F = x + uRefr * (x.y / -uRefr.y);
+    vec2 uv = F.xz / (2.0 * TANK.xz) + 0.5;
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) continue;
+    // 床の値は床までの吸収込みなので、その高さまでの分に戻す
+    vec3 c = texture(uCaus, uv).rgb * exp(ABSORB * x.y / -uRefr.y);
+    acc += c * exp(-ABSORB * s) * dt;
+  }
+  float g = 1.0 + 2.0 * pow(max(dot(d, uRefr), 0.0), 4.0);   // 光の向きに近い視線ほど明るい（前方散乱）
+  return acc * vec3(0.026, 0.045, 0.052) * g;
+}
+vec3 water(vec3 p, vec3 d) {
+  vec3 col = vec3(0.0), thr = vec3(1.0);
+  for (int i = 0; i < 3; i++) {
+    float tx = (sign(d.x) * TANK.x - p.x) / (d.x + 1e-7), tz = (sign(d.z) * TANK.z - p.z) / (d.z + 1e-7);
+    float tf = d.y < 0.0 ? -p.y / d.y : 1e9, ts = d.y > 0.0 ? surface(p, d, min(tx, tz)) : 1e9;
+    float t = min(min(tf, ts), min(tx, tz));
+    vec3 cc; float tc = 1e9;
+    if (i == 0) {
+      tc = creature(p, d, t, cc);
+      col += uLightCol * shafts(p, d, min(t, tc));
+    }
+    t = min(t, tc);
+    vec3 T = exp(-ABSORB * t), q = p + d * t;
+    col += thr * uGlow * (1.0 - T);
+    thr *= T;
+    if (t == tc) return col + thr * cc;
+    if (t == tf) return col + thr * floorColor(q);
+    vec3 n = t == ts ? -normalOf(wave(clamp(q.xz, -TANK.xz, TANK.xz))) : (tx < tz ? vec3(-sign(d.x), 0.0, 0.0) : vec3(0.0, 0.0, -sign(d.z)));
+    vec3 r = refract(d, n, IOR);
+    float F = dot(r, r) < 0.5 ? 1.0 : fresnel(-dot(r, n));
+    col += thr * (1.0 - F) * (t == ts ? look(q, r) : 0.9 * background(q, r));
+    thr *= F; p = q + n * 1e-3; d = reflect(d, n);
+  }
+  return col + thr * uGlow;
+}
+`;
+const VERT = /* glsl */`varying vec3 vPos; varying vec3 vNrm;
+void main() { vPos = (modelMatrix * vec4(position, 1.0)).xyz; vNrm = normal; gl_Position = projectionMatrix * viewMatrix * vec4(vPos, 1.0); }`;
+const OUT = '#include <tonemapping_fragment>\n#include <colorspace_fragment>\n';
+
+async function gpuRenderer(canvas) {
+  const [THREE, { OrbitControls }, { GPUComputationRenderer }] = await Promise.all(['three', 'three/addons/controls/OrbitControls.js', 'three/addons/misc/GPUComputationRenderer.js'].map((m) => import(m)));
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  const ext = renderer.extensions, scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(FOV, 1, 0.005, 2000);
+  if (!ext.has('EXT_color_buffer_float') && !ext.has('EXT_color_buffer_half_float')) throw new Error('no float render targets');
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  canvas.addEventListener('webglcontextrestored', () => location.reload());
+  const controls = new OrbitControls(camera, canvas);
+  controls.target.set(...TARGET);
+  Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, enablePan: false, minDistance: 0.22, maxDistance: 3, minPolarAngle: 0.2, maxPolarAngle: 1.53 });
+  const setView = (yaw, pitch, dist) => { camera.position.set(TARGET[0] + dist * Math.cos(pitch) * Math.sin(yaw), TARGET[1] + dist * Math.sin(pitch), TARGET[2] + dist * Math.cos(pitch) * Math.cos(yaw)); controls.update(); };
+  setView(0.5, 0.18, 0.95);
+
+  // 波紋シミュレーション（クリックで波紋。ガラスで反射する）
+  const gpu = new GPUComputationRenderer(SIM[0], SIM[1], renderer).setDataType(THREE.HalfFloatType);
+  const sim = gpu.addVariable('heightmap', /* glsl */`
+    uniform vec4 uDrops[8];
+    void main() {
+      vec2 cell = 1.0 / resolution.xy, uv = gl_FragCoord.xy * cell;
+      vec4 c = texture2D(heightmap, uv);
+      float nb = texture2D(heightmap, uv + vec2(0.0, cell.y)).r + texture2D(heightmap, uv - vec2(0.0, cell.y)).r
+               + texture2D(heightmap, uv + vec2(cell.x, 0.0)).r + texture2D(heightmap, uv - vec2(cell.x, 0.0)).r;
+      float h = (nb * 0.5 - c.g) * 0.993;
+      vec2 p = (uv - 0.5) * vec2(${f(2 * TX)}, ${f(2 * TZ)});
+      for (int i = 0; i < 8; i++) { vec2 q = (p - uDrops[i].xy) / uDrops[i].z; h += uDrops[i].w * exp(-dot(q, q)); }
+      gl_FragColor = vec4(h, c.r, 0.0, 1.0);
+    }`, gpu.createTexture());
+  gpu.setVariableDependencies(sim, [sim]);
+  sim.minFilter = sim.magFilter = THREE.LinearFilter;
+  const dropU = new Float32Array(32);
+  sim.material.uniforms.uDrops = { value: dropU };
+  const err = gpu.init(); if (err) throw new Error(err);
+
+  const U = { uTime: { value: 0 }, uDay: { value: 1 }, uW: { value: waveUniform }, uA: { value: ampUniform },
+    uLight: { value: new THREE.Vector3() }, uLightCol: { value: new THREE.Vector3() }, uAmb: { value: new THREE.Vector3() },
+    uGlow: { value: new THREE.Vector3() }, uRefr: { value: new THREE.Vector3(0, -1, 0) }, uSim: { value: null }, uSurf: { value: null }, uCaus: { value: null },
+    uCre: { value: null }, uVP: { value: new THREE.Matrix4() }, uRes: { value: new THREE.Vector2() }, uCreOn: { value: 1 },
+    uArgo: { value: Array.from({ length: MAXA }, () => new THREE.Vector4()) } };
+  const surfRT = gpu.createRenderTarget(0, 0, THREE.ClampToEdgeWrapping, THREE.ClampToEdgeWrapping, THREE.LinearFilter, THREE.LinearFilter);
+  const surfMat = gpu.createShaderMaterial(/* glsl */`
+    uniform float uTime;
+    uniform vec4 uW[${NW}];
+    uniform float uA[${NW}];
+    uniform sampler2D uSim;
+    void main() {
+      vec2 uv = gl_FragCoord.xy / resolution.xy, e = 1.0 / resolution.xy, p = (uv - 0.5) * vec2(${f(2 * TX)}, ${f(2 * TZ)});
+      vec3 w = vec3(0.0);
+      for (int i = 0; i < ${NW}; i++) {
+        vec2 kd = uW[i].xy, side = vec2(-kd.y, kd.x) / length(kd);
+        float kb = 0.37 * length(kd), pb = kb * dot(side, p) + 0.9 * uTime + 7.1 * float(i);
+        float ph = dot(kd, p) - uW[i].z * uTime + uW[i].w + 1.6 * sin(pb);
+        w += uA[i] * vec3(sin(ph), cos(ph) * (kd + 1.6 * kb * cos(pb) * side));
+      }
+      float h = texture2D(uSim, uv).r;
+      float hx = texture2D(uSim, uv + vec2(e.x, 0.0)).r - texture2D(uSim, uv - vec2(e.x, 0.0)).r;
+      float hz = texture2D(uSim, uv + vec2(0.0, e.y)).r - texture2D(uSim, uv - vec2(0.0, e.y)).r;
+      gl_FragColor = vec4(w + 0.001 * vec3(h, hx * resolution.x / ${f(4 * TX)}, hz * resolution.y / ${f(4 * TZ)}), 1.0);
+    }`, { uTime: U.uTime, uW: U.uW, uA: U.uA, uSim: U.uSim });
+  const mat = (frag, o = {}) => new THREE.ShaderMaterial(Object.assign({ uniforms: U, vertexShader: VERT, fragmentShader: 'varying vec3 vPos; varying vec3 vNrm;\n' + COMMON + frag }, o));
+
+  // コースティクス: 水面の細かい格子の頂点ごとに光線を屈折させて底まで飛ばし、着地点に格子を描く。
+  // 小さく縮んだマスほど光が集まる（面積比）。タコフネの近くを通る光線は弱める = 底に影が落ちる
+  const causRT = new THREE.WebGLRenderTarget(CAUS[0], CAUS[1], { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+  const grid = new THREE.PlaneGeometry(2 * TX, 2 * TZ, SIM[0], SIM[1]).rotateX(-Math.PI / 2);
+  const causScene = new THREE.Scene(), flatCam = new THREE.Camera();
+  const causMesh = new THREE.Mesh(grid, new THREE.ShaderMaterial({ uniforms: U, side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+    vertexShader: COMMON + /* glsl */`
+      varying vec2 vSurf; varying vec3 vI;
+      void main() {
+        vec3 w = wave(position.xz), P = vec3(position.x, LEVEL + w.x, position.z), n = normalOf(w);
+        vec3 Lin = -uLight;
+        vec3 r = refract(Lin, n, 1.0 / IOR);
+        float t = P.y / max(-r.y, 0.05);
+        vec3 F = P + r * t;
+        vI = vec3(max(-Lin.y, 0.0) * (1.0 - fresnel(dot(-Lin, n)))) * exp(-ABSORB * t);
+        vI *= argoClear(P, r);
+        vSurf = position.xz;
+        gl_Position = vec4(F.x / TANK.x, F.z / TANK.z, 0.0, 1.0);
+      }`,
+    fragmentShader: /* glsl */`
+      varying vec2 vSurf; varying vec3 vI;
+      void main() {
+        vec2 a = dFdx(vSurf), b = dFdy(vSurf);
+        gl_FragColor = vec4(vI * min(abs(a.x * b.y - a.y * b.x) / ${(4 * TX * TZ / (CAUS[0] * CAUS[1])).toExponential(6)}, 40.0), 1.0);
+      }` }));
+  causMesh.frustumCulled = false; causScene.add(causMesh);
+
+  // 空と地面
+  const skyDome = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), mat('void main() { gl_FragColor = vec4(sky(normalize(vPos - cameraPosition), 1.0), 1.0);\n' + OUT + '}', { side: THREE.BackSide, depthWrite: false }));
+  skyDome.renderOrder = -1;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(400, 400).rotateX(-Math.PI / 2),
+    mat('void main() { gl_FragColor = vec4(ground(vPos, max(fwidth(vPos.x), fwidth(vPos.z))), 1.0);\n' + OUT + '}'));
+  // 水面: 空を映し、視線を水中へ屈折させる
+  const surface = new THREE.Mesh(grid, mat(/* glsl */`
+    void main() {
+      vec3 n = normalOf(wave(vPos.xz)), d = normalize(vPos - cameraPosition);
+      if (dot(d, n) > -0.02) n = normalize(n - d * (dot(d, n) + 0.02));
+      float F = fresnel(-dot(d, n));
+      gl_FragColor = vec4(F * look(vPos, reflect(d, n)) + (1.0 - F) * water(vPos, refract(d, n, 1.0 / IOR)), 1.0);
+      ${OUT}
+    }`, { vertexShader: COMMON + /* glsl */`
+      varying vec3 vPos; varying vec3 vNrm;
+      void main() { vPos = vec3(position.x, LEVEL + wave(position.xz).x, position.z); vNrm = vec3(0.0, 1.0, 0.0);
+        gl_Position = projectionMatrix * viewMatrix * vec4(vPos, 1.0); }` }));
+  surface.frustumCulled = false;
+  // ガラス越しの水（揺れる水位より上は捨てる）
+  const sideH = TOP - 0.005;
+  const sides = new THREE.Mesh(new THREE.BoxGeometry(2 * TX, sideH, 2 * TZ).translate(0, sideH / 2, 0), mat(/* glsl */`
+    void main() {
+      float h = LEVEL + wave(clamp(vPos.xz, -TANK.xz, TANK.xz)).x;
+      if (vPos.y > h || abs(vNrm.y) > 0.5) discard;
+      vec3 d = normalize(vPos - cameraPosition);
+      vec3 col = water(vPos, refract(d, vNrm, 1.0 / IOR));
+      float px = fwidth(vPos.y);   // メニスカス: 水がガラスに触れる細い明るい線
+      col = mix(col, 0.25 * look(vPos, reflect(d, vec3(0.0, 1.0, 0.0))) + uGlow * 4.0, 0.5 * (1.0 - smoothstep(px, 3.0 * px, h - vPos.y)));
+      gl_FragColor = vec4(col, 1.0);
+      ${OUT}
+    }`));
+  // ガラス: うっすら映り込み
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(2 * TX + 0.01, TOP, 2 * TZ + 0.01).translate(0, TOP / 2, 0), mat(/* glsl */`
+    void main() {
+      if (abs(vNrm.y) > 0.5) discard;
+      vec3 d = normalize(vPos - cameraPosition), n = normalize(vNrm) * (gl_FrontFacing ? 1.0 : -1.0);
+      float F = 0.04 + 0.96 * pow(1.0 - abs(dot(d, n)), 5.0);
+      gl_FragColor = vec4(F * background(vPos, reflect(d, n)), F + 0.04);
+      ${OUT}
+    }`, { transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }));
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2b3035, roughness: 0.45, metalness: 0.3 });
+  const frame = new THREE.Group(), e = 0.005;
+  for (const [sx, sy, sz, x, y, z] of [[2 * TX, e, e, 0, 0, TZ], [2 * TX, e, e, 0, 0, -TZ], [2 * TX, e, e, 0, TOP, TZ], [2 * TX, e, e, 0, TOP, -TZ],
+    [e, e, 2 * TZ, TX, 0, 0], [e, e, 2 * TZ, -TX, 0, 0], [e, e, 2 * TZ, TX, TOP, 0], [e, e, 2 * TZ, -TX, TOP, 0],
+    [e, TOP, e, TX, TOP / 2, TZ], [e, TOP, e, -TX, TOP / 2, TZ], [e, TOP, e, TX, TOP / 2, -TZ], [e, TOP, e, -TX, TOP / 2, -TZ]]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(sx + e, sy, sz + e), dark);
+    b.position.set(x, y, z); frame.add(b);
+  }
+  const sunLight = new THREE.DirectionalLight(0xffffff, 2.5), hemi = new THREE.HemisphereLight(0xbcd2ea, 0x3a3f44, 0.9);
+  scene.add(skyDome, floor, sides, surface, glass, frame, sunLight, hemi);
+
+  // ---------------------------------------------------------------- タコフネのパス
+  // 色(水中での光の弱まり・コースティクス込み、水による吸収は含まない) と、視点からの距離(a) を浮動小数テクスチャへ
+  const creScene = new THREE.Scene();
+  const creSun = new THREE.DirectionalLight(0xffffff, 1), creHemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 1);
+  creScene.add(creSun, creSun.target, creHemi);
+  const creRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true });
+  const creU = { uBase: { value: new THREE.Vector3(1, 1, 1) } };
+  // 水中の照明: コースティクスで揺れる直射光, 深さによる弱まり, 薄い殻や膜を透ける光。
+  // 距離(a) はタコフネを水のシェーダーから探すのに使う（膜は下の殻の距離をそのまま残す）
+  const underwater = (m, { trans = 0, keepAlpha = false } = {}) => {
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, { uCaus: U.uCaus, uRefr: U.uRefr, uBase: creU.uBase, uTrans: { value: trans } });
+      sh.vertexShader = 'varying vec3 vWP;\n' + sh.vertexShader.replace('#include <fog_vertex>', '#include <fog_vertex>\n vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = `varying vec3 vWP; uniform sampler2D uCaus; uniform vec3 uRefr, uBase; uniform float uTrans;
+        const vec3 ABS = vec3(${ABSORB.map(f)}); const float LV = ${f(LEVEL)}; const vec2 TK = vec2(${f(TX)}, ${f(TZ)});\n` + sh.fragmentShader
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+          {
+            #if NUM_DIR_LIGHTS > 0
+              // 薄い殻・膜・皮膚は裏から当たった光を通す
+              reflectedLight.directDiffuse += uTrans * diffuseColor.rgb * directionalLights[0].color
+                * (0.25 + 0.75 * max(dot(-normal, directionalLights[0].direction), 0.0)) / PI;
+            #endif
+            float up = max(LV - vWP.y, 0.0), cr = max(-uRefr.y, 0.2);
+            vec2 fp = vWP.xz + uRefr.xz * (vWP.y / cr);
+            vec3 ratio = texture2D(uCaus, clamp(fp / (2.0 * TK) + 0.5, 0.0, 1.0)).rgb / max(uBase, vec3(1e-4));
+            float k = clamp(1.0 - vWP.y / LV, 0.2, 1.0) * 0.85;
+            vec3 g = 0.97 * exp(-ABS * up / cr) * mix(vec3(1.0), min(ratio, vec3(6.0)), k);
+            reflectedLight.directDiffuse *= g; reflectedLight.directSpecular *= g;
+            vec3 amb = exp(-ABS * up * 1.3);
+            reflectedLight.indirectDiffuse *= amb; reflectedLight.indirectSpecular *= amb;
+          }`)
+        .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + (keepAlpha ? '' : ' gl_FragColor.a = length(vWP - cameraPosition);'));
+    };
+    return m;
+  };
+  const tex = makeTextures(THREE);
+  const skinMat = (map = tex.skin) => new THREE.MeshPhysicalMaterial({ map, roughness: 0.38, clearcoat: 0.35, clearcoatRoughness: 0.3,
+    sheen: 0.25, sheenColor: new THREE.Color(0.8, 0.86, 0.96), sheenRoughness: 0.5, iridescence: 0.2, iridescenceIOR: 1.4 });
+  const kitMat = {
+    shell: underwater(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.32, clearcoat: 0.6, clearcoatRoughness: 0.25, side: THREE.DoubleSide }), { trans: 0.55 }),
+    web: underwater(new THREE.MeshPhysicalMaterial({ map: tex.web, transparent: true, depthWrite: false, side: THREE.DoubleSide, roughness: 0.25,
+      sheen: 1, sheenColor: new THREE.Color(0.85, 0.9, 1), sheenRoughness: 0.35, iridescence: 0.6, iridescenceIOR: 1.4,
+      blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+      blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor }), { trans: 0.2, keepAlpha: true }),
+    skin: underwater(skinMat(), { trans: 0.3 }),
+    arm: underwater(skinMat(tex.arm), { trans: 0.3 }),
+    eye: underwater(new THREE.MeshPhysicalMaterial({ map: tex.eye, emissiveMap: tex.eye, emissive: new THREE.Color(0.35, 0.3, 0.25), roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 }), { trans: 0.15 }),
+  };
+  // らせん面の座標 → 体の座標（x = 進む向き = 殻口から巻きの中へ, y = 竜骨側, z = 右）. TILT で前後の傾き
+  const kit = (() => {
+    const V = THREE.Vector3, TH = SH.TH;
+    const o = new V(Math.cos(TH), Math.sin(TH), 0), tA = o.clone().multiplyScalar(SH.b).add(new V(-Math.sin(TH), Math.cos(TH), 0)).normalize();
+    // 実物の姿勢: 殻は兜のように上（竜骨が上, 殻口は下向き）, 頭と腕は殻の下。進む向きは巻きの側
+    const Y = tA.clone().negate(), X = o.clone().addScaledVector(tA, -o.dot(tA)).normalize().negate(), Zb = new V().crossVectors(X, Y);
+    const M = new THREE.Matrix4().makeRotationZ(TILT).multiply(new THREE.Matrix4().makeBasis(X, Y, Zb).invert());
+    const shellGeo = buildShell(THREE).applyMatrix4(M);
+    shellGeo.computeBoundingBox();
+    const ctr = shellGeo.boundingBox.getCenter(new V());
+    const Tr = new THREE.Matrix4().makeTranslation(-ctr.x, -ctr.y, -ctr.z);
+    shellGeo.applyMatrix4(Tr); M.premultiply(Tr);
+    const { parts } = buildArgonautParts(THREE, M);
+    const Yp = o.clone().addScaledVector(tA, -o.dot(tA)).normalize(), Zp = new V(0, 0, 1);
+    const ellipsoid = (c, r, seg = [40, 28]) => {   // らせん面の座標で (tA, 殻口の竜骨側, z) を軸にした楕円体
+      const g = new THREE.SphereGeometry(1, seg[0], seg[1]);
+      g.applyMatrix4(new THREE.Matrix4().makeBasis(tA.clone().multiplyScalar(r[0]), Yp.clone().multiplyScalar(r[1]), Zp.clone().multiplyScalar(r[2])).setPosition(c));
+      return g.applyMatrix4(M);
+    };
+    const funnelDir = tA.clone().multiplyScalar(0.8).addScaledVector(o, 0.6).normalize();
+    const funnelGeo = new THREE.CylinderGeometry(0.0018, 0.0032, 0.011, 18, 1, true)
+      .applyMatrix4(new THREE.Matrix4().makeBasis(new V().crossVectors(funnelDir, Zp).normalize(), funnelDir, Zp).setPosition(parts.funnel.clone().addScaledVector(funnelDir, 0.004)))
+      .applyMatrix4(M);
+    return {
+      shellGeo,
+      webGeo: [-1, 1].map((sd) => buildWeb(THREE, sd).applyMatrix4(M)),
+      earGeo: buildEars(THREE).map((g) => g.applyMatrix4(M)),
+      headGeo: ellipsoid(parts.head, [0.0125, 0.0132, 0.0118]),
+      mantleGeo: ellipsoid(parts.mantle, [0.018, 0.0135, 0.0105]),
+      funnelGeo,
+      dorsalGeo: parts.dorsal.map((pts) => tubeGeometry(THREE, pts.map((v) => v.clone().applyMatrix4(M)), 0.0026, 0.0006)),
+      eyeGeo: new THREE.SphereGeometry(0.0058, 40, 28),
+      eyes: parts.eyes.map((e, i) => ({ pos: e.clone().applyMatrix4(M), rot: new THREE.Euler(0, i ? Math.PI : 0, i ? -TILT : TILT) })),
+      crown: parts.crown.clone().applyMatrix4(M),
+      armDir: tA.clone().transformDirection(M),
+      mat: kitMat,
+    };
+  })();
+  const argos = Array.from({ length: MAXA }, (_, i) => new Argonaut(THREE, kit, i, creScene));
+
+  // クリックで波紋
+  const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -LEVEL), hit = new THREE.Vector3();
+  let down = null;
+  canvas.addEventListener('pointerdown', (ev) => { down = [ev.clientX, ev.clientY, performance.now()]; });
+  canvas.addEventListener('pointerup', (ev) => {
+    if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 6 || performance.now() - down[2] > 500) return;
+    const r = canvas.getBoundingClientRect();
+    ray.setFromCamera(new THREE.Vector2((ev.clientX - r.left) / r.width * 2 - 1, 1 - (ev.clientY - r.top) / r.height * 2), camera);
+    if (ray.ray.intersectPlane(plane, hit) && Math.abs(hit.x) < TX && Math.abs(hit.z) < TZ) addRipple(hit.x, hit.z);
+  });
+
+  let simAcc = 0; const size = new THREE.Vector2(), buf = new THREE.Vector2();
+  return {
+    name: 'three.js r' + THREE.REVISION, minScale: 0.35, maxScale: Math.min(devicePixelRatio || 1, 2), target: 50, controls, setView, argos, camera,
+    draw(dt, L) {
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      if (renderer.getPixelRatio() !== state.scale) renderer.setPixelRatio(state.scale);
+      if (renderer.getSize(size).x !== w || size.y !== h) renderer.setSize(w, h, false);
+      camera.aspect = w / Math.max(1, h);
+      camera.fov = 2 * Math.atan(Math.tan(FOV * Math.PI / 360) / Math.min(1, camera.aspect)) * 180 / Math.PI;
+      camera.updateProjectionMatrix();
+      controls.update();
+      for (simAcc = Math.min(simAcc + dt, 0.1); simAcc >= 1 / 60; simAcc -= 1 / 60) {
+        for (let i = 0; i < 8; i++) dropU.set(drops.length ? drops.shift() : [0, 0, 1, 0], i * 4);
+        gpu.compute();
+      }
+      const R = refractDown(L.pos);
+      U.uTime.value = state.t; U.uDay.value = L.day;
+      U.uLight.value.set(...L.pos); U.uLightCol.value.set(...L.col); U.uAmb.value.set(...L.amb); U.uGlow.value.set(...L.glow); U.uRefr.value.set(...R);
+      U.uSim.value = gpu.getCurrentRenderTarget(sim).texture;
+      gpu.doRenderTarget(surfMat, surfRT); U.uSurf.value = surfRT.texture;
+      // タコフネを動かす
+      const live = argos.filter((a, i) => i < state.count);
+      argos.forEach((a, i) => a.setVisible(i < state.count));
+      if (dt > 0) for (const a of live) a.step(dt, state.t, live);
+      argos.forEach((a, i) => U.uArgo.value[i].set(...(a.center ? a.center.toArray() : [0, 0, 0]), i < state.count && a.center ? 0.034 * a.size : 0));
+      // コースティクス
+      U.uCaus.value = null;
+      renderer.setRenderTarget(causRT); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(causScene, flatCam);
+      U.uCaus.value = causRT.texture;
+      // タコフネのパス（同じカメラ, 同じ解像度）
+      const cs = Math.min(Math.max(state.scale * 1.6, 1), 2);   // タコフネは細かいので本体より高い解像度で
+      buf.set(Math.round(w * cs), Math.round(h * cs));
+      if (creRT.width !== buf.x || creRT.height !== buf.y) creRT.setSize(buf.x, buf.y);
+      const cos = Math.max(L.pos[1], 0.05);
+      creU.uBase.value.set(...ABSORB.map((a) => cos * 0.97 * Math.exp(-a * LEVEL / Math.max(-R[1], 0.2))));
+      creSun.color.setRGB(...L.col); creSun.intensity = 1;
+      creSun.position.set(-R[0], -R[1], -R[2]); creSun.target.position.set(0, 0, 0);
+      // 水中は光が四方に散る: 空の光 + 散乱した日光, 下からは白い底板に跳ね返った光
+      const sc = [0.86, 0.95, 1.0];
+      const ambAvg = (L.amb[0] + L.amb[1] + L.amb[2]) / 3;
+      creHemi.color.setRGB(...[0.94, 1, 1.06].map((k, i) => ambAvg * k + L.col[i] * 0.3 * sc[i]));   // 空の青みは水が散らしてほぼ白に
+      creHemi.groundColor.setRGB(...L.col.map((c, i) => c * 0.22 * sc[i] * Math.max(L.pos[1], 0.1)));
+      renderer.setRenderTarget(creRT); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(creScene, camera);
+      renderer.setRenderTarget(null);
+      U.uCre.value = creRT.texture; U.uRes.value.copy(buf);
+      U.uVP.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      sunLight.position.set(...L.pos).multiplyScalar(10);
+      hemi.intensity = 1.3 * L.day;
+      renderer.render(scene, camera);
+    },
+  };
+}
+
+// ================================================================= 起動とループ
+const canvas = $('view');
+let R = null;
+try { R = await gpuRenderer(canvas); } catch (e) { console.warn(e); $('err').style.display = 'grid'; $('ui').hidden = true; }
+if (R) {
+  state.scale = Math.min(devicePixelRatio || 1, 1.5);
+  if (innerWidth < 640) { $('ui').open = false; R.setView(0.5, 0.25, 1.25); }
+  const units = { elev: '°', az: '°', count: '匹' };
+  for (const id of ['elev', 'az', 'waves', 'count']) {
+    const show = () => { const x = +$(id).value; $(id + 'Out').textContent = units[id] ? x + units[id] : x.toFixed(2); };
+    $(id).addEventListener('input', show); show();
+  }
+  addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' && e.key !== ' ') return;
+    const k = e.key.toLowerCase();
+    if (k === ' ') { state.paused = !state.paused; e.preventDefault(); }
+    else if (k === 'h') $('ui').hidden = !$('ui').hidden;
+  });
+  window.aq = { state, R, addRipple };
+  let last = performance.now(), frames = 0, elapsed = 0, calmUntil = 0;
+  function frame(now) {
+    requestAnimationFrame(frame);
+    const real = (now - last) / 1000, dt = Math.min(0.05, real), live = state.paused ? 0 : dt;
+    last = now; state.t += live; frames++; elapsed += real;   // fps は実際の経過時間で測る（dt は上限つき）
+    if (elapsed > 0.5) {
+      const fps = frames / elapsed;
+      if (fps < R.target * 0.9) { state.scale = Math.max(R.minScale, state.scale * 0.85); calmUntil = now + 2500; }
+      else if (fps > R.target * 1.12 && now > calmUntil) state.scale = Math.min(R.maxScale, state.scale * 1.08);
+      $('stats').textContent = `${R.name} · ${fps.toFixed(0)} fps · 解像度 ${Math.round(state.scale * 100)}%`;
+      frames = 0; elapsed = 0;
+    }
+    state.waves = +$('waves').value; state.count = +$('count').value;
+    if (live > 0) for (splashAcc += live * 1.5; splashAcc >= 1; splashAcc -= 1)   // ポンプの水流が水面をときどき乱す
+      addRipple((Math.random() * 2 - 1) * TX * 0.95, (Math.random() * 2 - 1) * TZ * 0.95, (Math.random() < 0.5 ? -1 : 1) * (0.3 + Math.random()) * 0.25, 0.005 + 0.008 * Math.random());
+    waveHeights(state.t, state.waves);
+    R.draw(live, light());
+  }
+  requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>
