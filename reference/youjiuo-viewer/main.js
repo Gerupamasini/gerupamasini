@@ -153,7 +153,7 @@ function aquarium() {
   floor = { heightAt: () => -0.32, waterAt: () => 0.3, meadow: probe };
   const d = addFish(0, 0.06, 0.03, 190);
   d.recolor(Number(params.get('morph') ?? 0), 0.4);
-  d.behaviour.holdGrass({ floor, t: 0 }, 600);
+  d.behaviour.holdGrass({ floor, t: 0 }, 600, false, undefined, params.get('grip') ?? 'hook');
   state.brain = false;
   renderer.toneMappingExposure = 0.9;
   camera.fov = 30;
@@ -392,7 +392,8 @@ function seg(id, entries, get, set) {
 }
 const first = () => fishes[0]?.driver;
 const ACTS = {
-  hold: ['アマモに沿う', () => first()?.behaviour.holdGrass({ floor, t: state.time }, 30)],
+  hold: ['アマモに沿う', () => first()?.behaviour.holdGrass({ floor, t: state.time }, 30, false, undefined, params.get('grip') ?? undefined)],
+  hook: ['尾を掛ける', () => first()?.behaviour.holdGrass({ floor, t: state.time }, 30, false, undefined, 'hook')],
   forage: ['摂餌', () => first()?.setIntent({ id: 2, kind: 'forage', urgency: 0.3, seconds: 20 })],
   swim: ['ゆっくり泳ぐ', () => { const p = fishes[0].root.position; first()?.setIntent({ id: 3, kind: 'wander', urgency: 0.3, seconds: 14, target: new THREE.Vector3(p.x + 0.7, 0, p.z - 0.2) }); }],
   // a U-turn: a point behind it and to its left
@@ -455,6 +456,22 @@ window.__yj = {
     controls.target.copy(a);
     const c = Math.cos(b.heading), sn = Math.sin(b.heading);
     camera.position.set(a.x + c * off[0] + sn * off[2], a.y + off[1], a.z - sn * off[0] + c * off[2]);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(a);
+    render();
+    return this.state();
+  },
+  /** look at where fish i's tail holds its shoot, from the side the curl passes in front of */
+  followGrip(i = 0, dist = 0.09, up = 0.03) {
+    const b = fishes[i].driver.behaviour, h = b.hold;
+    if (!h) return this.followAt(i, 0.9, [0, up, dist]);
+    const fx = Math.cos(h.ref.fan), fz = Math.sin(h.ref.fan);
+    const nx = -fz * h.side, nz = fx * h.side;
+    const m = 0.5 * h.wrap * h.wrapA;
+    const dx = Math.cos(m) * nx + Math.sin(m) * nz, dz = Math.cos(m) * nz - Math.sin(m) * nx;
+    const a = new THREE.Vector3(h.ref.x, h.ref.y + h.anchor - 0.012, h.ref.z);
+    controls.target.copy(a);
+    camera.position.set(a.x + dx * dist, a.y + up, a.z + dz * dist);
     camera.up.set(0, 1, 0);
     camera.lookAt(a);
     render();

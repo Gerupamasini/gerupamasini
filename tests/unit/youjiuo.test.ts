@@ -216,7 +216,7 @@ describe('ヨウジウオ behaviour', () => {
     const base = new Vector3().subVectors(P[kb - 1], P[kb]), end = new Vector3().subVectors(P[NSEG - 2], P[NSEG]);
     expect(Math.abs(yawOf(base, end))).toBeLessThan(0.2);
   });
-  it('holds a shoot: laid along it, swaying with it, the tail coiled round the sheath', () => {
+  it('holds a shoot: laid along it, swaying with it, the end of the tail hooked or pressed round the sheath', () => {
     const m = meadow();
     const f = mk(5);
     f.pos.set(0.05, Number.NaN, 0.05);
@@ -234,7 +234,8 @@ describe('ヨウジウオ behaviour', () => {
     const hold = (f as unknown as { hold: { ref: ShootRefT; sCurl: number } }).hold;
     const h = hold.ref;
     expect(Math.hypot(tail.x - h.x, tail.z - h.z)).toBeLessThan(0.02);
-    // the rear of the tail winds round the sheath at least once, close to it but never through it
+    // the end of the tail goes part of the way round the sheath (a pipefish's tail is no seahorse's: under a turn),
+    // close to it but never through it, bending no more than the armour allows; the caudal fan stands free
     const axis = Array.from({ length: 64 }, () => new Vector3());
     const na = shootLine(m.kit.uniforms, h, shootState(m.kit.uniforms, h), 0.002, 0.2, axis);
     let wound = 0, prevA: number | null = null, minClear = 1e9;
@@ -252,9 +253,19 @@ describe('ヨウジウオ behaviour', () => {
       if (prevA !== null) wound += Math.atan2(Math.sin(a - prevA), Math.cos(a - prevA));
       prevA = a;
     }
-    expect(Math.abs(wound) / (2 * Math.PI)).toBeGreaterThan(1);
+    const mode = (f as unknown as { hold: { mode: string } }).hold.mode;
+    const turns = Math.abs(wound) / (2 * Math.PI);
+    if (mode === 'hook') { expect(turns).toBeGreaterThan(0.35); expect(turns).toBeLessThan(0.85); }
+    else { expect(turns).toBeGreaterThan(0.03); expect(turns).toBeLessThan(0.3); }
     expect(minClear).toBeGreaterThan(0);
     expect(minClear).toBeLessThan(0.0015);
+    let maxRing = 0;
+    for (let k = 1; k < NSEG; k++) {
+      if (STATIONS[k] > 0.975) continue;
+      const a = new Vector3().subVectors(f.pose.pts[k - 1], f.pose.pts[k]).normalize(), b = new Vector3().subVectors(f.pose.pts[k], f.pose.pts[k + 1]).normalize();
+      maxRing = Math.max(maxRing, (Math.acos(Math.min(1, a.dot(b))) / (0.5 * (STATIONS[k + 1] - STATIONS[k - 1]))) * 0.014);
+    }
+    expect(maxRing).toBeLessThan((25 * Math.PI) / 180);
     // it moves with the waves while the fins rest
     const p0 = f.toWorld(f.pose.pts[0].clone());
     let travel = 0;
@@ -279,6 +290,24 @@ describe('ヨウジウオ behaviour', () => {
     });
     expect(first).toBeLessThan(0.005);
     expect(most).toBeLessThan(0.012);
+  });
+  it('mostly clings, sometimes hooks, never coils like a seahorse', () => {
+    const modes: string[] = [];
+    for (let seed = 40; seed < 64; seed++) {
+      const m = meadow();
+      const f = mk(seed);
+      f.pos.set(0.05, Number.NaN, 0.05);
+      const env: FishEnv = { floor: floorWith(m), t: 0 };
+      run(f, env, 0.1, m);
+      if (!f.holdGrass(env, 40)) continue;
+      const h = (f as unknown as { hold: { mode: string; wrapA: number; sCurl: number } }).hold;
+      modes.push(h.mode);
+      expect(h.wrapA).toBeLessThan(1.6 * Math.PI);
+      expect(h.sCurl).toBeGreaterThanOrEqual(0.7);
+    }
+    const hooks = modes.filter((x) => x === 'hook').length;
+    expect(hooks).toBeGreaterThan(0);
+    expect(hooks).toBeLessThan(modes.length * 0.65);
   });
   it('stalks prey and strikes with a flick of the head and the snout\'s suction', () => {
     const f = mk(11);
