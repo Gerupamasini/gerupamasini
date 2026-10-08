@@ -13,6 +13,7 @@ import { CrabDriver, HermitDriver, SnailDriver } from '../species/shore/crawlers
 import { WormDriver } from '../species/shore/others';
 import { HakuDriver } from '../species/haku/HakuDriver';
 import { AmimehagiDriver } from '../species/amimehagi/AmimehagiDriver';
+import { YoujiuoDriver } from '../species/youjiuo/YoujiuoDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -47,4 +48,6 @@ export const DRIVERS: Record<string, DriverEntry> = {
   haku: { create: () => new HakuDriver(), placeholder: () => HakuDriver.makeModel(), preview: () => HakuDriver.makePreview(), nearDistance: 5 },
   // アミメハギ: the small filefish of the eelgrass (its own tiers in the placeholder view; near within 4 m)
   amimehagi: { create: () => new AmimehagiDriver(), placeholder: () => AmimehagiDriver.makeModel(), preview: (seed) => AmimehagiDriver.makePreview(seed), nearDistance: 4 },
+  // ヨウジウオ: the pipefish of the eelgrass (its own tiers in the placeholder view; near within 6 m)
+  youjiuo: { create: () => new YoujiuoDriver(), placeholder: () => YoujiuoDriver.makeModel(), preview: (seed) => YoujiuoDriver.makePreview(seed), nearDistance: 6 },
 };

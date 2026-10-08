@@ -12,7 +12,8 @@
     "crassostrea_gigas",
     "reticunassa_festiva",
     "mugil_cephalus",
-    "rudarius_ercodes"
+    "rudarius_ercodes",
+    "syngnathus_schlegeli"
   ],
   "behaviors": [
     "fish_benthic",
@@ -23,7 +24,8 @@
     "oyster_reef",
     "snail_crawl",
     "fish_school",
-    "fish_seagrass"
+    "fish_seagrass",
+    "pipefish_grass"
   ],
   "maps": [
     "kasai_west",

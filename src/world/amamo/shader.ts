@@ -45,6 +45,9 @@ varying vec4 vAmD;         // x: fall (0 standing .. 1 lying), y: edge of the pa
 varying vec3 vAmW;
 
 float amHash(float n) { return fract(sin(n * 0.1031 + 0.37) * 43758.5453); }
+// the shoot-level randoms use a hash without sine: the same on every GPU and on the CPU (flow.ts moves animals with the
+// shoot), where fract(sin(x)·43758) depends on each GPU's sin precision
+float amHashS(float p) { p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
 float amH2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float amNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -97,16 +100,16 @@ AmShoot amShoot() {
   vec3 th = AM_WAVE_K * vec3(dot(S.d0, P), dot(S.d1, P), dot(S.d2, P)) - AM_WAVE_W * t + vec3(0.0, 2.1, 4.3);
   th += 1.6 * vec3(amNoise(P * 0.09), amNoise(P * 0.07 + 5.3), amNoise(P * 0.11 + 9.1));
   // no two shoots quite in step: each lags or leads the passing wave a little and takes it more or less strongly
-  th += (vec3(amHash(S.seed * 211.0), amHash(S.seed * 223.0), amHash(S.seed * 227.0)) - 0.5) * 1.3;
+  th += (vec3(amHashS(S.seed * 211.0), amHashS(S.seed * 223.0), amHashS(S.seed * 227.0)) - 0.5) * 1.3;
   S.ws = sin(th);
   S.wc = cos(th);
   // gusts: patches of stronger motion drifting downwind over the meadow
   S.gust = mix(1.0, 0.35 + 1.3 * smoothstep(0.2, 0.85, amNoise(P * 0.045 - uAmWave.xy * t * 0.7)), uAmWave.w);
-  S.gust *= 0.75 + 0.5 * amHash(S.seed * 233.0);
+  S.gust *= 0.75 + 0.5 * amHashS(S.seed * 233.0);
   float az = aShootA.x;
   S.fan = vec2(cos(az), sin(az));
   // each shoot leans a little, mostly within its fan (the sheath is flattened that way)
-  S.tilt = S.fan * ((amHash(S.seed * 91.0) - 0.5) * 0.26) + vec2(-S.fan.y, S.fan.x) * ((amHash(S.seed * 17.0) - 0.5) * 0.08);
+  S.tilt = S.fan * ((amHashS(S.seed * 91.0) - 0.5) * 0.26) + vec2(-S.fan.y, S.fan.x) * ((amHashS(S.seed * 17.0) - 0.5) * 0.08);
   // where it falls when the water goes: down the local slope and toward the sea, as the last of the ebb laid it
   vec2 fd = uAmSeaward - S.grad * 40.0;
   S.fallDir = normalize(amRot(fd, 0.6 * (amHash(S.seed * 53.0) - 0.5)) + 1e-5);
