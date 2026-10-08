@@ -17,6 +17,8 @@ export interface IndividualRecord {
   traits: string[];
   /** a female carrying eggs (shown in her species' gravid form) */
   gravid?: boolean;
+  /** a male in breeding dress (shown in his species' male form) */
+  dress?: boolean;
   caughtAt: number;
   caughtWhere: [number, number];
   tideLevel: number;
@@ -44,6 +46,8 @@ export interface Individual {
   traits: string[];
   /** an adult female carrying eggs (her species' gravid model, when it has one) */
   gravid: boolean;
+  /** an adult male in breeding dress (his species' male model, when it has one) */
+  dress: boolean;
   /** percentile of length within the species distribution, 0..100 */
   lengthPct: number;
   /** how easily this one takes alarm: the big old ones are wary (1.3), the small ones not so much (0.7) */
@@ -112,12 +116,16 @@ export function generateIndividual(species: SpeciesDef, seed: number, x: number,
   // eggs: adult females in the spawning months mostly, a few at other times (the species says how many)
   const br = species.breeding;
   const adult = stage === species.stages[species.stages.length - 1].id;
-  const gravid = !!br && sex === 'f' && adult && rng.chance(br.months.includes(jstParts(nowMs).month) ? br.gravidShare : br.offSeasonShare);
-  const traits = species.traits.filter((tr) => evalTraitCondition(tr.when, { length_pct: pct, length_mm: len, weight_g: weight, gravid: gravid ? 1 : 0 })).map((tr) => tr.id);
+  const inSeason = !!br && br.months.includes(jstParts(nowMs).month);
+  const gravid = !!br && sex === 'f' && adult && rng.chance(inSeason ? br.gravidShare : br.offSeasonShare);
+  // nuptial dress: adult males in the spawning months (only drawn where the species has a share, so the other
+  // species' individuals keep their seeds' draws)
+  const dress = !!br && br.dressShare > 0 && sex === 'm' && adult && inSeason && rng.chance(br.dressShare);
+  const traits = species.traits.filter((tr) => evalTraitCondition(tr.when, { length_pct: pct, length_mm: len, weight_g: weight, gravid: gravid ? 1 : 0, dress: dress ? 1 : 0 })).map((tr) => tr.id);
   const id = `${species.id}#${hashInts(seed, 7).toString(16).padStart(8, '0')}`;
   return {
     id, species, pos: new Vector3(x, 0, z), home: new Vector3(x, 0, z), heading: rng.range(0, Math.PI * 2),
-    length_mm: Math.round(len * 10) / 10, weight_g: Math.round(weight * 10) / 10, sex, stage, traits, gravid, lengthPct: pct,
+    length_mm: Math.round(len * 10) / 10, weight_g: Math.round(weight * 10) / 10, sex, stage, traits, gravid, dress, lengthPct: pct,
     wariness: warinessFor(pct),
     alert: 0, energy: rng.range(0.3, 0.9), lod: 3,
     brain: { busyUntil: 0, intentId: 0, cooldowns: new Map(), nextTick: 0, done: true, lastIntentKind: '' },
@@ -128,6 +136,6 @@ export function generateIndividual(species: SpeciesDef, seed: number, x: number,
 export function toRecord(ind: Individual, number: number, nowMs: number, tideLevel: number): IndividualRecord {
   return {
     id: ind.id, speciesId: ind.species.id, number, length_mm: ind.length_mm, weight_g: ind.weight_g, sex: ind.sex, stage: ind.stage,
-    traits: [...ind.traits], ...(ind.gravid ? { gravid: true } : {}), caughtAt: nowMs, caughtWhere: [Math.round(ind.pos.x), Math.round(ind.pos.z)], tideLevel,
+    traits: [...ind.traits], ...(ind.gravid ? { gravid: true } : {}), ...(ind.dress ? { dress: true } : {}), caughtAt: nowMs, caughtWhere: [Math.round(ind.pos.x), Math.round(ind.pos.z)], tideLevel,
   };
 }

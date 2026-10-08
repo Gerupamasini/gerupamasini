@@ -14,6 +14,8 @@ node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボ�
 npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze -- --tier hero  # エドハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze-gravid -- --tier hero   # エドハゼの抱卵雌（edohaze_gravid.*.glb）
+npm run model:himehaze -- --tier hero  # ヒメハゼモデルの再生成（hero / lod1 / lod2）
+npm run model:himehaze-male -- --tier hero   # ヒメハゼの繁殖期の雄（himehaze_male.*.glb）
 npm run model:nets   # タモ網 6 種の GLB を再生成（docs/models/nets/）
 npm run render:oyster # マガキ（個体・群生・牡蠣礁）の画像を再生成（docs/models/oyster/）
 npm run model:pagurus-hide            # ユビナガホンヤドカリの「殻に閉じこもる姿勢」の表を再生成（形態・殻を変えたあと）
@@ -38,6 +40,7 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 - `docs/creatures/yubinagahonyadokari/` ユビナガホンヤドカリ（*Pagurus minutus*）の調査、実写資料の分析、技術設計、科学的検証
 - `docs/models/amamo/` アマモ場（株・群落・水中の揺れ・潮の干満）の調査・設計・使い方（ゲームでは `World` の `AmamoMeadow`、ビューアは `reference/amamo-viewer/`）
 - `docs/maps/hashirimizu/` 走水海岸〜観音崎マップ（一定の緩斜面、潮干狩り帯、胴長で入るアマモ場、生息環境のホットスポット、新しい 5 種。ビューアは `reference/shore-viewer/`）
+- `docs/models/himehaze/` ヒメハゼ（*Favonigobius gymnauchen*）の調査・設計（写真 70 枚の計測、鰭・体色・模様、リグ、繁殖期の雄。GLB はマハゼのパイプライン `tools/models/himehaze/` で生成し、ゲームではマハゼのドライバで動く）
 - `docs/models/haku/` ハク（ボラの稚魚）の調査・設計（写真との照合、群れの 5 状態、一斉逃避、LOD 3 段、接地影。ビューアは `reference/haku-viewer/`）
 - `docs/creatures/isosujiebi/` イソスジエビ（*Palaemon pacificus*）の調査とシラタエビとの差分一覧（共有エビモデルの種プロファイル `isosuji.js`、行動 AI `IsosujiBrain.js`。岩礁の潮だまりとアマモ場のビューアは `reference/isosuji-viewer/`、`?species=shirata` で元のシラタエビと見比べられる）
 - `docs/models/amimehagi/` アミメハギ（*Rudarius ercodes*）の調査・設計（写真 70 枚との照合、側扁した菱形の体・網目模様・第一背鰭棘、背鰭と臀鰭の波による定位と移動、アマモ場での 5 状態、葉を押しのける連携、LOD 3 段。ビューアは `reference/amimehagi-viewer/`）

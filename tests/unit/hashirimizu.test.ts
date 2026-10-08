@@ -113,11 +113,12 @@ describe('走水: who lives where', () => {
   const species: SpeciesDef[] = manifest.species.map((id) => SpeciesSchema.parse(json(`species/${id}.json`)));
   // (a rule without `maps` holds on every flat, 走水 included)
   const here = (tag: string) => species.filter((sp) => sp.spawn.some((r) => (!r.maps || r.maps.includes('hashirimizu')) && r.tags.includes(tag as never))).map((sp) => sp.names.ja);
-  // 走水 has gobies, shrimps, shellfish, the hermit crab and the ハク schools only (the crab and the worm stay out of the manifest)
+  // 走水 has gobies, shrimps, shellfish, the hermit crab, the ハク schools and the eelgrass fish (アミメハギ, ヨウジウオ) only
+  // (the crab and the worm stay out of the manifest)
   it('puts the right animals at each hotspot', () => {
-    expect(here('eelgrass_edge')).toEqual(expect.arrayContaining(['マハゼ', 'シラタエビ', 'ユビナガホンヤドカリ', 'ボラ']));
-    expect(here('eelgrass')).toEqual(expect.arrayContaining(['シラタエビ']));
-    expect(here('bare')).toEqual(expect.arrayContaining(['マハゼ', 'アラムシロ']));
+    expect(here('eelgrass_edge')).toEqual(expect.arrayContaining(['マハゼ', 'ヒメハゼ', 'シラタエビ', 'イソスジエビ', 'ユビナガホンヤドカリ', 'ボラ', 'アミメハギ', 'ヨウジウオ']));
+    expect(here('eelgrass')).toEqual(expect.arrayContaining(['シラタエビ', 'イソスジエビ', 'アミメハギ', 'ヨウジウオ']));
+    expect(here('bare')).toEqual(expect.arrayContaining(['マハゼ', 'ヒメハゼ', 'アラムシロ']));
     expect([...here('small_pool'), ...here('pool')]).toEqual(expect.arrayContaining(['ユビナガホンヤドカリ', 'アラムシロ']));
     // the clam flat (shallow water and the sand it leaves at low water)
     expect([...here('shallow'), ...here('exposed_sand')]).toEqual(expect.arrayContaining(['ハマグリ', 'ユビナガホンヤドカリ']));
@@ -125,7 +126,13 @@ describe('走水: who lives where', () => {
   });
   it('keeps the 葛西 animals to the 葛西 flat and the shore ones to 走水', () => {
     // (アサリ are laid by the clam field and マガキ by the reef, not by spawn rules; the hermit crab lives on both flats)
-    const everywhere = new Set(['ruditapes_philippinarum', 'crassostrea_gigas', 'pagurus_minutus', 'mugil_cephalus']);
+    const everywhere = new Set(['ruditapes_philippinarum', 'crassostrea_gigas', 'pagurus_minutus', 'mugil_cephalus', 'favonigobius_gymnauchen']);
+    // the eelgrass fish and イソスジエビ are 走水's own: every rule names the map
+    for (const id of ['rudarius_ercodes', 'syngnathus_schlegeli', 'palaemon_pacificus']) {
+      const sp = species.find((s) => s.id === id)!;
+      expect(sp, id).toBeDefined();
+      for (const r of sp.spawn) expect(r.maps, id).toEqual(['hashirimizu']);
+    }
     for (const sp of species) if (!everywhere.has(sp.id)) for (const r of sp.spawn) expect(r.maps, `${sp.id}`).toBeDefined();
     const edo = species.find((sp) => sp.id === 'gymnogobius_macrognathos')!;
     expect(edo.spawn.every((r) => !r.maps!.includes('hashirimizu'))).toBe(true);

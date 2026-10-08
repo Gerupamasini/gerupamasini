@@ -246,7 +246,7 @@ export class CreatureSystem {
       view = { tier, root: ph.root, model: null, radius: ph.length * 0.6, hero: null };
     } else {
       // the growth stage's own model where the species has them, in the individual's pattern variant
-      const rel = modelFor(sp, e.ind.stage, e.ind.gravid)[tier] ?? sp.model[tier]!;
+      const rel = modelFor(sp, e.ind.stage, e.ind.gravid, e.ind.dress)[tier] ?? sp.model[tier]!;
       let model: LoadedModel;
       try { model = await instantiateModel(rel, variantOf(e.ind.id)); } catch (err) { console.warn(err); e.pendingTier = null; return; }
       if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
