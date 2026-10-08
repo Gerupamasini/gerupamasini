@@ -1,0 +1,220 @@
+{
+  "id": "palaemon_pacificus",
+  "names": {
+    "ja": "イソスジエビ",
+    "sci": "Palaemon pacificus",
+    "en": "Pacific rock shrimp"
+  },
+  "taxon": {
+    "group": "crustacean",
+    "family": "Palaemonidae"
+  },
+  "locomotion": "walk",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "shrimp",
+    "modelLength_mm": 48,
+    "viewDistance_m": 10,
+    "driver": "isosuji",
+    "clips": {
+      "idle": "Idle",
+      "move": "Move",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 25,
+      "max": 55,
+      "mean": 40,
+      "sd": 7
+    },
+    "weightCoef": {
+      "a": 9e-06,
+      "b": 2.9
+    }
+  },
+  "sex": {
+    "maleRatio": 0.45,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "juvenile",
+      "ja": "幼体",
+      "maxLength_mm": 28
+    },
+    {
+      "id": "adult",
+      "ja": "成体"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true,
+    "tint": {
+      "hueDeg": [
+        -6,
+        6
+      ],
+      "sat": [
+        0.85,
+        1.15
+      ],
+      "val": [
+        0.9,
+        1.08
+      ]
+    }
+  },
+  "spawn": [
+    {
+      "tags": [
+        "pool",
+        "small_pool",
+        "shallow"
+      ],
+      "substrate": [
+        "gravel",
+        "sand"
+      ],
+      "depth_m": [
+        0.03,
+        0.6
+      ],
+      "time": [
+        "dawn",
+        "day",
+        "dusk"
+      ],
+      "tide": "any",
+      "maps": [
+        "hashirimizu"
+      ],
+      "density_per_100m2": 1.0,
+      "group": [
+        1,
+        4
+      ],
+      "maxPopulation": 40
+    },
+    {
+      "tags": [
+        "pool",
+        "small_pool",
+        "shallow",
+        "waterline"
+      ],
+      "substrate": [
+        "gravel",
+        "sand"
+      ],
+      "depth_m": [
+        0.02,
+        0.6
+      ],
+      "time": [
+        "night"
+      ],
+      "tide": "any",
+      "maps": [
+        "hashirimizu"
+      ],
+      "density_per_100m2": 3.0,
+      "group": [
+        2,
+        6
+      ],
+      "maxPopulation": 50
+    },
+    {
+      "tags": [
+        "eelgrass",
+        "eelgrass_edge"
+      ],
+      "depth_m": [
+        0.08,
+        1.2
+      ],
+      "time": [
+        "dawn",
+        "day",
+        "dusk",
+        "night"
+      ],
+      "tide": "any",
+      "maps": [
+        "hashirimizu"
+      ],
+      "density_per_100m2": 2.5,
+      "group": [
+        2,
+        6
+      ],
+      "maxPopulation": 50
+    }
+  ],
+  "brain": {
+    "tree": "shrimp_shallow",
+    "params": {
+      "fleeDistance_m": 0.9,
+      "restMean_s": 10
+    }
+  },
+  "capture": {
+    "tools": [
+      "net_small",
+      "net_shallow",
+      "net_fine",
+      "net_deep",
+      "net_dframe",
+      "net_carbon"
+    ],
+    "baseDifficulty": 0.4,
+    "alertPenalty": 0.5
+  },
+  "encyclopedia": {
+    "description": "岩礁の潮だまりや転石の下、海藻やアマモの間にすむ小型のエビ。半透明の体に黒褐色の細い縞があり、歩脚には黒と橙の輪、尾扇には黒で縁取られた黄色の丸い斑がある。夜行性で、昼は岩の割れ目やアマモの葉に付いてじっとしている。驚くと腹部を曲げて後ろへ跳ぶ。",
+    "habitatHint": "潮だまりの岩の陰やアマモ場。夜の潮だまりで歩き回る。",
+    "behaviors": [
+      {
+        "id": "rest",
+        "ja": "静止",
+        "hint": "触角を小刻みに動かしながら止まっている"
+      },
+      {
+        "id": "walk",
+        "ja": "歩行",
+        "hint": "長い歩脚で岩の上を歩く"
+      },
+      {
+        "id": "swim",
+        "ja": "短く泳ぐ",
+        "hint": "腹脚で岩から岩へ泳ぎ移る"
+      },
+      {
+        "id": "forage",
+        "ja": "摂餌",
+        "hint": "鋏脚で岩やアマモの表面をつまむ"
+      },
+      {
+        "id": "tail_flip_escape",
+        "ja": "後方へ跳んで逃走",
+        "hint": "近づくと腹部を曲げて後ろへ跳び、物陰へ入る"
+      }
+    ],
+    "placeholderModel": false
+  }
+}

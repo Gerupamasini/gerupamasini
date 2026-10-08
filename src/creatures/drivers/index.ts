@@ -3,6 +3,7 @@ import type { Driver } from './Driver';
 import type { PlaceholderModel } from '../models/placeholders';
 import { MahazeDriver } from '../species/mahaze/MahazeDriver';
 import { ShrimpDriver } from '../species/shrimp/ShrimpDriver';
+import { ISOSUJI } from '../species/shrimp/model/isosuji.js';
 import { PloverDriver } from '../species/plover/PloverDriver';
 import { AsariDriver } from '../asari/Asari.js';
 import { FORMS } from '../asari/AsariModel.js';
@@ -29,6 +30,8 @@ export interface DriverEntry {
 export const DRIVERS: Record<string, DriverEntry> = {
   mahaze: { create: () => new MahazeDriver() },
   shrimp: { create: () => new ShrimpDriver(), placeholder: () => ShrimpDriver.makeModel(), preview: () => ShrimpDriver.makePreview() },
+  // イソスジエビ: the same shrimp rig and locomotion with its species profile (shape, stripes, kinematics)
+  isosuji: { create: () => new ShrimpDriver(ISOSUJI), placeholder: () => ShrimpDriver.makeModel(), preview: () => ShrimpDriver.makePreview(ISOSUJI) },
   plover: { create: () => new PloverDriver(), placeholder: () => PloverDriver.makeModel() },
   asari: { create: () => new AsariDriver() as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.asari, seed) },
   hamaguri: { create: () => new AsariDriver(FORMS.hamaguri) as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.hamaguri, seed) },
