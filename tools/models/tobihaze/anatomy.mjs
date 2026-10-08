@@ -149,20 +149,59 @@ export function superR(s, y, z, q = section(s)) {
   return Math.pow(Math.pow(Math.abs(z) / w, n) + Math.pow(Math.abs(dy) / h, n), 1 / n);
 }
 
+/** Signed distance (mm) to the base loft's section at s (s >= 0.01), measured in its plane. */
+function planeDist(s, y, z) {
+  const q = section(s);
+  const dy = y - q.yc;
+  const r = superR(s, y, z, q);
+  const len = Math.hypot(dy, z);
+  const d = r < 1e-6 ? -Math.min(q.w, dy > 0 ? q.t : q.b) : len * (1 - 1 / r);
+  return d * 0.92;
+}
+
+const TIP_BLEND = [1.2, 2.0]; // over the snout's tip (fading out between these) the distance is measured in 3D
+
+/**
+ * Distance (mm, unsigned) from a point to the meridian of the loft through it: the curve along the loft's surface in
+ * the direction of the point from the axis. Round the snout's tip, where the sections grow as s^0.4 into the blunt
+ * front, this is close to the true distance; measured in the section's plane it is many times too steep along s.
+ */
+function meridianDist(s, y, z) {
+  const sa = clamp(s, 0.01, TIP_BLEND[1] + 1);
+  const dy = y - section(sa).yc;
+  const len = Math.hypot(dy, z);
+  const uy = len > 1e-6 ? dy / len : 1, uz = len > 1e-6 ? z / len : 0;
+  const D = (sg) => {
+    const q = section(sg);
+    const R = 1 / superR(sg, q.yc + uy, uz, q);
+    return (s - sg) ** 2 + (y - q.yc - uy * R) ** 2 + (z - uz * R) ** 2;
+  };
+  // a coarse scan along the meridian, then golden-section search round its best sample
+  const hi = Math.max(s, 0) + 2.5, N = 14;
+  let kb = 0, db = Infinity;
+  for (let k = 0; k <= N; k++) { const d = D((hi * k) / N); if (d < db) { db = d; kb = k; } }
+  let a = (hi * Math.max(0, kb - 1)) / N, b = (hi * Math.min(N, kb + 1)) / N;
+  const g = 0.381966;
+  let x1 = a + g * (b - a), x2 = b - g * (b - a), f1 = D(x1), f2 = D(x2);
+  for (let it = 0; it < 18; it++) {
+    if (f1 < f2) { b = x2; x2 = x1; f2 = f1; x1 = a + g * (b - a); f1 = D(x1); } else { a = x1; x1 = x2; f1 = f2; x2 = b - g * (b - a); f2 = D(x2); }
+  }
+  return Math.sqrt(Math.min(db, f1, f2));
+}
+
 /** Approximate signed distance (mm) to the base loft. */
 export function baseDist(s, y, z) {
   const sc = clamp(s, 0.01, S_END - 0.01);
-  const q = section(sc);
-  const dy = y - q.yc;
-  const r = superR(sc, y, z, q);
-  const len = Math.hypot(dy, z);
-  let d;
-  if (r < 1e-6) d = -Math.min(q.w, dy > 0 ? q.t : q.b);
-  else d = len * (1 - 1 / r);
-  d *= 0.92;
+  let d = planeDist(sc, y, z);
   const ds = Math.abs(s - sc);
   if (ds > 0) d = Math.max(d, 0) + ds;
-  return d;
+  // round the snout's tip, measured in 3D (in the section's plane, displacements subtracted from it - the lips - would
+  // hardly move the skin there, and crease it where they reach past the tip)
+  const k = 1 - smoothstep(TIP_BLEND[0], TIP_BLEND[1], s);
+  if (k <= 0) return d;
+  const inside = s > 0.01 && superR(s, y, z) < 1;
+  const dm = 0.92 * meridianDist(s, y, z) * (inside ? -1 : 1);
+  return dm * k + d * (1 - k);
 }
 
 /** Normalised height inside the section (-1 ventral … +1 dorsal). */
@@ -203,13 +242,15 @@ export function surfaceAt(s, y) {
 // ---------------------------------------------------------------------------
 // Eyes. Each eyeball sits on top of the head, the snout in front of it ~1.8 eye diameters long (the forehead slopes
 // down in front of it to the blunt snout); the two almost touch over the narrow interorbital. Eyeball Ø 3.0 mm (~0.3 of
-// the head's depth), raised on a short, thick stalk: its centre ~0.4 mm above the dorsal profile behind it, so the
-// upper globe stands above the head like a periscope (it can be raised further, and pulled right down into the
-// orbit). Positions read from lateral close-ups of live animals.
+// the head's depth), raised on a short, thick stalk: its centre a little above the dorsal profile just behind it, so
+// the upper globe stands above the head like a periscope (it can be raised further, and pulled right down into the
+// orbit). Positions read from lateral close-ups of live animals (photographs 4 and 10, and 5 and 11 from in front and
+// to the side, overlaid on the model at the eye's scale): the centre ~1.8 eye diameters behind the front of the upper
+// lip and ~2.3 above the front of the gape.
 // Retraction ("blinking", Aiello et al. 2023 PNAS): the eyeball sinks ~2.4 mm into the orbit and the dermal cup
 // closes over it.
 export const EYE = {
-  center: [5.6, 9.85, 1.62],
+  center: [4.9, 9.3, 1.62],
   radius: 1.52,
   // the eyes look out to the side, a little forward (~17°) and up (~13°): photographed from the side the pupil faces
   // the camera, head-on the dark eye shows on the outer face of each globe
@@ -413,16 +454,19 @@ function nearGape(p) {
 function lipRelief(p) {
   const g = nearGape(p);
   const uF = FEAT.gapeU[MOUTH_FRONT] / FEAT.gapeLen;
-  // along the gape: 0 across the front … 1 well back along the side
-  const side = smoothstep(0.6 * uF, 1.6 * uF, g.u);
+  // along the gape: 0 across the front … 1 behind the corner seen head-on, where the gape runs on under the lip lobe
+  const side = smoothstep(0.7 * uF, 1.5 * uF, g.u);
   // (the lips end at the corner: they do not run on back along the cheek)
   const fade = 1 - smoothstep(0.9, 1.04, g.u);
-  // thick, pouting lips: the upper a roll ~1.4 mm high centred 0.6 mm above the line, the lower ~0.9 mm, 0.4 mm below
-  // (each fades in over ~0.5 mm across the line: switched on more sharply, the skin folds over itself there)
-  // (no notch in the middle: head-on the upper lip's edge runs level across the front, photographs 1 and 2)
-  const up = smoothstep(-0.35, 0.2, g.dy) * (0.75 - 0.55 * side) * Math.exp(-(((g.d - 0.6) / 0.7) ** 2));
-  const lo = smoothstep(0.35, -0.2, g.dy) * (0.36 - 0.12 * side) * Math.exp(-(((g.d - 0.42) / 0.45) ** 2));
-  const crease = 0.1 * Math.exp(-((g.d / 0.09) ** 2));
+  // Across the front, thick pouting lips: the upper a roll ~1.4 mm high, its crest ~0.45 mm above the line, the
+  // lower ~0.9 mm, 0.4 mm below (each fades in over ~0.5 mm across the line: switched on more sharply, the skin folds
+  // over itself there). No notch in the middle: head-on the upper lip's edge runs level across the front (photographs
+  // 1 and 2). Behind the corner seen head-on the upper jaw is under the lip lobe (lipPadDist) and the lower jaw's
+  // side runs smoothly up to the gape: only a low roll on either side of the line, which reads as the fold under the
+  // lobe (photographs 3, 7 and 10), not as a ledge of lip along the jaw.
+  const up = smoothstep(-0.35, 0.2, g.dy) * (0.75 - 0.6 * side) * Math.exp(-(((g.d - 0.45) / 0.7) ** 2));
+  const lo = smoothstep(0.35, -0.2, g.dy) * (0.36 - 0.3 * side) * Math.exp(-(((g.d - 0.42) / 0.45) ** 2));
+  const crease = (0.1 - 0.04 * side) * Math.exp(-((g.d / (0.09 + 0.05 * side)) ** 2));
   // the lower jaw is set back under the overhanging upper lip (profile photographs: the outline steps back under
   // the lip), most at the front of the mouth
   const recess = smoothstep(0.1, -0.15, g.dy) * 0.12 * (1 - side) * Math.exp(-(((g.d - 0.75) / 0.7) ** 2));
@@ -445,9 +489,9 @@ function lipPadCoord(p) {
 /** distance to the lip pad (p on the +z side), and the width of its blend into the face */
 function lipPadDist(p) {
   const { l, r } = lipPadCoord(p);
-  // (blended in broadly all round, so it swells softly out of the face with no edge or crease round it; most
-  // broadly at its front end, which runs in under the corner of the mouth)
-  return [ellipsoidDist(l, [0, 0, 0], r), 0.9 + 0.35 * smoothstep(-0.1, -0.9, l[0] / r[0])];
+  // (blended in over ~0.6 mm all round: a distinct, rounded lobe with a soft fold round it, no edge (photographs 3, 7
+  // and 10); most broadly at its front end, which runs in under the corner of the mouth)
+  return [ellipsoidDist(l, [0, 0, 0], r), 0.6 + 0.35 * smoothstep(-0.1, -0.9, l[0] / r[0])];
 }
 
 /** outward displacement (mm) of the snout's median ridge and the grooves beside it (p on the +z side) */
@@ -637,7 +681,7 @@ export function fieldGrad(s, y, z, opts = null, e = 0.004) {
   G.forEach((p, i) => { FEAT.gapeU[i] = i === 0 ? 0 : (acc += Math.hypot(p[0] - G[i - 1][0], p[1] - G[i - 1][1], p[2] - G[i - 1][2])); });
   FEAT.gapeLen = FEAT.gapeU[FEAT.gapeCorner];
   // the lip lobe on the sculpted face: lying along the gape at its station, its lower edge just above the gape line,
-  // standing ~0.35 mm out of the face
+  // standing ~0.55 mm out of the face
   const P = FEAT.lipPad;
   let k = MOUTH_FRONT;
   while (k < FEAT.gapeCorner - 1 && G[k + 1][0] < P.s) k++;
@@ -652,7 +696,7 @@ export function fieldGrad(s, y, z, opts = null, e = 0.004) {
   let a = -2, b = 3;
   const fs = (x) => field(c0[0] + t[0] * x, c0[1] + t[1] * x, c0[2] + t[2] * x, NL);
   for (let it = 0; it < 40; it++) { const m = 0.5 * (a + b); if (fs(m) < 0) a = m; else b = m; }
-  const out = 0.5 * (a + b) + 0.35 - P.R[2];
+  const out = 0.5 * (a + b) + 0.55 - P.R[2];
   Object.assign(P, { c: c0.map((x, c) => x + t[c] * out), u, w, t });
 }
 

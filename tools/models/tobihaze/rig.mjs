@@ -2,7 +2,7 @@
 // The clips (Idle, Crawl, Hop, Swim, Blink, Feed) are sampled from the same pose model the runtime driver uses
 // (src/creatures/species/tobihaze/pose.js); in the game the animal is animated procedurally, the clips serve the
 // 図鑑 preview and any viewer without the driver.
-import { section, botY, toObject, dirToObject, EYE, RICTUS_S, OPEN_S, gapeY, pecBindFix, JAW_JOINT } from './anatomy.mjs';
+import { section, botY, toObject, dirToObject, EYE, RICTUS_S, OPEN_S, gapeY, pecBindFix, JAW_JOINT, FEAT } from './anatomy.mjs';
 import { PEC, PELVIC } from './fins.mjs';
 import { pecShare } from './arm.mjs';
 import { clamp, smoothstep } from '../../lib/noise.mjs';
@@ -97,12 +97,32 @@ export function jawFollow(s, y) {
 
 /**
  * The upper jaw's share of the drop. The rear end of the maxilla is tied to the lower jaw (Michel et al. 2014), so as
- * the jaw drops the side of the upper jaw swings down with it: the upper lip comes down toward the corners of the
- * open mouth, which are rounded (photograph 6), and along the side of the head, under the lip lobe, the skin of the
- * upper jaw follows the lower jaw part of the way, so the fold between them only opens a little.
+ * the jaw drops the side of the upper jaw swings down with it: along the side of the head, under the lip lobe, the
+ * skin of the upper jaw follows the lower jaw part of the way, so the fold between them only opens a little. At the
+ * corners of the opening (seen head-on) it hardly moves: the upper lip stays across the top of the open mouth and the
+ * lower lip drops below it in a U, a D-shaped opening (photograph 6). (Dragged down there, the upper lip pulled the
+ * skin at the corners into flat sheets on either side of the opening.)
  */
 export function maxillaShare(s) {
-  return 0.75 * smoothstep(OPEN_S - 0.9, OPEN_S + 0.1, s);
+  return 0.75 * smoothstep(OPEN_S - 0.3, OPEN_S + 1.5, s);
+}
+
+/**
+ * The lower lip's share: across its middle the lip drops with the jaw; toward the corners of the open mouth it
+ * drops less and less, to the upper lip's share there (maxillaShare), so the corners close round and the open mouth
+ * is an oval (photograph 6); below the lip the chin turns with the jaw.
+ */
+const Z_OPEN = FEAT.gapeLine.reduce((z, p) => (p[0] <= OPEN_S ? Math.max(z, p[2]) : z), 0);
+/** 1 across the middle of the mouth … 0 at the corners of the opening (an ellipse) */
+const midMouth = (z) => Math.sqrt(Math.max(0, 1 - Math.min(1, Math.abs(z) / Z_OPEN) ** 2));
+export function lowerLipShare(s, y, z) {
+  const gy = gapeY(Math.min(s, RICTUS_S));
+  const lip = maxillaShare(OPEN_S) + (1 - maxillaShare(OPEN_S)) * midMouth(z);
+  return lip + (1 - lip) * smoothstep(gy - 0.3, gy - 1.6, y);
+}
+/** the upper lip's share: none in the middle, the maxilla's toward the corners (the open mouth's top a shallow arch) */
+export function upperLipShare(s, z) {
+  return Math.max(maxillaShare(s), maxillaShare(OPEN_S) * (1 - midMouth(z)));
 }
 
 /** skin vertices: spine chain; the lower jaw (below the gape cut) and the throat on J_jaw */
@@ -110,12 +130,12 @@ export function skinWeights(list) {
   return pack(list.map((v) => {
     const s = v.fish[0], y = v.fish[1];
     if (v.cut === 'upper') {
-      const w = jawFollow(s, y) * maxillaShare(s);
+      const w = jawFollow(s, y) * upperLipShare(s, v.fish[2]);
       return w > 1e-3 ? withRest([[J.J_jaw, w]], s) : spineWeights(s);
     }
-    if (v.jaw || v.cut === 'lower') return withRest([[J.J_jaw, jawFollow(s, y)]], s);
+    if (v.jaw || v.cut === 'lower') return withRest([[J.J_jaw, jawFollow(s, y) * lowerLipShare(s, y, v.fish[2])]], s);
     // below the gape line behind the corners (continued back over the jaw's joint), fading out up toward the cheek
-    const w = jawWeight(s, y);
+    const w = jawWeight(s, y, v.fish[2]);
     if (w > 1e-3) return withRest([[J.J_jaw, w]], s);
     // the flank under the pectoral arm's skirt moves with the skirt (arm.mjs), so it stays hidden under it
     const wp = pecShare(v.fish);
@@ -128,13 +148,13 @@ export function skinWeights(list) {
  * jaw influence of a skin point outside the lower jaw's lips (behind the corners seen head-on): below the gape the
  * jaw's side, above it the cheek and the lip lobe; across the gape the skin of the fold between them stretches
  */
-export function jawWeight(s, y) {
+export function jawWeight(s, y, z) {
   if (s < OPEN_S - 1.0) return 0;
   const gy = gapeY(Math.min(s, RICTUS_S)) - 0.1 * Math.max(0, s - RICTUS_S);
   const below = smoothstep(gy + 0.3, gy - 0.5, y);
   // (above the gape the side of the upper jaw, following part of the way, less and less up into the lip lobe and the
   // cheek, which stay)
-  const upper = maxillaShare(s) * smoothstep(gy + 0.6, gy, y);
+  const upper = upperLipShare(s, z) * smoothstep(gy + 1.2, gy, y);
   return jawFollow(s, y) * (below + (1 - below) * upper);
 }
 
@@ -144,7 +164,7 @@ export function mouthWeights(m) {
     const q = m.lip[k];
     // the floor of the mouth lies in the lower jaw's U and goes with it as its lip does (so the two never part); the
     // palate goes with the upper lip at its edge (down toward the corners with the maxilla) and with the skull deeper in
-    const w = m.zone[k] === 0 ? jawFollow(q[0], q[1]) * maxillaShare(q[0]) * (1 - smoothstep(0.2, 0.8, m.depth[k])) : jawFollow(q[0], q[1]);
+    const w = m.zone[k] === 0 ? jawFollow(q[0], q[1]) * upperLipShare(q[0], q[2]) * (1 - smoothstep(0.2, 0.8, m.depth[k])) : jawFollow(q[0], q[1]) * lowerLipShare(q[0], q[1], q[2]);
     return w > 1e-3 ? withRest([[J.J_jaw, w]], s) : spineWeights(s);
   }), m.fish.length);
 }

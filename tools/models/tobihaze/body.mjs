@@ -2,6 +2,7 @@
 import {
   S_END, SL, BODY_U, ARM_U, DOME_U, EYE, CUP, MOUTH, RICTUS_S, OPEN_S, FEAT, uvS, uvT, windowAngle,
   section, basePoint, project, field, fieldGrad, toObject, dirToObject, gapeY, sideZ, normHeight, topY, botY, norm3,
+  rayOrigin, baseDist, S0, Y0,
 } from './anatomy.mjs';
 import { perlin3, fbm3, ridged3, hash01, hash3i, clamp, mix, smoothstep, forEachCell3 } from '../../lib/noise.mjs';
 
@@ -21,7 +22,10 @@ function distributeSections(NS) {
   const cdf = new Float64Array(M + 1);
   for (let i = 1; i <= M; i++) {
     const s = (i / M) * S_END;
-    const d = 1.0 + 2.6 * Math.exp(-s / 0.9) + 1.5 * smoothstep(2.5, 4.0, s) * smoothstep(11.5, 9.5, s) + 0.6 * smoothstep(11, 13, s) * smoothstep(19, 17, s)
+    // (round the snout's tip the rows crowd in as 1/sqrt(s): the face there stands nearly square to the axis, and a ring
+    // at s lies ~3.5 s^0.4 mm from the pole on the sculpted face - evenly spaced in s, the first ring would lie ~1.5 mm
+    // out, the lips' front one fan of long triangles round the pole)
+    const d = 1.0 + 2.6 * Math.exp(-s / 0.9) + 6 * Math.exp(-s / 0.5) / Math.sqrt(s + 0.003) + 1.5 * smoothstep(2.5, 4.0, s) * smoothstep(11.5, 9.5, s) + 0.6 * smoothstep(11, 13, s) * smoothstep(19, 17, s)
       + 0.5 * smoothstep(60, 64.5, s);
     cdf[i] = cdf[i - 1] + d;
   }
@@ -82,7 +86,9 @@ function uvMap() {
   if (UVMAP) return UVMAP;
   const N = 420, M = 192, R = 3, RV = 2;
   const S = new Float64Array(N + 1);
-  for (let i = 0; i <= N; i++) S[i] = Math.min(S_END - 0.002, Math.max(0.002, uvS(i / N)));
+  // (from the snout's very tip, the pole: the sections there grow as s^0.4, and a table begun at s = 0.002 starts on a
+  // ring 0.2-0.4 mm round the pole, which the texels inside it would repeat as a star of wedges)
+  for (let i = 0; i <= N; i++) S[i] = Math.min(S_END - 0.002, Math.max(0, uvS(i / N)));
   // the projected surface on a regular (s-row, phi-column) table
   const P = [];
   for (let i = 0; i <= N; i++) {
@@ -288,7 +294,7 @@ export function buildSkin(NS, NV, log = () => {}) {
       const b = basePoint(s, phi, q);
       const p = project(b);
       const n = fieldGrad(p[0], p[1], p[2]);
-      verts.push({ i, j, s, phi, base: b, fish: p, n, jaw: 0, cut: '' });
+      verts.push({ i, j, s, phi, base: b, fish: p, proj: p, n, jaw: 0, cut: '' });
     }
     // seam column NV duplicates column 0 (u wraps)
     const v0 = verts[i * cols];
@@ -354,7 +360,9 @@ export function buildSkin(NS, NV, log = () => {}) {
   // gape line, its neighbours spread out evenly on either side.
   {
     const gyR = (p) => gapeY(clamp(p[0], MOUTH[0][0], RICTUS_S));
-    const WIN = 6;
+    // (the slide spreads over a stretch of the row of the same length in every tier: over fewer of the finer tiers'
+    // columns, behind the corner seen head-on - where the gape runs back across the rows - it folded their quads)
+    const WIN = Math.max(6, Math.round((6 * NV) / 112));
     for (let i = i0; i <= ir; i++) for (const side of [1, -1]) {
       const col = (k) => (side > 0 ? jg + k : NV - jg - k);
       const P = [];
@@ -533,6 +541,86 @@ export function buildSkin(NS, NV, log = () => {}) {
     for (const h2 of [g, jawCopy.get(g)]) if (h2 !== undefined) verts[h2].fish = p;
     if (g % cols === 0) for (const h2 of [g + NV, jawCopy.get(g + NV)]) if (h2 !== undefined) verts[h2].fish = p;
   }
+  // Across the front the cut runs along the lower arc of one of the grid's first rings round the pole, slid down
+  // onto the gape. There the slide's chords lie inside the upper lip's roll and its projection does not reach the
+  // skin, nor can the smoothing above move those vertices out (its horizontal probe misses the skin from inside the
+  // roll), so the middle of the lips' edge sank ~0.3 mm into a notch. The ring's part of the cut is laid out afresh:
+  // evenly along the crease between the lips, on the skin, between its two ends (which the smoothing did reach; moved
+  // further out, toward the ring's next vertices above the gape, their quads would turn over).
+  {
+    let kM = 0;
+    gape.forEach((g, k) => { if (Math.abs(verts[g].fish[2]) < Math.abs(verts[gape[kM]].fish[2])) kM = k; });
+    const iRun = verts[gape[kM]].i;
+    let kA = kM, kB = kM;
+    while (kA > 0 && verts[gape[kA - 1]].i <= iRun) kA--;
+    while (kB < gape.length - 1 && verts[gape[kB + 1]].i <= iRun) kB++;
+    if (kB - kA > 2) {
+      const A = verts[gape[kA]].fish, B = verts[gape[kB]].fish;
+      // (horizontal rays at the gape's height from a point on the midline behind the lips)
+      const cx = 1.5;
+      const hit = (th) => {
+        const d = [-Math.cos(th), Math.sin(th)];
+        let lo = 0, hi = 4, y = gyAt([cx, 0, 0]);
+        for (let n = 0; n < 40; n++) {
+          const m = 0.5 * (lo + hi);
+          const q = [cx + d[0] * m, 0, d[1] * m];
+          y = gyAt(q);
+          if (field(q[0], y, q[2]) < 0) lo = m; else hi = m;
+        }
+        const m = 0.5 * (lo + hi);
+        return [cx + d[0] * m, gyAt([cx + d[0] * m, 0, 0]), d[1] * m];
+      };
+      const thA = Math.atan2(A[2], cx - A[0]), thB = Math.atan2(B[2], cx - B[0]);
+      const M = 400;
+      const C = [], L = [0];
+      for (let n = 0; n <= M; n++) C.push(hit(thA + ((thB - thA) * n) / M));
+      for (let n = 1; n <= M; n++) L.push(L[n - 1] + Math.hypot(C[n][0] - C[n - 1][0], C[n][1] - C[n - 1][1], C[n][2] - C[n - 1][2]));
+      const N = kB - kA;
+      for (let k = kA + 1; k < kB; k++) {
+        const a = (L[M] * (k - kA)) / N;
+        let n = 0;
+        while (n < M - 1 && L[n + 1] < a) n++;
+        const t = (a - L[n]) / Math.max(L[n + 1] - L[n], 1e-9);
+        const p = C[n].map((x, c) => x + (C[n + 1][c] - x) * t);
+        const g = gape[k];
+        for (const h of [g, jawCopy.get(g)]) if (h !== undefined) verts[h].fish = [...p];
+        if (g % cols === 0) for (const h of [g + NV, jawCopy.get(g + NV)]) if (h !== undefined) verts[h].fish = [...p];
+      }
+    }
+  }
+  // The normals over the face: the surface's own (the field's gradient, exact on the skin). The grid's columns fan
+  // out from the pole there, so normals taken across the grid's rows and columns lean along the fan's chords - by up
+  // to ~50° at the pole - and shade the lips' front as a faceted star with a bright line up the middle of the snout;
+  // and the vertices slid onto the gape above kept the normals of where they were.
+  for (const v of verts) {
+    if (v.s > 8 || Math.abs(field(v.fish[0], v.fish[1], v.fish[2])) > 0.01) continue;
+    v.n = fieldGrad(v.fish[0], v.fish[1], v.fish[2]);
+  }
+  // The texture of the vertices moved off their projected places (slid onto the gape, laid along the crease): the loft
+  // parameter whose projection lands where the vertex now is - on the ray from the projection's origin through it,
+  // where that crosses the base loft - so the skin's paint stays put under it instead of being dragged along (round
+  // the snout's pole, where the paint's columns converge, it was drawn out into a star above the lips).
+  for (const v of verts) {
+    if (Math.hypot(v.fish[0] - v.proj[0], v.fish[1] - v.proj[1], v.fish[2] - v.proj[2]) < 0.005) continue;
+    let sp = v.s, b = null;
+    for (let it = 0; it < 3; it++) {
+      const o = rayOrigin(sp);
+      const L = Math.hypot(v.fish[0] - o[0], v.fish[1] - o[1], v.fish[2] - o[2]);
+      const d = [(v.fish[0] - o[0]) / L, (v.fish[1] - o[1]) / L, (v.fish[2] - o[2]) / L];
+      const at = (t) => baseDist(o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t);
+      let t0 = 0.02, t1 = -1;
+      for (let t = 0.07; t < L + 3; t += 0.05) { if (at(t) > 0) { t1 = t; break; } t0 = t; }
+      if (t1 < 0) break;
+      for (let k = 0; k < 24; k++) { const m = 0.5 * (t0 + t1); if (at(m) > 0) t1 = m; else t0 = m; }
+      const t = 0.5 * (t0 + t1);
+      b = [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t];
+      sp = Math.max(b[0], 0);
+    }
+    if (!b) continue;
+    v.uvS = sp;
+    const ph = invPhi(sp, b[1], b[2]);
+    v.uvPhi = ph + TAU * Math.round((v.phi - ph) / TAU);
+  }
   log(`    gape cut: ${gape.length} vertices, ${cutSet.size} split`);
   return { verts, sList, cols, NS, NV, jg, i0, ir, gid, jawCopy, isJawQuad, phiOf, gape };
 }
@@ -548,8 +636,8 @@ function vertexAttributes(list, flipCheck) {
     t = sub(t, nn.map((c) => c * dot(nn, t)));
     const tl = Math.hypot(...t) || 1;
     tangent.set([t[0] / tl, t[1] / tl, t[2] / tl, v.tw ?? 1], k * 4);
-    uv[k * 2] = clamp(uvTof(v.s, v.phi), 0, 1) * BODY_U;
-    uv[k * 2 + 1] = uvVof(v.s, v.phi);
+    uv[k * 2] = clamp(uvTof(v.uvS ?? v.s, v.uvPhi ?? v.phi), 0, 1) * BODY_U;
+    uv[k * 2 + 1] = uvVof(v.uvS ?? v.s, v.uvPhi ?? v.phi);
   });
   return { position, normal, tangent, uv };
 }
@@ -595,9 +683,9 @@ export function skinTarget(part, opts, sMax = Infinity) {
   part.list.forEach((v, k) => {
     if (v.s > sMax || v.cut === 'lower' || v.cut === 'upper') return;
     // (the change the options make to the projected surface: some vertices were moved off their plain projection
-    // - onto the gape, relaxed round it - and keep that offset)
+    // - onto the gape, along the crease between the lips - and keep that offset)
     const p = project(v.base, opts);
-    const a = toObject(v.relaxed ? project(v.base) : v.fish), b = toObject(p);
+    const a = toObject(v.proj), b = toObject(p);
     d[k * 3] = b[0] - a[0]; d[k * 3 + 1] = b[1] - a[1]; d[k * 3 + 2] = b[2] - a[2];
   });
   return d;
@@ -902,6 +990,7 @@ export function buildMouth(G) {
   const ring = G.gape;
   const up = ring.map((g) => verts[g].fish);
   const lo = ring.map((g) => verts[jawCopy.get(g) ?? g].fish);
+  const nrmUp = ring.map((g) => verts[g].n);
   const NR = 9; // rows from the lip edge into the cavity
   const position = [], normal = [], uv = [], color = [], fishPts = [], zone = [], lipPts = [], depth = [];
   const rows = [];
@@ -922,7 +1011,10 @@ export function buildMouth(G) {
       const row = [];
       for (let k = 0; k < edge.length; k++) {
         // (the first row on the lip's own edge, so no gap opens between the lip and the inside of the mouth)
-        const p = r === 0 ? [...edge[k]] : cavity(edge[k], upper, Math.max(f, 0.06));
+        // (set ~0.04 mm in under the skin, so where the lips meet - and round the corners, where the inside of the mouth
+        // turns along the skin - it never shows through it)
+        const n0 = nrmUp[k];
+        const p = (r === 0 ? [...edge[k]] : cavity(edge[k], upper, Math.max(f, 0.06))).map((x, c) => x - n0[c] * 0.04);
         row.push(position.length / 3);
         position.push(...toObject(p));
         fishPts.push(p);
@@ -953,6 +1045,21 @@ export function buildMouth(G) {
       for (let k = 1; k < W - 1; k++) for (let c = 0; c < 3; c++) position[row[k] * 3 + c] = 0.5 * P[k][c] + 0.25 * (P[k - 1][c] + P[k + 1][c]);
     }
   }
+  // (and every point drawn in from the lips kept ~0.06 mm under the skin: round the corners the cavity's walls run back
+  // past the skin of the side of the gape, which is tucked in under the lip lobe, and would show through it there)
+  const fromObject = (o) => [S0 - o[2] * 1000, o[1] * 1000 + Y0, o[0] * 1000];
+  for (let v = 0; v < position.length / 3; v++) {
+    if (depth[v] === 0) continue;
+    let p = fromObject(position.slice(v * 3, v * 3 + 3));
+    for (let it = 0; it < 4; it++) {
+      const f = field(p[0], p[1], p[2]);
+      if (f < -0.06) break;
+      const g = fieldGrad(p[0], p[1], p[2]);
+      p = p.map((x, c) => x - g[c] * (f + 0.07));
+    }
+    fishPts[v] = p;
+    position.splice(v * 3, 3, ...toObject(p));
+  }
   const tris = [];
   for (let part = 0; part < 2; part++) for (let r = 0; r < NR; r++) {
     const A = rows[part * (NR + 1) + r], B = rows[part * (NR + 1) + r + 1];
@@ -970,15 +1077,15 @@ export function buildMouth(G) {
   // the back wall of the throat: the deepest palate row joined to the deepest floor row
   const Ap = rows[NR], Bf = rows[2 * NR + 1];
   for (let k = 0; k < W - 1; k++) tris.push(Ap[k], Bf[k], Bf[k + 1], Ap[k], Bf[k + 1], Ap[k + 1]);
-  // smooth normals from the triangles
+  // smooth normals, facing into the cavity: from each point toward the middle of the mouth (the cavity is dark and
+  // seen only through the lips; normals from its triangles, which follow the lips' uneven vertices, streak it)
   const nrm = new Float32Array(position.length);
-  for (let t = 0; t < tris.length; t += 3) {
-    const a = tris[t], b = tris[t + 1], c = tris[t + 2];
-    const pa = position.slice(a * 3, a * 3 + 3), pb = position.slice(b * 3, b * 3 + 3), pc = position.slice(c * 3, c * 3 + 3);
-    const fn = cross(sub(pb, pa), sub(pc, pa));
-    for (const v of [a, b, c]) { nrm[v * 3] += fn[0]; nrm[v * 3 + 1] += fn[1]; nrm[v * 3 + 2] += fn[2]; }
+  for (let v = 0; v < position.length / 3; v++) {
+    const p = fishPts[v];
+    const c = [Math.max(p[0], 0) + 1.2, gapeY(clamp(p[0], MOUTH[0][0], RICTUS_S)) + (zone[v] === 0 ? -0.2 : 0.2), 0];
+    const n = norm3(sub(c, p));
+    nrm.set(dirToObject(n), v * 3);
   }
-  for (let v = 0; v < nrm.length / 3; v++) { const n = norm3([nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2]]); nrm.set(n, v * 3); }
   return {
     name: 'Mouth', position: new Float32Array(position), normal: nrm, uv: new Float32Array(uv), color: new Float32Array(color),
     indices: new Uint32Array(tris), fish: fishPts, zone, lip: lipPts, depth,
@@ -1009,6 +1116,8 @@ const COL = {
 /** jittered dot field on the surface (3D cells): returns coverage 0..1 of dots of radius r (mm) at density */
 /** height of the snout tip, the pole where the loft's texture columns meet */
 const SNOUT_POLE_Y = section(0).yc;
+/** the pole on the sculpted face */
+const SNOUT_POLE = project(basePoint(0, 0));
 /** the average of a dot pattern over the skin (sampled once): its tone where the dots themselves are left out */
 const DOT_MEAN = new Map();
 function dotMean(cell, r, seed, keep = 1, jitterR = 0.4) {
@@ -1105,13 +1214,13 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
   // (the texture's columns converge on the snout tip, the pole of the loft's uv: small dots there would smear into a
   // star, so in a small disc round it each pattern of dots gives way to its own average tone - the same shade,
   // without the dots; the relief stays, so the wet film's highlights break up there as everywhere else)
-  const rPole = Math.hypot(Math.max(s, 0), p[1] - SNOUT_POLE_Y, p[2]);
+  const rPole = Math.hypot(p[0] - SNOUT_POLE[0], p[1] - SNOUT_POLE[1], p[2] - SNOUT_POLE[2]);
   // (the same at the mouth's corners, where the grid's columns gather onto the gape)
   const RC = FEAT.gapeLine[FEAT.gapeCorner];
   const rCorner = Math.hypot(s - RC[0], p[1] - RC[1], Math.abs(p[2]) - RC[2]);
   // (and along the lips, where the columns are squeezed together onto the cut: the lips are smooth there anyway)
   const lipCalm = Math.max(smoothstep(0.08, 0.5, Math.abs(p[1] - gapeY(clamp(s, MOUTH[0][0], RICTUS_S)))), smoothstep(RICTUS_S + 0.2, RICTUS_S + 0.8, s));
-  const tipCalm = smoothstep(0.08, 0.4, rPole) * smoothstep(0.15, 0.75, rCorner) * lipCalm;
+  const tipCalm = smoothstep(0.03, 0.2, rPole) * smoothstep(0.15, 0.75, rCorner) * lipCalm;
   const calmed = (v, cell, r, seed, keep, jitterR) => (tipCalm >= 1 ? v : v * tipCalm + dotMean(cell, r, seed, keep, jitterR) * (1 - tipCalm));
   // melanophore speckle: dense, fine, stronger on the back and head
   const sp = calmed(dots(p, 0.3, 0.085, 101, 0.9), 0.3, 0.085, 101, 0.9) * (0.35 + 0.65 * (1 - ventral)) * (s < 16 ? 1.2 : 1);
@@ -1145,7 +1254,9 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
     col = lerp3(col, COL.lip, up * 0.25 * front * smoothstep(0.2, 1.4, s) * (0.25 + 0.75 * smoothstep(0.4, 1.6, Math.abs(z))));
     // the lower lip, paler, all along the gape (photograph 10)
     col = lerp3(col, COL.belly, lo * (0.15 + 0.15 * front));
-    col = lerp3(col, COL.dark, smoothstep(0.14, 0.02, Math.abs(dy)) * along * 0.55);
+    // the dark line where the lips meet: across the front; behind the corner seen head-on, only faintly, in the fold
+    // under the lip lobe
+    col = lerp3(col, COL.dark, smoothstep(0.14, 0.02, Math.abs(dy)) * along * (0.2 + 0.35 * front));
   }
   // (the lip pads are painted as the face round them: the same speckled grey)
   // eye sockets: the cup's skin is paler and smoother toward the window; its margin (and the hidden skin inside the
@@ -1234,9 +1345,9 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
     h -= 0.01 * Math.pow(Math.abs(Math.sin(m * Math.PI)), 12) * (1 - ventral);
   }
 
-  // (the fine relief fades out over the snout's tip, where the texels still run long toward the uv pole and would draw
-  // it out into radial streaks)
-  h *= smoothstep(0.1, 1.2, rPole) * smoothstep(0.1, 0.7, rCorner) * lipCalm;
+  // (the fine relief fades out right on the snout's tip, where the texels converge on the uv pole and would draw it
+  // out into radial streaks)
+  h *= smoothstep(0.08, 0.5, rPole) * smoothstep(0.1, 0.7, rCorner) * lipCalm;
   // (the skin of the eyes' base is a little smoother)
   h *= 1 - 0.35 * stalk;
   // ---------------- roughness and skin data
@@ -1245,7 +1356,7 @@ function skinPoint(s, phi, p, n, ao, globe = false) {
   const mudAff = clamp(ventral * 0.8 + smoothstep(0.0, -0.6, nh) * 0.35 + (1 - ao) * 0.6 + 0.25 * fbm3(p[0] * 0.4, p[1] * 0.4, p[2] * 0.4, 3, 97));
   // (right on the snout's tip, where the texture's columns meet, the film is thinner and the skin a little rougher:
   // no sharp glint gathers on the pole)
-  const poleMatte = 1 - smoothstep(0.1, 0.7, rPole);
+  const poleMatte = 1 - smoothstep(0.08, 0.4, rPole);
   rough += 0.22 * poleMatte;
   // (grains stick out of the mucus film: they dry first)
   const mucus = clamp(0.55 + 0.35 * (1 - ao) + 0.2 * ventral - 0.25 * dorsal + 0.2 * fbm3(p[0] * 0.7, p[1] * 0.7, p[2] * 0.7, 3, 103) - 0.45 * poleMatte - 0.7 * grains);
@@ -1268,7 +1379,9 @@ export function bakeSkinTextures({ W, H, armPaint, armPoint = null, armOcclusion
   for (let i = 0; i <= NSb; i++) {
     for (let j = 0; j <= NVb; j++) {
       const phi = (j / NVb) * TAU;
-      const s = Math.min(S_END - 0.005, Math.max(0.003, uvSof(i / NSb, phi)));
+      // (down to the snout's very tip: the sections there grow as s^0.4, and a grid kept back at s = 0.003 starts on a
+      // ring 0.2-0.4 mm round the pole, which the texels inside it repeat as a star of wedges)
+      const s = Math.min(S_END - 0.005, Math.max(1e-6, uvSof(i / NSb, phi)));
       const p = project(basePoint(s, phi));
       const nn = fieldGrad(p[0], p[1], p[2]);
       const k = i * (NVb + 1) + j;
@@ -1321,7 +1434,7 @@ export function bakeSkinTextures({ W, H, armPaint, armPoint = null, armOcclusion
       const { s, phi } = uvInverse(t, v);
       TEXSP[(y * W + x) * 2] = s; TEXSP[(y * W + x) * 2 + 1] = phi;
       const { p, n, ao } = sample(t, phi / TAU);
-      TIPR[y * W + x] = Math.hypot(Math.max(s, 0), p[1] - SNOUT_POLE_Y, p[2]);
+      TIPR[y * W + x] = Math.hypot(p[0] - SNOUT_POLE[0], p[1] - SNOUT_POLE[1], p[2] - SNOUT_POLE[2]);
       const r = skinPoint(s, phi, p, n, ao);
       const k = y * W + x;
       for (let c = 0; c < 3; c++) albedo[k * 3 + c] = clamp(Math.round(r.col[c]), 0, 255);
@@ -1460,7 +1573,7 @@ export function bakeSkinTextures({ W, H, armPaint, armPoint = null, armOcclusion
     const dhdu = (height[y * W + xr] - height[y * W + xl]) / ((xr - xl) * mmU || 1);
     const dhdv = (height[yu * W + x] - height[yd * W + x]) / (2 * mmV);
     // the uv columns still converge on the very tip: fade the relief out right round the pole
-    const kTip = inArm || inDome ? 1 : smoothstep(0.03, 0.15, TIPR[k]);
+    const kTip = inArm || inDome ? 1 : smoothstep(0.05, 0.3, TIPR[k]);
     const nn = norm3([-dhdu * kTip, dhdv * kTip, 1]);
     normal[k * 3] = Math.round((nn[0] * 0.5 + 0.5) * 255);
     normal[k * 3 + 1] = Math.round((nn[1] * 0.5 + 0.5) * 255);
