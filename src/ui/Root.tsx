@@ -20,10 +20,12 @@ import { ShopScreen } from './home/ShopScreen';
 import { GachaScreen } from './home/GachaScreen';
 import { DebugPanel } from './debug/DebugPanel';
 import { CreatureMarkers } from './debug/CreatureMarkers';
+import { TouchControls } from './TouchControls';
 import { ArrowIcon, Key, KeyHint, MoonIcon } from './common/Icons';
 import { tideName } from '../core/Moon';
 import { BUILD, versionLabel, builtAtLabel } from '../core/Build';
 import './ui.css';
+import './mobile.css';
 
 export function Root({ app }: { app: App }) {
   const screen = ui.screen.value;
@@ -46,7 +48,7 @@ export function Root({ app }: { app: App }) {
       {screen === 'observe' && <ObserveOverlay app={app} />}
       {screen === 'caseView' && <CaseOverlay app={app} />}
       {screen === 'capture' && <CaptureOverlay app={app} />}
-      {inField && <CreatureMarkers />}
+      {inField && !app.input.touchDevice && <CreatureMarkers />}
       {screen === 'field' && ui.mapOpen.value && <MapOverlay app={app} />}
       {screen === 'zukan' && <Zukan app={app} />}
       {screen === 'menu' && <Menu app={app} />}
@@ -55,7 +57,8 @@ export function Root({ app }: { app: App }) {
       {screen === 'gacha' && <GachaScreen app={app} />}
       {screen === 'ticket' && <TideTable app={app} />}
       {screen === 'tidetable' && <TideTable app={app} />}
-      {ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}
+      {!app.input.touchDevice && ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}
+      {app.input.touchDevice && <TouchControls key={screen} app={app} />}
       <Toasts />
     </Fragment>
   );
@@ -151,7 +154,7 @@ function Hud({ app }: { app: App }) {
   const screen = ui.screen.value;
   return (
     <Fragment>
-      {!hud.pointerLocked && screen === 'field' && (
+      {!app.input.touchDevice && !hud.pointerLocked && screen === 'field' && (
         <div class="screen center transparent" onClick={() => app.focusGame()}>
           <div class="ready">
             <div class="ready-pill">{t('hud.ready')} <Key k="Enter" /></div>

@@ -102,7 +102,9 @@ export class App {
   lockedId: string | null = null;
   frameCount = 0;
   readonly tankMax = TANK_MAX_OCCUPANTS;
-  private pointerDown: { x: number; y: number; t: number } | null = null;
+  private pointerDown: { x: number; y: number; t: number; id: number } | null = null;
+  private canvasPointers = new Set<number>();
+  private dragPointer: number | null = null;
   private pendingPose: { x: number; z: number; heading: number; map: string } | null = null;
   private raf = 0;
   private lastFrame = 0;
@@ -123,6 +125,7 @@ export class App {
     this.renderer = new GameRenderer(canvas);
     this.camera = new PerspectiveCamera(70, this.renderer.aspect, 0.05, 2500);
     this.input = new Input(canvas);
+    document.documentElement.classList.toggle('touch-device', this.input.touchDevice);
     this.input.onLockError = (reason) => { console.warn('[input] pointer lock refused:', reason); toast(t('hud.lockFailed'), 'warn', 6000); };
     window.addEventListener('resize', () => this.onResize());
     document.addEventListener('visibilitychange', () => {
@@ -131,34 +134,55 @@ export class App {
     });
     window.addEventListener('beforeunload', () => { void this.writeSave(); });
     canvas.addEventListener('pointerdown', (e) => {
-      this.pointerDown = { x: e.clientX, y: e.clientY, t: performance.now() };
+      this.canvasPointers.add(e.pointerId);
+      if (this.canvasPointers.size > 1) { this.pointerDown = null; return; }
+      this.pointerDown = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId };
       // in the layout editor a press on a decoration starts dragging it over the sand
       if (this.mode === 'tankEdit' && ui.tankTab.value === 'layout' && e.button === 0) {
         const [nx, ny] = this.ndcOf(e.clientX, e.clientY);
         const id = this.tank.pickItem(nx, ny);
-        if (id) { this.dragItem = id; ui.tankSelected.value = id; this.tank.setControlsEnabled(false); canvas.setPointerCapture(e.pointerId); }
+        if (id) { this.dragItem = id; this.dragPointer = e.pointerId; ui.tankSelected.value = id; this.tank.setControlsEnabled(false); canvas.setPointerCapture(e.pointerId); }
       }
     });
     canvas.addEventListener('pointermove', (e) => {
-      if (!this.dragItem) return;
+      if (!this.dragItem || this.dragPointer !== e.pointerId) return;
       const [nx, ny] = this.ndcOf(e.clientX, e.clientY);
       this.tank.moveItem(this.dragItem, nx, ny);
     });
     canvas.addEventListener('pointerup', (e) => {
+      this.canvasPointers.delete(e.pointerId);
       const d = this.pointerDown;
-      this.pointerDown = null;
-      if (this.dragItem) {
-        this.dragItem = null;
-        this.tank.setControlsEnabled(true);
-        this.commitTankLayout();
+      if (d?.id === e.pointerId) this.pointerDown = null;
+      if (this.dragItem && this.dragPointer === e.pointerId) {
+        this.finishTankDrag();
         return;
       }
-      if (!d || (this.mode !== 'home' && this.mode !== 'tankEdit' && this.mode !== 'shop')) return;
+      if (!d || d.id !== e.pointerId || (this.mode !== 'home' && this.mode !== 'tankEdit' && this.mode !== 'shop')) return;
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6 || performance.now() - d.t > 350) return;
       if (this.mode === 'shop') this.onShopClick(e.clientX, e.clientY);
       else this.onHomeClick(e.clientX, e.clientY);
     });
+    const cancelPointer = (e: PointerEvent) => {
+      this.canvasPointers.delete(e.pointerId);
+      this.pointerDown = null;
+      if (this.dragPointer === e.pointerId) this.finishTankDrag();
+    };
+    canvas.addEventListener('pointercancel', cancelPointer);
+    canvas.addEventListener('lostpointercapture', cancelPointer);
+    const cancelAll = () => {
+      this.canvasPointers.clear(); this.pointerDown = null;
+      this.finishTankDrag();
+    };
+    window.addEventListener('blur', cancelAll);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) cancelAll(); });
     (window as unknown as { __higata: App }).__higata = this;
+  }
+
+  private finishTankDrag(): void {
+    if (!this.dragItem) return;
+    this.dragItem = null; this.dragPointer = null;
+    this.tank.setControlsEnabled(true);
+    this.commitTankLayout();
   }
 
   get mode(): Screen {
@@ -182,6 +206,9 @@ export class App {
   }
 
   private setMode(m: Screen): void {
+    this.input.clearTouch();
+    this.pointerDown = null; this.canvasPointers.clear();
+    this.finishTankDrag();
     ui.screen.value = m;
     this.input.dragLook = m === 'field';
     const overlay = m !== 'field' && m !== 'observe' && m !== 'capture' && m !== 'home' && m !== 'tankEdit' && m !== 'caseView';
@@ -194,7 +221,7 @@ export class App {
   // ------------------------------------------------------------------ boot
   async start(): Promise<void> {
     render(h(Root, { app: this }), this.uiRoot);
-    this.settings = await loadSettings();
+    this.settings = await loadSettings(this.input.touchDevice ? { quality: 'low' } : {});
     ui.settings.value = this.settings;
     this.renderer.setQuality(this.settings.quality);
     if (!this.renderer.caps.webgl2) {
@@ -221,7 +248,7 @@ export class App {
     if (this.renderer.caps.floatRT) this.hero = new HeroPipeline(this.renderer.gl);
     if (this.renderer.caps.floatRT) this.field = new FieldRenderer(this.renderer.gl);
     this.applyHeroSetting();
-    if (new URLSearchParams(location.search).has('debug')) ui.debug.value = true;
+    ui.debug.value = !this.input.touchDevice && new URLSearchParams(location.search).has('debug');
     const existing = await this.saveStore.load();
     this.equipmentCollection.value = normalizeCollection(existing?.equipmentCollection, existing?.tank.layout?.equipment);
     ui.hasSave.value = !!existing;
@@ -460,11 +487,15 @@ export class App {
   // ------------------------------------------------------------------ debug
   /** The whole flat at a glance (M on the flat). */
   toggleMap(): void {
+    this.input.clearTouch();
     ui.mapOpen.value = !ui.mapOpen.value;
+    this.input.blocked = ui.mapOpen.value;
+    this.input.dragLook = !ui.mapOpen.value;
     if (ui.mapOpen.value) this.input.exitPointerLock();
   }
 
   toggleDebug(): void {
+    if (this.input.touchDevice) return;
     ui.debug.value = !ui.debug.value;
     if (!ui.debug.value) ui.markers.value = [];
   }
@@ -1414,9 +1445,9 @@ export class App {
     if (this.input.pressed('debug')) this.toggleDebug();
     switch (mode) {
       case 'field':
-        this.input.dragLook = true;
+        this.input.dragLook = !ui.mapOpen.value;
         if (!this.input.pointerLocked && (this.input.keyPressed('Enter') || this.input.keyPressed('Space'))) this.focusGame();
-        if (this.input.pressed('menu')) { if (ui.mapOpen.value) ui.mapOpen.value = false; else this.openOverlay('menu'); }
+        if (this.input.pressed('menu')) { if (ui.mapOpen.value) this.toggleMap(); else this.openOverlay('menu'); }
         else if (this.input.pressed('map')) this.toggleMap();
         else if (this.input.pressed('zukan')) this.openOverlay('zukan');
         else if (this.input.pressed('ticket')) this.openOverlay('ticket');
@@ -1565,8 +1596,8 @@ export class App {
   /** WASD moves the viewpoint and orbit centre together; Shift / Ctrl moves vertically at home. */
   private tankKeys(dt: number): void {
     const i = this.input;
-    const right = (i.held('right') ? 1 : 0) - (i.held('left') ? 1 : 0);
-    const forward = (i.held('forward') ? 1 : 0) - (i.held('back') ? 1 : 0);
+    const right = i.moveRight;
+    const forward = i.moveForward;
     const atHome = this.mode === 'home';
     const up = atHome ? (i.held('viewUp') ? 1 : 0) - (i.held('viewDown') ? 1 : 0) : 0;
     const speed = !atHome && i.held('run') ? 2.2 : 1;
@@ -1706,6 +1737,7 @@ export class App {
       } else if (this.targetOyster >= 0) {
         prompt = `${this.data.species.get('crassostrea_gigas')?.names.ja ?? 'マガキ'}   [F] ${t('hud.observe')}   ${t('hud.observeOnly')}`;
       } else if (toolHint) prompt = toolHint;
+      if (this.input.touchDevice && prompt) prompt = prompt.replace(/\[(?:E|F|[1-3])\]\s*/g, '');
     }
     const fps = this.fpsCount / Math.max(1e-3, this.fpsAcc);
     this.fpsAcc = 0; this.fpsCount = 0;

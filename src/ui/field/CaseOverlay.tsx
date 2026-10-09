@@ -33,7 +33,7 @@ export function CaseOverlay({ app }: { app: App }) {
         ) : <p class="dim small">{t('case.empty')}</p>}
         <div class="stat-row" style={{ marginTop: '10px' }}><span>{t('home.research')}</span><span class="num">{enc.research.value.toLocaleString()}</span></div>
       </div>
-      <div class="foot">{t('case.hint')}</div>
+      <div class="foot">{app.input.touchDevice ? '1本指で回転・2本指で拡大。「戻る」で干潟へ。' : t('case.hint')}</div>
     </aside>
   );
 }

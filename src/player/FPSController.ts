@@ -120,10 +120,8 @@ export class FPSController {
     }
     let mx = 0, mz = 0;
     if (this.enabled) {
-      if (input.held('forward')) mz += 1;
-      if (input.held('back')) mz -= 1;
-      if (input.held('right')) mx += 1;
-      if (input.held('left')) mx -= 1;
+      mz = input.moveForward;
+      mx = input.moveRight;
     }
     const len = Math.hypot(mx, mz);
     this.blockedByDepth = false;
@@ -178,7 +176,7 @@ export class FPSController {
       const fwd = this.forward;
       this.tmpRight.set(-fwd.z, 0, fwd.x);
       const dir = new Vector3().addScaledVector(fwd, mz).addScaledVector(this.tmpRight, mx);
-      let speed = this.running ? RUN : this.crouching ? CROUCH : WALK;
+      let speed = (this.running ? RUN : this.crouching ? CROUCH : WALK) * Math.min(1, len);
       const sub = this.terrain.substrateAt(this.position.x, this.position.z);
       if (sub === 'mud' || sub === 'channel') speed *= 0.65;
       else if (sub === 'muddy_sand') speed *= 0.85;

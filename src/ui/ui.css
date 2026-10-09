@@ -25,8 +25,8 @@
 .btn.lg { height: 52px; padding: 0 30px; font-size: 15px; }
 .icon-btn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px 0 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(236, 244, 244, 0.04); color: var(--fg-2); transition: background 0.2s var(--ease), border-color 0.2s var(--ease), color 0.2s var(--ease); }
 .icon-btn:hover { background: rgba(236, 244, 244, 0.1); border-color: var(--line-2); color: var(--fg); }
-button:not(.btn):not(.icon-btn):not(.nav-item):not(.chip):not(.seg > button):not(.zukan-item) { background: rgba(236, 244, 244, 0.06); color: var(--fg); border: 1px solid var(--line-2); border-radius: 999px; padding: 8px 16px; font-size: 13px; letter-spacing: 0.04em; transition: background 0.2s var(--ease), border-color 0.2s var(--ease); }
-button:not(.btn):not(.icon-btn):not(.nav-item):not(.chip):not(.seg > button):not(.zukan-item):hover { background: rgba(236, 244, 244, 0.12); border-color: rgba(236, 244, 244, 0.3); }
+button:not(.btn):not(.icon-btn):not(.nav-item):not(.nav-tile):not(.nav-primary):not(.touch-button):not(.tool-chip):not(.chip):not(.seg > button):not(.zukan-item) { background: rgba(236, 244, 244, 0.06); color: var(--fg); border: 1px solid var(--line-2); border-radius: 999px; padding: 8px 16px; font-size: 13px; letter-spacing: 0.04em; transition: background 0.2s var(--ease), border-color 0.2s var(--ease); }
+button:not(.btn):not(.icon-btn):not(.nav-item):not(.nav-tile):not(.nav-primary):not(.touch-button):not(.tool-chip):not(.chip):not(.seg > button):not(.zukan-item):hover { background: rgba(236, 244, 244, 0.12); border-color: rgba(236, 244, 244, 0.3); }
 button.primary:not(.btn) { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
 .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; border: 1px solid var(--line); background: rgba(5, 11, 14, 0.35); }
 .seg > button { background: transparent; border: 0; color: var(--dim); padding: 6px 14px; border-radius: 999px; font-size: 13px; letter-spacing: 0.04em; transition: background 0.2s var(--ease), color 0.2s var(--ease); }
