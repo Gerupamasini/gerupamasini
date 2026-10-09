@@ -25,6 +25,21 @@ export function SpotSelect({ app }: { app: App }) {
   const sel = spots.find((s) => s.id === selId) ?? spots[0];
   const [bx0, by0] = jp(139.5, 35.75), [bx1, by1] = jp(140.1, 35.1);
   const pick = (s: SpotDef) => { ui.spot.value = s.id; };
+  if (app.input.touchDevice) return <div class="screen center mobile-spots">
+    <div class="card mobile-spots-card">
+      <CardHead title={t('spots.title')} onClose={() => app.closeOverlay()} />
+      <div class="mobile-spot-options">
+        {spots.map((s) => <button key={s.id} class={`btn mobile-spot ${s.id === sel?.id ? 'selected' : ''}`} aria-pressed={s.id === sel?.id} onClick={() => pick(s)}>
+          <span class="name">{s.ja}</span><span class="dim small">{s.area}</span>
+          <span class="small">{s.map ? t('spots.open') : t('spots.soon')}</span>
+        </button>)}
+      </div>
+      {sel && <div class="mobile-spot-detail">
+        <p class="dim small">{sel.description}</p>
+        <button class="btn primary spot-go" disabled={!sel.map} onClick={() => { if (sel.map) void app.enterField(sel.id); }}>{sel.map ? t('spots.go') : t('spots.soon')}</button>
+      </div>}
+    </div>
+  </div>;
   return (
     <div class="screen center">
       <div class="card spots-card">

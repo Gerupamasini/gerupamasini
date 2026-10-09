@@ -3,6 +3,7 @@ import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import { TankPanel } from '../tank/TankPanel';
 import { ToolsPanel } from './ToolsPanel';
+import { MobileHome } from './MobileHome';
 import { nextLevelAt } from '../../systems/Encyclopedia';
 import { formatJst } from '../../core/Time';
 import { moonAge, tideName } from '../../core/Moon';
@@ -25,6 +26,7 @@ function dateLine(ms: number): string {
  * almanac of the real tide (top right), and a row of seven tiles along the bottom with the flat as the loud one.
  */
 export function HomeMenu({ app }: { app: App }) {
+  if (app.input.touchDevice) return <MobileHome app={app} />;
   const hud = ui.hud.value;
   const now = app.clock.nowGame();
   const nextLow = hud.extrema.find((e) => e.t > now && e.kind === 'low');

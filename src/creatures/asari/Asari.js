@@ -205,6 +205,21 @@ export class AsariDriver {
 
   get state() { return this.beh?.state; }
 
+  /** Check the posed valves, not the brain intent or the siphons protruding from the sand. */
+  canNetCapture() {
+    if (!this.root || !this.model || !this.ind) return false;
+    this.root.updateWorldMatrix(true, true);
+    for (const shell of [this.model.left, this.model.right]) {
+      if (!shell.pivot.visible) continue;
+      const mesh = shell.valve, positions = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < positions.count; i++) {
+        this.tmp.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+        if (this.tmp.y > this.ind.pos.y + 0.001) return true;
+      }
+    }
+    return false;
+  }
+
   dispose() {
     this.detach();
     this.listeners.clear();
