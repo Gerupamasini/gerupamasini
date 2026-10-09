@@ -778,8 +778,8 @@ export class App {
     const out: { ind: Individual; edge: number }[] = [];
     if (!creatures || !player) return out;
     for (const ind of creatures.individuals) {
-      if (!ind.species.collectable || ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
       if (ind.pos.distanceTo(player.position) > this.netReach() + 1.5) continue;
+      if (!creatures.canNetCapture(ind.id)) continue;
       // the hoop is judged against the body as drawn (the anchor) as well as the logical position, with the animal's own size as margin
       const margin = Math.max(0.06, ind.length_mm / 2000), scale = this.netZoneScale(), reach = this.netReach();
       let e = NetView.inZone(this.camera, ind.pos, margin, scale, reach);
@@ -856,7 +856,7 @@ export class App {
       // a slow swing in deep water gives everything time to go; a practised hand gives less
       escape = (escape + 0.35 * slow * (0.5 + ind.alert)) * (1 - 0.1 * skill) * quiet;
       escape = Math.min(0.85, Math.max(0, escape));
-      if (this.capture.forceCatch || (ind.rng.next() > escape && caught.length < free)) caught.push(ind);
+      if (caught.length < free && (ind.species.locomotion === 'burrow' || this.capture.forceCatch || ind.rng.next() > escape)) caught.push(ind);
     }
     for (const ind of creatures.individuals) {
       if (caught.includes(ind) || ind.species.locomotion === 'burrow' || ind.species.taxon.group === 'bird') continue;
@@ -1694,15 +1694,10 @@ export class App {
     let prompt: string | null = null;
     if (this.mode === 'field' && this.creatures && player) {
       this.target = this.binoculars?.raised ? this.creatures.pickTarget(this.camera, this.toolDef()?.params.reach_m ?? 80, 1.2) : this.creatures.pickTarget(this.camera, 7);
-      // the net: something catchable where the hoop would go through the water
       const netInHand = this.toolType() === 'capture';
-      const inReach = netInHand && this.netZoneHits().length > 0;
-      const deep = netInHand && this.swingSlow() * (this.netDef()?.params.deep ?? 1) >= 0.5 ? `　${t('hud.deepSlow')}` : '';
-      // the net: a swing when something is under the hoop; "too far" when the animal looked at is beyond the handle
-      const tooFarNet = netInHand && !inReach && !!this.target && this.target.species.collectable && this.target.pos.distanceTo(this.camera.position) > this.netReach() + 0.2;
       const dg = this.toolType() === 'dig' ? this.digTarget() : null;
       const toolHint = netInHand
-        ? (inReach ? `[E] ${t('hud.swing')}${deep}` : tooFarNet ? t('hud.tooFar') : deep.trim())
+        ? ''
         : (dg && !dg.far ? `[E] ${t('hud.dig')}` : t('hud.tooFar'));
       // a clam's siphon holes under the reticle
       this.targetClam = -1;
@@ -1727,7 +1722,7 @@ export class App {
         const digId = this.encyclopedia.loadout.value.find((x) => this.toolType(x) === 'dig');
         const shovelKey = digId ? this.encyclopedia.loadout.value.indexOf(digId) : -1;
         const digHint = this.toolType() === 'dig' ? toolHint : shovelKey >= 0 ? `[${shovelKey + 1}] ${this.toolDef(digId!)?.ja ?? ''}` : t('tools.noShovel');
-        prompt = sp.locomotion === 'burrow'
+        prompt = sp.locomotion === 'burrow' && !(netInHand && this.creatures.canNetCapture(this.target.id))
           ? `${sp.names.ja}   [F] ${t('hud.observe')}   ${digHint}`
           : `${sp.names.ja}   [F] ${t('hud.observe')}${sp.collectable ? (toolHint ? `   ${toolHint}` : '') : `   ${t('hud.observeOnly')}`}`;
       } else if (this.targetClam >= 0) {
@@ -1737,7 +1732,7 @@ export class App {
       } else if (this.targetOyster >= 0) {
         prompt = `${this.data.species.get('crassostrea_gigas')?.names.ja ?? 'マガキ'}   [F] ${t('hud.observe')}   ${t('hud.observeOnly')}`;
       } else if (toolHint) prompt = toolHint;
-      if (this.input.touchDevice && prompt) prompt = prompt.replace(/\[(?:E|F|[1-3])\]\s*/g, '');
+      if (this.input.touchDevice) prompt = null;
     }
     const fps = this.fpsCount / Math.max(1e-3, this.fpsAcc);
     this.fpsAcc = 0; this.fpsCount = 0;

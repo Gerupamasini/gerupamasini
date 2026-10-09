@@ -42,7 +42,7 @@ export function Root({ app }: { app: App }) {
       {screen === 'title' && <Title app={app} />}
       {screen === 'home' && <HomeMenu app={app} />}
       {screen === 'tankEdit' && <TankEdit app={app} />}
-      {ui.transition.value && <Transition label={ui.transition.value} />}
+      {ui.transition.value && <Transition label={ui.transition.value} touch={app.input.touchDevice} />}
       {inField && ui.settings.value.sunglasses && <div class="sunglasses-tint" aria-hidden="true" />}
       {(screen === 'field' || screen === 'capture') && <Hud app={app} />}
       {screen === 'observe' && <ObserveOverlay app={app} />}
@@ -78,7 +78,8 @@ function TankEdit({ app }: { app: App }) {
 }
 
 /** The curtain between screens. */
-function Transition({ label }: { label: string }) {
+function Transition({ label, touch }: { label: string; touch: boolean }) {
+  if (touch) return <div class="screen loading transition mobile-transition"><span role="status">{label}</span></div>;
   return (
     <div class="screen loading transition">
       <h1 class="wordmark">{t('app.title')}</h1>
@@ -152,6 +153,16 @@ const KEY_HINTS: [string[], string][] = [
 function Hud({ app }: { app: App }) {
   const hud = ui.hud.value;
   const screen = ui.screen.value;
+  if (app.input.touchDevice) return <Fragment>
+    <div class="mobile-field-status">
+      <span class="num">{hud.timeText}</span>
+      <span>潮位 {(hud.tideLevel * 100).toFixed(0)} cm</span>
+      <span>ケース {hud.caseCount}/{hud.caseMax}</span>
+      {hud.tooDeep && <span class="mobile-depth-warning">水深注意</span>}
+      {hud.ticket && <span class="mobile-ticket">潮時 {Math.floor(hud.ticket.remainingSec / 60)}:{String(hud.ticket.remainingSec % 60).padStart(2, '0')}</span>}
+    </div>
+    <div class="reticle" />
+  </Fragment>;
   return (
     <Fragment>
       {!app.input.touchDevice && !hud.pointerLocked && screen === 'field' && (

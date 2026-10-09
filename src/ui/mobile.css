@@ -16,21 +16,17 @@
 .touch-stick i { position: absolute; left: 32%; top: 32%; width: 36%; height: 36%; border-radius: 50%; background: rgba(127, 227, 210, .6); border: 1px solid var(--accent); }
 .stick-cross { position: absolute; inset: 18%; border-radius: 50%; border: 1px solid var(--line-2); }
 .stick-label { position: absolute; left: 0; right: 0; top: calc(100% + 3px); text-align: center; font-size: 11px; color: var(--fg-2); text-shadow: 0 1px 4px #000; }
-.touch-actions { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom)); width: clamp(180px, 52vw, 216px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.touch-actions { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom)); width: 148px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .touch-actions .touch-button { font-size: 12px; padding: 4px; }
 .touch-toolbar { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); display: flex; gap: 6px; }
 .touch-more { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(64px + env(safe-area-inset-top)); width: min(70vw, 260px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px; gap: 6px; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 14px; }
-.touch-home .touch-stick { bottom: calc(146px + env(safe-area-inset-bottom)); }
-.touch-home-height { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(138px + env(safe-area-inset-bottom)); display: grid; gap: 6px; width: 96px; }
-.touch-home .touch-toolbar { top: calc(220px + env(safe-area-inset-top)); }
-.touch-controls .touch-view-hint { position: absolute; bottom: calc(302px + env(safe-area-inset-bottom)); left: 8px; right: 8px; text-align: center; font-size: 11px; color: var(--fg-2); text-shadow: 0 1px 5px #000; pointer-events: none; }
 .touch-capture { display: flex; align-items: flex-end; justify-content: center; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 .touch-capture .touch-button { min-width: 120px; }
 
 /* Portrait phones and tablets. Safe areas protect controls around notches and browser bars. */
 .touch-device #view { height: 100dvh; }
 .touch-device .key, .touch-device .hud-keys, .touch-device .home-hint, .touch-device .home-title, .touch-device .hud-stats .fps { display: none; }
-.touch-device button { min-height: 44px; }
+.touch-device button { min-height: 44px; -webkit-tap-highlight-color: transparent; }
 .touch-device input:not([type=range]), .touch-device select { font-size: 16px; }
 .touch-device .screen { padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
 .touch-device .card { max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; padding: 18px 16px; }
@@ -40,29 +36,7 @@
 .touch-device .title-now .sep { display: none; }
 .touch-device .title-foot { bottom: max(8px, env(safe-area-inset-bottom)); flex-wrap: wrap; gap: 4px; }
 .touch-device .wordmark { font-size: clamp(34px, 9vw, 64px); }
-.touch-device .home-almanac { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); top: calc(8px + env(safe-area-inset-top)); min-width: 0; padding: 8px 12px; display: flex; flex-direction: column; gap: 0; }
-.touch-device .home-almanac .row { width: 100%; margin: 0; }
-.touch-device .home-almanac .row.head .time { width: auto; font-size: 23px; margin: 0; }
-.touch-device .home-almanac .row.head .date { font-size: 12px; }
-.touch-device .home-almanac .row.body { gap: 12px; }
-.touch-device .home-almanac .moon-col { display: grid; grid-template-columns: 32px auto; gap: 0 6px; padding-right: 10px; }
-.touch-device .home-almanac .moon-col svg { width: 30px; height: 30px; grid-row: span 2; }
-.touch-device .home-almanac .moon-col .age, .touch-device .home-almanac .moon-col .age .num { font-size: 10px; }
-.touch-device .home-almanac .moon-col .tidename { font-size: 16px; }
-.touch-device .home-almanac .tide-col { gap: 1px; }
-.touch-device .home-almanac .kv { font-size: 10px; gap: 6px; }
-.touch-device .home-almanac .kv .num { font-size: 13px; }
-.touch-device .home-status { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); top: calc(114px + env(safe-area-inset-top)); bottom: auto; min-width: 0; padding: 8px 12px; flex-direction: column; gap: 4px; align-items: stretch; }
-.touch-device .home-status .level-row .num { font-size: 22px; }
-.touch-device .home-status .stat-line { font-size: 11px; gap: 8px; }
-.touch-device .home-status .stat-line .stat b { font-size: 13px; }
-.touch-device .home-nav { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; max-width: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: dense; gap: 6px; padding: 0; }
-.touch-device .home-nav .nav-tile, .touch-device .home-nav .nav-primary { min-width: 0; height: 48px; min-height: 48px; padding: 4px 6px; margin: 0; font-size: 12px; letter-spacing: 0; gap: 4px; border-radius: 10px; }
-.touch-device .home-nav .nav-tile svg { width: 16px; height: 16px; }
-.touch-device .home-nav .nav-primary { grid-column: span 2; font-size: 18px; }
-.touch-device .home-info { left: 8px; right: 8px; bottom: calc(322px + env(safe-area-inset-bottom)); max-width: none; max-height: 24dvh; overflow-y: auto; }
 .touch-device .drawer, .touch-device .tank-edit .drawer { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); top: auto; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; height: min(50dvh, 460px); max-height: 50dvh; padding: 12px; }
-.touch-device .home-nav ~ .drawer { bottom: calc(116px + env(safe-area-inset-bottom)); }
 .touch-device .drawer-head { margin-bottom: 6px; gap: 6px; }
 .touch-device .drawer-head h2 { font-size: 16px; }
 .touch-device .drawer-body { overscroll-behavior: contain; touch-action: pan-y; }
@@ -74,36 +48,12 @@
 .touch-device .edit-badge { top: calc(8px + env(safe-area-inset-top)); left: 8px; right: 8px; justify-content: space-between; }
 .touch-device .tank-items li, .touch-device .occupant .row, .touch-device .case-list li { flex-wrap: wrap; }
 .touch-device .tank-add { flex-wrap: wrap; }
-.touch-device .hud-tl { left: max(8px, env(safe-area-inset-left)); top: calc(8px + env(safe-area-inset-top)); gap: 5px; pointer-events: none; }
-.touch-device .hud-clock { padding: 4px 8px; gap: 6px; flex-wrap: wrap; max-width: calc(100vw - 174px); }
-.touch-device .hud-clock .num { font-size: 18px; }
-.touch-device .hud-clock .date { font-size: 10px; }
-.touch-device .hud-clock .meta { display: none; }
-.touch-device .gauge { width: min(184px, 49vw); padding: 6px 8px; }
-.touch-device .gauge-head { font-size: 10px; }
-.touch-device .gauge-head .num { font-size: 15px; }
-.touch-device .gauge-trend { white-space: nowrap; }
-.touch-device .gauge-trend svg { width: 16px; height: 16px; flex-shrink: 0; }
-.touch-device .gauge-next { font-size: 10px; }
-.touch-device .glasses-badge { font-size: 10px; padding: 4px 8px; }
-.touch-device .ticket-badge { max-width: 56vw; font-size: 10px; padding: 4px 8px; }
-.touch-device .hud-tr { right: max(8px, env(safe-area-inset-right)); top: calc(66px + env(safe-area-inset-top)); gap: 4px; max-width: 44vw; }
-.touch-device .minimap-wrap, .touch-device .minimap { width: 80px; height: 80px; }
-.touch-device .hud-stats { font-size: 10px; padding: 4px 8px; }
-.touch-device .hud-stats b { font-size: 12px; }
-.touch-device .hud-tools { flex-wrap: wrap; gap: 4px; margin-top: 2px; max-width: 44vw; }
-.touch-device .hud-tools .tool-chip { min-height: 44px; max-width: 44vw; padding: 6px 8px; font-size: 11px; white-space: normal; background: rgba(8, 20, 25, .85); opacity: 1; transform: none; color: var(--fg-2); }
-.touch-device .hud-tools .tool-chip.on { border-color: var(--accent); color: var(--accent); box-shadow: none; }
-.touch-device .hud-tools .tool-chip .use { display: none; }
-.touch-device .hud-cb { bottom: calc(152px + env(safe-area-inset-bottom)); padding: 0 12px; }
-.touch-device .prompt { max-width: 96vw; font-size: 12px; padding: 8px 12px; text-align: center; }
 .touch-device .observe-top { left: 10px; top: calc(10px + env(safe-area-inset-top)); right: 10px; }
 .touch-device .observe-name { font-size: 21px; }
 .touch-device .observe-name .sci { display: block; margin-left: 0; }
 .touch-device .observe-right { top: calc(100px + env(safe-area-inset-top)); right: 8px; min-width: 0; max-width: 48vw; max-height: 28dvh; overflow-y: auto; font-size: 11px; padding: 8px; }
 .touch-device .observe-bottom { bottom: calc(8px + env(safe-area-inset-bottom)); gap: 6px; }
 .touch-device .observe-bottom .seg button { min-width: 52px; }
-.touch-device .capture-reveal .display { font-size: clamp(22px, 6vw, 30px); max-width: calc(100vw - 24px); }
 .touch-device .shop-screen { padding: calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
 .touch-device .shop-top { flex-wrap: wrap; gap: 8px; }
 .touch-device .shop-title { font-size: 23px; }
@@ -111,41 +61,81 @@
 .touch-device .shop-card.float { right: 8px; top: auto; bottom: calc(8px + env(safe-area-inset-bottom)); width: calc(100% - 16px); max-height: 48dvh; overflow-y: auto; }
 .touch-device .shop-pick { width: 94%; text-align: center; bottom: 20px; }
 .touch-device .map-card { max-height: calc(100dvh - 24px); overflow-y: auto; }
-.touch-device .spots-maps { min-height: 210px; height: 32dvh; }
-.touch-device .spots-list li { min-height: 44px; }
-.touch-device .toasts { bottom: calc(172px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); }
+.touch-device .toasts { top: calc(60px + env(safe-area-inset-top)); bottom: auto; left: max(8px, env(safe-area-inset-left)); right: auto; transform: none; align-items: flex-start; max-width: min(68vw, 320px); }
 .touch-instructions { margin: 0; line-height: 1.8; color: var(--fg-2); }
 
 /* Wide, short displays keep a clear centre and one navigation row. */
 @media (orientation: landscape) and (max-height: 600px) {
-  .touch-device .home-almanac { right: auto; width: min(42vw, 340px); }
-  .touch-device .home-status { left: auto; right: calc(82px + env(safe-area-inset-right)); top: calc(8px + env(safe-area-inset-top)); width: min(34vw, 270px); }
-  .touch-home .touch-toolbar { top: calc(8px + env(safe-area-inset-top)); }
-  .touch-device .home-nav { grid-template-columns: repeat(8, minmax(0, 1fr)); }
-  .touch-home .touch-stick { bottom: calc(78px + env(safe-area-inset-bottom)); }
-  .touch-home-height { width: 220px; grid-template-columns: 1fr 1fr 2fr; bottom: calc(76px + env(safe-area-inset-bottom)); }
-  .touch-controls .touch-view-hint { bottom: calc(132px + env(safe-area-inset-bottom)); }
-  .touch-device .home-info { left: 26%; right: 30%; bottom: 156px; max-height: 30dvh; }
   .touch-device .drawer, .touch-device .tank-edit .drawer { left: auto; width: min(45vw, 360px); top: calc(64px + env(safe-area-inset-top)); bottom: calc(8px + env(safe-area-inset-bottom)); height: auto; max-height: none; }
-  .touch-device .home-nav ~ .drawer { top: calc(114px + env(safe-area-inset-top)); bottom: calc(68px + env(safe-area-inset-bottom)); }
   .touch-device .drawer.sheet-collapsed { top: auto; height: auto; }
-  .touch-device .hud-tr { top: calc(66px + env(safe-area-inset-top)); max-width: 36vw; }
-  .touch-device .hud-tools { max-width: 36vw; }
-  .touch-device .minimap-wrap { display: none; }
-  .touch-device .hud-stats { flex-direction: row; gap: 6px; }
-  .touch-device .glasses-badge { display: none; }
-  .touch-device .hud-tools .tool-chip .lv { display: none; }
-  .touch-device .hud-cb { bottom: calc(130px + env(safe-area-inset-bottom)); }
   .touch-device .observe-right { top: calc(8px + env(safe-area-inset-top)); max-height: 38dvh; }
   .touch-device .observe-bottom { flex-direction: row; justify-content: center; flex-wrap: wrap; padding: 0 8px; }
   .touch-device .shop-card.float { width: min(42vw, 340px); max-height: 64dvh; }
-  .touch-device .spots-maps { height: 180px; min-height: 180px; }
 }
 
-@media (orientation: landscape) and (max-width: 700px) {
-  .touch-device .home-nav .nav-tile svg { display: none; }
-  .touch-device .home-almanac { width: 48vw; }
-  .touch-device .home-almanac .kv:last-child, .touch-device .home-almanac .kv:nth-child(2) small { display: none; }
-  .touch-device .home-almanac .kv > span:first-child { white-space: nowrap; }
-  .touch-device .home-status .stat-name { display: none; }
+
+/* Compact home and field layouts: menus open only when requested. */
+.mobile-home-status, .mobile-field-status {
+  position: fixed; top: calc(8px + env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left));
+  display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 12px;
+  background: rgba(8, 20, 25, .72); color: var(--fg-2); font-size: 12px;
+}
+.mobile-home-status { right: max(8px, env(safe-area-inset-right)); justify-content: space-between; padding: 0 8px; }
+.mobile-home-status .btn { display: flex; gap: 8px; padding: 4px; font-size: 12px; letter-spacing: 0; border: 0; }
+.mobile-home-status .num { color: var(--fg); font-size: 16px; }
+.mobile-standing { font-size: 11px; white-space: nowrap; }
+.mobile-home-selected { position: fixed; top: calc(62px + env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); height: auto; max-width: calc(100vw - 140px); padding: 8px 12px; border-radius: 12px; flex-direction: column; align-items: flex-start; gap: 4px; background: rgba(8, 20, 25, .8); font-size: 13px; letter-spacing: 0; }
+.touch-device .mobile-home-nav {
+  position: fixed; left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right));
+  bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; max-width: none; padding: 0;
+  display: grid; grid-template-columns: 1fr 1.35fr 1fr; gap: 8px;
+}
+.touch-device .mobile-home-nav .nav-tile, .touch-device .mobile-home-nav .nav-primary {
+  min-width: 0; height: 48px; min-height: 48px; padding: 4px 8px; margin: 0; border-radius: 12px;
+  font-size: 14px; letter-spacing: 0;
+}
+.mobile-home-more {
+  position: fixed; right: max(8px, env(safe-area-inset-right)); bottom: calc(66px + env(safe-area-inset-bottom));
+  width: min(280px, calc(100vw - 16px)); padding: 8px; display: grid; grid-template-columns: 1fr 1fr;
+  gap: 8px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--surface-2);
+}
+.mobile-home-more .btn { padding: 6px; font-size: 13px; letter-spacing: 0; }
+.touch-home .touch-stick { bottom: calc(92px + env(safe-area-inset-bottom)); }
+.touch-home-height { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(78px + env(safe-area-inset-bottom)); display: grid; gap: 6px; width: 96px; }
+.touch-camera-close { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(62px + env(safe-area-inset-top)); }
+.touch-device .home-nav ~ .drawer { bottom: calc(66px + env(safe-area-inset-bottom)); }
+.mobile-field-status { max-width: calc(100vw - 94px - env(safe-area-inset-left) - env(safe-area-inset-right)); flex-wrap: wrap; gap: 4px 8px; pointer-events: none; padding: 8px; }
+.mobile-field-status .num { font-size: 15px; color: var(--fg); }
+.touch-device #ui > .mobile-field-status { pointer-events: none; }
+.mobile-depth-warning { color: var(--sand); }
+.mobile-ticket { color: var(--accent); }
+.touch-tool-select { position: absolute; bottom: calc(76px + env(safe-area-inset-bottom)); right: max(10px, env(safe-area-inset-right)); width: 148px; }
+.touch-tool-select > button { width: 100%; min-height: 44px; }
+.touch-tool-options { position: absolute; bottom: calc(100% + 6px); right: 0; display: grid; gap: 6px; width: 180px; max-height: calc(100dvh - 180px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; padding: 8px; border: 1px solid var(--line-2); border-radius: 14px; background: var(--surface-2); }
+.touch-tool-options button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
+.touch-extra-actions { position: absolute; bottom: calc(128px + env(safe-area-inset-bottom)); right: max(10px, env(safe-area-inset-right)); width: 148px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.touch-extra-actions .touch-button { padding: 4px; font-size: 12px; }
+.touch-extra-close { grid-column: span 2; }
+.touch-device .capture-reveal { top: calc(60px + env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); right: auto; max-width: calc(100vw - 16px); align-items: flex-start; text-align: left; gap: 4px; }
+.touch-device .capture-reveal.wait, .touch-device .capture-reveal .eyebrow { display: none; }
+.touch-device .capture-reveal .display { font-size: 14px; padding: 6px 10px; border-radius: 10px; background: rgba(8, 20, 25, .8); }
+.touch-device .mobile-transition { align-items: flex-start; justify-content: flex-end; padding: max(12px, env(safe-area-inset-bottom)); }
+.mobile-transition span { font-size: 13px; color: var(--fg-2); }
+.touch-device .mobile-spots-card { width: min(540px, 100%); max-height: 100%; padding: 16px; overflow: hidden; display: flex; flex-direction: column; gap: 14px; }
+.mobile-spots-card .card-head { margin: 0; }
+.mobile-spots-card .card-head h2 { font-size: 22px; }
+.mobile-spot-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mobile-spot-options .mobile-spot { min-width: 0; height: auto; border-radius: 12px; display: flex; flex-direction: column; gap: 6px; padding: 14px 8px; font-size: 14px; letter-spacing: 0; white-space: normal; user-select: none; -webkit-user-select: none; }
+.mobile-spot.selected { color: var(--accent); border-color: var(--accent); background: rgba(127, 227, 210, .1); }
+.mobile-spot .name { font-weight: 700; }
+.mobile-spot-detail { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.mobile-spot-detail p { margin: 0; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.mobile-spot-detail .spot-go { width: 100%; flex-shrink: 0; }
+@media (max-height: 400px) {
+  .touch-home-height { width: 220px; grid-template-columns: 1fr 1fr 2fr; }
+  .touch-device .mobile-spots-card { padding: 12px; gap: 8px; }
+  .mobile-spot-options .mobile-spot { padding: 8px; gap: 3px; }
+  .mobile-spot-detail { gap: 8px; }
+  .touch-extra-actions { width: 260px; grid-template-columns: repeat(4, 1fr); }
+  .touch-extra-close { grid-column: span 4; }
 }

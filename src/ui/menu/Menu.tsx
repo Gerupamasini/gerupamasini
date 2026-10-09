@@ -26,7 +26,7 @@ export function Menu({ app }: { app: App }) {
         </div>
         <div class="setting">
           <span class="label">{app.input.touchDevice ? '視点の感度' : t('menu.sensitivity')}<span class="num">{s.mouseSensitivity.toFixed(1)}</span></span>
-          <input type="range" min="0.3" max="2.5" step="0.1" value={s.mouseSensitivity} onInput={(e) => void app.updateSettings({ mouseSensitivity: Number((e.target as HTMLInputElement).value) })} />
+          <input type="range" min="0.3" max="10" step="0.1" value={s.mouseSensitivity} onInput={(e) => void app.updateSettings({ mouseSensitivity: Number((e.target as HTMLInputElement).value) })} />
         </div>
         <div class="setting">
           <span class="label">{t('menu.eyeHeight')}<span class="num">{s.eyeHeight.toFixed(2)} m</span></span>
@@ -34,7 +34,7 @@ export function Menu({ app }: { app: App }) {
         </div>
         <h4>{t('menu.controls')}</h4>
         <div class="keys-grid">
-          {app.input.touchDevice ? <p class="touch-instructions">左スティックで移動、画面をドラッグして視点を回します。採集・観察は右側のボタン、道具の切り替えは画面上部から。走る・望遠・双眼鏡は押している間だけ作動します。水槽と観察画面では1本指で回転、2本指で拡大できます。</p> : KEYS.map(([keys, label]) => <KeyHint key={label} keys={keys} label={label} />)}
+          {app.input.touchDevice ? <p class="touch-instructions">左スティックで移動、画面をドラッグして視点を回します。右下で道具を選び、採集・観察を押します。走る・ジャンプ・低い視点・望遠は「メニュー → 追加操作」から。走る・望遠・双眼鏡は長押しです。ホームの上下移動は「メニュー → 視点操作」。水槽と観察画面では1本指で回転、2本指で拡大できます。</p> : KEYS.map(([keys, label]) => <KeyHint key={label} keys={keys} label={label} />)}
         </div>
         <div class="buttons">
           <button class="btn primary" onClick={() => app.closeOverlay()}>{t('menu.resume')}</button>

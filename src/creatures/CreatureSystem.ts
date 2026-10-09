@@ -443,6 +443,14 @@ export class CreatureSystem {
     return e ? (e.view ? e.driver.anchor().clone() : e.ind.pos.clone()) : null;
   }
 
+  canNetCapture(id: string): boolean {
+    const e = this.entries.get(id);
+    if (!e || !e.ind.species.collectable || e.ind.species.taxon.group === 'bird') return false;
+    if (e.ind.species.locomotion !== 'burrow') return true;
+    // Unknown/unattached burrowers stay dig-only; a visible siphon is not a visible shell.
+    return !!e.view && e.driver.canNetCapture?.() === true;
+  }
+
   /** Visible individuals count by tier (debug / HUD). */
   stats(): { total: number; visible: number; lod1: number } {
     let visible = 0, lod1 = 0;

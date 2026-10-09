@@ -57,6 +57,8 @@ export interface DriverContext {
 }
 
 export interface Driver {
+  /** Burrowers can be netted only while their shell/body is exposed above the ground. */
+  canNetCapture?(): boolean;
   /** attach to a model root placed in the scene; sets up the rig and the individual's scale */
   attach(root: Object3D, individual: Individual, extras: Record<string, unknown>, bones: Record<string, Object3D>, meshes: Object3D[]): void;
   detach(): void;

@@ -5,7 +5,7 @@ import type { Action, Input } from '../core/Input';
 import { ui } from './store';
 
 /** Each finger owns its button until release, including release outside the button. */
-function HoldButton({ input, action, children, className = '' }: { input: Input; action: Action; children: string; className?: string }) {
+export function HoldButton({ input, action, children, className = '' }: { input: Input; action: Action; children: string; className?: string }) {
   const pointer = useRef<number | null>(null);
   const [held, setHeld] = useState(false);
   const release = () => { pointer.current = null; input.setTouchAction(action, false); setHeld(false); };
@@ -32,7 +32,7 @@ function HoldButton({ input, action, children, className = '' }: { input: Input;
     onContextMenu={(e) => e.preventDefault()}>{children}</button>;
 }
 
-function MovementStick({ input, label }: { input: Input; label: string }) {
+export function MovementStick({ input, label }: { input: Input; label: string }) {
   const pointer = useRef<number | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const release = () => { pointer.current = null; input.setTouchMove(0, 0); setOffset({ x: 0, y: 0 }); };
@@ -74,28 +74,19 @@ function MovementStick({ input, label }: { input: Input; label: string }) {
 export function TouchControls({ app }: { app: App }) {
   const screen = ui.screen.value;
   const [more, setMore] = useState(false);
+  const [tools, setTools] = useState(false);
+  const [actions, setActions] = useState(false);
   const input = app.input;
   // HUD updates keep the posture label in sync with the controller.
   void ui.hud.value;
   useEffect(() => () => input.clearTouch(), [input]);
   if (ui.transition.value || ui.mapOpen.value || (screen === 'home' && ui.homePanel.value !== 'none')) return null;
   if (screen === 'capture') return <div class="touch-controls touch-capture"><HoldButton input={input} action="interact">次へ</HoldButton></div>;
-  if (screen === 'home') return <div class="touch-controls touch-home">
-    <div class="touch-toolbar"><button class="touch-button" onClick={() => app.openOverlay('menu')}>設定</button></div>
-    <MovementStick input={input} label="視点移動" />
-    <div class="touch-home-height">
-      <HoldButton input={input} action="viewUp">上へ</HoldButton>
-      <HoldButton input={input} action="viewDown">下へ</HoldButton>
-      <button class="touch-button" onClick={() => app.tank.resetView()}>視点リセット</button>
-    </div>
-    <span class="touch-view-hint">1本指で回転・2本指で拡大／移動</span>
-  </div>;
   if (screen !== 'field') return null;
   const tool = app.data.tools.get(ui.tool.value);
   return <div class="touch-controls touch-field">
     <div class="touch-toolbar">
-      <button class="touch-button" onClick={() => app.openOverlay('menu')}>メニュー</button>
-      <button class="touch-button" onClick={() => setMore(!more)} aria-expanded={more} aria-controls="touch-more">{more ? '閉じる' : 'その他'}</button>
+      <button class="touch-button" onClick={() => { setTools(false); setActions(false); setMore(!more); }} aria-expanded={more} aria-controls="touch-more">{more ? '閉じる' : 'メニュー'}</button>
     </div>
     {more && <nav id="touch-more" class="touch-more" aria-label="干潟メニュー">
       <button class="touch-button" onClick={() => app.toggleMap()}>地図</button>
@@ -104,15 +95,26 @@ export function TouchControls({ app }: { app: App }) {
       <button class="touch-button" onClick={() => app.openOverlay('ticket')}>潮時チケット</button>
       <button class="touch-button" onClick={() => app.toggleSunglasses()}>サングラス</button>
       <button class="touch-button" onClick={() => app.enterHome()}>自宅へ</button>
+      <button class="touch-button" onClick={() => { setMore(false); setActions(true); }}>追加操作</button>
+      <button class="touch-button" onClick={() => app.openOverlay('menu')}>設定</button>
     </nav>}
     <MovementStick input={input} label="移動" />
-    <div class="touch-actions">
-      <HoldButton input={input} action="interact" className="touch-primary">{tool?.type === 'optic' ? '双眼鏡' : '採集'}</HoldButton>
-      <HoldButton input={input} action="observe">観察</HoldButton>
+    <div class="touch-tool-select">
+      <button class="touch-button" aria-label={`道具を選ぶ：${tool?.ja ?? ''}`} aria-expanded={tools} aria-controls="touch-tool-options" onClick={() => { setMore(false); setActions(false); setTools(!tools); }}>{tool?.ja ?? '道具'} ▾</button>
+      {tools && <div id="touch-tool-options" class="touch-tool-options">
+        {app.encyclopedia.loadout.value.map((id) => <button key={id} class="touch-button" aria-pressed={id === ui.tool.value} onClick={() => { app.setTool(id); setTools(false); }}>{app.data.tools.get(id)?.ja ?? id}</button>)}
+      </div>}
+    </div>
+    {actions && <div class="touch-extra-actions">
+      <button class="touch-button touch-extra-close" onClick={() => setActions(false)}>操作を閉じる</button>
       <HoldButton input={input} action="crouch">{app.player?.lowView ? '立つ' : '低い視点'}</HoldButton>
       <HoldButton input={input} action="run">走る</HoldButton>
       <HoldButton input={input} action="jump">ジャンプ</HoldButton>
       <HoldButton input={input} action="zoom">望遠</HoldButton>
+    </div>}
+    <div class="touch-actions">
+      <HoldButton input={input} action="interact" className="touch-primary">{tool?.type === 'optic' ? '双眼鏡' : '採集'}</HoldButton>
+      <HoldButton input={input} action="observe">観察</HoldButton>
     </div>
   </div>;
 }
