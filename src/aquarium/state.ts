@@ -4,11 +4,11 @@ export type EquipmentKind = typeof EQUIPMENT_KINDS[number];
 export type Vec3 = [number, number, number];
 export interface TankDimensions { width: number; depth: number; height: number; glass: number; waterHeight: number }
 export const STANDARD_TANK: TankDimensions = { width: 0.6, depth: 0.3, height: 0.36, glass: 0.006, waterHeight: 0.3 };
-export interface EquipmentRecord { id: string; kind: EquipmentKind; position: Vec3; rotation: number; enabled: boolean; setting: number }
+export interface EquipmentRecord { id: string; kind: EquipmentKind; itemId?: string; position: Vec3; rotation: number; enabled: boolean; setting: number }
 export interface Endpoint { device: string; port: string }
 export type ConnectionKind = 'power' | 'water' | 'air' | 'sensor';
 export interface ConnectionRecord { id: string; kind: ConnectionKind; from: Endpoint; to: Endpoint; radius: number; via?: Vec3[] }
-export interface EquipmentLayout { version: 1; stand: 'wood' | 'metal'; devices: EquipmentRecord[]; connections: ConnectionRecord[]; temperature: number }
+export interface EquipmentLayout { version: 1; stand: 'wood' | 'metal'; tankItemId?: string; standItemId?: string; devices: EquipmentRecord[]; connections: ConnectionRecord[]; temperature: number }
 export const EQUIPMENT_LABELS: Record<EquipmentKind, string> = {
   glassLid: 'ガラス蓋', lightFixture: '照明器具', ledLight: 'LEDライト', filter: '水中フィルター', canisterFilter: '外部フィルター', topFilter: '上部フィルター', spongeFilter: 'スポンジフィルター', airPump: 'エアポンプ', airStone: 'エアストーン', heater: 'ヒーター', thermometer: '水温計', thermostat: 'サーモスタット', flowPump: '水流ポンプ', circulationPump: '小型循環ポンプ', chiller: 'クーラー', powerStrip: '電源タップ',
 };
@@ -35,7 +35,7 @@ export function equipmentPlacement(kind: EquipmentKind, d = STANDARD_TANK): Vec3
   }
 }
 export function makeEquipment(kind: EquipmentKind, id: string, d = STANDARD_TANK): EquipmentRecord {
-  return { id, kind, position: equipmentPlacement(kind, d), rotation: 0, enabled: true, setting: FLOW_KINDS.includes(kind) ? (kind === 'flowPump' ? 600 : 300) : kind === 'thermostat' || kind === 'chiller' ? 24 : 1 };
+  return { id, kind, itemId: `${kind}-initial`, position: equipmentPlacement(kind, d), rotation: 0, enabled: true, setting: FLOW_KINDS.includes(kind) ? (kind === 'flowPump' ? 600 : 300) : kind === 'thermostat' || kind === 'chiller' ? 24 : 1 };
 }
 export function defaultEquipmentLayout(d = STANDARD_TANK): EquipmentLayout {
   return { version: 1, stand: 'wood', temperature: 24, devices: ['glassLid', 'ledLight', 'canisterFilter', 'airPump', 'airStone', 'heater', 'thermometer', 'thermostat', 'powerStrip'].map((k) => makeEquipment(k as EquipmentKind, k, d)), connections: [] };
@@ -50,8 +50,8 @@ export function normalizeEquipment(raw: unknown, dimensions = STANDARD_TANK): Eq
     const base = makeEquipment(x.kind, x.id, dimensions);
     const bounds = [Math.max(0.8, dimensions.width / 2 + 0.4), Math.max(0.8, dimensions.height + 0.2), Math.max(0.8, dimensions.depth / 2 + 0.2)];
     const position = Array.isArray(x.position) && x.position.length === 3 && x.position.every(Number.isFinite) ? x.position.map((v, i) => Math.max(i === 1 ? -0.72 : -bounds[i], Math.min(bounds[i], v))) as Vec3 : base.position;
-    return [{ ...base, position, rotation: Number.isFinite(x.rotation) ? x.rotation % (Math.PI * 2) : 0, enabled: x.enabled !== false, setting: Number.isFinite(x.setting) ? Math.max(0, Math.min(FLOW_KINDS.includes(x.kind) ? 2000 : x.kind === 'thermostat' || x.kind === 'chiller' ? 32 : 1, x.setting)) : base.setting }];
+    return [{ ...base, itemId: typeof x.itemId === 'string' ? x.itemId : base.itemId, position, rotation: Number.isFinite(x.rotation) ? x.rotation % (Math.PI * 2) : 0, enabled: x.enabled !== false, setting: Number.isFinite(x.setting) ? Math.max(0, Math.min(FLOW_KINDS.includes(x.kind) ? 2000 : x.kind === 'thermostat' || x.kind === 'chiller' ? 32 : 1, x.setting)) : base.setting }];
   });
   const connections = (Array.isArray(r.connections) ? r.connections : []).slice(0, 80).filter((c) => c && typeof c.id === 'string' && ['power', 'water', 'air', 'sensor'].includes(c.kind) && c.from && c.to && [c.from, c.to].every((p) => typeof p.device === 'string' && typeof p.port === 'string')).map((c) => ({ ...c, radius: Number.isFinite(c.radius) ? Math.max(0.001, Math.min(0.012, c.radius)) : 0.003, via: Array.isArray(c.via) ? c.via.slice(0, 16).filter((p) => Array.isArray(p) && p.length === 3 && p.every((v) => Number.isFinite(v) && Math.abs(v) < 2)) : undefined }));
-  return { version: 1, stand: r.stand === 'metal' ? 'metal' : 'wood', devices, connections, temperature: Number.isFinite(r.temperature) ? Math.max(5, Math.min(40, r.temperature)) : 24 };
+  return { version: 1, stand: r.stand === 'metal' ? 'metal' : 'wood', tankItemId: typeof r.tankItemId === 'string' ? r.tankItemId : 'tank-initial', standItemId: typeof r.standItemId === 'string' ? r.standItemId : r.stand === 'metal' ? 'stand-studio' : 'stand-initial', devices, connections, temperature: Number.isFinite(r.temperature) ? Math.max(5, Math.min(40, r.temperature)) : 24 };
 }

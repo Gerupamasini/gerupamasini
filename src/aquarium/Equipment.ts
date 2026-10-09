@@ -3,17 +3,19 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { EquipmentMaterials } from './Materials';
 import { STANDARD_TANK, type ConnectionKind, type EquipmentKind, type TankDimensions, type Vec3 } from './state';
+import type { EquipmentStyle } from './catalog';
 
 export interface EquipmentPort { name: string; kind: ConnectionKind; role: 'in' | 'out'; anchor: Object3D; radius: number }
-export interface EquipmentContext { materials: EquipmentMaterials; dimensions?: TankDimensions }
+export interface EquipmentContext { materials: EquipmentMaterials; dimensions?: TankDimensions; style?: EquipmentStyle }
 type Part = 'body' | 'supports' | 'emitter' | 'detail';
 
 /** Batch static geometry by material within each named part: a grille costs one draw, not 40. */
 class ModelBuilder {
   readonly root = new Group();
   private readonly batches = new Map<Part, Map<Material, BufferGeometry[]>>();
-  constructor(readonly quality: number, readonly m: EquipmentMaterials) {}
+  constructor(readonly quality: number, readonly m: EquipmentMaterials, readonly style: EquipmentStyle = 'classic') {}
   add(geo: BufferGeometry, material: Material, p: Vec3 = [0, 0, 0], rotation: Vec3 = [0, 0, 0], part: Part = 'body'): void {
+    material = this.m.forStyle(material, this.style);
     const mesh = new Mesh(geo); mesh.position.fromArray(p); mesh.rotation.set(...rotation); mesh.updateMatrix();
     geo.applyMatrix4(mesh.matrix);
     const flat = geo.index ? geo.toNonIndexed() : geo; if (flat !== geo) geo.dispose();
@@ -62,10 +64,14 @@ export class AquariumDevice extends Group {
   readonly dimensions: TankDimensions;
   constructor(readonly kind: EquipmentKind | 'tank' | 'stand', readonly context: EquipmentContext, stand: 'wood' | 'metal' = 'wood') {
     super(); this.name = kind; this.dimensions = context.dimensions ?? STANDARD_TANK;
-    for (let q = 0; q < 3; q++) { const b = new ModelBuilder(q, context.materials); buildModel(kind, b, this.dimensions, stand); const g = b.finish(); g.name = `LOD${q}`; this.lod.addLevel(g, [0, 0.95, 1.9][q]); }
+    this.rebuildModel(stand);
     this.add(this.lod); definePorts(this);
     // Start unpowered; every emitter is assigned from the connectivity graph.
     this.powered = true; this.setPowered(false);
+  }
+  rebuildModel(stand: 'wood' | 'metal' = 'wood'): void {
+    this.lod.traverse((o) => { if (o instanceof Mesh) o.geometry.dispose(); }); this.lod.clear(); this.lod.levels.length = 0;
+    for (let q = 0; q < 3; q++) { const b = new ModelBuilder(q, this.context.materials, this.context.style); buildModel(this.kind, b, this.dimensions, stand); const g = b.finish(); g.name = `LOD${q}`; this.lod.addLevel(g, [0, 0.95, 1.9][q]); }
   }
   port(name: string, kind: ConnectionKind, role: 'in' | 'out', position: Vec3, direction: Vec3, radius = 0.003): void {
     const anchor = new Object3D(); anchor.position.fromArray(position); anchor.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(...direction).normalize()); anchor.name = name;
@@ -93,6 +99,10 @@ function buildModel(kind: AquariumDevice['kind'], b: ModelBuilder, d: TankDimens
         b.box([t, 0.0015, z], [sign * (w / 2 + t / 2), h, 0], m.clearPlastic);
         for (const side of [-1, 1]) b.box([0.002, h, 0.002], [side * (w / 2 - 0.001), h / 2, sign * (z / 2 - 0.001)], m.silicone);
         b.box([w, 0.003, 0.003], [0, 0.0015, sign * (z / 2 - 0.001)], m.silicone);
+      }
+      if (b.style !== 'classic') for (const sign of [-1, 1]) {
+        b.box([w + 2 * t, 0.012, t + 0.002], [0, h - 0.005, sign * (z / 2 + t / 2)], m.paintedMetal);
+        b.box([t + 0.002, 0.012, z], [sign * (w / 2 + t / 2), h - 0.005, 0], m.paintedMetal);
       }
       break;
     }
@@ -152,9 +162,13 @@ function buildModel(kind: AquariumDevice['kind'], b: ModelBuilder, d: TankDimens
       b.box([0.1, 0.006, 0.075], [0, -0.033, 0], m.paintedMetal, false, 'supports');
       b.box([0.09, 0.055, 0.006], [0, -0.054, 0.035], m.paintedMetal, false, 'supports');
       b.box([0.085, 0.042, 0.053], [0, 0, 0], m.paintedMetal, true); b.box([0.078, 0.012, 0.048], [0, -0.024, 0], m.rubber, true);
-      b.rod([0, 0, 0.026], [0, 0, 0.033], 0.003, m.blackPlastic); b.box([0.018, 0.002, 0.012], [0.02, 0.022, 0], m.rubber, false, 'detail'); break;
+      for (let i = 0; i < 4; i++) b.rod([(i - 1.5) * 0.014, 0, 0.026], [(i - 1.5) * 0.014, 0, 0.033], 0.003, m.blackPlastic);
+      b.box([0.018, 0.002, 0.012], [0.02, 0.022, 0], m.rubber, false, 'detail'); break;
     }
-    case 'airStone': b.box([0.035, 0.008, 0.013], [0, 0.004, 0], m.ceramic, true); b.rod([0, 0.004, -0.006], [0, 0.004, -0.015], 0.002, m.blackPlastic); break;
+    case 'airStone':
+      if (b.style === 'ivory') b.cylinder(0.014, 0.008, [0, 0.004, 0], m.ceramic);
+      else b.box([b.style === 'studio' ? 0.055 : 0.035, 0.008, 0.013], [0, 0.004, 0], m.ceramic, true);
+      b.rod([0, 0.004, -0.006], [0, 0.004, -0.015], 0.002, m.blackPlastic); break;
     case 'heater': {
       b.cylinder(0.008, 0.17, [0, 0, 0], m.glass); b.cylinder(0.0058, 0.135, [0, -0.008, 0], m.ceramic);
       b.cylinder(0.009, 0.024, [0, 0.094, 0], m.blackPlastic); b.cylinder(0.007, 0.006, [0, -0.088, 0], m.rubber);
@@ -202,7 +216,7 @@ function definePorts(o: AquariumDevice): void {
   if (!['tank', 'stand', 'glassLid', 'airStone', 'spongeFilter', 'thermometer'].includes(k)) port('power', 'power', 'in', k === 'canisterFilter' ? [0, 0.247, -0.072] : k === 'chiller' ? [0, 0.04, -0.137] : k === 'ledLight' || k === 'lightFixture' ? [d.width / 2 + 0.01, 0, 0] : [0, 0.015, -0.02], [0, 0, -1]);
   if (k === 'tank') { port('intake', 'water', 'out', [-d.width / 2 + 0.035, d.height + 0.012, -d.depth / 2 - 0.02], [0, -1, 0], 0.008); port('return', 'water', 'in', [d.width / 2 - 0.035, d.height + 0.012, -d.depth / 2 - 0.02], [0, -1, 0], 0.008); }
   if (k === 'canisterFilter' || k === 'chiller') { const y = k === 'canisterFilter' ? 0.283 : 0.331, x = k === 'canisterFilter' ? 0.035 : 0.065; port('in', 'water', 'in', [-x, y, k === 'chiller' ? -0.06 : 0], [0, 1, 0], 0.008); port('out', 'water', 'out', [x, y, k === 'chiller' ? -0.06 : 0], [0, 1, 0], 0.008); }
-  if (k === 'airPump') port('air', 'air', 'out', [0, 0, 0.033], [0, 0, 1], 0.002);
+  if (k === 'airPump') for (let i = 0; i < 4; i++) port(i === 0 ? 'air' : `air${i}`, 'air', 'out', [(i - 1.5) * 0.014, 0, 0.033], [0, 0, 1], 0.002);
   if (k === 'airStone') port('air', 'air', 'in', [0, 0.004, -0.015], [0, 0, -1], 0.002);
   if (k === 'spongeFilter') port('air', 'air', 'in', [0, 0.014, -0.011], [0, 0, -1], 0.002);
   if (k === 'thermostat') { port('heater', 'power', 'out', [0.02, -0.048, 0], [0, -1, 0]); port('sensor', 'sensor', 'in', [-0.02, -0.048, 0], [0, -1, 0], 0.001); }
