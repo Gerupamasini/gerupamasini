@@ -81,6 +81,7 @@ export function HomeMenu({ app }: { app: App }) {
         <button class={`nav-tile ${panel === 'tank' ? 'on' : ''}`} onClick={() => app.openTankEdit()}><TankIcon />{t('home.tankShort')}</button>
         <button class="nav-tile" onClick={() => app.openOverlay('tidetable')}><CalendarIcon />{t('home.tideTable')}<Key k="T" /></button>
       </nav>
+      <div class="home-hint">{t('home.hint')}</div>
 
       {info && infoSp && (
         <div class="glass home-info rise" onClick={() => { ui.homeInfo.value = null; }}>

@@ -274,7 +274,7 @@ export class App {
     ui.homePanel.value = 'none';
     ui.homeInfo.value = null;
     this.tank.setAspect(this.renderer.aspect);
-    this.tank.activate(true);
+    this.tank.activate(false);
     this.tank.resetView();
     void this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
     const layout = this.save?.tank.layout ?? defaultTankLayout();
@@ -1324,7 +1324,7 @@ export class App {
     }
     const hit = this.tank.pick(nx, ny);
     if (hit?.kind === 'occupant') ui.homeInfo.value = hit.occupant.record;
-    else if (hit?.kind === 'tank') { ui.homeInfo.value = null; if (this.mode === 'tankEdit') this.tank.pokeAt(nx, ny); else this.openTankEdit(); }
+    else if (hit?.kind === 'tank') { ui.homeInfo.value = null; if (this.mode === 'tankEdit') this.tank.pokeAt(nx, ny); }
     else ui.homeInfo.value = null;
   }
 
@@ -1452,7 +1452,8 @@ export class App {
         this.capture.update(dt);
         break;
       case 'home':
-        this.tank.setAutoRotate(!this.tankKeys(dt));
+        this.tank.setAutoRotate(false);
+        this.tankKeys(dt);
         if (this.input.pressed('zukan')) this.openOverlay('zukan');
         else if (this.input.pressed('ticket')) this.openOverlay('ticket');
         else if (this.input.pressed('menu')) {
@@ -1561,13 +1562,15 @@ export class App {
     gl.autoClear = autoClear;
   }
 
-  /** WASD in the room moves the viewpoint itself (the orbit centre comes along); the mouse turns and zooms. True while a key is held. */
-  private tankKeys(dt: number): boolean {
+  /** WASD moves the viewpoint and orbit centre together; Shift / Ctrl moves vertically at home. */
+  private tankKeys(dt: number): void {
     const i = this.input;
     const right = (i.held('right') ? 1 : 0) - (i.held('left') ? 1 : 0);
     const forward = (i.held('forward') ? 1 : 0) - (i.held('back') ? 1 : 0);
-    this.tank.panCamera(right, forward, dt * (i.held('run') ? 2.2 : 1));
-    return right !== 0 || forward !== 0;
+    const atHome = this.mode === 'home';
+    const up = atHome ? (i.held('viewUp') ? 1 : 0) - (i.held('viewDown') ? 1 : 0) : 0;
+    const speed = !atHome && i.held('run') ? 2.2 : 1;
+    this.tank.panCamera(right, forward, dt * speed, up);
   }
 
   /** Where the view's centre meets the ground within `maxDist` (marching the ray), or null. */
