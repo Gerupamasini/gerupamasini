@@ -1,7 +1,7 @@
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'run' | 'crouch'
   | 'interact' | 'observe' | 'zukan' | 'menu' | 'speedUp' | 'speedDown' | 'home' | 'ticket' | 'debug' | 'zoom' | 'zoomIn' | 'zoomOut' | 'map'
-  | 'tool1' | 'tool2' | 'tool3' | 'caseView' | 'jump' | 'sunglasses';
+  | 'tool1' | 'tool2' | 'tool3' | 'caseView' | 'jump' | 'sunglasses' | 'viewUp' | 'viewDown';
 
 const BINDINGS: Record<Action, string[]> = {
   forward: ['KeyW', 'ArrowUp'],
@@ -10,6 +10,8 @@ const BINDINGS: Record<Action, string[]> = {
   right: ['KeyD', 'ArrowRight'],
   run: ['ShiftLeft', 'ShiftRight'],
   crouch: ['ControlLeft', 'ControlRight', 'KeyC'],
+  viewUp: ['ShiftLeft', 'ShiftRight'],
+  viewDown: ['ControlLeft', 'ControlRight'],
   interact: ['KeyE'],
   observe: ['KeyF'],
   zukan: ['Tab'],

@@ -188,7 +188,7 @@ float vnoiseT(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 -
 /**
  * The home showcase tank: a 60 cm aquarium in a dark, quiet room under a cool LED bar. Water is kept almost clear so
  * the animals read well; real caustics from the moving surface play on the sand and the animals; bubbles from an air
- * stone keep the surface alive; the camera drifts slowly. Several occupants can live in it.
+ * stone keep the surface alive; the player controls the viewpoint. Several occupants can live in it.
  */
 export class TankScene {
   readonly scene = new Scene();
@@ -216,13 +216,11 @@ export class TankScene {
   private readonly nudgeV = new Vector3();
   private readonly nudgeV2 = new Vector3();
   private readonly nudgeV3 = new Vector3();
-  private breathPrev = 0;
   private readonly itemObjects = new Map<string, Object3D>();
   private readonly sandMesh: Mesh;
   private readonly sandMat: MeshStandardMaterial;
   private readonly bottomMesh: Mesh;
   private itemSeq = 0;
-  private drift = 0;
   private time = 0;
   // the water
   private readonly U: Record<string, IUniform>;
@@ -523,6 +521,8 @@ export class TankScene {
     }
     this.controls.autoRotate = autoRotate;
     this.controls.autoRotateSpeed = 0.22;
+    // Home stops moving as soon as the player releases the mouse or a movement key.
+    this.controls.enableDamping = autoRotate;
   }
 
   deactivate(): void {
@@ -854,12 +854,12 @@ export class TankScene {
 
   /**
    * The viewpoint itself moves (W/S along the way it looks, A/D sideways), the orbit centre coming along so the
-   * angle is kept; the pace scales with how far the centre is, so close up the steps are fine. The camera is held
-   * above the table and short of the walls.
+   * angle is kept; up moves vertically. The pace scales with how far the centre is, so close up the steps are fine.
+   * The camera stays above the room floor and short of the walls and ceiling.
    */
-  panCamera(right: number, forward: number, dt: number): void {
+  panCamera(right: number, forward: number, dt: number, up = 0): void {
     const c = this.controls;
-    if (!c || c.enabled === false || (right === 0 && forward === 0)) return;
+    if (!c || c.enabled === false || (right === 0 && forward === 0 && up === 0)) return;
     const dist = this.camera.position.distanceTo(c.target);
     const pace = (0.12 + 0.75 * dist) * dt;
     // along the floor: the way the camera looks, flattened (looking down, the move is still level)
@@ -874,6 +874,8 @@ export class TankScene {
     const nx = c.target.x + move.x, nz = c.target.z + move.z;
     move.x = Math.max(-lim, Math.min(lim, nx)) - c.target.x;
     move.z = Math.max(-lim, Math.min(lim, nz)) - c.target.z;
+    if (up > 0) move.y = Math.max(0, Math.min(up * pace, 2.8 - this.camera.position.y));
+    else if (up < 0) move.y = Math.min(0, Math.max(up * pace, 0.02 - this.camera.position.y));
     this.camera.position.add(move);
     c.target.add(move);
     c.update();
@@ -952,16 +954,9 @@ export class TankScene {
   }
 
   update(dt: number, simScale: number): void {
-    this.drift += dt;
     if (this.camT < 1) this.stepCamera(dt);
     else if (this.view === 'shelf') this.camera.lookAt(this.camCur.t);
-    else if (this.controls) {
-      this.controls.update();
-      // gentle vertical breathing of the view on top of the slow orbit, as a delta so a panned centre keeps its place
-      const breath = Math.sin(this.drift * 0.25) * 0.012;
-      this.controls.target.y += breath - this.breathPrev;
-      this.breathPrev = breath;
-    }
+    else this.controls?.update();
     this.equipment.update(dt, this.camera, this.gl.domElement.height);
     this.updateEquipmentLighting();
     this.turb = Math.min(1, 0.15 + this.equipment.flows.reduce((a, f) => a + f.flowRate / 1800, 0));
