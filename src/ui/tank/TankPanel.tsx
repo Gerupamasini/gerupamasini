@@ -5,6 +5,7 @@ import { t, ui } from '../store';
 import type { IndividualRecord } from '../../creatures/Individual';
 import { TANK_ITEM_TYPES, TANK_MAX_ITEMS, TANK_SUBSTRATES } from '../../app/TankLayout';
 import { CloseIcon } from '../common/Icons';
+import { EquipmentTab } from './EquipmentTab';
 
 function Name({ app, r }: { app: App; r: IndividualRecord }) {
   const sp = app.data.species.get(r.speciesId);
@@ -28,11 +29,12 @@ export function TankPanel({ app }: { app: App }) {
       <div class="seg">
         <button class={tab === 'fish' ? 'on' : ''} onClick={() => { ui.tankTab.value = 'fish'; ui.tankSelected.value = null; }}>{t('tank.tab.fish')}</button>
         <button class={tab === 'layout' ? 'on' : ''} onClick={() => { ui.tankTab.value = 'layout'; }}>{t('tank.tab.layout')}</button>
+        <button class={tab === 'equipment' ? 'on' : ''} onClick={() => { ui.tankTab.value = 'equipment'; ui.tankSelected.value = null; }}>設備</button>
       </div>
       <div class="drawer-body">
-        {tab === 'fish' ? <FishTab app={app} /> : <LayoutTab app={app} />}
+        {tab === 'fish' ? <FishTab app={app} /> : tab === 'layout' ? <LayoutTab app={app} /> : <EquipmentTab app={app} />}
       </div>
-      <div class="foot">{tab === 'fish' ? 'ドラッグで回転 ・ ホイールで接近 ・ WASD で視点' : t('tank.dragHint')}</div>
+      <div class="foot">{tab === 'layout' ? t('tank.dragHint') : 'ドラッグで回転 ・ ホイールで接近 ・ WASD で視点'}</div>
     </aside>
   );
 }

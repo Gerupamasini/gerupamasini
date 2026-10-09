@@ -11,6 +11,7 @@ import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { World } from './World';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
+import type { EquipmentKind, EquipmentRecord, ConnectionRecord } from '../aquarium';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
 import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
@@ -1211,6 +1212,25 @@ export class App {
     this.commitTankLayout();
   }
 
+  tankAddEquipment(kind: EquipmentKind): void {
+    if (!this.tank.equipment.addDevice(kind)) toast('設備の上限です（24個）', 'warn');
+    this.commitTankLayout();
+  }
+
+  tankChangeEquipment(id: string, change: Partial<Pick<EquipmentRecord, 'position' | 'rotation' | 'enabled' | 'setting'>>): void {
+    this.tank.equipment.changeDevice(id, change);
+    this.commitTankLayout();
+  }
+
+  tankRemoveEquipment(id: string): void { this.tank.equipment.removeDevice(id); this.commitTankLayout(); }
+  tankStand(finish: 'wood' | 'metal'): void { this.tank.equipment.setStand(finish); this.commitTankLayout(); }
+  tankAutoConnect(): void { this.tank.equipment.autoConnect(); this.commitTankLayout(); }
+  tankConnect(connection: ConnectionRecord): void {
+    const error = this.tank.equipment.connect(connection);
+    if (error) toast(error, 'warn'); else this.commitTankLayout();
+  }
+  tankDisconnect(id: string): void { this.tank.equipment.disconnect(id); this.commitTankLayout(); }
+
   private onHomeClick(clientX: number, clientY: number): void {
     if (this.mode === 'home' && ui.homePanel.value === 'tools') {
       const [nx, ny] = this.ndcOf(clientX, clientY);
@@ -1248,6 +1268,7 @@ export class App {
     }
     s.ticket.active = this.clock.serialize();
     s.removedIndividuals = [...this.removed];
+    s.tank.layout = this.tank.currentLayout;
     this.encyclopedia.writeSave(s);
     await this.saveStore.save(s);
     ui.hasSave.value = true;

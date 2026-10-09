@@ -1,8 +1,8 @@
 import {
-  BoxGeometry, BufferGeometry, Camera, CanvasTexture, ClampToEdgeWrapping, Color, CustomBlending, DataTexture, DirectionalLight, DoubleSide, EdgesGeometry,
-  Float32BufferAttribute, FloatType, HalfFloatType, HemisphereLight, LineBasicMaterial, LinearFilter, LinearMipmapLinearFilter,
-  LineSegments, Mesh, MeshStandardMaterial, Object3D, OneFactor, OneMinusSrcAlphaFactor, PerspectiveCamera, PlaneGeometry, Plane,
-  PMREMGenerator, Points, PointsMaterial, Raycaster, RGBAFormat, Scene, ShaderMaterial, SpotLight, SrcColorFactor, UnsignedByteType,
+  BoxGeometry, Camera, CanvasTexture, ClampToEdgeWrapping, Color, CustomBlending, DataTexture, DirectionalLight, DoubleSide,
+  FloatType, HalfFloatType, HemisphereLight, LinearFilter, LinearMipmapLinearFilter,
+  Mesh, MeshStandardMaterial, Object3D, OneFactor, OneMinusSrcAlphaFactor, PerspectiveCamera, PlaneGeometry, Plane,
+  PMREMGenerator, Raycaster, RGBAFormat, Scene, ShaderMaterial, SpotLight, SrcColorFactor, UnsignedByteType,
   Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer, SRGBColorSpace } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -21,6 +21,7 @@ import type { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 import type { HeroLighting } from '../render/HeroPipeline';
 import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
 import { Group } from 'three';
+import { AquariumEquipment } from '../aquarium';
 import { ToolShelf, type ShelfTool } from './ToolShelf';
 
 const UP = new Vector3(0, 1, 0);
@@ -72,6 +73,7 @@ function makeWaves(): Wave[] {
 
 const COMMON = /* glsl */ `
 uniform sampler2D uSurf, uCaus;
+uniform vec3 uLampPosition, uLampAxis;
 uniform vec3 uLampCol;      // the light bar's light
 uniform float uCausScale;   // caustics texture -> fraction of the bar's light
 const float W_LEVEL = ${f(W_LEVEL)}, W_IOR = ${f(W_IOR)}, W_LAMP_Y = ${f(W_LAMP_Y)}, W_LAMP_HALF = ${f(W_LAMP_HALF)};
@@ -83,7 +85,7 @@ vec3 normalOf(vec3 w) { return normalize(vec3(-w.y, 1.0, -w.z)); }
 float fresnel(float c) { return 0.02 + 0.98 * pow(1.0 - clamp(c, 0.0, 1.0), 5.0); }
 // the LED bar above the tank: the direction to its nearest point, and how much of its light arrives (1 right under it)
 float lampAt(vec3 p, out vec3 L) {
-  vec3 d = vec3(clamp(p.x, -W_LAMP_HALF, W_LAMP_HALF), W_LAMP_Y, 0.0) - p;
+  vec3 d = uLampPosition + uLampAxis * clamp(dot(p - uLampPosition, uLampAxis), -W_LAMP_HALF, W_LAMP_HALF) - p;
   float r2 = dot(d, d);
   L = d * inversesqrt(r2);
   return 2.0 / (1.0 + 66.0 * r2) * smoothstep(0.2, 0.6, L.y);
@@ -97,8 +99,9 @@ vec3 causAt(vec2 xz) {
 vec3 room(vec3 p, vec3 d) {
   vec3 c = vec3(0.012, 0.014, 0.017);
   if (d.y > 0.001) {
-    float t = (W_LAMP_Y - p.y) / d.y;
-    vec3 q = p + d * t;
+    float t = (uLampPosition.y - p.y) / d.y;
+    vec3 q = p + d * t - uLampPosition;
+    q = vec3(dot(q, uLampAxis), q.y, dot(q, cross(uLampAxis, vec3(0.0, 1.0, 0.0))));
     float sx = smoothstep(0.03, 0.0, abs(q.x) - W_LAMP_HALF), sz = smoothstep(0.03, 0.0, abs(q.z) - 0.015);
     c += uLampCol * (0.8 * sx * sz + 0.03 * smoothstep(0.35, 0.0, length(vec2(max(abs(q.x) - W_LAMP_HALF, 0.0), q.z))));
   }
@@ -153,7 +156,7 @@ void main() {
 function lightByCaustics(m: MeshStandardMaterial, U: Record<string, IUniform>, key: string, grain: boolean, chain?: MeshStandardMaterial['onBeforeCompile']): void {
   m.onBeforeCompile = (shader, renderer) => {
     chain?.(shader, renderer);
-    Object.assign(shader.uniforms, { uSurf: U.uSurf, uCaus: U.uCaus, uLampCol: U.uLampCol, uCausScale: U.uCausScale });
+    Object.assign(shader.uniforms, { uSurf: U.uSurf, uCaus: U.uCaus, uLampCol: U.uLampCol, uLampPosition: U.uLampPosition, uLampAxis: U.uLampAxis, uCausScale: U.uCausScale });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPosT;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPosT = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -177,21 +180,6 @@ float vnoiseT(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 -
 }`);
   };
   m.customProgramCacheKey = () => key;
-}
-
-function bubbleTexture(): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const g = c.getContext('2d')!;
-  const grd = g.createRadialGradient(16, 16, 6, 16, 16, 15);
-  grd.addColorStop(0, 'rgba(255,255,255,0.08)');
-  grd.addColorStop(0.75, 'rgba(255,255,255,0.35)');
-  grd.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grd;
-  g.fillRect(0, 0, 32, 32);
-  g.fillStyle = 'rgba(255,255,255,0.9)';
-  g.beginPath(); g.arc(12, 11, 2.2, 0, 7); g.fill();
-  return new CanvasTexture(c);
 }
 
 /**
@@ -244,18 +232,16 @@ export class TankScene {
   private readonly waves = makeWaves();
   private readonly waveU = new Float32Array(NW * 4);
   private readonly ampU = new Float32Array(NW);
+  private readonly jetU = new Float32Array(16);
+  private readonly jetValues = new Float32Array(8);
   private readonly dropU = new Float32Array(32);
   private readonly drops: [number, number, number, number][] = [];
   private simAcc = 0;
   private gustAcc = 0;
   waves_ = 0.8;
   turb = 0.5;
-  // bubbles from the air stone
-  private readonly bubbles: Float32Array;
-  private readonly bubbleVel: Float32Array;
-  private readonly bubbleGeo: BufferGeometry;
-  private static readonly NB = 14;
-  private static readonly STONE = new Vector3(-TX + 0.06, 0.004, -TZ + 0.05);
+  readonly equipment = new AquariumEquipment({ width: TANK_W, depth: TANK_D, height: TANK_H, glass: 0.006, waterHeight: WATER_H });
+  private readonly lampLight: SpotLight;
   onBehavior: ((e: BehaviorEvent, record: IndividualRecord) => void) | null = null;
   heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
   readonly lighting: HeroLighting = {
@@ -275,6 +261,7 @@ export class TankScene {
     const spot = new SpotLight(0xdff4ff, 1.8, 2.5, 0.75, 0.55, 1.2);
     spot.position.set(0.05, 0.95, 0.08);
     spot.target.position.set(0, 0, 0);
+    this.lampLight = spot;
     spot.castShadow = true;
     spot.shadow.mapSize.set(1024, 1024);
     spot.shadow.bias = -0.0004;
@@ -285,22 +272,14 @@ export class TankScene {
     this.scene.add(hemi, spot, spot.target, fill, rim);
     const desk = new Mesh(new PlaneGeometry(6, 4), new MeshStandardMaterial({ color: 0x1b1715, roughness: 0.8, metalness: 0.05 }));
     desk.rotation.x = -Math.PI / 2;
-    desk.position.y = -0.022;
+    desk.position.y = -0.738;
     desk.receiveShadow = true;
     this.scene.add(desk);
     const wall = new Mesh(new PlaneGeometry(6, 3), new MeshStandardMaterial({ color: 0x0f1214, roughness: 1 }));
     wall.position.set(0, 1.4, -1.4);
     this.scene.add(wall);
-    const stand = new Mesh(new BoxGeometry(TANK_W + 0.06, 0.02, TANK_D + 0.06), new MeshStandardMaterial({ color: 0x111111, roughness: 0.4, metalness: 0.2 }));
-    stand.position.y = -0.011;
-    stand.receiveShadow = true;
-    this.scene.add(stand);
-    // aquarium light bar
-    const bar = new Mesh(new BoxGeometry(TANK_W + 0.02, 0.012, 0.05), new MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.4 }));
-    bar.position.set(0, TANK_H + 0.07, 0);
-    const lamp = new Mesh(new BoxGeometry(W_LAMP_HALF * 2, 0.003, 0.03), new MeshStandardMaterial({ color: 0xffffff, emissive: new Color(0.8, 0.95, 1.0), emissiveIntensity: 3 }));
-    lamp.position.set(0, W_LAMP_Y, 0);
-    this.scene.add(bar, lamp);
+    this.scene.add(this.equipment);
+    this.equipment.onRipple = (x, z, strength) => this.addRipple(x, z, strength, 0.009);
     this.scene.add(this.shelf.group);
     // a window on the back wall, the bay at night outside
     const win = new Mesh(new PlaneGeometry(1.05, 0.72), new MeshStandardMaterial({ map: makeNightWindow(), emissive: new Color(0xffffff), emissiveMap: makeNightWindow(), emissiveIntensity: 0.55, roughness: 1 }));
@@ -318,6 +297,8 @@ export class TankScene {
     const zero = new DataTexture(new Float32Array(4), 1, 1, RGBAFormat, FloatType);
     zero.needsUpdate = true;
     this.U = {
+      uLampPosition: { value: new Vector3(0, W_LAMP_Y, 0) }, uLampAxis: { value: new Vector3(1, 0, 0) },
+      uJets: { value: this.jetU }, uJetValues: { value: this.jetValues },
       uTime: { value: 0 }, uW: { value: this.waveU }, uA: { value: this.ampU }, uSim: { value: zero }, uSurf: { value: zero }, uCaus: { value: zero },
       uLampCol: { value: new Color(0.87, 0.96, 1.0).multiplyScalar(3.0) }, uCausScale: { value: 1 },
       uGlow: { value: new Color(0.004, 0.012, 0.014).multiplyScalar(2.0) }, uScatter: { value: new Color(0.005, 0.011, 0.013) }, uShaft: { value: 2.2 },
@@ -354,6 +335,8 @@ export class TankScene {
           uniform vec4 uW[${NW}];     // per wave: direction * wavenumber, angular speed, phase
           uniform float uA[${NW}];    // per wave: height now (m)
           uniform sampler2D uSim;
+          uniform vec4 uJets[4];
+          uniform vec2 uJetValues[4];
           void main() {
             vec2 uv = gl_FragCoord.xy / resolution.xy, e = 1.0 / resolution.xy, p = (uv - 0.5) * vec2(${f(2 * TX)}, ${f(2 * TZ)});
             vec3 w = vec3(0.0);
@@ -363,11 +346,20 @@ export class TankScene {
               float ph = dot(kd, p) - uW[i].z * uTime + uW[i].w + 1.6 * sin(pb);
               w += uA[i] * vec3(sin(ph), cos(ph) * (kd + 1.6 * kb * cos(pb) * side));
             }
+            // Equipment outlets send a small directional surface disturbance into the existing height field.
+            for (int i = 0; i < 4; i++) {
+              if (uJetValues[i].x <= 0.0) continue;
+              vec2 q = p - uJets[i].xy, dir = uJets[i].zw;
+              float radius = max(uJetValues[i].y, 0.03), envelope = exp(-dot(q, q) / (radius * radius));
+              float phase = dot(q, dir) * 75.0 - uTime * 7.0;
+              float a = uJetValues[i].x * 0.00025;
+              w += a * envelope * vec3(sin(phase), cos(phase) * 75.0 * dir - sin(phase) * 2.0 * q / (radius * radius));
+            }
             float h = texture2D(uSim, uv).r;   // + the ripples (mm)
             float hx = texture2D(uSim, uv + vec2(e.x, 0.0)).r - texture2D(uSim, uv - vec2(e.x, 0.0)).r;
             float hz = texture2D(uSim, uv + vec2(0.0, e.y)).r - texture2D(uSim, uv - vec2(0.0, e.y)).r;
             gl_FragColor = vec4(w + 0.001 * vec3(h, hx * resolution.x / ${f(4 * TX)}, hz * resolution.y / ${f(4 * TZ)}), 1.0);
-          }`, { uTime: U.uTime, uW: U.uW, uA: U.uA, uSim: U.uSim });
+          }`, { uTime: U.uTime, uW: U.uW, uA: U.uA, uSim: U.uSim, uJets: U.uJets, uJetValues: U.uJetValues });
         // caustics: every vertex of a grid on the surface sends the bar's light through the water to the floor, and the
         // grid is drawn where the rays land; a surface cell landing on a smaller patch of floor concentrates its light
         // (the area ratio from screen-space derivatives), and overlapping patches add up
@@ -475,21 +467,6 @@ export class TankScene {
     for (const m of [sidesMul, sidesAdd, surfMul, surfAdd]) m.frustumCulled = false;
     this.scene.add(sidesMul, sidesAdd, surfMul, surfAdd);
 
-    // bubbles from an air stone in the back corner; each pop makes a ripple
-    const NB = TankScene.NB;
-    this.bubbles = new Float32Array(NB * 3);
-    this.bubbleVel = new Float32Array(NB * 2);
-    for (let i = 0; i < NB; i++) this.resetBubble(i, -Math.random() * 2.5);
-    this.bubbleGeo = new BufferGeometry().setAttribute('position', new Float32BufferAttribute(this.bubbles, 3));
-    const bubbleMat = new PointsMaterial({ map: bubbleTexture(), size: 0.006, sizeAttenuation: true, transparent: true, depthWrite: false, opacity: 0.9, color: 0xdff4ff });
-    const bubbles = new Points(this.bubbleGeo, bubbleMat);
-    bubbles.renderOrder = 1;
-    bubbles.frustumCulled = false;
-    this.scene.add(bubbles);
-    const stone = new Mesh(new BoxGeometry(0.03, 0.008, 0.012), new MeshStandardMaterial({ color: 0x4a5560, roughness: 0.9 }));
-    stone.position.copy(TankScene.STONE).setY(0.004);
-    this.scene.add(stone);
-
     // glass panels: only what the panes reflect of the dark room (Fresnel, premultiplied), so the water and the animals
     // show through untinted; edges and an invisible hit box for picking
     const glassMat = new ShaderMaterial({
@@ -504,19 +481,8 @@ export class TankScene {
           ${OUT}
         }`,
     });
-    const glassParts: [number, number, number, number, number, number][] = [
-      [TANK_W, TANK_H, 0.002, 0, TANK_H / 2, TANK_D / 2], [TANK_W, TANK_H, 0.002, 0, TANK_H / 2, -TANK_D / 2],
-      [0.002, TANK_H, TANK_D, TANK_W / 2, TANK_H / 2, 0], [0.002, TANK_H, TANK_D, -TANK_W / 2, TANK_H / 2, 0],
-    ];
-    for (const [w, h, d, x, y, z] of glassParts) {
-      const g = new Mesh(new BoxGeometry(w, h, d), glassMat);
-      g.position.set(x, y, z);
-      g.renderOrder = 6;
-      this.scene.add(g);
-    }
-    const edges = new LineSegments(new EdgesGeometry(new BoxGeometry(TANK_W, TANK_H, TANK_D)), new LineBasicMaterial({ color: 0x9fb4ba, transparent: true, opacity: 0.3 }));
-    edges.position.y = TANK_H / 2;
-    this.scene.add(edges);
+    // Reuse the host's optical glass shader; standalone tanks use the shared physical glass.
+    this.equipment.tank.traverse((o) => { if (o instanceof Mesh && o.material === this.equipment.materials.glass) o.material = glassMat; });
     this.hitBox = new Mesh(new BoxGeometry(TANK_W, TANK_H, TANK_D), new MeshStandardMaterial({ visible: false }));
     this.hitBox.position.y = TANK_H / 2;
     this.hitBox.name = 'tank-hit';
@@ -568,11 +534,13 @@ export class TankScene {
 
   // ------------------------------------------------------------------ layout: substrate and decorations
   get currentLayout(): TankLayout {
-    return { substrate: this.layout.substrate, items: this.layout.items.map((i) => ({ ...i })) };
+    return { substrate: this.layout.substrate, items: this.layout.items.map((i) => ({ ...i })), equipment: this.equipment.currentLayout };
   }
 
   setLayout(layout: TankLayout): void {
     this.layout = { substrate: layout.substrate, items: layout.items.map((i) => ({ ...i })) };
+    this.equipment.setLayout(layout.equipment);
+    if (!layout.equipment && layout.substrate === 'none') this.moveBottomEquipment(-SAND_H);
     this.applySubstrate();
     for (const o of this.itemObjects.values()) o.removeFromParent();
     this.itemObjects.clear();
@@ -580,8 +548,20 @@ export class TankScene {
   }
 
   setSubstrate(s: TankSubstrate): void {
+    const previous = this.sandTop;
     this.layout.substrate = s;
     this.applySubstrate();
+    this.moveBottomEquipment(this.sandTop - previous, previous);
+  }
+
+  /** Keep equipment resting on the bed when its thickness changes; retain manually raised placements. */
+  private moveBottomEquipment(delta: number, previous = SAND_H): void {
+    if (!delta) return;
+    for (const r of this.equipment.currentLayout.devices) {
+      if (!['airStone', 'spongeFilter', 'circulationPump'].includes(r.kind) || Math.abs(r.position[1] - previous) > 0.025) continue;
+      const position = [...r.position] as [number, number, number]; position[1] = Math.max(0, position[1] + delta);
+      this.equipment.changeDevice(r.id, { position });
+    }
   }
 
   private applySubstrate(): void {
@@ -789,39 +769,20 @@ export class TankScene {
     return null;
   }
 
-  private resetBubble(i: number, y: number): void {
-    const S = TankScene.STONE;
-    this.bubbles[i * 3] = S.x + (Math.random() - 0.5) * 0.02;
-    this.bubbles[i * 3 + 1] = y;
-    this.bubbles[i * 3 + 2] = S.z + (Math.random() - 0.5) * 0.012;
-    this.bubbleVel[i * 2] = 0.1 + Math.random() * 0.08;
-    this.bubbleVel[i * 2 + 1] = Math.random() * 6.28;
-  }
-
   private stepWater(dt: number): void {
     this.time += dt;
     this.U.uTime.value = this.time;
+    this.jetU.fill(0); this.jetValues.fill(0);
+    this.equipment.flows.slice(0, 4).forEach((flow, i) => {
+      this.jetU.set([flow.position.x, flow.position.z, flow.direction.x, flow.direction.z], i * 4);
+      this.jetValues.set([Math.min(1, flow.flowRate / 600), flow.radius], i * 2);
+    });
     // each wave's height now: its own slow cycle, scaled by how lively the tank is
     const swing = 0.35 + 0.55 * this.turb;
     this.waves.forEach((W, i) => {
       this.ampU[i] = W.a * Math.max(0.1, 1 + swing * (0.6 * Math.sin(W.f1 * this.time + W.p1) + 0.4 * Math.sin(W.f2 * this.time + W.p2)))
         * this.waves_ * (W.short ? 0.3 + 1.4 * this.turb : 1);
     });
-    // bubbles rise with a wobble; each pop at the surface makes a small ripple
-    const NB = TankScene.NB;
-    for (let i = 0; i < NB; i++) {
-      const y = this.bubbles[i * 3 + 1];
-      if (y < 0) { this.bubbles[i * 3 + 1] = Math.min(0, y + dt); continue; }   // waiting at the stone
-      const ph = this.bubbleVel[i * 2 + 1] + this.time * 9;
-      this.bubbles[i * 3] += Math.sin(ph) * 0.004 * dt * 9;
-      this.bubbles[i * 3 + 2] += Math.cos(ph * 0.8) * 0.003 * dt * 9;
-      this.bubbles[i * 3 + 1] = y + this.bubbleVel[i * 2] * dt;
-      if (this.bubbles[i * 3 + 1] >= W_LEVEL - 0.002) {
-        this.addRipple(this.bubbles[i * 3], this.bubbles[i * 3 + 2], (Math.random() < 0.5 ? -1 : 1) * (0.25 + 0.5 * Math.random()), 0.008);
-        this.resetBubble(i, -0.3 - Math.random() * 1.8);
-      }
-    }
-    (this.bubbleGeo.attributes.position as Float32BufferAttribute).needsUpdate = true;
     // now and then a tiny gust somewhere
     for (this.gustAcc += dt * 0.4 * this.turb; this.gustAcc >= 1; this.gustAcc -= 1)
       this.addRipple((Math.random() * 2 - 1) * TX * 0.9, (Math.random() * 2 - 1) * TZ * 0.9, (Math.random() < 0.5 ? -1 : 1) * 0.3, 0.02 + 0.03 * Math.random());
@@ -842,6 +803,26 @@ export class TankScene {
     gl.render(this.causScene, this.flatCam);
     gl.setClearColor(prevClear, prevAlpha);
     gl.setRenderTarget(prevRT);
+  }
+
+  private updateEquipmentLighting(): void {
+    const level = Math.min(1.5, this.equipment.lightLevel);
+    this.U.uLampCol.value.setRGB(0.87, 0.96, 1.0).multiplyScalar(3 * level);
+    const lamp = [...this.equipment.devices.values()].find((d) => (d.kind === 'ledLight' || d.kind === 'lightFixture') && d.powered);
+    if (lamp) {
+      lamp.localToWorld(this.U.uLampPosition.value.set(0, -0.01, 0));
+      this.U.uLampAxis.value.set(1, 0, 0).transformDirection(lamp.matrixWorld);
+      this.lampLight.position.copy(this.U.uLampPosition.value).add(new Vector3(0, 0.035, 0));
+      this.lampLight.target.position.set(this.U.uLampPosition.value.x, 0, this.U.uLampPosition.value.z);
+    }
+    this.lampLight.intensity = 1.8 * level;
+    this.lighting.sunIntensity = 2.4 * level;
+  }
+
+  /** Look at the service side without changing device placement. */
+  focusEquipmentRear(): void {
+    this.view = 'tank';
+    this.startCamera(new Vector3(-0.85, 0.32, -1.05), new Vector3(0, -0.08, 0));
   }
 
   /**
@@ -937,6 +918,8 @@ export class TankScene {
 
   /** Everything stands still (the edit screen): only the camera moves. */
   updateFrozen(): void {
+    this.equipment.updateFrozen(this.camera);
+    this.updateEquipmentLighting();
     if (this.camT < 1) this.stepCamera(1 / 60);
     else if (this.view === 'tank') this.controls?.update();
   }
@@ -952,6 +935,9 @@ export class TankScene {
       this.controls.target.y += breath - this.breathPrev;
       this.breathPrev = breath;
     }
+    this.equipment.update(dt, this.camera, this.gl.domElement.height);
+    this.updateEquipmentLighting();
+    this.turb = Math.min(1, 0.15 + this.equipment.flows.reduce((a, f) => a + f.flowRate / 1800, 0));
     this.stepWater(dt);
     for (const o of this.occupants) {
       const d = o.driver;
@@ -976,6 +962,7 @@ export class TankScene {
   }
 
   dispose(): void {
+    this.equipment.dispose();
     this.deactivate();
     this.clearOccupants();
     this.gpu?.dispose();

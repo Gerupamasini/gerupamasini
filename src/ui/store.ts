@@ -87,7 +87,7 @@ export const ui = {
   /** full-map overview on the flat (M) */
   mapOpen: signal(false),
   /** tank panel tab */
-  tankTab: signal<'fish' | 'layout'>('fish'),
+  tankTab: signal<'fish' | 'layout' | 'equipment'>('fish'),
   /** selected decoration in the tank layout editor */
   tankSelected: signal<string | null>(null),
   /** bumped whenever the tank layout changes, so the editor re-renders */
