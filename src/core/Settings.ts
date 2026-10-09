@@ -54,12 +54,12 @@ export const QUALITY_PRESETS: Record<Quality, QualityPreset> = {
 
 const KEY = 'settings';
 
-export async function loadSettings(): Promise<SettingsData> {
+export async function loadSettings(defaults: Partial<SettingsData> = {}): Promise<SettingsData> {
   try {
     const s = (await get(KEY)) as Partial<SettingsData> | undefined;
-    return { ...DEFAULT_SETTINGS, ...(s ?? {}) };
+    return { ...DEFAULT_SETTINGS, ...defaults, ...(s ?? {}) };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, ...defaults };
   }
 }
 

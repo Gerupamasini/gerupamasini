@@ -45,9 +45,9 @@ export function HomeMenu({ app }: { app: App }) {
         </div>
         <div class="exp"><i style={{ width: `${Math.min(100, (research / nextAt) * 100)}%` }} /></div>
         <div class="stat-line">
-          <span class="stat"><span class="coin" />{t('home.credits')} <b class="num">{enc.money.value.toLocaleString()}</b></span>
+          <span class="stat" title={t('home.credits')}><span class="coin" /><span class="stat-name">{t('home.credits')}</span><b class="num">{enc.money.value.toLocaleString()}</b></span>
           <span class="sep" />
-          <span class="stat"><span class="ticket-mark" />{t('hud.ticket')} <b class="num">∞</b></span>
+          <span class="stat" title={t('hud.ticket')}><span class="ticket-mark" /><span class="stat-name">{t('hud.ticket')}</span><b class="num">∞</b></span>
         </div>
       </div>
 

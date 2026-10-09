@@ -33,7 +33,8 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガード、`?mode=naked` で殻から出した体（`&stage=dark` で写真と同じ黒い撮影台）、`?mode=retract` で殻に閉じこもる様子を見られます。
 
 ## 文書
-- `docs/models/aquarium/` 水槽基本設備20種、共通材質、LOD、設備コレクション・CRガチャ・自動配線（自宅 → 水槽 → 設備 / ガチャ）
+- `docs/models/aquarium/` 水槽基本設備20種、共通材質、LOD、設備コレクション・専用チケットガチャ・自動配線（自宅 → 水槽 → 設備 / ガチャ）
+- [スマホ・タブレットの操作と画面写真](docs/mobile/README.md) ホーム・水槽編集・ガチャ・干潟の移動／採集／観察、縦横画面の確認手順
 - `docs/spec/` 仕様書 4 本（ゲームと MVP、アーキテクチャとデータ、生物 AI とモデル、潮位・セーブ・進行）
 - `docs/planning/` 設計質問と回答、マハゼモデル監査
 - `docs/TESTING.md` 身内テスト手順

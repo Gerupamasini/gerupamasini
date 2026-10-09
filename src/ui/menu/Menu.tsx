@@ -25,7 +25,7 @@ export function Menu({ app }: { app: App }) {
           </div>
         </div>
         <div class="setting">
-          <span class="label">{t('menu.sensitivity')}<span class="num">{s.mouseSensitivity.toFixed(1)}</span></span>
+          <span class="label">{app.input.touchDevice ? '視点の感度' : t('menu.sensitivity')}<span class="num">{s.mouseSensitivity.toFixed(1)}</span></span>
           <input type="range" min="0.3" max="2.5" step="0.1" value={s.mouseSensitivity} onInput={(e) => void app.updateSettings({ mouseSensitivity: Number((e.target as HTMLInputElement).value) })} />
         </div>
         <div class="setting">
@@ -34,7 +34,7 @@ export function Menu({ app }: { app: App }) {
         </div>
         <h4>{t('menu.controls')}</h4>
         <div class="keys-grid">
-          {KEYS.map(([keys, label]) => <KeyHint key={label} keys={keys} label={label} />)}
+          {app.input.touchDevice ? <p class="touch-instructions">左スティックで移動、画面をドラッグして視点を回します。採集・観察は右側のボタン、道具の切り替えは画面上部から。走る・望遠・双眼鏡は押している間だけ作動します。水槽と観察画面では1本指で回転、2本指で拡大できます。</p> : KEYS.map(([keys, label]) => <KeyHint key={label} keys={keys} label={label} />)}
         </div>
         <div class="buttons">
           <button class="btn primary" onClick={() => app.closeOverlay()}>{t('menu.resume')}</button>

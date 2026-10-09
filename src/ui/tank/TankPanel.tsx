@@ -1,5 +1,6 @@
 import { researchFor } from '../../systems/Encyclopedia';
 import { h, Fragment } from 'preact';
+import { useState } from 'preact/hooks';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import type { IndividualRecord } from '../../creatures/Individual';
@@ -20,10 +21,12 @@ function Name({ app, r }: { app: App; r: IndividualRecord }) {
 /** The tank drawer: who lives in it, and how it is laid out (substrate and decorations). */
 export function TankPanel({ app }: { app: App }) {
   const tab = ui.tankTab.value;
+  const [collapsed, setCollapsed] = useState(false);
   return (
-    <aside class="glass drawer">
+    <aside class={`glass drawer ${collapsed ? 'sheet-collapsed' : ''}`}>
       <div class="drawer-head">
         <h2>{t('tank.title')}</h2>
+        {app.input.touchDevice && <button class="btn ghost sm sheet-toggle" onClick={() => setCollapsed(!collapsed)} aria-expanded={!collapsed}>{collapsed ? '編集を表示' : '水槽を見る'}</button>}
         <button class="icon-btn" onClick={() => app.closeTankEdit()} aria-label={t('ui.close')}><CloseIcon /></button>
       </div>
       <div class="seg">
@@ -34,7 +37,7 @@ export function TankPanel({ app }: { app: App }) {
       <div class="drawer-body">
         {tab === 'fish' ? <FishTab app={app} /> : tab === 'layout' ? <LayoutTab app={app} /> : <EquipmentTab app={app} />}
       </div>
-      <div class="foot">{tab === 'layout' ? t('tank.dragHint') : 'ドラッグで回転 ・ ホイールで接近 ・ WASD で視点'}</div>
+      <div class="foot">{app.input.touchDevice ? '1本指で回転・2本指で拡大／移動。レイアウトの飾りはドラッグで配置。' : tab === 'layout' ? t('tank.dragHint') : 'ドラッグで回転 ・ ホイールで接近 ・ WASD で視点'}</div>
     </aside>
   );
 }
