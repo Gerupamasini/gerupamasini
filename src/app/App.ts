@@ -1163,12 +1163,11 @@ export class App {
 
   async rollGacha(count: number): Promise<void> {
     if (!this.save || this.mode !== 'gacha' || this.gachaBusy.value) return;
-    const draw = drawEquipment(this.equipmentCollection.value, this.encyclopedia.money.value, count);
-    if (!draw) { toast('CRが足りません', 'warn'); return; }
+    const draw = drawEquipment(this.equipmentCollection.value, count);
+    if (!draw) { toast('設備ガチャチケットが足りません', 'warn'); return; }
     this.gachaBusy.value = true;
     try {
       this.equipmentCollection.value = draw.collection;
-      this.encyclopedia.money.value = draw.money;
       ui.gachaResults.value = draw.results;
       await this.writeSave();
     } finally { this.gachaBusy.value = false; }

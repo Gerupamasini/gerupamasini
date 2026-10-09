@@ -45,35 +45,43 @@ try {
   assert.equal(await page.evaluate(() => window.__higata.tank.equipment.currentLayout.stand), 'wood');
   await page.getByRole('button', { name: '設備ガチャへ', exact: true }).click();
   await page.getByRole('heading', { name: '水槽設備ガチャ' }).waitFor();
-  assert.equal(await page.getByRole('button', { name: /1回引く/ }).isDisabled(), true);
-  const beforePoor = await page.evaluate(async () => { const a = window.__higata; await a.rollGacha(1); return { money: a.encyclopedia.money.value, draws: a.equipmentCollection.value.draws }; });
-  assert.deepEqual(beforePoor, { money: 0, draws: 0 });
+  assert.equal(await page.getByRole('button', { name: /1回引く/ }).isDisabled(), false);
+  assert.equal(await page.getByRole('button', { name: /10回引く/ }).isDisabled(), false);
+  const initialWallet = await page.evaluate(() => { const a = window.__higata; return { money: a.encyclopedia.money.value, tickets: a.equipmentCollection.value.tickets, draws: a.equipmentCollection.value.draws }; });
+  assert.deepEqual(initialWallet, { money: 0, tickets: 10, draws: 0 });
   await page.getByRole('button', { name: /排出アイテム・確率を見る/ }).click();
   assert.equal(await page.locator('.gacha-pool li').count(), 36);
   await page.getByLabel('ガチャの設備種類').selectOption('stand'); assert.equal(await page.locator('.gacha-pool li').count(), 2);
   await page.getByRole('button', { name: /排出アイテム・確率を見る/ }).click();
   await page.evaluate(() => window.__higata.addMoney(1200));
   // Controlled draws make the integration reproducible, including duplicates and all relevant finishes.
-  await page.evaluate(async () => {
-    const app = window.__higata, original = Math.random;
+  await page.evaluate(() => {
+    window.__gachaRandom = Math.random;
     const values = [9.5, 0.5, 20.5, 50.5, 50.5, 54.5, 9.5, 0.5, 50.5, 54.5]; let i = 0;
     Math.random = () => values[i++ % values.length] / 90;
-    try { await app.rollGacha(10); } finally { Math.random = original; }
   });
+  await page.getByRole('button', { name: /10回引く/ }).click();
+  await page.waitForFunction(() => !window.__higata.gachaBusy.value && window.__higata.equipmentCollection.value.draws === 10);
+  await page.evaluate(() => { Math.random = window.__gachaRandom; });
   assert.equal(await page.locator('.gacha-result').count(), 10);
   const draw = await page.evaluate(() => ({ collection: window.__higata.equipmentCollection.value, money: window.__higata.encyclopedia.money.value }));
-  assert.equal(draw.money, 200); assert.equal(draw.collection.draws, 10);
+  assert.equal(draw.money, 1200); assert.equal(draw.collection.tickets, 0); assert.equal(draw.collection.draws, 10);
   assert.equal(draw.collection.stock['stand-studio'], 2); assert.equal(draw.collection.stock['airStone-ivory'], 3);
+  assert.equal(await page.getByRole('button', { name: /1回引く/ }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: /10回引く/ }).isDisabled(), true);
+  await page.evaluate(() => window.__higata.rollGacha(1));
+  assert.deepEqual(await page.evaluate(() => ({ collection: window.__higata.equipmentCollection.value, money: window.__higata.encyclopedia.money.value })), draw);
   await page.screenshot({ animations: 'disabled', path: new URL('aquarium-gacha.png', output).pathname });
-  // Exercise the real draw button and reject a simultaneous second purchase.
-  await page.evaluate(() => { window.__gachaRandom = Math.random; Math.random = () => 85.5 / 90; });
+  // Test-only grant exercises the single draw button and concurrent draw guard.
+  await page.evaluate(() => { const a = window.__higata; a.equipmentCollection.value = { ...a.equipmentCollection.value, tickets: 2 }; window.__gachaRandom = Math.random; Math.random = () => 85.5 / 90; });
   await page.getByRole('button', { name: /1回引く/ }).click();
   await page.waitForFunction(() => !window.__higata.gachaBusy.value && window.__higata.equipmentCollection.value.draws === 11);
-  assert.equal(await page.evaluate(() => window.__higata.encyclopedia.money.value), 100);
+  assert.equal(await page.evaluate(() => window.__higata.equipmentCollection.value.tickets), 1);
   await page.evaluate(async () => { const a = window.__higata; await Promise.all([a.rollGacha(1), a.rollGacha(1)]); Math.random = window.__gachaRandom; });
   assert.equal(await page.evaluate(() => window.__higata.equipmentCollection.value.draws), 12);
-  assert.equal(await page.evaluate(() => window.__higata.encyclopedia.money.value), 0);
-  console.log('gacha credits, rewards, duplicates and locked items passed');
+  assert.equal(await page.evaluate(() => window.__higata.equipmentCollection.value.tickets), 0);
+  assert.equal(await page.evaluate(() => window.__higata.encyclopedia.money.value), 1200);
+  console.log('initial tickets, ticket spending, unchanged CR, rewards, duplicates and locked items passed');
   await page.getByRole('button', { name: /戻る/ }).click(); await page.waitForFunction(() => window.__higata.mode === 'tankEdit');
   await page.getByRole('button', { name: '入れ替える', exact: true }).click();
   assert.equal(await page.evaluate(() => window.__higata.tank.equipment.currentLayout.stand), 'metal');
@@ -148,11 +156,12 @@ try {
   assert.deepEqual(restored.layout.equipment.devices, saved.layout.equipment.devices); assert.deepEqual(restored.layout.equipment.connections, saved.layout.equipment.connections);
   assert.equal(restored.layout.equipment.standItemId, 'stand-studio'); assert.equal(restored.layout.equipment.tankItemId, 'tank-ivory');
   assert.deepEqual(restored.collection, saved.collection); assert.equal(restored.money, saved.money); assert.deepEqual(restored.layout.items, saved.layout.items);
+  assert.equal(restored.collection.tickets, 0);
   await page.getByRole('button', { name: /ガチャ/ }).click(); await page.getByRole('heading', { name: '水槽設備ガチャ' }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   const mobile = await page.evaluate(() => { const e = document.querySelector('.gacha-panel').getBoundingClientRect(); return { left: e.left, right: e.right, bottom: e.bottom, width: innerWidth, height: innerHeight }; });
   assert.ok(mobile.left >= 0 && mobile.right <= mobile.width); assert.ok(mobile.bottom <= mobile.height);
   await page.screenshot({ animations: 'disabled', path: new URL('aquarium-gacha-mobile.png', output).pathname });
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ status: 'passed', equipment: restored.layout.equipment.devices.length, connections: restored.layout.equipment.connections.length, checks: ['73cm aquarium and floor offset', '18 item categories', 'unowned items blocked', 'CR spending and reward quantities', 'gacha buttons and probabilities', 'model replacement', 'multiple air stones', 'automatic connections', 'light OFF/ON', 'placement and substrate', 'water picking and decoration dragging', 'new species in translated aquarium', 'IndexedDB collection and layout restoration', 'mobile layout', 'no shader/page errors'] }));
+  console.log(JSON.stringify({ status: 'passed', equipment: restored.layout.equipment.devices.length, connections: restored.layout.equipment.connections.length, checks: ['73cm aquarium and floor offset', '18 item categories', 'unowned items blocked', '10 initial tickets', 'ticket spending, unchanged CR and reward quantities', 'gacha buttons and probabilities', 'model replacement', 'multiple air stones', 'automatic connections', 'light OFF/ON', 'placement and substrate', 'water picking and decoration dragging', 'new species in translated aquarium', 'IndexedDB collection, spent ticket balance and layout restoration', 'mobile layout', 'no shader/page errors'] }));
 } finally { await browser?.close(); server.kill(); }

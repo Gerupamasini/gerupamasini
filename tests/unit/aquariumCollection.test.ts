@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Mesh, PerspectiveCamera, Vector3 } from 'three';
-import { AquariumEquipment, CATEGORY_LABELS, EQUIPMENT_CATEGORIES, EQUIPMENT_ITEMS, GACHA_COST, GACHA_POOL, categoryLimit, defaultEquipmentLayout, drawEquipment, emptyEquipmentCollection, gachaProbability, itemForCategory, normalizeCollection, normalizeEquipment, ownedEquipmentLayout, ownedQuantity, usedQuantity } from '../../src/aquarium';
+import { AquariumEquipment, CATEGORY_LABELS, EQUIPMENT_CATEGORIES, EQUIPMENT_ITEMS, GACHA_POOL, categoryLimit, defaultEquipmentLayout, drawEquipment, emptyEquipmentCollection, gachaProbability, itemForCategory, normalizeCollection, normalizeEquipment, ownedEquipmentLayout, ownedQuantity, usedQuantity } from '../../src/aquarium';
 import { emptySave, SaveStore } from '../../src/core/Save';
 
 describe('aquarium collection and gacha', () => {
@@ -17,21 +17,34 @@ describe('aquarium collection and gacha', () => {
     expect(categoryLimit('stand')).toBe(1); expect(categoryLimit('airStone')).toBeGreaterThan(1);
   });
 
-  it('charges once per draw, awards quantities, and leaves the input snapshot intact', () => {
-    const initial = emptyEquipmentCollection(), draw = drawEquipment(initial, GACHA_COST * 10, 10, () => 0)!;
-    expect(draw.money).toBe(0); expect(draw.results).toHaveLength(10); expect(draw.collection.draws).toBe(10);
+  it('starts with ten tickets, spends one per draw, and awards quantities atomically', () => {
+    const initial = emptyEquipmentCollection(), draw = drawEquipment(initial, 10, () => 0)!;
+    expect(initial.tickets).toBe(10); expect(draw.collection.tickets).toBe(0);
+    expect(draw.results).toHaveLength(10); expect(draw.collection.draws).toBe(10);
     expect(draw.results[0]).toEqual({ itemId: GACHA_POOL[0].id, isNew: true, quantity: 1 });
     expect(draw.results[9]).toEqual({ itemId: GACHA_POOL[0].id, isNew: false, quantity: 10 });
     expect(draw.collection.stock[GACHA_POOL[0].id]).toBe(10); expect(initial).toEqual(emptyEquipmentCollection());
-    expect(drawEquipment(initial, GACHA_COST, 1, () => 1 - Number.EPSILON)!.results[0].itemId).toBe(GACHA_POOL.at(-1)!.id);
+    const single = drawEquipment(initial, 1, () => 1 - Number.EPSILON)!;
+    expect(single.results[0].itemId).toBe(GACHA_POOL.at(-1)!.id); expect(single.collection.tickets).toBe(9);
+    expect(drawEquipment(single.collection, 10)).toBeNull(); expect(drawEquipment(draw.collection, 1)).toBeNull();
   });
 
-  it('rejects insufficient credits, invalid counts and invalid random values atomically', () => {
+  it('rejects insufficient or invalid tickets, invalid counts and invalid random values atomically', () => {
     const initial = emptyEquipmentCollection();
-    for (const money of [99, -1, NaN, Infinity]) expect(drawEquipment(initial, money, 1)).toBeNull();
-    for (const count of [0, 2, 9, NaN]) expect(drawEquipment(initial, 1000, count)).toBeNull();
-    let i = 0; expect(drawEquipment(initial, 1000, 10, () => ++i < 4 ? 0 : NaN)).toBeNull();
+    for (const tickets of [0, -1, 1.5, NaN, Infinity]) expect(drawEquipment({ ...initial, tickets }, 1)).toBeNull();
+    for (const count of [0, 2, 9, NaN]) expect(drawEquipment(initial, count)).toBeNull();
+    let i = 0; expect(drawEquipment(initial, 10, () => ++i < 4 ? 0 : NaN)).toBeNull();
     expect(initial).toEqual(emptyEquipmentCollection());
+  });
+
+  it('grants ten tickets to old collections once and preserves spent balances on later loads', () => {
+    const legacy = { version: 1, stock: { 'stand-studio': 2 }, draws: 15 };
+    const migrated = normalizeCollection(legacy);
+    expect(migrated).toEqual({ ...legacy, tickets: 10 }); expect(normalizeCollection(migrated)).toEqual(migrated);
+    const spent = drawEquipment(migrated, 10, () => 0)!.collection;
+    expect(normalizeCollection(spent)).toEqual(spent); expect(normalizeCollection(spent).tickets).toBe(0);
+    expect(normalizeCollection({ ...migrated, tickets: 3 }).tickets).toBe(3);
+    for (const tickets of [-1, NaN, Infinity, null, '10']) expect(normalizeCollection({ ...legacy, tickets }).tickets).toBe(0);
   });
 
   it('preserves equipped legacy designs while enforcing ownership and quantities in new saves', () => {
@@ -43,24 +56,43 @@ describe('aquarium collection and gacha', () => {
     layout.devices.find((d) => d.kind === 'airStone')!.itemId = 'airStone-ivory';
     layout.devices.push({ ...layout.devices.find((d) => d.kind === 'airStone')!, id: 'stone-two' });
     layout.standItemId = 'stand-studio'; layout.stand = 'metal';
-    const owned = { version: 1 as const, stock: { 'airStone-ivory': 1 }, draws: 1 };
+    const owned = { ...emptyEquipmentCollection(), stock: { 'airStone-ivory': 1 }, draws: 1 };
     const safe = ownedEquipmentLayout(layout, owned);
     expect(safe.stand).toBe('wood'); expect(safe.devices.filter((d) => d.itemId === 'airStone-ivory')).toHaveLength(1);
     expect(usedQuantity(safe, 'airStone-ivory')).toBe(1);
     expect(usedQuantity(safe, 'airStone-ivory', 'airStone')).toBe(0);
     expect(layout.devices.filter((d) => d.itemId === 'airStone-ivory')).toHaveLength(2);
     expect(itemForCategory('heater-studio', 'airStone').id).toBe('airStone-initial');
-    expect(normalizeCollection({ version: 1, stock: { invalid: 2, 'tank-ivory': NaN, 'stand-studio': -1, 'airStone-ivory': 2.9 }, draws: Infinity })).toEqual({ version: 1, stock: { 'airStone-ivory': 2 }, draws: 0 });
+    expect(normalizeCollection({ version: 1, stock: { invalid: 2, 'tank-ivory': NaN, 'stand-studio': -1, 'airStone-ivory': 2.9 }, draws: Infinity })).toEqual({ version: 1, stock: { 'airStone-ivory': 2 }, draws: 0, tickets: 10 });
   });
 
   it('round-trips collection and equipped designs through the real save migration', () => {
     const store = new SaveStore(), save = emptySave('map', 1);
+    delete save.equipmentCollection; // Save created before collections and ticket grants existed.
     save.tank.layout!.equipment = normalizeEquipment({ ...defaultEquipmentLayout(), stand: 'metal' });
     const old = store.importJson(JSON.stringify(save)); expect(old.equipmentCollection!.stock['stand-studio']).toBe(1);
     expect(old.tank.layout!.equipment!.standItemId).toBe('stand-studio');
     const restored = store.importJson(store.exportJson(old)); expect(restored).toEqual(old);
     restored.tank.layout!.equipment!.tankItemId = 'tank-studio';
     expect(store.importJson(store.exportJson(restored)).tank.layout!.equipment!.tankItemId).toBe('tank-initial');
+  });
+
+  it('persists new and migrated ticket balances without changing CR or regranting on reload', () => {
+    const store = new SaveStore(), fresh = emptySave('map', 1);
+    expect(store.importJson(store.exportJson(fresh)).equipmentCollection!.tickets).toBe(10);
+    fresh.player.money = 1200;
+    const legacy = JSON.parse(store.exportJson(fresh));
+    delete legacy.equipmentCollection.tickets;
+    legacy.equipmentCollection.stock = { 'stand-studio': 1 }; legacy.equipmentCollection.draws = 7;
+    const migrated = store.importJson(JSON.stringify(legacy));
+    expect(migrated.equipmentCollection!.tickets).toBe(10);
+    migrated.equipmentCollection = drawEquipment(migrated.equipmentCollection!, 10, () => 0)!.collection;
+    for (let i = 0; i < 2; i++) {
+      const restored = store.importJson(store.exportJson(migrated));
+      expect(restored.equipmentCollection).toEqual(migrated.equipmentCollection);
+      expect(restored.equipmentCollection!.tickets).toBe(0); expect(restored.player.money).toBe(1200);
+      expect(restored.equipmentCollection!.draws).toBe(17); expect(restored.equipmentCollection!.stock['stand-studio']).toBe(1);
+    }
   });
 
   it('swaps models without moving endpoints or changing operation and shares finish materials', () => {

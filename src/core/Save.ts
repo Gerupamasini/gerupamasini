@@ -2,7 +2,7 @@ import { get, set, del } from 'idb-keyval';
 import type { TicketState } from './GameClock';
 import type { IndividualRecord } from '../creatures/Individual';
 import type { TankLayout } from '../app/TankLayout';
-import { normalizeCollection, ownedEquipmentLayout, type EquipmentCollection } from '../aquarium/catalog';
+import { emptyEquipmentCollection, normalizeCollection, ownedEquipmentLayout, type EquipmentCollection } from '../aquarium/catalog';
 import { normalizeEquipment } from '../aquarium/state';
 
 export interface SpeciesProgress {
@@ -49,6 +49,7 @@ export function emptySave(map: string, now: number): SaveV1 {
     player: { map, pos: [0, 0, 0], heading: 0, money: 0, research: 0, tools: [DEFAULT_NET, 'shovel'], loadout: [DEFAULT_NET, 'shovel'], skills: {}, levelClaimed: 1 },
     ticket: { active: null, usedCount: 0 },
     encyclopedia: {}, case: [], tank: { individuals: [], lastSimMs: now, layout: { substrate: 'sand', items: [] } }, removedIndividuals: [],
+    equipmentCollection: emptyEquipmentCollection(),
     stats: { playSeconds: 0, captures: 0, observations: 0 },
   };
 }

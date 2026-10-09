@@ -56,8 +56,9 @@ export function itemForCategory(id: string | undefined, category: EquipmentCateg
 export const MULTIPLE_EQUIPMENT = new Set<EquipmentCategory>(['ledLight', 'spongeFilter', 'airPump', 'airStone', 'flowPump', 'circulationPump', 'powerStrip']);
 export const categoryLimit = (category: EquipmentCategory): number => MULTIPLE_EQUIPMENT.has(category) ? 4 : 1;
 
-export interface EquipmentCollection { version: 1; stock: Record<string, number>; draws: number }
-export const emptyEquipmentCollection = (): EquipmentCollection => ({ version: 1, stock: {}, draws: 0 });
+export const INITIAL_GACHA_TICKETS = 10;
+export interface EquipmentCollection { version: 1; stock: Record<string, number>; draws: number; tickets: number }
+export const emptyEquipmentCollection = (): EquipmentCollection => ({ version: 1, stock: {}, draws: 0, tickets: INITIAL_GACHA_TICKETS });
 /** Initial items are always available; acquired items have real quantities for multiple placement. */
 export function ownedQuantity(collection: EquipmentCollection, id: string): number {
   const item = equipmentItem(id); return item?.rarity === 'initial' ? Infinity : collection.stock[id] ?? 0;
@@ -73,6 +74,8 @@ export function normalizeCollection(raw: unknown, legacyLayout?: EquipmentLayout
       if (equipmentItem(id)?.rarity !== 'initial' && equipmentItem(id) && Number.isFinite(count) && count >= 1) result.stock[id] = Math.min(9999, Math.floor(count));
     }
     result.draws = Number.isFinite(r.draws) ? Math.max(0, Math.floor(r.draws)) : 0;
+    // Only saves without a ticket balance receive the welcome grant. A spent balance stays zero.
+    if (Object.prototype.hasOwnProperty.call(r, 'tickets')) result.tickets = Number.isFinite(r.tickets) ? Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(r.tickets))) : 0;
   } else if (legacyLayout) {
     // Existing saves keep their metal stand and any previously equipped valid designs.
     const ids = [legacyLayout.standItemId ?? (legacyLayout.stand === 'metal' ? 'stand-studio' : initialItemId('stand')), legacyLayout.tankItemId, ...legacyLayout.devices.map((d) => d.itemId)];
@@ -92,14 +95,14 @@ export function ownedEquipmentLayout(layout: EquipmentLayout, collection: Equipm
   return { ...layout, tankItemId: tank.id, standItemId: stand.id, stand: stand.stand!, devices: layout.devices.map((d) => ({ ...d, position: [...d.position], itemId: choose(d.itemId, d.kind).id })) };
 }
 
-export const GACHA_COST = 100;
+export const GACHA_TICKET_COST = 1;
 export const GACHA_POOL = EQUIPMENT_ITEMS.filter((i) => i.rarity !== 'initial');
 const weight = (item: EquipmentItem): number => item.rarity === 'R' ? 1 : 4;
 const TOTAL_WEIGHT = GACHA_POOL.reduce((n, i) => n + weight(i), 0);
 export const gachaProbability = (id: string): number => { const item = GACHA_POOL.find((i) => i.id === id); return item ? weight(item) / TOTAL_WEIGHT : 0; };
 export interface GachaResult { itemId: string; isNew: boolean; quantity: number }
-export function drawEquipment(collection: EquipmentCollection, money: number, count: number, random: () => number = Math.random): { collection: EquipmentCollection; money: number; results: GachaResult[] } | null {
-  if ((count !== 1 && count !== 10) || !Number.isFinite(money) || money < GACHA_COST * count) return null;
+export function drawEquipment(collection: EquipmentCollection, count: number, random: () => number = Math.random): { collection: EquipmentCollection; results: GachaResult[] } | null {
+  if ((count !== 1 && count !== 10) || !Number.isSafeInteger(collection.tickets) || collection.tickets < GACHA_TICKET_COST * count) return null;
   const stock = { ...collection.stock }, results: GachaResult[] = [];
   for (let n = 0; n < count; n++) {
     const r = random(); if (!Number.isFinite(r) || r < 0 || r >= 1) return null;
@@ -108,5 +111,5 @@ export function drawEquipment(collection: EquipmentCollection, money: number, co
     const quantity = (stock[item.id] ?? 0) + 1; stock[item.id] = quantity;
     results.push({ itemId: item.id, isNew: quantity === 1, quantity });
   }
-  return { collection: { version: 1, stock, draws: collection.draws + count }, money: money - GACHA_COST * count, results };
+  return { collection: { ...collection, stock, draws: collection.draws + count, tickets: collection.tickets - GACHA_TICKET_COST * count }, results };
 }
