@@ -23,11 +23,11 @@ export function SpotSelect({ app }: { app: App }) {
   const spots = app.data.spots;
   const selId = ui.spot.value ?? spots[0]?.id ?? null;
   const sel = spots.find((s) => s.id === selId) ?? spots[0];
-  const [bx0, by0] = jp(139.5, 35.75), [bx1, by1] = jp(140.1, 35.1);
   const pick = (s: SpotDef) => { ui.spot.value = s.id; };
   if (app.input.touchDevice) return <div class="screen center mobile-spots">
     <div class="card mobile-spots-card">
       <CardHead title={t('spots.title')} onClose={() => app.closeOverlay()} />
+      <div class="mobile-spot-layout"><CoastMaps spots={spots} selected={sel?.id} onPick={pick} /><div class="mobile-spot-content">
       <div class="mobile-spot-options">
         {spots.map((s) => <button key={s.id} class={`btn mobile-spot ${s.id === sel?.id ? 'selected' : ''}`} aria-pressed={s.id === sel?.id} onClick={() => pick(s)}>
           <span class="name">{s.ja}</span><span class="dim small">{s.area}</span>
@@ -38,6 +38,7 @@ export function SpotSelect({ app }: { app: App }) {
         <p class="dim small">{sel.description}</p>
         <button class="btn primary spot-go" disabled={!sel.map} onClick={() => { if (sel.map) void app.enterField(sel.id); }}>{sel.map ? t('spots.go') : t('spots.soon')}</button>
       </div>}
+      </div></div>
     </div>
   </div>;
   return (
@@ -45,31 +46,7 @@ export function SpotSelect({ app }: { app: App }) {
       <div class="card spots-card">
         <CardHead eyebrow={t('spots.eyebrow')} title={t('spots.title')} onClose={() => app.closeOverlay()} />
         <div class="spots-body">
-          <div class="spots-maps">
-            <svg class="spots-japan" viewBox="0 0 520 560" aria-label="日本">
-              <path class="land" d={path(HOKKAIDO, jp)} />
-              <path class="land" d={path(HONSHU, jp)} />
-              <path class="land" d={path(SHIKOKU, jp)} />
-              <path class="land" d={path(KYUSHU, jp)} />
-              <rect class="focus" x={bx0} y={by0} width={bx1 - bx0} height={by1 - by0} rx="2" />
-              <text class="label" x={bx1 + 8} y={by0 + 10}>{t('spots.tokyoBay')}</text>
-            </svg>
-            <svg class="spots-bay" viewBox="-20 -20 300 380" aria-label="東京湾">
-              <path class="shore" d="M-20 -20 H280 V360 H-20 Z" />
-              <path class="water" d={path(BAY, bay)} />
-              {spots.map((s) => {
-                const [x, y] = bay(s.lon, s.lat);
-                const on = s.id === sel?.id, ready = !!s.map;
-                return (
-                  <g key={s.id} class={`pin ${ready ? 'open' : 'soon'} ${on ? 'on' : ''}`} transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`} onClick={() => pick(s)} role="button" tabIndex={0}>
-                    <circle class="halo" r="14" />
-                    <circle class="dot" r="5" />
-                    <text class="name" x="10" y="4">{s.ja}</text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
+          <CoastMaps spots={spots} selected={sel?.id} onPick={pick} />
           <div class="spots-side">
             <ul class="spots-list">
               {spots.map((s) => (
@@ -92,5 +69,36 @@ export function SpotSelect({ app }: { app: App }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function CoastMaps({ spots, selected, onPick }: { spots: SpotDef[]; selected?: string; onPick: (s: SpotDef) => void }) {
+  const [bx0, by0] = jp(139.5, 35.75), [bx1, by1] = jp(140.1, 35.1);
+  return (
+          <div class="spots-maps">
+            <svg class="spots-japan" viewBox="0 0 520 560" aria-label="日本">
+              <path class="land" d={path(HOKKAIDO, jp)} />
+              <path class="land" d={path(HONSHU, jp)} />
+              <path class="land" d={path(SHIKOKU, jp)} />
+              <path class="land" d={path(KYUSHU, jp)} />
+              <rect class="focus" x={bx0} y={by0} width={bx1 - bx0} height={by1 - by0} rx="2" />
+              <text class="label" x={bx1 + 8} y={by0 + 10}>{t('spots.tokyoBay')}</text>
+            </svg>
+            <svg class="spots-bay" viewBox="-20 -20 300 380" aria-label="東京湾">
+              <path class="shore" d="M-20 -20 H280 V360 H-20 Z" />
+              <path class="water" d={path(BAY, bay)} />
+              {spots.map((s) => {
+                const [x, y] = bay(s.lon, s.lat);
+                const on = s.id === selected, ready = !!s.map;
+                return (
+                  <g key={s.id} class={`pin ${ready ? 'open' : 'soon'} ${on ? 'on' : ''}`} transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`} onClick={() => onPick(s)} role="button" tabIndex={0}>
+                    <circle class="halo" r="14" />
+                    <circle class="dot" r="5" />
+                    <text class="name" x="10" y="4">{s.ja}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
   );
 }
