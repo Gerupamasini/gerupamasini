@@ -28,6 +28,8 @@ const UP = new Vector3(0, 1, 0);
 
 export const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
 export const TANK_MAX_OCCUPANTS = 4;
+/** The cabinet is 73 cm tall; keep aquarium coordinates local to its top. */
+export const TANK_OFFSET_Y = 0.73;
 
 export interface Occupant {
   record: IndividualRecord;
@@ -79,6 +81,7 @@ uniform float uCausScale;   // caustics texture -> fraction of the bar's light
 const float W_LEVEL = ${f(W_LEVEL)}, W_IOR = ${f(W_IOR)}, W_LAMP_Y = ${f(W_LAMP_Y)}, W_LAMP_HALF = ${f(W_LAMP_HALF)};
 const vec2 W_HALF = vec2(${f(TX)}, ${f(TZ)});
 const vec3 W_ABSORB = vec3(${W_ABSORB.map(f).join(', ')});
+const vec3 TANK_ORIGIN = vec3(0.0, ${f(TANK_OFFSET_Y)}, 0.0);
 // water height above W_LEVEL and its slope at p
 vec3 wave(vec2 p) { return textureLod(uSurf, p / (2.0 * W_HALF) + 0.5, 0.0).xyz; }
 vec3 normalOf(vec3 w) { return normalize(vec3(-w.y, 1.0, -w.z)); }
@@ -121,14 +124,14 @@ varying vec3 vPos;
 void main() {
   vec3 w = wave(position.xz);
   vPos = vec3(position.x, W_LEVEL + w.x, position.z);
-  gl_Position = projectionMatrix * viewMatrix * vec4(vPos, 1.0);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(vPos, 1.0);
 }`;
 // the surface seen from above: the view refracts into the water and is absorbed on its way to the floor
 const SURF_HEAD = /* glsl */ `
 varying vec3 vPos;
 uniform vec3 uGlow;
 void main() {
-  vec3 n = normalOf(wave(vPos.xz)), d = normalize(vPos - cameraPosition);
+  vec3 n = normalOf(wave(vPos.xz)), d = normalize(vPos - (cameraPosition - TANK_ORIGIN));
   if (dot(d, n) > -0.02) n = normalize(n - d * (dot(d, n) + 0.02));
   float F = fresnel(-dot(d, n));
   vec3 r = refract(d, n, 1.0 / W_IOR);
@@ -137,7 +140,7 @@ void main() {
 `;
 const SIDE_VERT = COMMON + /* glsl */ `
 varying vec3 vPos; varying vec3 vNrm;
-void main() { vPos = (modelMatrix * vec4(position, 1.0)).xyz; vNrm = normal; gl_Position = projectionMatrix * viewMatrix * vec4(vPos, 1.0); }`;
+void main() { vPos = (modelMatrix * vec4(position, 1.0)).xyz - TANK_ORIGIN; vNrm = normal; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 // the water behind the glass walls, up to the moving water line
 const SIDE_HEAD = /* glsl */ `
 varying vec3 vPos; varying vec3 vNrm;
@@ -147,7 +150,7 @@ void main() {
   if (abs(vNrm.y) > 0.5) discard;
   float h = W_LEVEL + wave(clamp(vPos.xz, -W_HALF, W_HALF)).x;
   if (vPos.y > h) discard;
-  vec3 d = normalize(vPos - cameraPosition), n = normalize(vNrm);
+  vec3 d = normalize(vPos - (cameraPosition - TANK_ORIGIN)), n = normalize(vNrm);
   vec3 r = refract(d, n, 1.0 / W_IOR);
   float t = boxExit(vPos - n * 0.001, r);
 `;
@@ -159,7 +162,7 @@ function lightByCaustics(m: MeshStandardMaterial, U: Record<string, IUniform>, k
     Object.assign(shader.uniforms, { uSurf: U.uSurf, uCaus: U.uCaus, uLampCol: U.uLampCol, uLampPosition: U.uLampPosition, uLampAxis: U.uLampAxis, uCausScale: U.uCausScale });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPosT;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPosT = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\nvWorldPosT = (modelMatrix * vec4(transformed, 1.0)).xyz - vec3(0.0, ${f(TANK_OFFSET_Y)}, 0.0);`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\nvarying vec3 vWorldPosT;\n${COMMON}
 float hashT(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -189,6 +192,7 @@ float vnoiseT(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 -
  */
 export class TankScene {
   readonly scene = new Scene();
+  readonly aquariumRoot = new Group();
   readonly camera: PerspectiveCamera;
   private controls: OrbitControls | null = null;
   /** the tool shelf on the wall, and the camera's move between the tank and it */
@@ -196,7 +200,7 @@ export class TankScene {
   private view: 'tank' | 'shelf' = 'tank';
   private readonly camFrom = { p: new Vector3(), t: new Vector3() };
   private readonly camTo = { p: new Vector3(), t: new Vector3() };
-  private readonly camCur = { t: new Vector3(0, 0.12, 0) };
+  private readonly camCur = { t: new Vector3(0, TANK_OFFSET_Y + 0.12, 0) };
   private camT = 1;
   readonly occupants: Occupant[] = [];
   /** top of the substrate: the animals, the decorations and the caustics all sit on it */
@@ -204,8 +208,8 @@ export class TankScene {
   private readonly floor: Floor = { heightAt: () => this.sandTop, waterAt: () => WATER_H };
   private readonly hitBox: Mesh;
   private readonly raycaster = new Raycaster();
-  private readonly waterPlane = new Plane(new Vector3(0, 1, 0), -W_LEVEL);
-  private readonly floorPlane = new Plane(new Vector3(0, 1, 0), 0);
+  private readonly waterPlane = new Plane(new Vector3(0, 1, 0), -W_LEVEL - TANK_OFFSET_Y);
+  private readonly floorPlane = new Plane(new Vector3(0, 1, 0), -TANK_OFFSET_Y - SAND_H);
   // layout: substrate and decorations
   private layout: TankLayout = defaultTankLayout();
   private readonly itemsRoot = new Group();
@@ -247,12 +251,14 @@ export class TankScene {
   readonly lighting: HeroLighting = {
     sunDir: new Vector3(0.12, 0.95, 0.2).normalize(), sunColor: new Color(0.9, 0.97, 1.0), sunIntensity: 2.4,
     skyColor: new Color(0.7, 0.82, 0.9), groundColor: new Color(0.22, 0.2, 0.18), ambientIntensity: 0.5,
-    fogColor: new Color(0.1, 0.14, 0.16), fogDensity: 0.2, floorY: 0, underwater: true,
+    fogColor: new Color(0.1, 0.14, 0.16), fogDensity: 0.2, floorY: TANK_OFFSET_Y, underwater: true,
   };
 
   constructor(private readonly canvas: HTMLCanvasElement, aspect: number, private readonly gl: WebGLRenderer) {
     this.camera = new PerspectiveCamera(40, aspect, 0.003, 20);
     this.scene.background = new Color(0.028, 0.032, 0.036);
+    this.aquariumRoot.name = 'raisedAquarium'; this.aquariumRoot.position.y = TANK_OFFSET_Y;
+    this.scene.add(this.aquariumRoot);
     const pmrem = new PMREMGenerator(gl);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environmentIntensity = 0.22;
@@ -272,13 +278,13 @@ export class TankScene {
     this.scene.add(hemi, spot, spot.target, fill, rim);
     const desk = new Mesh(new PlaneGeometry(6, 4), new MeshStandardMaterial({ color: 0x1b1715, roughness: 0.8, metalness: 0.05 }));
     desk.rotation.x = -Math.PI / 2;
-    desk.position.y = -0.738;
+    desk.position.y = TANK_OFFSET_Y - 0.738; desk.name = 'roomFloor';
     desk.receiveShadow = true;
     this.scene.add(desk);
     const wall = new Mesh(new PlaneGeometry(6, 3), new MeshStandardMaterial({ color: 0x0f1214, roughness: 1 }));
     wall.position.set(0, 1.4, -1.4);
     this.scene.add(wall);
-    this.scene.add(this.equipment);
+    this.aquariumRoot.add(this.equipment);
     this.equipment.onRipple = (x, z, strength) => this.addRipple(x, z, strength, 0.009);
     this.scene.add(this.shelf.group);
     // a window on the back wall, the bay at night outside
@@ -407,7 +413,7 @@ export class TankScene {
     const sand = new Mesh(new BoxGeometry(TANK_W - 0.002, SAND_H, TANK_D - 0.002), sandMat);
     sand.position.y = SAND_H / 2;
     sand.receiveShadow = true;
-    this.scene.add(sand);
+    this.aquariumRoot.add(sand);
     this.sandMesh = sand; this.sandMat = sandMat;
     // bare bottom (dark acrylic) when no substrate is chosen; still lit by the caustics
     const bottomMat = new MeshStandardMaterial({ color: 0x101316, roughness: 0.3, metalness: 0.1 });
@@ -416,9 +422,9 @@ export class TankScene {
     bottom.rotation.x = -Math.PI / 2;
     bottom.receiveShadow = true;
     bottom.visible = false;
-    this.scene.add(bottom);
+    this.aquariumRoot.add(bottom);
     this.bottomMesh = bottom;
-    this.scene.add(this.itemsRoot);
+    this.aquariumRoot.add(this.itemsRoot);
 
     // the water behind the glass: first what it takes away (absorption, per channel), then what it adds (scattered
     // light sheets, the meniscus); the surface the same way, plus its reflection of the room
@@ -465,7 +471,7 @@ export class TankScene {
     }`, true, 5));
     surfAdd.renderOrder = 5;
     for (const m of [sidesMul, sidesAdd, surfMul, surfAdd]) m.frustumCulled = false;
-    this.scene.add(sidesMul, sidesAdd, surfMul, surfAdd);
+    this.aquariumRoot.add(sidesMul, sidesAdd, surfMul, surfAdd);
 
     // glass panels: only what the panes reflect of the dark room (Fresnel, premultiplied), so the water and the animals
     // show through untinted; edges and an invisible hit box for picking
@@ -475,18 +481,19 @@ export class TankScene {
       fragmentShader: COMMON + /* glsl */ `
         varying vec3 vPos; varying vec3 vNrm;
         void main() {
-          vec3 d = normalize(vPos - cameraPosition), n = normalize(vNrm) * (gl_FrontFacing ? 1.0 : -1.0);
+          vec3 d = normalize(vPos - (cameraPosition - TANK_ORIGIN)), n = normalize(vNrm) * (gl_FrontFacing ? 1.0 : -1.0);
           float F = 0.04 + 0.96 * pow(1.0 - abs(dot(d, n)), 5.0);
           gl_FragColor = vec4(F * room(vPos, reflect(d, n)), F + 0.01);
           ${OUT}
         }`,
     });
     // Reuse the host's optical glass shader; standalone tanks use the shared physical glass.
-    this.equipment.tank.traverse((o) => { if (o instanceof Mesh && o.material === this.equipment.materials.glass) o.material = glassMat; });
+    this.equipment.onTankChanged = () => this.equipment.tank.traverse((o) => { if (o instanceof Mesh && o.material === this.equipment.materials.glass) o.material = glassMat; });
+    this.equipment.onTankChanged();
     this.hitBox = new Mesh(new BoxGeometry(TANK_W, TANK_H, TANK_D), new MeshStandardMaterial({ visible: false }));
     this.hitBox.position.y = TANK_H / 2;
     this.hitBox.name = 'tank-hit';
-    this.scene.add(this.hitBox);
+    this.aquariumRoot.add(this.hitBox);
     this.frameTank();
   }
 
@@ -494,16 +501,16 @@ export class TankScene {
   frameTank(): void {
     const hfov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
     const dist = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
-    this.camera.position.set(dist * 0.35, 0.16 + dist * 0.28, dist * 0.95);
-    this.camera.lookAt(0, 0.12, 0);
-    if (this.controls) { this.controls.target.set(0, 0.12, 0); this.controls.update(); }
+    this.camera.position.set(dist * 0.35, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95);
+    this.camera.lookAt(0, TANK_OFFSET_Y + 0.12, 0);
+    if (this.controls) { this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0); this.controls.update(); }
   }
 
   activate(autoRotate = false): void {
     if (!this.controls) {
       this.controls = new OrbitControls(this.camera, this.canvas);
       this.controls.enableDamping = true;
-      this.controls.target.set(0, 0.12, 0);
+      this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0);
       // right up to the glass (the camera's near plane is 3 mm) and back to the far wall
       this.controls.minDistance = 0.012;
       this.controls.maxDistance = 3.2;
@@ -540,6 +547,7 @@ export class TankScene {
   setLayout(layout: TankLayout): void {
     this.layout = { substrate: layout.substrate, items: layout.items.map((i) => ({ ...i })) };
     this.equipment.setLayout(layout.equipment);
+    this.equipment.applyPreset();
     if (!layout.equipment && layout.substrate === 'none') this.moveBottomEquipment(-SAND_H);
     this.applySubstrate();
     for (const o of this.itemObjects.values()) o.removeFromParent();
@@ -569,6 +577,8 @@ export class TankScene {
     this.sandMesh.visible = s !== 'none';
     this.bottomMesh.visible = s === 'none';
     this.sandTop = s === 'none' ? 0 : SAND_H;
+    this.floorPlane.constant = -TANK_OFFSET_Y - this.sandTop;
+    this.lighting.floorY = TANK_OFFSET_Y + this.sandTop;
     this.itemsRoot.position.y = this.sandTop;
     for (const o of this.occupants) o.ind.pos.y = this.sandTop;
     if (s === 'mud') { this.sandMat.color.set(0x4a4034); this.sandMat.roughness = 1.0; }
@@ -628,6 +638,22 @@ export class TankScene {
       if (o) return o.userData.itemId as string;
     }
     return null;
+  }
+
+  /** Clicking a visible aquarium interior selects its item card. */
+  pickEquipment(ndcX: number, ndcY: number): string | null {
+    this.scene.updateMatrixWorld(true);
+    this.raycaster.setFromCamera(new Vector2(ndcX, ndcY), this.camera);
+    const hits = this.raycaster.intersectObjects([this.equipment.stand, ...this.equipment.devices.values()], true);
+    for (const hit of hits) {
+      let o: Object3D | null = hit.object;
+      if (!(o instanceof Mesh) || !o.visible) continue;
+      // Raycaster also visits hidden LOD children: only the currently drawn level is selectable.
+      let visible = true;
+      while (o && o !== this.equipment) { if (!o.visible) visible = false; if (o.userData.equipmentId) break; o = o.parent; }
+      if (visible && o?.userData.equipmentId) return o.userData.equipmentId as string;
+    }
+    return this.raycaster.intersectObject(this.hitBox).length ? 'tank' : null;
   }
 
   /** Drag a decoration to where a canvas point (NDC) meets the sand, kept inside the tank. */
@@ -710,7 +736,7 @@ export class TankScene {
     if (this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); root.removeFromParent(); return; }
     const driver = entry.create();
     const unsub = driver.onEvent((e) => this.onBehavior?.(e, record));
-    this.scene.add(root);
+    this.aquariumRoot.add(root);
     driver.attach(root, ind, extras, bones, meshes);
     if (!rel) {
       // procedural models are built by the driver in attach(); light them now
@@ -811,9 +837,10 @@ export class TankScene {
     const lamp = [...this.equipment.devices.values()].find((d) => (d.kind === 'ledLight' || d.kind === 'lightFixture') && d.powered);
     if (lamp) {
       lamp.localToWorld(this.U.uLampPosition.value.set(0, -0.01, 0));
+      this.aquariumRoot.worldToLocal(this.U.uLampPosition.value);
       this.U.uLampAxis.value.set(1, 0, 0).transformDirection(lamp.matrixWorld);
-      this.lampLight.position.copy(this.U.uLampPosition.value).add(new Vector3(0, 0.035, 0));
-      this.lampLight.target.position.set(this.U.uLampPosition.value.x, 0, this.U.uLampPosition.value.z);
+      this.lampLight.position.copy(this.U.uLampPosition.value).add(new Vector3(0, TANK_OFFSET_Y + 0.035, 0));
+      this.lampLight.target.position.set(this.U.uLampPosition.value.x, TANK_OFFSET_Y, this.U.uLampPosition.value.z);
     }
     this.lampLight.intensity = 1.8 * level;
     this.lighting.sunIntensity = 2.4 * level;
@@ -822,7 +849,7 @@ export class TankScene {
   /** Look at the service side without changing device placement. */
   focusEquipmentRear(): void {
     this.view = 'tank';
-    this.startCamera(new Vector3(-0.85, 0.32, -1.05), new Vector3(0, -0.08, 0));
+    this.startCamera(new Vector3(-0.85, TANK_OFFSET_Y + 0.32, -1.05), new Vector3(0, TANK_OFFSET_Y - 0.08, 0));
   }
 
   /**
@@ -880,8 +907,8 @@ export class TankScene {
     this.view = 'tank';
     this.camT = 1;
     this.frameTank();
-    this.camCur.t.set(0, 0.12, 0);
-    if (this.controls) { this.controls.enabled = true; this.controls.target.set(0, 0.12, 0); this.controls.update(); }
+    this.camCur.t.set(0, TANK_OFFSET_Y + 0.12, 0);
+    if (this.controls) { this.controls.enabled = true; this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0); this.controls.update(); }
   }
 
   focusTank(): void {
@@ -889,7 +916,7 @@ export class TankScene {
     this.view = 'tank';
     const hfov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
     const dist = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
-    this.startCamera(new Vector3(dist * 0.35, 0.16 + dist * 0.28, dist * 0.95), new Vector3(0, 0.12, 0));
+    this.startCamera(new Vector3(dist * 0.35, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95), new Vector3(0, TANK_OFFSET_Y + 0.12, 0));
   }
 
   private startCamera(p: Vector3, t: Vector3): void {

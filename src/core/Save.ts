@@ -2,6 +2,8 @@ import { get, set, del } from 'idb-keyval';
 import type { TicketState } from './GameClock';
 import type { IndividualRecord } from '../creatures/Individual';
 import type { TankLayout } from '../app/TankLayout';
+import { normalizeCollection, ownedEquipmentLayout, type EquipmentCollection } from '../aquarium/catalog';
+import { normalizeEquipment } from '../aquarium/state';
 
 export interface SpeciesProgress {
   discovered?: number;
@@ -33,6 +35,7 @@ export interface SaveV1 {
   encyclopedia: Record<string, SpeciesProgress>;
   case: IndividualRecord[];
   tank: { individuals: IndividualRecord[]; lastSimMs: number; layout?: TankLayout };
+  equipmentCollection?: EquipmentCollection;
   removedIndividuals: string[];
   stats: { playSeconds: number; captures: number; observations: number };
 }
@@ -54,6 +57,9 @@ function migrate(raw: unknown): SaveV1 | null {
   if (!raw || typeof raw !== 'object') return null;
   const s = raw as Partial<SaveV1>;
   if (s.version !== 1) return null;
+  const equipment = normalizeEquipment(s.tank?.layout?.equipment);
+  s.equipmentCollection = normalizeCollection(s.equipmentCollection, equipment);
+  if (s.tank?.layout) s.tank.layout.equipment = ownedEquipmentLayout(equipment, s.equipmentCollection);
   if (s.player) {
     if (!s.player.skills) s.player.skills = {};
     if (!s.player.tools) s.player.tools = [];

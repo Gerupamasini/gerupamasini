@@ -2,12 +2,13 @@ import { DEFAULT_SETTINGS, type SettingsData } from '../core/Settings';
 import { signal } from '@preact/signals';
 import type { TideExtremum } from '../tide/TideModel';
 import type { IndividualRecord } from '../creatures/Individual';
+import type { GachaResult } from '../aquarium/catalog';
 
 /** the tool in the player's hands on the flat */
 /** a tool id from items/tools.json */
 export type ToolId = string;
 
-export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'error';
+export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'gacha' | 'error';
 
 export interface HudState {
   timeText: string;
@@ -90,6 +91,9 @@ export const ui = {
   tankTab: signal<'fish' | 'layout' | 'equipment'>('fish'),
   /** selected decoration in the tank layout editor */
   tankSelected: signal<string | null>(null),
+  equipmentSelected: signal<string | null>(null),
+  equipmentPreview: signal<string | null>(null),
+  gachaResults: signal<GachaResult[]>([]),
   /** bumped whenever the tank layout changes, so the editor re-renders */
   tankLayoutVersion: signal(0),
 };

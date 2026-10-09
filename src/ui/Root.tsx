@@ -17,6 +17,7 @@ import { TankPanel } from './tank/TankPanel';
 import { CaseOverlay } from './field/CaseOverlay';
 import { SpotSelect } from './home/SpotSelect';
 import { ShopScreen } from './home/ShopScreen';
+import { GachaScreen } from './home/GachaScreen';
 import { DebugPanel } from './debug/DebugPanel';
 import { CreatureMarkers } from './debug/CreatureMarkers';
 import { ArrowIcon, Key, KeyHint, MoonIcon } from './common/Icons';
@@ -51,6 +52,7 @@ export function Root({ app }: { app: App }) {
       {screen === 'menu' && <Menu app={app} />}
       {screen === 'spots' && <SpotSelect app={app} />}
       {screen === 'shop' && <ShopScreen app={app} />}
+      {screen === 'gacha' && <GachaScreen app={app} />}
       {screen === 'ticket' && <TideTable app={app} />}
       {screen === 'tidetable' && <TideTable app={app} />}
       {ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}

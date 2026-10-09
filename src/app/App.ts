@@ -1,5 +1,6 @@
 import { PerspectiveCamera, Vector3, type Object3D } from 'three';
 import { render, h } from 'preact';
+import { signal } from '@preact/signals';
 import { GameRenderer } from '../render/Renderer';
 import { Input } from '../core/Input';
 import { GameClock, TICKET_RANGE_DAYS } from '../core/GameClock';
@@ -11,7 +12,7 @@ import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { World } from './World';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
-import type { EquipmentKind, EquipmentRecord, ConnectionRecord } from '../aquarium';
+import { categoryLimit, drawEquipment, emptyEquipmentCollection, equipmentItem, normalizeCollection, normalizeEquipment, ownedEquipmentLayout, ownedQuantity, usedQuantity, type EquipmentKind, type EquipmentRecord, type EquipmentCollection } from '../aquarium';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
 import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
@@ -60,6 +61,8 @@ export class App {
   readonly clock = new GameClock();
   readonly saveStore = new SaveStore();
   readonly removed = new Set<string>();
+  readonly equipmentCollection = signal<EquipmentCollection>(emptyEquipmentCollection());
+  readonly gachaBusy = signal(false);
   settings: SettingsData = null!;
   data: GameData = null!;
   tide: TideModel = null!;
@@ -173,7 +176,7 @@ export class App {
   /** true when the tank should be on screen (home, or an overlay opened from home) */
   private tankVisible(): boolean {
     const m = this.mode;
-    if (m === 'home' || m === 'title' || m === 'tankEdit') return true;
+    if (m === 'home' || m === 'title' || m === 'tankEdit' || m === 'gacha') return true;
     if (m === 'zukan' || m === 'menu' || m === 'ticket' || m === 'tidetable') return ui.overlayFrom.value === 'home' || ui.overlayFrom.value === 'tankEdit' || !this.world;
     return false;
   }
@@ -220,6 +223,7 @@ export class App {
     this.applyHeroSetting();
     if (new URLSearchParams(location.search).has('debug')) ui.debug.value = true;
     const existing = await this.saveStore.load();
+    this.equipmentCollection.value = normalizeCollection(existing?.equipmentCollection, existing?.tank.layout?.equipment);
     ui.hasSave.value = !!existing;
     this.setMode('title');
     this.updateHud(this.clock.nowGame());
@@ -234,6 +238,7 @@ export class App {
 
   async startNewGame(): Promise<void> {
     this.save = emptySave(this.data.manifest.defaultMap, Date.now());
+    this.equipmentCollection.value = emptyEquipmentCollection(); ui.gachaResults.value = [];
     this.encyclopedia.applySave(this.save);
     this.syncLoadout();
     this.removed.clear();
@@ -246,6 +251,7 @@ export class App {
     const s = await this.saveStore.load();
     if (!s) return this.startNewGame();
     this.save = s;
+    this.equipmentCollection.value = normalizeCollection(s.equipmentCollection, s.tank.layout?.equipment); ui.gachaResults.value = [];
     this.encyclopedia.applySave(s);
     this.syncLoadout();
     this.removed.clear();
@@ -271,7 +277,8 @@ export class App {
     this.tank.activate(true);
     this.tank.resetView();
     void this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
-    this.tank.setLayout(this.save?.tank.layout ?? defaultTankLayout());
+    const layout = this.save?.tank.layout ?? defaultTankLayout();
+    this.tank.setLayout({ ...layout, equipment: ownedEquipmentLayout(normalizeEquipment(layout.equipment), this.equipmentCollection.value) });
     this.syncShelf();
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
@@ -1149,7 +1156,38 @@ export class App {
   }
 
   openGacha(): void {
-    toast(`${t('home.gacha')}: ${t('home.soon')}`, 'info');
+    if (this.mode !== 'home' && this.mode !== 'tankEdit') return;
+    ui.homePanel.value = 'none'; ui.homeInfo.value = null; ui.gachaResults.value = [];
+    this.tank.setAutoRotate(false); this.tank.resetView(); this.openOverlay('gacha');
+  }
+
+  async rollGacha(count: number): Promise<void> {
+    if (!this.save || this.mode !== 'gacha' || this.gachaBusy.value) return;
+    const draw = drawEquipment(this.equipmentCollection.value, this.encyclopedia.money.value, count);
+    if (!draw) { toast('CRが足りません', 'warn'); return; }
+    this.gachaBusy.value = true;
+    try {
+      this.equipmentCollection.value = draw.collection;
+      this.encyclopedia.money.value = draw.money;
+      ui.gachaResults.value = draw.results;
+      await this.writeSave();
+    } finally { this.gachaBusy.value = false; }
+  }
+
+  closeGacha(): void {
+    if (this.mode !== 'gacha' || this.gachaBusy.value) return;
+    this.closeOverlay();
+    if (ui.screen.value === 'tankEdit') ui.homePanel.value = 'tank';
+  }
+
+  showGachaEquipment(itemId: string): void {
+    if (this.gachaBusy.value) return;
+    const item = equipmentItem(itemId); if (!item) return;
+    this.closeGacha(); ui.tankTab.value = 'equipment';
+    ui.equipmentPreview.value = itemId;
+    const placed = this.tank.equipment.currentLayout.devices.find((d) => d.kind === item.category);
+    ui.equipmentSelected.value = item.category === 'tank' || item.category === 'stand' ? item.category : placed?.id ?? `category:${item.category}`;
+    if (this.mode !== 'tankEdit') this.openTankEdit();
   }
 
   /** The shelf shows what is owned, with a lit tag and its key on what goes to the flat. */
@@ -1182,11 +1220,13 @@ export class App {
   }
 
   // ------------------------------------------------------------------ tank layout editor
-  private commitTankLayout(): void {
+  private commitTankLayout(): boolean {
+    if (!this.tank.equipment.applyPreset()) return false;
     ui.tankLayoutVersion.value++;
-    if (!this.save) return;
+    if (!this.save) return true;
     this.save.tank.layout = this.tank.currentLayout;
     this.requestSave();
+    return true;
   }
 
   tankSetSubstrate(s: TankSubstrate): void {
@@ -1213,23 +1253,58 @@ export class App {
   }
 
   tankAddEquipment(kind: EquipmentKind): void {
-    if (!this.tank.equipment.addDevice(kind)) toast('設備の上限です（24個）', 'warn');
-    this.commitTankLayout();
+    this.tankInstallEquipment(`${kind}-initial`);
+  }
+
+  /** Inventory, per-category limits and placement quantities are enforced outside the UI too. */
+  tankInstallEquipment(itemId: string, replacing?: string): boolean {
+    const item = equipmentItem(itemId); if (!item || !this.save) return false;
+    const rig = this.tank.equipment, layout = rig.currentLayout, selected = ui.equipmentSelected.value;
+    const fixed = item.category === 'tank' || item.category === 'stand';
+    if (fixed) replacing = item.category;
+    const record = replacing ? layout.devices.find((d) => d.id === replacing) : undefined;
+    if (replacing && !fixed && record?.kind !== item.category) return false;
+    if (usedQuantity(layout, itemId, replacing) >= ownedQuantity(this.equipmentCollection.value, itemId)) { toast('このアイテムはガチャで獲得すると使えます', 'info'); return false; }
+    if (!fixed && !record && layout.devices.filter((d) => d.kind === item.category).length >= categoryLimit(item.category)) { toast('この設備はこれ以上置けません', 'warn'); return false; }
+    if (replacing) rig.setItem(replacing, itemId);
+    else {
+      const id = rig.addDevice(item.category as EquipmentKind, itemId);
+      if (!id) { toast('設備の上限です（24個）', 'warn'); return false; }
+      if (['airStone', 'spongeFilter', 'circulationPump'].includes(item.category) && this.tank.currentLayout.substrate === 'none') {
+        const r = rig.currentLayout.devices.find((d) => d.id === id)!; rig.changeDevice(id, { position: [r.position[0], Math.max(0, r.position[1] - 0.05), r.position[2]] });
+      }
+      ui.equipmentSelected.value = id;
+    }
+    if (!this.commitTankLayout()) {
+      rig.setLayout(layout); rig.applyPreset(); ui.equipmentSelected.value = selected;
+      toast('付属品を含めると設備の上限を超えます', 'warn'); return false;
+    }
+    return true;
   }
 
   tankChangeEquipment(id: string, change: Partial<Pick<EquipmentRecord, 'position' | 'rotation' | 'enabled' | 'setting'>>): void {
+    const record = this.tank.equipment.currentLayout.devices.find((d) => d.id === id);
+    if (!record) return;
+    if (change.position) {
+      if (!change.position.every(Number.isFinite)) return;
+      const p = [...change.position] as [number, number, number];
+      if (['airStone', 'spongeFilter', 'circulationPump', 'flowPump', 'filter', 'heater', 'thermometer'].includes(record.kind)) {
+        const bottom = this.tank.currentLayout.substrate === 'none' ? 0 : 0.05;
+        const low = record.kind === 'heater' ? bottom + 0.1 : bottom + 0.004;
+        const high = record.kind === 'spongeFilter' ? 0.08 : record.kind === 'heater' ? 0.19 : 0.28;
+        p[0] = Math.max(-0.27, Math.min(0.27, p[0])); p[1] = Math.max(low, Math.min(high, p[1])); p[2] = Math.max(-0.135, Math.min(0.135, p[2]));
+      }
+      change = { ...change, position: p };
+    }
     this.tank.equipment.changeDevice(id, change);
     this.commitTankLayout();
   }
 
-  tankRemoveEquipment(id: string): void { this.tank.equipment.removeDevice(id); this.commitTankLayout(); }
-  tankStand(finish: 'wood' | 'metal'): void { this.tank.equipment.setStand(finish); this.commitTankLayout(); }
-  tankAutoConnect(): void { this.tank.equipment.autoConnect(); this.commitTankLayout(); }
-  tankConnect(connection: ConnectionRecord): void {
-    const error = this.tank.equipment.connect(connection);
-    if (error) toast(error, 'warn'); else this.commitTankLayout();
+  tankRemoveEquipment(id: string): void {
+    if (!this.tank.equipment.canRemoveDevice(id)) return;
+    this.tank.equipment.removeDevice(id); ui.equipmentSelected.value = null; this.commitTankLayout();
   }
-  tankDisconnect(id: string): void { this.tank.equipment.disconnect(id); this.commitTankLayout(); }
+  tankStand(finish: 'wood' | 'metal'): void { this.tankInstallEquipment(finish === 'metal' ? 'stand-studio' : 'stand-initial', 'stand'); }
 
   private onHomeClick(clientX: number, clientY: number): void {
     if (this.mode === 'home' && ui.homePanel.value === 'tools') {
@@ -1239,6 +1314,10 @@ export class App {
       return;
     }
     const [nx, ny] = this.ndcOf(clientX, clientY);
+    if (this.mode === 'tankEdit' && ui.tankTab.value === 'equipment') {
+      const id = this.tank.pickEquipment(nx, ny); if (id) { ui.equipmentPreview.value = null; ui.equipmentSelected.value = id; }
+      return;
+    }
     if (ui.homePanel.value === 'tank' && ui.tankTab.value === 'layout') {
       // in the editor a click selects a decoration (or clears the selection); the panel stays open
       ui.tankSelected.value = this.tank.pickItem(nx, ny);
@@ -1269,6 +1348,7 @@ export class App {
     s.ticket.active = this.clock.serialize();
     s.removedIndividuals = [...this.removed];
     s.tank.layout = this.tank.currentLayout;
+    s.equipmentCollection = { ...this.equipmentCollection.value, stock: { ...this.equipmentCollection.value.stock } };
     this.encyclopedia.writeSave(s);
     await this.saveStore.save(s);
     ui.hasSave.value = true;
@@ -1388,6 +1468,9 @@ export class App {
           if (ui.tankSelected.value) ui.tankSelected.value = null;
           else this.closeTankEdit();
         }
+        break;
+      case 'gacha':
+        if (this.input.pressed('menu')) this.closeGacha();
         break;
       case 'menu': case 'zukan': case 'ticket': case 'tidetable':
         if (this.input.pressed('menu') || (mode === 'zukan' && this.input.keyPressed('Tab'))) this.closeOverlay();

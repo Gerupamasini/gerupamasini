@@ -4,6 +4,7 @@ import { BubbleEmitter } from './Bubbles';
 import { Cable, Hose, makeConnector, routeConnection, validateConnection, type FlexibleLine } from './Connections';
 import { EquipmentMaterials } from './Materials';
 import { defaultEquipmentLayout, EQUIPMENT_MAX, FLOW_KINDS, makeEquipment, normalizeEquipment, STANDARD_TANK, type ConnectionRecord, type Endpoint, type EquipmentKind, type EquipmentLayout, type EquipmentRecord, type TankDimensions, type Vec3 } from './state';
+import { itemForCategory } from './catalog';
 
 export interface WaterFlow { position: Vector3; direction: Vector3; flowRate: number; radius: number; device: string }
 const DIGITS = ['abcdef', 'bc', 'abdeg', 'abcdg', 'bcfg', 'acdfg', 'acdefg', 'abc', 'abcdefg', 'abcdfg'];
@@ -47,6 +48,7 @@ export class AquariumEquipment extends Group {
   private readonly heaterDemand = new Map<string, boolean>();
   private readonly chillerDemand = new Map<string, boolean>();
   onRipple: ((x: number, z: number, strength: number) => void) | null = null;
+  onTankChanged: (() => void) | null = null;
   constructor(readonly dimensions: TankDimensions = STANDARD_TANK) {
     super(); this.name = 'AquariumEquipment';
     const c = { materials: this.materials, dimensions }; this.tank = new AquariumTank(c); this.stand = new AquariumStand(c);
@@ -66,14 +68,17 @@ export class AquariumEquipment extends Group {
     for (const b of this.bubbles.values()) b.dispose(); this.bubbles.clear();
     for (const d of this.displays.values()) d.dispose(); this.displays.clear();
     for (const l of this.lights.values()) { l.target.removeFromParent(); l.removeFromParent(); l.dispose(); } this.lights.clear();
-    this.layout = normalizeEquipment(raw, this.dimensions); this.setStand(this.layout.stand);
+    this.layout = normalizeEquipment(raw, this.dimensions);
+    this.setItem('tank', this.layout.tankItemId ?? 'tank-initial');
+    this.setStand(this.layout.stand, this.layout.standItemId);
     this.heaterDemand.clear(); this.chillerDemand.clear();
     for (const r of this.layout.devices) this.spawn(r);
     if (!raw) this.autoConnect(); else this.rebuildConnections();
     this.refreshOperation();
   }
   private spawn(r: EquipmentRecord): void {
-    const d = new AquariumDevice(r.kind, { materials: this.materials, dimensions: this.dimensions }); d.name = r.id; d.userData.equipmentId = r.id; d.position.fromArray(r.position); d.rotation.y = r.rotation; d.enabled = r.enabled;
+    const item = itemForCategory(r.itemId, r.kind); r.itemId = item.id;
+    const d = new AquariumDevice(r.kind, { materials: this.materials, dimensions: this.dimensions, style: item.style }); d.name = r.id; d.userData.equipmentId = r.id; d.position.fromArray(r.position); d.rotation.y = r.rotation; d.enabled = r.enabled;
     this.devices.set(r.id, d); this.add(d);
     if (r.kind === 'airStone' || r.kind === 'spongeFilter') { const b = new BubbleEmitter(); this.bubbles.set(r.id, b); this.add(b); }
     if (['thermometer', 'thermostat', 'chiller'].includes(r.kind)) {
@@ -84,14 +89,30 @@ export class AquariumEquipment extends Group {
       const light = new SpotLight(0xdff4ff, 0.7, 1.4, 1.0, 0.75, 1.5); light.position.set(0, -0.012, 0); light.target.position.set(0, -0.4, 0); d.add(light, light.target); this.lights.set(r.id, light);
     }
   }
-  setStand(finish: 'wood' | 'metal'): void {
-    this.layout.stand = finish; this.stand.dispose(); this.stand = new AquariumStand({ materials: this.materials, dimensions: this.dimensions }, finish); this.add(this.stand);
+  setStand(finish: 'wood' | 'metal', itemId?: string): void {
+    const item = itemForCategory(itemId ?? (finish === 'metal' ? 'stand-studio' : undefined), 'stand');
+    this.layout.stand = item.stand!; this.layout.standItemId = item.id;
+    this.stand.dispose(); this.stand = new AquariumStand({ materials: this.materials, dimensions: this.dimensions, style: item.style }, item.stand); this.stand.userData.equipmentId = 'stand'; this.add(this.stand);
   }
-  addDevice(kind: EquipmentKind): string | null {
+  setItem(id: string, itemId: string): void {
+    if (id === 'tank') {
+      const item = itemForCategory(itemId, 'tank'); this.layout.tankItemId = item.id; this.tank.context.style = item.style; this.tank.rebuildModel(); this.tank.userData.equipmentId = 'tank'; this.onTankChanged?.(); return;
+    }
+    if (id === 'stand') { const item = itemForCategory(itemId, 'stand'); this.setStand(item.stand!, item.id); return; }
+    const index = this.layout.devices.findIndex((d) => d.id === id); if (index < 0) return;
+    const old = this.layout.devices[index], record = { ...old, itemId: itemForCategory(itemId, old.kind).id }, edges = this.layout.connections;
+    this.removeDevice(id); this.layout.devices.splice(index, 0, record); this.spawn(record); this.layout.connections = edges; this.rebuildConnections(); this.refreshOperation();
+  }
+  addDevice(kind: EquipmentKind, itemId?: string): string | null {
     if (this.devices.size >= EQUIPMENT_MAX) return null;
     let i = 1, id = `${kind}-${i}`; while (this.devices.has(id)) id = `${kind}-${++i}`;
-    const r = makeEquipment(kind, id, this.dimensions); const duplicates = this.layout.devices.filter((d) => d.kind === kind).length;
-    if (duplicates) r.position[0] = Math.max(-0.7, Math.min(0.7, r.position[0] + 0.055 * duplicates));
+    const r = makeEquipment(kind, id, this.dimensions); r.itemId = itemForCategory(itemId, kind).id; const duplicates = this.layout.devices.filter((d) => d.kind === kind).length;
+    if (duplicates) {
+      if (kind === 'ledLight' || kind === 'lightFixture') r.position[2] = 0.065 * Math.ceil(duplicates / 2) * (duplicates % 2 ? 1 : -1);
+      else if (kind === 'flowPump') r.position[2] = Math.min(this.dimensions.depth / 2 - 0.035, r.position[2] + 0.055 * duplicates);
+      else if (kind === 'powerStrip') r.position[1] -= 0.045 * duplicates;
+      else r.position[0] = Math.max(-0.7, Math.min(0.7, r.position[0] + (kind === 'spongeFilter' ? 0.095 : 0.075) * duplicates));
+    }
     this.layout.devices.push(r); this.spawn(r); this.refreshOperation(); return id;
   }
   removeDevice(id: string): void {
@@ -109,7 +130,31 @@ export class AquariumEquipment extends Group {
     this.layout.connections.push(c); this.rebuildConnections(); this.refreshOperation(); return null;
   }
   disconnect(id: string): void { this.layout.connections = this.layout.connections.filter((c) => c.id !== id); this.rebuildConnections(); this.refreshOperation(); }
-  /** Defaults choose a single serial water circuit; extra devices stay available for manual wiring. */
+  private presetRequirements(): Map<EquipmentKind, number> {
+    const list = this.layout.devices, needed = new Map<EquipmentKind, number>();
+    const emitters = list.filter((d) => d.kind === 'airStone' || d.kind === 'spongeFilter').length;
+    if (emitters) needed.set('airPump', Math.ceil(emitters / 4));
+    if (list.some((d) => d.kind === 'chiller')) needed.set('canisterFilter', 1);
+    if (list.some((d) => d.kind === 'thermostat')) needed.set('thermometer', 1);
+    const loads = list.filter((d) => d.kind !== 'powerStrip' && this.devices.get(d.id)?.ports.has('power') && !(d.kind === 'heater' && list.some((r) => r.kind === 'thermostat'))).length;
+    if (loads) needed.set('powerStrip', Math.max(1, Math.ceil((loads - 1) / 5)));
+    return needed;
+  }
+  canRemoveDevice(id: string): boolean {
+    const record = this.layout.devices.find((d) => d.id === id); if (!record) return false;
+    return this.layout.devices.filter((d) => d.kind === record.kind).length > (this.presetRequirements().get(record.kind) ?? 0);
+  }
+  /** Game preset supplies the basic accessories so selecting an interior never requires manual wiring. */
+  applyPreset(): boolean {
+    const list = this.layout.devices;
+    let ready = true;
+    const need = (kind: EquipmentKind, count: number) => { while (list.filter((d) => d.kind === kind).length < count) if (!this.addDevice(kind)) { ready = false; break; } };
+    for (const [kind, count] of this.presetRequirements()) if (kind !== 'powerStrip') need(kind, count);
+    // Bundled pumps/filters themselves need electricity; count outlets after adding them.
+    need('powerStrip', this.presetRequirements().get('powerStrip') ?? 0);
+    this.autoConnect(); return ready;
+  }
+  /** A serial water circuit, four air outlets per pump, and chained six-outlet strips. */
   autoConnect(): void {
     const connections: ConnectionRecord[] = [], list = this.layout.devices;
     const first = (kind: EquipmentKind) => list.find((d) => d.kind === kind)?.id;
@@ -118,20 +163,23 @@ export class AquariumEquipment extends Group {
       if (!validateConnection(c, this.resolvePort, connections)) connections.push(c);
     };
     const strips = list.filter((d) => d.kind === 'powerStrip');
-    if (strips.length) link('power', 'mains', 'socket', strips[0].id, 'power');
+    strips.forEach((d, i) => link('power', i ? strips[i - 1].id : 'mains', i ? 'socket5' : 'socket', d.id, 'power'));
     let socket = 0, strip = 0;
     for (const d of list) {
       if (d.kind === 'powerStrip' || !this.devices.get(d.id)?.ports.has('power')) continue;
       if (d.kind === 'heater' && first('thermostat')) { link('power', first('thermostat'), 'heater', d.id, 'power'); continue; }
-      // Reserve the sixth outlet to supply the next strip, if one was placed.
-      if (socket >= 5 && strips[strip + 1]) { link('power', strips[strip]?.id, `socket${socket}`, strips[strip + 1].id, 'power'); strip++; socket = 0; }
-      if (socket < 6) link('power', strips[strip]?.id, `socket${socket++}`, d.id, 'power');
+      // Every strip is wired; reserve its sixth socket for the following strip.
+      if (socket >= 5 && strips[strip + 1]) { strip++; socket = 0; }
+      if (socket < (strips[strip + 1] ? 5 : 6)) link('power', strips[strip]?.id, `socket${socket++}`, d.id, 'power');
     }
     link('sensor', first('thermometer'), 'sensor', first('thermostat'), 'sensor');
-    const can = first('canisterFilter'), chill = first('chiller');
-    if (can) { link('water', 'tank', 'intake', can, 'in'); link('water', can, 'out', chill ?? 'tank', chill ? 'in' : 'return'); if (chill) link('water', chill, 'out', 'tank', 'return'); }
+    const circuit = list.filter((d) => d.kind === 'canisterFilter' || d.kind === 'chiller').sort((a, b) => Number(a.kind === 'chiller') - Number(b.kind === 'chiller'));
+    if (circuit.some((d) => d.kind === 'canisterFilter')) {
+      link('water', 'tank', 'intake', circuit[0].id, 'in');
+      circuit.forEach((d, i) => link('water', d.id, 'out', circuit[i + 1]?.id ?? 'tank', circuit[i + 1] ? 'in' : 'return'));
+    }
     const air = list.filter((d) => d.kind === 'airPump'), emitters = list.filter((d) => d.kind === 'airStone' || d.kind === 'spongeFilter');
-    emitters.forEach((d, i) => link('air', air[i]?.id, 'air', d.id, 'air'));
+    emitters.forEach((d, i) => link('air', air[Math.floor(i / 4)]?.id, i % 4 === 0 ? 'air' : `air${i % 4}`, d.id, 'air'));
     this.layout.connections = connections; this.rebuildConnections(); this.refreshOperation();
   }
   private rebuildConnections(): void {
@@ -216,9 +264,9 @@ export class AquariumEquipment extends Group {
     for (const [id, b] of this.bubbles) {
       const d = this.devices.get(id)!; this.vector.set(0, d.kind === 'spongeFilter' ? 0.213 : 0.008, d.kind === 'spongeFilter' ? 0.035 : 0); d.localToWorld(this.vector);
       b.update(this.time, this.vector, this.localToWorld(this.waterPoint.set(0, this.dimensions.waterHeight, 0)).y, viewportHeight, this.sampleFlow(this.vector, this.current));
-      if (b.visible && this.rippleAcc > 0.25) this.onRipple?.(this.vector.x, this.vector.z, 0.25);
+      if (b.visible && this.rippleAcc > 0.25) { const p = this.worldToLocal(this.waterPoint.copy(this.vector)); this.onRipple?.(p.x, p.z, 0.25); }
     }
-    if (this.rippleAcc > 0.25) { for (const f of this.flows) if (f.position.y > this.dimensions.waterHeight - 0.06) this.onRipple?.(f.position.x, f.position.z, Math.min(0.5, f.flowRate / 1600)); this.rippleAcc = 0; }
+    if (this.rippleAcc > 0.25) { for (const f of this.flows) { const p = this.worldToLocal(this.waterPoint.copy(f.position)); if (p.y > this.dimensions.waterHeight - 0.06) this.onRipple?.(p.x, p.z, Math.min(0.5, f.flowRate / 1600)); } this.rippleAcc = 0; }
     let cooling = 0;
     for (const chill of this.layout.devices.filter((r) => r.kind === 'chiller')) {
       if (!this.supplied(chill.id) || !this.waterCircuit(chill.id)) this.chillerDemand.set(chill.id, false);
