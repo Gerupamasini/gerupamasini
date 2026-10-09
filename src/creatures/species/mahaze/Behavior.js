@@ -34,9 +34,9 @@ const restTime = (scale = 1) => scale * Math.min(90, 8 + 14 * -Math.log(1 - Math
 export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY, scale = 1, onEvent = null, body = null }) {
   // species geometry: joint positions along the body, total length and resting fin folds (マハゼ defaults)
   const SP = body?.spine ?? SPINE, TL = body?.tlMM ?? TL_MM, RF = body?.restFold ?? REST_FOLD;
-  // floorY may be a function (x, z) → ground height, so the goby can rest on sloping terrain
+  // floorY and st.pos use the root parent's coordinates, including inside a raised aquarium.
   const floorAt = typeof floorY === 'function' ? floorY : () => floorY;
-  const S = scale; // world metres per model metre: distances and speeds scale with the individual
+  const S = scale; // parent-space metres per model metre: distances and speeds scale with the individual
   const emit = (name) => { if (onEvent) onEvent(name); };
   const rest = {};
   for (const [name, b] of Object.entries(bones)) rest[name] = b.position.clone();
@@ -100,6 +100,7 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
   const q = new THREE.Quaternion();
   const e = new THREE.Euler(0, 0, 0, 'YXZ');
   const tmp = new THREE.Vector3();
+  const worldToParent = new THREE.Matrix4();
 
   // ------------------------------------------------------------------ actions
   function dart(dist = rand(0.06, 0.16) * S, angle = null, force = false) {
@@ -384,9 +385,14 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     // rest on whichever contact points are lowest in this pose (sucker rim, belly, lower caudal lobe);
     // lift a few mm while swimming
     root.position.set(st.pos.x, 0, st.pos.z);
-    root.updateMatrixWorld(true);
+    root.updateWorldMatrix(true, true);
+    if (root.parent) worldToParent.copy(root.parent.matrixWorld).invert();
     let lowest = Infinity;
-    for (const c of contacts) lowest = Math.min(lowest, c.bone.localToWorld(tmp.copy(c.p)).y);
+    for (const c of contacts) {
+      c.bone.localToWorld(tmp.copy(c.p));
+      if (root.parent) tmp.applyMatrix4(worldToParent);
+      lowest = Math.min(lowest, tmp.y);
+    }
     root.position.y = floorAt(st.pos.x, st.pos.z) - lowest + 0.0028 * S * st.lift;
   }
 
