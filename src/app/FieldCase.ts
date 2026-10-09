@@ -175,7 +175,7 @@ export class FieldCase {
     if (!entry) return;
     const seed = hashInts(record.number, record.caughtAt % 100000);
     const ind = generateIndividual(species, seed, 0, 0, 0, 0, Date.now());
-    ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits]; ind.gravid = !!record.gravid;
+    ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits]; ind.gravid = !!record.gravid; ind.dress = !!record.dress;
     const slot = this.occupants.length;
     const c = this.group.position;
     const long = this.halfX >= this.halfZ;
@@ -184,7 +184,7 @@ export class FieldCase {
     ind.home.copy(ind.pos);
     ind.heading = (long ? Math.PI / 2 : 0) + (slot % 2 ? Math.PI : 0);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
-    const files = modelFor(species, ind.stage, ind.gravid);
+    const files = modelFor(species, ind.stage, ind.gravid, ind.dress);
     const rel = files.lod1 ?? files.lod2 ?? files.hero;
     if (rel) {
       const model = await instantiateModel(rel, variantOf(ind.id));

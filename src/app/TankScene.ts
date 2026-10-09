@@ -683,13 +683,13 @@ export class TankScene {
     if (!entry) return;
     const seed = hashInts(record.number, record.caughtAt % 100000);
     const ind = generateIndividual(species, seed, 0, 0, 0, 0, Date.now());
-    ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits]; ind.gravid = !!record.gravid;
+    ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits]; ind.gravid = !!record.gravid; ind.dress = !!record.dress;
     const slot = this.occupants.length;
     ind.pos.set((slot % 2 === 0 ? -1 : 1) * 0.12 * Math.ceil(slot / 2), 0, (slot >= 2 ? 0.06 : -0.04));
     ind.home.copy(ind.pos);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     let hero: HeroInstance | null = null;
-    const files = modelFor(species, ind.stage, ind.gravid);
+    const files = modelFor(species, ind.stage, ind.gravid, ind.dress);
     const useHero = !!this.heroApply && !!files.hero && !this.occupants.some((o) => o.hero);
     const rel = useHero ? files.hero : files.lod1 ?? files.hero ?? files.lod2;
     if (rel) {

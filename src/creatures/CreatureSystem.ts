@@ -11,7 +11,7 @@ import { BehaviorTree, type PerceptionContext } from './brain/BehaviorTree';
 import { Spawner, type SpawnEnv } from './Spawner';
 export type { SpawnEnv };
 import { minDepthFor, type Individual } from './Individual';
-import type { BehaviorEvent, Driver, Floor, Intent } from './drivers/Driver';
+import type { BehaviorEvent, Driver, Floor, Intent, MeadowProbe } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
 import { modelFor, variantOf } from './models/choice';
@@ -54,6 +54,10 @@ export interface CreatureFrame {
 const LOD1_DIST = 10;
 const LOD2_DIST = 40;
 const BIRD_DIST = 120;
+/** an animal in the water is lost in it within this (m) seen from the shore, however large: no need to draw it further */
+const AQUATIC_DIST = 14;
+/** below this length (mm) an animal's shadow is a few pixels on the bed: its parts are not drawn again for the shadows */
+const SHADOWLESS_MM = 80;
 
 /** Owns every live individual on the flat: spawning, brains, drivers, model tiers and targeting. */
 export class CreatureSystem {
@@ -96,12 +100,21 @@ export class CreatureSystem {
     };
   }
 
+  /** The flat's eelgrass, for the animals that live among the blades. */
+  setMeadow(meadow: MeadowProbe | null): void {
+    this.floor.meadow = meadow;
+  }
+
   /** Warm the model cache for the distance tiers. */
   async preload(): Promise<void> {
     const jobs: Promise<unknown>[] = [];
     for (const sp of this.data.species.values()) {
+      // only what lives on this flat (the others load when they are first needed, in the tank or the book)
+      if (!sp.spawn.some((r) => !r.maps || r.maps.includes(this.mapId))) continue;
       if (sp.model.lod2) jobs.push(preloadModel(sp.model.lod2));
       for (const st of sp.stages) if (st.model?.lod2) jobs.push(preloadModel(st.model.lod2));
+      // the gravid female's and the breeding male's own forms
+      for (const form of [sp.model.gravid, sp.model.male]) if (form?.lod2) jobs.push(preloadModel(form.lod2));
     }
     await Promise.all(jobs);
   }
@@ -119,7 +132,7 @@ export class CreatureSystem {
   }
 
   private tierFor(sp: SpeciesDef, dist: number, lod1Rank: number, locked: boolean): Tier | 'placeholder' | null {
-    const far = sp.model.viewDistance_m ?? (sp.taxon.group === 'bird' ? BIRD_DIST : Math.min(LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400)));
+    const far = sp.model.viewDistance_m ?? (sp.taxon.group === 'bird' ? BIRD_DIST : Math.min(isAquatic(sp) ? AQUATIC_DIST : LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400)));
     if (dist > far) return null;
     if (!sp.model.lod2 && !sp.model.lod1 && !sp.model.hero) return 'placeholder';
     if (locked) return sp.model.hero ? 'hero' : sp.model.lod1 ? 'lod1' : 'lod2';
@@ -235,7 +248,7 @@ export class CreatureSystem {
       view = { tier, root: ph.root, model: null, radius: ph.length * 0.6, hero: null };
     } else {
       // the growth stage's own model where the species has them, in the individual's pattern variant
-      const rel = modelFor(sp, e.ind.stage, e.ind.gravid)[tier] ?? sp.model[tier]!;
+      const rel = modelFor(sp, e.ind.stage, e.ind.gravid, e.ind.dress)[tier] ?? sp.model[tier]!;
       let model: LoadedModel;
       try { model = await instantiateModel(rel, variantOf(e.ind.id)); } catch (err) { console.warn(err); e.pendingTier = null; return; }
       if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
@@ -255,6 +268,7 @@ export class CreatureSystem {
     // the baked clips ride on the root for drivers that play them (the plover)
     if (view.model) view.root.userData.clips = view.model.clips;
     e.driver.attach(view.root, e.ind, view.model?.extras ?? {}, bones as Record<string, Object3D>, meshes);
+    if (tier !== 'hero' && sp.size.length_mm.mean < SHADOWLESS_MM) view.root.traverse((o) => { o.castShadow = false; });
   }
 
   private dropView(e: Entry): void {

@@ -167,6 +167,23 @@
 - シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
 - バージョン 0.12.1。
 
+## 26 回目（アマモと寄せ波）
+- `claude/festive-lamport-hd2row` の新しい先端（85f9c79）をマージ: `WaterPass` が寄せ波の水面の高さを 384² の半精度浮動小数の場に毎フレーム描く（`surfField`、`prepare()` で鏡の前に）、`FieldRenderer.compile()` がその quad も先に compile、`AmamoMeadow.setSurf()` → `tAmSurf`/`uAmSurf`、シェーダは `amStep` の終点で `amSurfEta` を読んで葉を水面に沿わせ、`leanM` で鞘より浅い所の株を根元から倒す（`ceilY` は寄せ波ありで 3.5 cm の余裕）。`World` は `setSurf(water.surfField)`。
+- 衝突は World（私の `if (!layout)` 構造に `setSurf` を差し込む）、AmamoMeadow（`shootsNear` と `setSurf` の両方）、kit／shader（`uAmPush` と `tAmSurf` の両方、`amPush` と鞘の倒れの両方）。ヨウジウオの静水の uniforms に `tAmSurf`/`uAmSurf` を追加。
+- レビュー（並列 5 視点）の指摘で、CPU 側の揺れ `flow.ts` に寄せ波ありの余裕（`ceil` 3.5 cm）と鞘の倒れ（`leanM`、`fallDir`）を移植（`ShootRef` に地面の勾配 `gx/gz`）。倒れの向きの乱数はシェーダ側も `amHashS` に揃えた。寄せ波の高さ自体は CPU では読まず平均 0。
+- バージョン 0.22.0。
+
+## 25 回目（ヒメハゼ、アミメハギ、イソスジエビ、ヨウジウオ）
+- ヒメハゼ: `claude/sleepy-fermat-31sedx` は `Himehaze/` だけの単独プロジェクト（独自の three、ビューア、行動デモ、独自キーの GLB）で、ゲームには何も接続されていなかった。GLB 生成（anatomy / body / fins / eye / interior / rig と `src/fish/{species,pose}.js`）を `tools/models/himehaze/` に移し、エドハゼ型の `build.mjs`・`species.mjs` で **マハゼのパイプライン**（`--tier hero|lod1|lod2`、extras のキー `mahaze`、`src/assets/models/himehaze/himehaze[_male].<tier>.glb`）として作り直した。リグはマハゼと同じ 24 関節・同じモーフ名・同じクリップ（Idle / Swim / Yawn）なので `DRIVERS.mahaze` で動く。移植時にリグ extras の `axes.body`（関節位置と全長）が抜けていたのを足した（無いとマハゼの寸法で曲がる）。接地点は元プロジェクトの `CONTACT_S` から。ブランチの `game.html`・`src/game/*`・`vendor/three`・元 GLB は取り込まない（README は `docs/models/himehaze/`）。
+- 繁殖期の雄: スキーマに `model.male`（繁殖期の雄のモデル）と `breeding.dressShare` を追加、`Individual.dress`（記録にも）、`modelFor(sp, stage, gravid, dress)`。他の種は dressShare 0 なので乱数の消費は変わらない（`tests/unit/himehaze.test.ts`）。
+- アミメハギ（`claude/gifted-knuth-f8mcrk`）、イソスジエビ（`claude/beautiful-feynman-9mpsgl`）、ヨウジウオ（`claude/ecstatic-brahmagupta-8hdgd8`）を順にマージ。3 ブランチとも spawn 規則が最初から `maps: ["hashirimizu"]`。衝突は README／manifest／App（`setMeadow` と mark）／drivers の「両方残す」だけ。ヨウジウオの静水の uniforms とテストに、アミメハギ側で増えた `uAmPush` を足した。
+- ヨウジウオは指定の 3 ブランチに無く（gifted-knuth が 2 回書かれていた）、全ブランチを `git grep` して `claude/ecstatic-brahmagupta-8hdgd8` を見つけた。
+- バージョン 0.21.0。
+
+## 24 回目（走水の軽量化）
+- `claude/festive-lamport-hd2row` の新しい先端（28aba20）をマージ: `MEADOW_QUALITY`（mid の影なし、距離 4.5/13/36）、`CreatureSystem`（`AQUATIC_DIST` 14、`SHADOWLESS_MM` 80、このマップの種だけ preload）、`QUALITY_PRESETS` の maxDpr（mid 1、high 1.5）、`FieldRenderer.compile()` と `WaterPass.compileTarget()`（読み込み中に `compileAsync`）、`Surf.makeFoamTexture` のキャッシュ、水面の泡の帯、走水の pits 0、`performance.mark('world:*')`。衝突は App（`groundBoost` と mark）と World（私の `if (!layout)` 構造に mark を差し込む）の 2 か所。
+- バージョン 0.20.0。
+
 ## 23 回目（横須賀 走水海岸）
 - `claude/festive-lamport-hd2row` をマージ（走水マップ `public/data/maps/hashirimizu*`、`src/world/maps/hashirimizu/*`、アマモ場 `src/world/amamo/*`、寄せ波 `Surf.ts`、映り込み `render/Mirror.ts`、`Water.ts`・`Sky.ts`（雲層）・`Terrain.ts`（陸の高さ・砂の色・砂漣の向き・遡上の濡れ）、横須賀の潮位観測点、`App.leaveWorld()` によるマップ切り替え、`World.dispose()`、胴長の限界水深、`Habitat` の地物タグ eelgrass/eelgrass_edge/bare、spawn 規則の `maps`、種の `aquatic`）。衝突 15 ファイルを手で解決。
 - 解決の方針: 葛西はそのまま（`World.create` は `layout` の無いマップで割石・牡蠣礁を作り、遠景は非表示のまま；layout のあるマップでアマモ場・小道具・遠景を作る）。`World.dispose()` で礁と石も解放。濡れた砂の暗さ（0.68）と粗さ（0.58/0.62/0.42）は 22 回目の値を維持し、遡上の水膜は 0.32。`Spawner` は debug の hidden と規則の `maps` の両方を見る。観察開始距離は 21 回目の `len × 7`。`FPSController.canStand` は `wadeDepth` と `groundAt`（石の上）の両方。

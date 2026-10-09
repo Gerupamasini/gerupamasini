@@ -303,13 +303,23 @@ export class App {
       if (this.tide.station.id !== map.station) { this.tide = new TideModel(this.data.stations.get(map.station)!); this.curveCacheMin = -1; }
       const dayNo = Math.floor((this.clock.nowGame() + 9 * 3600000) / 86400000);
       this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; }, dayNo);
+      // the shaders compile behind the loading screen (in parallel where the browser can), before anything draws the
+      // flat: otherwise the first frame stalls for as long as they take
+      performance.mark('world:built');
+      ui.loading.value = { frac: 0.6, label: t('loading.shaders') };
+      await this.field?.compile(this.world.scene, this.camera, this.world.water);
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
       this.player.eyeHeight = this.settings.eyeHeight;
       // the revetment's stones can be stood on
       this.player.groundBoost = (x, z) => this.world?.riprap?.heightBoost(x, z) ?? 0;
+      performance.mark('world:created');
       ui.loading.value = { frac: 0.7, label: t('loading.models') };
+      performance.mark('world:player');
       this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed, map.habitat?.minSpawnDist_m);
+      performance.mark('world:creatureSystem');
+      this.creatures.setMeadow(this.world.amamo);
       await this.creatures.preload();
+      performance.mark('world:creatures');
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
       this.world.water.setPolarized(this.settings.sunglasses);
@@ -337,6 +347,7 @@ export class App {
       this.pendingPose = null;
       ui.loading.value = { frac: 0.95, label: t('loading.models') };
       this.onResize();
+      performance.mark('world:ready');
     }
     this.tank.deactivate();
     // away long enough for the tide to have moved: the population is rebuilt for the water as it is now
@@ -925,7 +936,7 @@ export class App {
 
   /** A fresh model of the species to lie in the net (the detailed tier, or the driver's own geometry). */
   private async displayModelFor(ind: Individual): Promise<Object3D | null> {
-    const sp = ind.species, m = modelFor(sp, ind.stage, ind.gravid);
+    const sp = ind.species, m = modelFor(sp, ind.stage, ind.gravid, ind.dress);
     const rel = m.lod1 ?? m.hero ?? m.lod2;
     if (rel) {
       try { return (await instantiateModel(rel, variantOf(ind.id))).root; } catch (err) { console.warn(err); }

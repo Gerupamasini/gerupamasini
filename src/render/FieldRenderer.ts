@@ -24,6 +24,25 @@ export class FieldRenderer {
     return this.rt;
   }
 
+  /**
+   * Compile every shader the field needs before the first frame (in parallel where the browser offers
+   * KHR_parallel_shader_compile), each in the variant it is drawn in: the scene into the HDR target, the water onto
+   * the screen. Otherwise the first frame stalls for as long as the compiles take.
+   */
+  async compile(scene: Scene, camera: PerspectiveCamera, water: WaterPass): Promise<void> {
+    const gl = this.gl, prev = gl.getRenderTarget();
+    camera.updateMatrixWorld();
+    gl.setRenderTarget(this.target());
+    const sceneReady = gl.compileAsync(scene, camera);
+    gl.setRenderTarget(null);
+    const waterReady = gl.compileAsync(water.compileTarget(), camera);
+    const surf = water.surfCompileTarget();
+    let surfReady: Promise<unknown> = Promise.resolve();
+    if (surf) { gl.setRenderTarget(surf.target); surfReady = gl.compileAsync(surf.mesh, camera); }
+    gl.setRenderTarget(prev);
+    await Promise.all([sceneReady, waterReady, surfReady]);
+  }
+
   render(scene: Scene, camera: PerspectiveCamera, water: WaterPass): void {
     const gl = this.gl, rt = this.target();
     camera.updateMatrixWorld();

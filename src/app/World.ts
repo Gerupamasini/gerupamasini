@@ -18,6 +18,7 @@ import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import { oysterEnv } from '../creatures/oyster/material';
 import { AmamoMeadow, MEADOW_QUALITY } from '../world/amamo';
 import { LAYOUTS, type ShoreLayout } from '../world/maps/hashirimizu';
+import { seagrass } from '../creatures/species/amimehagi/seagrass';
 import type { FeedingPit } from '../world/FeedingPits';
 import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
@@ -76,8 +77,12 @@ export class World {
   }
 
   static async create(map: MapDef, station: TideStationDef | TideModel, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void, pitSeed = 20261001): Promise<World> {
+    // (performance marks: where the loading goes, read with performance.getEntriesByType('mark'))
+    const mark = (what: string) => performance.mark(`world:${what}`);
+    mark('start');
     onProgress?.('地形');
     const grid = await loadTerrainGrid(map);
+    mark('grid');
     const layout = map.layout ? LAYOUTS[map.layout] ?? null : null;
     // アカエイの昼寝跡: dug into the flat before the terrain is built, so pools, tags and shading all see them;
     // the seed is the day's, so the rays have been somewhere else by the next visit
@@ -88,8 +93,10 @@ export class World {
     grid.pitMask = carveCoarse(grid, pits);
     const terrain = new Terrain(grid, map.substrate.palette, pits);
     terrain.setDetail(preset.surfaceDetail > 0);
+    mark('terrain');
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, pits);
+    mark('habitat');
     if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); terrain.setRippleAngle(layout.rippleAngle); }
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
@@ -102,13 +109,13 @@ export class World {
     if (layout) water.setBody(...layout.water.colour, layout.water.turbidity);
     const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists
+    mark('water');
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
+    mark('skyline');
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
     if (!layout) {
       // the 葛西 flat: hard ground and the oyster reef on it — stones along the levees' toes; every face in the
-      // oyster zone (about mean sea level down to the spring low) grows a clump
-      // hard ground and the oyster reef on it: stones along the levees' toes and on the low flat; every face in the
       // oyster zone (about mean sea level down to the spring low) grows a clump
       onProgress?.('牡蠣礁');
       const quality = preset.surfaceDetail === 0 ? 'low' : preset.shadowMapSize >= 2048 ? 'high' : 'mid';
@@ -134,19 +141,25 @@ export class World {
         // the reef needs float render targets for its texture bake; the flat works without it
         console.warn('[oysters] reef not built', e);
       }
+      mark('reef');
     } else {
       // a shore map: its アマモ beds (the animals' standing features), its props, its own far scenery
       onProgress?.('アマモ場');
       const mapSeed = hashInts(...[...map.id].map((c) => c.charCodeAt(0)), 20261006);
       w.amamo = new AmamoMeadow(terrain, habitat, mapSeed, layout.meadow);
       w.amamo.setQuality(MEADOW_QUALITY[preset.vegetation]);
+      w.amamo.setSurf(water.surfField);
       terrain.setMeadowCover(w.amamo.coverTexture, MEADOW_QUALITY[preset.vegetation].lod[2]);
       w.scene.add(w.amamo.group);
+      mark('meadow');
       // the standing features the animals gather at: the eelgrass, its edges, the open sand among it
       const meadow = w.amamo;
       habitat.setFeatures((x, z) => ({ eelgrass: meadow.coverAt(x, z), zone: meadow.suitability(x, z) }));
+      // the fish of the eelgrass weave between its shoots and push its leaves aside
+      seagrass.bind(meadow);
       onProgress?.('浜');
       for (const o of layout.props(terrain, mapSeed)) w.scene.add(o);
+      mark('props');
       // (the 葛西 flat's far scenery stays off for now: `world.scene.add(world.skyline.group)` brings it back)
       w.scene.add(reflectInWater(w.skyline.group));
       if (w.skyline.land) w.scene.add(reflectInWater(w.skyline.land.group));
@@ -159,11 +172,13 @@ export class World {
     water.setMirror(preset.mirror);
     water.setSurfSteps(preset.surfSteps);
     water.mirrorGate = () => !renderer.shadowMap.enabled || !sky.sunLight.castShadow || sky.sunLight.shadow.map !== null;
+    mark('sky');
     return w;
   }
 
   /** Free what the flat built (leaving for another map). Animals, tools and the case are freed by their owners. */
   dispose(): void {
+    if (this.amamo) seagrass.bind(null);
     this.amamo?.dispose();
     this.amamo = null;
     this.oysters?.dispose();

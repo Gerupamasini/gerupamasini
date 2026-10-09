@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { makeFoamTexture, surfUniforms } from '../../src/world/Surf';
+import type { Terrain } from '../../src/world/Terrain';
+import { WaterPass } from '../../src/world/Water';
+import { createWaves } from '../../src/world/Waves';
 import { HASHIRIMIZU } from '../../src/world/maps/hashirimizu';
 import { profile, REF_TIDE } from '../../src/world/maps/hashirimizu/shape';
 
@@ -51,5 +54,22 @@ describe('走水 surf and sand', () => {
     expect(bright / (S * S)).toBeGreaterThan(0.03);
     expect(bright / (S * S)).toBeLessThan(0.5);
     t.dispose();
+  });
+});
+
+describe('the surf field for what floats in it', () => {
+  // (only what the water reads from the terrain at construction; no GL needed to build the pass)
+  const terrain = { heightTexture: null, spillTexture: null, n: 8, half: 48 } as unknown as Terrain;
+
+  it('is drawn over the whole terrain where the shore has surf, and not at all on a sheltered flat', () => {
+    const waves = createWaves();
+    const open = new WaterPass(terrain, waves, surfUniforms(HASHIRIMIZU.surf));
+    const calm = new WaterPass(terrain, waves, surfUniforms(null));
+    expect(open.surfField?.half).toBe(48);
+    expect(open.surfCompileTarget()).not.toBeNull();
+    expect(calm.surfField).toBeNull();
+    expect(calm.surfCompileTarget()).toBeNull();
+    open.dispose();
+    calm.dispose();
   });
 });

@@ -3,14 +3,18 @@
   "species": [
     "acanthogobius_flavimanus",
     "gymnogobius_macrognathos",
+    "favonigobius_gymnauchen",
     "exopalaemon_orientis",
+    "palaemon_pacificus",
     "charadrius_alexandrinus",
     "ruditapes_philippinarum",
     "meretrix_lusoria",
     "pagurus_minutus",
     "crassostrea_gigas",
     "reticunassa_festiva",
-    "mugil_cephalus"
+    "mugil_cephalus",
+    "rudarius_ercodes",
+    "syngnathus_schlegeli"
   ],
   "behaviors": [
     "fish_benthic",
@@ -20,7 +24,9 @@
     "hermit_crab_tidal",
     "oyster_reef",
     "snail_crawl",
-    "fish_school"
+    "fish_school",
+    "fish_seagrass",
+    "pipefish_grass"
   ],
   "maps": [
     "kasai_west",

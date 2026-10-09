@@ -1,6 +1,6 @@
 import {
   BufferAttribute, BufferGeometry, Color, CylinderGeometry, DoubleSide, MeshDepthMaterial, MeshStandardMaterial, Sphere, Vector2, Vector4,
-  type IUniform, type WebGLProgramParametersWithUniforms,
+  type IUniform, type Texture, type WebGLProgramParametersWithUniforms,
 } from 'three';
 import { AM_FRAG_COMMON, AM_LEAF_COLOR, AM_LEAF_DEFORM, AM_LIGHT_END, AM_LIGHT_PARS, AM_SHEATH_COLOR, AM_SHEATH_DEFORM, AM_VERT_COMMON } from './shader';
 import { LEAF_SLOTS } from './params';
@@ -25,7 +25,16 @@ export interface AmamoUniforms {
   uAmCurrent: IUniform<Vector2>;
   uAmWave: IUniform<Vector4>;
   uAmSeaward: IUniform<Vector2>;
+  /** animals swimming among the leaves, pushing them aside (xyz world, w reach in m; 0 = unused): see shader.amPush */
+  uAmPush: IUniform<Vector4[]>;
+  /** the surf's height over the still level (WaterPass.surfField), where an open shore has surf */
+  tAmSurf: IUniform<Texture | null>;
+  /** x: half the terrain's size (m, the field's extent), y: 1 with surf / 0 without */
+  uAmSurf: IUniform<Vector2>;
 }
+
+/** how many animals at once can push the leaves aside (AM_PUSH in the shader) */
+export const PUSH_SLOTS = 8;
 
 function leafGeometry(nseg: number, across: number, leaves: number): BufferGeometry {
   const rows = nseg + 1, per = rows * across, n = per * leaves;
@@ -128,6 +137,9 @@ export class AmamoKit {
     uAmCurrent: { value: new Vector2(0, 0) },
     uAmWave: { value: new Vector4(Math.cos(0.7), Math.sin(0.7), 0.1, 0.6) },
     uAmSeaward: { value: new Vector2(0, 1) },
+    uAmPush: { value: Array.from({ length: PUSH_SLOTS }, () => new Vector4(0, -1e3, 0, 0)) },
+    tAmSurf: { value: null },
+    uAmSurf: { value: new Vector2(1, 0) },
   };
   readonly leafGeo: BufferGeometry[];
   readonly sheathGeo: BufferGeometry[];
