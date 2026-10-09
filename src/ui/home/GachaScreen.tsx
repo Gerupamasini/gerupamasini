@@ -13,10 +13,11 @@ export function GachaScreen({ app }: { app: App }) {
   return <div class="gacha-screen"><div class="gacha-panel glass">
     <div class="gacha-head"><div><span class="eyebrow">AQUARIUM COLLECTION</span><h2>水槽設備ガチャ</h2></div><button class="btn ghost sm" disabled={busy} onClick={() => app.closeGacha()}>戻る <Key k="Esc" /></button></div>
     <div class="gacha-body">
-      <div class="gacha-intro"><span class={`gacha-capsule ${busy ? 'rolling' : ''}`} aria-hidden="true"><CapsuleIcon /></span><div><h3>水槽に、新しいデザインを。</h3><p>ライトやエアストーン、水槽台などのインテリアが出ます。獲得したアイテムは「水槽 → 設備」で選べます。</p><p class="small dim">初期設備はいつでも使用できます。同じアイテムが出た場合は所持数が増え、複数置ける設備に使えます。</p></div></div>
-      <p class="small dim">専用の設備ガチャチケットを使います。はじめに{INITIAL_GACHA_TICKETS}枚をプレゼント。</p>
+      <div class="gacha-intro"><span class={`gacha-capsule ${busy ? 'rolling' : ''}`} aria-hidden="true"><CapsuleIcon /></span><div><h3>水槽に、新しいデザインを。</h3><p>ライトやエアストーン、水槽台などのインテリアが出ます。獲得したアイテムは「水槽 → 設備」で選べます。</p>{!app.input.touchDevice && <p class="small dim">初期設備はいつでも使用できます。同じアイテムが出た場合は所持数が増え、複数置ける設備に使えます。</p>}</div></div>
+      {!app.input.touchDevice && <p class="small dim">専用の設備ガチャチケットを使います。はじめに{INITIAL_GACHA_TICKETS}枚をプレゼント。</p>}
       <div class="gacha-wallet"><span>ガチャチケット <strong class="num">{tickets.toLocaleString()}</strong>枚</span><span>コレクション <b class="num">{owned} / {GACHA_POOL.length}</b></span></div>
       <div class="gacha-draw"><button class="btn primary" disabled={busy || tickets < GACHA_TICKET_COST} onClick={() => void app.rollGacha(1)}>1回引く <span class="num">{GACHA_TICKET_COST}枚</span></button><button class="btn" disabled={busy || tickets < GACHA_TICKET_COST * 10} onClick={() => void app.rollGacha(10)}>10回引く <span class="num">{GACHA_TICKET_COST * 10}枚</span></button></div>
+      {app.input.touchDevice && <details class="gacha-help"><summary>チケット・初期設備について</summary><p class="small dim">専用チケットをはじめに{INITIAL_GACHA_TICKETS}枚配布。初期設備はいつでも使用でき、同じアイテムが出ると所持数が増えて複数置ける設備に使えます。</p></details>}
       {tickets < GACHA_TICKET_COST && <p class="small dim">設備ガチャチケットがありません。</p>}
       {results.length > 0 && <div class="gacha-results" aria-live="polite"><h3>獲得したアイテム</h3><div class="gacha-grid">{results.map((result, i) => {
         const item = equipmentItem(result.itemId)!;

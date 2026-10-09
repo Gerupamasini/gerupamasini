@@ -195,6 +195,7 @@ export class TankScene {
   readonly aquariumRoot = new Group();
   readonly camera: PerspectiveCamera;
   private controls: OrbitControls | null = null;
+  private viewInputEnabled = true;
   /** the tool shelf on the wall, and the camera's move between the tank and it */
   readonly shelf = new ToolShelf();
   private view: 'tank' | 'shelf' = 'tank';
@@ -496,12 +497,26 @@ export class TankScene {
   }
 
   /** Default framing: the tank fills roughly two thirds of the width. */
-  frameTank(): void {
+  frameTank(fitHeight = false): void {
     const hfov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
-    const dist = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
+    const widthDistance = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
+    const heightDistance = fitHeight ? (TANK_H + 0.16) / (0.8 * 2 * Math.tan(this.camera.fov * Math.PI / 360)) : 0;
+    const dist = Math.max(widthDistance, heightDistance);
+    if (fitHeight) { this.view = 'tank'; this.camT = 1; }
     this.camera.position.set(dist * 0.35, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95);
     this.camera.lookAt(0, TANK_OFFSET_Y + 0.12, 0);
     if (this.controls) { this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0); this.controls.update(); }
+  }
+
+  captureView() {
+    return { position: this.camera.position.clone(), target: (this.camT < 1 || this.view === 'shelf' ? this.camCur.t : this.controls?.target ?? this.camCur.t).clone(), view: this.view };
+  }
+
+  restoreView(state: ReturnType<TankScene['captureView']>): void {
+    this.view = state.view; this.camT = 1;
+    this.camera.position.copy(state.position); this.camCur.t.copy(state.target);
+    this.camera.lookAt(state.target);
+    if (this.controls) { this.controls.target.copy(state.target); this.controls.update(); }
   }
 
   activate(autoRotate = false): void {
@@ -674,7 +689,13 @@ export class TankScene {
   }
 
   setControlsEnabled(on: boolean): void {
-    if (this.controls) this.controls.enabled = on;
+    if (this.controls) this.controls.enabled = on && this.viewInputEnabled;
+  }
+
+  /** Home can lock touch navigation even after a shelf/tank camera transition completes. */
+  setViewInputEnabled(on: boolean): void {
+    this.viewInputEnabled = on;
+    this.setControlsEnabled(on);
   }
 
   /** A splash on the surface at (x, z): a ripple spreads from it. */
@@ -910,7 +931,7 @@ export class TankScene {
     this.camT = 1;
     this.frameTank();
     this.camCur.t.set(0, TANK_OFFSET_Y + 0.12, 0);
-    if (this.controls) { this.controls.enabled = true; this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0); this.controls.update(); }
+    if (this.controls) { this.controls.enabled = this.viewInputEnabled; this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0); this.controls.update(); }
   }
 
   focusTank(): void {
@@ -940,7 +961,7 @@ export class TankScene {
     this.camera.lookAt(this.camCur.t);
     if (this.camT >= 1 && this.view === 'tank' && this.controls) {
       this.controls.target.copy(this.camTo.t);
-      this.controls.enabled = true;
+      this.controls.enabled = this.viewInputEnabled;
       this.controls.update();
     }
   }

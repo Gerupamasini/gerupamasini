@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
 
-const root = new URL('../../', import.meta.url), port = 4181;
+const root = new URL('../../', import.meta.url), port = process.argv.includes('--field-only') ? 4183 : 4181;
 const url = `http://127.0.0.1:${port}/gerupamasini/`;
 const shots = new URL('../../docs/mobile/screenshots/', import.meta.url);
 await mkdir(shots, { recursive: true });
@@ -54,21 +54,30 @@ try {
   await page.waitForFunction(() => window.__higata.mode === 'home'); await frames();
   await page.locator('.home-nav').evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
   await reachable('.home-nav button, .touch-controls button, .touch-stick');
-  assert.equal(await page.locator('.home-nav button').count(), 3);
+  assert.equal(await page.locator('.home-nav button').count(), 7);
+  assert.equal(await page.locator('.mobile-home-tide .gauge > svg').count(), 1);
   assert.equal(await page.locator('.touch-view-hint, .home-hint, .home-almanac, .home-status').count(), 0);
   await page.keyboard.press('F3'); await page.evaluate(() => window.__higata.toggleDebug()); await frames();
   assert.equal(await page.locator('.debug-panel, .markers').count(), 0);
   assert.equal(await page.locator('.menu').count(), 0);
   await shot('home-portrait');
+  let before, after;
+  if (!process.argv.includes('--field-only')) {
+  if (!process.argv.includes('--editor-only') && !process.argv.includes('--editor-lite')) {
+  const locked = await pose();
+  for (let i = 0; i < 2; i++) {
+    await touch('touchStart', [{ id: 1, x: 200, y: 400 }]);
+    await touch('touchMove', [{ id: 1, x: 230, y: 420 }]); await frames(); await touch('touchEnd');
+  }
+  same(locked.p, (await pose()).p); same(locked.q, (await pose()).q);
   const openCamera = async () => {
-    await page.locator('.home-nav').getByRole('button', { name: 'メニュー', exact: true }).tap();
-    await page.getByRole('button', { name: '視点操作', exact: true }).tap();
+    await page.getByRole('button', { name: '視点移動', exact: true }).tap();
   };
   await openCamera();
-  let before = await pose();
+  before = await pose();
   const up = await point(page.locator('[data-action="viewUp"]'));
   await touch('touchStart', [up]); await frames(5); await touch('touchEnd');
-  let after = await pose(); assert.ok(after.p[1] > before.p[1]); same(before.q, after.q);
+  after = await pose(); assert.ok(after.p[1] > before.p[1]); same(before.q, after.q);
   await frames(); same(after.p, (await pose()).p);
   const down = await point(page.locator('[data-action="viewDown"]'));
   await touch('touchStart', [down]); await frames(4); await touch('touchCancel');
@@ -89,13 +98,15 @@ try {
   assert.equal(await page.evaluate(() => window.__higata.mode), 'home');
   await page.getByRole('button', { name: '視点を閉じる', exact: true }).tap();
   for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 568, height: 320 }, { width: 844, height: 390 }]) {
-    await page.setViewportSize(size); await frames();
-    await reachable('.home-nav button, .mobile-home-status button');
+    await page.setViewportSize(size); await frames(1);
+    await reachable('.home-nav button, .mobile-home-status button, .mobile-home-utility button, .mobile-home-tide');
     if (size.width === 568) await shot('home-small-landscape');
     if (size.width === 844) await shot('home-landscape');
-    await page.locator('.home-nav').getByRole('button', { name: 'メニュー', exact: true }).tap();
-    await reachable('.mobile-home-more button, .home-nav button');
-    await page.getByRole('button', { name: '視点操作', exact: true }).tap();
+    await page.getByRole('button', { name: 'UI非表示', exact: true }).tap();
+    assert.equal(await page.locator('.home-nav, .mobile-home-status, .mobile-home-tide, .touch-home').count(), 0);
+    await reachable('.mobile-home-restore');
+    await page.getByRole('button', { name: 'UI表示', exact: true }).tap();
+    await openCamera();
     await reachable('.home-nav button, .touch-controls button, .touch-stick');
     await page.getByRole('button', { name: '視点を閉じる', exact: true }).tap();
     await page.locator('.home-nav .nav-primary').tap();
@@ -107,6 +118,7 @@ try {
       return [...button.children].filter((child) => { const c = child.getBoundingClientRect(); return c.top < r.top || c.bottom > r.bottom + 1; }).map((child) => child.textContent);
     })), []);
     assert.equal(await page.locator('.mobile-spots-card .mobile-spot').count(), 2);
+    assert.equal(await page.locator('.mobile-spots-card .spots-maps svg').count(), 2);
     await page.locator('.mobile-spot').last().tap();
     assert.equal(await page.locator('.mobile-spot').last().getAttribute('aria-pressed'), 'true');
     await page.locator('.mobile-spot').first().tap();
@@ -115,24 +127,84 @@ try {
     await page.locator('.mobile-spots-card').getByLabel('閉じる', { exact: true }).tap();
     await page.waitForFunction(() => window.__higata.mode === 'home');
   }
+  console.log('PASS home camera enable/lock, gestures, UI hide/restore, all seven buttons and maps at four sizes');
+  }
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: '道具', exact: true }).tap();
+  await page.locator('.tools-drawer').waitFor();
+  await page.getByRole('button', { name: 'UI非表示', exact: true }).tap();
+  assert.equal(await page.locator('.tools-drawer, .home-nav').count(), 0);
+  await page.getByRole('button', { name: 'UI表示', exact: true }).tap();
+  await page.locator('.tools-drawer').waitFor();
+  await page.getByRole('button', { name: '視点移動', exact: true }).tap();
+  await page.locator('.touch-stick').waitFor();
+  assert.equal(await page.locator('.tools-drawer').count(), 0);
+  await page.waitForFunction(() => window.__higata.tank.camT >= 1);
+  await page.getByRole('button', { name: '視点を閉じる', exact: true }).tap();
+  await page.evaluate(async (lite) => {
+    const a = window.__higata, sp = a.data.species.get('acanthogobius_flavimanus');
+    const record = (id, number) => ({ id, number, speciesId: sp.id, length_mm: 50 + number * 5, weight_g: 8, sex: 'f', stage: sp.stages[0].id, traits: [], caughtAt: Date.now(), caughtWhere: [0, 0], tideLevel: 0 });
+    a.encyclopedia.caseItems.value = Array.from({ length: 6 }, (_, i) => record(`mobile-case-${i}`, i + 1));
+    const tank = record('mobile-tank', 1);
+    if (!lite) {
+      a.encyclopedia.tankItems.value = [tank];
+      await a.tank.setOccupants([tank], (id) => a.data.species.get(id));
+    }
+  }, process.argv.includes('--editor-lite'));
+  const homeView = await pose();
   await page.getByRole('button', { name: '水槽', exact: true }).tap();
   await page.waitForFunction(() => window.__higata.mode === 'tankEdit');
+  await page.locator('.specimen-source button').last().tap();
+  await page.locator('.mobile-specimen').last().tap();
+  await page.waitForFunction(() => document.querySelector('.mobile-specimen:last-child')?.getAttribute('aria-pressed') === 'true');
+  for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 568, height: 320 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(size); await frames(1);
+    assert.equal(await page.locator('.mobile-specimen').count(), 6);
+    await reachable('.tank-editor-panel .drawer-head button, .mobile-specimen-actions button');
+    if (size.width === 390 && !process.argv.includes('--editor-lite')) await shot('tank-fish-portrait');
+  }
+  console.log('PASS tank specimen actions at four sizes');
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: '設備', exact: true }).tap();
+  await page.getByLabel('設備の種類').selectOption('3');
   await page.locator('[data-category="airStone"]').tap();
   await page.getByLabel('設備のX (cm)').fill('12'); await page.getByLabel('設備のX (cm)').press('Tab');
   assert.ok(await page.evaluate(() => window.__higata.tank.equipment.currentLayout.devices.some((d) => d.kind === 'airStone' && d.position[0] === .12)));
-  await page.locator('.drawer-body').evaluate((el) => { el.scrollTop = 0; });
-  await shot('tank-edit');
+  for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 568, height: 320 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(size); await frames(1);
+    await page.locator('.drawer-body').evaluate((el) => { el.scrollTop = 0; });
+    await reachable('.equipment-back, .equipment-tabs button, .equipment-position input, .equipment-actions button');
+    if (size.width === 390) await shot('tank-edit');
+    if (size.width === 568) await shot('tank-edit-landscape');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'デザイン', exact: true }).tap();
+  for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 568, height: 320 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(size); await frames(1);
+    await page.locator('.drawer-body').evaluate((el) => { el.scrollTop = 0; });
+    await reachable('.equipment-choices button, .equipment-actions button');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.equipment-choice').last().tap();
+  assert.equal(await page.locator('.equipment-actions button').first().isDisabled(), true);
+  await page.locator('.equipment-choice').first().tap();
+  await page.getByRole('button', { name: '位置・向き', exact: true }).tap();
   await page.getByRole('button', { name: '水槽を見る', exact: true }).tap();
   await page.locator('.sheet-collapsed').waitFor();
   await reachable('.drawer-head button');
   await page.getByRole('button', { name: '編集を表示', exact: true }).tap();
   await page.getByLabel('閉じる', { exact: true }).tap();
   await page.waitForFunction(() => window.__higata.mode === 'home');
-  await page.locator('.home-nav').getByRole('button', { name: 'メニュー', exact: true }).tap();
+  const restoredHome = await pose();
+  same(homeView.p, restoredHome.p); same(homeView.q, restoredHome.q);
+  await page.evaluate(() => { window.__higata.encyclopedia.caseItems.value = []; });
   await page.getByRole('button', { name: 'ガチャ', exact: true }).tap();
   await page.waitForFunction(() => window.__higata.mode === 'gacha');
+  for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 568, height: 320 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(size); await frames(1);
+    await reachable('.gacha-head button, .gacha-draw button');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: /^1回引く/ }).tap();
   await page.locator('.gacha-result').waitFor();
   assert.equal(await page.evaluate(() => window.__higata.equipmentCollection.value.tickets), 9);
@@ -140,7 +212,8 @@ try {
   await page.locator('.gacha-head button').tap(); await page.waitForFunction(() => window.__higata.mode === 'home');
   console.log('PASS compact mobile home + destination selector without scrolling, pinch, height buttons, four sizes, equipment and gacha; debug absent');
 
-  if (process.argv.includes('--layout-only')) {
+  }
+  if (process.argv.includes('--layout-only') || process.argv.includes('--editor-only') || process.argv.includes('--editor-lite')) {
     assert.deepEqual(errors, []);
     console.log('PASS layout checks; use the default command for field gameplay checks');
   } else {
@@ -166,9 +239,8 @@ try {
   assert.ok(Math.abs(after.yaw - before.yaw) > .01 && Math.abs(after.pitch - before.pitch) > .01);
   await frames(); const stopped = await location(); same([after.p[0], after.p[2]], [stopped.p[0], stopped.p[2]]);
   assert.equal(await page.locator('.hud-cb, .prompt, .hud-tools, .hud-tr').count(), 0);
-  assert.equal(await page.locator('.touch-actions button').count(), 2);
-  await page.getByRole('button', { name: 'メニュー', exact: true }).tap();
-  await page.getByRole('button', { name: '追加操作', exact: true }).tap();
+  assert.equal(await page.locator('.touch-actions button').count(), 5);
+  assert.equal(await page.locator('.mobile-field-tide .gauge > svg, .mobile-minimap canvas').count(), 2);
   const posture = await page.evaluate(() => window.__higata.player.lowView);
   await page.locator('[data-action="crouch"]').tap(); await frames();
   assert.equal(await page.evaluate(() => window.__higata.player.lowView), !posture);
@@ -177,12 +249,14 @@ try {
   assert.equal(await page.evaluate(() => window.__higata.player.running), true);
   await touch('touchEnd'); await frames();
   assert.equal(await page.evaluate(() => window.__higata.player.running), false);
+  await page.getByRole('button', { name: 'メニュー', exact: true }).tap();
+  await reachable('.touch-more button, .touch-actions button, .touch-toolbar button, .touch-stick');
   const zoom = await point(page.locator('[data-action="zoom"]'));
   await touch('touchStart', [zoom]); await frames(4);
   assert.equal(await page.evaluate(() => window.__higata.player.zooming), true);
   await touch('touchCancel'); await frames();
   assert.equal(await page.evaluate(() => window.__higata.player.zooming), false);
-  await page.getByRole('button', { name: '操作を閉じる', exact: true }).tap();
+  await page.locator('.touch-toolbar button').tap();
   await page.locator('[data-action="interact"]').tap();
   await page.waitForFunction(() => window.__higata.mode === 'capture');
   assert.equal(await page.evaluate(() => window.__higata.input.moveForward), 0);
@@ -231,7 +305,31 @@ try {
   await page.getByLabel('閉じる', { exact: true }).tap(); await page.locator('.map-card').waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'ケース', exact: true }).tap();
   await page.waitForFunction(() => window.__higata.mode === 'caseView');
-  await page.locator('.case-drawer .drawer-head button').tap(); await page.waitForFunction(() => window.__higata.mode === 'field');
+  await page.evaluate(async () => {
+    const a = window.__higata, r = a.encyclopedia.caseItems.value[0];
+    a.encyclopedia.caseItems.value = Array.from({ length: 6 }, (_, i) => ({ ...r, id: `case-layout-${i}`, number: i + 1 }));
+    await a.fieldCase.setOccupants(a.encyclopedia.caseItems.value, (id) => a.data.species.get(id));
+  });
+  for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 568, height: 320 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(size); await frames(1);
+    assert.equal(await page.locator('.mobile-specimen').count(), 6);
+    await page.locator('.mobile-specimen').last().tap();
+    await page.waitForFunction(() => document.querySelector('.mobile-specimen:last-child')?.getAttribute('aria-pressed') === 'true');
+    await reachable('.case-drawer button');
+    assert.equal(await page.locator('.case-drawer .drawer-body').evaluate((el) => el.scrollHeight > el.clientHeight + 1), false);
+    const centre = await page.evaluate(() => {
+      const a = window.__higata, center = a.caseControls.target.clone().project(a.camera);
+      return { x: (center.x + 1) * innerWidth / 2, y: (1 - center.y) * innerHeight / 2, view: a.camera.view?.enabled };
+    });
+    const panel = await page.locator('.case-drawer').boundingBox();
+    assert.ok(centre.view && centre.x > 0 && centre.y > 0);
+    assert.ok(size.width > size.height ? centre.x < panel.x : centre.y < panel.y);
+    if (size.width === 390) await shot('case-portrait');
+    if (size.width === 568) await shot('case-landscape');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.case-drawer .drawer-head button').tap();
+  assert.equal(await page.evaluate(() => window.__higata.camera.view?.enabled ?? false), false); await page.waitForFunction(() => window.__higata.mode === 'field');
   // Fix the target to a real animal so its motion does not make a UI input check random.
   await page.evaluate(() => {
     const a = window.__higata, ind = a.creatures.individuals.find((i) => i.species.collectable);
@@ -250,8 +348,16 @@ try {
   await page.locator('.touch-tool-options button').last().tap();
   await page.locator('.touch-tool-select > button').tap();
   await page.locator('.touch-tool-options button').first().tap();
-  await page.setViewportSize({ width: 844, height: 390 }); await frames();
-  await reachable('.touch-controls button, .touch-stick'); await shot('field-landscape');
+  for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 568, height: 320 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(size); await frames(1);
+    await reachable('.touch-controls button, .touch-stick, .mobile-minimap');
+    await page.getByRole('button', { name: 'メニュー', exact: true }).tap();
+    await reachable('.touch-more button, .touch-actions button, .touch-tool-select > button, .touch-toolbar button, .touch-stick, .mobile-minimap');
+    if (size.width === 320) await shot('field-menu-small');
+    if (size.width === 844) await shot('field-menu-landscape');
+    await page.locator('.touch-toolbar button').tap();
+    if (size.width === 844) await shot('field-landscape');
+  }
   await page.getByRole('button', { name: 'メニュー', exact: true }).tap();
   await page.getByRole('button', { name: '設定', exact: true }).tap();
   assert.equal(await page.locator('.menu').getByText('デバッグ', { exact: false }).count(), 0);

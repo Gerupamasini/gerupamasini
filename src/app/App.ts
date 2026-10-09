@@ -3,9 +3,9 @@ import { render, h } from 'preact';
 import { signal } from '@preact/signals';
 import { GameRenderer } from '../render/Renderer';
 import { Input } from '../core/Input';
-import { GameClock, TICKET_RANGE_DAYS } from '../core/GameClock';
+import { GameClock } from '../core/GameClock';
 import { loadSettings, saveSettings, type SettingsData } from '../core/Settings';
-import { formatJst } from '../core/Time';
+import { formatJst, jstParts } from '../core/Time';
 import { SaveStore, emptySave, type SaveV1, DEFAULT_NET } from '../core/Save';
 import { loadGameData, type GameData } from '../data/loader';
 import type { TidePhase } from '../data/schemas';
@@ -468,12 +468,10 @@ export class App {
 
   // ------------------------------------------------------------------ ticket
   useTicket(targetGameMs: number): boolean {
-    const now = this.clock.nowReal();
-    if (Math.abs(targetGameMs - now) > TICKET_RANGE_DAYS * 86400000) return false;
-    this.clock.useTicket(targetGameMs);
+    if (!this.clock.useTicket(targetGameMs)) return false;
     this.creatures?.resetPopulation(this.lockedId);
     if (this.save) this.save.ticket.usedCount++;
-    toast(`${t('ticket.active')}: ${formatJst(targetGameMs, { date: true })}`, 'info');
+    toast(`${t('ticket.active')}: ${jstParts(targetGameMs).year}年 ${formatJst(targetGameMs, { date: true })}`, 'info');
     this.requestSave();
     return true;
   }
@@ -1746,7 +1744,7 @@ export class App {
       tideLevel: level,
       tideRate: rate,
       extrema, tideCurve,
-      ticket: tk ? { remainingSec: Math.max(0, Math.round(tk.remainingSec)), phase: tk.phase, targetText: formatJst(tk.targetGameMs, { date: true }) } : null,
+      ticket: tk ? { remainingSec: Math.max(0, Math.round(tk.remainingSec)), phase: tk.phase, targetText: `${jstParts(tk.targetGameMs).year}年 ${formatJst(tk.targetGameMs, { date: true })}` } : null,
       caseCount: this.encyclopedia.caseItems.value.length,
       caseMax: this.encyclopedia.caseMax,
       prompt,

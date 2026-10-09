@@ -11,7 +11,6 @@ export interface TicketState {
 
 export const TICKET_DURATION_SEC = 30 * 60;
 export const TICKET_ENDING_SEC = 10;
-export const TICKET_RANGE_DAYS = 3;
 
 /**
  * Game clock. Game time equals real time unless a 潮時チケット is active, in which case the clock is
@@ -48,11 +47,13 @@ export class GameClock {
     return this.offsetMs;
   }
 
-  useTicket(targetGameMs: number): void {
+  useTicket(targetGameMs: number): boolean {
+    if (!Number.isFinite(targetGameMs) || Number.isNaN(new Date(targetGameMs).getTime())) return false;
     const now = this.nowReal();
     this.ticket = { targetGameMs, startedRealMs: now, remainingSec: TICKET_DURATION_SEC, paused: false, phase: 'active' };
     this.offsetMs = targetGameMs - now;
     this.warned = false;
+    return true;
   }
 
   cancelTicket(): void {
