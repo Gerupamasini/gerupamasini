@@ -219,6 +219,13 @@
 - ユビナガホンヤドカリ: `claude/ecstatic-allen-yjy81l` をマージ（`src/creatures/yubinagahonyadokari/*`、`DRIVERS.pagurus`（`nearDistance` 4.5 で近距離の placeholder 個体を毎フレーム更新）、`Floor.sampleAt`、`Driver.debugLabel`、種データ `pagurus_minutus.json`、行動木 `hermit_crab_tidal`、`hermit-lab.html` を vite の第 2 入力に、`tests/unit/pagurus.test.ts`）。衝突は README／package.json／manifest／App（デバッグ表示）／drivers/index（asari・hamaguri と pagurus）／Observation（小さな動物の開始距離）を手で解決。`capture.tools` は今の網 6 種に（ブランチの `hand_net` は無い）。スモークのヤドカリ節は今の網の流れ（`groundUnderReticle` → `holdAt` → `forceCatch` → `swingNet`）に書き直し、番号を 20〜23 に。小さな動物の観察開始距離は `len × 7`。
 - 図鑑のマガキ: 種データ `crassostrea_gigas.json`（sessile、collectable false、行動 5 つ、段階 稚貝 ≤26 / 若貝 ≤60 / 成貝 ≤115 / 老貝）、行動木 `oyster_reef`（rest のみ）、`Spawner.FIELD_SPECIES` に追加（礁が置くので spawner は出さない）。`OysterReef` に個体ごとの seed・年齢・込み具合・殻長を保存し、`infoOf(i)`（行列・付着面・状態）、`setHidden(i)`（インスタンス描画から外す）、`pickRay(origin, dir, maxDist)`（レティクルの選択）。`OysterDriver`（`src/creatures/oyster/OysterDriver.ts`）: `OysterDriver.pending` 経由で `ReefOysterInfo` を受け取り、同じ genome を `DETAIL.hero` で組み立てて石の上に置く（行列の位置・向きだけ使い、面の d は scale 倍）、5 状態の行動を回して状態が変わるたびに `BehaviorEvent`（`OYSTER_BEHAVIOR_ID`）。`DRIVERS.oyster`（placeholder は空の Group、preview は成貝を伏せて少し開けた姿；preview は描画する renderer を受け取れるようにして、図鑑の ModelPreview は自分の renderer で atlas を焼く）。App: `targetOyster` / `watchedOyster` / `observeOyster()`、HUD の prompt、[F]、`exitObserve` で despawn と `setHidden(false)`。`CreatureSystem.anchorOf` は view が付く前は `ind.pos` を返す（これまで driver の anchor が原点を返し、spawn 直後の観察がマップ中央へ飛んでいた）。`tests/unit/oysterSpecies.test.ts`。
 - 石の見た目: `makeRockMaterial` の作り直し（広いまだら 1.7/7/23 m⁻¹、鉄さびの斑、泥の皮膜、中潮位の薄い殻の痂、緑藻；粒・白い輪・板模様・細かい凹凸はやめた）。干潟の真ん中の捨て石の山（`layRevetment` の mounds）は削除。
+
+## 21 回目（アカエイ）
+- 新種 `hemitrygon_akajei`（`public/data/species/`、行動ツリー `ray_benthic`、manifest）と `src/creatures/species/akaei/*`（`morphology` / `geometry` / `material` / `AkaeiModel` / `AkaeiDriver` / `SandFX`）。`DRIVERS.akaei`（`smoothNear`: 10 m 以内は毎フレーム更新）。詳細は `docs/models/akaei/README.md`。
+- モデル: DW = 1 単位で作り、ルートを体盤幅でスケール。体盤は閉じた殻（LOD0 96 行 × 44 列）、尾は 120 リング × 16 辺。骨格は体盤の格子 12 × 9 と尾 22（計 131）で全部位が共有、ジオメトリは LOD ごとに全個体で共有。皮膚は `aPlan`（bind 時の平面座標・面・輪郭半幅）から色・粗さ・粘液・凹凸・砂・透過をシェーダで計算（`akaei-skin` / `akaei-skin-lod2`）。
+- 姿勢: `AkaeiPose` の解析場（進行波・はためき・反り・吻の持ち上げ・頭のポンプ・呼吸・地面への沿わせ）→ 格子ボーンの位置と傾き、弦長を保つ内寄せ。尾は追従チェーン（各節が前の節の向きへ緩和、付け根と棘が硬い、重さで砂に寝る、地面で止まる）。
+- `CreatureSystem`: `Floor.sampleAt` を渡す、`smoothNear` のドライバの近距離 lod 判定。種スキーマに `size.minDepthFraction`（`minDepthFor` が使う、既定 0.15、アカエイ 0.07）。
+- テスト: `tests/unit/akaei.test.ts`（体盤の比率、各 LOD の有限性・スキン・法線の向き・三角形数、骨格と部位、波で頭が動かず縁が動く、5 行動、LOD と水面）。スモークに `16-akaei` / `16b-akaei-swim` / `16c-akaei-observe`。画像は `npm run render:akaei`。
 - バージョン 0.17.0。
 
 ## 20 回目（ゴロタ場と牡蠣礁）

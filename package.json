@@ -28,6 +28,7 @@
     "render:aramushiro": "node tools/models/aramushiro/render.mjs",
     "render:ishigarei": "node tools/models/ishigarei/render.mjs",
     "model:pagurus-hide": "node tools/models/pagurus/bake-hide-table.mjs",
+    "render:akaei": "node tools/models/akaei/render.mjs",
     "terrain:bake": "node tools/terrain/bake-map.mjs",
     "terrain:hashirimizu": "node tools/terrain/bake-hashirimizu.mjs && node tools/terrain/figures-hashirimizu.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tools/**/*.mjs\" \"tests/**/*.{ts,mjs}\"",

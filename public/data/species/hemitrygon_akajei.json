@@ -1,0 +1,188 @@
+{
+  "id": "hemitrygon_akajei",
+  "names": {
+    "ja": "アカエイ",
+    "sci": "Hemitrygon akajei",
+    "en": "Whip stingray"
+  },
+  "taxon": {
+    "group": "fish",
+    "family": "Dasyatidae"
+  },
+  "locomotion": "swim",
+  "collectable": false,
+  "protected": false,
+  "model": {
+    "placeholder": "akaei",
+    "modelLength_mm": 1000,
+    "viewDistance_m": 35,
+    "driver": "akaei",
+    "clips": {
+      "idle": "Idle",
+      "move": "Move",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 450,
+      "max": 1600,
+      "mean": 820,
+      "sd": 210
+    },
+    "weightCoef": {
+      "a": 2.3e-06,
+      "b": 3.0
+    },
+    "minDepthFraction": 0.07
+  },
+  "sex": {
+    "maleRatio": 0.5,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "juvenile",
+      "ja": "幼魚",
+      "maxLength_mm": 620
+    },
+    {
+      "id": "adult",
+      "ja": "成魚"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true
+  },
+  "spawn": [
+    {
+      "tags": [
+        "shallow",
+        "channel"
+      ],
+      "substrate": [
+        "sand",
+        "muddy_sand"
+      ],
+      "depth_m": [
+        0.12,
+        1.6
+      ],
+      "season": [
+        "spring",
+        "summer",
+        "autumn"
+      ],
+      "time": [
+        "dawn",
+        "day",
+        "dusk",
+        "night"
+      ],
+      "tide": "any",
+      "density_per_100m2": 0.035,
+      "group": [
+        1,
+        1
+      ],
+      "maxPopulation": 4,
+      "maps": [
+        "kasai_west",
+        "hashirimizu"
+      ]
+    },
+    {
+      "tags": [
+        "shallow",
+        "channel",
+        "deep"
+      ],
+      "substrate": [
+        "sand",
+        "muddy_sand"
+      ],
+      "depth_m": [
+        0.12,
+        2.5
+      ],
+      "season": [
+        "summer"
+      ],
+      "time": [
+        "dusk",
+        "night"
+      ],
+      "tide": "rising",
+      "density_per_100m2": 0.05,
+      "group": [
+        1,
+        2
+      ],
+      "maxPopulation": 6,
+      "maps": [
+        "kasai_west",
+        "hashirimizu"
+      ]
+    }
+  ],
+  "brain": {
+    "tree": "ray_benthic",
+    "params": {
+      "fleeDistance_m": 2.2,
+      "restMean_s": 26,
+      "cruiseDistance_m": [
+        2,
+        8
+      ]
+    }
+  },
+  "capture": {
+    "tools": [],
+    "baseDifficulty": 1,
+    "alertPenalty": 1
+  },
+  "encyclopedia": {
+    "description": "内湾の浅い砂底や砂泥底にすむエイ。体盤は横に広い菱形で、背は灰褐色から茶褐色、腹は白く縁が黄色みを帯びた橙色になる（名前の由来）。眼のすぐ後ろに大きな噴水孔があり、砂に潜っているあいだはここから水を吸って呼吸する。口と5対の鰓孔は腹側にある。体盤の縁を前から後ろへ波打たせて滑るように泳ぎ、底に降りると体盤をはためかせて砂をかぶり、眼と噴水孔だけを出して隠れる。頭を砂に押しつけ、水を吹き出して砂を掘り、貝やゴカイ、カニなどを食べる。干潟に残る浅い楕円の窪みはその食痕。長い尾の付け根近くに鋸歯のある毒の棘があり、踏むと刺されて激しく痛む。浅瀬はすり足で歩くとエイの方から逃げていく。",
+    "habitatHint": "春から秋、満ち潮の浅い砂底や澪。砂に潜っていると眼と噴水孔の出っ張りしか見えない。",
+    "behaviors": [
+      {
+        "id": "glide_swim",
+        "ja": "滑空遊泳",
+        "hint": "体盤の縁を前から後ろへ波打たせ、底近くを滑るように泳ぐ"
+      },
+      {
+        "id": "bottom_rest",
+        "ja": "着底",
+        "hint": "砂底に体盤を沿わせて休み、噴水孔で呼吸する"
+      },
+      {
+        "id": "burrow_in_sand",
+        "ja": "砂潜り",
+        "hint": "体盤を震わせて砂を巻き上げ、背にかぶって眼と噴水孔だけを出す"
+      },
+      {
+        "id": "forage",
+        "ja": "摂餌",
+        "hint": "頭を砂に押しつけ、水を吹いて底の小動物を掘り出す"
+      },
+      {
+        "id": "escape",
+        "ja": "逃避",
+        "hint": "驚くと砂を巻き上げて急に体盤を打ち、素早く泳ぎ去る"
+      }
+    ],
+    "placeholderModel": false
+  }
+}

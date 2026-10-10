@@ -6,6 +6,7 @@ import { ShrimpDriver } from '../species/shrimp/ShrimpDriver';
 import { ISOSUJI } from '../species/shrimp/model/isosuji.js';
 import { PloverDriver } from '../species/plover/PloverDriver';
 import { AsariDriver } from '../asari/Asari.js';
+import { AkaeiDriver } from '../species/akaei/AkaeiDriver';
 import { FORMS } from '../asari/AsariModel.js';
 import { PagurusMinutusDriver } from '../yubinagahonyadokari/PagurusMinutusDriver';
 import { OysterDriver } from '../oyster/OysterDriver';
@@ -55,4 +56,6 @@ export const DRIVERS: Record<string, DriverEntry> = {
   aramushiro: { create: () => new AramushiroDriver(), placeholder: () => AramushiroDriver.makeModel(), preview: (seed) => AramushiroDriver.makePreview(seed), nearDistance: 3 },
   // イシガレイ: the juvenile flounder of the sandy flats (its own tiers in the placeholder view; near within 3 m)
   ishigarei: { create: () => new IshigareiDriver(), placeholder: () => IshigareiDriver.makeModel(), preview: (seed) => IshigareiDriver.makePreview(seed), nearDistance: 3 },
+  // アカエイ: the ray of the shallow sand (its own tiers in the placeholder view; its wave runs every frame within 10 m)
+  akaei: { create: () => new AkaeiDriver(), placeholder: () => AkaeiDriver.makeModel(), preview: (seed) => AkaeiDriver.makePreview(seed), nearDistance: 10 },
 };

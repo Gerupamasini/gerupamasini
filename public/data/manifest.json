@@ -15,7 +15,8 @@
     "mugil_cephalus",
     "rudarius_ercodes",
     "syngnathus_schlegeli",
-    "platichthys_bicoloratus"
+    "platichthys_bicoloratus",
+    "hemitrygon_akajei"
   ],
   "behaviors": [
     "fish_benthic",
@@ -28,7 +29,8 @@
     "fish_school",
     "fish_seagrass",
     "pipefish_grass",
-    "flatfish_sand"
+    "flatfish_sand",
+    "ray_benthic"
   ],
   "maps": [
     "kasai_west",
