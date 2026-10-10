@@ -161,6 +161,8 @@ function Hud({ app }: { app: App }) {
       {hud.tooDeep && <span class="mobile-depth-warning">水深注意</span>}
       {hud.ticket && <span class="mobile-ticket">潮時 {Math.floor(hud.ticket.remainingSec / 60)}:{String(hud.ticket.remainingSec % 60).padStart(2, '0')}</span>}
     </div>
+    <div class="mobile-field-tide"><TideGauge /></div>
+    <button class="btn mobile-minimap" aria-label="地図を開く" onClick={() => app.toggleMap()}><Minimap app={app} /></button>
     <div class="reticle" />
   </Fragment>;
   return (

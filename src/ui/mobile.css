@@ -16,10 +16,12 @@
 .touch-stick i { position: absolute; left: 32%; top: 32%; width: 36%; height: 36%; border-radius: 50%; background: rgba(127, 227, 210, .6); border: 1px solid var(--accent); }
 .stick-cross { position: absolute; inset: 18%; border-radius: 50%; border: 1px solid var(--line-2); }
 .stick-label { position: absolute; left: 0; right: 0; top: calc(100% + 3px); text-align: center; font-size: 11px; color: var(--fg-2); text-shadow: 0 1px 4px #000; }
-.touch-actions { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom)); width: 148px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.touch-actions .touch-button { font-size: 12px; padding: 4px; }
+.touch-actions { position: absolute; right: max(8px, env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom)); width: 168px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.touch-actions .touch-button { grid-column: span 2; min-height: 40px; font-size: 11px; padding: 4px 0; }
+.touch-actions .touch-button:nth-child(-n+2) { grid-column: span 3; min-height: 44px; font-size: 12px; }
 .touch-toolbar { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); display: flex; gap: 6px; }
-.touch-more { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(64px + env(safe-area-inset-top)); width: min(70vw, 260px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px; gap: 6px; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 14px; }
+.touch-more { position: absolute; right: calc(184px + env(safe-area-inset-right)); top: calc(64px + env(safe-area-inset-top)); width: min(260px, calc(100vw - 192px - env(safe-area-inset-left) - env(safe-area-inset-right))); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 6px; gap: 4px; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 14px; box-sizing: border-box; }
+.touch-more .touch-button { min-height: 44px; padding: 4px 0; font-size: 11px; }
 .touch-capture { display: flex; align-items: flex-end; justify-content: center; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 .touch-capture .touch-button { min-width: 120px; }
 
@@ -36,7 +38,7 @@
 .touch-device .title-now .sep { display: none; }
 .touch-device .title-foot { bottom: max(8px, env(safe-area-inset-bottom)); flex-wrap: wrap; gap: 4px; }
 .touch-device .wordmark { font-size: clamp(34px, 9vw, 64px); }
-.touch-device .drawer, .touch-device .tank-edit .drawer { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); top: auto; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; height: min(50dvh, 460px); max-height: 50dvh; padding: 12px; }
+.touch-device .drawer, .touch-device .tank-edit .drawer { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); top: auto; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; height: clamp(320px, 46dvh, 420px); max-height: calc(100dvh - 80px); padding: 8px; animation: none; }
 .touch-device .drawer-head { margin-bottom: 6px; gap: 6px; }
 .touch-device .drawer-head h2 { font-size: 16px; }
 .touch-device .drawer-body { overscroll-behavior: contain; touch-action: pan-y; }
@@ -44,8 +46,10 @@
 .touch-device .sheet-collapsed > :not(.drawer-head) { display: none; }
 .touch-device .sheet-collapsed .drawer-head { margin-bottom: 0; }
 .touch-device .drawer .seg { flex-shrink: 0; }
-.touch-device .drawer .seg button { padding: 4px 9px; }
-.touch-device .edit-badge { top: calc(8px + env(safe-area-inset-top)); left: 8px; right: 8px; justify-content: space-between; }
+.touch-device .drawer .seg button { min-height: 34px; padding: 4px 7px; font-size: 12px; }
+.touch-device .edit-badge { top: calc(8px + env(safe-area-inset-top)); left: 8px; right: 8px; flex-direction: row; align-items: center; justify-content: space-between; gap: 4px; }
+.touch-device .edit-badge .eyebrow { font-size: 9px; letter-spacing: 0; }
+.touch-device .edit-badge button { min-height: 36px; padding: 4px 8px; font-size: 12px; }
 .touch-device .tank-items li, .touch-device .occupant .row, .touch-device .case-list li { flex-wrap: wrap; }
 .touch-device .tank-add { flex-wrap: wrap; }
 .touch-device .observe-top { left: 10px; top: calc(10px + env(safe-area-inset-top)); right: 10px; }
@@ -84,38 +88,34 @@
 .mobile-home-status .btn { display: flex; gap: 8px; padding: 4px; font-size: 12px; letter-spacing: 0; border: 0; }
 .mobile-home-status .num { color: var(--fg); font-size: 16px; }
 .mobile-standing { font-size: 11px; white-space: nowrap; }
-.mobile-home-selected { position: fixed; top: calc(62px + env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); height: auto; max-width: calc(100vw - 140px); padding: 8px 12px; border-radius: 12px; flex-direction: column; align-items: flex-start; gap: 4px; background: rgba(8, 20, 25, .8); font-size: 13px; letter-spacing: 0; }
+.mobile-home-selected { position: fixed; top: calc(174px + env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); height: auto; max-width: calc(100vw - 140px); padding: 8px 12px; border-radius: 12px; flex-direction: column; align-items: flex-start; gap: 4px; background: rgba(8, 20, 25, .8); font-size: 13px; letter-spacing: 0; }
 .touch-device .mobile-home-nav {
   position: fixed; left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right));
   bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; max-width: none; padding: 0;
-  display: grid; grid-template-columns: 1fr 1.35fr 1fr; gap: 8px;
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px;
 }
 .touch-device .mobile-home-nav .nav-tile, .touch-device .mobile-home-nav .nav-primary {
-  min-width: 0; height: 48px; min-height: 48px; padding: 4px 8px; margin: 0; border-radius: 12px;
-  font-size: 14px; letter-spacing: 0;
+  min-width: 0; height: 54px; min-height: 54px; padding: 4px 0; margin: 0; border-radius: 9px;
+  flex-direction: column; gap: 3px; font-size: clamp(9px, 2.5vw, 12px); letter-spacing: 0;
 }
-.mobile-home-more {
-  position: fixed; right: max(8px, env(safe-area-inset-right)); bottom: calc(66px + env(safe-area-inset-bottom));
-  width: min(280px, calc(100vw - 16px)); padding: 8px; display: grid; grid-template-columns: 1fr 1fr;
-  gap: 8px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--surface-2);
-}
-.mobile-home-more .btn { padding: 6px; font-size: 13px; letter-spacing: 0; }
-.touch-home .touch-stick { bottom: calc(92px + env(safe-area-inset-bottom)); }
-.touch-home-height { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(78px + env(safe-area-inset-bottom)); display: grid; gap: 6px; width: 96px; }
-.touch-camera-close { position: absolute; right: max(8px, env(safe-area-inset-right)); top: calc(62px + env(safe-area-inset-top)); }
-.touch-device .home-nav ~ .drawer { bottom: calc(66px + env(safe-area-inset-bottom)); }
+.mobile-home-nav .nav-tile svg { width: 19px; height: 19px; }
+.mobile-home-utility { position: fixed; right: max(8px, env(safe-area-inset-right)); bottom: calc(72px + env(safe-area-inset-bottom)); display: flex; gap: 4px; }
+.touch-device .mobile-home-utility .btn { min-height: 34px; height: 34px; padding: 4px 8px; font-size: 11px; letter-spacing: 0; border-radius: 9px; background: rgba(8, 20, 25, .82); }
+.touch-device .mobile-home-restore { position: fixed; right: max(8px, env(safe-area-inset-right)); bottom: calc(72px + env(safe-area-inset-bottom)); min-height: 34px; height: 34px; padding: 4px 9px; font-size: 11px; background: rgba(8, 20, 25, .6); }
+.home-ui-hidden #ui > .toasts { display: none; }
+.touch-home .touch-stick { bottom: calc(136px + env(safe-area-inset-bottom)); }
+.touch-home-height { position: absolute; right: max(8px, env(safe-area-inset-right)); bottom: calc(118px + env(safe-area-inset-bottom)); display: grid; gap: 4px; width: 96px; }
+.touch-home-height .touch-button { min-height: 40px; font-size: 11px; padding: 4px; }
+.touch-device .home-nav ~ .drawer { bottom: calc(114px + env(safe-area-inset-bottom)); }
 .mobile-field-status { max-width: calc(100vw - 94px - env(safe-area-inset-left) - env(safe-area-inset-right)); flex-wrap: wrap; gap: 4px 8px; pointer-events: none; padding: 8px; }
 .mobile-field-status .num { font-size: 15px; color: var(--fg); }
 .touch-device #ui > .mobile-field-status { pointer-events: none; }
 .mobile-depth-warning { color: var(--sand); }
 .mobile-ticket { color: var(--accent); }
-.touch-tool-select { position: absolute; bottom: calc(76px + env(safe-area-inset-bottom)); right: max(10px, env(safe-area-inset-right)); width: 148px; }
-.touch-tool-select > button { width: 100%; min-height: 44px; }
+.touch-tool-select { position: absolute; bottom: calc(116px + env(safe-area-inset-bottom)); right: max(8px, env(safe-area-inset-right)); width: 168px; }
+.touch-tool-select > button { width: 100%; min-height: 40px; }
 .touch-tool-options { position: absolute; bottom: calc(100% + 6px); right: 0; display: grid; gap: 6px; width: 180px; max-height: calc(100dvh - 180px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; padding: 8px; border: 1px solid var(--line-2); border-radius: 14px; background: var(--surface-2); }
 .touch-tool-options button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
-.touch-extra-actions { position: absolute; bottom: calc(128px + env(safe-area-inset-bottom)); right: max(10px, env(safe-area-inset-right)); width: 148px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.touch-extra-actions .touch-button { padding: 4px; font-size: 12px; }
-.touch-extra-close { grid-column: span 2; }
 .touch-device .capture-reveal { top: calc(60px + env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); right: auto; max-width: calc(100vw - 16px); align-items: flex-start; text-align: left; gap: 4px; }
 .touch-device .capture-reveal.wait, .touch-device .capture-reveal .eyebrow { display: none; }
 .touch-device .capture-reveal .display { font-size: 14px; padding: 6px 10px; border-radius: 10px; background: rgba(8, 20, 25, .8); }
@@ -136,6 +136,172 @@
   .touch-device .mobile-spots-card { padding: 12px; gap: 8px; }
   .mobile-spot-options .mobile-spot { padding: 8px; gap: 3px; }
   .mobile-spot-detail { gap: 8px; }
-  .touch-extra-actions { width: 260px; grid-template-columns: repeat(4, 1fr); }
-  .touch-extra-close { grid-column: span 4; }
+}
+
+/* Retain diagrams and 3D views; size them for the available phone viewport. */
+.mobile-home-tide { position: fixed; left: max(8px, env(safe-area-inset-left)); top: calc(60px + env(safe-area-inset-top)); }
+.touch-device button.mobile-home-tide { border: 0; border-radius: 12px; padding: 0; background: transparent; text-align: left; }
+.mobile-home-tide .gauge, .mobile-field-tide .gauge { width: 168px; padding: 7px 8px; box-sizing: border-box; border-radius: 12px; }
+.mobile-home-tide .gauge > svg, .mobile-field-tide .gauge > svg { width: 100%; height: 40px; }
+.mobile-home-tide .gauge-trend svg, .mobile-field-tide .gauge-trend svg { width: 12px; height: 12px; }
+.mobile-home-tide .gauge-head, .mobile-field-tide .gauge-head { gap: 4px; }
+.mobile-home-tide .gauge-head .num, .mobile-field-tide .gauge-head .num { font-size: 14px; }
+.mobile-home-tide .gauge-head .small, .mobile-field-tide .gauge-head .small,
+.mobile-home-tide .gauge-trend, .mobile-field-tide .gauge-trend,
+.mobile-home-tide .gauge-next, .mobile-field-tide .gauge-next { font-size: 9px; gap: 4px; }
+.mobile-field-tide { position: fixed; left: max(8px, env(safe-area-inset-left)); top: calc(60px + env(safe-area-inset-top)); pointer-events: none; }
+.touch-device #ui > .mobile-field-tide { pointer-events: none; }
+.touch-device .mobile-minimap { position: fixed; right: max(8px, env(safe-area-inset-right)); top: calc(64px + env(safe-area-inset-top)); width: 64px; height: 64px; padding: 0; border-radius: 10px; overflow: hidden; }
+.mobile-minimap .minimap { width: 64px; height: 64px; padding: 0; margin: 0; }
+.mobile-minimap canvas, .mobile-minimap svg { width: 64px; height: 64px; }
+.touch-device .mobile-spots-card { padding: 12px; gap: 8px; }
+.mobile-spot-layout, .mobile-spot-content { display: grid; gap: 8px; min-width: 0; }
+.mobile-spots .spots-maps { min-height: 0; height: 120px; gap: 8px; }
+.mobile-spots .spots-japan, .mobile-spots .spots-bay { height: 120px; }
+.mobile-spots .mobile-spot { min-height: 80px; padding: 8px; gap: 4px; font-size: 12px; }
+.mobile-spot-detail { gap: 8px; }
+.mobile-specimen-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.touch-device .mobile-specimen { min-width: 0; min-height: 48px; height: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 5px; border-radius: 8px; font-size: 11px; letter-spacing: 0; }
+.mobile-specimen b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mobile-specimen .num { font-size: 10px; }
+.mobile-specimen small { color: var(--dim); font-size: 9px; }
+.mobile-specimen.on { border-color: var(--accent); background: #7fe3d211; }
+.mobile-specimen-detail { margin-top: 6px; }
+.mobile-specimen-actions { display: flex; gap: 4px; margin-top: 4px; }
+.touch-device .mobile-specimen-actions .btn { flex: 1; height: 40px; min-height: 40px; padding: 4px; font-size: 11px; letter-spacing: 0; white-space: normal; }
+.mobile-specimen-detail > .small { display: block; font-size: 11px; line-height: 16px; }
+.touch-device .mobile-case-panel { height: clamp(250px, 32dvh, 320px); }
+.touch-device .mobile-case-panel .drawer-body { padding: 0; }
+.touch-device .tank-editor-panel .drawer-body { padding: 4px 0 0; }
+.touch-device .tank-editor-panel .drawer-head .btn { font-size: 11px; padding: 4px 6px; }
+.touch-device .tank-editor-panel .drawer-head button { height: 36px; min-height: 36px; }
+.touch-device .tank-editor-panel .drawer-head .icon-btn { width: 36px; }
+.touch-device .tank-editor-panel .foot { font-size: 9px; margin-top: 4px; line-height: 1.3; }
+.touch-device .specimen-source { margin: 0 0 4px; }
+.touch-device .drawer .specimen-source button { min-height: 30px; padding: 3px 6px; font-size: 11px; }
+.mobile-behavior-details, .equipment-spec { font-size: 11px; margin: 6px 0; }
+.mobile-behavior-details summary, .equipment-spec summary { min-height: 28px; line-height: 28px; }
+.specimen-pagination { display: flex; gap: 8px; align-items: center; justify-content: center; font-size: 11px; margin-top: 4px; }
+.touch-device .specimen-pagination .btn { min-height: 32px; padding: 3px 8px; }
+.touch-device .equipment-view { flex-wrap: nowrap; margin: 0 0 6px; }
+.touch-device .equipment-view select { min-width: 0; flex: 1; font-size: 13px; background: #142127; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; }
+.touch-device .equipment-view button { min-height: 36px; padding: 4px 8px; font-size: 11px; }
+.touch-device .equipment-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-bottom: 6px; }
+.touch-device .equipment-slot { padding: 5px; gap: 5px; min-height: 60px; letter-spacing: 0; }
+.touch-device .equipment-slot strong { font-size: 11px; line-height: 1.35; }
+.touch-device .equipment-slot .equipment-swatch { width: 28px; height: 32px; flex-basis: 28px; }
+.touch-device .equipment-slot > span:last-child { display: none; }
+.touch-device .equipment-detail-head { display: flex; align-items: center; gap: 8px; }
+.touch-device .equipment-detail-head h4 { margin: 0; font-size: 12px; line-height: 1.2; letter-spacing: 0; }
+.touch-device .equipment-detail-head h4 small { display: block; margin-top: 2px; font-size: 10px; font-weight: normal; color: var(--fg-2); }
+.touch-device .equipment-back { margin: 0; height: 32px; min-height: 32px; padding: 3px 8px; font-size: 11px; }
+.touch-device .equipment-current { margin: 4px 0; font-size: 10px; }
+.touch-device .equipment-tabs { margin: 4px 0; }
+.touch-device .drawer .equipment-tabs button { min-height: 30px; }
+.touch-device .equipment-position { gap: 4px; margin: 6px 0; }
+.touch-device .equipment-position input { min-height: 36px; }
+.touch-device .equipment-actions { flex-wrap: nowrap; gap: 4px; margin: 4px 0; position: sticky; bottom: 0; padding: 4px 0; background: #0d1c22; z-index: 1; }
+.touch-device .equipment-position + .equipment-actions { position: static; }
+.touch-device .equipment-actions button { flex: 1; min-height: 40px; padding: 4px !important; letter-spacing: 0; }
+.touch-device .equipment-item-detail { gap: 6px; padding: 4px 0; align-items: center; }
+.touch-device .equipment-item-detail .equipment-swatch { width: 32px; height: 32px; flex-basis: 32px; }
+.touch-device .equipment-item-detail h3 { font-size: 11px; margin: 2px 0; line-height: 1.3; }
+.touch-device .equipment-item-detail p { font-size: 10px; line-height: 1.2; margin: 2px 0; }
+.touch-device .equipment-item-detail .equipment-rarity { font-size: 9px; padding: 0 4px; }
+.touch-device .equipment-choices { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.touch-device .equipment-choice { flex-direction: column; align-items: flex-start; padding: 5px; gap: 2px; font-size: 10px; letter-spacing: 0; line-height: 1.25; }
+.touch-device .equipment-choice .equipment-swatch { width: 28px; height: 24px; flex-basis: 24px; }
+.touch-device .equipment-instances { position: sticky; top: 0; gap: 4px; }
+.touch-device .equipment-instances button { min-height: 32px; padding: 3px 8px; }
+.touch-device .tank-editor-panel h4 { margin: 8px 0 4px; letter-spacing: 0; }
+.touch-device .tank-editor-panel .equipment-detail-head h4 { margin: 0; }
+.touch-device .tank-add { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.touch-device .tank-add button { min-height: 36px; padding: 4px; font-size: 11px; letter-spacing: 0; }
+.touch-device .tank-items li { padding: 4px 6px; font-size: 12px; }
+.touch-device .tank-item-actions button { min-height: 36px; }
+.touch-device .card.zukan { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); padding: 12px; overflow: hidden; }
+.touch-device .zukan .card-head { margin-bottom: 8px; }
+.touch-device .zukan-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
+.touch-device .zukan-list { display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 4px; }
+.touch-device .zukan-list li { flex: 0 0 108px; }
+.touch-device .zukan-item { min-height: 48px; padding: 5px; gap: 4px; }
+.touch-device .zukan-item .name { font-size: 12px; }
+.touch-device .status-dots { gap: 4px; font-size: 8px; letter-spacing: 0; }
+.touch-device .status-dots i { gap: 2px; }
+.touch-device .zukan-detail { padding-right: 0; }
+.touch-device .zukan-detail h3 { font-size: 19px; }
+.touch-device .zukan-detail .sci { font-size: 10px; margin-bottom: 6px; }
+.touch-device .zukan-preview { height: clamp(110px, 22dvh, 180px); margin-bottom: 6px; }
+.touch-device .zukan-detail p.desc { font-size: 12px; line-height: 1.5; margin: 6px 0; }
+.touch-device .behaviors li { padding: 4px 0; font-size: 12px; }
+.touch-device .gacha-head { padding: 10px 12px; gap: 8px; }
+.touch-device .gacha-head h2 { font-size: 18px; }
+.touch-device .gacha-body { padding: 10px 12px; }
+.touch-device .gacha-intro { gap: 10px; }
+.touch-device .gacha-intro h3 { font-size: 14px; margin-bottom: 4px; }
+.touch-device .gacha-intro p { font-size: 11px; line-height: 1.5; margin: 4px 0; }
+.touch-device .gacha-wallet { padding: 8px 0; gap: 4px; font-size: 11px; }
+.touch-device .gacha-wallet strong { font-size: 20px; }
+.touch-device .gacha-draw { gap: 6px; margin-bottom: 6px; }
+.touch-device .gacha-draw .btn { min-height: 44px; padding: 6px 12px; font-size: 12px; gap: 8px; }
+.touch-device .gacha-help { font-size: 11px; margin: 6px 0; }
+.touch-device .gacha-help summary { min-height: 28px; line-height: 28px; }
+.touch-device .gacha-results { margin-top: 10px; }
+.touch-device .gacha-results h3 { font-size: 14px; margin: 6px 0; }
+.touch-device .gacha-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.touch-device .gacha-result { padding: 7px; gap: 6px; flex-wrap: wrap; }
+.touch-device .gacha-result h4 { font-size: 11px; margin: 4px 0; }
+.touch-device .gacha-result .equipment-swatch.large { width: 38px; height: 38px; flex-basis: 38px; }
+.touch-device .gacha-result small, .touch-device .gacha-result p { font-size: 10px; margin: 4px 0; }
+.touch-device .gacha-pool-toggle { margin-top: 10px; padding: 6px 0; }
+.touch-device .shop-title { font-size: 18px; margin: 4px 0; }
+.touch-device .shop-top { gap: 6px; }
+.touch-device .shop-top .btn { padding: 4px 8px; font-size: 12px; }
+.touch-device .shop-line { font-size: 11px; margin: 6px 0; }
+.touch-device .shop-card.float { padding: 10px 12px; }
+.touch-device .shop-card .name { font-size: 17px; }
+.touch-device .shop-card p { font-size: 11px; margin: 6px 0; }
+.touch-device .shop-foot { font-size: 10px; }
+@media (orientation: landscape) and (max-height: 600px) {
+  .touch-more { grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(260px, calc(100vw - 312px - env(safe-area-inset-left) - env(safe-area-inset-right))); }
+  .touch-device .mobile-case-panel { top: 8px; height: auto; }
+  .touch-device .tank-edit .tank-editor-panel { top: 8px; }
+  .touch-device .tank-edit .edit-badge { right: calc(min(45vw, 360px) + 16px); }
+  .touch-device .mobile-specimen-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .touch-device .mobile-specimen { min-height: 42px; }
+  .touch-device .mobile-fish-tab .mobile-specimen-grid { display: flex; overflow-x: auto; padding-bottom: 3px; }
+  .touch-device .mobile-fish-tab .mobile-specimen { flex: 0 0 88px; }
+  .touch-device .mobile-fish-tab .mobile-behavior-details { margin: 2px 0; }
+  .touch-device .mobile-fish-tab .mobile-behavior-details summary { min-height: 20px; line-height: 20px; }
+  .mobile-spots .mobile-spot-layout { grid-template-columns: 40% minmax(0, 1fr); gap: 10px; }
+  .mobile-spots .spots-maps { height: 170px; gap: 4px; }
+  .mobile-spots .spots-japan, .mobile-spots .spots-bay { height: 170px; }
+  .mobile-spots .mobile-spot { min-height: 70px; padding: 6px; }
+  .mobile-home-status { max-width: 420px; right: auto; }
+  .mobile-home-tide { top: 56px; }
+  .mobile-home-selected { top: 56px; left: 184px; }
+  .touch-device .card.zukan { padding: 8px; }
+  .touch-device .zukan .card-head { margin-bottom: 4px; }
+  .touch-device .zukan-body { grid-template-columns: 120px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .touch-device .zukan-list { flex-direction: column; overflow-y: auto; overflow-x: hidden; border-bottom: 0; }
+  .touch-device .zukan-list li { flex-basis: auto; }
+  .touch-device .zukan-preview { height: 100px; }
+  .touch-device .gacha-panel { max-height: calc(100dvh - 20px); }
+  .touch-device .gacha-intro { align-items: flex-start; }
+  .touch-device .gacha-capsule { width: 44px; height: 44px; flex-basis: 44px; }
+  .touch-device .gacha-body > .small { font-size: 10px; margin: 6px 0; }
+  .touch-device .gacha-body { padding: 8px 12px; }
+  .touch-device .gacha-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (orientation: landscape) and (max-height: 400px) {
+  .touch-device .tank-editor-panel .drawer-head button { height: 32px; min-height: 32px; }
+  .touch-device .tank-editor-panel > .seg { padding: 2px; }
+  .touch-device .tank-editor-panel > .seg button { min-height: 30px; }
+  .touch-device .drawer .equipment-tabs { padding: 2px; }
+  .touch-device .drawer .equipment-tabs button { min-height: 28px; padding: 3px 6px; }
+  .touch-device .equipment-position { margin: 4px 0; }
+  .touch-device .equipment-position label { gap: 3px; font-size: 10px; line-height: 12px; }
+  .touch-device .equipment-position input { min-height: 32px; height: 32px; }
+  .touch-device .equipment-position + .equipment-actions { margin: 2px 0; padding: 0; }
+  .touch-device .equipment-position + .equipment-actions button { min-height: 36px; }
 }

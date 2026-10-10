@@ -29,7 +29,11 @@ export function jstParts(ms: number): JstParts {
 
 /** Epoch ms for a JST wall-clock time. */
 export function jstToMs(year: number, month: number, day: number, hour = 0, minute = 0, second = 0): number {
-  return Date.UTC(year, month - 1, day, hour, minute, second) - JST_OFFSET_MS;
+  // Date.UTC treats years 0..99 as 1900..1999; a calendar must retain the selected year.
+  const d = new Date(0);
+  d.setUTCFullYear(year, month - 1, day);
+  d.setUTCHours(hour, minute, second, 0);
+  return d.getTime() - JST_OFFSET_MS;
 }
 
 export function jstMidnight(ms: number): number {

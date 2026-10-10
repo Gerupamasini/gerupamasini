@@ -20,6 +20,7 @@ import { AmamoMeadow, MEADOW_QUALITY } from '../world/amamo';
 import { MangroveForest } from '../world/mangrove';
 import { LAYOUTS, type ShoreLayout } from '../world/maps/hashirimizu';
 import { seagrass } from '../creatures/species/amimehagi/seagrass';
+import { CarrionField } from '../creatures/species/aramushiro/carrion';
 import type { FeedingPit } from '../world/FeedingPits';
 import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
@@ -45,6 +46,8 @@ export class World {
   riprap: Riprap | null = null;
   /** the マガキ reef on those stones */
   oysters: OysterReef | null = null;
+  /** crushed clams lying about, the scavengers' carrion */
+  carrion: CarrionField | null = null;
 
   readonly scene = new Scene();
   readonly fog: FogExp2;
@@ -117,6 +120,11 @@ export class World {
     mark('skyline');
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
+    // clams crushed underfoot on the clam flat, their meat in the water: the アラムシロ gather on them (new each day)
+    if (map.animals) {
+    w.carrion = new CarrionField({ heightAt: (x, z) => terrain.heightAt(x, z), sampleAt: (x, z) => habitat.sample(x, z, 0) }, hashInts(map.id.length * 53, pitSeed));
+    w.scene.add(w.carrion.group);
+    }
     if (!layout) {
       // the 葛西 flat: hard ground and the oyster reef on it — stones along the levees' toes; every face in the
       // oyster zone (about mean sea level down to the spring low) grows a clump
@@ -196,6 +204,8 @@ export class World {
     this.mangroves = null;
     this.oysters?.dispose();
     this.oysters = null;
+    this.carrion?.dispose();
+    this.carrion = null;
     this.riprap?.dispose();
     this.riprap = null;
     this.skyline.dispose();
@@ -220,6 +230,7 @@ export class World {
     oysterEnv.uOyTime.value += dt;
     this.riprap?.update(camera);
     this.mangroves?.update(dt, camera, { tideLevel: this.tideLevel, wetLevel: this.habitat.wetLevel });
+    this.carrion?.update(anchor.x, anchor.z, dt);
     this.terrain.updateLod(anchor.x, anchor.z);
     // (absolute: a ticket or the debug clock can move game time backwards, and the pools must follow at once)
     if (Math.abs(gameMs - this.lastHabitatMs) > 2000 || this.lastHabitatMs === 0) {

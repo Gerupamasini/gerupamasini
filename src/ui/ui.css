@@ -311,7 +311,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .equipment-warning { color: #e9ba83; }
 
 .equipment-slots, .equipment-choices { display: grid; gap: 7px; }
-.drawer .equipment-slot, .drawer .equipment-choice { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px; background: rgba(15, 28, 32, 0.75); border: 1px solid var(--line); border-radius: 9px; color: var(--fg); }
+.drawer .equipment-slot, .drawer .equipment-choice { display: flex; align-items: center; gap: 10px; width: 100%; height: auto; text-align: left; padding: 10px; background: rgba(15, 28, 32, 0.75); border: 1px solid var(--line); border-radius: 9px; color: var(--fg); }
 .equipment-slot > span:nth-child(2), .equipment-choice > span:nth-child(2) { flex: 1; min-width: 0; }
 .equipment-slot small, .equipment-choice small { display: block; color: var(--dim); font-size: 10px; margin: 3px 0; }
 .equipment-slot strong { display: block; font-size: 12px; font-weight: 500; line-height: 1.6; }

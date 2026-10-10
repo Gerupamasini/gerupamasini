@@ -11,7 +11,7 @@ import { BehaviorTree, type PerceptionContext } from './brain/BehaviorTree';
 import { Spawner, type SpawnEnv } from './Spawner';
 export type { SpawnEnv };
 import { minDepthFor, type Individual } from './Individual';
-import type { BehaviorEvent, Driver, Floor, Intent, MeadowProbe } from './drivers/Driver';
+import type { BehaviorEvent, Driver, Floor, Intent, MeadowProbe, ScentProbe } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
 import { modelFor, variantOf } from './models/choice';
@@ -104,6 +104,11 @@ export class CreatureSystem {
   /** The flat's eelgrass, for the animals that live among the blades. */
   setMeadow(meadow: MeadowProbe | null): void {
     this.floor.meadow = meadow;
+  }
+
+  /** The carrion lying about the flat, for the scavengers. */
+  setScent(scent: ScentProbe | null): void {
+    this.floor.scent = scent;
   }
 
   /** Warm the model cache for the distance tiers. */
