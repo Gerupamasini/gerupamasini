@@ -78,17 +78,17 @@ export const QUALITY_PRESETS: Record<Quality, QualityPreset> = {
 
 const KEY = 'settings';
 
-/** The saved settings over the defaults; `firstRun` supplies what a run without any saved settings starts from
- * (the quality tier the machine's GPU suggests). */
-export async function loadSettings(firstRun?: () => Partial<SettingsData>): Promise<SettingsData> {
+/** The saved settings over the defaults (`defaults`: this device's, under what is saved; `firstRun`: what a run
+ * without any saved settings starts from, the quality tier the machine's GPU suggests). */
+export async function loadSettings(defaults: Partial<SettingsData> = {}, firstRun?: () => Partial<SettingsData>): Promise<SettingsData> {
   try {
     const s = (await get(KEY)) as Partial<SettingsData> | undefined;
-    const out = { ...DEFAULT_SETTINGS, ...(s ?? firstRun?.() ?? {}) };
+    const out = { ...DEFAULT_SETTINGS, ...defaults, ...(s ?? firstRun?.() ?? {}) };
     if (!(out.quality in QUALITY_PRESETS)) out.quality = DEFAULT_SETTINGS.quality;
     mirrorQuality(out.quality);
     return out;
   } catch {
-    return { ...DEFAULT_SETTINGS, ...(firstRun?.() ?? {}) };
+    return { ...DEFAULT_SETTINGS, ...defaults, ...(firstRun?.() ?? {}) };
   }
 }
 

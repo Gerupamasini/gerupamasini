@@ -237,7 +237,9 @@ export class WaterPass {
           vec2 uv = vUv;
           float d = texture2D(tDepth, uv).r;
           vec3 base = texture2D(tColor, uv).rgb;
-          bool sky = d >= 0.9995;
+          // SkyDome does not write depth: only the cleared far-plane value is sky. A 0.9995 cutoff
+          // incorrectly hides distant vegetation/shore objects (about 100 m with the game's near plane).
+          bool sky = d >= 1.0;
           vec3 P = worldPos(uv, sky ? 0.9995 : d);
           vec3 rd = normalize(P - uCamPos);
           float sceneDist = sky ? 1e5 : length(P - uCamPos);
@@ -351,7 +353,7 @@ export class WaterPass {
               off *= smoothstep(0.0, 0.02, thick0);
               vec2 uv2 = uv + off;
               float d2 = texture2D(tDepth, uv2).r;
-              bool sky2 = d2 >= 0.9995;
+              bool sky2 = d2 >= 1.0;
               vec3 P2 = worldPos(uv2, sky2 ? 0.9995 : d2);
               if (P2.y > level || any(lessThan(uv2, vec2(0.0))) || any(greaterThan(uv2, vec2(1.0)))) { uv2 = uv; P2 = P; sky2 = sky; }
               vec3 refr = texture2D(tColor, uv2).rgb;

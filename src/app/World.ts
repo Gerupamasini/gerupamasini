@@ -17,8 +17,10 @@ import { OysterReef } from '../creatures/oyster/OysterReef';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import { oysterEnv } from '../creatures/oyster/material';
 import { AmamoMeadow, MEADOW_QUALITY } from '../world/amamo';
+import { MangroveForest } from '../world/mangrove';
 import { LAYOUTS, type ShoreLayout } from '../world/maps/hashirimizu';
 import { seagrass } from '../creatures/species/amimehagi/seagrass';
+import { CarrionField } from '../creatures/species/aramushiro/carrion';
 import type { FeedingPit } from '../world/FeedingPits';
 import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
@@ -38,10 +40,14 @@ export class World {
   readonly layout: ShoreLayout | null;
   /** the アマモ beds below the low-water mark */
   amamo: AmamoMeadow | null = null;
+  /** Only maps explicitly declaring a tropical intertidal forest receive mangroves. */
+  mangroves: MangroveForest | null = null;
   /** the stones along the levees (hard ground for oysters; the 葛西 flat) */
   riprap: Riprap | null = null;
   /** the マガキ reef on those stones */
   oysters: OysterReef | null = null;
+  /** crushed clams lying about, the scavengers' carrion */
+  carrion: CarrionField | null = null;
 
   readonly scene = new Scene();
   readonly fog: FogExp2;
@@ -115,6 +121,11 @@ export class World {
     mark('skyline');
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
+    // clams crushed underfoot on the clam flat, their meat in the water: the アラムシロ gather on them (new each day)
+    if (map.animals) {
+    w.carrion = new CarrionField({ heightAt: (x, z) => terrain.heightAt(x, z), sampleAt: (x, z) => habitat.sample(x, z, 0) }, hashInts(map.id.length * 53, pitSeed));
+    w.scene.add(w.carrion.group);
+    }
     if (!layout) {
       // the 葛西 flat: hard ground and the oyster reef on it — stones along the levees' toes; every face in the
       // oyster zone (about mean sea level down to the spring low) grows a clump
@@ -165,6 +176,14 @@ export class World {
       w.scene.add(reflectInWater(w.skyline.group));
       if (w.skyline.land) w.scene.add(reflectInWater(w.skyline.land.group));
     }
+    if (map.mangroves) {
+      onProgress?.('ヤエヤマヒルギ林');
+      w.mangroves = new MangroveForest(terrain, map.mangroves);
+      w.mangroves.setQuality(preset.vegetation);
+      // Build the visible tiers before FieldRenderer.compile, so shader compilation stays behind the loading screen.
+      w.mangroves.update(0, { position: new Vector3(map.spawnStart.x,terrain.heightAt(map.spawnStart.x,map.spawnStart.z)+1.5,map.spawnStart.z) }, { tideLevel: 0, wetLevel: 0 });
+      w.scene.add(w.mangroves.group);
+    }
     w.scene.add(terrain.mirrorProxy(LAYER_MIRROR));
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
     // (lights obey layers too: the mirror's camera must see the sun and the sky light, or the land comes out black)
@@ -183,8 +202,12 @@ export class World {
     if (this.amamo) seagrass.bind(null);
     this.amamo?.dispose();
     this.amamo = null;
+    this.mangroves?.dispose();
+    this.mangroves = null;
     this.oysters?.dispose();
     this.oysters = null;
+    this.carrion?.dispose();
+    this.carrion = null;
     this.riprap?.dispose();
     this.riprap = null;
     this.skyline.dispose();
@@ -208,6 +231,8 @@ export class World {
     oysterEnv.uOyWater.value.set(this.tideLevel, this.habitat.wetLevel);
     oysterEnv.uOyTime.value += dt;
     this.riprap?.update(camera);
+    this.mangroves?.update(dt, camera, { tideLevel: this.tideLevel, wetLevel: this.habitat.wetLevel });
+    this.carrion?.update(anchor.x, anchor.z, dt);
     this.terrain.updateLod(anchor.x, anchor.z);
     // (absolute: a ticket or the debug clock can move game time backwards, and the pools must follow at once)
     if (Math.abs(gameMs - this.lastHabitatMs) > 2000 || this.lastHabitatMs === 0) {

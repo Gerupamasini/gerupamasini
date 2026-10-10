@@ -2,7 +2,7 @@ import type { Object3D } from 'three';
 import type { Individual } from '../../Individual';
 import type { Intent } from '../../drivers/Driver';
 import { ShoreDriver, ease, seedOf } from './ShoreDriver';
-import { makeCrab, makeHermit, makeSnail, type ShoreModel } from './models';
+import { makeCrab, makeHermit, type ShoreModel } from './models';
 
 /** the rest rotations of the parts a driver swings about, so the swing is added to them */
 function restOf(parts: Record<string, Object3D>): Record<string, { x: number; y: number; z: number; py: number; pz: number }> {
@@ -198,80 +198,4 @@ export class HermitDriver extends ShoreDriver {
       a.rotation.x = r[ak].x + 0.15 * Math.sin(this.t * 1.3 + ph);
     }
   }
-}
-
-// ------------------------------------------------------------------ アラムシロ
-/**
- * アラムシロ: glides slowly on its pale foot with the siphon held up and swinging, tasting the water for carrion;
- * buries itself in the sand with only the siphon showing, and withdraws into its shell when touched or nearly so.
- */
-export class SnailDriver extends ShoreDriver {
-  private rest: ReturnType<typeof restOf> = {};
-  private withdraw = 0;
-  private bury = 0;
-  private sniff = 0;
-
-  static readonly MODEL_MM = 13;
-  static makeModel() { return ShoreDriver.holder(SnailDriver.MODEL_MM / 1000, 'Snail'); }
-  static makePreview(seed = 0.3): Object3D {
-    const m = makeSnail(SnailDriver.MODEL_MM / 1000, Math.floor(seed * 1e6) + 1);
-    m.root.userData.disposable = true;
-    return m.root;
-  }
-
-  constructor() {
-    super();
-    this.turnRate = 0.9;
-  }
-
-  protected build(ind: Individual): ShoreModel {
-    this.size = ind.length_mm / 1000;
-    const m = makeSnail(this.size, seedOf(ind));
-    this.rest = restOf(m.parts);
-    this.bakeParts = m.root.children.slice();
-    return m;
-  }
-
-  protected begin(intent: Intent): void {
-    const s = this.size;
-    switch (intent.kind) {
-      case 'rest': this.mode = 'rest'; this.target = null; break;
-      case 'wander': case 'moveTo':
-        this.mode = 'crawl';
-        this.go(intent.target, s * (intent.kind === 'moveTo' ? 0.45 : 0.25));
-        this.emit('crawl');
-        break;
-      case 'forage':
-        // nose about: a short crawl with the siphon sweeping wide
-        this.mode = 'forage';
-        this.target = null;
-        this.emit('siphon_search');
-        break;
-      case 'burrow': this.mode = 'bury'; this.target = null; this.emit('bury'); break;
-      case 'flee': case 'display': this.mode = 'withdrawn'; this.target = null; this.timer = Math.max(this.timer, 4); this.emit('withdraw'); break;
-      default: this.mode = 'idle'; this.target = null;
-    }
-  }
-
-  protected pose(dt: number): void {
-    const p = this.parts, r = this.rest, s = this.size;
-    const moving = Math.min(1, this.speed / (s * 0.2));
-    this.withdraw = ease(this.withdraw, this.mode === 'withdrawn' ? 1 : 0, dt, this.mode === 'withdrawn' ? 0.1 : 1.2);
-    this.bury = ease(this.bury, this.mode === 'bury' ? 1 : 0, dt, 2.5);
-    this.sniff = ease(this.sniff, this.mode === 'forage' ? 1 : 0, dt, 0.5);
-    const w = this.withdraw, b = this.bury;
-    const model = this.model?.root;
-    // dug in: shell under the sand, only the siphon's tip above it
-    if (model) model.position.y = -s * 0.42 * b;
-    if (!this.far) { p.foot.visible = w < 0.9; p.siphon.visible = w < 0.7; }
-    p.foot.scale.set(s * 0.45 * (1 - 0.8 * w), s * 0.1 * (1 - 0.5 * w), s * 0.95 * (1 - 0.75 * w) * (1 + 0.04 * moving * Math.sin(this.t * 7)));
-    p.shell.position.y = r.shell.py - s * 0.06 * w;
-    p.siphon.scale.setScalar(Math.max(0.05, 1 - w));
-    if (this.detail > 0) return;
-    // the siphon: up and swinging as it goes, straight up when buried, sweeping wide when it searches
-    p.siphon.rotation.x = r.siphon.x - 0.6 * b;
-    p.siphon.rotation.y = (0.35 + 0.45 * this.sniff) * Math.sin(this.t * (1.1 + 0.8 * this.sniff));
-  }
-
-  protected override anchorHeight(): number { return this.size * (0.3 - 0.35 * this.bury); }
 }

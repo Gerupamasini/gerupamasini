@@ -1,7 +1,7 @@
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'run' | 'crouch'
   | 'interact' | 'observe' | 'zukan' | 'menu' | 'speedUp' | 'speedDown' | 'home' | 'ticket' | 'debug' | 'zoom' | 'zoomIn' | 'zoomOut' | 'map'
-  | 'tool1' | 'tool2' | 'tool3' | 'caseView' | 'jump' | 'sunglasses';
+  | 'tool1' | 'tool2' | 'tool3' | 'caseView' | 'jump' | 'sunglasses' | 'viewUp' | 'viewDown';
 
 const BINDINGS: Record<Action, string[]> = {
   forward: ['KeyW', 'ArrowUp'],
@@ -10,6 +10,8 @@ const BINDINGS: Record<Action, string[]> = {
   right: ['KeyD', 'ArrowRight'],
   run: ['ShiftLeft', 'ShiftRight'],
   crouch: ['ControlLeft', 'ControlRight', 'KeyC'],
+  viewUp: ['ShiftLeft', 'ShiftRight'],
+  viewDown: ['ControlLeft', 'ControlRight'],
   interact: ['KeyE'],
   observe: ['KeyF'],
   zukan: ['Tab'],
@@ -31,11 +33,17 @@ const BINDINGS: Record<Action, string[]> = {
   sunglasses: ['KeyG'],
 };
 
-/** Keyboard and mouse state with per-frame edge detection. */
+/** Keyboard, mouse and touch state with per-frame edge detection. */
 export class Input {
+  readonly touchDevice = window.matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0;
   private down = new Set<string>();
   private pressedCodes = new Set<string>();
   private releasedCodes = new Set<string>();
+  private touchActions = new Set<Action>();
+  private touchPressed = new Set<Action>();
+  private touchRight = 0;
+  private touchForward = 0;
+  private lookPointer: { id: number; x: number; y: number } | null = null;
   mouseDX = 0;
   mouseDY = 0;
   wheel = 0;
@@ -63,7 +71,14 @@ export class Input {
       this.down.delete(e.code);
       this.releasedCodes.add(e.code);
     });
-    window.addEventListener('blur', () => this.down.clear());
+    const reset = () => {
+      this.down.clear();
+      this.pressedCodes.clear();
+      this.clearTouch();
+      this.mouseDown = this.mouseRightDown = this.mouseClicked = false;
+    };
+    window.addEventListener('blur', reset);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });
     document.addEventListener('pointerlockchange', () => {
       this.pointerLocked = document.pointerLockElement === canvas;
     });
@@ -84,9 +99,32 @@ export class Input {
       if (button === 0) this.mouseDown = false;
       if (button === 2) this.mouseRightDown = false;
     };
-    canvas.addEventListener('pointerdown', (e) => down(e.button));
-    window.addEventListener('pointerup', (e) => up(e.button));
-    window.addEventListener('pointercancel', () => { this.mouseDown = false; this.mouseRightDown = false; });
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') { down(e.button); return; }
+      e.preventDefault();
+      if (!this.dragLook || this.blocked || this.lookPointer) return;
+      this.lookPointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      const p = this.lookPointer;
+      if (!p || p.id !== e.pointerId || !this.dragLook || this.blocked) return;
+      this.mouseDX += e.clientX - p.x;
+      this.mouseDY += e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+    });
+    const release = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') up(e.button);
+      if (this.lookPointer?.id === e.pointerId) this.lookPointer = null;
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', (e) => {
+      release(e);
+      if (e.pointerType !== 'touch') this.mouseDown = this.mouseRightDown = false;
+    });
+    canvas.addEventListener('lostpointercapture', release);
+    // Keep mouse events for browsers that suppress pointer events during pointer lock.
+    // preventDefault on touch pointerdown suppresses compatibility mouse events.
     canvas.addEventListener('mousedown', (e) => down(e.button));
     window.addEventListener('mouseup', (e) => up(e.button));
     canvas.addEventListener('wheel', (e) => {
@@ -103,12 +141,40 @@ export class Input {
 
   held(action: Action): boolean {
     if (this.blocked) return false;
-    return BINDINGS[action].some((c) => this.down.has(c));
+    return this.touchActions.has(action) || BINDINGS[action].some((c) => this.down.has(c));
   }
 
   pressed(action: Action): boolean {
-    if (this.blocked && action !== 'menu') return false;
-    return BINDINGS[action].some((c) => this.pressedCodes.has(c));
+    if (this.blocked && action !== 'menu' && action !== 'map') return false;
+    return this.touchPressed.has(action) || BINDINGS[action].some((c) => this.pressedCodes.has(c));
+  }
+
+  setTouchAction(action: Action, held: boolean): void {
+    if (held) {
+      if (!this.touchActions.has(action)) this.touchPressed.add(action);
+      this.touchActions.add(action);
+    } else this.touchActions.delete(action);
+  }
+
+  setTouchMove(right: number, forward: number): void {
+    const safe = (n: number) => Number.isFinite(n) ? Math.max(-1, Math.min(1, n)) : 0;
+    this.touchRight = safe(right); this.touchForward = safe(forward);
+  }
+
+  get moveRight(): number {
+    return this.blocked ? 0 : Math.max(-1, Math.min(1, this.touchRight + Number(this.held('right')) - Number(this.held('left'))));
+  }
+
+  get moveForward(): number {
+    return this.blocked ? 0 : Math.max(-1, Math.min(1, this.touchForward + Number(this.held('forward')) - Number(this.held('back'))));
+  }
+
+  /** Release fingers when leaving a screen, hiding the page or cancelling an OS gesture. */
+  clearTouch(): void {
+    this.touchActions.clear(); this.touchPressed.clear();
+    this.touchRight = this.touchForward = 0;
+    this.lookPointer = null;
+    this.mouseDX = this.mouseDY = 0;
   }
 
   keyPressed(code: string): boolean {
@@ -116,6 +182,7 @@ export class Input {
   }
 
   requestPointerLock(): void {
+    if (this.touchDevice) return;
     if (this.pointerLocked || document.pointerLockElement === this.canvas) return;
     try {
       const r = (this.canvas.requestPointerLock as (() => Promise<void> | void) | undefined)?.call(this.canvas);
@@ -127,7 +194,7 @@ export class Input {
 
   /** true while the view follows the mouse: the pointer is locked, or the fallback drag is in progress */
   get looking(): boolean {
-    return this.pointerLocked || (this.dragLook && this.mouseDown);
+    return this.pointerLocked || (this.dragLook && (this.mouseDown || this.lookPointer !== null));
   }
 
   exitPointerLock(): void {
@@ -137,6 +204,7 @@ export class Input {
   /** Consume per-frame deltas. Call at the end of the frame. */
   endFrame(): void {
     this.pressedCodes.clear();
+    this.touchPressed.clear();
     this.releasedCodes.clear();
     this.mouseDX = 0;
     this.mouseDY = 0;

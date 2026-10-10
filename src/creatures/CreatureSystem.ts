@@ -11,7 +11,7 @@ import { BehaviorTree, type PerceptionContext } from './brain/BehaviorTree';
 import { Spawner, type SpawnEnv } from './Spawner';
 export type { SpawnEnv };
 import { minDepthFor, type Individual } from './Individual';
-import type { BehaviorEvent, Driver, Floor, Intent, MeadowProbe } from './drivers/Driver';
+import type { BehaviorEvent, Driver, Floor, Intent, MeadowProbe, ScentProbe } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
 import { modelFor, variantOf } from './models/choice';
@@ -88,6 +88,7 @@ export class CreatureSystem {
     readonly removed: Set<string>,
     /** animals never appear closer to the player than this (m); a small, busy shore lets them come nearer */
     private readonly minSpawnDist?: number,
+    private readonly enabled = true,
   ) {
     this.group.name = 'creatures';
     scene.add(this.group);
@@ -105,8 +106,14 @@ export class CreatureSystem {
     this.floor.meadow = meadow;
   }
 
+  /** The carrion lying about the flat, for the scavengers. */
+  setScent(scent: ScentProbe | null): void {
+    this.floor.scent = scent;
+  }
+
   /** Warm the model cache for the distance tiers. */
   async preload(): Promise<void> {
+    if (!this.enabled) return;
     const jobs: Promise<unknown>[] = [];
     for (const sp of this.data.species.values()) {
       // only what lives on this flat (the others load when they are first needed, in the tank or the book)
@@ -164,6 +171,7 @@ export class CreatureSystem {
   private lastLockedId: string | null = null;
 
   update(f: CreatureFrame): void {
+    if (!this.enabled) return;
     this.frameIndex++;
     this.nowMs = f.gameMs;
     this.lastLockedId = f.lockedId;
@@ -299,6 +307,7 @@ export class CreatureSystem {
   }
 
   spawn(ind: Individual): void {
+    if (!this.enabled) return;
     if (this.entries.has(ind.id)) return;
     const entry = DRIVERS[ind.species.model.driver ?? ''];
     if (!entry) { console.warn(`[creatures] no driver for ${ind.species.id}`); return; }
@@ -329,6 +338,7 @@ export class CreatureSystem {
   /** debug: spawn everything the rules allow right around the player, ignoring the pop-in distance (`scale` < 1: the
    * preset's share of it instead, as the measurements want) */
   forceSpawn(playerPos: Vector3, env: SpawnEnv, scale = 1): number {
+    if (!this.enabled) return 0;
     const requests = this.spawner.plan(playerPos.x, playerPos.z, env, this.individuals, 0, scale);
     for (const req of requests) this.spawn(this.spawner.create(req, env.gameMs));
     return requests.length;
@@ -461,6 +471,14 @@ export class CreatureSystem {
     // before the model is attached the driver has no anchor of its own: the individual's place stands in (an
     // observation started right after a spawn — a clam, a reef oyster — looks there, and the view follows)
     return e ? (e.view ? e.driver.anchor().clone() : e.ind.pos.clone()) : null;
+  }
+
+  canNetCapture(id: string): boolean {
+    const e = this.entries.get(id);
+    if (!e || !e.ind.species.collectable || e.ind.species.taxon.group === 'bird') return false;
+    if (e.ind.species.locomotion !== 'burrow') return true;
+    // Unknown/unattached burrowers stay dig-only; a visible siphon is not a visible shell.
+    return !!e.view && e.driver.canNetCapture?.() === true;
   }
 
   /** Visible individuals count by tier (debug / HUD). */

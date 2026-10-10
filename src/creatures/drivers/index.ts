@@ -9,11 +9,12 @@ import { AsariDriver } from '../asari/Asari.js';
 import { FORMS } from '../asari/AsariModel.js';
 import { PagurusMinutusDriver } from '../yubinagahonyadokari/PagurusMinutusDriver';
 import { OysterDriver } from '../oyster/OysterDriver';
-import { CrabDriver, HermitDriver, SnailDriver } from '../species/shore/crawlers';
+import { CrabDriver, HermitDriver } from '../species/shore/crawlers';
 import { WormDriver } from '../species/shore/others';
 import { HakuDriver } from '../species/haku/HakuDriver';
 import { AmimehagiDriver } from '../species/amimehagi/AmimehagiDriver';
 import { YoujiuoDriver } from '../species/youjiuo/YoujiuoDriver';
+import { AramushiroDriver } from '../species/aramushiro/AramushiroDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -42,7 +43,6 @@ export const DRIVERS: Record<string, DriverEntry> = {
   // the 走水 shore: procedural models built per individual by the drivers
   crab: { create: () => new CrabDriver(), placeholder: () => CrabDriver.makeModel(), preview: (seed) => CrabDriver.makePreview(seed) },
   hermit: { create: () => new HermitDriver(), placeholder: () => HermitDriver.makeModel(), preview: (seed) => HermitDriver.makePreview(seed) },
-  snail: { create: () => new SnailDriver(), placeholder: () => SnailDriver.makeModel(), preview: (seed) => SnailDriver.makePreview(seed) },
   worm: { create: () => new WormDriver(), placeholder: () => WormDriver.makeModel(), preview: (seed) => WormDriver.makePreview(seed) },
   // ハク: the schooling juvenile mullet (its own tiers in the placeholder view; near within 5 m)
   haku: { create: () => new HakuDriver(), placeholder: () => HakuDriver.makeModel(), preview: () => HakuDriver.makePreview(), nearDistance: 5 },
@@ -50,4 +50,6 @@ export const DRIVERS: Record<string, DriverEntry> = {
   amimehagi: { create: () => new AmimehagiDriver(), placeholder: () => AmimehagiDriver.makeModel(), preview: (seed) => AmimehagiDriver.makePreview(seed), nearDistance: 4 },
   // ヨウジウオ: the pipefish of the eelgrass (its own tiers in the placeholder view; near within 6 m)
   youjiuo: { create: () => new YoujiuoDriver(), placeholder: () => YoujiuoDriver.makeModel(), preview: (seed) => YoujiuoDriver.makePreview(seed), nearDistance: 6 },
+  // アラムシロ: the carrion snail of the sand (its own tiers in the placeholder view; near within 3 m)
+  aramushiro: { create: () => new AramushiroDriver(), placeholder: () => AramushiroDriver.makeModel(), preview: (seed) => AramushiroDriver.makePreview(seed), nearDistance: 3 },
 };

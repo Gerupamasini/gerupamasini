@@ -2,6 +2,8 @@ import { get, set, del } from 'idb-keyval';
 import type { TicketState } from './GameClock';
 import type { IndividualRecord } from '../creatures/Individual';
 import type { TankLayout } from '../app/TankLayout';
+import { emptyEquipmentCollection, normalizeCollection, ownedEquipmentLayout, type EquipmentCollection } from '../aquarium/catalog';
+import { normalizeEquipment } from '../aquarium/state';
 
 export interface SpeciesProgress {
   discovered?: number;
@@ -33,6 +35,7 @@ export interface SaveV1 {
   encyclopedia: Record<string, SpeciesProgress>;
   case: IndividualRecord[];
   tank: { individuals: IndividualRecord[]; lastSimMs: number; layout?: TankLayout };
+  equipmentCollection?: EquipmentCollection;
   removedIndividuals: string[];
   stats: { playSeconds: number; captures: number; observations: number };
 }
@@ -46,6 +49,7 @@ export function emptySave(map: string, now: number): SaveV1 {
     player: { map, pos: [0, 0, 0], heading: 0, money: 0, research: 0, tools: [DEFAULT_NET, 'shovel'], loadout: [DEFAULT_NET, 'shovel'], skills: {}, levelClaimed: 1 },
     ticket: { active: null, usedCount: 0 },
     encyclopedia: {}, case: [], tank: { individuals: [], lastSimMs: now, layout: { substrate: 'sand', items: [] } }, removedIndividuals: [],
+    equipmentCollection: emptyEquipmentCollection(),
     stats: { playSeconds: 0, captures: 0, observations: 0 },
   };
 }
@@ -54,6 +58,9 @@ function migrate(raw: unknown): SaveV1 | null {
   if (!raw || typeof raw !== 'object') return null;
   const s = raw as Partial<SaveV1>;
   if (s.version !== 1) return null;
+  const equipment = normalizeEquipment(s.tank?.layout?.equipment);
+  s.equipmentCollection = normalizeCollection(s.equipmentCollection, equipment);
+  if (s.tank?.layout) s.tank.layout.equipment = ownedEquipmentLayout(equipment, s.equipmentCollection);
   if (s.player) {
     if (!s.player.skills) s.player.skills = {};
     if (!s.player.tools) s.player.tools = [];

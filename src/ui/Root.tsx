@@ -17,12 +17,15 @@ import { TankPanel } from './tank/TankPanel';
 import { CaseOverlay } from './field/CaseOverlay';
 import { SpotSelect } from './home/SpotSelect';
 import { ShopScreen } from './home/ShopScreen';
+import { GachaScreen } from './home/GachaScreen';
 import { DebugPanel } from './debug/DebugPanel';
 import { CreatureMarkers } from './debug/CreatureMarkers';
+import { TouchControls } from './TouchControls';
 import { ArrowIcon, Key, KeyHint, MoonIcon } from './common/Icons';
 import { tideName } from '../core/Moon';
 import { BUILD, versionLabel, builtAtLabel } from '../core/Build';
 import './ui.css';
+import './mobile.css';
 
 export function Root({ app }: { app: App }) {
   const screen = ui.screen.value;
@@ -39,21 +42,23 @@ export function Root({ app }: { app: App }) {
       {screen === 'title' && <Title app={app} />}
       {screen === 'home' && <HomeMenu app={app} />}
       {screen === 'tankEdit' && <TankEdit app={app} />}
-      {ui.transition.value && <Transition label={ui.transition.value} />}
+      {ui.transition.value && <Transition label={ui.transition.value} touch={app.input.touchDevice} />}
       {inField && ui.settings.value.sunglasses && <div class="sunglasses-tint" aria-hidden="true" />}
       {(screen === 'field' || screen === 'capture') && <Hud app={app} />}
       {screen === 'observe' && <ObserveOverlay app={app} />}
       {screen === 'caseView' && <CaseOverlay app={app} />}
       {screen === 'capture' && <CaptureOverlay app={app} />}
-      {inField && <CreatureMarkers />}
+      {inField && !app.input.touchDevice && <CreatureMarkers />}
       {screen === 'field' && ui.mapOpen.value && <MapOverlay app={app} />}
       {screen === 'zukan' && <Zukan app={app} />}
       {screen === 'menu' && <Menu app={app} />}
       {screen === 'spots' && <SpotSelect app={app} />}
       {screen === 'shop' && <ShopScreen app={app} />}
+      {screen === 'gacha' && <GachaScreen app={app} />}
       {screen === 'ticket' && <TideTable app={app} />}
       {screen === 'tidetable' && <TideTable app={app} />}
-      {ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}
+      {!app.input.touchDevice && ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}
+      {app.input.touchDevice && <TouchControls key={screen} app={app} />}
       <Toasts />
     </Fragment>
   );
@@ -73,7 +78,8 @@ function TankEdit({ app }: { app: App }) {
 }
 
 /** The curtain between screens. */
-function Transition({ label }: { label: string }) {
+function Transition({ label, touch }: { label: string; touch: boolean }) {
+  if (touch) return <div class="screen loading transition mobile-transition"><span role="status">{label}</span></div>;
   return (
     <div class="screen loading transition">
       <h1 class="wordmark">{t('app.title')}</h1>
@@ -147,9 +153,21 @@ const KEY_HINTS: [string[], string][] = [
 function Hud({ app }: { app: App }) {
   const hud = ui.hud.value;
   const screen = ui.screen.value;
+  if (app.input.touchDevice) return <Fragment>
+    <div class="mobile-field-status">
+      <span class="num">{hud.timeText}</span>
+      <span>潮位 {(hud.tideLevel * 100).toFixed(0)} cm</span>
+      <span>ケース {hud.caseCount}/{hud.caseMax}</span>
+      {hud.tooDeep && <span class="mobile-depth-warning">水深注意</span>}
+      {hud.ticket && <span class="mobile-ticket">潮時 {Math.floor(hud.ticket.remainingSec / 60)}:{String(hud.ticket.remainingSec % 60).padStart(2, '0')}</span>}
+    </div>
+    <div class="mobile-field-tide"><TideGauge /></div>
+    <button class="btn mobile-minimap" aria-label="地図を開く" onClick={() => app.toggleMap()}><Minimap app={app} /></button>
+    <div class="reticle" />
+  </Fragment>;
   return (
     <Fragment>
-      {!hud.pointerLocked && screen === 'field' && (
+      {!app.input.touchDevice && !hud.pointerLocked && screen === 'field' && (
         <div class="screen center transparent" onClick={() => app.focusGame()}>
           <div class="ready">
             <div class="ready-pill">{t('hud.ready')} <Key k="Enter" /></div>

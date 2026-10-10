@@ -51,6 +51,10 @@ export class FPSController {
   jumped = false;
   /** extra ground under the feet (stones of the revetment), metres above the terrain */
   groundBoost: ((x: number, z: number) => number) | null = null;
+  /** Bounded support query: feet may stand on prop roots, never snap to an overhead root. */
+  supportHeight: ((x: number, z: number, maxY: number) => number | null) | null = null;
+  /** Optional swept obstacle test; terrain-only maps keep their original movement path. */
+  obstacleFree: ((from: Vector3, to: Vector3) => boolean) | null = null;
   private readonly tmpForward = new Vector3();
   private readonly tmpRight = new Vector3();
   /** the deepest water the player can wade into: boots (35 cm) unless the map says chest waders */
@@ -120,10 +124,8 @@ export class FPSController {
     }
     let mx = 0, mz = 0;
     if (this.enabled) {
-      if (input.held('forward')) mz += 1;
-      if (input.held('back')) mz -= 1;
-      if (input.held('right')) mx += 1;
-      if (input.held('left')) mx -= 1;
+      mz = input.moveForward;
+      mx = input.moveRight;
     }
     const len = Math.hypot(mx, mz);
     this.blockedByDepth = false;
@@ -162,7 +164,7 @@ export class FPSController {
       this.speedNow = Math.hypot(this.dashVX, this.dashVZ);
       // the flight is in absolute height: the eye glides over ripples and hollows instead of jittering with the
       // ground under the feet; it lands where the ground comes up to meet it
-      const groundNow = this.terrain.heightAt(this.position.x, this.position.z);
+      const groundNow = this.groundAt(this.position.x, this.position.z);
       this.airY = this.jumpBaseY - groundNow;
       this.airTime += dt;
       // down on the ground: falling onto it, or rising ground catching the feet (not in the first instant of the hop)
@@ -178,7 +180,7 @@ export class FPSController {
       const fwd = this.forward;
       this.tmpRight.set(-fwd.z, 0, fwd.x);
       const dir = new Vector3().addScaledVector(fwd, mz).addScaledVector(this.tmpRight, mx);
-      let speed = this.running ? RUN : this.crouching ? CROUCH : WALK;
+      let speed = (this.running ? RUN : this.crouching ? CROUCH : WALK) * Math.min(1, len);
       const sub = this.terrain.substrateAt(this.position.x, this.position.z);
       if (sub === 'mud' || sub === 'channel') speed *= 0.65;
       else if (sub === 'muddy_sand') speed *= 0.85;
@@ -195,7 +197,7 @@ export class FPSController {
       this.bob += dt * speed * 1.8;
     }
     this.speedNowLast = this.speedNow;
-    this.depthHere = this.habitat.depthAt(this.position.x, this.position.z);
+    this.depthHere = Math.max(0, this.habitat.waterAt(this.position.x, this.position.z) - this.groundAt(this.position.x, this.position.z));
     this.position.y = this.groundAt(this.position.x, this.position.z);
     this.syncCamera(dt);
   }
@@ -204,16 +206,20 @@ export class FPSController {
 
   /** the ground the feet stand on: the terrain, or a stone on it */
   private groundAt(x: number, z: number): number {
-    return this.terrain.heightAt(x, z) + (this.groundBoost ? this.groundBoost(x, z) : 0);
+    const terrain = this.terrain.heightAt(x, z) + (this.groundBoost ? this.groundBoost(x, z) : 0);
+    const maxY = (this.airborne ? this.jumpBaseY : this.position.y) + 0.45;
+    return Math.max(terrain, this.supportHeight?.(x, z, maxY) ?? terrain);
   }
 
   private canStand(x: number, z: number): boolean {
     const b = this.map.bounds.walkable;
     if (x < b[0][0] || x > b[1][0] || z < b[0][1] || z > b[1][1]) return false;
     for (const ne of this.map.bounds.noEntry) if (x >= ne[0][0] && x <= ne[1][0] && z >= ne[0][1] && z <= ne[1][1]) return false;
-    if (this.habitat.depthAt(x, z) > this.wadeDepth) return false;
     const h = this.groundAt(x, z);
-    if (h - this.position.y > 0.6) return false; // too steep a step
+    if ((this.supportHeight ? this.habitat.waterAt(x, z) - h : this.habitat.depthAt(x, z)) > this.wadeDepth) return false;
+    const feetY = this.airborne ? this.jumpBaseY : this.position.y;
+    if (h - feetY > (this.supportHeight ? 0.45 : 0.6)) return false; // too steep a step
+    if (this.obstacleFree && !this.obstacleFree(new Vector3(this.position.x, feetY, this.position.z), new Vector3(x, Math.max(h, this.airborne ? feetY : h), z))) return false;
     return true;
   }
 

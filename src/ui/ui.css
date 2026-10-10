@@ -25,8 +25,8 @@
 .btn.lg { height: 52px; padding: 0 30px; font-size: 15px; }
 .icon-btn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px 0 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(236, 244, 244, 0.04); color: var(--fg-2); transition: background 0.2s var(--ease), border-color 0.2s var(--ease), color 0.2s var(--ease); }
 .icon-btn:hover { background: rgba(236, 244, 244, 0.1); border-color: var(--line-2); color: var(--fg); }
-button:not(.btn):not(.icon-btn):not(.nav-item):not(.chip):not(.seg > button):not(.zukan-item) { background: rgba(236, 244, 244, 0.06); color: var(--fg); border: 1px solid var(--line-2); border-radius: 999px; padding: 8px 16px; font-size: 13px; letter-spacing: 0.04em; transition: background 0.2s var(--ease), border-color 0.2s var(--ease); }
-button:not(.btn):not(.icon-btn):not(.nav-item):not(.chip):not(.seg > button):not(.zukan-item):hover { background: rgba(236, 244, 244, 0.12); border-color: rgba(236, 244, 244, 0.3); }
+button:not(.btn):not(.icon-btn):not(.nav-item):not(.nav-tile):not(.nav-primary):not(.touch-button):not(.tool-chip):not(.chip):not(.seg > button):not(.zukan-item) { background: rgba(236, 244, 244, 0.06); color: var(--fg); border: 1px solid var(--line-2); border-radius: 999px; padding: 8px 16px; font-size: 13px; letter-spacing: 0.04em; transition: background 0.2s var(--ease), border-color 0.2s var(--ease); }
+button:not(.btn):not(.icon-btn):not(.nav-item):not(.nav-tile):not(.nav-primary):not(.touch-button):not(.tool-chip):not(.chip):not(.seg > button):not(.zukan-item):hover { background: rgba(236, 244, 244, 0.12); border-color: rgba(236, 244, 244, 0.3); }
 button.primary:not(.btn) { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 700; }
 .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; border: 1px solid var(--line); background: rgba(5, 11, 14, 0.35); }
 .seg > button { background: transparent; border: 0; color: var(--dim); padding: 6px 14px; border-radius: 999px; font-size: 13px; letter-spacing: 0.04em; transition: background 0.2s var(--ease), color 0.2s var(--ease); }
@@ -266,7 +266,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 /* tank drawer */
 .drawer { position: fixed; right: 24px; top: 356px; bottom: 108px; width: min(92vw, 360px); display: flex; flex-direction: column; padding: 18px 20px 16px; overflow: hidden; animation: rise 0.4s var(--ease) both; }
 /* the edit screen has nothing above the drawer: let it use the height */
-.tank-edit .drawer { top: 120px; }
+.tank-edit .drawer { top: 96px; bottom: 24px; }
 .drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .drawer-head h2 { margin: 0; font-family: var(--font-display); font-size: 18px; letter-spacing: 0.08em; font-weight: 700; }
 .drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
@@ -289,6 +289,95 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .tank-items li.on { background: rgba(127, 227, 210, 0.12); }
 .tank-item-actions { display: flex; gap: 4px; }
 .drawer .foot { color: var(--dim-2); font-size: 11px; letter-spacing: 0.06em; margin-top: 10px; }
+.equipment-summary { display: flex; gap: 16px; flex-wrap: wrap; padding: 14px 0; font-size: 12px; color: var(--dim); }
+.equipment-summary strong { color: var(--fg); margin-left: 5px; }
+.equipment-view, .equipment-actions, .equipment-add { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.equipment-add select { flex: 1; }
+.equipment-card { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.equipment-card summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 13px; }
+.equipment-status { font-size: 10px; color: var(--dim); border: 1px solid var(--line); border-radius: 8px; padding: 2px 7px; }
+.equipment-status.active { color: var(--accent); }
+.equipment-position { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.equipment-position label, .equipment-setting, .equipment-connect label { color: var(--dim); font-size: 11px; display: flex; flex-direction: column; gap: 5px; }
+.equipment-position input, .equipment-setting input, .equipment-add select, .equipment-connect select { width: 100%; min-width: 0; padding: 6px; color: var(--fg); background: #142127; border: 1px solid var(--line); border-radius: 5px; font: inherit; box-sizing: border-box; }
+.equipment-actions button { padding: 5px 9px !important; font-size: 11px !important; }
+.equipment-connect { margin: 12px 0; }
+.equipment-connect summary { cursor: pointer; font-size: 12px; }
+.equipment-connect label { margin: 9px 0; }
+.equipment-connections { list-style: none; padding: 0; margin: 12px 0; }
+.equipment-connections li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.equipment-connections small { display: block; margin-bottom: 3px; color: var(--accent); }
+.equipment-connections button { padding: 4px 8px !important; font-size: 10px !important; flex-shrink: 0; }
+.equipment-warning { color: #e9ba83; }
+
+.equipment-slots, .equipment-choices { display: grid; gap: 7px; }
+.drawer .equipment-slot, .drawer .equipment-choice { display: flex; align-items: center; gap: 10px; width: 100%; height: auto; text-align: left; padding: 10px; background: rgba(15, 28, 32, 0.75); border: 1px solid var(--line); border-radius: 9px; color: var(--fg); }
+.equipment-slot > span:nth-child(2), .equipment-choice > span:nth-child(2) { flex: 1; min-width: 0; }
+.equipment-slot small, .equipment-choice small { display: block; color: var(--dim); font-size: 10px; margin: 3px 0; }
+.equipment-slot strong { display: block; font-size: 12px; font-weight: 500; line-height: 1.6; }
+.equipment-slot > span:last-child { color: var(--dim); font-size: 22px; }
+.drawer .equipment-choice { font-size: 12px; }
+.drawer .equipment-choice.on { border-color: var(--accent); background: rgba(127, 227, 210, 0.07); }
+.equipment-choice.locked { opacity: 0.65; }
+.equipment-item-detail { display: flex; gap: 14px; padding: 16px 0; align-items: flex-start; }
+.equipment-item-detail h3 { margin: 7px 0; font-size: 16px; line-height: 1.5; }
+.equipment-item-detail p { line-height: 1.8; }
+.equipment-rarity { display: inline-block; font-family: var(--font-mono); padding: 2px 7px; border: 1px solid var(--line); border-radius: 5px; font-size: 10px; color: var(--dim); }
+.equipment-rarity.rarity-N { color: var(--accent); border-color: rgba(127, 227, 210, 0.4); }
+.equipment-rarity.rarity-R { color: #ffe2a3; border-color: rgba(255, 226, 163, 0.4); }
+.equipment-instances { display: flex; flex-wrap: wrap; gap: 5px; }
+.equipment-instances button { font-size: 10px !important; }
+.equipment-instances .on { border-color: var(--accent) !important; }
+.equipment-back { margin-top: 12px; }
+.equipment-swatch { --finish: #555d60; --shine: #899a9d; position: relative; display: inline-block; flex: 0 0 42px; width: 42px; height: 42px; border-radius: 8px; background: radial-gradient(ellipse at 50% 10%, #263f43, #101b20 80%); overflow: hidden; }
+.equipment-swatch.finish-ivory { --finish: #d7ceb7; --shine: #faf4e6; }
+.equipment-swatch.finish-studio { --finish: #677b82; --shine: #b2c5cb; }
+.equipment-swatch i { position: absolute; left: 27%; top: 22%; width: 46%; height: 60%; border: 1px solid var(--shine); border-radius: 5px; background: linear-gradient(115deg, var(--shine), var(--finish) 40%, var(--finish)); box-shadow: 3px 5px 8px #0008; }
+.equipment-swatch b { position: absolute; left: 33%; top: 33%; width: 34%; height: 6%; border-radius: 3px; background: #c3e8dc; opacity: 0.7; }
+.equipment-swatch.silhouette-tank i { left: 12%; top: 30%; width: 76%; height: 46%; border-radius: 1px; background: linear-gradient(130deg, #718c8733, #274a5355); border: 2px solid var(--shine); }
+.equipment-swatch.silhouette-tank b { left: 16%; top: 64%; width: 68%; height: 9%; background: #a89878; }
+.equipment-swatch.silhouette-cabinet i { left: 18%; top: 18%; width: 64%; height: 66%; border-radius: 1px; }
+.equipment-swatch.silhouette-cabinet b { left: 49%; top: 23%; width: 2%; height: 55%; background: #26393b; }
+.equipment-swatch.silhouette-bar i { left: 9%; top: 38%; width: 82%; height: 14%; border-radius: 2px; }
+.equipment-swatch.silhouette-bar b { left: 15%; top: 53%; width: 70%; height: 3%; background: #eaffff; }
+.equipment-swatch.silhouette-stone i { left: 20%; top: 62%; width: 60%; height: 16%; border-radius: 6px; }
+.equipment-swatch.silhouette-stone b { left: 45%; top: 24%; width: 9%; height: 9%; border-radius: 50%; box-shadow: -5px 9px 0 #c3e8dc, 4px 17px 0 #c3e8dc; }
+.equipment-swatch.large { flex-basis: 72px; width: 72px; height: 72px; border-radius: 12px; }
+.gacha-screen { position: fixed; inset: 0; display: flex; justify-content: center; align-items: center; padding: 24px; background: #040c11b3; box-sizing: border-box; }
+.gacha-panel { display: flex; flex-direction: column; width: min(880px, 100%); max-height: calc(100dvh - 48px); border-radius: 18px; background: #09181eea; overflow: hidden; }
+.gacha-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 26px; border-bottom: 1px solid var(--line); }
+.gacha-head h2 { font-family: var(--font-display); font-size: 26px; margin: 6px 0 0; }
+.gacha-body { padding: 22px 26px; overflow-y: auto; }
+.gacha-intro { display: flex; align-items: center; gap: 24px; }
+.gacha-intro h3 { margin: 0 0 10px; font-size: 19px; }
+.gacha-intro p { font-size: 13px; line-height: 1.8; }
+.gacha-capsule { display: grid; place-items: center; flex: 0 0 96px; width: 96px; height: 96px; border-radius: 50%; color: var(--accent); background: radial-gradient(circle, #24514e, #11252b); border: 1px solid #7fe3d244; }
+.gacha-capsule svg { width: 50px; height: 50px; }
+.gacha-capsule.rolling { animation: gacha-roll 0.5s ease infinite; }
+.gacha-wallet { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px 0; color: var(--dim); font-size: 12px; }
+.gacha-wallet strong { color: #ffe2a3; font-size: 24px; margin-left: 8px; }
+.gacha-wallet b { color: var(--fg); }
+.gacha-draw { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.gacha-draw .btn { gap: 18px; }
+.gacha-draw .num { font-size: 12px; }
+.gacha-results { margin-top: 24px; }
+.gacha-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 12px; }
+.gacha-result { display: flex; gap: 12px; align-items: center; padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: #10262b; }
+.gacha-result.rarity-R { border-color: #ffe2a35c; background: linear-gradient(120deg, #2b2b24, #10262b); }
+.gacha-result h4 { font-size: 14px; margin: 6px 0; }
+.gacha-result small { display: block; margin-top: 7px; color: var(--dim); }
+.gacha-result p { margin: 7px 0; }
+.gacha-result button { border: 1px solid var(--line); background: #152d33; color: var(--accent); border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 11px; }
+.gacha-new { color: #ffe2a3; font-size: 10px; margin-left: 8px; }
+.gacha-pool-toggle { margin-top: 24px; padding: 12px 0; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--fg); width: 100%; text-align: left; font: inherit; font-size: 13px; }
+.gacha-filter { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--dim); }
+.gacha-filter select { background: #122a31; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 7px; }
+.gacha-pool { padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 8px; }
+.gacha-pool li { display: flex; align-items: center; gap: 10px; padding: 8px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.gacha-pool small { display: block; color: var(--dim); margin-top: 5px; }
+@keyframes gacha-roll { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
+@media (max-width: 600px) { .gacha-screen { padding: 10px; } .gacha-panel { max-height: calc(100dvh - 20px); } .gacha-head, .gacha-body { padding: 16px; } .gacha-intro { gap: 12px; } .gacha-capsule { flex-basis: 58px; width: 58px; height: 58px; } .gacha-capsule svg { width: 34px; height: 34px; } .gacha-head h2 { font-size: 21px; } }
+@media (prefers-reduced-motion: reduce) { .gacha-capsule.rolling, .gacha-result { animation: none; } }
 
 /* ------------------------------------------------------------------ zukan */
 .card.zukan { width: min(94vw, 980px); max-height: 88vh; display: flex; flex-direction: column; padding-bottom: 22px; }
@@ -498,3 +587,6 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .btn.sm { height: 36px; padding: 0 16px; font-size: 13px; }
 .btn.ghost { background: transparent; }
 .btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+.spot-regions { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+.spots-japan [role="button"] { cursor: pointer; }
