@@ -1,4 +1,5 @@
 import { h } from 'preact';
+import { useState } from 'preact/hooks';
 import type { App } from '../../app/App';
 import type { SpotDef } from '../../data/schemas';
 import { t, ui } from '../store';
@@ -12,6 +13,7 @@ const KYUSHU: [number, number][] = [[131.0, 33.9], [131.7, 33.6], [131.9, 33.0],
 // Tokyo Bay's shore (lon, lat), from the Miura side round to Futtsu
 const BAY: [number, number][] = [[139.73, 35.14], [139.67, 35.25], [139.65, 35.32], [139.64, 35.40], [139.73, 35.48], [139.78, 35.53], [139.82, 35.60], [139.86, 35.64], [139.92, 35.66], [139.98, 35.68], [140.05, 35.62], [140.03, 35.55], [139.95, 35.48], [139.90, 35.40], [139.85, 35.30], [139.80, 35.20], [139.78, 35.12]];
 
+const OKINAWA: [number, number][] = [[127.65,26.08],[127.82,26.2],[127.88,26.4],[128.05,26.55],[128.28,26.87],[128.18,26.88],[127.98,26.7],[127.84,26.53],[127.7,26.42],[127.66,26.23]];
 const JP = { lon0: 128.5, lat0: 46.2, k: 36, cos: Math.cos((36 * Math.PI) / 180) };
 const jp = (lon: number, lat: number): [number, number] => [(lon - JP.lon0) * JP.k * JP.cos, (JP.lat0 - lat) * JP.k];
 const BAYV = { lon0: 139.55, lat0: 35.75, k: 560, cos: Math.cos((35.5 * Math.PI) / 180) };
@@ -20,7 +22,15 @@ const path = (pts: [number, number][], f: (lon: number, lat: number) => [number,
 
 /** The map of the coast: where to go today. One pin opens the flat; the others wait to be built. */
 export function SpotSelect({ app }: { app: App }) {
-  const spots = app.data.spots;
+  const allSpots = app.data.spots;
+  const [area, setArea] = useState(allSpots.find(s => s.id === ui.spot.value)?.area ?? '東京湾');
+  const areas = [...new Set(allSpots.map(s => s.area))];
+  const spots = allSpots.filter(s => s.area === area);
+  const chooseArea = (next: string) => { setArea(next); ui.spot.value = allSpots.find(s => s.area === next)?.id ?? null; };
+  const regionButtons = <div class="spot-regions">{areas.map(a => <button class={`btn ${a === area ? 'primary' : 'ghost'}`} aria-pressed={a === area} onClick={() => chooseArea(a)}>{a}</button>)}</div>;
+  const regionPoint = area === '沖縄'
+    ? (lon: number, lat: number): [number, number] => [(lon - 127.5) * 275, (27 - lat) * 350]
+    : bay;
   const selId = ui.spot.value ?? spots[0]?.id ?? null;
   const sel = spots.find((s) => s.id === selId) ?? spots[0];
   const [bx0, by0] = jp(139.5, 35.75), [bx1, by1] = jp(140.1, 35.1);
@@ -28,6 +38,7 @@ export function SpotSelect({ app }: { app: App }) {
   if (app.input.touchDevice) return <div class="screen center mobile-spots">
     <div class="card mobile-spots-card">
       <CardHead title={t('spots.title')} onClose={() => app.closeOverlay()} />
+      {regionButtons}
       <div class="mobile-spot-options">
         {spots.map((s) => <button key={s.id} class={`btn mobile-spot ${s.id === sel?.id ? 'selected' : ''}`} aria-pressed={s.id === sel?.id} onClick={() => pick(s)}>
           <span class="name">{s.ja}</span><span class="dim small">{s.area}</span>
@@ -44,6 +55,7 @@ export function SpotSelect({ app }: { app: App }) {
     <div class="screen center">
       <div class="card spots-card">
         <CardHead eyebrow={t('spots.eyebrow')} title={t('spots.title')} onClose={() => app.closeOverlay()} />
+        {regionButtons}
         <div class="spots-body">
           <div class="spots-maps">
             <svg class="spots-japan" viewBox="0 0 520 560" aria-label="日本">
@@ -52,13 +64,21 @@ export function SpotSelect({ app }: { app: App }) {
               <path class="land" d={path(SHIKOKU, jp)} />
               <path class="land" d={path(KYUSHU, jp)} />
               <rect class="focus" x={bx0} y={by0} width={bx1 - bx0} height={by1 - by0} rx="2" />
-              <text class="label" x={bx1 + 8} y={by0 + 10}>{t('spots.tokyoBay')}</text>
+              <g role="button" tabIndex={0} aria-label="東京湾を選ぶ" onClick={() => chooseArea('東京湾')} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') chooseArea('東京湾'); }}>
+                <rect x={bx0-10} y={by0-10} width="100" height="50" fill="transparent" />
+                <text class="label" x={bx1 + 8} y={by0 + 10}>{t('spots.tokyoBay')}</text>
+              </g>
+              <g role="button" tabIndex={0} aria-label="沖縄を選ぶ" onClick={() => chooseArea('沖縄')} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') chooseArea('沖縄'); }}>
+                <rect x="18" y="325" width="120" height="90" rx="8" class="focus" />
+                <path class="land" d={path(OKINAWA, (lon,lat) => [38+(lon-127.5)*100, 340+(27-lat)*65])} />
+                <text class="label" x="92" y="390">沖縄</text>
+              </g>
             </svg>
-            <svg class="spots-bay" viewBox="-20 -20 300 380" aria-label="東京湾">
+            <svg class="spots-bay" viewBox="-20 -20 300 380" aria-label={area}>
               <path class="shore" d="M-20 -20 H280 V360 H-20 Z" />
-              <path class="water" d={path(BAY, bay)} />
+              <path class={area === '沖縄' ? 'land' : 'water'} d={path(area === '沖縄' ? OKINAWA : BAY, regionPoint)} />
               {spots.map((s) => {
-                const [x, y] = bay(s.lon, s.lat);
+                const [x, y] = regionPoint(s.lon, s.lat);
                 const on = s.id === sel?.id, ready = !!s.map;
                 return (
                   <g key={s.id} class={`pin ${ready ? 'open' : 'soon'} ${on ? 'on' : ''}`} transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`} onClick={() => pick(s)} role="button" tabIndex={0}>

@@ -17,6 +17,7 @@ import { OysterReef } from '../creatures/oyster/OysterReef';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import { oysterEnv } from '../creatures/oyster/material';
 import { AmamoMeadow, MEADOW_QUALITY } from '../world/amamo';
+import { MangroveForest } from '../world/mangrove';
 import { LAYOUTS, type ShoreLayout } from '../world/maps/hashirimizu';
 import { seagrass } from '../creatures/species/amimehagi/seagrass';
 import type { FeedingPit } from '../world/FeedingPits';
@@ -38,6 +39,8 @@ export class World {
   readonly layout: ShoreLayout | null;
   /** the アマモ beds below the low-water mark */
   amamo: AmamoMeadow | null = null;
+  /** Only maps explicitly declaring a tropical intertidal forest receive mangroves. */
+  mangroves: MangroveForest | null = null;
   /** the stones along the levees (hard ground for oysters; the 葛西 flat) */
   riprap: Riprap | null = null;
   /** the マガキ reef on those stones */
@@ -164,6 +167,14 @@ export class World {
       w.scene.add(reflectInWater(w.skyline.group));
       if (w.skyline.land) w.scene.add(reflectInWater(w.skyline.land.group));
     }
+    if (map.mangroves) {
+      onProgress?.('ヤエヤマヒルギ林');
+      w.mangroves = new MangroveForest(terrain, map.mangroves);
+      w.mangroves.setQuality(preset.vegetation);
+      // Build the visible tiers before FieldRenderer.compile, so shader compilation stays behind the loading screen.
+      w.mangroves.update(0, { position: new Vector3(map.spawnStart.x,terrain.heightAt(map.spawnStart.x,map.spawnStart.z)+1.5,map.spawnStart.z) }, { tideLevel: 0, wetLevel: 0 });
+      w.scene.add(w.mangroves.group);
+    }
     w.scene.add(terrain.mirrorProxy(LAYER_MIRROR));
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
     // (lights obey layers too: the mirror's camera must see the sun and the sky light, or the land comes out black)
@@ -181,6 +192,8 @@ export class World {
     if (this.amamo) seagrass.bind(null);
     this.amamo?.dispose();
     this.amamo = null;
+    this.mangroves?.dispose();
+    this.mangroves = null;
     this.oysters?.dispose();
     this.oysters = null;
     this.riprap?.dispose();
@@ -206,6 +219,7 @@ export class World {
     oysterEnv.uOyWater.value.set(this.tideLevel, this.habitat.wetLevel);
     oysterEnv.uOyTime.value += dt;
     this.riprap?.update(camera);
+    this.mangroves?.update(dt, camera, { tideLevel: this.tideLevel, wetLevel: this.habitat.wetLevel });
     this.terrain.updateLod(anchor.x, anchor.z);
     // (absolute: a ticket or the debug clock can move game time backwards, and the pools must follow at once)
     if (Math.abs(gameMs - this.lastHabitatMs) > 2000 || this.lastHabitatMs === 0) {

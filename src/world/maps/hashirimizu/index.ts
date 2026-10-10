@@ -55,4 +55,12 @@ export const HASHIRIMIZU: ShoreLayout = {
   props: buildHashirimizuProps,
 };
 
-export const LAYOUTS: Record<string, ShoreLayout> = { hashirimizu: HASHIRIMIZU };
+const MANKO: ShoreLayout = {
+  meadow: { suitability: () => 0, field: () => 0, holes: false },
+  clams: { beds: 0, opts: {} }, pits: { clusters: 0, opts: {} },
+  landLevel: [3, 4], sandTint: [0.78, 0.75, 0.65], rippleAngle: 0.4,
+  surf: null, water: { colour: [0.08, 0.115, 0.075], turbidity: 0.9 },
+  props: () => [],
+};
+
+export const LAYOUTS: Record<string, ShoreLayout> = { hashirimizu: HASHIRIMIZU, manko: MANKO };
