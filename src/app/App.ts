@@ -371,12 +371,18 @@ export class App {
       this.player.eyeHeight = this.settings.eyeHeight;
       // the revetment's stones can be stood on
       this.player.groundBoost = (x, z) => this.world?.riprap?.heightBoost(x, z) ?? 0;
+      if (this.world.mangroves) {
+        const roots = this.world.mangroves.collision, terrain = this.world.terrain;
+        this.player.supportHeight = (x, z, maxY) => roots.supportAt(x, z, maxY, terrain.heightAt(x, z), 0.35, 0.18)?.height ?? null;
+        this.player.obstacleFree = (from, to) => roots.canMove(from, to, terrain, 0.18, this.player?.lowView ? 0.65 : 1.45);
+      }
       performance.mark('world:created');
       ui.loading.value = { frac: 0.7, label: t('loading.models') };
       performance.mark('world:player');
-      this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed, map.habitat?.minSpawnDist_m);
+      this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed, map.habitat?.minSpawnDist_m, map.animals);
       performance.mark('world:creatureSystem');
       this.creatures.setMeadow(this.world.amamo);
+      this.creatures.setScent(this.world.carrion);
       await this.creatures.preload();
       performance.mark('world:creatures');
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
@@ -397,8 +403,8 @@ export class App {
       if (first?.type === 'dig') void this.shovel.setTool(first, this.fieldToolTier);
       if (first?.type === 'optic') void this.binoculars.setTool(first, this.fieldToolTier);
       const L = this.world.layout;
-      this.clams = L ? new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242), L.clams.beds, L.clams.opts) : new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
-      this.world.scene.add(this.clams.group);
+      this.clams = !map.animals ? null : L ? new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242), L.clams.beds, L.clams.opts) : new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
+      if (this.clams) this.world.scene.add(this.clams.group);
       this.capture.onSwung = (caught) => this.onToolSwung(caught);
       this.capture.onResolved = (caught) => this.onCaptureResolved(caught);
       this.applyHeroSetting();
@@ -489,6 +495,7 @@ export class App {
       if (this.net || this.shovel || this.binoculars) this.setTool(ui.tool.value, true);
     }
     this.world?.terrain.setDetail(preset.surfaceDetail > 0);
+    this.world?.mangroves?.setQuality(preset.vegetation);
     this.world?.water.setMirror(preset.mirror);
     this.world?.water.setSurfSteps(preset.surfSteps);
     const light = this.world?.sky.sunLight;

@@ -7,7 +7,7 @@ import { Rng } from '../../../core/Rng';
 
 /**
  * Procedural models of the small animals of the 走水 shore (built per individual at its real size, +Z forward, +Y up,
- * origin on the ground under the body): ケフサイソガニ, ユビナガホンヤドカリ in its borrowed shell, アラムシロ, and
+ * origin on the ground under the body): ケフサイソガニ, ユビナガホンヤドカリ in its borrowed shell, and
  * ボラ fry (ハク) and ミズヒキゴカイ. Parts the drivers animate are named in `parts`.
  */
 export interface ShoreModel {
@@ -91,7 +91,6 @@ export interface ShellParams {
   lip: [number, number, number];
 }
 
-export const SHELL_ARAMUSHIRO: ShellParams = { whorls: 6, expansion: 2.2, spire: 3.6, tube: 1.0, ribs: 13, cords: 5, sculpt: 2.2, base: [0.22, 0.17, 0.11], band: [0.09, 0.065, 0.045], lip: [0.6, 0.55, 0.45] };
 /** the slender turreted shell a ユビナガホンヤドカリ usually carries (ホソウミニナ-like) */
 export const SHELL_UMININA: ShellParams = { whorls: 9, expansion: 1.45, spire: 6.4, tube: 1.0, ribs: 18, cords: 3, sculpt: 1.4, base: [0.11, 0.095, 0.08], band: [0.05, 0.042, 0.036], lip: [0.3, 0.27, 0.23] };
 
@@ -354,45 +353,6 @@ export function makeHermit(shellLen: number, seed: number): ShoreModel {
     const m2 = mesh(keep(article(u * 0.24, u * 0.05, u * 0.04, 0.3)), k ? hermitMats.leg : hermitMats.band, knee);
     m2.rotation.x = 1.2;
     parts[hip.name] = hip;
-  }
-  return { root, parts, dispose: () => geos.forEach((g) => g.dispose()) };
-}
-
-// ------------------------------------------------------------------ アラムシロ
-const snailMats = {
-  foot: new MeshStandardMaterial({ color: 0xa89c86, roughness: 0.4 }),
-  siphon: new MeshStandardMaterial({ color: 0x9a8a70, roughness: 0.5 }),
-};
-
-/** アラムシロ (Reticunassa festiva): a 12 mm latticed shell on a pale foot, the siphon held up and forward as it crawls. */
-export function makeSnail(len: number, seed: number): ShoreModel {
-  const root = new Group();
-  root.name = 'Aramushiro';
-  const parts: Record<string, Object3D> = {};
-  const geos: BufferGeometry[] = [];
-  const keep = <T extends BufferGeometry>(g: T) => { geos.push(g); return g; };
-  const shell = new Group();
-  root.add(shell);
-  const sm = mesh(keep(shellGeometry(SHELL_ARAMUSHIRO, seed)), shellMat, shell, 'shellMesh');
-  sm.scale.setScalar(len);
-  // carried with the apex back and up, the aperture down over the foot
-  sm.rotation.set(-Math.PI / 2 + 0.5, Math.PI, 0);
-  sm.position.set(len * 0.05, len * 0.13, len * 0.3);
-  parts.shell = shell;
-  const foot = mesh(keep(new SphereGeometry(0.5, 14, 8)), snailMats.foot, root, 'foot');
-  foot.scale.set(len * 0.4, len * 0.08, len * 0.85);
-  foot.position.set(0, len * 0.035, len * 0.12);
-  parts.foot = foot;
-  const siphon = new Group();
-  siphon.position.set(0, len * 0.22, len * 0.42);
-  siphon.rotation.x = -0.9;
-  root.add(siphon);
-  mesh(keep(article(len * 0.5, len * 0.07, len * 0.07, 0.8)), snailMats.siphon, siphon);
-  parts.siphon = siphon;
-  for (const s of [-1, 1]) {
-    const t = mesh(keep(article(len * 0.25, len * 0.03, len * 0.03, 0.3)), snailMats.foot, root);
-    t.position.set(s * len * 0.08, len * 0.08, len * 0.45);
-    t.rotation.set(-0.2, s * 0.6, 0);
   }
   return { root, parts, dispose: () => geos.forEach((g) => g.dispose()) };
 }

@@ -30,11 +30,13 @@
   ],
   "maps": [
     "kasai_west",
-    "hashirimizu"
+    "hashirimizu",
+    "manko"
   ],
   "stations": [
     "jma_tokyo",
-    "jma_yokosuka"
+    "jma_yokosuka",
+    "manko_demo"
   ],
   "items": "items/tools.json",
   "strings": "strings/ja.json",

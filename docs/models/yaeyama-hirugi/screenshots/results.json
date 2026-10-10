@@ -1,0 +1,342 @@
+{
+  "status": "passed",
+  "results": [
+    {
+      "name": "adult-0",
+      "mode": "single",
+      "base": "低い横広がり",
+      "seed": 317,
+      "lod": [
+        0
+      ],
+      "trees": 1,
+      "triangles": 354400,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 696,
+      "frame": 2,
+      "renderCalls": 18,
+      "renderTriangles": 750092,
+      "seconds": 15.931
+    },
+    {
+      "name": "adult-1",
+      "mode": "single",
+      "base": "二股の開いた樹冠",
+      "seed": 317,
+      "lod": [
+        0
+      ],
+      "trees": 1,
+      "triangles": 197352,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 598,
+      "frame": 3,
+      "renderCalls": 18,
+      "renderTriangles": 435996,
+      "seconds": 7.954
+    },
+    {
+      "name": "adult-2",
+      "mode": "single",
+      "base": "水路へ傾く樹冠",
+      "seed": 317,
+      "lod": [
+        0
+      ],
+      "trees": 1,
+      "triangles": 282958,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 725,
+      "frame": 4,
+      "renderCalls": 18,
+      "renderTriangles": 607208,
+      "seconds": 8.005
+    },
+    {
+      "name": "adult-3",
+      "mode": "single",
+      "base": "縦長の林内木",
+      "seed": 317,
+      "lod": [
+        0
+      ],
+      "trees": 1,
+      "triangles": 275492,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 664,
+      "frame": 5,
+      "renderCalls": 18,
+      "renderTriangles": 592276,
+      "seconds": 7.887
+    },
+    {
+      "name": "adult-4",
+      "mode": "single",
+      "base": "多幹の古木",
+      "seed": 317,
+      "lod": [
+        0
+      ],
+      "trees": 1,
+      "triangles": 450632,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 962,
+      "frame": 6,
+      "renderCalls": 18,
+      "renderTriangles": 942556,
+      "seconds": 8.735
+    },
+    {
+      "name": "five",
+      "mode": "five",
+      "base": "多幹の古木",
+      "seed": 317,
+      "lod": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "trees": 5,
+      "triangles": 1560834,
+      "calls": 20,
+      "templates": 5,
+      "geometryCount": 60,
+      "collisionSegments": 3645,
+      "frame": 7,
+      "renderCalls": 55,
+      "renderTriangles": 3173328,
+      "seconds": 13.988
+    },
+    {
+      "name": "roots",
+      "mode": "roots",
+      "base": "多幹の古木",
+      "seed": 317,
+      "lod": [
+        0
+      ],
+      "trees": 1,
+      "triangles": 450632,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 962,
+      "frame": 8,
+      "renderCalls": 17,
+      "renderTriangles": 941212,
+      "seconds": 8.93
+    },
+    {
+      "name": "collision",
+      "mode": "roots",
+      "base": "多幹の古木",
+      "seed": 317,
+      "lod": [
+        0
+      ],
+      "trees": 1,
+      "triangles": 450632,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 962,
+      "frame": 9,
+      "renderCalls": 18,
+      "renderTriangles": 941212,
+      "seconds": 7.321
+    },
+    {
+      "name": "leaf",
+      "mode": "leaf",
+      "base": "低い横広がり",
+      "seed": 317,
+      "lod": [
+        0
+      ],
+      "trees": 1,
+      "triangles": 354400,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 696,
+      "frame": 10,
+      "renderCalls": 17,
+      "renderTriangles": 748748,
+      "seconds": 9.239
+    },
+    {
+      "name": "saplings",
+      "mode": "saplings",
+      "base": "低い横広がり",
+      "seed": 317,
+      "lod": [
+        0,
+        0,
+        0
+      ],
+      "trees": 3,
+      "triangles": 9876,
+      "calls": 12,
+      "templates": 3,
+      "geometryCount": 36,
+      "collisionSegments": 78,
+      "frame": 11,
+      "renderCalls": 33,
+      "renderTriangles": 59700,
+      "seconds": 6.717
+    },
+    {
+      "name": "forest",
+      "mode": "forest",
+      "base": "低い横広がり",
+      "seed": 317,
+      "lod": [],
+      "trees": 215,
+      "triangles": 1177686,
+      "calls": 163,
+      "templates": 8,
+      "geometryCount": 80,
+      "collisionSegments": 83407,
+      "frame": 12,
+      "renderCalls": 268,
+      "renderTriangles": 2066500,
+      "seconds": 11.297
+    },
+    {
+      "name": "forest-low",
+      "mode": "forest",
+      "base": "低い横広がり",
+      "seed": 317,
+      "lod": [],
+      "trees": 215,
+      "triangles": 314422,
+      "calls": 109,
+      "templates": 8,
+      "geometryCount": 112,
+      "collisionSegments": 83407,
+      "frame": 13,
+      "renderCalls": 164,
+      "renderTriangles": 354754,
+      "seconds": 6.581
+    },
+    {
+      "name": "flood",
+      "mode": "forest",
+      "base": "低い横広がり",
+      "seed": 317,
+      "lod": [],
+      "trees": 215,
+      "triangles": 1177686,
+      "calls": 163,
+      "templates": 8,
+      "geometryCount": 112,
+      "collisionSegments": 83407,
+      "frame": 14,
+      "renderCalls": 268,
+      "renderTriangles": 2066500,
+      "seconds": 10.074
+    },
+    {
+      "name": "lod0",
+      "mode": "single",
+      "base": "低い横広がり",
+      "seed": 317,
+      "lod": [
+        0
+      ],
+      "trees": 1,
+      "triangles": 354400,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 696,
+      "frame": 15,
+      "renderCalls": 18,
+      "renderTriangles": 750092,
+      "seconds": 9.274
+    },
+    {
+      "name": "lod1",
+      "mode": "single",
+      "base": "低い横広がり",
+      "seed": 317,
+      "lod": [
+        1
+      ],
+      "trees": 1,
+      "triangles": 20462,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 696,
+      "frame": 16,
+      "renderCalls": 18,
+      "renderTriangles": 82216,
+      "seconds": 5.358
+    },
+    {
+      "name": "lod2",
+      "mode": "single",
+      "base": "低い横広がり",
+      "seed": 317,
+      "lod": [
+        2
+      ],
+      "trees": 1,
+      "triangles": 4140,
+      "calls": 4,
+      "templates": 1,
+      "geometryCount": 12,
+      "collisionSegments": 696,
+      "frame": 17,
+      "renderCalls": 14,
+      "renderTriangles": 45432,
+      "seconds": 5.235
+    }
+  ],
+  "support": {
+    "height": 0.8698825414256979,
+    "normal": [
+      -0.2971363785810346,
+      0.9547006496470689,
+      0.016020052659479367
+    ],
+    "tree": 0
+  },
+  "farProbe": {
+    "composite": [
+      242,
+      135,
+      132,
+      255
+    ],
+    "bare": [
+      242,
+      135,
+      132,
+      255
+    ],
+    "difference": 0
+  },
+  "integration": {
+    "primed": 20,
+    "trees": 6,
+    "calls": 20,
+    "segments": 4668,
+    "tide": -0.27406528783161765,
+    "worldTide": -0.27406528783161765
+  },
+  "errors": []
+}

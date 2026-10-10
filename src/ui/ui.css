@@ -598,3 +598,6 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .first-steps summary { cursor: pointer; font-weight: 600; }
 .first-steps p { margin: 7px 0; }
 .touch-device .first-steps { top: calc(54px + env(safe-area-inset-top)); left: 10px; width: min(260px, calc(100vw - 120px)); padding: 7px 9px; font-size: 11px; }
+
+.spot-regions { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+.spots-japan [role="button"] { cursor: pointer; }

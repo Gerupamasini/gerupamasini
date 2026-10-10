@@ -25,6 +25,7 @@
     "render:amamo": "node tools/models/amamo/render.mjs",
     "render:amimehagi": "node tools/models/amimehagi/render.mjs",
     "render:youjiuo": "node tools/models/youjiuo/render.mjs",
+    "render:yaeyama-hirugi": "node tools/models/yaeyama-hirugi/render.mjs",
     "model:pagurus-hide": "node tools/models/pagurus/bake-hide-table.mjs",
     "terrain:bake": "node tools/terrain/bake-map.mjs",
     "terrain:hashirimizu": "node tools/terrain/bake-hashirimizu.mjs && node tools/terrain/figures-hashirimizu.mjs",
@@ -32,7 +33,8 @@
     "model:digging": "node tools/models/digging/build.mjs",
     "render:digging": "node tools/models/nets/render.mjs --shots tools/models/digging/shots.mjs --out docs/models/digging",
     "model:optics": "node tools/models/digging/build.mjs --set optics",
-    "render:optics": "node tools/models/nets/render.mjs --shots tools/models/optics/shots.mjs --out docs/models/optics"
+    "render:optics": "node tools/models/nets/render.mjs --shots tools/models/optics/shots.mjs --out docs/models/optics",
+    "terrain:manko": "node tools/terrain/bake-manko.mjs"
   },
   "dependencies": {
     "@preact/signals": "^2.11.3",
