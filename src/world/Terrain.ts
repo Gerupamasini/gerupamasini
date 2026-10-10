@@ -755,6 +755,16 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     this.uDetail.value = on ? 1 : 0;
   }
 
+  /** The lighter caustics (超軽量): every other wave component in the focusing sum (the programs are rebuilt once). */
+  setLite(on: boolean): void {
+    for (const m of [this.material, this.patchMaterial]) {
+      const d = m.defines as Record<string, number | string>;
+      if (('WAVE_STRIDE' in d) === on) continue;
+      if (on) { d.WAVE_STRIDE = 2; d.WAVE_AMP = '1.4'; } else { delete d.WAVE_STRIDE; delete d.WAVE_AMP; }
+      m.needsUpdate = true;
+    }
+  }
+
   /** Share the surf's uniforms with the water (call before the first frame). */
   setSurf(surf: SurfUniforms): void {
     this.surf = surf;

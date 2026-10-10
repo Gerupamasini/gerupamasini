@@ -29,8 +29,8 @@ try {
   assert.equal(info.size,70);assert.equal(info.animals,0);assert.equal(info.clams,null);assert.equal(info.reef,false);assert.equal(info.pits,0);assert.equal(info.skyline,0);assert.ok(info.forest.trees>90);
   // Separate scene settings must reach the forest without changing its root collision or enabling animals.
   await page.evaluate(()=>{window.mankoRoots=window.__higata.world.mangroves.collision.segments;});
-  for (const [fieldQuality, vegetation, shadows] of [['high','high',true],['minimum','low',false]]) {
-    await page.evaluate(fieldQuality=>window.__higata.updateSettings({homeQuality:'minimum',fieldQuality}),fieldQuality);
+  for (const [fieldQuality, vegetation, shadows] of [['high','high',true],['minimal','minimal',false]]) {
+    await page.evaluate(fieldQuality=>window.__higata.updateSettings({homeQuality:'minimal',fieldQuality}),fieldQuality);
     assert.deepEqual(await page.evaluate(()=>{
       const a=window.__higata;
       return {vegetation:a.world.mangroves.quality,shadows:a.world.sky.sunLight.castShadow,

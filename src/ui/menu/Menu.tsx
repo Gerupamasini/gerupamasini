@@ -1,7 +1,7 @@
 import { h } from 'preact';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
-import { QUALITY_LABELS, type Quality } from '../../core/Settings';
+import { QUALITY_LABELS, QUALITY_ORDER } from '../../core/Settings';
 import { CardHead, KeyHint } from '../common/Icons';
 import { buildLabel } from '../../core/Build';
 
@@ -19,12 +19,12 @@ export function Menu({ app }: { app: App }) {
         {(['homeQuality', 'fieldQuality'] as const).map((scene) => <div class="setting" key={scene}>
           <span class="label">{scene === 'homeQuality' ? 'ホーム（水槽）の画質' : '干潟の画質'}</span>
           <div class="seg">
-            {(['minimum', 'low', 'mid', 'high'] as Quality[]).map((q) => (
+            {QUALITY_ORDER.map((q) => (
               <button key={q} class={s[scene] === q ? 'on' : ''} aria-pressed={s[scene] === q} onClick={() => void app.updateSettings({ [scene]: q })}>{QUALITY_LABELS[q]}</button>
             ))}
           </div>
         </div>)}
-        <p class="small dim">最低画質では図鑑を写真で表示します。</p>
+        <p class="small dim">超軽量（最低画質）では図鑑を写真で表示します。</p>
         <div class="setting">
           <span class="label">{app.input.touchDevice ? '視点の感度' : t('menu.sensitivity')}<span class="num">{s.mouseSensitivity.toFixed(1)}</span></span>
           <input type="range" min="0.3" max="10" step="0.1" value={s.mouseSensitivity} onInput={(e) => void app.updateSettings({ mouseSensitivity: Number((e.target as HTMLInputElement).value) })} />

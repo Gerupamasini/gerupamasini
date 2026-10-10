@@ -64,8 +64,10 @@ export class Spawner {
     return true;
   }
 
-  /** Decide spawns for the cells around (px, pz). `population` counts live individuals per species. */
-  plan(px: number, pz: number, env: SpawnEnv, live: Individual[], minDist: number = MIN_SPAWN_DIST, populationScale = 1): SpawnRequest[] {
+  /** Decide spawns for the cells around (px, pz). `population` counts live individuals per species. `scale` is the
+   * quality preset's share of the animals: fewer cells host a group (deterministic per cell and day, so a lighter
+   * preset does not keep retrying the cells it left empty), the groups themselves stay whole. */
+  plan(px: number, pz: number, env: SpawnEnv, live: Individual[], minDist: number = MIN_SPAWN_DIST, scale = 1): SpawnRequest[] {
     const h = this.habitat;
     const cn = h.cn, cs = h.coarse;
     const counts = new Map<string, number>();
@@ -89,7 +91,7 @@ export class Spawner {
           if (occupied.has(`${sp.id}:${cell}`)) continue;
           for (let ri = 0; ri < sp.spawn.length; ri++) {
             const rule = sp.spawn[ri];
-            const maxPopulation = Math.max(1, Math.ceil(rule.maxPopulation * populationScale));
+            const maxPopulation = Math.max(1, Math.ceil(rule.maxPopulation * (sp.taxon.group === 'bird' ? 1 : scale)));
             if ((counts.get(sp.id) ?? 0) >= maxPopulation) continue;
             if (!this.ruleMatches(rule, cell, env)) continue;
             const seed = hashInts(cell, ri, env.day, sp.id.length * 131);
@@ -97,7 +99,8 @@ export class Spawner {
             const expected = (rule.density_per_100m2 * cs * cs) / 100;
             // deterministic per cell and day: does this cell host a group?
             const groupMean = (rule.group[0] + rule.group[1]) / 2;
-            const pGroup = Math.min(1, expected / groupMean);
+            // (the birds keep their numbers: a placeholder at a distance, and the binoculars' reason to be)
+            const pGroup = Math.min(1, expected / groupMean) * (sp.taxon.group === 'bird' ? 1 : scale);
             if (!rng.chance(pGroup)) continue;
             const n = rng.int(rule.group[0], rule.group[1]);
             for (let k = 0; k < n; k++) {
@@ -137,7 +140,7 @@ export class Spawner {
       if (d > SPAWN_RADIUS || d < minDist) continue;
       if (live.some((i) => i.pitId === pit.id)) continue;
       const roll = hashInts(pit.id * 31 + 7, env.day, 977) % 1000;
-      if (roll >= 330) continue;
+      if (roll >= 330 * scale) continue;
       if (h.sample(pit.x, pit.z, env.gameMs).depth < 0.025) continue;
       const pick = roll % 9;
       const spId = pick < 3 ? 'acanthogobius_flavimanus' : pick < 5 ? 'exopalaemon_orientis' : pick < 7 ? 'gymnogobius_macrognathos' : 'favonigobius_gymnauchen';

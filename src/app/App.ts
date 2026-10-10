@@ -24,6 +24,7 @@ import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
+import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import type { SpeciesDef, ToolDef } from '../data/schemas';
@@ -226,7 +227,12 @@ export class App {
   // ------------------------------------------------------------------ boot
   async start(): Promise<void> {
     render(h(Root, { app: this }), this.uiRoot);
-    this.settings = await loadSettings(this.input.touchDevice ? { quality: 'low' } : {});
+    // the first run on an integrated or software GPU (a laptop) starts on 低, as does a touch device; the player is
+    // told, and may change it
+    let fresh = false;
+    this.settings = await loadSettings(this.input.touchDevice ? { quality: 'low' } : {}, () => { fresh = true; return this.renderer.weakGpu ? { quality: 'low' } : {}; });
+    const autoLow = fresh && this.settings.quality === 'low';
+    if (fresh) void saveSettings(this.settings);   // (so the first run's choice, and its notice, happen once)
     ui.settings.value = this.settings;
     this.renderer.setQuality(this.settings.homeQuality);
     if (!this.renderer.caps.webgl2) {
@@ -238,6 +244,7 @@ export class App {
     this.data = await loadGameData((frac, label) => { ui.loading.value = { frac: 0.02 + frac * 0.3, label }; });
     ui.strings.value = this.data.strings;
     document.title = t('app.title');
+    if (autoLow) toast(t('toast.autoQuality'), 'info', 9000);
     // a stale page (the host caches index.html for a while) learns about the newer deploy and offers a reload
     const poll = async () => { const nb = await checkForNewBuild(); if (nb) ui.newBuild.value = nb; };
     setTimeout(() => void poll(), 4000);
@@ -414,6 +421,8 @@ export class App {
       this.onResize();
       performance.mark('world:ready');
     }
+    this.fieldSince = performance.now();
+    this.slowSecs = 0;
     this.tank.deactivate();
     // away long enough for the tide to have moved: the population is rebuilt for the water as it is now
     if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.creatures?.resetPopulation(null);
@@ -465,12 +474,15 @@ export class App {
   }
 
   async updateSettings(patch: Partial<SettingsData>): Promise<void> {
+    const canvasBefore = Math.min(QUALITY_PRESETS[this.settings.homeQuality].msaa, QUALITY_PRESETS[this.settings.fieldQuality].msaa) > 0;
     // Preserve the public legacy API used by old clients; the menu edits each scene independently.
     if (patch.quality) patch = { homeQuality: patch.quality, fieldQuality: patch.quality, ...patch };
     this.settings = normalizeSettings({ ...this.settings, ...patch });
     ui.settings.value = this.settings;
     this.world?.water.setPolarized(this.settings.sunglasses);
     this.applySceneQuality();
+    const canvasAfter = Math.min(QUALITY_PRESETS[this.settings.homeQuality].msaa, QUALITY_PRESETS[this.settings.fieldQuality].msaa) > 0;
+    if (canvasAfter !== this.renderer.canvasMsaa && canvasAfter !== canvasBefore) toast(t('toast.reloadHint'), 'info', 8000);
     if (this.player) this.player.eyeHeight = this.settings.eyeHeight;
     await saveSettings(this.settings);
   }
@@ -488,6 +500,7 @@ export class App {
     this.renderer.setQuality(this.activeQuality);
     const preset = QUALITY_PRESETS[this.settings.fieldQuality];
     this.field?.setQuality(preset);
+    this.applyPreset();
     this.creatures?.setQuality(preset);
     this.fieldCase?.setQuality(preset);
     if (this.appliedFieldQuality !== this.settings.fieldQuality) {
@@ -516,11 +529,32 @@ export class App {
     this.tank?.setQuality(QUALITY_PRESETS[this.settings.homeQuality]);
   }
 
+  /** Each scene keeps its own simulation and geometry tiers; only the active scene sets the shared hero buffer. */
+  private applyPreset(): void {
+    const field = QUALITY_PRESETS[this.settings.fieldQuality];
+    const home = QUALITY_PRESETS[this.settings.homeQuality];
+    this.hero?.setSamples(QUALITY_PRESETS[this.activeQuality].msaa);
+    this.world?.water.setLite(field.water === 'lite');
+    this.world?.terrain.setLite(field.water === 'lite');
+    this.tank?.setLite(home.tankWater === 'lite');
+    CONTACT_SHADOWS.enabled = QUALITY_PRESETS[this.activeQuality].contactShadows;
+  }
+
   private applyHeroSetting(): void {
     const hero = this.hero;
     const fn = hero && this.settings.heroMaterials ? (model: Parameters<typeof HeroInstance.apply>[0]) => HeroInstance.apply(model, hero.shared) : null;
-    if (this.creatures) this.creatures.heroApply = QUALITY_PRESETS[this.settings.fieldQuality].hero ? fn : null;
-    if (this.tank) this.tank.heroApply = QUALITY_PRESETS[this.settings.homeQuality].hero ? fn : null;
+    if (this.creatures) {
+      const next = QUALITY_PRESETS[this.settings.fieldQuality].hero ? fn : null;
+      const changed = !!this.creatures.heroApply !== !!next;
+      this.creatures.heroApply = next;
+      if (changed) this.creatures.dropHeroViews();
+    }
+    if (this.tank) {
+      const next = QUALITY_PRESETS[this.settings.homeQuality].hero ? fn : null;
+      const changed = !!this.tank.heroApply !== !!next;
+      this.tank.heroApply = next;
+      if (changed) void this.tank.refreshHero();
+    }
   }
 
   private heroLightingFromWorld(anchor: Vector3): HeroLighting {
@@ -725,12 +759,13 @@ export class App {
     ui.homePanel.value = panel;
   }
 
-  forceSpawn(): void {
+  /** debug: everything the rules allow, around the player (`share`: the quality tier's share of it, for measuring) */
+  forceSpawn(share = false): void {
     const w = this.world, p = this.player, c = this.creatures;
     if (!w || !p || !c) return;
     const gameMs = this.clock.nowGame();
     const env: SpawnEnv = { tod: w.tod, season: w.season, tidePhase: this.tidePhase(), mapId: w.map.id, gameMs, day: Math.floor(gameMs / 86400000) };
-    const n = c.forceSpawn(p.position, env);
+    const n = c.forceSpawn(p.position, env, share ? this.renderer.preset.creatureScale : 1);
     toast(`${n} 体をスポーン`, 'info');
   }
 
@@ -1576,9 +1611,14 @@ export class App {
   }
 
   private frameErrors = 0;
+  private slowSecs = 0;
+  private slowHinted = false;
+  /** when the flat was last entered (the first seconds there are the models' first draws, not the frame rate) */
+  private fieldSince = 0;
 
   private step(now: number): void {
-    const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
+    // A queued frame can predate the clock reset on entering a scene; never move simulations or saved play time backwards.
+    const dt = Math.max(0, Math.min(0.1, (now - this.lastFrame) / 1000));
     this.lastFrame = now;
     if (document.hidden) return;
     this.frameCount++;
@@ -1714,6 +1754,11 @@ export class App {
 
     this.sceneDirty = false;
     this.fpsAcc += dt; this.fpsCount++;
+    // a flat that crawls: say once where the lighter picture is (after the first seconds, which are the models' first draws)
+    if (mode === 'field' && now - this.fieldSince > 6000 && !this.slowHinted && this.settings.fieldQuality !== 'minimal') {
+      this.slowSecs = dt >= 1 / 20 ? this.slowSecs + dt : Math.max(0, this.slowSecs - dt * 0.5);
+      if (this.slowSecs > 8) { this.slowHinted = true; toast(t('toast.slowHint'), 'info', 9000); }
+    }
     this.hudAcc += dt;
     if (this.hudAcc >= 1 / HUD_HZ) { this.updateHud(gameMs); this.hudAcc = 0; }
     this.saveAcc += dt;

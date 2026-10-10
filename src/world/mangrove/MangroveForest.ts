@@ -15,8 +15,10 @@ export interface MangroveLayout {
   minGround?: number; maxGround?: number; minSpacing?: number;
 }
 type VegetationQuality = QualityPreset['vegetation'];
-export const MANGROVE_LOD: Record<VegetationQuality, readonly [number, number, number]> = { high: [11, 32, 180], mid: [8, 25, 145], low: [5, 18, 110] };
-const NEAR_BUDGET: Record<VegetationQuality, number> = { high: 2, mid: 1, low: 1 };
+export const MANGROVE_LOD: Record<VegetationQuality, readonly [number, number, number]> = { high: [11, 32, 180], mid: [8, 25, 145], low: [5, 18, 110], minimal: [4, 13, 80] };
+const NEAR_BUDGET: Record<VegetationQuality, number> = { high: 2, mid: 1, low: 1, minimal: 1 };
+/** the tiers that take the forest's lighter geometry and cast no shadow (超軽量 as 低) */
+const lite = (q: VegetationQuality): boolean => q === 'low' || q === 'minimal';
 interface Batch { specs: TreeSpec[]; bounds: Sphere; levels: Map<HirugiLod, Record<TreePart, InstancedMesh>> }
 
 /** Deterministic gap/edge/juvenile structure; no uniform rows or independent random dots. */
@@ -83,7 +85,7 @@ export class MangroveForest {
     for (const specs of buckets.values()) this.batches.push({ specs, bounds: batchBounds(specs, this.kit), levels: new Map() });
   }
   setQuality(q: VegetationQuality): void {
-    if ((q === 'low') !== (this.quality === 'low')) {
+    if (lite(q) !== lite(this.quality)) {
       for (const batch of this.batches) {
         const far = batch.levels.get(2);
         if (far) { for (const part of PARTS) this.kit.release(far[part]); batch.levels.delete(2); }
@@ -120,7 +122,7 @@ export class MangroveForest {
         if (!batch.levels.has(lod)) {
           const first = batch.specs[0], level = {} as Record<TreePart, InstancedMesh>;
           for (const part of PARTS) {
-            level[part] = this.kit.mesh(first.base, lod, part, batch.specs.length, first.sapling, this.quality === 'low' && lod === 2);
+            level[part] = this.kit.mesh(first.base, lod, part, batch.specs.length, first.sapling, lite(this.quality) && lod === 2);
             this.group.add(reflectInWater(level[part]));
           }
           batch.levels.set(lod, level);
@@ -128,7 +130,7 @@ export class MangroveForest {
         const level = batch.levels.get(lod)!;
         for (const part of PARTS) {
           const mesh = level[part]; specs.forEach((s, i) => writeInstance(mesh, i, s, this.terrain));
-          finishInstances(mesh, specs.length, batch.bounds); mesh.castShadow = this.quality !== 'low' && lod < 2;
+          finishInstances(mesh, specs.length, batch.bounds); mesh.castShadow = !lite(this.quality) && lod < 2;
         }
       }
     }

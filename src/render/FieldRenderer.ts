@@ -7,28 +7,34 @@ export class FieldRenderer {
   private rt: WebGLRenderTarget | null = null;
   private preset = QUALITY_PRESETS.mid;
   private readonly size = new Vector2();
+  private samples = 4;
   /** draw calls and triangles of the last scene render (before the water composite) */
   readonly lastStats = { calls: 0, triangles: 0 };
 
   constructor(private readonly gl: WebGLRenderer) {}
 
   setQuality(preset: QualityPreset): void {
-    if (this.preset.samples !== preset.samples) { this.rt?.dispose(); this.rt = null; }
     this.preset = preset;
+    this.setSamples(preset.msaa);
   }
 
   private target(): WebGLRenderTarget {
     const s = this.gl.getDrawingBufferSize(this.size);
     const w = Math.max(1, s.x), h = Math.max(1, s.y);
-    if (!this.rt || this.rt.width !== w || this.rt.height !== h) {
+    if (!this.rt || this.rt.width !== w || this.rt.height !== h || this.rt.samples !== this.samples) {
       this.rt?.dispose();
-      this.rt = new WebGLRenderTarget(w, h, { type: HalfFloatType, format: RGBAFormat, samples: this.preset.samples, depthBuffer: true, minFilter: LinearFilter, magFilter: LinearFilter, generateMipmaps: false });
+      this.rt = new WebGLRenderTarget(w, h, { type: HalfFloatType, format: RGBAFormat, samples: this.samples, depthBuffer: true, minFilter: LinearFilter, magFilter: LinearFilter, generateMipmaps: false });
       const depth = new DepthTexture(w, h, FloatType);
       depth.minFilter = NearestFilter;
       depth.magFilter = NearestFilter;
       this.rt.depthTexture = depth;
     }
     return this.rt;
+  }
+
+  /** Multisampling of the HDR buffer (0: none). The buffer is rebuilt on the next frame. */
+  setSamples(n: number): void {
+    this.samples = Math.max(0, Math.round(n));
   }
 
   /**

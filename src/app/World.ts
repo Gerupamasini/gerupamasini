@@ -99,6 +99,7 @@ export class World {
     grid.pitMask = carveCoarse(grid, pits);
     const terrain = new Terrain(grid, map.substrate.palette, pits);
     terrain.setDetail(preset.surfaceDetail > 0);
+    terrain.setLite(preset.water === 'lite');
     mark('terrain');
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, pits);
@@ -143,7 +144,7 @@ export class World {
         // and the levees' own faces where the tide covers them
         for (const s of riprap.leveeSites(map.id.length * 131 + 3, 0.38, -1.15)) sites.push({ p: s.p, n: s.n, room: s.room, surface: (world: Vector3, outP: Vector3, outN: Vector3) => riprap.terrainSurface(world, outP, outN) });
         const reef = new OysterReef({
-          atlas, sites, seed: hashInts(map.id.length, 0x0a5), quality, maxOysters: quality === 'low' ? 5000 : 12000,
+          atlas, sites, seed: hashInts(map.id.length, 0x0a5), quality, maxOysters: preset.oysters,
           ground: (x, z, n) => { terrain.normalAt(x, z, n); return terrain.heightAt(x, z) + riprap.heightBoost(x, z); },
         });
         w.scene.add(reef.group);
@@ -190,6 +191,7 @@ export class World {
     (w as { sky: SkyDome }).sky = sky;
     water.setMirror(preset.mirror);
     water.setSurfSteps(preset.surfSteps);
+    water.setLite(preset.water === 'lite');
     water.mirrorGate = () => !renderer.shadowMap.enabled || !sky.sunLight.castShadow || sky.sunLight.shadow.map !== null;
     mark('sky');
     return w;

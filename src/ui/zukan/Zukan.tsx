@@ -19,7 +19,7 @@ export function Zukan({ app }: { app: App }) {
   const known = !!(p?.discovered || p?.captured);
   void ui.settings.value;
   const quality = app.activeQuality;
-  const photo = quality === 'minimum';
+  const photo = quality === 'minimal';
   const [previewError, setPreviewError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [retry, setRetry] = useState(0);
