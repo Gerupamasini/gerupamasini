@@ -89,7 +89,10 @@ try {
   // stand at the waterline at the current tide and look across the shallows
   await noon();
   // the world runs on the debug clock here, so place the player from the world's own water level
-  await page.evaluate(() => { const a = window.__higata; a.clock.cancelTicket(); a.teleport('waterline'); a.player.pitch = -0.35; });
+  // (the clock and the tide settle over a frame or two before the waterline is looked for: the spot depends on them)
+  await page.evaluate(() => { window.__higata.clock.cancelTicket(); });
+  await waitFrames(page, 3);
+  await page.evaluate(() => { const a = window.__higata; a.teleport('waterline'); a.player.pitch = -0.35; });
   await waitFor(4500);
   await page.screenshot({ path: path.join(outDir, '07-waterline.png') });
   // make sure the close-up steps below have something to look at
@@ -98,6 +101,10 @@ try {
     console.log('no goby around the waterline, forcing a spawn');
     await page.evaluate(() => window.__higata.forceSpawn());
     await waitFrames(page, 10);
+    // the rules may leave this spot empty on the day (at a low tide the 葛西 waterline is the bank's edge, where only
+    // a few puddles hold water): the steps below are about observing and catching, so one is put in the water ahead
+    const still = await page.evaluate(() => window.__higata.creatures.individuals.filter((i) => i.species.id === 'acanthogobius_flavimanus').length);
+    if (still === 0) { console.log('no goby by the rules here today, placing one'); await page.evaluate(() => window.__higata.debugSpawn('acanthogobius_flavimanus', 3)); await waitFrames(page, 6); }
   }
   // close-ups of the placeholder species when they are around
   for (const [sid, file] of [['exopalaemon_orientis', '14-shrimp.png'], ['charadrius_alexandrinus', '15-plover.png']]) {
