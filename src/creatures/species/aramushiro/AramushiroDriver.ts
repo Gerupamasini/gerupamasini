@@ -3,7 +3,7 @@ import type { Individual } from '../../Individual';
 import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
-import { FOOT, MODEL_SH } from './anatomy';
+import { FOOT, HEAD, MODEL_SH } from './anatomy';
 import { LANDMARKS, shellHeight } from './shell';
 import { Aramushiro, PACE, type SnailEnv } from './behavior';
 import { MORPHS, lookFor, tickAramushiroMaterials } from './materials';
@@ -188,6 +188,12 @@ export class AramushiroDriver implements Driver {
     }
     root.rotation.set(-pitch + s.dig, s.heading, roll);
     if (level < 2 || (Math.floor(this.time * 10) & 1) === 0) poseModel(model, s.pose, this.time);
+    // buried: how far the siphon must reach from the canal to stand a little out of the sand
+    if (s.sink > 0) {
+      root.updateMatrixWorld();
+      const canal = this.tmp.copy(LANDMARKS.canal).applyMatrix4(model.shellM).applyMatrix4(root.matrixWorld);
+      s.siphonReach = (g + 0.22 * s.size - canal.y) / (HEAD.siphon * s.size * 0.93);
+    }
     // the sand clings to what is pushed into it
     const own = model.mats.own;
     own.uSandY.value = g;
