@@ -111,6 +111,8 @@ export class Terrain {
   private readonly uLand: IUniform<Vector2> = { value: new Vector2(3.1, 3.9) };
   /** the sand's colour relative to the 葛西 grey (another shore's sand is another colour) */
   private readonly uSandTint: IUniform<Vector3> = { value: new Vector3(1, 1, 1) };
+  /** the mud's (and creek beds') colour relative to the 葛西 grey: subtropical estuary mud is warmer */
+  private readonly uMudTint: IUniform<Vector3> = { value: new Vector3(1, 1, 1) };
   /** (cos, sin) of the ripple marks' turn from 葛西's: their crests run along x there, parallel to that shore */
   private readonly uRipRot: IUniform<Vector2> = { value: new Vector2(1, 0) };
   private waves: WaveSet | null = null;
@@ -349,6 +351,7 @@ export class Terrain {
       shader.uniforms.uMeadowFar = this.uMeadowFar;
       shader.uniforms.uLand = this.uLand;
       shader.uniforms.uSandTint = this.uSandTint;
+      shader.uniforms.uMudTint = this.uMudTint;
       shader.uniforms.uRipRot = this.uRipRot;
       shader.uniforms.uSurf = this.surf.uSurf;
       shader.uniforms.uSurfDir = this.surf.uSurfDir;
@@ -374,6 +377,7 @@ uniform sampler2D uMeadow;
 uniform vec2 uMeadowFar;
 uniform vec2 uLand;
 uniform vec3 uSandTint;
+uniform vec3 uMudTint;
 uniform vec2 uRipRot;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
@@ -485,6 +489,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   float isSand = 1.0 - smoothstep(0.5, 1.5, vSubstrate);
   float muddy = smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate));
   diffuseColor.rgb *= mix(vec3(1.0), uSandTint, 1.0 - smoothstep(1.5, 2.5, vSubstrate));
+  diffuseColor.rgb *= mix(vec3(1.0), uMudTint, smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate)) + smoothstep(3.5, 4.0, vSubstrate) * (1.0 - smoothstep(4.0, 4.5, vSubstrate)));
   vec2 rq = rippleFrame(vWorldPos.xz);
   gDis = rippleDisloc(rq);
   // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
@@ -745,6 +750,10 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     this.uRipRot.value.set(Math.cos(angle), Math.sin(angle));
   }
 
+  /** Tint the mud and creek beds (multiplies the 葛西 grey). */
+  setMudTint(r: number, g: number, b: number): void {
+    this.uMudTint.value.set(r, g, b);
+  }
   /** Tint the sand and muddy sand (multiplies the 葛西 grey). */
   setSandTint(r: number, g: number, b: number): void {
     this.uSandTint.value.set(r, g, b);

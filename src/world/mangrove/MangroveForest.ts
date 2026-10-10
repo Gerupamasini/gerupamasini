@@ -8,7 +8,7 @@ import { batchBounds, finishInstances, HirugiKit, writeInstance } from './kit';
 import { PARTS, type TreePart } from './materials';
 import { treeScale, treeSpec, type HirugiBase, type HirugiLod, type TreeSpec } from './types';
 
-export interface MangroveCluster { x: number; z: number; radius: number; count: number }
+export interface MangroveCluster { x: number; z: number; radius: number; count: number; juvenileFraction?: number }
 export interface MangroveLayout {
   seed: number; clusters: readonly MangroveCluster[]; juvenileFraction?: number;
   /** Metres in the same datum as Terrain. No fixed geography or invented tide data. */
@@ -27,7 +27,7 @@ export function placeMangroves(terrain: Terrain, layout: MangroveLayout): TreeSp
     for (let attempt = 0, accepted = 0; attempt < cluster.count * 45 && accepted < cluster.count; attempt++) {
       const a = rng.range(0, Math.PI * 2), r = Math.sqrt(rng.next()) * cluster.radius;
       const x = cluster.x + Math.cos(a) * r, z = cluster.z + Math.sin(a) * r;
-      const edge = r / cluster.radius, young = rng.chance((layout.juvenileFraction ?? 0.2) * (0.4 + edge * 1.8));
+      const edge = r / cluster.radius, young = cluster.juvenileFraction === 1 || rng.chance((cluster.juvenileFraction ?? layout.juvenileFraction ?? 0.2) * (0.4 + edge * 1.8));
       const s = treeSpec(hashInts(layout.seed, 173), id, rng.int(0, 4) as HirugiBase); s.x = x; s.z = z;
       s.scale = young ? 1 : rng.range(0.79, 1.16) * (1 - edge * 0.15);
       s.sapling = young ? rng.int(0, 2) as 0 | 1 | 2 : null;

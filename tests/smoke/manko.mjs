@@ -26,7 +26,7 @@ try {
   await page.evaluate(()=>{const a=window.__higata;a.setDebugTime(Date.UTC(2026,9,10,3));a.setTideOverride(-.25);});
   await page.waitForFunction(()=>window.__higata.world.tideLevel===-.25);
   const info=await page.evaluate(()=>{const a=window.__higata; a.forceSpawn();return {map:a.world.map.id,size:a.world.terrain.size,animals:a.creatures.individuals.length,clams:a.clams,reef:!!a.world.oysters,pits:a.world.pits.length,skyline:a.world.skyline.group.children.length,forest:a.world.mangroves.stats,position:a.player.position.toArray()};});
-  assert.equal(info.size,70);assert.equal(info.animals,0);assert.equal(info.clams,null);assert.equal(info.reef,false);assert.equal(info.pits,0);assert.equal(info.skyline,0);assert.ok(info.forest.trees>90);
+  assert.equal(info.size,120);assert.equal(info.animals,0);assert.equal(info.clams,null);assert.equal(info.reef,false);assert.equal(info.pits,0);assert.equal(info.skyline,0);assert.ok(info.forest.trees>180);
   await page.screenshot({path:new URL('field.png',out).pathname});
   assert.deepEqual(errors,[]);fs.writeFileSync(new URL('validation.json',out),JSON.stringify({info,errors},null,2));console.log(JSON.stringify(info));
 } finally {await browser?.close();server.kill('SIGTERM');}

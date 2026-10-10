@@ -125,7 +125,7 @@ export function buildTreeGeometry(s: TreeSkeleton, lod: HirugiLod, lowFar = fals
   if (lowFar && lod === 2) {
     s.trunk.forEach(p => ribbon(trunk, p));
     s.roots.filter(p => p.order === 0).forEach(p => ribbon(root, p));
-    if (juvenile) s.leaves.forEach(l => blade(leaf, l, 1)); else s.tufts.forEach(t => tuftCard(leaf, t, false));
+    if (juvenile) s.leaves.forEach(l => blade(leaf, l, 1)); else s.tufts.forEach(t => tuftCard(leaf, t, true));
     return { Trunk: trunk.finish('Trunk'), Branches: branch.finish('Branches'), Leaves: leaf.finish('Leaves'), Roots: root.finish('Roots') };
   }
   s.trunk.forEach((p) => tube(trunk, p, lod));

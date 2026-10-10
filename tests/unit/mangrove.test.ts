@@ -53,7 +53,7 @@ describe('ヤエヤマヒルギ: shared assets', () => {
       expect(s.tufts.length).toBeGreaterThan(50);
     }
   });
-  it('uses sparse flat cards only for low-quality far trees and preserves collisions when switching quality', () => {
+  it('uses card-only far trees on low quality and preserves collisions when switching quality', () => {
     const terrain = flatTerrain(), spec = treeSpec(317);
     const forest = new MangroveForest(terrain, { seed: 1, clusters: [] }, [spec]);
     const camera = { position: new Vector3(0, 5, 50) }, env = { tideLevel: 0, wetLevel: 0 };
@@ -61,8 +61,9 @@ describe('ヤエヤマヒルギ: shared assets', () => {
     const normal = forest.stats.triangles, segments = forest.collision.segments;
     forest.setQuality('low'); forest.update(0, camera, env);
     expect(forest.stats.triangles).toBeGreaterThan(0);
-    // Normal LOD2 is already twig cards (~2.5k tris), so the low path only needs to halve it again.
-    expect(forest.stats.triangles).toBeLessThan(normal * 0.4);
+    // Normal LOD2 is already twig cards (~2.7k tris). Low keeps the crossed cards (a single card vanishes
+    // edge-on and thins the forest wall) and drops branches, tubes and shadows: under half the cost.
+    expect(forest.stats.triangles).toBeLessThan(normal * 0.5);
     expect(forest.stats.calls).toBe(3);
     expect(forest.collision.segments).toBe(segments);
     forest.setQuality('high'); forest.update(0, camera, env);

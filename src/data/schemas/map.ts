@@ -23,7 +23,9 @@ export const MapSchema = z.object({
   /** Opt-in Rhizophora stylosa forest; heights are in the map's terrain datum. Existing temperate shores are unchanged. */
   mangroves: z.object({
     seed: z.number().int(),
-    clusters: z.array(z.object({ x: z.number(), z: z.number(), radius: z.number().positive(), count: z.number().int().nonnegative().max(1000) })).max(64),
+    clusters: z.array(z.object({ x: z.number(), z: z.number(), radius: z.number().positive(), count: z.number().int().nonnegative().max(1000),
+      /** overrides the layout's fraction: 1 scatters seedlings over open mud */
+      juvenileFraction: z.number().min(0).max(1).optional() })).max(64),
     juvenileFraction: z.number().min(0).max(1).optional(),
     minGround: z.number().optional(), maxGround: z.number().optional(), minSpacing: z.number().positive().optional(),
   }).optional(),

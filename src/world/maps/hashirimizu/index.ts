@@ -20,6 +20,8 @@ export interface ShoreLayout {
   landLevel: readonly [number, number];
   /** the sand's colour against the 葛西 grey (terrain shader) */
   sandTint: readonly [number, number, number];
+  /** the mud's colour against the 葛西 grey (terrain shader); absent: unchanged */
+  mudTint?: readonly [number, number, number];
   /** the ripple marks' turn from 葛西's (radians; their crests run along x there): crests parallel to this shore */
   rippleAngle: number;
   /** the waves breaking on the shore (null: none) */
@@ -58,8 +60,10 @@ export const HASHIRIMIZU: ShoreLayout = {
 const MANKO: ShoreLayout = {
   meadow: { suitability: () => 0, field: () => 0, holes: false },
   clams: { beds: 0, opts: {} }, pits: { clusters: 0, opts: {} },
-  landLevel: [3, 4], sandTint: [0.78, 0.75, 0.65], rippleAngle: 0.4,
-  surf: null, water: { colour: [0.08, 0.115, 0.075], turbidity: 0.9 },
+  // Manko's estuary silt (user photos): warm greige-khaki, not 葛西's neutral grey; darker and browner when wet.
+  landLevel: [3, 4], sandTint: [1.08, 0.98, 0.8], mudTint: [1.42, 1.22, 0.92], rippleAngle: 0.4,
+  // silty khaki-brown water, opaque within a few tens of centimetres
+  surf: null, water: { colour: [0.105, 0.098, 0.062], turbidity: 1.4 },
   props: () => [],
 };
 
