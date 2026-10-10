@@ -23,8 +23,8 @@ class Builder {
 }
 
 function tube(b: Builder, path: WoodPath, lod: HirugiLod): void {
-  const steps = path.points.length === 2 ? 1 : path.root ? [32, 8, 6][lod] : path.order >= 2 ? [7, 3, 2][lod] : [24, 8, 5][lod];
-  const sides = path.root ? [20, 7, 5][lod] : path.order >= 2 ? [6, 5, 3][lod] : [20, 8, 5][lod];
+  const steps = path.points.length === 2 ? 1 : path.root ? (path.order >= 2 ? [6, 2, 2] : path.order ? [18, 6, 4] : [40, 10, 7])[lod] : path.order >= 2 ? [7, 3, 2][lod] : [24, 8, 5][lod];
+  const sides = path.root ? (path.order >= 2 ? [5, 3, 3] : path.order ? [12, 6, 4] : [18, 7, 5])[lod] : path.order >= 2 ? [6, 5, 3][lod] : [20, 8, 5][lod];
   const { points, radii } = samplePath(path, steps), offset = b.p.length / 3;
   let length = 0, side = new Vector3(1, 0, 0);
   for (let i = 0; i <= steps; i++) {
@@ -106,8 +106,8 @@ export function buildTreeGeometry(s: TreeSkeleton, lod: HirugiLod, lowFar = fals
   }
   s.trunk.forEach((p) => tube(trunk, p, lod));
   s.branches.filter((p) => p.order <= [3, 1, 1][lod]).forEach((p) => tube(branch, p, lod));
-  // All primary prop roots survive into the far silhouette.
-  s.roots.filter((p) => lod < 2 || p.order === 0).forEach((p) => tube(root, p, lod));
+  // All primary prop roots survive into the far silhouette; hanging rootlets are close-range only.
+  s.roots.filter((p) => p.order <= [2, 1, 0][lod]).forEach((p) => tube(root, p, lod));
   const stride = s.leaves.length < 100 ? 1 : [1, 10, 24][lod];
   const enlarge = s.leaves.length < 100 ? 1 : [1, 2.60, 4.5][lod];
   for (let i = 0; i < s.leaves.length; i += stride) blade(leaf, s.leaves[i], lod, enlarge, s.leaves.length >= 100 && lod > 0);

@@ -5,11 +5,11 @@ import type { HirugiBase, LeafSpec, SaplingSize, TreeSkeleton, WoodPath } from '
 const v = (x: number, y: number, z: number) => new Vector3(x, y, z);
 const polar = (r: number, a: number, y: number) => v(Math.cos(a) * r, y, Math.sin(a) * r);
 const BASES = [
-  { height: 4.2, spread: 2.6, fork: 1.25, leaders: 4, lean: 0.15, roots: 13, reach: 2.6 },
-  { height: 5.6, spread: 2.25, fork: 1.8, leaders: 2, lean: 0.05, roots: 11, reach: 2.35 },
-  { height: 4.8, spread: 2.8, fork: 1.35, leaders: 3, lean: 1.25, roots: 14, reach: 3.1 },
-  { height: 7.1, spread: 1.85, fork: 3.2, leaders: 3, lean: 0.12, roots: 12, reach: 2.1 },
-  { height: 5.0, spread: 2.9, fork: 0.8, leaders: 5, lean: 0.25, roots: 19, reach: 3.35 },
+  { height: 4.2, spread: 2.6, fork: 1.25, leaders: 4, lean: 0.15, roots: 17, reach: 2.6 },
+  { height: 5.6, spread: 2.25, fork: 1.8, leaders: 2, lean: 0.05, roots: 15, reach: 2.35 },
+  { height: 4.8, spread: 2.8, fork: 1.35, leaders: 3, lean: 1.25, roots: 18, reach: 3.1 },
+  { height: 7.1, spread: 1.85, fork: 3.2, leaders: 3, lean: 0.12, roots: 16, reach: 2.1 },
+  { height: 5.0, spread: 2.9, fork: 0.8, leaders: 5, lean: 0.25, roots: 24, reach: 3.35 },
 ] as const;
 
 /** Five authored silhouettes, not five arbitrary PRNG trees. All instances share these skeletons and their three geometry tiers. */
@@ -63,9 +63,6 @@ export function buildSkeleton(base: HirugiBase, sapling: SaplingSize | null = nu
   for (let i = 0; i < b.roots; i++) {
     const a = i / b.roots * Math.PI * 2 + rng.range(-0.16, 0.16), reach = b.reach * rng.range(0.63, 1.08);
     const h = rng.range(0.85, Math.min(b.fork + 0.8, 2.65));
-    const foot = polar(reach, a, -0.16);
-    const shoulder = polar(reach * 0.4, a + rng.range(-0.12, 0.12), h * 0.75);
-    const knee = polar(reach * 0.78, a + rng.range(-0.09, 0.09), h * 0.37);
     // Root origins follow an actual stem, including above the fork / on a multi-stem tree.
     // Attaching every root to the central axis would leave floating roots above the low fork.
     const candidates = h <= b.fork ? [trunk[0]] : trunk.slice(1);
@@ -78,14 +75,32 @@ export function buildSkeleton(base: HirugiBase, sapling: SaplingSize | null = nu
         if(cost<best){best=cost;attachment=p;}
       }
     }
-    const start = attachment.clone().add(polar(0.025,a,0));
-    roots.push(path([start, shoulder, knee, foot], [rng.range(0.095, 0.17), 0.085, 0.058, 0.023], 0, true));
-    // Branches off existing prop roots; no invented conical pneumatophores.
-    for (let j = 0; j < 2; j++) {
-      const joint = j === 0 ? shoulder : knee;
-      const sideFoot = polar(reach * rng.range(0.85, 1.2), a + (j ? -1 : 1) * rng.range(0.16, 0.36), -0.16);
-      const turn = joint.clone().lerp(sideFoot, 0.55); turn.y += 0.06;
-      roots.push(path([joint.clone(), turn, sideFoot], [j ? 0.035 : 0.054, 0.025, 0.011], 1, true));
+    const start = attachment.clone().add(polar(0.025,a,0)), r0 = rng.range(0.055, 0.092), wobble = () => rng.range(-0.07, 0.07);
+    // Rhizophora prop roots leave the stem outward, arch over a crest and then drop almost vertically.
+    // They stay thick down to the mud (no pointed spider-leg tips) and finish 20 cm below the surface.
+    const out = polar(reach * 0.2, a + wobble(), h + 0.08 + h * 0.06);
+    const crest = polar(reach * 0.44, a + wobble(), h * 0.92 + 0.1);
+    const shoulder = polar(reach * 0.7, a + wobble(), h * 0.6);
+    const knee = polar(reach * 0.86, a + wobble(), h * 0.2 + 0.05);
+    const foot = polar(reach * 0.9, a + wobble(), -0.22);
+    roots.push(path([start, out, crest, shoulder, knee, foot], [r0, r0 * 0.86, r0 * 0.74, r0 * 0.66, r0 * 0.6, r0 * 0.56], 0, true));
+    // Near the mud a prop root splits into short splayed toes, which anchor it and read as a tangle at the base.
+    const toes = rng.int(2, 3);
+    for (let j = 0; j < toes; j++) {
+      const da = (j - (toes - 1) / 2) * rng.range(0.11, 0.2) + wobble(), joint = shoulder.clone().lerp(knee, rng.range(0.55, 0.85));
+      const toe = polar(reach * rng.range(0.82, 1.02), a + da, -0.2), bend = joint.clone().lerp(toe, 0.5); bend.y += 0.05;
+      roots.push(path([joint, bend, toe], [r0 * 0.42, r0 * 0.34, r0 * 0.3], 1, true));
+    }
+    // A secondary arch leapfrogs outward from the crest: the reason old stands become a walkable lattice.
+    if (rng.chance(0.75)) {
+      const side = a + (rng.chance(0.5) ? 1 : -1) * rng.range(0.14, 0.34), h2 = h * rng.range(0.45, 0.7);
+      const from = crest.clone().lerp(shoulder, rng.range(0.15, 0.45));
+      const arch = polar(reach * rng.range(0.98, 1.15), side, h2 + 0.08), drop = polar(reach * rng.range(1.22, 1.42), side + wobble(), h2 * 0.25);
+      const end2 = drop.clone().setY(-0.2); end2.x *= 1.02; end2.z *= 1.02;
+      roots.push(path([from, arch, drop, end2], [r0 * 0.58, r0 * 0.5, r0 * 0.44, r0 * 0.41], 1, true));
+      // Thin hanging rootlet: close-range detail only, simplified collision.
+      const hang = arch.clone().lerp(drop, 0.3);
+      roots.push(path([hang, hang.clone().setY(hang.y * 0.45), hang.clone().setY(-0.15)], [0.016, 0.014, 0.012], 2, true));
     }
   }
   // A few branch-borne aerial roots, descending from a genuine woody attachment to the mud.
