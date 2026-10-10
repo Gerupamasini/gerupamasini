@@ -139,6 +139,7 @@
         "channel"
       ],
       "substrate": [
+        "channel",
         "sand",
         "muddy_sand",
         "mud"

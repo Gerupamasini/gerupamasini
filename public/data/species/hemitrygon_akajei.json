@@ -74,7 +74,8 @@
       ],
       "substrate": [
         "sand",
-        "muddy_sand"
+        "muddy_sand",
+        "channel"
       ],
       "depth_m": [
         0.12,
@@ -92,7 +93,7 @@
         "night"
       ],
       "tide": "any",
-      "density_per_100m2": 0.035,
+      "density_per_100m2": 0.08,
       "group": [
         1,
         1
@@ -111,7 +112,8 @@
       ],
       "substrate": [
         "sand",
-        "muddy_sand"
+        "muddy_sand",
+        "channel"
       ],
       "depth_m": [
         0.12,
@@ -125,7 +127,7 @@
         "night"
       ],
       "tide": "rising",
-      "density_per_100m2": 0.05,
+      "density_per_100m2": 0.1,
       "group": [
         1,
         2
