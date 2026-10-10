@@ -1,6 +1,7 @@
 import { CanvasTexture, ClampToEdgeWrapping, Color, DoubleSide, Group, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, Vector3 } from 'three';
 import { buildHashirimizuSkyline, type ShipMark } from './maps/hashirimizu/skyline';
 import { buildHashirimizuLand, type Land } from './maps/hashirimizu/land';
+import { buildMankoLand } from './maps/manko/land';
 
 /**
  * The far scenery around the 西のなぎさ, as flat silhouettes standing on the horizon: 富士山 to the west-south-west,
@@ -37,7 +38,8 @@ export class Skyline {
   /** `kind`: the map's layout (its own horizon); absent: the 西のなぎさ */
   constructor(kind?: string) {
     this.group.name = 'skyline';
-    if (kind === 'manko') return;
+    // 漫湖 is a lake basin: forest all round, the lake's far shore and low hills; no sea horizon, no buildings
+    if (kind === 'manko') { this.land = buildMankoLand(); return; }
     if (kind === 'hashirimizu') { buildHashirimizuSkyline(this.plane.bind(this), this.ships); this.land = buildHashirimizuLand(); return; }
     // ---- 富士山: 106 km WSW, 3776 m: a broad flat-topped cone 1.6° high and 12° wide, nearly all haze
     this.plane(253, ang(18), ang(1.65 * 2.4), FOOT, 1024, 160, (c, w, h) => {

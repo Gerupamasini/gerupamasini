@@ -1,20 +1,36 @@
-import { Group, Sphere, Vector3, type InstancedMesh, type PerspectiveCamera } from 'three';
+import { DynamicDrawUsage, Group, InstancedBufferAttribute, InstancedBufferGeometry, InstancedMesh, Matrix4, Quaternion, Sphere, Vector3, type PerspectiveCamera } from 'three';
 import { hashInts, Rng } from '../../core/Rng';
 import type { Quality } from '../../core/Settings';
 import type { Terrain } from '../Terrain';
 import { reflectInWater } from '../../render/Mirror';
 import { collisionSegments, RootCollisionWorld } from './collision';
 import { batchBounds, finishInstances, HirugiKit, writeInstance } from './kit';
+import { buildCrownGeometry } from './geometry';
 import { PARTS, type TreePart } from './materials';
 import { treeScale, treeSpec, type HirugiBase, type HirugiLod, type TreeSpec } from './types';
 
-export interface MangroveCluster { x: number; z: number; radius: number; count: number; juvenileFraction?: number }
+export interface MangroveCluster {
+  x: number; z: number; radius: number; count: number; juvenileFraction?: number;
+  /** rows deep in the forest: drawn on mid/high quality only (low shows the map's distant-forest canopy there) */
+  deep?: boolean;
+}
 export interface MangroveLayout {
   seed: number; clusters: readonly MangroveCluster[]; juvenileFraction?: number;
   /** Metres in the same datum as Terrain. No fixed geography or invented tide data. */
   minGround?: number; maxGround?: number; minSpacing?: number;
+  /** adult size range (default 0.79-1.16): a map's stand can be lower and denser */
+  scale?: readonly [number, number];
+  /** walkable area [[x0,z0],[x1,z1]]: root collision is built only for trees that reach into it */
+  collisionBounds?: readonly [readonly [number, number], readonly [number, number]];
+  /** distant crowns of a forest too deep to reach (x, y = base height, z, s = radius, m): drawn with the trees'
+   * own foliage cards and leaf material, one instanced draw; low quality draws a third of them (the roof below fills in) */
+  backdrop?: readonly BackdropCrown[];
 }
-export const MANGROVE_LOD: Record<Quality, readonly [number, number, number]> = { high: [11, 32, 180], mid: [8, 25, 145], low: [5, 18, 110] };
+export interface BackdropCrown { x: number; y: number; z: number; s: number }
+// LOD1 hands over to the card crowns by ~20-25 m: beyond that a leaf is a pixel and LOD1 costs ~10x LOD2.
+export const MANGROVE_LOD: Record<Quality, readonly [number, number, number]> = { high: [11, 25, 170], mid: [8, 20, 140], low: [5, 15, 100] };
+/** Batch size: big enough that a 300 m map stays in the low hundreds of draw calls, small enough to cull. */
+const CHUNK = 80;
 const NEAR_BUDGET: Record<Quality, number> = { high: 2, mid: 1, low: 1 };
 interface Batch { specs: TreeSpec[]; bounds: Sphere; levels: Map<HirugiLod, Record<TreePart, InstancedMesh>> }
 
@@ -29,7 +45,8 @@ export function placeMangroves(terrain: Terrain, layout: MangroveLayout): TreeSp
       const x = cluster.x + Math.cos(a) * r, z = cluster.z + Math.sin(a) * r;
       const edge = r / cluster.radius, young = cluster.juvenileFraction === 1 || rng.chance((cluster.juvenileFraction ?? layout.juvenileFraction ?? 0.2) * (0.4 + edge * 1.8));
       const s = treeSpec(hashInts(layout.seed, 173), id, rng.int(0, 4) as HirugiBase); s.x = x; s.z = z;
-      s.scale = young ? 1 : rng.range(0.79, 1.16) * (1 - edge * 0.15);
+      s.scale = young ? 1 : rng.range(...(layout.scale ?? [0.79, 1.16])) * (1 - edge * 0.15);
+      if (cluster.deep) s.deep = true;
       s.sapling = young ? rng.int(0, 2) as 0 | 1 | 2 : null;
       const h = terrain.heightAt(x, z), rootReach = young ? 0.45 : (s.base === 4 ? 4.1 : 3.5) * treeScale(s);
       if (!terrain.inside(x, z, rootReach + 0.5) || h < (layout.minGround ?? -0.35) || h > (layout.maxGround ?? 0.8)) continue;
@@ -58,7 +75,7 @@ export function placeMangroves(terrain: Terrain, layout: MangroveLayout): TreeSp
   return specs;
 }
 
-/** 48 m chunk × five base silhouettes × three LODs, four semantic draw calls per populated bucket. */
+/** CHUNK m chunk × five base silhouettes × three LODs, four semantic draw calls per populated bucket. */
 export class MangroveForest {
   readonly group = new Group();
   readonly kit: HirugiKit;
@@ -75,11 +92,38 @@ export class MangroveForest {
     this.specs = explicit ?? placeMangroves(terrain, layout);
     const buckets = new Map<string, TreeSpec[]>();
     for (const s of this.specs) {
-      const key = `${Math.floor(s.x / 48)},${Math.floor(s.z / 48)}/${s.sapling === null ? `a${s.base}` : `j${s.sapling}`}`;
+      const key = `${Math.floor(s.x / CHUNK)},${Math.floor(s.z / CHUNK)}/${s.sapling === null ? `a${s.base}` : `j${s.sapling}`}`;
       const list = buckets.get(key) ?? []; list.push(s); buckets.set(key, list);
-      this.collision.add(collisionSegments(this.kit.skeleton(s.base, s.sapling), s, terrain));
+      // Physics only where something can touch it: deep rows and trees beyond the walkable area are scenery.
+      const b = layout.collisionBounds, reach = 5 * treeScale(s);
+      if (!s.deep && (!b || (s.x > b[0][0] - reach && s.x < b[1][0] + reach && s.z > b[0][1] - reach && s.z < b[1][1] + reach)))
+        this.collision.add(collisionSegments(this.kit.skeleton(s.base, s.sapling), s, terrain));
     }
     for (const specs of buckets.values()) this.batches.push({ specs, bounds: batchBounds(specs, this.kit), levels: new Map() });
+    if (layout.backdrop?.length) this.backdrop = this.buildBackdrop(layout.backdrop);
+  }
+  private backdrop: InstancedMesh | null = null;
+  private buildBackdrop(sites: readonly BackdropCrown[]): InstancedMesh {
+    const source = buildCrownGeometry(), g = new InstancedBufferGeometry();
+    for (const name of Object.keys(source.attributes)) g.setAttribute(name, source.getAttribute(name));
+    g.setIndex(source.index);
+    // instances in a shuffled order, so that drawing the first third thins the forest evenly (low quality)
+    const rng = new Rng(hashInts(sites.length, 7177)), order = sites.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) { const j = rng.int(0, i); [order[i], order[j]] = [order[j], order[i]]; }
+    const seeds = new Float32Array(sites.length * 4), mesh = new InstancedMesh(g, this.kit.materials.Leaves, sites.length);
+    const m = new Matrix4(), q = new Quaternion(), up = new Vector3(0, 1, 0), box = new Sphere();
+    order.forEach((k, i) => {
+      const c = sites[k];
+      mesh.setMatrixAt(i, m.compose(new Vector3(c.x, c.y, c.z), q.setFromAxisAngle(up, rng.range(0, Math.PI * 2)), new Vector3(c.s, c.s * rng.range(0.75, 0.95), c.s)));
+      seeds.set([rng.next(), rng.next(), rng.next(), rng.next()], i * 4);
+    });
+    g.setAttribute('aSeeds', new InstancedBufferAttribute(seeds, 4).setUsage(DynamicDrawUsage));
+    mesh.computeBoundingSphere(); box.copy(mesh.boundingSphere!); g.boundingSphere = box;
+    mesh.name = 'MangroveBackdrop'; mesh.castShadow = false; mesh.receiveShadow = true;
+    mesh.customDepthMaterial = this.kit.depth.Leaves;
+    this.group.add(reflectInWater(mesh));
+    source.dispose();
+    return mesh;
   }
   setQuality(q: Quality): void {
     if ((q === 'low') !== (this.quality === 'low')) {
@@ -89,6 +133,7 @@ export class MangroveForest {
       }
     }
     this.quality = q; this.elapsed = Infinity;
+    if (this.backdrop) this.backdrop.count = q === 'low' ? Math.ceil(this.backdrop.instanceMatrix.count / 3) : this.backdrop.instanceMatrix.count;
   }
   /** For asset inspection only; automatic map rendering enforces the close-up budget. */
   setLod(lod: HirugiLod | null): void { this.forcedLod = lod; this.elapsed = Infinity; }
@@ -110,7 +155,7 @@ export class MangroveForest {
         // Hysteresis, both directions, independent of the collision representation.
         const n = near * (old === 0 ? 1.12 : 0.88), m = mid * (old === 1 ? 1.12 : 0.88);
         const f = far * (old === 2 ? 1.06 : 0.94);
-        const lod = d > f ? -1 : this.forcedLod ?? (d < n && (s.sapling !== null || nearest.has(s.id)) ? 0 : d < m ? 1 : 2);
+        const lod = d > f || (s.deep && this.quality === 'low') ? -1 : this.forcedLod ?? (d < n && (s.sapling !== null || nearest.has(s.id)) ? 0 : d < m ? 1 : 2);
         this.lods.set(s.id, lod); if (lod >= 0) levels[lod].push(s);
       }
       for (const lod of [0, 1, 2] as const) {
@@ -142,6 +187,7 @@ export class MangroveForest {
   }
   dispose(): void {
     for (const batch of this.batches) for (const level of batch.levels.values()) for (const part of PARTS) this.kit.release(level[part]);
+    if (this.backdrop) { this.backdrop.geometry.dispose(); this.backdrop.removeFromParent(); this.backdrop = null; }
     this.batches.length = 0; this.lods.clear(); this.collision.clear(); this.group.clear(); this.kit.dispose();
   }
 }

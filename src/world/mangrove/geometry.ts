@@ -125,7 +125,7 @@ export function buildTreeGeometry(s: TreeSkeleton, lod: HirugiLod, lowFar = fals
   if (lowFar && lod === 2) {
     s.trunk.forEach(p => ribbon(trunk, p));
     s.roots.filter(p => p.order === 0).forEach(p => ribbon(root, p));
-    if (juvenile) s.leaves.forEach(l => blade(leaf, l, 1)); else s.tufts.forEach(t => tuftCard(leaf, t, true));
+    if (juvenile) s.leaves.forEach(l => blade(leaf, l, 1)); else s.tufts.forEach((t, i) => { if (i % 2 === 0) tuftCard(leaf, { ...t, length: t.length * 1.4, width: t.width * 1.4, center: t.center.clone().addScaledVector(t.axis, -t.length * 0.2) }, true); });
     return { Trunk: trunk.finish('Trunk'), Branches: branch.finish('Branches'), Leaves: leaf.finish('Leaves'), Roots: root.finish('Roots') };
   }
   s.trunk.forEach((p) => tube(trunk, p, lod));
@@ -133,10 +133,34 @@ export function buildTreeGeometry(s: TreeSkeleton, lod: HirugiLod, lowFar = fals
   s.branches.filter((p) => p.order <= [3, 2, 1][lod]).forEach((p) => tube(branch, p, lod));
   // All primary prop roots survive into the far silhouette; hanging rootlets are close-range only.
   s.roots.filter((p) => p.order <= [2, 1, 0][lod]).forEach((p) => tube(root, p, lod));
-  if (lod < 2 || juvenile) s.leaves.forEach(l => blade(leaf, l, juvenile ? Math.min(lod, 1) as HirugiLod : lod));
+  // LOD1 (8-30 m): every second leaf, 1.35x larger (the same canopy area) - a leaf is a few pixels there.
+  if (lod === 1 && !juvenile) s.leaves.forEach((l, i) => { if (i % 2 === 0) blade(leaf, { ...l, length: l.length * 1.35, width: l.width * 1.35 }, 1); });
+  else if (lod < 2 || juvenile) s.leaves.forEach(l => blade(leaf, l, juvenile ? Math.min(lod, 1) as HirugiLod : lod));
   // Real crowns carry tens of thousands of leaves. Filler cards just inside each twig supply that mass
   // (the dense domes of photos 23/45) for ~0.8k triangles, while real leaves form the readable outer layer.
-  if (lod < 2) s.tufts.forEach(t => tuftCard(leaf, t, false, 0.8));
-  else s.tufts.forEach(t => tuftCard(leaf, t, true));
+  // Crossed: a lone horizontal card vanishes edge-on and the crown reads see-through from the side.
+  if (lod < 2) s.tufts.forEach(t => tuftCard(leaf, t, true, 0.85));
+  // LOD2: every second twig card at 1.4x (same coverage); at that range the gaps between cards are sub-pixel
+  else s.tufts.forEach((t, i) => { if (i % 2 === 0) tuftCard(leaf, { ...t, length: t.length * 1.4, width: t.width * 1.4, center: t.center.clone().addScaledVector(t.axis, -t.length * 0.2) }, true); });
   return { Trunk: trunk.finish('Trunk'), Branches: branch.finish('Branches'), Leaves: leaf.finish('Leaves'), Roots: root.finish('Roots') };
+}
+
+/**
+ * One whole distant crown (unit radius, base at y=0) made of the trees' own twig-tuft cards: the background
+ * forest is the same foliage, material and wind as the real trees, aggregated. 10 crossed cards on a dome (40 triangles).
+ */
+export function buildCrownGeometry(): BufferGeometry {
+  const b = new Builder();
+  for (let i = 0; i < 10; i++) {
+    // Fibonacci points over the upper hemisphere, flattened like a Rhizophora dome
+    const t = (i + 0.5) / 10, el = Math.asin(t * 0.95), az = i * 2.39996;
+    const dir = new Vector3(Math.cos(az) * Math.cos(el), Math.sin(el) * 0.75, Math.sin(az) * Math.cos(el));
+    const size = 0.95 - 0.25 * t;
+    const axis = dir.clone().add(new Vector3(0, 0.9, 0)).normalize();
+    const center = dir.clone().multiplyScalar(0.62).add(new Vector3(0, 0.35, 0)).addScaledVector(axis, -size * 0.5);
+    tuftCard(b, { center, axis, roll: az, length: size, width: size * 1.05, age: 0.25 + 0.6 * ((i * 0.618) % 1), phase: (i * 0.37) % 1 }, true);
+  }
+  const g = b.finish('Crown');
+  g.boundingSphere!.radius = 2.5;
+  return g;
 }

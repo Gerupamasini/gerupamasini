@@ -5,6 +5,9 @@ import type { ClamBedOptions } from '../../ClamField';
 import type { SurfParams } from '../../Surf';
 import { buildHashirimizuProps } from './props';
 import { eelgrassField, eelgrassZone, offshore } from './shape';
+import { inThicket } from '../manko/shape';
+import { backdropCrowns } from '../manko/land';
+import type { BackdropCrown } from '../../mangrove/MangroveForest';
 
 export * as shape from './shape';
 
@@ -28,6 +31,10 @@ export interface ShoreLayout {
   surf: SurfParams | null;
   /** the water: its colour in depth (linear) and its turbidity against 葛西's silty water */
   water: { colour: readonly [number, number, number]; turbidity: number };
+  /** distant mangrove crowns drawn with the trees' own foliage (absent: none) */
+  mangroveBackdrop?(): BackdropCrown[];
+  /** ground the player cannot enter inside the walkable bounds (absent: none) */
+  blocked?(x: number, z: number): boolean;
   /** the shore's own scenery standing on the terrain */
   props(terrain: Terrain, seed: number): Object3D[];
 }
@@ -65,6 +72,9 @@ const MANKO: ShoreLayout = {
   // silty khaki-brown water, opaque within a few tens of centimetres
   surf: null, water: { colour: [0.105, 0.098, 0.062], turbidity: 1.4 },
   props: () => [],
+  // the dense mangrove forest beyond its front rows
+  blocked: inThicket,
+  mangroveBackdrop: backdropCrowns,
 };
 
 export const LAYOUTS: Record<string, ShoreLayout> = { hashirimizu: HASHIRIMIZU, manko: MANKO };

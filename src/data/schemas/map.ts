@@ -25,9 +25,12 @@ export const MapSchema = z.object({
     seed: z.number().int(),
     clusters: z.array(z.object({ x: z.number(), z: z.number(), radius: z.number().positive(), count: z.number().int().nonnegative().max(1000),
       /** overrides the layout's fraction: 1 scatters seedlings over open mud */
-      juvenileFraction: z.number().min(0).max(1).optional() })).max(64),
+      juvenileFraction: z.number().min(0).max(1).optional(),
+      /** deep forest rows: mid/high quality only */
+      deep: z.boolean().optional() })).max(1024),
     juvenileFraction: z.number().min(0).max(1).optional(),
     minGround: z.number().optional(), maxGround: z.number().optional(), minSpacing: z.number().positive().optional(),
+    scale: z.tuple([z.number().positive(), z.number().positive()]).optional(),
   }).optional(),
   /** how deep the player can wade: boots (the default, 35 cm) or chest waders */
   wading: z.object({ gear: z.enum(['boots', 'waders']), maxDepth_m: z.number().positive() }).optional(),

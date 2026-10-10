@@ -38,6 +38,29 @@ export function buildSkeleton(base: HirugiBase, sapling: SaplingSize | null = nu
     // Red-brown stipule sheathing the terminal bud (photo 20).
     branches.push(path([p.clone(), p.clone().addScaledVector(axis, 0.045)], [0.0042, 0.0006], 3));
   };
+  /** A limb from origin to outer with twigs along it, five-to-seven shoots per twig, a tip rosette per shoot. */
+  const fan = (origin: Vector3, outer: Vector3, angle: number, twigs: number, sag: number) => {
+    const elbow = origin.clone().lerp(outer, 0.5); elbow.y += sag;
+    branches.push(path([origin, elbow, outer], [0.054, 0.035, 0.017], 1));
+    for (let twig = 0; twig < twigs; twig++) {
+      const begin = origin.clone().lerp(outer, 0.2 + twig / (twigs + 3));
+      const az = angle + rng.range(-1.2, 1.2), length = rng.range(0.32, 0.73);
+      const tip = begin.clone().add(polar(length, az, rng.range(-0.14, 0.44)));
+      branches.push(path([begin, begin.clone().lerp(tip, 0.45), tip], [0.017, 0.009, 0.0035], 2));
+      const tuft = v(0, 0, 0);
+      for (let shoot = 0; shoot < 7; shoot++) {
+        const joint = begin.clone().lerp(tip, 0.25 + shoot * 0.125);
+        // Shoots turn outward and up so foliage forms a layered outer shell over an open, woody interior.
+        const direction = polar(rng.range(0.16, 0.34), az + (shoot - 3) * 0.75 + rng.range(-0.3, 0.3), rng.range(0.04, 0.26));
+        const terminal = joint.clone().add(direction);
+        branches.push(path([joint, terminal], [0.0065, 0.0035], 3));
+        rosette(terminal, direction, rng.int(3, 4)); tuft.addScaledVector(terminal, 1 / 7);
+      }
+      // One far-LOD foliage card per twig, sized to the spread of its rosettes.
+      const cardAxis = polar(1, az, 1.4).normalize(), cardLength = 0.62 + length * 0.4;
+      tufts.push({ center: tuft.addScaledVector(cardAxis, -cardLength * 0.5), axis: cardAxis, roll: 0, length: cardLength, width: 0.66 + length * 0.35, age: rng.range(0.3, 0.8), phase: rng.next() });
+    }
+  };
   for (let leader = 0; leader < b.leaders; leader++) {
     const a = leader / b.leaders * Math.PI * 2 + rng.range(-0.2, 0.2);
     const end = polar(b.spread * 0.48, a, b.height * rng.range(0.62, 0.81)); end.x += b.lean;
@@ -49,26 +72,15 @@ export function buildSkeleton(base: HirugiBase, sapling: SaplingSize | null = nu
       const angle = a + (arm - 2) * 0.66 + rng.range(-0.3, 0.3);
       const origin = mid.clone().lerp(end, arm / 6);
       const outer = polar(b.spread * rng.range(0.76, 1.06), angle, b.height * rng.range(0.81, 1)); outer.x += b.lean;
-      const elbow = origin.clone().lerp(outer, 0.5); elbow.y -= 0.12;
-      branches.push(path([origin, elbow, outer], [0.054, 0.035, 0.017], 1));
-      for (let twig = 0; twig < 10; twig++) {
-        const begin = origin.clone().lerp(outer, 0.2 + twig / 13);
-        const az = angle + rng.range(-1.2, 1.2), length = rng.range(0.32, 0.73);
-        const tip = begin.clone().add(polar(length, az, rng.range(-0.14, 0.44)));
-        branches.push(path([begin, begin.clone().lerp(tip, 0.45), tip], [0.017, 0.009, 0.0035], 2));
-        const tuft = v(0, 0, 0);
-        for (let shoot = 0; shoot < 7; shoot++) {
-          const joint = begin.clone().lerp(tip, 0.25 + shoot * 0.125);
-          // Shoots turn outward and up so foliage forms a layered outer shell over an open, woody interior.
-          const direction = polar(rng.range(0.16, 0.34), az + (shoot - 3) * 0.75 + rng.range(-0.3, 0.3), rng.range(0.04, 0.26));
-          const terminal = joint.clone().add(direction);
-          branches.push(path([joint, terminal], [0.0065, 0.0035], 3));
-          rosette(terminal, direction, rng.int(3, 4)); tuft.addScaledVector(terminal, 1 / 7);
-        }
-        // One far-LOD foliage card per twig, sized to the spread of its five rosettes.
-        const cardAxis = polar(1, az, 1.4).normalize(), cardLength = 0.62 + length * 0.4;
-        tufts.push({ center: tuft.addScaledVector(cardAxis, -cardLength * 0.5), axis: cardAxis, roll: 0, length: cardLength, width: 0.66 + length * 0.35, age: rng.range(0.3, 0.8), phase: rng.next() });
-      }
+      fan(origin, outer, angle, 10, -0.12);
+    }
+    // Skirt limbs (user's photos): low branches leave the stem below the crown and droop outward, so the foliage
+    // dome reaches down to ~1-1.5 m over the prop roots instead of standing on a bare pole.
+    for (let arm = 0; arm < (b.leaders >= 4 ? 1 : 2); arm++) {
+      const angle = a + (arm ? 0.9 : -0.9) + rng.range(-0.35, 0.35);
+      const origin = start.clone().lerp(mid, rng.range(0.25, 0.6));
+      const outer = polar(b.spread * rng.range(0.95, 1.2), angle, Math.min(origin.y, rng.range(1.1, 1.6))); outer.x += b.lean * 0.6;
+      fan(origin, outer, angle, 6, 0.25);
     }
   }
   for (let i = 0; i < b.roots; i++) {
@@ -124,20 +136,35 @@ export function buildSkeleton(base: HirugiBase, sapling: SaplingSize | null = nu
 }
 
 function juvenile(size: SaplingSize): TreeSkeleton {
-  const h = [0.4, 0.85, 1.55][size], trunk: WoodPath[] = [{ points: [v(0, -0.12, 0), v(0.006, h * 0.45, 0), v(-0.018, h, 0.014)], radii: [0.012 + size * 0.003, 0.007 + size * 0.002, 0.003], order: 0, root: false }];
+  // User's seedling photo: one straight stem (the propagule's dark hypocotyl at the base), leaf pairs crowded at
+  // the tip, short leafy side shoots in the upper half on the larger plants, early arched prop roots on the largest.
+  const h = [0.4, 0.85, 1.55][size], rng = new Rng(337 + size);
+  const top = v(-0.012, h, 0.01);
+  const trunk: WoodPath[] = [{ points: [v(0, -0.12, 0), v(0.004, h * 0.4, 0), v(-0.006, h * 0.75, 0.006), top], radii: [0.014 + size * 0.005, 0.011 + size * 0.004, 0.007 + size * 0.002, 0.004], order: 0, root: false }];
   const branches: WoodPath[] = [], roots: WoodPath[] = [], leaves: LeafSpec[] = [];
-  const rng = new Rng(337 + size), tips = [v(-0.018, h, 0.014)];
-  if (size > 0) for (let i = 0; i < size + 1; i++) {
-    const a = i * 2.2, start = v(0, h * (0.48 + i * 0.1), 0), tip = polar(0.12 + size * 0.07, a, h * (0.75 + i * 0.08));
-    branches.push({ points: [start, tip], radii: [0.006, 0.0025], order: 1, root: false }); tips.push(tip);
-  }
-  for (const tip of tips) for (let node = 0; node < 4; node++) for (const sign of [-1, 1]) {
-    const a = node * Math.PI / 2 + size * 0.4;
-    leaves.push({ center: tip.clone().add(v(0, -node * 0.026, 0)), axis: polar(1, a, 1.1).multiplyScalar(sign).setY(1.1).normalize(), roll: rng.range(-0.2, 0.2), length: rng.range(0.085, 0.125), width: rng.range(0.039, 0.057), age: node === 0 ? 0.12 : 0.45, phase: rng.next() });
+  const rosette = (p: Vector3, axis: Vector3, pairs: number, size0: number) => {
+    const side = v(axis.z, 0, -axis.x); if (side.lengthSq() < 1e-3) side.set(1, 0, 0); side.normalize();
+    const rot = rng.range(0, Math.PI);
+    for (let node = 0; node < pairs; node++) for (const sign of [-1, 1]) {
+      const youth = (node + 1) / pairs, radial = side.clone().applyAxisAngle(axis, rot + node * Math.PI / 2).multiplyScalar(sign);
+      const direction = axis.clone().multiplyScalar(0.3 + youth * 0.9).addScaledVector(radial, 1).add(v(0, 0.15 + youth * 0.3, 0)).normalize();
+      const grown = 1 - youth * 0.35;
+      leaves.push({ center: p.clone().addScaledVector(axis, (node - pairs + 1) * 0.016), axis: direction, roll: rng.range(-0.2, 0.2),
+        length: rng.range(0.095, 0.13) * size0 * grown, width: rng.range(0.045, 0.06) * size0 * grown, age: node === pairs - 1 ? 0.1 : rng.range(0.3, 0.7), phase: rng.next() });
+    }
+    branches.push({ points: [p.clone(), p.clone().addScaledVector(axis, 0.03)], radii: [0.0035, 0.0006], order: 3, root: false });
+  };
+  rosette(top, v(-0.02, 1, 0.02).normalize(), [3, 4, 4][size], [0.85, 1, 1.05][size]);
+  const laterals = [0, 2, 4][size];
+  for (let i = 0; i < laterals; i++) {
+    const a = i * 2.4 + 0.5, y = h * (0.5 + 0.4 * i / Math.max(1, laterals - 1)), start = v(0, y, 0);
+    const tip = polar(0.1 + size * 0.05 + rng.range(0, 0.05), a, y + 0.08 + size * 0.03);
+    branches.push({ points: [start, start.clone().lerp(tip, 0.5).add(v(0, 0.015, 0)), tip], radii: [0.006 + size * 0.0015, 0.0045, 0.003], order: 2, root: false });
+    rosette(tip, tip.clone().sub(start).normalize(), 3, 0.92);
   }
   if (size === 2) for (let i = 0; i < 3; i++) {
-    const a = i / 3 * Math.PI * 2;
-    roots.push({ points: [v(0, 0.22, 0), polar(0.12, a, 0.12), polar(0.25, a, -0.05)], radii: [0.013, 0.009, 0.004], order: 0, root: true });
+    const a = i / 3 * Math.PI * 2 + 0.4;
+    roots.push({ points: [v(0, 0.24, 0), polar(0.07, a, 0.25), polar(0.17, a, 0.13), polar(0.21, a, -0.06)], radii: [0.012, 0.011, 0.01, 0.009], order: 0, root: true });
   }
   return { trunk, branches, roots, leaves, tufts: [], height: h + 0.13, reach: 0.35 };
 }

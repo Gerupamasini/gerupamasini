@@ -11,6 +11,8 @@ export interface TreeSpec extends HirugiSeeds {
   id: number; base: HirugiBase; x: number; z: number; yaw: number; scale: number;
   /** null: adult; 0..2: fixed juvenile models, no seed deformation. */
   sapling: SaplingSize | null;
+  /** deep forest row: skipped on low quality */
+  deep?: boolean;
 }
 export interface WoodPath { points: Vector3[]; radii: number[]; order: number; root: boolean }
 export interface LeafSpec { center: Vector3; axis: Vector3; roll: number; length: number; width: number; age: number; phase: number }

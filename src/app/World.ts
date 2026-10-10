@@ -177,7 +177,7 @@ export class World {
     }
     if (map.mangroves) {
       onProgress?.('ヤエヤマヒルギ林');
-      w.mangroves = new MangroveForest(terrain, map.mangroves);
+      w.mangroves = new MangroveForest(terrain, { ...map.mangroves, collisionBounds: map.bounds.walkable, backdrop: layout?.mangroveBackdrop?.() });
       w.mangroves.setQuality(preset.vegetation);
       // Build the visible tiers before FieldRenderer.compile, so shader compilation stays behind the loading screen.
       w.mangroves.update(0, { position: new Vector3(map.spawnStart.x,terrain.heightAt(map.spawnStart.x,map.spawnStart.z)+1.5,map.spawnStart.z) }, { tideLevel: 0, wetLevel: 0 });
