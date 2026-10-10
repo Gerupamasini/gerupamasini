@@ -83,7 +83,7 @@ export class CreatureSystem {
     private readonly data: GameData,
     private readonly habitat: Habitat,
     private readonly terrain: Terrain,
-    private readonly preset: QualityPreset,
+    private preset: QualityPreset,
     private readonly mapId: string,
     readonly removed: Set<string>,
     /** animals never appear closer to the player than this (m); a small, busy shore lets them come nearer */
@@ -139,20 +139,42 @@ export class CreatureSystem {
   }
 
   private tierFor(sp: SpeciesDef, dist: number, lod1Rank: number, locked: boolean): Tier | 'placeholder' | null {
-    const far = sp.model.viewDistance_m ?? (sp.taxon.group === 'bird' ? BIRD_DIST : Math.min(isAquatic(sp) ? AQUATIC_DIST : LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400)));
+    // (the lighter presets draw the animals closer only, and give the detailed tiers within a shorter reach; the
+    // birds keep their reach, which the binoculars are for, and are a placeholder at a distance anyway)
+    const vs = this.preset.viewScale, bird = sp.taxon.group === 'bird';
+    const base = sp.model.viewDistance_m ?? (bird ? BIRD_DIST : Math.min(isAquatic(sp) ? AQUATIC_DIST : LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400)));
+    // (never nearer than 8 m, so the small animals do not appear a few steps from the viewer)
+    const far = bird ? base : Math.max(vs * base, Math.min(base, 8));
     if (dist > far) return null;
     if (!sp.model.lod2 && !sp.model.lod1 && !sp.model.hero) return 'placeholder';
     if (locked) return sp.model.hero ? 'hero' : sp.model.lod1 ? 'lod1' : 'lod2';
     // a species without light tiers (the plover's one dense GLB) shows its driver's placeholder beyond a distance
     if (sp.model.placeholderBeyond_m !== undefined && dist > sp.model.placeholderBeyond_m && DRIVERS[sp.model.driver ?? '']?.placeholder) return 'placeholder';
-    if (dist <= LOD1_DIST && lod1Rank < this.preset.lod1Count && sp.model.lod1) return 'lod1';
+    if (dist <= LOD1_DIST * vs && lod1Rank < this.preset.lod1Count && sp.model.lod1) return 'lod1';
     return sp.model.lod2 ? 'lod2' : sp.model.lod1 ? 'lod1' : 'hero';
   }
+
+  /** The quality tier changed mid-game: the next spawn pass plans with the new share and the tiers follow the new
+   * reach at once; a smaller share or reach rebuilds the crowd (all but the observed animal) for the new tier. */
+  setPreset(p: QualityPreset): void {
+    const shrank = p.creatureScale < this.preset.creatureScale || p.viewScale < this.preset.viewScale;
+    this.preset = p;
+    if (shrank) this.resetPopulation(this.lastLockedId);
+  }
+
+  /** Hero materials switched off (or on): the views that carry them, and the hero-tier views built without them,
+   * are dropped and rebuilt by the next tier pass. */
+  dropHeroViews(): void {
+    for (const e of this.entries.values()) if (e.view && (e.view.hero || e.view.tier === 'hero')) this.dropView(e);
+  }
+
+  private lastLockedId: string | null = null;
 
   update(f: CreatureFrame): void {
     if (!this.enabled) return;
     this.frameIndex++;
     this.nowMs = f.gameMs;
+    this.lastLockedId = f.lockedId;
     const env: SpawnEnv = { tod: f.tod, season: f.season, tidePhase: f.tidePhase, mapId: this.mapId, gameMs: f.gameMs, day: Math.floor(f.gameMs / 86400000) };
     // spawning (1 Hz)
     this.spawnAcc += f.dt;
@@ -160,13 +182,8 @@ export class CreatureSystem {
       this.spawnAcc = 0;
       const live = this.individuals;
       for (const ind of this.spawner.cull(f.playerPos.x, f.playerPos.z, env, live)) if (ind.id !== f.lockedId) this.despawn(ind.id);
-      const scale = this.preset.creatureScale;
-      const requests = this.spawner.plan(f.playerPos.x, f.playerPos.z, env, this.individuals, this.minSpawnDist);
-      let n = 0;
-      for (const req of requests) {
-        if (scale < 1 && (n++ % Math.round(1 / (1 - scale + 1e-6))) === 0 && Math.random() > scale) continue;
-        this.spawn(this.spawner.create(req, f.gameMs));
-      }
+      const requests = this.spawner.plan(f.playerPos.x, f.playerPos.z, env, this.individuals, this.minSpawnDist, this.preset.creatureScale);
+      for (const req of requests) this.spawn(this.spawner.create(req, f.gameMs));
     }
     // LOD assignment (4 Hz)
     this.lodAcc += f.dt;
@@ -264,6 +281,8 @@ export class CreatureSystem {
       if (tier === 'hero' && this.heroApply) {
         try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] falling back to standard materials', err); hero = null; }
         if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { hero?.dispose(); model.root.removeFromParent(); return; }
+        // (the hero materials were switched off while they were being made: the plain ones)
+        if (!this.heroApply) { hero?.dispose(); hero = null; }
       }
       view = { tier, root: model.root, model, radius: model.radius, hero };
     }
@@ -316,10 +335,11 @@ export class CreatureSystem {
     for (const e of [...this.entries.values()]) if (hidden.has(e.ind.species.id)) this.despawn(e.ind.id);
   }
 
-  /** debug: spawn everything the rules allow right around the player, ignoring the pop-in distance */
-  forceSpawn(playerPos: Vector3, env: SpawnEnv): number {
+  /** debug: spawn everything the rules allow right around the player, ignoring the pop-in distance (`scale` < 1: the
+   * preset's share of it instead, as the measurements want) */
+  forceSpawn(playerPos: Vector3, env: SpawnEnv, scale = 1): number {
     if (!this.enabled) return 0;
-    const requests = this.spawner.plan(playerPos.x, playerPos.z, env, this.individuals, 0);
+    const requests = this.spawner.plan(playerPos.x, playerPos.z, env, this.individuals, 0, scale);
     for (const req of requests) this.spawn(this.spawner.create(req, env.gameMs));
     return requests.length;
   }

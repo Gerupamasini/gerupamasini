@@ -51,7 +51,8 @@ export interface HeroLighting {
 export class HeroPipeline {
   readonly shared: SharedUniforms;
   private readonly envRT: WebGLRenderTarget;
-  private readonly mainRT: WebGLRenderTarget;
+  private mainRT: WebGLRenderTarget;
+  private readonly rtOpts: { type: typeof HalfFloatType; format: typeof RGBAFormat; generateMipmaps: boolean; minFilter: typeof LinearMipmapLinearFilter; magFilter: typeof LinearFilter; depthBuffer: boolean };
   private readonly compRT: WebGLRenderTarget;
   private readonly post = createPost();
   private width = 1;
@@ -82,6 +83,7 @@ export class HeroPipeline {
       uResolution: { value: new Vector2(1, 1) },
     };
     const rtOpts = { type: HalfFloatType, format: RGBAFormat, generateMipmaps: true, minFilter: LinearMipmapLinearFilter, magFilter: LinearFilter, depthBuffer: true };
+    this.rtOpts = rtOpts;
     this.envRT = new WebGLRenderTarget(4, 4, rtOpts);
     const depth = new DepthTexture(4, 4, FloatType);
     depth.minFilter = NearestFilter;
@@ -98,6 +100,20 @@ export class HeroPipeline {
     this.post.material.uniforms.uTex.value = this.mainRT.texture;
     this.post.material.uniforms.uBloom.value = 0.18;
     this.post.material.uniforms.uExposure.value = 1.0;
+  }
+
+  /** Multisampling of the main buffer (the field's tier, 0: none): the buffer is rebuilt on a change. */
+  setSamples(n: number): void {
+    if (this.mainRT.samples === n) return;
+    const old = this.mainRT;
+    const rt = new WebGLRenderTarget(this.width, this.height, { ...this.rtOpts, samples: n });
+    const depth = new DepthTexture(this.width, this.height, FloatType);
+    depth.minFilter = NearestFilter;
+    depth.magFilter = NearestFilter;
+    rt.depthTexture = depth;
+    this.mainRT = rt;
+    this.post.material.uniforms.uTex.value = rt.texture;
+    old.dispose();
   }
 
   resize(width: number, height: number): void {

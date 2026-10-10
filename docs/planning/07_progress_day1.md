@@ -167,6 +167,20 @@
 - シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
 - バージョン 0.12.1。
 
+## 27 回目（超軽量の画質と軽量化）
+- 画質に **超軽量**（`Quality` 'minimal'、`QUALITY_ORDER`）。`QualityPreset` に `msaa`・`water: 'lite'|'full'`・`viewScale`・`contactShadows`・`oysters`・`tankWater`・`hero` が増え、`App.applyPreset()` が描画先のサンプル数（`FieldRenderer.setSamples`）、水と床の軽い式（`WaterPass.setLite`: `defines` の `WATER_LITE`・`WAVE_STRIDE 2`・`WAVE_AMP 1.4`；`Terrain.setLite`: `WAVE_STRIDE`・`WAVE_AMP` のみ；`Waves.ts` の両ループが `WAVE_STRIDE` 刻み）、水槽（`TankScene.setLite`）、接地影（`CONTACT_SHADOWS.enabled`）に配る。`World.create` も生成時に同じ段を当てる（先行 compile の前）。`MEADOW_QUALITY.minimal`、牡蠣礁は `preset.oysters`、`CreatureSystem.tierFor` は `viewScale` で描画距離と lod1 の距離を縮める。
+- キャンバスの `antialias` は生成時に固定なので、`saveSettings` が画質を localStorage（`higata.quality`）に写し、`GameRenderer` が次の起動でそれを読んで `msaa` 0 の段（超軽量・低）ならマルチサンプルなしで作る。その線をまたぐ切り替えは `toast.reloadHint`。
+- レビューの指摘で: `CreatureSystem.setPreset`（`applyPreset` から。割合か描画距離が縮めば観察中以外を `resetPopulation`）、`dropHeroViews` と `TankScene.refreshHero`（`applyHeroSetting` でヒーロー素材の有無が変わったとき）、重さの案内は `fieldSince`（干潟に入って 6 秒後から、入り直すたびに 0 から）、`ShadowLayer` は消した枠を再アップロードせず、無効のときはメッシュごと描かない。鳥は `viewScale` の対象外（双眼鏡のため）。
+- 全段に効く軽量化: 水のパスの `camLevel`（眼の位置の寄せ波の高さ）を頂点シェーダ（`vCamLevel`）へ。
+- `Spawner.plan(…, scale)`: 群れを置く確率に `creatureScale` を掛ける（セル・日ごとに決定的。鳥は除く）。これまでは `creatureScale` 0.6 でもほぼ全部出ていた（確率の式が効いておらず、計画が毎秒やり直されるので埋まる）。`forceSpawn(share)` はデバッグでは全部、計測では割合。`tierFor` の描画距離は `viewScale` を掛けても 8 m を下回らない（出現の環 10 m のすぐ内側に小さな生物が現れないように）。
+- `QualityPreset.waterNormals`（どこも読んでいなかった）を削除。
+- 設計書（6 読者 + 統合）の残り項目から: `QualityPreset.maxPixels`（描画バッファの画素の上限。`GameRenderer.resize` が `max(0.5, min(devicePixelRatio, maxDpr, sqrt(maxPixels / (w·h))))` を dpr にする: 超軽量 90 万・低 160 万・中 300 万・高 600 万。下限 0.5 倍なので 4K の CSS 解像度では上限を超える）、`HeroPipeline.setSamples`（ヒーローの主バッファも `msaa` に従う）、水槽の光芒の `SHAFT_N`（超軽量 4）、初回起動の GPU 判定（`GameRenderer.weakGpu`: `WEBGL_debug_renderer_info` の名前が Intel / UHD / Iris / HD Graphics / Mali / Adreno / PowerVR / SwiftShader / llvmpipe / VMware / VirtualBox か AMD の APU（Radeon(TM) Graphics / Vega）で、Intel Arc でなければ `loadSettings(firstRun)` が「低」で始めて保存し、`toast.autoQuality`。「Mesa」はドライバ名なので見ない）。
+- 検証ワークフローの指摘で: 水槽の `removeOccupant` が墓標（`dropped`）を残し、`refreshHero` / `setOccupants` のモデル読み込み中に放した個体を再追加しない（`queued` の直列化だけでは放す操作をまたげなかった）。`dropHeroViews` はヒーロー段のビューをヒーロー材質の有無にかかわらず落とす（オンにした向きも作り直す）。牡蠣礁の段（`OysterReef.quality` は 3 段のまま）は 超軽量 → low。
+- 計測の後に CPU プロファイル（`tests/smoke/out/cpu-profile.mjs`、gitignore）: 葛西の潮だまり（超軽量、209 匹）で JS は 1 フレーム 3 ms（`creatures.update`）、残りはソフトウェア描画と初回描画のシェーダコンパイル待ち（`getShaderInfoLog`）。CPU は律速ではない。
+- 20 fps を下回るフレームが 8 秒分たまると一度だけ `toast.slowHint`。
+- `tests/unit/quality.test.ts`（段の順・各段の MEADOW・軽い段ほどコストが増えないこと）。
+- バージョン 0.23.0。
+
 ## 26 回目（アマモと寄せ波）
 - `claude/festive-lamport-hd2row` の新しい先端（85f9c79）をマージ: `WaterPass` が寄せ波の水面の高さを 384² の半精度浮動小数の場に毎フレーム描く（`surfField`、`prepare()` で鏡の前に）、`FieldRenderer.compile()` がその quad も先に compile、`AmamoMeadow.setSurf()` → `tAmSurf`/`uAmSurf`、シェーダは `amStep` の終点で `amSurfEta` を読んで葉を水面に沿わせ、`leanM` で鞘より浅い所の株を根元から倒す（`ceilY` は寄せ波ありで 3.5 cm の余裕）。`World` は `setSurf(water.surfField)`。
 - 衝突は World（私の `if (!layout)` 構造に `setSurf` を差し込む）、AmamoMeadow（`shootsNear` と `setSurf` の両方）、kit／shader（`uAmPush` と `tAmSurf` の両方、`amPush` と鞘の倒れの両方）。ヨウジウオの静水の uniforms に `tAmSurf`/`uAmSurf` を追加。
