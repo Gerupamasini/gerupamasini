@@ -317,6 +317,7 @@ export class App {
       this.creatures = new CreatureSystem(this.world.scene, this.data, this.world.habitat, this.world.terrain, this.renderer.preset, map.id, this.removed, map.habitat?.minSpawnDist_m);
       performance.mark('world:creatureSystem');
       this.creatures.setMeadow(this.world.amamo);
+      this.creatures.setScent(this.world.carrion);
       await this.creatures.preload();
       performance.mark('world:creatures');
       this.observation = new Observation(this.camera, this.canvas, this.creatures);

@@ -32,6 +32,26 @@ export interface MeadowProbe {
   shootsNear(x: number, z: number, r: number, max?: number): ShootSpec[];
 }
 
+/** A piece of carrion on the bed, as the scavengers find it. */
+export interface Food {
+  readonly id: number;
+  readonly x: number;
+  readonly z: number;
+  /** its radius on the bed (m) and the meat left on it (0..1) */
+  readonly r: number;
+  readonly meat: number;
+}
+
+/** The carrion of the flat as the scavengers smell it (the アラムシロ's CarrionField). */
+export interface ScentProbe {
+  sourcesNear(x: number, z: number, r: number): readonly Food[];
+  /** a place at the food (an angle round it), or null when every place is taken */
+  claim(food: Food, who: string, angle: number): number | null;
+  release(food: Food, who: string): void;
+  /** eat a share of the meat (of the whole piece) */
+  eat(food: Food, share: number): void;
+}
+
 /** What drivers need from the world: ground height and water surface at a point. */
 export interface Floor {
   heightAt(x: number, z: number): number;
@@ -39,6 +59,8 @@ export interface Floor {
   sampleAt?(x: number, z: number): HabitatSample | null;
   /** the eelgrass meadow, on a flat that has one */
   meadow?: MeadowProbe | null;
+  /** the carrion lying about, for the scavengers */
+  scent?: ScentProbe | null;
 }
 
 export interface DriverContext {
