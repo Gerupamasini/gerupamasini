@@ -187,7 +187,7 @@ export class IshigareiDriver implements Driver {
     if (this.pending) { const p = this.pending; this.pending = null; this.setIntent(p); }
     // nothing to dig into (a bare tank, the acrylic case): no burrowing, and one lying buried (born so) rises
     this.canBurrow = ctx.canBurrow !== false;
-    if (!this.canBurrow) { const s = f.state; if (s.mode === 'BURROW_IN_SAND' || s.bury > 0.02) f.glide(null); }
+    if (!this.canBurrow) { const s = f.state; if (s.mode !== 'GLIDE_SWIM' && s.mode !== 'ESCAPE' && (s.mode === 'BURROW_IN_SAND' || s.bury > 0.02)) f.glide(null); }
     if (!!ctx.locked !== this.locked) {
       this.locked = !!ctx.locked;
       model.lod.autoUpdate = !this.locked;

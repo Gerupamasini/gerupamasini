@@ -319,7 +319,7 @@ export class AkaeiDriver implements Driver {
     if (!ind || !model || !holder) return;
     this.floor = ctx.floor;
     this.minDepth = ctx.minDepth ?? 0.05;
-    const dt = Math.min(0.05, dtIn * ctx.simScale);
+    const dt = Math.min(0.1, dtIn * ctx.simScale);   // (a far ray is handed two frames at once: no slow motion below 40 fps)
     if (dt <= 0) return;
     this.time += dt;
     this.phaseT += dt;

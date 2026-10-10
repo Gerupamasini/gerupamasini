@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { SpeciesSchema, type SpeciesDef } from '../../src/data/schemas';
 
-const json = (rel: string) => JSON.parse(readFileSync(new URL(`../../public/data/${rel}`, import.meta.url), 'utf8')) as unknown;
+const json = (rel: string) => JSON.parse(readFileSync(fileURLToPath(new URL(`../../public/data/${rel}`, import.meta.url)), 'utf8')) as unknown;
 const manifest = json('manifest.json') as { species: string[] };
 const species: SpeciesDef[] = manifest.species.map((id) => SpeciesSchema.parse(json(`species/${id}.json`)));
 

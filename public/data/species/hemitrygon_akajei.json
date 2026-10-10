@@ -30,10 +30,9 @@
   "spawn": [
     {"tags": ["shallow", "deep"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.15, 2.0], "season": ["spring", "summer", "autumn"], "tide": "high", "maps": ["kasai_west"], "density_per_100m2": 0.06, "group": [1, 1], "maxPopulation": 4},
     {"tags": ["shallow", "deep"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.15, 2.0], "season": ["spring", "summer", "autumn"], "tide": "rising", "maps": ["kasai_west"], "density_per_100m2": 0.04, "group": [1, 1], "maxPopulation": 4},
-    {"tags": ["small_pool"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.12, 1.6], "season": ["spring", "summer", "autumn"], "tide": "high", "maps": ["kasai_west"], "density_per_100m2": 0.5, "group": [1, 1], "maxPopulation": 4},
     {"tags": ["channel"], "substrate": ["channel"], "depth_m": [0.2, 1.6], "season": ["spring", "summer", "autumn"], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 0.08, "group": [1, 1], "maxPopulation": 4},
     {"tags": ["shallow", "deep"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.12, 2.5], "season": ["summer"], "time": ["dusk", "night"], "tide": "rising", "maps": ["kasai_west", "hashirimizu"], "density_per_100m2": 0.05, "group": [1, 2], "maxPopulation": 6},
-    {"tags": ["shallow", "bare", "deep"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.12, 2.0], "season": ["spring", "summer", "autumn"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.12, "group": [1, 1], "maxPopulation": 3}
+    {"tags": ["shallow", "bare", "deep"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.12, 2.0], "season": ["spring", "summer", "autumn"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.06, "group": [1, 1], "maxPopulation": 3}
   ],
   "brain": {
     "tree": "ray_benthic",
