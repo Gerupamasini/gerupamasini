@@ -9,7 +9,7 @@ import { CONTACT_SHADOWS } from '../haku/ContactShadows';
 /** the quality tier's reach for the ray's own detail tiers (set by the app from the preset): the distances of its
  * LOD steps scale with the preset's view scale, and the lightest tiers forgo the 55k-triangle close-up altogether */
 export const AKAEI_DETAIL = { viewScale: 1, allowLod0: true };
-import { LATTICE_COLS, LATTICE_ROWS, TAIL_BONES, latticeU, latticeZ, tailAxisY, type Lod } from './geometry';
+import { LATTICE_COLS, LATTICE_ROWS, TAIL_BONES, akaeiGeometries, latticeU, latticeZ, tailAxisY, type Lod } from './geometry';
 import { MORPH, halfWidth, tailSection, tailZ, ventralDepth } from './morphology';
 import { SAND_COLOURS } from './material';
 import { SandFX } from './SandFX';
@@ -200,6 +200,9 @@ export class AkaeiDriver implements Driver {
     const b = akaeiBuild({ id: 'keep', length_mm: 800 });
     const models = [new AkaeiModel(b.look, 1), new AkaeiModel(b.look, 2)];
     for (const m of models) parent.add(m.root);
+    // the shared geometry is built here too (the close-up's 55k triangles take ~0.1 s), not in the frame a ray first
+    // comes near; a preset that never shows the close-up does without it
+    if (AKAEI_DETAIL.allowLod0) akaeiGeometries(0);
     const fx = new SandFX(parent);
     fx.imprint(0, 0, 0, 0.3, 0.5, () => 0);
     return { dispose: () => { for (const m of models) { m.root.removeFromParent(); m.dispose(); } fx.dispose(); } };
@@ -212,6 +215,9 @@ export class AkaeiDriver implements Driver {
     this.dw = b.dw;
     this.aspect = b.aspect;
     this.tailK = b.tail;
+    // a new ray starts in its far form: the distance decides on the first update, and a ray that is far never has the
+    // close-up built or uploaded for it
+    if (!this.attachedOnce) this.lod = 2;
     this.model = new AkaeiModel(b.look, this.lod);
     this.model.root.scale.set(this.dw, this.dw, this.dw * this.aspect);
     root.add(this.model.root);

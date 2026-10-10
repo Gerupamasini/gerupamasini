@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { Group, type Material, type Mesh, type Object3D, type ShaderMaterial } from 'three';
+import { Group, Vector3, type Material, type Mesh, type Object3D, type ShaderMaterial, type SkinnedMesh } from 'three';
+import { SpeciesSchema } from '../../src/data/schemas';
+import { generateIndividual, minDepthFor } from '../../src/creatures/Individual';
+import type { DriverContext } from '../../src/creatures/drivers/Driver';
+import { AkaeiDriver } from '../../src/creatures/species/akaei/AkaeiDriver';
 import { DRIVERS } from '../../src/creatures/drivers/index';
 import { AkaeiModel } from '../../src/creatures/species/akaei/AkaeiModel';
 import { akaeiBuild } from '../../src/creatures/species/akaei/AkaeiDriver';
@@ -73,5 +78,30 @@ describe('kept models cover every material variant the species are drawn with', 
     m.dispose();
     keeper.dispose();
     expect(parent.children.length).toBe(0);
+  });
+});
+
+describe('a new ray is born in its far form', () => {
+  const root = new URL('../../', import.meta.url).pathname;
+  const species = SpeciesSchema.parse(JSON.parse(readFileSync(root + 'public/data/species/hemitrygon_akajei.json', 'utf8')));
+  const triangles = (holder: Object3D) => {
+    let most = 0;
+    holder.traverse((o) => { const m = o as SkinnedMesh; if (m.isSkinnedMesh && m.visible) most = Math.max(most, (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3); });
+    return most;
+  };
+
+  it('the first attach builds the far model; the first update near the player brings the close-up', () => {
+    const ind = generateIndividual(species, 5, 0, 0, 0, 0, 0, [820, 820]);
+    const holder = AkaeiDriver.makeModel().root;
+    new Group().add(holder);
+    const d = new AkaeiDriver();
+    d.attach(holder, ind);
+    expect(d.lod).toBe(2);
+    expect(triangles(holder)).toBeLessThan(3000);
+    const ctx: DriverContext = { floor: { heightAt: () => 0, waterAt: () => 0.6 }, player: new Vector3(3, 0, 3), simScale: 1, nowMs: 0, minDepth: minDepthFor(species, ind.length_mm) };
+    d.update(1 / 30, ctx);
+    expect(d.lod).toBe(0);
+    expect(triangles(holder)).toBeGreaterThan(20000);
+    d.detach();
   });
 });
