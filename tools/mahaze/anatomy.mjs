@@ -30,7 +30,10 @@ export const VERT_COUNT = 31;
 // of the head width and the cheeks swell smoothly behind the eyes.
 // ---- adult (the earlier model: thick lips, long snout, small eye relative to the head)
 const KS = [0.0, 0.41, 0.82, 1.23, 1.64, 2.05, 2.46, 2.87, 3.28, 4.1, 4.9, 6.15, 8.2, 10.25, 12.3, 15, 18, 21, 24, 27, 30, 33, 36, 38.5, 40.5, 42, 43.2];
-const KTOP_A = [2.6, 3.45, 3.95, 4.32, 4.62, 4.8, 4.98, 5.12, 5.24, 5.38, 5.45, 5.63, 6.2, 6.52, 6.74, 6.95, 7.05, 6.95, 6.72, 6.38, 5.98, 5.6, 5.27, 5.05, 4.88, 4.78, 4.66];
+// dorsal head profile (snout → first dorsal fin) as one smooth convex curve whose slope falls steadily
+// (y = y0 + A·(1 − (1 − s/18)^p); adult y0 3.3, A 3.75, p 2.6 — a gentle arc through the eye, no forehead
+// bulge, flat interorbital or nape hump); s = 0 keeps the snout-tip pole at the gape
+const KTOP_A = [2.6, 3.52, 3.73, 3.93, 4.12, 4.31, 4.49, 4.66, 4.83, 5.14, 5.41, 5.79, 6.28, 6.63, 6.86, 7.01, 7.05, 6.95, 6.72, 6.38, 5.98, 5.6, 5.27, 5.05, 4.88, 4.78, 4.66];
 const KBOT_A = [1.4, 1.2, 0.98, 0.83, 0.68, 0.54, 0.43, 0.33, 0.25, 0.13, 0.07, 0.03, 0.0, 0.0, 0.0, 0.0, 0.02, 0.12, 0.35, 0.7, 1.1, 1.48, 1.8, 2.0, 2.14, 2.24, 2.36];
 const KW_A = [1.45, 1.62, 1.74, 1.84, 1.9, 1.95, 2.02, 2.1, 2.2, 2.42, 2.68, 3.08, 3.34, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
 const KNT_A = [2.2, 2.12, 2.04, 1.97, 1.91, 1.87, 1.84, 1.82, 1.8, 1.8, 1.82, 1.86, 1.92, 1.98, 2.02, 2.03, 2.0, 1.97, 1.95, 1.92, 1.9, 1.87, 1.84, 1.82, 1.8, 1.8, 1.8];
@@ -45,7 +48,9 @@ const KDY_A = [0.15, 0.2, 0.26, 0.32, 0.4, 0.46, 0.5, 0.54, 0.56, 0.52, 0.42, 0.
 // head line; oblique mouth (gape falls ~1.2 mm from the snout tip to the rictus under the eye front);
 // thinner lips, flatter cheeks; dorsal profile almost straight from the eye to the first dorsal fin;
 // deeper caudal peduncle (9 % SL)
-const KTOP_J = [2.95, 3.65, 4.15, 4.45, 4.68, 4.86, 5.02, 5.17, 5.3, 5.52, 5.72, 5.95, 6.12, 6.22, 6.42, 6.8, 7.0, 6.95, 6.78, 6.5, 6.17, 5.85, 5.58, 5.4, 5.22, 5.08, 4.95];
+// juvenile: same smooth convex arc (y0 3.45, A 3.55, p 2.7), gentler at the snout and without the dip
+// behind the head
+const KTOP_J = [2.95, 3.66, 3.87, 4.07, 4.26, 4.44, 4.61, 4.78, 4.94, 5.23, 5.49, 5.85, 6.31, 6.64, 6.84, 6.97, 7, 6.95, 6.78, 6.5, 6.17, 5.85, 5.58, 5.4, 5.22, 5.08, 4.95];
 const KBOT_J = [1.9, 1.62, 1.36, 1.14, 0.95, 0.78, 0.62, 0.48, 0.36, 0.18, 0.08, 0.03, 0.0, 0.0, 0.0, 0.0, 0.02, 0.1, 0.3, 0.58, 0.92, 1.24, 1.5, 1.68, 1.8, 1.88, 1.98];
 const KTOP = pick(KTOP_A, KTOP_J);
 const KBOT = pick(KBOT_A, KBOT_J);
