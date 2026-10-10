@@ -292,8 +292,8 @@ export const MOUTH = pick(
 export const RICTUS_S = MOUTH[MOUTH.length - 1][0];
 // lip rolls (radius along the gape, f = 0 front … 1 corner) and how far they protrude from the skin
 export const LIPS = pick(
-  { ru: (f) => 0.7 - 0.34 * f - 0.08 * f * f, rl: (f) => 0.52 - 0.2 * f - 0.08 * f * f, outU: 0.5, outL: 0.42, groove: 0.95, grooveR: 0.09, mental: 0.88, crease: 0.085, band: [0.95, 0.3, 0.75, 0.25] },
-  { ru: (f) => 0.36 - 0.16 * f - 0.06 * f * f, rl: (f) => 0.28 - 0.1 * f - 0.06 * f * f, outU: 0.16, outL: 0.12, groove: 0.58, grooveR: 0.055, mental: 0.7, crease: 0.065, band: [0.56, 0.18, 0.46, 0.14] },
+  { ru: (f) => 0.6 - 0.28 * f - 0.08 * f * f, rl: (f) => 0.44 - 0.17 * f - 0.07 * f * f, outU: 0.3, outL: 0.24, groove: 0.78, grooveR: 0.085, mental: 0.75, crease: 0.07, band: [0.78, 0.25, 0.6, 0.2] },
+  { ru: (f) => 0.32 - 0.14 * f - 0.05 * f * f, rl: (f) => 0.24 - 0.09 * f - 0.05 * f * f, outU: 0.13, outL: 0.1, groove: 0.52, grooveR: 0.05, mental: 0.66, crease: 0.065, band: [0.5, 0.17, 0.4, 0.13] },
 );
 const LIP_FRONT = pick(1.25, 1.2); // forward reach of the upper-lip front (× its protrusion)
 const LIP_YMAX = MOUTH[0][1] + LIPS.groove + 0.75; // lips and gape creases live below this height
