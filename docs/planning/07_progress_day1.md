@@ -167,6 +167,13 @@
 - シロチドリ: `PloverDriver` の mixer に `finished` リスナー（終わったアクションを `fadeOut(0.2)`、`oneShot` を外す）。しぐさのクリップは `AnimationUtils.makeClipAdditive` で差分化し `AdditiveAnimationBlendMode` で再生（`GESTURE_CLIPS`）。クリップ解析（node で GLB の回転トラックを読む）: Walk は 0.36 秒周期で頭の振幅 50°・キー間 41°、Run は 0.10 秒周期で 30° → `steady`（neck0〜2 と head の回転・位置を `HEAD_SMOOTH_S` 0.16 秒で slerp/lerp）を mixer.update の後に適用。`setIntent` は attach 前でも落ちない（`here`）。ループの切り替えは `setEffectiveWeight(1)` してから `crossFadeTo`。
 - バージョン 0.12.1。
 
+## 28 回目（イシガレイ・アカエイ・アラムシロを東京湾の 2 つの浜へ）
+- 探した結果: イシガレイは `claude/ishigarei-juvenile`（PR #34、1 コミット、本流より 28 後ろ）、アカエイは `claude/vibrant-pascal-bn5g33`（PR #44、4 コミット、98 後ろ）、アラムシロは PR #42 で本流に入っていて、`claude/fervent-archimedes-952bzo` に未マージの追補 1 コミット（0b2291a）。この順で逆にマージ（アラムシロ → イシガレイ → アカエイ）。
+- 衝突: アラムシロは TESTING／package.json（両方残す）。イシガレイは README／package.json／`drivers/index.ts`（両方残す）。アカエイは README／TESTING／進捗／package(-lock)／manifest／`CreatureSystem`／`drivers/index.ts`: `CreatureSystem` は本流（`sampleAt` の `nowMs`、`nearDistance` の `near`）、`DriverEntry` も本流（`preview(seed, renderer)`、`nearDistance`）で、アカエイの `smoothNear: true` は `nearDistance: 10` に。manifest は両方。lock は本流。
+- アカエイの規則は `maps` なし（全マップ）だったので `kasai_west`／`hashirimizu` を明記（`hashirimizu.test.ts` の「maps は必ず書く」に合わせて）。アラムシロは葛西の規則 2 本を追加。
+- イシガレイの読み取りで分かった残課題: ドライバが `ctx.canBurrow` を読まない（砂のない水槽・ケースでも潜る）、潜った個体も網に入る、品質プリセットを読まない（描画距離だけ縮む）、秋の規則の `channel` タグは底質の制限で死んでいる。
+- バージョン 0.24.0。
+
 ## 27 回目（超軽量の画質と軽量化）
 - 画質に **超軽量**（`Quality` 'minimal'、`QUALITY_ORDER`）。`QualityPreset` に `msaa`・`water: 'lite'|'full'`・`viewScale`・`contactShadows`・`oysters`・`tankWater`・`hero` が増え、`App.applyPreset()` が描画先のサンプル数（`FieldRenderer.setSamples`）、水と床の軽い式（`WaterPass.setLite`: `defines` の `WATER_LITE`・`WAVE_STRIDE 2`・`WAVE_AMP 1.4`；`Terrain.setLite`: `WAVE_STRIDE`・`WAVE_AMP` のみ；`Waves.ts` の両ループが `WAVE_STRIDE` 刻み）、水槽（`TankScene.setLite`）、接地影（`CONTACT_SHADOWS.enabled`）に配る。`World.create` も生成時に同じ段を当てる（先行 compile の前）。`MEADOW_QUALITY.minimal`、牡蠣礁は `preset.oysters`、`CreatureSystem.tierFor` は `viewScale` で描画距離と lod1 の距離を縮める。
 - キャンバスの `antialias` は生成時に固定なので、`saveSettings` が画質を localStorage（`higata.quality`）に写し、`GameRenderer` が次の起動でそれを読んで `msaa` 0 の段（超軽量・低）ならマルチサンプルなしで作る。その線をまたぐ切り替えは `toast.reloadHint`。
@@ -220,7 +227,7 @@
 - 図鑑のマガキ: 種データ `crassostrea_gigas.json`（sessile、collectable false、行動 5 つ、段階 稚貝 ≤26 / 若貝 ≤60 / 成貝 ≤115 / 老貝）、行動木 `oyster_reef`（rest のみ）、`Spawner.FIELD_SPECIES` に追加（礁が置くので spawner は出さない）。`OysterReef` に個体ごとの seed・年齢・込み具合・殻長を保存し、`infoOf(i)`（行列・付着面・状態）、`setHidden(i)`（インスタンス描画から外す）、`pickRay(origin, dir, maxDist)`（レティクルの選択）。`OysterDriver`（`src/creatures/oyster/OysterDriver.ts`）: `OysterDriver.pending` 経由で `ReefOysterInfo` を受け取り、同じ genome を `DETAIL.hero` で組み立てて石の上に置く（行列の位置・向きだけ使い、面の d は scale 倍）、5 状態の行動を回して状態が変わるたびに `BehaviorEvent`（`OYSTER_BEHAVIOR_ID`）。`DRIVERS.oyster`（placeholder は空の Group、preview は成貝を伏せて少し開けた姿；preview は描画する renderer を受け取れるようにして、図鑑の ModelPreview は自分の renderer で atlas を焼く）。App: `targetOyster` / `watchedOyster` / `observeOyster()`、HUD の prompt、[F]、`exitObserve` で despawn と `setHidden(false)`。`CreatureSystem.anchorOf` は view が付く前は `ind.pos` を返す（これまで driver の anchor が原点を返し、spawn 直後の観察がマップ中央へ飛んでいた）。`tests/unit/oysterSpecies.test.ts`。
 - 石の見た目: `makeRockMaterial` の作り直し（広いまだら 1.7/7/23 m⁻¹、鉄さびの斑、泥の皮膜、中潮位の薄い殻の痂、緑藻；粒・白い輪・板模様・細かい凹凸はやめた）。干潟の真ん中の捨て石の山（`layRevetment` の mounds）は削除。
 
-## 21 回目（アカエイ）
+## アカエイ（ブランチ側の記録。28 回目で取り込み）
 - 新種 `hemitrygon_akajei`（`public/data/species/`、行動ツリー `ray_benthic`、manifest）と `src/creatures/species/akaei/*`（`morphology` / `geometry` / `material` / `AkaeiModel` / `AkaeiDriver` / `SandFX`）。`DRIVERS.akaei`（`smoothNear`: 10 m 以内は毎フレーム更新）。詳細は `docs/models/akaei/README.md`。
 - モデル: DW = 1 単位で作り、ルートを体盤幅でスケール。体盤は閉じた殻（LOD0 96 行 × 44 列）、尾は 120 リング × 16 辺。骨格は体盤の格子 12 × 9 と尾 22（計 131）で全部位が共有、ジオメトリは LOD ごとに全個体で共有。皮膚は `aPlan`（bind 時の平面座標・面・輪郭半幅）から色・粗さ・粘液・凹凸・砂・透過をシェーダで計算（`akaei-skin` / `akaei-skin-lod2`）。
 - 姿勢: `AkaeiPose` の解析場（進行波・はためき・反り・吻の持ち上げ・頭のポンプ・呼吸・地面への沿わせ）→ 格子ボーンの位置と傾き、弦長を保つ内寄せ。尾は追従チェーン（各節が前の節の向きへ緩和、付け根と棘が硬い、重さで砂に寝る、地面で止まる）。
