@@ -30,6 +30,8 @@ interface Entry {
   driver: Driver;
   view: View | null;
   pendingTier: string | null;
+  retryAfter?: number;
+  failures?: number;
   unsub: () => void;
   /** the last spot where an aquatic animal had enough water under it */
   lastWet?: Vector3;
@@ -83,7 +85,7 @@ export class CreatureSystem {
     private readonly data: GameData,
     private readonly habitat: Habitat,
     private readonly terrain: Terrain,
-    private readonly preset: QualityPreset,
+    private preset: QualityPreset,
     private readonly mapId: string,
     readonly removed: Set<string>,
     /** animals never appear closer to the player than this (m); a small, busy shore lets them come nearer */
@@ -103,6 +105,12 @@ export class CreatureSystem {
   /** The flat's eelgrass, for the animals that live among the blades. */
   setMeadow(meadow: MeadowProbe | null): void {
     this.floor.meadow = meadow;
+  }
+
+  setQuality(preset: QualityPreset): void {
+    if (this.preset === preset) return;
+    this.preset = preset;
+    this.lodAcc = 1;
   }
 
   /** Warm the model cache for the distance tiers. */
@@ -135,7 +143,8 @@ export class CreatureSystem {
     const far = sp.model.viewDistance_m ?? (sp.taxon.group === 'bird' ? BIRD_DIST : Math.min(isAquatic(sp) ? AQUATIC_DIST : LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400)));
     if (dist > far) return null;
     if (!sp.model.lod2 && !sp.model.lod1 && !sp.model.hero) return 'placeholder';
-    if (locked) return sp.model.hero ? 'hero' : sp.model.lod1 ? 'lod1' : 'lod2';
+    if (this.preset.modelTier === 'lod2') return sp.model.lod2 ? 'lod2' : DRIVERS[sp.model.driver ?? '']?.placeholder ? 'placeholder' : sp.model.lod1 ? 'lod1' : 'hero';
+    if (locked) return this.preset.hero && sp.model.hero ? 'hero' : sp.model.lod1 ? 'lod1' : sp.model.lod2 ? 'lod2' : 'placeholder';
     // a species without light tiers (the plover's one dense GLB) shows its driver's placeholder beyond a distance
     if (sp.model.placeholderBeyond_m !== undefined && dist > sp.model.placeholderBeyond_m && DRIVERS[sp.model.driver ?? '']?.placeholder) return 'placeholder';
     if (dist <= LOD1_DIST && lod1Rank < this.preset.lod1Count && sp.model.lod1) return 'lod1';
@@ -153,10 +162,16 @@ export class CreatureSystem {
       const live = this.individuals;
       for (const ind of this.spawner.cull(f.playerPos.x, f.playerPos.z, env, live)) if (ind.id !== f.lockedId) this.despawn(ind.id);
       const scale = this.preset.creatureScale;
-      const requests = this.spawner.plan(f.playerPos.x, f.playerPos.z, env, this.individuals, this.minSpawnDist);
-      let n = 0;
+      // Lower-quality populations stay bounded; they cannot fill back up over subsequent spawn ticks.
+      const bySpecies = new Map<string, Individual[]>();
+      for (const ind of this.individuals) { const list = bySpecies.get(ind.species.id) ?? []; list.push(ind); bySpecies.set(ind.species.id, list); }
+      for (const list of bySpecies.values()) {
+        const cap = Math.max(1, Math.ceil(Math.max(...list[0].species.spawn.map(rule => rule.maxPopulation)) * scale));
+        list.sort((a, b) => a.pos.distanceToSquared(f.playerPos) - b.pos.distanceToSquared(f.playerPos));
+        for (const ind of list.slice(cap)) if (ind.id !== f.lockedId) this.despawn(ind.id);
+      }
+      const requests = this.spawner.plan(f.playerPos.x, f.playerPos.z, env, this.individuals, this.minSpawnDist, scale);
       for (const req of requests) {
-        if (scale < 1 && (n++ % Math.round(1 / (1 - scale + 1e-6))) === 0 && Math.random() > scale) continue;
         this.spawn(this.spawner.create(req, f.gameMs));
       }
     }
@@ -237,6 +252,7 @@ export class CreatureSystem {
   }
 
   private async setTier(e: Entry, tier: Tier | 'placeholder'): Promise<void> {
+    if (tier !== 'placeholder' && performance.now() < (e.retryAfter ?? 0)) return;
     e.pendingTier = tier;
     const sp = e.ind.species;
     let view: View;
@@ -250,14 +266,21 @@ export class CreatureSystem {
       // the growth stage's own model where the species has them, in the individual's pattern variant
       const rel = modelFor(sp, e.ind.stage, e.ind.gravid, e.ind.dress)[tier] ?? sp.model[tier]!;
       let model: LoadedModel;
-      try { model = await instantiateModel(rel, variantOf(e.ind.id)); } catch (err) { console.warn(err); e.pendingTier = null; return; }
-      if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
+      try { model = await instantiateModel(rel, variantOf(e.ind.id)); } catch (err) {
+        if (this.entries.get(e.ind.id) !== e || e.pendingTier !== tier) return;
+        console.warn('[creature] model unavailable, retrying later', err); e.pendingTier = null;
+        e.failures = (e.failures ?? 0) + 1; e.retryAfter = performance.now() + Math.min(30000, 2000 * 2 ** (e.failures - 1));
+        if (!e.view && DRIVERS[sp.model.driver ?? '']?.placeholder) await this.setTier(e, 'placeholder');
+        return;
+      }
+      if (this.entries.get(e.ind.id) !== e || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
       let hero: HeroInstance | null = null;
       if (tier === 'hero' && this.heroApply) {
         try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] falling back to standard materials', err); hero = null; }
-        if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { hero?.dispose(); model.root.removeFromParent(); return; }
+        if (this.entries.get(e.ind.id) !== e || e.pendingTier !== tier) { hero?.dispose(); model.root.removeFromParent(); return; }
       }
       view = { tier, root: model.root, model, radius: model.radius, hero };
+      e.failures = 0; e.retryAfter = 0;
     }
     if (e.view) this.dropView(e);
     e.view = view;

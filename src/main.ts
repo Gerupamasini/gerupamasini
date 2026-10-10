@@ -7,8 +7,14 @@ console.info(`干潟図鑑 ${buildLabel}${BUILD.builtAt ? ` built ${BUILD.builtA
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui') as HTMLElement;
 
-const app = new App(canvas, uiRoot);
-app.start().catch((err: unknown) => {
+function showBootError(err: unknown): void {
   console.error(err);
-  uiRoot.innerHTML = `<div style="position:fixed;inset:0;display:grid;place-items:center;background:#06111a;color:#fff;padding:24px;text-align:center">起動に失敗しました<br><small>${String((err as Error)?.message ?? err)}</small></div>`;
-});
+  const panel = document.createElement('div');
+  panel.style.cssText = 'position:fixed;inset:0;display:grid;place-content:center;gap:16px;background:#06111a;color:#fff;padding:24px;text-align:center';
+  const message = document.createElement('p');
+  message.textContent = `起動できませんでした。WebGL2対応のブラウザで、ハードウェアアクセラレーションを有効にしてください。通信エラーの場合は再読み込みしてください。\n${String((err as Error)?.message ?? err)}`;
+  const retry = document.createElement('button'); retry.textContent = '再読み込み'; retry.className = 'btn'; retry.onclick = () => location.reload();
+  panel.append(message, retry); uiRoot.replaceChildren(panel);
+}
+try { const app = new App(canvas, uiRoot); void app.start().catch(showBootError); }
+catch (err) { showBootError(err); }

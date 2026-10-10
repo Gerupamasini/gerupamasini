@@ -9,10 +9,10 @@ export interface RendererCaps {
 export class GameRenderer {
   readonly gl: WebGLRenderer;
   readonly caps: RendererCaps;
-  private quality: Quality = 'mid';
+  private quality: Quality | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement) {
-    this.gl = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', alpha: false, stencil: false });
+    this.gl = new WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false });
     this.gl.outputColorSpace = SRGBColorSpace;
     this.gl.toneMapping = ACESFilmicToneMapping;
     this.gl.toneMappingExposure = 0.5;
@@ -21,6 +21,7 @@ export class GameRenderer {
   }
 
   setQuality(q: Quality): void {
+    if (this.quality === q) return;
     this.quality = q;
     const p = QUALITY_PRESETS[q];
     this.gl.shadowMap.enabled = p.shadows;
@@ -29,7 +30,7 @@ export class GameRenderer {
   }
 
   get preset() {
-    return QUALITY_PRESETS[this.quality];
+    return QUALITY_PRESETS[this.quality ?? 'mid'];
   }
 
   resize(): void {

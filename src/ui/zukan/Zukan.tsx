@@ -2,7 +2,7 @@ import { h } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ModelPreview } from './ModelPreview';
 import type { App } from '../../app/App';
-import { t } from '../store';
+import { t, ui } from '../store';
 import type { IndividualRecord } from '../../creatures/Individual';
 import { CardHead } from '../common/Icons';
 import { formatJst } from '../../core/Time';
@@ -17,29 +17,47 @@ export function Zukan({ app }: { app: App }) {
   const sp = app.data.species.get(sel);
   const p = sp ? progress[sp.id] : undefined;
   const known = !!(p?.discovered || p?.captured);
+  void ui.settings.value;
+  const quality = app.activeQuality;
+  const photo = quality === 'minimum';
+  const [previewError, setPreviewError] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [retry, setRetry] = useState(0);
   const stageName = (id: string) => sp?.stages.find((s) => s.id === id)?.ja ?? id;
   const traitName = (id: string) => sp?.traits.find((s) => s.id === id)?.ja ?? id;
   const inds = p?.individuals ?? [];
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewRef = useRef<ModelPreview | null>(null);
   useEffect(() => {
-    if (!canvasRef.current) return;
-    const pv = new ModelPreview(canvasRef.current);
-    previewRef.current = pv;
-    return () => { pv.dispose(); previewRef.current = null; };
-  }, []);
+    if (photo || !known || !canvasRef.current) return;
+    try {
+      const pv = new ModelPreview(canvasRef.current, quality);
+      previewRef.current = pv;
+      return () => { pv.dispose(); previewRef.current = null; };
+    } catch (e) { console.warn('[preview] unavailable', e); setPreviewError(true); }
+  }, [photo, quality, known, retry]);
   useEffect(() => {
     const pv = previewRef.current;
-    if (!pv || !sp) return;
+    setLoading(false);
+    if (photo || !sp || !known) { setPreviewError(false); return; }
+    if (!pv) { setPreviewError(true); return; }
+    setPreviewError(false);
     setPlaying(null);
-    if (known) void pv.show(sp, sp.model.clips.idle); else pv.clear();
-  }, [sp?.id, known]);
+    let cancelled = false;
+    if (known) {
+      setLoading(true);
+      void pv.show(sp, sp.model.clips.idle).catch((e) => {
+        if (!cancelled) { console.warn('[preview] failed', e); setPreviewError(true); }
+      }).finally(() => { if (!cancelled) setLoading(false); });
+    } else pv.clear();
+    return () => { cancelled = true; pv.clear(); };
+  }, [sp?.id, known, photo, quality, retry]);
   // a recorded behaviour plays its clip in the plate (species whose shapes have no clips just show the note)
   const play = (b: { id: string; clip?: string }) => {
     const pv = previewRef.current;
     if (!sp || !p?.behaviors[b.id]) return;
     setPlaying(b.id);
-    if (pv && b.clip) void pv.show(sp, b.clip);
+    if (pv && b.clip) void pv.show(sp, b.clip).catch(() => setPreviewError(true));
   };
   const playingDef = sp?.encyclopedia.behaviors.find((b) => b.id === playing);
   const found = species.filter((s) => progress[s.id]?.discovered || progress[s.id]?.captured).length;
@@ -79,7 +97,11 @@ export function Zukan({ app }: { app: App }) {
             <div class="zukan-detail">
               <h3>{known ? sp.names.ja : t('zukan.unknown')}</h3>
               <div class="sci">{known ? sp.names.sci : ''}</div>
-              <canvas ref={canvasRef} class="zukan-preview" style={{ display: known ? 'block' : 'none' }} />
+              {known && photo && <img class="zukan-preview zukan-photo" src={`${import.meta.env.BASE_URL}data/photos/${sp.id}.jpg`} alt={`${sp.names.ja}の3Dモデルの静止画像`} width="640" height="400" />}
+              {known && !photo && <canvas key={`${quality}-${retry}`} ref={canvasRef} class="zukan-preview" />}
+              {known && photo && <span class="small dim">モデルの静止画像</span>}
+              {loading && <p class="small dim" role="status">モデルを読み込み中…</p>}
+              {previewError && !photo && <div class="preview-error" role="alert">表示できませんでした。<button class="btn sm" onClick={() => setRetry(retry + 1)}>再読み込み</button></div>}
               {!known && <div class="zukan-preview empty">まだ出会っていない</div>}
               <div class="tags">
                 {!sp.collectable && <span class="tag">{t('zukan.notCollectable')}</span>}
@@ -88,7 +110,7 @@ export function Zukan({ app }: { app: App }) {
                 {sp.sex.dimorphic && <span class={`tag ${p?.femaleSeen ? 'on' : ''}`}>{t('zukan.female')}</span>}
               </div>
               <p class="desc">{known ? sp.encyclopedia.description : '干潟で出会うと、ここに姿と暮らしが記されます。'}</p>
-              <div class="habitat">{t('zukan.habitat')} ・ {known ? sp.encyclopedia.habitatHint : '？'}</div>
+              <div class="habitat">{t('zukan.habitat')} ・ {sp.encyclopedia.habitatHint}</div>
               <h4>{t('zukan.behaviors')} <span class="num" style={{ marginLeft: '8px' }}>{recordedCount} / {sp.encyclopedia.behaviors.length}</span></h4>
               <ul class="behaviors">
                 {sp.encyclopedia.behaviors.map((b) => {

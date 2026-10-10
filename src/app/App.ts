@@ -4,7 +4,7 @@ import { signal } from '@preact/signals';
 import { GameRenderer } from '../render/Renderer';
 import { Input } from '../core/Input';
 import { GameClock } from '../core/GameClock';
-import { loadSettings, saveSettings, type SettingsData } from '../core/Settings';
+import { loadSettings, saveSettings, normalizeSettings, QUALITY_PRESETS, type SettingsData, type Quality } from '../core/Settings';
 import { formatJst, jstParts } from '../core/Time';
 import { SaveStore, emptySave, type SaveV1, DEFAULT_NET } from '../core/Save';
 import { loadGameData, type GameData } from '../data/loader';
@@ -12,7 +12,7 @@ import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { World } from './World';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
-import { categoryLimit, drawEquipment, emptyEquipmentCollection, equipmentItem, normalizeCollection, normalizeEquipment, ownedEquipmentLayout, ownedQuantity, usedQuantity, type EquipmentKind, type EquipmentRecord, type EquipmentCollection } from '../aquarium';
+import { categoryLimit, claimResearchTickets, drawEquipment, emptyEquipmentCollection, equipmentItem, normalizeCollection, normalizeEquipment, ownedEquipmentLayout, ownedQuantity, usedQuantity, type EquipmentKind, type EquipmentRecord, type EquipmentCollection } from '../aquarium';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
 import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
@@ -114,6 +114,10 @@ export class App {
   private fpsCount = 0;
   private saveAcc = 0;
   private saveTimer: number | null = null;
+  private savingSuspended = false;
+  private saveChanging = false;
+  private sceneDirty = true;
+  private appliedFieldQuality: Quality | null = null;
   private curveCacheMin = -1;
   private readonly anchor = new Vector3();
   private readonly tmp = new Vector3();
@@ -210,6 +214,7 @@ export class App {
     this.pointerDown = null; this.canvasPointers.clear();
     this.finishTankDrag();
     ui.screen.value = m;
+    this.applySceneQuality();
     this.input.dragLook = m === 'field';
     const overlay = m !== 'field' && m !== 'observe' && m !== 'capture' && m !== 'home' && m !== 'tankEdit' && m !== 'caseView';
     this.input.blocked = overlay;
@@ -223,7 +228,7 @@ export class App {
     render(h(Root, { app: this }), this.uiRoot);
     this.settings = await loadSettings(this.input.touchDevice ? { quality: 'low' } : {});
     ui.settings.value = this.settings;
-    this.renderer.setQuality(this.settings.quality);
+    this.renderer.setQuality(this.settings.homeQuality);
     if (!this.renderer.caps.webgl2) {
       ui.error.value = t('warn.webgl2', 'WebGL2 is required');
       ui.screen.value = 'error';
@@ -240,16 +245,19 @@ export class App {
     const map = this.data.maps.get(this.data.manifest.defaultMap)!;
     this.tide = new TideModel(this.data.stations.get(map.station)!);
     this.encyclopedia = new Encyclopedia(this.data);
-    this.encyclopedia.onChanged = () => this.requestSave();
+    this.encyclopedia.onChanged = () => { this.claimEquipmentRewards(); this.requestSave(); };
     this.tank = new TankScene(this.canvas, this.renderer.aspect, this.renderer.gl);
     // what the animals do in the tank only counts as observed while the player is looking at the tank (home or its
     // edit screen), not from behind the 図鑑, the menu or the title
     this.tank.onBehavior = (e, rec) => { if (this.mode === 'home') this.encyclopedia.onBehavior(rec.speciesId, e.behaviorId, this.clock.nowGame()); };
     if (this.renderer.caps.floatRT) this.hero = new HeroPipeline(this.renderer.gl);
     if (this.renderer.caps.floatRT) this.field = new FieldRenderer(this.renderer.gl);
+    this.applySceneQuality();
     this.applyHeroSetting();
     ui.debug.value = !this.input.touchDevice && new URLSearchParams(location.search).has('debug');
-    const existing = await this.saveStore.load();
+    let existing: SaveV1 | null = null;
+    try { existing = await this.saveStore.load(); }
+    catch (e) { await this.showSaveRecovery(e); }
     this.equipmentCollection.value = normalizeCollection(existing?.equipmentCollection, existing?.tank.layout?.equipment);
     ui.hasSave.value = !!existing;
     this.setMode('title');
@@ -264,22 +272,26 @@ export class App {
   }
 
   async startNewGame(): Promise<void> {
-    this.save = emptySave(this.data.manifest.defaultMap, Date.now());
-    this.equipmentCollection.value = emptyEquipmentCollection(); ui.gachaResults.value = [];
-    this.encyclopedia.applySave(this.save);
-    this.syncLoadout();
-    this.removed.clear();
-    this.pendingPose = null;
-    this.enterHome();
-    void this.writeSave();
+    if (this.saveChanging) return;
+    if ((ui.hasSave.value || ui.saveRecovery.value) && !confirm('新しく始めますか？現在のセーブはバックアップに保管します。')) return;
+    await this.replaceSave(emptySave(this.data.manifest.defaultMap, Date.now()));
   }
 
   async continueGame(): Promise<void> {
-    const s = await this.saveStore.load();
+    let s: SaveV1 | null;
+    try { s = await this.saveStore.load(); }
+    catch (e) { await this.showSaveRecovery(e); return; }
     if (!s) return this.startNewGame();
+    this.applyLoadedSave(s);
+  }
+
+  private applyLoadedSave(s: SaveV1): void {
+    this.leaveWorld();
+    this.tank.clearOccupants();
     this.save = s;
     this.equipmentCollection.value = normalizeCollection(s.equipmentCollection, s.tank.layout?.equipment); ui.gachaResults.value = [];
     this.encyclopedia.applySave(s);
+    this.claimEquipmentRewards();
     this.syncLoadout();
     this.removed.clear();
     for (const id of s.removedIndividuals) this.removed.add(id);
@@ -288,6 +300,9 @@ export class App {
       s.ticket.active = null;
     }
     this.clock.restore(s.ticket.active);
+    ui.guideDismissed.value = s.guideDismissed ?? false;
+    ui.saveRecovery.value = null;
+    ui.hasSave.value = true;
     this.pendingPose = { x: s.player.pos[0], z: s.player.pos[2], heading: s.player.heading, map: s.player.map };
     this.enterHome();
   }
@@ -325,12 +340,22 @@ export class App {
   }
 
   async enterField(spotId: string | null = ui.spot.value): Promise<void> {
+    try { await this.buildField(spotId); }
+    catch (e) {
+      console.warn('[field] loading failed', e);
+      this.leaveWorld(); this.enterHome();
+      toast('干潟を読み込めませんでした。通信を確認して、もう一度「干潟へ」を押してください。', 'warn', 8000);
+    }
+  }
+
+  private async buildField(spotId: string | null): Promise<void> {
     const mapId = this.data.maps.has(this.mapForSpot(spotId)) ? this.mapForSpot(spotId) : this.data.manifest.defaultMap;
     // another flat: the one built so far is taken down first (its animals, tools and the case with it)
     if (this.world && this.world.map.id !== mapId) this.leaveWorld();
     if (this.save) this.save.player.map = mapId;
     if (!this.world) {
       this.setMode('boot');
+      this.renderer.setQuality(this.settings.fieldQuality);
       ui.loading.value = { frac: 0.35, label: t('loading.map') };
       const map = this.data.maps.get(mapId)!;
       // the tide is the one of the flat's own station (the tide table and tickets follow it)
@@ -358,8 +383,8 @@ export class App {
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
       this.world.water.setPolarized(this.settings.sunglasses);
       this.net = new NetView(this.world.scene);
-      void this.net.setTool(this.netDef() ?? null);
-      for (const id of this.encyclopedia.loadout.value) { const td = this.data.tools.get(id); preloadNet(td); if (td?.model && td.type !== 'capture') void preloadModel(`${td.model}.hero.glb`).catch((e) => console.warn(e)); }
+      void this.net.setTool(this.netDef() ?? null, this.fieldToolTier);
+      for (const id of this.encyclopedia.loadout.value) preloadNet(this.data.tools.get(id), this.fieldToolTier);
       this.shovel = new ShovelView(this.world.scene);
       this.binoculars = new BinocularView(this.world.scene);
       this.fieldCase = new FieldCase();
@@ -369,8 +394,8 @@ export class App {
       this.shovel.setHeld(this.toolType() === 'dig');
       this.binoculars.setHeld(this.toolType() === 'optic');
       const first = this.toolDef();
-      if (first?.type === 'dig') void this.shovel.setTool(first);
-      if (first?.type === 'optic') void this.binoculars.setTool(first);
+      if (first?.type === 'dig') void this.shovel.setTool(first, this.fieldToolTier);
+      if (first?.type === 'optic') void this.binoculars.setTool(first, this.fieldToolTier);
       const L = this.world.layout;
       this.clams = L ? new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242), L.clams.beds, L.clams.opts) : new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
       this.world.scene.add(this.clams.group);
@@ -407,6 +432,8 @@ export class App {
     this.net = null;
     this.shovel?.dispose();
     this.shovel = null;
+    this.binoculars?.dispose(); this.binoculars = null;
+    this.caseControls?.dispose(); this.caseControls = null;
     this.fieldCase?.dispose();
     this.fieldCase = null;
     this.world?.dispose();
@@ -432,28 +459,61 @@ export class App {
   }
 
   async updateSettings(patch: Partial<SettingsData>): Promise<void> {
-    this.settings = { ...this.settings, ...patch };
+    // Preserve the public legacy API used by old clients; the menu edits each scene independently.
+    if (patch.quality) patch = { homeQuality: patch.quality, fieldQuality: patch.quality, ...patch };
+    this.settings = normalizeSettings({ ...this.settings, ...patch });
     ui.settings.value = this.settings;
     this.world?.water.setPolarized(this.settings.sunglasses);
-    this.renderer.setQuality(this.settings.quality);
-    this.world?.terrain.setDetail(this.renderer.preset.surfaceDetail > 0);
-    this.world?.water.setMirror(this.renderer.preset.mirror);
-    this.world?.water.setSurfSteps(this.renderer.preset.surfSteps);
+    this.applySceneQuality();
+    if (this.player) this.player.eyeHeight = this.settings.eyeHeight;
+    await saveSettings(this.settings);
+  }
+
+  /** Overlays use the setting of the scene they were opened from. */
+  get activeQuality(): Quality {
+    const from = ui.overlayFrom.value;
+    const field = this.worldVisible() || (['menu', 'zukan', 'ticket', 'tidetable'].includes(this.mode) && ['field', 'observe', 'capture', 'caseView'].includes(from));
+    return field ? this.settings.fieldQuality : this.settings.homeQuality;
+  }
+
+  private applySceneQuality(): void {
+    if (!this.settings) return;
+    this.sceneDirty = true;
+    this.renderer.setQuality(this.activeQuality);
+    const preset = QUALITY_PRESETS[this.settings.fieldQuality];
+    this.field?.setQuality(preset);
+    this.creatures?.setQuality(preset);
+    this.fieldCase?.setQuality(preset);
+    if (this.appliedFieldQuality !== this.settings.fieldQuality) {
+      this.appliedFieldQuality = this.settings.fieldQuality;
+      if (this.net || this.shovel || this.binoculars) this.setTool(ui.tool.value, true);
+    }
+    this.world?.terrain.setDetail(preset.surfaceDetail > 0);
+    this.world?.water.setMirror(preset.mirror);
+    this.world?.water.setSurfSteps(preset.surfSteps);
+    const light = this.world?.sky.sunLight;
+    if (light) {
+      light.castShadow = preset.shadows;
+      if (light.shadow.mapSize.x !== preset.shadowMapSize) {
+        light.shadow.map?.dispose(); light.shadow.map = null;
+        light.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
+      }
+      light.shadow.needsUpdate = true;
+    }
     if (this.world?.amamo) {
-      const q = MEADOW_QUALITY[this.renderer.preset.vegetation];
+      const q = MEADOW_QUALITY[preset.vegetation];
       this.world.amamo.setQuality(q);
       this.world.terrain.setMeadowCover(this.world.amamo.coverTexture, q.lod[2]);
     }
-    if (this.player) this.player.eyeHeight = this.settings.eyeHeight;
     this.applyHeroSetting();
-    await saveSettings(this.settings);
+    this.tank?.setQuality(QUALITY_PRESETS[this.settings.homeQuality]);
   }
 
   private applyHeroSetting(): void {
     const hero = this.hero;
     const fn = hero && this.settings.heroMaterials ? (model: Parameters<typeof HeroInstance.apply>[0]) => HeroInstance.apply(model, hero.shared) : null;
-    if (this.creatures) this.creatures.heroApply = fn;
-    if (this.tank) this.tank.heroApply = fn;
+    if (this.creatures) this.creatures.heroApply = QUALITY_PRESETS[this.settings.fieldQuality].hero ? fn : null;
+    if (this.tank) this.tank.heroApply = QUALITY_PRESETS[this.settings.homeQuality].hero ? fn : null;
   }
 
   private heroLightingFromWorld(anchor: Vector3): HeroLighting {
@@ -741,6 +801,8 @@ export class App {
     this.requestSave();
   }
 
+  private get fieldToolTier() { return QUALITY_PRESETS[this.settings.fieldQuality].modelTier; }
+
   setTool(id: ToolId, force = false): void {
     if (ui.tool.value === id && !force) return;
     if (!this.data.tools.has(id)) return;
@@ -749,9 +811,9 @@ export class App {
     this.net?.setHeld(type === 'capture');
     this.shovel?.setHeld(type === 'dig');
     this.binoculars?.setHeld(type === 'optic');
-    if (type === 'capture') void this.net?.setTool(this.data.tools.get(id) ?? null);
-    if (type === 'dig') void this.shovel?.setTool(this.data.tools.get(id) ?? null);
-    if (type === 'optic') void this.binoculars?.setTool(this.data.tools.get(id) ?? null);
+    if (type === 'capture') void this.net?.setTool(this.data.tools.get(id) ?? null, this.fieldToolTier);
+    if (type === 'dig') void this.shovel?.setTool(this.data.tools.get(id) ?? null, this.fieldToolTier);
+    if (type === 'optic') void this.binoculars?.setTool(this.data.tools.get(id) ?? null, this.fieldToolTier);
   }
 
   /** [E] on the flat: use the tool in hand where the player is looking. */
@@ -1190,6 +1252,15 @@ export class App {
     this.tank.setAutoRotate(false); this.tank.resetView(); this.openOverlay('gacha');
   }
 
+  private claimEquipmentRewards(): void {
+    if (!this.save || !this.encyclopedia) return;
+    const reward = claimResearchTickets(this.equipmentCollection.value, this.encyclopedia.research.value);
+    if (reward.awarded) {
+      this.equipmentCollection.value = reward.collection;
+      toast(`研究の報酬：設備ガチャチケット ${reward.awarded}枚`, 'success');
+    }
+  }
+
   async rollGacha(count: number): Promise<void> {
     if (!this.save || this.mode !== 'gacha' || this.gachaBusy.value) return;
     const draw = drawEquipment(this.equipmentCollection.value, count);
@@ -1359,13 +1430,13 @@ export class App {
 
   // ------------------------------------------------------------------ save
   requestSave(): void {
-    if (this.saveTimer !== null) return;
+    if (!this.save || this.savingSuspended || this.saveTimer !== null) return;
     this.saveTimer = window.setTimeout(() => { this.saveTimer = null; void this.writeSave(); }, 1000);
   }
 
-  async writeSave(): Promise<void> {
+  private snapshotSave(): SaveV1 | null {
     const s = this.save;
-    if (!s) return;
+    if (!s) return null;
     s.updatedAt = Date.now();
     s.lastRealMs = Date.now();
     if (this.player && this.world) {
@@ -1378,29 +1449,97 @@ export class App {
     s.tank.layout = this.tank.currentLayout;
     s.equipmentCollection = { ...this.equipmentCollection.value, stock: { ...this.equipmentCollection.value.stock } };
     this.encyclopedia.writeSave(s);
-    await this.saveStore.save(s);
-    ui.hasSave.value = true;
+    s.guideDismissed = ui.guideDismissed.value;
+    return structuredClone(s);
+  }
+
+  async writeSave(): Promise<boolean> {
+    if (this.savingSuspended || !this.save) return false;
+    const snapshot = this.snapshotSave()!;
+    try {
+      await this.saveStore.save(snapshot);
+      ui.hasSave.value = true;
+      ui.saveError.value = null;
+      return true;
+    } catch (e) {
+      this.saveFailed(e);
+      return false;
+    }
+  }
+
+  private suspendSaving(): void {
+    this.savingSuspended = true;
+    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+    this.saveTimer = null; this.saveAcc = 0;
+  }
+
+  private saveFailed(e: unknown): void {
+    console.warn('[save] failed', e);
+    ui.saveError.value = '保存できませんでした。再試行するか、JSONを保存して進行を保管してください。';
+  }
+
+  private async showSaveRecovery(e: unknown): Promise<void> {
+    let backup = false;
+    try { backup = !!await this.saveStore.loadBackup(); } catch { /* preserve inaccessible data */ }
+    ui.saveRecovery.value = { message: e instanceof Error ? e.message : 'セーブを読み込めませんでした。', backup };
+  }
+
+  private async replaceSave(s: SaveV1): Promise<void> {
+    if (this.saveChanging) throw new Error('セーブの切り替え中です。完了してから再試行してください。');
+    if (!this.data.maps.has(s.player.map) || [...s.case, ...s.tank.individuals].some((r) => !this.data.species.has(r.speciesId))) throw new Error('このゲームにないマップ・生物を含むセーブです。');
+    this.saveChanging = true; this.suspendSaving();
+    try {
+      await this.saveStore.replace(s);
+      this.applyLoadedSave(s);
+      ui.saveError.value = null;
+    } catch (e) { this.saveFailed(e); throw e; }
+    finally { this.saveChanging = false; this.savingSuspended = false; this.requestSave(); }
+  }
+
+  async restoreBackup(): Promise<void> {
+    try {
+      const backup = await this.saveStore.loadBackup();
+      if (!backup) throw new Error('バックアップがありません。');
+      await this.replaceSave(backup);
+    } catch (e) { toast(e instanceof Error ? e.message : '復元できませんでした。', 'warn'); }
+  }
+
+  async downloadSave(stored = false): Promise<void> {
+    try {
+      const json = stored ? await this.saveStore.exportStored() : this.exportSave();
+      if (!json) return;
+      const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      const a = document.createElement('a'); a.href = url;
+      a.download = `higata-zukan-save-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { toast(String(e), 'warn'); }
   }
 
   exportSave(): string | null {
-    return this.save ? this.saveStore.exportJson(this.save) : null;
+    const snapshot = this.snapshotSave();
+    return snapshot ? this.saveStore.exportJson(snapshot) : null;
   }
 
   async importSave(text: string): Promise<void> {
     const s = this.saveStore.importJson(text);
-    await this.saveStore.save(s);
-    ui.hasSave.value = true;
+    await this.replaceSave(s);
     toast(t('toast.saved'), 'success');
   }
 
   async resetSave(): Promise<void> {
-    await this.saveStore.clear();
-    ui.hasSave.value = false;
-    location.reload();
+    if (this.saveChanging) return;
+    this.saveChanging = true; this.suspendSaving();
+    try {
+      await this.saveStore.clear();
+      this.save = null;
+      ui.hasSave.value = false;
+      location.reload();
+    } catch (e) { this.saveChanging = false; this.savingSuspended = false; this.saveFailed(e); }
   }
 
   // ------------------------------------------------------------------ loop
   private onResize(): void {
+    this.sceneDirty = true;
     this.renderer.resize();
     this.camera.aspect = this.renderer.aspect;
     this.camera.updateProjectionMatrix();
@@ -1434,6 +1573,7 @@ export class App {
   private step(now: number): void {
     const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
+    if (document.hidden) return;
     this.frameCount++;
     this.clock.update();
     const gameMs = this.clock.nowGame();
@@ -1514,7 +1654,7 @@ export class App {
       default: break;
     }
 
-    if (world && player) {
+    if (world && player && this.worldVisible()) {
       this.anchor.copy(player.position);
       world.update(gameMs, dt, this.anchor, this.camera);
     }
@@ -1523,13 +1663,13 @@ export class App {
     if (mode === 'shop' && this.shop) {
       this.shop.update(dt);
       this.renderer.gl.render(this.shop.scene, this.shop.camera);
-    } else if (this.tankVisible()) {
+    } else if (this.tankVisible() && (['home', 'title', 'tankEdit', 'gacha'].includes(mode) || this.sceneDirty)) {
       if (mode === 'tankEdit') this.tank.updateFrozen(); else this.tank.update(dt, 1);
       if (this.hero && this.tank.heroActive) {
         this.hero.setLighting(this.tank.lighting);
         this.hero.render(this.tank.scene, this.tank.camera, dt);
       } else this.renderer.gl.render(this.tank.scene, this.tank.camera);
-    } else if (world && player && creatures) {
+    } else if (!this.tankVisible() && world && player && creatures && (this.worldVisible() || this.sceneDirty)) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       else if (mode === 'capture') player.idle(dt);
       this.fieldCase?.update(dt, player.position);
@@ -1565,12 +1705,13 @@ export class App {
       }
     }
 
+    this.sceneDirty = false;
     this.fpsAcc += dt; this.fpsCount++;
     this.hudAcc += dt;
     if (this.hudAcc >= 1 / HUD_HZ) { this.updateHud(gameMs); this.hudAcc = 0; }
     this.saveAcc += dt;
     if (this.saveAcc >= AUTOSAVE_SEC) { this.saveAcc = 0; void this.writeSave(); }
-    if (this.save) this.save.stats.playSeconds += dt;
+    if (this.save && (this.worldVisible() || mode === 'home')) this.save.stats.playSeconds += dt;
     this.input.endFrame();
   }
 

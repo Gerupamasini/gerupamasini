@@ -23,6 +23,7 @@ import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type Tan
 import { Group } from 'three';
 import { AquariumEquipment } from '../aquarium';
 import { ToolShelf, type ShelfTool } from './ToolShelf';
+import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 
 const UP = new Vector3(0, 1, 0);
 
@@ -240,6 +241,12 @@ export class TankScene {
   private readonly dropU = new Float32Array(32);
   private readonly drops: [number, number, number, number][] = [];
   private simAcc = 0;
+  private waterAcc = 0;
+  private preset = QUALITY_PRESETS.mid;
+  private occupantGeneration = 0;
+  private occupantRecords: IndividualRecord[] = [];
+  private speciesLookup: ((id: string) => SpeciesDef | undefined) | null = null;
+  private readonly flatWater: DataTexture;
   private gustAcc = 0;
   waves_ = 0.8;
   turb = 0.5;
@@ -301,6 +308,7 @@ export class TankScene {
     const floatOK = gl.capabilities.isWebGL2 && (gl.extensions.has('EXT_color_buffer_float') || gl.extensions.has('EXT_color_buffer_half_float'));
     const zero = new DataTexture(new Float32Array(4), 1, 1, RGBAFormat, FloatType);
     zero.needsUpdate = true;
+    this.flatWater = zero;
     this.U = {
       uLampPosition: { value: new Vector3(0, W_LAMP_Y, 0) }, uLampAxis: { value: new Vector3(1, 0, 0) },
       uJets: { value: this.jetU }, uJetValues: { value: this.jetValues },
@@ -716,15 +724,19 @@ export class TankScene {
 
   /** Make the tank hold exactly these records (adds and removes as needed). */
   async setOccupants(records: IndividualRecord[], species: (id: string) => SpeciesDef | undefined): Promise<void> {
+    this.occupantRecords = [...records]; this.speciesLookup = species;
+    const generation = ++this.occupantGeneration;
     const wanted = new Set(records.map((r) => r.id));
     for (const o of [...this.occupants]) if (!wanted.has(o.record.id)) this.removeOccupant(o.record.id);
     for (const rec of records.slice(0, TANK_MAX_OCCUPANTS)) {
       if (this.occupants.some((o) => o.record.id === rec.id)) continue;
-      await this.addOccupant(rec, species(rec.speciesId));
+      if (generation !== this.occupantGeneration) return;
+      try { await this.addOccupant(rec, species(rec.speciesId), generation); }
+      catch (e) { console.warn('[tank] model unavailable; retry when reopened', e); }
     }
   }
 
-  private async addOccupant(record: IndividualRecord, species: SpeciesDef | undefined): Promise<void> {
+  private async addOccupant(record: IndividualRecord, species: SpeciesDef | undefined, generation: number): Promise<void> {
     if (!species) return;
     const entry = DRIVERS[species.model.driver ?? ''];
     if (!entry) return;
@@ -738,11 +750,11 @@ export class TankScene {
     let hero: HeroInstance | null = null;
     const files = modelFor(species, ind.stage, ind.gravid, ind.dress);
     const useHero = !!this.heroApply && !!files.hero && !this.occupants.some((o) => o.hero);
-    const rel = useHero ? files.hero : files.lod1 ?? files.hero ?? files.lod2;
+    const rel = this.preset.modelTier === 'lod2' ? files.lod2 ?? (entry.placeholder ? undefined : files.lod1) : useHero ? files.hero : files.lod1 ?? files.lod2 ?? (entry.placeholder ? undefined : files.hero);
     if (rel) {
       const model = await instantiateModel(rel, variantOf(ind.id));
       root = model.root; bones = model.bones as Record<string, Object3D>; meshes = model.meshes; extras = model.extras;
-      for (const m of meshes) m.castShadow = true;
+      for (const m of meshes) m.castShadow = this.preset.shadows;
       if (useHero && this.heroApply) {
         try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] tank fallback', err); hero = null; }
       }
@@ -754,7 +766,7 @@ export class TankScene {
       ph.root.userData.startOnSurface = true;
       root = ph.root;
     } else return;
-    if (this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); root.removeFromParent(); return; }
+    if (generation !== this.occupantGeneration || this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); root.removeFromParent(); return; }
     const driver = entry.create();
     const unsub = driver.onEvent((e) => this.onBehavior?.(e, record));
     this.aquariumRoot.add(root);
@@ -798,7 +810,23 @@ export class TankScene {
   }
 
   clearOccupants(): void {
+    ++this.occupantGeneration;
+    this.occupantRecords = [];
     for (const o of [...this.occupants]) this.removeOccupant(o.record.id);
+  }
+
+  setQuality(preset: QualityPreset): void {
+    if (this.preset === preset) return;
+    this.preset = preset; this.waterAcc = 0;
+    this.lampLight.castShadow = preset.shadows;
+    this.lampLight.shadow.map?.dispose(); this.lampLight.shadow.map = null;
+    this.lampLight.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
+    this.lampLight.shadow.needsUpdate = true;
+    this.U.uSurf.value = preset.tankWaterHz ? this.surfRT?.texture ?? this.flatWater : this.flatWater;
+    this.U.uCaus.value = preset.tankWaterHz ? this.causRT?.texture ?? this.flatWater : this.flatWater;
+    const records = this.occupantRecords, lookup = this.speciesLookup;
+    this.clearOccupants();
+    if (lookup) void this.setOccupants(records, lookup);
   }
 
   /** Pick what is under a canvas point: an occupant, the tank, or nothing. */
@@ -817,6 +845,10 @@ export class TankScene {
   }
 
   private stepWater(dt: number): void {
+    if (!this.preset.tankWaterHz) { this.drops.length = 0; return; }
+    this.waterAcc += dt;
+    if (this.waterAcc < 1 / this.preset.tankWaterHz) return;
+    dt = this.waterAcc; this.waterAcc = 0;
     this.time += dt;
     this.U.uTime.value = this.time;
     this.jetU.fill(0); this.jetValues.fill(0);
@@ -835,7 +867,7 @@ export class TankScene {
       this.addRipple((Math.random() * 2 - 1) * TX * 0.9, (Math.random() * 2 - 1) * TZ * 0.9, (Math.random() < 0.5 ? -1 : 1) * 0.3, 0.02 + 0.03 * Math.random());
     if (!this.gpu || !this.sim || !this.surfMat || !this.surfRT || !this.causRT) { this.drops.length = 0; return; }
     // the ripple simulation steps at 60 Hz, taking up to 8 waiting splashes per step
-    for (this.simAcc = Math.min(this.simAcc + dt, 0.1); this.simAcc >= 1 / 60; this.simAcc -= 1 / 60) {
+    for (this.simAcc = Math.min(this.simAcc + dt, 0.1); this.simAcc >= 1 / this.preset.tankWaterHz; this.simAcc -= 1 / this.preset.tankWaterHz) {
       for (let i = 0; i < 8; i++) this.dropU.set(this.drops.length ? this.drops.shift()! : [0, 0, 1, 0], i * 4);
       this.gpu.compute();
     }
@@ -1009,6 +1041,7 @@ export class TankScene {
     this.deactivate();
     this.clearOccupants();
     this.gpu?.dispose();
+    this.flatWater.dispose();
     this.surfRT?.dispose();
     this.causRT?.dispose();
   }
