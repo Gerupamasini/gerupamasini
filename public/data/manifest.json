@@ -14,7 +14,8 @@
     "reticunassa_festiva",
     "mugil_cephalus",
     "rudarius_ercodes",
-    "syngnathus_schlegeli"
+    "syngnathus_schlegeli",
+    "platichthys_bicoloratus"
   ],
   "behaviors": [
     "fish_benthic",
@@ -26,7 +27,8 @@
     "snail_crawl",
     "fish_school",
     "fish_seagrass",
-    "pipefish_grass"
+    "pipefish_grass",
+    "flatfish_sand"
   ],
   "maps": [
     "kasai_west",

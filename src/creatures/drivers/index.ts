@@ -15,6 +15,7 @@ import { HakuDriver } from '../species/haku/HakuDriver';
 import { AmimehagiDriver } from '../species/amimehagi/AmimehagiDriver';
 import { YoujiuoDriver } from '../species/youjiuo/YoujiuoDriver';
 import { AramushiroDriver } from '../species/aramushiro/AramushiroDriver';
+import { IshigareiDriver } from '../species/ishigarei/IshigareiDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -52,4 +53,6 @@ export const DRIVERS: Record<string, DriverEntry> = {
   youjiuo: { create: () => new YoujiuoDriver(), placeholder: () => YoujiuoDriver.makeModel(), preview: (seed) => YoujiuoDriver.makePreview(seed), nearDistance: 6 },
   // アラムシロ: the carrion snail of the sand (its own tiers in the placeholder view; near within 3 m)
   aramushiro: { create: () => new AramushiroDriver(), placeholder: () => AramushiroDriver.makeModel(), preview: (seed) => AramushiroDriver.makePreview(seed), nearDistance: 3 },
+  // イシガレイ: the juvenile flounder of the sandy flats (its own tiers in the placeholder view; near within 3 m)
+  ishigarei: { create: () => new IshigareiDriver(), placeholder: () => IshigareiDriver.makeModel(), preview: (seed) => IshigareiDriver.makePreview(seed), nearDistance: 3 },
 };
