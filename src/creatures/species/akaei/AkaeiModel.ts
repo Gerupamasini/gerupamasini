@@ -166,11 +166,15 @@ export class AkaeiModel {
     this.sting = mk('TailSting', g.sting, this.stingMat, this.tail);
     this.eyeL = mk('Eye_L', g.eyeL, this.eyeMat);
     this.eyeR = mk('Eye_R', g.eyeR, this.eyeMat);
-    const lg = akaeiGeometries(0);
+    // (a far ray is born at LOD2, whose set has no spiracles or mouth: they come from LOD1's, the same shapes at a
+    // quarter of LOD0's build cost; the 55k-triangle disc is built only when a ray actually comes near)
+    const lg = g.spiracleL && g.mouth ? g : akaeiGeometries(1);
     this.spiracleL = mk('Spiracle_L', g.spiracleL ?? lg.spiracleL!, [this.skin, this.interior]);
     this.spiracleR = mk('Spiracle_R', g.spiracleR ?? lg.spiracleR!, [this.skin, this.interior]);
     this.mouth = mk('MouthAndGillArea', g.mouth ?? lg.mouth!, [this.skin, this.interior]);
-    for (const m of [this.eyeL, this.eyeR, this.spiracleL, this.spiracleR, this.mouth, this.sting]) m.castShadow = false;
+    // its shadow is the contact decal under the disc (SandFX), as for the other procedural species: nothing of the
+    // ray is drawn into the sun's shadow map (a second, offset shadow, and two skinned shadow draws)
+    for (const m of [this.disc, this.tail, this.eyeL, this.eyeR, this.spiracleL, this.spiracleR, this.mouth, this.sting]) m.castShadow = false;
     // the skinned parts move within these (model units): the disc and head about the trunk, the tail within its reach
     const discSphere = new Sphere(new Vector3(0, 0, 0), 0.75);
     for (const m of [this.disc, this.eyeL, this.eyeR, this.spiracleL, this.spiracleR, this.mouth]) m.boundingSphere = discSphere.clone();
@@ -203,8 +207,7 @@ export class AkaeiModel {
       this.mouth.geometry = g.mouth;
     }
     for (const m of [this.spiracleL, this.spiracleR, this.mouth]) { m.visible = !cheap; m.updateMorphTargets(); }
-    // fine relief and translucency only near; the sting is too small to shadow anything
-    this.tail.castShadow = lod < 2;
+    // (fine relief and translucency only near)
   }
 
   /** set every bone from the pose */

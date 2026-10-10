@@ -25,6 +25,7 @@ import { hashInts } from '../core/Rng';
 import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
+import { AKAEI_DETAIL } from '../creatures/species/akaei/AkaeiDriver';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import type { SpeciesDef, ToolDef } from '../data/schemas';
@@ -482,6 +483,8 @@ export class App {
     this.tank?.setLite(p.tankWater === 'lite');
     this.creatures?.setPreset(p);
     CONTACT_SHADOWS.enabled = p.contactShadows;
+    AKAEI_DETAIL.viewScale = p.viewScale;
+    AKAEI_DETAIL.allowLod0 = p.lod1Count > 0;
   }
 
   private heroOn = false;

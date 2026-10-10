@@ -4,6 +4,11 @@ import type { BehaviorEvent, Driver, DriverContext, Floor, Intent } from '../../
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
 import { AkaeiModel, AkaeiPose, BELLY } from './AkaeiModel';
+import { CONTACT_SHADOWS } from '../haku/ContactShadows';
+
+/** the quality tier's reach for the ray's own detail tiers (set by the app from the preset): the distances of its
+ * LOD steps scale with the preset's view scale, and the lightest tiers forgo the 55k-triangle close-up altogether */
+export const AKAEI_DETAIL = { viewScale: 1, allowLod0: true };
 import { LATTICE_COLS, LATTICE_ROWS, TAIL_BONES, latticeU, latticeZ, tailAxisY, type Lod } from './geometry';
 import { MORPH, halfWidth, tailSection, tailZ, ventralDepth } from './morphology';
 import { SAND_COLOURS } from './material';
@@ -328,10 +333,11 @@ export class AkaeiDriver implements Driver {
 
     // detail by distance to the player (with a little hysteresis)
     const dist = ctx.player.distanceTo(this.pos);
-    const byDistance: Lod = ctx.locked || ctx.bounds ? 0 : dist < (this.lod === 0 ? 8 : 7) ? 0 : dist < (this.lod <= 1 ? 22 : 20) ? 1 : 2;
+    const vs = AKAEI_DETAIL.viewScale;
+    const byDistance: Lod = ctx.locked || ctx.bounds ? 0 : dist < (this.lod === 0 ? 8 : 7) * vs ? (AKAEI_DETAIL.allowLod0 ? 0 : 1) : dist < (this.lod <= 1 ? 22 : 20) * vs ? 1 : 2;
     const want = this.forceLod ?? byDistance;
     if (want !== this.lod) { this.lod = want; model.setLod(want); }
-    this.fxOn = this.lod <= 1;
+    this.fxOn = this.lod <= 1 && CONTACT_SHADOWS.enabled;   // (the sand puffs go with the contact shadows: off on 超軽量)
 
     if (!this.settled) {
       this.settled = true;

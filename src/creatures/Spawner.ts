@@ -99,7 +99,9 @@ export class Spawner {
           if (occupied.has(`${sp.id}:${cell}`)) continue;
           for (let ri = 0; ri < sp.spawn.length; ri++) {
             const rule = sp.spawn[ri];
-            if ((counts.get(sp.id) ?? 0) >= rule.maxPopulation) continue;
+            // (the cap follows the preset's share too, as the chance of a group does; the birds keep theirs)
+            const cap = Math.max(1, Math.ceil(rule.maxPopulation * (sp.taxon.group === 'bird' ? 1 : scale)));
+            if ((counts.get(sp.id) ?? 0) >= cap) continue;
             if (!this.ruleMatches(rule, cell, env)) continue;
             const seed = hashInts(cell, ri, env.day, sp.id.length * 131);
             const rng = new Rng(seed);
@@ -114,7 +116,7 @@ export class Spawner {
               const memberSeed = hashInts(seed, k);
               const id = `${sp.id}#${hashInts(memberSeed, 7).toString(16).padStart(8, '0')}`;
               if (this.removed.has(id)) continue;
-              if ((counts.get(sp.id) ?? 0) >= rule.maxPopulation) break;
+              if ((counts.get(sp.id) ?? 0) >= cap) break;
               // position inside the cell matching the depth requirement (small pools: straight into the pool)
               let x = cx, z = cz, ok = false;
               if (rule.tags.includes('small_pool')) {
