@@ -113,7 +113,8 @@ describe('走水: who lives where', () => {
   const species: SpeciesDef[] = manifest.species.map((id) => SpeciesSchema.parse(json(`species/${id}.json`)));
   // (a rule without `maps` holds on every flat, 走水 included)
   const here = (tag: string) => species.filter((sp) => sp.spawn.some((r) => (!r.maps || r.maps.includes('hashirimizu')) && r.tags.includes(tag as never))).map((sp) => sp.names.ja);
-  // 走水 has gobies, shrimps, shellfish, the hermit crab, the ハク schools and the eelgrass fish (アミメハギ, ヨウジウオ) only
+  // 走水 has gobies, shrimps, shellfish, the hermit crab, the ハク schools and the eelgrass fish (アミメハギ, ヨウジウオ) only,
+// and since round 28 the flounder juvenile (イシガレイ) and the ray (アカエイ) on the open sand
   // (the crab and the worm stay out of the manifest)
   it('puts the right animals at each hotspot', () => {
     expect(here('eelgrass_edge')).toEqual(expect.arrayContaining(['マハゼ', 'ヒメハゼ', 'シラタエビ', 'イソスジエビ', 'ユビナガホンヤドカリ', 'ボラ', 'アミメハギ', 'ヨウジウオ']));

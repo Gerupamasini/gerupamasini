@@ -140,7 +140,7 @@ export class IshigareiDriver implements Driver {
     this.busy = true;
     switch (intent.kind) {
       case 'flee':
-        f.escape(intent.from ?? (Number.isNaN(this.player.x) ? null : this.player));
+        f.escape(intent.from ?? (Number.isNaN(this.player.x) ? null : this.player), intent.target ?? null);
         break;
       case 'rest':
         f.rest(secs);
@@ -161,7 +161,8 @@ export class IshigareiDriver implements Driver {
         f.freeze(Math.max(secs, 3));
         break;
       case 'special':
-        if ((intent.param === 'hide' || intent.param === 'sleep') && this.canBurrow) f.burrow(Math.max(secs, 30));
+        // (in a sand tank or the case, the odd 'special' is the time to bury: its signature behaviour)
+        if ((intent.param === 'hide' || intent.param === 'sleep' || !!this.ctx?.bounds) && this.canBurrow) f.burrow(Math.max(secs, 30));
         else f.rest(secs);
         break;
       default:
@@ -172,6 +173,11 @@ export class IshigareiDriver implements Driver {
 
   /** whether the floor here is sand to bury in (the flat: yes; a bare tank or the case: no) */
   private canBurrow = true;
+
+  /** the net takes it only while its body shows: one buried to the eyes is not scooped by a hoop over the sand */
+  canNetCapture(): boolean {
+    return !this.fish || this.fish.state.bury < 0.5;
+  }
 
   update(dt: number, ctx: DriverContext): void {
     const f = this.fish, ind = this.ind, model = this.model, root = this.root;

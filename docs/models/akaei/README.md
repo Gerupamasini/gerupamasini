@@ -100,10 +100,10 @@ Akaei               Group（CreatureSystem のホルダー: 位置・向き・�
 
 | 既存 | 変更 |
 |---|---|
-| `public/data/species/hemitrygon_akajei.json`、`behaviors/ray_benthic.json`、`manifest.json` | 種と行動ツリーの追加。春〜秋の浅い砂・砂泥底と澪（0.12〜1.6 m）、夏の夕方〜夜の上げ潮に浅場へ。網では捕れない（`collectable: false`） |
+| `public/data/species/hemitrygon_akajei.json`、`behaviors/ray_benthic.json`、`manifest.json` | 種と行動ツリーの追加。春〜秋の浅い砂・砂泥底と澪（0.12〜2.5 m、澪は 0.2〜1.6 m）、夏の夕方〜夜の上げ潮に浅場へ。網では捕れない（`collectable: false`） |
 | `src/creatures/drivers/index.ts` | `akaei` ドライバ（ホルダー、図鑑プレビュー、`nearDistance: 10`） |
 | `CreatureSystem` | 変更なし: 本流の `Floor.sampleAt`（砂煙と砂の色を底質に合わせる）と `nearDistance`（10 m 以内で毎フレーム更新）をそのまま使う |
-| 出現（28 回目） | 葛西: 満潮・上げ潮の砂浅場（15 cm〜2 m）、澪筋（底質 `channel`）、夏の夕方〜夜の上げ潮。走水: 沖の砂底（12 cm〜2 m）に 0〜3 尾。走水には摂餌痕（地形）は無く、掘り跡は一時的な演出だけ |
+| 出現（28 回目） | 葛西: 満潮・上げ潮の砂浅場（15 cm〜2 m）、澪筋（底質 `channel`）、夏の夕方〜夜の上げ潮。走水: 沖の砂底（12 cm〜2 m）に 0〜3 尾（夏の夕方〜夜の上げ潮にはさらに 1〜2 尾）。走水には摂餌痕（地形）は無く、掘り跡は一時的な演出だけ |
 | `Individual.minDepthFor`、種スキーマ `size.minDepthFraction` | 平たく尾の長いエイは全長の 7 % の水深で足りる（既定は 15 %） |
 | 水・地形・潮汐 | 変更なし。高さは `Floor.heightAt`、水面は `Floor.waterAt`（潮位と潮だまり）、浅くなれば既存の `keepInWater` が深みへ戻す |
 
@@ -119,4 +119,4 @@ Akaei               Group（CreatureSystem のホルダー: 位置・向き・�
 | ![埋没 眼](buried_eyes.jpg) 埋没: 眼と噴水孔だけが出る | ![摂餌](forage_pulse.jpg) 摂餌: 頭を押しつけて砂を噴く |
 | ![逃避](escape_burst.jpg) 逃避: 砂から飛び出す | ![逃避 滑空](escape_glide.jpg) 逃避後の低い滑空 |
 | ![LOD0](lod0.jpg) LOD0 | ![LOD1](lod1.jpg) LOD1 |
-| ![LOD2](lod2.jpg) LOD2 | ゲーム内の見え方はスモークテストの `tests/smoke/out/16-akaei.png`（着底）・`16b-akaei-swim.png`（泳ぎ出し）・`16c-akaei-observe.png`（観察）で確かめる（ゲームの水を通して描かれる） |
+| ![LOD2](lod2.jpg) LOD2 | ゲーム内の見え方はスモークテストの `tests/smoke/out/24-akaei.png`（着底）・`24b-akaei-swim.png`（泳ぎ出し）・`24c-akaei-observe.png`（観察）で確かめる（ゲームの水を通して描かれる） |

@@ -25,6 +25,7 @@ npm run render:amimehagi # アミメハギの文書画像を再生成（docs/mod
 npm run render:youjiuo # ヨウジウオの文書画像を再生成（docs/models/youjiuo/）
 npm run render:aramushiro # アラムシロの文書画像を再生成（docs/models/aramushiro/）
 npm run render:akaei  # アカエイ（5 つの行動・腹面・LOD）の画像を再生成（docs/models/akaei/）
+npm run render:ishigarei # イシガレイの文書画像を再生成（docs/models/ishigarei/）
 npm run terrain:bake # 地形 PNG の再生成
 npm run terrain:manko      # 漫湖（70 m × 70 m）の泥干潟と浅い澪筋を再生成
 npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（docs/maps/hashirimizu/）を再生成

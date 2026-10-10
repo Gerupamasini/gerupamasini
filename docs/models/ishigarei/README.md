@@ -8,7 +8,7 @@
 - 画像の再生成: `npm run render:ishigarei`（ビューア）、`node tests/smoke/ishigarei.mjs`（ゲーム内）
 - テスト: `tests/unit/ishigarei.test.ts`（眼の位置と非対称、体の比率、写真に合わせた口、ジオメトリと重み、唇の骨、5 状態、脳の意図に従うこと、引き潮、骨格が砂紋に沿うこと）
 
-ゲーム内では春〜夏の葛西臨海公園西なぎさ・走水の浅い砂底に出る（デバッグ F3 で `debugSpawn('platichthys_bicoloratus')` でも可）。
+ゲーム内では春〜夏の葛西臨海公園西なぎさ・走水の浅い砂底と潮だまりに出る。秋は大きめの若魚が浅瀬と澪に（0.5/100 m²）。葛西では春〜夏、アカエイの昼寝跡の居残り（居残りの 10 枠に 1 つ）に稚魚が混じる（デバッグ F3 で `debugSpawn('platichthys_bicoloratus')` でも可）。
 
 ![砂の上に伏せる](flat_rest.jpg)
 
@@ -78,7 +78,7 @@ IshigareiJuvenileRoot
 
 - `src/creatures/drivers/index.ts` に `ishigarei` を登録（モデルはドライバが作るので GLB なし）。
 - `public/data/manifest.json` に種と行動ツリーを追加。
-- 既存の描画・水・地形・潮・`CreatureSystem` には手を入れていない（`amimehagi/materials.ts` の 3 つの定数を export しただけ）。
+- 既存の描画・水・地形・潮・`CreatureSystem` には手を入れていない（`amimehagi/materials.ts` の 3 つの定数を export しただけ）。28 回目の取り込みで: `Spawner.plan` の昼寝跡の居残りに稚魚の枠（春〜夏）、ドライバは `ctx.canBurrow`（砂のない水槽・ケースでは潜らず、埋まって生まれた個体は滑り出る）と `canNetCapture`（埋没 50 % 以上は網に入らない）を実装、逃走は脳の水に沿った目標へ。
 
 ## 5. 画像
 

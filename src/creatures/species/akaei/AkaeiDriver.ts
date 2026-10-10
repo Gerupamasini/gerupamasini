@@ -188,6 +188,7 @@ export class AkaeiDriver implements Driver {
     model.root.traverse((o) => { const m = o as SkinnedMesh; if (m.isSkinnedMesh) m.geometry = m.geometry.clone(); });
     holder.add(model.root);
     holder.userData.disposable = true;
+    holder.userData.disposer = () => model.dispose();   // (the materials and the skeleton go with the preview)
     return holder;
   }
 
@@ -267,7 +268,8 @@ export class AkaeiDriver implements Driver {
         break;
       }
       case 'burrow': {
-        if (this.state === 'BURROW_IN_SAND' && this.phase === 'buried') break;
+        // (found already buried: the behaviour is seen, and counts)
+        if (this.state === 'BURROW_IN_SAND' && this.phase === 'buried') { this.emit(AKAEI_EVENTS.BURROW_IN_SAND); break; }
         this.target = null;
         this.enter('BURROW_IN_SAND', this.grounded > 0.95 ? 'dig' : 'land');
         break;
@@ -655,7 +657,9 @@ export class AkaeiDriver implements Driver {
           if (this.phaseT < dt * 1.5 && this.fxOn && (this.grounded > 0.6 || this.sand > 0.2)) this.burstPuff();
           // away from the threat, at once
           // toward the flight target (already bent along the water), else straight away from the threat
-          const away = this.target && Math.hypot(this.target.x - this.pos.x, this.target.z - this.pos.z) > 0.2 ? Math.atan2(this.target.x - this.pos.x, this.target.z - this.pos.z)
+          // (the flight target, once reached, is done with: the ray never turns back toward it)
+          if (this.target && Math.hypot(this.target.x - this.pos.x, this.target.z - this.pos.z) < 0.3) this.target = null;
+          const away = this.target ? Math.atan2(this.target.x - this.pos.x, this.target.z - this.pos.z)
             : this.fleeFrom ? Math.atan2(this.pos.x - this.fleeFrom.x, this.pos.z - this.fleeFrom.z) : this.heading;
           w.face = away;
           w.yawMax = 5.5;
@@ -666,7 +670,7 @@ export class AkaeiDriver implements Driver {
           w.flap = this.phaseT < 0.35 ? 0.05 : 0;
           w.flapFreq = 3;
           w.camber = 0.004;
-          if (this.phaseT > 1.25) this.setPhase('flee');
+          if (this.phaseT > 1.25) { this.setPhase('flee'); this.target = null; }   // (straight on from here)
           break;
         }
         // keep going, easing to a cruise

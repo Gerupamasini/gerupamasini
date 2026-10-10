@@ -476,7 +476,8 @@ export class CreatureSystem {
   canNetCapture(id: string): boolean {
     const e = this.entries.get(id);
     if (!e || !e.ind.species.collectable || e.ind.species.taxon.group === 'bird') return false;
-    if (e.ind.species.locomotion !== 'burrow') return true;
+    // (a swimmer that can hide in the sand, the flounder, answers for itself too)
+    if (e.ind.species.locomotion !== 'burrow' && !e.driver.canNetCapture) return true;
     // Unknown/unattached burrowers stay dig-only; a visible siphon is not a visible shell.
     return !!e.view && e.driver.canNetCapture?.() === true;
   }

@@ -163,16 +163,19 @@ export function createFlounderBehavior(opts) {
     st.prey = null;
     st.fast = false;
   }
-  function escape(from) {
+  function escape(from, to) {
     st.fast = true;
     st.refractory = 3.5;
     let away = rand(-Math.PI, Math.PI);
     if (from) away = Math.atan2(st.pos.x - from.x, st.pos.z - from.z) + rand(-0.6, 0.6);
+    // the brain's flight target (bent along the water): that way, and no further than it
+    if (to) { away = Math.atan2(to.x - st.pos.x, to.z - st.pos.z) + rand(-0.3, 0.3); }
     // stay roughly at home: bend the escape back towards the range
     const dHome = homeDist(st.pos.x, st.pos.z);
     if (dHome > range * 0.8) away = wrap(away + 0.6 * wrap(Math.atan2(home.x - st.pos.x, home.z - st.pos.z) - away));
     st.escDir = away;
     st.escLen = rand(3, 6) * BL;
+    if (to) st.escLen = Math.min(st.escLen, Math.max(2 * BL, Math.hypot(to.x - st.pos.x, to.z - st.pos.z)));
     setMode('ESCAPE', 'burst');
     // explosive take-off: a big cloud from under the body, more when buried
     const buried = st.bury;
@@ -751,7 +754,7 @@ export function createFlounderBehavior(opts) {
   st.pos.y = ground(st.pos.x, st.pos.z) + Y_ROOT * M * K;
 
   const api = {
-    update, escape: (from) => escape(from), glide: (spot) => startGlide(spot), forage: () => startForage(),
+    update, escape: (from, to) => { if (st.mode !== 'ESCAPE') escape(from, to); }, glide: (spot) => startGlide(spot), forage: () => startForage(),
     /** bury and stay buried for about `seconds` */
     burrow: (seconds) => {
       if (st.mode === 'BURROW_IN_SAND' && st.phase === 'buried') { st.next = st.t + (seconds ?? rand(15, 80)); return; }
