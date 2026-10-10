@@ -171,7 +171,7 @@
 - 探した結果: イシガレイは `claude/ishigarei-juvenile`（PR #34、1 コミット、本流より 28 後ろ）、アカエイは `claude/vibrant-pascal-bn5g33`（PR #44、4 コミット、98 後ろ）、アラムシロは PR #42 で本流に入っていて、`claude/fervent-archimedes-952bzo` に未マージの追補 1 コミット（0b2291a）。この順で逆にマージ（アラムシロ → イシガレイ → アカエイ）。
 - 衝突: アラムシロは TESTING／package.json（両方残す）。イシガレイは README／package.json／`drivers/index.ts`（両方残す）。アカエイは README／TESTING／進捗／package(-lock)／manifest／`CreatureSystem`／`drivers/index.ts`: `CreatureSystem` は本流（`sampleAt` の `nowMs`、`nearDistance` の `near`）、`DriverEntry` も本流（`preview(seed, renderer)`、`nearDistance`）で、アカエイの `smoothNear: true` は `nearDistance: 10` に。manifest は両方。lock は本流。
 - アカエイの規則は `maps` なし（全マップ）だったので `kasai_west`／`hashirimizu` を明記（`hashirimizu.test.ts` の「maps は必ず書く」に合わせて）。アラムシロは葛西の規則 2 本を追加。
-- イシガレイの読み取りで分かった残課題: ドライバが `ctx.canBurrow` を読まない（砂のない水槽・ケースでも潜る）、潜った個体も網に入る、品質プリセットを読まない（描画距離だけ縮む）、秋の規則の `channel` タグは底質の制限で死んでいる。
+- イシガレイの読み取りで分かったこと: ドライバが `ctx.canBurrow` を読まず砂のない水槽・ケースでも潜っていたので、潜れない所では潜る意図を休むに替え、埋まって生まれた個体は滑り出て砂を落とす（`IshigareiDriver`）。残課題: 潜った個体も網に入る、品質プリセットを読まない（描画距離だけ縮む）、秋の規則の `channel` タグは底質の制限で死んでいる。
 - バージョン 0.24.0。
 
 ## 27 回目（超軽量の画質と軽量化）

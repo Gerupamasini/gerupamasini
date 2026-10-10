@@ -146,7 +146,7 @@ export class IshigareiDriver implements Driver {
         f.rest(secs);
         break;
       case 'burrow':
-        f.burrow(Math.max(secs, 10));
+        if (this.canBurrow) f.burrow(Math.max(secs, 10)); else f.rest(secs);
         break;
       case 'wander': case 'moveTo': {
         const t = intent.target;
@@ -161,7 +161,7 @@ export class IshigareiDriver implements Driver {
         f.freeze(Math.max(secs, 3));
         break;
       case 'special':
-        if (intent.param === 'hide' || intent.param === 'sleep') f.burrow(Math.max(secs, 30));
+        if ((intent.param === 'hide' || intent.param === 'sleep') && this.canBurrow) f.burrow(Math.max(secs, 30));
         else f.rest(secs);
         break;
       default:
@@ -169,6 +169,9 @@ export class IshigareiDriver implements Driver {
     }
     this.emit(intent.kind);
   }
+
+  /** whether the floor here is sand to bury in (the flat: yes; a bare tank or the case: no) */
+  private canBurrow = true;
 
   update(dt: number, ctx: DriverContext): void {
     const f = this.fish, ind = this.ind, model = this.model, root = this.root;
@@ -182,6 +185,9 @@ export class IshigareiDriver implements Driver {
     this.playerPrev.copy(ctx.player);
     this.player.copy(ctx.player);
     if (this.pending) { const p = this.pending; this.pending = null; this.setIntent(p); }
+    // nothing to dig into (a bare tank, the acrylic case): no burrowing, and one lying buried (born so) rises
+    this.canBurrow = ctx.canBurrow !== false;
+    if (!this.canBurrow) { const s = f.state; if (s.mode === 'BURROW_IN_SAND' || s.bury > 0.02) f.glide(null); }
     if (!!ctx.locked !== this.locked) {
       this.locked = !!ctx.locked;
       model.lod.autoUpdate = !this.locked;
