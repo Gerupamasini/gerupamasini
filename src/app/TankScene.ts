@@ -30,6 +30,7 @@ export const TANK_MAX_OCCUPANTS = 4;
 
 export interface Occupant {
   record: IndividualRecord;
+  species: SpeciesDef;
   ind: Individual;
   driver: Driver;
   root: Object3D;
@@ -441,8 +442,12 @@ export class TankScene {
     }`, false, 2));
     sidesMul.renderOrder = 2;
     const sidesAdd = new Mesh(sidesGeo, pass(SIDE_VERT, SIDE_HEAD + /* glsl */ `
-      // light inside the water along the view ray: the caustic light sheets scatter toward the eye (light shafts)
-      const int N = 8;
+      // light inside the water along the view ray: the caustic light sheets scatter toward the eye (light shafts;
+      // the lite tank takes half the steps)
+      #ifndef SHAFT_N
+      #define SHAFT_N 8
+      #endif
+      const int N = SHAFT_N;
       float ds = t / float(N);
       vec3 col = vec3(0.0), thr = vec3(1.0), Ts = exp(-W_ABSORB * ds);
       for (int i = 0; i < N; i++) {
@@ -460,6 +465,7 @@ export class TankScene {
       ${OUT}
     }`, true, 3));
     sidesAdd.renderOrder = 3;
+    this.shaftMat = sidesAdd.material as ShaderMaterial;
     const surfGeo = new PlaneGeometry(2 * TX - 0.004, 2 * TZ - 0.004, 96, 48).rotateX(-Math.PI / 2);
     const surfMul = new Mesh(surfGeo, pass(SURF_VERT, SURF_HEAD + /* glsl */ `
       gl_FragColor = vec4((1.0 - F) * T, 1.0);
@@ -688,13 +694,44 @@ export class TankScene {
   }
 
   /** Make the tank hold exactly these records (adds and removes as needed). */
-  async setOccupants(records: IndividualRecord[], species: (id: string) => SpeciesDef | undefined): Promise<void> {
-    const wanted = new Set(records.map((r) => r.id));
-    for (const o of [...this.occupants]) if (!wanted.has(o.record.id)) this.removeOccupant(o.record.id);
-    for (const rec of records.slice(0, TANK_MAX_OCCUPANTS)) {
-      if (this.occupants.some((o) => o.record.id === rec.id)) continue;
-      await this.addOccupant(rec, species(rec.speciesId));
-    }
+  /** The hero materials were switched on or off (the quality tier, or the setting): the animals are rebuilt so the
+   * ones that carried them, or may now carry them, take the new materials. */
+  refreshHero(): Promise<void> {
+    return this.queued(async () => {
+      if (!this.occupants.length) return;
+      const again = this.occupants.map((o) => ({ record: o.record, species: o.species }));
+      for (const o of again) this.removeOccupant(o.record.id);
+      this.dropped.clear();   // (the job's own removals are not the player's)
+      for (const o of again) {
+        if (this.dropped.has(o.record.id)) continue;   // released while its model was loading
+        try { await this.addOccupant(o.record, o.species); } catch (err) { console.warn('[tank] rebuild failed', err); }
+      }
+    });
+  }
+
+  setOccupants(records: IndividualRecord[], species: (id: string) => SpeciesDef | undefined): Promise<void> {
+    return this.queued(async () => {
+      const wanted = new Set(records.map((r) => r.id));
+      for (const o of [...this.occupants]) if (!wanted.has(o.record.id)) this.removeOccupant(o.record.id);
+      this.dropped.clear();
+      for (const rec of records.slice(0, TANK_MAX_OCCUPANTS)) {
+        if (this.occupants.some((o) => o.record.id === rec.id) || this.dropped.has(rec.id)) continue;
+        try { await this.addOccupant(rec, species(rec.speciesId)); } catch (err) { console.warn('[tank] add failed', err); }
+      }
+    });
+  }
+
+  /** ids taken out (the player's 放す, a case move) while an occupant change was still loading models: the
+   * change's queued re-adds skip them, so nothing comes back from a stale snapshot */
+  private readonly dropped = new Set<string>();
+
+  /** the occupant changes run one after another (each awaits its models): a later call never interleaves with an
+   * earlier one, so an animal is neither doubled nor brought back */
+  private occupantQueue: Promise<void> = Promise.resolve();
+  private queued(job: () => Promise<void>): Promise<void> {
+    const run = this.occupantQueue.then(job, job);
+    this.occupantQueue = run.catch(() => undefined);
+    return run;
   }
 
   private async addOccupant(record: IndividualRecord, species: SpeciesDef | undefined): Promise<void> {
@@ -727,7 +764,8 @@ export class TankScene {
       ph.root.userData.startOnSurface = true;
       root = ph.root;
     } else return;
-    if (this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); root.removeFromParent(); return; }
+    // (already there, or taken out while its model loaded: not added)
+    if (this.occupants.some((o) => o.record.id === record.id) || this.dropped.has(record.id)) { hero?.dispose(); root.removeFromParent(); return; }
     const driver = entry.create();
     const unsub = driver.onEvent((e) => this.onBehavior?.(e, record));
     this.scene.add(root);
@@ -739,7 +777,7 @@ export class TankScene {
       this.lightMeshesByCaustics(ms);
     }
     root.userData.occupantId = record.id;
-    this.occupants.push({ record, ind, driver, root, unsub, hero });
+    this.occupants.push({ record, species, ind, driver, root, unsub, hero });
   }
 
   /** Model materials are shared between instances, so the tank's copies get their own, lit by the caustics. */
@@ -760,6 +798,7 @@ export class TankScene {
   }
 
   removeOccupant(id: string): void {
+    this.dropped.add(id);
     const i = this.occupants.findIndex((o) => o.record.id === id);
     if (i < 0) return;
     const o = this.occupants[i];
@@ -798,6 +837,20 @@ export class TankScene {
     this.bubbleVel[i * 2 + 1] = Math.random() * 6.28;
   }
 
+  /** 超軽量: the ripples step at most twice a frame, the caustics are redrawn every other frame and the light
+   * shafts take half the steps */
+  private lite = false;
+  private causTick = 0;
+  private shaftMat: ShaderMaterial | null = null;
+  setLite(on: boolean): void {
+    this.lite = on;
+    const m = this.shaftMat;
+    if (m && ('SHAFT_N' in m.defines) !== on) {
+      if (on) m.defines.SHAFT_N = 4; else delete m.defines.SHAFT_N;
+      m.needsUpdate = true;
+    }
+  }
+
   private stepWater(dt: number): void {
     this.time += dt;
     this.U.uTime.value = this.time;
@@ -826,14 +879,18 @@ export class TankScene {
     for (this.gustAcc += dt * 0.4 * this.turb; this.gustAcc >= 1; this.gustAcc -= 1)
       this.addRipple((Math.random() * 2 - 1) * TX * 0.9, (Math.random() * 2 - 1) * TZ * 0.9, (Math.random() < 0.5 ? -1 : 1) * 0.3, 0.02 + 0.03 * Math.random());
     if (!this.gpu || !this.sim || !this.surfMat || !this.surfRT || !this.causRT) { this.drops.length = 0; return; }
-    // the ripple simulation steps at 60 Hz, taking up to 8 waiting splashes per step
-    for (this.simAcc = Math.min(this.simAcc + dt, 0.1); this.simAcc >= 1 / 60; this.simAcc -= 1 / 60) {
+    // the ripple simulation steps at 60 Hz, taking up to 8 waiting splashes per step (a slow frame catches up with a
+    // few steps; the lite tank takes two at most and lets the rest go)
+    this.simAcc = Math.min(this.simAcc + dt, 0.1);
+    for (let steps = 0; this.simAcc >= 1 / 60 && steps < (this.lite ? 2 : 6); steps++, this.simAcc -= 1 / 60) {
       for (let i = 0; i < 8; i++) this.dropU.set(this.drops.length ? this.drops.shift()! : [0, 0, 1, 0], i * 4);
       this.gpu.compute();
     }
+    if (this.lite) this.simAcc = Math.min(this.simAcc, 1 / 60);
     this.U.uSim.value = this.gpu.getCurrentRenderTarget(this.sim).texture;
     this.gpu.doRenderTarget(this.surfMat, this.surfRT);
-    // redraw the caustics
+    // redraw the caustics (the lite tank every other frame)
+    if (this.lite && (this.causTick++ & 1)) return;
     const gl = this.gl, prevRT = gl.getRenderTarget(), prevClear = new Color(), prevAlpha = gl.getClearAlpha();
     gl.getClearColor(prevClear);
     gl.setRenderTarget(this.causRT);

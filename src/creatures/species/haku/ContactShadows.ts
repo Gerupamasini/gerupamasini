@@ -15,6 +15,9 @@ import {
 
 const CAPACITY = 512;
 
+/** the presets switch the contact shadows off altogether (超軽量): placed shadows are hidden instead */
+export const CONTACT_SHADOWS = { enabled: true };
+
 const VERT = /* glsl */ `
 attribute vec2 aShadow;   // opacity, softness
 varying vec2 vUv;
@@ -87,8 +90,12 @@ export class ShadowLayer {
     this.free.push(i);
   }
 
+  /** which slots hold a placed shadow (a hidden slot is not uploaded again) */
+  private readonly shown = new Uint8Array(CAPACITY);
+
   hide(i: number): void {
-    if (i < 0) return;
+    if (i < 0 || !this.shown[i]) return;
+    this.shown[i] = 0;
     this.mesh.setMatrixAt(i, this.m.makeScale(0, 0, 0));
     this.params.setXY(i, 0, 0);
     this.mesh.instanceMatrix.needsUpdate = true;
@@ -98,6 +105,10 @@ export class ShadowLayer {
   /** place the shadow of slot i: centre on the bed, heading, length and width (m), opacity and softness (0..1) */
   set(i: number, x: number, y: number, z: number, heading: number, length: number, width: number, opacity: number, softness: number): void {
     if (i < 0) return;
+    // (switched off by the preset: the placed shadows go, and the layer is not drawn at all)
+    if (!CONTACT_SHADOWS.enabled) { this.hide(i); this.mesh.visible = false; return; }
+    this.mesh.visible = true;
+    this.shown[i] = 1;
     this.q.setFromAxisAngle(this.up, heading);
     this.m.compose(this.p.set(x, y, z), this.q, this.sc.set(width, 1, length));
     this.mesh.setMatrixAt(i, this.m);

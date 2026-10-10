@@ -22,6 +22,7 @@ import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
+import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import type { SpeciesDef, ToolDef } from '../data/schemas';
@@ -190,7 +191,11 @@ export class App {
   // ------------------------------------------------------------------ boot
   async start(): Promise<void> {
     render(h(Root, { app: this }), this.uiRoot);
-    this.settings = await loadSettings();
+    // the first run on an integrated or software GPU (a laptop) starts on 低; the player is told, and may change it
+    let fresh = false;
+    this.settings = await loadSettings(() => { fresh = true; return this.renderer.weakGpu ? { quality: 'low' } : {}; });
+    const autoLow = fresh && this.settings.quality === 'low';
+    if (fresh) void saveSettings(this.settings);   // (so the first run's choice, and its notice, happen once)
     ui.settings.value = this.settings;
     this.renderer.setQuality(this.settings.quality);
     if (!this.renderer.caps.webgl2) {
@@ -202,6 +207,7 @@ export class App {
     this.data = await loadGameData((frac, label) => { ui.loading.value = { frac: 0.02 + frac * 0.3, label }; });
     ui.strings.value = this.data.strings;
     document.title = t('app.title');
+    if (autoLow) toast(t('toast.autoQuality'), 'info', 9000);
     // a stale page (the host caches index.html for a while) learns about the newer deploy and offers a reload
     const poll = async () => { const nb = await checkForNewBuild(); if (nb) ui.newBuild.value = nb; };
     setTimeout(() => void poll(), 4000);
@@ -216,6 +222,7 @@ export class App {
     this.tank.onBehavior = (e, rec) => { if (this.mode === 'home') this.encyclopedia.onBehavior(rec.speciesId, e.behaviorId, this.clock.nowGame()); };
     if (this.renderer.caps.floatRT) this.hero = new HeroPipeline(this.renderer.gl);
     if (this.renderer.caps.floatRT) this.field = new FieldRenderer(this.renderer.gl);
+    this.applyPreset();
     this.applyHeroSetting();
     if (new URLSearchParams(location.search).has('debug')) ui.debug.value = true;
     const existing = await this.saveStore.load();
@@ -348,6 +355,8 @@ export class App {
       this.onResize();
       performance.mark('world:ready');
     }
+    this.fieldSince = performance.now();
+    this.slowSecs = 0;
     this.tank.deactivate();
     // away long enough for the tide to have moved: the population is rebuilt for the water as it is now
     if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.creatures?.resetPopulation(null);
@@ -400,7 +409,13 @@ export class App {
     this.settings = { ...this.settings, ...patch };
     ui.settings.value = this.settings;
     this.world?.water.setPolarized(this.settings.sunglasses);
+    const offBefore = (this.renderer.preset.msaa > 0) !== this.renderer.canvasMsaa;
     this.renderer.setQuality(this.settings.quality);
+    this.applyPreset();
+    // the canvas's own multisampling is fixed when the page opens: a move away from what it was made with is said
+    // to wait for the next load (once; moving back needs no reload)
+    const offAfter = (this.renderer.preset.msaa > 0) !== this.renderer.canvasMsaa;
+    if (offAfter && !offBefore) toast(t('toast.reloadHint'), 'info', 8000);
     this.world?.terrain.setDetail(this.renderer.preset.surfaceDetail > 0);
     this.world?.water.setMirror(this.renderer.preset.mirror);
     this.world?.water.setSurfSteps(this.renderer.preset.surfSteps);
@@ -414,11 +429,32 @@ export class App {
     await saveSettings(this.settings);
   }
 
+  /** The preset's knobs that live outside the renderer: the field buffer, the water tiers, the tank, the contact shadows. */
+  private applyPreset(): void {
+    const p = this.renderer.preset;
+    this.field?.setSamples(p.msaa);
+    this.hero?.setSamples(p.msaa);
+    this.world?.water.setLite(p.water === 'lite');
+    this.world?.terrain.setLite(p.water === 'lite');
+    this.tank?.setLite(p.tankWater === 'lite');
+    this.creatures?.setPreset(p);
+    CONTACT_SHADOWS.enabled = p.contactShadows;
+  }
+
+  private heroOn = false;
+
   private applyHeroSetting(): void {
     const hero = this.hero;
-    const fn = hero && this.settings.heroMaterials ? (model: Parameters<typeof HeroInstance.apply>[0]) => HeroInstance.apply(model, hero.shared) : null;
+    const fn = hero && this.settings.heroMaterials && this.renderer.preset.hero ? (model: Parameters<typeof HeroInstance.apply>[0]) => HeroInstance.apply(model, hero.shared) : null;
     if (this.creatures) this.creatures.heroApply = fn;
     if (this.tank) this.tank.heroApply = fn;
+    // switched on or off mid-game: what already carries (or lacks) the materials is rebuilt
+    const on = !!fn;
+    if (on !== this.heroOn) {
+      this.heroOn = on;
+      this.creatures?.dropHeroViews();
+      if (this.tank) void this.tank.refreshHero();
+    }
   }
 
   private heroLightingFromWorld(anchor: Vector3): HeroLighting {
@@ -621,12 +657,13 @@ export class App {
     ui.homePanel.value = panel;
   }
 
-  forceSpawn(): void {
+  /** debug: everything the rules allow, around the player (`share`: the quality tier's share of it, for measuring) */
+  forceSpawn(share = false): void {
     const w = this.world, p = this.player, c = this.creatures;
     if (!w || !p || !c) return;
     const gameMs = this.clock.nowGame();
     const env: SpawnEnv = { tod: w.tod, season: w.season, tidePhase: this.tidePhase(), mapId: w.map.id, gameMs, day: Math.floor(gameMs / 86400000) };
-    const n = c.forceSpawn(p.position, env);
+    const n = c.forceSpawn(p.position, env, share ? this.renderer.preset.creatureScale : 1);
     toast(`${n} 体をスポーン`, 'info');
   }
 
@@ -1301,6 +1338,10 @@ export class App {
   }
 
   private frameErrors = 0;
+  private slowSecs = 0;
+  private slowHinted = false;
+  /** when the flat was last entered (the first seconds there are the models' first draws, not the frame rate) */
+  private fieldSince = 0;
 
   private step(now: number): void {
     const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
@@ -1433,6 +1474,11 @@ export class App {
     }
 
     this.fpsAcc += dt; this.fpsCount++;
+    // a flat that crawls: say once where the lighter picture is (after the first seconds, which are the models' first draws)
+    if (mode === 'field' && now - this.fieldSince > 6000 && !this.slowHinted && this.settings.quality !== 'minimal') {
+      this.slowSecs = dt >= 1 / 20 ? this.slowSecs + dt : Math.max(0, this.slowSecs - dt * 0.5);
+      if (this.slowSecs > 8) { this.slowHinted = true; toast(t('toast.slowHint'), 'info', 9000); }
+    }
     this.hudAcc += dt;
     if (this.hudAcc >= 1 / HUD_HZ) { this.updateHud(gameMs); this.hudAcc = 0; }
     this.saveAcc += dt;

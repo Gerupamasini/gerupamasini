@@ -1,7 +1,7 @@
 import { h } from 'preact';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
-import type { Quality } from '../../core/Settings';
+import { QUALITY_ORDER } from '../../core/Settings';
 import { CardHead, KeyHint } from '../common/Icons';
 import { buildLabel } from '../../core/Build';
 
@@ -19,7 +19,7 @@ export function Menu({ app }: { app: App }) {
         <div class="setting">
           <span class="label">{t('menu.quality')}</span>
           <div class="seg">
-            {(['low', 'mid', 'high'] as Quality[]).map((q) => (
+            {QUALITY_ORDER.map((q) => (
               <button key={q} class={s.quality === q ? 'on' : ''} onClick={() => void app.updateSettings({ quality: q })}>{t(`menu.quality.${q}`)}</button>
             ))}
           </div>
