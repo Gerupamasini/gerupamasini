@@ -79,6 +79,14 @@ export class IshigareiDriver implements Driver {
     return m.root;
   }
 
+  /** The species' materials in every tier (the skin, the far skin, the fins, the eyes) on a model that is never drawn: DriverEntry.keep. */
+  static keep(parent: Object3D): { dispose(): void } {
+    const m = buildModel(new IshigareiLook(lookSpecFor('keep')));
+    m.look.ground.off();
+    parent.add(m.root);
+    return { dispose: () => { m.root.removeFromParent(); disposeModel(m); } };
+  }
+
   attach(root: Object3D, individual: Individual): void {
     this.root = root;
     this.ind = individual;

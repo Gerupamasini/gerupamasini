@@ -68,6 +68,13 @@ export class AramushiroDriver implements Driver {
     return m.root;
   }
 
+  /** The species' materials (the shell and the soft parts, shared by every tier) on a model that is never drawn: DriverEntry.keep. */
+  static keep(parent: Object3D): { dispose(): void } {
+    const m = buildModel(lookFor(0, 0.5), 1);
+    parent.add(m.root);
+    return { dispose: () => { m.root.removeFromParent(); m.dispose(); } };
+  }
+
   attach(root: Object3D, individual: Individual): void {
     this.root = root;
     this.ind = individual;

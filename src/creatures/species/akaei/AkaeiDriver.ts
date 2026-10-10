@@ -192,6 +192,19 @@ export class AkaeiDriver implements Driver {
     return holder;
   }
 
+  /**
+   * The species' materials in both variants (the near and the far skin, eyes and sting, the mouth's interior) and the
+   * sand effects' shaders (the puffs, the contact shadow, an imprint), on models that are never drawn: DriverEntry.keep.
+   */
+  static keep(parent: Object3D): { dispose(): void } {
+    const b = akaeiBuild({ id: 'keep', length_mm: 800 });
+    const models = [new AkaeiModel(b.look, 1), new AkaeiModel(b.look, 2)];
+    for (const m of models) parent.add(m.root);
+    const fx = new SandFX(parent);
+    fx.imprint(0, 0, 0, 0.3, 0.5, () => 0);
+    return { dispose: () => { for (const m of models) { m.root.removeFromParent(); m.dispose(); } fx.dispose(); } };
+  }
+
   attach(root: Object3D, individual: Individual): void {
     this.holder = root;
     this.ind = individual;

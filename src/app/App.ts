@@ -368,6 +368,9 @@ export class App {
       this.creatures.setMeadow(this.world.amamo);
       this.creatures.setScent(this.world.carrion);
       await this.creatures.preload();
+      // the procedural species' shaders compile here too, and stay compiled while the flat lives (DriverEntry.keep)
+      ui.loading.value = { frac: 0.75, label: t('loading.shaders') };
+      await this.field?.compileKept(this.creatures.keptModels(), this.camera, this.world.scene);
       performance.mark('world:creatures');
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
@@ -485,6 +488,8 @@ export class App {
     CONTACT_SHADOWS.enabled = p.contactShadows;
     AKAEI_DETAIL.viewScale = p.viewScale;
     AKAEI_DETAIL.allowLod0 = p.lod1Count > 0;
+    // the kept models' programs follow the preset's variant (the shadows on or off change the shaders)
+    if (this.world && this.creatures) void this.field?.compileKept(this.creatures.keptModels(), this.camera, this.world.scene);
   }
 
   private heroOn = false;
