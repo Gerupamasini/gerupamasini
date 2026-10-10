@@ -7,7 +7,7 @@
 // Seen from above with the head pointing right, the dorsal fin is on top — as in every photograph of the
 // eyed side.
 //
-// Proportions are taken from the reference photographs (docs/REFERENCE_NOTES.md): juvenile of TL 55–95 mm,
+// Proportions are taken from the reference photographs (measured on the 70 photos listed in docs/models/ishigarei/README.md): juvenile of TL 55–95 mm,
 // SL ≈ 0.82 TL, body depth ≈ 0.45 SL, head ≈ 0.25 SL, dorsal fin from above the upper eye, anal fin from
 // behind the pelvic fins, small eyed-side pectoral, rounded caudal fin, both eyes on raised turrets close
 // together on the right side, the upper (migrated) eye on the dorsal profile and a little behind the lower

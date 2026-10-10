@@ -82,7 +82,7 @@ Akaei               Group（CreatureSystem のホルダー: 位置・向き・�
 | LOD1 | 15,304 | 20〜22 m まで | 同じ部位を粗く、砂煙あり |
 | LOD2 | 1,690 | 視程 35 m まで | 体盤・尾・棘・眼のみ、標準マテリアル（凹凸なし）、噴水孔・口は皮膚の描き込み、尾 1 反復、砂煙なし |
 
-ジオメトリは LOD ごとに 1 度だけ作って全個体で共有し、個体が持つのは骨格（130 ボーン）とマテリアルだけです。10 m 以内では毎フレーム、その先は 2 フレームおき（`DRIVERS.akaei.smoothNear`）に更新します。接地影は 10×10 のパッチを地形に沿わせて乗算で描くので、影の解像度が粗い品質設定や影なしでも体が浮きません。
+ジオメトリは LOD ごとに 1 度だけ作って全個体で共有し、個体が持つのは骨格（130 ボーン）とマテリアルだけです。10 m 以内では毎フレーム、その先は 2 フレームおき（`DRIVERS.akaei.nearDistance` 10 m）に更新します。接地影は 10×10 のパッチを地形に沿わせて乗算で描くので、影の解像度が粗い品質設定や影なしでも体が浮きません。
 
 ## 6. 行動
 
@@ -101,8 +101,9 @@ Akaei               Group（CreatureSystem のホルダー: 位置・向き・�
 | 既存 | 変更 |
 |---|---|
 | `public/data/species/hemitrygon_akajei.json`、`behaviors/ray_benthic.json`、`manifest.json` | 種と行動ツリーの追加。春〜秋の浅い砂・砂泥底と澪（0.12〜1.6 m）、夏の夕方〜夜の上げ潮に浅場へ。網では捕れない（`collectable: false`） |
-| `src/creatures/drivers/index.ts` | `akaei` ドライバ（ホルダー、図鑑プレビュー、`smoothNear`） |
-| `CreatureSystem` | `Floor.sampleAt` を渡す（砂煙と砂の色を底質に合わせる）。`smoothNear` のドライバは 10 m 以内で毎フレーム更新 |
+| `src/creatures/drivers/index.ts` | `akaei` ドライバ（ホルダー、図鑑プレビュー、`nearDistance: 10`） |
+| `CreatureSystem` | 変更なし: 本流の `Floor.sampleAt`（砂煙と砂の色を底質に合わせる）と `nearDistance`（10 m 以内で毎フレーム更新）をそのまま使う |
+| 出現（28 回目） | 葛西: 満潮・上げ潮の砂浅場（15 cm〜2 m）、満潮にかぶった摂餌痕のセル、澪筋（底質 `channel`）、夏の夕方〜夜の上げ潮。走水: 沖の砂底（12 cm〜2 m）に 1〜3 尾。走水には摂餌痕（地形）は無く、掘り跡は一時的な演出だけ |
 | `Individual.minDepthFor`、種スキーマ `size.minDepthFraction` | 平たく尾の長いエイは全長の 7 % の水深で足りる（既定は 15 %） |
 | 水・地形・潮汐 | 変更なし。高さは `Floor.heightAt`、水面は `Floor.waterAt`（潮位と潮だまり）、浅くなれば既存の `keepInWater` が深みへ戻す |
 

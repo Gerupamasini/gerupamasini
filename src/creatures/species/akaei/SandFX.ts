@@ -270,6 +270,7 @@ export class SandFX {
     if (maxIdx > 0) { geo.getAttribute('position').needsUpdate = true; geo.getAttribute('aPuff').needsUpdate = true; }
     for (let k = this.imprints.length - 1; k >= 0; k--) {
       const im = this.imprints[k];
+      im.mesh.visible = CONTACT_SHADOWS.enabled;
       im.age += dt;
       const fade = 1 - Math.max(0, (im.age - im.life * 0.5) / (im.life * 0.5));
       im.mat.uniforms.uAmount.value = im.strength * Math.max(0, fade);

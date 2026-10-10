@@ -118,7 +118,9 @@ describe('走水: who lives where', () => {
   it('puts the right animals at each hotspot', () => {
     expect(here('eelgrass_edge')).toEqual(expect.arrayContaining(['マハゼ', 'ヒメハゼ', 'シラタエビ', 'イソスジエビ', 'ユビナガホンヤドカリ', 'ボラ', 'アミメハギ', 'ヨウジウオ']));
     expect(here('eelgrass')).toEqual(expect.arrayContaining(['シラタエビ', 'イソスジエビ', 'アミメハギ', 'ヨウジウオ']));
-    expect(here('bare')).toEqual(expect.arrayContaining(['マハゼ', 'ヒメハゼ', 'アラムシロ']));
+    expect(here('bare')).toEqual(expect.arrayContaining(['マハゼ', 'ヒメハゼ', 'アラムシロ', 'イシガレイ', 'アカエイ']));
+    expect(here('shallow')).toEqual(expect.arrayContaining(['イシガレイ', 'アカエイ']));
+    expect(here('deep')).toEqual(expect.arrayContaining(['アカエイ']));
     expect([...here('small_pool'), ...here('pool')]).toEqual(expect.arrayContaining(['ユビナガホンヤドカリ', 'アラムシロ']));
     // the clam flat (shallow water and the sand it leaves at low water)
     expect([...here('shallow'), ...here('exposed_sand')]).toEqual(expect.arrayContaining(['ハマグリ', 'ユビナガホンヤドカリ']));
