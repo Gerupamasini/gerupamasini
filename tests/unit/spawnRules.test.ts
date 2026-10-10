@@ -16,7 +16,8 @@ describe('spawn rules can fire where they are declared', () => {
     }
   });
   it('an eelgrass-only rule is not declared for 葛西, a pool-only rule not for 走水', () => {
-    const grass = new Set(['bare', 'eelgrass', 'eelgrass_edge']), pools = new Set(['pool', 'small_pool']);
+    // ('small_pool' can also be a small depression or a pit, so only the big pools are 葛西-only)
+    const grass = new Set(['bare', 'eelgrass', 'eelgrass_edge']), pools = new Set(['pool']);
     for (const sp of species) for (const [i, r] of sp.spawn.entries()) {
       if (r.tags.every((t) => grass.has(t))) expect(r.maps ?? [], `${sp.id} rule ${i}`).not.toContain('kasai_west');
       if (r.tags.every((t) => pools.has(t))) expect(r.maps ?? [], `${sp.id} rule ${i}`).not.toContain('hashirimizu');
