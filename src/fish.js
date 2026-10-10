@@ -569,7 +569,7 @@ float spineSlope(float s){
   float dA = uAmp * (0.5*s + 1.2*max(s-0.45,0.));
   float ph = uPhase - k*s;
   float st = s - 0.36;
-  float flex = st < 0.0 ? 0.6 : 1.0 + 0.6 * st;
+  float flex = st < 0.0 ? 0.85 : 1.0 + 0.35 * st;   // a turn bends the whole fish into a C (head swings into it too), not just the tail
   float dTurn = uTurn * 2.0 * st * flex;
   return dA*sin(ph) - A*k*cos(ph) + dTurn;
 }

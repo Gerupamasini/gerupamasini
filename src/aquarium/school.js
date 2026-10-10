@@ -147,9 +147,16 @@ export class Butterflyfish {
     let dy = wantYaw - this.yaw;
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     // pectoral turning is slow and smooth; big course changes at speed get a tail kick
-    const maxTurn = wantSpeed < 0.02 ? 0.9 : 1.3;
-    const tr = THREE.MathUtils.clamp(dy * 1.8, -maxTurn, maxTurn);
-    this.turnRate += (tr - this.turnRate) * Math.min(1, dt * 2.0);
+    const maxTurn = wantSpeed < 0.02 ? 1.0 : 1.6;
+    const tr = THREE.MathUtils.clamp(dy * 2.0, -maxTurn, maxTurn);
+    const prevRate = this.turnRate;
+    this.turnRate += (tr - this.turnRate) * Math.min(1, dt * 2.2);
+    // the body curls into the turn: proportional to the turn rate, with an extra flex while
+    // the turn is starting (the head swings first and the tail follows), smoothed so the
+    // body lags the heading a little like a real spine
+    const yawAcc = (this.turnRate - prevRate) / Math.max(dt, 1e-4);
+    const bendT = THREE.MathUtils.clamp(-(this.turnRate * 0.3 + yawAcc * 0.08), -0.42, 0.42);
+    this.bend = (this.bend || 0) + (bendT - (this.bend || 0)) * Math.min(1, dt * 4);
     this.yaw += this.turnRate * dt;
     // pitch: level while cruising; tips head-down (up to ~40 deg) to pick at the substrate
     let wantPitch = Math.asin(THREE.MathUtils.clamp(look.y, -1, 1));
@@ -192,7 +199,7 @@ export class Butterflyfish {
     this.model.update(dt, this.t, {
       amp: 0.006 + 0.004 * Math.min(sp, 1) + 0.055 * b * b,     // body nearly rigid except in bursts
       freq: 1.0 + 2.2 * b,
-      turn: THREE.MathUtils.clamp(-this.turnRate * 0.18, -0.3, 0.3),
+      turn: this.bend,
       pec, pecAmp, scull, finWave, brake,
     });
   }

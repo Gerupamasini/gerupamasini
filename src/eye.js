@@ -69,7 +69,10 @@ export function createFishEye({
     uPupilA: { value: pupilA }, uIrisA: { value: irisA }, uUpperAmt: { value: upperAmt },
     uPupAsp: { value: pupilAspect }, uAzMix: { value: azMix }, uAzV: { value: new THREE.Color(...azV) }, uAzH: { value: new THREE.Color(...azH) },
   };
-  const ballMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.35, clearcoat: 0.0, envMapIntensity: 0.4 });
+  // underwater the cornea and water have nearly the same refractive index (1.376 vs 1.333), so the
+  // eye shows almost no milky surface reflection: a deep black pupil and a dark, saturated iris
+  // with only a small crisp highlight from the lens
+  const ballMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.3, clearcoat: 0.0, envMapIntensity: 0.12, specularIntensity: 0.25 });
   patch(ballMat, 'eyeball');
   const prev = ballMat.onBeforeCompile;
   ballMat.onBeforeCompile = (sh, rr) => {
@@ -78,7 +81,8 @@ export function createFishEye({
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 eyeDir; varying vec3 vEyeDir;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEyeDir = eyeDir;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + EYE_GLSL)
-      .replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb *= eyeColor();');
+      .replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb *= eyeColor();')
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n{ vec3 dd = normalize(vEyeDir); float thq = acos(clamp(dd.z, -1.0, 1.0)); roughnessFactor = mix(0.12, roughnessFactor, smoothstep(uPupilA * 0.8, uPupilA * 1.1, thq)); }');   // glossy black lens in the pupil
   };
   const pk = ballMat.customProgramCacheKey?.bind(ballMat);
   ballMat.customProgramCacheKey = () => (pk ? pk() : '') + '|eyeball';
@@ -86,8 +90,9 @@ export function createFishEye({
   // cornea: a clear dome over the iris; mostly invisible except for its reflections
   const cg = new THREE.SphereGeometry(r * 1.035, 64, 32, 0, Math.PI * 2, 0, irisA * 1.15);
   cg.rotateX(Math.PI / 2); cg.applyMatrix4(matrix);
-  const cornea = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.06, roughness: 0.0, metalness: 0,
-    clearcoat: 1.0, clearcoatRoughness: 0.0, envMapIntensity: 1.6, depthWrite: false, specularIntensity: 1 });
+  // cornea: adds only its specular reflection (black base colour, additive), and weakly - no white veil
+  const cornea = new THREE.MeshPhysicalMaterial({ color: 0x000000, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, roughness: 0.04, metalness: 0,
+    clearcoat: 0.0, envMapIntensity: 0.35, depthWrite: false, specularIntensity: 0.45 });
   patch(cornea, 'cornea');
   const cm = new THREE.Mesh(cg, cornea); cm.renderOrder = 3;
   group.add(cm);
