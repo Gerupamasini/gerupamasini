@@ -61,6 +61,8 @@ const ramp = (t: number, a: number, b: number): number => smooth(a, b, t);
 export const PACE = { crawl: 0.05, food: 0.075, away: 0.06 };
 /** the scent: how far it carries down the current and in still water (m); the reading that turns a snail */
 export const SCENT = { reach: 2.0, still: 0.9, threshold: 0.12 };
+/** how deep a buried snail lies (shell heights, under the bed to the foot) */
+export const BURY = 0.6;
 /** a meal (s): 8–18 min */
 export const MEAL = { min: 480, max: 1080 };
 /** meat taken from a piece per second of feeding (share of the piece) */
@@ -96,6 +98,8 @@ export class Aramushiro {
   onEvent: ((id: string) => void) | null = null;
   /** marks to lay in the sand */
   readonly marks: TrailMark[] = [];
+  /** how long the siphon must be to reach a little above the sand from where it leaves the shell (share of its length; the driver measures it) */
+  siphonReach = 1;
   /** level of detail of the drawing (0 near … 2 far): less of the body is worked out far off */
   lod: 0 | 1 | 2 = 0;
 
@@ -437,7 +441,8 @@ export class Aramushiro {
 
   private burrowStep(dt: number, env: SnailEnv): void {
     this.pace = 0;
-    const depth = 0.66 * this.size;
+    // (just under the surface: the shell's top a millimetre or two down)
+    const depth = BURY * this.size;
     if (this.sub === 'dig') {
       this.digT += dt;
       // ploughing in, a burst of rocking at a time
@@ -628,7 +633,7 @@ export class Aramushiro {
         break;
       }
       case 'BURROW': {
-        const k = this.sink / (0.66 * this.size);
+        const k = this.sink / (BURY * this.size);
         const digging = this.sub === 'dig' || this.sub === 'emerge';
         const rock = digging ? Math.sin(this.digT * 5.2) * (0.5 + 0.5 * Math.sin(this.digT * 1.3)) : 0;
         w.dig = this.sub === 'buried' ? 1 : digging ? 0.6 + 0.4 * Math.max(0, Math.sin(this.digT * 1.3)) : 0;
@@ -642,6 +647,8 @@ export class Aramushiro {
         w.siphonPitch = REST.siphonPitch + (1.45 - REST.siphonPitch) * smooth(0.1, 0.6, k);
         w.siphonYaw = REST.siphonYaw + 0.2 * Math.sin(t * TAU * 0.05 + sd);
         w.siphonBend = 0.1;
+        // stretched up through the sand: only its mouth shows above it
+        w.siphonExt = Math.max(1, Math.min(1.7, this.siphonReach)) * smooth(0.0, 0.5, k) + (1 - smooth(0.0, 0.5, k));
         for (let i = 0; i < 2; i++) { w.tentExt[i] = 1 - 0.6 * smooth(0, 0.5, k); w.tentPitch[i] = -0.1; }
         w.retractHead = 0.6 * smooth(0.3, 0.9, k);
         if (this.clock < this.hideUntil) { w.retractTubes = 1; w.siphonExt = 0.15; }
@@ -706,7 +713,7 @@ export class Aramushiro {
     p.probBend += (w.probBend - p.probBend) * k(0.4);
     p.probPlane = w.probPlane;
     // the body goes nose-down into the sand as it digs
-    this.dig += ((this.state === 'BURROW' ? 0.22 * smooth(0, 0.4, this.sink / (0.66 * this.size)) : 0) - this.dig) * k(1.5);
+    this.dig += ((this.state === 'BURROW' ? 0.22 * smooth(0, 0.4, this.sink / (BURY * this.size)) : 0) - this.dig) * k(1.5);
     void env;
   }
 }
