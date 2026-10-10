@@ -2,6 +2,7 @@ import {
   BufferAttribute, BufferGeometry, Color, CustomBlending, DstColorFactor, Mesh, Points, ShaderMaterial, UniformsLib, UniformsUtils,
   Vector2, Vector3, ZeroFactor, type Object3D, type WebGLRenderer,
 } from 'three';
+import { CONTACT_SHADOWS } from '../haku/ContactShadows';
 
 /**
  * What a ray does to the sand around it:
@@ -213,7 +214,7 @@ export class SandFX {
   updateShadow(dt: number, x: number, z: number, heading: number, halfW: number, halfL: number, contact: number, ground: (x: number, z: number) => number, moving: boolean): void {
     this.shadowMat.uniforms.uStrength.value = 0.42 * contact;
     (this.shadowMat.uniforms.uShape.value as Vector2).set(0.35 + 0.5 * (1 - contact), 0.25);
-    this.shadow.visible = contact > 0.02;
+    this.shadow.visible = contact > 0.02 && CONTACT_SHADOWS.enabled;   // (超軽量 turns the contact shadows off)
     this.shadowTimer -= dt;
     if (!this.shadow.visible || (this.shadowTimer > 0 && !moving)) return;
     this.shadowTimer = 0.25;
