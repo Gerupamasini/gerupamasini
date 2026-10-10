@@ -1,6 +1,6 @@
 import { Group, Sphere, Vector3, type InstancedMesh, type PerspectiveCamera } from 'three';
 import { hashInts, Rng } from '../../core/Rng';
-import type { Quality } from '../../core/Settings';
+import type { QualityPreset } from '../../core/Settings';
 import type { Terrain } from '../Terrain';
 import { reflectInWater } from '../../render/Mirror';
 import { collisionSegments, RootCollisionWorld } from './collision';
@@ -14,10 +14,11 @@ export interface MangroveLayout {
   /** Metres in the same datum as Terrain. No fixed geography or invented tide data. */
   minGround?: number; maxGround?: number; minSpacing?: number;
 }
-export const MANGROVE_LOD: Record<Quality, readonly [number, number, number]> = { high: [11, 32, 180], mid: [8, 25, 145], low: [5, 18, 110], minimal: [4, 13, 80] };
-const NEAR_BUDGET: Record<Quality, number> = { high: 2, mid: 1, low: 1, minimal: 1 };
+type VegetationQuality = QualityPreset['vegetation'];
+export const MANGROVE_LOD: Record<VegetationQuality, readonly [number, number, number]> = { high: [11, 32, 180], mid: [8, 25, 145], low: [5, 18, 110], minimal: [4, 13, 80] };
+const NEAR_BUDGET: Record<VegetationQuality, number> = { high: 2, mid: 1, low: 1, minimal: 1 };
 /** the tiers that take the forest's lighter geometry and cast no shadow (超軽量 as 低) */
-const lite = (q: Quality): boolean => q === 'low' || q === 'minimal';
+const lite = (q: VegetationQuality): boolean => q === 'low' || q === 'minimal';
 interface Batch { specs: TreeSpec[]; bounds: Sphere; levels: Map<HirugiLod, Record<TreePart, InstancedMesh>> }
 
 /** Deterministic gap/edge/juvenile structure; no uniform rows or independent random dots. */
@@ -68,7 +69,7 @@ export class MangroveForest {
   readonly specs: TreeSpec[];
   private readonly batches: Batch[] = [];
   private readonly lods = new Map<number, number>();
-  private quality: Quality = 'mid';
+  private quality: VegetationQuality = 'mid';
   private elapsed = Infinity;
   private lastCamera = new Vector3(Infinity, Infinity, Infinity);
   private forcedLod: HirugiLod | null = null;
@@ -83,7 +84,7 @@ export class MangroveForest {
     }
     for (const specs of buckets.values()) this.batches.push({ specs, bounds: batchBounds(specs, this.kit), levels: new Map() });
   }
-  setQuality(q: Quality): void {
+  setQuality(q: VegetationQuality): void {
     if (lite(q) !== lite(this.quality)) {
       for (const batch of this.batches) {
         const far = batch.levels.get(2);

@@ -101,7 +101,7 @@ export function TideTable({ app }: { app: App }) {
           )}
           {[0, 6, 12, 18, 24].map((hh) => <text key={hh} x={Math.min(W - 10, Math.max(6, (hh / 24) * W))} y={H - 3} text-anchor="middle" class="axis">{hh}</text>)}
         </svg>
-        <p class="dim small pick-hint">{t('tidetable.pickHint')}</p>
+        <p class="dim small pick-hint">{t('tidetable.pickHint')}　潮位は平均海面を0cmとする天文予測です。</p>
         <div class="tide-extrema" aria-label="満潮・干潮の時刻">
           {day.extrema.map((e) => <button key={e.t} class={`btn tide-extremum ${e.kind}`} onClick={() => setPick(e.t)}>
             <span>{e.kind === 'high' ? t('hud.high') : t('hud.low')} <b class="num">{formatJst(e.t)}</b></span>
@@ -117,6 +117,10 @@ export function TideTable({ app }: { app: App }) {
             </button>; })}
           </div>
         </section></div>
+        <details class="tide-source small"><summary>潮汐データの出典・精度</summary>
+          <p><a href={app.tide.station.source?.url} target="_blank" rel="noreferrer">{app.tide.station.source?.name}</a></p>
+          <p>{app.tide.station.source?.note}</p>
+        </details>
         {calendar && <DateCalendar selected={sel} today={today} onSelect={selectDay} onClose={() => setCalendar(false)} />}
         {pick !== null && (
           <div class="tide-confirm" role="dialog" aria-label={t('ticket.confirmTitle')} onClick={(e) => { if (e.target === e.currentTarget) setPick(null); }}>

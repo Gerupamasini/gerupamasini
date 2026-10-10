@@ -57,7 +57,8 @@ export const MULTIPLE_EQUIPMENT = new Set<EquipmentCategory>(['ledLight', 'spong
 export const categoryLimit = (category: EquipmentCategory): number => MULTIPLE_EQUIPMENT.has(category) ? 4 : 1;
 
 export const INITIAL_GACHA_TICKETS = 10;
-export interface EquipmentCollection { version: 1; stock: Record<string, number>; draws: number; tickets: number }
+export const RESEARCH_PER_GACHA_TICKET = 100;
+export interface EquipmentCollection { version: 1; stock: Record<string, number>; draws: number; tickets: number; researchClaimed?: number }
 export const emptyEquipmentCollection = (): EquipmentCollection => ({ version: 1, stock: {}, draws: 0, tickets: INITIAL_GACHA_TICKETS });
 /** Initial items are always available; acquired items have real quantities for multiple placement. */
 export function ownedQuantity(collection: EquipmentCollection, id: string): number {
@@ -74,6 +75,7 @@ export function normalizeCollection(raw: unknown, legacyLayout?: EquipmentLayout
       if (equipmentItem(id)?.rarity !== 'initial' && equipmentItem(id) && Number.isFinite(count) && count >= 1) result.stock[id] = Math.min(9999, Math.floor(count));
     }
     result.draws = Number.isFinite(r.draws) ? Math.max(0, Math.floor(r.draws)) : 0;
+    if (Number.isSafeInteger(r.researchClaimed) && r.researchClaimed! >= 0) result.researchClaimed = r.researchClaimed;
     // Only saves without a ticket balance receive the welcome grant. A spent balance stays zero.
     if (Object.prototype.hasOwnProperty.call(r, 'tickets')) result.tickets = Number.isFinite(r.tickets) ? Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(r.tickets))) : 0;
   } else if (legacyLayout) {
@@ -93,6 +95,14 @@ export function ownedEquipmentLayout(layout: EquipmentLayout, collection: Equipm
   };
   const tank = choose(layout.tankItemId, 'tank'), stand = choose(layout.standItemId ?? (layout.stand === 'metal' ? 'stand-studio' : undefined), 'stand');
   return { ...layout, tankItemId: tank.id, standItemId: stand.id, stand: stand.stand!, devices: layout.devices.map((d) => ({ ...d, position: [...d.position], itemId: choose(d.itemId, d.kind).id })) };
+}
+
+/** Each research milestone pays once, including after spent tickets and reloads. */
+export function claimResearchTickets(collection: EquipmentCollection, research: number): { collection: EquipmentCollection; awarded: number } {
+  if (!Number.isFinite(research) || research < 0) return { collection, awarded: 0 };
+  const earned = Math.floor(research / RESEARCH_PER_GACHA_TICKET);
+  const awarded = Math.max(0, earned - (collection.researchClaimed ?? 0));
+  return awarded ? { collection: { ...collection, tickets: Math.min(Number.MAX_SAFE_INTEGER, collection.tickets + awarded), researchClaimed: earned }, awarded } : { collection, awarded: 0 };
 }
 
 export const GACHA_TICKET_COST = 1;

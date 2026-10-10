@@ -1,12 +1,14 @@
 import { get, set } from 'idb-keyval';
 
 export type Quality = 'minimal' | 'low' | 'mid' | 'high';
-/** the levels in order, lightest first (the menu lists them so) */
 export const QUALITY_ORDER: Quality[] = ['minimal', 'low', 'mid', 'high'];
+export const QUALITY_LABELS: Record<Quality, string> = { minimal: '超軽量', low: '低', mid: '中', high: '高' };
 
 export interface SettingsData {
   version: 1;
   quality: Quality;
+  homeQuality: Quality;
+  fieldQuality: Quality;
   mouseSensitivity: number;
   invertY: boolean;
   volume: number;
@@ -20,6 +22,8 @@ export interface SettingsData {
 export const DEFAULT_SETTINGS: SettingsData = {
   version: 1,
   quality: 'mid',
+  homeQuality: 'mid',
+  fieldQuality: 'mid',
   mouseSensitivity: 1,
   invertY: false,
   volume: 0.8,
@@ -38,6 +42,8 @@ export interface QualityPreset {
   surfaceDetail: number;
   shadowMapSize: number;
   post: boolean;
+  modelTier: 'lod2' | 'lod1' | 'hero';
+  tankWaterHz: number;
   creatureScale: number;
   lod1Count: number;
   /** アマモ beds: how many shoots, how far each detail tier reaches, which tiers cast shadows (MEADOW_QUALITY) */
@@ -68,32 +74,47 @@ export interface QualityPreset {
 export const QUALITY_PRESETS: Record<Quality, QualityPreset> = {
   // (the 3D view renders at most at these device-pixel ratios: on a high-density screen mid draws at 1×, about half
   // the pixels of 1.5×; the water, the sand and the surf are per-pixel work)
-  // 超軽量: for a laptop's integrated GPU — two thirds of the resolution (about 45 % of the pixels), no multisampling, the lite water, few animals
-  // drawn close only, a thin meadow, a small reef, the tank's water at half rate, no hero materials
-  minimal: { maxDpr: 0.67, maxPixels: 0.9e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.35, lod1Count: 0, surfaceDetail: 0, vegetation: 'minimal', mirror: 0, surfSteps: 0, msaa: 0, water: 'lite', viewScale: 0.6, contactShadows: false, oysters: 2000, tankWater: 'lite', hero: false },
-  low: { maxDpr: 1, maxPixels: 1.6e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, surfaceDetail: 0, vegetation: 'low', mirror: 0, surfSteps: 0, msaa: 0, water: 'full', viewScale: 0.85, contactShadows: true, oysters: 5000, tankWater: 'full', hero: true },
-  mid: { maxDpr: 1, maxPixels: 3.0e6, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, surfaceDetail: 1, vegetation: 'mid', mirror: 0.4, surfSteps: 12, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, oysters: 12000, tankWater: 'full', hero: true },
-  high: { maxDpr: 1.5, maxPixels: 6.0e6, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, surfaceDetail: 1, vegetation: 'high', mirror: 0.5, surfSteps: 16, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, oysters: 12000, tankWater: 'full', hero: true },
+  minimal: { maxDpr: 0.67, maxPixels: 0.9e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.35, lod1Count: 0, surfaceDetail: 0, vegetation: 'minimal', mirror: 0, surfSteps: 0, msaa: 0, water: 'lite', viewScale: 0.6, contactShadows: false, oysters: 2000, tankWater: 'lite', hero: false, modelTier: 'lod2', tankWaterHz: 30 },
+  low: { maxDpr: 1, maxPixels: 1.6e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, surfaceDetail: 0, vegetation: 'low', mirror: 0, surfSteps: 0, msaa: 0, water: 'full', viewScale: 0.85, contactShadows: true, oysters: 5000, tankWater: 'full', hero: true, modelTier: 'lod1', tankWaterHz: 30 },
+  mid: { maxDpr: 1, maxPixels: 3.0e6, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, surfaceDetail: 1, vegetation: 'mid', mirror: 0.4, surfSteps: 12, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60 },
+  high: { maxDpr: 1.5, maxPixels: 6.0e6, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, surfaceDetail: 1, vegetation: 'high', mirror: 0.5, surfSteps: 16, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60 },
 };
 
 const KEY = 'settings';
 
-/** The saved settings over the defaults (`defaults`: this device's, under what is saved; `firstRun`: what a run
- * without any saved settings starts from, the quality tier the machine's GPU suggests). */
+/** Migrate the old single quality setting, and keep corrupt settings from breaking the menu. */
+export function normalizeSettings(raw: unknown, defaults: Partial<SettingsData> = {}): SettingsData {
+  const s = raw && typeof raw === 'object' ? raw as Partial<SettingsData> : {};
+  const validQuality = (q: unknown, fallback: Quality): Quality => q === 'minimum' ? 'minimal' : typeof q === 'string' && Object.hasOwn(QUALITY_PRESETS, q) ? q as Quality : fallback;
+  const base = validQuality(defaults.quality, DEFAULT_SETTINGS.quality);
+  const legacy = validQuality(s.quality, base);
+  const bounded = (v: unknown, fallback: number, min: number, max: number) => typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
+  return {
+    version: 1, quality: legacy,
+    homeQuality: validQuality(s.homeQuality, validQuality(defaults.homeQuality, legacy)),
+    fieldQuality: validQuality(s.fieldQuality, validQuality(defaults.fieldQuality, legacy)),
+    mouseSensitivity: bounded(s.mouseSensitivity, DEFAULT_SETTINGS.mouseSensitivity, 0.3, 10),
+    eyeHeight: bounded(s.eyeHeight, DEFAULT_SETTINGS.eyeHeight, 1.1, 1.9),
+    volume: bounded(s.volume, DEFAULT_SETTINGS.volume, 0, 1),
+    invertY: typeof s.invertY === 'boolean' ? s.invertY : DEFAULT_SETTINGS.invertY,
+    heroMaterials: typeof s.heroMaterials === 'boolean' ? s.heroMaterials : DEFAULT_SETTINGS.heroMaterials,
+    sunglasses: typeof s.sunglasses === 'boolean' ? s.sunglasses : DEFAULT_SETTINGS.sunglasses,
+  };
+}
+
 export async function loadSettings(defaults: Partial<SettingsData> = {}, firstRun?: () => Partial<SettingsData>): Promise<SettingsData> {
   try {
     const s = (await get(KEY)) as Partial<SettingsData> | undefined;
-    const out = { ...DEFAULT_SETTINGS, ...defaults, ...(s ?? firstRun?.() ?? {}) };
-    if (!(out.quality in QUALITY_PRESETS)) out.quality = DEFAULT_SETTINGS.quality;
-    mirrorQuality(out.quality);
+    const out = normalizeSettings(s ?? firstRun?.(), defaults);
+    mirrorQuality(out);
     return out;
   } catch {
-    return { ...DEFAULT_SETTINGS, ...defaults, ...(firstRun?.() ?? {}) };
+    return normalizeSettings(firstRun?.(), defaults);
   }
 }
 
 export async function saveSettings(s: SettingsData): Promise<void> {
-  mirrorQuality(s.quality);
+  mirrorQuality(s);
   try {
     await set(KEY, s);
   } catch (e) {
@@ -105,7 +126,9 @@ const QUALITY_MIRROR = 'higata.quality';
 
 /** The quality is mirrored synchronously (localStorage) for what must be decided before the saved settings arrive:
  * the canvas's own context attributes, fixed at creation. */
-function mirrorQuality(q: Quality): void {
+function mirrorQuality(s: SettingsData): void {
+  // One canvas serves both scenes. A scene with no MSAA must not inherit canvas MSAA from the other scene.
+  const q = QUALITY_ORDER[Math.min(QUALITY_ORDER.indexOf(s.homeQuality), QUALITY_ORDER.indexOf(s.fieldQuality))];
   try { localStorage.setItem(QUALITY_MIRROR, q); } catch { /* private mode: the renderer takes the default */ }
 }
 
@@ -113,7 +136,8 @@ function mirrorQuality(q: Quality): void {
 export function savedQualityHint(): Quality {
   try {
     const q = localStorage.getItem(QUALITY_MIRROR);
-    if (q && q in QUALITY_PRESETS) return q as Quality;
+    if (q === 'minimum') return 'minimal';
+    if (q && Object.hasOwn(QUALITY_PRESETS, q)) return q as Quality;
   } catch { /* no storage */ }
   return DEFAULT_SETTINGS.quality;
 }

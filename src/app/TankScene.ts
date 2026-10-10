@@ -23,6 +23,7 @@ import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type Tan
 import { Group } from 'three';
 import { AquariumEquipment } from '../aquarium';
 import { ToolShelf, type ShelfTool } from './ToolShelf';
+import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 
 const UP = new Vector3(0, 1, 0);
 
@@ -241,6 +242,12 @@ export class TankScene {
   private readonly dropU = new Float32Array(32);
   private readonly drops: [number, number, number, number][] = [];
   private simAcc = 0;
+  private waterAcc = 0;
+  private preset = QUALITY_PRESETS.mid;
+  private occupantGeneration = 0;
+  private occupantRecords: IndividualRecord[] = [];
+  private speciesLookup: ((id: string) => SpeciesDef | undefined) | null = null;
+  private readonly flatWater: DataTexture;
   private gustAcc = 0;
   waves_ = 0.8;
   turb = 0.5;
@@ -302,6 +309,7 @@ export class TankScene {
     const floatOK = gl.capabilities.isWebGL2 && (gl.extensions.has('EXT_color_buffer_float') || gl.extensions.has('EXT_color_buffer_half_float'));
     const zero = new DataTexture(new Float32Array(4), 1, 1, RGBAFormat, FloatType);
     zero.needsUpdate = true;
+    this.flatWater = zero;
     this.U = {
       uLampPosition: { value: new Vector3(0, W_LAMP_Y, 0) }, uLampAxis: { value: new Vector3(1, 0, 0) },
       uJets: { value: this.jetU }, uJetValues: { value: this.jetValues },
@@ -721,47 +729,40 @@ export class TankScene {
   }
 
   /** Make the tank hold exactly these records (adds and removes as needed). */
-  /** The hero materials were switched on or off (the quality tier, or the setting): the animals are rebuilt so the
-   * ones that carried them, or may now carry them, take the new materials. */
-  refreshHero(): Promise<void> {
-    return this.queued(async () => {
-      if (!this.occupants.length) return;
-      const again = this.occupants.map((o) => ({ record: o.record, species: o.species }));
-      for (const o of again) this.removeOccupant(o.record.id);
-      this.dropped.clear();   // (the job's own removals are not the player's)
-      for (const o of again) {
-        if (this.dropped.has(o.record.id)) continue;   // released while its model was loading
-        try { await this.addOccupant(o.record, o.species); } catch (err) { console.warn('[tank] rebuild failed', err); }
-      }
-    });
-  }
-
   setOccupants(records: IndividualRecord[], species: (id: string) => SpeciesDef | undefined): Promise<void> {
+    this.occupantRecords = [...records]; this.speciesLookup = species;
+    const generation = ++this.occupantGeneration;
+    this.dropped.clear();
+    const wanted = new Set(records.map((r) => r.id));
+    for (const o of [...this.occupants]) if (!wanted.has(o.record.id)) this.removeOccupant(o.record.id);
     return this.queued(async () => {
-      const wanted = new Set(records.map((r) => r.id));
-      for (const o of [...this.occupants]) if (!wanted.has(o.record.id)) this.removeOccupant(o.record.id);
-      this.dropped.clear();
       for (const rec of records.slice(0, TANK_MAX_OCCUPANTS)) {
+        if (generation !== this.occupantGeneration) return;
         if (this.occupants.some((o) => o.record.id === rec.id) || this.dropped.has(rec.id)) continue;
-        try { await this.addOccupant(rec, species(rec.speciesId)); } catch (err) { console.warn('[tank] add failed', err); }
+        try { await this.addOccupant(rec, species(rec.speciesId), generation); }
+        catch (e) { console.warn('[tank] model unavailable; retry when reopened', e); }
       }
     });
   }
 
-  /** ids taken out (the player's 放す, a case move) while an occupant change was still loading models: the
-   * change's queued re-adds skip them, so nothing comes back from a stale snapshot */
-  private readonly dropped = new Set<string>();
+  /** Rebuild the current desired occupants, including pending loads, when hero materials change. */
+  refreshHero(): Promise<void> {
+    const records = [...this.occupantRecords], lookup = this.speciesLookup;
+    if (!lookup) return Promise.resolve();
+    this.clearOccupants();
+    return this.setOccupants(records, lookup);
+  }
 
-  /** the occupant changes run one after another (each awaits its models): a later call never interleaves with an
-   * earlier one, so an animal is neither doubled nor brought back */
+  private readonly dropped = new Set<string>();
   private occupantQueue: Promise<void> = Promise.resolve();
+
   private queued(job: () => Promise<void>): Promise<void> {
     const run = this.occupantQueue.then(job, job);
     this.occupantQueue = run.catch(() => undefined);
     return run;
   }
 
-  private async addOccupant(record: IndividualRecord, species: SpeciesDef | undefined): Promise<void> {
+  private async addOccupant(record: IndividualRecord, species: SpeciesDef | undefined, generation: number): Promise<void> {
     if (!species) return;
     const entry = DRIVERS[species.model.driver ?? ''];
     if (!entry) return;
@@ -774,14 +775,15 @@ export class TankScene {
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     let hero: HeroInstance | null = null;
     const files = modelFor(species, ind.stage, ind.gravid, ind.dress);
-    const useHero = !!this.heroApply && !!files.hero && !this.occupants.some((o) => o.hero);
-    const rel = useHero ? files.hero : files.lod1 ?? files.hero ?? files.lod2;
+    const useHero = this.preset.modelTier === 'hero' && !!this.heroApply && !!files.hero && !this.occupants.some((o) => o.hero);
+    const rel = this.preset.modelTier === 'lod2' ? files.lod2 ?? (entry.placeholder ? undefined : files.lod1) : useHero ? files.hero : files.lod1 ?? files.lod2 ?? (entry.placeholder ? undefined : files.hero);
     if (rel) {
       const model = await instantiateModel(rel, variantOf(ind.id));
       root = model.root; bones = model.bones as Record<string, Object3D>; meshes = model.meshes; extras = model.extras;
-      for (const m of meshes) m.castShadow = true;
+      for (const m of meshes) m.castShadow = this.preset.shadows;
       if (useHero && this.heroApply) {
         try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] tank fallback', err); hero = null; }
+        if (!this.heroApply) { hero?.dispose(); hero = null; }
       }
       if (!hero) this.lightMeshesByCaustics(meshes as Mesh[]);
     } else if (entry.placeholder) {
@@ -791,8 +793,7 @@ export class TankScene {
       ph.root.userData.startOnSurface = true;
       root = ph.root;
     } else return;
-    // (already there, or taken out while its model loaded: not added)
-    if (this.occupants.some((o) => o.record.id === record.id) || this.dropped.has(record.id)) { hero?.dispose(); root.removeFromParent(); return; }
+    if (generation !== this.occupantGeneration || this.dropped.has(record.id) || this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); root.removeFromParent(); return; }
     const driver = entry.create();
     const unsub = driver.onEvent((e) => this.onBehavior?.(e, record));
     this.aquariumRoot.add(root);
@@ -826,6 +827,7 @@ export class TankScene {
 
   removeOccupant(id: string): void {
     this.dropped.add(id);
+    this.occupantRecords = this.occupantRecords.filter(record => record.id !== id);
     const i = this.occupants.findIndex((o) => o.record.id === id);
     if (i < 0) return;
     const o = this.occupants[i];
@@ -837,7 +839,23 @@ export class TankScene {
   }
 
   clearOccupants(): void {
+    ++this.occupantGeneration;
+    this.occupantRecords = [];
     for (const o of [...this.occupants]) this.removeOccupant(o.record.id);
+  }
+
+  setQuality(preset: QualityPreset): void {
+    if (this.preset === preset) return;
+    this.preset = preset; this.waterAcc = 0;
+    this.lampLight.castShadow = preset.shadows;
+    this.lampLight.shadow.map?.dispose(); this.lampLight.shadow.map = null;
+    this.lampLight.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
+    this.lampLight.shadow.needsUpdate = true;
+    this.U.uSurf.value = preset.tankWaterHz ? this.surfRT?.texture ?? this.flatWater : this.flatWater;
+    this.U.uCaus.value = preset.tankWaterHz ? this.causRT?.texture ?? this.flatWater : this.flatWater;
+    const records = this.occupantRecords, lookup = this.speciesLookup;
+    this.clearOccupants();
+    if (lookup) void this.setOccupants(records, lookup);
   }
 
   /** Pick what is under a canvas point: an occupant, the tank, or nothing. */
@@ -870,6 +888,10 @@ export class TankScene {
   }
 
   private stepWater(dt: number): void {
+    if (!this.preset.tankWaterHz) { this.drops.length = 0; return; }
+    this.waterAcc += dt;
+    if (this.waterAcc < 1 / this.preset.tankWaterHz) return;
+    dt = this.waterAcc; this.waterAcc = 0;
     this.time += dt;
     this.U.uTime.value = this.time;
     this.jetU.fill(0); this.jetValues.fill(0);
@@ -887,8 +909,7 @@ export class TankScene {
     for (this.gustAcc += dt * 0.4 * this.turb; this.gustAcc >= 1; this.gustAcc -= 1)
       this.addRipple((Math.random() * 2 - 1) * TX * 0.9, (Math.random() * 2 - 1) * TZ * 0.9, (Math.random() < 0.5 ? -1 : 1) * 0.3, 0.02 + 0.03 * Math.random());
     if (!this.gpu || !this.sim || !this.surfMat || !this.surfRT || !this.causRT) { this.drops.length = 0; return; }
-    // the ripple simulation steps at 60 Hz, taking up to 8 waiting splashes per step (a slow frame catches up with a
-    // few steps; the lite tank takes two at most and lets the rest go)
+    // Cap catch-up work as well as the scene's water update frequency.
     this.simAcc = Math.min(this.simAcc + dt, 0.1);
     for (let steps = 0; this.simAcc >= 1 / 60 && steps < (this.lite ? 2 : 6); steps++, this.simAcc -= 1 / 60) {
       for (let i = 0; i < 8; i++) this.dropU.set(this.drops.length ? this.drops.shift()! : [0, 0, 1, 0], i * 4);
@@ -1066,6 +1087,7 @@ export class TankScene {
     this.deactivate();
     this.clearOccupants();
     this.gpu?.dispose();
+    this.flatWater.dispose();
     this.surfRT?.dispose();
     this.causRT?.dispose();
   }

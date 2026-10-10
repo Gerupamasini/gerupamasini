@@ -1,15 +1,22 @@
 import { DepthTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, RGBAFormat, Vector2, WebGLRenderTarget, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import type { WaterPass } from '../world/Water';
+import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 
 /** Renders the flat into an HDR buffer with depth, then composites the screen-space water onto the screen. */
 export class FieldRenderer {
   private rt: WebGLRenderTarget | null = null;
+  private preset = QUALITY_PRESETS.mid;
   private readonly size = new Vector2();
   private samples = 4;
   /** draw calls and triangles of the last scene render (before the water composite) */
   readonly lastStats = { calls: 0, triangles: 0 };
 
   constructor(private readonly gl: WebGLRenderer) {}
+
+  setQuality(preset: QualityPreset): void {
+    this.preset = preset;
+    this.setSamples(preset.msaa);
+  }
 
   private target(): WebGLRenderTarget {
     const s = this.gl.getDrawingBufferSize(this.size);

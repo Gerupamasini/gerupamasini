@@ -15,10 +15,10 @@ export class GameRenderer {
   readonly gpuName: string;
   /** an integrated, mobile or software GPU: the first run starts on 低 */
   readonly weakGpu: boolean;
-  private _quality: Quality = 'mid';
+  private _quality: Quality | null = null;
 
   get quality(): Quality {
-    return this._quality;
+    return this._quality ?? 'mid';
   }
 
   constructor(readonly canvas: HTMLCanvasElement) {
@@ -46,13 +46,14 @@ export class GameRenderer {
   }
 
   setQuality(q: Quality): void {
+    if (this._quality === q) return;
     this._quality = q;
     this.gl.shadowMap.enabled = QUALITY_PRESETS[q].shadows;
     this.resize();
   }
 
   get preset() {
-    return QUALITY_PRESETS[this._quality];
+    return QUALITY_PRESETS[this.quality];
   }
 
   resize(): void {

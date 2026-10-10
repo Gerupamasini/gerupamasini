@@ -1,39 +1,203 @@
 {
   "id": "jma_yokosuka",
   "names": {
-    "ja": "横須賀（推定）",
+    "ja": "横須賀",
     "en": "Yokosuka"
   },
-  "lat": 35.283,
-  "lon": 139.65,
-  "phaseReference": "JST135E",
-  "phaseConvention": "zone_speed",
+  "lat": 35.28805,
+  "lon": 139.651383,
+  "phaseReference": "UTC",
   "mslAboveChartDatum_cm": null,
   "constituents": [
     {
       "name": "M2",
-      "amplitude_cm": 35.2,
-      "phase_deg": 146.5
+      "amplitude_cm": 41.15908741950989,
+      "phase_deg": 233.14895629882812
+    },
+    {
+      "name": "N2",
+      "amplitude_cm": 6.181517988443375,
+      "phase_deg": 229.68617248535156
     },
     {
       "name": "S2",
-      "amplitude_cm": 17.0,
-      "phase_deg": 173.5
+      "amplitude_cm": 20.045728981494904,
+      "phase_deg": 261.82769775390625
+    },
+    {
+      "name": "K2",
+      "amplitude_cm": 5.49197718501091,
+      "phase_deg": 256.5218505859375
+    },
+    {
+      "name": "2N2",
+      "amplitude_cm": 0.7995249703526497,
+      "phase_deg": 237.59153747558594
+    },
+    {
+      "name": "S1",
+      "amplitude_cm": 0.5308160092681646,
+      "phase_deg": 260.54278564453125
     },
     {
       "name": "K1",
-      "amplitude_cm": 24.4,
-      "phase_deg": 176.0
+      "amplitude_cm": 24.07315820455551,
+      "phase_deg": 39.23817443847656
+    },
+    {
+      "name": "P1",
+      "amplitude_cm": 7.831305265426636,
+      "phase_deg": 37.182952880859375
     },
     {
       "name": "O1",
-      "amplitude_cm": 19.1,
-      "phase_deg": 158.0
+      "amplitude_cm": 18.917742371559143,
+      "phase_deg": 20.86474609375
+    },
+    {
+      "name": "Q1",
+      "amplitude_cm": 3.907468169927597,
+      "phase_deg": 10.593802452087402
+    },
+    {
+      "name": "M1",
+      "amplitude_cm": 1.0673820041120052,
+      "phase_deg": 295.6083679199219
+    },
+    {
+      "name": "M4",
+      "amplitude_cm": 0.573814008384943,
+      "phase_deg": 5.345695972442627
+    },
+    {
+      "name": "Mm",
+      "amplitude_cm": 0.4487060010433197,
+      "phase_deg": 111.77822875976562
+    },
+    {
+      "name": "Mf",
+      "amplitude_cm": 0.4821369890123606,
+      "phase_deg": 115.87957763671875
+    },
+    {
+      "name": "Sa",
+      "amplitude_cm": 9.149377048015594,
+      "phase_deg": 167.7972412109375
+    },
+    {
+      "name": "Ssa",
+      "amplitude_cm": 0.6676290184259415,
+      "phase_deg": 240.03802490234375
+    },
+    {
+      "name": "T2",
+      "amplitude_cm": 1.1142509989440441,
+      "phase_deg": 242.54971313476562
+    },
+    {
+      "name": "J1",
+      "amplitude_cm": 1.1453229933977127,
+      "phase_deg": 57.216190338134766
+    },
+    {
+      "name": "L2",
+      "amplitude_cm": 1.392672024667263,
+      "phase_deg": 241.09901428222656
+    },
+    {
+      "name": "R2",
+      "amplitude_cm": 0.3431400051340461,
+      "phase_deg": 83.78710174560547
+    },
+    {
+      "name": "2Q1",
+      "amplitude_cm": 0.5306490231305361,
+      "phase_deg": 2.6433000564575195
+    },
+    {
+      "name": "MSf",
+      "amplitude_cm": 0.32507500145584345,
+      "phase_deg": 24.457857131958008
+    },
+    {
+      "name": "MNS2",
+      "amplitude_cm": 0.29318099841475487,
+      "phase_deg": 246.028564453125
+    },
+    {
+      "name": "M3",
+      "amplitude_cm": 0.8242670446634293,
+      "phase_deg": 92.26849365234375
+    },
+    {
+      "name": "mu2",
+      "amplitude_cm": 1.153745036572218,
+      "phase_deg": 245.92532348632812
+    },
+    {
+      "name": "nu2",
+      "amplitude_cm": 1.2067249976098537,
+      "phase_deg": 228.4436492919922
+    },
+    {
+      "name": "lambda2",
+      "amplitude_cm": 0.39898199029266834,
+      "phase_deg": 229.293701171875
+    },
+    {
+      "name": "MN4",
+      "amplitude_cm": 0.025084998924285173,
+      "phase_deg": 52.132476806640625
+    },
+    {
+      "name": "MS4",
+      "amplitude_cm": 0.3651499981060624,
+      "phase_deg": 62.44740295410156
+    },
+    {
+      "name": "MKS2",
+      "amplitude_cm": 0.47149299643933773,
+      "phase_deg": 8.824602127075195
+    },
+    {
+      "name": "M6",
+      "amplitude_cm": 0.031601000227965415,
+      "phase_deg": 61.251625061035156
+    },
+    {
+      "name": "S4",
+      "amplitude_cm": 0.2635450102388859,
+      "phase_deg": 93.04400634765625
+    },
+    {
+      "name": "OO1",
+      "amplitude_cm": 0.7732570171356201,
+      "phase_deg": 80.90140533447266
+    },
+    {
+      "name": "rho1",
+      "amplitude_cm": 0.7466800045222044,
+      "phase_deg": 9.94499683380127
+    },
+    {
+      "name": "sigma1",
+      "amplitude_cm": 0.6012340076267719,
+      "phase_deg": 186.65708923339844
+    },
+    {
+      "name": "2SM2",
+      "amplitude_cm": 0.10252200299873948,
+      "phase_deg": 77.18470001220703
+    },
+    {
+      "name": "2MS6",
+      "amplitude_cm": 0.05237199948169291,
+      "phase_deg": 78.02227783203125
     }
   ],
   "source": {
-    "name": "気象庁 潮汐調和定数 横須賀（暫定の推定値）",
-    "url": "https://www.data.jma.go.jp/kaiyou/db/tide/suisan/harms60.php?stn=YK",
-    "note": "暫定: 公式表に接続できない環境で作成したため、東京の主要4分潮から湾口側（横須賀）の振幅比（半日周潮 約0.73、日周潮 約0.97）と位相の進み（半日周潮 約7〜8°、日周潮 約2〜3°）を当てて推定した値。公式の調和定数で置き換えること。"
+    "name": "TICON-4 横須賀（実測潮位由来）",
+    "url": "https://www.seanoe.org/data/00980/109129/",
+    "note": "Neaps tide database (https://github.com/openwatersio/tide-database). Source: Hart-Davis, M., Dettmering, D., Seitz, F. (2025), TICON-4: TIdal CONstants based on GESLA-4 sea-level records, SEANOE, https://doi.org/10.17882/109129. Licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Modified: see https://github.com/openwatersio/tide-database#modifications-to-source-data ゲームでは37/50分潮を使用（名称・単位を変換、未対応の微小分潮を省略）。潮位0cmは平均海面で、気象庁潮位表の基準面とは異なります。東京は2020年の公式表16日で潮位変動と干潮時刻を検証。横須賀は公式表との照合未実施。気象・高潮は含みません。"
   }
 }
