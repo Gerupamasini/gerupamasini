@@ -77,23 +77,38 @@ float hgNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(hgHash(i),hgHash(i+vec2(1,0)),f.x),mix(hgHash(i+vec2(0,1)),hgHash(i+1.0),f.x),f.y);
 }
-// A distant proxy is a small cluster of true-sized leaves, never one oversized leaf.
-// The original atlas stores local leaf UV in RG and coverage in A. Mip-aware cutoffs retain far canopy coverage.
+// Tier 1: LOD1 quad, analytic leaf outline (petiole, elliptic blade, mucro) - no texture fetch.
+// Tier 2: LOD2 twig card, rosette atlas (RG: each leaf's own UV, A: coverage). Mip-aware cutoff keeps far coverage.
 vec2 hgProxyLeaf(vec2 uv, float phase, float tier, out float mask) {
-  float tile=floor(fract(phase+vHgSeed)*8.0)+(tier<1.5?0.0:8.0);
+  if (tier < 1.5) {
+    float t = uv.y, w = 0.5 * pow(max(sin(3.14159265 * pow(t, 0.9)), 0.0), 0.62) * (t < 0.08 ? 0.25 : 1.0);
+    float edge = fwidth(uv.x) * 0.7;
+    mask = smoothstep(-edge, edge, w - abs(uv.x - 0.5));
+    mask = step(0.5, mask);
+    return uv;
+  }
+  // Filler cards are only for mass at range; within 3-5 m the real leaves carry the crown. Dithered, no pop.
+  #ifdef HG_VIEW
+    if (length(vViewPosition) < 3.0 + 2.0 * hgHash(floor(gl_FragCoord.xy))) { mask = 0.0; return uv; }
+  #endif
+  float tile=floor(fract(phase+vHgSeed)*16.0);
   vec2 at=(vec2(mod(tile,4.0),floor(tile/4.0))+0.01+uv*0.98)/4.0;
   vec4 sampleLeaf=texture2D(uHgLeafAtlas,at);
   float footprint=max(fwidth(uv.x),fwidth(uv.y));
-  float cutoff=mix(0.5,0.23,smoothstep(0.035,0.15,footprint));
+  float cutoff=mix(0.5,0.22,smoothstep(0.01,0.06,footprint));
   mask=step(cutoff,sampleLeaf.a);
   return sampleLeaf.rg;
 }
 float hgBark(vec2 uv) {
-  // Rhizophora bark: fine grey/brown wrinkles and lenticels, not deep pine-like plates.
-  float wrinkles = hgNoise(uv * vec2(175.0, 14.0));
-  vec2 cell = uv * vec2(70.0, 145.0), id = floor(cell), f = fract(cell)-0.5;
-  float dotMask = (1.0-smoothstep(0.12,0.35,length(f*vec2(1.0,2.8)))) * step(0.58,hgHash(id));
-  return (wrinkles-0.5) * 0.35 - dotMask * 0.28;
+  // Rhizophora bark (photos 21, 44): smooth pale grey skin, fine longitudinal fissures,
+  // sparse corky lenticels (round, slightly raised) at random offsets - not a regular dash grid.
+  float fissure = hgNoise(uv * vec2(60.0, 4.0)) * 0.6 + hgNoise(uv * vec2(190.0, 11.0)) * 0.4;
+  fissure = smoothstep(0.62, 0.86, fissure);
+  vec2 cell = uv * vec2(38.0, 30.0), id = floor(cell);
+  vec2 jitter = vec2(hgHash(id + 1.7), hgHash(id + 5.3)) - 0.5;
+  float lenticel = (1.0 - smoothstep(0.08, 0.2, length((fract(cell) - 0.5 - jitter * 0.5) * vec2(1.0, 1.6)))) * step(0.78, hgHash(id));
+  float mottle = hgNoise(uv * vec2(9.0, 2.5)) - 0.5;
+  return mottle * 0.34 - fissure * 0.5 + lenticel * 0.26;
 }
 `;
 const COLOR = /* glsl */`
@@ -104,8 +119,9 @@ const COLOR = /* glsl */`
   float lateral = abs(hgUv.x - 0.5);
   float vein = pow(max(0.0,cos((hgUv.y - lateral * 0.3)*72.0)),10.0) * smoothstep(0.025,0.08,lateral) * (1.0-smoothstep(0.32,0.49,lateral));
   float age = mod(vHgDetail.x,2.0);
-  vec3 top = mix(vec3(0.21,0.37,0.031),vec3(0.038,0.115,0.015),age);
-  vec3 underside = mix(vec3(0.23,0.30,0.075),vec3(0.15,0.225,0.07),age);
+  // Photo 43: glossy mid-green mature leaves, yellow-green new pairs; underside pale with dark cork warts.
+  vec3 top = mix(vec3(0.20,0.40,0.035),vec3(0.055,0.17,0.022),age);
+  vec3 underside = mix(vec3(0.27,0.36,0.09),vec3(0.17,0.27,0.075),age);
   float mottling = hgNoise(hgUv*vec2(33,42)+vHgDetail.y*17.0);
   vec2 spotCell = hgUv*vec2(28,40), spotId = floor(spotCell);
   float speckle = (1.0-smoothstep(0.025,0.1,length(fract(spotCell)-0.5))) * step(0.68,hgHash(spotId));
@@ -121,7 +137,7 @@ const COLOR = /* glsl */`
   float fine = hgBark(vUv);
   hgWet = 1.0 - smoothstep(uHgWet-0.06,uHgWet+0.22,vHgWorld.y);
   float soaked = 1.0-smoothstep(uHgWater-0.03,uHgWater+0.045,vHgWorld.y);
-  vec3 bark = mix(vec3(0.2,0.165,0.125),vec3(0.38,0.36,0.32),coarse);
+  vec3 bark = mix(vec3(0.21,0.18,0.14),vec3(0.40,0.38,0.33),coarse);
   bark *= 0.92 + fine*0.4;
   // Narrow olive biofilm at the tidal stain, exposed wet wood remains brown-grey.
   float algae = exp(-abs(vHgWorld.y-uHgWet+0.14)*9.0)*hgNoise(vUv*19.0)*0.45;
@@ -138,7 +154,7 @@ const COLOR = /* glsl */`
   bark = mix(bark, vec3(0.42,0.40,0.36), barnacle * 0.8);
   hgWet = max(hgWet, mud * 0.75);
   diffuseColor.rgb *= bark;
-  hgRelief = fine*0.0013 + barnacle*0.0016 - mud*fine*0.0008;
+  hgRelief = fine*0.0024 + barnacle*0.0016 - mud*fine*0.0008;
 #endif
 `;
 
@@ -146,6 +162,7 @@ function hook(shader: WebGLProgramParametersWithUniforms, u: HirugiUniforms, par
   Object.assign(shader.uniforms, u);
   const leaf = part === 'Leaves', root = part === 'Roots';
   shader.defines ??= {}; Object.assign(shader.defines, { HG_LEAF: leaf ? 1 : 0, HG_ROOT: root ? 1 : 0 });
+  if (!depth) shader.defines.HG_VIEW = 1;
   shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${VERTEX}`)
     .replace('#include <begin_vertex>', `vec3 transformed = hgShape(position);
 vHgWorld = (modelMatrix * instanceMatrix * vec4(transformed,1.0)).xyz;
@@ -182,11 +199,11 @@ export function treeMaterial(u: HirugiUniforms, part: TreePart): MeshStandardMat
     : new MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0 });
   m.name = `YaeyamaHirugi/${part}`; m.onBeforeCompile = (s) => hook(s, u, part, false);
   m.defines = { ...m.defines, USE_UV: '' };
-  m.customProgramCacheKey = () => `hirugi-v2-${part}`;
+  m.customProgramCacheKey = () => `hirugi-v4-${part}`;
   return m;
 }
 export function treeDepth(u: HirugiUniforms, part: TreePart): MeshDepthMaterial {
   const m = new MeshDepthMaterial({ depthPacking: RGBADepthPacking, side: part === 'Leaves' ? DoubleSide : FrontSide });
   m.defines = { ...m.defines, USE_UV: '' };
-  m.onBeforeCompile = (s) => hook(s, u, part, true); m.customProgramCacheKey = () => `hirugi-depth-v2-${part}`; return m;
+  m.onBeforeCompile = (s) => hook(s, u, part, true); m.customProgramCacheKey = () => `hirugi-depth-v3-${part}`; return m;
 }

@@ -19,18 +19,24 @@ export function buildSkeleton(base: HirugiBase, sapling: SaplingSize | null = nu
   const path = (points: Vector3[], radii: number[], order: number, root = false): WoodPath => ({ points, radii, order, root });
   const fork = v(b.lean * 0.16, b.fork, 0.07);
   trunk.push(path([v(0, -0.14, 0), v(0.015, 0.55, -0.04), fork.clone()], [0.29 + base * 0.014, 0.19 + base * 0.008, 0.17], 0));
+  const tufts: LeafSpec[] = [];
   const rosette = (p: Vector3, tangent: Vector3, count: number) => {
-    // Opposite, decussate pairs on internodes near shoot tips. Older leaves are lower and darker.
+    // Rhizophora: 3-4 opposite, decussate pairs crowded within ~5 cm of the shoot tip (photos 20, 43),
+    // not a pinnate row along the twig. Young pairs are small and erect, old pairs larger and spread.
     const axis = tangent.clone().normalize();
     const side = v(axis.z, 0, -axis.x).normalize();
     if (side.lengthSq() < 0.1) side.set(1, 0, 0);
     const rot = rng.range(0, Math.PI * 2);
     for (let node = 0; node < count; node++) for (let sign = -1; sign <= 1; sign += 2) {
-      const a = rot + node * Math.PI * 0.5, radial = side.clone().applyAxisAngle(axis, a).multiplyScalar(sign);
-      const direction = axis.clone().multiplyScalar(rng.range(0.15, 0.6)).addScaledVector(radial, rng.range(0.7, 1)).normalize();
-      const center = p.clone().addScaledVector(axis, (node - count + 1) * 0.037).addScaledVector(radial, 0.002);
-      leaves.push({ center, axis: direction, roll: rng.range(-0.35, 0.35), length: rng.range(0.095, 0.155), width: rng.range(0.043, 0.07), age: node === count - 1 ? rng.range(0.1, 0.35) : rng.range(0.45, 1), phase: rng.next() });
+      const youth = (node + 1) / count, a = rot + node * Math.PI * 0.5, radial = side.clone().applyAxisAngle(axis, a).multiplyScalar(sign);
+      const direction = axis.clone().multiplyScalar(0.2 + youth * 0.7).addScaledVector(radial, 1).add(v(0, 0.12 + youth * 0.3, 0)).normalize();
+      const center = p.clone().addScaledVector(axis, (node - count + 1) * 0.014).addScaledVector(radial, 0.003);
+      const grown = 1 - youth * 0.3;
+      leaves.push({ center, axis: direction, roll: rng.range(-0.3, 0.3), length: rng.range(0.105, 0.15) * grown, width: rng.range(0.05, 0.068) * grown,
+        age: node === count - 1 ? rng.range(0.05, 0.3) : rng.range(0.4, 1), phase: rng.next() });
     }
+    // Red-brown stipule sheathing the terminal bud (photo 20).
+    branches.push(path([p.clone(), p.clone().addScaledVector(axis, 0.045)], [0.0042, 0.0006], 3));
   };
   for (let leader = 0; leader < b.leaders; leader++) {
     const a = leader / b.leaders * Math.PI * 2 + rng.range(-0.2, 0.2);
@@ -45,18 +51,23 @@ export function buildSkeleton(base: HirugiBase, sapling: SaplingSize | null = nu
       const outer = polar(b.spread * rng.range(0.76, 1.06), angle, b.height * rng.range(0.81, 1)); outer.x += b.lean;
       const elbow = origin.clone().lerp(outer, 0.5); elbow.y -= 0.12;
       branches.push(path([origin, elbow, outer], [0.054, 0.035, 0.017], 1));
-      for (let twig = 0; twig < 8; twig++) {
-        const begin = origin.clone().lerp(outer, 0.22 + twig / 11);
+      for (let twig = 0; twig < 10; twig++) {
+        const begin = origin.clone().lerp(outer, 0.2 + twig / 13);
         const az = angle + rng.range(-1.2, 1.2), length = rng.range(0.32, 0.73);
         const tip = begin.clone().add(polar(length, az, rng.range(-0.14, 0.44)));
         branches.push(path([begin, begin.clone().lerp(tip, 0.45), tip], [0.017, 0.009, 0.0035], 2));
-        for (let shoot = 0; shoot < 4; shoot++) {
-          const joint = begin.clone().lerp(tip, 0.3 + shoot * 0.21);
-          const direction = polar(rng.range(0.18, 0.38), az + (shoot - 1.5) * 1.2, rng.range(-0.05, 0.25));
+        const tuft = v(0, 0, 0);
+        for (let shoot = 0; shoot < 7; shoot++) {
+          const joint = begin.clone().lerp(tip, 0.25 + shoot * 0.125);
+          // Shoots turn outward and up so foliage forms a layered outer shell over an open, woody interior.
+          const direction = polar(rng.range(0.16, 0.34), az + (shoot - 3) * 0.75 + rng.range(-0.3, 0.3), rng.range(0.04, 0.26));
           const terminal = joint.clone().add(direction);
-          branches.push(path([joint, terminal], [0.0065, 0.002], 3));
-          rosette(terminal, direction, rng.int(5, 7));
+          branches.push(path([joint, terminal], [0.0065, 0.0035], 3));
+          rosette(terminal, direction, rng.int(3, 4)); tuft.addScaledVector(terminal, 1 / 7);
         }
+        // One far-LOD foliage card per twig, sized to the spread of its five rosettes.
+        const cardAxis = polar(1, az, 1.4).normalize(), cardLength = 0.62 + length * 0.4;
+        tufts.push({ center: tuft.addScaledVector(cardAxis, -cardLength * 0.5), axis: cardAxis, roll: 0, length: cardLength, width: 0.66 + length * 0.35, age: rng.range(0.3, 0.8), phase: rng.next() });
       }
     }
   }
@@ -109,7 +120,7 @@ export function buildSkeleton(base: HirugiBase, sapling: SaplingSize | null = nu
     const foot = start.clone().multiplyScalar(1.45); foot.y = -0.16;
     roots.push(path([start, start.clone().lerp(foot, 0.48), foot], [0.051, 0.035, 0.013], 1, true));
   }
-  return { trunk, branches, roots, leaves, height: b.height + 0.6, reach: b.reach * 1.3 };
+  return { trunk, branches, roots, leaves, tufts, height: b.height + 0.6, reach: b.reach * 1.3 };
 }
 
 function juvenile(size: SaplingSize): TreeSkeleton {
@@ -128,7 +139,7 @@ function juvenile(size: SaplingSize): TreeSkeleton {
     const a = i / 3 * Math.PI * 2;
     roots.push({ points: [v(0, 0.22, 0), polar(0.12, a, 0.12), polar(0.25, a, -0.05)], radii: [0.013, 0.009, 0.004], order: 0, root: true });
   }
-  return { trunk, branches, roots, leaves, height: h + 0.13, reach: 0.35 };
+  return { trunk, branches, roots, leaves, tufts: [], height: h + 0.13, reach: 0.35 };
 }
 
 /** Sampling is shared by visible geometry and physics; collision does not depend on the active LOD. */

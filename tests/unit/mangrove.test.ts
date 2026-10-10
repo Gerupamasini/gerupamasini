@@ -44,6 +44,15 @@ describe('ヤエヤマヒルギ: shared assets', () => {
     }
     a.dispose(); b.dispose(); kit.dispose();
   });
+  it('stays within the per-tree triangle budget for every base and LOD', () => {
+    // LOD0 is limited to 1-2 trees near the camera; LOD1/LOD2 are what a forest actually costs.
+    for (const base of [0, 1, 2, 3, 4] as const) {
+      const s = buildSkeleton(base);
+      const tris = [0, 1, 2].map(l => Object.values(buildTreeGeometry(s, l as 0 | 1 | 2)).reduce((n, g) => n + g.index!.count / 3, 0));
+      expect(tris[0]).toBeLessThan(260_000); expect(tris[1]).toBeLessThan(45_000); expect(tris[2]).toBeLessThan(4_000);
+      expect(s.tufts.length).toBeGreaterThan(50);
+    }
+  });
   it('uses sparse flat cards only for low-quality far trees and preserves collisions when switching quality', () => {
     const terrain = flatTerrain(), spec = treeSpec(317);
     const forest = new MangroveForest(terrain, { seed: 1, clusters: [] }, [spec]);
@@ -52,7 +61,8 @@ describe('ヤエヤマヒルギ: shared assets', () => {
     const normal = forest.stats.triangles, segments = forest.collision.segments;
     forest.setQuality('low'); forest.update(0, camera, env);
     expect(forest.stats.triangles).toBeGreaterThan(0);
-    expect(forest.stats.triangles).toBeLessThan(normal * 0.25);
+    // Normal LOD2 is already twig cards (~2.5k tris), so the low path only needs to halve it again.
+    expect(forest.stats.triangles).toBeLessThan(normal * 0.4);
     expect(forest.stats.calls).toBe(3);
     expect(forest.collision.segments).toBe(segments);
     forest.setQuality('high'); forest.update(0, camera, env);

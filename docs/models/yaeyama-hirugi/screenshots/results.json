@@ -10,15 +10,15 @@
         0
       ],
       "trees": 1,
-      "triangles": 354400,
+      "triangles": 185592,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 696,
+      "collisionSegments": 708,
       "frame": 2,
       "renderCalls": 18,
-      "renderTriangles": 750092,
-      "seconds": 15.931
+      "renderTriangles": 412476,
+      "seconds": 18.064
     },
     {
       "name": "adult-1",
@@ -29,15 +29,15 @@
         0
       ],
       "trees": 1,
-      "triangles": 197352,
+      "triangles": 104408,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 598,
+      "collisionSegments": 606,
       "frame": 3,
       "renderCalls": 18,
-      "renderTriangles": 435996,
-      "seconds": 7.954
+      "renderTriangles": 250108,
+      "seconds": 9.051
     },
     {
       "name": "adult-2",
@@ -48,15 +48,15 @@
         0
       ],
       "trees": 1,
-      "triangles": 282958,
+      "triangles": 147246,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 725,
+      "collisionSegments": 709,
       "frame": 4,
       "renderCalls": 18,
-      "renderTriangles": 607208,
-      "seconds": 8.005
+      "renderTriangles": 335784,
+      "seconds": 8.373
     },
     {
       "name": "adult-3",
@@ -67,15 +67,15 @@
         0
       ],
       "trees": 1,
-      "triangles": 275492,
+      "triangles": 143470,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 664,
+      "collisionSegments": 624,
       "frame": 5,
       "renderCalls": 18,
-      "renderTriangles": 592276,
-      "seconds": 7.887
+      "renderTriangles": 328232,
+      "seconds": 9.392
     },
     {
       "name": "adult-4",
@@ -86,15 +86,15 @@
         0
       ],
       "trees": 1,
-      "triangles": 450632,
+      "triangles": 233810,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 962,
+      "collisionSegments": 936,
       "frame": 6,
       "renderCalls": 18,
-      "renderTriangles": 942556,
-      "seconds": 8.735
+      "renderTriangles": 508912,
+      "seconds": 10.466
     },
     {
       "name": "five",
@@ -109,15 +109,15 @@
         0
       ],
       "trees": 5,
-      "triangles": 1560834,
+      "triangles": 814526,
       "calls": 20,
       "templates": 5,
       "geometryCount": 60,
-      "collisionSegments": 3645,
+      "collisionSegments": 3583,
       "frame": 7,
       "renderCalls": 55,
-      "renderTriangles": 3173328,
-      "seconds": 13.988
+      "renderTriangles": 1680712,
+      "seconds": 12.104
     },
     {
       "name": "roots",
@@ -128,15 +128,15 @@
         0
       ],
       "trees": 1,
-      "triangles": 450632,
+      "triangles": 233810,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 962,
+      "collisionSegments": 936,
       "frame": 8,
       "renderCalls": 17,
-      "renderTriangles": 941212,
-      "seconds": 8.93
+      "renderTriangles": 507568,
+      "seconds": 9.823
     },
     {
       "name": "collision",
@@ -147,15 +147,15 @@
         0
       ],
       "trees": 1,
-      "triangles": 450632,
+      "triangles": 233810,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 962,
+      "collisionSegments": 936,
       "frame": 9,
       "renderCalls": 18,
-      "renderTriangles": 941212,
-      "seconds": 7.321
+      "renderTriangles": 507568,
+      "seconds": 8.368
     },
     {
       "name": "leaf",
@@ -166,15 +166,15 @@
         0
       ],
       "trees": 1,
-      "triangles": 354400,
+      "triangles": 185592,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 696,
+      "collisionSegments": 708,
       "frame": 10,
       "renderCalls": 17,
-      "renderTriangles": 748748,
-      "seconds": 9.239
+      "renderTriangles": 411132,
+      "seconds": 10.361
     },
     {
       "name": "saplings",
@@ -187,15 +187,15 @@
         0
       ],
       "trees": 3,
-      "triangles": 9876,
+      "triangles": 5540,
       "calls": 12,
       "templates": 3,
       "geometryCount": 36,
       "collisionSegments": 78,
       "frame": 11,
       "renderCalls": 33,
-      "renderTriangles": 59700,
-      "seconds": 6.717
+      "renderTriangles": 51028,
+      "seconds": 8.295
     },
     {
       "name": "forest",
@@ -204,15 +204,15 @@
       "seed": 317,
       "lod": [],
       "trees": 215,
-      "triangles": 1177686,
+      "triangles": 1198890,
       "calls": 163,
       "templates": 8,
       "geometryCount": 80,
-      "collisionSegments": 83407,
+      "collisionSegments": 82119,
       "frame": 12,
       "renderCalls": 268,
-      "renderTriangles": 2066500,
-      "seconds": 11.297
+      "renderTriangles": 2221356,
+      "seconds": 15.525
     },
     {
       "name": "forest-low",
@@ -221,15 +221,15 @@
       "seed": 317,
       "lod": [],
       "trees": 215,
-      "triangles": 314422,
+      "triangles": 396040,
       "calls": 109,
       "templates": 8,
       "geometryCount": 112,
-      "collisionSegments": 83407,
+      "collisionSegments": 82119,
       "frame": 13,
       "renderCalls": 164,
-      "renderTriangles": 354754,
-      "seconds": 6.581
+      "renderTriangles": 436372,
+      "seconds": 7.876
     },
     {
       "name": "flood",
@@ -238,15 +238,15 @@
       "seed": 317,
       "lod": [],
       "trees": 215,
-      "triangles": 1177686,
+      "triangles": 1198890,
       "calls": 163,
       "templates": 8,
       "geometryCount": 112,
-      "collisionSegments": 83407,
+      "collisionSegments": 82119,
       "frame": 14,
       "renderCalls": 268,
-      "renderTriangles": 2066500,
-      "seconds": 10.074
+      "renderTriangles": 2221356,
+      "seconds": 12.019
     },
     {
       "name": "lod0",
@@ -257,15 +257,15 @@
         0
       ],
       "trees": 1,
-      "triangles": 354400,
+      "triangles": 185592,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 696,
+      "collisionSegments": 708,
       "frame": 15,
       "renderCalls": 18,
-      "renderTriangles": 750092,
-      "seconds": 9.274
+      "renderTriangles": 412476,
+      "seconds": 9.761
     },
     {
       "name": "lod1",
@@ -276,15 +276,15 @@
         1
       ],
       "trees": 1,
-      "triangles": 20462,
+      "triangles": 32640,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 696,
+      "collisionSegments": 708,
       "frame": 16,
       "renderCalls": 18,
-      "renderTriangles": 82216,
-      "seconds": 5.358
+      "renderTriangles": 106572,
+      "seconds": 5.842
     },
     {
       "name": "lod2",
@@ -295,23 +295,23 @@
         2
       ],
       "trees": 1,
-      "triangles": 4140,
+      "triangles": 2692,
       "calls": 4,
       "templates": 1,
       "geometryCount": 12,
-      "collisionSegments": 696,
+      "collisionSegments": 708,
       "frame": 17,
       "renderCalls": 14,
-      "renderTriangles": 45432,
-      "seconds": 5.235
+      "renderTriangles": 43984,
+      "seconds": 6.179
     }
   ],
   "support": {
-    "height": 0.8698825414256979,
+    "height": 1.4670073415842284,
     "normal": [
-      -0.2971363785810346,
-      0.9547006496470689,
-      0.016020052659479367
+      -0.30516263325266607,
+      0.9515987201819534,
+      0.036546450092552606
     ],
     "tree": 0
   },
@@ -319,13 +319,13 @@
     "composite": [
       242,
       135,
-      132,
+      133,
       255
     ],
     "bare": [
       242,
       135,
-      132,
+      133,
       255
     ],
     "difference": 0
@@ -334,7 +334,7 @@
     "primed": 20,
     "trees": 6,
     "calls": 20,
-    "segments": 4668,
+    "segments": 4604,
     "tide": -0.27406528783161765,
     "worldTide": -0.27406528783161765
   },
