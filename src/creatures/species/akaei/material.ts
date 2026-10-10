@@ -76,6 +76,10 @@ vec3 akPerturb(vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float faceDirection) {
 const SKIN_FN = /* glsl */ `
 const vec2 AK_EYE = vec2(${MORPH.eye.x.toFixed(4)}, ${MORPH.eye.z.toFixed(4)});
 const vec2 AK_SPI = vec2(${MORPH.spiracle.x.toFixed(4)}, ${MORPH.spiracle.z.toFixed(4)});
+const float AK_EYE_R = ${MORPH.eye.r.toFixed(4)};
+const float AK_EYE_LONG = ${MORPH.eye.long.toFixed(3)};
+const vec2 AK_SPI_ROT = vec2(${Math.cos(MORPH.spiracle.yaw).toFixed(4)}, ${Math.sin(MORPH.spiracle.yaw).toFixed(4)});
+const vec2 AK_SPI_R = vec2(${MORPH.spiracle.rx.toFixed(4)}, ${MORPH.spiracle.rz.toFixed(4)});
 float akSeg(vec2 p, vec2 a, vec2 b, float w) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return 1.0 - smoothstep(w * 0.4, w, length(pa - ba * h)); }
 float akSlits(vec2 q) {
   float s = 0.0;
@@ -134,14 +138,19 @@ AkSkin akSkin(vec4 P) {
     c *= 0.72 + 0.5 * mott;
     c *= 1.0 + 0.05 * (rays - 0.5) * finZone * det;
     c *= 0.94 + 0.12 * fine;
-    // orange-yellow skin round the eyes and spiracles [PHOTO 005, 011, 027, 056]
+    // the eye–spiracle complex's colour [PHOTO 005, 006, 011, 027]: a yellow-ochre patch on the socket in front of and
+    // outside the eye, a golden line round the eye's lip, the spiracle's thick rim yellowish; the rest skin
     vec2 e = vec2(ax, p.y);
-    float eyeHalo = exp(-dot((e - AK_EYE) / vec2(0.03, 0.028), (e - AK_EYE) / vec2(0.03, 0.028)));
-    float spiHalo = exp(-dot((e - AK_SPI) / vec2(0.034, 0.045), (e - AK_SPI) / vec2(0.034, 0.045)));
-    // a yellowish rim round the eye and the spiracle, not a wash [PHOTO 005, 006, 011]
-    float halo = clamp(eyeHalo + spiHalo, 0.0, 1.0);
-    halo = smoothstep(0.35, 0.75, halo) * (1.0 - smoothstep(0.85, 1.0, halo)) * (0.55 + 0.45 * akN(p * 70.0));
-    c = mix(c, akLin(vec3(0.6, 0.47, 0.22)), halo * 0.55);
+    vec2 ep = (e - AK_EYE - vec2(0.014, 0.012)) / vec2(0.026, 0.024);
+    float patchY = exp(-dot(ep, ep)) * (0.6 + 0.4 * akN(p * 60.0));
+    float eyeD = length(vec2(e.x - AK_EYE.x, (e.y - AK_EYE.y) / AK_EYE_LONG)) / AK_EYE_R;
+    float eyeLip = exp(-pow((eyeD - 1.0) / 0.12, 2.0));
+    vec2 sq = e - AK_SPI;
+    vec2 sl = vec2(sq.x * AK_SPI_ROT.x - sq.y * AK_SPI_ROT.y, sq.x * AK_SPI_ROT.y + sq.y * AK_SPI_ROT.x) / AK_SPI_R;
+    float spiD = length(sl);
+    float spiRim = exp(-pow((spiD - 1.06) / 0.2, 2.0)) * (0.7 + 0.3 * akN(p * 90.0));
+    float halo = clamp(patchY * 1.0 + eyeLip * 0.35 + spiRim * 0.7, 0.0, 1.0);
+    c = mix(c, akLin(vec3(0.55, 0.45, 0.26)), halo * 0.6);
     // a thin yellow line along the margin
     float line = smoothstep(0.986, 0.998, u);
     c = mix(c, akLin(vec3(0.7, 0.56, 0.28)), line * 0.8);
@@ -271,22 +280,23 @@ export function eyeTexture(): DataTexture {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     // SphereGeometry's uv.y is 1 at the pole (the cornea's apex)
     const v = 1 - y / (H - 1), a = (x / W) * Math.PI * 2;
-    // pupil: wider across, cut from above by the operculum's lobes
-    const lobes = 0.06 * Math.max(0, Math.cos(a - Math.PI / 2)) * (0.6 + 0.4 * Math.cos(a * 5));
-    const pupilR = 0.3 - lobes;
+    // seen from above the cornea is a dark, glossy dome [PHOTO 005, 006, 027]: a black pupil under its lobed flap, a
+    // very dark olive-bronze iris, and a thin golden line where the dome meets the lip of the socket
+    // (only v < ~0.3 shows above the socket: the dome is half sunk)
+    const lobes = 0.025 * Math.max(0, Math.cos(a - Math.PI / 2)) * (0.6 + 0.4 * Math.cos(a * 5));
+    const pupilR = 0.15 - lobes;
     const streak = 0.85 + 0.15 * Math.sin(a * 41 + Math.sin(a * 7) * 2);
     let r: number, g: number, b: number;
-    if (v < pupilR + 0.06) { r = 0.02; g = 0.025; b = 0.03; }
-    else if (v < 0.62) {
-      const t = (v - pupilR) / (0.62 - pupilR);
-      const base = [0.15, 0.12, 0.055];
-      const k = (0.55 + 0.45 * Math.sin(Math.PI * Math.min(1, t * 1.2))) * streak;
-      r = base[0] * k; g = base[1] * k; b = base[2] * k;
-      if (t < 0.12) { r *= 0.5; g *= 0.5; b *= 0.5; }
-    } else {
-      const t = (v - 0.62) / 0.38;
-      r = 0.2 * (1 - t) + 0.1 * t; g = 0.17 * (1 - t) + 0.08 * t; b = 0.12 * (1 - t) + 0.06 * t;
-    }
+    if (v < pupilR) { r = 0.012; g = 0.014; b = 0.018; }
+    else if (v < 0.33) {
+      const t = (v - pupilR) / (0.33 - pupilR);
+      const k = (0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, t * 1.1))) * streak;
+      r = 0.03 * k; g = 0.027 * k; b = 0.02 * k;
+    } else if (v < 0.42) {
+      const t = (v - 0.33) / 0.09;
+      const k = Math.sin(Math.PI * t);
+      r = 0.03 + 0.07 * k; g = 0.027 + 0.05 * k; b = 0.02 + 0.02 * k;
+    } else { r = 0.06; g = 0.05; b = 0.035; }
     const i = (y * W + x) * 4;
     d[i] = lin(Math.pow(r, 1 / 2.2)); d[i + 1] = lin(Math.pow(g, 1 / 2.2)); d[i + 2] = lin(Math.pow(b, 1 / 2.2)); d[i + 3] = 255;
   }

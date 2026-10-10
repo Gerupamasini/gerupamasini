@@ -220,3 +220,17 @@ describe('アカエイ behaviour', () => {
 
 function require_color() { return Color; }
 import { Color } from 'three';
+
+describe('アカエイ eye–spiracle complex', () => {
+  it('lays its skin patch facing up on both sides', () => {
+    for (const lod of [0, 1] as Lod[]) {
+      const g = akaeiGeometries(lod);
+      for (const geo of [g.spiracleL!, g.spiracleR!]) {
+        const n = geo.getAttribute('normal');
+        let up = 0;
+        for (let i = 0; i < n.count; i++) up += n.getY(i);
+        expect(up / n.count).toBeGreaterThan(0.5);
+      }
+    }
+  });
+});

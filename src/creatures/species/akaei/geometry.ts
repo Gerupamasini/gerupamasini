@@ -34,8 +34,8 @@ export interface LodSpec {
 }
 
 export const LOD_SPEC: Record<Lod, LodSpec> = {
-  0: { rows: 96, across: 44, tailRings: 120, tailSides: 16, eyeSeg: 22, details: true },
-  1: { rows: 44, across: 18, tailRings: 52, tailSides: 9, eyeSeg: 12, details: true },
+  0: { rows: 112, across: 50, tailRings: 120, tailSides: 16, eyeSeg: 24, details: true },
+  1: { rows: 52, across: 22, tailRings: 52, tailSides: 9, eyeSeg: 12, details: true },
   2: { rows: 18, across: 7, tailRings: 16, tailSides: 5, eyeSeg: 6, details: false },
 };
 
@@ -153,16 +153,34 @@ class Builder {
   }
 }
 
+/** n + 1 values from 0 to 1 spaced inversely to `density` (more where it is higher) */
+function spread(n: number, density: (t: number) => number): number[] {
+  const M = 2000, cum = [0];
+  for (let i = 1; i <= M; i++) cum.push(cum[i - 1] + density((i - 0.5) / M));
+  const total = cum[M], out: number[] = [];
+  let j = 0;
+  for (let k = 0; k <= n; k++) {
+    const target = (k / n) * total;
+    while (j < M && cum[j + 1] < target) j++;
+    const f = j < M ? (target - cum[j]) / Math.max(1e-12, cum[j + 1] - cum[j]) : 0;
+    out.push(Math.min(1, (j + f) / M));
+  }
+  out[0] = 0; out[n] = 1;
+  return out;
+}
+
 /**
  * The disc: one closed shell. Each station is a loop across the dorsal surface from the left margin to the right and
  * back under the ventral surface, so the margin vertex is shared (its normal points out, which gives the thin rim its
- * light). Stations are a little closer at the snout; across, they crowd toward the margin where the wave is largest.
+ * light). Stations crowd a little at the snout and much more over the eye–spiracle complex; across, they crowd toward
+ * the margin where the wave is largest and over the complex.
  */
 function buildDisc(spec: LodSpec): BufferGeometry {
   const b = new Builder();
   const M = MORPH, NZ = spec.rows, NU = spec.across;
-  const across: number[] = [];
-  for (let k = 0; k <= NU; k++) { const t = k / NU; across.push(0.45 * t + 0.55 * Math.sin((t * Math.PI) / 2)); }
+  // across: crowded toward the margin (where the wave is largest) and, on the detailed tiers, over the eye–spiracle
+  // complex too, whose lips and rims are narrower than the rest of the disc needs
+  const across = spread(NU, (u) => 1 + 2.2 * u * u * u + (spec.details ? 2.4 * Math.exp(-(((u - 0.3) / 0.12) ** 2)) : 0));
   // u from -1 (the animal's right, -X) over the back to +1 and back under the belly
   const loopU: { u: number; side: number }[] = [];
   for (let k = NU; k >= 1; k--) loopU.push({ u: -across[k], side: 1 });
@@ -175,9 +193,13 @@ function buildDisc(spec: LodSpec): BufferGeometry {
   const ring = loopU.length;
   const z0 = M.zSnout - 0.0016, z1 = M.zEnd;
   const rows: number[] = [];
+  // stations: a little closer at the snout, and much closer over the eyes and spiracles on the detailed tiers
+  const along = spread(NZ, (t) => {
+    const z = z0 - (z0 - z1) * t;
+    return 1.3 - 0.3 * t + (spec.details ? 3.2 * Math.exp(-(((z - 0.24) / 0.055) ** 2)) : 0);
+  });
   for (let r = 0; r <= NZ; r++) {
-    const t = r / NZ;
-    const z = z0 - (z0 - z1) * (0.62 * t + 0.38 * Math.pow(t, 1.45));
+    const z = z0 - (z0 - z1) * along[r];
     const w = halfWidth(z);
     rows.push(b.count);
     for (const { u, side } of loopU) {
@@ -327,18 +349,23 @@ function buildSting(spec: LodSpec): BufferGeometry {
   return b.build();
 }
 
-/** gaze direction of the left eye (the right mirrors x): up, out and a little forward */
-const EYE_GAZE = new Vector3(0.42, 0.88, 0.22).normalize();
-
-/** an eye: the domed cornea standing out of its raised orbit; uv.y runs from the pupil (0) outward */
+/**
+ * An eye: the cornea's dark dome, a little almond-shaped (longer along the body) and lower than it is wide, sunk in its
+ * socket so about half shows, bulging up and out through the raised lip [PHOTO 005, 006, 011, 027]. uv.y runs from the
+ * apex (1) down the dome.
+ */
 function buildEye(spec: LodSpec, sideX: number): BufferGeometry {
   const E = MORPH.eye;
   const seg = spec.eyeSeg;
-  const sph = new SphereGeometry(E.r, seg, Math.max(4, Math.round(seg * 0.6)), 0, Math.PI * 2, 0, Math.PI * 0.62);
-  const gaze = EYE_GAZE.clone().setX(EYE_GAZE.x * sideX);
+  // nearly a whole ball: its open lower edge stays deep under the skin of the socket
+  const sph = new SphereGeometry(E.r, seg, Math.max(5, Math.round(seg * 0.75)), 0, Math.PI * 2, 0, Math.PI * 0.9);
+  // shape in the eye's own frame (y = its axis): flattened along the axis, drawn out along the body
+  sph.applyMatrix4(new Matrix4().makeScale(1, E.flat, E.long));
+  const gaze = new Vector3(E.gaze[0] * sideX, E.gaze[1], E.gaze[2]).normalize();
+  // turn the axis to the gaze, keeping the long axis along the body
   const q = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), gaze);
   const x = E.x * sideX, z = E.z;
-  const c = new Vector3(x, dorsalHeight(x, z) - E.r * 0.42, z);
+  const c = new Vector3(x, dorsalHeight(x, z) - E.r * E.sunk, z);
   sph.applyMatrix4(new Matrix4().compose(c, q, new Vector3(1, 1, 1)));
   const b = new Builder();
   const p = sph.getAttribute('position'), uv = sph.getAttribute('uv');
@@ -362,7 +389,7 @@ function spiracleFrame(sideX: number): { cx: number; cz: number; ux: [number, nu
 
 /**
  * A spiracle: the dark opening sunk in its hollow behind the eye (material 1) and the valve that shuts it (material 0,
- * skin). Morph target 0 opens the valve: it folds forward against its hinge at the front edge.
+ * skin). Morph target 0 opens the valve: it draws back against its hinge on the outer wall.
  */
 function buildSpiracle(spec: LodSpec, sideX: number): BufferGeometry {
   const S = MORPH.spiracle;
@@ -385,7 +412,7 @@ function buildSpiracle(spec: LodSpec, sideX: number): BufferGeometry {
       const [x, z] = at(Math.cos(a) * S.rx * 0.82 * d, Math.sin(a) * S.rz * 0.82 * d);
       // nearly black inside, a little warm brown only at the lip [PHOTO 005, 006]
       const shade = 0.018 + 0.1 * Math.pow(d, 4);
-      ring.push(b.disc(x, dorsalHeight(x, z) + 0.0005, z, 1, [shade * 0.9, shade * 0.55, shade * 0.45]));
+      ring.push(b.disc(x, dorsalHeight(x, z) + 0.0005, z, 1, [shade * 0.8, shade * 0.7, shade * 0.6]));
       open.push(0, 0, 0);
     }
     rings.push(ring);
@@ -395,32 +422,31 @@ function buildSpiracle(spec: LodSpec, sideX: number): BufferGeometry {
     const k1 = (k + 1) % NA;
     b.quad(rings[r][k], rings[r][k1], rings[r + 1][k1], rings[r + 1][k]);
   }
-  // the valve: a skin flap over the opening, hinged on its front edge
+  // the valve: a pale flap hinged on the outer wall that closes all but a dark crescent slit next to the eye
+  // [PHOTO 011, 027]; open, it draws back toward its hinge
   b.group(0);
   const NV = spec.details ? 6 : 2, NVa = spec.details ? 12 : 5;
-  const hingeV = S.rz * 0.8;
+  const hingeU = S.rx * 0.84;
   const flap: number[][] = [];
   const open0 = new Vector3();
   for (let i = 0; i <= NV; i++) {
-    const t = i / NV; // 0 at the hinge (front) … 1 at the free edge (back)
+    const t = i / NV; // 0 at the hinge (outer wall) … 1 at the free edge (toward the eye)
     const row: number[] = [];
+    const du = hingeU - t * S.rx * 1.36;
+    const halfAlong = S.rz * 0.86 * Math.sqrt(Math.max(0.05, 1 - (du / (S.rx * 0.86)) ** 2));
     for (let j = 0; j <= NVa; j++) {
       const w = -1 + (2 * j) / NVa;
-      // the valve shuts the front of the opening; a dark crescent stays at the back [PHOTO 006, 011]
-      const dv = hingeV - t * S.rz * 1.12;
-      const halfAcross = S.rx * 0.86 * Math.sqrt(Math.max(0.04, 1 - (dv / (S.rz * 0.86)) ** 2));
-      const du = w * halfAcross;
+      const dv = w * halfAlong;
       const [x, z] = at(du, dv);
-      const y = dorsalHeight(x, z) + 0.0011 + 0.0004 * Math.sin(Math.PI * t);
+      const y = dorsalHeight(x, z) + 0.0011 + 0.0012 * Math.sin(Math.PI * t * 0.8);
       row.push(b.disc(x, y, z, 1));
-      // open: the valve folds forward against its hinge (the front wall), uncovering the opening behind it
-      const [hx, hz] = at(du * 0.9, hingeV);
-      open0.set(hx + (x - hx) * 0.22, y + 0.0012 * t, hz + (z - hz) * 0.22);
+      const [hx, hz] = at(hingeU, dv * 0.95);
+      open0.set(hx + (x - hx) * 0.3, y + 0.0015 * t, hz + (z - hz) * 0.3);
       open.push(open0.x - x, open0.y - y, open0.z - z);
     }
     flap.push(row);
   }
-  for (let i = 0; i < NV; i++) for (let j = 0; j < NVa; j++) b.quad(flap[i][j], flap[i][j + 1], flap[i + 1][j + 1], flap[i + 1][j]);
+  for (let i = 0; i < NV; i++) for (let j = 0; j < NVa; j++) b.quad(flap[i][j], flap[i + 1][j], flap[i + 1][j + 1], flap[i][j + 1]);
   b.morph.push(open);
   return b.build();
 }

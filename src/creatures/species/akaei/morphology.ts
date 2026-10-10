@@ -76,15 +76,24 @@ export const MORPH = {
 
   // ------------------------------------------------------------------ head
   /**
-   * eyes on raised orbits 0.21 DW behind the snout; preorbital snout ≈ 1.75 × the interorbital width between the orbits'
-   * inner edges (0.12) [LIT 1.36–2.14; PHOTO 005, 006, 014, 037]
+   * The eye–spiracle complex, as in the close-ups [PHOTO 005, 006, 011, 027, 056]: the eye is a dark, glossy, slightly
+   * almond-shaped dome sunk in a socket and bulging up and outward through a raised fleshy rim; the spiracle sits
+   * against its back and outer side, its rim running on from the eye's so the two share one low mound. Eyes 0.21 DW
+   * behind the snout; preorbital snout ≈ 1.75 × the interorbital width between the orbits' inner edges (0.12)
+   * [LIT 1.36–2.14].
+   *   r        radius of the cornea's dome; long  its elongation along the body (almond); flat  its height / width
+   *   sunk     how far the dome's centre lies under the socket floor (× r): about half the eye shows
+   *   gaze     the dome's axis (left eye): mostly up, well out to the side, a little forward
+   *   socketR / socketH  the broad mound the complex stands on; rimR / rimH / rimW  the raised lip round the eye (× r)
    */
-  eye: { x: 0.078, z: 0.262, r: 0.0155, orbitR: 0.026, orbitH: 0.019 },
+  eye: { x: 0.078, z: 0.262, r: 0.0172, long: 1.2, flat: 0.9, sunk: 0.34, gaze: [0.62, 0.77, 0.14] as [number, number, number],
+    socketR: 0.036, socketH: 0.011, rimR: 1.14, rimH: 0.005, rimW: 0.45 },
   /**
-   * spiracles right behind the eyes and a little outside them, 1.3–1.5 × the eye, a large oval opening whose rear
-   * crescent stays dark even when the valve shuts its front [PHOTO 005, 006, 011, 027, 056]
+   * spiracles 1.5–2 × the eye, wrapped round its back and outer side (the centre 0.022 outside and 0.026 behind the
+   * eye's), a teardrop whose long axis runs back and inward from beside the eye; a thick rim; the valve, a pale flap
+   * hinged on the outer wall, closes all but a dark crescent slit along the side next to the eye [PHOTO 006, 011, 027]
    */
-  spiracle: { x: 0.09, z: 0.214, rx: 0.022, rz: 0.029, yaw: 0.3, depth: 0.008 },
+  spiracle: { x: 0.104, z: 0.231, rx: 0.022, rz: 0.035, yaw: 0.55, depth: 0.009, rimH: 0.0035 },
   /** mouth a transverse, gently arched slit under the eyes; nostrils and the nasal curtain in front [PHOTO 047, 049, 050, 055] */
   mouth: { z: 0.258, halfW: 0.045, arch: 0.009 },
   /** nostrils at the mouth's corners, 0.12 DW apart, 0.19 DW behind the snout [PHOTO 049, 052] */
@@ -161,13 +170,19 @@ export function dorsalHeight(x: number, z: number): number {
   const one = Math.max(0, 1 - u * u);
   let h = M.rimHalf * Math.sqrt(one) + F * Math.pow(one, 1.3) + Math.max(0, T - F) * trunkBump(x, z);
   const ax = Math.abs(x);
-  // raised orbits, the spiracles' hollows behind them, a faint ridge over the spine
+  // the eye–spiracle complex: a low mound, the lip round the eye's socket, the spiracle's hollow with its thick rim,
+  // and a bridge where the two rims meet [PHOTO 005, 006, 011, 027]
   const E = M.eye, S = M.spiracle;
-  h += E.orbitH * gauss(ax - E.x, z - E.z, E.orbitR, E.orbitR * 1.1);
+  const ex = ax - E.x, ez = z - E.z;
+  h += E.socketH * gauss(ex - 0.008, ez + 0.01, E.socketR, E.socketR * 1.15);
+  const ed = Math.hypot(ex, ez / E.long) / E.r;
+  h += E.rimH * Math.exp(-(((ed - E.rimR) / E.rimW) ** 2));
   const sx = ax - S.x, sz = z - S.z, cy = Math.cos(S.yaw), sy = Math.sin(S.yaw);
   const su = sx * cy - sz * sy, sv = sx * sy + sz * cy;
   const sd = Math.hypot(su / S.rx, sv / S.rz);
-  h += 0.004 * Math.exp(-((sd - 1.05) ** 2) / 0.08) - S.depth * Math.exp(-sd * sd * 1.6);
+  h += S.rimH * Math.exp(-((sd - 1.1) ** 2) / 0.2) - S.depth * Math.exp(-sd * sd * 1.6);
+  const bx = (S.x + E.x) / 2 + 0.004, bz = (S.z + E.z) / 2;
+  h += 0.004 * gauss(ax - bx, z - bz, 0.012, 0.012);
   h += 0.0012 * Math.exp(-(x * x) / (0.03 * 0.03)) * smoothstep(0.15, 0.0, z) * smoothstep(-0.48, -0.3, z);
   return h;
 }

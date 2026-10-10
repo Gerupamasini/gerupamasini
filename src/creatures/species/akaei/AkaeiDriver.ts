@@ -432,7 +432,8 @@ export class AkaeiDriver implements Driver {
     this.breathT += dt * (this.alertK > 0.5 ? 0.35 : this.grounded > 0.5 ? 0.6 : 0.8);
     const br = 0.5 + 0.5 * Math.sin(this.breathT * TWO_PI);
     p.breath = br * (0.4 + 0.6 * this.grounded);
-    p.spiracle = Math.max(0, Math.min(1, br * 1.3 - 0.15)) * (this.alertK > 0.5 ? 0.3 : 1);
+    // the valve stays shut but for a dark slit, and opens only briefly at the top of each breath [PHOTO 011, 027]
+    p.spiracle = smooth(0.55, 1, br) * 0.75 * (this.alertK > 0.5 ? 0.3 : 1);
     p.gills = (1 - br) * 0.35;
     this.applyFeedingOpenings(p);
     p.drapeK = smooth(0.5, 1, this.grounded);
