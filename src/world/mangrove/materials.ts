@@ -19,6 +19,11 @@ uniform vec2 uHgGrid;
 varying vec3 vHgWorld;
 varying vec3 vHgDetail;
 varying float vHgSeed;
+varying float vHgAbove;
+float hgGroundAt(vec2 xz) {
+  float n = uHgGrid.y;
+  return texture2D(uHgGround, ((xz / uHgGrid.x + 0.5) * (n - 1.0) + 0.5) / n).r;
+}
 vec3 hgShape(vec3 p) {
   float y = max(p.y, 0.0), t = clamp(y / 2.0, 0.0, 1.0);
   float lean = y * t * t * (3.0 - 2.0 * t);
@@ -34,9 +39,7 @@ vec3 hgShape(vec3 p) {
     (p.x*sn+p.z*c) * spread + sin(aSeeds.x * 6.28318530718) * 0.055 * lean);
   #if HG_ROOT == 1
     vec4 w = instanceMatrix * vec4(q, 1.0);
-    float n = uHgGrid.y;
-    vec2 uv = ((w.xz / uHgGrid.x + 0.5) * (n - 1.0) + 0.5) / n;
-    float ground = texture2D(uHgGround, uv).r;
+    float ground = hgGroundAt(w.xz);
     float scale = length(instanceMatrix[1].xyz);
     float k = clamp(1.0 - y / 1.35, 0.0, 1.0);
     q.y += (ground - instanceMatrix[3].y) / scale * k * k * (3.0 - 2.0 * k);
@@ -64,6 +67,7 @@ const FRAGMENT = /* glsl */`
 varying vec3 vHgWorld;
 varying vec3 vHgDetail;
 varying float vHgSeed;
+varying float vHgAbove;
 uniform float uHgWater, uHgWet;
 uniform sampler2D uHgLeafAtlas;
 float hgWet = 0.0;
@@ -117,14 +121,24 @@ const COLOR = /* glsl */`
   float fine = hgBark(vUv);
   hgWet = 1.0 - smoothstep(uHgWet-0.06,uHgWet+0.22,vHgWorld.y);
   float soaked = 1.0-smoothstep(uHgWater-0.03,uHgWater+0.045,vHgWorld.y);
-  vec3 bark = mix(vec3(0.16,0.125,0.087),vec3(0.28,0.27,0.23),coarse);
+  vec3 bark = mix(vec3(0.2,0.165,0.125),vec3(0.38,0.36,0.32),coarse);
   bark *= 0.92 + fine*0.4;
   // Narrow olive biofilm at the tidal stain, exposed wet wood remains brown-grey.
   float algae = exp(-abs(vHgWorld.y-uHgWet+0.14)*9.0)*hgNoise(vUv*19.0)*0.45;
   bark = mix(bark,vec3(0.081,0.105,0.037),algae);
   bark *= 1.0-hgWet*0.43-soaked*0.08;
+  // Mud splash/coating on the lowest 20-40 cm of each prop root and stem base, ragged upper edge.
+  float mudLine = 0.18 + 0.2 * hgNoise(vUv * vec2(3.0, 1.2) + vHgSeed * 9.0);
+  float mud = 1.0 - smoothstep(mudLine - 0.12, mudLine, vHgAbove);
+  bark = mix(bark, mix(vec3(0.115,0.098,0.074), vec3(0.06,0.052,0.042), hgWet), mud * 0.9);
+  // Sparse barnacle / oyster spat inside the intertidal band (above the mud, below the wet line).
+  vec2 bc = vUv * vec2(42.0, 60.0), bid = floor(bc);
+  float barnacle = (1.0 - smoothstep(0.16, 0.3, length(fract(bc) - 0.5))) * step(0.86, hgHash(bid + 3.1))
+    * smoothstep(0.1, 0.3, vHgAbove) * (1.0 - smoothstep(uHgWet - 0.15, uHgWet + 0.05, vHgWorld.y));
+  bark = mix(bark, vec3(0.42,0.40,0.36), barnacle * 0.8);
+  hgWet = max(hgWet, mud * 0.75);
   diffuseColor.rgb *= bark;
-  hgRelief = fine*0.0013;
+  hgRelief = fine*0.0013 + barnacle*0.0016 - mud*fine*0.0008;
 #endif
 `;
 
@@ -135,7 +149,7 @@ function hook(shader: WebGLProgramParametersWithUniforms, u: HirugiUniforms, par
   shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${VERTEX}`)
     .replace('#include <begin_vertex>', `vec3 transformed = hgShape(position);
 vHgWorld = (modelMatrix * instanceMatrix * vec4(transformed,1.0)).xyz;
-vHgDetail = aDetail; vHgSeed = aSeeds.z;`);
+vHgDetail = aDetail; vHgSeed = aSeeds.z; vHgAbove = vHgWorld.y - hgGroundAt(vHgWorld.xz);`);
   if (depth) {
     shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>\n${FRAGMENT}`)
       .replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>
@@ -168,11 +182,11 @@ export function treeMaterial(u: HirugiUniforms, part: TreePart): MeshStandardMat
     : new MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0 });
   m.name = `YaeyamaHirugi/${part}`; m.onBeforeCompile = (s) => hook(s, u, part, false);
   m.defines = { ...m.defines, USE_UV: '' };
-  m.customProgramCacheKey = () => `hirugi-v1-${part}`;
+  m.customProgramCacheKey = () => `hirugi-v2-${part}`;
   return m;
 }
 export function treeDepth(u: HirugiUniforms, part: TreePart): MeshDepthMaterial {
   const m = new MeshDepthMaterial({ depthPacking: RGBADepthPacking, side: part === 'Leaves' ? DoubleSide : FrontSide });
   m.defines = { ...m.defines, USE_UV: '' };
-  m.onBeforeCompile = (s) => hook(s, u, part, true); m.customProgramCacheKey = () => `hirugi-depth-v1-${part}`; return m;
+  m.onBeforeCompile = (s) => hook(s, u, part, true); m.customProgramCacheKey = () => `hirugi-depth-v2-${part}`; return m;
 }

@@ -9,11 +9,15 @@ const UP = new Vector3(0, 1, 0);
 export function collisionSegments(skeleton: TreeSkeleton, tree: TreeSpec, ground: Ground): RootSegment[] {
   const result: RootSegment[] = [], scale = treeScale(tree);
   for (const p of [...skeleton.roots, ...skeleton.trunk]) {
-    const sample = samplePath(p, p.root ? p.order === 0 ? 18 : 10 : 10);
+    // Tiered fidelity: arching primaries are smooth enough to walk along, toes/secondary arches coarser,
+    // hair-thin hanging rootlets are a single snag capsule (body blocking only, too thin to stand on).
+    const sample = samplePath(p, p.root ? [16, 6, 1][Math.min(p.order, 2)] : 10);
     for (let i = 0; i < sample.points.length - 1; i++) {
       const a = worldPoint(sample.points[i], tree, p.root, ground), b = worldPoint(sample.points[i + 1], tree, p.root, ground);
       if (a.distanceToSquared(b) < 1e-10) continue;
-      result.push({ a, b, ra: sample.radii[i] * scale, rb: sample.radii[i + 1] * scale, tree: tree.id, root: p.root });
+      // Small animals need a contact patch: very thin roots get a minimum support radius of 2.5 cm.
+      const min = p.root && p.order < 2 ? 0.025 : 0;
+      result.push({ a, b, ra: Math.max(min, sample.radii[i] * scale), rb: Math.max(min, sample.radii[i + 1] * scale), tree: tree.id, root: p.root });
     }
   }
   return result;

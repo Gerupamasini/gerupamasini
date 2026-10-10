@@ -86,9 +86,12 @@ describe('ヤエヤマヒルギ: shared assets', () => {
   it('attaches primary and branch-borne prop roots to real woody stems, including above a low fork', () => {
     for(const base of [0,1,2,3,4] as const) {
       const s=buildSkeleton(base), points=s.trunk.flatMap(p=>new CatmullRomCurve3(p.points,false,'centripetal').getPoints(96));
-      for(const root of s.roots.filter(p=>p.order===0 || p.points[0].y>2)) {
+      for(const root of s.roots.filter(p=>p.order===0)) {
         expect(Math.min(...points.map(p=>p.distanceTo(root.points[0])))).toBeLessThan(0.1);
       }
+      // Toes, secondary arches and rootlets branch from a primary root or an aerial root; none float.
+      const woody=[...points,...s.roots.flatMap(p=>new CatmullRomCurve3(p.points,false,'centripetal').getPoints(64))];
+      for(const root of s.roots.filter(p=>p.order>0)) expect(Math.min(...woody.map(p=>p.distanceTo(root.points[0])))).toBeLessThan(0.1);
     }
   });
 });
