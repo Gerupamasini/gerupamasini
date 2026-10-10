@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { Group, Vector3, type Material, type Mesh, type Object3D, type ShaderMaterial, type SkinnedMesh } from 'three';
+import { Color, Group, Vector3, type Material, type Mesh, type Object3D, type ShaderMaterial, type SkinnedMesh } from 'three';
 import { SpeciesSchema } from '../../src/data/schemas';
 import { generateIndividual, minDepthFor } from '../../src/creatures/Individual';
 import type { DriverContext } from '../../src/creatures/drivers/Driver';
 import { AkaeiDriver } from '../../src/creatures/species/akaei/AkaeiDriver';
+import { makeSkinMaterial } from '../../src/creatures/species/akaei/material';
 import { DRIVERS } from '../../src/creatures/drivers/index';
 import { AkaeiModel } from '../../src/creatures/species/akaei/AkaeiModel';
 import { akaeiBuild } from '../../src/creatures/species/akaei/AkaeiDriver';
@@ -103,5 +104,29 @@ describe('a new ray is born in its far form', () => {
     expect(d.lod).toBe(0);
     expect(triangles(holder)).toBeGreaterThan(20000);
     d.detach();
+  });
+});
+
+describe('the far ray skin compiles without the relief and the fine detail', () => {
+  const look = { tint: new Color(1, 1, 1), dark: 0.4, seed: 0.3 };
+  const chunks = ['common', 'begin_vertex', 'color_fragment', 'roughnessmap_fragment', 'normal_fragment_maps', 'lights_fragment_end', 'lights_physical_fragment'].map((c) => `#include <${c}>`).join('\n');
+  const compiled = (cheap: boolean) => {
+    const m = makeSkinMaterial(look, cheap);
+    const shader = { uniforms: {}, vertexShader: chunks, fragmentShader: chunks } as unknown as Parameters<NonNullable<typeof m.onBeforeCompile>>[0];
+    m.onBeforeCompile!(shader, null as never);
+    return { m, frag: shader.fragmentShader };
+  };
+  it('the near skin has the relief and AK_DETAIL 1', () => {
+    const { m, frag } = compiled(false);
+    expect(m.defines?.AK_DETAIL).toBe('1.0');
+    expect(frag).toContain('dFdx(akHt)');
+    expect(frag).toContain('float det = AK_DETAIL;');
+  });
+  it('the far skin has neither', () => {
+    const { m, frag } = compiled(true);
+    expect(m.defines?.AK_DETAIL).toBe('0.0');
+    expect(frag).not.toContain('dFdx(akHt)');
+    expect(frag).not.toContain('akPerturb(-vViewPosition');
+    expect(frag).not.toContain('material.clearcoat');
   });
 });

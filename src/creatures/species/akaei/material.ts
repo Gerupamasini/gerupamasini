@@ -39,7 +39,7 @@ export interface SkinUniforms {
 
 const COMMON = /* glsl */ `
 uniform vec3 uAkTint;
-uniform vec4 uAkLook;   // x dark, y seed, z detail (0 far … 1 near), w unused
+uniform vec4 uAkLook;   // x dark, y seed, z and w unused (the detail is the AK_DETAIL define: the far skin's terms compile away)
 uniform vec4 uAkSand;   // x back cover 0..1, y tail cover, z settled grain, w margin cover
 uniform vec3 uAkSandCol;
 uniform float uAkTime;
@@ -94,7 +94,7 @@ AkSkin akSkin(vec4 P) {
   AkSkin k;
   float side = P.z;
   float seed = uAkLook.y;
-  float det = uAkLook.z;
+  float det = AK_DETAIL;
   k.thin = 0.0;
   if (side > 1.5) {
     // ---------------------------------------------------------------- tail
@@ -197,7 +197,7 @@ AkSkin akSkin(vec4 P) {
 }
 `;
 
-/** a skin material for one individual (cheap = LOD2: standard material, no coat, no relief) */
+/** a skin material for one individual (cheap = LOD2: standard material, no coat, no relief, no fine detail: AK_DETAIL 0 compiles those terms away) */
 export function makeSkinMaterial(look: SkinLook, cheap: boolean, shared?: SkinUniforms): MeshPhysicalMaterial | MeshStandardMaterial {
   const uniforms: SkinUniforms = shared ?? {
     uAkTint: { value: look.tint.clone() },
@@ -214,6 +214,7 @@ export function makeSkinMaterial(look: SkinLook, cheap: boolean, shared?: SkinUn
       specularIntensity: 0.55,
     });
   mat.name = cheap ? 'AkaeiSkinLod2' : 'AkaeiSkin';
+  mat.defines = { AK_DETAIL: cheap ? '0.0' : '1.0' };
   mat.userData.akaei = uniforms;
   mat.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, uniforms);
@@ -229,14 +230,6 @@ export function makeSkinMaterial(look: SkinLook, cheap: boolean, shared?: SkinUn
         diffuseColor.rgb *= mix(akS.col, akSandC, akS.sand);`)
       .replace('#include <roughnessmap_fragment>', /* glsl */ `#include <roughnessmap_fragment>
         roughnessFactor = mix(akS.rough, 0.92, akS.sand);`)
-      .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
-        {
-          float akHt = akS.height * 0.0006 * (1.0 - akS.sand) + akS.sand * akSandG * 0.0009;
-          vec2 akDh = vec2(dFdx(akHt), dFdy(akHt)) * uAkLook.z;
-          // fade the relief where it would alias
-          akDh *= 1.0 - smoothstep(0.3, 1.0, length(fwidth(vAkPlan.xy)) * 220.0);
-          normal = akPerturb(-vViewPosition, normal, akDh, faceDirection);
-        }`)
       .replace('#include <lights_fragment_end>', /* glsl */ `#include <lights_fragment_end>
         #if NUM_DIR_LIGHTS > 0
         {
@@ -249,6 +242,15 @@ export function makeSkinMaterial(look: SkinLook, cheap: boolean, shared?: SkinUn
         }
         #endif`);
     if (!cheap) {
+      // the relief (screen-space derivatives of the skin's height): the far skin does without, as it does without the coat
+      shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>
+        {
+          float akHt = akS.height * 0.0006 * (1.0 - akS.sand) + akS.sand * akSandG * 0.0009;
+          vec2 akDh = vec2(dFdx(akHt), dFdy(akHt));
+          // fade the relief where it would alias
+          akDh *= 1.0 - smoothstep(0.3, 1.0, length(fwidth(vAkPlan.xy)) * 220.0);
+          normal = akPerturb(-vViewPosition, normal, akDh, faceDirection);
+        }`);
       shader.fragmentShader = shader.fragmentShader.replace('#include <lights_physical_fragment>', /* glsl */ `#include <lights_physical_fragment>
         #ifdef USE_CLEARCOAT
         material.clearcoat *= akS.coat * (1.0 - akS.sand);
