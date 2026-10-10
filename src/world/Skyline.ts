@@ -37,6 +37,7 @@ export class Skyline {
   /** `kind`: the map's layout (its own horizon); absent: the 西のなぎさ */
   constructor(kind?: string) {
     this.group.name = 'skyline';
+    if (kind === 'manko') return;
     if (kind === 'hashirimizu') { buildHashirimizuSkyline(this.plane.bind(this), this.ships); this.land = buildHashirimizuLand(); return; }
     // ---- 富士山: 106 km WSW, 3776 m: a broad flat-topped cone 1.6° high and 12° wide, nearly all haze
     this.plane(253, ang(18), ang(1.65 * 2.4), FOOT, 1024, 160, (c, w, h) => {

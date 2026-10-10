@@ -587,3 +587,6 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .btn.sm { height: 36px; padding: 0 16px; font-size: 13px; }
 .btn.ghost { background: transparent; }
 .btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+.spot-regions { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+.spots-japan [role="button"] { cursor: pointer; }

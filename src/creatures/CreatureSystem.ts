@@ -88,6 +88,7 @@ export class CreatureSystem {
     readonly removed: Set<string>,
     /** animals never appear closer to the player than this (m); a small, busy shore lets them come nearer */
     private readonly minSpawnDist?: number,
+    private readonly enabled = true,
   ) {
     this.group.name = 'creatures';
     scene.add(this.group);
@@ -112,6 +113,7 @@ export class CreatureSystem {
 
   /** Warm the model cache for the distance tiers. */
   async preload(): Promise<void> {
+    if (!this.enabled) return;
     const jobs: Promise<unknown>[] = [];
     for (const sp of this.data.species.values()) {
       // only what lives on this flat (the others load when they are first needed, in the tank or the book)
@@ -148,6 +150,7 @@ export class CreatureSystem {
   }
 
   update(f: CreatureFrame): void {
+    if (!this.enabled) return;
     this.frameIndex++;
     this.nowMs = f.gameMs;
     const env: SpawnEnv = { tod: f.tod, season: f.season, tidePhase: f.tidePhase, mapId: this.mapId, gameMs: f.gameMs, day: Math.floor(f.gameMs / 86400000) };
@@ -285,6 +288,7 @@ export class CreatureSystem {
   }
 
   spawn(ind: Individual): void {
+    if (!this.enabled) return;
     if (this.entries.has(ind.id)) return;
     const entry = DRIVERS[ind.species.model.driver ?? ''];
     if (!entry) { console.warn(`[creatures] no driver for ${ind.species.id}`); return; }
@@ -314,6 +318,7 @@ export class CreatureSystem {
 
   /** debug: spawn everything the rules allow right around the player, ignoring the pop-in distance */
   forceSpawn(playerPos: Vector3, env: SpawnEnv): number {
+    if (!this.enabled) return 0;
     const requests = this.spawner.plan(playerPos.x, playerPos.z, env, this.individuals, 0);
     for (const req of requests) this.spawn(this.spawner.create(req, env.gameMs));
     return requests.length;
