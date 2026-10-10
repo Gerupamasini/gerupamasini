@@ -93,6 +93,7 @@ export class IshigareiDriver implements Driver {
     const scale = individual.length_mm / 1000 / MODEL_TL;
     this.model = buildModel(new IshigareiLook(lookSpecFor(individual.id)));
     root.add(this.model.root);
+    root.scale.setScalar(scale);   // (once: the length does not change in the field)
     const lv = this.model.lod.levels;
     lv[1].distance = LOD1_AT * scale; lv[2].distance = LOD2_AT * scale;
     if (!this.fish) {
@@ -214,9 +215,7 @@ export class IshigareiDriver implements Driver {
     const st = f.state;
     ind.pos.copy(st.pos);
     ind.heading = st.heading;
-    applyPose(root, model.bones, P, JAW_AXIS);
-    root.scale.setScalar(ind.length_mm / 1000 / MODEL_TL);
-    root.updateMatrixWorld(true);
+    applyPose(root, model.bones, P, JAW_AXIS);   // (ends by updating the world matrices: syncEyes reads them)
     syncEyes(model);
     root.visible = true;
     // materials: burial, mouth, gills; the substrate it lies on (sand over it, the hue it matches)

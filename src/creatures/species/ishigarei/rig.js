@@ -5,6 +5,7 @@ import { EYES, MOUTH, S_ROOT } from './anatomy.js';
 
 const M = 0.001;
 const _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _g = new THREE.Vector3(), _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _y = new THREE.Vector3();
+const _d = new THREE.Vector3();   // (the eye's wanted direction, reused: this runs per eye per frame)
 
 /** Orientation of an eye looking along `dir` (model frame), its local +y kept towards the fish's back (+X). */
 export function eyeQuaternion(dir, out = new THREE.Quaternion()) {
@@ -71,7 +72,7 @@ export function applyPose(root, bones, P, axis) {
     const g0 = _g.set(0, 0, 1).applyQuaternion(rest.quat);
     const want = P.eyes[i].dir;
     const ang = g0.angleTo(want);
-    const d = new THREE.Vector3().copy(want);
+    const d = _d.copy(want);
     if (ang > 0.55) d.copy(g0).lerp(want, 0.55 / ang).normalize();
     eyeQuaternion(d, b.quaternion);
     b.position.copy(rest.pos).addScaledVector(g0, P.eyes[i].raise * 0.6 * M);

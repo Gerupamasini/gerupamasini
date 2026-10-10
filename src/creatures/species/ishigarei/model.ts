@@ -119,9 +119,11 @@ export function buildModel(look: IshigareiLook, tiers: (0 | 1 | 2)[] = [0, 1, 2]
 }
 
 const _m = new Matrix4();
-/** after the bones have moved: the eyeballs follow their bones (in the model root's frame) */
+/**
+ * After the bones have moved: the eyeballs follow their bones (in the model root's frame). Call it right after
+ * applyPose, whose world-matrix update it reads (no traversal of its own: a fish is 70-odd objects, and this ran per frame).
+ */
 export function syncEyes(m: IshigareiModel): void {
-  m.root.updateMatrixWorld(true);
   _m.copy(m.root.matrixWorld).invert();
   for (const nodes of m.eyeNodes) for (const n of nodes) {
     if (!n.parent?.visible && nodes !== m.eyeNodes[0]) continue;
