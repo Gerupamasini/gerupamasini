@@ -2,8 +2,10 @@ import { h, Fragment } from 'preact';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import { TankPanel } from '../tank/TankPanel';
+import { TankSwitcher } from '../tank/TankSwitcher';
 import { ToolsPanel } from './ToolsPanel';
 import { MobileHome } from './MobileHome';
+import { FirstSteps } from './FirstSteps';
 import { nextLevelAt } from '../../systems/Encyclopedia';
 import { formatJst } from '../../core/Time';
 import { moonAge, tideName } from '../../core/Moon';
@@ -39,6 +41,8 @@ export function HomeMenu({ app }: { app: App }) {
   const infoSp = info ? app.data.species.get(info.speciesId) : undefined;
   return (
     <Fragment>
+      <FirstSteps app={app} />
+      <TankSwitcher app={app} />
       <div class="glass home-status rise">
         <div class="level-row">
           <span class="lv">Lv.</span><span class="num">{level}</span>

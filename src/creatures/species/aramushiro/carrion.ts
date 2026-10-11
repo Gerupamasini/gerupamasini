@@ -1,10 +1,9 @@
 import {
-  BufferGeometry, Color, DynamicDrawUsage, Float32BufferAttribute, Group, InstancedBufferAttribute, InstancedMesh, Matrix4, MeshPhysicalMaterial,
+  BufferGeometry, Color, DoubleSide, DynamicDrawUsage, Float32BufferAttribute, Group, InstancedMesh, Matrix4, MeshPhysicalMaterial,
   Object3D, Quaternion, SphereGeometry, Vector3,
 } from 'three';
 import { Rng, hashInts } from '../../../core/Rng';
 import { FORMS, coarseValve } from '../../asari/AsariModel.js';
-import { makeShellOuterMaterial } from '../../asari/AsariMaterial.js';
 import { valveFragment } from '../../../world/PitDebris';
 import type { HabitatSample } from '../../../world/Habitat';
 import type { Food, ScentProbe } from './behavior';
@@ -88,6 +87,24 @@ function meatGeometry(): BufferGeometry {
   return g;
 }
 
+/** colours of a broken アサリ valve (its own geometry's local frame: shell-length units, the umbo up) */
+function shellColours(g: BufferGeometry, k: number): BufferGeometry {
+  const pos = g.getAttribute('position');
+  const col: number[] = [];
+  const cream = new Color(0.4, 0.34, 0.26), brown = new Color(0.15, 0.11, 0.08), c = new Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i);
+    // rays from the umbo and concentric growth bands, as on the clams of the flat
+    const ang = Math.atan2(x, y + 0.45), r = Math.hypot(x, y + 0.45);
+    const ray = 0.5 + 0.5 * Math.sin(ang * 9 + k * 1.7 + Math.sin(r * 11) * 0.8);
+    const band = 0.5 + 0.5 * Math.sin(r * 34 + k);
+    c.copy(cream).lerp(brown, Math.min(0.85, 0.55 * ray * ray + 0.25 * band));
+    col.push(c.r, c.g, c.b);
+  }
+  g.setAttribute('color', new Float32BufferAttribute(col, 3));
+  return g;
+}
+
 /** The carrion about the player (a ScentProbe for the snails). */
 export class CarrionField implements ScentProbe {
   readonly group = new Group();
@@ -114,12 +131,12 @@ export class CarrionField implements ScentProbe {
     const rng = new Rng(seed ^ 0x3c1);
     const valve = coarseValve(FORMS.asari) as BufferGeometry;
     const kinds = [valveFragment(valve, rng, 1), valveFragment(valve, rng, 1), valveFragment(valve, rng, 2), valveFragment(valve, rng, 2)];
+    // (broken edges show both faces: a plain calcareous shell, cream with grey-brown rays, the inside white)
+    const shellMat = new MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.55, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.4, side: DoubleSide });
+    shellMat.name = 'CarrionShell';
     this.frags = kinds.map((g, i) => {
-      const mat = (makeShellOuterMaterial as (o: { instanced?: boolean; style?: string }) => MeshPhysicalMaterial)({ instanced: true, style: FORMS.asari.style });
-      (mat.userData.uniforms as { uSand: { value: { set(a: number, b: number, c: number, d: number): void } } }).uSand.value.set(-1e9, 0.04, 0, 0.85);
-      const geo = g.clone();
-      geo.setAttribute('aSeed', new InstancedBufferAttribute(new Float32Array(MAX_ITEMS * 4), 4));
-      const mesh = new InstancedMesh(geo, mat, MAX_ITEMS);
+      const geo = shellColours(g.clone(), i);
+      const mesh = new InstancedMesh(geo, shellMat, MAX_ITEMS);
       mesh.name = `CarrionShell${i}`;
       return mesh;
     });
@@ -248,7 +265,6 @@ export class CarrionField implements ScentProbe {
         o.scale.setScalar(len);
         o.updateMatrix();
         mesh.setMatrixAt(i, o.matrix);
-        (mesh.geometry.getAttribute('aSeed') as InstancedBufferAttribute).setXYZW(i, it.seed, (it.seed * 7.3) % 1, 1, 0);
       }
     }
     this.meat.count = n;
@@ -256,7 +272,6 @@ export class CarrionField implements ScentProbe {
     this.frags.forEach((mesh, i) => {
       mesh.count = counts[i];
       mesh.instanceMatrix.needsUpdate = true;
-      (mesh.geometry.getAttribute('aSeed') as InstancedBufferAttribute).needsUpdate = true;
     });
     void this.m;
   }
@@ -264,6 +279,7 @@ export class CarrionField implements ScentProbe {
   dispose(): void {
     this.group.removeFromParent();
     this.meat.material instanceof MeshPhysicalMaterial && this.meat.material.dispose();
-    for (const f of this.frags) { f.geometry.dispose(); (f.material as MeshPhysicalMaterial).dispose(); }
+    for (const f of this.frags) f.geometry.dispose();
+    (this.frags[0]?.material as MeshPhysicalMaterial | undefined)?.dispose();
   }
 }

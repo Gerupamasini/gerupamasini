@@ -155,6 +155,8 @@
 .mobile-minimap .minimap { width: 64px; height: 64px; padding: 0; margin: 0; }
 .mobile-minimap canvas, .mobile-minimap svg { width: 64px; height: 64px; }
 .touch-device .mobile-spots-card { padding: 12px; gap: 8px; }
+.touch-device .mobile-spots-card .spot-regions { margin: 0; gap: 6px; flex-shrink: 0; }
+.touch-device .mobile-spots-card .spot-regions .btn { min-height: 36px; height: 36px; padding: 4px 12px; font-size: 12px; letter-spacing: 0; }
 .mobile-spot-layout, .mobile-spot-content { display: grid; gap: 8px; min-width: 0; }
 .mobile-spots .spots-maps { min-height: 0; height: 120px; gap: 8px; }
 .mobile-spots .spots-japan, .mobile-spots .spots-bay { height: 120px; }

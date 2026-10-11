@@ -51,6 +51,8 @@ const underFog = new THREE.FogExp2(0x3c5a50, 0.6);
 let brainRng = new Rng(77);
 
 function clear() {
+  for (const m of forms) m.dispose();
+  forms = [];
   for (const s of snails) { s.driver.dispose(); s.root.removeFromParent(); }
   snails = [];
   shellModel?.dispose();
@@ -155,6 +157,30 @@ function shellStudio(view) {
   renderer.toneMappingExposure = 1.0;
 }
 
+// ---------------------------------------------------------------- the colour forms side by side, apertures to the camera
+let forms = [];
+function formsScene() {
+  shellStudio('aperture');
+  shellModel.root.visible = false;
+  forms = MORPHS.map((_, i) => {
+    const m = buildModel(lookFor(i, 0.31 + i * 0.17), 1, [0]);
+    const pose = restPose();
+    pose.retractTubes = pose.retractHead = pose.retractFoot = 1;
+    poseModel(m, pose, 0);
+    for (const o of m.root.getObjectByName('AramushiroLOD0').children) if (o.name !== 'Shell') o.visible = false;
+    m.lod.autoUpdate = false;
+    const sh = m.shells[0];
+    sh.matrix.makeTranslation((i - (MORPHS.length - 1) / 2) * 0.0085, 0.006, 0).multiply(new THREE.Matrix4().makeRotationY(i % 2 ? Math.PI : 0));
+    scene.add(m.root);
+    return m;
+  });
+  camera.fov = 18;
+  camera.position.set(0, 0, 0.14);
+  controls.target.set(0, 0, 0);
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
 // ---------------------------------------------------------------- a live snail on a white dish in air (as in the photos of snails held or set down)
 function dish() {
   clear();
@@ -240,7 +266,16 @@ function sandScene(kind) {
   scene.add(carrion.group);
   floor.scent = carrion;
   state.canBurrow = true;
-  if (kind === 'feeding') {
+  if (kind === 'crowd') {
+    // a population: sixty snails over two metres of sand, most of them seen at the far tiers
+    const rng = new Rng(23);
+    for (let i = 0; i < 60; i++) addSnail(i, rng.range(-1, 1), rng.range(-1, 1), rng.range(7, 15));
+    carrion.add(0.3, -0.2, 0.7, 1);
+    carrion.update(0, 0, 0);
+    state.brain = true;
+    camera.fov = 40;
+    camera.position.set(0.0, 0.9, 1.6); controls.target.set(0, 0, 0);
+  } else if (kind === 'feeding') {
     // a crushed clam in the water: a crowd already round it, more coming up the current
     carrion.add(0, 0, 0.6, 1);
     carrion.update(0, 0, 0);
@@ -348,13 +383,14 @@ addEventListener('resize', resize);
 resize();
 
 // ---------------------------------------------------------------- panel
-const SCENES = { sand: '砂地（水中）', feeding: '腐肉に集まる', dish: '皿の上（空気中）', aperture: '殻口', back: '背面', side: '側面', apex: '殻頂', black: '黒背景' };
+const SCENES = { sand: '砂地（水中）', feeding: '腐肉に集まる', crowd: '60 個体', dish: '皿の上（空気中）', forms: '色の型', aperture: '殻口', back: '背面', side: '側面', apex: '殻頂', black: '黒背景' };
 function setScene(k) {
   state.scene = k;
   brainRng = new Rng(77);
   state.time = 0;
-  if (k === 'sand' || k === 'feeding') sandScene(k);
+  if (k === 'sand' || k === 'feeding' || k === 'crowd') sandScene(k);
   else if (k === 'dish') dish();
+  else if (k === 'forms') formsScene();
   else shellStudio(k);
   applyLod();
   step(1 / 60);
@@ -407,8 +443,7 @@ if (!capture) requestAnimationFrame(loop);
 window.__am = {
   set(o) {
     if (o.morph !== undefined) state.morph = o.morph;
-    if (o.scene && o.scene !== state.scene) setScene(o.scene);
-    else if (o.scene && o.reset) setScene(o.scene);
+    if (o.scene && (o.scene !== state.scene || o.reset)) setScene(o.scene);
     if (o.lod !== undefined) { state.lod = o.lod; applyLod(); }
     if (o.depth !== undefined) state.depth = o.depth;
     if (o.brain !== undefined) state.brain = o.brain;
@@ -440,9 +475,19 @@ window.__am = {
     return true;
   },
   state() { return snails.map((s) => { const b = s.driver.behaviour; return { state: b.state, sub: b.sub, pos: b.pos.toArray().map((v) => +v.toFixed(4)), sink: +b.sink.toFixed(4) }; }); },
+  /** where snail i's parts are (world): its root, the bed under it, the shell's apex and aperture */
+  probe(i = 0) {
+    const s = snails[i];
+    s.root.updateMatrixWorld(true);
+    const m = s.driver.modelOf;
+    const w = (v) => v.clone().applyMatrix4(m.shellM).applyMatrix4(s.root.matrixWorld).toArray().map((x) => +x.toFixed(4));
+    return { rootY: +s.root.position.y.toFixed(4), ground: +floor.heightAt(s.root.position.x, s.root.position.z).toFixed(4), sink: s.driver.behaviour.sink, apex: w(new THREE.Vector3()), ap: w(new THREE.Vector3(0.0026, -0.0086, 0)), visible: m.root.visible, lodVis: m.lod.levels.map((l) => l.object.visible) };
+  },
   info() { return renderer.info.render; },
   get snails() { return snails; },
   get scene() { return scene; },
+  /** draw calls and triangles of the scene alone (without the water's composite) */
+  sceneInfo() { renderer.info.autoReset = false; renderer.info.reset(); renderer.setRenderTarget(null); renderer.render(scene, camera); const r = { ...renderer.info.render }; renderer.info.autoReset = true; return r; },
   morphs: MORPHS.length,
   render,
 };

@@ -587,6 +587,17 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .btn.sm { height: 36px; padding: 0 16px; font-size: 13px; }
 .btn.ghost { background: transparent; }
 .btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+/* Recovery and optional guidance stay at the edges of the scene. */
+.save-warning { flex-wrap: wrap; }
+.save-warning span { flex: 1 1 200px; }
+.save-recovery { max-width: 580px; font-size: 13px; margin-top: 14px; padding: 10px; border: 1px solid #a26e45; border-radius: 10px; }
+.save-recovery .buttons { flex-wrap: wrap; }
+.zukan-photo { object-fit: contain; background: #111416; }
+.preview-error { font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.first-steps { position: absolute; left: 16px; top: 142px; width: min(300px, calc(100vw - 32px)); padding: 9px 12px; border: 1px solid #405b5c; border-radius: 10px; background: #102326e8; font-size: 12px; pointer-events: auto; z-index: 22; }
+.first-steps summary { cursor: pointer; font-weight: 600; }
+.first-steps p { margin: 7px 0; }
+.touch-device .first-steps { top: calc(54px + env(safe-area-inset-top)); left: 10px; width: min(260px, calc(100vw - 120px)); padding: 7px 9px; font-size: 11px; }
 
 .spot-regions { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
 .spots-japan [role="button"] { cursor: pointer; }

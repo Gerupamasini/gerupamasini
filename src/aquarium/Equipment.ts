@@ -112,10 +112,12 @@ function buildModel(kind: AquariumDevice['kind'], b: ModelBuilder, d: TankDimens
       b.box([w + 0.025, 0.02, z + 0.025], [0, -0.72, 0], stand === 'wood' ? m.wood : m.paintedMetal);
       if (stand === 'wood') {
         for (const s of [-1, 1]) b.box([0.018, 0.68, z + 0.02], [s * (w / 2 + 0.003), -0.369, 0], m.wood);
+        if (w >= 0.9) b.box([0.025, 0.68, z + 0.02], [0, -0.369, 0], m.wood);
         // Open rear and split front doors leave access for plumbing and maintenance.
         for (const s of [-1, 1]) { b.box([w / 2 - 0.012, 0.65, 0.016], [s * w / 4, -0.365, z / 2 + 0.009], m.wood, true); b.rod([s * 0.021, -0.3, z / 2 + 0.02], [s * 0.021, -0.38, z / 2 + 0.02], 0.002, m.metal, 'detail'); }
       } else {
         for (const x of [-1, 1]) for (const a of [-1, 1]) b.box([0.025, 0.68, 0.025], [x * (w / 2 - 0.015), -0.369, a * (z / 2 - 0.015)], m.paintedMetal);
+        if (w >= 0.9) for (const a of [-1, 1]) b.box([0.025, 0.68, 0.025], [0, -0.369, a * (z / 2 - 0.015)], m.paintedMetal);
         b.box([w, 0.025, 0.025], [0, -0.08, -z / 2 + 0.015], m.paintedMetal);
         b.rod([-w / 2 + 0.025, -0.69, -z / 2], [w / 2 - 0.025, -0.08, -z / 2], 0.006, m.metal);
       }

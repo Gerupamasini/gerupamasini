@@ -1,6 +1,7 @@
 import { ClampToEdgeWrapping, DataTexture, Group, LinearFilter, RedFormat, UnsignedByteType, Vector2, type Camera } from 'three';
 import { Rng } from '../../core/Rng';
 import type { Substrate } from '../../data/schemas';
+import type { Quality } from '../../core/Settings';
 import type { Habitat } from '../Habitat';
 import type { Terrain } from '../Terrain';
 import type { SurfField } from '../Water';
@@ -18,7 +19,9 @@ export interface MeadowQuality {
   shadowLod: number;
 }
 
-export const MEADOW_QUALITY: Record<'low' | 'mid' | 'high', MeadowQuality> = {
+export const MEADOW_QUALITY: Record<Quality, MeadowQuality> = {
+  // 超軽量: a third of the shoots, the detailed tiers only within arm's reach, the far meadow is the cover painted on the bed
+  minimal: { density: 0.35, lod: [2.5, 7, 18], shadowLod: -1 },
   low: { density: 0.6, lod: [3.5, 11, 28], shadowLod: -1 },
   // (the blades' shadows on the bed are faint, and drawing them costs more triangles than the blades themselves:
   // mid casts none, high only from the nearest tier)

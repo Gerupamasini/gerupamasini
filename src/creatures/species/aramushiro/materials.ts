@@ -53,7 +53,7 @@ const c = (r: number, g: number, b: number) => new Color(r, g, b);
 /** The colour forms of the photographs. */
 export const MORPHS: readonly Omit<Look, 'seed'>[] = [
   // cream with chestnut bands and white granules (the commonest: photos 2, 6, 11, 23, 24, 49)
-  { ground: c(0.56, 0.45, 0.28), pale: c(0.78, 0.72, 0.56), brown: c(0.13, 0.055, 0.025), inside: c(0.22, 0.1, 0.07), tip: c(0.5, 0.25, 0.16),
+  { ground: c(0.5, 0.4, 0.25), pale: c(0.74, 0.68, 0.52), brown: c(0.08, 0.035, 0.016), inside: c(0.22, 0.1, 0.07), tip: c(0.5, 0.25, 0.16),
     skin: c(0.21, 0.2, 0.17), speck: c(0.03, 0.028, 0.026), bands: 0.85, flames: 0.25, grooves: 0.7, film: 0.15, silt: 0.3, erosion: 0.35, mottle: 0.55, rings: 0.4 },
   // yellow-olive, dark spire, bands faint (photos 9, 13, 38, 39)
   { ground: c(0.36, 0.33, 0.14), pale: c(0.64, 0.58, 0.3), brown: c(0.07, 0.05, 0.025), inside: c(0.2, 0.09, 0.05), tip: c(0.18, 0.12, 0.08),
@@ -62,7 +62,7 @@ export const MORPHS: readonly Omit<Look, 'seed'>[] = [
   { ground: c(0.68, 0.4, 0.2), pale: c(0.84, 0.7, 0.52), brown: c(0.3, 0.13, 0.06), inside: c(0.62, 0.36, 0.17), tip: c(0.58, 0.32, 0.2),
     skin: c(0.26, 0.23, 0.17), speck: c(0.045, 0.036, 0.03), bands: 0.25, flames: 0.15, grooves: 0.45, film: 0.08, silt: 0.2, erosion: 0.2, mottle: 0.35, rings: 0.25 },
   // grey-brown, dark banded, dusted (photos 15, 19, 34, 42, 43)
-  { ground: c(0.42, 0.37, 0.3), pale: c(0.7, 0.67, 0.6), brown: c(0.09, 0.04, 0.03), inside: c(0.16, 0.08, 0.07), tip: c(0.32, 0.18, 0.13),
+  { ground: c(0.36, 0.31, 0.25), pale: c(0.66, 0.63, 0.56), brown: c(0.05, 0.022, 0.016), inside: c(0.16, 0.08, 0.07), tip: c(0.32, 0.18, 0.13),
     skin: c(0.19, 0.18, 0.16), speck: c(0.022, 0.022, 0.022), bands: 1.0, flames: 0.6, grooves: 0.85, film: 0.25, silt: 0.55, erosion: 0.45, mottle: 0.8, rings: 0.7 },
   // green-filmed, dark (live snails under algae: photos 25, 31, 32)
   { ground: c(0.24, 0.27, 0.13), pale: c(0.52, 0.55, 0.3), brown: c(0.06, 0.05, 0.025), inside: c(0.2, 0.12, 0.06), tip: c(0.15, 0.13, 0.08),
@@ -214,7 +214,8 @@ const CAUSTIC_INJECT = /* glsl */ `
 /** under water the shell's and the mucus' reflection is that of a solid against water (weak); in air the wet film shines */
 const WET = /* glsl */ `
 {
-  float amWet = mix(0.45, 1.0, uAmAir);
+  // (against water a shell or a mucous skin hardly reflects: F0 drops five-fold or more)
+  float amWet = mix(0.18, 1.0, uAmAir);
   material.specularColor *= amWet;
   material.specularColorBlended = mix(material.specularColor, diffuseColor.rgb, metalnessFactor);
   material.specularF90 = mix(amWet, 1.0, metalnessFactor);
@@ -312,9 +313,10 @@ float amRough = 0.5, amCoat = 0.0, amAO = 1.0, amH = 0.0, amThin = 0.0;
   // axial flames between the ribs, irregular
   float fl = amSm(0.55, 0.85, amFbm(vec2(w * 9.0 + seed * 4.0, a * 2.5))) * uPat.y;
   vec3 col = uGround * (0.9 + 0.2 * amNoise(vec2(w * 20.0, a * 30.0) + seed));
-  col = mix(col, uBrown, clamp(band * 0.85 + fl * 0.6, 0.0, 0.92));
+  col = mix(col, uBrown, clamp(band + fl * 0.6, 0.0, 0.95));
   // the granules white over everything; the grooves brown
-  col = mix(col, mix(uPale, uGround, band * 0.6), crest * (0.8 - 0.25 * band));
+  // (a granule in a band is tan, not white: the band runs through it, paler)
+  col = mix(col, mix(uPale, mix(uGround, uBrown, 0.35), band), crest * (0.8 - 0.3 * band));
   col = mix(col, uBrown * 0.8, (1.0 - crest) * uPat.z * 0.55 * teleo);
   // the spire's tip: worn and darker, the protoconch smooth, glassy orange-pink
   float tipK = amSm(${f(S.whorls - S.protoconch - 0.6)}, ${f(S.whorls - S.protoconch + 0.2)}, w);
@@ -369,7 +371,7 @@ float amRough = 0.5, amCoat = 0.0, amAO = 1.0, amH = 0.0, amThin = 0.0;
   amRough = mix(amRough, 0.9, dust);
   amThin = (part > 1.5 && part < 2.5) ? 0.3 : 0.08;
   diffuseColor.rgb = col * amAO;
-  amCoat = mix(0.12, 1.0, uAmAir) * (1.0 - 0.7 * silt) * (1.0 - dust);
+  amCoat = mix(0.06, 0.6, uAmAir) * (1.0 - 0.7 * silt) * (1.0 - dust);
 }
 `;
 
@@ -477,7 +479,7 @@ float amRough = 0.4, amCoat = 0.0, amAO = 1.0, amThin = 0.3, amSSS = 0.6, amH = 
   amRough = mix(amRough, 0.9, dust);
   diffuseColor.rgb = col;
   diffuseColor.a = mix(amAlpha, 1.0, dust);
-  amCoat = mix(0.3, 0.45, uAmAir) * (1.0 - dust);
+  amCoat = mix(0.04, 0.45, uAmAir) * (1.0 - dust);
 }
 `;
 
@@ -536,7 +538,7 @@ export interface AramushiroMaterials {
 }
 
 function shellMaterial(own: AmOwn, pose: SoftPose): MeshPhysicalMaterial {
-  const m = new MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.12 });
+  const m = new MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.2 });
   m.name = 'AramushiroShell';
   m.envMapIntensity = 0.3;
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {

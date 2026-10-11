@@ -68,9 +68,9 @@ export interface Individual {
   strandedSince: number;
 }
 
-/** The least water an aquatic animal is placed in or will stay in: about 15 % of its length, never under 1.5 cm. */
+/** The least water an aquatic animal is placed in or will stay in: about 15 % of its length (or the species' own share), never under 1.5 cm. */
 export function minDepthFor(species: SpeciesDef, length_mm: number): number {
-  return Math.max(0.015, (length_mm / 1000) * 0.15);
+  return Math.max(0.015, (length_mm / 1000) * (species.size.minDepthFraction ?? 0.15));
 }
 
 function erf(x: number): number {

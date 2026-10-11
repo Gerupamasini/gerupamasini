@@ -18,6 +18,7 @@ export function GachaScreen({ app }: { app: App }) {
       <div class="gacha-wallet"><span>ガチャチケット <strong class="num">{tickets.toLocaleString()}</strong>枚</span><span>コレクション <b class="num">{owned} / {GACHA_POOL.length}</b></span></div>
       <div class="gacha-draw"><button class="btn primary" disabled={busy || tickets < GACHA_TICKET_COST} onClick={() => void app.rollGacha(1)}>1回引く <span class="num">{GACHA_TICKET_COST}枚</span></button><button class="btn" disabled={busy || tickets < GACHA_TICKET_COST * 10} onClick={() => void app.rollGacha(10)}>10回引く <span class="num">{GACHA_TICKET_COST * 10}枚</span></button></div>
       {app.input.touchDevice && <details class="gacha-help"><summary>チケット・初期設備について</summary><p class="small dim">専用チケットをはじめに{INITIAL_GACHA_TICKETS}枚配布。初期設備はいつでも使用でき、同じアイテムが出ると所持数が増えて複数置ける設備に使えます。</p></details>}
+      <p class="small dim">研究ポイント100ごとに専用チケット1枚。観察・採集・研究所への提供で獲得できます。次の1枚まで {100 - app.encyclopedia.research.value % 100} RP。</p>
       {tickets < GACHA_TICKET_COST && <p class="small dim">設備ガチャチケットがありません。</p>}
       {results.length > 0 && <div class="gacha-results" aria-live="polite"><h3>獲得したアイテム</h3><div class="gacha-grid">{results.map((result, i) => {
         const item = equipmentItem(result.itemId)!;

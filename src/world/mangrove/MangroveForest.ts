@@ -1,6 +1,6 @@
 import { DynamicDrawUsage, Group, InstancedBufferAttribute, InstancedBufferGeometry, InstancedMesh, Matrix4, Quaternion, Sphere, Vector3, type PerspectiveCamera } from 'three';
 import { hashInts, Rng } from '../../core/Rng';
-import type { Quality } from '../../core/Settings';
+import type { QualityPreset } from '../../core/Settings';
 import type { Terrain } from '../Terrain';
 import { reflectInWater } from '../../render/Mirror';
 import { collisionSegments, RootCollisionWorld } from './collision';
@@ -11,7 +11,7 @@ import { treeScale, treeSpec, type HirugiBase, type HirugiLod, type TreeSpec } f
 
 export interface MangroveCluster {
   x: number; z: number; radius: number; count: number; juvenileFraction?: number;
-  /** rows deep in the forest: drawn on mid/high quality only (low shows the map's distant-forest canopy there) */
+  /** rows deep in the forest: drawn on mid/high quality only (low and minimal show the map's distant-forest canopy there) */
   deep?: boolean;
 }
 export interface MangroveLayout {
@@ -23,17 +23,20 @@ export interface MangroveLayout {
   /** walkable area [[x0,z0],[x1,z1]]: root collision is built only for trees that reach into it */
   collisionBounds?: readonly [readonly [number, number], readonly [number, number]];
   /** distant crowns of a forest too deep to reach (x, y = base height, z, s = radius, m): drawn with the trees'
-   * own foliage cards and leaf material, one instanced draw; low quality draws a third of them (the roof below fills in) */
+   * own foliage cards and leaf material, one instanced draw; low quality draws a third of them, minimal a fifth (the roof below fills in) */
   backdrop?: readonly BackdropCrown[];
   /** foliage colour against the default (absent: unchanged) */
   leafTint?: readonly [number, number, number];
 }
 export interface BackdropCrown { x: number; y: number; z: number; s: number }
+type VegetationQuality = QualityPreset['vegetation'];
 // LOD1 hands over to the card crowns by ~20-25 m: beyond that a leaf is a pixel and LOD1 costs ~10x LOD2.
-export const MANGROVE_LOD: Record<Quality, readonly [number, number, number]> = { high: [11, 25, 170], mid: [8, 20, 140], low: [5, 15, 100] };
+export const MANGROVE_LOD: Record<VegetationQuality, readonly [number, number, number]> = { high: [11, 25, 170], mid: [8, 20, 140], low: [5, 15, 100], minimal: [4, 12, 80] };
 /** Batch size: big enough that a 300 m map stays in the low hundreds of draw calls, small enough to cull. */
 const CHUNK = 80;
-const NEAR_BUDGET: Record<Quality, number> = { high: 2, mid: 1, low: 1 };
+const NEAR_BUDGET: Record<VegetationQuality, number> = { high: 2, mid: 1, low: 1, minimal: 1 };
+/** the tiers that take the forest's lighter geometry and cast no shadow (超軽量 as 低) */
+const lite = (q: VegetationQuality): boolean => q === 'low' || q === 'minimal';
 interface Batch { specs: TreeSpec[]; bounds: Sphere; levels: Map<HirugiLod, Record<TreePart, InstancedMesh>> }
 
 /** Deterministic gap/edge/juvenile structure; no uniform rows or independent random dots. */
@@ -85,7 +88,7 @@ export class MangroveForest {
   readonly specs: TreeSpec[];
   private readonly batches: Batch[] = [];
   private readonly lods = new Map<number, number>();
-  private quality: Quality = 'mid';
+  private quality: VegetationQuality = 'mid';
   private elapsed = Infinity;
   private lastCamera = new Vector3(Infinity, Infinity, Infinity);
   private forcedLod: HirugiLod | null = null;
@@ -128,15 +131,15 @@ export class MangroveForest {
     source.dispose();
     return mesh;
   }
-  setQuality(q: Quality): void {
-    if ((q === 'low') !== (this.quality === 'low')) {
+  setQuality(q: VegetationQuality): void {
+    if (lite(q) !== lite(this.quality)) {
       for (const batch of this.batches) {
         const far = batch.levels.get(2);
         if (far) { for (const part of PARTS) this.kit.release(far[part]); batch.levels.delete(2); }
       }
     }
     this.quality = q; this.elapsed = Infinity;
-    if (this.backdrop) this.backdrop.count = q === 'low' ? Math.ceil(this.backdrop.instanceMatrix.count / 3) : this.backdrop.instanceMatrix.count;
+    if (this.backdrop) { const n = this.backdrop.instanceMatrix.count; this.backdrop.count = q === 'minimal' ? Math.ceil(n / 5) : q === 'low' ? Math.ceil(n / 3) : n; }
   }
   /** For asset inspection only; automatic map rendering enforces the close-up budget. */
   setLod(lod: HirugiLod | null): void { this.forcedLod = lod; this.elapsed = Infinity; }
@@ -158,7 +161,7 @@ export class MangroveForest {
         // Hysteresis, both directions, independent of the collision representation.
         const n = near * (old === 0 ? 1.12 : 0.88), m = mid * (old === 1 ? 1.12 : 0.88);
         const f = far * (old === 2 ? 1.06 : 0.94);
-        const lod = d > f || (s.deep && this.quality === 'low') ? -1 : this.forcedLod ?? (d < n && (s.sapling !== null || nearest.has(s.id)) ? 0 : d < m ? 1 : 2);
+        const lod = d > f || (s.deep && lite(this.quality)) ? -1 : this.forcedLod ?? (d < n && (s.sapling !== null || nearest.has(s.id)) ? 0 : d < m ? 1 : 2);
         this.lods.set(s.id, lod); if (lod >= 0) levels[lod].push(s);
       }
       for (const lod of [0, 1, 2] as const) {
@@ -167,7 +170,7 @@ export class MangroveForest {
         if (!batch.levels.has(lod)) {
           const first = batch.specs[0], level = {} as Record<TreePart, InstancedMesh>;
           for (const part of PARTS) {
-            level[part] = this.kit.mesh(first.base, lod, part, batch.specs.length, first.sapling, this.quality === 'low' && lod === 2);
+            level[part] = this.kit.mesh(first.base, lod, part, batch.specs.length, first.sapling, lite(this.quality) && lod === 2);
             this.group.add(reflectInWater(level[part]));
           }
           batch.levels.set(lod, level);
@@ -175,7 +178,7 @@ export class MangroveForest {
         const level = batch.levels.get(lod)!;
         for (const part of PARTS) {
           const mesh = level[part]; specs.forEach((s, i) => writeInstance(mesh, i, s, this.terrain));
-          finishInstances(mesh, specs.length, batch.bounds); mesh.castShadow = this.quality !== 'low' && lod < 2;
+          finishInstances(mesh, specs.length, batch.bounds); mesh.castShadow = !lite(this.quality) && lod < 2;
         }
       }
     }

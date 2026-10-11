@@ -4,7 +4,7 @@ import { signal } from '@preact/signals';
 import { GameRenderer } from '../render/Renderer';
 import { Input } from '../core/Input';
 import { GameClock } from '../core/GameClock';
-import { loadSettings, saveSettings, type SettingsData } from '../core/Settings';
+import { loadSettings, saveSettings, normalizeSettings, QUALITY_PRESETS, type SettingsData, type Quality } from '../core/Settings';
 import { formatJst, jstParts } from '../core/Time';
 import { SaveStore, emptySave, type SaveV1, DEFAULT_NET } from '../core/Save';
 import { loadGameData, type GameData } from '../data/loader';
@@ -13,7 +13,9 @@ import { TideModel } from '../tide/TideModel';
 import { World } from './World';
 import { LAYOUTS } from '../world/maps/hashirimizu';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
-import { categoryLimit, drawEquipment, emptyEquipmentCollection, equipmentItem, normalizeCollection, normalizeEquipment, ownedEquipmentLayout, ownedQuantity, usedQuantity, type EquipmentKind, type EquipmentRecord, type EquipmentCollection } from '../aquarium';
+import { RoomTanks } from './RoomTanks';
+import { canPlaceTank, freeTankPosition, initialRoom, newRoomTank, resizedTankLayout, roomCapacity, tankSizeItemId, TANK_DIMENSIONS, TANK_SIZES, type AquariumRoom, type TankSize } from '../aquarium';
+import { categoryLimit, claimResearchTickets, drawEquipment, emptyEquipmentCollection, equipmentItem, normalizeCollection, normalizeEquipment, ownedQuantity, usedQuantity, type EquipmentKind, type EquipmentRecord, type EquipmentCollection } from '../aquarium';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
 import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
@@ -25,6 +27,8 @@ import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
+import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
+import { AKAEI_DETAIL } from '../creatures/species/akaei/AkaeiDriver';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import type { SpeciesDef, ToolDef } from '../data/schemas';
@@ -103,6 +107,11 @@ export class App {
   lockedId: string | null = null;
   frameCount = 0;
   readonly tankMax = TANK_MAX_OCCUPANTS;
+  readonly aquariumRoom = signal<AquariumRoom>({ version: 1, tanks: [], mainTankId: null });
+  readonly activeTankId = signal<string | null>(null);
+  readonly roomBusy = signal(false);
+  readonly roomTanks = new RoomTanks();
+  private roomReturnMode: 'home' | 'tankEdit' = 'tankEdit';
   private pointerDown: { x: number; y: number; t: number; id: number } | null = null;
   private canvasPointers = new Set<number>();
   private dragPointer: number | null = null;
@@ -115,6 +124,10 @@ export class App {
   private fpsCount = 0;
   private saveAcc = 0;
   private saveTimer: number | null = null;
+  private savingSuspended = false;
+  private saveChanging = false;
+  private sceneDirty = true;
+  private appliedFieldQuality: Quality | null = null;
   private curveCacheMin = -1;
   private readonly anchor = new Vector3();
   private readonly tmp = new Vector3();
@@ -201,7 +214,7 @@ export class App {
   /** true when the tank should be on screen (home, or an overlay opened from home) */
   private tankVisible(): boolean {
     const m = this.mode;
-    if (m === 'home' || m === 'title' || m === 'tankEdit' || m === 'gacha') return true;
+    if (m === 'home' || m === 'title' || m === 'tankEdit' || m === 'roomPlacement' || m === 'gacha') return true;
     if (m === 'zukan' || m === 'menu' || m === 'ticket' || m === 'tidetable') return ui.overlayFrom.value === 'home' || ui.overlayFrom.value === 'tankEdit' || !this.world;
     return false;
   }
@@ -211,6 +224,7 @@ export class App {
     this.pointerDown = null; this.canvasPointers.clear();
     this.finishTankDrag();
     ui.screen.value = m;
+    this.applySceneQuality();
     this.input.dragLook = m === 'field';
     const overlay = m !== 'field' && m !== 'observe' && m !== 'capture' && m !== 'home' && m !== 'tankEdit' && m !== 'caseView';
     this.input.blocked = overlay;
@@ -222,9 +236,14 @@ export class App {
   // ------------------------------------------------------------------ boot
   async start(): Promise<void> {
     render(h(Root, { app: this }), this.uiRoot);
-    this.settings = await loadSettings(this.input.touchDevice ? { quality: 'low' } : {});
+    // the first run on an integrated or software GPU (a laptop) starts on 低, as does a touch device; the player is
+    // told, and may change it
+    let fresh = false;
+    this.settings = await loadSettings(this.input.touchDevice ? { quality: 'low' } : {}, () => { fresh = true; return this.renderer.weakGpu ? { quality: 'low' } : {}; });
+    const autoLow = fresh && this.settings.quality === 'low';
+    if (fresh) void saveSettings(this.settings);   // (so the first run's choice, and its notice, happen once)
     ui.settings.value = this.settings;
-    this.renderer.setQuality(this.settings.quality);
+    this.renderer.setQuality(this.settings.homeQuality);
     if (!this.renderer.caps.webgl2) {
       ui.error.value = t('warn.webgl2', 'WebGL2 is required');
       ui.screen.value = 'error';
@@ -234,6 +253,7 @@ export class App {
     this.data = await loadGameData((frac, label) => { ui.loading.value = { frac: 0.02 + frac * 0.3, label }; });
     ui.strings.value = this.data.strings;
     document.title = t('app.title');
+    if (autoLow) toast(t('toast.autoQuality'), 'info', 9000);
     // a stale page (the host caches index.html for a while) learns about the newer deploy and offers a reload
     const poll = async () => { const nb = await checkForNewBuild(); if (nb) ui.newBuild.value = nb; };
     setTimeout(() => void poll(), 4000);
@@ -241,16 +261,20 @@ export class App {
     const map = this.data.maps.get(this.data.manifest.defaultMap)!;
     this.tide = new TideModel(this.data.stations.get(map.station)!);
     this.encyclopedia = new Encyclopedia(this.data);
-    this.encyclopedia.onChanged = () => this.requestSave();
+    this.encyclopedia.onChanged = () => { this.claimEquipmentRewards(); this.requestSave(); };
     this.tank = new TankScene(this.canvas, this.renderer.aspect, this.renderer.gl);
+    this.tank.scene.add(this.roomTanks); this.roomTanks.onChanged = () => { this.sceneDirty = true; };
     // what the animals do in the tank only counts as observed while the player is looking at the tank (home or its
     // edit screen), not from behind the 図鑑, the menu or the title
     this.tank.onBehavior = (e, rec) => { if (this.mode === 'home') this.encyclopedia.onBehavior(rec.speciesId, e.behaviorId, this.clock.nowGame()); };
     if (this.renderer.caps.floatRT) this.hero = new HeroPipeline(this.renderer.gl);
     if (this.renderer.caps.floatRT) this.field = new FieldRenderer(this.renderer.gl);
+    this.applySceneQuality();
     this.applyHeroSetting();
     ui.debug.value = !this.input.touchDevice && new URLSearchParams(location.search).has('debug');
-    const existing = await this.saveStore.load();
+    let existing: SaveV1 | null = null;
+    try { existing = await this.saveStore.load(); }
+    catch (e) { await this.showSaveRecovery(e); }
     this.equipmentCollection.value = normalizeCollection(existing?.equipmentCollection, existing?.tank.layout?.equipment);
     ui.hasSave.value = !!existing;
     this.setMode('title');
@@ -258,6 +282,9 @@ export class App {
     // the title sits over the quiet tank, slowly turning
     this.tank.setAspect(this.renderer.aspect);
     this.tank.activate(true);
+    const mainPreview = existing?.aquariumRoom?.tanks.find(t => t.id === existing.aquariumRoom!.mainTankId);
+    if (mainPreview) { this.tank.setDimensions(TANK_DIMENSIONS[mainPreview.size]); this.tank.setRoomPosition(mainPreview.position); }
+    if (existing?.aquariumRoom && !existing.aquariumRoom.tanks.length) this.tank.setPresent(false);
     this.tank.frameTank();
     this.tank.setLayout(existing?.tank.layout ?? defaultTankLayout());
     this.lastFrame = performance.now();
@@ -265,22 +292,27 @@ export class App {
   }
 
   async startNewGame(): Promise<void> {
-    this.save = emptySave(this.data.manifest.defaultMap, Date.now());
-    this.equipmentCollection.value = emptyEquipmentCollection(); ui.gachaResults.value = [];
-    this.encyclopedia.applySave(this.save);
-    this.syncLoadout();
-    this.removed.clear();
-    this.pendingPose = null;
-    this.enterHome();
-    void this.writeSave();
+    if (this.saveChanging) return;
+    if ((ui.hasSave.value || ui.saveRecovery.value) && !confirm('新しく始めますか？現在のセーブはバックアップに保管します。')) return;
+    await this.replaceSave(emptySave(this.data.manifest.defaultMap, Date.now()));
   }
 
   async continueGame(): Promise<void> {
-    const s = await this.saveStore.load();
+    let s: SaveV1 | null;
+    try { s = await this.saveStore.load(); }
+    catch (e) { await this.showSaveRecovery(e); return; }
     if (!s) return this.startNewGame();
+    this.applyLoadedSave(s);
+  }
+
+  private applyLoadedSave(s: SaveV1): void {
+    this.leaveWorld();
+    this.tank.clearOccupants();
     this.save = s;
+    this.aquariumRoom.value = structuredClone(s.aquariumRoom ?? initialRoom(s.tank)); this.activeTankId.value = null;
     this.equipmentCollection.value = normalizeCollection(s.equipmentCollection, s.tank.layout?.equipment); ui.gachaResults.value = [];
     this.encyclopedia.applySave(s);
+    this.claimEquipmentRewards();
     this.syncLoadout();
     this.removed.clear();
     for (const id of s.removedIndividuals) this.removed.add(id);
@@ -289,12 +321,17 @@ export class App {
       s.ticket.active = null;
     }
     this.clock.restore(s.ticket.active);
+    ui.guideDismissed.value = s.guideDismissed ?? false;
+    ui.saveRecovery.value = null;
+    ui.hasSave.value = true;
     this.pendingPose = { x: s.player.pos[0], z: s.player.pos[2], heading: s.player.heading, map: s.player.map };
     this.enterHome();
   }
 
   /** Home: the tank fills the screen behind the menu. */
   enterHome(): void {
+    this.rememberActiveTank();
+    this.activeTankId.value = this.aquariumRoom.value.mainTankId;
     if (this.mode === 'field' || this.mode === 'observe' || this.mode === 'capture') this.leftFieldAt = performance.now();
     this.player?.resetFov();
     this.setMode('home');
@@ -303,14 +340,102 @@ export class App {
     ui.homeInfo.value = null;
     this.tank.setAspect(this.renderer.aspect);
     this.tank.activate(false);
-    this.tank.resetView();
-    void this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
-    const layout = this.save?.tank.layout ?? defaultTankLayout();
-    this.tank.setLayout({ ...layout, equipment: ownedEquipmentLayout(normalizeEquipment(layout.equipment), this.equipmentCollection.value) });
+    void this.showRoomTank();
     this.syncShelf();
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
     this.requestSave();
+  }
+
+  get currentRoomTank() { return this.aquariumRoom.value.tanks.find(t => t.id === this.activeTankId.value); }
+  get roomTankLimit(): number { return roomCapacity(this.encyclopedia.level); }
+
+  private rememberActiveTank(): void {
+    const active = this.currentRoomTank;
+    if (!active || !this.tank) return;
+    const next = { ...active, individuals: [...this.encyclopedia.tankItems.value], layout: this.tank.currentLayout, lastSimMs: Date.now() };
+    this.aquariumRoom.value = { ...this.aquariumRoom.value, tanks: this.aquariumRoom.value.tanks.map(t => t.id === next.id ? next : t) };
+  }
+
+  private async showRoomTank(): Promise<void> {
+    const active = this.currentRoomTank;
+    this.tank.clearOccupants(); this.tank.setPresent(!!active);
+    this.encyclopedia.tankItems.value = active ? [...active.individuals] : [];
+    if (active) {
+      this.tank.setDimensions(TANK_DIMENSIONS[active.size]); this.tank.setRoomPosition(active.position);
+      this.tank.setLayout(active.layout); this.tank.resetView();
+    } else this.tank.frameRoom();
+    this.roomTanks.setTanks(this.aquariumRoom.value.tanks, active?.id ?? null, id => this.data.species.get(id));
+    ui.homeInfo.value = null; ui.equipmentSelected.value = null; ui.tankSelected.value = null; ui.tankLayoutVersion.value++; this.sceneDirty = true;
+    if (this.mode === 'roomPlacement') this.tank.frameRoom();
+    if (active) await this.tank.setOccupants(this.encyclopedia.tankItems.value, id => this.data.species.get(id));
+  }
+
+  async selectRoomTank(id: string): Promise<boolean> {
+    if (this.roomBusy.value || !['home', 'tankEdit', 'roomPlacement'].includes(this.mode) || !this.aquariumRoom.value.tanks.some(t => t.id === id) || this.activeTankId.value === id) return false;
+    this.roomBusy.value = true;
+    try { this.rememberActiveTank(); this.activeTankId.value = id; await this.showRoomTank(); this.requestSave(); return true; }
+    finally { this.roomBusy.value = false; }
+  }
+
+  setMainTank(id: string): boolean {
+    if (!this.aquariumRoom.value.tanks.some(t => t.id === id)) return false;
+    this.aquariumRoom.value = { ...this.aquariumRoom.value, mainTankId: id }; this.requestSave(); return true;
+  }
+
+  openRoomPlacement(): void {
+    if (!this.save || !['home', 'tankEdit'].includes(this.mode) || this.roomBusy.value) return;
+    this.rememberActiveTank(); this.roomReturnMode = this.mode === 'tankEdit' ? 'tankEdit' : 'home';
+    ui.homePanel.value = 'none'; this.setMode('roomPlacement'); this.tank.setViewInputEnabled(false); this.tank.frameRoom();
+  }
+  closeRoomPlacement(): void {
+    if (this.mode !== 'roomPlacement' || this.roomBusy.value) return;
+    const mode = this.currentRoomTank ? this.roomReturnMode : 'home';
+    this.setMode(mode); ui.homePanel.value = mode === 'tankEdit' ? 'tank' : 'none';
+    this.tank.setViewInputEnabled(true); if (this.currentRoomTank) this.tank.resetView(); else this.tank.frameRoom();
+  }
+
+  async addRoomTank(size: TankSize, position?: [number, number]): Promise<boolean> {
+    if (!this.save || this.mode !== 'roomPlacement' || this.roomBusy.value || !TANK_SIZES.includes(size)) return false;
+    this.rememberActiveTank(); const room = this.aquariumRoom.value;
+    if (room.tanks.length >= this.roomTankLimit) { toast('2台目はLv.5、3台目はLv.10で解放されます', 'info'); return false; }
+    const point = position ?? freeTankPosition(room.tanks, size);
+    if (!point || !canPlaceTank(room.tanks, size, point)) { toast('水槽と台が重ならない場所を選んでください', 'warn'); return false; }
+    let n = 1; while (room.tanks.some(t => t.id === `aquarium-${n}`)) n++;
+    const tank = newRoomTank(`aquarium-${n}`, size, point); this.roomBusy.value = true;
+    try {
+      this.aquariumRoom.value = { ...room, tanks: [...room.tanks, tank], mainTankId: room.mainTankId ?? tank.id };
+      this.activeTankId.value = tank.id; await this.showRoomTank(); this.requestSave(); return true;
+    } finally { this.roomBusy.value = false; }
+  }
+
+  moveRoomTank(id: string, position: [number, number]): boolean {
+    if (this.mode !== 'roomPlacement' || this.roomBusy.value) return false;
+    this.rememberActiveTank(); const room = this.aquariumRoom.value, tank = room.tanks.find(t => t.id === id);
+    if (!tank || !canPlaceTank(room.tanks, tank.size, position, id)) return false;
+    this.aquariumRoom.value = { ...room, tanks: room.tanks.map(t => t.id === id ? { ...t, position: [...position] } : t) };
+    if (id === this.activeTankId.value) this.tank.setRoomPosition(position);
+    this.roomTanks.setTanks(this.aquariumRoom.value.tanks, this.activeTankId.value, id => this.data.species.get(id));
+    this.sceneDirty = true; this.requestSave(); return true;
+  }
+
+  async removeRoomTank(id: string): Promise<boolean> {
+    if (this.mode !== 'roomPlacement' || this.roomBusy.value) return false;
+    this.rememberActiveTank(); const room = this.aquariumRoom.value, tank = room.tanks.find(t => t.id === id);
+    if (!tank) return false;
+    if (this.encyclopedia.caseItems.value.length + tank.individuals.length > this.encyclopedia.caseMax) { toast('ケースが満員です。水槽の生物を先に移してください', 'warn'); return false; }
+    this.roomBusy.value = true;
+    try {
+      const tanks = room.tanks.filter(t => t.id !== id), mainTankId = room.mainTankId === id ? tanks[0]?.id ?? null : room.mainTankId;
+      this.aquariumRoom.value = { ...room, tanks, mainTankId };
+      this.encyclopedia.caseItems.value = [...this.encyclopedia.caseItems.value, ...tank.individuals];
+      if (this.activeTankId.value === id) this.activeTankId.value = mainTankId;
+      await this.showRoomTank(); this.requestSave(); return true;
+    } finally { this.roomBusy.value = false; }
+  }
+
+  usedEquipmentQuantity(itemId: string, excluding?: string): number {
+    return usedQuantity(this.tank.equipment.currentLayout, itemId, excluding) + this.aquariumRoom.value.tanks.filter(t => t.id !== this.activeTankId.value).reduce((n, t) => n + usedQuantity(normalizeEquipment(t.layout.equipment, TANK_DIMENSIONS[t.size]), itemId), 0);
   }
 
   /** The map of the coast: pick where to go. */
@@ -326,12 +451,22 @@ export class App {
   }
 
   async enterField(spotId: string | null = ui.spot.value): Promise<void> {
+    try { await this.buildField(spotId); }
+    catch (e) {
+      console.warn('[field] loading failed', e);
+      this.leaveWorld(); this.enterHome();
+      toast('干潟を読み込めませんでした。通信を確認して、もう一度「干潟へ」を押してください。', 'warn', 8000);
+    }
+  }
+
+  private async buildField(spotId: string | null): Promise<void> {
     const mapId = this.data.maps.has(this.mapForSpot(spotId)) ? this.mapForSpot(spotId) : this.data.manifest.defaultMap;
     // another flat: the one built so far is taken down first (its animals, tools and the case with it)
     if (this.world && this.world.map.id !== mapId) this.leaveWorld();
     if (this.save) this.save.player.map = mapId;
     if (!this.world) {
       this.setMode('boot');
+      this.renderer.setQuality(this.settings.fieldQuality);
       ui.loading.value = { frac: 0.35, label: t('loading.map') };
       const map = this.data.maps.get(mapId)!;
       // the tide is the one of the flat's own station (the tide table and tickets follow it)
@@ -362,13 +497,16 @@ export class App {
       this.creatures.setMeadow(this.world.amamo);
       this.creatures.setScent(this.world.carrion);
       await this.creatures.preload();
+      // the procedural species' shaders compile here too, and stay compiled while the flat lives (DriverEntry.keep)
+      ui.loading.value = { frac: 0.75, label: t('loading.shaders') };
+      await this.field?.compileKept(this.creatures.keptModels(), this.camera, this.world.scene);
       performance.mark('world:creatures');
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
       this.world.water.setPolarized(this.settings.sunglasses);
       this.net = new NetView(this.world.scene);
-      void this.net.setTool(this.netDef() ?? null);
-      for (const id of this.encyclopedia.loadout.value) { const td = this.data.tools.get(id); preloadNet(td); if (td?.model && td.type !== 'capture') void preloadModel(`${td.model}.hero.glb`).catch((e) => console.warn(e)); }
+      void this.net.setTool(this.netDef() ?? null, this.fieldToolTier);
+      for (const id of this.encyclopedia.loadout.value) preloadNet(this.data.tools.get(id), this.fieldToolTier);
       this.shovel = new ShovelView(this.world.scene);
       this.binoculars = new BinocularView(this.world.scene);
       this.fieldCase = new FieldCase();
@@ -378,8 +516,8 @@ export class App {
       this.shovel.setHeld(this.toolType() === 'dig');
       this.binoculars.setHeld(this.toolType() === 'optic');
       const first = this.toolDef();
-      if (first?.type === 'dig') void this.shovel.setTool(first);
-      if (first?.type === 'optic') void this.binoculars.setTool(first);
+      if (first?.type === 'dig') void this.shovel.setTool(first, this.fieldToolTier);
+      if (first?.type === 'optic') void this.binoculars.setTool(first, this.fieldToolTier);
       const L = this.world.layout;
       this.clams = !map.animals ? null : L ? new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242), L.clams.beds, L.clams.opts) : new ClamField(this.world.terrain, hashInts(map.id.length * 31, 4242));
       if (this.clams) this.world.scene.add(this.clams.group);
@@ -392,6 +530,8 @@ export class App {
       this.onResize();
       performance.mark('world:ready');
     }
+    this.fieldSince = performance.now();
+    this.slowSecs = 0;
     this.tank.deactivate();
     // away long enough for the tide to have moved: the population is rebuilt for the water as it is now
     if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.creatures?.resetPopulation(null);
@@ -416,6 +556,8 @@ export class App {
     this.net = null;
     this.shovel?.dispose();
     this.shovel = null;
+    this.binoculars?.dispose(); this.binoculars = null;
+    this.caseControls?.dispose(); this.caseControls = null;
     this.fieldCase?.dispose();
     this.fieldCase = null;
     this.world?.dispose();
@@ -441,29 +583,93 @@ export class App {
   }
 
   async updateSettings(patch: Partial<SettingsData>): Promise<void> {
-    this.settings = { ...this.settings, ...patch };
+    const canvasBefore = Math.min(QUALITY_PRESETS[this.settings.homeQuality].msaa, QUALITY_PRESETS[this.settings.fieldQuality].msaa) > 0;
+    // Preserve the public legacy API used by old clients; the menu edits each scene independently.
+    if (patch.quality) patch = { homeQuality: patch.quality, fieldQuality: patch.quality, ...patch };
+    this.settings = normalizeSettings({ ...this.settings, ...patch });
     ui.settings.value = this.settings;
     this.world?.water.setPolarized(this.settings.sunglasses);
-    this.renderer.setQuality(this.settings.quality);
-    this.world?.terrain.setDetail(this.renderer.preset.surfaceDetail > 0);
-    this.world?.mangroves?.setQuality(this.renderer.preset.vegetation);
-    this.world?.water.setMirror(this.renderer.preset.mirror);
-    this.world?.water.setSurfSteps(this.renderer.preset.surfSteps);
+    this.applySceneQuality();
+    const canvasAfter = Math.min(QUALITY_PRESETS[this.settings.homeQuality].msaa, QUALITY_PRESETS[this.settings.fieldQuality].msaa) > 0;
+    if (canvasAfter !== this.renderer.canvasMsaa && canvasAfter !== canvasBefore) toast(t('toast.reloadHint'), 'info', 8000);
+    if (this.player) this.player.eyeHeight = this.settings.eyeHeight;
+    await saveSettings(this.settings);
+  }
+
+  /** Overlays use the setting of the scene they were opened from. */
+  get activeQuality(): Quality {
+    const from = ui.overlayFrom.value;
+    const field = this.worldVisible() || (['menu', 'zukan', 'ticket', 'tidetable'].includes(this.mode) && ['field', 'observe', 'capture', 'caseView'].includes(from));
+    return field ? this.settings.fieldQuality : this.settings.homeQuality;
+  }
+
+  private applySceneQuality(): void {
+    if (!this.settings) return;
+    this.sceneDirty = true;
+    this.renderer.setQuality(this.activeQuality);
+    const preset = QUALITY_PRESETS[this.settings.fieldQuality];
+    this.field?.setQuality(preset);
+    this.applyPreset();
+    this.creatures?.setQuality(preset);
+    this.fieldCase?.setQuality(preset);
+    const fieldChanged = this.appliedFieldQuality !== this.settings.fieldQuality;
+    if (fieldChanged) {
+      this.appliedFieldQuality = this.settings.fieldQuality;
+      if (this.net || this.shovel || this.binoculars) this.setTool(ui.tool.value, true);
+    }
+    this.world?.terrain.setDetail(preset.surfaceDetail > 0);
+    this.world?.mangroves?.setQuality(preset.vegetation);
+    this.world?.water.setMirror(preset.mirror);
+    this.world?.water.setSurfSteps(preset.surfSteps);
+    const light = this.world?.sky.sunLight;
+    if (light) {
+      light.castShadow = preset.shadows;
+      if (light.shadow.mapSize.x !== preset.shadowMapSize) {
+        light.shadow.map?.dispose(); light.shadow.map = null;
+        light.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
+      }
+      light.shadow.needsUpdate = true;
+    }
     if (this.world?.amamo) {
-      const q = MEADOW_QUALITY[this.renderer.preset.vegetation];
+      const q = MEADOW_QUALITY[preset.vegetation];
       this.world.amamo.setQuality(q);
       this.world.terrain.setMeadowCover(this.world.amamo.coverTexture, q.lod[2]);
     }
-    if (this.player) this.player.eyeHeight = this.settings.eyeHeight;
     this.applyHeroSetting();
-    await saveSettings(this.settings);
+    this.tank?.setQuality(QUALITY_PRESETS[this.settings.homeQuality]);
+    // the kept models' programs follow the field's variant (the shadows on or off change the shaders): compiled again
+    // after the light above has changed, when the field's quality did
+    if (fieldChanged && this.world && this.creatures) void this.field?.compileKept(this.creatures.keptModels(), this.camera, this.world.scene);
+  }
+
+  /** Each scene keeps its own simulation and geometry tiers; only the active scene sets the shared hero buffer. */
+  private applyPreset(): void {
+    const field = QUALITY_PRESETS[this.settings.fieldQuality];
+    const home = QUALITY_PRESETS[this.settings.homeQuality];
+    this.hero?.setSamples(QUALITY_PRESETS[this.activeQuality].msaa);
+    this.world?.water.setLite(field.water === 'lite');
+    this.world?.terrain.setLite(field.water === 'lite');
+    this.tank?.setLite(home.tankWater === 'lite');
+    CONTACT_SHADOWS.enabled = QUALITY_PRESETS[this.activeQuality].contactShadows;
+    AKAEI_DETAIL.viewScale = field.viewScale;
+    AKAEI_DETAIL.allowLod0 = field.lod1Count > 0;
   }
 
   private applyHeroSetting(): void {
     const hero = this.hero;
     const fn = hero && this.settings.heroMaterials ? (model: Parameters<typeof HeroInstance.apply>[0]) => HeroInstance.apply(model, hero.shared) : null;
-    if (this.creatures) this.creatures.heroApply = fn;
-    if (this.tank) this.tank.heroApply = fn;
+    if (this.creatures) {
+      const next = QUALITY_PRESETS[this.settings.fieldQuality].hero ? fn : null;
+      const changed = !!this.creatures.heroApply !== !!next;
+      this.creatures.heroApply = next;
+      if (changed) this.creatures.dropHeroViews();
+    }
+    if (this.tank) {
+      const next = QUALITY_PRESETS[this.settings.homeQuality].hero ? fn : null;
+      const changed = !!this.tank.heroApply !== !!next;
+      this.tank.heroApply = next;
+      if (changed) void this.tank.refreshHero();
+    }
   }
 
   private heroLightingFromWorld(anchor: Vector3): HeroLighting {
@@ -645,6 +851,7 @@ export class App {
 
   /** The tank's edit screen: everything in the tank stands still while it is arranged. */
   openTankEdit(): void {
+    if (!this.activeTankId.value) { this.openRoomPlacement(); return; }
     if (this.mode === 'tankEdit') return;
     void this.transition(t('transition.tank'), () => {
       ui.homeInfo.value = null;
@@ -668,12 +875,13 @@ export class App {
     ui.homePanel.value = panel;
   }
 
-  forceSpawn(): void {
+  /** debug: everything the rules allow, around the player (`share`: the quality tier's share of it, for measuring) */
+  forceSpawn(share = false): void {
     const w = this.world, p = this.player, c = this.creatures;
     if (!w || !p || !c) return;
     const gameMs = this.clock.nowGame();
     const env: SpawnEnv = { tod: w.tod, season: w.season, tidePhase: this.tidePhase(), mapId: w.map.id, gameMs, day: Math.floor(gameMs / 86400000) };
-    const n = c.forceSpawn(p.position, env);
+    const n = c.forceSpawn(p.position, env, share ? this.renderer.preset.creatureScale : 1);
     toast(`${n} 体をスポーン`, 'info');
   }
 
@@ -751,6 +959,8 @@ export class App {
     this.requestSave();
   }
 
+  private get fieldToolTier() { return QUALITY_PRESETS[this.settings.fieldQuality].modelTier; }
+
   setTool(id: ToolId, force = false): void {
     if (ui.tool.value === id && !force) return;
     if (!this.data.tools.has(id)) return;
@@ -759,9 +969,9 @@ export class App {
     this.net?.setHeld(type === 'capture');
     this.shovel?.setHeld(type === 'dig');
     this.binoculars?.setHeld(type === 'optic');
-    if (type === 'capture') void this.net?.setTool(this.data.tools.get(id) ?? null);
-    if (type === 'dig') void this.shovel?.setTool(this.data.tools.get(id) ?? null);
-    if (type === 'optic') void this.binoculars?.setTool(this.data.tools.get(id) ?? null);
+    if (type === 'capture') void this.net?.setTool(this.data.tools.get(id) ?? null, this.fieldToolTier);
+    if (type === 'dig') void this.shovel?.setTool(this.data.tools.get(id) ?? null, this.fieldToolTier);
+    if (type === 'optic') void this.binoculars?.setTool(this.data.tools.get(id) ?? null, this.fieldToolTier);
   }
 
   /** [E] on the flat: use the tool in hand where the player is looking. */
@@ -1004,6 +1214,7 @@ export class App {
   }
 
   async tankPut(rec: IndividualRecord): Promise<void> {
+    if (!this.activeTankId.value || !this.encyclopedia.caseItems.value.some(r => r.id === rec.id)) return;
     if (this.encyclopedia.tankItems.value.length >= this.tankMax) return;
     // the animal's model loads behind a curtain rather than in a stutter
     await this.transition(t('transition.put'), async () => {
@@ -1158,6 +1369,7 @@ export class App {
   }
 
   async tankRelease(rec: IndividualRecord): Promise<void> {
+    if (!this.encyclopedia.tankItems.value.some(r => r.id === rec.id)) return;
     if (!this.encyclopedia.moveToCase(rec)) { toast(t('capture.caseFull'), 'warn'); return; }
     this.tank.removeOccupant(rec.id);
   }
@@ -1198,6 +1410,15 @@ export class App {
     if (this.mode !== 'home' && this.mode !== 'tankEdit') return;
     ui.homePanel.value = 'none'; ui.homeInfo.value = null; ui.gachaResults.value = [];
     this.tank.setAutoRotate(false); this.tank.resetView(); this.openOverlay('gacha');
+  }
+
+  private claimEquipmentRewards(): void {
+    if (!this.save || !this.encyclopedia) return;
+    const reward = claimResearchTickets(this.equipmentCollection.value, this.encyclopedia.research.value);
+    if (reward.awarded) {
+      this.equipmentCollection.value = reward.collection;
+      toast(`研究の報酬：設備ガチャチケット ${reward.awarded}枚`, 'success');
+    }
   }
 
   async rollGacha(count: number): Promise<void> {
@@ -1262,7 +1483,7 @@ export class App {
     if (!this.tank.equipment.applyPreset()) return false;
     ui.tankLayoutVersion.value++;
     if (!this.save) return true;
-    this.save.tank.layout = this.tank.currentLayout;
+    this.rememberActiveTank();
     this.requestSave();
     return true;
   }
@@ -1296,13 +1517,26 @@ export class App {
 
   /** Inventory, per-category limits and placement quantities are enforced outside the UI too. */
   tankInstallEquipment(itemId: string, replacing?: string): boolean {
+    if (this.roomBusy.value) return false;
     const item = equipmentItem(itemId); if (!item || !this.save) return false;
     const rig = this.tank.equipment, layout = rig.currentLayout, selected = ui.equipmentSelected.value;
     const fixed = item.category === 'tank' || item.category === 'stand';
     if (fixed) replacing = item.category;
     const record = replacing ? layout.devices.find((d) => d.id === replacing) : undefined;
     if (replacing && !fixed && record?.kind !== item.category) return false;
-    if (usedQuantity(layout, itemId, replacing) >= ownedQuantity(this.equipmentCollection.value, itemId)) { toast('このアイテムはガチャで獲得すると使えます', 'info'); return false; }
+    if (this.usedEquipmentQuantity(itemId, replacing) >= ownedQuantity(this.equipmentCollection.value, itemId)) { toast('未所持、または別の水槽で使用中です', 'info'); return false; }
+    const active = this.currentRoomTank;
+    if (!active) return false;
+    if (item.category === 'stand' && item.size !== active.size) { toast('この水槽に対応するサイズの台を選んでください', 'info'); return false; }
+    if (item.category === 'tank' && item.size !== active.size) {
+      const size = item.size!;
+      if (!canPlaceTank(this.aquariumRoom.value.tanks, size, active.position, active.id)) { toast('大きい水槽を置くスペースがありません。部屋の設置画面で位置を変えてください', 'warn'); return false; }
+      const next = { ...active, size, layout: resizedTankLayout(this.tank.currentLayout, active.size, size, item.id), individuals: [...this.encyclopedia.tankItems.value] };
+      this.aquariumRoom.value = { ...this.aquariumRoom.value, tanks: this.aquariumRoom.value.tanks.map(t => t.id === next.id ? next : t) };
+      this.roomBusy.value = true;
+      void this.showRoomTank().finally(() => { this.roomBusy.value = false; });
+      ui.tankLayoutVersion.value++; this.requestSave(); return true;
+    }
     if (!fixed && !record && layout.devices.filter((d) => d.kind === item.category).length >= categoryLimit(item.category)) { toast('この設備はこれ以上置けません', 'warn'); return false; }
     if (replacing) rig.setItem(replacing, itemId);
     else {
@@ -1330,7 +1564,8 @@ export class App {
         const bottom = this.tank.currentLayout.substrate === 'none' ? 0 : 0.05;
         const low = record.kind === 'heater' ? bottom + 0.1 : bottom + 0.004;
         const high = record.kind === 'spongeFilter' ? 0.08 : record.kind === 'heater' ? 0.19 : 0.28;
-        p[0] = Math.max(-0.27, Math.min(0.27, p[0])); p[1] = Math.max(low, Math.min(high, p[1])); p[2] = Math.max(-0.135, Math.min(0.135, p[2]));
+        const d = this.tank.dimensions;
+        p[0] = Math.max(-d.width / 2 + 0.03, Math.min(d.width / 2 - 0.03, p[0])); p[1] = Math.max(low, Math.min(Math.min(high * d.height / 0.36, d.waterHeight - 0.02), p[1])); p[2] = Math.max(-d.depth / 2 + 0.015, Math.min(d.depth / 2 - 0.015, p[2]));
       }
       change = { ...change, position: p };
     }
@@ -1342,7 +1577,7 @@ export class App {
     if (!this.tank.equipment.canRemoveDevice(id)) return;
     this.tank.equipment.removeDevice(id); ui.equipmentSelected.value = null; this.commitTankLayout();
   }
-  tankStand(finish: 'wood' | 'metal'): void { this.tankInstallEquipment(finish === 'metal' ? 'stand-studio' : 'stand-initial', 'stand'); }
+  tankStand(finish: 'wood' | 'metal'): void { this.tankInstallEquipment(tankSizeItemId('stand', this.currentRoomTank?.size ?? 60, finish === 'metal' ? 'studio' : 'classic'), 'stand'); }
 
   private onHomeClick(clientX: number, clientY: number): void {
     if (this.mode === 'home' && ui.homePanel.value === 'tools') {
@@ -1369,13 +1604,13 @@ export class App {
 
   // ------------------------------------------------------------------ save
   requestSave(): void {
-    if (this.saveTimer !== null) return;
+    if (!this.save || this.savingSuspended || this.saveTimer !== null) return;
     this.saveTimer = window.setTimeout(() => { this.saveTimer = null; void this.writeSave(); }, 1000);
   }
 
-  async writeSave(): Promise<void> {
+  private snapshotSave(): SaveV1 | null {
     const s = this.save;
-    if (!s) return;
+    if (!s) return null;
     s.updatedAt = Date.now();
     s.lastRealMs = Date.now();
     if (this.player && this.world) {
@@ -1385,36 +1620,108 @@ export class App {
     }
     s.ticket.active = this.clock.serialize();
     s.removedIndividuals = [...this.removed];
-    s.tank.layout = this.tank.currentLayout;
+    this.rememberActiveTank();
     s.equipmentCollection = { ...this.equipmentCollection.value, stock: { ...this.equipmentCollection.value.stock } };
     this.encyclopedia.writeSave(s);
-    await this.saveStore.save(s);
-    ui.hasSave.value = true;
+    s.aquariumRoom = structuredClone(this.aquariumRoom.value);
+    const main = s.aquariumRoom.tanks.find(t => t.id === s.aquariumRoom!.mainTankId);
+    s.tank = main ? { individuals: [...main.individuals], layout: main.layout, lastSimMs: main.lastSimMs } : { individuals: [], lastSimMs: Date.now() };
+    s.guideDismissed = ui.guideDismissed.value;
+    return structuredClone(s);
+  }
+
+  async writeSave(): Promise<boolean> {
+    if (this.savingSuspended || !this.save) return false;
+    const snapshot = this.snapshotSave()!;
+    try {
+      await this.saveStore.save(snapshot);
+      ui.hasSave.value = true;
+      ui.saveError.value = null;
+      return true;
+    } catch (e) {
+      this.saveFailed(e);
+      return false;
+    }
+  }
+
+  private suspendSaving(): void {
+    this.savingSuspended = true;
+    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+    this.saveTimer = null; this.saveAcc = 0;
+  }
+
+  private saveFailed(e: unknown): void {
+    console.warn('[save] failed', e);
+    ui.saveError.value = '保存できませんでした。再試行するか、JSONを保存して進行を保管してください。';
+  }
+
+  private async showSaveRecovery(e: unknown): Promise<void> {
+    let backup = false;
+    try { backup = !!await this.saveStore.loadBackup(); } catch { /* preserve inaccessible data */ }
+    ui.saveRecovery.value = { message: e instanceof Error ? e.message : 'セーブを読み込めませんでした。', backup };
+  }
+
+  private async replaceSave(s: SaveV1): Promise<void> {
+    if (this.saveChanging) throw new Error('セーブの切り替え中です。完了してから再試行してください。');
+    if (!this.data.maps.has(s.player.map) || [...s.case, ...(s.aquariumRoom?.tanks.flatMap(t => t.individuals) ?? s.tank.individuals)].some((r) => !this.data.species.has(r.speciesId))) throw new Error('このゲームにないマップ・生物を含むセーブです。');
+    this.saveChanging = true; this.suspendSaving();
+    try {
+      await this.saveStore.replace(s);
+      this.applyLoadedSave(s);
+      ui.saveError.value = null;
+    } catch (e) { this.saveFailed(e); throw e; }
+    finally { this.saveChanging = false; this.savingSuspended = false; this.requestSave(); }
+  }
+
+  async restoreBackup(): Promise<void> {
+    try {
+      const backup = await this.saveStore.loadBackup();
+      if (!backup) throw new Error('バックアップがありません。');
+      await this.replaceSave(backup);
+    } catch (e) { toast(e instanceof Error ? e.message : '復元できませんでした。', 'warn'); }
+  }
+
+  async downloadSave(stored = false): Promise<void> {
+    try {
+      const json = stored ? await this.saveStore.exportStored() : this.exportSave();
+      if (!json) return;
+      const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      const a = document.createElement('a'); a.href = url;
+      a.download = `higata-zukan-save-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { toast(String(e), 'warn'); }
   }
 
   exportSave(): string | null {
-    return this.save ? this.saveStore.exportJson(this.save) : null;
+    const snapshot = this.snapshotSave();
+    return snapshot ? this.saveStore.exportJson(snapshot) : null;
   }
 
   async importSave(text: string): Promise<void> {
     const s = this.saveStore.importJson(text);
-    await this.saveStore.save(s);
-    ui.hasSave.value = true;
+    await this.replaceSave(s);
     toast(t('toast.saved'), 'success');
   }
 
   async resetSave(): Promise<void> {
-    await this.saveStore.clear();
-    ui.hasSave.value = false;
-    location.reload();
+    if (this.saveChanging) return;
+    this.saveChanging = true; this.suspendSaving();
+    try {
+      await this.saveStore.clear();
+      this.save = null;
+      ui.hasSave.value = false;
+      location.reload();
+    } catch (e) { this.saveChanging = false; this.savingSuspended = false; this.saveFailed(e); }
   }
 
   // ------------------------------------------------------------------ loop
   private onResize(): void {
+    this.sceneDirty = true;
     this.renderer.resize();
     this.camera.aspect = this.renderer.aspect;
     this.camera.updateProjectionMatrix();
     this.tank?.setAspect(this.renderer.aspect);
+    if (this.mode === 'roomPlacement') this.tank.frameRoom();
     this.shop?.setAspect(this.renderer.aspect);
   }
 
@@ -1440,10 +1747,16 @@ export class App {
   }
 
   private frameErrors = 0;
+  private slowSecs = 0;
+  private slowHinted = false;
+  /** when the flat was last entered (the first seconds there are the models' first draws, not the frame rate) */
+  private fieldSince = 0;
 
   private step(now: number): void {
-    const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
+    // A queued frame can predate the clock reset on entering a scene; never move simulations or saved play time backwards.
+    const dt = Math.max(0, Math.min(0.1, (now - this.lastFrame) / 1000));
     this.lastFrame = now;
+    if (document.hidden) return;
     this.frameCount++;
     this.clock.update();
     const gameMs = this.clock.nowGame();
@@ -1511,6 +1824,9 @@ export class App {
       case 'gacha':
         if (this.input.pressed('menu')) this.closeGacha();
         break;
+      case 'roomPlacement':
+        if (this.input.pressed('menu')) this.closeRoomPlacement();
+        break;
       case 'menu': case 'zukan': case 'ticket': case 'tidetable':
         if (this.input.pressed('menu') || (mode === 'zukan' && this.input.keyPressed('Tab'))) this.closeOverlay();
         break;
@@ -1524,7 +1840,7 @@ export class App {
       default: break;
     }
 
-    if (world && player) {
+    if (world && player && this.worldVisible()) {
       this.anchor.copy(player.position);
       world.update(gameMs, dt, this.anchor, this.camera);
     }
@@ -1533,13 +1849,14 @@ export class App {
     if (mode === 'shop' && this.shop) {
       this.shop.update(dt);
       this.renderer.gl.render(this.shop.scene, this.shop.camera);
-    } else if (this.tankVisible()) {
-      if (mode === 'tankEdit') this.tank.updateFrozen(); else this.tank.update(dt, 1);
+    } else if (this.tankVisible() && (['home', 'title', 'tankEdit', 'gacha'].includes(mode) || this.sceneDirty)) {
+      if (mode === 'tankEdit' || mode === 'roomPlacement') this.tank.updateFrozen(); else this.tank.update(dt, 1);
+      this.roomTanks.updateLOD(this.tank.camera);
       if (this.hero && this.tank.heroActive) {
         this.hero.setLighting(this.tank.lighting);
         this.hero.render(this.tank.scene, this.tank.camera, dt);
       } else this.renderer.gl.render(this.tank.scene, this.tank.camera);
-    } else if (world && player && creatures) {
+    } else if (!this.tankVisible() && world && player && creatures && (this.worldVisible() || this.sceneDirty)) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       else if (mode === 'capture') player.idle(dt);
       this.fieldCase?.update(dt, player.position);
@@ -1575,12 +1892,18 @@ export class App {
       }
     }
 
+    this.sceneDirty = false;
     this.fpsAcc += dt; this.fpsCount++;
+    // a flat that crawls: say once where the lighter picture is (after the first seconds, which are the models' first draws)
+    if (mode === 'field' && now - this.fieldSince > 6000 && !this.slowHinted && this.settings.fieldQuality !== 'minimal') {
+      this.slowSecs = dt >= 1 / 20 ? this.slowSecs + dt : Math.max(0, this.slowSecs - dt * 0.5);
+      if (this.slowSecs > 8) { this.slowHinted = true; toast(t('toast.slowHint'), 'info', 9000); }
+    }
     this.hudAcc += dt;
     if (this.hudAcc >= 1 / HUD_HZ) { this.updateHud(gameMs); this.hudAcc = 0; }
     this.saveAcc += dt;
     if (this.saveAcc >= AUTOSAVE_SEC) { this.saveAcc = 0; void this.writeSave(); }
-    if (this.save) this.save.stats.playSeconds += dt;
+    if (this.save && (this.worldVisible() || mode === 'home')) this.save.stats.playSeconds += dt;
     this.input.endFrame();
   }
 

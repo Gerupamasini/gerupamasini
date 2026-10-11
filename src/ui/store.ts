@@ -8,7 +8,7 @@ import type { GachaResult } from '../aquarium/catalog';
 /** a tool id from items/tools.json */
 export type ToolId = string;
 
-export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'gacha' | 'error';
+export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'roomPlacement' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'gacha' | 'error';
 
 export interface HudState {
   timeText: string;
@@ -60,6 +60,9 @@ export const ui = {
   /** the tool (id) or parcel ('coming:<id>') picked on the shop's shelves */
   shopSelected: signal<string | null>(null),
   screen: signal<Screen>('boot'),
+  saveError: signal<string | null>(null),
+  saveRecovery: signal<{ message: string; backup: boolean } | null>(null),
+  guideDismissed: signal(false),
   overlayFrom: signal<Screen>('field'),
   loading: signal({ frac: 0, label: '' }),
   error: signal<string | null>(null),

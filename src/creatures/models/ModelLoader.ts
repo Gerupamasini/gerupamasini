@@ -31,13 +31,18 @@ export interface LoadedModel {
 
 const loader = new GLTFLoader();
 const cache = new Map<string, Promise<GLTF>>();
+const loaded = new Set<string>();
 
 export function preloadModel(rel: string): Promise<GLTF> {
   let p = cache.get(rel);
   if (!p) {
     p = loader.loadAsync(modelUrl(rel)).then((gltf) => {
       prepareMaterials(gltf, rel.includes('.hero.') ? 'hero' : rel.includes('.lod1.') ? 'lod1' : 'lod2');
+      loaded.add(rel);
       return gltf;
+    }).catch((error: unknown) => {
+      if (cache.get(rel) === p) cache.delete(rel);
+      throw error;
     });
     cache.set(rel, p);
   }
@@ -45,7 +50,7 @@ export function preloadModel(rel: string): Promise<GLTF> {
 }
 
 export function isModelLoaded(rel: string): boolean {
-  return cache.has(rel);
+  return loaded.has(rel);
 }
 
 /** Tier-dependent material adjustments on the shared (cached) materials. */

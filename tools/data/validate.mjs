@@ -38,6 +38,8 @@ if (manifest.spots) {
 const toolIds = new Set((tools?.tools ?? []).map((t) => t.id));
 for (const [id, sp] of species) {
   if (sp.id !== id) { errors++; console.error(`✗ species/${id}.json: id が一致しません (${sp.id})`); }
+  const photo = path.join(dataDir, 'photos', `${id}.jpg`);
+  if (!fs.existsSync(photo) || fs.statSync(photo).size < 1000) { errors++; console.error(`✗ ${id}: 図鑑の静止画像がありません`); }
   if (!behaviors.has(sp.brain.tree)) { errors++; console.error(`✗ ${id}: 行動ツリー ${sp.brain.tree} がありません`); }
   for (const t of sp.capture.tools) if (!toolIds.has(t)) { errors++; console.error(`✗ ${id}: 道具 ${t} がありません`); }
   for (const m of [sp.model, ...sp.stages.map((st) => st.model).filter(Boolean)]) {

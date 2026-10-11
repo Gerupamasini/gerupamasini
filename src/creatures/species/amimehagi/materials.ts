@@ -55,7 +55,7 @@ export const AMH_UNIFORMS = {
 
 // ------------------------------------------------------------------ GLSL
 
-const HELPERS = /* glsl */ `
+export const HELPERS = /* glsl */ `
 uniform float uAmhTime;
 uniform vec3 uWaterTint;
 uniform vec3 uSandTint;
@@ -169,7 +169,7 @@ vec3 amCells(vec2 p, out vec2 id) {
 `;
 
 /** the underwater light field in place of the image-based light */
-const ENV_INJECT = /* glsl */ `
+export const ENV_INJECT = /* glsl */ `
 #include <lights_fragment_maps>
 {
   vec3 nW = inverseTransformDirection(normal, viewMatrix);
@@ -185,7 +185,7 @@ const ENV_INJECT = /* glsl */ `
 `;
 
 /** the sun's beam through the water column, with caustics over the faces that look up */
-const SUN_INJECT = /* glsl */ `
+export const SUN_INJECT = /* glsl */ `
 #include <lights_fragment_begin>
 {
   float upW = inverseTransformDirection(normal, viewMatrix).y;

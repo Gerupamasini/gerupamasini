@@ -74,30 +74,35 @@ void main() {
     float g = -exp(-x * x / 0.18);
     float bank = exp(-pow((abs(x) - 0.75) / 0.17, 2.0));
     float dh = (2.0 * x / 0.18) * exp(-x * x / 0.18) - sign(x) * 2.0 * (abs(x) - 0.75) / (0.17 * 0.17) * bank * 0.35;
-    float slope = dh * 0.11 * fade;
+    float slope = dh * 0.08 * fade;
     f = lit(slope, 0.0);
     // the turned sand is a little darker (wetter) in the groove, the grains on the banks catch the light
-    f *= 1.0 - 0.08 * fade * (-g) + 0.03 * fade * bank * (n2(vUv * vec2(9.0, 30.0) + seed) - 0.3);
+    f *= 1.0 - 0.035 * fade * (-g) + 0.03 * fade * bank * (n2(vUv * vec2(9.0, 30.0) + seed) - 0.3);
     f = mix(1.0, f, smoothstep(1.0, 0.75, abs(q.x)));
   } else if (kind < 2.5) {
-    // mound: heaped, lumpy sand, a hump over the buried snail
+    // mound: the sand turned over by a burrowing snail — a low lumpy heap, the siphon's hole near its front
     float r = length(q * vec2(1.0, 0.85));
     if (r > 1.0) discard;
-    float lump = n2(q * 6.0 + seed * 7.0) - 0.5;
-    float hgt = k * (pow(1.0 - r * r, 2.0) + 0.25 * lump * (1.0 - r));
-    float e = 0.02;
     vec2 g;
+    float hgt;
     {
-      vec2 qx = q + vec2(e, 0.0), qy = q + vec2(0.0, e);
-      float rx = length(qx * vec2(1.0, 0.85)), ry = length(qy * vec2(1.0, 0.85));
-      float hx = k * (pow(max(0.0, 1.0 - rx * rx), 2.0) + 0.25 * (n2(qx * 6.0 + seed * 7.0) - 0.5) * (1.0 - rx));
-      float hy = k * (pow(max(0.0, 1.0 - ry * ry), 2.0) + 0.25 * (n2(qy * 6.0 + seed * 7.0) - 0.5) * (1.0 - ry));
-      g = vec2(hx - hgt, hy - hgt) / e;
+      float e = 0.03;
+      vec2 qq[3];
+      qq[0] = q; qq[1] = q + vec2(e, 0.0); qq[2] = q + vec2(0.0, e);
+      float hh[3];
+      for (int i = 0; i < 3; i++) {
+        float rr = length(qq[i] * vec2(1.0, 0.85));
+        float lump = n2(qq[i] * 5.0 + seed * 7.0) - 0.5 + 0.5 * (n2(qq[i] * 13.0 + seed) - 0.5);
+        float hole = exp(-dot(qq[i] - vec2(0.0, -0.45), qq[i] - vec2(0.0, -0.45)) / 0.012);
+        hh[i] = k * (pow(max(0.0, 1.0 - rr * rr), 1.5) * (0.8 + 0.6 * lump) - 0.9 * hole);
+      }
+      hgt = hh[0];
+      g = vec2(hh[1] - hh[0], hh[2] - hh[0]) / e;
     }
-    f = lit(g.x * 0.5, -g.y * 0.5);
-    // freshly turned sand: darker and grainier
-    f *= 1.0 - 0.07 * k * (1.0 - r) + 0.05 * k * (n2(q * 40.0 + seed) - 0.5);
-    f = mix(1.0, f, smoothstep(1.0, 0.7, r));
+    f = lit(g.x * 0.35, -g.y * 0.35);
+    // freshly turned grains: a shade lighter where the heap is high and dry-looking, darker in the hole
+    f *= 1.0 + 0.04 * hgt - 0.25 * k * exp(-dot(q - vec2(0.0, -0.45), q - vec2(0.0, -0.45)) / 0.012) + 0.06 * k * (n2(q * 40.0 + seed) - 0.5);
+    f = mix(1.0, f, smoothstep(1.0, 0.65, r));
   } else {
     // pit: a small hollow with a low rim
     float r = length(q);

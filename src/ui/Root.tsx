@@ -14,6 +14,7 @@ import { ObserveOverlay } from './observe/ObserveOverlay';
 import { CaptureOverlay } from './capture/CaptureOverlay';
 import { HomeMenu } from './home/HomeMenu';
 import { TankPanel } from './tank/TankPanel';
+import { RoomPlacement } from './tank/RoomPlacement';
 import { CaseOverlay } from './field/CaseOverlay';
 import { SpotSelect } from './home/SpotSelect';
 import { ShopScreen } from './home/ShopScreen';
@@ -26,6 +27,7 @@ import { tideName } from '../core/Moon';
 import { BUILD, versionLabel, builtAtLabel } from '../core/Build';
 import './ui.css';
 import './mobile.css';
+import './tank/room.css';
 
 export function Root({ app }: { app: App }) {
   const screen = ui.screen.value;
@@ -42,6 +44,7 @@ export function Root({ app }: { app: App }) {
       {screen === 'title' && <Title app={app} />}
       {screen === 'home' && <HomeMenu app={app} />}
       {screen === 'tankEdit' && <TankEdit app={app} />}
+      {screen === 'roomPlacement' && <RoomPlacement app={app} />}
       {ui.transition.value && <Transition label={ui.transition.value} touch={app.input.touchDevice} />}
       {inField && ui.settings.value.sunglasses && <div class="sunglasses-tint" aria-hidden="true" />}
       {(screen === 'field' || screen === 'capture') && <Hud app={app} />}
@@ -59,7 +62,7 @@ export function Root({ app }: { app: App }) {
       {screen === 'tidetable' && <TideTable app={app} />}
       {!app.input.touchDevice && ui.debug.value && (inField || screen === 'home') && <DebugPanel app={app} />}
       {app.input.touchDevice && <TouchControls key={screen} app={app} />}
-      <Toasts />
+      <Toasts app={app} />
     </Fragment>
   );
 }
@@ -130,10 +133,18 @@ function Title({ app }: { app: App }) {
           <span>{t('hud.tide')} <span class="num">{level >= 0 ? '+' : ''}{(level * 100).toFixed(0)} cm</span></span>
         </div>
         <div class="title-actions rise d4">
-          <button class="btn primary lg" onClick={() => void app.startNewGame()}>{t('title.start')} <ArrowIcon /></button>
-          {ui.hasSave.value && <button class="btn lg" onClick={() => void app.continueGame()}>{t('title.continue')}</button>}
+          {ui.hasSave.value && <button class="btn primary lg" onClick={() => void app.continueGame()}>{t('title.continue')} <ArrowIcon /></button>}
+          <button class={`btn lg ${ui.hasSave.value ? 'ghost' : 'primary'}`} onClick={() => void app.startNewGame().catch(() => {})}>{ui.hasSave.value ? '新しくはじめる' : t('title.start')}</button>
           <button class="btn ghost lg" onClick={() => app.openOverlay('menu')}>{t('title.settings')}</button>
         </div>
+        {ui.saveRecovery.value && <div class="save-recovery" role="alert">
+          <p>{ui.saveRecovery.value.message}</p>
+          <div class="buttons">
+            {ui.saveRecovery.value.backup && <button class="btn" onClick={() => void app.restoreBackup()}>バックアップを復元</button>}
+            <button class="btn" onClick={() => void app.downloadSave(true)}>元データを保存</button>
+            <button class="btn" onClick={() => void app.continueGame()}>読み込みを再試行</button>
+          </div>
+        </div>}
       </div>
       <div class="title-foot rise d5">
         <span class="build" title={BUILD.builtAt ? `ビルド ${BUILD.builtAt}` : undefined}>

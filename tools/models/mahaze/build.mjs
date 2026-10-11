@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Builds src/assets/models/mahaze/mahaze_<variant>.<tier>.glb (geometry + baked textures) procedurally.
 //   node tools/models/mahaze/build.mjs [--variant juvenile|subadult|adult] [--tier hero|lod1|lod2] [--dump-textures <dir>]
-// Each file carries the three pattern variants of its growth stage (glTF KHR_materials_variants pattern1..3).
+// Each file carries the nine variants of its growth stage: three patterns × three colour morphs (glTF
+// KHR_materials_variants pattern1_standard … pattern3_dark, each with extras { pattern, color }).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,9 +10,9 @@ import jpeg from 'jpeg-js';
 import { GLBBuilder } from '../../lib/glb.mjs';
 import { encodePNG } from '../../lib/png.mjs';
 import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, MOUTH, RICTUS_S, VARIANT, GROWTH, profileTable, toObject, botY } from './anatomy.mjs';
-import { buildBody } from './body.mjs';
+import { buildBody, COLORS } from './body.mjs';
 import { finDefinitions, buildFinMesh, buildFinTargets, paintFinAtlas } from './fins.mjs';
-import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './eye.mjs';
+import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE, PUPIL_GLOW } from './eye.mjs';
 import { buildMouth, buildGills } from './interior.mjs';
 import { JOINTS, J, AXES, bodyWeights, interiorWeights, finWeights, buildClips } from './rig.mjs';
 import { FIN_TARGETS } from '../../../src/creatures/species/mahaze/pose.js';
@@ -78,9 +79,12 @@ const sClamp = gb.addSampler({ magFilter: LINEAR, minFilter: MIPMAP, wrapS: CLAM
 
 // ---------------------------------------------------------------- body
 log('body');
-// three pattern variants per growth stage (glTF KHR_materials_variants): same mesh, own pattern textures
+// three patterns × three colour morphs per growth stage (glTF KHR_materials_variants): same mesh, own
+// albedo / pigment textures for every pattern and colour
 const PATTERN_IDS = [1, 2, 3];
-const body = buildBody({ NS: tier.NS, NV: tier.NV, NSb: tier.NSb, NVb: tier.NVb, texW: tier.texW, texH: tier.texH, patterns: PATTERN_IDS, log });
+const COLOR_IDS = COLORS.map((c, i) => i + 1);
+const VARIANTS = PATTERN_IDS.flatMap((p) => COLOR_IDS.map((c) => ({ pattern: p, color: c })));
+const body = buildBody({ NS: tier.NS, NV: tier.NV, NSb: tier.NSb, NVb: tier.NVb, texW: tier.texW, texH: tier.texH, patterns: PATTERN_IDS, colors: COLOR_IDS, log });
 const BT = body.textures;
 const tNrm = gb.addTexture(image(gb, 'body_normal', BT.width, BT.height, 3, BT.normal, 'png'), sBody, 'body_normal');
 const orm = downsample2(BT.width, BT.height, 3, BT.orm);
@@ -88,9 +92,10 @@ const tOrm = gb.addTexture(image(gb, 'body_orm', orm.w, orm.h, 3, orm.data, 'png
 const vol = downsample2(BT.width, BT.height, 3, BT.volume);
 const tVol = gb.addTexture(image(gb, 'body_transmission_thickness', vol.w, vol.h, 3, vol.data, 'png'), sBody, 'body_transmission_thickness');
 const profile = profileTable(512);
-// one body material per pattern: albedo, pigment and snout cap differ; normal, ORM and thickness are shared
-const bodyMaterial = (T, k) => {
-  const sfx = k === 1 ? '' : `_p${k}`;
+// one body material per pattern and colour: albedo, pigment and snout cap differ; normal, ORM and thickness are shared
+const suffix = (p, c) => (p === 1 && c === 1 ? '' : `_p${p}${c === 1 ? '' : `_${COLORS[c - 1].name}`}`);
+const bodyMaterial = (T, p, c) => {
+  const sfx = suffix(p, c);
   const tAlb = gb.addTexture(image(gb, `body_basecolor${sfx}`, T.width, T.height, 3, T.albedo, 'jpeg', 93), sBody, `body_basecolor${sfx}`);
   const tPig = gb.addTexture(image(gb, `body_pigment${sfx}`, T.width, T.height, 3, T.pigment, 'jpeg', 95), sBody, `body_pigment_mel_irid_xan${sfx}`);
   const tCapAlb = gb.addTexture(image(gb, `snoutcap_basecolor_roughness${sfx}`, T.cap.size, T.cap.size, 4, T.cap.albedo, 'png'), sClamp, `snoutcap_basecolor_roughness${sfx}`);
@@ -109,7 +114,8 @@ const bodyMaterial = (T, k) => {
     extras: {
       mahaze: {
         role: 'body',
-        pattern: k,
+        pattern: p,
+        color: c,
         pigmentTexture: tPig,
         // planar (y, z) projected front of the snout, replaces the converging loft UVs at the tip
         snoutCap: { albedoRoughness: tCapAlb, pigment: tCapPig, rectMM: T.cap.rect },
@@ -121,10 +127,17 @@ const bodyMaterial = (T, k) => {
     },
   });
 };
-const bodyMats = body.patternTextures.map((T, i) => bodyMaterial(T, PATTERN_IDS[i]));
+const bodyMats = VARIANTS.map(({ pattern: p, color: c }) => {
+  const T = body.patternTextures[PATTERN_IDS.indexOf(p)];
+  return bodyMaterial({ ...T, ...T.colors[COLOR_IDS.indexOf(c)] }, p, c);
+});
 const mBody = bodyMats[0];
 gb.useExtension('KHR_materials_variants');
-gb.json.extensions = { ...(gb.json.extensions || {}), KHR_materials_variants: { variants: PATTERN_IDS.map((k) => ({ name: `pattern${k}` })) } };
+gb.json.extensions = {
+  ...(gb.json.extensions || {}),
+  KHR_materials_variants: { variants: VARIANTS.map(({ pattern: p, color: c }) => ({ name: `pattern${p}_${COLORS[c - 1].name}`, extras: { mahaze: { pattern: p, color: c } } })) },
+};
+// mats[i] is the material of variant i
 const variantMappings = (mats) => ({ KHR_materials_variants: { mappings: mats.map((material, i) => ({ material, variants: [i] })) } });
 
 // ---------------------------------------------------------------- skeleton
@@ -175,7 +188,7 @@ const mEye = gb.addMaterial({
   name: 'Mahaze_Eye',
   pbrMetallicRoughness: { baseColorTexture: { index: tIris }, metallicFactor: 0, roughnessFactor: 0.4 },
   extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: 0.03 }, KHR_materials_ior: { ior: 1.376 } },
-  extras: { mahaze: { role: 'eye', radiusMM: EYE.radius, pupilAngle: PUPIL_ANGLE, irisAngle: IRIS_ANGLE, corneaBulge: CORNEA_BULGE } },
+  extras: { mahaze: { role: 'eye', radiusMM: EYE.radius, pupilAngle: PUPIL_ANGLE, irisAngle: IRIS_ANGLE, corneaBulge: CORNEA_BULGE, pupilGlow: PUPIL_GLOW } },
 });
 const eye = buildEyeMesh(tier.eyeNT, tier.eyeNP);
 const meshEye = gb.addMesh('Eye', [gb.primitive({ ...eye, material: mEye })]);
@@ -189,7 +202,8 @@ for (const [side, name, jn] of [[1, 'Eye_L', 'J_eyeL'], [-1, 'Eye_R', 'J_eyeR']]
 log('fins');
 const defs = finDefinitions();
 let tFinNrm = null;
-const finMats = PATTERN_IDS.map((k) => {
+// fin atlases per pattern; the colour morph only tints them (baseColorFactor) and scales their melanophores
+const finAtlases = PATTERN_IDS.map((k) => {
   const sfx = k === 1 ? '' : `_p${k}`;
   const atlas = paintFinAtlas(defs, log, k);
   // the atlas is painted at full size; the distance tiers carry it downsampled (three patterns per file)
@@ -198,15 +212,20 @@ const finMats = PATTERN_IDS.map((k) => {
   const tFinCol = gb.addTexture(image(gb, `fin_basecolor_alpha${sfx}`, col.w, col.h, 4, col.data, 'png'), sClamp, `fin_basecolor_alpha${sfx}`);
   if (tFinNrm === null) tFinNrm = gb.addTexture(image(gb, 'fin_normal', nrm.w, nrm.h, 3, nrm.data, 'jpeg', 95), sClamp, 'fin_normal');
   const tFinData = gb.addTexture(image(gb, `fin_data${sfx}`, dat.w, dat.h, 4, dat.data, 'png'), sClamp, `fin_ray_mel_irid_coverage${sfx}`);
+  return { tFinCol, tFinData };
+});
+const finMats = VARIANTS.map(({ pattern: p, color: c }) => {
+  const { tFinCol, tFinData } = finAtlases[PATTERN_IDS.indexOf(p)];
+  const fin = COLORS[c - 1].fin;
   return gb.addMaterial({
-    name: `Mahaze_Fin${sfx}`,
-    pbrMetallicRoughness: { baseColorTexture: { index: tFinCol }, metallicFactor: 0, roughnessFactor: 0.38 },
+    name: `Mahaze_Fin${suffix(p, c)}`,
+    pbrMetallicRoughness: { baseColorTexture: { index: tFinCol }, baseColorFactor: [...fin.tint, 1], metallicFactor: 0, roughnessFactor: 0.38 },
     normalTexture: { index: tFinNrm, scale: 1 },
     alphaMode: tier.finMask ? 'MASK' : 'BLEND',
     ...(tier.finMask ? { alphaCutoff: 0.5 } : {}),
     doubleSided: true,
     extensions: { KHR_materials_ior: { ior: 1.36 } },
-    extras: { mahaze: { role: 'fin', pattern: k, dataTexture: tFinData } },
+    extras: { mahaze: { role: 'fin', pattern: p, color: c, dataTexture: tFinData, tint: fin.tint, melK: fin.melK } },
   });
 });
 const mFin = finMats[0];
