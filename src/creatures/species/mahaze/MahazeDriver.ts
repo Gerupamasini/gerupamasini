@@ -1,6 +1,6 @@
 import { Object3D, Sphere, SkinnedMesh, Vector3, type Mesh } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent, Floor } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent, Floor } from '../../drivers/Driver';
 import { createBehavior } from './Behavior.js';
 
 type Behavior = ReturnType<typeof createBehavior>;
@@ -29,6 +29,7 @@ export class MahazeDriver implements Driver {
   private alertUntil = 0;
   private waitingForPerch = false;
   private readonly tmp = new Vector3();
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
   busy = false;
 
   attach(root: Object3D, individual: Individual, _extras: Record<string, unknown>, bones: Record<string, Object3D>, meshes: Object3D[]): void {
@@ -72,11 +73,15 @@ export class MahazeDriver implements Driver {
       if ((mesh as SkinnedMesh).isSkinnedMesh) (mesh as SkinnedMesh).boundingSphere = new Sphere(new Vector3(0, 0.002, 0.012), 0.04);
     }
     root.scale.setScalar(scale);
+    // the footprint it lies on: snout to the tail's base, its flanks with the pectorals spread
+    const tl = (bodyGeom?.tlMM ?? 50.5) * 0.001;
+    const foot = { ahead: (F.S0 - (bodyGeom?.tlMM ?? 50.5) / 2) * 0.001, halfL: 0.42 * tl, halfW: 0.1 * tl };
     this.beh = createBehavior({
       root, bones, finMeshes, axes: rig.axes, contacts, scale,
       floorY: (x: number, z: number) => (this.floor ? this.floor.heightAt(x, z) : 0),
       onEvent: (name: string) => this.emit(name),
       body: bodyGeom,
+      foot,
     });
     const st = this.beh.state;
     st.pos.set(individual.pos.x, 0, individual.pos.z);
@@ -184,6 +189,19 @@ export class MahazeDriver implements Driver {
     ind.pos.x = x; ind.pos.z = z;
     this.busy = false;
     this.waitingForPerch = false;
+  }
+
+  /** a goby is always on the bed (a dart lifts it a few millimetres) */
+  body(): BodyState {
+    const st = this.beh?.state, b = this.bodyState;
+    if (st) { b.heading = st.heading; b.y = st.bedY ?? (this.ind?.pos.y ?? 0); }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const st = this.beh?.state;
+    if (st) { st.pos.x += dx; st.pos.z += dz; }
+    if (this.ind) { this.ind.pos.x += dx; this.ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

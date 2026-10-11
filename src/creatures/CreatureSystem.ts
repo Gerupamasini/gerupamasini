@@ -16,6 +16,9 @@ import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
 import { modelFor, variantOf } from './models/choice';
 import type { HeroInstance } from './species/mahaze/hero/applyHero';
+import { AnimalContacts } from './physics/animals';
+import type { ContactBody } from './physics/contacts';
+import type { WaterMotion } from './physics/water';
 
 interface View {
   tier: Tier | 'placeholder';
@@ -35,6 +38,8 @@ interface Entry {
   unsub: () => void;
   /** the last spot where an aquatic animal had enough water under it */
   lastWet?: Vector3;
+  /** its body for the contacts between the animals */
+  body?: ContactBody;
 }
 
 export interface CreatureFrame {
@@ -79,6 +84,12 @@ export class CreatureSystem {
   private nowMs = 0;
   /** when set, hero-tier models get the volumetric materials (observation lock) */
   heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
+  /** how the flat's water moves (the swell, the surf): what swims in it is carried and rocked (set by the app) */
+  water: WaterMotion | null = null;
+  /** the animals' bodies: they push each other aside instead of passing through */
+  private readonly contacts = new AnimalContacts();
+  private readonly drawn: Entry[] = [];
+  private readonly minDepthOf = (ind: Individual): number => (isAquatic(ind.species) ? minDepthFor(ind.species, ind.length_mm) : 0);
 
   constructor(
     private readonly scene: Scene,
@@ -269,12 +280,22 @@ export class CreatureSystem {
         if (this.frameIndex % every === 0) {
           e.driver.update(f.dt * every, {
             floor: this.floor, player: f.playerPos, simScale: f.simScale, nowMs: f.gameMs, locked: e.ind.id === f.lockedId,
-            minDepth: isAquatic(ind.species) ? minDepthFor(ind.species, ind.length_mm) : undefined,
+            minDepth: isAquatic(ind.species) ? minDepthFor(ind.species, ind.length_mm) : undefined, water: this.water,
           });
         }
         if (e.view.hero) e.view.hero.update(f.camera, e.driver.openings ?? { mouth: 0, gill: 0 });
       }
     }
+    // the animals in view push each other aside (the unseen ones are left to themselves)
+    const drawn = this.drawn;
+    drawn.length = 0;
+    for (const e of this.entries.values()) if (e.view) drawn.push(e);
+    this.contacts.step(f.dt * f.simScale, drawn, { floor: this.floor }, this.minDepthOf);
+  }
+
+  /** contacts made in the last frame (debug) */
+  get touching(): number {
+    return this.contacts.contacts.touching;
   }
 
   private issue(e: Entry, intent: Intent, nowSec: number): void {
