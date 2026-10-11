@@ -4,7 +4,7 @@
 // hero material on (the observed fish volumetric, its neighbours in their field material), then off (all three in the
 // field material, drawn by the field's own renderer). Headless Chromium (SwiftShader); starts the Vite dev server itself.
 // Usage: node tests/smoke/goby-translucency.mjs [--out <dir>] [--map <id>] [--quality low|mid|high]
-// Output: tests/smoke/out/goby-<quality>-<hero|field>-<front|back>.png. Fails on any page or shader error.
+// Output: tests/smoke/out/goby-<quality>-<hero|field>-<front|back|back-close>.png. Fails on any page or shader error.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -73,48 +73,66 @@ try {
       const k = dd < 0.15 ? 0.15 : -0.15;
       w.x += (gx / gl) * k; w.z += (gz / gl) * k;
     }
-    // side by side across the sun's direction, all heading the same way (across the light)
+    // the player well back on the shore, so the fish do not flee from it
+    const gx = h.depthAt(w.x + 0.5, w.z) - h.depthAt(w.x - 0.5, w.z), gz = h.depthAt(w.x, w.z + 0.5) - h.depthAt(w.x, w.z - 0.5), gl = Math.hypot(gx, gz) || 1;
+    a.player.setPose(w.x - (gx / gl) * 3, w.z - (gz / gl) * 3, 0);
+    // side by side across the sun's direction, heading across the light (broadside to a camera on the sun's line)
     const s = a.world.sunDir, sl = Math.hypot(s.x, s.z) || 1, sx = s.x / sl, sz = s.z / sl;
+    const heading = Math.atan2(-sz, sx);
     const out = [];
     [['acanthogobius_flavimanus', 0], ['gymnogobius_macrognathos', -1], ['favonigobius_gymnauchen', 1]].forEach(([sid, k], i) => {
       const species = cs.spawner.speciesList.find((q) => q.id === sid);
       if (!species) return;
-      const x = w.x - sz * k * 0.075 + sx * k * 0.02, z = w.z + sx * k * 0.075 + sz * k * 0.02;
+      // a row across the light: offset along the sun's line, and a little along the fish
+      const x = w.x + sx * k * 0.045 - sz * k * 0.012, z = w.z + sz * k * 0.045 + sx * k * 0.012;
       const ind = cs.spawner.create({ species, ruleIndex: 0, cell: 0, seed: 777 + i * 31, x, z, lengthRange: [55, 56] }, Date.now());
-      ind.heading = Math.atan2(-sz, sx);
+      ind.heading = heading;
       cs.spawn(ind);
-      out.push({ id: ind.id, sid, len: ind.length_mm, pos: [x, z].map((v) => +v.toFixed(2)), depth: +h.depthAt(x, z).toFixed(3) });
+      out.push({ id: ind.id, sid, len: ind.length_mm, x, z, heading, depth: +h.depthAt(x, z).toFixed(3) });
     });
     return { out, sun: [sx, sz, s.y] };
   });
   console.log('gobies', JSON.stringify(fish));
-  for (const f of fish.out) await page.evaluate((id) => { window.__higata.creatures.driverOf(id)?.setIntent({ id: 99, kind: 'rest', urgency: 0, seconds: 900 }); }, f.id);
-  await waitFrames(page, 20);
+  const ids = fish.out.map((f) => f.id);
+  await page.waitForFunction((ids) => ids.every((id) => window.__higata.creatures.entries.get(id)?.view?.model), ids, { timeout: 900000 });
   await page.addStyleTag({ content: '#ui { display: none !important; }' });
-  const main = fish.out[0].id;
+  const main = ids[0];
   await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, main);
-  await waitFrames(page, 20);
+  /** pin the three where they were put (resting), let the pose settle, then stop the simulation for the pictures */
+  const pin = async () => {
+    await page.evaluate((out) => {
+      const cs = window.__higata.creatures;
+      cs.enabled = true;
+      for (const f of out) { const d = cs.driverOf(f.id); d.holdAt(f.x, f.z, f.heading); d.setIntent({ id: 99, kind: 'rest', urgency: 0, seconds: 900 }); }
+    }, fish.out);
+    await waitFrames(page, 12);
+    await page.evaluate(() => { window.__higata.creatures.enabled = false; });
+  };
   // the orbit camera on the sun's side looking down (front light) or on the far side, low, looking toward the sun
-  const view = (against) => page.evaluate(([against, sun]) => {
+  const view = (against, d) => page.evaluate(([against, sun, d]) => {
     const a = window.__higata, o = a.observation, c = o.controls;
-    const k = against ? -1 : 1, el = against ? 0.32 : 0.75, d = 0.2;
+    const k = against ? -1 : 1, el = against ? 0.3 : 0.75;
     a.camera.position.set(c.target.x + sun[0] * k * d * Math.cos(el), c.target.y + d * Math.sin(el), c.target.z + sun[1] * k * d * Math.cos(el));
     c.update();
     return a.creatures.individuals.map((x) => [x.species.id.slice(0, 12), a.creatures.entries.get(x.id)?.view?.tier, !!a.creatures.entries.get(x.id)?.view?.hero]);
-  }, [against, fish.sun]);
-  const shot = async (name) => { await waitFrames(page, 14); await page.screenshot({ path: path.join(outDir, `goby-${quality}-${name}.png`) }); };
-  await waitFrames(page, 10);
-  console.log('hero front', JSON.stringify(await view(false)));
-  await shot('hero-front');
-  console.log('hero back', JSON.stringify(await view(true)));
-  await shot('hero-back');
-  // the field material on all three (the observed one in its hero-tier mesh)
-  await page.evaluate(() => window.__higata.updateSettings({ heroMaterials: false }));
-  await waitFrames(page, 30);
-  console.log('field front', JSON.stringify(await view(false)));
-  await shot('field-front');
-  console.log('field back', JSON.stringify(await view(true)));
-  await shot('field-back');
+  }, [against, fish.sun, d]);
+  const shot = async (name) => { await waitFrames(page, 10); await page.screenshot({ path: path.join(outDir, `goby-${quality}-${name}.png`) }); };
+  const series = async (tag) => {
+    await pin();
+    console.log(`${tag} front`, JSON.stringify(await view(false, 0.17)));
+    await shot(`${tag}-front`);
+    console.log(`${tag} back`, JSON.stringify(await view(true, 0.17)));
+    await shot(`${tag}-back`);
+    await view(true, 0.085);
+    await shot(`${tag}-back-close`);
+  };
+  await page.waitForFunction((id) => window.__higata.creatures.heroActive(id), main, { timeout: 900000 });
+  await series('hero');
+  // the field material on all three (the observed one in its hero-tier mesh), drawn by the field's renderer
+  await page.evaluate(() => { window.__higata.creatures.enabled = true; return window.__higata.updateSettings({ heroMaterials: false }); });
+  await page.waitForFunction((id) => { const v = window.__higata.creatures.entries.get(id)?.view; return v?.tier === 'hero' && !v.hero; }, main, { timeout: 900000 });
+  await series('field');
+  await page.evaluate(() => { window.__higata.creatures.enabled = true; });
   await page.evaluate(() => window.__higata.exitObserve());
   await waitFrames(page, 4);
   await browser.close();
