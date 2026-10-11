@@ -12,6 +12,9 @@ import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
 import { createPitDebris } from '../world/PitDebris';
 import { Skyline } from '../world/Skyline';
 import { Riprap } from '../world/Riprap';
+import { LeveeLine } from '../world/LeveeLine';
+import { ReedBed } from '../world/ReedBed';
+import { StakeRow } from '../world/StakeRow';
 import { OysterAtlas } from '../creatures/oyster/bake';
 import { OysterReef } from '../creatures/oyster/OysterReef';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
@@ -44,6 +47,10 @@ export class World {
   mangroves: MangroveForest | null = null;
   /** the stones along the levees (hard ground for oysters; the 葛西 flat) */
   riprap: Riprap | null = null;
+  /** the ヨシ fringe along the levee's inner toe (the 葛西 flat) */
+  reeds: ReedBed | null = null;
+  /** the old bamboo stakes in the shallows */
+  stakes: StakeRow | null = null;
   /** the マガキ reef on those stones */
   oysters: OysterReef | null = null;
   /** crushed clams lying about, the scavengers' carrion */
@@ -105,6 +112,8 @@ export class World {
     const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, pits);
     mark('habitat');
     if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); if (layout.mudTint) terrain.setMudTint(...layout.mudTint); terrain.setSediment(layout.ripples ?? 1, layout.mudLook ?? 0); terrain.setRippleAngle(layout.rippleAngle); }
+    // 葛西's sand is a warm grey-brown, not neutral: the photos' dry sand runs about 1 : 0.94 : 0.85 in R : G : B
+    else terrain.setSandTint(1.0, 0.935, 0.85);
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
     const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });
@@ -126,14 +135,21 @@ export class World {
     w.carrion = new CarrionField({ heightAt: (x, z) => terrain.heightAt(x, z), sampleAt: (x, z) => habitat.sample(x, z, 0) }, hashInts(map.id.length * 53, pitSeed));
     w.scene.add(w.carrion.group);
     }
-    if (!layout) {
-      // the 葛西 flat: hard ground and the oyster reef on it — stones along the levees' toes; every face in the
+    if (!layout && map.levee) {
+      // the 葛西 flat: hard ground and the oyster reef on it — stones along the levee's toe; every face in the
       // oyster zone (about mean sea level down to the spring low) grows a clump
       onProgress?.('牡蠣礁');
       const quality = preset.surfaceDetail === 0 ? 'low' : preset.shadowMapSize >= 2048 ? 'high' : 'mid';
-      const riprap = new Riprap(terrain, hashInts(map.id.length * 17, 0x51b));
+      const riprap = new Riprap(terrain, hashInts(map.id.length * 17, 0x51b), map.levee);
       for (const m of riprap.group) w.scene.add(m);
       w.riprap = riprap;
+      // a thin fringe of reeds on the berm against the levee, their kinds by the season
+      w.reeds = new ReedBed(terrain, new LeveeLine(map.levee), hashInts(map.id.length * 23, 0x9ee), preset.vegetation);
+      for (const m of w.reeds.group) w.scene.add(m);
+      if (map.stakes) {
+        w.stakes = new StakeRow(terrain, ...map.stakes.from, ...map.stakes.to, map.stakes.count, hashInts(map.id.length * 29, 0x57a));
+        w.scene.add(w.stakes.mesh);
+      }
       try {
         const atlas = OysterAtlas.shared(renderer, quality);
         OysterDriver.atlas = atlas;
@@ -141,8 +157,11 @@ export class World {
           p: s.p, n: s.n, room: s.room,
           surface: (world: Vector3, outP: Vector3, outN: Vector3) => riprap.surfaceToward(s.stone, world, outP, outN),
         }));
-        // and the levees' own faces where the tide covers them
+        // and the levee's own faces where the tide covers them
         for (const s of riprap.leveeSites(map.id.length * 131 + 3, 0.38, -1.15)) sites.push({ p: s.p, n: s.n, room: s.room, surface: (world: Vector3, outP: Vector3, outN: Vector3) => riprap.terrainSurface(world, outP, outN) });
+        // and round the bamboo stakes
+        const stakes = w.stakes;
+        if (stakes) for (const s of stakes.attachSites(map.id.length * 137 + 5, 0.38, -1.15)) sites.push({ p: s.p, n: s.n, room: s.room, surface: (world: Vector3, outP: Vector3, outN: Vector3) => stakes.surfaceToward(s.stake, world, outP, outN) });
         const reef = new OysterReef({
           atlas, sites, seed: hashInts(map.id.length, 0x0a5), quality, maxOysters: preset.oysters,
           ground: (x, z, n) => { terrain.normalAt(x, z, n); return terrain.heightAt(x, z) + riprap.heightBoost(x, z); },
@@ -154,7 +173,7 @@ export class World {
         console.warn('[oysters] reef not built', e);
       }
       mark('reef');
-    } else {
+    } else if (layout) {
       // a shore map: its アマモ beds (the animals' standing features), its props, its own far scenery
       onProgress?.('アマモ場');
       const mapSeed = hashInts(...[...map.id].map((c) => c.charCodeAt(0)), 20261006);
@@ -210,6 +229,10 @@ export class World {
     this.carrion = null;
     this.riprap?.dispose();
     this.riprap = null;
+    this.reeds?.dispose();
+    this.reeds = null;
+    this.stakes?.dispose();
+    this.stakes = null;
     this.skyline.dispose();
     this.sky.dispose();
     this.water.dispose();
@@ -245,6 +268,7 @@ export class World {
     this.sunElevation = sp.elevation;
     this.tod = timeOfDay(sp.elevation, jstParts(gameMs).hour);
     this.season = seasonOf(gameMs);
+    this.reeds?.update(dt, this.season);
     const sunUp = Math.max(0, Math.min(1, (sp.elevation + 2) / 14)) * (1 - 0.8 * this.overcast);
     this.sky.update(this.sunDir, sp.elevation, anchor, this.overcast);
     this.fog.color.copy(this.sky.fogColor);
