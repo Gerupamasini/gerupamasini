@@ -1,0 +1,87 @@
+{
+  "source": "ゲーム内3Dモデルの静止画像",
+  "width": 640,
+  "height": 400,
+  "species": [
+    {
+      "id": "acanthogobius_flavimanus",
+      "name": "マハゼ",
+      "file": "acanthogobius_flavimanus.jpg"
+    },
+    {
+      "id": "gymnogobius_macrognathos",
+      "name": "エドハゼ",
+      "file": "gymnogobius_macrognathos.jpg"
+    },
+    {
+      "id": "favonigobius_gymnauchen",
+      "name": "ヒメハゼ",
+      "file": "favonigobius_gymnauchen.jpg"
+    },
+    {
+      "id": "exopalaemon_orientis",
+      "name": "シラタエビ",
+      "file": "exopalaemon_orientis.jpg"
+    },
+    {
+      "id": "palaemon_pacificus",
+      "name": "イソスジエビ",
+      "file": "palaemon_pacificus.jpg"
+    },
+    {
+      "id": "charadrius_alexandrinus",
+      "name": "シロチドリ",
+      "file": "charadrius_alexandrinus.jpg"
+    },
+    {
+      "id": "ruditapes_philippinarum",
+      "name": "アサリ",
+      "file": "ruditapes_philippinarum.jpg"
+    },
+    {
+      "id": "meretrix_lusoria",
+      "name": "ハマグリ",
+      "file": "meretrix_lusoria.jpg"
+    },
+    {
+      "id": "pagurus_minutus",
+      "name": "ユビナガホンヤドカリ",
+      "file": "pagurus_minutus.jpg"
+    },
+    {
+      "id": "crassostrea_gigas",
+      "name": "マガキ",
+      "file": "crassostrea_gigas.jpg"
+    },
+    {
+      "id": "reticunassa_festiva",
+      "name": "アラムシロ",
+      "file": "reticunassa_festiva.jpg"
+    },
+    {
+      "id": "mugil_cephalus",
+      "name": "ボラ",
+      "file": "mugil_cephalus.jpg"
+    },
+    {
+      "id": "rudarius_ercodes",
+      "name": "アミメハギ",
+      "file": "rudarius_ercodes.jpg"
+    },
+    {
+      "id": "syngnathus_schlegeli",
+      "name": "ヨウジウオ",
+      "file": "syngnathus_schlegeli.jpg"
+    },
+    {
+      "id": "platichthys_bicoloratus",
+      "name": "イシガレイ",
+      "file": "platichthys_bicoloratus.jpg"
+    },
+    {
+      "id": "hemitrygon_akajei",
+      "name": "アカエイ",
+      "file": "hemitrygon_akajei.jpg"
+    }
+  ]
+}

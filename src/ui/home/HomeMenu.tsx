@@ -3,6 +3,8 @@ import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import { TankPanel } from '../tank/TankPanel';
 import { ToolsPanel } from './ToolsPanel';
+import { MobileHome } from './MobileHome';
+import { FirstSteps } from './FirstSteps';
 import { nextLevelAt } from '../../systems/Encyclopedia';
 import { formatJst } from '../../core/Time';
 import { moonAge, tideName } from '../../core/Moon';
@@ -25,6 +27,7 @@ function dateLine(ms: number): string {
  * almanac of the real tide (top right), and a row of seven tiles along the bottom with the flat as the loud one.
  */
 export function HomeMenu({ app }: { app: App }) {
+  if (app.input.touchDevice) return <MobileHome app={app} />;
   const hud = ui.hud.value;
   const now = app.clock.nowGame();
   const nextLow = hud.extrema.find((e) => e.t > now && e.kind === 'low');
@@ -37,6 +40,7 @@ export function HomeMenu({ app }: { app: App }) {
   const infoSp = info ? app.data.species.get(info.speciesId) : undefined;
   return (
     <Fragment>
+      <FirstSteps app={app} />
       <div class="glass home-status rise">
         <div class="level-row">
           <span class="lv">Lv.</span><span class="num">{level}</span>
@@ -45,9 +49,9 @@ export function HomeMenu({ app }: { app: App }) {
         </div>
         <div class="exp"><i style={{ width: `${Math.min(100, (research / nextAt) * 100)}%` }} /></div>
         <div class="stat-line">
-          <span class="stat"><span class="coin" />{t('home.credits')} <b class="num">{enc.money.value.toLocaleString()}</b></span>
+          <span class="stat" title={t('home.credits')}><span class="coin" /><span class="stat-name">{t('home.credits')}</span><b class="num">{enc.money.value.toLocaleString()}</b></span>
           <span class="sep" />
-          <span class="stat"><span class="ticket-mark" />{t('hud.ticket')} <b class="num">∞</b></span>
+          <span class="stat" title={t('hud.ticket')}><span class="ticket-mark" /><span class="stat-name">{t('hud.ticket')}</span><b class="num">∞</b></span>
         </div>
       </div>
 
@@ -81,6 +85,7 @@ export function HomeMenu({ app }: { app: App }) {
         <button class={`nav-tile ${panel === 'tank' ? 'on' : ''}`} onClick={() => app.openTankEdit()}><TankIcon />{t('home.tankShort')}</button>
         <button class="nav-tile" onClick={() => app.openOverlay('tidetable')}><CalendarIcon />{t('home.tideTable')}<Key k="T" /></button>
       </nav>
+      <div class="home-hint">{t('home.hint')}</div>
 
       {info && infoSp && (
         <div class="glass home-info rise" onClick={() => { ui.homeInfo.value = null; }}>

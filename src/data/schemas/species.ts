@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const HabitatTagSchema = z.enum(['exposed_sand', 'exposed_mud', 'waterline', 'shallow', 'pool', 'small_pool', 'channel', 'deep', 'eelgrass', 'eelgrass_edge', 'bare']);
-export const SubstrateSchema = z.enum(['sand', 'muddy_sand', 'mud', 'gravel', 'channel']);
+export const SubstrateSchema = z.enum(['sand', 'muddy_sand', 'mud', 'gravel', 'channel', 'rock']);
 export const TimeOfDaySchema = z.enum(['dawn', 'day', 'dusk', 'night']);
 export const SeasonSchema = z.enum(['spring', 'summer', 'autumn', 'winter']);
 export const TidePhaseSchema = z.enum(['any', 'low', 'rising', 'high', 'falling']);
@@ -28,6 +28,8 @@ export const SpeciesSchema = z.object({
   names: z.object({ ja: z.string(), sci: z.string(), en: z.string().optional() }),
   taxon: z.object({ group: TaxonGroupSchema, family: z.string().optional() }),
   locomotion: LocomotionSchema,
+  /** how deep a burrower sits (cm): a digging tool must reach at least this far */
+  digDepth_cm: z.number().positive().optional(),
   /** lives in the water and is kept in it (default: swimmers and crustaceans); a crawling snail sets it */
   aquatic: z.boolean().optional(),
   collectable: z.boolean(),
@@ -40,14 +42,27 @@ export const SpeciesSchema = z.object({
     modelLength_mm: z.number().positive(),
     /** beyond this distance from the player the animal has no view (default from its size) */
     viewDistance_m: z.number().positive().optional(),
+    /** beyond this distance the driver's placeholder stands in for the GLB tiers (a species whose only GLB is dense) */
+    placeholderBeyond_m: z.number().positive().optional(),
     driver: z.string().optional(),
     clips: z.object({ idle: z.string().default('Idle'), move: z.string().default('Move'), special: z.array(z.string()).default([]) }).default({ idle: 'Idle', move: 'Move', special: [] }),
+    /** the gravid female's own model files (an egg-swollen form; the rest comes from `model`) */
+    gravid: z.object({ hero: z.string().optional(), lod1: z.string().optional(), lod2: z.string().optional() }).optional(),
+    /** the breeding male's own model files (nuptial dress; the rest comes from `model`) */
+    male: z.object({ hero: z.string().optional(), lod1: z.string().optional(), lod2: z.string().optional() }).optional(),
   }),
   size: z.object({
     length_mm: z.object({ min: z.number(), max: z.number(), mean: z.number(), sd: z.number() }),
     weightCoef: z.object({ a: z.number(), b: z.number() }),
+    /** the least water an aquatic animal stays in, as a share of its length (default 0.15; a flat ray with a long tail needs far less) */
+    minDepthFraction: z.number().positive().optional(),
   }),
   sex: z.object({ maleRatio: z.number().min(0).max(1).default(0.5), dimorphic: z.boolean().default(false) }).default({ maleRatio: 0.5, dimorphic: false }),
+  /**
+   * when adult females carry eggs: the share in the spawning months, and out of them; and the share of adult males in
+   * breeding dress (the species' `model.male`) in those months
+   */
+  breeding: z.object({ months: z.array(z.number().int().min(1).max(12)).min(1), gravidShare: z.number().min(0).max(1).default(0.7), offSeasonShare: z.number().min(0).max(1).default(0), dressShare: z.number().min(0).max(1).default(0) }).optional(),
   stages: z.array(z.object({
     id: z.string(), ja: z.string(), maxLength_mm: z.number().optional(),
     /** this stage's own model files (a growth form of the species' model; the rest comes from `model`) */

@@ -89,7 +89,10 @@ try {
   // stand at the waterline at the current tide and look across the shallows
   await noon();
   // the world runs on the debug clock here, so place the player from the world's own water level
-  await page.evaluate(() => { const a = window.__higata; a.clock.cancelTicket(); a.teleport('waterline'); a.player.pitch = -0.35; });
+  // (the clock and the tide settle over a frame or two before the waterline is looked for: the spot depends on them)
+  await page.evaluate(() => { window.__higata.clock.cancelTicket(); });
+  await waitFrames(page, 3);
+  await page.evaluate(() => { const a = window.__higata; a.teleport('waterline'); a.player.pitch = -0.35; });
   await waitFor(4500);
   await page.screenshot({ path: path.join(outDir, '07-waterline.png') });
   // make sure the close-up steps below have something to look at
@@ -98,6 +101,10 @@ try {
     console.log('no goby around the waterline, forcing a spawn');
     await page.evaluate(() => window.__higata.forceSpawn());
     await waitFrames(page, 10);
+    // the rules may leave this spot empty on the day (at a low tide the 葛西 waterline is the bank's edge, where only
+    // a few puddles hold water): the steps below are about observing and catching, so one is put in the water ahead
+    const still = await page.evaluate(() => window.__higata.creatures.individuals.filter((i) => i.species.id === 'acanthogobius_flavimanus').length);
+    if (still === 0) { console.log('no goby by the rules here today, placing one'); await page.evaluate(() => window.__higata.debugSpawn('acanthogobius_flavimanus', 3)); await waitFrames(page, 6); }
   }
   // close-ups of the placeholder species when they are around
   for (const [sid, file] of [['exopalaemon_orientis', '14-shrimp.png'], ['charadrius_alexandrinus', '15-plover.png']]) {
@@ -116,6 +123,37 @@ try {
     if (found) { await waitFrames(page, 10); await page.screenshot({ path: path.join(outDir, file) }); }
     else console.log(`no ${sid} nearby for a close-up`);
   }
+  // アカエイ: rare, so put one in the water ahead when none is about; look at it lying on the bottom, then swimming
+  const ray = await page.evaluate(() => {
+    const a = window.__higata;
+    const p = a.player.position;
+    const near = () => a.creatures.individuals.filter((i) => i.species.id === 'hemitrygon_akajei').sort((x, y) => x.pos.distanceTo(p) - y.pos.distanceTo(p))[0];
+    let ind = near();
+    if (!ind || ind.pos.distanceTo(p) > 30) { a.debugSpawn('hemitrygon_akajei', 4); ind = near(); }
+    if (!ind) return null;
+    const px = ind.pos.x + 1.4, pz = ind.pos.z + 0.6;
+    a.player.setPose(px, pz, Math.atan2(-(ind.pos.x - px), -(ind.pos.z - pz)));
+    a.player.lowView = true;
+    a.player.pitch = -0.45;
+    return ind.id;
+  });
+  if (ray) {
+    // the shallows are the slowest view under software GL (well under 1 fps): few frames, long timeouts
+    await waitFrames(page, 12, 300000);
+    await page.screenshot({ path: path.join(outDir, '24-akaei.png') });
+    await page.evaluate((id) => {
+      const a = window.__higata, ind = a.creatures.get(id);
+      a.creatures.forceIntent(id, { id: 0, kind: 'wander', urgency: 0.5, seconds: 12, target: ind.pos.clone().add({ x: -2.5, y: 0, z: -1.5 }) });
+    }, ray);
+    await waitFrames(page, 20, 300000);
+    await page.screenshot({ path: path.join(outDir, '24b-akaei-swim.png') });
+    // and through the observation camera (the observed animal keeps its full detail)
+    await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, ray);
+    await waitFrames(page, 12, 300000);
+    await page.screenshot({ path: path.join(outDir, '24c-akaei-observe.png') });
+    await page.evaluate(() => { window.__higata.exitObserve(); });
+    await waitFrames(page, 4, 300000);
+  } else console.log('no water for a ray');
   // walk up to the nearest goby, observe it, catch it, open the zukan and put it in the tank
   const near = await page.evaluate(() => {
     const a = window.__higata;
@@ -185,6 +223,51 @@ try {
     await waitFrames(page, 6);
     await page.screenshot({ path: path.join(outDir, '13-continue.png') });
   } else errors.push('no goby spawned near the player');
+  // ユビナガホンヤドカリ: close-up, observation, capture and the home tank
+  await noon();
+  const crab = await page.evaluate(() => {
+    const a = window.__higata;
+    const p = a.player.position;
+    let c = a.creatures.individuals.filter((i) => i.species.id === 'pagurus_minutus').sort((x, y) => x.pos.distanceTo(p) - y.pos.distanceTo(p))[0];
+    if (!c) { a.teleport('pool'); a.forceSpawn(); c = a.creatures.individuals.filter((i) => i.species.id === 'pagurus_minutus')[0]; }
+    if (!c) return null;
+    const dist = 0.7, px = c.pos.x + dist, pz = c.pos.z;
+    a.player.setPose(px, pz, Math.atan2(-(c.pos.x - px), -(c.pos.z - pz)));
+    a.player.pitch = -Math.atan2(1.5, dist);
+    return { id: c.id, len: c.length_mm };
+  });
+  console.log('nearest hermit crab', JSON.stringify(crab));
+  if (crab) {
+    await waitFrames(page, 10);
+    await page.screenshot({ path: path.join(outDir, '20-hermit-near.png') });
+    await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, crab.id);
+    // (the crab at full detail is slow on the software renderer: fewer frames, a longer wait)
+    await waitFrames(page, 14, 240000);
+    await page.screenshot({ path: path.join(outDir, '21-hermit-observe.png') });
+    // catch it with the net the same way as the goby: the crab is held under the reticle and the swing is forced
+    await page.evaluate(() => { const a = window.__higata; a.exitObserve(); a.player.lowView = true; a.player.pitch = -0.64; });
+    await waitFrames(page, 3);
+    await page.evaluate((id) => {
+      const a = window.__higata, c = a.creatures.get(id);
+      const p = a.groundUnderReticle(1.1);
+      if (p) { a.creatures.driverOf(id)?.holdAt?.(p.x, p.z); c.pos.set(p.x, p.y + 0.005, p.z); }
+      c.alert = 0; a.capture.forceCatch = true; a.swingNet();
+    }, crab.id);
+    await page.waitForFunction(() => { const s = window.__higata.capture.state.value; return !!s && s.phase === 'check' && s.revealed; }, null, { timeout: 240000 });
+    await waitFrames(page, 2);
+    console.log('hermit reveal', JSON.stringify(await page.evaluate(() => window.__higata.capture.state.value?.catchText)));
+    await page.screenshot({ path: path.join(outDir, '22-hermit-net.png') });
+    await page.waitForFunction(() => window.__higata.mode === 'field', null, { timeout: 240000 });
+    const got = await page.evaluate(() => window.__higata.encyclopedia.caseItems.value.some((r) => r.speciesId === 'pagurus_minutus'));
+    if (got) {
+      await page.evaluate(() => { const a = window.__higata; a.enterHome(); a.setHomePanel('tank'); const rec = a.encyclopedia.caseItems.value.find((r) => r.speciesId === 'pagurus_minutus'); return a.tankPut(rec); });
+      // (the tank draws the crab at full detail: a few frames are slow on the software renderer)
+      await waitFrames(page, 14);
+      await page.screenshot({ path: path.join(outDir, '23-hermit-tank.png') });
+      await page.evaluate(() => window.__higata.enterField());
+      await page.waitForFunction(() => window.__higata && window.__higata.mode === 'field', null, { timeout: 120000 });
+    } else errors.push('the forced swing did not catch the hermit crab');
+  } else errors.push('no hermit crab to look at');
   // runnel at mid tide, then debug mode at low tide with markers (daylight)
   await noon();
   await page.evaluate(() => { const a = window.__higata; a.toggleDebug(); a.setTideOverride(0.15); a.teleport('runnel'); a.player.pitch = -0.12; });

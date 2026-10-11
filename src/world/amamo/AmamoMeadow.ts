@@ -1,11 +1,12 @@
 import { ClampToEdgeWrapping, DataTexture, Group, LinearFilter, RedFormat, UnsignedByteType, Vector2, type Camera } from 'three';
 import { Rng } from '../../core/Rng';
 import type { Substrate } from '../../data/schemas';
+import type { Quality } from '../../core/Settings';
 import type { Habitat } from '../Habitat';
 import type { Terrain } from '../Terrain';
 import type { SurfField } from '../Water';
 import { AmamoKit, type Lod } from './kit';
-import { AmamoPatch, patchOutline, type GroundSampler, type Grown, type PatchKind, type PatchOptions } from './AmamoPatch';
+import { AmamoPatch, patchOutline, type GroundSampler, type Grown, type PatchKind, type PatchOptions, type ShootSpec } from './AmamoPatch';
 import { MOTION, ZONE, smoothstep } from './params';
 
 /** How much of the meadow is drawn, and in how much detail. */
@@ -18,7 +19,9 @@ export interface MeadowQuality {
   shadowLod: number;
 }
 
-export const MEADOW_QUALITY: Record<'low' | 'mid' | 'high', MeadowQuality> = {
+export const MEADOW_QUALITY: Record<Quality, MeadowQuality> = {
+  // 超軽量: a third of the shoots, the detailed tiers only within arm's reach, the far meadow is the cover painted on the bed
+  minimal: { density: 0.35, lod: [2.5, 7, 18], shadowLod: -1 },
   low: { density: 0.6, lod: [3.5, 11, 28], shadowLod: -1 },
   // (the blades' shadows on the bed are faint, and drawing them costs more triangles than the blades themselves:
   // mid casts none, high only from the nearest tier)
@@ -63,7 +66,7 @@ export interface PatchSpec {
   prior: PatchSpec[];
 }
 
-const SUBSTRATE_WEIGHT: Record<Substrate, number> = { sand: 1, muddy_sand: 1, mud: 0.55, gravel: 0.25, channel: 0.12 };
+const SUBSTRATE_WEIGHT: Record<Substrate, number> = { sand: 1, muddy_sand: 1, mud: 0.55, gravel: 0.25, channel: 0.12, rock: 0 };
 /** cover texture size over the map */
 const COVER_RES = 512;
 /** patches are built when the camera comes within the last tier's reach plus this, and dropped a little farther out */
@@ -392,6 +395,26 @@ export class AmamoMeadow {
       if (lod !== -1 && this.hiddenByWater(p, cam.x, cam.y, cam.z, env.tideLevel)) lod = -1;
       if (lod !== p.lod || p.visible !== (lod !== -1)) p.setLod(lod, this.quality.density, this.quality.shadowLod);
     }
+  }
+
+  /**
+   * Grown shoots within r of (x, z) (only patches near the camera are grown), nearest first, at most `max`. For the
+   * animals that live among the blades (flow.ts gives the CPU twin of a shoot's motion).
+   */
+  shootsNear(x: number, z: number, r: number, max = 24): ShootSpec[] {
+    const found: { s: ShootSpec; d: number }[] = [];
+    for (const p of this.live.values()) {
+      if (Math.hypot(p.cx - x, p.cz - z) > r + p.reach + 0.05) continue;
+      // only shoots drawn at the near tiers (the instances are shuffled: the first ones are the ones drawn)
+      const drawn = Math.min(p.shoots.length, Math.round(p.shootCount * this.quality.density * 0.8));
+      for (let i = 0; i < drawn; i++) {
+        const s = p.shoots[i];
+        const d = Math.hypot(s.x - x, s.z - z);
+        if (d <= r) found.push({ s, d });
+      }
+    }
+    found.sort((a, b) => a.d - b.d);
+    return found.slice(0, max).map((o) => o.s);
   }
 
   /** On an open shore: the surf's surface, which the blades afloat ride and which the shoots stay under. */

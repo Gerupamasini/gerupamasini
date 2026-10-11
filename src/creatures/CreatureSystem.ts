@@ -11,7 +11,7 @@ import { BehaviorTree, type PerceptionContext } from './brain/BehaviorTree';
 import { Spawner, type SpawnEnv } from './Spawner';
 export type { SpawnEnv };
 import { minDepthFor, type Individual } from './Individual';
-import type { BehaviorEvent, Driver, Floor, Intent } from './drivers/Driver';
+import type { BehaviorEvent, Driver, Floor, Intent, MeadowProbe, ScentProbe } from './drivers/Driver';
 import { DRIVERS } from './drivers/index';
 import { instantiateModel, preloadModel, type LoadedModel, type Tier } from './models/ModelLoader';
 import { modelFor, variantOf } from './models/choice';
@@ -30,6 +30,8 @@ interface Entry {
   driver: Driver;
   view: View | null;
   pendingTier: string | null;
+  retryAfter?: number;
+  failures?: number;
   unsub: () => void;
   /** the last spot where an aquatic animal had enough water under it */
   lastWet?: Vector3;
@@ -51,7 +53,7 @@ export interface CreatureFrame {
   lockedId: string | null;
 }
 
-const LOD1_DIST = 6;
+const LOD1_DIST = 10;
 const LOD2_DIST = 40;
 const BIRD_DIST = 120;
 /** an animal in the water is lost in it within this (m) seen from the shore, however large: no need to draw it further */
@@ -74,6 +76,7 @@ export class CreatureSystem {
   private readonly ray = new Ray();
   private readonly sphere = new Sphere();
   private readonly tmpIntent = { id: 0 };
+  private nowMs = 0;
   /** when set, hero-tier models get the volumetric materials (observation lock) */
   heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
 
@@ -82,11 +85,12 @@ export class CreatureSystem {
     private readonly data: GameData,
     private readonly habitat: Habitat,
     private readonly terrain: Terrain,
-    private readonly preset: QualityPreset,
+    private preset: QualityPreset,
     private readonly mapId: string,
     readonly removed: Set<string>,
     /** animals never appear closer to the player than this (m); a small, busy shore lets them come nearer */
     private readonly minSpawnDist?: number,
+    private readonly enabled = true,
   ) {
     this.group.name = 'creatures';
     scene.add(this.group);
@@ -95,17 +99,60 @@ export class CreatureSystem {
     this.floor = {
       heightAt: (x, z) => terrain.heightAt(x, z),
       waterAt: (x, z) => habitat.waterAt(x, z),
+      sampleAt: (x, z) => habitat.sample(x, z, this.nowMs),
     };
+  }
+
+  /** The flat's eelgrass, for the animals that live among the blades. */
+  setMeadow(meadow: MeadowProbe | null): void {
+    this.floor.meadow = meadow;
+  }
+
+  setQuality(preset: QualityPreset): void {
+    this.setPreset(preset);
+  }
+
+  /** The carrion lying about the flat, for the scavengers. */
+  setScent(scent: ScentProbe | null): void {
+    this.floor.scent = scent;
+  }
+
+  /** the species' kept models (never drawn): their materials hold the shader programs, see DriverEntry.keep */
+  private readonly kept = new Group();
+  private keepers: { dispose(): void }[] | null = null;
+
+  /**
+   * A tree, not in the scene, carrying one model of every procedural species that lives on this flat in each of its
+   * tiers: compiled behind the loading screen (FieldRenderer.compileKept) so the first sighting does not stall, and
+   * kept as long as the flat so the programs survive the species' absence (three drops a program with the last
+   * material that used it, and the individuals' own materials come and go with the distance tiers).
+   */
+  keptModels(): Object3D {
+    if (!this.keepers) {
+      this.keepers = [];
+      this.kept.name = 'kept';
+      if (this.enabled) {
+        for (const sp of this.data.species.values()) {
+          if (!sp.spawn.some((r) => !r.maps || r.maps.includes(this.mapId))) continue;
+          const keep = DRIVERS[sp.model.driver ?? '']?.keep;
+          if (keep) this.keepers.push(keep(this.kept));
+        }
+      }
+    }
+    return this.kept;
   }
 
   /** Warm the model cache for the distance tiers. */
   async preload(): Promise<void> {
+    if (!this.enabled) return;
     const jobs: Promise<unknown>[] = [];
     for (const sp of this.data.species.values()) {
       // only what lives on this flat (the others load when they are first needed, in the tank or the book)
       if (!sp.spawn.some((r) => !r.maps || r.maps.includes(this.mapId))) continue;
       if (sp.model.lod2) jobs.push(preloadModel(sp.model.lod2));
       for (const st of sp.stages) if (st.model?.lod2) jobs.push(preloadModel(st.model.lod2));
+      // the gravid female's and the breeding male's own forms
+      for (const form of [sp.model.gravid, sp.model.male]) if (form?.lod2) jobs.push(preloadModel(form.lod2));
     }
     await Promise.all(jobs);
   }
@@ -123,16 +170,45 @@ export class CreatureSystem {
   }
 
   private tierFor(sp: SpeciesDef, dist: number, lod1Rank: number, locked: boolean): Tier | 'placeholder' | null {
-    const far = sp.model.viewDistance_m ?? (sp.taxon.group === 'bird' ? BIRD_DIST : Math.min(isAquatic(sp) ? AQUATIC_DIST : LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400)));
+    // (the lighter presets draw the animals closer only, and give the detailed tiers within a shorter reach; the
+    // birds keep their reach, which the binoculars are for, and are a placeholder at a distance anyway)
+    const vs = this.preset.viewScale, bird = sp.taxon.group === 'bird';
+    const base = sp.model.viewDistance_m ?? (bird ? BIRD_DIST : Math.min(isAquatic(sp) ? AQUATIC_DIST : LOD2_DIST, Math.max(10, (sp.size.length_mm.mean / 1000) * 400)));
+    // (never nearer than 8 m, so the small animals do not appear a few steps from the viewer)
+    const far = bird ? base : Math.max(vs * base, Math.min(base, 8));
     if (dist > far) return null;
     if (!sp.model.lod2 && !sp.model.lod1 && !sp.model.hero) return 'placeholder';
-    if (locked) return sp.model.hero ? 'hero' : sp.model.lod1 ? 'lod1' : 'lod2';
-    if (dist <= LOD1_DIST && lod1Rank < this.preset.lod1Count && sp.model.lod1) return 'lod1';
+    if (this.preset.modelTier === 'lod2') return sp.model.lod2 ? 'lod2' : DRIVERS[sp.model.driver ?? '']?.placeholder ? 'placeholder' : sp.model.lod1 ? 'lod1' : 'hero';
+    if (locked) return this.preset.hero && sp.model.hero ? 'hero' : sp.model.lod1 ? 'lod1' : sp.model.lod2 ? 'lod2' : 'placeholder';
+    // a species without light tiers (the plover's one dense GLB) shows its driver's placeholder beyond a distance
+    if (sp.model.placeholderBeyond_m !== undefined && dist > sp.model.placeholderBeyond_m && DRIVERS[sp.model.driver ?? '']?.placeholder) return 'placeholder';
+    if (dist <= LOD1_DIST * vs && lod1Rank < this.preset.lod1Count && sp.model.lod1) return 'lod1';
     return sp.model.lod2 ? 'lod2' : sp.model.lod1 ? 'lod1' : 'hero';
   }
 
+  /** The quality tier changed mid-game: the next spawn pass plans with the new share and the tiers follow the new
+   * reach at once; a smaller share or reach rebuilds the crowd (all but the observed animal) for the new tier. */
+  setPreset(p: QualityPreset): void {
+    if (this.preset === p) return;
+    const shrank = p.creatureScale < this.preset.creatureScale || p.viewScale < this.preset.viewScale;
+    this.preset = p;
+    this.lodAcc = 1;
+    if (shrank) this.resetPopulation(this.lastLockedId);
+  }
+
+  /** Hero materials switched off (or on): the views that carry them, and the hero-tier views built without them,
+   * are dropped and rebuilt by the next tier pass. */
+  dropHeroViews(): void {
+    for (const e of this.entries.values()) if (e.view && (e.view.hero || e.view.tier === 'hero')) this.dropView(e);
+  }
+
+  private lastLockedId: string | null = null;
+
   update(f: CreatureFrame): void {
+    if (!this.enabled) return;
     this.frameIndex++;
+    this.nowMs = f.gameMs;
+    this.lastLockedId = f.lockedId;
     const env: SpawnEnv = { tod: f.tod, season: f.season, tidePhase: f.tidePhase, mapId: this.mapId, gameMs: f.gameMs, day: Math.floor(f.gameMs / 86400000) };
     // spawning (1 Hz)
     this.spawnAcc += f.dt;
@@ -141,10 +217,17 @@ export class CreatureSystem {
       const live = this.individuals;
       for (const ind of this.spawner.cull(f.playerPos.x, f.playerPos.z, env, live)) if (ind.id !== f.lockedId) this.despawn(ind.id);
       const scale = this.preset.creatureScale;
-      const requests = this.spawner.plan(f.playerPos.x, f.playerPos.z, env, this.individuals, this.minSpawnDist);
-      let n = 0;
+      // Lower-quality populations stay bounded; they cannot fill back up over subsequent spawn ticks.
+      const bySpecies = new Map<string, Individual[]>();
+      for (const ind of this.individuals) { const list = bySpecies.get(ind.species.id) ?? []; list.push(ind); bySpecies.set(ind.species.id, list); }
+      for (const list of bySpecies.values()) {
+        const share = list[0].species.taxon.group === 'bird' ? 1 : scale;
+        const cap = Math.max(1, Math.ceil(Math.max(...list[0].species.spawn.map(rule => rule.maxPopulation)) * share));
+        list.sort((a, b) => a.pos.distanceToSquared(f.playerPos) - b.pos.distanceToSquared(f.playerPos));
+        for (const ind of list.slice(cap)) if (ind.id !== f.lockedId) this.despawn(ind.id);
+      }
+      const requests = this.spawner.plan(f.playerPos.x, f.playerPos.z, env, this.individuals, this.minSpawnDist, scale);
       for (const req of requests) {
-        if (scale < 1 && (n++ % Math.round(1 / (1 - scale + 1e-6))) === 0 && Math.random() > scale) continue;
         this.spawn(this.spawner.create(req, f.gameMs));
       }
     }
@@ -216,7 +299,8 @@ export class CreatureSystem {
       const locked = e.ind.id === f.lockedId;
       const tier = this.tierFor(e.ind.species, dist, lod1Rank, locked);
       if (tier === 'lod1') lod1Rank++;
-      e.ind.lod = locked ? 0 : tier === 'lod1' ? 1 : tier === null ? 3 : 2;
+      const near = tier === 'placeholder' && dist <= (DRIVERS[e.ind.species.model.driver ?? '']?.nearDistance ?? -1);
+      e.ind.lod = locked ? 0 : tier === 'lod1' || near ? 1 : tier === null ? 3 : 2;
       if (tier === null) { if (e.view) this.dropView(e); continue; }
       if (e.view?.tier === tier || e.pendingTier === tier) continue;
       void this.setTier(e, tier);
@@ -224,6 +308,7 @@ export class CreatureSystem {
   }
 
   private async setTier(e: Entry, tier: Tier | 'placeholder'): Promise<void> {
+    if (tier !== 'placeholder' && performance.now() < (e.retryAfter ?? 0)) return;
     e.pendingTier = tier;
     const sp = e.ind.species;
     let view: View;
@@ -235,16 +320,24 @@ export class CreatureSystem {
       view = { tier, root: ph.root, model: null, radius: ph.length * 0.6, hero: null };
     } else {
       // the growth stage's own model where the species has them, in the individual's pattern variant
-      const rel = modelFor(sp, e.ind.stage)[tier] ?? sp.model[tier]!;
+      const rel = modelFor(sp, e.ind.stage, e.ind.gravid, e.ind.dress)[tier] ?? sp.model[tier]!;
       let model: LoadedModel;
-      try { model = await instantiateModel(rel, variantOf(e.ind.id)); } catch (err) { console.warn(err); e.pendingTier = null; return; }
-      if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
+      try { model = await instantiateModel(rel, variantOf(e.ind.id)); } catch (err) {
+        if (this.entries.get(e.ind.id) !== e || e.pendingTier !== tier) return;
+        console.warn('[creature] model unavailable, retrying later', err); e.pendingTier = null;
+        e.failures = (e.failures ?? 0) + 1; e.retryAfter = performance.now() + Math.min(30000, 2000 * 2 ** (e.failures - 1));
+        if (!e.view && DRIVERS[sp.model.driver ?? '']?.placeholder) await this.setTier(e, 'placeholder');
+        return;
+      }
+      if (this.entries.get(e.ind.id) !== e || e.pendingTier !== tier) { model.root.removeFromParent(); return; }
       let hero: HeroInstance | null = null;
       if (tier === 'hero' && this.heroApply) {
         try { hero = await this.heroApply(model); } catch (err) { console.warn('[hero] falling back to standard materials', err); hero = null; }
-        if (!this.entries.has(e.ind.id) || e.pendingTier !== tier) { hero?.dispose(); model.root.removeFromParent(); return; }
+        if (this.entries.get(e.ind.id) !== e || e.pendingTier !== tier) { hero?.dispose(); model.root.removeFromParent(); return; }
+        if (!this.heroApply) { hero?.dispose(); hero = null; }
       }
       view = { tier, root: model.root, model, radius: model.radius, hero };
+      e.failures = 0; e.retryAfter = 0;
     }
     if (e.view) this.dropView(e);
     e.view = view;
@@ -267,6 +360,7 @@ export class CreatureSystem {
   }
 
   spawn(ind: Individual): void {
+    if (!this.enabled) return;
     if (this.entries.has(ind.id)) return;
     const entry = DRIVERS[ind.species.model.driver ?? ''];
     if (!entry) { console.warn(`[creatures] no driver for ${ind.species.id}`); return; }
@@ -287,9 +381,18 @@ export class CreatureSystem {
     this.events.emit('despawn', e.ind);
   }
 
-  /** debug: spawn everything the rules allow right around the player, ignoring the pop-in distance */
-  forceSpawn(playerPos: Vector3, env: SpawnEnv): number {
-    const requests = this.spawner.plan(playerPos.x, playerPos.z, env, this.individuals, 0);
+  /** debug: keep these species out of the world (the ones here now leave; the spawner skips them) */
+  setHiddenSpecies(ids: Iterable<string>): void {
+    const hidden = new Set(ids);
+    this.spawner.hidden = hidden;
+    for (const e of [...this.entries.values()]) if (hidden.has(e.ind.species.id)) this.despawn(e.ind.id);
+  }
+
+  /** debug: spawn everything the rules allow right around the player, ignoring the pop-in distance (`scale` < 1: the
+   * preset's share of it instead, as the measurements want) */
+  forceSpawn(playerPos: Vector3, env: SpawnEnv, scale = 1): number {
+    if (!this.enabled) return 0;
+    const requests = this.spawner.plan(playerPos.x, playerPos.z, env, this.individuals, 0, scale);
     for (const req of requests) this.spawn(this.spawner.create(req, env.gameMs));
     return requests.length;
   }
@@ -392,14 +495,16 @@ export class CreatureSystem {
   }
 
   /** Nearest individual under the screen centre within `maxDist` metres. */
-  pickTarget(camera: Camera, maxDist = 8): Individual | null {
+  pickTarget(camera: Camera, maxDist = 8, coneDeg = 0): Individual | null {
     camera.getWorldDirection(this.tmp);
     this.ray.set(camera.position, this.tmp);
+    const cone = Math.tan(coneDeg * Math.PI / 180);
     let best: Individual | null = null, bestD = Infinity;
     for (const e of this.entries.values()) {
       if (!e.view) continue;
       const scale = e.ind.length_mm / e.ind.species.model.modelLength_mm;
-      const r = Math.max(0.12, e.view.radius * scale * 1.6);
+      // (through the binoculars a small bird far off still counts when it is within a degree or so of the centre)
+      const r = Math.max(0.12, e.view.radius * scale * 1.6, cone * e.ind.pos.distanceTo(camera.position));
       this.sphere.set(e.driver.anchor(), r);
       const d = e.ind.pos.distanceTo(camera.position);
       if (d > maxDist) continue;
@@ -416,7 +521,18 @@ export class CreatureSystem {
 
   anchorOf(id: string): Vector3 | null {
     const e = this.entries.get(id);
-    return e ? e.driver.anchor().clone() : null;
+    // before the model is attached the driver has no anchor of its own: the individual's place stands in (an
+    // observation started right after a spawn — a clam, a reef oyster — looks there, and the view follows)
+    return e ? (e.view ? e.driver.anchor().clone() : e.ind.pos.clone()) : null;
+  }
+
+  canNetCapture(id: string): boolean {
+    const e = this.entries.get(id);
+    if (!e || !e.ind.species.collectable || e.ind.species.taxon.group === 'bird') return false;
+    // (a swimmer that can hide in the sand, the flounder, answers for itself too)
+    if (e.ind.species.locomotion !== 'burrow' && !e.driver.canNetCapture) return true;
+    // Unknown/unattached burrowers stay dig-only; a visible siphon is not a visible shell.
+    return !!e.view && e.driver.canNetCapture?.() === true;
   }
 
   /** Visible individuals count by tier (debug / HUD). */
@@ -428,6 +544,8 @@ export class CreatureSystem {
 
   dispose(): void {
     for (const id of [...this.entries.keys()]) this.despawn(id);
+    for (const k of this.keepers ?? []) k.dispose();
+    this.keepers = null;
     this.scene.remove(this.group);
   }
 }

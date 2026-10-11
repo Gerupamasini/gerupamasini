@@ -59,8 +59,19 @@ export function DebugPanel({ app }: { app: App }) {
         <button onClick={() => app.teleport('creek')}>水路</button>
         <button onClick={() => app.teleport('pool')}>潮だまり</button>
         <button onClick={() => app.teleport('clams')}>貝床</button>
+        <button onClick={() => app.teleport('oysters')}>牡蠣礁</button>
         <button onClick={() => app.teleport('amamo')}>アマモ場</button>
         <button onClick={() => app.forceSpawn()}>周囲に生物</button>
+      </div>
+      <div class="debug-row seg">
+        <span>出す生物</span>
+        <button onClick={() => app.setAllSpeciesShown(true)}>全部</button>
+        <button onClick={() => app.setAllSpeciesShown(false)}>なし</button>
+      </div>
+      <div class="debug-row wrap">
+        {[...app.data.species.values()].map((sp) => (
+          <label key={sp.id}><input type="checkbox" checked={!d.hidden.includes(sp.id)} onChange={(e) => app.setSpeciesShown(sp.id, (e.target as HTMLInputElement).checked)} /> {sp.names.ja}</label>
+        ))}
       </div>
       <div class="debug-row seg">
         <span>習熟</span>
@@ -78,7 +89,7 @@ export function DebugPanel({ app }: { app: App }) {
         })}
       </div>
       <div class="debug-row dim small">
-        draw {d.stats.calls} / tris {(d.stats.tris / 1000).toFixed(0)}k / 生物 {d.stats.creatures}（表示 {d.stats.visible}、近距離 {d.stats.lod1}） / アサリ 近く {d.stats.clamsNear}（全 {d.stats.clamsTotal}） / アマモ {d.stats.amamo} / {hud.fps} fps / 次の満干 {hud.extrema.slice(0, 2).map((e) => `${e.kind === 'high' ? '満' : '干'} ${formatJst(e.t)}`).join(' ')}
+        draw {d.stats.calls} / tris {(d.stats.tris / 1000).toFixed(0)}k / 生物 {d.stats.creatures}（表示 {d.stats.visible}、近距離 {d.stats.lod1}） / アサリ 近く {d.stats.clamsNear}（全 {d.stats.clamsTotal}） / マガキ 描画 {d.stats.oysters ?? '-'}（全 {d.stats.oystersTotal ?? 0}） / アマモ {d.stats.amamo ?? '-'} / {hud.fps} fps / 次の満干 {hud.extrema.slice(0, 2).map((e) => `${e.kind === 'high' ? '満' : '干'} ${formatJst(e.t)}`).join(' ')}
       </div>
     </div>
   );

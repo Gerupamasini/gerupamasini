@@ -1,27 +1,40 @@
-import { DepthTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, RGBAFormat, Vector2, WebGLRenderTarget, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
+import { DepthTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, RGBAFormat, Vector2, WebGLRenderTarget, type Object3D, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import type { WaterPass } from '../world/Water';
+import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 
 /** Renders the flat into an HDR buffer with depth, then composites the screen-space water onto the screen. */
 export class FieldRenderer {
   private rt: WebGLRenderTarget | null = null;
+  private preset = QUALITY_PRESETS.mid;
   private readonly size = new Vector2();
+  private samples = 4;
   /** draw calls and triangles of the last scene render (before the water composite) */
   readonly lastStats = { calls: 0, triangles: 0 };
 
   constructor(private readonly gl: WebGLRenderer) {}
 
+  setQuality(preset: QualityPreset): void {
+    this.preset = preset;
+    this.setSamples(preset.msaa);
+  }
+
   private target(): WebGLRenderTarget {
     const s = this.gl.getDrawingBufferSize(this.size);
     const w = Math.max(1, s.x), h = Math.max(1, s.y);
-    if (!this.rt || this.rt.width !== w || this.rt.height !== h) {
+    if (!this.rt || this.rt.width !== w || this.rt.height !== h || this.rt.samples !== this.samples) {
       this.rt?.dispose();
-      this.rt = new WebGLRenderTarget(w, h, { type: HalfFloatType, format: RGBAFormat, samples: 4, depthBuffer: true, minFilter: LinearFilter, magFilter: LinearFilter, generateMipmaps: false });
+      this.rt = new WebGLRenderTarget(w, h, { type: HalfFloatType, format: RGBAFormat, samples: this.samples, depthBuffer: true, minFilter: LinearFilter, magFilter: LinearFilter, generateMipmaps: false });
       const depth = new DepthTexture(w, h, FloatType);
       depth.minFilter = NearestFilter;
       depth.magFilter = NearestFilter;
       this.rt.depthTexture = depth;
     }
     return this.rt;
+  }
+
+  /** Multisampling of the HDR buffer (0: none). The buffer is rebuilt on the next frame. */
+  setSamples(n: number): void {
+    this.samples = Math.max(0, Math.round(n));
   }
 
   /**
@@ -41,6 +54,19 @@ export class FieldRenderer {
     if (surf) { gl.setRenderTarget(surf.target); surfReady = gl.compileAsync(surf.mesh, camera); }
     gl.setRenderTarget(prev);
     await Promise.all([sceneReady, waterReady, surfReady]);
+  }
+
+  /**
+   * Compile the shaders of a tree that is not in the scene (the creatures' kept models) in the scene's own variant:
+   * the HDR target bound, the scene's lights and fog. Called again when the preset changes what the variant is.
+   */
+  async compileKept(root: Object3D, camera: PerspectiveCamera, scene: Scene): Promise<void> {
+    const gl = this.gl, prev = gl.getRenderTarget();
+    camera.updateMatrixWorld();
+    gl.setRenderTarget(this.target());
+    const ready = gl.compileAsync(root, camera, scene);
+    gl.setRenderTarget(prev);
+    await ready;
   }
 
   render(scene: Scene, camera: PerspectiveCamera, water: WaterPass): void {

@@ -449,6 +449,17 @@ function withTent(g) {
 }
 
 /** geometry shared by every individual of a form (never disposed) */
+/** A very light valve for debris seen from a distance: the lod2 outline at a third of its segments. */
+export function coarseValve(form = FORMS.asari) {
+  if (form._coarse) return form._coarse;
+  F = form;
+  const saved = LODS[2];
+  LODS[2] = { ...saved, nu: Math.max(8, Math.round(saved.nu / 3)), ns: Math.max(3, Math.round(saved.ns / 3)) };
+  const g = buildValve(2);
+  LODS[2] = saved;
+  return (form._coarse = g);
+}
+
 export function sharedGeometry(form = FORMS.asari) {
   if (form._geo) return form._geo;
   F = form;

@@ -2,12 +2,13 @@ import { DEFAULT_SETTINGS, type SettingsData } from '../core/Settings';
 import { signal } from '@preact/signals';
 import type { TideExtremum } from '../tide/TideModel';
 import type { IndividualRecord } from '../creatures/Individual';
+import type { GachaResult } from '../aquarium/catalog';
 
 /** the tool in the player's hands on the flat */
 /** a tool id from items/tools.json */
 export type ToolId = string;
 
-export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'error';
+export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'gacha' | 'error';
 
 export interface HudState {
   timeText: string;
@@ -42,7 +43,9 @@ export interface DebugState {
   tideOverride: number | null;
   overcast: number;
   markers: boolean;
-  stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number; clamsNear: number; clamsTotal: number; amamo: string };
+  /** species kept out of the world for now (ids) */
+  hidden: string[];
+  stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number; clamsNear: number; clamsTotal: number; oysters?: string; oystersTotal?: number; amamo?: string };
 }
 
 export interface Toast {
@@ -57,6 +60,9 @@ export const ui = {
   /** the tool (id) or parcel ('coming:<id>') picked on the shop's shelves */
   shopSelected: signal<string | null>(null),
   screen: signal<Screen>('boot'),
+  saveError: signal<string | null>(null),
+  saveRecovery: signal<{ message: string; backup: boolean } | null>(null),
+  guideDismissed: signal(false),
   overlayFrom: signal<Screen>('field'),
   loading: signal({ frac: 0, label: '' }),
   error: signal<string | null>(null),
@@ -74,7 +80,7 @@ export const ui = {
   newBuild: signal<import('../core/Build').BuildInfo | null>(null),
   /** debug mode on (F3 or ?debug=1) */
   debug: signal(false),
-  debugState: signal<DebugState>({ timeOverride: false, tideOverride: null, overcast: 0, markers: true, stats: { calls: 0, tris: 0, creatures: 0, visible: 0, lod1: 0, clamsNear: 0, clamsTotal: 0, amamo: '' } }),
+  debugState: signal<DebugState>({ timeOverride: false, tideOverride: null, overcast: 0, markers: true, hidden: [], stats: { calls: 0, tris: 0, creatures: 0, visible: 0, lod1: 0, clamsNear: 0, clamsTotal: 0 } }),
   markers: signal<Marker[]>([]),
   /** side panel shown on the home screen */
   homePanel: signal<'none' | 'tank' | 'tools'>('none'),
@@ -85,9 +91,12 @@ export const ui = {
   /** full-map overview on the flat (M) */
   mapOpen: signal(false),
   /** tank panel tab */
-  tankTab: signal<'fish' | 'layout'>('fish'),
+  tankTab: signal<'fish' | 'layout' | 'equipment'>('fish'),
   /** selected decoration in the tank layout editor */
   tankSelected: signal<string | null>(null),
+  equipmentSelected: signal<string | null>(null),
+  equipmentPreview: signal<string | null>(null),
+  gachaResults: signal<GachaResult[]>([]),
   /** bumped whenever the tank layout changes, so the editor re-renders */
   tankLayoutVersion: signal(0),
 };

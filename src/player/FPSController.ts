@@ -34,16 +34,27 @@ export class FPSController {
   private bob = 0;
   private fov = FOV_NORMAL;
   zooming = false;
+  /** a narrower field forced by the tool in hand (the binoculars), degrees; null for the usual zoom key */
+  zoomFov: number | null = null;
   /** short pitch nudge (radians) that decays: the swing of the net */
   private kick = 0;
   /** in the air: height above the ground and vertical speed; the dash is the horizontal speed carried through the jump */
   private airY = 0;
   private vy = 0;
+  /** absolute height of the feet while in the air (m) */
+  private jumpBaseY = 0;
+  private airTime = 0;
   private dashVX = 0;
   private dashVZ = 0;
   airborne = false;
   /** true for the frame the feet leave the ground (the HUD's hop) */
   jumped = false;
+  /** extra ground under the feet (stones of the revetment), metres above the terrain */
+  groundBoost: ((x: number, z: number) => number) | null = null;
+  /** Bounded support query: feet may stand on prop roots, never snap to an overhead root. */
+  supportHeight: ((x: number, z: number, maxY: number) => number | null) | null = null;
+  /** Optional swept obstacle test; terrain-only maps keep their original movement path. */
+  obstacleFree: ((from: Vector3, to: Vector3) => boolean) | null = null;
   private readonly tmpForward = new Vector3();
   private readonly tmpRight = new Vector3();
   /** the deepest water the player can wade into: boots (35 cm) unless the map says chest waders */
@@ -68,7 +79,7 @@ export class FPSController {
   }
 
   setPose(x: number, z: number, yaw: number, pitch?: number): void {
-    this.position.set(x, this.terrain.heightAt(x, z), z);
+    this.position.set(x, this.groundAt(x, z), z);
     this.yaw = yaw;
     if (pitch !== undefined) this.pitch = pitch;
     this.syncCamera(0);
@@ -95,7 +106,7 @@ export class FPSController {
   update(dt: number, sensitivity: number, invertY: boolean): void {
     const input = this.input;
     if (this.enabled && input.looking) {
-      const look = 0.0022 * sensitivity * (this.zooming ? 0.45 : 1);
+      const look = 0.0022 * sensitivity * (this.zoomFov !== null ? Math.max(0.1, this.zoomFov / FOV_NORMAL) : this.zooming ? 0.45 : 1);
       this.yaw -= input.mouseDX * look;
       this.pitch -= input.mouseDY * look * (invertY ? -1 : 1);
       this.pitch = MathUtils.clamp(this.pitch, -Math.PI / 2 + 0.05, Math.PI / 2 - 0.05);
@@ -105,7 +116,7 @@ export class FPSController {
     this.crouching = this.lowView;
     this.running = this.enabled && !this.crouching && input.held('run');
     this.zooming = this.enabled && (input.mouseRightDown || input.held('zoom'));
-    const targetFov = this.zooming ? FOV_ZOOM : FOV_NORMAL;
+    const targetFov = this.zoomFov ?? (this.zooming ? FOV_ZOOM : FOV_NORMAL);
     if (Math.abs(this.fov - targetFov) > 0.05) {
       this.fov = MathUtils.damp(this.fov, targetFov, 12, dt);
       this.camera.fov = this.fov;
@@ -113,33 +124,35 @@ export class FPSController {
     }
     let mx = 0, mz = 0;
     if (this.enabled) {
-      if (input.held('forward')) mz += 1;
-      if (input.held('back')) mz -= 1;
-      if (input.held('right')) mx += 1;
-      if (input.held('left')) mx -= 1;
+      mz = input.moveForward;
+      mx = input.moveRight;
     }
     const len = Math.hypot(mx, mz);
     this.blockedByDepth = false;
     this.speedNow = 0;
     this.jumped = false;
     // the jump: off the ground (not from deep water), a hop; out of a run, a long jump that keeps the run's pace
-    if (this.enabled && !this.airborne && input.pressed('jump') && this.depthHere < 0.25) {
+    // (Space held keeps jumping: the next hop leaves the ground as soon as the feet touch it)
+    if (this.enabled && !this.airborne && (input.pressed('jump') || input.held('jump')) && this.depthHere < 0.25) {
       this.airborne = true;
       this.jumped = true;
       this.vy = JUMP_V * (this.crouching ? 0.85 : 1);
       this.airY = 0.001;
+      this.jumpBaseY = this.position.y;
+      this.airTime = 0;
       const runFrac = this.running && len > 0 ? 1 : 0;
       const fwd = this.forward;
       this.tmpRight.set(-fwd.z, 0, fwd.x);
       const dx = len > 0 ? (fwd.x * mz + this.tmpRight.x * mx) / len : 0, dz = len > 0 ? (fwd.z * mz + this.tmpRight.z * mx) / len : 0;
-      const carry = Math.max(this.speedNowLast, runFrac * RUN * DASH_MIN_RUN) * (runFrac ? DASH_BOOST : 1);
+      // (capped: a chain of jumps must not keep multiplying the speed carried from the last one)
+      const carry = Math.min(RUN * DASH_BOOST, Math.max(this.speedNowLast, runFrac * RUN * DASH_MIN_RUN) * (runFrac ? DASH_BOOST : 1));
       this.dashVX = dx * carry; this.dashVZ = dz * carry;
       this.kick -= runFrac ? 0.06 : 0.03;
     }
     if (this.airborne) {
       // in the air the feet carry on with the take-off speed; the keys only steer a little
       this.vy -= GRAVITY * dt;
-      this.airY += this.vy * dt;
+      this.jumpBaseY += this.vy * dt;
       const steer = 1.2 * dt;
       if (len > 0) {
         const fwd = this.forward;
@@ -149,7 +162,13 @@ export class FPSController {
       }
       this.tryMove(this.dashVX * dt, this.dashVZ * dt);
       this.speedNow = Math.hypot(this.dashVX, this.dashVZ);
-      if (this.airY <= 0) {
+      // the flight is in absolute height: the eye glides over ripples and hollows instead of jittering with the
+      // ground under the feet; it lands where the ground comes up to meet it
+      const groundNow = this.groundAt(this.position.x, this.position.z);
+      this.airY = this.jumpBaseY - groundNow;
+      this.airTime += dt;
+      // down on the ground: falling onto it, or rising ground catching the feet (not in the first instant of the hop)
+      if (this.airY <= 0 && (this.vy <= 0 || this.airTime > 0.06)) {
         this.airborne = false;
         this.airY = 0;
         this.vy = 0;
@@ -161,7 +180,7 @@ export class FPSController {
       const fwd = this.forward;
       this.tmpRight.set(-fwd.z, 0, fwd.x);
       const dir = new Vector3().addScaledVector(fwd, mz).addScaledVector(this.tmpRight, mx);
-      let speed = this.running ? RUN : this.crouching ? CROUCH : WALK;
+      let speed = (this.running ? RUN : this.crouching ? CROUCH : WALK) * Math.min(1, len);
       const sub = this.terrain.substrateAt(this.position.x, this.position.z);
       if (sub === 'mud' || sub === 'channel') speed *= 0.65;
       else if (sub === 'muddy_sand') speed *= 0.85;
@@ -178,20 +197,29 @@ export class FPSController {
       this.bob += dt * speed * 1.8;
     }
     this.speedNowLast = this.speedNow;
-    this.depthHere = this.habitat.depthAt(this.position.x, this.position.z);
-    this.position.y = this.terrain.heightAt(this.position.x, this.position.z);
+    this.depthHere = Math.max(0, this.habitat.waterAt(this.position.x, this.position.z) - this.groundAt(this.position.x, this.position.z));
+    this.position.y = this.groundAt(this.position.x, this.position.z);
     this.syncCamera(dt);
   }
 
   private speedNowLast = 0;
 
+  /** the ground the feet stand on: the terrain, or a stone on it */
+  private groundAt(x: number, z: number): number {
+    const terrain = this.terrain.heightAt(x, z) + (this.groundBoost ? this.groundBoost(x, z) : 0);
+    const maxY = (this.airborne ? this.jumpBaseY : this.position.y) + 0.45;
+    return Math.max(terrain, this.supportHeight?.(x, z, maxY) ?? terrain);
+  }
+
   private canStand(x: number, z: number): boolean {
     const b = this.map.bounds.walkable;
     if (x < b[0][0] || x > b[1][0] || z < b[0][1] || z > b[1][1]) return false;
     for (const ne of this.map.bounds.noEntry) if (x >= ne[0][0] && x <= ne[1][0] && z >= ne[0][1] && z <= ne[1][1]) return false;
-    if (this.habitat.depthAt(x, z) > this.wadeDepth) return false;
-    const h = this.terrain.heightAt(x, z);
-    if (h - this.position.y > 0.6) return false; // too steep a step
+    const h = this.groundAt(x, z);
+    if ((this.supportHeight ? this.habitat.waterAt(x, z) - h : this.habitat.depthAt(x, z)) > this.wadeDepth) return false;
+    const feetY = this.airborne ? this.jumpBaseY : this.position.y;
+    if (h - feetY > (this.supportHeight ? 0.45 : 0.6)) return false; // too steep a step
+    if (this.obstacleFree && !this.obstacleFree(new Vector3(this.position.x, feetY, this.position.z), new Vector3(x, Math.max(h, this.airborne ? feetY : h), z))) return false;
     return true;
   }
 

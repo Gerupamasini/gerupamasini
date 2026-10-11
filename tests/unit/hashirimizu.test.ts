@@ -111,28 +111,41 @@ describe('走水: zones and patches', () => {
 describe('走水: who lives where', () => {
   const manifest = json('manifest.json') as { species: string[] };
   const species: SpeciesDef[] = manifest.species.map((id) => SpeciesSchema.parse(json(`species/${id}.json`)));
-  const here = (tag: string) => species.filter((sp) => sp.spawn.some((r) => r.maps?.includes('hashirimizu') && r.tags.includes(tag as never))).map((sp) => sp.names.ja);
+  // (a rule without `maps` holds on every flat, 走水 included)
+  const here = (tag: string) => species.filter((sp) => sp.spawn.some((r) => (!r.maps || r.maps.includes('hashirimizu')) && r.tags.includes(tag as never))).map((sp) => sp.names.ja);
+  // 走水 has gobies, shrimps, shellfish, the hermit crab, the ハク schools and the eelgrass fish (アミメハギ, ヨウジウオ) only,
+// and since round 28 the flounder juvenile (イシガレイ) and the ray (アカエイ) on the open sand
+  // (the crab and the worm stay out of the manifest)
   it('puts the right animals at each hotspot', () => {
-    expect(here('eelgrass_edge')).toEqual(expect.arrayContaining(['マハゼ', 'シラタエビ', 'ボラ', 'ケフサイソガニ', 'ユビナガホンヤドカリ']));
-    expect(here('eelgrass')).toEqual(expect.arrayContaining(['シラタエビ', 'ケフサイソガニ']));
-    expect(here('bare')).toEqual(expect.arrayContaining(['マハゼ', 'アラムシロ']));
-    expect([...here('small_pool'), ...here('pool')]).toEqual(expect.arrayContaining(['ケフサイソガニ', 'ユビナガホンヤドカリ', 'アラムシロ']));
+    expect(here('eelgrass_edge')).toEqual(expect.arrayContaining(['マハゼ', 'ヒメハゼ', 'シラタエビ', 'イソスジエビ', 'ユビナガホンヤドカリ', 'ボラ', 'アミメハギ', 'ヨウジウオ']));
+    expect(here('eelgrass')).toEqual(expect.arrayContaining(['シラタエビ', 'イソスジエビ', 'アミメハギ', 'ヨウジウオ']));
+    expect(here('bare')).toEqual(expect.arrayContaining(['マハゼ', 'ヒメハゼ', 'アラムシロ', 'イシガレイ', 'アカエイ']));
+    expect(here('shallow')).toEqual(expect.arrayContaining(['イシガレイ', 'アカエイ']));
+    expect(here('deep')).toEqual(expect.arrayContaining(['アカエイ']));
+    expect([...here('small_pool'), ...here('pool')]).toEqual(expect.arrayContaining(['ユビナガホンヤドカリ', 'アラムシロ']));
     // the clam flat (shallow water and the sand it leaves at low water)
-    expect([...here('shallow'), ...here('exposed_sand')]).toEqual(expect.arrayContaining(['ハマグリ', 'ミズヒキゴカイ', 'ユビナガホンヤドカリ']));
+    expect([...here('shallow'), ...here('exposed_sand')]).toEqual(expect.arrayContaining(['ハマグリ', 'ユビナガホンヤドカリ']));
+    for (const name of ['ケフサイソガニ', 'ミズヒキゴカイ', 'シロチドリ', 'エドハゼ']) for (const tag of ['eelgrass_edge', 'eelgrass', 'bare', 'pool', 'shallow', 'exposed_sand', 'waterline']) expect(here(tag)).not.toContain(name);
   });
-  it('keeps the 葛西 animals to the 葛西 flat and the new ones to 走水', () => {
-    // (アサリ are laid by the clam field on every flat, not by spawn rules)
-    for (const sp of species) if (sp.id !== 'ruditapes_philippinarum') for (const r of sp.spawn) expect(r.maps, `${sp.id}`).toBeDefined();
+  it('keeps the 葛西 animals to the 葛西 flat and the shore ones to 走水', () => {
+    // (アサリ are laid by the clam field and マガキ by the reef, not by spawn rules; the hermit crab lives on both flats)
+    const everywhere = new Set(['ruditapes_philippinarum', 'crassostrea_gigas', 'pagurus_minutus', 'mugil_cephalus', 'favonigobius_gymnauchen']);
+    // the eelgrass fish and イソスジエビ are 走水's own: every rule names the map
+    for (const id of ['rudarius_ercodes', 'syngnathus_schlegeli', 'palaemon_pacificus']) {
+      const sp = species.find((s) => s.id === id)!;
+      expect(sp, id).toBeDefined();
+      for (const r of sp.spawn) expect(r.maps, id).toEqual(['hashirimizu']);
+    }
+    for (const sp of species) if (!everywhere.has(sp.id)) for (const r of sp.spawn) expect(r.maps, `${sp.id}`).toBeDefined();
     const edo = species.find((sp) => sp.id === 'gymnogobius_macrognathos')!;
     expect(edo.spawn.every((r) => !r.maps!.includes('hashirimizu'))).toBe(true);
+    const plover = species.find((sp) => sp.id === 'charadrius_alexandrinus')!;
+    expect(plover.spawn.every((r) => !r.maps!.includes('hashirimizu'))).toBe(true);
   });
   it('has a driver with a model for every species, and keeps the crawling snail in the water', () => {
     for (const sp of species) expect(DRIVERS[sp.model.driver ?? ''], sp.id).toBeDefined();
     const snail = species.find((sp) => sp.id === 'reticunassa_festiva')!;
-    const worm = species.find((sp) => sp.id === 'cirriformia_comosa')!;
     expect(isAquatic(snail)).toBe(true);
-    expect(isAquatic(worm)).toBe(false);
-    expect(isAquatic(species.find((sp) => sp.id === 'hemigrapsus_penicillatus')!)).toBe(true);
   });
 });
 

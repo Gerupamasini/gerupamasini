@@ -1,12 +1,13 @@
 import {
   AnimationMixer, Color, DirectionalLight, HemisphereLight, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera, PlaneGeometry,
-  PMREMGenerator, Scene, Vector3, WebGLRenderer, ACESFilmicToneMapping, SRGBColorSpace, Box3,
+  PMREMGenerator, Scene, Vector3, WebGLRenderer, ACESFilmicToneMapping, SRGBColorSpace, Box3, type WebGLRenderTarget,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { SpeciesDef } from '../../data/schemas';
 import { instantiateModel } from '../../creatures/models/ModelLoader';
 import { DRIVERS } from '../../creatures/drivers/index';
+import { QUALITY_PRESETS, type Quality } from '../../core/Settings';
 
 /** Small turntable viewer for the species' best model in the 図鑑. Owns its own renderer and canvas. */
 export class ModelPreview {
@@ -19,17 +20,22 @@ export class ModelPreview {
   private raf = 0;
   private last = 0;
   private disposed = false;
+  private generation = 0;
+  private readonly environment: WebGLRenderTarget;
 
-  constructor(readonly canvas: HTMLCanvasElement) {
-    this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
+  constructor(readonly canvas: HTMLCanvasElement, private readonly quality: Quality = 'mid') {
+    this.renderer = new WebGLRenderer({ canvas, antialias: quality === 'high', alpha: true });
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.9;
-    this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    this.renderer.setPixelRatio(Math.min(QUALITY_PRESETS[quality].maxDpr, window.devicePixelRatio || 1));
     this.camera = new PerspectiveCamera(35, 1, 0.002, 20);
     const pmrem = new PMREMGenerator(this.renderer);
     this.scene.background = new Color(0.05, 0.06, 0.07);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const room = new RoomEnvironment();
+    this.environment = pmrem.fromScene(room, 0.04);
+    this.scene.environment = this.environment.texture;
+    room.dispose(); pmrem.dispose();
     this.scene.environmentIntensity = 0.45;
     this.scene.add(new HemisphereLight(0xdfe9ec, 0x6b5e4e, 0.8));
     const key = new DirectionalLight(0xfff4e8, 1.6);
@@ -56,11 +62,12 @@ export class ModelPreview {
 
   async show(species: SpeciesDef, idleClip = 'Idle'): Promise<void> {
     this.clear();
-    const rel = species.model.hero ?? species.model.lod1 ?? species.model.lod2;
+    const generation = this.generation;
+    const rel = this.quality === 'low' ? species.model.lod1 ?? species.model.lod2 : species.model.hero ?? species.model.lod1 ?? species.model.lod2;
     let root: Object3D;
     if (rel) {
       const model = await instantiateModel(rel);
-      if (this.disposed) { model.root.removeFromParent(); return; }
+      if (this.disposed || generation !== this.generation) { model.root.removeFromParent(); return; }
       root = model.root;
       for (const m of model.meshes) { m.frustumCulled = false; m.layers.set(0); }
       const clip = model.clips.find((c) => c.name === idleClip) ?? model.clips[0];
@@ -71,7 +78,7 @@ export class ModelPreview {
     } else {
       const entry = DRIVERS[species.model.driver ?? ''];
       if (!entry?.preview && !entry?.placeholder) return;
-      root = entry.preview ? entry.preview() : entry.placeholder!().root;
+      root = entry.preview ? entry.preview(undefined, this.renderer) : entry.placeholder!().root;
     }
     this.root = root;
     this.scene.add(root);
@@ -90,10 +97,12 @@ export class ModelPreview {
   }
 
   clear(): void {
+    ++this.generation;
     if (this.root) {
       this.root.removeFromParent();
       // procedural previews own their geometry; glTF instances share theirs with the loader cache
       if (this.root.userData.disposable) this.root.traverse((o) => { const m = o as Mesh; if (m.isMesh) m.geometry.dispose(); });
+      (this.root.userData.disposer as (() => void) | undefined)?.();
       this.root = null;
     }
     this.mixer = null;
@@ -114,6 +123,12 @@ export class ModelPreview {
     cancelAnimationFrame(this.raf);
     this.clear();
     this.controls.dispose();
+    this.environment.dispose();
+    this.scene.traverse((o) => {
+      const mesh = o as Mesh;
+      if (mesh.isMesh) { mesh.geometry.dispose(); (mesh.material as MeshStandardMaterial).dispose(); }
+    });
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
   }
 }

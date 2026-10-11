@@ -169,7 +169,22 @@ export class WaterPass {
       uniforms: this.uniforms,
       depthTest: false,
       depthWrite: false,
-      vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+      // (the water's level at the eye, which decides whether the view is under the surf, is the same for every
+      // pixel: it is found here, three times a frame, not two million times)
+      vertexShader: /* glsl */ `
+        uniform sampler2D tHeight;
+        uniform float uHeightN, uHalf, uWater, uTime;
+        uniform vec3 uCamPos;
+        varying vec2 vUv;
+        varying float vCamLevel;
+        ${GROUND_GLSL}
+        ${SURF_GLSL}
+        ${SURF_ETA_GLSL}
+        void main() {
+          vUv = uv;
+          vCamLevel = uWater + (uSurf.w > 0.0 ? surfEta(uCamPos.xz, uWater) : 0.0);
+          gl_Position = vec4(position.xy, 0.0, 1.0);
+        }`,
       fragmentShader: /* glsl */ `
         uniform sampler2D tColor, tDepth, tHeight, tSpill, tMirror, tFoam;
         uniform samplerCube tEnv;
@@ -179,6 +194,7 @@ export class WaterPass {
         uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax;
         uniform vec2 uRes;
         varying vec2 vUv;
+        varying float vCamLevel;
         ${NOISE_GLSL}
         ${WAVES_GLSL}
         ${SURF_GLSL}
@@ -221,7 +237,9 @@ export class WaterPass {
           vec2 uv = vUv;
           float d = texture2D(tDepth, uv).r;
           vec3 base = texture2D(tColor, uv).rgb;
-          bool sky = d >= 0.9995;
+          // SkyDome does not write depth: only the cleared far-plane value is sky. A 0.9995 cutoff
+          // incorrectly hides distant vegetation/shore objects (about 100 m with the game's near plane).
+          bool sky = d >= 1.0;
           vec3 P = worldPos(uv, sky ? 0.9995 : d);
           vec3 rd = normalize(P - uCamPos);
           float sceneDist = sky ? 1e5 : length(P - uCamPos);
@@ -239,13 +257,17 @@ export class WaterPass {
           bool surfOn = uSurf.w > 0.0 && calm < 0.5;
           float surface = level;
           if (surfOn && !sky) surface += surfEta(P.xz, level);
+          // is the camera itself under the water (watching a fish down among the eelgrass)? (the level at the eye
+          // comes from the vertex stage)
+          float camLevel = vCamLevel;
+          bool underCam = uCamPos.y < camLevel - 0.003;
 
           // Near the viewer the surf stands up from the plane: the view ray is traced through the band of heights the
           // waves can take (12–16 steps and a few secant refinements), so a crest hides the water behind it and its
           // face is seen as a face. Only where that band lies in the surf and within ~35 m; beyond, the plane.
           float t = -1.0;
           bool traced = false;
-          if (surfOn && uSurfSteps > 0.5 && rd.y < -1e-5) {
+          if (surfOn && uSurfSteps > 0.5 && rd.y < -1e-5 && !underCam) {
             float top = level + 2.2 * uSurf.x, bot = level - 1.5 * uSurf.x;
             float t0 = max((top - uCamPos.y) / rd.y, 0.0), tb = (bot - uCamPos.y) / rd.y;
             float t1 = min(tb, sceneDist), tEnd = min(t1, 35.0);
@@ -280,7 +302,23 @@ export class WaterPass {
             if (tp < sceneDist) t = tp;
           }
 
-          if (t >= 0.0) {
+          if (underCam) {
+            // the view runs through the water itself: everything fades into the water's glow over the path, and the
+            // surface seen from below is the sky inside Snell's window and the water mirrored outside it
+            float tUp = rd.y > 1e-4 ? (camLevel - uCamPos.y) / rd.y : 1e5;
+            float path = min(sceneDist, tUp);
+            vec3 glow = waterGlow(rd);
+            vec3 seen = base;
+            if (tUp < sceneDist) {
+              vec3 S = uCamPos + rd * tUp;
+              vec3 N = waterNormal(S.xz, tUp, calm);
+              vec3 rr = refract(rd, -N, 1.333);
+              float win = dot(rr, rr) > 0.0 ? smoothstep(0.0, 0.25, rr.y) : 0.0;
+              vec3 skyC = min(textureCube(tEnv, rr).rgb * uEnvI, vec3(8.0));
+              seen = mix(glow * 1.15, mix(skyC, base, 0.3) * 0.8, win);
+            }
+            col = mix(glow, seen, exp(-path * uFogW));
+          } else if (t >= 0.0) {
             {
               vec3 S = uCamPos + rd * t;
               vec3 N = waterNormal(S.xz, t, calm);
@@ -315,7 +353,7 @@ export class WaterPass {
               off *= smoothstep(0.0, 0.02, thick0);
               vec2 uv2 = uv + off;
               float d2 = texture2D(tDepth, uv2).r;
-              bool sky2 = d2 >= 0.9995;
+              bool sky2 = d2 >= 1.0;
               vec3 P2 = worldPos(uv2, sky2 ? 0.9995 : d2);
               if (P2.y > level || any(lessThan(uv2, vec2(0.0))) || any(greaterThan(uv2, vec2(1.0)))) { uv2 = uv; P2 = P; sky2 = sky; }
               vec3 refr = texture2D(tColor, uv2).rgb;
@@ -380,6 +418,9 @@ export class WaterPass {
               // (on an open shore the swash draws the edge itself: the rim stays a near-field touch)
               float nearOnly = 1.0 - uSurf.w * smoothstep(4.0, 12.0, t);
               float rim = smoothstep(0.0, 0.004, vdepth) * (1.0 - smoothstep(0.004, 0.03, vdepth)) * onBed * nearOnly;
+              #ifdef WATER_LITE
+              col += env * rim * 0.03;
+              #else
               rim *= smoothstep(-0.2, 0.5, snoise(S.xz * 3.0 + uTime * 0.1));
               col += env * rim * 0.05;
               float bub = smoothstep(0.86, 0.97, snoise(S.xz * 14.0 + uTime * vec2(0.05, 0.03))) * (1.0 - smoothstep(0.0, 0.06, vdepth)) * smoothstep(0.0, 0.004, vdepth) * onBed;
@@ -387,6 +428,7 @@ export class WaterPass {
               // flecks floating on the surface, near the viewer
               float speck = smoothstep(0.93, 0.99, snoise(S.xz * 9.0 + uTime * vec2(0.04, 0.025))) * smoothstep(0.02, 0.2, vdepth) * (1.0 - smoothstep(4.0, 14.0, t));
               col = mix(col, vec3(0.75, 0.72, 0.62) * uAmbient, speck * 0.25);
+              #endif
 
               // a swash sheet only millimetres thick hardly shows: its edges dissolve into the wet sand (the froth on it, below,
               // stays)
@@ -396,12 +438,20 @@ export class WaterPass {
               if (surfOn) {
                 // each wave lays its own pattern (the lace shifts with the wave's number)
                 // (looked up through a smooth warp and at a second, turned scale, so no cell pattern repeats in a line)
+                #ifdef WATER_LITE
+                vec2 fuv = S.xz * 0.85 + vec2(uTime * 0.01, uTime * 0.006) + N.xz * 0.05 + vec2(waveN * 0.37, waveN * 0.61);
+                vec3 L1 = texture2D(tFoam, fuv).rgb;
+                vec3 L2 = L1.gbr;
+                float lf = max(L1.r, L1.b * 0.8);
+                float patches = 0.5;
+                #else
                 vec2 fw = (vec2(vnoiseW(S.xz * 1.6 + waveN * 1.7), vnoiseW(S.xz * 1.6 + vec2(7.3, -waveN))) - 0.5) * 0.18;
                 vec2 fuv = S.xz * 0.85 + vec2(uTime * 0.01, uTime * 0.006) + N.xz * 0.05 + vec2(waveN * 0.37, waveN * 0.61) + fw;
                 vec3 L1 = texture2D(tFoam, fuv).rgb;
                 vec3 L2 = texture2D(tFoam, mat2(0.8, 0.6, -0.6, 0.8) * fuv * 2.13 + vec2(0.4, -uTime * 0.01)).rgb;
                 float lf = max(max(L1.r, L2.g * 0.9), L1.b * 0.8);
                 float patches = smoothstep(0.25, 0.7, vnoiseW(S.xz * 0.7 + vec2(waveN * 3.1, uTime * 0.1)));
+                #endif
                 // a little foam reads as lace along the cell walls; more fills the cells in, a roller is solid white.
                 // (far off the lace is finer than a pixel and would average into a veil: the walls alone stay)
                 float fa = foam * mix(0.45, 1.15, patches);
@@ -509,6 +559,16 @@ export class WaterPass {
   /** The surf field's quad and the target it is drawn into, to compile ahead too (null: no surf). */
   surfCompileTarget(): { mesh: Object3D; target: WebGLRenderTarget } | null {
     return this.surf ? { mesh: (this.surf.quad as unknown as { _mesh: Object3D })._mesh, target: this.surf.target } : null;
+  }
+
+  /** The lighter composite (超軽量): every other wave component, one unwarped foam lookup, no noise rim, bubbles or
+   * flecks. The program is rebuilt on a change (a few hundred milliseconds, once). */
+  setLite(on: boolean): void {
+    const d = this.material.defines as Record<string, number | string>;
+    if (('WATER_LITE' in d) === on) return;
+    if (on) { d.WATER_LITE = 1; d.WAVE_STRIDE = 2; d.WAVE_AMP = '1.4'; }
+    else { delete d.WATER_LITE; delete d.WAVE_STRIDE; delete d.WAVE_AMP; }
+    this.material.needsUpdate = true;
   }
 
   /** Steps of the trace that stands the surf up from the plane near the viewer (0: the surf on the flat plane). */

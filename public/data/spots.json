@@ -12,53 +12,23 @@
     },
     {
       "id": "hashirimizu",
-      "ja": "走水海岸",
-      "en": "Hashirimizu Beach",
+      "ja": "横須賀 走水海岸",
+      "en": "Hashirimizu Beach, Yokosuka",
       "area": "東京湾",
       "lat": 35.2472,
       "lon": 139.7388,
       "map": "hashirimizu",
-      "description": "観音崎の手前、低い護岸の下の小さな砂浜。一定の緩い斜面を胴長で歩いて、潮干狩りの浜からアマモ場の縁まで。狭いぶん生き物が多い。横須賀の潮位で遊ぶ。"
+      "description": "観音崎の手前、低い護岸の下の小さな砂浜。一定の緩い斜面を胴長で歩いて、潮干狩りの浜からアマモ場の縁まで。ハゼ・エビ・貝・ヤドカリ。横須賀の潮位で遊ぶ。"
     },
     {
-      "id": "sanbanze",
-      "ja": "三番瀬",
-      "en": "Sanbanze",
-      "area": "東京湾",
-      "lat": 35.672,
-      "lon": 139.985,
-      "map": null,
-      "description": "船橋沖に残る広い浅場と干潟。近日公開。"
-    },
-    {
-      "id": "tamagawa",
-      "ja": "多摩川河口",
-      "en": "Tama River Mouth",
-      "area": "東京湾",
-      "lat": 35.533,
-      "lon": 139.78,
-      "map": null,
-      "description": "羽田の対岸に広がる河口の干潟。近日公開。"
-    },
-    {
-      "id": "banzu",
-      "ja": "盤洲干潟",
-      "en": "Banzu",
-      "area": "東京湾",
-      "lat": 35.43,
-      "lon": 139.905,
-      "map": null,
-      "description": "小櫃川河口に広がる東京湾最大級の干潟。近日公開。"
-    },
-    {
-      "id": "futtsu",
-      "ja": "富津干潟",
-      "en": "Futtsu",
-      "area": "東京湾",
-      "lat": 35.31,
-      "lon": 139.8,
-      "map": null,
-      "description": "富津岬の付け根に広がる干潟。近日公開。"
+      "id": "manko",
+      "ja": "漫湖",
+      "en": "Manko",
+      "area": "沖縄",
+      "lat": 26.193,
+      "lon": 127.681,
+      "map": "manko",
+      "description": "沖縄本島南部の河口干潟をイメージした70 m × 70 mの探索マップ。泥の干潟と水路、ヤエヤマヒルギ林。現段階ではいきもの・建物なし。潮位はゲーム用の仮設定。"
     }
   ]
 }

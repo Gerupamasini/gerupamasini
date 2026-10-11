@@ -1,0 +1,7 @@
+{
+  "id": "oyster_reef",
+  "tickHz": { "near": 0.5, "mid": 0.2, "far": 0.1 },
+  "root": { "type": "selector", "children": [
+    { "type": "action", "name": "rest", "args": { "seconds": 60 } }
+  ]}
+}

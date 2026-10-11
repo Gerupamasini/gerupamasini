@@ -67,6 +67,7 @@ const SUBSTRATE_COLORS: Record<Substrate, [number, number, number]> = {
   mud: [0.19, 0.185, 0.17],
   gravel: [0.33, 0.305, 0.27],
   channel: [0.15, 0.145, 0.135],
+  rock: [0.3, 0.295, 0.28],
 };
 
 export class Terrain {
@@ -466,6 +467,7 @@ vec4 rippleDisloc(vec2 p) {
   dipoleLayer(p, 1.0, 0.3, 0.14, 0.36, vec2(41.0, 23.0), acc);
   return acc;
 }
+float gRock = 0.0;
 float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
 // where the ripples are: patches of flat sand in between, crests fading in and out at the metre scale
 float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * smoothstep(0.15, 0.6, vnoise(p * 0.9 + 2.9)) * (0.6 + 0.4 * vnoise(p * 0.2 + 7.1)); }
@@ -489,6 +491,20 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   float ripple = cos(ripplePhase(rq)) * rippleAmp(rq) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit);
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 - ripple * 0.05;
   diffuseColor.rgb *= detail;
+  // stone-built levees: a running bond of dressed blocks (~55 × 32 cm), dark joints, each block its own grey-brown
+  float rock = smoothstep(4.5, 5.0, vSubstrate);
+  if (rock > 0.001) {
+    vec2 bp = vec2(vWorldPos.z / 0.55, vWorldPos.y / 0.32);
+    bp.x += step(0.5, fract(bp.y * 0.5)) * 0.5;
+    vec2 bc = floor(bp), bf = fract(bp);
+    float shade = 0.78 + 0.44 * hash21(bc + 11.0);
+    vec2 edge = min(bf, 1.0 - bf);
+    float joint = 1.0 - smoothstep(0.03, 0.09, min(edge.x * 0.55, edge.y * 0.32) / 0.32);
+    vec3 stone = vec3(0.34, 0.33, 0.31) * shade * (0.9 + 0.2 * vnoise(vWorldPos.xz * 9.0 + bc));
+    stone = mix(stone, vec3(0.12, 0.115, 0.1), joint * 0.85);
+    diffuseColor.rgb = mix(diffuseColor.rgb, stone, rock);
+    gRock = rock * (1.0 - joint);
+  }
   // ---- up close: the grains themselves (after MahazeViewer's sediment). Medium quartz grains and coarser shell
   // bits sit on a silty base; each is a disc with a dark rim and a dome in the normal. Faded by pixel footprint.
   float det1 = (1.0 - smoothstep(0.1, 0.35, fw * 0.5 / 1.4)) * uDetail;
@@ -554,6 +570,13 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand));
     gNrmAdd += nd.yz * bump + nd2.yz * bump2;
   }
+  // the stone blocks of the levees: each block tilts its own way a little
+  if (gRock > 0.0) {
+    vec2 bp = vec2(vWorldPos.z / 0.55, vWorldPos.y / 0.32);
+    bp.x += step(0.5, fract(bp.y * 0.5)) * 0.5;
+    vec2 bc = floor(bp);
+    gNrmAdd += (vec2(hash21(bc + 3.0), hash21(bc + 5.0)) - 0.5) * 0.3 * gRock;
+  }
   // a stingray's pit: the ray blew the oxidised skin off, so the bowl shows the darker, wetter sand beneath,
   // strewn with the chalky grit of the clams it crushed
   if (vPit > 0.001) {
@@ -602,8 +625,8 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
       wet = max(wet, max(gSwash, zone * 0.9));
     }
   }
-  diffuseColor.rgb *= mix(1.0, 0.76, wet);
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.93, 1.04), 0.45 * wet);
+  diffuseColor.rgb *= mix(1.0, 0.68, wet);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.84, 0.92, 1.06), 0.55 * wet);
   // above the bank: the park's land, dry grass and earth over the packed bank
   float land = smoothstep(uLand.x, uLand.y, vWorldPos.y);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.31, 0.32, 0.2) * (0.8 + 0.4 * vnoise(vWorldPos.xz * 0.9 + 3.0)), land);
@@ -648,13 +671,13 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   float lvlR = (spillR > uWaterLevel + 0.01 && spillR > vWorldPos.y + 0.003) ? spillR : uWaterLevel;
   float wetR = 1.0 - smoothstep(lvlR + 0.02, max(lvlR, uWetLevel) + 0.05, vWorldPos.y);
   wetR = max(wetR, 1.0 - smoothstep(lvlR - 0.05, lvlR + 0.12, vWorldPos.y));
-  roughnessFactor = mix(roughnessFactor, 0.42, wetR);   // damp sand has a soft sheen, not a mirror
-  roughnessFactor = mix(roughnessFactor, 0.24, gSwash * smoothstep(-0.01, 0.0, vWorldPos.y - uWaterLevel));   // the film the swash left: a soft mirror
-  roughnessFactor = mix(roughnessFactor, 0.5, gFilm * 0.5);   // the organic film has a wet sheen of its own
-  roughnessFactor = mix(roughnessFactor, 0.28, gQuartz);      // quartz and shell grains glint
+  roughnessFactor = mix(roughnessFactor, 0.58, wetR);   // damp sand is darker and only faintly satin, never a mirror of the sun
+  roughnessFactor = mix(roughnessFactor, 0.32, gSwash * smoothstep(-0.01, 0.0, vWorldPos.y - uWaterLevel));   // the film the swash just left: a soft sheen
+  roughnessFactor = mix(roughnessFactor, 0.62, gFilm * 0.5);   // the organic film has a wet sheen of its own
+  roughnessFactor = mix(roughnessFactor, 0.42, gQuartz);       // quartz and shell grains glint a little
 }`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain';
+    mat.customProgramCacheKey = () => 'higata-terrain-v2';
     return mat;
   }
 
@@ -730,6 +753,16 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   /** Close-up surface detail on or off (quality preset). */
   setDetail(on: boolean): void {
     this.uDetail.value = on ? 1 : 0;
+  }
+
+  /** The lighter caustics (超軽量): every other wave component in the focusing sum (the programs are rebuilt once). */
+  setLite(on: boolean): void {
+    for (const m of [this.material, this.patchMaterial]) {
+      const d = m.defines as Record<string, number | string>;
+      if (('WAVE_STRIDE' in d) === on) continue;
+      if (on) { d.WAVE_STRIDE = 2; d.WAVE_AMP = '1.4'; } else { delete d.WAVE_STRIDE; delete d.WAVE_AMP; }
+      m.needsUpdate = true;
+    }
   }
 
   /** Share the surf's uniforms with the water (call before the first frame). */

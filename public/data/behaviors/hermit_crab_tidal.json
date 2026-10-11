@@ -1,0 +1,15 @@
+{
+  "id": "hermit_crab_tidal",
+  "tickHz": { "near": 1, "mid": 0.5, "far": 0.2 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$fleeDistance_m" } },
+      { "type": "condition", "name": "alert_above", "args": { "v": 0.65 } },
+      { "type": "action", "name": "flee", "args": { "distance_m": 0.05, "urgency": 0.8, "param": "withdraw" }, "interrupt": true }
+    ]},
+    { "type": "random", "weights": [0.55, 0.45], "children": [
+      { "type": "action", "name": "rest", "args": { "seconds": "$restMean_s" } },
+      { "type": "action", "name": "forage", "args": { "seconds": [8, 24] } }
+    ]}
+  ]}
+}

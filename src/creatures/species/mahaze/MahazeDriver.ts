@@ -44,12 +44,11 @@ export class MahazeDriver implements Driver {
     const bodyGeom: BodyGeometry | null = rig.axes.body ?? null;
     const viewer = rigNode?.userData.viewer as { contacts?: [string, number, string | number][] } | undefined;
     const bx = (body.userData.mahaze as MahazeExtras | undefined) ?? (body.material as unknown as { userData: { mahaze: MahazeExtras } }).userData.mahaze;
-    // rest-pose bone positions with the root at the origin and unit scale
+    // Contact definitions use model metres, independently of the root's parent transform.
     root.position.set(0, 0, 0);
     root.quaternion.identity();
     root.scale.setScalar(1);
-    root.updateMatrixWorld(true);
-    for (const b of Object.values(bones)) b.userData.restObj = b.getWorldPosition(new Vector3());
+    root.updateWorldMatrix(true, true);
     const F = bx.fishFrame, P = bx.profile;
     const botY = (s: number) => { const k = Math.min(P.n - 1, Math.round((s / F.SEND) * (P.n - 1))); return P.data[k * 6] - P.data[k * 6 + 2]; };
     const rimY = rig.contactY * 1000 + F.Y0;
@@ -62,7 +61,10 @@ export class MahazeDriver implements Driver {
         ['J_root', 15.5, botY(15.5)], ['J_sp1', 18.5, botY(18.5)], ['J_sp2', 22.5, botY(22.5)], ['J_sp3', 26.5, botY(26.5)],
         ['J_sp4', 30.5, botY(30.5)], ['J_sp5', 34.5, botY(34.5)], ['J_sp6', 38.5, botY(38.5)], ['J_caudal2', 48.0, tailY],
       ];
-    const contacts = contactDefs.filter(([bone]) => bones[bone]).map(([bone, s, y]) => ({ bone: bones[bone], p: new Vector3(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001).sub(bones[bone].userData.restObj as Vector3) }));
+    const contacts = contactDefs.filter(([bone]) => bones[bone]).map(([bone, s, y]) => {
+      const p = new Vector3(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001);
+      return { bone: bones[bone], p: bones[bone].worldToLocal(root.localToWorld(p)) };
+    });
     const finMeshes: Record<string, Mesh> = {};
     for (const m of meshes) {
       const mesh = m as Mesh;

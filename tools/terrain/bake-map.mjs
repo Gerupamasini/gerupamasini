@@ -260,7 +260,7 @@ function height(x, z) {
   return Math.max(h, -3.45);   // the deepest trunk mouths stay inside the encoded range
 }
 
-const PALETTE = mapDef.substrate.palette; // ['sand','muddy_sand','mud','gravel','channel']
+const PALETTE = mapDef.substrate.palette; // ['sand','muddy_sand','mud','gravel','channel','rock']
 const idx = Object.fromEntries(PALETTE.map((p, i) => [p, i]));
 
 /**
@@ -285,13 +285,25 @@ function mudness(x, z, h, rel, slope) {
   m -= 0.55 * smooth(0.04, 0.16, br.bar);                         // the bar is clean sand
   m -= 0.4 * smooth(0.85, 1.4, h);                                // upper beach
   m += 0.09 * fbm(x / 9 + 13, z / 9 - 41, 2);                     // ragged edges
+  m += 0.5 * mudZone(x, z);                                       // the sheltered mud flat
   return m;
+}
+
+// a 泥干潟: a broad sheltered stretch on the west half, between the creek mouths and the levee, where the fines settle;
+// soft-edged and a little ragged
+const MUD_ZONE = { cx: -62, cz: -20, rx: 52, rz: 68, rot: 0.25 };
+function mudZone(x, z) {
+  const c = Math.cos(MUD_ZONE.rot), sn = Math.sin(MUD_ZONE.rot);
+  const rx = ((x - MUD_ZONE.cx) * c - (z - MUD_ZONE.cz) * sn) / MUD_ZONE.rx, rz = ((x - MUD_ZONE.cx) * sn + (z - MUD_ZONE.cz) * c) / MUD_ZONE.rz;
+  const r = Math.hypot(rx, rz) + 0.18 * fbm(x / 22 + 5, z / 22 - 9, 2);
+  return smooth(1.0, 0.7, r);
 }
 
 function substrate(x, z, h, m) {
   // the earthen bank, the land behind it and the side levees: packed earth and stone (gravel)
   const lv = leveeAt(x, z);
-  if (bankMask(z) > 0.5 || (lv.m > 0.5 && lv.h > baseProfile(z) + 0.25)) return idx.gravel;
+  if (bankMask(z) > 0.5) return idx.gravel;
+  if (lv.m > 0.5 && lv.h > baseProfile(z) + 0.25) return idx.rock;   // the levees are built of stone
   const ch = channel(x, z);
   if (ch && ch.weight > 0.5 && ch.depth > 0.07) return idx.channel;
   const n2 = fbm(x / 12 + 50, z / 12 - 20, 3);

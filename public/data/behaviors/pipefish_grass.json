@@ -1,0 +1,28 @@
+{
+  "id": "pipefish_grass",
+  "tickHz": { "near": 4, "mid": 2, "far": 0.5 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$fleeDistance_m" } },
+      { "type": "action", "name": "flee", "args": { "distance_m": 0.6, "urgency": 1, "param": "into_grass" }, "interrupt": true }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "depth_below", "args": { "m": 0.08 } },
+      { "type": "action", "name": "move_to_deeper", "args": { "minDepth_m": 0.2 } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "alert_above", "args": { "v": 0.45 } },
+      { "type": "action", "name": "display", "args": { "param": "freeze", "seconds": [8, 16] } }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "time_is", "args": { "v": "night" } },
+      { "type": "action", "name": "rest", "args": { "seconds": 40 } }
+    ]},
+    { "type": "random", "weights": [0.42, 0.26, 0.2, 0.12], "children": [
+      { "type": "action", "name": "rest", "args": { "seconds": "$holdMean_s" } },
+      { "type": "action", "name": "forage", "args": { "seconds": [10, 22] } },
+      { "type": "action", "name": "wander", "args": { "distance_m": "$cruiseDistance_m", "stayNearHome_m": 3 } },
+      { "type": "cooldown", "seconds": 15, "child": { "type": "action", "name": "special", "args": { "param": "hover" } } }
+    ]}
+  ]}
+}

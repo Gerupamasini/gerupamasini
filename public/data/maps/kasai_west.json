@@ -7,7 +7,7 @@
   "seed": 20261004,
   "resolution": 577,
   "height": { "file": "kasai_west/height.png", "min_tp_m": -3.5, "max_tp_m": 6.0 },
-  "substrate": { "file": "kasai_west/substrate.png", "palette": ["sand", "muddy_sand", "mud", "gravel", "channel"] },
+  "substrate": { "file": "kasai_west/substrate.png", "palette": ["sand", "muddy_sand", "mud", "gravel", "channel", "rock"] },
   "spawnStart": { "x": 10, "z": -120, "heading": 180 },
   "bounds": { "walkable": [[-155, -155], [155, 155]], "noEntry": [] },
   "props": []

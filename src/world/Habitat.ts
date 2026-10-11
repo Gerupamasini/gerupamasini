@@ -73,6 +73,7 @@ const WET_TAU_MS: Record<Substrate, number> = {
   mud: 120 * 60 * 1000,
   gravel: 30 * 60 * 1000,
   channel: 180 * 60 * 1000,
+  rock: 15 * 60 * 1000,
 };
 
 /**
@@ -348,7 +349,8 @@ export class Habitat {
     this.lastUpdateMs = nowMs;
     // high-water mark decays 0.25 m per hour toward the tide; capped so a tide jump
     // (ticket, debug override) does not leave the whole flat looking freshly wetted
-    this.wetLevel = Math.min(Math.max(tideLevel, this.wetLevel - 0.25 * dtH), tideLevel + 0.18);
+    // the damp mark follows the ebb down slowly: at low water most of the flat still carries the sheen of the last tide
+    this.wetLevel = Math.min(Math.max(tideLevel, this.wetLevel - 0.05 * dtH), tideLevel + 1.4);
     const cn = this.cn, cn2 = cn * cn;
     const wet = new Uint8Array(cn2);
     for (let k = 0; k < cn2; k++) {
@@ -381,7 +383,7 @@ export class Habitat {
       const depth = water - ground;
       const sub = palette[this.coarseSubstrate[k]] ?? 'mud';
       if (depth <= 0) {
-        tags.push(sub === 'sand' || sub === 'gravel' ? 'exposed_sand' : 'exposed_mud');
+        tags.push(sub === 'sand' || sub === 'gravel' || sub === 'rock' ? 'exposed_sand' : 'exposed_mud');
         if (dist[k] <= this.coarse * 1.01) tags.push('waterline');
       } else {
         if (inPool) tags.push('pool');
