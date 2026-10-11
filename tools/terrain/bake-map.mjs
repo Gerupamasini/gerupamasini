@@ -123,22 +123,6 @@ function mouthDist(x, z) {
   return Math.hypot(x - ax - vx * u, z - az - vz * u);
 }
 
-function dhash(i, j, k) {
-  let n = (Math.imul(i | 0, 374761393) ^ Math.imul(j | 0, 668265263) ^ Math.imul(k | 0, 2246822519) ^ SEED) >>> 0;
-  n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
-  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
-}
-/** a field of rounded boulders (cellular): ~1 at a stone's top, falling to 0 in the gaps between stones */
-function boulders(x, z) {
-  const C = 1.3, ix = Math.floor(x / C), iz = Math.floor(z / C);
-  let f1 = 9, f2 = 9;
-  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
-    const cx = (ix + i + 0.15 + 0.7 * dhash(ix + i, iz + j, 11)) * C, cz = (iz + j + 0.15 + 0.7 * dhash(ix + i, iz + j, 12)) * C;
-    const d = Math.hypot(x - cx, z - cz) / C;
-    if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
-  }
-  return smooth(0, 0.35, f2 - f1) * (1 - 0.5 * smooth(0.2, 0.7, f1));
-}
 /** the levee: its height where it stands and how much of the ground it claims (0..1) */
 function leveeAt(x, z) {
   const { d, s } = leveeNearest(x, z);
@@ -149,9 +133,9 @@ function leveeAt(x, z) {
   const run = (crestH + 2.6) / LV.slope;
   const reach = LV.crest_half_m + run;
   if (d > reach + 1) return { h: -9, m: 0, d };
-  // a rounded crest, straight rubble faces, a little roughness of the stones
+  // a flat crest and smooth, straight faces
   const t = clamp((d - LV.crest_half_m) / run, 0, 1);
-  const h = crestH - (crestH + 2.6) * t + 0.12 * fbm(x / 1.6 + 7, z / 1.6 - 3, 2) + 0.32 * (boulders(x, z) - 0.5);
+  const h = crestH - (crestH + 2.6) * t;
   return { h, m: 1 - smooth(reach - 2, reach + 1, d), d };
 }
 
