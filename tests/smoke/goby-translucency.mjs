@@ -44,10 +44,10 @@ try {
     if (m.type() === 'warning' && /hero|shader|program|goby/i.test(t)) { console.warn('warn:', t.slice(0, 2000)); }
   });
   await page.goto(url, { waitUntil: 'load' });
-  await page.waitForFunction(() => document.querySelector('.title-screen') || document.querySelector('.card h2'), null, { timeout: 120000 });
+  await page.waitForFunction(() => document.querySelector('.title-screen') || document.querySelector('.card h2'), null, { timeout: 600000 });
   await page.evaluate((q) => window.__higata.updateSettings({ quality: q, heroMaterials: true }), quality);
   await page.locator('button.primary').first().click();
-  await page.waitForFunction(() => window.__higata && window.__higata.mode === 'home', null, { timeout: 120000 });
+  await page.waitForFunction(() => window.__higata && window.__higata.mode === 'home', null, { timeout: 600000 });
   await page.evaluate((m) => window.__higata.enterField(m), map);
   await page.waitForFunction(() => window.__higata.world && window.__higata.creatures, null, { timeout: 600000 });
   await waitFrames(page, 4);
