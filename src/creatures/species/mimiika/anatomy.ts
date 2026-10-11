@@ -158,8 +158,10 @@ export function socketPush(p: [number, number, number]): [number, number, number
 /** the section's flattening: the belly is a little flatter than the back */
 export const BELLY_FLAT = 0.95;
 
-/** a point of the body surface at z and angle θ from the dorsal midline (θ > 0 the left side) */
-export function surfacePoint(z: number, theta: number, K: ProfileKnot[] = PROFILE): [number, number, number] {
+const sm = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/** the body's surface without the funnel's imprint and the eye sockets (the funnel itself is placed on this) */
+function surfaceRaw(z: number, theta: number, K: ProfileKnot[]): [number, number, number] {
   const p = profileAt(z, K);
   const s = Math.sin(theta), c = Math.cos(theta);
   // a superellipse a little fuller than an ellipse
@@ -168,7 +170,15 @@ export function surfacePoint(z: number, theta: number, K: ProfileKnot[] = PROFIL
   let x = p.w * se, y = p.h * ce * (c < 0 ? BELLY_FLAT : 1);
   // the head's top sinks a little between the eyes' domes (the two humps of a front view: 10, 16, 47)
   y -= 0.6 * Math.exp(-(((z - 1.6) / 1.1) ** 2)) * Math.pow(Math.max(c, 0), 8);
-  return z > -2.5 ? socketPush([x, p.c + y, z]) : [x, p.c + y, z];
+  return [x, p.c + y, z];
+}
+
+/** a point of the body surface at z and angle θ from the dorsal midline (θ > 0 the left side) */
+export function surfacePoint(z: number, theta: number, K: ProfileKnot[] = PROFILE): [number, number, number] {
+  const q = surfaceRaw(z, theta, K);
+  // under the head the skin is drawn up into the funnel's groove: it lies just inside the funnel's dorsal wall
+  if (K === HEAD_PROFILE && Math.cos(theta) < 0) q[1] = funnelImprint(q[0], q[1], z);
+  return z > -2.5 ? socketPush(q) : q;
 }
 
 export const ARM_NAMES = ['I', 'II', 'III', 'IV'] as const;
@@ -260,10 +270,10 @@ export function finBase(u: number): [number, number, number] {
  * wall's thickness at the opening, bore how deep the dark opening is drawn; flare how far the mantle's ventral edge
  * stands out over the base (its free edge lies on the funnel, not on the head).
  */
-export const FUNNEL = { z0: -4.8, zOut: -0.9, z1: 3.0, embed: 0.32, droop: 0.55, lip: 0.38, bore: 1.5, flare: 1.35 };
-/** the funnel's section: half width a, half height b (mm) along z (the lip a little flared, a trumpet's mouth) */
+export const FUNNEL = { z0: -4.6, zOut: -0.9, z1: 3.4, embed: 1.15, embedBase: 0.3, droop: 0.7, lip: 0.5, bore: 1.8, flare: 1.5, tilt: 0.3, pz: 0.3, py: 1.0, w0: -0.8, w1: 0.9 };
+/** the funnel's section: half width a, half height b (mm) along z: broad and flat in the cavity, a fat cone outside, a bead at the lip */
 const FUNNEL_KNOTS: [number, number, number][] = [
-  [-4.8, 1.9, 0.4], [-3.0, 2.35, 0.62], [-0.9, 2.25, 0.84], [0.9, 1.7, 1.0], [2.3, 1.34, 1.04], [3.0, 1.42, 1.12],
+  [-4.6, 2.0, 0.45], [-3.0, 2.5, 0.8], [-1.0, 2.5, 1.12], [0.4, 2.3, 1.3], [1.9, 2.0, 1.3], [2.95, 1.78, 1.25], [3.4, 1.84, 1.3],
 ];
 
 /** the funnel's cross-section at z: half width a, half height b and the centre's height yc (mm, neck frame) */
@@ -275,10 +285,24 @@ export function funnelSection(z: number): { a: number; b: number; yc: number; to
   const t0 = (zc - K[i][0]) / (K[i + 1][0] - K[i][0]);
   const t = t0 * t0 * (3 - 2 * t0);
   const a = K[i][1] + (K[i + 1][1] - K[i][1]) * t, b = K[i][2] + (K[i + 1][2] - K[i][2]) * t;
-  // the dorsal wall in the head's groove, the free end standing down off it
-  const d = Math.min(1, Math.max(0, (zc - 0.4) / (FUNNEL.z1 - 0.4)));
-  const top = surfacePoint(zc, Math.PI, HEAD_PROFILE)[1] + FUNNEL.embed - FUNNEL.droop * d * d;
+  // the dorsal wall: on the visceral sac in the cavity, then high in the head's groove; the free end droops a little
+  const E = FUNNEL.embedBase + (FUNNEL.embed - FUNNEL.embedBase) * sm(-2.6, -0.6, zc);
+  const d = Math.min(1, Math.max(0, (zc - 1.4) / (FUNNEL.z1 - 1.4)));
+  const top = surfaceRaw(zc, Math.PI, HEAD_PROFILE)[1] + E - FUNNEL.droop * d * d;
   return { a, b, yc: top - b, top };
+}
+
+/** the head's skin drawn up into the funnel's groove: never lower than 0.3 mm inside the funnel's dorsal wall */
+export function funnelImprint(x: number, y: number, z: number): number {
+  if (z < FUNNEL.z0 || z > FUNNEL.z1 + 2.0) return y;
+  const S = funnelSection(Math.min(z, FUNNEL.z1));
+  const ax = Math.abs(x);
+  if (ax >= S.a) return y;
+  const F = S.yc + S.b * Math.sqrt(1 - (ax / S.a) ** 2) - 0.3;
+  const w = 1 - sm(FUNNEL.z1 + 0.7, FUNNEL.z1 + 2.0, z);
+  const k = 0.35, h = Math.max(k - Math.abs(F - y), 0) / k;
+  const m = Math.max(F, y) + (h * h * k) / 4;
+  return y + (m - y) * w;
 }
 
 /** neck-frame millimetres → model metres */

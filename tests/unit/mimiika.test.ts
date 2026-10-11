@@ -113,6 +113,34 @@ describe('ミミイカ: the body plan', () => {
       expect(q[1], `funnel vertex at ${q.map((v) => v.toFixed(2))}`).toBeGreaterThan(Math.min(...near.map((o) => o[1])) + 0.05);
     }
     expect(checked).toBeGreaterThan(30);
+    // the bore ≈ 0.4 of the eye across inside a thick lip (29: outer 3.7, bore 2.5 mm)
+    expect((2 * (tip.a - FUNNEL.lip)) / (2 * EYE.r)).toBeGreaterThan(0.3);
+    expect((2 * (tip.a - FUNNEL.lip)) / (2 * EYE.r)).toBeLessThan(0.45);
+    // the head's skin (in its funnel groove) never shows inside the bore: it stays above the bore's dorsal half
+    const headY = (x: number, z: number) => {
+      let lo = Math.PI / 2, hi = Math.PI;
+      for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (surfacePoint(z, m, HEAD_PROFILE)[0] > x) lo = m; else hi = m; }
+      return surfacePoint(z, (lo + hi) / 2, HEAD_PROFILE)[1];
+    };
+    let bore = 0;
+    for (let i = 0; i < fp.count; i++) {
+      const q = mm(fp, i);
+      if (fs.getZ(i) !== 2 || fs.getY(i) < 0.6 || Math.abs(q[0]) < 0.05) continue;
+      bore++;
+      expect(headY(Math.abs(q[0]), q[2]), `bore vertex ${q.map((v) => v.toFixed(2))}`).toBeGreaterThan(q[1]);
+    }
+    expect(bore).toBeGreaterThan(8);
+    // the mantle's edge lies over the funnel without cutting it: its lining stays under the tube where they overlap
+    let lin = 0;
+    for (let i = 0; i < mp.count; i++) {
+      const q = mm(mp, i);
+      if (ms.getY(i) !== 1 || q[2] < FUNNEL.zOut - 1.2 || q[1] > -2) continue;
+      const S = funnelSection(q[2]);
+      if (Math.abs(q[0]) > S.a * 0.95) continue;
+      lin++;
+      expect(q[1], `lining vertex ${q.map((v) => v.toFixed(2))}`).toBeLessThan(S.yc - S.b * Math.sqrt(1 - (q[0] / S.a) ** 2) + 0.02);
+    }
+    expect(lin).toBeGreaterThan(4);
     // and its opening is clear of the arms' bases and of the eyes
     for (const a of ARMS) {
       const B = armBase(a).pos;

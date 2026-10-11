@@ -5,7 +5,7 @@ import { armBone, tenBone, type RigDef } from './geometry';
 /**
  * The skeleton of one ミミイカ and the application of a behaviour pose to it (no rendering: the scene, the viewer
  * and the tests use it alike).
- *   J_root ─ J_head ─ J_eye_L, J_eye_R, J_funnel, J_arm{I…IV}{L,R}_0…4, J_ten{L,R}_0…5
+ *   J_root ─ J_head ─ J_eye_L, J_eye_R, J_funnel ─ J_funnelTip, J_arm{I…IV}{L,R}_0…4, J_ten{L,R}_0…5
  *          └ J_fin_L, J_fin_R
  * The mantle's own motion (ventilation, the jet's contraction) and the waves along the fins are made in the vertex
  * shader (materials.ts), so the mantle needs no bones of its own.
@@ -101,6 +101,11 @@ function aimEye(b: Bone, dir: Vector3, up: Vector3): void {
   b.quaternion.setFromRotationMatrix(_m);
 }
 
+/** how far the funnel's mouth is opened by the mantle's squeeze */
+export const funnelOpening = (mantle: number): number => Math.max(0.88, Math.min(1.3, 1 + 4.5 * (1 - mantle)));
+/** the funnel's pitch as posed (negative: down), with the dip that keeps an opened or turned mouth under the head */
+export const funnelPitchOf = (P: Pose): number => P.funnelPitch - 0.4 * Math.max(0, funnelOpening(P.mantle) - 1) - 0.35 * Math.abs(P.funnelYaw);
+
 /** Pose → root transform and bone rotations (ends with one world-matrix update of the whole model). */
 export function applyPose(root: Object3D, bones: Record<string, Bone>, P: Pose): void {
   root.position.copy(P.pos);
@@ -141,12 +146,14 @@ export function applyPose(root: Object3D, bones: Record<string, Bone>, P: Pose):
     const side = i === 0 ? 1 : -1;
     b.quaternion.copy(restQ(b)).multiply(_q.setFromAxisAngle(AZ, P.finFold[i] * side));
   }
-  const f = bones.J_funnel;
-  f.quaternion.copy(restQ(f)).multiply(_q.setFromAxisAngle(AX, -P.funnelPitch)).multiply(_q2.setFromAxisAngle(AY, P.funnelYaw));
-  // the water breathed in round the neck leaves through the funnel: it opens as the mantle squeezes (most in a jet)
-  // and its valve draws it in a little as the mantle fills
-  const sF = Math.max(0.93, Math.min(1.25, 1 + 1.6 * (1 - P.mantle)));
-  f.scale.set(sF, sF, 1);
+  // the water breathed in round the neck leaves through the funnel: its mouth opens as the mantle squeezes (±10 % with
+  // each breath, most in a jet) and draws in as it fills; opened or turned aside, the tube dips a little so that its
+  // mouth stays clear of the head's skin
+  const sF = funnelOpening(P.mantle);
+  const f = bones.J_funnel, ft = bones.J_funnelTip;
+  const pitch = funnelPitchOf(P);
+  f.quaternion.copy(restQ(f)).multiply(_q.setFromAxisAngle(AX, -pitch)).multiply(_q2.setFromAxisAngle(AY, P.funnelYaw));
+  ft.scale.set(sF, 1 + 0.25 * (sF - 1), 1);
   // the world's up in the head's frame (for the eyes' counter-roll)
   bones.J_head.updateWorldMatrix(true, false);
   bones.J_head.matrixWorld.decompose(_hp, _hq, _hs);

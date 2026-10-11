@@ -233,7 +233,7 @@ ${NOISE}
  * normal, clearcoat / iridescence and emissive stages.
  */
 const SKIN_SURFACE = /* glsl */ `
-float mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt = 0.0, mmSand = 0.0, mmPig = 0.0, mmFlank = 0.0, mmEyeIr = 0.0, mmDome = 0.0, mmRim = 0.0, mmSil = 0.0, mmCut = 1.0, mmSpang = 0.0;
+float mmFun = 0.0, mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt = 0.0, mmSand = 0.0, mmPig = 0.0, mmFlank = 0.0, mmEyeIr = 0.0, mmDome = 0.0, mmRim = 0.0, mmSil = 0.0, mmCut = 1.0, mmSpang = 0.0;
 {
   vec3 p = vRest;
   float part = vSkin.x;
@@ -281,7 +281,8 @@ float mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   vec3 base = mix(vec3(0.44, 0.46, 0.5), vec3(0.46, 0.42, 0.43), D);
   if (arm) base = mix(vec3(0.66, 0.58, 0.58), vec3(0.50, 0.34, 0.20), D);
   // the funnel: pale, faintly lilac, glassy flesh (photographs 20, 29)
-  if (funnel) base = vec3(0.4, 0.36, 0.42);
+  // lilac-grey (B > R > G), paler towards the opening (29: lip lin (0.19, 0.16, 0.24) beside head skin (0.085, 0.064, 0.07))
+  if (funnel) { base = mix(vec3(0.37, 0.345, 0.43), vec3(0.43, 0.40, 0.50), smoothstep(0.45, 1.0, vSkin.y)); mmFun = 1.0; }
   // the viscera through the belly: a soft darker body in the mantle's middle (the ink sac, the gills)
   if (part < 0.5) base *= 1.0 - 0.15 * (1.0 - D) * exp(-pow((zn + 11.0) / 6.0, 2.0) - pow(p.x / 4.0, 2.0));
   // ---- the pattern's regions
@@ -299,7 +300,7 @@ float mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   eyePatch = max(eyePatch, 0.7 * eyeZone * smoothstep(0.3, 0.7, dot(eyeN, mmLidF)) * smoothstep(0.12, 0.22, lidS) * (1.0 - smoothstep(0.5, 0.75, lidS)));
   float ePm = eyePatch;
   // the copper set (the mosaic) spreads on the back and the arms' outer faces, hardly under the belly
-  float regM = part < 0.5 ? mix(0.2, 1.0, smoothstep(0.0, 0.3, D)) : part < 1.5 ? mix(0.8, 1.05, D) * (1.0 - 0.45 * eyePatch) : arm ? mix(0.1, 1.0, D) * (1.0 - 0.35 * armT) : 0.3;
+  float regM = part < 0.5 ? mix(0.2, 1.0, smoothstep(-0.05, 0.15, D)) : part < 1.5 ? mix(0.8, 1.05, D) * (1.0 - 0.45 * eyePatch) : arm ? mix(0.1, 1.0, D) * (1.0 - 0.35 * armT) : 0.3;
   float regB = part < 1.5 ? mix(0.85, 1.0, D) * (1.0 - 0.5 * eyePatch) : arm ? mix(0.5, 1.3, D) : 0.3;
   float eY = uChroma.x * mix(0.45, 1.0, D) * (1.0 + 0.6 * eyeRing + 0.4 * saddle);
   float eR = uChroma.y * regM * (1.0 - 0.3 * uChroma.w + 0.5 * uChroma.w * mott);
@@ -308,7 +309,8 @@ float mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   eY *= 1.0 - 0.1 * uPale; eR *= 1.0 - 0.5 * uPale * paleK; eB *= 1.0 - 0.6 * uPale * paleK;
   // (the lid's margin: fewer dark organs, a rim of yellow ones)
   eB *= 1.0 - 0.65 * margin; eR *= 1.0 - 0.3 * margin; eY = max(eY, 0.8 * margin * uChroma.x + 0.3 * margin);
-  if (funnel) { float fo = 1.0 - step(0.5, vSkin.z); eY *= 0.3 * fo; eR *= 0.3 * fo; eB *= 0.22 * fo; }
+  // (a few organs on its base under the mantle; the free tube and the lip all but clear: 20, 26, 29)
+  if (funnel) { float fo = (1.0 - step(0.5, vSkin.z)) * (1.0 - 0.85 * smoothstep(0.3, 0.7, vSkin.y)); eY *= 0.25 * fo; eR *= 0.2 * fo; eB *= 0.12 * fo; }
   if (sucker || lining) { eY = 0.0; eR = 0.0; eB = 0.0; }
   // (the rolled edge of the collar is paler: its organs thin out over the lip)
   eB *= 1.0 - 0.6 * lip; eR *= 1.0 - 0.4 * lip;
@@ -346,7 +348,7 @@ float mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   // under a spread dark set the copper turns maroon-plum (32, 61, 68)
   colM = mix(colM, vec3(0.085, 0.022, 0.03), 0.75 * smoothstep(0.5, 1.0, eB) * D);
   // the gaps: the tissue tinted by the stretched rims of the organs round them
-  float spread = smoothstep(0.3, 0.9, eR) * mix(0.3, 1.0, D);
+  float spread = smoothstep(0.3, 0.9, eR) * mix(0.3, 1.0, smoothstep(0.0, 0.3, D));
   alb = mix(alb, vec3(0.09, 0.045, 0.037), 0.85 * spread);
   // the yellow set: a few organs in the gaps, an orange cast over the copper (the golden net: below, topmost)
   alb = mix(alb, colY, cY * 0.45);
@@ -477,9 +479,18 @@ float mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
     mmHgt += (rim * 0.04 - (cup - rim) * 0.03) * fine;
   }
   // the arm tips and the tentacles are thin: they pass light
-  mmThin = arm ? 0.35 + 0.55 * vSkin.y : funnel ? (vSkin.z > 1.5 ? 0.0 : 0.3) : sucker ? 0.45 : lining ? 0.1 : 0.12 * (1.0 - D) + 0.25 * lip;
+  mmThin = arm ? 0.35 + 0.55 * vSkin.y : funnel ? (vSkin.z > 1.5 ? 0.15 : vSkin.z > 0.5 ? 0.6 : 0.45) : sucker ? 0.45 : lining ? 0.1 : 0.12 * (1.0 - D) + 0.25 * lip;
   // the funnel's opening: the thick lip paler, the bore going dark within a millimetre
-  if (funnel && vSkin.z > 0.5) alb = vSkin.z < 1.5 ? vec3(0.5, 0.46, 0.52) : mix(vec3(0.3, 0.2, 0.23), vec3(0.015, 0.01, 0.012), smoothstep(0.0, 0.45, vSkin.w));
+  // the opening: the thick rounded lip palest; the bore wall lit tan-mauve at the mouth (29: 0.6-0.75 of the lip),
+  // dark only deep inside; the valve a pale crescent on its dorsal wall (bore rows carry 0.5 + 0.5 cos phi in vSkin.y)
+  if (funnel && vSkin.z > 0.5) {
+    if (vSkin.z < 1.5) alb = vec3(0.50, 0.47, 0.58);
+    else {
+      alb = mix(vec3(0.26, 0.18, 0.17), vec3(0.025, 0.014, 0.016), smoothstep(0.15, 1.0, vSkin.w));
+      float valve = smoothstep(0.62, 0.9, vSkin.y) * exp(-pow((vSkin.w - 0.5) / 0.16, 2.0));
+      alb = mix(alb, vec3(0.40, 0.34, 0.40), 0.7 * valve);
+    }
+  }
   // a fine relief of the organs and the skin; the raised fold of the lids (≈ 0.43 mm wide), the crease round the globe
   mmHgt += 0.02 * cB + 0.012 * (mmN(p * 3.0) - 0.5);
   mmHgt += 0.10 * fold - 0.05 * crease;
@@ -516,7 +527,7 @@ float mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   // pale dress, at the arm tips and the mantle's thin rim); the viewing angle is added in SKIN_THIN
   // (the mantle and head are a muscular wall: milky and see-through in the pale dress, hardly at all when the copper
   // is spread; the arms stay glassy)
-  float clear = (arm ? 0.42 + 0.4 * uPale : 0.16 + 0.5 * uPale) * (1.0 - 0.9 * spread) * (1.0 - mmPig) * (1.0 - mmPig) * (1.0 - mmSand) * (funnel ? (vSkin.z > 1.5 ? 0.0 : 1.0) : lining ? 0.3 : 1.0) * (arm ? 1.0 + 0.3 * vSkin.y : 1.0);
+  float clear = (arm ? 0.42 + 0.4 * uPale : 0.16 + 0.5 * uPale) * (1.0 - 0.9 * spread) * (1.0 - mmPig) * (1.0 - mmPig) * (1.0 - mmSand) * (funnel ? (vSkin.z > 1.5 ? 0.0 : vSkin.z > 0.5 ? 0.55 : 1.0) : lining ? 0.3 : 1.0) * (arm ? 1.0 + 0.3 * vSkin.y : 1.0);
   // the skin of the eye's bulge is as opaque as the head's, but over the ball the thin lid lets its silver show between
   // the organs (32, 33, 62, 68); the gold gaps stay opaque (29)
   float bulge = headP ? smoothstep(1.7, 1.3, eyeL / ${f(EYE.r)}) : 0.0;
@@ -548,7 +559,7 @@ const SKIN_THIN = /* glsl */ `
 {
   vec3 vW = inverseTransformDirection(-normalize(vViewPosition), viewMatrix);
   vec3 nW = inverseTransformDirection(normal, viewMatrix);
-  vec3 tissue = diffuseColor.rgb * vec3(1.1, 0.88, 0.8) * (1.0 - 0.95 * mmPig);
+  vec3 tissue = diffuseColor.rgb * mix(vec3(1.1, 0.88, 0.8), vec3(1.0, 0.94, 1.04), mmFun) * (1.0 - 0.95 * mmPig);
   float k = (0.1 + 0.4 * mmThin + 0.22 * uPale) * (1.0 - mmSand);
   totalEmissiveRadiance += tissue * amUnderwater(-nW, 1.0) * k;
   float back = pow(clamp(dot(vW, amSunDir()), 0.0, 1.0), 3.0);
