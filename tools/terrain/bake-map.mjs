@@ -84,8 +84,9 @@ const N = mapDef.resolution;
 const half = SIZE / 2;
 
 // 東なぎさ: a flat enclosed by a U of stone levee (捨石の導流堤) open to the bay in the south. Outside the levee the
-// water is deep; inside, the flat climbs from the mouth to an upper sand berm against the levee's inner toe, with
-// sand bars standing out of it and creeks running in from the mouth (after the aerial photos of the enclosure).
+// water is deep; inside, the flat climbs from the mouth to an upper sand berm against the levee's inner toe. No bars
+// stand out of it: the flat is rough with random hummocks and hollows that keep water as the tide leaves, crossed by
+// shallow creeks from the mouth.
 const LV = mapDef.levee;
 const PATH = LV.path;
 const PATH_LEN = [0];
@@ -122,6 +123,11 @@ function mouthDist(x, z) {
   return Math.hypot(x - ax - vx * u, z - az - vz * u);
 }
 
+function dhash(i, j, k) {
+  let n = (Math.imul(i | 0, 374761393) ^ Math.imul(j | 0, 668265263) ^ Math.imul(k | 0, 2246822519) ^ SEED) >>> 0;
+  n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+}
 /** a field of rounded boulders (cellular): ~1 at a stone's top, falling to 0 in the gaps between stones */
 function boulders(x, z) {
   const C = 1.3, ix = Math.floor(x / C), iz = Math.floor(z / C);
@@ -181,32 +187,6 @@ function berm(x, z) {
   return { k, top: 1.45 + 0.2 * fbm(x / 14 + 2, z / 14 - 7, 2) - 0.25 * smooth(LV.crest_half_m + 4, LV.crest_half_m + 6 + width, d) };
 }
 
-// sand bars: the pale banks standing out of the flat (dry at most tides), after the aerial views
-const BARS = [
-  { pts: [[-96, 60], [-80, 74], [-50, 84], [-10, 94], [32, 102], [58, 112]], w: 13, h: 1.25 },   // the long spit
-  { pts: [[22, 44], [58, 38], [92, 54], [108, 84]], w: 11, h: 1.05 },                             // the south-east bank
-  { pts: [[-98, -62], [-84, -34], [-74, -6], [-76, 18]], w: 15, h: 1.15 },                         // the west bank
-  { pts: [[44, -70], [70, -60], [96, -44]], w: 9, h: 0.95 },                                       // a low bank in the north-east
-];
-/** how much bar is here (0..1) and the height its crest stands at */
-function barAt(x, z) {
-  let k = 0, top = 0;
-  for (const b of BARS) {
-    for (let i = 1; i < b.pts.length; i++) {
-      const [ax, az] = b.pts[i - 1], [bx, bz] = b.pts[i];
-      const vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz;
-      const u = clamp(((x - ax) * vx + (z - az) * vz) / L2, 0, 1);
-      const d = Math.hypot(x - ax - vx * u, z - az - vz * u);
-      // tapering at the ends, a ragged edge
-      const end = Math.min(i - 1 + u, b.pts.length - 1 - (i - 1 + u));
-      const w = b.w * (0.55 + 0.45 * smooth(0, 1.2, end)) * (1 + 0.25 * fbm(x / 9 + 11, z / 9 - 2, 2));
-      const kk = smooth(w, w * 0.3, d);
-      if (kk > k) { k = kk; top = b.h * (0.8 + 0.2 * smooth(0, 1.5, end)); }
-    }
-  }
-  return { k, top };
-}
-
 // ------------------------------------------------------------------ tidal creeks: a dendritic network
 // Trunks come in through the mouth and run up the flat, meandering and branching as they go, each branch narrower and
 // shallower than the one it left; the flat between creeks rises a little away from them, so at half tide the creeks
@@ -223,14 +203,7 @@ function growCreek(x, z, heading, order, length, w, d, along0 = 0) {
     // meander: noise-driven bends, pulled back toward the way up the flat (north is heading π)
     const bend = 0.55 * wiggle * gnoise(len / 22 + phase, order * 3.7 + 1.3) + 0.25 * gnoise(len / 60 + phase * 2, order + 9.2);
     h += bend * 0.5 + 0.06 * Math.sin(Math.PI - h);
-    let nx = px + Math.sin(h) * step, nz = pz + Math.cos(h) * step;
-    // a sand bar turns the creek aside: it runs along the bar's flank instead of cutting through it
-    for (let k = 1; k <= 12 && barAt(nx, nz).k > 0.15; k++) {
-      const turn = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.27;
-      nx = px + Math.sin(h + turn) * step; nz = pz + Math.cos(h + turn) * step;
-      if (barAt(nx, nz).k <= 0.15) h += turn;
-    }
-    if (barAt(nx, nz).k > 0.15) break;
+    const nx = px + Math.sin(h) * step, nz = pz + Math.cos(h) * step;
     // stay off the levee and inside the enclosure (the trunks start just outside the mouth)
     if (Math.abs(nx) > half - 6 || Math.abs(nz) > half - 2) break;
     if (leveeNearest(nx, nz).d < LV.crest_half_m + 18) break;
@@ -246,14 +219,15 @@ function growCreek(x, z, heading, order, length, w, d, along0 = 0) {
     }
   }
 }
-// the trunks are laid out by hand after the aerial photos: the main creek comes in between the spit's end and the east
-// tip, winds through the middle of the enclosure to its sheltered north; a second runs up the east side; a short
-// one drains the mouth. Each meanders a little about its line, and branches grow off it at random.
+// the trunks are laid out by hand after the aerial photos: the main creek comes in through the east side of the mouth
+// and winds through the middle of the enclosure to its sheltered north; a second runs up the east side; a short one
+// drains the mouth. Each meanders a little about its line, and branches grow off it at random. All are shallow
+// runnels (10–30 cm) in the flat's own sediment.
 const TRUNKS = [
-  { pts: [[80, 160], [72, 122], [46, 96], [10, 72], [-28, 58], [-52, 34], [-50, -4], [-28, -34], [2, -62], [22, -92]], w: [12, 3.5], d: [0.85, 0.3] },
-  { pts: [[10, 72], [16, 30], [6, -6], [30, -34], [58, -24]], w: [7, 2.5], d: [0.55, 0.2] },
-  { pts: [[72, 122], [98, 100], [112, 62], [112, 14], [100, -22]], w: [8, 2.5], d: [0.6, 0.2] },
-  { pts: [[-10, 160], [-6, 128], [-40, 116]], w: [7, 3], d: [0.5, 0.25] },
+  { pts: [[80, 160], [72, 122], [46, 96], [10, 72], [-28, 58], [-52, 34], [-50, -4], [-28, -34], [2, -62], [22, -92]], w: [9, 3], d: [0.3, 0.1] },
+  { pts: [[10, 72], [16, 30], [6, -6], [30, -34], [58, -24]], w: [6, 2.5], d: [0.2, 0.08] },
+  { pts: [[72, 122], [98, 100], [112, 62], [112, 14], [100, -22]], w: [6, 2.5], d: [0.22, 0.08] },
+  { pts: [[-10, 160], [-6, 128], [-40, 116]], w: [5, 2.5], d: [0.18, 0.08] },
 ];
 for (const tr of TRUNKS) {
   const phase = crand() * 100;
@@ -320,51 +294,10 @@ function channel(x, z) {
   return c.depth > 0.002 ? { depth: c.depth, weight: c.weight } : 0;
 }
 
-// tide pools: seeded hollows on the banks, clear of the creeks and the levee, inside the enclosure
-const POOLS = [];
-{
-  let tries = 0;
-  while (POOLS.length < 14 && tries++ < 600) {
-    const cx = (crand() * 2 - 1) * (half - 25), cz = (crand() * 2 - 1) * (half - 30);
-    if (!insideEnclosure(cx, cz) || leveeNearest(cx, cz).d < 30) continue;
-    if (creekAt(cx, cz).dist < 9) continue;
-    if (POOLS.some((p) => Math.hypot(p.cx - cx, p.cz - cz) < 28)) continue;
-    const r = 5 + crand() * 9;
-    POOLS.push({ cx, cz, rx: r * (0.8 + 0.5 * crand()), rz: r * (0.7 + 0.5 * crand()), depth: 0.1 + crand() * 0.14, rot: crand() * Math.PI });
-  }
-}
-// ------------------------------------------------------------------ dimples: a thin random field of hollows and humps
-// A jittered grid of cells across the flat: most cells get a shallow hollow (5–20 cm deep, 6–18 m across, a little
-// elongated), the rest a low hump. The hollows keep water when the tide leaves, so there is a wadeable pool within a
-// short walk at any tide, and the flat reads as gently uneven rather than a plane.
-const DIMPLE_CELL = 18;
-function dhash(i, j, k) {
-  let n = (Math.imul(i | 0, 374761393) ^ Math.imul(j | 0, 668265263) ^ Math.imul(k | 0, 2246822519) ^ SEED) >>> 0;
-  n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
-  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
-}
-function dimples(x, z) {
-  const ci = Math.floor(x / DIMPLE_CELL), cj = Math.floor(z / DIMPLE_CELL);
-  let h = 0;
-  for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
-    const i = ci + di, j = cj + dj;
-    const cx = (i + 0.1 + 0.8 * dhash(i, j, 1)) * DIMPLE_CELL, cz = (j + 0.1 + 0.8 * dhash(i, j, 2)) * DIMPLE_CELL;
-    const hollow = dhash(i, j, 3) < 0.7;
-    const rx = 3 + 6 * dhash(i, j, 4), rz = rx * (0.6 + 0.6 * dhash(i, j, 5)), rot = dhash(i, j, 6) * Math.PI;
-    const amp = hollow ? -(0.05 + 0.15 * dhash(i, j, 7)) : 0.02 + 0.04 * dhash(i, j, 7);
-    const ux = (x - cx) * Math.cos(rot) - (z - cz) * Math.sin(rot), uz = (x - cx) * Math.sin(rot) + (z - cz) * Math.cos(rot);
-    const q = (ux / rx) ** 2 + (uz / rz) ** 2;
-    if (q > 6) continue;
-    // a flat-bottomed bowl: the floor is level enough to stand in, the rim comes up in the outer third
-    h += amp * (1 - smooth(0.4, 1.0, Math.sqrt(q)));
-  }
-  return h;
-}
-
 // random relief (the Minecraft-like part): seeded, domain-warped gradient noise at four scales plus ridged sand waves.
 // Amplitudes are tidal-flat sized (tens of centimetres), so the flat keeps its slope but gets hummocks, hollows that
 // hold water, and low bars that break the plane.
-const RELIEF = { macro: [120, 0.16], meso: [40, 0.09], fine: [11, 0.04], micro: [4.5, 0.014], ridge: [21, 0.05] };
+const RELIEF = { macro: [110, 0.22], meso: [36, 0.1], fine: [11, 0.04], micro: [4.5, 0.014], ridge: [21, 0.05] };
 function relief(x, z) {
   const [wx, wz] = warp(x, z, 90, 18);
   let h = RELIEF.macro[1] * gfbm(wx / RELIEF.macro[0], wz / RELIEF.macro[0], 3);
@@ -377,25 +310,36 @@ function relief(x, z) {
   return h;
 }
 
+// the flat's hollows, the way the ebb leaves them: stretched along the contours (east–west, across the way the water
+// drains to the mouth), so each lies behind a low swell and holds its water as the tide goes (the runnels behind the
+// ridges of a real flat); lobed and running into each other, flat-floored, of every size — thick in some stretches of
+// the flat and nearly absent in others — with low hummocks between
+function hollows(x, z) {
+  const [wx, wz] = warp(x, z, 40, 20);
+  // where the hollows gather: broad zones, more of them on the lower flat
+  const zone = smooth(-0.35, 0.45, gfbm(x / 130 + 61, z / 130 - 23, 2) + 0.15 * smooth(-60, 80, z));
+  // two sizes of trough, both a little longer east–west than north–south
+  const big = gfbm(wx / 46 + 7.3, wz / 28 - 4.1, 3);
+  const small = gfbm(wx / 15 - 2.2, wz / 10 + 5.7, 2);
+  const t = 0.55 * big + 0.45 * small;
+  // a hollow where the field dips under a threshold that the zone lowers; its floor flattens out at depth
+  const th = lerp(-0.3, 0.05, zone);
+  const depth = (0.2 + 0.2 * zone) * smooth(th, th - 0.18, t);
+  const hummock = 0.06 * smooth(0.25, 0.7, t);
+  return hummock - depth;
+}
+
 function height(x, z) {
   const fm = flatMask(x, z);
   let h = baseProfile(x, z);
-  // the bars and the berm stand on the flat; the relief roughens it all
-  const bar = barAt(x, z);
-  const barK = bar.k * fm;
-  h += barK * Math.max(0, bar.top - h);
+  // the relief roughens the flat; the berm stands against the levee
   h += relief(x, z) * fm;
   const bm = berm(x, z);
   h = lerp(h, Math.max(h, bm.top), bm.k);
   const ck = creekAt(x, z);
   // the banks: the flat rises away from the creeks (a low dome between them), then the creek cuts in
   h += 0.09 * smooth(0, DOME_R, ck.dist) * fm;
-  h += dimples(x, z) * fm * (1 - smooth(0.2, 0.6, barK));
-  for (const p of POOLS) {
-    const rx = (x - p.cx) * Math.cos(p.rot) - (z - p.cz) * Math.sin(p.rot), rz = (x - p.cx) * Math.sin(p.rot) + (z - p.cz) * Math.cos(p.rot);
-    const dx = rx / p.rx, dz = rz / p.rz;
-    h -= p.depth * Math.exp(-(dx * dx + dz * dz) * 1.3);
-  }
+  h += hollows(x, z) * fm;
   h -= ck.depth * (0.35 + 0.65 * fm);
   // the levee: everything is blended into its rubble faces
   const lv = leveeAt(x, z);
@@ -408,7 +352,7 @@ const idx = Object.fromEntries(PALETTE.map((p, i) => [p, i]));
 
 /**
  * Substrate from a continuous "mudness" score, so sand and mud separate the way they do on a real flat: mud settles in
- * sheltered hollows, around the creeks and on the low flat; sand holds the bars, the slopes and the berm. Large-scale
+ * sheltered hollows and on the low flat; sand holds the hummocks, the slopes and the berm. Large-scale
  * zones (seeded noise) and a little edge roughness keep the boundaries organic.
  *   rel   local height above the surrounding 12 m (m): hollows negative, hummocks positive
  *   slope local gradient
@@ -422,8 +366,7 @@ function mudness(x, z, h, rel, slope) {
   m -= 2.4 * clamp(rel, -0.15, 0.15);                             // hollows collect fines, highs are winnowed
   m -= 0.22 * clamp((h + 0.4) / 1.2, -1, 1);                      // the lower flat is muddier
   m -= 1.6 * clamp(slope, 0, 0.12);                               // current-swept slopes stay sandy
-  m += 0.55 * (ch ? ch.weight : 0);                               // creek margins
-  m -= 0.7 * smooth(0.25, 0.7, barAt(x, z).k);                      // the bars are clean sand
+  m -= 0.3 * (ch ? ch.weight : 0);                                // the creeks: same sediment as the flat (no dark lines)
   m -= 0.6 * smooth(0.2, 0.6, berm(x, z).k);                       // and so is the berm
   m += 0.09 * fbm(x / 9 + 13, z / 9 - 41, 2);                     // ragged edges
   m += 0.32 * mudZone(x, z);                                       // the sheltered mud flat
@@ -444,8 +387,7 @@ function substrate(x, z, h, m) {
   // the levee is built of stone; its drowned tips too
   const lv = leveeAt(x, z);
   if (lv.m > 0.5 && lv.d < LV.crest_half_m + (lv.h + 2.6) / LV.slope - 1.0) return idx.rock;
-  const ch = channel(x, z);
-  if (ch && ch.weight > 0.5 && ch.depth > 0.07) return idx.channel;
+  // (the creeks are shallow runnels of the same mud and muddy sand, not a substrate of their own)
   // shell grit and gravel along the strandline of the berm
   const n2 = fbm(x / 12 + 50, z / 12 - 20, 3);
   if (h > 1.15 && n2 > 0.45) return idx.gravel;

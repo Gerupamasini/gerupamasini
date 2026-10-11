@@ -32,10 +32,40 @@ describe('東なぎさ (kasai_west)', () => {
     for (const s of [0, levee.length]) { const p = levee.at(s); expect(heightAt(p.x, p.z)).toBeLessThan(0.5); }
   });
 
-  it('keeps the bay outside deep and starts the player on a dry bar', () => {
+  it('keeps the bay outside deep and starts the player on the dry berm', () => {
     expect(heightAt(-155, 0)).toBeLessThan(-1.8);
     expect(heightAt(0, -155)).toBeLessThan(-1.8);
     expect(heightAt(map.spawnStart.x, map.spawnStart.z)).toBeGreaterThan(0.9);
+  });
+
+  it('holds many tide pools on the flat when the tide is out', () => {
+    // priority flood from the map's edge: a cell is in a pool where the lowest way out stands above it
+    const H = new Float32Array(N * N);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) H[j * N + i] = heightAt(-half + i * cell, -half + j * cell);
+    const fill = new Float32Array(N * N).fill(NaN);
+    const heap: [number, number][] = [];
+    const push = (v: number, k: number) => { heap.push([v, k]); let c = heap.length - 1; while (c > 0) { const p = (c - 1) >> 1; if (heap[p][0] <= heap[c][0]) break; [heap[p], heap[c]] = [heap[c], heap[p]]; c = p; } };
+    const pop = () => { const top = heap[0], last = heap.pop()!; if (heap.length) { heap[0] = last; let c = 0; for (;;) { const l = 2 * c + 1, r = l + 1; let m = c; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === c) break; [heap[m], heap[c]] = [heap[c], heap[m]]; c = m; } } return top; };
+    for (let k = 0; k < N * N; k++) { const i = k % N, j = (k / N) | 0; if (i === 0 || j === 0 || i === N - 1 || j === N - 1) { fill[k] = H[k]; push(H[k], k); } }
+    while (heap.length) {
+      const [v, k] = pop(); const i = k % N, j = (k / N) | 0;
+      for (const [a, b] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+        if (a < 0 || b < 0 || a >= N || b >= N) continue;
+        const q = b * N + a;
+        if (Number.isNaN(fill[q])) { fill[q] = Math.max(H[q], v); push(fill[q], q); }
+      }
+    }
+    // pools above a low tide (−0.7 m), counted as separate patches
+    const pooled = (k: number) => fill[k] > -0.69 && fill[k] > H[k] + 0.02;
+    const seen = new Uint8Array(N * N);
+    let pools = 0;
+    for (let k = 0; k < N * N; k++) {
+      if (seen[k] || !pooled(k)) continue;
+      let size = 0; const stack = [k]; seen[k] = 1;
+      while (stack.length) { const c = stack.pop()!; size++; const i = c % N, j = (c / N) | 0; for (const [a, b] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) { if (a < 0 || b < 0 || a >= N || b >= N) continue; const q = b * N + a; if (!seen[q] && pooled(q)) { seen[q] = 1; stack.push(q); } } }
+      if (size * cell * cell > 4) pools++;
+    }
+    expect(pools).toBeGreaterThan(60);
   });
 });
 

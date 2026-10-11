@@ -243,7 +243,7 @@ export interface Driver {
   "size_m": 320, "resolution": 577,
   "height": { "file": "kasai_west/height.png", "min_tp_m": -3.5, "max_tp_m": 6.0 },
   "substrate": { "file": "kasai_west/substrate.png", "palette": ["sand", "muddy_sand", "mud", "gravel", "channel", "rock"] },
-  "spawnStart": { "x": -55, "z": 78, "heading": 0 },
+  "spawnStart": { "x": -117, "z": -20, "heading": 270 },
   "bounds": { "walkable": [[-155, -155], [155, 155]], "noEntry": [] },
   "props": [],
   "levee": { "path": [[-142, 112], [-136, 40], "…", [100, 146]], "crest_tp_m": 2.8, "crest_half_m": 3.0, "slope": 0.5, "tip_m": 28 },

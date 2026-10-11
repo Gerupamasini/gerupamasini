@@ -29,9 +29,9 @@
     ]
   },
   "spawnStart": {
-    "x": -55,
-    "z": 78,
-    "heading": 0
+    "x": -117,
+    "z": -20,
+    "heading": 270
   },
   "bounds": {
     "walkable": [
