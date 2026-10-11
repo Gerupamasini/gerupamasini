@@ -1,7 +1,7 @@
 import { Fragment } from 'preact';
 import { useState } from 'preact/hooks';
 import type { App } from '../../app/App';
-import { CATEGORY_LABELS, EQUIPMENT_CATEGORIES, EQUIPMENT_MAX, categoryLimit, equipmentItem, itemForCategory, itemsForCategory, ownedQuantity, usedQuantity, type EquipmentCategory, type Vec3 } from '../../aquarium';
+import { CATEGORY_LABELS, EQUIPMENT_CATEGORIES, EQUIPMENT_MAX, TANK_SIZES, categoryLimit, equipmentItem, itemForCategory, itemsForCategory, ownedQuantity, tankSizeItemId, type TankSize, type EquipmentCategory, type Vec3 } from '../../aquarium';
 import { ui } from '../store';
 import { EquipmentSwatch } from '../common/EquipmentSwatch';
 
@@ -47,11 +47,12 @@ function EquipmentDetail({ app, selected }: { app: App; selected: string }) {
   const fixed = category === 'tank' || category === 'stand';
   const current = fixed ? itemForCategory(category === 'tank' ? layout.tankItemId : layout.standItemId, category) : record ? itemForCategory(record.itemId, category) : undefined;
   const [previewId, setPreviewId] = useState(equipmentItem(ui.equipmentPreview.value ?? undefined)?.category === category ? ui.equipmentPreview.value! : current?.id ?? `${category}-initial`);
+  const [tankSize, setTankSize] = useState<TankSize>(equipmentItem(previewId)?.size ?? app.currentRoomTank?.size ?? 60);
   const [tab, setTab] = useState<'position' | 'design'>(record ? 'position' : 'design');
   const preview = itemForCategory(previewId, category), collection = app.equipmentCollection.value;
   const quantity = ownedQuantity(collection, preview.id), owns = quantity > 0, replacing = fixed ? category : record?.id;
-  const available = usedQuantity(layout, preview.id, replacing) < quantity, siblings = layout.devices.filter((d) => d.kind === category);
-  const canAdd = !fixed && siblings.length < categoryLimit(category) && layout.devices.length < EQUIPMENT_MAX && usedQuantity(layout, preview.id) < quantity;
+  const available = app.usedEquipmentQuantity(preview.id, replacing) < quantity, siblings = layout.devices.filter((d) => d.kind === category);
+  const canAdd = !fixed && siblings.length < categoryLimit(category) && layout.devices.length < EQUIPMENT_MAX && app.usedEquipmentQuantity(preview.id) < quantity;
   const detail = <div class="equipment-item-detail"><EquipmentSwatch style={preview.style} category={category} large /><div><span class={`equipment-rarity rarity-${preview.rarity}`}>{preview.rarity === 'initial' ? '初期アイテム' : preview.rarity}</span><h3>{preview.name}</h3><p class="small dim">{preview.description}</p><p class="small">{preview.rarity === 'initial' ? 'いつでも使用できます' : owns ? `所持数 ${quantity}個` : 'ガチャで獲得できます'}</p></div></div>;
   return <Fragment>
     <div class="equipment-detail-head"><button class="btn equipment-back" onClick={() => { ui.equipmentSelected.value = null; }}>‹ 設備一覧</button><h4>{CATEGORY_LABELS[category]}{app.input.touchDevice && <small>現在：{current?.name ?? '未設置'}</small>}</h4></div>
@@ -67,7 +68,8 @@ function EquipmentDetail({ app, selected }: { app: App; selected: string }) {
     </div></Fragment>}
     {(!app.input.touchDevice || tab === 'design') && <Fragment>
     {!app.input.touchDevice && detail}
-    <div class="equipment-choices" aria-label="設備のアイテム候補">{itemsForCategory(category).map((item) => {
+    {category === 'tank' && <label class="equipment-add">水槽のサイズ<select aria-label="水槽のサイズ" disabled={app.roomBusy.value} value={tankSize} onChange={e => { const size = Number(e.currentTarget.value) as TankSize; setTankSize(size); const id = tankSizeItemId('tank', size); setPreviewId(id); ui.equipmentPreview.value = id; }}>{TANK_SIZES.map(size => <option key={size} value={size}>{size}cm</option>)}</select></label>}
+    <div class="equipment-choices" aria-label="設備のアイテム候補">{itemsForCategory(category, category === 'tank' ? tankSize : category === 'stand' ? app.currentRoomTank?.size : undefined).map((item) => {
       const n = ownedQuantity(collection, item.id), active = item.id === preview.id;
       return <button key={item.id} class={`btn equipment-choice ${active ? 'on' : ''} ${n ? '' : 'locked'}`} aria-pressed={active} onClick={() => { setPreviewId(item.id); ui.equipmentPreview.value = item.id; }}><EquipmentSwatch style={item.style} category={category} /><span>{item.name}<small>{item.rarity === 'initial' ? '初期' : n ? `所持 ${n}個` : '未所持'}</small></span></button>;
     })}</div>

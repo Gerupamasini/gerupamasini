@@ -4,14 +4,14 @@ import { AquariumEquipment, CATEGORY_LABELS, EQUIPMENT_CATEGORIES, EQUIPMENT_ITE
 import { emptySave, SaveStore } from '../../src/core/Save';
 
 describe('aquarium collection and gacha', () => {
-  it('offers three designs per category and a complete, normalized reward pool', () => {
+  it('offers three designs per equipment and tank size, with a normalized reward pool', () => {
     expect(new Set(EQUIPMENT_ITEMS.map((i) => i.id)).size).toBe(EQUIPMENT_ITEMS.length);
     for (const category of EQUIPMENT_CATEGORIES) {
       expect(CATEGORY_LABELS[category]).toBeTruthy();
-      expect(EQUIPMENT_ITEMS.filter((i) => i.category === category)).toHaveLength(3);
+      expect(EQUIPMENT_ITEMS.filter((i) => i.category === category)).toHaveLength(category === 'tank' || category === 'stand' ? 12 : 3);
       expect(ownedQuantity(emptyEquipmentCollection(), `${category}-initial`)).toBe(Infinity);
     }
-    expect(GACHA_POOL).toHaveLength(36);
+    expect(GACHA_POOL).toHaveLength(48);
     expect(GACHA_POOL.reduce((n, i) => n + gachaProbability(i.id), 0)).toBeCloseTo(1);
     expect(GACHA_POOL.filter((i) => i.rarity === 'R').reduce((n, i) => n + gachaProbability(i.id), 0)).toBeCloseTo(0.2);
     expect(categoryLimit('stand')).toBe(1); expect(categoryLimit('airStone')).toBeGreaterThan(1);
