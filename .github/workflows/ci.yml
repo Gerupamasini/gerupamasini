@@ -16,8 +16,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - name: UE5 port — C++ tide core against the TypeScript fixtures
-        run: npm run unreal:test-tide
       - run: npm run build
       - run: npx playwright-core install --with-deps chromium
       - name: Save and quality browser regressions

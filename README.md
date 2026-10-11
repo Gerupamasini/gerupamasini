@@ -37,12 +37,12 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガード、`?mode=naked` で殻から出した体（`&stage=dark` で写真と同じ黒い撮影台）、`?mode=retract` で殻に閉じこもる様子を見られます。
 
 ## 文書
-- [Steam 版（UE5）](unreal/README.md) UE5 プロジェクト、潮汐の C++ 移植とゴールデンテスト（`npm run unreal:test-tide`）、データ同期（`npm run unreal:sync-data`）
+- Steam 版（UE5）は別のリポジトリ [Gerupamasini/UE5HigataZukan](https://github.com/Gerupamasini/UE5HigataZukan) で開発する。Web 版の開発はいったん止めている
 - [ヤエヤマヒルギ](docs/models/yaeyama-hirugi/README.md) 成木5樹形・幼木3サイズ、支柱根の衝突判定、潮汐の湿潤材質、群生の共有Geometry／LOD。ビューアは `reference/yaeyama-hirugi-viewer/`、画像・ブラウザー検証は `npm run render:yaeyama-hirugi`。
 - `docs/models/aquarium/` 水槽基本設備20種、共通材質、LOD、設備コレクション・専用チケットガチャ・自動配線（自宅 → 水槽 → 設備 / ガチャ）
 - [スマホ・タブレットの操作と画面写真](docs/mobile/README.md) ホーム・水槽編集・ガチャ・干潟の移動／採集／観察、縦横画面の確認手順
 - `docs/spec/` 仕様書 4 本（ゲームと MVP、アーキテクチャとデータ、生物 AI とモデル、潮位・セーブ・進行）
-- `docs/planning/` 設計質問と回答、マハゼモデル監査、[Steam・スマホ版の障害の洗い出し](docs/planning/09_steam_readiness_audit.md)、[エンジン選定の判断記録](docs/planning/10_engine_decision.md)、[UE5 移植計画](docs/planning/11_ue5_port_plan.md)
+- `docs/planning/` 設計質問と回答、マハゼモデル監査、[Steam・スマホ版の障害の洗い出し](docs/planning/09_steam_readiness_audit.md)、[エンジン選定の判断記録](docs/planning/10_engine_decision.md)、[UE5 移植計画](https://github.com/Gerupamasini/UE5HigataZukan/blob/main/docs/11_ue5_port_plan.md)
 - `docs/TESTING.md` 身内テスト手順
 - `docs/models/` マハゼモデルの説明、`docs/models/nets/` タモ網 6 種の調査・設計・使い方（ゲームでは `NetView` と `ToolShelf` がこの GLB を使う）
 - `docs/models/oyster/` マガキの調査・設計（個体差の seed、殻の層、LOD、群生と牡蠣礁の大量配置、行動、ゲームへの統合）

@@ -7,4 +7,3 @@ dist/
 .vite/
 tests/smoke/out/
 *.log
-build/

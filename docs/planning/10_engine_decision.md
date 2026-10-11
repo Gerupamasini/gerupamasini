@@ -2,9 +2,9 @@
 
 - 状態: **決定（2026-10-11）: Steam 版は UE5（選択肢 C）に移植する。** スマホ版は今の Three.js 版のまま（当面は手を入れない）。Web 版の開発はいったん止める
 - 日付: 2026-10-11
-- 関連: [09_steam_readiness_audit.md](09_steam_readiness_audit.md)（Steam・スマホ版の障害の一覧）、[11_ue5_port_plan.md](11_ue5_port_plan.md)（移植計画）
+- 関連: [09_steam_readiness_audit.md](09_steam_readiness_audit.md)（Steam・スマホ版の障害の一覧）、[移植計画](https://github.com/Gerupamasini/UE5HigataZukan/blob/main/docs/11_ue5_port_plan.md)（Steam 版のリポジトリ [Gerupamasini/UE5HigataZukan](https://github.com/Gerupamasini/UE5HigataZukan)）
 
-> 決定の経緯: §5 の案では B と C を試作で比べてから決めるつもりだった。比較を待たず、Steam 版は C（UE5）に決めた。§5 の縦切り試作は、UE5 の段階 1 として、同じ場面と同じ合格の目安で行う（11 §3）。同日、スマホ版は今の Three.js 版のまま当面は手を入れないこと、Web 版の開発をいったん止めること、海外のプレイヤーも日本時間で遊ぶことも決めた（11 §7）。
+> 決定の経緯: §5 の案では B と C を試作で比べてから決めるつもりだった。比較を待たず、Steam 版は C（UE5）に決めた。§5 の縦切り試作は、UE5 の段階 1 として、同じ場面と同じ合格の目安で行う（移植計画 §3）。同日、スマホ版は今の Three.js 版のまま当面は手を入れないこと、Web 版の開発をいったん止めること、海外のプレイヤーも日本時間で遊ぶこと、セーブは Steam 版と共有しないこと、Steam 版を別のリポジトリ（Gerupamasini/UE5HigataZukan）に分けることも決めた（移植計画 §7）。
 
 ## 1. 背景
 

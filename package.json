@@ -37,9 +37,7 @@
     "render:digging": "node tools/models/nets/render.mjs --shots tools/models/digging/shots.mjs --out docs/models/digging",
     "model:optics": "node tools/models/digging/build.mjs --set optics",
     "render:optics": "node tools/models/nets/render.mjs --shots tools/models/optics/shots.mjs --out docs/models/optics",
-    "terrain:manko": "node tools/terrain/bake-manko.mjs",
-    "unreal:sync-data": "node tools/unreal/sync-data.mjs",
-    "unreal:test-tide": "cmake -S unreal/tests/tide -B build/unreal-tide && cmake --build build/unreal-tide && ctest --test-dir build/unreal-tide --output-on-failure"
+    "terrain:manko": "node tools/terrain/bake-manko.mjs"
   },
   "dependencies": {
     "@preact/signals": "^2.11.3",
