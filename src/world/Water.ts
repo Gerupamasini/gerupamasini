@@ -332,13 +332,13 @@ export class WaterPass {
                 vec4 sf = surfAt(S.xz, Ds, uTime, bs);
                 waveN = gSurfN;
                 // (the surface's gradient: the ripples' plus the surf's; the normal leans against it. Near the viewer the
-                // surf's is measured on the surface itself, so wandering crests and the chop over them are lit as they
-                // lie; further off, the main waves' slope along the seaward direction and the chop's)
+                // surf's is measured on the surface itself, so wandering crests are lit as they lie; further off, the
+                // waves' slope along the seaward direction)
                 vec2 surfGrad;
                 if (uSurfSteps > 0.5 && t < 35.0) {
                   float e0 = Ds > 1.4 ? 0.0 : sf.x * (1.0 - smoothstep(0.8, 1.4, Ds));   // (= surfEta here)
                   surfGrad = vec2(surfEta(S.xz + vec2(0.08, 0.0), level) - e0, surfEta(S.xz + vec2(0.0, 0.08), level) - e0) / 0.08;
-                } else surfGrad = (-gg / bs * sf.z + gSurfCrossGrad) * (1.0 - smoothstep(40.0, 120.0, t));
+                } else surfGrad = -gg / bs * sf.z * (1.0 - smoothstep(40.0, 120.0, t));
                 vec2 grad = -N.xz / N.y + surfGrad;
                 N = normalize(vec3(-grad.x, 1.0, -grad.y));
                 foam = sf.y;

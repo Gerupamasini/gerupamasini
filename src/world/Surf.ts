@@ -10,22 +10,20 @@ export interface SurfParams {
   slope: number;
   /** the way out to sea (unit vector in world x, z) */
   seaward: readonly [number, number];
-  /** the cross sea — short chop and ship wakes from other quarters — against the main waves' height (0: none) */
-  cross: number;
 }
 
 /** The surf's uniforms, one set shared by the water and the sand. */
 export interface SurfUniforms {
   /** x: height (m), y: period (s), z: slope, w: 1 on / 0 off */
   uSurf: IUniform<Vector4>;
-  /** xy: seaward direction (world x, z), w: the cross sea's share */
+  /** xy: seaward direction (world x, z) */
   uSurfDir: IUniform<Vector4>;
 }
 
 export function surfUniforms(p: SurfParams | null): SurfUniforms {
   return {
     uSurf: { value: p ? new Vector4(p.height, p.period, p.slope, 1) : new Vector4(0.1, 4, 0.05, 0) },
-    uSurfDir: { value: p ? new Vector4(p.seaward[0], p.seaward[1], 0, p.cross) : new Vector4(1, 0, 0, 0) },
+    uSurfDir: { value: p ? new Vector4(p.seaward[0], p.seaward[1], 0, 0) : new Vector4(1, 0, 0, 0) },
   };
 }
 
@@ -38,7 +36,8 @@ export function surfUniforms(p: SurfParams | null): SurfUniforms {
  * height (in sets, uneven along the crest, so stretches of a crest fade and only parts of it break), and the crests
  * wander: long bends that drift from wave to wave, bends of a crest's length and small kinks. Their alongshore phase
  * gradient is the same at every depth, so a crest that comes in at an angle turns toward the shore as it slows
- * (refraction). A cross sea of short chop runs obliquely over them offshore and dies in the surf. Shoaling, it turns cnoidal (peaked crest, flat trough) and leans forward
+ * (refraction). Only these waves: no chop from other quarters runs over them (it read as a fine lattice drifting
+ * over the whole sea and blurred the view of the bed). Shoaling, a wave turns cnoidal (peaked crest, flat trough) and leans forward
  * until the front stands steep and its thin top lets the light through; it goes over where the depth is about its
  * height (breaker index ~1.05 for this slope and period), its top turning white, runs in as a small bore with a
  * foaming roller that shrinks with the depth, and ends as a thin swash sheet that climbs the beach, stops and drains
@@ -81,29 +80,6 @@ float surfHeightAt(float n, vec2 sy, float broad) {
 }
 float surfBroad(vec2 sy) { return 0.75 + 0.5 * surfNoise(vec2(sy.y * 0.06, sy.x * 0.03) + 3.1); }
 float surfHeight(float n, vec2 p) { vec2 sy = surfFrame(p); return surfHeightAt(n, sy, surfBroad(sy)); }
-// the cross sea's slope where surfAt last looked (world x, z), for the normals far off
-vec2 gSurfCrossGrad = vec2(0.0);
-// The cross sea: short waves from other quarters (wind chop, the wakes of ships in the channel) running obliquely over
-// the main waves in patches, dying out in the surf. x: height (m), yz: its slope (world x, z).
-vec3 surfCross(vec2 p, float t, float D) {
-  float fade = smoothstep(0.12, 0.6, D) * uSurfDir.w;
-  if (fade <= 0.0) return vec3(0.0);
-  vec2 sea = uSurfDir.xy, along = vec2(-sea.y, sea.x);
-  vec3 r = vec3(0.0);
-  for (int i = 0; i < 2; i++) {
-    float fi = float(i);
-    float a = i == 0 ? 0.87 : -0.61, lam = i == 0 ? 3.1 : 1.8;
-    vec2 dir = -sea * cos(a) + along * sin(a);
-    float k = 6.2831853 / lam, w = sqrt(9.81 * k * tanh(k * max(D, 0.05)));
-    // each train in its own patches, its crests wobbling (so the two never set into a lattice)
-    float grp = smoothstep(0.3, 0.85, surfNoise(p * 0.12 + fi * 31.0 + t * vec2(0.05, -0.03)));
-    float A = uSurf.x * (i == 0 ? 0.22 : 0.12) * 1.5 * grp * fade;
-    float ph = k * dot(p, dir) - w * t + fi * 2.5 + 2.6 * surfNoise(p * 0.11 + fi * 13.0);
-    r.x += A * sin(ph);
-    r.yz += A * k * cos(ph) * dir;
-  }
-  return r;
-}
 // the swash front's height above the still water (m) at a point of the beach: it climbs fast, stops, drains back
 // slower and draws down a little below the still level before the next bore comes in. y: 1 while climbing.
 vec2 surfSwash(vec2 p, float t) {
@@ -136,7 +112,6 @@ float gSurfN = 0.0;
 // x: the surface relative to the still level (m); y: foam (0..1); z: the surface slope seaward (dη/ds); w: the lip —
 // the thin top of a steepening front, where the light comes through. For a point of depth D on a bed of slope 'slope'.
 vec4 surfAt(vec2 p, float D, float t, float slope) {
-  gSurfCrossGrad = vec2(0.0);
   if (uSurf.w <= 0.0) return vec4(0.0);
   float ph = surfPhase(p, D, t);
   float n = floor(ph), u = ph - n;
@@ -184,9 +159,6 @@ vec4 surfAt(vec2 p, float D, float t, float slope) {
     lip *= 1.0 - k;
   }
   vec4 r = vec4(eta, foam, deta * du, lip);
-  vec3 cross = surfCross(p, t, D);
-  r.x += cross.x;
-  gSurfCrossGrad = cross.yz;
   // the last of the bore becomes the swash: up the beach the surface is the swash sheet alone
   float sw = 1.0 - smoothstep(0.0, 0.6 * Db, D);
   if (sw > 0.0) {
