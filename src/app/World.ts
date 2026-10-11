@@ -129,6 +129,8 @@ export class World {
     terrain.shareMirror(water.uniforms);
     if (layout) water.setBody(...layout.water.colour, layout.water.turbidity, layout.water);
     const tide = station instanceof TideModel ? station : new TideModel(station);
+    // (a silt flat's crust: only where even the spring high water never reaches)
+    if (layout?.mudLook) terrain.setCrustLevel(tide.maxAmplitude() + 0.1);
     // the sky needs its own scene reference; create it after the scene exists
     mark('water');
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
