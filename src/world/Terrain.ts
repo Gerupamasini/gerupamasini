@@ -468,6 +468,7 @@ vec4 rippleDisloc(vec2 p) {
   return acc;
 }
 float gRock = 0.0;
+vec2 gRockO = vec2(0.0);
 float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
 // where the ripples are: patches of flat sand in between, crests fading in and out at the metre scale
 float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * smoothstep(0.15, 0.6, vnoise(p * 0.9 + 2.9)) * (0.6 + 0.4 * vnoise(p * 0.2 + 7.1)); }
@@ -491,19 +492,35 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   float ripple = cos(ripplePhase(rq)) * rippleAmp(rq) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit);
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 - ripple * 0.05;
   diffuseColor.rgb *= detail;
-  // stone-built levees: a running bond of dressed blocks (~55 × 32 cm), dark joints, each block its own grey-brown
+  // the stone levee (捨石): a mound of quarried boulders (~0.6–1 m) with dark gaps between, each its own grey-buff,
+  // zoned by the tide the way the photos show it — pale and dry above the spring high water, an olive film of algae
+  // through the upper intertidal, dark and crusted with old oyster shell below mean sea level
   float rock = smoothstep(4.5, 5.0, vSubstrate);
   if (rock > 0.001) {
-    vec2 bp = vec2(vWorldPos.z / 0.55, vWorldPos.y / 0.32);
-    bp.x += step(0.5, fract(bp.y * 0.5)) * 0.5;
-    vec2 bc = floor(bp), bf = fract(bp);
-    float shade = 0.78 + 0.44 * hash21(bc + 11.0);
-    vec2 edge = min(bf, 1.0 - bf);
-    float joint = 1.0 - smoothstep(0.03, 0.09, min(edge.x * 0.55, edge.y * 0.32) / 0.32);
-    vec3 stone = vec3(0.34, 0.33, 0.31) * shade * (0.9 + 0.2 * vnoise(vWorldPos.xz * 9.0 + bc));
-    stone = mix(stone, vec3(0.12, 0.115, 0.1), joint * 0.85);
+    vec2 rp = vWorldPos.xz / 1.05 + vec2(0.0, vWorldPos.y * 0.8);
+    vec2 ri = floor(rp), rf = fract(rp);
+    float f1 = 8.0, f2 = 8.0; vec2 rid = vec2(0.0);
+    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+      vec2 g = vec2(float(x), float(y));
+      vec2 o = g + 0.15 + 0.7 * hash22(ri + g + 3.0) - rf;
+      float d = dot(o, o);
+      if (d < f1) { f2 = f1; f1 = d; rid = ri + g; gRockO = o; } else if (d < f2) f2 = d;
+    }
+    // the gaps between boulders: uneven, some stones jammed tight, some with deep shadowed voids
+    float gw = mix(0.04, 0.3, hash21(rid + 29.0) * vnoise(vWorldPos.xz * 1.7));
+    float gap = 1.0 - smoothstep(0.03, 0.03 + gw, sqrt(f2) - sqrt(f1));
+    // and each boulder lit as a dome: brighter on its crown, darker toward its edges
+    float crown = 1.0 - smoothstep(0.1, 0.75, sqrt(f1));
+    float shade = (0.62 + 0.55 * hash21(rid + 11.0)) * (0.8 + 0.3 * crown);
+    vec3 buff = vec3(0.43, 0.41, 0.37), grey = vec3(0.33, 0.325, 0.31), olive = vec3(0.24, 0.27, 0.15), crust = vec3(0.19, 0.18, 0.165);
+    vec3 stone = mix(grey, buff, smoothstep(1.1, 1.7, vWorldPos.y));
+    float alg = smoothstep(0.15, 0.45, vWorldPos.y) * (1.0 - smoothstep(0.9, 1.3, vWorldPos.y)) * smoothstep(0.3, 0.7, vnoise(vWorldPos.xz * 0.6 + rid));
+    stone = mix(stone, olive, alg * 0.75);
+    stone = mix(stone, crust, 1.0 - smoothstep(0.0, 0.4, vWorldPos.y));
+    stone *= shade * (0.9 + 0.2 * vnoise(vWorldPos.xz * 9.0 + rid));
+    stone = mix(stone, vec3(0.07, 0.065, 0.06), gap * 0.9);
     diffuseColor.rgb = mix(diffuseColor.rgb, stone, rock);
-    gRock = rock * (1.0 - joint);
+    gRock = rock * (1.0 - gap);
   }
   // ---- up close: the grains themselves (after MahazeViewer's sediment). Medium quartz grains and coarser shell
   // bits sit on a silty base; each is a disc with a dark rim and a dome in the normal. Faded by pixel footprint.
@@ -570,13 +587,8 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand));
     gNrmAdd += nd.yz * bump + nd2.yz * bump2;
   }
-  // the stone blocks of the levees: each block tilts its own way a little
-  if (gRock > 0.0) {
-    vec2 bp = vec2(vWorldPos.z / 0.55, vWorldPos.y / 0.32);
-    bp.x += step(0.5, fract(bp.y * 0.5)) * 0.5;
-    vec2 bc = floor(bp);
-    gNrmAdd += (vec2(hash21(bc + 3.0), hash21(bc + 5.0)) - 0.5) * 0.3 * gRock;
-  }
+  // the levee's boulders: each one domed, so the mound reads as stones and not as a painted slope
+  if (gRock > 0.0) gNrmAdd += -gRockO * 2.0 * gRock;
   // a stingray's pit: the ray blew the oxidised skin off, so the bowl shows the darker, wetter sand beneath,
   // strewn with the chalky grit of the clams it crushed
   if (vPit > 0.001) {

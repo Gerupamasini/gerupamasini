@@ -3,7 +3,7 @@ import { buildHashirimizuSkyline, type ShipMark } from './maps/hashirimizu/skyli
 import { buildHashirimizuLand, type Land } from './maps/hashirimizu/land';
 
 /**
- * The far scenery around the 西のなぎさ, as flat silhouettes standing on the horizon: 富士山 to the west-south-west,
+ * The far scenery around the 葛西 flat (東なぎさ), as flat silhouettes standing on the horizon: 富士山 to the west-south-west,
  * 東京スカイツリー and 東京タワー to the north-west, the park's big wheel to the north-east, the Gate Bridge across the
  * bay to the south-west, the city and the park's trees as low bands. Everything sits on a ring ~1.9 km out (inside
  * the sky dome and the camera's far plane, far beyond the flat), follows the camera, ignores the fog and takes the
@@ -36,7 +36,7 @@ export class Skyline {
   readonly land: Land | null = null;
   private readonly tmp = new Color();
 
-  /** `kind`: the map's layout (its own horizon); absent: the 西のなぎさ */
+  /** `kind`: the map's layout (its own horizon); absent: the 葛西 flat */
   constructor(kind?: string) {
     this.group.name = 'skyline';
     if (kind === 'manko') return;

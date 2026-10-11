@@ -1,14 +1,129 @@
 {
   "id": "kasai_west",
-  "names": { "ja": "西のなぎさ", "en": "West Nagisa" },
+  "names": {
+    "ja": "東なぎさ",
+    "en": "East Nagisa"
+  },
   "station": "jma_tokyo",
-  "origin": { "lat": 35.636, "lon": 139.858 },
+  "origin": {
+    "lat": 35.636,
+    "lon": 139.858
+  },
   "size_m": 320,
   "seed": 20261004,
   "resolution": 577,
-  "height": { "file": "kasai_west/height.png", "min_tp_m": -3.5, "max_tp_m": 6.0 },
-  "substrate": { "file": "kasai_west/substrate.png", "palette": ["sand", "muddy_sand", "mud", "gravel", "channel", "rock"] },
-  "spawnStart": { "x": 10, "z": -120, "heading": 180 },
-  "bounds": { "walkable": [[-155, -155], [155, 155]], "noEntry": [] },
-  "props": []
+  "height": {
+    "file": "kasai_west/height.png",
+    "min_tp_m": -3.5,
+    "max_tp_m": 6.0
+  },
+  "substrate": {
+    "file": "kasai_west/substrate.png",
+    "palette": [
+      "sand",
+      "muddy_sand",
+      "mud",
+      "gravel",
+      "channel",
+      "rock"
+    ]
+  },
+  "spawnStart": {
+    "x": -55,
+    "z": 78,
+    "heading": 0
+  },
+  "bounds": {
+    "walkable": [
+      [
+        -155,
+        -155
+      ],
+      [
+        155,
+        155
+      ]
+    ],
+    "noEntry": []
+  },
+  "props": [],
+  "levee": {
+    "path": [
+      [
+        -142,
+        112
+      ],
+      [
+        -136,
+        40
+      ],
+      [
+        -128,
+        -40
+      ],
+      [
+        -116,
+        -92
+      ],
+      [
+        -90,
+        -124
+      ],
+      [
+        -45,
+        -140
+      ],
+      [
+        10,
+        -143
+      ],
+      [
+        62,
+        -136
+      ],
+      [
+        104,
+        -114
+      ],
+      [
+        130,
+        -74
+      ],
+      [
+        140,
+        -20
+      ],
+      [
+        141,
+        40
+      ],
+      [
+        134,
+        92
+      ],
+      [
+        118,
+        128
+      ],
+      [
+        100,
+        146
+      ]
+    ],
+    "crest_tp_m": 2.8,
+    "crest_half_m": 3.0,
+    "slope": 0.5,
+    "tip_m": 28
+  },
+  "stakes": {
+    "from": [
+      -104,
+      126
+    ],
+    "to": [
+      -72,
+      136
+    ],
+    "count": 14
+  }
 }

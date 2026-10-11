@@ -20,6 +20,17 @@ export const MapSchema = z.object({
   props: z.array(z.object({ type: z.string(), x: z.number(), z: z.number(), rot: z.number().default(0), scale: z.number().default(1) })).default([]),
   /** the map's own shore features (src/world/maps/<layout>); absent: the 葛西 features */
   layout: z.string().optional(),
+  /**
+   * A stone levee's centre line (x, z in m, from one drowned tip round to the other), its crest height (T.P. m), crest
+   * half-width, face slope (rise per run) and how far from each tip the crest sinks under: the terrain bake builds
+   * it and the riprap and the reeds follow it.
+   */
+  levee: z.object({
+    path: z.array(z.tuple([z.number(), z.number()])).min(2),
+    crest_tp_m: z.number(), crest_half_m: z.number().positive(), slope: z.number().positive(), tip_m: z.number().nonnegative(),
+  }).optional(),
+  /** a row of old bamboo stakes (竹杭) standing in the shallows, from one end to the other */
+  stakes: z.object({ from: z.tuple([z.number(), z.number()]), to: z.tuple([z.number(), z.number()]), count: z.number().int().positive().max(200) }).optional(),
   /** Opt-in Rhizophora stylosa forest; heights are in the map's terrain datum. Existing temperate shores are unchanged. */
   mangroves: z.object({
     seed: z.number().int(),
