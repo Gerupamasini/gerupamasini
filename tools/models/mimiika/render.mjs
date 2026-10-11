@@ -17,10 +17,38 @@ const W = Number(arg('--width', 1280)), H = Number(arg('--height', 760)), DPR = 
 fs.mkdirSync(outDir, { recursive: true });
 
 const DEFAULT_SHOTS = [
-  { name: 'side_lod0', set: { scene: 'side', lod: 0 } },
-  { name: 'top_lod0', set: { scene: 'top', lod: 0 } },
-  { name: 'front_lod0', set: { scene: 'front', lod: 0 } },
-  { name: 'oblique_lod0', set: { scene: 'oblique', lod: 0 } },
+  // the model: side, back, front; the three tiers from above
+  { name: 'side_lod0', set: { scene: 'tank', lod: 0, seed: 2, cam: [0.004, 0.012, 0.1] } },
+  { name: 'top_lod0', set: { scene: 'top', lod: 0, seed: 2 } },
+  { name: 'top_lod1', set: { scene: 'top', lod: 1, seed: 2 } },
+  { name: 'top_lod2', set: { scene: 'top', lod: 2, seed: 2 } },
+  { name: 'front_lod0', set: { scene: 'front', lod: 0, seed: 2 } },
+  // the chromatophores: pale and glassy, the resting mottle, fully spread
+  { name: 'skin_pale', set: { scene: 'tank', lod: 0, seed: 2, chroma: 'pale', cam: [0.035, 0.022, 0.055] } },
+  { name: 'skin_mid', set: { chroma: null, cam: [0.035, 0.022, 0.055] } },
+  { name: 'skin_dark', set: { chroma: 'dark', cam: [0.035, 0.022, 0.055] } },
+  { name: 'skin_close', set: { chroma: null, cam: [-0.005, 0.03, 0.035], target: [-0.006, 0.008, 0.0] } },
+  { name: 'eye_close', set: { cam: [0.022, 0.016, 0.03], target: [0.014, 0.007, 0.004] } },
+  // burrowing: the jets blow the pit, the dorsal arms throw sand over the head, buried to the eyes
+  { name: 'burrow_blow', set: { scene: 'tank', seed: 2 }, call: { fn: 'mode', args: ['BURROW'] }, advance: 1.6, follow: { offset: [0.045, 0.025, 0.05] } },
+  { name: 'burrow_sweep', call: { fn: 'until', args: ['sweep', 10, 0, 0.62] }, follow: { offset: [0.045, 0.02, 0.05] } },
+  { name: 'burrow_buried', call: { fn: 'until', args: ['buried', 10, 0, 2] }, follow: { offset: [0.05, 0.03, 0.045] } },
+  // hovering on the fins; hunting: the strike and the catch
+  { name: 'hover', set: { scene: 'tank', seed: 2 }, call: { fn: 'mode', args: ['HOVER'] }, advance: 3, follow: { offset: [0.0, 0.015, 0.09] } },
+  { name: 'hover_top', follow: { offset: [0.001, 0.09, 0.0001] } },
+  { name: 'hunt_watch', set: { scene: 'tank', seed: 3 }, call: { fn: 'mode', args: ['HUNT'] }, advance: 0.2, follow: { offset: [0.02, 0.03, 0.09] } },
+  { name: 'hunt_approach', call: { fn: 'until', args: ['approach', 6, 0, 0.8] }, follow: { offset: [0.06, 0.02, 0.06] } },
+  { name: 'hunt_strike', call: { fn: 'until', args: ['strike', 10, 0, 0.07] }, follow: { offset: [0.06, 0.02, 0.06] } },
+  { name: 'hunt_eat', call: { fn: 'until', args: ['eat', 3, 0, 0.6] }, follow: { offset: [0.06, 0.02, 0.06] } },
+  // escape: the flash and the ink, the jets mantle first
+  { name: 'escape_ink', set: { scene: 'tank', seed: 2 }, call: { fn: 'mode', args: ['ESCAPE'] }, advance: 0.2, follow: { offset: [0.03, 0.04, 0.13] } },
+  { name: 'escape_jet', advance: 0.25, follow: { offset: [0.03, 0.04, 0.16] } },
+  // the sandy shallow under 30 cm of water: by day buried, at night out on the fins under a diver's torch
+  { name: 'flat_day', set: { scene: 'flat' }, advance: 2 },
+  { name: 'flat_buried', follow: { i: 0, offset: [0.05, 0.04, 0.05] } },
+  { name: 'flat_night_hover', set: { scene: 'flat', night: true }, call: { fn: 'mode', args: ['HOVER', 0] }, advance: 4, follow: { i: 0, offset: [0.02, 0.03, 0.1] } },
+  { name: 'flat_night_hunt', call: { fn: 'mode', args: ['HUNT', 0] }, advance: 0.1, follow: { i: 0, offset: [0.05, 0.035, 0.08] } },
+  { name: 'flat_night_strike', call: { fn: 'until', args: ['strike', 10, 0, 0.07] }, follow: { i: 0, offset: [0.06, 0.03, 0.07] } },
 ];
 
 const shotsFile = arg('--shots', null);

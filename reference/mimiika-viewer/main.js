@@ -62,6 +62,7 @@ function poseStudio(dt = 0) {
   applyPose(sq.root, sq.bones, P);
   syncLevel(sq, lod, P.ten[0].ext > 0.12);
   MimiikaDriver.applyMaterials(sq, P);
+  sq.look.uniforms.uGroundY.value = FLOOR;
   if (chromaOverride) { sq.look.uniforms.uChroma.value.set(...chromaOverride.slice(0, 4)); sq.look.uniforms.uPale.value = chromaOverride[4] ?? 0; }
   for (const e of beh.fx) (e.kind === 'ink' ? studioInk : studioFx).emit(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha);
   beh.fx.length = 0;
@@ -380,6 +381,18 @@ window.__mm = {
     render();
   },
   mode(m, i) { command(m, i); },
+  /** simulated time until the behaviour (of squid i on the flat) reaches `phase` (or `max` seconds) */
+  until(phase, max = 20, i = 0, after = 0) {
+    const b = () => (mode === 'flat' ? squids[i]?.driver.behaviour : beh);
+    for (let k = 0; k < max * 30; k++) {
+      simT += 1 / 30;
+      tickAmimehagiMaterials(simT);
+      if (mode === 'flat') stepFlat(1 / 30); else poseStudio(1 / 30);
+      if (b()?.state.phase === phase) break;
+    }
+    for (let k = 0; k < after * 30; k++) { simT += 1 / 30; tickAmimehagiMaterials(simT); if (mode === 'flat') stepFlat(1 / 30); else poseStudio(1 / 30); }
+    render();
+  },
   follow(o) {
     const b = mode === 'flat' ? squids[o.i ?? 0]?.driver.behaviour : beh;
     if (!b) return;

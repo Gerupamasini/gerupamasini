@@ -42,6 +42,8 @@ export interface MmUniforms {
   uFinK: IUniform<number>;
   uPupil: IUniform<number>;
   uRelief: IUniform<number>;
+  /** the sand's height under the animal (world y): a buried animal's sand coat fades into it */
+  uGroundY: IUniform<number>;
 }
 
 // ------------------------------------------------------------------ shared GLSL
@@ -136,6 +138,7 @@ uniform float uSandCoat;
 uniform float uHeadCover;
 uniform vec3 uCover;
 uniform float uRelief;
+uniform float uGroundY;
 const vec3 mmEye = vec3(${f(EYE.x)}, ${f(EYE.y)}, ${f(EYE.z - Z_ROOT)});
 const vec3 mmEyeUp = vec3(-0.19083, 0.97969, -0.06156);
 const vec3 mmEyeFwd = vec3(-0.30700, 0.00000, 0.95171);
@@ -200,8 +203,9 @@ float mmRough = 0.5, mmCoat = 0.35, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   vec3 colR = mix(vec3(0.7, 0.24, 0.08), vec3(0.55, 0.14, 0.07), oR.y);
   vec3 colB = mix(vec3(0.2, 0.08, 0.05), vec3(0.08, 0.035, 0.03), oB.y);
 #else
-  float cY = clamp(eY * 0.55, 0.0, 1.0), cR = clamp(eR * eR * 0.6, 0.0, 1.0), cB = clamp(eB * eB * 0.7, 0.0, 1.0);
-  vec3 colY = vec3(1.0, 0.75, 0.3), colR = vec3(0.62, 0.19, 0.07), colB = vec3(0.13, 0.055, 0.04);
+  // (the mean of the organs: their cover, and the colour they give the skin seen from afar)
+  float cY = clamp(eY * 0.8, 0.0, 1.0), cR = clamp(eR * 1.0, 0.0, 0.9), cB = clamp(eB * 1.12, 0.0, 0.88);
+  vec3 colY = vec3(1.0, 0.75, 0.3), colR = vec3(0.6, 0.19, 0.08), colB = vec3(0.12, 0.05, 0.035);
 #endif
   alb = mix(alb, alb * colY, cY * 0.85);
   alb = mix(alb, colR, cR * 0.9);
@@ -260,27 +264,34 @@ float mmRough = 0.5, mmCoat = 0.35, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   mmRough = mix(0.46, 0.56, cB);
   // ---- sand: grains in the mucus of the back, and thrown over the head (not over the eyes)
   {
-    vec3 q = p / 0.34 + 51.0;
+    // grains: jittered points at two sizes over a fine noise (no lattice), a few pale quartz and dark grains
+    vec3 q = p / 0.3 + 51.0;
     vec3 id = floor(q), h = mmH3(id);
-    float grain = 1.0 - smoothstep(0.32, 0.46, length(q - id - 0.5 - (h - 0.5) * 0.3));
-    float lay = mmN(p * 0.6 + 9.0) * 0.35 + h.x * 0.65;
-    // (buried, the sides are under the sand as well: the coat reaches down them)
-    float back = mix(D, 1.0, 0.6 * uHeadCover) * (part < 0.5 ? 1.0 : part < 1.5 ? 0.85 : arm ? 0.35 : 0.0);
-    float head = D * (part < 1.5 ? smoothstep(-6.0, 1.0, zn) : arm ? 0.4 * (1.0 - vSkin.y) : 0.0) * smoothstep(1.05, 1.3, eyeD);
+    float gd = length(q - id - 0.5 - (h - 0.5) * 0.7);
+    float grain = 1.0 - smoothstep(0.22, 0.42, gd * (0.8 + 0.5 * h.z));
+    float lay = mmN(p * 0.6 + 9.0) * 0.45 + mmN(p * 2.7 + 3.0) * 0.25 + h.x * 0.3;
+    float back = mix(D, 1.0, 0.6 * uHeadCover) * (part < 0.5 ? 1.0 : part < 1.5 ? 0.85 : arm ? mix(0.35, 0.9, uHeadCover) : 0.0);
+    float head = D * (part < 1.5 ? smoothstep(-6.0, 1.0, zn) : arm ? 0.4 * (1.0 - vSkin.y) : 0.0) * smoothstep(1.0, 1.25, eyeE);
     float cover = max(back * uSandCoat, head * uHeadCover);
-    mmSand = smoothstep(lay - 0.06, lay + 0.06, cover * 1.15) * mix(grain, 1.0, smoothstep(0.55, 1.0, cover));
-    vec3 sand = uCover * (0.82 + 0.3 * h.y) * (0.9 + 0.2 * mmN(p * 2.0));
-    sand = mix(sand, sand * 1.3 + 0.02, step(0.92, h.z) * 0.6);
+    mmSand = smoothstep(lay - 0.08, lay + 0.08, cover * 1.15) * mix(0.5 + 0.5 * grain, 1.0, smoothstep(0.5, 0.95, cover));
+    float fineN = mmN(p * 4.3) * 0.6 + mmN(p * 9.1) * 0.4;
+    vec3 sand = uCover * (0.86 + 0.22 * fineN);
+    float odd = step(0.9, h.y) * grain * (1.0 - smoothstep(0.05, 0.2, aa));
+    sand = mix(sand, mix(sand * 0.55, sand * 1.35 + 0.02, step(0.5, h.z)), odd * 0.6);
     alb = mix(alb, sand, mmSand);
-    mmRough = mix(mmRough, 0.85, mmSand);
+    mmRough = mix(mmRough, 0.9, mmSand);
     mmCoat *= 1.0 - mmSand;
     mmIr *= 1.0 - mmSand;
-    mmHgt += 0.05 * mmSand * grain;
+    mmHgt += 0.035 * mmSand * (grain + fineN * 0.5);
   }
   diffuseColor.rgb = alb * uTint;
   // glassy tissue: where no pigment is spread the background shows through (most in the pale, hunting dress)
-  float clear = (0.12 + 0.5 * uPale) * (1.0 - mmPig) * (1.0 - mmSand) * (funnel ? 0.6 : 1.0) * (arm ? 1.0 + 0.6 * vSkin.y : 1.0);
-  diffuseColor.a = 1.0 - clamp(clear, 0.0, 0.7);
+  // a living bobtail is glassy: between the chromatophores the tissue lets most of the light through (more in the
+  // pale dress, at the arm tips and the mantle's thin rim); the viewing angle is added in SKIN_THIN
+  float clear = (0.42 + 0.4 * uPale) * (1.0 - 0.8 * mmPig) * (1.0 - mmSand) * (funnel ? 0.5 : 1.0) * (arm ? 1.0 + 0.3 * vSkin.y : 1.0);
+  diffuseColor.a = 1.0 - clamp(clear, 0.0, 0.85);
+  // buried: the sand on it runs out into the bed's sand (no hard line where the mound meets it)
+  diffuseColor.a *= 1.0 - mmSand * (1.0 - smoothstep(0.0, ${f(0.0022)}, vWPos.y - uGroundY));
 }
 `;
 
@@ -311,10 +322,14 @@ const SKIN_THIN = /* glsl */ `
   float back = pow(clamp(dot(vW, amSunDir()), 0.0, 1.0), 3.0);
   totalEmissiveRadiance += tissue * amSunCol() * amSunThrough() * back * (0.03 + 0.25 * mmThin) * (1.0 - mmSand);
   // (the iridophores reflect structurally: a little of their colour whatever the light's direction)
-  float cv = clamp(dot(nW, vW), 0.0, 1.0);
+  // (vW runs from the eye to the surface: the facing term and the reflection use it that way round)
+  float cv = clamp(-dot(nW, vW), 0.0, 1.0);
+  // translucent sac: seen face on the light passes through one thin wall, at the silhouette through a long path of
+  // tissue — clear in the middle, milky towards the outline
+  diffuseColor.a = mix(1.0, diffuseColor.a, pow(cv, 0.7) * (1.0 - mmSand));
   vec3 film = 0.5 + 0.5 * cos(6.2832 * (mmIrT * 1.6 + cv * 0.9 + vec3(0.0, 0.33, 0.67)));
   film = mix(film, vec3(0.45, 0.9, 0.55), 0.35);
-  totalEmissiveRadiance += film * mmIr * amUnderwater(reflect(-vW, nW), 0.3) * 0.12;
+  totalEmissiveRadiance += film * mmIr * amUnderwater(reflect(vW, nW), 0.3) * 0.12;
 }
 `;
 
@@ -417,7 +432,7 @@ float mfThin = 1.0;
   float cR = mmOrgans(p, nF, 0.65, 0.1, 0.42, eR, 25.0, aa, t).x;
   float cY = mmOrgans(p, nF, 0.42, 0.1, 0.45, eY, 29.0, aa, t).x;
 #else
-  float cB = eB * 0.2, cR = eR * 0.2, cY = eY * 0.3;
+  float cB = eB * 0.35, cR = eR * 0.3, cY = eY * 0.4;
 #endif
   vec3 col = vec3(0.82, 0.8, 0.78);
   col = mix(col, col * vec3(1.0, 0.8, 0.35), cY * 0.8);
@@ -432,6 +447,9 @@ float mfThin = 1.0;
   col = mix(col, uCover, sand);
   alpha = mix(alpha, 0.95, sand);
   mfThin = 1.0 - sand;
+#ifdef MM_LOW
+  alpha *= 0.75;
+#endif
   diffuseColor = vec4(col * uTint, clamp(alpha, 0.0, 1.0));
 }
 `;
@@ -531,13 +549,45 @@ function eyeMaterial(u: MmUniforms, low: boolean): MeshPhysicalMaterial {
 {
   vec3 nW = inverseTransformDirection(normal, viewMatrix);
   vec3 vW = inverseTransformDirection(-normalize(vViewPosition), viewMatrix);
-  float head = pow(clamp(dot(nW, vW), 0.0, 1.0), 2.0);
+  float head = pow(clamp(-dot(nW, vW), 0.0, 1.0), 2.0);
   // the tapetum-less dark of the pupil still throws back a little blue-green; the silver iris its own light
   totalEmissiveRadiance += mePup * vec3(0.02, 0.07, 0.08) * amUnderwater(nW, 1.0) * head;
-  totalEmissiveRadiance += meIr * diffuseColor.rgb * amUnderwater(reflect(-vW, nW), 0.3) * 0.18;
+  totalEmissiveRadiance += meIr * diffuseColor.rgb * amUnderwater(reflect(vW, nW), 0.3) * 0.18;
 }`);
   };
   m.customProgramCacheKey = () => (low ? 'mimiika-eye-low-v1' : 'mimiika-eye-v1');
+  return m;
+}
+
+// ------------------------------------------------------------------ viscera
+
+/** the organs inside: their own colour, the ink sac's silvery iridophore coat glinting, lit by the water's light */
+function visceraMaterial(): MeshPhysicalMaterial {
+  const m = new MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, side: DoubleSide, transparent: true, depthWrite: false, metalness: 0, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2, iridescence: 0.6, iridescenceIOR: 1.5, iridescenceThicknessRange: [250, 500] });
+  m.name = 'MimiikaViscera';
+  m.envMapIntensity = 0.3;
+  m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
+    Object.assign(shader.uniforms, AMH_UNIFORMS);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('void main() {', `${HELPERS}\nvoid main() {`)
+      .replace('#include <lights_fragment_begin>', SUN_INJECT)
+      .replace('#include <lights_fragment_maps>', `${ENV_INJECT}
+  // inside the animal: the light reaching them has crossed the tissue
+  iblIrradiance *= 0.45;
+  radiance *= 0.5;`)
+      .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n  reflectedLight.directDiffuse *= 0.5;')
+      // seen through the tissue the organs have no hard outline: they fade towards their silhouettes
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+{
+  vec3 nV = normalize(normal);
+  float facing = abs(dot(nV, normalize(vViewPosition)));
+  diffuseColor.a *= 0.85 * smoothstep(0.05, 0.75, facing);
+}`);
+  };
+  m.customProgramCacheKey = () => 'mimiika-viscera-v1';
   return m;
 }
 
@@ -561,6 +611,7 @@ export class MimiikaLook {
   readonly finsLow: MeshPhysicalMaterial;
   readonly eyes: MeshPhysicalMaterial;
   readonly eyesLow: MeshPhysicalMaterial;
+  readonly viscera: MeshPhysicalMaterial;
   readonly spec: MmLookSpec;
 
   constructor(spec: MmLookSpec) {
@@ -569,7 +620,7 @@ export class MimiikaLook {
       uTint: { value: new Color(...spec.tint) }, uChroma: { value: new Vector4(0.75, 0.8, 0.85 * spec.dark, 0.5) },
       uIrid: { value: 0.7 }, uPale: { value: 0 }, uSeed: { value: spec.seed }, uMantle: { value: 1 },
       uSandCoat: { value: 0 }, uHeadCover: { value: 0 }, uCover: { value: new Color(0.37, 0.37, 0.355) },
-      uFinAmp: { value: new Vector2() }, uFinPh: { value: new Vector2() }, uFinK: { value: 1 }, uPupil: { value: 0.4 }, uRelief: { value: 1 },
+      uFinAmp: { value: new Vector2() }, uFinPh: { value: new Vector2() }, uFinK: { value: 1 }, uPupil: { value: 0.4 }, uRelief: { value: 1 }, uGroundY: { value: -1e3 },
     };
     this.skin = skinMaterial(this.uniforms, false);
     this.skinLow = skinMaterial(this.uniforms, true);
@@ -577,13 +628,14 @@ export class MimiikaLook {
     this.finsLow = finMaterial(this.uniforms, true);
     this.eyes = eyeMaterial(this.uniforms, false);
     this.eyesLow = eyeMaterial(this.uniforms, true);
+    this.viscera = visceraMaterial();
   }
 
   /** the sediment it lies in (linear colour): the sand on its skin */
   setCover(r: number, g: number, b: number): void { this.uniforms.uCover.value.setRGB(r, g, b); }
 
   dispose(): void {
-    for (const m of [this.skin, this.skinLow, this.fins, this.finsLow, this.eyes, this.eyesLow]) m.dispose();
+    for (const m of [this.skin, this.skinLow, this.fins, this.finsLow, this.eyes, this.eyesLow, this.viscera]) m.dispose();
   }
 }
 

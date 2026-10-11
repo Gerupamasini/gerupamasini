@@ -322,6 +322,38 @@ export function buildFin(rig: RigDef, t: Tier, side: 1 | -1): BufferGeometry {
 }
 
 /**
+ * The viscera seen through the glassy mantle (photographs 17, 24, 62): the silvery, dark ink sac on the midline under
+ * the gut, the orange-brown digestive gland behind it and the pale gills to the sides — ellipsoids with a vertex
+ * colour each, rigid with the root (they sit well inside the mantle's contraction).
+ */
+export function buildViscera(rig: RigDef, t: Tier): BufferGeometry {
+  const b = new Builder();
+  const root = rig.byName.J_root;
+  const cols: number[] = [];
+  const blob = (c: [number, number, number], r: [number, number, number], col: [number, number, number], w: number, h: number) => {
+    const first = b.count;
+    for (let i = 0; i <= h; i++) {
+      const th = (Math.PI * i) / h;
+      for (let j = 0; j <= w; j++) {
+        const ph = (2 * Math.PI * j) / w;
+        const n = new Vector3(Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph));
+        const p: [number, number, number] = [c[0] + n.x * r[0], c[1] + n.y * r[1], c[2] + n.z * r[2]];
+        b.vert(M(p), new Vector3(n.x / r[0], n.y / r[1], n.z / r[2]).normalize(), [j / w, i / h], [6, 0, 0, 0], [[root, 1]]);
+        cols.push(...col);
+      }
+    }
+    b.grid(first, h + 1, w + 1, true);
+  };
+  const w = Math.max(8, Math.round(t.around / 4)), h = Math.max(5, Math.round(w * 0.6));
+  blob([0, 1.4, -13.5], [4.4, 3.6, 6.8], [0.36, 0.17, 0.08], w, h);          // digestive gland
+  blob([0, -1.8, -9.5], [2.3, 1.7, 4.2], [0.05, 0.05, 0.06], w, h);         // ink sac (its silver coat: the shader)
+  for (const s of [-1, 1]) blob([s * 4.6, -1.2, -9.0], [1.3, 1.6, 4.6], [0.5, 0.42, 0.38], w, h);   // gills
+  const g = b.build();
+  g.setAttribute('color', new BufferAttribute(new Float32Array(cols), 3));
+  return g;
+}
+
+/**
  * The eyeball: a sphere round the optical axis (+z), polar uv (centre of the uv square = the pupil). Its back half sits
  * in the socket; the cornea over it is the skin's transparent window (the shader's clearcoat).
  */

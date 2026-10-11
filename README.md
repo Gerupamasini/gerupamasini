@@ -26,6 +26,7 @@ npm run render:youjiuo # ヨウジウオの文書画像を再生成（docs/model
 npm run render:aramushiro # アラムシロの文書画像を再生成（docs/models/aramushiro/）
 npm run render:akaei  # アカエイ（5 つの行動・腹面・LOD）の画像を再生成（docs/models/akaei/）
 npm run render:ishigarei # イシガレイの文書画像を再生成（docs/models/ishigarei/）
+npm run render:mimiika   # ミミイカ（7 状態・体色・LOD）の画像を再生成（docs/models/mimiika/）
 npm run terrain:bake # 地形 PNG の再生成
 npm run terrain:manko      # 漫湖（70 m × 70 m）の泥干潟と浅い澪筋を再生成
 npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（docs/maps/hashirimizu/）を再生成
@@ -57,6 +58,7 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 - `docs/models/youjiuo/` ヨウジウオの調査・設計（体輪と骨板、筒状の吻、背鰭推進、アマモに沿う擬態と尾のかけ方、ピボット摂餌、草陰への逃避、LOD 3 段。ビューアは `reference/youjiuo-viewer/`、静止画は `node tools/models/youjiuo/render.mjs`、ゲーム内は `node tests/smoke/youjiuo.mjs`）
 - `docs/models/aramushiro/` アラムシロ（*Reticunassa festiva*）の調査・設計（写真 50 枚と文献、対数螺旋の殻と粒の格子・厚い外唇・滑層・前溝、半透明の足と触角・水管・吻・蓋、6 状態の行動、腐肉と匂いの流れ、這い跡と潜砂の盛り上がり、LOD 3 段。ビューアは `reference/aramushiro-viewer/`、静止画は `node tools/models/aramushiro/render.mjs`、ゲーム内は `node tests/smoke/aramushiro.mjs`）
 - `docs/models/ishigarei/` イシガレイ（*Platichthys bicoloratus*）若魚の調査・設計（写真 70 枚との照合、右眼側の左右非対称な頭部と三日月形の瞳孔、厚い唇の端位口、砂粒状の擬態模様、底に伏せる・潜砂・底すれすれの遊泳・摂餌・逃避の 5 状態、LOD 3 段。ビューアは `reference/ishigarei-viewer/`、静止画は `npm run render:ishigarei`、ゲーム内は `node tests/smoke/ishigarei.mjs`）
+- `docs/models/mimiika/` ミミイカ（*Euprymna morsei*）の調査・設計（写真 70 枚との照合、丸い外套膜・耳状のヒレ・角膜の窓から覗く眼・短い腕と収納式の触腕、3 層の色素胞と虹色素胞・半透明の体と透ける内臓のシェーダー、REST／HOVER／SWIM／CRAWL／BURROW／HUNT／ESCAPE の 7 状態（ヒレの波とジェット、漏斗で砂を吹き腕で頭に砂をかける潜砂、アミへの触腕、墨と後退ジェット）、LOD 3 段。ビューアは `reference/mimiika-viewer/`、静止画は `npm run render:mimiika`、ゲーム内は `node tests/smoke/mimiika.mjs`）
 - `docs/models/akaei/` アカエイの調査・設計（体盤・眼・噴水孔・腹側の口と鰓孔・尾棘、格子ボーンの波打ち遊泳、砂潜り・摂餌・逃避、LOD、ゲームへの統合）
 
 ## データ駆動

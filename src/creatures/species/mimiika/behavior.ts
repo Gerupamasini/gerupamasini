@@ -524,7 +524,7 @@ export function createSquidBehavior(opts: SquidOptions) {
         st.roll = damp(st.roll, 0, 3, dt);
         an.funnelPitch = damp(an.funnelPitch, 0, 2, dt);
         finSet(0.0, 1, -1.0, 0);
-        arms(1.0, 0.35, 0.0, 0.04);
+        arms(1.45, 0.4, 0.0, 0.04);
         chroma(0.8, 0.85, 1.0, 0.45, 0.4, 0, 0.6);
         if (st.t > st.dur) {
           st.settled = true;
@@ -645,7 +645,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         // buried, eyes on the passing mysid; it strikes when it comes within reach
         st.buryGoal = 1;
         finSet(0, 1, -1.0, 0);
-        arms(1.0, 0.35, 0.0, 0.04);
+        arms(1.45, 0.4, 0.0, 0.04);
         chroma(0.8, 0.85, 1.0, 0.45, 0.4, 0, 1);
         // the mysid drifts by
         if (p.state === 'drift') {

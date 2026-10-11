@@ -270,6 +270,7 @@ export class MimiikaDriver implements Driver {
     const tentaclesOut = P.ten[0].ext > 0.12 || P.ten[1].ext > 0.12;
     syncLevel(model, level, tentaclesOut);
     MimiikaDriver.applyMaterials(model, P);
+    model.look.uniforms.uGroundY.value = ctx.floor.heightAt(st.pos.x, st.pos.z);
     root.visible = true;
     this.effects(sdt, ctx, level);
     this.updatePrey(level);

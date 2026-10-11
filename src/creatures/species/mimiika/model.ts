@@ -1,6 +1,6 @@
 import { Group, LOD, Matrix4, Mesh, Skeleton, SkinnedMesh, Sphere, Vector3, type Bone, type BufferGeometry, type Material } from 'three';
 import { ML_MM } from './anatomy';
-import { LODS, buildArms, buildBody, buildEye, buildFin, buildFunnel, buildTentacles, rigDefinition, type RigDef } from './geometry';
+import { LODS, buildArms, buildBody, buildEye, buildFin, buildFunnel, buildTentacles, buildViscera, rigDefinition, type RigDef } from './geometry';
 import { createBones } from './rig';
 import type { MimiikaLook } from './materials';
 
@@ -10,10 +10,10 @@ export const MODEL_ML = ML_MM / 1000;
 export const LOD1_AT = 0.3;
 export const LOD2_AT = 1.1;
 
-export type PartName = 'Mantle' | 'Head' | 'Funnel' | 'Fin_L' | 'Fin_R' | 'Arms' | 'Tentacles';
+export type PartName = 'Mantle' | 'Head' | 'Funnel' | 'Fin_L' | 'Fin_R' | 'Arms' | 'Tentacles' | 'Viscera';
 
 interface TierGeometry {
-  parts: [PartName, BufferGeometry, 'skin' | 'fin'][];
+  parts: [PartName, BufferGeometry, 'skin' | 'fin' | 'gut'][];
   eye: BufferGeometry;
 }
 
@@ -30,7 +30,8 @@ export function mimiikaGeometry(t: 0 | 1 | 2): TierGeometry {
   if (cached) return cached;
   const rig = mimiikaRig(), lod = LODS[t];
   const body = buildBody(rig, lod);
-  const parts: TierGeometry['parts'] = [['Mantle', body.mantle, 'skin'], ['Head', body.head, 'skin']];
+  const parts: TierGeometry['parts'] = t < 2 ? [['Viscera', buildViscera(rig, lod), 'gut']] : [];
+  parts.push(['Mantle', body.mantle, 'skin'], ['Head', body.head, 'skin']);
   if (lod.funnel) parts.push(['Funnel', buildFunnel(rig, lod), 'skin']);
   parts.push(['Fin_L', buildFin(rig, lod, 1), 'fin'], ['Fin_R', buildFin(rig, lod, -1), 'fin'], ['Arms', buildArms(rig, lod), 'skin']);
   if (lod.tentacles) parts.push(['Tentacles', buildTentacles(rig, lod), 'skin']);
@@ -64,7 +65,7 @@ const SPHERE = new Sphere(new Vector3(0, 0, 0), 0.035);
  *   MimiIkaRoot
  *   ├── Armature: J_root ─ J_head ─ (J_eye_L ─ Eye_L) (J_eye_R ─ Eye_R) J_funnel, arm and tentacle chains; J_fin_L, J_fin_R
  *   └── MimiIkaLOD
- *       ├── LOD0: Mantle, Head, Funnel, Fin_L, Fin_R, Arms, Tentacles
+ *       ├── LOD0: Viscera (seen through the mantle), Mantle, Head, Funnel, Fin_L, Fin_R, Arms, Tentacles
  *       ├── LOD1: the same, coarser
  *       └── LOD2: Mantle, Head, Fin_L, Fin_R, Arms (no funnel, no tentacles)
  */
@@ -87,10 +88,10 @@ export function buildModel(look: MimiikaLook, tiers: (0 | 1 | 2)[] = [0, 1, 2]):
     level.name = `LOD${t}`;
     let ten: SkinnedMesh | null = null;
     for (const [name, g, kind] of geo.parts) {
-      const mat: Material = kind === 'fin' ? (t === 2 ? look.finsLow : look.fins) : t === 2 ? look.skinLow : look.skin;
+      const mat: Material = kind === 'gut' ? look.viscera : kind === 'fin' ? (t === 2 ? look.finsLow : look.fins) : t === 2 ? look.skinLow : look.skin;
       const m = new SkinnedMesh(g, mat);
       m.name = name;
-      m.renderOrder = kind === 'fin' ? 2 : 0;
+      m.renderOrder = kind === 'fin' ? 2 : kind === 'gut' ? -1 : 0;
       m.bind(skeleton, IDENTITY);
       m.boundingSphere = SPHERE;
       m.frustumCulled = true;

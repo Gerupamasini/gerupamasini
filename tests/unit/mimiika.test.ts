@@ -71,7 +71,7 @@ describe('ミミイカ: the body plan', () => {
     expect(m.root.name).toBe('MimiIkaRoot');
     const names = new Set<string>();
     m.root.traverse((o) => names.add(o.name));
-    for (const n of ['Mantle', 'Head', 'Eye_L', 'Eye_R', 'Fin_L', 'Fin_R', 'Arms', 'Tentacles', 'Funnel', 'LOD0', 'LOD1', 'LOD2']) expect(names, n).toContain(n);
+    for (const n of ['Mantle', 'Head', 'Eye_L', 'Eye_R', 'Fin_L', 'Fin_R', 'Arms', 'Tentacles', 'Funnel', 'Viscera', 'LOD0', 'LOD1', 'LOD2']) expect(names, n).toContain(n);
     const tris = (lvl: number) => {
       let t = 0;
       m.lod.levels[lvl].object.traverse((o) => { const g = (o as Mesh).geometry; if (g) t += (g.index ? g.index.count : g.getAttribute('position').count) / 3; });
