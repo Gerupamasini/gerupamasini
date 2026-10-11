@@ -30,6 +30,8 @@ export class Skyline {
   private readonly marks: Mark[] = [];
   /** ships passing on the horizon (moved by update) */
   private readonly ships: ShipMark[] = [];
+  /** the ship pictures: one texture and material per drawing, shared by every lane that carries it */
+  private readonly shipMats = new Map<string, MeshBasicMaterial>();
   /** the near land around a map that has it: real ground standing still in the world (not riding with the eye) */
   readonly land: Land | null = null;
   private readonly tmp = new Color();
@@ -38,7 +40,7 @@ export class Skyline {
   constructor(kind?: string) {
     this.group.name = 'skyline';
     if (kind === 'manko') return;
-    if (kind === 'hashirimizu') { buildHashirimizuSkyline(this.plane.bind(this), this.ships); this.land = buildHashirimizuLand(); return; }
+    if (kind === 'hashirimizu') { buildHashirimizuSkyline(this.shipPlane.bind(this), this.ships); this.land = buildHashirimizuLand(); return; }
     // ---- 富士山: 106 km WSW, 3776 m: a broad flat-topped cone 1.6° high and 12° wide, nearly all haze
     this.plane(253, ang(18), ang(1.65 * 2.4), FOOT, 1024, 160, (c, w, h) => {
       for (let x = 0; x < w; x++) {
@@ -149,6 +151,18 @@ export class Skyline {
 
   /** one flat picture standing on the ring at a bearing (degrees clockwise from north), its bottom at `bottomY` metres */
   private plane(bearing: number, width: number, height: number, bottomY: number, cw: number, ch: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void, base: Color, haze: number): Mesh {
+    return this.place(new Mesh(new PlaneGeometry(width, height), this.picture(cw, ch, draw, base, haze)), bearing, bottomY + height / 2);
+  }
+
+  /** a ship's picture: like plane, but its drawing (named by `key`) is made once and shared */
+  private shipPlane(key: string, bearing: number, width: number, height: number, bottomY: number, cw: number, ch: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void, base: Color, haze: number): Mesh {
+    let mat = this.shipMats.get(key);
+    if (!mat) { mat = this.picture(cw, ch, draw, base, haze); this.shipMats.set(key, mat); }
+    return this.place(new Mesh(new PlaneGeometry(width, height), mat), bearing, bottomY + height / 2);
+  }
+
+  /** a drawing on a canvas as a material that takes the sky's haze (update) */
+  private picture(cw: number, ch: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void, base: Color, haze: number): MeshBasicMaterial {
     const canvas = document.createElement('canvas');
     canvas.width = cw; canvas.height = ch;
     const c = canvas.getContext('2d')!;
@@ -160,15 +174,19 @@ export class Skyline {
     tex.wrapS = tex.wrapT = ClampToEdgeWrapping;
     tex.generateMipmaps = false;
     const mat = new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, side: DoubleSide });
-    const mesh = new Mesh(new PlaneGeometry(width, height), mat);
+    this.marks.push({ mat, base, haze, night: 0.1 });
+    return mat;
+  }
+
+  /** stand a picture on the ring, facing the flat */
+  private place(mesh: Mesh, bearing: number, y: number): Mesh {
     const a = bearing * DEG;
-    mesh.position.set(Math.sin(a) * R, bottomY + height / 2, -Math.cos(a) * R);
+    mesh.position.set(Math.sin(a) * R, y, -Math.cos(a) * R);
     mesh.lookAt(0, mesh.position.y, 0);
     mesh.frustumCulled = true;
     mesh.castShadow = false; mesh.receiveShadow = false;
     mesh.renderOrder = -10;
     this.group.add(mesh);
-    this.marks.push({ mat, base, haze, night: 0.1 });
     return mesh;
   }
 
@@ -177,13 +195,17 @@ export class Skyline {
     this.group.position.set(eye.x, 0, eye.z);
     this.land?.setHaze(fog);
     for (const s of this.ships) {
-      // along its lane, round and round the sector it can be seen in (it is a different ship next time)
+      // along its lane, round and round the sector it can be seen in; each time round, the ship its pass draws
       const span = s.sector[1] - s.sector[0];
-      const b = s.sector[0] + ((((s.bearing0 - s.sector[0] + s.degPerSec * timeSec) % span) + span) % span);
-      const a = b * DEG;
-      s.mesh.position.set(Math.sin(a) * R, s.mesh.position.y, -Math.cos(a) * R);
-      s.mesh.lookAt(eye.x, s.mesh.position.y, eye.z);
-      s.mesh.scale.x = s.degPerSec > 0 ? 1 : -1;
+      const run = s.bearing0 - s.sector[0] + s.degPerSec * timeSec;
+      const k = s.pick(Math.floor(run / span));
+      const a = (s.sector[0] + (((run % span) + span) % span)) * DEG;
+      s.meshes.forEach((m, i) => { m.visible = i === k; });
+      const mesh = s.meshes[k];
+      mesh.position.set(Math.sin(a) * R, mesh.position.y, -Math.cos(a) * R);
+      mesh.lookAt(eye.x, mesh.position.y, eye.z);
+      // (the pictures are drawn bow to the left; seen from the shore, the bearing grows to the right)
+      mesh.scale.x = s.degPerSec > 0 ? -1 : 1;
     }
     for (const m of this.marks) {
       this.tmp.copy(m.base).lerp(fog, m.haze);
