@@ -1,9 +1,11 @@
-import { DoubleSide, FrontSide, MeshDepthMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RGBADepthPacking, Vector2,
+import { DoubleSide, FrontSide, MeshDepthMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RGBADepthPacking, Vector2, Vector3,
   type IUniform, type Texture, type WebGLProgramParametersWithUniforms } from 'three';
 
 export interface HirugiUniforms {
   uHgTime: IUniform<number>; uHgWater: IUniform<number>; uHgWet: IUniform<number>; uHgWind: IUniform<number>;
   uHgGround: IUniform<Texture>; uHgGrid: IUniform<Vector2>;
+  /** a stand's foliage colour against the default (subtropical sun-flushed leaves are yellower and brighter) */
+  uHgLeafTint: IUniform<Vector3>;
   uHgLeafAtlas: IUniform<Texture>;
 }
 export type TreePart = 'Trunk' | 'Branches' | 'Leaves' | 'Roots';
@@ -69,6 +71,7 @@ varying vec3 vHgDetail;
 varying float vHgSeed;
 varying float vHgAbove;
 uniform float uHgWater, uHgWet;
+uniform vec3 uHgLeafTint;
 uniform sampler2D uHgLeafAtlas;
 float hgWet = 0.0;
 float hgRelief = 0.0;
@@ -130,7 +133,7 @@ const COLOR = /* glsl */`
   leafColor += vec3(0.03,0.044,0.007)*(midrib+vein*0.25);
   // Sparse senescent leaves without turning the entire canopy autumn-yellow.
   leafColor = mix(leafColor,vec3(0.31,0.30,0.03),smoothstep(0.975,1.0,vHgDetail.y)*age);
-  diffuseColor.rgb *= leafColor;
+  diffuseColor.rgb *= leafColor * uHgLeafTint;
   hgRelief = midrib * 0.00010 + vein * 0.000016;
 #else
   float coarse = hgNoise(vUv*vec2(8,3)+vHgSeed*23.0);
@@ -199,11 +202,11 @@ export function treeMaterial(u: HirugiUniforms, part: TreePart): MeshStandardMat
     : new MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0 });
   m.name = `YaeyamaHirugi/${part}`; m.onBeforeCompile = (s) => hook(s, u, part, false);
   m.defines = { ...m.defines, USE_UV: '' };
-  m.customProgramCacheKey = () => `hirugi-v4-${part}`;
+  m.customProgramCacheKey = () => `hirugi-v5-${part}`;
   return m;
 }
 export function treeDepth(u: HirugiUniforms, part: TreePart): MeshDepthMaterial {
   const m = new MeshDepthMaterial({ depthPacking: RGBADepthPacking, side: part === 'Leaves' ? DoubleSide : FrontSide });
   m.defines = { ...m.defines, USE_UV: '' };
-  m.onBeforeCompile = (s) => hook(s, u, part, true); m.customProgramCacheKey = () => `hirugi-depth-v3-${part}`; return m;
+  m.onBeforeCompile = (s) => hook(s, u, part, true); m.customProgramCacheKey = () => `hirugi-depth-v5-${part}`; return m;
 }

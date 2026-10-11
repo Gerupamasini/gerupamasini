@@ -8,6 +8,7 @@ import { eelgrassField, eelgrassZone, offshore } from './shape';
 import { inThicket } from '../manko/shape';
 import { backdropCrowns } from '../manko/land';
 import type { BackdropCrown } from '../../mangrove/MangroveForest';
+import type { Atmosphere } from '../../Sky';
 
 export * as shape from './shape';
 
@@ -30,7 +31,17 @@ export interface ShoreLayout {
   /** the waves breaking on the shore (null: none) */
   surf: SurfParams | null;
   /** the water: its colour in depth (linear) and its turbidity against 葛西's silty water */
-  water: { colour: readonly [number, number, number]; turbidity: number };
+  water: {
+    colour: readonly [number, number, number]; turbidity: number;
+    /** a milky body: the share of sun and sky light the suspended fines send back up (linear; absent: none) */
+    scatter?: readonly [number, number, number];
+    /** factor on the Fresnel reflection (absent: 1) and how broken it is, 0..1 (absent: 0) */
+    reflect?: number; rough?: number;
+  };
+  /** the map's air: sky, clouds, sun and fill light (absent: the temperate Tokyo Bay day) */
+  atmosphere?: Partial<Atmosphere>;
+  /** mangrove foliage colour against the default (absent: unchanged) */
+  mangroveLeafTint?: readonly [number, number, number];
   /** distant mangrove crowns drawn with the trees' own foliage (absent: none) */
   mangroveBackdrop?(): BackdropCrown[];
   /** ground the player cannot enter inside the walkable bounds (absent: none) */
@@ -69,12 +80,21 @@ const MANKO: ShoreLayout = {
   clams: { beds: 0, opts: {} }, pits: { clusters: 0, opts: {} },
   // Manko's estuary silt (user photos): warm greige-khaki, not 葛西's neutral grey; darker and browner when wet.
   landLevel: [3, 4], sandTint: [1.08, 0.98, 0.8], mudTint: [1.42, 1.22, 0.92], rippleAngle: 0.4,
-  // silty khaki-brown water, opaque within a few tens of centimetres
-  surf: null, water: { colour: [0.105, 0.098, 0.062], turbidity: 1.4 },
+  // the lake's opaque, milky jade water (user's photo): lit from within by the suspended fines, a soft broken
+  // reflection; a dim jade residual at dusk and night
+  surf: null, water: { colour: [0.03, 0.06, 0.045], turbidity: 2.4, scatter: [0.084, 0.19, 0.0925], reflect: 0.3, rough: 0.6 },
+  // subtropical air: a deep blue sky that the high sun does not bleach, bright cumulus, a strong warm sun
+  atmosphere: {
+    rayleigh: 1.7, turbidity: 1.8, mie: 0.0015, skyScale: 0.3, skyScaleHighSun: 0.55,
+    cloudCoverage: 0.42, cloudDensity: 0.9, cloudScale: 0.0003, cloudGain: 2.5,
+    sunColor: [1, 0.95, 0.86], sunGain: 1.08, hemiSky: [0.5, 0.66, 0.88], hemiGround: [0.26, 0.26, 0.18], fogDay: [0.55, 0.74, 0.98],
+  },
   props: () => [],
   // the dense mangrove forest beyond its front rows
   blocked: inThicket,
   mangroveBackdrop: backdropCrowns,
+  // sun-flushed subtropical canopy: brighter, yellower green (user's photo)
+  mangroveLeafTint: [1.4, 1.28, 0.85],
 };
 
 export const LAYOUTS: Record<string, ShoreLayout> = { hashirimizu: HASHIRIMIZU, manko: MANKO };

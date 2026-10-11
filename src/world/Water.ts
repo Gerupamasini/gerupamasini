@@ -164,6 +164,11 @@ export class WaterPass {
       uReflMax: { value: 0.6 },
       uRes: { value: new Vector2(1, 1) },
       uEnvI: { value: 0.6 },
+      // a milky body (漫湖's jade lake): the share of sun and sky light the suspended fines send back up (linear;
+      // 0: none, 葛西 and 走水), the reflection's share of Fresnel (1: unchanged) and how broken it is (0: unchanged)
+      uScatter: { value: new Vector3() },
+      uReflScale: { value: 1 },
+      uReflRough: { value: 0 },
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,
@@ -175,8 +180,8 @@ export class WaterPass {
         uniform samplerCube tEnv;
         uniform mat4 uProjInv, uCamWorld, uMirrorMat;
         uniform float uMirrorOn, uPolar, uSurfSteps, uHeightN;
-        uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog;
-        uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax;
+        uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog, uScatter;
+        uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax, uReflScale, uReflRough;
         uniform vec2 uRes;
         varying vec2 vUv;
         ${NOISE_GLSL}
@@ -212,7 +217,9 @@ export class WaterPass {
         // toward the lit surface, with the sun's forward-scattered halo
         vec3 waterGlow(vec3 d) {
           float mu = dot(d, uSunDir);
-          return uWaterFog * (0.75 + 0.35 * smoothstep(-0.6, 0.8, -d.y)) + uSunCol * 0.035 * hgPhase(mu, 0.72) * uSunUp;
+          // a milky body is lit like a matte surface just under the water: it follows the sun and the sky (dims at dusk)
+          vec3 lit = uScatter * (uSunCol * uSunUp * (0.25 + 0.75 * max(uSunDir.y, 0.0)) + uAmbient * uFogColor);
+          return (uWaterFog + lit) * (0.75 + 0.35 * smoothstep(-0.6, 0.8, -d.y)) + uSunCol * 0.035 * hgPhase(mu, 0.72) * uSunUp;
         }
 
         ${SURF_ETA_GLSL}
@@ -353,7 +360,10 @@ export class WaterPass {
               vec3 under = mix(glow, refr, exp(-thick * fogW)) * mix(1.0, 0.5, face);
 
               // the sky, reflected (the sun's disc is handled by the glitter below) and weighted by Fresnel
-              vec3 R = reflect(rd, N);
+              // (a rough reflection, for a ruffled milky lake: exaggerated slopes break the mirror up)
+              vec3 Nr = N;
+              if (uReflRough > 0.0) { float k = 1.0 + 3.0 * uReflRough; Nr = normalize(vec3(N.x * k, N.y, N.z * k)); }
+              vec3 R = reflect(rd, Nr);
               R.y = max(abs(R.y), 0.06);   // never sample the dome's dark underside at the horizon
               vec3 envSky;
               if (uMirrorOn > 0.5) {
@@ -362,10 +372,11 @@ export class WaterPass {
                 // short vertical smear stands in for the many small facets between the pixels
                 vec4 mc = uMirrorMat * vec4(S + R * 300.0, 1.0);
                 vec2 muv = clamp(mc.xy / mc.w, vec2(0.002), vec2(0.998));
-                float smear = 0.0015 + 0.004 * clamp(length(N.xz) * 6.0, 0.0, 1.0);
+                float smear = (0.0015 + 0.004 * clamp(length(N.xz) * 6.0, 0.0, 1.0)) * (1.0 + 4.0 * uReflRough);
+                float side = 0.0007 * (1.0 + 2.0 * uReflRough);
                 envSky = texture2D(tMirror, muv).rgb * 0.5
-                  + texture2D(tMirror, clamp(muv + vec2(0.0007, smear), vec2(0.002), vec2(0.998))).rgb * 0.25
-                  + texture2D(tMirror, clamp(muv - vec2(0.0007, smear), vec2(0.002), vec2(0.998))).rgb * 0.25;
+                  + texture2D(tMirror, clamp(muv + vec2(side, smear), vec2(0.002), vec2(0.998))).rgb * 0.25
+                  + texture2D(tMirror, clamp(muv - vec2(side, smear), vec2(0.002), vec2(0.998))).rgb * 0.25;
               } else envSky = textureCube(tEnv, R).rgb;
               vec3 env = min(envSky * uEnvI, vec3(12.0));
               float cosT = clamp(dot(-rd, N), 0.0, 1.0);
@@ -390,7 +401,8 @@ export class WaterPass {
               float glint = pow(nh, 5000.0) * 90.0 * tw * gshape * near + pow(max(dot(N, H), 0.0), 1500.0) * 0.08;
               vec3 spec = uSunCol * glint * F * uSunUp;
 
-              col = mix(under, env, F) + spec;
+              // (the sun's glitter keeps the full Fresnel: a milky lake still sparkles)
+              col = mix(under, env, F * uReflScale) + spec;
               // the light through the thin top of a steepening wave: turquoise, brightest with the sun behind it
               col += vec3(0.03, 0.11, 0.085) * uSunCol * uSunUp * lip * (0.3 + 0.7 * pow(max(dot(rd, uSunDir), 0.0), 2.0)) * 0.5 * (1.0 - F);
 
@@ -514,10 +526,15 @@ export class WaterPass {
 
   private polarized = false;
 
-  /** The water of this shore: its colour seen in depth (linear) and its turbidity against 葛西's silty water. */
-  setBody(r: number, g: number, b: number, turbidity: number): void {
+  /** The water of this shore: its colour seen in depth (linear) and its turbidity against 葛西's silty water; optionally
+   * a milky body (scatter, linear), a weaker (reflect, factor on Fresnel) and broken (rough, 0..1) reflection. */
+  setBody(r: number, g: number, b: number, turbidity: number, optics: { scatter?: readonly [number, number, number]; reflect?: number; rough?: number } = {}): void {
     this.tint.setRGB(r, g, b);
     this.clarity = turbidity;
+    const sc = optics.scatter ?? [0, 0, 0];
+    this.uniforms.uScatter.value.set(sc[0], sc[1], sc[2]);
+    this.uniforms.uReflScale.value = optics.reflect ?? 1;
+    this.uniforms.uReflRough.value = optics.rough ?? 0;
     this.setPolarized(this.polarized);
   }
 

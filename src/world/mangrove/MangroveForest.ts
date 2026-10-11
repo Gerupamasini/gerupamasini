@@ -25,6 +25,8 @@ export interface MangroveLayout {
   /** distant crowns of a forest too deep to reach (x, y = base height, z, s = radius, m): drawn with the trees'
    * own foliage cards and leaf material, one instanced draw; low quality draws a third of them (the roof below fills in) */
   backdrop?: readonly BackdropCrown[];
+  /** foliage colour against the default (absent: unchanged) */
+  leafTint?: readonly [number, number, number];
 }
 export interface BackdropCrown { x: number; y: number; z: number; s: number }
 // LOD1 hands over to the card crowns by ~20-25 m: beyond that a leaf is a pixel and LOD1 costs ~10x LOD2.
@@ -101,6 +103,7 @@ export class MangroveForest {
     }
     for (const specs of buckets.values()) this.batches.push({ specs, bounds: batchBounds(specs, this.kit), levels: new Map() });
     if (layout.backdrop?.length) this.backdrop = this.buildBackdrop(layout.backdrop);
+    if (layout.leafTint) this.kit.uniforms.uHgLeafTint.value.set(...layout.leafTint);
   }
   private backdrop: InstancedMesh | null = null;
   private buildBackdrop(sites: readonly BackdropCrown[]): InstancedMesh {

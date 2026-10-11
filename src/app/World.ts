@@ -112,7 +112,7 @@ export class World {
     const surf = surfUniforms(layout?.surf ?? null);
     terrain.setSurf(surf);
     const water = new WaterPass(terrain, waves, surf);
-    if (layout) water.setBody(...layout.water.colour, layout.water.turbidity);
+    if (layout) water.setBody(...layout.water.colour, layout.water.turbidity, layout.water);
     const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists
     mark('water');
@@ -177,14 +177,14 @@ export class World {
     }
     if (map.mangroves) {
       onProgress?.('ヤエヤマヒルギ林');
-      w.mangroves = new MangroveForest(terrain, { ...map.mangroves, collisionBounds: map.bounds.walkable, backdrop: layout?.mangroveBackdrop?.() });
+      w.mangroves = new MangroveForest(terrain, { ...map.mangroves, collisionBounds: map.bounds.walkable, backdrop: layout?.mangroveBackdrop?.(), leafTint: layout?.mangroveLeafTint });
       w.mangroves.setQuality(preset.vegetation);
       // Build the visible tiers before FieldRenderer.compile, so shader compilation stays behind the loading screen.
       w.mangroves.update(0, { position: new Vector3(map.spawnStart.x,terrain.heightAt(map.spawnStart.x,map.spawnStart.z)+1.5,map.spawnStart.z) }, { tideLevel: 0, wetLevel: 0 });
       w.scene.add(w.mangroves.group);
     }
     w.scene.add(terrain.mirrorProxy(LAYER_MIRROR));
-    const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
+    const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize, layout?.atmosphere);
     // (lights obey layers too: the mirror's camera must see the sun and the sky light, or the land comes out black)
     reflectInWater(sky.sky); reflectInWater(sky.sunLight); reflectInWater(sky.hemi);
     (w as { sky: SkyDome }).sky = sky;
