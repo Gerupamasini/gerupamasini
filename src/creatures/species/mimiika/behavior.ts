@@ -150,8 +150,8 @@ export function createSquidBehavior(opts: SquidOptions) {
     ten: [0, 0], tenGoal: 0, tenAim: new Vector3(0, -0.1, 1).normalize(), tenAimW: 0,
     eyeT: rand(0.5, 2), eyeOff: [new Vector3(), new Vector3()], eyeLook: null as Vector3 | null,
     pupil: 0.45,
-    ch: { y: 0.7, r: 0.95, b: 0.45, mottle: 0.45, irid: 0.75, pale: 0 },
-    chGoal: { y: 0.7, r: 0.95, b: 0.45, mottle: 0.45, irid: 0.75, pale: 0 },
+    ch: { y: 0.7, r: 0.95, b: 0.25, mottle: 0.45, irid: 0.75, pale: 0 },
+    chGoal: { y: 0.7, r: 0.95, b: 0.25, mottle: 0.45, irid: 0.75, pale: 0 },
     chRate: 2, flash: 0,
   };
 
@@ -350,8 +350,8 @@ export function createSquidBehavior(opts: SquidOptions) {
     arms(0.7, 0.0, 0.28, freeze ? 0.05 : 0.35);
     an.tipCurl = freeze ? 0.6 : 0.85;
     an.headPitch = freeze ? 0.0 : 0.07;
-    if (freeze) chroma(0.8, 1.0, 0.75, 0.8, 0.4, 0, 4);
-    else chroma(0.7, 0.95, 0.45, 0.45, 0.75, 0, 1.5);
+    if (freeze) chroma(0.8, 1.0, 0.6, 0.8, 0.4, 0, 4);
+    else chroma(0.7, 0.95, 0.25, 0.45, 0.75, 0, 1.5);
     if (st.t > st.dur) {
       st.settled = true;
       if (autonomous) choose();
@@ -424,7 +424,7 @@ export function createSquidBehavior(opts: SquidOptions) {
     if (st.phase === 'descend') { if (descend(dt)) phase('turn', 2); return; }
     st.altGoal = 0;
     finSet(0.22, 3.0, -0.15, 0.05);
-    chroma(0.7, 0.95, 0.45, 0.45, 0.75, 0, 1.5);
+    chroma(0.7, 0.95, 0.25, 0.45, 0.75, 0, 1.5);
     if (st.phase === 'turn') {
       const err = steerTo(tgt, 0.9, dt);
       st.vel.multiplyScalar(Math.exp(-dt * 4));
@@ -528,7 +528,7 @@ export function createSquidBehavior(opts: SquidOptions) {
         an.funnelPitch = damp(an.funnelPitch, 0, 2, dt);
         finSet(0.0, 1, -1.0, 0);
         arms(1.45, 0.4, 0.0, 0.04);
-        chroma(0.7, 0.95, 0.6, 0.45, 0.5, 0, 0.6);
+        chroma(0.7, 0.95, 0.35, 0.45, 0.5, 0, 0.6);
         if (st.t > st.dur) {
           st.settled = true;
           if (autonomous) choose();
@@ -635,7 +635,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         p.remains = Math.max(0, 1 - st.t / st.dur);
         arms(0.45, 0.62 + 0.06 * Math.sin(st.t * 9), 0, 0.05);
         if (st.phase === 'eat') { finSet(0.28, 2.4, 0.15, 0.05); st.altGoal = Math.max(st.altGoal * 0.995, 0.3 * ML); chroma(0.7, 0.9, 0.5, 0.45, 0.75, 0.1, 1.5); }
-        else { st.buryGoal = damp(st.buryGoal, 0.95, 0.8, dt); chroma(0.7, 0.95, 0.6, 0.45, 0.5, 0, 1); }
+        else { st.buryGoal = damp(st.buryGoal, 0.95, 0.8, dt); chroma(0.7, 0.95, 0.35, 0.45, 0.5, 0, 1); }
         if (st.t > st.dur) {
           p.state = 'eaten';
           prey = null;
@@ -649,7 +649,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         st.buryGoal = 1;
         finSet(0, 1, -1.0, 0);
         arms(1.45, 0.4, 0.0, 0.04);
-        chroma(0.7, 0.95, 0.6, 0.45, 0.5, 0, 1);
+        chroma(0.7, 0.95, 0.35, 0.45, 0.5, 0, 1);
         // the mysid drifts by
         if (p.state === 'drift') {
           forward(fwd);

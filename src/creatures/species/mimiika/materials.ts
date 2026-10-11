@@ -104,7 +104,7 @@ vec2 mmOrgans(vec3 p, vec3 n, float cell, float r0, float r1, float expand, floa
  * in its cell; spread, it fills the cell up to a thin pale line where it meets its neighbours: the reticulated net of
  * a resting bobtail. Returns (pigment cover, the pale net between organs, the organ's random, its expansion).
  */
-vec4 mmReticle(vec3 p, vec3 n, float cell, float expand, float seed, float aa, float t) {
+vec4 mmReticle(vec3 p, vec3 n, float cell, vec2 expand2, float fracB, float seed, float aa, float t) {
   vec3 q = p / cell + seed;
   vec3 b = floor(q - 0.5);
   float f1 = 9.0, f2 = 9.0;
@@ -119,6 +119,8 @@ vec4 mmReticle(vec3 p, vec3 n, float cell, float expand, float seed, float aa, f
     float d = length(dq - n * hn) + 1.4 * max(abs(hn) - 0.25, 0.0);
     if (d < f1) { f2 = f1; f1 = d; h1 = h; } else if (d < f2) f2 = d;
   }
+  // (a share fracB of the cells is the brown class, with its own expansion)
+  float expand = mix(expand2.x, expand2.y, step(h1.y, fracB));
   float e = clamp(expand * (0.75 + 0.6 * h1.x) - 0.08 * h1.y + 0.04 * sin(t * (0.6 + h1.z) + h1.y * 6.283), 0.0, 1.0);
   float w = aa / cell + 0.02;
   // contracted: a dot (a little irregular); spread: the cell less a pale line, thinner the more it spreads
@@ -231,7 +233,7 @@ ${NOISE}
  * normal, clearcoat / iridescence and emissive stages.
  */
 const SKIN_SURFACE = /* glsl */ `
-float mmRough = 0.5, mmCoat = 0.12, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt = 0.0, mmSand = 0.0, mmPig = 0.0, mmFlank = 0.0, mmEyeIr = 0.0, mmDome = 0.0, mmRim = 0.0, mmSil = 0.0, mmCut = 1.0;
+float mmRough = 0.5, mmCoat = 0.06, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt = 0.0, mmSand = 0.0, mmPig = 0.0, mmFlank = 0.0, mmEyeIr = 0.0, mmDome = 0.0, mmRim = 0.0, mmSil = 0.0, mmCut = 1.0, mmSpang = 0.0;
 {
   vec3 p = vRest;
   float part = vSkin.x;
@@ -277,9 +279,9 @@ float mmRough = 0.5, mmCoat = 0.12, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   D = max(D, 0.8 * dome);
   // ---- the tissue between the organs: glassy, lilac-grey on the back, silver-blue under the belly (12, 29, 62)
   vec3 base = mix(vec3(0.44, 0.46, 0.5), vec3(0.46, 0.42, 0.43), D);
-  if (arm) base = mix(vec3(0.70, 0.62, 0.62), vec3(0.58, 0.50, 0.48), D);
+  if (arm) base = mix(vec3(0.66, 0.58, 0.58), vec3(0.50, 0.34, 0.20), D);
   // the funnel: pale, faintly lilac, glassy flesh (photographs 20, 29)
-  if (funnel) base = vec3(0.6, 0.56, 0.64);
+  if (funnel) base = vec3(0.4, 0.36, 0.42);
   // the viscera through the belly: a soft darker body in the mantle's middle (the ink sac, the gills)
   if (part < 0.5) base *= 1.0 - 0.15 * (1.0 - D) * exp(-pow((zn + 11.0) / 6.0, 2.0) - pow(p.x / 4.0, 2.0));
   // ---- the pattern's regions
@@ -294,9 +296,10 @@ float mmRough = 0.5, mmCoat = 0.12, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   // midline, down to the upper lid (7, 22, 33, 62, 68)
   float eyeZone = headP ? (1.0 - smoothstep(1.04, 1.22, eyeD)) * smoothstep(-0.2, 0.15, eA) : 0.0;
   float eyePatch = eyeZone * smoothstep(0.12, 0.22, lidS) * smoothstep(0.55, 0.9, dot(eyeN, mmPatchC));
+  eyePatch = max(eyePatch, 0.7 * eyeZone * smoothstep(0.3, 0.7, dot(eyeN, mmLidF)) * smoothstep(0.12, 0.22, lidS) * (1.0 - smoothstep(0.5, 0.75, lidS)));
   float ePm = eyePatch;
   // the copper set (the mosaic) spreads on the back and the arms' outer faces, hardly under the belly
-  float regM = part < 0.5 ? mix(0.2, 1.0, smoothstep(0.1, 0.8, D)) : part < 1.5 ? mix(0.8, 1.05, D) * (1.0 - 0.45 * eyePatch) : arm ? mix(0.1, 1.0, D) * (1.0 - 0.35 * armT) : 0.3;
+  float regM = part < 0.5 ? mix(0.2, 1.0, smoothstep(0.0, 0.3, D)) : part < 1.5 ? mix(0.8, 1.05, D) * (1.0 - 0.45 * eyePatch) : arm ? mix(0.1, 1.0, D) * (1.0 - 0.35 * armT) : 0.3;
   float regB = part < 1.5 ? mix(0.85, 1.0, D) * (1.0 - 0.5 * eyePatch) : arm ? mix(0.5, 1.3, D) : 0.3;
   float eY = uChroma.x * mix(0.45, 1.0, D) * (1.0 + 0.6 * eyeRing + 0.4 * saddle);
   float eR = uChroma.y * regM * (1.0 - 0.3 * uChroma.w + 0.5 * uChroma.w * mott);
@@ -311,38 +314,59 @@ float mmRough = 0.5, mmCoat = 0.12, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   eB *= 1.0 - 0.6 * lip; eR *= 1.0 - 0.4 * lip;
   // glassy when the pigment is withdrawn: the tissue scatters less (and lets the light through, SKIN_THIN)
   vec3 alb = base * (1.0 - 0.45 * uPale * (1.0 - 0.5 * float(funnel)));
-  // the mosaic's cells: 0.72 mm on the mantle's back, 0.42 mm on the flanks, the head and round the eyes, 0.5 on the arms
-  float coarseW = part < 0.5 ? smoothstep(0.35, 0.8, D) : 0.0;
+  // the mosaic's cells, one lattice per part (counted against the body: 12-14 across the back in 7, 18-24 along the
+  // mantle in 29): 1.15 mm on the mantle, 0.7 mm on the head, 0.5 mm over the eye's dome, the arms' spots 0.5 → 0.3 mm;
+  // a share of them the brown class (the darker cells of 29, the blotches of 12, all of them plum in 32)
+  float fracB = clamp(0.25 + 0.9 * (uChroma.z - 0.5 * uChroma.y), 0.2, 0.85);
+  float eRm = arm ? min(eR, 0.55) : eR;
+  vec2 ex = vec2(eRm, max(eB, 0.85 * eRm));
 #ifndef MM_LOW
-  vec4 rC = coarseW > 0.02 ? mmReticle(p, nR, 0.72, eR, 13.3, aa, t) : vec4(0.0);
-  vec4 rF = coarseW < 0.98 ? mmReticle(p, nR, arm ? 0.5 : 0.42, eR, 21.7, aa, t) : vec4(0.0);
-  vec4 rM = mix(rF, rC, coarseW);
-  vec2 oB = mmOrgans(p, nR, 0.36, 0.07, mix(0.22, 0.42, D), eB, 7.7, aa, t);
+  vec4 rM = part < 0.5 ? mmReticle(p, nR, 1.15, ex, fracB, 13.3, aa, t)
+                       : mmReticle(p, nR, arm ? mix(0.5, 0.3, armT) : mix(0.7, 0.5, dome), ex, arm ? 0.6 : fracB, 21.7, aa, t);
+  vec2 oB = mmOrgans(p, nR, 0.36, 0.07, arm && vSkin.z > 0.0 ? 0.15 : mix(0.22, 0.42, D), arm && vSkin.z > 0.0 ? eB * 0.3 : eB, 7.7, aa, t);
   vec2 oY = mmOrgans(p, nR, 0.3, 0.07, 0.34, eY, 3.1, aa, t);
   float cM = rM.x, cB = oB.x, cY = oY.x;
+  float isBr = step(rM.z, arm ? 0.6 : fracB);
+  // (the small dark organs hide under a spread copper sac: no dots on the cells of 29, 22, 7; over them in 20, 68)
+  cB *= 1.0 - 0.75 * cM * (1.0 - smoothstep(0.6, 1.0, eB));
   // a spread sac is thin and copper; contracted, its pigment is dense and rust-red; each organ its own shade
   vec3 colM = mix(vec3(0.13, 0.03, 0.02), vec3(0.17, 0.058, 0.03), smoothstep(0.2, 0.9, rM.w)) * (0.85 + 0.3 * rM.z);
   vec3 colB = mix(vec3(0.028, 0.012, 0.010), vec3(0.036, 0.011, 0.022), D * smoothstep(0.4, 1.0, eB)) * (0.8 + 0.4 * oB.y);
   vec3 colY = mix(vec3(0.66, 0.42, 0.10), vec3(0.58, 0.32, 0.07), oY.y);
+  // the brown class: dark maroon-brown (12's blotches without the tank's blue), darker cells among the copper (29)
+  // (in the copper dress they are only a shade darker than their neighbours; the dark set brings them out)
+  colM = mix(colM, mix(vec3(0.05, 0.026, 0.024), vec3(0.085, 0.045, 0.038), smoothstep(0.2, 0.9, rM.w)) * (0.85 + 0.3 * rM.z), isBr * (0.35 + 0.65 * smoothstep(0.2, 0.8, eB)));
 #else
   float cM = clamp(eR * 0.78, 0.0, 0.85), cB = clamp(eB * 0.3, 0.0, 0.8), cY = clamp(eY * 0.2, 0.0, 0.4);
   vec4 rM = vec4(cM, 0.0, 0.5, eR);
   vec3 colM = mix(vec3(0.13, 0.03, 0.02), vec3(0.17, 0.058, 0.03), clamp(eR, 0.0, 1.0));
   vec3 colB = vec3(0.03, 0.012, 0.014), colY = vec3(0.62, 0.37, 0.085);
+  colM = mix(colM, vec3(0.07, 0.037, 0.032), fracB * 0.6);
 #endif
   // under a spread dark set the copper turns maroon-plum (32, 61, 68)
   colM = mix(colM, vec3(0.085, 0.022, 0.03), 0.75 * smoothstep(0.5, 1.0, eB) * D);
   // the gaps: the tissue tinted by the stretched rims of the organs round them
   float spread = smoothstep(0.3, 0.9, eR) * mix(0.3, 1.0, D);
-  alb = mix(alb, alb * vec3(0.36, 0.22, 0.16), 0.8 * spread);
-  // the yellow set, topmost: gold where an organ lies in a gap (the broken golden net of 26, 29, 47), an orange cast
-  // over the copper
-  alb = mix(alb, colY, cY * 0.9);
+  alb = mix(alb, vec3(0.09, 0.045, 0.037), 0.85 * spread);
+  // the yellow set: a few organs in the gaps, an orange cast over the copper (the golden net: below, topmost)
+  alb = mix(alb, colY, cY * 0.45);
   alb = mix(alb, colM * mix(vec3(1.0), vec3(1.1, 0.95, 0.6), cY * 0.6), cM);
   alb = mix(alb, colB, cB * 0.95);
   // fully dark (the startle, a dark bottom): the dark set floods the back
   float deep = smoothstep(0.85, 1.2, eB) * D;
   alb = mix(alb, vec3(0.03, 0.012, 0.014), deep * 0.75);
+#ifndef MM_LOW
+  {
+    // the golden net, topmost (the yellow organs are the outermost layer): broken dashes along the cells' borders,
+    // 30-50 % of their length, brightest on the saddle and round the eye (29); kept in the dark dress with gold dust
+    // (61, 66, 67), lost in the startle's flood
+    float dash = smoothstep(0.55, 0.68, mmN(p * 2.6 + uSeed * 7.0));
+    float gold = rM.y * rM.y * dash * clamp(eY, 0.0, 1.0) * (0.25 + 0.9 * saddle + 0.6 * eyeRing) * (1.0 - 0.8 * smoothstep(1.0, 1.25, eB));
+    alb = mix(alb, vec3(0.5, 0.3, 0.13), clamp(gold, 0.0, 1.0) * 0.9);
+  }
+#endif
+  // the arms in the copper dress: a chocolate wash over their spots (29)
+  if (arm) alb = mix(alb, colM * 0.8, 0.6 * smoothstep(0.7, 1.0, eR) * D * (1.0 - 0.5 * armT));
   mmPig = max(max(cB, deep * 0.8), cM * 0.85);
   cB = max(max(cB, deep * 0.8), cM * 0.6);
 #ifndef MM_LOW
@@ -396,8 +420,8 @@ float mmRough = 0.5, mmCoat = 0.12, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   float spang = step(0.8, fract(plateH * 7.3)) * plate * (1.0 - cM) * (1.0 - cB) * D * (part < 1.5 ? 1.0 : 0.3);
 #ifndef MM_LOW
   if (ePm > 0.01) {
-    // the eye's reflecting plates are larger (0.42 mm) and crowded: 55-65 % of the patch (7, 22)
-    vec3 q = p / 0.42 + 5.0;
+    // the eye's reflecting plates: small flecks (0.15-0.25 mm) on a dark ground, ≈ 40 % of the patch (7)
+    vec3 q = p / 0.2 + 5.0;
     vec3 b = floor(q - 0.5);
     float f1 = 9.0, f2 = 9.0; vec3 hh = vec3(0.5);
     for (int k = 0; k < 8; k++) {
@@ -407,26 +431,33 @@ float mmRough = 0.5, mmCoat = 0.12, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
       float d = length(dq - nR * dot(dq, nR));
       if (d < f1) { f2 = f1; f1 = d; hh = h; } else if (d < f2) f2 = d;
     }
-    eyePl = smoothstep(0.05, 0.16 + aa / 0.42, f2 - f1) * (0.3 + 0.7 * hh.x);
+    eyePl = smoothstep(0.1, 0.26 + aa / 0.2, f2 - f1) * (0.5 + 0.5 * hh.x);
+    // (finer than the pixel: their mean)
+    eyePl = mix(eyePl, 0.45, smoothstep(0.06, 0.2, aa));
     plateH = hh.z;
   }
 #endif
   eyePatch *= eyePl;
-  float flank = (part < 0.5 ? 1.0 : 0.0) * exp(-pow((zn + 5.0) / 3.8, 2.0)) * exp(-pow((nR.y + 0.05) / 0.42, 2.0)) * smoothstep(0.2, 0.5, mmF(p * 0.15 + 3.0 + uSeed));
-  flank *= 0.55 + 0.45 * min(plate, 1.0);
+  // the flank's sheet (12): flecks on the upper middle of the flank, under the chromatophores
+  float flank = (part < 0.5 ? 1.0 : 0.0) * exp(-pow((zn + 5.0) / 3.8, 2.0)) * exp(-pow((nR.y - 0.15) / 0.42, 2.0)) * smoothstep(0.2, 0.5, mmF(p * 0.15 + 3.0 + uSeed));
+  flank *= (1.0 - 0.85 * cM) * (1.0 - 0.8 * cB) * smoothstep(0.35, 0.8, plate);
+  // cell spangles (7): a few whole cells of the mosaic on the front and middle of the back carry silver-blue plates
+  float cs = part < 0.5 ? step(0.88, fract(rM.z * 13.7)) * exp(-pow((zn + 8.0) / 5.0, 2.0)) * smoothstep(0.7, 0.95, D) : 0.0;
   // the chromatophores lie over the flank's sheet and the spangles; over the eyes the plates lie among them
-  mmIr = (0.9 * spang + 1.1 * flank * (1.0 - 0.6 * cM) * (1.0 - 0.8 * cB) + (part < 0.5 ? 0.25 * (1.0 - D) : 0.0)) + 1.8 * eyePatch * (1.0 - 0.3 * cB) + 0.35 * margin * (1.0 - edge);
+  mmIr = (0.9 * spang + 1.1 * flank * (1.0 - 0.6 * cM) * (1.0 - 0.8 * cB) + (part < 0.5 ? 0.25 * smoothstep(-0.45, -0.75, nR.y) : 0.0)) + 1.8 * eyePatch * (1.0 - 0.3 * cB) + 0.35 * margin * (1.0 - edge) + 2.5 * cs * min(plate, 1.0);
   if (arm) mmIr = 0.2 * spang;
   mmIr *= uIrid;
   // the film: blue-green to teal over the eyes, gold-green on the flank, the spangles the animal's own hue
   mmIrT = ePm > 0.05 ? plateH * 0.5 : flank > 0.05 ? 0.55 + 0.15 * plateH : fract(uSeed * 3.7) * 0.5 + 0.2 * plateH;
+  mmSpang = cs;
   mmFlank = flank;
   mmEyeIr = eyePatch;
   // (the margin's ring of reflecting cells: gold-green face on, teal when grazing: 29, 61)
   mmRim = margin * (1.0 - edge);
-  mmSil = part < 0.5 ? 1.0 - D : 0.0;
-  // (the chromatophores thin out over the eye's patch: its plates show)
-  alb = mix(alb, colM * 0.45, 0.8 * ePm);
+  // (the silver only on the belly's band, the lowest 12-20 % of a side view: 26, 29)
+  mmSil = part < 0.5 ? smoothstep(-0.45, -0.75, nR.y) : 0.0;
+  // (over the eye's patch the chromatophores thin out to a dark ground under its flecks: 7)
+  alb = mix(alb, vec3(0.03, 0.028, 0.02), 0.85 * ePm);
   // ---- suckers on the oral faces
   if (arm && vSkin.z > 0.2) {
     float tt = vSkin.y;
@@ -448,13 +479,13 @@ float mmRough = 0.5, mmCoat = 0.12, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   // the arm tips and the tentacles are thin: they pass light
   mmThin = arm ? 0.35 + 0.55 * vSkin.y : funnel ? (vSkin.z > 1.5 ? 0.0 : 0.3) : sucker ? 0.45 : lining ? 0.1 : 0.12 * (1.0 - D) + 0.25 * lip;
   // the funnel's opening: the thick lip paler, the bore going dark within a millimetre
-  if (funnel && vSkin.z > 0.5) alb = vSkin.z < 1.5 ? vec3(0.72, 0.67, 0.73) : mix(vec3(0.3, 0.2, 0.23), vec3(0.015, 0.01, 0.012), smoothstep(0.0, 0.45, vSkin.w));
+  if (funnel && vSkin.z > 0.5) alb = vSkin.z < 1.5 ? vec3(0.5, 0.46, 0.52) : mix(vec3(0.3, 0.2, 0.23), vec3(0.015, 0.01, 0.012), smoothstep(0.0, 0.45, vSkin.w));
   // a fine relief of the organs and the skin; the raised fold of the lids (≈ 0.43 mm wide), the crease round the globe
   mmHgt += 0.02 * cB + 0.012 * (mmN(p * 3.0) - 0.5);
   mmHgt += 0.10 * fold - 0.05 * crease;
   // (the skin pulled tight over the globe glistens)
   mmRough = mix(mix(0.46, 0.56, cB), 0.34, dome);
-  mmCoat = mix(mmCoat, 0.75, dome);
+  mmCoat = mix(mmCoat, mix(0.75, 0.25, ePm), dome);
   // ---- sand: grains in the mucus of the back, and thrown over the head (not over the eyes)
   {
     // grains: jittered points at two sizes over a fine noise (no lattice), a few pale quartz and dark grains
@@ -483,7 +514,9 @@ float mmRough = 0.5, mmCoat = 0.12, mmIr = 0.0, mmIrT = 0.5, mmThin = 0.0, mmHgt
   // glassy tissue: where no pigment is spread the background shows through (most in the pale, hunting dress)
   // a living bobtail is glassy: between the chromatophores the tissue lets most of the light through (more in the
   // pale dress, at the arm tips and the mantle's thin rim); the viewing angle is added in SKIN_THIN
-  float clear = (0.42 + 0.4 * uPale) * (1.0 - mmPig) * (1.0 - mmPig) * (1.0 - mmSand) * (funnel ? (vSkin.z > 1.5 ? 0.0 : 1.0) : lining ? 0.3 : 1.0) * (arm ? 1.0 + 0.3 * vSkin.y : 1.0);
+  // (the mantle and head are a muscular wall: milky and see-through in the pale dress, hardly at all when the copper
+  // is spread; the arms stay glassy)
+  float clear = (arm ? 0.42 + 0.4 * uPale : 0.16 + 0.5 * uPale) * (1.0 - 0.9 * spread) * (1.0 - mmPig) * (1.0 - mmPig) * (1.0 - mmSand) * (funnel ? (vSkin.z > 1.5 ? 0.0 : 1.0) : lining ? 0.3 : 1.0) * (arm ? 1.0 + 0.3 * vSkin.y : 1.0);
   // the skin of the eye's bulge is as opaque as the head's, but over the ball the thin lid lets its silver show between
   // the organs (32, 33, 62, 68); the gold gaps stay opaque (29)
   float bulge = headP ? smoothstep(1.7, 1.3, eyeL / ${f(EYE.r)}) : 0.0;
@@ -529,13 +562,16 @@ const SKIN_THIN = /* glsl */ `
   // the hues of the photographs: teal-green to blue over the eyes (7, 22, 61, 12), gold-green on the flank (12), the
   // back's spangles gold-green or blue-violet (the animal's own), the belly silver; the hue drifts a little with the angle
   float sh = (1.0 - cv) * 0.35;
-  vec3 eyeC = mix(vec3(0.06, 0.62, 0.36), vec3(0.10, 0.30, 0.85), clamp(mmIrT * 2.2 - 0.5 + sh, 0.0, 1.0));
-  vec3 flankC = mix(vec3(0.85, 0.78, 0.35), vec3(0.40, 0.85, 0.40), clamp((mmIrT - 0.55) * 4.0 + sh, 0.0, 1.0));
+  // (each eye fleck its own hue: about 55 % teal-green, 35 % blue, 10 % gold, 7; bluer seen obliquely)
+  float eh = clamp(mmIrT * 2.0 + 0.25 * sh, 0.0, 1.0);
+  vec3 eyeC = eh < 0.55 ? vec3(0.05, 0.55, 0.3) : eh < 0.9 ? vec3(0.08, 0.25, 0.8) : vec3(0.6, 0.5, 0.1);
+  // (the flank's flecks drift gold → green → pink across the sheet, 12)
+  float fhh = fract((mmIrT - 0.55) * 20.0 + 0.3 * sh);
+  vec3 flankC = fhh < 0.4 ? vec3(0.85, 0.78, 0.35) : fhh < 0.75 ? vec3(0.4, 0.85, 0.4) : vec3(0.8, 0.45, 0.55);
   vec3 spC = mix(vec3(0.75, 0.80, 0.30), vec3(0.45, 0.35, 0.95), step(0.5, fract(uSeed * 3.7)));
-  // (a few violet and gold plates among the eye's teal ones: 22, 33)
-  float fh = fract(mmIrT * 13.7);
-  eyeC = mix(eyeC, fh < 0.12 ? vec3(0.2, 0.08, 0.62) : fh > 0.95 ? vec3(0.75, 0.48, 0.06) : eyeC, 0.8 * step(0.02, mmEyeIr));
   vec3 film = mmEyeIr > 0.02 ? eyeC : mmFlank > 0.05 ? flankC : spC;
+  // (the cell spangles of the back: silver-blue-violet plates over whole cells, 7)
+  film = mix(film, vec3(0.55, 0.6, 0.95), step(0.05, mmSpang));
   film = mix(film, vec3(0.78, 0.84, 0.95), mmSil * (1.0 - step(0.05, mmFlank)));
   film = mix(film, mix(vec3(0.62, 0.66, 0.24), vec3(0.1, 0.62, 0.55), sh * 2.0), mmRim);
   // (iridophores are stacks of thin plates: they send coloured light back over a broad cone, not only as a mirror)
@@ -545,7 +581,7 @@ const SKIN_THIN = /* glsl */ `
   // flank (12), blue-green over the eyes (3, 6, 7, 22); a rainbow drifting over them with the angle
   vec3 sheet = mmFlank * flankC;
   // the eyes' plates: bright structural colour from the water's light (7, 22: plates 0.2–0.5 linear in green)
-  totalEmissiveRadiance += eyeC * mmEyeIr * uIrid * (1.0 - mmSand) * (amUnderwater(nW, 1.0) * 1.6 + lightIn * 0.9);
+  totalEmissiveRadiance += eyeC * mmEyeIr * uIrid * (1.0 - mmSand) * (amUnderwater(nW, 1.0) * 2.4 + lightIn * 1.2);
   totalEmissiveRadiance += sheet * uIrid * (1.0 - mmSand) * (amUnderwater(nW, 1.0) * 0.55 + lightIn * 0.35);
 }
 `;
@@ -571,10 +607,11 @@ const SKIN_ALPHA = /* glsl */ `
 function skinMaterial(u: MmUniforms, low: boolean): MeshPhysicalMaterial {
   const m = new MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0, roughness: 0.5, clearcoat: low ? 0.25 : 0.35, clearcoatRoughness: 0.24, side: FrontSide, transparent: true, depthWrite: true,
-    iridescence: low ? 0 : 1, iridescenceIOR: 1.55, iridescenceThicknessRange: [180, 720], specularIntensity: 0.3,
+    iridescence: low ? 0 : 1, iridescenceIOR: 1.55, iridescenceThicknessRange: [180, 720], specularIntensity: 0.3, ior: 1.2,
   });
   m.name = low ? 'MimiikaSkinLOD2' : 'MimiikaSkin';
-  m.envMapIntensity = 0.2;
+  // (skin against water: a relative index of only 1.05-1.2, a faint sheen)
+  m.envMapIntensity = 0.1;
   m.defines = { USE_UV: '', ...(low ? { MM_LOW: '' } : {}) };
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, AMH_UNIFORMS, u);
@@ -670,14 +707,18 @@ float mfThin = 1.0;
 #else
   float cB = eB * 0.05, cR = eR * 0.06, cY = eY * 0.08;
 #endif
-  vec3 col = vec3(0.7, 0.7, 0.72);
+  vec3 col = vec3(0.74, 0.75, 0.78);
+  // (an orange-gold tint near the base, 66)
+  col = mix(col, vec3(0.7, 0.48, 0.25), 0.35 * near * uChroma.x);
   col = mix(col, vec3(0.80, 0.52, 0.12), cY * 0.9);
   col = mix(col, vec3(0.30, 0.09, 0.045), cR * 0.9);
   col = mix(col, vec3(0.03, 0.013, 0.012), cB * 0.95);
   float alpha = 0.05 + 0.85 * max(cB, cR * 0.9) + 0.6 * cY + 0.1 * near * near;
   // the fleshy base, the clear, slightly thickened rim
   alpha = mix(alpha, 0.9, 1.0 - smoothstep(0.0, 0.1, v));
-  alpha = max(alpha, 0.22 * exp(-pow((v - 0.985) / 0.02, 2.0)));
+  alpha = max(alpha, 0.32 * exp(-pow((v - 0.985) / 0.02, 2.0)));
+  // a clear membrane face on, milky towards its outline (26, 17, 19): not a veil over the flank where it lies folded
+  alpha += 0.15 * pow(1.0 - abs(dot(normalize(vNormal), normalize(vViewPosition))), 4.0);
   // sand on the fins of a buried animal
   float sand = smoothstep(0.3, 0.6, uSandCoat) * step(0.35, mmH(floor(p / 0.34))) * 0.8;
   col = mix(col, uCover, sand);
@@ -926,7 +967,7 @@ export class MimiikaLook {
   constructor(spec: MmLookSpec) {
     this.spec = spec;
     this.uniforms = {
-      uTint: { value: new Color(...spec.tint) }, uChroma: { value: new Vector4(0.7, 0.95, 0.45 * spec.dark, 0.45) },
+      uTint: { value: new Color(...spec.tint) }, uChroma: { value: new Vector4(0.7, 0.95, 0.25 * spec.dark, 0.45) },
       uIrid: { value: 0.7 }, uPale: { value: 0 }, uSeed: { value: spec.seed }, uMantle: { value: 1 },
       uSandCoat: { value: 0 }, uHeadCover: { value: 0 }, uCover: { value: new Color(0.37, 0.37, 0.355) },
       uFinAmp: { value: new Vector2() }, uFinPh: { value: new Vector2() }, uFinK: { value: 1 }, uPupil: { value: 0.15 }, uLid: { value: 0.35 }, uHeadFromWorld: { value: new Matrix3() }, uLidCol: { value: new Color(0.2, 0.1, 0.07) }, uRelief: { value: 1 }, uGroundY: { value: -1e3 },
