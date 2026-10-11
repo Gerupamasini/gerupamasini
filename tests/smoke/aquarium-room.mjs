@@ -110,6 +110,7 @@ try {
   await page.getByRole('button', { name: '水槽2を見る', exact: true }).click(); await page.waitForFunction(() => !window.__higata.roomBusy.value);
   assert.deepEqual(await page.evaluate(() => window.__higata.tank.occupants.map(o => o.record.id)), ['two']);
   assert.equal(await page.evaluate(() => window.__higata.tankInstallEquipment('airStone-ivory', 'airStone')), false);
+  await page.locator('.home-switcher button.on').evaluate(el => Promise.all(el.getAnimations().map(animation => animation.finished)));
   await page.screenshot({ path: new URL('home-mobile.png', screenshots).pathname });
   await reload(); const final = await state(); assert.equal(final.active, final.main); assert.equal(final.width, 1.2);
   assert.deepEqual(final.tanks.map(t => t.size), [45, 90, 120]); assert.deepEqual(final.tanks.map(t => t.fish), [['one'], ['two'], []]);
