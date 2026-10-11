@@ -1,11 +1,10 @@
 import {
-  BufferGeometry, CanvasTexture, Color, Float32BufferAttribute, Group, IcosahedronGeometry, LinearMipmapLinearFilter,
-  Mesh, MeshLambertMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace, type IUniform,
+  BufferGeometry, CanvasTexture, Color, Float32BufferAttribute, Group, LinearMipmapLinearFilter,
+  Mesh, MeshLambertMaterial, RepeatWrapping, SRGBColorSpace, type IUniform,
 } from 'three';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Land } from '../hashirimizu/land';
 import type { BackdropCrown } from '../../mangrove/MangroveForest';
-import { canopyAt, crownAt, CROWN_CELL, ENTRY, FAR_SHORE_X, forestDepth, groundAt, HALF, shellProfile, vnoise } from './shape';
+import { canopyAt, crownAt, CROWN_CELL, FAR_SHORE_X, forestDepth, groundAt, HALF, shellProfile, vnoise } from './shape';
 
 /**
  * Everything round the 漫湖 basin beyond the rows of real tree models: the deep mangrove forest, the wider lake to
@@ -189,66 +188,6 @@ function city(): Mesh {
   return mesh;
 }
 
-// ------------------------------------------------------------------ the entry shore's limestone and algae stones
-/** Pale, pitted limestone blocks on the entry shore and darker algae-covered stones in the shallows (user's photo). */
-function stones(): Mesh {
-  const pos: number[] = [], col: number[] = [], idx: number[] = [];
-  // welded (smooth-shaded) unit rock; each stone displaces it with its own noise, so no two read alike
-  const raw = new IcosahedronGeometry(1, 3); raw.deleteAttribute('normal'); raw.deleteAttribute('uv');
-  const base = mergeVertices(raw), bp = base.getAttribute('position'), bi = base.index!;
-  raw.dispose();
-  for (let k = 0; k < 260; k++) {
-    const a = rnd() * Math.PI * 2, r = Math.pow(rnd(), 0.7) * 15, x = ENTRY.x + Math.cos(a) * r * 1.25, z = ENTRY.z + Math.sin(a) * r * 0.8;
-    const wet = groundAt(x, z) < 0.5, s = wet ? 0.08 + rnd() * 0.16 : 0.08 + Math.pow(rnd(), 2.5) * 0.36, flat = 0.55 + rnd() * 0.35;
-    // limestone: pale cream-grey; in the tidal shallows dark olive with algae (user's photo)
-    const c = wet ? [0.035 + rnd() * 0.015, 0.05 + rnd() * 0.015, 0.02] : [0.28 + rnd() * 0.05, 0.275 + rnd() * 0.05, 0.235 + rnd() * 0.04];
-    const o = pos.length / 3, y = groundAt(x, z) - s * flat * 0.35, rot = rnd() * 6.28, seedK = k * 3.7;
-    for (let i = 0; i < bp.count; i++) {
-      const vx = bp.getX(i), vy = bp.getY(i), vz = bp.getZ(i);
-      // coral-limestone: lumpy, with sharp knobs and hollows at several scales
-      const n = 0.55 + 0.55 * vnoise(vx * 1.6 + seedK, vz * 1.6 + vy * 1.3) + 0.3 * Math.abs(vnoise(vx * 4.5 + seedK, vy * 4.5 - vz * 3) - 0.5) * 2 - 0.12 * vnoise(vx * 11 + seedK, vz * 11 + vy * 9);
-      const px = (vx * Math.cos(rot) - vz * Math.sin(rot)) * s * n * 1.25, pz = (vx * Math.sin(rot) + vz * Math.cos(rot)) * s * n;
-      pos.push(x + px, y + vy * s * n * flat, z + pz);
-      // solution pits and dark undersides in the limestone; mud staining at the foot
-      const pit = vnoise(vx * 7 + seedK, vz * 7 - vy * 5) < 0.28 ? 0.55 : 1, foot = vy < -0.1 ? 0.55 : 1;
-      col.push(c[0] * pit * foot, c[1] * pit * foot, c[2] * pit * foot);
-    }
-    for (let i = 0; i < bi.count; i++) idx.push(o + bi.getX(i));
-  }
-  base.dispose();
-  const g = new BufferGeometry();
-  g.setAttribute('position', new Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new Float32BufferAttribute(col, 3));
-  g.setIndex(idx); g.computeVertexNormals(); g.computeBoundingSphere();
-  const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.92 });
-  // porous coral limestone: solution pits and craggy relief from 3D noise in world space, as bump (no vertices)
-  mat.onBeforeCompile = (sh) => {
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRockP;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvRockP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-varying vec3 vRockP;
-float rkHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-float rkNoise(vec3 p) {
-  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(mix(rkHash(i), rkHash(i + vec3(1,0,0)), f.x), mix(rkHash(i + vec3(0,1,0)), rkHash(i + vec3(1,1,0)), f.x), f.y),
-             mix(mix(rkHash(i + vec3(0,0,1)), rkHash(i + vec3(1,0,1)), f.x), mix(rkHash(i + vec3(0,1,1)), rkHash(i + 1.0), f.x), f.y), f.z);
-}
-float rkField(vec3 p) { return rkNoise(p * 9.0) * 0.5 + rkNoise(p * 23.0) * 0.3 + rkNoise(p * 61.0) * 0.2; }`)
-      .replace('#include <color_fragment>', `#include <color_fragment>
-float rkF = rkField(vRockP);
-float rkPit = smoothstep(0.42, 0.3, rkF);
-diffuseColor.rgb *= 0.78 + 0.4 * rkF - 0.35 * rkPit;`)
-      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-{ vec3 dx = dFdx(-vViewPosition), dy = dFdy(-vViewPosition), r1 = cross(dy, normal), r2 = cross(normal, dx);
-  float det = dot(dx, r1), h = rkF * 0.012 - rkPit * 0.01;
-  if (abs(det) > 1e-10) normal = normalize(abs(det) * normal - sign(det) * (dFdx(h) * r1 + dFdy(h) * r2)); }`);
-  };
-  mat.customProgramCacheKey = () => 'manko-limestone';
-  const mesh = new Mesh(g, mat);
-  mesh.name = 'manko-stones';
-  return mesh;
-}
-
 export function buildMankoLand(): Land {
   const group = new Group();
   group.name = 'manko-land';
@@ -261,18 +200,16 @@ export function buildMankoLand(): Land {
   // the far shore's tree line at 3 m, so its crowns make the skyline's lower edge (not the 12 m grid's steps)
   const shore = new Mesh(grid(FAR_SHORE_X - 30, FAR_SHORE_X + 90, -560, 460, 3, 0, true), mat);
   shore.name = 'manko-far-shore';
-  const town = city(), rocks = stones();
-  group.add(near, far, shore, town, rocks);
+  const town = city();
+  group.add(near, far, shore, town);
   group.traverse((o) => { o.castShadow = false; o.receiveShadow = false; o.matrixAutoUpdate = false; o.updateMatrix(); });
-  rocks.castShadow = rocks.receiveShadow = true;
   return {
     group,
     setHaze: (color) => { haze.uHazeCol.value.copy(color); },
     dispose: () => {
-      for (const m of [near, far, shore, town, rocks]) m.geometry.dispose();
+      for (const m of [near, far, shore, town]) m.geometry.dispose();
       map.dispose(); mat.dispose();
       const tm = town.material as MeshLambertMaterial; tm.map?.dispose(); tm.dispose();
-      (rocks.material as MeshStandardMaterial).dispose();
       group.removeFromParent();
     },
   };

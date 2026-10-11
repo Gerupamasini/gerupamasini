@@ -26,7 +26,7 @@ try {
   await page.evaluate(()=>{const a=window.__higata;a.setDebugTime(Date.UTC(2026,9,10,3));a.setTideOverride(-.25);});
   await page.waitForFunction(()=>window.__higata.world.tideLevel===-.25);
   const info=await page.evaluate(()=>{const a=window.__higata; a.forceSpawn();return {map:a.world.map.id,size:a.world.terrain.size,animals:a.creatures.individuals.length,clams:a.clams,reef:!!a.world.oysters,pits:a.world.pits.length,skyline:a.world.skyline.group.children.length,land:a.world.skyline.land?.group.children.length??0,forest:a.world.mangroves.stats,position:a.player.position.toArray()};});
-  assert.equal(info.size,300);assert.equal(info.animals,0);assert.equal(info.clams,null);assert.equal(info.reef,false);assert.equal(info.pits,0);assert.equal(info.skyline,0);assert.equal(info.land,5);assert.ok(info.forest.trees>1000);
+  assert.equal(info.size,300);assert.equal(info.animals,0);assert.equal(info.clams,null);assert.equal(info.reef,false);assert.equal(info.pits,0);assert.equal(info.skyline,0);assert.equal(info.land,4);assert.ok(info.forest.trees>1000);
   await page.screenshot({path:new URL('field.png',out).pathname});
   // clean views (HUD hidden): the basin from the entry, the lake mouth, the west forest; at low and mid quality
   await page.addStyleTag({content:'body > *:not(canvas):not(#app), #app > *:not(canvas), .hud, .overlay { visibility:hidden !important }'});

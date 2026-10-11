@@ -3,7 +3,7 @@
  * A lake, not the sea: a lobed basin of mud and shallow water (the 200 m × 200 m playable area) ringed by dense
  * mangrove forest, opening to the north-east into the wider lake, whose far shore is forest again, with low green
  * low hills beyond, and on the east the open lake with the city on its far shore. Mangrove islands stand in the
- * basin. Entry is a limestone-rubble shore at the east edge.
+ * basin. Entry is a raised muddy-sand bank on the east shore (no rocks on the flat).
  * One world function serves the 300 m terrain (shape inside ±150 m) and the land around it out to the horizon.
  * Axes: +x east, +z south. Heights in metres in the map datum (simulated tide ±0.85 m).
  */
@@ -47,7 +47,7 @@ export function openness(x: number, z: number): number {
   for (const i of ISLANDS) s *= 1 - smooth(i.r + 1.5, i.r - 1.5, Math.hypot(x - i.x, z - i.z) + wob * 0.4);
   return s;
 }
-/** The limestone-rubble entry bank: open ground, no canopy. */
+/** The raised entry bank: open ground, no canopy. */
 export function bankAt(x: number, z: number): number { return smooth(10, 5, Math.hypot(x - ENTRY.x, (z - ENTRY.z) * 1.4)); }
 
 /** The main creek through the flat, draining to the lake mouth. */
@@ -109,7 +109,7 @@ export const heightAt = groundAt;
 /** Palette: 0 sand, 1 muddy_sand, 2 mud, 3 gravel, 4 channel. */
 export function substrateAt(x: number, z: number): number {
   const e = Math.hypot(x - ENTRY.x, (z - ENTRY.z) * 1.4);
-  if (e < 9) return 1;                                            // muddy sand among the limestone blocks
+  if (e < 9) return 1;                                            // the entry bank's muddy sand
   if (lakeOpen(x, z) > 0.5) return 4;                             // lake bed
   if (openness(x, z) > 0.5) {
     if (Math.abs(z - creekZ(x)) < 1.5 + Math.max(0, x) * 0.017 && x > -88) return 4;
