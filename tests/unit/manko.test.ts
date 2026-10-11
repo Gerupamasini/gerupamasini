@@ -140,10 +140,24 @@ describe('漫湖 environment-only flat', () => {
       if (d > 0.003 && d >= 0.25 && Math.abs(habitat.spill[k] - pl[k]) > 1e-4) slabs.push(`${k % terrain.n},${Math.floor(k / terrain.n)}`);
     }
     expect(slabs, slabs.slice(0, 8).join(' ')).toEqual([]);
-    // the trickle reaches the lake: at the lowest water it still meets water standing at the tide past the mouth
-    let meets = false;
-    for (let x = 100; x <= 116 && !meets; x += 0.5) { const z = creekZ(x); if (groundAt(x, z) < -0.85 && streamLevel(x - 0.5, creekZ(x - 0.5)) > groundAt(x - 0.5, creekZ(x - 0.5))) meets = true; }
-    expect(meets).toBe(true);
+    // and at every low water, down to the lowest: the creek is water from its head all the way into the lake, and
+    // nowhere does the trickle stand as a terrace over the water or mud beside it
+    const n = terrain.n, cell = map.size_m / (n - 1), half = map.size_m / 2;
+    for (const tide of [-0.85, -0.75, -0.6, -0.4]) {
+      const pooled = (k: number) => pl[k] > tide + 0.01 && pl[k] > hs[k] + 0.003;
+      const surf = (k: number) => pooled(k) ? pl[k] : Math.max(tide, hs[k]);
+      const wet = (k: number) => pooled(k) || tide > hs[k];
+      let terraces = 0;
+      for (let j = 1; j < n - 1; j++) for (let i = 1; i < n - 1; i++) {
+        const k = j * n + i;
+        if (pooled(k)) for (const kk of [k + 1, k - 1, k + n, k - n]) if (surf(k) - surf(kk) > 0.05) terraces++;
+      }
+      expect(terraces, `terraces at tide ${tide}`).toBe(0);
+      for (let x = -86; x <= 116; x += 0.5) {
+        const z = creekZ(x), k = Math.round((z + half) / cell) * n + Math.round((x + half) / cell);
+        expect(wet(k), `creek dry at x=${x}, tide ${tide}`).toBe(true);
+      }
+    }
     forest.dispose();terrain.dispose();
   });
 });

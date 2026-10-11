@@ -45,7 +45,10 @@ function colour(x: number, z: number, canopy: number): number[] {
 
 /** (the roof opens round the wetland centre, defined below, so its walls stand in a clearing, not inside the trees, and
  * along the bridge's approach roads, which run through the forest in a cutting) */
-const roofAt = (x: number, z: number) => canopyAt(x, z) * shellProfile(forestDepth(x, z)) * (1 - centreClear(x, z)) * (1 - roadClear(x, z));
+const roofAt = (x: number, z: number) => {
+  const c = canopyAt(x, z) * shellProfile(forestDepth(x, z));
+  return c * (1 - centreClear(x, z)) * (1 - roadClear(x, z, c));
+};
 
 /** A heightfield over [x0,x1]×[z0,z1]; cells wholly inside `hole` (half-size) and cells with no canopy (when `canopyOnly`) are skipped. */
 function grid(x0: number, x1: number, z0: number, z1: number, step: number, hole: number, canopyOnly: boolean): BufferGeometry {
@@ -180,7 +183,8 @@ export function edgeImpostorSites(): ImpostorSite[] {
     if (Math.abs(px) < inner && Math.abs(pz) < inner) continue;   // the tree models' rows
     if (Math.hypot(px, pz) > 700) continue;
     const depth = forestDepth(px, pz);
-    if (depth < 0.8 || depth > 12.5 || centreClear(px, pz) > 0 || roadClear(px, pz) > 0) continue;
+    // (the edge rows' trees are up to ~7 m tall: they stand under the high deck, not in the road's cutting)
+    if (depth < 0.8 || depth > 12.5 || centreClear(px, pz) > 0 || roadClear(px, pz, 7) > 0) continue;
     const scale = r.range(0.62, 0.92) * r.range(0.86, 1.14) * (1 + depth * 0.012);
     out.push({ x: px, y: groundAt(px, pz), z: pz, scale, base: r.int(0, 4) as HirugiBase, yaw: r.range(0, Math.PI * 2) });
   }
@@ -348,13 +352,17 @@ export const BRIDGE = { z: -330, x0: -150, x1: 600, half: 6.5 };
 export function deckTop(x: number): number {
   const ground = groundAt(x, BRIDGE.z) + 0.45;
   const crest = 8.6 + 0.7 * Math.sin(Math.PI * Math.min(1, Math.max(0, (x - 96) / 334)));
-  const rise = smooth(-100, 104, x) * (1 - smooth(436, 590, x));
+  // (the east ramp starts over the water, so the deck is already coming down when it meets the far shore's trees)
+  const rise = smooth(-100, 104, x) * (1 - smooth(360, 590, x));
   return ground + (Math.max(crest, ground) - ground) * rise;
 }
-/** 1 in the approach roads' cutting through the forest (and the town), 0 elsewhere. */
-function roadClear(x: number, z: number): number {
+/** 1 in the approach roads' cutting through the forest, 0 elsewhere: only where the deck is down among the crowns
+ * (`canopy`: their height over the ground there); under the high deck the trees stand. */
+function roadClear(x: number, z: number, canopy: number): number {
   if (x < BRIDGE.x0 - 20 || x > BRIDGE.x1 + 20) return 0;
-  return smooth(BRIDGE.half + 7, BRIDGE.half + 3, Math.abs(z - BRIDGE.z));
+  const across = smooth(BRIDGE.half + 7, BRIDGE.half + 3, Math.abs(z - BRIDGE.z));
+  if (across <= 0) return 0;
+  return across * smooth(canopy + 1.5, canopy + 0.5, deckTop(x) - 2.1 - groundAt(x, BRIDGE.z));
 }
 function bridge(buf: Buf): void {
   const z0 = BRIDGE.z, H = BRIDGE.half, step = 5, r = new Rng(0xb71d6e);
@@ -411,7 +419,7 @@ function bridge(buf: Buf): void {
   // piers: twin round columns under a hammerhead cap, a dark tide band at their feet over the water; on the land
   // approaches, closer and plainer
   const piers: number[] = [];
-  for (let x = 118; x <= 428; x += 44.5) piers.push(x);
+  for (let x = 118; x < 455; x += 43) piers.push(x);
   for (let x = 86; x > BRIDGE.x0; x -= 34) piers.push(x);
   for (let x = 462; x < BRIDGE.x1; x += 34) piers.push(x);
   for (const x of piers) {

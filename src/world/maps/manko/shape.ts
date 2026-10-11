@@ -92,20 +92,24 @@ function mouthFloor(x: number): number {
   if (!mouthTable) {
     mouthTable = new Float32Array(81);
     let low = Infinity;
-    for (let i = 0; i <= 80; i++) { const xx = 98 + i * 0.25; low = Math.min(low, groundAt(xx, creekZ(xx))); mouthTable[i] = low; }
+    for (let i = 0; i <= 80; i++) { const xx = 96 + i * 0.25; low = Math.min(low, groundAt(xx, creekZ(xx))); mouthTable[i] = low; }
   }
-  const f = Math.min(80, Math.max(0, (x - 98) / 0.25)), i = Math.min(79, Math.floor(f));
+  const f = Math.min(80, Math.max(0, (x - 96) / 0.25)), i = Math.min(79, Math.floor(f));
   return mouthTable[i] + (mouthTable[i + 1] - mouthTable[i]) * (f - i);
 }
 /** The low-water trickle in the creeks: its surface (a few centimetres over the bed), or -1e3 away from them. */
 export function streamLevel(x: number, z: number): number {
   let level = -1e3;
   const widen = Math.max(0, x) * 0.012, cz = creekZ(x);
-  if (x > -96 && x < 116 && Math.abs(z - cz) < 5 + widen * 2) {
+  if (x > -96 && x < 114 && Math.abs(z - cz) < (x > 96 ? 2.5 + widen : 5 + widen * 2)) {
     // (the head: the trickle seeps out of the forest floor, from nothing to its few centimetres)
     level = creekBed(x) + 0.035 - 0.1 * (1 - smooth(-92, -87, x));
-    // (the mouth: it runs on down the channel's floor into the lake, still only centimetres deep)
-    if (x > 98) level = Math.min(level, mouthFloor(x) + 0.035);
+    // (the mouth: it runs on down the channel's floor, only centimetres deep, and gives out where the lake's own
+    // water stands at an ordinary low tide; where the shelf falls away beside it, it never stands over it)
+    if (x > 96) {
+      level = Math.min(level, mouthFloor(x) + 0.035) - 0.1 * smooth(107, 112, x);
+      if (groundAt(x, z) < level - 0.05) level = -1e3;
+    }
   }
   if (z > cz + 1 && z < 82 && Math.abs(x - tributaryX(z)) < 3.5) {
     const t = tributaryBed(z) + 0.03;
@@ -118,7 +122,9 @@ export function streamLevel(x: number, z: number): number {
 function carveCreeks(x: number, z: number, g: number): number {
   const widen = Math.max(0, x) * 0.012, dc = Math.abs(z - creekZ(x));
   const along = smooth(-98, -90, x) * (1 - smooth(112, 120, x));
-  if (along > 0 && dc < 9) g -= along * (1 - smooth(6, 9, dc)) * Math.max(0, g - (creekBed(x) + 0.34 * smooth(0.4, 2.6 + widen * 0.8, dc)));
+  // (past the flat's edge the bed steepens down the lake's shelf, so the mouth has no sill)
+  const bed = creekBed(x) - 0.03 * Math.max(0, x - 98);
+  if (along > 0 && dc < 9) g -= along * (1 - smooth(6, 9, dc)) * Math.max(0, g - (bed + 0.34 * smooth(0.4, 2.6 + widen * 0.8, dc)));
   const alongT = smooth(JUNCTION.z - 1, JUNCTION.z + 2, z) * (1 - smooth(78, 86, z)), dt = Math.abs(x - tributaryX(z));
   if (alongT > 0 && dt < 6) g -= alongT * (1 - smooth(4, 6, dt)) * Math.max(0, g - (tributaryBed(z) + 0.26 * smooth(0.3, 1.8, dt)));
   return g;
