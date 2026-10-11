@@ -158,8 +158,8 @@ const FRAG_SURFACE = /* glsl */ `
   // how far the legs take the body's tint: little in the grey-white legs of 2.webp and 5.webp, much in the khaki
   // and brown individuals (4.webp, the specimens)
   float legTint = uKgMorph.w;
-  vec3 limbG = mix(mix(vec3(0.54, 0.555, 0.55), ground * 0.85, legTint), mix(ground, marb, 0.45), 1.0 - pale);
-  vec3 limbD = mix(mix(vec3(0.08, 0.078, 0.065), marb, 0.3 + 0.5 * legTint), marb * 0.6, 1.0 - pale);
+  vec3 limbG = mix(mix(vec3(0.5, 0.47, 0.39), ground * 0.95, legTint), mix(ground, marb, 0.4), 1.0 - pale);
+  vec3 limbD = mix(mix(vec3(0.15, 0.12, 0.085), marb * 1.1 + vec3(0.02, 0.015, 0.008), 0.35 + 0.45 * legTint), marb * 0.75, 1.0 - pale);
   vec3 pink = vec3(0.74, 0.25, 0.27), pinkL = vec3(0.86, 0.5, 0.52), maroon = vec3(0.24, 0.025, 0.035);
   vec3 black = vec3(0.012, 0.010, 0.009);
   vec3 cream = vec3(0.62, 0.55, 0.40);
@@ -210,7 +210,7 @@ const FRAG_SURFACE = /* glsl */ `
     float fl1 = kgSpeck(vec3(q * 150.0, seedP * 0.5 + P.y * 150.0), dens, 0.34, fw * 150.0, idd);
     float fl2 = kgSpeck(vec3(q * 72.0, seedP * 0.7 + P.y * 72.0), dens * 0.45, 0.3, fw * 72.0, idd);
     vec3 dcol = mix(base, gold, clamp(fl1 * 0.85 + fl2 * 0.6, 0.0, 1.0));
-    dcol = mix(dcol, gold * 0.8, clamp(mRidge * 0.45 + arc * 0.35, 0.0, 1.0));
+    dcol = mix(dcol, gold * 0.8, clamp(mRidge * 0.25 + arc * 0.18, 0.0, 1.0));
     // a darker band just behind the M ridge
     dcol = mix(dcol, base * 0.75, exp(-pow((q.y - zM + 0.035) / 0.025, 2.0)) * 0.45 * (1.0 - smoothstep(0.3, 0.38, q.x)));
     // the translucent rim inside the lateral and posterior margins, its inner edge a fine golden line (008)
@@ -259,7 +259,7 @@ const FRAG_SURFACE = /* glsl */ `
     // ---- face: suborbital ridge with a row of small granules [L], epistome; the buccal cavity is dark
     // the face around the mouth frame: dark, veined with the dorsum's pale colour (2.webp, 4.webp)
     vec3 fcol = mix(marb, ground, 0.25 * smoothstep(0.45, 0.7, kgFbm(P * 16.0 + seedP)));
-    float subOrb = (1.0 - smoothstep(0.0, 0.02, abs(P.y - 0.48))) * smoothstep(0.08, 0.12, q.x) * (1.0 - smoothstep(0.34, 0.4, q.x));
+    float subOrb = (1.0 - smoothstep(0.0, 0.02, abs(P.y - 0.36))) * smoothstep(0.08, 0.12, q.x) * (1.0 - smoothstep(0.34, 0.4, q.x));
     float gran = 0.5 + 0.5 * cos(q.x * 6.2831853 * 34.0);
     h += subOrb * faceM * 0.003 * gran;
     fcol = mix(fcol, ground, subOrb * gran * 0.25);
@@ -289,7 +289,7 @@ const FRAG_SURFACE = /* glsl */ `
     col = dcol * dorsal + scol * side * (1.0 - faceM) + fcol * faceM * (1.0 - dorsal) + vcol * ventral;
     rough = mix(0.66, 0.78, tub) * dorsal + 0.7 * side + 0.55 * ventral;
     // the buccal cavity (behind the third maxillipeds): dark, evaluated continuously so its edge is smooth
-    float cav = (1.0 - smoothstep(0.16, 0.2, q.x)) * smoothstep(0.09, 0.13, P.y) * (1.0 - smoothstep(0.39, 0.43, P.y)) * smoothstep(0.37, 0.4, P.z) * (1.0 - dorsal);
+    float cav = (1.0 - smoothstep(0.16, 0.2, q.x)) * smoothstep(0.09, 0.13, P.y) * (1.0 - smoothstep(0.33, 0.37, P.y)) * smoothstep(0.37, 0.4, P.z) * (1.0 - dorsal);
     col = mix(col, vec3(0.02, 0.016, 0.014), cav);
     rough = mix(rough, 0.35, cav);
     ao = mix(ao, 0.25, cav);
@@ -308,22 +308,22 @@ const FRAG_SURFACE = /* glsl */ `
     float isDistal = step(0.5, seg);
     float th = vKgUv.x * 6.2831853;
     // the cornea is an oblique window: low on the front of the tip, high on its back (4.webp)
-    float edge = 0.222 - 0.03 * cos(th - 0.6);
+    float edge = 0.192 - 0.018 * cos(th - 0.6);
     float cornea = isDistal * smoothstep(edge - 0.004, edge + 0.004, P.x);
     // the stalk: grey-violet, mottled dark in irregular patches, finely speckled; a dusky band just below the
     // cornea (2.webp close-up: mean sRGB ≈ 93,90,85; 013)
-    vec3 stalk = mix(vec3(0.4, 0.41, 0.46), ground * 0.6, 0.3 * (1.0 - pale));
+    vec3 stalk = mix(limbG * 1.05, ground * 0.8, 0.25);
     // the basal article sits in the orbit: shaded, no pattern of its own (its seam would show)
     float basal = 1.0 - isDistal;
     float mott = smoothstep(0.42, 0.64, kgFbm(vec3(P.x * 45.0, P.y * 45.0, P.z * 45.0 + seedP + limb)));
-    stalk = mix(stalk, mix(marb, vec3(0.06, 0.055, 0.065), 0.5), mott * (0.2 + 0.45 * pale));
-    stalk = mix(stalk, marb * 0.5, kgSpeck(P * 80.0 + seedP, 0.45, 0.24, fw * 80.0, idd) * 0.5);
-    stalk = mix(stalk, mix(marb, vec3(0.1), 0.5), smoothstep(edge - 0.06, edge - 0.01, P.x) * isDistal * 0.3);
+    stalk = mix(stalk, limbD, mott * 0.35);
+    stalk = mix(stalk, limbD * 0.7, kgSpeck(P * 80.0 + seedP, 0.45, 0.24, fw * 80.0, idd) * 0.45);
+    stalk = mix(stalk, limbD * 0.8, smoothstep(edge - 0.05, edge - 0.01, P.x) * isDistal * 0.35);
     if (det > 0.2) glint = kgSpeck(P * 170.0 + seedP + 3.0, 0.55, 0.2, fw * 170.0, idd) * (1.0 - cornea);
     // cornea: a dark grey cap, lighter toward its rim, golden flecks; the pseudopupil that faces the viewer is
     // darkened in the light stage (2.webp: dark centre, pale edge; 013)
     float rimC = smoothstep(0.012, 0.03, length(P.yz));
-    vec3 corn = mix(vec3(0.045, 0.04, 0.038), vec3(0.16, 0.15, 0.14), rimC * 0.7);
+    vec3 corn = mix(vec3(0.06, 0.06, 0.05), vec3(0.2, 0.2, 0.16), rimC * 0.75);
     float fleck = kgSpeck(P * 220.0 + seedP + 7.0, 0.35, 0.2, fw * 220.0, idd);
     corn = mix(corn, vec3(0.34, 0.24, 0.1), fleck * 0.5);
     // ommatidial facets: a fine hexagonal-ish ripple at macro range
@@ -353,20 +353,22 @@ const FRAG_SURFACE = /* glsl */ `
     float field = smoothstep(-0.32, -0.05, zn + 0.2 * (kgFbm(vec3(P.x * 18.0, P.z * 18.0, seedP + limb)) - 0.5)) * (1.0 - smoothstep(0.9, 1.05, zn));
     float blot = smoothstep(0.42, 0.62, kgFbm(vec3(P.x * 22.0, P.z * 22.0, seedP + limb)));
     field *= mix(1.0, blot, blotchy);
-    // pale morphs: black and white; dark morphs (6.webp): the body's dusky violet with little white
-    vec3 m = mix(mix(ground, marb, 0.4), mix(vec3(0.66, 0.66, 0.72), ground, 0.2), pale);
-    vec3 dark = mix(vec3(0.03, 0.03, 0.035), marb * 0.5, 0.3 + 0.5 * (1.0 - pale));
+    // most crabs: the face in the body's own mottled grey-brown, dark field and pale specks close in tone (063,
+    // 027, 035, 069); a strongly contrasted black-and-white face only in dark-backed individuals (2.webp, 003)
+    float contrast = 1.0 - smoothstep(0.55, 0.85, uKgMorph.z);
+    vec3 m = mix(mix(limbG, ground, 0.4), mix(vec3(0.62, 0.62, 0.66), ground, 0.2), contrast);
+    vec3 dark = mix(mix(marb, ground * 0.45, 0.35), vec3(0.03, 0.03, 0.035), contrast * 0.8);
     float wspk = kgSpeck(P * 190.0 + seedP + 13.0, 0.5, 0.25, fw * 190.0, idd);
-    vec3 fieldC = mix(dark, vec3(0.86, 0.86, 0.84), wspk * 0.9);
+    vec3 fieldC = mix(dark, mix(ground * 1.1, vec3(0.86, 0.86, 0.84), contrast), wspk * (0.55 + 0.35 * contrast));
     // the blaze: a pale streak running obliquely down toward the midline in the upper half
     float bl = (zn - 0.15) - (xm - 0.75) * 0.9;
     float blaze = (1.0 - smoothstep(0.06, 0.2, abs(bl))) * smoothstep(0.25, 0.6, xm) * smoothstep(-0.1, 0.25, zn) * (1.0 - smoothstep(0.75, 0.95, zn));
-    fieldC = mix(fieldC, vec3(0.88, 0.88, 0.86), blaze * (0.2 + 0.65 * pale));
+    fieldC = mix(fieldC, mix(ground * 1.1, vec3(0.88, 0.88, 0.86), contrast), blaze * (0.15 + 0.6 * contrast));
     m = mix(m, fieldC, field);
     // a faint grey smudge low on the ischium, a pale rim all round
     m = mix(m, m * 0.72, exp(-pow((zn + 0.55) / 0.12, 2.0)) * 0.6 * (1.0 - field));
     float rimM = smoothstep(0.86, 1.0, max(abs(zn), abs(xm * 2.0 - 1.0)));
-    m = mix(m, vec3(0.84, 0.83, 0.8), rimM * 0.5);
+    m = mix(m, mix(ground * 1.1, vec3(0.84, 0.83, 0.8), contrast), rimM * 0.4);
     // the suture line and tubercles
     float suture = (1.0 - smoothstep(0.0, 0.035, abs(sutL))) * (1.0 - smoothstep(0.85, 1.0, xm));
     h -= suture * 0.003;
@@ -430,15 +432,17 @@ const FRAG_SURFACE = /* glsl */ `
     if (part > 9.5) {
       // propodus: palm, then the fixed finger (the dactylus is part 11 throughout)
       float x = P.x;
-      float fing = part > 10.5 ? 1.0 : smoothstep(0.27, 0.32, x);
+      float fing = part > 10.5 ? 1.0 : smoothstep(0.21, 0.255, x);
       // the palm: porcelain grey-white, finely speckled, a dusky patch over its proximal upper part (2.webp,
       // 4.webp); pink-red in breeding males (6.webp)
       // translucent blue-grey porcelain (2.webp: mean sRGB ≈ 155,153,149 in its light)
-      vec3 palmC = mix(vec3(0.42, 0.45, 0.5), limbG, 0.25);
-      float dusk = clamp(smoothstep(0.15, 0.03, x) * 0.8 + smoothstep(0.0, 0.05, P.y) * (1.0 - smoothstep(0.16, 0.27, x)), 0.0, 1.0);
+      // the palm takes the legs' translucent sandy colour, a little greyer (011: blue-grey; 063, 027: cream)
+      vec3 palmC = mix(limbG, ground * 0.85, 0.3);
+      float dusk = clamp(smoothstep(0.12, 0.025, x) * 0.8 + smoothstep(0.0, 0.04, P.y) * (1.0 - smoothstep(0.13, 0.22, x)), 0.0, 1.0);
       dusk *= 0.55 + 0.45 * kgFbm2(P * 30.0 + seedP);
-      palmC = mix(palmC, mix(marb, vec3(0.06, 0.065, 0.075), 0.5), dusk * 0.85);
-      palmC = mix(palmC, mix(marb * 0.6, vec3(0.05), 0.4), kgSpeck(P * 220.0 + seedP + 37.0, 0.5, 0.26, fw * 220.0, idd) * 0.3);
+      palmC = mix(palmC, limbD, dusk * 0.7);
+      // a dense net of fine dark speckles over the whole palm (011)
+      palmC = mix(palmC, limbD * 0.6, kgSpeck(P * 220.0 + seedP + 37.0, 0.7, 0.3, fw * 220.0, idd) * 0.45);
       // breeding males: pink-white, pinker along the upper margin, dark-speckled (6.webp)
       vec3 palmR = mix(mix(pinkL, vec3(0.82, 0.76, 0.76), 0.45), pink, smoothstep(0.0, 0.08, P.y) * 0.5);
       palmR = mix(palmR, vec3(0.06, 0.03, 0.03), kgSpeck(P * 150.0 + seedP + 39.0, 0.35, 0.3, fw * 150.0, idd) * 0.7);
@@ -446,10 +450,10 @@ const FRAG_SURFACE = /* glsl */ `
       if (det > 0.2) glint = max(glint, kgSpeck(P * 190.0 + seedP + 43.0, 0.45, 0.2, fw * 190.0, idd) * (1.0 - fing));
       // fingers: porcelain, glossy; the cutting edges and tips flushed pink (3.webp, 2.webp), darker red-brown
       // tips in breeding males (6.webp)
-      float ft = part > 10.5 ? clamp(x / 0.25, 0.0, 1.0) : clamp((x - 0.29) / 0.23, 0.0, 1.0);
+      float ft = part > 10.5 ? clamp(x / 0.19, 0.0, 1.0) : clamp((x - 0.23) / 0.18, 0.0, 1.0);
       float cutSide = part > 10.5 ? -sin(th) : sin(th);
       float edge = smoothstep(0.1, 0.8, cutSide);
-      vec3 fcol = vec3(0.7, 0.72, 0.75);
+      vec3 fcol = mix(limbG, vec3(0.58, 0.56, 0.5), 0.55);
       fcol = mix(fcol, pinkL, edge * smoothstep(0.15, 0.7, ft) * (0.45 + 0.5 * red));
       fcol = mix(fcol, mix(pinkL, pink, 0.3 + 0.7 * red), smoothstep(0.5, 0.92, ft) * (0.55 + 0.4 * red));
       // the very tips: horn-yellow (3.webp), red-brown in breeding males (6.webp)
@@ -479,8 +483,10 @@ const FRAG_SURFACE = /* glsl */ `
     // ragged dark bands over translucent grey-white (2.webp, 4.webp, 5.webp); breeding males: violet legs with
     // maroon meri (6.webp)
     // the bands are soft, cloudy dusky patches under a translucent cuticle (2.webp close-up), not painted rings
-    band = smoothstep(0.1, 0.65, band + 0.3 * (kgFbm(P * 22.0 + limb * 1.7 + seg) - 0.5));
-    vec3 lg = mix(limbG, limbD, band * 0.85);
+    band = smoothstep(0.1, 0.7, band + 0.4 * (kgFbm(P * 26.0 + limb * 1.7 + seg) - 0.5));
+    // bands broken into blotches: a dark band is a cloud of brown patches, strongest on the dorsal face (049, 057, 068)
+    band *= 0.55 + 0.45 * smoothstep(0.35, 0.65, kgFbm(P * 48.0 + vec3(limb * 2.1, seg, seedP)));
+    vec3 lg = mix(limbG, limbD, band * 0.55);
     // fine dark chromatophore dots, sparse, a little denser in the bands
     lg = mix(lg, limbD * 0.5, kgSpeck(P * 110.0 + vec3(limb * 3.7, seg * 1.3, seedP), 0.45, 0.26, fw * 110.0, idd) * (0.3 + 0.4 * band));
     // the joints flush a little orange (009)
@@ -495,16 +501,17 @@ const FRAG_SURFACE = /* glsl */ `
     trans = 0.45;
     // the merus: one undivided oval tympanum on each broad face [L] — dark, densely speckled, glossier (010)
     if (part > 12.5 && part < 13.5) {
-      float faceZ = abs(cos(th));
-      float ov = max(0.0, 1.0 - pow((t - 0.5) / 0.36, 2.0)) * max(0.0, 1.0 - pow(sin(th) / 0.74, 2.0));
-      float tym = smoothstep(0.02, 0.3, ov) * smoothstep(0.3, 0.6, faceZ);
+      // the meri's broad faces are dorsal and ventral (Geometry legSegments): the tympanum covers most of each
+      float faceY = abs(sin(th));
+      float ov = max(0.0, 1.0 - pow((t - 0.52) / 0.36, 2.0)) * max(0.0, 1.0 - pow(cos(th) / 0.74, 2.0));
+      float tym = smoothstep(0.02, 0.3, ov) * smoothstep(0.3, 0.6, faceY);
       vec3 tcol = mix(lg * 0.82, limbD * 0.6, kgSpeck(P * 160.0 + vec3(limb, seedP, 2.0), 0.55, 0.3, fw * 160.0, idd) * 0.6);
       lg = mix(lg, tcol, tym * 0.6);
       rough = mix(rough, 0.3, tym);
       trans += tym * 0.15;
       if (det > 0.2) glint = kgSpeck(P * 220.0 + vec3(limb, seedP, 5.0), 0.5, 0.2, fw * 220.0, idd) * (0.35 + 0.65 * tym);
       // the margins of the merus: a granular crest
-      float margin = smoothstep(0.75, 0.97, abs(sin(th)));
+      float margin = smoothstep(0.75, 0.97, abs(cos(th)));
       if (det > 0.05) h += margin * kgDome(P * 140.0 + limb, 0.6, 0.3, fw * 140.0, off, idd) * 0.002;
     } else if (det > 0.3) {
       glint = kgSpeck(P * 200.0 + vec3(limb, seedP, 9.0), 0.25, 0.2, fw * 200.0, idd);
@@ -521,7 +528,7 @@ const FRAG_SURFACE = /* glsl */ `
       wetBias = 0.15;
     }
     // setal sockets: tiny pits along the margins
-    float sock = kgSpeck(P * 120.0 + vec3(limb * 5.0, seg, 1.0), 0.35, 0.16, fw * 120.0, idd) * smoothstep(0.7, 0.95, abs(sin(th)));
+    float sock = kgSpeck(P * 120.0 + vec3(limb * 5.0, seg, 1.0), 0.35, 0.16, fw * 120.0, idd) * smoothstep(0.7, 0.95, abs(cos(th)));
     h -= sock * 0.001;
     col = lg;
   }
@@ -709,7 +716,7 @@ export function makeSetaeMaterial() {
  */
 const MORPHS = {
   pale: { tint: [0.66, 0.64, 0.44], dark: [0.25, 0.25, 0.21], purple: 0.08, pale: 0.85, red: 0.15, cover: 0.6, legTint: 0.12 },
-  khaki: { tint: [0.7, 0.67, 0.5], dark: [0.3, 0.28, 0.2], purple: 0.0, pale: 0.8, red: 0.05, cover: 0.85, legTint: 0.5 },
+  khaki: { tint: [0.71, 0.66, 0.53], dark: [0.31, 0.27, 0.2], purple: 0.0, pale: 0.8, red: 0.05, cover: 0.85, legTint: 0.5 },
   grey: { tint: [0.74, 0.74, 0.72], dark: [0.16, 0.16, 0.17], purple: 0.1, pale: 0.6, red: 0.35, cover: 0.85, legTint: 0.1 },
   brown: { tint: [0.68, 0.58, 0.42], dark: [0.25, 0.19, 0.14], purple: 0.0, pale: 0.7, red: 0.1, cover: 0.72, legTint: 0.6 },
   purple: { tint: [0.56, 0.44, 0.62], dark: [0.22, 0.13, 0.25], purple: 1.0, pale: 0.0, red: 0.9, cover: 0.5, legTint: 0.5 },

@@ -2,7 +2,7 @@
 // URL params: view=front|side|top|q34|back|low|macro|under  pose=stand|feed|wave|fold|walk  lod=0|1|2
 //             wet=0..1 sand=0..1 seed=int sex=m|f sun=elevationDeg az=deg w,h (canvas size) live=1 (run the sim)
 import {
-  ACESFilmicToneMapping, Color, DirectionalLight, HemisphereLight, Mesh, MeshStandardMaterial, MeshPhysicalMaterial, PCFSoftShadowMap,
+  ACESFilmicToneMapping, Color, DirectionalLight, HemisphereLight, Mesh, MeshBasicMaterial, MeshStandardMaterial, MeshPhysicalMaterial, OrthographicCamera, PCFSoftShadowMap,
   PerspectiveCamera, PlaneGeometry, PMREMGenerator, Scene, SRGBColorSpace, Vector3, WebGLRenderer, BackSide, SphereGeometry, ShaderMaterial,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -51,7 +51,9 @@ renderer.shadowMap.type = PCFSoftShadowMap;
 
 const SCENE = param('scene') ?? 'field';
 const scene = new Scene();
-scene.background = new Color(SCENE === 'studio' ? 0xd9dde0 : SCENE === 'hand' ? 0xd9a48c : SCENE === 'dark' ? 0x8a8580 : 0x9fb3c0);
+scene.background = new Color(SCENE === 'studio' ? 0xd9dde0 : SCENE === 'hand' ? 0xd9a48c : SCENE === 'dark' ? 0x8a8580 : SCENE === 'clay' ? 0x8c9094 : SCENE === 'sil' ? 0xffffff : 0x9fb3c0);
+// clay: the untextured grey model (shape review); sil: a black silhouette on white (overlay on a photo)
+const CLAY = SCENE === 'clay', SIL = SCENE === 'sil';
 
 // sky gradient → environment
 const skyMat = new ShaderMaterial({
@@ -123,9 +125,10 @@ normal = normalize(normal + (viewMatrix * vec4(gN.x, 0.0, gN.y, 0.0)).xyz * 0.6)
 let groundMat = sandMat;
 if (SCENE === 'studio') groundMat = new MeshPhysicalMaterial({ color: new Color(0.62, 0.66, 0.68), roughness: 0.08, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, transmission: 0 });
 else if (SCENE === 'hand') groundMat = new MeshStandardMaterial({ color: new Color(0.62, 0.36, 0.27), roughness: 0.55 });
+if (CLAY) groundMat = new MeshStandardMaterial({ color: new Color(0.55, 0.56, 0.57), roughness: 0.9 });
 const ground = new Mesh(new PlaneGeometry(0.6, 0.6, 1, 1).rotateX(-Math.PI / 2), groundMat);
 ground.receiveShadow = true;
-scene.add(ground);
+if (!SIL && !Q.has('noground')) scene.add(ground);
 
 const seed = num('seed', 7);
 const crab = new CrabModel({ sex: param('sex') ?? 'm', cw_m: CW, seed, juvenile: num('juv', 0) });
@@ -138,6 +141,13 @@ crab.setSandColor(new Color(SANDC[0] * 1.05, SANDC[1] * 1.05, SANDC[2] * 1.05));
 crab.pelletMat.userData.uniforms.uPelPepper.value = PEPPER;
 if (num('dbg', 0)) for (const m of [crab.mat, crab.setaeMat]) m.userData.uniforms.uKgMorph.value.y = 1;
 if (param('fill')) scene.userData.fill = num('fill', 0.9);
+if (CLAY || SIL) {
+  const m = SIL ? new MeshBasicMaterial({ color: 0x000000 }) : new MeshStandardMaterial({ color: new Color(0.62, 0.62, 0.62), roughness: 0.65, metalness: 0 });
+  const ms = SIL ? m : new MeshStandardMaterial({ color: new Color(0.25, 0.25, 0.25), roughness: 0.8, side: 2 });
+  for (const l of crab.lods) l.material = m;
+  crab.setae.material = ms;
+  if (Q.get('setae') === '0') crab.setae.visible = false, crab.setae.layers.disable(0);
+}
 scene.add(crab.root);
 // a static field of pellets around the crab (p4)
 const NPEL = LIVE_CHECK() ? 0 : num('pellets', 0);
@@ -217,7 +227,11 @@ function poseFlip() {
   crab.root.position.set(0, (0.58 + 0.02) * CW, 0);
 }
 
-const camera = new PerspectiveCamera(num('fov', 40), (W || innerWidth) / (H || innerHeight), 0.0005, 5);
+const ASPECT = (W || innerWidth) / (H || innerHeight);
+// ortho=<frame height in CW>: an orthographic camera (silhouettes to lay over photographs at a known scale)
+const camera = Q.has('ortho')
+  ? new OrthographicCamera(-num('ortho', 4) * CW * ASPECT / 2, num('ortho', 4) * CW * ASPECT / 2, num('ortho', 4) * CW / 2, -num('ortho', 4) * CW / 2, 0.0005, 5)
+  : new PerspectiveCamera(num('fov', 40), ASPECT, 0.0005, 5);
 const target = new Vector3(0, CW * 0.35, 0);
 const views = {
   front: [0, 0.35, 3.2], side: [3.2, 0.4, 0], top: [0, 3.6, 0.001], q34: [2.1, 1.5, 2.3], back: [-1.6, 1.5, -2.6],
@@ -346,6 +360,7 @@ function frame() {
       controls.target.copy(a);
     }
   } else pose(kind, t);
+  if (Q.get('setae') === '0') crab.setae.visible = false;
   controls.update();
   renderer.render(scene, camera);
   frames++;

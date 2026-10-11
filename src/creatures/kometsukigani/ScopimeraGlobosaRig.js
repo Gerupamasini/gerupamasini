@@ -118,7 +118,7 @@ export function rigDefinition() {
     add(`Mxp3_${id}`, body, new Vector3(sign * hx, hy, hz), basisQuat(xAx, yAx), { limb: `Mxp3_${id}`, side: sign });
   }
   // where the sorted sand is pressed into a pellet: above the mouth, at the top of the buccal frame [L]
-  add('Mouth', body, new Vector3(0, 0.41, 0.445));
+  add('Mouth', body, new Vector3(0, 0.33, 0.44));
   add('Abdomen_M', body, new Vector3(0, -0.004, ABDOMEN.z0));
   add('Abdomen_F', body, new Vector3(0, -0.004, ABDOMEN.z0));
 
