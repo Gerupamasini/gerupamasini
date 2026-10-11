@@ -100,13 +100,15 @@ try {
   await page.evaluate((id) => { const a = window.__higata; a.enterObserve(a.creatures.get(id)); }, main);
   /** pin the three where they were put (resting), let the pose settle, then stop the simulation for the pictures */
   const pin = async () => {
+    // (held in place every frame while the pose settles: a slow frame is a long step for the brain)
     await page.evaluate((out) => {
       const cs = window.__higata.creatures;
       cs.enabled = true;
-      for (const f of out) { const d = cs.driverOf(f.id); d.holdAt(f.x, f.z, f.heading); d.setIntent({ id: 99, kind: 'rest', urgency: 0, seconds: 900 }); }
+      const hold = () => { for (const f of out) cs.driverOf(f.id)?.holdAt(f.x, f.z, f.heading); window.__gobyHold = requestAnimationFrame(hold); };
+      hold();
     }, fish.out);
-    await waitFrames(page, 12);
-    await page.evaluate(() => { window.__higata.creatures.enabled = false; });
+    await waitFrames(page, 8);
+    await page.evaluate(() => { cancelAnimationFrame(window.__gobyHold); window.__higata.creatures.enabled = false; });
   };
   // the orbit camera on the sun's side looking down (front light) or on the far side, low, looking toward the sun
   const view = (against, d) => page.evaluate(([against, sun, d]) => {
