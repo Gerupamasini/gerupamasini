@@ -201,8 +201,10 @@ export class SurfZone {
   /** what part of the shore a point is in, for the day's sea */
   kindAt(x: number, z: number, level: number): SurfZoneKind {
     const D = level - this.groundAt(x, z);
-    // a point behind a bar that breaks the bigger waves is in the breaker zone however deep the trough is
-    const Deff = D > 0 ? Math.min(D, Math.max(0.02, level - this.barAt(x, z)) * 1.6) : D;
+    // a point behind a bar that breaks the bigger waves is in the breaker zone however deep the trough is (ground
+    // standing out of the water is no bar: its lee is sheltered)
+    const Dbar = level - this.barAt(x, z);
+    const Deff = D > 0 && Dbar > 0.03 ? Math.min(D, Dbar * 1.6) : D;
     return classifyDepth(Deff, this.sea.height, this.sea.period, this.uniforms.uSurfLv.value.w, this.slopeAt(x, z));
   }
 

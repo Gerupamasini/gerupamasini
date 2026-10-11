@@ -582,8 +582,8 @@ export class WaterPass {
                 float fCrest = smoothstep(0.25, 0.5, sf.crest * 0.85 + (streak - 0.5) * 0.6) * mix(1.0, 0.75, far);
                 // 2. the roller: lumps of foam tumbling forward with the bore (two octaves moving with it), sharp-edged and
                 // nearly solid where it is thick, ragged where it thins
-                vec2 rq = vec2(dot(S.xz, along) * 2.4, dot(S.xz, sea) * 2.8 + uTime * 1.6) + wn * 3.0;
-                float lump = fbmW(rq) * 0.62 + fbmW(rq * 2.7 + 5.0) * 0.38;
+                vec2 rq = vec2(dot(S.xz, along) * 3.2, dot(S.xz, sea) * 3.2 + uTime * 1.6) + wn * 3.0;
+                float lump = fbmW(rq) * 0.5 + fbmW(rq * 2.3 + 5.0) * 0.3 + vnoiseW(rq * 7.0 - uTime) * 0.2;
                 float fRoll = smoothstep(0.3, 0.55, sf.roller * 0.95 + (lump - 0.5) * mix(0.75, 0.3, far)) * mix(0.9 + 0.1 * voro, 0.95, far);
                 // 3. the lace left behind: the cell walls and the threads, thinning as it ages
                 float cov = sf.trail * exp(-sf.age / 3.5) * mix(0.6, 1.25, patches);
@@ -591,7 +591,16 @@ export class WaterPass {
                 #ifdef WATER_LITE
                 fTrail = clamp(cov * 1.4 - (1.0 - voro) * 0.9, 0.0, 1.0);
                 #else
-                if (cov > 0.01) fTrail = max(foamLace((S.xz - drift) * 4.5 + wn * 7.0, min(cov * 1.2, 0.85), fpx * 4.5 * 2.6), clamp(cov * 1.3 - (1.0 - voro) * 0.95, 0.0, 1.0)) * smoothstep(0.0, 0.12, cov);
+                if (cov > 0.01) {
+                  // a network of foam cells of uneven size (the lace's Voronoi walls at two scales, warped and broken),
+                  // its walls thicker the more foam there is; rafts of dense foam where the bore left most, full of bubbles;
+                  // and a few of the long threads between (the contours of a warped noise, thin)
+                  float walls = max(L1.r, L2.g * 0.85);
+                  float net = smoothstep(1.0 - 0.75 * cov, 1.0 - 0.45 * cov, walls) * smoothstep(0.25, 0.6, vnoiseW((S.xz - drift) * 2.3 + wn * 3.0) + 0.45 * cov);
+                  float raft = smoothstep(0.62 - 0.3 * cov, 0.7 - 0.3 * cov, fbmW((S.xz - drift) * 1.1 + wn * 1.9)) * (0.75 + 0.25 * L1.b);
+                  float threads = foamLace((S.xz - drift) * 3.2 + wn * 7.0, min(cov, 0.6) * 0.5, fpx * 3.2 * 2.6) * 0.7;
+                  fTrail = max(max(net, raft * smoothstep(0.15, 0.5, cov)), threads) * smoothstep(0.0, 0.1, cov);
+                }
                 #endif
                 fTrail = mix(fTrail, cov * 0.55, farther);
                 // 4. the swash: the front band (thick climbing, thin lace draining), the collision line, the backwash's
@@ -741,6 +750,9 @@ export class WaterPass {
   compileTarget(): Object3D {
     return (this.quad as unknown as { _mesh: Object3D })._mesh;
   }
+
+  /** More of the surf's programs to compile ahead (the sand's memory, the spray), each with the target it draws into. */
+  readonly extraCompile: { mesh: Object3D; target: WebGLRenderTarget | null }[] = [];
 
   /** The surf field's quad and the target it is drawn into, to compile ahead too (null: no surf). */
   surfCompileTarget(): { mesh: Object3D; target: WebGLRenderTarget } | null {

@@ -47,6 +47,27 @@ export function DebugPanel({ app }: { app: App }) {
         <input type="range" min="0" max="1" step="0.05" value={d.overcast} onInput={(e) => app.setOvercast(Number((e.target as HTMLInputElement).value))} />
         <b>{Math.round(d.overcast * 100)}%</b>
       </div>
+      {app.world?.sea && (() => {
+        const sea = app.world.sea, p = app.player?.position;
+        const kinds = { land: '陸', swash: '遡上帯', breaker: '砕波帯', shallow: '浅い海', deep: '深い海' } as const;
+        const kind = p && app.world.surfZone ? kinds[app.world.surfZone.kindAt(p.x, p.z, app.world.tideLevel)] : '-';
+        return (
+          <div class="debug-row wrap">
+            <b>寄せ波</b>
+            <span>波高</span>
+            <input type="range" min="0.05" max="1.4" step="0.01" value={sea.height} onInput={(e) => app.setSea({ height: Number((e.target as HTMLInputElement).value) })} />
+            <b>{sea.height.toFixed(2)} m</b>
+            <span>周期</span>
+            <input type="range" min="2.5" max="12" step="0.1" value={sea.period} onInput={(e) => app.setSea({ period: Number((e.target as HTMLInputElement).value) })} />
+            <b>{sea.period.toFixed(1)} s</b>
+            <button onClick={() => app.setSea(null)}>この日の海</button>
+            <select value={String(d.surfView ?? 0)} onChange={(e) => app.setSurfDebug(Number((e.target as HTMLSelectElement).value))}>
+              <option value="0">そのまま</option><option value="1">区分</option><option value="2">泡の種類</option><option value="3">位相・砕波・水膜</option>
+            </select>
+            <span class="dim small">足もと: {kind}</span>
+          </div>
+        );
+      })()}
       <div class="debug-row">
         <label><input type="checkbox" checked={d.markers} onChange={(e) => app.setMarkers((e.target as HTMLInputElement).checked)} /> 生物マーカー</label>
         <label><input type="checkbox" checked={app.settings.heroMaterials} onChange={(e) => void app.updateSettings({ heroMaterials: (e.target as HTMLInputElement).checked })} /> ヒーロー材質</label>

@@ -98,9 +98,11 @@ try {
     for (let i = 0; i < 6; i++) await shot(`high-seq-${i}.png`, 3);
   }
   if (want('feet')) {
-    await stand(0.55, 0.6, 0, -0.55);
-    await shot('feet-swash.png', 8);
-    for (let i = 0; i < 3; i++) await shot(`feet-seq-${i}.png`, 4);
+    // the swash at one's feet through one wave: the uprush, the sheet stopping, the backwash, the sand left wet
+    await page.evaluate(() => window.__higata.world.setSeaState({ height: 0.45, period: 4.6, angle: 0.22, spread: 0.16 }));
+    await stand(0.55, 2.2, 0, -0.62);
+    await waitFrames(page, 6);
+    for (let i = 0; i < 8; i++) { await clockAt(900 + i * 0.6); await shot(`feet-${i}.png`, 1); }
   }
   if (want('side')) {
     // a livelier day, standing in the swash at high water, looking along the beach: the waves' profiles
@@ -120,8 +122,10 @@ try {
     await page.evaluate(() => window.__higata.world.setSeaState({ height: 0.34, period: 3.8, angle: 0.22, spread: 0.16 }));
   }
   if (want('along')) {
-    await stand(0.55, 1.0, 0, -0.12, 1.1);
-    await shot('along-beach.png', 8);
+    await page.evaluate(() => window.__higata.world.setSeaState({ height: 0.45, period: 4.6, angle: 0.22, spread: 0.16 }));
+    await stand(0.55, 1.6, 0, -0.14, 0.9);
+    await waitFrames(page, 6);
+    for (let i = 0; i < 4; i++) { await clockAt(1200 + i * 0.8); await shot(`along-${i}.png`, 1); }
   }
   if (want('debug')) {
     await stand(-0.3, 2, 0, -0.25);

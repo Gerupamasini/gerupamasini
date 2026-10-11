@@ -42,6 +42,8 @@ export class Skyline {
     this.group.name = 'skyline';
     // 漫湖 is a lake basin: forest all round, the lake's far shore and its town (its own land, no ring backdrop)
     if (kind === 'manko') { this.land = buildMankoLand(); return; }
+    // the surf lab: an open horizon
+    if (kind === 'surflab') return;
     if (kind === 'hashirimizu') { buildHashirimizuSkyline(this.shipPlane.bind(this), this.ships); this.land = buildHashirimizuLand(); return; }
     // ---- 富士山: 106 km WSW, 3776 m: a broad flat-topped cone 1.6° high and 12° wide, nearly all haze
     this.plane(253, ang(18), ang(1.65 * 2.4), FOOT, 1024, 160, (c, w, h) => {

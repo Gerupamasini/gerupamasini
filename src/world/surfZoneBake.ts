@@ -67,7 +67,10 @@ export function bakeStatic(f: BakeFrame, heights: Float32Array): { gmax: Float32
     const d = h[Math.max(0, j - 1) * n + i], u = h[Math.min(n - 1, j + 1) * n + i];
     raw[j * n + i] = -(((r - l) / (2 * cell)) * dx + ((u - d) / (2 * cell)) * dy);
   }
-  return { gmax: toTerrain(f, gmaxR), slope: blur(raw, n, n, 3) };
+  // (spread along the shore over a metre or two: a bar or a ledge breaks the waves behind it, and its edge in the lee is
+  // never a sharp line)
+  const gmaxS = blurY(blurY(gmaxR, ns, ny, 5), ns, ny, 5);
+  return { gmax: toTerrain(f, gmaxS), slope: blur(raw, n, n, 3) };
 }
 
 /**
@@ -92,10 +95,16 @@ export function bakeLevel(f: BakeFrame, level: number, period: number): LevelBak
   const d2 = cell * Math.SQRT2;
   const row = new Float32Array(ny), w = new Float32Array(ny);
   for (let j = 0; j < ny; j++) { const k = j * ns + ns - 1; if (cls[k] === SEA) { t[k] = 0; sh[k] = 1; } }
+  // the eikonal's upwind update from the seaward neighbour (a) and one along the shore (b): ((T−a)/h)² + ((T−b)/h)² =
+  // 1/c², the first-order (Godunov) solution, so the fronts come out smooth instead of kinked in 45° steps
   const relax = (i: number, j: number, jp: number) => {
     const k = j * ns + i, q = jp * ns + i;
     if (cls[k] !== SEA || cls[q] !== SEA || t[q] >= INF) return;
-    const v = t[q] + (2 * cell) / (c[k] + c[q]);
+    const up = k + 1, a = cls[up] === SEA ? t[up] : INF, b = t[q];
+    const hc = cell / c[k];
+    let v: number;
+    if (a >= INF || Math.abs(a - b) >= hc) v = Math.min(a, b) + hc;
+    else v = 0.5 * (a + b + Math.sqrt(2 * hc * hc - (a - b) * (a - b)));
     if (v < t[k]) t[k] = v;
   };
   for (let i = ns - 2; i >= 0; i--) {
@@ -104,11 +113,13 @@ export function bakeLevel(f: BakeFrame, level: number, period: number): LevelBak
       if (kc === ROCK) continue;
       const up = k + 1, qa = j > 0 ? up - ns : -1, qb = j < ny - 1 ? up + ns : -1;
       if (kc === SEA) {
-        // straight on, or by a diagonal step
+        // straight on from the row before (the diagonals only where that is blocked: the lateral sweeps below do the rest)
         let best = INF;
-        if (cls[up] === SEA && t[up] < INF) best = t[up] + (2 * cell) / (c[k] + c[up]);
-        if (qa >= 0 && cls[qa] === SEA && t[qa] < INF) { const v = t[qa] + (2 * d2) / (c[k] + c[qa]); if (v < best) best = v; }
-        if (qb >= 0 && cls[qb] === SEA && t[qb] < INF) { const v = t[qb] + (2 * d2) / (c[k] + c[qb]); if (v < best) best = v; }
+        if (cls[up] === SEA && t[up] < INF) best = t[up] + cell / c[k];
+        else {
+          if (qa >= 0 && cls[qa] === SEA && t[qa] < INF) best = Math.min(best, t[qa] + d2 / c[k]);
+          if (qb >= 0 && cls[qb] === SEA && t[qb] < INF) best = Math.min(best, t[qb] + d2 / c[k]);
+        }
         t[k] = best;
       } else {
         // the beach: the time of the waterline straight below it (or beside it, past a rock)
@@ -117,9 +128,11 @@ export function bakeLevel(f: BakeFrame, level: number, period: number): LevelBak
         sh[k] = cls[up] === ROCK ? 0 : sh[up];
       }
     }
-    // round obstacles: the sea reached from beside, along the shore, both ways
-    for (let j = 1; j < ny; j++) relax(i, j, j - 1);
-    for (let j = ny - 2; j >= 0; j--) relax(i, j, j + 1);
+    // round obstacles: the sea reached from beside, along the shore, both ways (twice, so a lee fills from both sides)
+    for (let pass = 0; pass < 2; pass++) {
+      for (let j = 1; j < ny; j++) relax(i, j, j - 1);
+      for (let j = ny - 2; j >= 0; j--) relax(i, j, j + 1);
+    }
     // shelter: the row behind, blurred along the shore (rocks block, the land is not counted). A row with nothing in
     // the way stays open: the blur is only worked where there is a shadow to spread.
     let open = true;
@@ -218,6 +231,19 @@ function dilate(src: Float32Array, ns: number, ny: number, r: number): Float32Ar
     let m = 0;
     for (let o = -r; o <= r; o++) { const jj = j + o; if (jj >= 0 && jj < ny) m = Math.max(m, tmp[jj * ns + i]); }
     out[j * ns + i] = m;
+  }
+  return out;
+}
+
+/** a box blur along the shore only (y), of radius r (clamped edges; the 'nothing seaward' sentinel left alone) */
+function blurY(src: Float32Array, ns: number, ny: number, r: number): Float32Array {
+  const out = new Float32Array(src.length);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < ns; i++) {
+    const k = j * ns + i;
+    if (src[k] <= -INF) { out[k] = src[k]; continue; }
+    let s = 0, c = 0;
+    for (let o = -r; o <= r; o++) { const jj = j + o; if (jj < 0 || jj >= ny) continue; const v = src[jj * ns + i]; if (v <= -INF) continue; s += v; c++; }
+    out[k] = s / c;
   }
   return out;
 }

@@ -472,6 +472,7 @@ export class App {
       // the tide is the one of the flat's own station (the tide table and tickets follow it)
       if (this.tide.station.id !== map.station) { this.tide = new TideModel(this.data.stations.get(map.station)!); this.curveCacheMin = -1; }
       const dayNo = Math.floor((this.clock.nowGame() + 9 * 3600000) / 86400000);
+      this.fieldDay = dayNo;
       this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; }, dayNo);
       // the shaders compile behind the loading screen (in parallel where the browser can), before anything draws the
       // flat: otherwise the first frame stalls for as long as they take
@@ -730,6 +731,21 @@ export class App {
   setOvercast(v: number): void {
     if (this.world) this.world.overcast = v;
     ui.debugState.value = { ...ui.debugState.value, overcast: v };
+  }
+
+  /** the day the flat was entered on (its sea, its rays' resting marks) */
+  private fieldDay = 0;
+
+  /** debug: another sea on an open shore (height m, period s); null: the day's own */
+  setSea(over: { height?: number; period?: number } | null): void {
+    this.world?.setSeaState(over, this.fieldDay);
+    ui.debugState.value = { ...ui.debugState.value };
+  }
+
+  /** debug: the surf's views (0 off, 1 the zones, 2 the foams, 3 the phase / breaking / swash depth) */
+  setSurfDebug(mode: number): void {
+    this.world?.water.setSurfDebug(mode);
+    ui.debugState.value = { ...ui.debugState.value, surfView: mode };
   }
 
   setMarkers(on: boolean): void {

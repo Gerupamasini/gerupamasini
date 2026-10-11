@@ -674,9 +674,10 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
         float inW = smoothstep(0.0, 0.08, min(em.x, em.y));
         if (inW > 0.0) mem = mix(mem, texture2D(tSurfMem, muv), inW);
       }
-      gSwash = mem.r * smoothstep(-0.01, 0.0, e);
+      // (the backwash lays bare sand below the still waterline too: it shines as much as the sand above it)
+      gSwash = mem.r;
       gSat = mem.g;
-      sandFoam = mem.b * smoothstep(-0.02, 0.0, e);
+      sandFoam = mem.b;
       mark = mem.a;
       wet = max(wet, gSat * 0.95);
       wet = max(wet, 1.0 - smoothstep(-0.02, 0.0, e));

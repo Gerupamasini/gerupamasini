@@ -9,6 +9,7 @@ import { inThicket } from '../manko/shape';
 import { backdropCrowns } from '../manko/land';
 import type { BackdropCrown } from '../../mangrove/MangroveForest';
 import type { Atmosphere } from '../../Sky';
+import { SURFLAB } from '../surflab';
 
 export * as shape from './shape';
 
@@ -105,4 +106,4 @@ const MANKO: ShoreLayout = {
   mangroveLeafTint: [1.4, 1.28, 0.85],
 };
 
-export const LAYOUTS: Record<string, ShoreLayout> = { hashirimizu: HASHIRIMIZU, manko: MANKO };
+export const LAYOUTS: Record<string, ShoreLayout> = { hashirimizu: HASHIRIMIZU, manko: MANKO, surflab: SURFLAB };

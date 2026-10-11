@@ -1,7 +1,7 @@
 import { FogExp2, Scene, Vector3, Vector4, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import type { MapDef, TideStationDef } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
-import { Terrain, loadTerrainGrid } from '../world/Terrain';
+import { Terrain, loadTerrainGrid, type TerrainGrid } from '../world/Terrain';
 import { WaterPass } from '../world/Water';
 import { createWaves } from '../world/Waves';
 import { LAYER_MIRROR, reflectInWater } from '../render/Mirror';
@@ -105,12 +105,13 @@ export class World {
     this.skyline = new Skyline(map.layout);
   }
 
-  static async create(map: MapDef, station: TideStationDef | TideModel, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void, pitSeed = 20261001): Promise<World> {
+  static async create(map: MapDef, station: TideStationDef | TideModel, renderer: WebGLRenderer, preset: QualityPreset, onProgress?: (label: string) => void, pitSeed = 20261001, terrainGrid?: TerrainGrid): Promise<World> {
     // (performance marks: where the loading goes, read with performance.getEntriesByType('mark'))
     const mark = (what: string) => performance.mark(`world:${what}`);
     mark('start');
     onProgress?.('地形');
-    const grid = await loadTerrainGrid(map);
+    // (a lab hands its terrain over ready-made)
+    const grid = terrainGrid ?? await loadTerrainGrid(map);
     mark('grid');
     const layout = map.layout ? LAYOUTS[map.layout] ?? null : null;
     // アカエイの昼寝跡: dug into the flat before the terrain is built, so pools, tags and shading all see them;
@@ -158,12 +159,13 @@ export class World {
     if (surfZone && preset.surfMemory > 0) {
       w.surfMemory = new SurfMemory(surf, preset.surfMemory, preset.surfMemory >= 512 ? 40 : 32, preset.surfMemory >= 512 ? 1 : 2);
       water.setMemory(w.surfMemory.uniforms);
+      water.extraCompile.push(w.surfMemory.compileTarget());
     }
     if (surfZone) {
       const u = water.uniforms;
       const light = { uSunDir: u.uSunDir, uSunCol: u.uSunCol, uSunUp: u.uSunUp, uAmbient: u.uAmbient, tEnv: u.tEnv, uEnvI: u.uEnvI, uFogColor: u.uFogColor, uFogDensity: u.uFogDensity, uWaterFog: u.uWaterFog, uTime: u.uTime, uWater: u.uWater, uSurfDebug: u.uSurfDebug };
       if (preset.surfLip) { w.surfLip = new SurfLip(surf, light); w.scene.add(w.surfLip.mesh); }
-      if (preset.spray > 0) { w.surfSpray = new SurfSpray(surf, light, preset.spray); water.setSpray(w.surfSpray); }
+      if (preset.spray > 0) { w.surfSpray = new SurfSpray(surf, light, preset.spray); water.setSpray(w.surfSpray); water.extraCompile.push({ mesh: w.surfSpray.compileMesh, target: null }); }
     }
     mark('skyline');
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);

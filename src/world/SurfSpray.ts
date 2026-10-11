@@ -53,14 +53,39 @@ export class SurfSpray {
           vA = 0.0; vMist = 0.0; vDepth = 0.0;
           gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
           gl_PointSize = 0.0;
-          float kind = seed.w;                                  // < 0.6 lip spray, < 0.85 bore splash, else mist
-          float mist = step(0.85, kind);
+          float kind = seed.w;                    // < 0.55 lip spray, < 0.78 bore splash, < 0.9 mist, else off a rock or a wall
+          float mist = step(0.78, kind) * (1.0 - step(0.9, kind));
           float life = mix(mix(0.7, 1.4, seed.x), mix(1.8, 3.2, seed.x), mist);
           float cyc = (uTime + seed.y * 37.0) / life;
           float ci = floor(cyc), age = (cyc - ci) * life;
           float tb = uTime - age;
           // born somewhere along the shore about the viewer, anew each cycle
           float y = uSpray.x + (h1(seed.z * 71.3 + ci * 1.7) - 0.5) * uSpray.y;
+          vec2 d = uSurfDir.xy, al = vec2(-d.y, d.x);
+          if (kind >= 0.9) {
+            // a wave striking a rock or a wall face: thrown up, a little back to sea, where the zone marks a face and a
+            // crest has just arrived (a point picked at random over the breaker band and some way beyond it)
+            float s = mix(uSpray.z, uSpray.w + 15.0, h1(seed.x * 17.9 + ci * 2.3));
+            vec2 xz = d * s + al * y;
+            float imp = surfAuxAt(xz).w;
+            vec4 st = surfStage(xz, uLevel, tb);
+            float hit = smoothstep(0.25, 0.5, imp) * (1.0 - smoothstep(0.04, 0.16, st.x)) * smoothstep(0.06, 0.2, st.w);
+            if (hit < h1(seed.z * 5.3 + ci * 7.1)) return;
+            float r1 = h1(seed.y * 5.7 + ci), r2 = h1(seed.z * 9.1 + ci * 2.1), r3 = h1(seed.x * 3.9 + ci * 4.7);
+            vec3 v0 = vec3(0.0, mix(1.2, 4.0, r1) * (0.5 + st.w), 0.0) + vec3(d.x, 0.0, d.y) * mix(-0.3, 1.0, r2) + vec3(al.x, 0.0, al.y) * (r3 - 0.5) * 1.6;
+            float e = 1.0 - exp(-age / 0.8);
+            vec3 P = vec3(xz.x, uLevel + 0.1, xz.y) + v0 * 0.8 * e;
+            P.y -= 9.81 * (0.8 * age - 0.64 * e);
+            if (P.y < uLevel - 0.05) return;
+            vec4 mv = viewMatrix * vec4(P, 1.0);
+            gl_Position = projectionMatrix * mv;
+            float size = mix(0.004, 0.016, r3);
+            float px = size * projectionMatrix[1][1] * uRes.y * 0.5 / max(-mv.z, 0.05);
+            gl_PointSize = clamp(px, 1.5, 48.0);
+            vA = smoothstep(0.0, 0.06, age) * (1.0 - smoothstep(0.6, 1.0, age / life)) * min(1.0, (px * px) / 2.25) * 0.6 * (1.0 - smoothstep(35.0, 60.0, -mv.z));
+            vDepth = -mv.z; vWorld = P;
+            return;
+          }
           vec4 cr = surfBreakingCrest(y, uSpray.z, uSpray.w, uLevel, tb, 20);
           if (cr.x < -1e3) return;
           float stage = smoothstep(0.98, 1.32, cr.y);
@@ -68,16 +93,15 @@ export class SurfSpray {
           // off a plunging lip while it goes over; off a bore's front once broken (and off spilling crests, a little)
           float lipOn = smoothstep(0.25, 0.55, cr.z) * smoothstep(0.1, 0.4, stage) * (1.0 - smoothstep(0.85, 1.0, stage));
           float boreOn = smoothstep(1.1, 1.5, cr.y) * smoothstep(0.04, 0.12, H) * mix(0.4, 1.0, cr.z);
-          float on = kind < 0.6 ? lipOn : kind < 0.85 ? boreOn : max(lipOn, boreOn) * 0.8;
+          float on = kind < 0.55 ? lipOn : kind < 0.78 ? boreOn : max(lipOn, boreOn) * 0.8;
           on *= smoothstep(0.06, 0.18, H);
           if (on < h1(seed.x * 13.1 + ci * 3.3)) return;
-          vec2 d = uSurfDir.xy, al = vec2(-d.y, d.x);
           float c = sqrt(9.81 * max(H / 0.9, 0.05));            // the crest's speed near the break
           float r1 = h1(seed.y * 5.7 + ci), r2 = h1(seed.z * 9.1 + ci * 2.1), r3 = h1(seed.x * 3.9 + ci * 4.7);
-          float topH = uLevel + H * (kind < 0.6 ? 0.55 : 0.25);
-          float s0 = cr.x - (kind < 0.6 ? H * 0.4 * stage : 0.05);
+          float topH = uLevel + H * (kind < 0.55 ? 0.55 : 0.25);
+          float s0 = cr.x - (kind < 0.55 ? H * 0.4 * stage : 0.05);
           vec3 v0;
-          if (kind < 0.6) v0 = vec3(0.0, mix(0.4, 1.8, r1) * (0.6 + H), 0.0) - vec3(d.x, 0.0, d.y) * c * mix(0.6, 1.25, r2);
+          if (kind < 0.55) v0 = vec3(0.0, mix(0.4, 1.8, r1) * (0.6 + H), 0.0) - vec3(d.x, 0.0, d.y) * c * mix(0.6, 1.25, r2);
           else v0 = vec3(0.0, mix(0.25, 1.0, r1) * (0.5 + H), 0.0) - vec3(d.x, 0.0, d.y) * c * mix(0.3, 0.9, r2);
           v0 += vec3(al.x, 0.0, al.y) * (r3 - 0.5) * 0.6;
           // drag (a droplet of a few millimetres slows over about a second; mist drifts with the breeze)
@@ -135,6 +159,9 @@ export class SurfSpray {
     this.points.frustumCulled = false;
     this.scene.add(this.points);
   }
+
+  /** The points, to compile ahead of the first frame (they are drawn onto the screen). */
+  get compileMesh(): Points { return this.points; }
 
   /** Follow the viewer and the water (the band searched is the lips' one). */
   update(band: Vector4, level: number): void {

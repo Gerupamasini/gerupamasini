@@ -219,7 +219,10 @@ void surfSwashAt(vec2 sy, float D, float ph, float ta, float beta, float shelter
     // a lacy, lobed front
     xs += (0.16 * (surfNoise(sy * vec2(0.9, 1.4) + wn * 5.3) - 0.5) + 0.06 * (surfNoise(sy * vec2(3.0, 4.5) - wn * 2.1) - 0.5)) * min(Xr, 1.6);
     float te = tau + 0.3, dx = xs - x;
-    float h = dx > 0.0 ? min(dx * dx / (88.29 * te * te), 0.5 * Hn) : 0.0;
+    // the lens behind the front, and the front's own blunt nose (friction keeps the tip a few millimetres thick, a
+    // centimetre or so while it climbs): a sheet that ends in a low step, not a feather edge
+    float nose = (0.004 + 0.012 * smoothstep(0.0, 0.6, us) * min(Hn / 0.3, 1.5)) * smoothstep(0.0, 0.03, dx) * exp(-dx / 0.35);
+    float h = dx > 0.0 ? min(max(dx * dx / (88.29 * te * te), nose), 0.5 * Hn) : 0.0;
     if (i == 0) { xsNew = xs; upNew = tau < tU ? 1.0 : 0.0; }
     if (i == 1) hPrev = h;
     if (h > best.x) {
@@ -249,9 +252,11 @@ SurfBrk surfBreak(float H0, float D, float m, float bar, float level) {
   float Dr = max(uSurfLv.w, 0.3), Dc = max(D, 0.02);
   float H = H0 * clamp(pow(Dr / max(Dc, 0.05), 0.25), 0.8, 2.2);
   b.gam = clamp(1.56 / (1.0 + exp(-19.5 * m)) - 43.8 * (1.0 - exp(-19.0 * m)) * H / (9.81 * Tp * Tp), 0.6, 1.3);
-  // a bar seaward breaks it early; well past the bar, in deeper water, it re-forms
-  float Dbar = max(level - bar, 0.02);
-  b.Dctl = Dbar < Dc ? mix(Dbar, Dc, smoothstep(1.5, 2.6, Dc / Dbar)) : Dc;
+  // a bar seaward breaks it early; well past the bar, in deeper water, it re-forms. (Ground standing out of the water
+  // is no bar: behind a rock the waves are sheltered, not broken.)
+  float Dbar = level - bar;
+  float barOn = smoothstep(0.03, 0.15, Dbar) * step(Dbar, Dc);
+  b.Dctl = mix(Dc, mix(max(Dbar, 0.02), Dc, smoothstep(1.5, 2.6, Dc / max(Dbar, 0.02))), barOn);
   float Hr = H0 * pow(Dr, 0.25);
   b.Db = pow(Hr / b.gam, 0.8);                         // where this wave goes over on its way in
   b.q = Hr * pow(max(b.Dctl, 0.02), -1.25) / b.gam;    // its height over the breaking height here
@@ -403,9 +408,10 @@ Surf surfEval(vec2 xz, float level, float t, bool full) {
       S.brk = k; S.plunge = plunge;
       S.age = u * Tp;
       S.murk = (1.0 - smoothstep(0.1, 1.2, D)) * max(k, near * 0.5);
-      // waves striking a rock or a wall: white water all round it as each crest arrives
-      S.impact = A.w * (exp(-u * 6.0) + smoothstep(0.82, 1.0, u)) * smoothstep(0.04, 0.15, H0);
-      S.roller = max(S.roller, S.impact * 0.9);
+      // waves striking a rock or a wall: white water all round it as each crest arrives, foam streaming off after
+      S.impact = A.w * (exp(-u * 4.0) + smoothstep(0.85, 1.0, u)) * smoothstep(0.04, 0.15, H0);
+      S.roller = max(S.roller, min(S.impact * 1.3, 1.0));
+      S.trail = max(S.trail, A.w * 0.6 * smoothstep(0.04, 0.15, H0));
     }
   }
   // up the beach (and a little below the still waterline) the surface is the swash's
