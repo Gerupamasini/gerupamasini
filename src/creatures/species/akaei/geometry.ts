@@ -1,5 +1,5 @@
 import { BufferGeometry, Float32BufferAttribute, Matrix4, Quaternion, SphereGeometry, Uint16BufferAttribute, Vector3 } from 'three';
-import { MORPH, dorsalHeight, halfWidth, tailFins, tailSection, tailZ, ventralDepth } from './morphology';
+import { MORPH, dorsalHeight, eyeCentre, halfWidth, tailFins, tailSection, tailZ, ventralDepth } from './morphology';
 
 /**
  * Geometry of the アカエイ, built once per LOD and shared by every individual (the individual's size is the root's
@@ -350,22 +350,21 @@ function buildSting(spec: LodSpec): BufferGeometry {
 }
 
 /**
- * An eye: the cornea's dark dome, a little almond-shaped (longer along the body) and lower than it is wide, sunk in its
- * socket so about half shows, bulging up and out through the raised lip [PHOTO 005, 006, 011, 027]. uv.y runs from the
- * apex (1) down the dome.
+ * An eye: the cornea's dark dome, a little almond-shaped (longer along the body), looking out sideways from the outer
+ * face of its orbit; the orbit's brow covers its inner side and crown (morphology's orbit) [PHOTO 005, 006, 011, 027].
+ * uv.y runs from the apex (1) down the dome.
  */
 function buildEye(spec: LodSpec, sideX: number): BufferGeometry {
   const E = MORPH.eye;
   const seg = spec.eyeSeg;
-  // nearly a whole ball: its open lower edge stays deep under the skin of the socket
+  // nearly a whole ball: its open back stays deep inside the orbit
   const sph = new SphereGeometry(E.r, seg, Math.max(5, Math.round(seg * 0.75)), 0, Math.PI * 2, 0, Math.PI * 0.9);
   // shape in the eye's own frame (y = its axis): flattened along the axis, drawn out along the body
   sph.applyMatrix4(new Matrix4().makeScale(1, E.flat, E.long));
   const gaze = new Vector3(E.gaze[0] * sideX, E.gaze[1], E.gaze[2]).normalize();
   // turn the axis to the gaze, keeping the long axis along the body
   const q = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), gaze);
-  const x = E.x * sideX, z = E.z;
-  const c = new Vector3(x, dorsalHeight(x, z) - E.r * E.sunk, z);
+  const c = new Vector3(...eyeCentre(sideX));
   sph.applyMatrix4(new Matrix4().compose(c, q, new Vector3(1, 1, 1)));
   const b = new Builder();
   const p = sph.getAttribute('position'), uv = sph.getAttribute('uv');

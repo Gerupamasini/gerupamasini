@@ -233,4 +233,21 @@ describe('アカエイ eye–spiracle complex', () => {
       }
     }
   });
+
+  it('looks out sideways: the cornea that shows above the orbit faces out, not up [PHOTO 005, 006, 027]', () => {
+    for (const lod of [0, 1] as Lod[]) {
+      const g = akaeiGeometries(lod);
+      for (const [geo, side] of [[g.eyeL, 1], [g.eyeR, -1]] as [BufferGeometry, number][]) {
+        const p = geo.getAttribute('position'), n = geo.getAttribute('normal');
+        let out = 0, up = 0, k = 0;
+        for (let i = 0; i < p.count; i++) {
+          if (p.getY(i) <= dorsalHeight(p.getX(i), p.getZ(i))) continue;
+          out += n.getX(i) * side; up += n.getY(i); k++;
+        }
+        expect(k).toBeGreaterThan(10);
+        expect(out / k).toBeGreaterThan(up / k);
+        expect(out / k).toBeGreaterThan(0.4);
+      }
+    }
+  });
 });
