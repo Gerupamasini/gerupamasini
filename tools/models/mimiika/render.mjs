@@ -32,6 +32,9 @@ const DEFAULT_SHOTS = [
   // the mantle's collar round the neck and the mouth of the mantle cavity; the suckers on the arms
   { name: 'collar', set: { scene: 'side', lod: 0, seed: 2, cam: [0.045, -0.03, 0.035], target: [0.004, 0.0, 0.0] } },
   { name: 'suckers', set: { cam: [0.045, -0.012, 0.012], target: [0.02, -0.002, 0.0] } },
+  // the funnel: held turned aside as in photographs 20 and 29, and from below
+  { name: 'funnel', set: { funnelYaw: -0.7, cam: [0.034, 0.006, 0.045], target: [0.009, 0.0, 0.0] } },
+  { name: 'funnel_below', set: { funnelYaw: null, cam: [0.03, -0.03, 0.025], target: [0.006, -0.003, 0.0] } },
   // the views of the photographs used for the comparison (12, 29)
   { name: 'photo12_view', set: { scene: 'tank', lod: 0, seed: 2, cam: [0.02, 0.03, 0.075], target: [0.004, 0.004, 0.0] } },
   { name: 'photo29_view', set: { cam: [0.045, 0.012, 0.06], target: [0.003, 0.004, 0.0] } },
