@@ -580,6 +580,9 @@ ${WAVES_GLSL}
 ${SURF_GLSL}
 // shared between the colour, normal and roughness stages (the colour stage runs first)
 float gFilm = 0.0;
+// a mud flat at low water (uMudLook): how saturated the silt is, and the thin sheets of water lying on it
+float gMudWet = 0.0;
+float gSheet = 0.0;
 float gSwash = 0.0;
 float gQuartz = 0.0;
 vec2 gNrmAdd = vec2(0.0);
@@ -635,7 +638,7 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
     float mott = vnoise(vWorldPos.xz * 12.0) * 0.55 + vnoise(vWorldPos.xz * 26.0 + 5.0) * 0.3 + vnoise(vWorldPos.xz * 61.0 - 2.0) * 0.15;
     float mott2 = vnoise(vWorldPos.xz * 55.0 + 3.0) * 0.6 + vnoise(vWorldPos.xz * 140.0 + 9.0) * 0.4;
     float near = 1.0 - smoothstep(0.4, 1.6, fw * 0.02);
-    diffuseColor.rgb *= mix(1.0, (0.86 + 0.28 * mott) * mix(1.0, 0.8 + 0.4 * mott2, near), mudL);
+    diffuseColor.rgb *= mix(1.0, (0.9 + 0.2 * mott) * mix(1.0, 0.9 + 0.2 * mott2, near), mudL);
   }
   // the levee: a smooth face, zoned by the tide the way the photos show it — pale and dry above the spring high
   // water, an olive film of algae through the upper intertidal, dark and crusted with old oyster shell below mean
@@ -712,9 +715,9 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // ---- micro relief: silt lumps at the millimetre and centimetre scale, faded with distance
   if (uDetail > 0.5) {
     vec3 nd = vnoiseD(mm * 0.35) * 0.5 + vnoiseD(mm * 1.1 + 7.0) * 0.25;
-    float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand)) * (1.0 + 0.9 * uMudLook * (1.0 - isSand));
+    float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand)) * (1.0 + 0.25 * uMudLook * (1.0 - isSand));
     vec3 nd2 = vnoiseD(mm * 0.055 + 3.0);
-    float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand)) * (1.0 + 1.2 * uMudLook * (1.0 - isSand));
+    float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand)) * (1.0 + 0.8 * uMudLook * (1.0 - isSand));
     gNrmAdd += nd.yz * bump + nd2.yz * bump2;
   }
   // a stingray's pit: the ray blew the oxidised skin off, so the bowl shows the darker, wetter sand beneath,
@@ -776,6 +779,17 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   gTrough = exposedWet * smoothstep(-0.15, -0.5, gRipple) * smoothstep(0.3, 0.6, vnoise(vWorldPos.xz * 0.45 + 13.0));
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.5, 0.56, 0.64), gTrough * 0.85);
   // (the photos' wet flat is a neutral grey with the sky in it, whatever the colour of the dry sand)
+  // a mud flat at low water (user's photos): the silt stays saturated through the day and glistens, and thin
+  // sheets of water lie in the hollows and along the water's edge, flat and glassy, mirroring the sky
+  if (uMudLook > 0.001) {
+    float mudW = uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
+    float aboveW = vWorldPos.y - lvl;
+    gMudWet = mudW * max(wet, 0.7);
+    float sheetN = vnoise(vWorldPos.xz * 0.09 + 7.0) * 0.55 + vnoise(vWorldPos.xz * 0.33 - 3.0) * 0.3 + vnoise(vWorldPos.xz * 1.7 + 1.0) * 0.15;
+    float nearW = 1.0 - smoothstep(0.0, 0.22, aboveW);
+    gSheet = mudW * smoothstep(0.54, 0.6, sheetN + nearW * 0.35) * (1.0 - smoothstep(0.3, 0.5, aboveW));
+    diffuseColor.rgb *= mix(1.0, 0.85, gMudWet) * mix(1.0, 0.72, gSheet);
+  }
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.8, 0.9, 1.08), 0.75 * wet);
   // above the bank: the park's land, dry grass and earth over the packed bank
   float land = smoothstep(uLand.x, uLand.y, vWorldPos.y);
@@ -812,9 +826,17 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   float skew = rippleSkew(rp);
   float slope = (cos(ph) + 2.0 * skew * cos(ph * 2.0 + 0.6)) / (1.0 + skew) * strength * kRel * rippleSize(rp);
   vec3 worldPerturb = vec3(grad.x * slope + gNrmAdd.x, 0.0, grad.y * slope + gNrmAdd.y);
+  // (a sheet of water lies flat over the silt's lumps; saturated silt is smoothed by its own film of water)
+  worldPerturb *= (1.0 - 0.9 * gSheet) * (1.0 - 0.45 * gMudWet);
   vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
   normal = normalize(normal + viewPerturb);
 }`)
+        .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+#if defined( RE_IndirectSpecular )
+  // the sky in the wet silt and the water sheets: the scene's environment is kept dim for the diffuse fill, so
+  // the mirror-like wet mud takes its sky reflection at near full strength (Fresnel still applies in the BRDF)
+  radiance *= 1.0 + 9.0 * max(gMudWet * 0.4, gSheet);
+#endif`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 {
   float spillR = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
@@ -829,9 +851,11 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // wet silt is glossy (the shine of a mud flat at low water), damp silt satin
   float mudR = uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
   roughnessFactor = mix(roughnessFactor, mix(0.7, 0.36, wetR), mudR);
+  roughnessFactor = mix(roughnessFactor, 0.3, gMudWet);   // saturated silt: a satin sheen
+  roughnessFactor = mix(roughnessFactor, 0.05, gSheet);   // a film of water: a mirror
 }`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v3';
+    mat.customProgramCacheKey = () => 'higata-terrain-v4';
     return mat;
   }
 

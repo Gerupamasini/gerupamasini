@@ -86,9 +86,9 @@ const MANKO: ShoreLayout = {
   landLevel: [3, 4], sandTint: [1.08, 0.98, 0.8], mudTint: [1.42, 1.22, 0.92], rippleAngle: 0.4,
   // a lake's sheltered mud flat: no ripple marks, the mottled, lumpy, glossy silt of the goby flat (MahazeViewer)
   ripples: 0, mudLook: 1,
-  // the lake's opaque, milky jade water (user's photo): lit from within by the suspended fines, a soft broken
-  // reflection; a dim jade residual at dusk and night
-  surf: null, water: { colour: [0.03, 0.06, 0.045], turbidity: 2.4, scatter: [0.084, 0.19, 0.0925], reflect: 0.3, rough: 0.6 },
+  // the river-lake's turbid water (user's photos): a muted grey-green teal of suspended silt, mirroring the sky and
+  // the mangrove banks, slightly broken by the breeze
+  surf: null, water: { colour: [0.03, 0.045, 0.04], turbidity: 2.2, scatter: [0.034, 0.056, 0.048], reflect: 0.8, rough: 0.3 },
   // subtropical air: a deep blue sky that the high sun does not bleach, bright cumulus, a strong warm sun
   atmosphere: {
     rayleigh: 1.7, turbidity: 1.8, mie: 0.0015, skyScale: 0.3, skyScaleHighSun: 0.55,
