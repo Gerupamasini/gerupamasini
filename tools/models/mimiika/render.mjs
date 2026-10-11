@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Renders the ミミイカ with the reference viewer in headless Chromium (software WebGL):
-//   node tools/models/mimiika/render.mjs [--only <shot,...>] [--out <dir>] [--shots <file.json>]
+//   node tools/models/mimiika/render.mjs [--only <shot,...>] [--out <dir>] [--shots <file.json>] [--port <n>]
 // Writes JPEGs to docs/models/mimiika/ by default.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -62,7 +62,7 @@ const DEFAULT_SHOTS = [
 const shotsFile = arg('--shots', null);
 const SHOTS = shotsFile ? JSON.parse(fs.readFileSync(shotsFile, 'utf8')) : DEFAULT_SHOTS;
 
-const PORT = 5207;
+const PORT = Number(arg('--port', 5207));
 const url = `http://localhost:${PORT}/gerupamasini/reference/mimiika-viewer/index.html?capture&dpr=${DPR}`;
 const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

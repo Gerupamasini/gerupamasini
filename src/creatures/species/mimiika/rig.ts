@@ -134,6 +134,10 @@ export function applyPose(root: Object3D, bones: Record<string, Bone>, P: Pose):
   }
   const f = bones.J_funnel;
   f.quaternion.copy(restQ(f)).multiply(_q.setFromAxisAngle(AX, -P.funnelPitch)).multiply(_q2.setFromAxisAngle(AY, P.funnelYaw));
+  // the water breathed in round the neck leaves through the funnel: it opens as the mantle squeezes (most in a jet)
+  // and its valve draws it in a little as the mantle fills
+  const sF = Math.max(0.93, Math.min(1.25, 1 + 1.6 * (1 - P.mantle)));
+  f.scale.set(sF, sF, 1);
   aimEye(bones.J_eye_L, P.eyes[0]);
   aimEye(bones.J_eye_R, P.eyes[1]);
   root.updateMatrixWorld(true);

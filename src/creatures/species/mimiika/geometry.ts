@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Matrix4, Vector3 } from 'three';
 import {
   ARMS, ARM_BONES, CAVITY_Z, EYE, FIN, FUNNEL, HEAD_PROFILE, PROFILE, TENTACLE, TENTACLE_BONES, Z_FRONT, Z_TIP,
-  armBase, finBase, finEdge, mantleRim, profileAt, surfacePoint, tentacleBase, toModel, type ArmDef, type ProfileKnot,
+  armBase, finBase, finEdge, funnelSection, mantleRim, profileAt, surfacePoint, tentacleBase, toModel, type ArmDef, type ProfileKnot,
 } from './anatomy';
 
 /**
@@ -72,7 +72,9 @@ export function rigDefinition(): RigDef {
     const g = new Vector3(EYE.gaze[0] * side, EYE.gaze[1], EYE.gaze[2]).normalize();
     add(side > 0 ? 'J_eye_L' : 'J_eye_R', 'J_head', frame(v3(toModel([EYE.x * side, EYE.y, EYE.z])), g, Y));
   }
-  add('J_funnel', 'J_head', frame(v3(toModel([0, FUNNEL.y, FUNNEL.z0 + 1.2])), new Vector3(0, 0.08, 1), Y));
+  // the funnel's joint where it leaves the mantle, pointing along the tube to its opening
+  const f0 = funnelSection(0), f1 = funnelSection(FUNNEL.z1);
+  add('J_funnel', 'J_head', frame(v3(toModel([0, f0.yc, 0])), new Vector3(0, f1.yc - f0.yc, FUNNEL.z1), Y));
   for (const side of [1, -1] as const) {
     // the fin's frame: z along the base (forward), x out along the membrane at rest, y its normal
     const b = v3(toModel(finBase(0.45)));
@@ -198,8 +200,10 @@ export function buildBody(rig: RigDef, t: Tier): { mantle: BufferGeometry; head:
     const th = -Math.PI + (2 * Math.PI * j) / t.around;
     const rim = mantleRim(th);
     const col: (typeof pts)[number] = [];
-    // the free edge turns in a little towards the neck it closes on
-    const hug = (z: number) => 0.7 * (1 - rim.fused) * smooth(rim.z - 2.6, rim.z, z);
+    // the free edge turns in a little towards the neck it closes on; under the belly it lies on the funnel's base
+    // instead and stands out over it
+    const V = Math.exp(-(((Math.PI - Math.abs(th)) / 0.62) ** 2));
+    const hug = (z: number) => 0.7 * (1 - rim.fused) * (1 - V) * smooth(rim.z - 2.6, rim.z, z) - FUNNEL.flare * V * smooth(rim.z - 4.5, rim.z, z);
     // outer skin: clustered at the blunt end and at the edge
     for (let i = 0; i <= nOut; i++) {
       const u = 0.5 - 0.5 * Math.cos(Math.PI * (i / nOut));
@@ -381,34 +385,66 @@ export function buildTentacles(rig: RigDef, t: Tier): BufferGeometry {
   return b.build();
 }
 
-/** the funnel: a short cone under the head, open at its tip */
+/**
+ * The funnel (anatomy FUNNEL, funnelSection): one sheet from the flat base in the mantle cavity along the outer wall
+ * to the opening, over the thick rounded lip and back down the bore, closed at the bottom of the bore. The seam runs
+ * along the dorsal wall, in the head's groove. aSkin = (4, t along the outer wall, layer 0 outer / 1 lip / 2 bore,
+ * depth into the bore 0 … 1). Skinned from the root (the base in the cavity) through the head to J_funnel (the tube).
+ */
 export function buildFunnel(rig: RigDef, t: Tier): BufferGeometry {
   const b = new Builder();
-  const fun = rig.byName.J_funnel, head = rig.byName.J_head;
-  const around = Math.max(8, Math.round(t.around / 4)), along = 8;
+  const fun = rig.byName.J_funnel, head = rig.byName.J_head, root = rig.byName.J_root;
+  const around = Math.max(10, Math.round(t.around / 3)), along = Math.max(8, Math.round(t.front / 2)), nLip = t.around > 40 ? 4 : 2, nBore = 3;
   const cols = around + 1;
+  const weights = (z: number): [number, number][] => {
+    const wh = smooth(-2.6, -0.6, z), wf = smooth(-0.2, 1.8, z);
+    return [[root, 1 - wh], [head, wh * (1 - wf)], [fun, wh * wf]];
+  };
+  // the section at z, scaled in (s) for the lip and the bore; φ = 0 is the dorsal side, φ > 0 the animal's left
+  const at = (z: number, phi: number, s: number, dz = 0): Vector3 => {
+    const S = funnelSection(z);
+    return new Vector3(Math.sin(phi) * (S.a - s), S.yc + Math.cos(phi) * (S.b - s * 0.9), z + dz);
+  };
+  const rows: { p: Vector3[]; skin: [number, number, number, number]; z: number }[] = [];
   for (let i = 0; i <= along; i++) {
     const u = i / along;
-    const z = FUNNEL.z0 + (FUNNEL.z1 - FUNNEL.z0) * u;
-    const r = FUNNEL.r0 + (FUNNEL.r1 - FUNNEL.r0) * Math.pow(u, 0.8);
-    for (let j = 0; j < cols; j++) {
-      const a = (2 * Math.PI * j) / around;
-      const p: [number, number, number] = [Math.sin(a) * r * 1.15, FUNNEL.y + Math.cos(a) * r * 0.8, z];
-      const n = new Vector3(Math.sin(a) / 1.15, Math.cos(a) / 0.8, 0.12).normalize();
-      b.vert(M(p), n, [j / around, u], [4, u, 0, FUNNEL.y], [[head, 1 - smooth(0.2, 0.7, u)], [fun, smooth(0.2, 0.7, u)]]);
-    }
+    // denser towards the opening
+    const z = FUNNEL.z0 + (FUNNEL.z1 - FUNNEL.z0) * (1 - (1 - u) * (1 - u) * 0.55 - 0.45 * (1 - u));
+    rows.push({ p: Array.from({ length: cols }, (_, j) => at(z, (2 * Math.PI * j) / around, 0)), skin: [4, u, 0, 0], z });
   }
-  b.grid(0, along + 1, cols, false);
-  // the opening: a small dark disc just inside the rim
-  const first = b.count;
-  const zc = FUNNEL.z1 - 0.15;
-  b.vert(M([0, FUNNEL.y, zc - 0.3]), new Vector3(0, 0, 1), [0.5, 1], [4, 1.5, 0, FUNNEL.y], [[fun, 1]]);
-  for (let j = 0; j <= around; j++) {
-    const a = (2 * Math.PI * j) / around;
-    const r = FUNNEL.r1 * 0.95;
-    b.vert(M([Math.sin(a) * r * 1.15, FUNNEL.y + Math.cos(a) * r * 0.8, zc]), new Vector3(0, 0, 1), [j / around, 1], [4, 1.5, 0, FUNNEL.y], [[fun, 1]]);
+  // the lip: half a turn over the rim
+  const L = FUNNEL.lip;
+  for (let k = 1; k <= nLip; k++) {
+    const ph = (Math.PI * k) / (nLip + 1);
+    rows.push({ p: Array.from({ length: cols }, (_, j) => at(FUNNEL.z1, (2 * Math.PI * j) / around, L * 0.5 * (1 - Math.cos(ph)), L * 0.55 * Math.sin(ph))), skin: [4, 1, 1, 0], z: FUNNEL.z1 });
   }
-  for (let j = 0; j < around; j++) b.idx.push(first, first + 1 + j + 1, first + 1 + j);
+  // the bore: back into the tube, narrowing a little
+  for (let k = 0; k <= nBore; k++) {
+    const d = k / nBore, z = FUNNEL.z1 - FUNNEL.bore * d;
+    rows.push({ p: Array.from({ length: cols }, (_, j) => at(z, (2 * Math.PI * j) / around, L + 0.25 * d)), skin: [4, 1, 2, d], z });
+  }
+  // normals from the sheet's own derivatives (rows × around: outward on the wall, into the bore inside it)
+  const n = rows.length;
+  rows.forEach((r, i) => {
+    const r0 = rows[Math.max(0, i - 1)].p, r1 = rows[Math.min(n - 1, i + 1)].p;
+    r.p.forEach((p, j) => {
+      const jm = (j - 1 + around) % around, jp = (j + 1) % around;
+      const dRow = r1[j].clone().sub(r0[j]);
+      const dCol = r.p[jp].clone().sub(r.p[jm]);
+      const nn = new Vector3().crossVectors(dRow, dCol);
+      if (nn.lengthSq() < 1e-12) nn.set(0, 0, i < along ? -1 : 1);
+      b.vert(M([p.x, p.y, p.z]), nn.normalize(), [j / around, i / (n - 1)], r.skin, weights(r.z));
+    });
+  });
+  b.grid(0, n, cols, false);
+  // the bottom of the bore, and the closed base inside the cavity (never seen but through the mantle)
+  const last = (n - 1) * cols;
+  const zb = FUNNEL.z1 - FUNNEL.bore, Sb = funnelSection(zb);
+  const cb = b.vert(M([0, Sb.yc, zb - 0.1]), new Vector3(0, 0, 1), [0.5, 1], [4, 1, 2, 1], weights(zb));
+  for (let j = 0; j < around; j++) b.idx.push(last + j, cb, last + j + 1);
+  const S0 = funnelSection(FUNNEL.z0);
+  const c0 = b.vert(M([0, S0.yc, FUNNEL.z0 - 0.2]), new Vector3(0, 0, -1), [0.5, 0], [4, 0, 0, 0], weights(FUNNEL.z0));
+  for (let j = 0; j < around; j++) b.idx.push(j + 1, c0, j);
   return b.build();
 }
 

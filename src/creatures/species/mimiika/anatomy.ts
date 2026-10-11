@@ -224,8 +224,34 @@ export function finBase(u: number): [number, number, number] {
   return [x, FIN.y, z];
 }
 
-/** the funnel: under the head, from inside the mantle's collar to its opening */
-export const FUNNEL = { z0: -1.6, z1: 3.0, y: -3.55, r0: 1.2, r1: 0.62 };
+/**
+ * The funnel (漏斗, the excurrent siphon; photographs 20, 29): a broad, flat base in the mantle cavity, under the
+ * mantle's ventral edge, then a fleshy tube lying in the head's funnel groove, its thick rounded lip and dark bore
+ * opening forward and a little down under the eyes. z0 the base, zOut where the mantle's edge lies over it, z1 the
+ * opening; embed how deep its dorsal wall lies in the groove, droop how far its tip stands down off the head; lip the
+ * wall's thickness at the opening, bore how deep the dark opening is drawn; flare how far the mantle's ventral edge
+ * stands out over the base (its free edge lies on the funnel, not on the head).
+ */
+export const FUNNEL = { z0: -4.8, zOut: -0.9, z1: 3.0, embed: 0.32, droop: 0.55, lip: 0.38, bore: 1.5, flare: 1.35 };
+/** the funnel's section: half width a, half height b (mm) along z (the lip a little flared, a trumpet's mouth) */
+const FUNNEL_KNOTS: [number, number, number][] = [
+  [-4.8, 1.9, 0.4], [-3.0, 2.35, 0.62], [-0.9, 2.25, 0.84], [0.9, 1.7, 1.0], [2.3, 1.34, 1.04], [3.0, 1.42, 1.12],
+];
+
+/** the funnel's cross-section at z: half width a, half height b and the centre's height yc (mm, neck frame) */
+export function funnelSection(z: number): { a: number; b: number; yc: number; top: number } {
+  const K = FUNNEL_KNOTS;
+  const zc = Math.min(K[K.length - 1][0], Math.max(K[0][0], z));
+  let i = 0;
+  while (i < K.length - 2 && K[i + 1][0] < zc) i++;
+  const t0 = (zc - K[i][0]) / (K[i + 1][0] - K[i][0]);
+  const t = t0 * t0 * (3 - 2 * t0);
+  const a = K[i][1] + (K[i + 1][1] - K[i][1]) * t, b = K[i][2] + (K[i + 1][2] - K[i][2]) * t;
+  // the dorsal wall in the head's groove, the free end standing down off it
+  const d = Math.min(1, Math.max(0, (zc - 0.4) / (FUNNEL.z1 - 0.4)));
+  const top = surfacePoint(zc, Math.PI, HEAD_PROFILE)[1] + FUNNEL.embed - FUNNEL.droop * d * d;
+  return { a, b, yc: top - b, top };
+}
 
 /** neck-frame millimetres → model metres */
 export function toModel(p: [number, number, number]): [number, number, number] {

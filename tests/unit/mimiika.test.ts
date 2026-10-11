@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Group, Vector3, type Bone, type Mesh } from 'three';
-import { ARMS, EYE, FIN, ML_MM, TENTACLE, bellyDepth, surfacePoint } from '../../src/creatures/species/mimiika/anatomy';
-import { LODS, buildArms, buildBody, buildFin, rigDefinition } from '../../src/creatures/species/mimiika/geometry';
+import { ARMS, EYE, FIN, FUNNEL, HEAD_PROFILE, ML_MM, TENTACLE, Z_ROOT, armBase, bellyDepth, funnelSection, surfacePoint } from '../../src/creatures/species/mimiika/anatomy';
+import { LODS, buildArms, buildBody, buildFin, buildFunnel, rigDefinition } from '../../src/creatures/species/mimiika/geometry';
 import { createSquidBehavior, MODES, type Mode } from '../../src/creatures/species/mimiika/behavior';
 import { applyPose } from '../../src/creatures/species/mimiika/rig';
 import { buildModel, disposeModel } from '../../src/creatures/species/mimiika/model';
@@ -47,7 +47,7 @@ describe('ミミイカ: the body plan', () => {
 
   it('builds outward-facing skin (the triangles wind round their normals)', () => {
     const rig = rigDefinition();
-    const geos = [buildBody(rig, LODS[1]).mantle, buildBody(rig, LODS[1]).head, buildArms(rig, LODS[1])];
+    const geos = [buildBody(rig, LODS[1]).mantle, buildBody(rig, LODS[1]).head, buildArms(rig, LODS[1]), buildFunnel(rig, LODS[0]), buildFunnel(rig, LODS[1])];
     for (const g of geos) {
       const p = g.getAttribute('position'), n = g.getAttribute('normal'), idx = g.getIndex()!;
       let agree = 0, total = 0;
@@ -64,6 +64,44 @@ describe('ミミイカ: the body plan', () => {
     }
     const fin = buildFin(rig, LODS[0], 1);
     expect(fin.getAttribute('aFin').count).toBe(fin.getAttribute('position').count);
+  });
+
+  it('has a funnel that comes out from under the mantle and opens forward under the eyes', () => {
+    // the opening: under the eye, about two fifths of its diameter across
+    expect(FUNNEL.z1).toBeGreaterThan(EYE.z - EYE.r);
+    expect(FUNNEL.z1).toBeLessThan(EYE.z + EYE.r);
+    const tip = funnelSection(FUNNEL.z1);
+    expect((2 * tip.a) / (2 * EYE.r)).toBeGreaterThan(0.3);
+    expect((2 * tip.a) / (2 * EYE.r)).toBeLessThan(0.55);
+    // in front of the mantle's edge it hangs well below the head's ventral surface (it shows from the side)
+    for (const z of [0, 1, 2, FUNNEL.z1]) {
+      const S = funnelSection(z);
+      expect(S.yc - S.b, `z ${z}`).toBeLessThan(surfacePoint(z, Math.PI, HEAD_PROFILE)[1] - 1.2);
+    }
+    // under the mantle it stays inside the mantle's outer skin (the edge lies over it, nothing pokes through)
+    const rig = rigDefinition();
+    const f = buildFunnel(rig, LODS[0]), mantle = buildBody(rig, LODS[0]).mantle;
+    const fp = f.getAttribute('position'), fs = f.getAttribute('aSkin');
+    const mp = mantle.getAttribute('position'), ms = mantle.getAttribute('aSkin');
+    const mm = (a: typeof fp, i: number) => [a.getX(i) * 1000, a.getY(i) * 1000, a.getZ(i) * 1000 + Z_ROOT];
+    const outer: number[][] = [];
+    for (let i = 0; i < mp.count; i++) { const q = mm(mp, i); if (ms.getY(i) === 0 && q[1] < -2) outer.push(q); }
+    let checked = 0;
+    for (let i = 0; i < fp.count; i++) {
+      const q = mm(fp, i);
+      if (fs.getZ(i) !== 0 || q[2] > FUNNEL.zOut - 0.4) continue;
+      const near = outer.filter((o) => Math.abs(o[0] - q[0]) < 0.6 && Math.abs(o[2] - q[2]) < 0.6);
+      if (!near.length) continue;
+      checked++;
+      expect(q[1], `funnel vertex at ${q.map((v) => v.toFixed(2))}`).toBeGreaterThan(Math.min(...near.map((o) => o[1])) + 0.05);
+    }
+    expect(checked).toBeGreaterThan(30);
+    // and its opening is clear of the arms' bases and of the eyes
+    for (const a of ARMS) {
+      const B = armBase(a).pos;
+      expect(Math.hypot(B[0], B[1] - tip.yc, B[2] - FUNNEL.z1), a.name).toBeGreaterThan(tip.b + a.rBase + 0.5);
+    }
+    expect(Math.hypot(EYE.x - tip.a, EYE.y - tip.yc, EYE.z - FUNNEL.z1)).toBeGreaterThan(EYE.r + 0.5);
   });
 
   it('is built as MimiIkaRoot with Mantle, Head, Eye_L/R, Fin_L/R, Arms, Tentacles in three tiers', () => {

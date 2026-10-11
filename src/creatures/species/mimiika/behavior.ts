@@ -1,5 +1,5 @@
 import { Euler, Quaternion, Vector3 } from 'three';
-import { ARMS, ARM_BONES, ML_MM, TENTACLE, Z_ROOT, CROWN, EYE } from './anatomy';
+import { ARMS, ARM_BONES, ML_MM, TENTACLE, Z_ROOT, CROWN, EYE, FUNNEL, funnelSection } from './anatomy';
 import { emptyPose, type Pose } from './rig';
 import { Mysid } from './prey';
 
@@ -85,7 +85,7 @@ const BURIED_Y = -7.0;
 const BURIED_PITCH = 0.32;
 /** where the arm crown and the funnel's tip are, ahead of the root (mm) */
 const CROWN_Z = CROWN.z - Z_ROOT;
-const FUNNEL_TIP = new Vector3(0, -3.55, 3.0 - Z_ROOT);
+const FUNNEL_TIP = new Vector3(0, funnelSection(FUNNEL.z1).yc, FUNNEL.z1 + FUNNEL.lip - Z_ROOT);
 const ARM_W = [0.55, 0.8, 1.0, 1.2, 1.45].map((w) => w / 5);
 const REST_GAZE = [new Vector3(EYE.gaze[0], EYE.gaze[1], EYE.gaze[2]).normalize(), new Vector3(-EYE.gaze[0], EYE.gaze[1], EYE.gaze[2]).normalize()];
 
