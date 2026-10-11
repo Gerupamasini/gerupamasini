@@ -79,10 +79,12 @@ export function groundAt(x: number, z: number): number {
   // Forest floor: raised mud, then the land rising gently far away into low wooded hills.
   const r = Math.hypot(x, z), hills = 14 * smooth(800, 1400, r) * (0.6 + 0.8 * vnoise(x * 0.004, z * 0.004));
   const forest = 0.5 + 0.08 * vnoise(x * 0.2, z * 0.2) + hills;
-  // The near shore: the flat leans gently toward the lake over ~60 m (about 1%), then a bank of ~5° runs down
-  // to the bed (wading depth runs out on it at high water). Across the lake the far shore keeps a plain blend.
+  // The near shore: the flat leans gently toward the lake over ~60 m (a fifth of a metre, under 0.5%), then a bank
+  // of up to ~5° runs down to the bed. The lean stays shallow so that at spring high water (+0.85) the wading
+  // limit (1 m) falls on the bank, not out on the flat. Across the lake the far shore keeps a plain blend.
   const sd = shoreDist(x, z), approach = smooth(-60, 0, sd), shelf = smooth(-4, 24, sd);
-  const nearShore = basin - 0.5 * approach + (lakeBed - (basin - 0.5 * approach)) * shelf;
+  const leaned = basin - 0.22 * approach;
+  const nearShore = leaned + (lakeBed - leaned) * shelf;
   const water = nearShore + (basin + (lakeBed - basin) * smooth(0.25, 0.9, lake) - nearShore) * smooth(200, 260, x);
   const bank = 1.6 * smooth(9, 3, Math.hypot(x - ENTRY.x, (z - ENTRY.z) * 1.4)) + 0.4 * (vnoise(x * 0.8, z * 0.8) - 0.5) * smooth(10, 4, Math.hypot(x - ENTRY.x, z - ENTRY.z));
   return forest + (water - forest) * open + bank;

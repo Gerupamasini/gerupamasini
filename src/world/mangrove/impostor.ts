@@ -1,6 +1,6 @@
 import {
   Color, DirectionalLight, Group, HalfFloatType, HemisphereLight, InstancedBufferAttribute, InstancedMesh, LinearFilter,
-  LinearMipmapLinearFilter, Matrix4, MeshBasicMaterial, OrthographicCamera, PlaneGeometry, Scene, Vector2, Vector3,
+  LinearMipmapLinearFilter, Matrix4, Mesh, MeshBasicMaterial, NoBlending, OrthographicCamera, PlaneGeometry, Scene, Vector2, Vector3,
   WebGLRenderTarget, type IUniform, type WebGLRenderer,
 } from 'three';
 import { finishInstances, writeInstance, type HirugiKit } from './kit';
@@ -24,12 +24,22 @@ export interface ImpostorAtlas {
   frames: Vector2[];
 }
 
-/** Render the five adult trees (LOD0, still air, no seed lean) from eight azimuths into one HDR atlas. */
+/**
+ * Render the five adult trees (LOD1, still air, no seed lean) from eight azimuths into one HDR atlas. Each view is
+ * drawn into a small 4× MSAA tile and copied into the atlas, which keeps no depth or multisample buffers: ~28 MB
+ * of texture (with mips) stays, the bake's working buffers (~2 MB) are freed at once.
+ */
 export function bakeImpostors(renderer: WebGLRenderer, kit: HirugiKit): ImpostorAtlas {
   const target = new WebGLRenderTarget(TILE * VIEWS, TILE * BASES, {
-    type: HalfFloatType, samples: 4, generateMipmaps: true, minFilter: LinearMipmapLinearFilter, magFilter: LinearFilter,
+    type: HalfFloatType, samples: 0, depthBuffer: false, generateMipmaps: false, minFilter: LinearMipmapLinearFilter, magFilter: LinearFilter,
   });
   target.texture.name = 'YaeyamaHirugi/Impostors';
+  const tile = new WebGLRenderTarget(TILE, TILE, { type: HalfFloatType, samples: 4, minFilter: LinearFilter, magFilter: LinearFilter });
+  // the copy: a screen-filling quad drawn into one tile of the atlas, texel for texel, alpha and all (no blending)
+  const copyCam = new OrthographicCamera(-1, 1, 1, -1, 0, 1), copyScene = new Scene();
+  // (transparent with no blending: an opaque material would have its alpha forced to 1 and lose the coverage)
+  const copyQuad = new Mesh(new PlaneGeometry(2, 2), new MeshBasicMaterial({ map: tile.texture, depthTest: false, depthWrite: false, toneMapped: false, transparent: true, blending: NoBlending }));
+  copyScene.add(copyQuad);
   const scene = new Scene();
   // a clear noon: a strong warm key from above and to one side of each view, a blue-white sky fill
   const hemi = new HemisphereLight(new Color(0.5, 0.66, 0.88), new Color(0.26, 0.26, 0.18), 0.3);
@@ -38,15 +48,15 @@ export function bakeImpostors(renderer: WebGLRenderer, kit: HirugiKit): Impostor
   const cam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   const frames: Vector2[] = [];
   const prev = { target: renderer.getRenderTarget(), autoClear: renderer.autoClear, color: renderer.getClearColor(new Color()), alpha: renderer.getClearAlpha(), shadows: renderer.shadowMap.enabled };
-  renderer.shadowMap.enabled = false;
-  renderer.setRenderTarget(target);
-  // (transparent background of the foliage's own mean colour, so the mip levels do not fringe dark)
-  renderer.setClearColor(new Color(0.03, 0.06, 0.018), 0); renderer.autoClear = false;
-  renderer.clear();
+  renderer.shadowMap.enabled = false; renderer.autoClear = false;
+  // (a transparent clear: the renderer premultiplies it to zero anyway; the impostor shader divides the
+  // coverage back out, so edges and small mips keep the foliage's own colour)
+  renderer.setClearColor(new Color(0, 0, 0), 0);
+  renderer.setRenderTarget(target); renderer.clear();
   for (let base = 0 as HirugiBase; base < BASES; base = (base + 1) as HirugiBase) {
     const spec = { ...treeSpec(1, base, base), yaw: 0, scale: 1, trunkSeed: 2147483647, rootSeed: 2147483647, leafSeed: 2147483647, scaleSeed: 2147483647 };
     const group = new Group(), meshes = PARTS.map((part) => {
-      const m = kit.mesh(base, 0, part, 1); writeInstance(m, 0, spec, kit.ground); finishInstances(m, 1); group.add(m); return m;
+      const m = kit.mesh(base, 1, part, 1); writeInstance(m, 0, spec, kit.ground); finishInstances(m, 1); group.add(m); return m;
     });
     scene.add(group);
     const sk = kit.skeleton(base), g = kit.ground.heightAt(0, 0);
@@ -59,10 +69,12 @@ export function bakeImpostors(renderer: WebGLRenderer, kit: HirugiKit): Impostor
       // the key light 40° to the left of the view and 55° up, so every view is lit alike
       const la = a - 0.7;
       sun.position.set(Math.sin(la) * Math.cos(0.96) * 60, g + Math.sin(0.96) * 60, Math.cos(la) * Math.cos(0.96) * 60);
+      renderer.setRenderTarget(tile); renderer.clear(); renderer.render(scene, cam);
+      // the mips are built once, with the last tile
+      target.texture.generateMipmaps = base === BASES - 1 && k === VIEWS - 1;
       target.viewport.set(k * TILE, base * TILE, TILE, TILE);
       target.scissor.set(k * TILE, base * TILE, TILE, TILE); target.scissorTest = true;
-      renderer.setRenderTarget(target);
-      renderer.render(scene, cam);
+      renderer.setRenderTarget(target); renderer.render(copyScene, copyCam);
     }
     scene.remove(group);
     for (const m of meshes) kit.release(m);
@@ -70,6 +82,7 @@ export function bakeImpostors(renderer: WebGLRenderer, kit: HirugiKit): Impostor
   target.scissorTest = false; target.viewport.set(0, 0, TILE * VIEWS, TILE * BASES); target.scissor.set(0, 0, TILE * VIEWS, TILE * BASES);
   renderer.setRenderTarget(prev.target); renderer.autoClear = prev.autoClear; renderer.setClearColor(prev.color, prev.alpha);
   renderer.shadowMap.enabled = prev.shadows;
+  tile.dispose(); copyQuad.geometry.dispose(); (copyQuad.material as MeshBasicMaterial).dispose();
   return { target, frames };
 }
 
@@ -113,7 +126,8 @@ vec4 imp = texture2D(uImpAtlas, vImpUv);
 // coverage thins in the small mip levels: lower the cut there so the far crowns stay full
 float fp = max(fwidth(vImpUv.x) * ${TILE * VIEWS}.0, fwidth(vImpUv.y) * ${TILE * BASES}.0);
 if (imp.a < mix(0.5, 0.25, smoothstep(1.0, 6.0, fp))) discard;
-diffuseColor.rgb = imp.rgb * uImpLight;`)
+// (the atlas is premultiplied by coverage: divide it back out so edges and small mips keep the leaves' colour)
+diffuseColor.rgb = imp.rgb / max(imp.a, 1e-3) * uImpLight;`)
       .replace('#include <fog_fragment>', '#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, uImpHaze, 1.0 - exp(-pow(vImpDist / 2200.0, 2.0)));');
   };
   mat.customProgramCacheKey = () => 'hirugi-impostor-v1';

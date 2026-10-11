@@ -60,6 +60,26 @@ describe('漫湖 environment-only flat', () => {
     expect(adults.filter(t=>openness(t.x,t.z)>.9 && lakeOpen(t.x,t.z)<.1).length).toBeLessThan(adults.length*0.05);
     expect(forest.specs.filter(t=>t.sapling!==null && openness(t.x,t.z)>.5).length).toBeGreaterThan(20);
     expect(forest.collision.segments.length).toBeGreaterThan(1000);
+    // At spring high water (+0.85, 1 m waders) the flat stays connected: the wading limit is on the lake's bank,
+    // not out on the gentle lean, and no pocket of the east flat is cut off from the entry.
+    const tide = 0.85, wade = map.wading!.maxDepth_m, N = 201, seen = new Uint8Array(N * N);
+    const ok = (i: number, j: number) => { const x = i - 100, z = j - 100; return !inThicket(x, z) && tide - terrain.heightAt(x, z) <= wade; };
+    const queue = [[Math.round(map.spawnStart.x) + 100, Math.round(map.spawnStart.z) + 100]];
+    seen[queue[0][1] * N + queue[0][0]] = 1;
+    while (queue.length) {
+      const [i, j] = queue.pop()!;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const a = i + di, b = j + dj;
+        if (a < 0 || b < 0 || a >= N || b >= N || seen[b * N + a] || !ok(a, b)) continue;
+        seen[b * N + a] = 1; queue.push([a, b]);
+      }
+    }
+    const reached = (x: number, z: number) => seen[(Math.round(z) + 100) * N + Math.round(x) + 100] === 1;
+    expect(reached(93, -66)).toBe(true);
+    for (let z = -60; z <= 60; z += 20) {
+      let east = -Infinity; for (let x = 60; x <= 100; x++) if (reached(x, z)) east = x;
+      expect(east, `z=${z}`).toBeGreaterThanOrEqual(90);
+    }
     // the background forest's edges: three rows of tree impostors, outside the walkable area, never on open ground
     const edge = edgeImpostorSites();
     console.log('edge impostors', edge.length);
