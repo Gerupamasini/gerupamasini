@@ -116,14 +116,16 @@ export class World {
     // 葛西's sand is a warm grey-brown, not neutral: the photos' dry sand runs about 1 : 0.94 : 0.85 in R : G : B and
     // reads lighter than the shared grey (tuned against the photos with tests/smoke/kasai-sand.mjs)
     else terrain.setSandTint(1.36, 1.18, 0.92);
+    if (layout?.streams) habitat.addStreams(layout.streams);
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
-    const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });
+    const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7, ...layout?.water.ripple });
     terrain.setWaves(waves);
     // the surf on an open shore: one set of uniforms for the water and the sand it wets
     const surf = surfUniforms(layout?.surf ?? null);
     terrain.setSurf(surf);
     const water = new WaterPass(terrain, waves, surf);
+    terrain.shareMirror(water.uniforms);
     if (layout) water.setBody(...layout.water.colour, layout.water.turbidity, layout.water);
     const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists

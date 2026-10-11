@@ -203,10 +203,57 @@ export class Habitat {
     this.pools.sort((a, b) => b.area - a.area);
   }
 
+  /**
+   * Running water the tide does not explain: the trickle in a creek's bed at low water, whose surface falls with the
+   * bed to the sea (`levelAt`: its height at a point, or -1e3 off the creeks). Written into the pool levels the
+   * shaders and the map read, grown two cells like the pools, so the waterline is the ground's own contour; the
+   * player's wading depth is the tide's (a few centimetres of trickle are not water to wade).
+   */
+  addStreams(levelAt: (x: number, z: number) => number): void {
+    const t = this.terrain, n = t.n, h = t.heights, out = this.poolLevels, mark = new Uint8Array(n * n);
+    for (let k = 0; k < n * n; k++) {
+      const i = k % n, j = (k - i) / n, level = levelAt(-t.half + i * t.cell, -t.half + j * t.cell);
+      if (level > h[k] + 0.003 && level > out[k]) { out[k] = level; mark[k] = 1; }
+    }
+    for (let pass = 0; pass < 2; pass++) {
+      const src = out.slice(), was = mark.slice();
+      for (let k = 0; k < n * n; k++) {
+        if (src[k] > -1e2) continue;
+        const i = k % n, j = (k - i) / n;
+        let best = -1e3;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const ii = i + di, jj = j + dj;
+          if (ii < 0 || jj < 0 || ii >= n || jj >= n || !was[jj * n + ii]) continue;
+          best = Math.max(best, src[jj * n + ii]);
+        }
+        if (best > -1e2) { out[k] = best; mark[k] = 1; }
+      }
+    }
+  }
+
   private buildPoolLevels(): Float32Array {
     const n = this.terrain.n, out = new Float32Array(n * n).fill(-1e3);
     for (const p of this.pools) for (const k of p.cells) out[k] = p.level;
-    // grow each pool by two cells so its shallow fringe (less than 3 cm deep) is covered too
+    // the shallow fringe (less than 3 cm deep) is part of the same hollow: follow it out to where the ground meets
+    // the level, so the waterline is the ground's own contour and not the outline of the cells (on a gentle mud
+    // slope that fringe is metres wide)
+    const h = this.terrain.heights, spill = this.spill;
+    for (const p of this.pools) {
+      const stack = p.cells.slice();
+      while (stack.length) {
+        const c = stack.pop()!;
+        const i = c % n, j = (c - i) / n;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const ii = i + di, jj = j + dj;
+          if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+          const kk = jj * n + ii;
+          if (out[kk] >= p.level || spill[kk] <= h[kk] || Math.abs(spill[kk] - p.level) > 1e-4) continue;
+          out[kk] = p.level;
+          stack.push(kk);
+        }
+      }
+    }
+    // and grow each pool by two cells, so the cells the waterline crosses carry its level on both sides
     for (let pass = 0; pass < 2; pass++) {
       const src = out.slice();
       for (let k = 0; k < n * n; k++) {

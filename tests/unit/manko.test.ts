@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
 import { MapSchema, SpotsFileSchema, TideStationSchema } from '../../src/data/schemas';
-import { creekZ, heightAt, tributaryX, openness, lakeOpen, canopyAt, groundAt, inThicket, forestDepth } from '../../src/world/maps/manko/shape';
+import { creekZ, heightAt, tributaryX, openness, lakeOpen, canopyAt, groundAt, inThicket, forestDepth, riverCentre, streamLevel, JUNCTION } from '../../src/world/maps/manko/shape';
 import { LAYOUTS } from '../../src/world/maps/hashirimizu';
 import { MangroveForest } from '../../src/world/mangrove';
 import { edgeImpostorSites } from '../../src/world/maps/manko/land';
@@ -39,14 +39,36 @@ describe('漫湖 environment-only flat', () => {
       expect(terrain.substrateAt(x,z)).toBe('channel');
     }
     expect(heightAt(tributaryX(40)+4,40)-heightAt(tributaryX(40),40)).toBeGreaterThan(.12);
+    // The creeks are one system, unbroken from the forest to the lake: open all along (no island or point across
+    // them), and the low-water trickle stands in the bed the whole way (the bed only ever falls downstream)
+    let prev = Infinity;
+    for (let x=-86;x<=104;x+=0.5) {
+      const z=creekZ(x); expect(openness(x,z), `creek x=${x}`).toBeGreaterThan(.5);
+      expect(streamLevel(x,z)-terrain.heightAt(x,z), `trickle x=${x}`).toBeGreaterThan(.005);
+      expect(streamLevel(x,z)).toBeLessThanOrEqual(prev); prev=streamLevel(x,z);
+    }
+    for (let z=Math.ceil(JUNCTION.z);z<=72;z+=0.5) {
+      const x=tributaryX(z); expect(openness(x,z), `tributary z=${z}`).toBeGreaterThan(.5);
+      expect(streamLevel(x,z)-terrain.heightAt(x,z), `tributary trickle z=${z}`).toBeGreaterThan(.005);
+    }
+    // and the river runs on past both ends of the lake: open water all the way up and down to the horizon
+    let span: [number, number] | null = null;
+    for (let z=-1500;z<=1500;z+=10) {
+      let lo=Infinity, hi=-Infinity; for (let x=-200;x<=800;x+=5) if (lakeOpen(x,z)>.5 && groundAt(x,z)<-1) { lo=Math.min(lo,x); hi=Math.max(hi,x); }
+      expect(hi-lo, `river z=${z}`).toBeGreaterThan(100);
+      if (span) expect(lo<=span[1] && hi>=span[0], `river joined at z=${z}`).toBe(true);
+      span=[lo,hi];
+    }
+    expect(Math.abs(riverCentre(-1500)-riverCentre(1500))).toBeLessThan(400);
     // Mud dominates the open part of the walkable square; it is a lake basin, ringed by forest, not a coast.
     let mud=0,open=0; for(let x=-100;x<=100;x+=4)for(let z=-100;z<=100;z+=4){ if(openness(x,z)>.5){open++; if(terrain.substrateAt(x,z)==='mud')mud++;} }
     expect(mud/open).toBeGreaterThan(.75); expect(open/2601).toBeGreaterThan(.5);
     for (let a=0;a<360;a+=10) {
       const r=900, x=Math.cos(a*Math.PI/180)*r, z=Math.sin(a*Math.PI/180)*r;
-      // every direction ends in forest (canopy over land) except across the lake, whose far shore is ~400 m out
-      expect(canopyAt(x,z)>2 || (lakeOpen(x,z)>.5 && Math.hypot(x,z)<500)).toBe(true);
-      expect(groundAt(x,z)).toBeGreaterThan(0);
+      // every direction ends in forest (canopy over land) except across the lake, whose far shore is ~400 m out,
+      // and up and down the river it is a widening of, which winds on to the horizon
+      expect(canopyAt(x,z)>2 || (lakeOpen(x,z)>.5 && (Math.hypot(x,z)<500 || Math.abs(z)>600))).toBe(true);
+      if (lakeOpen(x,z)<.5) expect(groundAt(x,z)).toBeGreaterThan(0);
     }
     const forest = new MangroveForest(terrain,map.mangroves!);
     const adults=forest.specs.filter(t=>t.sapling===null);
@@ -78,8 +100,27 @@ describe('漫湖 environment-only flat', () => {
     expect(reached(93, -66)).toBe(true);
     for (let z = -60; z <= 60; z += 20) {
       let east = -Infinity; for (let x = 60; x <= 100; x++) if (reached(x, z)) east = x;
-      expect(east, `z=${z}`).toBeGreaterThanOrEqual(90);
+      // (where the creek's mouth reaches the lake its channel is too deep to wade at high water)
+      if (Math.abs(z - creekZ(95)) > 25) expect(east, `z=${z}`).toBeGreaterThanOrEqual(90);
     }
+    // no patch of the open mud anywhere is cut off from the entry (the tops of a few isolated hummocks, a metre or
+    // two across, may stand out of the water alone)
+    const pocket = new Uint8Array(N * N), big: string[] = [];
+    for (let z = -98; z <= 98; z++) for (let x = -98; x <= 98; x++) {
+      const k = (z + 100) * N + x + 100;
+      if (pocket[k] || !ok(x + 100, z + 100) || openness(x, z) <= 0.9 || reached(x, z)) continue;
+      const stack = [[x + 100, z + 100]]; pocket[k] = 1; let size = 0;
+      while (stack.length) {
+        const [i, j] = stack.pop()!; size++;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const a = i + di, b = j + dj;
+          if (a < 0 || b < 0 || a >= N || b >= N || pocket[b * N + a] || seen[b * N + a] || !ok(a, b)) continue;
+          pocket[b * N + a] = 1; stack.push([a, b]);
+        }
+      }
+      if (size > 4) big.push(`${x},${z} (${size} m²)`);
+    }
+    expect(big, big.join(' ')).toEqual([]);
     // the background forest's edges: three rows of tree impostors, outside the walkable area, never on open ground
     const edge = edgeImpostorSites();
     console.log('edge impostors', edge.length);

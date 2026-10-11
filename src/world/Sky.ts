@@ -12,6 +12,9 @@ export interface Atmosphere {
   skyScale: number; skyScaleHighSun: number;
   /** fair-weather cumulus: cover, density, size (smaller is larger clouds) and the sunlit tops' brightness */
   cloudCoverage: number; cloudDensity: number; cloudScale: number; cloudGain: number;
+  /** the cumulus' shading: how dark their thick, shaded bases go (three's 0.45), and how far their colour is taken
+   * from the air's reddened tint toward a neutral white-grey (0: none) */
+  cloudShadeMin: number; cloudNeutral: number;
   /** clear-day key light colour and a factor on its intensity */
   sunColor: readonly [number, number, number]; sunGain: number;
   /** clear-day hemisphere fill colours and the day fog/horizon colour */
@@ -20,7 +23,7 @@ export interface Atmosphere {
 }
 export const DEFAULT_ATMOSPHERE: Atmosphere = {
   rayleigh: 2.2, turbidity: 2.0, mie: 0.002, skyScale: 0.32, skyScaleHighSun: 1,
-  cloudCoverage: 0.5, cloudDensity: 0.7, cloudScale: 0.00025, cloudGain: 1,
+  cloudCoverage: 0.5, cloudDensity: 0.7, cloudScale: 0.00025, cloudGain: 1, cloudShadeMin: 0.45, cloudNeutral: 0,
   sunColor: [1, 0.96, 0.9], sunGain: 1, hemiSky: [0.58, 0.68, 0.78], hemiGround: [0.28, 0.24, 0.18], fogDay: [0.6, 0.7, 0.78],
 };
 
@@ -52,14 +55,23 @@ export class SkyDome {
     const mat = this.sky.material;
     mat.uniforms.uSkyScale = { value: this.atm.skyScale };
     mat.uniforms.uCloudGain = { value: this.atm.cloudGain };
+    mat.uniforms.uCloudShadeMin = { value: this.atm.cloudShadeMin };
+    mat.uniforms.uCloudNeutral = { value: this.atm.cloudNeutral };
     const CLOUD_SUN = 'vec3 sunColor = vSunE * Fex * 0.22 * 0.04;';
+    const CLOUD_SHADE = 'float shade = mix( 0.45, 1.0,';
+    const CLOUD_COL = 'cloudColor *= max( dayFactor, 0.03 );';
     // (fail loudly if a three upgrade changes the cloud shader: the gain would silently do nothing)
-    if (!mat.fragmentShader.includes(CLOUD_SUN)) throw new Error('Sky: cloud lighting line not found in three Sky shader');
+    for (const line of [CLOUD_SUN, CLOUD_SHADE, CLOUD_COL]) if (!mat.fragmentShader.includes(line)) throw new Error(`Sky: cloud line not found in three Sky shader: ${line}`);
     mat.fragmentShader = mat.fragmentShader
       .replace('uniform float mieDirectionalG;', `uniform float mieDirectionalG;
 		uniform float uSkyScale;
-		uniform float uCloudGain;`)
+		uniform float uCloudGain;
+		uniform float uCloudShadeMin;
+		uniform float uCloudNeutral;`)
       .replace(CLOUD_SUN, 'vec3 sunColor = vSunE * Fex * 0.22 * 0.04 * uCloudGain;')
+      .replace(CLOUD_SHADE, 'float shade = mix( uCloudShadeMin, 1.0,')
+      .replace(CLOUD_COL, `${CLOUD_COL}
+				cloudColor = mix( cloudColor, vec3( dot( cloudColor, vec3( 0.2126, 0.7152, 0.0722 ) ) ) * vec3( 0.97, 0.99, 1.04 ), uCloudNeutral );`)
       .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( texColor * uSkyScale, 1.0 );');
     mat.needsUpdate = true;
     // fair-weather cumulus: three's own cloud layer (lit by the sun with a silver lining on the rims toward it,

@@ -31,13 +31,27 @@ export function shoreDist(x: number, z: number): number {
   return x + 10 * (vnoise(z * 0.02, 3.3) - 0.5) + 4 * (vnoise(z * 0.07, 9.1) - 0.5) - LAKE_SHORE_X;
 }
 export function lakeOpen(x: number, z: number): number {
-  const near = smooth(-6, 14, shoreDist(x, z));
+  const near = smooth(-6, 14, shoreDist(x, z)), az = Math.abs(z + 60);
   const far = 1 - smooth(FAR_SHORE_X - 20, FAR_SHORE_X + 10, x - 18 * (vnoise(z * 0.01, 1.7) - 0.5));
-  const ends = 1 - smooth(560, 700, Math.abs(z + 60));
-  return near * far * ends;
+  const lake = near * far * (1 - smooth(520, 640, az));
+  return Math.max(lake, riverOpen(x, z));
+}
+/** The river (国場川) the lake is a widening of runs on past both its ends, up- and downstream: a channel narrowing to
+ * ~180 m that winds away between the wooded banks to the horizon, so the lake never reads as a closed pond. */
+export function riverCentre(z: number): number {
+  const zc = z + 60, t = Math.max(0, Math.abs(zc) - 500);
+  return (LAKE_SHORE_X + FAR_SHORE_X) / 2 + (zc < 0 ? 1 : -1) * 150 * Math.sin(t * 0.0032) + 30 * (vnoise(z * 0.004, 5.5) - 0.5) * smooth(420, 600, Math.abs(zc));
+}
+export function riverHalfWidth(z: number): number { return (FAR_SHORE_X - LAKE_SHORE_X) / 2 - 77 * smooth(420, 900, Math.abs(z + 60)); }
+function riverOpen(x: number, z: number): number {
+  const az = Math.abs(z + 60);
+  if (az < 420) return 0;
+  const half = riverHalfWidth(z), wob = 10 * (vnoise(x * 0.02, z * 0.02) - 0.5);
+  return smooth(half + 8, half - 12, Math.abs(x - riverCentre(z)) + wob) * smooth(420, 520, az);
 }
 /** Mangrove islands in the basin (rounded domes in the aerial view). */
-export const ISLANDS = [{ x: 18, z: -22, r: 7 }, { x: -40, z: 40, r: 6 }, { x: 8, z: 64, r: 6.5 }, { x: 60, z: -98, r: 6 }, { x: -50, z: -40, r: 5 }, { x: -12, z: -6, r: 4.5 }, { x: 92, z: 14, r: 7 }];
+// (none on the creeks: the creek and its tributary run unbroken from the forest to the lake)
+export const ISLANDS = [{ x: 18, z: -22, r: 7 }, { x: -40, z: 40, r: 6 }, { x: 8, z: 64, r: 6.5 }, { x: 60, z: -98, r: 6 }, { x: -50, z: -40, r: 5 }, { x: -30, z: 14, r: 4.5 }, { x: 92, z: 14, r: 7 }];
 /** Limestone shore where the player arrives, the lake to the east and a mangrove dome beside it (user's photo). */
 export const ENTRY = { x: 86, z: 74 };
 
@@ -47,6 +61,8 @@ export function openness(x: number, z: number): number {
   const wob = 7 * (vnoise(x * 0.05, z * 0.05) - 0.5) + 2.5 * (vnoise(x * 0.25, z * 0.25) - 0.5);
   for (const l of LOBES) s = Math.max(s, smooth(l.r + 2, l.r - 4, Math.hypot(x - l.x, z - l.z) + wob));
   s = Math.max(s, lakeOpen(x, z));
+  // the creek's mouth: a channel through the mangrove point to the lake
+  s = Math.max(s, smooth(7 + Math.max(0, x) * 0.012, 4, Math.abs(z - creekZ(x)) + wob * 0.3) * smooth(66, 76, x) * (1 - smooth(104, 112, x)));
   for (const i of ISLANDS) s *= 1 - smooth(i.r + 1.5, i.r - 1.5, Math.hypot(x - i.x, z - i.z) + wob * 0.4);
   return s;
 }
@@ -57,6 +73,37 @@ export function bankAt(x: number, z: number): number { return smooth(10, 5, Math
 export function creekZ(x: number): number { return -10 + 11 * Math.sin(x * 0.035 + 0.6) + 3 * Math.sin(x * 0.1) - Math.max(0, x - 20) * 0.55; }
 /** A tributary from the south lobes. */
 export function tributaryX(z: number): number { return -10 + 7 * Math.sin(z * 0.06) + 2 * Math.sin(z * 0.17); }
+/** Where the tributary joins the creek. */
+export const JUNCTION = (() => {
+  let best = Infinity, z = 0;
+  for (let q = -40; q < 40; q += 0.02) { const d = Math.abs(q - creekZ(tributaryX(q))); if (d < best) { best = d; z = q; } }
+  return { x: tributaryX(z), z };
+})();
+/**
+ * The creeks' beds (thalwegs) fall steadily all the way to the lake, so the trickle left in them at low water runs
+ * unbroken from the forest to the lake: the creek from its head in the west forest, the tributary from the south
+ * forest down to the junction (m, map datum).
+ */
+export function creekBed(x: number): number { return x < -80 ? -0.12 + 0.012 * (-80 - x) : -0.12 - 0.0022 * (x + 80); }
+export function tributaryBed(z: number): number { return creekBed(JUNCTION.x) + 0.0045 * (z - JUNCTION.z); }
+/** The low-water trickle in the creeks: its surface (a few centimetres over the bed), or -1e3 away from them. */
+export function streamLevel(x: number, z: number): number {
+  let level = -1e3;
+  const widen = Math.max(0, x) * 0.012;
+  // (the head: the trickle seeps out of the forest floor, from nothing to its few centimetres)
+  if (x > -96 && x < 116 && Math.abs(z - creekZ(x)) < 5 + widen * 2) level = creekBed(x) + 0.035 - 0.1 * (1 - smooth(-92, -87, x));
+  if (z > creekZ(x) + 1 && z < 82 && Math.abs(x - tributaryX(z)) < 3.5) level = Math.max(level, tributaryBed(z) + 0.03);
+  return level;
+}
+/** The channels cut down to their thalwegs (only ever lowering the ground): soft banks, a little steeper at the water. */
+function carveCreeks(x: number, z: number, g: number): number {
+  const widen = Math.max(0, x) * 0.012, dc = Math.abs(z - creekZ(x));
+  const along = smooth(-98, -90, x) * (1 - smooth(112, 120, x));
+  if (along > 0 && dc < 9) g -= along * (1 - smooth(6, 9, dc)) * Math.max(0, g - (creekBed(x) + 0.34 * smooth(0.4, 2.6 + widen * 0.8, dc)));
+  const alongT = smooth(JUNCTION.z - 1, JUNCTION.z + 2, z) * (1 - smooth(78, 86, z)), dt = Math.abs(x - tributaryX(z));
+  if (alongT > 0 && dt < 6) g -= alongT * (1 - smooth(4, 6, dt)) * Math.max(0, g - (tributaryBed(z) + 0.26 * smooth(0.3, 1.8, dt)));
+  return g;
+}
 
 /** Ground (mud/rubble/lake bed) everywhere, inside and outside the terrain. */
 export function groundAt(x: number, z: number): number {
@@ -83,11 +130,13 @@ export function groundAt(x: number, z: number): number {
   // of up to ~5° runs down to the bed. The lean stays shallow so that at spring high water (+0.85) the wading
   // limit (1 m) falls on the bank, not out on the flat. Across the lake the far shore keeps a plain blend.
   const sd = shoreDist(x, z), approach = smooth(-60, 0, sd), shelf = smooth(-4, 24, sd);
-  const leaned = basin - 0.22 * approach;
+  const leaned = basin - 0.18 * approach;
   const nearShore = leaned + (lakeBed - leaned) * shelf;
-  const water = nearShore + (basin + (lakeBed - basin) * smooth(0.25, 0.9, lake) - nearShore) * smooth(200, 260, x);
-  const bank = 1.6 * smooth(9, 3, Math.hypot(x - ENTRY.x, (z - ENTRY.z) * 1.4)) + 0.4 * (vnoise(x * 0.8, z * 0.8) - 0.5) * smooth(10, 4, Math.hypot(x - ENTRY.x, z - ENTRY.z));
-  return forest + (water - forest) * open + bank;
+  // (beyond the lake's ends the river's own banks: there the bed follows the river, not the basin's near shore)
+  const water = nearShore + (basin + (lakeBed - basin) * smooth(0.25, 0.9, lake) - nearShore) * Math.max(smooth(200, 260, x), smooth(540, 620, Math.abs(z + 60)));
+  // (its top rolls gently: broad swells, no angular little hollows to hold puddles)
+  const bank = 1.6 * smooth(9, 3, Math.hypot(x - ENTRY.x, (z - ENTRY.z) * 1.4)) + (0.22 * (vnoise(x * 0.3, z * 0.3) - 0.5) + 0.05 * (vnoise(x * 1.1 + 3, z * 1.1) - 0.5)) * smooth(10, 4, Math.hypot(x - ENTRY.x, z - ENTRY.z));
+  return carveCreeks(x, z, forest + (water - forest) * open + bank);
 }
 
 /** Individual crowns of the closed forest: jittered 4.6 m cells, each a rounded dome (Worley distance).

@@ -7,7 +7,7 @@ import type { Land } from '../hashirimizu/land';
 import type { BackdropCrown } from '../../mangrove/MangroveForest';
 import type { ImpostorSite } from '../../mangrove/impostor';
 import type { HirugiBase } from '../../mangrove/types';
-import { canopyAt, crownAt, CROWN_CELL, FAR_SHORE_X, forestDepth, groundAt, HALF, shellProfile, vnoise } from './shape';
+import { canopyAt, crownAt, CROWN_CELL, FAR_SHORE_X, forestDepth, groundAt, HALF, shellProfile, smooth, vnoise } from './shape';
 
 /**
  * Everything round the 漫湖 basin beyond the rows of real tree models: the deep mangrove forest, the wider lake to
@@ -26,7 +26,7 @@ import { canopyAt, crownAt, CROWN_CELL, FAR_SHORE_X, forestDepth, groundAt, HALF
 const haze = { uHazeCol: { value: new Color(0.7, 0.75, 0.8) } as IUniform<Color>, uHazeK: { value: 1 / 2200 } as IUniform<number> };
 
 // linear colours: sunlit crown tops, shaded crown sides, the dark gaps between crowns, the under-canopy, mud
-const TOP = [0.09, 0.2, 0.032], SHADE = [0.035, 0.095, 0.016], HOLLOW = [0.01, 0.024, 0.007], UNDER = [0.02, 0.017, 0.012], MUD = [0.17, 0.145, 0.105];
+const TOP = [0.17, 0.19, 0.024], SHADE = [0.058, 0.075, 0.011], HOLLOW = [0.013, 0.016, 0.004], UNDER = [0.02, 0.017, 0.012], MUD = [0.17, 0.145, 0.105];
 
 function colour(x: number, z: number, canopy: number): number[] {
   if (canopy < 0.05) return MUD;
@@ -43,8 +43,9 @@ function colour(x: number, z: number, canopy: number): number[] {
   return c;
 }
 
-/** (the roof opens round the wetland centre, defined below, so its walls stand in a clearing, not inside the trees) */
-const roofAt = (x: number, z: number) => canopyAt(x, z) * shellProfile(forestDepth(x, z)) * (1 - centreClear(x, z));
+/** (the roof opens round the wetland centre, defined below, so its walls stand in a clearing, not inside the trees, and
+ * along the bridge's approach roads, which run through the forest in a cutting) */
+const roofAt = (x: number, z: number) => canopyAt(x, z) * shellProfile(forestDepth(x, z)) * (1 - centreClear(x, z)) * (1 - roadClear(x, z));
 
 /** A heightfield over [x0,x1]×[z0,z1]; cells wholly inside `hole` (half-size) and cells with no canopy (when `canopyOnly`) are skipped. */
 function grid(x0: number, x1: number, z0: number, z1: number, step: number, hole: number, canopyOnly: boolean): BufferGeometry {
@@ -78,24 +79,53 @@ function grid(x0: number, x1: number, z0: number, z1: number, step: number, hole
 let seed = 0x2468ace;
 const rnd = () => { seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 374761393) >>> 0; return seed / 4294967296; };
 
-/** Original tiling leaf-mass texture for the roof: overlapping leaf blobs, light edges, dark gaps. No photographs. */
+/**
+ * Original tiling foliage texture for the roof (5 m square): the mangrove's leaf rosettes, a little larger than life
+ * (leaves ~0.3–0.4 m) so they still read as leaves a couple of hundred metres off, in three layers — shaded ones deep
+ * in the canopy, then the middle, then the sunlit tops — each leaf pointed, folded along a pale midrib, lighter at
+ * its upper half; the gaps between them near black. RGB: young yellow-green and older darker leaves among the mean.
+ * No photographs. `userData.norm` brings its mean (linear) to that of the old leaf-mass texture.
+ */
 function roofTexture(): CanvasTexture {
-  const size = 256, canvas = document.createElement('canvas');
+  const size = 512, canvas = document.createElement('canvas'), r = new Rng(0x1eaf5);
   canvas.width = canvas.height = size;
-  const c = canvas.getContext('2d')!;
-  c.fillStyle = '#5a5a5a'; c.fillRect(0, 0, size, size);
-  for (let i = 0; i < 1400; i++) {
-    const x = rnd() * size, y = rnd() * size, a = rnd() * Math.PI, l = 7 + rnd() * 6, w = l * 0.45, v = 120 + rnd() * 135;
+  const c = canvas.getContext('2d')!, px = size / 5;
+  c.fillStyle = '#1c1d18'; c.fillRect(0, 0, size, size);
+  const leaf = (x: number, y: number, a: number, len: number, v: number, warm: number) => {
+    const w = len * 0.4, rgb = (k: number) => `rgb(${Math.min(255, v * k * (1 + 0.1 * warm)) | 0},${Math.min(255, v * k) | 0},${Math.min(255, v * k * (1 - 0.22 * warm)) | 0})`;
     for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
-      c.save(); c.translate(x + ox, y + oy); c.rotate(a);
-      c.fillStyle = `rgb(${v},${v},${v})`;
-      c.beginPath(); c.ellipse(0, 0, l, w, 0, 0, Math.PI * 2); c.fill();
+      const cx = x + ox, cy = y + oy;
+      if (cx < -len || cy < -len || cx > size + len || cy > size + len) continue;
+      c.save(); c.translate(cx, cy); c.rotate(a);
+      // the lower half of the blade (in the leaf's own shade), then the upper half catching the light
+      c.fillStyle = rgb(0.78);
+      c.beginPath(); c.moveTo(0, 0); c.bezierCurveTo(len * 0.3, w * 1.05, len * 0.78, w * 0.8, len, 0); c.closePath(); c.fill();
+      c.fillStyle = rgb(1.0);
+      c.beginPath(); c.moveTo(0, 0); c.bezierCurveTo(len * 0.3, -w * 1.05, len * 0.78, -w * 0.8, len, 0); c.closePath(); c.fill();
+      c.strokeStyle = rgb(1.18); c.lineWidth = Math.max(1, len * 0.045);
+      c.beginPath(); c.moveTo(len * 0.04, 0); c.lineTo(len * 0.86, 0); c.stroke();
       c.restore();
     }
-  }
+  };
+  const layer = (count: number, lo: number, hi: number, scale: number) => {
+    for (let i = 0; i < count; i++) {
+      const x = r.next() * size, y = r.next() * size, leaves = r.int(4, 6), turn = r.next() * Math.PI * 2;
+      const v = lo + r.next() * (hi - lo), warm = r.next() < 0.25 ? 1 : r.next() < 0.3 ? -0.6 : 0;
+      for (let k = 0; k < leaves; k++) {
+        const a = turn + k / leaves * Math.PI * 2 + r.range(-0.25, 0.25), len = r.range(0.28, 0.4) * px * scale;
+        leaf(x + Math.cos(a) * len * 0.08, y + Math.sin(a) * len * 0.08, a, len, v * r.range(0.9, 1.08), warm);
+      }
+    }
+  };
+  layer(150, 55, 95, 1.05); layer(130, 105, 160, 1); layer(110, 165, 235, 0.95);
+  // the mean (linear) of what was drawn, to keep the canopy's overall tone
+  const data = c.getImageData(0, 0, size, size).data;
+  let sum = 0;
+  for (let i = 0; i < data.length; i += 16) { const v = data[i + 1] / 255; sum += v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }
   const t = new CanvasTexture(canvas);
-  t.wrapS = t.wrapT = RepeatWrapping; t.minFilter = LinearMipmapLinearFilter; t.anisotropy = 4;
+  t.wrapS = t.wrapT = RepeatWrapping; t.minFilter = LinearMipmapLinearFilter; t.anisotropy = 8;
   t.colorSpace = SRGBColorSpace;
+  t.userData.norm = 0.75 / Math.max(0.05, sum / (data.length / 16));
   return t;
 }
 
@@ -110,11 +140,15 @@ function hazy(mat: MeshLambertMaterial, key: string, fadeMap: boolean): MeshLamb
     let fs = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform vec3 uHazeCol;\nuniform float uHazeK;\nvarying float vHaze;')
       .replace('#include <fog_fragment>', '#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, uHazeCol, 1.0 - exp(-pow(uHazeK * vHaze, 2.0)));');
-    // the roof's leaf texture is close-range sparkle: it fades to its mean by 60 m, where its mip would flatten it anyway
-    if (fadeMap) fs = fs.replace('#include <map_fragment>', '#ifdef USE_MAP\nvec4 sampledDiffuseColor = texture2D(map, vMapUv);\ndiffuseColor.rgb *= mix(sampledDiffuseColor.rgb * 1.55, vec3(0.75), smoothstep(25.0, 60.0, vHaze));\n#endif');
+    // the roof's leaves (normalised to the canopy's mean tone): held out to a few hundred metres, where the mips
+    // have long since merged them into the crowns' own texture
+    if (fadeMap) {
+      const norm = (mat.map?.userData.norm as number | undefined ?? 1.55).toFixed(3);
+      fs = fs.replace('#include <map_fragment>', `#ifdef USE_MAP\nvec4 sampledDiffuseColor = texture2D(map, vMapUv);\ndiffuseColor.rgb *= mix(sampledDiffuseColor.rgb * ${norm}, vec3(0.75), smoothstep(250.0, 600.0, vHaze));\n#endif`);
+    }
     sh.fragmentShader = fs;
   };
-  mat.customProgramCacheKey = () => `manko-land-${key}`;
+  mat.customProgramCacheKey = () => `manko-land-v2-${key}`;
   return mat;
 }
 
@@ -146,7 +180,7 @@ export function edgeImpostorSites(): ImpostorSite[] {
     if (Math.abs(px) < inner && Math.abs(pz) < inner) continue;   // the tree models' rows
     if (Math.hypot(px, pz) > 700) continue;
     const depth = forestDepth(px, pz);
-    if (depth < 0.8 || depth > 12.5 || centreClear(px, pz) > 0) continue;
+    if (depth < 0.8 || depth > 12.5 || centreClear(px, pz) > 0 || roadClear(px, pz) > 0) continue;
     const scale = r.range(0.62, 0.92) * r.range(0.86, 1.14) * (1 + depth * 0.012);
     out.push({ x: px, y: groundAt(px, pz), z: pz, scale, base: r.int(0, 4) as HirugiBase, yaw: r.range(0, Math.PI * 2) });
   }
@@ -301,6 +335,112 @@ function centreClear(x: number, z: number): number {
   return Math.max(Math.abs(u) - (CENTRE.w + 15), Math.abs(v) - (CENTRE.d + 4)) < 0 ? 1 : 0;
 }
 
+// ------------------------------------------------------------------ the bridge
+/**
+ * The road bridge across the lake to the north (after the concrete girder bridges over 国場川; not a copy of one): a
+ * continuous box-girder deck with cantilevered slabs, concrete parapets and a steel handrail, on twin-column piers
+ * with hammerhead caps every ~42 m over the water, street lights along it. Long approach viaducts carry the road
+ * down to the land on both sides, into a cutting through the forest to the west and between the blocks to the east,
+ * so from the basin it runs out of sight into the trees and the town, never ends in the air.
+ */
+export const BRIDGE = { z: -330, x0: -150, x1: 600, half: 6.5 };
+/** The deck's top (road surface) along the bridge: on the ground at the ends, rising at ~4% to ~9 m over the lake. */
+export function deckTop(x: number): number {
+  const ground = groundAt(x, BRIDGE.z) + 0.45;
+  const crest = 8.6 + 0.7 * Math.sin(Math.PI * Math.min(1, Math.max(0, (x - 96) / 334)));
+  const rise = smooth(-100, 104, x) * (1 - smooth(436, 590, x));
+  return ground + (Math.max(crest, ground) - ground) * rise;
+}
+/** 1 in the approach roads' cutting through the forest (and the town), 0 elsewhere. */
+function roadClear(x: number, z: number): number {
+  if (x < BRIDGE.x0 - 20 || x > BRIDGE.x1 + 20) return 0;
+  return smooth(BRIDGE.half + 7, BRIDGE.half + 3, Math.abs(z - BRIDGE.z));
+}
+function bridge(buf: Buf): void {
+  const z0 = BRIDGE.z, H = BRIDGE.half, step = 5, r = new Rng(0xb71d6e);
+  const concrete = [0.68, 0.68, 0.66], fascia = [0.78, 0.78, 0.76], shade = [0.3, 0.3, 0.3], soffit = [0.36, 0.36, 0.35];
+  const asphalt = [0.16, 0.16, 0.17], walk = [0.5, 0.5, 0.48], rail = [0.55, 0.58, 0.6], joint = [0.12, 0.12, 0.12];
+  const slab = 0.38, girder = 2.1, web0 = 3.7, web1 = 3.1, parapet = 0.95;
+  /** a quad facing +z (facing 1) or -z (facing -1), between x a..b, bottoms ya, yb and tops ta, tb, at the signed
+   * offset u from the axis (its top at u2: a sloping face) */
+  const side = (facing: number, xa: number, xb: number, u: number, ya: number, yb: number, ta: number, tb: number, col: number[], u2 = u) => {
+    const z = z0 + u, z2 = z0 + u2;
+    if (facing > 0) quad(buf, [xa, ya, z], [xb, yb, z], [xa, ta, z2], [xb, tb, z2], col);
+    else quad(buf, [xb, yb, z], [xa, ya, z], [xb, tb, z2], [xa, ta, z2], col);
+  };
+  /** a horizontal-ish strip (facing up, or down when `down`) across u0..u1 (signed, toward +z), between x a..b */
+  const flat = (xa: number, xb: number, ya: number, yb: number, u0: number, u1: number, col: number[], down = false) => {
+    if (!down) quad(buf, [xa, ya, z0 + u1], [xb, yb, z0 + u1], [xa, ya, z0 + u0], [xb, yb, z0 + u0], col);
+    else quad(buf, [xa, ya, z0 + u0], [xb, yb, z0 + u0], [xa, ya, z0 + u1], [xb, yb, z0 + u1], col);
+  };
+  const weather = new Map<number, number>();
+  for (let xa = BRIDGE.x0; xa < BRIDGE.x1; xa += step) {
+    const xb = xa + step, ya = deckTop(xa), yb = deckTop(xb), ga = groundAt(xa, z0), gb = groundAt(xb, z0);
+    // each span's concrete weathers a little differently
+    const span = Math.floor((xa + 400) / 42), w = weather.get(span) ?? (weather.set(span, 0.92 + 0.12 * r.next()), weather.get(span)!);
+    const tint = (c: number[]) => c.map((v) => v * w);
+    // the road, its kerbs and footways
+    flat(xa, xb, ya, yb, -H + 1.3, H - 1.3, asphalt);
+    for (const sgn of [-1, 1]) {
+      const u0 = sgn > 0 ? H - 1.3 : -H + 0.3, u1 = sgn > 0 ? H - 0.3 : -H + 1.3;
+      flat(xa, xb, ya + 0.18, yb + 0.18, u0, u1, walk);
+      side(-sgn, xa, xb, sgn * (H - 1.3), ya, yb, ya + 0.18, yb + 0.18, walk);   // the kerb, facing the road
+      // the parapet: inner face, top, and the outer face running down over the slab's edge (the fascia)
+      side(-sgn, xa, xb, sgn * (H - 0.3), ya + 0.18, yb + 0.18, ya + parapet, yb + parapet, tint(concrete));
+      flat(xa, xb, ya + parapet, yb + parapet, sgn > 0 ? H - 0.3 : -H, sgn > 0 ? H : -H + 0.3, tint(fascia));
+      side(sgn, xa, xb, sgn * H, ya - slab, yb - slab, ya + parapet, yb + parapet, tint(fascia));
+      // the handrail over it on its posts (seen at distance as a fine line above the parapet)
+      side(sgn, xa, xb, sgn * (H - 0.12), ya + parapet + 0.22, yb + parapet + 0.22, ya + parapet + 0.3, yb + parapet + 0.3, rail);
+      side(-sgn, xa, xb, sgn * (H - 0.2), ya + parapet + 0.22, yb + parapet + 0.22, ya + parapet + 0.3, yb + parapet + 0.3, rail);
+      for (let k = 0; k < 2; k++) {
+        const px = xa + k * step / 2 + 0.2;
+        side(sgn, px, px + 0.08, sgn * (H - 0.12), ya + parapet, ya + parapet, ya + parapet + 0.3, ya + parapet + 0.3, rail);
+      }
+      const clear = Math.min(ya - ga, yb - gb);
+      if (clear > girder + 0.8) {
+        // the cantilever's soffit in shadow, then the box girder's sloping web and its bottom
+        flat(xa, xb, ya - slab, yb - slab, sgn > 0 ? web0 : -H, sgn > 0 ? H : -web0, soffit, true);
+        side(sgn, xa, xb, sgn * web1, ya - girder, yb - girder, ya - slab, yb - slab, tint(shade.map((v, i) => v + 0.18 * concrete[i])), sgn * web0);
+      } else {
+        // on the embankment: a retaining wall down to the ground
+        side(sgn, xa, xb, sgn * H, Math.min(ga, ya - slab) - 0.3, Math.min(gb, yb - slab) - 0.3, ya - slab, yb - slab, tint(concrete.map((v) => v * 0.85)));
+      }
+    }
+    if (Math.min(ya - ga, yb - gb) > girder + 0.8) flat(xa, xb, ya - girder, yb - girder, -web1, web1, shade, true);
+  }
+  // piers: twin round columns under a hammerhead cap, a dark tide band at their feet over the water; on the land
+  // approaches, closer and plainer
+  const piers: number[] = [];
+  for (let x = 118; x <= 428; x += 44.5) piers.push(x);
+  for (let x = 86; x > BRIDGE.x0; x -= 34) piers.push(x);
+  for (let x = 462; x < BRIDGE.x1; x += 34) piers.push(x);
+  for (const x of piers) {
+    const top = deckTop(x), under = top - girder, g = groundAt(x, z0);
+    if (under - g < 1.6) continue;
+    const capH = 1.3, cap = under - capH, wet = lakeOpenAt(x) ? 1 : 0;
+    // the cap: wider at the top (a hammerhead), on two columns
+    boxAt(buf, x, z0, 0, 1.0, 4.6, capH, cap, concrete, 1, 1, true);
+    for (const u of [-2.5, 2.5]) {
+      const n = 8, rad = 0.75, ring = (y: number) => Array.from({ length: n }, (_, k) => [x + Math.cos(k / n * Math.PI * 2) * rad, y, z0 + u + Math.sin(k / n * Math.PI * 2) * rad]);
+      const bands = wet ? [[g - 0.2, 0.9, [0.26, 0.27, 0.25]], [0.9, cap, concrete]] as const : [[g - 0.2, cap, concrete]] as const;
+      for (const [y0, y1, col] of bands) {
+        const lo = ring(y0), hi = ring(y1);
+        for (let k = 0; k < n; k++) { const j = (k + 1) % n; quad(buf, lo[j], lo[k], hi[j], hi[k], col as number[]); }
+      }
+    }
+    // the deck's expansion joint over the pier: a dark seam across the fascia
+    for (const sgn of [-1, 1]) side(sgn, x - 0.06, x + 0.06, sgn * (H + 0.01), top - slab, top - slab, top + parapet, top + parapet, joint);
+  }
+  // street lights, alternating sides every 36 m along the raised deck
+  for (let x = 40, k = 0; x < 560; x += 36, k++) {
+    const sgn = k % 2 ? 1 : -1, top = deckTop(x) + 0.18, u = (H - 0.55) * sgn;
+    boxAt(buf, x, z0 + u, 0, 0.09, 0.09, 9, top, rail, 1, 1, true);
+    boxAt(buf, x, z0 + u - sgn * 0.9, 0, 0.06, 0.95, 0.12, top + 8.9, rail, 1, 1, true);
+    boxAt(buf, x, z0 + u - sgn * 1.75, 0, 0.18, 0.32, 0.14, top + 8.8, [0.85, 0.85, 0.8], 1, 1, true);
+  }
+}
+const lakeOpenAt = (x: number) => groundAt(x, BRIDGE.z) < -0.6;
+
 /** Mid-rise apartment blocks behind the far shore's trees and a road bridge crossing the lake (user's photo). */
 function city(): { walls: Mesh; tiles: Mesh } {
   const out = newBuf(), tiles = newBuf(), ok = new Rng(0x0c1a7a);
@@ -319,13 +459,13 @@ function city(): { walls: Mesh; tiles: Mesh } {
   };
   for (let z = -520; z < 420; z += 30 + rnd() * 35) {
     const x = FAR_SHORE_X + 80 + rnd() * 90, floors = 6 + Math.floor(rnd() * 9), w = 12 + rnd() * 22, d = 7 + rnd() * 5;
-    block(x, z, w, d, floors, palette[Math.floor(rnd() * palette.length)]);
-    if (rnd() < 0.5) { const x2 = x + 40 + rnd() * 60, f2 = 9 + Math.floor(rnd() * 8); block(x2, z + 10, 10 + rnd() * 10, 8, f2, palette[Math.floor(rnd() * palette.length)]); }
+    // (the bridge's road runs between the blocks)
+    const clear = (zz: number, dd: number) => Math.abs(zz - BRIDGE.z) > dd + BRIDGE.half + 4;
+    const col = palette[Math.floor(rnd() * palette.length)];
+    if (clear(z, d)) block(x, z, w, d, floors, col);
+    if (rnd() < 0.5) { const x2 = x + 40 + rnd() * 60, f2 = 9 + Math.floor(rnd() * 8), w2 = 10 + rnd() * 10, c2 = palette[Math.floor(rnd() * palette.length)]; if (clear(z + 10, 8)) block(x2, z + 10, w2, 8, f2, c2); }
   }
-  // the bridge: a long low deck on piers, crossing the lake to the north
-  const by = 7, z0 = -330;
-  for (let x = 140; x < FAR_SHORE_X + 60; x += 34) box(out, x, z0, 1.2, 4, by, -2, [0.75, 0.75, 0.73], 2, 1);
-  box(out, (140 + FAR_SHORE_X + 60) / 2, z0, (FAR_SHORE_X - 80) / 2 + 2, 7, 1.6, by, [0.8, 0.82, 0.84], 1, 1);
+  bridge(out);
   centre(out, tiles);
   const mesh = (b: Buf, mat: MeshLambertMaterial, name: string) => {
     const g = new BufferGeometry();
