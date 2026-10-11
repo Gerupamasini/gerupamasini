@@ -66,10 +66,18 @@ export class MahazeDriver implements Driver {
       return { bone: bones[bone], p: bones[bone].worldToLocal(root.localToWorld(p)) };
     });
     const finMeshes: Record<string, Mesh> = {};
+    const cullCentre = new Vector3(0, 0.002, 0.012);
     for (const m of meshes) {
       const mesh = m as Mesh;
       if (roleOf(mesh) === 'fin') finMeshes[mesh.name] = mesh;
-      if ((mesh as SkinnedMesh).isSkinnedMesh) (mesh as SkinnedMesh).boundingSphere = new Sphere(new Vector3(0, 0.002, 0.012), 0.04);
+      if ((mesh as SkinnedMesh).isSkinnedMesh) {
+        // a generous sphere for the culling (the skinned bounds move with the animation), centred on the part itself:
+        // the translucent body and the fins sort by these centres, so a fin on the far side is drawn before the body
+        // (and seen through it) and one on the near side after it
+        if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+        const c = mesh.geometry.boundingBox!.getCenter(new Vector3());
+        (mesh as SkinnedMesh).boundingSphere = new Sphere(c, 0.04 + c.distanceTo(cullCentre));
+      }
     }
     root.scale.setScalar(scale);
     this.beh = createBehavior({

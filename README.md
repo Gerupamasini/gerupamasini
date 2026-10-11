@@ -12,6 +12,7 @@ npm run build        # dist/ を生成（GitHub Pages 用のベースパス /ger
 npm run smoke        # ヘッドレス Chromium で起動し tests/smoke/out/ にスクリーンショット
 node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボを撮影（tests/smoke/out/pagurus-*.png）
 CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium.mjs # 水槽設備・ガチャ・自動配線・保存復元のブラウザ検証
+node tests/smoke/goby-translucency.mjs  # ハゼ 3 種の体の透け（観察の体積シェーダーと、干潟・水槽の全段階の透け）を順光・逆光で撮影
 npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze -- --tier hero  # エドハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze-gravid -- --tier hero   # エドハゼの抱卵雌（edohaze_gravid.*.glb）
