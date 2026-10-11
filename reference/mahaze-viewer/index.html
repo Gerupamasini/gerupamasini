@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>マハゼ 3D</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #03090b;
+    --panel: rgba(8, 20, 23, 0.78);
+    --line: rgba(160, 205, 210, 0.16);
+    --text: #d9e6e6;
+    --muted: #8aa3a5;
+    --accent: #e7b766;
+    --error: #f0a38b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #progress { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; pointer-events: none; }
+  #progress[hidden] { display: none; }
+  #progress .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; width: min(320px, 100%); text-align: center; backdrop-filter: blur(8px); }
+  #progress .msg { color: var(--text); letter-spacing: 0.03em; overflow-wrap: anywhere; }
+  #progress .bar { height: 3px; margin-top: 10px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  #progress .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #progress.error .msg { color: var(--error); }
+  #progress.error .bar { display: none; }
+  .panel { position: fixed; top: 12px; left: 12px; width: 286px; max-height: calc(100% - 24px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; backdrop-filter: blur(8px); transition: opacity .2s, transform .2s; }
+  body.panel-hidden .panel { opacity: 0; transform: translateX(-12px); pointer-events: none; }
+  h1 { font-size: 14px; margin: 0 0 2px; font-weight: 600; letter-spacing: .02em; }
+  .sub { color: var(--muted); font-size: 11.5px; margin-bottom: 10px; font-style: italic; }
+  .group { border-top: 1px solid var(--line); padding-top: 9px; margin-top: 9px; }
+  .label { color: var(--muted); font-size: 11px; margin-bottom: 6px; letter-spacing: .05em; }
+  .seg { display: flex; gap: 4px; flex-wrap: wrap; }
+  .seg button { flex: 1 1 auto; background: rgba(255,255,255,0.04); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font: inherit; font-size: 12px; cursor: pointer; }
+  .seg button:hover { border-color: rgba(231,183,102,.5); }
+  .seg button.on { background: rgba(231,183,102,0.18); border-color: var(--accent); color: #fff3dc; }
+  .row { display: grid; grid-template-columns: 74px 1fr 40px; align-items: center; gap: 8px; margin: 5px 0; }
+  .row span { color: var(--muted); font-size: 11.5px; }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+  .checks label { display: flex; gap: 6px; align-items: center; color: var(--text); font-size: 12px; cursor: pointer; }
+  select { background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12px; }
+  .hint { position: fixed; right: 14px; bottom: 12px; color: var(--muted); font-size: 11.5px; text-align: right; text-shadow: 0 1px 2px #000; pointer-events: none; }
+  #toggle-panel { position: fixed; top: 12px; right: 12px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  @media (max-width: 640px) {
+    .panel { top: auto; bottom: 10px; left: 10px; right: 10px; width: auto; max-height: 46%; }
+    .hint { display: none; }
+  }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="progress" role="status"><div class="card"><div class="msg">モデルを読み込み中…</div><div class="bar"><i></i></div></div></div>
+
+<aside class="panel">
+  <h1>マハゼ（全長 約50mm）</h1>
+  <div class="sub">Acanthogobius flavimanus</div>
+
+  <div class="group">
+    <div class="label">個体</div>
+    <div class="seg" id="variant">
+      <button data-v="juvenile" class="on">幼魚</button>
+      <button data-v="subadult">中間</button>
+      <button data-v="adult">成魚の体型</button>
+    </div>
+    <div class="seg" id="pattern" style="margin-top:6px">
+      <button data-v="1" class="on">模様 1</button>
+      <button data-v="2">模様 2</button>
+      <button data-v="3">模様 3</button>
+    </div>
+    <div class="seg" id="color" style="margin-top:6px">
+      <button data-v="1" class="on">標準色</button>
+      <button data-v="2">琥珀（元の色）</button>
+      <button data-v="3">暗褐色</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="label">照明</div>
+    <div class="seg" id="light-mode">
+      <button data-v="front" class="on">正面光 (F)</button>
+      <button data-v="back">逆光 (B)</button>
+      <button data-v="side">側光 (S)</button>
+    </div>
+    <div class="row"><span>方位</span><input id="light-az" type="range" min="-60" max="60" step="1" value="0" data-fmt="#°"><output for="light-az"></output></div>
+    <div class="row"><span>高さ</span><input id="light-el" type="range" min="-40" max="50" step="1" value="0" data-fmt="#°"><output for="light-el"></output></div>
+    <div class="row"><span>強さ</span><input id="light-int" type="range" min="0.2" max="2.5" step="0.05" value="1"><output for="light-int"></output></div>
+    <div class="checks"><label><input id="follow" type="checkbox" checked>光をカメラに追従</label></div>
+  </div>
+
+  <div class="group">
+    <div class="label">動き</div>
+    <div class="seg">
+      <button id="act-swim" type="button">泳ぐ (W)</button>
+      <button id="act-yawn" type="button">あくび (Y)</button>
+      <button id="act-flick" type="button">背びれ (D)</button>
+    </div>
+    <div class="checks" style="margin-top:6px">
+      <label><input id="auto" type="checkbox" checked>自動で行動</label>
+      <label><input id="freeze" type="checkbox">一時停止</label>
+      <label><input id="follow-fish" type="checkbox" checked>カメラが追う</label>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="label">背景</div>
+    <div class="seg" id="env">
+      <button data-v="water" class="on">水中（砂底）</button>
+      <button data-v="tank">明るい水槽</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="label">組織の透過・散乱</div>
+    <div class="row"><span>乳白（散乱）</span><input id="scatter" type="range" min="0.4" max="2" step="0.05" value="1"><output for="scatter"></output></div>
+    <div class="row"><span>内部構造</span><input id="interior" type="range" min="0" max="1" step="0.05" value="0.45"><output for="interior"></output></div>
+    <div class="row"><span>露出</span><input id="exposure" type="range" min="0.4" max="2.5" step="0.05" value="1"><output for="exposure"></output></div>
+  </div>
+
+  <div class="group">
+    <div class="label">カメラ</div>
+    <div class="seg" id="cam-preset">
+      <button data-v="whole" class="on">全体 (1)</button>
+      <button data-v="head">頭部 (2)</button>
+      <button data-v="tail">尾部 (3)</button>
+      <button data-v="below">腹側</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="label">表示</div>
+    <div class="checks">
+      <label><input id="floor" type="checkbox" checked>砂底</label>
+      <label><input id="snow" type="checkbox" checked>浮遊粒子</label>
+      <label><input id="autorot" type="checkbox">自動回転</label>
+      <label>品質 <select id="quality"><option value="1">標準</option><option value="1.5" selected>高</option><option value="2">最高</option></select></label>
+    </div>
+    <div class="label" style="margin-top:8px">シェーディング</div>
+    <div class="seg" id="shading">
+      <button data-v="custom" class="on">体積透過シェーダー</button>
+      <button data-v="standard">glTF標準PBR</button>
+    </div>
+    <div class="label" style="margin-top:8px">解析表示</div>
+    <div class="seg" id="debug">
+      <button data-v="0" class="on">通常</button>
+      <button data-v="1">厚み</button>
+      <button data-v="2">透過光のみ</button>
+      <button data-v="3">内部構造</button>
+    </div>
+  </div>
+</aside>
+<button id="toggle-panel">パネル</button>
+<div class="hint">ドラッグ: 回転 ／ ホイール・ピンチ: 拡大 ／ 右ドラッグ: 移動</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

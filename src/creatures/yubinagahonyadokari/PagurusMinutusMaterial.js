@@ -1,0 +1,724 @@
+// Materials for ユビナガホンヤドカリ and its shells.
+//
+// Physically based (MeshPhysicalMaterial: PBR, image-based lighting from the scene environment,
+// ACES tone mapping and shadows come from the engine) with the species' surface written procedurally in
+// the shader – no textures, so texture memory is zero and every LOD shares one program:
+//   * pattern: shield gastric spot and lateral markings, granular branchial lobes and reddish cardiac strip
+//     of the posterior carapace, cheliped with brown blotches and bluish granules, walking-leg
+//     longitudinal stripe + transverse bands, dactyl median white section, banded eyestalk with two-striped
+//     corneas, white-ringed antennal flagellum, banded third maxillipeds, translucent olive abdomen
+//   * micro relief: cellular granules / pits / grooves / membrane wrinkles via derivative bump mapping,
+//     faded to the mean tone once finer than a pixel (pmAA, pmLine) so nothing shimmers at a distance
+//   * roughness variation, wet film (clearcoat + darkening) driven by exposure/wetness
+//   * thin-cuticle translucency (membranes, dactyl tips, antennae, abdomen) with a back-light term
+//   * view-dependent pseudopupil on the compound eyes
+//   * optional shallow-water caustics on up-facing surfaces when submerged
+// Per-individual colour (morph, hue/value) is held in uniforms of a per-crab material instance; all
+// instances share the same compiled program (customProgramCacheKey).
+import * as THREE from 'three';
+import { PALETTE, MORPH } from './PagurusMinutusMorphology.js';
+import { SHELL_SPECIES, setShellMaterialFactory } from './PagurusMinutusShell.js';
+
+const col = (hex) => new THREE.Color(hex); // sRGB hex → linear working colour space
+
+const NOISE_GLSL = /* glsl */ `
+float pmHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float pmNoise(vec3 x) {
+  vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(pmHash(i), pmHash(i + vec3(1, 0, 0)), f.x), mix(pmHash(i + vec3(0, 1, 0)), pmHash(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(pmHash(i + vec3(0, 0, 1)), pmHash(i + vec3(1, 0, 1)), f.x), mix(pmHash(i + vec3(0, 1, 1)), pmHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+float pmFbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * pmNoise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s; }
+float pmCell(vec3 p) {
+  vec3 i = floor(p), f = fract(p); float d = 8.0;
+  for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec3 g = vec3(float(x), float(y), float(z));
+    vec3 o = vec3(pmHash(i + g), pmHash(i + g + 19.1), pmHash(i + g + 47.3));
+    vec3 r = g + o - f; d = min(d, dot(r, r));
+  }
+  return sqrt(d);
+}
+float pmCaustic(vec2 p, float t) {
+  vec2 q = p; float c = 0.0;
+  for (int i = 0; i < 2; i++) {
+    q = q * 1.63 + vec2(sin(q.y * 1.31 + t * 0.9), cos(q.x * 1.13 - t * 0.83));
+    c += pow(1.0 - abs(sin(q.x + q.y * 0.71 + t * 0.6)), 7.0);
+  }
+  return c;
+}
+vec3 pmBump(vec3 surfPos, vec3 surfNorm, float h, float faceDir) {
+  vec3 sx = dFdx(surfPos), sy = dFdy(surfPos);
+  vec3 r1 = cross(sy, surfNorm), r2 = cross(surfNorm, sx);
+  float det = dot(sx, r1) * faceDir;
+  vec3 grad = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+  return normalize(abs(det) * surfNorm - grad);
+}
+`;
+
+const COMMON_VERT_HEAD = /* glsl */ `
+varying vec3 vPmWorld;
+varying float vPmScale;
+`;
+const COMMON_VERT_BODY = /* glsl */ `
+vPmScale = length(modelMatrix[0].xyz);
+vPmWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
+`;
+
+// light-dependent extras shared by crab and shell (appended after lights_fragment_end)
+const LIGHT_EXTRAS = /* glsl */ `
+{
+  #if NUM_DIR_LIGHTS > 0
+    vec3 pmL = directionalLights[0].direction;
+    vec3 pmV = normalize(vViewPosition);
+    float pmBack = pow(saturate(dot(pmV, -pmL)), 3.0);
+    float pmWrap = saturate((dot(-normal, pmL) + 0.45) / 1.45);
+    reflectedLight.directDiffuse += directionalLights[0].color * pmTransColor * pmThin * (0.22 * pmWrap + 0.95 * pmBack * pmWrap);
+  #endif
+  if (uPmCaus > 0.0 && vPmWorld.y < uPmWaterY) {
+    vec3 pmUp = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+    float up = saturate(dot(normal, pmUp));
+    float depth = clamp(uPmWaterY - vPmWorld.y, 0.0, 1.0);
+    float c = pmCaustic(vPmWorld.xz * 95.0, uPmTime * 1.4) * up * exp(-depth * 3.0);
+    reflectedLight.directDiffuse += uPmCausColor * c * uPmCaus * diffuseColor.rgb;
+  }
+}
+`;
+
+// ---------------------------------------------------------------------------------------------
+// Exoskeleton
+// ---------------------------------------------------------------------------------------------
+
+const EXO_FRAG_PARS = /* glsl */ `
+varying float vPmRegion;
+varying vec4 vPmSeg;
+varying vec3 vPmBind;
+varying vec3 vPmWorld;
+varying float vPmScale;
+uniform float uPmWet, uPmHue, uPmSat, uPmVal, uPmGreen, uPmContrast;
+uniform float uPmCaus, uPmWaterY, uPmTime;
+uniform vec3 uPmCausColor;
+uniform vec3 uShield, uShieldDark, uBranchio, uSoft, uSternum, uLegBase, uLegStripe, uLegBand, uLegPale;
+uniform vec3 uDactBase, uDactWhite, uDactTip, uChel, uGran, uFinger, uFingerTip, uMembrane, uEyestalk, uEyeBand;
+uniform vec3 uCornea, uCorneaStripe, uAntenna, uAntennaWhite, uAntennule, uMxp, uMxpBand, uAbd, uAbdDeep, uAbdVisc, uUropod, uSetae;
+uniform vec3 uCardiac;
+uniform vec4 uPC; // posterior carapace: length, cardiac-strip half widths (groove, middle, margin)
+uniform float uShieldC; // half width of the shield's central zone
+uniform float uAnnuli, uWhitePeriod;
+float pmThin = 0.1;
+float pmClear = 1.0;
+float pmHeight = 0.0;
+float pmRough = 0.45;
+vec3 pmTransColor = vec3(1.0);
+${NOISE_GLSL}
+vec3 pmAdjust(vec3 c) {
+  float Y = dot(c, vec3(0.299, 0.587, 0.114));
+  float I = dot(c, vec3(0.596, -0.274, -0.322));
+  float Q = dot(c, vec3(0.211, -0.523, 0.312));
+  float h = uPmHue * 6.2831853; float cs = cos(h), sn = sin(h);
+  float I2 = (I * cs - Q * sn) * uPmSat, Q2 = (I * sn + Q * cs) * uPmSat;
+  Y *= uPmVal;
+  vec3 r = vec3(Y + 0.956 * I2 + 0.621 * Q2, Y - 0.272 * I2 - 0.647 * Q2, Y - 1.106 * I2 + 1.703 * Q2);
+  r.g *= 1.0 + 0.16 * (uPmGreen - 0.5);
+  r.r *= 1.0 - 0.1 * (uPmGreen - 0.5);
+  return max(r, vec3(0.0));
+}
+// 1 while a pattern of the given frequency (cycles per SL) is resolved on screen, fading to 0 as it would
+// alias – the pattern then gives way to its mean tone instead of shimmering
+float pmAA(vec3 p, float freq) { vec3 w = fwidth(p) * freq; return 1.0 - smoothstep(0.45, 1.2, max(max(w.x, w.y), w.z)); }
+// a fine groove line of half width w at distance d, widened (and faded) to at least a pixel
+float pmLine(float d, float w) { float fw = max(w, fwidth(d) * 1.2); return exp(-pow(d / fw, 2.0)) * (w / fw); }
+// soft, membranous cuticle of the branchial lobes (photo 01): golden brown, densely set with small pale
+// granules, brown mottling, reddish-brown streaks and a few dark-brown spots
+vec3 pmBranchial(vec3 p, float mott, out float hgt) {
+  vec3 c = uSoft * (0.82 + 0.36 * mott);
+  // coarser granules that stay visible at observation distance: bright granules, darker interstices
+  float aaM = pmAA(p, 48.0);
+  float gm = 1.0 - smoothstep(0.12, 0.34, pmCell(p * 48.0 + 7.1));
+  c *= mix(1.0, 0.8 + 0.42 * gm, aaM);
+  c = mix(c, uLegPale, gm * 0.2 * aaM);
+  // salt-and-pepper granulation: pale granules with darker ones between (mean tone when unresolved)
+  float aa = pmAA(p, 95.0);
+  float g = 1.0 - smoothstep(0.1, 0.3, pmCell(p * 95.0));
+  float gd = 1.0 - smoothstep(0.08, 0.22, pmCell(p * 95.0 + 31.7));
+  c = mix(c, uLegPale, g * 0.38 * aa + 0.07 * (1.0 - aa));
+  c *= 1.0 - 0.22 * gd * aa;
+  float aa2 = pmAA(p, 160.0);
+  c *= 1.0 + (0.24 * smoothstep(0.25, 0.65, pmNoise(p * 160.0)) - 0.12) * aa2;
+  // irregular brown mottling and reddish-brown streaks; a few larger dark-brown spots
+  c = mix(c, uShieldDark, smoothstep(0.43, 0.62, pmFbm(p * 7.0 + 4.0)) * 0.5 * uPmContrast);
+  c = mix(c, uCardiac * 0.85, smoothstep(0.45, 0.62, pmFbm(p * vec3(14.0, 6.0, 5.0) + 11.0)) * 0.55);
+  c = mix(c, uShieldDark, smoothstep(0.84, 0.88, pmNoise(p * 18.0 + 3.3)) * 0.55 * uPmContrast);
+  hgt = (g - 0.6 * gd) * 0.005 * aa + gm * 0.004 * aaM + (pmNoise(p * vec3(26.0, 40.0, 18.0)) - 0.5) * 0.004;
+  return c;
+}
+vec3 pmSurface(vec3 p, vec4 sg, float region, vec3 nView, vec3 vView) {
+  int R = int(region + 0.5);
+  float t = sg.x, ang = sg.y * 6.2831853, kind = sg.z, side = sg.w;
+  float mott = pmFbm(p * 9.0);
+  vec3 c = uLegBase;
+  float ant = cos(ang) * side; // +1 on the anterior ("lateral") face of a leg article
+  float dors = sin(ang);
+  if (R == 0) {
+    // the pinkish central zone of the shield; beside its posterior half the golden granular
+    // branchiostegites, toward the front grey-olive mottling among the cheliped bases (photo 01). The
+    // linea anomurica runs along the edge of the central zone.
+    float ax = abs(p.x);
+    // widest over the gastric region, narrowing backward into the cardiac strip of the posterior carapace
+    float xl = mix(uPC.y + 0.01, uShieldC, smoothstep(0.0, 0.55, p.z)) * (1.0 - 0.45 * smoothstep(0.7, 1.0, p.z));
+    float side = smoothstep(xl - 0.06, xl + 0.06, ax + (pmFbm(p * 9.0 + 6.0) - 0.47) * 0.12);
+    float linea = pmLine(ax - xl, 0.01) * smoothstep(0.03, 0.12, p.z) * (1.0 - smoothstep(0.84, 0.95, p.z));
+    c = uShield * (0.85 + 0.3 * pmFbm(p * 12.0 + 5.0));
+    c = mix(c, uCardiac * 1.15, smoothstep(0.44, 0.64, pmFbm(p * 8.0 + 1.7)) * 0.4); // rosy blotches
+    float aaG = pmAA(p, 60.0);
+    c *= mix(1.0, 0.9 + 0.18 * (1.0 - smoothstep(0.1, 0.32, pmCell(p * 60.0 + 2.9))), aaG); // fine granulation
+    float hb;
+    vec3 cb = pmBranchial(p, mott, hb);
+    vec3 front = mix(uBranchio, uLegBase, 0.4) * (0.8 + 0.4 * pmFbm(p * 11.0 + 2.0));
+    c = mix(c, mix(cb, front, smoothstep(0.45, 0.8, p.z)), side);
+    c = mix(c, front, smoothstep(0.78, 0.95, p.z) * 0.45);
+    // dark-brown gastric spot inside a pale horseshoe-shaped halo open to the back, a pale median line
+    // running back from it (photo 01)
+    vec2 gq = vec2(p.x * 1.25, p.z - 0.55) + (vec2(pmNoise(p * 14.0), pmNoise(p * 14.0 + 7.7)) - 0.5) * 0.05;
+    float gd = length(gq);
+    float gs = 1.0 - smoothstep(0.035, 0.1, gd);
+    float halo = smoothstep(0.075, 0.11, gd) * (1.0 - smoothstep(0.15, 0.21, gd)) * smoothstep(-0.12, 0.04, gq.y);
+    c = mix(c, uLegPale, halo * 0.7 * (0.6 + 0.4 * pmNoise(p * 30.0)));
+    c = mix(c, uShieldDark, gs * 0.88);
+    c = mix(c, uLegPale, (1.0 - smoothstep(0.018, 0.045, abs(p.x))) * smoothstep(0.2, 0.36, p.z) * (1.0 - smoothstep(0.44, 0.5, p.z)) * 0.7);
+    // dark-brown spots in loose pairs on the lateral parts of the shield's posterior half (photo 01)
+    vec2 sq = vec2(abs(p.x), p.z) + (vec2(pmNoise(p * 17.0 + 2.0), pmNoise(p * 17.0 + 9.0)) - 0.5) * 0.05 + vec2(0.0, 0.035 * sign(p.x));
+    float sp = max(max(1.0 - smoothstep(0.022, 0.045, length(sq - vec2(0.31, 0.3))), 1.0 - smoothstep(0.02, 0.04, length(sq - vec2(0.25, 0.12)))),
+                   max(1.0 - smoothstep(0.018, 0.036, length(sq - vec2(0.36, 0.56))), 1.0 - smoothstep(0.014, 0.03, length(sq - vec2(0.4, 0.2)))));
+    c = mix(c, uShieldDark, sp * 0.8 * uPmContrast);
+    float lat = smoothstep(0.12, 0.42, abs(p.x)) * smoothstep(0.5, 0.72, pmFbm(p * 7.0 + 3.1));
+    c = mix(c, uShieldDark, lat * 0.6 * uPmContrast);
+    float cerv = pmLine(p.z, 0.016) * (1.0 - side);
+    c *= 1.0 - 0.1 * cerv - 0.25 * linea;
+    // toward the cervical groove the central zone reddens like the cardiac strip it runs into
+    c = mix(c, mix(uShield, uCardiac, 0.4) * (0.85 + 0.3 * mott), (1.0 - smoothstep(0.0, 0.3, p.z)) * (1.0 - side) * 0.7);
+    c = mix(c, uShieldDark, step(0.82, pmNoise(p * 55.0)) * 0.3 * (1.0 - side));
+    // the central plate well calcified: smooth and a little glossy, finely punctate
+    float aa = pmAA(p, 80.0);
+    float pit = (1.0 - smoothstep(0.04, 0.13, pmCell(p * 80.0))) * aa * (1.0 - side);
+    c *= 1.0 - 0.12 * pit;
+    pmHeight = mix(-0.003 * pit + (pmNoise(p * 85.0) - 0.5) * 0.002 * aa, hb, side) - 0.008 * cerv - 0.006 * linea;
+    // calcified: a little smoother and glossier than the membranous parts, but never plastic-looking
+    pmRough = mix(0.46, 0.62, side); pmThin = mix(0.08, 0.35, side); pmClear = mix(0.55, 0.35, side);
+  } else if (R == 1) {
+    // branchiostegites beside the shield: golden and granular like the branchial lobes behind, greyer
+    // toward the front among the cheliped bases
+    float hb;
+    vec3 cb = pmBranchial(p, mott, hb);
+    c = mix(uBranchio * (0.86 + 0.28 * mott), cb, smoothstep(0.7, 0.25, p.z));
+    pmHeight = hb * smoothstep(0.7, 0.25, p.z);
+    pmRough = 0.58; pmThin = 0.35; pmClear = 0.6;
+  } else if (R == 2) {
+    // soft posterior carapace (photo 01): a reddish cardiac strip with a darker median line between the
+    // sulci cardiobranchiales, and on each side the inflated, granular, membranous branchial lobe
+    float f = clamp(-p.z / uPC.x, 0.0, 1.0);
+    float xs = f < 0.5 ? mix(uPC.y, uPC.z, smoothstep(0.0, 0.3, f)) : mix(uPC.z, uPC.w, smoothstep(0.7, 1.0, f));
+    float ax = abs(p.x);
+    float top = smoothstep(0.15, 0.6, dors);
+    float hb;
+    c = pmBranchial(p, mott, hb);
+    // the strip keeps the granulation underneath, reddened, finely striate across, darker along the midline
+    float strip = (1.0 - smoothstep(xs - 0.05, xs + 0.01, ax)) * top;
+    vec3 cs = mix(c, uCardiac * (0.9 + 0.2 * mott), 0.42);
+    // where it starts at the cervical groove it is as pale as the shield's central zone it continues
+    cs = mix(cs, mix(uShield, uCardiac, 0.4) * (0.85 + 0.3 * mott), (1.0 - smoothstep(0.0, 0.25, f)) * 0.85);
+    cs *= 1.0 - 0.1 * smoothstep(0.6, 0.95, abs(fract(p.z * 70.0 + pmNoise(p * 20.0) * 0.5) - 0.5) * 2.0) * pmAA(p, 70.0);
+    cs = mix(cs, uCardiac * 0.7, pmLine(ax, 0.014) * 0.8);
+    c = mix(c, cs, strip);
+    float sul = pmLine(ax - xs, 0.012) * top;
+    float med = pmLine(ax, 0.006) * top * smoothstep(0.05, 0.15, f);
+    c *= 1.0 - 0.15 * sul - 0.15 * med;
+    pmHeight = mix(hb, (pmNoise(p * 60.0) - 0.5) * 0.002, strip) - 0.01 * sul - 0.004 * med;
+    // membranous: matte and leathery, a soft sheen rather than the shield's gloss
+    pmRough = mix(0.68, 0.6, strip); pmThin = 0.5; pmClear = mix(0.25, 0.35, strip);
+  } else if (R == 3) {
+    c = uSternum * (0.92 + 0.15 * mott); pmRough = 0.5; pmThin = 0.25;
+  } else if (R == 4 || R == 5) {
+    // the chela cream; merus and carpus tan, closer to the walking legs (photo 01)
+    c = (R == 5 ? uChel : mix(uChel, uLegBase, 0.5)) * (0.82 + 0.36 * mott);
+    // large irregular brown blotches on a cream ground (photos 01, 001, 002): two on the palm's dorsal
+    // face, smaller ones on the carpus and merus
+    float blot = smoothstep(0.46, 0.6, pmFbm(p * (R == 5 ? 4.2 : 7.0) + 4.7));
+    blot = max(blot, smoothstep(0.62, 0.74, pmFbm(p * 13.0 + 1.3)) * 0.7);
+    c = mix(c, uLegStripe * 1.35, blot * 0.78 * uPmContrast);
+    // dense granules (photos 01, 001, 002, 033), blue-grey over the blotches, a few larger tubercles
+    float cell = pmCell(p * 24.0);
+    float g = 1.0 - smoothstep(0.1, 0.3, cell);
+    float big = 1.0 - smoothstep(0.1, 0.3, pmCell(p * 11.0 + 5.0));
+    pmHeight = g * 0.015 + big * 0.007;
+    c = mix(c, uGran * mix(1.0, 0.72, blot), g * (R == 5 ? 0.8 : 0.55) * (0.55 + 0.45 * max(dors, 0.0)));
+    if (R == 5) c = mix(c, uShieldDark, smoothstep(0.42, 0.58, t) * 0.3 * smoothstep(0.1, 0.7, dors) * (1.0 - g) * (1.0 - blot));
+    pmRough = 0.52 - g * 0.15; pmThin = 0.06; pmClear = 0.55;
+  } else if (R == 6) {
+    // fingers: brown-blotched proximally, pale before the corneous tips (photo 01)
+    c = mix(uFinger, uLegStripe * 1.35, smoothstep(0.52, 0.64, pmFbm(p * 9.0 + 2.2)) * 0.6 * (1.0 - smoothstep(0.55, 0.75, t)));
+    c = mix(c, uChel * 1.08, smoothstep(0.6, 0.75, t) * 0.65);
+    c = mix(c, uFingerTip, smoothstep(0.86, 0.99, t));
+    float g = 1.0 - smoothstep(0.2, 0.42, pmCell(p * 30.0));
+    c = mix(c, uGran, g * 0.4 * (1.0 - smoothstep(0.7, 0.9, t)));
+    pmHeight = g * 0.006;
+    pmRough = mix(0.4, 0.26, smoothstep(0.75, 1.0, t)); pmThin = mix(0.12, 0.55, smoothstep(0.7, 1.0, t));
+  } else if (R == 7) {
+    c = uLegBase * (0.84 + 0.32 * mott);
+    // irregular dark-brown mottling over the whole article (photos 01, 001, 021, 038)
+    c = mix(c, uLegStripe, smoothstep(0.56, 0.72, pmFbm(p * 14.0 + 7.3)) * 0.55 * uPmContrast);
+    float stripe = smoothstep(0.55, 0.85, ant) * step(1.5, kind) * (0.75 + 0.25 * pmNoise(p * 25.0));
+    c = mix(c, uLegStripe, stripe * 0.72 * uPmContrast);
+    if (kind > 1.5 && kind < 2.5) c = mix(c, uLegBand, smoothstep(0.55, 0.62, t) * (1.0 - smoothstep(0.78, 0.85, t)) * 0.6 * uPmContrast);
+    // white patches: distal carpus, and the distal half of the propodus (photo 01)
+    float pale = smoothstep(0.42, 0.66, pmFbm(p * 9.0 + 3.0) + 0.2 * dors) * smoothstep(-0.7, 0.1, dors);
+    if (kind > 2.5 && kind < 3.5) c = mix(c, uLegPale, smoothstep(0.7, 0.86, t) * pale * 0.7);
+    if (kind > 3.5 && kind < 4.5) {
+      c = mix(c, uLegBand, smoothstep(0.18, 0.26, t) * (1.0 - smoothstep(0.42, 0.5, t)) * 0.5 * uPmContrast);
+      c = mix(c, uLegPale, smoothstep(0.55, 0.7, t) * mix(0.2, 0.85, pale));
+    }
+    // pale bluish granules on the dorsal and outer faces
+    float g = (1.0 - smoothstep(0.12, 0.3, pmCell(p * 22.0))) * smoothstep(-0.3, 0.5, dors);
+    c = mix(c, uGran, g * 0.32);
+    pmHeight = g * 0.008 + (pmNoise(p * 90.0) - 0.5) * 0.002;
+    pmRough = 0.52; pmThin = 0.16; pmClear = 0.45;
+  } else if (R == 8) {
+    c = uDactBase * (0.88 + 0.24 * mott);
+    c = mix(c, uLegStripe, smoothstep(0.58, 0.74, pmFbm(p * 16.0 + 2.1)) * 0.35 * uPmContrast);
+    float w = smoothstep(0.24, 0.3, t) * (1.0 - smoothstep(0.47, 0.53, t));
+    c = mix(c, uDactWhite, w * 0.82);
+    c = mix(c, uLegStripe, smoothstep(0.62, 0.88, ant) * (1.0 - w) * (1.0 - smoothstep(0.75, 0.86, t)) * 0.7 * uPmContrast);
+    c = mix(c, uDactTip, smoothstep(0.8, 0.95, t));
+    pmRough = mix(0.46, 0.26, smoothstep(0.85, 1.0, t)); pmThin = mix(0.28, 0.85, t); pmClear = 0.6;
+  } else if (R == 9) {
+    c = uMembrane * (0.92 + 0.12 * mott);
+    pmHeight = (pmNoise(p * vec3(160.0, 40.0, 160.0)) - 0.5) * 0.003;
+    pmRough = 0.62; pmThin = 0.55; pmClear = 0.55;
+  } else if (R == 10) {
+    c = uEyestalk * (0.93 + 0.12 * mott);
+    c = mix(c, uEyeBand, smoothstep(0.36, 0.44, t) * (1.0 - smoothstep(0.6, 0.68, t)) * 0.85);
+    c = mix(c, uEyeBand * 0.85, step(0.7, pmNoise(p * 48.0)) * smoothstep(-0.2, 0.6, dors) * 0.6);
+    pmRough = 0.42; pmThin = 0.42;
+  } else if (R == 11) {
+    c = uCornea;
+    float s1 = smoothstep(0.34, 0.4, t) * (1.0 - smoothstep(0.47, 0.53, t));
+    float s2 = smoothstep(0.58, 0.64, t) * (1.0 - smoothstep(0.71, 0.77, t));
+    c = mix(c, uCorneaStripe, max(s1, s2) * 0.75);
+    float f = pmCell(p * 150.0);
+    c *= 0.82 + 0.18 * smoothstep(0.15, 0.5, f);
+    float pp = smoothstep(0.86, 0.985, dot(nView, vView));
+    c = mix(c, vec3(0.006), pp * 0.92);
+    pmHeight = (0.5 - f) * 0.0015;
+    pmRough = 0.1; pmThin = 0.15; pmClear = 1.0;
+    return c;
+  } else if (R == 12) {
+    c = mix(uAntenna, uAntennaWhite, step(0.8, fract(t * 4.0)) * 0.55);
+    pmRough = 0.45; pmThin = 0.35;
+  } else if (R == 13) {
+    float ann = t * uAnnuli; float idx = floor(ann); float ph = fract(ann);
+    c = uAntenna * (0.9 + 0.2 * mott);
+    float isW = 1.0 - step(0.5, mod(idx, uWhitePeriod));
+    c = mix(c, uAntennaWhite, isW * 0.72);
+    c *= 0.78 + 0.22 * smoothstep(0.0, 0.14, ph) * smoothstep(1.0, 0.86, ph);
+    pmRough = 0.42; pmThin = 0.75;
+  } else if (R == 14) {
+    c = kind > 4.5 ? uAntennule : mix(uEyestalk, uEyeBand, smoothstep(0.75, 0.9, t) * 0.5);
+    pmRough = 0.45; pmThin = 0.55;
+  } else if (R == 15) {
+    c = mix(uMxp, uMxpBand, step(0.5, fract(t * 2.0 + kind * 0.5)) * 0.85);
+    pmRough = 0.5; pmThin = 0.45;
+  } else if (R == 16) {
+    // dorsum grey-olive with fine transverse lines; the orange-amber visceral mass shows through the
+    // sides and the venter (photos 01–05); greener individuals look olive and glossy alive (06)
+    // photo 01: the dorsum golden olive-brown with dark transverse striations, the sides and venter
+    // orange-brown where the visceral mass shows through
+    float ventral = smoothstep(0.6, -0.45, dors);
+    c = mix(uAbdDeep, uAbd, smoothstep(0.3, 0.75, pmFbm(p * 6.0)));
+    float lines = smoothstep(0.78, 0.97, abs(fract(t * 34.0) - 0.5) * 2.0);
+    float fine = smoothstep(0.6, 0.95, abs(fract(t * 110.0 + pmNoise(p * 30.0) * 0.6) - 0.5) * 2.0);
+    c *= 1.0 - (0.34 * lines + 0.12 * fine) * (1.0 - 0.6 * ventral);
+    float visc = max(ventral, 0.22) * (0.55 + 0.45 * smoothstep(0.05, 0.35, t) * (1.0 - smoothstep(0.75, 1.0, t)));
+    visc *= 0.7 + 0.3 * pmFbm(p * 9.0 + 3.0);
+    c = mix(c, uAbdVisc, clamp(visc * (1.15 - 0.6 * uPmGreen), 0.0, 1.0));
+    c = mix(c, uMembrane, smoothstep(0.78, 0.95, pmNoise(p * 26.0)) * 0.2);
+    pmHeight = (pmNoise(p * vec3(30.0, 120.0, 30.0)) - 0.5) * 0.004 - 0.002 * lines;
+    pmRough = 0.42; pmThin = 0.66; pmClear = 0.9;
+  } else if (R == 17) {
+    c = uUropod * (0.9 + 0.2 * mott); pmRough = 0.38; pmThin = 0.35;
+  } else if (R == 18) {
+    c = mix(uLegBase, uMembrane, 0.3) * (0.9 + 0.2 * mott); pmRough = 0.45; pmThin = 0.3;
+  } else if (R == 19) {
+    c = mix(uGran, uDactTip, smoothstep(0.35, 1.0, t)); pmRough = 0.3; pmThin = 0.3;
+  } else {
+    c = uSetae; pmRough = 0.5; pmThin = 0.9;
+  }
+  return pmAdjust(c);
+}
+`;
+
+function exoHook(uniforms) {
+  return (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute float aRegion;
+attribute vec4 aSeg;
+varying float vPmRegion;
+varying vec4 vPmSeg;
+varying vec3 vPmBind;
+${COMMON_VERT_HEAD}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vPmRegion = aRegion; vPmSeg = aSeg; vPmBind = position;`)
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+${COMMON_VERT_BODY}`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+${EXO_FRAG_PARS}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+vec3 pmAlbedo = pmSurface(vPmBind, vPmSeg, vPmRegion, normalize(vNormal), normalize(vViewPosition));
+float pmWetDark = mix(1.0, 0.8, uPmWet * (1.0 - pmThin * 0.4));
+diffuseColor.rgb = pmAlbedo * pmWetDark;
+pmTransColor = vec3(1.0, 0.93, 0.78) * pmAlbedo;`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+roughnessFactor = mix(pmRough, pmRough * 0.55, uPmWet);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+normal = pmBump(-vViewPosition, normal, pmHeight * vPmScale, faceDirection);`)
+      .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+#ifdef USE_CLEARCOAT
+  material.clearcoat = saturate(uPmWet * pmClear);
+  material.clearcoatRoughness = max(0.06, mix(0.25, 0.07, uPmWet));
+#endif`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+${LIGHT_EXTRAS}`);
+  };
+}
+
+function paletteUniforms() {
+  const P = PALETTE;
+  const u = (hex) => ({ value: col(hex) });
+  return {
+    uShield: u(P.shield), uShieldDark: u(P.shieldDark), uBranchio: u(P.branchio), uSoft: u(P.softCarapace), uSternum: u(P.sternum),
+    uLegBase: u(P.legBase), uLegStripe: u(P.legStripe), uLegBand: u(P.legBand), uLegPale: u(P.legPale),
+    uDactBase: u(P.dactylBase), uDactWhite: u(P.dactylWhite), uDactTip: u(P.dactylTip),
+    uChel: u(P.cheliped), uGran: u(P.chelaGranule), uFinger: u(P.chelaFinger), uFingerTip: u(P.chelaFingerTip),
+    uMembrane: u(P.membrane), uEyestalk: u(P.eyestalk), uEyeBand: u(P.eyeBand), uCornea: u(P.cornea), uCorneaStripe: u(P.corneaStripe),
+    uAntenna: u(P.antenna), uAntennaWhite: u(P.antennaWhite), uAntennule: u(P.antennule), uMxp: u(P.mxp), uMxpBand: u(P.mxpBand),
+    uAbd: u(P.abdomen), uAbdDeep: u(P.abdomenDeep), uAbdVisc: u(P.abdomenViscera), uUropod: u(P.uropod), uSetae: u(P.setae),
+    uCardiac: u(P.cardiac),
+    uPC: { value: new THREE.Vector4(MORPH.posteriorCarapace.length, ...MORPH.posteriorCarapace.cardiacHalfWidth) },
+    uShieldC: { value: MORPH.shield.centralHalfWidth },
+    uAnnuli: { value: 108 }, uWhitePeriod: { value: 3 },
+  };
+}
+
+function envUniforms() {
+  return {
+    uPmWet: { value: 0.6 }, uPmCaus: { value: 0 }, uPmWaterY: { value: -1e6 }, uPmTime: { value: 0 },
+    uPmCausColor: { value: new THREE.Color(1.0, 0.97, 0.85).multiplyScalar(0.9) },
+  };
+}
+
+/**
+ * Per-crab material set. `colorway` = { hue, sat, val, green, contrast }.
+ * @returns {{ body: THREE.MeshPhysicalMaterial, setae: THREE.MeshStandardMaterial, uniforms: object, update(o): void, dispose(): void }}
+ */
+export function createCrabMaterials(colorway = {}) {
+  const uniforms = {
+    ...paletteUniforms(), ...envUniforms(),
+    uPmHue: { value: colorway.hue ?? 0 }, uPmSat: { value: colorway.sat ?? 1 }, uPmVal: { value: colorway.val ?? 1 },
+    uPmGreen: { value: colorway.green ?? 0.5 }, uPmContrast: { value: colorway.contrast ?? 1 },
+  };
+  const body = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, roughness: 0.45, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.12,
+    ior: 1.52, specularIntensity: 0.7, envMapIntensity: 1.0,
+  });
+  body.name = 'PagurusMinutus_Exoskeleton';
+  const hook = exoHook(uniforms);
+  body.onBeforeCompile = hook;
+  body.customProgramCacheKey = () => 'pagurus-exo-v1';
+  body.userData.pm = { hook, key: 'pagurus-exo-v1', uniforms };
+
+  const setae = createSetaeMaterial(uniforms);
+  const update = (o) => {
+    if (o.wet !== undefined) uniforms.uPmWet.value = o.wet;
+    if (o.caustics !== undefined) uniforms.uPmCaus.value = o.caustics;
+    if (o.waterY !== undefined) uniforms.uPmWaterY.value = o.waterY;
+    if (o.time !== undefined) uniforms.uPmTime.value = o.time;
+  };
+  return { body, setae, uniforms, update, dispose() { body.dispose(); setae.dispose(); } };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Setae: alpha-tested cards with procedural strands (opaque pass, alpha-to-coverage under MSAA)
+// ---------------------------------------------------------------------------------------------
+
+function createSetaeMaterial(crabUniforms) {
+  const uniforms = { uSetae: crabUniforms.uSetae, uPmWet: crabUniforms.uPmWet, uPmHue: crabUniforms.uPmHue, uPmVal: crabUniforms.uPmVal };
+  const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0, side: THREE.DoubleSide, alphaTest: 0.45 });
+  m.alphaToCoverage = true;
+  m.name = 'PagurusMinutus_Setae';
+  const hook = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute vec4 aSeta;
+attribute vec2 aPmUv;
+varying vec2 vPmUv;
+varying vec4 vPmSeta;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vPmUv = aPmUv; vPmSeta = aSeta;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec2 vPmUv;
+varying vec4 vPmSeta;
+uniform vec3 uSetae;
+uniform float uPmWet, uPmHue, uPmVal;
+float pmH1(float n) { return fract(sin(n * 91.345) * 47453.31); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  float a = 0.0;
+  for (int k = 0; k < 3; k++) {
+    float fk = float(k);
+    float seed = vPmSeta.x * 13.7 + fk * 3.1;
+    float len = 0.62 + 0.38 * pmH1(seed);
+    float cx = 0.22 + 0.28 * fk + 0.07 * sin(vPmUv.y * 3.0 + seed * 6.0) * vPmUv.y;
+    float wd = mix(0.075, 0.012, vPmUv.y / len);
+    float s = (1.0 - smoothstep(wd * 0.45, wd, abs(vPmUv.x - cx))) * step(vPmUv.y, len);
+    a = max(a, s);
+  }
+  diffuseColor.a = a;
+  diffuseColor.rgb = uSetae * uPmVal * mix(0.75, 1.0, vPmUv.y) * mix(1.0, 0.85, uPmWet);
+}`);
+  };
+  m.onBeforeCompile = hook;
+  m.customProgramCacheKey = () => 'pagurus-setae-v1';
+  m.userData.pm = { hook, key: 'pagurus-setae-v1', uniforms };
+  return m;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Shell
+// ---------------------------------------------------------------------------------------------
+
+const PATTERN_ID = { band: 0, zigzag: 1, nodule: 2, streak: 3 };
+
+const SHELL_FRAG_PARS = /* glsl */ `
+varying vec4 vPmShell;
+varying float vPmRelief;
+varying vec3 vPmObj;
+varying vec3 vPmWorld;
+varying float vPmScale;
+uniform vec3 uBase, uAlt, uBand, uInterior, uInteriorBand, uLip, uCallus, uFoul;
+uniform float uPattern, uBandPhi, uBandWidth, uGloss, uNacre, uFouling, uPmWet, uSeed, uDamage, uSilt;
+uniform vec3 uSiltColor;
+uniform float uPmCaus, uPmWaterY, uPmTime;
+uniform vec3 uPmCausColor;
+float pmThin = 0.0;
+float pmHeight = 0.0;
+float pmRough = 0.4;
+float pmNacreMask = 0.0;
+vec3 pmTransColor = vec3(1.0);
+${NOISE_GLSL}
+vec3 pmShell() {
+  float whorl = vPmShell.x;            // growth angle in whorls (negative toward apex)
+  float phi = vPmShell.y * 6.2831853;  // around the generating curve
+  int part = int(vPmShell.z + 0.5);
+  float depth = vPmShell.w;
+  vec3 p = vPmObj * 18.0 + uSeed;
+  float mott = pmFbm(p * 0.7);
+  vec3 c = uBase;
+  if (part == 0) {
+    int pat = int(uPattern + 0.5);
+    float th = whorl * 6.2831853;
+    if (pat == 0) {
+      float band = smoothstep(uBandWidth, uBandWidth * 0.4, abs(atan(sin(phi - uBandPhi), cos(phi - uBandPhi))));
+      c = mix(uBase, uAlt, smoothstep(0.35, 0.7, mott));
+      c = mix(c, uBand, band * 0.8);
+      c = mix(c, uBand * 0.9, smoothstep(0.55, 0.9, vPmRelief) * 0.45);
+    } else if (pat == 1) {
+      float z = sin(th * 34.0 + sin(phi * 3.0 + th) * 2.4 + mott * 3.0);
+      c = mix(uBase, uAlt, smoothstep(0.2, 0.9, z) * 0.85);
+      c = mix(c, uBand, smoothstep(0.82, 1.0, cos(phi - 1.2)) * 0.55);
+    } else if (pat == 2) {
+      c = mix(uBase, uBand, smoothstep(0.3, 0.8, mott) * 0.5);
+      c = mix(c, uAlt, smoothstep(0.35, 0.8, vPmRelief) * 0.85);
+    } else {
+      float streak = smoothstep(0.55, 0.9, sin(th * 18.0 + mott * 5.0 + phi * 0.8));
+      c = mix(uBase, uAlt, streak * 0.7);
+      c = mix(c, uBand, smoothstep(0.6, 1.0, vPmRelief) * 0.5);
+    }
+    // growth lines
+    c *= 0.93 + 0.07 * sin(th * 220.0 + mott * 4.0);
+    // eroded / worn tops of the sculpture and the apex region are chalky
+    c = mix(c, vec3(0.62, 0.6, 0.56), smoothstep(-4.0, -9.0, whorl) * 0.5 + uDamage * smoothstep(0.6, 1.0, vPmRelief) * 0.3);
+    pmHeight = vPmRelief * 0.0;
+    pmRough = mix(0.68, 0.22, uGloss) + mott * 0.1;
+    // biofouling: diatom/algal film and spirorbid tubes
+    float film = smoothstep(0.35, 0.75, pmFbm(vPmObj * 9.0 + uSeed) + uFouling * 0.45 - 0.3) * uFouling;
+    c = mix(c, uFoul, film * 0.85);
+    pmRough = mix(pmRough, 0.85, film);
+    float sp = pmCell(vPmObj * 26.0 + uSeed);
+    float ring = smoothstep(0.08, 0.05, abs(sp - 0.18)) * step(0.94, pmHash(floor(vPmObj * 26.0 + uSeed)));
+    c = mix(c, vec3(0.86, 0.84, 0.78), ring * smoothstep(0.45, 0.8, uFouling));
+    // silt film: settles in the sutures and between the cords, rubbed off the crests
+    float silt = smoothstep(0.15, 0.6, pmFbm(vPmObj * 7.0 + uSeed * 1.3) * 0.7 + (1.0 - vPmRelief) * 0.45 + uSilt * 0.5 - 0.25) * uSilt;
+    c = mix(c, uSiltColor * (0.85 + 0.3 * mott), silt * 0.85);
+    pmRough = mix(pmRough, 0.92, silt);
+    pmThin = 0.05;
+  } else if (part == 1) {
+    c = mix(uInterior, uInteriorBand, smoothstep(0.75, 0.95, cos(phi - uBandPhi)) * 0.6);
+    c *= exp(-depth * 2.6);
+    pmNacreMask = uNacre * exp(-depth * 1.5);
+    pmRough = mix(0.35, 0.12, uGloss);
+    pmThin = 0.25 * exp(-depth * 2.0);
+  } else if (part == 2) {
+    c = uLip * (0.9 + 0.2 * mott);
+    pmRough = 0.3;
+  } else if (part == 3) {
+    c = mix(vec3(0.6, 0.58, 0.54), uSiltColor, uSilt * 0.5) * (0.85 + 0.3 * mott);
+    pmRough = 0.85;
+  } else {
+    c = uCallus * (0.95 + 0.1 * mott);
+    pmRough = 0.15;
+  }
+  return c;
+}
+`;
+
+function shellHook(uniforms) {
+  return (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute vec4 aShell;
+attribute float aRelief;
+varying vec4 vPmShell;
+varying float vPmRelief;
+varying vec3 vPmObj;
+${COMMON_VERT_HEAD}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vPmShell = aShell; vPmRelief = aRelief; vPmObj = position;`)
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+${COMMON_VERT_BODY}`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+${SHELL_FRAG_PARS}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+diffuseColor.rgb = pmShell() * mix(1.0, 0.82, uPmWet);
+pmTransColor = diffuseColor.rgb;`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+roughnessFactor = mix(pmRough, pmRough * 0.6, uPmWet);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+float pmFade = 1.0 - smoothstep(0.004, 0.02, length(fwidth(vPmObj)));
+normal = pmBump(-vViewPosition, normal, (pmNoise(vPmObj * 90.0) - 0.5) * 0.0015 * vPmScale * pmFade, faceDirection);`)
+      .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+#ifdef USE_CLEARCOAT
+  material.clearcoat = saturate((uPmWet - 0.15) * 1.2 * (int(vPmShell.z + 0.5) == 1 ? 0.3 : 1.0));
+  material.clearcoatRoughness = 0.08;
+#endif
+#ifdef USE_IRIDESCENCE
+  material.iridescence = pmNacreMask;
+#endif`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+${LIGHT_EXTRAS}`);
+  };
+}
+
+/** per-shell material (fouling, damage, wetness are individual) */
+export function createShellMaterial(shell) {
+  const sp = SHELL_SPECIES[shell.key];
+  const C = sp.color;
+  const uniforms = {
+    ...envUniforms(),
+    uBase: { value: col(C.base) }, uAlt: { value: col(C.alt) }, uBand: { value: col(C.band) },
+    uInterior: { value: col(C.interior) }, uInteriorBand: { value: col(C.interiorBand) }, uLip: { value: col(C.lipColor) },
+    uCallus: { value: col(C.callus ?? sp.umbilicalCallus?.color ?? C.lipColor) }, uFoul: { value: col('#5d6a3a') },
+    uPattern: { value: PATTERN_ID[C.pattern] ?? 0 }, uBandPhi: { value: C.bandPhi }, uBandWidth: { value: C.bandWidth || 0.3 },
+    uGloss: { value: C.gloss }, uNacre: { value: C.nacre }, uFouling: { value: shell.fouling }, uSeed: { value: (shell.seed % 997) * 0.37 },
+    uDamage: { value: shell.damage }, uSilt: { value: shell.silt ?? 0 }, uSiltColor: { value: col('#8a8273') },
+  };
+  const m = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, roughness: 0.45, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.08, envMapIntensity: 0.6,
+    iridescence: C.nacre > 0 ? 0.01 : 0, iridescenceIOR: 1.6, iridescenceThicknessRange: [180, 520],
+    side: THREE.FrontSide,
+  });
+  m.name = `Shell_${shell.key}`;
+  const hook = shellHook(uniforms);
+  m.onBeforeCompile = hook;
+  const key = `pagurus-shell-v1${C.nacre > 0 ? '-nacre' : ''}`;
+  m.customProgramCacheKey = () => key;
+  m.userData.pm = { hook, key, uniforms };
+  m.userData.update = (o) => {
+    if (o.wet !== undefined) uniforms.uPmWet.value = o.wet;
+    if (o.caustics !== undefined) uniforms.uPmCaus.value = o.caustics;
+    if (o.waterY !== undefined) uniforms.uPmWaterY.value = o.waterY;
+    if (o.time !== undefined) uniforms.uPmTime.value = o.time;
+  };
+  return m;
+}
+setShellMaterialFactory(createShellMaterial);
+
+// ---------------------------------------------------------------------------------------------
+// Contact shadow (soft ambient-occlusion blob under crab and shell)
+// ---------------------------------------------------------------------------------------------
+
+export function createContactShadowMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uOpacity: { value: 0.55 }, uSoft: { value: 1.0 } },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */ `
+      varying vec2 vUv;
+      uniform float uOpacity;
+      void main() {
+        vec2 q = vUv * 2.0 - 1.0;
+        float r = length(q);
+        float a = pow(clamp(1.0 - r, 0.0, 1.0), 1.6) * uOpacity;
+        gl_FragColor = vec4(0.0, 0.0, 0.0, a);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+}
+
+/**
+ * The tank lights its occupants by replacing each MeshStandardMaterial's onBeforeCompile with its caustics
+ * shader (on a clone). Re-attach our hook in front of theirs so both apply, sharing our uniforms.
+ */
+export function adoptForeignMaterial(mesh) {
+  const mat = mesh.material;
+  const pm = mat?.userData?.pm;
+  if (!pm || mat.onBeforeCompile === pm.hook || mat.userData.pmChained) return false;
+  const foreign = mat.onBeforeCompile;
+  const foreignKey = mat.customProgramCacheKey ? mat.customProgramCacheKey() : '';
+  mat.onBeforeCompile = (shader, renderer) => {
+    pm.hook(shader, renderer);
+    foreign.call(mat, shader, renderer);
+  };
+  mat.customProgramCacheKey = () => `${pm.key}|${foreignKey}`;
+  mat.userData.pmChained = true;
+  mat.needsUpdate = true;
+  return true;
+}
+
+/**
+ * Give `target` (one of our materials) the shader hook a host scene installed on `foreign` (a clone of
+ * another crab's material, e.g. the tank's caustics), so both run on the target.
+ */
+export function chainForeignHook(target, foreign) {
+  const pm = target?.userData?.pm;
+  if (!pm || !foreign?.onBeforeCompile || foreign.onBeforeCompile === foreign.userData?.pm?.hook) return false;
+  const fhook = foreign.onBeforeCompile;
+  const fkey = foreign.customProgramCacheKey ? foreign.customProgramCacheKey() : '';
+  target.onBeforeCompile = (shader, renderer) => {
+    pm.hook(shader, renderer);
+    fhook.call(foreign, shader, renderer);
+  };
+  target.customProgramCacheKey = () => `${pm.key}|${fkey}`;
+  target.userData.pmChained = true;
+  target.needsUpdate = true;
+  return true;
+}

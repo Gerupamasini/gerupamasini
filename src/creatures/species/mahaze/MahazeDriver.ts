@@ -1,0 +1,209 @@
+import { Object3D, Sphere, SkinnedMesh, Vector3, type Mesh } from 'three';
+import type { Individual } from '../../Individual';
+import type { BehaviorEvent, Driver, DriverContext, Intent, Floor } from '../../drivers/Driver';
+import { createBehavior } from './Behavior.js';
+
+type Behavior = ReturnType<typeof createBehavior>;
+
+interface MahazeExtras {
+  role: string;
+  profile: { n: number; data: number[] };
+  fishFrame: { S0: number; Y0: number; SL: number; SEND: number };
+}
+
+/**
+ * Drives the マハゼ rig with the procedural behaviour model (perch / paddle / orient / dart / glide / yawn) and maps the
+ * brain's intents onto it. Works for every LOD because all tiers share the rig.
+ */
+/** axial geometry stored in a goby's rig extras (mahazeRig.axes.body) */
+interface BodyGeometry { tlMM: number; spine: [string, number][]; restFold?: { d1: number; d2: number; anal: number; caudal: number } }
+
+export class MahazeDriver implements Driver {
+  private beh: Behavior | null = null;
+  private root: Object3D | null = null;
+  private ind: Individual | null = null;
+  private floor: Floor | null = null;
+  private listeners = new Set<(e: BehaviorEvent) => void>();
+  private intent: Intent | null = null;
+  private timer = 0;
+  private alertUntil = 0;
+  private waitingForPerch = false;
+  private readonly tmp = new Vector3();
+  busy = false;
+
+  attach(root: Object3D, individual: Individual, _extras: Record<string, unknown>, bones: Record<string, Object3D>, meshes: Object3D[]): void {
+    this.root = root;
+    this.ind = individual;
+    const scale = individual.length_mm / individual.species.model.modelLength_mm;
+    const roleOf = (m: Object3D): string | undefined => (m.userData.mahaze as MahazeExtras | undefined)?.role ?? ((m as Mesh).material as { userData?: { mahaze?: MahazeExtras } })?.userData?.mahaze?.role;
+    const body = meshes.find((m) => roleOf(m) === 'body') as Mesh | undefined;
+    let rigNode: Object3D | undefined;
+    root.traverse((o) => { if (!rigNode && o.userData.mahazeRig) rigNode = o; });
+    const rig = rigNode?.userData.mahazeRig as { axes: Record<string, number[]> & { body?: BodyGeometry }; contactY: number; tailContactY: number } | undefined;
+    if (!body || !rig) throw new Error('goby: rig data missing in glTF extras');
+    const bodyGeom: BodyGeometry | null = rig.axes.body ?? null;
+    const viewer = rigNode?.userData.viewer as { contacts?: [string, number, string | number][] } | undefined;
+    const bx = (body.userData.mahaze as MahazeExtras | undefined) ?? (body.material as unknown as { userData: { mahaze: MahazeExtras } }).userData.mahaze;
+    // Contact definitions use model metres, independently of the root's parent transform.
+    root.position.set(0, 0, 0);
+    root.quaternion.identity();
+    root.scale.setScalar(1);
+    root.updateWorldMatrix(true, true);
+    const F = bx.fishFrame, P = bx.profile;
+    const botY = (s: number) => { const k = Math.min(P.n - 1, Math.round((s / F.SEND) * (P.n - 1))); return P.data[k * 6] - P.data[k * 6 + 2]; };
+    const rimY = rig.contactY * 1000 + F.Y0;
+    const tailY = rig.tailContactY * 1000 + F.Y0;
+    // ground contacts along the body (bone, s mm, y mm): from the species' rig extras when given, else the マハゼ set
+    const contactDefs: [string, number, number][] = viewer?.contacts
+      ? viewer.contacts.map(([bone, sMM, y]) => [bone, sMM, y === 'rim' ? rimY : y === 'bot' ? botY(sMM) : y === 'tail' ? tailY : Number(y)])
+      : [
+        ['J_pelvic', 13.0, rimY], ['J_pelvic', 14.8, rimY], ['J_pelvic', 16.6, rimY],
+        ['J_root', 15.5, botY(15.5)], ['J_sp1', 18.5, botY(18.5)], ['J_sp2', 22.5, botY(22.5)], ['J_sp3', 26.5, botY(26.5)],
+        ['J_sp4', 30.5, botY(30.5)], ['J_sp5', 34.5, botY(34.5)], ['J_sp6', 38.5, botY(38.5)], ['J_caudal2', 48.0, tailY],
+      ];
+    const contacts = contactDefs.filter(([bone]) => bones[bone]).map(([bone, s, y]) => {
+      const p = new Vector3(0, (y - F.Y0) * 0.001, (F.S0 - s) * 0.001);
+      return { bone: bones[bone], p: bones[bone].worldToLocal(root.localToWorld(p)) };
+    });
+    const finMeshes: Record<string, Mesh> = {};
+    for (const m of meshes) {
+      const mesh = m as Mesh;
+      if (roleOf(mesh) === 'fin') finMeshes[mesh.name] = mesh;
+      if ((mesh as SkinnedMesh).isSkinnedMesh) (mesh as SkinnedMesh).boundingSphere = new Sphere(new Vector3(0, 0.002, 0.012), 0.04);
+    }
+    root.scale.setScalar(scale);
+    this.beh = createBehavior({
+      root, bones, finMeshes, axes: rig.axes, contacts, scale,
+      floorY: (x: number, z: number) => (this.floor ? this.floor.heightAt(x, z) : 0),
+      onEvent: (name: string) => this.emit(name),
+      body: bodyGeom,
+    });
+    const st = this.beh.state;
+    st.pos.set(individual.pos.x, 0, individual.pos.z);
+    this.beh.setHeading(individual.heading);
+    this.beh.setAuto(false);
+    // settle the pose once so the first frame is not a T-pose
+    this.beh.update(1 / 60);
+  }
+
+  detach(): void {
+    this.beh = null;
+    this.root = null;
+  }
+
+  /** mouth / gill opening for the hero interior material */
+  get openings(): { mouth: number; gill: number } {
+    const st = this.beh?.state;
+    return { mouth: st?.mouthOpen ?? 0, gill: st?.gillOpen ?? 0 };
+  }
+
+  setIntent(intent: Intent): void {
+    const beh = this.beh, ind = this.ind;
+    this.intent = intent;
+    this.timer = intent.seconds > 0 ? intent.seconds : 8;
+    this.busy = true;
+    this.waitingForPerch = false;
+    if (!beh || !ind) return;
+    const st = beh.state;
+    switch (intent.kind) {
+      case 'rest':
+        beh.setRestFor(intent.seconds);
+        break;
+      case 'wander':
+      case 'moveTo':
+      case 'flee': {
+        const t = intent.target ?? ind.pos;
+        const dx = t.x - st.pos.x, dz = t.z - st.pos.z;
+        const dist = Math.hypot(dx, dz);
+        const angle = Math.atan2(dx, dz);
+        if (intent.kind === 'flee') { beh.setAlert(1); this.emit('flee'); }
+        beh.dart(Math.max(0.03, dist), angle, intent.kind === 'flee');
+        this.waitingForPerch = true;
+        break;
+      }
+      case 'forage':
+        beh.paddle();
+        this.timer = Math.min(this.timer, 2.5);
+        break;
+      case 'display':
+        beh.setAlert(1);
+        this.alertUntil = this.timer;
+        break;
+      case 'special':
+        if (intent.param === 'yawn') beh.yawn();
+        this.timer = 3;
+        break;
+      default:
+        this.timer = 1;
+    }
+  }
+
+  update(dt: number, ctx: DriverContext): void {
+    const beh = this.beh, ind = this.ind;
+    if (!beh || !ind) return;
+    this.floor = ctx.floor;
+    const sdt = dt * ctx.simScale;
+    beh.update(sdt);
+    const st = beh.state;
+    const b = ctx.bounds;
+    if (b) {
+      // the glass: stop at the walls, turn back toward the middle and give up the dart
+      const cx = Math.max(b.minX, Math.min(b.maxX, st.pos.x)), cz = Math.max(b.minZ, Math.min(b.maxZ, st.pos.z));
+      if (cx !== st.pos.x || cz !== st.pos.z) {
+        st.pos.x = cx; st.pos.z = cz;
+        beh.setHeading(Math.atan2((b.minX + b.maxX) / 2 - cx, (b.minZ + b.maxZ) / 2 - cz));
+        beh.setRestFor(1.5);
+        if (this.root) this.root.position.set(cx, this.root.position.y, cz);
+      }
+    }
+    ind.pos.x = st.pos.x;
+    ind.pos.z = st.pos.z;
+    ind.pos.y = this.root ? this.root.position.y : ind.pos.y;
+    ind.heading = st.heading;
+    if (this.busy) {
+      this.timer -= sdt;
+      if (this.waitingForPerch) {
+        if (st.mode === 'perch' && this.timer < 7.5) this.busy = false;
+      }
+      if (this.timer <= 0) {
+        this.busy = false;
+        if (this.intent?.kind === 'display') beh.setAlert(0);
+      }
+    }
+  }
+
+  holdAt(x: number, z: number, heading?: number): void {
+    const beh = this.beh, ind = this.ind;
+    if (!beh || !ind) return;
+    const st = beh.state;
+    st.pos.x = x; st.pos.z = z;
+    if (heading !== undefined) beh.setHeading(heading);
+    // a short rest gives up the dart or glide that carried it out
+    beh.setRestFor(0.6);
+    if (this.root) this.root.position.set(x, this.root.position.y, z);
+    ind.pos.x = x; ind.pos.z = z;
+    this.busy = false;
+    this.waitingForPerch = false;
+  }
+
+  onEvent(cb: (e: BehaviorEvent) => void): () => void {
+    this.listeners.add(cb);
+    return () => this.listeners.delete(cb);
+  }
+
+  private emit(behaviorId: string): void {
+    if (!this.ind) return;
+    const e: BehaviorEvent = { individualId: this.ind.id, behaviorId, t: performance.now() };
+    for (const l of this.listeners) l(e);
+  }
+
+  anchor(): Vector3 {
+    if (this.root) return this.tmp.copy(this.root.position).add(new Vector3(0, 0.004 * this.root.scale.x, 0));
+    return this.ind ? this.ind.pos : this.tmp.set(0, 0, 0);
+  }
+
+  dispose(): void {
+    this.detach();
+    this.listeners.clear();
+  }
+}

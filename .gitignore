@@ -3,3 +3,7 @@ Thumbs.db
 *.swp
 *~
 node_modules/
+dist/
+.vite/
+tests/smoke/out/
+*.log

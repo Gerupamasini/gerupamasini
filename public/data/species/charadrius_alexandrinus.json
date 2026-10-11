@@ -1,0 +1,56 @@
+{
+  "id": "charadrius_alexandrinus",
+  "names": { "ja": "シロチドリ", "sci": "Charadrius alexandrinus", "en": "Kentish plover" },
+  "taxon": { "group": "bird", "family": "Charadriidae" },
+  "locomotion": "walk",
+  "collectable": false,
+  "protected": true,
+  "model": {
+    "placeholder": "plover",
+    "hero": "plover/kentish_plover.hero.glb",
+    "lod1": "plover/kentish_plover.hero.glb",
+    "lod2": "plover/kentish_plover.hero.glb",
+    "modelLength_mm": 165,
+    "placeholderBeyond_m": 10,
+    "driver": "plover",
+    "clips": { "idle": "Idle", "move": "Move", "special": [] }
+  },
+  "size": {
+    "length_mm": { "min": 150, "max": 180, "mean": 165, "sd": 6 },
+    "weightCoef": { "a": 0.00001, "b": 3.0 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": true },
+  "stages": [
+    { "id": "juvenile", "ja": "幼鳥", "maxLength_mm": 155 },
+    { "id": "adult", "ja": "成鳥" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    {
+      "tags": ["exposed_sand", "exposed_mud", "waterline"],
+      "time": ["dawn", "day", "dusk"],
+      "tide": "any",
+      "maps": ["kasai_west"],
+      "density_per_100m2": 0.12,
+      "group": [1, 4],
+      "maxPopulation": 10
+    }
+  ],
+  "brain": { "tree": "shorebird_waterline", "params": { "fleeDistance_m": 8, "runDistance_m": 14 } },
+  "capture": { "tools": [], "baseDifficulty": 1, "alertPenalty": 1 },
+  "encyclopedia": {
+    "description": "砂浜や干潟で見られる小型のチドリ。干潟が露出すると水際を走っては止まり、ゴカイや小さな甲殻類をついばむ。人が近づくと走って離れ、さらに近づくと飛び立つ。採集はできないので、観察して図鑑に記録する。",
+    "habitatHint": "干潮時に露出した砂泥面と水際。昼間。",
+    "behaviors": [
+      { "id": "walk", "ja": "歩行", "hint": "水際を歩く" },
+      { "id": "run", "ja": "走行", "hint": "小走りで移動する" },
+      { "id": "forage_peck", "ja": "ついばみ", "hint": "止まって餌をついばむ" },
+      { "id": "alert", "ja": "見張り", "hint": "首を上げて周囲を見る" },
+      { "id": "flee_flight", "ja": "飛び立ち", "hint": "近づくと飛んで離れる" }
+    ],
+    "placeholderModel": true
+  }
+}

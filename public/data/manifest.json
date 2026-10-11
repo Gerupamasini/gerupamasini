@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "species": [
+    "acanthogobius_flavimanus",
+    "gymnogobius_macrognathos",
+    "favonigobius_gymnauchen",
+    "exopalaemon_orientis",
+    "palaemon_pacificus",
+    "charadrius_alexandrinus",
+    "ruditapes_philippinarum",
+    "meretrix_lusoria",
+    "pagurus_minutus",
+    "crassostrea_gigas",
+    "reticunassa_festiva",
+    "mugil_cephalus",
+    "rudarius_ercodes",
+    "syngnathus_schlegeli",
+    "platichthys_bicoloratus",
+    "hemitrygon_akajei"
+  ],
+  "behaviors": [
+    "fish_benthic",
+    "shrimp_shallow",
+    "shorebird_waterline",
+    "bivalve_buried",
+    "hermit_crab_tidal",
+    "oyster_reef",
+    "snail_crawl",
+    "fish_school",
+    "fish_seagrass",
+    "pipefish_grass",
+    "flatfish_sand",
+    "ray_benthic"
+  ],
+  "maps": [
+    "kasai_west",
+    "hashirimizu",
+    "manko"
+  ],
+  "stations": [
+    "jma_tokyo",
+    "jma_yokosuka",
+    "manko_demo"
+  ],
+  "items": "items/tools.json",
+  "strings": "strings/ja.json",
+  "defaultMap": "kasai_west",
+  "spots": "spots.json"
+}

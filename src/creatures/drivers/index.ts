@@ -1,0 +1,68 @@
+import type { Object3D, WebGLRenderer } from 'three';
+import type { Driver } from './Driver';
+import type { PlaceholderModel } from '../models/placeholders';
+import { MahazeDriver } from '../species/mahaze/MahazeDriver';
+import { ShrimpDriver } from '../species/shrimp/ShrimpDriver';
+import { ISOSUJI } from '../species/shrimp/model/isosuji.js';
+import { PloverDriver } from '../species/plover/PloverDriver';
+import { AsariDriver } from '../asari/Asari.js';
+import { AkaeiDriver } from '../species/akaei/AkaeiDriver';
+import { FORMS } from '../asari/AsariModel.js';
+import { PagurusMinutusDriver } from '../yubinagahonyadokari/PagurusMinutusDriver';
+import { OysterDriver } from '../oyster/OysterDriver';
+import { CrabDriver, HermitDriver } from '../species/shore/crawlers';
+import { WormDriver } from '../species/shore/others';
+import { HakuDriver } from '../species/haku/HakuDriver';
+import { AmimehagiDriver } from '../species/amimehagi/AmimehagiDriver';
+import { YoujiuoDriver } from '../species/youjiuo/YoujiuoDriver';
+import { AramushiroDriver } from '../species/aramushiro/AramushiroDriver';
+import { IshigareiDriver } from '../species/ishigarei/IshigareiDriver';
+
+export interface DriverEntry {
+  create(): Driver;
+  /** procedural placeholder model factory when the species has no glTF */
+  placeholder?: () => PlaceholderModel;
+  /** a representative model for the 図鑑 preview (and the scoop) when the driver builds its own geometry; `seed` in [0, 1) picks the individual's pattern */
+  preview?: (seed?: number, renderer?: WebGLRenderer) => Object3D;
+  /**
+   * Procedural models with their own LOD: within this distance (m) the individual counts as near (lod 1:
+   * driver updated every frame, brain at the near rate) although it uses the placeholder tier.
+   */
+  nearDistance?: number;
+  /**
+   * A model of the species in every tier it is drawn in, built once per flat into `parent` and never drawn: its
+   * materials keep the species' shader programs alive (three drops a program with the last material that used it, so
+   * without this the programs would be compiled again, synchronously, whenever the species came back into view) and
+   * the loading screen compiles them ahead (CreatureSystem.keptModels, FieldRenderer.compileKept).
+   */
+  keep?: (parent: Object3D) => { dispose(): void };
+}
+
+/** The only place that needs a code change when a species gets a custom driver. */
+export const DRIVERS: Record<string, DriverEntry> = {
+  mahaze: { create: () => new MahazeDriver() },
+  shrimp: { create: () => new ShrimpDriver(), placeholder: () => ShrimpDriver.makeModel(), preview: () => ShrimpDriver.makePreview() },
+  // イソスジエビ: the same shrimp rig and locomotion with its species profile (shape, stripes, kinematics)
+  isosuji: { create: () => new ShrimpDriver(ISOSUJI), placeholder: () => ShrimpDriver.makeModel(), preview: () => ShrimpDriver.makePreview(ISOSUJI) },
+  plover: { create: () => new PloverDriver(), placeholder: () => PloverDriver.makeModel() },
+  asari: { create: () => new AsariDriver() as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.asari, seed) },
+  hamaguri: { create: () => new AsariDriver(FORMS.hamaguri) as unknown as Driver, placeholder: () => AsariDriver.makeModel(), preview: (seed) => AsariDriver.makePreview(FORMS.hamaguri, seed) },
+  pagurus: { create: () => new PagurusMinutusDriver(), placeholder: () => PagurusMinutusDriver.makeModel(), nearDistance: 4.5 },
+  oyster: { create: () => new OysterDriver(), placeholder: () => OysterDriver.makeModel(), preview: (seed, renderer) => OysterDriver.makePreview(seed, renderer) },
+  // the 走水 shore: procedural models built per individual by the drivers
+  crab: { create: () => new CrabDriver(), placeholder: () => CrabDriver.makeModel(), preview: (seed) => CrabDriver.makePreview(seed) },
+  hermit: { create: () => new HermitDriver(), placeholder: () => HermitDriver.makeModel(), preview: (seed) => HermitDriver.makePreview(seed) },
+  worm: { create: () => new WormDriver(), placeholder: () => WormDriver.makeModel(), preview: (seed) => WormDriver.makePreview(seed) },
+  // ハク: the schooling juvenile mullet (its own tiers in the placeholder view; near within 5 m)
+  haku: { create: () => new HakuDriver(), placeholder: () => HakuDriver.makeModel(), preview: () => HakuDriver.makePreview(), nearDistance: 5 },
+  // アミメハギ: the small filefish of the eelgrass (its own tiers in the placeholder view; near within 4 m)
+  amimehagi: { create: () => new AmimehagiDriver(), placeholder: () => AmimehagiDriver.makeModel(), preview: (seed) => AmimehagiDriver.makePreview(seed), nearDistance: 4 },
+  // ヨウジウオ: the pipefish of the eelgrass (its own tiers in the placeholder view; near within 6 m)
+  youjiuo: { create: () => new YoujiuoDriver(), placeholder: () => YoujiuoDriver.makeModel(), preview: (seed) => YoujiuoDriver.makePreview(seed), nearDistance: 6 },
+  // アラムシロ: the carrion snail of the sand (its own tiers in the placeholder view; near within 3 m)
+  aramushiro: { create: () => new AramushiroDriver(), placeholder: () => AramushiroDriver.makeModel(), preview: (seed) => AramushiroDriver.makePreview(seed), nearDistance: 3, keep: (parent) => AramushiroDriver.keep(parent) },
+  // イシガレイ: the juvenile flounder of the sandy flats (its own tiers in the placeholder view; near within 3 m)
+  ishigarei: { create: () => new IshigareiDriver(), placeholder: () => IshigareiDriver.makeModel(), preview: (seed) => IshigareiDriver.makePreview(seed), nearDistance: 3, keep: (parent) => IshigareiDriver.keep(parent) },
+  // アカエイ: the ray of the shallow sand (its own tiers in the placeholder view; its wave runs every frame within 10 m)
+  akaei: { create: () => new AkaeiDriver(), placeholder: () => AkaeiDriver.makeModel(), preview: (seed) => AkaeiDriver.makePreview(seed), nearDistance: 10, keep: (parent) => AkaeiDriver.keep(parent) },
+};

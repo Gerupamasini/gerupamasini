@@ -1,0 +1,14 @@
+{
+  "id": "bivalve_buried",
+  "tickHz": { "near": 2, "mid": 0.5, "far": 0.2 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$threatDistance_m" } },
+      { "type": "action", "name": "display", "args": { "seconds": 4, "param": "close_shell" }, "interrupt": true }
+    ]},
+    { "type": "random", "weights": [0.9, 0.1], "children": [
+      { "type": "action", "name": "rest", "args": { "seconds": "$restMean_s" } },
+      { "type": "action", "name": "burrow", "args": { "seconds": 30 } }
+    ]}
+  ]}
+}

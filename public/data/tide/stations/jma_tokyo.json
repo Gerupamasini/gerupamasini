@@ -1,0 +1,203 @@
+{
+  "id": "jma_tokyo",
+  "names": {
+    "ja": "東京",
+    "en": "Tokyo"
+  },
+  "lat": 35.648617,
+  "lon": 139.77,
+  "phaseReference": "UTC",
+  "mslAboveChartDatum_cm": null,
+  "constituents": [
+    {
+      "name": "M2",
+      "amplitude_cm": 48.04542064666748,
+      "phase_deg": 235.16932678222656
+    },
+    {
+      "name": "N2",
+      "amplitude_cm": 7.1747370064258575,
+      "phase_deg": 231.3981170654297
+    },
+    {
+      "name": "S2",
+      "amplitude_cm": 23.70670735836029,
+      "phase_deg": 263.5086364746094
+    },
+    {
+      "name": "K2",
+      "amplitude_cm": 6.5838538110256195,
+      "phase_deg": 258.8950500488281
+    },
+    {
+      "name": "2N2",
+      "amplitude_cm": 0.9252670221030712,
+      "phase_deg": 239.2115020751953
+    },
+    {
+      "name": "S1",
+      "amplitude_cm": 0.9218839928507805,
+      "phase_deg": 276.5294189453125
+    },
+    {
+      "name": "K1",
+      "amplitude_cm": 25.215283036231995,
+      "phase_deg": 40.15046310424805
+    },
+    {
+      "name": "P1",
+      "amplitude_cm": 8.32316130399704,
+      "phase_deg": 37.73865509033203
+    },
+    {
+      "name": "O1",
+      "amplitude_cm": 19.76645290851593,
+      "phase_deg": 21.693586349487305
+    },
+    {
+      "name": "Q1",
+      "amplitude_cm": 4.051737114787102,
+      "phase_deg": 11.413406372070312
+    },
+    {
+      "name": "M1",
+      "amplitude_cm": 1.1127419769763947,
+      "phase_deg": 298.9387512207031
+    },
+    {
+      "name": "M4",
+      "amplitude_cm": 0.7439979817718267,
+      "phase_deg": 324.7220153808594
+    },
+    {
+      "name": "Mm",
+      "amplitude_cm": 0.5458020139485598,
+      "phase_deg": 109.69636535644531
+    },
+    {
+      "name": "Mf",
+      "amplitude_cm": 0.46372399665415287,
+      "phase_deg": 121.0964126586914
+    },
+    {
+      "name": "Sa",
+      "amplitude_cm": 9.71750095486641,
+      "phase_deg": 160.07643127441406
+    },
+    {
+      "name": "Ssa",
+      "amplitude_cm": 0.8710079826414585,
+      "phase_deg": 232.68873596191406
+    },
+    {
+      "name": "T2",
+      "amplitude_cm": 1.3092409819364548,
+      "phase_deg": 239.11416625976562
+    },
+    {
+      "name": "J1",
+      "amplitude_cm": 1.2246820144355297,
+      "phase_deg": 57.62503433227539
+    },
+    {
+      "name": "L2",
+      "amplitude_cm": 1.589198037981987,
+      "phase_deg": 242.73519897460938
+    },
+    {
+      "name": "R2",
+      "amplitude_cm": 0.5233759991824627,
+      "phase_deg": 78.15516662597656
+    },
+    {
+      "name": "2Q1",
+      "amplitude_cm": 0.5406369920819998,
+      "phase_deg": 6.497485160827637
+    },
+    {
+      "name": "MSf",
+      "amplitude_cm": 0.18702599918469787,
+      "phase_deg": 62.30699920654297
+    },
+    {
+      "name": "MNS2",
+      "amplitude_cm": 0.34976101014763117,
+      "phase_deg": 244.64556884765625
+    },
+    {
+      "name": "M3",
+      "amplitude_cm": 1.1721939779818058,
+      "phase_deg": 96.66574096679688
+    },
+    {
+      "name": "mu2",
+      "amplitude_cm": 1.3493379577994347,
+      "phase_deg": 249.832763671875
+    },
+    {
+      "name": "nu2",
+      "amplitude_cm": 1.384586002677679,
+      "phase_deg": 229.35418701171875
+    },
+    {
+      "name": "lambda2",
+      "amplitude_cm": 0.46860501170158386,
+      "phase_deg": 236.96458435058594
+    },
+    {
+      "name": "MN4",
+      "amplitude_cm": 0.21564699709415436,
+      "phase_deg": 229.8682403564453
+    },
+    {
+      "name": "MS4",
+      "amplitude_cm": 0.11398800415918231,
+      "phase_deg": 280.401611328125
+    },
+    {
+      "name": "MKS2",
+      "amplitude_cm": 0.38112299516797066,
+      "phase_deg": 3.6303980350494385
+    },
+    {
+      "name": "M6",
+      "amplitude_cm": 0.08450599852949381,
+      "phase_deg": 351.3921203613281
+    },
+    {
+      "name": "S4",
+      "amplitude_cm": 0.4046129994094372,
+      "phase_deg": 104.05158996582031
+    },
+    {
+      "name": "OO1",
+      "amplitude_cm": 0.7781039923429489,
+      "phase_deg": 79.88896942138672
+    },
+    {
+      "name": "rho1",
+      "amplitude_cm": 0.757056986913085,
+      "phase_deg": 10.818909645080566
+    },
+    {
+      "name": "sigma1",
+      "amplitude_cm": 0.6019290070980787,
+      "phase_deg": 189.02120971679688
+    },
+    {
+      "name": "2SM2",
+      "amplitude_cm": 0.11201800080016255,
+      "phase_deg": 77.61500549316406
+    },
+    {
+      "name": "2MS6",
+      "amplitude_cm": 0.10071200085803866,
+      "phase_deg": 29.881093978881836
+    }
+  ],
+  "source": {
+    "name": "TICON-4 東京（実測潮位由来）",
+    "url": "https://www.seanoe.org/data/00980/109129/",
+    "note": "Neaps tide database (https://github.com/openwatersio/tide-database). Source: Hart-Davis, M., Dettmering, D., Seitz, F. (2025), TICON-4: TIdal CONstants based on GESLA-4 sea-level records, SEANOE, https://doi.org/10.17882/109129. Licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Modified: see https://github.com/openwatersio/tide-database#modifications-to-source-data ゲームでは37/50分潮を使用（名称・単位を変換、未対応の微小分潮を省略）。潮位0cmは平均海面で、気象庁潮位表の基準面とは異なります。東京は2020年の公式表16日で潮位変動と干潮時刻を検証。横須賀は公式表との照合未実施。気象・高潮は含みません。"
+  }
+}

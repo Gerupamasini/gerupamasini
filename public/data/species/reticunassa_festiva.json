@@ -1,0 +1,46 @@
+{
+  "id": "reticunassa_festiva",
+  "names": { "ja": "アラムシロ", "sci": "Reticunassa festiva", "en": "Festive nassa" },
+  "taxon": { "group": "mollusc", "family": "Nassariidae" },
+  "locomotion": "walk",
+  "aquatic": true,
+  "collectable": true,
+  "protected": false,
+  "model": { "modelLength_mm": 12, "viewDistance_m": 8, "driver": "aramushiro" },
+  "size": {
+    "length_mm": { "min": 6, "max": 16, "mean": 11, "sd": 2 },
+    "weightCoef": { "a": 0.0003, "b": 3.0 }
+  },
+  "sex": { "maleRatio": 0.5, "dimorphic": false },
+  "stages": [
+    { "id": "juvenile", "ja": "稚貝", "maxLength_mm": 7 },
+    { "id": "adult", "ja": "成貝" }
+  ],
+  "traits": [
+    { "id": "large", "ja": "大型個体", "when": "length_pct>=90" },
+    { "id": "small", "ja": "小型個体", "when": "length_pct<=10" }
+  ],
+  "variation": { "scaleFromLength": true },
+  "spawn": [
+    {"tags": ["small_pool", "pool", "shallow"], "substrate": ["sand", "muddy_sand", "mud"], "depth_m": [0.015, 0.5], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 3.5, "group": [3, 7], "maxPopulation": 55},
+    {"tags": ["bare"], "depth_m": [0.015, 0.7], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 2, "group": [2, 5], "maxPopulation": 55},
+    {"tags": ["small_pool", "pool", "shallow"], "substrate": ["sand", "muddy_sand", "mud"], "depth_m": [0.015, 0.5], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 3.5, "group": [3, 7], "maxPopulation": 55},
+    {"tags": ["channel"], "substrate": ["channel"], "depth_m": [0.05, 0.6], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 1.5, "group": [2, 5], "maxPopulation": 55}
+  ],
+  "brain": { "tree": "snail_crawl", "params": { "fleeDistance_m": 0.35, "restMean_s": 10 } },
+  "capture": { "tools": ["net_small", "net_shallow", "net_fine", "net_deep", "net_dframe", "net_carbon"], "baseDifficulty": 0.05, "alertPenalty": 0.05 },
+  "encyclopedia": {
+    "description": "砂泥底の干潟や浅瀬にすむ小さな巻貝で、殻は高さ 1cm ほど。白い縦肋を褐色の螺溝が刻んで粒を並べた、むしろ目のような殻をもつ。殻口の外唇は厚く、内側に歯がある。死んだ貝や魚の腐肉を好み、長い水管で水の匂いを探って流れの上手へたどり、長い吻を伸ばして食べる。ふだんは砂に潜って水管だけを出し、匂いがすると一斉に出てきて集まる。",
+    "habitatHint": "潮干狩り帯の浅い水たまりや水際。潰れたアサリなどの腐肉に群がっていることが多い。砂から水管だけ出していることもある。",
+    "behaviors": [
+      { "id": "rest", "ja": "静止", "hint": "じっとしている" },
+      { "id": "crawl", "ja": "這う", "hint": "広い足を前へ伸ばし、殻を引き寄せながら進む" },
+      { "id": "siphon_search", "ja": "匂いを探る", "hint": "水管を大きく振って水の匂いを探る" },
+      { "id": "feed", "ja": "腐肉を食べる", "hint": "腐肉に群がり、長い吻を差し込んで食べる" },
+      { "id": "bury", "ja": "砂に潜る", "hint": "殻を左右に揺すって潜り、水管だけを砂の上に出す" },
+      { "id": "withdraw", "ja": "殻に引っ込む", "hint": "触れそうになると殻の中へ隠れ、蓋を閉じる" },
+      { "id": "emerge", "ja": "出てくる", "hint": "足から先に出て、殻を起こして這い出す" }
+    ],
+    "placeholderModel": false
+  }
+}

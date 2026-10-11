@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><title>図鑑の静止画像撮影</title>
+<style>body{margin:0;background:#111416}canvas{display:block;width:640px;height:400px}</style>
+<canvas id="plate" width="640" height="400"></canvas>
+<script type="module">
+  import { ModelPreview } from '../../src/ui/zukan/ModelPreview.ts';
+  import { SpeciesSchema } from '../../src/data/schemas/index.ts';
+  const preview = new ModelPreview(document.querySelector('canvas'), 'high');
+  const manifest = await fetch(`${import.meta.env.BASE_URL}data/manifest.json`).then(r => r.json());
+  window.photoStudio = {
+    species: manifest.species,
+    async show(id) {
+      const species = SpeciesSchema.parse(await fetch(`${import.meta.env.BASE_URL}data/species/${id}.json`).then(r => r.json()));
+      await preview.show(species, species.model.clips.idle);
+      preview.controls.autoRotate = false;
+      preview.resize();
+      return species.names.ja;
+    }
+  };
+</script></html>

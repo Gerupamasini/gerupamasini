@@ -1,0 +1,58 @@
+{
+  "id": "hashirimizu",
+  "names": {
+    "ja": "走水",
+    "en": "Hashirimizu"
+  },
+  "station": "jma_yokosuka",
+  "origin": {
+    "lat": 35.2472,
+    "lon": 139.7388
+  },
+  "size_m": 96,
+  "seed": 20261006,
+  "resolution": 385,
+  "height": {
+    "file": "hashirimizu/height.png",
+    "min_tp_m": -4.2,
+    "max_tp_m": 3.4
+  },
+  "substrate": {
+    "file": "hashirimizu/substrate.png",
+    "palette": [
+      "sand",
+      "muddy_sand",
+      "mud",
+      "gravel",
+      "channel"
+    ]
+  },
+  "spawnStart": {
+    "x": -27.5,
+    "z": 2,
+    "heading": 270
+  },
+  "bounds": {
+    "walkable": [
+      [
+        -31.6,
+        -40
+      ],
+      [
+        47,
+        40
+      ]
+    ],
+    "noEntry": []
+  },
+  "props": [],
+  "layout": "hashirimizu",
+  "wading": {
+    "gear": "waders",
+    "maxDepth_m": 1.0
+  },
+  "habitat": {
+    "coarse_m": 2,
+    "minSpawnDist_m": 4
+  }
+}

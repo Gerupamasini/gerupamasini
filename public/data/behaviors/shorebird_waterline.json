@@ -1,0 +1,23 @@
+{
+  "id": "shorebird_waterline",
+  "tickHz": { "near": 5, "mid": 2, "far": 1 },
+  "root": { "type": "selector", "children": [
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$fleeDistance_m" } },
+      { "type": "action", "name": "flee", "args": { "distance_m": 30, "urgency": 1, "param": "flight" }, "interrupt": true }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "player_within", "args": { "m": "$runDistance_m" } },
+      { "type": "action", "name": "flee", "args": { "distance_m": 10, "urgency": 0.6, "param": "run" }, "interrupt": true }
+    ]},
+    { "type": "sequence", "children": [
+      { "type": "condition", "name": "submerged", "args": {} },
+      { "type": "action", "name": "move_to_waterline", "args": { "distance_m": 12 } }
+    ]},
+    { "type": "random", "weights": [0.5, 0.3, 0.2], "children": [
+      { "type": "action", "name": "forage", "args": { "seconds": [4, 10] } },
+      { "type": "action", "name": "wander", "args": { "distance_m": [2, 8], "stayNearHome_m": 30, "alongWaterline": true } },
+      { "type": "action", "name": "display", "args": { "param": "alert", "seconds": [2, 5] } }
+    ]}
+  ]}
+}

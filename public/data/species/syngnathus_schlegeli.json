@@ -1,0 +1,207 @@
+{
+  "id": "syngnathus_schlegeli",
+  "names": {
+    "ja": "ヨウジウオ",
+    "sci": "Syngnathus schlegeli",
+    "en": "Seaweed pipefish"
+  },
+  "taxon": {
+    "group": "fish",
+    "family": "Syngnathidae"
+  },
+  "locomotion": "swim",
+  "collectable": true,
+  "protected": false,
+  "model": {
+    "placeholder": "youjiuo",
+    "modelLength_mm": 200,
+    "viewDistance_m": 12,
+    "driver": "youjiuo",
+    "clips": {
+      "idle": "Idle",
+      "move": "Swim",
+      "special": []
+    }
+  },
+  "size": {
+    "length_mm": {
+      "min": 90,
+      "max": 280,
+      "mean": 175,
+      "sd": 35
+    },
+    "weightCoef": {
+      "a": 5.6e-07,
+      "b": 3.0
+    }
+  },
+  "sex": {
+    "maleRatio": 0.5,
+    "dimorphic": false
+  },
+  "stages": [
+    {
+      "id": "young",
+      "ja": "幼魚",
+      "maxLength_mm": 110
+    },
+    {
+      "id": "adult",
+      "ja": "成魚"
+    }
+  ],
+  "traits": [
+    {
+      "id": "large",
+      "ja": "大型個体",
+      "when": "length_pct>=90"
+    },
+    {
+      "id": "small",
+      "ja": "小型個体",
+      "when": "length_pct<=10"
+    }
+  ],
+  "variation": {
+    "scaleFromLength": true
+  },
+  "spawn": [
+    {
+      "tags": [
+        "eelgrass"
+      ],
+      "depth_m": [
+        0.25,
+        2.2
+      ],
+      "season": [
+        "spring",
+        "summer",
+        "autumn"
+      ],
+      "tide": "any",
+      "maps": [
+        "hashirimizu"
+      ],
+      "density_per_100m2": 3,
+      "group": [
+        1,
+        2
+      ],
+      "maxPopulation": 14,
+      "length_mm": [
+        110,
+        260
+      ]
+    },
+    {
+      "tags": [
+        "eelgrass_edge"
+      ],
+      "depth_m": [
+        0.25,
+        2.2
+      ],
+      "season": [
+        "spring",
+        "summer",
+        "autumn"
+      ],
+      "tide": "any",
+      "maps": [
+        "hashirimizu"
+      ],
+      "density_per_100m2": 1.2,
+      "group": [
+        1,
+        1
+      ],
+      "maxPopulation": 6,
+      "length_mm": [
+        90,
+        200
+      ]
+    },
+    {
+      "tags": [
+        "eelgrass"
+      ],
+      "depth_m": [
+        0.4,
+        2.2
+      ],
+      "season": [
+        "winter"
+      ],
+      "tide": "any",
+      "maps": [
+        "hashirimizu"
+      ],
+      "density_per_100m2": 1,
+      "group": [
+        1,
+        1
+      ],
+      "maxPopulation": 5,
+      "length_mm": [
+        130,
+        270
+      ]
+    }
+  ],
+  "brain": {
+    "tree": "pipefish_grass",
+    "params": {
+      "fleeDistance_m": 0.9,
+      "holdMean_s": 22,
+      "cruiseDistance_m": [
+        0.25,
+        0.9
+      ]
+    }
+  },
+  "capture": {
+    "tools": [
+      "net_small",
+      "net_shallow",
+      "net_fine",
+      "net_deep",
+      "net_dframe",
+      "net_carbon"
+    ],
+    "baseDifficulty": 0.42,
+    "alertPenalty": 0.35
+  },
+  "encyclopedia": {
+    "description": "アマモ場に暮らすヨウジ（楊枝）のように細長い魚。体は骨質の環（体輪）が連なった鎧で、胴は七角形、尾は四角形の断面をもち、ほとんど曲がらない。頭の先は長い筒状の吻で、その先端の小さな口でカイアシ類やヨコエビなどの小さな甲殻類を吸い込む。獲物に静かに近づき、頭を一瞬ではね上げて吻を寄せ、吻をふくらませて吸い込む（ピボット摂餌）。泳ぐときは体をくねらせず、背びれを毎秒十数〜二十数回ふるわせて静かに進む。アマモの葉に体を沿わせ、葉といっしょに揺れて身を隠す。体色は緑・褐色・黄褐色などさまざまで、白い小点や帯が入る。雄は尾の腹側の育児嚢で卵を育てる。",
+    "habitatHint": "アマモ場の中。葉の根元近くで、葉に沿って揺れている。",
+    "behaviors": [
+      {
+        "id": "idle_hover",
+        "ja": "中層での静止",
+        "hint": "背びれを小刻みにふるわせてその場にとどまる"
+      },
+      {
+        "id": "slow_swim",
+        "ja": "ゆっくり泳ぐ",
+        "hint": "体をほとんど曲げず背びれで進む"
+      },
+      {
+        "id": "grass_hold",
+        "ja": "アマモに沿う",
+        "hint": "葉に体を沿わせ、尾を軽くかけて葉と揺れる"
+      },
+      {
+        "id": "strike",
+        "ja": "ピボット摂餌",
+        "hint": "小さな獲物に近づき、頭をはね上げて吸い込む"
+      },
+      {
+        "id": "escape",
+        "ja": "草陰へ逃げる",
+        "hint": "近づくと向きを変えてアマモの中へ逃げ込む"
+      }
+    ],
+    "placeholderModel": false
+  }
+}
