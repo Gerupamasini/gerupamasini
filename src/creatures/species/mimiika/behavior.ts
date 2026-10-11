@@ -160,6 +160,7 @@ export function createSquidBehavior(opts: SquidOptions) {
   const fx: FxEvent[] = [];
   const P = emptyPose();
   const fwd = new Vector3(), right = new Vector3(), _v = new Vector3(), _w = new Vector3(), _q = new Quaternion(), _e = new Euler(0, 0, 0, 'YXZ');
+  const _qh = new Quaternion(), _qh2 = new Quaternion(), _ax = new Vector3(1, 0, 0), _ay = new Vector3(0, 1, 0);
 
   const ground = (x: number, z: number) => world.ground(x, z);
   const canBurrow = () => world.canBurrow?.() !== false;
@@ -892,12 +893,14 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
     an.eyeT -= dt;
     if (an.eyeT <= 0) {
       an.eyeT = rand(0.6, 2.5);
-      for (const o of an.eyeOff) o.set(rand(-0.25, 0.25), rand(-0.15, 0.2), rand(-0.25, 0.25));
+      // (small saccades: the lids' opening is low)
+      for (const o of an.eyeOff) o.set(rand(-0.12, 0.12), rand(-0.04, 0.05), rand(-0.12, 0.12));
     }
     const th = world.threat?.();
     const look = an.eyeLook ?? (th && (st.mode === 'ESCAPE' || st.fear > 0.2 || (st.mode === 'REST' && st.phase === 'freeze')) ? th.pos : null);
+    // (into the head's frame: the body's turn, then the head's own on the neck)
     _e.set(-st.pitch, st.heading, st.roll);
-    _q.setFromEuler(_e).invert();
+    _q.setFromEuler(_e).multiply(_qh.setFromAxisAngle(_ax, -P.headPitch)).multiply(_qh2.setFromAxisAngle(_ay, P.headYaw)).invert();
     for (let i = 0; i < 2; i++) {
       const g = P.eyes[i];
       if (look) {
@@ -907,9 +910,10 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
     }
     // the pupil: a thin slit by day (a bar when it watches, nearly shut buried), a broad oval at night
     P.pupil = damp(P.pupil, st.night ? (st.mode === 'HUNT' ? 0.95 : 0.85) : st.bury > 0.6 ? 0.06 : st.mode === 'HUNT' ? 0.3 : 0.15, 1.5, dt);
-    // the lids: narrowed resting by day and buried, opening as it hovers and hunts, wide open at night and in alarm
-    const lidGoal = st.mode === 'ESCAPE' || st.fear > 0.2 ? 1 : st.night ? 0.85 : st.mode === 'HUNT' ? 0.75 : st.mode === 'HOVER' || st.mode === 'SWIM' ? 0.5 : st.bury > 0.6 ? 0.15 : 0.35;
-    P.lid = damp(P.lid, lidGoal, 2.5, dt);
+    // the lids: half open resting by day and buried, opening as it hovers and hunts, wide open at night and in alarm (fast)
+    // (buried, it watches with the lids half open: 16)
+    const lidGoal = st.mode === 'ESCAPE' || st.fear > 0.2 ? 1 : st.night ? 0.85 : st.mode === 'HUNT' ? 0.75 : st.mode === 'HOVER' || st.mode === 'SWIM' ? 0.55 : st.bury > 0.6 ? 0.5 : 0.45;
+    P.lid = damp(P.lid, lidGoal, lidGoal > P.lid + 0.3 ? 8 : 2.5, dt);
     // ---- burial, sand
     P.bury = st.bury;
     P.sandCoat = st.sandCoat;

@@ -118,6 +118,9 @@ export class MimiikaDriver implements Driver {
     u.uHeadCover.value = P.headCover;
     u.uPupil.value = P.pupil;
     u.uLid.value = P.lid;
+    // the far tier's balls take the lid skin's mean colour
+    const k = Math.min(1, Math.max(0, 0.8 * P.chroma.r + 0.3 * P.chroma.b));
+    u.uLidCol.value.setRGB(0.42 + (0.13 - 0.42) * k, 0.38 + (0.045 - 0.38) * k, 0.36 + (0.03 - 0.36) * k);
   }
 
   attach(root: Object3D, individual: Individual): void {

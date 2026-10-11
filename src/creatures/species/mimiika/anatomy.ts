@@ -107,7 +107,8 @@ export const CAVITY_Z = -6.2;
  * sides, their tops on the head's outline (the two dorsolateral humps of a front view), the skin pulled tight over
  * them. Centre (mm, the left one; the right mirrors x), the ball's radius, the lid skin over it, how deep inside the
  * head the skin is projected onto the dome from (socketPush), the fillet where the dome leaves the head, and the
- * resting gaze, which is the axis of the lids' opening: sideways, 14.5° forward and 7° down.
+ * resting gaze, which is the axis of the lids' opening: sideways, 10° forward and 2° down (photograph 29, taken level;
+ * from above, 11 and 19 make it look lower).
  */
 export const EYE = {
   z: 2.6,
@@ -117,7 +118,7 @@ export const EYE = {
   skin: 0.13,
   deep: 3.0,
   fillet: 0.8,
-  gaze: [0.9607, -0.1201, 0.2502] as [number, number, number],
+  gaze: [0.98421, -0.0349, 0.17354] as [number, number, number],
 };
 
 /** the lids' frame of the left eye (neck frame): A the opening's axis, U up across it, F forward across it */
@@ -165,6 +166,8 @@ export function surfacePoint(z: number, theta: number, K: ProfileKnot[] = PROFIL
   const e = 2.3;
   const se = Math.sign(s) * Math.pow(Math.abs(s), 2 / e), ce = Math.sign(c) * Math.pow(Math.abs(c), 2 / e);
   let x = p.w * se, y = p.h * ce * (c < 0 ? BELLY_FLAT : 1);
+  // the head's top sinks a little between the eyes' domes (the two humps of a front view: 10, 16, 47)
+  y -= 0.6 * Math.exp(-(((z - 1.6) / 1.1) ** 2)) * Math.pow(Math.max(c, 0), 8);
   return z > -2.5 ? socketPush([x, p.c + y, z]) : [x, p.c + y, z];
 }
 

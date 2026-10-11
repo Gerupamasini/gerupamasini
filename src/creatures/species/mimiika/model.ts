@@ -37,7 +37,8 @@ export function mimiikaGeometry(t: 0 | 1 | 2): TierGeometry {
   if (lod.funnel) parts.push(['Funnel', buildFunnel(rig, lod), 'skin']);
   parts.push(['Fin_L', buildFin(rig, lod, 1), 'fin'], ['Fin_R', buildFin(rig, lod, -1), 'fin'], ['Arms', buildArms(rig, lod), 'skin']);
   if (lod.tentacles) parts.push(['Tentacles', buildTentacles(rig, lod), 'skin']);
-  const g = { parts, eye: buildEye(lod, Math.min(EYE.r, body.domeMin - 0.03)), cornea: buildCornea(lod) };
+  // the ball just under the tier's skin; on the far tier, whose head is too coarse to bulge over it, the ball is the dome
+  const g = { parts, eye: buildEye(lod, t === 2 ? EYE.r + EYE.skin : Math.min(EYE.r, body.domeMin - 0.03)), cornea: buildCornea(lod) };
   TIERS[t] = g;
   return g;
 }
@@ -71,7 +72,7 @@ const SPHERE = new Sphere(new Vector3(0, 0, 0), 0.035);
  *   └── MimiIkaLOD
  *       ├── LOD0: Viscera (seen through the mantle), Mantle, Head, Funnel, Fin_L, Fin_R, Arms, Tentacles
  *       ├── LOD1: the same, coarser
- *       └── LOD2: Mantle, Head, Fin_L, Fin_R, Arms (no funnel, no tentacles; the eyes painted on the lids' openings)
+ *       └── LOD2: Mantle, Head, Fin_L, Fin_R, Arms (no funnel, no tentacles, no corneas; the balls stand for the domes)
  */
 export function buildModel(look: MimiikaLook, tiers: (0 | 1 | 2)[] = [0, 1, 2]): MimiikaModel {
   const rig = mimiikaRig();
@@ -127,14 +128,14 @@ export function buildModel(look: MimiikaLook, tiers: (0 | 1 | 2)[] = [0, 1, 2]):
     // (mirrored, so that the iris's front and back come out right on both sides)
     if (mirror) e.scale.x = -1;
     e.onBeforeRender = headFrame;
-    e.visible = tiers[0] !== 2;
     bones[bone].add(e);
     return e;
   };
   const eyes: [Mesh, Mesh] = [mk('Eye_L', 'J_eye_L', false), mk('Eye_R', 'J_eye_R', true)];
   const cornea = new Mesh(g0.cornea ?? undefined, look.cornea);
   cornea.name = 'Cornea';
-  cornea.renderOrder = 3;
+  // (after the skin, before the fins)
+  cornea.renderOrder = 1;
   cornea.frustumCulled = false;
   cornea.visible = g0.cornea !== null;
   head.add(cornea);
@@ -147,8 +148,8 @@ export function syncLevel(m: MimiikaModel, level: number, tentaclesOut: boolean)
     m.level = level;
     const t = m.tiers[Math.min(level, m.tiers.length - 1)];
     const g = mimiikaGeometry(t);
-    // (the far tier paints its eyes on the lids: no balls, no corneas)
-    for (const e of m.eyes) { e.geometry = g.eye; e.material = t === 2 ? m.look.eyesLow : m.look.eyes; e.visible = t !== 2; }
+    // (the far tier has no corneas)
+    for (const e of m.eyes) { e.geometry = g.eye; e.material = t === 2 ? m.look.eyesLow : m.look.eyes; }
     if (g.cornea) m.cornea.geometry = g.cornea;
     m.cornea.visible = g.cornea !== null;
   }

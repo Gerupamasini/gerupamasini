@@ -52,7 +52,7 @@ export function emptyPose(): Pose {
     armCurl: new Float32Array(ARMS.length * ARM_BONES), armSwing: new Float32Array(ARMS.length * ARM_BONES),
     ten: [0, 1].map(() => ({ ext: 0, aim: new Vector3(0, 0, 1), aimW: 0, curl: 0 })),
     finFold: [0, 0], finAmp: [0, 0], finPh: [0, 0], finK: 1, mantle: 1, funnelPitch: 0, funnelYaw: 0,
-    eyes: [new Vector3(...EYE.gaze).normalize(), new Vector3(-EYE.gaze[0], EYE.gaze[1], EYE.gaze[2]).normalize()], pupil: 0.15, lid: 0.35,
+    eyes: [new Vector3(...EYE.gaze).normalize(), new Vector3(-EYE.gaze[0], EYE.gaze[1], EYE.gaze[2]).normalize()], pupil: 0.15, lid: 0.45,
     bury: 0, sandCoat: 0, headCover: 0, chroma: { y: 0.5, r: 0.5, b: 0.4, mottle: 0.3, irid: 0.6, pale: 0 }, lift: 0,
   };
 }
@@ -81,16 +81,22 @@ const AX = new Vector3(1, 0, 0), AY = new Vector3(0, 1, 0), AZ = new Vector3(0, 
 const restQ = (b: Bone) => (b.userData.rest as { quat: Quaternion }).quat;
 const restP = (b: Bone) => (b.userData.rest as { pos: Vector3 }).pos;
 
-/** the eye bone's orientation for a gaze `dir` (head frame), held within 0.5 rad of its resting gaze */
-function aimEye(b: Bone, dir: Vector3): void {
-  const g0 = _v.set(0, 0, 1).applyQuaternion(restQ(b));
-  const ang = g0.angleTo(dir);
-  const d = _x.copy(dir);
-  // (the ball turns at most 0.35 rad behind the lids' opening: its iris always fills it)
-  if (ang > 0.35) d.copy(g0).lerp(dir, 0.35 / ang).normalize();
-  const z = d.normalize();
-  const xx = _y.crossVectors(AY, z).normalize();
-  const yy = new Vector3().crossVectors(z, xx);
+const _g0 = new Vector3(), _gx = new Vector3(), _gy = new Vector3(), _up = new Vector3(), _hq = new Quaternion(), _hp = new Vector3(), _hs = new Vector3();
+/**
+ * The eye bone's orientation for a gaze `dir` (head frame): within ±0.3 rad sideways and ±0.1 rad up and down of its
+ * resting gaze (the iris must fill the lids' opening, which is low), and rolled against the head's tilt so that the slit
+ * of the pupil stays level (the statocysts: 19, 20, 32). `up` is the world's up in the head frame.
+ */
+function aimEye(b: Bone, dir: Vector3, up: Vector3): void {
+  const g0 = _g0.set(0, 0, 1).applyQuaternion(restQ(b));
+  const gx = _gx.crossVectors(AY, g0).normalize(), gy = _gy.crossVectors(g0, gx);
+  const yaw = Math.max(-0.3, Math.min(0.3, Math.atan2(dir.dot(gx), dir.dot(g0))));
+  const pitch = Math.max(-0.1, Math.min(0.1, Math.atan2(dir.dot(gy), Math.hypot(dir.dot(gx), dir.dot(g0)))));
+  const z = _x.copy(g0).multiplyScalar(Math.cos(pitch) * Math.cos(yaw)).addScaledVector(gx, Math.cos(pitch) * Math.sin(yaw)).addScaledVector(gy, Math.sin(pitch)).normalize();
+  const xx = _y.crossVectors(up, z);
+  if (xx.lengthSq() < 1e-8) xx.crossVectors(AY, z);
+  xx.normalize();
+  const yy = _v.crossVectors(z, xx);
   _m.makeBasis(xx, yy, z);
   b.quaternion.setFromRotationMatrix(_m);
 }
@@ -141,7 +147,11 @@ export function applyPose(root: Object3D, bones: Record<string, Bone>, P: Pose):
   // and its valve draws it in a little as the mantle fills
   const sF = Math.max(0.93, Math.min(1.25, 1 + 1.6 * (1 - P.mantle)));
   f.scale.set(sF, sF, 1);
-  aimEye(bones.J_eye_L, P.eyes[0]);
-  aimEye(bones.J_eye_R, P.eyes[1]);
+  // the world's up in the head's frame (for the eyes' counter-roll)
+  bones.J_head.updateWorldMatrix(true, false);
+  bones.J_head.matrixWorld.decompose(_hp, _hq, _hs);
+  _up.set(0, 1, 0).applyQuaternion(_hq.invert());
+  aimEye(bones.J_eye_L, P.eyes[0], _up);
+  aimEye(bones.J_eye_R, P.eyes[1], _up);
   root.updateMatrixWorld(true);
 }
