@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Matrix4, Vector3 } from 'three';
 import {
   ARMS, ARM_BONES, CAVITY_Z, EYE, FIN, FUNNEL, HEAD_PROFILE, PROFILE, TENTACLE, TENTACLE_BONES, Z_FRONT, Z_TIP,
-  armBase, finBase, finEdge, funnelSection, mantleRim, profileAt, surfacePoint, tentacleBase, toModel, type ArmDef, type ProfileKnot,
+  Z_ROOT, armBase, finBase, finEdge, funnelSection, lidFrame, mantleRim, profileAt, surfacePoint, tentacleBase, toModel, type ArmDef, type ProfileKnot,
 } from './anatomy';
 
 /**
@@ -188,7 +188,7 @@ function surf(z: number, th: number, K: ProfileKnot[], zLo: number, zHi: number)
  *   Head    the visceral sac inside the cavity, the neck, the head with the eye sockets and the arm crown; narrower
  *           than the mantle's opening, so the cavity shows as a dark gap round the neck with the funnel coming out
  */
-export function buildBody(rig: RigDef, t: Tier): { mantle: BufferGeometry; head: BufferGeometry } {
+export function buildBody(rig: RigDef, t: Tier): { mantle: BufferGeometry; head: BufferGeometry; domeMin: number } {
   const head = rig.byName.J_head, root = rig.byName.J_root;
   const cols = t.around + 1;
   // ---- the mantle
@@ -249,13 +249,35 @@ export function buildBody(rig: RigDef, t: Tier): { mantle: BufferGeometry; head:
     for (let j = 0; j < cols; j++) {
       const th = -Math.PI + (2 * Math.PI * j) / t.around;
       const S = surf(z, th, HEAD_PROFILE, -7.6, Z_FRONT);
-      // the head (and arms) turn on the neck; the sac inside the mantle stays with the root
-      const wh = smooth(-0.2, 3.0, z);
+      // the head (and arms) turn on the neck; the sac inside the mantle stays with the root; the skin of the eye's dome
+      // turns with the head as one piece (the ball under it is rigid on the head)
+      const dEye = Math.hypot(S.p.x - EYE.x * Math.sign(S.p.x || 1), S.p.y - EYE.y, S.p.z - EYE.z) - (EYE.r + EYE.skin);
+      const wh = Math.max(smooth(-0.2, 3.0, z), 1 - smooth(0.25, 1.5, dEye));
       hb.vert(M([S.p.x, S.p.y, S.p.z]), S.n, [j / t.around, (z + 7.6) / (Z_FRONT + 7.6)], [1, 0, 0, S.c], [[root, 1 - wh], [head, wh]]);
     }
   }
   hb.grid(0, zs.length, cols, false);
-  return { mantle: mb.build(), head: hb.build() };
+  return { mantle: mb.build(), head: hb.build(), domeMin: domeMin(hb) };
+}
+
+/**
+ * The least distance from the eye's centre to the head's skin over the front of the dome (the triangles' corners,
+ * edge midpoints and centroids: a flat facet sags inside the sphere its corners lie on). The ball must stay under it.
+ */
+function domeMin(b: Builder): number {
+  const C = new Vector3(EYE.x, EYE.y, EYE.z), A = new Vector3(...EYE.gaze).normalize();
+  const Rs = EYE.r + EYE.skin;
+  const P = (i: number) => new Vector3(b.pos[3 * i] * 1000, b.pos[3 * i + 1] * 1000, b.pos[3 * i + 2] * 1000 + Z_ROOT);
+  let best = Infinity;
+  for (let k = 0; k < b.idx.length; k += 3) {
+    const a = P(b.idx[k]), c = P(b.idx[k + 1]), d = P(b.idx[k + 2]);
+    if (a.x <= 0 || c.x <= 0 || d.x <= 0) continue;
+    if (a.distanceTo(C) > 1.5 * Rs || c.distanceTo(C) > 1.5 * Rs || d.distanceTo(C) > 1.5 * Rs) continue;
+    const m = a.clone().add(c).add(d).divideScalar(3);
+    if (m.clone().sub(C).dot(A) <= 0) continue;
+    for (const q of [a, c, d, m, a.clone().lerp(c, 0.5), c.clone().lerp(d, 0.5), d.clone().lerp(a, 0.5)]) best = Math.min(best, q.distanceTo(C));
+  }
+  return best;
 }
 
 /** a tapering tube along a straight rest line, skinned to a chain of bones; `club` widens the far end (the tentacles) */
@@ -508,11 +530,11 @@ export function buildViscera(rig: RigDef, t: Tier): BufferGeometry {
 
 /**
  * The eyeball: a sphere round the optical axis (+z), polar uv (centre of the uv square = the pupil). Its back half sits
- * in the socket; the cornea over it is the skin's transparent window (the shader's clearcoat).
+ * in the socket, under the dome of the lid skin; its radius is the tier's (just under the skin's facets, domeMin).
  */
-export function buildEye(t: Tier): BufferGeometry {
+export function buildEye(t: Tier, rBall = EYE.r): BufferGeometry {
   const pos: number[] = [], nor: number[] = [], uv: number[] = [], idx: number[] = [];
-  const r = EYE.r / 1000;
+  const r = rBall / 1000;
   const W = t.eyeW, H = t.eyeH;
   for (let i = 0; i <= H; i++) {
     const th = (Math.PI * 0.78 * i) / H;   // from the axis back to 140°: the rest is inside the head
@@ -539,3 +561,54 @@ export function buildEye(t: Tier): BufferGeometry {
   return g;
 }
 
+
+/**
+ * The corneas (both eyes in one geometry, in J_head's frame): clear bubbles bulging a little over the lids' opening
+ * (photographs 12, 15, 22, 47: their highlights float above the iris), tucked under the lid skin round it. uv is the
+ * stereographic position on the eye (the lids' frame), so the shader can mask the bubble to the opening. Only on the
+ * two nearer tiers.
+ */
+export function buildCornea(t: Tier): BufferGeometry | null {
+  if (t.eyeW < 20) return null;
+  const nA = Math.round(0.8 * t.eyeW), nR = Math.round(0.45 * t.eyeH);
+  const { A, U, F } = lidFrame();
+  const vA = new Vector3(...A), vU = new Vector3(...U), vF = new Vector3(...F);
+  const Rs = EYE.r + EYE.skin;
+  const H = toModel([0, 0.8, 1.2]);   // J_head's rest position
+  const pos: number[] = [], nor: number[] = [], uv: number[] = [], idx: number[] = [];
+  for (const side of [1, -1] as const) {
+    const first = pos.length / 3;
+    for (let i = 0; i <= nR; i++) {
+      const phi = (0.88 * i) / nR;
+      const q = 1 - (phi / 0.8) ** 2;
+      const rho = phi < 0.8 ? Rs + 0.02 + 0.22 * q * q : Rs - 0.08;
+      const drho = phi < 0.8 ? 0.22 * 2 * q * (-2 * phi / 0.64) : 0;
+      for (let j = 0; j <= nA; j++) {
+        const psi = (2 * Math.PI * j) / nA;
+        const rad = vF.clone().multiplyScalar(Math.cos(psi)).addScaledVector(vU, Math.sin(psi));
+        const dir = vA.clone().multiplyScalar(Math.cos(phi)).addScaledVector(rad, Math.sin(phi));
+        const tPhi = vA.clone().multiplyScalar(-Math.sin(phi)).addScaledVector(rad, Math.cos(phi));
+        const n = dir.clone().addScaledVector(tPhi, -drho / rho).normalize();
+        const p = [EYE.x + dir.x * rho, EYE.y + dir.y * rho, EYE.z + dir.z * rho];
+        const m = toModel([p[0] * side, p[1], p[2]]);
+        pos.push(m[0] - H[0], m[1] - H[1], m[2] - H[2]);
+        nor.push(n.x * side, n.y, n.z);
+        const st = 2 * Math.tan(phi / 2);
+        uv.push(st * Math.cos(psi), st * Math.sin(psi));
+      }
+    }
+    for (let i = 0; i < nR; i++) for (let j = 0; j < nA; j++) {
+      const a = first + i * (nA + 1) + j, b = a + 1, c = a + nA + 1, d = c + 1;
+      // (outward on the left eye; the mirrored right eye winds the other way)
+      if (side > 0) idx.push(a, b, c, b, d, c);
+      else idx.push(a, c, b, b, c, d);
+    }
+  }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array(nor), 3));
+  g.setAttribute('uv', new BufferAttribute(new Float32Array(uv), 2));
+  g.setIndex(idx);
+  g.computeBoundingSphere();
+  return g;
+}

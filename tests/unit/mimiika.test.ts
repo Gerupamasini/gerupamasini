@@ -66,6 +66,23 @@ describe('ミミイカ: the body plan', () => {
     expect(fin.getAttribute('aFin').count).toBe(fin.getAttribute('position').count);
   });
 
+  it('has globe eyes standing out of the head under tight lid skin, the ball never through it', () => {
+    // the globe ≈ 0.29 ML across, its top above the head's dorsal midline (the two humps of a front view)
+    expect((2 * (EYE.r + EYE.skin)) / ML_MM).toBeGreaterThan(0.26);
+    expect((2 * (EYE.r + EYE.skin)) / ML_MM).toBeLessThan(0.32);
+    expect(EYE.y + EYE.r + EYE.skin).toBeGreaterThan(surfacePoint(EYE.z, 0, HEAD_PROFILE)[1] + 0.3);
+    // the skin over the dome is a sphere just round the ball (projected from deep inside the head, so its facets are small)
+    const rig = rigDefinition();
+    const d0 = buildBody(rig, LODS[0]).domeMin, d1 = buildBody(rig, LODS[1]).domeMin;
+    expect(d0).toBeGreaterThan(EYE.r + 0.02);
+    expect(d0).toBeLessThan(EYE.r + EYE.skin + 0.01);
+    expect(d1).toBeGreaterThan(EYE.r - 0.4);
+    // a point of the head at the opening's axis lies on the dome
+    const g = new Vector3(...EYE.gaze).normalize();
+    const onAxis = surfacePoint(EYE.z + g.z * 3, Math.atan2(EYE.x + g.x * 3, EYE.y + g.y * 3), HEAD_PROFILE);
+    expect(Math.hypot(onAxis[0] - EYE.x, onAxis[1] - EYE.y, onAxis[2] - EYE.z)).toBeCloseTo(EYE.r + EYE.skin, 1);
+  });
+
   it('has a funnel that comes out from under the mantle and opens forward under the eyes', () => {
     // the opening: under the eye, about two fifths of its diameter across
     expect(FUNNEL.z1).toBeGreaterThan(EYE.z - EYE.r);

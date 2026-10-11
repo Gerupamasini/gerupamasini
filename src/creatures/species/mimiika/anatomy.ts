@@ -9,12 +9,13 @@
  *             the neck, the mantle cavity behind it with the gills, the funnel coming out of it
  *  - fins     two rounded, ear-like lobes ("ミミ") on the sides at mid-mantle: the base ≈ 0.42 ML long, the free lobe
  *             reaching ≈ 0.3 ML out and a little ahead of and behind its base; thin, clear, sparsely spotted
- *  - head     about as wide as the mantle, its sides taken up by the very large eyes (diameter ≈ 0.26 ML) under a
- *             transparent cornea, a silvery iris and a horizontal kidney-shaped pupil
+ *  - head     about as wide as the mantle, its sides taken up by the very large eyes (globes ≈ 0.29 ML across, their
+ *             tops on the head's outline) behind an almond opening of the lids and a clear cornea, a silvery iris
+ *             and a pupil that is a thin slit by day and a broad oval in the dark
  *  - arms     eight arms (0.45–0.67 ML), the third pair the longest, two rows of stalked suckers on the oral face
  *  - tentacles two long, thin tentacles with a small club, kept in the pockets between arms III and IV and shot out
  *             at prey (≈ 0.9 ML long out)
- *  - funnel   a short white cone under the head
+ *  - funnel   a pale, fleshy tube from the mantle cavity under the head, opening forward under the eyes
  * Frame: x the animal's left, y dorsal, z forward (towards the arms). `z = 0` is the mantle's opening (the neck);
  * the model's origin (the root, near the centre of mass) is at Z_ROOT.
  */
@@ -43,8 +44,8 @@ export const PROFILE: ProfileKnot[] = [
   { z: -3.5, w: 8.4, h: 7.6, c: 0.4 },
   { z: -0.8, w: 7.0, h: 6.2, c: 0.8 },
   { z: 0.6, w: 6.0, h: 5.4, c: 1.0 },
-  { z: 2.4, w: 5.3, h: 5.1, c: 1.1 },
-  { z: 4.4, w: 4.8, h: 4.5, c: 0.8 },
+  { z: 2.4, w: 5.3, h: 4.7, c: 0.7 },
+  { z: 4.4, w: 4.8, h: 4.3, c: 0.6 },
   { z: 6.2, w: 3.9, h: 3.7, c: 0.2 },
   { z: 7.6, w: 3.2, h: 3.0, c: -0.25 },
   { z: 8.4, w: 2.6, h: 2.4, c: -0.45 },
@@ -101,32 +102,56 @@ export function mantleRim(theta: number): { z: number; fused: number; thick: num
 /** how far back the mantle cavity reaches inside (mm, neck frame) */
 export const CAVITY_Z = -6.2;
 
-/** the eyes: centre (mm, the left one; the right mirrors x), radius, and the resting gaze */
+/**
+ * The eyes (photographs 10, 11, 12, 26, 29, 47, 62): near-perfect globes ≈ 0.29 ML across standing out of the head's
+ * sides, their tops on the head's outline (the two dorsolateral humps of a front view), the skin pulled tight over
+ * them. Centre (mm, the left one; the right mirrors x), the ball's radius, the lid skin over it, how deep inside the
+ * head the skin is projected onto the dome from (socketPush), the fillet where the dome leaves the head, and the
+ * resting gaze, which is the axis of the lids' opening: sideways, 14.5° forward and 7° down.
+ */
 export const EYE = {
   z: 2.6,
-  x: 4.85,
-  y: 1.7,
-  r: 3.3,
-  /** the socket's skin round the ball (mm beyond its radius), the half angle of the corneal window (rad) */
-  socket: 0.3,
-  window: 0.8,
-  /** outward, a little forward and up */
-  gaze: [0.93, 0.2, 0.3] as [number, number, number],
+  x: 4.95,
+  y: 2.4,
+  r: 3.45,
+  skin: 0.13,
+  deep: 3.0,
+  fillet: 0.8,
+  gaze: [0.9607, -0.1201, 0.2502] as [number, number, number],
 };
 
+/** the lids' frame of the left eye (neck frame): A the opening's axis, U up across it, F forward across it */
+export function lidFrame(): { A: [number, number, number]; U: [number, number, number]; F: [number, number, number] } {
+  const g = EYE.gaze, n = Math.hypot(...g);
+  const A: [number, number, number] = [g[0] / n, g[1] / n, g[2] / n];
+  // x = Y × A (backward on the left eye), U = A × x, F = −x
+  const xl = Math.hypot(A[2], A[0]);
+  const x: [number, number, number] = [A[2] / xl, 0, -A[0] / xl];
+  const U: [number, number, number] = [A[1] * x[2] - A[2] * x[1], A[2] * x[0] - A[0] * x[2], A[0] * x[1] - A[1] * x[0]];
+  return { A, U, F: [-x[0], -x[1], -x[2]] };
+}
+
 /**
- * The eye sockets: near an eye the head's surface is pushed out onto a sphere just round the ball (a smooth maximum,
- * so the bulge grows out of the head without a crease); the skin's window over the cornea is cut in the shader.
+ * The eye sockets: near an eye the head's surface is pushed out onto the dome round the ball. The points are carried
+ * along rays from a centre deep inside the head (EYE.deep towards the midline), so that a wide patch of the head's
+ * mesh covers the dome evenly (from the eye's own centre, just under the skin, the whole dome would come from a few
+ * quads and the ball would show through their facets), with a polynomial smooth maximum for the fillet.
  */
 export function socketPush(p: [number, number, number]): [number, number, number] {
   const sx = p[0] >= 0 ? 1 : -1;
-  const dx = p[0] - EYE.x * sx, dy = p[1] - EYE.y, dz = p[2] - EYE.z;
-  const L = Math.hypot(dx, dy, dz) || 1e-6;
-  const R = EYE.r + EYE.socket, k = 1.6;
-  if (L > R + 3 * k) return p;
-  const Ls = (L + R + Math.sqrt((L - R) * (L - R) + k * k)) / 2;
-  const s = Ls / L;
-  return [EYE.x * sx + dx * s, EYE.y + dy * s, EYE.z + dz * s];
+  const C = [EYE.x * sx, EYE.y, EYE.z], Cp = [C[0] - EYE.deep * sx, C[1], C[2]];
+  const R = EYE.r + EYE.skin, k = EYE.fillet;
+  if (Math.hypot(p[0] - C[0], p[1] - C[1], p[2] - C[2]) > R + 2 * k) return p;
+  const v = [p[0] - Cp[0], p[1] - Cp[1], p[2] - Cp[2]];
+  const tp = Math.hypot(v[0], v[1], v[2]) || 1e-6;
+  const u = v.map((a) => a / tp);
+  const o = [Cp[0] - C[0], Cp[1] - C[1], Cp[2] - C[2]];
+  const b = u[0] * o[0] + u[1] * o[1] + u[2] * o[2], c = o[0] * o[0] + o[1] * o[1] + o[2] * o[2] - R * R;
+  // where the ray from the deep centre leaves the dome (the centre is inside it: c < 0)
+  const th = -b + Math.sqrt(b * b - c);
+  const h = Math.max(k - Math.abs(tp - th), 0) / k;
+  const t = Math.max(tp, th) + (h * h * k) / 4;
+  return [Cp[0] + u[0] * t, Cp[1] + u[1] * t, Cp[2] + u[2] * t];
 }
 
 /** the section's flattening: the belly is a little flatter than the back */

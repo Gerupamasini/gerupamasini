@@ -1,5 +1,5 @@
 import { Bone, Matrix4, Quaternion, Vector3, type Object3D } from 'three';
-import { ARMS, ARM_BONES, TENTACLE_BONES } from './anatomy';
+import { ARMS, ARM_BONES, EYE, TENTACLE_BONES } from './anatomy';
 import { armBone, tenBone, type RigDef } from './geometry';
 
 /**
@@ -34,6 +34,8 @@ export interface Pose {
   /** gaze of each eye (head frame), and how wide the pupils are (0 slit … 1 round) */
   eyes: [Vector3, Vector3];
   pupil: number;
+  /** the lids' opening: 0 narrowed (buried) … 1 wide open */
+  lid: number;
   /** burial (0 … 1), sand stuck on the back, sand thrown over the head */
   bury: number;
   sandCoat: number;
@@ -50,7 +52,7 @@ export function emptyPose(): Pose {
     armCurl: new Float32Array(ARMS.length * ARM_BONES), armSwing: new Float32Array(ARMS.length * ARM_BONES),
     ten: [0, 1].map(() => ({ ext: 0, aim: new Vector3(0, 0, 1), aimW: 0, curl: 0 })),
     finFold: [0, 0], finAmp: [0, 0], finPh: [0, 0], finK: 1, mantle: 1, funnelPitch: 0, funnelYaw: 0,
-    eyes: [new Vector3(0.93, 0.2, 0.3).normalize(), new Vector3(-0.93, 0.2, 0.3).normalize()], pupil: 0.5,
+    eyes: [new Vector3(...EYE.gaze).normalize(), new Vector3(-EYE.gaze[0], EYE.gaze[1], EYE.gaze[2]).normalize()], pupil: 0.15, lid: 0.35,
     bury: 0, sandCoat: 0, headCover: 0, chroma: { y: 0.5, r: 0.5, b: 0.4, mottle: 0.3, irid: 0.6, pale: 0 }, lift: 0,
   };
 }
@@ -84,7 +86,8 @@ function aimEye(b: Bone, dir: Vector3): void {
   const g0 = _v.set(0, 0, 1).applyQuaternion(restQ(b));
   const ang = g0.angleTo(dir);
   const d = _x.copy(dir);
-  if (ang > 0.5) d.copy(g0).lerp(dir, 0.5 / ang).normalize();
+  // (the ball turns at most 0.35 rad behind the lids' opening: its iris always fills it)
+  if (ang > 0.35) d.copy(g0).lerp(dir, 0.35 / ang).normalize();
   const z = d.normalize();
   const xx = _y.crossVectors(AY, z).normalize();
   const yy = new Vector3().crossVectors(z, xx);

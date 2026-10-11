@@ -150,8 +150,8 @@ export function createSquidBehavior(opts: SquidOptions) {
     ten: [0, 0], tenGoal: 0, tenAim: new Vector3(0, -0.1, 1).normalize(), tenAimW: 0,
     eyeT: rand(0.5, 2), eyeOff: [new Vector3(), new Vector3()], eyeLook: null as Vector3 | null,
     pupil: 0.45,
-    ch: { y: 0.75, r: 0.8, b: 0.8, mottle: 0.5, irid: 0.7, pale: 0 },
-    chGoal: { y: 0.75, r: 0.8, b: 0.8, mottle: 0.5, irid: 0.7, pale: 0 },
+    ch: { y: 0.7, r: 0.95, b: 0.45, mottle: 0.45, irid: 0.75, pale: 0 },
+    chGoal: { y: 0.7, r: 0.95, b: 0.45, mottle: 0.45, irid: 0.75, pale: 0 },
     chRate: 2, flash: 0,
   };
 
@@ -349,8 +349,8 @@ export function createSquidBehavior(opts: SquidOptions) {
     arms(0.7, 0.0, 0.28, freeze ? 0.05 : 0.35);
     an.tipCurl = freeze ? 0.6 : 0.85;
     an.headPitch = freeze ? 0.0 : 0.07;
-    if (freeze) chroma(0.85, 0.9, 1.05, 0.85, 0.4, 0, 4);
-    else chroma(0.7, 0.8, 1.0, 0.55, 0.75, 0, 1.5);
+    if (freeze) chroma(0.8, 1.0, 0.75, 0.8, 0.4, 0, 4);
+    else chroma(0.7, 0.95, 0.45, 0.45, 0.75, 0, 1.5);
     if (st.t > st.dur) {
       st.settled = true;
       if (autonomous) choose();
@@ -363,7 +363,7 @@ export function createSquidBehavior(opts: SquidOptions) {
     arms(0.25, 0.3, 0.0, 0.7);
     an.headPitch = -0.08;
     // the hovering dress (photographs 17, 34): yellow-orange ground, red-brown dots, glassy
-    chroma(0.95, 0.65, 0.32, 0.3, 0.8, 0.42, 1.2);
+    chroma(0.95, 0.4, 0.2, 0.3, 0.8, 0.45, 1.2);
     st.vel.multiplyScalar(Math.exp(-dt * 1.5));
     // a slow drift and a lazy turn
     st.vel.x += Math.sin(st.t * 0.37 + pers.wave) * 0.02 * ML * dt;
@@ -405,7 +405,7 @@ export function createSquidBehavior(opts: SquidOptions) {
       if (rng() < dt * 0.35 && an.jetT < 0) { jet(0.06, 0.28); st.vel.addScaledVector(fwd, 0.25 * ML); }
       arms(0.15, 0.2, 0.0, 0.5);
       an.headPitch = -0.04;
-      chroma(0.85, 0.65, 0.5, 0.35, 0.8, 0.3, 1.5);
+      chroma(0.85, 0.5, 0.3, 0.35, 0.8, 0.3, 1.5);
       if (dist < 0.8 * ML) phase('arrive', 1.5);
     } else if (st.phase === 'arrive') {
       st.vel.multiplyScalar(Math.exp(-dt * 2.5));
@@ -423,7 +423,7 @@ export function createSquidBehavior(opts: SquidOptions) {
     if (st.phase === 'descend') { if (descend(dt)) phase('turn', 2); return; }
     st.altGoal = 0;
     finSet(0.22, 3.0, -0.15, 0.05);
-    chroma(0.7, 0.8, 1.0, 0.55, 0.7, 0, 1.5);
+    chroma(0.7, 0.95, 0.45, 0.45, 0.75, 0, 1.5);
     if (st.phase === 'turn') {
       const err = steerTo(tgt, 0.9, dt);
       st.vel.multiplyScalar(Math.exp(-dt * 4));
@@ -464,7 +464,7 @@ export function createSquidBehavior(opts: SquidOptions) {
         st.vel.multiplyScalar(Math.exp(-dt * 5));
         finSet(0.15, 2, -0.4, 0);
         arms(0.65, 0.1, 0.1, 0.2);
-        chroma(0.8, 0.85, 0.95, 0.5, 0.5, 0, 2);
+        chroma(0.75, 0.95, 0.55, 0.5, 0.6, 0, 2);
         if (st.t > st.dur) { phase('blow', rand(2.4, 3.6)); st.pulses = 0; }
         return;
       case 'blow': {
@@ -527,7 +527,7 @@ export function createSquidBehavior(opts: SquidOptions) {
         an.funnelPitch = damp(an.funnelPitch, 0, 2, dt);
         finSet(0.0, 1, -1.0, 0);
         arms(1.45, 0.4, 0.0, 0.04);
-        chroma(0.8, 0.85, 1.0, 0.45, 0.4, 0, 0.6);
+        chroma(0.7, 0.95, 0.6, 0.45, 0.5, 0, 0.6);
         if (st.t > st.dur) {
           st.settled = true;
           if (autonomous) choose();
@@ -551,7 +551,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
       case 'search':
         finSet(0.32, 2.5, 0.18, 0.1);
         arms(0.4, 0.2, 0, 0.6);
-        chroma(0.9, 0.6, 0.3, 0.35, 0.85, 0.45, 1.5);
+        chroma(0.9, 0.45, 0.2, 0.35, 0.85, 0.45, 1.5);
         st.vel.multiplyScalar(Math.exp(-dt * 2));
         st.turn = damp(st.turn, 0.6 * Math.sin(st.t * 1.3), 2, dt);
         st.heading = wrap(st.heading + st.turn * dt);
@@ -565,7 +565,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         an.headPitch = clamp(Math.atan2(-(toP.y), Math.hypot(toP.x, toP.z)) * 0.5, -0.25, 0.25) * -1;
         st.altGoal = clamp(p.pos.y - ground(p.pos.x, p.pos.z) - 0.2 * ML, 0.25 * ML, 1.5 * ML);
         // attention: paler, the chromatophores flickering over the back
-        chroma(0.85, 0.5 + 0.25 * Math.max(0, Math.sin(st.t * 7)), 0.28, 0.6, 0.95, 0.45, 4);
+        chroma(0.85, 0.4 + 0.3 * Math.max(0, Math.sin(st.t * 7)), 0.2, 0.6, 0.95, 0.45, 4);
         if (err < 0.12 && st.t > 0.5) phase('approach', 9);
         break;
       }
@@ -580,7 +580,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         finSet(0.26, 3.2, 0.2, 0.04);
         arms(0.15, 0.48, 0, 0.08);
         an.armRaise[0] = an.armRaise[1] = 0.12;
-        chroma(0.85, 0.5, 0.25, 0.5, 1.0, 0.48, 3);
+        chroma(0.85, 0.4, 0.18, 0.5, 1.0, 0.48, 3);
         // the prey notices a fast approach now and then
         if (dist < reach() * 0.85) phase('strike', 0.11);
         else if (st.t > st.dur) { prey = null; phase('search', 0.5); }
@@ -596,7 +596,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         an.armRaise[0] = an.armRaise[1] = 0.25;
         forward(fwd);
         if (!ambush) st.vel.addScaledVector(fwd, 2.0 * ML * dt / 0.11);
-        chroma(0.6, 0.7, 0.75, 0.3, 0.7, 0.1, 15);
+        chroma(0.6, 0.8, 0.5, 0.3, 0.7, 0.1, 15);
         if (ambush) { st.buryGoal = 0.6; if (st.t < dt * 1.5) sand(st.pos.clone().setY(ground(st.pos.x, st.pos.z) + 0.003 * K), new Vector3(0, 0.04 * K, 0).addScaledVector(fwd, 0.03 * K), 14, 0.008, 0.005, 2, 0.45); }
         if (st.t > st.dur) {
           if (rng() < 0.8 && dist < reach() * 1.3) { p.state = 'caught'; phase(ambush ? 'aeat' : 'capture', 0.35); }
@@ -633,8 +633,8 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         p.pos.copy(toWorld(new Vector3(0, -0.6, CROWN_Z + 3.2), _v));
         p.remains = Math.max(0, 1 - st.t / st.dur);
         arms(0.45, 0.62 + 0.06 * Math.sin(st.t * 9), 0, 0.05);
-        if (st.phase === 'eat') { finSet(0.28, 2.4, 0.15, 0.05); st.altGoal = Math.max(st.altGoal * 0.995, 0.3 * ML); chroma(0.7, 0.75, 0.7, 0.45, 0.7, 0.15, 1.5); }
-        else { st.buryGoal = damp(st.buryGoal, 0.95, 0.8, dt); chroma(0.8, 0.85, 1.0, 0.45, 0.4, 0, 1); }
+        if (st.phase === 'eat') { finSet(0.28, 2.4, 0.15, 0.05); st.altGoal = Math.max(st.altGoal * 0.995, 0.3 * ML); chroma(0.7, 0.9, 0.5, 0.45, 0.75, 0.1, 1.5); }
+        else { st.buryGoal = damp(st.buryGoal, 0.95, 0.8, dt); chroma(0.7, 0.95, 0.6, 0.45, 0.5, 0, 1); }
         if (st.t > st.dur) {
           p.state = 'eaten';
           prey = null;
@@ -648,7 +648,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         st.buryGoal = 1;
         finSet(0, 1, -1.0, 0);
         arms(1.45, 0.4, 0.0, 0.04);
-        chroma(0.8, 0.85, 1.0, 0.45, 0.4, 0, 1);
+        chroma(0.7, 0.95, 0.6, 0.45, 0.5, 0, 1);
         // the mysid drifts by
         if (p.state === 'drift') {
           forward(fwd);
@@ -686,7 +686,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
       case 'startle':
         finSet(0.0, 1, -1.15, 0);
         arms(0.0, 0.25, 0, 0);
-        chroma(1.0, 1.0, 1.1, 0.2, 0.2, 0, 30);
+        chroma(0.9, 1.05, 1.15, 0.2, 0.3, 0, 30);
         an.mantle = damp(an.mantle, 1.09, 20, dt);
         if (st.t > st.dur) { phase('jet', 0.62); st.pulses = 0; ink(); chroma(0.25, 0.15, 0.05, 0.1, 0.5, 0.8, 12); }
         break;
@@ -717,7 +717,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         break;
       case 'land':
       default:
-        chroma(0.7, 0.75, 0.85, 0.5, 0.6, 0.1, 2);
+        chroma(0.7, 0.9, 0.5, 0.5, 0.65, 0.05, 2);
         if (descend(dt) || st.t > st.dur) {
           st.fear = 0.5;
           st.settled = true;
@@ -905,7 +905,11 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         g.copy(look).sub(eyeW).applyQuaternion(_q).normalize();
       } else g.copy(REST_GAZE[i]).add(an.eyeOff[i]).normalize();
     }
-    P.pupil = damp(P.pupil, st.night ? 0.85 : st.bury > 0.6 ? 0.5 : st.mode === 'HUNT' ? 0.7 : 0.35, 1.5, dt);
+    // the pupil: a thin slit by day (a bar when it watches, nearly shut buried), a broad oval at night
+    P.pupil = damp(P.pupil, st.night ? (st.mode === 'HUNT' ? 0.95 : 0.85) : st.bury > 0.6 ? 0.06 : st.mode === 'HUNT' ? 0.3 : 0.15, 1.5, dt);
+    // the lids: narrowed resting by day and buried, opening as it hovers and hunts, wide open at night and in alarm
+    const lidGoal = st.mode === 'ESCAPE' || st.fear > 0.2 ? 1 : st.night ? 0.85 : st.mode === 'HUNT' ? 0.75 : st.mode === 'HOVER' || st.mode === 'SWIM' ? 0.5 : st.bury > 0.6 ? 0.15 : 0.35;
+    P.lid = damp(P.lid, lidGoal, 2.5, dt);
     // ---- burial, sand
     P.bury = st.bury;
     P.sandCoat = st.sandCoat;

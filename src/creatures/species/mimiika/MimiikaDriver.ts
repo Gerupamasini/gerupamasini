@@ -117,6 +117,7 @@ export class MimiikaDriver implements Driver {
     u.uSandCoat.value = P.sandCoat;
     u.uHeadCover.value = P.headCover;
     u.uPupil.value = P.pupil;
+    u.uLid.value = P.lid;
   }
 
   attach(root: Object3D, individual: Individual): void {
