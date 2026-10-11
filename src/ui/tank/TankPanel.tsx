@@ -5,6 +5,7 @@ import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import type { IndividualRecord } from '../../creatures/Individual';
 import { TANK_ITEM_TYPES, TANK_MAX_ITEMS, TANK_SUBSTRATES } from '../../app/TankLayout';
+import { TankSwitcher } from './TankSwitcher';
 import { CloseIcon } from '../common/Icons';
 import { EquipmentTab } from './EquipmentTab';
 import { SpecimenPicker } from '../common/SpecimenPicker';
@@ -33,6 +34,7 @@ export function TankPanel({ app }: { app: App }) {
         {app.input.touchDevice && <button class="btn ghost sm sheet-toggle" onClick={() => setCollapsed(!collapsed)} aria-expanded={!collapsed}>{collapsed ? '編集を表示' : '水槽を見る'}</button>}
         <button class="icon-btn" onClick={() => app.closeTankEdit()} aria-label={t('ui.close')}><CloseIcon /></button>
       </div>
+      <div class="tank-room-controls"><TankSwitcher app={app} editor /><button class="btn sm" onClick={() => app.openRoomPlacement()}>部屋に設置</button></div>
       <div class="seg">
         <button class={tab === 'fish' ? 'on' : ''} onClick={() => { ui.tankTab.value = 'fish'; ui.tankSelected.value = null; }}>{t('tank.tab.fish')}</button>
         <button class={tab === 'layout' ? 'on' : ''} onClick={() => { ui.tankTab.value = 'layout'; }}>{t('tank.tab.layout')}</button>
