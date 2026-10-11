@@ -1,5 +1,5 @@
 import {
-  BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, RedFormat, Vector2, Vector3,
+  BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, RedFormat, RGBAFormat, Vector2, Vector3,
   type IUniform, type Texture, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
 import { makeSpillTexture } from './Water';
@@ -70,6 +70,131 @@ const SUBSTRATE_COLORS: Record<Substrate, [number, number, number]> = {
   rock: [0.3, 0.295, 0.28],
 };
 
+/** GLSL shared by the fragment stage (shading) and the ripple sheet's vertex stage (relief): hashes, value noise and
+ * the ripple field. Needs `uRipRot` and `uRippleGain`. */
+const RIPPLE_GLSL = /* glsl */ `
+// integer hash: the flat is 320 m wide and the grains are a millimetre, so cell ids run into the hundreds of
+// thousands — float tricks fall apart there, integer mixing does not
+float hash21(vec2 p) {
+  uvec2 v = uvec2(ivec2(floor(p + 0.5)));
+  uint h = v.x * 0x27d4eb2du ^ v.y * 0x165667b1u;
+  h = (h ^ (h >> 15u)) * 0x2c1b3c6du; h ^= h >> 12u; h *= 0x297a2d39u; h ^= h >> 15u;
+  return float(h) * (1.0 / 4294967296.0);
+}
+vec2 hash22(vec2 p) { return vec2(hash21(p), hash21(p + vec2(1013.0, 7177.0))); }
+float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y); }
+// Ripple marks as one continuous scalar field over the whole flat: shore-parallel crests (wavelength ~10 cm, as in the
+// photos of the flat) whose
+// line is bent by layers of noise displacement. Bending the phase instead of the direction keeps the local
+// wavelength bounded, so the crests swerve without ever breaking, and chunks share the same field.
+float rippleWarp(vec2 p) {
+  float w = 2.2 * (vnoise(p * 0.04 + 1.7) - 0.5);          // broad swerves, tens of metres
+  w += 0.55 * (vnoise(p * 0.125 - 3.1) - 0.5);            // metre-scale bends
+  w += 0.2 * (vnoise(p * 0.65 + 8.9) - 0.5);              // crest waviness at the 1.5 m scale
+  w += 0.16 * (vnoise(p * 1.7 - 5.3) - 0.5);              // 60 cm wiggles
+  w += 0.07 * (vnoise(p * 4.6 + 2.2) - 0.5);              // 20 cm wiggles: the crests are sinuous, never ruled lines
+  w += 0.018 * (vnoise(p * 12.0 - 7.7) - 0.5);            // and a little beaded at their own scale
+  w += 7.0 * (vnoise(p * 0.035 - 6.1) - 0.5);             // the spacing itself wanders: ~7 cm crests here, ~10 cm there
+  return p.y + w;
+}
+#define RIPPLE_K 63.0
+// Crests that split and merge. Real wave ripples are full of Y-junctions: a crest forks, or two run together.
+// In a phase field that is a pair of dislocations — one extra crest inserted between two cores, a fork at each
+// end. Pairs are laid along the crest direction in cells of a few metres; the far field of a pair cancels, so
+// each is windowed to its cell without a seam (the 2π step between the cores lies where the window is still
+// exactly 1). Two layers: long inserted crests every few metres, and short ones in between.
+// Accumulates (phase, d/dx, d/dy, nearness to a core) — the cores get a smooth saddle instead of a vanishing wavelength.
+void dipoleLayer(vec2 p, float cell, float prob, float sepMin, float sepMax, vec2 seed, inout vec4 acc) {
+  vec2 cellF = floor(p / cell);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 c = cellF + vec2(float(i), float(j));
+    if (hash21(c + seed) > prob) continue;
+    vec2 ctr = (c + 0.15 + 0.7 * hash22(c + seed + vec2(21.0, 5.0))) * cell;
+    float sep = mix(sepMin, sepMax, hash21(c + seed + vec2(13.0, 1.0)));
+    float sgn = hash21(c + seed + vec2(2.0, 27.0)) < 0.5 ? 1.0 : -1.0;
+    float R = min(cell * 0.95, 1.6 * sep + 0.3);
+    vec2 d = p - ctr;
+    float r = length(d);
+    if (r > R) continue;
+    vec2 da = d - vec2(sep * 0.5, 0.0), db = d + vec2(sep * 0.5, 0.0);
+    float ra2 = max(dot(da, da), 1e-6), rb2 = max(dot(db, db), 1e-6);
+    // principal value of the angle difference: its only 2π step is on the segment between the cores
+    vec2 q = vec2(da.x * db.x + da.y * db.y, da.y * db.x - da.x * db.y);
+    float pv = atan(q.y, q.x);
+    vec2 gpv = vec2(-da.y, da.x) / ra2 - vec2(-db.y, db.x) / rb2;
+    float t = clamp((r - 0.5 * R) / (0.5 * R), 0.0, 1.0);
+    float w = 1.0 - t * t * (3.0 - 2.0 * t);
+    vec2 gw = -(6.0 * t * (1.0 - t) / (0.5 * R)) * d / max(r, 1e-4);
+    acc.x += sgn * w * pv;
+    acc.yz += sgn * (w * gpv + pv * gw);
+    acc.w = max(acc.w, max(exp(-ra2 / 0.0016), exp(-rb2 / 0.0016)));
+  }
+}
+vec4 rippleDisloc(vec2 p) {
+  vec4 acc = vec4(0.0);
+  dipoleLayer(p, 2.0, 0.8, 0.5, 1.3, vec2(3.0, 9.0), acc);
+  dipoleLayer(p, 1.0, 0.6, 0.14, 0.36, vec2(41.0, 23.0), acc);
+  return acc;
+}
+// where the ripples are: patches of flat sand in between, crests fading in and out at the metre scale
+float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * smoothstep(0.15, 0.6, vnoise(p * 0.9 + 2.9)) * (0.6 + 0.4 * vnoise(p * 0.2 + 7.1)); }
+// the ripple field's own frame: the world turned so that the crests run along its x, parallel to this map's shore
+vec2 rippleFrame(vec2 p) { return vec2(uRipRot.x * p.x + uRipRot.y * p.y, -uRipRot.y * p.x + uRipRot.x * p.y); }
+vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRipRot.y * g.x + uRipRot.x * g.y); }
+// how lopsided the ripples are here (0.05 symmetric … 0.3 a steep lee face), and their height relative to the
+// fully formed ones: both wander over the flat, so no two stretches of ripples look alike
+float rippleSkew(vec2 p) { return 0.05 + 0.25 * vnoise(p * 0.15 + 9.7); }
+float rippleSize(vec2 p) { return 0.55 + 0.6 * vnoise(p * 0.07 - 2.3) + 0.25 * (vnoise(p * 0.6 + 4.1) - 0.5); }
+// the ripples' cross-section: a gentle stoss face and a steeper lee (up to the crest, then down), −1..1-ish
+float rippleProfile(float ph, float skew) { return -(sin(ph) + skew * sin(2.0 * ph + 0.6)) / (1.0 + skew); }
+// the ripples' crest-to-trough half height (m) where they are fully formed
+#define RIPPLE_H 0.015
+// the ripple relief (m) at a point, from the same field the shading uses (crest positive, trough negative)
+float rippleHeight(vec2 xz, float sandy, float pit) {
+  vec2 rq = rippleFrame(xz);
+  vec4 dis = rippleDisloc(rq);
+  float ph = rippleWarp(rq) * RIPPLE_K + dis.x;
+  float amp = rippleAmp(rq) * (1.0 - 0.8 * dis.w) * (0.12 + 0.88 * sandy) * (1.0 - pit) * uRippleGain;
+  return RIPPLE_H * amp * rippleSize(rq) * rippleProfile(ph, rippleSkew(rq));
+}
+`;
+
+
+/** GLSL for the ripple sheet's vertex stage: the coarse mesh's own surface (its triangles, colours, normals) sampled at
+ * any point from the grid textures, then the ripple field. */
+const SHEET_VERTEX_GLSL = /* glsl */ `
+uniform sampler2D uGridTex;
+uniform sampler2D uNrmTex;
+uniform float uGridN;
+uniform float uCell;
+uniform vec3 uSubCol[8];
+float gSheetH = 0.0, gSheetSub = 0.0, gSheetPit = 0.0;
+vec3 gSheetNrm = vec3(0.0, 1.0, 0.0), gSheetCol = vec3(0.0);
+${RIPPLE_GLSL}
+// the coarse mesh at a point: the grid cell's two triangles (split along the b–c diagonal, as the chunks are), with
+// height, substrate, pit, normal and colour interpolated as the mesh's own vertices interpolate them
+void sheetSample(vec2 xz) {
+  vec2 g = (xz + uHalf) / uCell;
+  vec2 i = clamp(floor(g), vec2(0.0), vec2(uGridN - 2.0));
+  vec2 f = clamp(g - i, 0.0, 1.0);
+  ivec2 ia = ivec2(i), ib = ia + ivec2(0, 1), ic = ia + ivec2(1, 0), id = ia + ivec2(1, 1);
+  vec4 A = texelFetch(uGridTex, ia, 0), B = texelFetch(uGridTex, ib, 0), C = texelFetch(uGridTex, ic, 0), D = texelFetch(uGridTex, id, 0);
+  vec4 w = f.x + f.y <= 1.0 ? vec4(1.0 - f.x - f.y, f.y, f.x, 0.0) : vec4(0.0, 1.0 - f.x, 1.0 - f.y, f.x + f.y - 1.0);
+  vec4 s = w.x * A + w.y * B + w.z * C + w.w * D;
+  gSheetH = s.r; gSheetSub = s.g; gSheetPit = s.b;
+  gSheetNrm = normalize(w.x * texelFetch(uNrmTex, ia, 0).xyz + w.y * texelFetch(uNrmTex, ib, 0).xyz + w.z * texelFetch(uNrmTex, ic, 0).xyz + w.w * texelFetch(uNrmTex, id, 0).xyz);
+  gSheetCol = w.x * uSubCol[int(A.g + 0.5)] + w.y * uSubCol[int(B.g + 0.5)] + w.z * uSubCol[int(C.g + 0.5)] + w.w * uSubCol[int(D.g + 0.5)];
+}
+`;
+
+/** the ripple sheet's radius (m) per quality: none at the lightest (the ripples stay painted on the flat mesh) */
+export const RIPPLE_SHEET_RADIUS: Record<'minimal' | 'low' | 'mid' | 'high', number> = { minimal: 0, low: 2, mid: 3, high: 4 };
+/** the sheet's vertex spacing (m): eight to a ripple, so where the water's edge cuts the troughs it runs smooth */
+const SHEET_STEP = 0.0125;
+/** how far the coarse mesh steps down under the sheet (m): clear of the deepest trough */
+const SHEET_DROP = 0.05;
+
 export class Terrain {
   readonly n: number;
   readonly size: number;
@@ -120,6 +245,15 @@ export class Terrain {
   private readonly uMudTint: IUniform<Vector3> = { value: new Vector3(1, 1, 1) };
   /** (cos, sin) of the ripple marks' turn from 葛西's: their crests run along x there, parallel to that shore */
   private readonly uRipRot: IUniform<Vector2> = { value: new Vector2(1, 0) };
+  /** the ripple sheet: its centre (snapped to its grid), radius and the coarse mesh's step down under it */
+  private readonly uSheetC: IUniform<Vector2> = { value: new Vector2(0, 0) };
+  private readonly uSheetR: IUniform<number> = { value: 0 };
+  private readonly uSheetDrop: IUniform<number> = { value: 0 };
+  /** the coarse grid for the sheet: height, substrate, pit (RGBA float) and the vertex normals */
+  private readonly gridTexture: DataTexture;
+  private readonly nrmTexture: DataTexture;
+  private sheet: Mesh | null = null;
+  private sheetMaterial: MeshStandardMaterial | null = null;
   private waves: WaveSet | null = null;
   /** the surf on an open shore (shared with the water): the sand glistens where the swash has just been */
   private surf: SurfUniforms = surfUniforms(null);
@@ -155,10 +289,19 @@ export class Terrain {
     this.spillTexture = makeSpillTexture(new Float32Array(this.n * this.n).fill(-1e3), this.n);
     this.uSpill = { value: this.spillTexture };
 
-    this.material = this.buildMaterial(false);
-    this.patchMaterial = this.buildMaterial(true);
+    // (built before the materials: the sheet's vertex stage reads them)
+    const n2 = this.n * this.n, gd = new Float32Array(n2 * 4);
+    for (let k = 0; k < n2; k++) { gd[k * 4] = this.heights[k]; gd[k * 4 + 1] = this.substrate[k]; gd[k * 4 + 2] = this.pitMask ? this.pitMask[k] : 0; }
+    this.gridTexture = new DataTexture(gd, this.n, this.n, RGBAFormat, FloatType);
+    this.gridTexture.needsUpdate = true;
+    this.nrmTexture = new DataTexture(new Float32Array(n2 * 4), this.n, this.n, RGBAFormat, FloatType);
+    this.material = this.buildMaterial('terrain');
+    this.patchMaterial = this.buildMaterial('patch');
     this.mesh.name = 'terrain';
     this.buildChunks();
+    const nd = this.nrmTexture.image.data as Float32Array;
+    for (let k = 0; k < n2; k++) { nd[k * 4] = this.nrm[k * 3]; nd[k * 4 + 1] = this.nrm[k * 3 + 1]; nd[k * 4 + 2] = this.nrm[k * 3 + 2]; }
+    this.nrmTexture.needsUpdate = true;
     this.buildPitPatches();
   }
 
@@ -257,6 +400,8 @@ export class Terrain {
       // and freed again once the chunk is well out of range
       if (d > LOD_DIST[1] + 40) for (const l of [0, 1]) { const g = c.lods[l]; if (g) { g.dispose(); c.lods[l] = null; } }
     }
+    // the ripple sheet follows the player in whole grid steps, so its vertices stay put on the ground as it moves
+    if (this.sheet) this.uSheetC.value.set(Math.round(px / SHEET_STEP) * SHEET_STEP, Math.round(pz / SHEET_STEP) * SHEET_STEP);
     // the pits' fine patches only matter up close; the coarse hollow stands in beyond that
     for (const p of this.patches) p.mesh.visible = Math.hypot(p.x - px, p.z - pz) < 70;
   }
@@ -341,8 +486,9 @@ export class Terrain {
     return geo;
   }
 
-  private buildMaterial(patch: boolean): MeshStandardMaterial {
-    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: DoubleSide, polygonOffset: patch, polygonOffsetFactor: patch ? -1 : 0, polygonOffsetUnits: patch ? -2 : 0 });
+  private buildMaterial(kind: 'terrain' | 'patch' | 'sheet'): MeshStandardMaterial {
+    const over = kind !== 'terrain';
+    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: DoubleSide, polygonOffset: over, polygonOffsetFactor: over ? -1 : 0, polygonOffsetUnits: over ? -2 : 0 });
     const uWater = this.uWater, uWet = this.uWet, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
@@ -365,9 +511,49 @@ export class Terrain {
       if (this.waves) Object.assign(shader.uniforms, this.waves.uniforms);
       shader.uniforms.uSpillTex = this.uSpill;
       shader.uniforms.uHalf = { value: this.half };
+      shader.uniforms.uSheetC = this.uSheetC;
+      shader.uniforms.uSheetR = this.uSheetR;
+      shader.uniforms.uSheetDrop = this.uSheetDrop;
+      shader.uniforms.uGridTex = { value: this.gridTexture };
+      shader.uniforms.uNrmTex = { value: this.nrmTexture };
+      shader.uniforms.uGridN = { value: this.n };
+      shader.uniforms.uCell = { value: this.cell };
+      shader.uniforms.uSubCol = { value: this.palette.map((p) => new Vector3(...SUBSTRATE_COLORS[p])).concat(Array.from({ length: Math.max(0, 8 - this.palette.length) }, () => new Vector3())).slice(0, 8) };
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nattribute float substrate;\nattribute float pit;\nvarying float vSubstrate;\nvarying float vPit;')
-        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvSubstrate = substrate;\nvPit = pit;');
+        .replace('#include <common>', `#include <common>
+varying vec3 vWorldPos;
+attribute float substrate;
+attribute float pit;
+varying float vSubstrate;
+varying float vPit;
+uniform vec2 uSheetC;
+uniform float uSheetR;
+uniform float uSheetDrop;
+uniform vec2 uRipRot;
+uniform float uRippleGain;
+uniform float uHalf;
+${kind === 'sheet' ? SHEET_VERTEX_GLSL : ''}`)
+        .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+${kind === 'sheet' ? 'vSubstrate = gSheetSub;\nvPit = gSheetPit;' : 'vSubstrate = substrate;\nvPit = pit;'}`);
+      if (kind === 'sheet') {
+        // the ripple sheet: a fine grid that follows the player, standing on the coarse mesh's own triangles and
+        // raised into the ripples' relief, so the troughs are real hollows the water can lie in
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <color_vertex>', '#include <color_vertex>\nsheetSample(uSheetC + position.xz);\n#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )\nvColor.rgb = gSheetCol;\n#endif')
+          .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = gSheetNrm;\n#ifdef USE_TANGENT\nvec3 objectTangent = vec3(tangent.xyz);\n#endif')
+          .replace('#include <begin_vertex>', `vec3 transformed = vec3(uSheetC.x + position.x, gSheetH, uSheetC.y + position.z);
+{
+  // the relief fades out toward the sheet's rim, where the coarse mesh takes over again
+  float edge = 1.0 - smoothstep(uSheetR - 1.6, uSheetR - 0.5, length(position.xz));
+  float sandy = 1.0 - smoothstep(1.5, 2.5, gSheetSub);
+  transformed.y += rippleHeight(transformed.xz, sandy, gSheetPit) * edge;
+}`);
+      } else if (kind === 'terrain') {
+        // under the ripple sheet the coarse mesh steps down out of the way (it comes back up before the sheet's rim)
+        shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+if (uSheetDrop > 0.0) transformed.y -= uSheetDrop * (1.0 - smoothstep(uSheetR - 1.3, uSheetR - 0.3, length(transformed.xz - uSheetC)));`);
+      }
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
 varying vec3 vWorldPos;
@@ -398,17 +584,9 @@ float gSwash = 0.0;
 float gQuartz = 0.0;
 vec2 gNrmAdd = vec2(0.0);
 vec4 gDis = vec4(0.0);
-// integer hash: the flat is 320 m wide and the grains are a millimetre, so cell ids run into the hundreds of
-// thousands — float tricks fall apart there, integer mixing does not
-float hash21(vec2 p) {
-  uvec2 v = uvec2(ivec2(floor(p + 0.5)));
-  uint h = v.x * 0x27d4eb2du ^ v.y * 0x165667b1u;
-  h = (h ^ (h >> 15u)) * 0x2c1b3c6du; h ^= h >> 12u; h *= 0x297a2d39u; h ^= h >> 15u;
-  return float(h) * (1.0 / 4294967296.0);
-}
-vec2 hash22(vec2 p) { return vec2(hash21(p), hash21(p + vec2(1013.0, 7177.0))); }
-float vnoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y); }
+float gRipple = 0.0;
+float gTrough = 0.0;
+${RIPPLE_GLSL}
 // value noise with its derivative (quintic), for micro relief
 vec3 vnoiseD(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -430,62 +608,7 @@ vec3 grains(vec2 p, out vec2 off) {
   }
   return vec3(sqrt(best), hash21(id + vec2(31.0, 17.0)), hash21(id + vec2(59.0, 3.0)));
 }
-// Ripple marks as one continuous scalar field over the whole flat: shore-parallel crests (wavelength ~8 cm) whose
-// line is bent by layers of noise displacement. Bending the phase instead of the direction keeps the local
-// wavelength bounded, so the crests swerve without ever breaking, and chunks share the same field.
-float rippleWarp(vec2 p) {
-  float w = 2.2 * (vnoise(p * 0.04 + 1.7) - 0.5);          // broad swerves, tens of metres
-  w += 0.55 * (vnoise(p * 0.125 - 3.1) - 0.5);            // metre-scale bends
-  w += 0.2 * (vnoise(p * 0.65 + 8.9) - 0.5);              // crest waviness at the 1.5 m scale
-  w += 0.09 * (vnoise(p * 1.7 - 5.3) - 0.5);              // 60 cm wiggles
-  w += 0.03 * (vnoise(p * 4.6 + 2.2) - 0.5);              // 20 cm wiggles
-  return p.y + w;
-}
-#define RIPPLE_K 78.5
-// Crests that split and merge. Real wave ripples are full of Y-junctions: a crest forks, or two run together.
-// In a phase field that is a pair of dislocations — one extra crest inserted between two cores, a fork at each
-// end. Pairs are laid along the crest direction in cells of a few metres; the far field of a pair cancels, so
-// each is windowed to its cell without a seam (the 2π step between the cores lies where the window is still
-// exactly 1). Two layers: long inserted crests every few metres, and short ones in between.
-// Accumulates (phase, d/dx, d/dy, nearness to a core) — the cores get a smooth saddle instead of a vanishing wavelength.
-void dipoleLayer(vec2 p, float cell, float prob, float sepMin, float sepMax, vec2 seed, inout vec4 acc) {
-  vec2 cellF = floor(p / cell);
-  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-    vec2 c = cellF + vec2(float(i), float(j));
-    if (hash21(c + seed) > prob) continue;
-    vec2 ctr = (c + 0.15 + 0.7 * hash22(c + seed + vec2(21.0, 5.0))) * cell;
-    float sep = mix(sepMin, sepMax, hash21(c + seed + vec2(13.0, 1.0)));
-    float sgn = hash21(c + seed + vec2(2.0, 27.0)) < 0.5 ? 1.0 : -1.0;
-    float R = min(cell * 0.95, 1.6 * sep + 0.3);
-    vec2 d = p - ctr;
-    float r = length(d);
-    if (r > R) continue;
-    vec2 da = d - vec2(sep * 0.5, 0.0), db = d + vec2(sep * 0.5, 0.0);
-    float ra2 = max(dot(da, da), 1e-6), rb2 = max(dot(db, db), 1e-6);
-    // principal value of the angle difference: its only 2π step is on the segment between the cores
-    vec2 q = vec2(da.x * db.x + da.y * db.y, da.y * db.x - da.x * db.y);
-    float pv = atan(q.y, q.x);
-    vec2 gpv = vec2(-da.y, da.x) / ra2 - vec2(-db.y, db.x) / rb2;
-    float t = clamp((r - 0.5 * R) / (0.5 * R), 0.0, 1.0);
-    float w = 1.0 - t * t * (3.0 - 2.0 * t);
-    vec2 gw = -(6.0 * t * (1.0 - t) / (0.5 * R)) * d / max(r, 1e-4);
-    acc.x += sgn * w * pv;
-    acc.yz += sgn * (w * gpv + pv * gw);
-    acc.w = max(acc.w, max(exp(-ra2 / 0.0016), exp(-rb2 / 0.0016)));
-  }
-}
-vec4 rippleDisloc(vec2 p) {
-  vec4 acc = vec4(0.0);
-  dipoleLayer(p, 2.0, 0.8, 0.5, 1.3, vec2(3.0, 9.0), acc);
-  dipoleLayer(p, 1.0, 0.3, 0.14, 0.36, vec2(41.0, 23.0), acc);
-  return acc;
-}
 float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
-// where the ripples are: patches of flat sand in between, crests fading in and out at the metre scale
-float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * smoothstep(0.15, 0.6, vnoise(p * 0.9 + 2.9)) * (0.6 + 0.4 * vnoise(p * 0.2 + 7.1)); }
-// the ripple field's own frame: the world turned so that the crests run along its x, parallel to this map's shore
-vec2 rippleFrame(vec2 p) { return vec2(uRipRot.x * p.x + uRipRot.y * p.y, -uRipRot.y * p.x + uRipRot.x * p.y); }
-vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRipRot.y * g.x + uRipRot.x * g.y); }
 `)
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
@@ -501,8 +624,10 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   vec2 rq = rippleFrame(vWorldPos.xz);
   gDis = rippleDisloc(rq);
   // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
-  float ripple = cos(ripplePhase(rq)) * rippleAmp(rq) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit) * uRippleGain;
-  float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 - ripple * 0.05;
+  // (-1 in a trough, +1 on a crest, scaled by how well formed the ripples are here)
+  float ripple = rippleProfile(ripplePhase(rq), rippleSkew(rq)) * rippleAmp(rq) * rippleSize(rq) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit) * uRippleGain;
+  gRipple = ripple;
+  float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 + ripple * 0.1;
   diffuseColor.rgb *= detail;
   // a sheltered silt flat (MahazeViewer's mud): mottled at ~8 cm and ~2 cm, as fresh silt settles unevenly
   float mudL = uMudLook * (1.0 - isSand);
@@ -624,7 +749,10 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   float spillH = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
   float lvl = (spillH > uWaterLevel + 0.01 && spillH > vWorldPos.y + 0.003) ? spillH : uWaterLevel;
   // wet band: everything between the current water level and the recent high-water mark is darker
-  float wet = 1.0 - smoothstep(lvl + 0.02, max(lvl, uWetLevel) + 0.05, vWorldPos.y);
+  // (a flat stays saturated below the last high water while the tide is out: wet throughout that band, draining a
+  // little toward its top, as the photos' dark, sky-grey low-water flat)
+  float wetTop = max(lvl, uWetLevel);
+  float wet = (1.0 - smoothstep(wetTop - 0.03, wetTop + 0.06, vWorldPos.y)) * (1.0 - 0.3 * smoothstep(lvl + 0.05, lvl + 0.8, vWorldPos.y));
   wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
   // an open shore's swash: the sand the biggest waves reach stays saturated; where this wave's sheet or the last
   // two's has just drained it still carries a film of water and shines (the water pass runs the same swash)
@@ -640,8 +768,15 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
       wet = max(wet, max(gSwash, zone * 0.9));
     }
   }
-  diffuseColor.rgb *= mix(1.0, 0.68, wet);
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.84, 0.92, 1.06), 0.55 * wet);
+  diffuseColor.rgb *= mix(1.0, 0.76, wet);
+  // water left in the ripple troughs: on sand the tide has just uncovered, each trough keeps a thin film — dark,
+  // glassy, carrying the sky — while the crests between have already drained
+  float exposedWet = smoothstep(lvl - 0.004, lvl + 0.01, vWorldPos.y) * (1.0 - smoothstep(max(lvl, uWetLevel) - 0.02, max(lvl, uWetLevel) + 0.06, vWorldPos.y));
+  // (patchy: some stretches drain at once, others keep a trough of water in every hollow)
+  gTrough = exposedWet * smoothstep(-0.15, -0.5, gRipple) * smoothstep(0.3, 0.6, vnoise(vWorldPos.xz * 0.45 + 13.0));
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.5, 0.56, 0.64), gTrough * 0.85);
+  // (the photos' wet flat is a neutral grey with the sky in it, whatever the colour of the dry sand)
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.8, 0.9, 1.08), 0.75 * wet);
   // above the bank: the park's land, dry grass and earth over the packed bank
   float land = smoothstep(uLand.x, uLand.y, vWorldPos.y);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.31, 0.32, 0.2) * (0.8 + 0.4 * vnoise(vWorldPos.xz * 0.9 + 3.0)), land);
@@ -665,7 +800,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   // ripple marks: one continuous warped field (see rippleWarp) with its dislocations; sand carries them, mud faintly
   float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
   vec2 rp = rippleFrame(vWorldPos.xz);
-  float strength = (0.12 + 0.88 * sandy) * rippleAmp(rp) * 0.26 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w) * uRippleGain;
+  float strength = (0.12 + 0.88 * sandy) * rippleAmp(rp) * 0.42 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w) * uRippleGain;
   float ph = ripplePhase(rp);
   // the crest line's local direction comes from the phase gradient (warp plus dislocations), so the shading
   // follows the bends and the forks; where crests crowd the slope grows, where they spread it eases
@@ -673,9 +808,9 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   vec2 gph = vec2(rippleWarp(rp + vec2(e, 0.0)) - rippleWarp(rp - vec2(e, 0.0)), rippleWarp(rp + vec2(0.0, e)) - rippleWarp(rp - vec2(0.0, e))) / (2.0 * e) * RIPPLE_K + gDis.yz;
   float kRel = clamp(length(gph) / RIPPLE_K, 0.4, 1.6);
   vec2 grad = rippleToWorld(normalize(gph + vec2(0.0, 1e-4)));
-  float slope = cos(ph) * strength * kRel;
-  // the lee side is steeper
-  slope += cos(ph * 2.0 + 0.6) * strength * 0.35;
+  // the slope of rippleProfile (the lee side steeper by this stretch's skew), scaled like its height
+  float skew = rippleSkew(rp);
+  float slope = (cos(ph) + 2.0 * skew * cos(ph * 2.0 + 0.6)) / (1.0 + skew) * strength * kRel * rippleSize(rp);
   vec3 worldPerturb = vec3(grad.x * slope + gNrmAdd.x, 0.0, grad.y * slope + gNrmAdd.y);
   vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
   normal = normalize(normal + viewPerturb);
@@ -684,12 +819,13 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
 {
   float spillR = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
   float lvlR = (spillR > uWaterLevel + 0.01 && spillR > vWorldPos.y + 0.003) ? spillR : uWaterLevel;
-  float wetR = 1.0 - smoothstep(lvlR + 0.02, max(lvlR, uWetLevel) + 0.05, vWorldPos.y);
+  float wetR = (1.0 - smoothstep(max(lvlR, uWetLevel) - 0.03, max(lvlR, uWetLevel) + 0.06, vWorldPos.y)) * (1.0 - 0.3 * smoothstep(lvlR + 0.05, lvlR + 0.8, vWorldPos.y));
   wetR = max(wetR, 1.0 - smoothstep(lvlR - 0.05, lvlR + 0.12, vWorldPos.y));
-  roughnessFactor = mix(roughnessFactor, 0.58, wetR);   // damp sand is darker and only faintly satin, never a mirror of the sun
+  roughnessFactor = mix(roughnessFactor, 0.48, wetR);   // damp sand is darker and only faintly satin, never a mirror of the sun
   roughnessFactor = mix(roughnessFactor, 0.32, gSwash * smoothstep(-0.01, 0.0, vWorldPos.y - uWaterLevel));   // the film the swash just left: a soft sheen
   roughnessFactor = mix(roughnessFactor, 0.62, gFilm * 0.5);   // the organic film has a wet sheen of its own
   roughnessFactor = mix(roughnessFactor, 0.42, gQuartz);       // quartz and shell grains glint a little
+  roughnessFactor = mix(roughnessFactor, 0.06, gTrough);       // the water standing in the ripple troughs
   // wet silt is glossy (the shine of a mud flat at low water), damp silt satin
   float mudR = uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
   roughnessFactor = mix(roughnessFactor, mix(0.7, 0.36, wetR), mudR);
@@ -724,6 +860,10 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     for (const p of this.patches) p.mesh.geometry.dispose();
     this.material.dispose();
     this.patchMaterial.dispose();
+    if (this.sheet) this.sheet.geometry.dispose();
+    this.sheetMaterial?.dispose();
+    this.gridTexture.dispose();
+    this.nrmTexture.dispose();
     this.heightTexture.dispose();
     this.spillTexture.dispose();
     this.mesh.removeFromParent();
@@ -778,6 +918,39 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     this.uSandTint.value.set(r, g, b);
   }
 
+  /**
+   * The ripple sheet (quality preset): a fine grid of `radius` m round the player raised into the ripples' relief, so
+   * their troughs are real hollows — the water stands in them and they hide behind the crests. 0 takes it away (the
+   * ripples are then only painted on the coarse mesh).
+   */
+  setRippleSheet(radius: number): void {
+    if (radius === this.uSheetR.value && (radius > 0) === !!this.sheet) return;
+    if (this.sheet) { this.sheet.geometry.dispose(); this.sheet.removeFromParent(); this.sheet = null; }
+    this.uSheetR.value = radius;
+    this.uSheetDrop.value = radius > 0 ? SHEET_DROP : 0;
+    if (radius <= 0) return;
+    // a square a little wider than the circle, so every bit of the stepped-down mesh lies under it
+    const M = Math.ceil((radius + 0.6) / SHEET_STEP), side = 2 * M + 1;
+    const pos = new Float32Array(side * side * 3);
+    for (let j = 0; j < side; j++) for (let i = 0; i < side; i++) { const v = (j * side + i) * 3; pos[v] = (i - M) * SHEET_STEP; pos[v + 2] = (j - M) * SHEET_STEP; }
+    const idx = new Uint32Array((side - 1) * (side - 1) * 6);
+    let q = 0;
+    for (let j = 0; j < side - 1; j++) for (let i = 0; i < side - 1; i++) {
+      const a = j * side + i, b = a + side;
+      idx[q++] = a; idx[q++] = b; idx[q++] = a + 1; idx[q++] = a + 1; idx[q++] = b; idx[q++] = b + 1;
+    }
+    const geo = new BufferGeometry();
+    geo.setAttribute('position', new BufferAttribute(pos, 3));
+    geo.setIndex(new BufferAttribute(idx, 1));
+    this.sheetMaterial ??= this.buildMaterial('sheet');
+    const mesh = new Mesh(geo, this.sheetMaterial);
+    mesh.frustumCulled = false;   // (its vertices are placed in the shader)
+    mesh.receiveShadow = true;
+    mesh.name = 'ripple-sheet';
+    this.mesh.add(mesh);
+    this.sheet = mesh;
+  }
+
   /** Close-up surface detail on or off (quality preset). */
   setDetail(on: boolean): void {
     this.uDetail.value = on ? 1 : 0;
@@ -785,7 +958,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
 
   /** The lighter caustics (超軽量): every other wave component in the focusing sum (the programs are rebuilt once). */
   setLite(on: boolean): void {
-    for (const m of [this.material, this.patchMaterial]) {
+    for (const m of [this.material, this.patchMaterial, ...(this.sheetMaterial ? [this.sheetMaterial] : [])]) {
       const d = m.defines as Record<string, number | string>;
       if (('WAVE_STRIDE' in d) === on) continue;
       if (on) { d.WAVE_STRIDE = 2; d.WAVE_AMP = '1.4'; } else { delete d.WAVE_STRIDE; delete d.WAVE_AMP; }
