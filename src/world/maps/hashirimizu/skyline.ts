@@ -10,6 +10,11 @@ import { Color, type Mesh } from 'three';
  * こんごう or あたご／まや classes, or a もがみ-class frigate) and, very rarely, the nuclear carrier from the US base.
  * Which ship sails is drawn afresh each time a lane comes round, from the pass's own number: the same moment brings
  * the same ship for everyone.
+ *
+ * Two fleets sail the same lanes. Above the lightest quality the ships are pictures (public/data/scenery/ships: the
+ * part above the waterline, small, softened and faded, lossy WebP with alpha; a few kilobytes each), drawn a little
+ * under their true size and mixed into the sky's haze by distance: container ships and bulk carriers, an Aegis
+ * destroyer, the carrier. At the lightest quality, and until the pictures have loaded, the drawn silhouettes below.
  */
 
 /** the Skyline's ring radius (m) and the angle → width on it */
@@ -23,11 +28,17 @@ type Draw = (c: CanvasRenderingContext2D, w: number, h: number) => void;
 /** one ship picture on the ring: `key` names the drawing, made once and shared by every lane that carries it */
 export type ShipPlane = (key: string, bearing: number, width: number, height: number, bottomY: number, cw: number, ch: number, draw: Draw, base: Color, haze: number) => Mesh;
 
+/** one ship picture on the ring, from an image file: its haze is the lane's (distance `km`) */
+export type PhotoPlane = (key: ShipPhoto, km: number, bearing: number, width: number, height: number, bottomY: number) => Mesh;
+
 export interface ShipMark {
-  /** the ships this lane can carry; one of them sails each pass */
+  /** the drawn ships this lane can carry; one of them sails each pass */
   meshes: Mesh[];
   /** which of `meshes` sails on pass `n` (the passes are numbered as the lane comes round, negative before the epoch) */
   pick(n: number): number;
+  /** the same lane's ships as pictures, and which of them sails on pass `n` (the warships on the same passes) */
+  photos: Mesh[];
+  pickPhoto(n: number): number;
   bearing0: number;
   degPerSec: number;
   sector: [number, number];
@@ -40,6 +51,17 @@ export const NAVY_ODDS = {
   /** the carrier (only on the two lanes nearest the shore, inbound to 横須賀) */
   carrier: 0.03,
 } as const;
+
+/** the ship pictures: length (m) and the picture's height over its length (the part above the waterline) */
+export const SHIP_PHOTOS = {
+  container: { len: 260, aspect: 0.2072 },
+  bulk: { len: 225, aspect: 0.1676 },
+  destroyer: { len: 170, aspect: 0.2633 },
+  carrier: { len: 333, aspect: 0.2188 },
+} as const;
+export type ShipPhoto = keyof typeof SHIP_PHOTOS;
+/** the pictures are drawn a little under their true size (they read as large on the horizon) */
+const PHOTO_SCALE = 0.82;
 
 let seed = 0x2468ace1;
 const rnd = () => { seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 374761393) >>> 0; return seed / 4294967296; };
@@ -185,7 +207,7 @@ const drawCarrier: Draw = (c, w, h) => {
 
 interface ShipKind { key: string; len: number; tall: number; draw: Draw }
 
-export function buildHashirimizuSkyline(ship: ShipPlane, ships: ShipMark[]): void {
+export function buildHashirimizuSkyline(ship: ShipPlane, photo: PhotoPlane, ships: ShipMark[]): void {
   // ---- ships in the 浦賀水道: inbound to Tokyo close to this shore (moving north), outbound further out
   const merchants: ShipKind[] = [
     { key: 'container', len: 300, tall: 50, draw: (c, w, h) => { // a container ship: boxes in rows, the bridge aft
@@ -237,14 +259,35 @@ export function buildHashirimizuSkyline(ship: ShipPlane, ships: ShipMark[]): voi
       return mesh;
     });
     const nEscort = lane.escorts ? escorts.length : 0;
-    const pick = (n: number): number => {
+    // what the pass brings: the carrier, a 護衛艦, or the lane's merchantman (the same draw for both fleets)
+    const navy = (n: number): 'carrier' | 'escort' | null => {
       const u = passHash(li, n);
-      if (lane.carrier && u < NAVY_ODDS.carrier) return fleet.length - 1;
-      if (nEscort && u < (lane.carrier ? NAVY_ODDS.carrier : 0) + NAVY_ODDS.escort) return 1 + Math.min(nEscort - 1, Math.floor(passHash(li, n, 1) * nEscort));
+      if (lane.carrier && u < NAVY_ODDS.carrier) return 'carrier';
+      if (nEscort && u < (lane.carrier ? NAVY_ODDS.carrier : 0) + NAVY_ODDS.escort) return 'escort';
+      return null;
+    };
+    const pick = (n: number): number => {
+      const v = navy(n);
+      if (v === 'carrier') return fleet.length - 1;
+      if (v === 'escort') return 1 + Math.min(nEscort - 1, Math.floor(passHash(li, n, 1) * nEscort));
       return 0;
+    };
+    // the pictures: a container ship or a bulk carrier, the destroyer, the carrier
+    const photoFleet: ShipPhoto[] = ['container', 'bulk', ...(lane.escorts ? ['destroyer' as const] : []), ...(lane.carrier ? ['carrier' as const] : [])];
+    const photos = photoFleet.map((key) => {
+      const { len, aspect } = SHIP_PHOTOS[key];
+      const width = ang((len / (lane.km * 1000)) / DEG) * PHOTO_SCALE;
+      const mesh = photo(key, lane.km, lane.b0, width, width * aspect, FOOT);
+      mesh.visible = false;
+      return mesh;
+    });
+    const pickPhoto = (n: number): number => {
+      const v = navy(n);
+      if (v) return photoFleet.indexOf(v === 'escort' ? 'destroyer' : 'carrier');
+      return passHash(li, n, 2) < 0.5 ? 0 : 1;
     };
     // the angular speed of a ship at that distance across the line of sight
     const degPerSec = ((lane.kn * 0.514) / (lane.km * 1000)) / DEG;
-    ships.push({ meshes, pick, bearing0: lane.b0, degPerSec, sector: [22, 168] });
+    ships.push({ meshes, pick, photos, pickPhoto, bearing0: lane.b0, degPerSec, sector: [22, 168] });
   });
 }

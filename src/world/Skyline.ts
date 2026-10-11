@@ -1,5 +1,9 @@
-import { CanvasTexture, ClampToEdgeWrapping, Color, DoubleSide, Group, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, Vector3 } from 'three';
-import { buildHashirimizuSkyline, type ShipMark } from './maps/hashirimizu/skyline';
+import {
+  CanvasTexture, ClampToEdgeWrapping, Color, DoubleSide, Group, LinearFilter, LinearMipmapLinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry,
+  SRGBColorSpace, TextureLoader, Vector3, type IUniform, type Texture,
+} from 'three';
+import { DATA_BASE } from '../data/loader';
+import { buildHashirimizuSkyline, type ShipMark, type ShipPhoto } from './maps/hashirimizu/skyline';
 import { buildHashirimizuLand, type Land } from './maps/hashirimizu/land';
 
 /**
@@ -32,6 +36,18 @@ export class Skyline {
   private readonly ships: ShipMark[] = [];
   /** the ship pictures: one texture and material per drawing, shared by every lane that carries it */
   private readonly shipMats = new Map<string, MeshBasicMaterial>();
+  /** the ships as pictures from image files: one texture each (fetched on first use), a material per lane and ship */
+  private readonly photoKeys = new Set<ShipPhoto>();
+  private readonly photoTex: Texture[] = [];
+  private readonly photoMats: MeshBasicMaterial[] = [];
+  /** the sky's haze and the day's light for the pictures (shared by all of them) */
+  private readonly photoHaze: IUniform<Color> = { value: new Color() };
+  private readonly photoDay: IUniform<number> = { value: 1 };
+  /** whether the pictures are wanted (the quality), and whether they have all arrived */
+  private photosOn = false;
+  private photosReady = false;
+  private photosLoading = false;
+  private disposed = false;
   /** the near land around a map that has it: real ground standing still in the world (not riding with the eye) */
   readonly land: Land | null = null;
   private readonly tmp = new Color();
@@ -40,7 +56,7 @@ export class Skyline {
   constructor(kind?: string) {
     this.group.name = 'skyline';
     if (kind === 'manko') return;
-    if (kind === 'hashirimizu') { buildHashirimizuSkyline(this.shipPlane.bind(this), this.ships); this.land = buildHashirimizuLand(); return; }
+    if (kind === 'hashirimizu') { buildHashirimizuSkyline(this.shipPlane.bind(this), this.photoPlane.bind(this), this.ships); this.land = buildHashirimizuLand(); return; }
     // ---- 富士山: 106 km WSW, 3776 m: a broad flat-topped cone 1.6° high and 12° wide, nearly all haze
     this.plane(253, ang(18), ang(1.65 * 2.4), FOOT, 1024, 160, (c, w, h) => {
       for (let x = 0; x < w; x++) {
@@ -161,6 +177,48 @@ export class Skyline {
     return this.place(new Mesh(new PlaneGeometry(width, height), mat), bearing, bottomY + height / 2);
   }
 
+  /** a ship from its picture: the texture shared, the material its lane's (the haze grows with the distance) */
+  private photoPlane(key: ShipPhoto, km: number, bearing: number, width: number, height: number, bottomY: number): Mesh {
+    // (nothing is fetched until the pictures are wanted: setPhotos)
+    this.photoKeys.add(key);
+    const mat = new MeshBasicMaterial({ transparent: true, depthWrite: false, fog: false, side: DoubleSide });
+    mat.userData.photo = key;
+    // the air between: the picture mixed toward the sky's haze, more the further off (about a third at 3 km, over half at 6)
+    const hazeK: IUniform<number> = { value: 1 - Math.exp(-km / 7) };
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uShipHaze = this.photoHaze;
+      shader.uniforms.uShipHazeK = hazeK;
+      shader.uniforms.uShipDay = this.photoDay;
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uShipHaze;\nuniform float uShipHazeK, uShipDay;')
+        .replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, uShipHaze, uShipHazeK) * uShipDay;');
+    };
+    mat.customProgramCacheKey = () => 'skyline-ship-photo';
+    this.photoMats.push(mat);
+    return this.place(new Mesh(new PlaneGeometry(width, height), mat), bearing, bottomY + height / 2);
+  }
+
+  /** Ships as pictures (true) or drawn (false, the lightest quality). The pictures are fetched the first time they are
+   * wanted; until they have all arrived the drawn ships sail. */
+  setPhotos(on: boolean): void {
+    this.photosOn = on;
+    if (!on || this.photosLoading || this.photoKeys.size === 0) return;
+    this.photosLoading = true;
+    const loader = new TextureLoader();
+    let left = this.photoKeys.size;
+    for (const key of this.photoKeys) {
+      loader.load(`${DATA_BASE}scenery/ships/${key}.webp`, (tex) => {
+        if (this.disposed) { tex.dispose(); return; }
+        tex.colorSpace = SRGBColorSpace;
+        tex.minFilter = LinearMipmapLinearFilter; tex.magFilter = LinearFilter;
+        tex.wrapS = tex.wrapT = ClampToEdgeWrapping;
+        this.photoTex.push(tex);
+        for (const m of this.photoMats) if (m.userData.photo === key) { m.map = tex; m.needsUpdate = true; }
+        if (--left === 0) this.photosReady = true;
+      }, undefined, () => { /* a picture that does not come: the drawn ships stay */ });
+    }
+  }
+
   /** a drawing on a canvas as a material that takes the sky's haze (update) */
   private picture(cw: number, ch: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void, base: Color, haze: number): MeshBasicMaterial {
     const canvas = document.createElement('canvas');
@@ -198,15 +256,20 @@ export class Skyline {
       // along its lane, round and round the sector it can be seen in; each time round, the ship its pass draws
       const span = s.sector[1] - s.sector[0];
       const run = s.bearing0 - s.sector[0] + s.degPerSec * timeSec;
-      const k = s.pick(Math.floor(run / span));
+      const n = Math.floor(run / span);
       const a = (s.sector[0] + (((run % span) + span) % span)) * DEG;
-      s.meshes.forEach((m, i) => { m.visible = i === k; });
-      const mesh = s.meshes[k];
+      const photos = this.photosOn && this.photosReady;
+      const k = photos ? s.pickPhoto(n) : s.pick(n);
+      s.meshes.forEach((m, i) => { m.visible = !photos && i === k; });
+      s.photos.forEach((m, i) => { m.visible = photos && i === k; });
+      const mesh = photos ? s.photos[k] : s.meshes[k];
       mesh.position.set(Math.sin(a) * R, mesh.position.y, -Math.cos(a) * R);
       mesh.lookAt(eye.x, mesh.position.y, eye.z);
       // (the pictures are drawn bow to the left; seen from the shore, the bearing grows to the right)
       mesh.scale.x = s.degPerSec > 0 ? -1 : 1;
     }
+    this.photoHaze.value.copy(fog);
+    this.photoDay.value = 0.1 + 0.9 * day;
     for (const m of this.marks) {
       this.tmp.copy(m.base).lerp(fog, m.haze);
       this.tmp.multiplyScalar(m.night + (1 - m.night) * day);
@@ -215,8 +278,11 @@ export class Skyline {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.land?.dispose();
     for (const m of this.marks) { m.mat.map?.dispose(); m.mat.dispose(); }
+    for (const m of this.photoMats) m.dispose();
+    for (const t of this.photoTex) t.dispose();
     this.group.traverse((o) => { (o as Mesh).geometry?.dispose(); });
   }
 }

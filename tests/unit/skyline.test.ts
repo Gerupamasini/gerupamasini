@@ -6,8 +6,10 @@ describe('走水 horizon ships', () => {
   // (no canvas here: the factory only names each picture, the drawings are not run)
   const ships: ShipMark[] = [];
   const keyOf = new Map<Mesh, string>();
-  buildHashirimizuSkyline((key) => { const m = new Mesh(); keyOf.set(m, key); return m; }, ships);
+  const named = (key: string) => { const m = new Mesh(); keyOf.set(m, key); return m; };
+  buildHashirimizuSkyline(named, named, ships);
   const fleet = (s: ShipMark) => s.meshes.map((m) => keyOf.get(m));
+  const photos = (s: ShipMark) => s.photos.map((m) => keyOf.get(m));
 
   it('keeps each lane its merchantman, adds the escorts to the lanes but the ferry, the carrier only close in', () => {
     expect(ships.map((s) => fleet(s)[0])).toEqual(['container', 'tanker', 'carcarrier', 'ferry', 'tanker']);
@@ -40,5 +42,24 @@ describe('走水 horizon ships', () => {
       } else expect(share('carrier')).toBe(0);
     }
     for (const n of [-5, 0, 7, 1_812_345]) expect(ships[0].pick(n)).toBe(ships[0].pick(n));
+  });
+
+  it('sails the same warships in pictures, on the same passes, and container ships and bulk carriers otherwise', () => {
+    for (const i of [0, 1]) expect(photos(ships[i])).toEqual(['container', 'bulk', 'destroyer', 'carrier']);
+    for (const i of [2, 4]) expect(photos(ships[i])).toEqual(['container', 'bulk', 'destroyer']);
+    expect(photos(ships[3])).toEqual(['container', 'bulk']);
+    const NAVY = new Set(['kongo', 'atago', 'mogami']);
+    for (const s of ships) {
+      let container = 0, n0 = 1_800_000;
+      for (let n = n0; n < n0 + 20000; n++) {
+        const drawn = fleet(s)[s.pick(n)]!, photo = photos(s)[s.pickPhoto(n)]!;
+        if (NAVY.has(drawn)) expect(photo).toBe('destroyer');
+        else if (drawn === 'carrier') expect(photo).toBe('carrier');
+        else { expect(['container', 'bulk']).toContain(photo); if (photo === 'container') container++; }
+      }
+      const merchants = 20000 - [...Array(20000).keys()].filter((k) => !['container', 'bulk'].includes(photos(s)[s.pickPhoto(n0 + k)]!)).length;
+      expect(container / merchants).toBeGreaterThan(0.45);
+      expect(container / merchants).toBeLessThan(0.55);
+    }
   });
 });

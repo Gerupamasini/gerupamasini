@@ -516,6 +516,7 @@ export class App {
     this.world?.mangroves?.setQuality(preset.vegetation);
     this.world?.water.setMirror(preset.mirror);
     this.world?.water.setSurfSteps(preset.surfSteps);
+    this.world?.skyline.setPhotos(preset.shipPhotos);
     const light = this.world?.sky.sunLight;
     if (light) {
       light.castShadow = preset.shadows;
