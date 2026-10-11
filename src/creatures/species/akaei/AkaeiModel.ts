@@ -164,8 +164,8 @@ export class AkaeiModel {
     this.disc = mk('DiscBody', g.disc, this.skin);
     this.tail = mk('Tail', g.tail, this.skin);
     this.sting = mk('TailSting', g.sting, this.stingMat, this.tail);
-    this.eyeL = mk('Eye_L', g.eyeL, this.eyeMat);
-    this.eyeR = mk('Eye_R', g.eyeR, this.eyeMat);
+    this.eyeL = mk('Eye_L', g.eyeL, [this.eyeMat, this.skin]);
+    this.eyeR = mk('Eye_R', g.eyeR, [this.eyeMat, this.skin]);
     // (a far ray is born at LOD2, whose set has no spiracles or mouth: they come from LOD1's, the same shapes at a
     // quarter of LOD0's build cost; the 55k-triangle disc is built only when a ray actually comes near)
     const lg = g.spiracleL && g.mouth ? g : akaeiGeometries(1);
@@ -199,7 +199,7 @@ export class AkaeiModel {
     this.eyeR.geometry = g.eyeR;
     this.disc.material = cheap ? this.skinCheap : this.skin;
     this.tail.material = cheap ? this.skinCheap : this.skin;
-    this.eyeL.material = this.eyeR.material = cheap ? this.eyeMatCheap : this.eyeMat;
+    this.eyeL.material = this.eyeR.material = cheap ? [this.eyeMatCheap, this.skinCheap] : [this.eyeMat, this.skin];
     this.sting.material = cheap ? this.stingMatCheap : this.stingMat;
     if (g.spiracleL && g.spiracleR && g.mouth) {
       this.spiracleL.geometry = g.spiracleL;
