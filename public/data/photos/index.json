@@ -72,6 +72,16 @@
       "id": "syngnathus_schlegeli",
       "name": "ヨウジウオ",
       "file": "syngnathus_schlegeli.jpg"
+    },
+    {
+      "id": "platichthys_bicoloratus",
+      "name": "イシガレイ",
+      "file": "platichthys_bicoloratus.jpg"
+    },
+    {
+      "id": "hemitrygon_akajei",
+      "name": "アカエイ",
+      "file": "hemitrygon_akajei.jpg"
     }
   ]
 }
