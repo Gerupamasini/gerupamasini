@@ -15,6 +15,9 @@ interface MahazeMatExtras {
   fishFrame?: { S0: number; Y0: number; SL: number; SEND: number };
   vertebrae?: { start: number; count: number };
   dataTexture?: number;
+  /** fin: tint and melanophore factor of the individual's colour morph (the fin atlases are shared by the colours) */
+  tint?: [number, number, number];
+  melK?: number;
 }
 
 interface FinEntry {
@@ -70,7 +73,8 @@ export class HeroInstance {
     inst.interiorMat = interiorMat as unknown as HeroInstance['interiorMat'];
     const finOrig = finMeshes[0].material as unknown as { map: Texture; normalMap: Texture; userData: { mahaze: MahazeMatExtras } };
     const finData = await tex(finOrig.userData.mahaze.dataTexture, NoColorSpace);
-    const finMats = createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finOrig.normalMap }, shared }) as { transmit: Material; scatter: Material };
+    const fx = finOrig.userData.mahaze;
+    const finMats = createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finOrig.normalMap }, shared, tint: fx.tint, melK: fx.melK }) as { transmit: Material; scatter: Material };
     inst.created.push(bodyMat, eyeMat, interiorMat as unknown as Material, finMats.transmit, finMats.scatter);
     for (const f of finMeshes) {
       const scatter = new SkinnedMesh(f.geometry, finMats.scatter);
