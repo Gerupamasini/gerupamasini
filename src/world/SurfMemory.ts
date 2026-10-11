@@ -76,6 +76,8 @@ export class SurfMemory {
             float R2 = 1.1 * (0.35 * b * sqrt(Hs * L0) + 0.5 * sqrt(Hs * L0 * (0.563 * b * b + 0.004)));
             prev = vec4(0.0, 1.0 - smoothstep(0.55 * R2, 0.95 * R2, -sf.D), 0.0, 0.0);
           } else prev = texture2D(tPrev, puv);
+          // (whatever went wrong once must not stay in the memory for good)
+          if (any(isnan(prev)) || any(isinf(prev))) prev = vec4(0.0);
           // the film: glassy while the sheet is on it and for a second or two after it drains
           float film = max(prev.r * exp(-uDt / 1.4), covered);
           // saturation: the sand dries over a minute or so once the swash stops coming
@@ -89,7 +91,8 @@ export class SurfMemory {
           // swash marks: where a front stops (its flow turning), a line of fine bubbles and grit
           float stop = (1.0 - sf.swUp) * sf.front * (1.0 - smoothstep(0.05, 0.35, abs(sf.flow))) * sf.sw;
           float mark = max(prev.a * exp(-uDt / mix(45.0, 6.0, covered * (1.0 - stop))), stop * 0.9);
-          gl_FragColor = vec4(film, sat, clamp(foam, 0.0, 1.0), mark);
+          vec4 m = vec4(film, sat, clamp(foam, 0.0, 1.0), mark);
+          gl_FragColor = any(isnan(m)) ? vec4(0.0) : clamp(m, 0.0, 1.0);
         }`,
     });
     this.quad = new FullScreenQuad(this.material);

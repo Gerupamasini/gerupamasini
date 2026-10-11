@@ -141,6 +141,31 @@ try {
     await shot('debug-depth.png', 4);
     await page.evaluate(() => window.__higata.world.water.setSurfDebug(0));
   }
+  if (want('quality')) {
+    // switching the tier in the field re-makes the surf's parts about the viewer (memory, lips, spray)
+    await stand(0.55, 1.4, 0, -0.1);
+    for (const q of ['low', 'minimal', 'high', 'mid']) {
+      await page.evaluate((q) => window.__higata.updateSettings({ fieldQuality: q }), q);
+      await waitFrames(page, 4);
+      const parts = await page.evaluate(() => { const w = window.__higata.world; return { mem: w.surfMemory?.res ?? 0, lip: !!w.surfLip, spray: !!w.surfSpray }; });
+      console.log('quality', q, JSON.stringify(parts));
+      await shot(`quality-${q}.png`, 2);
+    }
+  }
+  if (want('worker')) {
+    // the bracket the tide is heading for is made ahead in the worker: no bake on the main thread as the tide rises
+    const r = await page.evaluate(async () => {
+      const w = window.__higata.world, z = w.surfZone;
+      const lv0 = z.uniforms.uSurfLv.value.y;
+      const before = z.bakes;
+      z.update(lv0 - 0.01, 1e-4);
+      await new Promise((res) => setTimeout(res, 4000));
+      z.update(lv0 + 0.005, 1e-4);
+      return { here: z.bakes - before, installed: z.uniforms.uSurfLv.value.toArray().slice(0, 2), worker: !!z.worker };
+    });
+    console.log('worker', JSON.stringify(r));
+    if (r.here !== 0 || r.installed[0] > r.installed[1]) { console.error('the worker did not make the next bracket'); code = 1; }
+  }
   const stats = await page.evaluate(() => {
     const a = window.__higata, w = a.world, cam = a.camera.position;
     let wl = -40; for (; wl < 40; wl += 0.05) if (w.terrain.heightAt(wl, cam.z) < w.tideLevel) break;

@@ -175,3 +175,23 @@ describe('the surf zone following the tide', () => {
     }
   });
 });
+
+describe('the surf lab beach', () => {
+  it('breaks the bigger waves on the bar, lets them re-form in the trough and break again on the face', async () => {
+    const lab = await import('../../src/world/maps/surflab/shape');
+    const zone = new SurfZone(lab.makeGrid(), [1, 0], { height: 0.6, period: 7, angle: -0.25, spread: 0.14 });
+    zone.update(0.3);
+    const out: string[] = [];
+    for (let d = 70; d >= -8; d -= 0.25) { const k = zone.kindAt(lab.ZERO_X + d, 6, 0.3); if (out[out.length - 1] !== k) out.push(k); }
+    // seaward to landward: past the bar, the bar's breaker zone, the trough, the inner breaker zone, the swash, the land
+    expect(out.slice(-3)).toEqual(['breaker', 'swash', 'land']);
+    expect(out.filter((k) => k === 'breaker').length).toBeGreaterThanOrEqual(2);
+    expect(out.indexOf('breaker')).toBeLessThan(out.lastIndexOf('shallow'));
+    // the face is steep (a shore break: the waves plunge on it) and the rocks are struck and shelter the water behind
+    expect(zone.slopeAt(lab.ZERO_X + 2, 6)).toBeGreaterThan(0.11);
+    let struck = 0;
+    for (let z = -36; z <= -24; z += 0.5) for (let d = 12; d <= 26; d += 0.5) struck = Math.max(struck, zone.impactAt(lab.ZERO_X + d, z));
+    expect(struck).toBeGreaterThan(0.4);
+    expect(zone.shelterAt(lab.ZERO_X + 10, -30, 0.3)).toBeLessThan(zone.shelterAt(lab.ZERO_X + 10, 20, 0.3));
+  });
+});

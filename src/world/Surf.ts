@@ -209,8 +209,10 @@ void surfSwashAt(vec2 sy, float D, float ph, float ta, float beta, float shelter
   for (int i = 0; i < 3; i++) {
     float n = n0 - float(i), tau = tau0 + float(i) * Tl, wn = surfW(n);
     float Hn = surfWaveH(n, sy) * shel;
-    float R = 0.62 * R2 * sqrt(max(Hn, 0.0) / Hs) * (0.75 + 0.5 * surfNoise(vec2(sy.y * 0.2, 1.7) + wn * 3.1));
-    float Xr = R / b, U0 = sqrt(19.62 * R), tU = U0 / (9.81 * b), tD = 1.35 * tU;
+    // (a few millimetres at least: a sheltered wave of next to nothing still reaches the waterline, and the timing below
+    // never divides by zero)
+    float R = max(0.62 * R2 * sqrt(max(Hn, 0.0) / Hs) * (0.75 + 0.5 * surfNoise(vec2(sy.y * 0.2, 1.7) + wn * 3.1)), 0.004);
+    float Xr = R / b, U0 = sqrt(19.62 * R), tU = max(U0 / (9.81 * b), 0.05), tD = 1.35 * tU;
     float xs, us;
     if (tau < tU) { xs = U0 * tau - 4.905 * b * tau * tau; us = U0 - 9.81 * b * tau; }
     else { float tb = tau - tU; xs = Xr * (1.0 - (tb / tD) * (tb / tD)); us = -2.0 * Xr * tb / (tD * tD); }

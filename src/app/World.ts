@@ -156,17 +156,7 @@ export class World {
     w.sea = sea;
     w.surf = layout?.surf ? surf : null;
     w.gl = renderer;
-    if (surfZone && preset.surfMemory > 0) {
-      w.surfMemory = new SurfMemory(surf, preset.surfMemory, preset.surfMemory >= 512 ? 40 : 32, preset.surfMemory >= 512 ? 1 : 2);
-      water.setMemory(w.surfMemory.uniforms);
-      water.extraCompile.push(w.surfMemory.compileTarget());
-    }
-    if (surfZone) {
-      const u = water.uniforms;
-      const light = { uSunDir: u.uSunDir, uSunCol: u.uSunCol, uSunUp: u.uSunUp, uAmbient: u.uAmbient, tEnv: u.tEnv, uEnvI: u.uEnvI, uFogColor: u.uFogColor, uFogDensity: u.uFogDensity, uWaterFog: u.uWaterFog, uTime: u.uTime, uWater: u.uWater, uSurfDebug: u.uSurfDebug };
-      if (preset.surfLip) { w.surfLip = new SurfLip(surf, light); w.scene.add(w.surfLip.mesh); }
-      if (preset.spray > 0) { w.surfSpray = new SurfSpray(surf, light, preset.spray); water.setSpray(w.surfSpray); water.extraCompile.push({ mesh: w.surfSpray.compileMesh, target: null }); }
-    }
+    w.setSurfQuality(preset);
     mark('skyline');
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
@@ -290,6 +280,37 @@ export class World {
       if (o.userData.mapOwned) { const m = o as Mesh; m.geometry?.dispose(); const mat = m.material; if (Array.isArray(mat)) mat.forEach((x) => x.dispose()); else mat?.dispose(); }
     });
     this.scene.clear();
+  }
+
+  private sprayCount = 0;
+
+  /**
+   * The surf's parts about the viewer for a quality tier: the sand's memory of the swash, the plunging lips and the
+   * spray (made, re-made or dropped when the tier changes).
+   */
+  setSurfQuality(preset: QualityPreset): void {
+    const surf = this.surf, water = this.water;
+    if (!this.surfZone || !surf) return;
+    if ((this.surfMemory?.res ?? 0) !== preset.surfMemory) {
+      this.surfMemory?.dispose();
+      this.surfMemory = preset.surfMemory > 0 ? new SurfMemory(surf, preset.surfMemory, preset.surfMemory >= 512 ? 40 : 32, preset.surfMemory >= 512 ? 1 : 2) : null;
+      water.setMemory(this.surfMemory?.uniforms ?? null);
+    }
+    const u = water.uniforms;
+    const light = { uSunDir: u.uSunDir, uSunCol: u.uSunCol, uSunUp: u.uSunUp, uAmbient: u.uAmbient, tEnv: u.tEnv, uEnvI: u.uEnvI, uFogColor: u.uFogColor, uFogDensity: u.uFogDensity, uWaterFog: u.uWaterFog, uTime: u.uTime, uWater: u.uWater, uSurfDebug: u.uSurfDebug };
+    if (preset.surfLip !== !!this.surfLip) {
+      if (this.surfLip) { this.surfLip.dispose(); this.surfLip = null; }
+      else { this.surfLip = new SurfLip(surf, light); this.scene.add(this.surfLip.mesh); }
+    }
+    if ((this.surfSpray ? this.sprayCount : 0) !== preset.spray) {
+      this.surfSpray?.dispose();
+      this.surfSpray = preset.spray > 0 ? new SurfSpray(surf, light, preset.spray) : null;
+      this.sprayCount = preset.spray;
+      water.setSpray(this.surfSpray);
+    }
+    water.extraCompile.length = 0;
+    if (this.surfMemory) water.extraCompile.push(this.surfMemory.compileTarget());
+    if (this.surfSpray) water.extraCompile.push({ mesh: this.surfSpray.compileMesh, target: null });
   }
 
   /** debug: another sea (any of height, period, approach angle and its spread); null: the day's own */

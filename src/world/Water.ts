@@ -311,7 +311,7 @@ export class WaterPass {
           float lr = log2(max(fp * 1.6, 0.004) / 0.004), l0 = floor(lr), fl = lr - l0;
           float cs0 = 0.004 * exp2(l0), cs1 = cs0 * 2.0;
           vec2 drift = uTime * vec2(0.21, 0.13);
-          float tol = 0.022 + 0.01 * sig / 0.1;
+          float tol = 0.03 + 0.012 * sig / 0.1;
           float g = mix(glintCells(p + drift, need, sig, tol, cs0, 0.0), glintCells(p + drift, need, sig, tol, cs1, 17.0), fl);
           return g;
         }
@@ -595,11 +595,14 @@ export class WaterPass {
                   // a network of foam cells of uneven size (the lace's Voronoi walls at two scales, warped and broken),
                   // its walls thicker the more foam there is; rafts of dense foam where the bore left most, full of bubbles;
                   // and a few of the long threads between (the contours of a warped noise, thin)
+                  float cv = min(cov, 0.9);
                   float walls = max(L1.r, L2.g * 0.85);
-                  float net = smoothstep(1.0 - 0.75 * cov, 1.0 - 0.45 * cov, walls) * smoothstep(0.25, 0.6, vnoiseW((S.xz - drift) * 2.3 + wn * 3.0) + 0.45 * cov);
-                  float raft = smoothstep(0.62 - 0.3 * cov, 0.7 - 0.3 * cov, fbmW((S.xz - drift) * 1.1 + wn * 1.9)) * (0.75 + 0.25 * L1.b);
-                  float threads = foamLace((S.xz - drift) * 3.2 + wn * 7.0, min(cov, 0.6) * 0.5, fpx * 3.2 * 2.6) * 0.7;
-                  fTrail = max(max(net, raft * smoothstep(0.15, 0.5, cov)), threads) * smoothstep(0.0, 0.1, cov);
+                  float net = smoothstep(1.0 - 0.6 * cv, 1.0 - 0.38 * cv, walls) * smoothstep(0.3, 0.65, vnoiseW((S.xz - drift) * 2.3 + wn * 3.0) + 0.4 * cv);
+                  // (rafts only where the foam is thick, a fifth of it at most, ragged and full of bubbles)
+                  float rn = fbmW((S.xz - drift) * 1.1 + wn * 1.9) + 0.12 * (vnoiseW((S.xz - drift) * 6.0) - 0.5);
+                  float raft = smoothstep(0.8 - 0.2 * cv, 0.86 - 0.2 * cv, rn) * (0.55 + 0.45 * L1.b) * smoothstep(0.35, 0.8, cv);
+                  float threads = foamLace((S.xz - drift) * 3.2 + wn * 7.0, cv * 0.45, fpx * 3.2 * 2.6) * 0.7;
+                  fTrail = max(max(net, raft), threads) * smoothstep(0.0, 0.1, cov);
                 }
                 #endif
                 fTrail = mix(fTrail, cov * 0.55, farther);
