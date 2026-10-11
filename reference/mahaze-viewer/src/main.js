@@ -9,8 +9,16 @@ import { createBehavior } from './fish/Behavior.js';
 import { createBackground, createFloor, createParticles } from './scene/Environment.js';
 import { createPost } from './scene/Post.js';
 
-// window.MAHAZE_MODEL_URL can point the viewer at another copy of the model (e.g. a .gltf with external textures)
-const MODEL_URL = window.MAHAZE_MODEL_URL || new URL('../models/mahaze_juvenile.glb', import.meta.url).href;
+// Three growth stages of the same fish: juvenile (default), subadult (?model=subadult) and adult (?model=adult).
+// window.MAHAZE_MODELS = { juvenile, adult } (or MAHAZE_MODEL_URL for a single model) can point the viewer
+// at other copies of the models (e.g. .gltf with external textures).
+const MODEL_URLS = window.MAHAZE_MODELS || {
+  juvenile: new URL('../models/mahaze_juvenile.glb', import.meta.url).href,
+  subadult: new URL('../models/mahaze_subadult.glb', import.meta.url).href,
+  adult: new URL('../models/mahaze_adult.glb', import.meta.url).href,
+};
+const VARIANT = (() => { const m = new URLSearchParams(location.search).get('model'); return m in MODEL_URLS && m !== 'juvenile' ? m : 'juvenile'; })();
+const MODEL_URL = window.MAHAZE_MODEL_URL || MODEL_URLS[VARIANT];
 const LAYER_FISH = 2; // body, eyes, fins (main pass)
 const LAYER_BEHIND = 3; // fins are also drawn into the background buffer so they show through thin tissue
 const params = new URLSearchParams(location.search);
@@ -97,6 +105,9 @@ function applyEnv(name) {
 
 // ---------------------------------------------------------------------------- state
 const state = {
+  // pattern (1…3) and colour morph (1…3) of the fish, from ?pattern= / ?color=
+  pattern: Math.max(1, Number(new URLSearchParams(location.search).get('pattern')) || 1),
+  color: Math.max(1, Number(new URLSearchParams(location.search).get('color')) || 1),
   lightMode: 'front',
   azOffset: 0,
   elOffset: 0,
@@ -204,26 +215,46 @@ async function onLoaded(gltf) {
   }
   if (!fish.body) throw new Error('Body mesh not found in glTF');
 
+  // variants (KHR_materials_variants): pattern × colour morph. Only the glTF material indices are read here;
+  // the materials and their textures are loaded the first time a variant is shown (loadVariant).
+  const variantMaterialIndices = (obj) => {
+    const a = parser.associations.get(obj);
+    const prim = a && a.meshes !== undefined ? parser.json.meshes[a.meshes].primitives[a.primitives ?? 0] : null;
+    const maps = prim?.extensions?.KHR_materials_variants?.mappings;
+    const out = [];
+    if (maps) for (const m of maps) for (const v of m.variants) out[v] = m.material;
+    return out;
+  };
+  const variantDefs = parser.json.extensions?.KHR_materials_variants?.variants || [];
+  fish.variants = variantDefs.map((v, i) => {
+    const x = v.extras?.mahaze;
+    const m = /pattern(\d+)/.exec(v.name || '');
+    return { pattern: x?.pattern ?? (m ? Number(m[1]) : i + 1), color: x?.color ?? 1 };
+  });
+
   // body
+  const profileTexture = createProfileTexture(fish.body.material.userData.mahaze.profile);
+  const bodyVariant = async (orig) => {
+    const bx = orig.userData.mahaze;
+    const pigment = await parser.getDependency('texture', bx.pigmentTexture);
+    pigment.colorSpace = THREE.NoColorSpace;
+    const capAlbedo = await parser.getDependency('texture', bx.snoutCap.albedoRoughness);
+    const capPigment = await parser.getDependency('texture', bx.snoutCap.pigment);
+    capAlbedo.colorSpace = THREE.SRGBColorSpace; // rgb decoded to linear on sampling; alpha (roughness) stays linear
+    capPigment.colorSpace = THREE.NoColorSpace;
+    return createBodyMaterial({
+      textures: { albedo: orig.map, normal: orig.normalMap, orm: orig.roughnessMap || orig.aoMap, pigment, capAlbedo, capPigment },
+      capRect: bx.snoutCap.rectMM,
+      profileTexture,
+      frame: bx.fishFrame,
+      vertebrae: bx.vertebrae,
+      shared,
+    });
+  };
   const bx = fish.body.material.userData.mahaze;
-  const pigment = await parser.getDependency('texture', bx.pigmentTexture);
-  pigment.colorSpace = THREE.NoColorSpace;
-  const capAlbedo = await parser.getDependency('texture', bx.snoutCap.albedoRoughness);
-  const capPigment = await parser.getDependency('texture', bx.snoutCap.pigment);
-  capAlbedo.colorSpace = THREE.SRGBColorSpace; // rgb decoded to linear on sampling; alpha (roughness) stays linear
-  capPigment.colorSpace = THREE.NoColorSpace;
   fish.profile = bx.profile;
   fish.frame = bx.fishFrame;
-  const orig = fish.body.material;
-  const bodyMat = createBodyMaterial({
-    textures: { albedo: orig.map, normal: orig.normalMap, orm: orig.roughnessMap || orig.aoMap, pigment, capAlbedo, capPigment },
-    capRect: bx.snoutCap.rectMM,
-    profileTexture: createProfileTexture(bx.profile),
-    frame: bx.fishFrame,
-    vertebrae: bx.vertebrae,
-    shared,
-  });
-  fish.body.userData.custom = bodyMat;
+  const bodyIdx = variantMaterialIndices(fish.body);
 
   // eyes
   const eyeOrig = fish.eyes[0].material;
@@ -236,10 +267,28 @@ async function onLoaded(gltf) {
   fish.interiorMat = interiorMat;
 
   // fins (two passes each, both skinned to the same skeleton)
-  const finOrig = fish.fins[0].mesh.material;
-  const finData = await parser.getDependency('texture', finOrig.userData.mahaze.dataTexture);
-  finData.colorSpace = THREE.NoColorSpace;
-  const finMats = createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finOrig.normalMap }, shared });
+  const finIdx = variantMaterialIndices(fish.fins[0].mesh);
+  const finVariant = async (finOrig) => {
+    const fx = finOrig.userData.mahaze;
+    const finData = await parser.getDependency('texture', fx.dataTexture);
+    finData.colorSpace = THREE.NoColorSpace;
+    return createFinMaterials({ textures: { color: finOrig.map, data: finData, normal: finOrig.normalMap }, shared, tint: fx.tint, melK: fx.melK });
+  };
+  // materials of variant i (default materials of the meshes when the model has no variants)
+  fish.loadVariant = (i) => {
+    if (!fish.variantCache) fish.variantCache = [];
+    if (!fish.variantCache[i]) {
+      fish.variantCache[i] = (async () => {
+        const bodyOrig = bodyIdx[i] !== undefined ? await parser.getDependency('material', bodyIdx[i]) : fish.originals.get(fish.body);
+        const finOrig = finIdx[i] !== undefined ? await parser.getDependency('material', finIdx[i]) : fish.originals.get(fish.fins[0].mesh);
+        return { bodyOrig, body: await bodyVariant(bodyOrig), finOrig, fin: await finVariant(finOrig) };
+      })();
+    }
+    return fish.variantCache[i];
+  };
+  const V0 = await fish.loadVariant(variantIndex(state.pattern, state.color));
+  fish.body.userData.custom = V0.body;
+  const finMats = V0.fin;
   for (const f of fish.fins) {
     const scatter = new THREE.SkinnedMesh(f.mesh.geometry, finMats.scatter);
     scatter.bind(f.mesh.skeleton, f.mesh.bindMatrix);
@@ -258,6 +307,7 @@ async function onLoaded(gltf) {
     f.center = f.mesh.geometry.boundingSphere.center.clone();
   }
 
+  await setVariant(state.pattern, state.color, false);
   scene.add(root);
   root.updateMatrixWorld(true);
   for (const bone of Object.values(fish.bones)) bone.userData.restObj = bone.getWorldPosition(new THREE.Vector3());
@@ -290,6 +340,47 @@ async function onLoaded(gltf) {
   // debugging / automated capture: advance the behaviour without waiting for real time
   window.__mahaze = { fish, camera, controls, THREE, step: (sec) => { for (let t = 0; t < sec; t += 1 / 60) fish.behavior.update(1 / 60); } };
   window.__mahazeReady = true;
+}
+
+// index of the variant with this pattern and colour (or the closest one the model has)
+function variantIndex(pattern, color) {
+  const V = fish.variants || [];
+  if (!V.length) return 0;
+  let best = 0, bestD = Infinity;
+  V.forEach((v, i) => {
+    const d = (v.pattern === pattern ? 0 : 10) + (v.color === color ? 0 : 1) + i * 1e-3;
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
+
+// switch pattern and colour morph (body, snout cap and fin textures; the mesh is shared)
+let variantRequest = 0;
+async function setVariant(pattern, color, apply = true) {
+  state.pattern = pattern;
+  state.color = color;
+  for (const b of document.querySelectorAll('#pattern button')) b.classList.toggle('on', Number(b.dataset.v) === pattern);
+  for (const b of document.querySelectorAll('#color button')) b.classList.toggle('on', Number(b.dataset.v) === color);
+  if (!fish.loadVariant) return;
+  const req = ++variantRequest;
+  const i = variantIndex(pattern, color);
+  let P;
+  try {
+    P = await fish.loadVariant(i);
+  } catch (err) {
+    fish.variantCache[i] = null; // let a later click retry
+    console.error('variant could not be loaded', err);
+    return;
+  }
+  if (req !== variantRequest) return; // a newer choice was made while this one was loading
+  fish.body.userData.custom = P.body;
+  fish.originals.set(fish.body, P.bodyOrig);
+  for (const f of fish.fins) {
+    f.mesh.userData.custom = P.fin.transmit;
+    if (f.scatter) f.scatter.material = P.fin.scatter;
+    fish.originals.set(f.mesh, P.finOrig);
+  }
+  if (apply) applyMaterialMode();
 }
 
 function applyMaterialMode() {
@@ -534,6 +625,29 @@ bindSeg('shading', (v) => { state.custom = v === 'custom'; if (fish.body) applyM
 bindSeg('debug', (v) => { shared.uDebug.value = Number(v); });
 let envName = 'water';
 bindSeg('env', (v) => { envName = v; applyEnv(v); });
+// pattern / colour: keep the choice in the URL so it survives switching the growth stage (a page reload)
+function setURLParam(name, v) {
+  const u = new URL(location.href);
+  if (v !== '1') u.searchParams.set(name, v); else u.searchParams.delete(name);
+  history.replaceState(null, '', u.href);
+}
+bindSeg('pattern', (v) => {
+  setVariant(Number(v), state.color);
+  setURLParam('pattern', v);
+});
+bindSeg('color', (v) => {
+  setVariant(state.pattern, Number(v));
+  setURLParam('color', v);
+});
+// switching the individual reloads the page with the other model (keeps the other URL parameters)
+for (const b of document.querySelectorAll('#variant button')) b.classList.toggle('on', b.dataset.v === VARIANT);
+if (window.MAHAZE_MODEL_URL && !window.MAHAZE_MODELS) document.getElementById('variant').closest('.group').hidden = true;
+bindSeg('variant', (v) => {
+  if (v === VARIANT) return;
+  const u = new URL(location.href);
+  if (v !== 'juvenile') u.searchParams.set('model', v); else u.searchParams.delete('model');
+  location.replace(u.href);
+});
 bindRange('light-az', (v) => { state.azOffset = v; });
 bindRange('light-el', (v) => { state.elOffset = v; });
 bindRange('light-int', (v) => {

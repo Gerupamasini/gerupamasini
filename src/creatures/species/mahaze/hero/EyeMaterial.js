@@ -31,6 +31,7 @@ uniform sampler2D uIris;
 uniform float uEyeR;         // mm
 uniform float uPupil;        // rad
 uniform float uIrisA;        // rad
+uniform float uPupilGlow;    // strength of the blue-green glow in the pupil (strong in the juvenile)
 uniform float uCausticAmt;
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
@@ -84,15 +85,22 @@ void main() {
   // fish lens bulging through the pupil: tight secondary highlight, deep blue-black body
   vec3 lensC = vec3(0.0, 0.0, uEyeR * 0.28);
   vec3 lensN = normalize(lp - lensC);
-  float lensSpec = pupil * specGGX(normalize(mat3(modelMatrix) * lensN), V, L, 0.06, 0.03);
+  vec3 lensNw = normalize(mat3(modelMatrix) * lensN);
+  float lensSpec = pupil * specGGX(lensNw, V, L, 0.06, 0.03);
+  // iridescent patch on the lens (photos 02 / u1 / u5): a broad lobe around the light's reflection that shifts
+  // from teal to deep blue with the viewing angle, instead of a uniform glow over the whole pupil
+  float lobe = pow(sat(dot(lensNw, normalize(L + V))), 5.0);
+  vec3 iridC = mix(vec3(0.03, 0.2, 0.2), vec3(0.03, 0.08, 0.26), sat(1.0 - NoV * 1.2));
+  vec3 lensIrid = pupil * uPupilGlow * iridC * lobe * (Lc * 0.06 + ambientIrr(lensNw) * 0.25);
   vec3 lensEnv = pupil * waterEnv(reflect(-V, normalize(mat3(modelMatrix) * lensN)), 0.08) * 0.03;
   diffuse = mix(diffuse, vec3(0.003, 0.005, 0.008) + ambientIrr(N) * 0.02, pupil);
   // the pupil glints blue-green (retinal / lens reflection seen in the close-up photos)
-  diffuse += pupil * vec3(0.012, 0.05, 0.065) * (ambientIrr(N) * 1.5 + Lc * 0.015) * (0.6 + 0.8 * pow(1.0 - NoV, 1.5));
+  diffuse += pupil * uPupilGlow * vec3(0.008, 0.03, 0.04) * (ambientIrr(N) * 1.2 + Lc * 0.01) * (0.5 + 0.8 * pow(1.0 - NoV, 1.5));
   // cornea
   float spec = specGGX(N, V, L, 0.035, 0.03);
-  vec3 envSpec = waterEnv(reflect(-V, N), 0.035) * F_Schlick(0.03, NoV) * 1.3;
-  vec3 col = diffuse + sheen + Lc * (spec + lensSpec) + envSpec + lensEnv;
+  // underwater the cornea (n ≈ 1.37) barely reflects the surroundings; only bright lights leave highlights
+  vec3 envSpec = waterEnv(reflect(-V, N), 0.035) * F_Schlick(0.02, NoV) * 0.55;
+  vec3 col = diffuse + sheen + Lc * (spec + lensSpec) + envSpec + lensEnv + lensIrid;
   col = applyFog(col, length(cameraPosition - vWorldPos));
   gl_FragColor = vec4(col, 1.0);
 }
@@ -107,6 +115,7 @@ export function createEyeMaterial({ irisTexture, params, shared }) {
       uEyeR: { value: params.radiusMM },
       uPupil: { value: params.pupilAngle },
       uIrisA: { value: params.irisAngle },
+      uPupilGlow: { value: params.pupilGlow ?? 1 },
     },
     vertexShader,
     fragmentShader,
