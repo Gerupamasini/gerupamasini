@@ -24,6 +24,7 @@ export function DebugPanel({ app }: { app: App }) {
   return (
     <div class="debug-panel">
       <div class="debug-title">DEBUG <span class="dim small">F3 で閉じる</span></div>
+      <div class="debug-row dim small">水深制限なし（移動・視点・ジャンプ・採集）</div>
       <div class="debug-row"><b>時刻</b> {hud.dateText} {hud.timeText} {d.timeOverride && <span class="warn">(固定中)</span>}</div>
       <div class="debug-row">
         <input type="datetime-local" value={timeInput} onInput={(e) => setTimeInput((e.target as HTMLInputElement).value)} />

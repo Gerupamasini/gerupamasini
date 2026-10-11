@@ -12,6 +12,7 @@ npm run build        # dist/ を生成（GitHub Pages 用のベースパス /ger
 npm run smoke        # ヘッドレス Chromium で起動し tests/smoke/out/ にスクリーンショット
 node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボを撮影（tests/smoke/out/pagurus-*.png）
 CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium.mjs # 水槽設備・ガチャ・自動配線・保存復元のブラウザ検証
+node tests/smoke/debug-depth.mjs    # ビルド後、F3・水深制限・水中採集・スマホのデバッグ無効を検証
 npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze -- --tier hero  # エドハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze-gravid -- --tier hero   # エドハゼの抱卵雌（edohaze_gravid.*.glb）
@@ -32,6 +33,8 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 ```
 
 ローカルや別ホストでは `VITE_BASE=/ npm run build` のようにベースパスを変えられます。
+
+PCでは F3（または `?debug=1`）でデバッグモードを開けます。デバッグ中は水深による移動・視点・ジャンプ・採集の制限を解除し、閉じると通常の制限に戻ります。地形や障害物の衝突判定は維持します。スマホではデバッグモードを開きません。
 
 ユビナガホンヤドカリ単体のラボは `hermit-lab.html`（開発時は http://localhost:5173/gerupamasini/hermit-lab.html）。
 殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガード、`?mode=naked` で殻から出した体（`&stage=dark` で写真と同じ黒い撮影台）、`?mode=retract` で殻に閉じこもる様子を見られます。

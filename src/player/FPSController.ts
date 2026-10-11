@@ -22,6 +22,8 @@ export class FPSController {
   crouching = false;
   running = false;
   enabled = true;
+  /** Debug inspection: walk, jump and lower the view below water without wading limits. */
+  ignoreDepthLimit = false;
   /** true when the last movement attempt was stopped by deep water */
   blockedByDepth = false;
   depthHere = 0;
@@ -133,7 +135,7 @@ export class FPSController {
     this.jumped = false;
     // the jump: off the ground (not from deep water), a hop; out of a run, a long jump that keeps the run's pace
     // (Space held keeps jumping: the next hop leaves the ground as soon as the feet touch it)
-    if (this.enabled && !this.airborne && (input.pressed('jump') || input.held('jump')) && this.depthHere < 0.25) {
+    if (this.enabled && !this.airborne && (input.pressed('jump') || input.held('jump')) && (this.ignoreDepthLimit || this.depthHere < 0.25)) {
       this.airborne = true;
       this.jumped = true;
       this.vy = JUMP_V * (this.crouching ? 0.85 : 1);
@@ -216,7 +218,7 @@ export class FPSController {
     if (x < b[0][0] || x > b[1][0] || z < b[0][1] || z > b[1][1]) return false;
     for (const ne of this.map.bounds.noEntry) if (x >= ne[0][0] && x <= ne[1][0] && z >= ne[0][1] && z <= ne[1][1]) return false;
     const h = this.groundAt(x, z);
-    if ((this.supportHeight ? this.habitat.waterAt(x, z) - h : this.habitat.depthAt(x, z)) > this.wadeDepth) return false;
+    if (this.depthBlocks(x, z, h)) return false;
     const feetY = this.airborne ? this.jumpBaseY : this.position.y;
     if (h - feetY > (this.supportHeight ? 0.45 : 0.6)) return false; // too steep a step
     if (this.obstacleFree && !this.obstacleFree(new Vector3(this.position.x, feetY, this.position.z), new Vector3(x, Math.max(h, this.airborne ? feetY : h), z))) return false;
@@ -226,9 +228,13 @@ export class FPSController {
   private tryMove(dx: number, dz: number): void {
     const { x, z } = this.position;
     if (this.canStand(x + dx, z + dz)) { this.position.x += dx; this.position.z += dz; return; }
-    if (this.canStand(x + dx, z)) { this.position.x += dx; this.blockedByDepth = true; return; }
-    if (this.canStand(x, z + dz)) { this.position.z += dz; this.blockedByDepth = true; return; }
-    this.blockedByDepth = this.habitat.depthAt(x + dx, z + dz) > this.wadeDepth;
+    this.blockedByDepth = this.depthBlocks(x + dx, z + dz, this.groundAt(x + dx, z + dz));
+    if (this.canStand(x + dx, z)) { this.position.x += dx; return; }
+    if (this.canStand(x, z + dz)) { this.position.z += dz; return; }
+  }
+
+  private depthBlocks(x: number, z: number, ground: number): boolean {
+    return !this.ignoreDepthLimit && (this.supportHeight ? this.habitat.waterAt(x, z) - ground : this.habitat.depthAt(x, z)) > this.wadeDepth;
   }
 
   private syncCamera(dt: number): void {
@@ -237,7 +243,7 @@ export class FPSController {
     const bobY = this.speedNow > 0 && !this.airborne ? Math.sin(this.bob * 2) * 0.012 * Math.min(1, this.speedNow / WALK) : 0;
     // wading deep, a crouch cannot take the eye under the water: it stops just above the surface
     const water = this.habitat.waterAt(this.position.x, this.position.z);
-    const eyeY = Math.max(this.position.y + this.eye, water > this.position.y ? water + 0.16 : -Infinity);
+    const eyeY = this.ignoreDepthLimit ? this.position.y + this.eye : Math.max(this.position.y + this.eye, water > this.position.y ? water + 0.16 : -Infinity);
     this.camera.position.set(this.position.x, eyeY + bobY + this.airY, this.position.z);
     this.camera.rotation.set(0, 0, 0, 'YXZ');
     this.camera.rotation.y = this.yaw;

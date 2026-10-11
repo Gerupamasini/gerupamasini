@@ -478,6 +478,7 @@ export class App {
       ui.loading.value = { frac: 0.6, label: t('loading.shaders') };
       await this.field?.compile(this.world.scene, this.camera, this.world.water);
       this.player = new FPSController(this.camera, this.world.terrain, this.world.habitat, this.input, map);
+      this.player.ignoreDepthLimit = ui.debug.value;
       this.player.eyeHeight = this.settings.eyeHeight;
       // the revetment's stones can be stood on
       this.player.groundBoost = (x, z) => this.world?.riprap?.heightBoost(x, z) ?? 0;
@@ -708,6 +709,11 @@ export class App {
   toggleDebug(): void {
     if (this.input.touchDevice) return;
     ui.debug.value = !ui.debug.value;
+    if (this.player) {
+      this.player.ignoreDepthLimit = ui.debug.value;
+      this.player.blockedByDepth = false;
+      this.player.idle(0);
+    }
     if (!ui.debug.value) ui.markers.value = [];
   }
 
@@ -1107,7 +1113,7 @@ export class App {
     const tg = this.digTarget();
     if (!tg || tg.far) { toast(t('hud.tooFar'), 'warn'); return; }
     const p = tg.p;
-    if (world.habitat.depthAt(p.x, p.z) > 0.15) { toast(t('hud.tooDeepToDig'), 'warn'); return; }
+    if (!ui.debug.value && world.habitat.depthAt(p.x, p.z) > 0.15) { toast(t('hud.tooDeepToDig'), 'warn'); return; }
     this.shovel?.setDigPoint(p, this.camera);
     const nowSec = this.clock.nowGame() / 1000;
     // a practised hand finds the clam under a wider blade
