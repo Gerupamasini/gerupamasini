@@ -5,7 +5,7 @@ Web 版（リポジトリ直下、Three.js）とデータ（`public/data/`）を
 
 ## 準備（Windows）
 
-1. Unreal Engine 5.7 と Visual Studio 2022（「C++ によるゲーム開発」）を入れる。別の版を使う場合は `HigataZukan/HigataZukan.uproject` の `EngineAssociation` を変える
+1. Unreal Engine 5.8（5.8.3 で開発）と Visual Studio 2022（「C++ によるゲーム開発」）を入れる。別の版を使う場合は `HigataZukan/HigataZukan.uproject` の `EngineAssociation` を変える
 2. Git LFS を入れる（`git lfs install`）。`.uasset` / `.umap` は LFS に入る
 3. リポジトリ直下で `npm ci` と `npm run unreal:sync-data` を実行する。`public/data/` の JSON が `HigataZukan/Content/Data/` に写る
 4. `HigataZukan.uproject` を右クリック →「Generate Visual Studio project files」を選び、開いてビルドする

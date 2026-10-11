@@ -71,7 +71,7 @@ tools/unreal/                   データの同期、今後の glTF 書き出し
 
 ## 6. 開発環境
 
-- UE は **5.7 を想定**（`HigataZukan.uproject` の `EngineAssociation`）。使う版に合わせて変える
+- UE は **5.8（5.8.3）**を使う（`HigataZukan.uproject` の `EngineAssociation`）。マイナー版を上げるときはこの行と `.uproject` を一緒に変える
 - ビルドと実行は **Windows + Visual Studio 2022**（または Rider）。DX12 と HW レイトレーシングに対応した GPU
 - クラウドの開発環境（このリポジトリの CI など）では UE をビルドできない。UE のヘッダーを使わない部分だけを CMake で検証する。**UE のモジュールのコンパイル確認は手元の Windows 機で行う**
 - Git LFS をインストールしてから `.uasset` をコミットする。GitHub の LFS の容量と転送量の上限は要確認
