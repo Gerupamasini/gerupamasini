@@ -4,7 +4,12 @@ import type { BehaviorEvent, Driver, DriverContext, Floor, Intent } from '../../
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
 import { AkaeiModel, AkaeiPose, BELLY } from './AkaeiModel';
-import { LATTICE_COLS, LATTICE_ROWS, TAIL_BONES, latticeU, latticeZ, tailAxisY, type Lod } from './geometry';
+import { CONTACT_SHADOWS } from '../haku/ContactShadows';
+
+/** the quality tier's reach for the ray's own detail tiers (set by the app from the preset): the distances of its
+ * LOD steps scale with the preset's view scale, and the lightest tiers forgo the 55k-triangle close-up altogether */
+export const AKAEI_DETAIL = { viewScale: 1, allowLod0: true };
+import { LATTICE_COLS, LATTICE_ROWS, TAIL_BONES, akaeiGeometries, latticeU, latticeZ, tailAxisY, type Lod } from './geometry';
 import { MORPH, halfWidth, tailSection, tailZ, ventralDepth } from './morphology';
 import { SAND_COLOURS } from './material';
 import { SandFX } from './SandFX';
@@ -183,7 +188,24 @@ export class AkaeiDriver implements Driver {
     model.root.traverse((o) => { const m = o as SkinnedMesh; if (m.isSkinnedMesh) m.geometry = m.geometry.clone(); });
     holder.add(model.root);
     holder.userData.disposable = true;
+    holder.userData.disposer = () => model.dispose();   // (the materials and the skeleton go with the preview)
     return holder;
+  }
+
+  /**
+   * The species' materials in both variants (the near and the far skin, eyes and sting, the mouth's interior) and the
+   * sand effects' shaders (the puffs, the contact shadow, an imprint), on models that are never drawn: DriverEntry.keep.
+   */
+  static keep(parent: Object3D): { dispose(): void } {
+    const b = akaeiBuild({ id: 'keep', length_mm: 800 });
+    const models = [new AkaeiModel(b.look, 1), new AkaeiModel(b.look, 2)];
+    for (const m of models) parent.add(m.root);
+    // the shared geometry is built here too (the close-up's 55k triangles take ~0.1 s), not in the frame a ray first
+    // comes near; a preset that never shows the close-up does without it
+    if (AKAEI_DETAIL.allowLod0) akaeiGeometries(0);
+    const fx = new SandFX(parent);
+    fx.imprint(0, 0, 0, 0.3, 0.5, () => 0);
+    return { dispose: () => { for (const m of models) { m.root.removeFromParent(); m.dispose(); } fx.dispose(); } };
   }
 
   attach(root: Object3D, individual: Individual): void {
@@ -193,6 +215,9 @@ export class AkaeiDriver implements Driver {
     this.dw = b.dw;
     this.aspect = b.aspect;
     this.tailK = b.tail;
+    // a new ray starts in its far form: the distance decides on the first update, and a ray that is far never has the
+    // close-up built or uploaded for it
+    if (!this.attachedOnce) this.lod = 2;
     this.model = new AkaeiModel(b.look, this.lod);
     this.model.root.scale.set(this.dw, this.dw, this.dw * this.aspect);
     root.add(this.model.root);
@@ -262,7 +287,8 @@ export class AkaeiDriver implements Driver {
         break;
       }
       case 'burrow': {
-        if (this.state === 'BURROW_IN_SAND' && this.phase === 'buried') break;
+        // (found already buried: the behaviour is seen, and counts)
+        if (this.state === 'BURROW_IN_SAND' && this.phase === 'buried') { this.emit(AKAEI_EVENTS.BURROW_IN_SAND); break; }
         this.target = null;
         this.enter('BURROW_IN_SAND', this.grounded > 0.95 ? 'dig' : 'land');
         break;
@@ -319,7 +345,7 @@ export class AkaeiDriver implements Driver {
     if (!ind || !model || !holder) return;
     this.floor = ctx.floor;
     this.minDepth = ctx.minDepth ?? 0.05;
-    const dt = Math.min(0.05, dtIn * ctx.simScale);
+    const dt = Math.min(0.1, dtIn * ctx.simScale);   // (a far ray is handed two frames at once: no slow motion below 40 fps)
     if (dt <= 0) return;
     this.time += dt;
     this.phaseT += dt;
@@ -328,10 +354,11 @@ export class AkaeiDriver implements Driver {
 
     // detail by distance to the player (with a little hysteresis)
     const dist = ctx.player.distanceTo(this.pos);
-    const byDistance: Lod = ctx.locked || ctx.bounds ? 0 : dist < (this.lod === 0 ? 8 : 7) ? 0 : dist < (this.lod <= 1 ? 22 : 20) ? 1 : 2;
+    const vs = AKAEI_DETAIL.viewScale;
+    const byDistance: Lod = ctx.locked || ctx.bounds ? 0 : dist < (this.lod === 0 ? 8 : 7) * vs ? (AKAEI_DETAIL.allowLod0 ? 0 : 1) : dist < (this.lod <= 1 ? 22 : 20) * vs ? 1 : 2;
     const want = this.forceLod ?? byDistance;
     if (want !== this.lod) { this.lod = want; model.setLod(want); }
-    this.fxOn = this.lod <= 1;
+    this.fxOn = this.lod <= 1 && CONTACT_SHADOWS.enabled;   // (the sand puffs go with the contact shadows: off on 超軽量)
 
     if (!this.settled) {
       this.settled = true;
@@ -649,7 +676,9 @@ export class AkaeiDriver implements Driver {
           if (this.phaseT < dt * 1.5 && this.fxOn && (this.grounded > 0.6 || this.sand > 0.2)) this.burstPuff();
           // away from the threat, at once
           // toward the flight target (already bent along the water), else straight away from the threat
-          const away = this.target && Math.hypot(this.target.x - this.pos.x, this.target.z - this.pos.z) > 0.2 ? Math.atan2(this.target.x - this.pos.x, this.target.z - this.pos.z)
+          // (the flight target, once reached, is done with: the ray never turns back toward it)
+          if (this.target && Math.hypot(this.target.x - this.pos.x, this.target.z - this.pos.z) < 0.3) this.target = null;
+          const away = this.target ? Math.atan2(this.target.x - this.pos.x, this.target.z - this.pos.z)
             : this.fleeFrom ? Math.atan2(this.pos.x - this.fleeFrom.x, this.pos.z - this.fleeFrom.z) : this.heading;
           w.face = away;
           w.yawMax = 5.5;
@@ -660,7 +689,7 @@ export class AkaeiDriver implements Driver {
           w.flap = this.phaseT < 0.35 ? 0.05 : 0;
           w.flapFreq = 3;
           w.camber = 0.004;
-          if (this.phaseT > 1.25) this.setPhase('flee');
+          if (this.phaseT > 1.25) { this.setPhase('flee'); this.target = null; }   // (straight on from here)
           break;
         }
         // keep going, easing to a cruise

@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // Builds the エドハゼ GLB tiers (geometry + baked textures) procedurally, with the マハゼ pipeline.
-//   node tools/build-model.mjs [--fast] [--dump-textures <dir>]
+//   node tools/models/edohaze/build.mjs [--tier hero|lod1|lod2] [--fast] [--dump-textures <dir>]
+//   GOBY_GRAVID=1 node tools/models/edohaze/build.mjs --tier hero   (the gravid female)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import jpeg from 'jpeg-js';
 import { GLBBuilder } from '../../lib/glb.mjs';
 import { encodePNG } from '../../lib/png.mjs';
-import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, profileTable, toObject, botY } from './anatomy.mjs';
+import { S0, Y0, SL, S_END, TL, VERT_START, VERT_COUNT, EYE, GRAVID, profileTable, toObject, botY } from './anatomy.mjs';
 import { buildBody } from './body.mjs';
 import { finDefinitions, buildFinMesh, buildFinTargets, paintFinAtlas } from './fins.mjs';
 import { buildEyeMesh, eyeTransform, paintIris, PUPIL_ANGLE, IRIS_ANGLE, CORNEA_BULGE } from './eye.mjs';
@@ -31,7 +32,8 @@ const tier = TIERS[tierName];
 if (!tier) { console.error(`unknown tier ${tierName}`); process.exit(1); }
 const dumpIdx = args.indexOf('--dump-textures');
 const dumpDir = dumpIdx >= 0 ? args[dumpIdx + 1] : null;
-const outFile = path.join(root, 'src', 'assets', 'models', 'edohaze', `edohaze.${tierName}.glb`);
+// GOBY_GRAVID=1 builds the gravid female (egg-swollen belly) as its own set of tiers
+const outFile = path.join(root, 'src', 'assets', 'models', 'edohaze', `edohaze${GRAVID ? '_gravid' : ''}.${tierName}.glb`);
 
 const t0 = Date.now();
 const log = (m) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).padStart(5)}s] ${m}`);

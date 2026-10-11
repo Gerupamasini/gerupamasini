@@ -38,6 +38,21 @@ export const PATTERNS = [
   { shift: 1.1, rsK: 1.1, rhK: 2.0, hn: 0.14, mottK: 0.85, freqK: 0.85, blotK: 1.15, dorsK: 1.5 },
   { shift: 0.8, rsK: 0.7, rhK: 0.8, hn: -0.04, mottK: 1.25, freqK: 1.4, blotK: 0.9, dorsK: 0.9 },
 ];
+// Colour morphs, independent of the pattern (every pattern is baked in every colour). The ground colour of
+// a goby follows its bottom and water: pale grey-brown on sand, amber-olive in brackish creeks, dark on mud.
+//   base / dors / belly: albedo of flank, back and belly (linear); melK: melanophore density as an optical
+//   depth factor; melAdd: diffuse dusky melanin over the back and flanks; xanK: xanthophore (yellow) density;
+//   iriK: iridophore (silvery sheen) density, lower when dispersed melanophores cover them
+//   fin: tint of the fin membranes and rays and their melanophore factor (the fin atlases are shared)
+//   1: standard: the photo-matched colour of the growth stage
+//   2: amber: the original pale amber colour of the first adult model, a little darker and warmer
+//   3: dark: dark mud-brown, dusky and less yellow
+export const COLORS = [
+  { name: 'standard', base: PAT.base, dors: PAT.dors, belly: [0.76, 0.7, 0.58], melK: 1, melAdd: 0, xanK: 1, iriK: 1, fin: { tint: [1, 1, 1], melK: 1 } },
+  // (the juvenile already carries 1.6× the xanthophores: its amber keeps fewer so it stays amber, not golden)
+  { name: 'amber', base: [0.66, 0.46, 0.2], dors: [0.48, 0.32, 0.12], belly: [0.8, 0.68, 0.5], melK: 0.88, melAdd: 0.03, xanK: pick(1.3, 0.85), iriK: 1, fin: { tint: [1, 0.88, 0.66], melK: 0.95 } },
+  { name: 'dark', base: [0.36, 0.25, 0.14], dors: [0.2, 0.135, 0.075], belly: [0.62, 0.54, 0.43], melK: 1.35, melAdd: 0.2, xanK: 0.95, iriK: 0.6, fin: { tint: [0.68, 0.62, 0.52], melK: 1.6 } },
+];
 
 const TAU = Math.PI * 2;
 
@@ -84,7 +99,7 @@ export function invPhi(s, y, z) {
 
 // Upper / lower lip bands around the gape (0..1), fish-space s, y in mm.
 function lipBands(s, y) {
-  if (s > RICTUS_S + 0.9 || y > MOUTH[0][1] + 1.62) return { up: 0, lo: 0, rim: 0 };
+  if (s > RICTUS_S + 0.9 || y > MOUTH[0][1] + LIPS.band[0] + 0.7) return { up: 0, lo: 0, rim: 0 };
   const g = gapeY(Math.min(Math.max(s, 0.05), RICTUS_S));
   const along = smoothstep(RICTUS_S + 0.7, RICTUS_S - 0.3, s);
   const dy = y - g;
@@ -146,7 +161,7 @@ function projectGrid(sOf, phiOf, NS, NV, log) {
   return { P, N, S, PHI, cols, nVert };
 }
 
-export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, patterns = [1], log = () => {} } = {}) {
+export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 2048, texH = 1024, patterns = [1], colors = [1], log = () => {} } = {}) {
   // --------------------------------------------------------------------------- bake grid (regular s/φ)
   log('  projecting bake grid …');
   const sListB = distributeSections(NSb);
@@ -183,9 +198,10 @@ export function buildBody({ NS = 460, NV = 224, NSb = 400, NVb = 192, texW = 204
   }
   const TS = patterns.map((pattern) => {
     log(`  baking body textures (pattern ${pattern}) …`);
-    return bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern });
+    return bakeBodyTextures({ sList: sListB, NS: NSb, NV: NVb, cols: colsB, P: B.P, N: B.N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern, colors });
   });
-  const T = TS[0];
+  // pattern 1 in colour 1 (normal, ORM and thickness are shared by all patterns and colours)
+  const T = { ...TS[0], ...TS[0].colors[0] };
 
   // --------------------------------------------------------------------------- render mesh (warped grid with cuts)
   log('  render mesh …');
@@ -406,7 +422,7 @@ function buildWarpedMesh(NS, NV, log) {
 // Pattern + height baking
 
 function bakeBodyTextures(ctx) {
-  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern = 1 } = ctx;
+  const { sList, NS, NV, cols, P, N, AO, THK, QD, dS, dPhi, texW, texH, log, pattern = 1, colors = [1] } = ctx;
   // pattern-dependent random streams (shape relief, pores and roughness keep their fixed seeds)
   const PS = (pattern - 1) * 1009;
   const ST = PATTERNS[pattern - 1];
@@ -532,9 +548,13 @@ function bakeBodyTextures(ctx) {
       const hd = 6.0 + 26.0 * dorsal + 40.0 * hm + 10.0 * smoothstep(3.5, 1.0, s);
       d = mix(d, hd, head);
     }
-    // keep the eye itself and lips clean
-    const ed = eyeDist(s, y, z);
-    d *= 1 + 0.9 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.35) ** 2));
+    // keep the eye itself and lips clean; the skin rim right around the cornea is pale (photos 02 / 03 / hand:
+    // the dark ring around the iris belongs to the eyeball, the orbital rim outside it is cream-grey)
+    {
+      const lid = eyeLid(s, y, z);
+      const rim = smoothstep(0.2, -0.02, lid.d) * smoothstep(0.45, 0.8, lid.h);
+      d *= 1 - 0.85 * rim * (1 - 0.4 * smoothstep(0.3, 1.0, lid.dorsal));
+    }
     d *= 1 - belly * 0.97;
     const lb = lipBands(s, y);
     d = d * (1 - 0.6 * lb.lo) + 32.0 * lb.up + 8.0 * lb.lo;
@@ -582,7 +602,6 @@ function bakeBodyTextures(ctx) {
     m += CSPOT_K * Math.exp(-(((s - 40.5) / 0.75) ** 2) - ((hn - 0.02) / 0.4) ** 2);
     m *= (1 - belly) * MELF_K;
     const ed = eyeDist(s, yy, z);
-    m += 0.12 * Math.exp(-(((ed - EYE.radius - EYE.skin) / 0.3) ** 2));
     let iri = 0.85 * belly + 0.3 * smoothstep(0.25, -0.4, hn) + 0.12 * Math.exp(-(((hn - 0.02) / 0.22) ** 2));
     iri = Math.max(iri, head * 0.55 * smoothstep(0.55, -0.3, hn) * smoothstep(3.0, 5.5, s));
     iri = Math.max(iri, 0.06 * smoothstep(EYE.radius + 0.5, EYE.radius + 0.2, ed) * smoothstep(EYE.radius, EYE.radius + 0.15, ed));
@@ -602,9 +621,11 @@ function bakeBodyTextures(ctx) {
       const onLid = smoothstep(0.14, -0.02, lid.d);
       const edge = onLid * smoothstep(0.55, 0.85, lid.h); // inner margin, next to the cornea
       const up = smoothstep(-0.2, 0.9, lid.dorsal);
-      m += onLid * (0.16 * up + 0.04) - 0.08 * edge * (1 - up);
-      xan = Math.max(xan, edge * (0.75 - 0.5 * up));
-      iri = Math.max(iri, edge * (0.35 - 0.25 * up));
+      // pigmented skin over the top of the eye dome, but a pale (cream / silvery) margin all round the cornea
+      m += onLid * 0.16 * up * (1 - edge);
+      m *= 1 - 0.75 * edge;
+      xan = Math.max(xan, edge * (0.6 - 0.3 * up));
+      iri = Math.max(iri, edge * (0.4 - 0.15 * up));
     }
     // gill region seen through the operculum (used for the fallback albedo only)
     const gill = smoothstep(7.5, 9.0, s) * smoothstep(11.6, 10.6, s) * smoothstep(0.35, -0.2, hn) * smoothstep(-0.95, -0.55, hn);
@@ -895,14 +916,15 @@ function bakeBodyTextures(ctx) {
   }
 
   // albedo (linear) + roughness at a surface point
-  function shadeAt(s, yy, z, hn, head, MELv, I, X, G, cavity, halfW) {
+  // (MELv and X already carry the colour morph's melanophore / xanthophore factors, see morphPigment)
+  function shadeAt(s, yy, z, hn, head, MELv, I, X, G, cavity, halfW, col = COLORS[0]) {
     const dorsal = smoothstep(-0.2, 0.8, hn);
     const belly = bellyOf(hn);
     const M = MELv * 1.6;
-    // pale amber tissue, olive-brown back, milky belly (juvenile photos IMG_1603 / 9176 / user photo 1)
-    let [r, g, b] = PAT.base;
-    r = mix(r, PAT.dors[0], dorsal * 0.6); g = mix(g, PAT.dors[1], dorsal * 0.6); b = mix(b, PAT.dors[2], dorsal * 0.6);
-    r = mix(r, 0.76, belly); g = mix(g, 0.7, belly); b = mix(b, 0.58, belly);
+    // translucent tissue of the colour morph: flank, darker back, milky belly
+    let [r, g, b] = col.base;
+    r = mix(r, col.dors[0], dorsal * 0.6); g = mix(g, col.dors[1], dorsal * 0.6); b = mix(b, col.dors[2], dorsal * 0.6);
+    r = mix(r, col.belly[0], belly); g = mix(g, col.belly[1], belly); b = mix(b, col.belly[2], belly);
     r *= mix(1, 1.02, X * 0.6); g *= mix(1, 0.9, X * 0.6); b *= mix(1, 0.55, X * 0.6);
     r = mix(r, 0.78, I * 0.4); g = mix(g, 0.77, I * 0.4); b = mix(b, 0.7, I * 0.4);
     // blood-tinted throat and cheeks under the thin skin
@@ -914,7 +936,7 @@ function bakeBodyTextures(ctx) {
       // upper lip: dusky olive-brown like the snout, speckled (speckles come from MEL below)
       r = mix(r, 0.56 * n, lb.up * 0.35); g = mix(g, 0.46 * n, lb.up * 0.35); b = mix(b, 0.3 * n, lb.up * 0.35);
       // lower lip: pale warm cream (not grey-white), a little translucent
-      r = mix(r, 0.7 * n, lb.lo * 0.4); g = mix(g, 0.6 * n, lb.lo * 0.4); b = mix(b, 0.46 * n, lb.lo * 0.4);
+      r = mix(r, 0.68 * n, lb.lo * 0.55); g = mix(g, 0.5 * n, lb.lo * 0.55); b = mix(b, 0.4 * n, lb.lo * 0.55);
       // moist margin: faint warm translucency, strongly desaturated
       r = mix(r, 0.66, lb.rim * 0.22); g = mix(g, 0.52, lb.rim * 0.22); b = mix(b, 0.45, lb.rim * 0.22);
     }
@@ -932,14 +954,19 @@ function bakeBodyTextures(ctx) {
     return { r, g, b, rough };
   }
 
+  // pigment densities of a colour morph: melanophores as an optical-depth factor plus a diffuse dusky layer
+  // over the back and flanks, xanthophores scaled
+  const morphMel = (m, hn, col) => 1 - Math.pow(1 - clamp(m), col.melK) * (1 - col.melAdd * (1 - bellyOf(hn)));
+  const morphXan = (x, col) => x * col.xanK;
+  const morphIri = (i, col) => clamp(i * col.iriK);
+
   // ---------------------------------------------------------------------------
-  // Encode maps
+  // Encode maps: normal, ORM and thickness once; albedo and pigment for every colour morph
   log('    encoding …');
-  const albedo = new Uint8Array(nT * 3);
   const normalMap = new Uint8Array(nT * 3);
   const orm = new Uint8Array(nT * 3);
-  const pigment = new Uint8Array(nT * 3);
   const volume = new Uint8Array(nT * 3);
+  const morphs = colors.map(() => ({ albedo: new Uint8Array(nT * 3), pigment: new Uint8Array(nT * 3) }));
   const srgb = (c) => {
     c = clamp(c, 0, 1);
     return Math.round(255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055));
@@ -966,20 +993,25 @@ function bakeBodyTextures(ctx) {
       const cavity = clamp(lap * 0.35, 0, 0.35);
 
       const s = A.px[t], yy = A.py[t], z = A.pz[t];
-      const C = shadeAt(s, yy, z, HN[t], HEAD[t], MEL[t], IRI[t], XAN[t], GILL[t], cavity, secs[x].w);
-      const I = IRI[t], X = XAN[t];
-      albedo[t * 3] = srgb(C.r); albedo[t * 3 + 1] = srgb(C.g); albedo[t * 3 + 2] = srgb(C.b);
-      const ao = clamp(A.ao[t] * (1 - cavity), 0, 1);
-      orm[t * 3] = Math.round(ao * 255);
-      orm[t * 3 + 1] = Math.round(clamp(C.rough, 0.12, 0.8) * 255);
-      orm[t * 3 + 2] = 0;
-
-      pigment[t * 3] = Math.round(clamp(MEL[t]) * 255);
-      pigment[t * 3 + 1] = Math.round(clamp(I) * 255);
-      pigment[t * 3 + 2] = Math.round(clamp(X) * 255);
+      colors.forEach((c, ci) => {
+        const col = COLORS[c - 1], out = morphs[ci];
+        const mel = morphMel(MEL[t], HN[t], col), X = morphXan(XAN[t], col), I = morphIri(IRI[t], col);
+        const C = shadeAt(s, yy, z, HN[t], HEAD[t], mel, I, X, GILL[t], cavity, secs[x].w, col);
+        out.albedo[t * 3] = srgb(C.r); out.albedo[t * 3 + 1] = srgb(C.g); out.albedo[t * 3 + 2] = srgb(C.b);
+        out.pigment[t * 3] = Math.round(mel * 255);
+        out.pigment[t * 3 + 1] = Math.round(clamp(I) * 255);
+        out.pigment[t * 3 + 2] = Math.round(clamp(X) * 255);
+        // roughness does not depend on the colour: taken from the first morph
+        if (ci === 0) {
+          const ao = clamp(A.ao[t] * (1 - cavity), 0, 1);
+          orm[t * 3] = Math.round(ao * 255);
+          orm[t * 3 + 1] = Math.round(clamp(C.rough, 0.12, 0.8) * 255);
+          orm[t * 3 + 2] = 0;
+        }
+      });
 
       const thk = A.thk[t];
-      const trans = clamp(1.1 - thk / 5.0, 0.12, 0.92) * (1 - 0.7 * clamp(MEL[t])) * (1 - 0.45 * I);
+      const trans = clamp(1.1 - thk / 5.0, 0.12, 0.92) * (1 - 0.7 * clamp(MEL[t])) * (1 - 0.45 * IRI[t]);
       volume[t * 3] = Math.round(trans * 255);
       volume[t * 3 + 1] = Math.round(clamp(thk / 8.0) * 255);
       volume[t * 3 + 2] = 0;
@@ -991,8 +1023,7 @@ function bakeBodyTextures(ctx) {
   log('    snout cap …');
   const CAP = texW >= 2048 ? 384 : 192;
   const capRect = { y0: -0.2, y1: 4.8, z0: -2.7, z1: 2.7 };
-  const capAlb = new Uint8Array(CAP * CAP * 4);
-  const capPig = new Uint8Array(CAP * CAP * 3);
+  const caps = colors.map(() => ({ albedo: new Uint8Array(CAP * CAP * 4), pigment: new Uint8Array(CAP * CAP * 3) }));
   const valid = new Uint8Array(CAP * CAP);
   for (let j = 0; j < CAP; j++)
     for (let i = 0; i < CAP; i++) {
@@ -1006,13 +1037,18 @@ function bakeBodyTextures(ctx) {
       for (let k = 0; k < 12; k++) { const m = 0.5 * (lo + hi); if (field(m, yy, z) < 0) hi = m; else lo = m; }
       const sp = 0.5 * (lo + hi);
       const P = pigmentAt(Math.max(sp, 0.02), yy, z);
-      const mel = 1 - (1 - P.mel) * (1 - Math.min(spots3D(Math.max(sp, 0.21), yy, z), 0.95));
-      const C = shadeAt(Math.max(sp, 0.02), yy, z, P.hn, P.head, mel, P.iri, P.xan, P.gill, 0, section(Math.max(sp, 0.05)).w);
+      const mel0 = 1 - (1 - P.mel) * (1 - Math.min(spots3D(Math.max(sp, 0.21), yy, z), 0.95));
+      const halfW = section(Math.max(sp, 0.05)).w;
       const o = j * CAP + i;
       valid[o] = 1;
-      capAlb[o * 4] = srgb(C.r); capAlb[o * 4 + 1] = srgb(C.g); capAlb[o * 4 + 2] = srgb(C.b);
-      capAlb[o * 4 + 3] = Math.round(clamp(C.rough, 0.12, 0.8) * 255);
-      capPig[o * 3] = Math.round(clamp(mel) * 255); capPig[o * 3 + 1] = Math.round(P.iri * 255); capPig[o * 3 + 2] = Math.round(P.xan * 255);
+      colors.forEach((c, ci) => {
+        const col = COLORS[c - 1], out = caps[ci];
+        const mel = morphMel(mel0, P.hn, col), X = morphXan(P.xan, col), I = morphIri(P.iri, col);
+        const C = shadeAt(Math.max(sp, 0.02), yy, z, P.hn, P.head, mel, I, X, P.gill, 0, halfW, col);
+        out.albedo[o * 4] = srgb(C.r); out.albedo[o * 4 + 1] = srgb(C.g); out.albedo[o * 4 + 2] = srgb(C.b);
+        out.albedo[o * 4 + 3] = Math.round(clamp(C.rough, 0.12, 0.8) * 255);
+        out.pigment[o * 3] = Math.round(mel * 255); out.pigment[o * 3 + 1] = Math.round(I * 255); out.pigment[o * 3 + 2] = Math.round(clamp(X) * 255);
+      });
     }
   // dilate into the empty border so bilinear / mip filtering never pulls in black
   for (let pass = 0; pass < 12; pass++) {
@@ -1026,14 +1062,19 @@ function bakeBodyTextures(ctx) {
           if (ii < 0 || jj < 0 || ii >= CAP || jj >= CAP) continue;
           const q = jj * CAP + ii;
           if (!valid[q]) continue;
-          for (let c = 0; c < 4; c++) capAlb[o * 4 + c] = capAlb[q * 4 + c];
-          for (let c = 0; c < 3; c++) capPig[o * 3 + c] = capPig[q * 3 + c];
+          for (const out of caps) {
+            for (let c = 0; c < 4; c++) out.albedo[o * 4 + c] = out.albedo[q * 4 + c];
+            for (let c = 0; c < 3; c++) out.pigment[o * 3 + c] = out.pigment[q * 3 + c];
+          }
           next[o] = 1;
           break;
         }
       }
     valid.set(next);
   }
-  const cap = { size: CAP, albedo: capAlb, pigment: capPig, rect: capRect };
-  return { width: texW, height: texH, albedo, normal: normalMap, orm, pigment, volume, cap };
+  return {
+    width: texW, height: texH, normal: normalMap, orm, volume,
+    // per colour morph: body albedo + pigment and the snout cap
+    colors: colors.map((c, ci) => ({ color: c, albedo: morphs[ci].albedo, pigment: morphs[ci].pigment, cap: { size: CAP, albedo: caps[ci].albedo, pigment: caps[ci].pigment, rect: capRect } })),
+  };
 }

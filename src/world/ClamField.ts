@@ -5,6 +5,15 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/Rng';
 import type { Terrain } from './Terrain';
 
+/** A map's own clam ground: where a bed may lie, how big the beds are and how many clams per m². */
+export interface ClamBedOptions {
+  ok?(x: number, z: number): boolean;
+  radius?: readonly [number, number];
+  perM2?: readonly [number, number];
+  /** keep beds this far from the map edge (m) */
+  margin?: number;
+}
+
 /** clams within this distance of the player get their siphons drawn */
 const NEAR = 5;
 const CELL = 4;
@@ -46,20 +55,27 @@ export class ClamField {
   private readonly lastPlayer = new Vector3();
   private playerSpeed = 0;
 
-  constructor(private readonly terrain: Terrain, seed: number, beds = 45) {
+  /**
+   * `opts`: a map's own clam ground (where beds may lie, their size and how thick the clams are); the default is the
+   * 葛西 flat's sandy band between -1.1 and -0.1 m.
+   */
+  constructor(private readonly terrain: Terrain, seed: number, beds = 45, opts: ClamBedOptions = {}) {
     const rng = new Rng(seed);
     const xs: number[] = [], zs: number[] = [], len: number[] = [], seeds: number[] = [];
     const half = terrain.half;
+    const margin = opts.margin ?? 12;
     const okBed = (x: number, z: number) => {
-      if (!terrain.inside(x, z, 12)) return false;
+      if (!terrain.inside(x, z, margin)) return false;
       const s = terrain.substrateAt(x, z), h = terrain.heightAt(x, z);
-      return (s === 'sand' || s === 'muddy_sand') && h > -1.1 && h < -0.1;
+      if (s !== 'sand' && s !== 'muddy_sand') return false;
+      return opts.ok ? opts.ok(x, z) : h > -1.1 && h < -0.1;
     };
+    const [r0, r1] = opts.radius ?? [3, 7], [d0, d1] = opts.perM2 ?? [0.9, 1.6];
     for (let b = 0; b < beds; b++) {
       let cx = 0, cz = 0, found = false;
-      for (let tries = 0; tries < 60 && !found; tries++) { cx = rng.range(-half + 12, half - 12); cz = rng.range(-half + 12, half - 12); found = okBed(cx, cz); }
+      for (let tries = 0; tries < 60 && !found; tries++) { cx = rng.range(-half + margin, half - margin); cz = rng.range(-half + margin, half - margin); found = okBed(cx, cz); }
       if (!found) continue;
-      const r = rng.range(3, 7), n = Math.min(260, Math.round(Math.PI * r * r * rng.range(0.9, 1.6)));
+      const r = rng.range(r0, r1), n = Math.min(260, Math.round(Math.PI * r * r * rng.range(d0, d1)));
       const before = xs.length;
       for (let i = 0; i < n; i++) {
         const a = rng.range(0, Math.PI * 2), d = Math.sqrt(rng.next()) * r;

@@ -15,7 +15,7 @@ describe('astro arguments', () => {
   });
 });
 
-describe('TideModel (Tokyo, provisional 4 constituents)', () => {
+describe('TideModel (Tokyo, measured constituents)', () => {
   it('stays within the summed amplitude', () => {
     const max = model.maxAmplitude();
     for (let i = 0; i < 24 * 30; i++) {

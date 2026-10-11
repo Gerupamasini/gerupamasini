@@ -1,5 +1,5 @@
 import { Euler, Group, Mesh, Object3D, PerspectiveCamera, Quaternion, Scene, Vector3, MathUtils } from 'three';
-import { instantiateModel } from '../creatures/models/ModelLoader';
+import { instantiateModel, type Tier } from '../creatures/models/ModelLoader';
 import { prepareNet } from '../assets/models/nets/netMaterials';
 import type { ToolDef } from '../data/schemas';
 import { NET_LAYER } from './NetView';
@@ -38,12 +38,12 @@ export class BinocularView {
   }
 
   /** The pair in hand: the hero GLB (origin between the eyecups, +z the way they look). */
-  async setTool(tool: ToolDef | null): Promise<void> {
+  async setTool(tool: ToolDef | null, tier: Tier = 'hero'): Promise<void> {
     const seq = ++this.loadSeq;
     if (this.model) { this.model.removeFromParent(); this.model = null; }
     if (!tool?.model) return;
     let loaded;
-    try { loaded = await instantiateModel(`${tool.model}.hero.glb`); } catch (e) { console.warn(e); return; }
+    try { loaded = await instantiateModel(`${tool.model}.${tier}.glb`); } catch (e) { console.warn(e); return; }
     if (seq !== this.loadSeq) return;
     const root = loaded.root;
     prepareNet(root).setSurface({ wet: 0, mud: 0, waterline: null });

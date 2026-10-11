@@ -1,0 +1,28 @@
+{
+  "id": "manko_demo",
+  "names": {
+    "ja": "漫湖（ゲーム用の仮潮汐）",
+    "en": "Manko (simulated tide)"
+  },
+  "lat": 26.193,
+  "lon": 127.681,
+  "phaseReference": "UTC",
+  "phaseConvention": "zone_speed",
+  "mslAboveChartDatum_cm": null,
+  "constituents": [
+    {
+      "name": "M2",
+      "amplitude_cm": 65,
+      "phase_deg": 0
+    },
+    {
+      "name": "S2",
+      "amplitude_cm": 20,
+      "phase_deg": 0
+    }
+  ],
+  "source": {
+    "name": "ゲーム環境確認用の仮潮汐",
+    "note": "実測・公式予測ではない。漫湖内の水位や那覇の調和定数を再現する値ではなく、干出と冠水を確認するための設定。"
+  }
+}

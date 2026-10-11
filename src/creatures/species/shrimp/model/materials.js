@@ -35,6 +35,73 @@ float shChromato(vec3 p, float cellsPerMetre, float keep, float radius){
 }
 `;
 
+// Species stripe patterns (イソスジエビ), drawn per pixel from parametric coordinates the model writes into
+// aPat/aPatW, so the lines stay sharp at macro distance whatever the mesh density. Compiled in only when a
+// material sets o.pattern (PAT_MODE 1 body stripes, 2 leg rings, 3 uropod ocellus); the シラタエビ shaders
+// are unchanged.
+const PATTERN_GLSL = /* glsl */ `
+#if PAT_MODE == 1
+{
+  // vPat.x: across-stripe phase (lines at integers), vPat.y: along-stripe coordinate (dot rows),
+  // vPat.z: second line family, vPat.w: dot colour (0 pale, 1 yellow). vPatW: weights (A, B, dots).
+  float wob = (shNoise(vObjPos*1700.0)-0.5)*0.14 + (shNoise(vObjPos*520.0)-0.5)*0.22;
+  float pa = vPat.x + wob;
+  float fa = fwidth(vPat.x) + 1e-4;
+  float da = abs(fract(pa + 0.5) - 0.5);
+  float ia = floor(pa + 0.5);
+  float wA = uLineW * (0.7 + 0.6*shNoise(vObjPos*800.0 + ia*3.1)) * (mod(ia, 2.0) > 0.5 ? uLineBold : 1.0);
+  float lineA = (1.0 - smoothstep(wA - fa, wA + fa, da)) * vPatW.x;
+  float pb = vPat.z + wob*0.7;
+  float fb = fwidth(vPat.z) + 1e-4;
+  float db = abs(fract(pb + 0.5) - 0.5);
+  float wB = uLineW * 0.75 * (0.7 + 0.6*shNoise(vObjPos*700.0 + 9.0));
+  float lineB = (1.0 - smoothstep(wB - fb, wB + fb, db)) * vPatW.y;
+  float line = clamp(max(lineA, lineB) * min(uPigment, 1.2), 0.0, 1.0);
+  vec2 cell = vec2(floor(vPat.x), floor(vPat.y));
+  vec2 dc = vec2(fract(vPat.x) - 0.5, fract(vPat.y) - 0.5) + (vec2(shHash(vec3(cell, 3.0)), shHash(vec3(cell, 5.0))) - 0.5)*0.35;
+  float keepDot = step(0.42, shHash(vec3(cell, 7.0)));
+  float fd = fwidth(vPat.x) + fwidth(vPat.y) + 1e-4;
+  float rD = 0.085 * (0.7 + 0.6*shHash(vec3(cell, 11.0)));
+  float dotv = (1.0 - smoothstep(rD - fd, rD + fd, length(dc))) * keepDot * vPatW.z * (1.0 - line);
+  diffuseColor.rgb = mix(diffuseColor.rgb, mix(uDotColor, uDotColor2, vPat.w), dotv*0.9);
+  diffuseColor.rgb = mix(diffuseColor.rgb, mix(uLineEdge, uLineColor, smoothstep(0.35, 0.95, line)), line);
+  a = max(a, line*0.96);
+  a = max(a, dotv*0.75);
+  shPig = max(shPig, line);
+}
+#elif PAT_MODE == 2
+{
+  // Leg rings: vPat.x position along the podomere (0..1); y orange, z black, w proximal orange centres (<0 = none).
+  float t = vPat.x;
+  float ft = fwidth(t) + 1e-4;
+  float w = uBandW * (0.85 + 0.3*shNoise(vObjPos*3000.0));
+  float orA = vPat.y >= 0.0 ? 1.0 - smoothstep(w - ft, w + ft, abs(t - vPat.y)) : 0.0;
+  float blk = vPat.z >= 0.0 ? 1.0 - smoothstep(w*0.9 - ft, w*0.9 + ft, abs(t - vPat.z)) : 0.0;
+  float orB = vPat.w >= 0.0 ? 1.0 - smoothstep(w*0.7 - ft, w*0.7 + ft, abs(t - vPat.w)) : 0.0;
+  float orng = max(orA, orB*0.85) * vPatW.x;
+  blk *= vPatW.x;
+  diffuseColor.rgb = mix(diffuseColor.rgb, uBandColor, orng);
+  diffuseColor.rgb = mix(diffuseColor.rgb, uBandDark, blk);
+  a = max(a, max(orng*0.85, blk*0.95));
+  shPig = max(shPig, blk);
+}
+#elif PAT_MODE == 3
+{
+  // Uropod ocellus: vPat.xy point on the ramus, vPat.zw spot centre, vPatW.y radius (TL units), vPatW.x weight.
+  float d = length(vPat.xy - vPat.zw);
+  float r = max(vPatW.y, 1e-4);
+  float fd = fwidth(d) + 1e-5;
+  float core = 1.0 - smoothstep(r*0.58 - fd, r*0.58 + fd, d);
+  float ring = (1.0 - smoothstep(r - fd, r + fd, d)) - core;
+  core *= vPatW.x; ring *= vPatW.x;
+  diffuseColor.rgb = mix(diffuseColor.rgb, uBandColor, core);
+  diffuseColor.rgb = mix(diffuseColor.rgb, uBandDark, ring);
+  a = max(a, max(core*0.9, ring*0.95));
+  shPig = max(shPig, ring);
+}
+#endif
+`;
+
 /**
  * Cuticle + underlying tissue as one translucent layer.
  * Geometry attributes (from loft.js): aJoint (arthrodial membrane), aPig (chromatophore
@@ -79,6 +146,29 @@ export function createCuticleMaterial(o = {}) {
     uJointColor: { value: new THREE.Color(o.jointColor ?? 0xa89a80) },
     uRelief: { value: o.relief ?? 0.12 },
   };
+  const pat = o.pattern;
+  if (pat) {
+    mat.defines = { ...(mat.defines ?? {}), PAT_MODE: pat.mode };
+    Object.assign(u, {
+      uLineColor: { value: new THREE.Color(pat.lineColor ?? 0x1e130b) },
+      uLineEdge: { value: new THREE.Color(pat.lineEdge ?? 0x6e3a18) },
+      uDotColor: { value: new THREE.Color(pat.dotColor ?? 0xf3eedb) },
+      uDotColor2: { value: new THREE.Color(pat.dotColor2 ?? 0xf2c234) },
+      uLineW: { value: pat.lineW ?? 0.08 },
+      uLineBold: { value: pat.lineBold ?? 1.5 },
+      uBandColor: { value: new THREE.Color(pat.bandColor ?? 0xf2a41c) },
+      uBandDark: { value: new THREE.Color(pat.bandDark ?? 0x16100c) },
+      uBandW: { value: pat.bandW ?? 0.055 },
+    });
+  }
+  const patDecl = pat
+    ? `attribute vec4 aPat; attribute vec4 aPatW; varying vec4 vPat; varying vec4 vPatW;`
+    : '';
+  const patFrag = pat
+    ? `varying vec4 vPat; varying vec4 vPatW;
+        uniform vec3 uLineColor; uniform vec3 uLineEdge; uniform vec3 uDotColor; uniform vec3 uDotColor2;
+        uniform float uLineW; uniform float uLineBold; uniform vec3 uBandColor; uniform vec3 uBandDark; uniform float uBandW;`
+    : '';
   mat.userData.uniforms = u;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
@@ -87,9 +177,10 @@ export function createCuticleMaterial(o = {}) {
         '#include <common>',
         `#include <common>
         attribute float aJoint; attribute float aPig; attribute float aThick;
-        varying float vJoint; varying float vPigD; varying float vThick; varying vec3 vObjPos;`
+        varying float vJoint; varying float vPigD; varying float vThick; varying vec3 vObjPos;
+        ${patDecl}`
       )
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvJoint = aJoint; vPigD = aPig; vThick = aThick; vObjPos = position;`);
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvJoint = aJoint; vPigD = aPig; vThick = aThick; vObjPos = position;${pat ? ' vPat = aPat; vPatW = aPatW;' : ''}`);
     const transmission = THREE.ShaderChunk.transmission_fragment
       .replace(
         'material.transmission = transmission;',
@@ -104,6 +195,7 @@ export function createCuticleMaterial(o = {}) {
         uniform float uAlpha; uniform float uRimAlpha; uniform float uPigment; uniform float uMilk; uniform float uMilkBase; uniform float uCells; uniform float uKeep; uniform float uDotR;
         uniform vec3 uChromaColor; uniform vec3 uChromaCore; uniform vec3 uJointColor; uniform float uRelief;
         varying float vJoint; varying float vPigD; varying float vThick; varying vec3 vObjPos;
+        ${patFrag}
         float shPig;`
       )
       .replace(
@@ -125,6 +217,7 @@ export function createCuticleMaterial(o = {}) {
           float a = mix(uAlpha, uRimAlpha, pow(fres, 2.2));
           a = max(a, cov * 0.92);
           a = max(a, uAlpha + vJoint * 0.04);
+          ${pat ? PATTERN_GLSL : ''}
           diffuseColor.a = clamp(a, 0.0, 1.0);
         }`
       )
@@ -151,7 +244,7 @@ export function createCuticleMaterial(o = {}) {
       )
       .replace('#include <transmission_fragment>', transmission);
   };
-  mat.customProgramCacheKey = () => 'cuticle-v3-' + (o.key ?? '');
+  mat.customProgramCacheKey = () => 'cuticle-v3-' + (o.key ?? '') + (pat ? '-pat' + pat.mode : '');
   return mat;
 }
 
@@ -169,7 +262,8 @@ export function createTissueMaterial(color, o = {}) {
  * pseudopupil (darkest where ommatidia face the viewer), brownish-grey periphery, and a pale
  * translucent corneal rim at grazing angles; wet clear-coat highlight on top.
  */
-export function createEyeMaterial() {
+export function createEyeMaterial(o = {}) {
+  const v3 = (c, d) => `vec3(${(c ?? d).map((x) => x.toFixed(4)).join(', ')})`;
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0x141010,
     roughness: 0.45,
@@ -184,25 +278,25 @@ export function createEyeMaterial() {
       {
         vec3 vd = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition);
         float facing = clamp(dot(normalize(vNormal), vd), 0.0, 1.0);
-        vec3 pupil = vec3(0.012, 0.010, 0.009);
-        vec3 periph = vec3(0.30, 0.25, 0.23);
-        vec3 rim = vec3(0.62, 0.60, 0.55);
+        vec3 pupil = ${v3(o.pupil, [0.012, 0.01, 0.009])};
+        vec3 periph = ${v3(o.periph, [0.3, 0.25, 0.23])};
+        vec3 rim = ${v3(o.rim, [0.62, 0.6, 0.55])};
         vec3 c = mix(periph, pupil, smoothstep(0.82, 0.97, facing));
         c = mix(rim, c, smoothstep(0.1, 0.45, facing));
         diffuseColor.rgb = c;
       }`
     );
   };
-  mat.customProgramCacheKey = () => 'eye-v3';
+  mat.customProgramCacheKey = () => 'eye-v3' + (o.key ? '-' + o.key : '');
   return mat;
 }
 
-export function createFlagellumMaterial(tint) {
+export function createFlagellumMaterial(tint, opacity = 0.32) {
   return new THREE.MeshPhysicalMaterial({
     color: tint,
     roughness: 0.3,
     transparent: true,
-    opacity: 0.32, // near-invisible in water, catching light only along its length
+    opacity, // シラタエビ 0.32: near-invisible in water, catching light only along its length
     depthWrite: false,
     clearcoat: 0.5,
   });

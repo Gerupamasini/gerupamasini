@@ -82,6 +82,7 @@ export class Encyclopedia {
     this.research.value += points;
     toast(`${label}  +${points} ${t('progress.research')}`, 'success');
     this.claimLevels();
+    this.onChanged?.();
   }
 
   get level(): number {

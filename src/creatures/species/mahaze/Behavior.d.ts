@@ -22,6 +22,7 @@ export function createBehavior(opts: {
   /** species axial geometry from the rig extras (mahazeRig.axes.body); マハゼ defaults when omitted */
   body?: { tlMM: number; spine: [string, number][]; restFold?: { d1: number; d2: number; anal: number; caudal: number } } | null;
   root: Object3D; bones: Record<string, Object3D>; finMeshes: Record<string, Object3D>; axes: Record<string, number[]>;
+  /** Bone-local contact points; floorY uses the root parent's coordinate system. */
   contacts: { bone: Object3D; p: Vector3 }[]; floorY: number | ((x: number, z: number) => number); scale?: number; onEvent?: ((name: string) => void) | null;
 }): MahazeBehavior;
 export const SPINE: [string, number][];

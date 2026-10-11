@@ -4,7 +4,7 @@ import {
 } from 'three';
 import { CAPTURE_PHASE_SEC, EMPTY_PHASE_SEC, REVEAL_SEC, type CaptureState } from '../systems/Capture';
 import type { ToolDef } from '../data/schemas';
-import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
+import { instantiateModel, preloadModel, type Tier } from '../creatures/models/ModelLoader';
 import { BAG_TARGETS, prepareNet, type BagTarget, type NetHandle } from '../assets/models/nets/netMaterials';
 
 const DROPS = 64;
@@ -77,8 +77,8 @@ function fitToMouth(root: Object3D, fallbackMouthZ: number): Object3D {
 }
 
 /** Load a net's detailed model ahead of time (the carried nets, on the way to the flat). */
-export function preloadNet(tool: ToolDef | undefined): void {
-  if (tool?.model) void preloadModel(`${tool.model}.hero.glb`).catch((e) => console.warn(e));
+export function preloadNet(tool: ToolDef | undefined, tier: Tier = 'hero'): void {
+  if (tool?.model) void preloadModel(`${tool.model}.${tier}.glb`).catch((e) => console.warn(e));
 }
 
 /**
@@ -165,8 +165,8 @@ export class NetView {
   }
 
   /** The net in hand: its model is loaded (once per net) and fitted with the mouth centre at the group's origin. */
-  async setTool(tool: ToolDef | null): Promise<void> {
-    const id = tool?.model ? tool.id : null;
+  async setTool(tool: ToolDef | null, tier: Tier = 'hero'): Promise<void> {
+    const id = tool?.model ? `${tool.id}/${tier}` : null;
     if (id === this.toolId) return;
     this.toolId = id;
     const seq = ++this.loadSeq;
@@ -183,7 +183,7 @@ export class NetView {
     const reach = p.reach_m ?? 1.5;
     this.pThrust = pose(0.0, -0.04, -Math.min(1.15, Math.max(0.8, 0.55 + 0.25 * reach)), Q_THRUST);
     let loaded;
-    try { loaded = await instantiateModel(`${tool.model}.hero.glb`); } catch (e) { console.warn(e); return; }
+    try { loaded = await instantiateModel(`${tool.model}.${tier}.glb`); } catch (e) { if (seq === this.loadSeq) this.toolId = null; console.warn(e); return; }
     if (seq !== this.loadSeq) return;
     const wrapped = fitToMouth(loaded.root, p.handle_m ?? 1);
     const net = prepareNet(loaded.root);

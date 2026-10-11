@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ヤエヤマヒルギ — マングローブ干潟</title><link rel="icon" href="data:,">
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#a9bbc0;font:13px/1.55 system-ui,sans-serif;color:#e9efda;overflow:hidden}canvas{width:100vw;height:100vh;display:block;touch-action:none}
+    .panel{position:fixed;left:20px;top:20px;width:285px;padding:20px;background:rgba(20,32,25,.91);border:1px solid #7c91604d;border-radius:12px;backdrop-filter:blur(14px)}h1{margin:0;font-size:20px;font-weight:500}small{color:#b5c0a4}p{margin:12px 0}button,select,input{font:inherit;color:inherit;background:#ffffff0c;border:1px solid #ffffff25;border-radius:5px;padding:6px 8px;margin:3px 1px}button:hover{background:#8ea76d44}button{cursor:pointer}input[type=number]{width:95px}input[type=range]{width:140px;padding:0;vertical-align:middle}#stats{font-size:11px;color:#b5c0a4;white-space:pre-line}.capture .panel{display:none}.note{font-size:11px;color:#b5c0a4}#status{position:fixed;bottom:18px;left:20px;padding:7px 12px;border-radius:5px;background:#142019cc;color:#d6e1c5;font-size:11px}.capture #status{display:none}
+  </style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<aside class="panel">
+  <small>Rhizophora stylosa</small><h1>ヤエヤマヒルギ</h1>
+  <p><button data-mode="single">単木</button><button data-mode="roots">支柱根</button><button data-mode="leaf">葉の近接</button><button data-mode="five">成木5樹形</button><button data-mode="saplings">幼木3サイズ</button><button data-mode="forest">干潟の林</button></p>
+  <label>樹形 <select id="base"><option value="0">低い横広がり</option><option value="1">二股の樹冠</option><option value="2">水路へ傾く</option><option value="3">縦長の林内木</option><option value="4">多幹の古木</option></select></label>
+  <p><label>個体 seed <input id="seed" type="number" value="317"></label><button id="shuffle">変える</button></p>
+  <p><label>詳細 <select id="lod"><option value="auto">距離に応じて</option><option value="0">LOD0 · 近接</option><option value="1">LOD1 · 通常</option><option value="2">LOD2 · 遠景</option></select></label></p>
+  <p><label>潮位 <input id="tide" type="range" min="-0.35" max="1.0" value="-0.05" step="0.01"></label></p>
+  <p><label><input id="collision" type="checkbox">根の衝突形状を表示</label></p>
+  <p><button id="walk">林を歩く</button><span class="note">Escで観察に戻る</span></p>
+  <div id="stats"></div><p class="note">ドラッグで回転、ホイールで拡大。歩行時はWASD・Space・Shift。根の上に接地し、太い根と幹は移動を遮ります。</p>
+</aside>
+<div id="status">読み込み中…</div>
+<script type="module" src="./main.js"></script>
+</body></html>

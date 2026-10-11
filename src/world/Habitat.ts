@@ -77,6 +77,19 @@ const WET_TAU_MS: Record<Substrate, number> = {
 };
 
 /**
+ * A coarse cell's feature tags from its eelgrass cover `c`, the lowest and highest cover of its four neighbours and
+ * how suitable for eelgrass it is (`zone`). A bed is 'eelgrass'; its thin margin, a dense cell against open sand and
+ * an open cell against a bed are all 'eelgrass_edge'; open sand where eelgrass could grow is 'bare'.
+ */
+export function featureTagsOf(c: number, lo: number, hi: number, zone: number): HabitatTag[] {
+  const tags: HabitatTag[] = [];
+  if (c >= 0.4) tags.push('eelgrass');
+  if ((c > 0.06 && c < 0.4) || (c >= 0.4 && lo < 0.1) || (c <= 0.06 && hi >= 0.4)) tags.push('eelgrass_edge');
+  if (zone > 0.3 && c <= 0.06) tags.push('bare');
+  return tags;
+}
+
+/**
  * Habitat state derived from the terrain and the tide: depth, exposure, tide pools (depressions keep water at their
  * spill height), wetness memory and the habitat tags used by spawn rules. Tags live on a coarse grid (COARSE m cells).
  */
@@ -98,6 +111,8 @@ export class Habitat {
   readonly coarseDist: Float32Array;
   /** per coarse cell: the level of the small pool or feeding pit in it (else -1e3) */
   readonly coarseSmallPool: Float32Array;
+  /** per coarse cell: the standing features (eelgrass, its edge, bare sand among it), whatever the tide */
+  readonly featureTags: HabitatTag[][];
   tideLevel = 0;
   /** running high-water mark that decays toward the tide level (drives the wet band) */
   wetLevel = 0;
@@ -111,6 +126,7 @@ export class Habitat {
     this.cn = Math.max(2, Math.round(terrain.size / coarseCell));
     const cn2 = this.cn * this.cn;
     this.tags = Array.from({ length: cn2 }, () => []);
+    this.featureTags = Array.from({ length: cn2 }, () => []);
     this.lastWet = new Float64Array(cn2);
     this.coarseHeight = new Float32Array(cn2);
     this.coarseSubstrate = new Uint8Array(cn2);
@@ -232,6 +248,35 @@ export class Habitat {
     return out;
   }
 
+  /**
+   * The standing features of the ground, sampled per coarse cell: eelgrass cover (0..1) and whether eelgrass could grow
+   * there at all (0..1). Cells become 'eelgrass' (a bed), 'eelgrass_edge' (the bed's margin and the sand right against
+   * it: where the animals of both meet) and 'bare' (open sand inside the eelgrass zone).
+   */
+  setFeatures(sample: (x: number, z: number) => { eelgrass: number; zone: number }): void {
+    const cn = this.cn, cs = this.coarse, cover = new Float32Array(cn * cn), zone = new Float32Array(cn * cn);
+    for (let j = 0; j < cn; j++) for (let i = 0; i < cn; i++) {
+      const [cx, cz] = this.coarseCenter(i, j);
+      let c = 0, zn = 0;
+      for (const [u, v] of [[0, 0], [-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]] as const) {
+        const f = sample(cx + u * cs, cz + v * cs);
+        c += f.eelgrass; zn += f.zone;
+      }
+      const k = j * cn + i;
+      cover[k] = c / 5; zone[k] = zn / 5;
+    }
+    for (let j = 0; j < cn; j++) for (let i = 0; i < cn; i++) {
+      const k = j * cn + i, c = cover[k];
+      let lo = 1, hi = 0;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const ii = i + di, jj = j + dj;
+        if (ii < 0 || jj < 0 || ii >= cn || jj >= cn) continue;
+        lo = Math.min(lo, cover[jj * cn + ii]); hi = Math.max(hi, cover[jj * cn + ii]);
+      }
+      this.featureTags[k] = featureTagsOf(c, lo, hi, zone[k]);
+    }
+  }
+
   /** A random point inside a tide pool or feeding pit within a coarse cell (water above the tide), or null. */
   randomPoolPoint(coarseIndex: number, rnd: () => number): [number, number] | null {
     const t = this.terrain, n = t.n;
@@ -348,6 +393,7 @@ export class Habitat {
       }
       // a small pool or a feeding pit in this cell still holds water above the tide: a nursery for small animals
       if (this.coarseSmallPool[k] > tideLevel + 0.01) tags.push('small_pool');
+      for (const f of this.featureTags[k]) tags.push(f);
       this.tags[k] = tags;
     }
   }

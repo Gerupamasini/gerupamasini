@@ -30,7 +30,10 @@ export const VERT_COUNT = 31;
 // of the head width and the cheeks swell smoothly behind the eyes.
 // ---- adult (the earlier model: thick lips, long snout, small eye relative to the head)
 const KS = [0.0, 0.41, 0.82, 1.23, 1.64, 2.05, 2.46, 2.87, 3.28, 4.1, 4.9, 6.15, 8.2, 10.25, 12.3, 15, 18, 21, 24, 27, 30, 33, 36, 38.5, 40.5, 42, 43.2];
-const KTOP_A = [3.12, 3.36, 3.62, 3.84, 4.06, 4.28, 4.5, 4.8, 5.05, 5.3, 5.42, 5.63, 6.2, 6.52, 6.74, 6.95, 7.05, 6.95, 6.72, 6.38, 5.98, 5.6, 5.27, 5.05, 4.88, 4.78, 4.66];
+// dorsal head profile (snout → first dorsal fin) as one smooth convex curve whose slope falls steadily
+// (y = y0 + A·(1 − (1 − s/18)^p); adult y0 3.3, A 3.75, p 2.6 — a gentle arc through the eye, no forehead
+// bulge, flat interorbital or nape hump); s = 0 keeps the snout-tip pole at the gape
+const KTOP_A = [2.6, 3.52, 3.73, 3.93, 4.12, 4.31, 4.49, 4.66, 4.83, 5.14, 5.41, 5.79, 6.28, 6.63, 6.86, 7.01, 7.05, 6.95, 6.72, 6.38, 5.98, 5.6, 5.27, 5.05, 4.88, 4.78, 4.66];
 const KBOT_A = [1.4, 1.2, 0.98, 0.83, 0.68, 0.54, 0.43, 0.33, 0.25, 0.13, 0.07, 0.03, 0.0, 0.0, 0.0, 0.0, 0.02, 0.12, 0.35, 0.7, 1.1, 1.48, 1.8, 2.0, 2.14, 2.24, 2.36];
 const KW_A = [1.45, 1.62, 1.74, 1.84, 1.9, 1.95, 2.02, 2.1, 2.2, 2.42, 2.68, 3.08, 3.34, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
 const KNT_A = [2.2, 2.12, 2.04, 1.97, 1.91, 1.87, 1.84, 1.82, 1.8, 1.8, 1.82, 1.86, 1.92, 1.98, 2.02, 2.03, 2.0, 1.97, 1.95, 1.92, 1.9, 1.87, 1.84, 1.82, 1.8, 1.8, 1.8];
@@ -45,11 +48,25 @@ const KDY_A = [0.15, 0.2, 0.26, 0.32, 0.4, 0.46, 0.5, 0.54, 0.56, 0.52, 0.42, 0.
 // head line; oblique mouth (gape falls ~1.2 mm from the snout tip to the rictus under the eye front);
 // thinner lips, flatter cheeks; dorsal profile almost straight from the eye to the first dorsal fin;
 // deeper caudal peduncle (9 % SL)
-const KTOP_J = [2.95, 3.65, 4.15, 4.45, 4.68, 4.86, 5.02, 5.17, 5.3, 5.52, 5.72, 5.95, 6.12, 6.22, 6.42, 6.8, 7.0, 6.95, 6.78, 6.5, 6.17, 5.85, 5.58, 5.4, 5.22, 5.08, 4.95];
+// juvenile: same smooth convex arc (y0 3.45, A 3.55, p 2.7), gentler at the snout and without the dip
+// behind the head
+const KTOP_J = [2.95, 3.66, 3.87, 4.07, 4.26, 4.44, 4.61, 4.78, 4.94, 5.23, 5.49, 5.85, 6.31, 6.64, 6.84, 6.97, 7, 6.95, 6.78, 6.5, 6.17, 5.85, 5.58, 5.4, 5.22, 5.08, 4.95];
 const KBOT_J = [1.9, 1.62, 1.36, 1.14, 0.95, 0.78, 0.62, 0.48, 0.36, 0.18, 0.08, 0.03, 0.0, 0.0, 0.0, 0.0, 0.02, 0.1, 0.3, 0.58, 0.92, 1.24, 1.5, 1.68, 1.8, 1.88, 1.98];
 const KTOP = pick(KTOP_A, KTOP_J);
 const KBOT = pick(KBOT_A, KBOT_J);
-const KW = KW_A, KNT = KNT_A, KNB = KNB_A, KDY = KDY_A;
+// adult head refit (front / dorsal photos): the head is broad and box-like down to the mouth, whose corners
+// sit wider than the eyes; in dorsal view the snout is U-shaped: wide at the mouth corners, narrowing to a
+// rounded front (oblique photos from above show it wedge-like, not a square-fronted box)
+const KW_A2 = [1.0, 1.48, 1.82, 2.06, 2.25, 2.41, 2.55, 2.67, 2.77, 2.92, 3.02, 3.2, 3.36, 3.32, 3.2, 3.05, 2.82, 2.58, 2.3, 1.98, 1.66, 1.36, 1.08, 0.86, 0.69, 0.56, 0.46];
+const KNB_A2 = [2.4, 2.6, 2.8, 2.9, 2.95, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 2.95, 2.8, 2.65, 2.55, 2.45, 2.35, 2.2, 2.1, 2.0, 1.95, 1.9, 1.87, 1.85, 1.85, 1.85];
+// adult snout refit (true lateral photo 02, aligned at snout tip + pupil, head length checked against the gill
+// cover margin): a tall, fleshy upper-lip lobe forms the front, and behind the groove above it the snout rises
+// steeply (~45° over the first mm, then flatter) to the eye: a high, blunt snout (KTOP_A front, set ~70 % of
+// the way to the photo profile). Front / oblique photos: the snout is widest at the level of the mouth and
+// narrows upward (trapezoidal section) -> lower widest level, somewhat narrower top
+const KDY_A2 = [-0.3, -0.3, -0.3, -0.3, -0.29, -0.32, -0.33, -0.32, -0.29, -0.21, -0.11, -0.02, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const KNT_A2 = [1.9, 1.75, 1.68, 1.64, 1.62, 1.62, 1.64, 1.66, 1.7, 1.74, 1.78, 1.85, 1.92, 1.98, 2.02, 2.03, 2.0, 1.97, 1.95, 1.92, 1.9, 1.87, 1.84, 1.82, 1.8, 1.8, 1.8];
+const KW = pick(KW_A2, KW_A), KNT = pick(KNT_A2, KNT_A), KNB = pick(KNB_A2, KNB_A), KDY = pick(KDY_A2, KDY_A);
 
 export function monotone(xs, ys) {
   const n = xs.length;
@@ -93,7 +110,7 @@ const fDY = monotone(KS, KDY);
 
 const SNOUT_CAP = 0.62;
 const CHEEK = pick(0.36, 0.2); // cheek swelling (mm): the juvenile's cheeks are flatter
-const SNOUT_CAP_W = 1.1;
+const SNOUT_CAP_W = pick(0.8, 1.1); // the adult snout front is broad: full width is reached sooner
 const SNOUT_CAP_WE = 2.0; // the width rounds off over a longer run: rounded snout tip in dorsal view
 const TAIL_BLADE0 = 39.3;
 
@@ -212,14 +229,19 @@ export function surfaceAt(s, y) {
 // Juvenile (calibrated lateral photo): eye centre 13.7 % SL behind the snout and high on the head, orbit
 // ring Ø ≈ 2.5 mm (6 % SL) with a large dark pupil (Ø ≈ 1.3 mm, half the visible eye); the eyeball top
 // stands ~0.5 mm above the dorsal head line and most of the eyeball is exposed.
+// Adult refit (fitted-camera close-ups of lateral photo 02, front u2, dorsal p04, oblique hand / p07): in units
+// of head length (snout tip → gill-cover margin) the pupil sits 0.40 HL behind the tip and 0.22 HL above the
+// tip–opercle line; the visible eye (dark disc) is 0.17 HL across (~2.05 mm) and the pupil 0.083 HL. Seen from
+// a camera 12° above the lateral the pupil is round and centred in the window, so the axis points mostly
+// sideways (~24° up, ~9° forward); from the front the pupils show as upright slits.
 export const EYE = pick({
-  center: [4.9, 4.9, 1.15],
-  axis: norm3([-0.25, 0.45, 0.86]),
-  radius: 1.0,
+  center: [4.63, 4.85, 1.16],
+  axis: norm3([-0.16, 0.42, 0.89]),
+  radius: 1.06,
   skin: 0.06,
-  aperture: 60 * (Math.PI / 180),
-  pupil: 0.38, // pupil half-angle (rad)
-  iris: 1.08, // iris half-angle (rad)
+  aperture: 68 * (Math.PI / 180),
+  pupil: 0.6, // pupil half-angle (rad): the pupil fills 60-65 % of the visible eye in the close-up photos
+  iris: 1.1, // iris half-angle (rad)
   // skin fold around the cornea window (gobies have no true eyelids, but the orbital skin forms a thick,
   // raised rim that overlaps the edge of the eyeball, thickest and furthest over the eye dorsally):
   // tube radius ventral → dorsal, extra coverage (rad) dorsally / ventrally
@@ -227,10 +249,10 @@ export const EYE = pick({
 }, {
   center: [5.6, 5.05, 1.38],
   axis: norm3([-0.22, 0.42, 0.88]),
-  radius: 1.15,
+  radius: 1.22, // the calibrated lateral photo's eye ring is ~8 % larger than before
   skin: 0.05,
-  aperture: 70 * (Math.PI / 180),
-  pupil: 0.58,
+  aperture: 72 * (Math.PI / 180),
+  pupil: 0.62,
   iris: 1.12,
   lid: { r0: 0.08, r1: 0.22, coverD: 0.22, coverV: -0.07, sink: 0.15 },
 });
@@ -275,10 +297,11 @@ export const MOUTH = pick(
 export const RICTUS_S = MOUTH[MOUTH.length - 1][0];
 // lip rolls (radius along the gape, f = 0 front … 1 corner) and how far they protrude from the skin
 export const LIPS = pick(
-  { ru: (f) => 0.43 - 0.2 * f - 0.08 * f * f, rl: (f) => 0.3 - 0.12 * f - 0.07 * f * f, outU: 0.2, outL: 0.14, groove: 0.66, grooveR: 0.065, band: [0.66, 0.22, 0.5, 0.18] },
-  { ru: (f) => 0.29 - 0.13 * f - 0.05 * f * f, rl: (f) => 0.22 - 0.08 * f - 0.05 * f * f, outU: 0.12, outL: 0.09, groove: 0.48, grooveR: 0.05, band: [0.46, 0.16, 0.38, 0.12] },
+  { ru: (f) => 0.6 - 0.28 * f - 0.08 * f * f, rl: (f) => 0.44 - 0.17 * f - 0.07 * f * f, outU: 0.3, outL: 0.24, groove: 0.78, grooveR: 0.085, mental: 0.75, crease: 0.07, band: [0.78, 0.25, 0.6, 0.2] },
+  { ru: (f) => 0.32 - 0.14 * f - 0.05 * f * f, rl: (f) => 0.24 - 0.09 * f - 0.05 * f * f, outU: 0.13, outL: 0.1, groove: 0.52, grooveR: 0.05, mental: 0.66, crease: 0.065, band: [0.5, 0.17, 0.4, 0.13] },
 );
-const LIP_YMAX = MOUTH[0][1] + 1.12; // lips and gape creases live below this height
+const LIP_FRONT = pick(1.25, 1.2); // forward reach of the upper-lip front (× its protrusion)
+const LIP_YMAX = MOUTH[0][1] + LIPS.groove + 0.75; // lips and gape creases live below this height
 // Free margin of the gill cover (operculum + subopercle), top → bottom (head length ≈ 28.5 % SL).
 export const OPERCLE = [[10.0, 5.1], [10.8, 4.62], [11.4, 3.8], [11.7, 2.8], [11.55, 1.8], [11.1, 0.95], [10.4, 0.38], [9.6, 0.08]];
 // Preopercular groove (hinge side of the gill cover), top → bottom.
@@ -358,8 +381,17 @@ function lipLine(sign, radii, out) {
   });
   // front centre (the lips of both sides meet across the snout tip)
   const r0 = radii[0];
-  pts[0] = [r0 - out * 1.2, MOUTH[0][1] + sign * r0 * 0.95, 0];
+  // the upper lip's front is a rounded lobe that protrudes ahead of the snout (lateral photo 02)
+  pts[0] = [r0 - out * (sign > 0 ? LIP_FRONT : 1.2), MOUTH[0][1] + sign * r0 * 0.95, 0];
   return pts;
+}
+
+// The lip chains of both sides meet at the midline; insert a point just off the centre so that each chain
+// leaves the midline almost sideways (otherwise the two mirrored chains meet in a pointed V at the front)
+function roundCentre(pts, radii) {
+  const [p0, p1] = pts, r0 = radii[0], r1 = radii[1];
+  const pa = [p0[0] + 0.1 * (p1[0] - p0[0]), p0[1] + 0.3 * (p1[1] - p0[1]), 0.45 * p1[2]];
+  return { pts: [p0, pa, ...pts.slice(1)], radii: [r0, 0.7 * r0 + 0.3 * r1, ...radii.slice(1)] };
 }
 
 function buildFeatures() {
@@ -377,21 +409,23 @@ function buildFeatures() {
     uPts.push([p[0] - nn[0] * (r - 0.03), p[1] - nn[1] * (r - 0.03), p[2] - nn[2] * (r - 0.03)]);
     ru.push(r);
   }
-  const lipsU = capsuleChain(uPts, ru);
+  const U = roundCentre(uPts, ru);
+  const lipsU = capsuleChain(U.pts, U.radii);
   // the upper jaw overhangs the lower slightly: the lower lip starts a little behind the snout tip
   const lPts = lipLine(-1, rl, LIPS.outL).map((p, i) => {
     if (i === 0) return [p[0] + 0.12, p[1], p[2]];
     const f = i / (n - 1);
     return [p[0], p[1], p[2] * (1 - 0.035 * f)];
   });
-  const lipsL = capsuleChain(lPts, rl);
+  const Lr = roundCentre(lPts, rl);
+  const lipsL = capsuleChain(Lr.pts, Lr.radii);
   const gape = onSurface(MOUTH, 0.0);
   gape[0] = [-0.12, MOUTH[0][1], 0];
-  const crease = capsuleChain(gape, MOUTH.map((_, i) => 0.065 - 0.015 * (i / (MOUTH.length - 1))));
+  const crease = capsuleChain(gape, MOUTH.map((_, i) => LIPS.crease - 0.015 * (i / (MOUTH.length - 1))));
   // premaxillary groove above the upper lip, mental groove below the lower lip
   const grooveU = onSurface(MOUTH.slice(1).map(([s, y]) => [s, y + LIPS.groove]), -0.02);
   grooveU.unshift([0.4, MOUTH[0][1] + LIPS.groove + 0.04, 0]);
-  const grooveL = onSurface(MOUTH.slice(2, -1).map(([s, y]) => [s, y - 0.66]), -0.02);
+  const grooveL = onSurface(MOUTH.slice(2, -1).map(([s, y]) => [s, y - LIPS.mental]), -0.02);
   // premaxillary groove: sets the upper lip off from the snout as a distinct band (front-oblique photo)
   const gU = capsuleChain(grooveU, grooveU.map((_, i) => LIPS.grooveR - 0.02 * (i / grooveU.length)));
   const gL = capsuleChain(grooveL, grooveL.map(() => 0.05));

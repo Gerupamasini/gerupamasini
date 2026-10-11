@@ -5,7 +5,7 @@ import { SpeciesSchema } from '../../src/data/schemas/species';
 import { modelFor, variantOf } from '../../src/creatures/models/choice';
 import { generateIndividual } from '../../src/creatures/Individual';
 
-// マハゼ comes in three growth forms (juvenile / subadult / adult GLBs), each carrying three pattern variants.
+// マハゼ comes in three growth forms (juvenile / subadult / adult GLBs), each carrying nine variants (three patterns × three colour morphs).
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const sp = SpeciesSchema.parse(JSON.parse(readFileSync(root + 'public/data/species/acanthogobius_flavimanus.json', 'utf8')));
 
@@ -36,12 +36,14 @@ describe('マハゼの成長段階ごとのモデル', () => {
     expect(modelFor(sp, 'nonsense')).toBe(sp.model);
   });
 
-  it('the hero GLBs carry three pattern variants on the body and fins, tagged with their growth stage', () => {
+  it('the hero GLBs carry nine variants (three patterns × three colour morphs) on the body and fins, tagged with their growth stage', () => {
     for (const [stage, variant] of [['juvenile', 'juvenile'], ['young', 'subadult'], ['adult', 'adult']] as const) {
       const m = modelFor(sp, stage);
       for (const key of ['hero', 'lod1', 'lod2'] as const) expect(existsSync(root + 'src/assets/models/' + m[key]!), `${stage} ${key}`).toBe(true);
       const j = glbJson(m.hero!);
-      expect(j.extensions?.KHR_materials_variants?.variants.map((v) => v.name)).toEqual(['pattern1', 'pattern2', 'pattern3']);
+      expect(j.extensions?.KHR_materials_variants?.variants.map((v) => v.name)).toEqual(
+        [1, 2, 3].flatMap((p) => ['standard', 'amber', 'dark'].map((c) => `pattern${p}_${c}`)),
+      );
       const fish = j.nodes.find((n) => n.extras?.totalLength_mm);
       expect(fish?.extras?.variant).toBe(variant);
       for (const name of ['Body', 'Fin_Caudal', 'Fin_Pectoral_L']) {
@@ -51,10 +53,10 @@ describe('マハゼの成長段階ごとのモデル', () => {
     }
   });
 
-  it('the pattern variant is fixed by the id and spread over the three', () => {
+  it('the variant is fixed by the id and spread over all nine', () => {
     expect(variantOf('acanthogobius_flavimanus#0001abcd')).toBe(variantOf('acanthogobius_flavimanus#0001abcd'));
     const seen = new Set<number>();
-    for (let i = 0; i < 60; i++) seen.add(variantOf(`acanthogobius_flavimanus#${i.toString(16).padStart(8, '0')}`) % 3);
-    expect([...seen].sort()).toEqual([0, 1, 2]);
+    for (let i = 0; i < 200; i++) seen.add(variantOf(`acanthogobius_flavimanus#${i.toString(16).padStart(8, '0')}`) % 9);
+    expect([...seen].sort()).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
   });
 });

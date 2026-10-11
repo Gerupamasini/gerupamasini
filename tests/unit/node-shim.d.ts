@@ -12,3 +12,6 @@ declare module 'node:fs' {
 declare module 'node:url' {
   export function fileURLToPath(url: URL | string): string;
 }
+declare module 'pngjs' {
+  export const PNG: { sync: { read(buf: unknown): { width: number; height: number; data: Uint8Array } } };
+}

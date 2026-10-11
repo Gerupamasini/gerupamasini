@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>イシガレイ 3D</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; background: #111; color: #dde8e8; font: 13px/1.45 system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .panel { position: fixed; top: 12px; left: 12px; background: rgba(12, 22, 24, 0.78); border: 1px solid rgba(160, 205, 210, 0.18); border-radius: 10px; padding: 10px 12px; max-width: 380px; }
+  body.capture .panel { display: none; }
+  .panel button { background: rgba(255,255,255,0.06); color: inherit; border: 1px solid rgba(160,205,210,0.2); border-radius: 6px; padding: 4px 8px; margin: 2px; cursor: pointer; font: inherit; }
+  #info { color: #8fa6a8; font-size: 11.5px; margin-top: 6px; white-space: pre-line; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div class="panel">
+  <div><b>干潟図鑑 イシガレイ（若魚）</b></div>
+  <div>
+    <button data-scene="top">背面（有眼側）</button><button data-scene="side">側面</button><button data-scene="head">頭部</button><button data-scene="blind">無眼側</button><button data-scene="tray">撮影トレー</button>
+    <button data-scene="flat">砂泥の浅場</button>
+  </div>
+  <div>
+    <button data-lod="0">LOD0</button><button data-lod="1">LOD1</button><button data-lod="2">LOD2</button>
+    <button id="mouth">口を開く</button><button id="startle">脅かす</button><button id="burrow">潜る</button><button id="feed">摂餌</button><button id="glide">泳ぐ</button>
+  </div>
+  <div id="info"></div>
+</div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

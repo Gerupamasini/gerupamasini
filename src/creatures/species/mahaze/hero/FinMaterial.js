@@ -52,6 +52,8 @@ void main() {
 const fragmentShader = /* glsl */ `
 ${commonGLSL}
 uniform sampler2D uColor;
+uniform vec3 uTint;            // colour morph: tint of membrane and rays
+uniform float uMelK;           // colour morph: melanophore optical-depth factor
 uniform sampler2D uData;       // r: ray density, g: melanin, b: iridophores, a: membrane coverage
 uniform sampler2D uNormalMap;
 uniform int uPass;
@@ -67,7 +69,7 @@ void main() {
   vec4 dat = texture(uData, vUv);
   float cov = dat.a;
   if (cov < 0.004) discard;
-  vec3 alb = texture(uColor, vUv).rgb;
+  vec3 alb = texture(uColor, vUv).rgb * uTint;
   float face = gl_FrontFacing ? 1.0 : -1.0;
   vec3 Ng0 = normalize(vWorldNormal);
   vec3 Ng = Ng0 * face;
@@ -82,9 +84,11 @@ void main() {
   float cosL = dot(Ng, L);
   float muL = max(abs(cosL), 0.1);
 
-  float ray = dat.r, mel = dat.g, irid = dat.b;
+  float ray = dat.r, mel = 1.0 - pow(max(1.0 - dat.g, 0.0), uMelK), irid = dat.b;
   float tauS = uFinDensity * (0.055 + 0.5 * ray + 0.7 * irid);
   vec3 tauA = vec3(0.004, 0.008, 0.02) + ray * vec3(0.05, 0.12, 0.26) + mel * vec3(2.3, 2.7, 3.1) + (1.0 - alb) * 0.05;
+  // colour morph: diffuse pigment in membrane and rays (yellowish for amber, dusky for the dark morph)
+  tauA += (1.0 - uTint) * (0.3 + 0.9 * ray);
   vec3 tauT = tauA + vec3(tauS);
   vec3 omega = vec3(tauS) * alb / tauT;
 
@@ -123,12 +127,14 @@ void main() {
 }
 `;
 
-export function createFinMaterials({ textures, shared }) {
+export function createFinMaterials({ textures, shared, tint = [1, 1, 1], melK = 1 }) {
   const make = (pass) => new THREE.ShaderMaterial({
     name: pass === 0 ? 'MahazeFinTransmit' : 'MahazeFinScatter',
     uniforms: {
       ...shared,
       uColor: { value: textures.color },
+      uTint: { value: new THREE.Vector3(...tint) },
+      uMelK: { value: melK },
       uData: { value: textures.data },
       uNormalMap: { value: textures.normal },
       uPass: { value: pass },

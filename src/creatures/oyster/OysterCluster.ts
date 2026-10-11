@@ -32,6 +32,9 @@ export interface MemberPick {
   scale: number;
   /** reef prototype index, if any */
   proto?: number;
+  /** the seed the genome came from, and the crowding it was made with (to rebuild the oyster in full later) */
+  seed?: number;
+  crowding?: number;
 }
 
 export interface ClusterMember extends MemberPick {

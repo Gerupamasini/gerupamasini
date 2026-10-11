@@ -78,13 +78,15 @@
         "muddy_sand"
       ],
       "tide": "any",
+      "maps": ["kasai_west"],
       "density_per_100m2": 0.12,
       "group": [
         1,
         1
       ],
       "maxPopulation": 10
-    }
+    },
+    { "tags": ["shallow", "waterline", "exposed_sand"], "substrate": ["sand", "muddy_sand"], "depth_m": [-0.6, 0.45], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.6, "group": [1, 1], "maxPopulation": 16 }
   ],
   "brain": {
     "tree": "bivalve_buried",

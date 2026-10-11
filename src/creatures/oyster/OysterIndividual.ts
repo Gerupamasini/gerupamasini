@@ -136,6 +136,12 @@ export class OysterIndividual {
     this.applyGape();
   }
 
+  /** Pose the gape directly (previews; the behaviour overrides it on the next update). */
+  setGape(g: number): void {
+    this.gape = g;
+    this.applyGape();
+  }
+
   /** Set the attachment plane (own frame). */
   setPlane(p: Vector4): void {
     this.plane.copy(p);

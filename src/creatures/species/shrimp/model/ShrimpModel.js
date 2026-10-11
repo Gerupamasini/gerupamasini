@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { MORPH as M, TL } from './morphology.js';
-import { loft, blade, bendZ, smoothTable, table, withShellAttrs, paint } from './loft.js';
+import { MORPH, TL } from './morphology.js';
+import { loft, blade, bendZ, smoothTable, table, withShellAttrs, paint, ringPodomere } from './loft.js';
 import { podomere } from './geometry.js';
 import {
   createCuticleMaterial,
@@ -24,7 +24,7 @@ const smoothstep = (a, b, x) => {
  * (dense where the view passes through the middle of the mass, thin toward the silhouette),
  * and muscle shows the chevron myomere banding of decapod abdominal flexors [PHOTO 001, 003].
  */
-function tissueVolume(color, opacity, striated) {
+function tissueVolume(color, opacity, striated, key = '') {
   const m = new THREE.MeshStandardMaterial({ color, roughness: 0.75, transparent: true, opacity, depthWrite: false });
   m.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
@@ -45,31 +45,42 @@ function tissueVolume(color, opacity, striated) {
         }`
       );
   };
-  m.customProgramCacheKey = () => 'tissue-' + (striated ? 's' : 'p');
+  m.customProgramCacheKey = () => 'tissue-' + (striated ? 's' : 'p') + key;
   return m;
 }
 
-let SHARED = null;
-function materials() {
-  if (SHARED) return SHARED;
-  const C = M.colour;
-  SHARED = {
+/** The default species: the morphology this model was traced for. */
+export const SHIRATA = { id: 'shirata', ja: 'シラタエビ', sci: 'Exopalaemon orientis', TL, morph: MORPH };
+
+const SHARED = new Map();
+/**
+ * Materials are shared by every individual of a species. A species' `look` overrides the シラタエビ options
+ * per material (colours, opacity, chromatophore density, stripe pattern); without it nothing changes.
+ */
+function materials(species = SHIRATA) {
+  if (SHARED.has(species.id)) return SHARED.get(species.id);
+  const C = species.morph.colour;
+  const L = species.look ?? {};
+  const sfx = species.id === SHIRATA.id ? '' : '-' + species.id;
+  const cut = (name, o) => createCuticleMaterial({ ...o, ...(L[name] ?? {}), key: o.key + sfx });
+  const tis = (name, color, opacity, striated) => tissueVolume(L[name]?.color ?? color, L[name]?.opacity ?? opacity, striated, sfx);
+  const S = {
     // Abdomen: turbid muscle under the cuticle -> milky grey (#7a807c over dark, #9b8f6a over white).
-    abdomen: createCuticleMaterial({ key: 'abd', glass: true, color: 0xdfe3dd, alpha: 0.035, rimAlpha: 0.32, roughness: 0.12 }),
+    abdomen: cut('abdomen', { key: 'abd', glass: true, color: 0xdfe3dd, alpha: 0.035, rimAlpha: 0.32, roughness: 0.12 }),
     // Carapace: clearer, organs visible through it.
-    carapace: createCuticleMaterial({ key: 'cara', glass: true, color: 0xe2e5de, alpha: 0.03, rimAlpha: 0.3, roughness: 0.12 }),
-    rostrum: createCuticleMaterial({ key: 'ros', glass: true, color: 0xe4e4dc, alpha: 0.15, rimAlpha: 0.55, cells: 3200, dotR: 0.34 }),
+    carapace: cut('carapace', { key: 'cara', glass: true, color: 0xe2e5de, alpha: 0.03, rimAlpha: 0.3, roughness: 0.12 }),
+    rostrum: cut('rostrum', { key: 'ros', glass: true, color: 0xe4e4dc, alpha: 0.15, rimAlpha: 0.55, cells: 3200, dotR: 0.34 }),
     // Legs, pleopods: milky white translucent [PHOTO 004 #babaaf].
-    append: createCuticleMaterial({ key: 'app', glass: true, color: 0xdcdcd2, alpha: 0.09, rimAlpha: 0.4, cells: 3600, keep: 0.4, relief: 0.05, sheen: 0.3 }),
-    fan: createCuticleMaterial({ key: 'fan', glass: true, color: 0xe4e2d8, alpha: 0.1, rimAlpha: 0.45, cells: 3000, keep: 0.5 }),
-    stalk: createCuticleMaterial({ key: 'stalk', glass: true, color: 0xd8cfbb, alpha: 0.45, rimAlpha: 0.85, cells: 5200, dotR: 0.38, chroma: C.eyestalkPigment }),
+    append: cut('append', { key: 'app', glass: true, color: 0xdcdcd2, alpha: 0.09, rimAlpha: 0.4, cells: 3600, keep: 0.4, relief: 0.05, sheen: 0.3 }),
+    fan: cut('fan', { key: 'fan', glass: true, color: 0xe4e2d8, alpha: 0.1, rimAlpha: 0.45, cells: 3000, keep: 0.5 }),
+    stalk: cut('stalk', { key: 'stalk', glass: true, color: 0xd8cfbb, alpha: 0.45, rimAlpha: 0.85, cells: 5200, dotR: 0.38, chroma: C.eyestalkPigment }),
     // Abdominal flexor/extensor mass: the milky, faintly bluish-grey translucency of the live body [PHOTO 001, 003].
-    muscle: tissueVolume(0xc6cdc8, 0.3, true),
-    gill: tissueVolume(0xa9ada3, 0.08, false),
-    cephTissue: tissueVolume(0xc9ccc3, 0.16, false),
-    eye: createEyeMaterial(),
+    muscle: tis('muscle', 0xc6cdc8, 0.3, true),
+    gill: tis('gill', 0xa9ada3, 0.08, false),
+    cephTissue: tis('cephTissue', 0xc9ccc3, 0.16, false),
+    eye: createEyeMaterial({ ...(L.eye ?? {}), key: sfx.slice(1) }),
     stomach: createTissueMaterial(C.stomach, { roughness: 0.45 }),
-    hepato: tissueVolume(C.hepatopancreas, 0.5, false),
+    hepato: tis('hepato', C.hepatopancreas, 0.5, false),
     heart: createTissueMaterial(0xcdb9a4),
     ovary: createTissueMaterial(C.ovary),
     gut: createTissueMaterial(C.hindgut, { roughness: 0.5 }),
@@ -79,12 +90,17 @@ function materials() {
     egg: createEggMaterial(),
     setae: new THREE.MeshStandardMaterial({ color: 0xe2e0d6, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6 }),
     flag: new Map(),
+    flagOpacity: L.flagellumOpacity,
+    antennaTint: L.antennaTint ?? 0xd6d1c4,
   };
-  return SHARED;
+  // Walking legs and chelipeds get their own (ringed) material when the species has one; the key keeps the
+  // 'cuticle-v3-app' prefix so the game's distance LOD still treats them as appendages.
+  S.legs = L.legs ? cut('legs', { key: 'app-legs', glass: true, color: 0xdcdcd2, alpha: 0.09, rimAlpha: 0.4, cells: 3600, keep: 0.4, relief: 0.05, sheen: 0.3 }) : S.append;
+  SHARED.set(species.id, S);
+  return S;
 }
-function flagMat(tint) {
-  const S = materials();
-  if (!S.flag.has(tint)) S.flag.set(tint, createFlagellumMaterial(tint));
+function flagMat(S, tint) {
+  if (!S.flag.has(tint)) S.flag.set(tint, createFlagellumMaterial(tint, S.flagOpacity));
   return S.flag.get(tint);
 }
 
@@ -118,7 +134,7 @@ const h0Shift = () => 0;
 function mergeShell(geos) {
   const clean = geos.map((g) => {
     const n = g.index ? g.toNonIndexed() : g;
-    for (const k of Object.keys(n.attributes)) if (!['position', 'normal', 'aJoint', 'aPig', 'aThick'].includes(k)) n.deleteAttribute(k);
+    for (const k of Object.keys(n.attributes)) if (!['position', 'normal', 'aJoint', 'aPig', 'aThick', 'aPat', 'aPatW'].includes(k)) n.deleteAttribute(k);
     withShellAttrs(n);
     if (!n.attributes.normal) n.computeVertexNormals();
     return n;
@@ -135,8 +151,11 @@ function mergeShell(geos) {
 // carpus/propodus drop steeply down-back to the foot [PHOTO 001, 006].
 
 export class ShrimpModel {
-  constructor({ sex = 'female', berried = false, scale = 1, blueSpots = false } = {}) {
-    const S = materials();
+  constructor({ sex = 'female', berried = false, scale = 1, blueSpots = false, species = SHIRATA } = {}) {
+    this.species = species;
+    this.M = species.morph;
+    const S = materials(species);
+    this.S = S;
     this.sex = sex;
     this.scale = scale;
     this.root = new THREE.Object3D();
@@ -156,7 +175,7 @@ export class ShrimpModel {
 
   // ================================================================ cephalothorax
   carapaceAt(xf) {
-    const st = M.carapace.stations;
+    const st = this.M.carapace.stations;
     return {
       d: smoothTable(st.map((r) => [r[0], r[1]]), xf),
       v: smoothTable(st.map((r) => [r[0], r[2]]), xf),
@@ -165,7 +184,7 @@ export class ShrimpModel {
   }
 
   buildCephalothorax(S) {
-    const C = M.carapace;
+    const C = this.M.carapace;
     this.ceph = joint(this.body, 0, 0, 0, 'cephalothorax');
     const len = C.frontX;
     // Dotted longitudinal chromatophore line on the carapace side [PHOTO 002, 043].
@@ -182,11 +201,21 @@ export class ShrimpModel {
       attrs: (t, zN, yN) => {
         const line = Math.exp(-(((yN - (0.12 - 0.1 * t)) / 0.07) ** 2)) * smoothstep(0.15, 0.3, t) * (1 - smoothstep(0.85, 0.95, t)) * smoothstep(0.5, 0.8, zN);
         const dorsal = smoothstep(0.2, 0.8, yN) * 0.2;
-        return {
+        const a = {
           joint: t < 0.04 ? 1 - t / 0.04 : 0,
           pig: 0.62 + dorsal + line * 0.9 + (t > 0.9 ? 0.4 : 0),
           thick: 0.25 + 0.35 * smoothstep(-0.9, 0.2, yN),
         };
+        const P = this.M.pattern?.carapace;
+        if (P) {
+          // oblique lateral lines (postero-dorsal -> antero-ventral) and sinuous dorsal longitudinal lines
+          const span = smoothstep(0.03, 0.1, t) * (1 - smoothstep(0.86, 0.96, t));
+          const lateral = smoothstep(0.12, 0.45, zN) * smoothstep(-0.8, -0.5, yN) * span;
+          const dors = smoothstep(0.58, 0.86, yN) * span;
+          a.pat = [P.lines * (t + P.slant * yN) + P.offset, yN * 2.5, P.dorsal * zN + 0.5 + 0.25 * Math.sin(t * 9), smoothstep(-0.2, -0.6, yN)];
+          a.patW = [lateral, dors, 0.45 * span, 0];
+        }
+        return a;
       },
       caps: [true, true],
     });
@@ -248,8 +277,8 @@ export class ShrimpModel {
   }
 
   buildRostrum(S) {
-    const R = M.rostrum;
-    const C = M.carapace;
+    const R = this.M.rostrum;
+    const C = this.M.carapace;
     const tipX = C.eyeX + R.tipAhead;
     const L = tipX - R.baseX;
     const base = this.carapaceAt(R.baseX);
@@ -300,10 +329,10 @@ export class ShrimpModel {
   }
 
   buildEyes(S) {
-    const E = M.eye;
+    const E = this.M.eye;
     this.eyes = [];
     for (const s of [1, -1]) {
-      const e = joint(this.ceph, (M.carapace.eyeX - 0.006) * T, E.y * T, s * 0.012 * T, 'eye' + s);
+      const e = joint(this.ceph, (this.M.carapace.eyeX - 0.006) * T, E.y * T, s * 0.012 * T, 'eye' + s);
       e.rotation.order = 'YZX';
       e.rotation.y = -s * E.yaw;
       e.rotation.z = E.pitch;
@@ -329,8 +358,8 @@ export class ShrimpModel {
   }
 
   buildAntennules(S) {
-    const A1 = M.antennule;
-    const C = M.carapace;
+    const A1 = this.M.antennule;
+    const C = this.M.carapace;
     this.antennules = [];
     this.flagella = [];
     for (const s of [1, -1]) {
@@ -362,7 +391,7 @@ export class ShrimpModel {
           nodes: F.len > 0.4 ? 16 : 8,
           rootRadius: 0.0022 * T * this.scale,
           tipRadius: 0.0005 * T * this.scale,
-          material: flagMat(F.tint),
+          material: flagMat(S, F.tint),
           stiffness: 0.45,
         });
         f.anchor = a;
@@ -372,9 +401,9 @@ export class ShrimpModel {
   }
 
   buildAntennae(S) {
-    const A2 = M.antenna;
+    const A2 = this.M.antenna;
     const Sc = A2.scaphocerite;
-    const C = M.carapace;
+    const C = this.M.carapace;
     this.antennae = [];
     for (const s of [1, -1]) {
       const j = joint(this.ceph, (C.frontX - 0.012) * T, -0.004 * T, s * 0.02 * T, 'antenna' + s);
@@ -413,7 +442,7 @@ export class ShrimpModel {
         nodes: 30,
         rootRadius: 0.0035 * T * this.scale,
         tipRadius: 0.0006 * T * this.scale,
-        material: flagMat(0xd6d1c4),
+        material: flagMat(S, S.antennaTint),
         stiffness: 0.55,
       });
       f.anchor = tip;
@@ -423,8 +452,8 @@ export class ShrimpModel {
   }
 
   buildMouthparts(S) {
-    const X = M.maxilliped3;
-    const C = M.carapace;
+    const X = this.M.maxilliped3;
+    const C = this.M.carapace;
     this.mxp = [];
     for (const s of [1, -1]) {
       const c = this.carapaceAt(0.165);
@@ -457,7 +486,10 @@ export class ShrimpModel {
   buildPereopods(S) {
     this.chelipeds = [];
     this.walkLegs = [];
-    M.pereopods.forEach((P, pi) => {
+    // species leg rings (black before each joint, orange at it); without a pattern the legs are plain S.append
+    const LP = this.M.pattern?.legs;
+    const ring = (g, len, key) => (LP ? (LP[key] ? ringPodomere(g, len, LP[key]) : withShellAttrs(g, { pig: 0.3 })) : g);
+    this.M.pereopods.forEach((P, pi) => {
       const c = this.carapaceAt(P.x);
       for (const s of [1, -1]) {
         // Coxae articulate on the thoracic sternum, under the branchiostegite; a short basis
@@ -478,29 +510,29 @@ export class ShrimpModel {
         hip.rotation.order = 'YZX';
         const [li, lm, lc, lp, ld] = P.segs.map((v) => v * T);
         const L1 = li + lm;
-        mesh(podomere(li, r * 0.9, r), S.append, hip);
+        mesh(ring(podomere(li, r * 0.9, r), li, 'ischium'), S.legs, hip);
         const isj = joint(hip, li, 0, 0);
-        mesh(podomere(lm, r, r * 0.95), S.append, isj);
+        mesh(ring(podomere(lm, r, r * 0.95), lm, 'merus'), S.legs, isj);
         const knee = joint(hip, L1, 0, 0);
-        mesh(podomere(lc, r * 0.85, r * 0.78), S.append, knee);
+        mesh(ring(podomere(lc, r * 0.85, r * 0.78), lc, 'carpus'), S.legs, knee);
         const wrist = joint(knee, lc, 0, 0);
         const leg = { P: { ...P, name: P.name }, side: s, coxa, hip, knee, wrist, L1, hipPos, index: pi };
         if (P.chela) {
           const palmR = r * (P.name === 'P2' ? 1.15 : 1.0);
-          mesh(podomere(lp, r * 0.8, palmR), S.append, wrist);
-          const fixed = mesh(podomere(ld, palmR * 0.5, palmR * 0.08, 6), S.append, wrist);
+          mesh(ring(podomere(lp, r * 0.8, palmR), lp, 'palm'), S.legs, wrist);
+          const fixed = mesh(ring(podomere(ld, palmR * 0.5, palmR * 0.08, 6), ld, 'finger'), S.legs, wrist);
           fixed.position.set(lp, -palmR * 0.3, 0);
           const dact = joint(wrist, lp, palmR * 0.3, 0);
-          mesh(podomere(ld, palmR * 0.5, palmR * 0.08, 6), S.append, dact);
+          mesh(ring(podomere(ld, palmR * 0.5, palmR * 0.08, 6), ld, 'finger'), S.legs, dact);
           leg.dactyl = dact;
           leg.L2 = lc + lp + ld;
           hip.rotation.set(0, -s * 0.4, -0.9, 'YZX');
           knee.rotation.z = 1.2;
           this.chelipeds.push(leg);
         } else {
-          mesh(podomere(lp, r * 0.75, r * 0.55), S.append, wrist);
+          mesh(ring(podomere(lp, r * 0.75, r * 0.55), lp, 'propodus'), S.legs, wrist);
           const dact = joint(wrist, lp, 0, 0);
-          mesh(podomere(ld, r * 0.5, r * 0.07, 6), S.append, dact);
+          mesh(ring(podomere(ld, r * 0.5, r * 0.07, 6), ld, 'dactylus'), S.legs, dact);
           leg.dactyl = dact;
           // Carpus->propodus joint carried at a fixed downward bend; IK solves the merus/knee with the
           // resulting effective distal vector, so the leg shows two bends like the photos.
@@ -519,7 +551,7 @@ export class ShrimpModel {
 
   // ================================================================ abdomen
   buildAbdomen(S, { berried, blueSpots }) {
-    const A = M.abdomen;
+    const A = this.M.abdomen;
     this.abd = [];
     let parent = this.body;
     let x = 0;
@@ -528,7 +560,7 @@ export class ShrimpModel {
       const j = joint(parent, x, 0, 0, 'abd' + (i + 1));
       const len = s.len * T;
       const ov = i === 1 ? 0.3 : 0.16; // anterior articular part tucked under the previous tergite
-      const contour = i === 5 ? M.somite6Contour : M.somiteContour;
+      const contour = i === 5 ? this.M.somite6Contour : this.M.somiteContour;
       const oh = i === 5 ? 0.0 : 0.07; // posterior tergite margin overhangs the next somite
       const geo = loft({
         length: len * (1 + ov + oh),
@@ -568,11 +600,19 @@ export class ShrimpModel {
           const u = t * (1 + ov + oh) - ov;
           const band = smoothstep(0.8, 0.97, u) * (1 - smoothstep(1.03, 1.07, u)); // posterior-margin band
           const ventralLine = smoothstep(-0.8, -0.95, yN) * 0.35;
-          return {
+          const a = {
             joint: u < 0.02 ? clamp01(-u / ov + 0.5) : 0,
             pig: 0.7 + 0.25 * smoothstep(0.3, 0.9, yN) + band * 0.7 + ventralLine,
             thick: 0.35 + 0.65 * smoothstep(-0.95, -0.2, yN) * smoothstep(1.02, 0.6, Math.abs(yN) + 0.1),
           };
+          const P = this.M.pattern?.abdomen;
+          if (P) {
+            // per somite: a thin mid band and a bold posterior band, tilted forward-down on the pleura
+            const shown = smoothstep(-0.03, 0.03, u);
+            a.pat = [P.perSomite * (u - P.first + P.slant * (yN - 1)), yN * 2.6, 0, smoothstep(-0.25, -0.7, yN)];
+            a.patW = [shown, 0, P.dots * shown, 0];
+          }
+          return a;
         },
       });
       const seg = mesh(geo, S.abdomen, j);
@@ -613,7 +653,7 @@ export class ShrimpModel {
       x = -len;
     }
     this.pleopods = this.abd.slice(0, 5).map((j) => j.userData.pleopods);
-    this.lm.carapacePost = joint(this.body, 0, M.carapace.stations[0][1] * T, 0, 'lm_cpost');
+    this.lm.carapacePost = joint(this.body, 0, this.M.carapace.stations[0][1] * T, 0, 'lm_cpost');
 
     if (berried) {
       const eggGeo = new THREE.SphereGeometry(0.0075 * T, 8, 6);
@@ -637,7 +677,7 @@ export class ShrimpModel {
   }
 
   buildPleopodPair(S, j, s, len, i) {
-    const P = M.pleopod;
+    const P = this.M.pleopod;
     const pairs = [];
     const h = s.h1 * T;
     const scale = i === 0 ? 0.85 : 1;
@@ -692,10 +732,10 @@ export class ShrimpModel {
 
   // ================================================================ tail fan
   buildTailFan(S) {
-    const Tn = M.telson;
-    const U = M.uropod;
+    const Tn = this.M.telson;
+    const U = this.M.uropod;
     const last = this.abd[5];
-    const lastLen = M.abdomen[5].len * T;
+    const lastLen = this.M.abdomen[5].len * T;
     this.telson = joint(last, -lastLen, 0, 0, 'telson');
     const tl = Tn.len * T;
     const telGeo = loft({
@@ -726,7 +766,7 @@ export class ShrimpModel {
 
     this.uropods = [];
     for (const sd of [1, -1]) {
-      const u = joint(last, -lastLen * 0.97, -M.abdomen[5].h1 * T * 0.15, sd * M.abdomen[5].w1 * T * 0.55, 'uropod' + sd);
+      const u = joint(last, -lastLen * 0.97, -this.M.abdomen[5].h1 * T * 0.15, sd * this.M.abdomen[5].w1 * T * 0.55, 'uropod' + sd);
       u.rotation.order = 'YXZ'; // roll about the blade axis, then spread
       u.userData.side = sd;
       // protopod
@@ -741,10 +781,18 @@ export class ShrimpModel {
           // exopod lateral margin straighter than the medial one
           // (built pointing +X, then turned 180 deg about Y, which mirrors Z: negative here = lateral)
           offset: (t) => -(key === 'exo' ? 1 : -0.4) * R.maxHalf * T * 0.3 * Math.sin(Math.PI * t),
-          attrs: (t, zN) => {
+          attrs: (t, zN, yN, side) => {
             // Dark mark at the base/diaeresis [PHOTO 004, 009], denser dots at the margins.
             const mark = Math.exp(-(((t - 0.12) / 0.07) ** 2)) * smoothstep(0.2, 0.6, zN) * 1.1;
-            return { pig: 0.8 + 0.3 * smoothstep(0.7, 1.0, zN) + mark, thick: 0.2 };
+            const a = { pig: 0.8 + 0.3 * smoothstep(0.7, 1.0, zN) + mark, thick: 0.2 };
+            const O = this.M.pattern?.ocellus?.[key];
+            if (O) {
+              // ringed spot near the tip of the ramus, in TL units on the blade
+              const w = R.maxHalf * (t < R.at ? 0.55 + (0.45 * t) / R.at : Math.sqrt(Math.max(0, 1 - ((t - R.at) / (1 - R.at)) ** 2.2)));
+              a.pat = [t * R.len, side * zN * w, O.at * R.len, 0];
+              a.patW = [O.w, O.r, 0, 0];
+            }
+            return a;
           },
         });
         g.rotateY(Math.PI); // point backward (-X)
@@ -774,7 +822,7 @@ export class ShrimpModel {
 
   // ================================================================ pose & utilities
   applyRestPose() {
-    const R = M.rest;
+    const R = this.M.rest;
     this.abd.forEach((j, i) => (j.rotation.z = R.joints[i]));
     this.telson.rotation.z = R.telson;
     for (const u of this.uropods) {
@@ -787,7 +835,7 @@ export class ShrimpModel {
   /** Solve a walking leg to a foot target given in cephalothorax space (knee splayed outward-up). */
   solveLegIK(leg, local) {
     const v = local.clone().sub(leg.coxa.position);
-    if (leg.restDir) {
+    if (leg.restDir && !leg.free) {
       // Keep each foot inside its own working sector: a walking leg never swings across to the
       // other side of its coxa (that is what made the hind legs point the wrong way while walking).
       const r = Math.hypot(v.x, v.z);

@@ -33,7 +33,7 @@ export function ObserveOverlay({ app }: { app: App }) {
           <button onClick={() => app.observation.nudge(-1)} title="+">{t('observe.closer')}</button>
           <button onClick={() => app.observation.nudge(1)} title="-">{t('observe.farther')}</button>
         </div>
-        <span class="hint">{t('observe.hint')} ・ {t('observe.exit')}</span>
+        {app.input.touchDevice ? <button class="btn" onClick={() => app.exitObserve()}>観察を終了</button> : <span class="hint">{t('observe.hint')} ・ {t('observe.exit')}</span>}
       </div>
     </Fragment>
   );

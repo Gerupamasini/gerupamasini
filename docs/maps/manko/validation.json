@@ -1,0 +1,30 @@
+{
+  "info": {
+    "map": "manko",
+    "size": 70,
+    "animals": 0,
+    "clams": null,
+    "reef": false,
+    "pits": 0,
+    "skyline": 0,
+    "forest": {
+      "trees": 149,
+      "templates": 8,
+      "geometries": 36,
+      "calls": 85,
+      "triangles": 58850,
+      "collisionSegments": 43942,
+      "lod": [
+        0,
+        1,
+        148
+      ]
+    },
+    "position": [
+      -4,
+      1.4742275476455688,
+      -31
+    ]
+  },
+  "errors": []
+}
