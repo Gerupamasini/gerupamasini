@@ -238,16 +238,32 @@ describe('アカエイ eye–spiracle complex', () => {
     for (const lod of [0, 1] as Lod[]) {
       const g = akaeiGeometries(lod);
       for (const [geo, side] of [[g.eyeL, 1], [g.eyeR, -1]] as [BufferGeometry, number][]) {
-        const p = geo.getAttribute('position'), n = geo.getAttribute('normal');
+        const p = geo.getAttribute('position'), n = geo.getAttribute('normal'), idx = geo.getIndex()!;
+        // group 0 is the cornea, group 1 the lids' skin
+        const cornea = geo.groups.find((gr) => gr.materialIndex === 0)!;
+        const seen = new Set<number>();
+        for (let i = cornea.start; i < cornea.start + cornea.count; i++) seen.add(idx.getX(i));
         let out = 0, up = 0, k = 0;
-        for (let i = 0; i < p.count; i++) {
+        for (const i of seen) {
           if (p.getY(i) <= dorsalHeight(p.getX(i), p.getZ(i))) continue;
           out += n.getX(i) * side; up += n.getY(i); k++;
         }
-        expect(k).toBeGreaterThan(10);
+        expect(k).toBeGreaterThan(0.8 * seen.size);
         expect(out / k).toBeGreaterThan(up / k);
         expect(out / k).toBeGreaterThan(0.4);
       }
     }
+  });
+
+  it('covers the eyeball with skin over its crown: the lids reach higher than the cornea', () => {
+    const geo = akaeiGeometries(0).eyeL;
+    const p = geo.getAttribute('position'), idx = geo.getIndex()!;
+    const top = (mat: number): number => {
+      const gr = geo.groups.find((g) => g.materialIndex === mat)!;
+      let y = -Infinity;
+      for (let i = gr.start; i < gr.start + gr.count; i++) y = Math.max(y, p.getY(idx.getX(i)));
+      return y;
+    };
+    expect(top(1)).toBeGreaterThan(top(0) + 0.12 * MORPH.eye.r);
   });
 });
