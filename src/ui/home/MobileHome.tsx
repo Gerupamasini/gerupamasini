@@ -4,6 +4,7 @@ import type { App } from '../../app/App';
 import { ui } from '../store';
 import { HoldButton, MovementStick } from '../TouchControls';
 import { ToolsPanel } from './ToolsPanel';
+import { FirstSteps } from './FirstSteps';
 import { TideGauge } from '../hud/TideGauge';
 import { BookIcon, CalendarIcon, CapsuleIcon, CartIcon, MoonIcon, TankIcon, ToolboxIcon } from '../common/Icons';
 
@@ -22,6 +23,7 @@ export function MobileHome({ app }: { app: App }) {
   }, [app, camera, tools, hidden]);
   if (hidden) return <button class="btn mobile-home-restore" onClick={() => setHidden(false)}>UI表示</button>;
   return <Fragment>
+    <FirstSteps app={app} />
     <div class="mobile-home-status">
       <button class="btn ghost" onClick={() => app.openOverlay('tidetable')} aria-label="潮見表">
         <MoonIcon ms={app.clock.nowGame()} size={18} /><span class="num">{hud.timeText}</span><span>潮位 {(hud.tideLevel * 100).toFixed(0)} cm</span>

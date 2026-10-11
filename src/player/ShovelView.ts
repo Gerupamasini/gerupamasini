@@ -1,7 +1,7 @@
 import { BoxGeometry, CylinderGeometry, Group, IcosahedronGeometry, MathUtils, Matrix4, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera, Quaternion, Scene, Vector3 } from 'three';
 import { CAPTURE_PHASE_SEC, REVEAL_SEC, type CaptureState } from '../systems/Capture';
 import { NET_LAYER } from './NetView';
-import { instantiateModel } from '../creatures/models/ModelLoader';
+import { instantiateModel, type Tier } from '../creatures/models/ModelLoader';
 import { prepareNet, type NetHandle } from '../assets/models/nets/netMaterials';
 import type { ToolDef } from '../data/schemas';
 
@@ -99,7 +99,7 @@ export class ShovelView {
 
   /** The digging tool in hand: its GLB (grip at the origin, +z grip → tip, +y the digging face) mounted so the
    * Blade_Center node sits at the group's origin with the tip toward local −z; the stock parts otherwise. */
-  async setTool(tool: ToolDef | null): Promise<void> {
+  async setTool(tool: ToolDef | null, tier: Tier = 'hero'): Promise<void> {
     const seq = ++this.loadSeq;
     if (this.model) { this.model.removeFromParent(); this.model = null; this.net = null; }
     for (const o of this.stock) o.visible = true;
@@ -107,7 +107,7 @@ export class ShovelView {
     this.reachScale = 1 + Math.max(0, len - 0.45) * 0.35;
     if (!tool?.model) return;
     let loaded;
-    try { loaded = await instantiateModel(`${tool.model}.hero.glb`); } catch (e) { console.warn(e); return; }
+    try { loaded = await instantiateModel(`${tool.model}.${tier}.glb`); } catch (e) { console.warn(e); return; }
     if (seq !== this.loadSeq) return;
     const root = loaded.root;
     root.updateMatrixWorld(true);

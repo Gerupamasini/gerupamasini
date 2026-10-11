@@ -8,6 +8,7 @@ import type { Driver, Floor } from '../creatures/drivers/Driver';
 import { DRIVERS } from '../creatures/drivers/index';
 import { instantiateModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
+import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
 
@@ -54,6 +55,10 @@ export class FieldCase {
   private afloat = false;
   private restY = 0;
   private readonly tmp = new Vector3();
+  private preset = QUALITY_PRESETS.mid;
+  private generation = 0;
+  private records: IndividualRecord[] = [];
+  private lookup: ((id: string) => SpeciesDef | undefined) | null = null;
 
   constructor() {
     this.group.name = 'fieldCase';
@@ -161,15 +166,27 @@ export class FieldCase {
   }
 
   async setOccupants(records: IndividualRecord[], species: (id: string) => SpeciesDef | undefined): Promise<void> {
+    this.records = [...records]; this.lookup = species;
+    const generation = ++this.generation;
     const wanted = new Set(records.map((r) => r.id));
     for (const o of [...this.occupants]) if (!wanted.has(o.record.id)) this.removeOccupant(o.record.id);
     for (const rec of records.slice(0, CASE_MAX)) {
       if (this.occupants.some((o) => o.record.id === rec.id)) continue;
-      await this.addOccupant(rec, species(rec.speciesId));
+      if (generation !== this.generation) return;
+      try { await this.addOccupant(rec, species(rec.speciesId), generation); }
+      catch (e) { console.warn('[case] model unavailable; retry when reopened', e); }
     }
   }
 
-  private async addOccupant(record: IndividualRecord, species: SpeciesDef | undefined): Promise<void> {
+  setQuality(preset: QualityPreset): void {
+    if (this.preset === preset) return;
+    this.preset = preset;
+    const records = this.records, lookup = this.lookup;
+    this.clearOccupants();
+    if (lookup && this.group.visible) void this.setOccupants(records, lookup);
+  }
+
+  private async addOccupant(record: IndividualRecord, species: SpeciesDef | undefined, generation: number): Promise<void> {
     if (!species || !this.group.visible) return;
     const entry = DRIVERS[species.model.driver ?? ''];
     if (!entry) return;
@@ -185,7 +202,7 @@ export class FieldCase {
     ind.heading = (long ? Math.PI / 2 : 0) + (slot % 2 ? Math.PI : 0);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     const files = modelFor(species, ind.stage, ind.gravid, ind.dress);
-    const rel = files.lod1 ?? files.lod2 ?? files.hero;
+    const rel = this.preset.modelTier === 'lod2' ? files.lod2 ?? (entry.placeholder ? undefined : files.lod1) : files.lod1 ?? files.lod2 ?? (entry.placeholder ? undefined : files.hero);
     if (rel) {
       const model = await instantiateModel(rel, variantOf(ind.id));
       root = model.root; bones = model.bones as Record<string, Object3D>; meshes = model.meshes; extras = model.extras;
@@ -196,7 +213,7 @@ export class FieldCase {
       ph.root.userData.startOnSurface = true;
       root = ph.root;
     } else return;
-    if (!this.group.visible || this.occupants.some((o) => o.record.id === record.id)) { root.removeFromParent(); return; }
+    if (generation !== this.generation || !this.group.visible || this.occupants.some((o) => o.record.id === record.id)) { root.removeFromParent(); return; }
     const driver = entry.create();
     const unsub = driver.onEvent(() => {});
     this.animals.add(root);
@@ -216,6 +233,8 @@ export class FieldCase {
   }
 
   clearOccupants(): void {
+    ++this.generation;
+    this.records = [];
     for (const o of [...this.occupants]) this.removeOccupant(o.record.id);
   }
 
