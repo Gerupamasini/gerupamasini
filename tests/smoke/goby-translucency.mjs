@@ -75,9 +75,8 @@ try {
       }
     }
     if (!w) throw new Error('no flat water');
-    // the player well back, so the fish do not flee from it
-    a.player.setPose(p0.x, p0.z, 0);
-    if (best < 3) { const dx = p0.x - w.x, dz = p0.z - w.z, l = Math.hypot(dx, dz) || 1; a.player.setPose(w.x + (dx / l) * 3, w.z + (dz / l) * 3, 0); }
+    // the player 3 m back toward where it came from: near enough for the fish's models, far enough not to scare them
+    { const dx = p0.x - w.x, dz = p0.z - w.z, l = Math.hypot(dx, dz) || 1; a.player.setPose(w.x + (dx / l) * 3, w.z + (dz / l) * 3, 0); }
     // side by side across the sun's direction, heading across the light (broadside to a camera on the sun's line)
     const s = a.world.sunDir, sl = Math.hypot(s.x, s.z) || 1, sx = s.x / sl, sz = s.z / sl;
     const heading = Math.atan2(-sz, sx);
