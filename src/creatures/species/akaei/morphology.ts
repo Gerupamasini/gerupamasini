@@ -81,8 +81,10 @@ export const MORPH = {
    * inner side and over the top, and the cornea bulges out of the orbit's outer wall, its lower lid running down to the
    * disc beside it — so from the side it looks straight at you [PHOTO 005, 027] and from above it shows as a dark
    * crescent along the outer edge of the orbit's hump [PHOTO 006]. The spiracle sits against its back and outer side,
-   * its rim running on from the orbit's so the two share one low mound. Eyes 0.21 DW behind the snout; preorbital snout
-   * ≈ 1.75 × the interorbital width between the orbits' inner edges (0.12) [LIT 1.36–2.14].
+   * its rim running on from the orbit's so the two share one low mound. Eyes 0.21 DW behind the snout and 0.068 out from
+   * the midline: from above the gap between the eyes is about 0.32 × their distance from the snout, and the dark
+   * crescent seen there is the cornea's outer face, so the eyeball's centre lies a little further in [PHOTO 006];
+   * preorbital snout ≈ 2.0 × the interorbital width between the eyeballs' inner edges (0.10) [LIT 1.36–2.14].
    *   r        radius of the cornea's dome; long  its elongation along the body (almond); flat  its depth along the gaze
    *   gaze     the dome's axis (left eye): out to the side, tilted a little up and forward
    *   lift     how far the eye's centre stands above the disc beside it (× r): the lower lid meets the disc
@@ -93,14 +95,14 @@ export const MORPH = {
    *            and ends in a thin rim lidT (× r) proud of the cornea
    *   socketR / socketH  the broad mound the complex stands on
    */
-  eye: { x: 0.078, z: 0.262, r: 0.0172, long: 1.2, flat: 0.8, lift: 0.68, gaze: [0.9, 0.42, 0.15] as [number, number, number],
+  eye: { x: 0.068, z: 0.262, r: 0.0172, long: 1.2, flat: 0.8, lift: 0.68, gaze: [0.9, 0.42, 0.15] as [number, number, number],
     browH: 1.66, browX: 0.05, browIn: 1.8, browOut: 0.62, browL: 1.5, lidOpen: 47, lidUp: -6, lidT: 0.08, socketR: 0.036, socketH: 0.009 },
   /**
    * spiracles 1.5–2 × the eye, wrapped round its back and outer side (the centre 0.022 outside and 0.026 behind the
    * eye's), a teardrop whose long axis runs back and inward from beside the eye; a thick rim; the valve, a pale flap
    * hinged on the outer wall, closes all but a dark crescent slit along the side next to the eye [PHOTO 006, 011, 027]
    */
-  spiracle: { x: 0.104, z: 0.231, rx: 0.022, rz: 0.035, yaw: 0.55, depth: 0.009, rimH: 0.0035 },
+  spiracle: { x: 0.094, z: 0.231, rx: 0.022, rz: 0.035, yaw: 0.55, depth: 0.009, rimH: 0.0035 },
   /** mouth a transverse, gently arched slit under the eyes; nostrils and the nasal curtain in front [PHOTO 047, 049, 050, 055] */
   mouth: { z: 0.258, halfW: 0.045, arch: 0.009 },
   /** nostrils at the mouth's corners, 0.12 DW apart, 0.19 DW behind the snout [PHOTO 049, 052] */

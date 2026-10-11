@@ -180,7 +180,7 @@ function buildDisc(spec: LodSpec): BufferGeometry {
   const M = MORPH, NZ = spec.rows, NU = spec.across;
   // across: crowded toward the margin (where the wave is largest) and, on the detailed tiers, over the eye–spiracle
   // complex too, whose lips and rims are narrower than the rest of the disc needs
-  const across = spread(NU, (u) => 1 + 2.2 * u * u * u + (spec.details ? 2.4 * Math.exp(-(((u - 0.3) / 0.12) ** 2)) : 0));
+  const across = spread(NU, (u) => 1 + 2.2 * u * u * u + (spec.details ? 2.4 * Math.exp(-(((u - 0.26) / 0.12) ** 2)) : 0));
   // u from -1 (the animal's right, -X) over the back to +1 and back under the belly
   const loopU: { u: number; side: number }[] = [];
   for (let k = NU; k >= 1; k--) loopU.push({ u: -across[k], side: 1 });
