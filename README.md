@@ -12,6 +12,7 @@ npm run build        # dist/ を生成（GitHub Pages 用のベースパス /ger
 npm run smoke        # ヘッドレス Chromium で起動し tests/smoke/out/ にスクリーンショット
 node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボを撮影（tests/smoke/out/pagurus-*.png）
 CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium.mjs # 水槽設備・ガチャ・自動配線・保存復元のブラウザ検証
+CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium-water.mjs # 水槽の水の描画（4 つの画質・底床・水中視点）
 npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze -- --tier hero  # エドハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze-gravid -- --tier hero   # エドハゼの抱卵雌（edohaze_gravid.*.glb）
@@ -40,6 +41,7 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 ## 文書
 - [ヤエヤマヒルギ](docs/models/yaeyama-hirugi/README.md) 成木5樹形・幼木3サイズ、支柱根の衝突判定、潮汐の湿潤材質、群生の共有Geometry／LOD。ビューアは `reference/yaeyama-hirugi-viewer/`、画像・ブラウザー検証は `npm run render:yaeyama-hirugi`。
 - `docs/models/aquarium/` 水槽基本設備20種、共通材質、LOD、設備コレクション・専用チケットガチャ・自動配線（自宅 → 水槽 → 設備 / ガチャ）
+- [ホームの水槽の水・光・底床の描画](docs/models/aquarium/water.md) 専用 HDR パイプライン（屈折・水面の裏の全反射・側面ガラスの鏡・吸収と散乱・影の入る光の筋・コースティクス・ブルーム）、起伏と断面のある底床、作り直した飾り、画質設定ごとの負荷と動的解像度。確認は `node tests/smoke/aquarium-water.mjs`
 - [スマホ・タブレットの操作と画面写真](docs/mobile/README.md) ホーム・水槽編集・ガチャ・干潟の移動／採集／観察、縦横画面の確認手順
 - `docs/spec/` 仕様書 4 本（ゲームと MVP、アーキテクチャとデータ、生物 AI とモデル、潮位・セーブ・進行）
 - `docs/planning/` 設計質問と回答、マハゼモデル監査

@@ -69,15 +69,25 @@ export interface QualityPreset {
   tankWater: 'lite' | 'full';
   /** whether the hero (volumetric) materials may be used at all (the setting is still the player's) */
   hero: boolean;
+  /** the home tank's light shafts: steps through the water at half resolution (0: none) */
+  tankShafts: number;
+  /** the home tank's drifting specks (0: none) */
+  tankMotes: number;
+  /** secant steps that find what a ray bent by the water meets (1–3) */
+  tankHitIter: number;
+  /** the home tank's bloom */
+  tankBloom: boolean;
+  /** the home tank's internal resolution may drop to this fraction of the screen's when the GPU falls behind */
+  tankMinScale: number;
 }
 
 export const QUALITY_PRESETS: Record<Quality, QualityPreset> = {
   // (the 3D view renders at most at these device-pixel ratios: on a high-density screen mid draws at 1×, about half
   // the pixels of 1.5×; the water, the sand and the surf are per-pixel work)
-  minimal: { maxDpr: 0.67, maxPixels: 0.9e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.35, lod1Count: 0, surfaceDetail: 0, vegetation: 'minimal', mirror: 0, surfSteps: 0, msaa: 0, water: 'lite', viewScale: 0.6, contactShadows: false, oysters: 2000, tankWater: 'lite', hero: false, modelTier: 'lod2', tankWaterHz: 30 },
-  low: { maxDpr: 1, maxPixels: 1.6e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, surfaceDetail: 0, vegetation: 'low', mirror: 0, surfSteps: 0, msaa: 0, water: 'full', viewScale: 0.85, contactShadows: true, oysters: 5000, tankWater: 'full', hero: true, modelTier: 'lod1', tankWaterHz: 30 },
-  mid: { maxDpr: 1, maxPixels: 3.0e6, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, surfaceDetail: 1, vegetation: 'mid', mirror: 0.4, surfSteps: 12, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60 },
-  high: { maxDpr: 1.5, maxPixels: 6.0e6, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, surfaceDetail: 1, vegetation: 'high', mirror: 0.5, surfSteps: 16, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60 },
+  minimal: { maxDpr: 0.67, maxPixels: 0.9e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.35, lod1Count: 0, surfaceDetail: 0, vegetation: 'minimal', mirror: 0, surfSteps: 0, msaa: 0, water: 'lite', viewScale: 0.6, contactShadows: false, oysters: 2000, tankWater: 'lite', hero: false, modelTier: 'lod2', tankWaterHz: 30, tankShafts: 0, tankMotes: 0, tankHitIter: 1, tankBloom: false, tankMinScale: 0.6 },
+  low: { maxDpr: 1, maxPixels: 1.6e6, shadows: false, shadowMapSize: 512, post: false, creatureScale: 0.6, lod1Count: 2, surfaceDetail: 0, vegetation: 'low', mirror: 0, surfSteps: 0, msaa: 0, water: 'full', viewScale: 0.85, contactShadows: true, oysters: 5000, tankWater: 'full', hero: true, modelTier: 'lod1', tankWaterHz: 30, tankShafts: 6, tankMotes: 350, tankHitIter: 2, tankBloom: true, tankMinScale: 0.6 },
+  mid: { maxDpr: 1, maxPixels: 3.0e6, shadows: true, shadowMapSize: 1024, post: false, creatureScale: 1, lod1Count: 4, surfaceDetail: 1, vegetation: 'mid', mirror: 0.4, surfSteps: 12, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60, tankShafts: 10, tankMotes: 800, tankHitIter: 2, tankBloom: true, tankMinScale: 0.65 },
+  high: { maxDpr: 1.5, maxPixels: 6.0e6, shadows: true, shadowMapSize: 2048, post: true, creatureScale: 1, lod1Count: 6, surfaceDetail: 1, vegetation: 'high', mirror: 0.5, surfSteps: 16, msaa: 4, water: 'full', viewScale: 1, contactShadows: true, oysters: 12000, tankWater: 'full', hero: true, modelTier: 'hero', tankWaterHz: 60, tankShafts: 16, tankMotes: 1400, tankHitIter: 3, tankBloom: true, tankMinScale: 0.75 },
 };
 
 const KEY = 'settings';
