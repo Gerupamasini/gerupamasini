@@ -86,13 +86,32 @@ export const JUNCTION = (() => {
  */
 export function creekBed(x: number): number { return x < -80 ? -0.12 + 0.012 * (-80 - x) : -0.12 - 0.0022 * (x + 80); }
 export function tributaryBed(z: number): number { return creekBed(JUNCTION.x) + 0.0045 * (z - JUNCTION.z); }
+/** The creek's floor down the mouth into the lake (its running minimum, so the trickle only ever falls), lazily tabled. */
+let mouthTable: Float32Array | null = null;
+function mouthFloor(x: number): number {
+  if (!mouthTable) {
+    mouthTable = new Float32Array(81);
+    let low = Infinity;
+    for (let i = 0; i <= 80; i++) { const xx = 98 + i * 0.25; low = Math.min(low, groundAt(xx, creekZ(xx))); mouthTable[i] = low; }
+  }
+  const f = Math.min(80, Math.max(0, (x - 98) / 0.25)), i = Math.min(79, Math.floor(f));
+  return mouthTable[i] + (mouthTable[i + 1] - mouthTable[i]) * (f - i);
+}
 /** The low-water trickle in the creeks: its surface (a few centimetres over the bed), or -1e3 away from them. */
 export function streamLevel(x: number, z: number): number {
   let level = -1e3;
-  const widen = Math.max(0, x) * 0.012;
-  // (the head: the trickle seeps out of the forest floor, from nothing to its few centimetres)
-  if (x > -96 && x < 116 && Math.abs(z - creekZ(x)) < 5 + widen * 2) level = creekBed(x) + 0.035 - 0.1 * (1 - smooth(-92, -87, x));
-  if (z > creekZ(x) + 1 && z < 82 && Math.abs(x - tributaryX(z)) < 3.5) level = Math.max(level, tributaryBed(z) + 0.03);
+  const widen = Math.max(0, x) * 0.012, cz = creekZ(x);
+  if (x > -96 && x < 116 && Math.abs(z - cz) < 5 + widen * 2) {
+    // (the head: the trickle seeps out of the forest floor, from nothing to its few centimetres)
+    level = creekBed(x) + 0.035 - 0.1 * (1 - smooth(-92, -87, x));
+    // (the mouth: it runs on down the channel's floor into the lake, still only centimetres deep)
+    if (x > 98) level = Math.min(level, mouthFloor(x) + 0.035);
+  }
+  if (z > cz + 1 && z < 82 && Math.abs(x - tributaryX(z)) < 3.5) {
+    const t = tributaryBed(z) + 0.03;
+    // (inside the creek's strip the tributary's surface eases into the creek's: no step where they meet)
+    level = level > -1e2 ? level + (t - level) * smooth(cz + 1, cz + 5, z) : t;
+  }
   return level;
 }
 /** The channels cut down to their thalwegs (only ever lowering the ground): soft banks, a little steeper at the water. */

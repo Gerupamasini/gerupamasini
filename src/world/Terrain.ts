@@ -942,7 +942,7 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   roughnessFactor = mix(roughnessFactor, 0.85, gSubm);    // under the water: dull (the water pass draws the surface)
 }`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v5';
+    mat.customProgramCacheKey = () => 'higata-terrain-v6';
     return mat;
   }
 

@@ -116,6 +116,7 @@ export class World {
     // 葛西's sand is a warm grey-brown, not neutral: the photos' dry sand runs about 1 : 0.94 : 0.85 in R : G : B and
     // reads lighter than the shared grey (tuned against the photos with tests/smoke/kasai-sand.mjs)
     else terrain.setSandTint(1.36, 1.18, 0.92);
+    if (layout?.poolFringe) habitat.fillPoolFringes();
     if (layout?.streams) habitat.addStreams(layout.streams);
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats

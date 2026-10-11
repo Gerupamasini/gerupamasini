@@ -8,6 +8,7 @@ import { LAYOUTS } from '../../src/world/maps/hashirimizu';
 import { MangroveForest } from '../../src/world/mangrove';
 import { edgeImpostorSites } from '../../src/world/maps/manko/land';
 import { Terrain } from '../../src/world/Terrain';
+import { Habitat } from '../../src/world/Habitat';
 const read = (file: string) => readFileSync(fileURLToPath(new URL(`../../public/data/${file}`, import.meta.url)));
 const map = MapSchema.parse(JSON.parse(read('maps/manko.json').toString()));
 describe('漫湖 environment-only flat', () => {
@@ -129,6 +130,20 @@ describe('漫湖 environment-only flat', () => {
       expect(Math.abs(p.x) >= 144 || Math.abs(p.z) >= 144).toBe(true);
       const d = forestDepth(p.x, p.z); expect(d).toBeGreaterThan(0.7); expect(d).toBeLessThan(13);
     }
+    // what the shaders and the map are given: pools filled to their waterline and the creeks' trickle, never a slab
+    // of water standing deeper than a trickle over ground the flood says drains elsewhere (a rim crossed, the lake)
+    const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, []);
+    habitat.fillPoolFringes(); habitat.addStreams(LAYOUTS.manko.streams!);
+    const pl = habitat.poolLevels, hs = terrain.heights, slabs: string[] = [];
+    for (let k = 0; k < pl.length; k++) {
+      const d = pl[k] - hs[k];
+      if (d > 0.003 && d >= 0.25 && Math.abs(habitat.spill[k] - pl[k]) > 1e-4) slabs.push(`${k % terrain.n},${Math.floor(k / terrain.n)}`);
+    }
+    expect(slabs, slabs.slice(0, 8).join(' ')).toEqual([]);
+    // the trickle reaches the lake: at the lowest water it still meets water standing at the tide past the mouth
+    let meets = false;
+    for (let x = 100; x <= 116 && !meets; x += 0.5) { const z = creekZ(x); if (groundAt(x, z) < -0.85 && streamLevel(x - 0.5, creekZ(x - 0.5)) > groundAt(x - 0.5, creekZ(x - 0.5))) meets = true; }
+    expect(meets).toBe(true);
     forest.dispose();terrain.dispose();
   });
 });

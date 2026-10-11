@@ -48,6 +48,8 @@ export interface ShoreLayout {
   blocked?(x: number, z: number): boolean;
   /** the surface of the trickle left in the creeks at low water (m), or -1e3 away from them (absent: none) */
   streams?(x: number, z: number): number;
+  /** fill the tide pools' whole shallow fringe, so their waterline follows a gentle mud slope (absent: false) */
+  poolFringe?: boolean;
   /** the shore's own scenery standing on the terrain */
   props(terrain: Terrain, seed: number): Object3D[];
 }
@@ -80,7 +82,7 @@ const MANKO: ShoreLayout = {
   meadow: { suitability: () => 0, field: () => 0, holes: false },
   clams: { beds: 0, opts: {} }, pits: { clusters: 0, opts: {} },
   // Manko's estuary silt (user photos): warm greige-khaki, not 葛西's neutral grey; darker and browner when wet.
-  landLevel: [3, 4], sandTint: [1.0, 0.97, 0.88], mudTint: [1.46, 1.37, 1.12], rippleAngle: 0.4,
+  landLevel: [3, 4], sandTint: [1.0, 0.97, 0.88], mudTint: [1.56, 1.44, 1.06], rippleAngle: 0.4,
   // a lake's sheltered mud flat: no ripple marks, the mottled, lumpy, glossy silt of the goby flat (MahazeViewer)
   ripples: 0, mudLook: 1,
   // the river-lake's turbid water (user's photos): a muted grey-green teal of suspended silt, mirroring the sky and
@@ -100,6 +102,7 @@ const MANKO: ShoreLayout = {
   // the dense mangrove forest beyond its front rows
   blocked: inThicket,
   streams: streamLevel,
+  poolFringe: true,
   mangroveBackdrop: backdropCrowns,
   mangroveImpostors: edgeImpostorSites,
   // sun-flushed subtropical canopy: brighter, yellower green (user's photo)
