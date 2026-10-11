@@ -103,8 +103,8 @@ export class IshigareiDriver implements Driver {
         start: { x: individual.pos.x, z: individual.pos.z, heading: individual.heading },
         home: { x: individual.home.x, z: individual.home.z }, range: 1.5,
         autonomous: false, bounds: () => this.ctx?.bounds ?? null,
-        // a fish that starts the day half the time buried
-        startBuried: (strHash(individual.id) & 1) === 0,
+        // a fish that starts the day half the time buried; one just set into a tank or the case is seen first
+        startBuried: root.userData.startOnSurface !== true && (strHash(individual.id) & 1) === 0,
       });
     }
     this.shadows = shadowLayerFor(root.parent ?? root);
@@ -238,12 +238,21 @@ export class IshigareiDriver implements Driver {
     // the sediment under the fish (the near tiers lay the blind side and the fins onto it)
     const ground = model.look.ground;
     ground.uniforms.uGroundSink.value = P.sink + P.bury * 0.0012 * root.scale.x;
-    if (level <= 1) ground.update(st.pos.x, st.pos.z, 0.15 * root.scale.x, (x, z) => ctx.floor.heightAt(x, z));
+    if (level <= 1) {
+      // the patch is in world space (the shader clamps world positions); the floor is in the parent's frame, which
+      // the raised home tank and the case only translate
+      const o = root.parent ? root.parent.getWorldPosition(this.origin) : this.origin.set(0, 0, 0);
+      const moved = !o.equals(this.originPrev);
+      this.originPrev.copy(o);
+      ground.update(st.pos.x + o.x, st.pos.z + o.z, 0.15 * root.scale.x, (x, z) => ctx.floor.heightAt(x - o.x, z - o.z) + o.y, moved);
+    }
     this.updateShadow(P);
     if (st.mode !== this.lastMode) { this.lastMode = st.mode; this.emit(st.mode.toLowerCase()); }
     this.busy = this.clock < this.until || !f.settled;
   }
   private melGoal = 1;
+  private readonly origin = new Vector3();
+  private readonly originPrev = new Vector3(Number.NaN, 0, 0);
 
   /** a flat oval under the fish: a narrow rim beside it on the bottom, the whole fish's shape when it swims */
   private updateShadow(P: { lift: number; bury: number }): void {
