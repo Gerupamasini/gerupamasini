@@ -111,7 +111,7 @@ export class World {
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, pits);
     mark('habitat');
-    if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); terrain.setRippleAngle(layout.rippleAngle); }
+    if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); if (layout.mudTint) terrain.setMudTint(...layout.mudTint); terrain.setSediment(layout.ripples ?? 1, layout.mudLook ?? 0); terrain.setRippleAngle(layout.rippleAngle); }
     // 葛西's sand is a warm grey-brown, not neutral: the photos' dry sand runs about 1 : 0.94 : 0.85 in R : G : B
     else terrain.setSandTint(1.0, 0.935, 0.85);
     terrain.setSpill(habitat.poolLevels);
@@ -122,7 +122,7 @@ export class World {
     const surf = surfUniforms(layout?.surf ?? null);
     terrain.setSurf(surf);
     const water = new WaterPass(terrain, waves, surf);
-    if (layout) water.setBody(...layout.water.colour, layout.water.turbidity);
+    if (layout) water.setBody(...layout.water.colour, layout.water.turbidity, layout.water);
     const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists
     mark('water');
@@ -197,14 +197,14 @@ export class World {
     }
     if (map.mangroves) {
       onProgress?.('ヤエヤマヒルギ林');
-      w.mangroves = new MangroveForest(terrain, map.mangroves);
+      w.mangroves = new MangroveForest(terrain, { ...map.mangroves, collisionBounds: map.bounds.walkable, backdrop: layout?.mangroveBackdrop?.(), leafTint: layout?.mangroveLeafTint });
       w.mangroves.setQuality(preset.vegetation);
       // Build the visible tiers before FieldRenderer.compile, so shader compilation stays behind the loading screen.
       w.mangroves.update(0, { position: new Vector3(map.spawnStart.x,terrain.heightAt(map.spawnStart.x,map.spawnStart.z)+1.5,map.spawnStart.z) }, { tideLevel: 0, wetLevel: 0 });
       w.scene.add(w.mangroves.group);
     }
     w.scene.add(terrain.mirrorProxy(LAYER_MIRROR));
-    const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize);
+    const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize, layout?.atmosphere);
     // (lights obey layers too: the mirror's camera must see the sun and the sky light, or the land comes out black)
     reflectInWater(sky.sky); reflectInWater(sky.sunLight); reflectInWater(sky.hemi);
     (w as { sky: SkyDome }).sky = sky;

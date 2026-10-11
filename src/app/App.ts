@@ -11,6 +11,7 @@ import { loadGameData, type GameData } from '../data/loader';
 import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { World } from './World';
+import { LAYOUTS } from '../world/maps/hashirimizu';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
 import { RoomTanks } from './RoomTanks';
 import { canPlaceTank, freeTankPosition, initialRoom, newRoomTank, resizedTankLayout, roomCapacity, tankSizeItemId, TANK_DIMENSIONS, TANK_SIZES, type AquariumRoom, type TankSize } from '../aquarium';
@@ -481,6 +482,8 @@ export class App {
       this.player.eyeHeight = this.settings.eyeHeight;
       // the revetment's stones can be stood on
       this.player.groundBoost = (x, z) => this.world?.riprap?.heightBoost(x, z) ?? 0;
+      const shore = map.layout ? LAYOUTS[map.layout] : undefined;
+      if (shore?.blocked) this.player.blocked = shore.blocked;
       if (this.world.mangroves) {
         const roots = this.world.mangroves.collision, terrain = this.world.terrain;
         this.player.supportHeight = (x, z, maxY) => roots.supportAt(x, z, maxY, terrain.heightAt(x, z), 0.35, 0.18)?.height ?? null;

@@ -11,10 +11,14 @@ export interface TreeSpec extends HirugiSeeds {
   id: number; base: HirugiBase; x: number; z: number; yaw: number; scale: number;
   /** null: adult; 0..2: fixed juvenile models, no seed deformation. */
   sapling: SaplingSize | null;
+  /** deep forest row: skipped on low quality */
+  deep?: boolean;
 }
 export interface WoodPath { points: Vector3[]; radii: number[]; order: number; root: boolean }
 export interface LeafSpec { center: Vector3; axis: Vector3; roll: number; length: number; width: number; age: number; phase: number }
-export interface TreeSkeleton { trunk: WoodPath[]; branches: WoodPath[]; roots: WoodPath[]; leaves: LeafSpec[]; height: number; reach: number }
+export interface TreeSkeleton { trunk: WoodPath[]; branches: WoodPath[]; roots: WoodPath[]; leaves: LeafSpec[];
+  /** Far-LOD foliage cards, one per twig. Empty for juveniles, which keep true leaves at every LOD. */
+  tufts: LeafSpec[]; height: number; reach: number }
 export interface RootSegment { a: Vector3; b: Vector3; ra: number; rb: number; tree: number; root: boolean }
 
 export function treeSpec(seed: number, id = 0, base: HirugiBase = (id % 5) as HirugiBase): TreeSpec {
