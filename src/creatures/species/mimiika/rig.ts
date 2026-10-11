@@ -5,7 +5,7 @@ import { armBone, tenBone, type RigDef } from './geometry';
 /**
  * The skeleton of one ミミイカ and the application of a behaviour pose to it (no rendering: the scene, the viewer
  * and the tests use it alike).
- *   J_root ─ J_head ─ J_eye_L, J_eye_R, J_funnel ─ J_funnelTip, J_arm{I…IV}{L,R}_0…4, J_ten{L,R}_0…5
+ *   J_root ─ J_head ─ J_eye_L, J_eye_R, J_funnelSwing ─ J_funnel ─ J_funnelTip, J_arm{I…IV}{L,R}_0…4, J_ten{L,R}_0…5
  *          └ J_fin_L, J_fin_R
  * The mantle's own motion (ventilation, the jet's contraction) and the waves along the fins are made in the vertex
  * shader (materials.ts), so the mantle needs no bones of its own.
@@ -36,7 +36,7 @@ export interface Pose {
   /** gaze of each eye (head frame), and how wide the pupils are (0 slit … 1 round) */
   eyes: [Vector3, Vector3];
   pupil: number;
-  /** the lids' opening: 0 narrowed (buried) … 1 wide open */
+  /** the lids' opening: 0 narrowed … 1 wide open (half open at rest and buried, wide at night and in alarm) */
   lid: number;
   /** burial (0 … 1), sand stuck on the back, sand thrown over the head */
   bury: number;
@@ -92,6 +92,9 @@ const _g0 = new Vector3(), _gx = new Vector3(), _gy = new Vector3(), _up = new V
 function aimEye(b: Bone, dir: Vector3, up: Vector3): void {
   const g0 = _g0.set(0, 0, 1).applyQuaternion(restQ(b));
   const gx = _gx.crossVectors(AY, g0).normalize(), gy = _gy.crossVectors(g0, gx);
+  // (a target behind the eye's own side: back towards the rest gaze, rather than snapping between the limits)
+  const k = Math.min(1, Math.max(0, (dir.dot(g0) + 0.2) / 0.4)), w = k * k * (3 - 2 * k);
+  dir = _hp.copy(g0).lerp(dir, w).normalize();
   const yaw = Math.max(-0.3, Math.min(0.3, Math.atan2(dir.dot(gx), dir.dot(g0))));
   const pitch = Math.max(-0.1, Math.min(0.1, Math.atan2(dir.dot(gy), Math.hypot(dir.dot(gx), dir.dot(g0)))));
   const z = _x.copy(g0).multiplyScalar(Math.cos(pitch) * Math.cos(yaw)).addScaledVector(gx, Math.cos(pitch) * Math.sin(yaw)).addScaledVector(gy, Math.sin(pitch)).normalize();
@@ -155,7 +158,7 @@ export function applyPose(root: Object3D, bones: Record<string, Bone>, P: Pose):
     b.quaternion.copy(restQ(b)).multiply(_q.setFromAxisAngle(AZ, P.finFold[i] * side));
   }
   // the water breathed in round the neck leaves through the funnel: its mouth opens as the mantle squeezes (±10 % with
-  // each breath, most in a jet) and draws in as it fills; opened or turned aside, the tube dips a little so that its
+  // each breath, most in a jet) and draws in as it fills; turned aside under the head, the tube dips a little so that its
   // mouth stays clear of the head's skin
   // swung aside (20, 29) the whole free funnel turns up the flank, a little narrower across (its broad base does not
   // turn into depth that would cut the mantle's lip), its mouth tipped to face out and down along the flank

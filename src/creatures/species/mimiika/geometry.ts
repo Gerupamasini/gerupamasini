@@ -178,11 +178,13 @@ function surf(z: number, th: number, K: ProfileKnot[], zLo: number, zHi: number,
   const a1 = v3(surfacePoint(z, th + e, K, imprint)), a0 = v3(surfacePoint(z, th - e, K, imprint));
   const b1 = v3(surfacePoint(Math.min(zHi, z + ez), th, K, imprint)), b0 = v3(surfacePoint(Math.max(zLo, z - ez), th, K, imprint));
   const dth = a1.sub(a0), dz = b1.sub(b0);
-  let n = new Vector3().crossVectors(dth, dz);
-  if (n.lengthSq() < 1e-10 || pr.w < 0.05) n = new Vector3(0, 0, z < (zLo + zHi) / 2 ? -1 : 1);
+  // (the θ / z parametrisation is oriented: dz × dθ points outward everywhere, also on the front of the eyes' domes,
+  // where a test against the section's centre would flip on noise; only at the caps' poles is a fallback needed)
+  let n = new Vector3().crossVectors(dz, dth);
+  const deg = n.lengthSq() < 1e-10 || pr.w < 0.05;
+  if (deg) n = new Vector3(0, 0, z < (zLo + zHi) / 2 ? -1 : 1);
   n.normalize();
-  // (outward: away from the section's centre, and out of the caps at the two ends)
-  if (n.dot(new Vector3(p.x, p.y - pr.c, z < zLo + 5 ? (z - zLo - 5) * 2 : z > zHi - 2 ? (z - zHi + 2) * 2 : 0)) < 0) n.negate();
+  if (deg && n.dot(new Vector3(p.x, p.y - pr.c, z < zLo + 5 ? (z - zLo - 5) * 2 : z > zHi - 2 ? (z - zHi + 2) * 2 : 0)) < 0) n.negate();
   const f = dz.lengthSq() > 1e-12 ? dz.normalize() : new Vector3(0, 0, 1);
   return { p, n, f, c: pr.c };
 }
@@ -210,7 +212,7 @@ export function buildBody(rig: RigDef, t: Tier): { mantle: BufferGeometry; head:
     const col: (typeof pts)[number] = [];
     // the free edge turns in a little towards the neck it closes on; under the belly it lies on the funnel's base
     // instead and stands out over it
-    const V = Math.exp(-(((Math.PI - Math.abs(th)) / 0.62) ** 2));
+    const V = t.funnel ? Math.exp(-(((Math.PI - Math.abs(th)) / 0.62) ** 2)) : 0;
     const hug = (z: number) => 0.7 * (1 - rim.fused) * (1 - V) * smooth(rim.z - 2.6, rim.z, z) - FUNNEL.flare * V * smooth(rim.z - 4.5, rim.z, z);
     // outer skin: clustered at the blunt end and at the edge
     for (let i = 0; i <= nOut; i++) {
@@ -536,7 +538,7 @@ export function buildViscera(rig: RigDef, t: Tier): BufferGeometry {
     b.grid(first, h + 1, w + 1, true);
   };
   const w = Math.max(8, Math.round(t.around / 4)), h = Math.max(5, Math.round(w * 0.6));
-  blob([0, 1.4, -13.5], [4.4, 3.6, 6.8], [0.36, 0.17, 0.08], w, h);          // digestive gland
+  blob([0, 1.4, -13.5], [4.4, 3.6, 6.8], [0.3, 0.12, 0.04], w, h);          // digestive gland
   blob([0, -1.8, -9.5], [2.3, 1.7, 4.2], [0.05, 0.05, 0.06], w, h);         // ink sac (its silver coat: the shader)
   // the gills lie in the mantle cavity either side of the visceral sac: seen through the gap at the collar
   for (const s of [-1, 1]) blob([s * 6.3, -1.0, -3.9], [0.7, 1.45, 2.5], [0.62, 0.5, 0.48], w, h);
@@ -598,8 +600,8 @@ export function buildCornea(t: Tier): BufferGeometry | null {
     for (let i = 0; i <= nR; i++) {
       const phi = (0.88 * i) / nR;
       const q = 1 - (phi / 0.8) ** 2;
-      const rho = phi < 0.8 ? Rs + 0.02 + 0.22 * q * q : Rs - 0.08;
-      const drho = phi < 0.8 ? 0.22 * 2 * q * (-2 * phi / 0.64) : 0;
+      const rho = phi < 0.8 ? Rs + 0.02 + 0.14 * q * q : Rs - 0.08;
+      const drho = phi < 0.8 ? 0.14 * 2 * q * (-2 * phi / 0.64) : 0;
       for (let j = 0; j <= nA; j++) {
         const psi = (2 * Math.PI * j) / nA;
         const rad = vF.clone().multiplyScalar(Math.cos(psi)).addScaledVector(vU, Math.sin(psi));

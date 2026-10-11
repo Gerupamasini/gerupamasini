@@ -68,7 +68,8 @@ const SPHERE = new Sphere(new Vector3(0, 0, 0), 0.035);
 /**
  * One squid: its skeleton, its own materials and three tiers of shared geometry.
  *   MimiIkaRoot
- *   ├── Armature: J_root ─ J_head ─ (J_eye_L ─ Eye_L) (J_eye_R ─ Eye_R) Cornea J_funnel, arm and tentacle chains; J_fin_L, J_fin_R
+ *   ├── Armature: J_root ─ J_head ─ (J_eye_L ─ Eye_L) (J_eye_R ─ Eye_R) Cornea (J_funnelSwing ─ J_funnel ─ J_funnelTip),
+ *   │             arm and tentacle chains; J_fin_L, J_fin_R
  *   └── MimiIkaLOD
  *       ├── LOD0: Viscera (seen through the mantle), Mantle, Head, Funnel, Fin_L, Fin_R, Arms, Tentacles
  *       ├── LOD1: the same, coarser

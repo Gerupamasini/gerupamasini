@@ -310,7 +310,7 @@ export function createSquidBehavior(opts: SquidOptions) {
 
   function spawnPrey(ambush: boolean): void {
     forward(fwd);
-    right.set(fwd.z, 0, -fwd.x);
+    right.set(-fwd.z, 0, fwd.x);
     const d = (ambush ? rand(1.6, 2.2) : rand(2, 3.5)) * ML;
     const side = rand(-0.9, 0.9);
     const x = st.pos.x + fwd.x * d * Math.cos(side) + right.x * d * Math.sin(side);
@@ -474,7 +474,7 @@ export function createSquidBehavior(opts: SquidOptions) {
   function updateBurrow(dt: number): void {
     const g = ground(st.pos.x, st.pos.z);
     forward(fwd);
-    right.set(fwd.z, 0, -fwd.x);
+    right.set(-fwd.z, 0, fwd.x);
     switch (st.phase) {
       case 'descend':
         if (descend(dt)) phase('settle', 0.6);
@@ -551,7 +551,7 @@ export function createSquidBehavior(opts: SquidOptions) {
         an.funnelPitch = damp(an.funnelPitch, 0, 2, dt);
         finSet(0.0, 1, -1.0, 0);
         arms(1.45, 0.4, 0.0, 0.04);
-        chroma(0.7, 0.95, 0.35, 0.45, 0.5, 0, 0.6);
+        chroma(0.7, 0.95, 0.35, 0.45, 0.2, 0, 0.6);
         if (st.t > st.dur) {
           st.settled = true;
           if (autonomous) choose();
@@ -658,7 +658,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         p.remains = Math.max(0, 1 - st.t / st.dur);
         arms(0.45, 0.62 + 0.06 * Math.sin(st.t * 9), 0, 0.05);
         if (st.phase === 'eat') { finSet(0.28, 2.4, 0.15, 0.05); st.altGoal = Math.max(st.altGoal * 0.995, 0.3 * ML); chroma(0.7, 0.9, 0.5, 0.45, 0.75, 0.1, 1.5); }
-        else { st.buryGoal = damp(st.buryGoal, 0.95, 0.8, dt); chroma(0.7, 0.95, 0.35, 0.45, 0.5, 0, 1); }
+        else { st.buryGoal = damp(st.buryGoal, 0.95, 0.8, dt); chroma(0.7, 0.95, 0.35, 0.45, 0.2, 0, 1); }
         if (st.t > st.dur) {
           p.state = 'eaten';
           prey = null;
@@ -672,7 +672,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         st.buryGoal = 1;
         finSet(0, 1, -1.0, 0);
         arms(1.45, 0.4, 0.0, 0.04);
-        chroma(0.7, 0.95, 0.35, 0.45, 0.5, 0, 1);
+        chroma(0.7, 0.95, 0.35, 0.45, 0.2, 0, 1);
         // the mysid drifts by
         if (p.state === 'drift') {
           forward(fwd);
@@ -851,7 +851,8 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
     // the sand on the skin comes off slowly, faster when it swims
     if (st.bury < 0.3) {
       const sp = Math.hypot(st.vel.x, st.vel.z) / ML;
-      const k = dt * (0.02 + 0.06 * sp);
+      // (off the bottom the coat soon washes off: hovering animals carry no sand, 17, 24, 34, 62)
+      const k = dt * (st.alt > 0.15 * ML ? 0.35 : 0.02 + 0.06 * sp);
       st.sandCoat = Math.max(0, st.sandCoat - k);
       st.headCover = Math.max(0, st.headCover - k * 2.5);
     }
@@ -860,7 +861,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
     // attitude: on the bottom it follows the slope; in the water as the mode wants; banked in turns
     const e = 0.6 * ML;
     forward(fwd);
-    right.set(fwd.z, 0, -fwd.x);
+    right.set(-fwd.z, 0, fwd.x);
     const slopeF = (ground(st.pos.x + fwd.x * e, st.pos.z + fwd.z * e) - ground(st.pos.x - fwd.x * e, st.pos.z - fwd.z * e)) / (2 * e);
     const slopeR = (ground(st.pos.x + right.x * e, st.pos.z + right.z * e) - ground(st.pos.x - right.x * e, st.pos.z - right.z * e)) / (2 * e);
     const lifted = smooth(st.alt / (0.5 * ML));

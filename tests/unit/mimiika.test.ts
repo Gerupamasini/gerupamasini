@@ -62,6 +62,19 @@ describe('ミミイカ: the body plan', () => {
       }
       expect(agree / total).toBeGreaterThan(0.97);
     }
+    // the head's skin over the eyes' domes faces out of the eye (an inverted band there mirrored the surroundings)
+    for (const t of [LODS[0], LODS[1]]) {
+      const h = buildBody(rig, t).head, hp = h.getAttribute('position'), hn = h.getAttribute('normal');
+      let near = 0;
+      for (let i = 0; i < hp.count; i++) {
+        const q = new Vector3(hp.getX(i) * 1000, hp.getY(i) * 1000, hp.getZ(i) * 1000 + Z_ROOT);
+        const C = new Vector3(EYE.x * Math.sign(q.x || 1), EYE.y, EYE.z);
+        if (q.distanceTo(C) > EYE.r + EYE.skin + 2 * EYE.fillet) continue;
+        near++;
+        expect(new Vector3(hn.getX(i), hn.getY(i), hn.getZ(i)).dot(q.sub(C)), `head vertex near the eye`).toBeGreaterThan(0);
+      }
+      expect(near).toBeGreaterThan(100);
+    }
     const fin = buildFin(rig, LODS[0], 1);
     expect(fin.getAttribute('aFin').count).toBe(fin.getAttribute('position').count);
   });

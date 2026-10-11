@@ -347,7 +347,7 @@ function loop(now) {
 document.querySelectorAll('[data-scene]').forEach((b) => b.addEventListener('click', () => setScene(b.dataset.scene)));
 document.querySelectorAll('[data-lod]').forEach((b) => b.addEventListener('click', () => { lod = Number(b.dataset.lod); if (sq) showLod(sq, lod); }));
 document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => command(b.dataset.mode)));
-const CHROMA = { pale: [0.85, 0.3, 0.15, 0.3, 0.6], grey: [0.45, 0.3, 0.8, 0.75, 0.15], mid: null, speckled: [0.85, 0.8, 0.85, 0.3, 0], darkgold: [0.95, 1.0, 0.95, 0.4, 0], dark: [0.8, 1.05, 1.1, 0.4, 0] };
+const CHROMA = { pale: [0.95, 0.4, 0.12, 0.3, 0.45], grey: [0.45, 0.3, 0.8, 0.75, 0.15], mid: null, speckled: [0.85, 0.8, 0.85, 0.3, 0], darkgold: [0.95, 1.0, 1.35, 0.3, 0], dark: [0.3, 1.05, 0.95, 0.4, 0] };
 document.querySelectorAll('[data-chroma]').forEach((b) => b.addEventListener('click', () => { chromaOverride = CHROMA[b.dataset.chroma]; }));
 
 resize();
