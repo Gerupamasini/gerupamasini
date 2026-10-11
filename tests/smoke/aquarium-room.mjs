@@ -41,13 +41,20 @@ try {
   assert.equal((await state()).width, 0.45);
   await home();
   await page.evaluate(async () => { const a = window.__higata; await a.tankPut(a.encyclopedia.caseItems.value.find(r => r.id === 'one')); });
-  for (const [item, width] of [['tank-initial', 0.6], ['tank-45-initial', 0.45]]) {
-    assert.equal(await page.evaluate(item => window.__higata.tankInstallEquipment(item, 'tank'), item), true);
+  await page.getByRole('button', { name: '水槽', exact: true }).click(); await page.waitForFunction(() => window.__higata.mode === 'tankEdit');
+  await page.getByRole('button', { name: '設備', exact: true }).click(); await page.getByLabel('設備の種類').selectOption('0');
+  await page.evaluate(() => { window.roomDisposedMaterials = 0; const seen = new Set(); window.__higata.tank.occupants[0].root.traverse(o => { if (o.isMesh) for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (!seen.has(m)) { seen.add(m); m.addEventListener('dispose', () => window.roomDisposedMaterials++); } }); });
+  for (const [size, width] of [[60, 0.6], [45, 0.45]]) {
+    await page.locator('[data-category="tank"]').click(); await page.getByLabel('水槽のサイズ').selectOption(String(size));
+    assert.equal(await page.locator('.equipment-choices button').count(), 3);
+    await page.getByRole('button', { name: '入れ替える', exact: true }).click();
     await page.waitForFunction(() => !window.__higata.roomBusy.value);
     assert.equal((await state()).width, width);
     assert.deepEqual(await page.evaluate(() => window.__higata.tank.occupants.map(o => [o.record.id, o.record.length_mm])), [['one', 80]]);
     assert.deepEqual((await state()).rootScale, [1, 1, 1]);
   }
+  assert.ok(await page.evaluate(() => window.roomDisposedMaterials > 0), 'Tank changes release owned fish materials');
+  await page.locator('.tank-editor-panel .drawer-head .icon-btn').click(); await page.waitForFunction(() => window.__higata.mode === 'home');
   await openRoom();
   await page.evaluate(() => { const a = window.__higata, template = a.encyclopedia.caseItems.value[0]; a.encyclopedia.caseItems.value = [template, ...Array.from({ length: 5 }, (_, i) => ({ ...template, id: `full-${i}` }))]; });
   assert.equal(await page.evaluate(() => { const a = window.__higata; return a.removeRoomTank(a.activeTankId.value); }), false);
@@ -87,6 +94,14 @@ try {
     if (viewport.width === 390) await page.screenshot({ path: new URL('placement-mobile.png', screenshots).pathname });
   }
   await page.setViewportSize({ width: 1280, height: 800 }); await page.screenshot({ path: new URL('placement-desktop.png', screenshots).pathname });
+  const rect = await page.locator('.room-tank.selected rect').boundingBox(), scale = await page.locator('.room-plan').evaluate(el => el.getScreenCTM().d);
+  await page.mouse.move(rect.x + rect.width * 0.73, rect.y + rect.height * 0.6); await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width * 0.73, rect.y + rect.height * 0.6 + 20 * scale); await page.mouse.up();
+  assert.deepEqual((await state()).tanks[2].position, [1.8, 1.2], 'Diagram dragging keeps the grabbed offset and snaps to 5cm');
+  await page.getByLabel('水槽の前後位置').fill('1'); await page.getByLabel('水槽の前後位置').press('Tab'); await page.getByRole('button', { name: 'この位置に移動', exact: true }).click();
+  await page.locator('.room-placement').evaluate(el => { el.style.visibility = 'hidden'; });
+  await page.screenshot({ path: new URL('room-overview.png', screenshots).pathname });
+  await page.locator('.room-placement').evaluate(el => { el.style.visibility = ''; });
   await page.getByRole('button', { name: 'メイン水槽にする', exact: true }).click(); await home();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: '水槽1を見る', exact: true }).click(); await page.waitForFunction(() => !window.__higata.roomBusy.value);

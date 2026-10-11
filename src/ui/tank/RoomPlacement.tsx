@@ -21,7 +21,7 @@ export function RoomPlacement({ app }: { app: App }) {
     return [Math.round((point.x / 100 + ROOM_LIMITS.minX) * 20) / 20, Math.round((point.y / 100 + ROOM_LIMITS.minZ) * 20) / 20];
   };
   const dimensions = TANK_DIMENSIONS[tank?.size ?? size], ghost = mapPoint(position), footprint = tankFootprint(tank?.size ?? size);
-  const dragPosition = (x: number, y: number): [number, number] => { const p = fromPointer(x, y); return [p[0] - dragOffset.current[0], p[1] - dragOffset.current[1]]; };
+  const dragPosition = (x: number, y: number): [number, number] => { const p = fromPointer(x, y); return [Math.round((p[0] - dragOffset.current[0]) * 20) / 20, Math.round((p[1] - dragOffset.current[1]) * 20) / 20]; };
   return <section class="room-placement glass" aria-label="部屋に水槽を設置">
     <header class="room-heading"><div><span class="eyebrow">MY AQUARIUM ROOM</span><h2>部屋に水槽を設置</h2></div><button class="btn" disabled={busy} onClick={() => app.closeRoomPlacement()}>戻る</button></header>
     <div class="room-capacity"><strong>設置 {room.tanks.length}/{limit}台</strong><span>Lv.5で2台 · Lv.10で3台</span><span class="room-slots">{ROOM_SLOT_LEVELS.map((lv, i) => <span class={app.encyclopedia.level >= lv ? 'unlocked' : ''} key={lv}>{i + 1}{app.encyclopedia.level < lv ? ` 🔒Lv.${lv}` : ''}</span>)}</span></div>

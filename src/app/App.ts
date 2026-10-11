@@ -1718,6 +1718,7 @@ export class App {
     this.camera.aspect = this.renderer.aspect;
     this.camera.updateProjectionMatrix();
     this.tank?.setAspect(this.renderer.aspect);
+    if (this.mode === 'roomPlacement') this.tank.frameRoom();
     this.shop?.setAspect(this.renderer.aspect);
   }
 

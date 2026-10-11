@@ -48,9 +48,10 @@
 .touch-device .tank-switcher button { width:32px; height:32px; font-size:14px; }
 .touch-device .editor-switcher button { width:26px; height:28px; font-size:12px; }
 .touch-device .editor-switcher > span { font-size:10px; }
-.touch-device .tank-room-controls .btn { font-size:11px; padding:5px 8px; min-height:30px; }
+.touch-device .tank-room-controls { height:30px; min-height:30px; margin-bottom:4px; }
+.touch-device .tank-room-controls .btn { height:30px; font-size:11px; padding:5px 8px; min-height:30px; }
 @media (orientation:portrait) {
-  .touch-device .tank-editor-panel { height:clamp(355px, calc(46dvh + 35px), 455px); }
+  .touch-device .tank-edit .tank-editor-panel:not(.sheet-collapsed) { height:clamp(355px, calc(46dvh + 35px), 455px); }
 }
 @media (max-width:700px) and (orientation:portrait) {
   .room-placement { inset:8px; padding:12px; max-height:650px; gap:8px; }
@@ -86,4 +87,13 @@
   .room-position label { gap:2px; font-size:10px; }.room-position input { min-height:27px; font-size:11px; padding:2px 6px; }
   .room-form .btn { height:28px; min-height:28px; font-size:11px; padding:3px 5px; }.room-validity { font-size:9px; min-height:12px; }
   .room-map-hint,.room-removal-note { font-size:9px; }.room-tank-list button { height:27px; min-height:27px; font-size:10px; padding:3px 5px; }
+}
+@media (orientation:landscape) and (max-height:400px) {
+  .touch-device .tank-editor-panel .equipment-back { height:28px; min-height:28px; }
+  .touch-device .tank-editor-panel .equipment-tabs { margin:2px 0; }
+  .touch-device .tank-editor-panel .equipment-choice { height:58px; min-height:58px; padding:4px; gap:1px; font-size:9px; line-height:1.15; }
+  .touch-device .tank-editor-panel .equipment-choice .equipment-swatch { width:20px; height:16px; flex-basis:16px; }
+  .touch-device .tank-editor-panel .equipment-choice small { font-size:8px; margin:1px 0; }
+  .touch-device .tank-editor-panel .equipment-actions { margin:2px 0; padding:2px 0; }
+  .touch-device .tank-editor-panel .equipment-actions button { height:32px; min-height:32px; }
 }

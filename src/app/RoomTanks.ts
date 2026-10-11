@@ -1,4 +1,4 @@
-import { BoxGeometry, DoubleSide, Group, Light, Mesh, MeshStandardMaterial, PlaneGeometry, Vector3, type Camera, type Material } from 'three';
+import { BoxGeometry, DoubleSide, Group, Light, LOD, Mesh, MeshStandardMaterial, PlaneGeometry, Vector3, type Camera, type Material } from 'three';
 import { AquariumEquipment, TANK_DIMENSIONS, type RoomTank } from '../aquarium';
 import { TANK_OFFSET_Y, SAND_H } from './TankScene';
 import { buildTankItem } from './TankLayout';
@@ -50,7 +50,7 @@ export class RoomTanks extends Group {
       }
     }
   }
-  updateLOD(camera: Camera): void { this.rigs.forEach(r => { r.tank.updateLOD(camera); r.stand.updateLOD(camera); for (const d of r.devices.values()) d.updateLOD(camera); }); }
+  updateLOD(camera: Camera): void { this.rigs.forEach(r => r.traverse(o => { if (o instanceof LOD) o.update(camera); })); }
   private clearTanks(): void {
     ++this.generation; this.drivers.forEach(d => d.dispose()); this.drivers = [];
     this.rigs.forEach(r => r.dispose()); this.rigs = [];
