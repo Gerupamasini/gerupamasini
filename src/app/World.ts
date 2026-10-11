@@ -1,11 +1,16 @@
-import { FogExp2, Scene, Vector3, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
+import { FogExp2, Scene, Vector3, Vector4, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import type { MapDef, TideStationDef } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { Terrain, loadTerrainGrid } from '../world/Terrain';
 import { WaterPass } from '../world/Water';
 import { createWaves } from '../world/Waves';
 import { LAYER_MIRROR, reflectInWater } from '../render/Mirror';
-import { surfUniforms } from '../world/Surf';
+import { bindSurfZone, setSurfSea, surfUniforms, type SurfUniforms } from '../world/Surf';
+import { SurfZone } from '../world/SurfZone';
+import { SurfMemory } from '../world/SurfMemory';
+import { breakerBand, SurfLip } from '../world/SurfLip';
+import { SurfSpray } from '../world/SurfSpray';
+import { runup2, seaStateFor, type SeaState } from '../world/surfPhysics';
 import { SkyDome } from '../world/Sky';
 import { Habitat } from '../world/Habitat';
 import { carveCoarse, placeFeedingPits } from '../world/FeedingPits';
@@ -55,6 +60,17 @@ export class World {
   oysters: OysterReef | null = null;
   /** crushed clams lying about, the scavengers' carrion */
   carrion: CarrionField | null = null;
+  /** an open shore's surf: where the waves are (from the terrain and the tide), the day's sea, the sand's memory of it */
+  surfZone: SurfZone | null = null;
+  surfMemory: SurfMemory | null = null;
+  /** the plunging lips and the spray near the viewer (null: off on this tier, or no surf) */
+  surfLip: SurfLip | null = null;
+  surfSpray: SurfSpray | null = null;
+  private readonly band = new Vector4();
+  surf: SurfUniforms | null = null;
+  /** the day's sea (null: no surf) */
+  sea: SeaState | null = null;
+  private gl: WebGLRenderer | null = null;
 
   readonly scene = new Scene();
   readonly fog: FogExp2;
@@ -118,8 +134,16 @@ export class World {
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
     const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });
     terrain.setWaves(waves);
-    // the surf on an open shore: one set of uniforms for the water and the sand it wets
+    // the surf on an open shore: one set of uniforms for the water and the sand it wets; where the waves go comes from
+    // the terrain and the tide (the zone, re-made as the tide moves), the day's sea from the shore's usual one
     const surf = surfUniforms(layout?.surf ?? null);
+    let surfZone: SurfZone | null = null, sea: SeaState | null = null;
+    if (layout?.surf) {
+      sea = seaStateFor(layout.surf, pitSeed);
+      surfZone = new SurfZone({ n: grid.n, size: grid.size, heights: grid.heights }, layout.surf.seaward, sea, { worker: true });
+      bindSurfZone(surf, surfZone);
+      setSurfSea(surf, sea);
+    }
     terrain.setSurf(surf);
     const water = new WaterPass(terrain, waves, surf);
     if (layout) water.setBody(...layout.water.colour, layout.water.turbidity, layout.water);
@@ -127,6 +151,20 @@ export class World {
     // the sky needs its own scene reference; create it after the scene exists
     mark('water');
     const w = new World(map, terrain, water, null as unknown as SkyDome, habitat, tide);
+    w.surfZone = surfZone;
+    w.sea = sea;
+    w.surf = layout?.surf ? surf : null;
+    w.gl = renderer;
+    if (surfZone && preset.surfMemory > 0) {
+      w.surfMemory = new SurfMemory(surf, preset.surfMemory, preset.surfMemory >= 512 ? 40 : 32, preset.surfMemory >= 512 ? 1 : 2);
+      water.setMemory(w.surfMemory.uniforms);
+    }
+    if (surfZone) {
+      const u = water.uniforms;
+      const light = { uSunDir: u.uSunDir, uSunCol: u.uSunCol, uSunUp: u.uSunUp, uAmbient: u.uAmbient, tEnv: u.tEnv, uEnvI: u.uEnvI, uFogColor: u.uFogColor, uFogDensity: u.uFogDensity, uWaterFog: u.uWaterFog, uTime: u.uTime, uWater: u.uWater, uSurfDebug: u.uSurfDebug };
+      if (preset.surfLip) { w.surfLip = new SurfLip(surf, light); w.scene.add(w.surfLip.mesh); }
+      if (preset.spray > 0) { w.surfSpray = new SurfSpray(surf, light, preset.spray); water.setSpray(w.surfSpray); }
+    }
     mark('skyline');
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
@@ -218,6 +256,14 @@ export class World {
 
   /** Free what the flat built (leaving for another map). Animals, tools and the case are freed by their owners. */
   dispose(): void {
+    this.surfZone?.dispose();
+    this.surfZone = null;
+    this.surfMemory?.dispose();
+    this.surfMemory = null;
+    this.surfLip?.dispose();
+    this.surfLip = null;
+    this.surfSpray?.dispose();
+    this.surfSpray = null;
     if (this.amamo) seagrass.bind(null);
     this.amamo?.dispose();
     this.amamo = null;
@@ -244,6 +290,17 @@ export class World {
     this.scene.clear();
   }
 
+  /** debug: another sea (any of height, period, approach angle and its spread); null: the day's own */
+  setSeaState(over: Partial<SeaState> | null, daySeed = 0): void {
+    const base = this.layout?.surf;
+    if (!base || !this.surfZone || !this.surf) return;
+    const day = seaStateFor(base, daySeed);
+    const sea = { ...(over ? { ...this.sea!, ...over } : day) };
+    this.sea = sea;
+    this.surfZone.setSea(sea);
+    setSurfSea(this.surf, sea);
+  }
+
   /** Advance environment state for a game time (ms) and real dt (s). */
   update(gameMs: number, dt: number, anchor: Vector3, camera: PerspectiveCamera): void {
     this.timeAcc += dt;
@@ -251,6 +308,8 @@ export class World {
     this.tideLevel = this.tideOverride ?? this.tide.level(gameMs);
     if (this.timeAcc > 1 || this.tideRate === 0) this.tideRate = this.tideOverride !== null ? 0 : this.tide.rate(gameMs);
     this.water.setLevel(this.tideLevel);
+    // the breaker zone and the swash follow the tide (the next bracket made ahead in the worker)
+    this.surfZone?.update(this.tideLevel, this.tideRate);
     oysterEnv.uOyWater.value.set(this.tideLevel, this.habitat.wetLevel);
     oysterEnv.uOyTime.value += dt;
     this.riprap?.update(camera);
@@ -280,6 +339,15 @@ export class World {
     });
     // the bed's caustics run on the water's clock so they sit under the ripples that cast them
     this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.water.uniforms.uTime.value, sunUp, this.sunDir);
+    // the sand's memory of the swash, on the same clock
+    if (this.surfMemory && this.gl) this.surfMemory.update(this.gl, camera, this.tideLevel, this.water.uniforms.uTime.value, dt);
+    if (this.sea) this.terrain.setSurfMemory(this.surfMemory?.uniforms ?? null, runup2(this.sea.height, this.sea.period, 0.08));
+    // the lips and the spray look for breaking crests in the breaker zone at the viewer's place
+    if (this.sea && this.surfZone && this.layout?.surf && (this.surfLip || this.surfSpray)) {
+      breakerBand(this.surfZone, this.layout.surf.seaward, camera, this.tideLevel, this.sea, this.band);
+      this.surfLip?.update(this.band, this.tideLevel);
+      this.surfSpray?.update(this.band, this.tideLevel);
+    }
     // the eelgrass sways with the same breeze and leans with the tidal current
     this.amamo?.update(dt, camera, { tideLevel: this.tideLevel, tideRate: this.tideRate, windDir: WIND_DIR, waveGain: this.water.uniforms.uWaveGain.value });
     // lift the exposure at night so the flat stays readable under the moon
