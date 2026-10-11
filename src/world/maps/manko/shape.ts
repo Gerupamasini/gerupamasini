@@ -26,9 +26,12 @@ const LOBES = [
 /** The open lake to the east (user's photo from the shore: wide khaki water, a low green far shore ~420 m out
  * with the city behind). The basin's east side shelves into it; beyond x ≈ 100 it is too deep to wade. */
 export const LAKE_SHORE_X = 96, FAR_SHORE_X = 430;
+/** Signed distance (m) east of the near lake shore line: negative on the flat, positive over the water. */
+export function shoreDist(x: number, z: number): number {
+  return x + 10 * (vnoise(z * 0.02, 3.3) - 0.5) + 4 * (vnoise(z * 0.07, 9.1) - 0.5) - LAKE_SHORE_X;
+}
 export function lakeOpen(x: number, z: number): number {
-  const wob = 10 * (vnoise(z * 0.02, 3.3) - 0.5) + 4 * (vnoise(z * 0.07, 9.1) - 0.5);
-  const near = smooth(LAKE_SHORE_X - 6, LAKE_SHORE_X + 14, x + wob);
+  const near = smooth(-6, 14, shoreDist(x, z));
   const far = 1 - smooth(FAR_SHORE_X - 20, FAR_SHORE_X + 10, x - 18 * (vnoise(z * 0.01, 1.7) - 0.5));
   const ends = 1 - smooth(560, 700, Math.abs(z + 60));
   return near * far * ends;
@@ -62,16 +65,25 @@ export function groundAt(x: number, z: number): number {
     + 0.06 * Math.sin(x * 0.11 + z * 0.17) + 0.03 * Math.sin(x * 0.9 - z * 0.7) * Math.sin(z * 0.8);
   const benches = 0.08 * smooth(0.55, 0.9, Math.sin(x * 0.07 - 1.1) * Math.sin(z * 0.09 + 0.5));
   // Basin floor: exposed mud at low water, draining gently to the north-east.
-  const flat = 0.24 - (x - z) * 0.0011 + hummocks + benches;
-  const creek = 0.5 * bump(z - creekZ(x), 2.4 + Math.max(0, x) * 0.025) * smooth(-96, -84, x) * (1 - lake);
-  const trib = 0.22 * bump(x - tributaryX(z), 1.3) * smooth(80, 70, z) * smooth(creekZ(tributaryX(z)) - 2, creekZ(tributaryX(z)) + 4, z);
+  // (the hummocks and benches smooth out toward the lake, where the flat leans into it)
+  const flat = 0.24 - (x - z) * 0.0011 + (hummocks + benches) * (1 - 0.75 * smooth(-35, -5, shoreDist(x, z)));
+  // The creeks: the flat dips gently toward them over ~12 m, and only the last few metres to the channel are
+  // steeper (a soft bank, not a trench cut into the flat)
+  const dc = Math.abs(z - creekZ(x)), widen = Math.max(0, x) * 0.012;
+  const creek = (0.17 * bump(dc, 12 + widen * 4) + 0.3 * (1 - smooth(1 + widen, 6.5 + widen * 1.5, dc))) * smooth(-96, -84, x) * (1 - lake);
+  const dt = Math.abs(x - tributaryX(z));
+  const trib = (0.07 * bump(dt, 7) + 0.16 * (1 - smooth(0.6, 3, dt))) * smooth(80, 70, z) * smooth(creekZ(tributaryX(z)) - 2, creekZ(tributaryX(z)) + 4, z);
   const basin = flat - creek - trib;
   // The lake bed falls to ~1.3 m below the datum.
   const lakeBed = -1.3 + 0.1 * vnoise(x * 0.05, z * 0.05);
   // Forest floor: raised mud, then the land rising gently far away into low wooded hills.
   const r = Math.hypot(x, z), hills = 14 * smooth(800, 1400, r) * (0.6 + 0.8 * vnoise(x * 0.004, z * 0.004));
   const forest = 0.5 + 0.08 * vnoise(x * 0.2, z * 0.2) + hills;
-  const water = basin + (lakeBed - basin) * smooth(0.25, 0.9, lake);
+  // The near shore: the flat leans gently toward the lake over ~60 m (about 1%), then a bank of ~5° runs down
+  // to the bed (wading depth runs out on it at high water). Across the lake the far shore keeps a plain blend.
+  const sd = shoreDist(x, z), approach = smooth(-60, 0, sd), shelf = smooth(-4, 24, sd);
+  const nearShore = basin - 0.5 * approach + (lakeBed - (basin - 0.5 * approach)) * shelf;
+  const water = nearShore + (basin + (lakeBed - basin) * smooth(0.25, 0.9, lake) - nearShore) * smooth(200, 260, x);
   const bank = 1.6 * smooth(9, 3, Math.hypot(x - ENTRY.x, (z - ENTRY.z) * 1.4)) + 0.4 * (vnoise(x * 0.8, z * 0.8) - 0.5) * smooth(10, 4, Math.hypot(x - ENTRY.x, z - ENTRY.z));
   return forest + (water - forest) * open + bank;
 }
@@ -119,39 +131,45 @@ export function substrateAt(x: number, z: number): number {
 }
 
 // ------------------------------------------------------------------ depth into the forest
-/** Distance (m) from the open mud/water into the closed forest, from a 2 m raster with a chamfer transform over
- * ±170 m (lazily built, ~30k cells). Drives the canopy shell's rise, the front rows of tree models and the thicket
- * the player cannot enter. Beyond the raster: deep forest where closed. */
-const D_HALF = 170, D_STEP = 2, D_N = D_HALF / D_STEP * 2 + 1;
-let depthRaster: Float32Array | null = null;
-function buildDepth(): Float32Array {
-  const d = new Float32Array(D_N * D_N);
-  for (let j = 0; j < D_N; j++) for (let i = 0; i < D_N; i++) {
-    const x = -D_HALF + i * D_STEP, z = -D_HALF + j * D_STEP;
-    d[j * D_N + i] = Math.max(openness(x, z), bankAt(x, z)) < 0.5 ? 1e6 : 0;
+/** Distance (m) from the open mud/water into the closed forest, from chamfer-transformed rasters (lazily built):
+ * 2 m over ±170 m (the terrain and its edge) and 4 m over ±800 m (the land round the lake, for the background's
+ * edge rows and canopy). Drives the canopy roof's rise, the rows of trees and the thicket the player cannot enter. */
+interface DepthRaster { half: number; step: number; n: number; d: Float32Array }
+function buildDepth(half: number, step: number): DepthRaster {
+  const n = Math.round(half / step) * 2 + 1, d = new Float32Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const x = -half + i * step, z = -half + j * step;
+    d[j * n + i] = Math.max(openness(x, z), bankAt(x, z)) < 0.5 ? 1e6 : 0;
   }
-  const a = D_STEP, b = D_STEP * Math.SQRT2;
-  for (let j = 0; j < D_N; j++) for (let i = 0; i < D_N; i++) {
-    const k = j * D_N + i; let v = d[k];
+  const a = step, b = step * Math.SQRT2;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const k = j * n + i; let v = d[k];
     if (i > 0) v = Math.min(v, d[k - 1] + a);
-    if (j > 0) { v = Math.min(v, d[k - D_N] + a); if (i > 0) v = Math.min(v, d[k - D_N - 1] + b); if (i < D_N - 1) v = Math.min(v, d[k - D_N + 1] + b); }
+    if (j > 0) { v = Math.min(v, d[k - n] + a); if (i > 0) v = Math.min(v, d[k - n - 1] + b); if (i < n - 1) v = Math.min(v, d[k - n + 1] + b); }
     d[k] = v;
   }
-  for (let j = D_N - 1; j >= 0; j--) for (let i = D_N - 1; i >= 0; i--) {
-    const k = j * D_N + i; let v = d[k];
-    if (i < D_N - 1) v = Math.min(v, d[k + 1] + a);
-    if (j < D_N - 1) { v = Math.min(v, d[k + D_N] + a); if (i < D_N - 1) v = Math.min(v, d[k + D_N + 1] + b); if (i > 0) v = Math.min(v, d[k + D_N - 1] + b); }
+  for (let j = n - 1; j >= 0; j--) for (let i = n - 1; i >= 0; i--) {
+    const k = j * n + i; let v = d[k];
+    if (i < n - 1) v = Math.min(v, d[k + 1] + a);
+    if (j < n - 1) { v = Math.min(v, d[k + n] + a); if (i < n - 1) v = Math.min(v, d[k + n + 1] + b); if (i > 0) v = Math.min(v, d[k + n - 1] + b); }
     d[k] = v;
   }
-  return d;
+  return { half, step, n, d };
+}
+let fine: DepthRaster | null = null, coarse: DepthRaster | null = null;
+function sampleDepth(r: DepthRaster, x: number, z: number): number | null {
+  const fx = (x + r.half) / r.step, fz = (z + r.half) / r.step;
+  if (fx < 0 || fz < 0 || fx > r.n - 1 || fz > r.n - 1) return null;
+  const i = Math.min(r.n - 2, Math.floor(fx)), j = Math.min(r.n - 2, Math.floor(fz)), u = fx - i, v = fz - j, k = j * r.n + i, d = r.d;
+  const c = (q: number) => Math.min(q, 400);
+  return (c(d[k]) * (1 - u) + c(d[k + 1]) * u) * (1 - v) + (c(d[k + r.n]) * (1 - u) + c(d[k + r.n + 1]) * u) * v;
 }
 export function forestDepth(x: number, z: number): number {
-  depthRaster ??= buildDepth();
-  const fx = (x + D_HALF) / D_STEP, fz = (z + D_HALF) / D_STEP;
-  if (fx < 0 || fz < 0 || fx > D_N - 1 || fz > D_N - 1) return Math.max(openness(x, z), bankAt(x, z)) < 0.5 ? 99 : 0;
-  const i = Math.min(D_N - 2, Math.floor(fx)), j = Math.min(D_N - 2, Math.floor(fz)), u = fx - i, v = fz - j, k = j * D_N + i, r = depthRaster;
-  const c = (n: number) => Math.min(n, 400);
-  return (c(r[k]) * (1 - u) + c(r[k + 1]) * u) * (1 - v) + (c(r[k + D_N]) * (1 - u) + c(r[k + D_N + 1]) * u) * v;
+  fine ??= buildDepth(170, 2);
+  const f = sampleDepth(fine, x, z);
+  if (f !== null) return f;
+  coarse ??= buildDepth(800, 4);
+  return sampleDepth(coarse, x, z) ?? (Math.max(openness(x, z), bankAt(x, z)) < 0.5 ? 99 : 0);
 }
 /** The mangrove thicket: impassable beyond the front rows (its interior is the simplified canopy shell). */
 export const THICKET_DEPTH = 11;

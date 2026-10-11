@@ -9,21 +9,21 @@
     "skyline": 0,
     "land": 5,
     "forest": {
-      "trees": 1754,
+      "trees": 1746,
       "templates": 8,
-      "geometries": 68,
+      "geometries": 80,
       "calls": 158,
-      "triangles": 369172,
-      "collisionSegments": 462796,
+      "triangles": 623004,
+      "collisionSegments": 473957,
       "lod": [
         2,
-        33,
-        281
+        34,
+        280
       ]
     },
     "position": [
       84,
-      1.8670557737350464,
+      1.3942091464996338,
       76
     ]
   },

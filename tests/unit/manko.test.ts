@@ -6,6 +6,7 @@ import { MapSchema, SpotsFileSchema, TideStationSchema } from '../../src/data/sc
 import { creekZ, heightAt, tributaryX, openness, lakeOpen, canopyAt, groundAt, inThicket, forestDepth } from '../../src/world/maps/manko/shape';
 import { LAYOUTS } from '../../src/world/maps/hashirimizu';
 import { MangroveForest } from '../../src/world/mangrove';
+import { edgeImpostorSites } from '../../src/world/maps/manko/land';
 import { Terrain } from '../../src/world/Terrain';
 const read = (file: string) => readFileSync(fileURLToPath(new URL(`../../public/data/${file}`, import.meta.url)));
 const map = MapSchema.parse(JSON.parse(read('maps/manko.json').toString()));
@@ -59,6 +60,14 @@ describe('漫湖 environment-only flat', () => {
     expect(adults.filter(t=>openness(t.x,t.z)>.9 && lakeOpen(t.x,t.z)<.1).length).toBeLessThan(adults.length*0.05);
     expect(forest.specs.filter(t=>t.sapling!==null && openness(t.x,t.z)>.5).length).toBeGreaterThan(20);
     expect(forest.collision.segments.length).toBeGreaterThan(1000);
+    // the background forest's edges: three rows of tree impostors, outside the walkable area, never on open ground
+    const edge = edgeImpostorSites();
+    console.log('edge impostors', edge.length);
+    expect(edge.length).toBeGreaterThan(800); expect(edge.length).toBeLessThan(6000);
+    for (const p of edge) {
+      expect(Math.abs(p.x) >= 144 || Math.abs(p.z) >= 144).toBe(true);
+      const d = forestDepth(p.x, p.z); expect(d).toBeGreaterThan(0.7); expect(d).toBeLessThan(13);
+    }
     forest.dispose();terrain.dispose();
   });
 });

@@ -6,7 +6,8 @@ import type { SurfParams } from '../../Surf';
 import { buildHashirimizuProps } from './props';
 import { eelgrassField, eelgrassZone, offshore } from './shape';
 import { inThicket } from '../manko/shape';
-import { backdropCrowns } from '../manko/land';
+import { backdropCrowns, edgeImpostorSites } from '../manko/land';
+import type { ImpostorSite } from '../../mangrove/impostor';
 import type { BackdropCrown } from '../../mangrove/MangroveForest';
 import type { Atmosphere } from '../../Sky';
 
@@ -42,6 +43,8 @@ export interface ShoreLayout {
   };
   /** the map's air: sky, clouds, sun and fill light (absent: the temperate Tokyo Bay day) */
   atmosphere?: Partial<Atmosphere>;
+  /** the background forest's edge rows, drawn as impostors of the tree models (absent: none) */
+  mangroveImpostors?(): ImpostorSite[];
   /** mangrove foliage colour against the default (absent: unchanged) */
   mangroveLeafTint?: readonly [number, number, number];
   /** distant mangrove crowns drawn with the trees' own foliage (absent: none) */
@@ -96,6 +99,7 @@ const MANKO: ShoreLayout = {
   // the dense mangrove forest beyond its front rows
   blocked: inThicket,
   mangroveBackdrop: backdropCrowns,
+  mangroveImpostors: edgeImpostorSites,
   // sun-flushed subtropical canopy: brighter, yellower green (user's photo)
   mangroveLeafTint: [1.4, 1.28, 0.85],
 };

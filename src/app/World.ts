@@ -201,6 +201,8 @@ export class World {
       onProgress?.('ヤエヤマヒルギ林');
       w.mangroves = new MangroveForest(terrain, { ...map.mangroves, collisionBounds: map.bounds.walkable, backdrop: layout?.mangroveBackdrop?.(), leafTint: layout?.mangroveLeafTint });
       w.mangroves.setQuality(preset.vegetation);
+      // the background forest's edge rows: the trees baked into billboards once, behind the loading screen
+      if (layout?.mangroveImpostors) w.mangroves.setImpostors(renderer, layout.mangroveImpostors());
       // Build the visible tiers before FieldRenderer.compile, so shader compilation stays behind the loading screen.
       w.mangroves.update(0, { position: new Vector3(map.spawnStart.x,terrain.heightAt(map.spawnStart.x,map.spawnStart.z)+1.5,map.spawnStart.z) }, { tideLevel: 0, wetLevel: 0 });
       w.scene.add(w.mangroves.group);
@@ -274,6 +276,7 @@ export class World {
     const sunUp = Math.max(0, Math.min(1, (sp.elevation + 2) / 14)) * (1 - 0.8 * this.overcast);
     this.sky.update(this.sunDir, sp.elevation, anchor, this.overcast);
     this.fog.color.copy(this.sky.fogColor);
+    this.mangroves?.setLight(this.sky.sunColorHdr(this.sunColTmp), this.sky.hemi.color, this.sky.hemi.intensity, this.sky.fogColor);
     this.fog.density = 0.0024 * (1 + 2.5 * this.overcast);
     const day = Math.max(0, Math.min(1, (sp.elevation + 4) / 14));
     this.water.update(dt, {

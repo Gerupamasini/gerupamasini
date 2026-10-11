@@ -1,4 +1,4 @@
-import { DynamicDrawUsage, Group, InstancedBufferAttribute, InstancedBufferGeometry, InstancedMesh, Matrix4, Quaternion, Sphere, Vector3, type PerspectiveCamera } from 'three';
+import { Color, DynamicDrawUsage, Group, InstancedBufferAttribute, InstancedBufferGeometry, InstancedMesh, Matrix4, Quaternion, Sphere, Vector3, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import { hashInts, Rng } from '../../core/Rng';
 import type { QualityPreset } from '../../core/Settings';
 import type { Terrain } from '../Terrain';
@@ -6,6 +6,7 @@ import { reflectInWater } from '../../render/Mirror';
 import { collisionSegments, RootCollisionWorld } from './collision';
 import { batchBounds, finishInstances, HirugiKit, writeInstance } from './kit';
 import { buildCrownGeometry } from './geometry';
+import { bakeImpostors, impostorField, type ImpostorAtlas, type ImpostorSite } from './impostor';
 import { PARTS, type TreePart } from './materials';
 import { treeScale, treeSpec, type HirugiBase, type HirugiLod, type TreeSpec } from './types';
 
@@ -109,6 +110,22 @@ export class MangroveForest {
     if (layout.leafTint) this.kit.uniforms.uHgLeafTint.value.set(...layout.leafTint);
   }
   private backdrop: InstancedMesh | null = null;
+  private impostors: { mesh: InstancedMesh; atlas: ImpostorAtlas } | null = null;
+  private readonly impostorUniforms = { uImpLight: { value: new Color(1, 1, 1) }, uImpHaze: { value: new Color(0.7, 0.75, 0.8) } };
+  /** The background forest's edge rows as billboards of the five trees, baked once with `renderer` (see impostor.ts). */
+  setImpostors(renderer: WebGLRenderer, sites: readonly ImpostorSite[]): void {
+    if (!sites.length || this.impostors) return;
+    const atlas = bakeImpostors(renderer, this.kit), mesh = impostorField(atlas, sites, this.impostorUniforms);
+    this.group.add(reflectInWater(mesh));
+    this.impostors = { mesh, atlas };
+  }
+  /** The day's light on the impostors (baked under a clear noon) and the air haze they fade into. */
+  setLight(sunHdr: Vector3, hemi: Color, hemiIntensity: number, haze: Color): void {
+    // noon's key 2.8 and fill 0.3 are what the atlas was lit with; scale both shares by today's
+    const k = 0.82 / 2.8, f = 0.18 / 0.3;
+    this.impostorUniforms.uImpLight.value.setRGB(sunHdr.x * k + hemi.r * hemiIntensity * f, sunHdr.y * k + hemi.g * hemiIntensity * f, sunHdr.z * k + hemi.b * hemiIntensity * f);
+    this.impostorUniforms.uImpHaze.value.copy(haze);
+  }
   private buildBackdrop(sites: readonly BackdropCrown[]): InstancedMesh {
     const source = buildCrownGeometry(), g = new InstancedBufferGeometry();
     for (const name of Object.keys(source.attributes)) g.setAttribute(name, source.getAttribute(name));
@@ -194,6 +211,7 @@ export class MangroveForest {
   dispose(): void {
     for (const batch of this.batches) for (const level of batch.levels.values()) for (const part of PARTS) this.kit.release(level[part]);
     if (this.backdrop) { this.backdrop.geometry.dispose(); this.backdrop.removeFromParent(); this.backdrop = null; }
+    if (this.impostors) { const { mesh, atlas } = this.impostors; mesh.geometry.dispose(); (mesh.material as { dispose(): void }).dispose(); atlas.target.dispose(); mesh.removeFromParent(); this.impostors = null; }
     this.batches.length = 0; this.lods.clear(); this.collision.clear(); this.group.clear(); this.kit.dispose();
   }
 }

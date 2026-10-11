@@ -5,6 +5,8 @@ import {
 import { Rng } from '../../../core/Rng';
 import type { Land } from '../hashirimizu/land';
 import type { BackdropCrown } from '../../mangrove/MangroveForest';
+import type { ImpostorSite } from '../../mangrove/impostor';
+import type { HirugiBase } from '../../mangrove/types';
 import { canopyAt, crownAt, CROWN_CELL, FAR_SHORE_X, forestDepth, groundAt, HALF, shellProfile, vnoise } from './shape';
 
 /**
@@ -131,6 +133,23 @@ export function backdropCrowns(): BackdropCrown[] {
   };
   add(-HALF - 60, HALF + 40, -HALF - 60, HALF + 60);
   // (the far shore's tree line is the roof strip in buildMankoLand: at 450 m the scene fog would grey these out)
+  return out;
+}
+
+/** The background forest's edge: three rows of mangroves (as impostors of the tree models) wherever the forest
+ * meets the open water or mud beyond the rows of real trees — across the lake, along its shores, round the
+ * terrain's edge — so no edge of the far forest is a bare wall of canopy. */
+export function edgeImpostorSites(): ImpostorSite[] {
+  const out: ImpostorSite[] = [], r = new Rng(0x1ed9e), inner = HALF - 6, step = 3.6;
+  for (let z = -700; z <= 700; z += step) for (let x = -700; x <= 700; x += step) {
+    const px = x + r.range(-1.4, 1.4), pz = z + r.range(-1.4, 1.4);
+    if (Math.abs(px) < inner && Math.abs(pz) < inner) continue;   // the tree models' rows
+    if (Math.hypot(px, pz) > 700) continue;
+    const depth = forestDepth(px, pz);
+    if (depth < 0.8 || depth > 12.5 || centreClear(px, pz) > 0) continue;
+    const scale = r.range(0.62, 0.92) * r.range(0.86, 1.14) * (1 + depth * 0.012);
+    out.push({ x: px, y: groundAt(px, pz), z: pz, scale, base: r.int(0, 4) as HirugiBase, yaw: r.range(0, Math.PI * 2) });
+  }
   return out;
 }
 
