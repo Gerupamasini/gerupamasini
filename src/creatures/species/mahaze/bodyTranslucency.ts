@@ -377,8 +377,10 @@ float gbAlpha = 1.0;
 
 /**
  * Blending the tissue by its coverage would dim its highlights and the light coming through it with it: those are
- * laid over the blend instead — the alpha is raised where they are bright and the colour scaled so that the diffuse
- * tissue still shows by its own coverage (as the ミミイカ's skin does).
+ * laid over the blend instead. Into the HDR buffers of the field and the hero pipeline the blend is exact (the colour
+ * is scaled up by the coverage, so the glow of a thin, back-lit tail comes on top of the sand seen through it); drawn
+ * straight to the tone-mapped screen the colour must stay in range, so there the alpha is raised where they are bright
+ * (as the ミミイカ's skin does).
  */
 const COMPOSITE = /* glsl */ `
 #include <opaque_fragment>
@@ -389,8 +391,12 @@ const COMPOSITE = /* glsl */ `
 #endif
   vec3 add = spec + gbAdd;
   vec3 base = max(outgoingLight - spec, 0.0);
+#ifdef TONE_MAPPING
   float a1 = max(gbAlpha, clamp(max(add.r, max(add.g, add.b)) * 1.2, 0.0, 1.0));
-  gl_FragColor = vec4((base * gbAlpha + add) / max(a1, 1e-3), a1);
+#else
+  float a1 = max(gbAlpha, 0.02);
+#endif
+  gl_FragColor = vec4((base * gbAlpha + add) / a1, a1);
 }
 `;
 
@@ -480,6 +486,6 @@ vGbRest = position;
       .replace('#include <emissivemap_fragment>', THROUGH)
       .replace('#include <opaque_fragment>', COMPOSITE);
   };
-  m.customProgramCacheKey = () => (low ? 'goby-body-translucent-low-v1' : 'goby-body-translucent-v1');
+  m.customProgramCacheKey = () => (low ? 'goby-body-translucent-low-v2' : 'goby-body-translucent-v2');
   m.needsUpdate = true;
 }

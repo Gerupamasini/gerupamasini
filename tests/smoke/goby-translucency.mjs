@@ -3,7 +3,7 @@
 // on the sand and watches the マハゼ through the observation camera, in front light and against the sun — first with the
 // hero material on (the observed fish volumetric, its neighbours in their field material), then off (all three in the
 // field material, drawn by the field's own renderer). Headless Chromium (SwiftShader); starts the Vite dev server itself.
-// Usage: node tests/smoke/goby-translucency.mjs [--out <dir>] [--map <id>] [--quality low|mid|high]
+// Usage: node tests/smoke/goby-translucency.mjs [--out <dir>] [--map <id>] [--quality minimal|low|mid|high] (minimal: lod2 only)
 // Output: tests/smoke/out/goby-<quality>-<hero|field>-<front|back|back-close>.png. Fails on any page or shader error.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -130,12 +130,18 @@ try {
     await view(true, 0.085);
     await shot(`${tag}-back-close`);
   };
-  await page.waitForFunction((id) => window.__higata.creatures.heroActive(id), main, { timeout: 900000 });
-  await series('hero');
-  // the field material on all three (the observed one in its hero-tier mesh), drawn by the field's renderer
-  await page.evaluate(() => { window.__higata.creatures.enabled = true; return window.__higata.updateSettings({ heroMaterials: false }); });
-  await page.waitForFunction((id) => { const v = window.__higata.creatures.entries.get(id)?.view; return v?.tier === 'hero' && !v.hero; }, main, { timeout: 900000 });
-  await series('field');
+  if (quality === 'minimal') {
+    // no hero at all: every fish in the far tier's light program
+    await page.waitForFunction((ids) => ids.every((id) => window.__higata.creatures.entries.get(id)?.view?.tier === 'lod2'), ids, { timeout: 900000 });
+    await series('field');
+  } else {
+    await page.waitForFunction((id) => window.__higata.creatures.heroActive(id), main, { timeout: 900000 });
+    await series('hero');
+    // the field material on all three (the observed one in its hero-tier mesh), drawn by the field's renderer
+    await page.evaluate(() => { window.__higata.creatures.enabled = true; return window.__higata.updateSettings({ heroMaterials: false }); });
+    await page.waitForFunction((id) => { const v = window.__higata.creatures.entries.get(id)?.view; return v?.tier === 'hero' && !v.hero; }, main, { timeout: 900000 });
+    await series('field');
+  }
   await page.evaluate(() => { window.__higata.creatures.enabled = true; });
   await page.evaluate(() => window.__higata.exitObserve());
   await waitFrames(page, 4);
