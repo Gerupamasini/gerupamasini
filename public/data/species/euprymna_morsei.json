@@ -40,9 +40,8 @@
   ],
   "variation": { "scaleFromLength": true },
   "spawn": [
-    {"tags": ["bare", "eelgrass_edge", "shallow"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.12, 1.0], "season": ["spring", "summer", "autumn"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.5, "group": [1, 2], "maxPopulation": 10, "length_mm": [12, 40]},
-    {"tags": ["bare", "shallow", "deep"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.2, 1.2], "season": ["winter"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.2, "group": [1, 1], "maxPopulation": 4, "length_mm": [20, 42]},
-    {"tags": ["shallow"], "substrate": ["sand"], "depth_m": [0.2, 1.0], "season": ["summer", "autumn"], "time": ["dusk", "night"], "tide": "rising", "maps": ["kasai_west"], "density_per_100m2": 0.12, "group": [1, 1], "maxPopulation": 3, "length_mm": [10, 30]}
+    {"tags": ["bare", "eelgrass_edge", "shallow"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.12, 1.0], "season": ["spring", "summer", "autumn"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 2.0, "group": [1, 2], "maxPopulation": 20, "length_mm": [12, 40]},
+    {"tags": ["bare", "shallow", "deep"], "substrate": ["sand", "muddy_sand"], "depth_m": [0.2, 1.2], "season": ["winter"], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 0.8, "group": [1, 1], "maxPopulation": 20, "length_mm": [20, 42]}
   ],
   "brain": {
     "tree": "squid_sand",
