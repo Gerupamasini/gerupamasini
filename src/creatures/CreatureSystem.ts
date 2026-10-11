@@ -117,6 +117,31 @@ export class CreatureSystem {
     this.floor.scent = scent;
   }
 
+  /** the species' kept models (never drawn): their materials hold the shader programs, see DriverEntry.keep */
+  private readonly kept = new Group();
+  private keepers: { dispose(): void }[] | null = null;
+
+  /**
+   * A tree, not in the scene, carrying one model of every procedural species that lives on this flat in each of its
+   * tiers: compiled behind the loading screen (FieldRenderer.compileKept) so the first sighting does not stall, and
+   * kept as long as the flat so the programs survive the species' absence (three drops a program with the last
+   * material that used it, and the individuals' own materials come and go with the distance tiers).
+   */
+  keptModels(): Object3D {
+    if (!this.keepers) {
+      this.keepers = [];
+      this.kept.name = 'kept';
+      if (this.enabled) {
+        for (const sp of this.data.species.values()) {
+          if (!sp.spawn.some((r) => !r.maps || r.maps.includes(this.mapId))) continue;
+          const keep = DRIVERS[sp.model.driver ?? '']?.keep;
+          if (keep) this.keepers.push(keep(this.kept));
+        }
+      }
+    }
+    return this.kept;
+  }
+
   /** Warm the model cache for the distance tiers. */
   async preload(): Promise<void> {
     if (!this.enabled) return;
@@ -504,7 +529,8 @@ export class CreatureSystem {
   canNetCapture(id: string): boolean {
     const e = this.entries.get(id);
     if (!e || !e.ind.species.collectable || e.ind.species.taxon.group === 'bird') return false;
-    if (e.ind.species.locomotion !== 'burrow') return true;
+    // (a swimmer that can hide in the sand, the flounder, answers for itself too)
+    if (e.ind.species.locomotion !== 'burrow' && !e.driver.canNetCapture) return true;
     // Unknown/unattached burrowers stay dig-only; a visible siphon is not a visible shell.
     return !!e.view && e.driver.canNetCapture?.() === true;
   }
@@ -518,6 +544,8 @@ export class CreatureSystem {
 
   dispose(): void {
     for (const id of [...this.entries.keys()]) this.despawn(id);
+    for (const k of this.keepers ?? []) k.dispose();
+    this.keepers = null;
     this.scene.remove(this.group);
   }
 }

@@ -22,8 +22,10 @@
   ],
   "variation": { "scaleFromLength": true },
   "spawn": [
-    { "tags": ["small_pool", "pool", "shallow", "waterline"], "substrate": ["sand", "muddy_sand", "mud"], "depth_m": [0.015, 0.5], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 3.5, "group": [3, 7], "maxPopulation": 55 },
-    { "tags": ["bare"], "depth_m": [0.015, 0.7], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 2, "group": [2, 5], "maxPopulation": 55 }
+    {"tags": ["small_pool", "pool", "shallow"], "substrate": ["sand", "muddy_sand", "mud"], "depth_m": [0.015, 0.5], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 3.5, "group": [3, 7], "maxPopulation": 55},
+    {"tags": ["bare"], "depth_m": [0.015, 0.7], "tide": "any", "maps": ["hashirimizu"], "density_per_100m2": 2, "group": [2, 5], "maxPopulation": 55},
+    {"tags": ["small_pool", "pool", "shallow"], "substrate": ["sand", "muddy_sand", "mud"], "depth_m": [0.015, 0.5], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 3.5, "group": [3, 7], "maxPopulation": 55},
+    {"tags": ["channel"], "substrate": ["channel"], "depth_m": [0.05, 0.6], "tide": "any", "maps": ["kasai_west"], "density_per_100m2": 1.5, "group": [2, 5], "maxPopulation": 55}
   ],
   "brain": { "tree": "snail_crawl", "params": { "fleeDistance_m": 0.35, "restMean_s": 10 } },
   "capture": { "tools": ["net_small", "net_shallow", "net_fine", "net_deep", "net_dframe", "net_carbon"], "baseDifficulty": 0.05, "alertPenalty": 0.05 },

@@ -54,6 +54,8 @@ export const SpeciesSchema = z.object({
   size: z.object({
     length_mm: z.object({ min: z.number(), max: z.number(), mean: z.number(), sd: z.number() }),
     weightCoef: z.object({ a: z.number(), b: z.number() }),
+    /** the least water an aquatic animal stays in, as a share of its length (default 0.15; a flat ray with a long tail needs far less) */
+    minDepthFraction: z.number().positive().optional(),
   }),
   sex: z.object({ maleRatio: z.number().min(0).max(1).default(0.5), dimorphic: z.boolean().default(false) }).default({ maleRatio: 0.5, dimorphic: false }),
   /**

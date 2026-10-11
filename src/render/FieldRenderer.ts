@@ -1,4 +1,4 @@
-import { DepthTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, RGBAFormat, Vector2, WebGLRenderTarget, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
+import { DepthTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, RGBAFormat, Vector2, WebGLRenderTarget, type Object3D, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import type { WaterPass } from '../world/Water';
 import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 
@@ -54,6 +54,19 @@ export class FieldRenderer {
     if (surf) { gl.setRenderTarget(surf.target); surfReady = gl.compileAsync(surf.mesh, camera); }
     gl.setRenderTarget(prev);
     await Promise.all([sceneReady, waterReady, surfReady]);
+  }
+
+  /**
+   * Compile the shaders of a tree that is not in the scene (the creatures' kept models) in the scene's own variant:
+   * the HDR target bound, the scene's lights and fog. Called again when the preset changes what the variant is.
+   */
+  async compileKept(root: Object3D, camera: PerspectiveCamera, scene: Scene): Promise<void> {
+    const gl = this.gl, prev = gl.getRenderTarget();
+    camera.updateMatrixWorld();
+    gl.setRenderTarget(this.target());
+    const ready = gl.compileAsync(root, camera, scene);
+    gl.setRenderTarget(prev);
+    await ready;
   }
 
   render(scene: Scene, camera: PerspectiveCamera, water: WaterPass): void {

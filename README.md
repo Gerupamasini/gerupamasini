@@ -23,6 +23,9 @@ npm run model:pagurus-hide            # ユビナガホンヤドカリの「殻�
 npm run render:amamo # アマモの文書画像を再生成（docs/models/amamo/）
 npm run render:amimehagi # アミメハギの文書画像を再生成（docs/models/amimehagi/）
 npm run render:youjiuo # ヨウジウオの文書画像を再生成（docs/models/youjiuo/）
+npm run render:aramushiro # アラムシロの文書画像を再生成（docs/models/aramushiro/）
+npm run render:akaei  # アカエイ（5 つの行動・腹面・LOD）の画像を再生成（docs/models/akaei/）
+npm run render:ishigarei # イシガレイの文書画像を再生成（docs/models/ishigarei/）
 npm run terrain:bake # 地形 PNG の再生成
 npm run terrain:manko      # 漫湖（70 m × 70 m）の泥干潟と浅い澪筋を再生成
 npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（docs/maps/hashirimizu/）を再生成
@@ -52,6 +55,9 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 - `docs/creatures/isosujiebi/` イソスジエビ（*Palaemon pacificus*）の調査とシラタエビとの差分一覧（共有エビモデルの種プロファイル `isosuji.js`、行動 AI `IsosujiBrain.js`。岩礁の潮だまりとアマモ場のビューアは `reference/isosuji-viewer/`、`?species=shirata` で元のシラタエビと見比べられる）
 - `docs/models/amimehagi/` アミメハギ（*Rudarius ercodes*）の調査・設計（写真 70 枚との照合、側扁した菱形の体・網目模様・第一背鰭棘、背鰭と臀鰭の波による定位と移動、アマモ場での 5 状態、葉を押しのける連携、LOD 3 段。ビューアは `reference/amimehagi-viewer/`）
 - `docs/models/youjiuo/` ヨウジウオの調査・設計（体輪と骨板、筒状の吻、背鰭推進、アマモに沿う擬態と尾のかけ方、ピボット摂餌、草陰への逃避、LOD 3 段。ビューアは `reference/youjiuo-viewer/`、静止画は `node tools/models/youjiuo/render.mjs`、ゲーム内は `node tests/smoke/youjiuo.mjs`）
+- `docs/models/aramushiro/` アラムシロ（*Reticunassa festiva*）の調査・設計（写真 50 枚と文献、対数螺旋の殻と粒の格子・厚い外唇・滑層・前溝、半透明の足と触角・水管・吻・蓋、6 状態の行動、腐肉と匂いの流れ、這い跡と潜砂の盛り上がり、LOD 3 段。ビューアは `reference/aramushiro-viewer/`、静止画は `node tools/models/aramushiro/render.mjs`、ゲーム内は `node tests/smoke/aramushiro.mjs`）
+- `docs/models/ishigarei/` イシガレイ（*Platichthys bicoloratus*）若魚の調査・設計（写真 70 枚との照合、右眼側の左右非対称な頭部と三日月形の瞳孔、厚い唇の端位口、砂粒状の擬態模様、底に伏せる・潜砂・底すれすれの遊泳・摂餌・逃避の 5 状態、LOD 3 段。ビューアは `reference/ishigarei-viewer/`、静止画は `npm run render:ishigarei`、ゲーム内は `node tests/smoke/ishigarei.mjs`）
+- `docs/models/akaei/` アカエイの調査・設計（体盤・眼・噴水孔・腹側の口と鰓孔・尾棘、格子ボーンの波打ち遊泳、砂潜り・摂餌・逃避、LOD、ゲームへの統合）
 
 ## データ駆動
 生物は `public/data/species/*.json`、行動ツリーは `public/data/behaviors/*.json`、地図は `public/data/maps/`、潮位観測点は `public/data/tide/stations/` に置き、`npm run data:validate` で検証します。種の追加はデータと `src/assets/models/<種>/` のモデル追加だけで済み、固有ドライバが必要な場合のみ `src/creatures/drivers/index.ts` に登録します。

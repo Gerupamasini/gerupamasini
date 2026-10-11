@@ -25,6 +25,7 @@ import { hashInts } from '../core/Rng';
 import { instantiateModel, preloadModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
+import { AKAEI_DETAIL } from '../creatures/species/akaei/AkaeiDriver';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import type { SpeciesDef, ToolDef } from '../data/schemas';
@@ -391,6 +392,9 @@ export class App {
       this.creatures.setMeadow(this.world.amamo);
       this.creatures.setScent(this.world.carrion);
       await this.creatures.preload();
+      // the procedural species' shaders compile here too, and stay compiled while the flat lives (DriverEntry.keep)
+      ui.loading.value = { frac: 0.75, label: t('loading.shaders') };
+      await this.field?.compileKept(this.creatures.keptModels(), this.camera, this.world.scene);
       performance.mark('world:creatures');
       this.observation = new Observation(this.camera, this.canvas, this.creatures);
       this.observation.onBehavior = (speciesId, behaviorId) => { this.encyclopedia.onBehavior(speciesId, behaviorId, this.clock.nowGame()); };
@@ -503,7 +507,8 @@ export class App {
     this.applyPreset();
     this.creatures?.setQuality(preset);
     this.fieldCase?.setQuality(preset);
-    if (this.appliedFieldQuality !== this.settings.fieldQuality) {
+    const fieldChanged = this.appliedFieldQuality !== this.settings.fieldQuality;
+    if (fieldChanged) {
       this.appliedFieldQuality = this.settings.fieldQuality;
       if (this.net || this.shovel || this.binoculars) this.setTool(ui.tool.value, true);
     }
@@ -527,6 +532,9 @@ export class App {
     }
     this.applyHeroSetting();
     this.tank?.setQuality(QUALITY_PRESETS[this.settings.homeQuality]);
+    // the kept models' programs follow the field's variant (the shadows on or off change the shaders): compiled again
+    // after the light above has changed, when the field's quality did
+    if (fieldChanged && this.world && this.creatures) void this.field?.compileKept(this.creatures.keptModels(), this.camera, this.world.scene);
   }
 
   /** Each scene keeps its own simulation and geometry tiers; only the active scene sets the shared hero buffer. */
@@ -538,6 +546,8 @@ export class App {
     this.world?.terrain.setLite(field.water === 'lite');
     this.tank?.setLite(home.tankWater === 'lite');
     CONTACT_SHADOWS.enabled = QUALITY_PRESETS[this.activeQuality].contactShadows;
+    AKAEI_DETAIL.viewScale = field.viewScale;
+    AKAEI_DETAIL.allowLod0 = field.lod1Count > 0;
   }
 
   private applyHeroSetting(): void {

@@ -80,19 +80,28 @@ export class Spawner {
     const ci = h.coarseIndex(px, pz);
     const ci0 = ci % cn, cj0 = (ci - ci0) / cn;
     const r = Math.ceil(SPAWN_RADIUS / cs);
+    // the cells of the disc, nearest first: a species' cap then fills around the player, not from the north edge
+    // of the scan (the per-cell rolls stay deterministic; only who wins the cap changes)
+    const cells: { cell: number; cx: number; cz: number; d: number }[] = [];
     for (let cj = Math.max(0, cj0 - r); cj < Math.min(cn, cj0 + r + 1); cj++) {
       for (let ci1 = Math.max(0, ci0 - r); ci1 < Math.min(cn, ci0 + r + 1); ci1++) {
-        const cell = cj * cn + ci1;
         const [cx, cz] = h.coarseCenter(ci1, cj);
         const d = Math.hypot(cx - px, cz - pz);
         if (d > SPAWN_RADIUS || d < minDist) continue;
+        cells.push({ cell: cj * cn + ci1, cx, cz, d });
+      }
+    }
+    cells.sort((a, b) => a.d - b.d);
+    {
+      for (const { cell, cx, cz } of cells) {
         for (const sp of this.speciesList) {
           if (FIELD_SPECIES.has(sp.id) || this.hidden.has(sp.id)) continue;   // アサリ are laid by the clam field in their thousands, マガキ by the reef; other burrowers spawn here, sparsely
           if (occupied.has(`${sp.id}:${cell}`)) continue;
           for (let ri = 0; ri < sp.spawn.length; ri++) {
             const rule = sp.spawn[ri];
-            const maxPopulation = Math.max(1, Math.ceil(rule.maxPopulation * (sp.taxon.group === 'bird' ? 1 : scale)));
-            if ((counts.get(sp.id) ?? 0) >= maxPopulation) continue;
+            // (the cap follows the preset's share too, as the chance of a group does; the birds keep theirs)
+            const cap = Math.max(1, Math.ceil(rule.maxPopulation * (sp.taxon.group === 'bird' ? 1 : scale)));
+            if ((counts.get(sp.id) ?? 0) >= cap) continue;
             if (!this.ruleMatches(rule, cell, env)) continue;
             const seed = hashInts(cell, ri, env.day, sp.id.length * 131);
             const rng = new Rng(seed);
@@ -107,7 +116,7 @@ export class Spawner {
               const memberSeed = hashInts(seed, k);
               const id = `${sp.id}#${hashInts(memberSeed, 7).toString(16).padStart(8, '0')}`;
               if (this.removed.has(id)) continue;
-              if ((counts.get(sp.id) ?? 0) >= maxPopulation) break;
+              if ((counts.get(sp.id) ?? 0) >= cap) break;
               // position inside the cell matching the depth requirement (small pools: straight into the pool)
               let x = cx, z = cz, ok = false;
               if (rule.tags.includes('small_pool')) {
@@ -142,8 +151,10 @@ export class Spawner {
       const roll = hashInts(pit.id * 31 + 7, env.day, 977) % 1000;
       if (roll >= 330 * scale) continue;
       if (h.sample(pit.x, pit.z, env.gameMs).depth < 0.025) continue;
-      const pick = roll % 9;
-      const spId = pick < 3 ? 'acanthogobius_flavimanus' : pick < 5 ? 'exopalaemon_orientis' : pick < 7 ? 'gymnogobius_macrognathos' : 'favonigobius_gymnauchen';
+      const pick = roll % 10;
+      // (one slot in ten is a flounder juvenile left by the ebb, in spring and summer; a ヒメハゼ otherwise)
+      const flounder = pick === 9 && (env.season === 'spring' || env.season === 'summer');
+      const spId = pick < 3 ? 'acanthogobius_flavimanus' : pick < 5 ? 'exopalaemon_orientis' : pick < 7 ? 'gymnogobius_macrognathos' : flounder ? 'platichthys_bicoloratus' : 'favonigobius_gymnauchen';
       const sp = this.speciesList.find((q) => q.id === spId);
       // only animals that live on this flat at all, and that the debug chooser lets out
       if (!sp || this.hidden.has(sp.id) || !sp.spawn.some((r) => !r.maps || r.maps.includes(env.mapId))) continue;
@@ -151,7 +162,7 @@ export class Spawner {
       const seed = hashInts(pit.id, env.day, 991);
       const id = `${sp.id}#${hashInts(seed, 7).toString(16).padStart(8, '0')}`;
       if (this.removed.has(id)) continue;
-      out.push({ species: sp, ruleIndex: 0, cell: h.coarseIndex(pit.x, pit.z), seed, x: pit.x, z: pit.z, pitId: pit.id, lengthRange: pick < 3 ? [26, 40] : pick < 5 ? [26, 42] : [24, 36] });
+      out.push({ species: sp, ruleIndex: 0, cell: h.coarseIndex(pit.x, pit.z), seed, x: pit.x, z: pit.z, pitId: pit.id, lengthRange: pick < 3 ? [26, 40] : pick < 5 ? [26, 42] : flounder ? [22, 45] : [24, 36] });
       counts.set(sp.id, (counts.get(sp.id) ?? 0) + 1);
     }
     return out;

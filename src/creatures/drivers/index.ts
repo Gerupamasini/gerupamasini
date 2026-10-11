@@ -6,6 +6,7 @@ import { ShrimpDriver } from '../species/shrimp/ShrimpDriver';
 import { ISOSUJI } from '../species/shrimp/model/isosuji.js';
 import { PloverDriver } from '../species/plover/PloverDriver';
 import { AsariDriver } from '../asari/Asari.js';
+import { AkaeiDriver } from '../species/akaei/AkaeiDriver';
 import { FORMS } from '../asari/AsariModel.js';
 import { PagurusMinutusDriver } from '../yubinagahonyadokari/PagurusMinutusDriver';
 import { OysterDriver } from '../oyster/OysterDriver';
@@ -15,6 +16,7 @@ import { HakuDriver } from '../species/haku/HakuDriver';
 import { AmimehagiDriver } from '../species/amimehagi/AmimehagiDriver';
 import { YoujiuoDriver } from '../species/youjiuo/YoujiuoDriver';
 import { AramushiroDriver } from '../species/aramushiro/AramushiroDriver';
+import { IshigareiDriver } from '../species/ishigarei/IshigareiDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -27,6 +29,13 @@ export interface DriverEntry {
    * driver updated every frame, brain at the near rate) although it uses the placeholder tier.
    */
   nearDistance?: number;
+  /**
+   * A model of the species in every tier it is drawn in, built once per flat into `parent` and never drawn: its
+   * materials keep the species' shader programs alive (three drops a program with the last material that used it, so
+   * without this the programs would be compiled again, synchronously, whenever the species came back into view) and
+   * the loading screen compiles them ahead (CreatureSystem.keptModels, FieldRenderer.compileKept).
+   */
+  keep?: (parent: Object3D) => { dispose(): void };
 }
 
 /** The only place that needs a code change when a species gets a custom driver. */
@@ -51,5 +60,9 @@ export const DRIVERS: Record<string, DriverEntry> = {
   // ヨウジウオ: the pipefish of the eelgrass (its own tiers in the placeholder view; near within 6 m)
   youjiuo: { create: () => new YoujiuoDriver(), placeholder: () => YoujiuoDriver.makeModel(), preview: (seed) => YoujiuoDriver.makePreview(seed), nearDistance: 6 },
   // アラムシロ: the carrion snail of the sand (its own tiers in the placeholder view; near within 3 m)
-  aramushiro: { create: () => new AramushiroDriver(), placeholder: () => AramushiroDriver.makeModel(), preview: (seed) => AramushiroDriver.makePreview(seed), nearDistance: 3 },
+  aramushiro: { create: () => new AramushiroDriver(), placeholder: () => AramushiroDriver.makeModel(), preview: (seed) => AramushiroDriver.makePreview(seed), nearDistance: 3, keep: (parent) => AramushiroDriver.keep(parent) },
+  // イシガレイ: the juvenile flounder of the sandy flats (its own tiers in the placeholder view; near within 3 m)
+  ishigarei: { create: () => new IshigareiDriver(), placeholder: () => IshigareiDriver.makeModel(), preview: (seed) => IshigareiDriver.makePreview(seed), nearDistance: 3, keep: (parent) => IshigareiDriver.keep(parent) },
+  // アカエイ: the ray of the shallow sand (its own tiers in the placeholder view; its wave runs every frame within 10 m)
+  akaei: { create: () => new AkaeiDriver(), placeholder: () => AkaeiDriver.makeModel(), preview: (seed) => AkaeiDriver.makePreview(seed), nearDistance: 10, keep: (parent) => AkaeiDriver.keep(parent) },
 };
