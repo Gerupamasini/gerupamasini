@@ -364,7 +364,7 @@ export function createSquidBehavior(opts: SquidOptions) {
     arms(0.25, 0.3, 0.0, 0.7);
     an.headPitch = -0.08;
     // the hovering dress (photographs 17, 34): yellow-orange ground, red-brown dots, glassy
-    chroma(0.95, 0.4, 0.2, 0.3, 0.8, 0.45, 1.2);
+    chroma(0.95, 0.4, 0.12, 0.3, 0.8, 0.45, 1.2);
     st.vel.multiplyScalar(Math.exp(-dt * 1.5));
     // a slow drift and a lazy turn
     st.vel.x += Math.sin(st.t * 0.37 + pers.wave) * 0.02 * ML * dt;
@@ -406,7 +406,7 @@ export function createSquidBehavior(opts: SquidOptions) {
       if (rng() < dt * 0.35 && an.jetT < 0) { jet(0.06, 0.28); st.vel.addScaledVector(fwd, 0.25 * ML); }
       arms(0.15, 0.2, 0.0, 0.5);
       an.headPitch = -0.04;
-      chroma(0.85, 0.5, 0.3, 0.35, 0.8, 0.3, 1.5);
+      chroma(0.85, 0.5, 0.18, 0.35, 0.8, 0.3, 1.5);
       if (dist < 0.8 * ML) phase('arrive', 1.5);
     } else if (st.phase === 'arrive') {
       st.vel.multiplyScalar(Math.exp(-dt * 2.5));
@@ -552,7 +552,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
       case 'search':
         finSet(0.32, 2.5, 0.18, 0.1);
         arms(0.4, 0.2, 0, 0.6);
-        chroma(0.9, 0.45, 0.2, 0.35, 0.85, 0.45, 1.5);
+        chroma(0.9, 0.45, 0.14, 0.35, 0.85, 0.45, 1.5);
         st.vel.multiplyScalar(Math.exp(-dt * 2));
         st.turn = damp(st.turn, 0.6 * Math.sin(st.t * 1.3), 2, dt);
         st.heading = wrap(st.heading + st.turn * dt);
