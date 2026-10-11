@@ -8,6 +8,7 @@ export function usePanelViewport(app: App, panel: RefObject<HTMLElement>, camera
   useEffect(() => {
     if (!app.input.touchDevice || !panel.current) return;
     const homeView = frameTank ? app.tank.captureView() : null;
+    const homeTankId = app.activeTankId.value;
     const update = () => {
       const r = panel.current!.getBoundingClientRect(), w = window.innerWidth, h = window.innerHeight;
       const side = w > h && h <= 600;
@@ -20,6 +21,6 @@ export function usePanelViewport(app: App, panel: RefObject<HTMLElement>, camera
     observer.observe(panel.current);
     window.addEventListener('resize', update);
     update();
-    return () => { observer.disconnect(); window.removeEventListener('resize', update); camera.clearViewOffset(); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); if (homeView) app.tank.restoreView(homeView); };
+    return () => { observer.disconnect(); window.removeEventListener('resize', update); camera.clearViewOffset(); camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); if (homeView) { if (homeTankId === app.activeTankId.value) app.tank.restoreView(homeView); else app.tank.resetView(); } };
   }, [app, panel, camera, top, frameTank]);
 }

@@ -205,6 +205,9 @@ export class FPSController {
   private speedNowLast = 0;
 
   /** the ground the feet stand on: the terrain, or a stone on it */
+  /** ground the map forbids beyond its bounds (e.g. a mangrove thicket's interior) */
+  blocked: ((x: number, z: number) => boolean) | null = null;
+
   private groundAt(x: number, z: number): number {
     const terrain = this.terrain.heightAt(x, z) + (this.groundBoost ? this.groundBoost(x, z) : 0);
     const maxY = (this.airborne ? this.jumpBaseY : this.position.y) + 0.45;
@@ -215,6 +218,7 @@ export class FPSController {
     const b = this.map.bounds.walkable;
     if (x < b[0][0] || x > b[1][0] || z < b[0][1] || z > b[1][1]) return false;
     for (const ne of this.map.bounds.noEntry) if (x >= ne[0][0] && x <= ne[1][0] && z >= ne[0][1] && z <= ne[1][1]) return false;
+    if (this.blocked?.(x, z)) return false;
     const h = this.groundAt(x, z);
     if ((this.supportHeight ? this.habitat.waterAt(x, z) - h : this.habitat.depthAt(x, z)) > this.wadeDepth) return false;
     const feetY = this.airborne ? this.jumpBaseY : this.position.y;

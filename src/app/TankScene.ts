@@ -21,7 +21,7 @@ import type { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 import type { HeroLighting } from '../render/HeroPipeline';
 import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
 import { Group } from 'three';
-import { AquariumEquipment } from '../aquarium';
+import { AquariumEquipment, STANDARD_TANK, type TankDimensions } from '../aquarium';
 import { ToolShelf, type ShelfTool } from './ToolShelf';
 import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 
@@ -80,10 +80,15 @@ uniform sampler2D uSurf, uCaus;
 uniform vec3 uLampPosition, uLampAxis;
 uniform vec3 uLampCol;      // the light bar's light
 uniform float uCausScale;   // caustics texture -> fraction of the bar's light
-const float W_LEVEL = ${f(W_LEVEL)}, W_IOR = ${f(W_IOR)}, W_LAMP_Y = ${f(W_LAMP_Y)}, W_LAMP_HALF = ${f(W_LAMP_HALF)};
-const vec2 W_HALF = vec2(${f(TX)}, ${f(TZ)});
+uniform float uWaterLevel, uLampHalf;
+uniform vec2 uTankHalf;
+uniform vec3 uTankOrigin;
+#define W_LEVEL uWaterLevel
+#define W_HALF uTankHalf
+#define W_LAMP_HALF uLampHalf
+#define TANK_ORIGIN uTankOrigin
+const float W_IOR = ${f(W_IOR)};
 const vec3 W_ABSORB = vec3(${W_ABSORB.map(f).join(', ')});
-const vec3 TANK_ORIGIN = vec3(0.0, ${f(TANK_OFFSET_Y)}, 0.0);
 // water height above W_LEVEL and its slope at p
 vec3 wave(vec2 p) { return textureLod(uSurf, p / (2.0 * W_HALF) + 0.5, 0.0).xyz; }
 vec3 normalOf(vec3 w) { return normalize(vec3(-w.y, 1.0, -w.z)); }
@@ -161,10 +166,10 @@ void main() {
 function lightByCaustics(m: MeshStandardMaterial, U: Record<string, IUniform>, key: string, grain: boolean, chain?: MeshStandardMaterial['onBeforeCompile']): void {
   m.onBeforeCompile = (shader, renderer) => {
     chain?.(shader, renderer);
-    Object.assign(shader.uniforms, { uSurf: U.uSurf, uCaus: U.uCaus, uLampCol: U.uLampCol, uLampPosition: U.uLampPosition, uLampAxis: U.uLampAxis, uCausScale: U.uCausScale });
+    Object.assign(shader.uniforms, U);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPosT;')
-      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\nvWorldPosT = (modelMatrix * vec4(transformed, 1.0)).xyz - vec3(0.0, ${f(TANK_OFFSET_Y)}, 0.0);`);
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPosT;\nuniform vec3 uTankOrigin;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPosT = (modelMatrix * vec4(transformed, 1.0)).xyz - uTankOrigin;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\nvarying vec3 vWorldPosT;\n${COMMON}
 float hashT(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -208,7 +213,7 @@ export class TankScene {
   readonly occupants: Occupant[] = [];
   /** top of the substrate: the animals, the decorations and the caustics all sit on it */
   private sandTop = SAND_H;
-  private readonly floor: Floor = { heightAt: () => this.sandTop, waterAt: () => WATER_H };
+  private readonly floor: Floor = { heightAt: () => this.sandTop, waterAt: () => this.dimensions.waterHeight };
   private readonly hitBox: Mesh;
   private readonly raycaster = new Raycaster();
   private readonly waterPlane = new Plane(new Vector3(0, 1, 0), -W_LEVEL - TANK_OFFSET_Y);
@@ -251,7 +256,11 @@ export class TankScene {
   private gustAcc = 0;
   waves_ = 0.8;
   turb = 0.5;
-  readonly equipment = new AquariumEquipment({ width: TANK_W, depth: TANK_D, height: TANK_H, glass: 0.006, waterHeight: WATER_H });
+  dimensions: TankDimensions = { ...STANDARD_TANK };
+  equipment = new AquariumEquipment(this.dimensions);
+  private readonly waterSides: Mesh[] = [];
+  private readonly waterSurfaces: Mesh[] = [];
+  private glassMat!: ShaderMaterial;
   private readonly lampLight: SpotLight;
   onBehavior: ((e: BehaviorEvent, record: IndividualRecord) => void) | null = null;
   heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
@@ -311,6 +320,7 @@ export class TankScene {
     zero.needsUpdate = true;
     this.flatWater = zero;
     this.U = {
+      uTankHalf: { value: new Vector2(TX, TZ) }, uWaterLevel: { value: W_LEVEL }, uLampHalf: { value: W_LAMP_HALF }, uTankOrigin: { value: this.aquariumRoot.position },
       uLampPosition: { value: new Vector3(0, W_LAMP_Y, 0) }, uLampAxis: { value: new Vector3(1, 0, 0) },
       uJets: { value: this.jetU }, uJetValues: { value: this.jetValues },
       uTime: { value: 0 }, uW: { value: this.waveU }, uA: { value: this.ampU }, uSim: { value: zero }, uSurf: { value: zero }, uCaus: { value: zero },
@@ -326,6 +336,7 @@ export class TankScene {
         // the ripple simulation: a height field (mm); each cell moves toward the average of its neighbours and overshoots
         // (the wave equation); ClampToEdge sampling makes the glass reflect the ripples; splashes add a bump
         const sim = gpu.addVariable('heightmap', /* glsl */ `
+          uniform vec2 uTankHalf;
           uniform vec4 uDrops[8];   // splashes: x, z, radius (m), height (mm)
           void main() {
             vec2 cell = 1.0 / resolution.xy, uv = gl_FragCoord.xy * cell;
@@ -333,26 +344,28 @@ export class TankScene {
             float nb = texture2D(heightmap, uv + vec2(0.0, cell.y)).r + texture2D(heightmap, uv - vec2(0.0, cell.y)).r
                      + texture2D(heightmap, uv + vec2(cell.x, 0.0)).r + texture2D(heightmap, uv - vec2(cell.x, 0.0)).r;
             float h = (nb * 0.5 - c.g) * 0.992;
-            vec2 p = (uv - 0.5) * vec2(${f(2 * TX)}, ${f(2 * TZ)});
+            vec2 p = (uv - 0.5) * (2.0 * uTankHalf);
             for (int i = 0; i < 8; i++) { vec2 q = (p - uDrops[i].xy) / uDrops[i].z; h += uDrops[i].w * exp(-dot(q, q)); }
             gl_FragColor = vec4(h, c.r, 0.0, 1.0);
           }`, gpu.createTexture());
         gpu.setVariableDependencies(sim, [sim]);
         sim.minFilter = sim.magFilter = LinearFilter;
         sim.material.uniforms.uDrops = { value: this.dropU };
+        sim.material.uniforms.uTankHalf = U.uTankHalf;
         const err = gpu.init();
         if (err) throw new Error(err);
         // once a frame: the waves plus the ripples, with their slopes, into one texture every water shader reads
         const surfRT = gpu.createRenderTarget(0, 0, ClampToEdgeWrapping, ClampToEdgeWrapping, LinearFilter, LinearFilter);
         const surfMat = gpu.createShaderMaterial(/* glsl */ `
           uniform float uTime;
+          uniform vec2 uTankHalf;
           uniform vec4 uW[${NW}];     // per wave: direction * wavenumber, angular speed, phase
           uniform float uA[${NW}];    // per wave: height now (m)
           uniform sampler2D uSim;
           uniform vec4 uJets[4];
           uniform vec2 uJetValues[4];
           void main() {
-            vec2 uv = gl_FragCoord.xy / resolution.xy, e = 1.0 / resolution.xy, p = (uv - 0.5) * vec2(${f(2 * TX)}, ${f(2 * TZ)});
+            vec2 uv = gl_FragCoord.xy / resolution.xy, e = 1.0 / resolution.xy, p = (uv - 0.5) * (2.0 * uTankHalf);
             vec3 w = vec3(0.0);
             for (int i = 0; i < ${NW}; i++) {   // each wave's crests are bent by a slower wave running along them
               vec2 kd = uW[i].xy, side = vec2(-kd.y, kd.x) / length(kd);
@@ -372,8 +385,8 @@ export class TankScene {
             float h = texture2D(uSim, uv).r;   // + the ripples (mm)
             float hx = texture2D(uSim, uv + vec2(e.x, 0.0)).r - texture2D(uSim, uv - vec2(e.x, 0.0)).r;
             float hz = texture2D(uSim, uv + vec2(0.0, e.y)).r - texture2D(uSim, uv - vec2(0.0, e.y)).r;
-            gl_FragColor = vec4(w + 0.001 * vec3(h, hx * resolution.x / ${f(4 * TX)}, hz * resolution.y / ${f(4 * TZ)}), 1.0);
-          }`, { uTime: U.uTime, uW: U.uW, uA: U.uA, uSim: U.uSim, uJets: U.uJets, uJetValues: U.uJetValues });
+            gl_FragColor = vec4(w + 0.001 * vec3(h, hx * resolution.x / (4.0 * uTankHalf.x), hz * resolution.y / (4.0 * uTankHalf.y)), 1.0);
+          }`, { uTankHalf: U.uTankHalf, uTime: U.uTime, uW: U.uW, uA: U.uA, uSim: U.uSim, uJets: U.uJets, uJetValues: U.uJetValues });
         // caustics: every vertex of a grid on the surface sends the bar's light through the water to the floor, and the
         // grid is drawn where the rays land; a surface cell landing on a smaller patch of floor concentrates its light
         // (the area ratio from screen-space derivatives), and overlapping patches add up
@@ -398,10 +411,11 @@ export class TankScene {
               gl_Position = vec4(F.x / W_HALF.x, F.z / W_HALF.y, 0.0, 1.0);
             }`,
           fragmentShader: /* glsl */ `
+            uniform vec2 uTankHalf;
             varying vec2 vSurf; varying vec3 vI;
             void main() {
               vec2 a = dFdx(vSurf), b = dFdy(vSurf);
-              gl_FragColor = vec4(vI * min(abs(a.x * b.y - a.y * b.x) / ${((4 * TX * TZ) / (CAUS[0] * CAUS[1])).toExponential(6)}, 40.0) / ${f(halfFloat ? 1 : 4)}, 1.0);
+              gl_FragColor = vec4(vI * min(abs(a.x * b.y - a.y * b.x) / (4.0 * uTankHalf.x * uTankHalf.y / ${f(CAUS[0] * CAUS[1])}), 40.0) / ${f(halfFloat ? 1 : 4)}, 1.0);
             }`,
         }));
         causMesh.frustumCulled = false;
@@ -485,6 +499,7 @@ export class TankScene {
     surfAdd.renderOrder = 5;
     for (const m of [sidesMul, sidesAdd, surfMul, surfAdd]) m.frustumCulled = false;
     this.aquariumRoot.add(sidesMul, sidesAdd, surfMul, surfAdd);
+    this.waterSides.push(sidesMul, sidesAdd); this.waterSurfaces.push(surfMul, surfAdd);
 
     // glass panels: only what the panes reflect of the dark room (Fresnel, premultiplied), so the water and the animals
     // show through untinted; edges and an invisible hit box for picking
@@ -500,6 +515,7 @@ export class TankScene {
           ${OUT}
         }`,
     });
+    this.glassMat = glassMat;
     // Reuse the host's optical glass shader; standalone tanks use the shared physical glass.
     this.equipment.onTankChanged = () => this.equipment.tank.traverse((o) => { if (o instanceof Mesh && o.material === this.equipment.materials.glass) o.material = glassMat; });
     this.equipment.onTankChanged();
@@ -510,16 +526,57 @@ export class TankScene {
     this.frameTank();
   }
 
+  /** Resize only the container and water. Animals and decorations keep their physical sizes. */
+  setDimensions(dimensions: TankDimensions): void {
+    if (this.dimensions.width === dimensions.width && this.dimensions.height === dimensions.height) return;
+    this.clearOccupants(); this.dimensions = { ...dimensions };
+    this.equipment.dispose(); this.equipment = new AquariumEquipment(this.dimensions);
+    this.aquariumRoot.add(this.equipment);
+    this.equipment.onRipple = (x, z, strength) => this.addRipple(x, z, strength, 0.009);
+    this.equipment.onTankChanged = () => this.equipment.tank.traverse(o => { if (o instanceof Mesh && o.material === this.equipment.materials.glass) o.material = this.glassMat; });
+    this.equipment.onTankChanged();
+    const { width: w, depth: d, height: h, waterHeight } = dimensions;
+    this.U.uTankHalf.value.set(w / 2, d / 2); this.U.uWaterLevel.value = waterHeight; this.U.uLampHalf.value = w / 2 - 0.02;
+    this.waterPlane.constant = -waterHeight - TANK_OFFSET_Y;
+    this.sandMesh.geometry.dispose(); this.sandMesh.geometry = new BoxGeometry(w - 0.002, SAND_H, d - 0.002);
+    this.bottomMesh.geometry.dispose(); this.bottomMesh.geometry = new PlaneGeometry(w, d);
+    this.hitBox.geometry.dispose(); this.hitBox.geometry = new BoxGeometry(w, h, d); this.hitBox.position.y = h / 2;
+    this.waterSides[0].geometry.dispose(); this.waterSurfaces[0].geometry.dispose();
+    const sides = new BoxGeometry(w - 0.004, h - 0.01, d - 0.004).translate(0, (h - 0.01) / 2, 0);
+    const surface = new PlaneGeometry(w - 0.004, d - 0.004, 96, 48).rotateX(-Math.PI / 2);
+    this.waterSides.forEach(m => m.geometry = sides); this.waterSurfaces.forEach(m => m.geometry = surface);
+    for (const m of this.causScene.children) if (m instanceof Mesh) { m.geometry.dispose(); m.geometry = new PlaneGeometry(w, d, SIM[0], SIM[1]).rotateX(-Math.PI / 2); }
+    this.drops.length = 0; this.simAcc = 0; this.waterAcc = 0;
+  }
+
+  setRoomPosition(position: [number, number]): void {
+    this.aquariumRoot.position.set(position[0], TANK_OFFSET_Y, position[1]);
+    this.updateEquipmentLighting();
+  }
+  setPresent(on: boolean): void { this.aquariumRoot.visible = on; this.lampLight.visible = on; }
+
+  frameRoom(): void {
+    this.view = 'tank'; this.camT = 1;
+    const hfov = 2 * Math.atan(Math.tan(this.camera.fov * Math.PI / 360) * this.camera.aspect);
+    const distance = Math.max(4.3, 5.7 / (0.85 * 2 * Math.tan(hfov / 2)));
+    this.camera.far = 50; this.camera.updateProjectionMatrix();
+    if (this.controls) this.controls.maxDistance = 30;
+    this.camera.position.set(0, 2.3, distance); this.camCur.t.set(0, 0.6, 0.25);
+    this.camera.lookAt(this.camCur.t);
+    if (this.controls) { this.controls.target.copy(this.camCur.t); this.controls.update(); }
+  }
+
   /** Default framing: the tank fills roughly two thirds of the width. */
   frameTank(fitHeight = false): void {
+    if (this.controls) this.controls.maxDistance = Math.max(3.2, this.dimensions.width * 7);
     const hfov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
-    const widthDistance = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
-    const heightDistance = fitHeight ? (TANK_H + 0.16) / (0.8 * 2 * Math.tan(this.camera.fov * Math.PI / 360)) : 0;
+    const widthDistance = (this.dimensions.width / 0.66) / (2 * Math.tan(hfov / 2));
+    const heightDistance = fitHeight ? (this.dimensions.height + 0.16) / (0.8 * 2 * Math.tan(this.camera.fov * Math.PI / 360)) : 0;
     const dist = Math.max(widthDistance, heightDistance);
     if (fitHeight) { this.view = 'tank'; this.camT = 1; }
-    this.camera.position.set(dist * 0.35, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95);
-    this.camera.lookAt(0, TANK_OFFSET_Y + 0.12, 0);
-    if (this.controls) { this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0); this.controls.update(); }
+    this.camera.position.set(dist * 0.35 + this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95 + this.aquariumRoot.position.z);
+    this.camera.lookAt(this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.12, this.aquariumRoot.position.z);
+    if (this.controls) { this.controls.target.set(this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.12, this.aquariumRoot.position.z); this.controls.update(); }
   }
 
   captureView() {
@@ -537,7 +594,7 @@ export class TankScene {
     if (!this.controls) {
       this.controls = new OrbitControls(this.camera, this.canvas);
       this.controls.enableDamping = true;
-      this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0);
+      this.controls.target.set(this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.12, this.aquariumRoot.position.z);
       // right up to the glass (the camera's near plane is 3 mm) and back to the far wall
       this.controls.minDistance = 0.012;
       this.controls.maxDistance = 3.2;
@@ -633,7 +690,7 @@ export class TankScene {
     const r = ITEM_RADIUS[type];
     let best: [number, number] = [0, 0], bestD = -1;
     for (let k = 0; k < 24; k++) {
-      const x = (Math.random() * 2 - 1) * (TX - r - 0.02), z = (Math.random() * 2 - 1) * (TZ - r - 0.02);
+      const x = (Math.random() * 2 - 1) * ((this.dimensions.width / 2) - r - 0.02), z = (Math.random() * 2 - 1) * ((this.dimensions.depth / 2) - r - 0.02);
       let d = 1;
       for (const o of this.layout.items) d = Math.min(d, Math.hypot(o.x - x, o.z - z) - ITEM_RADIUS[o.type] - r);
       if (d > bestD) { bestD = d; best = [x, z]; }
@@ -693,8 +750,9 @@ export class TankScene {
     const hit = new Vector3();
     if (!this.raycaster.ray.intersectPlane(this.floorPlane, hit)) return;
     const r = ITEM_RADIUS[it.type];
-    it.x = Math.max(-TX + r, Math.min(TX - r, hit.x));
-    it.z = Math.max(-TZ + r, Math.min(TZ - r, hit.z));
+    hit.sub(this.aquariumRoot.position);
+    it.x = Math.max(-(this.dimensions.width / 2) + r, Math.min((this.dimensions.width / 2) - r, hit.x));
+    it.z = Math.max(-(this.dimensions.depth / 2) + r, Math.min((this.dimensions.depth / 2) - r, hit.z));
     obj.position.set(it.x, 0, it.z);
   }
 
@@ -714,7 +772,7 @@ export class TankScene {
 
   /** A splash on the surface at (x, z): a ripple spreads from it. */
   addRipple(x: number, z: number, heightMm = 3, radius = 0.012): void {
-    if (Math.abs(x) > TX || Math.abs(z) > TZ) return;
+    if (Math.abs(x) > (this.dimensions.width / 2) || Math.abs(z) > (this.dimensions.depth / 2)) return;
     this.drops.push([x, z, radius, heightMm]);
   }
 
@@ -723,7 +781,8 @@ export class TankScene {
     this.raycaster.setFromCamera(new Vector2(ndcX, ndcY), this.camera);
     const hit = new Vector3();
     if (!this.raycaster.ray.intersectPlane(this.waterPlane, hit)) return false;
-    if (Math.abs(hit.x) > TX || Math.abs(hit.z) > TZ) return false;
+    hit.sub(this.aquariumRoot.position);
+    if (Math.abs(hit.x) > (this.dimensions.width / 2) || Math.abs(hit.z) > (this.dimensions.depth / 2)) return false;
     this.addRipple(hit.x, hit.z, 4, 0.014);
     return true;
   }
@@ -793,7 +852,7 @@ export class TankScene {
       ph.root.userData.startOnSurface = true;
       root = ph.root;
     } else return;
-    if (generation !== this.occupantGeneration || this.dropped.has(record.id) || this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); root.removeFromParent(); return; }
+    if (generation !== this.occupantGeneration || this.dropped.has(record.id) || this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); this.disposeLitMaterials(root); root.removeFromParent(); return; }
     const driver = entry.create();
     const unsub = driver.onEvent((e) => this.onBehavior?.(e, record));
     this.aquariumRoot.add(root);
@@ -809,6 +868,7 @@ export class TankScene {
   }
 
   /** Model materials are shared between instances, so the tank's copies get their own, lit by the caustics. */
+  private readonly litMaterials = new WeakSet<Material>();
   private lightMeshesByCaustics(meshes: Mesh[]): void {
     for (const mesh of meshes) {
       const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[];
@@ -819,10 +879,17 @@ export class TankScene {
         // keep a model's own shader injection (e.g. the shrimp cuticle) and add the caustics after it
         const prev = m.onBeforeCompile, prevKey = Object.prototype.hasOwnProperty.call(m, 'customProgramCacheKey') ? m.customProgramCacheKey() : c.type;
         lightByCaustics(c, this.U, `tank-${prevKey}`, false, prev);
+        this.litMaterials.add(c);
         return c;
       });
       mesh.material = Array.isArray(mesh.material) ? lit : lit[0];
     }
+  }
+
+  private disposeLitMaterials(root: Object3D): void {
+    const materials = new Set<Material>();
+    root.traverse(o => { if (o instanceof Mesh) for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (this.litMaterials.has(m)) materials.add(m); });
+    materials.forEach(m => { m.dispose(); this.litMaterials.delete(m); });
   }
 
   removeOccupant(id: string): void {
@@ -832,6 +899,7 @@ export class TankScene {
     if (i < 0) return;
     const o = this.occupants[i];
     o.hero?.dispose();
+    this.disposeLitMaterials(o.root);
     o.unsub();
     o.driver.dispose();
     o.root.removeFromParent();
@@ -907,7 +975,7 @@ export class TankScene {
     });
     // now and then a tiny gust somewhere
     for (this.gustAcc += dt * 0.4 * this.turb; this.gustAcc >= 1; this.gustAcc -= 1)
-      this.addRipple((Math.random() * 2 - 1) * TX * 0.9, (Math.random() * 2 - 1) * TZ * 0.9, (Math.random() < 0.5 ? -1 : 1) * 0.3, 0.02 + 0.03 * Math.random());
+      this.addRipple((Math.random() * 2 - 1) * (this.dimensions.width / 2) * 0.9, (Math.random() * 2 - 1) * (this.dimensions.depth / 2) * 0.9, (Math.random() < 0.5 ? -1 : 1) * 0.3, 0.02 + 0.03 * Math.random());
     if (!this.gpu || !this.sim || !this.surfMat || !this.surfRT || !this.causRT) { this.drops.length = 0; return; }
     // Cap catch-up work as well as the scene's water update frequency.
     this.simAcc = Math.min(this.simAcc + dt, 0.1);
@@ -938,8 +1006,8 @@ export class TankScene {
       lamp.localToWorld(this.U.uLampPosition.value.set(0, -0.01, 0));
       this.aquariumRoot.worldToLocal(this.U.uLampPosition.value);
       this.U.uLampAxis.value.set(1, 0, 0).transformDirection(lamp.matrixWorld);
-      this.lampLight.position.copy(this.U.uLampPosition.value).add(new Vector3(0, TANK_OFFSET_Y + 0.035, 0));
-      this.lampLight.target.position.set(this.U.uLampPosition.value.x, TANK_OFFSET_Y, this.U.uLampPosition.value.z);
+      this.lampLight.position.copy(this.U.uLampPosition.value).add(this.aquariumRoot.position).add(new Vector3(0, 0.035, 0));
+      this.lampLight.target.position.copy(this.aquariumRoot.position).add(new Vector3(this.U.uLampPosition.value.x, 0, this.U.uLampPosition.value.z));
     }
     this.lampLight.intensity = 1.8 * level;
     this.lighting.sunIntensity = 2.4 * level;
@@ -948,7 +1016,8 @@ export class TankScene {
   /** Look at the service side without changing device placement. */
   focusEquipmentRear(): void {
     this.view = 'tank';
-    this.startCamera(new Vector3(-0.85, TANK_OFFSET_Y + 0.32, -1.05), new Vector3(0, TANK_OFFSET_Y - 0.08, 0));
+    const origin = this.aquariumRoot.position;
+    this.startCamera(new Vector3(origin.x - this.dimensions.width * 1.1, TANK_OFFSET_Y + 0.32, origin.z - 1.05), new Vector3(origin.x, TANK_OFFSET_Y - 0.08, origin.z));
   }
 
   /**
@@ -1008,16 +1077,16 @@ export class TankScene {
     this.view = 'tank';
     this.camT = 1;
     this.frameTank();
-    this.camCur.t.set(0, TANK_OFFSET_Y + 0.12, 0);
-    if (this.controls) { this.controls.enabled = this.viewInputEnabled; this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0); this.controls.update(); }
+    this.camCur.t.set(this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.12, this.aquariumRoot.position.z);
+    if (this.controls) { this.controls.enabled = this.viewInputEnabled; this.controls.target.set(this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.12, this.aquariumRoot.position.z); this.controls.update(); }
   }
 
   focusTank(): void {
     if (this.view === 'tank') return;
     this.view = 'tank';
     const hfov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
-    const dist = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
-    this.startCamera(new Vector3(dist * 0.35, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95), new Vector3(0, TANK_OFFSET_Y + 0.12, 0));
+    const dist = (this.dimensions.width / 0.66) / (2 * Math.tan(hfov / 2));
+    this.startCamera(new Vector3(dist * 0.35, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95).add(new Vector3(this.aquariumRoot.position.x, 0, this.aquariumRoot.position.z)), this.aquariumRoot.position.clone().add(new Vector3(0, 0.12, 0)));
   }
 
   private startCamera(p: Vector3, t: Vector3): void {
@@ -1046,6 +1115,7 @@ export class TankScene {
 
   /** Everything stands still (the edit screen): only the camera moves. */
   updateFrozen(): void {
+    if (!this.aquariumRoot.visible) return;
     this.equipment.updateFrozen(this.camera);
     this.updateEquipmentLighting();
     if (this.camT < 1) this.stepCamera(1 / 60);
@@ -1053,6 +1123,7 @@ export class TankScene {
   }
 
   update(dt: number, simScale: number): void {
+    if (!this.aquariumRoot.visible) { this.controls?.update(); return; }
     if (this.camT < 1) this.stepCamera(dt);
     else if (this.view === 'shelf') this.camera.lookAt(this.camCur.t);
     else this.controls?.update();
@@ -1067,12 +1138,12 @@ export class TankScene {
         const S = o.ind.length_mm / 1000;
         if (r < 0.55) d.setIntent({ id: Date.now(), kind: 'rest', urgency: 0, seconds: 6 + o.ind.rng.next() * 20 });
         else if (r < 0.9) {
-          const tx = (o.ind.rng.next() - 0.5) * (TANK_W - 4 * S), tz = (o.ind.rng.next() - 0.5) * (TANK_D - 3 * S);
+          const tx = (o.ind.rng.next() - 0.5) * (this.dimensions.width - 4 * S), tz = (o.ind.rng.next() - 0.5) * (this.dimensions.depth - 3 * S);
           d.setIntent({ id: Date.now(), kind: 'wander', urgency: 0.3, seconds: 8, target: new Vector3(tx, 0, tz) });
         } else d.setIntent({ id: Date.now(), kind: 'special', urgency: 0, seconds: 3, param: 'yawn' });
       }
       const S = o.ind.length_mm / 1000;
-      const hx = TANK_W / 2 - 0.01 - S * 0.55, hz = TANK_D / 2 - 0.01 - S * 0.55;
+      const hx = Math.max(0.015, this.dimensions.width / 2 - 0.01 - S * 0.55), hz = Math.max(0.015, this.dimensions.depth / 2 - 0.01 - S * 0.55);
       d.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now(), bounds: { minX: -hx, maxX: hx, minZ: -hz, maxZ: hz }, canBurrow: this.sandTop > 0 });
       if (o.hero) o.hero.update(this.camera, d.openings ?? { mouth: 0, gill: 0 });
       o.ind.pos.x = Math.max(-hx, Math.min(hx, o.ind.pos.x));

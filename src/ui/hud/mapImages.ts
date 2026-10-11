@@ -1,7 +1,10 @@
 import type { World } from '../../app/World';
+import { reedMapColour } from '../../world/ReedBed';
 
-export const SUB_COLORS = ['#9b9b97', '#777772', '#4f4f4a', '#8a8074', '#3e4542', '#6e6c68'];
-const SHORE = [0x6b, 0x84, 0x45], BEACH = [0xd2, 0xcf, 0xc5], ALGAE = [0x7a, 0x84, 0x4e];
+// the map is drawn to be read at a glance, brighter than the flat itself (an aerial photo on a fine day): pale sand,
+// olive-brown mud, the levee's stone, the reeds in their season's colour
+export const SUB_COLORS = ['#d6c59c', '#b49f78', '#857558', '#cbbd9c', '#6e6250', '#b3ab9a'];
+const SHORE = [0x6b, 0x84, 0x45], BEACH = [0xe4, 0xd6, 0xb0], ALGAE = [0x7d, 0x8a, 0x4e];
 
 /** Substrate colours shaded by height, one pixel per terrain cell. */
 export function makeBaseImage(world: World): HTMLCanvasElement {
@@ -23,6 +26,17 @@ export function makeBaseImage(world: World): HTMLCanvasElement {
     img.data[k * 4] = r * shade; img.data[k * 4 + 1] = g * shade; img.data[k * 4 + 2] = b * shade; img.data[k * 4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
+  // the reed fringe: a soft dab of the season's colour round each clump
+  const reeds = world.reeds;
+  if (reeds) {
+    const [r, g, b] = reedMapColour(world.season);
+    ctx.fillStyle = `rgba(${r | 0},${g | 0},${b | 0},0.85)`;
+    for (const [x, z] of reeds.positions()) {
+      ctx.beginPath();
+      ctx.arc((x + t.half) / t.cell, (z + t.half) / t.cell, 1.1 / t.cell, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   return base;
 }
 
@@ -50,9 +64,9 @@ export class WaterLayer {
       const o = k * 4;
       if (depth > 0) {
         const a = Math.min(0.9, 0.3 + depth * 0.7);
-        // shallow water is pale turquoise, the creeks and the bay deepen to teal
-        const u = Math.min(1, depth / 0.8);
-        if (pooled) { d[o] = 92; d[o + 1] = 178; d[o + 2] = 186; } else { d[o] = 96 - 50 * u; d[o + 1] = 196 - 70 * u; d[o + 2] = 205 - 60 * u; }
+        // shallow water is pale turquoise, the creeks deepen to teal and the open bay to a deep blue
+        const u = Math.min(1, depth / 0.8), v = Math.min(1, Math.max(0, (depth - 0.8) / 1.4));
+        if (pooled) { d[o] = 92; d[o + 1] = 178; d[o + 2] = 186; } else { d[o] = 96 - 50 * u - 18 * v; d[o + 1] = 196 - 70 * u - 34 * v; d[o + 2] = 205 - 60 * u - 5 * v; }
         d[o + 3] = Math.round(a * 255);
       } else d[o + 3] = 0;
     }

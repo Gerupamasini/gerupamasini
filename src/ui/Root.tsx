@@ -14,6 +14,7 @@ import { ObserveOverlay } from './observe/ObserveOverlay';
 import { CaptureOverlay } from './capture/CaptureOverlay';
 import { HomeMenu } from './home/HomeMenu';
 import { TankPanel } from './tank/TankPanel';
+import { RoomPlacement } from './tank/RoomPlacement';
 import { CaseOverlay } from './field/CaseOverlay';
 import { SpotSelect } from './home/SpotSelect';
 import { ShopScreen } from './home/ShopScreen';
@@ -26,6 +27,7 @@ import { tideName } from '../core/Moon';
 import { BUILD, versionLabel, builtAtLabel } from '../core/Build';
 import './ui.css';
 import './mobile.css';
+import './tank/room.css';
 
 export function Root({ app }: { app: App }) {
   const screen = ui.screen.value;
@@ -42,6 +44,7 @@ export function Root({ app }: { app: App }) {
       {screen === 'title' && <Title app={app} />}
       {screen === 'home' && <HomeMenu app={app} />}
       {screen === 'tankEdit' && <TankEdit app={app} />}
+      {screen === 'roomPlacement' && <RoomPlacement app={app} />}
       {ui.transition.value && <Transition label={ui.transition.value} touch={app.input.touchDevice} />}
       {inField && ui.settings.value.sunglasses && <div class="sunglasses-tint" aria-hidden="true" />}
       {(screen === 'field' || screen === 'capture') && <Hud app={app} />}

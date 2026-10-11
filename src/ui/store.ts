@@ -8,7 +8,7 @@ import type { GachaResult } from '../aquarium/catalog';
 /** a tool id from items/tools.json */
 export type ToolId = string;
 
-export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'gacha' | 'error';
+export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'roomPlacement' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'gacha' | 'error';
 
 export interface HudState {
   timeText: string;

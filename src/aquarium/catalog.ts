@@ -1,4 +1,4 @@
-import { EQUIPMENT_KINDS, EQUIPMENT_LABELS, type EquipmentKind, type EquipmentLayout } from './state';
+import { EQUIPMENT_KINDS, EQUIPMENT_LABELS, TANK_SIZES, type TankSize, type EquipmentKind, type EquipmentLayout } from './state';
 
 export type EquipmentCategory = 'tank' | 'stand' | EquipmentKind;
 export type EquipmentStyle = 'classic' | 'ivory' | 'studio';
@@ -10,12 +10,13 @@ export interface EquipmentItem {
   style: EquipmentStyle;
   rarity: 'initial' | 'N' | 'R';
   stand?: 'wood' | 'metal';
+  size?: TankSize;
 }
 export const EQUIPMENT_CATEGORIES: EquipmentCategory[] = ['tank', 'stand', ...EQUIPMENT_KINDS];
 export const CATEGORY_LABELS: Record<EquipmentCategory, string> = { tank: '水槽本体', stand: '水槽台', ...EQUIPMENT_LABELS };
 const INITIAL_NAMES: Record<EquipmentCategory, string> = {
   tank: 'クリアガラス水槽 60', stand: 'オークキャビネット 60',
-  glassLid: 'クリアガラス蓋', lightFixture: 'ベーシックライトバー', ledLight: 'デイライトLED 60',
+  glassLid: 'クリアガラス蓋', lightFixture: 'ベーシックライトバー', ledLight: 'デイライトLED',
   filter: 'ベーシック水中フィルター', canisterFilter: 'クラシック外部フィルター', topFilter: 'ベーシック上部フィルター',
   spongeFilter: 'クラシックスポンジフィルター', airPump: 'クラシックエアポンプ', airStone: 'セラミックエアストーン',
   heater: 'ガラス管ヒーター', thermometer: 'デジタル水温計', thermostat: 'ベーシックサーモスタット',
@@ -42,14 +43,21 @@ const DESCRIPTIONS: Record<EquipmentCategory, string> = {
   powerStrip: '配線をまとめる6口電源タップ。水槽の背面に設置します。',
 };
 export const initialItemId = (category: EquipmentCategory): string => `${category}-initial`;
+export const tankSizeItemId = (category: 'tank' | 'stand', size: TankSize, style: EquipmentStyle = 'classic'): string => `${category}${size === 60 ? '' : `-${size}`}-${style === 'classic' ? 'initial' : style}`;
 export const EQUIPMENT_ITEMS: EquipmentItem[] = EQUIPMENT_CATEGORIES.flatMap((category) => [
   { id: initialItemId(category), category, name: INITIAL_NAMES[category], description: DESCRIPTIONS[category], style: 'classic' as const, rarity: 'initial' as const, ...(category === 'stand' ? { stand: 'wood' as const } : {}) },
   { id: `${category}-ivory`, category, name: category === 'stand' ? 'アイボリーキャビネット 60' : `アイボリー ${CATEGORY_LABELS[category]}`, description: `${DESCRIPTIONS[category]} 明るいアイボリーの仕上げ。`, style: 'ivory' as const, rarity: 'N' as const, ...(category === 'stand' ? { stand: 'wood' as const } : {}) },
   { id: `${category}-studio`, category, name: category === 'stand' ? 'スタジオメタルフレーム 60' : `スタジオ ${CATEGORY_LABELS[category]}`, description: `${DESCRIPTIONS[category]} 金属とチャコールを合わせた落ち着いた仕上げ。`, style: 'studio' as const, rarity: 'R' as const, ...(category === 'stand' ? { stand: 'metal' as const } : {}) },
-]);
+]).map(item => ({ ...item, ...(item.category === 'tank' || item.category === 'stand' ? { size: 60 as TankSize } : {}) }));
+for (const size of TANK_SIZES.filter(s => s !== 60)) for (const category of ['tank', 'stand'] as const) for (const style of ['classic', 'ivory', 'studio'] as const) {
+  EQUIPMENT_ITEMS.push({ id: tankSizeItemId(category, size, style), category, size, style,
+    name: category === 'tank' ? `${style === 'classic' ? 'クリアガラス' : style === 'ivory' ? 'アイボリー' : 'スタジオ'}水槽 ${size}` : `${style === 'classic' ? '標準オークキャビネット' : style === 'ivory' ? 'アイボリーキャビネット' : 'スタジオメタルフレーム'} ${size}`,
+    description: category === 'tank' ? `幅${size}cmのガラス水槽。対応する標準台と一緒に設置できます。` : `${size}cm水槽を支える高さ73cmの専用台。配線とホースは背面にまとまります。`,
+    rarity: style === 'classic' ? 'initial' : style === 'ivory' ? 'N' : 'R', ...(category === 'stand' ? { stand: style === 'studio' ? 'metal' as const : 'wood' as const } : {}) });
+}
 const ITEMS = new Map(EQUIPMENT_ITEMS.map((i) => [i.id, i]));
 export const equipmentItem = (id: string | undefined): EquipmentItem | undefined => id ? ITEMS.get(id) : undefined;
-export const itemsForCategory = (category: EquipmentCategory): EquipmentItem[] => EQUIPMENT_ITEMS.filter((i) => i.category === category);
+export const itemsForCategory = (category: EquipmentCategory, size?: TankSize): EquipmentItem[] => EQUIPMENT_ITEMS.filter((i) => i.category === category && (size === undefined || i.size === size));
 export function itemForCategory(id: string | undefined, category: EquipmentCategory): EquipmentItem {
   const item = equipmentItem(id); return item?.category === category ? item : ITEMS.get(initialItemId(category))!;
 }
@@ -86,14 +94,16 @@ export function normalizeCollection(raw: unknown, legacyLayout?: EquipmentLayout
   return result;
 }
 /** A malformed/imported save cannot equip designs or quantities outside its collection. */
-export function ownedEquipmentLayout(layout: EquipmentLayout, collection: EquipmentCollection): EquipmentLayout {
-  const used = new Map<string, number>();
+export function ownedEquipmentLayout(layout: EquipmentLayout, collection: EquipmentCollection, used = new Map<string, number>()): EquipmentLayout {
   const choose = (id: string | undefined, category: EquipmentCategory): EquipmentItem => {
     let item = itemForCategory(id, category);
-    if ((used.get(item.id) ?? 0) >= ownedQuantity(collection, item.id)) item = itemForCategory(undefined, category);
+    if ((used.get(item.id) ?? 0) >= ownedQuantity(collection, item.id)) item = itemForCategory(category === 'tank' || category === 'stand' ? tankSizeItemId(category, item.size ?? 60) : undefined, category);
     used.set(item.id, (used.get(item.id) ?? 0) + 1); return item;
   };
-  const tank = choose(layout.tankItemId, 'tank'), stand = choose(layout.standItemId ?? (layout.stand === 'metal' ? 'stand-studio' : undefined), 'stand');
+  const tank = choose(layout.tankItemId, 'tank');
+  const size = tank.size ?? 60;
+  const requestedStand = itemForCategory(layout.standItemId ?? (layout.stand === 'metal' ? 'stand-studio' : undefined), 'stand');
+  const stand = choose(requestedStand.size === size ? requestedStand.id : tankSizeItemId('stand', size), 'stand');
   return { ...layout, tankItemId: tank.id, standItemId: stand.id, stand: stand.stand!, devices: layout.devices.map((d) => ({ ...d, position: [...d.position], itemId: choose(d.itemId, d.kind).id })) };
 }
 

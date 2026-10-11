@@ -20,3 +20,5 @@ jobs:
       - run: npx playwright-core install --with-deps chromium
       - name: Save and quality browser regressions
         run: CHROMIUM_PATH=$(node --input-type=module -e "import {chromium} from 'playwright-core'; process.stdout.write(chromium.executablePath())") npm run smoke:recovery
+      - name: Aquarium room browser regressions
+        run: CHROMIUM_PATH=$(node --input-type=module -e "import {chromium} from 'playwright-core'; process.stdout.write(chromium.executablePath())") npm run smoke:room

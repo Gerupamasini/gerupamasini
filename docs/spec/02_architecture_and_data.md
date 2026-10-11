@@ -237,15 +237,17 @@ export interface Driver {
 
 ```json
 {
-  "id": "kasai_west", "names": { "ja": "西のなぎさ" },
+  "id": "kasai_west", "names": { "ja": "東なぎさ" },
   "station": "jma_tokyo",
   "origin": { "lat": 35.636, "lon": 139.858 },
-  "size_m": 320, "resolution": 256,
-  "height": { "file": "kasai_west/height.png", "min_tp_m": -2.0, "max_tp_m": 3.0 },
-  "substrate": { "file": "kasai_west/substrate.png", "palette": ["sand", "muddy_sand", "mud", "gravel", "channel"] },
-  "spawnStart": { "x": 20, "z": -140, "heading": 180 },
-  "bounds": { "walkable": [[-160, -160], [160, 160]], "noEntry": [] },
-  "props": []
+  "size_m": 320, "resolution": 577,
+  "height": { "file": "kasai_west/height.png", "min_tp_m": -3.5, "max_tp_m": 6.0 },
+  "substrate": { "file": "kasai_west/substrate.png", "palette": ["sand", "muddy_sand", "mud", "gravel", "channel", "rock"] },
+  "spawnStart": { "x": -117, "z": -20, "heading": 270 },
+  "bounds": { "walkable": [[-155, -155], [155, 155]], "noEntry": [] },
+  "props": [],
+  "levee": { "path": [[-142, 112], [-136, 40], "…", [100, 146]], "crest_tp_m": 2.8, "crest_half_m": 3.0, "slope": 0.5, "tip_m": 28 },
+  "stakes": { "from": [-104, 126], "to": [-72, 136], "count": 14 }
 }
 ```
 

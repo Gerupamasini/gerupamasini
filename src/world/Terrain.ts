@@ -104,6 +104,11 @@ export class Terrain {
   private readonly uCausticGain: IUniform<number> = { value: 2.6 };
   /** 1: grains, burrows and micro relief up close; 0: the cheap far-field shading only (low quality) */
   private readonly uDetail: IUniform<number> = { value: 1 };
+  /** the ripple marks' strength (1: 葛西's sandy flat; 0: none, a lake's mud flat) */
+  private readonly uRippleGain: IUniform<number> = { value: 1 };
+  /** 0..1: how far the mud takes the look of a sheltered silt flat (after MahazeViewer's sediment): two-scale
+   * mottling, stronger silt lumps, few sand grains, a glossier wet sheen */
+  private readonly uMudLook: IUniform<number> = { value: 0 };
   /** アマモ cover over the map (0..1), and the distance range over which the drawn blades hand over to a canopy tint */
   private readonly uMeadow: IUniform<Texture> = { value: new DataTexture(new Uint8Array(1), 1, 1, RedFormat) };
   private readonly uMeadowFar: IUniform<Vector2> = { value: new Vector2(1e4, 1e4 + 1) };
@@ -111,6 +116,8 @@ export class Terrain {
   private readonly uLand: IUniform<Vector2> = { value: new Vector2(3.1, 3.9) };
   /** the sand's colour relative to the 葛西 grey (another shore's sand is another colour) */
   private readonly uSandTint: IUniform<Vector3> = { value: new Vector3(1, 1, 1) };
+  /** the mud's (and creek beds') colour relative to the 葛西 grey: subtropical estuary mud is warmer */
+  private readonly uMudTint: IUniform<Vector3> = { value: new Vector3(1, 1, 1) };
   /** (cos, sin) of the ripple marks' turn from 葛西's: their crests run along x there, parallel to that shore */
   private readonly uRipRot: IUniform<Vector2> = { value: new Vector2(1, 0) };
   private waves: WaveSet | null = null;
@@ -345,10 +352,13 @@ export class Terrain {
       shader.uniforms.uSunDirT = this.uSunDirT;
       shader.uniforms.uCausticGain = this.uCausticGain;
       shader.uniforms.uDetail = this.uDetail;
+      shader.uniforms.uRippleGain = this.uRippleGain;
+      shader.uniforms.uMudLook = this.uMudLook;
       shader.uniforms.uMeadow = this.uMeadow;
       shader.uniforms.uMeadowFar = this.uMeadowFar;
       shader.uniforms.uLand = this.uLand;
       shader.uniforms.uSandTint = this.uSandTint;
+      shader.uniforms.uMudTint = this.uMudTint;
       shader.uniforms.uRipRot = this.uRipRot;
       shader.uniforms.uSurf = this.surf.uSurf;
       shader.uniforms.uSurfDir = this.surf.uSurfDir;
@@ -370,10 +380,13 @@ uniform float uSunUp;
 uniform vec3 uSunDirT;
 uniform float uCausticGain;
 uniform float uDetail;
+uniform float uRippleGain;
+uniform float uMudLook;
 uniform sampler2D uMeadow;
 uniform vec2 uMeadowFar;
 uniform vec2 uLand;
 uniform vec3 uSandTint;
+uniform vec3 uMudTint;
 uniform vec2 uRipRot;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
@@ -468,6 +481,7 @@ vec4 rippleDisloc(vec2 p) {
   return acc;
 }
 float gRock = 0.0;
+vec2 gRockO = vec2(0.0);
 float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
 // where the ripples are: patches of flat sand in between, crests fading in and out at the metre scale
 float rippleAmp(vec2 p) { return smoothstep(0.3, 0.62, vnoise(p * 0.055 + 4.4)) * smoothstep(0.15, 0.6, vnoise(p * 0.9 + 2.9)) * (0.6 + 0.4 * vnoise(p * 0.2 + 7.1)); }
@@ -485,25 +499,50 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   float isSand = 1.0 - smoothstep(0.5, 1.5, vSubstrate);
   float muddy = smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate));
   diffuseColor.rgb *= mix(vec3(1.0), uSandTint, 1.0 - smoothstep(1.5, 2.5, vSubstrate));
+  diffuseColor.rgb *= mix(vec3(1.0), uMudTint, smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(2.5, 3.5, vSubstrate)) + smoothstep(3.5, 4.0, vSubstrate) * (1.0 - smoothstep(4.0, 4.5, vSubstrate)));
   vec2 rq = rippleFrame(vWorldPos.xz);
   gDis = rippleDisloc(rq);
   // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
-  float ripple = cos(ripplePhase(rq)) * rippleAmp(rq) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit);
+  float ripple = cos(ripplePhase(rq)) * rippleAmp(rq) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit) * uRippleGain;
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 - ripple * 0.05;
   diffuseColor.rgb *= detail;
-  // stone-built levees: a running bond of dressed blocks (~55 × 32 cm), dark joints, each block its own grey-brown
+  // a sheltered silt flat (MahazeViewer's mud): mottled at ~8 cm and ~2 cm, as fresh silt settles unevenly
+  float mudL = uMudLook * (1.0 - isSand);
+  if (mudL > 0.001) {
+    float mott = vnoise(vWorldPos.xz * 12.0) * 0.55 + vnoise(vWorldPos.xz * 26.0 + 5.0) * 0.3 + vnoise(vWorldPos.xz * 61.0 - 2.0) * 0.15;
+    float mott2 = vnoise(vWorldPos.xz * 55.0 + 3.0) * 0.6 + vnoise(vWorldPos.xz * 140.0 + 9.0) * 0.4;
+    float near = 1.0 - smoothstep(0.4, 1.6, fw * 0.02);
+    diffuseColor.rgb *= mix(1.0, (0.86 + 0.28 * mott) * mix(1.0, 0.8 + 0.4 * mott2, near), mudL);
+  }
+  // the stone levee (捨石): a mound of quarried boulders (~0.6–1 m) with dark gaps between, each its own grey-buff,
+  // zoned by the tide the way the photos show it — pale and dry above the spring high water, an olive film of algae
+  // through the upper intertidal, dark and crusted with old oyster shell below mean sea level
   float rock = smoothstep(4.5, 5.0, vSubstrate);
   if (rock > 0.001) {
-    vec2 bp = vec2(vWorldPos.z / 0.55, vWorldPos.y / 0.32);
-    bp.x += step(0.5, fract(bp.y * 0.5)) * 0.5;
-    vec2 bc = floor(bp), bf = fract(bp);
-    float shade = 0.78 + 0.44 * hash21(bc + 11.0);
-    vec2 edge = min(bf, 1.0 - bf);
-    float joint = 1.0 - smoothstep(0.03, 0.09, min(edge.x * 0.55, edge.y * 0.32) / 0.32);
-    vec3 stone = vec3(0.34, 0.33, 0.31) * shade * (0.9 + 0.2 * vnoise(vWorldPos.xz * 9.0 + bc));
-    stone = mix(stone, vec3(0.12, 0.115, 0.1), joint * 0.85);
+    vec2 rp = vWorldPos.xz / 1.05 + vec2(0.0, vWorldPos.y * 0.8);
+    vec2 ri = floor(rp), rf = fract(rp);
+    float f1 = 8.0, f2 = 8.0; vec2 rid = vec2(0.0);
+    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+      vec2 g = vec2(float(x), float(y));
+      vec2 o = g + 0.15 + 0.7 * hash22(ri + g + 3.0) - rf;
+      float d = dot(o, o);
+      if (d < f1) { f2 = f1; f1 = d; rid = ri + g; gRockO = o; } else if (d < f2) f2 = d;
+    }
+    // the gaps between boulders: uneven, some stones jammed tight, some with deep shadowed voids
+    float gw = mix(0.04, 0.3, hash21(rid + 29.0) * vnoise(vWorldPos.xz * 1.7));
+    float gap = 1.0 - smoothstep(0.03, 0.03 + gw, sqrt(f2) - sqrt(f1));
+    // and each boulder lit as a dome: brighter on its crown, darker toward its edges
+    float crown = 1.0 - smoothstep(0.1, 0.75, sqrt(f1));
+    float shade = (0.62 + 0.55 * hash21(rid + 11.0)) * (0.8 + 0.3 * crown);
+    vec3 buff = vec3(0.43, 0.41, 0.37), grey = vec3(0.33, 0.325, 0.31), olive = vec3(0.24, 0.27, 0.15), crust = vec3(0.19, 0.18, 0.165);
+    vec3 stone = mix(grey, buff, smoothstep(1.1, 1.7, vWorldPos.y));
+    float alg = smoothstep(0.15, 0.45, vWorldPos.y) * (1.0 - smoothstep(0.9, 1.3, vWorldPos.y)) * smoothstep(0.3, 0.7, vnoise(vWorldPos.xz * 0.6 + rid));
+    stone = mix(stone, olive, alg * 0.75);
+    stone = mix(stone, crust, 1.0 - smoothstep(0.0, 0.4, vWorldPos.y));
+    stone *= shade * (0.9 + 0.2 * vnoise(vWorldPos.xz * 9.0 + rid));
+    stone = mix(stone, vec3(0.07, 0.065, 0.06), gap * 0.9);
     diffuseColor.rgb = mix(diffuseColor.rgb, stone, rock);
-    gRock = rock * (1.0 - joint);
+    gRock = rock * (1.0 - gap);
   }
   // ---- up close: the grains themselves (after MahazeViewer's sediment). Medium quartz grains and coarser shell
   // bits sit on a silty base; each is a disc with a dark rim and a dome in the normal. Faded by pixel footprint.
@@ -513,7 +552,8 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     vec2 o1, o2;
     vec3 g1 = grains(mm / 1.4, o1);
     vec3 g2 = grains(mm / 3.4 + 17.0, o2);
-    float grainy = (0.3 + 0.5 * isSand) * (1.0 - 0.5 * vPit);
+    // (silt carries few sand grains: the mud look keeps a scatter of them, as the goby flat does)
+    float grainy = (0.3 + 0.5 * isSand) * (1.0 - 0.5 * vPit) * (1.0 - 0.8 * uMudLook * (1.0 - isSand));
     vec3 alb = diffuseColor.rgb;
     vec3 quartz = alb * 1.3 + vec3(0.06), shell = alb * 1.15 + vec3(0.05, 0.04, 0.03), black = alb * 0.4;
     vec3 c1 = alb * (0.8 + 0.5 * g1.y);
@@ -565,18 +605,13 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   // ---- micro relief: silt lumps at the millimetre and centimetre scale, faded with distance
   if (uDetail > 0.5) {
     vec3 nd = vnoiseD(mm * 0.35) * 0.5 + vnoiseD(mm * 1.1 + 7.0) * 0.25;
-    float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand));
+    float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand)) * (1.0 + 0.9 * uMudLook * (1.0 - isSand));
     vec3 nd2 = vnoiseD(mm * 0.055 + 3.0);
-    float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand));
+    float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand)) * (1.0 + 1.2 * uMudLook * (1.0 - isSand));
     gNrmAdd += nd.yz * bump + nd2.yz * bump2;
   }
-  // the stone blocks of the levees: each block tilts its own way a little
-  if (gRock > 0.0) {
-    vec2 bp = vec2(vWorldPos.z / 0.55, vWorldPos.y / 0.32);
-    bp.x += step(0.5, fract(bp.y * 0.5)) * 0.5;
-    vec2 bc = floor(bp);
-    gNrmAdd += (vec2(hash21(bc + 3.0), hash21(bc + 5.0)) - 0.5) * 0.3 * gRock;
-  }
+  // the levee's boulders: each one domed, so the mound reads as stones and not as a painted slope
+  if (gRock > 0.0) gNrmAdd += -gRockO * 2.0 * gRock;
   // a stingray's pit: the ray blew the oxidised skin off, so the bowl shows the darker, wetter sand beneath,
   // strewn with the chalky grit of the clams it crushed
   if (vPit > 0.001) {
@@ -650,7 +685,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   // ripple marks: one continuous warped field (see rippleWarp) with its dislocations; sand carries them, mud faintly
   float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
   vec2 rp = rippleFrame(vWorldPos.xz);
-  float strength = (0.12 + 0.88 * sandy) * rippleAmp(rp) * 0.26 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w);
+  float strength = (0.12 + 0.88 * sandy) * rippleAmp(rp) * 0.26 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w) * uRippleGain;
   float ph = ripplePhase(rp);
   // the crest line's local direction comes from the phase gradient (warp plus dislocations), so the shading
   // follows the bends and the forks; where crests crowd the slope grows, where they spread it eases
@@ -675,9 +710,12 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   roughnessFactor = mix(roughnessFactor, 0.32, gSwash * smoothstep(-0.01, 0.0, vWorldPos.y - uWaterLevel));   // the film the swash just left: a soft sheen
   roughnessFactor = mix(roughnessFactor, 0.62, gFilm * 0.5);   // the organic film has a wet sheen of its own
   roughnessFactor = mix(roughnessFactor, 0.42, gQuartz);       // quartz and shell grains glint a little
+  // wet silt is glossy (the shine of a mud flat at low water), damp silt satin
+  float mudR = uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
+  roughnessFactor = mix(roughnessFactor, mix(0.7, 0.36, wetR), mudR);
 }`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v2';
+    mat.customProgramCacheKey = () => 'higata-terrain-v3';
     return mat;
   }
 
@@ -745,6 +783,16 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     this.uRipRot.value.set(Math.cos(angle), Math.sin(angle));
   }
 
+  /** The ripple marks' strength (0: a lake's mud flat has none) and the silt-flat look of the mud (0..1). */
+  setSediment(rippleGain: number, mudLook: number): void {
+    this.uRippleGain.value = rippleGain;
+    this.uMudLook.value = mudLook;
+  }
+
+  /** Tint the mud and creek beds (multiplies the 葛西 grey). */
+  setMudTint(r: number, g: number, b: number): void {
+    this.uMudTint.value.set(r, g, b);
+  }
   /** Tint the sand and muddy sand (multiplies the 葛西 grey). */
   setSandTint(r: number, g: number, b: number): void {
     this.uSandTint.value.set(r, g, b);
