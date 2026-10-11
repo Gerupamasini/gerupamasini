@@ -265,7 +265,7 @@ export class World {
     // the sky refreshes its environment maps itself whenever the sun moved enough (so time jumps show at once)
     this.sky.refreshEnvironment();
     this.sky.sky.position.copy(camera.position);
-    this.skyline.update(camera.position, this.sky.fogColor, day, gameMs / 1000);
+    this.skyline.update(camera.position, this.sky.fogColor, day, gameMs / 1000, this.tideLevel);
     if (this.timeAcc > 1) this.timeAcc -= 0; // keep accumulating; used as shader time
   }
 }

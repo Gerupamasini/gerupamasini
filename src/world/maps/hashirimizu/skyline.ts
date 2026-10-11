@@ -21,7 +21,7 @@ import { Color, type Mesh } from 'three';
 const R = 1900;
 const DEG = Math.PI / 180;
 const ang = (deg: number) => R * Math.tan(deg * DEG);
-/** pictures stand a little above the sea */
+/** where the pictures are made to stand (the Skyline moves each ship's waterline onto the sea every frame) */
 const FOOT = 3;
 
 type Draw = (c: CanvasRenderingContext2D, w: number, h: number) => void;
@@ -42,6 +42,8 @@ export interface ShipMark {
   bearing0: number;
   degPerSec: number;
   sector: [number, number];
+  /** the lane's distance (km): the waterline goes where the sea that far off is seen */
+  km: number;
 }
 
 /** a ship's share of the passes on a lane that can carry it */
@@ -288,6 +290,6 @@ export function buildHashirimizuSkyline(ship: ShipPlane, photo: PhotoPlane, ship
     };
     // the angular speed of a ship at that distance across the line of sight
     const degPerSec = ((lane.kn * 0.514) / (lane.km * 1000)) / DEG;
-    ships.push({ meshes, pick, photos, pickPhoto, bearing0: lane.b0, degPerSec, sector: [22, 168] });
+    ships.push({ meshes, pick, photos, pickPhoto, bearing0: lane.b0, degPerSec, sector: [22, 168], km: lane.km });
   });
 }

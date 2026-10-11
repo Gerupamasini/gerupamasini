@@ -248,8 +248,11 @@ export class Skyline {
     return mesh;
   }
 
-  /** Per frame: ride along with the eye and take the sky's haze; at night the land goes dark. */
-  update(eye: Vector3, fog: Color, day: number, timeSec = 0): void {
+  /** Per frame: ride along with the eye and take the sky's haze; at night the land goes dark. `seaLevel`: the water's
+   * height, on which the ships sail. */
+  update(eye: Vector3, fog: Color, day: number, timeSec = 0, seaLevel = 0): void {
+    // the eye's height over the sea (the ships' waterlines are seen that much below the eye, divided by their distance)
+    const above = Math.max(eye.y - seaLevel, 0.05);
     this.group.position.set(eye.x, 0, eye.z);
     this.land?.setHaze(fog);
     for (const s of this.ships) {
@@ -263,7 +266,10 @@ export class Skyline {
       s.meshes.forEach((m, i) => { m.visible = !photos && i === k; });
       s.photos.forEach((m, i) => { m.visible = photos && i === k; });
       const mesh = photos ? s.photos[k] : s.meshes[k];
-      mesh.position.set(Math.sin(a) * R, mesh.position.y, -Math.cos(a) * R);
+      // the waterline where the flat sea lies at the lane's true distance, seen across the nearer ring: a little
+      // below the horizon, the further off the less (standing it higher left the ship floating over the sea)
+      const foot = eye.y - above * (R / (s.km * 1000));
+      mesh.position.set(Math.sin(a) * R, foot + (mesh.geometry as PlaneGeometry).parameters.height / 2, -Math.cos(a) * R);
       mesh.lookAt(eye.x, mesh.position.y, eye.z);
       // (the pictures are drawn bow to the left; seen from the shore, the bearing grows to the right)
       mesh.scale.x = s.degPerSec > 0 ? -1 : 1;
