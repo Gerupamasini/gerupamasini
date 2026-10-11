@@ -29,6 +29,12 @@ const DEFAULT_SHOTS = [
   { name: 'skin_dark', set: { chroma: 'dark', cam: [0.035, 0.022, 0.055] } },
   { name: 'skin_close', set: { chroma: null, cam: [-0.005, 0.03, 0.035], target: [-0.006, 0.008, 0.0] } },
   { name: 'eye_close', set: { cam: [0.022, 0.016, 0.03], target: [0.014, 0.007, 0.004] } },
+  // the mantle's collar round the neck and the mouth of the mantle cavity; the suckers on the arms
+  { name: 'collar', set: { scene: 'side', lod: 0, seed: 2, cam: [0.045, -0.03, 0.035], target: [0.004, 0.0, 0.0] } },
+  { name: 'suckers', set: { cam: [0.045, -0.012, 0.012], target: [0.02, -0.002, 0.0] } },
+  // the views of the photographs used for the comparison (12, 29)
+  { name: 'photo12_view', set: { scene: 'tank', lod: 0, seed: 2, cam: [0.02, 0.03, 0.075], target: [0.004, 0.004, 0.0] } },
+  { name: 'photo29_view', set: { cam: [0.045, 0.012, 0.06], target: [0.003, 0.004, 0.0] } },
   // burrowing: the jets blow the pit, the dorsal arms throw sand over the head, buried to the eyes
   { name: 'burrow_blow', set: { scene: 'tank', seed: 2 }, call: { fn: 'mode', args: ['BURROW'] }, advance: 1.6, follow: { offset: [0.045, 0.025, 0.05] } },
   { name: 'burrow_sweep', call: { fn: 'until', args: ['sweep', 10, 0, 0.62] }, follow: { offset: [0.045, 0.02, 0.05] } },
@@ -44,6 +50,8 @@ const DEFAULT_SHOTS = [
   { name: 'escape_ink', set: { scene: 'tank', seed: 2 }, call: { fn: 'mode', args: ['ESCAPE'] }, advance: 0.2, follow: { offset: [0.03, 0.04, 0.13] } },
   { name: 'escape_jet', advance: 0.25, follow: { offset: [0.03, 0.04, 0.16] } },
   // the sandy shallow under 30 cm of water: by day buried, at night out on the fins under a diver's torch
+  { name: 'flat_rest', set: { scene: 'flat', awake: true }, call: { fn: 'mode', args: ['REST', 0] }, advance: 4, follow: { i: 0, offset: [0.03, 0.025, 0.055], dt: [0, 0.004, 0] } },
+  { name: 'flat_rest_top', follow: { i: 0, offset: [0.0, 0.06, 0.012] } },
   { name: 'flat_day', set: { scene: 'flat' }, advance: 2 },
   { name: 'flat_buried', follow: { i: 0, offset: [0.05, 0.04, 0.05] } },
   { name: 'flat_night_hover', set: { scene: 'flat', night: true }, call: { fn: 'mode', args: ['HOVER', 0] }, advance: 4, follow: { i: 0, offset: [0.02, 0.03, 0.1] } },

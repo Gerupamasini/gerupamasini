@@ -4,13 +4,14 @@
  *
  * Measured on the 70 photographs of the reference sheet (side views 11, 12, 15, 19, 26, 29; dorsal 6, 7, 17, 66, 67;
  * frontal 9, 10, 47; swimming 52–56; burying 40–46; buried 16) and the literature on sepiolids:
- *  - mantle   a short, rounded sac (width ≈ 0.7 ML, depth ≈ 0.58 ML), blunt behind, the dorsal edge fused with the head
- *             (Euprymna), the ventral edge free: a collar the funnel comes out of
+ *  - mantle   a short, rounded muscular sac round the visceral mass (width ≈ 0.83 ML, depth ≈ 0.77 ML), blunt
+ *             behind, the dorsal edge fused with the head (Euprymna), the sides and the belly free: a thick collar round
+ *             the neck, the mantle cavity behind it with the gills, the funnel coming out of it
  *  - fins     two rounded, ear-like lobes ("ミミ") on the sides at mid-mantle: the base ≈ 0.42 ML long, the free lobe
  *             reaching ≈ 0.3 ML out and a little ahead of and behind its base; thin, clear, sparsely spotted
  *  - head     about as wide as the mantle, its sides taken up by the very large eyes (diameter ≈ 0.26 ML) under a
  *             transparent cornea, a silvery iris and a horizontal kidney-shaped pupil
- *  - arms     eight short arms (0.32–0.5 ML), the third pair the longest, two rows of suckers on the oral face
+ *  - arms     eight arms (0.45–0.67 ML), the third pair the longest, two rows of stalked suckers on the oral face
  *  - tentacles two long, thin tentacles with a small club, kept in the pockets between arms III and IV and shot out
  *             at prey (≈ 0.9 ML long out)
  *  - funnel   a short white cone under the head
@@ -32,15 +33,15 @@ export interface ProfileKnot { z: number; w: number; h: number; c: number }
  * (z < 0) and head (z > 0); the eye sockets are pushed out over it (socketPush).
  */
 export const PROFILE: ProfileKnot[] = [
-  { z: -25.0, w: 0.0, h: 0.0, c: 1.0 },
-  { z: -24.6, w: 2.6, h: 2.4, c: 1.0 },
-  { z: -23.3, w: 5.2, h: 4.7, c: 0.95 },
-  { z: -21.0, w: 7.9, h: 6.6, c: 0.85 },
-  { z: -17.0, w: 9.7, h: 7.9, c: 0.7 },
-  { z: -12.0, w: 10.3, h: 8.3, c: 0.55 },
-  { z: -7.0, w: 9.9, h: 7.9, c: 0.5 },
-  { z: -3.0, w: 8.7, h: 7.0, c: 0.6 },
-  { z: -0.6, w: 7.0, h: 6.1, c: 0.8 },
+  { z: -25.0, w: 0.0, h: 0.0, c: 0.4 },
+  { z: -24.6, w: 3.0, h: 3.0, c: 0.4 },
+  { z: -23.4, w: 6.0, h: 5.9, c: 0.35 },
+  { z: -21.0, w: 8.6, h: 8.2, c: 0.25 },
+  { z: -17.0, w: 10.1, h: 9.6, c: 0.1 },
+  { z: -12.5, w: 10.4, h: 9.8, c: 0.0 },
+  { z: -7.5, w: 9.7, h: 9.0, c: 0.05 },
+  { z: -3.5, w: 8.4, h: 7.6, c: 0.4 },
+  { z: -0.8, w: 7.0, h: 6.2, c: 0.8 },
   { z: 0.6, w: 6.0, h: 5.4, c: 1.0 },
   { z: 2.4, w: 5.3, h: 5.1, c: 1.1 },
   { z: 4.4, w: 4.8, h: 4.5, c: 0.8 },
@@ -53,25 +54,52 @@ export const PROFILE: ProfileKnot[] = [
 const catmull = (p0: number, p1: number, p2: number, p3: number, t: number) =>
   0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t);
 
+/**
+ * The head and the visceral sac it continues into inside the mantle (the neck is narrower than the mantle's opening:
+ * the gap between them is the mouth of the mantle cavity, with the funnel in it). From z = 0.6 forward it is the
+ * same outline as PROFILE (where the mantle is fused to the head on the back the two surfaces meet).
+ */
+export const HEAD_PROFILE: ProfileKnot[] = [
+  { z: -7.6, w: 0.0, h: 0.0, c: 0.5 },
+  { z: -7.0, w: 3.4, h: 3.2, c: 0.5 },
+  { z: -5.4, w: 4.7, h: 4.4, c: 0.7 },
+  { z: -3.0, w: 5.8, h: 5.3, c: 0.85 },
+  { z: -1.0, w: 6.2, h: 5.6, c: 0.95 },
+  ...PROFILE.filter((k) => k.z >= 0.6),
+];
+
 /** the outline at z: Catmull-Rom through the knots (the ends are rounded caps) */
-export function profileAt(z: number): { w: number; h: number; c: number } {
-  const K = PROFILE;
+export function profileAt(z: number, K: ProfileKnot[] = PROFILE): { w: number; h: number; c: number } {
   const zc = Math.min(K[K.length - 1].z, Math.max(K[0].z, z));
   let i = 0;
   while (i < K.length - 2 && K[i + 1].z < zc) i++;
   const a = K[Math.max(0, i - 1)], b = K[i], c = K[i + 1], d = K[Math.min(K.length - 1, i + 2)];
   const t = (zc - b.z) / Math.max(1e-6, c.z - b.z);
   // the caps: a sphere-like end instead of a cone into the last knot
-  const cap = (zc - K[0].z) < 1.6 ? Math.sqrt(Math.max(0, (zc - K[0].z) / 1.6)) : (K[K.length - 1].z - zc) < 0.8 ? Math.sqrt(Math.max(0, (K[K.length - 1].z - zc) / 0.8)) : -1;
+  const nearStart = (zc - K[0].z) < 1.6 && K[0].w === 0, nearEnd = (K[K.length - 1].z - zc) < 0.8 && K[K.length - 1].w === 0;
+  const cap = nearStart ? Math.sqrt(Math.max(0, (zc - K[0].z) / 1.6)) : nearEnd ? Math.sqrt(Math.max(0, (K[K.length - 1].z - zc) / 0.8)) : -1;
   let w = Math.max(0, catmull(a.w, b.w, c.w, d.w, t));
   let h = Math.max(0, catmull(a.h, b.h, c.h, d.h, t));
   if (cap >= 0) {
-    const end = (zc - K[0].z) < 1.6 ? K[1] : K[K.length - 2];
-    const k = (zc - K[0].z) < 1.6 ? profileAt(K[0].z + 1.6) : profileAt(K[K.length - 1].z - 0.8);
-    w = (k.w || end.w) * cap; h = (k.h || end.h) * cap;
+    const k = nearStart ? profileAt(K[0].z + 1.6 + 1e-6, K) : profileAt(K[K.length - 1].z - 0.8 - 1e-6, K);
+    w = k.w * cap; h = k.h * cap;
   }
   return { w, h, c: catmull(a.c, b.c, c.c, d.c, t) };
 }
+
+/**
+ * The mantle's free edge (the collar): on the back the mantle is fused with the head (Euprymna) and its edge runs
+ * forward onto the head; on the sides and under the belly it is free, a little behind the neck, and the opening of
+ * the mantle cavity lies between it and the head. z of the edge at angle θ from the dorsal line, and the share fused.
+ */
+export function mantleRim(theta: number): { z: number; fused: number; thick: number } {
+  const c = Math.cos(theta);
+  const t = Math.min(1, Math.max(0, (c - 0.1) / 0.65));
+  const fused = t * t * (3 - 2 * t);
+  return { z: -0.9 + 2.0 * fused, fused, thick: 0.02 + 0.7 * (1 - fused) };
+}
+/** how far back the mantle cavity reaches inside (mm, neck frame) */
+export const CAVITY_Z = -6.2;
 
 /** the eyes: centre (mm, the left one; the right mirrors x), radius, and the resting gaze */
 export const EYE = {
@@ -81,7 +109,7 @@ export const EYE = {
   r: 3.3,
   /** the socket's skin round the ball (mm beyond its radius), the half angle of the corneal window (rad) */
   socket: 0.3,
-  window: 0.86,
+  window: 0.8,
   /** outward, a little forward and up */
   gaze: [0.93, 0.2, 0.3] as [number, number, number],
 };
@@ -102,22 +130,16 @@ export function socketPush(p: [number, number, number]): [number, number, number
 }
 
 /** the section's flattening: the belly is a little flatter than the back */
-export const BELLY_FLAT = 0.86;
+export const BELLY_FLAT = 0.95;
 
 /** a point of the body surface at z and angle θ from the dorsal midline (θ > 0 the left side) */
-export function surfacePoint(z: number, theta: number): [number, number, number] {
-  const p = profileAt(z);
+export function surfacePoint(z: number, theta: number, K: ProfileKnot[] = PROFILE): [number, number, number] {
+  const p = profileAt(z, K);
   const s = Math.sin(theta), c = Math.cos(theta);
   // a superellipse a little fuller than an ellipse
   const e = 2.3;
   const se = Math.sign(s) * Math.pow(Math.abs(s), 2 / e), ce = Math.sign(c) * Math.pow(Math.abs(c), 2 / e);
   let x = p.w * se, y = p.h * ce * (c < 0 ? BELLY_FLAT : 1);
-  // the ventral mantle margin: a narrow groove round the lower half at the neck (the collar's free edge)
-  const vent = Math.max(0, -c);
-  const groove = 0.45 * vent * vent * Math.exp(-(((z + 0.15) / 0.45) ** 2));
-  const r = Math.hypot(x, y) || 1;
-  x -= (x / r) * groove;
-  y -= (y / r) * groove;
   return z > -2.5 ? socketPush([x, p.c + y, z]) : [x, p.c + y, z];
 }
 
@@ -140,10 +162,10 @@ export interface ArmDef {
 export const CROWN = { z: 7.4, y: -0.55, rx: 2.55, ry: 2.15 };
 
 const ARM_PAIRS = [
-  { angle: 0.36, length: 8.2, rBase: 0.95, spread: 0.3 },
-  { angle: 1.1, length: 10.4, rBase: 1.12, spread: 0.36 },
-  { angle: 1.92, length: 12.0, rBase: 1.22, spread: 0.34 },
-  { angle: 2.62, length: 10.0, rBase: 1.05, spread: 0.26 },
+  { angle: 0.36, length: 11.4, rBase: 1.12, spread: 0.3 },
+  { angle: 1.1, length: 14.6, rBase: 1.32, spread: 0.36 },
+  { angle: 1.92, length: 16.8, rBase: 1.42, spread: 0.34 },
+  { angle: 2.62, length: 13.8, rBase: 1.25, spread: 0.26 },
 ];
 
 export const ARMS: ArmDef[] = [];

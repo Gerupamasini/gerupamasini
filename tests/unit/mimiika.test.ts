@@ -24,15 +24,15 @@ describe('ミミイカ: the body plan', () => {
     let top = 0, w = 0;
     for (let z = -24; z <= 0; z += 0.25) { top = Math.max(top, surfacePoint(z, 0)[1]); w = Math.max(w, surfacePoint(z, Math.PI / 2)[0]); }
     const depth = top - bellyDepth();
-    expect(depth / ML_MM).toBeGreaterThan(0.55);
-    expect(depth / ML_MM).toBeLessThan(0.7);
+    expect(depth / ML_MM).toBeGreaterThan(0.65);
+    expect(depth / ML_MM).toBeLessThan(0.85);
     expect((2 * w) / ML_MM).toBeGreaterThan(0.72);
     expect((2 * w) / ML_MM).toBeLessThan(0.9);
   });
 
-  it('has very large eyes, short arms, long tentacles and mid-mantle ear-like fins', () => {
+  it('has very large eyes, arms shorter than the mantle, long tentacles and mid-mantle ear-like fins', () => {
     expect((2 * EYE.r) / ML_MM).toBeGreaterThan(0.24);
-    for (const a of ARMS) expect(a.length / ML_MM).toBeLessThan(0.55);
+    for (const a of ARMS) expect(a.length / ML_MM).toBeLessThan(0.75);
     // the third pair is the longest
     const len = (p: number) => ARMS.find((a) => a.pair === p)!.length;
     expect(len(2)).toBeGreaterThan(len(0));
@@ -142,7 +142,7 @@ describe('ミミイカ: behaviour', () => {
     const eye = new Vector3();
     (m.bones.J_eye_L as Bone).getWorldPosition(eye);
     expect(eye.y + EYE.r / 1000 - g).toBeGreaterThan(0.001);
-    const mantleTop = new Vector3(0, 8.86 / 1000, -4 / 1000).applyMatrix4(m.root.matrixWorld);
+    const mantleTop = new Vector3(0, 9.88 / 1000, -4.5 / 1000).applyMatrix4(m.root.matrixWorld);
     expect(mantleTop.y - g).toBeLessThan(0.003);
     disposeModel(m);
   });

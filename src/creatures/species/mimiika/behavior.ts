@@ -76,8 +76,8 @@ const damp = (cur: number, goal: number, rate: number, dt: number) => cur + (goa
 const smooth = (x: number) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
 const MM = 0.001;
 /** the belly's depth under the root and the body's top over it (mm, model) */
-const BELLY = 6.6;
-const TOP = 9.0;
+const BELLY = 9.35;
+const TOP = 9.9;
 /** the root over the sand when it sits (mm) and when it is fully buried */
 const SIT_Y = BELLY - 0.6;
 const BURIED_Y = -7.0;
@@ -144,7 +144,7 @@ export function createSquidBehavior(opts: SquidOptions) {
   const an = {
     breathPh: rand(0, 6.28), mantle: 1, jetT: -1, jetDur: 0.2, jetDepth: 0.16,
     finPh: [rand(0, 6), rand(0, 6)] as [number, number], finFreq: 1.2, finAmp: 0.08, finAmpGoal: 0.08, finFold: -0.35, finFoldGoal: -0.35, finK: 0.9, finDir: 1, flap: 0, flapGoal: 0,
-    armDroop: 0.55, armClose: 0.1, armSpread: 0.0, armWave: 0.4, armRaise: [0, 0] as [number, number],
+    armDroop: 0.55, armClose: 0.1, armSpread: 0.0, armWave: 0.4, armRaise: [0, 0] as [number, number], tipCurl: 0.3,
     crawlPh: 0, crawl: 0,
     headPitch: 0.06, headYaw: 0, funnelPitch: 0, funnelYaw: 0,
     ten: [0, 0], tenGoal: 0, tenAim: new Vector3(0, -0.1, 1).normalize(), tenAimW: 0,
@@ -346,10 +346,11 @@ export function createSquidBehavior(opts: SquidOptions) {
     st.vel.multiplyScalar(Math.exp(-dt * 4));
     const freeze = st.phase === 'freeze';
     finSet(freeze ? 0.02 : 0.06 + 0.12 * Math.max(0, Math.sin(st.t * 0.7 + pers.wave)) ** 8, 1.4, -0.35, 0);
-    arms(0.6, 0.12, 0.05, freeze ? 0.05 : 0.35);
+    arms(0.7, 0.0, 0.28, freeze ? 0.05 : 0.35);
+    an.tipCurl = freeze ? 0.6 : 0.85;
     an.headPitch = freeze ? 0.0 : 0.07;
     if (freeze) chroma(0.85, 0.9, 1.05, 0.85, 0.4, 0, 4);
-    else chroma(0.75, 0.8, 0.82, 0.55, 0.65, 0, 1.5);
+    else chroma(0.7, 0.8, 1.0, 0.55, 0.75, 0, 1.5);
     if (st.t > st.dur) {
       st.settled = true;
       if (autonomous) choose();
@@ -361,7 +362,8 @@ export function createSquidBehavior(opts: SquidOptions) {
     finSet(0.32, rand(2.4, 2.6), 0.18, 0.12);
     arms(0.25, 0.3, 0.0, 0.7);
     an.headPitch = -0.08;
-    chroma(0.65, 0.5, 0.35, 0.3, 0.85, 0.45, 1.2);
+    // the hovering dress (photographs 17, 34): yellow-orange ground, red-brown dots, glassy
+    chroma(0.95, 0.65, 0.32, 0.3, 0.8, 0.42, 1.2);
     st.vel.multiplyScalar(Math.exp(-dt * 1.5));
     // a slow drift and a lazy turn
     st.vel.x += Math.sin(st.t * 0.37 + pers.wave) * 0.02 * ML * dt;
@@ -403,7 +405,7 @@ export function createSquidBehavior(opts: SquidOptions) {
       if (rng() < dt * 0.35 && an.jetT < 0) { jet(0.06, 0.28); st.vel.addScaledVector(fwd, 0.25 * ML); }
       arms(0.15, 0.2, 0.0, 0.5);
       an.headPitch = -0.04;
-      chroma(0.6, 0.55, 0.45, 0.35, 0.8, 0.3, 1.5);
+      chroma(0.85, 0.65, 0.5, 0.35, 0.8, 0.3, 1.5);
       if (dist < 0.8 * ML) phase('arrive', 1.5);
     } else if (st.phase === 'arrive') {
       st.vel.multiplyScalar(Math.exp(-dt * 2.5));
@@ -421,7 +423,7 @@ export function createSquidBehavior(opts: SquidOptions) {
     if (st.phase === 'descend') { if (descend(dt)) phase('turn', 2); return; }
     st.altGoal = 0;
     finSet(0.22, 3.0, -0.15, 0.05);
-    chroma(0.75, 0.8, 0.85, 0.55, 0.6, 0, 1.5);
+    chroma(0.7, 0.8, 1.0, 0.55, 0.7, 0, 1.5);
     if (st.phase === 'turn') {
       const err = steerTo(tgt, 0.9, dt);
       st.vel.multiplyScalar(Math.exp(-dt * 4));
@@ -549,7 +551,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
       case 'search':
         finSet(0.32, 2.5, 0.18, 0.1);
         arms(0.4, 0.2, 0, 0.6);
-        chroma(0.5, 0.4, 0.3, 0.35, 0.85, 0.5, 1.5);
+        chroma(0.9, 0.6, 0.3, 0.35, 0.85, 0.45, 1.5);
         st.vel.multiplyScalar(Math.exp(-dt * 2));
         st.turn = damp(st.turn, 0.6 * Math.sin(st.t * 1.3), 2, dt);
         st.heading = wrap(st.heading + st.turn * dt);
@@ -563,7 +565,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         an.headPitch = clamp(Math.atan2(-(toP.y), Math.hypot(toP.x, toP.z)) * 0.5, -0.25, 0.25) * -1;
         st.altGoal = clamp(p.pos.y - ground(p.pos.x, p.pos.z) - 0.2 * ML, 0.25 * ML, 1.5 * ML);
         // attention: paler, the chromatophores flickering over the back
-        chroma(0.45, 0.35 + 0.25 * Math.max(0, Math.sin(st.t * 7)), 0.25, 0.6, 0.95, 0.45, 4);
+        chroma(0.85, 0.5 + 0.25 * Math.max(0, Math.sin(st.t * 7)), 0.28, 0.6, 0.95, 0.45, 4);
         if (err < 0.12 && st.t > 0.5) phase('approach', 9);
         break;
       }
@@ -578,7 +580,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         finSet(0.26, 3.2, 0.2, 0.04);
         arms(0.15, 0.48, 0, 0.08);
         an.armRaise[0] = an.armRaise[1] = 0.12;
-        chroma(0.4, 0.3, 0.22, 0.5, 1.0, 0.5, 3);
+        chroma(0.85, 0.5, 0.25, 0.5, 1.0, 0.48, 3);
         // the prey notices a fast approach now and then
         if (dist < reach() * 0.85) phase('strike', 0.11);
         else if (st.t > st.dur) { prey = null; phase('search', 0.5); }
@@ -752,6 +754,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
     if (st.mode !== 'BURROW') an.funnelPitch = damp(an.funnelPitch, st.mode === 'HOVER' ? -0.25 : 0, 3, dt);
     if (st.mode !== 'HOVER' && st.mode !== 'SWIM' && st.mode !== 'HUNT') an.headPitch = damp(an.headPitch, 0.05, 2, dt);
     an.crawl = st.mode === 'CRAWL' ? an.crawl : 0;
+    an.tipCurl = damp(an.tipCurl, st.mode === 'REST' ? an.tipCurl : st.mode === 'HOVER' || st.mode === 'HUNT' ? 0.25 : st.mode === 'BURROW' ? 0.5 : 0.15, 2, dt);
     switch (st.mode) {
       case 'REST': updateRest(dt); break;
       case 'HOVER': updateHover(dt); break;
@@ -865,6 +868,8 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
         curl += -raise * (k === 0 ? 0.75 : k < 3 ? 0.8 : 0.45);
         swing += -raise * 0.12 * a.side;
         curl += -reachK * 0.25 * ca;
+        // the tips curl in (each arm a little differently): resting arms lie in loose coils on the sand
+        curl += an.tipCurl * keep * (k >= 2 ? 0.28 * (k - 1) : 0) * (0.7 + 0.6 * ((i * 0.37 + pers.wave) % 1));
         P.armCurl[j] = curl;
         P.armSwing[j] = swing;
       }

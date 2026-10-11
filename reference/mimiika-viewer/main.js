@@ -81,8 +81,8 @@ function studio(view) {
   AMH_UNIFORMS.uAir.value = 1;
   scene.background = new THREE.Color(tank ? 0x8fb4c4 : 0x0d1112);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = tank ? 0.35 : 0.25;
-  AMH_UNIFORMS.uSkyGain.value = tank ? 0.35 : 0.22;
+  scene.environmentIntensity = tank ? 0.22 : 0.2;
+  AMH_UNIFORMS.uSkyGain.value = tank ? 0.2 : 0.18;
   const sun = new THREE.DirectionalLight(0xfff4e6, tank ? 2.4 : 2.6);
   sun.position.set(0.3, 1, 0.5);
   scene.add(sun, sun.target, new THREE.HemisphereLight(0xb8c8d0, 0x4a4036, tank ? 0.8 : 0.4));
@@ -229,7 +229,7 @@ function flatScene(opts = {}) {
     squids.push({ driver: d, ind, root });
   }
   for (const f of squids) f.driver.update(1 / 60, ctx());
-  if (opts.awake) for (const f of squids) f.driver.setIntent({ id: 1, kind: 'rest', urgency: 0.3, seconds: 4 });
+  if (opts.awake) for (const f of squids) { f.manual = true; f.driver.behaviour.state.bury = f.driver.behaviour.state.buryGoal = 0; const st = f.driver.behaviour.state; st.sandCoat = st.headCover = 0; st.mode = 'REST'; st.phase = 'sit'; st.t = 0; st.dur = 60; }
   renderer.toneMappingExposure = night ? 0.42 : 0.66;
   camera.fov = 40;
   camera.position.set(0.22, 0.25, 0.26);
@@ -343,7 +343,7 @@ function loop(now) {
 document.querySelectorAll('[data-scene]').forEach((b) => b.addEventListener('click', () => setScene(b.dataset.scene)));
 document.querySelectorAll('[data-lod]').forEach((b) => b.addEventListener('click', () => { lod = Number(b.dataset.lod); if (sq) showLod(sq, lod); }));
 document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => command(b.dataset.mode)));
-const CHROMA = { pale: [0.35, 0.25, 0.12, 0.3, 0.7], mid: null, dark: [1, 1, 1.15, 0.5, 0] };
+const CHROMA = { pale: [0.45, 0.35, 0.3, 0.3, 0.7], mid: null, dark: [0.9, 1, 1.35, 0.5, 0] };
 document.querySelectorAll('[data-chroma]').forEach((b) => b.addEventListener('click', () => { chromaOverride = CHROMA[b.dataset.chroma]; }));
 
 resize();
