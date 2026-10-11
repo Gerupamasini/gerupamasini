@@ -1,5 +1,5 @@
 import { Bone, Matrix4, Quaternion, Vector3, type Object3D } from 'three';
-import { ARMS, ARM_BONES, EYE, TENTACLE_BONES } from './anatomy';
+import { ARMS, ARM_BONES, EYE, FUNNEL, TENTACLE_BONES } from './anatomy';
 import { armBone, tenBone, type RigDef } from './geometry';
 
 /**
@@ -31,6 +31,8 @@ export interface Pose {
   mantle: number;
   funnelPitch: number;
   funnelYaw: number;
+  /** the funnel swung far to one side up the flank (−1 right … 1 left), as it rests and ventilates (20, 29) */
+  funnelSide: number;
   /** gaze of each eye (head frame), and how wide the pupils are (0 slit … 1 round) */
   eyes: [Vector3, Vector3];
   pupil: number;
@@ -51,7 +53,7 @@ export function emptyPose(): Pose {
     pos: new Vector3(), quat: new Quaternion(), headPitch: 0, headYaw: 0,
     armCurl: new Float32Array(ARMS.length * ARM_BONES), armSwing: new Float32Array(ARMS.length * ARM_BONES),
     ten: [0, 1].map(() => ({ ext: 0, aim: new Vector3(0, 0, 1), aimW: 0, curl: 0 })),
-    finFold: [0, 0], finAmp: [0, 0], finPh: [0, 0], finK: 1, mantle: 1, funnelPitch: 0, funnelYaw: 0,
+    finFold: [0, 0], finAmp: [0, 0], finPh: [0, 0], finK: 1, mantle: 1, funnelPitch: 0, funnelYaw: 0, funnelSide: 0,
     eyes: [new Vector3(...EYE.gaze).normalize(), new Vector3(-EYE.gaze[0], EYE.gaze[1], EYE.gaze[2]).normalize()], pupil: 0.15, lid: 0.45,
     bury: 0, sandCoat: 0, headCover: 0, chroma: { y: 0.5, r: 0.5, b: 0.4, mottle: 0.3, irid: 0.6, pale: 0 }, lift: 0,
   };
@@ -101,10 +103,16 @@ function aimEye(b: Bone, dir: Vector3, up: Vector3): void {
   b.quaternion.setFromRotationMatrix(_m);
 }
 
-/** how far the funnel's mouth is opened by the mantle's squeeze */
-export const funnelOpening = (mantle: number): number => Math.max(0.88, Math.min(1.3, 1 + 4.5 * (1 - mantle)));
-/** the funnel's pitch as posed (negative: down), with the dip that keeps an opened or turned mouth under the head */
-export const funnelPitchOf = (P: Pose): number => P.funnelPitch - 0.4 * Math.max(0, funnelOpening(P.mantle) - 1) - 0.35 * Math.abs(P.funnelYaw);
+/** how far the funnel's mouth is opened by the mantle's squeeze (±10 % with each breath, 1.25 in a jet) */
+export const funnelOpening = (mantle: number): number => Math.max(0.9, Math.min(1.25, 1 + 4.5 * (1 - mantle)));
+/** the funnel's pitch as posed (negative: down): turned aside it dips a little so its mouth stays under the head */
+export const funnelPitchOf = (P: Pose): number => Math.max(-0.6, P.funnelPitch - 0.35 * Math.abs(P.funnelYaw) * (1 - Math.abs(P.funnelSide)));
+/** the swing to one side: about the head's vertical, tilted towards that side (the tube rises up the flank) */
+export function funnelSwingQ(side: number, out: Quaternion): Quaternion {
+  const sg = side >= 0 ? 1 : -1, b = FUNNEL.swingTilt;
+  return out.setFromAxisAngle(_sw.set(-Math.sin(b) * sg, Math.cos(b), 0), FUNNEL.swing * side);
+}
+const _sw = new Vector3();
 
 /** Pose → root transform and bone rotations (ends with one world-matrix update of the whole model). */
 export function applyPose(root: Object3D, bones: Record<string, Bone>, P: Pose): void {
@@ -149,11 +157,15 @@ export function applyPose(root: Object3D, bones: Record<string, Bone>, P: Pose):
   // the water breathed in round the neck leaves through the funnel: its mouth opens as the mantle squeezes (±10 % with
   // each breath, most in a jet) and draws in as it fills; opened or turned aside, the tube dips a little so that its
   // mouth stays clear of the head's skin
-  const sF = funnelOpening(P.mantle);
-  const f = bones.J_funnel, ft = bones.J_funnelTip;
-  const pitch = funnelPitchOf(P);
-  f.quaternion.copy(restQ(f)).multiply(_q.setFromAxisAngle(AX, -pitch)).multiply(_q2.setFromAxisAngle(AY, P.funnelYaw));
-  ft.scale.set(sF, 1 + 0.25 * (sF - 1), 1);
+  // swung aside (20, 29) the whole free funnel turns up the flank, a little narrower across (its broad base does not
+  // turn into depth that would cut the mantle's lip), its mouth tipped to face out and down along the flank
+  const sF = funnelOpening(P.mantle), side = Math.max(-1, Math.min(1, P.funnelSide));
+  const fs = bones.J_funnelSwing, f = bones.J_funnel, ft = bones.J_funnelTip;
+  fs.quaternion.copy(restQ(fs)).multiply(funnelSwingQ(side, _q));
+  f.quaternion.copy(restQ(f)).multiply(_q.setFromAxisAngle(AX, -funnelPitchOf(P))).multiply(_q2.setFromAxisAngle(AY, P.funnelYaw));
+  f.scale.set(1 - 0.28 * Math.abs(side), 1, 1);
+  ft.quaternion.copy(restQ(ft)).multiply(_q.setFromAxisAngle(AX, 0.5 * Math.abs(side)));
+  ft.scale.set(sF, sF, 1);
   // the world's up in the head's frame (for the eyes' counter-roll)
   bones.J_head.updateWorldMatrix(true, false);
   bones.J_head.matrixWorld.decompose(_hp, _hq, _hs);

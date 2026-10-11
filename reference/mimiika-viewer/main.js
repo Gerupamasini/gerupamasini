@@ -32,7 +32,7 @@ const camera = new THREE.PerspectiveCamera(30, 1, 0.002, 200);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 
-let funnelYaw = null;
+let funnelYaw = null, funnelSide = null;
 let scene = null, sq = null, beh = null, studioFx = null, studioInk = null, studioPrey = null, squids = [], mode = 'side', lod = 0, seed = 1, simT = 0;
 let chromaOverride = null;
 const info = document.getElementById('info');
@@ -62,6 +62,7 @@ function poseStudio(dt = 0) {
   const P = beh.update(dt || 1 / 60);
   // (render scripts can hold the funnel turned aside, as in photographs 20 and 29)
   if (funnelYaw !== null) P.funnelYaw = funnelYaw;
+  if (funnelSide !== null) { P.funnelSide = funnelSide; MimiikaDriver.applyMaterials(sq, P); }
   applyPose(sq.root, sq.bones, P);
   syncLevel(sq, lod, P.ten[0].ext > 0.12);
   MimiikaDriver.applyMaterials(sq, P);
@@ -359,6 +360,7 @@ window.__mm = {
     if (o.lod !== undefined) lod = o.lod;
     if (o.depth !== undefined) depth = o.depth;
     if ('funnelYaw' in o) funnelYaw = o.funnelYaw;
+    if ('funnelSide' in o) funnelSide = o.funnelSide;
     if ('chroma' in o) chromaOverride = o.chroma ? (CHROMA[o.chroma] ?? o.chroma) : null;
     if (o.scene) setScene(o.scene, o);
     else if (sq) showLod(sq, lod);

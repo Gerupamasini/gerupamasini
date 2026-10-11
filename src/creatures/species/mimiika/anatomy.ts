@@ -173,11 +173,14 @@ function surfaceRaw(z: number, theta: number, K: ProfileKnot[]): [number, number
   return [x, p.c + y, z];
 }
 
-/** a point of the body surface at z and angle θ from the dorsal midline (θ > 0 the left side) */
-export function surfacePoint(z: number, theta: number, K: ProfileKnot[] = PROFILE): [number, number, number] {
+/**
+ * A point of the body surface at z and angle θ from the dorsal midline (θ > 0 the left side). `imprint`: under the
+ * head the skin is drawn up into the funnel's groove (off on the far tier, which has no funnel).
+ */
+export function surfacePoint(z: number, theta: number, K: ProfileKnot[] = PROFILE, imprint = true): [number, number, number] {
   const q = surfaceRaw(z, theta, K);
-  // under the head the skin is drawn up into the funnel's groove: it lies just inside the funnel's dorsal wall
-  if (K === HEAD_PROFILE && Math.cos(theta) < 0) q[1] = funnelImprint(q[0], q[1], z);
+  // (the groove: the skin lies just inside the funnel's dorsal wall)
+  if (imprint && K === HEAD_PROFILE && Math.cos(theta) < 0) q[1] = funnelImprint(q[0], q[1], z);
   return z > -2.5 ? socketPush(q) : q;
 }
 
@@ -268,12 +271,19 @@ export function finBase(u: number): [number, number, number] {
  * opening forward and a little down under the eyes. z0 the base, zOut where the mantle's edge lies over it, z1 the
  * opening; embed how deep its dorsal wall lies in the groove, droop how far its tip stands down off the head; lip the
  * wall's thickness at the opening, bore how deep the dark opening is drawn; flare how far the mantle's ventral edge
- * stands out over the base (its free edge lies on the funnel, not on the head).
+ * stands out over the base (its free edge lies on the funnel, not on the head). The mouth: outer ≈ 3.2 × 2.8 mm, a thick
+ * rounded lip (0.6-0.9 mm), the bore half the outer width (29: 3.2 / 1.6 mm; 20: bore 0.51-0.56 of the outer).
+ * At rest it is often swung far to one side up the flank, its mouth under the back of the eye in front of the mantle's
+ * margin, facing out (20, 29): a joint at swingZ turns it by swing rad about the head's vertical tilted by swingTilt
+ * towards that side (J_funnelSwing).
  */
-export const FUNNEL = { z0: -4.6, zOut: -0.9, z1: 3.4, embed: 1.15, embedBase: 0.3, droop: 0.7, lip: 0.5, bore: 1.8, flare: 1.5, tilt: 0.3, pz: 0.3, py: 1.0, w0: -0.8, w1: 0.9 };
-/** the funnel's section: half width a, half height b (mm) along z: broad and flat in the cavity, a fat cone outside, a bead at the lip */
+export const FUNNEL = {
+  z0: -4.6, zOut: -0.9, z1: 3.4, embed: 1.15, embedBase: 0.3, droop: 0.5, lip: 0.78, bore: 1.5, flare: 1.5, tilt: 0.3,
+  pz: 0.3, py: 1.0, w0: -0.8, w1: 0.9, swingZ: -1.1, swing: 1.3, swingTilt: 0.3,
+};
+/** the funnel's section: half width a, half height b (mm) along z: broad and flat in the cavity, a fat cone outside */
 const FUNNEL_KNOTS: [number, number, number][] = [
-  [-4.6, 2.0, 0.45], [-3.0, 2.5, 0.8], [-1.0, 2.5, 1.12], [0.4, 2.3, 1.3], [1.9, 2.0, 1.3], [2.95, 1.78, 1.25], [3.4, 1.84, 1.3],
+  [-4.6, 2.0, 0.45], [-3.0, 2.5, 0.8], [-1.0, 2.5, 1.12], [0.4, 2.3, 1.3], [1.9, 2.0, 1.3], [2.95, 1.62, 1.32], [3.4, 1.62, 1.4],
 ];
 
 /** the funnel's cross-section at z: half width a, half height b and the centre's height yc (mm, neck frame) */

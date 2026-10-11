@@ -77,7 +77,9 @@ export function rigDefinition(): RigDef {
   // shear, and aiming down does not swing its ventral wall back into the mantle's lip)
   const f0 = funnelSection(FUNNEL.pz), f1 = funnelSection(FUNNEL.z1), py = f0.yc - FUNNEL.py * f0.b;
   const fDir = new Vector3(0, f1.yc - f0.yc, FUNNEL.z1 - FUNNEL.pz);
-  add('J_funnel', 'J_head', frame(v3(toModel([0, py, FUNNEL.pz])), fDir, Y));
+  // (the joint that swings the whole free funnel to one side, under the mantle's ventral lip)
+  add('J_funnelSwing', 'J_head', frame(v3(toModel([0, funnelSection(FUNNEL.swingZ).yc, FUNNEL.swingZ])), fDir, Y));
+  add('J_funnel', 'J_funnelSwing', frame(v3(toModel([0, py, FUNNEL.pz])), fDir, Y));
   // the tip, which opens with each breath and in the jet
   const ft = funnelSection(FUNNEL.z1 - 0.6);
   add('J_funnelTip', 'J_funnel', frame(v3(toModel([0, ft.yc, FUNNEL.z1 - 0.6])), fDir, Y));
@@ -169,12 +171,12 @@ function rings(z0: number, z1: number, n: number, clusterStart: boolean, cluster
 }
 
 /** a point of a lofted surface (outline K) and its outward normal, from the surface's derivatives */
-function surf(z: number, th: number, K: ProfileKnot[], zLo: number, zHi: number): { p: Vector3; n: Vector3; f: Vector3; c: number } {
+function surf(z: number, th: number, K: ProfileKnot[], zLo: number, zHi: number, imprint = true): { p: Vector3; n: Vector3; f: Vector3; c: number } {
   const pr = profileAt(z, K);
-  const p = v3(surfacePoint(z, th, K));
+  const p = v3(surfacePoint(z, th, K, imprint));
   const e = 0.02, ez = 0.03;
-  const a1 = v3(surfacePoint(z, th + e, K)), a0 = v3(surfacePoint(z, th - e, K));
-  const b1 = v3(surfacePoint(Math.min(zHi, z + ez), th, K)), b0 = v3(surfacePoint(Math.max(zLo, z - ez), th, K));
+  const a1 = v3(surfacePoint(z, th + e, K, imprint)), a0 = v3(surfacePoint(z, th - e, K, imprint));
+  const b1 = v3(surfacePoint(Math.min(zHi, z + ez), th, K, imprint)), b0 = v3(surfacePoint(Math.max(zLo, z - ez), th, K, imprint));
   const dth = a1.sub(a0), dz = b1.sub(b0);
   let n = new Vector3().crossVectors(dth, dz);
   if (n.lengthSq() < 1e-10 || pr.w < 0.05) n = new Vector3(0, 0, z < (zLo + zHi) / 2 ? -1 : 1);
@@ -234,7 +236,7 @@ export function buildBody(rig: RigDef, t: Tier): { mantle: BufferGeometry; head:
       const u = i / nIn;
       const z = rim.z + (CAVITY_Z - rim.z) * u;
       const O = surf(z, th, PROFILE, Z_TIP, Z_FRONT);
-      const H = surf(z, th, HEAD_PROFILE, -7.6, Z_FRONT);
+      const H = surf(z, th, HEAD_PROFILE, -7.6, Z_FRONT, t.funnel);
       const p = O.p.clone().addScaledVector(O.n, -T - hug(z));
       const close = smooth(0.7, 1.0, u);
       p.lerp(H.p, close);
@@ -251,10 +253,13 @@ export function buildBody(rig: RigDef, t: Tier): { mantle: BufferGeometry; head:
   // ---- the head and the visceral sac
   const hb = new Builder();
   const zs = rings(-7.6, Z_FRONT, t.front + Math.round(t.front / 2), true, true);
+  // (the funnel's groove under the head, and how far down to fill it when the funnel is swung out of it: aGroove)
+  const groove: number[] = [];
   for (const z of zs) {
     for (let j = 0; j < cols; j++) {
       const th = -Math.PI + (2 * Math.PI * j) / t.around;
-      const S = surf(z, th, HEAD_PROFILE, -7.6, Z_FRONT);
+      const S = surf(z, th, HEAD_PROFILE, -7.6, Z_FRONT, t.funnel);
+      groove.push(t.funnel && Math.cos(th) < 0 ? (surfacePoint(z, th, HEAD_PROFILE, false)[1] - S.p.y) / 1000 : 0);
       // the head (and arms) turn on the neck; the sac inside the mantle stays with the root; the skin of the eye's dome
       // turns with the head as one piece (the ball under it is rigid on the head)
       const dEye = Math.hypot(S.p.x - EYE.x * Math.sign(S.p.x || 1), S.p.y - EYE.y, S.p.z - EYE.z) - (EYE.r + EYE.skin);
@@ -263,7 +268,9 @@ export function buildBody(rig: RigDef, t: Tier): { mantle: BufferGeometry; head:
     }
   }
   hb.grid(0, zs.length, cols, false);
-  return { mantle: mb.build(), head: hb.build(), domeMin: domeMin(hb) };
+  const headGeo = hb.build();
+  headGeo.setAttribute('aGroove', new BufferAttribute(new Float32Array(groove), 1));
+  return { mantle: mb.build(), head: headGeo, domeMin: domeMin(hb) };
 }
 
 /**
@@ -421,13 +428,13 @@ export function buildTentacles(rig: RigDef, t: Tier): BufferGeometry {
  */
 export function buildFunnel(rig: RigDef, t: Tier): BufferGeometry {
   const b = new Builder();
-  const fun = rig.byName.J_funnel, tip = rig.byName.J_funnelTip, head = rig.byName.J_head, root = rig.byName.J_root;
-  const around = Math.max(10, Math.round(t.around / 3)), along = Math.max(8, Math.round(t.front / 2)), nLip = t.around > 40 ? 4 : 2, nBore = 3;
+  const fun = rig.byName.J_funnel, tip = rig.byName.J_funnelTip, swing = rig.byName.J_funnelSwing, head = rig.byName.J_head, root = rig.byName.J_root;
+  const around = Math.max(10, Math.round(t.around / 3)), along = Math.max(8, Math.round(t.front / 2)), nLip = t.around > 30 ? 4 : 2, nBore = 3;
   const cols = around + 1;
   const weights = (z: number, mouth = false): [number, number][] => {
-    const wh = smooth(-2.6, -1.2, z), wf = smooth(FUNNEL.w0, FUNNEL.w1, z);
+    const wh = smooth(-2.6, -1.2, z), ws = smooth(-2.2, -1.0, z), wf = smooth(FUNNEL.w0, FUNNEL.w1, z);
     const wt = mouth ? 1 : smooth(FUNNEL.z1 - 1.6, FUNNEL.z1 - 0.4, z);
-    return [[root, 1 - wh], [head, wh * (1 - wf)], [fun, wh * wf * (1 - wt)], [tip, wh * wf * wt]];
+    return [[root, 1 - wh], [head, wh * (1 - ws)], [swing, wh * ws * (1 - wf)], [fun, wh * ws * wf * (1 - wt)], [tip, wh * ws * wf * wt]];
   };
   // the section at z, scaled in (s) for the lip and the bore; φ = 0 is the dorsal side, φ > 0 the animal's left
   // (the opening faces forward and a little down: its plane leans back by FUNNEL.tilt, the upper lip ahead of the lower)
@@ -453,7 +460,7 @@ export function buildFunnel(rig: RigDef, t: Tier): BufferGeometry {
   // the bore: back into the tube, narrowing a little
   for (let k = 0; k <= nBore; k++) {
     const d = k / nBore, z = FUNNEL.z1 - FUNNEL.bore * d;
-    rows.push({ p: Array.from({ length: cols }, (_, j) => at(z, (2 * Math.PI * j) / around, L + 0.25 * d)), skin: [4, 1, 2, d], z, bore: true });
+    rows.push({ p: Array.from({ length: cols }, (_, j) => at(z, (2 * Math.PI * j) / around, L + 0.15 * d)), skin: [4, 1, 2, d], z, bore: true });
   }
   // normals from the sheet's own derivatives (rows × around: outward on the wall, into the bore inside it)
   const n = rows.length;

@@ -1,6 +1,6 @@
 import { Euler, Quaternion, Vector3 } from 'three';
 import { ARMS, ARM_BONES, ML_MM, TENTACLE, Z_ROOT, CROWN, EYE, FUNNEL, funnelSection } from './anatomy';
-import { emptyPose, funnelPitchOf, type Pose } from './rig';
+import { emptyPose, funnelPitchOf, funnelSwingQ, type Pose } from './rig';
 import { Mysid } from './prey';
 
 /**
@@ -88,6 +88,7 @@ const CROWN_Z = CROWN.z - Z_ROOT;
 const FUNNEL_TIP = new Vector3(0, funnelSection(FUNNEL.z1).yc, FUNNEL.z1 + FUNNEL.lip - Z_ROOT);
 /** the funnel's joint (where it leaves the mantle) and the head's, model mm */
 const FUNNEL_PIVOT = new Vector3(0, funnelSection(FUNNEL.pz).yc - FUNNEL.py * funnelSection(FUNNEL.pz).b, FUNNEL.pz - Z_ROOT);
+const SWING_PIVOT = new Vector3(0, funnelSection(FUNNEL.swingZ).yc, FUNNEL.swingZ - Z_ROOT);
 const HEAD_PIVOT = new Vector3(0, 0.8, 1.2 - Z_ROOT);
 const ARM_W = [0.55, 0.8, 1.0, 1.2, 1.45].map((w) => w / 5);
 const REST_GAZE = [new Vector3(EYE.gaze[0], EYE.gaze[1], EYE.gaze[2]).normalize(), new Vector3(-EYE.gaze[0], EYE.gaze[1], EYE.gaze[2]).normalize()];
@@ -149,7 +150,7 @@ export function createSquidBehavior(opts: SquidOptions) {
     finPh: [rand(0, 6), rand(0, 6)] as [number, number], finFreq: 1.2, finAmp: 0.08, finAmpGoal: 0.08, finFold: -0.35, finFoldGoal: -0.35, finK: 0.9, finDir: 1, flap: 0, flapGoal: 0,
     armDroop: 0.55, armClose: 0.1, armSpread: 0.0, armWave: 0.4, armRaise: [0, 0] as [number, number], tipCurl: 0.3,
     crawlPh: 0, crawl: 0,
-    headPitch: 0.06, headYaw: 0, funnelPitch: 0, funnelYaw: 0, funnelYawGoal: 0, funnelT: rand(4, 10),
+    headPitch: 0.06, headYaw: 0, funnelPitch: 0, funnelYaw: 0, funnelYawGoal: 0, funnelT: rand(4, 10), funnelSide: 0, funnelSideGoal: 0,
     ten: [0, 0], tenGoal: 0, tenAim: new Vector3(0, -0.1, 1).normalize(), tenAimW: 0,
     eyeT: rand(0.5, 2), eyeOff: [new Vector3(), new Vector3()], eyeLook: null as Vector3 | null,
     pupil: 0.45,
@@ -185,8 +186,11 @@ export function createSquidBehavior(opts: SquidOptions) {
   function funnelMouth(at: Vector3, dir: Vector3): void {
     _tq.setFromAxisAngle(_tx, -P.headPitch).multiply(_tq2.setFromAxisAngle(_ty, P.headYaw));
     const qf = new Quaternion().setFromAxisAngle(_tx, -funnelPitchOf(P)).multiply(_tq2.setFromAxisAngle(_ty, P.funnelYaw));
-    at.copy(FUNNEL_TIP).sub(FUNNEL_PIVOT).applyQuaternion(qf).add(FUNNEL_PIVOT).sub(HEAD_PIVOT).applyQuaternion(_tq).add(HEAD_PIVOT);
-    dir.set(0, -0.04, 1).applyQuaternion(qf).applyQuaternion(_tq).normalize();
+    const qs = funnelSwingQ(P.funnelSide, new Quaternion());
+    at.copy(FUNNEL_TIP).sub(FUNNEL_PIVOT).applyQuaternion(qf).add(FUNNEL_PIVOT)
+      .sub(SWING_PIVOT).applyQuaternion(qs).add(SWING_PIVOT)
+      .sub(HEAD_PIVOT).applyQuaternion(_tq).add(HEAD_PIVOT);
+    dir.set(0, -0.04, 1).applyQuaternion(_tq2.setFromAxisAngle(_tx, 0.5 * Math.abs(P.funnelSide))).applyQuaternion(qf).applyQuaternion(qs).applyQuaternion(_tq).normalize();
   }
   function ink(): void {
     const dir = new Vector3();
@@ -485,7 +489,7 @@ export function createSquidBehavior(opts: SquidOptions) {
         return;
       case 'blow': {
         // jets aimed down and forward blow the sand out from under the mantle: it sinks into the pit
-        an.funnelPitch = damp(an.funnelPitch, -0.55, 6, dt);
+        an.funnelPitch = damp(an.funnelPitch, -0.45, 6, dt);
         finSet(0.55, 5.5, -0.55, 0.2);
         arms(0.75, 0.0, 0.2, 0.3);
         const every = 0.38;
@@ -777,16 +781,27 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
       const pg = st.mode === 'REST' ? -0.15 : st.mode === 'HOVER' ? -0.25 : st.mode === 'SWIM' ? -0.35 : st.mode === 'HUNT' ? -0.2 : st.mode === 'ESCAPE' ? -0.05 : -0.1;
       an.funnelPitch = damp(an.funnelPitch, pg, 3, dt);
       if (st.mode === 'REST') {
+        // resting and ventilating it swings the funnel far to one side or the other, its mouth up on the flank under
+        // the back of the eye (20, 29), and now and then forward under the head (26)
         an.funnelT -= dt;
         if (an.funnelT <= 0) {
-          an.funnelT = rand(6, 18);
           const r = rng();
-          an.funnelYawGoal = r < 0.2 ? -0.7 : r < 0.35 ? -0.4 : r < 0.65 ? 0 : r < 0.8 ? 0.4 : 0.7;
+          an.funnelSideGoal = r < 0.3 ? 0 : an.funnelSideGoal !== 0 && r < 0.79 ? -Math.sign(an.funnelSideGoal) : rng() < 0.5 ? 1 : -1;
+          an.funnelT = an.funnelSideGoal === 0 ? rand(4, 10) : rand(8, 25);
         }
-      } else if (st.mode === 'HOVER' || st.mode === 'SWIM') an.funnelYawGoal = clamp(-0.8 * st.turn + (st.mode === 'HOVER' ? 0.12 * Math.sin(st.t * 0.7) : 0), -0.6, 0.6);
-      else an.funnelYawGoal = 0;
-    } else if (st.phase !== 'blow') { an.funnelYawGoal = 0; an.funnelPitch = damp(an.funnelPitch, -0.1, 2, dt); }
-    an.funnelYaw = damp(an.funnelYaw, clamp(an.funnelYawGoal, -0.8, 0.8), st.mode === 'BURROW' ? 14 : 1.2, dt);
+        an.funnelYawGoal = 0;
+      } else {
+        an.funnelSideGoal = 0;
+        if (st.mode === 'HOVER' || st.mode === 'SWIM') an.funnelYawGoal = clamp(-0.8 * st.turn + (st.mode === 'HOVER' ? 0.12 * Math.sin(st.t * 0.7) : 0), -0.6, 0.6);
+        else an.funnelYawGoal = 0;
+      }
+      if (Math.abs(an.funnelSide) > 0.1) an.funnelPitch = damp(an.funnelPitch, -0.2, 3, dt);
+    } else {
+      an.funnelSideGoal = 0;
+      if (st.phase !== 'blow') { an.funnelYawGoal = 0; an.funnelPitch = damp(an.funnelPitch, -0.1, 2, dt); }
+    }
+    an.funnelSide = damp(an.funnelSide, an.funnelSideGoal, st.mode === 'ESCAPE' ? 12 : st.mode === 'REST' ? 1.6 : 3, dt);
+    an.funnelYaw = damp(an.funnelYaw, clamp(an.funnelYawGoal, -0.6, 0.6), st.mode === 'BURROW' ? 14 : 1.2, dt);
     if (st.mode !== 'HOVER' && st.mode !== 'SWIM' && st.mode !== 'HUNT') an.headPitch = damp(an.headPitch, 0.05, 2, dt);
     an.crawl = st.mode === 'CRAWL' ? an.crawl : 0;
     an.tipCurl = damp(an.tipCurl, st.mode === 'REST' ? an.tipCurl : st.mode === 'HOVER' || st.mode === 'HUNT' ? 0.25 : st.mode === 'BURROW' ? 0.5 : 0.15, 2, dt);
@@ -923,6 +938,7 @@ const reach = () => TENTACLE.length * 0.9 * MM * K;
     P.headYaw = damp(P.headYaw, an.eyeLook ? 0 : 0.06 * Math.sin(t * 0.3), 2, dt);
     P.funnelPitch = an.funnelPitch;
     P.funnelYaw = an.funnelYaw;
+    P.funnelSide = an.funnelSide;
     // ---- eyes: on the prey or the threat, else wandering saccades round the resting gaze
     an.eyeT -= dt;
     if (an.eyeT <= 0) {

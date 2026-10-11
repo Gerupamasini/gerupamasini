@@ -3,7 +3,7 @@ import { Group, Vector3, type Bone, type Mesh } from 'three';
 import { ARMS, EYE, FIN, FUNNEL, HEAD_PROFILE, ML_MM, TENTACLE, Z_ROOT, armBase, bellyDepth, funnelSection, surfacePoint } from '../../src/creatures/species/mimiika/anatomy';
 import { LODS, buildArms, buildBody, buildFin, buildFunnel, rigDefinition } from '../../src/creatures/species/mimiika/geometry';
 import { createSquidBehavior, MODES, type Mode } from '../../src/creatures/species/mimiika/behavior';
-import { applyPose } from '../../src/creatures/species/mimiika/rig';
+import { applyPose, emptyPose } from '../../src/creatures/species/mimiika/rig';
 import { buildModel, disposeModel } from '../../src/creatures/species/mimiika/model';
 import { MimiikaLook } from '../../src/creatures/species/mimiika/materials';
 import { lookSpecFor } from '../../src/creatures/species/mimiika/MimiikaDriver';
@@ -84,12 +84,12 @@ describe('ミミイカ: the body plan', () => {
   });
 
   it('has a funnel that comes out from under the mantle and opens forward under the eyes', () => {
-    // the opening: under the eye, about two fifths of its diameter across
+    // the opening: under the eye, about 0.45 of its dome across (29: outer 3.2 mm)
     expect(FUNNEL.z1).toBeGreaterThan(EYE.z - EYE.r);
     expect(FUNNEL.z1).toBeLessThan(EYE.z + EYE.r);
-    const tip = funnelSection(FUNNEL.z1);
-    expect((2 * tip.a) / (2 * EYE.r)).toBeGreaterThan(0.3);
-    expect((2 * tip.a) / (2 * EYE.r)).toBeLessThan(0.55);
+    const tip = funnelSection(FUNNEL.z1), dome = 2 * (EYE.r + EYE.skin);
+    expect((2 * tip.a) / dome).toBeGreaterThan(0.4);
+    expect((2 * tip.a) / dome).toBeLessThan(0.55);
     // in front of the mantle's edge it hangs well below the head's ventral surface (it shows from the side)
     for (const z of [0, 1, 2, FUNNEL.z1]) {
       const S = funnelSection(z);
@@ -113,9 +113,9 @@ describe('ミミイカ: the body plan', () => {
       expect(q[1], `funnel vertex at ${q.map((v) => v.toFixed(2))}`).toBeGreaterThan(Math.min(...near.map((o) => o[1])) + 0.05);
     }
     expect(checked).toBeGreaterThan(30);
-    // the bore ≈ 0.4 of the eye across inside a thick lip (29: outer 3.7, bore 2.5 mm)
-    expect((2 * (tip.a - FUNNEL.lip)) / (2 * EYE.r)).toBeGreaterThan(0.3);
-    expect((2 * (tip.a - FUNNEL.lip)) / (2 * EYE.r)).toBeLessThan(0.45);
+    // the bore about half the mouth across inside a thick lip (29: outer 3.2, bore 1.6 mm; 20: bore 0.51-0.56 of it)
+    expect((2 * (tip.a - FUNNEL.lip)) / dome).toBeGreaterThan(0.2);
+    expect((2 * (tip.a - FUNNEL.lip)) / dome).toBeLessThan(0.3);
     // the head's skin (in its funnel groove) never shows inside the bore: it stays above the bore's dorsal half
     const headY = (x: number, z: number) => {
       let lo = Math.PI / 2, hi = Math.PI;
@@ -147,6 +147,31 @@ describe('ミミイカ: the body plan', () => {
       expect(Math.hypot(B[0], B[1] - tip.yc, B[2] - FUNNEL.z1), a.name).toBeGreaterThan(tip.b + a.rBase + 0.5);
     }
     expect(Math.hypot(EYE.x - tip.a, EYE.y - tip.yc, EYE.z - FUNNEL.z1)).toBeGreaterThan(EYE.r + 0.5);
+  });
+
+  it('swings its funnel aside up the flank as it rests, the mouth under the back of the eye (20, 29)', () => {
+    const m = buildModel(new MimiikaLook(lookSpecFor('squid#4')), [0]);
+    const rig = rigDefinition();
+    const P = emptyPose();
+    // the mouth's centre at rest, carried by the tip's bone
+    const S = funnelSection(FUNNEL.z1);
+    const rest = new Vector3(0, S.yc / 1000, (FUNNEL.z1 - Z_ROOT) / 1000);
+    const tipBone = rig.byName.J_funnelTip;
+    for (const side of [1, -1]) {
+      P.funnelSide = side;
+      applyPose(m.root, m.bones, P);
+      const b = m.bones.J_funnelTip;
+      const q = rest.clone().applyMatrix4(rig.defs[tipBone].inverse).applyMatrix4(m.root.matrixWorld.clone().invert().multiply(b.matrixWorld));
+      const mm = [q.x * 1000, q.y * 1000, q.z * 1000 + Z_ROOT];
+      // on the flank (not hanging under the chin), level with the lower part of the head, in front of the mantle's margin
+      expect(mm[0] * side, `side ${side}: ${mm.map((v) => v.toFixed(2))}`).toBeGreaterThan(3.6);
+      expect(mm[0] * side).toBeLessThan(5.4);
+      expect(mm[1]).toBeGreaterThan(-4.2);
+      expect(mm[1]).toBeLessThan(-2.4);
+      expect(mm[2]).toBeGreaterThan(-1.2);
+      expect(mm[2]).toBeLessThan(1.6);
+    }
+    disposeModel(m);
   });
 
   it('is built as MimiIkaRoot with Mantle, Head, Eye_L/R, Fin_L/R, Arms, Tentacles in three tiers', () => {
