@@ -22,13 +22,14 @@ import type { HeroLighting } from '../render/HeroPipeline';
 import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
 import { Group } from 'three';
 import { AquariumEquipment, STANDARD_TANK, type TankDimensions } from '../aquarium';
+import { MAX_TANK_ANIMALS, animalSlotPosition } from '../aquarium/progression';
 import { ToolShelf, type ShelfTool } from './ToolShelf';
 import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 
 const UP = new Vector3(0, 1, 0);
 
 export const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
-export const TANK_MAX_OCCUPANTS = 4;
+export const TANK_MAX_OCCUPANTS = MAX_TANK_ANIMALS;
 /** The cabinet is 73 cm tall; keep aquarium coordinates local to its top. */
 export const TANK_OFFSET_Y = 0.73;
 
@@ -829,7 +830,8 @@ export class TankScene {
     const ind = generateIndividual(species, seed, 0, 0, 0, 0, Date.now());
     ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits]; ind.gravid = !!record.gravid; ind.dress = !!record.dress;
     const slot = this.occupants.length;
-    ind.pos.set((slot % 2 === 0 ? -1 : 1) * 0.12 * Math.ceil(slot / 2), 0, (slot >= 2 ? 0.06 : -0.04));
+    const [x, z] = animalSlotPosition(slot, this.occupantRecords.length, this.dimensions.width, this.dimensions.depth);
+    ind.pos.set(x, 0, z);
     ind.home.copy(ind.pos);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     let hero: HeroInstance | null = null;

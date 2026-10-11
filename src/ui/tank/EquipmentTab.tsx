@@ -4,6 +4,7 @@ import type { App } from '../../app/App';
 import { CATEGORY_LABELS, EQUIPMENT_CATEGORIES, EQUIPMENT_MAX, TANK_SIZES, categoryLimit, equipmentItem, itemForCategory, itemsForCategory, ownedQuantity, tankSizeItemId, type TankSize, type EquipmentCategory, type Vec3 } from '../../aquarium';
 import { ui } from '../store';
 import { EquipmentSwatch } from '../common/EquipmentSwatch';
+import { equipmentUnlocked, isFilterKind, filterCapacity, TANK_ANIMAL_LIMIT } from '../../aquarium';
 
 const MOBILE_GROUPS: { label: string; categories: EquipmentCategory[] }[] = [
   { label: '水槽・台・蓋', categories: ['tank', 'stand', 'glassLid'] },
@@ -23,7 +24,7 @@ export function EquipmentTab({ app }: { app: App }) {
   if (selected) return <EquipmentDetail key={selected} app={app} selected={selected} />;
   const categories = app.input.touchDevice ? MOBILE_GROUPS[group].categories : EQUIPMENT_CATEGORIES;
   return <Fragment>
-    {!app.input.touchDevice && <p class="small dim">設備を選んで、デザインや設置位置を変えられます。初期アイテムはいつでも使用できます。</p>}
+    {!app.input.touchDevice && <p class="small dim">水槽サイズ・ろ過装置はショップで解放。デザインや設置位置はここで変更できます。</p>}
     <div class="equipment-view">
       {app.input.touchDevice && <select aria-label="設備の種類" value={group} onChange={(e) => setGroup(Number(e.currentTarget.value))}>{MOBILE_GROUPS.map((g, i) => <option value={i} key={g.label}>{g.label}</option>)}</select>}
       <button onClick={() => app.tank.resetView()}>正面</button><button onClick={() => app.tank.focusEquipmentRear()}>背面</button>
@@ -50,36 +51,38 @@ function EquipmentDetail({ app, selected }: { app: App; selected: string }) {
   const [tankSize, setTankSize] = useState<TankSize>(equipmentItem(previewId)?.size ?? app.currentRoomTank?.size ?? 60);
   const [tab, setTab] = useState<'position' | 'design'>(record ? 'position' : 'design');
   const preview = itemForCategory(previewId, category), collection = app.equipmentCollection.value;
-  const quantity = ownedQuantity(collection, preview.id), owns = quantity > 0, replacing = fixed ? category : record?.id;
+  const quantity = ownedQuantity(collection, preview.id), unlocked = equipmentUnlocked(collection, preview.id), owns = quantity > 0 && unlocked, replacing = fixed ? category : record?.id;
   const available = app.usedEquipmentQuantity(preview.id, replacing) < quantity, siblings = layout.devices.filter((d) => d.kind === category);
   const canAdd = !fixed && siblings.length < categoryLimit(category) && layout.devices.length < EQUIPMENT_MAX && app.usedEquipmentQuantity(preview.id) < quantity;
-  const detail = <div class="equipment-item-detail"><EquipmentSwatch style={preview.style} category={category} large /><div><span class={`equipment-rarity rarity-${preview.rarity}`}>{preview.rarity === 'initial' ? '初期アイテム' : preview.rarity}</span><h3>{preview.name}</h3><p class="small dim">{preview.description}</p><p class="small">{preview.rarity === 'initial' ? 'いつでも使用できます' : owns ? `所持数 ${quantity}個` : 'ガチャで獲得できます'}</p></div></div>;
+  const detail = <div class="equipment-item-detail"><EquipmentSwatch style={preview.style} category={category} large /><div><span class={`equipment-rarity rarity-${preview.rarity}`}>{preview.rarity === 'initial' ? '標準デザイン' : preview.rarity}</span><h3>{preview.name}</h3><p class="small dim">{preview.description}</p><p class="small">{!unlocked ? 'ショップで種類を解放してください' : preview.rarity === 'initial' ? '使用できます' : owns ? `所持数 ${quantity}個` : 'デザインはガチャで獲得できます'}</p></div></div>;
   return <Fragment>
     <div class="equipment-detail-head"><button class="btn equipment-back" onClick={() => { ui.equipmentSelected.value = null; }}>‹ 設備一覧</button><h4>{CATEGORY_LABELS[category]}{app.input.touchDevice && <small>現在：{current?.name ?? '未設置'}</small>}</h4></div>
     {!app.input.touchDevice && <p class="small equipment-current">現在：<strong>{current?.name ?? '未設置'}</strong></p>}
+    {isFilterKind(category) && !app.input.touchDevice && <p class="small equipment-filter-capacity">{app.aquariumProgression.filters[category] ? `Lv.${app.aquariumProgression.filters[category]} · 飼育上限 ${Math.min(TANK_ANIMAL_LIMIT[app.currentRoomTank?.size ?? 60], filterCapacity(app.aquariumProgression, category))}匹` : '未解放'}<button onClick={() => app.openShop('filters')}>解放・強化</button></p>}
     {siblings.length > 1 && <div class="equipment-instances" aria-label="設置済みの設備">{siblings.map((d, i) => <button key={d.id} title={itemForCategory(d.itemId, category).name} aria-label={`設備${i + 1} ${itemForCategory(d.itemId, category).name}`} class={d.id === selected ? 'on' : ''} onClick={() => { ui.equipmentPreview.value = null; ui.equipmentSelected.value = d.id; }}>#{i + 1}</button>)}</div>}
-    {app.input.touchDevice && record && <div class="seg equipment-tabs"><button class={tab === 'position' ? 'on' : ''} onClick={() => setTab('position')}>位置・向き</button><button class={tab === 'design' ? 'on' : ''} onClick={() => setTab('design')}>デザイン</button></div>}
+    {app.input.touchDevice && record && <div class="seg equipment-tabs"><button class={tab === 'position' ? 'on' : ''} onClick={() => setTab('position')}>位置・向き</button><button class={tab === 'design' ? 'on' : ''} onClick={() => setTab('design')}>デザイン</button>{isFilterKind(category) && <button aria-label="解放・強化" onClick={() => app.openShop('filters')}>強化 Lv.{app.aquariumProgression.filters[category]}</button>}</div>}
     {record && (!app.input.touchDevice || tab === 'position') && <Fragment>{!app.input.touchDevice && <h4>設置位置</h4>}<div class="equipment-position">{(['X', '高さ', 'Z'] as const).map((axis, i) => <label key={axis}>{axis} (cm)<input aria-label={`設備の${axis} (cm)`} type="number" step="0.5" min={i === 1 ? -72 : -80} max="80" value={Number((record.position[i] * 100).toFixed(1))} onChange={(e) => {
       const value = e.currentTarget.valueAsNumber; if (!Number.isFinite(value)) return;
       const position = [...record.position] as Vec3; position[i] = value / 100; app.tankChangeEquipment(record.id, { position });
     }} /></label>)}</div><div class="equipment-actions"><button onClick={() => app.tankChangeEquipment(record.id, { rotation: record.rotation + Math.PI / 4 })}>45° 回転</button>
       {(category === 'ledLight' || category === 'lightFixture') && <button onClick={() => app.tankChangeEquipment(record.id, { enabled: !record.enabled })}>{record.enabled ? '消灯する' : '点灯する'}</button>}
-      <button disabled={!app.tank.equipment.canRemoveDevice(record.id)} title="付属セットに必要な設備は、デザインや位置を変更できます" onClick={() => app.tankRemoveEquipment(record.id)}>{app.tank.equipment.canRemoveDevice(record.id) ? '取り外す' : '付属セット'}</button>
+      <button disabled={!app.tank.equipment.canRemoveDevice(record.id)} title="飼育や付属セットに必要な設備は交換できます" onClick={() => app.tankRemoveEquipment(record.id)}>{app.tank.equipment.canRemoveDevice(record.id) ? '取り外す' : isFilterKind(category) ? '飼育に必要' : '付属セット'}</button>
     </div></Fragment>}
     {(!app.input.touchDevice || tab === 'design') && <Fragment>
     {!app.input.touchDevice && detail}
     {category === 'tank' && <label class="equipment-add">水槽のサイズ<select aria-label="水槽のサイズ" disabled={app.roomBusy.value} value={tankSize} onChange={e => { const size = Number(e.currentTarget.value) as TankSize; setTankSize(size); const id = tankSizeItemId('tank', size); setPreviewId(id); ui.equipmentPreview.value = id; }}>{TANK_SIZES.map(size => <option key={size} value={size}>{size}cm</option>)}</select></label>}
     <div class="equipment-choices" aria-label="設備のアイテム候補">{itemsForCategory(category, category === 'tank' ? tankSize : category === 'stand' ? app.currentRoomTank?.size : undefined).map((item) => {
       const n = ownedQuantity(collection, item.id), active = item.id === preview.id;
-      return <button key={item.id} class={`btn equipment-choice ${active ? 'on' : ''} ${n ? '' : 'locked'}`} aria-pressed={active} onClick={() => { setPreviewId(item.id); ui.equipmentPreview.value = item.id; }}><EquipmentSwatch style={item.style} category={category} /><span>{item.name}<small>{item.rarity === 'initial' ? '初期' : n ? `所持 ${n}個` : '未所持'}</small></span></button>;
+      const allowed = equipmentUnlocked(collection, item.id);
+      return <button key={item.id} class={`btn equipment-choice ${active ? 'on' : ''} ${n && allowed ? '' : 'locked'}`} aria-pressed={active} onClick={() => { setPreviewId(item.id); ui.equipmentPreview.value = item.id; }}><EquipmentSwatch style={item.style} category={category} /><span>{item.name}<small>{!allowed ? 'ショップで解放' : item.rarity === 'initial' ? '標準' : n ? `所持 ${n}個` : '未所持'}</small></span></button>;
     })}</div>
     <div class="equipment-actions"><button disabled={!owns || !available || current?.id === preview.id} onClick={() => app.tankInstallEquipment(preview.id, replacing)}>{current?.id === preview.id ? '使用中' : current ? '入れ替える' : '設置する'}</button>
       {categoryLimit(category) > 1 && record && <button disabled={!canAdd} onClick={() => app.tankInstallEquipment(preview.id)}>もう1個設置する</button>}
-      {!owns && <button onClick={() => app.openGacha()}>設備ガチャへ</button>}
+      {!unlocked ? <button onClick={() => app.openShop(category === 'tank' || category === 'stand' ? 'tanks' : 'filters')}>ショップで解放</button> : !owns && <button onClick={() => app.openGacha()}>設備ガチャへ</button>}
     </div>
     {owns && !available && current?.id !== preview.id && <p class="small dim">所持しているアイテムはすべて設置中です。</p>}
 
-    {app.input.touchDevice ? <details class="equipment-spec"><summary>選択した設備の詳細・接続</summary>{detail}<p class="small dim">配線・ホースは付属セットで自動接続されます。</p></details> : <p class="small dim">配線・ホースは付属セットで自動接続されます。デザインによって生物の飼育性能は変わりません。</p>}
+    {app.input.touchDevice ? <details class="equipment-spec"><summary>選択した設備の詳細・接続</summary>{detail}<p class="small dim">配線・ホースは自動接続。仕上げの色で飼育性能は変わりません。</p></details> : <p class="small dim">配線・ホースは自動接続。ろ過装置は1種類まで。同じ種類の複数設置・仕上げの色で飼育上限は増えません。</p>}
     </Fragment>}
   </Fragment>;
 }

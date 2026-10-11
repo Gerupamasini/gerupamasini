@@ -22,3 +22,5 @@ jobs:
         run: CHROMIUM_PATH=$(node --input-type=module -e "import {chromium} from 'playwright-core'; process.stdout.write(chromium.executablePath())") npm run smoke:recovery
       - name: Aquarium room browser regressions
         run: CHROMIUM_PATH=$(node --input-type=module -e "import {chromium} from 'playwright-core'; process.stdout.write(chromium.executablePath())") npm run smoke:room
+      - name: Aquarium shop, capacity and introduction quest regressions
+        run: CHROMIUM_PATH=$(node --input-type=module -e "import {chromium} from 'playwright-core'; process.stdout.write(chromium.executablePath())") npm run smoke:progression

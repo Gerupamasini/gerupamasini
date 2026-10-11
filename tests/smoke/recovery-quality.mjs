@@ -43,6 +43,7 @@ try {
     const app = window.__higata, s = JSON.parse(app.exportSave());
     s.player.money = 54321;
     s.encyclopedia.acanthogobius_flavimanus = { discovered: Date.now(), behaviors: {}, individuals: [], nextNumber: 1 };
+    s.equipmentCollection.progression.questRewards.push('discover'); // This fixture's explicit CR balance already includes its introduction reward.
     await app.importSave(JSON.stringify(s));
   }); } catch (e) { console.error('Live import failed; exported state:', await page.evaluate(() => window.__higata.exportSave())); throw e; }
   assert.equal(await page.evaluate(() => window.__higata.encyclopedia.money.value), 54321);

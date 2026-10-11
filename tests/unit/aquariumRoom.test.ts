@@ -9,7 +9,8 @@ const fish = (id: string): IndividualRecord => ({ id, speciesId: 'acanthogobius_
 const multiSave = () => {
   const a = newRoomTank('one', 45, [0, 0]), b = newRoomTank('two', 120, [1.8, 0]);
   a.individuals = [fish('first')]; b.individuals = [fish('second')];
-  return { ...emptySave('map', 1), aquariumRoom: { version: 1 as const, mainTankId: 'two', tanks: [a, b] } };
+  const save = emptySave('map', 1); save.equipmentCollection!.progression!.sizes = [...TANK_SIZES];
+  return { ...save, aquariumRoom: { version: 1 as const, mainTankId: 'two', tanks: [a, b] } };
 };
 
 describe('aquarium room', () => {
@@ -56,7 +57,7 @@ describe('aquarium room', () => {
     ]) { const save = multiSave(); change(save); expect(() => parseSave(save)).toThrow(InvalidSaveError); }
   });
   it('enforces ownership across containers rather than granting each tank its own copy', () => {
-    const save = multiSave(); save.equipmentCollection = { ...emptyEquipmentCollection(), stock: { 'ledLight-ivory': 1 } };
+    const save = multiSave(); save.equipmentCollection!.stock = { 'ledLight-ivory': 1 };
     for (const t of save.aquariumRoom.tanks) t.layout.equipment!.devices.find(d => d.kind === 'ledLight')!.itemId = 'ledLight-ivory';
     const owned = parseSave(save).aquariumRoom!.tanks.map(t => t.layout.equipment!.devices.find(d => d.kind === 'ledLight')!.itemId);
     expect(owned).toEqual(['ledLight-ivory', 'ledLight-initial']);
