@@ -17,6 +17,7 @@ import { AmimehagiDriver } from '../species/amimehagi/AmimehagiDriver';
 import { YoujiuoDriver } from '../species/youjiuo/YoujiuoDriver';
 import { AramushiroDriver } from '../species/aramushiro/AramushiroDriver';
 import { IshigareiDriver } from '../species/ishigarei/IshigareiDriver';
+import { MimiikaDriver } from '../species/mimiika/MimiikaDriver';
 
 export interface DriverEntry {
   create(): Driver;
@@ -64,5 +65,7 @@ export const DRIVERS: Record<string, DriverEntry> = {
   // イシガレイ: the juvenile flounder of the sandy flats (its own tiers in the placeholder view; near within 3 m)
   ishigarei: { create: () => new IshigareiDriver(), placeholder: () => IshigareiDriver.makeModel(), preview: (seed) => IshigareiDriver.makePreview(seed), nearDistance: 3, keep: (parent) => IshigareiDriver.keep(parent) },
   // アカエイ: the ray of the shallow sand (its own tiers in the placeholder view; its wave runs every frame within 10 m)
+  // ミミイカ: the bobtail squid of the sandy shallows (its own tiers in the placeholder view; near within 2.5 m)
+  mimiika: { create: () => new MimiikaDriver(), placeholder: () => MimiikaDriver.makeModel(), preview: (seed) => MimiikaDriver.makePreview(seed), nearDistance: 2.5, keep: (parent) => MimiikaDriver.keep(parent) },
   akaei: { create: () => new AkaeiDriver(), placeholder: () => AkaeiDriver.makeModel(), preview: (seed) => AkaeiDriver.makePreview(seed), nearDistance: 10, keep: (parent) => AkaeiDriver.keep(parent) },
 };

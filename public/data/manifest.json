@@ -16,7 +16,8 @@
     "rudarius_ercodes",
     "syngnathus_schlegeli",
     "platichthys_bicoloratus",
-    "hemitrygon_akajei"
+    "hemitrygon_akajei",
+    "euprymna_morsei"
   ],
   "behaviors": [
     "fish_benthic",
@@ -30,7 +31,8 @@
     "fish_seagrass",
     "pipefish_grass",
     "flatfish_sand",
-    "ray_benthic"
+    "ray_benthic",
+    "squid_sand"
   ],
   "maps": [
     "kasai_west",
