@@ -26,6 +26,8 @@ export interface ShoreLayout {
   sandTint: readonly [number, number, number];
   /** the mud's colour against the 葛西 grey (terrain shader); absent: unchanged */
   mudTint?: readonly [number, number, number];
+  /** the ripple marks' strength (absent: 1) and how far the mud takes the sheltered silt-flat look, 0..1 (absent: 0) */
+  ripples?: number; mudLook?: number;
   /** the ripple marks' turn from 葛西's (radians; their crests run along x there): crests parallel to this shore */
   rippleAngle: number;
   /** the waves breaking on the shore (null: none) */
@@ -80,6 +82,8 @@ const MANKO: ShoreLayout = {
   clams: { beds: 0, opts: {} }, pits: { clusters: 0, opts: {} },
   // Manko's estuary silt (user photos): warm greige-khaki, not 葛西's neutral grey; darker and browner when wet.
   landLevel: [3, 4], sandTint: [1.08, 0.98, 0.8], mudTint: [1.42, 1.22, 0.92], rippleAngle: 0.4,
+  // a lake's sheltered mud flat: no ripple marks, the mottled, lumpy, glossy silt of the goby flat (MahazeViewer)
+  ripples: 0, mudLook: 1,
   // the lake's opaque, milky jade water (user's photo): lit from within by the suspended fines, a soft broken
   // reflection; a dim jade residual at dusk and night
   surf: null, water: { colour: [0.03, 0.06, 0.045], turbidity: 2.4, scatter: [0.084, 0.19, 0.0925], reflect: 0.3, rough: 0.6 },

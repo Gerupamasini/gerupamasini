@@ -189,17 +189,16 @@ function boxAt(buf: Buf, cx: number, cz: number, yaw: number, w: number, d: numb
   quad(buf, P(w, y0, d), P(w, y0, -d), P(w, y0 + h, d), P(w, y0 + h, -d), colour, [0, 0, su, 0, 0, fv, su, fv]);
   quad(buf, P(-w, y0 + h, d), P(w, y0 + h, d), P(-w, y0 + h, -d), P(w, y0 + h, -d), colour);
 }
-/** A raised strip (3 faces) along a-b: the white mortar (漆喰) on an Okinawan roof's ridge and hips. */
+/** A raised strip (3 faces) along a-b: the white mortar (漆喰) on an Okinawan roof's ridge and hips. Drawn in the
+ * walls' mesh at UV (0, 0), the facade texture's plain white, so it shows exactly its vertex colour. */
 function strip(buf: Buf, a: number[], b: number[], width: number, height: number, colour: number[]): void {
   const dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1, sx = -dz / l * width / 2, sz = dx / l * width / 2;
   const up = (p: number[], k: number) => [p[0] + sx * k, p[1] + height, p[2] + sz * k];
   const lo = (p: number[], k: number) => [p[0] + sx * k, p[1], p[2] + sz * k];
-  quad(buf, up(a, 1), up(b, 1), up(a, -1), up(b, -1), colour, MORTAR_UV);
-  quad(buf, lo(a, -1), lo(b, -1), up(a, -1), up(b, -1), colour, MORTAR_UV);
-  quad(buf, lo(b, 1), lo(a, 1), up(b, 1), up(a, 1), colour, MORTAR_UV);
+  quad(buf, up(a, 1), up(b, 1), up(a, -1), up(b, -1), colour);
+  quad(buf, lo(b, -1), lo(a, -1), up(b, -1), up(a, -1), colour);
+  quad(buf, lo(a, 1), lo(b, 1), up(a, 1), up(b, 1), colour);
 }
-/** the tile texture's plain white patch (constant UV: the face shows exactly its vertex colour) */
-const MORTAR_UV = [0.985, 0.985, 0.985, 0.985, 0.985, 0.985, 0.985, 0.985];
 /**
  * Okinawan hipped roof of red clay tiles (赤瓦): four slopes over a deep eave (雨端) with a dark soffit, white mortar
  * along the ridge and the four hips. W, D: half-sizes of the walls; the tiles' columns run down the slopes.
@@ -214,16 +213,17 @@ function hipRoof(buf: Buf, walls: Buf, cx: number, cz: number, yaw: number, W: n
   quad(buf, E0, E3, R0, R0, tint, [0, 0, end, 0, end / 2, slope, end / 2, slope]);
   // the soffit under the eave and the fascia board round it (in the walls' mesh: plain colours)
   const S = (u: number, v: number) => P(u, yEave - 0.02, v), soffit = [0.2, 0.19, 0.17], fascia = [0.62, 0.58, 0.54];
-  quad(walls, S(-a, b), S(a, b), S(-W, D), S(W, D), soffit);
-  quad(walls, S(a, -b), S(-a, -b), S(W, -D), S(-W, -D), soffit);
-  quad(walls, S(-a, -b), S(-a, b), S(-W, -D), S(-W, D), soffit);
-  quad(walls, S(a, b), S(a, -b), S(W, D), S(W, -D), soffit);
+  // (wound to face down: seen from under the eave)
+  quad(walls, S(a, b), S(-a, b), S(W, D), S(-W, D), soffit);
+  quad(walls, S(-a, -b), S(a, -b), S(-W, -D), S(W, -D), soffit);
+  quad(walls, S(-a, b), S(-a, -b), S(-W, D), S(-W, -D), soffit);
+  quad(walls, S(a, -b), S(a, b), S(W, -D), S(W, D), soffit);
   const F = (u: number, v: number, y: number) => P(u, y, v);
   for (const [p, q] of [[[-a, b], [a, b]], [[a, -b], [-a, -b]], [[-a, -b], [-a, b]], [[a, b], [a, -b]]])
     quad(walls, F(p[0], p[1], yEave - 0.28), F(q[0], q[1], yEave - 0.28), F(p[0], p[1], yEave), F(q[0], q[1], yEave), fascia);
   const white = [0.86, 0.84, 0.8];
-  strip(buf, R0, R1, 0.5, 0.18, white);
-  for (const [e, r] of [[E0, R0], [E3, R0], [E1, R1], [E2, R1]]) strip(buf, e, r, 0.4, 0.14, white);
+  strip(walls, R0, R1, 0.5, 0.18, white);
+  for (const [e, r] of [[E0, R0], [E3, R0], [E1, R1], [E2, R1]]) strip(walls, e, r, 0.4, 0.14, white);
 }
 /** A rooftop water tank on a stand (stainless or FRP), a fixture of Okinawan flat roofs. */
 function tank(buf: Buf, x: number, y: number, z: number, r: number, h: number, colour: number[]): void {
@@ -234,7 +234,7 @@ function tank(buf: Buf, x: number, y: number, z: number, r: number, h: number, c
 }
 
 /** Original Okinawan clay-tile texture: 2.4 m × 2.4 m, 8 columns of flat tiles under round cover tiles set in white
- * mortar, 8 courses; tint jitter and faint mould. The top-right corner is a plain white patch for the mortar. */
+ * mortar, 8 courses; tint jitter and faint mould. */
 function tileTexture(): CanvasTexture {
   const size = 256, canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
   const c = canvas.getContext('2d')!, r = new Rng(0x7a11e5);
@@ -254,7 +254,6 @@ function tileTexture(): CanvasTexture {
   }
   for (let row = 0; row < 8; row++) { c.fillStyle = 'rgba(70,25,15,0.45)'; c.fillRect(0, row * 32 + 30, size, 2); }
   for (let k = 0; k < 14; k++) { c.fillStyle = `rgba(40,45,30,${0.05 + r.next() * 0.08})`; c.beginPath(); c.ellipse(r.next() * size, r.next() * size, 6 + r.next() * 18, 4 + r.next() * 10, 0, 0, Math.PI * 2); c.fill(); }
-  c.fillStyle = '#ece6da'; c.fillRect(size - 6, size - 6, 6, 6);
   const t = new CanvasTexture(canvas); t.wrapS = t.wrapT = RepeatWrapping; t.colorSpace = SRGBColorSpace; t.minFilter = LinearMipmapLinearFilter; t.anisotropy = 4;
   return t;
 }

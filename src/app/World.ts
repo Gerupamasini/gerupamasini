@@ -103,7 +103,7 @@ export class World {
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, pits);
     mark('habitat');
-    if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); if (layout.mudTint) terrain.setMudTint(...layout.mudTint); terrain.setRippleAngle(layout.rippleAngle); }
+    if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); if (layout.mudTint) terrain.setMudTint(...layout.mudTint); terrain.setSediment(layout.ripples ?? 1, layout.mudLook ?? 0); terrain.setRippleAngle(layout.rippleAngle); }
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
     const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });

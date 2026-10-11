@@ -30,7 +30,7 @@ try {
   await page.screenshot({path:new URL('field.png',out).pathname});
   // clean views (HUD hidden): the basin from the entry, the lake mouth, the west forest; at low and mid quality
   await page.addStyleTag({content:'body > *:not(canvas):not(#app), #app > *:not(canvas), .hud, .overlay { visibility:hidden !important }'});
-  for (const [name,quality,x,z,yaw,pitch] of [['view-entry','high',84,76,-1.0,-0.03],['view-lake','high',60,-20,-1.57,-0.02],['view-basin','high',84,76,0.9,-0.05],['view-west','high',-40,0,1.45,0.02],['view-island','high',4,-6,-0.9,-0.05],['view-centre','high',-50,30,2.23,0.02],['view-entry-low','low',84,76,-1.0,-0.03]]) {
+  for (const [name,quality,x,z,yaw,pitch] of [['view-entry','high',84,76,-1.0,-0.03],['view-lake','high',60,-20,-1.57,-0.02],['view-basin','high',84,76,0.9,-0.05],['view-west','high',-40,0,1.45,0.02],['view-island','high',4,-6,-0.9,-0.05],['view-centre','high',-50,30,2.23,0.02],['view-mud','high',-20,10,0.5,-0.75],['view-entry-low','low',84,76,-1.0,-0.03]]) {
     await page.evaluate(([q,x,z,yaw,pitch])=>{const a=window.__higata;a.updateSettings({quality:q});const p=a.player;p.position.set(x,a.world.terrain.heightAt(x,z)+1.6,z);p.yaw=yaw;p.pitch=pitch;},[quality,x,z,yaw,pitch]);
     await page.waitForTimeout(2500);
     const st=await page.evaluate(()=>{const a=window.__higata;return {...a.world.mangroves.stats,frameCalls:a.renderer?.renderer?.info?.render?.calls,frameTris:a.renderer?.renderer?.info?.render?.triangles};});

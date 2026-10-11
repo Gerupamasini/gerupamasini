@@ -104,6 +104,11 @@ export class Terrain {
   private readonly uCausticGain: IUniform<number> = { value: 2.6 };
   /** 1: grains, burrows and micro relief up close; 0: the cheap far-field shading only (low quality) */
   private readonly uDetail: IUniform<number> = { value: 1 };
+  /** the ripple marks' strength (1: 葛西's sandy flat; 0: none, a lake's mud flat) */
+  private readonly uRippleGain: IUniform<number> = { value: 1 };
+  /** 0..1: how far the mud takes the look of a sheltered silt flat (after MahazeViewer's sediment): two-scale
+   * mottling, stronger silt lumps, few sand grains, a glossier wet sheen */
+  private readonly uMudLook: IUniform<number> = { value: 0 };
   /** アマモ cover over the map (0..1), and the distance range over which the drawn blades hand over to a canopy tint */
   private readonly uMeadow: IUniform<Texture> = { value: new DataTexture(new Uint8Array(1), 1, 1, RedFormat) };
   private readonly uMeadowFar: IUniform<Vector2> = { value: new Vector2(1e4, 1e4 + 1) };
@@ -347,6 +352,8 @@ export class Terrain {
       shader.uniforms.uSunDirT = this.uSunDirT;
       shader.uniforms.uCausticGain = this.uCausticGain;
       shader.uniforms.uDetail = this.uDetail;
+      shader.uniforms.uRippleGain = this.uRippleGain;
+      shader.uniforms.uMudLook = this.uMudLook;
       shader.uniforms.uMeadow = this.uMeadow;
       shader.uniforms.uMeadowFar = this.uMeadowFar;
       shader.uniforms.uLand = this.uLand;
@@ -373,6 +380,8 @@ uniform float uSunUp;
 uniform vec3 uSunDirT;
 uniform float uCausticGain;
 uniform float uDetail;
+uniform float uRippleGain;
+uniform float uMudLook;
 uniform sampler2D uMeadow;
 uniform vec2 uMeadowFar;
 uniform vec2 uLand;
@@ -493,9 +502,17 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   vec2 rq = rippleFrame(vWorldPos.xz);
   gDis = rippleDisloc(rq);
   // ripple troughs hold a little more moisture and fines: faintly darker, following the same field as the normals
-  float ripple = cos(ripplePhase(rq)) * rippleAmp(rq) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit);
+  float ripple = cos(ripplePhase(rq)) * rippleAmp(rq) * (1.0 - 0.8 * gDis.w) * (0.3 + 0.7 * isSand) * (1.0 - vPit) * uRippleGain;
   float detail = 1.0 + grain * (0.10 + 0.08 * isSand) + patchN * 0.18 - ripple * 0.05;
   diffuseColor.rgb *= detail;
+  // a sheltered silt flat (MahazeViewer's mud): mottled at ~8 cm and ~2 cm, as fresh silt settles unevenly
+  float mudL = uMudLook * (1.0 - isSand);
+  if (mudL > 0.001) {
+    float mott = vnoise(vWorldPos.xz * 12.0) * 0.55 + vnoise(vWorldPos.xz * 26.0 + 5.0) * 0.3 + vnoise(vWorldPos.xz * 61.0 - 2.0) * 0.15;
+    float mott2 = vnoise(vWorldPos.xz * 55.0 + 3.0) * 0.6 + vnoise(vWorldPos.xz * 140.0 + 9.0) * 0.4;
+    float near = 1.0 - smoothstep(0.4, 1.6, fw * 0.02);
+    diffuseColor.rgb *= mix(1.0, (0.86 + 0.28 * mott) * mix(1.0, 0.8 + 0.4 * mott2, near), mudL);
+  }
   // stone-built levees: a running bond of dressed blocks (~55 × 32 cm), dark joints, each block its own grey-brown
   float rock = smoothstep(4.5, 5.0, vSubstrate);
   if (rock > 0.001) {
@@ -518,7 +535,8 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     vec2 o1, o2;
     vec3 g1 = grains(mm / 1.4, o1);
     vec3 g2 = grains(mm / 3.4 + 17.0, o2);
-    float grainy = (0.3 + 0.5 * isSand) * (1.0 - 0.5 * vPit);
+    // (silt carries few sand grains: the mud look keeps a scatter of them, as the goby flat does)
+    float grainy = (0.3 + 0.5 * isSand) * (1.0 - 0.5 * vPit) * (1.0 - 0.8 * uMudLook * (1.0 - isSand));
     vec3 alb = diffuseColor.rgb;
     vec3 quartz = alb * 1.3 + vec3(0.06), shell = alb * 1.15 + vec3(0.05, 0.04, 0.03), black = alb * 0.4;
     vec3 c1 = alb * (0.8 + 0.5 * g1.y);
@@ -570,9 +588,9 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   // ---- micro relief: silt lumps at the millimetre and centimetre scale, faded with distance
   if (uDetail > 0.5) {
     vec3 nd = vnoiseD(mm * 0.35) * 0.5 + vnoiseD(mm * 1.1 + 7.0) * 0.25;
-    float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand));
+    float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand)) * (1.0 + 0.9 * uMudLook * (1.0 - isSand));
     vec3 nd2 = vnoiseD(mm * 0.055 + 3.0);
-    float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand));
+    float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand)) * (1.0 + 1.2 * uMudLook * (1.0 - isSand));
     gNrmAdd += nd.yz * bump + nd2.yz * bump2;
   }
   // the stone blocks of the levees: each block tilts its own way a little
@@ -655,7 +673,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   // ripple marks: one continuous warped field (see rippleWarp) with its dislocations; sand carries them, mud faintly
   float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
   vec2 rp = rippleFrame(vWorldPos.xz);
-  float strength = (0.12 + 0.88 * sandy) * rippleAmp(rp) * 0.26 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w);
+  float strength = (0.12 + 0.88 * sandy) * rippleAmp(rp) * 0.26 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w) * uRippleGain;
   float ph = ripplePhase(rp);
   // the crest line's local direction comes from the phase gradient (warp plus dislocations), so the shading
   // follows the bends and the forks; where crests crowd the slope grows, where they spread it eases
@@ -680,9 +698,12 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   roughnessFactor = mix(roughnessFactor, 0.32, gSwash * smoothstep(-0.01, 0.0, vWorldPos.y - uWaterLevel));   // the film the swash just left: a soft sheen
   roughnessFactor = mix(roughnessFactor, 0.62, gFilm * 0.5);   // the organic film has a wet sheen of its own
   roughnessFactor = mix(roughnessFactor, 0.42, gQuartz);       // quartz and shell grains glint a little
+  // wet silt is glossy (the shine of a mud flat at low water), damp silt satin
+  float mudR = uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
+  roughnessFactor = mix(roughnessFactor, mix(0.7, 0.36, wetR), mudR);
 }`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v2';
+    mat.customProgramCacheKey = () => 'higata-terrain-v3';
     return mat;
   }
 
@@ -748,6 +769,12 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   /** Turn the ripple marks by `angle` (radians) from 葛西's, whose crests run along x (parallel to its shore). */
   setRippleAngle(angle: number): void {
     this.uRipRot.value.set(Math.cos(angle), Math.sin(angle));
+  }
+
+  /** The ripple marks' strength (0: a lake's mud flat has none) and the silt-flat look of the mud (0..1). */
+  setSediment(rippleGain: number, mudLook: number): void {
+    this.uRippleGain.value = rippleGain;
+    this.uMudLook.value = mudLook;
   }
 
   /** Tint the mud and creek beds (multiplies the 葛西 grey). */
