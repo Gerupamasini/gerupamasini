@@ -63,19 +63,21 @@ try {
   const fish = await page.evaluate(() => {
     const a = window.__higata, cs = a.creatures;
     const h = a.world.habitat, p0 = a.player.position;
-    let w = null;
-    for (const r of [8, 20, 60, 160]) { w = h.nearestWater(p0.x, p0.z, 0.12, r); if (w && h.depthAt(w.x, w.z) < 0.5) break; }
-    if (!w) throw new Error('no water');
-    for (let i = 0; i < 40; i++) {
-      const dd = h.depthAt(w.x, w.z);
-      if (dd >= 0.15 && dd <= 0.3) break;
-      const e = 0.3, gx = h.depthAt(w.x + e, w.z) - h.depthAt(w.x - e, w.z), gz = h.depthAt(w.x, w.z + e) - h.depthAt(w.x, w.z - e), gl = Math.hypot(gx, gz) || 1;
-      const k = dd < 0.15 ? 0.15 : -0.15;
-      w.x += (gx / gl) * k; w.z += (gz / gl) * k;
+    // the nearest flat patch of water 20–40 cm deep (the cameras must stay above the bed on every side)
+    let w = null, best = Infinity;
+    const slope = (x, z) => { const e = 0.25; return Math.hypot(h.depthAt(x + e, z) - h.depthAt(x - e, z), h.depthAt(x, z + e) - h.depthAt(x, z - e)) / (2 * e); };
+    for (let r = 0; r <= 40 && !w; r += 0.5) {
+      for (let k = 0; k < Math.max(1, Math.round(r * 8)); k++) {
+        const t = (k / Math.max(1, Math.round(r * 8))) * Math.PI * 2, x = p0.x + Math.cos(t) * r, z = p0.z + Math.sin(t) * r;
+        const dd = h.depthAt(x, z);
+        if (dd < 0.2 || dd > 0.4 || slope(x, z) > 0.06 || slope(x + 0.3, z) > 0.08 || slope(x - 0.3, z) > 0.08 || slope(x, z + 0.3) > 0.08 || slope(x, z - 0.3) > 0.08) continue;
+        if (r < best) { best = r; w = { x, z }; }
+      }
     }
-    // the player well back on the shore, so the fish do not flee from it
-    const gx = h.depthAt(w.x + 0.5, w.z) - h.depthAt(w.x - 0.5, w.z), gz = h.depthAt(w.x, w.z + 0.5) - h.depthAt(w.x, w.z - 0.5), gl = Math.hypot(gx, gz) || 1;
-    a.player.setPose(w.x - (gx / gl) * 3, w.z - (gz / gl) * 3, 0);
+    if (!w) throw new Error('no flat water');
+    // the player well back, so the fish do not flee from it
+    a.player.setPose(p0.x, p0.z, 0);
+    if (best < 3) { const dx = p0.x - w.x, dz = p0.z - w.z, l = Math.hypot(dx, dz) || 1; a.player.setPose(w.x + (dx / l) * 3, w.z + (dz / l) * 3, 0); }
     // side by side across the sun's direction, heading across the light (broadside to a camera on the sun's line)
     const s = a.world.sunDir, sl = Math.hypot(s.x, s.z) || 1, sx = s.x / sl, sz = s.z / sl;
     const heading = Math.atan2(-sz, sx);
@@ -114,7 +116,8 @@ try {
   const view = (against, d) => page.evaluate(([against, sun, d]) => {
     const a = window.__higata, o = a.observation, c = o.controls;
     const k = against ? -1 : 1, el = against ? 0.3 : 0.75;
-    a.camera.position.set(c.target.x + sun[0] * k * d * Math.cos(el), c.target.y + d * Math.sin(el), c.target.z + sun[1] * k * d * Math.cos(el));
+    const x = c.target.x + sun[0] * k * d * Math.cos(el), z = c.target.z + sun[1] * k * d * Math.cos(el);
+    a.camera.position.set(x, Math.max(c.target.y + d * Math.sin(el), a.world.terrain.heightAt(x, z) + 0.015), z);
     c.update();
     return a.creatures.individuals.map((x) => [x.species.id.slice(0, 12), a.creatures.entries.get(x.id)?.view?.tier, !!a.creatures.entries.get(x.id)?.view?.hero]);
   }, [against, fish.sun, d]);
