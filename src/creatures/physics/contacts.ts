@@ -145,6 +145,8 @@ export class Contacts {
   private readonly cp = { s: 0, t: 0 };
   /** pairs that touched in the last step (debug) */
   touching = 0;
+  /** pairs measured closely in the last step's first relaxation (the sweep's cost; debug, tests) */
+  measured = 0;
 
   private table(n: number): Table {
     if (!this.tab || this.tab.reach.length < n) {
@@ -166,6 +168,7 @@ export class Contacts {
       if (b.mode !== 'away') list.push(b);
     }
     this.touching = 0;
+    this.measured = 0;
     if (dt <= 0 || list.length < 2) return;
     // sweep along the axis they are spread over most (a shore's animals lie along the water's edge)
     const n = list.length;
@@ -209,6 +212,7 @@ export class Contacts {
           if (t.y0[i] >= t.y1[j] || t.y0[j] >= t.y1[i]) continue;
           const bx = B.x + B.pushX, bz = B.z + B.pushZ;
           if (Math.abs((alongX ? bz : bx) - crossA) > ra + rb) continue;
+          if (it === 0) this.measured++;
           const sa = t.sin[i], ca = t.cos[i], sb = t.sin[j], cb = t.cos[j];
           const ha = A.shape.half, hb = B.shape.half;
           const a0x = ax + sa * (A.shape.ahead - ha), a0z = az + ca * (A.shape.ahead - ha);

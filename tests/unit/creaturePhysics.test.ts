@@ -122,10 +122,10 @@ describe('contacts between the animals', () => {
     for (let i = 0; i < 240; i++) bodies.push(body(`b${i}`, ((i * 7919) % 3000) / 100, ((i * 104729) % 600) / 100, { heading: i }));
     for (let i = 0; i < 60; i++) bodies.push(body(`c${i}`, 10 + (i % 10) * 0.03, 3 + Math.floor(i / 10) * 0.03, { heading: i }));
     const c = new Contacts();
-    const t0 = performance.now();
     for (let k = 0; k < 60; k++) { c.step(1 / 60, bodies, { floor: flat() }); for (const b of bodies) { b.x += b.pushX; b.z += b.pushZ; } }
-    // a second of frames for 300 animals in well under a frame's time each
-    expect((performance.now() - t0) / 60).toBeLessThan(4);
+    // the sweep measures only the near pairs: the clump's own and a few more, not all 45 000 (n² / 2)
+    expect(c.measured).toBeLessThan(2500);
+    expect(c.touching).toBe(0);
   });
 });
 
