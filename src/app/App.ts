@@ -49,6 +49,7 @@ import { checkForNewBuild } from '../core/Build';
 import { Root } from '../ui/Root';
 import { HeroPipeline, type HeroLighting } from '../render/HeroPipeline';
 import { FieldRenderer } from '../render/FieldRenderer';
+import { TankRenderer } from '../render/tank/TankRenderer';
 import { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 
 const HUD_HZ = 4;
@@ -79,6 +80,8 @@ export class App {
   capture: Capture = new Capture();
   tank: TankScene = null!;
   hero: HeroPipeline | null = null;
+  /** the home tank's HDR frame (water, glass, light shafts, bloom) */
+  tankRenderer: TankRenderer | null = null;
   private field: FieldRenderer | null = null;
   /** the タモ in the player's hands */
   net: NetView | null = null;
@@ -276,7 +279,8 @@ export class App {
     this.encyclopedia = new Encyclopedia(this.data);
     this.encyclopedia.onChanged = () => { this.claimEquipmentRewards(); this.requestSave(); };
     this.tank = new TankScene(this.canvas, this.renderer.aspect, this.renderer.gl);
-    this.tank.scene.add(this.roomTanks); this.roomTanks.onChanged = () => { this.sceneDirty = true; };
+    this.tank.scene.add(this.roomTanks); this.roomTanks.onChanged = () => { this.sceneDirty = true; this.tank.markRoomChanged(); };
+    this.tankRenderer = new TankRenderer(this.renderer.gl, this.renderer.caps.floatRT);
     // what the animals do in the tank only counts as observed while the player is looking at the tank (home or its
     // edit screen), not from behind the 図鑑, the menu or the title
     this.tank.onBehavior = (e, rec) => { if (this.mode === 'home') this.encyclopedia.onBehavior(rec.speciesId, e.behaviorId, this.clock.nowGame()); };
@@ -657,6 +661,7 @@ export class App {
     }
     this.applyHeroSetting();
     this.tank?.setQuality(QUALITY_PRESETS[this.settings.homeQuality]);
+    this.tankRenderer?.setQuality(QUALITY_PRESETS[this.settings.homeQuality]);
     // the kept models' programs follow the field's variant (the shadows on or off change the shaders): compiled again
     // after the light above has changed, when the field's quality did
     if (fieldChanged && this.world && this.creatures) void this.field?.compileKept(this.creatures.keptModels(), this.camera, this.world.scene);
@@ -1810,6 +1815,14 @@ export class App {
     return rate >= 0 ? 'rising' : 'falling';
   }
 
+  /** the home tank's frame for the debug line: internal resolution, its share of the screen's, the GPU time */
+  private tankStats(): string | undefined {
+    const r = this.tankRenderer;
+    if (!r || !this.tankVisible()) return undefined;
+    const s = r.stats;
+    return `${s.width}×${s.height} ${Math.round(s.scale * 100)}%${s.gpuMs > 0 ? ` GPU ${s.gpuMs.toFixed(1)}ms` : ''}`;
+  }
+
   private frame(now: number): void {
     this.raf = requestAnimationFrame((n) => this.frame(n));
     try {
@@ -1928,10 +1941,11 @@ export class App {
     } else if (this.tankVisible() && (['home', 'title', 'tankEdit', 'gacha'].includes(mode) || this.sceneDirty)) {
       if (mode === 'tankEdit' || mode === 'roomPlacement') this.tank.updateFrozen(); else this.tank.update(dt, 1);
       this.roomTanks.updateLOD(this.tank.camera);
-      if (this.hero && this.tank.heroActive) {
-        this.hero.setLighting(this.tank.lighting);
-        this.hero.render(this.tank.scene, this.tank.camera, dt);
-      } else this.renderer.gl.render(this.tank.scene, this.tank.camera);
+      const heroOn = !!this.hero && this.tank.heroActive;
+      if (heroOn) this.hero!.setLighting(this.tank.lighting);
+      if (this.tankRenderer) this.tankRenderer.render(this.tank.scene, this.tank.camera, this.tank.passes, dt, heroOn ? this.hero!.shared : null);
+      else if (heroOn) this.hero!.render(this.tank.scene, this.tank.camera, dt);
+      else this.renderer.gl.render(this.tank.scene, this.tank.camera);
     } else if (!this.tankVisible() && world && player && creatures && (this.worldVisible() || this.sceneDirty)) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       else if (mode === 'capture') player.idle(dt);
@@ -2170,7 +2184,7 @@ export class App {
       const cs = this.creatures?.stats() ?? { total: 0, visible: 0, lod1: 0 };
       const clamsNear = this.clams && player ? this.clams.nearIndices(player.position.x, player.position.z, 12).length : 0;
       const reef = this.world?.oysters;
-      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0, oysters: reef ? reef.drawn.join('/') : '-', oystersTotal: reef?.count ?? 0, amamo: this.amamoStats() } };
+      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0, oysters: reef ? reef.drawn.join('/') : '-', oystersTotal: reef?.count ?? 0, amamo: this.amamoStats(), tank: this.tankStats() } };
     }
   }
 }

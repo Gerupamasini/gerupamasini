@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace, WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, PCFShadowMap, SRGBColorSpace, WebGLRenderer } from 'three';
 import { QUALITY_PRESETS, savedQualityHint, type Quality } from '../core/Settings';
 
 export interface RendererCaps {
@@ -30,7 +30,7 @@ export class GameRenderer {
     this.gl.outputColorSpace = SRGBColorSpace;
     this.gl.toneMapping = ACESFilmicToneMapping;
     this.gl.toneMappingExposure = 0.5;
-    this.gl.shadowMap.type = PCFSoftShadowMap;
+    this.gl.shadowMap.type = PCFShadowMap;
     this.caps = { webgl2: this.gl.capabilities.isWebGL2, floatRT: this.gl.extensions.has('EXT_color_buffer_float') };
     let name = '';
     try {
