@@ -876,6 +876,8 @@ export class TankScene {
         if (!(m as MeshStandardMaterial).isMeshStandardMaterial) return m;
         const c = (m as MeshStandardMaterial).clone();
         c.userData = m.userData;
+        // copy() resets a standard/physical material's defines to its own: keep the model's (e.g. USE_UV, LOD switches)
+        c.defines = { ...c.defines, ...m.defines };
         // keep a model's own shader injection (e.g. the shrimp cuticle) and add the caustics after it
         const prev = m.onBeforeCompile, prevKey = Object.prototype.hasOwnProperty.call(m, 'customProgramCacheKey') ? m.customProgramCacheKey() : c.type;
         lightByCaustics(c, this.U, `tank-${prevKey}`, false, prev);

@@ -1,7 +1,7 @@
 import { FogExp2, Scene, Vector3, Vector4, type Mesh, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import type { MapDef, TideStationDef } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
-import { Terrain, loadTerrainGrid, type TerrainGrid } from '../world/Terrain';
+import { Terrain, loadTerrainGrid, RIPPLE_SHEET_RADIUS, type TerrainGrid } from '../world/Terrain';
 import { WaterPass } from '../world/Water';
 import { createWaves } from '../world/Waves';
 import { LAYER_MIRROR, reflectInWater } from '../render/Mirror';
@@ -123,14 +123,16 @@ export class World {
     grid.pitMask = carveCoarse(grid, pits);
     const terrain = new Terrain(grid, map.substrate.palette, pits);
     terrain.setDetail(preset.surfaceDetail > 0);
+    terrain.setRippleSheet(RIPPLE_SHEET_RADIUS[preset.vegetation]);
     terrain.setLite(preset.water === 'lite');
     mark('terrain');
     onProgress?.('潮だまり');
     const habitat = new Habitat(terrain, map.habitat?.coarse_m ?? 5, pits);
     mark('habitat');
     if (layout) { terrain.setLandLevel(layout.landLevel[0], layout.landLevel[1]); terrain.setSandTint(...layout.sandTint); if (layout.mudTint) terrain.setMudTint(...layout.mudTint); terrain.setSediment(layout.ripples ?? 1, layout.mudLook ?? 0); terrain.setRippleAngle(layout.rippleAngle); }
-    // 葛西's sand is a warm grey-brown, not neutral: the photos' dry sand runs about 1 : 0.94 : 0.85 in R : G : B
-    else terrain.setSandTint(1.0, 0.935, 0.85);
+    // 葛西's sand is a warm grey-brown, not neutral: the photos' dry sand runs about 1 : 0.94 : 0.85 in R : G : B and
+    // reads lighter than the shared grey (tuned against the photos with tests/smoke/kasai-sand.mjs)
+    else terrain.setSandTint(1.36, 1.18, 0.92);
     terrain.setSpill(habitat.poolLevels);
     // one wave set for the surface and the caustics; the seed follows the map so the ripples differ between flats
     const waves = createWaves({ windDir: WIND_DIR, depth: 0.6, seed: map.id.length * 131 + 7 });

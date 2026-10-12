@@ -45,6 +45,7 @@ export class GroundPatch {
   readonly uniforms: { uGround: IUniform<DataTexture>; uGroundRect: IUniform<Vector4>; uGroundSink: IUniform<number> };
   private cx = Number.NaN;
   private cz = Number.NaN;
+  private cref = 0;
   constructor() {
     const N = GroundPatch.N;
     this.texture = new DataTexture(new Uint16Array(N * N), N, N, RedFormat, HalfFloatType);
@@ -53,9 +54,10 @@ export class GroundPatch {
     this.uniforms = { uGround: { value: this.texture }, uGroundRect: { value: new Vector4(0, 0, 1, -1e3) }, uGroundSink: { value: 0 } };
   }
 
-  /** resample when the fish has moved away from the patch's centre (size: side of the square, m) */
+  /** resample when the fish has moved away from the patch's centre or the ground under it has changed (a tank's
+   *  substrate taken out or put in); size: side of the square, m */
   update(x: number, z: number, size: number, heightAt: (x: number, z: number) => number, force = false): void {
-    if (!force && Math.hypot(x - this.cx, z - this.cz) < size * 0.1) return;
+    if (!force && Math.hypot(x - this.cx, z - this.cz) < size * 0.1 && Math.abs(heightAt(this.cx, this.cz) - this.cref) < 0.0005) return;
     const N = GroundPatch.N, data = this.texture.image.data as Uint16Array;
     const x0 = x - size * 0.5, z0 = z - size * 0.5, ref = heightAt(x, z);
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
@@ -64,7 +66,7 @@ export class GroundPatch {
     this.texture.needsUpdate = true;
     const t = size / (N - 1);
     this.uniforms.uGroundRect.value.set(x0 - t * 0.5, z0 - t * 0.5, 1 / (size + t), ref);
-    this.cx = x; this.cz = z;
+    this.cx = x; this.cz = z; this.cref = ref;
   }
 
   /** no ground (a preview, a viewer's studio): nothing is clamped */
