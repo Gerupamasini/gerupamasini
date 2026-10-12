@@ -151,6 +151,10 @@ export class HeroPipeline {
     this.resize(Math.max(1, size.x), Math.max(1, size.y));
     this.shared.uTime.value += dt;
     this.shared.uCamNearFar.value.set(camera.near, camera.far);
+    // (the home tank's renderer points these at its own buffers while it draws a hero fish)
+    this.shared.uBg.value = this.envRT.texture;
+    this.shared.uBgDepth.value = this.envRT.depthTexture;
+    this.shared.uResolution.value.set(this.width, this.height);
     const prevTone = r.toneMapping;
     const prevBg = scene.background;
     r.toneMapping = NoToneMapping;

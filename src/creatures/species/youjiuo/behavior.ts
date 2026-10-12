@@ -189,6 +189,14 @@ export class Youjiuo {
 
   private setSub(sub: string): void { this.sub = sub; this.subT = 0; }
 
+  /** Moved by a push from another animal (false while it holds a blade: it stays with the blade). */
+  shift(dx: number, dz: number): boolean {
+    if (this.hold || this.holdW > 0) return false;
+    this.pos.x += dx; this.pos.z += dz;
+    this.freePos.x += dx; this.freePos.z += dz;
+    return true;
+  }
+
   /** Hover in mid-water. */
   hover(secs: number): void {
     this.releaseHold();

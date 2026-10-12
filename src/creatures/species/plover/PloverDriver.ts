@@ -1,6 +1,6 @@
 import { AdditiveAnimationBlendMode, AnimationAction, AnimationClip, AnimationMixer, AnimationUtils, LoopOnce, LoopRepeat, MathUtils, Object3D, Quaternion, Vector3 } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import { makePlover, type PlaceholderModel } from '../../models/placeholders';
 import { turnToward } from '../shrimp/ShrimpDriver';
 
@@ -77,6 +77,7 @@ export class PloverDriver implements Driver {
   private flyDur = 1;
   private scale = 1;
   private readonly tmp = new Vector3();
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
   busy = false;
   // the clip player
   private mixer: AnimationMixer | null = null;
@@ -357,6 +358,22 @@ export class PloverDriver implements Driver {
       wl.rotation.z = fold + flap;
       wr.rotation.z = -fold - flap;
     }
+  }
+
+  /** on its legs on the sand; on the wing out of everyone's way */
+  body(): BodyState {
+    const b = this.bodyState, ind = this.ind;
+    b.mode = this.mode === 'fly' ? 'away' : 'bed';
+    if (ind) { b.heading = ind.heading; b.y = ind.pos.y; }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const ind = this.ind;
+    // (in flight its place is the flight path's: nothing to push)
+    if (!ind || this.mode === 'fly') return;
+    ind.pos.x += dx;
+    ind.pos.z += dz;
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

@@ -1,6 +1,7 @@
 import { Bone, Group, LOD, Matrix4, Object3D, Skeleton, SkinnedMesh, Sphere, Vector3 } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import { WaterRider } from '../../physics/water';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
 import { BONES, MODEL_TL, SPINE } from './anatomy';
@@ -90,6 +91,9 @@ export class HakuDriver implements Driver {
   /** where the player was at the last update (the alarm's "away") */
   private readonly player = new Vector3(Number.NaN, 0, 0);
   private shadowTick = 0;
+  /** carried to and fro by the swell and the surf, rocked by their surges */
+  private readonly rider = new WaterRider();
+  private readonly bodyState: BodyState = { mode: 'water', heading: 0, y: 0 };
   busy = false;
 
   /** The view's holder; the rig and meshes are built in attach(). */
@@ -246,6 +250,11 @@ export class HakuDriver implements Driver {
     // so the school's spacing and the C-start stay the same at any frame rate
     const steps = Math.max(1, Math.ceil(sdt * 40 - 1e-6));
     for (let i = 0; i < steps; i++) f.update(sdt / steps, school, env);
+    // the water carries the fry to and fro (a fish of 3 cm hardly holds against the swell; a C-start outruns it)
+    const r = this.rider.step(sdt, ctx.water, ctx.floor, f.pos.x, f.pos.y, f.pos.z, f.heading, f.tl, f.escT >= 0 ? 0.3 : 1, Math.max(env.minDepth, 1.6 * f.depthBody));
+    f.pos.addScaledVector(r.vel, sdt);
+    const L = f.layer(env, f.pos.x, f.pos.z), lo = L.bottom + 0.3 * f.depthBody, hi = L.surface - 0.25 * f.depthBody;
+    if (lo < hi) f.pos.y = Math.min(hi, Math.max(lo, f.pos.y));
     ind.pos.copy(f.pos);
     ind.heading = f.heading;
     this.place();
@@ -261,7 +270,7 @@ export class HakuDriver implements Driver {
     const f = this.fish, root = this.root;
     if (!f || !root || Number.isNaN(f.pos.y)) return;
     root.position.copy(f.pos);
-    root.rotation.set(f.pitch, f.heading, f.roll, 'YXZ');
+    root.rotation.set(f.pitch + this.rider.tiltX, f.heading, f.roll + this.rider.tiltZ, 'YXZ');
   }
 
   private updateShadow(env: FishEnv): void {
@@ -291,7 +300,22 @@ export class HakuDriver implements Driver {
     if (heading !== undefined) f.heading = heading;
     f.speed = 0; f.vy = 0; f.reactAt = -1; f.escT = -1;
     ind.pos.x = x; ind.pos.z = z;
+    this.rider.reset();
     this.busy = false;
+  }
+
+  /** always swimming */
+  body(): BodyState {
+    const f = this.fish, b = this.bodyState;
+    if (f && !Number.isNaN(f.pos.y)) { b.heading = f.heading; b.y = f.pos.y - 0.5 * f.depthBody; }
+    else if (this.ind) { b.heading = this.ind.heading; b.y = this.ind.pos.y; }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const f = this.fish, ind = this.ind;
+    if (f) { f.pos.x += dx; f.pos.z += dz; }
+    if (ind) { ind.pos.x += dx; ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

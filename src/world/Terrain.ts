@@ -1,10 +1,11 @@
 import {
   BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, RedFormat, RGBAFormat, Vector2, Vector3,
-  type IUniform, type Texture, LinearFilter, ClampToEdgeWrapping,
+  Vector4, type IUniform, type Texture, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
 import { makeSpillTexture } from './Water';
 import { WAVES_GLSL, type WaveSet } from './Waves';
-import { SURF_GLSL, surfUniforms, type SurfUniforms } from './Surf';
+import { surfUniforms, type SurfUniforms } from './Surf';
+import type { SurfMemoryUniforms } from './SurfMemory';
 import type { MapDef, Substrate } from '../data/schemas';
 import { pitMaskAt, pitShape, type FeedingPit } from './FeedingPits';
 import { DATA_BASE } from '../data/loader';
@@ -257,6 +258,11 @@ export class Terrain {
   private waves: WaveSet | null = null;
   /** the surf on an open shore (shared with the water): the sand glistens where the swash has just been */
   private surf: SurfUniforms = surfUniforms(null);
+  /** what the sand remembers of the swash (SurfMemory: film, saturation, foam, swash marks), when there is a memory */
+  private readonly uSurfMem: IUniform<Texture | null> = { value: null };
+  private readonly uMemBox: IUniform<Vector4> = { value: new Vector4(0, 0, 1, 0) };
+  /** x: the day's 2 % run-up on the beach face (m): without a memory the sand stays saturated up to about there */
+  private readonly uSwashBand: IUniform<Vector4> = { value: new Vector4(0.2, 0, 0, 0) };
 
   constructor(grid: TerrainGrid, palette: Substrate[], pits: FeedingPit[] = []) {
     this.n = grid.n;
@@ -507,7 +513,9 @@ export class Terrain {
       shader.uniforms.uMudTint = this.uMudTint;
       shader.uniforms.uRipRot = this.uRipRot;
       shader.uniforms.uSurf = this.surf.uSurf;
-      shader.uniforms.uSurfDir = this.surf.uSurfDir;
+      shader.uniforms.tSurfMem = this.uSurfMem;
+      shader.uniforms.uMemBox = this.uMemBox;
+      shader.uniforms.uSwashBand = this.uSwashBand;
       if (this.waves) Object.assign(shader.uniforms, this.waves.uniforms);
       shader.uniforms.uSpillTex = this.uSpill;
       shader.uniforms.uHalf = { value: this.half };
@@ -576,11 +584,15 @@ uniform vec3 uMudTint;
 uniform vec2 uRipRot;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
+uniform vec4 uSurf;
+uniform sampler2D tSurfMem;
+uniform vec4 uMemBox;
+uniform vec4 uSwashBand;
 ${WAVES_GLSL}
-${SURF_GLSL}
 // shared between the colour, normal and roughness stages (the colour stage runs first)
 float gFilm = 0.0;
 float gSwash = 0.0;
+float gSat = 0.0;
 float gQuartz = 0.0;
 vec2 gNrmAdd = vec2(0.0);
 vec4 gDis = vec4(0.0);
@@ -754,20 +766,33 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   float wetTop = max(lvl, uWetLevel);
   float wet = (1.0 - smoothstep(wetTop - 0.03, wetTop + 0.06, vWorldPos.y)) * (1.0 - 0.3 * smoothstep(lvl + 0.05, lvl + 0.8, vWorldPos.y));
   wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
-  // an open shore's swash: the sand the biggest waves reach stays saturated; where this wave's sheet or the last
-  // two's has just drained it still carries a film of water and shines (the water pass runs the same swash)
+  // an open shore's swash, as the sand remembers it (SurfMemory): saturated wherever the sheets have been lately
+  // (drying over a minute or so), a glassy film just after one drains, foam and swash marks left on it. Outside the
+  // memory's window, the band the swash usually reaches stays saturated (its edge in lobes and tongues).
+  float sandFoam = 0.0, mark = 0.0;
   if (uSurf.w > 0.0) {
     float e = vWorldPos.y - uWaterLevel;
-    if (e > -0.2 && e < 0.3) {
+    if (e > -0.4 && e < 0.8) {
       vec2 q = vWorldPos.xz;
-      float reach = max(surfSwash(q, uTime).x, surfSwash(q, uTime - 1.2).x);
-      gSwash = 1.0 - smoothstep(reach - 0.004, reach + 0.012, e);
-      // (the reach wanders along the beach in lobes and tongues, as the swash's own front does)
       float lobes = 0.05 * (vnoise(q * 0.35 + 3.0) - 0.5) + 0.025 * (vnoise(q * 1.3 - 1.0) - 0.5);
-      float zone = 1.0 - smoothstep(0.4 * uSurf.x, 0.8 * uSurf.x, e + lobes);
-      wet = max(wet, max(gSwash, zone * 0.9));
+      vec4 mem = vec4(0.0, 1.0 - smoothstep(0.55 * uSwashBand.x, 0.95 * uSwashBand.x, e + lobes), 0.0, 0.0);
+      if (uMemBox.w > 0.0) {
+        vec2 muv = (q - uMemBox.xy) / uMemBox.z + 0.5;
+        vec2 em = min(muv, 1.0 - muv);
+        float inW = smoothstep(0.0, 0.08, min(em.x, em.y));
+        if (inW > 0.0) mem = mix(mem, texture2D(tSurfMem, muv), inW);
+      }
+      // (the backwash lays bare sand below the still waterline too: it shines as much as the sand above it)
+      gSwash = mem.r;
+      gSat = mem.g;
+      sandFoam = mem.b;
+      mark = mem.a;
+      wet = max(wet, gSat * 0.95);
+      wet = max(wet, 1.0 - smoothstep(-0.02, 0.0, e));
     }
   }
+  // a glassy film: darker still, a little cooler
+  diffuseColor.rgb *= mix(1.0, 0.82, gSwash);
   diffuseColor.rgb *= mix(1.0, 0.76, wet);
   // water left in the ripple troughs: on sand the tide has just uncovered, each trough keeps a thin film — dark,
   // glassy, carrying the sky — while the crests between have already drained
@@ -777,6 +802,25 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.5, 0.56, 0.64), gTrough * 0.85);
   // (the photos' wet flat is a neutral grey with the sky in it, whatever the colour of the dry sand)
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.8, 0.9, 1.08), 0.75 * wet);
+  // foam left on the sand: clusters of fine bubbles (a few millimetres) that pop one by one, and the swash marks, thin
+  // lines of bubbles and dark grit where the fronts stopped
+  if (sandFoam + mark > 0.003) {
+    vec2 ob;
+    vec3 gb = grains(mm / 2.6 + 91.0, ob);
+    float clus = smoothstep(0.25, 0.75, vnoise(vWorldPos.xz * 9.0 + 3.0) * 0.6 + vnoise(vWorldPos.xz * 31.0) * 0.4);
+    float amt = clamp(sandFoam * (0.5 + 0.9 * clus) + mark * 0.6 * (0.6 + 0.4 * clus), 0.0, 1.0);
+    float has = step(1.0 - amt * 0.95, gb.z);
+    float rB = 0.28 + 0.16 * gb.y;
+    float detB = 1.0 - smoothstep(0.2, 0.9, fw * 0.5 / 2.6);
+    float disc = smoothstep(rB, rB - 0.08, gb.x) * has * detB;
+    float rimB = (smoothstep(rB + 0.1, rB, gb.x) - smoothstep(rB, rB - 0.06, gb.x)) * has * detB;
+    vec3 foamC = vec3(0.86, 0.88, 0.9);
+    // (beyond the bubbles' size, the white they add up to)
+    diffuseColor.rgb = mix(diffuseColor.rgb, foamC, mix(amt * 0.45, disc * 0.85, detB));
+    diffuseColor.rgb *= 1.0 - 0.25 * rimB;
+    gNrmAdd += (-ob / rB) * 0.8 * disc;
+    diffuseColor.rgb *= 1.0 - 0.12 * mark * (1.0 - clus);
+  }
   // above the bank: the park's land, dry grass and earth over the packed bank
   float land = smoothstep(uLand.x, uLand.y, vWorldPos.y);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.31, 0.32, 0.2) * (0.8 + 0.4 * vnoise(vWorldPos.xz * 0.9 + 3.0)), land);
@@ -815,6 +859,12 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
   normal = normalize(normal + viewPerturb);
 }`)
+        .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+#if defined( USE_ENVMAP ) && defined( RE_IndirectSpecular )
+  // a film of water on the sand gives back the sky like the sea does (the scene's environment is kept dim for the
+  // matte ground; the film's reflection is the water's, so it is raised to the sea's)
+  if (gSwash > 0.01) radiance += getIBLRadiance( geometryViewDir, geometryNormal, 0.06 ) * gSwash * 7.0;
+#endif`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 {
   float spillR = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
@@ -822,7 +872,8 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   float wetR = (1.0 - smoothstep(max(lvlR, uWetLevel) - 0.03, max(lvlR, uWetLevel) + 0.06, vWorldPos.y)) * (1.0 - 0.3 * smoothstep(lvlR + 0.05, lvlR + 0.8, vWorldPos.y));
   wetR = max(wetR, 1.0 - smoothstep(lvlR - 0.05, lvlR + 0.12, vWorldPos.y));
   roughnessFactor = mix(roughnessFactor, 0.48, wetR);   // damp sand is darker and only faintly satin, never a mirror of the sun
-  roughnessFactor = mix(roughnessFactor, 0.32, gSwash * smoothstep(-0.01, 0.0, vWorldPos.y - uWaterLevel));   // the film the swash just left: a soft sheen
+  roughnessFactor = mix(roughnessFactor, 0.5, gSat * (1.0 - wetR));                // sand the swash has soaked: damp, satin
+  roughnessFactor = mix(roughnessFactor, 0.06, gSwash);                                // the film a sheet just left: a mirror
   roughnessFactor = mix(roughnessFactor, 0.62, gFilm * 0.5);   // the organic film has a wet sheen of its own
   roughnessFactor = mix(roughnessFactor, 0.42, gQuartz);       // quartz and shell grains glint a little
   roughnessFactor = mix(roughnessFactor, 0.06, gTrough);       // the water standing in the ripple troughs
@@ -831,7 +882,7 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   roughnessFactor = mix(roughnessFactor, mix(0.7, 0.36, wetR), mudR);
 }`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v3';
+    mat.customProgramCacheKey = () => 'higata-terrain-v4';
     return mat;
   }
 
@@ -969,6 +1020,13 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   /** Share the surf's uniforms with the water (call before the first frame). */
   setSurf(surf: SurfUniforms): void {
     this.surf = surf;
+  }
+
+  /** What the sand remembers of the swash (null: no memory, the usual band stays wet); and the day's run-up (m). */
+  setSurfMemory(mem: SurfMemoryUniforms | null, runup: number): void {
+    if (mem) { this.uSurfMem.value = mem.tSurfMem.value; this.uMemBox.value.copy(mem.uMemBox.value); }
+    else this.uMemBox.value.w = 0;
+    this.uSwashBand.value.x = runup;
   }
 
   /** Share the water's wave set so the caustics follow the ripples (call before the first frame). */

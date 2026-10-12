@@ -8,6 +8,8 @@ import { TANK_DIMENSIONS, type TankSize } from '../aquarium/state';
 import { equipmentItem, tankSizeItemId } from '../aquarium/catalog';
 import { emptyEquipmentCollection, normalizeCollection, ownedEquipmentLayout, type EquipmentCollection } from '../aquarium/catalog';
 import { normalizeEquipment } from '../aquarium/state';
+import { MAX_TANK_ANIMALS, tankAnimalCapacity, tankUnlocked } from '../aquarium/progression';
+import { progressionOf } from '../aquarium/catalog';
 
 export interface SpeciesProgress {
   discovered?: number;
@@ -84,10 +86,10 @@ const saveSchema = z.object({
     paused: z.boolean(), phase: z.enum(['active', 'ending']),
   }).nullable(), usedCount: count }),
   encyclopedia: z.record(z.string(), progressSchema), case: z.array(recordSchema).max(6),
-  tank: z.object({ individuals: z.array(recordSchema).max(4), lastSimMs: finite, layout: layoutSchema.optional() }),
+  tank: z.object({ individuals: z.array(recordSchema).max(MAX_TANK_ANIMALS), lastSimMs: finite, layout: layoutSchema.optional() }),
   aquariumRoom: z.object({ version: z.literal(1), mainTankId: z.string().min(1).nullable(), tanks: z.array(z.object({
     id: z.string().min(1), size: z.union([z.literal(45), z.literal(60), z.literal(90), z.literal(120)]),
-    position: z.tuple([finite, finite]), individuals: z.array(recordSchema).max(4), lastSimMs: finite, layout: layoutSchema,
+    position: z.tuple([finite, finite]), individuals: z.array(recordSchema).max(MAX_TANK_ANIMALS), lastSimMs: finite, layout: layoutSchema,
   })).max(3) }).optional(),
   equipmentCollection: z.unknown().optional(), removedIndividuals: z.array(z.string()),
   stats: z.object({ playSeconds: finite.nonnegative(), captures: count, observations: count }),
@@ -113,8 +115,8 @@ export function parseSave(raw: unknown): SaveV1 {
   if (!parsed.success) throw new InvalidSaveError();
   const s = parsed.data as SaveV1;
   const equipment = normalizeEquipment(s.tank?.layout?.equipment);
-  s.equipmentCollection = normalizeCollection(s.equipmentCollection, equipment);
-  if (s.tank?.layout) s.tank.layout.equipment = ownedEquipmentLayout(equipment, s.equipmentCollection);
+  const room = s.aquariumRoom ?? initialRoom(s.tank);
+  s.equipmentCollection = normalizeCollection(s.equipmentCollection, equipment, room.tanks.map(tank => normalizeEquipment(tank.layout.equipment, TANK_DIMENSIONS[tank.size])));
   if (s.player) {
     if (!s.player.skills) s.player.skills = {};
     if (!s.player.tools) s.player.tools = [];
@@ -126,16 +128,17 @@ export function parseSave(raw: unknown): SaveV1 {
   }
   const activeIds = [...s.case, ...s.tank.individuals].map((r) => r.id);
   if (new Set(activeIds).size !== activeIds.length) throw new InvalidSaveError();
-  const room = s.aquariumRoom ?? initialRoom(s.tank);
   const roomIds = room.tanks.map(t => t.id), fishIds = [...s.case, ...room.tanks.flatMap(t => t.individuals)].map(r => r.id);
   if (new Set(roomIds).size !== roomIds.length || new Set(fishIds).size !== fishIds.length) throw new InvalidSaveError();
   if (room.tanks.length ? !room.tanks.some(t => t.id === room.mainTankId) : room.mainTankId !== null) throw new InvalidSaveError();
   const used = new Map<string, number>();
   for (const tank of room.tanks) {
+    if (!tankUnlocked(progressionOf(s.equipmentCollection), tank.size)) throw new InvalidSaveError();
     if (!canPlaceTank(room.tanks, tank.size, tank.position, tank.id)) throw new InvalidSaveError();
     const layout = normalizeEquipment(tank.layout.equipment, TANK_DIMENSIONS[tank.size as TankSize]);
     if (equipmentItem(layout.tankItemId)?.size !== tank.size) layout.tankItemId = tankSizeItemId('tank', tank.size);
     tank.layout.equipment = ownedEquipmentLayout(layout, s.equipmentCollection!, used);
+    if (tank.individuals.length > tankAnimalCapacity(tank.size, tank.layout.equipment, progressionOf(s.equipmentCollection))) throw new InvalidSaveError();
   }
   s.aquariumRoom = room;
   const main = room.tanks.find(t => t.id === room.mainTankId);

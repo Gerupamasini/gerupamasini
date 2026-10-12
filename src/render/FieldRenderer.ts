@@ -52,8 +52,9 @@ export class FieldRenderer {
     const surf = water.surfCompileTarget();
     let surfReady: Promise<unknown> = Promise.resolve();
     if (surf) { gl.setRenderTarget(surf.target); surfReady = gl.compileAsync(surf.mesh, camera); }
+    const extras = water.extraCompile.map((e) => { gl.setRenderTarget(e.target); return gl.compileAsync(e.mesh, camera); });
     gl.setRenderTarget(prev);
-    await Promise.all([sceneReady, waterReady, surfReady]);
+    await Promise.all([sceneReady, waterReady, surfReady, ...extras]);
   }
 
   /**

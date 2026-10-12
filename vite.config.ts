@@ -49,6 +49,8 @@ export default defineConfig({
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         hermitLab: fileURLToPath(new URL('./hermit-lab.html', import.meta.url)),
+        // surf-lab.html: the surf on a beach made to show it (sea, tide, hour and camera in hand)
+        surfLab: fileURLToPath(new URL('./surf-lab.html', import.meta.url)),
       },
       output: { manualChunks: { three: ['three'] } },
     },

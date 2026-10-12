@@ -68,6 +68,10 @@
 ### 4.1 共通契約
 - `attach(root, model, individual)` で three のオブジェクトとリグを受け取り、個体のサイズと色調を適用する。
 - `setIntent(intent)` で意図を受け取り、`update(dt, ctx)` で姿勢・位置・向きを更新する。地形への接地はドライバの責務。
+- 生きもの同士の接触、足場の面への接地、水の動きは共通の物理層（`src/creatures/physics/`、[生きものの物理](../creatures/physics.md)）が受け持つ。
+  - ドライバは `body()` で体の状態（底・遊泳・潜砂・固定）を返す。
+  - `nudge(dx, dz)` で押し分けを受け取る。
+  - 小さな遊泳種は `ctx.water` の水の動きに `WaterRider` で乗る。
 - 行動が「図鑑に残る出来事」になった瞬間に `BehaviorEvent` を発火する（例: `yawn` 開始、`dart` 開始、`flee`、`forage_peck`、`alert`）。
 - LOD が変わるとドライバはモデルを差し替えられるが、状態は保持する。
 

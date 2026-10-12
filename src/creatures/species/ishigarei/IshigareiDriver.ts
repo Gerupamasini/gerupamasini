@@ -1,6 +1,7 @@
 import { Color, Group, Vector3, type Object3D } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import { WaterRider } from '../../physics/water';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
 import { createFlounderBehavior } from './behavior.js';
@@ -44,6 +45,10 @@ export class IshigareiDriver implements Driver {
   private locked = false;
   private listeners = new Set<(e: BehaviorEvent) => void>();
   private readonly tmp = new Vector3();
+  /** off the bottom the swell carries it to and fro; lying on the sand it holds its place */
+  private readonly rider = new WaterRider();
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
+  private groundY = 0;
   private readonly sun = new Vector3();
   private readonly player = new Vector3(Number.NaN, 0, 0);
   private readonly playerPrev = new Vector3(Number.NaN, 0, 0);
@@ -208,6 +213,12 @@ export class IshigareiDriver implements Driver {
       model.lod.autoUpdate = !this.locked;
       if (this.locked) model.lod.levels.forEach((l, i) => { l.object.visible = i === 0; });
     }
+    {
+      const s0 = f.state, swimming = s0.lift > 0.004 && s0.bury < 0.1;
+      const r = this.rider.step(sdt, ctx.water, ctx.floor, s0.pos.x, s0.pos.y, s0.pos.z, s0.heading, ind.length_mm / 1000, swimming ? (s0.mode === 'ESCAPE' ? 0.3 : 1) : 0, ctx.minDepth ?? 0);
+      s0.pos.x += r.vel.x * sdt;
+      s0.pos.z += r.vel.z * sdt;
+    }
     const steps = Math.max(1, Math.ceil(sdt * 60 - 1e-6));
     let P = null as ReturnType<FlounderApi['update']> | null;
     for (let i = 0; i < steps; i++) P = f.update(sdt / steps);
@@ -215,6 +226,7 @@ export class IshigareiDriver implements Driver {
     const st = f.state;
     ind.pos.copy(st.pos);
     ind.heading = st.heading;
+    this.groundY = ctx.floor.heightAt(st.pos.x, st.pos.z);
     applyPose(root, model.bones, P, JAW_AXIS);   // (ends by updating the world matrices: syncEyes reads them)
     syncEyes(model);
     root.visible = true;
@@ -281,7 +293,27 @@ export class IshigareiDriver implements Driver {
     if (heading !== undefined) f.state.heading = heading;
     f.rest(4);
     ind.pos.x = x; ind.pos.z = z;
+    this.rider.reset();
     this.busy = false;
+  }
+
+  /** lying on the sand, gliding over it, or under it out of everyone's way */
+  body(): BodyState {
+    const f = this.fish, b = this.bodyState;
+    if (f) {
+      const st = f.state;
+      b.mode = st.bury > 0.75 ? 'away' : st.lift > 0.01 ? 'water' : 'bed';
+      b.heading = st.heading;
+      b.y = this.groundY + st.lift;
+    }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const f = this.fish, ind = this.ind;
+    if (!f) return;
+    f.state.pos.x += dx; f.state.pos.z += dz;
+    if (ind) { ind.pos.x += dx; ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

@@ -46,7 +46,7 @@ export function makeEquipment(kind: EquipmentKind, id: string, d = STANDARD_TANK
   return { id, kind, itemId: `${kind}-initial`, position: equipmentPlacement(kind, d), rotation: 0, enabled: true, setting: FLOW_KINDS.includes(kind) ? (kind === 'flowPump' ? 600 : 300) : kind === 'thermostat' || kind === 'chiller' ? 24 : 1 };
 }
 export function defaultEquipmentLayout(d = STANDARD_TANK): EquipmentLayout {
-  return { version: 1, stand: 'wood', temperature: 24, devices: ['glassLid', 'ledLight', 'canisterFilter', 'airPump', 'airStone', 'heater', 'thermometer', 'thermostat', 'powerStrip'].map((k) => makeEquipment(k as EquipmentKind, k, d)), connections: [] };
+  return { version: 1, stand: 'wood', temperature: 24, devices: ['glassLid', 'ledLight', 'filter', 'airPump', 'airStone', 'heater', 'thermometer', 'thermostat', 'powerStrip'].map((k) => makeEquipment(k as EquipmentKind, k, d)), connections: [] };
 }
 /** Defensive migration: old layouts acquire defaults; malformed imports never enter TubeGeometry. */
 export function normalizeEquipment(raw: unknown, dimensions = STANDARD_TANK): EquipmentLayout {
