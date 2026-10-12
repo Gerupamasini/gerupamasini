@@ -255,7 +255,9 @@ export class World {
       fogColor: this.sky.fogColor, fogDensity: this.fog.density, env: this.sky.envCube, day,
     });
     // the bed's caustics run on the water's clock so they sit under the ripples that cast them
-    this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.water.uniforms.uTime.value, sunUp, this.sunDir);
+    this.terrain.setWater(this.tideLevel, this.water.uniforms.uTime.value, sunUp, this.sunDir);
+    // how long each height has been out of the water (it refreshes itself once the time or the water has moved)
+    this.terrain.wetDry.update((ms) => this.tide.level(ms), gameMs, this.tideLevel, this.map.origin.lat, this.map.origin.lon);
     // the eelgrass sways with the same breeze and leans with the tidal current
     this.amamo?.update(dt, camera, { tideLevel: this.tideLevel, tideRate: this.tideRate, windDir: WIND_DIR, waveGain: this.water.uniforms.uWaveGain.value });
     // lift the exposure at night so the flat stays readable under the moon

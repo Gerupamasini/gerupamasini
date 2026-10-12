@@ -8,6 +8,7 @@ import { SURF_GLSL, surfUniforms, type SurfUniforms } from './Surf';
 import type { MapDef, Substrate } from '../data/schemas';
 import { pitMaskAt, pitShape, type FeedingPit } from './FeedingPits';
 import { DATA_BASE } from '../data/loader';
+import { WetDry } from './WetDry';
 
 export interface TerrainGrid {
   n: number;
@@ -97,7 +98,10 @@ export class Terrain {
   spillTexture: DataTexture;
   private readonly uSpill: IUniform<DataTexture>;
   private readonly uWater: IUniform<number> = { value: -10 };
-  private readonly uWet: IUniform<number> = { value: -10 };
+  /** how long each height has been out of the water, as drying (WetDry): the sediment's film, darkness and gloss */
+  readonly wetDry: WetDry;
+  private readonly uWetDry: IUniform<DataTexture>;
+  private readonly uWetDryRange: IUniform<Vector2>;
   private readonly uTime: IUniform<number> = { value: 0 };
   private readonly uSunUp: IUniform<number> = { value: 1 };
   private readonly uSunDirT: IUniform<Vector3> = { value: new Vector3(0, 1, 0) };
@@ -138,6 +142,11 @@ export class Terrain {
       }
     }
     this.palette = palette;
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < this.heights.length; k++) { const y = this.heights[k]; if (y < lo) lo = y; if (y > hi) hi = y; }
+    this.wetDry = new WetDry(lo - 0.05, hi + 0.05);
+    this.uWetDry = { value: this.wetDry.texture };
+    this.uWetDryRange = { value: this.wetDry.range };
 
     this.heightTexture = new DataTexture(this.heights, this.n, this.n, RedFormat, FloatType);
     this.heightTexture.minFilter = LinearFilter;
@@ -336,10 +345,11 @@ export class Terrain {
 
   private buildMaterial(patch: boolean): MeshStandardMaterial {
     const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: DoubleSide, polygonOffset: patch, polygonOffsetFactor: patch ? -1 : 0, polygonOffsetUnits: patch ? -2 : 0 });
-    const uWater = this.uWater, uWet = this.uWet, uTime = this.uTime;
+    const uWater = this.uWater, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
-      shader.uniforms.uWetLevel = uWet;
+      shader.uniforms.uWetDry = this.uWetDry;
+      shader.uniforms.uWetDryRange = this.uWetDryRange;
       shader.uniforms.uTime = uTime;
       shader.uniforms.uSunUp = this.uSunUp;
       shader.uniforms.uSunDirT = this.uSunDirT;
@@ -364,7 +374,8 @@ varying vec3 vWorldPos;
 varying float vSubstrate;
 varying float vPit;
 uniform float uWaterLevel;
-uniform float uWetLevel;
+uniform sampler2D uWetDry;
+uniform vec2 uWetDryRange;
 uniform float uTime;
 uniform float uSunUp;
 uniform vec3 uSunDirT;
@@ -382,6 +393,11 @@ ${SURF_GLSL}
 // shared between the colour, normal and roughness stages (the colour stage runs first)
 float gFilm = 0.0;
 float gSwash = 0.0;
+// how wet the sediment is (0 dry .. 1 saturated), and the film of water standing on it (gloss, smoothed grains)
+float gWet = 0.0;
+float gWetFilm = 0.0;
+// the pixel's footprint on the ground (mm): ripples finer than a few pixels become roughness rather than stripes
+float gFootMm = 1.0;
 float gQuartz = 0.0;
 vec2 gNrmAdd = vec2(0.0);
 vec4 gDis = vec4(0.0);
@@ -608,9 +624,26 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   // the water level here: the tide, or a tide pool's own level above it
   float spillH = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
   float lvl = (spillH > uWaterLevel + 0.01 && spillH > vWorldPos.y + 0.003) ? spillH : uWaterLevel;
-  // wet band: everything between the current water level and the recent high-water mark is darker
-  float wet = 1.0 - smoothstep(lvl + 0.02, max(lvl, uWetLevel) + 0.05, vWorldPos.y);
-  wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
+  // how wet the sediment is. The CPU follows the tide back (WetDry): for this height, the drying since the water
+  // left it (the sun dries faster than the night), as the film left on the surface and the pore water's darkness, on
+  // sand and on mud. Sand drains in hours; mud holds its water through the low tide. Ripple troughs and shallow
+  // hollows keep their film longest; just above the water the capillary fringe stays saturated, and a seepage film
+  // shines along the water's edge.
+  float wetHere = vWorldPos.y - lvl;
+  vec4 wd = texture2D(uWetDry, vec2(clamp((vWorldPos.y - uWetDryRange.x) / (uWetDryRange.y - uWetDryRange.x), 0.0, 1.0), 0.5));
+  float mudW = clamp(smoothstep(0.5, 2.0, vSubstrate) * (1.0 - smoothstep(2.5, 3.0, vSubstrate)) + smoothstep(3.5, 4.0, vSubstrate) * (1.0 - smoothstep(4.5, 5.0, vSubstrate)), 0.0, 1.0);
+  // (the ripples are 8 cm: once a pixel covers more than a fifth of one, their troughs blend into their mean)
+  float trough = mix(clamp(max(ripple, 0.0) * 1.6, 0.0, 1.0), 0.2, smoothstep(10.0, 30.0, fw));
+  gFootMm = fw;
+  float hollow = smoothstep(0.45, 0.8, vnoise(vWorldPos.xz * 0.6 + 13.0)) * 0.7 + smoothstep(0.5, 0.85, vnoise(vWorldPos.xz * 2.3 - 5.0)) * 0.5;
+  float retain = 1.0 + 2.5 * trough * trough + 2.0 * hollow;
+  float film = pow(max(mix(wd.r, wd.g, mudW), 1e-4), 1.0 / retain);
+  float moist = pow(max(mix(wd.b, wd.a, mudW), 1e-4), 1.0 / (0.8 + 0.4 * retain));
+  film = max(film, 1.0 - smoothstep(0.0, mix(0.025, 0.07, mudW), wetHere));
+  moist = max(moist, 1.0 - smoothstep(0.0, mix(0.08, 0.5, mudW), wetHere));
+  // (the levee stones and the bank above the high water stay as they were)
+  film *= 1.0 - gRock;
+  float wet = wetHere <= 0.0 ? 1.0 : max(moist, film);
   // an open shore's swash: the sand the biggest waves reach stays saturated; where this wave's sheet or the last
   // two's has just drained it still carries a film of water and shines (the water pass runs the same swash)
   if (uSurf.w > 0.0) {
@@ -625,11 +658,17 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
       wet = max(wet, max(gSwash, zone * 0.9));
     }
   }
-  diffuseColor.rgb *= mix(1.0, 0.68, wet);
+  diffuseColor.rgb *= mix(1.0, 0.66, wet);
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.84, 0.92, 1.06), 0.55 * wet);
+  // a standing film takes a little more of the light into the water
+  diffuseColor.rgb *= mix(1.0, 0.92, film * step(0.0, wetHere));
+  gWet = wet;
+  gWetFilm = wetHere > 0.0 ? max(film, gSwash) : 0.0;
   // above the bank: the park's land, dry grass and earth over the packed bank
   float land = smoothstep(uLand.x, uLand.y, vWorldPos.y);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.31, 0.32, 0.2) * (0.8 + 0.4 * vnoise(vWorldPos.xz * 0.9 + 3.0)), land);
+  gWet *= 1.0 - land;
+  gWetFilm *= 1.0 - land;
   // sunlight caustics on the submerged bed, focused by the same ripples that bend the view of it: the inverse
   // Jacobian of the refraction map from the wave field's curvature (pools are calm: broad, slow, soft bands)
   float depth = lvl - vWorldPos.y;
@@ -661,23 +700,29 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   float slope = cos(ph) * strength * kRel;
   // the lee side is steeper
   slope += cos(ph * 2.0 + 0.6) * strength * 0.35;
-  vec3 worldPerturb = vec3(grad.x * slope + gNrmAdd.x, 0.0, grad.y * slope + gNrmAdd.y);
+  // a standing film fills in between the grains and over the lumps: the ripples still show through it
+  vec2 nrmAdd = gNrmAdd * (1.0 - 0.8 * gWetFilm);
+  vec3 worldPerturb = vec3(grad.x * slope + nrmAdd.x, 0.0, grad.y * slope + nrmAdd.y);
   vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
   normal = normalize(normal + viewPerturb);
 }`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 {
-  float spillR = texture2D(uSpillTex, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
-  float lvlR = (spillR > uWaterLevel + 0.01 && spillR > vWorldPos.y + 0.003) ? spillR : uWaterLevel;
-  float wetR = 1.0 - smoothstep(lvlR + 0.02, max(lvlR, uWetLevel) + 0.05, vWorldPos.y);
-  wetR = max(wetR, 1.0 - smoothstep(lvlR - 0.05, lvlR + 0.12, vWorldPos.y));
-  roughnessFactor = mix(roughnessFactor, 0.58, wetR);   // damp sand is darker and only faintly satin, never a mirror of the sun
-  roughnessFactor = mix(roughnessFactor, 0.32, gSwash * smoothstep(-0.01, 0.0, vWorldPos.y - uWaterLevel));   // the film the swash just left: a soft sheen
+  roughnessFactor = mix(roughnessFactor, 0.58, gWet);   // damp sand is darker and only faintly satin
   roughnessFactor = mix(roughnessFactor, 0.62, gFilm * 0.5);   // the organic film has a wet sheen of its own
   roughnessFactor = mix(roughnessFactor, 0.42, gQuartz);       // quartz and shell grains glint a little
-}`);
+  // a film of water: a mirror of the sky, the sun's glint in it. Further off, the ripples under the film are finer than
+  // a pixel and spread its mirror out (their slopes become roughness; otherwise the sky aliases into stripes)
+  roughnessFactor = mix(roughnessFactor, mix(0.07, 0.3, smoothstep(6.0, 40.0, gFootMm)), gWetFilm);
+}`)
+        .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+#if defined( USE_ENVMAP ) && defined( RE_IndirectSpecular )
+  // the sky's light comes in at a small share (scene.environmentIntensity, for the diffuse fill); what wet ground
+  // mirrors of the sky is the sky itself, at full strength
+  radiance *= mix(1.0, 1.0 / max(envMapIntensity, 1e-3), max(gWetFilm, 0.5 * gWet));
+#endif`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v2';
+    mat.customProgramCacheKey = () => 'higata-terrain-v3';
     return mat;
   }
 
@@ -708,6 +753,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     this.patchMaterial.dispose();
     this.heightTexture.dispose();
     this.spillTexture.dispose();
+    this.wetDry.dispose();
     this.mesh.removeFromParent();
   }
 
@@ -718,9 +764,8 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     this.uSpill.value = this.spillTexture;
   }
 
-  setWater(level: number, wetLevel: number, time: number, sunUp = 1, sunDir?: Vector3): void {
+  setWater(level: number, time: number, sunUp = 1, sunDir?: Vector3): void {
     this.uWater.value = level;
-    this.uWet.value = Math.max(level, wetLevel);
     this.uTime.value = time;
     this.uSunUp.value = sunUp;
     if (sunDir) this.uSunDirT.value.copy(sunDir);
