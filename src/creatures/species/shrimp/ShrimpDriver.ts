@@ -1,6 +1,7 @@
 import { Group, MathUtils, Object3D, Vector3, type Material, type Mesh } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Floor, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Floor, Intent } from '../../drivers/Driver';
+import type { WaterMotion, WaterSample } from '../../physics/water';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { hashInts } from '../../../core/Rng';
 import { ShrimpModel, SHIRATA } from './model/ShrimpModel.js';
@@ -24,7 +25,18 @@ class ShrimpWorld {
   heightAt(x: number, z: number): number { return this.floor ? this.floor.heightAt(x, z) : this.fallbackY; }
   groundY(x: number, z: number): number { return this.heightAt(x, z); }
   onSediment(p: Vector3): boolean { return p.y - this.heightAt(p.x, p.z) < 0.001; }
-  flowAt(_p: Vector3, out: Vector3): Vector3 { return out.set(0, 0, 0); }
+  /** the water's motion (the swell, the surf; absent in the tank) and its velocity at the shrimp this step */
+  water: WaterMotion | null = null;
+  private readonly flow = new Vector3();
+  private readonly sample: WaterSample = { ux: 0, uy: 0, uz: 0, bed: 0, surface: 0 };
+  /** read the water once a step where the shrimp is (the flow is smooth over its antennae's reach) */
+  sampleFlow(p: Vector3): void {
+    if (!this.water || !this.floor) { this.flow.set(0, 0, 0); return; }
+    const s = this.water.sample(this.floor, p.x, p.y, p.z, this.sample);
+    this.flow.set(s.ux, s.uy, s.uz);
+  }
+  /** the water moving past: the swimming shrimp is dragged along with it, the standing one crouches against it, the antennae trail in it */
+  flowAt(_p: Vector3, out: Vector3): Vector3 { return out.copy(this.flow); }
   upstreamness(): number { return 0; }
   steer(): void {}
   puff(): void {}
@@ -98,6 +110,7 @@ export class ShrimpDriver implements Driver {
   private appendageMeshes: Mesh[] = [];
   private detailLevel = -1;
   private readonly tmp = new Vector3();
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
   busy = false;
 
   /** the species profile the model is built from (SHIRATA or e.g. ISOSUJI) */
@@ -262,6 +275,8 @@ export class ShrimpDriver implements Driver {
         } else it.target = null;
       }
     }
+    w.water = ctx.water ?? null;
+    w.sampleFlow(sh.position);
     sh.update(sdt);
     if (sh.mode === 'water' && !this.swimSent) { this.swimSent = true; this.emit('swim'); }
     if (sh.mode === 'ground') this.swimSent = false;
@@ -296,6 +311,26 @@ export class ShrimpDriver implements Driver {
     it.target = null; it.speed = 0; it.mode = 'ground'; it.arms = 'rest';
     this.mode = 'idle';
     this.busy = false;
+  }
+
+  /** walking on the bed, swimming free, or clinging to a blade (where it is not to be moved) */
+  body(): BodyState {
+    const b = this.bodyState, sh = this.shrimp;
+    if (sh) {
+      b.mode = sh.mode === 'water' ? 'water' : sh.mode === 'cling' ? 'fixed' : 'bed';
+      b.heading = yawToHeading(sh.yaw);
+      b.y = sh.mode === 'ground' ? sh.position.y - sh.standH : sh.position.y - 0.004 * this.scale;
+    }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const sh = this.shrimp, ind = this.ind;
+    if (!sh || sh.mode === 'cling') return;
+    sh.position.x += dx; sh.position.z += dz;
+    // standing, its body is solved from its planted feet each step: the feet go with it
+    if (sh.mode === 'ground') for (const leg of sh.legs) { leg.foot.x += dx; leg.foot.z += dz; leg.from.x += dx; leg.from.z += dz; }
+    if (ind) { ind.pos.x += dx; ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

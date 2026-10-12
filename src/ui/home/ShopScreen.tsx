@@ -3,6 +3,8 @@ import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import { Key } from '../common/Icons';
 import { specs } from './ToolsPanel';
+import { ShopEquipment } from './ShopEquipment';
+import './shop-equipment.css';
 
 /**
  * The shop: the room itself is drawn behind (the rack of nets, the parcels on the side table); this overlay carries
@@ -15,6 +17,7 @@ export function ShopScreen({ app }: { app: App }) {
   const tool = sel && !sel.startsWith('coming:') ? app.data.tools.get(sel) : undefined;
   const coming = sel?.startsWith('coming:') ? sel.slice(7) : null;
   const owned = tool ? enc.owns(tool.id) : false;
+  const tab = ui.shopTab.value;
   return (
     <div class="screen shop-screen">
       <div class="shop-top">
@@ -25,6 +28,8 @@ export function ShopScreen({ app }: { app: App }) {
         <div class="shop-cr"><span class="dim">{t('home.credits')}</span><b class="num">{cr.toLocaleString()}</b><span class="dim">CR</span></div>
         <button class="btn ghost sm" onClick={() => app.closeShop()}>{t('shop.leave')} <Key k="Esc" /></button>
       </div>
+      <nav class="seg shop-tabs" aria-label="ショップの売り場">{(['tools', 'tanks', 'filters', 'quests'] as const).map((id, i) => <button class={tab === id ? 'on' : ''} aria-pressed={tab === id} key={id} onClick={() => { ui.shopTab.value = id; ui.shopSelected.value = null; }}>{['採集道具', '水槽', 'フィルター', 'クエスト'][i]}</button>)}</nav>
+      {tab !== 'tools' ? <ShopEquipment key={tab} app={app} tab={tab} /> : <>
       <p class="shop-line">{t('shop.greeting')}</p>
       {tool ? (
         <div class={`glass shop-card float ${owned ? 'owned' : ''}`}>
@@ -49,6 +54,7 @@ export function ShopScreen({ app }: { app: App }) {
         <div class="shop-pick dim">{t('shop.pickHint')}</div>
       )}
       <p class="shop-foot dim small">{t('tools.crHint')}</p>
+      </>}
     </div>
   );
 }

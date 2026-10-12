@@ -14,7 +14,9 @@ export class EquipmentMaterials {
     const t = new DataTexture(data, n, n, RGBAFormat); t.wrapS = t.wrapT = RepeatWrapping; t.needsUpdate = true;
     this.textures.push(t); return t;
   }
-  readonly glass = new MeshPhysicalMaterial({ color: 0xe8f6f0, roughness: 0.06, metalness: 0, transmission: 1, thickness: 0.006, ior: 1.52, attenuationColor: 0xc4e8d3, attenuationDistance: 1.8, transparent: true, opacity: 0.3, depthWrite: false });
+  // (no transmission: a transmissive material makes three.js draw the whole scene once more each frame for it; thin
+  // glass reads by its reflections)
+  readonly glass = new MeshPhysicalMaterial({ color: 0xe8f6f0, roughness: 0.04, metalness: 0, ior: 1.52, transparent: true, opacity: 0.16, depthWrite: false, envMapIntensity: 1.6 });
   readonly blackPlastic = new MeshStandardMaterial({ color: 0x252a2b, roughness: 0.43 });
   readonly clearPlastic = new MeshPhysicalMaterial({ color: 0x9baeb0, roughness: 0.26, transparent: true, opacity: 0.43, depthWrite: false });
   readonly rubber = new MeshStandardMaterial({ color: 0x151a1a, roughness: 0.88 });

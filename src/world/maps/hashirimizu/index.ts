@@ -11,6 +11,7 @@ import type { ImpostorSite } from '../../mangrove/impostor';
 import type { BackdropCrown } from '../../mangrove/MangroveForest';
 import type { Atmosphere } from '../../Sky';
 import type { WaterOptics } from '../../Water';
+import { SURFLAB } from '../surflab';
 
 export * as shape from './shape';
 
@@ -34,6 +35,8 @@ export interface ShoreLayout {
   rippleAngle: number;
   /** the waves breaking on the shore (null: none) */
   surf: SurfParams | null;
+  /** the swell's orbital speed at the surface (m/s): what carries the small fish to and fro (absent: the eelgrass's, 0.1) */
+  swell?: number;
   /** the water: its colour in depth (linear) and its turbidity against 葛西's silty water */
   water: { colour: readonly [number, number, number]; turbidity: number } & WaterOptics;
   /** the map's air: sky, clouds, sun and fill light (absent: the temperate Tokyo Bay day) */
@@ -71,10 +74,13 @@ export const HASHIRIMIZU: ShoreLayout = {
   sandTint: [0.98, 0.9, 0.74],
   // the coast runs along z, so the crests do too
   rippleAngle: Math.PI / 2,
-  // the bay mouth's small wind waves and ship wakes: a few tens of centimetres, a few seconds apart (the sea is to +x)
-  surf: { height: 0.24, period: 3.4, slope: 0.05, seaward: [1, 0] },
+  // the bay mouth's wind waves and ship wakes: a few tens of centimetres, a few seconds apart (the sea is to +x),
+  // coming in a little from the south (up 浦賀水道, the right as one looks out), each day's sea about this one. At
+  // the exploring tide they spill across the clam flat; at high water they break on the steep beach face (a shore break)
+  surf: { height: 0.4, period: 4.2, slope: 0.05, seaward: [1, 0], angle: 0.22, spread: 0.16 },
   // the bay mouth's water: clearer than the silty flat at 葛西 and greener-blue
-  water: { colour: [0.07, 0.125, 0.125], turbidity: 0.55 },
+  // (and rougher offshore: the bay mouth's wind sea, broken by the sun into glitter)
+  water: { colour: [0.07, 0.125, 0.125], turbidity: 0.55, chop: 1.0 },
   props: buildHashirimizuProps,
 };
 
@@ -92,6 +98,8 @@ const MANKO: ShoreLayout = {
     // a breeze over the river: a chop of ~35 cm crests that breaks up the reflected banks; the shallows lie calm
     ripple: { peak: 0.35, boost: 2.5, aniso: 1, calmGain: 0.08, still: 1 },
   },
+  // a lake behind its bar: only a little chop reaches the flat
+  swell: 0.03,
   // subtropical air: a deep blue sky that the high sun does not bleach, bright cumulus, a strong warm sun
   atmosphere: {
     rayleigh: 1.7, turbidity: 1.8, mie: 0.0015, skyScale: 0.3, skyScaleHighSun: 0.55,
@@ -109,4 +117,4 @@ const MANKO: ShoreLayout = {
   mangroveLeafTint: [1.7, 1.32, 0.62],
 };
 
-export const LAYOUTS: Record<string, ShoreLayout> = { hashirimizu: HASHIRIMIZU, manko: MANKO };
+export const LAYOUTS: Record<string, ShoreLayout> = { hashirimizu: HASHIRIMIZU, manko: MANKO, surflab: SURFLAB };

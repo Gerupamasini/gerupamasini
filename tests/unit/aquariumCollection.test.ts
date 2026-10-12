@@ -40,7 +40,7 @@ describe('aquarium collection and gacha', () => {
   it('grants ten tickets to old collections once and preserves spent balances on later loads', () => {
     const legacy = { version: 1, stock: { 'stand-studio': 2 }, draws: 15 };
     const migrated = normalizeCollection(legacy);
-    expect(migrated).toEqual({ ...legacy, tickets: 10 }); expect(normalizeCollection(migrated)).toEqual(migrated);
+    expect(migrated).toEqual({ ...legacy, tickets: 10, progression: emptyEquipmentCollection().progression }); expect(normalizeCollection(migrated)).toEqual(migrated);
     const spent = drawEquipment(migrated, 10, () => 0)!.collection;
     expect(normalizeCollection(spent)).toEqual(spent); expect(normalizeCollection(spent).tickets).toBe(0);
     expect(normalizeCollection({ ...migrated, tickets: 3 }).tickets).toBe(3);
@@ -63,7 +63,7 @@ describe('aquarium collection and gacha', () => {
     expect(usedQuantity(safe, 'airStone-ivory', 'airStone')).toBe(0);
     expect(layout.devices.filter((d) => d.itemId === 'airStone-ivory')).toHaveLength(2);
     expect(itemForCategory('heater-studio', 'airStone').id).toBe('airStone-initial');
-    expect(normalizeCollection({ version: 1, stock: { invalid: 2, 'tank-ivory': NaN, 'stand-studio': -1, 'airStone-ivory': 2.9 }, draws: Infinity })).toEqual({ version: 1, stock: { 'airStone-ivory': 2 }, draws: 0, tickets: 10 });
+    expect(normalizeCollection({ version: 1, stock: { invalid: 2, 'tank-ivory': NaN, 'stand-studio': -1, 'airStone-ivory': 2.9 }, draws: Infinity })).toEqual({ ...emptyEquipmentCollection(), stock: { 'airStone-ivory': 2 } });
   });
 
   it('round-trips collection and equipped designs through the real save migration', () => {

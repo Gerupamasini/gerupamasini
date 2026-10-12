@@ -20,6 +20,9 @@ try {
   await page.goto(url); await page.locator('.title-screen').waitFor();
   await page.evaluate(() => window.__higata.updateSettings({ homeQuality: 'minimal' }));
   await page.locator('.title-actions .primary').click(); await page.waitForFunction(() => window.__higata.mode === 'home');
+  await page.evaluate(() => window.__higata.openShop('tanks')); await page.waitForFunction(() => window.__higata.mode === 'shop');
+  await page.evaluate(() => { const a = window.__higata; a.encyclopedia.addMoney(5000); for (const size of [45, 90, 120]) a.buyTankSize(size); a.closeShop(); });
+  await page.waitForFunction(() => window.__higata.mode === 'home'); await page.locator('.transition').waitFor({ state: 'hidden' });
   await page.evaluate(async () => {
     const a = window.__higata, s = JSON.parse(a.exportSave());
     const fish = id => ({ id, speciesId: 'acanthogobius_flavimanus', number: id === 'one' ? 1 : 2, length_mm: 80, weight_g: 10, sex: 'unknown', stage: 'subadult', traits: [], caughtAt: Date.now(), caughtWhere: [0, 0], tideLevel: 0 });

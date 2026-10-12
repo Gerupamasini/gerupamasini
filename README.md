@@ -9,9 +9,13 @@ npm install
 npm run dev          # http://localhost:5173/gerupamasini/
 npm run check        # 型検査 + 単体テスト + データ検証
 npm run build        # dist/ を生成（GitHub Pages 用のベースパス /gerupamasini/）
+npm run smoke:progression # ビルド後、水槽・ろ過装置のショップ、飼育上限、導入クエストをブラウザで検証
 npm run smoke        # ヘッドレス Chromium で起動し tests/smoke/out/ にスクリーンショット
 node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボを撮影（tests/smoke/out/pagurus-*.png）
 CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium.mjs # 水槽設備・ガチャ・自動配線・保存復元のブラウザ検証
+node tests/smoke/goby-translucency.mjs  # ハゼ 3 種の体の透け（観察の体積シェーダーと、干潟・水槽の全段階の透け）を順光・逆光で撮影
+CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium-water.mjs # 水槽の水の描画（4 つの画質・底床・水中視点）
+node tests/smoke/physics.mjs         # 生きものの物理（重ならない・接地・波の揺れ）をゲーム内で確認（tests/smoke/out/physics-*.png）
 npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze -- --tier hero  # エドハゼモデルの再生成（hero / lod1 / lod2）
 npm run model:edohaze-gravid -- --tier hero   # エドハゼの抱卵雌（edohaze_gravid.*.glb）
@@ -34,12 +38,17 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 
 ローカルや別ホストでは `VITE_BASE=/ npm run build` のようにベースパスを変えられます。
 
+波打ち際ラボは `surf-lab.html`（開発時は http://localhost:5173/gerupamasini/surf-lab.html）。急な前浜・砂州・岩場のある浜で、潮位・波高・周期・波向・時刻・画質・デバッグ表示（区分・泡の種類・位相）と視点を切り替え、寄せ波・砕波・遡上・引き波・濡れた砂を確かめられます。`node tests/smoke/surf-lab.mjs` で各視点の連番、`node tests/smoke/surf.mjs` で走水の画、`node tests/smoke/surf-perf.mjs` で画質ごとの負荷。
+
 ユビナガホンヤドカリ単体のラボは `hermit-lab.html`（開発時は http://localhost:5173/gerupamasini/hermit-lab.html）。
 殻の種類、LOD、水、デバッグ表示を切り替え、脅かす・餌・空き殻を試せます。`?mode=guard` で繁殖期の交尾前ガード、`?mode=naked` で殻から出した体（`&stage=dark` で写真と同じ黒い撮影台）、`?mode=retract` で殻に閉じこもる様子を見られます。
 
 ## 文書
+- [水槽・ろ過装置のショップと導入クエスト](docs/aquarium-progression/README.md) CRでの解放・Lv.5までの強化、最大20匹の飼育、9件のクエストとスマホ画面写真。
+- [生きものの物理](docs/creatures/physics.md) 全種共通の物理層（`src/creatures/physics/`）。生きもの同士が重ならないように押し分ける接触、体の足場の面に沿って寝かせる接地（ハゼ類・アサリ類）、うねりと寄せ波で小さな魚を前後に運んで揺らす水の動き。
 - [ヤエヤマヒルギ](docs/models/yaeyama-hirugi/README.md) 成木5樹形・幼木3サイズ、支柱根の衝突判定、潮汐の湿潤材質、群生の共有Geometry／LOD。ビューアは `reference/yaeyama-hirugi-viewer/`、画像・ブラウザー検証は `npm run render:yaeyama-hirugi`。
 - `docs/models/aquarium/` 水槽基本設備20種、共通材質、LOD、設備コレクション・専用チケットガチャ・自動配線（自宅 → 水槽 → 設備 / ガチャ）
+- [ホームの水槽の水・光・底床の描画](docs/models/aquarium/water.md) 専用 HDR パイプライン（屈折・水面の裏の全反射・側面ガラスの鏡・吸収と散乱・影の入る光の筋・コースティクス・ブルーム）、起伏と断面のある底床、作り直した飾り、画質設定ごとの負荷と動的解像度。確認は `node tests/smoke/aquarium-water.mjs`
 - [スマホ・タブレットの操作と画面写真](docs/mobile/README.md) ホーム・水槽編集・ガチャ・干潟の移動／採集／観察、縦横画面の確認手順
 - `docs/spec/` 仕様書 4 本（ゲームと MVP、アーキテクチャとデータ、生物 AI とモデル、潮位・セーブ・進行）
 - `docs/planning/` 設計質問と回答、マハゼモデル監査
@@ -50,6 +59,7 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 - `docs/creatures/yubinagahonyadokari/` ユビナガホンヤドカリ（*Pagurus minutus*）の調査、実写資料の分析、技術設計、科学的検証
 - `docs/models/amamo/` アマモ場（株・群落・水中の揺れ・潮の干満）の調査・設計・使い方（ゲームでは `World` の `AmamoMeadow`、ビューアは `reference/amamo-viewer/`）
 - [漫湖マップ](docs/maps/manko.md) 沖縄から選べる70 m × 70 mの泥干潟。マングローブ林と浅い澪筋。いきもの・建物なし。潮汐はゲーム用の仮設定。
+- [波打ち際](docs/research/surf/README.md) 砕波・白波・遡上・引き波・濡れた砂の調査と設計（地形と潮位から砕波帯を自動計算、不規則波、浅水変形、砕波指標と砕波形式、段波、遡上と引き波、泡 4 種、砂の記憶、巻き波の波頭、GPU 飛沫、LOD と画質、負荷）
 - `docs/maps/hashirimizu/` 走水海岸〜観音崎マップ（一定の緩斜面、潮干狩り帯、胴長で入るアマモ場、生息環境のホットスポット、新しい 5 種。ビューアは `reference/shore-viewer/`）
 - `docs/models/himehaze/` ヒメハゼ（*Favonigobius gymnauchen*）の調査・設計（写真 70 枚の計測、鰭・体色・模様、リグ、繁殖期の雄。GLB はマハゼのパイプライン `tools/models/himehaze/` で生成し、ゲームではマハゼのドライバで動く）
 - `docs/models/haku/` ハク（ボラの稚魚）の調査・設計（写真との照合、群れの 5 状態、一斉逃避、LOD 3 段、接地影。ビューアは `reference/haku-viewer/`）
