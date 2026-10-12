@@ -1,4 +1,4 @@
-import { LinearFilter, NearestFilter, RGBAFormat, ShaderMaterial, UnsignedByteType, Vector2, WebGLRenderTarget, type WebGLRenderer } from 'three';
+import { LinearFilter, NearestFilter, RGBAFormat, ShaderMaterial, UnsignedByteType, Vector2, WebGLRenderTarget, type Texture, type WebGLRenderer } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { createEasuMaterial, createRcasMaterial } from './Fsr';
 
@@ -53,13 +53,18 @@ export class Upscaler {
     return this.src;
   }
 
-  /** Scale what was drawn into `input()` up to the drawing buffer and sharpen it, onto the screen. */
-  present(gl: WebGLRenderer): void {
-    if (!this.src) return;
+  /**
+   * Scale what was drawn into `input()` (or `src`, `w` × `h`: the TAA's history) up to the drawing buffer and sharpen it,
+   * onto the screen. At the screen's own size it is only sharpened (TAA softens a little).
+   */
+  present(gl: WebGLRenderer, src: Texture | null = null, w = this.src?.width ?? 1, h = this.src?.height ?? 1): void {
+    const tex = src ?? this.src?.texture;
+    if (!tex) return;
     const prev = gl.getRenderTarget();
     const out = gl.getDrawingBufferSize(this.out);
-    if (this.mode === 'bilinear') {
-      this.bilinear.uniforms.tInput.value = this.src.texture;
+    const same = w === out.x && h === out.y;
+    if (this.mode === 'bilinear' && !same) {
+      this.bilinear.uniforms.tInput.value = tex;
       (this.bilinear.uniforms.uOutSize.value as Vector2).copy(out);
       this.quad.material = this.bilinear;
       gl.setRenderTarget(null);
@@ -67,15 +72,21 @@ export class Upscaler {
       gl.setRenderTarget(prev);
       return;
     }
-    if (!this.up || this.up.width !== out.x || this.up.height !== out.y) {
-      this.up?.dispose();
-      this.up = ldr(out.x, out.y, NearestFilter);
+    let sharpenFrom = tex;
+    if (!same) {
+      if (!this.up || this.up.width !== out.x || this.up.height !== out.y) {
+        this.up?.dispose();
+        this.up = ldr(out.x, out.y, NearestFilter);
+      }
+      this.easu.setInput(tex, w, h, out.x, out.y);
+      this.quad.material = this.easu;
+      gl.setRenderTarget(this.up);
+      this.quad.render(gl);
+      sharpenFrom = this.up.texture;
     }
-    this.easu.setInput(this.src.texture, this.src.width, this.src.height, out.x, out.y);
-    this.quad.material = this.easu;
-    gl.setRenderTarget(this.up);
-    this.quad.render(gl);
-    this.rcas.uniforms.tInput.value = this.up.texture;
+    // (scaled up: FSR's usual 0.25 stops; at the same size, after TAA, milder)
+    this.rcas.setSharpness(same ? 0.6 : 0.25);
+    this.rcas.uniforms.tInput.value = sharpenFrom;
     this.quad.material = this.rcas;
     gl.setRenderTarget(null);
     this.quad.render(gl);

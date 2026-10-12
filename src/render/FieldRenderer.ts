@@ -2,6 +2,7 @@ import { DepthTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, RG
 import type { WaterPass } from '../world/Water';
 import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 import { renderSize } from './RenderSize';
+import { Taa } from './Taa';
 import { Upscaler } from './Upscaler';
 
 /**
@@ -13,6 +14,11 @@ export class FieldRenderer {
   private rt: WebGLRenderTarget | null = null;
   /** FSR 1 (scaling up and sharpening) when the view is drawn smaller than the screen */
   readonly upscaler = new Upscaler();
+  private readonly taa = new Taa();
+  /** TAA on (a PC, a tier with it): the view then always goes through the upscaler's target */
+  private taaOn = false;
+  private msaa = 4;
+  private lastRenderMs = 0;
   private readonly screen = new Vector2();
   private preset = QUALITY_PRESETS.mid;
   private readonly size = new Vector2();
@@ -24,7 +30,17 @@ export class FieldRenderer {
 
   setQuality(preset: QualityPreset): void {
     this.preset = preset;
-    this.setSamples(preset.msaa);
+    this.msaa = preset.msaa;
+    // (TAA takes the place of multisampling)
+    this.setSamples(this.taaOn ? 0 : preset.msaa);
+  }
+
+  /** Temporal anti-aliasing (PCs, the tiers that have it). */
+  setTaa(on: boolean): void {
+    if (this.taaOn === on) return;
+    this.taaOn = on;
+    this.taa.invalidate();
+    this.setSamples(on ? 0 : this.msaa);
   }
 
   private target(): WebGLRenderTarget {
@@ -84,6 +100,11 @@ export class FieldRenderer {
 
   render(scene: Scene, camera: PerspectiveCamera, water: WaterPass): void {
     const gl = this.gl, rt = this.target();
+    // (frames drawn elsewhere in between, the observation view: the history is stale)
+    const now = performance.now();
+    if (now - this.lastRenderMs > 250) this.taa.invalidate();
+    this.lastRenderMs = now;
+    if (this.taaOn) this.taa.jitter(camera, rt.width, rt.height);
     camera.updateMatrixWorld();
     water.prepare(gl, scene, camera);
     gl.setRenderTarget(rt);
@@ -91,7 +112,14 @@ export class FieldRenderer {
     this.lastStats.calls = gl.info.render.calls;
     this.lastStats.triangles = gl.info.render.triangles;
     const screen = gl.getDrawingBufferSize(this.screen);
-    if (rt.width < screen.x || rt.height < screen.y) {
+    if (this.taaOn) {
+      // the finished picture into a target, blended into the history, then scaled up (or only sharpened) to the screen
+      const ldr = this.upscaler.input(rt.width, rt.height);
+      water.render(gl, rt, ldr, camera, true);
+      this.taa.unjitter(camera);
+      const resolved = this.taa.resolve(gl, ldr.texture, rt.depthTexture!, camera, rt.width, rt.height);
+      this.upscaler.present(gl, resolved, rt.width, rt.height);
+    } else if (rt.width < screen.x || rt.height < screen.y) {
       water.render(gl, rt, this.upscaler.input(rt.width, rt.height), camera, true);
       this.upscaler.present(gl);
     } else water.render(gl, rt, null, camera);
@@ -102,5 +130,6 @@ export class FieldRenderer {
     this.rt?.dispose();
     this.rt = null;
     this.upscaler.dispose();
+    this.taa.dispose();
   }
 }

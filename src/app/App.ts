@@ -516,6 +516,7 @@ export class App {
     this.renderer.setUpscaling(this.fieldScene && !!this.field && !this.input.touchDevice);
     const preset = QUALITY_PRESETS[this.settings.fieldQuality];
     this.field?.setQuality(preset);
+    this.field?.setTaa(preset.taa && !this.input.touchDevice);
     this.applyPreset();
     this.creatures?.setQuality(preset);
     this.fieldCase?.setQuality(preset);
