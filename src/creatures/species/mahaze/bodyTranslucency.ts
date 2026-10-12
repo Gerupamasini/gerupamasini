@@ -183,6 +183,13 @@ const FUNCTIONS = /* glsl */ `
   #define GB_ORGANS ${N_ORGANS}
 #endif
 #define GB_PROFILE_N 512.0
+// the skin's UV: the base colour map's (always there on these bodies, and kept when a material is cloned, which
+// resets the custom defines); USE_UV only for a body without one
+#ifdef USE_MAP
+  #define GB_UV vMapUv
+#else
+  #define GB_UV vUv
+#endif
 vec3 gbToFish(vec3 o) { return vec3(uGbFrame.x - o.z * 1000.0, o.y * 1000.0 + uGbFrame.y, o.x * 1000.0); }
 vec3 gbDirToFish(vec3 o) { return vec3(-o.z, o.y, o.x); }
 struct GbSec { float yc; float t; float b; float w; float nT; float nB; };
@@ -341,9 +348,9 @@ float gbAlpha = 1.0;
   outside = max(outside, 0.8 * jaws);
   tau += outside * 4.0 + jaws * vec3(6.0, 7.0, 7.5);
   // chromatophores where the light leaves the body and where it enters it (seam-free derivatives at the ventral wrap)
-  vec2 uvA = vUv, uvB = vec2(vUv.x, fract(vUv.y + 0.5));
+  vec2 uvA = GB_UV, uvB = vec2(GB_UV.x, fract(GB_UV.y + 0.5));
   vec2 dxA = dFdx(uvA), dyA = dFdy(uvA), dxB = dFdx(uvB), dyB = dFdy(uvB);
-  vec3 pig = textureGrad(uGbPigment, vUv, dot(dxA, dxA) < dot(dxB, dxB) ? dxA : dxB, dot(dyA, dyA) < dot(dyB, dyB) ? dyA : dyB).rgb;
+  vec3 pig = textureGrad(uGbPigment, GB_UV, dot(dxA, dxA) < dot(dxB, dxB) ? dxA : dxB, dot(dyA, dyA) < dot(dyB, dyB) ? dyA : dyB).rgb;
   vec3 skinIn = gbSkinT(pig);
   vec3 skinOut = gbSkinT(textureLod(uGbPigment, gbFishUV(xE), 2.0).rgb);
   vec3 T = exp(-tau) * skinIn * skinOut;
