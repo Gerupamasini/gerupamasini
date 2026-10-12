@@ -9,7 +9,7 @@ export class FieldRenderer {
   private readonly size = new Vector2();
   private samples = 4;
   /** draw calls and triangles of the last scene render (before the water composite) */
-  readonly lastStats = { calls: 0, triangles: 0 };
+  readonly lastStats = { calls: 0, triangles: 0, mirrorCalls: 0, mirrorTriangles: 0 };
 
   constructor(private readonly gl: WebGLRenderer) {}
 
@@ -73,6 +73,8 @@ export class FieldRenderer {
     const gl = this.gl, rt = this.target();
     camera.updateMatrixWorld();
     water.prepare(gl, scene, camera);
+    this.lastStats.mirrorCalls = water.reflectionStats?.calls ?? 0;
+    this.lastStats.mirrorTriangles = water.reflectionStats?.triangles ?? 0;
     gl.setRenderTarget(rt);
     gl.render(scene, camera);
     this.lastStats.calls = gl.info.render.calls;

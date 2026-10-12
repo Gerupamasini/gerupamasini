@@ -20,12 +20,12 @@ export interface ReefLayout {
   minSpacing?: number;
 }
 export const CORAL_LOD: Record<Quality, readonly [number, number, number]> = {
-  high: [6.5, 20, 85],
-  mid: [3.2, 13, 65],
+  high: [3.5, 16, 85],
+  mid: [2.6, 12, 65],
   low: [1.6, 9, 50],
   minimal: [0, 6, 35],
 };
-const HERO_BUDGET: Record<Quality, number> = { high: 8, mid: 3, low: 1, minimal: 0 };
+const HERO_BUDGET: Record<Quality, number> = { high: 4, mid: 2, low: 1, minimal: 0 };
 const colonyHeight: Record<CoralSpecies, number> = {
   acropora_digitifera: 0.86,
   acropora_hyacinthus: 0.68,
@@ -35,10 +35,10 @@ const colonyHeight: Record<CoralSpecies, number> = {
 };
 const colonyRadius: Record<CoralSpecies, number> = {
   acropora_digitifera: 0.6,
-  acropora_hyacinthus: 1.2,
-  porites_lobata: 1.35,
-  montipora_foliosa: 0.9,
-  platygyra_daedalea: 1.1,
+  acropora_hyacinthus: 0.97,
+  porites_lobata: 1.46,
+  montipora_foliosa: 0.85,
+  platygyra_daedalea: 1.06,
 };
 /** A conservative low-tide clearance check; live colonies never spawn on mud, plants, channels or steep slopes. */
 export function placeCorals(terrain: Terrain, layout: ReefLayout): CoralSpec[] {

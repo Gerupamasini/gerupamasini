@@ -123,7 +123,7 @@ float waveCaustic(vec2 p, vec3 L, float D, float t, float fp, float gain) {
   float det = (1.0 + H.x * g) * (1.0 + H.z * g) - H.y * H.y * g * g;
   float soft = 0.09 + 6.0 * fp / max(D, 1e-3);
   float I = 1.0 / max(abs(det), soft);
-  I = mix(I, 1.0, smoothstep(0.0, -1.5, det) * 0.3);
+  I = mix(I, 1.0, (1.0 - smoothstep(-1.5, 0.0, det)) * 0.3);
   I = mix(1.0, clamp(I, 0.0, 4.0), 0.65);
   return mix(1.0, I, smoothstep(0.0, 0.004, D));
 }

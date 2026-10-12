@@ -59,6 +59,7 @@ function branch(
   terminal = true,
   broken = false,
   farProxy = false,
+  taper = terminal ? 0.28 : 0.2,
 ): void {
   const small = radius < 0.018,
     curve = new CatmullRomCurve3(points),
@@ -76,7 +77,7 @@ function branch(
     prev = points[0];
   const end = curve.getPoint(1),
     endDir = curve.getTangent(1).normalize(),
-    endRadius = radius * (terminal ? 0.72 : 0.8);
+    endRadius = radius * (1 - taper);
   for (let row = 0; row <= steps + capSteps; row++) {
     const t = Math.min(1, row / steps),
       cap = row > steps ? (((row - steps) / capSteps) * Math.PI) / 2 : 0,
@@ -95,7 +96,7 @@ function branch(
     const up = dir.clone().cross(side).normalize();
     length += p.distanceTo(prev);
     prev = p;
-    const shaftRadius = radius * (1 - (terminal ? 0.28 : 0.2) * t),
+    const shaftRadius = radius * (1 - taper * t),
       r = row > steps ? endRadius * Math.cos(cap) : shaftRadius;
     for (let j = 0; j <= sides; j++) {
       const a = (j / sides) * TAU,
@@ -277,40 +278,43 @@ interface TableNode {
   radius: number;
   index: number;
 }
-/** Anastomosing planar growth graph: unevenly spaced nodes and cross-links remove a radial fishbone pattern. */
+/** A planar growth tree with occasional short fusions, rather than a triangulated wire lattice. */
 function table(b: Surface, rng: Rng, lod: CoralLod, variant: number): void {
-  const h = rng.range(0.32, 0.42),
+  const h = rng.range(0.2, 0.28),
     reach = rng.range(0.66, 0.81),
     phase = rng.range(0, TAU),
     ellipse = 0.78 + variant * 0.035,
     canopyHeight = (x: number, z: number): number =>
       h + (0.055 * Math.hypot(x, z)) / reach + 0.018 * Math.sin(x * 7 + phase) * Math.cos(z * 9 - phase);
-  mound(b, rng, lod, 0.15, 0.028);
-  branch(
-    b,
-    [new Vector3(0, 0.02, 0), new Vector3(0.025, h * 0.55, -0.015), new Vector3(0, h + 0.015, 0)],
-    0.065,
-    lod,
-    false,
-  );
-  for (let arm = 0; arm < 5; arm++) {
-    const a = phase + (arm * TAU) / 5 + rng.range(-0.15, 0.15),
-      r = rng.range(0.28, 0.43),
-      p = new Vector3(Math.cos(a) * r, h, Math.sin(a) * r * ellipse);
-    branch(
-      b,
-      [
-        new Vector3(0, h * 0.5, 0),
-        p
-          .clone()
-          .multiplyScalar(0.55)
-          .setY(h * 0.86),
-        p,
-      ],
-      0.028,
-      lod,
-      false,
-    );
+  // A low fused attachment, then unequal oblique axes. A table colony does not stand on a bare,
+  // cylindrical tree trunk; the spreading skeletal supports become part of the crown's underside.
+  mound(b, rng, lod, 0.2, 0.043);
+  const supports = 4 + (variant % 2);
+  for (let arm = 0; arm < supports; arm++) {
+    const a = phase + (arm * TAU) / supports + rng.range(-0.36, 0.36),
+      r = reach * rng.range(0.29, 0.62),
+      p = new Vector3(Math.cos(a) * r, 0, Math.sin(a) * r * ellipse),
+      base = new Vector3(rng.range(-0.055, 0.055), 0.018, rng.range(-0.05, 0.05)),
+      shoulder = base
+        .clone()
+        .lerp(p, rng.range(0.35, 0.52))
+        .setY(h * rng.range(0.58, 0.76));
+    p.y = canopyHeight(p.x, p.z) - 0.012;
+    branch(b, [base, shoulder, p], rng.range(0.034, 0.046), lod, false, false, false, 0.64);
+    const forkDirection = a + rng.range(-0.7, 0.7),
+      forkReach = r + reach * rng.range(0.12, 0.23),
+      forkEnd = new Vector3(
+        Math.cos(forkDirection) * forkReach,
+        0,
+        Math.sin(forkDirection) * forkReach * ellipse,
+      ),
+      forkStart = shoulder.clone().lerp(p, 0.34),
+      forkMid = forkStart
+        .clone()
+        .lerp(forkEnd, 0.55)
+        .setY(h * 0.94);
+    forkEnd.y = canopyHeight(forkEnd.x, forkEnd.z) - 0.008;
+    branch(b, [forkStart, forkMid, forkEnd], rng.range(0.018, 0.025), lod, false, false, false, 0.55);
   }
   if (lod === 2) {
     const slices = 42,
@@ -354,7 +358,7 @@ function table(b: Surface, rng: Rng, lod: CoralLod, variant: number): void {
     return;
   }
   const nodes: TableNode[] = [{ p: new Vector3(0, canopyHeight(0, 0), 0), radius: 0, index: 0 }],
-    target = 370 + variant * 24;
+    target = 460 + variant * 28;
   for (let attempt = 0; attempt < target * 14 && nodes.length < target; attempt++) {
     const a = rng.range(0, TAU),
       r =
@@ -374,29 +378,40 @@ function table(b: Surface, rng: Rng, lod: CoralLod, variant: number): void {
         .slice(0, i)
         .map((n) => ({ n, d: n.p.distanceToSquared(node.p) }))
         .sort((a, b) => a.d - b.d),
-      links = 1 + Number(rng.next() < 0.86 && neighbours.length > 1 && neighbours[1].d < 0.045);
+      // Most nodes belong to one growing axis. Only adjacent branches fuse, and those short
+      // anastomoses sit under the living crown instead of drawing large triangles across its top.
+      links = 1 + Number(rng.next() < 0.25 && neighbours.length > 1 && neighbours[1].d < 0.0025);
     for (let link = 0; link < links; link++) {
       const parent = neighbours[link].n,
         mid = parent.p
           .clone()
           .lerp(node.p, 0.5)
-          .add(new Vector3(rng.range(-0.012, 0.012), rng.range(-0.007, 0.007), rng.range(-0.012, 0.012))),
+          .add(
+            new Vector3(
+              rng.range(-0.006, 0.006),
+              rng.range(-0.005, 0.004) - link * 0.012,
+              rng.range(-0.006, 0.006),
+            ),
+          ),
         path = new CatmullRomCurve3([parent.p, mid, node.p]),
         radius = rng.range(0.009, 0.013) * (1.15 - (node.radius / reach) * 0.3);
       branch(b, [parent.p, mid, node.p], radius, lod, false);
-      const shoots = 2;
+      const shoots = link === 0 ? 2 + Math.floor(rng.next() * 3) : 0;
       for (let k = 0; k < shoots; k++) {
-        const p = path.getPoint((k + rng.range(0.18, 0.82)) / shoots),
-          a = rng.range(0, TAU),
-          rise = rng.range(0.026, 0.055),
-          lean = rng.range(0.012, 0.027),
-          rad = rng.range(0.0065, 0.009),
+        const along = (k + rng.range(0.18, 0.82)) / shoots,
+          p = path.getPoint(k === shoots - 1 ? 1 : along),
+          a = Math.atan2(p.z, p.x) + rng.range(-1.3, 1.3),
+          rise = rng.range(0.022, 0.047),
+          lean = rng.range(0.002, 0.011) * (0.65 + (node.radius / reach) * 0.65),
+          rad = rng.range(0.0055, 0.008),
           end = p.clone().add(new Vector3(Math.cos(a) * lean, rise, Math.sin(a) * lean)),
           middle = p
             .clone()
             .lerp(end, 0.55)
             .add(new Vector3(0, 0.002, 0));
-        if ((lod === 0 && (link === 0 || k === 0)) || (lod === 1 && k === 0 && link === 0))
+        // Identical axes and RNG at both near tiers; the medium tier retains the terminal shoot
+        // at each junction plus a few dense clusters, preserving the crown's uneven outline.
+        if (lod === 0 || (lod === 1 && (k === shoots - 1 || (shoots === 4 && i % 4 === 0 && k === 0))))
           branch(b, [p, middle, end], rad, lod);
       }
     }
@@ -405,30 +420,25 @@ function table(b: Surface, rng: Rng, lod: CoralLod, variant: number): void {
 
 /** Open, overlapping fan/cup sectors grow in a loose spiral, with attached bases and thick living rims. */
 function foliose(b: Surface, rng: Rng, lod: CoralLod, variant: number): void {
-  mound(b, rng, lod, 0.18, 0.15);
+  mound(b, rng, lod, 0.19, 0.042);
   const plates = 5 + variant,
     steps = [34, 12, 5][lod],
     slices = [102, 36, 14][lod],
-    phase = rng.range(0, TAU),
-    upper = 0.075 + (plates - 1) * 0.055;
-  branch(
-    b,
-    [new Vector3(0, 0.04, 0), new Vector3(0.015, upper * 0.6, -0.015), new Vector3(0.035, upper, 0)],
-    0.085,
-    lod,
-    false,
-  );
+    phase = rng.range(0, TAU);
   for (let plate = 0; plate < plates; plate++) {
     const tier = plate / (plates - 1),
       start = phase + plate * 2.32 + rng.range(-0.28, 0.28),
       arc = rng.range(1.35, 1.76) * Math.PI,
       radius = (0.61 - tier * 0.19) * rng.range(0.88, 1.1),
-      cy = 0.075 + plate * 0.055,
+      cy = 0.055 + plate * 0.041 + rng.range(-0.01, 0.01),
       curl = rng.range(0.075, 0.145),
       tilt = rng.range(-0.025, 0.05),
       frequency = rng.range(2.8, 4.3),
       cx = Math.cos(start + arc * 0.5) * rng.range(0.015, 0.085),
       cz = Math.sin(start + arc * 0.5) * rng.range(0.015, 0.085),
+      rootX = rng.range(-0.055, 0.055),
+      rootZ = rng.range(-0.055, 0.055),
+      rootHeight = rng.range(0.012, 0.021),
       offset = b.p.length / 3;
     for (const face of [1, -1])
       for (let i = 0; i <= steps; i++)
@@ -439,14 +449,18 @@ function foliose(b: Surface, rng: Rng, lod: CoralLod, variant: number): void {
             scallop = 1 + 0.08 * Math.sin(a * frequency + plate) + 0.025 * Math.sin(a * 12 + plate),
             side = Math.pow(Math.sin(Math.PI * s), 0.78),
             // The open ends narrow into the shared calcified base rather than ending as rectangular cuts.
-            r = 0.042 + t * radius * scallop * side,
-            x = cx * t * side + Math.cos(a) * r,
-            z = cz * t * side + Math.sin(a) * r * 0.91,
+            r = 0.016 + t * radius * scallop * side,
+            x = rootX * (1 - t) + cx * t * side + Math.cos(a) * r,
+            z = rootZ * (1 - t) + cz * t * side + Math.sin(a) * r * 0.91,
             flutes =
               0.038 * Math.sin(a * frequency - plate * 0.7) * t * t + 0.015 * Math.sin(a * 9 + t * 4) * t * t,
             rimCurl = curl * Math.pow(t, 4) * (0.55 + 0.45 * side),
+            // Every whorl is a calcified sheet growing continuously out of its own basal fold.
+            // The inner folds overlap under the next whorl, so there is no exposed supporting stump.
+            basalRise = 1 - Math.exp(-t * 12),
             y =
-              cy +
+              rootHeight +
+              (cy - rootHeight) * basalRise +
               side * (0.045 * t + rimCurl + flutes + tilt * Math.sin(a - start) * t + 0.04 * (1 - side) * t) +
               face * (0.0027 + 0.0012 * t);
           b.v(new Vector3(x, y, z), x, z, Math.max(0, (t - 0.91) / 0.09));

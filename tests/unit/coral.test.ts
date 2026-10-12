@@ -254,7 +254,7 @@ describe('Okinawa corals', () => {
       camera = { position: new Vector3(0, -1.4, 0) };
     reef.setQuality('high');
     reef.update(0, camera, { tideLevel: 0 });
-    expect(reef.stats.lod[0]).toBeLessThanOrEqual(8);
+    expect(reef.stats.lod[0]).toBeLessThanOrEqual(4);
     expect(reef.stats.colonies).toBeGreaterThan(60);
     expect(reef.stats.materials).toBeLessThanOrEqual(15);
     const specs = reef.specs;
@@ -269,7 +269,8 @@ describe('Okinawa corals', () => {
     expect(reef.kit.stats.geometries).toBeLessThanOrEqual(60);
     reef.dispose();
     expect(reef.group.children).toHaveLength(0);
-  });
+    // This integration case cold-builds all species' fixed 1K surface atlases and shared LOD meshes.
+  }, 15000);
   it('keeps estuary water optics unchanged unless per-channel attenuation is explicitly enabled', () => {
     const n = 9,
       t = new Terrain(

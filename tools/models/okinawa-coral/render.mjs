@@ -24,6 +24,7 @@ const shots = [
   { name: 'variants', mode: 'variants', species: ids[0] },
   ...['high', 'low', 'minimal'].map((quality) => ({ name: `reef-${quality}`, mode: 'reef', quality })),
   ...[0, 1, 2].map((lod) => ({ name: `lod${lod}`, mode: 'single', species: ids[1], lod })),
+  { name: 'reef-surface', mode: 'reef', cam: [0, -1.4, 3], target: [0, 0.6, 0] },
   { name: 'neutral', mode: 'five', water: false },
 ];
 fs.mkdirSync(out, { recursive: true });

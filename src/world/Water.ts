@@ -137,7 +137,9 @@ export class WaterPass {
       tSpill: { value: terrain.spillTexture },
       tEnv: { value: null as CubeTexture | null },
       tMirror: { value: null as unknown },
+      tMirrorDepth: { value: null as unknown },
       uMirrorMat: { value: new Matrix4() },
+      uMirrorInv: { value: new Matrix4() },
       uMirrorOn: { value: 0 },
       uPolar: { value: 0 },
       uSurfSteps: { value: 12 },
@@ -192,9 +194,9 @@ export class WaterPass {
           gl_Position = vec4(position.xy, 0.0, 1.0);
         }`,
       fragmentShader: /* glsl */ `
-        uniform sampler2D tColor, tDepth, tHeight, tSpill, tMirror, tFoam;
+        uniform sampler2D tColor, tDepth, tHeight, tSpill, tMirror, tMirrorDepth, tFoam;
         uniform samplerCube tEnv;
-        uniform mat4 uProjInv, uCamWorld, uMirrorMat;
+        uniform mat4 uProjInv, uCamWorld, uMirrorMat, uMirrorInv;
         uniform float uMirrorOn, uPolar, uSurfSteps, uHeightN;
         uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog, uScatter, uAbsorption;
         uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax, uReflScale, uReflRough;
@@ -236,7 +238,14 @@ export class WaterPass {
           float mu = dot(d, uSunDir);
           // a milky body is lit like a matte surface just under the water: it follows the sun and the sky (dims at dusk)
           vec3 lit = uScatter * (uSunCol * uSunUp * (0.25 + 0.75 * max(uSunDir.y, 0.0)) + uAmbient * uFogColor);
-          return (uWaterFog + lit) * (0.75 + 0.35 * smoothstep(-0.6, 0.8, -d.y)) + uSunCol * 0.035 * hgPhase(mu, 0.72) * uSunUp;
+          float vertical = 0.75 + 0.35 * smoothstep(-0.6, 0.8, -d.y);
+          if (dot(uAbsorption, vec3(1.0)) > 0.0) {
+            // Clear-water radiance increases toward the lit surface and attenuates with eye depth.
+            // Keep the established estuary profile for water without spectral absorption.
+            float eyeDepth = max(uWater - uCamPos.y, 0.0);
+            vertical = (0.65 + 0.55 * smoothstep(-0.65, 0.85, d.y)) * exp(-eyeDepth * 0.025);
+          }
+          return (uWaterFog + lit) * vertical + uSunCol * 0.035 * hgPhase(mu, 0.72) * uSunUp;
         }
 
         ${SURF_ETA_GLSL}
@@ -322,8 +331,37 @@ export class WaterPass {
               vec3 N = waterNormal(S.xz, tUp, calm);
               vec3 rr = refract(rd, -N, 1.333);
               float win = dot(rr, rr) > 0.0 ? smoothstep(0.0, 0.25, rr.y) : 0.0;
-              vec3 skyC = min(textureCube(tEnv, rr).rgb * uEnvI, vec3(8.0));
-              seen = mix(glow * 1.15, mix(skyC, base, 0.3) * 0.8, win);
+              vec3 skyC = min(textureCube(tEnv, dot(rr, rr) > 0.0 ? rr : vec3(0.0, 1.0, 0.0)).rgb * uEnvI, vec3(8.0));
+              vec3 reflected = glow * 1.15;
+              if (uMirrorOn > 0.5 && dot(uAbsorption, vec3(1.0)) > 0.0) {
+                // At and outside the critical angle the viewer sees the submerged reef reflected
+                // in the surface, not an opaque flat blue panel. The low-resolution mirror also
+                // stores depth, so absorption covers both legs of this reflected water path.
+                vec4 mc = uMirrorMat * vec4(S, 1.0);
+                vec2 muv = mc.xy / mc.w + N.xz * 0.065 / max(tUp, 0.7);
+                if (all(greaterThan(muv, vec2(0.002))) && all(lessThan(muv, vec2(0.998)))) {
+                  float md = texture2D(tMirrorDepth, muv).r;
+                  if (md < 1.0) {
+                    vec4 mp = uMirrorInv * vec4(muv, md, 1.0);
+                    vec3 hit = mp.xyz / mp.w;
+                    float reflectedPath = min(length(hit - S), 250.0);
+                    vec3 trans = exp(-reflectedPath * (vec3(uFogW) + uAbsorption));
+                    vec3 reflectedScene = glow * (1.0 - trans) + texture2D(tMirror, muv).rgb * trans;
+                    float edge = min(min(muv.x, 1.0 - muv.x), min(muv.y, 1.0 - muv.y));
+                    reflected = mix(reflected, reflectedScene, smoothstep(0.002, 0.04, edge));
+                  }
+                }
+                // Water-to-air Fresnel, including total internal reflection.
+                float ci = clamp(dot(rd, N), 0.0, 1.0);
+                float ct2 = 1.0 - 1.333 * 1.333 * (1.0 - ci * ci);
+                float ct = sqrt(max(ct2, 0.0));
+                float rs = (1.333 * ci - ct) / max(1.333 * ci + ct, 1e-5);
+                float rp = (ci - 1.333 * ct) / max(ci + 1.333 * ct, 1e-5);
+                float F = ct2 <= 0.0 ? 1.0 : clamp((rs * rs + rp * rp) * 0.5, 0.0, 1.0);
+                seen = mix(skyC, reflected, F);
+              } else {
+                seen = mix(reflected, mix(skyC, base, 0.3) * 0.8, win);
+              }
             }
             vec3 transmission = exp(-path * (vec3(uFogW) + uAbsorption));
             col = glow * (1.0-transmission) + seen * transmission;
@@ -551,7 +589,16 @@ export class WaterPass {
 
   /** The sea's mirror of the land and sky at `scale` of the screen's resolution (0: off, the sky cube alone). */
   setMirror(scale: number): void {
-    if (scale <= 0) { this.mirror?.dispose(); this.mirror = null; this.uniforms.uMirrorOn.value = 0; return; }
+    if (scale <= 0) {
+      this.mirror?.dispose();
+      this.mirror = null;
+      this.uniforms.uMirrorOn.value = 0;
+      // Active sampler uniforms are uploaded even when their shader branch is disabled.
+      // Drop disposed attachments so Three cannot recreate an unowned depth texture.
+      this.uniforms.tMirror.value = null;
+      this.uniforms.tMirrorDepth.value = null;
+      return;
+    }
     if (this.mirror) this.mirror.scale = scale;
     else this.mirror = new MirrorView(scale);
   }
@@ -608,10 +655,17 @@ export class WaterPass {
     }
     const m = this.mirror, u = this.uniforms;
     if (!m || !this.mirrorGate()) { u.uMirrorOn.value = 0; return; }
-    m.render(gl, scene, camera, this.level);
+    const below = u.uAbsorption.value.lengthSq() > 0 && camera.matrixWorld.elements[13] < this.level - 0.02;
+    m.render(gl, scene, camera, this.level, below);
     u.uMirrorOn.value = m.valid ? 1 : 0;
     u.tMirror.value = m.target.texture;
+    u.tMirrorDepth.value = m.target.depthTexture;
     u.uMirrorMat.value.copy(m.textureMatrix);
+    u.uMirrorInv.value.copy(m.textureMatrixInverse);
+  }
+
+  get reflectionStats(): { calls: number; triangles: number } | null {
+    return this.uniforms.uMirrorOn.value > 0 ? this.mirror?.stats ?? null : null;
   }
 
   setLevel(y: number): void {

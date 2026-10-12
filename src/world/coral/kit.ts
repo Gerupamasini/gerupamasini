@@ -11,6 +11,7 @@ import {
   type MeshStandardMaterial,
 } from 'three';
 import { coralGeometry } from './geometry';
+import { createWaves, type WaveSet } from '../Waves';
 import { coralMaterial, type CoralLight } from './materials';
 import { type CoralSpec, type CoralSpecies, type CoralVariant, type CoralLod } from './types';
 export interface CoralGround {
@@ -22,12 +23,26 @@ export class CoralKit {
     water: { value: 0 },
     time: { value: 0 },
     sun: { value: new Vector3(0.4, 0.8, 0.3).normalize() },
+    waves: createWaves().uniforms,
   };
   private geometries = new Map<string, BufferGeometry>();
   private materials = new Map<string, MeshStandardMaterial>();
   private views = new Set<InstancedBufferGeometry>();
   private owners = new Map<BufferGeometry, InstancedBufferGeometry>();
   disposed = false;
+  /** Stable uniform holders follow the actual water field, including later gain changes. */
+  setWaves(waves: WaveSet): void {
+    if (this.disposed) throw Error('CoralKit disposed');
+    for (const key of ['uWaveA', 'uWaveB', 'uWaveGain'] as const) {
+      const source = waves.uniforms[key];
+      if (this.light.waves[key] === source) continue;
+      Object.defineProperty(this.light.waves[key], 'value', {
+        configurable: true,
+        get: () => source.value,
+        // Water owns the value; material consumers only read this forwarded uniform.
+      });
+    }
+  }
   geometry(species: CoralSpecies, variant: CoralVariant, lod: CoralLod): BufferGeometry {
     if (this.disposed) throw Error('CoralKit disposed');
     const key = `${species}/${variant}/${lod}`;

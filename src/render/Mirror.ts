@@ -1,5 +1,5 @@
 import {
-  HalfFloatType, LinearFilter, Matrix4, Object3D, PerspectiveCamera, Plane, RGBAFormat, Vector2, Vector3, Vector4, WebGLRenderTarget,
+  DepthTexture, FloatType, HalfFloatType, LinearFilter, Matrix4, NearestFilter, Object3D, PerspectiveCamera, Plane, RGBAFormat, Vector2, Vector3, Vector4, WebGLRenderTarget,
   type Scene, type WebGLRenderer,
 } from 'three';
 
@@ -14,16 +14,19 @@ export function reflectInWater<T extends Object3D>(o: T): T {
 
 /**
  * The calm sea as a mirror (after three's Reflector): the camera reflected in the water plane renders what stands
- * above it into a small target, its near plane tilted onto the water (an oblique projection) so nothing below the
- * surface gets in. Only LAYER_MIRROR is drawn — the sky, the hills, the town, the far coast — a handful of draw calls.
+ * above it into a small target, its near plane tilted onto the water (an oblique projection). Optional underwater
+ * mode reverses the clip plane to retain the submerged reef. Only LAYER_MIRROR is drawn.
  * The water pass looks the reflection up through `textureMatrix`, bent by its ripples.
  */
 export class MirrorView {
   readonly target: WebGLRenderTarget;
   /** world → mirror-texture coordinates (projective) */
   readonly textureMatrix = new Matrix4();
-  /** false when the last frame had no mirror (the eye below the surface, or switched off) */
+  /** Mirror UV + depth → world, for the length of an underwater reflected ray. */
+  readonly textureMatrixInverse = new Matrix4();
+  /** False when disabled or the eye is on the wrong side of the requested reflecting surface. */
   valid = false;
+  readonly stats = { calls: 0, triangles: 0 };
   private readonly cam = new PerspectiveCamera();
   private readonly size = new Vector2();
   private readonly plane = new Plane();
@@ -41,17 +44,35 @@ export class MirrorView {
   }
 
   /** Render the reflection in the plane y = level as seen from `camera`. */
-  render(gl: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, level: number): void {
+  render(gl: WebGLRenderer, scene: Scene, camera: PerspectiveCamera, level: number, below = false): void {
     this.valid = false;
+    this.stats.calls = this.stats.triangles = 0;
     if (this.scale <= 0) return;
     const eye = this.eye.setFromMatrixPosition(camera.matrixWorld);
-    if (eye.y <= level + 0.02) return;
+    if (below ? eye.y >= level - 0.02 : eye.y <= level + 0.02) return;
+    if (below) {
+      // A downward-facing underwater view cannot see the surface. Avoid a second reef render.
+      let seesSurface = false;
+      for (const x of [-1, 1]) for (const y of [-1, 1]) {
+        this.v.set(x, y, 0.5).unproject(camera).sub(eye);
+        if (this.v.y > 0) seesSurface = true;
+      }
+      if (!seesSurface) return;
+    }
     gl.getDrawingBufferSize(this.size);
     const w = Math.max(1, Math.round(this.size.x * this.scale)), h = Math.max(1, Math.round(this.size.y * this.scale));
+    if (below && !this.target.depthTexture) {
+      // Legacy above-water mirrors need no sampled depth attachment.
+      this.target.dispose();
+      const depth = new DepthTexture(w, h, FloatType);
+      depth.minFilter = depth.magFilter = NearestFilter;
+      this.target.depthTexture = depth;
+      this.target.samples = 4;
+    }
     if (this.target.width !== w || this.target.height !== h) this.target.setSize(w, h);
 
     // the eye and its line of sight, reflected in the plane (through the point of the plane under the eye)
-    const n = this.normal, o = this.v.set(eye.x, level, eye.z);
+    const n = this.normal.set(0, below ? -1 : 1, 0), o = this.v.set(eye.x, level, eye.z);
     const cam = this.cam;
     cam.position.set(eye.x, 2 * level - eye.y, eye.z);
     this.rot.extractRotation(camera.matrixWorld);
@@ -63,9 +84,6 @@ export class MirrorView {
     cam.updateMatrixWorld();
     cam.projectionMatrix.copy(camera.projectionMatrix);
 
-    this.textureMatrix.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
-    this.textureMatrix.multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
-
     // oblique near plane on the water (Lengyel), so the bed and anything under the surface is clipped away
     this.plane.setFromNormalAndCoplanarPoint(n, o).applyMatrix4(cam.matrixWorldInverse);
     const p = this.plane, e = cam.projectionMatrix.elements, c = this.clip.set(p.normal.x, p.normal.y, p.normal.z, p.constant);
@@ -73,12 +91,17 @@ export class MirrorView {
     c.multiplyScalar(2 / c.dot(this.q));
     e[2] = c.x; e[6] = c.y; e[10] = c.z + 1 - 0.003; e[14] = c.w;
     cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+    this.textureMatrix.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+    this.textureMatrix.multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
+    this.textureMatrixInverse.copy(this.textureMatrix).invert();
 
     const prevTarget = gl.getRenderTarget(), autoShadow = gl.shadowMap.autoUpdate;
     gl.shadowMap.autoUpdate = false;   // the shadows of this frame come with the main render
     gl.setRenderTarget(this.target);
     gl.clear();
     gl.render(scene, cam);
+    this.stats.calls = gl.info.render.calls;
+    this.stats.triangles = gl.info.render.triangles;
     gl.setRenderTarget(prevTarget);
     gl.shadowMap.autoUpdate = autoShadow;
     this.valid = true;

@@ -36,17 +36,21 @@ const size = 70,
   n = 281,
   heights = new Float32Array(n * n),
   substrate = new Uint8Array(n * n);
+function reefFloor(xx, zz) {
+  const lane = Math.abs(xx - (10 + 2 * Math.sin(zz * 0.1))) < 2.5;
+  const relief =
+    0.32 * Math.sin(xx * 0.32 + Math.sin(zz * 0.17)) * Math.sin(zz * 0.24) +
+    0.045 * Math.sin(xx * 1.6 + zz * 0.7) * Math.cos(zz * 1.3 - xx * 0.6);
+  const outside = Math.max(0, Math.max(Math.abs(xx), Math.abs(zz)) - size / 2);
+  return -2.85 + 0.12 * Math.sin(xx * 0.11) * Math.sin(zz * 0.14) +
+    (lane ? -0.1 : relief) - outside * 0.025;
+}
 for (let z = 0; z < n; z++)
   for (let x = 0; x < n; x++) {
     const xx = (x / (n - 1) - 0.5) * size,
       zz = (z / (n - 1) - 0.5) * size;
     const lane = Math.abs(xx - (10 + 2 * Math.sin(zz * 0.1))) < 2.5;
-    // Broad consolidated reef mounds, with lower white-sand runnels between them.
-    const reefRelief =
-      0.11 * Math.sin(xx * 0.46 + Math.sin(zz * 0.31)) * Math.sin(zz * 0.38) +
-      0.022 * Math.sin(xx * 2.4 + zz * 1.3) * Math.cos(zz * 2.1 - xx * 1.1);
-    heights[z * n + x] =
-      -2.85 + zz * 0.009 + 0.12 * Math.sin(xx * 0.11) * Math.sin(zz * 0.14) + (lane ? -0.06 : reefRelief);
+    heights[z * n + x] = reefFloor(xx, zz);
     substrate[z * n + x] = lane ? 0 : 5;
   }
 const terrain = new Terrain({ n, size, heights, substrate }, [
@@ -62,6 +66,41 @@ terrain.setReefBottom(true);
 terrain.setSediment(0.2, 0);
 terrain.setLandLevel(4, 5);
 scene.add(terrain.mesh);
+// The 70 m inspection terrain is surrounded by a coarse continuation of the same seafloor.
+// This is visual background only; placement and terrain queries remain within the 70 m map.
+// Without it, a clear-water camera sees the square edge abruptly become infinite blue.
+{
+  const steps = n - 1, perimeter = steps * 4, rings = [35, 44, 65, 100, 180, 320];
+  const p = [], colours = [], subs = [], uv = [], indices = [];
+  for (const radius of rings)
+    for (let i = 0; i < perimeter; i++) {
+      const edge = Math.floor(i / steps), along = (i % steps) / steps * 2 - 1;
+      const x = (edge === 0 ? along : edge === 1 ? 1 : edge === 2 ? -along : -1) * radius;
+      const z = (edge === 0 ? -1 : edge === 1 ? along : edge === 2 ? 1 : -along) * radius;
+      const sandy = Math.abs(x - (10 + 2 * Math.sin(z * 0.1))) < 2.5;
+      p.push(x, reefFloor(x, z), z);
+      colours.push(...(sandy ? [0.37, 0.37, 0.355] : [0.3, 0.295, 0.28]));
+      subs.push(sandy ? 0 : 5);
+      uv.push(x / size + 0.5, z / size + 0.5);
+    }
+  for (let ring = 0; ring < rings.length - 1; ring++)
+    for (let i = 0; i < perimeter; i++) {
+      const a = ring * perimeter + i, b = ring * perimeter + (i + 1) % perimeter;
+      indices.push(a, b, a + perimeter, b, b + perimeter, a + perimeter);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+  g.setAttribute('substrate', new THREE.Float32BufferAttribute(subs, 1));
+  g.setAttribute('pit', new THREE.Float32BufferAttribute(new Float32Array(subs.length), 1));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(indices);
+  g.computeVertexNormals();
+  const backdrop = new THREE.Mesh(g, terrain.material);
+  backdrop.name = 'SeafloorBackground';
+  backdrop.receiveShadow = true;
+  scene.add(reflectInWater(backdrop));
+}
 const habitat = new Habitat(terrain, 2);
 terrain.setSpill(habitat.poolLevels);
 const waves = createWaves({ seed: 71, windDir: 0.8, depth: 2.5 });
@@ -70,7 +109,7 @@ const surf = surfUniforms(null);
 terrain.setSurf(surf);
 const water = new WaterPass(terrain, waves, surf);
 water.setBody(...CORAL_WATER.color, CORAL_WATER.turbidity, { absorption: CORAL_WATER.absorption });
-water.setMirror(0);
+water.setMirror(QUALITY_PRESETS.high.mirror);
 const sky = new SkyDome(scene, renderer, true, 2048, {
   cloudCoverage: 0.12,
   turbidity: 1.8,
@@ -123,12 +162,14 @@ function rebuild() {
         { x: -18, z: 15, radius: 13, count: 70, exposure: 0.4 },
         { x: 23, z: -16, radius: 9, count: 45, exposure: 0.6 },
         { x: 23, z: 15, radius: 9, count: 45, exposure: 0.2 },
-        { x: 0, z: 0, radius: 10, count: 40, exposure: 0.7 },
+        { x: 0, z: 0, radius: 10, count: 85, exposure: 0.7 },
       ],
     });
+    reef.kit.setWaves(waves);
     scene.add(reef.group);
   } else {
     kit = new CoralKit();
+    kit.setWaves(waves);
     let count = config.mode === 'five' ? 5 : config.mode === 'variants' ? 4 : 1;
     for (let i = 0; i < count; i++) {
       const s = coralSpec(config.seed, i, config.mode === 'five' ? CORAL_IDS[i] : config.species);
@@ -154,8 +195,8 @@ function rebuild() {
 function pose() {
   const y = terrain.heightAt(0, 0);
   if (config.mode === 'reef') {
-    camera.position.set(4, -1.55, 9);
-    controls.target.set(-5, -1.9, -2);
+    camera.position.set(3, -0.62, 7);
+    controls.target.set(0, -2.55, 2.6);
   } else if (config.mode === 'five' || config.mode === 'variants') {
     camera.position.set(0, y + 2.5, 9.8);
     controls.target.set(0, y + 0.48, 0);
@@ -197,9 +238,10 @@ function pose() {
 }
 function update(dt) {
   const level = config.water ? 0 : -100;
+  const time = water.uniforms.uTime.value + dt;
   terrain.updateLod(camera.position.x, camera.position.z);
   water.setLevel(level);
-  terrain.setWater(level, level, 2, 1, sunDir);
+  terrain.setWater(level, level, time, 1, sunDir);
   water.update(dt, {
     sunUp: 1,
     sunDir,
@@ -212,17 +254,19 @@ function update(dt) {
   });
   if (kit) {
     kit.light.water.value = level;
-    kit.light.time.value = 2;
+    kit.light.time.value = time;
     kit.light.sun.value.copy(sunDir);
     models.forEach((m) => m.setLod(config.lod === 'auto' ? 0 : Number(config.lod)));
   }
   if (reef) {
     reef.update(dt, camera, { tideLevel: level, sunDir });
+    reef.kit.light.time.value = time;
   }
 }
 function info() {
   return {
     config,
+    camera: { position: camera.position.toArray(), target: controls.target.toArray() },
     colonies: reef?.specs.length ?? models.length,
     triangles:
       reef?.stats.triangles ??
@@ -262,6 +306,7 @@ async function set(patch) {
   controls.update();
   renderer.shadowMap.enabled = config.quality === 'high' || config.quality === 'mid';
   field.setQuality(QUALITY_PRESETS[config.quality]);
+  water.setMirror(QUALITY_PRESETS[config.quality].mirror);
   reef?.setQuality(config.quality);
   reef?.setLod(config.lod === 'auto' ? null : Number(config.lod));
   update(0);

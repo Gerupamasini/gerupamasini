@@ -604,6 +604,24 @@ vec3 vnoiseD(vec2 p) {
   float k1 = b - a, k2 = c - a, k3 = a - b - c + d;
   return vec3(a + k1 * u.x + k2 * u.y + k3 * u.x * u.y, du * vec2(k1 + k3 * u.y, k2 + k3 * u.x));
 }
+// Reef relief uses triangular gradient noise. Thresholding square value-noise cells makes erosion read as
+// little rectangular tiles at grazing angles; the smooth, compact gradients here have no world-axis edges.
+vec3 reefNoiseCorner(vec2 cell, vec2 p) {
+  vec2 g = normalize(hash22(cell + vec2(317.0, 911.0)) * 2.0 - 1.0 + vec2(0.001));
+  float a = max(0.5 - dot(p, p), 0.0), a2 = a * a, a3 = a2 * a, a4 = a2 * a2;
+  float n = dot(g, p);
+  return vec3(a4 * n, a4 * g - 8.0 * a3 * n * p);
+}
+vec3 reefNoiseD(vec2 p) {
+  const float skew = 0.366025404, unskew = 0.211324865;
+  vec2 cell = floor(p + (p.x + p.y) * skew);
+  vec2 a = p - cell + (cell.x + cell.y) * unskew;
+  vec2 stepTo = a.x > a.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+  vec3 n = reefNoiseCorner(cell, a)
+    + reefNoiseCorner(cell + stepTo, a - stepTo + unskew)
+    + reefNoiseCorner(cell + 1.0, a - 1.0 + 2.0 * unskew);
+  return vec3(clamp(0.5 + n.x * 35.0, 0.0, 1.0), n.yz * 35.0);
+}
 // grain field (after MahazeViewer): distance to the nearest grain centre in cell units, two ids, and the offset to it
 vec3 grains(vec2 p, out vec2 off) {
   vec2 ip = floor(p), fp = fract(p);
@@ -663,34 +681,35 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   if (uReefBottom > 0.5) {
     gReefHard = max(1.0 - smoothstep(0.1, 0.6, abs(vSubstrate - uReefIndices.x)),
                     1.0 - smoothstep(0.1, 0.6, abs(vSubstrate - uReefIndices.y)));
-    // Continuous, warped carbonate crust, not a repeated field of separate round boulders. Broad exposed
-    // limestone alternates with thin coralline/algal encrustations; centimetre erosion pits interrupt both.
+    // Continuous, eroded carbonate crust: large exposed areas, irregular coralline margins and small pits.
+    // Different frequencies and a rotated fine layer avoid both checkerboard pores and identical blobs.
     vec2 qp = vWorldPos.xz;
-    vec2 warp = vec2(vnoise(qp * 0.71 + 5.2), vnoise(qp * 0.63 - 19.3)) - 0.5;
-    vec2 crustP = qp + warp * 0.48;
-    float broad = vnoise(crustP * 0.9 + vec2(4.3, 12.1));
-    vec3 relief = vnoiseD(crustP * 3.7 + vec2(31.0, 7.0));
-    vec3 pores = vnoiseD(qp * 27.0 + warp * 2.3);
-    float coating = vnoise(crustP * 5.8 + vec2(23.0, -14.0));
-    float coralline = smoothstep(0.48, 0.67, broad * 0.57 + coating * 0.43);
-    float turf = smoothstep(0.55, 0.76, (1.0 - broad) * 0.66 + relief.x * 0.34);
-    float poreVisible = 1.0 - smoothstep(0.35, 1.0, fw * 0.027);
-    float pit = mix(0.12, 1.0 - smoothstep(0.2, 0.38, pores.x), poreVisible);
-    vec3 carbonate = mix(vec3(0.36, 0.31, 0.24), vec3(0.64, 0.58, 0.46),
-                         smoothstep(0.19, 0.83, relief.x * 0.7 + broad * 0.3));
-    vec3 pinkCrust = mix(vec3(0.29, 0.13, 0.15), vec3(0.46, 0.29, 0.28), coating);
-    carbonate = mix(carbonate, pinkCrust, coralline * 0.76);
-    carbonate = mix(carbonate, vec3(0.22, 0.25, 0.14), turf * 0.64);
-    carbonate *= 0.83 + 0.26 * relief.x;
-    carbonate = mix(carbonate, carbonate * vec3(0.43, 0.48, 0.42), pit * 0.72);
+    vec3 warp = reefNoiseD(qp * 0.37 + vec2(11.7, -8.1));
+    vec2 crustP = qp + warp.yz * 0.075;
+    float broad = reefNoiseD(crustP * 0.74 + vec2(4.3, 12.1)).x;
+    vec3 relief = reefNoiseD(crustP * 7.3 + vec2(31.0, 7.0));
+    mat2 fineFrame = mat2(0.798636, 0.601815, -0.601815, 0.798636);
+    vec3 pores = reefNoiseD(fineFrame * qp * 43.0 + vec2(5.1, -17.8));
+    float coating = reefNoiseD(crustP * 2.8 + vec2(23.0, -14.0)).x;
+    float coralline = smoothstep(0.64, 0.77, broad * 0.25 + coating * 0.75);
+    float turf = smoothstep(0.57, 0.77, (1.0 - broad) * 0.58 + relief.x * 0.42);
+    float poreVisible = 1.0 - smoothstep(0.25, 0.8, fw * 0.043);
+    float pit = mix(0.12, 1.0 - smoothstep(0.19, 0.38, pores.x), poreVisible);
+    vec3 carbonate = mix(vec3(0.19, 0.18, 0.15), vec3(0.34, 0.32, 0.26),
+                         smoothstep(0.17, 0.83, relief.x * 0.4 + broad * 0.6));
+    vec3 pinkCrust = mix(vec3(0.20, 0.13, 0.145), vec3(0.30, 0.22, 0.225), coating);
+    carbonate = mix(carbonate, pinkCrust, coralline * 0.72);
+    carbonate = mix(carbonate, vec3(0.18, 0.205, 0.115), turf * 0.57);
+    carbonate *= 0.93 + 0.14 * relief.x;
+    carbonate *= 1.0 - pit * 0.14;
     diffuseColor.rgb = mix(diffuseColor.rgb, carbonate, gReefHard);
     gReefRoughness = mix(0.91, 0.78, coralline) - turf * 0.03;
-    // Normal slopes represent irregular 2–4 mm crust and 1–2 mm erosion. Fade unresolved pores to their
+    // Normal slopes represent irregular 3–6 mm crust and 1–2 mm erosion. Fade unresolved pores to their
     // average colour rather than shimmering at distance; only the small close-up layer needs extra noise.
-    vec2 reliefSlope = relief.yz * 0.095 + pores.yz * 0.11 * poreVisible;
+    vec2 reliefSlope = relief.yz * 0.11 + (pores.yz * fineFrame) * 0.035 * poreVisible;
     if (uDetail > 0.5 && fw < 12.0) {
-      vec3 micro = vnoiseD(qp * 113.0 + 17.9);
-      reliefSlope += micro.yz * 0.045 * (1.0 - smoothstep(3.0, 12.0, fw));
+      vec3 micro = reefNoiseD(qp * 139.0 + 17.9);
+      reliefSlope += micro.yz * 0.018 * (1.0 - smoothstep(3.0, 12.0, fw));
     }
     gNrmAdd += reliefSlope * gReefHard;
   }
@@ -775,10 +794,10 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   }
   // diatom film: a patchy golden-brown bloom on undisturbed mud and muddy sand; reduced (black) mud in the
   // lowest, longest-wet hollows (after MahazeViewer's sediment)
-  float filmP = muddy * smoothstep(0.35, 0.75, vnoise(vWorldPos.xz * 0.11 - 11.0)) * smoothstep(0.3, 0.7, vnoise(vWorldPos.xz * 0.9 + 4.0));
+  float filmP = muddy * smoothstep(0.35, 0.75, vnoise(vWorldPos.xz * 0.11 - 11.0)) * smoothstep(0.3, 0.7, vnoise(vWorldPos.xz * 0.9 + 4.0)) * (1.0 - gReefHard);
   gFilm = filmP;
   diffuseColor.rgb *= mix(vec3(1.0), vec3(0.78, 0.68, 0.42), filmP * 0.6);
-  float reducedP = smoothstep(1.5, 2.5, vSubstrate) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0));
+  float reducedP = smoothstep(1.5, 2.5, vSubstrate) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0)) * (1.0 - gReefHard);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.058, 0.056, 0.052), reducedP * 0.7);
   // under an アマモ bed the sediment is finer, darker and richer (trapped silt, detritus, the canopy's shade); past the
   // distance where the blades are drawn, the canopy itself stands in (lying mats at low water, dark green under it)
@@ -811,7 +830,7 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
       wet = max(wet, max(gSwash, zone * 0.9));
     }
   }
-  diffuseColor.rgb *= mix(1.0, 0.76, wet);
+  diffuseColor.rgb *= mix(1.0, 0.76, wet * (1.0 - gReefHard));
   // water left in the ripple troughs: on sand the tide has just uncovered, each trough keeps a thin film — dark,
   // glassy, carrying the sky — while the crests between have already drained
   float exposedWet = smoothstep(lvl - 0.004, lvl + 0.01, vWorldPos.y) * (1.0 - smoothstep(max(lvl, uWetLevel) - 0.02, max(lvl, uWetLevel) + 0.06, vWorldPos.y));
@@ -819,7 +838,7 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   gTrough = exposedWet * smoothstep(-0.15, -0.5, gRipple) * smoothstep(0.3, 0.6, vnoise(vWorldPos.xz * 0.45 + 13.0));
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.5, 0.56, 0.64), gTrough * 0.85);
   // (the photos' wet flat is a neutral grey with the sky in it, whatever the colour of the dry sand)
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.8, 0.9, 1.08), 0.75 * wet);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.8, 0.9, 1.08), 0.75 * wet * (1.0 - gReefHard));
   // above the bank: the park's land, dry grass and earth over the packed bank
   float land = smoothstep(uLand.x, uLand.y, vWorldPos.y);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.31, 0.32, 0.2) * (0.8 + 0.4 * vnoise(vWorldPos.xz * 0.9 + 3.0)), land);
@@ -835,7 +854,9 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
     float caustic = waveCaustic(vWorldPos.xz, L, D, uTime, fp, uCausticGain * mix(1.0, 0.35, calmC));
     // the silt dims the light on its way down; what is left arrives focused
     float reach = exp(-D * mix(1.1, 0.6, calmC));
-    diffuseColor.rgb *= mix(1.0, caustic, under * (0.35 + 0.65 * reach));
+    // Porous, encrusted hardground scatters the fine net; smooth pale sand keeps its clearer caustic lines.
+    float focusContrast = mix(1.0, 0.2, gReefHard);
+    diffuseColor.rgb *= mix(1.0, caustic, under * (0.35 + 0.65 * reach) * focusContrast);
   }
 }`)
         .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
@@ -843,7 +864,7 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // ripple marks: one continuous warped field (see rippleWarp) with its dislocations; sand carries them, mud faintly
   float sandy = 1.0 - smoothstep(1.5, 2.5, vSubstrate);
   vec2 rp = rippleFrame(vWorldPos.xz);
-  float strength = (0.12 + 0.88 * sandy) * rippleAmp(rp) * 0.42 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w) * uRippleGain;
+  float strength = (0.12 + 0.88 * sandy) * rippleAmp(rp) * 0.42 * (1.0 - vPit) * (1.0 - 0.85 * gDis.w) * uRippleGain * (1.0 - gReefHard);
   float ph = ripplePhase(rp);
   // the crest line's local direction comes from the phase gradient (warp plus dislocations), so the shading
   // follows the bends and the forks; where crests crowd the slope grows, where they spread it eases

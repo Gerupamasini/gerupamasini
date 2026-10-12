@@ -212,6 +212,7 @@ export class World {
       terrain.setReefBottom(true);
       terrain.setSediment(0.2, 0);
       w.corals = new CoralReef(terrain, map.corals);
+      w.corals.kit.setWaves(waves);
       w.corals.setQuality(preset.vegetation);
       w.corals.update(0, {
         position: new Vector3(
@@ -307,6 +308,7 @@ export class World {
       sunUp, sunDir: this.sunDir, sunCol: this.sky.sunColorHdr(this.sunColTmp), ambient: this.sky.hemi.intensity * (0.5 + 0.6 * day),
       fogColor: this.sky.fogColor, fogDensity: this.fog.density, env: this.sky.envCube, day,
     });
+    if (this.corals) this.corals.kit.light.time.value = this.water.uniforms.uTime.value;
     // the bed's caustics run on the water's clock so they sit under the ripples that cast them
     this.terrain.setWater(this.tideLevel, this.habitat.wetLevel, this.water.uniforms.uTime.value, sunUp, this.sunDir);
     // the eelgrass sways with the same breeze and leans with the tidal current

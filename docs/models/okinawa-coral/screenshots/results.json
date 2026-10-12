@@ -12,8 +12,20 @@
         "quality": "high",
         "name": "five"
       },
+      "camera": {
+        "position": [
+          0,
+          -0.34999990463256747,
+          9.8
+        ],
+        "target": [
+          0,
+          -2.3699999046325684,
+          0
+        ]
+      },
       "colonies": 5,
-      "triangles": 785476,
+      "triangles": 809676,
       "calls": 5,
       "resources": {
         "geometries": 15,
@@ -22,8 +34,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 27,
-        "triangles": 1650036
+        "calls": 28,
+        "triangles": 1709636,
+        "mirrorCalls": 4,
+        "mirrorTriangles": 61172
       },
       "terrain": {
         "chunks": 36,
@@ -44,6 +58,18 @@
         "quality": "high",
         "name": "acropora_digitifera"
       },
+      "camera": {
+        "position": [
+          0.9946061776469044,
+          -1.848843355066664,
+          1.7016365197931254
+        ],
+        "target": [
+          -0.023245821629774593,
+          -2.724196074444608,
+          -0.008354838991695368
+        ]
+      },
       "colonies": 1,
       "triangles": 410080,
       "calls": 1,
@@ -54,8 +80,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 16,
-        "triangles": 885068
+        "calls": 17,
+        "triangles": 896268,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -76,8 +104,20 @@
         "quality": "high",
         "name": "acropora_hyacinthus"
       },
+      "camera": {
+        "position": [
+          1.7385321204484239,
+          -1.2354152992488971,
+          2.8668403113814485
+        ],
+        "target": [
+          0.001788237964383821,
+          -2.729015038185172,
+          -0.050889411191738516
+        ]
+      },
       "colonies": 1,
-      "triangles": 202430,
+      "triangles": 226870,
       "calls": 1,
       "resources": {
         "geometries": 3,
@@ -86,8 +126,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 17,
-        "triangles": 474760
+        "calls": 18,
+        "triangles": 534840,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -108,6 +150,18 @@
         "quality": "high",
         "name": "porites_lobata"
       },
+      "camera": {
+        "position": [
+          2.363544315519774,
+          -0.39269919127711805,
+          4.276110500472211
+        ],
+        "target": [
+          -0.16344228864753238,
+          -2.5659076708610007,
+          0.03077300547113848
+        ]
+      },
       "colonies": 1,
       "triangles": 39600,
       "calls": 1,
@@ -118,8 +172,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 17,
-        "triangles": 149100
+        "calls": 18,
+        "triangles": 160300,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -140,8 +196,20 @@
         "quality": "high",
         "name": "montipora_foliosa"
       },
+      "camera": {
+        "position": [
+          1.2948033400637549,
+          -1.5188741961146761,
+          2.2424532242131154
+        ],
+        "target": [
+          -0.05191863593994806,
+          -2.6770550954778605,
+          -0.020039695473105634
+        ]
+      },
       "colonies": 1,
-      "triangles": 93766,
+      "triangles": 93526,
       "calls": 1,
       "resources": {
         "geometries": 3,
@@ -150,8 +218,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 17,
-        "triangles": 257432
+        "calls": 18,
+        "triangles": 268152,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -172,6 +242,18 @@
         "quality": "high",
         "name": "platygyra_daedalea"
       },
+      "camera": {
+        "position": [
+          1.878196371350127,
+          -0.9960098791385419,
+          3.157602840183805
+        ],
+        "target": [
+          -0.007302397491355082,
+          -2.617538820342217,
+          -0.010035091469884792
+        ]
+      },
       "colonies": 1,
       "triangles": 39600,
       "calls": 1,
@@ -182,8 +264,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 17,
-        "triangles": 149100
+        "calls": 18,
+        "triangles": 160300,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -204,6 +288,18 @@
         "quality": "high",
         "name": "acropora_digitifera-macro"
       },
+      "camera": {
+        "position": [
+          0.07137303993866964,
+          -2.7288516252231747,
+          0.41726138081459674
+        ],
+        "target": [
+          0.01446512509432507,
+          -2.648774180996409,
+          0.24305147250230225
+        ]
+      },
       "colonies": 1,
       "triangles": 410080,
       "calls": 1,
@@ -214,8 +310,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 16,
-        "triangles": 885068
+        "calls": 17,
+        "triangles": 896268,
+        "mirrorCalls": 3,
+        "mirrorTriangles": 21572
       },
       "terrain": {
         "chunks": 36,
@@ -236,8 +334,20 @@
         "quality": "high",
         "name": "acropora_hyacinthus-macro"
       },
+      "camera": {
+        "position": [
+          0.25856893806266706,
+          -2.6014342993775044,
+          0.423482139117392
+        ],
+        "target": [
+          0.06380284722338914,
+          -2.603477147689821,
+          0.3780729260658646
+        ]
+      },
       "colonies": 1,
-      "triangles": 202430,
+      "triangles": 226870,
       "calls": 1,
       "resources": {
         "geometries": 3,
@@ -247,7 +357,9 @@
       "reef": null,
       "render": {
         "calls": 15,
-        "triangles": 464776
+        "triangles": 519864,
+        "mirrorCalls": 3,
+        "mirrorTriangles": 21572
       },
       "terrain": {
         "chunks": 36,
@@ -268,6 +380,18 @@
         "quality": "high",
         "name": "porites_lobata-macro"
       },
+      "camera": {
+        "position": [
+          -0.11201902199669005,
+          -2.3624057665773637,
+          0.5652777323274345
+        ],
+        "target": [
+          -0.09431841734126244,
+          -2.4276599282484614,
+          0.4915988141796054
+        ]
+      },
       "colonies": 1,
       "triangles": 39600,
       "calls": 1,
@@ -278,8 +402,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 10,
-        "triangles": 114156
+        "calls": 11,
+        "triangles": 125356,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -300,8 +426,20 @@
         "quality": "high",
         "name": "montipora_foliosa-macro"
       },
+      "camera": {
+        "position": [
+          0.009224721600728208,
+          -2.606628496233454,
+          0.5388554431546713
+        ],
+        "target": [
+          0.023003494511109113,
+          -2.527381476972548,
+          0.47944117420060844
+        ]
+      },
       "colonies": 1,
-      "triangles": 93766,
+      "triangles": 93526,
       "calls": 1,
       "resources": {
         "geometries": 3,
@@ -311,7 +449,9 @@
       "reef": null,
       "render": {
         "calls": 7,
-        "triangles": 207512
+        "triangles": 213240,
+        "mirrorCalls": 3,
+        "mirrorTriangles": 21572
       },
       "terrain": {
         "chunks": 36,
@@ -332,6 +472,18 @@
         "quality": "high",
         "name": "platygyra_daedalea-macro"
       },
+      "camera": {
+        "position": [
+          0.06320223999508513,
+          -2.2923107371997133,
+          0.6276505516987371
+        ],
+        "target": [
+          0.07189405693344966,
+          -2.4591954302407792,
+          0.5177690175499131
+        ]
+      },
       "colonies": 1,
       "triangles": 39600,
       "calls": 1,
@@ -342,8 +494,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 7,
-        "triangles": 99180
+        "calls": 8,
+        "triangles": 110380,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -364,6 +518,18 @@
         "quality": "high",
         "name": "variants"
       },
+      "camera": {
+        "position": [
+          0,
+          -0.34999990463256747,
+          9.8
+        ],
+        "target": [
+          0,
+          -2.3699999046325684,
+          0
+        ]
+      },
       "colonies": 4,
       "triangles": 1458424,
       "calls": 4,
@@ -374,8 +540,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 25,
-        "triangles": 2995932
+        "calls": 26,
+        "triangles": 3007132,
+        "mirrorCalls": 3,
+        "mirrorTriangles": 21572
       },
       "terrain": {
         "chunks": 36,
@@ -396,29 +564,43 @@
         "quality": "high",
         "name": "reef-high"
       },
-      "colonies": 270,
-      "triangles": 3578523,
-      "calls": 96,
+      "camera": {
+        "position": [
+          2.999999999999999,
+          -0.6199999999999994,
+          7
+        ],
+        "target": [
+          0,
+          -2.5499999999999994,
+          2.6
+        ]
+      },
+      "colonies": 296,
+      "triangles": 3180633,
+      "calls": 104,
       "resources": {
         "geometries": 40,
         "materials": 13,
-        "views": 101
+        "views": 106
       },
       "reef": {
-        "colonies": 270,
-        "calls": 96,
-        "triangles": 3578523,
+        "colonies": 296,
+        "calls": 104,
+        "triangles": 3180633,
         "lod": [
-          8,
-          41,
-          221
+          4,
+          51,
+          241
         ],
         "geometries": 40,
         "materials": 13
       },
       "render": {
-        "calls": 82,
-        "triangles": 5868430
+        "calls": 91,
+        "triangles": 4782167,
+        "mirrorCalls": 32,
+        "mirrorTriangles": 882617
       },
       "terrain": {
         "chunks": 36,
@@ -439,29 +621,43 @@
         "quality": "low",
         "name": "reef-low"
       },
-      "colonies": 270,
-      "triangles": 1190731,
-      "calls": 77,
+      "camera": {
+        "position": [
+          2.999999999999999,
+          -0.6199999999999994,
+          7
+        ],
+        "target": [
+          0,
+          -2.5499999999999994,
+          2.6
+        ]
+      },
+      "colonies": 296,
+      "triangles": 1791180,
+      "calls": 94,
       "resources": {
-        "geometries": 41,
+        "geometries": 40,
         "materials": 13,
-        "views": 102
+        "views": 106
       },
       "reef": {
-        "colonies": 270,
-        "calls": 77,
-        "triangles": 1190731,
+        "colonies": 296,
+        "calls": 94,
+        "triangles": 1791180,
         "lod": [
           1,
-          13,
-          246
+          32,
+          261
         ],
-        "geometries": 41,
+        "geometries": 40,
         "materials": 13
       },
       "render": {
-        "calls": 54,
-        "triangles": 684676
+        "calls": 59,
+        "triangles": 1086914,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -482,29 +678,43 @@
         "quality": "minimal",
         "name": "reef-minimal"
       },
-      "colonies": 270,
-      "triangles": 593115,
-      "calls": 68,
+      "camera": {
+        "position": [
+          2.999999999999999,
+          -0.6199999999999994,
+          7
+        ],
+        "target": [
+          0,
+          -2.5499999999999994,
+          2.6
+        ]
+      },
+      "colonies": 296,
+      "triangles": 911481,
+      "calls": 79,
       "resources": {
-        "geometries": 41,
+        "geometries": 40,
         "materials": 13,
-        "views": 103
+        "views": 107
       },
       "reef": {
-        "colonies": 270,
-        "calls": 68,
-        "triangles": 593115,
+        "colonies": 296,
+        "calls": 79,
+        "triangles": 911481,
         "lod": [
           0,
-          9,
-          196
+          18,
+          222
         ],
-        "geometries": 41,
+        "geometries": 40,
         "materials": 13
       },
       "render": {
-        "calls": 55,
-        "triangles": 584203
+        "calls": 57,
+        "triangles": 825681,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -525,8 +735,20 @@
         "quality": "high",
         "name": "lod0"
       },
+      "camera": {
+        "position": [
+          1.7385321204484239,
+          -1.2354152992488971,
+          2.8668403113814485
+        ],
+        "target": [
+          0.001788237964383821,
+          -2.729015038185172,
+          -0.050889411191738516
+        ]
+      },
       "colonies": 1,
-      "triangles": 202430,
+      "triangles": 226870,
       "calls": 1,
       "resources": {
         "geometries": 3,
@@ -535,8 +757,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 17,
-        "triangles": 474760
+        "calls": 18,
+        "triangles": 534840,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -557,8 +781,20 @@
         "quality": "high",
         "name": "lod1"
       },
+      "camera": {
+        "position": [
+          1.7385321204484239,
+          -1.2354152992488967,
+          2.8668403113814485
+        ],
+        "target": [
+          0.001788237964383821,
+          -2.7290150381851714,
+          -0.050889411191738516
+        ]
+      },
       "colonies": 1,
-      "triangles": 48606,
+      "triangles": 48274,
       "calls": 1,
       "resources": {
         "geometries": 3,
@@ -567,8 +803,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 17,
-        "triangles": 167112
+        "calls": 18,
+        "triangles": 177648,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -589,8 +827,20 @@
         "quality": "high",
         "name": "lod2"
       },
+      "camera": {
+        "position": [
+          1.7385321204484239,
+          -1.2354152992488971,
+          2.8668403113814485
+        ],
+        "target": [
+          0.001788237964383821,
+          -2.729015038185172,
+          -0.050889411191738516
+        ]
+      },
       "colonies": 1,
-      "triangles": 1056,
+      "triangles": 1152,
       "calls": 1,
       "resources": {
         "geometries": 3,
@@ -599,8 +849,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 16,
-        "triangles": 70956
+        "calls": 17,
+        "triangles": 82252,
+        "mirrorCalls": 0,
+        "mirrorTriangles": 0
       },
       "terrain": {
         "chunks": 36,
@@ -611,6 +863,73 @@
       "frames": 34
     },
     {
+      "name": "reef-surface",
+      "config": {
+        "mode": "reef",
+        "species": "acropora_digitifera",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "reef-surface",
+        "cam": [
+          0,
+          -1.4,
+          3
+        ],
+        "target": [
+          0,
+          0.6,
+          0
+        ]
+      },
+      "camera": {
+        "position": [
+          0,
+          -1.4000000000000004,
+          2.9999999999999996
+        ],
+        "target": [
+          0,
+          0.6,
+          0
+        ]
+      },
+      "colonies": 296,
+      "triangles": 3697087,
+      "calls": 109,
+      "resources": {
+        "geometries": 43,
+        "materials": 14,
+        "views": 118
+      },
+      "reef": {
+        "colonies": 296,
+        "calls": 109,
+        "triangles": 3697087,
+        "lod": [
+          4,
+          63,
+          229
+        ],
+        "geometries": 43,
+        "materials": 14
+      },
+      "render": {
+        "calls": 76,
+        "triangles": 4561809,
+        "mirrorCalls": 38,
+        "mirrorTriangles": 1612623
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 8
+    },
+    {
       "name": "neutral",
       "config": {
         "mode": "five",
@@ -619,10 +938,32 @@
         "lod": "auto",
         "water": false,
         "quality": "high",
-        "name": "neutral"
+        "name": "neutral",
+        "cam": [
+          0,
+          -1.4,
+          3
+        ],
+        "target": [
+          0,
+          0.6,
+          0
+        ]
+      },
+      "camera": {
+        "position": [
+          0,
+          -0.34999990463256747,
+          9.8
+        ],
+        "target": [
+          0,
+          -2.3699999046325684,
+          0
+        ]
       },
       "colonies": 5,
-      "triangles": 785476,
+      "triangles": 809676,
       "calls": 5,
       "resources": {
         "geometries": 15,
@@ -631,8 +972,10 @@
       },
       "reef": null,
       "render": {
-        "calls": 27,
-        "triangles": 1650036
+        "calls": 28,
+        "triangles": 1709636,
+        "mirrorCalls": 2,
+        "mirrorTriangles": 11212
       },
       "terrain": {
         "chunks": 36,
@@ -640,7 +983,7 @@
         "lod1": 0,
         "lod2": 0
       },
-      "frames": 36
+      "frames": 39
     }
   ],
   "integration": {
@@ -655,13 +998,18 @@
     "water": -0.25948792430028517,
     "tide": -0.25948792430028517,
     "render": {
-      "calls": 53,
-      "triangles": 752534
+      "calls": 52,
+      "triangles": 695288,
+      "mirrorCalls": 0,
+      "mirrorTriangles": 0
     }
   },
   "errors": [],
   "verification": {
-    "fullCapture": "19 views and World integration",
-    "refreshedCapture": "3 variable-scale reef views and World integration after physical corallite scale correction; fixed-scale views are unchanged"
+    "fullRun": "20 views and World integration passed with no browser or shader errors.",
+    "finalRefresh": "After tightening automatic LOD budgets and clearing disposed reflection samplers, the 4 affected reef views and World integration were rerendered and passed. Fixed-LOD single/close-up geometry and shaders are unchanged.",
+    "unitTests": "414 tests passed; following final LOD and reflection lifecycle changes, all 46 affected tests passed again.",
+    "renderer": "Chromium SwiftShader; draw/triangle counts are not a hardware FPS measurement.",
+    "quality": "Procedural artifacts remain; photographic AAA quality is not achieved."
   }
 }
