@@ -1,4 +1,4 @@
-import { DataTexture, NoColorSpace, RGBAFormat, Vector2, Vector3, Vector4, type Material, type MeshPhysicalMaterial, type Texture, type WebGLProgramParametersWithUniforms } from 'three';
+import { DataTexture, NoColorSpace, RGBAFormat, Vector2, Vector3, Vector4, type IUniform, type Material, type MeshPhysicalMaterial, type Texture, type WebGLProgramParametersWithUniforms } from 'three';
 import type { GLTFParser } from 'three/addons/loaders/GLTFLoader.js';
 import { createProfileTexture } from './hero/BodyMaterial.js';
 
@@ -382,6 +382,11 @@ float gbAlpha = 1.0;
 #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
   gbFar += getIBLIrradiance(normalize(-vViewPosition));
 #endif
+#if NUM_DIR_LIGHTS > 0
+  // the sunlit bed below (albedo ~0.25) throws its light up into a body seen from above
+  vec3 gbSunW = normalize(inverseTransformDirection(directionalLights[0].direction, viewMatrix));
+  gbFar += directionalLights[0].color * max(gbSunW.y, 0.0) * 0.25 * smoothstep(0.1, -0.5, VW.y);
+#endif
   // (diffuse light crosses the tissue on longer, slanted paths than the straight view ray)
   vec3 tauFar = uGbSigL * tExit * (1.0 + dense) * 1.6 + tauOrg + scat * 0.3;
   gbAdd += gbFar * RECIPROCAL_PI * exp(-tauFar) * skinIn * skinOut * uGbAmbient;
@@ -422,6 +427,16 @@ const COMPOSITE = /* glsl */ `
   gl_FragColor = vec4((base * gbAlpha + add) / a1, a1);
 }
 `;
+
+/** How strongly the light passes through every goby body (one set for all: the look of the species, not of a fish). */
+export const GOBY_LIGHT = {
+  /** how much the organs and the column show */
+  uGbInterior: { value: 0.45 } as IUniform<number>,
+  /** the light diffused through from behind (sun, lamps) */
+  uGbBack: { value: 0.3 } as IUniform<number>,
+  /** the surroundings' light diffused through from the far side */
+  uGbAmbient: { value: 1.0 } as IUniform<number>,
+};
 
 let blackTex: DataTexture | null = null;
 /** no pigment (until the GLB's pigment map is decoded) */
@@ -477,9 +492,7 @@ export function makeTranslucentBody(m: MeshPhysicalMaterial, tier: 'hero' | 'lod
     uGbOrgC: { value: organs.map((o) => new Vector4(o.c.x, o.c.y, o.c.z, o.s)) },
     uGbOrgR: { value: organs.map((o) => o.r) },
     uGbOrgK: { value: organs.map((o) => o.k) },
-    uGbInterior: { value: 0.45 },
-    uGbBack: { value: 0.3 },
-    uGbAmbient: { value: 1.0 },
+    ...GOBY_LIGHT,
   };
   if (x.pigmentTexture !== undefined && parser) {
     void (parser.getDependency('texture', x.pigmentTexture) as Promise<Texture>).then((t) => {

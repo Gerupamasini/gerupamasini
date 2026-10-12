@@ -21,6 +21,8 @@ export interface SharedUniforms {
   uTime: IUniform<number>;
   uScatter: IUniform<number>;
   uInterior: IUniform<number>;
+  /** the surroundings' light diffused through the body from its far side */
+  uAmbThrough: IUniform<number>;
   uCausticAmt: IUniform<number>;
   uFinDensity: IUniform<number>;
   uDebug: IUniform<number>;
@@ -73,6 +75,7 @@ export class HeroPipeline {
       uTime: { value: 0 },
       uScatter: { value: 1.0 },
       uInterior: { value: 0.45 },
+      uAmbThrough: { value: 1.0 },
       uCausticAmt: { value: 0.15 },
       uFinDensity: { value: 1.0 },
       uDebug: { value: 0 },

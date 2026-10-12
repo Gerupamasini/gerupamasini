@@ -470,7 +470,9 @@ void main() {
   // diffuses through the tissue: whichever side the key light is on, the thin parts are lit faintly from behind and
   // the column and the viscera show in them as shadows (diffusion attenuation of the whole path, slanted paths 1.6×)
   vec3 tauFar = sqrt(3.0 * tauA * (tauA + vec3(tauS * (1.0 - G_TIS)))) * 1.6;
-  vec3 farLight = ambientIrr(dOutW) * exp(-tauFar) * skinIn * skinOut * uAmbThrough * (1.0 - 0.85 * smoothstep(0.98, 1.1, bodyR(pIn)));
+  // (the sunlit bed below, albedo ~0.25, throws its light up into a body seen from above)
+  vec3 farIrr = ambientIrr(dOutW) + uLightColor * max(normalize(uLightDir).y, 0.0) * 0.25 * INV_PI * smoothstep(0.1, -0.5, dOutW.y);
+  vec3 farLight = farIrr * exp(-tauFar) * skinIn * skinOut * uAmbThrough * (1.0 - 0.85 * smoothstep(0.98, 1.1, bodyR(pIn)));
 
   // diffuse reflectance of a finite milky slab grows with its reduced optical depth
   vec3 tint = exp(-tauNear * 0.8);
@@ -534,7 +536,7 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uIor: { value: 1.04 },
     uNormalStrength: { value: 1.0 },
     uBackStrength: { value: 0.3 },
-    uAmbThrough: { value: 1.0 },
+    uAmbThrough: shared.uAmbThrough ?? { value: 1.0 },
   };
   const mat = new THREE.ShaderMaterial({
     name: 'MahazeBodyVolumetric',
