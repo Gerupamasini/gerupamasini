@@ -14,8 +14,8 @@
 
 /** carapace (plan outline and heights) */
 export const CARAPACE = {
-  /** carapace length / width; plates 007–009 (dorsal, flattened specimen): 233 px / 266 px [P] */
-  lengthRatio: 0.86,
+  /** carapace length / width; plates 007–009 (dorsal, flattened specimens): 0.82–0.88 (009: 237 / 292 px) [P] */
+  lengthRatio: 0.82,
   /**
    * total body height, sternum to the top of the dome: the live crab seen from the ground (063, 027, 035) is a
    * low, broad dome — 0.44–0.56 CW tall (SHAPE_AUDIT.md) [P]
@@ -29,15 +29,18 @@ export const CARAPACE = {
    */
   frontRise: 0.11,
   /** z of the widest point (slightly behind the middle, 009) [P] */
-  widestZ: -0.05,
+  widestZ: -0.12,
   /** posterior margin half-width (straight, 009: 140 px of 280) [P] */
   posteriorHalf: 0.25,
   /** half-width at the external orbital angles (009, 002) [P] */
   orbitalAngleHalf: 0.39,
   /** the front between the orbits: narrow, deflexed, a median groove [P][R] */
   frontHalf: 0.065,
-  /** eyestalk base centre: x (002: centres 0.29 CW apart at the base, but the sockets open at ±0.11), y, z [P] */
-  eyeBase: [0.16, 0.39, 0.38],
+  /**
+   * eyestalk base centre: x (002: centres 0.29 CW apart at the base; 063: 0.22 where they leave the front margin and
+   * 0.3 at the corneas), y, z [P]
+   */
+  eyeBase: [0.14, 0.39, 0.36],
   /** sternum ventral face is y = 0; the branchiostegite wall meets it at about this inset [R] */
   ventralInset: 0.8,
 };
@@ -48,34 +51,41 @@ export const CARAPACE = {
  */
 export const EYE = {
   /** basal article, sunk in the orbit */
-  baseLen: 0.035, baseR: 0.021,
+  baseLen: 0.035, baseR: 0.019,
   /**
-   * stalk proper: slender, narrow at its neck and slightly club-shaped toward the tip; 0.035–0.05 CW thick and
-   * 0.16–0.2 CW visible above the orbit in the live crab (061, 063, 027; 013 for the shape) [P]
+   * stalk proper: a slim neck out of the orbit (0.032 CW), thickening steadily upward to 0.058 under the cornea —
+   * club-shaped, not a tube of one thickness; 0.2–0.3 CW visible above the front margin in the live crab
+   * (063: 0.24, 027: 0.3; 061, 035; 013 for the shape) [P]
    */
-  stalkLen: 0.185, stalkR0: 0.019, stalkR1: 0.023,
-  /** terminal cornea: a small bulb only a little wider than the stalk (1.2–1.6 ×), about 0.06 long (013, 061) [P] */
-  corneaLen: 0.065, corneaR: 0.033,
+  stalkLen: 0.18, stalkR0: 0.016, stalkR1: 0.029,
+  /**
+   * terminal cornea: an ovoid bulb 1.3–1.5 × the stalk below it (063: 0.1 on a 0.066 stalk, 027: 0.1 on 0.07, 069;
+   * 013: the stalk swells into it), the model a little slimmer: 0.076 on 0.058; the dark window on its outer and
+   * front side, the clear cuticle wrapping round behind it (013) [P]
+   */
+  corneaLen: 0.08, corneaR: 0.038,
   /** erect pose: leaning out and a little forward from vertical (degrees) [P] */
-  erectOutDeg: 7, erectForwardDeg: 8,
+  erectOutDeg: 6, erectForwardDeg: 8,
   /** folded pose: lying laterally along the orbital margin (001, 009) [P] */
   foldOutDeg: 72, foldForwardDeg: -8,
 };
 
 /**
- * third maxillipeds: two large, strongly convex opercular plates closing the whole buccal frame — the most
- * conspicuous thing in the face (002–005, 2.webp, 4.webp); merus a little smaller than the ischium, an oblique
- * suture between them, outer surface with rounded tubercles [L] (Wong et al. 2010)
+ * third maxillipeds: two large opercular plates closing the whole buccal frame — the most conspicuous thing in the
+ * face (002–005, 2.webp, 4.webp, 063) — but thin lids, only gently arched, their margins thin and nearly flush with
+ * the face around them (063, 027 seen from the side of the face); merus a little smaller than the ischium, an
+ * oblique suture between them, outer surface with rounded tubercles [L] (Wong et al. 2010)
  */
 export const MXP3 = {
   /**
-   * each plate: width, height (ischium + merus), convexity. In the front views (2.webp, 4.webp) the
+   * each plate: width (from the hinge to a hair past the midline: closed, the pair overlaps a little), height
+   * (ischium + merus), arch (the lid's rise above its margins). In the front views (2.webp, 4.webp) the
    * pair fills the face from just under the eyestalk bases to the sternum, about 1.5 × as wide as tall (2.webp,
    * plates 003–005) [P]
    */
-  width: 0.225, height: 0.31, thick: 0.055,
-  /** hinge (outer margin) position: x, y, z (body frame) */
-  hinge: [0.225, 0.2, 0.425],
+  width: 0.232, height: 0.345, thick: 0.026,
+  /** hinge (outer margin) position: x, y, z (body frame); the plates reach up to just under the front (063) */
+  hinge: [0.225, 0.215, 0.405],
   /** plates lean back from vertical (the face slopes a little) */
   leanDeg: 12,
 };
@@ -89,48 +99,56 @@ export const MXP3 = {
  */
 export const CHELIPED = {
   /** coxa socket (body frame) and the limb's bind direction (yaw from +Z toward the side, pitch down) */
-  base: [0.21, 0.11, 0.3], yawDeg: 30, pitchDeg: -20,
+  base: [0.21, 0.11, 0.285], yawDeg: 30, pitchDeg: -20,
   coxa: 0.045, basis: 0.04, ischium: 0.04,
   /** merus and carpus slender: the live crab's arm is a thin rod beside the face, not a block (063, 027, 049) [P] */
-  merus: 0.26, merusH: 0.085, merusW: 0.06,
+  merus: 0.26, merusH: 0.11, merusW: 0.07,
   carpus: 0.17, carpusR: 0.038,
   /**
    * palm: deep (height ≈ 0.8 × length), laterally compressed — a plate, not a ball (011, 003); fingers a little
    * shorter than the palm, slender (011). These are a female's / small male's (027, 035, 057); large males are
    * 1.2 × (002–005, 061) [P]
    */
-  palm: 0.23, palmH: 0.18, palmW: 0.068,
-  finger: 0.18, fingerH: 0.05, fingerW: 0.028,
-  dactylus: 0.19,
+  palm: 0.23, palmH: 0.19, palmW: 0.052,
+  /**
+   * fingers about two thirds of the palm (002, 003: 0.55–0.65; 011 seen from the side: 0.75), slender, tapering to
+   * sharp amber tips, the gape a narrow slit (002, 011) [P]
+   */
+  finger: 0.155, fingerH: 0.038, fingerW: 0.02,
+  dactylus: 0.165,
   /** females: whole limb ≈ 1.6 CL; mature males > 2 CL [L] */
   maleScale: 1.2,
 };
 
 /**
  * Walking legs P2–P5 (Leg_*1 … Leg_*4). Long, banded; legs 1 and 2 (P2, P3) longest and about equal, leg 4 (P5)
- * shortest [L]. Lengths from the flat dorsal specimen 009 (CW 266 px): merus 0.5–0.6, carpus 0.2, propodus
- * 0.24–0.26, dactylus 0.3 (P2–P4) [P].
+ * shortest [L]. Lengths from the flat dorsal specimens 007 (CW 256 px) and 009 (CW 266 px): merus ≈ 0.5, carpus
+ * ≈ 0.21, propodus ≈ 0.23, dactylus ≈ 0.33 — the dactylus LONGER than the propodus, a long slim spike (P2–P4) [P].
  *
- * Cross-sections: the meri are flattened so that, on the living crab, their BROAD face is seen from above
- * (0.12–0.13 CW wide in 049, 057) and their thin edge from the front (0.08–0.1 CW in 063): bone-local Z (forward /
- * back, horizontal in the bind pose) carries the broad width `*B`, Y (dorsal, in the flexion plane) the depth `*D`.
- * Each merus has one undivided oval tympanum covering most of its broad face, above and below [L] (the dark
- * speckled ovals of 009, 010, 049). Carpus short and stout; propodus parallel-sided; dactylus lanceolate, tapering
- * to a sharp tip (009, 068) [P][L].
+ * Cross-sections: flat blades, not rods. On the living crab the BROAD face is seen from above and the thin edge
+ * from the front: bone-local Z (forward / back, horizontal in the bind pose) carries the broad width `*B`, Y (dorsal,
+ * in the flexion plane) the depth `*D`, about a third of it. Breadths with the clear margins, from 009 (CW 290 px)
+ * and 007: merus a leaf 0.08 at its base, 0.15 just before the middle, 0.06 at the knee; carpus a club 0.045 → 0.1;
+ * propodus an oval 0.09 in its proximal third → 0.045; dactylus 0.055 at its base to a needle point. Every segment
+ * necked to 0.045–0.06 at its joints. Depth ≈ 0.05 (merus) → 0.03 (dactylus); with the roll that is the 0.1–0.12
+ * the meri and carpi show from the front in 063 [P]. Each merus has one undivided oval tympanum covering most of
+ * its broad face, above and below [L] (the dark speckled ovals of 009, 010, 049).
  *
  * base: coxa socket (x, y, z) on the ventrolateral edge; yawDeg: bind direction in the horizontal plane measured
  * from the lateral axis toward the front (009: P2 points forward, P5 back) [P]. roll: the leg's twist about its
- * long axis (the anterior edge turned a little up, 049, 063) [P].
+ * long axis, the dorsal face tilted forward (the anterior margin down): most on the first leg (29°), least on the
+ * last (9°). The broad faces then show from above, from the front and from in front and above — 0.13 CW of P2
+ * seen from the front in 063, 0.15 from above in 057, broad blades in 069 and 016 [P].
  */
 export const LEGS = [
-  { name: 1, pereiopod: 'P2', base: [0.32, 0.09, 0.15], yawDeg: 50, coxa: 0.05, basis: 0.05, ischium: 0.045, merus: 0.48, carpus: 0.19, propodus: 0.25, dactylus: 0.27,
-    merusB: 0.135, merusD: 0.08, carpusB: 0.095, carpusD: 0.066, propB: 0.08, propD: 0.056, dacB: 0.055, dacD: 0.044, roll: 0.2 },
-  { name: 2, pereiopod: 'P3', base: [0.36, 0.085, 0.02], yawDeg: 17, coxa: 0.05, basis: 0.05, ischium: 0.045, merus: 0.52, carpus: 0.2, propodus: 0.26, dactylus: 0.28,
-    merusB: 0.14, merusD: 0.082, carpusB: 0.098, carpusD: 0.068, propB: 0.082, propD: 0.058, dacB: 0.056, dacD: 0.045, roll: 0.18 },
-  { name: 3, pereiopod: 'P4', base: [0.35, 0.085, -0.12], yawDeg: -15, coxa: 0.05, basis: 0.048, ischium: 0.044, merus: 0.48, carpus: 0.19, propodus: 0.25, dactylus: 0.26,
-    merusB: 0.135, merusD: 0.08, carpusB: 0.095, carpusD: 0.066, propB: 0.08, propD: 0.056, dacB: 0.055, dacD: 0.044, roll: 0.15 },
-  { name: 4, pereiopod: 'P5', base: [0.29, 0.09, -0.24], yawDeg: -50, coxa: 0.045, basis: 0.045, ischium: 0.04, merus: 0.38, carpus: 0.15, propodus: 0.2, dactylus: 0.22,
-    merusB: 0.12, merusD: 0.072, carpusB: 0.085, carpusD: 0.056, propB: 0.072, propD: 0.048, dacB: 0.05, dacD: 0.04, roll: 0.1 },
+  { name: 1, pereiopod: 'P2', base: [0.32, 0.09, 0.16], yawDeg: 56, coxa: 0.05, basis: 0.048, ischium: 0.042, merus: 0.47, carpus: 0.2, propodus: 0.23, dactylus: 0.31,
+    merusB: 0.15, merusD: 0.048, carpusB: 0.1, carpusD: 0.042, propB: 0.09, propD: 0.036, dacB: 0.064, dacD: 0.03, roll: 0.5 },
+  { name: 2, pereiopod: 'P3', base: [0.36, 0.085, 0.03], yawDeg: 22, coxa: 0.05, basis: 0.048, ischium: 0.042, merus: 0.51, carpus: 0.21, propodus: 0.24, dactylus: 0.33,
+    merusB: 0.155, merusD: 0.05, carpusB: 0.102, carpusD: 0.043, propB: 0.092, propD: 0.037, dacB: 0.066, dacD: 0.031, roll: 0.32 },
+  { name: 3, pereiopod: 'P4', base: [0.35, 0.085, -0.12], yawDeg: -14, coxa: 0.05, basis: 0.046, ischium: 0.041, merus: 0.47, carpus: 0.2, propodus: 0.23, dactylus: 0.31,
+    merusB: 0.15, merusD: 0.048, carpusB: 0.1, carpusD: 0.042, propB: 0.09, propD: 0.036, dacB: 0.064, dacD: 0.03, roll: 0.22 },
+  { name: 4, pereiopod: 'P5', base: [0.29, 0.09, -0.24], yawDeg: -44, coxa: 0.045, basis: 0.042, ischium: 0.038, merus: 0.37, carpus: 0.16, propodus: 0.19, dactylus: 0.26,
+    merusB: 0.13, merusD: 0.044, carpusB: 0.088, carpusD: 0.038, propB: 0.08, propD: 0.033, dacB: 0.058, dacD: 0.028, roll: 0.15 },
 ];
 
 /** natural standing stance (degrees in the limb plane) used for the rest pose and as the IK's preferred shape [P] */
@@ -141,14 +159,15 @@ export const STANCE = {
    * walking it rises a little (040, 044, 068); waving it stands up on its legs (6.webp) [P]
    */
   bodyHeight: { calm: 0.09, alert: 0.2, feed: 0.05, hide: 0.03, display: 0.42 },
-  /** the dactylus meets the sand steeply: walking on the tips (027, 063) [P] */
-  dactylDeg: -72,
+  /** the dactylus meets the sand steeply, the curved spike's point in the sand (063: 65–75°; 027, 068) [P] */
+  dactylDeg: -66,
   /**
-   * foot radius from the coxa socket in the ground plane, per leg: at the calm height the merus rises only
-   * ~15–20° from the body, so the knee sits at the height of the carapace's side, not above the dome, and the
-   * carpus, propodus and dactylus drop steeply to the sand (063, 027, 019) — not a spider's high knees [P]
+   * foot radius from the coxa socket in the ground plane, per leg. At the calm height that sets the merus rising
+   * about 35° (063: P2's knee 0.48 CW above the sand, under the top of the dome) and the knee bent to ~110°, the
+   * carpus and propodus dropping at ~35° and the dactylus steeply to the sand — the feet within about 1.3 CW of the
+   * body's centre (063, 016, 057), not sprawled out at the end of long, nearly straight legs like a spider's [P]
    */
-  footReach: [1.03, 1.09, 1.02, 0.83],
+  footReach: [0.98, 1.02, 0.96, 0.8],
 };
 
 /** abdomen: male narrow (006), female broad and rounded (062); folded tight under the sternum [P][L] */

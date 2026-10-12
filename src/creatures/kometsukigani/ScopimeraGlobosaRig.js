@@ -66,11 +66,11 @@ export const LEG_JOINTS = {
  */
 export const CHELA_POSES = {
   /**
-   * fold, fitted to the front views (2.webp, 4.webp, 003–005): the carpus lies across above each palm like a
-   * shoulder, the palm hangs beside the maxillipeds with its broad face forward, the fingers point down to the
-   * midline under them
+   * fold, fitted to the front views (063, 002, 061, 2.webp, 4.webp): the carpus lies across above each palm like a
+   * shoulder, the palm hangs beside the maxillipeds with its broad face forward, the fingers point straight down,
+   * their tips just above the sand — side by side, not crossed under the face
    */
-  fold: [-1.4, 1.409, 0, 0.244, 2.561, 0.713, 0.04],
+  fold: [-1.4, 1.409, 0, 0.244, 2.561, 0.45, 0.04],
   scoop: [0.05, 0.25, 0, 0.12, 1.25, -1.15, 0.3],
   mouth: [0.1, 0.95, 0, 0.25, 1.8, -1.2, 0.05],
   /** wave, fitted to 6.webp: merus vertical beside the carapace, palm high with the fingers hooked inward */
@@ -118,9 +118,9 @@ export function rigDefinition() {
     add(`Mxp3_${id}`, body, new Vector3(sign * hx, hy, hz), basisQuat(xAx, yAx), { limb: `Mxp3_${id}`, side: sign });
   }
   // where the sorted sand is pressed into a pellet: above the mouth, at the top of the buccal frame [L]
-  add('Mouth', body, new Vector3(0, 0.33, 0.44));
-  add('Abdomen_M', body, new Vector3(0, -0.004, ABDOMEN.z0));
-  add('Abdomen_F', body, new Vector3(0, -0.004, ABDOMEN.z0));
+  add('Mouth', body, new Vector3(0, 0.33, 0.42));
+  add('Abdomen_M', body, new Vector3(0, 0.006, ABDOMEN.z0));
+  add('Abdomen_F', body, new Vector3(0, 0.006, ABDOMEN.z0));
 
   for (const { id, sign } of SIDES) {
     const C = CHELIPED;

@@ -135,9 +135,22 @@ const se = (c, n) => Math.sign(c) * Math.pow(Math.abs(c), 2 / n);
  * capA / capB: length of the rounded ends (CW). Normals come from the grid (outward).
  */
 function tube(B, { bone, x0, x1, radial, rings, section, info, capA = 0.02, capB = 0.02, roll = 0, twist = 0 }) {
+  // rings: evenly along the body, and a few more on each rounded end, spaced by angle so the ends are round
+  // domes and rims rather than a facet or two (a segment's end is where the eye goes at a joint)
+  const L = x1 - x0;
+  const ca = Math.min(0.45, capA / L), cb = Math.min(0.45, capB / L);
+  const K = Math.max(1, Math.round(radial / 7));
+  const body = Math.max(2, rings - K);
+  const rows = body + 2 * K;
+  const ringT = (v) => {
+    const j = v * rows;
+    if (j <= K) return ca * (1 - Math.cos((Math.PI / 2) * (j / K)));
+    if (j >= rows - K) return 1 - cb * (1 - Math.cos((Math.PI / 2) * ((rows - j) / K)));
+    return ca + (1 - ca - cb) * ((j - K) / body);
+  };
   patch(B, {
-    rows: rings, cols: radial, bone, wrapCols: true,
-    fn: (u, v, o, inside) => { tubePoint({ x0, x1, section, capA, capB, roll, twist }, v, u * TAU, o, inside); return info(v, u * TAU); },
+    rows, cols: radial, bone, wrapCols: true,
+    fn: (u, v, o, inside) => { const t = ringT(v); tubePoint({ x0, x1, section, capA, capB, roll, twist }, t, u * TAU, o, inside); return info(t, u * TAU); },
   });
 }
 
@@ -150,9 +163,10 @@ function tubePoint({ x0, x1, section, capA = 0.02, capB = 0.02, roll = 0, twist 
   if (t < ca) m = Math.sqrt(Math.max(0, 1 - (1 - t / ca) ** 2));
   else if (t > 1 - cb) m = Math.sqrt(Math.max(0, 1 - ((t - (1 - cb)) / cb) ** 2));
   m = Math.max(m, 0.002);
-  const c = Math.cos(th), sn = Math.sin(th), n = s.n ?? 2;
+  const c = Math.cos(th), sn = Math.sin(th), n = s.n ?? 2, ny = s.ny ?? n;
   const dr = s.dr ?? 0;
-  let y = (s.ry * se(sn, n) + dr * sn) * m, z = (s.rz * se(c, n) + dr * c) * m;
+  // ny < n: the faces bulge less toward the fore and aft margins — a lens, thin-edged like a real flattened segment
+  let y = (s.ry * se(sn, ny) + dr * sn) * m, z = (s.rz * se(c, n) + dr * c) * m;
   // roll: the segment's turn about its axis; twist: the turn growing along it (the cuticle is never a straight prism)
   const rl = roll + twist * (t - 0.5);
   if (rl) { const cr = Math.cos(rl), sr = Math.sin(rl); const yy = y * cr - z * sr; z = y * sr + z * cr; y = yy; }
@@ -164,14 +178,20 @@ function tubePoint({ x0, x1, section, capA = 0.02, capB = 0.02, roll = 0, twist 
 // --------------------------------------------------------------------------------------------- carapace
 
 /**
- * plan outline (left half, x ≥ 0), from the front midline round to the posterior midline: the specimen 009 for
- * the proportions, the live crabs seen from above (057, 049, 020, 052) for the well-rounded anterolateral corners —
- * a broad rounded hexagon, widest about the middle, the front between the orbits straight [P]
+ * plan outline (left half, x ≥ 0), from the front midline round to the posterior midline, traced on the specimen
+ * 009 (CW 292 px; L/W 0.82) and checked on the live crabs seen from above (057, 049, 016): a broad, rounded
+ * trapezoid — wider than long, widest a little behind the middle, the front narrower than the body [P]
  */
 const OUTLINE = [
-  [0, 0.43], [0.04, 0.428], [0.066, 0.422], [0.085, 0.405], [0.13, 0.398], [0.2, 0.39], [0.26, 0.373], [0.31, 0.348],
-  [0.355, 0.31], [0.4, 0.255], [0.44, 0.185], [0.47, 0.1], [0.49, 0.015], [0.495, -0.06], [0.483, -0.16], [0.45, -0.26],
-  [0.395, -0.34], [0.325, -0.39], [0.25, -0.412], [0.12, -0.42], [0, -0.422],
+  // the front: a narrow frontal lobe between the eyestalks, then the orbits sloping back to the blunt external
+  // orbital angles at a half-width of 0.39 (009: 0.39 at z 0.23; 016, 049) — narrower than the carapace, wider
+  // than an egg's nose
+  [0, 0.41], [0.04, 0.408], [0.065, 0.399], [0.085, 0.378], [0.14, 0.362], [0.22, 0.346], [0.29, 0.322],
+  [0.345, 0.288], [0.38, 0.252], [0.402, 0.222],
+  // the sides: convex, diverging to the widest point a little behind the middle (009: z ≈ −0.1)
+  [0.448, 0.15], [0.478, 0.04], [0.495, -0.05], [0.5, -0.12], [0.488, -0.22], [0.458, -0.3],
+  // rounded posterolateral corners and a broad, nearly straight posterior margin (009: half-width 0.25)
+  [0.41, -0.35], [0.34, -0.388], [0.25, -0.405], [0.12, -0.411], [0, -0.412],
 ];
 
 let OUTLINE_POLY = null;
@@ -258,25 +278,34 @@ function carapaceFn(u, v, o, inside) {
   // on every lobe; 6.webp, 008): branchial, epibranchial (behind the orbit), protogastric, mesogastric, cardiac,
   // intestinal
   // (low and soft: the live crab's dorsum reads as one inflated dome with faint regions, 060, 049, 057)
-  dy += dorsal * (0.018 * g(0.28, -0.08, 0.2) + 0.007 * g(0.3, 0.17, 0.1) + 0.006 * g(0.1, 0.2, 0.09)
-    + 0.005 * g(0, 0.08, 0.08) + 0.006 * g(0, -0.15, 0.09) + 0.004 * g(0, -0.3, 0.09));
+  dy += dorsal * (0.02 * g(0.29, -0.1, 0.19) + 0.012 * g(0.31, 0.17, 0.1) + 0.01 * g(0.11, 0.2, 0.09)
+    + 0.008 * g(0, 0.08, 0.08) + 0.01 * g(0, -0.15, 0.09) + 0.006 * g(0, -0.3, 0.09));
   // and never quite symmetric or smooth: low irregular undulations of the dorsum (the left and right halves differ)
   dy += dorsal * (0.004 * vnoise(x * 6.5, z * 6.5, 9) + 0.0018 * vnoise(x * 17, z * 17, 10));
   // furrows: the cervical groove arching across, the H between the gastric and cardiac regions
   const cerv = Math.abs(z - (0.08 - 0.55 * ax * ax));
-  dy -= dorsal * 0.005 * Math.exp(-(cerv * cerv) / 0.0006) * smoothstep(0.04, 0.1, ax) * (1 - smoothstep(0.3, 0.38, ax));
+  dy -= dorsal * 0.008 * Math.exp(-(cerv * cerv) / 0.0005) * smoothstep(0.04, 0.1, ax) * (1 - smoothstep(0.3, 0.38, ax));
   const hx = Math.abs(ax - 0.065);
-  dy -= dorsal * 0.004 * Math.exp(-(hx * hx) / 0.0004) * smoothstep(-0.22, -0.14, z) * (1 - smoothstep(0, 0.06, z));
+  dy -= dorsal * 0.007 * Math.exp(-(hx * hx) / 0.0003) * smoothstep(-0.22, -0.14, z) * (1 - smoothstep(0, 0.06, z));
   // the epibranchial arcs behind the orbits (a furrow in front of the branchial lobes) and the M-shaped ridge in
   // front of the intestinal region — the same curves the material draws (008, 4.webp)
   const eArc = Math.abs(Math.hypot(ax / 0.44, (z - 0.06) / 0.23) - 1) * 0.23;
-  dy -= dorsal * 0.004 * Math.exp(-(eArc * eArc) / 0.0004) * smoothstep(0.12, 0.17, ax) * smoothstep(0.08, 0.14, z);
+  dy -= dorsal * 0.006 * Math.exp(-(eArc * eArc) / 0.0003) * smoothstep(0.12, 0.17, ax) * smoothstep(0.08, 0.14, z);
   const zM = -0.2 - 0.065 * Math.sin(Math.PI * clamp(ax / 0.36, 0, 1)) + 0.035 * Math.exp(-((ax / 0.035) ** 2));
   dy += dorsal * 0.003 * Math.exp(-((z - zM) ** 2) / 0.00015) * (1 - smoothstep(0.32, 0.4, ax));
-  // orbital grooves: a channel along the anterior rim where the eyestalk folds down (001, 009)
-  const orb = smoothstep(0.07, 0.11, ax) * (1 - smoothstep(0.33, 0.4, ax)) * smoothstep(0.33, 0.39, z) * smoothstep(0.32, 0.47, v) * (1 - smoothstep(0.52, 0.6, v));
-  // front: narrow, deflexed lobe with a median furrow
-  const frontLobe = (1 - smoothstep(0.05, 0.075, ax)) * smoothstep(0.36, 0.42, z);
+  // ---- the front, measured along the rim (axR: the outline's half-width at this bearing), so it follows the outline
+  const axR = R * Math.abs(sn);
+  const frontS = smoothstep(0.5, 0.75, c);
+  const rimBand = smoothstep(0.34, 0.46, v) * (1 - smoothstep(0.54, 0.64, v));
+  // orbits: a cavity under the front margin from beside the frontal lobe to the external orbital angle, where the
+  // eyestalk stands and folds down (063, 069, 002, 001, 009)
+  const orb = smoothstep(0.075, 0.11, axR) * (1 - smoothstep(0.33, 0.39, axR)) * frontS * rimBand;
+  // the front margin is not a straight edge: it rises at the external orbital angles, dips along each orbit and
+  // rises a little again at the frontal lobe (063, 016, 069, 004)
+  const ga = (cx, r) => Math.exp(-(((axR - cx) / r) ** 2));
+  const undul = frontS * (0.014 * ga(0.375, 0.045) - 0.016 * ga(0.21, 0.085) + 0.006 * ga(0.03, 0.05));
+  // front: a narrow lobe between the eyestalks, deflexed — it bends down over the face (004, 063, 016)
+  const frontLobe = (1 - smoothstep(0.05, 0.08, axR)) * smoothstep(0.88, 0.97, c) * smoothstep(0.3, 0.46, v) * (1 - smoothstep(0.56, 0.66, v));
   // buccal frame: the face recess where the third maxillipeds sit
   const bx = 1 - smoothstep(0.17, 0.25, ax);
   const byw = smoothstep(0.04, 0.1, y) * (1 - smoothstep(0.32, 0.38, y));
@@ -284,16 +313,18 @@ function carapaceFn(u, v, o, inside) {
   // displacement: along the (approximate) outward normal of the base shape
   const nx = sn * (v <= 0.5 ? Math.sin(phi) : 1), nz = c * (v <= 0.5 ? Math.sin(phi) : 1), ny = v <= 0.5 ? Math.cos(phi) * 1.3 : -Math.abs(Math.cos(phi));
   const nl = Math.hypot(nx, ny, nz) || 1;
-  const disp = dy - 0.024 * orb + 0.008 * frontLobe * dorsal - 0.018 * buccal;
+  const disp = dy - 0.03 * orb + 0.006 * frontLobe - 0.01 * buccal;
   x += (nx / nl) * disp; z += (nz / nl) * disp; y += (ny / nl) * disp * (dorsal ? 1 : 0.4) + (dorsal ? dy * 0.4 : 0);
-  // the front lobe bends down between the eyes
-  if (frontLobe > 0 && v < 0.6) y -= 0.02 * frontLobe * smoothstep(0.38, 0.43, z);
+  // the margin's undulation, fading away from the rim; the lobe's downward bend
+  y += undul * (smoothstep(0.2, 0.46, v) * (1 - smoothstep(0.5, 0.7, v)));
+  y -= 0.018 * frontLobe * smoothstep(0.42, 0.56, v);
   o.set(x, y, z);
   // part: dorsal carapace, lateral wall (branchiostegite / pterygostomial), face, buccal cavity, sternum
   let part = PART.CARAPACE;
   if (v > 0.5) part = c > 0.8 && y > 0.05 ? PART.FACE : (v > 0.8 ? PART.STERNUM : PART.BRANCHIO);
   else if (v > 0.44) part = c > 0.8 ? PART.FACE : PART.BRANCHIO;
-  return [part, 0, orb, 0];
+  // (the orbit's shading: a shallow cavity, half-lit — 063 shows the eyestalk bases in shade, not in a black hole)
+  return [part, 0, orb * 0.55, 0];
 }
 
 function buildCarapace(B, res) {
@@ -311,22 +342,30 @@ function buildEyes(B, res) {
     const limb = 10 + k;
     // basal article: short, wider
     tube(B, {
-      bone: base, x0: -0.03, x1: EYE.baseLen + 0.008, radial, rings: Math.max(3, Math.round(res.ringK * 0.12)),
-      section: (t) => ({ cy: 0, cz: 0, ry: EYE.baseR + (EYE.stalkR0 - EYE.baseR) * smoothstep(0.3, 1, t), rz: EYE.baseR + (EYE.stalkR0 - EYE.baseR) * smoothstep(0.3, 1, t) }),
-      info: () => [PART.EYESTALK, limb * 10, 0, 0.6], capA: 0.02, capB: 0.012,
+      bone: base, x0: -0.03, x1: EYE.baseLen + 0.006, radial, rings: Math.max(3, Math.round(res.ringK * 0.12)),
+      section: (t) => { const r = EYE.baseR + (EYE.stalkR0 * 1.04 - EYE.baseR) * smoothstep(0.2, 1, t); return { cy: 0, cz: 0, ry: r, rz: r * 0.92 }; },
+      info: () => [PART.EYESTALK, limb * 10, 0, 0.6], capA: 0.02, capB: 0.005,
     });
     // stalk + terminal cornea (club-shaped), slightly curved forward at the tip
     const len = EYE.stalkLen + EYE.corneaLen;
     tube(B, {
-      bone: dist, x0: -0.006, x1: len, radial, rings: Math.max(5, Math.round(res.ringK * 0.36)),
+      bone: dist, x0: -0.012, x1: len, radial, rings: Math.max(5, Math.round(res.ringK * 0.36)),
       section: (t) => {
-        const x = -0.006 + t * (len + 0.006);
-        const cs = smoothstep(EYE.stalkLen - 0.03, EYE.stalkLen + 0.02, x);
-        const r = EYE.stalkR0 + (EYE.stalkR1 - EYE.stalkR0) * (x / EYE.stalkLen) + (EYE.corneaR - EYE.stalkR1) * cs * (1 - smoothstep(len - 0.035, len, x) * 0.2);
-        return { cy: 0.006 * smoothstep(EYE.stalkLen * 0.5, len, x), cz: 0, ry: r, rz: r };
+        // a slim neck out of the orbit, widening steadily upward, then the cornea: an ovoid about 1.4 × the stalk
+        // below it (063, 027, 013, 061)
+        const x = -0.012 + t * (len + 0.012);
+        const u = clamp(x / EYE.stalkLen, 0, 1);
+        const stalk = EYE.stalkR0 + (EYE.stalkR1 - EYE.stalkR0) * Math.pow(u, 1.3);
+        const cx = (x - EYE.stalkLen) / EYE.corneaLen;                   // 0 … 1 over the cornea
+        // an ovoid with a full, rounded tip — not an onion dome (063, 027, 013)
+        const bulb = EYE.corneaR * Math.pow(Math.max(0, 1 - ((cx - 0.45) / 0.6) ** 2), 0.4);
+        // the joint with the basal article: a shallow waist, the stalk leaving it from inside (no collar)
+        const r = Math.max(stalk * (1 - smoothstep(0.55, 1.0, cx)), bulb) * (0.93 + 0.07 * smoothstep(-0.006, 0.012, x));
+        // flattened a little front-to-back, and leaning forward at the tip
+        return { cy: 0.008 * smoothstep(EYE.stalkLen * 0.4, len, x), cz: 0, ry: r * 0.94, rz: r };
       },
       info: () => [PART.EYESTALK, limb * 10 + 1, 0, 0.7],
-      capA: 0.01, capB: 0.03,
+      capA: 0.005, capB: 0.022,
     });
   });
 }
@@ -334,7 +373,7 @@ function buildEyes(B, res) {
 // --------------------------------------------------------------------------------------------- mouthparts
 
 /**
- * Third maxillipeds: two inflated shields that close the buccal frame and meet on the midline (002–005, 2.webp,
+ * Third maxillipeds: two thin, gently arched lids that close the buccal frame and meet on the midline (002–005, 2.webp,
  * 4.webp). Bone-local: X from the lateral hinge to the midline, Y the outer face, Z along the hinge — upward on the
  * left plate, downward on the right one (Z = X × Y), so "up" is `zUp * sideUp`. Each plate: the ischium below, the
  * slightly smaller merus above with its upper-medial corner cut obliquely (the notch between the pair), the whole
@@ -353,13 +392,15 @@ function buildMxp(B, res) {
       const rx = 0.5 * W, rz = 0.5 * H;
       // a pillow: straight medial edge above (the pair meets on the midline), both lower corners well rounded so
       // the pair ends in two bulbs with a small notch between them (2.webp, 4.webp)
-      const nExp = s < 0 ? 2.15 : 3.2;
-      let px = rx + rx * se(c, s < 0 ? 2.15 : (c > 0 ? 4.5 : 3.2)), pz = rz * se(s, nExp);
-      // the merus narrows a little upward: its upper-medial corner softly bevelled
+      // the upper medial corner nearly square, so the pair meets right up to the top (063: only a small notch)
+      const nExp = s < 0 ? 2.15 : (c > 0 ? 6 : 3.2);
+      let px = rx + rx * se(c, s < 0 ? 2.15 : (c > 0 ? 10 : 3.2)), pz = rz * se(s, nExp);
+      // the merus narrows a little upward: its upper-medial corner only slightly bevelled, so the pair closes the
+      // frame right up to the front with just a small notch between them (063, 027)
       const cut = smoothstep(0.2, 0.9, c) * smoothstep(0.3, 0.95, s);
-      px -= 0.015 * cut; pz -= 0.018 * cut;
+      px -= 0.004 * cut; pz -= 0.006 * cut;
       const lat = smoothstep(0.2, 0.9, -c) * smoothstep(0.3, 0.9, s);
-      pz -= 0.02 * lat;
+      pz -= 0.016 * lat;
       return [px, pz];
     };
     for (const face of [1, -1]) {
@@ -369,10 +410,13 @@ function buildMxp(B, res) {
           const a = u * TAU, r = 1 - v;
           const [px, pz] = outline(a);
           const cx = 0.5 * W, x = cx + (px - cx) * r, zu = pz * r;
-          // dome: highest a little medial of centre and in the upper (merus) half
+          // a thin plate, gently arched: highest a little medial of centre and in the upper (merus) half, falling
+          // off evenly to thin margins — a lid over the mouth, not a pillow (063, 027, 002)
           const dx = (x - 0.56 * W) / (0.62 * W), dz = (zu - 0.06 * H) / (0.62 * H);
-          const dome = Math.pow(Math.max(0, 1 - dx * dx - dz * dz * 0.85), 0.62) * smoothstep(0, 0.35, 1 - r * r) ** 0.25;
-          const y = face > 0 ? T * (0.12 + 0.88 * dome) : -0.004 - 0.01 * dome;
+          // the margin a rounded rim, not a cut edge: the lid's thickness rolls over it (r → 1)
+          const rimR = Math.sqrt(Math.max(0, 1 - ((r - 0.86) / 0.14) ** 2 * (r > 0.86 ? 1 : 0)));
+          const dome = Math.max(0, 1 - dx * dx - dz * dz * 0.85) * smoothstep(0, 0.5, 1 - r * r) ** 0.5;
+          const y = face > 0 ? T * (0.28 * rimR + 0.72 * dome) : -0.003 - 0.004 * rimR - 0.004 * dome;
           o.set(x, y, zu * up);
           inside.set(x, y - face, zu * up);
           return [PART.MXP, (12 + k) * 10, 0, 0.3];
@@ -396,8 +440,9 @@ function buildAbdomen(B, res) {
         const tip = sex === 'm' ? Math.sqrt(Math.max(0.06, 1 - Math.pow(Math.max(0, v - 0.7) / 0.3, 2))) : Math.sqrt(Math.max(0.05, 1 - Math.pow(Math.max(0, v - 0.55) / 0.45, 2)));
         const w = (A.width0 + (A.width1 - A.width0) * v) * 0.5 * tip;
         const x = (u * 2 - 1) * w;
-        // a convex plate with rounded flanks
-        const bulge = (sex === 'm' ? 0.042 : 0.03) * Math.sqrt(Math.max(0, 1 - (u * 2 - 1) ** 2)) * (0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, v * 1.2)));
+        // a low convex plate with rounded flanks, folded tight into the sternal cavity: its margins sink into the
+        // sternum and only the middle stands a little proud — it never hangs below the body (063, 027 from the front)
+        const bulge = (sex === 'm' ? 0.022 : 0.02) * Math.sqrt(Math.max(0, 1 - (u * 2 - 1) ** 2)) * (0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, v * 1.2)));
         o.set(x, -bulge, zz);
         inside.set(x, 1, zz);
         return [PART.ABDOMEN, 140, 0, 0.2];
@@ -409,28 +454,34 @@ function buildAbdomen(B, res) {
 // --------------------------------------------------------------------------------------------- chelipeds
 
 const N_TEETH = 13;
+/** the palm starts this far inside the carpus (its condyle) */
+const PALM_X0 = -0.02;
 
 /** cheliped merus: stout, trigonal, its upper margin granular (the material); the inner face carries a tympanum */
 function chelaMerusSection(t, th) {
+  // slim, trigonal (063, 027: the arm is a thin rod beside the face; the bulk is the carpus' rounded shoulder)
   const p = Math.sin(Math.PI * clamp(t * 0.85 + 0.12, 0, 1));
   const tri = 1 + 0.12 * Math.cos(3 * th - Math.PI / 2);
-  return { cy: 0.01 * p, cz: 0, ry: (0.05 + 0.028 * p) * tri, rz: (0.034 + 0.012 * p) * tri, n: 2.2 };
+  const C = CHELIPED;
+  return { cy: 0.006 * p, cz: 0, ry: C.merusH * 0.5 * (0.72 + 0.28 * p) * tri, rz: C.merusW * 0.5 * (0.78 + 0.22 * p) * tri, n: 2.2 };
 }
 
 /** propodus: the palm (inflated, oval) drawn out into the long fixed finger, denticles on its cutting edge */
 function chelaPropodusSection(t, th, res) {
   const C = CHELIPED;
   const PL = C.palm + C.finger;
-  const x = -0.012 + t * (PL + 0.012);
+  const x = PALM_X0 + t * (PL - PALM_X0);
   const f = smoothstep(C.palm - 0.03, C.palm + 0.025, x);              // 0 palm … 1 finger
+  // the palm leaves the carpus' rim by a slim condyle, then opens at once to its full depth (002, 011)
+  const kc = 0.78 + 0.22 * smoothstep(-0.004, 0.024, x);
   const pt = clamp(x / C.palm, 0, 1);
   // a broad oval plate, full almost to its distal margin (2.webp, 003–005)
   // an inflated bulb, deepest a little proximal of the middle, its upper margin arching down to the dactylus
   const palmRy = C.palmH * 0.5 * (0.55 + 0.45 * Math.sin(Math.PI * clamp(pt * 0.75 + 0.16, 0, 1)));
   const palmRz = C.palmW * 0.5 * (0.7 + 0.3 * Math.sin(Math.PI * clamp(pt * 0.85 + 0.12, 0, 1)));
   const ft = clamp((x - C.palm) / C.finger, 0, 1);
-  const taper = Math.pow(1 - ft, 0.85) * (1 - 0.15 * ft);
-  const fRy = C.fingerH * 0.5 * (0.08 + 0.92 * taper), fRz = C.fingerW * 0.5 * (0.1 + 0.9 * taper);
+  const taper = Math.pow(1 - ft, 1.05) * (1 - 0.1 * ft);
+  const fRy = C.fingerH * 0.5 * (0.04 + 0.96 * taper), fRz = C.fingerW * 0.5 * (0.06 + 0.94 * taper);
   // the finger leaves the palm along its lower half and curves up to meet the hooked dactylus: a narrow gape,
   // the tips touching (2.webp, 6.webp)
   const fCy = -C.palmH * 0.17 + 0.035 * ft * ft;
@@ -440,8 +491,10 @@ function chelaPropodusSection(t, th, res) {
     dr = 0.0055 * Math.pow(up, 10) * (0.5 + 0.5 * Math.cos(TAU * N_TEETH * ft)) * (1 - ft);
   }
   // the palm's faces are gently uneven (011), the fingers smooth
-  if (res.teeth) dr += 0.0012 * vnoise(pt * 16, th * 2.4, 31) * (1 - f);
-  return { cy: f * fCy + (1 - f) * 0.012 * Math.sin(Math.PI * pt), cz: 0.004 * f, ry: palmRy * (1 - f) + fRy * f, rz: palmRz * (1 - f) + fRz * f, n: 2 - 0.1 * f, dr };
+  // (sampled round a circle so the noise closes on itself: no seam down the palm)
+  if (res.teeth) dr += 0.0012 * vnoise(pt * 16 + 2.4 * Math.cos(th), 2.4 * Math.sin(th), 31) * (1 - f);
+  // the palm a thin plate with rounded (not blocky) margins: faces gently convex, edges thin (063, 011)
+  return { cy: f * fCy + (1 - f) * 0.012 * Math.sin(Math.PI * pt), cz: 0.004 * f, ry: (palmRy * (1 - f) + fRy * f) * kc, rz: (palmRz * (1 - f) + fRz * f) * kc, n: 1.6 + 0.4 * f, ny: 2.1 - 0.1 * f, dr };
 }
 
 
@@ -459,23 +512,31 @@ function buildChelipeds(B, res) {
     tube(B, { bone: bi('Ischium'), x0: -0.01, x1: C.ischium + 0.01, radial, rings: rings(0.06), section: (t) => ({ cy: 0, cz: 0, ry: 0.05 + 0.02 * t, rz: 0.042 }), info: () => [PART.CHELA_ARM, limb * 10 + 2, 0, 0.2] });
     // merus: stout, trigonal, its upper margin granular (material)
     tube(B, {
-      bone: bi('Merus'), x0: -0.015, x1: C.merus + 0.012, radial, rings: rings(C.merus),
+      bone: bi('Merus'), x0: -0.015, x1: C.merus + 0.008, radial, rings: rings(C.merus),
       section: chelaMerusSection,
-      info: (t) => [PART.CHELA_ARM, limb * 10 + 3, membrane(t, C.merus), 0.15], capA: 0.03, capB: 0.035,
+      info: (t) => [PART.CHELA_ARM, limb * 10 + 3, membrane(t, C.merus), 0.15], capA: 0.02, capB: 0.026,
     });
+    // carpus: a rounded knob, leaving the merus' rim by a slim condyle and swelling toward the palm, its dorsal face
+    // domed; it ends in a broad rim that takes the palm's condyle (002, 063, 011)
+    const cX0 = -0.022, cL = C.carpus + 0.008 - cX0;
     tube(B, {
-      bone: bi('Carpus'), x0: -0.014, x1: C.carpus + 0.014, radial, rings: rings(C.carpus),
-      section: (t) => { const p = Math.sin(Math.PI * clamp(t * 0.8 + 0.15, 0, 1)); return { cy: 0.004, cz: 0, ry: 0.044 + 0.022 * p, rz: 0.036 + 0.016 * p }; },
-      info: (t) => [PART.CHELA_ARM, limb * 10 + 4, membrane(t, C.carpus), 0.15], capA: 0.03, capB: 0.03,
+      bone: bi('Carpus'), x0: cX0, x1: cX0 + cL, radial, rings: rings(C.carpus),
+      section: (t) => {
+        const x = cX0 + t * cL;
+        const p = smoothstep(0, 0.75, t) * (1 - 0.1 * smoothstep(0.85, 1, t));
+        const k = (0.55 + 0.45 * smoothstep(-0.002, 0.03, x)) * (1 + 0.04 * smoothstep(1 - 0.02 / cL, 1 - 0.004 / cL, t));
+        return { cy: 0.006 * p, cz: 0, ry: (0.034 + 0.03 * p) * k, rz: (0.028 + 0.022 * p) * k, n: 2.2, ny: 1.8 };
+      },
+      info: (t) => [PART.CHELA_ARM, limb * 10 + 4, membrane(t, cL, 0.034), 0.15], capA: 0.01, capB: 0.01,
     });
     // propodus: inflated palm drawn out into the long fixed finger (ventral), denticles on its cutting edge
     const PL = C.palm + C.finger;
     const nT = N_TEETH;
     tube(B, {
-      bone: bi('Propodus'), x0: -0.012, x1: PL, radial: Math.round(radial * 1.25), rings: rings(PL) + 4,
+      bone: bi('Propodus'), x0: PALM_X0, x1: PL, radial: Math.round(radial * 1.25), rings: rings(PL) + 4,
       section: (t, th) => chelaPropodusSection(t, th, res),
-      info: (t) => [PART.PALM, limb * 10 + 5, membrane(t, PL, 0.02), 0.1],
-      capA: 0.03, capB: 0.012,
+      info: (t) => [PART.PALM, limb * 10 + 5, membrane(t, PL - PALM_X0, 0.03), 0.1],
+      capA: 0.012, capB: 0.012,
     });
     // dactylus (movable finger): hinged at the palm's distal dorsal corner, curving down to cross the fixed tip
     tube(B, {
@@ -483,15 +544,17 @@ function buildChelipeds(B, res) {
       section: (t, th) => {
         const x = -0.014 + t * (C.dactylus + 0.014);
         const ft = clamp(x / C.dactylus, 0, 1);
+        // hinged on the palm by a slim condyle (the joint is a neck, not a ball)
+        const kc = 0.62 + 0.38 * smoothstep(-0.002, 0.016, x);
         let dr = 0;
         if (res.teeth && ft > 0.08 && ft < 0.92) {
           const down = Math.max(0, -Math.sin(th));
           dr = 0.005 * Math.pow(down, 10) * (0.5 + 0.5 * Math.cos(TAU * (nT - 1) * ft + 1.3)) * (1 - ft);
         }
-        const taper = Math.pow(1 - ft, 0.85) * (1 - 0.15 * ft);
-        return { cy: -0.045 * ft * ft, cz: 0.003 * ft, ry: C.fingerH * 0.5 * (0.08 + 0.97 * taper), rz: C.fingerW * 0.5 * (0.1 + 0.9 * taper), n: 2, dr };
+        const taper = Math.pow(1 - ft, 1.05) * (1 - 0.1 * ft);
+        return { cy: -0.05 * ft * ft, cz: 0.003 * ft, ry: C.fingerH * 0.5 * (0.04 + 0.98 * taper) * kc, rz: C.fingerW * 0.5 * (0.06 + 0.94 * taper) * kc, n: 2, dr };
       },
-      info: () => [PART.FINGER, limb * 10 + 6, 0, 0.1], capA: 0.022, capB: 0.01,
+      info: () => [PART.FINGER, limb * 10 + 6, 0, 0.1], capA: 0.01, capB: 0.006,
     });
   });
 }
@@ -499,70 +562,90 @@ function buildChelipeds(B, res) {
 // --------------------------------------------------------------------------------------------- walking legs
 
 /**
- * The seven segments of a walking leg as tube specs (bone-local). Meri, carpi and propodi are flattened with their
- * broad faces up and down: wide along Z (forward / back), shallow along Y (dorsal), so the living crab shows the
- * broad face from above and the thin edge from the front (049, 057 vs 063; Morphology LEGS). Each merus carries the
- * faint hollow of its tympanum on both broad faces. `roll` turns the anterior margin a little up.
+ * The seven segments of a walking leg as tube specs (bone-local). Meri, carpi and propodi are flat blades with their
+ * broad faces up and down: wide along Z (forward / back), shallow along Y (dorsal) — about a third as deep as broad
+ * (009, 057, 063; Morphology LEGS). Each merus carries the
+ * faint hollow of its tympanum on both broad faces. `roll` tilts the dorsal face forward (the anterior margin
+ * down), so the blades show their faces from the front as well as from above (063, 069).
  */
 function legSegments(L, sign, res) {
-  const roll = -(L.roll ?? 0) * sign;
+  const roll = (L.roll ?? 0) * sign;
   // every leg its own small irregularities (left and right legs differ; 009, 049: no two segments alike)
   const lseed = L.name * 13 + (sign > 0 ? 0 : 101);
   const tw = (k) => (0.08 + 0.08 * hash01(lseed, k, 3)) * sign * (hash01(lseed, k, 4) < 0.5 ? 1 : -1);
-  /** the articulations: each segment narrows into a short neck at both ends (where the membrane joins it) */
-  const neck = (t, a, b, w = 0.07) => 1 - a * Math.exp(-((t / w) ** 2)) - b * Math.exp(-(((1 - t) / w) ** 2));
-  /** low, irregular undulations of the cuticle (≈ 0.02 CW across, 0.001–0.002 CW high), only at the close-up level */
-  const bump = (t, th, len, k, amp) => (res.teeth ? amp * (vnoise(t * len * 48, th * 2.6 + k * 7.1, lseed + k) + 0.5 * vnoise(t * len * 120, th * 5.2 + k * 3.3, lseed + k + 50)) : 0);
+  /** each segment's own slight deviation in breadth (±6 %) — no two alike */
+  const jw = (k) => 1 + 0.12 * (hash01(lseed, k, 9) - 0.5);
+  const neck = (t, a, b, w = 0.06) => 1 - a * Math.exp(-((t / w) ** 2)) - b * Math.exp(-(((1 - t) / w) ** 2));
+  /**
+   * the articulations, as on the real legs (009, 068, 016): a segment ends in a broad, slightly flared rim (`lip`)
+   * closed by a low dome, and the next one starts INSIDE it as a slim condyle (`cond`: `a` of its breadth, swelling
+   * to full within `w` CW of the joint) carrying the pale joint membrane — a socket and a neck, not two rounded
+   * sausage ends pressed together. x: CW from the joint along the segment.
+   */
+  const cond = (x, a, w) => a + (1 - a) * smoothstep(-0.002, w, x);
+  const lip = (t, len) => 1 + 0.05 * smoothstep(1 - 0.022 / len, 1 - 0.004 / len, t);
+  /** low, irregular undulations of the cuticle (≈ 0.02 CW across, 0.001 CW high), only at the close-up level */
+  // (sampled round a circle, so it closes on itself without a seam along the segment)
+  const bump = (t, th, len, k, amp) => (res.teeth ? amp * (vnoise(t * len * 48 + 2.6 * Math.cos(th), 2.6 * Math.sin(th) + k * 7.1, lseed + k) + 0.5 * vnoise(t * len * 120 + 5.2 * Math.cos(th), 5.2 * Math.sin(th) + k * 3.3, lseed + k + 50)) : 0);
+  const mX0 = -0.012, mL = L.merus + 0.004 - mX0;
+  const cX0 = -0.018, cL = L.carpus + 0.004 - cX0;
+  const pX0 = -0.016, pL = L.propodus + 0.004 - pX0;
+  const dX0 = -0.012, dL = L.dactylus - dX0;
   return {
-    Coxa: { x0: -0.035, x1: L.coxa + 0.008, capA: 0.026, capB: 0.012, section: (t) => ({ cy: 0, cz: 0, ry: 0.04 - 0.004 * t, rz: 0.046 }), part: PART.LEG_PROX, thin: 0.35, mem: 0 },
-    Basis: { x0: -0.01, x1: L.basis + 0.006, capA: 0.01, capB: 0.01, section: () => ({ cy: 0, cz: 0, ry: 0.036, rz: 0.042 }), part: PART.LEG_PROX, thin: 0.35, mem: 0.025 },
-    Ischium: { x0: -0.006, x1: L.ischium + 0.01, capA: 0.008, capB: 0.012, roll: roll * 0.5, section: (t) => ({ cy: 0, cz: 0, ry: 0.034, rz: 0.044 + 0.012 * t, n: 2.2 }), part: PART.LEG_PROX, thin: 0.4, mem: 0 },
+    Coxa: { x0: -0.035, x1: L.coxa + 0.006, capA: 0.024, capB: 0.01, section: (t) => ({ cy: 0, cz: 0, ry: 0.034 - 0.004 * t, rz: 0.042 }), part: PART.LEG_PROX, thin: 0.35, mem: 0 },
+    Basis: { x0: -0.008, x1: L.basis + 0.005, capA: 0.008, capB: 0.008, section: (t) => ({ cy: 0, cz: 0, ry: 0.03, rz: 0.036 * neck(t, 0.2, 0), ny: 1.8 }), part: PART.LEG_PROX, thin: 0.35, mem: 0.025 },
+    Ischium: { x0: -0.005, x1: L.ischium + 0.008, capA: 0.006, capB: 0.006, roll: roll * 0.5, section: (t) => ({ cy: 0, cz: 0, ry: 0.028, rz: (0.032 + 0.008 * t) * neck(t, 0.15, 0) * lip(t, L.ischium + 0.013), n: 2.2, ny: 1.7 }), part: PART.LEG_PROX, thin: 0.4, mem: 0 },
     Merus: {
-      x0: -0.012, x1: L.merus + 0.008, capA: 0.012, capB: 0.009, roll, twist: tw(3),
+      x0: mX0, x1: mX0 + mL, capA: 0.008, capB: 0.009, roll, twist: tw(3),
       section: (t, th) => {
-        // narrow at its proximal articulation, broadest beyond the middle, then drawn in to the knee (009, 049)
-        // … and the distal end opens a little into the socket that takes the carpus (no capsule ends)
-        const prof = (0.62 + 0.38 * smoothstep(0, 0.22, t)) * (1 + 0.06 * smoothstep(0.35, 0.75, t)) * (1 - 0.1 * smoothstep(0.8, 0.95, t)) * (1 + 0.06 * smoothstep(0.95, 1, t)) * neck(t, 0.05, 0);
+        // a long leaf, flat as a blade: half its breadth where it leaves the ischium, broadest a little before the
+        // middle (0.15 CW with the clear margins), narrowing to the knee (009, 007, 049, 057, 016); lens-shaped in
+        // section, 0.05 thick, with thin fore and aft margins — broad from above, a thin edge from the front (063)
+        const leaf = Math.pow(Math.sin(Math.PI * clamp(0.06 + 0.86 * Math.pow(t, 0.85), 0, 1)), 0.6);
+        const prof = (0.5 + 0.5 * leaf) * cond(mX0 + t * mL, 0.62, 0.03) * lip(t, mL) * jw(3);
         const sn = Math.sin(th), c = Math.cos(th);
         // the tympanum: an oval hollow over most of each broad face (up and down)
-        const ov = Math.max(0, 1 - ((t - 0.52) / 0.36) ** 2) * Math.max(0, 1 - (c / 0.72) ** 2);
-        const hollow = res.teeth ? 0.0022 * ov : 0;
-        // the knee's dorsal condyle, a faint ridge along the upper face, and the cuticle's own small undulations
-        let dr = 0.006 * Math.exp(-(((1 - t) / 0.07) ** 2)) * Math.max(0, sn) ** 2;
-        dr += 0.0022 * Math.exp(-((c / 0.28) ** 2)) * Math.max(0, sn) * smoothstep(0.1, 0.3, t) * (1 - smoothstep(0.7, 0.92, t));
-        dr += bump(t, th, L.merus, 3, 0.0016);
-        // a flattened plate with distinct fore and aft margins, not an oval tube (009, 049)
-        return { cy: -0.003 * Math.sin(Math.PI * t), cz: 0, ry: L.merusD * 0.5 * (0.85 + 0.15 * prof) - hollow * Math.abs(sn), rz: L.merusB * 0.5 * prof * (1 + 0.04 * c), n: 2.9, dr };
+        const ov = Math.max(0, 1 - ((t - 0.48) / 0.34) ** 2) * Math.max(0, 1 - (c / 0.72) ** 2);
+        const hollow = res.teeth ? 0.0014 * ov : 0;
+        // the knee's dorsal condyle and the cuticle's own small undulations
+        let dr = 0.0035 * Math.exp(-(((1 - t) / 0.06) ** 2)) * Math.max(0, sn) ** 2;
+        dr += bump(t, th, L.merus, 3, 0.001);
+        return { cy: -0.003 * Math.sin(Math.PI * t), cz: 0, ry: L.merusD * 0.5 * (0.6 + 0.4 * prof) - hollow * Math.abs(sn), rz: L.merusB * 0.5 * prof * (1 + 0.04 * c), n: 2.2, ny: 1.35, dr };
       },
-      part: PART.MERUS, thin: 0.55, mem: 0.025,
+      part: PART.MERUS, thin: 0.55, mem: 0.028,
     },
     Carpus: {
-      x0: -0.016, x1: L.carpus + 0.008, capA: 0.012, capB: 0.008, roll: roll * 0.8, twist: tw(4),
+      x0: cX0, x1: cX0 + cL, capA: 0.008, capB: 0.009, roll: roll * 0.95, twist: tw(4),
       section: (t, th) => {
-        // short and stout: a rounded knob where it meets the knee, widening distally (049, 068)
-        const p = (0.72 + 0.28 * smoothstep(0, 0.45, t)) * neck(t, 0.06, 0) * (1 + 0.05 * smoothstep(0.93, 1, t));
-        const dr = 0.004 * Math.exp(-((t / 0.12) ** 2)) * Math.max(0, Math.sin(th)) ** 2 + bump(t, th, L.carpus, 4, 0.0012);
-        return { cy: 0.002 * t, cz: 0, ry: L.carpusD * 0.5 * (0.85 + 0.15 * p), rz: L.carpusB * 0.5 * p, n: 2.6, dr };
+        // short and club-shaped: out of the knee by a slim condyle, flaring to its full breadth near the propodus
+        // (009, 049, 068, 007)
+        const p = (0.5 + 0.5 * Math.pow(smoothstep(0, 0.6, t), 0.8)) * cond(cX0 + t * cL, 0.55, 0.024) * lip(t, cL) * jw(4);
+        const dr = 0.0025 * Math.exp(-((t / 0.12) ** 2)) * Math.max(0, Math.sin(th)) ** 2 + bump(t, th, L.carpus, 4, 0.0008);
+        return { cy: 0.002 * t, cz: 0, ry: L.carpusD * 0.5 * (0.65 + 0.35 * p), rz: L.carpusB * 0.5 * p, n: 2.2, ny: 1.4, dr };
       },
-      part: PART.LEG_DIST, thin: 0.6, mem: 0.025,
+      part: PART.LEG_DIST, thin: 0.6, mem: 0.03,
     },
     Propodus: {
-      x0: -0.014, x1: L.propodus + 0.006, capA: 0.01, capB: 0.008, roll: roll * 0.6, twist: tw(5),
+      x0: pX0, x1: pX0 + pL, capA: 0.008, capB: 0.008, roll: roll * 0.85, twist: tw(5),
       section: (t, th) => {
-        // parallel-sided, tapering a little to the dactylus, bowed slightly ventrally (009)
-        const p = (0.8 + 0.2 * smoothstep(0, 0.2, t)) * (1 - 0.16 * t) * neck(t, 0.05, 0) * (1 + 0.05 * smoothstep(0.93, 1, t));
-        return { cy: -0.004 * Math.sin(Math.PI * t), cz: 0, ry: L.propD * 0.5 * (0.9 + 0.1 * p), rz: L.propB * 0.5 * p, n: 2.6, dr: bump(t, th, L.propodus, 5, 0.001) };
+        // an elongate oval: out of the carpus by a slim condyle, broadest in its proximal third, narrowing to half
+        // that at the dactylus; bowed a little ventrally (009, 007)
+        const p = (0.72 + 0.28 * smoothstep(0, 0.25, t)) * (1 - 0.36 * smoothstep(0.3, 1, t)) * cond(pX0 + t * pL, 0.55, 0.022) * lip(t, pL) * jw(5);
+        return { cy: -0.005 * Math.sin(Math.PI * t), cz: 0, ry: L.propD * 0.5 * (0.7 + 0.3 * p), rz: L.propB * 0.5 * p, n: 2.1, ny: 1.45, dr: bump(t, th, L.propodus, 5, 0.0007) };
       },
-      part: PART.LEG_DIST, thin: 0.65, mem: 0.025,
+      part: PART.LEG_DIST, thin: 0.65, mem: 0.028,
     },
-    // dactylus: long, lanceolate, sharp; legs 1–3 curve a little ventrally, the last one less (S. sheni) [R]
+    // dactylus: long, slender, lanceolate — broadest just beyond its base, then a long taper to a needle point —
+    // curving ventrally (and a little backward) (007, 009, 068, 063); the last leg's straighter (S. sheni) [R]
     Dactylus: {
-      x0: -0.012, x1: L.dactylus, capA: 0.01, capB: 0.004, roll: roll * 0.4, twist: tw(6),
+      x0: dX0, x1: L.dactylus, capA: 0.007, capB: 0.002, roll: roll * 0.6, twist: tw(6),
       section: (t, th) => {
-        const lance = (0.78 + 0.32 * Math.sin(Math.PI * clamp(t * 1.15 + 0.05, 0, 1))) * (1 - t ** 1.5) * neck(t, 0.08, 0);
+        const u = clamp((dX0 + t * dL) / L.dactylus, 0, 1);
+        const lance = (0.75 + 0.25 * Math.sin(Math.PI * clamp(u * 1.6 + 0.05, 0, 1))) * Math.pow(1 - u, 1.15) * cond(dX0 + t * dL, 0.6, 0.016);
         // fine longitudinal ridges (068)
-        const ridge = res.teeth ? 0.0006 * Math.cos(th * 6) * (1 - t) : 0;
-        return { cy: -(L.name === 4 ? 0.008 : 0.018) * t * t, cz: 0.003 * sign * t * t, ry: L.dacD * 0.5 * lance + 0.0006, rz: L.dacB * 0.5 * lance + 0.0006, n: 2, dr: ridge };
+        const ridge = res.teeth ? 0.0004 * Math.cos(th * 6) * (1 - u) : 0;
+        const bend = L.name === 4 ? 0.025 : 0.065;
+        return { cy: -bend * u * u, cz: 0.008 * sign * u * u, ry: L.dacD * 0.5 * lance + 0.0003, rz: L.dacB * 0.5 * lance + 0.0003, n: 2, ny: 1.55, dr: ridge };
       },
       part: PART.DACTYL, thin: 0.75, mem: 0.02,
     },
@@ -675,10 +758,10 @@ function buildSetae(B) {
     }
     const ci = (s) => rig.index.get(`Cheliped_${id}_${s}`);
     const C = CHELIPED;
-    const merusSpec = { x0: -0.015, x1: C.merus + 0.012, capA: 0.03, capB: 0.035, section: chelaMerusSection };
+    const merusSpec = { x0: -0.015, x1: C.merus + 0.008, capA: 0.02, capB: 0.026, section: chelaMerusSection };
     fringe(ci('Merus'), merusSpec, 0.15, 0.85, Math.PI / 2, 3, [0.02, 0.04], (8 + sk) * 10 + 3, 0.6, 0.002);
-    const propSpec = { x0: -0.012, x1: C.palm + C.finger, capA: 0.03, capB: 0.012, section: (t, th) => chelaPropodusSection(t, th, res) };
-    const palmEnd = (C.palm + 0.012) / (C.palm + C.finger + 0.012);
+    const propSpec = { x0: PALM_X0, x1: C.palm + C.finger, capA: 0.012, capB: 0.012, section: (t, th) => chelaPropodusSection(t, th, res) };
+    const palmEnd = (C.palm - PALM_X0) / (C.palm + C.finger - PALM_X0);
     fringe(ci('Propodus'), propSpec, 0.12, palmEnd * 0.9, Math.PI / 2, 3, [0.02, 0.035], (8 + sk) * 10 + 5, 0.6, 0.002);
     fringe(ci('Propodus'), propSpec, palmEnd, palmEnd + (1 - palmEnd) * 0.6, -Math.PI / 2, 2, [0.015, 0.025], (8 + sk) * 10 + 5, 0.8, 0.0018);
     // third maxillipeds: a dense fringe on the medial margin

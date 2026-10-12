@@ -1,4 +1,5 @@
 import { Color, DoubleSide, FrontSide, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, MultiplyBlending, Vector4 } from 'three';
+import { CHELIPED, EYE } from './ScopimeraGlobosaMorphology.js';
 
 /**
  * コメツキガニ materials. Everything procedural, evaluated in the shader from the bind-pose coordinates the geometry
@@ -310,7 +311,8 @@ const FRAG_SURFACE = /* glsl */ `
     float gran = 0.5 + 0.5 * cos(q.x * 6.2831853 * 34.0);
     h += subOrb * faceM * 0.003 * gran;
     vec3 fcol = mix(dcol, ground, subOrb * gran * 0.2);
-    fcol = mix(fcol, mix(vec3(0.5, 0.46, 0.4), vec3(0.5, 0.46, 0.56), clamp(purple + red, 0.0, 1.0)), smoothstep(0.1, 0.04, P.y) * 0.6);
+    float lowF = smoothstep(0.12, 0.04, P.y);
+    fcol = mix(fcol, mix(vec3(0.5, 0.46, 0.4), vec3(0.5, 0.46, 0.56), clamp(purple + red, 0.0, 1.0)), lowF * 0.3);
     // ---- ventral (3.webp): the sternum's lateral plates violet ("the underside red-purple" [L]), deepest toward the
     // legs, pale lavender in front of the chelipeds' bases; every suture and plate margin white; fine grey dots.
     float zs = P.z;
@@ -319,10 +321,13 @@ const FRAG_SURFACE = /* glsl */ `
     // the live underside's violet: deep in pale and purplish individuals (3.webp), faint in the sand-coloured ones
     float violetAmt = clamp(0.35 + 0.5 * purple + 0.3 * red + 0.4 * smoothstep(0.82, 0.86, pale), 0.0, 1.0);
     float violet = violetAmt * (1.0 - smoothstep(0.16, 0.26, zs)) * smoothstep(0.03, 0.12, q.x);
-    vec3 vcol = mix(vec3(0.62, 0.6, 0.72), vec3(0.11, 0.045, 0.3), violet * (0.8 + 0.2 * smoothstep(0.1, 0.3, q.x)));
+    vec3 vcol = mix(vec3(0.54, 0.52, 0.6), vec3(0.11, 0.045, 0.3), violet * (0.8 + 0.2 * smoothstep(0.1, 0.3, q.x)));
     vcol = mix(vcol, vec3(0.82, 0.82, 0.84), suture * 0.85);
     vcol = mix(vcol, vec3(0.1, 0.09, 0.11), kgSpeck(P * 85.0 + seedP + 11.0, 0.45, 0.26, fw * 85.0, idd) * 0.5);
     vcol *= 1.0 - (1.0 - smoothstep(0.004, 0.012, q.x)) * 0.3;
+    // the front of the sternum lies back under the maxillipeds and the folded chelae: in their shade in the living
+    // crab (063, 027), whatever the sun — too small for the shadow map to catch
+    vcol *= 1.0 - 0.55 * smoothstep(0.14, 0.3, zs);
     float under = smoothstep(0.6, 0.72, s) * (1.0 - ventral) * (1.0 - smoothstep(0.3, 0.42, P.z));
     vec3 ucol = mix(vcol, vec3(0.55, 0.56, 0.62), (1.0 - smoothstep(0.6, 0.7, s)) * 0.6);
     vec3 scol = mix(dcol, ucol, under);
@@ -349,18 +354,29 @@ const FRAG_SURFACE = /* glsl */ `
     if (det > 0.3) glint = kgSpeck(P * 160.0 + seedP + 41.0, 0.12 + 0.18 * side, 0.18, fw * 160.0, idd) * 0.6;
     trans = 0.1 + 0.25 * rim + 0.08 * side;
     // the granular dorsum breaks the water film into sparkles: no mirror coat there (2.webp)
-    kgCoatK = 1.0 - 0.85 * dorsal - 0.5 * side;
+    kgCoatK = 1.0 - 0.85 * dorsal - 0.5 * side - 0.75 * ventral;
     wetBias = 0.25 * ventral + 0.15 * faceM + 0.2 * cavity;
     sandExp = 0.35 * ventral + 0.25 * side * smoothstep(0.55, 0.75, s) + dirt * 0.6;
     ao *= mix(1.0, 0.6, smoothstep(0.6, 0.9, s) * (1.0 - ventral)); // under the overhang of the carapace
+    // the underside faces the sand a few tenths of a millimetre away: it sees little sky and no sun, and shows no
+    // sheen — seen from the front it is a shadow under the maxillipeds (063, 027), not a pale glassy plate
+    ao *= 1.0 - 0.7 * ventral;
+    trans *= 1.0 - ventral;
+    // and the low front of the sternum under the maxillipeds, a hair above the sand, is in their shadow (063)
+    ao *= 1.0 - 0.5 * lowF * faceM;
+    kgCoatK -= 0.6 * lowF * faceM;
   }
   // ------------------------------------------------------------------ eyestalks and cornea
   else if (part < 5.5) {
     float isDistal = step(0.5, seg);
     float th = vKgUv.x * 6.2831853;
-    // the cornea is an oblique window: low on the front of the tip, high on its back (4.webp)
-    float edge = 0.192 - 0.018 * cos(th - 0.6);
-    float cornea = isDistal * smoothstep(edge - 0.003, edge + 0.003, P.x);
+    // the cornea is an oblique oval window on the front and outer face of the tip: low on the front, and the clear,
+    // speckled cuticle of the stalk wraps round behind it and over its very end — the eye is a club with a dark
+    // window, not a black ball on a stick (013, 063, 4.webp)
+    float edge = ${(EYE.stalkLen + 0.007).toFixed(4)} - 0.014 * cos(th - 0.6);
+    float facing = smoothstep(-0.5, 0.15, cos(th - 0.6));
+    float tipX = ${(EYE.stalkLen + EYE.corneaLen).toFixed(4)};
+    float cornea = isDistal * smoothstep(edge - 0.003, edge + 0.003, P.x) * facing * (1.0 - 0.6 * smoothstep(tipX - 0.01, tipX + 0.004, P.x));
     // the stalk: pale, translucent, dusted with fine dark dots, denser just under the cornea (063, 013)
     float Ds = 0.5 + 0.35 * smoothstep(edge - 0.06, edge - 0.005, P.x) * isDistal + 0.35 * (kgFbm(P * 40.0 + seedP + limb) - 0.5);
     vec3 stalk = mix(limbG * 1.08, ground * 0.85, 0.2);
@@ -372,7 +388,7 @@ const FRAG_SURFACE = /* glsl */ `
     if (det > 0.2) glint = kgSpeck(P * 170.0 + seedP + 3.0, 0.3, 0.2, fw * 170.0, idd) * (1.0 - cornea) * 0.6;
     // cornea: wet and nearly black, a faint bronze in the facets (063, 027, 013); it shows the sky and the sun
     float rimE = smoothstep(0.012, 0.03, length(P.yz));
-    vec3 corn = mix(vec3(0.03, 0.026, 0.02), vec3(0.11, 0.09, 0.06), rimE * 0.8);
+    vec3 corn = mix(vec3(0.05, 0.037, 0.025), vec3(0.13, 0.1, 0.06), rimE * 0.8);
     float fleck = kgSpeck(P * 240.0 + seedP + 7.0, 0.4, 0.28, fw * 240.0, idd);
     corn = mix(corn, vec3(0.16, 0.12, 0.06), fleck * 0.5);
     // ommatidial facets: a fine ripple at macro range
@@ -434,7 +450,8 @@ const FRAG_SURFACE = /* glsl */ `
     float segs = 1.0 - smoothstep(0.0, 0.006, abs(fract(P.z * 9.0 + 0.2) - 0.5) - 0.47);
     a *= 1.0 - segs * 0.15;
     h -= segs * 0.0015;
-    col = a; rough = 0.42; wetBias = 0.3;
+    col = a; rough = 0.5; wetBias = 0.15;
+    ao *= 0.5;
   }
   // ------------------------------------------------------------------ chelipeds
   else if (part < 11.5) {
@@ -472,7 +489,7 @@ const FRAG_SURFACE = /* glsl */ `
     if (part > 9.5) {
       // propodus: palm, then the fixed finger (the dactylus is part 11 throughout)
       float x = P.x;
-      float fing = part > 10.5 ? 1.0 : smoothstep(0.21, 0.255, x);
+      float fing = part > 10.5 ? 1.0 : smoothstep(${(CHELIPED.palm - 0.02).toFixed(3)}, ${(CHELIPED.palm + 0.025).toFixed(3)}, x);
       // the palm: translucent, a pale yellow-brown (063, 027: cream; 011: grey), its dots crowding over the
       // proximal upper part; never white
       vec3 palmB = mix(limbG, vec3(0.56, 0.46, 0.3), 0.35) * (0.86 + 0.14 * kgFbm2(P * 7.0 + seedP + limb));
@@ -491,7 +508,7 @@ const FRAG_SURFACE = /* glsl */ `
       if (det > 0.2) glint = max(glint, kgSpeck(P * 190.0 + seedP + 43.0, 0.2, 0.2, fw * 190.0, idd) * (1.0 - fing) * 0.6);
       // fingers: pale horn, smooth and glossy; yellowish where they leave the palm (063: the joints glow yellow-
       // orange), a darker line along the denticulate edge, horn-yellow tips; pink only in breeding males
-      float ft = part > 10.5 ? clamp(x / 0.19, 0.0, 1.0) : clamp((x - 0.23) / 0.18, 0.0, 1.0);
+      float ft = part > 10.5 ? clamp(x / ${CHELIPED.dactylus.toFixed(3)}, 0.0, 1.0) : clamp((x - ${CHELIPED.palm.toFixed(3)}) / ${CHELIPED.finger.toFixed(3)}, 0.0, 1.0);
       float cutSide = part > 10.5 ? -sin(th) : sin(th);
       float edge = smoothstep(0.1, 0.8, cutSide);
       vec3 fcol = mix(limbG, vec3(0.6, 0.5, 0.32), 0.5) * (0.88 + 0.12 * kgFbm2(P * 12.0 + seedP + limb));

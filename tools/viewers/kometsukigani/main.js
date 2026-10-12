@@ -297,6 +297,8 @@ if (NPEL > 0) {
 function LIVE_CHECK() { return Q.get('live') === '1'; }
 
 const v = new Vector3();
+/** cpose=a,b,c,d,e,f,g: try a cheliped posture in place of the fold (fitting CHELA_POSES to a photograph) */
+const CPOSE = Q.get('cpose')?.split(',').map(Number) ?? null;
 function pose(kind, t = 0) {
   const r = crab.rig;
   if (kind === 'flip') { poseFlip(); return; }
@@ -314,13 +316,13 @@ function pose(kind, t = 0) {
     // the tip presses a little into the sand (063, 027: the dactyli stand in small dimples)
     v.y = -num('sink', 0.02);
     v.applyMatrix4(bodyInv);
-    leg.solve(v, STANCE.dactylDeg * Math.PI / 180 + leg.jit.dac, [0.18, 0.06, -0.1, -0.25][k] * leg.side);
+    leg.solve(v, STANCE.dactylDeg * Math.PI / 180 + leg.jit.dac, [0.3, 0.14, -0.12, -0.3][k] * leg.side);
   }
   for (const c of r.chelae) {
     if (kind === 'wave') c.setPose(CHELA_POSES.wave);
     else if (kind === 'feed') c.setPose(CHELA_POSES.scoop);
     else if (kind === 'mouth') c.setPose(CHELA_POSES.mouth);
-    else c.setPose(CHELA_POSES.fold);
+    else c.setPose(CPOSE ?? CHELA_POSES.fold);
   }
   const fold = kind === 'fold' ? 1 : 0;
   for (const e of r.eyes) e.pose(fold, null, 0);

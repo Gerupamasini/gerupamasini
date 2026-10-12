@@ -37,8 +37,11 @@ const GROUP = [0, 1, 0, 1, 1, 0, 1, 0];
  * after the first, so the four feet of a tetrapod never land as one [L] (Uca pugnax: Barnes 1975) [G]
  */
 const LAG = [0, 0.5, 0.07, 0.57, 0.5, 0, 0.57, 0.07];
-/** a little anterior/posterior bend of the carpus–propodus joint per leg (dactyli 1–3 curve in, 4 out) [R] */
-const CP_BEND = [0.18, 0.06, -0.1, -0.25];
+/**
+ * the carpus–propodus bend in the ground plane: the front legs' distal parts curve forward, the hind legs' back
+ * (057, 007, 049: no straight radial spokes) [P][R]
+ */
+const CP_BEND = [0.3, 0.14, -0.12, -0.3];
 /** how deep a standing dactylus presses into the sand (CW) */
 const FOOT_SINK = 0.02;
 
@@ -632,7 +635,7 @@ export class CrabAnimator {
 
   /** fingertip target helpers in Body space */
   mouthPoint(out, side) {
-    return out.set(side * 0.03, CARAPACE.marginY + 0.05, 0.46);
+    return out.set(side * 0.03, CARAPACE.marginY + 0.05, 0.44);
   }
 
   updateChelae(dt) {
