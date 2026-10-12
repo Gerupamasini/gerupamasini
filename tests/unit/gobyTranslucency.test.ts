@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { closeSync, openSync, readSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MeshPhysicalMaterial, ShaderLib } from 'three';
@@ -6,12 +6,20 @@ import { anatomyFor, isGobyBody, makeTranslucentBody, organsFor, type GobyBodyEx
 
 // The gobies' bodies are translucent on the flat and in the tank, not only in the observation's hero material.
 const root = fileURLToPath(new URL('../../', import.meta.url));
+/** the body material of a GLB (only its JSON chunk is read: the hero files are 40 MB) */
 function body(rel: string): { name: string; extras: GobyBodyExtras } {
-  const buf = readFileSync(root + 'src/assets/models/' + rel);
-  const len = buf.readUInt32LE(12);
-  const j = JSON.parse(buf.subarray(20, 20 + len).toString('utf8')) as { materials: { name: string; extras?: { mahaze?: GobyBodyExtras } }[] };
-  const m = j.materials.find((mm) => mm.extras?.mahaze?.role === 'body')!;
-  return { name: m.name, extras: m.extras!.mahaze! };
+  const fd = openSync(root + 'src/assets/models/' + rel, 'r');
+  try {
+    const head = new Uint8Array(20);
+    readSync(fd, head, 0, 20, 0);
+    const json = new Uint8Array(new DataView(head.buffer).getUint32(12, true));
+    readSync(fd, json, 0, json.length, 20);
+    const j = JSON.parse(new TextDecoder().decode(json)) as { materials: { name: string; extras?: { mahaze?: GobyBodyExtras } }[] };
+    const m = j.materials.find((mm) => mm.extras?.mahaze?.role === 'body')!;
+    return { name: m.name, extras: m.extras!.mahaze! };
+  } finally {
+    closeSync(fd);
+  }
 }
 const bodyExtras = (rel: string) => body(rel).extras;
 const GOBIES = [
