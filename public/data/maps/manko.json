@@ -941,12 +941,6 @@
         "count": 4
       },
       {
-        "x": 92,
-        "z": -58,
-        "radius": 4.6,
-        "count": 6
-      },
-      {
         "x": 100,
         "z": -59,
         "radius": 4.6,
@@ -979,16 +973,10 @@
         "count": 6
       },
       {
-        "x": 85,
-        "z": -52,
-        "radius": 4.6,
-        "count": 6
-      },
-      {
         "x": 93,
         "z": -53,
         "radius": 4.6,
-        "count": 4
+        "count": 6
       },
       {
         "x": 101,
@@ -2487,8 +2475,8 @@
         "count": 11
       },
       {
-        "x": -12,
-        "z": -6,
+        "x": -30,
+        "z": 14,
         "radius": 4.5,
         "count": 9
       },
@@ -2555,13 +2543,6 @@
         "juvenileFraction": 1
       },
       {
-        "x": 81,
-        "z": -54,
-        "radius": 2.2,
-        "count": 6,
-        "juvenileFraction": 1
-      },
-      {
         "x": -49,
         "z": -49,
         "radius": 2.2,
@@ -2569,8 +2550,15 @@
         "juvenileFraction": 1
       },
       {
-        "x": 91,
-        "z": -44,
+        "x": 86,
+        "z": -49,
+        "radius": 2.2,
+        "count": 6,
+        "juvenileFraction": 1
+      },
+      {
+        "x": 96,
+        "z": -39,
         "radius": 2.2,
         "count": 6,
         "juvenileFraction": 1
@@ -2597,20 +2585,6 @@
         "juvenileFraction": 1
       },
       {
-        "x": -14,
-        "z": -14,
-        "radius": 2.2,
-        "count": 5,
-        "juvenileFraction": 1
-      },
-      {
-        "x": -4,
-        "z": -4,
-        "radius": 2.2,
-        "count": 5,
-        "juvenileFraction": 1
-      },
-      {
         "x": 86,
         "z": 6,
         "radius": 2.2,
@@ -2622,6 +2596,13 @@
         "z": 16,
         "radius": 2.2,
         "count": 6,
+        "juvenileFraction": 1
+      },
+      {
+        "x": -24,
+        "z": 16,
+        "radius": 2.2,
+        "count": 5,
         "juvenileFraction": 1
       },
       {

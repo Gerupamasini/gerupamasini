@@ -105,6 +105,20 @@ export interface SurfField {
  * the sky is reflected from a cube map with Fresnel; the sun glitters; the shoreline gets a bright rim and bubbles;
  * far water fades into the fog. Pools are calm (little ripple) and clearer, so their bottoms are easy to see.
  */
+/** A shore's water beyond its colour and turbidity (every field optional; absent: 葛西's water). */
+export interface WaterOptics {
+  /** a milky body: the share of sun and sky light the suspended fines send back up (linear) */
+  scatter?: readonly [number, number, number];
+  /** factor on the Fresnel reflection, how broken it is (0..1), and a gain on the sky's brightness in it */
+  reflect?: number; rough?: number; env?: number;
+  /** the distance (m) over which the reflection rises to the physical Fresnel */
+  reflNear?: readonly [number, number];
+  /** a breezier surface: wave spectrum boost around `peak` (m), the footprint filter, calm damping, still shallows */
+  ripple?: { peak?: number; boost?: number; aniso?: number; calmGain?: number; still?: number };
+  /** an open shore's wind sea: how much rougher the deeper water is than the flat's breeze ripples (absent: 0) */
+  chop?: number;
+}
+
 export class WaterPass {
   readonly uniforms;
   private readonly material: ShaderMaterial;
@@ -179,6 +193,12 @@ export class WaterPass {
       uScatter: { value: new Vector3() },
       uReflScale: { value: 1 },
       uReflRough: { value: 0 },
+      // a breezy opaque river (漫湖): ripples kept by the narrower footprint, calm shallows; the distance over
+      // which the reflection rises to the physical Fresnel (5-20 m: clear water shows its bed up close)
+      uAniso: { value: 0 },
+      uCalmGain: { value: 0.22 },
+      uStill: { value: 0 },
+      uReflNear: { value: new Vector2(5, 20) },
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,
@@ -206,7 +226,8 @@ export class WaterPass {
         uniform mat4 uProjInv, uCamWorld, uMirrorMat;
         uniform float uMirrorOn, uPolar, uSurfSteps, uHeightN, uSurfDebug, uChop;
         uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog, uScatter;
-        uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax, uReflScale, uReflRough;
+        uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax, uReflScale, uReflRough, uAniso, uCalmGain, uStill;
+        uniform vec2 uReflNear;
         uniform vec2 uRes;
         uniform vec4 uMemBox;
         varying vec2 vUv;
@@ -263,9 +284,10 @@ export class WaterPass {
         // the surface slope from the wave set (random directions and speeds, nothing periodic), band-limited to the
         // pixel footprint so distant water does not shimmer; gusts roughen the surface in drifting patches; pools are calm
         vec3 waterNormal(vec2 p, float dist, float calm) {
-          float fp = max(length(fwidth(p)), dist * 0.0015);
+          // (uAniso: the footprint's geometric mean rather than its sum, which keeps the short chop alive at a distance)
+          float fp = mix(max(length(fwidth(p)), dist * 0.0015), max(sqrt(length(dFdx(p)) * length(dFdy(p))), dist * 0.0008), uAniso);
           float gust = 0.65 + 0.7 * smoothstep(-0.4, 0.6, snoise(p * 0.08 + uTime * vec2(0.03, 0.02)));
-          float gain = gust * mix(1.0, 0.22, calm) * (1.0 + 0.5 * gChop);
+          float gain = gust * mix(1.0, uCalmGain, calm) * (1.0 + 0.5 * gChop);
           vec3 g = waveGrad(p, uTime, fp * 4.0) * gain;
           if (gChop > 0.0) g.yz += windSea(p, fp) * gChop * gust;
           return normalize(vec3(-g.y, 1.0, -g.z));
@@ -427,7 +449,9 @@ export class WaterPass {
               Surf sf = surfEval(S.xz, surfOn ? level : -1e3, uTime, surfOn);
               float Ds = surfOn ? sf.D : 1e3;
               gChop = surfOn ? uChop * smoothstep(0.5, 3.0, Ds) : 0.0;
-              vec3 N = waterNormal(S.xz, t, calm);
+              // (uStill: water only centimetres deep over the mud lies mirror-calm, as the sheets on a flat do)
+              float still = uStill > 0.0 ? uStill * (1.0 - smoothstep(0.02, 0.15, surface - groundSmooth(S.xz))) : 0.0;
+              vec3 N = waterNormal(S.xz, t, max(calm, still));
               vec2 sy = surfFrame(S.xz);
               float sheetK = 0.0;   // 1 on a thin swash sheet
               if (surfOn) {
@@ -502,7 +526,7 @@ export class WaterPass {
               // steeply toward grazing; so is a thin swash sheet, a mirror laid on the sand
               vec2 sp = fresnelSP(max(cosT, 0.02));
               float Fphys = mix(0.5 * (sp.x + sp.y), sp.y + 0.12 * sp.x, uPolar);
-              F = mix(F, max(F, Fphys * 0.92), max(smoothstep(5.0, 20.0, t), sheetK * 0.6));
+              F = mix(F, max(F, Fphys * 0.92), max(smoothstep(uReflNear.x, uReflNear.y, t), sheetK * 0.6));
 
               // sun glitter: to the horizon, in the sun's path; denser on rough water, finer on the swash sheet
               float fpx = max(length(fwidth(S.xz)), t * 0.0008);
@@ -723,7 +747,7 @@ export class WaterPass {
     this.uniforms.uReflMax.value = on ? 0.3 : 0.6;
     this.polarized = on;
     this.uniforms.uFogW.value = (on ? 0.6 : 0.8) * this.clarity;
-    this.uniforms.uEnvI.value = on ? 0.5 : 0.6;
+    this.uniforms.uEnvI.value = (on ? 0.5 : 0.6) * this.envGain;
   }
 
   /** The sea's mirror of the land and sky at `scale` of the screen's resolution (0: off, the sky cube alone). */
@@ -734,10 +758,12 @@ export class WaterPass {
   }
 
   private polarized = false;
+  /** this shore's gain on the sky's reflection (1: 葛西's) */
+  private envGain = 1;
 
   /** The water of this shore: its colour seen in depth (linear) and its turbidity against 葛西's silty water; optionally
    * a milky body (scatter, linear), a weaker (reflect, factor on Fresnel) and broken (rough, 0..1) reflection. */
-  setBody(r: number, g: number, b: number, turbidity: number, optics: { scatter?: readonly [number, number, number]; reflect?: number; rough?: number; chop?: number } = {}): void {
+  setBody(r: number, g: number, b: number, turbidity: number, optics: WaterOptics = {}): void {
     this.uniforms.uChop.value = optics.chop ?? 0;
     this.tint.setRGB(r, g, b);
     this.clarity = turbidity;
@@ -745,6 +771,12 @@ export class WaterPass {
     this.uniforms.uScatter.value.set(sc[0], sc[1], sc[2]);
     this.uniforms.uReflScale.value = optics.reflect ?? 1;
     this.uniforms.uReflRough.value = optics.rough ?? 0;
+    this.envGain = optics.env ?? 1;
+    const rn = optics.reflNear ?? [5, 20];
+    this.uniforms.uReflNear.value.set(rn[0], rn[1]);
+    this.uniforms.uAniso.value = optics.ripple?.aniso ?? 0;
+    this.uniforms.uCalmGain.value = optics.ripple?.calmGain ?? 0.22;
+    this.uniforms.uStill.value = optics.ripple?.still ?? 0;
     this.setPolarized(this.polarized);
   }
 

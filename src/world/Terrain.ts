@@ -1,5 +1,5 @@
 import {
-  BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, RedFormat, RGBAFormat, Vector2, Vector3,
+  BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, Matrix4, RedFormat, RGBAFormat, Vector2, Vector3,
   Vector4, type IUniform, type Texture, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
 import { makeSpillTexture } from './Water';
@@ -235,6 +235,11 @@ export class Terrain {
   /** 0..1: how far the mud takes the look of a sheltered silt flat (after MahazeViewer's sediment): two-scale
    * mottling, stronger silt lumps, few sand grains, a glossier wet sheen */
   private readonly uMudLook: IUniform<number> = { value: 0 };
+  /** the water's mirror of the land and sky (shared with the water pass, see shareMirror): the sheets of water on a
+   * mud flat show it as the river does */
+  private mirrorU: { tMirror: IUniform<unknown>; uMirrorMat: IUniform<Matrix4>; uMirrorOn: IUniform<number> } = {
+    tMirror: { value: null }, uMirrorMat: { value: new Matrix4() }, uMirrorOn: { value: 0 },
+  };
   /** アマモ cover over the map (0..1), and the distance range over which the drawn blades hand over to a canopy tint */
   private readonly uMeadow: IUniform<Texture> = { value: new DataTexture(new Uint8Array(1), 1, 1, RedFormat) };
   private readonly uMeadowFar: IUniform<Vector2> = { value: new Vector2(1e4, 1e4 + 1) };
@@ -254,6 +259,8 @@ export class Terrain {
   private readonly gridTexture: DataTexture;
   private readonly nrmTexture: DataTexture;
   private sheet: Mesh | null = null;
+  /** the ripple sheet's radius the quality asks for (it stays away while the ripples' gain is 0) */
+  private sheetWanted = 0;
   private sheetMaterial: MeshStandardMaterial | null = null;
   private waves: WaveSet | null = null;
   /** the surf on an open shore (shared with the water): the sand glistens where the swash has just been */
@@ -506,6 +513,9 @@ export class Terrain {
       shader.uniforms.uDetail = this.uDetail;
       shader.uniforms.uRippleGain = this.uRippleGain;
       shader.uniforms.uMudLook = this.uMudLook;
+      shader.uniforms.tMirror = this.mirrorU.tMirror;
+      shader.uniforms.uMirrorMat = this.mirrorU.uMirrorMat;
+      shader.uniforms.uMirrorOn = this.mirrorU.uMirrorOn;
       shader.uniforms.uMeadow = this.uMeadow;
       shader.uniforms.uMeadowFar = this.uMeadowFar;
       shader.uniforms.uLand = this.uLand;
@@ -532,7 +542,7 @@ export class Terrain {
 varying vec3 vWorldPos;
 attribute float substrate;
 attribute float pit;
-varying float vSubstrate;
+varying float vSubstrateV;
 varying float vPit;
 uniform vec2 uSheetC;
 uniform float uSheetR;
@@ -543,7 +553,7 @@ uniform float uHalf;
 ${kind === 'sheet' ? SHEET_VERTEX_GLSL : ''}`)
         .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
 vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
-${kind === 'sheet' ? 'vSubstrate = gSheetSub;\nvPit = gSheetPit;' : 'vSubstrate = substrate;\nvPit = pit;'}`);
+${kind === 'sheet' ? 'vSubstrateV = gSheetSub;\nvPit = gSheetPit;' : 'vSubstrateV = substrate;\nvPit = pit;'}`);
       if (kind === 'sheet') {
         // the ripple sheet: a fine grid that follows the player, standing on the coarse mesh's own triangles and
         // raised into the ripples' relief, so the troughs are real hollows the water can lie in
@@ -565,7 +575,10 @@ if (uSheetDrop > 0.0) transformed.y -= uSheetDrop * (1.0 - smoothstep(uSheetR - 
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
 varying vec3 vWorldPos;
-varying float vSubstrate;
+varying float vSubstrateV;
+// the substrate here: interpolated across the mesh's triangles, and on a silt flat (uMudLook) frayed with noise so
+// the sand and the mud, and everything that follows them, meet along a ragged line and not along triangle edges
+float vSubstrate;
 varying float vPit;
 uniform float uWaterLevel;
 uniform float uWetLevel;
@@ -576,6 +589,9 @@ uniform float uCausticGain;
 uniform float uDetail;
 uniform float uRippleGain;
 uniform float uMudLook;
+uniform sampler2D tMirror;
+uniform mat4 uMirrorMat;
+uniform float uMirrorOn;
 uniform sampler2D uMeadow;
 uniform vec2 uMeadowFar;
 uniform vec2 uLand;
@@ -591,6 +607,13 @@ uniform vec4 uSwashBand;
 ${WAVES_GLSL}
 // shared between the colour, normal and roughness stages (the colour stage runs first)
 float gFilm = 0.0;
+// a mud flat at low water (uMudLook): how saturated the silt is, and the thin sheets of water lying on it
+float gMudWet = 0.0;
+float gSheet = 0.0;
+// the sheets' signed field (>0 inside), the dark glossy margin of saturated silt around them, and mud under the water
+float gSheetField = -1.0;
+float gHalo = 0.0;
+float gSubm = 0.0;
 float gSwash = 0.0;
 float gSat = 0.0;
 float gQuartz = 0.0;
@@ -647,7 +670,9 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
     float mott = vnoise(vWorldPos.xz * 12.0) * 0.55 + vnoise(vWorldPos.xz * 26.0 + 5.0) * 0.3 + vnoise(vWorldPos.xz * 61.0 - 2.0) * 0.15;
     float mott2 = vnoise(vWorldPos.xz * 55.0 + 3.0) * 0.6 + vnoise(vWorldPos.xz * 140.0 + 9.0) * 0.4;
     float near = 1.0 - smoothstep(0.4, 1.6, fw * 0.02);
-    diffuseColor.rgb *= mix(1.0, (0.86 + 0.28 * mott) * mix(1.0, 0.8 + 0.4 * mott2, near), mudL);
+    // (faint: the silt's own grain; its broader tone wanders over a metre or two and over tens of metres)
+    float broad = (0.9 + 0.2 * vnoise(vWorldPos.xz * 0.6 + 13.0)) * (0.92 + 0.16 * vnoise(vWorldPos.xz * 0.08 - 5.0));
+    diffuseColor.rgb *= mix(1.0, (0.96 + 0.08 * mott) * mix(1.0, 0.97 + 0.06 * mott2, near) * broad, mudL);
   }
   // the levee: a smooth face, zoned by the tide the way the photos show it — pale and dry above the spring high
   // water, an olive film of algae through the upper intertidal, dark and crusted with old oyster shell below mean
@@ -698,7 +723,9 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
     vec2 o4;
     vec3 g4 = grains(mm / 5.0 + 41.0, o4);
     float pel = smoothstep(0.3, 0.2, length(o4 * vec2(1.0, 1.9))) * step(0.72, g4.z) * (1.0 - isSand) * det4;
-    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.6, pel * 0.8);
+    // (on the silt flat they lie in clusters, where a crab or a goby has fed, and are barely darker than the silt)
+    pel *= mix(1.0, smoothstep(0.45, 0.75, vnoise(vWorldPos.xz * 3.0 + 31.0)), mudL);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * mix(0.6, 0.78, mudL), pel * 0.8);
     gNrmAdd += -o4 * 1.4 * pel;
   }
   // ---- burrow openings: the holes of アナジャコ, スナモグリ and worms, dark with a low collar or a mound of
@@ -715,18 +742,20 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
     float hole = smoothstep(holeR, holeR * 0.6, gb.x) * hasHole * detH;
     float collarR = holeR * mix(2.2, 4.5, mound);
     float collar = (smoothstep(collarR, holeR * 1.1, gb.x) - smoothstep(holeR * 1.1, holeR * 0.7, gb.x)) * hasHole * detM;
-    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * mix(vec3(0.92, 0.9, 0.88), vec3(1.12, 1.08, 1.02), mound), collar * 0.8);
+    // (silt ejecta is the silt itself, a shade wetter: no pale volcano)
+    vec3 collarC = mix(mix(vec3(0.92, 0.9, 0.88), vec3(1.12, 1.08, 1.02), mound), vec3(0.94 + 0.04 * mound), mudL);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * collarC, collar * 0.8);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.048, 0.045), hole * 0.9);
     // the mound's slope: up toward the hole, then the funnel down into it
     vec2 away = -ob / max(gb.x, 1e-3);
-    gNrmAdd += away * (0.6 + 0.6 * mound) * collar - away * 1.2 * hole;
+    gNrmAdd += (away * (0.6 + 0.6 * mound) * collar - away * 1.2 * hole) * mix(1.0, 0.4, mudL);
   }
   // ---- micro relief: silt lumps at the millimetre and centimetre scale, faded with distance
   if (uDetail > 0.5) {
     vec3 nd = vnoiseD(mm * 0.35) * 0.5 + vnoiseD(mm * 1.1 + 7.0) * 0.25;
-    float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand)) * (1.0 + 0.9 * uMudLook * (1.0 - isSand));
+    float bump = (1.0 - smoothstep(0.1, 0.5, fw * 0.35)) * (0.09 + 0.08 * (1.0 - isSand));
     vec3 nd2 = vnoiseD(mm * 0.055 + 3.0);
-    float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand)) * (1.0 + 1.2 * uMudLook * (1.0 - isSand));
+    float bump2 = (1.0 - smoothstep(0.15, 0.8, fw * 0.055)) * (0.025 + 0.045 * (1.0 - isSand)) * (1.0 + 0.3 * mudL);
     gNrmAdd += nd.yz * bump + nd2.yz * bump2;
   }
   // a stingray's pit: the ray blew the oxidised skin off, so the bowl shows the darker, wetter sand beneath,
@@ -746,8 +775,9 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // lowest, longest-wet hollows (after MahazeViewer's sediment)
   float filmP = muddy * smoothstep(0.35, 0.75, vnoise(vWorldPos.xz * 0.11 - 11.0)) * smoothstep(0.3, 0.7, vnoise(vWorldPos.xz * 0.9 + 4.0));
   gFilm = filmP;
-  diffuseColor.rgb *= mix(vec3(1.0), vec3(0.78, 0.68, 0.42), filmP * 0.6);
-  float reducedP = smoothstep(1.5, 2.5, vSubstrate) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0));
+  // (on a lake's silt flat the film is olive, not golden, and there is little black mud at the surface)
+  diffuseColor.rgb *= mix(vec3(1.0), mix(vec3(0.78, 0.68, 0.42), vec3(0.86, 0.86, 0.7), mudL), filmP * 0.6);
+  float reducedP = smoothstep(1.5, 2.5, vSubstrate) * smoothstep(0.55, 0.85, vnoise(vWorldPos.xz * 0.07 + 23.0)) * (1.0 - 0.8 * mudL);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.058, 0.056, 0.052), reducedP * 0.7);
   // under an アマモ bed the sediment is finer, darker and richer (trapped silt, detritus, the canopy's shade); past the
   // distance where the blades are drawn, the canopy itself stands in (lying mats at low water, dark green under it)
@@ -800,6 +830,34 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // (patchy: some stretches drain at once, others keep a trough of water in every hollow)
   gTrough = exposedWet * smoothstep(-0.15, -0.5, gRipple) * smoothstep(0.3, 0.6, vnoise(vWorldPos.xz * 0.45 + 13.0));
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.5, 0.56, 0.64), gTrough * 0.85);
+  // a mud flat at low water (user's photos): the silt stays saturated through the day and glistens, and thin
+  // sheets of water lie in the hollows and along the water's edge, flat and glassy, mirroring the sky
+  if (uMudLook > 0.001) {
+    float mudW = uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
+    float aboveW = vWorldPos.y - lvl;
+    // the sheets: water left in the flat's shallow hollows, in lobes and channels that join and part (a warped
+    // field over tens of metres, with smaller bays at a metre), more of it on low ground near the water's edge
+    // and only in the deeper hollows higher up; the edge is sharp, as a film's meniscus is, but anti-aliased
+    vec2 q = vWorldPos.xz;
+    vec2 wq = q * 0.06 + (vec2(vnoise(q * 0.045 + 3.1), vnoise(q * 0.045 - 7.7)) - 0.5) * 2.4;
+    float sheetN = vnoise(wq) * 0.5 + vnoise(wq * 2.3 + 5.0) * 0.25 + vnoise(q * 0.9 + 1.0) * 0.15 + vnoise(q * 3.1 - 4.0) * 0.1;
+    // (the waterline wanders with the silt's own small relief: never a ruled contour of the gentle lean)
+    float aboveN = aboveW + 0.05 * (vnoise(q * 0.4 + 9.0) - 0.5) + 0.03 * (vnoise(q * 1.7 - 2.0) - 0.5);
+    float nearW = 1.0 - smoothstep(0.0, 0.06, aboveN);
+    gSheetField = sheetN + nearW * 0.15 - (0.55 + 0.04 * smoothstep(0.3, 1.0, aboveW));
+    float sw = max(fwidth(gSheetField), 0.002) * 0.75;
+    float above = smoothstep(-0.03, 0.0, aboveW);
+    gSheet = mudW * smoothstep(-sw, sw, gSheetField) * (1.0 - smoothstep(0.9, 1.2, aboveW)) * above;
+    // around each sheet the silt is saturated: a dark glossy margin a few centimetres to a decimetre wide
+    gHalo = mudW * (1.0 - smoothstep(0.0, 0.05, -gSheetField)) * (1.0 - smoothstep(-sw, sw, gSheetField)) * above;
+    // and so is the strip the water has just left
+    gHalo = max(gHalo, mudW * (1.0 - smoothstep(0.0, 0.08, aboveN)) * above * (1.0 - gSheet));
+    // the rest of the flat is wet through, a little less so on the crests between the sheets
+    gMudWet = mudW * max(wet, 0.7) * mix(0.75, 1.0, smoothstep(-0.25, 0.0, gSheetField)) * above;
+    // under the water it is the water that shines: the bed itself is dull
+    gSubm = mudW * (1.0 - above);
+    diffuseColor.rgb *= mix(1.0, 0.97, gMudWet) * mix(1.0, 0.78, gSheet) * mix(1.0, 0.8, gHalo);
+  }
   // (the photos' wet flat is a neutral grey with the sky in it, whatever the colour of the dry sand)
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.8, 0.9, 1.08), 0.75 * wet);
   // foam left on the sand: clusters of fine bubbles (a few millimetres) that pop one by one, and the swash marks, thin
@@ -856,10 +914,28 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   float skew = rippleSkew(rp);
   float slope = (cos(ph) + 2.0 * skew * cos(ph * 2.0 + 0.6)) / (1.0 + skew) * strength * kRel * rippleSize(rp);
   vec3 worldPerturb = vec3(grad.x * slope + gNrmAdd.x, 0.0, grad.y * slope + gNrmAdd.y);
+  // (a sheet of water lies flat over the silt's lumps; saturated silt is smoothed by its own film of water)
+  worldPerturb *= (1.0 - 0.97 * gSheet) * (1.0 - 0.4 * gMudWet) * (1.0 - 0.5 * gHalo);
   vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
   normal = normalize(normal + viewPerturb);
 }`)
         .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+#if defined( RE_IndirectSpecular )
+  // the sky in the wet silt and the water sheets: the scene's environment is kept dim for the diffuse fill, so
+  // the mirror-like wet mud takes its sky reflection at near full strength (Fresnel still applies in the BRDF)
+  if (gSheet + gMudWet + gHalo > 0.0) {
+    // a sheet is a mirror of the land, the town and the sky, the water's own mirror looked up along the reflected
+    // ray (the sky cube, brightened, when the mirror is off); the silt's sheen and the margins catch the sky
+    vec3 sheetEnv = radiance * 10.0;
+    if (uMirrorOn > 0.5 && gSheet > 0.001) {
+      vec3 Rw = reflect(normalize(vWorldPos - cameraPosition), vec3(0.0, 1.0, 0.0));
+      Rw.y = max(Rw.y, 0.02);
+      vec4 mc = uMirrorMat * vec4(vWorldPos + Rw * 300.0, 1.0);
+      sheetEnv = texture2D(tMirror, clamp(mc.xy / mc.w, vec2(0.002), vec2(0.998))).rgb;
+    }
+    radiance = mix(radiance * (1.0 + 2.0 * gMudWet + 4.0 * gHalo), sheetEnv, gSheet);
+  }
+#endif
 #if defined( USE_ENVMAP ) && defined( RE_IndirectSpecular )
   // a film of water on the sand gives back the sky like the sea does (the scene's environment is kept dim for the
   // matte ground; the film's reflection is the water's, so it is raised to the sea's)
@@ -880,9 +956,30 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // wet silt is glossy (the shine of a mud flat at low water), damp silt satin
   float mudR = uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
   roughnessFactor = mix(roughnessFactor, mix(0.7, 0.36, wetR), mudR);
+  roughnessFactor = mix(roughnessFactor, 0.45, gMudWet);  // saturated silt: a satin sheen
+  roughnessFactor = mix(roughnessFactor, 0.15, gHalo);    // the margins of the sheets: glossy
+  roughnessFactor = mix(roughnessFactor, 0.04, gSheet);   // a film of water: a mirror
+  roughnessFactor = mix(roughnessFactor, 0.85, gSubm);    // under the water: dull (the water pass draws the surface)
 }`);
+      // (the vnoise above is declared with the common chunk; main() starts with the clipping planes)
+      if (!shader.fragmentShader.includes('#include <clipping_planes_fragment>')) throw new Error('Terrain: clipping_planes_fragment not found');
+      // (on a silt flat the substrate's colour follows the frayed substrate too, not the vertices' palette colours)
+      if (!shader.fragmentShader.includes('#include <color_fragment>')) throw new Error('Terrain: color_fragment not found');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uSubCol[8];')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+#if defined( USE_COLOR )
+if (uMudLook > 0.001) {
+  float si = clamp(vSubstrate, 0.0, 7.0), i0 = floor(si);
+  vec3 subC = mix(uSubCol[int(i0)], uSubCol[int(min(i0 + 1.0, 7.0))], smoothstep(0.3, 0.7, si - i0));
+  diffuseColor.rgb *= subC / max(vColor.rgb, vec3(1e-3));
+}
+#endif`);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <clipping_planes_fragment>', `vSubstrate = vSubstrateV;
+if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.0) - 0.5) * 0.9 + (vnoise(vWorldPos.xz * 3.0 - 5.0) - 0.5) * 0.3);
+#include <clipping_planes_fragment>`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v4';
+    mat.customProgramCacheKey = () => 'higata-terrain-v11';
     return mat;
   }
 
@@ -958,6 +1055,13 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   setSediment(rippleGain: number, mudLook: number): void {
     this.uRippleGain.value = rippleGain;
     this.uMudLook.value = mudLook;
+    this.setRippleSheet(this.sheetWanted);
+  }
+
+
+  /** Share the water's mirror (its uniforms, before the terrain's programs are built): the sheets on the mud show it. */
+  shareMirror(u: { tMirror: IUniform<unknown>; uMirrorMat: IUniform<Matrix4>; uMirrorOn: IUniform<number> }): void {
+    this.mirrorU = { tMirror: u.tMirror, uMirrorMat: u.uMirrorMat, uMirrorOn: u.uMirrorOn };
   }
 
   /** Tint the mud and creek beds (multiplies the 葛西 grey). */
@@ -975,6 +1079,9 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
    * ripples are then only painted on the coarse mesh).
    */
   setRippleSheet(radius: number): void {
+    // (a flat without ripple marks, a lake's mud, has nothing for it to raise: only the coarse mesh's facets)
+    this.sheetWanted = radius;
+    if (this.uRippleGain.value <= 0) radius = 0;
     if (radius === this.uSheetR.value && (radius > 0) === !!this.sheet) return;
     if (this.sheet) { this.sheet.geometry.dispose(); this.sheet.removeFromParent(); this.sheet = null; }
     this.uSheetR.value = radius;
