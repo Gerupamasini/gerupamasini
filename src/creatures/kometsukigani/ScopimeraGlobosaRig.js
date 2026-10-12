@@ -66,11 +66,13 @@ export const LEG_JOINTS = {
  */
 export const CHELA_POSES = {
   /**
-   * fold, fitted to the front views (063, 002, 061, 2.webp, 4.webp): the carpus lies across above each palm like a
-   * shoulder, the palm hangs beside the maxillipeds with its broad face forward, the fingers point straight down,
-   * their tips just above the sand — side by side, not crossed under the face
+   * fold, fitted to keypoints of the front view 063 (CW 317 px; a large male) and, for depth, the view from above
+   * and behind 049: the carpus knob lies across above each palm like a shoulder at the anterolateral corner, level
+   * with the eyes (centre 0.37 CW out, 0.36 up); the palm hangs beside the maxillipeds with its broad face forward
+   * (centre 0.32 out, 0.16 up, just in front of the face); the fingers point down and in, their tips 0.15 CW from
+   * the midline just above the sand — side by side, not crossed under the face (also 002, 061, 2.webp, 4.webp)
    */
-  fold: [-1.4, 1.409, 0, 0.244, 2.561, 0.45, 0.04],
+  fold: [-1.393, 1.321, 0, -0.009, 2.667, 0.364, 0.04],
   scoop: [0.05, 0.25, 0, 0.12, 1.25, -1.15, 0.3],
   mouth: [0.1, 0.95, 0, 0.25, 1.8, -1.2, 0.05],
   /** wave, fitted to 6.webp: merus vertical beside the carapace, palm high with the fingers hooked inward */
@@ -131,7 +133,7 @@ export function rigDefinition() {
     for (let s = 0; s < SEGMENTS.length; s++) {
       const seg = SEGMENTS[s];
       const pos = s === 0 ? new Vector3(sign * C.base[0], C.base[1], C.base[2])
-        : seg === 'Dactylus' ? new Vector3(C.palm - 0.012, C.palmH * 0.15, 0)
+        : seg === 'Dactylus' ? new Vector3(C.palm - 0.012, C.palmH * 0.1, 0)
           : new Vector3(lens[s - 1], 0, 0);
       // the right limb's local Z points the other way (Z = X × Y); flexions are mirrored by the joint signs
       const quat = s === 0 ? basisQuat(dir, Y) : new Quaternion();

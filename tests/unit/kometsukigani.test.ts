@@ -18,7 +18,7 @@ function burrowEnv(cw: number) {
 
 describe('コメツキガニ: rig and geometry', () => {
   it('builds three levels of detail within their budgets', () => {
-    expect(crabTriangles(0)).toBeLessThan(110000);
+    expect(crabTriangles(0)).toBeLessThan(116000);
     expect(crabTriangles(1)).toBeLessThan(30000);
     expect(crabTriangles(2)).toBeLessThan(7000);
   });

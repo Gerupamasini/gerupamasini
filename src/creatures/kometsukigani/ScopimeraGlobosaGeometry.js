@@ -278,15 +278,16 @@ function carapaceFn(u, v, o, inside) {
   // on every lobe; 6.webp, 008): branchial, epibranchial (behind the orbit), protogastric, mesogastric, cardiac,
   // intestinal
   // (low and soft: the live crab's dorsum reads as one inflated dome with faint regions, 060, 049, 057)
-  dy += dorsal * (0.02 * g(0.29, -0.1, 0.19) + 0.012 * g(0.31, 0.17, 0.1) + 0.01 * g(0.11, 0.2, 0.09)
-    + 0.008 * g(0, 0.08, 0.08) + 0.01 * g(0, -0.15, 0.09) + 0.006 * g(0, -0.3, 0.09));
+  // (049 seen from above and behind shows every lobe in light and shade: the relief is not faint)
+  dy += dorsal * (0.028 * g(0.29, -0.1, 0.17) + 0.018 * g(0.31, 0.17, 0.09) + 0.015 * g(0.11, 0.2, 0.08)
+    + 0.012 * g(0, 0.08, 0.07) + 0.015 * g(0, -0.15, 0.08) + 0.009 * g(0, -0.3, 0.08));
   // and never quite symmetric or smooth: low irregular undulations of the dorsum (the left and right halves differ)
   dy += dorsal * (0.004 * vnoise(x * 6.5, z * 6.5, 9) + 0.0018 * vnoise(x * 17, z * 17, 10));
   // furrows: the cervical groove arching across, the H between the gastric and cardiac regions
   const cerv = Math.abs(z - (0.08 - 0.55 * ax * ax));
-  dy -= dorsal * 0.008 * Math.exp(-(cerv * cerv) / 0.0005) * smoothstep(0.04, 0.1, ax) * (1 - smoothstep(0.3, 0.38, ax));
+  dy -= dorsal * 0.011 * Math.exp(-(cerv * cerv) / 0.0005) * smoothstep(0.04, 0.1, ax) * (1 - smoothstep(0.3, 0.38, ax));
   const hx = Math.abs(ax - 0.065);
-  dy -= dorsal * 0.007 * Math.exp(-(hx * hx) / 0.0003) * smoothstep(-0.22, -0.14, z) * (1 - smoothstep(0, 0.06, z));
+  dy -= dorsal * 0.009 * Math.exp(-(hx * hx) / 0.0003) * smoothstep(-0.22, -0.14, z) * (1 - smoothstep(0, 0.06, z));
   // the epibranchial arcs behind the orbits (a furrow in front of the branchial lobes) and the M-shaped ridge in
   // front of the intestinal region — the same curves the material draws (008, 4.webp)
   const eArc = Math.abs(Math.hypot(ax / 0.44, (z - 0.06) / 0.23) - 1) * 0.23;
@@ -307,17 +308,19 @@ function carapaceFn(u, v, o, inside) {
   // front: a narrow lobe between the eyestalks, deflexed — it bends down over the face (004, 063, 016)
   const frontLobe = (1 - smoothstep(0.05, 0.08, axR)) * smoothstep(0.88, 0.97, c) * smoothstep(0.3, 0.46, v) * (1 - smoothstep(0.56, 0.66, v));
   // buccal frame: the face recess where the third maxillipeds sit
-  const bx = 1 - smoothstep(0.17, 0.25, ax);
-  const byw = smoothstep(0.04, 0.1, y) * (1 - smoothstep(0.32, 0.38, y));
+  // (the frame is a large square opening: the maxillipeds fill the face from the sternum up to the front, 063, 002)
+  const bx = 1 - smoothstep(0.2, 0.28, ax);
+  const byw = smoothstep(0.04, 0.1, y) * (1 - smoothstep(0.4, 0.46, y));
   const buccal = bx * byw * smoothstep(0.8, 0.97, c) * (v > 0.5 ? 1 : 0);
   // displacement: along the (approximate) outward normal of the base shape
   const nx = sn * (v <= 0.5 ? Math.sin(phi) : 1), nz = c * (v <= 0.5 ? Math.sin(phi) : 1), ny = v <= 0.5 ? Math.cos(phi) * 1.3 : -Math.abs(Math.cos(phi));
   const nl = Math.hypot(nx, ny, nz) || 1;
-  const disp = dy - 0.03 * orb + 0.006 * frontLobe - 0.01 * buccal;
+  // (the buccal frame is deep enough that the maxillipeds lie in it, their tops not hidden behind the face)
+  const disp = dy - 0.03 * orb + 0.006 * frontLobe - 0.035 * buccal;
   x += (nx / nl) * disp; z += (nz / nl) * disp; y += (ny / nl) * disp * (dorsal ? 1 : 0.4) + (dorsal ? dy * 0.4 : 0);
   // the margin's undulation, fading away from the rim; the lobe's downward bend
   y += undul * (smoothstep(0.2, 0.46, v) * (1 - smoothstep(0.5, 0.7, v)));
-  y -= 0.018 * frontLobe * smoothstep(0.42, 0.56, v);
+  y -= 0.008 * frontLobe * smoothstep(0.42, 0.56, v);
   o.set(x, y, z);
   // part: dorsal carapace, lateral wall (branchiostegite / pterygostomial), face, buccal cavity, sternum
   let part = PART.CARAPACE;
@@ -393,8 +396,8 @@ function buildMxp(B, res) {
       // a pillow: straight medial edge above (the pair meets on the midline), both lower corners well rounded so
       // the pair ends in two bulbs with a small notch between them (2.webp, 4.webp)
       // the upper medial corner nearly square, so the pair meets right up to the top (063: only a small notch)
-      const nExp = s < 0 ? 2.15 : (c > 0 ? 6 : 3.2);
-      let px = rx + rx * se(c, s < 0 ? 2.15 : (c > 0 ? 10 : 3.2)), pz = rz * se(s, nExp);
+      const nExp = s < 0 ? 2.6 : (c > 0 ? 6 : 4);
+      let px = rx + rx * se(c, s < 0 ? 2.6 : (c > 0 ? 10 : 4)), pz = rz * se(s, nExp);
       // the merus narrows a little upward: its upper-medial corner only slightly bevelled, so the pair closes the
       // frame right up to the front with just a small notch between them (063, 027)
       const cut = smoothstep(0.2, 0.9, c) * smoothstep(0.3, 0.95, s);
@@ -480,11 +483,12 @@ function chelaPropodusSection(t, th, res) {
   const palmRy = C.palmH * 0.5 * (0.55 + 0.45 * Math.sin(Math.PI * clamp(pt * 0.75 + 0.16, 0, 1)));
   const palmRz = C.palmW * 0.5 * (0.7 + 0.3 * Math.sin(Math.PI * clamp(pt * 0.85 + 0.12, 0, 1)));
   const ft = clamp((x - C.palm) / C.finger, 0, 1);
-  const taper = Math.pow(1 - ft, 1.05) * (1 - 0.1 * ft);
+  // a blade: deep for its first half, then drawn out to a sharp, slightly hooked point (002–004, 011)
+  const taper = Math.pow(Math.max(0, 1 - Math.pow(ft, 1.6)), 0.85);
   const fRy = C.fingerH * 0.5 * (0.04 + 0.96 * taper), fRz = C.fingerW * 0.5 * (0.06 + 0.94 * taper);
-  // the finger leaves the palm along its lower half and curves up to meet the hooked dactylus: a narrow gape,
-  // the tips touching (2.webp, 6.webp)
-  const fCy = -C.palmH * 0.17 + 0.035 * ft * ft;
+  // the finger leaves the palm along its lower half and curves up to meet the hooked dactylus: the gape a narrow
+  // dark slit, the tips touching (002–004, 2.webp, 6.webp)
+  const fCy = -C.palmH * 0.14 + 0.03 * ft * ft;
   let dr = 0;
   if (res.teeth && f > 0.5 && ft < 0.93) {
     const up = Math.max(0, Math.sin(th));
@@ -523,11 +527,14 @@ function buildChelipeds(B, res) {
       bone: bi('Carpus'), x0: cX0, x1: cX0 + cL, radial, rings: rings(C.carpus),
       section: (t) => {
         const x = cX0 + t * cL;
-        const p = smoothstep(0, 0.75, t) * (1 - 0.1 * smoothstep(0.85, 1, t));
-        const k = (0.55 + 0.45 * smoothstep(-0.002, 0.03, x)) * (1 + 0.04 * smoothstep(1 - 0.02 / cL, 1 - 0.004 / cL, t));
-        return { cy: 0.006 * p, cz: 0, ry: (0.034 + 0.03 * p) * k, rz: (0.028 + 0.022 * p) * k, n: 2.2, ny: 1.8 };
+        // a round knob: an ellipsoid swelling at once out of the slim condyle, fullest a little beyond its middle,
+        // rounding off into the rim that takes the palm (063: a dome, not a cone)
+        const u = clamp((x + 0.004) / (C.carpus + 0.004), 0, 1);
+        const p = Math.pow(Math.max(0, Math.sin(Math.PI * (0.12 + 0.8 * u))), 0.45);
+        const k = (0.55 + 0.45 * smoothstep(-0.002, 0.02, x)) * (1 + 0.04 * smoothstep(1 - 0.02 / cL, 1 - 0.004 / cL, t));
+        return { cy: 0.012 * p, cz: 0, ry: C.carpusR * (0.35 + 0.65 * p) * k, rz: C.carpusR * 0.82 * (0.35 + 0.65 * p) * k, n: 2.1, ny: 2 };
       },
-      info: (t) => [PART.CHELA_ARM, limb * 10 + 4, membrane(t, cL, 0.034), 0.15], capA: 0.01, capB: 0.01,
+      info: (t) => [PART.CHELA_ARM, limb * 10 + 4, membrane(t, cL, 0.034), 0.15], capA: 0.01, capB: 0.012,
     });
     // propodus: inflated palm drawn out into the long fixed finger (ventral), denticles on its cutting edge
     const PL = C.palm + C.finger;
@@ -551,8 +558,8 @@ function buildChelipeds(B, res) {
           const down = Math.max(0, -Math.sin(th));
           dr = 0.005 * Math.pow(down, 10) * (0.5 + 0.5 * Math.cos(TAU * (nT - 1) * ft + 1.3)) * (1 - ft);
         }
-        const taper = Math.pow(1 - ft, 1.05) * (1 - 0.1 * ft);
-        return { cy: -0.05 * ft * ft, cz: 0.003 * ft, ry: C.fingerH * 0.5 * (0.04 + 0.98 * taper) * kc, rz: C.fingerW * 0.5 * (0.06 + 0.94 * taper) * kc, n: 2, dr };
+        const taper = Math.pow(Math.max(0, 1 - Math.pow(ft, 1.6)), 0.85);
+        return { cy: -0.045 * ft * ft, cz: 0.003 * ft, ry: C.fingerH * 0.46 * (0.04 + 0.98 * taper) * kc, rz: C.fingerW * 0.5 * (0.06 + 0.94 * taper) * kc, n: 2, dr };
       },
       info: () => [PART.FINGER, limb * 10 + 6, 0, 0.1], capA: 0.01, capB: 0.006,
     });
@@ -742,9 +749,10 @@ function buildSetae(B) {
       // dorsal / ventral), leaning a little ventrally; the longest (≈ 0.06 CW) on the propodi and the meri's hind
       // margin (063, 049, 068, 010; "black stout setae, sparse" [L])
       const FWD = sign > 0 ? -0.35 : Math.PI + 0.35, AFT = sign > 0 ? Math.PI + 0.35 : -0.35;
-      fringe(bi('Merus'), specs.Merus, 0.1, 0.94, AFT, 9, [0.03, 0.07], limb * 10 + 3, 0.42, 0.003);
+      // (063: the front legs carry a dense fringe along the merus' hind margin, 20 or so long dark setae)
+      fringe(bi('Merus'), specs.Merus, 0.1, 0.94, AFT, li < 2 ? 18 : 10, [0.035, 0.08], limb * 10 + 3, 0.42, 0.003);
       fringe(bi('Merus'), specs.Merus, 0.15, 0.9, FWD, 3, [0.02, 0.045], limb * 10 + 3, 0.45, 0.003);
-      fringe(bi('Carpus'), specs.Carpus, 0.12, 0.88, AFT, 4, [0.02, 0.05], limb * 10 + 4, 0.45, 0.0028);
+      fringe(bi('Carpus'), specs.Carpus, 0.12, 0.88, AFT, li < 2 ? 8 : 4, [0.025, 0.06], limb * 10 + 4, 0.45, 0.0028);
       fringe(bi('Propodus'), specs.Propodus, 0.06, 0.94, AFT, 8, [0.025, 0.065], limb * 10 + 5, 0.45, 0.0028);
       fringe(bi('Propodus'), specs.Propodus, 0.1, 0.9, FWD, 4, [0.02, 0.045], limb * 10 + 5, 0.5, 0.0028);
       fringe(bi('Dactylus'), specs.Dactylus, 0.06, 0.5, AFT, 3, [0.015, 0.035], limb * 10 + 6, 0.7, 0.0024);

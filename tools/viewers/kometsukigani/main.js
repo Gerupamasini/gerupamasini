@@ -90,7 +90,8 @@ scene.environmentIntensity = num('env', BEACH ? 0.55 : 0.09);
 
 const CW = num('cw', 9) / 1000;
 // sun: tight shadow frustum around the crab (as in the game's focused observation shadows)
-const sun = new DirectionalLight(BEACH ? 0xffeedd : 0xfff3e6, num('sunI', BEACH ? 2.9 : 2.6));
+// sunc=rrggbb: the sun's colour (an evening photograph's warm light, 063)
+const sun = new DirectionalLight(param('sunc') ? Number(`0x${param('sunc')}`) : BEACH ? 0xffeedd : 0xfff3e6, num('sunI', BEACH ? 2.9 : 2.6));
 sun.position.copy(sunDir).multiplyScalar(0.5);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -297,34 +298,49 @@ if (NPEL > 0) {
 function LIVE_CHECK() { return Q.get('live') === '1'; }
 
 const v = new Vector3();
-/** cpose=a,b,c,d,e,f,g: try a cheliped posture in place of the fold (fitting CHELA_POSES to a photograph) */
-const CPOSE = Q.get('cpose')?.split(',').map(Number) ?? null;
+/**
+ * Pose overrides, to fit a photograph's posture (URL, or `window.__fit` from tools/viewers/kometsukigani/fit.mjs).
+ * Per-leg lists run L1–L4 then R1–L4 (four values: both sides alike).
+ *   bh: sternum height (CW)    roll: body roll (rad)    hd: heading (rad, turns the rig on top of `heading`)
+ *   reach: foot radius from the coxa socket (CW)        lyaw: swing of each leg's foot (rad, + forward)
+ *   ldac: dactylus angle to the ground (deg)            lcp: carpus–propodus bend (rad)
+ *   lh: foot height above the ground (CW; a raised leg)
+ *   cpose / cposeR: cheliped posture (7 angles; cposeR for the right one)   eyefold: 0 erect … 1 folded
+ */
+const list = (k) => { const a = vec(k); return a && a.length === 4 ? [...a, ...a] : a; };
+const OV = {
+  bh: param('bh') === null ? null : num('bh', 0), roll: num('roll', 0), hd: num('hd', 0),
+  reach: list('reach'), lyaw: list('lyaw'), ldac: list('ldac'), lcp: list('lcp'), lh: list('lh'),
+  cpose: vec('cpose'), cposeR: vec('cposeR'), eyefold: param('eyefold') === null ? null : num('eyefold', 0),
+};
 function pose(kind, t = 0) {
   const r = crab.rig;
   if (kind === 'flip') { poseFlip(); return; }
-  const h = kind === 'feed' ? STANCE.bodyHeight.feed : kind === 'wave' ? STANCE.bodyHeight.display : STANCE.bodyHeight.calm;
+  const h = OV.bh ?? (kind === 'feed' ? STANCE.bodyHeight.feed : kind === 'wave' ? STANCE.bodyHeight.display : STANCE.bodyHeight.calm);
+  r.root.rotation.set(0, OV.hd, 0);
   r.body.position.set(0, h, 0);
-  r.body.rotation.set(num('pitch', kind === 'feed' ? 0.12 : kind === 'wave' ? -0.12 : 0), 0, 0);
+  r.body.rotation.set(num('pitch', kind === 'feed' ? 0.12 : kind === 'wave' ? -0.12 : 0), 0, OV.roll);
   r.root.updateMatrixWorld(true);
   const bodyInv = r.body.matrix.clone().invert();
   for (let i = 0; i < r.legs.length; i++) {
     const leg = r.legs[i];
     const k = i % 4;
-    const reach = STANCE.footReach[k] * (kind === 'wave' ? 0.95 : 1);
-    // home foot on the ground (Root space), then into Body space
-    leg.homeFoot(v, reach * (1 + leg.jit.reach), 0, leg.jit.yaw);
+    const reach = OV.reach ? OV.reach[i] : STANCE.footReach[k] * (kind === 'wave' ? 0.95 : 1) * (1 + leg.jit.reach);
+    // home foot on the ground (Root space), then into Body space (lyaw: + swings the foot forward on either side)
+    leg.homeFoot(v, reach, 0, leg.jit.yaw - (OV.lyaw ? OV.lyaw[i] * leg.side : 0));
     // the tip presses a little into the sand (063, 027: the dactyli stand in small dimples)
-    v.y = -num('sink', 0.02);
+    v.y = -num('sink', 0.02) + (OV.lh ? OV.lh[i] : 0);
     v.applyMatrix4(bodyInv);
-    leg.solve(v, STANCE.dactylDeg * Math.PI / 180 + leg.jit.dac, [0.3, 0.14, -0.12, -0.3][k] * leg.side);
+    const dac = (OV.ldac ? OV.ldac[i] : STANCE.dactylDeg) * Math.PI / 180 + leg.jit.dac;
+    leg.solve(v, dac, (OV.lcp ? OV.lcp[i] : [0.3, 0.14, -0.12, -0.3][k]) * leg.side);
   }
   for (const c of r.chelae) {
     if (kind === 'wave') c.setPose(CHELA_POSES.wave);
     else if (kind === 'feed') c.setPose(CHELA_POSES.scoop);
     else if (kind === 'mouth') c.setPose(CHELA_POSES.mouth);
-    else c.setPose(CPOSE ?? CHELA_POSES.fold);
+    else c.setPose((c.side < 0 && OV.cposeR) || OV.cpose || CHELA_POSES.fold);
   }
-  const fold = kind === 'fold' ? 1 : 0;
+  const fold = OV.eyefold ?? (kind === 'fold' ? 1 : 0);
   for (const e of r.eyes) e.pose(fold, null, 0);
   crab.setMouthPellet(kind === 'feed' ? 0.7 : 0);
 }
@@ -497,6 +513,8 @@ function frame() {
   frames++;
   if (frames % 10 === 0) hud.textContent = hudText();
   if (frames === 3) { hud.textContent = hudText(); window.__ready = true; }
+  // fit=1: stop after the first frames — the fitting tool renders on demand
+  if (Q.has('fit') && frames >= 3) return;
   requestAnimationFrame(frame);
 }
 // the sand's contact shading follows the real feet and body
@@ -538,4 +556,51 @@ if (param('tm') === 'agx') renderer.toneMapping = AgXToneMapping;
 
 window.__crab = crab;
 window.__live = live;
+
+/**
+ * Fitting hook (tools/viewers/kometsukigani/fit.mjs, scene=sil): set pose overrides and an orthographic view
+ * { el: elevation (rad), az: azimuth (rad), tx, ty: frame centre (CW), oh: frame height (CW) }, render once and
+ * compare the black silhouette with `window.__fitTarget` (a 0/1 mask the canvas' size, row 0 at the top).
+ * Returns { iou, inter, photoOnly, modelOnly } (inside `roi` [x, y, w, h] if given), or the model mask itself with
+ * `{ mask: true }`.
+ */
+const _fitDir = new Vector3();
+window.__fit = (p) => {
+  for (const k of Object.keys(OV)) if (k in p) OV[k] = p[k];
+  pose(kind, t);
+  if (camera.isOrthographicCamera && 'el' in p) {
+    const oh = p.oh * CW, wh = oh * ASPECT;
+    Object.assign(camera, { left: -wh / 2, right: wh / 2, top: oh / 2, bottom: -oh / 2 });
+    camera.updateProjectionMatrix();
+    _fitDir.set(Math.sin(p.az) * Math.cos(p.el), Math.sin(p.el), Math.cos(p.az) * Math.cos(p.el));
+    // the frame centre: tx across, ty up in the image plane, about the point 0.35 CW above the ground
+    const right = new Vector3(Math.cos(p.az), 0, -Math.sin(p.az));
+    const up = new Vector3().crossVectors(_fitDir, right).negate();
+    const c = new Vector3(0, 0.35, 0).addScaledVector(right, p.tx).addScaledVector(up, p.ty).multiplyScalar(CW);
+    controls.target.copy(c);
+    camera.position.copy(c).addScaledVector(_fitDir, 0.5);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(c);
+  }
+  crab.root.updateMatrixWorld(true);
+  renderer.render(scene, camera);
+  const gl = renderer.getContext();
+  const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+  const px = new Uint8Array(w * h * 4);
+  gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  const T = window.__fitTarget;
+  const m = p.mask ? new Uint8Array(w * h) : null;
+  let inter = 0, po = 0, mo = 0;
+  const R = p.roi;                                   // [x, y, w, h]: compare only inside this rectangle
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = ((h - 1 - y) * w + x) * 4;
+    const isM = px[i] < 128 ? 1 : 0;
+    if (m) m[y * w + x] = isM;
+    if (!T || (R && (x < R[0] || y < R[1] || x >= R[0] + R[2] || y >= R[1] + R[3]))) continue;
+    const isP = T[y * w + x];
+    if (isM && isP) inter++; else if (isP) po++; else if (isM) mo++;
+  }
+  if (m) return Array.from(m);
+  return { iou: inter / Math.max(1, inter + po + mo), inter, photoOnly: po, modelOnly: mo };
+};
 frame();
