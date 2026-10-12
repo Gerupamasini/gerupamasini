@@ -510,6 +510,7 @@ export class App {
       performance.mark('world:creatureSystem');
       this.creatures.setMeadow(this.world.amamo);
       this.creatures.setScent(this.world.carrion);
+      this.creatures.water = this.world.motion;
       await this.creatures.preload();
       // the procedural species' shaders compile here too, and stay compiled while the flat lives (DriverEntry.keep)
       ui.loading.value = { frac: 0.75, label: t('loading.shaders') };

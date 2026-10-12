@@ -1,6 +1,6 @@
 import { Color, Euler, Group, Matrix4, Object3D, Quaternion, Vector3, type SkinnedMesh } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Floor, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Floor, Intent } from '../../drivers/Driver';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
 import { AkaeiModel, AkaeiPose, BELLY } from './AkaeiModel';
@@ -157,6 +157,7 @@ export class AkaeiDriver implements Driver {
 
   private readonly tmp = new Vector3();
   private readonly tmp2 = new Vector3();
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
   private readonly mtx = new Matrix4();
   private readonly inv = new Matrix4();
   private readonly quat = new Quaternion();
@@ -950,6 +951,23 @@ export class AkaeiDriver implements Driver {
     this.busy = false;
     this.ind.pos.copy(this.pos);
     this.ind.heading = this.heading;
+  }
+
+  /** lying on the sand, gliding over it, or buried in it out of everyone's way (its disc: the rest give way to it) */
+  body(): BodyState {
+    const b = this.bodyState;
+    b.mode = this.state === 'BURROW_IN_SAND' && this.phase === 'buried' ? 'away' : this.grounded > 0.5 ? 'bed' : 'water';
+    b.heading = this.heading;
+    b.y = this.pos.y - BELLY * this.dw;
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    this.pos.x += dx; this.pos.z += dz;
+    // the tail's chain lies in the world: it comes along
+    const t = this.tailP;
+    for (let i = 0; i < t.length; i += 3) { t[i] += dx; t[i + 2] += dz; }
+    if (this.ind) { this.ind.pos.x += dx; this.ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

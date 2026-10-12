@@ -1,6 +1,7 @@
 import type { Object3D } from 'three';
 import type { Individual } from '../../Individual';
 import type { Intent } from '../../drivers/Driver';
+import type { BodyMode } from '../../physics/contacts';
 import { hashInts } from '../../../core/Rng';
 import { ShoreDriver, ease, seedOf } from './ShoreDriver';
 import { makeFry, makeWorm, type ShoreModel } from './models';
@@ -247,4 +248,6 @@ export class WormDriver extends ShoreDriver {
   }
 
   protected override anchorHeight(): number { return this.inTank ? this.size * 0.03 : 0.004; }
+  /** on the flat it lives down its burrow, its threads out on the sand: nothing to bump into */
+  protected override bodyMode(): BodyMode { return this.inTank ? 'bed' : 'away'; }
 }

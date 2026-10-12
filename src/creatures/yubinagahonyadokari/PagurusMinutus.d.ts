@@ -72,7 +72,11 @@ export class HermitCrab {
   debugEnabled: boolean;
   active: boolean;
   home: Vector3;
-  loco: { position: Vector3; heading: number; speed: number; initialised: boolean };
+  loco: {
+    position: Vector3; heading: number; speed: number; initialised: boolean;
+    /** the walking legs' feet in the world: where each is planted, aims, stepped from and is */
+    legs: Record<string, { planted: Vector3; footTarget: Vector3; stepFrom: Vector3; footWorld: Vector3 }>;
+  };
   rig: { root: Object3D };
   behavior: {
     state: string;

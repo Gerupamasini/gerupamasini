@@ -1,6 +1,7 @@
 import { Group, Object3D, Vector3, type Mesh } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import type { BodyMode } from '../../physics/contacts';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { bakeLod, type ShoreModel } from './models';
 
@@ -70,6 +71,7 @@ export abstract class ShoreDriver implements Driver {
   private idleFor = 0;
   private restSent = false;
   private readonly tmp = new Vector3();
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
 
   /** the holder the creature system puts in the scene; the model comes with attach() */
   static holder(length_m: number, name: string): PlaceholderModel {
@@ -99,6 +101,8 @@ export abstract class ShoreDriver implements Driver {
   protected steer(_dt: number): void {}
   /** the drawing detail changed (0 near, 1 mid, 2 far) */
   protected detailChanged(_level: number): void {}
+  /** how its body meets the others (a worm down its burrow is out of their way) */
+  protected bodyMode(): BodyMode { return 'bed'; }
 
   attach(root: Object3D, individual: Individual): void {
     this.root = root;
@@ -240,6 +244,20 @@ export abstract class ShoreDriver implements Driver {
     this.busy = false;
     this.root?.position.copy(ind.pos);
     this.held();
+  }
+
+  body(): BodyState {
+    const b = this.bodyState, ind = this.ind;
+    b.mode = this.bodyMode();
+    if (ind) { b.heading = ind.heading; b.y = ind.pos.y; }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const ind = this.ind;
+    if (!ind) return;
+    ind.pos.x += dx;
+    ind.pos.z += dz;
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {
