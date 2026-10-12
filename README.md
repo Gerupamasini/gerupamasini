@@ -31,6 +31,7 @@ npm run render:aramushiro # アラムシロの文書画像を再生成（docs/mo
 npm run render:akaei  # アカエイ（5 つの行動・腹面・LOD）の画像を再生成（docs/models/akaei/）
 npm run render:ishigarei # イシガレイの文書画像を再生成（docs/models/ishigarei/）
 npm run render:mimiika   # ミミイカ（7 状態・体色・LOD）の画像を再生成（docs/models/mimiika/）
+npm run render:sand-dust # 砂煙（アカエイ・イシガレイ・ミミイカ）の画像を再生成（docs/creatures/sand-dust/）
 npm run terrain:bake # 地形 PNG の再生成
 npm run terrain:manko      # 漫湖（70 m × 70 m）の泥干潟と浅い澪筋を再生成
 npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（docs/maps/hashirimizu/）を再生成
@@ -46,6 +47,7 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 ## 文書
 - [水槽・ろ過装置のショップと導入クエスト](docs/aquarium-progression/README.md) CRでの解放・Lv.5までの強化、最大20匹の飼育、9件のクエストとスマホ画面写真。
 - [生きものの物理](docs/creatures/physics.md) 全種共通の物理層（`src/creatures/physics/`）。生きもの同士が重ならないように押し分ける接触、体の足場の面に沿って寝かせる接地（ハゼ類・アサリ類）、うねりと寄せ波で小さな魚を前後に運んで揺らす水の動き。
+- [砂煙](docs/creatures/sand-dust.md) 魚やエイが舞い上げる砂（`src/creatures/fx/SandDust.ts`）。全種共通の 1 回の描画で、膨らんでゆっくり沈みうねりで揺れる泥の雲・すぐ落ちる砂粒・漂う墨。底質で色と量が変わり、画質で間引く。いまはアカエイ・イシガレイ・ミミイカ。
 - [ヤエヤマヒルギ](docs/models/yaeyama-hirugi/README.md) 成木5樹形・幼木3サイズ、支柱根の衝突判定、潮汐の湿潤材質、群生の共有Geometry／LOD。ビューアは `reference/yaeyama-hirugi-viewer/`、画像・ブラウザー検証は `npm run render:yaeyama-hirugi`。
 - `docs/models/aquarium/` 水槽基本設備20種、共通材質、LOD、設備コレクション・専用チケットガチャ・自動配線（自宅 → 水槽 → 設備 / ガチャ）
 - [ホームの水槽の水・光・底床の描画](docs/models/aquarium/water.md) 専用 HDR パイプライン（屈折・水面の裏の全反射・側面ガラスの鏡・吸収と散乱・影の入る光の筋・コースティクス・ブルーム）、起伏と断面のある底床、作り直した飾り、画質設定ごとの負荷と動的解像度。確認は `node tests/smoke/aquarium-water.mjs`

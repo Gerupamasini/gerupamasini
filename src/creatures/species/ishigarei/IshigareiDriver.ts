@@ -11,6 +11,7 @@ import { IshigareiLook, SUBSTRATE_TINT, type IshLookSpec } from './materials';
 import { buildModel, disposeModel, syncEyes, LOD1_AT, LOD2_AT, MODEL_TL, type IshigareiModel } from './model';
 import { shadowLayerFor, sunOf, underwaterSun, type ShadowLayer } from '../haku/ContactShadows';
 import { tickAmimehagiMaterials } from '../amimehagi/materials';
+import { keepSandDust, sandDustFor, type DustSource } from '../../fx/SandDust';
 
 function strHash(s: string): number {
   let h = 2166136261 >>> 0;
@@ -25,6 +26,7 @@ export function lookSpecFor(id: string): IshLookSpec {
 }
 
 const JAW_AXIS = jawAxis();
+const smooth = (a: number, b: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 type FlounderApi = ReturnType<typeof createFlounderBehavior>;
 
@@ -33,7 +35,9 @@ type FlounderApi = ReturnType<typeof createFlounderBehavior>;
  * draped over the ripples, buries itself, creeps after small prey, skims the bottom on the waves of its long dorsal
  * and anal fins and escapes in a cloud of sand (behavior.js: BOTTOM_REST, GLIDE_SWIM, BURROW_IN_SAND, FORAGE,
  * ESCAPE). The brain's intents choose what it does; the behaviour carries each one out and settles back on the bottom.
- * It draws itself through three tiers of shared geometry with its own materials, and casts a flat oval shadow.
+ * It draws itself through three tiers of shared geometry with its own materials, casts a flat oval shadow and throws
+ * the sand it lies in about (the behaviour's silt and spray into the shared dust, fx/SandDust; the wash of its tail and
+ * fins close over the bed).
  */
 export class IshigareiDriver implements Driver {
   private root: Object3D | null = null;
@@ -42,6 +46,8 @@ export class IshigareiDriver implements Driver {
   private fish: FlounderApi | null = null;
   private shadows: ShadowLayer | null = null;
   private shadowSlot = -1;
+  /** the sand it throws into the water (shared by every animal under the parent) */
+  private dust: DustSource | null = null;
   private locked = false;
   private listeners = new Set<(e: BehaviorEvent) => void>();
   private readonly tmp = new Vector3();
@@ -84,12 +90,13 @@ export class IshigareiDriver implements Driver {
     return m.root;
   }
 
-  /** The species' materials in every tier (the skin, the far skin, the fins, the eyes) on a model that is never drawn: DriverEntry.keep. */
+  /** The species' materials in every tier (the skin, the far skin, the fins, the eyes) and the dust, on a model that is never drawn: DriverEntry.keep. */
   static keep(parent: Object3D): { dispose(): void } {
     const m = buildModel(new IshigareiLook(lookSpecFor('keep')));
     m.look.ground.off();
     parent.add(m.root);
-    return { dispose: () => { m.root.removeFromParent(); disposeModel(m); } };
+    const dust = keepSandDust(parent);
+    return { dispose: () => { m.root.removeFromParent(); disposeModel(m); dust.dispose(); } };
   }
 
   attach(root: Object3D, individual: Individual): void {
@@ -110,14 +117,19 @@ export class IshigareiDriver implements Driver {
         autonomous: false, bounds: () => this.ctx?.bounds ?? null,
         // a fish that starts the day half the time buried; one just set into a tank or the case is seen first
         startBuried: root.userData.startOnSurface !== true && (strHash(individual.id) & 1) === 0,
+        spray: (p: Vector3, v: Vector3, n: number, size: number) => this.spray(p, v, n, size),
       });
     }
+    const dustRng = new Rng(hashInts(strHash(individual.id), 0xd057));
+    this.dust = sandDustFor(root.parent ?? root).source(() => dustRng.next());
     this.shadows = shadowLayerFor(root.parent ?? root);
     this.shadowSlot = this.shadows.claim();
     root.visible = false;
   }
 
   detach(): void {
+    this.dust?.release();
+    this.dust = null;
     if (this.shadows) this.shadows.release(this.shadowSlot);
     this.shadowSlot = -1;
     this.shadows = null;
@@ -143,8 +155,32 @@ export class IshigareiDriver implements Driver {
       // the observer it has noticed (the brain's alert): its eyes follow it, and close and fast it bolts
       threat: () => (!Number.isNaN(this.player.x) && (this.ind?.alert ?? 0) > 0.15 ? { pos: this.player, vel: this.playerVel } : null),
       others: () => [],
+      // the sediment it disturbs: fine silt into the water (lingers), see spray() for the coarse sand
+      silt: (p: Vector3, v: Vector3, n: number, size: number) => this.silt(p, v, n, size),
     };
   }
+
+  /**
+   * The behaviour's silt (behavior.js silt(): `n` an amount and `size` a size, both already scaled by the fish's size
+   * K, at a point on the bed thrown with `v` m/s): puffs of a few millimetres to a couple of centimetres that swell to
+   * clouds about the size of the fish.
+   */
+  private silt(p: Vector3, v: Vector3, n: number, size: number): void {
+    const d = this.dust;
+    if (!d?.on) return;
+    d.silt(p, v, n * 0.4, 0.004 * size, 0.008 * size, 1.6 + 0.5 * size, Math.min(0.6, 0.25 + 0.12 * size));
+  }
+
+  /** the behaviour's spray: the coarse sand in a throw (`size` relative, unscaled), flung up and falling straight back */
+  private spray(p: Vector3, v: Vector3, n: number, size: number): void {
+    const d = this.dust;
+    if (!d?.on) return;
+    const K = this.root?.scale.x ?? 1;
+    this.sprayV.copy(v).multiplyScalar(2);
+    this.sprayV.y += 0.035 + 0.035 * size;
+    d.grains(p, this.sprayV, n * 0.25, 0.006 * K, 0.0005 + 0.0002 * size);
+  }
+  private readonly sprayV = new Vector3();
 
   setIntent(intent: Intent): void {
     const f = this.fish, ind = this.ind;
@@ -219,6 +255,12 @@ export class IshigareiDriver implements Driver {
       s0.pos.x += r.vel.x * sdt;
       s0.pos.z += r.vel.z * sdt;
     }
+    // the sand it throws: only near enough to be seen (a tank or the case is all near)
+    const dust = this.dust;
+    if (dust) {
+      dust.near = this.locked || !!ctx.bounds || ind.lod <= 1 || model.lod.getCurrentLevel() <= 1;
+      if (dust.near) { dust.tick(sdt, ctx); dust.setBed(this.bed); }
+    }
     const steps = Math.max(1, Math.ceil(sdt * 60 - 1e-6));
     let P = null as ReturnType<FlounderApi['update']> | null;
     for (let i = 0; i < steps; i++) P = f.update(sdt / steps);
@@ -239,6 +281,7 @@ export class IshigareiDriver implements Driver {
     if (this.substrateT <= 0) {
       this.substrateT = 0.7;
       const s = ctx.floor.sampleAt?.(st.pos.x, st.pos.z);
+      this.bed = s?.substrate;
       const c = SUBSTRATE_TINT[s?.substrate ?? 'sand'] ?? SUBSTRATE_TINT.sand;
       model.look.setSubstrate(new Color(c[0], c[1], c[2]));
       // background matching: the melanophores follow the brightness of the ground, slowly
@@ -259,10 +302,49 @@ export class IshigareiDriver implements Driver {
       ground.update(st.pos.x + o.x, st.pos.z + o.z, 0.15 * root.scale.x, (x, z) => ctx.floor.heightAt(x - o.x, z - o.z) + o.y, moved);
     }
     this.updateShadow(P);
+    this.wash(sdt);
     if (st.mode !== this.lastMode) { this.lastMode = st.mode; this.emit(st.mode.toLowerCase()); }
     this.busy = this.clock < this.until || !f.settled;
   }
   private melGoal = 1;
+  /** the sediment under it (a HabitatSample's substrate) */
+  private bed: string | undefined = undefined;
+  private readonly washAt = new Vector3();
+  private readonly washV = new Vector3();
+
+  /**
+   * Swimming close over the bed it keeps lifting a little silt: the hard tail strokes of an escape or a burst of
+   * kicks wash it up behind the tail, the waves of the long dorsal and anal fins stir it along the margins as it
+   * creeps after prey or lifts off. Heavier the harder it beats and the lower it is.
+   */
+  private wash(dt: number): void {
+    const f = this.fish, d = this.dust, root = this.root, ctx = this.ctx;
+    if (!f || !d?.on || !root || !ctx) return;
+    const st = f.state, K = root.scale.x;
+    if (st.bury > 0.5) return;
+    const low = 1 - smooth(0.003 * K, 0.02 * K, st.lift);
+    if (low <= 0) return;
+    const beat = smooth(1.5, 6.5, st.swimAmp / K);
+    const fins = st.speed > 0.002 ? smooth(0.12, 0.35, st.finAmp) * 0.35 : 0;
+    const tailRate = 40 * beat * low, finRate = 8 * fins * low;
+    const rate = tailRate + finRate;
+    if (rate < 0.2) return;
+    const sh = Math.sin(st.heading), ch = Math.cos(st.heading);
+    const rnd = d.rnd;
+    if (rnd() * rate < tailRate) {
+      // behind the tail, thrown back and up
+      const back = 0.042 * K;
+      this.washAt.set(st.pos.x - sh * back, 0, st.pos.z - ch * back);
+      this.washV.set(-sh * st.speed * 0.25, 0.012 + 0.02 * beat, -ch * st.speed * 0.25);
+    } else {
+      // under one of the margins, pushed out sideways
+      const side = rnd() < 0.5 ? -1 : 1, along = (rnd() - 0.4) * 0.03 * K, out = 0.013 * K;
+      this.washAt.set(st.pos.x + ch * side * out - sh * along, 0, st.pos.z - sh * side * out - ch * along);
+      this.washV.set(ch * side * 0.01, 0.006, -sh * side * 0.01);
+    }
+    this.washAt.y = ctx.floor.heightAt(this.washAt.x, this.washAt.z) + 0.0015 * K;
+    d.stream(dt, rate * K, this.washAt, this.washV, 0.004 * K, 0.008 * K, 1.8, 0.25);
+  }
   private readonly origin = new Vector3();
   private readonly originPrev = new Vector3(Number.NaN, 0, 0);
 

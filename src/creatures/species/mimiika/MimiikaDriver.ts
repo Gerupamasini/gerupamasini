@@ -9,7 +9,7 @@ import { applyPose } from './rig';
 import { MimiikaLook, SUBSTRATE_TINT, type MmLookSpec } from './materials';
 import { buildModel, disposeModel, syncLevel, LOD1_AT, LOD2_AT, MODEL_ML, type MimiikaModel } from './model';
 import { makeMysidModel, poseMysid } from './prey';
-import { SandFX } from '../akaei/SandFX';
+import { keepSandDust, sandDustFor, type DustSource } from '../../fx/SandDust';
 import { CONTACT_SHADOWS, shadowLayerFor, sunOf, underwaterSun, type ShadowLayer } from '../haku/ContactShadows';
 import { AMH_UNIFORMS, tickAmimehagiMaterials } from '../amimehagi/materials';
 
@@ -26,14 +26,13 @@ export function lookSpecFor(id: string): MmLookSpec {
 }
 
 const INK = new Vector3(0.012, 0.01, 0.011);
-const _v = new Vector3();
 
 /**
  * ミミイカ (Euprymna morsei): the small bobtail squid of the sandy shallows. By day it lies buried with only its eyes
  * out; at night it hangs and swims over the sand on its ear-like fins, hunts mysids with its tentacles and, when
  * startled, inks and jets away mantle first and buries again (behavior.ts: REST, HOVER, SWIM, CRAWL, BURROW, HUNT,
  * ESCAPE). The brain's intents choose what it does; the behaviour carries each one out. It draws itself through three
- * tiers of shared geometry with its own chromatophore materials, throws sand and ink (the アカエイ's SandFX) and
+ * tiers of shared geometry with its own chromatophore materials, throws sand and ink (the shared dust, fx/SandDust) and
  * casts a soft contact shadow.
  */
 export class MimiikaDriver implements Driver {
@@ -41,8 +40,8 @@ export class MimiikaDriver implements Driver {
   private ind: Individual | null = null;
   private model: MimiikaModel | null = null;
   private squid: SquidApi | null = null;
-  private sandFx: SandFX | null = null;
-  private inkFx: SandFX | null = null;
+  /** the sand and the ink it throws into the water (shared by every animal under the parent) */
+  private dust: DustSource | null = null;
   private preyModel: Group | null = null;
   private shadows: ShadowLayer | null = null;
   private shadowSlot = -1;
@@ -99,7 +98,7 @@ export class MimiikaDriver implements Driver {
     parent.add(far.root);
     const prey = makeMysidModel();
     parent.add(prey);
-    const fx = new SandFX(parent);
+    const fx = keepSandDust(parent);
     return {
       dispose: () => {
         m.root.removeFromParent(); disposeModel(m);
@@ -152,12 +151,8 @@ export class MimiikaDriver implements Driver {
       });
     }
     const parent = root.parent ?? root;
-    this.sandFx = new SandFX(parent);
-    this.sandFx.shadow.visible = false;
-    this.inkFx = new SandFX(parent);
-    this.inkFx.shadow.visible = false;
-    this.inkFx.setSandColour(INK);
-    this.inkFx.points.name = 'MimiikaInk';
+    const dustRng = new Rng(hashInts(strHash(individual.id), 0xd057));
+    this.dust = sandDustFor(parent).source(() => dustRng.next());
     this.shadows = shadowLayerFor(parent);
     this.shadowSlot = this.shadows.claim();
     root.visible = false;
@@ -167,8 +162,7 @@ export class MimiikaDriver implements Driver {
     if (this.shadows) this.shadows.release(this.shadowSlot);
     this.shadowSlot = -1;
     this.shadows = null;
-    this.sandFx?.dispose(); this.sandFx = null;
-    this.inkFx?.dispose(); this.inkFx = null;
+    this.dust?.release(); this.dust = null;
     this.preyModel?.removeFromParent(); this.preyModel = null;
     if (this.model) disposeModel(this.model);
     this.model = null;
@@ -264,7 +258,7 @@ export class MimiikaDriver implements Driver {
       const smp = ctx.floor.sampleAt?.(s.state.pos.x, s.state.pos.z);
       const c = SUBSTRATE_TINT[smp?.substrate ?? 'sand'] ?? SUBSTRATE_TINT.sand;
       model.look.setCover(c[0], c[1], c[2]);
-      this.sandFx?.setSandColour(_v.set(c[0], c[1], c[2]));
+      this.dust?.setBed(smp?.substrate);
       // background matching: the darker the bottom, the more the brown set spreads
       const lum = (c[0] + c[1] + c[2]) / 3;
       s.setSurroundings((0.37 - lum) / 0.2, this.night);
@@ -303,18 +297,19 @@ export class MimiikaDriver implements Driver {
 
   /** sand and ink: only near enough to be seen (the far tier skips them) */
   private effects(dt: number, ctx: DriverContext, level: number): void {
-    const s = this.squid!;
-    const ground = (x: number, z: number) => ctx.floor.heightAt(x, z);
-    const near = level <= 1 || this.locked;
-    for (const e of s.fx) {
-      if (!near) continue;
-      const fx = e.kind === 'ink' ? this.inkFx : this.sandFx;
-      fx?.emit(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha);
+    const s = this.squid!, dust = this.dust;
+    if (dust) {
+      dust.near = level <= 1 || this.locked;
+      if (dust.near) {
+        dust.tick(dt, ctx);
+        for (const e of s.fx) {
+          if (e.kind === 'ink') dust.ink(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, INK);
+          // (a little squid's throw: the silt, and a grain or so in each puff)
+          else dust.kick(e.pos, e.vel, e.count, e.spread, e.size, e.life, e.alpha, 1);
+        }
+      }
     }
     s.fx.length = 0;
-    this.sandFx?.update(dt, ground);
-    // (ink hangs in the water: it barely settles)
-    this.inkFx?.update(dt, (x, z) => ground(x, z) - 1);
   }
 
   private updatePrey(level: number): void {
