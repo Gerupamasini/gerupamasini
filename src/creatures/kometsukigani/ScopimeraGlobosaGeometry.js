@@ -118,6 +118,14 @@ function patch(B, { rows, cols, fn, bone, wrapCols = false }) {
   }
 }
 
+/** smooth 2D value noise in [-1, 1] on a seeded lattice (small irregularities of the cuticle) */
+function vnoise(x, y, seed) {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  const h = (a, b) => hash01(a, b, seed) * 2 - 1;
+  return (h(ix, iy) * (1 - ux) + h(ix + 1, iy) * ux) * (1 - uy) + (h(ix, iy + 1) * (1 - ux) + h(ix + 1, iy + 1) * ux) * uy;
+}
+
 /** superellipse direction: (cos, sin) → exponent-shaped */
 const se = (c, n) => Math.sign(c) * Math.pow(Math.abs(c), 2 / n);
 
@@ -126,15 +134,15 @@ const se = (c, n) => Math.sign(c) * Math.pow(Math.abs(c), 2 / n);
  * section(t, th) → { cy, cz, ry, rz, n, dr } (t: 0..1 along x0..x1; th: angle, 0 = +Z, π/2 = +Y)
  * capA / capB: length of the rounded ends (CW). Normals come from the grid (outward).
  */
-function tube(B, { bone, x0, x1, radial, rings, section, info, capA = 0.02, capB = 0.02, roll = 0 }) {
+function tube(B, { bone, x0, x1, radial, rings, section, info, capA = 0.02, capB = 0.02, roll = 0, twist = 0 }) {
   patch(B, {
     rows: rings, cols: radial, bone, wrapCols: true,
-    fn: (u, v, o, inside) => { tubePoint({ x0, x1, section, capA, capB, roll }, v, u * TAU, o, inside); return info(v, u * TAU); },
+    fn: (u, v, o, inside) => { tubePoint({ x0, x1, section, capA, capB, roll, twist }, v, u * TAU, o, inside); return info(v, u * TAU); },
   });
 }
 
 /** the surface point of a tube at (t, th) — shared by the mesh and by anything that must sit on it (setae) */
-function tubePoint({ x0, x1, section, capA = 0.02, capB = 0.02, roll = 0 }, t, th, o, inside = null) {
+function tubePoint({ x0, x1, section, capA = 0.02, capB = 0.02, roll = 0, twist = 0 }, t, th, o, inside = null) {
   const L = x1 - x0;
   const ca = Math.min(0.45, capA / L), cb = Math.min(0.45, capB / L);
   const s = section(t, th);
@@ -145,7 +153,9 @@ function tubePoint({ x0, x1, section, capA = 0.02, capB = 0.02, roll = 0 }, t, t
   const c = Math.cos(th), sn = Math.sin(th), n = s.n ?? 2;
   const dr = s.dr ?? 0;
   let y = (s.ry * se(sn, n) + dr * sn) * m, z = (s.rz * se(c, n) + dr * c) * m;
-  if (roll) { const cr = Math.cos(roll), sr = Math.sin(roll); const yy = y * cr - z * sr; z = y * sr + z * cr; y = yy; }
+  // roll: the segment's turn about its axis; twist: the turn growing along it (the cuticle is never a straight prism)
+  const rl = roll + twist * (t - 0.5);
+  if (rl) { const cr = Math.cos(rl), sr = Math.sin(rl); const yy = y * cr - z * sr; z = y * sr + z * cr; y = yy; }
   // the inside point for orienting normals: on the axis, pulled back inside the rounded ends
   if (inside) inside.set(x0 + clamp(t, Math.min(ca, 0.5), Math.max(1 - cb, 0.5)) * L, s.cy, s.cz);
   return o.set(x0 + t * L, s.cy + y, s.cz + z);
@@ -250,6 +260,8 @@ function carapaceFn(u, v, o, inside) {
   // (low and soft: the live crab's dorsum reads as one inflated dome with faint regions, 060, 049, 057)
   dy += dorsal * (0.018 * g(0.28, -0.08, 0.2) + 0.007 * g(0.3, 0.17, 0.1) + 0.006 * g(0.1, 0.2, 0.09)
     + 0.005 * g(0, 0.08, 0.08) + 0.006 * g(0, -0.15, 0.09) + 0.004 * g(0, -0.3, 0.09));
+  // and never quite symmetric or smooth: low irregular undulations of the dorsum (the left and right halves differ)
+  dy += dorsal * (0.004 * vnoise(x * 6.5, z * 6.5, 9) + 0.0018 * vnoise(x * 17, z * 17, 10));
   // furrows: the cervical groove arching across, the H between the gastric and cardiac regions
   const cerv = Math.abs(z - (0.08 - 0.55 * ax * ax));
   dy -= dorsal * 0.005 * Math.exp(-(cerv * cerv) / 0.0006) * smoothstep(0.04, 0.1, ax) * (1 - smoothstep(0.3, 0.38, ax));
@@ -427,6 +439,8 @@ function chelaPropodusSection(t, th, res) {
     const up = Math.max(0, Math.sin(th));
     dr = 0.0055 * Math.pow(up, 10) * (0.5 + 0.5 * Math.cos(TAU * N_TEETH * ft)) * (1 - ft);
   }
+  // the palm's faces are gently uneven (011), the fingers smooth
+  if (res.teeth) dr += 0.0012 * vnoise(pt * 16, th * 2.4, 31) * (1 - f);
   return { cy: f * fCy + (1 - f) * 0.012 * Math.sin(Math.PI * pt), cz: 0.004 * f, ry: palmRy * (1 - f) + fRy * f, rz: palmRz * (1 - f) + fRz * f, n: 2 - 0.1 * f, dr };
 }
 
@@ -492,38 +506,63 @@ function buildChelipeds(B, res) {
  */
 function legSegments(L, sign, res) {
   const roll = -(L.roll ?? 0) * sign;
+  // every leg its own small irregularities (left and right legs differ; 009, 049: no two segments alike)
+  const lseed = L.name * 13 + (sign > 0 ? 0 : 101);
+  const tw = (k) => (0.08 + 0.08 * hash01(lseed, k, 3)) * sign * (hash01(lseed, k, 4) < 0.5 ? 1 : -1);
+  /** the articulations: each segment narrows into a short neck at both ends (where the membrane joins it) */
+  const neck = (t, a, b, w = 0.07) => 1 - a * Math.exp(-((t / w) ** 2)) - b * Math.exp(-(((1 - t) / w) ** 2));
+  /** low, irregular undulations of the cuticle (≈ 0.02 CW across, 0.001–0.002 CW high), only at the close-up level */
+  const bump = (t, th, len, k, amp) => (res.teeth ? amp * (vnoise(t * len * 48, th * 2.6 + k * 7.1, lseed + k) + 0.5 * vnoise(t * len * 120, th * 5.2 + k * 3.3, lseed + k + 50)) : 0);
   return {
     Coxa: { x0: -0.035, x1: L.coxa + 0.008, capA: 0.026, capB: 0.012, section: (t) => ({ cy: 0, cz: 0, ry: 0.04 - 0.004 * t, rz: 0.046 }), part: PART.LEG_PROX, thin: 0.35, mem: 0 },
     Basis: { x0: -0.01, x1: L.basis + 0.006, capA: 0.01, capB: 0.01, section: () => ({ cy: 0, cz: 0, ry: 0.036, rz: 0.042 }), part: PART.LEG_PROX, thin: 0.35, mem: 0.025 },
     Ischium: { x0: -0.006, x1: L.ischium + 0.01, capA: 0.008, capB: 0.012, roll: roll * 0.5, section: (t) => ({ cy: 0, cz: 0, ry: 0.034, rz: 0.044 + 0.012 * t, n: 2.2 }), part: PART.LEG_PROX, thin: 0.4, mem: 0 },
     Merus: {
-      x0: -0.012, x1: L.merus + 0.008, capA: 0.018, capB: 0.02, roll,
+      x0: -0.012, x1: L.merus + 0.008, capA: 0.012, capB: 0.009, roll, twist: tw(3),
       section: (t, th) => {
-        // narrow at its proximal articulation, then nearly parallel-sided, a little broader distally (009, 049)
-        const prof = (0.62 + 0.38 * smoothstep(0, 0.22, t)) * (1 + 0.05 * smoothstep(0.4, 0.85, t)) * (1 - 0.1 * smoothstep(0.9, 1, t));
+        // narrow at its proximal articulation, broadest beyond the middle, then drawn in to the knee (009, 049)
+        // … and the distal end opens a little into the socket that takes the carpus (no capsule ends)
+        const prof = (0.62 + 0.38 * smoothstep(0, 0.22, t)) * (1 + 0.06 * smoothstep(0.35, 0.75, t)) * (1 - 0.1 * smoothstep(0.8, 0.95, t)) * (1 + 0.06 * smoothstep(0.95, 1, t)) * neck(t, 0.05, 0);
+        const sn = Math.sin(th), c = Math.cos(th);
         // the tympanum: an oval hollow over most of each broad face (up and down)
-        const ov = Math.max(0, 1 - ((t - 0.52) / 0.36) ** 2) * Math.max(0, 1 - (Math.cos(th) / 0.72) ** 2);
+        const ov = Math.max(0, 1 - ((t - 0.52) / 0.36) ** 2) * Math.max(0, 1 - (c / 0.72) ** 2);
         const hollow = res.teeth ? 0.0022 * ov : 0;
-        return { cy: 0, cz: 0, ry: L.merusD * 0.5 * (0.85 + 0.15 * prof) - hollow * Math.abs(Math.sin(th)), rz: L.merusB * 0.5 * prof, n: 2.3 };
+        // the knee's dorsal condyle, a faint ridge along the upper face, and the cuticle's own small undulations
+        let dr = 0.006 * Math.exp(-(((1 - t) / 0.07) ** 2)) * Math.max(0, sn) ** 2;
+        dr += 0.0022 * Math.exp(-((c / 0.28) ** 2)) * Math.max(0, sn) * smoothstep(0.1, 0.3, t) * (1 - smoothstep(0.7, 0.92, t));
+        dr += bump(t, th, L.merus, 3, 0.0016);
+        // a flattened plate with distinct fore and aft margins, not an oval tube (009, 049)
+        return { cy: -0.003 * Math.sin(Math.PI * t), cz: 0, ry: L.merusD * 0.5 * (0.85 + 0.15 * prof) - hollow * Math.abs(sn), rz: L.merusB * 0.5 * prof * (1 + 0.04 * c), n: 2.9, dr };
       },
       part: PART.MERUS, thin: 0.55, mem: 0.025,
     },
     Carpus: {
-      x0: -0.012, x1: L.carpus + 0.008, capA: 0.014, capB: 0.012, roll: roll * 0.8,
-      section: (t) => { const p = 0.72 + 0.28 * smoothstep(0, 0.45, t); return { cy: 0.002 * t, cz: 0, ry: L.carpusD * 0.5 * (0.85 + 0.15 * p), rz: L.carpusB * 0.5 * p, n: 2.25 }; },
+      x0: -0.016, x1: L.carpus + 0.008, capA: 0.012, capB: 0.008, roll: roll * 0.8, twist: tw(4),
+      section: (t, th) => {
+        // short and stout: a rounded knob where it meets the knee, widening distally (049, 068)
+        const p = (0.72 + 0.28 * smoothstep(0, 0.45, t)) * neck(t, 0.06, 0) * (1 + 0.05 * smoothstep(0.93, 1, t));
+        const dr = 0.004 * Math.exp(-((t / 0.12) ** 2)) * Math.max(0, Math.sin(th)) ** 2 + bump(t, th, L.carpus, 4, 0.0012);
+        return { cy: 0.002 * t, cz: 0, ry: L.carpusD * 0.5 * (0.85 + 0.15 * p), rz: L.carpusB * 0.5 * p, n: 2.6, dr };
+      },
       part: PART.LEG_DIST, thin: 0.6, mem: 0.025,
     },
     Propodus: {
-      x0: -0.01, x1: L.propodus + 0.006, capA: 0.012, capB: 0.01, roll: roll * 0.6,
-      section: (t) => { const p = (0.8 + 0.2 * smoothstep(0, 0.2, t)) * (1 - 0.12 * t); return { cy: 0, cz: 0, ry: L.propD * 0.5 * (0.9 + 0.1 * p), rz: L.propB * 0.5 * p, n: 2.2 }; },
+      x0: -0.014, x1: L.propodus + 0.006, capA: 0.01, capB: 0.008, roll: roll * 0.6, twist: tw(5),
+      section: (t, th) => {
+        // parallel-sided, tapering a little to the dactylus, bowed slightly ventrally (009)
+        const p = (0.8 + 0.2 * smoothstep(0, 0.2, t)) * (1 - 0.16 * t) * neck(t, 0.05, 0) * (1 + 0.05 * smoothstep(0.93, 1, t));
+        return { cy: -0.004 * Math.sin(Math.PI * t), cz: 0, ry: L.propD * 0.5 * (0.9 + 0.1 * p), rz: L.propB * 0.5 * p, n: 2.6, dr: bump(t, th, L.propodus, 5, 0.001) };
+      },
       part: PART.LEG_DIST, thin: 0.65, mem: 0.025,
     },
     // dactylus: long, lanceolate, sharp; legs 1–3 curve a little ventrally, the last one less (S. sheni) [R]
     Dactylus: {
-      x0: -0.008, x1: L.dactylus, capA: 0.012, capB: 0.004, roll: roll * 0.4,
-      section: (t) => {
-        const lance = (0.78 + 0.32 * Math.sin(Math.PI * clamp(t * 1.15 + 0.05, 0, 1))) * (1 - t ** 1.5);
-        return { cy: -(L.name === 4 ? 0.008 : 0.016) * t * t, cz: 0, ry: L.dacD * 0.5 * lance + 0.0006, rz: L.dacB * 0.5 * lance + 0.0006, n: 2 };
+      x0: -0.012, x1: L.dactylus, capA: 0.01, capB: 0.004, roll: roll * 0.4, twist: tw(6),
+      section: (t, th) => {
+        const lance = (0.78 + 0.32 * Math.sin(Math.PI * clamp(t * 1.15 + 0.05, 0, 1))) * (1 - t ** 1.5) * neck(t, 0.08, 0);
+        // fine longitudinal ridges (068)
+        const ridge = res.teeth ? 0.0006 * Math.cos(th * 6) * (1 - t) : 0;
+        return { cy: -(L.name === 4 ? 0.008 : 0.018) * t * t, cz: 0.003 * sign * t * t, ry: L.dacD * 0.5 * lance + 0.0006, rz: L.dacB * 0.5 * lance + 0.0006, n: 2, dr: ridge };
       },
       part: PART.DACTYL, thin: 0.75, mem: 0.02,
     },
@@ -565,25 +604,34 @@ function buildSetae(B) {
   const seta = (bone, root, dir, len, width, limb) => {
     const M = rig.bind[bone];
     _nm.getNormalMatrix(M);
-    // two crossed ribbons; the strand droops distally (+X) as it grows
+    // a fine tapered hair, curving: it leaves the cuticle along `dir`, bends toward a random side and droops
+    // distally; two crossed ribbons so it reads from any side (063, 049, 068, 010: short, stiff, a little bent)
     const side = new Vector3().crossVectors(dir, Math.abs(dir.y) < 0.9 ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0)).normalize();
     const side2 = new Vector3().crossVectors(dir, side).normalize();
-    const segs = 3;
+    const ba = rand() * TAU, bend = 0.25 + 0.55 * rand();
+    const bendDir = side.clone().multiplyScalar(Math.cos(ba)).addScaledVector(side2, Math.sin(ba));
+    const id = rand();
+    const segs = 5;
+    const pts = [];
+    const p = root.clone(), d = dir.clone();
+    for (let s2 = 0; s2 <= segs; s2++) {
+      pts.push(p.clone());
+      d.addScaledVector(bendDir, bend / segs).add(new Vector3(0.06 / segs, 0, 0)).normalize();
+      p.addScaledVector(d, len / segs);
+    }
     for (const sd of [side, side2]) {
       const base = B.count;
-      for (let s = 0; s <= segs; s++) {
-        const t = s / segs;
-        const p = new Vector3().copy(root).addScaledVector(dir, len * t);
-        p.x += 0.12 * len * t * t;
-        const w = width * (1 - 0.92 * t);
+      for (let s2 = 0; s2 <= segs; s2++) {
+        const t = s2 / segs;
+        const w = width * (1 - 0.88 * t) * (s2 === 0 ? 1.2 : 1);
         for (const k of [-1, 1]) {
-          const q = p.clone().addScaledVector(sd, k * w * 0.5);
+          const q = pts[s2].clone().addScaledVector(sd, k * w * 0.5);
           const n = new Vector3().crossVectors(sd, dir).normalize();
-          B.vert(q.clone().applyMatrix4(M), n.applyMatrix3(_nm).normalize(), t, k * 0.5 + 0.5, q, [PART.SETA, limb, t, 1], bone);
+          B.vert(q.clone().applyMatrix4(M), n.applyMatrix3(_nm).normalize(), t, k * 0.5 + 0.5, q, [PART.SETA, limb, t, id], bone);
         }
       }
-      for (let s = 0; s < segs; s++) {
-        const a = base + s * 2;
+      for (let s2 = 0; s2 < segs; s2++) {
+        const a = base + s2 * 2;
         B.tri(a, a + 2, a + 1); B.tri(a + 1, a + 2, a + 3);
       }
     }
@@ -611,33 +659,33 @@ function buildSetae(B) {
       // dorsal / ventral), leaning a little ventrally; the longest (≈ 0.06 CW) on the propodi and the meri's hind
       // margin (063, 049, 068, 010; "black stout setae, sparse" [L])
       const FWD = sign > 0 ? -0.35 : Math.PI + 0.35, AFT = sign > 0 ? Math.PI + 0.35 : -0.35;
-      fringe(bi('Merus'), specs.Merus, 0.12, 0.92, AFT, 4, [0.03, 0.06], limb * 10 + 3, 0.55, 0.0032);
-      fringe(bi('Merus'), specs.Merus, 0.15, 0.9, FWD, 2, [0.025, 0.045], limb * 10 + 3, 0.6, 0.0032);
-      fringe(bi('Carpus'), specs.Carpus, 0.15, 0.85, AFT, 2, [0.025, 0.045], limb * 10 + 4, 0.6, 0.003);
-      fringe(bi('Propodus'), specs.Propodus, 0.08, 0.92, AFT, 4, [0.03, 0.055], limb * 10 + 5, 0.6, 0.003);
-      fringe(bi('Propodus'), specs.Propodus, 0.1, 0.9, FWD, 3, [0.025, 0.045], limb * 10 + 5, 0.65, 0.003);
-      fringe(bi('Dactylus'), specs.Dactylus, 0.06, 0.5, AFT, 2, [0.02, 0.035], limb * 10 + 6, 0.8, 0.003);
-      fringe(bi('Dactylus'), specs.Dactylus, 0.06, 0.5, FWD, 1, [0.02, 0.03], limb * 10 + 6, 0.8, 0.003);
+      fringe(bi('Merus'), specs.Merus, 0.1, 0.94, AFT, 9, [0.03, 0.07], limb * 10 + 3, 0.42, 0.003);
+      fringe(bi('Merus'), specs.Merus, 0.15, 0.9, FWD, 3, [0.02, 0.045], limb * 10 + 3, 0.45, 0.003);
+      fringe(bi('Carpus'), specs.Carpus, 0.12, 0.88, AFT, 4, [0.02, 0.05], limb * 10 + 4, 0.45, 0.0028);
+      fringe(bi('Propodus'), specs.Propodus, 0.06, 0.94, AFT, 8, [0.025, 0.065], limb * 10 + 5, 0.45, 0.0028);
+      fringe(bi('Propodus'), specs.Propodus, 0.1, 0.9, FWD, 4, [0.02, 0.045], limb * 10 + 5, 0.5, 0.0028);
+      fringe(bi('Dactylus'), specs.Dactylus, 0.06, 0.5, AFT, 3, [0.015, 0.035], limb * 10 + 6, 0.7, 0.0024);
+      fringe(bi('Dactylus'), specs.Dactylus, 0.06, 0.5, FWD, 2, [0.015, 0.03], limb * 10 + 6, 0.7, 0.0024);
     });
     // water-wicking tufts between the bases of the first two walking legs (S. intermedia) [R]
     const cox = rig.index.get(`Leg_${id}1_Coxa`);
     for (let i = 0; i < 9; i++) {
       const root = new Vector3(0.02 + 0.03 * rand(), -0.03 - 0.01 * rand(), -sign * (0.04 + 0.02 * rand()));
-      seta(cox, root, new Vector3(0.2, -1, (rand() - 0.5) * 0.4).normalize(), 0.025 + 0.02 * rand(), 0.0035, sk * 40);
+      seta(cox, root, new Vector3(0.2, -1, (rand() - 0.5) * 0.4).normalize(), 0.02 + 0.025 * rand(), 0.0018, sk * 40);
     }
     const ci = (s) => rig.index.get(`Cheliped_${id}_${s}`);
     const C = CHELIPED;
     const merusSpec = { x0: -0.015, x1: C.merus + 0.012, capA: 0.03, capB: 0.035, section: chelaMerusSection };
-    fringe(ci('Merus'), merusSpec, 0.15, 0.85, Math.PI / 2, 3, [0.02, 0.04], (8 + sk) * 10 + 3, 0.6, 0.003);
+    fringe(ci('Merus'), merusSpec, 0.15, 0.85, Math.PI / 2, 3, [0.02, 0.04], (8 + sk) * 10 + 3, 0.6, 0.002);
     const propSpec = { x0: -0.012, x1: C.palm + C.finger, capA: 0.03, capB: 0.012, section: (t, th) => chelaPropodusSection(t, th, res) };
     const palmEnd = (C.palm + 0.012) / (C.palm + C.finger + 0.012);
-    fringe(ci('Propodus'), propSpec, 0.12, palmEnd * 0.9, Math.PI / 2, 3, [0.02, 0.035], (8 + sk) * 10 + 5, 0.6, 0.003);
-    fringe(ci('Propodus'), propSpec, palmEnd, palmEnd + (1 - palmEnd) * 0.6, -Math.PI / 2, 2, [0.015, 0.025], (8 + sk) * 10 + 5, 0.8, 0.0028);
+    fringe(ci('Propodus'), propSpec, 0.12, palmEnd * 0.9, Math.PI / 2, 3, [0.02, 0.035], (8 + sk) * 10 + 5, 0.6, 0.002);
+    fringe(ci('Propodus'), propSpec, palmEnd, palmEnd + (1 - palmEnd) * 0.6, -Math.PI / 2, 2, [0.015, 0.025], (8 + sk) * 10 + 5, 0.8, 0.0018);
     // third maxillipeds: a dense fringe on the medial margin
     const mb = rig.index.get(`Mxp3_${id}`);
     for (let i = 0; i < 12; i++) {
       const z = -MXP3.height * 0.42 + (MXP3.height * 0.8 * (i + rand() * 0.6)) / 12;
-      seta(mb, new Vector3(MXP3.width * 0.97, 0.004, z), new Vector3(0.75, 0.4, (rand() - 0.5) * 0.3).normalize(), 0.012 + 0.012 * rand(), 0.003, (12 + sk) * 10);
+      seta(mb, new Vector3(MXP3.width * 0.97, 0.004, z), new Vector3(0.75, 0.4, (rand() - 0.5) * 0.3).normalize(), 0.01 + 0.014 * rand(), 0.0016, (12 + sk) * 10);
     }
   });
   // carapace: short setae along the anterolateral rim and the front
@@ -648,7 +696,7 @@ function buildSetae(B) {
     const R = outlineRadius(th);
     const root = new Vector3(Math.sin(th) * R * 0.99, marginY(th) + 0.005, Math.cos(th) * R * 0.99);
     const dir = new Vector3(Math.sin(th), 0.5, Math.cos(th)).normalize();
-    seta(body, root, dir, 0.012 + 0.015 * rand(), 0.003, 150);
+    seta(body, root, dir, 0.01 + 0.018 * rand(), 0.0018, 150);
   }
 }
 

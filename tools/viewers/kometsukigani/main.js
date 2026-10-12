@@ -2,10 +2,15 @@
 // URL params: view=front|side|top|q34|back|low|macro|under  pose=stand|feed|wave|fold|walk  lod=0|1|2
 //             wet=0..1 sand=0..1 seed=int sex=m|f sun=elevationDeg az=deg w,h (canvas size) live=1 (run the sim)
 import {
-  ACESFilmicToneMapping, Color, DirectionalLight, HemisphereLight, Mesh, MeshBasicMaterial, MeshStandardMaterial, MeshPhysicalMaterial, OrthographicCamera, PCFSoftShadowMap,
+  ACESFilmicToneMapping, AgXToneMapping, Color, DirectionalLight, Vector4, IcosahedronGeometry, InstancedMesh, Matrix4, Quaternion, Euler, HemisphereLight, Mesh, MeshBasicMaterial, MeshStandardMaterial, MeshPhysicalMaterial, OrthographicCamera, PCFSoftShadowMap,
   PerspectiveCamera, PlaneGeometry, PMREMGenerator, Scene, SRGBColorSpace, Vector3, WebGLRenderer, BackSide, SphereGeometry, ShaderMaterial,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CrabModel } from '../../../src/creatures/kometsukigani/ScopimeraGlobosaModel.js';
 import { STANCE } from '../../../src/creatures/kometsukigani/ScopimeraGlobosaMorphology.js';
 import { CHELA_POSES } from '../../../src/creatures/kometsukigani/ScopimeraGlobosaRig.js';
@@ -51,32 +56,41 @@ renderer.shadowMap.type = PCFSoftShadowMap;
 
 const SCENE = param('scene') ?? 'field';
 const scene = new Scene();
-scene.background = new Color(SCENE === 'studio' ? 0xd9dde0 : SCENE === 'hand' ? 0xd9a48c : SCENE === 'dark' ? 0x8a8580 : SCENE === 'clay' ? 0x8c9094 : SCENE === 'sil' ? 0xffffff : 0x9fb3c0);
+scene.background = new Color(SCENE === 'studio' ? 0xd9dde0 : SCENE === 'hand' ? 0xd9a48c : SCENE === 'dark' ? 0x8a8580 : SCENE === 'clay' ? 0x8c9094 : SCENE === 'sil' ? 0xffffff : SCENE === 'beach' ? 0xb9c4cc : 0x9fb3c0);
+// beach: natural daylight on a sand flat, for judging the crab as a macro photograph would show it
+const BEACH = SCENE === 'beach';
 // clay: the untextured grey model (shape review); sil: a black silhouette on white (overlay on a photo)
 const CLAY = SCENE === 'clay', SIL = SCENE === 'sil';
 
 // sky gradient → environment
 const skyMat = new ShaderMaterial({
   side: BackSide, depthWrite: false,
-  uniforms: {},
+  uniforms: { uSun: { value: new Vector3(0, 1, 0) } },
   vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: SCENE === 'studio' || SCENE === 'hand'
     // a bright room seen through the tank: white walls, a window band, the bench below
     // a room seen from the tank: mid-grey walls, a bright window to the front-left, a ceiling light, the bench
     ? 'varying vec3 vD; void main(){ float y = vD.y; vec3 c = vec3(0.32,0.33,0.34); c = mix(c, vec3(0.5,0.5,0.5), smoothstep(-0.05, 0.3, y)); float win = smoothstep(0.6, 0.88, dot(vD, normalize(vec3(-0.5,0.35,0.8)))); c += vec3(1.5,1.52,1.55) * win; c += vec3(1.2) * smoothstep(0.88, 0.98, y); c = mix(c, vec3(0.22,0.21,0.2), smoothstep(0.0, -0.4, y)); gl_FragColor = vec4(c, 1.0); }'
-    : 'varying vec3 vD; void main(){ float y = vD.y; vec3 c = mix(vec3(0.62,0.66,0.62), vec3(0.32,0.5,0.78), smoothstep(0.0, 0.6, y)); c = mix(c, vec3(0.42,0.38,0.32), smoothstep(0.0, -0.3, y)); gl_FragColor = vec4(c, 1.0); }',
+    : BEACH
+      // a clear sky: deep blue zenith, a pale hazy horizon, the sun as a small very bright disc (it is what a wet
+      // cornea or a glossy leg reflects), and the bright sand below (half the light a crab on a beach receives)
+      ? `uniform vec3 uSun; varying vec3 vD; void main(){ float y = vD.y; vec3 c = mix(vec3(0.95,0.97,1.0), vec3(0.28,0.45,0.82), smoothstep(0.0, 0.7, y));
+         c += vec3(1.0,0.95,0.85) * 0.6 * pow(max(0.0, dot(vD, uSun)), 8.0); c += vec3(60.0,56.0,50.0) * smoothstep(0.9993, 0.9997, dot(vD, uSun));
+         c = mix(c, vec3(0.62,0.54,0.42), smoothstep(0.02, -0.12, y)); gl_FragColor = vec4(c, 1.0); }`
+      : 'varying vec3 vD; void main(){ float y = vD.y; vec3 c = mix(vec3(0.62,0.66,0.62), vec3(0.32,0.5,0.78), smoothstep(0.0, 0.6, y)); c = mix(c, vec3(0.42,0.38,0.32), smoothstep(0.0, -0.3, y)); gl_FragColor = vec4(c, 1.0); }',
 });
+const el = num('sun', 48) * Math.PI / 180, az = num('az', 130) * Math.PI / 180;
+const sunDir = new Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize();
+skyMat.uniforms.uSun.value.copy(sunDir);
 const envScene = new Scene();
-envScene.add(new Mesh(new SphereGeometry(10, 32, 16), skyMat));
+envScene.add(new Mesh(new SphereGeometry(10, 64, 32), skyMat));
 const pmrem = new PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(envScene, 0.02).texture;
-scene.environmentIntensity = num('env', 0.09);
+scene.environment = pmrem.fromScene(envScene, 0.0).texture;
+scene.environmentIntensity = num('env', BEACH ? 0.55 : 0.09);
 
 const CW = num('cw', 9) / 1000;
 // sun: tight shadow frustum around the crab (as in the game's focused observation shadows)
-const sun = new DirectionalLight(0xfff3e6, 2.6);
-const el = num('sun', 48) * Math.PI / 180, az = num('az', 130) * Math.PI / 180;
-const sunDir = new Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize();
+const sun = new DirectionalLight(BEACH ? 0xffeedd : 0xfff3e6, num('sunI', BEACH ? 2.9 : 2.6));
 sun.position.copy(sunDir).multiplyScalar(0.5);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -91,10 +105,11 @@ if (SCENE === 'studio' || SCENE === 'hand') {
   const fill = new DirectionalLight(0xffffff, num('fill', 0.9));
   fill.position.set(0, 0.2, 1);
   scene.add(fill);
-} else scene.add(new HemisphereLight(0x95aec4, 0x5a4a36, num('hemi', 0.5)));
+} else scene.add(new HemisphereLight(0x95aec4, 0x5a4a36, num('hemi', BEACH ? 0.25 : 0.5)));
+if (BEACH) sun.shadow.radius = 2.5;
 
 // sand: a procedural ground close enough to the game's flat to judge the crab against
-const SANDC = SCENE === 'dark' ? [0.2, 0.195, 0.18] : [0.42, 0.34, 0.22];
+const SANDC = SCENE === 'dark' ? [0.2, 0.195, 0.18] : BEACH ? [0.4, 0.33, 0.23] : [0.42, 0.34, 0.22];
 // dark tidal sands (5.webp, 6.webp): salt and pepper — quartz and shell white, magnetite black, grey lithics
 const PEPPER = SCENE === 'dark' ? 1 : 0;
 const sandMat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
@@ -122,13 +137,125 @@ float gH = 0.0; vec2 gN = vec2(0.0);`).replace('#include <color_fragment>', `#in
 }`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize(normal + (viewMatrix * vec4(gN.x, 0.0, gN.y, 0.0)).xyz * 0.6);`).replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = 0.62;');
 };
-let groundMat = sandMat;
+// beach sand at macro scale: grains of several minerals (quartz, feldspar, lithics, a few dark heavy minerals and
+// shell bits), each a little dome with a dark crevice around it, a silt fraction between them; plus the contact
+// shading of the crab — a soft occlusion under the body and a small dark ring and a dimple where each foot
+// presses in (uniforms set every frame from the rig)
+const contactU = { uFeet: { value: Array.from({ length: 8 }, () => new Vector3(0, 0, -1)) }, uBody: { value: new Vector4(0, 0, 1, 1) }, uBodyH: { value: 0.1 }, uCWm: { value: num('cw', 9) / 1000 } };
+const beachSand = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
+beachSand.onBeforeCompile = (s) => {
+  Object.assign(s.uniforms, contactU);
+  s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vW;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+  s.fragmentShader = s.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vW;
+uniform vec3 uFeet[8];
+uniform vec4 uBody;
+uniform float uBodyH;
+uniform float uCWm;
+float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
+vec2 h22(vec2 p){ return vec2(h21(p), h21(p+17.3)); }
+// nearest / second nearest jittered cell centre: distance, crevice width, id, offset
+vec4 grains(vec2 p, out vec2 off){
+  vec2 ip = floor(p), fp = fract(p);
+  float d1 = 9.0, d2 = 9.0; vec2 id = vec2(0.0);
+  for (int j=-1;j<=1;j++) for (int i=-1;i<=1;i++){ vec2 g = vec2(i,j); vec2 o = h22(ip+g); vec2 r = g + o*0.9+0.05 - fp;
+    float sc = 0.75 + 0.5 * h21(ip+g+5.1); float d = length(r) / sc;
+    if (d<d1){ d2=d1; d1=d; id=ip+g; off=r; } else if (d<d2) d2=d; }
+  return vec4(d1, d2 - d1, id);
+}
+float gAO = 1.0; vec2 gN = vec2(0.0); float gR = 0.85;`).replace('#include <color_fragment>', `#include <color_fragment>
+{
+  vec2 mm = vW.xz * 1000.0;                       // millimetres
+  vec2 off;
+  vec4 g = grains(mm / 0.27, off);
+  float k = h21(g.zw + 3.1), k2 = h21(g.zw + 9.7);
+  float dome = clamp(1.0 - g.x * g.x * 1.6, 0.0, 1.0);
+  float crev = 1.0 - smoothstep(0.0, 0.16, g.y);   // the dark gap between two grains
+  // minerals: quartz (pale, glassy), feldspar (buff-pink), lithic grey-brown, dark heavy minerals, shell
+  vec3 c = mix(vec3(0.6, 0.55, 0.45), vec3(0.72, 0.68, 0.6), k2);
+  float rr = 0.4;
+  if (k > 0.55) { c = mix(vec3(0.62, 0.48, 0.36), vec3(0.72, 0.58, 0.45), k2); rr = 0.7; }
+  if (k > 0.75) { c = mix(vec3(0.32, 0.28, 0.24), vec3(0.45, 0.4, 0.33), k2); rr = 0.8; }
+  if (k > 0.95) { c = vec3(0.09, 0.085, 0.08) * (0.8 + 0.5 * k2); rr = 0.45; }
+  if (k > 0.975) { c = vec3(0.85, 0.83, 0.78); rr = 0.6; }
+  c *= 0.82 + 0.3 * dome;
+  // the silt between the grains
+  vec2 o2; vec4 g2 = grains(mm / 0.085 + 7.3, o2);
+  vec3 silt = vec3(0.42, 0.37, 0.3) * (0.8 + 0.35 * h21(g2.zw));
+  c = mix(c, silt, smoothstep(0.75, 1.05, g.x));
+  // broad dry / damp patches
+  float pat = h21(floor(mm / 3.0)) * 0.5 + h21(floor(mm / 1.3) + 2.0) * 0.5;
+  c *= 0.9 + 0.12 * pat;
+  diffuseColor.rgb = c * vec3(${SANDC.map((x) => (x / 0.4).toFixed(3)).join(', ')});
+  // each grain shades itself round (its flanks see less sky), so the sand reads as grains even in shadow
+  gAO = (1.0 - 0.55 * crev) * (0.62 + 0.38 * dome);
+  // a rounded grain: the slope of a low dome (steep at its edge), fading into the crevice
+  float r1 = clamp(g.x, 0.0, 0.98);
+  gN = normalize(off + 1e-5) * min(2.2, 0.9 * r1 / sqrt(max(0.06, 1.0 - r1 * r1))) * (1.0 - crev);
+  gR = mix(rr, 0.95, crev);
+  // contact: under the body a broad soft occlusion that deepens as the body comes down to the sand; at each foot
+  // a dimple ringed with displaced grains and a tight dark ring
+  vec2 b = (vW.xz - uBody.xy) / (uBody.zw * uCWm);
+  float under = exp(-dot(b, b) * 1.6);
+  gAO *= 1.0 - 0.55 * under * (1.0 - smoothstep(0.05, 0.6, uBodyH));
+  for (int i = 0; i < 8; i++) {
+    if (uFeet[i].z < 0.0) continue;
+    vec2 d = (vW.xz - uFeet[i].xy) / uCWm;
+    float r = length(d);
+    gAO *= 1.0 - 0.6 * exp(-pow(r / 0.035, 2.0)) - 0.25 * exp(-pow(r / 0.09, 2.0));
+    float ring = exp(-pow((r - 0.05) / 0.02, 2.0));
+    gN += normalize(d + 1e-5) * ring * 0.35 - normalize(d + 1e-5) * exp(-pow(r / 0.03, 2.0)) * 0.3;
+  }
+  diffuseColor.rgb *= gAO;
+}`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+normal = normalize(normal + (viewMatrix * vec4(gN.x, 0.0, gN.y, 0.0)).xyz * 0.6 * (1.0 - smoothstep(0.00004, 0.00015, length(fwidth(vW)))));`).replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gR;').replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= gAO; reflectedLight.indirectSpecular *= gAO;');
+};
+let groundMat = BEACH ? beachSand : sandMat;
 if (SCENE === 'studio') groundMat = new MeshPhysicalMaterial({ color: new Color(0.62, 0.66, 0.68), roughness: 0.08, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, transmission: 0 });
 else if (SCENE === 'hand') groundMat = new MeshStandardMaterial({ color: new Color(0.62, 0.36, 0.27), roughness: 0.55 });
 if (CLAY) groundMat = new MeshStandardMaterial({ color: new Color(0.55, 0.56, 0.57), roughness: 0.9 });
 const ground = new Mesh(new PlaneGeometry(0.6, 0.6, 1, 1).rotateX(-Math.PI / 2), groundMat);
 ground.receiveShadow = true;
 if (!SIL && !Q.has('noground')) scene.add(ground);
+// beach, close up: the sand around the crab as real grains — rounded, of several minerals, half sunk in a bed of
+// finer sand — so they cast their own little shadows and the feet stand among them, not on a painted floor
+if (BEACH && !Q.has('nograins')) {
+  const R = num('grainR', 3.2) * (num('cw', 9) / 1000);
+  const n = Math.round(num('grains', 85000));
+  const g = new IcosahedronGeometry(1, 2);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    // lumpy, not spheres: each vertex pushed in or out a little
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const k = 1 + 0.12 * Math.sin(x * 5.1 + y * 3.7) * Math.cos(z * 4.3 - x * 2.1);
+    pos.setXYZ(i, x * k, y * k * 0.72, z * k);
+  }
+  g.computeVertexNormals();
+  const gm = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0 });
+  const inst = new InstancedMesh(g, gm, n);
+  let rs = 977;
+  const rnd = () => { rs = (rs * 16807) % 2147483647; return rs / 2147483647; };
+  const m4 = new Matrix4(), qq = new Quaternion(), sc = new Vector3(), pp = new Vector3(), col = new Color();
+  const minerals = [[0.66, 0.6, 0.5, 0.5], [0.74, 0.62, 0.48, 0.24], [0.5, 0.44, 0.36, 0.18], [0.2, 0.17, 0.14, 0.015], [0.84, 0.82, 0.76, 0.025], [0.6, 0.46, 0.32, 0.04]];
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * R;
+    const size = (0.09 + 0.07 * rnd() + 0.06 * rnd() * rnd()) / 1000;
+    // sunk to a third of its height or more in the bed; fewer toward the edge of the patch (blends into the floor)
+    if (d > R * 0.8 && rnd() < (d - R * 0.8) / (R * 0.2)) { m4.makeScale(0, 0, 0); inst.setMatrixAt(i, m4); continue; }
+    pp.set(Math.sin(a) * d, size * (-0.2 + 0.35 * rnd()), Math.cos(a) * d);
+    qq.setFromEuler(new Euler(rnd() * 6.28, rnd() * 6.28, rnd() * 6.28));
+    sc.set(size * (0.8 + 0.4 * rnd()), size, size * (0.8 + 0.4 * rnd()));
+    m4.compose(pp, qq, sc);
+    inst.setMatrixAt(i, m4);
+    let r = rnd(), mm = minerals[0];
+    for (const m of minerals) { if (r < m[3]) { mm = m; break; } r -= m[3]; }
+    const v = 0.82 + 0.3 * rnd();
+    col.setRGB(mm[0] * v, mm[1] * v, mm[2] * v).convertSRGBToLinear();
+    inst.setColorAt(i, col);
+  }
+  inst.castShadow = true; inst.receiveShadow = true;
+  scene.add(inst);
+}
 
 const seed = num('seed', 7);
 const crab = new CrabModel({ sex: param('sex') ?? 'm', cw_m: CW, seed, juvenile: num('juv', 0) });
@@ -183,10 +310,11 @@ function pose(kind, t = 0) {
     const k = i % 4;
     const reach = STANCE.footReach[k] * (kind === 'wave' ? 0.95 : 1);
     // home foot on the ground (Root space), then into Body space
-    leg.homeFoot(v, reach, 0, 0);
-    v.y = 0;
+    leg.homeFoot(v, reach * (1 + leg.jit.reach), 0, leg.jit.yaw);
+    // the tip presses a little into the sand (063, 027: the dactyli stand in small dimples)
+    v.y = -num('sink', 0.02);
     v.applyMatrix4(bodyInv);
-    leg.solve(v, undefined, [0.18, 0.06, -0.1, -0.25][k] * leg.side);
+    leg.solve(v, STANCE.dactylDeg * Math.PI / 180 + leg.jit.dac, [0.18, 0.06, -0.1, -0.25][k] * leg.side);
   }
   for (const c of r.chelae) {
     if (kind === 'wave') c.setPose(CHELA_POSES.wave);
@@ -362,12 +490,50 @@ function frame() {
   } else pose(kind, t);
   if (Q.get('setae') === '0') crab.setae.visible = false;
   controls.update();
-  renderer.render(scene, camera);
+  if (BEACH) updateContact();
+  if (composer) composer.render(); else renderer.render(scene, camera);
   frames++;
   if (frames % 10 === 0) hud.textContent = hudText();
   if (frames === 3) { hud.textContent = hudText(); window.__ready = true; }
   requestAnimationFrame(frame);
 }
+// the sand's contact shading follows the real feet and body
+const _tip = new Vector3();
+function updateContact() {
+  const c = LIVE ? live.c.model : crab;
+  if (!c || !c.root.visible) return;
+  c.root.updateMatrixWorld(true);
+  c.rig.legs.forEach((leg, i) => {
+    _tip.set(leg.spec.dactylus, 0, 0).applyMatrix4(leg.dactylus.matrixWorld);
+    contactU.uFeet.value[i].set(_tip.x, _tip.z, _tip.y < CW * 0.04 ? 1 : -1);
+  });
+  const b = new Vector3().setFromMatrixPosition(c.rig.body.matrixWorld);
+  contactU.uBody.value.set(b.x, b.z, 0.5, 0.46);
+  contactU.uBodyH.value = b.y / CW;
+}
+
+// photo=1: the camera's own look — a macro lens's shallow depth of field focused on the crab, a little sensor
+// grain and vignetting (the reference photographs are all macro shots)
+let composer = null;
+if (Q.get('photo') === '1') {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const focus = camera.position.distanceTo(target);
+  composer.addPass(new BokehPass(scene, camera, { focus: num('focus', focus), aperture: num('aperture', 0.004) / CW, maxblur: num('maxblur', 0.018) }));
+  composer.addPass(new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, uSeed: { value: Math.random() * 100 }, uGrain: { value: num('grain', 0.035) } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float uSeed; uniform float uGrain; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + uSeed) * 43758.5453); }
+      void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 d = vUv - 0.5;
+        c.rgb *= 1.0 - 0.35 * dot(d, d);
+        float n = (h(gl_FragCoord.xy) + h(gl_FragCoord.xy + 17.0) - 1.0);
+        c.rgb *= 1.0 + n * uGrain; gl_FragColor = c; }`,
+  }));
+  composer.addPass(new OutputPass());
+}
+if (param('tm') === 'agx') renderer.toneMapping = AgXToneMapping;
+
 window.__crab = crab;
 window.__live = live;
 frame();

@@ -39,6 +39,8 @@ const GROUP = [0, 1, 0, 1, 1, 0, 1, 0];
 const LAG = [0, 0.5, 0.07, 0.57, 0.5, 0, 0.57, 0.07];
 /** a little anterior/posterior bend of the carpus–propodus joint per leg (dactyli 1–3 curve in, 4 out) [R] */
 const CP_BEND = [0.18, 0.06, -0.1, -0.25];
+/** how deep a standing dactylus presses into the sand (CW) */
+const FOOT_SINK = 0.02;
 
 /** command written by the behaviour every frame */
 export function makeCommand() {
@@ -220,7 +222,7 @@ export class CrabAnimator {
     let drop = socket;
     for (let pass = 0; pass < 2; pass++) {
       const reach = leg.maxReach(drop);
-      leg.homeFoot(out, Math.min(want, reach), 0, CP_BEND[k] * 0.6 * leg.side);
+      leg.homeFoot(out, Math.min(want * (1 + leg.jit.reach), reach), 0, CP_BEND[k] * 0.6 * leg.side + leg.jit.yaw);
       if (ahead) {
         // where the spot will be when the foot lands: the body turns and moves on meanwhile (root-local)
         const c = Math.cos(rot), sn = Math.sin(rot), x = out.x, z = out.z;
@@ -612,13 +614,16 @@ export class CrabAnimator {
     const legs = this.rig.legs;
     for (let i = 0; i < 8; i++) {
       const f = this.feet[i];
-      // world → root-local → body-local
-      _v.copy(f.w).applyMatrix4(_mInv).applyMatrix4(_mBodyInv);
+      // world → root-local → body-local; a standing tip presses a little into the sand (063, 027: small dimples)
+      _v.copy(f.w);
+      if (f.planted) _v.y -= FOOT_SINK * this.cw;
+      _v.applyMatrix4(_mInv).applyMatrix4(_mBodyInv);
       const k = i % 4;
       // the dactylus stabs steeply in stance; it swings more upright, then reaches for the landing
       let dac = STANCE.dactylDeg * DEG;
       if (!f.planted) dac = lerp(dac, -88 * DEG, Math.sin(Math.PI * clamp(f.t, 0, 1)));
       dac -= 0.12 * this.cmd.tiptoe;
+      dac += legs[i].jit.dac;
       legs[i].solve(_v, dac, CP_BEND[k] * legs[i].side * (f.planted ? 1 : 0.6));
     }
   }

@@ -801,6 +801,15 @@ export class ScopimeraColony {
       _v3.set(_v2.x + sx * off, g, _v2.z + sz * off);
       this.terrain.normalAt(_v3.x, _v3.z, _n);
       R.addDecal(_v3, _n, cw * 0.85, cw * (0.7 + off / cw * 0.4), Math.atan2(sx, sz), 1, this.shadowFocus && L.lod === 0 ? 0.22 : 0.42);
+      // near crabs: a small dark contact under each standing foot, where the tip presses into the sand
+      if (L.lod <= 1) {
+        for (const f of crab.animator.feet) {
+          if (!f.planted) continue;
+          _v3.set(f.w.x, this.terrain.surfaceAt(f.w.x, f.w.z), f.w.z);
+          this.terrain.normalAt(_v3.x, _v3.z, _n);
+          R.addDecal(_v3, _n, cw * 0.16, cw * 0.16, 0, 1, 0.5);
+        }
+      }
     }
     R.end();
   }

@@ -81,7 +81,22 @@ export class CrabModel {
     this.carried.visible = false;
     this.root.add(this.carried);
     this.pelletDiam = PELLET.feedDiam[0] + (PELLET.feedDiam[1] - PELLET.feedDiam[0]) * rand();
+    this.applyAsymmetry(mulberry(seed * 7919 + 17));
     this.castShadow = false;
+  }
+
+  /**
+   * An individual is never a mirror image of itself: small left/right differences in how it stands and carries
+   * its claws and eyes, how many setae each side keeps, how dirty and how worn its shell is (049, 057, 063).
+   */
+  applyAsymmetry(r) {
+    const sym = (a) => (r() * 2 - 1) * a;
+    for (const leg of this.rig.legs) leg.jit = { reach: sym(0.04), yaw: sym(0.07), dac: sym(0.08) };
+    this.rig.chelae.forEach((c) => { c.offset = [sym(0.05), sym(0.05), 0, sym(0.06), sym(0.06), sym(0.06), Math.max(0, sym(0.03))]; });
+    for (const e of this.rig.eyes) e.tilt.set(sym(0.07), sym(0.03), sym(0.06));
+    const dens = 0.65 + 0.35 * r();
+    const asym = [Math.min(1, dens + sym(0.12)), Math.min(1, dens + sym(0.12)), 0.25 + 0.6 * r(), sym(0.05)];
+    for (const m of [this.mat, this.setaeMat]) m.userData.uniforms.uKgAsym.value.set(...asym);
   }
 
   /** recolour (palette as made by crabPalette / paletteFor) */

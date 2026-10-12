@@ -201,6 +201,8 @@ export class LegRig {
     this.reach = this.c + this.l1 + this.l2 + this.l3;
     /** current joint angles */
     this.ang = { yaw: 0, lev: 0, knee: -1.2, cp: 0, dac: -0.5 };
+    /** this individual's own small differences: stance reach (fraction), swing (rad), dactylus angle (rad) */
+    this.jit = { reach: 0, yaw: 0, dac: 0 };
     this.invBind = this.bindQuat.clone().invert();
     /** last IK residual (CW units): > 0 means the target was out of reach or clamped */
     this.error = 0;
@@ -415,7 +417,9 @@ export class ChelaRig {
 
   /** set all joints from a posture (radians, coxa … dactylus) */
   setPose(a) {
-    for (let i = 0; i < 7; i++) this.ang[i] = a[i];
+    // an individual's own carriage (`offset`, set per crab): no two claws are held quite alike
+    const o = this.offset;
+    for (let i = 0; i < 7; i++) this.ang[i] = a[i] + (o ? o[i] : 0);
     this.apply();
   }
 
@@ -504,11 +508,14 @@ export class EyeRig {
     const fo = EYE.foldOutDeg * DEG, ff = EYE.foldForwardDeg * DEG;
     this.foldDir = new Vector3(side * Math.sin(fo), Math.cos(fo) * Math.cos(ff), Math.sin(ff)).normalize();
     this.dir = this.bindDir.clone();
+    /** this individual's own lean of the stalk (Body space, small) */
+    this.tilt = new Vector3();
   }
 
   /** fold: 0 erect … 1 lying in the orbit; look: desired direction (Body space, unit) or null; strength 0..1 */
   pose(fold, look, strength, bend = 0) {
     const d = _v.copy(this.bindDir).lerp(this.foldDir, fold).normalize();
+    d.addScaledVector(this.tilt, 1 - fold).normalize();
     if (look && strength > 0) {
       // a stalk swings a little toward what it watches (±~25°), it does not roll
       const l = _v2.copy(look).normalize();
