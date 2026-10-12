@@ -71,6 +71,21 @@ const SUBSTRATE_COLORS: Record<Substrate, [number, number, number]> = {
   rock: [0.3, 0.295, 0.28],
 };
 
+/** hash21 and vnoise of RIPPLE_GLSL on the CPU (the same integer mixing, so the same values) */
+function terrainHash(ix: number, iz: number): number {
+  let h = (Math.imul(ix | 0, 0x27d4eb2d) ^ Math.imul(iz | 0, 0x165667b1)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0; h = (h ^ (h >>> 12)) >>> 0;
+  h = Math.imul(h, 0x297a2d39) >>> 0; h = (h ^ (h >>> 15)) >>> 0;
+  return h / 4294967296;
+}
+function terrainVnoise(x: number, z: number): number {
+  const i = Math.floor(x), j = Math.floor(z);
+  let fx = x - i, fz = z - j;
+  fx = fx * fx * (3 - 2 * fx); fz = fz * fz * (3 - 2 * fz);
+  const a = terrainHash(i, j), b = terrainHash(i + 1, j), c = terrainHash(i, j + 1), d = terrainHash(i + 1, j + 1);
+  return (a + (b - a) * fx) * (1 - fz) + (c + (d - c) * fx) * fz;
+}
+
 /** GLSL shared by the fragment stage (shading) and the ripple sheet's vertex stage (relief): hashes, value noise and
  * the ripple field. Needs `uRipRot` and `uRippleGain`. */
 const RIPPLE_GLSL = /* glsl */ `
@@ -1173,6 +1188,38 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
 
   substrateAt(x: number, z: number): Substrate {
     return this.palette[this.substrateIndexAt(x, z)] ?? 'mud';
+  }
+
+  /**
+   * The sediment's colour as the shader draws it here (linear albedo, before the light): the substrates' colours and
+   * the map's tints blended as the vertices blend them, the broad patches, and the darkening and blue cast of the wet
+   * flat under the water. The fine grain, the ripple shading and the scattered marks (film, pellets, holes) average
+   * out and are left aside. For what lies on the bottom and should take its colour (sand thrown over a flatfish).
+   */
+  colorAt(x: number, z: number, out = new Color()): Color {
+    const { i, j, fx, fz } = this.gridIndex(x, z);
+    const n = this.n, S = this.substrate;
+    let r = 0, g = 0, b = 0, s = 0;
+    const corner = (k: number, w: number) => {
+      const c = SUBSTRATE_COLORS[this.palette[S[k]] ?? 'mud'];
+      r += c[0] * w; g += c[1] * w; b += c[2] * w; s += S[k] * w;
+    };
+    corner(j * n + i, (1 - fx) * (1 - fz)); corner(j * n + i + 1, fx * (1 - fz));
+    corner((j + 1) * n + i, (1 - fx) * fz); corner((j + 1) * n + i + 1, fx * fz);
+    const ss = (e0: number, e1: number, v: number) => { const t = Math.min(1, Math.max(0, (v - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+    const sandW = 1 - ss(1.5, 2.5, s);
+    const mudW = ss(1.5, 2.5, s) * (1 - ss(2.5, 3.5, s)) + ss(3.5, 4.0, s) * (1 - ss(4.0, 4.5, s));
+    const st = this.uSandTint.value, mt = this.uMudTint.value;
+    r *= (1 + (st.x - 1) * sandW) * (1 + (mt.x - 1) * mudW);
+    g *= (1 + (st.y - 1) * sandW) * (1 + (mt.y - 1) * mudW);
+    b *= (1 + (st.z - 1) * sandW) * (1 + (mt.z - 1) * mudW);
+    // the patches (vnoise(p · 0.35), as in the shader)
+    const d = 1 + (terrainVnoise(x * 0.35, z * 0.35) - 0.5) * 0.18;
+    // wet below the water: darker, and the neutral grey takes the sky's blue
+    const y = this.heightAt(x, z), lvl = this.uWater.value;
+    const wet = 1 - ss(lvl - 0.05, lvl + 0.12, y);
+    const k = d * (1 - 0.24 * wet);
+    return out.setRGB(r * k * (1 - 0.15 * wet), g * k * (1 - 0.075 * wet), b * k * (1 + 0.06 * wet));
   }
 
   inside(x: number, z: number, margin = 0): boolean {
