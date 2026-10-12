@@ -234,8 +234,6 @@ export class Terrain {
   /** 0..1: how far the mud takes the look of a sheltered silt flat (after MahazeViewer's sediment): two-scale
    * mottling, stronger silt lumps, few sand grains, a glossier wet sheen */
   private readonly uMudLook: IUniform<number> = { value: 0 };
-  /** the height (map datum) above which silt is never wet by the tide, so dries to a cracked crust (spring high water) */
-  private readonly uCrustLevel: IUniform<number> = { value: 1e3 };
   /** the water's mirror of the land and sky (shared with the water pass, see shareMirror): the sheets of water on a
    * mud flat show it as the river does */
   private mirrorU: { tMirror: IUniform<unknown>; uMirrorMat: IUniform<Matrix4>; uMirrorOn: IUniform<number> } = {
@@ -509,7 +507,6 @@ export class Terrain {
       shader.uniforms.uDetail = this.uDetail;
       shader.uniforms.uRippleGain = this.uRippleGain;
       shader.uniforms.uMudLook = this.uMudLook;
-      shader.uniforms.uCrustLevel = this.uCrustLevel;
       shader.uniforms.tMirror = this.mirrorU.tMirror;
       shader.uniforms.uMirrorMat = this.mirrorU.uMirrorMat;
       shader.uniforms.uMirrorOn = this.mirrorU.uMirrorOn;
@@ -584,7 +581,6 @@ uniform float uCausticGain;
 uniform float uDetail;
 uniform float uRippleGain;
 uniform float uMudLook;
-uniform float uCrustLevel;
 uniform sampler2D tMirror;
 uniform mat4 uMirrorMat;
 uniform float uMirrorOn;
@@ -809,45 +805,6 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // (patchy: some stretches drain at once, others keep a trough of water in every hollow)
   gTrough = exposedWet * smoothstep(-0.15, -0.5, gRipple) * smoothstep(0.3, 0.6, vnoise(vWorldPos.xz * 0.45 + 13.0));
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.5, 0.56, 0.64), gTrough * 0.85);
-  // silt the tide never reaches (above the spring high water: the entry bank) shrinks and cracks: irregular plates
-  // 30-60 cm across between fine dark cracks of varying width, smaller cracks splitting some plates, each plate its
-  // own shade of the crust, in patches (crust that was trodden or rained on stays whole); the lines thin out with
-  // distance. (Only for the mud look: other flats run none of this.)
-  float dryMud = 0.0;
-  if (uMudLook > 0.001) {
-  dryMud = uMudLook * smoothstep(0.5, 1.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate)) * smoothstep(0.12, 0.4, vWorldPos.y - max(max(lvl, uWetLevel), uCrustLevel));
-  float crackK = dryMud * (1.0 - smoothstep(10.0, 40.0, fw)) * uDetail * smoothstep(0.2, 0.42, vnoise(vWorldPos.xz * 0.22 + 17.0));
-  // (the dry crust is paler where it is thin and dry, darker where damp still holds below it)
-  diffuseColor.rgb *= 1.0 + dryMud * (0.16 * vnoise(vWorldPos.xz * 0.45 + 3.0) + 0.08 * vnoise(vWorldPos.xz * 1.6 - 7.0) - 0.12);
-  if (crackK > 0.001) {
-    float tone = 1.0, cr = 0.0;
-    vec2 dirC = vec2(0.0);
-    for (int lv = 0; lv < 2; lv++) {
-      float cell = lv == 0 ? 0.42 : 0.15;
-      vec2 cq = vWorldPos.xz / cell + float(lv) * 31.0;
-      cq += (vec2(vnoise(cq * 0.45 + 4.0), vnoise(cq * 0.45 - 6.0)) - 0.5) * 0.8 + (vec2(vnoise(cq * 2.3 + 1.0), vnoise(cq * 2.3 + 8.0)) - 0.5) * 0.14;
-      vec2 ci = floor(cq), cf = fract(cq), o1 = vec2(0.0), o2 = vec2(0.0), id = vec2(0.0);
-      float f1 = 8.0, f2 = 8.0;
-      for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
-        vec2 g = vec2(float(x), float(y));
-        vec2 o = g + 0.15 + 0.7 * hash22(ci + g + 51.0) - cf;
-        float d = dot(o, o);
-        if (d < f1) { f2 = f1; o2 = o1; f1 = d; o1 = o; id = ci + g; } else if (d < f2) { f2 = d; o2 = o; }
-      }
-      // distance to the plate's border, the crack's half-width (cm, varying along it) and the pixel, in cell units
-      float edge = dot(0.5 * (o1 + o2), normalize(o2 - o1));
-      float px = fw * 0.001 / cell;
-      float w = (lv == 0 ? 0.004 + 0.009 * vnoise(cq * 1.4 + 2.0) : 0.003 + 0.004 * vnoise(cq * 1.1 + 9.0)) / cell;
-      // (the small cracks only split some plates, and run out partway)
-      float has = lv == 0 ? 1.0 : smoothstep(0.5, 0.7, vnoise(cq * 0.6 + 5.0));
-      float c = (1.0 - smoothstep(w, w + max(px, 0.006), edge)) * has * min(1.0, w / max(px, 1e-4) * 3.0);
-      if (c > cr) { cr = c; dirC = normalize(o2 - o1); }
-      if (lv == 0) tone = 0.95 + 0.1 * hash21(id + 7.0);
-    }
-    diffuseColor.rgb *= mix(1.0, tone, crackK) * mix(1.0, 0.36, cr * crackK);
-    gNrmAdd += dirC * cr * crackK * 0.8;
-  }
-  }
   // a mud flat at low water (user's photos): the silt stays saturated through the day and glistens, and thin
   // sheets of water lie in the hollows and along the water's edge, flat and glassy, mirroring the sky
   if (uMudLook > 0.001) {
@@ -874,8 +831,6 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
     gMudWet = mudW * max(wet, 0.7) * mix(0.75, 1.0, smoothstep(-0.25, 0.0, gSheetField)) * above;
     // under the water it is the water that shines: the bed itself is dull
     gSubm = mudW * (1.0 - above);
-    // (dry crust is neither wet nor under a sheet of water)
-    gSheet *= 1.0 - dryMud; gHalo *= 1.0 - dryMud; gMudWet *= 1.0 - dryMud;
     diffuseColor.rgb *= mix(1.0, 0.97, gMudWet) * mix(1.0, 0.78, gSheet) * mix(1.0, 0.8, gHalo);
   }
   // (the photos' wet flat is a neutral grey with the sky in it, whatever the colour of the dry sand)
@@ -974,7 +929,7 @@ if (uMudLook > 0.001) {
 if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.0) - 0.5) * 0.9 + (vnoise(vWorldPos.xz * 3.0 - 5.0) - 0.5) * 0.3);
 #include <clipping_planes_fragment>`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v9';
+    mat.customProgramCacheKey = () => 'higata-terrain-v10';
     return mat;
   }
 
@@ -1053,10 +1008,6 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
     this.setRippleSheet(this.sheetWanted);
   }
 
-  /** The height above which the tide never wets the silt (the spring high water), where it dries to a cracked crust. */
-  setCrustLevel(y: number): void {
-    this.uCrustLevel.value = y;
-  }
 
   /** Share the water's mirror (its uniforms, before the terrain's programs are built): the sheets on the mud show it. */
   shareMirror(u: { tMirror: IUniform<unknown>; uMirrorMat: IUniform<Matrix4>; uMirrorOn: IUniform<number> }): void {
