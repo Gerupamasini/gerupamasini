@@ -1,6 +1,6 @@
 import { Group, Vector3, type Object3D } from 'three';
 import type { Individual } from '../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent } from '../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../drivers/Driver';
 import type { PlaceholderModel } from '../models/placeholders';
 import { HermitCrab, PagurusWorld, createPreviewCrab, type CrabState } from './PagurusMinutus.js';
 import { MORPH, slFromLength } from './PagurusMinutusMorphology.js';
@@ -41,6 +41,7 @@ export class PagurusMinutusDriver implements Driver {
   private sampleTimer = 0;
   private sample: ReturnType<NonNullable<DriverContext['floor']['sampleAt']>> | null = null;
   private readonly tmp = new Vector3();
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
   busy = false;
 
   /** posed preview crab inside a wrapper group (the zukan shows it as is) */
@@ -139,6 +140,22 @@ export class PagurusMinutusDriver implements Driver {
     ind.pos.copy(crab.loco.position);
     ind.heading = crab.loco.heading;
     if (this.busy && this.time > this.intentUntil) this.busy = false;
+  }
+
+  /** on the bed, walking or shut in its shell */
+  body(): BodyState {
+    const b = this.bodyState, loco = this.crab?.loco;
+    if (loco) { b.heading = loco.heading; b.y = loco.position.y; }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const loco = this.crab?.loco, ind = this.ind;
+    if (!loco) return;
+    loco.position.x += dx; loco.position.z += dz;
+    // the planted feet go with it, or the legs would stretch until it stepped again
+    for (const leg of Object.values(loco.legs)) for (const v of [leg.planted, leg.footTarget, leg.stepFrom, leg.footWorld]) { v.x += dx; v.z += dz; }
+    if (ind) { ind.pos.x += dx; ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

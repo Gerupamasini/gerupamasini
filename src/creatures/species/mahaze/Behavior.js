@@ -23,6 +23,7 @@
 //  * yawn: slow gape with raised head and erect fins, a short hold, snap shut, opercular flush
 import * as THREE from 'three';
 import { computePose, defaultPose, breathe, yawnCurves, SPINE, TL_MM, REST_FOLD } from './pose.js';
+import { bedPlane, bedTilt, fitBed } from '../../physics/bed';
 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -31,7 +32,8 @@ const rand = (a, b) => a + Math.random() * (b - a);
 // resting spells: gobies sit motionless most of the time. Heavy-tailed: mostly 10–30 s, sometimes over a minute
 const restTime = (scale = 1) => scale * Math.min(90, 8 + 14 * -Math.log(1 - Math.random() * 0.999));
 
-export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY, scale = 1, onEvent = null, body = null }) {
+// `foot`: the body's footprint on the bed, model metres: its middle ahead of the origin, half its length and width
+export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY, scale = 1, onEvent = null, body = null, foot = null }) {
   // species geometry: joint positions along the body, total length and resting fin folds (マハゼ defaults)
   const SP = body?.spine ?? SPINE, TL = body?.tlMM ?? TL_MM, RF = body?.restFold ?? REST_FOLD;
   // floorY and st.pos use the root parent's coordinates, including inside a raised aquarium.
@@ -99,6 +101,12 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
 
   const q = new THREE.Quaternion();
   const e = new THREE.Euler(0, 0, 0, 'YXZ');
+  // lying on the bed: the plane of the ground under the footprint, and the turn onto it (eased)
+  const FOOT = foot ?? { ahead: 0, halfL: 0.021, halfW: 0.005 };
+  const plane = bedPlane();
+  const tiltGoal = new THREE.Quaternion(), tilt = new THREE.Quaternion();
+  let tiltInit = false;
+  const ground = { heightAt: (x, z) => floorAt(x, z) };
   const tmp = new THREE.Vector3();
   const worldToParent = new THREE.Matrix4();
 
@@ -382,18 +390,27 @@ export function createBehavior({ root, bones, finMeshes, axes, contacts, floorY,
     st.pitch = pitch;
     e.set(-pitch, st.heading, 0);
     root.quaternion.setFromEuler(e);
-    // rest on whichever contact points are lowest in this pose (sucker rim, belly, lower caudal lobe);
-    // lift a few mm while swimming
+    // lie in the plane of the ground under the body (down a slope, across a ripple), not level with its middle
+    const sh = Math.sin(st.heading), ch = Math.cos(st.heading);
+    fitBed(ground, st.pos.x + sh * FOOT.ahead * S, st.pos.z + ch * FOOT.ahead * S, st.heading, FOOT.halfL * S, FOOT.halfW * S, plane);
+    bedTilt(plane, 1, tiltGoal);
+    if (!tiltInit) { tilt.copy(tiltGoal); tiltInit = true; }
+    else tilt.slerp(tiltGoal, 1 - Math.exp(-14 * dt));
+    root.quaternion.premultiply(tilt);
+    st.bedY = plane.ground;
+    // rest on whichever contact points (sucker rim, belly, lower caudal lobe) meet the ground under them first:
+    // each comes down onto the bed where it lies; lift a few mm while swimming
     root.position.set(st.pos.x, 0, st.pos.z);
     root.updateWorldMatrix(true, true);
     if (root.parent) worldToParent.copy(root.parent.matrixWorld).invert();
-    let lowest = Infinity;
+    let rest = -Infinity;
     for (const c of contacts) {
       c.bone.localToWorld(tmp.copy(c.p));
       if (root.parent) tmp.applyMatrix4(worldToParent);
-      lowest = Math.min(lowest, tmp.y);
+      rest = Math.max(rest, floorAt(tmp.x, tmp.z) - tmp.y);
     }
-    root.position.y = floorAt(st.pos.x, st.pos.z) - lowest + 0.0028 * S * st.lift;
+    if (!Number.isFinite(rest)) rest = floorAt(st.pos.x, st.pos.z);
+    root.position.y = rest + 0.0028 * S * st.lift;
   }
 
   const finNames = Object.keys(finMeshes);

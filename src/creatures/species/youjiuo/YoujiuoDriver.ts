@@ -4,7 +4,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
 import { BONES, MODEL_TL, NSEG } from './anatomy';
@@ -221,6 +221,20 @@ export class YoujiuoDriver implements Driver {
       default:
         f.hover(secs);
     }
+  }
+
+  private readonly bodyState: BodyState = { mode: 'water', heading: 0, y: 0 };
+
+  /** swimming free, or wound round a blade (where it stays with the blade) */
+  body(): BodyState {
+    const f = this.fish, b = this.bodyState;
+    if (f) { b.mode = f.hold || f.holdW > 0 ? 'fixed' : 'water'; b.heading = f.heading; b.y = f.pos.y - 0.02 * f.tl; }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const f = this.fish, ind = this.ind;
+    if (f?.shift(dx, dz) && ind) { ind.pos.x += dx; ind.pos.z += dz; }
   }
 
   update(dt: number, ctx: DriverContext): void {

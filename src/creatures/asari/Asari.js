@@ -2,6 +2,7 @@ import { Group, InstancedBufferAttribute, InstancedMesh, Matrix4, Object3D, Quat
 import { AsariModel, FORMS, makeAsariPreview, sharedGeometry } from './AsariModel.js';
 import { AsariBehavior, STATE } from './AsariBehavior.js';
 import { makeShellOuterMaterial } from './AsariMaterial.js';
+import { bedPlane, bedTilt, fitBed } from '../physics/bed';
 
 export { STATE };
 
@@ -13,8 +14,8 @@ const THREAT_NEAR = 0.45;
 const THREAT_FAST_DIST = 2.2;
 const THREAT_FAST_SPEED = 0.9;
 
-const X = new Vector3(1, 0, 0), Z = new Vector3(0, 0, 1);
-const qLie = new Quaternion(), qUp = new Quaternion(), qTmp = new Quaternion(), qRock = new Quaternion();
+const X = new Vector3(1, 0, 0), Y = new Vector3(0, 1, 0), Z = new Vector3(0, 0, 1);
+const qLie = new Quaternion(), qUp = new Quaternion(), qTmp = new Quaternion(), qRock = new Quaternion(), qYaw = new Quaternion();
 const v1 = new Vector3(), v2 = new Vector3(), v3 = new Vector3();
 
 function hashString(s) {
@@ -47,6 +48,9 @@ export class AsariDriver {
     this.lastPlayer = new Vector3();
     this.playerSpeed = 0;
     this.drift = new Vector3();
+    /** the plane of the sand under the shell (it lies, and digs in, square to the slope) */
+    this.plane = bedPlane();
+    this.bodyState = { mode: 'bed', heading: 0, y: 0 };
   }
 
   /** an empty holder; the clam is built once the individual (seeds, size) is known */
@@ -144,6 +148,9 @@ export class AsariDriver {
     v1.y = 0;
     if (b.pull > 0) this.drift.addScaledVector(v1, b.pull * sdt * 0.4).clampLength(0, 0.25);
     root.position.set(ind.pos.x, ground, ind.pos.z);
+    // square to the sand it lies on or is dug into (a slope, the side of a ripple)
+    fitBed(ctx.floor, ind.pos.x, ind.pos.z, ind.heading, 0.5 * L, 0.4 * L, this.plane);
+    bedTilt(this.plane, 1, root.quaternion).multiply(qYaw.setFromAxisAngle(Y, ind.heading));
     m.root.position.set((this.drift.x + v1.x * b.pull) * L, centreY * L, (this.drift.z + v1.z * b.pull) * L);
 
     // ---- siphons long enough to just break the surface
@@ -204,6 +211,14 @@ export class AsariDriver {
   }
 
   get state() { return this.beh?.state; }
+
+  /** the shell on the sand is in the others' way (but never moved by them); dug in, it is out of it */
+  body() {
+    const st = this.bodyState, ind = this.ind;
+    st.mode = this.beh && this.beh.burial > 0.5 ? 'away' : 'bed';
+    if (ind) { st.heading = ind.heading; st.y = ind.pos.y; }
+    return st;
+  }
 
   /** Check the posed valves, not the brain intent or the siphons protruding from the sand. */
   canNetCapture() {

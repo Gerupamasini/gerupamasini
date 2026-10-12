@@ -1,6 +1,6 @@
 import { Group, Matrix4, Vector3, type Object3D } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
 import { FOOT, HEAD, MODEL_SH } from './anatomy';
@@ -44,6 +44,7 @@ export class AramushiroDriver implements Driver {
   private time = 0;
   private scale = 1;
   busy = false;
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
 
   /** the model's true shell height (mm): an individual's length_mm is its shell height */
   static get MODEL_MM(): number { return shellHeight() * 1000; }
@@ -285,6 +286,24 @@ export class AramushiroDriver implements Driver {
     s.rest(3);
     ind.pos.x = x; ind.pos.z = z;
     this.busy = false;
+  }
+
+  /** crawling on the bed; holding its place at the carrion; down in the sand out of everyone's way */
+  body(): BodyState {
+    const s = this.snail, b = this.bodyState;
+    if (s) {
+      b.mode = s.sink > 0.45 * s.size ? 'away' : s.state === 'FEED' ? 'fixed' : 'bed';
+      b.heading = s.heading;
+      b.y = s.pos.y - s.sink;
+    }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const s = this.snail, ind = this.ind;
+    if (!s) return;
+    s.pos.x += dx; s.pos.z += dz;
+    if (ind) { ind.pos.x += dx; ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {
