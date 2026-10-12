@@ -434,8 +434,10 @@ export const GOBY_LIGHT = {
   uGbInterior: { value: 0.45 } as IUniform<number>,
   /** the light diffused through from behind (sun, lamps) */
   uGbBack: { value: 0.3 } as IUniform<number>,
-  /** the surroundings' light diffused through from the far side */
-  uGbAmbient: { value: 1.0 } as IUniform<number>,
+  /** the surroundings' light diffused through from the far side. Under water the light comes from every side (the
+   * water scatters the daylight into a glow all round), more than the flat's sky and ground lights give: ×5 makes a
+   * fish seen from the sun's side faintly see-through (thin parts lit from behind, the column and viscera as shadows) */
+  uGbAmbient: { value: 5.0 } as IUniform<number>,
 };
 
 let blackTex: DataTexture | null = null;

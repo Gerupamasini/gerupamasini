@@ -75,7 +75,7 @@ export class HeroPipeline {
       uTime: { value: 0 },
       uScatter: { value: 1.0 },
       uInterior: { value: 0.45 },
-      uAmbThrough: { value: 1.0 },
+      uAmbThrough: { value: 5.0 },   // as the field's goby bodies (GOBY_LIGHT.uGbAmbient)
       uCausticAmt: { value: 0.15 },
       uFinDensity: { value: 1.0 },
       uDebug: { value: 0 },

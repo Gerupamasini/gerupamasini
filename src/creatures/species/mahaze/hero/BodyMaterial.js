@@ -536,7 +536,7 @@ export function createBodyMaterial({ textures, profileTexture, frame, vertebrae,
     uIor: { value: 1.04 },
     uNormalStrength: { value: 1.0 },
     uBackStrength: { value: 0.3 },
-    uAmbThrough: shared.uAmbThrough ?? { value: 1.0 },
+    uAmbThrough: shared.uAmbThrough ?? { value: 5.0 },
   };
   const mat = new THREE.ShaderMaterial({
     name: 'MahazeBodyVolumetric',
