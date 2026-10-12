@@ -152,6 +152,42 @@ try {
       await shot(`quality-${q}.png`, 2);
     }
   }
+  if (want('cpu')) {
+    // what swims in the surf rides the CPU's copy of it (surfCpu): the same surface as the GPU draws (the water pass's
+    // height field over the whole map, drawn into a float target here), at low and high water, through a wave
+    for (const [tide, t] of [[-0.3, 300], [-0.3, 301.7], [0.55, 600], [0.55, 602.3]]) {
+      await stand(tide, 1.4, 0, -0.1);
+      await waitFrames(page, 4);
+      const r = await page.evaluate(async (t) => {
+        const { surfEta } = await import('/gerupamasini/src/world/surfCpu.ts');
+        const a = window.__higata, w = a.world, gl = a.renderer.gl, wu = w.water.uniforms, sf = w.water.surf;
+        wu.uTime.value = t;
+        // (three's FloatType, RGBAFormat; the target's own class, so one three)
+        const N = 384, rt = new sf.target.constructor(N, N, { type: 1015, format: 1023, depthBuffer: false });
+        const prev = gl.getRenderTarget();
+        gl.setRenderTarget(rt); sf.quad.render(gl); gl.setRenderTarget(prev);
+        const buf = new Float32Array(N * N * 4);
+        gl.readRenderTargetPixels(rt, 0, 0, N, N, buf);
+        rt.dispose();
+        const errs = [];
+        let wet = 0;
+        for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+          const x = ((i + 0.5) / N * 2 - 1) * sf.half, z = ((j + 0.5) / N * 2 - 1) * sf.half;
+          // (the surf, not the dry land: where the ground is under the swash's reach)
+          if (w.terrain.heightAt(x, z) > wu.uWater.value + 0.6) continue;
+          const g = buf[(j * N + i) * 4], c = surfEta(w.surf, x, z, wu.uWater.value, t);
+          errs.push(Math.abs(g - c));
+          if (Math.abs(g) > 0.02) wet++;
+        }
+        errs.sort((p, q) => p - q);
+        const at = (q) => +errs[Math.floor(q * (errs.length - 1))].toFixed(5);
+        return { n: errs.length, moving: wet, p50: at(0.5), p99: at(0.99), p999: at(0.999), max: at(1) };
+      }, t);
+      console.log('cpu', tide, t, JSON.stringify(r));
+      // (the hashes' last bits and a crest landing on the other side of a texel make a rare outlier at a bore's front)
+      if (!(r.moving > 1000 && r.p50 < 0.0005 && r.p99 < 0.005)) { console.error('the CPU surf is not the drawn surf'); code = 1; }
+    }
+  }
   if (want('worker')) {
     // the bracket the tide is heading for is made ahead in the worker: no bake on the main thread as the tide rises
     const r = await page.evaluate(async () => {

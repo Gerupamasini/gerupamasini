@@ -96,7 +96,9 @@ uniform vec4 uSurfDir;
 uniform vec4 uSurfLv;
 uniform vec2 uSurfGrid;
 uniform sampler2D tSurfZone, tSurfAux;
-// (an arithmetic hash, no sine: cheaper, and the same on every GPU)
+// (an arithmetic hash, no sine: cheaper, and the same on every GPU. It turns a difference in its input's last bit
+// into a different number, so it is given only inputs exact in single precision — integers, eighths — that every GPU,
+// fused multiply-add or not, and the CPU's copy of the surf (surfCpu) reckon alike)
 float surfHash(float n) { n = fract(n * 0.1031); n *= n + 33.33; n *= n + n; return fract(n); }
 // a wave's own offset into the noise fields, bounded however long the session runs (the wave count only grows)
 float surfW(float n) { return fract(n * 0.6180339887) * 89.0; }
@@ -105,7 +107,7 @@ float surfNoise(vec2 p) {
   float n = i.x + i.y * 57.0;
   return mix(mix(surfHash(n), surfHash(n + 1.0), f.x), mix(surfHash(n + 57.0), surfHash(n + 58.0), f.x), f.y);
 }
-float surfNoise1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(surfHash(i * 1.37 + 0.11), surfHash(i * 1.37 + 1.48), f); }
+float surfNoise1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(surfHash(i * 1.375 + 0.125), surfHash(i * 1.375 + 1.5), f); }
 // a point in the shore's own frame: x seaward, y along the shore
 vec2 surfFrame(vec2 p) { vec2 d = uSurfDir.xy; return vec2(dot(p, d), dot(p, vec2(-d.y, d.x))); }
 
@@ -159,7 +161,7 @@ float surfPhase(vec2 sy, float T, float t) {
 float surfWaveH(float n, vec2 sy) {
   float w = surfW(n);
   // (the group and the crest's unevenness widen the spread a little; the heights stay near Rayleigh's)
-  float ray = clamp(0.706 * sqrt(-log(max(1.0 - 0.985 * surfHash(w * 13.7 + 0.5), 1e-3))), 0.3, 1.5);
+  float ray = clamp(0.706 * sqrt(-log(max(1.0 - 0.985 * surfHash(floor(w * 64.0) + 0.5), 1e-3))), 0.3, 1.5);
   float grp = 0.8 + 0.4 * surfNoise1(n * 0.16 + 4.3);
   float sect = 0.68 + 0.64 * smoothstep(0.12, 0.88, surfNoise(vec2(sy.y * 0.075, sy.x * 0.02) + w));
   float fine = 0.88 + 0.24 * surfNoise(vec2(sy.y * 0.32, sy.x * 0.05) - w * 1.3);
