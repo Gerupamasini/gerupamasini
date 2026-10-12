@@ -13,10 +13,11 @@ import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { World } from './World';
 import { LAYOUTS } from '../world/maps/hashirimizu';
-import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
+import { TankScene } from './TankScene';
 import { RoomTanks } from './RoomTanks';
 import { canPlaceTank, freeTankPosition, initialRoom, newRoomTank, resizedTankLayout, roomCapacity, tankSizeItemId, TANK_DIMENSIONS, TANK_SIZES, type AquariumRoom, type TankSize } from '../aquarium';
 import { categoryLimit, claimResearchTickets, drawEquipment, emptyEquipmentCollection, equipmentItem, normalizeCollection, normalizeEquipment, ownedQuantity, usedQuantity, type EquipmentKind, type EquipmentRecord, type EquipmentCollection } from '../aquarium';
+import { equipmentUnlocked, progressionOf, tankAnimalCapacity, tankUnlocked, buyAquariumUpgrade, isFilterKind, installedFilter, makeEquipment, claimIntroQuests, type FilterKind } from '../aquarium';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
 import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
@@ -110,7 +111,18 @@ export class App {
   target: Individual | null = null;
   lockedId: string | null = null;
   frameCount = 0;
-  readonly tankMax = TANK_MAX_OCCUPANTS;
+  get aquariumProgression() { return progressionOf(this.equipmentCollection.value); }
+  get tankMax(): number {
+    void ui.tankLayoutVersion.value;
+    return this.currentRoomTank ? tankAnimalCapacity(this.currentRoomTank.size, this.tank.equipment.currentLayout, this.aquariumProgression) : 0;
+  }
+  get introQuestState() {
+    const progress = Object.values(this.encyclopedia.progress.value);
+    return { discovered: progress.filter(p => p.discovered !== undefined).length, captures: this.encyclopedia.stats.captures,
+      behaviors: progress.reduce((n, p) => n + Object.keys(p.behaviors).length, 0),
+      tankAnimals: this.encyclopedia.tankItems.value.length + this.aquariumRoom.value.tanks.filter(t => t.id !== this.activeTankId.value).reduce((n, t) => n + t.individuals.length, 0),
+      tankCount: this.aquariumRoom.value.tanks.length };
+  }
   readonly aquariumRoom = signal<AquariumRoom>({ version: 1, tanks: [], mainTankId: null });
   readonly activeTankId = signal<string | null>(null);
   readonly roomBusy = signal(false);
@@ -402,6 +414,7 @@ export class App {
 
   async addRoomTank(size: TankSize, position?: [number, number]): Promise<boolean> {
     if (!this.save || this.mode !== 'roomPlacement' || this.roomBusy.value || !TANK_SIZES.includes(size)) return false;
+    if (!tankUnlocked(this.aquariumProgression, size)) { toast('このサイズはショップでCRを使って解放できます', 'info'); return false; }
     this.rememberActiveTank(); const room = this.aquariumRoom.value;
     if (room.tanks.length >= this.roomTankLimit) { toast('2台目はLv.5、3台目はLv.10で解放されます', 'info'); return false; }
     const point = position ?? freeTankPosition(room.tanks, size);
@@ -477,6 +490,7 @@ export class App {
       // the tide is the one of the flat's own station (the tide table and tickets follow it)
       if (this.tide.station.id !== map.station) { this.tide = new TideModel(this.data.stations.get(map.station)!); this.curveCacheMin = -1; }
       const dayNo = Math.floor((this.clock.nowGame() + 9 * 3600000) / 86400000);
+      this.fieldDay = dayNo;
       this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; }, dayNo);
       // the shaders compile behind the loading screen (in parallel where the browser can), before anything draws the
       // flat: otherwise the first frame stalls for as long as they take
@@ -501,6 +515,7 @@ export class App {
       performance.mark('world:creatureSystem');
       this.creatures.setMeadow(this.world.amamo);
       this.creatures.setScent(this.world.carrion);
+      this.creatures.water = this.world.motion;
       await this.creatures.preload();
       // the procedural species' shaders compile here too, and stay compiled while the flat lives (DriverEntry.keep)
       ui.loading.value = { frac: 0.75, label: t('loading.shaders') };
@@ -542,6 +557,8 @@ export class App {
     if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.creatures?.resetPopulation(null);
     this.leftFieldAt = 0;
     this.setMode('field');
+    this.equipmentCollection.value = { ...this.equipmentCollection.value, progression: { ...this.aquariumProgression, visitedField: true } };
+    this.requestSave();
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
   }
@@ -627,6 +644,7 @@ export class App {
     this.world?.mangroves?.setQuality(preset.vegetation);
     this.world?.water.setMirror(preset.mirror);
     this.world?.water.setSurfSteps(preset.surfSteps);
+    this.world?.setSurfQuality(preset);
     const light = this.world?.sky.sunLight;
     if (light) {
       light.castShadow = preset.shadows;
@@ -737,6 +755,21 @@ export class App {
   setOvercast(v: number): void {
     if (this.world) this.world.overcast = v;
     ui.debugState.value = { ...ui.debugState.value, overcast: v };
+  }
+
+  /** the day the flat was entered on (its sea, its rays' resting marks) */
+  private fieldDay = 0;
+
+  /** debug: another sea on an open shore (height m, period s); null: the day's own */
+  setSea(over: { height?: number; period?: number } | null): void {
+    this.world?.setSeaState(over, this.fieldDay);
+    ui.debugState.value = { ...ui.debugState.value };
+  }
+
+  /** debug: the surf's views (0 off, 1 the zones, 2 the foams, 3 the phase / breaking / swash depth) */
+  setSurfDebug(mode: number): void {
+    this.world?.water.setSurfDebug(mode);
+    ui.debugState.value = { ...ui.debugState.value, surfView: mode };
   }
 
   setMarkers(on: boolean): void {
@@ -1221,13 +1254,16 @@ export class App {
   }
 
   async tankPut(rec: IndividualRecord): Promise<void> {
-    if (!this.activeTankId.value || !this.encyclopedia.caseItems.value.some(r => r.id === rec.id)) return;
+    if (this.roomBusy.value || !this.activeTankId.value || !this.encyclopedia.caseItems.value.some(r => r.id === rec.id)) return;
     if (this.encyclopedia.tankItems.value.length >= this.tankMax) return;
+    const tankId = this.activeTankId.value;
+    this.roomBusy.value = true;
     // the animal's model loads behind a curtain rather than in a stutter
-    await this.transition(t('transition.put'), async () => {
+    try { await this.transition(t('transition.put'), async () => {
+      if (this.activeTankId.value !== tankId || !this.encyclopedia.caseItems.value.some(r => r.id === rec.id) || this.encyclopedia.tankItems.value.length >= this.tankMax) return;
       this.encyclopedia.moveToTank(rec);
       await this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
-    });
+    }); } finally { this.roomBusy.value = false; }
   }
 
   /** debug: set a tool's catch count (its proficiency) by hand; nets share one */
@@ -1382,12 +1418,16 @@ export class App {
   }
 
   /** The shop is a room of its own: a curtain, then the counter. */
-  openShop(): void {
-    if (this.mode !== 'home') return;
+  openShop(tab: 'tools' | 'tanks' | 'filters' | 'quests' = 'tools'): void {
+    if (this.mode === 'shop') { ui.shopTab.value = tab; ui.shopSelected.value = null; return; }
+    if (!['home', 'tankEdit', 'roomPlacement'].includes(this.mode) || this.roomBusy.value) return;
     ui.homeInfo.value = null;
     ui.homePanel.value = 'none';
     ui.shopSelected.value = null;
+    ui.shopTab.value = tab;
     void this.transition(t('transition.shop'), () => {
+      if (this.mode !== 'home') this.setMode('home');
+      this.tank.setViewInputEnabled(true);
       if (!this.shop) this.shop = new ShopScene(this.renderer.aspect, (id) => t(`shop.item.${id}`));
       this.stockShop();
       this.openOverlay('shop');
@@ -1426,6 +1466,27 @@ export class App {
       this.equipmentCollection.value = reward.collection;
       toast(`研究の報酬：設備ガチャチケット ${reward.awarded}枚`, 'success');
     }
+  }
+
+  private claimIntroductionRewards(): void {
+    const reward = claimIntroQuests(this.aquariumProgression, this.introQuestState);
+    if (!reward.awarded) return;
+    this.equipmentCollection.value = { ...this.equipmentCollection.value, progression: reward.progression };
+    this.encyclopedia.money.value += reward.awarded;
+    toast(`クエスト達成：${reward.titles.join('・')}  +${reward.awarded} CR`, 'success');
+  }
+
+  buyTankSize(size: TankSize): boolean { return this.buyAquariumProgression('tank', size); }
+  buyFilterLevel(kind: FilterKind): boolean { return this.buyAquariumProgression('filter', kind); }
+  private buyAquariumProgression(type: 'tank' | 'filter', id: TankSize | FilterKind): boolean {
+    if (!this.save || this.mode !== 'shop' || this.savingSuspended || this.roomBusy.value) return false;
+    const bought = buyAquariumUpgrade(this.aquariumProgression, this.encyclopedia.money.value, type, id);
+    if (!bought) return false;
+    this.equipmentCollection.value = { ...this.equipmentCollection.value, progression: bought.progression };
+    this.encyclopedia.money.value = bought.money;
+    ui.tankLayoutVersion.value++;
+    toast(`${type === 'tank' ? `${id}cm水槽を解放` : 'フィルターを解放・強化'}  −${bought.cost} CR`, 'success');
+    this.requestSave(); return true;
   }
 
   async rollGacha(count: number): Promise<void> {
@@ -1531,28 +1592,39 @@ export class App {
     if (fixed) replacing = item.category;
     const record = replacing ? layout.devices.find((d) => d.id === replacing) : undefined;
     if (replacing && !fixed && record?.kind !== item.category) return false;
+    if (!equipmentUnlocked(this.equipmentCollection.value, itemId)) { toast('この水槽・フィルターはショップでCRを使って解放してください', 'info'); return false; }
     if (this.usedEquipmentQuantity(itemId, replacing) >= ownedQuantity(this.equipmentCollection.value, itemId)) { toast('未所持、または別の水槽で使用中です', 'info'); return false; }
     const active = this.currentRoomTank;
     if (!active) return false;
     if (item.category === 'stand' && item.size !== active.size) { toast('この水槽に対応するサイズの台を選んでください', 'info'); return false; }
     if (item.category === 'tank' && item.size !== active.size) {
       const size = item.size!;
+      const resized = resizedTankLayout(this.tank.currentLayout, active.size, size, item.id);
+      if (this.encyclopedia.tankItems.value.length > tankAnimalCapacity(size, resized.equipment!, this.aquariumProgression)) { toast('飼育上限を超えます。先に生物をケースへ移してください', 'warn'); return false; }
       if (!canPlaceTank(this.aquariumRoom.value.tanks, size, active.position, active.id)) { toast('大きい水槽を置くスペースがありません。部屋の設置画面で位置を変えてください', 'warn'); return false; }
-      const next = { ...active, size, layout: resizedTankLayout(this.tank.currentLayout, active.size, size, item.id), individuals: [...this.encyclopedia.tankItems.value] };
+      const next = { ...active, size, layout: resized, individuals: [...this.encyclopedia.tankItems.value] };
       this.aquariumRoom.value = { ...this.aquariumRoom.value, tanks: this.aquariumRoom.value.tanks.map(t => t.id === next.id ? next : t) };
       this.roomBusy.value = true;
       void this.showRoomTank().finally(() => { this.roomBusy.value = false; });
       ui.tankLayoutVersion.value++; this.requestSave(); return true;
     }
-    if (!fixed && !record && layout.devices.filter((d) => d.kind === item.category).length >= categoryLimit(item.category)) { toast('この設備はこれ以上置けません', 'warn'); return false; }
-    if (replacing) rig.setItem(replacing, itemId);
-    else {
-      const id = rig.addDevice(item.category as EquipmentKind, itemId);
-      if (!id) { toast('設備の上限です（24個）', 'warn'); return false; }
-      if (['airStone', 'spongeFilter', 'circulationPump'].includes(item.category) && this.tank.currentLayout.substrate === 'none') {
-        const r = rig.currentLayout.devices.find((d) => d.id === id)!; rig.changeDevice(id, { position: [r.position[0], Math.max(0, r.position[1] - 0.05), r.position[2]] });
+    const changingFilter = isFilterKind(item.category) && installedFilter(layout) !== item.category;
+    if (changingFilter) {
+      const next = { ...layout, devices: [...layout.devices.filter(d => !isFilterKind(d.kind)), makeEquipment(item.category as FilterKind, `${item.category}-1`, this.tank.dimensions)] };
+      next.devices[next.devices.length - 1].itemId = itemId;
+      if (this.encyclopedia.tankItems.value.length > tankAnimalCapacity(active.size, next, this.aquariumProgression)) { toast('飼育上限を超えます。先に生物をケースへ移してください', 'warn'); return false; }
+      rig.setLayout(next); ui.equipmentSelected.value = next.devices[next.devices.length - 1].id;
+    } else {
+      if (!fixed && !record && layout.devices.filter((d) => d.kind === item.category).length >= categoryLimit(item.category)) { toast('この設備はこれ以上置けません', 'warn'); return false; }
+      if (replacing) rig.setItem(replacing, itemId);
+      else {
+        const id = rig.addDevice(item.category as EquipmentKind, itemId);
+        if (!id) { toast('設備の上限です（24個）', 'warn'); return false; }
+        if (['airStone', 'spongeFilter', 'circulationPump'].includes(item.category) && this.tank.currentLayout.substrate === 'none') {
+          const r = rig.currentLayout.devices.find((d) => d.id === id)!; rig.changeDevice(id, { position: [r.position[0], Math.max(0, r.position[1] - 0.05), r.position[2]] });
+        }
+        ui.equipmentSelected.value = id;
       }
-      ui.equipmentSelected.value = id;
     }
     if (!this.commitTankLayout()) {
       rig.setLayout(layout); rig.applyPreset(); ui.equipmentSelected.value = selected;
@@ -1611,7 +1683,9 @@ export class App {
 
   // ------------------------------------------------------------------ save
   requestSave(): void {
-    if (!this.save || this.savingSuspended || this.saveTimer !== null) return;
+    if (!this.save || this.savingSuspended) return;
+    this.claimIntroductionRewards();
+    if (this.saveTimer !== null) return;
     this.saveTimer = window.setTimeout(() => { this.saveTimer = null; void this.writeSave(); }, 1000);
   }
 

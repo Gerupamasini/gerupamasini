@@ -42,6 +42,8 @@ export interface DebugState {
   timeOverride: boolean;
   tideOverride: number | null;
   overcast: number;
+  /** the surf's debug view (0 off) */
+  surfView?: number;
   markers: boolean;
   /** species kept out of the world for now (ids) */
   hidden: string[];
@@ -59,6 +61,7 @@ export const ui = {
   settings: signal<SettingsData>({ ...DEFAULT_SETTINGS }),
   /** the tool (id) or parcel ('coming:<id>') picked on the shop's shelves */
   shopSelected: signal<string | null>(null),
+  shopTab: signal<'tools' | 'tanks' | 'filters' | 'quests'>('tools'),
   screen: signal<Screen>('boot'),
   saveError: signal<string | null>(null),
   saveRecovery: signal<{ message: string; backup: boolean } | null>(null),

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { App } from '../../app/App';
 import { canPlaceTank, freeTankPosition, ROOM_LIMITS, ROOM_SLOT_LEVELS, tankFootprint, TANK_DIMENSIONS, TANK_SIZES, type TankSize } from '../../aquarium';
+import { tankUnlocked } from '../../aquarium';
 
 const W = 570, H = 250;
 const mapPoint = (position: [number, number]) => [(position[0] - ROOM_LIMITS.minX) * 100, (position[1] - ROOM_LIMITS.minZ) * 100];
@@ -8,12 +9,13 @@ const mapPoint = (position: [number, number]) => [(position[0] - ROOM_LIMITS.min
 export function RoomPlacement({ app }: { app: App }) {
   const room = app.aquariumRoom.value, busy = app.roomBusy.value, limit = app.roomTankLimit;
   const [selected, setSelected] = useState<string | null>(app.activeTankId.value);
-  const [size, setSize] = useState<TankSize>(45);
+  const [size, setSize] = useState<TankSize>(() => tankUnlocked(app.aquariumProgression, 45) ? 45 : 60);
   const [position, setPosition] = useState<[number, number]>([0, 0]);
   const dragging = useRef(false), dragOffset = useRef<[number, number]>([0, 0]), svg = useRef<SVGSVGElement>(null);
   useEffect(() => { app.tank.setViewInputEnabled(false); app.tank.frameRoom(); return () => app.tank.setViewInputEnabled(true); }, [app]);
   const tank = room.tanks.find(t => t.id === selected), adding = !tank;
   const valid = canPlaceTank(room.tanks, tank?.size ?? size, position, tank?.id);
+  const unlocked = tankUnlocked(app.aquariumProgression, size);
   useEffect(() => { if (selected && !tank) setSelected(room.tanks[0]?.id ?? null); }, [room.tanks, selected]);
   useEffect(() => { setPosition(tank ? [...tank.position] : freeTankPosition(room.tanks, size) ?? [0, 0]); }, [selected, size, tank?.position[0], tank?.position[1]]);
   const fromPointer = (clientX: number, clientY: number): [number, number] => {
@@ -42,12 +44,12 @@ export function RoomPlacement({ app }: { app: App }) {
         <p class="room-dimensions">幅{dimensions.width * 100} × 奥行{dimensions.depth * 100} × 高さ{dimensions.height * 100}cm<br />標準台：高さ73cm</p>
         <div class="room-position">{(['左右', '前後'] as const).map((label, i) => <label key={label}>{label} (m)<input aria-label={`水槽の${label}位置`} type="number" step="0.05" disabled={busy} value={position[i]} onChange={e => { const n = e.currentTarget.valueAsNumber; if (Number.isFinite(n)) setPosition(p => i === 0 ? [n, p[1]] : [p[0], n]); }} /></label>)}</div>
         <p class={`room-validity ${valid ? '' : 'invalid'}`} aria-live="polite">{valid ? 'この位置に設置できます' : '他の水槽や壁と重ならない位置を選んでください'}</p>
-        {adding ? <button class="btn primary" disabled={busy || !valid || room.tanks.length >= limit} onClick={async () => { if (await app.addRoomTank(size, position)) setSelected(app.activeTankId.value); }}>水槽と標準台を設置</button> : <>
+        {adding ? unlocked ? <button class="btn primary" disabled={busy || !valid || room.tanks.length >= limit} onClick={async () => { if (await app.addRoomTank(size, position)) setSelected(app.activeTankId.value); }}>水槽と標準台を設置</button> : <button class="btn primary" disabled={busy} onClick={() => app.openShop('tanks')}>ショップで水槽を解放</button> : <>
           <button class="btn" disabled={busy || !valid} onClick={() => app.moveRoomTank(tank.id, position)}>この位置に移動</button>
           <button class="btn room-main" disabled={busy} aria-pressed={tank.id === room.mainTankId} onClick={() => app.setMainTank(tank.id)}>{tank.id === room.mainTankId ? '★ メイン水槽' : 'メイン水槽にする'}</button>
           <div class="room-secondary"><button class="btn" disabled={busy} onClick={async () => { await app.selectRoomTank(tank.id); app.closeRoomPlacement(); app.openTankEdit(); }}>この水槽を編集</button><button class="btn danger" disabled={busy} onClick={() => void app.removeRoomTank(tank.id)}>撤去する</button></div>
         </>}
-        <p class="room-removal-note">撤去した設備は再利用できます。生物はケースへ戻ります。</p>
+        <p class="room-removal-note">水槽の種類はショップで解放。撤去した設備は再利用でき、生物はケースへ戻ります。</p>
       </div>
     </div>
   </section>;

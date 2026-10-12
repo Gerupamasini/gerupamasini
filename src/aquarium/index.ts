@@ -5,3 +5,4 @@ export * from './AquariumEquipment';
 export * from './state';
 export * from './catalog';
 export * from './room';
+export * from './progression';

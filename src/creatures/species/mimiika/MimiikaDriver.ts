@@ -1,6 +1,7 @@
-import { Color, Group, Vector3, type Object3D } from 'three';
+import { Color, Euler, Group, Vector3, type Object3D } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Intent } from '../../drivers/Driver';
+import { WaterRider } from '../../physics/water';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
 import { createSquidBehavior, type SquidApi } from './behavior';
@@ -48,6 +49,11 @@ export class MimiikaDriver implements Driver {
   private locked = false;
   private listeners = new Set<(e: BehaviorEvent) => void>();
   private readonly tmp = new Vector3();
+  /** hovering or swimming, the swell carries the little squid to and fro and rocks it; on the sand it holds on */
+  private readonly rider = new WaterRider();
+  private readonly rock = new Euler(0, 0, 0, 'YXZ');
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
+  private groundY = 0;
   private readonly sun = new Vector3();
   private readonly player = new Vector3(Number.NaN, 0, 0);
   private ctx: DriverContext | null = null;
@@ -263,6 +269,14 @@ export class MimiikaDriver implements Driver {
       const lum = (c[0] + c[1] + c[2]) / 3;
       s.setSurroundings((0.37 - lum) / 0.2, this.night);
     }
+    {
+      const s0 = s.state, afloat = s0.alt > 0.004 && s0.bury < 0.05 && s0.mode !== 'CRAWL' && s0.mode !== 'BURROW';
+      const r = this.rider.step(sdt, ctx.water, ctx.floor, s0.pos.x, s0.pos.y, s0.pos.z, s0.heading, ind.length_mm / 1000, afloat ? (s0.mode === 'ESCAPE' ? 0.3 : 1) : 0, ctx.minDepth ?? 0);
+      s0.pos.x += r.vel.x * sdt;
+      s0.pos.z += r.vel.z * sdt;
+      // (its height is kept over the sand on a spring: the swell's heave goes into that height)
+      if (afloat) s0.alt = Math.max(0.002, s0.alt + r.vel.y * sdt);
+    }
     const steps = Math.max(1, Math.ceil(sdt * 60 - 1e-6));
     let P = null as ReturnType<SquidApi['update']> | null;
     for (let i = 0; i < steps; i++) P = s.update(sdt / steps);
@@ -270,7 +284,9 @@ export class MimiikaDriver implements Driver {
     const st = s.state;
     ind.pos.copy(st.pos);
     ind.heading = st.heading;
+    this.groundY = ctx.floor.heightAt(st.pos.x, st.pos.z);
     AMH_UNIFORMS.uSurfaceY.value = ctx.floor.waterAt(st.pos.x, st.pos.z);
+    if (this.rider.tiltX !== 0 || this.rider.tiltZ !== 0) P.quat.setFromEuler(this.rock.set(-st.pitch + this.rider.tiltX, st.heading, st.roll + this.rider.tiltZ));
     applyPose(root, model.bones, P);
     const level = this.locked ? 0 : model.lod.getCurrentLevel();
     const tentaclesOut = P.ten[0].ext > 0.12 || P.ten[1].ext > 0.12;
@@ -340,7 +356,27 @@ export class MimiikaDriver implements Driver {
     if (heading !== undefined) s.state.heading = heading;
     s.rest(4);
     ind.pos.x = x; ind.pos.z = z;
+    this.rider.reset();
     this.busy = false;
+  }
+
+  /** sitting or crawling on the sand, hovering over it, or buried out of everyone's way */
+  body(): BodyState {
+    const s = this.squid, b = this.bodyState;
+    if (s) {
+      const st = s.state;
+      b.mode = st.bury > 0.6 ? 'away' : st.alt > 0.005 ? 'water' : 'bed';
+      b.heading = st.heading;
+      b.y = this.groundY + st.alt;
+    }
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    const s = this.squid, ind = this.ind;
+    if (!s) return;
+    s.state.pos.x += dx; s.state.pos.z += dz;
+    if (ind) { ind.pos.x += dx; ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

@@ -3,6 +3,8 @@ import type { Individual } from '../Individual';
 import type { HabitatSample } from '../../world/Habitat';
 import type { AmamoUniforms } from '../../world/amamo/kit';
 import type { ShootSpec } from '../../world/amamo/AmamoPatch';
+import type { BodyMode } from '../physics/contacts';
+import type { WaterMotion } from '../physics/water';
 
 export type IntentKind = 'rest' | 'wander' | 'moveTo' | 'flee' | 'forage' | 'display' | 'burrow' | 'special';
 
@@ -76,6 +78,17 @@ export interface DriverContext {
   minDepth?: number;
   /** false where there is nothing to dig into (an acrylic case, a bare tank): burrowers stay on the surface */
   canBurrow?: boolean;
+  /** how the water moves (the swell, an open shore's surf), for what swims in it; absent: still water (a tank, the case) */
+  water?: WaterMotion | null;
+}
+
+/** How an animal's body meets the others this frame (the physics' contacts, physics/contacts.ts). */
+export interface BodyState {
+  mode: BodyMode;
+  /** its heading (rad; forward = (sin, cos)) */
+  heading: number;
+  /** the height of its underside (m) */
+  y: number;
 }
 
 export interface Driver {
@@ -93,6 +106,14 @@ export interface Driver {
    * (an aquatic animal is never left on the sand).
    */
   holdAt?(x: number, z: number, heading?: number): void;
+  /** its body as the contacts see it (absent: on the bed at the individual's place, facing its heading) */
+  body?(): BodyState;
+  /**
+   * Move the animal by (dx, dz) where it is, carrying on with whatever it was doing: a push from another body. Its own
+   * position and the individual's move at once, its drawing at its next update. (Absent: it is never pushed; the
+   * others give way to it.)
+   */
+  nudge?(dx: number, dz: number): void;
   onEvent(cb: (e: BehaviorEvent) => void): () => void;
   /** anchor point for cameras (world) */
   anchor(): Vector3;

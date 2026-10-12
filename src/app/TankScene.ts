@@ -20,6 +20,7 @@ import type { HeroLighting } from '../render/HeroPipeline';
 import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
 import { Box3, Group } from 'three';
 import { AquariumEquipment, STANDARD_TANK, type TankDimensions } from '../aquarium';
+import { MAX_TANK_ANIMALS, animalSlotPosition } from '../aquarium/progression';
 import { ToolShelf, type ShelfTool } from './ToolShelf';
 import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
 import { TankWaterSim } from '../render/tank/TankWaterSim';
@@ -28,11 +29,13 @@ import { createScreenUniforms, LAYER_OVER } from '../render/tank/TankRenderer';
 import { Substrate, BED_H } from '../render/tank/Substrate';
 import { Motes, RoomProbe, glassEdgeMaterial } from '../render/tank/TankFx';
 import { cloneForTank, lightByCaustics } from '../render/tank/causticMaterial';
+import { AnimalContacts } from '../creatures/physics/animals';
+import type { ContactBody } from '../creatures/physics/contacts';
 
 const UP = new Vector3(0, 1, 0);
 
 export const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
-export const TANK_MAX_OCCUPANTS = 4;
+export const TANK_MAX_OCCUPANTS = MAX_TANK_ANIMALS;
 /** The cabinet is 73 cm tall; keep aquarium coordinates local to its top. */
 export const TANK_OFFSET_Y = 0.73;
 /** mean depth of the sand bed (m) */
@@ -43,6 +46,8 @@ export interface Occupant {
   species: SpeciesDef;
   ind: Individual;
   driver: Driver;
+  /** its body for the contacts between the tank's animals */
+  body?: ContactBody;
   root: Object3D;
   unsub: () => void;
   hero: HeroInstance | null;
@@ -75,6 +80,8 @@ export class TankScene {
   private readonly camCur = { t: new Vector3(0, TANK_OFFSET_Y + 0.12, 0) };
   private camT = 1;
   readonly occupants: Occupant[] = [];
+  /** the tank's animals push each other aside instead of passing through */
+  private readonly contacts = new AnimalContacts();
   /** mean top of the substrate: the decorations and the caustics sit on it; the animals stand on its relief */
   private sandTop = SAND_H;
   private readonly floor: Floor = { heightAt: (x, z) => this.substrate.heightAt(x, z), waterAt: () => this.dimensions.waterHeight };
@@ -567,7 +574,8 @@ export class TankScene {
     const ind = generateIndividual(species, seed, 0, 0, 0, 0, Date.now());
     ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits]; ind.gravid = !!record.gravid; ind.dress = !!record.dress;
     const slot = this.occupants.length;
-    ind.pos.set((slot % 2 === 0 ? -1 : 1) * 0.12 * Math.ceil(slot / 2), 0, (slot >= 2 ? 0.06 : -0.04));
+    const [x, z] = animalSlotPosition(slot, this.occupantRecords.length, this.dimensions.width, this.dimensions.depth);
+    ind.pos.set(x, 0, z);
     ind.home.copy(ind.pos);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     let hero: HeroInstance | null = null;
@@ -873,6 +881,8 @@ export class TankScene {
       o.root.position.x = Math.max(-hx, Math.min(hx, o.root.position.x));
       o.root.position.z = Math.max(-hz, Math.min(hz, o.root.position.z));
     }
+    const hx = this.dimensions.width / 2 - 0.01, hz = this.dimensions.depth / 2 - 0.01;
+    this.contacts.step(dt * simScale, this.occupants, { floor: this.floor, bounds: { minX: -hx, maxX: hx, minZ: -hz, maxZ: hz } });
   }
 
   dispose(): void {

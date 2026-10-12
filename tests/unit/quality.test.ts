@@ -15,8 +15,8 @@ describe('quality presets', () => {
   });
 
   it('never costs more on a lighter tier', () => {
-    const numeric = ['maxDpr', 'maxPixels', 'shadowMapSize', 'creatureScale', 'lod1Count', 'surfaceDetail', 'mirror', 'surfSteps', 'msaa', 'viewScale', 'oysters'] as const;
-    const flags = ['shadows', 'post', 'contactShadows', 'hero'] as const;
+    const numeric = ['maxDpr', 'maxPixels', 'shadowMapSize', 'creatureScale', 'lod1Count', 'surfaceDetail', 'mirror', 'surfSteps', 'msaa', 'viewScale', 'oysters', 'surfMemory', 'spray'] as const;
+    const flags = ['shadows', 'post', 'contactShadows', 'hero', 'surfLip'] as const;
     const rank = { lite: 0, full: 1 } as const;
     for (let i = 1; i < QUALITY_ORDER.length; i++) {
       const lo = QUALITY_PRESETS[QUALITY_ORDER[i - 1]], hi = QUALITY_PRESETS[QUALITY_ORDER[i]];
