@@ -1,5 +1,5 @@
 import {
-  BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, RedFormat, Vector2, Vector3,
+  BufferAttribute, Matrix4, BufferGeometry, Color, DataTexture, DoubleSide, FloatType, Group, Mesh, MeshLambertMaterial, MeshStandardMaterial, RedFormat, Vector2, Vector3,
   type IUniform, type Texture, LinearFilter, ClampToEdgeWrapping,
 } from 'three';
 import { makeSpillTexture } from './Water';
@@ -102,6 +102,13 @@ export class Terrain {
   readonly wetDry: WetDry;
   private readonly uWetDry: IUniform<DataTexture>;
   private readonly uWetDryRange: IUniform<Vector2>;
+  /** the sun's shadow beyond the near map (FarShadow), and the near map's world → UV (to know where it reaches) */
+  private farShadow: { uFarShadowMap: IUniform<Texture | null>; uFarShadowMatrix: IUniform<Matrix4>; uFarShadowOn: IUniform<number> } = {
+    uFarShadowMap: { value: null }, uFarShadowMatrix: { value: new Matrix4() }, uFarShadowOn: { value: 0 },
+  };
+  private readonly uNearShadowMatrix: IUniform<Matrix4> = { value: new Matrix4() };
+  /** the relief's own shadow over the flat (TerrainShadow) */
+  private terrainSun: { uTerrainSun: IUniform<Texture | null>; uTerrainSunOn: IUniform<number> } = { uTerrainSun: { value: null }, uTerrainSunOn: { value: 0 } };
   private readonly uTime: IUniform<number> = { value: 0 };
   private readonly uSunUp: IUniform<number> = { value: 1 };
   private readonly uSunDirT: IUniform<Vector3> = { value: new Vector3(0, 1, 0) };
@@ -349,6 +356,8 @@ export class Terrain {
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uWaterLevel = uWater;
       shader.uniforms.uWetDry = this.uWetDry;
+      Object.assign(shader.uniforms, this.farShadow, this.terrainSun);
+      shader.uniforms.uNearShadowMatrix = this.uNearShadowMatrix;
       shader.uniforms.uWetDryRange = this.uWetDryRange;
       shader.uniforms.uTime = uTime;
       shader.uniforms.uSunUp = this.uSunUp;
@@ -376,6 +385,32 @@ varying float vPit;
 uniform float uWaterLevel;
 uniform sampler2D uWetDry;
 uniform vec2 uWetDryRange;
+uniform sampler2D uFarShadowMap;
+uniform mat4 uFarShadowMatrix;
+uniform float uFarShadowOn;
+uniform mat4 uNearShadowMatrix;
+uniform sampler2D uTerrainSun;
+uniform float uTerrainSunOn;
+// the sun's shadow where the near map does not reach: the coarse map of the whole flat, 2×2 filtered (1 lit)
+float farSunShadow(vec3 wp) {
+  if (uFarShadowOn < 0.5) return 1.0;
+  vec4 nc = uNearShadowMatrix * vec4(wp, 1.0);
+  vec2 nuv = nc.xy / nc.w;
+  float nearCover = smoothstep(0.0, 0.06, min(min(nuv.x, nuv.y), min(1.0 - nuv.x, 1.0 - nuv.y)));
+  if (nearCover >= 1.0) return 1.0;
+  vec4 c = uFarShadowMatrix * vec4(wp, 1.0);
+  vec3 sc = c.xyz / c.w;
+  if (any(lessThan(sc.xy, vec2(0.0))) || any(greaterThan(sc.xy, vec2(1.0)))) return 1.0;
+  vec2 ts = vec2(textureSize(uFarShadowMap, 0));
+  vec2 p = sc.xy * ts - 0.5, f = fract(p);
+  vec2 b = (floor(p) + 0.5) / ts, o = 1.0 / ts;
+  // (a texel is 15–30 cm: the bias keeps the ground from shadowing itself)
+  float z = sc.z - 0.0008;
+  float s00 = step(z, texture2D(uFarShadowMap, b).r), s10 = step(z, texture2D(uFarShadowMap, b + vec2(o.x, 0.0)).r);
+  float s01 = step(z, texture2D(uFarShadowMap, b + vec2(0.0, o.y)).r), s11 = step(z, texture2D(uFarShadowMap, b + o).r);
+  float lit = mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
+  return mix(lit, 1.0, nearCover);
+}
 uniform float uTime;
 uniform float uSunUp;
 uniform vec3 uSunDirT;
@@ -715,6 +750,15 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   // a pixel and spread its mirror out (their slopes become roughness; otherwise the sky aliases into stripes)
   roughnessFactor = mix(roughnessFactor, mix(0.07, 0.3, smoothstep(6.0, 40.0, gFootMm)), gWetFilm);
 }`)
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+  {
+    // beyond the near shadow map, the sun's light is shaded by the far one (the sun is the only directional light);
+    // everywhere, by the relief's own shadow (the ground casts into neither map)
+    float farS = farSunShadow(vWorldPos);
+    if (uTerrainSunOn > 0.5) farS *= texture2D(uTerrainSun, (vWorldPos.xz + uHalf) / (2.0 * uHalf)).r;
+    reflectedLight.directDiffuse *= farS;
+    reflectedLight.directSpecular *= farS;
+  }`)
         .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
 #if defined( USE_ENVMAP ) && defined( RE_IndirectSpecular )
   // the sky's light comes in at a small share (scene.environmentIntensity, for the diffuse fill); what wet ground
@@ -722,7 +766,7 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
   radiance *= mix(1.0, 1.0 / max(envMapIntensity, 1e-3), max(gWetFilm, 0.5 * gWet));
 #endif`);
     };
-    mat.customProgramCacheKey = () => 'higata-terrain-v3';
+    mat.customProgramCacheKey = () => 'higata-terrain-v4';
     return mat;
   }
 
@@ -762,6 +806,16 @@ vec2 rippleToWorld(vec2 g) { return vec2(uRipRot.x * g.x - uRipRot.y * g.y, uRip
     this.spillTexture.dispose();
     this.spillTexture = makeSpillTexture(spill, this.n);
     this.uSpill.value = this.spillTexture;
+  }
+
+  /**
+   * The far shadow's uniforms (FarShadow), the near map's matrix (the sun light's shadow.matrix, which three keeps
+   * up to date in place) and the relief's own shadow (TerrainShadow): call before the first frame.
+   */
+  setShadows(far: Terrain['farShadow'], nearMatrix: Matrix4, terrainSun: Terrain['terrainSun']): void {
+    this.farShadow = far;
+    this.terrainSun = terrainSun;
+    this.uNearShadowMatrix.value = nearMatrix;
   }
 
   setWater(level: number, time: number, sunUp = 1, sunDir?: Vector3): void {

@@ -10,7 +10,7 @@ import { SaveStore, emptySave, type SaveV1, DEFAULT_NET } from '../core/Save';
 import { loadGameData, type GameData } from '../data/loader';
 import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
-import { World } from './World';
+import { World, farShadowSize } from './World';
 import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
 import { categoryLimit, claimResearchTickets, drawEquipment, emptyEquipmentCollection, equipmentItem, normalizeCollection, normalizeEquipment, ownedEquipmentLayout, ownedQuantity, usedQuantity, type EquipmentKind, type EquipmentRecord, type EquipmentCollection } from '../aquarium';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
@@ -529,6 +529,8 @@ export class App {
     this.world?.mangroves?.setQuality(preset.vegetation);
     this.world?.water.setMirror(preset.mirror);
     this.world?.water.setSurfSteps(preset.surfSteps);
+    this.world?.farShadow.setSize(farShadowSize(preset));
+    this.world?.terrainShadow.setEnabled(preset.shadows);
     const light = this.world?.sky.sunLight;
     if (light) {
       light.castShadow = preset.shadows;

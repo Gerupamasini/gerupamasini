@@ -1,6 +1,12 @@
 import { Color, CubeCamera, CubeTexture, DirectionalLight, HalfFloatType, HemisphereLight, LinearFilter, MathUtils, PMREMGenerator, Scene, Vector3, WebGLCubeRenderTarget, type Texture, type WebGLRenderer } from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 
+/**
+ * the near shadow map's half width (m): it covers the ground ahead of the player (FarShadow takes over beyond), so
+ * its texels stay small (2048: 3 cm, 1024: 6 cm)
+ */
+const NEAR_HALF = 32;
+
 /** Preetham sky dome, key light, hemisphere light and a PMREM environment refreshed as the sun moves. */
 export class SkyDome {
   readonly sky: Sky;
@@ -46,7 +52,7 @@ export class SkyDome {
     this.sunLight = new DirectionalLight(0xffffff, 3);
     this.sunLight.castShadow = shadows;
     const cam = this.sunLight.shadow.camera;
-    cam.left = -45; cam.right = 45; cam.top = 45; cam.bottom = -45; cam.near = 1; cam.far = 300;
+    cam.left = -NEAR_HALF; cam.right = NEAR_HALF; cam.top = NEAR_HALF; cam.bottom = -NEAR_HALF; cam.near = 1; cam.far = 300;
     this.sunLight.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     this.sunLight.shadow.bias = -0.0005;
     this.sunLight.shadow.normalBias = 0.05;
@@ -72,8 +78,15 @@ export class SkyDome {
     return out.set(c.r * i, c.g * i, c.b * i);
   }
 
-  /** Update lights and sky for a sun direction (unit vector) and elevation in degrees. Call every frame; cheap. */
-  update(sunDir: Vector3, elevation: number, anchor: Vector3, overcast = 0): void {
+  private readonly shadowCentre = new Vector3();
+  private readonly lx = new Vector3();
+  private readonly ly = new Vector3();
+
+  /**
+   * Update lights and sky for a sun direction (unit vector) and elevation in degrees. Call every frame; cheap.
+   * `view`: the camera's forward, which the near shadow map is moved ahead along.
+   */
+  update(sunDir: Vector3, elevation: number, anchor: Vector3, overcast = 0, view?: Vector3): void {
     this.sunDir.copy(sunDir);
     this.elevation = elevation;
     this.overcast = overcast;
@@ -92,8 +105,21 @@ export class SkyDome {
     // the sun carries the daylight; sky light stays a soft bluish fill so sand reads warm with cool shadows
     this.sunLight.intensity = (0.7 + 1.9 * day) * (1 - 0.75 * cloud);
     const lightDir = elevation > -2 ? sunDir : new Vector3(0.3, 1, 0.2).normalize();
-    this.sunLight.position.copy(anchor).addScaledVector(lightDir, 120);
-    this.sunLight.target.position.copy(anchor);
+    // the near map: centred a little ahead of the player (what is looked at), and moved in whole texels so that its
+    // edges do not crawl as the player walks
+    const c = this.shadowCentre.copy(anchor);
+    if (view) {
+      const h = Math.hypot(view.x, view.z);
+      if (h > 1e-3) c.x += (view.x / h) * NEAR_HALF * 0.55, c.z += (view.z / h) * NEAR_HALF * 0.55;
+    }
+    const lx = this.lx.set(0, 1, 0).cross(lightDir);
+    if (lx.lengthSq() < 1e-6) lx.set(1, 0, 0); else lx.normalize();
+    const ly = this.ly.copy(lightDir).cross(lx);
+    const texel = (2 * NEAR_HALF) / Math.max(1, this.sunLight.shadow.mapSize.x);
+    const px = c.dot(lx), py = c.dot(ly);
+    c.addScaledVector(lx, Math.round(px / texel) * texel - px).addScaledVector(ly, Math.round(py / texel) * texel - py);
+    this.sunLight.position.copy(c).addScaledVector(lightDir, 120);
+    this.sunLight.target.position.copy(c);
     // hemisphere: sky colour tracks the horizon tint
     const skyCol = new Color(0.58, 0.68, 0.78).lerp(new Color(0.16, 0.22, 0.34), 1 - day);
     const groundCol = new Color(0.28, 0.24, 0.18).lerp(new Color(0.05, 0.05, 0.07), 1 - day);

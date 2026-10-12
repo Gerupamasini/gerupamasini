@@ -14,7 +14,7 @@
     "check": "npm run typecheck && npm run test && npm run data:validate && npm run models:check",
     "smoke": "node tests/smoke/screenshot.mjs",
     "smoke:recovery": "node tests/smoke/recovery-quality.mjs",
-    "smoke:graphics": "node tests/smoke/upscale.mjs && node tests/smoke/auto-quality.mjs",
+    "smoke:graphics": "node tests/smoke/upscale.mjs && node tests/smoke/auto-quality.mjs && node tests/smoke/shadows.mjs",
     "models:pack": "node tools/models/pack/build.mjs",
     "models:check": "node tools/models/pack/build.mjs --check",
     "model:mahaze": "node tools/models/mahaze/build.mjs",

@@ -26,9 +26,16 @@ import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
 import { jstParts, seasonOf, type Season } from '../core/Time';
 import type { QualityPreset } from '../core/Settings';
+import { FarShadow } from '../world/FarShadow';
+import { TerrainShadow } from '../world/TerrainShadow';
 
 /** direction the breeze drives the ripples and the waves over the eelgrass (radians in the xz plane) */
 const WIND_DIR = 0.7;
+
+/** The far shadow map's size for a tier: off without shadows, otherwise 2048 at the top tier and 1024 below it. */
+export function farShadowSize(preset: QualityPreset): number {
+  return preset.shadows ? (preset.shadowMapSize >= 2048 ? 2048 : 1024) : 0;
+}
 
 /** The tidal flat: terrain, water, sky, habitat and the tide model bound to a map. */
 export class World {
@@ -64,6 +71,12 @@ export class World {
   /** tone-mapping exposure suggested for the current light */
   exposure = 0.5;
   private readonly sunColTmp = new Vector3();
+  private readonly viewTmp = new Vector3();
+  /** the sun's shadow over the whole flat, beyond the near map (size 0 when the tier has no shadows) */
+  readonly farShadow!: FarShadow;
+  /** the relief's own shadow across the flat (off when the tier has no shadows) */
+  readonly terrainShadow!: TerrainShadow;
+  private renderer: WebGLRenderer | null = null;
   private lastHabitatMs = 0;
   private timeAcc = 0;
 
@@ -193,12 +206,23 @@ export class World {
     water.setSurfSteps(preset.surfSteps);
     water.setLite(preset.water === 'lite');
     water.mirrorGate = () => !renderer.shadowMap.enabled || !sky.sunLight.castShadow || sky.sunLight.shadow.map !== null;
+    // the far shadow: the flat's casters (the trees up to ~15 m) seen from the sun; the ground itself does not cast
+    const far = new FarShadow(terrain.half, terrain.wetDry.range.x - 1, terrain.wetDry.range.y + 15, [terrain.mesh]);
+    far.setSize(farShadowSize(preset));
+    const relief = new TerrainShadow(terrain.heightTexture, terrain.half);
+    relief.setEnabled(preset.shadows);
+    terrain.setShadows(far.uniforms, sky.sunLight.shadow.matrix, relief.uniforms);
+    (w as { farShadow: FarShadow }).farShadow = far;
+    (w as { terrainShadow: TerrainShadow }).terrainShadow = relief;
+    w.renderer = renderer;
     mark('sky');
     return w;
   }
 
   /** Free what the flat built (leaving for another map). Animals, tools and the case are freed by their owners. */
   dispose(): void {
+    this.farShadow?.dispose();
+    this.terrainShadow?.dispose();
     if (this.amamo) seagrass.bind(null);
     this.amamo?.dispose();
     this.amamo = null;
@@ -246,7 +270,12 @@ export class World {
     this.tod = timeOfDay(sp.elevation, jstParts(gameMs).hour);
     this.season = seasonOf(gameMs);
     const sunUp = Math.max(0, Math.min(1, (sp.elevation + 2) / 14)) * (1 - 0.8 * this.overcast);
-    this.sky.update(this.sunDir, sp.elevation, anchor, this.overcast);
+    this.sky.update(this.sunDir, sp.elevation, anchor, this.overcast, camera.getWorldDirection(this.viewTmp));
+    // the shadow over the whole flat, beyond the near map (re-drawn when the sun has moved)
+    if (this.renderer) {
+      this.farShadow.update(this.renderer, this.scene, this.sunDir, dt, anchor);
+      this.terrainShadow.update(this.renderer, this.sunDir);
+    }
     this.fog.color.copy(this.sky.fogColor);
     this.fog.density = 0.0024 * (1 + 2.5 * this.overcast);
     const day = Math.max(0, Math.min(1, (sp.elevation + 4) / 14));
