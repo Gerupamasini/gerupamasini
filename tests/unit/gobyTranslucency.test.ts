@@ -36,7 +36,9 @@ function bodyR(x: GobyBodyExtras, s: number, y: number, z: number): number {
   return ((Math.abs(z) / w) ** n + (Math.abs(y - yc) / (up ? t : b)) ** n) ** (1 / n);
 }
 
-describe('the goby organs mapped onto each body', () => {
+// (these read the JSON chunks of up to 21 GLBs: generous time for a cold disk right after an install)
+const GLB_READS = { timeout: 30_000 };
+describe('the goby organs mapped onto each body', GLB_READS, () => {
   it('reproduce the hero material\'s organs in the マハゼ juvenile they were placed in', () => {
     const x = bodyExtras('mahaze/mahaze_juvenile.lod2.glb');
     const o = organsFor(x.profile!, x.fishFrame!);
@@ -77,7 +79,7 @@ describe('the goby organs mapped onto each body', () => {
   });
 });
 
-describe('the goby body material', () => {
+describe('the goby body material', GLB_READS, () => {
   const material = (rel: string) => {
     const m = new MeshPhysicalMaterial({ transmission: 0.5, thickness: 0.008 });
     const b = body(rel);
