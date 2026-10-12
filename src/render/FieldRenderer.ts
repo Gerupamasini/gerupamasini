@@ -1,10 +1,19 @@
 import { DepthTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, RGBAFormat, Vector2, WebGLRenderTarget, type Object3D, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import type { WaterPass } from '../world/Water';
 import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
+import { renderSize } from './RenderSize';
+import { Upscaler } from './Upscaler';
 
-/** Renders the flat into an HDR buffer with depth, then composites the screen-space water onto the screen. */
+/**
+ * Renders the flat into an HDR buffer with depth, then composites the screen-space water onto the screen. When the
+ * view is drawn smaller than the screen (RenderSize), the water writes the finished picture into the upscaler, which
+ * scales it up (FSR 1) and sharpens it onto the screen.
+ */
 export class FieldRenderer {
   private rt: WebGLRenderTarget | null = null;
+  /** FSR 1 (scaling up and sharpening) when the view is drawn smaller than the screen */
+  readonly upscaler = new Upscaler();
+  private readonly screen = new Vector2();
   private preset = QUALITY_PRESETS.mid;
   private readonly size = new Vector2();
   private samples = 4;
@@ -19,7 +28,7 @@ export class FieldRenderer {
   }
 
   private target(): WebGLRenderTarget {
-    const s = this.gl.getDrawingBufferSize(this.size);
+    const s = renderSize(this.gl, this.size);
     const w = Math.max(1, s.x), h = Math.max(1, s.y);
     if (!this.rt || this.rt.width !== w || this.rt.height !== h || this.rt.samples !== this.samples) {
       this.rt?.dispose();
@@ -40,20 +49,24 @@ export class FieldRenderer {
   /**
    * Compile every shader the field needs before the first frame (in parallel where the browser offers
    * KHR_parallel_shader_compile), each in the variant it is drawn in: the scene into the HDR target, the water onto
-   * the screen. Otherwise the first frame stalls for as long as the compiles take.
+   * the screen (and, with `upscale`, into the upscaler). Otherwise the first frame stalls for as long as the compiles
+   * take.
    */
-  async compile(scene: Scene, camera: PerspectiveCamera, water: WaterPass): Promise<void> {
+  async compile(scene: Scene, camera: PerspectiveCamera, water: WaterPass, { upscale = false } = {}): Promise<void> {
     const gl = this.gl, prev = gl.getRenderTarget();
     camera.updateMatrixWorld();
     gl.setRenderTarget(this.target());
     const sceneReady = gl.compileAsync(scene, camera);
+    // (scaled up, the water is composited into the upscaler's target: that variant too)
+    let upscaledReady: Promise<unknown> = Promise.resolve();
+    if (upscale) { gl.setRenderTarget(this.upscaler.input(1, 1)); upscaledReady = gl.compileAsync(water.compileTarget(), camera); }
     gl.setRenderTarget(null);
     const waterReady = gl.compileAsync(water.compileTarget(), camera);
     const surf = water.surfCompileTarget();
     let surfReady: Promise<unknown> = Promise.resolve();
     if (surf) { gl.setRenderTarget(surf.target); surfReady = gl.compileAsync(surf.mesh, camera); }
     gl.setRenderTarget(prev);
-    await Promise.all([sceneReady, waterReady, surfReady]);
+    await Promise.all([sceneReady, waterReady, surfReady, upscaledReady]);
   }
 
   /**
@@ -77,12 +90,17 @@ export class FieldRenderer {
     gl.render(scene, camera);
     this.lastStats.calls = gl.info.render.calls;
     this.lastStats.triangles = gl.info.render.triangles;
-    water.render(gl, rt, null, camera);
+    const screen = gl.getDrawingBufferSize(this.screen);
+    if (rt.width < screen.x || rt.height < screen.y) {
+      water.render(gl, rt, this.upscaler.input(rt.width, rt.height), camera, true);
+      this.upscaler.present(gl);
+    } else water.render(gl, rt, null, camera);
     gl.setRenderTarget(null);
   }
 
   dispose(): void {
     this.rt?.dispose();
     this.rt = null;
+    this.upscaler.dispose();
   }
 }

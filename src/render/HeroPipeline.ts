@@ -3,6 +3,7 @@ import {
   NoToneMapping, PerspectiveCamera, RGBAFormat, Scene, Vector2, Vector3, WebGLRenderTarget, type IUniform, type WebGLRenderer,
 } from 'three';
 import { createPost } from './HeroPost.js';
+import { renderSize } from './RenderSize';
 import type { WaterPass } from '../world/Water';
 
 export const LAYER_FISH = 2;
@@ -147,7 +148,7 @@ export class HeroPipeline {
 
   render(scene: Scene, camera: PerspectiveCamera, dt: number, water: WaterPass | null = null): void {
     const r = this.renderer;
-    const size = r.getDrawingBufferSize(new Vector2());
+    const size = renderSize(r, new Vector2());
     this.resize(Math.max(1, size.x), Math.max(1, size.y));
     this.shared.uTime.value += dt;
     this.shared.uCamNearFar.value.set(camera.near, camera.far);

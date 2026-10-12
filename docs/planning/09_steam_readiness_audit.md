@@ -80,8 +80,8 @@
 
 | # | 内容 | 場所 | 区分 | 移行後も残るか |
 |---|---|---|---|---|
-| 6-1 | **GLB が 55 個で計 276 MB、テクスチャは無圧縮の PNG / JPEG**（`mahaze_adult.hero.glb` は 30 MB のうち約 22 MB が画像）。KTX2 / Basis、Draco、meshopt は未使用。スマホのアプリ容量・VRAM・読み込み時間に直結する | `src/assets/models/**` | 重要 | 元画像は残る |
-| 6-2 | 実機（スマホ・Deck・中位 GPU）での fps と消費電力を測っていない | `docs/quality/README.md:37` | 重要 | 計測の方法は残る |
+| 6-1 | **GLB が 55 個で計 276 MB、テクスチャは無圧縮の PNG / JPEG**（`mahaze_adult.hero.glb` は 30 MB のうち約 22 MB が画像）。KTX2 / Basis、Draco、meshopt は未使用。スマホのアプリ容量・VRAM・読み込み時間に直結する。**2026-10-12: KTX2（UASTC）+ meshopt の圧縮版を作るようにした**（[グラフィックの土台](../quality/graphics.md)。GPU メモリは約 1/4、ファイルの合計は 7 % 増） | `src/assets/models/**` | 重要 | 元画像は残る |
+| 6-2 | 実機（スマホ・Deck・中位 GPU）での fps と消費電力を測っていない。**2026-10-12: GPU 時間を測る仕組み（デバッグパネルに表示）は入れた。実機での数字はまだ** | `docs/quality/README.md:37` | 重要 | 計測の方法は残る |
 | 6-3 | 影は平行光源 1 枚（512〜2048）で、カスケードなし。遠景の影が粗い | `Sky.ts:48-50` | 画質の上限に関わる | ― |
 | 6-4 | 開発用ページ（`hermit-lab.html`）と `window.__higata` が本番ビルドに入る | `vite.config.ts`、`App.ts:184` | 軽微 | ― |
 

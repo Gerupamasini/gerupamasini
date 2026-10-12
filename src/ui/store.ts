@@ -45,7 +45,7 @@ export interface DebugState {
   markers: boolean;
   /** species kept out of the world for now (ids) */
   hidden: string[];
-  stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number; clamsNear: number; clamsTotal: number; oysters?: string; oystersTotal?: number; amamo?: string };
+  stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number; clamsNear: number; clamsTotal: number; oysters?: string; oystersTotal?: number; amamo?: string; gpuMs?: number | null; view?: string };
 }
 
 export interface Toast {

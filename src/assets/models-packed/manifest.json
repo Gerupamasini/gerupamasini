@@ -1,0 +1,444 @@
+{
+ "files": {
+  "digging/dig_mini.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "4dff938362e278078ae13864fc726aa3000e845594cb11a28a4b66f3dd21b5ed",
+   "masterBytes": 1031172,
+   "bytes": 1295520,
+   "images": 9,
+   "minPsnr": 42.33
+  },
+  "digging/dig_mini.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "2db201fa0380f021b9ad00320386d9c691a2a14a357e39686d6de1608a472546",
+   "masterBytes": 310616,
+   "bytes": 364432,
+   "images": 9,
+   "minPsnr": 36.91
+  },
+  "digging/dig_mini.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "e5351e4adde72b6115945a302c131f385e15546a5a65b525d6788b24b1272a44",
+   "masterBytes": 97924,
+   "bytes": 106808,
+   "images": 9,
+   "minPsnr": 32.66
+  },
+  "digging/dig_rake.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "90712f36d262357b77867a7ece3cdb9048af9ee5cc3c53d9c43ddfa211758c3e",
+   "masterBytes": 1008392,
+   "bytes": 2553916,
+   "images": 9,
+   "minPsnr": 55.01
+  },
+  "digging/dig_rake.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "b2e55ad921fcc9aa50d6892e659ed116f9207fdeaa8cec7218f77b64b74ad438",
+   "masterBytes": 349804,
+   "bytes": 819160,
+   "images": 9,
+   "minPsnr": 53.89
+  },
+  "digging/dig_rake.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "b1683e7d41ef546cccb5e75951b85e9e93f6189a90a18c77768f4cad762709a3",
+   "masterBytes": 133472,
+   "bytes": 262464,
+   "images": 9,
+   "minPsnr": 51.75
+  },
+  "digging/dig_shovel.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "e938f5c9fe6435708a8152def52f744ed54120a01931b012dcc2d148bb93265a",
+   "masterBytes": 1325656,
+   "bytes": 2829600,
+   "images": 12,
+   "minPsnr": 55.01
+  },
+  "digging/dig_shovel.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "e7ee2c78f0a30d1a7b9f47583337a24ad2d0bc7eeae000ec8e7d175166db76ed",
+   "masterBytes": 412564,
+   "bytes": 879856,
+   "images": 12,
+   "minPsnr": 53.89
+  },
+  "digging/dig_shovel.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "ea9b55c11b49a18962f3b1e58fe244883b14dd3a45d649e3dfab75c0915a9777",
+   "masterBytes": 140000,
+   "bytes": 273684,
+   "images": 12,
+   "minPsnr": 51.75
+  },
+  "digging/dig_trowel.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "36b390697be273dc89a0c48f36e4b3382f2a03627112c9ddc4664edf8ff7b45b",
+   "masterBytes": 950760,
+   "bytes": 2150104,
+   "images": 9,
+   "minPsnr": 55.01
+  },
+  "digging/dig_trowel.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "269256056ceab58c8d9dede469c6b81a4feac5b5398814562f936be7bdca5a5b",
+   "masterBytes": 309492,
+   "bytes": 710348,
+   "images": 9,
+   "minPsnr": 53.89
+  },
+  "digging/dig_trowel.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "c99c92772b86774005f08aeaa5e70061e5feda3c3094136fb142cf56ad765b87",
+   "masterBytes": 98632,
+   "bytes": 213824,
+   "images": 6,
+   "minPsnr": 51.75
+  },
+  "edohaze/edohaze_gravid.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "508f09e61ede62f0d27ce5c46b3e2e413f862493f699d23318fdd6cef5985b38",
+   "masterBytes": 18949708,
+   "bytes": 15686268,
+   "images": 11,
+   "minPsnr": 46.83
+  },
+  "edohaze/edohaze_gravid.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "9ae3a085943f026e044655d00b2a963da53a7ccc25a2c290b9e20da3ae7713d1",
+   "masterBytes": 7038152,
+   "bytes": 8047876,
+   "images": 11,
+   "minPsnr": 45.08
+  },
+  "edohaze/edohaze_gravid.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "ed1281a51668884e1e2ab33513ab4ee5e0170425f182244689fea4f7128214bc",
+   "masterBytes": 4451008,
+   "bytes": 6111688,
+   "images": 11,
+   "minPsnr": 44.52
+  },
+  "edohaze/edohaze.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "f819ea0b5e866b5ee9ae393887409d0f45106ed4bdc0a9b2a5e4714b6cc11887",
+   "masterBytes": 18914900,
+   "bytes": 15660888,
+   "images": 11,
+   "minPsnr": 46.93
+  },
+  "edohaze/edohaze.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "88c6ea1db9f600477dd6dd12b18be788160d0b0497acf948a2b862a157ee5b27",
+   "masterBytes": 7034380,
+   "bytes": 8042764,
+   "images": 11,
+   "minPsnr": 45.06
+  },
+  "edohaze/edohaze.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "7afa47957709e13dc235f5ea268e512c3f0495dc4a39c4111037080af014c827",
+   "masterBytes": 4448424,
+   "bytes": 6107488,
+   "images": 11,
+   "minPsnr": 44.55
+  },
+  "himehaze/himehaze_male.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "51944ef0a2d0188d919dda253cd792ec5ba708ae004c24a52ebc62c4e83ec59e",
+   "masterBytes": 18834064,
+   "bytes": 16935040,
+   "images": 11,
+   "minPsnr": 42.59
+  },
+  "himehaze/himehaze_male.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "b651d778b1ac83857a45515de71c90cd95733c5fc5e2dc88299918e6400557c5",
+   "masterBytes": 7212252,
+   "bytes": 8676188,
+   "images": 11,
+   "minPsnr": 40.19
+  },
+  "himehaze/himehaze_male.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "a0ccfe201c7ea92872114edd5d137d67adf3ae07ba0d52b478d069232bda4f5a",
+   "masterBytes": 4560328,
+   "bytes": 6615684,
+   "images": 11,
+   "minPsnr": 37.92
+  },
+  "himehaze/himehaze.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "d6a523ff55d7e03167241677a5c06e40b108d0adb5001418387f5e55bd312ce1",
+   "masterBytes": 18747784,
+   "bytes": 16740276,
+   "images": 11,
+   "minPsnr": 42.65
+  },
+  "himehaze/himehaze.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "3f57ea6e672af0cd3a3cfe11ab09b1974187b02104ef35f9e60d5880d4991359",
+   "masterBytes": 7141480,
+   "bytes": 8535316,
+   "images": 11,
+   "minPsnr": 40.23
+  },
+  "himehaze/himehaze.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "07447f3e75c6989e3f6aa19c84896a5dfb124beb47cac307775f17e07c276f96",
+   "masterBytes": 4492340,
+   "bytes": 6481216,
+   "images": 11,
+   "minPsnr": 37.91
+  },
+  "mahaze/mahaze_adult.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "8d7f0a78cad36c0e282dee6acb252af0fead69ab84906e14eb205797fb10e748",
+   "masterBytes": 30580128,
+   "bytes": 32865484,
+   "images": 23,
+   "minPsnr": 42.23
+  },
+  "mahaze/mahaze_adult.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "08432650ed78aaf91fbfbec1838353d99c6ca0930186d99ee5a59745a5e487f5",
+   "masterBytes": 8591916,
+   "bytes": 9519052,
+   "images": 23,
+   "minPsnr": 39.93
+  },
+  "mahaze/mahaze_adult.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "dd5d3e2e5c796280c24496bacdab3908642131ebf94d3c3cd7f75808ece576d8",
+   "masterBytes": 2825588,
+   "bytes": 3027072,
+   "images": 23,
+   "minPsnr": 37.77
+  },
+  "mahaze/mahaze_juvenile.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "95ebee1f3522d03814567b994b6dd386daba8a539e4fbb0f2b6098be7cf4f3d5",
+   "masterBytes": 28920188,
+   "bytes": 31177648,
+   "images": 23,
+   "minPsnr": 43.4
+  },
+  "mahaze/mahaze_juvenile.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "a3917139f1b9910a4f7c549fe9f090da73d2b952f49ea49799ee773ed1f58dc8",
+   "masterBytes": 8124580,
+   "bytes": 9107876,
+   "images": 23,
+   "minPsnr": 41.21
+  },
+  "mahaze/mahaze_juvenile.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "6a672c6dda2cceb4fa975c00209a1d0c00a40406efd9e99395ec5702552dd3bd",
+   "masterBytes": 2658948,
+   "bytes": 2920104,
+   "images": 23,
+   "minPsnr": 39.56
+  },
+  "mahaze/mahaze_subadult.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "0d7c652533744ee9430f1e2b8bc872f22a7811982f4fcccc294a9183814d1a51",
+   "masterBytes": 29855748,
+   "bytes": 32203800,
+   "images": 23,
+   "minPsnr": 42.77
+  },
+  "mahaze/mahaze_subadult.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "9d35736a18a3ac25304400c5eff8c7ffcf56195d4914771657831fa0960fa460",
+   "masterBytes": 8390804,
+   "bytes": 9348832,
+   "images": 23,
+   "minPsnr": 40.34
+  },
+  "mahaze/mahaze_subadult.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "8e4a6f8b8a38e91c8dc2fca4a058b3ab19d7193983fd74eb780b46002782bdec",
+   "masterBytes": 2752104,
+   "bytes": 2983836,
+   "images": 23,
+   "minPsnr": 38.03
+  },
+  "nets/net_carbon.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "363b96921414e8a0d79fe8cab5a98571deeebac7fb2f6ed37970e221a53ed461",
+   "masterBytes": 2953180,
+   "bytes": 3882160,
+   "images": 18,
+   "minPsnr": 40.21
+  },
+  "nets/net_carbon.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "6a06a0975f873ea426e8ad0a2fdede6271f4d37d0c220a6d4d50521286cd82c2",
+   "masterBytes": 992408,
+   "bytes": 1178976,
+   "images": 18,
+   "minPsnr": 36.91
+  },
+  "nets/net_carbon.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "8b85daaa2f26a02ae46c4a8353fe19655cb6ca3502e34cfc452f3b772583684c",
+   "masterBytes": 371748,
+   "bytes": 380976,
+   "images": 18,
+   "minPsnr": 32.66
+  },
+  "nets/net_deep.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "c7678138b85307c8c247a3486b32f191af679fe7be7cd19df31fc7f9eae4a7a0",
+   "masterBytes": 3574036,
+   "bytes": 3483124,
+   "images": 18,
+   "minPsnr": 40.12
+  },
+  "nets/net_deep.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "cd1a678f21cc368425cf748b03a01a61595aedc5900103b430bb88f8c8eefbc3",
+   "masterBytes": 1107028,
+   "bytes": 1068820,
+   "images": 18,
+   "minPsnr": 35.66
+  },
+  "nets/net_deep.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "42950b7d8726dc896d330d7115f334582c11666b3b4f3e55b1f101291cffdc8e",
+   "masterBytes": 386748,
+   "bytes": 345528,
+   "images": 18,
+   "minPsnr": 32.66
+  },
+  "nets/net_dframe.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "e0c09d440301a529a30c5675d937dfdea4243e06913b5e8979fd966ed94da12b",
+   "masterBytes": 4863640,
+   "bytes": 5959832,
+   "images": 21,
+   "minPsnr": 38.86
+  },
+  "nets/net_dframe.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "b42656a6efe1aff396747d81e3862e750235a8983ba8d6c4d76a983e256e1cfa",
+   "masterBytes": 1393832,
+   "bytes": 1583280,
+   "images": 18,
+   "minPsnr": 36.62
+  },
+  "nets/net_dframe.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "71470cf10209bf1349f4b6725db4a51f6ddaadbc7906dcb24f23fbf6c0145e02",
+   "masterBytes": 460568,
+   "bytes": 458972,
+   "images": 18,
+   "minPsnr": 32.66
+  },
+  "nets/net_fine.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "00cfb542115e1fd8e4aa9562434a5623bdffc56ff08667de0532c19f5dfb9b5b",
+   "masterBytes": 4017184,
+   "bytes": 4815136,
+   "images": 15,
+   "minPsnr": 38.86
+  },
+  "nets/net_fine.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "a29c9c1b815f4b8138c288c82268e170679d74adad24f17283981aa62947504a",
+   "masterBytes": 1134028,
+   "bytes": 1251228,
+   "images": 12,
+   "minPsnr": 36.62
+  },
+  "nets/net_fine.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "7fb9bfd964a259cc0e809166cf80a92bb4cc0dc178ebac22c44aa360f4a1b7aa",
+   "masterBytes": 374700,
+   "bytes": 359984,
+   "images": 12,
+   "minPsnr": 32.66
+  },
+  "nets/net_shallow.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "f450280ad17920040e9c8ce351886bcb155de7faff9a8585b6b1328ef35f4828",
+   "masterBytes": 2606512,
+   "bytes": 2898344,
+   "images": 15,
+   "minPsnr": 40.12
+  },
+  "nets/net_shallow.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "ee5558db40edd1910772103fea6e461326ef59c3136102ba7831fe946497a295",
+   "masterBytes": 869932,
+   "bytes": 887420,
+   "images": 15,
+   "minPsnr": 36.91
+  },
+  "nets/net_shallow.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "f0e9140e8069a067d0d2fa5d1c20f10c02bd1a438a883fb221d181b80076b5cd",
+   "masterBytes": 303080,
+   "bytes": 282932,
+   "images": 15,
+   "minPsnr": 32.66
+  },
+  "nets/net_small.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "424445ee6df108257a8836dd789c104b187d865d4fcf4b3dc33e7c512a9d6d57",
+   "masterBytes": 2130344,
+   "bytes": 3285892,
+   "images": 15,
+   "minPsnr": 40.12
+  },
+  "nets/net_small.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "5a5719b5ac91c5d182184043f101aa96e60f0e9a1c4d90a137c8e7173da4f1fa",
+   "masterBytes": 675420,
+   "bytes": 1103004,
+   "images": 15,
+   "minPsnr": 37.65
+  },
+  "nets/net_small.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "fcea9d24d3a4f40248845049adfa3a2b3ee1571c819488cd6e3d853940c6ca0d",
+   "masterBytes": 227016,
+   "bytes": 331132,
+   "images": 12,
+   "minPsnr": 35.31
+  },
+  "optics/obs_binoculars.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "059fe1ae14f2134acf87640db25616ee9e9368ee5661887b4be9bde49e0a4387",
+   "masterBytes": 993744,
+   "bytes": 1272704,
+   "images": 9,
+   "minPsnr": 42.33
+  },
+  "optics/obs_binoculars.lod1.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "12fbd3b633ef0b5828f30b39527bf8d2fcc2a2a40f8f8480efbc196f75d76f72",
+   "masterBytes": 342816,
+   "bytes": 378140,
+   "images": 9,
+   "minPsnr": 36.91
+  },
+  "optics/obs_binoculars.lod2.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "626e922a6f0d05a8cd03b29f9b3e6eec533b5c85c27e7bd9c3e731fbf232ac40",
+   "masterBytes": 130960,
+   "bytes": 125020,
+   "images": 9,
+   "minPsnr": 32.66
+  },
+  "plover/kentish_plover.hero.glb": {
+   "settings": "uastc1-zstd-mips+meshopt-v0/1",
+   "master": "d0d42e3fdaccb3c22e5671874c7be75f0795d05f2f21a3450beb2fbe5fad7ae3",
+   "masterBytes": 8982916,
+   "bytes": 6374400,
+   "images": 0,
+   "minPsnr": null
+  }
+ }
+}

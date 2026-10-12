@@ -4,6 +4,7 @@ import {
   type Texture, type WebGLRenderer,
 } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { TONE_MAP_GLSL } from '../render/ToneMapGlsl';
 import { MirrorView } from '../render/Mirror';
 import type { Terrain } from './Terrain';
 import { WAVES_GLSL, type WaveSet } from './Waves';
@@ -164,6 +165,10 @@ export class WaterPass {
       uReflMax: { value: 0.6 },
       uRes: { value: new Vector2(1, 1) },
       uEnvI: { value: 0.6 },
+      // 1: drawn into the upscaler, which wants the finished picture (tone mapped and sRGB-encoded, as on the
+      // screen); three does both only for the screen, so the shader does them itself, with three's exposure
+      uLdrOut: { value: 0 },
+      uExposure: { value: 1 },
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,
@@ -193,8 +198,10 @@ export class WaterPass {
         uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog;
         uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax;
         uniform vec2 uRes;
+        uniform float uLdrOut, uExposure;
         varying vec2 vUv;
         varying float vCamLevel;
+        ${TONE_MAP_GLSL}
         ${NOISE_GLSL}
         ${WAVES_GLSL}
         ${SURF_GLSL}
@@ -479,6 +486,7 @@ export class WaterPass {
           }
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
+          if (uLdrOut > 0.5) gl_FragColor.rgb = acesFilmicTM(gl_FragColor.rgb, uExposure);
           {
             // a light grade (warm highlights, cool shadows) and a soft vignette, as in the viewer
             vec3 c = gl_FragColor.rgb;
@@ -489,6 +497,7 @@ export class WaterPass {
             gl_FragColor.rgb = c;
           }
           #include <colorspace_fragment>
+          if (uLdrOut > 0.5) gl_FragColor.rgb = srgbEncode(gl_FragColor.rgb);
         }`,
     });
     this.quad = new FullScreenQuad(this.material);
@@ -610,9 +619,14 @@ export class WaterPass {
     u.uWaterFog.value.copy(this.tint).multiplyScalar(0.06 + 0.94 * light.day);
   }
 
-  /** Composite the water over a rendered frame (colour + depth) into `output` (null = the screen). */
-  render(gl: WebGLRenderer, input: WebGLRenderTarget, output: WebGLRenderTarget | null, camera: PerspectiveCamera): void {
+  /**
+   * Composite the water over a rendered frame (colour + depth) into `output` (null = the screen). `ldr`: the output is
+   * the upscaler's, which takes the finished picture (tone mapped and sRGB-encoded as the screen would get it).
+   */
+  render(gl: WebGLRenderer, input: WebGLRenderTarget, output: WebGLRenderTarget | null, camera: PerspectiveCamera, ldr = false): void {
     const u = this.uniforms;
+    u.uLdrOut.value = ldr && output ? 1 : 0;
+    u.uExposure.value = gl.toneMappingExposure;
     u.tColor.value = input.texture;
     u.tDepth.value = input.depthTexture;
     u.uProjInv.value.copy(camera.projectionMatrixInverse);
