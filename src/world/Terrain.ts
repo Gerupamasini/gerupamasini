@@ -5,7 +5,7 @@ import {
 import { makeSpillTexture } from './Water';
 import { WAVES_GLSL, type WaveSet } from './Waves';
 import { surfUniforms, type SurfUniforms } from './Surf';
-import type { SurfMemoryUniforms } from './SurfMemory';
+import { SURF_MEM_GLSL, type SurfMemoryUniforms } from './SurfMemory';
 import type { MapDef, Substrate } from '../data/schemas';
 import { pitMaskAt, pitShape, type FeedingPit } from './FeedingPits';
 import { DATA_BASE } from '../data/loader';
@@ -268,8 +268,6 @@ export class Terrain {
   /** what the sand remembers of the swash (SurfMemory: film, saturation, foam, swash marks), when there is a memory */
   private readonly uSurfMem: IUniform<Texture | null> = { value: null };
   private readonly uMemBox: IUniform<Vector4> = { value: new Vector4(0, 0, 1, 0) };
-  /** x: the day's 2 % run-up on the beach face (m): without a memory the sand stays saturated up to about there */
-  private readonly uSwashBand: IUniform<Vector4> = { value: new Vector4(0.2, 0, 0, 0) };
 
   constructor(grid: TerrainGrid, palette: Substrate[], pits: FeedingPit[] = []) {
     this.n = grid.n;
@@ -500,7 +498,10 @@ export class Terrain {
   }
 
   private buildMaterial(kind: 'terrain' | 'patch' | 'sheet'): MeshStandardMaterial {
-    const over = kind !== 'terrain';
+    // (a pit's patch lies on the coarse mesh's own surface and is drawn over it; the ripple sheet stands only where
+    // the coarse mesh is stepped down out of its way, so it needs no offset — and the water pass, which tells from
+    // the depth whether the ground is above the swash's sheet of a few millimetres, sees it where it is)
+    const over = kind === 'patch';
     const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, side: DoubleSide, polygonOffset: over, polygonOffsetFactor: over ? -1 : 0, polygonOffsetUnits: over ? -2 : 0 });
     const uWater = this.uWater, uWet = this.uWet, uTime = this.uTime;
     mat.onBeforeCompile = (shader) => {
@@ -523,9 +524,10 @@ export class Terrain {
       shader.uniforms.uMudTint = this.uMudTint;
       shader.uniforms.uRipRot = this.uRipRot;
       shader.uniforms.uSurf = this.surf.uSurf;
+      shader.uniforms.tSurfZone = this.surf.tSurfZone;
+      shader.uniforms.uSurfGrid = this.surf.uSurfGrid;
       shader.uniforms.tSurfMem = this.uSurfMem;
       shader.uniforms.uMemBox = this.uMemBox;
-      shader.uniforms.uSwashBand = this.uSwashBand;
       if (this.waves) Object.assign(shader.uniforms, this.waves.uniforms);
       shader.uniforms.uSpillTex = this.uSpill;
       shader.uniforms.uHalf = { value: this.half };
@@ -572,6 +574,13 @@ ${kind === 'sheet' ? 'vSubstrateV = gSheetSub;\nvPit = gSheetPit;' : 'vSubstrate
         shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
 if (uSheetDrop > 0.0) transformed.y -= uSheetDrop * (1.0 - smoothstep(uSheetR - 1.3, uSheetR - 0.3, length(transformed.xz - uSheetC)));`);
       }
+      if (kind === 'sheet') {
+        // the sheet stops where the coarse mesh comes back up to the same surface (that is the ground beyond)
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nuniform vec2 uSheetC;\nuniform float uSheetR;')
+          .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+{ vec2 sd = vWorldPos.xz - uSheetC; if (dot(sd, sd) > (uSheetR - 0.32) * (uSheetR - 0.32)) discard; }`);
+      }
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
 varying vec3 vWorldPos;
@@ -601,10 +610,17 @@ uniform vec2 uRipRot;
 uniform sampler2D uSpillTex;
 uniform float uHalf;
 uniform vec4 uSurf;
+uniform sampler2D tSurfZone;
+uniform vec2 uSurfGrid;
 uniform sampler2D tSurfMem;
 uniform vec4 uMemBox;
-uniform vec4 uSwashBand;
 ${WAVES_GLSL}
+${SURF_MEM_GLSL}
+// the bed's slope toward the sea, from the surf's zone (SurfZone)
+float surfSlopeAt(vec2 q) {
+  vec2 pc = clamp(q, vec2(-uSurfGrid.x), vec2(uSurfGrid.x));
+  return texture2D(tSurfZone, ((pc + uSurfGrid.x) / (2.0 * uSurfGrid.x) * (uSurfGrid.y - 1.0) + 0.5) / uSurfGrid.y).w;
+}
 // shared between the colour, normal and roughness stages (the colour stage runs first)
 float gFilm = 0.0;
 // a mud flat at low water (uMudLook): how saturated the silt is, and the thin sheets of water lying on it
@@ -797,19 +813,18 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   float wet = (1.0 - smoothstep(wetTop - 0.03, wetTop + 0.06, vWorldPos.y)) * (1.0 - 0.3 * smoothstep(lvl + 0.05, lvl + 0.8, vWorldPos.y));
   wet = max(wet, 1.0 - smoothstep(lvl - 0.05, lvl + 0.12, vWorldPos.y));
   // an open shore's swash, as the sand remembers it (SurfMemory): saturated wherever the sheets have been lately
-  // (drying over a minute or so), a glassy film just after one drains, foam and swash marks left on it. Outside the
-  // memory's window, the band the swash usually reaches stays saturated (its edge in lobes and tongues).
+  // (drying over a minute or so), a glassy film just after one drains, foam and swash marks left on it. Away from the
+  // viewer, where the memory fades out, the sand is as it usually is (the band the swash usually keeps wet, its lower
+  // part glassy half the time): the same state the memory gives new ground, so the window never shows.
   float sandFoam = 0.0, mark = 0.0;
   if (uSurf.w > 0.0) {
     float e = vWorldPos.y - uWaterLevel;
     if (e > -0.4 && e < 0.8) {
       vec2 q = vWorldPos.xz;
-      float lobes = 0.05 * (vnoise(q * 0.35 + 3.0) - 0.5) + 0.025 * (vnoise(q * 1.3 - 1.0) - 0.5);
-      vec4 mem = vec4(0.0, 1.0 - smoothstep(0.55 * uSwashBand.x, 0.95 * uSwashBand.x, e + lobes), 0.0, 0.0);
+      vec4 mem = vec4(surfMemUsual(q, e, surfSlopeAt(q)), 0.0, 0.0);
       if (uMemBox.w > 0.0) {
         vec2 muv = (q - uMemBox.xy) / uMemBox.z + 0.5;
-        vec2 em = min(muv, 1.0 - muv);
-        float inW = smoothstep(0.0, 0.08, min(em.x, em.y));
+        float inW = surfMemWeight(muv);
         if (inW > 0.0) mem = mix(mem, texture2D(tSurfMem, muv), inW);
       }
       // (the backwash lays bare sand below the still waterline too: it shines as much as the sand above it)
@@ -1129,11 +1144,10 @@ if (uMudLook > 0.001) vSubstrate += uMudLook * ((vnoise(vWorldPos.xz * 0.7 + 21.
     this.surf = surf;
   }
 
-  /** What the sand remembers of the swash (null: no memory, the usual band stays wet); and the day's run-up (m). */
-  setSurfMemory(mem: SurfMemoryUniforms | null, runup: number): void {
+  /** What the sand remembers of the swash (null: no memory, the sand stays as it usually is). */
+  setSurfMemory(mem: SurfMemoryUniforms | null): void {
     if (mem) { this.uSurfMem.value = mem.tSurfMem.value; this.uMemBox.value.copy(mem.uMemBox.value); }
     else this.uMemBox.value.w = 0;
-    this.uSwashBand.value.x = runup;
   }
 
   /** Share the water's wave set so the caustics follow the ripples (call before the first frame). */
