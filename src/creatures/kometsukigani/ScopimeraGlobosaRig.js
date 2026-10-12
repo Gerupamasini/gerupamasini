@@ -68,11 +68,11 @@ export const CHELA_POSES = {
   /**
    * fold, fitted to keypoints of the front view 063 (CW 317 px; a large male) and, for depth, the view from above
    * and behind 049: the carpus knob lies across above each palm like a shoulder at the anterolateral corner, level
-   * with the eyes (centre 0.37 CW out, 0.36 up); the palm hangs beside the maxillipeds with its broad face forward
-   * (centre 0.32 out, 0.16 up, just in front of the face); the fingers point down and in, their tips 0.15 CW from
-   * the midline just above the sand — side by side, not crossed under the face (also 002, 061, 2.webp, 4.webp)
+   * with the eyes (centre 0.37 CW out, 0.37 up); the palm hangs beside the maxillipeds, not over them, with its broad
+   * face forward (centre 0.32 out, 0.15 up, just in front of the face); the fingers point down, their tips 0.23 CW
+   * from the midline on the sand — side by side, not crossed under the face (also 002, 061, 2.webp, 4.webp)
    */
-  fold: [-1.393, 1.321, 0, -0.009, 2.667, 0.364, 0.04],
+  fold: [-1.303, 1.341, 0, -0.176, 2.669, 0.176, 0.04],
   scoop: [0.05, 0.25, 0, 0.12, 1.25, -1.15, 0.3],
   mouth: [0.1, 0.95, 0, 0.25, 1.8, -1.2, 0.05],
   /** wave, fitted to 6.webp: merus vertical beside the carapace, palm high with the fingers hooked inward */

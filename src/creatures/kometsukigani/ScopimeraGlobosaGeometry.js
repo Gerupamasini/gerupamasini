@@ -307,16 +307,21 @@ function carapaceFn(u, v, o, inside) {
   const undul = frontS * (0.014 * ga(0.375, 0.045) - 0.016 * ga(0.21, 0.085) + 0.006 * ga(0.03, 0.05));
   // front: a narrow lobe between the eyestalks, deflexed — it bends down over the face (004, 063, 016)
   const frontLobe = (1 - smoothstep(0.05, 0.08, axR)) * smoothstep(0.88, 0.97, c) * smoothstep(0.3, 0.46, v) * (1 - smoothstep(0.56, 0.66, v));
+  // the antennular fossae: two dark pits under the front lobe, between the eyestalk bases and above the epistome,
+  // each holding a folded antennule (063, 027: two small round knobs side by side, a narrow septum between them)
+  const fx = smoothstep(0.015, 0.035, ax) * (1 - smoothstep(0.085, 0.11, ax));
+  const fossa = fx * smoothstep(0.33, 0.36, y) * (1 - smoothstep(0.41, 0.44, y)) * smoothstep(0.85, 0.95, c) * (v > 0.45 ? 1 : 0);
   // buccal frame: the face recess where the third maxillipeds sit
-  // (the frame is a large square opening: the maxillipeds fill the face from the sternum up to the front, 063, 002)
-  const bx = 1 - smoothstep(0.2, 0.28, ax);
-  const byw = smoothstep(0.04, 0.1, y) * (1 - smoothstep(0.4, 0.46, y));
+  // (the frame holds the maxillipeds: 0.42 CW across, from the sternum up to 0.35 — the arches of their tops stand
+  // clear of the face, 063)
+  const bx = 1 - smoothstep(0.19, 0.26, ax);
+  const byw = smoothstep(0.04, 0.1, y) * (1 - smoothstep(0.37, 0.43, y));
   const buccal = bx * byw * smoothstep(0.8, 0.97, c) * (v > 0.5 ? 1 : 0);
   // displacement: along the (approximate) outward normal of the base shape
   const nx = sn * (v <= 0.5 ? Math.sin(phi) : 1), nz = c * (v <= 0.5 ? Math.sin(phi) : 1), ny = v <= 0.5 ? Math.cos(phi) * 1.3 : -Math.abs(Math.cos(phi));
   const nl = Math.hypot(nx, ny, nz) || 1;
   // (the buccal frame is deep enough that the maxillipeds lie in it, their tops not hidden behind the face)
-  const disp = dy - 0.03 * orb + 0.006 * frontLobe - 0.035 * buccal;
+  const disp = dy - 0.03 * orb + 0.006 * frontLobe - 0.035 * buccal - 0.04 * fossa;
   x += (nx / nl) * disp; z += (nz / nl) * disp; y += (ny / nl) * disp * (dorsal ? 1 : 0.4) + (dorsal ? dy * 0.4 : 0);
   // the margin's undulation, fading away from the rim; the lobe's downward bend
   y += undul * (smoothstep(0.2, 0.46, v) * (1 - smoothstep(0.5, 0.7, v)));
@@ -327,7 +332,7 @@ function carapaceFn(u, v, o, inside) {
   if (v > 0.5) part = c > 0.8 && y > 0.05 ? PART.FACE : (v > 0.8 ? PART.STERNUM : PART.BRANCHIO);
   else if (v > 0.44) part = c > 0.8 ? PART.FACE : PART.BRANCHIO;
   // (the orbit's shading: a shallow cavity, half-lit — 063 shows the eyestalk bases in shade, not in a black hole)
-  return [part, 0, orb * 0.55, 0];
+  return [part, 0, Math.max(orb * 0.55, fossa * 0.8), 0];
 }
 
 function buildCarapace(B, res) {
@@ -376,50 +381,68 @@ function buildEyes(B, res) {
 // --------------------------------------------------------------------------------------------- mouthparts
 
 /**
- * Third maxillipeds: two thin, gently arched lids that close the buccal frame and meet on the midline (002–005, 2.webp,
- * 4.webp). Bone-local: X from the lateral hinge to the midline, Y the outer face, Z along the hinge — upward on the
- * left plate, downward on the right one (Z = X × Y), so "up" is `zUp * sideUp`. Each plate: the ischium below, the
- * slightly smaller merus above with its upper-medial corner cut obliquely (the notch between the pair), the whole
- * plate domed most along its medial half.
+ * Third maxillipeds: two plates that close the buccal frame and meet on the midline, traced on the ground-level
+ * front view 063 (CW 317 px) and checked on 027, 035 and 002–004. Each plate: the merus above — its top a rounded
+ * arch, the two arches leaving a small V notch between them on the midline — and below a transverse suture the
+ * ischium, a little flatter, its lower corners rounded. Thin plates: the merus gently domed, the ischium flatter,
+ * the margins thin rolled rims. Bone-local: X from the lateral hinge to the midline, Y the outer face, Z along the
+ * hinge — upward on the left plate, downward on the right one (Z = X × Y), so "up" is `zu * sideUp`.
  */
+/** the plate's outline (left plate): u 0 the lateral hinge … 1 the midline, v −1 bottom … 1 top (063) */
+const MXP_OUTLINE = [
+  // the merus' arch, from the notch on the midline over the top to the lateral margin
+  [1.0, 0.56], [0.94, 0.72], [0.83, 0.86], [0.68, 0.96], [0.52, 1.0], [0.37, 0.98], [0.22, 0.89], [0.1, 0.73],
+  [0.03, 0.52],
+  // the lateral margin, nearly straight, rounding into the bottom
+  [0.0, 0.3], [0.0, -0.05], [0.02, -0.42], [0.08, -0.67], [0.19, -0.86], [0.36, -0.97], [0.6, -1.0], [0.82, -1.0],
+  [0.94, -0.97], [1.0, -0.9],
+  // the medial margin, straight, closing back to the notch
+  [1.0, -0.3], [1.0, 0.3],
+];
+/** the ischium–merus suture: a little above the middle laterally, falling slightly to the midline (063, 027) */
+const mxpSuture = (u) => 0.1 - 0.14 * u;
+
+/** outline radius from the plate's centre (u 0.5, v 0) along angle a, by ray–polygon intersection */
+function mxpOutline(a) {
+  const dx = Math.cos(a), dz = Math.sin(a);
+  const P = MXP_OUTLINE;
+  let best = 0.5;
+  for (let k = 0; k < P.length; k++) {
+    const [ax, az] = P[k], [bx, bz] = P[(k + 1) % P.length];
+    const x0 = ax - 0.5, z0 = az, ex = bx - ax, ez = bz - az;
+    const den = dx * ez - dz * ex;
+    if (Math.abs(den) < 1e-12) continue;
+    const t = (x0 * ez - z0 * ex) / den, q = (x0 * dz - z0 * dx) / den;
+    if (t > 0 && q >= -1e-6 && q <= 1 + 1e-6) { best = t; break; }
+  }
+  return [0.5 + dx * best, dz * best];
+}
+
 function buildMxp(B, res) {
   const rig = sharedRig();
-  const n = Math.max(8, Math.round(res.radial * 1.1)), m = Math.max(5, Math.round(res.radial * 0.75));
+  const n = Math.max(8, Math.round(res.radial * 1.15)), m = Math.max(5, Math.round(res.radial * 0.75));
   SIDES.forEach(({ id, sign }, k) => {
     const bone = rig.index.get(`Mxp3_${id}`);
     const W = MXP3.width, H = MXP3.height, T = MXP3.thick;
     const up = sign;                                   // +Z is up on the left plate, down on the right
-    // outline in (x: hinge 0 … midline W, zu: -H/2 bottom … H/2 top) for an angle a around the plate's centre
-    const outline = (a) => {
-      const c = Math.cos(a), s = Math.sin(a);
-      const rx = 0.5 * W, rz = 0.5 * H;
-      // a pillow: straight medial edge above (the pair meets on the midline), both lower corners well rounded so
-      // the pair ends in two bulbs with a small notch between them (2.webp, 4.webp)
-      // the upper medial corner nearly square, so the pair meets right up to the top (063: only a small notch)
-      const nExp = s < 0 ? 2.6 : (c > 0 ? 6 : 4);
-      let px = rx + rx * se(c, s < 0 ? 2.6 : (c > 0 ? 10 : 4)), pz = rz * se(s, nExp);
-      // the merus narrows a little upward: its upper-medial corner only slightly bevelled, so the pair closes the
-      // frame right up to the front with just a small notch between them (063, 027)
-      const cut = smoothstep(0.2, 0.9, c) * smoothstep(0.3, 0.95, s);
-      px -= 0.004 * cut; pz -= 0.006 * cut;
-      const lat = smoothstep(0.2, 0.9, -c) * smoothstep(0.3, 0.9, s);
-      pz -= 0.016 * lat;
-      return [px, pz];
-    };
     for (const face of [1, -1]) {
       patch(B, {
         rows: m, cols: n * 2, bone, wrapCols: true,
-        fn: (u, v, o, inside) => {
-          const a = u * TAU, r = 1 - v;
-          const [px, pz] = outline(a);
-          const cx = 0.5 * W, x = cx + (px - cx) * r, zu = pz * r;
-          // a thin plate, gently arched: highest a little medial of centre and in the upper (merus) half, falling
-          // off evenly to thin margins — a lid over the mouth, not a pillow (063, 027, 002)
-          const dx = (x - 0.56 * W) / (0.62 * W), dz = (zu - 0.06 * H) / (0.62 * H);
-          // the margin a rounded rim, not a cut edge: the lid's thickness rolls over it (r → 1)
-          const rimR = Math.sqrt(Math.max(0, 1 - ((r - 0.86) / 0.14) ** 2 * (r > 0.86 ? 1 : 0)));
-          const dome = Math.max(0, 1 - dx * dx - dz * dz * 0.85) * smoothstep(0, 0.5, 1 - r * r) ** 0.5;
-          const y = face > 0 ? T * (0.28 * rimR + 0.72 * dome) : -0.003 - 0.004 * rimR - 0.004 * dome;
+        fn: (uu, vv, o, inside) => {
+          const a = uu * TAU, r = 1 - vv;
+          const [pu, pv] = mxpOutline(a);
+          const u = 0.5 + (pu - 0.5) * r, v = pv * r;
+          const x = u * W, zu = v * H * 0.5;
+          // the merus a low dome, highest a little above its middle; the ischium flatter; a shallow groove along
+          // the suture between them; every margin a thin rolled rim (063, 027)
+          const vs = mxpSuture(u);
+          const mer = smoothstep(vs - 0.08, vs + 0.08, v);
+          const dM = Math.max(0, 1 - ((u - 0.52) / 0.62) ** 2 - ((v - 0.5) / 0.62) ** 2);
+          const dI = Math.max(0, 1 - ((u - 0.5) / 0.66) ** 2 - ((v + 0.5) / 0.75) ** 2);
+          const dome = mer * Math.pow(dM, 0.55) + (1 - mer) * 0.6 * Math.pow(dI, 0.7);
+          const groove = Math.exp(-(((v - vs) / 0.05) ** 2)) * (1 - smoothstep(0.88, 0.99, r));
+          const rimR = Math.sqrt(Math.max(0, 1 - ((r - 0.88) / 0.12) ** 2 * (r > 0.88 ? 1 : 0)));
+          const y = face > 0 ? T * (0.3 * rimR + 0.7 * dome * smoothstep(0, 0.4, 1 - r * r) - 0.18 * groove) : -0.003 - 0.004 * rimR - 0.003 * dome;
           o.set(x, y, zu * up);
           inside.set(x, y - face, zu * up);
           return [PART.MXP, (12 + k) * 10, 0, 0.3];
@@ -427,6 +450,27 @@ function buildMxp(B, res) {
       });
     }
   });
+}
+
+/**
+ * Antennules: folded in their fossae under the front, each showing as a small rounded knob (063, 027); the slender
+ * antennae beside them are too fine to show at this scale. A small ellipsoid each, on the Body.
+ */
+function buildAntennules(B, res) {
+  const body = sharedRig().index.get('Body');
+  const n = Math.max(6, Math.round(res.radial * 0.6)), m = Math.max(4, Math.round(res.radial * 0.4));
+  for (const sx of [1, -1]) {
+    const c = new Vector3(sx * 0.055, 0.385, 0.37), r = [0.021, 0.019, 0.017];
+    patch(B, {
+      rows: m, cols: n, bone: body, wrapCols: true,
+      fn: (u, v, o, inside) => {
+        const th = u * TAU, ph = Math.PI * v;
+        o.set(c.x + r[0] * Math.sin(ph) * Math.cos(th), c.y + r[1] * Math.cos(ph), c.z + r[2] * Math.sin(ph) * Math.sin(th));
+        inside.copy(c);
+        return [PART.FACE, 0, 0.6, 0.4];
+      },
+    });
+  }
 }
 
 function buildAbdomen(B, res) {
@@ -599,8 +643,10 @@ function legSegments(L, sign, res) {
   const pX0 = -0.016, pL = L.propodus + 0.004 - pX0;
   const dX0 = -0.012, dL = L.dactylus - dX0;
   return {
-    Coxa: { x0: -0.035, x1: L.coxa + 0.006, capA: 0.024, capB: 0.01, section: (t) => ({ cy: 0, cz: 0, ry: 0.034 - 0.004 * t, rz: 0.042 }), part: PART.LEG_PROX, thin: 0.35, mem: 0 },
-    Basis: { x0: -0.008, x1: L.basis + 0.005, capA: 0.008, capB: 0.008, section: (t) => ({ cy: 0, cz: 0, ry: 0.03, rz: 0.036 * neck(t, 0.2, 0), ny: 1.8 }), part: PART.LEG_PROX, thin: 0.35, mem: 0.025 },
+    // the coxae: broad, flattened rings set side by side along the sternum's edge, each nearly touching the next —
+    // a continuous row the legs leave from, not separate pegs (012, 2.webp seen from below)
+    Coxa: { x0: -0.04, x1: L.coxa + 0.006, capA: 0.026, capB: 0.01, section: (t) => ({ cy: 0, cz: 0, ry: 0.042 - 0.008 * t, rz: 0.06 - 0.012 * t, n: 2.4 }), part: PART.LEG_PROX, thin: 0.35, mem: 0 },
+    Basis: { x0: -0.008, x1: L.basis + 0.005, capA: 0.008, capB: 0.008, section: (t) => ({ cy: 0, cz: 0, ry: 0.032, rz: (0.046 - 0.008 * t) * neck(t, 0.15, 0), ny: 1.8 }), part: PART.LEG_PROX, thin: 0.35, mem: 0.025 },
     Ischium: { x0: -0.005, x1: L.ischium + 0.008, capA: 0.006, capB: 0.006, roll: roll * 0.5, section: (t) => ({ cy: 0, cz: 0, ry: 0.028, rz: (0.032 + 0.008 * t) * neck(t, 0.15, 0) * lip(t, L.ischium + 0.013), n: 2.2, ny: 1.7 }), part: PART.LEG_PROX, thin: 0.4, mem: 0 },
     Merus: {
       x0: mX0, x1: mX0 + mL, capA: 0.008, capB: 0.009, roll, twist: tw(3),
@@ -806,6 +852,7 @@ export function crabGeometry(lod) {
   buildCarapace(B, res);
   buildEyes(B, res);
   buildMxp(B, res);
+  buildAntennules(B, res);
   buildAbdomen(B, res);
   buildChelipeds(B, res);
   buildLegs(B, res);

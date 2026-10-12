@@ -1,5 +1,5 @@
 import { Color, DoubleSide, FrontSide, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, MultiplyBlending, Vector4 } from 'three';
-import { CHELIPED, EYE } from './ScopimeraGlobosaMorphology.js';
+import { CHELIPED, EYE, MXP3 } from './ScopimeraGlobosaMorphology.js';
 
 /**
  * コメツキガニ materials. Everything procedural, evaluated in the shader from the bind-pose coordinates the geometry
@@ -427,10 +427,11 @@ const FRAG_SURFACE = /* glsl */ `
     // (merus) field, a pale oblique gap (the blaze) and a thinly dotted lower ischium (063, 027, 035, 069); a black
     // and white face only in dark-backed individuals (2.webp, 003); rounded tubercles all over [L]
     float sideUp = limb < 12.5 ? 1.0 : -1.0;
-    float xm = clamp(P.x / 0.24, 0.0, 1.0);          // 0 hinge … 1 midline
-    float zn = P.z * sideUp / 0.17;                  // -1 bottom … 1 top
-    float sutL = zn - (0.12 + 0.5 * (0.45 - xm));     // > 0 above the oblique ischium–merus suture
-    float field = smoothstep(-0.32, -0.05, zn + 0.25 * (kgFbm(vec3(P.x * 18.0, P.z * 18.0, seedP + limb)) - 0.5)) * (1.0 - smoothstep(0.9, 1.05, zn));
+    float xm = clamp(P.x / ${MXP3.width.toFixed(4)}, 0.0, 1.0);          // 0 hinge … 1 midline
+    float zn = P.z * sideUp / ${(MXP3.height * 0.5).toFixed(4)};                  // -1 bottom … 1 top
+    float sutL = zn - (0.1 - 0.14 * xm);             // > 0 above the ischium–merus suture (Geometry mxpSuture)
+    // the merus densely dotted, the ischium thinly (063, 027: the upper plate darker)
+    float field = smoothstep(-0.12, 0.08, sutL + 0.2 * (kgFbm(vec3(P.x * 18.0, P.z * 18.0, seedP + limb)) - 0.5));
     float contrast = 1.0 - smoothstep(0.55, 0.85, uKgMorph.z);
     float bl = (zn - 0.15) - (xm - 0.75) * 0.9;
     float blaze = (1.0 - smoothstep(0.06, 0.2, abs(bl))) * smoothstep(0.25, 0.6, xm) * smoothstep(-0.1, 0.25, zn) * (1.0 - smoothstep(0.75, 0.95, zn));
@@ -444,7 +445,7 @@ const FRAG_SURFACE = /* glsl */ `
     float rimM = smoothstep(0.86, 1.0, max(abs(zn), abs(xm * 2.0 - 1.0)));
     m = mix(m, mix(ground * 1.1, vec3(0.84, 0.83, 0.8), contrast), rimM * 0.35);
     // the suture line and tubercles
-    float suture = (1.0 - smoothstep(0.0, 0.035, abs(sutL))) * (1.0 - smoothstep(0.85, 1.0, xm));
+    float suture = (1.0 - smoothstep(0.0, 0.06, abs(sutL))) * (1.0 - smoothstep(0.92, 1.0, xm)) * smoothstep(0.0, 0.06, xm);
     h -= suture * 0.003;
     m *= 1.0 - suture * 0.3;
     if (det > 0.05) {

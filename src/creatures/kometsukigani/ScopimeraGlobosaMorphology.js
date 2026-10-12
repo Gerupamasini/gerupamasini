@@ -72,24 +72,22 @@ export const EYE = {
 };
 
 /**
- * third maxillipeds: two large opercular plates closing the whole buccal frame — the most conspicuous thing in the
- * face (002–005, 2.webp, 4.webp, 063) — but thin lids, only gently arched, their margins thin and nearly flush with
- * the face around them (063, 027 seen from the side of the face); merus a little smaller than the ischium, an
- * oblique suture between them, outer surface with rounded tubercles [L] (Wong et al. 2010)
+ * third maxillipeds: two opercular plates closing the buccal frame (002–005, 2.webp, 4.webp, 063, 027, 035). Each
+ * plate is a merus above — its top a rounded arch, a small V notch between the two arches on the midline — and an
+ * ischium below a transverse suture just above the middle; thin plates, the merus gently domed, the ischium flatter,
+ * outer surface with rounded tubercles [L] (Wong et al. 2010). Outline: Geometry MXP_OUTLINE.
  */
 export const MXP3 = {
   /**
-   * each plate: width (from the hinge to a hair past the midline: closed, the pair overlaps a little; 063: the pair
-   * 0.5 CW across, 0.38 tall, a rounded rectangle each), height (ischium + merus), arch (the lid's rise above its
-   * margins). In the front views (2.webp, 4.webp) the
-   * pair fills the face from just under the eyestalk bases to the sternum, about 1.5 × as wide as tall (2.webp,
-   * plates 003–005) [P]
+   * each plate: width (lateral hinge to the midline), height (top of the merus' arch to the ischium's lower edge),
+   * dome height. 063 (CW 317 px): the pair 0.42 CW across and 0.33 tall, from 0.02 to 0.35 above the sternum, the
+   * suture at 0.19 and the notch between the arches from 0.29 up; 027 (CW 285 px): 0.40 × 0.32 [P]
    */
-  width: 0.25, height: 0.41, thick: 0.026,
-  /** hinge (outer margin) position: x, y, z (body frame); the plates reach up to just under the front (063) */
-  hinge: [0.24, 0.2, 0.41],
+  width: 0.212, height: 0.33, thick: 0.03,
+  /** hinge (outer margin) position: x, y (the plate's mid-height), z (body frame) */
+  hinge: [0.21, 0.185, 0.42],
   /** plates lean back from vertical (the face slopes a little) */
-  leanDeg: 12,
+  leanDeg: 8,
 };
 
 /**
@@ -140,20 +138,23 @@ export const CHELIPED = {
  * the meri and carpi show from the front in 063 [P]. Each merus has one undivided oval tympanum covering most of
  * its broad face, above and below [L] (the dark speckled ovals of 009, 010, 049).
  *
- * base: coxa socket (x, y, z) on the ventrolateral edge; yawDeg: bind direction in the horizontal plane measured
- * from the lateral axis toward the front (009: P2 points forward, P5 back) [P]. roll: the leg's twist about its
+ * base: coxa socket (x, y, z) on the ventrolateral edge, under the lateral margin. The four sockets sit in a row
+ * along the posterior two-thirds of the side, P2's level with the carapace's middle (z 0.09, just behind the
+ * cheliped) and P5's at the posterolateral corner (z −0.27), each coxa nearly touching the next (008, 009 from above;
+ * 012, 2.webp from below) [P]. yawDeg: bind direction in the horizontal plane measured from the lateral axis toward
+ * the front (009, 008: P2 points forward, P3 a little forward, P4 a little back, P5 back) [P]. roll: the leg's twist about its
  * long axis, the dorsal face tilted forward (the anterior margin down): most on the first leg (29°), least on the
  * last (9°). With a depth of a little over a third of the breadth the meri then show 0.15–0.16 CW from above
  * (009, 057) and 0.12–0.13 from the front (063) — both measured with the silhouette fits of SHAPE_AUDIT.md 7 [P].
  */
 export const LEGS = [
-  { name: 1, pereiopod: 'P2', base: [0.32, 0.09, 0.16], yawDeg: 56, coxa: 0.05, basis: 0.048, ischium: 0.042, merus: 0.47, carpus: 0.2, propodus: 0.23, dactylus: 0.31,
+  { name: 1, pereiopod: 'P2', base: [0.33, 0.09, 0.09], yawDeg: 56, coxa: 0.05, basis: 0.048, ischium: 0.042, merus: 0.47, carpus: 0.2, propodus: 0.23, dactylus: 0.31,
     merusB: 0.16, merusD: 0.058, carpusB: 0.1, carpusD: 0.044, propB: 0.09, propD: 0.037, dacB: 0.064, dacD: 0.03, roll: 0.5 },
-  { name: 2, pereiopod: 'P3', base: [0.36, 0.085, 0.03], yawDeg: 22, coxa: 0.05, basis: 0.048, ischium: 0.042, merus: 0.51, carpus: 0.21, propodus: 0.24, dactylus: 0.33,
+  { name: 2, pereiopod: 'P3', base: [0.37, 0.085, -0.035], yawDeg: 22, coxa: 0.05, basis: 0.048, ischium: 0.042, merus: 0.51, carpus: 0.21, propodus: 0.24, dactylus: 0.33,
     merusB: 0.165, merusD: 0.06, carpusB: 0.102, carpusD: 0.045, propB: 0.092, propD: 0.038, dacB: 0.066, dacD: 0.031, roll: 0.35 },
-  { name: 3, pereiopod: 'P4', base: [0.35, 0.085, -0.12], yawDeg: -14, coxa: 0.05, basis: 0.046, ischium: 0.041, merus: 0.47, carpus: 0.2, propodus: 0.23, dactylus: 0.31,
+  { name: 3, pereiopod: 'P4', base: [0.36, 0.085, -0.155], yawDeg: -14, coxa: 0.05, basis: 0.046, ischium: 0.041, merus: 0.47, carpus: 0.2, propodus: 0.23, dactylus: 0.31,
     merusB: 0.16, merusD: 0.058, carpusB: 0.1, carpusD: 0.044, propB: 0.09, propD: 0.037, dacB: 0.064, dacD: 0.03, roll: 0.25 },
-  { name: 4, pereiopod: 'P5', base: [0.29, 0.09, -0.24], yawDeg: -44, coxa: 0.045, basis: 0.042, ischium: 0.038, merus: 0.37, carpus: 0.16, propodus: 0.19, dactylus: 0.26,
+  { name: 4, pereiopod: 'P5', base: [0.31, 0.09, -0.265], yawDeg: -44, coxa: 0.045, basis: 0.042, ischium: 0.038, merus: 0.37, carpus: 0.16, propodus: 0.19, dactylus: 0.26,
     merusB: 0.14, merusD: 0.052, carpusB: 0.088, carpusD: 0.04, propB: 0.08, propD: 0.034, dacB: 0.058, dacD: 0.028, roll: 0.15 },
 ];
 
@@ -165,15 +166,20 @@ export const STANCE = {
    * walking it rises a little (040, 044, 068); waving it stands up on its legs (6.webp) [P]
    */
   bodyHeight: { calm: 0.09, alert: 0.2, feed: 0.05, hide: 0.03, display: 0.42 },
-  /** the dactylus meets the sand steeply, the curved spike's point in the sand (063: 65–75°; 027, 068) [P] */
-  dactylDeg: -66,
   /**
-   * foot radius from the coxa socket in the ground plane, per leg. At the calm height that sets the merus rising
-   * about 35° (063: P2's knee 0.48 CW above the sand, under the top of the dome) and the knee bent to ~110°, the
-   * carpus and propodus dropping at ~35° and the dactylus steeply to the sand — the feet within about 1.3 CW of the
-   * body's centre (063, 016, 057), not sprawled out at the end of long, nearly straight legs like a spider's [P]
+   * the dactylus meets the sand nearly upright, the curved spike's point in the sand (063: vertical; 035, 027, 044:
+   * 70–80°) [P]
    */
-  footReach: [0.98, 1.02, 0.96, 0.8],
+  dactylDeg: -72,
+  /**
+   * foot radius from the coxa socket in the ground plane, per leg. At the calm height that raises each merus about
+   * 43° and puts the knees 0.56–0.58 CW above the sand, level with the top of the carapace and 0.6–0.8 CW out from
+   * the midline, the knee bent to ~95°; carpus and propodus slope down at ~40° and the dactylus stands nearly
+   * upright, the feet 1.2–1.25 CW out (P3). Measured on the ground-level front views 035 (knees 0.66–0.77 out, level
+   * with the dome; P3's foot 1.46 out), 063 (P2's knee 0.52 up, 0.71 out; its foot 1.25 out), 027, 040 and 044 (knees
+   * at or above the top of the carapace): the legs stand tall and close in, not sprawled like a spider's [P]
+   */
+  footReach: [0.92, 0.98, 0.92, 0.76],
 };
 
 /** abdomen: male narrow (006), female broad and rounded (062); folded tight under the sternum [P][L] */
