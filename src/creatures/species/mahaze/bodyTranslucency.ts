@@ -16,6 +16,8 @@ import { createProfileTexture } from './hero/BodyMaterial.js';
  *    thin tail and fin bases clear, head and belly milky, the melanophores and the organs dark against the light)
  *  - the sun (and in the tank its two lamps) behind the fish diffuses through the tissue on the light's path, so a
  *    fish against the light glows amber at its thin parts and shows its spine and viscera as shadows
+ *  - the surroundings' light (the water's glow, the sky's window, the sand's bounce) arrives from every side, so it
+ *    diffuses through from the far side too: seen from the sun's side the body is still faintly see-through
  *  - organs just under the skin darken its colour (the peritoneum through the belly wall), and the vertebral column
  *    scatters a little light back toward the eye
  * The near tiers march 12 + 6 steps per ray, the far tier (lod2) 6 + 3 and only the large organs. The body still writes
@@ -170,6 +172,7 @@ uniform vec3 uGbOrgR[${N_ORGANS}];
 uniform vec3 uGbOrgK[${N_ORGANS}];
 uniform float uGbInterior;    // how much the organs and the column show
 uniform float uGbBack;        // strength of the light diffused through from behind
+uniform float uGbAmbient;     // strength of the surroundings' light diffused through from the far side
 `;
 
 const FUNCTIONS = /* glsl */ `
@@ -369,6 +372,19 @@ float gbAlpha = 1.0;
 #if NUM_DIR_LIGHTS > 1 && !defined(GB_LOW)
   gbAdd += gbThrough(normalize(inverseTransformDirection(directionalLights[1].direction, viewMatrix)), directionalLights[1].color, w2o, pIn, NgF, VW, skinIn, maxLen, dense);
 #endif
+  // the light of everything round the far side (the water's glow, the sky through the surface, the sand's bounce)
+  // reaches the body from every direction and diffuses through it: whichever side the sun is on, the thin parts are
+  // lit faintly from behind and the column and the viscera show in them as shadows
+  vec3 gbFar = ambientLightColor;
+#if NUM_HEMI_LIGHTS > 0
+  gbFar += mix(hemisphereLights[0].groundColor, hemisphereLights[0].skyColor, 0.5 + 0.5 * VW.y);
+#endif
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+  gbFar += getIBLIrradiance(normalize(-vViewPosition));
+#endif
+  // (diffuse light crosses the tissue on longer, slanted paths than the straight view ray)
+  vec3 tauFar = uGbSigL * tExit * (1.0 + dense) * 1.6 + tauOrg + scat * 0.3;
+  gbAdd += gbFar * RECIPROCAL_PI * exp(-tauFar) * skinIn * skinOut * uGbAmbient;
   gbAdd *= 1.0 - 0.85 * outside;
   // the vertebral column scatters a little of the light it is bathed in back toward the eye (pale against the dark)
   vec3 gbE = ambientLightColor;
@@ -463,6 +479,7 @@ export function makeTranslucentBody(m: MeshPhysicalMaterial, tier: 'hero' | 'lod
     uGbOrgK: { value: organs.map((o) => o.k) },
     uGbInterior: { value: 0.45 },
     uGbBack: { value: 0.3 },
+    uGbAmbient: { value: 1.0 },
   };
   if (x.pigmentTexture !== undefined && parser) {
     void (parser.getDependency('texture', x.pigmentTexture) as Promise<Texture>).then((t) => {
@@ -493,6 +510,6 @@ vGbRest = position;
       .replace('#include <emissivemap_fragment>', THROUGH)
       .replace('#include <opaque_fragment>', COMPOSITE);
   };
-  m.customProgramCacheKey = () => (low ? 'goby-body-translucent-low-v2' : 'goby-body-translucent-v2');
+  m.customProgramCacheKey = () => (low ? 'goby-body-translucent-low-v3' : 'goby-body-translucent-v3');
   m.needsUpdate = true;
 }
