@@ -1,5 +1,6 @@
-// Final pass: mip-chain bloom, exposure, ACES filmic tone mapping, vignette, sRGB + dither.
+// Final pass: mip-chain bloom, exposure, the game's tone curve (ToneMapGlsl), vignette, sRGB + dither.
 import * as THREE from 'three';
+import { TONE_MAP_GLSL } from './ToneMapGlsl';
 
 export function createPost() {
   const scene = new THREE.Scene();
@@ -24,19 +25,7 @@ export function createPost() {
       uniform float uBloom;
       uniform vec2 uRes;
       varying vec2 vUv;
-      vec3 rrtOdt(vec3 v) {
-        vec3 a = v * (v + 0.0245786) - 0.000090537;
-        vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
-        return a / b;
-      }
-      vec3 acesFitted(vec3 c) {
-        const mat3 inM = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
-        const mat3 outM = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
-        return clamp(outM * rrtOdt(inM * c), 0.0, 1.0);
-      }
-      vec3 toSRGB(vec3 c) {
-        return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
-      }
+      ${TONE_MAP_GLSL}
       void main() {
         vec3 c = texture(uTex, vUv).rgb;
         vec3 bloom = vec3(0.0);
@@ -49,10 +38,11 @@ export function createPost() {
         }
         c += bloom / w * uBloom;
         c *= uExposure;
-        c = acesFitted(c);
+        // (the hero pass was tuned at three's exposure 0.6)
+        c = higataToneMap(c, 0.6);
         vec2 q = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
         c *= mix(0.72, 1.0, smoothstep(1.15, 0.3, length(q)));
-        c = toSRGB(c);
+        c = srgbEncode(c);
         float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
         c += (n - 0.5) / 255.0;
         gl_FragColor = vec4(c, 1.0);

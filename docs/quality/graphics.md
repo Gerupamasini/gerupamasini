@@ -9,6 +9,7 @@
 | 動的解像度と GPU 時間の計測 | 目標の fps を割りそうなら内部の解像度を下げ、余裕が戻れば上げる | `GpuTimer.ts`、`DynamicResolution.ts`、`Renderer.ts` |
 | 画質の自動設定 | 初めて干潟に入ったとき、その PC で実際に測って段階を選ぶ | `AutoQuality.ts`、`App.ts` の `stepAutoQuality` |
 | 乾き具合 | 潮が引いてからの時間・日差し・底質で、泥と砂が乾いていく（水膜のつや、暗さ） | `src/world/WetDry.ts`、`Terrain.ts` |
+| 色づくり（AgX） | 夕日など明るく色の強い光の色相を保つトーンマッピング。全経路で同じ式 | `src/render/ToneMapGlsl.ts` |
 
 ## 1. モデルの圧縮
 
@@ -94,10 +95,21 @@ FSR 1 は AMD FidelityFX Super Resolution 1.0（MIT ライセンス）を GLSL �
 - 空の映り込み: 地形の空の光は拡散光に合わせて弱く（`environmentIntensity` 0.03〜0.09）してあるので、濡れたところだけ鏡面反射を空そのままの強さに戻す
 - 確かめ方: `npm run build` のあと `node tests/smoke/wetdry.mjs`（引き潮 2 時間前、干潮、2 時間後、夕方の干潮を同じ場所から撮る。`--turn 70` で潮だまりを外した向き、`--root <別のビルド>` で前の版と比べられる）
 
+## 6. 色づくり（AgX）
+
+[判断記録](../planning/10_engine_decision.md) の §8-2 の 2 の 2 つめ。トーンマッピングを ACES Filmic から **AgX** に替えた。
+
+- どの経路も同じ式を通る（`src/render/ToneMapGlsl.ts`）: three が画面に描くもの（`CustomToneMapping` に組み込む）、FSR 1 に渡す水の合成、観察モードと水槽のヒーロー材質の仕上げ、図鑑のプレビュー
+- AgX の見え方（look）は、今の画面の明暗（ACES で照明を合わせてある）を大きく変えないように当てはめた: 露出 ×2.55、power 1.6、彩度 1.1。灰色の階調は中間〜明部で ACES と数段階以内、中間調はわずかに明るく、明部はやわらかく丸まる。夕日のように明るく色の強い光が、ACES のように黄色や紫に転ばない
+- 見比べ方: アドレスに `?tone=aces` を付けると前の ACES で描く（`?tone=agx` が今の既定）。`node tests/smoke/wetdry.mjs --tone aces --tag aces` と `--tone agx --tag agx` で同じ場面（干潟の昼〜夕方、西向きの夕日）を撮り比べられる
+- AgX 本来の見え方（明暗をそのまま）にすると全体が眠くなり、照明の作り直しが要る。power を 2.7 まで上げると ACES の明暗にほぼ重なるが、暗部が潰れる（夜の場面）ので採らなかった
+- **色の調整表（LUT）はまだ**。合わせる手本（実際の干潟の写真。時刻と天気が分かるもの）が要る
+
 ## 9. まだのこと
 
 - 実機での数字（内蔵 GPU、GTX 1650 級、RTX 3060 級、Steam Deck）。この環境はソフトウェア描画（SwiftShader）しかない
 - Steam Deck は今タッチ端末と判定される（[09](../planning/09_steam_readiness_audit.md) の 1-3）ので、それを直すまで FSR 1・動的解像度・自動設定は Deck で効かない
 - Electron の起動設定（高性能な GPU、ブロックリストの無視、裏での速度制限を止める）。Electron で包む作業と一緒に入れる
-- 判断記録 §8-2 の 2 の残り（AgX、TAA、カスケード影）
+- 判断記録 §8-2 の 2 の残り（TAA、カスケード影）
+- 色の調整表（LUT）: 手本の写真が届いたら
 - 遠くの砂紋の縞（変更前からある。TAA で抑える）

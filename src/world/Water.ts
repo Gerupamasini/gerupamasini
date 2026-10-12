@@ -486,7 +486,7 @@ export class WaterPass {
           }
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
-          if (uLdrOut > 0.5) gl_FragColor.rgb = acesFilmicTM(gl_FragColor.rgb, uExposure);
+          if (uLdrOut > 0.5) gl_FragColor.rgb = higataToneMap(gl_FragColor.rgb, uExposure);
           {
             // a light grade (warm highlights, cool shadows) and a soft vignette, as in the viewer
             vec3 c = gl_FragColor.rgb;

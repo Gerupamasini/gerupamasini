@@ -1,8 +1,9 @@
-import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace, Vector2, WebGLRenderer } from 'three';
+import { CustomToneMapping, PCFSoftShadowMap, SRGBColorSpace, Vector2, WebGLRenderer } from 'three';
 import { QUALITY_PRESETS, savedQualityHint, type Quality } from '../core/Settings';
 import { DynamicResolution, type DynResConfig } from './DynamicResolution';
 import { GpuTimer } from './GpuTimer';
 import { setRenderSize } from './RenderSize';
+import { installToneMap } from './ToneMapGlsl';
 
 /** the drawing buffer at most when the 3D view is scaled up to it (about 4K: the UI is HTML and stays sharp anyway) */
 const MAX_OUTPUT_PIXELS = 8.3e6;
@@ -47,7 +48,9 @@ export class GameRenderer {
     this.canvasMsaa = antialias;
     this.gl = new WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance', alpha: false, stencil: false });
     this.gl.outputColorSpace = SRGBColorSpace;
-    this.gl.toneMapping = ACESFilmicToneMapping;
+    // the game's tone curve (ToneMapGlsl: ACES, or AgX with its look), shared with the passes that tone map themselves
+    installToneMap();
+    this.gl.toneMapping = CustomToneMapping;
     this.gl.toneMappingExposure = 0.5;
     this.gl.shadowMap.type = PCFSoftShadowMap;
     this.caps = { webgl2: this.gl.capabilities.isWebGL2, floatRT: this.gl.extensions.has('EXT_color_buffer_float') };

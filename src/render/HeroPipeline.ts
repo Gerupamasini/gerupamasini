@@ -1,5 +1,5 @@
 import {
-  ACESFilmicToneMapping, Color, DepthTexture, FloatType, HalfFloatType, LinearFilter, LinearMipmapLinearFilter, NearestFilter,
+  Color, CustomToneMapping, DepthTexture, FloatType, HalfFloatType, LinearFilter, LinearMipmapLinearFilter, NearestFilter,
   NoToneMapping, PerspectiveCamera, RGBAFormat, Scene, Vector2, Vector3, WebGLRenderTarget, type IUniform, type WebGLRenderer,
 } from 'three';
 import { createPost } from './HeroPost.js';
@@ -175,7 +175,7 @@ export class HeroPipeline {
     // 3. tone map to the screen
     r.setRenderTarget(null);
     r.render(this.post.scene, this.post.camera);
-    r.toneMapping = prevTone === NoToneMapping ? ACESFilmicToneMapping : prevTone;
+    r.toneMapping = prevTone === NoToneMapping ? CustomToneMapping : prevTone;
     scene.background = prevBg;
     camera.layers.set(0);
   }

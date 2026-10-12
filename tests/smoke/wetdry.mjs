@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Builds nothing: run `npm run build` first. The drying flat: one place on the default flat seen on the ebb (two hours
 // before a midday low water), at the low water, two hours after, and at an evening low water, written to
-// tests/smoke/out/wetdry-*.png and side by side to wetdry-sheet.png. Fails on page errors and on a frame that does not
-// change between the stages (the drying must show).
+// tests/smoke/out/wetdry-*.png (and the sunset that day, looking west) and side by side to wetdry-sheet.png. Fails on
+// page errors, and when the ground looks the same on the ebb and on the flood (the drying must show).
 //   node tests/smoke/wetdry.mjs [--root <dir with a dist>] [--tag <name>] [--quality high|mid|low|minimal] [--above <m>]
-// (--above: how high over the low water the viewpoint stands, 0.6 m by default; --turn: degrees to turn the view
+//     [--turn <deg>] [--tone aces|agx]
+// (--above: how high over the low water the viewpoint stands, 0.6 m by default; --turn: degrees to turn the view (70 by default, off a tide pool)
 // from the seaward heading)
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -20,11 +21,12 @@ const root = path.resolve(arg('--root', here));
 const tag = arg('--tag', 'wetdry');
 const quality = arg('--quality', 'high');
 const above = Number(arg('--above', 0.6));
-const turn = Number(arg('--turn', 0));
+const turn = Number(arg('--turn', 70));
+const tone = arg('--tone', null);
 const outDir = path.join(here, 'tests', 'smoke', 'out');
 fs.mkdirSync(outDir, { recursive: true });
 const PORT = 4181;
-const url = `http://127.0.0.1:${PORT}/gerupamasini/`;
+const url = `http://127.0.0.1:${PORT}/gerupamasini/${tone ? `?tone=${tone}` : ''}`;
 const server = spawn(process.execPath, [path.join(here, 'node_modules/vite/bin/vite.js'), 'preview', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let code = 0;
@@ -81,16 +83,18 @@ try {
     return { x, z, yaw: yaw + (turn * Math.PI) / 180, ground: tr.heightAt(x, z), water: w.tideLevel };
   }, [above, turn]);
   console.log('view', JSON.stringify(pose));
-  const stages = [['a-ebb', lows.noon - 2 * 3600000], ['b-low', lows.noon], ['c-flood', lows.noon + 2 * 3600000], ['d-evening', lows.evening]];
+  // (and the same day's sunset, looking west: 16:50 JST, the autumn sun a few degrees up)
+  const day0 = Math.floor((lows.noon + 9 * 3600000) / 86400000) * 86400000 - 9 * 3600000;
+  const stages = [['a-ebb', lows.noon - 2 * 3600000], ['b-low', lows.noon], ['c-flood', lows.noon + 2 * 3600000], ['d-evening', lows.evening], ['e-sunset', day0 + 16.83 * 3600000, Math.PI / 2]];
   const shots = [];
-  for (const [name, t] of stages) {
-    await page.evaluate(([t, p]) => {
+  for (const [name, t, yaw] of stages) {
+    await page.evaluate(([t, p, yaw]) => {
       const a = window.__higata;
       a.clock.useTicket(t);
-      a.player.setPose(p.x, p.z, p.yaw);
+      a.player.setPose(p.x, p.z, yaw ?? p.yaw);
       a.player.pitch = -0.32;
       document.querySelector('#ui')?.setAttribute('style', 'display:none');
-    }, [t, pose]);
+    }, [t, pose, yaw ?? null]);
     await waitFrames(page, 8);
     const file = path.join(outDir, `${tag}-${name}.png`);
     await page.screenshot({ path: file });
@@ -98,9 +102,18 @@ try {
     const level = await page.evaluate(() => window.__higata.world.tideLevel.toFixed(2));
     console.log(`${name}: tide ${level} m`);
   }
-  // the four side by side, at half size
+  // the ground (the lower half) freshly out of the water against hours later: the drying must show
+  {
+    const [a, c] = [shots[0], shots[2]];
+    let se = 0, n = 0;
+    for (let i = (a.data.length / 2) & ~3; i < a.data.length; i += 4) for (let k = 0; k < 3; k++) { const d = a.data[i + k] - c.data[i + k]; se += d * d; n++; }
+    const db = 10 * Math.log10((255 * 255 * n) / Math.max(se, 1e-9));
+    console.log(`ground, ebb against flood: ${db.toFixed(1)} dB`);
+    if (db > 40) { console.error('FAIL the ground did not change between the ebb and the flood'); code = 1; }
+  }
+  // all of them side by side, at half size
   const w = shots[0].width / 2, h = shots[0].height / 2;
-  const sheet = new PNG({ width: w * 2, height: h * 2 });
+  const sheet = new PNG({ width: w * 2, height: h * Math.ceil(shots.length / 2) });
   shots.forEach((s, n) => {
     const ox = (n % 2) * w, oy = Math.floor(n / 2) * h;
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
