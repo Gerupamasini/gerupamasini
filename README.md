@@ -13,6 +13,7 @@ npm run smoke:progression # ビルド後、水槽・ろ過装置のショップ�
 npm run smoke        # ヘッドレス Chromium で起動し tests/smoke/out/ にスクリーンショット
 node tests/smoke/pagurus-lab.mjs     # ユビナガホンヤドカリのラボを撮影（tests/smoke/out/pagurus-*.png）
 CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium.mjs # 水槽設備・ガチャ・自動配線・保存復元のブラウザ検証
+node tests/smoke/goby-translucency.mjs  # ハゼ 3 種の体の透け（観察の体積シェーダーと、干潟・水槽の全段階の透け）を順光・逆光で撮影
 CHROMIUM_PATH=/usr/bin/chromium node tests/smoke/aquarium-water.mjs # 水槽の水の描画（4 つの画質・底床・水中視点）
 node tests/smoke/physics.mjs         # 生きものの物理（重ならない・接地・波の揺れ）をゲーム内で確認（tests/smoke/out/physics-*.png）
 npm run model:mahaze -- --tier lod2   # マハゼモデルの再生成（hero / lod1 / lod2）

@@ -158,6 +158,7 @@
 ### 7.5 マテリアル
 - 全段階で標準 PBR（ベースカラー、法線、ORM）を持つ。独自シェーダーは hero 段階の追加機能であり、無くても表示できること。
 - 半透明部位（ひれ、エビの体）は hero と lod1 で transmission、lod2 で不透明化。
+- ハゼ（マハゼ・エドハゼ・ヒメハゼ）の胴体は例外で、全段階で透ける。glTF の transmission は使わず、体積プロファイルから光の通り方を計算して背景に重ねる（`bodyTranslucency.ts`、[マハゼモデルの説明](../models/mahaze_juvenile_README.md)）。
 - 個体差の色調はマテリアルを複製せず、ユニフォーム（lod1）か頂点色の乗算（lod2）で与えられる構造にする。
 
 ### 7.6 extras `higata`
@@ -178,7 +179,7 @@
 2. ビルダーに `--tier` を追加。lod1 は NS 230 × NV 112、ひれ SUB 3 × NT 18、テクスチャ 1024、内部構造なし。lod2 は NS 115 × NV 56、ひれ SUB 2 × NT 12、テクスチャ 512、口内なし、ひれは alphaTest 用に被覆率をアルファへ。
 3. `pose.js` と `Behavior.js` を TypeScript 化し `MahazeDriver` へ。床の高さを地形関数に置き換える。dt のスケールは `simScale` で受ける。
 4. ヒーロー材質（Body / Fin / Eye / Interior）はフィーチャーフラグ `heroMaterials` の背後に置く。描画パスが `uBg` を供給できる場合だけ有効。
-5. 標準フォールバック: lod1 は `MeshPhysicalMaterial`（透過あり）、lod2 は透過なし。
+5. 標準フォールバック: lod1 は `MeshPhysicalMaterial`（透過あり）、lod2 は透過なし。→ 胴体は全段階で `bodyTranslucency.ts` の透け（2026-10 に変更）。
 6. フラスタムカリングを有効にし、バウンディングスフィアを段階ごとに計算。
 7. 成魚は当面スケールと色調で代用。翌週にビルダーへ成魚プリセット（体高比、頭部比、色）を足す。
 
