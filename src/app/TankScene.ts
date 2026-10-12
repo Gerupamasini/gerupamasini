@@ -24,6 +24,8 @@ import { Group } from 'three';
 import { AquariumEquipment, STANDARD_TANK, type TankDimensions } from '../aquarium';
 import { ToolShelf, type ShelfTool } from './ToolShelf';
 import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
+import { AnimalContacts } from '../creatures/physics/animals';
+import type { ContactBody } from '../creatures/physics/contacts';
 
 const UP = new Vector3(0, 1, 0);
 
@@ -37,6 +39,8 @@ export interface Occupant {
   species: SpeciesDef;
   ind: Individual;
   driver: Driver;
+  /** its body for the contacts between the tank's animals */
+  body?: ContactBody;
   root: Object3D;
   unsub: () => void;
   hero: HeroInstance | null;
@@ -211,6 +215,8 @@ export class TankScene {
   private readonly camCur = { t: new Vector3(0, TANK_OFFSET_Y + 0.12, 0) };
   private camT = 1;
   readonly occupants: Occupant[] = [];
+  /** the tank's animals push each other aside instead of passing through */
+  private readonly contacts = new AnimalContacts();
   /** top of the substrate: the animals, the decorations and the caustics all sit on it */
   private sandTop = SAND_H;
   private readonly floor: Floor = { heightAt: () => this.sandTop, waterAt: () => this.dimensions.waterHeight };
@@ -1153,6 +1159,8 @@ export class TankScene {
       o.root.position.x = Math.max(-hx, Math.min(hx, o.root.position.x));
       o.root.position.z = Math.max(-hz, Math.min(hz, o.root.position.z));
     }
+    const hx = this.dimensions.width / 2 - 0.01, hz = this.dimensions.depth / 2 - 0.01;
+    this.contacts.step(dt * simScale, this.occupants, { floor: this.floor, bounds: { minX: -hx, maxX: hx, minZ: -hz, maxZ: hz } });
   }
 
   dispose(): void {

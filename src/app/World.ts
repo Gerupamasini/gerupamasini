@@ -34,9 +34,13 @@ import { hashInts } from '../core/Rng';
 import { sunDirection, sunPosition, timeOfDay, type TimeOfDay } from '../world/Sun';
 import { jstParts, seasonOf, type Season } from '../core/Time';
 import type { QualityPreset } from '../core/Settings';
+import { WaterMotion } from '../creatures/physics/water';
+import { MOTION } from '../world/amamo/params';
 
 /** direction the breeze drives the ripples and the waves over the eelgrass (radians in the xz plane) */
 const WIND_DIR = 0.7;
+/** the swell on the sheltered 葛西 flat (m/s at the surface): a light chop from the bay */
+const KASAI_SWELL = 0.05;
 
 /** The tidal flat: terrain, water, sky, habitat and the tide model bound to a map. */
 export class World {
@@ -71,6 +75,8 @@ export class World {
   /** the day's sea (null: no surf) */
   sea: SeaState | null = null;
   private gl: WebGLRenderer | null = null;
+  /** how the water moves under the swell and the surf, for what swims in it */
+  motion: WaterMotion = new WaterMotion({ windDir: WIND_DIR, swell: 0 });
 
   readonly scene = new Scene();
   readonly fog: FogExp2;
@@ -150,6 +156,7 @@ export class World {
     terrain.setSurf(surf);
     const water = new WaterPass(terrain, waves, surf);
     if (layout) water.setBody(...layout.water.colour, layout.water.turbidity, layout.water);
+    const motion = new WaterMotion({ windDir: WIND_DIR, swell: layout ? layout.swell ?? MOTION.waveOrbital : KASAI_SWELL, surf });
     const tide = station instanceof TideModel ? station : new TideModel(station);
     // the sky needs its own scene reference; create it after the scene exists
     mark('water');
@@ -159,6 +166,7 @@ export class World {
     w.surf = layout?.surf ? surf : null;
     w.gl = renderer;
     w.setSurfQuality(preset);
+    w.motion = motion;
     mark('skyline');
     for (const m of createPitDebris(pits, terrain, pitSeed)) w.scene.add(m);
     w.pits = pits;
@@ -212,6 +220,7 @@ export class World {
       w.amamo = new AmamoMeadow(terrain, habitat, mapSeed, layout.meadow);
       w.amamo.setQuality(MEADOW_QUALITY[preset.vegetation]);
       w.amamo.setSurf(water.surfField);
+      motion.meadow = w.amamo.kit.uniforms;
       terrain.setMeadowCover(w.amamo.coverTexture, MEADOW_QUALITY[preset.vegetation].lod[2]);
       w.scene.add(w.amamo.group);
       mark('meadow');
@@ -375,6 +384,8 @@ export class World {
     }
     // the eelgrass sways with the same breeze and leans with the tidal current
     this.amamo?.update(dt, camera, { tideLevel: this.tideLevel, tideRate: this.tideRate, windDir: WIND_DIR, waveGain: this.water.uniforms.uWaveGain.value });
+    // and the small fish go to and fro with it, and with the surf
+    this.motion.update(this.water.uniforms.uTime.value, this.tideLevel, this.water.uniforms.uWaveGain.value, dt);
     // lift the exposure at night so the flat stays readable under the moon
     this.exposure = 0.58 + 0.32 * (1 - Math.max(0, Math.min(1, (sp.elevation + 4) / 14)));
     this.scene.background = this.sky.fogColor;

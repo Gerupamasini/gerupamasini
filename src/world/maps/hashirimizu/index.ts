@@ -33,6 +33,8 @@ export interface ShoreLayout {
   rippleAngle: number;
   /** the waves breaking on the shore (null: none) */
   surf: SurfParams | null;
+  /** the swell's orbital speed at the surface (m/s): what carries the small fish to and fro (absent: the eelgrass's, 0.1) */
+  swell?: number;
   /** the water: its colour in depth (linear) and its turbidity against 葛西's silty water */
   water: {
     colour: readonly [number, number, number]; turbidity: number;
@@ -92,6 +94,8 @@ const MANKO: ShoreLayout = {
   // the lake's opaque, milky jade water (user's photo): lit from within by the suspended fines, a soft broken
   // reflection; a dim jade residual at dusk and night
   surf: null, water: { colour: [0.03, 0.06, 0.045], turbidity: 2.4, scatter: [0.084, 0.19, 0.0925], reflect: 0.3, rough: 0.6 },
+  // a lake behind its bar: only a little chop reaches the flat
+  swell: 0.03,
   // subtropical air: a deep blue sky that the high sun does not bleach, bright cumulus, a strong warm sun
   atmosphere: {
     rayleigh: 1.7, turbidity: 1.8, mie: 0.0015, skyScale: 0.3, skyScaleHighSun: 0.55,

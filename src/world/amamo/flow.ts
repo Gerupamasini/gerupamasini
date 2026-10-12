@@ -126,6 +126,27 @@ export function shootFlow(u: AmamoUniforms, S: ShootState, lag: number, out: Vec
 }
 
 /**
+ * The waves' motion in the open water at (x, z): the same three trains and gusts that sway the shoots, without a shoot's
+ * own jitter, current or sway. Into `out`: the horizontal orbital velocity (m/s; x, y = world x, z) and, in z, Σ k·U·cos θ
+ * (1/s × m/s), so that the vertical velocity at a height h over the bed is −h × out.z (each train taken as a shallow-water
+ * wave: the surface rises and falls by U·D/c, the motion dying out linearly toward the bed).
+ */
+export function waveOrbital(u: Pick<AmamoUniforms, 'uAmTime' | 'uAmWave'>, x: number, z: number, out: Vector3): Vector3 {
+  const t = u.uAmTime.value, Wv = u.uAmWave.value;
+  const g = 0.35 + 1.3 * smoothstep(0.2, 0.85, amNoise(x * 0.045 - Wv.x * t * 0.7, z * 0.045 - Wv.y * t * 0.7));
+  const gust = 1 + (g - 1) * Wv.w;
+  let ux = 0, uz = 0, w = 0;
+  for (let i = 0; i < 3; i++) {
+    rot(Wv.x, Wv.y, SWAY_WAVES[i].turn, tmpB);
+    const th = K[i] * (tmpB.x * x + tmpB.y * z) - W[i] * t + OFFS[i] + 1.6 * amNoise(x * NOISE_K[i] + NOISE_O[i], z * NOISE_K[i] + NOISE_O[i]);
+    const U = SWAY_WAVES[i].amp * Wv.z * gust, s = Math.sin(th);
+    ux += tmpB.x * U * s; uz += tmpB.y * U * s;
+    w += K[i] * U * Math.cos(th);
+  }
+  return out.set(ux, uz, w);
+}
+
+/**
  * Unit tangent of the shoot's central line at arc length `s` (m from the base), as amTangent bends it (without the leaf
  * splay): stiff in the sheath, the flexible blade beyond it leaning with the flow, the waves' push delayed toward the tip.
  */
