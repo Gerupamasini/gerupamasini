@@ -2,6 +2,7 @@ import { PerspectiveCamera, Vector3, type Object3D } from 'three';
 import { render, h } from 'preact';
 import { signal } from '@preact/signals';
 import { GameRenderer } from '../render/Renderer';
+import { RIPPLE_SHEET_RADIUS } from '../world/Terrain';
 import { Input } from '../core/Input';
 import { GameClock } from '../core/GameClock';
 import { loadSettings, saveSettings, normalizeSettings, QUALITY_PRESETS, type SettingsData, type Quality } from '../core/Settings';
@@ -619,6 +620,7 @@ export class App {
       if (this.net || this.shovel || this.binoculars) this.setTool(ui.tool.value, true);
     }
     this.world?.terrain.setDetail(preset.surfaceDetail > 0);
+    this.world?.terrain.setRippleSheet(RIPPLE_SHEET_RADIUS[preset.vegetation]);
     this.world?.mangroves?.setQuality(preset.vegetation);
     this.world?.water.setMirror(preset.mirror);
     this.world?.water.setSurfSteps(preset.surfSteps);
