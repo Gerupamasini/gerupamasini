@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 
-const root = new URL('../../', import.meta.url), port = 4183;
+const root = new URL('../../', import.meta.url), port = 4189;
 const url = `http://127.0.0.1:${port}/gerupamasini/`;
 const output = new URL('out/', import.meta.url); fs.mkdirSync(output, { recursive: true });
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
