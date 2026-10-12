@@ -231,6 +231,9 @@ export class Terrain {
   private readonly uDetail: IUniform<number> = { value: 1 };
   /** the ripple marks' strength (1: 葛西's sandy flat; 0: none, a lake's mud flat) */
   private readonly uRippleGain: IUniform<number> = { value: 1 };
+  /** Opt-in tropical hardground; palette indices keep sand channels out of the encrusted rock treatment. */
+  private readonly uReefBottom: IUniform<number> = { value: 0 };
+  private readonly uReefIndices: IUniform<Vector2> = { value: new Vector2(-10, -10) };
   /** 0..1: how far the mud takes the look of a sheltered silt flat (after MahazeViewer's sediment): two-scale
    * mottling, stronger silt lumps, few sand grains, a glossier wet sheen */
   private readonly uMudLook: IUniform<number> = { value: 0 };
@@ -500,6 +503,8 @@ export class Terrain {
       shader.uniforms.uDetail = this.uDetail;
       shader.uniforms.uRippleGain = this.uRippleGain;
       shader.uniforms.uMudLook = this.uMudLook;
+      shader.uniforms.uReefBottom = this.uReefBottom;
+      shader.uniforms.uReefIndices = this.uReefIndices;
       shader.uniforms.uMeadow = this.uMeadow;
       shader.uniforms.uMeadowFar = this.uMeadowFar;
       shader.uniforms.uLand = this.uLand;
@@ -568,6 +573,8 @@ uniform float uCausticGain;
 uniform float uDetail;
 uniform float uRippleGain;
 uniform float uMudLook;
+uniform float uReefBottom;
+uniform vec2 uReefIndices;
 uniform sampler2D uMeadow;
 uniform vec2 uMeadowFar;
 uniform vec2 uLand;
@@ -586,6 +593,8 @@ vec2 gNrmAdd = vec2(0.0);
 vec4 gDis = vec4(0.0);
 float gRipple = 0.0;
 float gTrough = 0.0;
+float gReefHard = 0.0;
+float gReefRoughness = 0.84;
 ${RIPPLE_GLSL}
 // value noise with its derivative (quintic), for micro relief
 vec3 vnoiseD(vec2 p) {
@@ -641,7 +650,7 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // water, an olive film of algae through the upper intertidal, dark and crusted with old oyster shell below mean
   // sea level; broad soft blotches keep it from reading as paint
   float rock = smoothstep(4.5, 5.0, vSubstrate);
-  if (rock > 0.001) {
+  if (rock > 0.001 && uReefBottom < 0.5) {
     float blot = vnoise(vWorldPos.xz * 0.35 + 7.0) * 0.6 + vnoise(vWorldPos.xz * 1.3 - 3.0) * 0.4;
     vec3 buff = vec3(0.43, 0.41, 0.37), grey = vec3(0.33, 0.325, 0.31), olive = vec3(0.24, 0.27, 0.15), crust = vec3(0.19, 0.18, 0.165);
     vec3 stone = mix(grey, buff, smoothstep(1.1, 1.7, vWorldPos.y));
@@ -650,6 +659,40 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
     stone = mix(stone, crust, 1.0 - smoothstep(0.0, 0.4, vWorldPos.y));
     stone *= 0.88 + 0.24 * blot;
     diffuseColor.rgb = mix(diffuseColor.rgb, stone, rock);
+  }
+  if (uReefBottom > 0.5) {
+    gReefHard = max(1.0 - smoothstep(0.1, 0.6, abs(vSubstrate - uReefIndices.x)),
+                    1.0 - smoothstep(0.1, 0.6, abs(vSubstrate - uReefIndices.y)));
+    // Continuous, warped carbonate crust, not a repeated field of separate round boulders. Broad exposed
+    // limestone alternates with thin coralline/algal encrustations; centimetre erosion pits interrupt both.
+    vec2 qp = vWorldPos.xz;
+    vec2 warp = vec2(vnoise(qp * 0.71 + 5.2), vnoise(qp * 0.63 - 19.3)) - 0.5;
+    vec2 crustP = qp + warp * 0.48;
+    float broad = vnoise(crustP * 0.9 + vec2(4.3, 12.1));
+    vec3 relief = vnoiseD(crustP * 3.7 + vec2(31.0, 7.0));
+    vec3 pores = vnoiseD(qp * 27.0 + warp * 2.3);
+    float coating = vnoise(crustP * 5.8 + vec2(23.0, -14.0));
+    float coralline = smoothstep(0.48, 0.67, broad * 0.57 + coating * 0.43);
+    float turf = smoothstep(0.55, 0.76, (1.0 - broad) * 0.66 + relief.x * 0.34);
+    float poreVisible = 1.0 - smoothstep(0.35, 1.0, fw * 0.027);
+    float pit = mix(0.12, 1.0 - smoothstep(0.2, 0.38, pores.x), poreVisible);
+    vec3 carbonate = mix(vec3(0.36, 0.31, 0.24), vec3(0.64, 0.58, 0.46),
+                         smoothstep(0.19, 0.83, relief.x * 0.7 + broad * 0.3));
+    vec3 pinkCrust = mix(vec3(0.29, 0.13, 0.15), vec3(0.46, 0.29, 0.28), coating);
+    carbonate = mix(carbonate, pinkCrust, coralline * 0.76);
+    carbonate = mix(carbonate, vec3(0.22, 0.25, 0.14), turf * 0.64);
+    carbonate *= 0.83 + 0.26 * relief.x;
+    carbonate = mix(carbonate, carbonate * vec3(0.43, 0.48, 0.42), pit * 0.72);
+    diffuseColor.rgb = mix(diffuseColor.rgb, carbonate, gReefHard);
+    gReefRoughness = mix(0.91, 0.78, coralline) - turf * 0.03;
+    // Normal slopes represent irregular 2–4 mm crust and 1–2 mm erosion. Fade unresolved pores to their
+    // average colour rather than shimmering at distance; only the small close-up layer needs extra noise.
+    vec2 reliefSlope = relief.yz * 0.095 + pores.yz * 0.11 * poreVisible;
+    if (uDetail > 0.5 && fw < 12.0) {
+      vec3 micro = vnoiseD(qp * 113.0 + 17.9);
+      reliefSlope += micro.yz * 0.045 * (1.0 - smoothstep(3.0, 12.0, fw));
+    }
+    gNrmAdd += reliefSlope * gReefHard;
   }
   // ---- up close: the grains themselves (after MahazeViewer's sediment). Medium quartz grains and coarser shell
   // bits sit on a silty base; each is a disc with a dark rim and a dome in the normal. Faded by pixel footprint.
@@ -829,6 +872,7 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   // wet silt is glossy (the shine of a mud flat at low water), damp silt satin
   float mudR = uMudLook * smoothstep(1.5, 2.5, vSubstrate) * (1.0 - smoothstep(3.5, 4.5, vSubstrate));
   roughnessFactor = mix(roughnessFactor, mix(0.7, 0.36, wetR), mudR);
+  roughnessFactor = mix(roughnessFactor, gReefRoughness, gReefHard);
 }`);
     };
     mat.customProgramCacheKey = () => 'higata-terrain-v3';
@@ -907,6 +951,15 @@ float ripplePhase(vec2 p) { return rippleWarp(p) * RIPPLE_K + gDis.x; }
   setSediment(rippleGain: number, mudLook: number): void {
     this.uRippleGain.value = rippleGain;
     this.uMudLook.value = mudLook;
+  }
+
+  /** Tropical carbonate hardground: mottled limestone, coralline crust and pitted normals on rock/gravel.
+   * Caustic focusing is restrained (0.68 versus the temperate flat's 2.6) so direct sunlight does not paint
+   * bright stripes over every surface. Turning this off restores the original shore's caustic gain. */
+  setReefBottom(on: boolean): void {
+    this.uReefBottom.value = on ? 1 : 0;
+    this.uReefIndices.value.set(this.palette.indexOf('rock'), this.palette.indexOf('gravel'));
+    this.uCausticGain.value = on ? 0.68 : 2.6;
   }
 
   /** Tint the mud and creek beds (multiplies the 葛西 grey). */

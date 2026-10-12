@@ -621,6 +621,7 @@ export class App {
     this.world?.terrain.setDetail(preset.surfaceDetail > 0);
     this.world?.terrain.setRippleSheet(RIPPLE_SHEET_RADIUS[preset.vegetation]);
     this.world?.mangroves?.setQuality(preset.vegetation);
+    this.world?.corals?.setQuality(preset.vegetation);
     this.world?.water.setMirror(preset.mirror);
     this.world?.water.setSurfSteps(preset.surfSteps);
     const light = this.world?.sky.sunLight;

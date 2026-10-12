@@ -43,6 +43,12 @@ export const MapSchema = z.object({
     minGround: z.number().optional(), maxGround: z.number().optional(), minSpacing: z.number().positive().optional(),
     scale: z.tuple([z.number().positive(), z.number().positive()]).optional(),
   }).optional(),
+  /** Opt-in tropical hard-bottom reef; independent of creature spawning and estuary vegetation. */
+  corals: z.object({
+    seed: z.number().int(),
+    clusters: z.array(z.object({ x: z.number(), z: z.number(), radius: z.number().positive(), count: z.number().int().nonnegative().max(1000), exposure: z.number().min(0).max(1).optional() })).max(64),
+    waterLevel: z.number().optional(), lowWater: z.number().optional(), minSpacing: z.number().nonnegative().optional(),
+  }).optional(),
   /** how deep the player can wade: boots (the default, 35 cm) or chest waders */
   wading: z.object({ gear: z.enum(['boots', 'waders']), maxDepth_m: z.number().positive() }).optional(),
   /** habitat grid (coarse cell size) and how close to the player animals may appear */

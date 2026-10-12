@@ -1,0 +1,667 @@
+{
+  "status": "passed",
+  "results": [
+    {
+      "name": "five",
+      "config": {
+        "mode": "five",
+        "species": "acropora_digitifera",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "five"
+      },
+      "colonies": 5,
+      "triangles": 785476,
+      "calls": 5,
+      "resources": {
+        "geometries": 15,
+        "materials": 15,
+        "views": 15
+      },
+      "reef": null,
+      "render": {
+        "calls": 27,
+        "triangles": 1650036
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 4
+    },
+    {
+      "name": "acropora_digitifera",
+      "config": {
+        "mode": "single",
+        "species": "acropora_digitifera",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "acropora_digitifera"
+      },
+      "colonies": 1,
+      "triangles": 410080,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 16,
+        "triangles": 885068
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 6
+    },
+    {
+      "name": "acropora_hyacinthus",
+      "config": {
+        "mode": "single",
+        "species": "acropora_hyacinthus",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "acropora_hyacinthus"
+      },
+      "colonies": 1,
+      "triangles": 202430,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 17,
+        "triangles": 474760
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 8
+    },
+    {
+      "name": "porites_lobata",
+      "config": {
+        "mode": "single",
+        "species": "porites_lobata",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "porites_lobata"
+      },
+      "colonies": 1,
+      "triangles": 39600,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 17,
+        "triangles": 149100
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 10
+    },
+    {
+      "name": "montipora_foliosa",
+      "config": {
+        "mode": "single",
+        "species": "montipora_foliosa",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "montipora_foliosa"
+      },
+      "colonies": 1,
+      "triangles": 93766,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 17,
+        "triangles": 257432
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 12
+    },
+    {
+      "name": "platygyra_daedalea",
+      "config": {
+        "mode": "single",
+        "species": "platygyra_daedalea",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "platygyra_daedalea"
+      },
+      "colonies": 1,
+      "triangles": 39600,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 17,
+        "triangles": 149100
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 14
+    },
+    {
+      "name": "acropora_digitifera-macro",
+      "config": {
+        "mode": "macro",
+        "species": "acropora_digitifera",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "acropora_digitifera-macro"
+      },
+      "colonies": 1,
+      "triangles": 410080,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 16,
+        "triangles": 885068
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 16
+    },
+    {
+      "name": "acropora_hyacinthus-macro",
+      "config": {
+        "mode": "macro",
+        "species": "acropora_hyacinthus",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "acropora_hyacinthus-macro"
+      },
+      "colonies": 1,
+      "triangles": 202430,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 15,
+        "triangles": 464776
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 18
+    },
+    {
+      "name": "porites_lobata-macro",
+      "config": {
+        "mode": "macro",
+        "species": "porites_lobata",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "porites_lobata-macro"
+      },
+      "colonies": 1,
+      "triangles": 39600,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 10,
+        "triangles": 114156
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 20
+    },
+    {
+      "name": "montipora_foliosa-macro",
+      "config": {
+        "mode": "macro",
+        "species": "montipora_foliosa",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "montipora_foliosa-macro"
+      },
+      "colonies": 1,
+      "triangles": 93766,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 7,
+        "triangles": 207512
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 22
+    },
+    {
+      "name": "platygyra_daedalea-macro",
+      "config": {
+        "mode": "macro",
+        "species": "platygyra_daedalea",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "platygyra_daedalea-macro"
+      },
+      "colonies": 1,
+      "triangles": 39600,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 7,
+        "triangles": 99180
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 24
+    },
+    {
+      "name": "variants",
+      "config": {
+        "mode": "variants",
+        "species": "acropora_digitifera",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "variants"
+      },
+      "colonies": 4,
+      "triangles": 1458424,
+      "calls": 4,
+      "resources": {
+        "geometries": 12,
+        "materials": 3,
+        "views": 12
+      },
+      "reef": null,
+      "render": {
+        "calls": 25,
+        "triangles": 2995932
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 26
+    },
+    {
+      "name": "reef-high",
+      "config": {
+        "mode": "reef",
+        "species": "acropora_digitifera",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "high",
+        "name": "reef-high"
+      },
+      "colonies": 270,
+      "triangles": 3578523,
+      "calls": 96,
+      "resources": {
+        "geometries": 40,
+        "materials": 13,
+        "views": 101
+      },
+      "reef": {
+        "colonies": 270,
+        "calls": 96,
+        "triangles": 3578523,
+        "lod": [
+          8,
+          41,
+          221
+        ],
+        "geometries": 40,
+        "materials": 13
+      },
+      "render": {
+        "calls": 82,
+        "triangles": 5868430
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 4
+    },
+    {
+      "name": "reef-low",
+      "config": {
+        "mode": "reef",
+        "species": "acropora_digitifera",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "low",
+        "name": "reef-low"
+      },
+      "colonies": 270,
+      "triangles": 1190731,
+      "calls": 77,
+      "resources": {
+        "geometries": 41,
+        "materials": 13,
+        "views": 102
+      },
+      "reef": {
+        "colonies": 270,
+        "calls": 77,
+        "triangles": 1190731,
+        "lod": [
+          1,
+          13,
+          246
+        ],
+        "geometries": 41,
+        "materials": 13
+      },
+      "render": {
+        "calls": 54,
+        "triangles": 684676
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 5
+    },
+    {
+      "name": "reef-minimal",
+      "config": {
+        "mode": "reef",
+        "species": "acropora_digitifera",
+        "seed": 7123,
+        "lod": "auto",
+        "water": true,
+        "quality": "minimal",
+        "name": "reef-minimal"
+      },
+      "colonies": 270,
+      "triangles": 593115,
+      "calls": 68,
+      "resources": {
+        "geometries": 41,
+        "materials": 13,
+        "views": 103
+      },
+      "reef": {
+        "colonies": 270,
+        "calls": 68,
+        "triangles": 593115,
+        "lod": [
+          0,
+          9,
+          196
+        ],
+        "geometries": 41,
+        "materials": 13
+      },
+      "render": {
+        "calls": 55,
+        "triangles": 584203
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 6
+    },
+    {
+      "name": "lod0",
+      "config": {
+        "mode": "single",
+        "species": "acropora_hyacinthus",
+        "seed": 7123,
+        "lod": 0,
+        "water": true,
+        "quality": "high",
+        "name": "lod0"
+      },
+      "colonies": 1,
+      "triangles": 202430,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 17,
+        "triangles": 474760
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 32
+    },
+    {
+      "name": "lod1",
+      "config": {
+        "mode": "single",
+        "species": "acropora_hyacinthus",
+        "seed": 7123,
+        "lod": 1,
+        "water": true,
+        "quality": "high",
+        "name": "lod1"
+      },
+      "colonies": 1,
+      "triangles": 48606,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 17,
+        "triangles": 167112
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 33
+    },
+    {
+      "name": "lod2",
+      "config": {
+        "mode": "single",
+        "species": "acropora_hyacinthus",
+        "seed": 7123,
+        "lod": 2,
+        "water": true,
+        "quality": "high",
+        "name": "lod2"
+      },
+      "colonies": 1,
+      "triangles": 1056,
+      "calls": 1,
+      "resources": {
+        "geometries": 3,
+        "materials": 3,
+        "views": 3
+      },
+      "reef": null,
+      "render": {
+        "calls": 16,
+        "triangles": 70956
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 34
+    },
+    {
+      "name": "neutral",
+      "config": {
+        "mode": "five",
+        "species": "acropora_hyacinthus",
+        "seed": 7123,
+        "lod": "auto",
+        "water": false,
+        "quality": "high",
+        "name": "neutral"
+      },
+      "colonies": 5,
+      "triangles": 785476,
+      "calls": 5,
+      "resources": {
+        "geometries": 15,
+        "materials": 15,
+        "views": 15
+      },
+      "reef": null,
+      "render": {
+        "calls": 27,
+        "triangles": 1650036
+      },
+      "terrain": {
+        "chunks": 36,
+        "lod0": 36,
+        "lod1": 0,
+        "lod2": 0
+      },
+      "frames": 36
+    }
+  ],
+  "integration": {
+    "reef": true,
+    "colonies": 18,
+    "draws": 14,
+    "absorption": [
+      0.1,
+      0.025,
+      0.012
+    ],
+    "water": -0.25948792430028517,
+    "tide": -0.25948792430028517,
+    "render": {
+      "calls": 53,
+      "triangles": 752534
+    }
+  },
+  "errors": [],
+  "verification": {
+    "fullCapture": "19 views and World integration",
+    "refreshedCapture": "3 variable-scale reef views and World integration after physical corallite scale correction; fixed-scale views are unchanged"
+  }
+}

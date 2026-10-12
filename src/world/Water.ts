@@ -156,6 +156,7 @@ export class WaterPass {
       // the water itself: silty, olive-green, seen wherever the view path through it is long (after MahazeViewer)
       uWaterFog: { value: new Color(0.16, 0.172, 0.14) },
       uFogW: { value: 0.8 },      // per metre of path through the open water: from above, 30 cm is nearly clear; along the surface it closes in
+      uAbsorption: { value: new Vector3(0,0,0) }, // optional per-channel absorption, per metre
       uFogPool: { value: 0.35 },  // tide pools have settled and are clearer
       uRefr: { value: 0.6 },
       // how much of the sky the surface gives back: 1 = physical Fresnel; the game keeps it lower so the bottom shows,
@@ -195,7 +196,7 @@ export class WaterPass {
         uniform samplerCube tEnv;
         uniform mat4 uProjInv, uCamWorld, uMirrorMat;
         uniform float uMirrorOn, uPolar, uSurfSteps, uHeightN;
-        uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog, uScatter;
+        uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog, uScatter, uAbsorption;
         uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax, uReflScale, uReflRough;
         uniform vec2 uRes;
         varying vec2 vUv;
@@ -324,7 +325,8 @@ export class WaterPass {
               vec3 skyC = min(textureCube(tEnv, rr).rgb * uEnvI, vec3(8.0));
               seen = mix(glow * 1.15, mix(skyC, base, 0.3) * 0.8, win);
             }
-            col = mix(glow, seen, exp(-path * uFogW));
+            vec3 transmission = exp(-path * (vec3(uFogW) + uAbsorption));
+            col = glow * (1.0-transmission) + seen * transmission;
           } else if (t >= 0.0) {
             {
               vec3 S = uCamPos + rd * t;
@@ -374,7 +376,8 @@ export class WaterPass {
               fogW *= 1.0 + 2.5 * murk;
               vec3 glow = waterGlow(rd) * mix(vec3(1.0), vec3(1.3, 1.15, 0.7), murk * 0.7);
               // (a steep front shades the water behind it from the sky: the face reads darker than the trough before it)
-              vec3 under = mix(glow, refr, exp(-thick * fogW)) * mix(1.0, 0.5, face);
+              vec3 transmission = exp(-thick * (vec3(fogW) + uAbsorption));
+              vec3 under = (glow * (1.0-transmission) + refr * transmission) * mix(1.0, 0.5, face);
 
               // the sky, reflected (the sun's disc is handled by the glitter below) and weighted by Fresnel
               // (a rough reflection, for a ruffled milky lake: exaggerated slopes break the mirror up)
@@ -557,9 +560,11 @@ export class WaterPass {
 
   /** The water of this shore: its colour seen in depth (linear) and its turbidity against 葛西's silty water; optionally
    * a milky body (scatter, linear), a weaker (reflect, factor on Fresnel) and broken (rough, 0..1) reflection. */
-  setBody(r: number, g: number, b: number, turbidity: number, optics: { scatter?: readonly [number, number, number]; reflect?: number; rough?: number } = {}): void {
+  setBody(r: number, g: number, b: number, turbidity: number, optics: { scatter?: readonly [number, number, number]; reflect?: number; rough?: number; absorption?: readonly [number, number, number] } = {}): void {
     this.tint.setRGB(r, g, b);
     this.clarity = turbidity;
+    const absorption = optics.absorption ?? [0,0,0];
+    this.uniforms.uAbsorption.value.set(...absorption);
     const sc = optics.scatter ?? [0, 0, 0];
     this.uniforms.uScatter.value.set(sc[0], sc[1], sc[2]);
     this.uniforms.uReflScale.value = optics.reflect ?? 1;

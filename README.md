@@ -63,3 +63,5 @@ npm run terrain:hashirimizu # 走水マップの地形 PNG と文書の図（doc
 
 ## データ駆動
 生物は `public/data/species/*.json`、行動ツリーは `public/data/behaviors/*.json`、地図は `public/data/maps/`、潮位観測点は `public/data/tide/stations/` に置き、`npm run data:validate` で検証します。種の追加はデータと `src/assets/models/<種>/` のモデル追加だけで済み、固有ドライバが必要な場合のみ `src/creatures/drivers/index.ts` に登録します。
+
+- [沖縄浅海用サンゴ](docs/models/okinawa-coral/README.md)：5形態×4形状×3LOD、硬底への群生配置、水中RGB減衰。確認用ビューアは `reference/okinawa-coral-viewer/`、画像生成は `npm run render:okinawa-coral`。外部写真の照合は接続制限で未完了。

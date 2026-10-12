@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>
+    沖縄サンゴ・形状と水中質感
+  </title>
+  <style>
+    body {
+      margin: 0;
+      background: #102631;
+      color: #e5f3f5;
+      font: 14px system-ui;
+    }
+    canvas {
+      display: block;
+    }
+    aside {
+      position: fixed;
+      left: 18px;
+      top: 18px;
+      max-width: 310px;
+      padding: 18px;
+      background: #10202dd9;
+      border: 1px solid #809ba444;
+      border-radius: 12px;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0 0 12px;
+    }
+    label {
+      display: block;
+      margin: 8px 0;
+    }
+    select,
+    input,
+    button {
+      background: #193847;
+      color: inherit;
+      padding: 7px;
+      border: 1px solid #627d88;
+      border-radius: 5px;
+    }
+    select {
+      max-width: 280px;
+    }
+    small {
+      color: #a7c5cd;
+    }
+    #stats {
+      white-space: pre-line;
+      margin-top: 12px;
+      font-size: 12px;
+    }
+    .capture aside {
+      display: none;
+    }
+  </style>
+  <canvas id="view"></canvas>
+  <aside>
+    <h1>沖縄のサンゴ・造形確認</h1>
+    <label
+      >表示
+      <select id="mode">
+        <option value="single">1群体</option>
+        <option value="five">5種類比較</option>
+        <option value="variants">4形状比較</option>
+        <option value="macro">表面を観察</option>
+        <option value="reef">浅海の群生</option>
+      </select></label
+    >
+    <label
+      >種類
+      <select id="species"></select></label
+    ><label
+      >Seed <input id="seed" type="number" value="7123" style="width: 95px" /><button id="random">
+        変える
+      </button></label
+    >
+    <label
+      >LOD
+      <select id="lod">
+        <option value="auto">自動</option>
+        <option value="0">LOD0</option>
+        <option value="1">LOD1</option>
+        <option value="2">LOD2</option>
+      </select></label
+    >
+    <label
+      >画質
+      <select id="quality">
+        <option value="high">高</option>
+        <option value="mid">中</option>
+        <option value="low">低</option>
+        <option value="minimal">超軽量</option>
+      </select></label
+    >
+    <label><input id="water" type="checkbox" checked /> 水中の色減衰</label>
+    <small
+      >ドラッグで回転・ホイールで接近。サンゴ以外の生物・建物なし。写真測量による複製ではなく手続き生成モデルです。</small
+    >
+    <div id="stats"></div>
+  </aside>
+  <script type="module" src="./main.js"></script>
+</html>

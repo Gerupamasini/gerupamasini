@@ -20,6 +20,7 @@ import { OysterReef } from '../creatures/oyster/OysterReef';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
 import { oysterEnv } from '../creatures/oyster/material';
 import { AmamoMeadow, MEADOW_QUALITY } from '../world/amamo';
+import { CoralReef, CORAL_WATER } from '../world/coral';
 import { MangroveForest } from '../world/mangrove';
 import { LAYOUTS, type ShoreLayout } from '../world/maps/hashirimizu';
 import { seagrass } from '../creatures/species/amimehagi/seagrass';
@@ -45,6 +46,7 @@ export class World {
   amamo: AmamoMeadow | null = null;
   /** Only maps explicitly declaring a tropical intertidal forest receive mangroves. */
   mangroves: MangroveForest | null = null;
+  corals: CoralReef | null = null;
   /** the stones along the levees (hard ground for oysters; the 葛西 flat) */
   riprap: Riprap | null = null;
   /** the ヨシ fringe along the levee's inner toe (the 葛西 flat) */
@@ -205,8 +207,30 @@ export class World {
       w.mangroves.update(0, { position: new Vector3(map.spawnStart.x,terrain.heightAt(map.spawnStart.x,map.spawnStart.z)+1.5,map.spawnStart.z) }, { tideLevel: 0, wetLevel: 0 });
       w.scene.add(w.mangroves.group);
     }
+    if (map.corals) {
+      onProgress?.('サンゴ礁');
+      terrain.setReefBottom(true);
+      terrain.setSediment(0.2, 0);
+      w.corals = new CoralReef(terrain, map.corals);
+      w.corals.setQuality(preset.vegetation);
+      w.corals.update(0, {
+        position: new Vector3(
+          map.spawnStart.x, terrain.heightAt(map.spawnStart.x, map.spawnStart.z) + 1.5, map.spawnStart.z,
+        ),
+      }, { tideLevel: map.corals.waterLevel ?? 0 });
+      w.scene.add(w.corals.group);
+      // A reef opts into clear blue water and wavelength-dependent attenuation; estuaries keep their optics.
+      water.setBody(...CORAL_WATER.color, CORAL_WATER.turbidity, { absorption: CORAL_WATER.absorption });
+    }
     w.scene.add(terrain.mirrorProxy(LAYER_MIRROR));
     const sky = new SkyDome(w.scene, renderer, preset.shadows, preset.shadowMapSize, layout?.atmosphere);
+    if (w.corals) {
+      const shadow = sky.sunLight.shadow;
+      Object.assign(shadow.camera, { left: -14, right: 14, top: 14, bottom: -14 });
+      shadow.camera.updateProjectionMatrix();
+      shadow.normalBias = 0.003;
+      shadow.bias = -0.00003;
+    }
     // (lights obey layers too: the mirror's camera must see the sun and the sky light, or the land comes out black)
     reflectInWater(sky.sky); reflectInWater(sky.sunLight); reflectInWater(sky.hemi);
     (w as { sky: SkyDome }).sky = sky;
@@ -225,6 +249,8 @@ export class World {
     this.amamo = null;
     this.mangroves?.dispose();
     this.mangroves = null;
+    this.corals?.dispose();
+    this.corals = null;
     this.oysters?.dispose();
     this.oysters = null;
     this.carrion?.dispose();
@@ -267,6 +293,7 @@ export class World {
     // sun and sky
     const sp = sunPosition(gameMs, this.map.origin.lat, this.map.origin.lon);
     sunDirection(sp, this.sunDir);
+    this.corals?.update(dt, camera, { tideLevel: this.tideLevel, sunDir: this.sunDir });
     this.sunElevation = sp.elevation;
     this.tod = timeOfDay(sp.elevation, jstParts(gameMs).hour);
     this.season = seasonOf(gameMs);

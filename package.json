@@ -39,7 +39,8 @@
     "render:digging": "node tools/models/nets/render.mjs --shots tools/models/digging/shots.mjs --out docs/models/digging",
     "model:optics": "node tools/models/digging/build.mjs --set optics",
     "render:optics": "node tools/models/nets/render.mjs --shots tools/models/optics/shots.mjs --out docs/models/optics",
-    "terrain:manko": "node tools/terrain/bake-manko.mjs"
+    "terrain:manko": "node tools/terrain/bake-manko.mjs",
+    "render:okinawa-coral": "node tools/models/okinawa-coral/render.mjs"
   },
   "dependencies": {
     "@preact/signals": "^2.11.3",
