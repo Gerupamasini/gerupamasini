@@ -9,6 +9,7 @@ import { inThicket } from '../manko/shape';
 import { backdropCrowns } from '../manko/land';
 import type { BackdropCrown } from '../../mangrove/MangroveForest';
 import type { Atmosphere } from '../../Sky';
+import { SURFLAB } from '../surflab';
 
 export * as shape from './shape';
 
@@ -41,6 +42,8 @@ export interface ShoreLayout {
     scatter?: readonly [number, number, number];
     /** factor on the Fresnel reflection (absent: 1) and how broken it is, 0..1 (absent: 0) */
     reflect?: number; rough?: number;
+    /** an open shore's wind sea: how much rougher the deeper water is than the flat's breeze ripples (absent: 0) */
+    chop?: number;
   };
   /** the map's air: sky, clouds, sun and fill light (absent: the temperate Tokyo Bay day) */
   atmosphere?: Partial<Atmosphere>;
@@ -71,10 +74,13 @@ export const HASHIRIMIZU: ShoreLayout = {
   sandTint: [0.98, 0.9, 0.74],
   // the coast runs along z, so the crests do too
   rippleAngle: Math.PI / 2,
-  // the bay mouth's small wind waves and ship wakes: a few tens of centimetres, a few seconds apart (the sea is to +x)
-  surf: { height: 0.24, period: 3.4, slope: 0.05, seaward: [1, 0] },
+  // the bay mouth's wind waves and ship wakes: a few tens of centimetres, a few seconds apart (the sea is to +x),
+  // coming in a little from the south (up 浦賀水道, the right as one looks out), each day's sea about this one. At
+  // the exploring tide they spill across the clam flat; at high water they break on the steep beach face (a shore break)
+  surf: { height: 0.4, period: 4.2, slope: 0.05, seaward: [1, 0], angle: 0.22, spread: 0.16 },
   // the bay mouth's water: clearer than the silty flat at 葛西 and greener-blue
-  water: { colour: [0.07, 0.125, 0.125], turbidity: 0.55 },
+  // (and rougher offshore: the bay mouth's wind sea, broken by the sun into glitter)
+  water: { colour: [0.07, 0.125, 0.125], turbidity: 0.55, chop: 1.0 },
   props: buildHashirimizuProps,
 };
 
@@ -104,4 +110,4 @@ const MANKO: ShoreLayout = {
   mangroveLeafTint: [1.4, 1.28, 0.85],
 };
 
-export const LAYOUTS: Record<string, ShoreLayout> = { hashirimizu: HASHIRIMIZU, manko: MANKO };
+export const LAYOUTS: Record<string, ShoreLayout> = { hashirimizu: HASHIRIMIZU, manko: MANKO, surflab: SURFLAB };

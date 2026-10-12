@@ -1,7 +1,7 @@
 import { Vector3, Vector4 } from 'three';
 import type { Floor } from '../drivers/Driver';
 import type { SurfUniforms } from '../../world/Surf';
-import { surfEta } from '../../world/surfCpu';
+import { smoothstep, surfEta } from '../../world/surfCpu';
 import { waveOrbital } from '../../world/amamo/flow';
 import type { AmamoUniforms } from '../../world/amamo/kit';
 
@@ -84,16 +84,19 @@ export class WaterMotion {
       out.uz += w.y * held;
       out.uy -= h * w.z * held;
     }
+    // (the surf is drawn out to the map's edge: it shoals from the open sea and breaks near the shore)
     const surf = this.opts.surf;
-    if (surf && surf.uSurf.value.w > 0 && D < 1.4) {
+    if (surf && surf.uSurf.value.w > 0) {
       const t = this.time;
-      const eta = surfEta(surf, x, z, D, t);
-      const rate = (surfEta(surf, x, z, D, t + SURF_DT) - surfEta(surf, x, z, D, t - SURF_DT)) / (2 * SURF_DT);
-      // under a crest the water runs shoreward, under a trough back out
-      const c = eta * Math.sqrt(G / Math.max(D, 0.05)), d = surf.uSurfDir.value;
+      const eta = surfEta(surf, x, z, level, t);
+      const rate = (surfEta(surf, x, z, level, t + SURF_DT) - surfEta(surf, x, z, level, t - SURF_DT)) / (2 * SURF_DT);
+      // under a crest the water runs shoreward, under a trough back out (and where the backwash has drained off the
+      // sand there is no water left to carry anything)
+      const wet = smoothstep(0.002, 0.01, D + eta);
+      const c = wet * eta * Math.sqrt(G / Math.max(D, 0.05)), d = surf.uSurfDir.value;
       out.ux -= d.x * c;
       out.uz -= d.y * c;
-      out.uy += (h / D) * rate;
+      out.uy += wet * (h / D) * rate;
       out.surface = level + eta;
     }
     return out;

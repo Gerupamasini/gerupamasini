@@ -1,0 +1,218 @@
+#!/usr/bin/env node
+// The surf on 走水 in the game, in headless Chromium (SwiftShader): standing on the beach looking out to sea into the
+// morning sun at the exploring tide (the waves spilling across the clam flat) and at high water (a shore break on the
+// steep beach face), a run of frames through one wave's cycle (break, bore, swash, backwash), the swash at one's feet,
+// and the debug views of the zones and the foams. Starts the Vite dev server itself.
+// Usage: node tests/smoke/surf.mjs [--out <dir>] [--quality mid|high|low|minimal] [--only <name,...>]
+// Output: tests/smoke/out/surf/*.png (or <dir>). Fails on any page error or shader error.
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright-core';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const args = process.argv.slice(2);
+const opt = (k, d) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
+const outDir = path.resolve(opt('--out', path.join(root, 'tests', 'smoke', 'out', 'surf')));
+const quality = opt('--quality', 'mid');
+const only = opt('--only', '') ? opt('--only', '').split(',') : null;
+const W = Number(opt('--w', 960)), H = Number(opt('--h', 540));
+fs.mkdirSync(outDir, { recursive: true });
+const PORT = 5211;
+const url = `http://localhost:${PORT}/gerupamasini/`;
+const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function waitFrames(page, n, timeoutMs = 900000) {
+  const start = await page.evaluate(() => window.__higata?.frameCount ?? 0);
+  await page.waitForFunction((target) => (window.__higata?.frameCount ?? 0) >= target, start + n, { timeout: timeoutMs });
+}
+let code = 0;
+try {
+  for (let i = 0; ; i++) {
+    try { if ((await fetch(url)).ok) break; } catch { /* not up yet */ }
+    if (i > 120) throw new Error('vite did not start');
+    await wait(250);
+  }
+  const exe = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find((p) => fs.existsSync(p));
+  const browser = await chromium.launch({ headless: true, ...(exe ? { executablePath: exe } : {}), args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl', '--no-sandbox'] });
+  const page = await browser.newPage({ viewport: { width: W, height: H } });
+  page.setDefaultTimeout(600000);
+  page.on('pageerror', (e) => { console.error('pageerror:', e.message); code = 1; });
+  page.on('console', (m) => {
+    const t = m.text();
+    if (/Shader Error|ERROR: 0:|WebGLProgram/.test(t)) { console.error('shader:', t.slice(0, 4000)); code = 1; }
+    else if (m.type() === 'error' && !/net::ERR_|Failed to load resource/.test(t)) { console.error('console:', t.slice(0, 300)); code = 1; }
+  });
+  await page.goto(url, { waitUntil: 'load' });
+  await page.waitForFunction(() => document.querySelector('.title-screen') || document.querySelector('.card h2'), null, { timeout: 120000 });
+  await page.evaluate((q) => window.__higata.updateSettings({ quality: q, fieldQuality: q }), quality);
+  await page.locator('button.primary').first().click();
+  await page.waitForFunction(() => window.__higata && window.__higata.mode === 'home', null, { timeout: 120000 });
+  await page.evaluate(() => window.__higata.enterField('hashirimizu'));
+  await page.waitForFunction(() => window.__higata.world && window.__higata.creatures && window.__higata.mode === 'field', null, { timeout: 600000 });
+  await waitFrames(page, 3);
+  // half past seven in the morning (JST): the sun low over the sea, in front of the beach; the day's sea fixed
+  await page.evaluate(() => {
+    const a = window.__higata;
+    a.clock.cancelTicket?.();
+    const d = new Date();
+    a.clock.setDebugTime(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 22, 30) - 86400000);
+    a.world.setSeaState({ height: 0.34, period: 3.8, angle: 0.22, spread: 0.16 });
+    if (a.settings.sunglasses) a.toggleSunglasses();
+    // (the picture alone: no HUD, no tool in hand)
+    a.renderNetOverlay = () => {};
+    const st = document.createElement('style'); st.textContent = '#ui { display: none !important; }'; document.head.appendChild(st);
+  });
+  /** stand on the beach `back` metres up from the still waterline at z, looking out to sea (yaw from seaward) */
+  const stand = (tide, back, z = 0, pitch = -0.1, turn = 0) => page.evaluate(([tide, back, z, pitch, turn]) => {
+    const a = window.__higata, w = a.world;
+    a.setTideOverride(tide);
+    let x = -40;
+    for (; x < 40; x += 0.05) if (w.terrain.heightAt(x, z) < tide) break;
+    a.player.lowView = false;
+    a.player.setPose(x - back, z, -Math.PI / 2 + turn);
+    a.player.pitch = pitch;
+    return { x: +(x - back).toFixed(2) };
+  }, [tide, back, z, pitch, turn]);
+  /** set the water's clock (the surf's time) */
+  const clockAt = (t) => page.evaluate((t) => { window.__higata.world.water.uniforms.uTime.value = t; }, t);
+  const shot = async (name, n = 4) => {
+    if (only && !only.some((o) => name.startsWith(o))) return;
+    await waitFrames(page, n);
+    await page.screenshot({ path: path.join(outDir, name) });
+    console.log('shot', name);
+  };
+  const want = (group) => !only || only.some((o) => o.startsWith(group) || group.startsWith(o));
+  if (want('mid')) {
+    console.log('mid tide', await stand(-0.3, 1.2, 0, -0.08));
+    await shot('mid-tide.png', 8);
+    for (let i = 0; i < 8; i++) { await clockAt(300 + i * 0.5); await shot(`mid-seq-${i}.png`, 1); }
+    await page.evaluate(() => window.__higata.world.water.setSurfDebug(2));
+    for (let i = 0; i < 8; i++) { await clockAt(300 + i * 0.5); await shot(`middbg-${i}.png`, 1); }
+    await page.evaluate(() => window.__higata.world.water.setSurfDebug(0));
+  }
+  if (want('high')) {
+    console.log('high tide', await stand(0.55, 1.4, 0, -0.1));
+    await shot('high-tide.png', 10);
+    for (let i = 0; i < 6; i++) await shot(`high-seq-${i}.png`, 3);
+  }
+  if (want('feet')) {
+    // the swash at one's feet through one wave: the uprush, the sheet stopping, the backwash, the sand left wet
+    await page.evaluate(() => window.__higata.world.setSeaState({ height: 0.45, period: 4.6, angle: 0.22, spread: 0.16 }));
+    await stand(0.55, 2.2, 0, -0.62);
+    await waitFrames(page, 6);
+    for (let i = 0; i < 8; i++) { await clockAt(900 + i * 0.6); await shot(`feet-${i}.png`, 1); }
+  }
+  if (want('side')) {
+    // a livelier day, standing in the swash at high water, looking along the beach: the waves' profiles
+    await page.evaluate(() => window.__higata.world.setSeaState({ height: 0.5, period: 5, angle: 0.22, spread: 0.16 }));
+    await stand(0.55, -0.6, 0, -0.06, Math.PI / 2 - 0.25);
+    for (let i = 0; i < 4; i++) await shot(`side-${i}.png`, i === 0 ? 8 : 3);
+  }
+  if (want('big')) {
+    await page.evaluate(() => window.__higata.world.setSeaState({ height: 0.5, period: 5, angle: 0.22, spread: 0.16 }));
+    await stand(0.55, 1.4, 0, -0.1);
+    await waitFrames(page, 6);
+    for (let i = 0; i < 8; i++) { await clockAt(600 + i * 0.6); await shot(`big-${i}.png`, 1); }
+    await page.evaluate(() => window.__higata.world.water.setSurfDebug(2));
+    for (let i = 0; i < 8; i++) { await clockAt(600 + i * 0.6); await shot(`bigdbg-${i}.png`, 1); }
+    await page.evaluate(() => window.__higata.world.water.setSurfDebug(0));
+    console.log('band', await page.evaluate(() => window.__higata.world.band.toArray().map((v) => +v.toFixed(2))));
+    await page.evaluate(() => window.__higata.world.setSeaState({ height: 0.34, period: 3.8, angle: 0.22, spread: 0.16 }));
+  }
+  if (want('along')) {
+    await page.evaluate(() => window.__higata.world.setSeaState({ height: 0.45, period: 4.6, angle: 0.22, spread: 0.16 }));
+    await stand(0.55, 1.6, 0, -0.14, 0.9);
+    await waitFrames(page, 6);
+    for (let i = 0; i < 4; i++) { await clockAt(1200 + i * 0.8); await shot(`along-${i}.png`, 1); }
+  }
+  if (want('debug')) {
+    await stand(-0.3, 2, 0, -0.25);
+    await page.evaluate(() => window.__higata.world.water.setSurfDebug(1));
+    await shot('debug-zones.png', 6);
+    await page.evaluate(() => window.__higata.world.water.setSurfDebug(2));
+    await shot('debug-foams.png', 4);
+    await page.evaluate(() => window.__higata.world.water.setSurfDebug(3));
+    await shot('debug-phase.png', 4);
+    await page.evaluate(() => window.__higata.world.water.setSurfDebug(4));
+    await shot('debug-zonetex.png', 4);
+    await page.evaluate(() => window.__higata.world.water.setSurfDebug(5));
+    await shot('debug-depth.png', 4);
+    await page.evaluate(() => window.__higata.world.water.setSurfDebug(0));
+  }
+  if (want('quality')) {
+    // switching the tier in the field re-makes the surf's parts about the viewer (memory, lips, spray)
+    await stand(0.55, 1.4, 0, -0.1);
+    for (const q of ['low', 'minimal', 'high', 'mid']) {
+      await page.evaluate((q) => window.__higata.updateSettings({ fieldQuality: q }), q);
+      await waitFrames(page, 4);
+      const parts = await page.evaluate(() => { const w = window.__higata.world; return { mem: w.surfMemory?.res ?? 0, lip: !!w.surfLip, spray: !!w.surfSpray }; });
+      console.log('quality', q, JSON.stringify(parts));
+      await shot(`quality-${q}.png`, 2);
+    }
+  }
+  if (want('cpu')) {
+    // what swims in the surf rides the CPU's copy of it (surfCpu): the same surface as the GPU draws (the water pass's
+    // height field over the whole map, drawn into a float target here), at low and high water, through a wave
+    for (const [tide, t] of [[-0.3, 300], [-0.3, 301.7], [0.55, 600], [0.55, 602.3]]) {
+      await stand(tide, 1.4, 0, -0.1);
+      await waitFrames(page, 4);
+      const r = await page.evaluate(async (t) => {
+        const { surfEta } = await import('/gerupamasini/src/world/surfCpu.ts');
+        const a = window.__higata, w = a.world, gl = a.renderer.gl, wu = w.water.uniforms, sf = w.water.surf;
+        wu.uTime.value = t;
+        // (three's FloatType, RGBAFormat; the target's own class, so one three)
+        const N = 384, rt = new sf.target.constructor(N, N, { type: 1015, format: 1023, depthBuffer: false });
+        const prev = gl.getRenderTarget();
+        gl.setRenderTarget(rt); sf.quad.render(gl); gl.setRenderTarget(prev);
+        const buf = new Float32Array(N * N * 4);
+        gl.readRenderTargetPixels(rt, 0, 0, N, N, buf);
+        rt.dispose();
+        const errs = [];
+        let wet = 0;
+        for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+          const x = ((i + 0.5) / N * 2 - 1) * sf.half, z = ((j + 0.5) / N * 2 - 1) * sf.half;
+          // (the surf, not the dry land: where the ground is under the swash's reach)
+          if (w.terrain.heightAt(x, z) > wu.uWater.value + 0.6) continue;
+          const g = buf[(j * N + i) * 4], c = surfEta(w.surf, x, z, wu.uWater.value, t);
+          errs.push(Math.abs(g - c));
+          if (Math.abs(g) > 0.02) wet++;
+        }
+        errs.sort((p, q) => p - q);
+        const at = (q) => +errs[Math.floor(q * (errs.length - 1))].toFixed(5);
+        return { n: errs.length, moving: wet, p50: at(0.5), p99: at(0.99), p999: at(0.999), max: at(1) };
+      }, t);
+      console.log('cpu', tide, t, JSON.stringify(r));
+      // (the hashes' last bits and a crest landing on the other side of a texel make a rare outlier at a bore's front)
+      if (!(r.moving > 1000 && r.p50 < 0.0005 && r.p99 < 0.005)) { console.error('the CPU surf is not the drawn surf'); code = 1; }
+    }
+  }
+  if (want('worker')) {
+    // the bracket the tide is heading for is made ahead in the worker: no bake on the main thread as the tide rises
+    const r = await page.evaluate(async () => {
+      const w = window.__higata.world, z = w.surfZone;
+      const lv0 = z.uniforms.uSurfLv.value.y;
+      const before = z.bakes;
+      z.update(lv0 - 0.01, 1e-4);
+      await new Promise((res) => setTimeout(res, 4000));
+      z.update(lv0 + 0.005, 1e-4);
+      return { here: z.bakes - before, installed: z.uniforms.uSurfLv.value.toArray().slice(0, 2), worker: !!z.worker };
+    });
+    console.log('worker', JSON.stringify(r));
+    if (r.here !== 0 || r.installed[0] > r.installed[1]) { console.error('the worker did not make the next bracket'); code = 1; }
+  }
+  const stats = await page.evaluate(() => {
+    const a = window.__higata, w = a.world, cam = a.camera.position;
+    let wl = -40; for (; wl < 40; wl += 0.05) if (w.terrain.heightAt(wl, cam.z) < w.tideLevel) break;
+    return { bakes: w.surfZone?.bakes, sea: w.sea, lv: w.surfZone?.uniforms.uSurfLv.value.toArray(), cam: cam.toArray().map((v) => +v.toFixed(2)), player: a.player.position.toArray().map((v) => +v.toFixed(2)), fov: a.camera.fov, tide: w.tideLevel, wl: +wl.toFixed(2), groundCam: +w.terrain.heightAt(cam.x, cam.z).toFixed(3), zoneCam: +w.surfZone.groundAt(cam.x, cam.z).toFixed(3) };
+  });
+  console.log(JSON.stringify(stats));
+  await browser.close();
+} catch (e) {
+  console.error(e);
+  code = 1;
+} finally {
+  server.kill();
+}
+process.exit(code);

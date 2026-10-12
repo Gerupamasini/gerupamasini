@@ -7,7 +7,8 @@ import { WaterMotion, WaterRider, carryFor } from '../../src/creatures/physics/w
 import { AnimalContacts } from '../../src/creatures/physics/animals';
 import type { Floor } from '../../src/creatures/drivers/Driver';
 import { surfEta } from '../../src/world/surfCpu';
-import { surfUniforms } from '../../src/world/Surf';
+import { bindSurfZone, setSurfSea, surfUniforms } from '../../src/world/Surf';
+import { SurfZone } from '../../src/world/SurfZone';
 import { HASHIRIMIZU } from '../../src/world/maps/hashirimizu';
 import { SpeciesSchema } from '../../src/data/schemas/species';
 import { generateIndividual } from '../../src/creatures/Individual';
@@ -16,6 +17,21 @@ import { MahazeDriver } from '../../src/creatures/species/mahaze/MahazeDriver';
 
 const FISH: BodyBuild = { width: 0.16, height: 0.16 };
 const flat = (level = 0.5): Floor => ({ heightAt: () => 0, waterAt: () => level });
+
+/** a plane 1:20 beach (the sea to +x, the still waterline at x = 0 at a level of 0) under 走水's usual sea, its surf
+ * zone made and bound to the uniforms the way World does */
+function surfBeach() {
+  const n = 97, size = 48, half = size / 2, cell = size / (n - 1), heights = new Float32Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) heights[j * n + i] = -0.05 * (-half + i * cell);
+  const s = HASHIRIMIZU.surf!, sea = { height: s.height, period: s.period, angle: s.angle ?? 0, spread: s.spread ?? 0.16 };
+  const zone = new SurfZone({ n, size, heights }, s.seaward, sea);
+  zone.update(0);
+  const surf = surfUniforms(s);
+  bindSurfZone(surf, zone);
+  setSurfSea(surf, sea);
+  const floor: Floor = { heightAt: (x, z) => zone.groundAt(x, z), waterAt: () => 0 };
+  return { surf, floor };
+}
 
 function body(id: string, x: number, z: number, o: { build?: BodyBuild; len?: number; g?: number; heading?: number; y?: number; mode?: BodyMode; movable?: boolean } = {}): ContactBody {
   const b = contactBody(id, o.build ?? FISH, o.len ?? 0.05, o.g ?? 2);
@@ -309,14 +325,14 @@ describe('the waves', () => {
   });
 
   it('runs the water shoreward under the surf\'s crests and seaward under its troughs (走水)', () => {
-    const surf = surfUniforms(HASHIRIMIZU.surf);
+    const { surf, floor } = surfBeach();
     const w = new WaterMotion({ windDir: 0, swell: 0, surf });
-    const floor: Floor = { heightAt: () => -0.4, waterAt: () => 0 };
     const out = { ux: 0, uy: 0, uz: 0, bed: 0, surface: 0 };
     let crest = 0, trough = 0, hi = -Infinity, lo = Infinity;
     for (let t = 0; t < 30; t += 0.05) {
       w.update(t, 0);
-      w.sample(floor, 3, -0.2, 0, out);
+      // 40 cm of water, where the bigger waves break
+      w.sample(floor, 8, -0.2, 0, out);
       hi = Math.max(hi, out.surface); lo = Math.min(lo, out.surface);
       // seaward is +x on 走水
       if (out.surface > 0.03) crest += Math.sign(-out.ux);
@@ -329,8 +345,27 @@ describe('the waves', () => {
     expect(hi - lo).toBeLessThan(0.6);
   });
 
-  it('has no surf on a sheltered flat, nor out past it', () => {
+  it('has no surf on a sheltered flat, and leaves the beach above the swash dry', () => {
     expect(surfEta(surfUniforms(null), 0, 0, 0.3, 5)).toBe(0);
-    expect(surfEta(surfUniforms(HASHIRIMIZU.surf), 0, 0, 2, 5)).toBe(0);
+    // 10 m up a 1:20 beach the surface is the sand's, 50 cm over the still level (2 mm under the sand: no water)
+    const { surf } = surfBeach();
+    for (let t = 0; t < 10; t += 0.5) expect(surfEta(surf, -10, 0, 0, t)).toBeCloseTo(0.498, 3);
+  });
+
+  it('carries nothing where the backwash has drained the sand to a film (走水)', () => {
+    const { surf, floor } = surfBeach();
+    const w = new WaterMotion({ windDir: 0, swell: 0, surf });
+    const out = { ux: 0, uy: 0, uz: 0, bed: 0, surface: 0 };
+    let bare = 0;
+    for (let t = 0; t < 60; t += 0.05) {
+      w.update(t, 0);
+      // a few millimetres to a centimetre of still water at the waterline: the backwash drains it between the waves
+      // to a film of a millimetre or less
+      for (const x of [0.05, 0.1, 0.2]) for (const z of [-12, 0, 12]) {
+        w.sample(floor, x, -0.05 * x - 0.001, z, out);
+        if (out.surface - out.bed < 0.002) { bare++; expect(out.ux).toBe(0); }
+      }
+    }
+    expect(bare).toBeGreaterThan(0);
   });
 });

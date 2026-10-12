@@ -42,6 +42,8 @@ export interface DebugState {
   timeOverride: boolean;
   tideOverride: number | null;
   overcast: number;
+  /** the surf's debug view (0 off) */
+  surfView?: number;
   markers: boolean;
   /** species kept out of the world for now (ids) */
   hidden: string[];
