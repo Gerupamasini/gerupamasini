@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { SpeciesSchema } from '../../src/data/schemas';
 import { spawnsOnMap } from '../../src/creatures/Spawner';
 import { Matrix4, Vector3 } from 'three';
+import { ScopimeraColony } from '../../src/creatures/kometsukigani/ScopimeraColony.js';
 import { ScopimeraGlobosa, flatProbe, makeEnv, seasonFor } from '../../src/creatures/kometsukigani/ScopimeraGlobosa.js';
 import { breedingFactor, seasonalActivity, STATE } from '../../src/creatures/kometsukigani/ScopimeraGlobosaBehavior.js';
 import { createRigInstance } from '../../src/creatures/kometsukigani/ScopimeraGlobosaRig.js';
@@ -234,6 +235,23 @@ describe('コメツキガニ: where it lives', () => {
   it('is introduced on the 葛西 flat only', () => {
     for (const rule of species.spawn) expect(rule.maps).toEqual(['kasai_west']);
     for (const map of manifest.maps) expect(spawnsOnMap(species, map)).toBe(map === 'kasai_west');
+  });
+
+  it('burrows most thickly in muddy sand, sparsely in sand, and more sparsely still in the sand toward the shore', () => {
+    // a flat of one substrate and height, through the colony's own density rule (patches identical between calls)
+    const density = (sub: string, h: number, x: number, z: number) => ScopimeraColony.prototype.densityAt.call({
+      seed: 1003,
+      terrain: { inside: () => true, substrateAt: () => sub, pitMaskAt: () => 0, heightAt: () => h },
+    }, x, z) as number;
+    // a spot inside a patch
+    let spot: [number, number] | null = null;
+    for (let x = -100; x < 100 && !spot; x += 1.7) for (let z = -100; z < 100 && !spot; z += 1.3) if (density('muddy_sand', 0.2, x, z) > 6) spot = [x, z];
+    expect(spot).not.toBeNull();
+    const [x, z] = spot!;
+    const muddy = density('muddy_sand', -0.1, x, z), sandLow = density('sand', -0.1, x, z), sandHigh = density('sand', 0.6, x, z);
+    expect(sandLow / muddy).toBeCloseTo(0.3, 2);
+    expect(sandHigh / density('muddy_sand', 0.6, x, z)).toBeCloseTo(0.09, 2);
+    expect(density('mud', 0.2, x, z)).toBe(0);
   });
 
   it('is placed by its colony, not by the spawner', () => {

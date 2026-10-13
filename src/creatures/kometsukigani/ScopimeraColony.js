@@ -13,8 +13,8 @@ import { hashInts } from '../../core/Rng';
 /**
  * The コメツキガニ of the flat as a population living in burrows.
  *
- * Burrows are placed where the species lives — clean, fine sand on the middle and upper flat, exposed for hours at
- * every low tide [L] — in patches, a few to a dozen and more per square metre at the patch cores, spaced a few
+ * Burrows are placed where the species lives on this flat — the muddy sand of the middle flat above all, the cleaner
+ * sand less and less toward the shore, exposed for hours at every low tide — in patches, a few to a dozen and more per square metre at the patch cores, spaced a few
  * centimetres apart. They are generated lazily in 4 m cells around the player, deterministically from the map seed,
  * so a place looks the same when the player comes back. Each burrow may have a resident; a few crabs have none and
  * wander (large ones in loose droves on the lower flat [L]).
@@ -105,15 +105,20 @@ export class ScopimeraColony {
 
   // ======================================================================================== habitat
 
-  /** burrow density (per m²) the species would have here [L]: fine sand, middle and upper flat, in patches */
+  /**
+   * burrow density (per m²) the species would have here: densest on muddy sand, sparse on sand and sparser still on the
+   * sand toward the shore (the higher, drier upper flat), within the band the tide uncovers every day, in patches
+   */
   densityAt(x, z) {
     const t = this.terrain;
     if (!t.inside(x, z, 6)) return 0;
     const sub = t.substrateAt(x, z);
-    const subK = sub === 'sand' ? 1 : sub === 'muddy_sand' ? 0.3 : 0;
+    let subK = sub === 'muddy_sand' ? 1 : sub === 'sand' ? 0.3 : 0;
     if (!subK) return 0;
     if (t.pitMaskAt(x, z) > 0) return 0;
     const h = t.heightAt(x, z);
+    // the sand thins out landward: from T.P. 0 m up to +0.6 m its share falls to 30 % (0.09 of the muddy sand's)
+    if (sub === 'sand') subK *= 1 - 0.7 * smoothstep(0.0, 0.6, h);
     // exposed every low tide, flooded every high tide: about MSL−0.5 … +0.95 m T.P., best around +0.1 … +0.6
     const band = smoothstep(-0.55, -0.15, h) * (1 - smoothstep(0.65, 1.0, h));
     if (band <= 0) return 0;
