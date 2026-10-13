@@ -20,11 +20,22 @@ export const PART = {
   CHELA_ARM: 9, PALM: 10, FINGER: 11, LEG_PROX: 12, MERUS: 13, LEG_DIST: 14, DACTYL: 15, SETA: 17,
 };
 
-/** resolution per LOD: carapace grid, tube radial / ring density, setae */
+/**
+ * resolution per LOD, sized to what each level covers on screen (a 1 cm crab, 1080 lines, 70° view): the close-up
+ * fills a good part of the screen, the near level is 4–22 px across (0.45–2.5 m), the far one 4 px and less.
+ *   carT / carS     carapace grid (around / top to sternum)
+ *   radial, ringK   chelipeds, eyestalks and mouthparts: segments around, rings per CW of length
+ *   legR, legK      the walking legs (thin: they need fewer than the claws the eye goes to)
+ *   floor, ringMin  the least any small part gets around / along
+ *   face            the third maxillipeds and the antennules (no face at 4 px)
+ *   prox            the short basal segments of the limbs (coxa, basis, ischium: under the carapace's rim)
+ *   abdomen         the folded abdomen under the body
+ *   setae, teeth    close-up only
+ */
 const RES = [
-  { carT: 168, carS: 96, radial: 22, ringK: 70, setae: 1, teeth: true },
-  { carT: 76, carS: 44, radial: 12, ringK: 30, setae: 0, teeth: false },
-  { carT: 30, carS: 16, radial: 6, ringK: 12, setae: 0, teeth: false },
+  { carT: 120, carS: 64, radial: 18, ringK: 60, legR: 12, legK: 36, floor: 6, ringMin: 3, face: true, prox: true, abdomen: true, setae: 1, teeth: true },
+  { carT: 40, carS: 20, radial: 6, ringK: 14, legR: 4, legK: 9, floor: 4, ringMin: 2, face: true, prox: true, abdomen: true, setae: 0, teeth: false },
+  { carT: 16, carS: 8, radial: 4, ringK: 5, legR: 3, legK: 3, floor: 3, ringMin: 1, face: false, prox: false, abdomen: false, setae: 0, teeth: false },
 ];
 
 class MeshBuilder {
@@ -397,18 +408,18 @@ function buildEyes(B, res) {
   const rig = sharedRig();
   SIDES.forEach(({ id }, k) => {
     const base = rig.index.get(`EyeStalk_${id}`), dist = rig.index.get(`EyeStalk_${id}_Distal`);
-    const radial = Math.max(6, Math.round(res.radial * 0.8));
+    const radial = Math.max(res.floor, Math.round(res.radial * 0.8));
     const limb = 10 + k;
     // basal article: short, wider
     tube(B, {
-      bone: base, x0: -0.03, x1: EYE.baseLen + 0.006, radial, rings: Math.max(3, Math.round(res.ringK * 0.12)),
+      bone: base, x0: -0.03, x1: EYE.baseLen + 0.006, radial, rings: Math.max(res.ringMin, Math.round(res.ringK * 0.12)),
       section: (t) => { const r = EYE.baseR + (EYE.stalkR0 * 1.04 - EYE.baseR) * smoothstep(0.2, 1, t); return { cy: 0, cz: 0, ry: r, rz: r * 0.92 }; },
       info: () => [PART.EYESTALK, limb * 10, 0, 0.6], capA: 0.02, capB: 0.005,
     });
     // stalk + terminal cornea (club-shaped), slightly curved forward at the tip
     const len = EYE.stalkLen + EYE.corneaLen;
     tube(B, {
-      bone: dist, x0: -0.012, x1: len, radial, rings: Math.max(5, Math.round(res.ringK * 0.36)),
+      bone: dist, x0: -0.012, x1: len, radial, rings: Math.max(res.ringMin + 2, Math.round(res.ringK * 0.36)),
       section: (t) => {
         // a slim neck out of the orbit, widening steadily upward, then the cornea: an ovoid about 1.4 × the stalk
         // below it (063, 027, 013, 061)
@@ -471,8 +482,9 @@ function mxpOutline(a) {
 }
 
 function buildMxp(B, res) {
+  if (!res.face) return;
   const rig = sharedRig();
-  const n = Math.max(8, Math.round(res.radial * 1.15)), m = Math.max(5, Math.round(res.radial * 0.75));
+  const n = Math.max(res.floor + 2, Math.round(res.radial * 1.15)), m = Math.max(res.ringMin + 2, Math.round(res.radial * 0.75));
   SIDES.forEach(({ id, sign }, k) => {
     const bone = rig.index.get(`Mxp3_${id}`);
     const W = MXP3.width, H = MXP3.height, T = MXP3.thick;
@@ -509,6 +521,8 @@ function buildMxp(B, res) {
  * slender antennae beside them are too fine to show at this scale. A small ellipsoid each, on the Body.
  */
 function buildAntennules(B, res) {
+  // (a knob of a fraction of a pixel short of the close-up)
+  if (!res.face || !res.teeth) return;
   const body = sharedRig().index.get('Body');
   const n = Math.max(6, Math.round(res.radial * 0.6)), m = Math.max(4, Math.round(res.radial * 0.4));
   for (const sx of [1, -1]) {
@@ -551,12 +565,13 @@ function abdomenProfile(A) {
 }
 
 function buildAbdomen(B, res) {
+  if (!res.abdomen) return;
   const rig = sharedRig();
   for (const sex of ['m', 'f']) {
     const bone = rig.index.get(sex === 'm' ? 'Abdomen_M' : 'Abdomen_F');
     const A = sex === 'm' ? ABDOMEN.male : ABDOMEN.female;
     const { Lt, cuts, hw } = abdomenProfile(A);
-    const n = Math.max(4, res.radial), m = Math.max(5, Math.round(res.ringK * Lt * 0.9));
+    const n = Math.max(res.floor, res.radial), m = Math.max(res.ringMin + 2, Math.round(res.ringK * Lt * 0.9));
     // (only the outer face: the inner one lies against the sternum, and the rim thins to nothing)
     for (const face of [1]) {
       patch(B, {
@@ -642,11 +657,14 @@ function buildChelipeds(B, res) {
     const bi = (s) => rig.index.get(`Cheliped_${id}_${s}`);
     const limb = 8 + k;
     const radial = res.radial, rk = res.ringK;
-    const rings = (len) => Math.max(3, Math.round(rk * len * 1.1));
+    const rings = (len) => Math.max(res.ringMin, Math.round(rk * len * 1.1));
     const membrane = (t, L, a = 0.03) => 1 - smoothstep(0, a / L, t);
-    tube(B, { bone: bi('Coxa'), x0: -0.035, x1: C.coxa + 0.01, radial, rings: rings(0.09), section: () => ({ cy: 0, cz: 0, ry: 0.05, rz: 0.05 }), info: () => [PART.CHELA_ARM, limb * 10, 0, 0.2] });
-    tube(B, { bone: bi('Basis'), x0: -0.012, x1: C.basis + 0.008, radial, rings: rings(0.06), section: () => ({ cy: 0, cz: 0, ry: 0.046, rz: 0.044 }), info: (t) => [PART.CHELA_ARM, limb * 10 + 1, membrane(t, 0.07), 0.2] });
-    tube(B, { bone: bi('Ischium'), x0: -0.01, x1: C.ischium + 0.01, radial, rings: rings(0.06), section: (t) => ({ cy: 0, cz: 0, ry: 0.05 + 0.02 * t, rz: 0.042 }), info: () => [PART.CHELA_ARM, limb * 10 + 2, 0, 0.2] });
+    if (res.prox) {
+      const rP = Math.max(res.floor, Math.round(radial * 0.75));
+      tube(B, { bone: bi('Coxa'), x0: -0.035, x1: C.coxa + 0.01, radial: rP, rings: rings(0.09), section: () => ({ cy: 0, cz: 0, ry: 0.05, rz: 0.05 }), info: () => [PART.CHELA_ARM, limb * 10, 0, 0.2] });
+      tube(B, { bone: bi('Basis'), x0: -0.012, x1: C.basis + 0.008, radial: rP, rings: rings(0.06), section: () => ({ cy: 0, cz: 0, ry: 0.046, rz: 0.044 }), info: (t) => [PART.CHELA_ARM, limb * 10 + 1, membrane(t, 0.07), 0.2] });
+      tube(B, { bone: bi('Ischium'), x0: -0.01, x1: C.ischium + 0.01, radial: rP, rings: rings(0.06), section: (t) => ({ cy: 0, cz: 0, ry: 0.05 + 0.02 * t, rz: 0.042 }), info: () => [PART.CHELA_ARM, limb * 10 + 2, 0, 0.2] });
+    }
     // merus: stout, trigonal, its upper margin granular (material)
     tube(B, {
       bone: bi('Merus'), x0: -0.015, x1: C.merus + 0.008, radial, rings: rings(C.merus),
@@ -796,6 +814,9 @@ function legSegments(L, sign, res) {
   };
 }
 
+/** the short basal segments, left out at the far level (they sit under the carapace's rim) */
+const PROX = new Set(['Coxa', 'Basis', 'Ischium']);
+
 function buildLegs(B, res) {
   const rig = sharedRig();
   SIDES.forEach(({ id, sign }, sk) => {
@@ -803,10 +824,11 @@ function buildLegs(B, res) {
       const limb = sk * 4 + li;
       const specs = legSegments(L, sign, res);
       for (const seg of SEGMENTS) {
+        if (!res.prox && PROX.has(seg)) continue;
         const sp = specs[seg];
         const len = sp.x1 - sp.x0;
-        const radial = seg === 'Merus' ? Math.round(res.radial * 1.15) : seg === 'Dactylus' ? Math.max(5, res.radial - 2) : res.radial;
-        const rings = Math.max(3, Math.round(res.ringK * len)) + (seg === 'Merus' || seg === 'Dactylus' ? 2 : 1);
+        const radial = seg === 'Merus' ? Math.round(res.legR * 1.15) : seg === 'Dactylus' ? Math.max(res.floor, res.legR - 2) : res.legR;
+        const rings = Math.max(res.ringMin, Math.round(res.legK * len)) + (seg === 'Merus' || seg === 'Dactylus' ? 2 : 1) - (res.prox ? 0 : 1);
         tube(B, {
           bone: rig.index.get(`Leg_${id}${L.name}_${seg}`), ...sp, radial, rings,
           info: (t) => [sp.part, limb * 10 + SEGMENTS.indexOf(seg), sp.mem ? 1 - smoothstep(0, sp.mem / len, t) : 0, sp.thin],

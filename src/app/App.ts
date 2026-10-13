@@ -24,7 +24,7 @@ import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
 import { ShovelView } from '../player/ShovelView';
 import { BinocularView } from '../player/BinocularView';
 import { ClamField } from '../world/ClamField';
-import { ScopimeraColony } from '../creatures/kometsukigani/ScopimeraColony.js';
+import { colonyQuality, ScopimeraColony } from '../creatures/kometsukigani/ScopimeraColony.js';
 import { MEADOW_QUALITY } from '../world/amamo';
 import { generateIndividual } from '../creatures/Individual';
 import { hashInts } from '../core/Rng';
@@ -557,7 +557,7 @@ export class App {
       // the コメツキガニ colony: only on the flats its spawn rules name (葛西; data/species/scopimera_globosa.json)
       const crabSp = this.data.species.get(CRAB_SPECIES);
       if (crabSp && map.animals && spawnsOnMap(crabSp, map.id)) {
-        const q = this.settings.quality === 'low' ? 0 : this.settings.quality === 'high' ? 2 : 1;
+        const q = colonyQuality(this.settings.fieldQuality);
         this.crabs = new ScopimeraColony({
           scene: this.world.scene, terrain: this.world.terrain, habitat: this.world.habitat, tide: this.world.tide, creatures: this.creatures,
           species: crabSp, removed: this.removed, seed: hashInts(map.id.length * 53, 1003), quality: q, shadows: this.renderer.preset.shadows,
@@ -672,6 +672,7 @@ export class App {
     this.field?.setTaa(preset.taa && !this.input.touchDevice);
     this.applyPreset();
     this.creatures?.setQuality(preset);
+    this.crabs?.setQuality(colonyQuality(this.settings.fieldQuality));
     this.fieldCase?.setQuality(preset);
     const fieldChanged = this.appliedFieldQuality !== this.settings.fieldQuality;
     if (fieldChanged) {

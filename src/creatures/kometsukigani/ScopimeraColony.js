@@ -1,4 +1,4 @@
-import { Color, Group, Vector3 } from 'three';
+import { Color, Group, Object3D, Vector3 } from 'three';
 import { ScopimeraGlobosa, ScopimeraDriver, makeEnv, seasonFor, STATE } from './ScopimeraGlobosa.js';
 import { BurrowRenderer, RENDER_ORDER, shaftAxis } from './Burrows.js';
 import { SandPellets } from './SandPellets.js';
@@ -34,18 +34,30 @@ const SPECIES_ID = 'scopimera_globosa';
 const _v = new Vector3(), _v2 = new Vector3(), _v3 = new Vector3(), _n = new Vector3();
 const UP = new Vector3(0, 1, 0);
 
-/** quality: max live crabs, live radius (m), real holes, pellet radius */
+/**
+ * quality tiers (the field's quality: minimal, low, mid, high): live crabs at most and within (m), burrows drawn as
+ * real holes at most, pellets laid out within (m) and per burrow at most, pellets drawn as geometry within (m from
+ * the eye: 3 m is 2.6 m along the sand for a standing player; the far ones thinned out, SandPellets), the crabs'
+ * LOD0 / LOD1 limits (m)
+ */
 const QUALITY = [
-  { maxLive: 18, rLive: 5, holes: 16, pelR: 2.2, pelMax: 90 },
-  { maxLive: 36, rLive: 7.5, holes: 32, pelR: 3, pelMax: 140 },
-  { maxLive: 52, rLive: 9.5, holes: 40, pelR: 3.6, pelMax: 180 },
+  { maxLive: 10, rLive: 3.5, holes: 8, pelR: 1.8, pelMax: 60, pelDraw: 1.9, lod: [0.25, 1.4] },
+  { maxLive: 16, rLive: 5, holes: 12, pelR: 2.2, pelMax: 90, pelDraw: 2.4, lod: [0.3, 1.8] },
+  { maxLive: 30, rLive: 7.5, holes: 24, pelR: 3, pelMax: 140, pelDraw: 3.0, lod: [0.35, 2.5] },
+  { maxLive: 44, rLive: 9.5, holes: 32, pelR: 3.6, pelMax: 180, pelDraw: 3.4, lod: [0.4, 2.5] },
 ];
+/** the tier for the field's quality setting */
+export function colonyQuality(q) { return q === 'minimal' ? 0 : q === 'low' ? 1 : q === 'high' ? 3 : 2; }
+/** how often the burrows' decals and holes are laid out again (s), and how far the camera may move meanwhile (m) */
+const GROUND_EVERY = 0.25, GROUND_MOVE = 0.2;
+/** an open burrow nearer the eye than this (m: some 25 px across and more) is drawn with the fine, ragged shaft */
+const HOLE_FINE = 0.4;
 
 export class ScopimeraColony {
   /**
-   * @param o {{ scene, terrain, habitat, tide, creatures, species, removed: Set<string>, seed: number, quality: 0|1|2, shadows: boolean }}
+   * @param o {{ scene, terrain, habitat, tide, creatures, species, removed: Set<string>, seed: number, quality: 0|1|2|3, shadows: boolean }}
    */
-  constructor({ scene, terrain, habitat, tide, creatures, species, removed, seed, quality = 1, shadows = true }) {
+  constructor({ scene, terrain, habitat, tide, creatures, species, removed, seed, quality = 2, shadows = true }) {
     this.terrain = terrain;
     this.habitat = habitat;
     this.tide = tide;
@@ -53,14 +65,14 @@ export class ScopimeraColony {
     this.species = species;
     this.removed = removed;
     this.seed = seed >>> 0;
-    this.q = QUALITY[quality] ?? QUALITY[1];
+    this.q = QUALITY[quality] ?? QUALITY[2];
     this.shadowsAvailable = shadows;
     this.group = new Group();
     this.group.name = 'kometsukigani';
     this.crabGroup = new Group();
     this.crabGroup.name = 'kometsukigani-crabs';
     this.renderer = new BurrowRenderer();
-    this.pellets = new SandPellets({ quality });
+    this.pellets = new SandPellets({ far: this.q.pelDraw });
     // the pellets (and the grains on the crabs) are the flat's own sand: each pellet the dry sand where it lies,
     // the flat's mean as the fallback
     const sand = drySandColour(terrain, SAND_LINEAR);
@@ -105,6 +117,16 @@ export class ScopimeraColony {
   }
 
   static active = null;
+
+  /** the field's quality changed (colonyQuality): the live set, the holes and the pellets follow on the next tick */
+  setQuality(quality) {
+    this.q = QUALITY[quality] ?? QUALITY[2];
+    this.pellets.far = this.q.pelDraw;
+    this.groundDirty = true;
+  }
+
+  /** the water stands over this point of the sand (the tide, or a pool left on the flat) */
+  wetAt(x, z, y) { return this.habitat.waterAt(x, z) > y - 0.001; }
 
   // ======================================================================================== habitat
 
@@ -286,6 +308,7 @@ export class ScopimeraColony {
    */
   update(f) {
     const dt = f.dt;
+    this.dt = dt;
     this.gameMs = f.gameMs;
     this.time += dt;
     this.tideLevel = f.tideLevel;
@@ -411,7 +434,13 @@ export class ScopimeraColony {
     crab.model.setae.renderOrder = RENDER_ORDER.crab;
     crab.colonyIndex = idx;
     crab.behavior.tripAngle = rec.tripAngle;
-    crab.onPellet = (pos, r, kind) => { this.pellets.add(pos.x, this.terrain.surfaceAt(pos.x, pos.z), pos.z, r, kind, this.pellets.time, Math.random()); if (b >= 0) this.B.pellets[b]++; };
+    crab.onPellet = (pos, r, kind) => {
+      const y = this.terrain.surfaceAt(pos.x, pos.z);
+      if (this.wetAt(pos.x, pos.z, y)) return;           // (a pellet dropped in the water falls apart)
+      this.pellets.add(pos.x, y, pos.z, r, kind, this.pellets.time, Math.random());
+      if (b >= 0) this.B.pellets[b]++;
+    };
+    syncOnDemand(crab.root);
     crab.on((id) => this.onCrabEvent(idx, id));
     this.crabGroup.add(crab.root);
     // where is it now? in its burrow, or somewhere on a trip from it
@@ -433,6 +462,7 @@ export class ScopimeraColony {
       crab.behavior.wet = 0.4;
     }
     if (b >= 0) this.B.open[b] = crab.behavior.plugged ? 0 : 1;
+    crab.root.userData.kgSync = true;
     rec.live = crab;
     this.live.set(idx, { crab, ind, lod: 1, every: 1, frame: Math.floor(Math.random() * 4), env, inShadow: false });
     this.creatures.spawn(ind);
@@ -639,7 +669,8 @@ export class ScopimeraColony {
       const crab = L.crab, rec = this.crabs[idx];
       const locked = L.ind.id === this.lockedId;
       const d = crab.pos.distanceTo(this.cam);
-      L.lod = lodFor(d, L.lod, locked);
+      const lod = lodFor(d, L.lod, locked, this.q.lod);
+      if (lod !== L.lod) { L.lod = lod; crab.root.userData.kgSync = true; }
       crab.setLod(L.lod);
       L.every = updateEvery(L.lod, d, crab.hidden);
       L.frame++;
@@ -650,8 +681,13 @@ export class ScopimeraColony {
         env.threat = this.threatFor(L);
         crab.update(Math.min(0.1, L.acc), env);
         L.acc = 0;
+        // its bones moved: their matrices on the next render (a crab down its burrow is not drawn at all)
+        if (crab.root.visible) crab.root.userData.kgSync = true;
       }
-      if (rec.burrow >= 0) this.B.open[rec.burrow] = crab.behavior.plugged ? 0 : 1;
+      if (rec.burrow >= 0) {
+        const open = crab.behavior.plugged ? 0 : 1;
+        if (this.B.open[rec.burrow] !== open) { this.B.open[rec.burrow] = open; this.groundDirty = true; }
+      }
       crab.model.setShadows(focus && d < 0.5);
       L.ind.pos.copy(crab.pos);
       L.ind.heading = crab.heading;
@@ -672,7 +708,9 @@ export class ScopimeraColony {
       if (b < 0) continue;
       const y = this.B.y[b];
       const ex = this.exposureAt(this.B.cell[b], y);
-      if (!ex.exposed) { this.B.cycle[b] = -1; this.B.open[b] = rec.live ? this.B.open[b] : 0; continue; }
+      // out of the water by the cell's height, but this burrow may lie lower, or in a pool: under water it is shut
+      // and has no pellets round it (those it had wash away: SandPellets)
+      if (!ex.exposed || this.wetAt(this.B.x[b], this.B.z[b], y)) { this.B.cycle[b] = -1; this.B.open[b] = rec.live ? this.B.open[b] : 0; continue; }
       if (!rec.live) {
         // in/out: out part of the time while there is light and the season allows (about a third of a low tide [L])
         const act = this.season.activity * this.light * (rec.ovigerous ? 0.1 : 1);
@@ -717,8 +755,9 @@ export class ScopimeraColony {
     // a couple of excavation lumps by the mouth
     for (let k = 0; k < 2 + Math.floor(rand() * 3); k++) {
       const aa = rand() * TAU, rr = this.B.r[b] * rrange(rand, 1.4, 2.6);
-      const x = bx + Math.sin(aa) * rr, z = bz + Math.cos(aa) * rr;
-      this.pellets.add(x, this.terrain.surfaceAt(x, z), z, this.B.r[b] * rrange(rand, 0.35, 0.65), 'dig', -rrange(rand, 60, 3000), rand());
+      const x = bx + Math.sin(aa) * rr, z = bz + Math.cos(aa) * rr, y = this.terrain.surfaceAt(x, z);
+      const r = this.B.r[b] * rrange(rand, 0.35, 0.65), age = rrange(rand, 60, 3000), seed = rand();
+      if (!this.wetAt(x, z, y)) this.pellets.add(x, y, z, r, 'dig', -age, seed);
     }
     while (made < n) {
       // each trip leaves on a bearing turned a little further the same way, with some scatter [L]
@@ -742,7 +781,9 @@ export class ScopimeraColony {
           const pz = z - Math.sin(dir) * off + (rand() - 0.5) * 0.14 * cw;
           // older trips dried long ago; the last ones are still damp
           const age = (n - made) / Math.max(1e-3, rate);
-          this.pellets.add(px, this.terrain.surfaceAt(px, pz), pz, pr * rrange(rand, 0.8, 1.2), 'feed', this.pellets.time - age, rand());
+          const py = this.terrain.surfaceAt(px, pz), r = pr * rrange(rand, 0.8, 1.2), seed = rand();
+          // (a trip that ran down into the water left nothing there)
+          if (!this.wetAt(px, pz, py)) this.pellets.add(px, py, pz, r, 'feed', this.pellets.time - age, seed);
           made++;
         }
       }
@@ -753,12 +794,58 @@ export class ScopimeraColony {
 
   // ======================================================================================== drawing
 
+  /**
+   * The ground's decals and holes. The burrows' (mouth decals, the far pellet fields, the real holes) are laid out a
+   * few times a second, or when the camera has moved a little or a burrow opened or shut; the contact shadows under
+   * the crabs and their feet every frame.
+   */
   drawGround() {
+    const R = this.renderer;
+    const cam = this.cam;
+    this.groundAcc = (this.groundAcc ?? 0) + this.dt;
+    const lc = this.groundCam ??= new Vector3(Infinity, 0, 0);
+    if (this.groundDirty || this.groundAcc > GROUND_EVERY || Math.hypot(cam.x - lc.x, cam.z - lc.z) > GROUND_MOVE) {
+      this.groundAcc = 0;
+      this.groundDirty = false;
+      lc.copy(cam);
+      this.drawBurrows();
+    }
+    R.beginContacts();
+    // contact shadows: a soft dark ellipse under each crab on the surface, cast along the sun
+    for (const L of this.live.values()) {
+      const crab = L.crab;
+      if (crab.hidden || !crab.model.root.visible) continue;
+      const cw = crab.cw;
+      crab.anchor(_v2);
+      const g = this.terrain.surfaceAt(_v2.x, _v2.z);
+      const hgt = Math.max(0, _v2.y - g);
+      const el = Math.max(0.25, this.sunDir.y);
+      const sx = -this.sunDir.x, sz = -this.sunDir.z;
+      const off = hgt / el * 0.5;
+      _v3.set(_v2.x + sx * off, g, _v2.z + sz * off);
+      this.terrain.normalAt(_v3.x, _v3.z, _n);
+      R.addContact(_v3, _n, cw * 0.85, cw * (0.7 + off / cw * 0.4), Math.atan2(sx, sz), 1, this.shadowFocus && L.lod === 0 ? 0.22 : 0.42);
+      // near crabs: a small dark contact under each standing foot, where the tip presses into the sand
+      if (L.lod <= 1) {
+        for (const f of crab.animator.feet) {
+          if (!f.planted) continue;
+          _v3.set(f.w.x, this.terrain.surfaceAt(f.w.x, f.w.z), f.w.z);
+          this.terrain.normalAt(_v3.x, _v3.z, _n);
+          R.addContact(_v3, _n, cw * 0.16, cw * 0.16, 0, 1, 0.5);
+        }
+      }
+    }
+    R.endContacts();
+  }
+
+  drawBurrows() {
     const R = this.renderer;
     R.begin();
     const cam = this.cam;
     const half = this.terrain.half;
     const rDraw = Math.min(10, this.q.rLive + 2);
+    // the pellet fields fade in where the pellets themselves end (SandPellets: within q.pelDraw of the camera)
+    const f0 = this.q.pelDraw - 0.6, f1 = this.q.pelDraw + 0.4;
     const i0 = Math.floor((cam.x - rDraw + half) / CELL), i1 = Math.floor((cam.x + rDraw + half) / CELL);
     const j0 = Math.floor((cam.z - rDraw + half) / CELL), j1 = Math.floor((cam.z + rDraw + half) / CELL);
     const holes = [];
@@ -775,14 +862,15 @@ export class ScopimeraColony {
         _n.set(this.B.nx[b], this.B.ny[b], this.B.nz[b]);
         const r = this.B.r[b];
         R.addDecal(_v, _n, r * 2.2, r * 2.2, this.B.az[b], 0, open ? 1 : 0.15, (this.B.seed[b] % 1000) / 1000, open ? 1 : 0.5);
-        // beyond the pellets' own range, the field of pellets around a burrow as a speckled patch
-        if (d > 2.2) {
+        // beyond the pellets' own range, the field of pellets around a burrow as a speckled patch (none under water)
+        const dEye = Math.hypot(d, cam.y - this.B.y[b]);
+        if (dEye > f0) {
           const ci = this.B.crab[b];
           const ex = this.cellExposure.get(this.B.cell[b]);
           const np = ci >= 0 && ex ? this.expectedPellets(this.crabs[ci], ex) : 0;
-          if (np > 4) {
+          if (np > 4 && !this.wetAt(this.B.x[b], this.B.z[b], this.B.y[b])) {
             const cw = ci >= 0 ? this.crabs[ci].cw_mm / 1000 : 0.008;
-            const fade = smoothstep(2.2, 3.2, d);
+            const fade = smoothstep(f0, f1, dEye);
             R.addDecal(_v, _n, cw * 16, cw * 16, this.B.az[b], 3, fade * Math.min(1, np / this.q.pelMax), (this.B.seed[b] % 977) / 977, 1);
           }
         }
@@ -793,31 +881,8 @@ export class ScopimeraColony {
       const b = holes[k].b;
       _v.set(this.B.x[b], this.B.y[b], this.B.z[b]);
       _n.set(this.B.nx[b], this.B.ny[b], this.B.nz[b]);
-      R.addOpen(_v, this.B.r[b], this.B.k[b], this.B.az[b], _n);
-    }
-    // contact shadows: a soft dark ellipse under each crab on the surface, cast along the sun
-    for (const L of this.live.values()) {
-      const crab = L.crab;
-      if (crab.hidden || !crab.model.root.visible) continue;
-      const cw = crab.cw;
-      crab.anchor(_v2);
-      const g = this.terrain.surfaceAt(_v2.x, _v2.z);
-      const hgt = Math.max(0, _v2.y - g);
-      const el = Math.max(0.25, this.sunDir.y);
-      const sx = -this.sunDir.x, sz = -this.sunDir.z;
-      const off = hgt / el * 0.5;
-      _v3.set(_v2.x + sx * off, g, _v2.z + sz * off);
-      this.terrain.normalAt(_v3.x, _v3.z, _n);
-      R.addDecal(_v3, _n, cw * 0.85, cw * (0.7 + off / cw * 0.4), Math.atan2(sx, sz), 1, this.shadowFocus && L.lod === 0 ? 0.22 : 0.42);
-      // near crabs: a small dark contact under each standing foot, where the tip presses into the sand
-      if (L.lod <= 1) {
-        for (const f of crab.animator.feet) {
-          if (!f.planted) continue;
-          _v3.set(f.w.x, this.terrain.surfaceAt(f.w.x, f.w.z), f.w.z);
-          this.terrain.normalAt(_v3.x, _v3.z, _n);
-          R.addDecal(_v3, _n, cw * 0.16, cw * 0.16, 0, 1, 0.5);
-        }
-      }
+      // the round, ragged mouth only where it is a few pixels and more across
+      R.addOpen(_v, this.B.r[b], this.B.k[b], this.B.az[b], _n, Math.hypot(holes[k].d, cam.y - this.B.y[b]) < HOLE_FINE);
     }
     R.end();
   }
@@ -835,6 +900,7 @@ export class ScopimeraColony {
     const ci = this.B.crab[b];
     this.B.gone[b] = 1;
     this.B.open[b] = 0;
+    this.groundDirty = true;
     if (ci < 0) return null;
     const rec = this.crabs[ci];
     const L = this.live.get(ci);
@@ -871,7 +937,11 @@ export class ScopimeraColony {
     this.group.add(crab.root);
     this.pellets.add(crab.root.position.x, crab.root.position.y, crab.root.position.z, 0.001, 'feed', 0, 0.5);
     this.pellets.update(0, crab.root.position, null);
+    // (the holes and decals are hidden while there are none: shown for the compile)
+    for (const m of this.renderer.group.children) m.visible = true;
     try { gl.compile(this.group.parent ?? this.group, camera); } catch (err) { console.warn('[kometsukigani] prewarm', err); }
+    this.renderer.begin(); this.renderer.end();
+    this.renderer.beginContacts(); this.renderer.endContacts();
     crab.dispose();
     this.pellets.clear();
   }
@@ -903,6 +973,7 @@ export class ScopimeraColony {
     this.pellets.clear();
     this.cellExposure.clear();
     for (let b = 0; b < this.nB; b++) { this.B.cycle[b] = -1; this.B.pellets[b] = 0; }
+    this.groundDirty = true;
   }
 
   dispose() {
@@ -916,6 +987,20 @@ export class ScopimeraColony {
 }
 
 // ============================================================================================ helpers
+
+/**
+ * A live crab's matrices are worked out only when it has moved (its bones posed by an update, a new LOD, placed):
+ * three recomputes every object's world matrix every frame otherwise, and a crab has some eighty bones, most of
+ * them still on most frames (down a burrow, or between the updates of a far crab). The colony sets
+ * `root.userData.kgSync`; the renderer's pass over the scene then updates the whole crab once.
+ */
+function syncOnDemand(root) {
+  root.updateMatrixWorld = function updateIfMoved() {
+    if (!this.userData.kgSync) return;
+    this.userData.kgSync = false;
+    Object3D.prototype.updateMatrixWorld.call(this, true);
+  };
+}
 
 /**
  * The sand's colour where the crabs live, as the flat draws it (drySandAt: damp, linear albedo): the mean over the

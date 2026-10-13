@@ -9,6 +9,8 @@ import { breedingFactor, seasonalActivity, STATE } from '../../src/creatures/kom
 import { createRigInstance } from '../../src/creatures/kometsukigani/ScopimeraGlobosaRig.js';
 import { crabTriangles } from '../../src/creatures/kometsukigani/ScopimeraGlobosaGeometry.js';
 import { STANCE } from '../../src/creatures/kometsukigani/ScopimeraGlobosaMorphology.js';
+import { SandPellets } from '../../src/creatures/kometsukigani/SandPellets.js';
+import { lodFor, updateEvery } from '../../src/creatures/kometsukigani/ScopimeraGlobosaLOD.js';
 
 const DT = 1 / 60;
 
@@ -22,9 +24,10 @@ function burrowEnv(cw: number) {
 
 describe('コメツキガニ: rig and geometry', () => {
   it('builds three levels of detail within their budgets', () => {
-    expect(crabTriangles(0)).toBeLessThan(116000);
-    expect(crabTriangles(1)).toBeLessThan(30000);
-    expect(crabTriangles(2)).toBeLessThan(7000);
+    // close-up (with the setae), near (4–22 px across), far (4 px and less)
+    expect(crabTriangles(0)).toBeLessThan(60000);
+    expect(crabTriangles(1)).toBeLessThan(6500);
+    expect(crabTriangles(2)).toBeLessThan(1600);
   });
 
   it('walking-leg IK puts every dactylus tip on any target inside the leg\'s reach', () => {
@@ -256,5 +259,51 @@ describe('コメツキガニ: where it lives', () => {
 
   it('is placed by its colony, not by the spawner', () => {
     expect(species.placement).toBe('world');
+  });
+});
+
+describe('コメツキガニ: pellets and cost', () => {
+  it('washes away the pellets the water covers, each where it lies, within half a minute', () => {
+    const P = new SandPellets();
+    // one 0.5 m cell, a pool over its western half (x < 0.2) and dry sand east of it
+    P.add(0.1, 0, 0.1, 0.001, 'feed', 0, 0.3);
+    P.add(0.4, 0, 0.1, 0.001, 'feed', 0, 0.6);
+    const waterAt = (x: number) => (x < 0.2 ? 0.02 : -1);
+    const cam = new Vector3(0.25, 1.5, 0.25);
+    for (let t = 0; t < 40; t++) P.update(1, cam, waterAt);
+    expect(P.total).toBe(1);
+    expect(P.heightAt(0.4, 0.1)).toBeGreaterThan(0);
+    expect(P.heightAt(0.1, 0.1)).toBe(-Infinity);
+  });
+
+  it('draws each pellet by the camera with the detail of its own distance', () => {
+    const P = new SandPellets();
+    P.add(0.05, 0, 0.05, 0.001, 'feed', 0, 0.3);           // at the observation camera's feet
+    P.add(0.3, 0, 0.3, 0.001, 'feed', 0, 0.6);             // in the same 0.5 m cell, 0.4 m off
+    P.update(0, new Vector3(0.05, 0.05, 0.0), null);
+    const tris = P.group.children.map((m) => (m as unknown as { geometry: { index: { count: number } | null; attributes: { position: { count: number } } }; count: number }))
+      .map((m) => (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3 * m.count).sort((x, y) => x - y);
+    expect(tris).toEqual([20, 180]);
+  });
+
+  it('draws a share of the pixel-sized far pellets, grown to cover the same sand', () => {
+    const P = new SandPellets();
+    for (let k = 0; k < 300; k++) P.add(0.1 + (k % 20) * 0.015, 0, 0.1 + Math.floor(k / 20) * 0.02, 0.001, 'feed', 0, (k * 0.618) % 1);
+    P.update(0, new Vector3(-2.2, 1.5, 0.25), null);            // a standing eye 2.7 m off
+    const m = P.group.children[0] as unknown as { count: number };
+    expect(m.count).toBeGreaterThan(80);
+    expect(m.count).toBeLessThan(120);
+    expect(P.total).toBe(300);
+  });
+
+  it('a far crab, or one down its burrow, is updated less often than a near one', () => {
+    expect(updateEvery(0, 0.3, false)).toBe(1);
+    expect(updateEvery(1, 0.8, false)).toBe(1);
+    expect(updateEvery(1, 2, false)).toBe(2);
+    expect(updateEvery(1, 0.8, true)).toBe(4);
+    expect(updateEvery(2, 8, false)).toBe(4);
+    // a lighter tier's own LOD limits
+    expect(lodFor(1.7, 1, false, [0.35, 1.4])).toBe(2);
+    expect(lodFor(1.7, 1)).toBe(1);
   });
 });
