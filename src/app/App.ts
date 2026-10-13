@@ -1967,11 +1967,14 @@ export class App {
       this.roomTanks.updateLOD(this.tank.camera);
       const heroOn = !!this.hero && this.tank.heroActive;
       if (heroOn) this.hero!.setLighting(this.tank.lighting);
-      gpu.begin();
+      // (the tank's own renderer times its passes itself: timer queries of one kind cannot nest)
       if (this.tankRenderer) this.tankRenderer.render(this.tank.scene, this.tank.camera, this.tank.passes, dt, heroOn ? this.hero!.shared : null);
-      else if (heroOn) this.hero!.render(this.tank.scene, this.tank.camera, dt);
-      else this.renderer.gl.render(this.tank.scene, this.tank.camera);
-      gpu.end();
+      else {
+        gpu.begin();
+        if (heroOn) this.hero!.render(this.tank.scene, this.tank.camera, dt);
+        else this.renderer.gl.render(this.tank.scene, this.tank.camera);
+        gpu.end();
+      }
     } else if (!this.tankVisible() && world && player && creatures && (this.worldVisible() || this.sceneDirty)) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
       else if (mode === 'capture') player.idle(dt);
