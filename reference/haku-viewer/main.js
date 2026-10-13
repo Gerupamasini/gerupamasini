@@ -214,7 +214,8 @@ function meadow(n = 9) {
     const root = new THREE.Group();
     group.add(root);
     const d = new HakuDriver();
-    const ind = individual(i, 0.1 + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 60 + Math.random() * 30);
+    // (from the fourth id on: the first fish is in the wild colours, not the pale look of the tank photo)
+    const ind = individual(i + 3, 0.1 + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 60 + Math.random() * 30);
     d.attach(root, ind);
     fishes.push({ driver: d, ind, root });
   }
