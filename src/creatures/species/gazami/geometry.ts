@@ -125,7 +125,7 @@ export function rigDefinition(): RigDef {
     add(`J_eye_${side}`, 'J_body', new Vector3(sg * EYE.base[0], EYE.base[1], EYE.base[2]), frameAlong(eyeDir, sg, new Quaternion()));
     const aDir = new Vector3(sg * ANTENNA.dir[0], ANTENNA.dir[1], ANTENNA.dir[2]).normalize();
     add(`J_a2_${side}`, 'J_body', new Vector3(sg * ANTENNA.base[0], ANTENNA.base[1], ANTENNA.base[2]), frameAlong(aDir, sg, new Quaternion()));
-    add(`J_a1_${side}`, 'J_body', new Vector3(sg * ANTENNULE.base[0], ANTENNULE.base[1], ANTENNULE.base[2]), frameAlong(new Vector3(sg * 0.9, 0.42, 0.1).normalize(), sg, new Quaternion()));
+    add(`J_a1_${side}`, 'J_body', new Vector3(sg * ANTENNULE.base[0], ANTENNULE.base[1], ANTENNULE.base[2]), frameAlong(new Vector3(sg * 0.95, 0.12, 0.25).normalize(), sg, new Quaternion()));
     // (the plates slope down and back from their front edge: a turn about x)
     add(`J_mxp_${side}`, 'J_body', new Vector3(sg * MXP3.halfWidth, MXP3.y, MXP3.z0), new Quaternion().setFromAxisAngle(AX, MXP3.slope));
   }
@@ -622,9 +622,11 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
   const rows: number[][] = [];
   const weight = (t: number) => (neck > 0 ? 0.5 + 0.5 * smooth(tStart, neck, t) : t < 0.05 ? 0.75 + 5 * t : 1);
   const partAt = (t: number) => (neck > 0 && t < neck * 0.6 ? PART.MEMBRANE : part);
+  // (each ring closes on a twin of its first vertex, so that the angle around runs 0 … 1 without wrapping back
+  // through every other angle across the last quads: that seam lies along the top)
   for (const t of ts) {
     const row: number[] = [];
-    for (let j = 0; j < nA; j++) {
+    for (let j = 0; j <= nA; j++) {
       const a = (j / nA) * Math.PI * 2;
       const p = radial(Math.max(0, t), a);
       if (t < 0) p.x = t * L;
@@ -634,35 +636,36 @@ function buildArticle(gb: GeoBuilder, spec: ArticleSpec, L: number, lod: Lod, bo
       gb.setMm(vi, t * L, a * 0.5 * (sc.hy + sc.hz));
       row.push(vi);
     }
+    gb.twin(row[0], row[nA]);
     rows.push(row);
   }
   // caps: proximal (inside the parent) and distal (rounded, under the next article's neck)
   const p0 = sec(0);
   const cap0 = gb.v(tStart * L - 0.3, p0.cy, p0.cz, bone, weight(tStart), parent, PART.MEMBRANE, 0, 0, 0.8);
-  for (let j = 0; j < nA; j++) gb.tri(cap0, rows[0][(j + 1) % nA], rows[0][j]);
+  for (let j = 0; j < nA; j++) gb.tri(cap0, rows[0][j + 1], rows[0][j]);
   for (let r = 0; r < rows.length - 1; r++) for (let j = 0; j < nA; j++) {
-    const k = (j + 1) % nA;
+    const k = j + 1;
     gb.quad(rows[r][j], rows[r][k], rows[r + 1][k], rows[r + 1][j]);
   }
   const lastRow = rows[rows.length - 1];
   const s1 = sec(1);
   if (last) {
-    const tip = gb.v(L + 0.05, s1.cy, s1.cz, bone, 1, parent, part, 1, 0, 0);
-    for (let j = 0; j < nA; j++) gb.tri(lastRow[j], lastRow[(j + 1) % nA], tip);
+    // (a pole vertex for each triangle, at the angle of its edge, the normal along the axis)
+    for (let j = 0; j < nA; j++) gb.tri(lastRow[j], lastRow[j + 1], gb.vn(L + 0.05, s1.cy, s1.cz, 1, 0, 0, bone, 1, parent, part, 1, (j + 0.5) / nA, 0));
   } else {
     let prevRow = lastRow;
     for (const [dx, k] of [[0.5, 0.86], [0.85, 0.55]] as const) {
       const row: number[] = [];
-      for (let j = 0; j < nA; j++) {
+      for (let j = 0; j <= nA; j++) {
         const a = (j / nA) * Math.PI * 2;
         const p = radial(1, a);
         row.push(gb.v(L + capX * dx, s1.cy + (p.y - s1.cy) * k, s1.cz + (p.z - s1.cz) * k, bone, 1, parent, part, 1, j / nA, 0.35));
       }
-      for (let j = 0; j < nA; j++) { const kk = (j + 1) % nA; gb.quad(prevRow[j], prevRow[kk], row[kk], row[j]); }
+      gb.twin(row[0], row[nA]);
+      for (let j = 0; j < nA; j++) { const kk = j + 1; gb.quad(prevRow[j], prevRow[kk], row[kk], row[j]); }
       prevRow = row;
     }
-    const cap1 = gb.v(L + capX, s1.cy, s1.cz, bone, 1, parent, part, 1, 0, 0.3);
-    for (let j = 0; j < nA; j++) gb.tri(prevRow[j], prevRow[(j + 1) % nA], cap1);
+    for (let j = 0; j < nA; j++) gb.tri(prevRow[j], prevRow[j + 1], gb.vn(L + capX, s1.cy, s1.cz, 1, 0, 0, bone, 1, parent, part, 1, (j + 0.5) / nA, 0.3));
   }
   return {
     surface(t: number, a: number) {
@@ -853,10 +856,11 @@ function buildMxp(gb: GeoBuilder, lod: Lod, bone: number, sg: number, m: Matrix4
     for (let k = 0; k <= nz; k++) {
       const v = k / nz;
       const z = Z0 + (Z1 - Z0) * v;
-      // the merus (posterior third) wider at its outer anterior lobe; the ischium's inner edge toothed (shader)
-      const w = W * (v > 0.62 ? 1 - 0.18 * smooth(0.62, 1, v) : 1);
+      // the merus (the upper third, under the epistome) narrower, rounded at its inner corner; the ischium below
+      // meets its fellow at the midline
+      const w = W * (1 - 0.15 * (1 - smooth(0, 0.35, v)) * smooth(0.3, 1, u));
       const x = -sg * w * u;
-      const bulge = 0.9 * Math.sin(Math.PI * u) * Math.sin(Math.PI * Math.min(1, v * 1.05));
+      const bulge = 1.2 * Math.sin(Math.PI * u) * Math.sin(Math.PI * Math.min(1, v * 1.05));
       row.push(gb.v(x, -0.5 - bulge, z, bone, 1, bone, PART.STERNUM, u, v, 0.15, 0));
       urow.push(gb.v(x, 0.6, z, bone, 1, bone, PART.STERNUM, u, v, 0.8, 0));
     }

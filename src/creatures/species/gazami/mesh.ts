@@ -40,6 +40,7 @@ export class GeoBuilder {
   readonly mm: number[] = [];
   readonly idx: number[] = [];
   private readonly fixedN: boolean[] = [];
+  private readonly twins: number[] = [];
 
   get count(): number { return this.p.length / 3; }
 
@@ -70,6 +71,11 @@ export class GeoBuilder {
     this.n[i * 3] = nx; this.n[i * 3 + 1] = ny; this.n[i * 3 + 2] = nz;
     this.fixedN[i] = true;
     return i;
+  }
+
+  /** two vertices at one place, apart only in their surface coordinates (a ring's seam): one normal for both */
+  twin(a: number, b: number): void {
+    this.twins.push(a, b);
   }
 
   tri(a: number, b: number, c: number): void {
@@ -114,6 +120,11 @@ export class GeoBuilder {
         if (this.fixedN[k / 3]) continue;
         n[k] += fx; n[k + 1] += fy; n[k + 2] += fz;
       }
+    }
+    for (let t = 0; t < this.twins.length; t += 2) {
+      const a = this.twins[t] * 3, b = this.twins[t + 1] * 3;
+      if (this.fixedN[a / 3] || this.fixedN[b / 3]) continue;
+      for (let k = 0; k < 3; k++) { const s = n[a + k] + n[b + k]; n[a + k] = s; n[b + k] = s; }
     }
     for (let i = 0; i < this.count; i++) {
       const l = Math.hypot(n[i * 3], n[i * 3 + 1], n[i * 3 + 2]);

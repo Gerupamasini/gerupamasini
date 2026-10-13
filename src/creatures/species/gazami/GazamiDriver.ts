@@ -98,6 +98,8 @@ export class GazamiDriver implements Driver {
     for (const lv of m.lod.levels) lv.object.visible = true;
     parent.add(m.root);
     const fx = new SandFX(parent);
+    // (the pit it digs: its material too)
+    fx.imprint(0, 0, 0, 0.05, 0.03, () => 0);
     return {
       dispose: () => { m.root.removeFromParent(); disposeModel(m); fx.dispose(); },
     };

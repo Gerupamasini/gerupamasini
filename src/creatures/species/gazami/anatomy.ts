@@ -163,9 +163,9 @@ export function dorsalRelief(x: number, z: number): number {
   h += 0.95 * gauss(((ax - 17) * (ax - 17)) / 120 + ((z + 6) * (z + 6)) / 75); // branchial
   h += 0.5 * gauss(((ax - 14) * (ax - 14)) / 30 + ((z - 13) * (z - 13)) / 20); // hepatic
   // the cervical groove: a shallow arc across behind the gastric region, and the grooves beside the cardiac region
-  if (ax < 15) h -= 0.55 * gauss(((z - (-2.4 + 0.028 * x * x)) ** 2) / 1.6) * (1 - ax / 15);
-  h -= 0.4 * ridge(ax, z, [6.2, -4.5], [8.2, -17], 1, 1.1);
-  h -= 0.3 * ridge(ax, z, [5.5, 13.5], [9.5, 3.5], 1, 1.0);           // the gastric region's lateral margins
+  if (ax < 15) h -= 0.28 * gauss(((z - (-2.4 + 0.028 * x * x)) ** 2) / 2.2) * (1 - ax / 15);
+  h -= 0.22 * ridge(ax, z, [6.2, -4.5], [8.2, -17], 1, 1.4);
+  h -= 0.15 * ridge(ax, z, [5.5, 13.5], [9.5, 3.5], 1, 1.3);           // the gastric region's lateral margins
   // granular transverse lines
   h += ridge(ax, z, [2.0, 19.4], [6.0, 18.8], 0.32, 0.6);               // frontal
   h += ridge(ax, z, [3.6, 15.4], [9.4, 14.2], 0.36, 0.65);              // protogastric
@@ -191,20 +191,25 @@ export const domeProfile = (s: number): number => {
 
 export const EYE = {
   /** the eyestalk's base deep in the orbit, its rest direction (forward, out and up), length and radius */
-  base: [10.9, 12.1, 19.6] as V3,
-  dir: [0.32, 0.3, 0.9] as V3,
-  stalk: 4.4,
-  stalkR: 1.25,
-  /** the cornea: a dark, glossy, faceted globe at the tip (61: ≈ 4.5 mm across at CW 100) */
-  r: 2.05,
+  base: [10.9, 13.6, 19.6] as V3,
+  dir: [0.34, 0.12, 0.93] as V3,
+  stalk: 3.6,
+  stalkR: 1.15,
+  /** the cornea: a dark, glossy, faceted globe at the tip (66: ≈ 0.14 of the eyes' spacing, 3.3 mm across at CW 100) */
+  r: 1.65,
 };
 
 /** antennae: short flagella out of the inner orbital hiatus (61, 66); antennules folded in their fossae */
-export const ANTENNA = { base: [6.6, 11.2, 20.6] as V3, dir: [0.62, -0.12, 0.77] as V3, length: 5.2, r: 0.3 };
-export const ANTENNULE = { base: [2.6, 10.2, 21.2] as V3, length: 4.2, r: 0.55 };
+export const ANTENNA = { base: [6.6, 11.2, 20.4] as V3, dir: [0.6, -0.2, 0.77] as V3, length: 4.2, r: 0.26 };
+export const ANTENNULE = { base: [2.4, 11.4, 21.0] as V3, length: 3.0, r: 0.4 };
 
-/** the third maxillipeds: two plates closing the buccal frame, sloping from under the front down and back (66: white, purple-edged) */
-export const MXP3 = { z0: 21.0, z1: 12.4, halfWidth: 7.4, y: 4.4, slope: 0.62 };
+/**
+ * the third maxillipeds: two plates closing the buccal frame, hinged at their outer edges; on the front face they
+ * fill the space from just under the antennules down and back to the sternum, sloping ≈ 77° (standing a little proud of the face) (66: white, purple-edged,
+ * as wide as three quarters of the eyes' spacing). `y`, `z0`: the top of the hinge; `z1`: its foot (in z, along the
+ * slope); `slope`: the tilt about x (negative: the foot lower than the top).
+ */
+export const MXP3 = { z0: 22.2, z1: 14.6, halfWidth: 8.2, y: 10.6, slope: -1.35 };
 
 /**
  * The abdomen folded under the sternum: the male's narrow T (18, 63) and the female's broad, rounded flap (9, 70).

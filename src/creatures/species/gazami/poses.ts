@@ -11,11 +11,11 @@ import { emptyPose, legKey, planarOf, solveLeg, type LegPose, type Pose } from '
 type Partial4 = Partial<LegPose>;
 
 /** the chelipeds folded at rest: the merus out along the anterolateral margin, the chela back across in front of it, the fingers towards the eyes (19, 55) */
-export const CHELA_FOLDED: Partial4 = { promo: -0.3, pitch: -0.1, lev: 0.12, roll: 0.0, meYaw: 0.62, mcYaw: -2.68, mc: 0.0, cp: 0.05, cpRoll: 0.9, cpYaw: -0.36, pd: 0.03 };
+export const CHELA_FOLDED: Partial4 = { promo: -0.55, pitch: -0.1, lev: 0.15, roll: 0.0, meYaw: 0.15, mcYaw: -2.6, mc: 0.0, cp: -0.2, cpRoll: 0.9, cpYaw: -0.3, pd: 0.03 };
 /** held out in front, ready, the chelae pointing in and forward near the ground (66) */
 export const CHELA_READY: Partial4 = { promo: 0.15, pitch: -0.1, lev: 0.1, roll: 0.0, meYaw: 0.55, mcYaw: -2.35, mc: -0.25, cp: -0.15, cpRoll: 0.3, cpYaw: -0.2, pd: 0.06 };
 /** the threat display: raised high and spread wide, the fingers gaping (12, 47, 53, 58) */
-export const CHELA_DEFEND: Partial4 = { promo: 0.2, pitch: -0.1, lev: 0.75, roll: -0.35, meYaw: 0.75, mcYaw: -1.25, mc: 0.35, cp: 0.1, cpRoll: -0.9, cpYaw: -0.15, pd: 0.42 };
+export const CHELA_DEFEND: Partial4 = { promo: 0.2, pitch: -0.1, lev: 0.25, roll: -0.2, meYaw: 0.9, mcYaw: -1.8, mc: 0.0, cp: -0.2, cpRoll: -0.6, cpYaw: -0.15, pd: 0.42 };
 /** reaching down to the sand in front to pick (foraging) */
 export const CHELA_PICK: Partial4 = { promo: 0.55, pitch: -0.1, lev: -0.05, roll: 0.1, meYaw: 0.8, mcYaw: -1.7, mc: -0.45, cp: -0.35, cpRoll: 0.4, cpYaw: -0.1, pd: 0.2 };
 /** to the mouth (the third maxillipeds take the food) */

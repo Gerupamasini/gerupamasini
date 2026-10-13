@@ -59,21 +59,22 @@ export interface GzUniforms {
   uCover: IUniform<Color>;
   uGroundY: IUniform<number>;
   uMmScale: IUniform<number>;
+  uLimbSpots: IUniform<number>;
 }
 
 /** the morphs' colours (linear albedo): dorsum base, band, mottle; claw, leg, finger, tip */
-const MORPHS: { base: number[]; band: number[]; mottle: number[]; claw: number[]; leg: number[]; finger: number[]; tip: number[] }[] = [
-  // olive (19, 62, 64, 65): olive-tan with pale olive bands, brown claws, blue legs
-  { base: [0.135, 0.118, 0.072], band: [0.27, 0.24, 0.15], mottle: [0.06, 0.05, 0.032], claw: [0.095, 0.064, 0.043], leg: [0.07, 0.105, 0.14], finger: [0.11, 0.055, 0.11], tip: [0.3, 0.035, 0.045] },
-  // purplish brown (4, 17, 57, 61)
-  { base: [0.12, 0.068, 0.078], band: [0.26, 0.2, 0.17], mottle: [0.055, 0.03, 0.04], claw: [0.17, 0.1, 0.17], leg: [0.11, 0.105, 0.15], finger: [0.14, 0.06, 0.16], tip: [0.28, 0.03, 0.06] },
+const MORPHS: { base: number[]; band: number[]; mottle: number[]; claw: number[]; leg: number[]; finger: number[]; tip: number[]; spots: number }[] = [
+  // olive (19, 36, 62, 64, 65): olive-tan, pale olive bands, brown blotches; brown claws, blue legs, near-black fingers
+  { base: [0.13, 0.112, 0.066], band: [0.25, 0.22, 0.13], mottle: [0.05, 0.034, 0.02], claw: [0.085, 0.056, 0.036], leg: [0.055, 0.095, 0.15], finger: [0.03, 0.017, 0.028], tip: [0.16, 0.025, 0.03], spots: 1 },
+  // purplish brown (4, 17, 57, 61): purple-red, cream bands, violet claws, blue-violet legs
+  { base: [0.105, 0.05, 0.068], band: [0.24, 0.18, 0.15], mottle: [0.045, 0.02, 0.03], claw: [0.18, 0.11, 0.17], leg: [0.09, 0.08, 0.16], finger: [0.07, 0.03, 0.09], tip: [0.2, 0.02, 0.05], spots: 0.5 },
   // dark brown (45, 55)
-  { base: [0.036, 0.028, 0.021], band: [0.09, 0.075, 0.05], mottle: [0.018, 0.014, 0.011], claw: [0.045, 0.03, 0.024], leg: [0.05, 0.05, 0.055], finger: [0.06, 0.03, 0.05], tip: [0.16, 0.03, 0.03] },
+  { base: [0.034, 0.026, 0.019], band: [0.085, 0.07, 0.045], mottle: [0.016, 0.012, 0.009], claw: [0.04, 0.026, 0.02], leg: [0.045, 0.045, 0.055], finger: [0.02, 0.012, 0.014], tip: [0.12, 0.025, 0.025], spots: 0.8 },
   // green-olive (21, 32, 62)
-  { base: [0.07, 0.078, 0.055], band: [0.17, 0.17, 0.11], mottle: [0.032, 0.036, 0.026], claw: [0.07, 0.06, 0.05], leg: [0.06, 0.09, 0.12], finger: [0.08, 0.05, 0.1], tip: [0.26, 0.04, 0.05] },
+  { base: [0.068, 0.076, 0.05], band: [0.16, 0.16, 0.1], mottle: [0.028, 0.032, 0.022], claw: [0.065, 0.055, 0.045], leg: [0.05, 0.085, 0.13], finger: [0.03, 0.02, 0.035], tip: [0.18, 0.03, 0.04], spots: 1 },
 ];
 /** the sandy, translucent juvenile (1, 3, 23, 24, 68; the pink-tipped fingers of 26–31) */
-const JUVENILE = { base: [0.24, 0.2, 0.12], band: [0.36, 0.32, 0.21], mottle: [0.12, 0.09, 0.055], claw: [0.24, 0.19, 0.13], leg: [0.2, 0.2, 0.2], finger: [0.3, 0.22, 0.22], tip: [0.42, 0.06, 0.07] };
+const JUVENILE = { base: [0.3, 0.23, 0.14], band: [0.4, 0.33, 0.21], mottle: [0.15, 0.1, 0.06], claw: [0.3, 0.22, 0.15], leg: [0.24, 0.24, 0.28], finger: [0.36, 0.26, 0.24], tip: [0.45, 0.06, 0.08] };
 
 const lerp3 = (a: number[], b: number[], k: number) => a.map((v, i) => v + (b[i] - v) * k);
 
@@ -112,7 +113,7 @@ varying vec3 vRest;
 varying vec3 vRestN;
 uniform vec3 uBase, uBand, uSpot, uMottle, uClaw, uLeg, uFinger, uTip, uVentral, uPaddle, uCover;
 uniform vec2 uSeed;
-uniform float uJuv, uSandCoat, uWet, uGroundY, uMmScale;
+uniform float uJuv, uSandCoat, uWet, uGroundY, uMmScale, uLimbSpots;
 `;
 
 /** noise and pattern helpers (after the shared HELPERS: amHash, amHash2, amNoise, amCells) */
@@ -140,8 +141,12 @@ float gzSpots(vec2 p, float cell, float density, float rmin, float rmax, float f
 }
 /** a limb's spotted look: its colour above and on the outer face, white below, white spots crowded on top (19, 49, 61) */
 vec3 gzLimb(vec3 base, float upper, vec2 mm, float cell, float dens, float fw, float seed) {
-  vec3 c = mix(uVentral * 0.9, base * (0.85 + 0.3 * amNoise(mm * 0.35 + seed)), smoothstep(-0.85, -0.2, upper));
-  return mix(c, uSpot * 0.92, gzSpots(mm, cell, dens, 0.2, 0.46, fw, seed) * smoothstep(-0.5, 0.1, upper) * 0.88);
+  vec3 c = mix(uVentral * 0.9, base * (0.8 + 0.4 * amNoise(mm * 0.35 + seed)), smoothstep(-0.85, -0.25, upper));
+  // large ragged spots that run together into a net in places, and a fine speckle between them
+  float net = smoothstep(0.35, 0.75, amNoise(mm * 0.28 + seed * 2.0));
+  float sp = gzSpots(mm, cell, dens * (0.7 + 0.6 * net), 0.24, 0.5, fw, seed);
+  sp = max(sp, gzSpots(mm + 13.0, cell * 0.5, dens * 0.6, 0.18, 0.36, fw, seed + 5.0) * 0.8);
+  return mix(c, mix(uSpot, uBand * 1.6, 0.35) * 0.9, sp * smoothstep(-0.45, 0.15, upper) * 0.85);
 }
 /** granules: rounded bumps on a cellular grid; returns height (mm) */
 float gzGranules(vec2 p, float cell, float fw, float seed) {
@@ -159,7 +164,7 @@ float gzGranules(vec2 p, float cell, float fw, float seed) {
  */
 const SURFACE = /* glsl */ `
 vec3 gzCol = uBase;
-float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzEye = 0.0, gzAO = 1.0;
+float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzEye = 0.0, gzAO = 1.0, gzSpec = 1.0, gzCoatRough = 0.2;
 {
   vec3 P = vRest;
   int part = int(vPart + 0.5);
@@ -178,19 +183,39 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
     float ax = abs(X.x);
     float lowf = gzFbm(X * 0.07 + sd * 13.0);
     gzCol = uBase * (0.85 + 0.32 * lowf);
-    // dark mottling over the gastric, cardiac and branchial regions
+    // the dark pattern laid on the regions (4, 17, 36, 57, 61): the gastric shield, the cardiac patch, a dark band
+    // across each branchial region behind the epibranchial line, the hepatic patches; ragged-edged, never mirrored,
+    // each crab its own strength of each (some nearly plain: 62, 64)
+    float rag = 0.55 + 0.9 * gzFbm(X * 0.32 + sd * 11.0);
+    float hk = amHash(sd + 3.3);
+    float dark = 0.0;
+    dark += (0.6 + 0.6 * amHash(sd + 0.1)) * exp(-(X.x * X.x) / 30.0 - ((X.y - 8.5) * (X.y - 8.5)) / 26.0);
+    dark += (0.5 + 0.6 * amHash(sd + 0.2)) * exp(-(X.x * X.x) / 18.0 - ((X.y + 11.0) * (X.y + 11.0)) / 12.0);
+    float zb = -6.5 + 0.009 * X.x * X.x + 1.2 * (amNoise(X * 0.2 + sd) - 0.5);
+    dark += (0.5 + 0.7 * amHash(sd + 0.3 + step(0.0, X.x))) * exp(-((X.y - zb) * (X.y - zb)) / 5.0) * smoothstep(7.0, 12.0, ax) * (1.0 - smoothstep(28.0, 36.0, ax));
+    dark += (0.35 + 0.5 * amHash(sd + 0.4 + step(0.0, X.x))) * exp(-((ax - 14.5) * (ax - 14.5)) / 12.0 - ((X.y - 13.0) * (X.y - 13.0)) / 9.0);
+    dark += (0.3 + 0.5 * amHash(sd + 0.5 + step(0.0, X.x))) * exp(-((ax - 21.0) * (ax - 21.0)) / 30.0 - ((X.y + 13.0) * (X.y + 13.0)) / 12.0);
+    dark = smoothstep(0.3, 0.9, dark * rag) * (0.55 + 0.5 * hk);
+    gzCol = mix(gzCol, uMottle * 0.75, dark);
+    // and a fine mottle everywhere
     float mot = smoothstep(0.5, 0.78, gzFbm(X * 0.16 + sd.yx * 21.0));
-    gzCol = mix(gzCol, uMottle, mot * 0.55);
+    gzCol = mix(gzCol, uMottle, mot * 0.3);
+    // broad dark blotches and pale patches over the regions (36, 64), as strong as the individual has them (62: none)
+    float mk = amHash(sd + 7.7);
+    mk *= mk;
+    float blot = gzFbm(X * 0.08 + sd * 6.0 + 3.0);
+    gzCol = mix(gzCol, uMottle * 0.85, smoothstep(0.58, 0.78, blot) * (0.1 + 0.4 * mk));
+    gzCol = mix(gzCol, uBand, smoothstep(0.42, 0.25, blot) * (0.08 + 0.3 * mk) * (1.0 - smoothstep(30.0, 42.0, ax)));
     // pale granular bands: the epibranchial lines (from the spine's base forward and in) and the H of the grooves
     float dEpi = min(min(gzSeg(vec2(ax, X.y), vec2(34.5, -3.6), vec2(24.0, 1.2)), gzSeg(vec2(ax, X.y), vec2(24.0, 1.2), vec2(13.2, 5.6))), gzSeg(vec2(ax, X.y), vec2(13.2, 5.6), vec2(8.5, 6.0)));
     float dH = min(min(abs(X.y - (-2.4 + 0.028 * X.x * X.x)) + step(12.0, ax) * 9.0, gzSeg(vec2(ax, X.y), vec2(6.2, -4.5), vec2(8.2, -17.0))), gzSeg(vec2(ax, X.y), vec2(5.5, 13.5), vec2(9.5, 3.5)));
     float wob = 0.6 * (amNoise(X * 0.9 + sd * 5.0) - 0.5);
     // (granular and broken, not painted lines: 61, 19)
     float brk = smoothstep(0.25, 0.75, amNoise(X * 0.45 + sd * 3.0)) * (0.7 + 0.3 * amNoise(X * 2.3));
-    float band = ((1.0 - smoothstep(1.0, 2.8, dEpi + wob)) * 0.7 + (1.0 - smoothstep(0.4, 1.5, dH + wob * 0.6)) * 0.4) * (0.45 + 0.55 * brk);
+    float band = ((1.0 - smoothstep(1.2, 3.4, dEpi + wob)) * 0.85 + (1.0 - smoothstep(0.5, 1.8, dH + wob * 0.6)) * 0.55) * (0.5 + 0.5 * brk);
     // a pale field over the front and along the posterior margin (4, 61)
     band += 0.35 * smoothstep(14.0, 20.0, X.y) * (1.0 - smoothstep(10.0, 16.0, ax)) + 0.3 * smoothstep(-19.0, -22.5, X.y);
-    gzCol = mix(gzCol, uBand, clamp(band, 0.0, 1.0) * (0.75 + 0.25 * lowf));
+    gzCol = mix(gzCol, uBand, clamp(band, 0.0, 1.0) * (0.85 + 0.15 * lowf));
     // the white spots: fine speckles everywhere, more and larger towards the anterolateral margins and the spines
     float s = vSeg.x;
     float margin = smoothstep(0.55, 1.0, s) + tooth;
@@ -206,7 +231,7 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
       float dd = length(X - c0) - rr * (0.8 + 0.4 * amNoise((X - c0) * 1.2 + sd * 9.0 + float(k)));
       sp = max(sp, (1.0 - smoothstep(-0.25, 0.25, dd)) * step(0.12, amHash(sd * 4.1 + float(k) * 7.0)));
     }
-    gzCol = mix(gzCol, uSpot * (0.82 + 0.15 * lowf), sp * 0.88);
+    gzCol = mix(gzCol, mix(uSpot, uBand * 1.5, 0.3) * (0.82 + 0.15 * lowf), sp * 0.8);
     // the teeth: paler and a little translucent towards their tips; the lateral spines' tips dark
     float spine = smoothstep(37.0, 42.0, ax) * step(-9.0, X.y) * step(X.y, 1.5);
     gzCol = mix(gzCol, mix(uBand * 1.25, uTip * 0.5 + vec3(0.04, 0.03, 0.03), spine), smoothstep(0.35, 1.0, tooth) * 0.7);
@@ -214,11 +239,18 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
     // the granulation (39, 61)
     gzHgt = 2.0 * gzGranules(X, 0.42, fw, sd.x * 7.0) + 0.6 * gzGranules(X * 1.9 + 3.0, 0.42, fw, sd.y * 7.0);
     gzCol *= 1.0 + 0.7 * gzHgt;
-    gzRough = 0.36 + 0.4 * gzHgt;
+    // (granular: the wet film's reflection breaks up into a glitter, not a mirror)
+    gzRough = 0.5 + 0.35 * gzHgt;
+    gzCoatRough = 0.3 + 0.5 * gzHgt;
   } else if (part == 1) {
     // ---- the carapace's underside, the body wall, the front face: bluish white, the margin's underside paler
-    gzCol = uVentral * (0.82 + 0.16 * gzFbm(P.xz * 0.2 + sd));
+    // (two projections, or the noise runs in streaks down the steep faces)
+    gzCol = uVentral * (0.82 + 0.08 * (gzFbm(P.xz * 0.2 + sd) + gzFbm(P.xy * 0.2 - sd)));
     gzCol = mix(gzCol, uBand * 1.1, smoothstep(0.55, 0.0, cav) * 0.25);
+    // the face under the front (epistome, the orbits' floors, the pterygostomial regions round the mouth): a dull
+    // grey-brown in the margin's shade, the white mouthparts standing out against it (66)
+    float face = smoothstep(13.0, 19.5, P.z) * smoothstep(2.5, 6.0, P.y);
+    gzCol = mix(gzCol, mix(uVentral * 0.5, uBase * 1.2, 0.6), face * 0.85);
     gzHgt = 0.6 * gzGranules(P.xz, 0.5, fw, sd.y);
     gzRough = 0.34;
     if (tooth > 0.0) gzCol = mix(gzCol, uBand * 1.3, 0.5);
@@ -237,21 +269,24 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
       }
       suture = max(suture, (1.0 - smoothstep(0.1, 0.35, abs(P.x))) * step(P.z, 2.0));
     } else {
-      // the third maxillipeds: white with a violet inner edge (66)
-      gzCol = mix(gzCol, uFinger * 1.4, smoothstep(0.8, 0.98, vSeg.x) * 0.8);
+      // the third maxillipeds: white with a violet inner edge and a brownish rim (66)
+      gzCol = uVentral * 1.15;
+      gzCol = mix(gzCol, mix(uVentral, uFinger * 4.0, 0.6), smoothstep(0.9, 1.0, vSeg.x) * 0.8);
+      gzCol = mix(gzCol, mix(uVentral, uClaw * 2.0, 0.6), (smoothstep(0.9, 1.0, vSeg.y) + smoothstep(0.08, 0.0, vSeg.x)) * 0.6);
     }
     gzCol *= 1.0 - 0.28 * suture;
     gzRough = 0.26;
   } else if (part == 3 || part == 4 || part == 5 || part == 12) {
     // ---- the cheliped
     vec3 base = uClaw;
-    gzCol = gzLimb(base, upper, vMm, 1.55, 0.55, fw, sd.x + float(part));
+    gzCol = gzLimb(base, upper, vMm, 1.7, 0.42 * uLimbSpots, fw, sd.x + float(part));
     // the costae a little paler (the shader sees them as the ridges' lighter tops)
     if (part == 4 || part == 5) {
       float fin = part == 5 ? t : smoothstep(0.55, 1.0, t);
       float tipK = part == 5 ? smoothstep(0.72, 1.0, t) : smoothstep(0.88, 1.0, t);
-      vec3 f = mix(gzCol, uFinger, smoothstep(0.1, 0.6, fin) * 0.85);
-      f = mix(f, uTip, tipK * 0.85);
+      // the fingers darken from their base to a near black purple-brown, maroon to red at the very tips (66, 61, 53)
+      vec3 f = mix(gzCol, uFinger, smoothstep(0.05, 0.5, fin) * 0.92);
+      f = mix(f, uTip, tipK * 0.8);
       // the cutting edges stay pale
       float edge = part == 5 ? smoothstep(0.75, 0.98, -upper) : smoothstep(0.75, 0.98, upper);
       f = mix(f, uVentral * 0.85, edge * step(0.56, part == 5 ? 1.0 : t) * 0.6);
@@ -264,7 +299,7 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
       gzThin = 0.3;
     }
     gzHgt = 1.1 * gzGranules(vMm, 0.45, fw, sd.x + float(part));
-    gzRough = 0.34;
+    gzRough = 0.5 + 0.3 * gzHgt;
   } else if (part == 13) {
     // ---- the fingers' teeth: ivory, the tips a little translucent
     gzCol = mix(uVentral * 0.95, vec3(0.62, 0.58, 0.5), t);
@@ -272,11 +307,11 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
   } else if (part == 6 || part == 8) {
     // ---- walking legs (and the paddle's merus, carpus): blue-grey above with white spots, white below
     vec3 base = part == 8 ? mix(uLeg, uClaw, 0.35) : uLeg;
-    gzCol = gzLimb(base, upper, vMm, 1.5, part == 8 ? 0.5 : 0.24, fw, sd.y + float(part));
+    gzCol = gzLimb(base, upper, vMm, 1.5, (part == 8 ? 0.5 : 0.24) * uLimbSpots, fw, sd.y + float(part));
     // the joints a little warmer (46)
     gzCol = mix(gzCol, gzCol * vec3(1.25, 0.95, 0.8), (smoothstep(0.88, 1.0, t) + smoothstep(0.1, 0.0, t)) * 0.5);
     gzHgt = 0.4 * gzGranules(vMm, 0.45, fw, sd.y + float(part));
-    gzRough = 0.36;
+    gzRough = 0.48;
   } else if (part == 7) {
     // ---- the walking legs' dactyli: blue, purple-red at the tip
     gzCol = mix(uVentral * 0.9, uLeg * 1.35, smoothstep(-0.6, 0.3, upper));
@@ -304,7 +339,8 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
     vec2 id;
     vec3 c = amCells(vec2(vSeg.y * 60.0, vSeg.x * 22.0), id);
     gzHgt = (1.0 - smoothstep(0.2, 0.5, c.x)) * 0.012 * (1.0 - smoothstep(0.05, 0.2, fw));
-    gzCol = mix(vec3(0.03, 0.017, 0.011), vec3(0.11, 0.05, 0.03), smoothstep(0.6, 0.35, vSeg.x));
+    // (grey-brown, a dark pseudopupil where it looks straight at the viewer: 66, 61)
+    gzCol = mix(vec3(0.035, 0.03, 0.026), vec3(0.11, 0.09, 0.07), smoothstep(0.6, 0.35, vSeg.x));
     gzRough = 0.12; gzEye = 1.0;
   } else if (part == 11) {
     // ---- eyestalks, antennae, antennules: the dorsum's pale olive, a reddish base to the eyestalk (19)
@@ -318,14 +354,16 @@ float gzRough = 0.42, gzCoat = 0.0, gzHgt = 0.0, gzThin = 0.0, gzSand = 0.0, gzE
   float grit = amNoise(P.xz * 3.1 + P.y * 1.7 + sd * 4.0);
   gzSand = clamp(smoothstep(0.45, 0.95, cav) * 0.55 * smoothstep(0.35, 0.75, grit) + uSandCoat * smoothstep(0.0, 0.6, nW.y + 0.25) * smoothstep(0.25, 0.65, grit + 0.25 * uSandCoat), 0.0, 1.0);
   // the sand where the crab sits in it (its own grains, its own light)
-  float nearBed = 1.0 - smoothstep(0.0, 0.004 * uMmScale * 1000.0, vWPos.y - uGroundY);
-  gzSand = max(gzSand, nearBed * 0.8 * smoothstep(0.2, 0.6, grit));
+  float nearBed = 1.0 - smoothstep(0.0, 0.0025 * uMmScale * 1000.0, vWPos.y - uGroundY);
+  gzSand = max(gzSand, nearBed * 0.8 * smoothstep(0.2, 0.6, amNoise(P.xz * 5.3 + P.y * 4.1 + sd * 2.0)));
   gzAO = 1.0 - 0.45 * cav;
   gzCol *= gzAO;
   gzCol = mix(gzCol, uCover * (0.75 + 0.5 * grit), gzSand);
   gzRough = mix(gzRough, 0.92, gzSand);
   // wet: a film of water over the shell; drying out in the air it dulls
-  gzCoat = uWet * (1.0 - gzSand) * (part == 9 ? 0.3 : 0.6);
+  gzCoat = uWet * (1.0 - gzSand) * (part == 9 ? 0.2 : part == 0 ? 0.2 : part == 10 ? 0.35 : 0.12);
+  // the limbs' cuticle reflects less than the dorsum's, or a glossy sheen washes their colour out from above (19, 61)
+  gzSpec = (part >= 3 && part <= 8) || part >= 12 ? 0.45 : part == 0 ? 0.7 : 1.0;
   gzRough = mix(gzRough + 0.18, gzRough, uWet);
   diffuseColor.rgb = gzCol;
 }
@@ -364,7 +402,7 @@ function shellMaterial(u: GzUniforms, low: boolean): MeshPhysicalMaterial {
     iridescence: low ? 0 : 1, iridescenceIOR: 1.6, iridescenceThicknessRange: [200, 600], specularIntensity: 0.55, ior: 1.52,
   });
   m.name = low ? 'GazamiShellLOD2' : 'GazamiShell';
-  m.envMapIntensity = 0.45;
+  m.envMapIntensity = 0.3;
   m.defines = low ? { GZ_LOW: '' } : {};
   m.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, AMH_UNIFORMS, u);
@@ -379,11 +417,14 @@ function shellMaterial(u: GzUniforms, low: boolean): MeshPhysicalMaterial {
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(gzRough, 0.06, 1.0);')
       .replace('#include <normal_fragment_maps>', NORMAL)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+material.specularColor *= gzSpec;
+material.specularF90 *= gzSpec;
 #ifdef USE_CLEARCOAT
   material.clearcoat = gzCoat;
+  material.clearcoatRoughness = clamp(gzCoatRough, 0.06, 1.0);
 #endif
 #ifdef USE_IRIDESCENCE
-  material.iridescence = gzEye * 0.7;
+  material.iridescence = gzEye * 0.4;
   material.iridescenceThickness = 380.0;
 #endif`)
       .replace('#include <lights_fragment_begin>', SUN_INJECT)
@@ -447,14 +488,18 @@ export class GazamiLook implements GazamiLookLike {
     const pick = (k: keyof typeof JUVENILE) => new Color(...lerp3(M[k], JUVENILE[k], j).map((v) => v * spec.value) as [number, number, number]);
     // a female's finger tips orange-red, a male's purple-blue fingers (61 male, 9 female)
     const tip = pick('tip');
+    // the walking legs from bright blue (64) to a greyish olive (66), each crab its own
+    const h = (x: number) => { const v = Math.sin(spec.seed * 12.9898 + x * 78.233) * 43758.5453; return v - Math.floor(v); };
+    const leg = pick('leg').lerp(pick('claw').lerp(pick('base'), 0.5), 0.55 * h(1) * (1 - j));
     if (spec.sex === 1) tip.lerp(new Color(0.36, 0.09, 0.03), 0.5);
     this.uniforms = {
       uBase: { value: pick('base') }, uBand: { value: pick('band') }, uSpot: { value: new Color(0.6, 0.58, 0.52).multiplyScalar(0.92 + 0.1 * spec.value) },
-      uMottle: { value: pick('mottle') }, uClaw: { value: pick('claw') }, uLeg: { value: pick('leg') }, uFinger: { value: pick('finger') }, uTip: { value: tip },
-      uVentral: { value: new Color(0.58, 0.62, 0.68).lerp(new Color(0.6, 0.56, 0.48), j * 0.5) }, uPaddle: { value: pick('leg').lerp(new Color(0.2, 0.19, 0.14), 0.4) },
+      uMottle: { value: pick('mottle') }, uClaw: { value: pick('claw') }, uLeg: { value: leg }, uFinger: { value: pick('finger') }, uTip: { value: tip },
+      uVentral: { value: new Color(0.58, 0.62, 0.68).lerp(new Color(0.6, 0.56, 0.48), j * 0.5) }, uPaddle: { value: leg.clone().lerp(new Color(0.2, 0.19, 0.14), 0.4) },
       uSeed: { value: new Vector2((spec.seed * 97.31) % 37.0, (spec.seed * 53.17) % 29.0) },
       uSex: { value: spec.sex }, uJuv: { value: j }, uSandCoat: { value: 0 }, uWet: { value: 1 },
       uCover: { value: new Color(0.37, 0.37, 0.355) }, uGroundY: { value: -1e3 }, uMmScale: { value: 0.001 },
+      uLimbSpots: { value: (M.spots + (1 - M.spots) * j) * (0.8 + 0.4 * h(2)) },
     };
     this.shell = shellMaterial(this.uniforms, false);
     this.shellLow = shellMaterial(this.uniforms, true);

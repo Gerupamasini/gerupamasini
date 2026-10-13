@@ -122,14 +122,15 @@ function studio(v) {
   clear();
   mode = 'studio';
   AMH_UNIFORMS.uAir.value = 1;
-  AMH_UNIFORMS.uSkyGain.value = 0.35;
+  // (the room's ceiling panels are very bright: kept dim, or every wet surface facing up mirrors them as a haze)
+  AMH_UNIFORMS.uSkyGain.value = 0.18;
   const tank = v === 'tank';
   scene.background = new THREE.Color(tank ? 0x8fb4c4 : 0xe9e7e2);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.5;
-  const sun = new THREE.DirectionalLight(0xfff4e6, 2.2);
+  scene.environmentIntensity = 0.3;
+  const sun = new THREE.DirectionalLight(0xfff4e6, 2.4);
   sun.position.set(0.4, 1, 0.6);
-  scene.add(sun, sun.target, new THREE.HemisphereLight(0xdde4ea, 0x6a6258, 0.9));
+  scene.add(sun, sun.target, new THREE.HemisphereLight(0xdde4ea, 0x6a6258, 1.25));
   if (v === 'under') { const l2 = new THREE.DirectionalLight(0xffffff, 1.6); l2.position.set(0.2, -1, 0.3); scene.add(l2, l2.target); }
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(3, 3), S.behave || tank ? sandMaterial(new THREE.Color(0.55, 0.52, 0.47)) : new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.95 }));
   floor.rotation.x = -Math.PI / 2;
@@ -151,7 +152,8 @@ function studio(v) {
     if (v === 'under') P.lift = 40;
     applyPose(crab.root, crab.bones, rig, P, chelaScaleFor(`viewer#${S.seed}`, S.sex ? 'f' : 'm', S.cw));
     crab.root.scale.setScalar(SCALE());
-    if (v === 'under') { crab.root.rotation.z = Math.PI; crab.root.position.y = 0.05 * SCALE(); }
+    // (seen from below, lit from below: the camera under the crab, not the crab turned over)
+    if (v === 'under') crab.root.position.y = 0.05 * SCALE();
     crab.root.updateMatrixWorld(true);
     if (S.hideLegs) { for (const leg of rig.legs) crab.bones[`J_${leg.id}${leg.side}_cx`].scale.setScalar(1e-4); crab.root.updateMatrixWorld(true); }
     if (!S.clay) crab.look.uniforms.uMmScale.value = 0.001 * SCALE();
