@@ -51,3 +51,29 @@ describe('ミミイカ', () => {
     }
   });
 });
+
+describe('ボラ', () => {
+  const sp = species.find((s) => s.id === 'mugil_cephalus')!;
+  const overlap = (a: readonly string[] | undefined, b: readonly string[] | undefined) => !a || !b || a.some((x) => b.includes(x));
+
+  it('has スバシリ (5–10 cm) in the eelgrass of 走水 in summer and autumn, and on the open flats', () => {
+    const big = sp.spawn.filter((r) => r.length_mm && r.length_mm[0] >= 45);
+    expect(big.length).toBeGreaterThanOrEqual(2);
+    expect(big.some((r) => r.maps?.includes('hashirimizu') && r.tags.includes('eelgrass'))).toBe(true);
+    for (const r of big) {
+      expect(r.season).toEqual(expect.arrayContaining(['summer', 'autumn']));
+      expect(r.length_mm![1]).toBeLessThanOrEqual(sp.size.length_mm.max);
+    }
+  });
+
+  it('is not capped out of the スバシリ by the fry: a rule caps the whole species, so theirs is at least as high as any rule of the same season and place', () => {
+    // (the spawner skips a rule once the species' count reaches that rule's maxPopulation, whichever rule spawned them)
+    for (const [i, r] of sp.spawn.entries()) {
+      if (!r.length_mm || r.length_mm[0] < 45) continue;
+      for (const [j, o] of sp.spawn.entries()) {
+        if (j === i || !overlap(r.season, o.season) || !overlap(r.maps, o.maps)) continue;
+        expect(r.maxPopulation, `rule ${i} against rule ${j}`).toBeGreaterThanOrEqual(o.maxPopulation);
+      }
+    }
+  });
+});

@@ -147,16 +147,37 @@ export function waveOrbital(u: Pick<AmamoUniforms, 'uAmTime' | 'uAmWave'>, x: nu
 }
 
 /**
- * Unit tangent of the shoot's central line at arc length `s` (m from the base), as amTangent bends it (without the leaf
- * splay): stiff in the sheath, the flexible blade beyond it leaning with the flow, the waves' push delayed toward the tip.
+ * One leaf of a shoot as the CPU can follow it: a slot of LEAF_SLOTS. Its lean out of the fan to its own side is followed
+ * at the slot's mean (the shader's per-leaf jitter of that lean and of its length is hashed with a sine, which the CPU
+ * cannot match), so the line is close to the leaf just above the sheath and drifts off it (a few cm) toward the tip.
  */
-export function shootTangent(u: AmamoUniforms, ref: ShootRef, S: ShootState, s: number, out: Vector3): Vector3 {
+export interface LeafRef {
+  /** which side of the fan (±1; 0 the middle) */
+  side: number;
+  /** how far it leans out (rad, mean) */
+  splay: number;
+  /** its length relative to the shoot's (mean) */
+  rel: number;
+}
+
+/**
+ * Unit tangent of the shoot's central line at arc length `s` (m from the base), as amTangent bends it (without the leaf
+ * splay, unless a `leaf` is given): stiff in the sheath, the flexible blade beyond it leaning with the flow, the waves'
+ * push delayed toward the tip.
+ */
+export function shootTangent(u: AmamoUniforms, ref: ShootRef, S: ShootState, s: number, out: Vector3, leaf?: LeafRef): Vector3 {
   const hs = ref.sheath;
   const g = 0.22 * smoothstep(0, hs, s) + 0.78 * (1 - Math.exp(-Math.max(s - 0.6 * hs, 0) / MOTION.bendLength));
   shootFlow(u, S, (MOTION.tipLag * s) / Math.max(ref.length, 0.05), tmpA);
   // pressed over by shallow water: the sheath (the free blade beyond it floats along the surface by itself)
   const lw = smoothstep(hs * 0.7, hs * 1.3, s), press = S.leanM * (1 - lw);
-  const hx = S.tx + tmpA.x * MOTION.bendPerMps * g + S.fdx * press, hz = S.tz + tmpA.y * MOTION.bendPerMps * g + S.fdz * press;
+  let hx = S.tx + tmpA.x * MOTION.bendPerMps * g + S.fdx * press, hz = S.tz + tmpA.y * MOTION.bendPerMps * g + S.fdz * press;
+  if (leaf) {
+    // the leaf leans out of the fan to its side, arching out more toward its tip (amTangent's splay term)
+    const arch = smoothstep(hs * 0.8, ref.length * leaf.rel, s);
+    const k = leaf.side * leaf.splay * (0.6 + 2.2 * arch) * (0.55 + 0.45 * S.deep) * lw;
+    hx += Math.cos(ref.fan) * k; hz += Math.sin(ref.fan) * k;
+  }
   const m = Math.hypot(hx, hz), cap = MOTION.maxAngleWet;
   const th = cap * (1 - Math.exp(-m / cap));
   const dx = m > 1e-4 ? hx / m : Math.cos(ref.fan), dz = m > 1e-4 ? hz / m : Math.sin(ref.fan);
@@ -164,17 +185,17 @@ export function shootTangent(u: AmamoUniforms, ref: ShootRef, S: ShootState, s: 
 }
 
 /**
- * Points along the shoot's central line from the base, every `step` m up to `len` m (held under the water surface the
- * way the shader holds the blade: past the surface it runs along it). Returns the number written.
+ * Points along the shoot's central line (or along one `leaf`) from the base, every `step` m up to `len` m (held under
+ * the water surface the way the shader holds the blade: past the surface it runs along it). Returns the number written.
  */
-export function shootLine(u: AmamoUniforms, ref: ShootRef, S: ShootState, step: number, len: number, out: Vector3[]): number {
+export function shootLine(u: AmamoUniforms, ref: ShootRef, S: ShootState, step: number, len: number, out: Vector3[], leaf?: LeafRef): number {
   const ceil = ref.y + S.ceil;
   const T = tmpT;
   let n = 0;
   const p = tmpP.set(ref.x, ref.y, ref.z);
   out[n++].copy(p);
   for (let s = 0; s < len - 1e-9 && n < out.length; s += step) {
-    shootTangent(u, ref, S, s + step * 0.5, T);
+    shootTangent(u, ref, S, s + step * 0.5, T, leaf);
     p.addScaledVector(T, step);
     if (p.y > ceil) {
       const over = p.y - ceil;

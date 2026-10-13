@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import type { BTNode, BehaviorTreeDef, SpeciesDef, TidePhase } from '../../data/schemas';
-import type { Individual } from '../Individual';
+import { fleeScale, type Individual } from '../Individual';
 import type { Intent } from '../drivers/Driver';
 import type { Habitat, HabitatSample } from '../../world/Habitat';
 import type { TimeOfDay } from '../../world/Sun';
@@ -105,7 +105,7 @@ export class BehaviorTree {
     switch (name) {
       // the flight distance is the species' figure for an alarmed animal; a calm one lets the player much closer,
       // and a running player is fled from further out
-      case 'player_within': return ctx.playerDist <= num(a.m, 2) * (0.4 + 0.6 * ind.alert) * (ctx.playerRunning ? 1.6 : 1) * ind.wariness;
+      case 'player_within': return ctx.playerDist <= num(a.m, 2) * (0.4 + 0.6 * ind.alert) * (ctx.playerRunning ? 1.6 : 1) * ind.wariness * fleeScale(ind);
       case 'player_beyond': return ctx.playerDist > num(a.m, 2);
       case 'alert_above': return ind.alert > num(a.v, 0.5);
       case 'depth_below': return ctx.sample.depth < num(a.m, 0.05);
@@ -116,6 +116,7 @@ export class BehaviorTree {
       case 'tide_is': return String(a.v) === 'any' || String(a.v) === ctx.tidePhase;
       case 'energy_below': return ind.energy < num(a.v, 0.3);
       case 'random_chance': return ind.rng.chance(num(a.p, 0.5));
+      case 'length_above': return ind.length_mm > num(a.mm, Infinity);
       case 'neighbor_within': return false; // reserved for interaction rules
       default: console.warn(`[bt] unknown condition ${name}`); return false;
     }

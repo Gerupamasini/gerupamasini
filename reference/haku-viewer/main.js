@@ -1,6 +1,6 @@
-// ハク viewer: studio views of one fish (side / top / front, any tier) and a school over a sandy shallow,
-// driven by the game's own HakuDriver with a stand-in brain. ?capture hides the panel and exposes window.__haku
-// for scripted renders (tools/models/haku/render.mjs).
+// ハク viewer: studio views of one fish (side / top / front, any tier), a school over a sandy shallow, and a school of
+// スバシリ grazing in an eelgrass meadow, driven by the game's own HakuDriver with a stand-in brain. ?capture hides the
+// panel and exposes window.__haku for scripted renders (tools/models/haku/render.mjs).
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -10,8 +10,11 @@ import { liveSchools } from '../../src/creatures/species/haku/School.ts';
 import { HAKU_UNIFORMS } from '../../src/creatures/species/haku/materials.ts';
 import { applyPose } from '../../src/creatures/species/haku/swim.ts';
 import { Rng } from '../../src/core/Rng.ts';
+import { AmamoKit, AmamoPatch, ShootGrid } from '../../src/world/amamo/index.ts';
+import { seagrass } from '../../src/creatures/species/amimehagi/seagrass.ts';
 
 const params = new URLSearchParams(location.search);
+window.THREE = THREE;
 const capture = params.has('capture');
 if (capture) document.body.classList.add('capture');
 
@@ -36,12 +39,19 @@ function individual(i, x, z, len = 28) {
 }
 
 let scene = null, fishes = [], mode = 'side', lod = 0, floor = null, sun = null, simT = 0, lastIntent = 0, startleAt = -1;
+let kit = null, patches = [], waterY = 0;
+/** the open scenes (a school swimming about): the rest hold one fish in front of the camera */
+const OPEN = new Set(['shallows', 'meadow']);
 
 // the materials' light-field uniforms as the game sets them; the photo match changes them, every other scene restores them
 const uniformDefaults = { water: HAKU_UNIFORMS.uWaterTint.value.clone(), sand: HAKU_UNIFORMS.uSandTint.value.clone(), sky: HAKU_UNIFORMS.uSkyGain.value, caustic: HAKU_UNIFORMS.uCaustic.value };
 function clear() {
   for (const f of fishes) f.driver.dispose();
   fishes = [];
+  for (const p of patches) p.dispose();
+  patches = [];
+  kit = null;
+  seagrass.bind(null);
   scene = new THREE.Scene();
   HAKU_UNIFORMS.uWaterTint.value.copy(uniformDefaults.water);
   HAKU_UNIFORMS.uSandTint.value.copy(uniformDefaults.sand);
@@ -130,6 +140,93 @@ function shallows(n = 26) {
   controls.update();
 }
 
+/** the eelgrass the fish see (the game's MeadowProbe over the viewer's patches) */
+const probe = {
+  get kit() { return kit; },
+  coverAt(x, z) {
+    let c = 0;
+    for (const p of patches) { const d = Math.hypot(p.cx - x, p.cz - z); if (d < p.reach * 0.95) c = Math.max(c, Math.min(1, p.shootCount / (Math.PI * p.reach * p.reach) / 85)); }
+    return c;
+  },
+  shootsNear(x, z, r, max = 24) {
+    const out = [];
+    for (const p of patches) {
+      if (Math.hypot(p.cx - x, p.cz - z) > r + p.reach + 0.05) continue;
+      for (const s of p.shoots) { const d = Math.hypot(s.x - x, s.z - z); if (d <= r) out.push([d, s]); }
+    }
+    return out.sort((a, b) => a[0] - b[0]).slice(0, max).map((o) => o[1]);
+  },
+};
+
+/**
+ * A school of スバシリ (6–9 cm) in an eelgrass meadow (走水) under half a metre of water: they graze the film off the
+ * leaves and the bed, look round between bouts, and keep their distance from the camera.
+ */
+function meadow(n = 9) {
+  clear();
+  waterY = 0;
+  const bedY = -0.5;
+  const heightAt = (x, z) => bedY + 0.008 * Math.sin(x * 5) * Math.sin(z * 4) + 0.004 * Math.sin(x * 13 + z * 9);
+  floor = { heightAt, waterAt: () => waterY, meadow: probe };
+  const sky = new Sky();
+  sky.scale.setScalar(1000);
+  const sunDir = new THREE.Vector3(-0.35, 0.82, 0.45).normalize();
+  sky.material.uniforms.sunPosition.value.copy(sunDir);
+  const envScene = new THREE.Scene();
+  envScene.add(sky);
+  scene.environment = pmrem.fromScene(envScene, 0, 0.1, 2000).texture;
+  scene.environmentIntensity = 0.06;
+  const fogCol = new THREE.Color(0.13, 0.17, 0.15).multiplyScalar(1.6);
+  scene.background = fogCol;
+  scene.fog = new THREE.FogExp2(fogCol, 0.9);
+  sun = new THREE.DirectionalLight(0xfff6ea, 2.6);
+  sun.position.copy(sunDir).multiplyScalar(50);
+  scene.add(sun, sun.target, new THREE.HemisphereLight(new THREE.Color(0.58, 0.68, 0.78), new THREE.Color(0.28, 0.24, 0.18), 0.3));
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d');
+  const img = g.createImageData(512, 512);
+  for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) {
+    const v = 120 + 20 * Math.sin(x * 0.07 + Math.sin(y * 0.02) * 2) + (Math.random() - 0.5) * 50;
+    const i = (y * 512 + x) * 4;
+    img.data[i] = v * 0.9; img.data[i + 1] = v * 0.84; img.data[i + 2] = v * 0.68; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(8, 8); tex.colorSpace = THREE.SRGBColorSpace;
+  const bed = new THREE.Mesh(new THREE.PlaneGeometry(6, 6, 160, 160).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
+  const pos = bed.geometry.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
+  bed.geometry.computeVertexNormals();
+  scene.add(bed);
+  kit = new AmamoKit();
+  const ground = { heightAt, poolAt: () => -1e3 };
+  const grid = new ShootGrid();
+  let seed = 500;
+  for (const [x, z, r, dens, kind] of [[-0.55, -0.1, 0.75, 70, 'dense'], [0.5, -0.45, 0.45, 40, 'sparse'], [0.35, 0.55, 0.3, 45, 'pioneer'], [-0.2, 0.9, 0.35, 45, 'pioneer']]) {
+    const p = new AmamoPatch({ kit, ground, grid, lengthAt: () => 0.42, x, z, radius: r, density: dens, kind, seed: seed++ });
+    p.setLod(0, 1, -1);
+    scene.add(p); patches.push(p);
+  }
+  // the fish bend the leaves through the game's bridge to the meadow (its push slots)
+  seagrass.bind({ live: new Map(patches.map((p, i) => [i, p])), coverAt: probe.coverAt, kit });
+  const group = new THREE.Group();
+  scene.add(group);
+  for (let i = 0; i < n; i++) {
+    const root = new THREE.Group();
+    group.add(root);
+    const d = new HakuDriver();
+    const ind = individual(i, 0.1 + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 60 + Math.random() * 30);
+    d.attach(root, ind);
+    fishes.push({ driver: d, ind, root });
+  }
+  for (const f of fishes) f.driver.setIntent({ id: 1, kind: 'forage', urgency: 0.3, seconds: 20 });
+  renderer.toneMappingExposure = 0.6;
+  camera.fov = 40;
+  camera.updateProjectionMatrix();
+  camera.position.set(1.1, -0.12, 0.9);
+  controls.target.set(0.0, -0.3, 0.0);
+  controls.update();
+}
+
 /**
  * Photo match: the fish lateral, its right side to the camera (snout to the right of the frame), tilted head-down by
  * `tilt` degrees, scaled and placed so its snout lands on pixel `snout` with a total length of `tl` pixels in a
@@ -178,12 +275,14 @@ void main() {
   const root = new THREE.Group();
   scene.add(root);
   const d = new HakuDriver();
-  const ind = individual(0, 0, 0, 30);
+  // the fish's length picks its form: a ハク up to 4.5 cm, a スバシリ from there
+  const len = o.len ?? 30;
+  const ind = individual(0, 0, 0, len);
   d.attach(root, ind);
   fishes.push({ driver: d, ind, root });
   // place: camera on the fish's right (−X) looking +X, so +Z (the snout) is to the right of the frame
   const W = o.w, H = o.h, fov = 8;
-  const TL = 0.03;
+  const TL = len / 1000;
   const dist = (TL * H) / (2 * Math.tan(THREE.MathUtils.degToRad(fov / 2)) * o.tl);
   camera.fov = fov; camera.near = 0.01; camera.far = 10;
   camera.aspect = W / H; camera.updateProjectionMatrix();
@@ -224,7 +323,7 @@ function holdMatch() {
   const v = matchOpts.view;
   if (v) {
     f.root.updateMatrixWorld(true);
-    const TL = 0.03, side = v.side ?? -1;
+    const TL = (matchOpts.len ?? 30) / 1000, side = v.side ?? -1;
     const at = f.root.localToWorld(new THREE.Vector3(side * (v.x ?? 0.05) * TL, v.at[1] * TL, (0.38 - v.at[0]) * TL));
     const dir = new THREE.Vector3(...v.from).normalize().applyQuaternion(f.root.getWorldQuaternion(new THREE.Quaternion()));
     camera.fov = v.fov ?? 20; camera.near = 0.0003; camera.updateProjectionMatrix();
@@ -256,18 +355,32 @@ function startle() {
 function step(dt) {
   simT += dt;
   // a stand-in brain: every few seconds someone asks for something
-  if (mode === 'shallows' && simT - lastIntent > 3) {
+  if (OPEN.has(mode) && simT - lastIntent > 3) {
     lastIntent = simT;
     const f = fishes[Math.floor(Math.random() * fishes.length)];
     if (f) {
       const r = Math.random();
       const t = new THREE.Vector3((Math.random() - 0.5) * 1.2, 0, (Math.random() - 0.5) * 1.2);
-      f.driver.setIntent(r < 0.4 ? { id: 2, kind: 'wander', urgency: 0.3, seconds: 10, target: t } : r < 0.6 ? { id: 3, kind: 'forage', urgency: 0.3, seconds: 9 } : r < 0.8 ? { id: 4, kind: 'special', param: 'surface', urgency: 0.3, seconds: 10 } : { id: 5, kind: 'rest', urgency: 0, seconds: 8 });
+      // (the スバシリ in the meadow mostly feed)
+      if (mode === 'meadow') f.driver.setIntent(r < 0.7 ? { id: 3, kind: 'forage', urgency: 0.3, seconds: 16 } : r < 0.9 ? { id: 2, kind: 'wander', urgency: 0.3, seconds: 10, target: t } : { id: 5, kind: 'rest', urgency: 0, seconds: 8 });
+      else f.driver.setIntent(r < 0.4 ? { id: 2, kind: 'wander', urgency: 0.3, seconds: 10, target: t } : r < 0.6 ? { id: 3, kind: 'forage', urgency: 0.3, seconds: 9 } : r < 0.8 ? { id: 4, kind: 'special', param: 'surface', urgency: 0.3, seconds: 10 } : { id: 5, kind: 'rest', urgency: 0, seconds: 8 });
     }
   }
-  const ctx = { floor, player: camera.position, simScale: 1, nowMs: performance.now(), minDepth: 0.015, bounds: mode === 'shallows' ? { minX: -1.3, maxX: 1.3, minZ: -1.3, maxZ: 1.3 } : undefined, locked: mode !== 'shallows' };
+  if (kit) {
+    const u = kit.uniforms;
+    u.uAmTime.value = simT;
+    u.uAmWater.value = waterY;
+    u.uAmCurrent.value.set(0.01, 0.03);
+    u.uAmWave.value.set(Math.cos(0.7), Math.sin(0.7), 0.06, 0.6);
+  }
+  // the creature system's alert: the camera is the player (closer than the flight distance, the fish grow uneasy)
+  if (mode === 'meadow') for (const f of fishes) {
+    const d = Math.hypot(camera.position.x - f.ind.pos.x, camera.position.z - f.ind.pos.z);
+    f.ind.alert = Math.max(0, Math.min(1, f.ind.alert + dt * (d < (params.get('fear') ? Number(params.get('fear')) : 0.5) ? 0.4 : -0.08)));
+  }
+  const ctx = { floor, player: camera.position, simScale: 1, nowMs: simT * 1000, minDepth: 0.015, bounds: mode === 'shallows' ? { minX: -1.3, maxX: 1.3, minZ: -1.3, maxZ: 1.3 } : undefined, locked: !OPEN.has(mode) };
   for (const f of fishes) f.driver.update(dt, ctx);
-  if (mode !== 'shallows') {
+  if (!OPEN.has(mode)) {
     // studio: hold the fish in place, slow swimming in place
     const f = fishes[0];
     f.root.position.set(0, 0, 0); f.root.rotation.set(0, mode === 'front' ? 0 : 0, 0);
@@ -276,8 +389,10 @@ function step(dt) {
 
 function setScene(s) {
   mode = s;
-  if (s === 'shallows') shallows(Number(params.get('n')) || 26); else studio(s);
-  setLod(s === 'shallows' ? -1 : lod);
+  if (s === 'shallows') shallows(Number(params.get('n')) || 26);
+  else if (s === 'meadow') meadow(Number(params.get('n')) || 9);
+  else studio(s);
+  setLod(OPEN.has(s) ? -1 : lod);
 }
 
 function resize() {
@@ -317,7 +432,7 @@ window.__haku = {
     if (fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     controls.update();
     // a studio fish needs a few frames to be placed and posed
-    if (mode !== 'shallows') for (let i = 0; i < 20; i++) step(1 / 60);
+    if (!OPEN.has(mode)) for (let i = 0; i < 20; i++) step(1 / 60);
     if (pose) for (const f of fishes) { Object.assign(f.driver.fish.pose, pose); applyPose(f.driver.model.rig, f.driver.fish.pose, 0); }
     renderer.render(scene, camera);
     return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
