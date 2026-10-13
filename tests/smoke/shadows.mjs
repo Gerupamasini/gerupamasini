@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Builds nothing: run `npm run build` first. The sun's shadows beyond the near map, on the default flat (葛西):
-//  - the relief's own shadow (TerrainShadow): with the sun 4° up in the west, the west bank shades a band of the flat
-//    (some 70 m wide); at mid-morning nothing is shaded
+// Builds nothing: run `npm run build` first. The sun's shadows beyond the near map, on the default flat:
+//  - the relief's own shadow (TerrainShadow): with the sun 4° up in the west, the banks shade part of the flat, where
+//    the same march toward the sun over the terrain's heights on the CPU says they do; at mid-morning nothing is shaded
 //  - the far shadow map (FarShadow): the riprap and the reef's far clumps are drawn into it
 //  - the terrain shader takes both: a black relief map darkens the sunlit flat
 // The two maps are written to tests/smoke/out/shadows-relief.png and shadows-far.png (the flat seen from above, -z up).
@@ -55,26 +55,42 @@ try {
     const a = window.__higata, d = new Date(a.clock.nowReal() + 9 * 3600000);
     a.setDebugTime(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0) - 9 * 3600000 + hour * 3600000);
   }, hour);
-  // the relief map, read back (one byte a texel)
+  // the relief map, read back (one byte a texel), against the same march on the CPU at texels spread over the map (the
+  // ones in the penumbra left out)
   const relief = () => page.evaluate(() => {
-    const a = window.__higata, t = a.world.terrainShadow.target, n = t.width, buf = new Uint8Array(n * n);
+    const a = window.__higata, w = a.world, tr = w.terrain, t = w.terrainShadow.target, n = t.width, buf = new Uint8Array(n * n);
     a.renderer.gl.readRenderTargetPixels(t, 0, 0, n, n, buf);
-    let dark = 0, westDark = 0, west = 0;
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-      const v = buf[y * n + x];
-      if (v < 128) dark++;
-      // (the band within 70 m of the west edge of the 320 m flat)
-      if (x < n * (70 / 320)) { west++; if (v < 128) westDark++; }
+    let dark = 0;
+    for (let i = 0; i < n * n; i++) if (buf[i] < 128) dark++;
+    const s = w.sunDir, hl = Math.hypot(s.x, s.z), dx = s.x / hl, dz = s.z / hl, tan = s.y / hl, half = tr.half;
+    let seed = 7, agree = 0, decisive = 0, shadedCpu = 0;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let k = 0; k < 600; k++) {
+      const x = Math.floor(rnd() * n), y = Math.floor(rnd() * n);
+      const px = ((x + 0.5) / n) * 2 * half - half, pz = ((y + 0.5) / n) * 2 * half - half;
+      const h0 = tr.heightAt(px, pz) + 0.04;
+      let vis = 1, d = 0.5;
+      for (let i = 0; i < 80 && vis > 0; i++) {
+        d = d * 1.06 + 0.25;
+        const qx = px + dx * d, qz = pz + dz * d;
+        if (Math.abs(qx) > half || Math.abs(qz) > half) break;
+        vis = Math.min(vis, Math.min(1, Math.max(0, (tan - (tr.heightAt(qx, qz) - h0) / d) / 0.0094 + 0.5)));
+      }
+      if (vis > 0.15 && vis < 0.85) continue;
+      decisive++;
+      if (vis < 0.5) shadedCpu++;
+      if ((vis < 0.5) === (buf[y * n + x] < 128)) agree++;
     }
-    return { n, dark: dark / (n * n), westDark: westDark / west, elevation: a.world.sunElevation, values: Array.from(buf) };
+    return { n, dark: dark / (n * n), agree: agree / decisive, shadedCpu: shadedCpu / decisive, elevation: w.sunElevation, values: Array.from(buf) };
   });
   await setHour(16.75);
   await waitFrames(page, 4);
   const low = await relief();
-  console.log(`relief, sun ${low.elevation.toFixed(1)}° up: ${(low.dark * 100).toFixed(1)} % of the flat shaded, ${(low.westDark * 100).toFixed(0)} % of the band by the west bank`);
+  console.log(`relief, sun ${low.elevation.toFixed(1)}° up: ${(low.dark * 100).toFixed(1)} % of the flat shaded (the CPU march: ${(low.shadedCpu * 100).toFixed(1)} %), the two agree at ${(low.agree * 100).toFixed(1)} % of the texels`);
   writeMap('shadows-relief.png', low.n, low.values);
   assert.ok(low.elevation < 6 && low.elevation > 1, `the sun is ${low.elevation}° up`);
-  assert.ok(low.westDark > 0.4, 'the west bank shades the flat by it');
+  assert.ok(low.dark > 0.05, 'the banks shade part of the flat');
+  assert.ok(low.agree > 0.95, 'the relief map is where the march over the heights puts the shadows');
   await setHour(10);
   await waitFrames(page, 4);
   const high = await relief();
