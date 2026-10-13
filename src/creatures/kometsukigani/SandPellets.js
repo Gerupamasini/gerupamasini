@@ -1,4 +1,4 @@
-import { Group, InstancedBufferAttribute, InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
+import { Color, Group, InstancedBufferAttribute, InstancedMesh, Matrix4, Quaternion, Vector3 } from 'three';
 import { makePelletMaterial, SAND_LINEAR } from './ScopimeraGlobosaMaterial.js';
 import { pelletGeometry } from './ScopimeraGlobosaModel.js';
 
@@ -13,14 +13,14 @@ import { pelletGeometry } from './ScopimeraGlobosaModel.js';
 const CELL = 0.5;
 const BUCKET = 0.01;
 const MAX_PER_CELL = 4096;
-const STRIDE = 8;                    // x, y, z, r, seed, birth, kind, washAt
+const STRIDE = 11;                   // x, y, z, r, seed, birth, kind, washAt, sand r, g, b
 /**
  * draw distances (m) for detail 2 / 1 / 0. A 2 mm pellet is under a pixel beyond about 2.5 m: past that the
  * colony draws a pellet-field decal instead of geometry.
  */
 const DETAIL_DIST = [0.5, 1.3, 2.8];
 
-const _m = new Matrix4(), _q = new Quaternion(), _s = new Vector3(), _p = new Vector3();
+const _m = new Matrix4(), _q = new Quaternion(), _s = new Vector3(), _p = new Vector3(), _c = new Color();
 const UP = new Vector3(0, 1, 0);
 
 class Cell {
@@ -49,6 +49,11 @@ export class SandPellets {
     this.total = 0;
     this.castShadow = false;
     this.sand = SAND_LINEAR.clone();
+    /**
+     * the dry sand's colour at a point (x, z, out: Color) → out, or null: each pellet is the sand it was made of,
+     * where it lies (the colony gives the flat's Terrain.colorAt); without it the pellets take the flat's mean
+     */
+    this.colorAt = null;
   }
 
   setSandColor(c) { this.material.userData.uniforms.uPelSand.value.copy(c); }
@@ -67,6 +72,8 @@ export class SandPellets {
     const o = i * STRIDE;
     c.data[o] = x; c.data[o + 1] = y; c.data[o + 2] = z; c.data[o + 3] = r;
     c.data[o + 4] = seed; c.data[o + 5] = time; c.data[o + 6] = kind === 'dig' ? 1 : 0; c.data[o + 7] = 0;
+    if (this.colorAt) { this.colorAt(x, z, _c); c.data[o + 8] = _c.r; c.data[o + 9] = _c.g; c.data[o + 10] = _c.b; }
+    else { c.data[o + 8] = 0; c.data[o + 9] = 0; c.data[o + 10] = 0; }
     c.minY = Math.min(c.minY, y);
     c.dirty = true;
     this.total++;
@@ -182,9 +189,11 @@ export class SandPellets {
     mesh.receiveShadow = true;
     const attr = new InstancedBufferAttribute(new Float32Array(MAX_PER_CELL * 4), 4);
     const wash = new InstancedBufferAttribute(new Float32Array(MAX_PER_CELL), 1);
+    const col = new InstancedBufferAttribute(new Float32Array(MAX_PER_CELL * 3), 3);
     mesh.geometry = mesh.geometry.clone();
     mesh.geometry.setAttribute('aPel', attr);
     mesh.geometry.setAttribute('aWash', wash);
+    mesh.geometry.setAttribute('aPelCol', col);
     c.mesh = mesh;
     c.detail = detail;
     c.dirty = true;
@@ -196,6 +205,7 @@ export class SandPellets {
     const mesh = c.mesh;
     const attr = mesh.geometry.getAttribute('aPel');
     const wash = mesh.geometry.getAttribute('aWash');
+    const col = mesh.geometry.getAttribute('aPelCol');
     for (let k = 0; k < c.n; k++) {
       const o = k * STRIDE;
       const r = c.data[o + 3];
@@ -207,11 +217,13 @@ export class SandPellets {
       mesh.setMatrixAt(k, _m);
       attr.setXYZW(k, seed, c.data[o + 5], c.data[o + 6], c.data[o + 6] > 0.5 ? 1 : 0.85);
       wash.setX(k, c.data[o + 7]);
+      col.setXYZ(k, c.data[o + 8], c.data[o + 9], c.data[o + 10]);
     }
     mesh.count = c.n;
     mesh.instanceMatrix.needsUpdate = true;
     attr.needsUpdate = true;
     wash.needsUpdate = true;
+    col.needsUpdate = true;
     c.dirty = false;
   }
 

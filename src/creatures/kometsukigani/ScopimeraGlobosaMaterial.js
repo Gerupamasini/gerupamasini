@@ -943,7 +943,8 @@ export function crabPalette(rand, sex = 'm') {
 /**
  * Sand pellets (instanced). Feeding pellets: small, round, the sorted sand pressed into a ball; excavation lumps:
  * larger, wetter, irregular. Fresh pellets are dark and glossy with moisture and dry paler and matte over minutes;
- * under water they slump and wash away. Instance attribute aPel = (seed, birth time s, kind 0 feed / 1 dig, wet0).
+ * under water they slump and wash away. Instance attribute aPel = (seed, birth time s, kind 0 feed / 1 dig, wet0);
+ * aPelCol the dry sand's colour where the pellet lies (0: the flat's mean, uPelSand).
  */
 export function makePelletMaterial({ detail = 1 } = {}) {
   const uniforms = {
@@ -964,11 +965,13 @@ export function makePelletMaterial({ detail = 1 } = {}) {
       .replace('#include <common>', `#include <common>
 attribute vec4 aPel;
 attribute float aWash;
+attribute vec3 aPelCol;
 uniform float uPelTime;
 uniform float uPelDissolve;
 varying vec3 vPelLocal;
 varying vec4 vPel;
 varying float vPelDiss;
+varying vec3 vPelCol;
 ${COMMON}
 float pelDiss() { return max(uPelDissolve, aWash > 0.0 ? clamp((uPelTime - aWash) / 150.0, 0.0, 1.0) : 0.0); }
 // a lumpy, slightly flattened ball; excavation lumps are rougher; under water they slump
@@ -998,6 +1001,7 @@ vec3 pelDisp(vec3 p) {
 transformed = pelDisp(position);
 vPelLocal = position + aPel.x * 97.0;
 vPel = aPel;
+vPelCol = aPelCol;
 vPelDiss = pelDiss();`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
@@ -1010,6 +1014,7 @@ uniform float uPelPepper;
 varying vec3 vPelLocal;
 varying vec4 vPel;
 varying float vPelDiss;
+varying vec3 vPelCol;
 ${COMMON}
 ${FRAG_COMMON}
 float pelWet = 0.0;
@@ -1022,16 +1027,18 @@ float pelH = 0.0;`)
   float fw = max(length(fwidth(vPelLocal)), 1e-4);
   vec3 off; float id;
   float g = kgDome(vPelLocal * 7.0, 0.85, 0.38, fw * 7.0, off, id);
-  vec3 c = uPelSand * (0.85 + 0.3 * kgH31(floor(vPelLocal * 7.0)));
+  // the dry sand where the pellet lies (SandPellets.colorAt), else the flat's mean
+  vec3 sand = dot(vPelCol, vPelCol) > 1e-6 ? vPelCol : uPelSand;
+  vec3 c = sand * (0.85 + 0.3 * kgH31(floor(vPelLocal * 7.0)));
   // the odd pale quartz or shell grain and dark mineral grain, as in the sand around (not salt and pepper)
   // (葛西: few and faint — a pellet is the sand around it, not a speckled ball)
   c = id > 0.97 - 0.15 * uPelPepper ? mix(c, vec3(0.78, 0.75, 0.7), 0.3 + 0.6 * uPelPepper) : (id > 0.95 - 0.16 * uPelPepper ? c * 0.75 : (id < 0.25 * uPelPepper ? c * 0.35 : c));
-  c = mix(uPelSand * 0.9, c, smoothstep(0.0, 0.3, g) * uPelDetail + (1.0 - uPelDetail) * 0.5);
+  c = mix(sand * 0.9, c, smoothstep(0.0, 0.3, g) * uPelDetail + (1.0 - uPelDetail) * 0.5);
   // dried, a feeding pellet is the dry sand's own colour; an excavation lump, from below, a little darker
   c *= mix(1.0, 0.9, vPel.z);
   c *= mix(1.0, 0.62, pelWet);
   pelWet = max(pelWet, vPelDiss);
-  c = mix(c, uPelSand * 0.7, vPelDiss * 0.5);
+  c = mix(c, sand * 0.7, vPelDiss * 0.5);
   pelH = g * 0.08;
   diffuseColor.rgb = c;
 }`)
@@ -1040,7 +1047,7 @@ roughnessFactor = mix(0.92, 0.35, pelWet);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = kgPerturb(normal, -vViewPosition, pelH * uPelScale * uPelDetail);`);
   };
-  mat.customProgramCacheKey = () => 'kg-pellet-v3';
+  mat.customProgramCacheKey = () => 'kg-pellet-v4';
   return mat;
 }
 

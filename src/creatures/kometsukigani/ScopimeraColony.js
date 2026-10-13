@@ -61,9 +61,11 @@ export class ScopimeraColony {
     this.crabGroup.name = 'kometsukigani-crabs';
     this.renderer = new BurrowRenderer();
     this.pellets = new SandPellets({ quality });
-    // the pellets (and the grains on the crabs) are the flat's own sand
+    // the pellets (and the grains on the crabs) are the flat's own sand: each pellet the dry sand where it lies,
+    // the flat's mean as the fallback
     const sand = drySandColour(terrain, SAND_LINEAR);
     this.pellets.setSandColor(sand);
+    if (terrain?.colorAt) this.pellets.colorAt = (x, z, out) => drySandAt(terrain, x, z, out);
     this.sand = sand;
     this.group.add(this.renderer.group, this.pellets.group, this.crabGroup);
     scene.add(this.group);
@@ -912,20 +914,33 @@ export class ScopimeraColony {
 
 /**
  * The dry sand's colour where the crabs live, as the flat's shader draws it (linear albedo, Terrain.colorAt): the
- * mean over the exposed sand of the crabs' band (葛西: a near-neutral grey). The pellets are that sand, sorted and
- * pressed; the fallback when the flat is under water or the terrain cannot tell.
+ * mean over the sand of the crabs' band, dry (葛西: a warm grey the game's look turns to the photographs' grey). The
+ * pellets' fallback colour and the grains on the crabs; the fallback below when the terrain cannot tell.
  */
+/**
+ * The sand's colour at a point as the flat draws it when dry (Terrain.colorAt with the water line set aside: the
+ * pellet's own moisture and drying are the pellet shader's)
+ */
+function drySandAt(terrain, x, z, out) {
+  const w = terrain.uWater;
+  if (!w) return terrain.colorAt(x, z, out);
+  const lvl = w.value;
+  w.value = -1e9;
+  try { terrain.colorAt(x, z, out); } finally { w.value = lvl; }
+  return out;
+}
+
 function drySandColour(terrain, fallback) {
   if (!terrain?.colorAt || !terrain.substrateAt) return fallback.clone();
-  const half = terrain.half, lvl = terrain.uWater?.value ?? -Infinity, N = 32;
+  const half = terrain.half, N = 32;
   const c = new Color();
   let r = 0, g = 0, b = 0, n = 0;
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     const x = -half + ((i + 0.5) / N) * 2 * half, z = -half + ((j + 0.5) / N) * 2 * half;
     if (!terrain.inside(x, z, 6) || terrain.substrateAt(x, z) !== 'sand') continue;
     const h = terrain.heightAt(x, z);
-    if (h < -0.55 || h > 1.0 || h < lvl + 0.15) continue;
-    terrain.colorAt(x, z, c);
+    if (h < -0.55 || h > 1.0) continue;
+    drySandAt(terrain, x, z, c);
     r += c.r; g += c.g; b += c.b; n++;
   }
   return n >= 8 ? new Color(r / n, g / n, b / n) : fallback.clone();
