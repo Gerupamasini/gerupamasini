@@ -78,9 +78,10 @@ float kgPig(vec3 p, float D, float fw, out float tone){
   float id1, id2, i3, i4, i5;
   // distinct dots (≈ 0.006–0.009 CW, each its own size and opacity), crowding where D is high: a fine stipple, 1–2 px
   // in the photographs (049, 060, 063: never sparse big spots)
+  // (a macro view of 002–005, 011, b66 resolves them: none larger than about 0.008 CW — larger dots read as blots)
   float rr = mix(0.24, 0.32, D);
-  float m1 = kgSpeck(p * 80.0, clamp(D * 0.7, 0.0, 0.92), rr, fw * 80.0 + 0.12, id1);
-  float m2 = kgSpeck(p * 140.0 + 3.1, clamp(D * 0.95, 0.0, 0.95), rr, fw * 140.0 + 0.12, id2);
+  float m1 = kgSpeck(p * 105.0, clamp(D * 0.7, 0.0, 0.92), rr, fw * 105.0 + 0.12, id1);
+  float m2 = kgSpeck(p * 170.0 + 3.1, clamp(D * 0.95, 0.0, 0.95), rr, fw * 170.0 + 0.12, id2);
   tone = m1 > m2 ? id1 : id2;
   float dots = max(m1 * (0.32 + 0.36 * id1), m2 * (0.3 + 0.36 * id2));
   // and between them a dust of the finest melanophores — soft-edged specks, three overlapping layers so the
@@ -214,7 +215,8 @@ const FRAG_SURFACE = /* glsl */ `
   // how far the legs take the body's tint: little in the grey-white legs of 2.webp and 5.webp, much in the khaki
   // and brown individuals (4.webp, the specimens)
   float legTint = uKgMorph.w;
-  vec3 limbG = mix(mix(vec3(0.5, 0.47, 0.39), ground * 0.95, legTint), mix(ground, marb, 0.4), 1.0 - pale);
+  // (a cool grey-white in the pale ones, 2.webp, 4.webp, 003 — not beige)
+  vec3 limbG = mix(mix(vec3(0.48, 0.47, 0.43), ground * 0.95, legTint), mix(ground, marb, 0.4), 1.0 - pale);
   vec3 limbD = mix(mix(vec3(0.15, 0.12, 0.085), marb * 1.1 + vec3(0.02, 0.015, 0.008), 0.35 + 0.45 * legTint), marb * 0.75, 1.0 - pale);
   vec3 pink = vec3(0.74, 0.25, 0.27), pinkL = vec3(0.86, 0.5, 0.52), maroon = vec3(0.24, 0.025, 0.035);
   vec3 black = vec3(0.012, 0.010, 0.009);
@@ -284,7 +286,8 @@ const FRAG_SURFACE = /* glsl */ `
     float pig = kgPig(P + vec3(seedP), D, fw, tone);
     // the dorsum's ground is darker than the limbs' (049, 069: the pale is in the granules, not between them), and
     // darkest in the blotches
-    baseC *= 1.0 - (0.25 + 0.42 * blot) * dorsal;
+    // (and the darkening is toward a warm brown, not toward olive: 049, 060, 063)
+    baseC *= mix(vec3(1.0), vec3(0.36, 0.28, 0.22), (0.3 + 0.7 * blot) * dorsal);
     vec3 pigC = mix(marb * 0.42, marb * 1.05 + vec3(0.01, 0.007, 0.0), tone);
     vec3 dcol = mix(baseC, pigC, pig);
     // the translucent rim inside the lateral and posterior margins: fewer dots, paler (008)
@@ -304,9 +307,15 @@ const FRAG_SURFACE = /* glsl */ `
       tub2 = kgDome(P * 110.0 + seedP, 0.75 * (1.0 - 0.5 * smoothCard) * gd, 0.36, fw * 110.0, off, idd);
       float tub3 = kgDome(P * 260.0 + seedP + 3.0, 0.55, 0.34, fw * 260.0, off, idd);
       h += (tub * 0.013 + tub2 * 0.0045 + tub3 * 0.0012) * (dorsal + 0.6 * side);
-      // the granules' tips are pale (the specimens' golden flecks; 049's pale dots on a dark back)
-      // (049, 060: pale yellowish dots salt every dark field — the granules' tips)
-      dcol = mix(dcol, ground * 1.25 + vec3(0.06, 0.05, 0.025), clamp(smoothstep(0.3, 0.85, tub) * 0.85 + smoothstep(0.45, 1.0, tub2) * (0.25 + 0.6 * D), 0.0, 0.92) * (dorsal + 0.5 * side));
+      // the granules' tips are pale (the specimens' golden flecks; 049's pale dots on a dark back): only the apex of
+      // each, soft-edged and translucent, not a painted disc; and between them small irregular pale flecks that
+      // gather in the pale fields and fuse into short streaks (049 at 3×: never a polka-dot)
+      float paleField = smoothstep(0.4, 0.75, kgFbm(vec3(qs * 9.0, seedP + 51.0)) + 0.35 * lobe - 0.3 * blot);
+      float fl = kgN3(vec3(qs * 130.0, seedP + 7.0) + vec3(0.0, 0.0, P.y * 130.0)) * 0.7 + kgN3(vec3(qs * 260.0, seedP + 9.0)) * 0.3;
+      float flecks = smoothstep(0.62, 0.74, fl) * paleField * (1.0 - smoothstep(0.004, 0.012, fw));
+      float apex = smoothstep(0.55, 0.95, tub) * (0.35 + 0.4 * paleField) + smoothstep(0.6, 1.0, tub2) * (0.15 + 0.35 * D);
+      vec3 paleC = mix(ground * 1.12 + vec3(0.03, 0.025, 0.01), vec3(0.78, 0.7, 0.5), 0.25);
+      dcol = mix(dcol, paleC, clamp(apex + flecks * 0.6, 0.0, 0.8) * (dorsal + 0.5 * side));
       // micro-relief that no two square millimetres share: fine pits and a grainy skin
       h += (kgN3(P * 420.0 + seedP) - 0.5) * 0.0007 * (1.0 - smoothstep(0.0008, 0.003, fw));
       // the scuffs of a life on sand: fine scratches, slightly paler and smoother
@@ -322,8 +331,9 @@ const FRAG_SURFACE = /* glsl */ `
     float eArcG = abs(length(vec2(q.x / 0.44, (q.y - 0.075) / 0.23)) - 1.0) * 0.23;
     float arcG = (1.0 - smoothstep(0.0, 0.014, eArcG)) * smoothstep(0.12, 0.17, q.x) * smoothstep(0.08, 0.14, q.y);
     float grooves = max(max(groove, hgr), arcG) * dorsal;
-    h -= grooves * 0.005;
-    dcol *= 1.0 - grooves * 0.22;
+    // (shallow: 049 shows them as a change of shade between the lobes, not as cut lines)
+    h -= grooves * 0.0035;
+    dcol *= 1.0 - grooves * 0.14;
     // the lateral border: a beaded crest along the girth [L]
     float crest = (1.0 - smoothstep(0.0, 0.012 + 0.006 * kgN3(vec3(vKgUv.x * 60.0, seedP, 2.0)), abs(s - 0.485))) * (1.0 - faceM);
     float beads = 0.5 + 0.5 * cos(vKgUv.x * 6.2831853 * 140.0 + kgN3(vec3(vKgUv.x * 40.0, seedP, 5.0)) * 4.0);
@@ -366,7 +376,7 @@ const FRAG_SURFACE = /* glsl */ `
     // ---- roughness: a satin cuticle, uneven — tubercle tips and scuffs worn smoother, the granular flanks
     // rougher, never one value (063: broad soft highlights broken by the granules)
     float rN = kgFbm2(vec3(qs * 14.0, seedP + 33.0));
-    rough = (0.56 + 0.16 * (rN - 0.5) - 0.12 * smoothstep(0.5, 1.0, tub) - 0.1 * scr + 0.06 * branch) * dorsal + (0.62 + 0.1 * (rN - 0.5)) * side + 0.5 * ventral;
+    rough = (0.62 + 0.16 * (rN - 0.5) - 0.08 * smoothstep(0.5, 1.0, tub) - 0.1 * scr + 0.06 * branch) * dorsal + (0.62 + 0.1 * (rN - 0.5)) * side + 0.5 * ventral;
     rough += uKgAsym.w;
     // ---- dirt: silt and sand lodged in the grooves, along the girth and the orbits, in patches that differ left and
     // right (049, 060, 069)
@@ -408,36 +418,44 @@ const FRAG_SURFACE = /* glsl */ `
     // the cornea is an oblique oval window on the front and outer face of the tip: low on the front, and the clear,
     // speckled cuticle of the stalk wraps round behind it and over its very end — the eye is a club with a dark
     // window, not a black ball on a stick (013, 063, 4.webp)
-    float edge = ${(EYE.stalkLen + 0.007).toFixed(4)} - 0.014 * cos(th - 0.6);
+    float edge = ${(EYE.stalkLen + 0.012).toFixed(4)} - 0.02 * cos(th - 0.6);
     float facing = smoothstep(-0.5, 0.15, cos(th - 0.6));
     float tipX = ${(EYE.stalkLen + EYE.corneaLen).toFixed(4)};
-    float cornea = isDistal * smoothstep(edge - 0.003, edge + 0.003, P.x) * facing * (1.0 - 0.6 * smoothstep(tipX - 0.01, tipX + 0.004, P.x));
-    // the stalk: pale, translucent, dusted with fine dark dots, denser just under the cornea (063, 013)
-    // (063, 027: the stalk is densely speckled brown-grey, darkest just under the cornea)
-    float Ds = 0.68 + 0.25 * smoothstep(edge - 0.06, edge - 0.005, P.x) * isDistal + 0.3 * (kgFbm(P * 40.0 + seedP + limb) - 0.5);
-    vec3 stalk = mix(limbG * 0.95, mix(ground, marb, 0.5), 0.3);
+    // (the window wraps over the tip: from above the eyes show dark, 049, 013)
+    float cornea = isDistal * smoothstep(edge - 0.004, edge + 0.004, P.x) * max(facing, smoothstep(tipX - 0.04, tipX - 0.012, P.x));
+    // the stalk: a clear, glassy tube (013) — through it the grey-brown tissue, and in it a crowd of silvery-white
+    // chromatophores; over them a brownish dusting, denser just under the cornea (063, 027: in daylight the stalk
+    // reads a speckled brown-grey)
+    vec3 core = mix(mix(limbG, limbD, 0.55), mix(ground, marb, 0.5) * 0.7, 0.35);
+    // (013: the specks are points — 1/80 of the stalk's width — densely set, not flakes)
+    float wsp = kgSpeck(P * 260.0 + vec3(seedP, limb * 3.0, 0.0), 0.7, 0.3, fw * 260.0, idd);
+    float wsp2 = kgSpeck(P * 420.0 + vec3(5.0, seedP, limb), 0.6, 0.3, fw * 420.0, idd);
+    float silver = clamp(wsp + wsp2 * 0.7, 0.0, 1.0) * (1.0 - 0.4 * (1.0 - isDistal));
+    vec3 stalk = mix(core * 0.85, vec3(0.86, 0.85, 0.8), silver * 0.9);
+    float Ds = 0.3 + 0.4 * smoothstep(edge - 0.05, edge - 0.004, P.x) * isDistal + 0.25 * (kgFbm(P * 40.0 + seedP + limb) - 0.5);
     float tone;
     float pg = kgPig(P * 1.4 + vec3(limb * 3.0, seedP, 1.0), clamp(Ds, 0.03, 0.9), fw * 1.4, tone);
-    stalk = mix(stalk, mix(limbD * 0.3, limbD * 0.85, tone), pg * 0.9);
+    stalk = mix(stalk, mix(limbD * 0.3, limbD * 0.85, tone), pg * 0.6);
     // the basal article sits in the orbit: shaded
     stalk *= 1.0 - 0.25 * (1.0 - isDistal);
-    if (det > 0.2) glint = kgSpeck(P * 170.0 + seedP + 3.0, 0.3, 0.2, fw * 170.0, idd) * (1.0 - cornea) * 0.6;
-    // cornea: wet and nearly black, a faint bronze in the facets (063, 027, 013); it shows the sky and the sun
-    float rimE = smoothstep(${(EYE.corneaR * 0.32).toFixed(4)}, ${(EYE.corneaR * 0.8).toFixed(4)}, length(P.yz));
-    // (063, 027: dark grey-brown, not black, a little paler round its rim)
-    vec3 corn = mix(vec3(0.07, 0.058, 0.045), vec3(0.17, 0.14, 0.1), rimE * 0.8);
-    float fleck = kgSpeck(P * 240.0 + seedP + 7.0, 0.4, 0.28, fw * 240.0, idd);
-    corn = mix(corn, vec3(0.16, 0.12, 0.06), fleck * 0.5);
-    // ommatidial facets: a fine ripple at macro range
-    float fac = (0.5 + 0.5 * cos(P.x * 900.0) * cos(th * 40.0)) * (1.0 - smoothstep(0.0, 0.002, fw));
-    h += cornea * fac * 0.00025;
+    // cornea: a dark amber-brown window under the clear dome (013 under the lens: dark brown, golden flecks; 063,
+    // 027 in daylight: dark grey-brown, not black), a little paler round its rim; the facets are finer than any
+    // photograph resolves, so no grid
+    // (paler only along the window's lower margin, where the clear cuticle thins over it)
+    float rimE = 1.0 - smoothstep(edge + 0.002, edge + 0.022, P.x);
+    // (013: about half as bright as the dark carapace beside it)
+    vec3 corn = mix(vec3(0.022, 0.013, 0.008), vec3(0.09, 0.05, 0.022), rimE * 0.8);
+    float fleck = kgSpeck(P * 300.0 + seedP + 7.0, 0.45, 0.28, fw * 300.0, idd);
+    corn = mix(corn, vec3(0.36, 0.25, 0.1), fleck * 0.45);
+    if (det > 0.2) glint = mix(silver * 0.7, fleck * 0.35, cornea);
     // a pale ring where cornea meets stalk (063: a cream band under each eye)
-    float ring = (1.0 - smoothstep(0.0, 0.007, abs(P.x - edge + 0.004))) * isDistal;
+    float ring = (1.0 - smoothstep(0.0, 0.007, abs(P.x - edge + 0.005))) * isDistal;
     col = mix(stalk, corn, cornea);
-    col = mix(col, vec3(0.6, 0.55, 0.42), ring * 0.45 * (1.0 - cornea));
-    rough = mix(0.4, 0.035, cornea);
-    trans = mix(0.55, 0.0, cornea);
-    kgCoat = cornea;
+    col = mix(col, vec3(0.6, 0.55, 0.42), ring * 0.4 * (1.0 - cornea));
+    // the stalk's cuticle is glassy (a clear coat over the speckle); the cornea one smooth mirror over a satin base
+    rough = mix(0.36, 0.3, cornea);
+    trans = mix(0.6, 0.0, cornea);
+    kgCoat = mix(0.6, 1.0, cornea);
     kgCornea = cornea;
     wetBias = 0.3;
   }
@@ -484,7 +502,7 @@ const FRAG_SURFACE = /* glsl */ `
   else if (part < 8.5) {
     // pale grey-blue to white, finely speckled, a dusky line down its middle somites (b30, b66, 3.webp); the somite
     // boundaries thin pale-edged lines (b30: the live male's segments stand out)
-    float zz = P.z - ${f3(ABDOMEN.z0)};
+    float zz = P.z;                                  // bone-local: forward from the posterior margin
     float cut = seg > 0.5 ? ${abdCuts(ABDOMEN.female)} : ${abdCuts(ABDOMEN.male)};
     vec3 a = mix(vec3(0.62, 0.65, 0.72), limbG, 0.22);
     a = mix(a, a * vec3(0.72, 0.66, 0.6), (1.0 - smoothstep(0.012, 0.03, abs(P.x))) * smoothstep(0.08, 0.14, zz) * 0.5);
@@ -517,13 +535,15 @@ const FRAG_SURFACE = /* glsl */ `
     // (the violet flush of the arm is a breeding male's, 6.webp — not the faint red of the grey morph, 069)
     arm = mix(arm, mix(arm, vec3(0.3, 0.22, 0.6) * 0.5, 0.6), smoothstep(0.5, 0.9, red) * 0.6);
     // granular arm; the palm finely so, the fingers smooth
+    float palmG = 0.0;
     if (det > 0.05 && part < 9.5) {
       float g = kgDome(P * 120.0 + seg * 3.3 + limb, 0.55, 0.3, fw * 120.0, off, idd);
       h += g * 0.0025;
       arm = mix(arm, ground * 1.2 + 0.02, g * 0.25);
     } else if (det > 0.05 && part < 10.5) {
-      float g = kgDome(P * 230.0 + limb, 0.45, 0.3, fw * 230.0, off, idd);
-      h += g * 0.0008 * (1.0 - smoothstep(0.21, 0.26, P.x));
+      // the palm's outer face: close-set low rounded granules, translucent white (011)
+      palmG = kgDome(P * 150.0 + limb, 0.75, 0.38, fw * 150.0, off, idd) * (1.0 - smoothstep(${(CHELIPED.palm - 0.03).toFixed(3)}, ${(CHELIPED.palm + 0.01).toFixed(3)}, P.x));
+      h += palmG * 0.0017;
     }
     col = arm; rough = 0.48 + 0.1 * (sj - 0.5) + uKgAsym.w; trans = 0.3;
     if (seg > 2.5 && seg < 3.5) {
@@ -542,13 +562,23 @@ const FRAG_SURFACE = /* glsl */ `
       // proximal upper part; never white
       // (063: a warm golden tan, rgb ≈ 144, 118, 88 under the evening sun — darker and warmer than cream)
       // (warm tan in the sandy individuals, 063; bluish-white and glassy in the pale ones, 002–004)
-      vec3 palmB = mix(limbG, vec3(0.56, 0.41, 0.22), 0.15 + 0.85 * legTint) * (0.95 + 0.1 * kgFbm2(P * 7.0 + seedP + limb));
+      vec3 palmB = mix(mix(limbG, vec3(0.5, 0.52, 0.56), 0.45), vec3(0.56, 0.41, 0.22), 0.1 + 0.8 * legTint) * (0.88 + 0.1 * kgFbm2(P * 7.0 + seedP + limb));
       float dusk = clamp(smoothstep(0.12, 0.025, x) * 0.8 + smoothstep(-0.03, 0.05, P.y) * (1.0 - smoothstep(0.15, 0.24, x)), 0.0, 1.0);
       dusk *= 0.55 + 0.45 * kgFbm2(P * 30.0 + seedP);
       float Dp = clamp(0.46 + 0.5 * dusk + 0.55 * (kgFbm(P * 22.0 + vec3(limb, 4.0, seedP)) - 0.5), 0.03, 0.95);
+      // the pigment lies in the net between the granules: a grey-black reticulum over the pale face (011)
+      Dp *= 1.0 - 0.5 * smoothstep(0.05, 0.45, palmG);
       float tp;
       float pp = kgPig(P * 1.2 + vec3(limb * 6.0, seedP, 5.0), Dp, fw * 1.2, tp);
       vec3 palmC = mix(palmB, mix(limbD * 0.3, limbD * 0.8, tp), pp * 0.92);
+      palmC = mix(palmC, mix(vec3(0.84, 0.85, 0.86), ground * 1.25, legTint * 0.6), smoothstep(0.45, 0.95, palmG) * 0.12);
+      // the upper and lower margins: a row of beads (011)
+      float margin = smoothstep(0.86, 0.98, abs(sin(th))) * (1.0 - fing);
+      if (det > 0.05) {
+        float bead = kgDome(P * 240.0 + limb + 13.0, 0.9, 0.42, fw * 240.0, off, idd);
+        h += margin * bead * 0.0022;
+        palmC = mix(palmC, palmC * 1.15 + 0.03, margin * bead * 0.5);
+      }
       // breeding males: pink-white, pinker along the upper margin, dark-speckled (6.webp)
       vec3 palmR = mix(mix(pinkL, vec3(0.82, 0.76, 0.76), 0.45), pink, smoothstep(0.0, 0.08, P.y) * 0.5);
       palmR = mix(palmR, vec3(0.06, 0.03, 0.03), kgSpeck(P * 150.0 + seedP + 39.0, 0.35, 0.3, fw * 150.0, idd) * 0.7);
@@ -561,18 +591,24 @@ const FRAG_SURFACE = /* glsl */ `
       float ft = part > 10.5 ? clamp(x / ${CHELIPED.dactylus.toFixed(3)}, 0.0, 1.0) : clamp((x - ${CHELIPED.palm.toFixed(3)}) / ${CHELIPED.finger.toFixed(3)}, 0.0, 1.0);
       float cutSide = part > 10.5 ? -sin(th) : sin(th);
       float edge = smoothstep(0.1, 0.8, cutSide);
-      vec3 fcol = mix(limbG, vec3(0.6, 0.5, 0.32), 0.5) * (0.88 + 0.12 * kgFbm2(P * 12.0 + seedP + limb));
-      fcol = mix(fcol, vec3(0.72, 0.48, 0.16), (1.0 - smoothstep(0.0, 0.25, ft)) * 0.5);
+      // (002–004, 011: porcelain — a translucent bluish white, a whiter streak along the middle of each finger;
+      // horn-coloured in the sandy and brown individuals, 063)
+      vec3 fcol = mix(vec3(0.38, 0.42, 0.48), mix(limbG, vec3(0.6, 0.5, 0.32), 0.5), 0.12 + 0.7 * legTint) * (0.9 + 0.1 * kgFbm2(P * 12.0 + seedP + limb));
+      // (the margins, where the light crosses more of the glassy cuticle, read greyer; the middle whiter)
+      float mid = smoothstep(0.55, 0.95, abs(cos(th)));
+      fcol *= 0.72 + 0.28 * mid;
+      fcol = mix(fcol, vec3(0.62, 0.65, 0.7), mid * smoothstep(0.08, 0.3, ft) * (1.0 - smoothstep(0.65, 0.9, ft)) * 0.45);
+      fcol = mix(fcol, vec3(0.72, 0.48, 0.16), (1.0 - smoothstep(0.0, 0.2, ft)) * (0.12 + 0.4 * legTint));
       fcol = mix(fcol, fcol * 0.72, edge * smoothstep(0.1, 0.4, ft) * 0.4);
       fcol = mix(fcol, mix(pinkL, pink, 0.3 + 0.7 * red), smoothstep(0.5, 0.92, ft) * smoothstep(0.3, 0.8, red) * 0.8);
-      fcol = mix(fcol, mix(vec3(0.55, 0.42, 0.16), vec3(0.25, 0.08, 0.06), red), smoothstep(0.88, 1.0, ft) * 0.7);
+      fcol = mix(fcol, mix(vec3(0.5, 0.3, 0.1), vec3(0.25, 0.08, 0.06), red), smoothstep(0.9, 0.99, ft) * 0.8);
       // fine growth lines and pits along the fingers
       if (det > 0.05) h += ((kgN3(vec3(x * 180.0, P.y * 30.0, P.z * 30.0 + limb)) - 0.5) * 0.0005 + kgDome(P * 260.0 + seedP + limb, 0.35, 0.3, fw * 260.0, off, idd) * 0.0005) * fing;
       float tf;
-      fcol = mix(fcol, limbD * 0.55, kgPig(P * 1.5 + vec3(limb * 2.0, seedP, 9.0), 0.1 + 0.25 * (1.0 - ft), fw * 1.5, tf) * 0.6);
+      fcol = mix(fcol, limbD * 0.55, kgPig(P * 1.5 + vec3(limb * 2.0, seedP, 9.0), 0.05 + 0.22 * (1.0 - ft), fw * 1.5, tf) * 0.55);
       col = mix(palmC, fcol, fing);
-      rough = mix(0.42 + 0.1 * (kgFbm2(P * 18.0 + seedP) - 0.5), 0.24, fing) + uKgAsym.w;
-      trans = mix(0.5, 0.55, fing);
+      rough = mix(0.42 + 0.1 * (kgFbm2(P * 18.0 + seedP) - 0.5) - 0.1 * palmG, 0.26, fing) + uKgAsym.w;
+      trans = mix(0.5, 0.68, fing);
       // feeding leaves sand on the fingertips
       sandExp = fing * smoothstep(0.5, 0.95, ft) * (0.4 + uKgFeed.x);
       wetBias = fing * 0.2 * uKgFeed.x;
@@ -597,7 +633,8 @@ const FRAG_SURFACE = /* glsl */ `
     band = max(band, 0.55 * smoothstep(0.6, 0.78, kgFbm(P * 22.0 + vec3(limb * 1.9, seg * 2.0, seedP + 40.0))));
     // the bands are a dorsal pattern: the underside of the leg is pale, finely dotted (3.webp)
     band *= 0.35 + 0.65 * smoothstep(-0.85, -0.2, sin(th));
-    band = smoothstep(0.08, 0.7, band + 0.4 * (kgFbm(P * 26.0 + limb * 1.7 + seg) - 0.5));
+    // (crisp enough to read as bands at a glance: 2.webp, 4.webp, 6.webp)
+    band = smoothstep(0.12, 0.58, band + 0.4 * (kgFbm(P * 26.0 + limb * 1.7 + seg) - 0.5));
     // the margins (fore and aft edges of the flattened segments) are clear and glassy, the core — muscle under
     // the cuticle — a little darker (010, 049)
     float marginT = smoothstep(0.6, 0.92, abs(cos(th)));
@@ -606,15 +643,21 @@ const FRAG_SURFACE = /* glsl */ `
     lgB = mix(lgB, lgB * 1.12 + vec3(0.02, 0.018, 0.012), marginT * 0.5);
     // the bands, the mottling and everything else are only the density of the dark dots
     // (the bands are soft: a crowding of the dots, not a solid ring — 063, 010, 068)
-    float D = clamp(0.22 + 0.2 * sj2 + band * 0.75 + 0.3 * (kgFbm(P * 30.0 + vec3(limb * 1.3, seg, seedP)) - 0.5), 0.03, 0.95) * (1.0 - 0.7 * marginT);
+    float D = clamp(0.22 + 0.2 * sj2 + band * 0.9 + 0.3 * (kgFbm(P * 30.0 + vec3(limb * 1.3, seg, seedP)) - 0.5), 0.03, 0.95) * (1.0 - 0.7 * marginT);
     float tone;
     float pg = kgPig(P + vec3(limb * 1.7, seg * 2.3, seedP), D, fw, tone);
     vec3 lg = mix(lgB, mix(limbD * 0.3, limbD * 0.85, tone), pg * 0.92);
     // erythrophores: a few red-brown dots (010)
     lg = mix(lg, vec3(0.32, 0.06, 0.03), kgSpeck(P * 120.0 + vec3(limb, seg, seedP + 5.0), 0.06, 0.3, fw * 120.0, idd) * 0.6);
+    // silvery-white chromatophores scattered through the clear cuticle, the legs' sparkle (003, 010, 013)
+    float wsp = kgSpeck(P * 230.0 + vec3(limb * 2.0, seg * 3.0, seedP + 17.0), 0.32, 0.3, fw * 230.0, idd);
+    lg = mix(lg, vec3(0.8, 0.8, 0.77), wsp * 0.55 * (1.0 - 0.5 * band));
     // the cuticle darkens toward each articulation; the joint membranes themselves are pale orange (009, 049)
     float jd = clamp((1.0 - smoothstep(0.0, 0.07, t)) + (1.0 - smoothstep(0.0, 0.06, 1.0 - t)), 0.0, 1.0);
     lg = mix(lg, limbD * 0.55, jd * (0.35 + 0.25 * sj));
+    // and each segment's distal margin is a thin amber-orange rim (003, 002, 049: a bright line at every joint)
+    float rimJ = smoothstep(0.93, 0.975, t) * (1.0 - smoothstep(0.985, 1.0, t)) * step(part, 14.5);
+    lg = mix(lg, vec3(0.62, 0.38, 0.14), rimJ * 0.7);
     ao *= 1.0 - 0.3 * jd;
     // purplish individuals: the legs carry the tint (024, 025, 040–044)
     lg = mix(lg, lg * vec3(1.04, 0.94, 1.08), purple * 0.5);
@@ -639,6 +682,7 @@ const FRAG_SURFACE = /* glsl */ `
     } else if (det > 0.3) {
       glint = kgSpeck(P * 200.0 + vec3(limb, seedP, 9.0), 0.15, 0.2, fw * 200.0, idd) * 0.6;
     }
+    if (det > 0.3) glint = max(glint, wsp * 0.5);
     // granulation, pits and a slightly uneven skin over every segment (no smooth tubes; 010, 049)
     if (det > 0.05) {
       h += kgDome(P * 210.0 + vec3(limb * 3.0, seg, seedP), 0.55, 0.36, fw * 210.0, off, idd) * 0.0015;
@@ -771,9 +815,10 @@ const FRAG_LIGHT = /* glsl */ `
   // the cornea's pseudopupil: the ommatidia aimed straight at the viewer look black
   if (kgCornea > 0.001) {
     float facing = max(0.0, dot(normal, normalize(vViewPosition)));
-    float pupil = smoothstep(0.8, 0.96, facing) * kgCornea;
-    reflectedLight.directDiffuse *= 1.0 - 0.85 * pupil;
-    reflectedLight.indirectDiffuse *= 1.0 - 0.85 * pupil;
+    // (a small, soft spot — 013 shows no black disc; a large one turns the eye into a doll's)
+    float pupil = smoothstep(0.94, 0.995, facing) * kgCornea;
+    reflectedLight.directDiffuse *= 1.0 - 0.5 * pupil;
+    reflectedLight.indirectDiffuse *= 1.0 - 0.5 * pupil;
   }
 }
 `;

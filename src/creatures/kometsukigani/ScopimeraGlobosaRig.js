@@ -68,13 +68,13 @@ export const CHELA_POSES = {
   /**
    * fold, fitted to keypoints of the front view 063 (CW 317 px; a large male) and, for depth, the view from above
    * and behind 049: the carpus knob lies across above each palm like a shoulder under the anterolateral corner
-   * (centre 0.36 CW out, 0.32 up); the palm hangs beside the maxillipeds, not over them, with its broad face forward
-   * (centre 0.33 out, 0.15 up); the fingers point down, their tips 0.22 CW from the midline on the sand — side by
-   * side, not crossed under the face (also 002, 061, 2.webp, 4.webp). The limb comes forward from the coxa at the
-   * sternum's anterolateral corner (b66, b69). The other presets keep their knob, palm and fingertip where they were
-   * before the coxa moved there
+   * (centre 0.38 CW out, 0.33 up); the palm hangs beside the maxillipeds, not over them, with its broad face forward
+   * (centre 0.34 out, 0.19 up); the fingers point down, their tips 0.2 CW from the midline just above the sand (a
+   * margin for each individual's asymmetry) — side by side, not crossed under the face (also 002, 061, 2.webp,
+   * 4.webp). The limb comes forward from the coxa at the sternum's anterolateral corner (b66, b69). The other
+   * presets keep their knob, palm and fingertip where they were before the coxa moved there
    */
-  fold: [-1.4, 1.697, 0, 0.168, 1.995, 0.593, 0.04],
+  fold: [-1.4, 1.622, 0, 0.088, 2.006, 0.65, 0.04],
   scoop: [0.472, 0.274, 0, -0.012, 0.424, -1.014, 0.3],
   mouth: [0.124, 0.839, 0, 0.405, 1.085, -1.2, 0.05],
   /** wave, fitted to 6.webp: merus vertical beside the carapace, palm high with the fingers hooked inward */
@@ -409,8 +409,8 @@ export class ChelaRig {
     this.ang = [0, 0, 0, 0, 0, 0, 0];
     this.axes = SEGMENTS.map((s) => (CHELA_JOINTS[s][0] === 'y' ? Y : Z));
     this.limits = SEGMENTS.map((s) => [CHELA_JOINTS[s][1], CHELA_JOINTS[s][2]]);
-    // tip of the closed fingers in the Propodus frame
-    this.tipLocal = new Vector3(CHELIPED.palm + CHELIPED.finger * 0.96, -CHELIPED.palmH * 0.02, 0);
+    // tip of the closed fingers in the Propodus frame: the fixed finger's tip (Geometry chelaPropodusSection: its centre line ends 0.12 of the palm's height below the axis)
+    this.tipLocal = new Vector3(CHELIPED.palm + CHELIPED.finger * 0.96, -CHELIPED.palmH * 0.12, 0);
     this.frames = SEGMENTS.map(() => ({ p: new Vector3(), q: new Quaternion() }));
     this.error = 0;
     this.scale = 1;

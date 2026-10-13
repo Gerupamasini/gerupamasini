@@ -57,12 +57,13 @@ export const EYE = {
    * dome). Measured with the body height and the third maxillipeds as the scale (063: CW 317 px — stalk 20–22 px,
    * cornea 30 px; 027: CW 285 px — stalk 20 px, cornea 28 px; 013 for the shape) [P]
    */
-  stalkLen: 0.135, stalkR0: 0.026, stalkR1: 0.034,
+  stalkLen: 0.115, stalkR0: 0.026, stalkR1: 0.034,
   /**
-   * terminal cornea: an ovoid bulb about 1.5 × the stalk below it, 0.1 CW across (063: 0.095–0.1, 027: 0.098); the
-   * dark window on its outer and front side, the clear cuticle wrapping round behind it (013) [P]
+   * terminal cornea: a club, not a ball — the stalk swells into it, about 1.4 × the stalk below it and 0.095 CW
+   * across (063: 0.095–0.1, 027: 0.098), its dark window about 1.3 × as long as it is wide on the outer and front
+   * side (013: 145 px long on a tip 95 px wide), the clear cuticle wrapping round behind it [P]
    */
-  corneaLen: 0.09, corneaR: 0.051,
+  corneaLen: 0.115, corneaR: 0.047,
   /** erect pose: nearly upright — the stalks stand parallel, corneas 0.24–0.28 CW apart (063, 027) [P] */
   erectOutDeg: 2, erectForwardDeg: 8,
   /** folded pose: lying laterally along the orbital margin (001, 009) [P] */
@@ -118,17 +119,19 @@ export const CHELIPED = {
    */
   carpus: 0.17, carpusR: 0.094,
   /**
-   * palm: deep (height ≈ 0.85 × length), laterally compressed — a plate, not a ball (011, 003); fingers a little
-   * shorter than the palm, slender (011). These are a female's / small male's (027, 035, 057); large males are
-   * 1.2 × (002–005, 061; 063: 0.32 × 0.28 CW) [P]
+   * palm: deep (height ≈ 0.85 × length), laterally compressed — a plate, not a ball, deepest toward the fingers,
+   * its upper and lower margins beaded (011, 003, 002). These are a female's / small male's (027, 035, 057); large
+   * males are 1.2 × (002–005, 061; 063: 0.32 × 0.28 CW) [P]
    */
   palm: 0.25, palmH: 0.215, palmW: 0.055,
   /**
-   * fingers about two thirds of the palm (002, 003: 0.55–0.65; 011 seen from the side: 0.75), deep at their base
-   * and tapering to sharp amber tips, the gape a narrow dark slit between them (002–004, 011) [P]
+   * fingers nearly as long as the palm (002: 0.96 and 1.05 measured from the dactylus' hinge; 011 from the side:
+   * 1.25 × the palm's height), deep — each about 0.3 of the palm's height at mid-length (011) — and tapering evenly
+   * to sharp amber tips that cross; between them an elongated gape over their first two thirds, 0.17 of the palm's
+   * height at its widest, its edges lined with some twenty small rounded teeth (011, 002–004) [P]
    */
-  finger: 0.155, fingerH: 0.052, fingerW: 0.024,
-  dactylus: 0.165,
+  finger: 0.22, fingerH: 0.08, fingerW: 0.03,
+  dactylus: 0.23,
   /** females: whole limb ≈ 1.6 CL; mature males > 2 CL [L] */
   maleScale: 1.2,
 };

@@ -416,10 +416,11 @@ function buildEyes(B, res) {
         const u = clamp(x / EYE.stalkLen, 0, 1);
         const stalk = EYE.stalkR0 + (EYE.stalkR1 - EYE.stalkR0) * Math.pow(u, 1.3);
         const cx = (x - EYE.stalkLen) / EYE.corneaLen;                   // 0 … 1 over the cornea
-        // an ovoid with a full, rounded tip — not an onion dome (063, 027, 013)
-        const bulb = EYE.corneaR * Math.pow(Math.max(0, 1 - ((cx - 0.45) / 0.6) ** 2), 0.4);
+        // a club with a full, rounded tip: the stalk swells into it over its lower half, no ball on a stick and
+        // no onion dome (013, 063, 027)
+        const bulb = EYE.corneaR * Math.pow(Math.max(0, 1 - ((cx - 0.55) / 0.62) ** 2), 0.45);
         // the joint with the basal article: a shallow waist, the stalk leaving it from inside (no collar)
-        const r = Math.max(stalk * (1 - smoothstep(0.55, 1.0, cx)), bulb) * (0.93 + 0.07 * smoothstep(-0.006, 0.012, x));
+        const r = Math.max(stalk * (1 - smoothstep(0.6, 1.0, cx)), bulb) * (0.93 + 0.07 * smoothstep(-0.006, 0.012, x));
         // flattened a little front-to-back, and leaning forward at the tip
         return { cy: 0.008 * smoothstep(EYE.stalkLen * 0.4, len, x), cz: 0, ry: r * 0.94, rz: r };
       },
@@ -586,7 +587,7 @@ function buildAbdomen(B, res) {
 
 // --------------------------------------------------------------------------------------------- chelipeds
 
-const N_TEETH = 13;
+const N_TEETH = 21;
 /** the palm starts this far inside the carpus (its condyle) */
 const PALM_X0 = -0.02;
 
@@ -608,21 +609,23 @@ function chelaPropodusSection(t, th, res) {
   // the palm leaves the carpus' rim by a slim condyle, then opens at once to its full depth (002, 011)
   const kc = 0.78 + 0.22 * smoothstep(-0.004, 0.024, x);
   const pt = clamp(x / C.palm, 0, 1);
-  // a broad oval plate, full almost to its distal margin (2.webp, 003–005)
-  // an inflated bulb, deepest a little proximal of the middle, its upper margin arching down to the dactylus
-  const palmRy = C.palmH * 0.5 * (0.55 + 0.45 * Math.sin(Math.PI * clamp(pt * 0.75 + 0.16, 0, 1)));
+  // a broad plate, narrower where it leaves the carpus and deepest toward the fingers, its upper margin nearly
+  // straight (011, 002: a rounded trapezoid, not an oval bulb)
+  const palmRy = C.palmH * 0.5 * (0.7 + 0.3 * smoothstep(0, 0.65, pt)) * (1 - 0.06 * smoothstep(0.85, 1, pt));
   const palmRz = C.palmW * 0.5 * (0.7 + 0.3 * Math.sin(Math.PI * clamp(pt * 0.85 + 0.12, 0, 1)));
   const ft = clamp((x - C.palm) / C.finger, 0, 1);
-  // a blade: deep for its first half, then drawn out to a sharp, slightly hooked point (002–004, 011)
-  const taper = Math.pow(Math.max(0, 1 - Math.pow(ft, 1.6)), 0.85);
-  const fRy = C.fingerH * 0.5 * (0.04 + 0.96 * taper), fRz = C.fingerW * 0.5 * (0.06 + 0.94 * taper);
-  // the finger leaves the palm along its lower half and curves up to meet the hooked dactylus: the gape a narrow
-  // dark slit, the tips touching (002–004, 2.webp, 6.webp)
-  const fCy = -C.palmH * 0.14 + 0.03 * ft * ft;
+  // a blade tapering evenly from its deep base to a sharp, slightly hooked point (011, 002–004)
+  // (the fixed finger a little shallower than the dactylus: 011, 0.27 and 0.3 of the palm's height)
+  const taper = Math.pow(Math.max(0, 1 - Math.pow(ft, 1.6)), 0.75);
+  const fRy = C.fingerH * 0.44 * (0.04 + 0.96 * taper), fRz = C.fingerW * 0.5 * (0.06 + 0.94 * taper);
+  // the finger leaves the palm along its lower part and curves up to meet the hooked dactylus: between them an
+  // elongated gape over the first two thirds, the tips crossing (011, 002–004, 2.webp, 6.webp)
+  const fCy = -C.palmH * 0.26 + 0.03 * ft * ft;
   let dr = 0;
-  if (res.teeth && f > 0.5 && ft < 0.93) {
+  if (res.teeth && f > 0.5 && ft < 0.9) {
+    // a row of small rounded teeth along the cutting edge (011: some twenty)
     const up = Math.max(0, Math.sin(th));
-    dr = 0.0055 * Math.pow(up, 10) * (0.5 + 0.5 * Math.cos(TAU * N_TEETH * ft)) * (1 - ft);
+    dr = 0.0034 * Math.pow(up, 8) * Math.pow(0.5 + 0.5 * Math.cos(TAU * N_TEETH * ft), 2) * (1 - ft * 0.7);
   }
   // the palm's faces are gently uneven (011), the fingers smooth
   // (sampled round a circle so the noise closes on itself: no seam down the palm)
@@ -670,26 +673,28 @@ function buildChelipeds(B, res) {
     const PL = C.palm + C.finger;
     const nT = N_TEETH;
     tube(B, {
-      bone: bi('Propodus'), x0: PALM_X0, x1: PL, radial: Math.round(radial * 1.25), rings: rings(PL) + 4,
+      bone: bi('Propodus'), x0: PALM_X0, x1: PL, radial: Math.round(radial * 1.25), rings: rings(PL) + (res.teeth ? 4 : 2),
       section: (t, th) => chelaPropodusSection(t, th, res),
       info: (t) => [PART.PALM, limb * 10 + 5, membrane(t, PL - PALM_X0, 0.03), 0.1],
       capA: 0.012, capB: 0.012,
     });
     // dactylus (movable finger): hinged at the palm's distal dorsal corner, curving down to cross the fixed tip
     tube(B, {
-      bone: bi('Dactylus'), x0: -0.014, x1: C.dactylus, radial, rings: rings(C.dactylus) + 4,
+      bone: bi('Dactylus'), x0: -0.014, x1: C.dactylus, radial, rings: rings(C.dactylus) + (res.teeth ? 4 : 2),
       section: (t, th) => {
         const x = -0.014 + t * (C.dactylus + 0.014);
         const ft = clamp(x / C.dactylus, 0, 1);
         // hinged on the palm by a slim condyle (the joint is a neck, not a ball)
         const kc = 0.62 + 0.38 * smoothstep(-0.002, 0.016, x);
         let dr = 0;
-        if (res.teeth && ft > 0.08 && ft < 0.92) {
+        if (res.teeth && ft > 0.08 && ft < 0.9) {
           const down = Math.max(0, -Math.sin(th));
-          dr = 0.005 * Math.pow(down, 10) * (0.5 + 0.5 * Math.cos(TAU * (nT - 1) * ft + 1.3)) * (1 - ft);
+          dr = 0.0032 * Math.pow(down, 8) * Math.pow(0.5 + 0.5 * Math.cos(TAU * (nT - 1) * ft + 1.3), 2) * (1 - ft * 0.7);
         }
-        const taper = Math.pow(Math.max(0, 1 - Math.pow(ft, 1.6)), 0.85);
-        return { cy: -0.045 * ft * ft, cz: 0.003 * ft, ry: C.fingerH * 0.46 * (0.04 + 0.98 * taper) * kc, rz: C.fingerW * 0.5 * (0.06 + 0.94 * taper) * kc, n: 2, dr };
+        const taper = Math.pow(Math.max(0, 1 - Math.pow(ft, 1.6)), 0.75);
+        // arched along its length and hooked down at the tip to meet the fixed finger's: hinged at +0.1 of the
+        // palm's height, the fixed finger's tip at −0.12 (Propodus fCy), so the gape closes only at the tips (011)
+        return { cy: 0.008 * Math.sin(Math.PI * ft) - C.palmH * 0.23 * Math.pow(ft, 2.2), cz: 0.003 * ft, ry: C.fingerH * 0.46 * (0.04 + 0.98 * taper) * kc, rz: C.fingerW * 0.5 * (0.06 + 0.94 * taper) * kc, n: 2, dr };
       },
       info: () => [PART.FINGER, limb * 10 + 6, 0, 0.1], capA: 0.01, capB: 0.006,
     });
