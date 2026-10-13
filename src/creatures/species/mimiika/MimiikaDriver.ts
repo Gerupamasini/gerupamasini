@@ -31,7 +31,8 @@ const _v = new Vector3();
 
 /**
  * Sand events the behaviour may give beyond FxEvent's: single grains that swell little (`grow` × their start size) and
- * are gone where they reach the sand (`kill`), sand darker than the bed (`shade`), and the pit it blows (kind 'pit':
+ * are gone where they reach the sand (`kill`: the shared dust's grains), sand darker than the bed (`shade`, and `grow`: the shared dust
+ * takes neither), and the pit it blows (kind 'pit':
  * centre, heading, half-sizes in m, how dark 0 … 1; `deepen` darkens the last pit instead of laying a new one, `fill`
  * fills it in over that many seconds).
  */

@@ -72,14 +72,15 @@ const DEFAULT_SHOTS = [
   // escape: the flash and the ink, the jets mantle first
   { name: 'escape_ink', set: { scene: 'tank', seed: 2 }, call: { fn: 'mode', args: ['ESCAPE'] }, advance: 0.2, follow: { offset: [0.03, 0.04, 0.13] } },
   { name: 'escape_jet', advance: 0.25, follow: { offset: [0.03, 0.04, 0.16] } },
-  // the sandy shallow under 30 cm of water: by day buried, at night out on the fins under a diver's torch
-  { name: 'flat_rest', set: { scene: 'flat', awake: true }, call: { fn: 'mode', args: ['REST', 0] }, advance: 4, follow: { i: 0, offset: [0.03, 0.025, 0.055], dt: [0, 0.004, 0] } },
-  { name: 'flat_rest_top', follow: { i: 0, offset: [0.0, 0.06, 0.012] } },
-  { name: 'flat_day', set: { scene: 'flat' }, advance: 2 },
-  { name: 'flat_buried', follow: { i: 0, offset: [0.05, 0.04, 0.05] } },
-  { name: 'flat_night_hover', set: { scene: 'flat', night: true }, call: { fn: 'mode', args: ['HOVER', 0] }, advance: 4, follow: { i: 0, offset: [0.02, 0.03, 0.1] } },
-  { name: 'flat_night_hunt', call: { fn: 'mode', args: ['HUNT', 0] }, advance: 0.1, follow: { i: 0, offset: [0.05, 0.035, 0.08] } },
-  { name: 'flat_night_strike', call: { fn: 'until', args: ['strike', 10, 0, 0.07] }, follow: { i: 0, offset: [0.06, 0.03, 0.07] } },
+  // the sandy shallow under 30 cm of water: by day buried, at night out on the fins under a diver's torch (the animals
+  // are 12, 15 and 20 mm in mantle: the cameras about 4–7 cm from the one followed, the day's view of two of them 0.2 m off)
+  { name: 'flat_rest', set: { scene: 'flat', awake: true }, call: { fn: 'mode', args: ['REST', 0] }, advance: 4, follow: { i: 0, offset: [0.024, 0.019, 0.042], dt: [0, 0.003, 0] } },
+  { name: 'flat_rest_top', follow: { i: 0, offset: [0.0, 0.045, 0.009] } },
+  { name: 'flat_day', set: { scene: 'flat', cam: [0.075, 0.12, 0.175], target: [-0.03, 0.0, 0.05] }, advance: 2 },
+  { name: 'flat_buried', follow: { i: 0, offset: [0.03, 0.024, 0.03] } },
+  { name: 'flat_night_hover', set: { scene: 'flat', night: true }, call: { fn: 'mode', args: ['HOVER', 0] }, advance: 4, follow: { i: 0, offset: [0.012, 0.02, 0.065] } },
+  { name: 'flat_night_hunt', call: { fn: 'mode', args: ['HUNT', 0] }, advance: 0.1, follow: { i: 0, offset: [0.035, 0.025, 0.06] } },
+  { name: 'flat_night_strike', call: { fn: 'until', args: ['strike', 10, 0, 0.07] }, follow: { i: 0, offset: [0.04, 0.02, 0.05] } },
 ];
 
 const shotsFile = arg('--shots', null);

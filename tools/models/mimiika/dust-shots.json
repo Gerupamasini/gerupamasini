@@ -1,3 +1,3 @@
 [
-  { "name": "mimiika_burrow", "set": { "scene": "tank", "seed": 2 }, "call": { "fn": "mode", "args": ["BURROW"] }, "advance": 3.2, "follow": { "offset": [0.045, 0.025, 0.05] } }
+  { "name": "mimiika_burrow", "set": { "scene": "tank", "seed": 2 }, "call": { "fn": "mode", "args": ["BURROW"] }, "advance": 5.0, "follow": { "offset": [0.045, 0.025, 0.05] } }
 ]

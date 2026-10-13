@@ -10,7 +10,7 @@ import { Mysid } from './prey';
  *  REST    sits on the sand on its belly and the curled ventral arms, the head up a little, the fins folded down
  *          along the mantle; it ventilates (the mantle swells and narrows ≈ 1.4 times a second), ripples a fin now
  *          and then, looks about. The skin settles to a mottled red-brown that follows the bottom's brightness.
- *  HOVER   hangs 1–2 mantle lengths over the sand on small, quick waves running back along both fins, the head
+ *  HOVER   hangs half to one mantle length over the sand on small, quick waves running back along both fins, the head
  *          a little down, the arms held together in a loose cone; corrects its station with soft funnel puffs; the
  *          skin goes glassy and pale, the chromatophores drawn into dots, the iridophores showing.
  *  SWIM    leaves the bottom with a puff of the funnel (and of sand), travels arms first on the fins' waves (2–4 waves
@@ -65,7 +65,7 @@ export interface FxEvent {
   grow?: number;
   /** … and are gone where they reach the sand */
   kill?: boolean;
-  /** × the sand's colour (the coat's wet, mucus-bound grains: darker than the bed) */
+  /** × the sand's colour (the coat's wet, mucus-bound grains: darker than the bed; the shared dust draws the bed's colour and ignores it) */
   shade?: number;
 }
 /**
@@ -403,7 +403,7 @@ export function createSquidBehavior(opts: SquidOptions) {
     forward(fwd);
     // (the coat slides off as a unit: one clump off the back that falls behind it onto the sand, and single grains
     // sprayed off the head and the back, 67; the sprays stay under 12 grains each, only the clump is "the" shed. Wet
-    // and bound in mucus, the coat's grains are darker than the bed: the clump and the grains show against it)
+    // and bound in mucus, the coat's grains are darker than the bed: `shade` says so, for a renderer that can show it)
     const c = toWorld(_tv.set(0, 10.5, -6), new Vector3());
     sand(c, fwd.clone().multiplyScalar(-0.01 * K).setY(-0.004 * K), 24, 0.009, 0.0035, 2.8, 0.85, 1.25, false, 0.62);
     for (const [z, y] of [[-12, 10.5], [-4, 11], [3, 9], [10, 7.5]] as const) {
