@@ -473,10 +473,12 @@ export class WaterPass {
                   float h = 0.05 + 0.002 * t;
                   surfGrad = vec2(surfEta(S.xz + vec2(h, 0.0), level) - sf.eta, surfEta(S.xz + vec2(0.0, h), level) - sf.eta) / h;
                 } else surfGrad = sf.grad * (1.0 - smoothstep(80.0, 260.0, t));
-                // the swash sheet is rippled by its own flow: streaks along the slope moving with it, and fine wrinkles
+                // the swash sheet is rippled by its own flow: streaks along the slope moving with it (drawn on the
+                // sheet's own parcels, Surf.swDx: they ride the water and draw out behind the front, never faster; some
+                // three times as long as they are wide two seconds in), and fine wrinkles
                 sheetK = sf.sw * (1.0 - smoothstep(0.004, 0.05, sf.film)) * step(1e-4, sf.film);
                 if (sf.sw > 0.01 && sf.film > 0.0) {
-                  vec2 fq = vec2(sy.y * 3.4, (sy.x + 0.45 * sf.flow * min(sf.swAge, 2.5)) * 1.3) + vec2(sf.n * 3.1, 0.0);
+                  vec2 fq = vec2(sy.y * 3.4, sf.swDx / pow((sf.swAge + 0.3) / 0.6, 0.6667) * 2.9) + vec2(sf.n * 3.1, 0.0);
                   fq += 0.8 * vec2(fbmW(S.xz * 1.3), fbmW(S.xz * 1.3 + 3.0));
                   float e = 0.06, f0 = fbmW(fq), fx = fbmW(fq + vec2(e, 0.0)), fz = fbmW(fq + vec2(0.0, e));
                   vec2 gS = vec2((fz - f0) / e * 1.3, (fx - f0) / e * 3.4);   // (d/ds, d/dy)
@@ -643,12 +645,13 @@ export class WaterPass {
                 fTrail = mix(fTrail, cov * 0.55, farther);
                 // 4. the swash: the front band (thick climbing, thin lace draining), the collision line, the backwash's
                 // streaks (the lace drawn down the slope and stretched as the flow below it runs faster: a parcel's
-                // distance behind the front grows as t^(2/3)) and what the sand keeps (SurfMemory)
+                // distance behind the front grows as t^(2/3), so the lace is drawn on that distance over t^(2/3) and
+                // rides the sheet) and what the sand keeps (SurfMemory)
                 float fSwash = 0.0;
                 if (sf.sw > 0.01) {
                   float band = sf.front * mix(0.45, 1.0, sf.swUp) * smoothstep(0.0, 0.0015, vdepth) * onBed;
-                  float stretch = pow(max(sf.swAge, 0.3) / 0.6, 0.6667);
-                  vec2 bq = vec2(dot(S.xz, along) * 7.0, dot(S.xz, sea) * 7.0 / stretch + sf.flow * 0.5) + wn * 5.0;
+                  float stretch = pow((sf.swAge + 0.3) / 0.6, 0.6667);
+                  vec2 bq = vec2(dot(S.xz, along) * 7.0, sf.swDx * 7.0 / stretch) + wn * 5.0;
                   float lace = foamLace(bq, 0.25 + 0.45 * band, fpx * 7.0 * 2.6);
                   float mem = 0.0;
                   if (uMemBox.w > 0.0) {

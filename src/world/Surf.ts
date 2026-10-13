@@ -198,6 +198,8 @@ vec2 surfShape(float H, float D, float k) {
 vec4 gSwash = vec4(0.0);
 // a new uprush running over the last backwash (0..1); 1 while the event is running up; the event's number (bounded)
 float gSwCollide = 0.0, gSwUp = 0.0, gSwN = 0.0;
+// how far up the beach the event's front is from the point (m; 0 where no sheet lies)
+float gSwDx = 0.0;
 void surfSwashAt(vec2 sy, float D, float ph, float ta, float beta, float shelter, bool full) {
   float Tp = uSurf.y;
   float b = clamp(beta, 0.02, 0.25);
@@ -210,7 +212,7 @@ void surfSwashAt(vec2 sy, float D, float ph, float ta, float beta, float shelter
   float R2 = b / sqrt(Hs / L0) < 0.3 ? 0.043 * sqrt(HL) : 1.1 * (0.35 * b * sqrt(HL) + 0.5 * sqrt(HL * (0.563 * b * b + 0.004)));
   float shel = pow(clamp(shelter, 0.0, 1.0), 0.8);
   vec4 best = vec4(0.0, 0.0, 0.0, 99.0);
-  float bestN = 0.0, bestUp = 0.0, hPrev = 0.0, xsNew = -99.0, upNew = 0.0;
+  float bestN = 0.0, bestUp = 0.0, bestDx = 0.0, hPrev = 0.0, xsNew = -99.0, upNew = 0.0;
   for (int i = 0; i < 3; i++) {
     float n = n0 - float(i), tau = tau0 + float(i) * Tl, wn = surfW(n);
     float Hn = surfWaveH(n, sy) * shel;
@@ -234,10 +236,10 @@ void surfSwashAt(vec2 sy, float D, float ph, float ta, float beta, float shelter
     if (i == 1) hPrev = h;
     if (h > best.x) {
       best = vec4(h, us + 0.6667 * (x - xs) / te, step(0.0, dx) * exp(-max(dx, 0.0) / (0.05 + 0.08 * min(Xr, 2.0))), tau);
-      bestN = wn; bestUp = tau < tU ? 1.0 : 0.0;
+      bestN = wn; bestUp = tau < tU ? 1.0 : 0.0; bestDx = dx;
     }
   }
-  gSwash = best; gSwN = bestN; gSwUp = bestUp;
+  gSwash = best; gSwN = bestN; gSwUp = bestUp; gSwDx = bestDx;
   // the new uprush meeting the last backwash: a turbulent, foaming step where its front runs over the old sheet
   gSwCollide = full ? upNew * exp(-abs(x - xsNew) / 0.3) * smoothstep(0.002, 0.02, hPrev) : 0.0;
 }
@@ -335,12 +337,15 @@ struct Surf {
   float murk;     // sand stirred into the water (0..1)
   float impact;   // waves striking a rock or a wall here (0..1)
   float D;        // the still water's depth (m; negative up the beach)
+  float swDx;     // how far up the beach the swash's front is (m; 0 where no sheet lies): with swAge, where a parcel
+                  // of the sheet sits (d / (t + 0.3)^(2/3) is the same parcel all along, Shen & Meyer's lens), so what
+                  // is drawn on the sheet can ride it
 };
 
 // The surf at a point for the water level and time. 'full': the foam, the swash's foam and the flow too (the trace
 // asks only for the height).
 Surf surfEval(vec2 xz, float level, float t, bool full) {
-  Surf S = Surf(0.0, vec2(0.0), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 99.0, 0.0, 0.0, 0.0, 0.0, 1e3);
+  Surf S = Surf(0.0, vec2(0.0), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 99.0, 0.0, 0.0, 0.0, 0.0, 1e3, 0.0);
   if (uSurf.w <= 0.0) return S;
   vec4 Z = surfZoneAt(xz);
   float D = level - Z.x;
@@ -427,7 +432,7 @@ Surf surfEval(vec2 xz, float level, float t, bool full) {
     float esw = gSwash.x > 0.0 ? -D + gSwash.x : -D - SURF_DRY;
     eta = mix(eta, esw, wsw);
     S.sw = wsw;
-    S.film = gSwash.x; S.flow = gSwash.y; S.front = gSwash.z * wsw; S.swAge = gSwash.w; S.swUp = gSwUp;
+    S.film = gSwash.x; S.flow = gSwash.y; S.front = gSwash.z * wsw; S.swAge = gSwash.w; S.swUp = gSwUp; S.swDx = gSwDx;
     S.collide = gSwCollide * wsw;
     if (wsw > 0.5) S.n = gSwN;
     S.roller *= 1.0 - wsw;
