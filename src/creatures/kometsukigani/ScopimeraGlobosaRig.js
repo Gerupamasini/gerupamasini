@@ -66,15 +66,15 @@ export const LEG_JOINTS = {
  */
 export const CHELA_POSES = {
   /**
-   * fold, fitted to keypoints of the front view 063 (CW 317 px; a large male) and, for depth, the view from above
-   * and behind 049: the carpus knob lies across above each palm like a shoulder under the anterolateral corner
-   * (centre 0.38 CW out, 0.33 up); the palm hangs beside the maxillipeds, not over them, with its broad face forward
-   * (centre 0.34 out, 0.19 up); the fingers point down, their tips 0.2 CW from the midline just above the sand (a
-   * margin for each individual's asymmetry) — side by side, not crossed under the face (also 002, 061, 2.webp,
-   * 4.webp). The limb comes forward from the coxa at the sternum's anterolateral corner (b66, b69). The other
-   * presets keep their knob, palm and fingertip where they were before the coxa moved there
+   * fold: the arm leaves the body from under the anterolateral margin — the merus runs out and forward below the
+   * margin, never above it (its far end no higher than the carpus), the elbow just outside the side wall — and the
+   * carpus and palm lie in front of the front corner, angled inward across the face, the fingers down-inward, their
+   * tips 0.2 CW from the midline just above the sand (b67, b68, 002 from the front; 049, 008, 009 from above). An
+   * earlier fit to the front view 063 alone put the carpus behind the corner, bulging through the carapace, and the
+   * merus climbing the side of the face. Fitted in 3-D (carpus, palm, fingertip; the merus' height capped). The other
+   * presets keep their knob, palm and fingertip where they were before the coxa moved to the sternum's corner
    */
-  fold: [-1.4, 1.622, 0, 0.088, 2.006, 0.65, 0.04],
+  fold: [-0.695, 1.033, 0, -0.35, 2.317, -0.089, 0.04],
   scoop: [0.472, 0.274, 0, -0.012, 0.424, -1.014, 0.3],
   mouth: [0.124, 0.839, 0, 0.405, 1.085, -1.2, 0.05],
   /** wave, fitted to 6.webp: merus vertical beside the carapace, palm high with the fingers hooked inward */

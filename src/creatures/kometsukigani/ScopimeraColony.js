@@ -1,4 +1,4 @@
-import { Group, Vector3 } from 'three';
+import { Color, Group, Vector3 } from 'three';
 import { ScopimeraGlobosa, ScopimeraDriver, makeEnv, seasonFor, STATE } from './ScopimeraGlobosa.js';
 import { BurrowRenderer, RENDER_ORDER, shaftAxis } from './Burrows.js';
 import { SandPellets } from './SandPellets.js';
@@ -61,8 +61,11 @@ export class ScopimeraColony {
     this.crabGroup.name = 'kometsukigani-crabs';
     this.renderer = new BurrowRenderer();
     this.pellets = new SandPellets({ quality });
-    const sand = SAND_LINEAR.clone();
+    // the pellets (and the grains on the crabs) are the flat's own sand: each pellet the dry sand where it lies,
+    // the flat's mean as the fallback
+    const sand = drySandColour(terrain, SAND_LINEAR);
     this.pellets.setSandColor(sand);
+    if (terrain?.colorAt) this.pellets.colorAt = (x, z, out) => drySandAt(terrain, x, z, out);
     this.sand = sand;
     this.group.add(this.renderer.group, this.pellets.group, this.crabGroup);
     scene.add(this.group);
@@ -913,6 +916,50 @@ export class ScopimeraColony {
 }
 
 // ============================================================================================ helpers
+
+/**
+ * The sand's colour where the crabs live, as the flat draws it (drySandAt: damp, linear albedo): the mean over the
+ * sand of the crabs' band (葛西: a grey). The pellets' fallback colour and the grains on the crabs; the fallback below
+ * when the terrain cannot tell.
+ */
+/**
+ * The sand's colour at a point as the crabs' damp flat draws it: Terrain.colorAt read with the water line set aside
+ * (its dry albedo: substrate, the flat's sand tint, the broad patches), then darkened and neutralised as the flat's
+ * shader does its damp sand (Terrain.look.wetDark and the wet flat's grey) — most of the way, the pellets being a
+ * touch drier than the ground they lie on. Without this a dried pellet is the dry sand's colour, twice as light as
+ * the damp sand of the crabs' band at low water (measured on screen: 143 against 83).
+ */
+const DAMP = 0.85;
+function drySandAt(terrain, x, z, out) {
+  const w = terrain.uWater;
+  if (w) {
+    const lvl = w.value;
+    w.value = -1e9;
+    try { terrain.colorAt(x, z, out); } finally { w.value = lvl; }
+  } else terrain.colorAt(x, z, out);
+  const k = terrain.look?.wetDark?.value ?? 0.45;
+  // (the flat's shader: × wetDark, then 55 % of the way to × (0.84, 0.92, 1.06))
+  out.r *= 1 + (k * (0.45 + 0.55 * 0.84) - 1) * DAMP;
+  out.g *= 1 + (k * (0.45 + 0.55 * 0.92) - 1) * DAMP;
+  out.b *= 1 + (k * (0.45 + 0.55 * 1.06) - 1) * DAMP;
+  return out;
+}
+
+function drySandColour(terrain, fallback) {
+  if (!terrain?.colorAt || !terrain.substrateAt) return fallback.clone();
+  const half = terrain.half, N = 32;
+  const c = new Color();
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const x = -half + ((i + 0.5) / N) * 2 * half, z = -half + ((j + 0.5) / N) * 2 * half;
+    if (!terrain.inside(x, z, 6) || terrain.substrateAt(x, z) !== 'sand') continue;
+    const h = terrain.heightAt(x, z);
+    if (h < -0.55 || h > 1.0) continue;
+    drySandAt(terrain, x, z, c);
+    r += c.r; g += c.g; b += c.b; n++;
+  }
+  return n >= 8 ? new Color(r / n, g / n, b / n) : fallback.clone();
+}
 
 function hashI(a, b, c, d) {
   let h = 2166136261 >>> 0;
