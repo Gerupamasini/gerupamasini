@@ -1,4 +1,5 @@
-import { EQUIPMENT_KINDS, EQUIPMENT_LABELS, type EquipmentKind, type EquipmentLayout } from './state';
+import { EQUIPMENT_KINDS, EQUIPMENT_LABELS, TANK_SIZES, TANK_DIMENSIONS, makeEquipment, type TankSize, type EquipmentKind, type EquipmentLayout, type EquipmentRecord } from './state';
+import { initialProgression, normalizeProgression, isFilterKind, filterCapacity, tankUnlocked, type AquariumProgression, type FilterKind } from './progression';
 
 export type EquipmentCategory = 'tank' | 'stand' | EquipmentKind;
 export type EquipmentStyle = 'classic' | 'ivory' | 'studio';
@@ -10,12 +11,13 @@ export interface EquipmentItem {
   style: EquipmentStyle;
   rarity: 'initial' | 'N' | 'R';
   stand?: 'wood' | 'metal';
+  size?: TankSize;
 }
 export const EQUIPMENT_CATEGORIES: EquipmentCategory[] = ['tank', 'stand', ...EQUIPMENT_KINDS];
 export const CATEGORY_LABELS: Record<EquipmentCategory, string> = { tank: '水槽本体', stand: '水槽台', ...EQUIPMENT_LABELS };
 const INITIAL_NAMES: Record<EquipmentCategory, string> = {
   tank: 'クリアガラス水槽 60', stand: 'オークキャビネット 60',
-  glassLid: 'クリアガラス蓋', lightFixture: 'ベーシックライトバー', ledLight: 'デイライトLED 60',
+  glassLid: 'クリアガラス蓋', lightFixture: 'ベーシックライトバー', ledLight: 'デイライトLED',
   filter: 'ベーシック水中フィルター', canisterFilter: 'クラシック外部フィルター', topFilter: 'ベーシック上部フィルター',
   spongeFilter: 'クラシックスポンジフィルター', airPump: 'クラシックエアポンプ', airStone: 'セラミックエアストーン',
   heater: 'ガラス管ヒーター', thermometer: 'デジタル水温計', thermostat: 'ベーシックサーモスタット',
@@ -30,7 +32,7 @@ const DESCRIPTIONS: Record<EquipmentCategory, string> = {
   filter: '水槽の壁面に取り付けるコンパクトなフィルター。',
   canisterFilter: '水槽台の中に置く外部フィルター。吸水・戻りのホースが付属します。',
   topFilter: '水槽の上に置くフィルターボックス。水の戻り口を備えています。',
-  spongeFilter: '気泡とスポンジを組み合わせた、水槽内のアクセント。',
+  spongeFilter: 'エアポンプの気泡で水を通し、スポンジでろ過する水槽内フィルター。',
   airPump: '水槽の背面に置くエアポンプ。エア用品のホースは自動でつながります。',
   airStone: '細かな気泡が立ち上るエアストーン。底面の好きな位置に置けます。',
   heater: '吸盤で取り付けるヒーター。コードは背面にまとめられます。',
@@ -42,14 +44,21 @@ const DESCRIPTIONS: Record<EquipmentCategory, string> = {
   powerStrip: '配線をまとめる6口電源タップ。水槽の背面に設置します。',
 };
 export const initialItemId = (category: EquipmentCategory): string => `${category}-initial`;
+export const tankSizeItemId = (category: 'tank' | 'stand', size: TankSize, style: EquipmentStyle = 'classic'): string => `${category}${size === 60 ? '' : `-${size}`}-${style === 'classic' ? 'initial' : style}`;
 export const EQUIPMENT_ITEMS: EquipmentItem[] = EQUIPMENT_CATEGORIES.flatMap((category) => [
   { id: initialItemId(category), category, name: INITIAL_NAMES[category], description: DESCRIPTIONS[category], style: 'classic' as const, rarity: 'initial' as const, ...(category === 'stand' ? { stand: 'wood' as const } : {}) },
   { id: `${category}-ivory`, category, name: category === 'stand' ? 'アイボリーキャビネット 60' : `アイボリー ${CATEGORY_LABELS[category]}`, description: `${DESCRIPTIONS[category]} 明るいアイボリーの仕上げ。`, style: 'ivory' as const, rarity: 'N' as const, ...(category === 'stand' ? { stand: 'wood' as const } : {}) },
   { id: `${category}-studio`, category, name: category === 'stand' ? 'スタジオメタルフレーム 60' : `スタジオ ${CATEGORY_LABELS[category]}`, description: `${DESCRIPTIONS[category]} 金属とチャコールを合わせた落ち着いた仕上げ。`, style: 'studio' as const, rarity: 'R' as const, ...(category === 'stand' ? { stand: 'metal' as const } : {}) },
-]);
+]).map(item => ({ ...item, ...(item.category === 'tank' || item.category === 'stand' ? { size: 60 as TankSize } : {}) }));
+for (const size of TANK_SIZES.filter(s => s !== 60)) for (const category of ['tank', 'stand'] as const) for (const style of ['classic', 'ivory', 'studio'] as const) {
+  EQUIPMENT_ITEMS.push({ id: tankSizeItemId(category, size, style), category, size, style,
+    name: category === 'tank' ? `${style === 'classic' ? 'クリアガラス' : style === 'ivory' ? 'アイボリー' : 'スタジオ'}水槽 ${size}` : `${style === 'classic' ? '標準オークキャビネット' : style === 'ivory' ? 'アイボリーキャビネット' : 'スタジオメタルフレーム'} ${size}`,
+    description: category === 'tank' ? `幅${size}cmのガラス水槽。対応する標準台と一緒に設置できます。` : `${size}cm水槽を支える高さ73cmの専用台。配線とホースは背面にまとまります。`,
+    rarity: style === 'classic' ? 'initial' : style === 'ivory' ? 'N' : 'R', ...(category === 'stand' ? { stand: style === 'studio' ? 'metal' as const : 'wood' as const } : {}) });
+}
 const ITEMS = new Map(EQUIPMENT_ITEMS.map((i) => [i.id, i]));
 export const equipmentItem = (id: string | undefined): EquipmentItem | undefined => id ? ITEMS.get(id) : undefined;
-export const itemsForCategory = (category: EquipmentCategory): EquipmentItem[] => EQUIPMENT_ITEMS.filter((i) => i.category === category);
+export const itemsForCategory = (category: EquipmentCategory, size?: TankSize): EquipmentItem[] => EQUIPMENT_ITEMS.filter((i) => i.category === category && (size === undefined || i.size === size));
 export function itemForCategory(id: string | undefined, category: EquipmentCategory): EquipmentItem {
   const item = equipmentItem(id); return item?.category === category ? item : ITEMS.get(initialItemId(category))!;
 }
@@ -58,16 +67,22 @@ export const categoryLimit = (category: EquipmentCategory): number => MULTIPLE_E
 
 export const INITIAL_GACHA_TICKETS = 10;
 export const RESEARCH_PER_GACHA_TICKET = 100;
-export interface EquipmentCollection { version: 1; stock: Record<string, number>; draws: number; tickets: number; researchClaimed?: number }
-export const emptyEquipmentCollection = (): EquipmentCollection => ({ version: 1, stock: {}, draws: 0, tickets: INITIAL_GACHA_TICKETS });
-/** Initial items are always available; acquired items have real quantities for multiple placement. */
+export interface EquipmentCollection { version: 1; stock: Record<string, number>; draws: number; tickets: number; researchClaimed?: number; progression?: AquariumProgression }
+export const emptyEquipmentCollection = (): EquipmentCollection => ({ version: 1, stock: {}, draws: 0, tickets: INITIAL_GACHA_TICKETS, progression: initialProgression() });
+export const progressionOf = (collection: EquipmentCollection): AquariumProgression => collection.progression ?? initialProgression();
+export function equipmentUnlocked(collection: EquipmentCollection, id: string): boolean {
+  const item = equipmentItem(id); if (!item) return false;
+  const p = progressionOf(collection);
+  return item.size ? tankUnlocked(p, item.size) : isFilterKind(item.category) ? p.filters[item.category] > 0 : true;
+}
+/** Standard designs have unlimited copies after type unlock; acquired designs have real quantities. */
 export function ownedQuantity(collection: EquipmentCollection, id: string): number {
   const item = equipmentItem(id); return item?.rarity === 'initial' ? Infinity : collection.stock[id] ?? 0;
 }
 export function usedQuantity(layout: EquipmentLayout, id: string, excluding?: string): number {
   return Number(excluding !== 'tank' && layout.tankItemId === id) + Number(excluding !== 'stand' && layout.standItemId === id) + layout.devices.filter((d) => d.id !== excluding && d.itemId === id).length;
 }
-export function normalizeCollection(raw: unknown, legacyLayout?: EquipmentLayout): EquipmentCollection {
+export function normalizeCollection(raw: unknown, legacyLayout?: EquipmentLayout, roomLayouts: EquipmentLayout[] = []): EquipmentCollection {
   const result = emptyEquipmentCollection();
   if (raw && typeof raw === 'object' && (raw as EquipmentCollection).version === 1) {
     const r = raw as EquipmentCollection;
@@ -83,18 +98,36 @@ export function normalizeCollection(raw: unknown, legacyLayout?: EquipmentLayout
     const ids = [legacyLayout.standItemId ?? (legacyLayout.stand === 'metal' ? 'stand-studio' : initialItemId('stand')), legacyLayout.tankItemId, ...legacyLayout.devices.map((d) => d.itemId)];
     for (const id of ids) if (id && equipmentItem(id)?.rarity !== 'initial' && equipmentItem(id)) result.stock[id] = (result.stock[id] ?? 0) + 1;
   }
+  if (raw && typeof raw === 'object' && Object.prototype.hasOwnProperty.call(raw, 'progression')) result.progression = normalizeProgression((raw as EquipmentCollection).progression);
+  else {
+    // Grandfather only previously installed sizes/types and acquired finishes; future gacha rewards never unlock them.
+    const p = initialProgression(), layouts = [...roomLayouts, ...(legacyLayout ? [legacyLayout] : [])];
+    const ids = [...Object.keys(result.stock), ...layouts.flatMap(l => [l.tankItemId, l.standItemId, ...l.devices.map(d => d.itemId ?? initialItemId(d.kind))])];
+    for (const id of ids) { const item = equipmentItem(id); if (!item) continue;
+      if (item.size && !p.sizes.includes(item.size)) p.sizes.push(item.size);
+      if (isFilterKind(item.category)) p.filters[item.category] = 1;
+    }
+    result.progression = p;
+  }
   return result;
 }
 /** A malformed/imported save cannot equip designs or quantities outside its collection. */
-export function ownedEquipmentLayout(layout: EquipmentLayout, collection: EquipmentCollection): EquipmentLayout {
-  const used = new Map<string, number>();
+export function ownedEquipmentLayout(layout: EquipmentLayout, collection: EquipmentCollection, used = new Map<string, number>()): EquipmentLayout {
   const choose = (id: string | undefined, category: EquipmentCategory): EquipmentItem => {
     let item = itemForCategory(id, category);
-    if ((used.get(item.id) ?? 0) >= ownedQuantity(collection, item.id)) item = itemForCategory(undefined, category);
+    if ((used.get(item.id) ?? 0) >= ownedQuantity(collection, item.id)) item = itemForCategory(category === 'tank' || category === 'stand' ? tankSizeItemId(category, item.size ?? 60) : undefined, category);
     used.set(item.id, (used.get(item.id) ?? 0) + 1); return item;
   };
-  const tank = choose(layout.tankItemId, 'tank'), stand = choose(layout.standItemId ?? (layout.stand === 'metal' ? 'stand-studio' : undefined), 'stand');
-  return { ...layout, tankItemId: tank.id, standItemId: stand.id, stand: stand.stand!, devices: layout.devices.map((d) => ({ ...d, position: [...d.position], itemId: choose(d.itemId, d.kind).id })) };
+  const tank = choose(layout.tankItemId, 'tank');
+  const size = tank.size ?? 60;
+  const requestedStand = itemForCategory(layout.standItemId ?? (layout.stand === 'metal' ? 'stand-studio' : undefined), 'stand');
+  const stand = choose(requestedStand.size === size ? requestedStand.id : tankSizeItemId('stand', size), 'stand');
+  const p = progressionOf(collection);
+  const filters = layout.devices.filter(d => isFilterKind(d.kind) && p.filters[d.kind] > 0);
+  const selected = filters.reduce<typeof filters[number] | undefined>((best, d) => !best || filterCapacity(p, d.kind as FilterKind) > filterCapacity(p, best.kind as FilterKind) ? d : best, undefined);
+  const devices: EquipmentRecord[] = layout.devices.filter(d => !isFilterKind(d.kind) || d.kind === selected?.kind).map((d) => ({ ...d, position: [...d.position] as [number, number, number], itemId: choose(d.itemId, d.kind).id }));
+  if (!selected) { let id = 'filter'; while (devices.some(d => d.id === id)) id += '-1'; devices.push(makeEquipment('filter', id, TANK_DIMENSIONS[size])); }
+  return { ...layout, tankItemId: tank.id, standItemId: stand.id, stand: stand.stand!, devices, connections: layout.connections.filter(c => [c.from.device, c.to.device].every(id => ['tank', 'mains'].includes(id) || devices.some(d => d.id === id))) };
 }
 
 /** Each research milestone pays once, including after spent tickets and reloads. */

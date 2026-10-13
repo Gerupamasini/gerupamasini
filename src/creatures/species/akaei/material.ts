@@ -272,9 +272,11 @@ export function skinUniforms(mat: Material): SkinUniforms {
 
 let eyeTex: DataTexture | null = null;
 /**
- * The eye seen from above: a dark pupil under a lobed flap (the operculum that shades a ray's pupil), a bronze-olive iris
- * with fine radial streaks, darkening into the orbit. uv.y runs from the cornea's apex (0) toward the orbit (1).
+ * The eye: a dark pupil under a lobed flap (the operculum that shades a ray's pupil), a dark bronze-olive iris with
+ * fine radial streaks, shading into the eyeball inside the orbit. uv.y runs from the cornea's apex (0) toward the orbit (1).
  */
+const smooth01 = (t: number): number => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
+
 export function eyeTexture(): DataTexture {
   if (eyeTex) return eyeTex;
   const W = 128, H = 64, d = new Uint8Array(W * H * 4);
@@ -282,23 +284,20 @@ export function eyeTexture(): DataTexture {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     // SphereGeometry's uv.y is 1 at the pole (the cornea's apex)
     const v = 1 - y / (H - 1), a = (x / W) * Math.PI * 2;
-    // seen from above the cornea is a dark, glossy dome [PHOTO 005, 006, 027]: a black pupil under its lobed flap, a
-    // very dark olive-bronze iris, and a thin golden line where the dome meets the lip of the socket
-    // (only v < ~0.3 shows above the socket: the dome is half sunk)
-    const lobes = 0.025 * Math.max(0, Math.cos(a - Math.PI / 2)) * (0.6 + 0.4 * Math.cos(a * 5));
-    const pupilR = 0.15 - lobes;
-    const streak = 0.85 + 0.15 * Math.sin(a * 41 + Math.sin(a * 7) * 2);
+    // the cornea is a dark, glossy dome looking out sideways [PHOTO 005, 006, 027]: a black pupil under its lobed flap
+    // and a very dark olive-bronze iris, shading evenly into the dark eyeball where the orbit's skin closes over it
+    // (the golden line round it belongs to the lid: the skin's colour)
+    const lobes = 0.02 * Math.max(0, Math.cos(a - Math.PI / 2)) * (0.6 + 0.4 * Math.cos(a * 5));
+    const pupilR = 0.12 - lobes;
+    const streak = 0.93 + 0.07 * Math.sin(a * 41 + Math.sin(a * 7) * 2);
     let r: number, g: number, b: number;
     if (v < pupilR) { r = 0.012; g = 0.014; b = 0.018; }
-    else if (v < 0.33) {
-      const t = (v - pupilR) / (0.33 - pupilR);
-      const k = (0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, t * 1.1))) * streak;
-      r = 0.03 * k; g = 0.027 * k; b = 0.02 * k;
-    } else if (v < 0.42) {
-      const t = (v - 0.33) / 0.09;
-      const k = Math.sin(Math.PI * t);
-      r = 0.03 + 0.07 * k; g = 0.027 + 0.05 * k; b = 0.02 + 0.02 * k;
-    } else { r = 0.06; g = 0.05; b = 0.035; }
+    else {
+      const t = Math.min(1, (v - pupilR) / (0.42 - pupilR));
+      const k = (0.65 + 0.35 * Math.sin(Math.PI * Math.min(1, t * 1.15))) * (t < 1 ? streak : 1);
+      const out = smooth01((v - 0.36) / 0.3);
+      r = (0.032 * k) * (1 - out) + 0.045 * out; g = (0.028 * k) * (1 - out) + 0.038 * out; b = (0.02 * k) * (1 - out) + 0.028 * out;
+    }
     const i = (y * W + x) * 4;
     d[i] = lin(Math.pow(r, 1 / 2.2)); d[i + 1] = lin(Math.pow(g, 1 / 2.2)); d[i + 2] = lin(Math.pow(b, 1 / 2.2)); d[i + 3] = 255;
   }

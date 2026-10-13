@@ -4,11 +4,12 @@ import type { Terrain } from '../../src/world/Terrain';
 import { WaterPass } from '../../src/world/Water';
 import { createWaves } from '../../src/world/Waves';
 import { HASHIRIMIZU } from '../../src/world/maps/hashirimizu';
-import { profile, REF_TIDE } from '../../src/world/maps/hashirimizu/shape';
+import { profile, REF_TIDE, slopeAt } from '../../src/world/maps/hashirimizu/shape';
+import { breakerType, breakingDepth, iribarren } from '../../src/world/surfPhysics';
 
-/** distance from the 0 m line where the ground lies `depth` below the reference tide */
-function whereDepth(depth: number): number {
-  for (let d = -10; d < 60; d += 0.01) if (REF_TIDE - profile(d) >= depth) return d;
+/** distance from the 0 m line where the ground lies `depth` below the water level */
+function whereDepthAt(level: number, depth: number): number {
+  for (let d = -10; d < 60; d += 0.01) if (level - profile(d) >= depth) return d;
   return NaN;
 }
 
@@ -20,15 +21,21 @@ describe('走水 surf and sand', () => {
     expect(Math.abs(Math.sin(a))).toBeCloseTo(1, 9);
   });
 
-  it('breaks its waves on the clam flat, a few metres out from the waterline at the reference tide', () => {
+  it('spills its waves across the clam flat at the reference tide, and breaks them on the beach face at high water', () => {
     const s = HASHIRIMIZU.surf!;
-    // (breaker index ~1.05 on this slope: the depth at which a wave of the layout's height goes over)
-    const shore = whereDepth(0), breaker = whereDepth(s.height / 1.05);
-    expect(shore).toBeGreaterThan(2);
-    expect(breaker - shore).toBeGreaterThan(1.5);
+    const edge = (level: number) => level - profile(70);
+    // the common wave (the mean height, 0.63 Hs) breaks where the depth is about its shoaled height over Weggel's index
+    const H = 0.63 * s.height;
+    const at = (level: number, slope: number) => whereDepthAt(level, breakingDepth(H, edge(level), slope, s.period));
+    const shore = whereDepthAt(REF_TIDE, 0), breaker = at(REF_TIDE, 0.04);
+    expect(breaker - shore).toBeGreaterThan(3);
     expect(breaker - shore).toBeLessThan(10);
-    // inside the clam flat and short of the eelgrass, where the player wades
-    expect(breaker).toBeLessThan(12.5);
+    expect(breakerType(iribarren(0.04, H * 1.3, s.period))).toBe('spilling');
+    // high water: the waterline is on the 1:9 face and the waves go over a couple of metres off it, plunging
+    const hiShore = whereDepthAt(0.6, 0), hiBreak = at(0.6, slopeAt(hiShore + 2));
+    expect(hiShore).toBeLessThan(-4);
+    expect(hiBreak - hiShore).toBeLessThan(3.5);
+    expect(breakerType(iribarren(slopeAt(hiShore + 2), H * 1.3, s.period))).toBe('plunging');
   });
 
   it('has no surf on a sheltered flat', () => {

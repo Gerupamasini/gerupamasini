@@ -8,7 +8,7 @@ import type { GachaResult } from '../aquarium/catalog';
 /** a tool id from items/tools.json */
 export type ToolId = string;
 
-export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'gacha' | 'error';
+export type Screen = 'boot' | 'title' | 'home' | 'tankEdit' | 'roomPlacement' | 'field' | 'observe' | 'capture' | 'caseView' | 'zukan' | 'ticket' | 'tidetable' | 'menu' | 'spots' | 'shop' | 'gacha' | 'error';
 
 export interface HudState {
   timeText: string;
@@ -42,10 +42,12 @@ export interface DebugState {
   timeOverride: boolean;
   tideOverride: number | null;
   overcast: number;
+  /** the surf's debug view (0 off) */
+  surfView?: number;
   markers: boolean;
   /** species kept out of the world for now (ids) */
   hidden: string[];
-  stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number; clamsNear: number; clamsTotal: number; oysters?: string; oystersTotal?: number; amamo?: string; gpuMs?: number | null; view?: string };
+  stats: { calls: number; tris: number; creatures: number; visible: number; lod1: number; clamsNear: number; clamsTotal: number; oysters?: string; oystersTotal?: number; amamo?: string; tank?: string; gpuMs?: number | null; view?: string };
 }
 
 export interface Toast {
@@ -59,6 +61,7 @@ export const ui = {
   settings: signal<SettingsData>({ ...DEFAULT_SETTINGS }),
   /** the tool (id) or parcel ('coming:<id>') picked on the shop's shelves */
   shopSelected: signal<string | null>(null),
+  shopTab: signal<'tools' | 'tanks' | 'filters' | 'quests'>('tools'),
   screen: signal<Screen>('boot'),
   saveError: signal<string | null>(null),
   saveRecovery: signal<{ message: string; backup: boolean } | null>(null),

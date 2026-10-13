@@ -5,6 +5,7 @@ import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import type { IndividualRecord } from '../../creatures/Individual';
 import { TANK_ITEM_TYPES, TANK_MAX_ITEMS, TANK_SUBSTRATES } from '../../app/TankLayout';
+import { TankSwitcher } from './TankSwitcher';
 import { CloseIcon } from '../common/Icons';
 import { EquipmentTab } from './EquipmentTab';
 import { SpecimenPicker } from '../common/SpecimenPicker';
@@ -33,12 +34,14 @@ export function TankPanel({ app }: { app: App }) {
         {app.input.touchDevice && <button class="btn ghost sm sheet-toggle" onClick={() => setCollapsed(!collapsed)} aria-expanded={!collapsed}>{collapsed ? '編集を表示' : '水槽を見る'}</button>}
         <button class="icon-btn" onClick={() => app.closeTankEdit()} aria-label={t('ui.close')}><CloseIcon /></button>
       </div>
+      <div class="tank-room-controls"><TankSwitcher app={app} editor /><button class="btn sm" onClick={() => app.openRoomPlacement()}>部屋に設置</button></div>
       <div class="seg">
         <button class={tab === 'fish' ? 'on' : ''} onClick={() => { ui.tankTab.value = 'fish'; ui.tankSelected.value = null; }}>{t('tank.tab.fish')}</button>
         <button class={tab === 'layout' ? 'on' : ''} onClick={() => { ui.tankTab.value = 'layout'; }}>{t('tank.tab.layout')}</button>
         <button class={tab === 'equipment' ? 'on' : ''} onClick={() => { ui.tankTab.value = 'equipment'; ui.tankSelected.value = null; }}>設備</button>
       </div>
       <div class="drawer-body">
+        {tab === 'fish' && !app.input.touchDevice && <p class="small tank-filter-info">飼育上限 {app.tankMax}匹 <button onClick={() => app.openShop('filters')}>ろ過装置を強化</button></p>}
         {tab === 'fish' ? app.input.touchDevice ? <MobileFishTab app={app} /> : <FishTab app={app} /> : tab === 'layout' ? <LayoutTab app={app} /> : <EquipmentTab app={app} />}
       </div>
       <div class="foot">{app.input.touchDevice ? tab === 'layout' ? '飾りは水槽内でドラッグして配置。' : '1本指で回転・2本指で拡大／移動。' : tab === 'layout' ? t('tank.dragHint') : 'ドラッグで回転 ・ ホイールで接近 ・ WASD で視点'}</div>
@@ -55,12 +58,13 @@ function MobileFishTab({ app }: { app: App }) {
   const lastPage = Math.max(0, Math.ceil(records.length / 6) - 1), currentPage = Math.min(page, lastPage);
   const shown = records.slice(currentPage * 6, currentPage * 6 + 6), chosen = shown.find((r) => r.id === selected) ?? shown[0];
   const sp = chosen ? app.data.species.get(chosen.speciesId) : undefined;
-  return <div class="mobile-fish-tab">
-    <div class="seg specimen-source"><button class={source === 'tank' ? 'on' : ''} onClick={() => { setSource('tank'); setPage(0); }}>水槽 {enc.tankItems.value.length}/{app.tankMax}</button><button class={source === 'case' ? 'on' : ''} onClick={() => { setSource('case'); setPage(0); }}>ケース {enc.caseItems.value.length}/{enc.caseMax}</button></div>
+  return <div class={`mobile-fish-tab ${lastPage > 0 ? 'has-pages' : ''}`}>
+    <div class="seg specimen-source"><button class={source === 'tank' ? 'on' : ''} onClick={() => { setSource('tank'); setPage(0); }}>水槽 {enc.tankItems.value.length}/{app.tankMax}</button><button class={source === 'case' ? 'on' : ''} onClick={() => { setSource('case'); setPage(0); }}>ケース {enc.caseItems.value.length}/{enc.caseMax}</button><button onClick={() => app.openShop('filters')}>ろ過強化</button></div>
     <SpecimenPicker app={app} items={shown} selected={chosen?.id} onSelect={setSelected} />
-    {lastPage > 0 && <div class="specimen-pagination"><button class="btn ghost" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>前へ</button><span>{currentPage + 1}/{lastPage + 1}</span><button class="btn ghost" disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>次へ</button></div>}
     {chosen ? <div class="mobile-specimen-detail">
-      <span class="small dim">{t(`sex.${chosen.sex}`)} ・ {chosen.weight_g.toFixed(1)} g</span>
+      <div class="mobile-specimen-meta"><span class="small dim">{t(`sex.${chosen.sex}`)} ・ {chosen.weight_g.toFixed(1)} g</span>
+        {lastPage > 0 && <nav class="specimen-pagination" aria-label="水槽の生物一覧ページ"><button class="btn ghost" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>前へ</button><span>{currentPage + 1}/{lastPage + 1}</span><button class="btn ghost" disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>次へ</button></nav>}
+      </div>
       <div class="mobile-specimen-actions">
         {source === 'tank' ? <button class="btn" onClick={() => void app.tankRelease(chosen)}>{t('tank.release')}</button> : <Fragment>
           <button class="btn" disabled={enc.tankItems.value.length >= app.tankMax} onClick={() => void app.tankPut(chosen)}>{t('tank.put')}</button>

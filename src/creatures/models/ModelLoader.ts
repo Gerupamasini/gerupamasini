@@ -5,6 +5,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import basisTranscoderJs from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import basisTranscoderWasm from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
+import { isGobyBody, makeTranslucentBody } from '../species/mahaze/bodyTranslucency';
 
 export type Tier = 'hero' | 'lod1' | 'lod2';
 
@@ -83,13 +84,13 @@ function prepareMaterials(gltf: GLTF, tier: Tier): void {
     const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[];
-    for (const m of mats) prepareMaterial(m, tier);
+    for (const m of mats) prepareMaterial(m, tier, gltf.parser);
     mesh.castShadow = tier !== 'lod2';
     mesh.receiveShadow = false;
   });
 }
 
-function prepareMaterial(m: Material, tier: Tier): void {
+function prepareMaterial(m: Material, tier: Tier, parser: GLTFParser): void {
   const pm = m as MeshPhysicalMaterial;
   if (tier !== 'hero' && pm.isMeshPhysicalMaterial) {
     // transmission needs an extra scene pass; keep it for the observed hero only
@@ -102,6 +103,8 @@ function prepareMaterial(m: Material, tier: Tier): void {
   }
   const sm = m as MeshStandardMaterial;
   sm.envMapIntensity = 0.8;
+  // the gobies' bodies: translucent tissue in every tier (the observed hero swaps in its volumetric material)
+  if (pm.isMeshPhysicalMaterial && isGobyBody(m)) makeTranslucentBody(pm, tier, parser);
 }
 
 interface VariantMappings { mappings: { material: number; variants: number[] }[] }
@@ -136,7 +139,7 @@ export async function instantiateModel(rel: string, variant?: number): Promise<L
         const map = maps?.find((mp) => mp.variants.includes(pick));
         if (map) {
           swaps.push((gltf.parser.getDependency('material', map.material) as Promise<Material>).then((mat) => {
-            prepareMaterial(mat, tier);
+            prepareMaterial(mat, tier, gltf.parser);
             mesh.material = mat;
             gltf.parser.assignFinalMaterial(mesh);   // the loader's per-geometry adjustments (tangents, vertex colours)
           }));

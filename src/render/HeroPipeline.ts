@@ -22,6 +22,8 @@ export interface SharedUniforms {
   uTime: IUniform<number>;
   uScatter: IUniform<number>;
   uInterior: IUniform<number>;
+  /** the surroundings' light diffused through the body from its far side */
+  uAmbThrough: IUniform<number>;
   uCausticAmt: IUniform<number>;
   uFinDensity: IUniform<number>;
   uDebug: IUniform<number>;
@@ -74,6 +76,7 @@ export class HeroPipeline {
       uTime: { value: 0 },
       uScatter: { value: 1.0 },
       uInterior: { value: 0.45 },
+      uAmbThrough: { value: 5.0 },   // as the field's goby bodies (GOBY_LIGHT.uGbAmbient)
       uCausticAmt: { value: 0.15 },
       uFinDensity: { value: 1.0 },
       uDebug: { value: 0 },
@@ -152,6 +155,10 @@ export class HeroPipeline {
     this.resize(Math.max(1, size.x), Math.max(1, size.y));
     this.shared.uTime.value += dt;
     this.shared.uCamNearFar.value.set(camera.near, camera.far);
+    // (the home tank's renderer points these at its own buffers while it draws a hero fish)
+    this.shared.uBg.value = this.envRT.texture;
+    this.shared.uBgDepth.value = this.envRT.depthTexture;
+    this.shared.uResolution.value.set(this.width, this.height);
     const prevTone = r.toneMapping;
     const prevBg = scene.background;
     r.toneMapping = NoToneMapping;

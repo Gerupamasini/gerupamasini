@@ -40,3 +40,14 @@ describe('the Tokyo Bay newcomers of round 28', () => {
     }
   });
 });
+
+describe('ミミイカ', () => {
+  it('lives on 走水 only (not on 葛西), up to 20 at a time', () => {
+    const sp = species.find((s) => s.id === 'euprymna_morsei')!;
+    expect(sp).toBeDefined();
+    for (const [i, r] of sp.spawn.entries()) {
+      expect(r.maps, `rule ${i}`).toEqual(['hashirimizu']);
+      expect(r.maxPopulation, `rule ${i}`).toBe(20);
+    }
+  });
+});

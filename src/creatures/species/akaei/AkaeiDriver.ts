@@ -1,10 +1,9 @@
 import { Color, Euler, Group, Matrix4, Object3D, Quaternion, Vector3, type SkinnedMesh } from 'three';
 import type { Individual } from '../../Individual';
-import type { BehaviorEvent, Driver, DriverContext, Floor, Intent } from '../../drivers/Driver';
+import type { BehaviorEvent, BodyState, Driver, DriverContext, Floor, Intent } from '../../drivers/Driver';
 import type { PlaceholderModel } from '../../models/placeholders';
 import { Rng, hashInts } from '../../../core/Rng';
 import { AkaeiModel, AkaeiPose, BELLY } from './AkaeiModel';
-import { CONTACT_SHADOWS } from '../haku/ContactShadows';
 
 /** the quality tier's reach for the ray's own detail tiers (set by the app from the preset): the distances of its
  * LOD steps scale with the preset's view scale, and the lightest tiers forgo the 55k-triangle close-up altogether */
@@ -13,6 +12,7 @@ import { LATTICE_COLS, LATTICE_ROWS, TAIL_BONES, akaeiGeometries, latticeU, latt
 import { MORPH, halfWidth, tailSection, tailZ, ventralDepth } from './morphology';
 import { SAND_COLOURS } from './material';
 import { SandFX } from './SandFX';
+import { keepSandDust, sandDustFor, type DustSource } from '../../fx/SandDust';
 
 /**
  * アカエイ: a benthic ray of the shallow sand. Five behaviours, each a sequence the driver runs on its own once the brain
@@ -83,6 +83,8 @@ export class AkaeiDriver implements Driver {
   private ind: Individual | null = null;
   private model: AkaeiModel | null = null;
   private fx: SandFX | null = null;
+  /** the sand it throws into the water (shared by every animal under the parent) */
+  private dust: DustSource | null = null;
   private readonly pose = new AkaeiPose();
   private listeners = new Set<(e: BehaviorEvent) => void>();
   private floor: Floor | null = null;
@@ -152,11 +154,11 @@ export class AkaeiDriver implements Driver {
   lod: Lod = 0;
   /** pin the detail level (viewers); null = by distance */
   forceLod: Lod | null = null;
-  private fxOn = true;
   private sandColTimer = 0;
 
   private readonly tmp = new Vector3();
   private readonly tmp2 = new Vector3();
+  private readonly bodyState: BodyState = { mode: 'bed', heading: 0, y: 0 };
   private readonly mtx = new Matrix4();
   private readonly inv = new Matrix4();
   private readonly quat = new Quaternion();
@@ -194,7 +196,7 @@ export class AkaeiDriver implements Driver {
 
   /**
    * The species' materials in both variants (the near and the far skin, eyes and sting, the mouth's interior) and the
-   * sand effects' shaders (the puffs, the contact shadow, an imprint), on models that are never drawn: DriverEntry.keep.
+   * sand effects' shaders (the dust, the contact shadow, an imprint), on models that are never drawn: DriverEntry.keep.
    */
   static keep(parent: Object3D): { dispose(): void } {
     const b = akaeiBuild({ id: 'keep', length_mm: 800 });
@@ -205,7 +207,8 @@ export class AkaeiDriver implements Driver {
     if (AKAEI_DETAIL.allowLod0) akaeiGeometries(0);
     const fx = new SandFX(parent);
     fx.imprint(0, 0, 0, 0.3, 0.5, () => 0);
-    return { dispose: () => { for (const m of models) { m.root.removeFromParent(); m.dispose(); } fx.dispose(); } };
+    const dust = keepSandDust(parent);
+    return { dispose: () => { for (const m of models) { m.root.removeFromParent(); m.dispose(); } fx.dispose(); dust.dispose(); } };
   }
 
   attach(root: Object3D, individual: Individual): void {
@@ -224,6 +227,8 @@ export class AkaeiDriver implements Driver {
     root.position.set(0, 0, 0);
     root.rotation.set(0, 0, 0);
     this.fx = new SandFX(root.parent ?? root);
+    const dustRng = new Rng(hashString(individual.id) ^ 0xd057);
+    this.dust = sandDustFor(root.parent ?? root).source(() => dustRng.next());
     this.pos.copy(individual.pos);
     this.heading = individual.heading;
     this.fallbackY = individual.pos.y;
@@ -253,8 +258,10 @@ export class AkaeiDriver implements Driver {
   detach(): void {
     this.model?.dispose();
     this.fx?.dispose();
+    this.dust?.release();
     this.model = null;
     this.fx = null;
+    this.dust = null;
     this.holder = null;
   }
 
@@ -358,7 +365,10 @@ export class AkaeiDriver implements Driver {
     const byDistance: Lod = ctx.locked || ctx.bounds ? 0 : dist < (this.lod === 0 ? 8 : 7) * vs ? (AKAEI_DETAIL.allowLod0 ? 0 : 1) : dist < (this.lod <= 1 ? 22 : 20) * vs ? 1 : 2;
     const want = this.forceLod ?? byDistance;
     if (want !== this.lod) { this.lod = want; model.setLod(want); }
-    this.fxOn = this.lod <= 1 && CONTACT_SHADOWS.enabled;   // (the sand puffs go with the contact shadows: off on 超軽量)
+    // (the sand thrown about only near enough to be seen: the dust's own share of the preset decides the rest)
+    const dust = this.dust!;
+    dust.near = this.lod <= 1;
+    if (dust.near) dust.tick(dt, ctx);
 
     if (!this.settled) {
       this.settled = true;
@@ -489,14 +499,15 @@ export class AkaeiDriver implements Driver {
       this.sandColTimer = 2;
       const s = ctx.floor.sampleAt(this.pos.x, this.pos.z);
       const c = SAND_COLOURS[s?.substrate ?? 'sand'] ?? SAND_COLOURS.sand;
-      fxs.setSandColour(c);
+      this.dust?.setBed(s?.substrate);
       model.uniforms.uAkSandCol.value.setRGB(c.x, c.y, c.z);
     }
     const clearance = this.pos.y - (BELLY - this.sink) * dw - g0;
     const contact = 1 - smooth(0.0, 0.18 + 0.5 * dw, clearance);
     const buriedK = 1 - 0.85 * Math.min(1, this.sink / this.sinkMax);
     fxs.updateShadow(dt, this.pos.x, this.pos.z, this.heading, 0.5 * dw, 0.43 * dw * this.aspect, contact * buriedK, this.groundFn, this.speed > 0.02 || Math.abs(this.vy) > 0.01);
-    fxs.update(dt, this.groundFn);
+    fxs.update(dt);
+    this.stir(dt, clearance);
 
     ind.pos.copy(this.pos);
     ind.heading = this.heading;
@@ -535,7 +546,7 @@ export class AkaeiDriver implements Driver {
       const before = this.sand;
       this.sand = Math.max(0, this.sand - dt * (this.state === 'ESCAPE' ? 2.5 : 0.9));
       this.tailSand = Math.max(0, this.tailSand - dt * 0.8);
-      if (this.fxOn && before - this.sand > 0.004) this.shedSand(before - this.sand);
+      if (this.dustOn && before - this.sand > 0.004) this.shedSand(before - this.sand);
     }
     if (this.state !== 'BURROW_IN_SAND') this.sink = Math.max(0, this.sink - dt * (this.state === 'ESCAPE' ? 0.4 : 0.06));
 
@@ -598,7 +609,7 @@ export class AkaeiDriver implements Driver {
             this.flaps++;
             this.sand = Math.min(0.94, this.sand + 0.19);
             this.tailSand = Math.min(0.55, this.tailSand + 0.14);
-            if (this.fxOn) this.throwSandOverBack(1);
+            if (this.dustOn) this.throwSandOverBack(1);
             this.fx?.growImprint(Math.min(1, this.flaps / nFlaps));
           }
           if (this.phaseT > 0.4) this.sink = Math.min(this.sinkMax, this.sink + dt * this.sinkMax / (nFlaps / 1.9 + 0.3));
@@ -654,7 +665,7 @@ export class AkaeiDriver implements Driver {
         w.flapFreq = 3.2;
         this.mouthOpen = Math.max(this.mouthOpen, press);
         if (ph > 0.3) this.gillJet = Math.max(this.gillJet, smooth(0.3, 0.45, ph) * (1 - smooth(0.6, 0.95, ph)));
-        if (ph >= 0.25 && ph - dt / T < 0.25 && this.fxOn) this.feedingPuff();
+        if (ph >= 0.25 && ph - dt / T < 0.25 && this.dustOn) this.feedingPuff();
         // a small shift between pulses: the head swings to a fresh patch
         if (ph > 0.6) w.face = this.heading + Math.sin(this.pulses * 2.1 + this.dw * 7) * 0.5;
         w.yawMax = 0.4;
@@ -673,7 +684,7 @@ export class AkaeiDriver implements Driver {
       }
       case 'ESCAPE': {
         if (this.phase === 'burst') {
-          if (this.phaseT < dt * 1.5 && this.fxOn && (this.grounded > 0.6 || this.sand > 0.2)) this.burstPuff();
+          if (this.phaseT < dt * 1.5 && this.dustOn && (this.grounded > 0.6 || this.sand > 0.2)) this.burstPuff();
           // away from the threat, at once
           // toward the flight target (already bent along the water), else straight away from the threat
           // (the flight target, once reached, is done with: the ray never turns back toward it)
@@ -725,7 +736,7 @@ export class AkaeiDriver implements Driver {
     w.flapFreq = 2.4;
     w.amp = 0.08; w.freq = 1.4;
     w.front = 0.006;
-    if (this.phaseT < 0.05 && this.fxOn && this.grounded > 0.6) this.ringPuff(10, 0.12, 0.35);
+    if (this.phaseT < 0.05 && this.dustOn && this.grounded > 0.6) this.ringPuff(10, 0.12, 0.35);
   }
 
   /** coming down: slow, a small flare of the front, margins reaching for the sand */
@@ -738,7 +749,7 @@ export class AkaeiDriver implements Driver {
   }
 
   private touchdown(): void {
-    if (this.fxOn) this.ringPuff(8, 0.08, 0.3);
+    if (this.dustOn) this.ringPuff(8, 0.08, 0.3);
   }
 
   private digImprint(): void {
@@ -753,10 +764,12 @@ export class AkaeiDriver implements Driver {
     return out.applyMatrix4(this.mtx);
   }
 
+  private get dustOn(): boolean { return !!this.dust?.on; }
+
   /** sediment kicked out all round the rim (landing, lifting off) */
   private ringPuff(n: number, speed: number, alpha: number): void {
-    const fx = this.fx, rnd = () => this.ind!.rng.next();
-    if (!fx) return;
+    const dust = this.dust;
+    if (!dust) return;
     const size = 0.05 + 0.12 * this.dw;
     for (let i = 0; i < n; i++) {
       const t = i / n;
@@ -765,47 +778,48 @@ export class AkaeiDriver implements Driver {
       this.marginPoint(side * 0.95, z, this.tmp);
       this.tmp2.set(this.tmp.x - this.pos.x, 0, this.tmp.z - this.pos.z).normalize().multiplyScalar(speed);
       this.tmp2.y = speed * 0.6;
-      fx.emit(this.tmp, this.tmp2, 2, 0.02 * this.dw / 0.35, size, 2.6, alpha, rnd);
+      dust.kick(this.tmp, this.tmp2, 2, 0.02 * this.dw / 0.35, size, 2.6, alpha, 3);
     }
   }
 
   /** a burrowing flap: sand fluidised under the margins thrown up and over the back */
   private throwSandOverBack(k: number): void {
-    const fx = this.fx, rnd = () => this.ind!.rng.next();
-    if (!fx) return;
+    const dust = this.dust;
+    if (!dust) return;
     const size = 0.04 + 0.1 * this.dw;
     for (let i = 0; i < 12; i++) {
       const t = (i >> 1) / 6;
       const z = MORPH.zSnout - 0.08 - t * (MORPH.zSnout - MORPH.zRear - 0.1);
       const side = i % 2 ? 1 : -1;
       this.marginPoint(side * 0.92, z, this.tmp);
-      // inward and up, over the disc
+      // inward and up, over the disc (the grains rain down on the back: the sand that buries it)
       this.tmp2.set(this.pos.x - this.tmp.x, 0, this.pos.z - this.tmp.z).normalize().multiplyScalar(0.09 * k);
       this.tmp2.y = 0.16 * k;
-      fx.emit(this.tmp, this.tmp2, 2, 0.015, size, 2.2, 0.45, rnd);
+      dust.kick(this.tmp, this.tmp2, 2, 0.015, size, 2.2, 0.45, 4);
     }
   }
 
   /** a feeding pulse: a cloud from under the head and jets out from under the sides behind it */
   private feedingPuff(): void {
-    const fx = this.fx, rnd = () => this.ind!.rng.next();
-    if (!fx) return;
+    const dust = this.dust;
+    if (!dust) return;
     const size = 0.04 + 0.1 * this.dw;
     this.tmp.set(0, -BELLY, MORPH.mouth.z + 0.1).applyMatrix4(this.mtx);
     this.tmp2.set(Math.sin(this.heading) * 0.1, 0.12, Math.cos(this.heading) * 0.1);
-    fx.emit(this.tmp, this.tmp2, 6, 0.03 * this.dw / 0.35, size, 2.4, 0.4, rnd);
+    dust.kick(this.tmp, this.tmp2, 6, 0.03 * this.dw / 0.35, size, 2.4, 0.4, 2);
+    // the gills blow out what the mouth sucked in: fine silt, winnowed from the sand
     for (const side of [-1, 1]) {
       this.marginPoint(side * 0.97, 0.12, this.tmp);
       this.tmp2.set(this.tmp.x - this.pos.x, 0, this.tmp.z - this.pos.z).normalize().multiplyScalar(0.16);
       this.tmp2.y = 0.06;
-      fx.emit(this.tmp, this.tmp2, 4, 0.015, size * 0.8, 1.8, 0.35, rnd);
+      dust.silt(this.tmp, this.tmp2, 4, 0.015, size * 0.8, 2.6, 0.35);
     }
   }
 
   /** bursting out of cover: the whole disc throws its sand */
   private burstPuff(): void {
-    const fx = this.fx, rnd = () => this.ind!.rng.next();
-    if (!fx) return;
+    const dust = this.dust;
+    if (!dust) return;
     const size = 0.06 + 0.14 * this.dw;
     for (let i = 0; i < 14; i++) {
       const t = (i >> 1) / 7;
@@ -814,21 +828,55 @@ export class AkaeiDriver implements Driver {
       this.marginPoint(side * 0.9, z, this.tmp);
       this.tmp2.set(this.tmp.x - this.pos.x, 0, this.tmp.z - this.pos.z).normalize().multiplyScalar(0.3);
       this.tmp2.y = 0.28;
-      fx.emit(this.tmp, this.tmp2, 3, 0.03 * this.dw / 0.35, size, 3.2, 0.55, rnd);
+      dust.kick(this.tmp, this.tmp2, 3, 0.03 * this.dw / 0.35, size, 3.4, 0.55, 4);
+    }
+    // and from under the whole disc as it tears free of the sand: the cloud's heart, rising behind it
+    for (let i = 0; i < 6; i++) {
+      const u = (dust.rnd() * 2 - 1) * 0.6, z = MORPH.zSnout - 0.12 - dust.rnd() * (MORPH.zSnout - MORPH.zRear - 0.2);
+      this.tmp.set(u * halfWidth(z), -ventralDepth(u * halfWidth(z), z), z).applyMatrix4(this.mtx);
+      this.tmp2.set(-Math.sin(this.heading) * 0.1, 0.22, -Math.cos(this.heading) * 0.1);
+      dust.kick(this.tmp, this.tmp2, 3, 0.05 * this.dw / 0.35, size * 1.2, 3.6, 0.5, 3);
     }
   }
 
-  /** sand sliding off the back as the ray gets moving */
+  /** sand sliding off the back as the ray gets moving: grains falling off the margins, a trail of silt */
   private shedSand(amount: number): void {
-    const fx = this.fx, rnd = () => this.ind!.rng.next();
-    if (!fx) return;
+    const dust = this.dust;
+    if (!dust) return;
+    const rnd = dust.rnd;
     const n = Math.min(6, Math.ceil(amount * 40));
     for (let i = 0; i < n; i++) {
       const u = (rnd() * 2 - 1) * 0.8, z = MORPH.zSnout - 0.1 - rnd() * 0.6;
       this.tmp.set(u * halfWidth(z), 0.03, z).applyMatrix4(this.mtx);
       this.tmp2.set(-Math.sin(this.heading) * this.speed * 0.6, 0.02, -Math.cos(this.heading) * this.speed * 0.6);
-      fx.emit(this.tmp, this.tmp2, 1, 0.02, 0.04 + 0.08 * this.dw, 2.0, 0.35, rnd);
+      dust.silt(this.tmp, this.tmp2, 1, 0.02, 0.04 + 0.08 * this.dw, 2.0, 0.35);
+      this.tmp2.y = 0;
+      dust.grains(this.tmp, this.tmp2, 6, 0.03 * this.dw / 0.35, 0.0009, 1.6);
     }
+  }
+
+  private readonly stirAt = new Vector3();
+  private readonly stirVel = new Vector3();
+
+  /**
+   * The disc working close over the bed lifts silt behind it: the wave of the margins (a foraging ray, or one gliding
+   * low) and, above all, the hard first beats of an escape. Heavier the lower and the harder it beats.
+   */
+  private stir(dt: number, clearance: number): void {
+    const dust = this.dust;
+    if (!dust?.on || this.grounded > 0.9) return;
+    const dw = this.dw;
+    const low = 1 - smooth(0.02 * dw, 0.3 * dw + 0.03, clearance);
+    const beat = this.amp * this.freq * dw + 2 * this.flapAmp * this.flapFreq * dw;
+    const rate = 260 * low * Math.min(1.5, beat) * Math.min(1, this.speed / (0.3 * dw) + 0.3);
+    if (rate < 0.5) return;
+    // under the rear margins (left or right at random), thrown back and out
+    const side = dust.rnd() < 0.5 ? -1 : 1;
+    this.marginPoint(side * 0.85, MORPH.zRear + 0.12, this.stirAt);
+    this.stirAt.y = this.groundFn(this.stirAt.x, this.stirAt.z) + 0.01 * dw;
+    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+    this.stirVel.set(-fx * this.speed * 0.35 + Math.cos(this.heading) * side * 0.05, 0.03 + 0.05 * low, -fz * this.speed * 0.35 - Math.sin(this.heading) * side * 0.05);
+    dust.stream(dt, rate, this.stirAt, this.stirVel, 0.03 * dw, 0.03 + 0.08 * dw, 2.4, 0.28);
   }
 
   // ------------------------------------------------------------------ drape and tail
@@ -950,6 +998,23 @@ export class AkaeiDriver implements Driver {
     this.busy = false;
     this.ind.pos.copy(this.pos);
     this.ind.heading = this.heading;
+  }
+
+  /** lying on the sand, gliding over it, or buried in it out of everyone's way (its disc: the rest give way to it) */
+  body(): BodyState {
+    const b = this.bodyState;
+    b.mode = this.state === 'BURROW_IN_SAND' && this.phase === 'buried' ? 'away' : this.grounded > 0.5 ? 'bed' : 'water';
+    b.heading = this.heading;
+    b.y = this.pos.y - BELLY * this.dw;
+    return b;
+  }
+
+  nudge(dx: number, dz: number): void {
+    this.pos.x += dx; this.pos.z += dz;
+    // the tail's chain lies in the world: it comes along
+    const t = this.tailP;
+    for (let i = 0; i < t.length; i += 3) { t[i] += dx; t[i + 2] += dz; }
+    if (this.ind) { this.ind.pos.x += dx; this.ind.pos.z += dz; }
   }
 
   onEvent(cb: (e: BehaviorEvent) => void): () => void {

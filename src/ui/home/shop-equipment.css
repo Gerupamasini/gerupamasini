@@ -1,0 +1,55 @@
+.shop-tabs { margin:12px 0; width:max-content; max-width:100%; }
+.shop-catalog { width:min(500px, 100%); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:10px; min-height:0; }
+.shop-catalog-options { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
+.shop-catalog-options .btn { height:auto; min-height:52px; min-width:0; padding:6px; gap:4px; font-size:12px; letter-spacing:0; }
+.shop-catalog-options small { display:block; font-size:10px; color:var(--dim); }
+.shop-catalog-options .equipment-swatch { width:28px; height:28px; flex-basis:28px; }
+.shop-equipment-detail { display:flex; flex-direction:column; gap:10px; }
+.shop-equipment-name { display:flex; align-items:center; gap:10px; justify-content:space-between; }
+.shop-equipment-name h2 { font-size:18px; margin:0; flex:1; }
+.shop-equipment-name > span { font-size:12px; white-space:nowrap; }
+.shop-catalog p { margin:0; }
+.shop-capacity { font-size:13px; }.shop-capacity strong { color:var(--sand); }
+.shop-capacity small { display:block; font-size:11px; color:var(--dim); margin-top:4px; }
+.shop-filter-levels { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; }
+.shop-filter-levels > span { border:1px solid var(--line); border-radius:6px; text-align:center; padding:5px 2px; font-size:10px; }
+.shop-filter-levels b { display:block; font-size:13px; }
+.shop-catalog .buy-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.shop-catalog .price { color:var(--sand); font-size:16px; }
+.shop-catalog-note { font-size:11px; }
+.intro-quests > p { margin:4px 0 8px; font-size:11px; }
+.intro-quest-list { display:grid; gap:6px; }
+.intro-quest { padding:8px; border:1px solid var(--line); border-radius:8px; }
+.intro-quest > div { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:12px; }
+.intro-quest .num { font-size:11px; white-space:nowrap; color:var(--sand); }
+.intro-quest p { margin:5px 0 0; font-size:11px; color:var(--dim); }
+.intro-quest.done { border-color:#46776b; }.intro-quest.done strong { color:var(--accent); }
+.intro-quest-pages { display:flex; justify-content:space-between; align-items:center; gap:4px; margin-top:8px; font-size:10px; }
+.intro-quest-pages .btn.sm { padding:0 10px; height:30px; }
+.quest-reopen { height:auto; min-height:30px; width:max-content; max-width:calc(100vw - 32px); }
+.equipment-filter-capacity { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px 0; }
+.equipment-filter-capacity button { font-size:11px; padding:4px 8px; min-height:28px; }
+.tank-filter-info { margin:0 0 8px; font-size:11px; }.tank-filter-info button { margin-left:4px; padding:3px 6px; font-size:11px; }
+.first-steps .intro-quest > div { font-size:11px; }.first-steps .intro-quest { padding:6px; }
+.first-steps details > .btn { margin-top:6px; }
+.touch-device .shop-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); width:100%; margin:8px 0; }
+.touch-device .shop-tabs button { min-width:0; min-height:32px; padding:4px; font-size:12px; }
+.touch-device .shop-catalog { width:100%; padding:10px; gap:8px; }
+.touch-device .shop-equipment-detail { gap:8px; }.touch-device .shop-equipment-name h2 { font-size:16px; }
+.touch-device .shop-catalog-options .btn { font-size:11px; min-height:44px; padding:4px; }
+.touch-device .shop-catalog-options .equipment-swatch { width:22px; height:22px; flex-basis:22px; }
+.touch-device .quest-reopen { width:max-content; }
+@media (max-height:450px) {
+  .touch-device .shop-screen { padding:6px 10px; }
+  .touch-device .shop-title { margin:0; font-size:16px; }.touch-device .shop-top { gap:6px; flex-wrap:nowrap; }
+  .touch-device .shop-top .btn { height:30px; min-height:30px; padding:2px 8px; font-size:11px; }
+  .touch-device .shop-tabs { margin:4px 0; }.touch-device .shop-tabs button { min-height:28px; }
+  .touch-device .shop-catalog { padding:7px 9px; gap:6px; }
+  .touch-device .shop-catalog-options .btn { min-height:36px; }
+  .touch-device .shop-equipment-detail { gap:6px; }.touch-device .shop-equipment-name h2 { font-size:14px; }
+  .touch-device .shop-catalog .btn.sm { min-height:30px; height:30px; padding:2px 8px; font-size:11px; }
+  .touch-device .shop-filter-levels > span { padding:2px; }.touch-device .shop-capacity { font-size:12px; }
+  .touch-device .shop-catalog .small, .touch-device .shop-catalog-note { font-size:10px; }
+  .touch-device .intro-quest { padding:5px 7px; }.touch-device .intro-quests > p { margin:0 0 5px; }
+  .touch-device .first-steps { top:calc(44px + env(safe-area-inset-top)); }
+}

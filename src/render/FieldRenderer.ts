@@ -81,8 +81,15 @@ export class FieldRenderer {
     const surf = water.surfCompileTarget();
     let surfReady: Promise<unknown> = Promise.resolve();
     if (surf) { gl.setRenderTarget(surf.target); surfReady = gl.compileAsync(surf.mesh, camera); }
+    const extras = water.extraCompile.flatMap((e) => {
+      gl.setRenderTarget(e.target);
+      const ready = [gl.compileAsync(e.mesh, camera)];
+      // (what is drawn over the water's composite goes into the upscaler's target with it)
+      if (upscale && e.target === null) { gl.setRenderTarget(this.upscaler.input(1, 1)); ready.push(gl.compileAsync(e.mesh, camera)); }
+      return ready;
+    });
     gl.setRenderTarget(prev);
-    await Promise.all([sceneReady, waterReady, surfReady, upscaledReady]);
+    await Promise.all([sceneReady, waterReady, surfReady, upscaledReady, ...extras]);
   }
 
   /**

@@ -24,6 +24,36 @@ export function ozoneTransmittance(elevation: number, column: number, out: Vecto
   return out.set(Math.exp(-OZONE_TAU[0] * column * m), Math.exp(-OZONE_TAU[1] * column * m), Math.exp(-OZONE_TAU[2] * column * m));
 }
 
+/**
+ * A map's air: the clear-day sky, clouds, sun and fill light. The defaults are the temperate Tokyo Bay day; a
+ * subtropical map (漫湖) overrides some of them. Dusk, night and overcast blend from these.
+ */
+export interface Atmosphere {
+  /** Preetham clear-day scattering (dusk and overcast are added on top) */
+  rayleigh: number; turbidity: number; mie: number;
+  /** dome brightness, and its factor when the sun is high (a near-zenith sun would bleach the dome to cyan-white) */
+  skyScale: number; skyScaleHighSun: number;
+  /** the dome's saturation by day (toward sunset it goes to the shared `SkyDome.look.saturationDusk`) */
+  skySaturation: number;
+  /** fair-weather cumulus: cover, density, size (smaller is larger clouds) and the sunlit tops' brightness */
+  cloudCoverage: number; cloudDensity: number; cloudScale: number; cloudGain: number;
+  /** the cumulus' shading: how dark their thick, shaded bases go (three's 0.45), and how far their colour is taken
+   * from the air's reddened tint toward a neutral white-grey (0: none) */
+  cloudShadeMin: number; cloudNeutral: number;
+  /** clear-day key light colour and a factor on its intensity */
+  sunColor: readonly [number, number, number]; sunGain: number;
+  /** clear-day hemisphere fill colours and the day fog/horizon colour */
+  hemiSky: readonly [number, number, number]; hemiGround: readonly [number, number, number];
+  fogDay: readonly [number, number, number];
+}
+/** (the clear-day sky fitted to photographs of flats at midday, tools/grade/calibrate.mjs: a deeper, more saturated
+ * blue than before) */
+export const DEFAULT_ATMOSPHERE: Atmosphere = {
+  rayleigh: 3, turbidity: 1.8, mie: 0.002, skyScale: 0.27, skyScaleHighSun: 1, skySaturation: 1.4,
+  cloudCoverage: 0.5, cloudDensity: 0.7, cloudScale: 0.00025, cloudGain: 1, cloudShadeMin: 0.45, cloudNeutral: 0,
+  sunColor: [1, 0.96, 0.9], sunGain: 1, hemiSky: [0.58, 0.68, 0.78], hemiGround: [0.28, 0.24, 0.18], fogDay: [0.6, 0.7, 0.78],
+};
+
 /** Preetham sky dome, key light, hemisphere light and a PMREM environment refreshed as the sun moves. */
 export class SkyDome {
   readonly sky: Sky;
@@ -41,36 +71,54 @@ export class SkyDome {
   private lastEnvOvercast = 0;
   private overcast = 0;
   elevation = 45;
+  readonly atm: Atmosphere;
   /**
-   * The sky's look, fitted to photographs of flats (tools/grade/calibrate.mjs): the dome's brightness against the
-   * ground and the saturation of its colour (by day, toward sunset), the haze it gathers toward sunset (turbidity and
-   * Mie scattering, clear day → dusk), the ozone the sunlight crosses on its way to the sky (times the real column; see
-   * `ozoneTransmittance`), and how much of the sunset's warmth the sky light gives the shadows.
+   * The sky toward sunset, fitted to photographs of flats (tools/grade/calibrate.mjs) and shared by every map: the
+   * dome's saturation at dusk, the haze it gathers (turbidity and Mie scattering added at dusk), the ozone the
+   * sunlight crosses on its way to the sky (times the real column; see `ozoneTransmittance`), and how much of the
+   * sunset's warmth the sky light gives the shadows.
    */
-  readonly look = { scale: 0.27, saturation: 1.4, saturationDusk: 1, turbidity: 1.8, turbidityDusk: 10, rayleigh: 3, mie: 0.002, mieDusk: 0.012, ozone: 1.5, ambientDusk: 0.5 };
+  readonly look = { saturationDusk: 1, turbidityDusk: 10, mieDusk: 0.012, ozone: 1.5, ambientDusk: 0.5 };
 
-  constructor(private readonly scene: Scene, private readonly renderer: WebGLRenderer, shadows: boolean, shadowMapSize: number) {
+  constructor(private readonly scene: Scene, private readonly renderer: WebGLRenderer, shadows: boolean, shadowMapSize: number, atmosphere: Partial<Atmosphere> = {}) {
+    this.atm = { ...DEFAULT_ATMOSPHERE, ...atmosphere };
     this.sky = new Sky();
     this.sky.scale.setScalar(4000);
     // the Preetham model comes out far brighter than the ground at any exposure; scale the dome so the sky keeps its
     // blue and the environment maps built from it stop washing the flat out
     const mat = this.sky.material;
-    mat.uniforms.uSkyScale = { value: this.look.scale };
-    mat.uniforms.uSkySat = { value: this.look.saturation };
+    mat.uniforms.uSkyScale = { value: this.atm.skyScale };
+    mat.uniforms.uSkySat = { value: this.atm.skySaturation };
     mat.uniforms.uOzone = { value: new Vector3(1, 1, 1) };
+    mat.uniforms.uCloudGain = { value: this.atm.cloudGain };
+    mat.uniforms.uCloudShadeMin = { value: this.atm.cloudShadeMin };
+    mat.uniforms.uCloudNeutral = { value: this.atm.cloudNeutral };
+    const CLOUD_SUN = 'vec3 sunColor = vSunE * Fex * 0.22 * 0.04;';
+    const CLOUD_SHADE = 'float shade = mix( 0.45, 1.0,';
+    const CLOUD_COL = 'cloudColor *= max( dayFactor, 0.03 );';
+    const OZONE_AT = 'vec3 L0 = vec3( 0.1 ) * Fex;';
+    // (fail loudly if a three upgrade changes the sky shader: the gain or the ozone would silently do nothing)
+    for (const line of [CLOUD_SUN, CLOUD_SHADE, CLOUD_COL, OZONE_AT]) if (!mat.fragmentShader.includes(line)) throw new Error(`Sky: line not found in three Sky shader: ${line}`);
     mat.fragmentShader = mat.fragmentShader
       .replace('uniform float mieDirectionalG;', `uniform float mieDirectionalG;
 		uniform float uSkyScale;
 		uniform float uSkySat;
-		uniform vec3 uOzone;`)
-      .replace('vec3 L0 = vec3( 0.1 ) * Fex;', 'Lin *= uOzone;\n\t\t\tvec3 L0 = vec3( 0.1 ) * Fex;')
+		uniform vec3 uOzone;
+		uniform float uCloudGain;
+		uniform float uCloudShadeMin;
+		uniform float uCloudNeutral;`)
+      .replace(OZONE_AT, `Lin *= uOzone;\n\t\t\t${OZONE_AT}`)
+      .replace(CLOUD_SUN, 'vec3 sunColor = vSunE * Fex * 0.22 * 0.04 * uCloudGain;')
+      .replace(CLOUD_SHADE, 'float shade = mix( uCloudShadeMin, 1.0,')
+      .replace(CLOUD_COL, `${CLOUD_COL}
+				cloudColor = mix( cloudColor, vec3( dot( cloudColor, vec3( 0.2126, 0.7152, 0.0722 ) ) ) * vec3( 0.97, 0.99, 1.04 ), uCloudNeutral );`)
       // (more saturated, but not past the spectrum's edge: the reddened sun's disc would go negative in blue)
       .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( max( mix( vec3( dot( texColor, vec3( 0.2126, 0.7152, 0.0722 ) ) ), texColor, uSkySat ), 0.0 ) * uSkyScale, 1.0 );');
     mat.needsUpdate = true;
     // fair-weather cumulus: three's own cloud layer (lit by the sun with a silver lining on the rims toward it,
     // self-shadowed, fading into the haze toward the horizon); they also end up in the environment cube and in the
     // sea's mirror, so the water reflects them
-    mat.uniforms.cloudScale.value = 0.00025;
+    mat.uniforms.cloudScale.value = this.atm.cloudScale;
     mat.uniforms.cloudElevation.value = 0.7;
     const u = this.sky.material.uniforms;
     u.turbidity.value = 3;
@@ -124,16 +172,17 @@ export class SkyDome {
     this.uCloudTime.value += 1 / 60;
     const cu = this.sky.material.uniforms;
     cu.time.value = this.uCloudTime.value;
-    cu.cloudCoverage.value = 0.5 + 0.45 * MathUtils.clamp(overcast, 0, 1);
-    cu.cloudDensity.value = 0.7 + 0.3 * MathUtils.clamp(overcast, 0, 1);
+    const atm = this.atm, oc = MathUtils.clamp(overcast, 0, 1);
+    cu.cloudCoverage.value = atm.cloudCoverage + (0.95 - atm.cloudCoverage) * oc;
+    cu.cloudDensity.value = atm.cloudDensity + (1 - atm.cloudDensity) * oc;
     const day = MathUtils.smoothstep(elevation, -4, 10);
     const dusk = 1 - MathUtils.smoothstep(elevation, -2, 18);
     const cloud = MathUtils.clamp(overcast, 0, 1);
     // key light: warm when low, white when high; below the horizon a faint moon/sky light remains
-    const keyColor = new Color(1, 0.96, 0.9).lerp(new Color(1, 0.62, 0.35), dusk).lerp(new Color(0.55, 0.65, 0.9), 1 - day);
+    const keyColor = new Color(...atm.sunColor).lerp(new Color(1, 0.62, 0.35), dusk).lerp(new Color(0.55, 0.65, 0.9), 1 - day);
     this.sunLight.color.copy(keyColor);
     // the sun carries the daylight; sky light stays a soft bluish fill so sand reads warm with cool shadows
-    this.sunLight.intensity = (0.7 + 1.9 * day) * (1 - 0.75 * cloud);
+    this.sunLight.intensity = (0.7 + 1.9 * day) * (1 - 0.75 * cloud) * (1 + (atm.sunGain - 1) * day);
     const lightDir = elevation > -2 ? sunDir : new Vector3(0.3, 1, 0.2).normalize();
     // the near map: centred a little ahead of the player (what is looked at), and moved in whole texels so that its
     // edges do not crawl as the player walks
@@ -151,20 +200,21 @@ export class SkyDome {
     this.sunLight.position.copy(c).addScaledVector(lightDir, 120);
     this.sunLight.target.position.copy(c);
     // hemisphere: sky colour tracks the horizon tint
-    const skyCol = new Color(0.58, 0.68, 0.78).lerp(new Color(0.9, 0.62, 0.45), this.look.ambientDusk * dusk).lerp(new Color(0.16, 0.22, 0.34), 1 - day);
-    const groundCol = new Color(0.28, 0.24, 0.18).lerp(new Color(0.05, 0.05, 0.07), 1 - day);
+    const skyCol = new Color(...atm.hemiSky).lerp(new Color(0.9, 0.62, 0.45), this.look.ambientDusk * dusk).lerp(new Color(0.16, 0.22, 0.34), 1 - day);
+    const groundCol = new Color(...atm.hemiGround).lerp(new Color(0.05, 0.05, 0.07), 1 - day);
     this.hemi.color.copy(skyCol);
     this.hemi.groundColor.copy(groundCol);
     this.hemi.intensity = (0.2 + 0.1 * day) * (1 + 0.6 * cloud);
     this.hemi.color.lerp(new Color(0.6, 0.63, 0.66), cloud * 0.7);
-    this.fogColor.copy(new Color(0.6, 0.7, 0.78).lerp(new Color(0.85, 0.6, 0.42), dusk * day)).lerp(new Color(0.06, 0.08, 0.13), 1 - day);
+    this.fogColor.copy(new Color(...atm.fogDay).lerp(new Color(0.85, 0.6, 0.42), dusk * day)).lerp(new Color(0.06, 0.08, 0.13), 1 - day);
     this.fogColor.lerp(new Color(0.62, 0.66, 0.7), cloud * day * 0.8);
     const look = this.look;
-    this.sky.material.uniforms.turbidity.value = look.turbidity + look.turbidityDusk * dusk + 14 * cloud;
-    this.sky.material.uniforms.rayleigh.value = look.rayleigh - 1.2 * cloud;
-    this.sky.material.uniforms.mieCoefficient.value = look.mie + look.mieDusk * dusk + 0.03 * cloud;
-    this.sky.material.uniforms.uSkyScale.value = look.scale;
-    this.sky.material.uniforms.uSkySat.value = MathUtils.lerp(look.saturation, look.saturationDusk, dusk);
+    this.sky.material.uniforms.turbidity.value = atm.turbidity + look.turbidityDusk * dusk + 14 * cloud;
+    // (dusk blends back to the default scattering, so sunsets stay as they were)
+    this.sky.material.uniforms.rayleigh.value = MathUtils.lerp(atm.rayleigh, DEFAULT_ATMOSPHERE.rayleigh, dusk) - 1.2 * cloud;
+    this.sky.material.uniforms.mieCoefficient.value = atm.mie + look.mieDusk * dusk + 0.03 * cloud;
+    this.sky.material.uniforms.uSkyScale.value = atm.skyScale * MathUtils.lerp(1, atm.skyScaleHighSun, MathUtils.smoothstep(elevation, 25, 75));
+    this.sky.material.uniforms.uSkySat.value = MathUtils.lerp(atm.skySaturation, look.saturationDusk, dusk);
     ozoneTransmittance(elevation, look.ozone, this.sky.material.uniforms.uOzone.value);
     // below the horizon the Preetham model goes black: hide the dome and show the dark fog colour instead
     this.sky.visible = elevation > -7;
@@ -191,7 +241,8 @@ export class SkyDome {
     this.scene.environment = this.envTex;
     // three applies this in place of a material's own envMapIntensity (materials without an envMap of their own), so
     // it is the sky's share of the daylight on everything: a fifth of the sun's, not an equal partner
-    this.scene.environmentIntensity = 0.03 + 0.06 * MathUtils.smoothstep(this.elevation, -4, 10);
+    // (a map with a darker dome keeps the same ambient on the ground: the dome's scale is divided back out)
+    this.scene.environmentIntensity = (0.03 + 0.06 * MathUtils.smoothstep(this.elevation, -4, 10)) * DEFAULT_ATMOSPHERE.skyScale / this.sky.material.uniforms.uSkyScale.value;
     prev?.dispose();
   }
 

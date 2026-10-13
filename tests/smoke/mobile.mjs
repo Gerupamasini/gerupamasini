@@ -154,13 +154,13 @@ try {
   const homeView = await pose();
   await page.getByRole('button', { name: '水槽', exact: true }).tap();
   await page.waitForFunction(() => window.__higata.mode === 'tankEdit');
-  await page.locator('.specimen-source button').last().tap();
+  await page.locator('.specimen-source').getByRole('button', { name: /^ケース / }).tap();
   await page.locator('.mobile-specimen').last().tap();
   await page.waitForFunction(() => document.querySelector('.mobile-specimen:last-child')?.getAttribute('aria-pressed') === 'true');
   for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 568, height: 320 }, { width: 844, height: 390 }]) {
     await page.setViewportSize(size); await frames(1);
     assert.equal(await page.locator('.mobile-specimen').count(), 6);
-    await reachable('.tank-editor-panel .drawer-head button, .mobile-specimen-actions button');
+    await reachable('.tank-editor-panel .drawer-head button, .specimen-source button, .mobile-specimen-actions button');
     if (size.width === 390 && !process.argv.includes('--editor-lite')) await shot('tank-fish-portrait');
   }
   console.log('PASS tank specimen actions at four sizes');
@@ -193,6 +193,29 @@ try {
   await page.locator('.sheet-collapsed').waitFor();
   await reachable('.drawer-head button');
   await page.getByRole('button', { name: '編集を表示', exact: true }).tap();
+  await page.locator('.equipment-back').tap();
+  await page.getByLabel('設備の種類').selectOption('2');
+  await page.locator('[data-category="filter"]').tap();
+  for (const tab of ['位置・向き', 'デザイン']) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: tab, exact: true }).tap();
+    for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 568, height: 320 }, { width: 844, height: 390 }]) {
+      await page.setViewportSize(size); await frames(1);
+      await page.locator('.drawer-body').evaluate((el) => { el.scrollTop = 0; });
+      await reachable('.equipment-filter-capacity button, .equipment-tabs button, .equipment-position input, .equipment-choices button, .equipment-actions button');
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.equipment-back').tap();
+  await page.locator('[data-category="canisterFilter"]').tap();
+  for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 568, height: 320 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(size); await frames(1);
+    await page.locator('.drawer-body').evaluate((el) => { el.scrollTop = 0; });
+    await reachable('.equipment-choices button, .equipment-actions button');
+  }
+  assert.equal(await page.getByRole('button', { name: 'ショップで解放', exact: true }).count(), 1);
+  console.log('PASS filter level, position, designs and locked-filter shop controls at four sizes');
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByLabel('閉じる', { exact: true }).tap();
   await page.waitForFunction(() => window.__higata.mode === 'home');
   const restoredHome = await pose();

@@ -1,6 +1,6 @@
 import {
   ClampToEdgeWrapping, Color, CubeTexture, DataTexture, FloatType, HalfFloatType, LinearFilter, NearestFilter, LinearMipmapLinearFilter, Matrix4,
-  RedFormat, RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, WebGLRenderTarget, type Object3D, type PerspectiveCamera, type Scene,
+  RedFormat, RepeatWrapping, RGBAFormat, ShaderMaterial, Vector2, Vector3, Vector4, WebGLRenderTarget, type Object3D, type PerspectiveCamera, type Scene,
   type Texture, type WebGLRenderer,
 } from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
@@ -9,6 +9,8 @@ import { MirrorView } from '../render/Mirror';
 import type { Terrain } from './Terrain';
 import { WAVES_GLSL, type WaveSet } from './Waves';
 import { makeFoamTexture, SURF_GLSL, type SurfUniforms } from './Surf';
+import { SURF_MEM_GLSL, type SurfMemoryUniforms } from './SurfMemory';
+import type { SurfSpray } from './SurfSpray';
 
 /** Tiling wave-slope map from a small random spectrum (two-sided, so it tiles), with mipmaps against far shimmer. */
 export function makeWaveNormal(S = 256): DataTexture {
@@ -81,14 +83,10 @@ float groundSmooth(vec2 xz) {
 }
 `;
 
-/** GLSL: the surf's surface at a point (after GROUND_GLSL and SURF_GLSL; needs uTime). */
+/** GLSL: the surf's surface at a point (after SURF_GLSL; needs uTime). */
 const SURF_ETA_GLSL = /* glsl */ `
-// the surf's surface height at a point, relative to the still level (0 beyond the surf, where the sea is the plane)
-float surfEta(vec2 xz, float level) {
-  float D = level - groundSmooth(xz);
-  if (D > 1.4) return 0.0;
-  return surfAt(xz, D, uTime, uSurf.z).x * (1.0 - smoothstep(0.8, 1.4, D));
-}
+// the surf's surface height at a point, relative to the still level (on the beach: the swash sheet's, or the ground)
+float surfEta(vec2 xz, float level) { return surfEtaAt(xz, level, uTime); }
 `;
 
 /** Texels across the surf's height field (over the whole terrain: 25 cm on 走水's 96 m). */
@@ -108,6 +106,20 @@ export interface SurfField {
  * the sky is reflected from a cube map with Fresnel; the sun glitters; the shoreline gets a bright rim and bubbles;
  * far water fades into the fog. Pools are calm (little ripple) and clearer, so their bottoms are easy to see.
  */
+/** A shore's water beyond its colour and turbidity (every field optional; absent: 葛西's water). */
+export interface WaterOptics {
+  /** a milky body: the share of sun and sky light the suspended fines send back up (linear) */
+  scatter?: readonly [number, number, number];
+  /** factor on the Fresnel reflection, how broken it is (0..1), and a gain on the sky's brightness in it */
+  reflect?: number; rough?: number; env?: number;
+  /** the distance (m) over which the reflection rises to the physical Fresnel */
+  reflNear?: readonly [number, number];
+  /** a breezier surface: wave spectrum boost around `peak` (m), the footprint filter, calm damping, still shallows */
+  ripple?: { peak?: number; boost?: number; aniso?: number; calmGain?: number; still?: number };
+  /** an open shore's wind sea: how much rougher the deeper water is than the flat's breeze ripples (absent: 0) */
+  chop?: number;
+}
+
 export class WaterPass {
   readonly uniforms;
   private readonly material: ShaderMaterial;
@@ -127,6 +139,18 @@ export class WaterPass {
     this.uniforms = {
       uSurf: surf.uSurf,
       uSurfDir: surf.uSurfDir,
+      tSurfZone: surf.tSurfZone,
+      tSurfAux: surf.tSurfAux,
+      uSurfLv: surf.uSurfLv,
+      uSurfGrid: surf.uSurfGrid,
+      // the sand's memory of the swash (SurfMemory): what the sheet left on it; xy: the window's centre, z: its size,
+      // w: 1 when there is one
+      tSurfMem: { value: null as Texture | null },
+      uMemBox: { value: new Vector4(0, 0, 1, 0) },
+      // 0 off; 1 the zones; 2 the foams
+      uSurfDebug: { value: 0 },
+      // an open shore's wind sea: how much rougher the deeper water is than the flat's breeze ripples (0: not)
+      uChop: { value: 0 },
       tFoam: { value: makeFoamTexture() },
       tColor: { value: null as unknown },
       tDepth: { value: null as unknown },
@@ -171,6 +195,17 @@ export class WaterPass {
       uExposure: { value: 1 },
       // the picture's last grade (World sets it with the sun: the warm cast of a sunset as a camera sees it)
       uGradeTint: { value: new Vector3(1, 1, 1) },
+      // a milky body (漫湖's jade lake): the share of sun and sky light the suspended fines send back up (linear;
+      // 0: none, 葛西 and 走水), the reflection's share of Fresnel (1: unchanged) and how broken it is (0: unchanged)
+      uScatter: { value: new Vector3() },
+      uReflScale: { value: 1 },
+      uReflRough: { value: 0 },
+      // a breezy opaque river (漫湖): ripples kept by the narrower footprint, calm shallows; the distance over
+      // which the reflection rises to the physical Fresnel (5-20 m: clear water shows its bed up close)
+      uAniso: { value: 0 },
+      uCalmGain: { value: 0.22 },
+      uStill: { value: 0 },
+      uReflNear: { value: new Vector2(5, 20) },
     };
     this.material = new ShaderMaterial({
       uniforms: this.uniforms,
@@ -193,15 +228,17 @@ export class WaterPass {
           gl_Position = vec4(position.xy, 0.0, 1.0);
         }`,
       fragmentShader: /* glsl */ `
-        uniform sampler2D tColor, tDepth, tHeight, tSpill, tMirror, tFoam;
+        uniform sampler2D tColor, tDepth, tHeight, tSpill, tMirror, tFoam, tSurfMem;
         uniform samplerCube tEnv;
         uniform mat4 uProjInv, uCamWorld, uMirrorMat;
-        uniform float uMirrorOn, uPolar, uSurfSteps, uHeightN;
-        uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog;
-        uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax;
+        uniform float uMirrorOn, uPolar, uSurfSteps, uHeightN, uSurfDebug, uChop;
+        uniform vec3 uCamPos, uSunDir, uSunCol, uFogColor, uWaterFog, uScatter;
+        uniform float uWater, uTime, uSunUp, uAmbient, uFogDensity, uFogW, uFogPool, uEnvI, uHalf, uRefr, uReflK, uReflMax, uReflScale, uReflRough, uAniso, uCalmGain, uStill;
+        uniform vec2 uReflNear;
         uniform vec2 uRes;
         uniform float uLdrOut, uExposure;
         uniform vec3 uGradeTint;
+        uniform vec4 uMemBox;
         varying vec2 vUv;
         varying float vCamLevel;
         ${TONE_MAP_GLSL}
@@ -223,13 +260,46 @@ export class WaterPass {
         ${GROUND_GLSL}
         float groundAt(vec2 xz) { return texture2D(tHeight, tuv(xz)).r; }
         float spillAt(vec2 xz) { return texture2D(tSpill, tuv(xz)).r; }
+        // an open shore's wind sea over the deeper water (set before waterNormal: 0 in the shallows and pools)
+        float gChop = 0.0;
+        // value noise with its gradient (quintic, so the slopes are smooth)
+        vec3 vnoiseWD(vec2 x) {
+          vec2 i = floor(x), f = fract(x);
+          vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0), du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+          float a = hash12(i), b = hash12(i + vec2(1, 0)), c = hash12(i + vec2(0, 1)), d = hash12(i + vec2(1, 1));
+          float k1 = b - a, k2 = c - a, k4 = a - b - c + d;
+          return vec3(a + k1 * u.x + k2 * u.y + k4 * u.x * u.y, du * vec2(k1 + k4 * u.y, k2 + k4 * u.x));
+        }
+        // the wind sea's short waves (after the reference shore's chop): four octaves from 1.6 m to 20 cm, two layers
+        // each drifting their own way and turned so that the noise's grid never lines up; each octave fades out as it
+        // nears the pixel's footprint. The gradient of the surface (x, z).
+        vec2 windSea(vec2 p, float fp) {
+          vec2 g = vec2(0.0);
+          float amp = 0.05, sc = 0.62;
+          for (int o = 0; o < 4; o++) {
+            float fo = float(o);
+            float keep = 1.0 - smoothstep(0.25, 0.6, fp * sc);
+            if (keep <= 0.0) break;
+            for (int l = 0; l < 2; l++) {
+              float th = fo * 1.13 + float(l) * 2.1;
+              mat2 R = mat2(cos(th), -sin(th), sin(th), cos(th));
+              vec2 v = vec2(cos(th + 1.9), sin(th + 1.9)) * (0.35 + 0.25 * float(l)) * sqrt(0.62 / sc);
+              vec3 n = vnoiseWD(R * p * sc + v * uTime * sc + fo * 17.3 + float(l) * 5.1);
+              g += amp * sc * (n.yz * R) * keep;
+            }
+            sc *= 1.9; amp *= 0.55;
+          }
+          return g;
+        }
         // the surface slope from the wave set (random directions and speeds, nothing periodic), band-limited to the
         // pixel footprint so distant water does not shimmer; gusts roughen the surface in drifting patches; pools are calm
         vec3 waterNormal(vec2 p, float dist, float calm) {
-          float fp = max(length(fwidth(p)), dist * 0.0015);
+          // (uAniso: the footprint's geometric mean rather than its sum, which keeps the short chop alive at a distance)
+          float fp = mix(max(length(fwidth(p)), dist * 0.0015), max(sqrt(length(dFdx(p)) * length(dFdy(p))), dist * 0.0008), uAniso);
           float gust = 0.65 + 0.7 * smoothstep(-0.4, 0.6, snoise(p * 0.08 + uTime * vec2(0.03, 0.02)));
-          float gain = gust * mix(1.0, 0.22, calm);
+          float gain = gust * mix(1.0, uCalmGain, calm) * (1.0 + 0.5 * gChop);
           vec3 g = waveGrad(p, uTime, fp * 4.0) * gain;
+          if (gChop > 0.0) g.yz += windSea(p, fp) * gChop * gust;
           return normalize(vec3(-g.y, 1.0, -g.z));
         }
         // Henyey-Greenstein phase function: the silt scatters the sun forward
@@ -238,10 +308,64 @@ export class WaterPass {
         // toward the lit surface, with the sun's forward-scattered halo
         vec3 waterGlow(vec3 d) {
           float mu = dot(d, uSunDir);
-          return uWaterFog * (0.75 + 0.35 * smoothstep(-0.6, 0.8, -d.y)) + uSunCol * 0.035 * hgPhase(mu, 0.72) * uSunUp;
+          // a milky body is lit like a matte surface just under the water: it follows the sun and the sky (dims at dusk)
+          vec3 lit = uScatter * (uSunCol * uSunUp * (0.25 + 0.75 * max(uSunDir.y, 0.0)) + uAmbient * uFogColor);
+          return (uWaterFog + lit) * (0.75 + 0.35 * smoothstep(-0.6, 0.8, -d.y)) + uSunCol * 0.035 * hgPhase(mu, 0.72) * uSunUp;
         }
 
         ${SURF_ETA_GLSL}
+        ${SURF_MEM_GLSL}
+
+        // ---- sun glitter. The small waves' facets, each tilted at random about the surface's own slope (the
+        // unresolved slopes' spread, Cox & Munk's σ), flash wherever one turns the sun into the eye. The facets are
+        // cells sized to the pixel's footprint, two sizes blended, so the sparks carry on to the horizon thinning into
+        // the sun's broad path; each cell's facet is drawn anew a few times a second and eased across, so they twinkle.
+        float glintCells(vec2 p, vec2 need, float sig, float tol, float cs, float seed) {
+          vec2 q = p / cs;
+          vec2 c = floor(q);
+          vec2 o = fract(q) - 0.5 - (vec2(hash12(c + seed), hash12(c + seed + 9.1)) - 0.5) * 0.5;
+          float spot = smoothstep(0.42, 0.1, length(o));
+          float tt = uTime * (3.0 + 3.0 * hash12(c + seed + 3.3)) + hash12(c + seed + 7.7) * 10.0;
+          float k = floor(tt), fk = fract(tt);
+          // two draws of the facet's slope (Box-Muller), eased one into the next
+          vec2 u1 = vec2(hash12(c + k * 1.31 + seed), hash12(c + k * 2.17 + seed + 4.2));
+          vec2 u2 = vec2(hash12(c + (k + 1.0) * 1.31 + seed), hash12(c + (k + 1.0) * 2.17 + seed + 4.2));
+          vec2 m1 = sqrt(-2.0 * log(max(u1.x, 1e-4))) * vec2(cos(6.2831853 * u1.y), sin(6.2831853 * u1.y));
+          vec2 m2 = sqrt(-2.0 * log(max(u2.x, 1e-4))) * vec2(cos(6.2831853 * u2.y), sin(6.2831853 * u2.y));
+          vec2 m = mix(m1, m2, smoothstep(0.3, 0.7, fk)) * sig;
+          float d = length(m - need);
+          return spot * smoothstep(tol, tol * 0.25, d);
+        }
+        float glitter(vec2 p, vec3 N, vec3 rd, float fp, float sig) {
+          vec3 H = normalize(uSunDir - rd);
+          if (H.y <= 0.05 || uSunUp <= 0.0) return 0.0;
+          // the micro-slope a facet needs, against the surface's own normal
+          vec2 need = -H.xz / H.y + N.xz / max(N.y, 0.2);
+          float lr = log2(max(fp * 1.6, 0.004) / 0.004), l0 = floor(lr), fl = lr - l0;
+          float cs0 = 0.004 * exp2(l0), cs1 = cs0 * 2.0;
+          vec2 drift = uTime * vec2(0.21, 0.13);
+          float tol = 0.03 + 0.012 * sig / 0.1;
+          float g = mix(glintCells(p + drift, need, sig, tol, cs0, 0.0), glintCells(p + drift, need, sig, tol, cs1, 17.0), fl);
+          return g;
+        }
+        // foam threads (after the reference shore's lace): the contour lines of a warped noise, thicker the more foam
+        // there is; dense foam closes into a sheet with holes of uneven size
+        float fbmW(vec2 p) { return 0.5 * vnoiseW(p) + 0.3 * vnoiseW(p * 2.03 + 1.7) + 0.2 * vnoiseW(p * 4.01 + 5.3); }
+        // (fp: the pattern's footprint, pattern units per pixel: past half a cell the lace averages to its cover)
+        float foamLace(vec2 q, float cov, float fp) {
+          vec2 w = q + 0.7 * vec2(fbmW(q * 0.45 + 1.3), fbmW(q * 0.45 + 8.1)) - 0.35;
+          float r = 1.0 - abs(2.0 * fbmW(w * 1.6 + 5.0) - 1.0);
+          float r2 = 1.0 - abs(2.0 * vnoiseW(w * 3.3 + 11.0) - 1.0);
+          float wd = 0.03 + 0.14 * cov, wd2 = 0.025 + 0.08 * cov;
+          float thread = max(smoothstep(1.0 - wd, 1.0 - wd * 0.5, r), 0.75 * smoothstep(1.0 - wd2, 1.0 - wd2 * 0.5, r2));
+          // only dense foam closes into a sheet (with holes of uneven size)
+          float th = 0.8 - 0.32 * cov;
+          float sheet = smoothstep(th - 0.012, th + 0.025, fbmW(w * 1.15 + 2.0) + 0.08 * (vnoiseW(w * 9.0) - 0.5));
+          // threads break more where the foam is thin
+          float brk = smoothstep(0.62 - 0.5 * cov, 0.8 - 0.5 * cov, vnoiseW(w * 2.2 + 7.0));
+          float lace = max(sheet, thread * mix(0.15, 1.0, brk));
+          return mix(lace, cov * 0.6, smoothstep(0.25, 0.8, fp)) * smoothstep(0.02, 0.1, cov);
+        }
 
         void main() {
           vec2 uv = vUv;
@@ -262,8 +386,8 @@ export class WaterPass {
             if (sp > uWater + 0.01 && sp > P.y + 0.003) { level = sp; calm = 1.0; }
           }
 
-          // the surf (an open shore only): near the waterline the surface rises and falls with the waves and runs up
-          // the beach as the swash sheet, so whether a point of the bed is under water is decided by the surface there
+          // the surf (an open shore only): the surface rises and falls with the waves, which break near the shore and
+          // run up the beach as the swash sheet, so whether a point of the bed is under water is decided by the surface there
           bool surfOn = uSurf.w > 0.0 && calm < 0.5;
           float surface = level;
           if (surfOn && !sky) surface += surfEta(P.xz, level);
@@ -272,28 +396,28 @@ export class WaterPass {
           float camLevel = vCamLevel;
           bool underCam = uCamPos.y < camLevel - 0.003;
 
-          // Near the viewer the surf stands up from the plane: the view ray is traced through the band of heights the
-          // waves can take (12–16 steps and a few secant refinements), so a crest hides the water behind it and its
-          // face is seen as a face. Only where that band lies in the surf and within ~35 m; beyond, the plane.
+          // Near the viewer the waves stand up from the plane: the view ray is traced through the band of heights the
+          // waves can take (12–16 steps, closer together near the eye, and a few secant refinements), so a crest hides
+          // the water behind it and its face is seen as a face. Within ~35 m; beyond, the plane with the waves' normals.
           float t = -1.0;
           bool traced = false;
           if (surfOn && uSurfSteps > 0.5 && rd.y < -1e-5 && !underCam) {
-            float top = level + 2.2 * uSurf.x, bot = level - 1.5 * uSurf.x;
+            float top = level + 2.2 * uSurf.x + 0.12, bot = level - 1.5 * uSurf.x;
             float t0 = max((top - uCamPos.y) / rd.y, 0.0), tb = (bot - uCamPos.y) / rd.y;
             float t1 = min(tb, sceneDist), tEnd = min(t1, 35.0);
-            vec3 q0 = uCamPos + rd * t0, q1 = uCamPos + rd * tEnd;
-            if (t0 < tEnd && min(level - groundAt(q0.xz), level - groundAt(q1.xz)) < 1.4) {
+            vec3 q0 = uCamPos + rd * t0;
+            if (t0 < tEnd) {
               traced = tEnd >= t1 - 1e-3;   // (the whole band seen within reach: the trace has the last word)
               // one loop with a run-time bound and a single call of the surface (so the driver neither unrolls it nor
-              // inlines the surf dozens of times): march in even steps until the ray goes under, then refine the bracket
-              // by the secant method
+              // inlines the surf dozens of times): march until the ray goes under, then refine the bracket by the
+              // secant method. The steps grow with the distance (the near water is the one looked at).
               float lo = t0, flo = q0.y - level - surfEta(q0.xz, level), hi = -1.0, fhi = 0.0;
               if (flo <= 0.0) t = t0;
               else {
                 int steps = int(uSurfSteps), refined = 0;
-                float dt = (tEnd - t0) / uSurfSteps;
                 for (int i = 1; i <= steps + 4; i++) {
-                  float tt = hi < 0.0 ? t0 + dt * float(i) : lo + (hi - lo) * flo / (flo - fhi);
+                  float a = float(i) / uSurfSteps;
+                  float tt = hi < 0.0 ? t0 + (tEnd - t0) * a * (0.35 + 0.65 * a) : lo + (hi - lo) * flo / (flo - fhi);
                   if (hi < 0.0 && i > steps) break;
                   vec3 qq = uCamPos + rd * tt;
                   float ff = qq.y - level - surfEta(qq.xz, level);
@@ -331,31 +455,38 @@ export class WaterPass {
           } else if (t >= 0.0) {
             {
               vec3 S = uCamPos + rd * t;
-              vec3 N = waterNormal(S.xz, t, calm);
-              // the waves of the surf tilt the surface (their slope added to the ripples'), and the broken ones foam
-              float foam = 0.0, lip = 0.0, Ds = 1e3, waveN = 0.0, face = 0.0;
+              // the surf here: its slope added to the ripples', its foam, its swash
+              // (a tide pool's calm water has no surf: a level far below the ground short-cuts the surf to nothing)
+              Surf sf = surfEval(S.xz, surfOn ? level : -1e3, uTime, surfOn);
+              float Ds = surfOn ? sf.D : 1e3;
+              gChop = surfOn ? uChop * smoothstep(0.5, 3.0, Ds) : 0.0;
+              // (uStill: water only centimetres deep over the mud lies mirror-calm, as the sheets on a flat do)
+              float still = uStill > 0.0 ? uStill * (1.0 - smoothstep(0.02, 0.15, surface - groundSmooth(S.xz))) : 0.0;
+              vec3 N = waterNormal(S.xz, t, max(calm, still));
+              vec2 sy = surfFrame(S.xz);
+              float sheetK = 0.0;   // 1 on a thin swash sheet
               if (surfOn) {
-                float g0 = groundSmooth(S.xz), gx = groundSmooth(S.xz + vec2(0.7, 0.0)), gz = groundSmooth(S.xz + vec2(0.0, 0.7));
-                vec2 gg = vec2(gx - g0, gz - g0) / 0.7;
-                float bs = max(length(gg), 0.005);
-                Ds = level - g0;
-                vec4 sf = surfAt(S.xz, Ds, uTime, bs);
-                waveN = gSurfN;
-                // (the surface's gradient: the ripples' plus the surf's; the normal leans against it. Near the viewer the
-                // surf's is measured on the surface itself, so wandering crests are lit as they lie; further off, the
-                // waves' slope along the seaward direction)
+                // (near the viewer the slope is measured on the surface itself, so wandering crests and the swash's
+                // edge are lit as they lie; further off, the waves' own gradient, fading into the far sea's ripples)
                 vec2 surfGrad;
                 if (uSurfSteps > 0.5 && t < 35.0) {
-                  float e0 = Ds > 1.4 ? 0.0 : sf.x * (1.0 - smoothstep(0.8, 1.4, Ds));   // (= surfEta here)
-                  surfGrad = vec2(surfEta(S.xz + vec2(0.08, 0.0), level) - e0, surfEta(S.xz + vec2(0.0, 0.08), level) - e0) / 0.08;
-                } else surfGrad = -gg / bs * sf.z * (1.0 - smoothstep(40.0, 120.0, t));
-                vec2 grad = -N.xz / N.y + surfGrad;
+                  float h = 0.05 + 0.002 * t;
+                  surfGrad = vec2(surfEta(S.xz + vec2(h, 0.0), level) - sf.eta, surfEta(S.xz + vec2(0.0, h), level) - sf.eta) / h;
+                } else surfGrad = sf.grad * (1.0 - smoothstep(80.0, 260.0, t));
+                // the swash sheet is rippled by its own flow: streaks along the slope moving with it, and fine wrinkles
+                sheetK = sf.sw * (1.0 - smoothstep(0.004, 0.05, sf.film)) * step(1e-4, sf.film);
+                if (sf.sw > 0.01 && sf.film > 0.0) {
+                  vec2 fq = vec2(sy.y * 3.4, (sy.x + 0.45 * sf.flow * min(sf.swAge, 2.5)) * 1.3) + vec2(sf.n * 3.1, 0.0);
+                  fq += 0.8 * vec2(fbmW(S.xz * 1.3), fbmW(S.xz * 1.3 + 3.0));
+                  float e = 0.06, f0 = fbmW(fq), fx = fbmW(fq + vec2(e, 0.0)), fz = fbmW(fq + vec2(0.0, e));
+                  vec2 gS = vec2((fz - f0) / e * 1.3, (fx - f0) / e * 3.4);   // (d/ds, d/dy)
+                  vec2 gW = gS.x * uSurfDir.xy + gS.y * vec2(-uSurfDir.y, uSurfDir.x);
+                  surfGrad += gW * 0.045 * sf.sw * (0.4 + 0.6 * smoothstep(0.0, 0.8, abs(sf.flow)));
+                }
+                vec2 grad = -N.xz / N.y * mix(1.0, 0.35, sheetK) + surfGrad;
                 N = normalize(vec3(-grad.x, 1.0, -grad.y));
-                foam = sf.y;
-                lip = sf.w;
-                // the front of a wave turned toward the beach: it sees less of the sky and shows the stirred water in it
-                face = smoothstep(0.06, 0.45, sf.z) * (1.0 - smoothstep(25.0, 50.0, t));
               }
+              float lip = sf.lip, face = sf.face * (1.0 - smoothstep(25.0, 50.0, t));
 
               // refraction: the bottom's image wobbles in proportion to the water's thickness (things above the surface are left alone)
               float thick0 = min(sceneDist - t, 30.0);
@@ -365,22 +496,25 @@ export class WaterPass {
               float d2 = texture2D(tDepth, uv2).r;
               bool sky2 = d2 >= 1.0;
               vec3 P2 = worldPos(uv2, sky2 ? 0.9995 : d2);
-              if (P2.y > level || any(lessThan(uv2, vec2(0.0))) || any(greaterThan(uv2, vec2(1.0)))) { uv2 = uv; P2 = P; sky2 = sky; }
+              if (P2.y > surface + 0.02 || any(lessThan(uv2, vec2(0.0))) || any(greaterThan(uv2, vec2(1.0)))) { uv2 = uv; P2 = P; sky2 = sky; }
               vec3 refr = texture2D(tColor, uv2).rgb;
               float thick = sky2 ? 1e4 : max(length(P2 - uCamPos) - t, 0.0);
 
-              // turbidity: the bottom fades into the silty water over the length of the view path through it
-              // (a few tens of centimetres); tide pools have settled and stay clearer
+              // turbidity: the bottom fades into the water over the length of the view path through it (a few tens of
+              // centimetres on 葛西's silty flat, more in the bay mouth); tide pools have settled and stay clearer
               float fogW = mix(uFogW, uFogPool, calm);
               // the surf stirs the sand up: the breaking water is murkier, its colour going sandy-green
-              float murk = surfOn ? uSurf.w * (1.0 - smoothstep(0.1, 1.0, Ds)) : 0.0;
+              float murk = surfOn ? sf.murk : 0.0;
               fogW *= 1.0 + 2.5 * murk;
               vec3 glow = waterGlow(rd) * mix(vec3(1.0), vec3(1.3, 1.15, 0.7), murk * 0.7);
               // (a steep front shades the water behind it from the sky: the face reads darker than the trough before it)
-              vec3 under = mix(glow, refr, exp(-thick * fogW)) * mix(1.0, 0.5, face);
+              vec3 under = mix(glow, refr, exp(-thick * fogW)) * mix(1.0, 0.55, face);
 
               // the sky, reflected (the sun's disc is handled by the glitter below) and weighted by Fresnel
-              vec3 R = reflect(rd, N);
+              // (a rough reflection, for a ruffled milky lake: exaggerated slopes break the mirror up)
+              vec3 Nr = N;
+              if (uReflRough > 0.0) { float k = 1.0 + 3.0 * uReflRough; Nr = normalize(vec3(N.x * k, N.y, N.z * k)); }
+              vec3 R = reflect(rd, Nr);
               R.y = max(abs(R.y), 0.06);   // never sample the dome's dark underside at the horizon
               vec3 envSky;
               if (uMirrorOn > 0.5) {
@@ -389,37 +523,43 @@ export class WaterPass {
                 // short vertical smear stands in for the many small facets between the pixels
                 vec4 mc = uMirrorMat * vec4(S + R * 300.0, 1.0);
                 vec2 muv = clamp(mc.xy / mc.w, vec2(0.002), vec2(0.998));
-                float smear = 0.0015 + 0.004 * clamp(length(N.xz) * 6.0, 0.0, 1.0);
+                float smear = (0.0015 + 0.004 * clamp(length(N.xz) * 6.0, 0.0, 1.0)) * (1.0 + 4.0 * uReflRough);
+                float side = 0.0007 * (1.0 + 2.0 * uReflRough);
                 envSky = texture2D(tMirror, muv).rgb * 0.5
-                  + texture2D(tMirror, clamp(muv + vec2(0.0007, smear), vec2(0.002), vec2(0.998))).rgb * 0.25
-                  + texture2D(tMirror, clamp(muv - vec2(0.0007, smear), vec2(0.002), vec2(0.998))).rgb * 0.25;
+                  + texture2D(tMirror, clamp(muv + vec2(side, smear), vec2(0.002), vec2(0.998))).rgb * 0.25
+                  + texture2D(tMirror, clamp(muv - vec2(side, smear), vec2(0.002), vec2(0.998))).rgb * 0.25;
               } else envSky = textureCube(tEnv, R).rgb;
               vec3 env = min(envSky * uEnvI, vec3(12.0));
               float cosT = clamp(dot(-rd, N), 0.0, 1.0);
               float F = min((0.02 + 0.98 * pow(1.0 - cosT, 5.0)) * uReflK, uReflMax);
               // further out (where nothing is looked for under the surface) the sea is the mirror it really is: the
               // full Fresnel reflectance, or with the glasses on the p-polarised part they pass, which still climbs
-              // steeply toward grazing
+              // steeply toward grazing; so is a thin swash sheet, a mirror laid on the sand
               vec2 sp = fresnelSP(max(cosT, 0.02));
               float Fphys = mix(0.5 * (sp.x + sp.y), sp.y + 0.12 * sp.x, uPolar);
-              F = mix(F, max(F, Fphys * 0.92), smoothstep(5.0, 20.0, t));
+              F = mix(F, max(F, Fphys * 0.92), max(smoothstep(uReflNear.x, uReflNear.y, t), sheetK * 0.6));
 
-              // sun glitter: small facets tilted at random break the sun's reflection into sparkles
-              vec2 gp = S.xz * 40.0 + uTime * vec2(0.7, 0.4);
-              vec2 gc = floor(gp);
-              float gshape = smoothstep(0.32, 0.0, length(fract(gp) - 0.5 + (vec2(hash12(gc + 1.3), hash12(gc + 5.9)) - 0.5) * 0.4));
-              vec3 jit = vec3(hash12(gc) - 0.5, 0.0, hash12(gc + 7.3) - 0.5) * 0.09 * mix(1.0, 0.3, calm);
-              vec3 Ng = normalize(N + jit);
-              vec3 H = normalize(uSunDir - rd);
-              float nh = max(dot(Ng, H), 0.0);
-              float tw = 0.5 + 0.5 * sin(uTime * 9.0 + hash12(gc + 3.1) * 40.0);
-              float near = 1.0 - smoothstep(25.0, 70.0, t);
-              float glint = pow(nh, 5000.0) * 90.0 * tw * gshape * near + pow(max(dot(N, H), 0.0), 1500.0) * 0.08;
-              vec3 spec = uSunCol * glint * F * uSunUp;
+              // sun glitter: to the horizon, in the sun's path; denser on rough water, finer on the swash sheet
+              float fpx = max(length(fwidth(S.xz)), t * 0.0008);
+              float gust = 0.7 + 0.6 * smoothstep(-0.4, 0.6, snoise(S.xz * 0.08 + uTime * vec2(0.03, 0.02)));
+              float sig = mix(mix(0.09 + 0.05 * min(gChop, 1.5), 0.06, sheetK) * gust, 0.035, calm);
+              float glint = glitter(S.xz, N, rd, fpx, sig);
+              // and the broad sheen of the sun's path beneath the sparks (the facets too small to resolve)
+              vec3 Hsun = normalize(uSunDir - rd);
+              float nh = max(dot(N, Hsun), 0.0);
+              float sheen = exp(-(1.0 - nh * nh) / max(nh * nh, 1e-3) / (2.0 * sig * sig)) / (sig * sig * 40.0);
+              vec2 spS = fresnelSP(max(dot(uSunDir, Hsun), 0.02));
+              float Fs = mix(0.5 * (spS.x + spS.y), spS.y + 0.12 * spS.x, uPolar);
+              vec3 spec = uSunCol * uSunUp * Fs * (glint * 380.0 + sheen * 0.35) * (1.0 - smoothstep(0.05, 0.4, sf.roller + sf.crest));
 
-              col = mix(under, env, F) + spec;
-              // the light through the thin top of a steepening wave: turquoise, brightest with the sun behind it
-              col += vec3(0.03, 0.11, 0.085) * uSunCol * uSunUp * lip * (0.3 + 0.7 * pow(max(dot(rd, uSunDir), 0.0), 2.0)) * 0.5 * (1.0 - F);
+              // (the sun's glitter keeps the full Fresnel: a milky lake still sparkles)
+              col = mix(under, env, F * uReflScale) + spec;
+              // the light through the thin top of a steepening wave: bottle green, brightest with the sun behind it
+              float back = pow(max(dot(rd, uSunDir), 0.0), 2.0);
+              vec3 skyL = env * 0.35 + uAmbient * uFogColor * 0.6;
+              col += vec3(0.05, 0.2, 0.15) * (uSunCol * uSunUp * (0.25 + 0.9 * back) + skyL) * lip * 0.55 * (1.0 - F);
+              // and the face itself, lit through from above: greener and brighter toward its top
+              col = mix(col, col * vec3(0.8, 1.06, 1.0) + vec3(0.004, 0.022, 0.018) * uSunUp, face * 0.6);
 
               // the shoreline: a bright rim where the water is a few millimetres deep, and small bubbles
               float vdepth = surface - P.y;
@@ -433,53 +573,129 @@ export class WaterPass {
               #else
               rim *= smoothstep(-0.2, 0.5, snoise(S.xz * 3.0 + uTime * 0.1));
               col += env * rim * 0.05;
-              float bub = smoothstep(0.86, 0.97, snoise(S.xz * 14.0 + uTime * vec2(0.05, 0.03))) * (1.0 - smoothstep(0.0, 0.06, vdepth)) * smoothstep(0.0, 0.004, vdepth) * onBed;
+              float bub = smoothstep(0.86, 0.97, snoise(S.xz * 14.0 + uTime * vec2(0.05, 0.03))) * (1.0 - smoothstep(0.0, 0.06, vdepth)) * smoothstep(0.0, 0.004, vdepth) * onBed * (1.0 - uSurf.w);
               col = mix(col, vec3(0.85) * (0.4 + 0.6 * uSunUp) * uAmbient, bub * 0.55 * (1.0 - calm * 0.6) * nearOnly);
               // flecks floating on the surface, near the viewer
               float speck = smoothstep(0.93, 0.99, snoise(S.xz * 9.0 + uTime * vec2(0.04, 0.025))) * smoothstep(0.02, 0.2, vdepth) * (1.0 - smoothstep(4.0, 14.0, t));
               col = mix(col, vec3(0.75, 0.72, 0.62) * uAmbient, speck * 0.25);
               #endif
 
-              // a swash sheet only millimetres thick hardly shows: its edges dissolve into the wet sand (the froth on it, below,
-              // stays)
-              if (uSurf.w > 0.0 && Ds < 0.02) col = mix(base, col, smoothstep(0.0, 0.006, vdepth));
+              // the swash sheet's edge: a thin bright meniscus where the climbing (or draining) sheet meets the sand
+              if (surfOn && sf.sw > 0.01) {
+                float men = smoothstep(0.0, 0.0012, vdepth) * (1.0 - smoothstep(0.0015, 0.006, vdepth)) * onBed * (1.0 - smoothstep(6.0, 25.0, t));
+                col += (vec3(dot(env, vec3(0.33))) * 0.1 + uSunCol * uSunUp * 0.03) * men * (0.4 + 0.6 * sf.swUp);
+              }
+              // a sheet only a millimetre or two thick hardly shows but for its shine: its edge dissolves into the wet sand
+              if (uSurf.w > 0.0 && Ds < 0.02) col = mix(base, col, smoothstep(0.0, 0.0018, vdepth));
 
-              // the surf's foam: lace from the Voronoi map, in drifting patches; and the white froth along the water's edge
+              // the surf's foam, four kinds: the whitecap on a crest tipping over (streaks along the crest), the bore's
+              // roller (dense, bright, lumpy), the lace it leaves on the water (thinning and drifting in as it ages), and
+              // the swash's (a band at the climbing front, a turbulent line where it runs into the last backwash,
+              // streaks drawn down the slope by the backwash, bubbles left on the sand)
               if (surfOn) {
-                // each wave lays its own pattern (the lace shifts with the wave's number)
-                // (looked up through a smooth warp and at a second, turned scale, so no cell pattern repeats in a line)
+                vec2 sea = uSurfDir.xy, along = vec2(-sea.y, sea.x);
+                float wn = sf.n;
+                float far = smoothstep(8.0, 30.0, t), farther = smoothstep(40.0, 120.0, t);
+                // the lace drifts shoreward with the bore (about 0.4 m/s) and is laid anew by each wave
+                vec2 drift = -sea * min(sf.age, 6.0) * 0.4;
+                vec2 fuv = (S.xz - drift) * 0.85 + vec2(wn * 0.37, wn * 0.61) + N.xz * 0.05;
                 #ifdef WATER_LITE
-                vec2 fuv = S.xz * 0.85 + vec2(uTime * 0.01, uTime * 0.006) + N.xz * 0.05 + vec2(waveN * 0.37, waveN * 0.61);
                 vec3 L1 = texture2D(tFoam, fuv).rgb;
                 vec3 L2 = L1.gbr;
-                float lf = max(L1.r, L1.b * 0.8);
+                float voro = max(L1.r, L1.b * 0.8);
                 float patches = 0.5;
                 #else
-                vec2 fw = (vec2(vnoiseW(S.xz * 1.6 + waveN * 1.7), vnoiseW(S.xz * 1.6 + vec2(7.3, -waveN))) - 0.5) * 0.18;
-                vec2 fuv = S.xz * 0.85 + vec2(uTime * 0.01, uTime * 0.006) + N.xz * 0.05 + vec2(waveN * 0.37, waveN * 0.61) + fw;
-                vec3 L1 = texture2D(tFoam, fuv).rgb;
-                vec3 L2 = texture2D(tFoam, mat2(0.8, 0.6, -0.6, 0.8) * fuv * 2.13 + vec2(0.4, -uTime * 0.01)).rgb;
-                float lf = max(max(L1.r, L2.g * 0.9), L1.b * 0.8);
-                float patches = smoothstep(0.25, 0.7, vnoiseW(S.xz * 0.7 + vec2(waveN * 3.1, uTime * 0.1)));
+                vec2 fw = (vec2(vnoiseW(S.xz * 1.6 + wn * 1.7), vnoiseW(S.xz * 1.6 + vec2(7.3, -wn))) - 0.5) * 0.18;
+                vec3 L1 = texture2D(tFoam, fuv + fw).rgb;
+                vec3 L2 = texture2D(tFoam, mat2(0.8, 0.6, -0.6, 0.8) * (fuv + fw) * 2.13 + vec2(0.4, -uTime * 0.01)).rgb;
+                float voro = max(max(L1.r, L2.g * 0.9), L1.b * 0.8);
+                float patches = smoothstep(0.25, 0.7, vnoiseW(S.xz * 0.7 + vec2(wn * 3.1, uTime * 0.1)));
                 #endif
-                // a little foam reads as lace along the cell walls; more fills the cells in, a roller is solid white.
-                // (far off the lace is finer than a pixel and would average into a veil: the walls alone stay)
-                float fa = foam * mix(0.45, 1.15, patches);
-                if (Ds < 0.25) {
-                  // the water's edge: the swash's leading edge is a band of white froth a hand or two wide, thickest while
-                  // it climbs, thinning to lace as it stops and drains; and the sheet behind carries a little up the beach
-                  vec2 sw = surfSwash(S.xz, uTime);
-                  float band = (1.0 - smoothstep(0.006, 0.022, vdepth)) * smoothstep(0.0, 0.0012, vdepth) * onBed;
-                  float sheet = (1.0 - smoothstep(-0.02, 0.04, Ds)) * smoothstep(0.0, 0.003, vdepth) * 0.4;
-                  fa = max(fa, max(band * mix(0.8, 1.15, sw.y), sheet * (0.45 + 0.55 * sw.y)) * mix(0.7, 1.1, patches));
+                // 1. the whitecap: white tearing over the top and running down the front in streaks along the crest
+                vec2 cq = vec2(dot(S.xz, along) * 0.7, dot(S.xz, sea) * 3.6) + wn * 1.3;
+                float streak = fbmW(cq + vec2(0.0, uTime * 0.7)) * 0.7 + voro * 0.45;
+                float fCrest = smoothstep(0.25, 0.5, sf.crest * 0.85 + (streak - 0.5) * 0.6) * mix(1.0, 0.75, far);
+                // 2. the roller: lumps of foam tumbling forward with the bore (two octaves moving with it), sharp-edged and
+                // nearly solid where it is thick, ragged where it thins
+                vec2 rq = vec2(dot(S.xz, along) * 3.2, dot(S.xz, sea) * 3.2 + uTime * 1.6) + wn * 3.0;
+                float lump = fbmW(rq) * 0.5 + fbmW(rq * 2.3 + 5.0) * 0.3 + vnoiseW(rq * 7.0 - uTime) * 0.2;
+                float fRoll = smoothstep(0.3, 0.55, sf.roller * 0.95 + (lump - 0.5) * mix(0.75, 0.3, far)) * mix(0.9 + 0.1 * voro, 0.95, far);
+                // 3. the lace left behind: the cell walls and the threads, thinning as it ages
+                float cov = sf.trail * exp(-sf.age / 3.5) * mix(0.6, 1.25, patches);
+                float fTrail = 0.0;
+                #ifdef WATER_LITE
+                fTrail = clamp(cov * 1.4 - (1.0 - voro) * 0.9, 0.0, 1.0);
+                #else
+                if (cov > 0.01) {
+                  // a network of foam cells of uneven size (the lace's Voronoi walls at two scales, warped and broken),
+                  // its walls thicker the more foam there is; rafts of dense foam where the bore left most, full of bubbles;
+                  // and a few of the long threads between (the contours of a warped noise, thin)
+                  float cv = min(cov, 0.9);
+                  float walls = max(L1.r, L2.g * 0.85);
+                  float net = smoothstep(1.0 - 0.6 * cv, 1.0 - 0.38 * cv, walls) * smoothstep(0.3, 0.65, vnoiseW((S.xz - drift) * 2.3 + wn * 3.0) + 0.4 * cv);
+                  // (rafts only where the foam is thick, a fifth of it at most, ragged and full of bubbles)
+                  float rn = fbmW((S.xz - drift) * 1.1 + wn * 1.9) + 0.12 * (vnoiseW((S.xz - drift) * 6.0) - 0.5);
+                  float raft = smoothstep(0.8 - 0.2 * cv, 0.86 - 0.2 * cv, rn) * (0.55 + 0.45 * L1.b) * smoothstep(0.35, 0.8, cv);
+                  float threads = foamLace((S.xz - drift) * 3.2 + wn * 7.0, cv * 0.45, fpx * 3.2 * 2.6) * 0.7;
+                  fTrail = max(max(net, raft), threads) * smoothstep(0.0, 0.1, cov);
                 }
-                float fm = clamp(fa * 1.25 - (1.0 - lf) * 0.95, 0.0, 1.0) * mix(1.0, 0.8, smoothstep(8.0, 30.0, t));
-                // foam is a bright, rough body: lit by the sun on its (softened) slope and the sky, darker in the thin lace
-                // where the water shows through and in the hollows of the bubbles
-                vec3 Nf = normalize(mix(N, vec3(0.0, 1.0, 0.0), 0.4));
-                vec3 foamCol = 0.85 * (uSunCol * max(dot(Nf, uSunDir), 0.0) * 0.32 * uSunUp + uAmbient * vec3(0.55, 0.6, 0.65));
-                foamCol *= mix(0.72, 1.0, smoothstep(0.2, 0.9, fm)) * (0.9 + 0.1 * max(L2.g, L2.b));
-                col = mix(col, foamCol, clamp(fm, 0.0, 0.95) * (1.0 - smoothstep(60.0, 150.0, t)));
+                #endif
+                fTrail = mix(fTrail, cov * 0.55, farther);
+                // 4. the swash: the front band (thick climbing, thin lace draining), the collision line, the backwash's
+                // streaks (the lace drawn down the slope and stretched as the flow below it runs faster: a parcel's
+                // distance behind the front grows as t^(2/3)) and what the sand keeps (SurfMemory)
+                float fSwash = 0.0;
+                if (sf.sw > 0.01) {
+                  float band = sf.front * mix(0.45, 1.0, sf.swUp) * smoothstep(0.0, 0.0015, vdepth) * onBed;
+                  float stretch = pow(max(sf.swAge, 0.3) / 0.6, 0.6667);
+                  vec2 bq = vec2(dot(S.xz, along) * 7.0, dot(S.xz, sea) * 7.0 / stretch + sf.flow * 0.5) + wn * 5.0;
+                  float lace = foamLace(bq, 0.25 + 0.45 * band, fpx * 7.0 * 2.6);
+                  float mem = 0.0;
+                  if (uMemBox.w > 0.0) {
+                    vec2 muv = (S.xz - uMemBox.xy) / uMemBox.z + 0.5;
+                    float mw = surfMemWeight(muv);
+                    if (mw > 0.0) mem = texture2D(tSurfMem, muv).b * mw;
+                  }
+                  // the backwash's streaks: what the sheet still carries, drawn out down the slope
+                  float carried = (1.0 - sf.swUp) * exp(-sf.swAge / 3.0) * 0.55 * smoothstep(0.0005, 0.004, sf.film);
+                  fSwash = max(band * mix(0.75, 1.0, lace), max(carried, mem) * lace);
+                  fSwash = max(fSwash, sf.collide * (0.6 + 0.4 * lace));
+                  fSwash *= sf.sw * (1.0 - smoothstep(10.0, 40.0, t));
+                }
+                float fm = clamp(max(max(fCrest, fRoll), max(fTrail, fSwash)), 0.0, 1.0) * (1.0 - smoothstep(90.0, 220.0, t));
+                // foam is a bright, rough body: lit by the sun on its own lumpy slope and by the sky; the roller's lumps
+                // shade themselves, thin lace lets the water through and reads a little grey
+                vec3 nf = vec3(vnoiseW(S.xz * 7.0 + uTime * 0.6) - 0.5, 0.0, vnoiseW(S.xz * 7.0 + 4.3 - uTime * 0.5) - 0.5);
+                vec3 Nf = normalize(mix(N, vec3(0.0, 1.0, 0.0), 0.35) + nf * 0.9 * (fRoll + fCrest) * (1.0 - far));
+                float sunF = max(dot(Nf, uSunDir), 0.0);
+                // (its light from the same sky the water reflects, so foam is always brighter than the water about it:
+                // a white body lit by the whole sky and the sun, against a few tens of percent of the sky mirrored)
+                vec3 skyE = (textureCube(tEnv, vec3(0.0, 1.0, 0.0)).rgb * 0.45 + textureCube(tEnv, normalize(vec3(-rd.x, 0.35, -rd.z))).rgb * 0.55) * uEnvI;
+                vec3 foamCol = 0.92 * (uSunCol * uSunUp * (0.15 + 0.85 * sunF) * 0.34 + min(skyE, vec3(6.0)) * 1.05 + uAmbient * vec3(0.12, 0.13, 0.14));
+                // (backlit, the thin foam glows a little: light through the bubbles)
+                foamCol += uSunCol * uSunUp * back * 0.06 * (1.0 - fRoll);
+                float dense = smoothstep(0.25, 0.95, fm);
+                // the roller's lumps shade one another: darker in the creases
+                foamCol *= mix(0.8, 1.0, dense) * (0.93 + 0.07 * max(L2.g, L2.b)) * mix(1.0, 0.72 + 0.4 * lump, fRoll * (1.0 - far));
+                col = mix(col, foamCol, clamp(fm, 0.0, 0.96));
+                // bubbles mixed into the water about the foam: a milky haze that softens its edges
+                col = mix(col, foamCol * vec3(0.8, 0.92, 0.95), 0.1 * clamp(sf.roller + sf.trail * 0.6, 0.0, 1.0) * (1.0 - fm));
+                if (uSurfDebug > 0.5) {
+                  // the debug views: 1 the zones (deep blue, shallow cyan, breaker orange, swash yellow), 2 the foams
+                  // (crest red, roller white, lace green, swash blue)
+                  if (uSurfDebug < 1.5) {
+                    float Hd = uSurf.x, L0 = 1.5613 * uSurf.y * uSurf.y, b = clamp(surfZoneAt(S.xz).w, 0.01, 0.2);
+                    float R2 = 1.1 * (0.35 * b * sqrt(Hd * L0) + 0.5 * sqrt(Hd * L0 * (0.563 * b * b + 0.004)));
+                    float gam = clamp(1.56 / (1.0 + exp(-19.5 * b)) - 43.8 * (1.0 - exp(-19.0 * b)) * Hd / (9.81 * uSurf.y * uSurf.y), 0.6, 1.3);
+                    float DbM = pow(1.4 * Hd * pow(max(uSurfLv.w, 0.3), 0.25) / gam, 0.8);
+                    vec3 zc = Ds < -R2 ? vec3(0.5, 0.4, 0.3) : Ds < 0.25 * DbM ? vec3(1.0, 0.9, 0.2) : Ds < 1.15 * DbM ? vec3(1.0, 0.45, 0.1) : Ds < L0 * 0.5 ? vec3(0.2, 0.8, 0.9) : vec3(0.1, 0.2, 0.8);
+                    col = mix(col, zc * (0.4 + 0.6 * uSunUp), 0.55);
+                  } else if (uSurfDebug < 2.5) col = vec3(fCrest, max(fRoll, fTrail * 0.3), fSwash) + vec3(fRoll * 0.7, fRoll * 0.4 + fTrail * 0.6, fRoll * 0.7);
+                  // 3: the phase since the crest (red), how far broken (green), the swash's depth (blue, ×20)
+                  else if (uSurfDebug < 3.5) col = vec3(fract(sf.age / uSurf.y), sf.brk, sf.film * 20.0) * (sf.sw > 0.5 ? vec3(0.3, 0.3, 1.0) : vec3(1.0));
+                  // 4: the zone itself: arrival time (red, fractional seconds), ground (green, per 10 cm), slope (blue ×10)
+                  else { vec4 zz = surfZoneAt(S.xz); col = vec3(fract(mix(zz.y, zz.z, surfLvMix(level))), fract(zz.x * 10.0), zz.w * 10.0); }
+                }
               }
 
               // far water fades into the haze
@@ -487,6 +703,8 @@ export class WaterPass {
               col = mix(col, uFogColor, fogF);
             }
           }
+          // 5: (debug) the still depth by the zone at every pixel, water or not: blue wet, red dry, white the waterline
+          if (uSurfDebug > 4.5 && !sky) { float Dd = level - surfZoneAt(P.xz).x; col = Dd > 0.0 ? vec3(0.0, 0.2, 1.0) * (0.3 + fract(Dd * 5.0)) : vec3(1.0, 0.1, 0.0) * (0.3 + fract(-Dd * 5.0)); col = mix(col, vec3(4.0), 1.0 - smoothstep(0.0, 0.01, abs(Dd))); }
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           if (uLdrOut > 0.5) gl_FragColor.rgb = higataToneMap(gl_FragColor.rgb, uExposure);
@@ -509,7 +727,7 @@ export class WaterPass {
       // the surf's height field: the same surface the water pass draws, 25 cm apart, for the eelgrass afloat in it
       const u = this.uniforms;
       const material = new ShaderMaterial({
-        uniforms: { tHeight: u.tHeight, uHeightN: u.uHeightN, uHalf: u.uHalf, uWater: u.uWater, uTime: u.uTime, uSurf: u.uSurf, uSurfDir: u.uSurfDir },
+        uniforms: { tHeight: u.tHeight, uHeightN: u.uHeightN, uHalf: u.uHalf, uWater: u.uWater, uTime: u.uTime, uSurf: u.uSurf, uSurfDir: u.uSurfDir, tSurfZone: u.tSurfZone, tSurfAux: u.tSurfAux, uSurfLv: u.uSurfLv, uSurfGrid: u.uSurfGrid },
         depthTest: false,
         depthWrite: false,
         vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
@@ -544,7 +762,7 @@ export class WaterPass {
     this.uniforms.uReflMax.value = on ? 0.3 : 0.6;
     this.polarized = on;
     this.uniforms.uFogW.value = (on ? 0.6 : 0.8) * this.clarity;
-    this.uniforms.uEnvI.value = on ? 0.5 : 0.6;
+    this.uniforms.uEnvI.value = (on ? 0.5 : 0.6) * this.envGain;
   }
 
   /** The sea's mirror of the land and sky at `scale` of the screen's resolution (0: off, the sky cube alone). */
@@ -555,11 +773,25 @@ export class WaterPass {
   }
 
   private polarized = false;
+  /** this shore's gain on the sky's reflection (1: 葛西's) */
+  private envGain = 1;
 
-  /** The water of this shore: its colour seen in depth (linear) and its turbidity against 葛西's silty water. */
-  setBody(r: number, g: number, b: number, turbidity: number): void {
+  /** The water of this shore: its colour seen in depth (linear) and its turbidity against 葛西's silty water; optionally
+   * a milky body (scatter, linear), a weaker (reflect, factor on Fresnel) and broken (rough, 0..1) reflection. */
+  setBody(r: number, g: number, b: number, turbidity: number, optics: WaterOptics = {}): void {
+    this.uniforms.uChop.value = optics.chop ?? 0;
     this.tint.setRGB(r, g, b);
     this.clarity = turbidity;
+    const sc = optics.scatter ?? [0, 0, 0];
+    this.uniforms.uScatter.value.set(sc[0], sc[1], sc[2]);
+    this.uniforms.uReflScale.value = optics.reflect ?? 1;
+    this.uniforms.uReflRough.value = optics.rough ?? 0;
+    this.envGain = optics.env ?? 1;
+    const rn = optics.reflNear ?? [5, 20];
+    this.uniforms.uReflNear.value.set(rn[0], rn[1]);
+    this.uniforms.uAniso.value = optics.ripple?.aniso ?? 0;
+    this.uniforms.uCalmGain.value = optics.ripple?.calmGain ?? 0.22;
+    this.uniforms.uStill.value = optics.ripple?.still ?? 0;
     this.setPolarized(this.polarized);
   }
 
@@ -568,6 +800,9 @@ export class WaterPass {
   compileTarget(): Object3D {
     return (this.quad as unknown as { _mesh: Object3D })._mesh;
   }
+
+  /** More of the surf's programs to compile ahead (the sand's memory, the spray), each with the target it draws into. */
+  readonly extraCompile: { mesh: Object3D; target: WebGLRenderTarget | null }[] = [];
 
   /** The surf field's quad and the target it is drawn into, to compile ahead too (null: no surf). */
   surfCompileTarget(): { mesh: Object3D; target: WebGLRenderTarget } | null {
@@ -582,6 +817,26 @@ export class WaterPass {
     if (on) { d.WATER_LITE = 1; d.WAVE_STRIDE = 2; d.WAVE_AMP = '1.4'; }
     else { delete d.WATER_LITE; delete d.WAVE_STRIDE; delete d.WAVE_AMP; }
     this.material.needsUpdate = true;
+  }
+
+  /** What the sand remembers of the swash (SurfMemory), for the foam on the thin sheets (null: none). */
+  setMemory(mem: SurfMemoryUniforms | null): void {
+    this.memory = mem;
+    if (!mem) this.uniforms.uMemBox.value.w = 0;
+  }
+
+  private memory: SurfMemoryUniforms | null = null;
+
+  /** The spray drawn over the water after its composite (null: none). */
+  setSpray(spray: SurfSpray | null): void {
+    this.spray = spray;
+  }
+
+  private spray: SurfSpray | null = null;
+
+  /** Debug views of the surf: 0 off, 1 the zones (deep, shallow, breaker, swash, land), 2 the four foams. */
+  setSurfDebug(mode: number): void {
+    this.uniforms.uSurfDebug.value = mode;
   }
 
   /** Steps of the trace that stands the surf up from the plane near the viewer (0: the surf on the flat plane). */
@@ -631,6 +886,7 @@ export class WaterPass {
     const u = this.uniforms;
     u.uLdrOut.value = ldr && output ? 1 : 0;
     u.uExposure.value = gl.toneMappingExposure;
+    if (this.memory) { u.tSurfMem.value = this.memory.tSurfMem.value; u.uMemBox.value.copy(this.memory.uMemBox.value); }
     u.tColor.value = input.texture;
     u.tDepth.value = input.depthTexture;
     u.uProjInv.value.copy(camera.projectionMatrixInverse);
@@ -639,6 +895,7 @@ export class WaterPass {
     u.uRes.value.set(input.width, input.height);
     gl.setRenderTarget(output);
     this.quad.render(gl);
+    this.spray?.render(gl, camera, input.depthTexture, input.width, input.height, u.uLdrOut.value > 0.5);
   }
 
   dispose(): void {

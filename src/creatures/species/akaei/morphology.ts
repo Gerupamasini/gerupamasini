@@ -76,24 +76,33 @@ export const MORPH = {
 
   // ------------------------------------------------------------------ head
   /**
-   * The eye–spiracle complex, as in the close-ups [PHOTO 005, 006, 011, 027, 056]: the eye is a dark, glossy, slightly
-   * almond-shaped dome sunk in a socket and bulging up and outward through a raised fleshy rim; the spiracle sits
-   * against its back and outer side, its rim running on from the eye's so the two share one low mound. Eyes 0.21 DW
-   * behind the snout; preorbital snout ≈ 1.75 × the interorbital width between the orbits' inner edges (0.12)
-   * [LIT 1.36–2.14].
-   *   r        radius of the cornea's dome; long  its elongation along the body (almond); flat  its height / width
-   *   sunk     how far the dome's centre lies under the socket floor (× r): about half the eye shows
-   *   gaze     the dome's axis (left eye): mostly up, well out to the side, a little forward
-   *   socketR / socketH  the broad mound the complex stands on; rimR / rimH / rimW  the raised lip round the eye (× r)
+   * The eye–spiracle complex, as in the close-ups [PHOTO 005, 006, 011, 027, 056]: the eye looks out sideways. It is a
+   * dark, glossy, slightly almond-shaped dome set in the outer face of a raised orbit: a fleshy brow covers it from the
+   * inner side and over the top, and the cornea bulges out of the orbit's outer wall, its lower lid running down to the
+   * disc beside it — so from the side it looks straight at you [PHOTO 005, 027] and from above it shows as a dark
+   * crescent along the outer edge of the orbit's hump [PHOTO 006]. The spiracle sits against its back and outer side,
+   * its rim running on from the orbit's so the two share one low mound. Eyes 0.21 DW behind the snout and 0.068 out from
+   * the midline: from above the gap between the eyes is about 0.32 × their distance from the snout, and the dark
+   * crescent seen there is the cornea's outer face, so the eyeball's centre lies a little further in [PHOTO 006];
+   * preorbital snout ≈ 2.0 × the interorbital width between the eyeballs' inner edges (0.10) [LIT 1.36–2.14].
+   *   r        radius of the cornea's dome; long  its elongation along the body (almond); flat  its depth along the gaze
+   *   gaze     the dome's axis (left eye): out to the side, tilted a little up and forward
+   *   lift     how far the eye's centre stands above the disc beside it (× r): the lower lid meets the disc
+   *   browH / browX / browIn / browOut / browL  the orbit's hump (× r): its height above the disc, its crest's offset
+   *            (inward is negative), its fall inward and outward, and its length along the body (× the eye's length)
+   *   lidOpen / lidUp / lidT  the lids: skin covers the eyeball down to lidOpen° from the gaze, lidUp° more (−)
+   *            on the top side — over the crown it rolls from the brow well down onto the dome [PHOTO 005, 027] —
+   *            and ends in a thin rim lidT (× r) proud of the cornea
+   *   socketR / socketH  the broad mound the complex stands on
    */
-  eye: { x: 0.078, z: 0.262, r: 0.0172, long: 1.2, flat: 0.9, sunk: 0.34, gaze: [0.62, 0.77, 0.14] as [number, number, number],
-    socketR: 0.036, socketH: 0.011, rimR: 1.14, rimH: 0.005, rimW: 0.45 },
+  eye: { x: 0.068, z: 0.262, r: 0.0172, long: 1.2, flat: 0.8, lift: 0.68, gaze: [0.9, 0.42, 0.15] as [number, number, number],
+    browH: 1.66, browX: 0.05, browIn: 1.8, browOut: 0.62, browL: 1.5, lidOpen: 47, lidUp: -6, lidT: 0.08, socketR: 0.036, socketH: 0.009 },
   /**
    * spiracles 1.5–2 × the eye, wrapped round its back and outer side (the centre 0.022 outside and 0.026 behind the
    * eye's), a teardrop whose long axis runs back and inward from beside the eye; a thick rim; the valve, a pale flap
    * hinged on the outer wall, closes all but a dark crescent slit along the side next to the eye [PHOTO 006, 011, 027]
    */
-  spiracle: { x: 0.104, z: 0.231, rx: 0.022, rz: 0.035, yaw: 0.55, depth: 0.009, rimH: 0.0035 },
+  spiracle: { x: 0.094, z: 0.231, rx: 0.022, rz: 0.035, yaw: 0.55, depth: 0.009, rimH: 0.0035 },
   /** mouth a transverse, gently arched slit under the eyes; nostrils and the nasal curtain in front [PHOTO 047, 049, 050, 055] */
   mouth: { z: 0.258, halfW: 0.045, arch: 0.009 },
   /** nostrils at the mouth's corners, 0.12 DW apart, 0.19 DW behind the snout [PHOTO 049, 052] */
@@ -161,8 +170,38 @@ export function trunkBump(x: number, z: number, scale = 1): number {
 /** half-width of the trunk at z */
 export function trunkHalfWidth(z: number): number { return trunkW.at(z); }
 
-/** dorsal surface height above the margin plane at (x, z) inside the outline */
-export function dorsalHeight(x: number, z: number): number {
+/**
+ * The orbit round the eye (eye-local ex out to the side, ez forward): a rounded hump centred inside the eye, whose
+ * brow covers the dome's inner side and its crown's inner half and whose outer flank falls away steeply under the
+ * bulging cornea, so the cornea comes out through the flank, an almond facing outward.
+ */
+function orbit(ex: number, ez: number): number {
+  const E = MORPH.eye, r = E.r;
+  const dx = ex - E.browX * r;
+  const wx = (dx > 0 ? E.browOut : E.browIn) * r;
+  return E.browH * r * Math.exp(-((dx / wx) ** 2) - (ez / (E.browL * E.long * r)) ** 2);
+}
+
+type V3 = [number, number, number];
+let eyeAxes: { x: V3; g: V3; z: V3 } | null = null;
+/** the left eye's frame: its gaze g and the two axes across it, turned the shortest way from up (as the eye's mesh is) */
+export function eyeFrame(): { x: V3; g: V3; z: V3 } {
+  if (eyeAxes) return eyeAxes;
+  const [a, b, c] = MORPH.eye.gaze, l = Math.hypot(a, b, c);
+  const g: V3 = [a / l, b / l, c / l];
+  // Rodrigues about k = up × g, with |k| = sin, g.y = cos
+  const k: V3 = [g[2], 0, -g[0]], cs = g[1], s2 = k[0] * k[0] + k[2] * k[2];
+  const rot = (v: V3): V3 => {
+    const kv = k[0] * v[0] + k[2] * v[2], f = s2 > 1e-12 ? (1 - cs) / s2 : 0;
+    const cr: V3 = [k[1] * v[2] - k[2] * v[1], k[2] * v[0] - k[0] * v[2], k[0] * v[1] - k[1] * v[0]];
+    return [v[0] * cs + cr[0] + k[0] * kv * f, v[1] * cs + cr[1] + k[1] * kv * f, v[2] * cs + cr[2] + k[2] * kv * f];
+  };
+  eyeAxes = { x: rot([1, 0, 0]), g, z: rot([0, 0, 1]) };
+  return eyeAxes;
+}
+
+/** dorsal surface height above the margin plane at (x, z) inside the outline (withOrbit false: the disc under the eye) */
+export function dorsalHeight(x: number, z: number, withOrbit = true): number {
   const M = MORPH;
   const w = Math.max(1e-5, halfWidth(z));
   const u = Math.min(1, Math.abs(x) / w);
@@ -170,13 +209,14 @@ export function dorsalHeight(x: number, z: number): number {
   const one = Math.max(0, 1 - u * u);
   let h = M.rimHalf * Math.sqrt(one) + F * Math.pow(one, 1.3) + Math.max(0, T - F) * trunkBump(x, z);
   const ax = Math.abs(x);
-  // the eye–spiracle complex: a low mound, the lip round the eye's socket, the spiracle's hollow with its thick rim,
-  // and a bridge where the two rims meet [PHOTO 005, 006, 011, 027]
+  // the eye–spiracle complex: a low mound, the orbit and the skin over the eyeball, the spiracle's hollow with its
+  // thick rim, and a bridge where the two rims meet [PHOTO 005, 006, 011, 027]
   const E = M.eye, S = M.spiracle;
   const ex = ax - E.x, ez = z - E.z;
   h += E.socketH * gauss(ex - 0.008, ez + 0.01, E.socketR, E.socketR * 1.15);
-  const ed = Math.hypot(ex, ez / E.long) / E.r;
-  h += E.rimH * Math.exp(-(((ed - E.rimR) / E.rimW) ** 2));
+  if (withOrbit) {
+    h += orbit(ex, ez);
+  }
   const sx = ax - S.x, sz = z - S.z, cy = Math.cos(S.yaw), sy = Math.sin(S.yaw);
   const su = sx * cy - sz * sy, sv = sx * sy + sz * cy;
   const sd = Math.hypot(su / S.rx, sv / S.rz);
@@ -185,6 +225,14 @@ export function dorsalHeight(x: number, z: number): number {
   h += 0.004 * gauss(ax - bx, z - bz, 0.012, 0.012);
   h += 0.0012 * Math.exp(-(x * x) / (0.03 * 0.03)) * smoothstep(0.15, 0.0, z) * smoothstep(-0.48, -0.3, z);
   return h;
+}
+
+/** the centre of the eye's dome (left eye for sideX 1): it stands `lift` radii above the disc beside it */
+let eyeY: number | null = null;
+export function eyeCentre(sideX: number): [number, number, number] {
+  const E = MORPH.eye;
+  eyeY ??= dorsalHeight(E.x, E.z, false) + E.lift * E.r;
+  return [E.x * sideX, eyeY, E.z];
 }
 
 /** ventral depth below the margin plane (positive down) at (x, z) */

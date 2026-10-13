@@ -4,6 +4,14 @@ export type EquipmentKind = typeof EQUIPMENT_KINDS[number];
 export type Vec3 = [number, number, number];
 export interface TankDimensions { width: number; depth: number; height: number; glass: number; waterHeight: number }
 export const STANDARD_TANK: TankDimensions = { width: 0.6, depth: 0.3, height: 0.36, glass: 0.006, waterHeight: 0.3 };
+export const TANK_SIZES = [45, 60, 90, 120] as const;
+export type TankSize = typeof TANK_SIZES[number];
+export const TANK_DIMENSIONS: Record<TankSize, TankDimensions> = {
+  45: { width: 0.45, depth: 0.3, height: 0.3, glass: 0.005, waterHeight: 0.25 },
+  60: STANDARD_TANK,
+  90: { width: 0.9, depth: 0.45, height: 0.45, glass: 0.008, waterHeight: 0.39 },
+  120: { width: 1.2, depth: 0.45, height: 0.45, glass: 0.01, waterHeight: 0.39 },
+};
 export interface EquipmentRecord { id: string; kind: EquipmentKind; itemId?: string; position: Vec3; rotation: number; enabled: boolean; setting: number }
 export interface Endpoint { device: string; port: string }
 export type ConnectionKind = 'power' | 'water' | 'air' | 'sensor';
@@ -38,7 +46,7 @@ export function makeEquipment(kind: EquipmentKind, id: string, d = STANDARD_TANK
   return { id, kind, itemId: `${kind}-initial`, position: equipmentPlacement(kind, d), rotation: 0, enabled: true, setting: FLOW_KINDS.includes(kind) ? (kind === 'flowPump' ? 600 : 300) : kind === 'thermostat' || kind === 'chiller' ? 24 : 1 };
 }
 export function defaultEquipmentLayout(d = STANDARD_TANK): EquipmentLayout {
-  return { version: 1, stand: 'wood', temperature: 24, devices: ['glassLid', 'ledLight', 'canisterFilter', 'airPump', 'airStone', 'heater', 'thermometer', 'thermostat', 'powerStrip'].map((k) => makeEquipment(k as EquipmentKind, k, d)), connections: [] };
+  return { version: 1, stand: 'wood', temperature: 24, devices: ['glassLid', 'ledLight', 'filter', 'airPump', 'airStone', 'heater', 'thermometer', 'thermostat', 'powerStrip'].map((k) => makeEquipment(k as EquipmentKind, k, d)), connections: [] };
 }
 /** Defensive migration: old layouts acquire defaults; malformed imports never enter TubeGeometry. */
 export function normalizeEquipment(raw: unknown, dimensions = STANDARD_TANK): EquipmentLayout {

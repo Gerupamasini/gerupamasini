@@ -1,29 +1,30 @@
 {
   "info": {
     "map": "manko",
-    "size": 70,
+    "size": 300,
     "animals": 0,
     "clams": null,
     "reef": false,
     "pits": 0,
     "skyline": 0,
+    "land": 5,
     "forest": {
-      "trees": 149,
+      "trees": 1733,
       "templates": 8,
-      "geometries": 36,
-      "calls": 85,
-      "triangles": 58850,
-      "collisionSegments": 43942,
+      "geometries": 68,
+      "calls": 158,
+      "triangles": 486968,
+      "collisionSegments": 464050,
       "lod": [
-        0,
-        1,
-        148
+        2,
+        34,
+        281
       ]
     },
     "position": [
-      -4,
-      1.4742275476455688,
-      -31
+      84,
+      1.6201647520065308,
+      76
     ]
   },
   "errors": []

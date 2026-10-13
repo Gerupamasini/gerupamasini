@@ -5,9 +5,10 @@
 // the same regions as were measured on the photographs (relative to the horizon) and prints them against the
 // photographs' values, with a score (the smaller the closer).
 //   node tools/grade/calibrate.mjs [sets.json] [--out <dir>] [--above <m>]
-// sets.json: [{ "name": "...", "sky": { scale, saturation, turbidity, turbidityDusk, rayleigh, mie, mieDusk, ozone,
-//   ambientDusk }, "terrain": { wetDark, filmTable, filmFarRough }, "grade": { duskTint: [r, g, b] } }, ...]
-//   (fields left out keep the game's values). Frames go to tests/smoke/out/grade-<name>-{noon,sunset}.png.
+// sets.json: [{ "name": "...", "atmosphere": { skyScale, skySaturation, turbidity, rayleigh, mie, ... } (the map's
+//   clear-day sky, Sky's Atmosphere), "sky": { saturationDusk, turbidityDusk, mieDusk, ozone, ambientDusk } (toward
+//   sunset), "terrain": { wetDark, filmTable, filmFarRough }, "grade": { duskTint: [r, g, b] } }, ...] (fields left out
+//   keep the game's values). Frames go to tests/smoke/out/grade-<name>-{noon,sunset}.png.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -142,12 +143,13 @@ try {
   // (each set starts from the game's values)
   await page.evaluate(() => {
     const w = window.__higata.world;
-    window.__lookDefaults = JSON.stringify({ sky: w.sky.look, terrain: Object.fromEntries(Object.entries(w.terrain.look).map(([k, u]) => [k, u.value])), grade: { duskTint: w.grade.duskTint.toArray() } });
+    window.__lookDefaults = JSON.stringify({ atmosphere: w.sky.atm, sky: w.sky.look, terrain: Object.fromEntries(Object.entries(w.terrain.look).map(([k, u]) => [k, u.value])), grade: { duskTint: w.grade.duskTint.toArray() } });
   });
   for (const set of sets) {
     await page.evaluate((set) => {
       const w = window.__higata.world, d = JSON.parse(window.__lookDefaults);
-      set = { sky: { ...d.sky, ...set.sky }, terrain: { ...d.terrain, ...set.terrain }, grade: { ...d.grade, ...set.grade } };
+      set = { atmosphere: { ...d.atmosphere, ...set.atmosphere }, sky: { ...d.sky, ...set.sky }, terrain: { ...d.terrain, ...set.terrain }, grade: { ...d.grade, ...set.grade } };
+      Object.assign(w.sky.atm, set.atmosphere);
       Object.assign(w.sky.look, set.sky);
       for (const [k, v] of Object.entries(set.terrain ?? {})) w.terrain.look[k].value = v;
       if (set.grade?.duskTint) w.grade.duskTint.set(...set.grade.duskTint);

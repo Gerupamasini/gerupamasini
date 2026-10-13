@@ -2,6 +2,7 @@ import { PerspectiveCamera, Vector3, type Object3D } from 'three';
 import { render, h } from 'preact';
 import { signal } from '@preact/signals';
 import { GameRenderer } from '../render/Renderer';
+import { RIPPLE_SHEET_RADIUS } from '../world/Terrain';
 import { Input } from '../core/Input';
 import { GameClock } from '../core/GameClock';
 import { loadSettings, saveSettings, normalizeSettings, QUALITY_LABELS, QUALITY_PRESETS, type SettingsData, type Quality } from '../core/Settings';
@@ -11,8 +12,12 @@ import { loadGameData, type GameData } from '../data/loader';
 import type { TidePhase } from '../data/schemas';
 import { TideModel } from '../tide/TideModel';
 import { World, farShadowSize } from './World';
-import { TankScene, TANK_MAX_OCCUPANTS } from './TankScene';
-import { categoryLimit, claimResearchTickets, drawEquipment, emptyEquipmentCollection, equipmentItem, normalizeCollection, normalizeEquipment, ownedEquipmentLayout, ownedQuantity, usedQuantity, type EquipmentKind, type EquipmentRecord, type EquipmentCollection } from '../aquarium';
+import { LAYOUTS } from '../world/maps/hashirimizu';
+import { TankScene } from './TankScene';
+import { RoomTanks } from './RoomTanks';
+import { canPlaceTank, freeTankPosition, initialRoom, newRoomTank, resizedTankLayout, roomCapacity, tankSizeItemId, TANK_DIMENSIONS, TANK_SIZES, type AquariumRoom, type TankSize } from '../aquarium';
+import { categoryLimit, claimResearchTickets, drawEquipment, emptyEquipmentCollection, equipmentItem, normalizeCollection, normalizeEquipment, ownedQuantity, usedQuantity, type EquipmentKind, type EquipmentRecord, type EquipmentCollection } from '../aquarium';
+import { equipmentUnlocked, progressionOf, tankAnimalCapacity, tankUnlocked, buyAquariumUpgrade, isFilterKind, installedFilter, makeEquipment, claimIntroQuests, type FilterKind } from '../aquarium';
 import { defaultTankLayout, type TankItemType, type TankSubstrate } from './TankLayout';
 import { FPSController } from '../player/FPSController';
 import { NetView, NET_LAYER, REACH, preloadNet } from '../player/NetView';
@@ -26,6 +31,7 @@ import { configureModelLoader, instantiateModel, preloadModel } from '../creatur
 import { AutoQuality } from '../render/AutoQuality';
 import { modelFor, variantOf } from '../creatures/models/choice';
 import { CONTACT_SHADOWS } from '../creatures/species/haku/ContactShadows';
+import { SAND_DUST } from '../creatures/fx/SandDust';
 import { AKAEI_DETAIL } from '../creatures/species/akaei/AkaeiDriver';
 import { DRIVERS } from '../creatures/drivers';
 import { OysterDriver } from '../creatures/oyster/OysterDriver';
@@ -45,6 +51,7 @@ import { checkForNewBuild } from '../core/Build';
 import { Root } from '../ui/Root';
 import { HeroPipeline, type HeroLighting } from '../render/HeroPipeline';
 import { FieldRenderer } from '../render/FieldRenderer';
+import { TankRenderer } from '../render/tank/TankRenderer';
 import { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 
 const HUD_HZ = 4;
@@ -75,6 +82,8 @@ export class App {
   capture: Capture = new Capture();
   tank: TankScene = null!;
   hero: HeroPipeline | null = null;
+  /** the home tank's HDR frame (water, glass, light shafts, bloom) */
+  tankRenderer: TankRenderer | null = null;
   private field: FieldRenderer | null = null;
   /** the タモ in the player's hands */
   net: NetView | null = null;
@@ -104,7 +113,23 @@ export class App {
   target: Individual | null = null;
   lockedId: string | null = null;
   frameCount = 0;
-  readonly tankMax = TANK_MAX_OCCUPANTS;
+  get aquariumProgression() { return progressionOf(this.equipmentCollection.value); }
+  get tankMax(): number {
+    void ui.tankLayoutVersion.value;
+    return this.currentRoomTank ? tankAnimalCapacity(this.currentRoomTank.size, this.tank.equipment.currentLayout, this.aquariumProgression) : 0;
+  }
+  get introQuestState() {
+    const progress = Object.values(this.encyclopedia.progress.value);
+    return { discovered: progress.filter(p => p.discovered !== undefined).length, captures: this.encyclopedia.stats.captures,
+      behaviors: progress.reduce((n, p) => n + Object.keys(p.behaviors).length, 0),
+      tankAnimals: this.encyclopedia.tankItems.value.length + this.aquariumRoom.value.tanks.filter(t => t.id !== this.activeTankId.value).reduce((n, t) => n + t.individuals.length, 0),
+      tankCount: this.aquariumRoom.value.tanks.length };
+  }
+  readonly aquariumRoom = signal<AquariumRoom>({ version: 1, tanks: [], mainTankId: null });
+  readonly activeTankId = signal<string | null>(null);
+  readonly roomBusy = signal(false);
+  readonly roomTanks = new RoomTanks();
+  private roomReturnMode: 'home' | 'tankEdit' = 'tankEdit';
   private pointerDown: { x: number; y: number; t: number; id: number } | null = null;
   private canvasPointers = new Set<number>();
   private dragPointer: number | null = null;
@@ -208,7 +233,7 @@ export class App {
   /** true when the tank should be on screen (home, or an overlay opened from home) */
   private tankVisible(): boolean {
     const m = this.mode;
-    if (m === 'home' || m === 'title' || m === 'tankEdit' || m === 'gacha') return true;
+    if (m === 'home' || m === 'title' || m === 'tankEdit' || m === 'roomPlacement' || m === 'gacha') return true;
     if (m === 'zukan' || m === 'menu' || m === 'ticket' || m === 'tidetable') return ui.overlayFrom.value === 'home' || ui.overlayFrom.value === 'tankEdit' || !this.world;
     return false;
   }
@@ -258,6 +283,8 @@ export class App {
     this.encyclopedia = new Encyclopedia(this.data);
     this.encyclopedia.onChanged = () => { this.claimEquipmentRewards(); this.requestSave(); };
     this.tank = new TankScene(this.canvas, this.renderer.aspect, this.renderer.gl);
+    this.tank.scene.add(this.roomTanks); this.roomTanks.onChanged = () => { this.sceneDirty = true; this.tank.markRoomChanged(); };
+    this.tankRenderer = new TankRenderer(this.renderer.gl, this.renderer.caps.floatRT);
     // what the animals do in the tank only counts as observed while the player is looking at the tank (home or its
     // edit screen), not from behind the 図鑑, the menu or the title
     this.tank.onBehavior = (e, rec) => { if (this.mode === 'home') this.encyclopedia.onBehavior(rec.speciesId, e.behaviorId, this.clock.nowGame()); };
@@ -276,6 +303,9 @@ export class App {
     // the title sits over the quiet tank, slowly turning
     this.tank.setAspect(this.renderer.aspect);
     this.tank.activate(true);
+    const mainPreview = existing?.aquariumRoom?.tanks.find(t => t.id === existing.aquariumRoom!.mainTankId);
+    if (mainPreview) { this.tank.setDimensions(TANK_DIMENSIONS[mainPreview.size]); this.tank.setRoomPosition(mainPreview.position); }
+    if (existing?.aquariumRoom && !existing.aquariumRoom.tanks.length) this.tank.setPresent(false);
     this.tank.frameTank();
     this.tank.setLayout(existing?.tank.layout ?? defaultTankLayout());
     this.lastFrame = performance.now();
@@ -300,6 +330,7 @@ export class App {
     this.leaveWorld();
     this.tank.clearOccupants();
     this.save = s;
+    this.aquariumRoom.value = structuredClone(s.aquariumRoom ?? initialRoom(s.tank)); this.activeTankId.value = null;
     this.equipmentCollection.value = normalizeCollection(s.equipmentCollection, s.tank.layout?.equipment); ui.gachaResults.value = [];
     this.encyclopedia.applySave(s);
     this.claimEquipmentRewards();
@@ -320,6 +351,8 @@ export class App {
 
   /** Home: the tank fills the screen behind the menu. */
   enterHome(): void {
+    this.rememberActiveTank();
+    this.activeTankId.value = this.aquariumRoom.value.mainTankId;
     if (this.mode === 'field' || this.mode === 'observe' || this.mode === 'capture') this.leftFieldAt = performance.now();
     this.player?.resetFov();
     this.setMode('home');
@@ -328,14 +361,103 @@ export class App {
     ui.homeInfo.value = null;
     this.tank.setAspect(this.renderer.aspect);
     this.tank.activate(false);
-    this.tank.resetView();
-    void this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
-    const layout = this.save?.tank.layout ?? defaultTankLayout();
-    this.tank.setLayout({ ...layout, equipment: ownedEquipmentLayout(normalizeEquipment(layout.equipment), this.equipmentCollection.value) });
+    void this.showRoomTank();
     this.syncShelf();
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
     this.requestSave();
+  }
+
+  get currentRoomTank() { return this.aquariumRoom.value.tanks.find(t => t.id === this.activeTankId.value); }
+  get roomTankLimit(): number { return roomCapacity(this.encyclopedia.level); }
+
+  private rememberActiveTank(): void {
+    const active = this.currentRoomTank;
+    if (!active || !this.tank) return;
+    const next = { ...active, individuals: [...this.encyclopedia.tankItems.value], layout: this.tank.currentLayout, lastSimMs: Date.now() };
+    this.aquariumRoom.value = { ...this.aquariumRoom.value, tanks: this.aquariumRoom.value.tanks.map(t => t.id === next.id ? next : t) };
+  }
+
+  private async showRoomTank(): Promise<void> {
+    const active = this.currentRoomTank;
+    this.tank.clearOccupants(); this.tank.setPresent(!!active);
+    this.encyclopedia.tankItems.value = active ? [...active.individuals] : [];
+    if (active) {
+      this.tank.setDimensions(TANK_DIMENSIONS[active.size]); this.tank.setRoomPosition(active.position);
+      this.tank.setLayout(active.layout); this.tank.resetView();
+    } else this.tank.frameRoom();
+    this.roomTanks.setTanks(this.aquariumRoom.value.tanks, active?.id ?? null, id => this.data.species.get(id));
+    ui.homeInfo.value = null; ui.equipmentSelected.value = null; ui.tankSelected.value = null; ui.tankLayoutVersion.value++; this.sceneDirty = true;
+    if (this.mode === 'roomPlacement') this.tank.frameRoom();
+    if (active) await this.tank.setOccupants(this.encyclopedia.tankItems.value, id => this.data.species.get(id));
+  }
+
+  async selectRoomTank(id: string): Promise<boolean> {
+    if (this.roomBusy.value || !['home', 'tankEdit', 'roomPlacement'].includes(this.mode) || !this.aquariumRoom.value.tanks.some(t => t.id === id) || this.activeTankId.value === id) return false;
+    this.roomBusy.value = true;
+    try { this.rememberActiveTank(); this.activeTankId.value = id; await this.showRoomTank(); this.requestSave(); return true; }
+    finally { this.roomBusy.value = false; }
+  }
+
+  setMainTank(id: string): boolean {
+    if (!this.aquariumRoom.value.tanks.some(t => t.id === id)) return false;
+    this.aquariumRoom.value = { ...this.aquariumRoom.value, mainTankId: id }; this.requestSave(); return true;
+  }
+
+  openRoomPlacement(): void {
+    if (!this.save || !['home', 'tankEdit'].includes(this.mode) || this.roomBusy.value) return;
+    this.rememberActiveTank(); this.roomReturnMode = this.mode === 'tankEdit' ? 'tankEdit' : 'home';
+    ui.homePanel.value = 'none'; this.setMode('roomPlacement'); this.tank.setViewInputEnabled(false); this.tank.frameRoom();
+  }
+  closeRoomPlacement(): void {
+    if (this.mode !== 'roomPlacement' || this.roomBusy.value) return;
+    const mode = this.currentRoomTank ? this.roomReturnMode : 'home';
+    this.setMode(mode); ui.homePanel.value = mode === 'tankEdit' ? 'tank' : 'none';
+    this.tank.setViewInputEnabled(true); if (this.currentRoomTank) this.tank.resetView(); else this.tank.frameRoom();
+  }
+
+  async addRoomTank(size: TankSize, position?: [number, number]): Promise<boolean> {
+    if (!this.save || this.mode !== 'roomPlacement' || this.roomBusy.value || !TANK_SIZES.includes(size)) return false;
+    if (!tankUnlocked(this.aquariumProgression, size)) { toast('このサイズはショップでCRを使って解放できます', 'info'); return false; }
+    this.rememberActiveTank(); const room = this.aquariumRoom.value;
+    if (room.tanks.length >= this.roomTankLimit) { toast('2台目はLv.5、3台目はLv.10で解放されます', 'info'); return false; }
+    const point = position ?? freeTankPosition(room.tanks, size);
+    if (!point || !canPlaceTank(room.tanks, size, point)) { toast('水槽と台が重ならない場所を選んでください', 'warn'); return false; }
+    let n = 1; while (room.tanks.some(t => t.id === `aquarium-${n}`)) n++;
+    const tank = newRoomTank(`aquarium-${n}`, size, point); this.roomBusy.value = true;
+    try {
+      this.aquariumRoom.value = { ...room, tanks: [...room.tanks, tank], mainTankId: room.mainTankId ?? tank.id };
+      this.activeTankId.value = tank.id; await this.showRoomTank(); this.requestSave(); return true;
+    } finally { this.roomBusy.value = false; }
+  }
+
+  moveRoomTank(id: string, position: [number, number]): boolean {
+    if (this.mode !== 'roomPlacement' || this.roomBusy.value) return false;
+    this.rememberActiveTank(); const room = this.aquariumRoom.value, tank = room.tanks.find(t => t.id === id);
+    if (!tank || !canPlaceTank(room.tanks, tank.size, position, id)) return false;
+    this.aquariumRoom.value = { ...room, tanks: room.tanks.map(t => t.id === id ? { ...t, position: [...position] } : t) };
+    if (id === this.activeTankId.value) this.tank.setRoomPosition(position);
+    this.roomTanks.setTanks(this.aquariumRoom.value.tanks, this.activeTankId.value, id => this.data.species.get(id));
+    this.sceneDirty = true; this.requestSave(); return true;
+  }
+
+  async removeRoomTank(id: string): Promise<boolean> {
+    if (this.mode !== 'roomPlacement' || this.roomBusy.value) return false;
+    this.rememberActiveTank(); const room = this.aquariumRoom.value, tank = room.tanks.find(t => t.id === id);
+    if (!tank) return false;
+    if (this.encyclopedia.caseItems.value.length + tank.individuals.length > this.encyclopedia.caseMax) { toast('ケースが満員です。水槽の生物を先に移してください', 'warn'); return false; }
+    this.roomBusy.value = true;
+    try {
+      const tanks = room.tanks.filter(t => t.id !== id), mainTankId = room.mainTankId === id ? tanks[0]?.id ?? null : room.mainTankId;
+      this.aquariumRoom.value = { ...room, tanks, mainTankId };
+      this.encyclopedia.caseItems.value = [...this.encyclopedia.caseItems.value, ...tank.individuals];
+      if (this.activeTankId.value === id) this.activeTankId.value = mainTankId;
+      await this.showRoomTank(); this.requestSave(); return true;
+    } finally { this.roomBusy.value = false; }
+  }
+
+  usedEquipmentQuantity(itemId: string, excluding?: string): number {
+    return usedQuantity(this.tank.equipment.currentLayout, itemId, excluding) + this.aquariumRoom.value.tanks.filter(t => t.id !== this.activeTankId.value).reduce((n, t) => n + usedQuantity(normalizeEquipment(t.layout.equipment, TANK_DIMENSIONS[t.size]), itemId), 0);
   }
 
   /** The map of the coast: pick where to go. */
@@ -372,6 +494,7 @@ export class App {
       // the tide is the one of the flat's own station (the tide table and tickets follow it)
       if (this.tide.station.id !== map.station) { this.tide = new TideModel(this.data.stations.get(map.station)!); this.curveCacheMin = -1; }
       const dayNo = Math.floor((this.clock.nowGame() + 9 * 3600000) / 86400000);
+      this.fieldDay = dayNo;
       this.world = await World.create(map, this.tide, this.renderer.gl, this.renderer.preset, (label) => { ui.loading.value = { frac: 0.5, label }; }, dayNo);
       // the shaders compile behind the loading screen (in parallel where the browser can), before anything draws the
       // flat: otherwise the first frame stalls for as long as they take
@@ -382,6 +505,8 @@ export class App {
       this.player.eyeHeight = this.settings.eyeHeight;
       // the revetment's stones can be stood on
       this.player.groundBoost = (x, z) => this.world?.riprap?.heightBoost(x, z) ?? 0;
+      const shore = map.layout ? LAYOUTS[map.layout] : undefined;
+      if (shore?.blocked) this.player.blocked = shore.blocked;
       if (this.world.mangroves) {
         const roots = this.world.mangroves.collision, terrain = this.world.terrain;
         this.player.supportHeight = (x, z, maxY) => roots.supportAt(x, z, maxY, terrain.heightAt(x, z), 0.35, 0.18)?.height ?? null;
@@ -394,6 +519,7 @@ export class App {
       performance.mark('world:creatureSystem');
       this.creatures.setMeadow(this.world.amamo);
       this.creatures.setScent(this.world.carrion);
+      this.creatures.water = this.world.motion;
       await this.creatures.preload();
       // the procedural species' shaders compile here too, and stay compiled while the flat lives (DriverEntry.keep)
       ui.loading.value = { frac: 0.75, label: t('loading.shaders') };
@@ -435,6 +561,8 @@ export class App {
     if (this.leftFieldAt && performance.now() - this.leftFieldAt > 10 * 60000) this.creatures?.resetPopulation(null);
     this.leftFieldAt = 0;
     this.setMode('field');
+    this.equipmentCollection.value = { ...this.equipmentCollection.value, progression: { ...this.aquariumProgression, visitedField: true } };
+    this.requestSave();
     this.lastFrame = performance.now();
     if (!this.raf) this.raf = requestAnimationFrame((now) => this.frame(now));
   }
@@ -526,11 +654,13 @@ export class App {
       if (this.net || this.shovel || this.binoculars) this.setTool(ui.tool.value, true);
     }
     this.world?.terrain.setDetail(preset.surfaceDetail > 0);
+    this.world?.terrain.setRippleSheet(RIPPLE_SHEET_RADIUS[preset.vegetation]);
     this.world?.mangroves?.setQuality(preset.vegetation);
     this.world?.water.setMirror(preset.mirror);
     this.world?.water.setSurfSteps(preset.surfSteps);
     this.world?.farShadow.setSize(farShadowSize(preset));
     this.world?.terrainShadow.setEnabled(preset.shadows);
+    this.world?.setSurfQuality(preset);
     const light = this.world?.sky.sunLight;
     if (light) {
       light.castShadow = preset.shadows;
@@ -547,6 +677,7 @@ export class App {
     }
     this.applyHeroSetting();
     this.tank?.setQuality(QUALITY_PRESETS[this.settings.homeQuality]);
+    this.tankRenderer?.setQuality(QUALITY_PRESETS[this.settings.homeQuality]);
     // the kept models' programs follow the field's variant (the shadows on or off change the shaders): compiled again
     // after the light above has changed, when the field's quality did
     if (fieldChanged && this.world && this.creatures) void this.field?.compileKept(this.creatures.keptModels(), this.camera, this.world.scene);
@@ -561,6 +692,8 @@ export class App {
     this.world?.terrain.setLite(field.water === 'lite');
     this.tank?.setLite(home.tankWater === 'lite');
     CONTACT_SHADOWS.enabled = QUALITY_PRESETS[this.activeQuality].contactShadows;
+    SAND_DUST.amount = QUALITY_PRESETS[this.activeQuality].sandDust;
+    SAND_DUST.enabled = SAND_DUST.amount > 0;
     AKAEI_DETAIL.viewScale = field.viewScale;
     AKAEI_DETAIL.allowLod0 = field.lod1Count > 0;
   }
@@ -640,6 +773,21 @@ export class App {
   setOvercast(v: number): void {
     if (this.world) this.world.overcast = v;
     ui.debugState.value = { ...ui.debugState.value, overcast: v };
+  }
+
+  /** the day the flat was entered on (its sea, its rays' resting marks) */
+  private fieldDay = 0;
+
+  /** debug: another sea on an open shore (height m, period s); null: the day's own */
+  setSea(over: { height?: number; period?: number } | null): void {
+    this.world?.setSeaState(over, this.fieldDay);
+    ui.debugState.value = { ...ui.debugState.value };
+  }
+
+  /** debug: the surf's views (0 off, 1 the zones, 2 the foams, 3 the phase / breaking / swash depth) */
+  setSurfDebug(mode: number): void {
+    this.world?.water.setSurfDebug(mode);
+    ui.debugState.value = { ...ui.debugState.value, surfView: mode };
   }
 
   setMarkers(on: boolean): void {
@@ -761,6 +909,7 @@ export class App {
 
   /** The tank's edit screen: everything in the tank stands still while it is arranged. */
   openTankEdit(): void {
+    if (!this.activeTankId.value) { this.openRoomPlacement(); return; }
     if (this.mode === 'tankEdit') return;
     void this.transition(t('transition.tank'), () => {
       ui.homeInfo.value = null;
@@ -1123,12 +1272,16 @@ export class App {
   }
 
   async tankPut(rec: IndividualRecord): Promise<void> {
+    if (this.roomBusy.value || !this.activeTankId.value || !this.encyclopedia.caseItems.value.some(r => r.id === rec.id)) return;
     if (this.encyclopedia.tankItems.value.length >= this.tankMax) return;
+    const tankId = this.activeTankId.value;
+    this.roomBusy.value = true;
     // the animal's model loads behind a curtain rather than in a stutter
-    await this.transition(t('transition.put'), async () => {
+    try { await this.transition(t('transition.put'), async () => {
+      if (this.activeTankId.value !== tankId || !this.encyclopedia.caseItems.value.some(r => r.id === rec.id) || this.encyclopedia.tankItems.value.length >= this.tankMax) return;
       this.encyclopedia.moveToTank(rec);
       await this.tank.setOccupants(this.encyclopedia.tankItems.value, (id) => this.data.species.get(id));
-    });
+    }); } finally { this.roomBusy.value = false; }
   }
 
   /** debug: set a tool's catch count (its proficiency) by hand; nets share one */
@@ -1277,17 +1430,22 @@ export class App {
   }
 
   async tankRelease(rec: IndividualRecord): Promise<void> {
+    if (!this.encyclopedia.tankItems.value.some(r => r.id === rec.id)) return;
     if (!this.encyclopedia.moveToCase(rec)) { toast(t('capture.caseFull'), 'warn'); return; }
     this.tank.removeOccupant(rec.id);
   }
 
   /** The shop is a room of its own: a curtain, then the counter. */
-  openShop(): void {
-    if (this.mode !== 'home') return;
+  openShop(tab: 'tools' | 'tanks' | 'filters' | 'quests' = 'tools'): void {
+    if (this.mode === 'shop') { ui.shopTab.value = tab; ui.shopSelected.value = null; return; }
+    if (!['home', 'tankEdit', 'roomPlacement'].includes(this.mode) || this.roomBusy.value) return;
     ui.homeInfo.value = null;
     ui.homePanel.value = 'none';
     ui.shopSelected.value = null;
+    ui.shopTab.value = tab;
     void this.transition(t('transition.shop'), () => {
+      if (this.mode !== 'home') this.setMode('home');
+      this.tank.setViewInputEnabled(true);
       if (!this.shop) this.shop = new ShopScene(this.renderer.aspect, (id) => t(`shop.item.${id}`));
       this.stockShop();
       this.openOverlay('shop');
@@ -1326,6 +1484,27 @@ export class App {
       this.equipmentCollection.value = reward.collection;
       toast(`研究の報酬：設備ガチャチケット ${reward.awarded}枚`, 'success');
     }
+  }
+
+  private claimIntroductionRewards(): void {
+    const reward = claimIntroQuests(this.aquariumProgression, this.introQuestState);
+    if (!reward.awarded) return;
+    this.equipmentCollection.value = { ...this.equipmentCollection.value, progression: reward.progression };
+    this.encyclopedia.money.value += reward.awarded;
+    toast(`クエスト達成：${reward.titles.join('・')}  +${reward.awarded} CR`, 'success');
+  }
+
+  buyTankSize(size: TankSize): boolean { return this.buyAquariumProgression('tank', size); }
+  buyFilterLevel(kind: FilterKind): boolean { return this.buyAquariumProgression('filter', kind); }
+  private buyAquariumProgression(type: 'tank' | 'filter', id: TankSize | FilterKind): boolean {
+    if (!this.save || this.mode !== 'shop' || this.savingSuspended || this.roomBusy.value) return false;
+    const bought = buyAquariumUpgrade(this.aquariumProgression, this.encyclopedia.money.value, type, id);
+    if (!bought) return false;
+    this.equipmentCollection.value = { ...this.equipmentCollection.value, progression: bought.progression };
+    this.encyclopedia.money.value = bought.money;
+    ui.tankLayoutVersion.value++;
+    toast(`${type === 'tank' ? `${id}cm水槽を解放` : 'フィルターを解放・強化'}  −${bought.cost} CR`, 'success');
+    this.requestSave(); return true;
   }
 
   async rollGacha(count: number): Promise<void> {
@@ -1390,7 +1569,7 @@ export class App {
     if (!this.tank.equipment.applyPreset()) return false;
     ui.tankLayoutVersion.value++;
     if (!this.save) return true;
-    this.save.tank.layout = this.tank.currentLayout;
+    this.rememberActiveTank();
     this.requestSave();
     return true;
   }
@@ -1424,22 +1603,46 @@ export class App {
 
   /** Inventory, per-category limits and placement quantities are enforced outside the UI too. */
   tankInstallEquipment(itemId: string, replacing?: string): boolean {
+    if (this.roomBusy.value) return false;
     const item = equipmentItem(itemId); if (!item || !this.save) return false;
     const rig = this.tank.equipment, layout = rig.currentLayout, selected = ui.equipmentSelected.value;
     const fixed = item.category === 'tank' || item.category === 'stand';
     if (fixed) replacing = item.category;
     const record = replacing ? layout.devices.find((d) => d.id === replacing) : undefined;
     if (replacing && !fixed && record?.kind !== item.category) return false;
-    if (usedQuantity(layout, itemId, replacing) >= ownedQuantity(this.equipmentCollection.value, itemId)) { toast('このアイテムはガチャで獲得すると使えます', 'info'); return false; }
-    if (!fixed && !record && layout.devices.filter((d) => d.kind === item.category).length >= categoryLimit(item.category)) { toast('この設備はこれ以上置けません', 'warn'); return false; }
-    if (replacing) rig.setItem(replacing, itemId);
-    else {
-      const id = rig.addDevice(item.category as EquipmentKind, itemId);
-      if (!id) { toast('設備の上限です（24個）', 'warn'); return false; }
-      if (['airStone', 'spongeFilter', 'circulationPump'].includes(item.category) && this.tank.currentLayout.substrate === 'none') {
-        const r = rig.currentLayout.devices.find((d) => d.id === id)!; rig.changeDevice(id, { position: [r.position[0], Math.max(0, r.position[1] - 0.05), r.position[2]] });
+    if (!equipmentUnlocked(this.equipmentCollection.value, itemId)) { toast('この水槽・フィルターはショップでCRを使って解放してください', 'info'); return false; }
+    if (this.usedEquipmentQuantity(itemId, replacing) >= ownedQuantity(this.equipmentCollection.value, itemId)) { toast('未所持、または別の水槽で使用中です', 'info'); return false; }
+    const active = this.currentRoomTank;
+    if (!active) return false;
+    if (item.category === 'stand' && item.size !== active.size) { toast('この水槽に対応するサイズの台を選んでください', 'info'); return false; }
+    if (item.category === 'tank' && item.size !== active.size) {
+      const size = item.size!;
+      const resized = resizedTankLayout(this.tank.currentLayout, active.size, size, item.id);
+      if (this.encyclopedia.tankItems.value.length > tankAnimalCapacity(size, resized.equipment!, this.aquariumProgression)) { toast('飼育上限を超えます。先に生物をケースへ移してください', 'warn'); return false; }
+      if (!canPlaceTank(this.aquariumRoom.value.tanks, size, active.position, active.id)) { toast('大きい水槽を置くスペースがありません。部屋の設置画面で位置を変えてください', 'warn'); return false; }
+      const next = { ...active, size, layout: resized, individuals: [...this.encyclopedia.tankItems.value] };
+      this.aquariumRoom.value = { ...this.aquariumRoom.value, tanks: this.aquariumRoom.value.tanks.map(t => t.id === next.id ? next : t) };
+      this.roomBusy.value = true;
+      void this.showRoomTank().finally(() => { this.roomBusy.value = false; });
+      ui.tankLayoutVersion.value++; this.requestSave(); return true;
+    }
+    const changingFilter = isFilterKind(item.category) && installedFilter(layout) !== item.category;
+    if (changingFilter) {
+      const next = { ...layout, devices: [...layout.devices.filter(d => !isFilterKind(d.kind)), makeEquipment(item.category as FilterKind, `${item.category}-1`, this.tank.dimensions)] };
+      next.devices[next.devices.length - 1].itemId = itemId;
+      if (this.encyclopedia.tankItems.value.length > tankAnimalCapacity(active.size, next, this.aquariumProgression)) { toast('飼育上限を超えます。先に生物をケースへ移してください', 'warn'); return false; }
+      rig.setLayout(next); ui.equipmentSelected.value = next.devices[next.devices.length - 1].id;
+    } else {
+      if (!fixed && !record && layout.devices.filter((d) => d.kind === item.category).length >= categoryLimit(item.category)) { toast('この設備はこれ以上置けません', 'warn'); return false; }
+      if (replacing) rig.setItem(replacing, itemId);
+      else {
+        const id = rig.addDevice(item.category as EquipmentKind, itemId);
+        if (!id) { toast('設備の上限です（24個）', 'warn'); return false; }
+        if (['airStone', 'spongeFilter', 'circulationPump'].includes(item.category) && this.tank.currentLayout.substrate === 'none') {
+          const r = rig.currentLayout.devices.find((d) => d.id === id)!; rig.changeDevice(id, { position: [r.position[0], Math.max(0, r.position[1] - 0.05), r.position[2]] });
+        }
+        ui.equipmentSelected.value = id;
       }
-      ui.equipmentSelected.value = id;
     }
     if (!this.commitTankLayout()) {
       rig.setLayout(layout); rig.applyPreset(); ui.equipmentSelected.value = selected;
@@ -1458,7 +1661,8 @@ export class App {
         const bottom = this.tank.currentLayout.substrate === 'none' ? 0 : 0.05;
         const low = record.kind === 'heater' ? bottom + 0.1 : bottom + 0.004;
         const high = record.kind === 'spongeFilter' ? 0.08 : record.kind === 'heater' ? 0.19 : 0.28;
-        p[0] = Math.max(-0.27, Math.min(0.27, p[0])); p[1] = Math.max(low, Math.min(high, p[1])); p[2] = Math.max(-0.135, Math.min(0.135, p[2]));
+        const d = this.tank.dimensions;
+        p[0] = Math.max(-d.width / 2 + 0.03, Math.min(d.width / 2 - 0.03, p[0])); p[1] = Math.max(low, Math.min(Math.min(high * d.height / 0.36, d.waterHeight - 0.02), p[1])); p[2] = Math.max(-d.depth / 2 + 0.015, Math.min(d.depth / 2 - 0.015, p[2]));
       }
       change = { ...change, position: p };
     }
@@ -1470,7 +1674,7 @@ export class App {
     if (!this.tank.equipment.canRemoveDevice(id)) return;
     this.tank.equipment.removeDevice(id); ui.equipmentSelected.value = null; this.commitTankLayout();
   }
-  tankStand(finish: 'wood' | 'metal'): void { this.tankInstallEquipment(finish === 'metal' ? 'stand-studio' : 'stand-initial', 'stand'); }
+  tankStand(finish: 'wood' | 'metal'): void { this.tankInstallEquipment(tankSizeItemId('stand', this.currentRoomTank?.size ?? 60, finish === 'metal' ? 'studio' : 'classic'), 'stand'); }
 
   private onHomeClick(clientX: number, clientY: number): void {
     if (this.mode === 'home' && ui.homePanel.value === 'tools') {
@@ -1497,7 +1701,9 @@ export class App {
 
   // ------------------------------------------------------------------ save
   requestSave(): void {
-    if (!this.save || this.savingSuspended || this.saveTimer !== null) return;
+    if (!this.save || this.savingSuspended) return;
+    this.claimIntroductionRewards();
+    if (this.saveTimer !== null) return;
     this.saveTimer = window.setTimeout(() => { this.saveTimer = null; void this.writeSave(); }, 1000);
   }
 
@@ -1513,9 +1719,12 @@ export class App {
     }
     s.ticket.active = this.clock.serialize();
     s.removedIndividuals = [...this.removed];
-    s.tank.layout = this.tank.currentLayout;
+    this.rememberActiveTank();
     s.equipmentCollection = { ...this.equipmentCollection.value, stock: { ...this.equipmentCollection.value.stock } };
     this.encyclopedia.writeSave(s);
+    s.aquariumRoom = structuredClone(this.aquariumRoom.value);
+    const main = s.aquariumRoom.tanks.find(t => t.id === s.aquariumRoom!.mainTankId);
+    s.tank = main ? { individuals: [...main.individuals], layout: main.layout, lastSimMs: main.lastSimMs } : { individuals: [], lastSimMs: Date.now() };
     s.guideDismissed = ui.guideDismissed.value;
     return structuredClone(s);
   }
@@ -1553,7 +1762,7 @@ export class App {
 
   private async replaceSave(s: SaveV1): Promise<void> {
     if (this.saveChanging) throw new Error('セーブの切り替え中です。完了してから再試行してください。');
-    if (!this.data.maps.has(s.player.map) || [...s.case, ...s.tank.individuals].some((r) => !this.data.species.has(r.speciesId))) throw new Error('このゲームにないマップ・生物を含むセーブです。');
+    if (!this.data.maps.has(s.player.map) || [...s.case, ...(s.aquariumRoom?.tanks.flatMap(t => t.individuals) ?? s.tank.individuals)].some((r) => !this.data.species.has(r.speciesId))) throw new Error('このゲームにないマップ・生物を含むセーブです。');
     this.saveChanging = true; this.suspendSaving();
     try {
       await this.saveStore.replace(s);
@@ -1611,6 +1820,7 @@ export class App {
     this.camera.aspect = this.renderer.aspect;
     this.camera.updateProjectionMatrix();
     this.tank?.setAspect(this.renderer.aspect);
+    if (this.mode === 'roomPlacement') this.tank.frameRoom();
     this.shop?.setAspect(this.renderer.aspect);
   }
 
@@ -1621,6 +1831,14 @@ export class App {
     if (level < -0.35 * amp) return 'low';
     if (level > 0.35 * amp) return 'high';
     return rate >= 0 ? 'rising' : 'falling';
+  }
+
+  /** the home tank's frame for the debug line: internal resolution, its share of the screen's, the GPU time */
+  private tankStats(): string | undefined {
+    const r = this.tankRenderer;
+    if (!r || !this.tankVisible()) return undefined;
+    const s = r.stats;
+    return `${s.width}×${s.height} ${Math.round(s.scale * 100)}%${s.gpuMs > 0 ? ` GPU ${s.gpuMs.toFixed(1)}ms` : ''}`;
   }
 
   private frame(now: number): void {
@@ -1715,6 +1933,9 @@ export class App {
       case 'gacha':
         if (this.input.pressed('menu')) this.closeGacha();
         break;
+      case 'roomPlacement':
+        if (this.input.pressed('menu')) this.closeRoomPlacement();
+        break;
       case 'menu': case 'zukan': case 'ticket': case 'tidetable':
         if (this.input.pressed('menu') || (mode === 'zukan' && this.input.keyPressed('Tab'))) this.closeOverlay();
         break;
@@ -1742,12 +1963,14 @@ export class App {
       this.renderer.gl.render(this.shop.scene, this.shop.camera);
       gpu.end();
     } else if (this.tankVisible() && (['home', 'title', 'tankEdit', 'gacha'].includes(mode) || this.sceneDirty)) {
-      if (mode === 'tankEdit') this.tank.updateFrozen(); else this.tank.update(dt, 1);
+      if (mode === 'tankEdit' || mode === 'roomPlacement') this.tank.updateFrozen(); else this.tank.update(dt, 1);
+      this.roomTanks.updateLOD(this.tank.camera);
+      const heroOn = !!this.hero && this.tank.heroActive;
+      if (heroOn) this.hero!.setLighting(this.tank.lighting);
       gpu.begin();
-      if (this.hero && this.tank.heroActive) {
-        this.hero.setLighting(this.tank.lighting);
-        this.hero.render(this.tank.scene, this.tank.camera, dt);
-      } else this.renderer.gl.render(this.tank.scene, this.tank.camera);
+      if (this.tankRenderer) this.tankRenderer.render(this.tank.scene, this.tank.camera, this.tank.passes, dt, heroOn ? this.hero!.shared : null);
+      else if (heroOn) this.hero!.render(this.tank.scene, this.tank.camera, dt);
+      else this.renderer.gl.render(this.tank.scene, this.tank.camera);
       gpu.end();
     } else if (!this.tankVisible() && world && player && creatures && (this.worldVisible() || this.sceneDirty)) {
       if (mode === 'field') player.update(dt, this.settings.mouseSensitivity, this.settings.invertY);
@@ -2022,7 +2245,7 @@ export class App {
       const cs = this.creatures?.stats() ?? { total: 0, visible: 0, lod1: 0 };
       const clamsNear = this.clams && player ? this.clams.nearIndices(player.position.x, player.position.z, 12).length : 0;
       const reef = this.world?.oysters;
-      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0, oysters: reef ? reef.drawn.join('/') : '-', oystersTotal: reef?.count ?? 0, amamo: this.amamoStats(), gpuMs: Number.isFinite(this.renderer.gpuTimer.ms) ? this.renderer.gpuTimer.ms : null, view: `${this.renderer.renderSize.x}×${this.renderer.renderSize.y}${this.renderer.upscaled ? ` → ${this.renderer.gl.domElement.width}×${this.renderer.gl.domElement.height} FSR` : ''}` } };
+      ui.debugState.value = { ...ui.debugState.value, stats: { calls: info.calls, tris: info.triangles, creatures: cs.total, visible: cs.visible, lod1: cs.lod1, clamsNear, clamsTotal: this.clams?.count ?? 0, oysters: reef ? reef.drawn.join('/') : '-', oystersTotal: reef?.count ?? 0, amamo: this.amamoStats(), tank: this.tankStats(), gpuMs: Number.isFinite(this.renderer.gpuTimer.ms) ? this.renderer.gpuTimer.ms : null, view: `${this.renderer.renderSize.x}×${this.renderer.renderSize.y}${this.renderer.upscaled ? ` → ${this.renderer.gl.domElement.width}×${this.renderer.gl.domElement.height} FSR` : ''}` } };
     }
   }
 }

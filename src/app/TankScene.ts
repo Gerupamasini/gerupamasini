@@ -1,15 +1,13 @@
 import {
-  BoxGeometry, Camera, CanvasTexture, ClampToEdgeWrapping, Color, CustomBlending, DataTexture, DirectionalLight, DoubleSide,
-  FloatType, HalfFloatType, HemisphereLight, LinearFilter, LinearMipmapLinearFilter,
-  Mesh, MeshStandardMaterial, Object3D, OneFactor, OneMinusSrcAlphaFactor, PerspectiveCamera, PlaneGeometry, Plane,
-  PMREMGenerator, Raycaster, RGBAFormat, Scene, ShaderMaterial, SpotLight, SrcColorFactor, UnsignedByteType,
-  Vector2, Vector3, WebGLRenderTarget, ZeroFactor, type IUniform, type Material, type WebGLRenderer, SRGBColorSpace } from 'three';
+  BoxGeometry, CanvasTexture, Color, DirectionalLight, HemisphereLight, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera,
+  PlaneGeometry, Plane, PMREMGenerator, Raycaster, Scene, SpotLight, Vector2, Vector3, type IUniform, type Material, type ShaderMaterial,
+  type WebGLRenderer, SRGBColorSpace,
+} from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { GPUComputationRenderer, type Variable } from 'three/addons/misc/GPUComputationRenderer.js';
 import type { IndividualRecord } from '../creatures/Individual';
 import type { SpeciesDef } from '../data/schemas';
-import type { Driver, Floor } from '../creatures/drivers/Driver';
+import type { Driver, Floor, DriverContext } from '../creatures/drivers/Driver';
 import { DRIVERS } from '../creatures/drivers/index';
 import { instantiateModel } from '../creatures/models/ModelLoader';
 import { modelFor, variantOf } from '../creatures/models/choice';
@@ -20,177 +18,53 @@ import type { LoadedModel } from '../creatures/models/ModelLoader';
 import type { HeroInstance } from '../creatures/species/mahaze/hero/applyHero';
 import type { HeroLighting } from '../render/HeroPipeline';
 import { buildTankItem, defaultTankLayout, ITEM_RADIUS, TANK_MAX_ITEMS, type TankItem, type TankItemType, type TankLayout, type TankSubstrate } from './TankLayout';
-import { Group } from 'three';
-import { AquariumEquipment } from '../aquarium';
+import { Box3, Group } from 'three';
+import { AquariumEquipment, STANDARD_TANK, type TankDimensions } from '../aquarium';
+import { MAX_TANK_ANIMALS, animalSlotPosition } from '../aquarium/progression';
 import { ToolShelf, type ShelfTool } from './ToolShelf';
 import { QUALITY_PRESETS, type QualityPreset } from '../core/Settings';
+import { TankWaterSim } from '../render/tank/TankWaterSim';
+import { WaterPasses } from '../render/tank/WaterPasses';
+import { createScreenUniforms, LAYER_OVER } from '../render/tank/TankRenderer';
+import { Substrate, BED_H } from '../render/tank/Substrate';
+import { Motes, RoomProbe, glassEdgeMaterial } from '../render/tank/TankFx';
+import { cloneForTank, lightByCaustics } from '../render/tank/causticMaterial';
+import { AnimalContacts } from '../creatures/physics/animals';
+import type { ContactBody } from '../creatures/physics/contacts';
 
 const UP = new Vector3(0, 1, 0);
 
 export const TANK_W = 0.6, TANK_D = 0.3, TANK_H = 0.36, WATER_H = 0.3;
-export const TANK_MAX_OCCUPANTS = 4;
+export const TANK_MAX_OCCUPANTS = MAX_TANK_ANIMALS;
 /** The cabinet is 73 cm tall; keep aquarium coordinates local to its top. */
 export const TANK_OFFSET_Y = 0.73;
+/** mean depth of the sand bed (m) */
+export const SAND_H = BED_H;
 
 export interface Occupant {
   record: IndividualRecord;
   species: SpeciesDef;
   ind: Individual;
   driver: Driver;
+  /** its body for the contacts between the tank's animals */
+  body?: ContactBody;
   root: Object3D;
   unsub: () => void;
   hero: HeroInstance | null;
 }
 
-// ------------------------------------------------------------------ the water, after CAUSTIC//LITE (scottiefox/caustic-volume, MIT)
-// A random sea of small waves plus a GPU ripple simulation move the surface; once a frame the surface (height and slope)
-// is drawn into one texture, and a caustics texture is redrawn by sending the light from a grid on the surface through the
-// water to the floor. The sand and the animals are lit by that texture; the water itself tints what is behind it by
-// Beer–Lambert absorption and scatters a little of the caustic light sheets toward the eye (light shafts).
-const TX = TANK_W / 2, TZ = TANK_D / 2, W_LEVEL = WATER_H, W_IOR = 1.333;
-/** absorption per metre: red goes first, so a long path looks blue-green; the tank is small, so the tint stays faint */
-const W_ABSORB = [0.26, 0.055, 0.032];
-/** depth of the sand bed (m) */
-export const SAND_H = 0.05;
-const SIM: [number, number] = [192, 96]; // ripple grid: 3 mm cells
-const CAUS: [number, number] = [512, 256]; // caustics texture: 1.2 mm texels
+const TX = TANK_W / 2, TZ = TANK_D / 2, W_LEVEL = WATER_H;
+/** absorption per metre: red goes first, so a long path looks blue-green; a little fine silt keeps it from being glass */
+const W_ABSORB: [number, number, number] = [0.42, 0.085, 0.06];
 const W_LAMP_Y = TANK_H + 0.063, W_LAMP_HALF = TANK_W / 2 - 0.02;
-const NW = 20;
-const f = (v: number) => (Number.isInteger(v) ? v.toFixed(1) : String(v));
-
-interface Wave { k: number; kx: number; kz: number; w: number; ph: number; a: number; short: boolean; f1: number; f2: number; p1: number; p2: number }
-/** 20 waves from 25 cm down to 2.5 cm long, heading every which way, so the surface is short-crested and the caustics a net */
-function makeWaves(): Wave[] {
-  let s = 5;
-  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-  const out: Wave[] = [];
-  for (let i = 0; i < NW; i++) {
-    const len = 0.25 * (0.025 / 0.25) ** (i / (NW - 1)), k = (2 * Math.PI) / len, dir = i * 2.39996 + (rnd() - 0.5) * 0.9;
-    out.push({
-      k, kx: k * Math.cos(dir), kz: k * Math.sin(dir), w: Math.sqrt(9.81 * k + 7.3e-5 * k ** 3) * 0.7, ph: rnd() * 6.283,
-      a: Math.min(2.4 / (k * k), 0.0009) * (0.6 + 0.8 * rnd()), short: len < 0.08,
-      f1: 0.05 + 0.22 * rnd(), f2: 0.09 + 0.3 * rnd(), p1: rnd() * 6.283, p2: rnd() * 6.283,
-    });
-  }
-  return out;
-}
-
-const COMMON = /* glsl */ `
-uniform sampler2D uSurf, uCaus;
-uniform vec3 uLampPosition, uLampAxis;
-uniform vec3 uLampCol;      // the light bar's light
-uniform float uCausScale;   // caustics texture -> fraction of the bar's light
-const float W_LEVEL = ${f(W_LEVEL)}, W_IOR = ${f(W_IOR)}, W_LAMP_Y = ${f(W_LAMP_Y)}, W_LAMP_HALF = ${f(W_LAMP_HALF)};
-const vec2 W_HALF = vec2(${f(TX)}, ${f(TZ)});
-const vec3 W_ABSORB = vec3(${W_ABSORB.map(f).join(', ')});
-const vec3 TANK_ORIGIN = vec3(0.0, ${f(TANK_OFFSET_Y)}, 0.0);
-// water height above W_LEVEL and its slope at p
-vec3 wave(vec2 p) { return textureLod(uSurf, p / (2.0 * W_HALF) + 0.5, 0.0).xyz; }
-vec3 normalOf(vec3 w) { return normalize(vec3(-w.y, 1.0, -w.z)); }
-float fresnel(float c) { return 0.02 + 0.98 * pow(1.0 - clamp(c, 0.0, 1.0), 5.0); }
-// the LED bar above the tank: the direction to its nearest point, and how much of its light arrives (1 right under it)
-float lampAt(vec3 p, out vec3 L) {
-  vec3 d = uLampPosition + uLampAxis * clamp(dot(p - uLampPosition, uLampAxis), -W_LAMP_HALF, W_LAMP_HALF) - p;
-  float r2 = dot(d, d);
-  L = d * inversesqrt(r2);
-  return 2.0 / (1.0 + 66.0 * r2) * smoothstep(0.2, 0.6, L.y);
-}
-// light reaching the floor at xz, as a fraction of the bar's light (four taps: a little smoother)
-vec3 causAt(vec2 xz) {
-  vec2 uv = xz / (2.0 * W_HALF) + 0.5, o = 0.6 / vec2(${f(CAUS[0])}, ${f(CAUS[1])});
-  return uCausScale * 0.25 * (texture2D(uCaus, uv + o).rgb + texture2D(uCaus, uv - o).rgb + texture2D(uCaus, uv + vec2(o.x, -o.y)).rgb + texture2D(uCaus, uv - vec2(o.x, -o.y)).rgb);
-}
-// what a reflected ray sees of the dark room: the bar's bright strip, a soft glow round it, not much else
-vec3 room(vec3 p, vec3 d) {
-  vec3 c = vec3(0.012, 0.014, 0.017);
-  if (d.y > 0.001) {
-    float t = (uLampPosition.y - p.y) / d.y;
-    vec3 q = p + d * t - uLampPosition;
-    q = vec3(dot(q, uLampAxis), q.y, dot(q, cross(uLampAxis, vec3(0.0, 1.0, 0.0))));
-    float sx = smoothstep(0.03, 0.0, abs(q.x) - W_LAMP_HALF), sz = smoothstep(0.03, 0.0, abs(q.z) - 0.015);
-    c += uLampCol * (0.8 * sx * sz + 0.03 * smoothstep(0.35, 0.0, length(vec2(max(abs(q.x) - W_LAMP_HALF, 0.0), q.z))));
-  }
-  return c;
-}
-// where a ray from p inside the water leaves the water box (a wall, the floor or the surface plane)
-float boxExit(vec3 p, vec3 d) {
-  vec3 inv = 1.0 / (d + vec3(1e-6));
-  vec3 lo = (vec3(-W_HALF.x, 0.0, -W_HALF.y) - p) * inv, hi = (vec3(W_HALF.x, W_LEVEL, W_HALF.y) - p) * inv;
-  vec3 b = max(lo, hi);
-  return max(min(min(b.x, b.y), b.z), 0.0);
-}
-`;
-const OUT = '#include <tonemapping_fragment>\n#include <colorspace_fragment>\n';
-const SURF_VERT = COMMON + /* glsl */ `
-varying vec3 vPos;
-void main() {
-  vec3 w = wave(position.xz);
-  vPos = vec3(position.x, W_LEVEL + w.x, position.z);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(vPos, 1.0);
-}`;
-// the surface seen from above: the view refracts into the water and is absorbed on its way to the floor
-const SURF_HEAD = /* glsl */ `
-varying vec3 vPos;
-uniform vec3 uGlow;
-void main() {
-  vec3 n = normalOf(wave(vPos.xz)), d = normalize(vPos - (cameraPosition - TANK_ORIGIN));
-  if (dot(d, n) > -0.02) n = normalize(n - d * (dot(d, n) + 0.02));
-  float F = fresnel(-dot(d, n));
-  vec3 r = refract(d, n, 1.0 / W_IOR);
-  float t = boxExit(vec3(vPos.x, min(vPos.y, W_LEVEL - 0.001), vPos.z), r);
-  vec3 T = exp(-W_ABSORB * t);
-`;
-const SIDE_VERT = COMMON + /* glsl */ `
-varying vec3 vPos; varying vec3 vNrm;
-void main() { vPos = (modelMatrix * vec4(position, 1.0)).xyz - TANK_ORIGIN; vNrm = normal; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
-// the water behind the glass walls, up to the moving water line
-const SIDE_HEAD = /* glsl */ `
-varying vec3 vPos; varying vec3 vNrm;
-uniform vec3 uGlow, uScatter;
-uniform float uShaft;
-void main() {
-  if (abs(vNrm.y) > 0.5) discard;
-  float h = W_LEVEL + wave(clamp(vPos.xz, -W_HALF, W_HALF)).x;
-  if (vPos.y > h) discard;
-  vec3 d = normalize(vPos - (cameraPosition - TANK_ORIGIN)), n = normalize(vNrm);
-  vec3 r = refract(d, n, 1.0 / W_IOR);
-  float t = boxExit(vPos - n * 0.001, r);
-`;
-
-/** Lets a standard material receive the caustic light on top of the scene's lights. */
-function lightByCaustics(m: MeshStandardMaterial, U: Record<string, IUniform>, key: string, grain: boolean, chain?: MeshStandardMaterial['onBeforeCompile']): void {
-  m.onBeforeCompile = (shader, renderer) => {
-    chain?.(shader, renderer);
-    Object.assign(shader.uniforms, { uSurf: U.uSurf, uCaus: U.uCaus, uLampCol: U.uLampCol, uLampPosition: U.uLampPosition, uLampAxis: U.uLampAxis, uCausScale: U.uCausScale });
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPosT;')
-      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\nvWorldPosT = (modelMatrix * vec4(transformed, 1.0)).xyz - vec3(0.0, ${f(TANK_OFFSET_Y)}, 0.0);`);
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vWorldPosT;\n${COMMON}
-float hashT(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-float vnoiseT(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hashT(i), hashT(i + vec2(1, 0)), f.x), mix(hashT(i + vec2(0, 1)), hashT(i + vec2(1, 1)), f.x), f.y); }`)
-      .replace('#include <color_fragment>', grain ? `#include <color_fragment>
-{
-  float grainT = hashT(floor(vWorldPosT.xz * 900.0)) - 0.5;
-  float patchT = vnoiseT(vWorldPosT.xz * 14.0) - 0.5;
-  diffuseColor.rgb *= 1.0 + grainT * 0.14 + patchT * 0.12;
-}` : '#include <color_fragment>')
-      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-{
-  // the light bar through the moving surface: the caustics texture, strongest on faces that look up
-  float up = clamp(dot(normal, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz), 0.0, 1.0);
-  vec3 irr = uLampCol * causAt(vWorldPosT.xz) * (0.3 + 0.7 * up);
-  reflectedLight.directDiffuse += irr * BRDF_Lambert(diffuseColor.rgb);
-}`);
-  };
-  m.customProgramCacheKey = () => key;
-}
+const LAMP_RGB: [number, number, number] = [0.87, 0.96, 1.0];
 
 /**
- * The home showcase tank: a 60 cm aquarium in a dark, quiet room under a cool LED bar. Water is kept almost clear so
- * the animals read well; real caustics from the moving surface play on the sand and the animals; bubbles from an air
- * stone keep the surface alive; the player controls the viewpoint. Several occupants can live in it.
+ * The home showcase tank: an aquarium in a dark, quiet room under a cool LED bar. The water is drawn by the tank
+ * renderer (render/tank): refraction through the glass and the moving surface, the underside of the surface as a
+ * mirror, the side panes as mirrors at a slant, absorption and scattering, light shafts with the animals' shadows in
+ * them. The bar's light reaches the sand and the animals through the moving surface as a caustic net. The bed is a
+ * relief the animals stand on, cut against the glass. Several occupants can live in it; the player moves the view.
  */
 export class TankScene {
   readonly scene = new Scene();
@@ -206,9 +80,24 @@ export class TankScene {
   private readonly camCur = { t: new Vector3(0, TANK_OFFSET_Y + 0.12, 0) };
   private camT = 1;
   readonly occupants: Occupant[] = [];
-  /** top of the substrate: the animals, the decorations and the caustics all sit on it */
+  /** the tank's animals push each other aside instead of passing through */
+  private readonly contacts = new AnimalContacts();
+  /** mean top of the substrate: the decorations and the caustics sit on it; the animals stand on its relief */
   private sandTop = SAND_H;
-  private readonly floor: Floor = { heightAt: () => this.sandTop, waterAt: () => WATER_H };
+  private readonly floor: Floor = ((scene: TankScene): Floor => ({
+    heightAt: (x, z) => scene.substrate.heightAt(x, z),
+    waterAt: () => scene.dimensions.waterHeight,
+    colorAt: (x, z, out) => scene.substrate.colorAt(x, z, out),
+    // the bed's sand shader, in the tank's frame (the bed shades tank-local positions: world − aquariumRoot)
+    get bed() { return scene.bedInfo(); },
+  }))(this);
+  private readonly bedRef = { uniforms: {} as Record<string, IUniform>, origin: new Vector3(), siltAt: (x: number, z: number) => this.substrate.siltAt(x, z) };
+  private bedInfo(): Floor['bed'] {
+    if (this.layout.substrate === 'none') return null;
+    this.bedRef.uniforms = this.substrate.U;
+    this.bedRef.origin.copy(this.aquariumRoot.position);
+    return this.bedRef;
+  }
   private readonly hitBox: Mesh;
   private readonly raycaster = new Raycaster();
   private readonly waterPlane = new Plane(new Vector3(0, 1, 0), -W_LEVEL - TANK_OFFSET_Y);
@@ -220,39 +109,29 @@ export class TankScene {
   private readonly nudgeV2 = new Vector3();
   private readonly nudgeV3 = new Vector3();
   private readonly itemObjects = new Map<string, Object3D>();
-  private readonly sandMesh: Mesh;
-  private readonly sandMat: MeshStandardMaterial;
-  private readonly bottomMesh: Mesh;
   private itemSeq = 0;
-  private time = 0;
-  // the water
-  private readonly U: Record<string, IUniform>;
-  private readonly gpu: GPUComputationRenderer | null = null;
-  private readonly sim: Variable | null = null;
-  private readonly surfMat: ShaderMaterial | null = null;
-  private readonly surfRT: WebGLRenderTarget | null = null;
-  private readonly causRT: WebGLRenderTarget | null = null;
-  private readonly causScene = new Scene();
-  private readonly flatCam = new Camera();
-  private readonly waves = makeWaves();
-  private readonly waveU = new Float32Array(NW * 4);
-  private readonly ampU = new Float32Array(NW);
-  private readonly jetU = new Float32Array(16);
-  private readonly jetValues = new Float32Array(8);
-  private readonly dropU = new Float32Array(32);
-  private readonly drops: [number, number, number, number][] = [];
-  private simAcc = 0;
-  private waterAcc = 0;
+  /** the tank's shared uniform block: the water, the caustic light on the materials, the passes */
+  readonly U: Record<string, IUniform>;
+  readonly water: TankWaterSim;
+  /** the water/glass and light-shaft passes the tank renderer draws over the scene */
+  readonly passes: WaterPasses;
+  readonly substrate: Substrate;
+  private readonly motes: Motes;
+  private readonly probe: RoomProbe;
+  private readonly glassEdgeMat: ShaderMaterial;
   private preset = QUALITY_PRESETS.mid;
   private occupantGeneration = 0;
   private occupantRecords: IndividualRecord[] = [];
   private speciesLookup: ((id: string) => SpeciesDef | undefined) | null = null;
-  private readonly flatWater: DataTexture;
-  private gustAcc = 0;
   waves_ = 0.8;
   turb = 0.5;
-  readonly equipment = new AquariumEquipment({ width: TANK_W, depth: TANK_D, height: TANK_H, glass: 0.006, waterHeight: WATER_H });
+  dimensions: TankDimensions = { ...STANDARD_TANK };
+  equipment = new AquariumEquipment(this.dimensions);
   private readonly lampLight: SpotLight;
+  private readonly lampOffset = new Vector3(0, 0.035, 0);
+  /** what the drivers are told each frame (one object, refilled) */
+  private readonly driverCtx: DriverContext;
+  private readonly bounds = { minX: 0, maxX: 0, minZ: 0, maxZ: 0 };
   onBehavior: ((e: BehaviorEvent, record: IndividualRecord) => void) | null = null;
   heroApply: ((model: LoadedModel) => Promise<HeroInstance>) | null = null;
   readonly lighting: HeroLighting = {
@@ -269,6 +148,7 @@ export class TankScene {
     const pmrem = new PMREMGenerator(gl);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environmentIntensity = 0.22;
+    pmrem.dispose();
     // quiet dark room
     const hemi = new HemisphereLight(0x5a6a72, 0x1a1715, 0.3);
     const spot = new SpotLight(0xdff4ff, 1.8, 2.5, 0.75, 0.55, 1.2);
@@ -278,6 +158,7 @@ export class TankScene {
     spot.castShadow = true;
     spot.shadow.mapSize.set(1024, 1024);
     spot.shadow.bias = -0.0004;
+    spot.shadow.camera.near = 0.05;
     const fill = new DirectionalLight(0xffe9d6, 0.3);
     fill.position.set(0.9, 0.5, 0.8);
     const rim = new DirectionalLight(0x9fc8e8, 0.3);
@@ -295,7 +176,8 @@ export class TankScene {
     this.equipment.onRipple = (x, z, strength) => this.addRipple(x, z, strength, 0.009);
     this.scene.add(this.shelf.group);
     // a window on the back wall, the bay at night outside
-    const win = new Mesh(new PlaneGeometry(1.05, 0.72), new MeshStandardMaterial({ map: makeNightWindow(), emissive: new Color(0xffffff), emissiveMap: makeNightWindow(), emissiveIntensity: 0.55, roughness: 1 }));
+    const night = makeNightWindow();
+    const win = new Mesh(new PlaneGeometry(1.05, 0.72), new MeshStandardMaterial({ map: night, emissive: new Color(0xffffff), emissiveMap: night, emissiveIntensity: 0.55, roughness: 1 }));
     win.position.set(1.05, 0.9, -1.39);
     this.scene.add(win);
     const frameMat = new MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.6, metalness: 0.2 });
@@ -305,221 +187,152 @@ export class TankScene {
       this.scene.add(f);
     }
 
-    // ---- the water: simulation, surface texture and caustics texture (needs float render targets)
-    const floatOK = gl.capabilities.isWebGL2 && (gl.extensions.has('EXT_color_buffer_float') || gl.extensions.has('EXT_color_buffer_half_float'));
-    const zero = new DataTexture(new Float32Array(4), 1, 1, RGBAFormat, FloatType);
-    zero.needsUpdate = true;
-    this.flatWater = zero;
+    // ---- the water: the tank's shared uniforms, the surface simulation, the passes over the scene
+    const floatRT = gl.extensions.has('EXT_color_buffer_float') || gl.extensions.has('EXT_color_buffer_half_float');
+    this.probe = new RoomProbe(floatRT);
     this.U = {
+      uTankHalf: { value: new Vector2(TX, TZ) }, uWaterLevel: { value: W_LEVEL }, uLampHalf: { value: W_LAMP_HALF }, uTankOrigin: { value: this.aquariumRoot.position },
       uLampPosition: { value: new Vector3(0, W_LAMP_Y, 0) }, uLampAxis: { value: new Vector3(1, 0, 0) },
-      uJets: { value: this.jetU }, uJetValues: { value: this.jetValues },
-      uTime: { value: 0 }, uW: { value: this.waveU }, uA: { value: this.ampU }, uSim: { value: zero }, uSurf: { value: zero }, uCaus: { value: zero },
-      uLampCol: { value: new Color(0.87, 0.96, 1.0).multiplyScalar(3.0) }, uCausScale: { value: 1 },
-      uGlow: { value: new Color(0.004, 0.012, 0.014).multiplyScalar(2.0) }, uScatter: { value: new Color(0.005, 0.011, 0.013) }, uShaft: { value: 2.2 },
+      uLampCol: { value: new Color(...LAMP_RGB).multiplyScalar(3.0) }, uFloorY: { value: SAND_H }, uAbsorb: { value: new Vector3(...W_ABSORB) },
+      uTime: { value: 0 }, uBounce: { value: 0.1 },
+      uEnv: { value: this.probe.texture }, uEnvLod: { value: this.probe.maxLod }, uEnvGain: { value: 1.0 }, uLampRadiance: { value: 14 },
     };
-    const U = this.U;
-    this.waves.forEach((W, i) => this.waveU.set([W.kx, W.kz, W.w, W.ph], i * 4));
-    if (floatOK) {
-      try {
-        const gpu = new GPUComputationRenderer(SIM[0], SIM[1], gl);
-        gpu.setDataType(HalfFloatType);
-        // the ripple simulation: a height field (mm); each cell moves toward the average of its neighbours and overshoots
-        // (the wave equation); ClampToEdge sampling makes the glass reflect the ripples; splashes add a bump
-        const sim = gpu.addVariable('heightmap', /* glsl */ `
-          uniform vec4 uDrops[8];   // splashes: x, z, radius (m), height (mm)
-          void main() {
-            vec2 cell = 1.0 / resolution.xy, uv = gl_FragCoord.xy * cell;
-            vec4 c = texture2D(heightmap, uv);
-            float nb = texture2D(heightmap, uv + vec2(0.0, cell.y)).r + texture2D(heightmap, uv - vec2(0.0, cell.y)).r
-                     + texture2D(heightmap, uv + vec2(cell.x, 0.0)).r + texture2D(heightmap, uv - vec2(cell.x, 0.0)).r;
-            float h = (nb * 0.5 - c.g) * 0.992;
-            vec2 p = (uv - 0.5) * vec2(${f(2 * TX)}, ${f(2 * TZ)});
-            for (int i = 0; i < 8; i++) { vec2 q = (p - uDrops[i].xy) / uDrops[i].z; h += uDrops[i].w * exp(-dot(q, q)); }
-            gl_FragColor = vec4(h, c.r, 0.0, 1.0);
-          }`, gpu.createTexture());
-        gpu.setVariableDependencies(sim, [sim]);
-        sim.minFilter = sim.magFilter = LinearFilter;
-        sim.material.uniforms.uDrops = { value: this.dropU };
-        const err = gpu.init();
-        if (err) throw new Error(err);
-        // once a frame: the waves plus the ripples, with their slopes, into one texture every water shader reads
-        const surfRT = gpu.createRenderTarget(0, 0, ClampToEdgeWrapping, ClampToEdgeWrapping, LinearFilter, LinearFilter);
-        const surfMat = gpu.createShaderMaterial(/* glsl */ `
-          uniform float uTime;
-          uniform vec4 uW[${NW}];     // per wave: direction * wavenumber, angular speed, phase
-          uniform float uA[${NW}];    // per wave: height now (m)
-          uniform sampler2D uSim;
-          uniform vec4 uJets[4];
-          uniform vec2 uJetValues[4];
-          void main() {
-            vec2 uv = gl_FragCoord.xy / resolution.xy, e = 1.0 / resolution.xy, p = (uv - 0.5) * vec2(${f(2 * TX)}, ${f(2 * TZ)});
-            vec3 w = vec3(0.0);
-            for (int i = 0; i < ${NW}; i++) {   // each wave's crests are bent by a slower wave running along them
-              vec2 kd = uW[i].xy, side = vec2(-kd.y, kd.x) / length(kd);
-              float kb = 0.37 * length(kd), pb = kb * dot(side, p) + 0.9 * uTime + 7.1 * float(i);
-              float ph = dot(kd, p) - uW[i].z * uTime + uW[i].w + 1.6 * sin(pb);
-              w += uA[i] * vec3(sin(ph), cos(ph) * (kd + 1.6 * kb * cos(pb) * side));
-            }
-            // Equipment outlets send a small directional surface disturbance into the existing height field.
-            for (int i = 0; i < 4; i++) {
-              if (uJetValues[i].x <= 0.0) continue;
-              vec2 q = p - uJets[i].xy, dir = uJets[i].zw;
-              float radius = max(uJetValues[i].y, 0.03), envelope = exp(-dot(q, q) / (radius * radius));
-              float phase = dot(q, dir) * 75.0 - uTime * 7.0;
-              float a = uJetValues[i].x * 0.00025;
-              w += a * envelope * vec3(sin(phase), cos(phase) * 75.0 * dir - sin(phase) * 2.0 * q / (radius * radius));
-            }
-            float h = texture2D(uSim, uv).r;   // + the ripples (mm)
-            float hx = texture2D(uSim, uv + vec2(e.x, 0.0)).r - texture2D(uSim, uv - vec2(e.x, 0.0)).r;
-            float hz = texture2D(uSim, uv + vec2(0.0, e.y)).r - texture2D(uSim, uv - vec2(0.0, e.y)).r;
-            gl_FragColor = vec4(w + 0.001 * vec3(h, hx * resolution.x / ${f(4 * TX)}, hz * resolution.y / ${f(4 * TZ)}), 1.0);
-          }`, { uTime: U.uTime, uW: U.uW, uA: U.uA, uSim: U.uSim, uJets: U.uJets, uJetValues: U.uJetValues });
-        // caustics: every vertex of a grid on the surface sends the bar's light through the water to the floor, and the
-        // grid is drawn where the rays land; a surface cell landing on a smaller patch of floor concentrates its light
-        // (the area ratio from screen-space derivatives), and overlapping patches add up
-        const halfFloat = gl.extensions.has('EXT_color_buffer_float') || gl.extensions.has('EXT_color_buffer_half_float');
-        const causRT = new WebGLRenderTarget(CAUS[0], CAUS[1], {
-          type: halfFloat ? HalfFloatType : UnsignedByteType, depthBuffer: false, minFilter: LinearMipmapLinearFilter, magFilter: LinearFilter, generateMipmaps: true,
-        });
-        U.uCausScale.value = halfFloat ? 1 : 4;
-        const grid = new PlaneGeometry(2 * TX, 2 * TZ, SIM[0], SIM[1]).rotateX(-Math.PI / 2);
-        const causMesh = new Mesh(grid, new ShaderMaterial({
-          uniforms: U, side: DoubleSide, depthTest: false, depthWrite: false, blending: CustomBlending, blendSrc: OneFactor, blendDst: OneFactor,
-          vertexShader: COMMON + /* glsl */ `
-            varying vec2 vSurf; varying vec3 vI;
-            void main() {
-              vec3 w = wave(position.xz), P = vec3(position.x, W_LEVEL + w.x, position.z), n = normalOf(w);
-              vec3 L; float E = lampAt(P, L);
-              vec3 Lin = -L, r = refract(Lin, n, 1.0 / W_IOR);
-              float t = P.y / max(-r.y, 0.05);
-              vec3 F = P + r * t;
-              vI = vec3(E * max(-Lin.y, 0.0) * (1.0 - fresnel(dot(-Lin, n)))) * exp(-W_ABSORB * t);
-              vSurf = position.xz;
-              gl_Position = vec4(F.x / W_HALF.x, F.z / W_HALF.y, 0.0, 1.0);
-            }`,
-          fragmentShader: /* glsl */ `
-            varying vec2 vSurf; varying vec3 vI;
-            void main() {
-              vec2 a = dFdx(vSurf), b = dFdy(vSurf);
-              gl_FragColor = vec4(vI * min(abs(a.x * b.y - a.y * b.x) / ${((4 * TX * TZ) / (CAUS[0] * CAUS[1])).toExponential(6)}, 40.0) / ${f(halfFloat ? 1 : 4)}, 1.0);
-            }`,
-        }));
-        causMesh.frustumCulled = false;
-        this.causScene.add(causMesh);
-        this.gpu = gpu; this.sim = sim; this.surfMat = surfMat; this.surfRT = surfRT; this.causRT = causRT;
-        U.uSurf.value = surfRT.texture;
-        U.uCaus.value = causRT.texture;
-      } catch (err) {
-        console.warn('[tank] water simulation unavailable, flat water:', err);
-      }
-    }
-
-    // sand, lit by the caustics
-    const sandMat = new MeshStandardMaterial({ color: 0xb09c78, roughness: 0.95 });
-    lightByCaustics(sandMat, U, 'tank-sand', true);
-    // a 5 cm bed of sand, not a sheet: the box's top is the floor the animals and the decorations stand on
-    const sand = new Mesh(new BoxGeometry(TANK_W - 0.002, SAND_H, TANK_D - 0.002), sandMat);
-    sand.position.y = SAND_H / 2;
-    sand.receiveShadow = true;
-    this.aquariumRoot.add(sand);
-    this.sandMesh = sand; this.sandMat = sandMat;
-    // bare bottom (dark acrylic) when no substrate is chosen; still lit by the caustics
-    const bottomMat = new MeshStandardMaterial({ color: 0x101316, roughness: 0.3, metalness: 0.1 });
-    lightByCaustics(bottomMat, U, 'tank-bottom', false);
-    const bottom = new Mesh(new PlaneGeometry(TANK_W, TANK_D, 1, 1), bottomMat);
-    bottom.rotation.x = -Math.PI / 2;
-    bottom.receiveShadow = true;
-    bottom.visible = false;
-    this.aquariumRoot.add(bottom);
-    this.bottomMesh = bottom;
+    this.water = new TankWaterSim(gl, this.U);
+    this.passes = new WaterPasses(this.U, createScreenUniforms(), this.aquariumRoot.position);
+    this.passes.onBeforeRender = (camera) => this.beforePasses(camera);
+    // the bed, lit by the caustics, and the specks in the water
+    this.substrate = new Substrate(this.U);
+    this.aquariumRoot.add(this.substrate.root);
     this.aquariumRoot.add(this.itemsRoot);
-
-    // the water behind the glass: first what it takes away (absorption, per channel), then what it adds (scattered
-    // light sheets, the meniscus); the surface the same way, plus its reflection of the room
-    const pass = (vert: string, frag: string, add: boolean, order: number) => new ShaderMaterial({
-      uniforms: U, vertexShader: vert, fragmentShader: COMMON + frag, transparent: true, depthWrite: false, toneMapped: add,
-      blending: CustomBlending, blendSrc: add ? OneFactor : ZeroFactor, blendDst: add ? OneFactor : SrcColorFactor, name: `tank-pass-${order}`,
-    });
-    const sidesGeo = new BoxGeometry(2 * TX - 0.004, TANK_H - 0.01, 2 * TZ - 0.004).translate(0, (TANK_H - 0.01) / 2, 0);
-    const sidesMul = new Mesh(sidesGeo, pass(SIDE_VERT, SIDE_HEAD + /* glsl */ `
-      gl_FragColor = vec4(exp(-W_ABSORB * t), 1.0);
-      #include <colorspace_fragment>
-    }`, false, 2));
-    sidesMul.renderOrder = 2;
-    const sidesAdd = new Mesh(sidesGeo, pass(SIDE_VERT, SIDE_HEAD + /* glsl */ `
-      // light inside the water along the view ray: the caustic light sheets scatter toward the eye (light shafts;
-      // the lite tank takes half the steps)
-      #ifndef SHAFT_N
-      #define SHAFT_N 8
-      #endif
-      const int N = SHAFT_N;
-      float ds = t / float(N);
-      vec3 col = vec3(0.0), thr = vec3(1.0), Ts = exp(-W_ABSORB * ds);
-      for (int i = 0; i < N; i++) {
-        vec3 p = vPos + r * ((float(i) + 0.5) * ds);
-        vec2 uv = p.xz / (2.0 * W_HALF) + 0.5;
-        vec3 c = textureLod(uCaus, uv, 0.0).rgb, cb = textureLod(uCaus, uv, 4.0).rgb;
-        vec3 sheets = (cb + uShaft * max(c - cb, 0.0)) * uCausScale;
-        col += thr * uScatter * uLampCol * sheets * exp(-W_ABSORB * max(W_LEVEL - p.y, 0.0)) * ds;
-        thr *= Ts;
-      }
-      // the meniscus: a thin bright line where the water meets the glass
-      float px = fwidth(vPos.y);
-      col += (0.25 * room(vPos, reflect(d, vec3(0.0, 1.0, 0.0))) + uGlow * 4.0) * 0.5 * (1.0 - smoothstep(px, 3.0 * px, h - vPos.y));
-      gl_FragColor = vec4(col, 1.0);
-      ${OUT}
-    }`, true, 3));
-    sidesAdd.renderOrder = 3;
-    this.shaftMat = sidesAdd.material as ShaderMaterial;
-    const surfGeo = new PlaneGeometry(2 * TX - 0.004, 2 * TZ - 0.004, 96, 48).rotateX(-Math.PI / 2);
-    const surfMul = new Mesh(surfGeo, pass(SURF_VERT, SURF_HEAD + /* glsl */ `
-      gl_FragColor = vec4((1.0 - F) * T, 1.0);
-      #include <colorspace_fragment>
-    }`, false, 4));
-    surfMul.renderOrder = 4;
-    const surfAdd = new Mesh(surfGeo, pass(SURF_VERT, SURF_HEAD + /* glsl */ `
-      vec3 col = F * room(vPos, reflect(d, n)) + (1.0 - F) * uGlow * (1.0 - T);
-      gl_FragColor = vec4(col, 1.0);
-      ${OUT}
-    }`, true, 5));
-    surfAdd.renderOrder = 5;
-    for (const m of [sidesMul, sidesAdd, surfMul, surfAdd]) m.frustumCulled = false;
-    this.aquariumRoot.add(sidesMul, sidesAdd, surfMul, surfAdd);
-
-    // glass panels: only what the panes reflect of the dark room (Fresnel, premultiplied), so the water and the animals
-    // show through untinted; edges and an invisible hit box for picking
-    const glassMat = new ShaderMaterial({
-      uniforms: U, transparent: true, depthWrite: false, side: DoubleSide, blending: CustomBlending, blendSrc: OneFactor, blendDst: OneMinusSrcAlphaFactor,
-      vertexShader: SIDE_VERT,
-      fragmentShader: COMMON + /* glsl */ `
-        varying vec3 vPos; varying vec3 vNrm;
-        void main() {
-          vec3 d = normalize(vPos - (cameraPosition - TANK_ORIGIN)), n = normalize(vNrm) * (gl_FrontFacing ? 1.0 : -1.0);
-          float F = 0.04 + 0.96 * pow(1.0 - abs(dot(d, n)), 5.0);
-          gl_FragColor = vec4(F * room(vPos, reflect(d, n)), F + 0.01);
-          ${OUT}
-        }`,
-    });
-    // Reuse the host's optical glass shader; standalone tanks use the shared physical glass.
-    this.equipment.onTankChanged = () => this.equipment.tank.traverse((o) => { if (o instanceof Mesh && o.material === this.equipment.materials.glass) o.material = glassMat; });
+    this.motes = new Motes(this.U);
+    this.aquariumRoot.add(this.motes);
+    // the panes: their cut edges with the scene, their faces in the water pass
+    this.glassEdgeMat = glassEdgeMaterial(this.U, { uTankTop: this.passes.P.uTankTop });
+    this.equipment.onTankChanged = () => this.useGlassEdges();
     this.equipment.onTankChanged();
     this.hitBox = new Mesh(new BoxGeometry(TANK_W, TANK_H, TANK_D), new MeshStandardMaterial({ visible: false }));
     this.hitBox.position.y = TANK_H / 2;
     this.hitBox.name = 'tank-hit';
     this.aquariumRoot.add(this.hitBox);
+    this.driverCtx = { floor: this.floor, player: new Vector3(0, 1, 2), simScale: 1, nowMs: 0, bounds: this.bounds, canBurrow: true };
+    // picking sees every layer (the hero fish, the lid drawn over the water)
+    this.raycaster.layers.enableAll();
+    this.applyDimensions();
+    this.applyPreset();
     this.frameTank();
+  }
+
+  /** The tank's glass panes: their cut edges in the scene, their faces in the water pass. */
+  private useGlassEdges(): void {
+    const glass = this.equipment.materials.glass;
+    this.equipment.tank.traverse((o) => { if (o instanceof Mesh && o.material === glass) { o.material = this.glassEdgeMat; o.castShadow = false; } });
+  }
+
+  /**
+   * Transparent equipment wholly above the water (a glass lid, the clear trims on the rims) is drawn after the water
+   * pass, which would otherwise bend it like something seen through the water. Checked now and then: the equipment
+   * changes in the editor.
+   */
+  private overlayAcc = 1;
+  private readonly overlayBox = new Box3();
+  private sortOverlay(dt: number): void {
+    this.overlayAcc += dt;
+    if (this.overlayAcc < 0.5) return;
+    this.overlayAcc = 0;
+    const top = this.aquariumRoot.position.y + this.dimensions.waterHeight + 0.002;
+    let any = false;
+    this.equipment.traverse((o) => {
+      if (!(o instanceof Mesh)) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      if (!mats.some((m) => m.transparent)) { if (o.layers.isEnabled(LAYER_OVER)) o.layers.set(0); return; }
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      const above = this.overlayBox.copy(o.geometry.boundingBox!).applyMatrix4(o.matrixWorld).min.y > top;
+      if (above !== o.layers.isEnabled(LAYER_OVER)) o.layers.set(above ? LAYER_OVER : 0);
+      any ||= above;
+    });
+    this.passes.hasOverlay = any;
+  }
+
+  /**
+   * The bar's shadow map: the animals move slowly, so below the top tier it is drawn every other frame (the stones
+   * and the equipment never move on their own; the editor redraws it on every change).
+   */
+  private shadowTick = 0;
+  private stepShadows(): void {
+    const s = this.lampLight.shadow;
+    s.autoUpdate = false;
+    if (this.preset.shadowMapSize >= 2048 || (this.shadowTick++ & 1) === 0) s.needsUpdate = true;
+  }
+
+  /** Per frame, before the passes over the tank: the shadow map for the shafts, the light in the water. */
+  private beforePasses(camera: PerspectiveCamera): void {
+    const P = this.passes.P, lamp = this.U.uLampCol.value as Color;
+    this.passes.setVisible(this.aquariumRoot.visible);
+    P.uShadowMap.value = this.lampLight.castShadow ? this.lampLight.shadow.map?.depthTexture ?? null : null;
+    P.uShadowMatrix.value = this.lampLight.shadow.matrix;
+    // the water's own glow (the bar's light scattered many times) and the light shafts follow the bar's brightness
+    P.uScatterCol.value.setRGB(lamp.r * 0.011, lamp.g * 0.026, lamp.b * 0.03);
+    P.uDeepCol.value.setRGB(lamp.r * 0.006, lamp.g * 0.016, lamp.b * 0.019);
+    P.uMeniscusCol.value.copy(lamp).multiplyScalar(0.16);
+    this.motes.setPixelScale(this.gl.getDrawingBufferSize(this.tmpV2).y / (2 * Math.tan((camera.fov * Math.PI) / 360)));
+  }
+  private readonly tmpV2 = new Vector2();
+
+  private applyDimensions(): void {
+    const { width: w, depth: d, height: h, waterHeight, glass } = this.dimensions;
+    (this.U.uTankHalf.value as Vector2).set(w / 2, d / 2); this.U.uWaterLevel.value = waterHeight; this.U.uLampHalf.value = w / 2 - 0.02;
+    this.waterPlane.constant = -waterHeight - TANK_OFFSET_Y;
+    this.hitBox.geometry.dispose(); this.hitBox.geometry = new BoxGeometry(w, h, d); this.hitBox.position.y = h / 2;
+    this.water.setDimensions(w, d);
+    this.passes.setDimensions(w, d, h, glass);
+    this.substrate.setDimensions(w, d);
+    this.probe.markDirty();
+  }
+
+  /** Resize only the container and water. Animals and decorations keep their physical sizes. */
+  setDimensions(dimensions: TankDimensions): void {
+    if (this.dimensions.width === dimensions.width && this.dimensions.height === dimensions.height) return;
+    this.clearOccupants(); this.dimensions = { ...dimensions };
+    this.equipment.dispose(); this.equipment = new AquariumEquipment(this.dimensions);
+    this.aquariumRoot.add(this.equipment);
+    this.equipment.onRipple = (x, z, strength) => this.addRipple(x, z, strength, 0.009);
+    this.equipment.onTankChanged = () => this.useGlassEdges();
+    this.equipment.onTankChanged();
+    this.applyDimensions();
+    this.applySubstrate();
+  }
+
+  setRoomPosition(position: [number, number]): void {
+    this.aquariumRoot.position.set(position[0], TANK_OFFSET_Y, position[1]);
+    this.updateEquipmentLighting();
+    this.probe.markDirty();
+  }
+  setPresent(on: boolean): void { this.aquariumRoot.visible = on; this.lampLight.visible = on; this.passes.setVisible(on); this.probe.markDirty(); }
+  /** Something in the room changed (the other tanks, the shelf): the reflections are drawn again. */
+  markRoomChanged(): void { this.probe.markDirty(); }
+
+  frameRoom(): void {
+    this.view = 'tank'; this.camT = 1;
+    const hfov = 2 * Math.atan(Math.tan(this.camera.fov * Math.PI / 360) * this.camera.aspect);
+    const distance = Math.max(4.3, 5.7 / (0.85 * 2 * Math.tan(hfov / 2)));
+    this.camera.far = 50; this.camera.updateProjectionMatrix();
+    if (this.controls) this.controls.maxDistance = 30;
+    this.camera.position.set(0, 2.3, distance); this.camCur.t.set(0, 0.6, 0.25);
+    this.camera.lookAt(this.camCur.t);
+    if (this.controls) { this.controls.target.copy(this.camCur.t); this.controls.update(); }
   }
 
   /** Default framing: the tank fills roughly two thirds of the width. */
   frameTank(fitHeight = false): void {
+    if (this.controls) this.controls.maxDistance = Math.max(3.2, this.dimensions.width * 7);
     const hfov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
-    const widthDistance = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
-    const heightDistance = fitHeight ? (TANK_H + 0.16) / (0.8 * 2 * Math.tan(this.camera.fov * Math.PI / 360)) : 0;
+    const widthDistance = (this.dimensions.width / 0.66) / (2 * Math.tan(hfov / 2));
+    const heightDistance = fitHeight ? (this.dimensions.height + 0.16) / (0.8 * 2 * Math.tan(this.camera.fov * Math.PI / 360)) : 0;
     const dist = Math.max(widthDistance, heightDistance);
     if (fitHeight) { this.view = 'tank'; this.camT = 1; }
-    this.camera.position.set(dist * 0.35, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95);
-    this.camera.lookAt(0, TANK_OFFSET_Y + 0.12, 0);
-    if (this.controls) { this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0); this.controls.update(); }
+    this.camera.position.set(dist * 0.35 + this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95 + this.aquariumRoot.position.z);
+    this.camera.lookAt(this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.12, this.aquariumRoot.position.z);
+    if (this.controls) { this.controls.target.set(this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.12, this.aquariumRoot.position.z); this.controls.update(); }
   }
 
   captureView() {
@@ -537,7 +350,7 @@ export class TankScene {
     if (!this.controls) {
       this.controls = new OrbitControls(this.camera, this.canvas);
       this.controls.enableDamping = true;
-      this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0);
+      this.controls.target.set(this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.12, this.aquariumRoot.position.z);
       // right up to the glass (the camera's near plane is 3 mm) and back to the far wall
       this.controls.minDistance = 0.012;
       this.controls.maxDistance = 3.2;
@@ -579,7 +392,7 @@ export class TankScene {
     this.equipment.applyPreset();
     if (!layout.equipment && layout.substrate === 'none') this.moveBottomEquipment(-SAND_H);
     this.applySubstrate();
-    for (const o of this.itemObjects.values()) o.removeFromParent();
+    for (const o of this.itemObjects.values()) { this.disposeLitMaterials(o); o.traverse((m) => { if (m instanceof Mesh) m.geometry.dispose(); }); o.removeFromParent(); }
     this.itemObjects.clear();
     for (const it of this.layout.items) this.spawnItem(it);
   }
@@ -602,16 +415,18 @@ export class TankScene {
   }
 
   private applySubstrate(): void {
-    const s = this.layout.substrate;
-    this.sandMesh.visible = s !== 'none';
-    this.bottomMesh.visible = s === 'none';
-    this.sandTop = s === 'none' ? 0 : SAND_H;
+    this.substrate.setKind(this.layout.substrate);
+    this.sandTop = this.substrate.mean;
     this.floorPlane.constant = -TANK_OFFSET_Y - this.sandTop;
     this.lighting.floorY = TANK_OFFSET_Y + this.sandTop;
-    this.itemsRoot.position.y = this.sandTop;
-    for (const o of this.occupants) o.ind.pos.y = this.sandTop;
-    if (s === 'mud') { this.sandMat.color.set(0x4a4034); this.sandMat.roughness = 1.0; }
-    else { this.sandMat.color.set(0xb09c78); this.sandMat.roughness = 0.95; }
+    this.U.uFloorY.value = this.sandTop;
+    for (const o of this.occupants) o.ind.pos.y = this.substrate.heightAt(o.ind.pos.x, o.ind.pos.z);
+    for (const it of this.layout.items) this.itemObjects.get(it.id)?.position.set(it.x, this.itemY(it.x, it.z), it.z);
+  }
+
+  /** a decoration's foot: on the relief, sunk a couple of millimetres into it */
+  private itemY(x: number, z: number): number {
+    return this.layout.substrate === 'none' ? 0 : this.substrate.heightAt(x, z) - 0.002;
   }
 
   private spawnItem(it: TankItem): void {
@@ -619,8 +434,8 @@ export class TankScene {
     const obj = buildTankItem(it.type, seed);
     const meshes: Mesh[] = [];
     obj.traverse((o) => { if ((o as Mesh).isMesh) { const m = o as Mesh; m.castShadow = m.castShadow !== false && it.type !== 'plant'; m.receiveShadow = true; meshes.push(m); } });
-    this.lightMeshesByCaustics(meshes);
-    obj.position.set(it.x, 0, it.z);
+    this.lightMeshesByCaustics(meshes, it.type === 'plant');
+    obj.position.set(it.x, this.itemY(it.x, it.z), it.z);
     obj.rotation.y = it.rot;
     obj.userData.itemId = it.id;
     this.itemsRoot.add(obj);
@@ -633,7 +448,7 @@ export class TankScene {
     const r = ITEM_RADIUS[type];
     let best: [number, number] = [0, 0], bestD = -1;
     for (let k = 0; k < 24; k++) {
-      const x = (Math.random() * 2 - 1) * (TX - r - 0.02), z = (Math.random() * 2 - 1) * (TZ - r - 0.02);
+      const x = (Math.random() * 2 - 1) * ((this.dimensions.width / 2) - r - 0.02), z = (Math.random() * 2 - 1) * ((this.dimensions.depth / 2) - r - 0.02);
       let d = 1;
       for (const o of this.layout.items) d = Math.min(d, Math.hypot(o.x - x, o.z - z) - ITEM_RADIUS[o.type] - r);
       if (d > bestD) { bestD = d; best = [x, z]; }
@@ -645,7 +460,8 @@ export class TankScene {
   }
 
   removeItem(id: string): void {
-    this.itemObjects.get(id)?.removeFromParent();
+    const obj = this.itemObjects.get(id);
+    if (obj) { this.disposeLitMaterials(obj); obj.traverse((o) => { if (o instanceof Mesh) o.geometry.dispose(); }); obj.removeFromParent(); }
     this.itemObjects.delete(id);
     this.layout.items = this.layout.items.filter((i) => i.id !== id);
   }
@@ -693,9 +509,10 @@ export class TankScene {
     const hit = new Vector3();
     if (!this.raycaster.ray.intersectPlane(this.floorPlane, hit)) return;
     const r = ITEM_RADIUS[it.type];
-    it.x = Math.max(-TX + r, Math.min(TX - r, hit.x));
-    it.z = Math.max(-TZ + r, Math.min(TZ - r, hit.z));
-    obj.position.set(it.x, 0, it.z);
+    hit.sub(this.aquariumRoot.position);
+    it.x = Math.max(-(this.dimensions.width / 2) + r, Math.min((this.dimensions.width / 2) - r, hit.x));
+    it.z = Math.max(-(this.dimensions.depth / 2) + r, Math.min((this.dimensions.depth / 2) - r, hit.z));
+    obj.position.set(it.x, this.itemY(it.x, it.z), it.z);
   }
 
   setAutoRotate(on: boolean): void {
@@ -714,8 +531,7 @@ export class TankScene {
 
   /** A splash on the surface at (x, z): a ripple spreads from it. */
   addRipple(x: number, z: number, heightMm = 3, radius = 0.012): void {
-    if (Math.abs(x) > TX || Math.abs(z) > TZ) return;
-    this.drops.push([x, z, radius, heightMm]);
+    this.water.addRipple(x, z, heightMm, radius);
   }
 
   /** A click on the water surface (canvas point in NDC) makes a ripple; true when it hit the water. */
@@ -723,7 +539,8 @@ export class TankScene {
     this.raycaster.setFromCamera(new Vector2(ndcX, ndcY), this.camera);
     const hit = new Vector3();
     if (!this.raycaster.ray.intersectPlane(this.waterPlane, hit)) return false;
-    if (Math.abs(hit.x) > TX || Math.abs(hit.z) > TZ) return false;
+    hit.sub(this.aquariumRoot.position);
+    if (Math.abs(hit.x) > (this.dimensions.width / 2) || Math.abs(hit.z) > (this.dimensions.depth / 2)) return false;
     this.addRipple(hit.x, hit.z, 4, 0.014);
     return true;
   }
@@ -770,7 +587,8 @@ export class TankScene {
     const ind = generateIndividual(species, seed, 0, 0, 0, 0, Date.now());
     ind.length_mm = record.length_mm; ind.weight_g = record.weight_g; ind.sex = record.sex; ind.stage = record.stage; ind.traits = [...record.traits]; ind.gravid = !!record.gravid; ind.dress = !!record.dress;
     const slot = this.occupants.length;
-    ind.pos.set((slot % 2 === 0 ? -1 : 1) * 0.12 * Math.ceil(slot / 2), 0, (slot >= 2 ? 0.06 : -0.04));
+    const [x, z] = animalSlotPosition(slot, this.occupantRecords.length, this.dimensions.width, this.dimensions.depth);
+    ind.pos.set(x, 0, z);
     ind.home.copy(ind.pos);
     let root: Object3D, bones: Record<string, Object3D> = {}, meshes: Object3D[] = [], extras: Record<string, unknown> = {};
     let hero: HeroInstance | null = null;
@@ -793,7 +611,7 @@ export class TankScene {
       ph.root.userData.startOnSurface = true;
       root = ph.root;
     } else return;
-    if (generation !== this.occupantGeneration || this.dropped.has(record.id) || this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); root.removeFromParent(); return; }
+    if (generation !== this.occupantGeneration || this.dropped.has(record.id) || this.occupants.some((o) => o.record.id === record.id)) { hero?.dispose(); this.disposeLitMaterials(root); root.removeFromParent(); return; }
     const driver = entry.create();
     const unsub = driver.onEvent((e) => this.onBehavior?.(e, record));
     this.aquariumRoot.add(root);
@@ -809,20 +627,27 @@ export class TankScene {
   }
 
   /** Model materials are shared between instances, so the tank's copies get their own, lit by the caustics. */
-  private lightMeshesByCaustics(meshes: Mesh[]): void {
+  private readonly litMaterials = new WeakSet<Material>();
+  private lightMeshesByCaustics(meshes: Mesh[], sway = false): void {
     for (const mesh of meshes) {
       const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[];
       const lit = mats.map((m) => {
         if (!(m as MeshStandardMaterial).isMeshStandardMaterial) return m;
-        const c = (m as MeshStandardMaterial).clone();
-        c.userData = m.userData;
+        const c = cloneForTank(m as MeshStandardMaterial);
         // keep a model's own shader injection (e.g. the shrimp cuticle) and add the caustics after it
         const prev = m.onBeforeCompile, prevKey = Object.prototype.hasOwnProperty.call(m, 'customProgramCacheKey') ? m.customProgramCacheKey() : c.type;
-        lightByCaustics(c, this.U, `tank-${prevKey}`, false, prev);
+        lightByCaustics(c, this.U, `tank-${prevKey}`, { chain: prev, sway });
+        this.litMaterials.add(c);
         return c;
       });
       mesh.material = Array.isArray(mesh.material) ? lit : lit[0];
     }
+  }
+
+  private disposeLitMaterials(root: Object3D): void {
+    const materials = new Set<Material>();
+    root.traverse(o => { if (o instanceof Mesh) for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (this.litMaterials.has(m)) materials.add(m); });
+    materials.forEach(m => { m.dispose(); this.litMaterials.delete(m); });
   }
 
   removeOccupant(id: string): void {
@@ -832,6 +657,7 @@ export class TankScene {
     if (i < 0) return;
     const o = this.occupants[i];
     o.hero?.dispose();
+    this.disposeLitMaterials(o.root);
     o.unsub();
     o.driver.dispose();
     o.root.removeFromParent();
@@ -846,16 +672,28 @@ export class TankScene {
 
   setQuality(preset: QualityPreset): void {
     if (this.preset === preset) return;
-    this.preset = preset; this.waterAcc = 0;
+    this.preset = preset;
+    this.applyPreset();
+    const records = this.occupantRecords, lookup = this.speciesLookup;
+    this.clearOccupants();
+    if (lookup) void this.setOccupants(records, lookup);
+  }
+
+  /** The tier's shadows, water rate, specks and passes (the occupants' model tiers are reloaded by setQuality). */
+  private applyPreset(): void {
+    const preset = this.preset;
     this.lampLight.castShadow = preset.shadows;
     this.lampLight.shadow.map?.dispose(); this.lampLight.shadow.map = null;
     this.lampLight.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
     this.lampLight.shadow.needsUpdate = true;
-    this.U.uSurf.value = preset.tankWaterHz ? this.surfRT?.texture ?? this.flatWater : this.flatWater;
-    this.U.uCaus.value = preset.tankWaterHz ? this.causRT?.texture ?? this.flatWater : this.flatWater;
-    const records = this.occupantRecords, lookup = this.speciesLookup;
-    this.clearOccupants();
-    if (lookup) void this.setOccupants(records, lookup);
+    this.water.setRate(preset.tankWaterHz);
+    this.motes.setCount(preset.tankMotes);
+    this.applyPassOptions();
+  }
+
+  private applyPassOptions(): void {
+    const p = this.preset, shafts = this.lite ? Math.ceil(p.tankShafts / 2) : p.tankShafts;
+    this.passes.setOptions({ hitIter: p.tankHitIter, shaftSteps: shafts, shaftShadows: p.shadows && shafts > 0 });
   }
 
   /** Pick what is under a canvas point: an occupant, the tank, or nothing. */
@@ -876,70 +714,24 @@ export class TankScene {
   /** 超軽量: the ripples step at most twice a frame, the caustics are redrawn every other frame and the light
    * shafts take half the steps */
   private lite = false;
-  private causTick = 0;
-  private shaftMat: ShaderMaterial | null = null;
   setLite(on: boolean): void {
     this.lite = on;
-    const m = this.shaftMat;
-    if (m && ('SHAFT_N' in m.defines) !== on) {
-      if (on) m.defines.SHAFT_N = 4; else delete m.defines.SHAFT_N;
-      m.needsUpdate = true;
-    }
-  }
-
-  private stepWater(dt: number): void {
-    if (!this.preset.tankWaterHz) { this.drops.length = 0; return; }
-    this.waterAcc += dt;
-    if (this.waterAcc < 1 / this.preset.tankWaterHz) return;
-    dt = this.waterAcc; this.waterAcc = 0;
-    this.time += dt;
-    this.U.uTime.value = this.time;
-    this.jetU.fill(0); this.jetValues.fill(0);
-    this.equipment.flows.slice(0, 4).forEach((flow, i) => {
-      this.jetU.set([flow.position.x, flow.position.z, flow.direction.x, flow.direction.z], i * 4);
-      this.jetValues.set([Math.min(1, flow.flowRate / 600), flow.radius], i * 2);
-    });
-    // each wave's height now: its own slow cycle, scaled by how lively the tank is
-    const swing = 0.35 + 0.55 * this.turb;
-    this.waves.forEach((W, i) => {
-      this.ampU[i] = W.a * Math.max(0.1, 1 + swing * (0.6 * Math.sin(W.f1 * this.time + W.p1) + 0.4 * Math.sin(W.f2 * this.time + W.p2)))
-        * this.waves_ * (W.short ? 0.3 + 1.4 * this.turb : 1);
-    });
-    // now and then a tiny gust somewhere
-    for (this.gustAcc += dt * 0.4 * this.turb; this.gustAcc >= 1; this.gustAcc -= 1)
-      this.addRipple((Math.random() * 2 - 1) * TX * 0.9, (Math.random() * 2 - 1) * TZ * 0.9, (Math.random() < 0.5 ? -1 : 1) * 0.3, 0.02 + 0.03 * Math.random());
-    if (!this.gpu || !this.sim || !this.surfMat || !this.surfRT || !this.causRT) { this.drops.length = 0; return; }
-    // Cap catch-up work as well as the scene's water update frequency.
-    this.simAcc = Math.min(this.simAcc + dt, 0.1);
-    for (let steps = 0; this.simAcc >= 1 / 60 && steps < (this.lite ? 2 : 6); steps++, this.simAcc -= 1 / 60) {
-      for (let i = 0; i < 8; i++) this.dropU.set(this.drops.length ? this.drops.shift()! : [0, 0, 1, 0], i * 4);
-      this.gpu.compute();
-    }
-    if (this.lite) this.simAcc = Math.min(this.simAcc, 1 / 60);
-    this.U.uSim.value = this.gpu.getCurrentRenderTarget(this.sim).texture;
-    this.gpu.doRenderTarget(this.surfMat, this.surfRT);
-    // redraw the caustics (the lite tank every other frame)
-    if (this.lite && (this.causTick++ & 1)) return;
-    const gl = this.gl, prevRT = gl.getRenderTarget(), prevClear = new Color(), prevAlpha = gl.getClearAlpha();
-    gl.getClearColor(prevClear);
-    gl.setRenderTarget(this.causRT);
-    gl.setClearColor(0x000000, 0);
-    gl.clear();
-    gl.render(this.causScene, this.flatCam);
-    gl.setClearColor(prevClear, prevAlpha);
-    gl.setRenderTarget(prevRT);
+    this.water.lite = on;
+    this.applyPassOptions();
   }
 
   private updateEquipmentLighting(): void {
     const level = Math.min(1.5, this.equipment.lightLevel);
-    this.U.uLampCol.value.setRGB(0.87, 0.96, 1.0).multiplyScalar(3 * level);
-    const lamp = [...this.equipment.devices.values()].find((d) => (d.kind === 'ledLight' || d.kind === 'lightFixture') && d.powered);
+    (this.U.uLampCol.value as Color).setRGB(LAMP_RGB[0], LAMP_RGB[1], LAMP_RGB[2]).multiplyScalar(3 * level);
+    let lamp: Object3D | null = null;
+    for (const d of this.equipment.devices.values()) if ((d.kind === 'ledLight' || d.kind === 'lightFixture') && d.powered) { lamp = d; break; }
     if (lamp) {
-      lamp.localToWorld(this.U.uLampPosition.value.set(0, -0.01, 0));
-      this.aquariumRoot.worldToLocal(this.U.uLampPosition.value);
-      this.U.uLampAxis.value.set(1, 0, 0).transformDirection(lamp.matrixWorld);
-      this.lampLight.position.copy(this.U.uLampPosition.value).add(new Vector3(0, TANK_OFFSET_Y + 0.035, 0));
-      this.lampLight.target.position.set(this.U.uLampPosition.value.x, TANK_OFFSET_Y, this.U.uLampPosition.value.z);
+      const lp = this.U.uLampPosition.value as Vector3;
+      lamp.localToWorld(lp.set(0, -0.01, 0));
+      this.aquariumRoot.worldToLocal(lp);
+      (this.U.uLampAxis.value as Vector3).set(1, 0, 0).transformDirection(lamp.matrixWorld);
+      this.lampLight.position.copy(lp).add(this.aquariumRoot.position).add(this.lampOffset);
+      this.lampLight.target.position.set(this.aquariumRoot.position.x + lp.x, this.aquariumRoot.position.y, this.aquariumRoot.position.z + lp.z);
     }
     this.lampLight.intensity = 1.8 * level;
     this.lighting.sunIntensity = 2.4 * level;
@@ -948,7 +740,8 @@ export class TankScene {
   /** Look at the service side without changing device placement. */
   focusEquipmentRear(): void {
     this.view = 'tank';
-    this.startCamera(new Vector3(-0.85, TANK_OFFSET_Y + 0.32, -1.05), new Vector3(0, TANK_OFFSET_Y - 0.08, 0));
+    const origin = this.aquariumRoot.position;
+    this.startCamera(new Vector3(origin.x - this.dimensions.width * 1.1, TANK_OFFSET_Y + 0.32, origin.z - 1.05), new Vector3(origin.x, TANK_OFFSET_Y - 0.08, origin.z));
   }
 
   /**
@@ -983,6 +776,7 @@ export class TankScene {
   /** Hang the tools on the shelf. */
   setShelfTools(list: ShelfTool[]): void {
     this.shelf.setTools(list);
+    this.probe.markDirty();
   }
 
   pickTool(ndcX: number, ndcY: number): string | null {
@@ -1008,16 +802,16 @@ export class TankScene {
     this.view = 'tank';
     this.camT = 1;
     this.frameTank();
-    this.camCur.t.set(0, TANK_OFFSET_Y + 0.12, 0);
-    if (this.controls) { this.controls.enabled = this.viewInputEnabled; this.controls.target.set(0, TANK_OFFSET_Y + 0.12, 0); this.controls.update(); }
+    this.camCur.t.set(this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.12, this.aquariumRoot.position.z);
+    if (this.controls) { this.controls.enabled = this.viewInputEnabled; this.controls.target.set(this.aquariumRoot.position.x, TANK_OFFSET_Y + 0.12, this.aquariumRoot.position.z); this.controls.update(); }
   }
 
   focusTank(): void {
     if (this.view === 'tank') return;
     this.view = 'tank';
     const hfov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
-    const dist = (TANK_W / 0.66) / (2 * Math.tan(hfov / 2));
-    this.startCamera(new Vector3(dist * 0.35, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95), new Vector3(0, TANK_OFFSET_Y + 0.12, 0));
+    const dist = (this.dimensions.width / 0.66) / (2 * Math.tan(hfov / 2));
+    this.startCamera(new Vector3(dist * 0.35, TANK_OFFSET_Y + 0.16 + dist * 0.28, dist * 0.95).add(new Vector3(this.aquariumRoot.position.x, 0, this.aquariumRoot.position.z)), this.aquariumRoot.position.clone().add(new Vector3(0, 0.12, 0)));
   }
 
   private startCamera(p: Vector3, t: Vector3): void {
@@ -1046,50 +840,74 @@ export class TankScene {
 
   /** Everything stands still (the edit screen): only the camera moves. */
   updateFrozen(): void {
+    if (!this.aquariumRoot.visible) return;
     this.equipment.updateFrozen(this.camera);
     this.updateEquipmentLighting();
+    this.updateProbe(1 / 60);
+    this.sortOverlay(1 / 60);
+    this.lampLight.shadow.needsUpdate = true;
     if (this.camT < 1) this.stepCamera(1 / 60);
     else if (this.view === 'tank') this.controls?.update();
   }
 
+  private updateProbe(dt: number): void {
+    const o = this.aquariumRoot.position;
+    this.probe.update(this.gl, this.scene, this.aquariumRoot, o.x, o.y + this.dimensions.waterHeight, o.z, dt);
+  }
+
   update(dt: number, simScale: number): void {
+    if (!this.aquariumRoot.visible) { this.controls?.update(); return; }
     if (this.camT < 1) this.stepCamera(dt);
     else if (this.view === 'shelf') this.camera.lookAt(this.camCur.t);
     else this.controls?.update();
     this.equipment.update(dt, this.camera, this.gl.domElement.height);
     this.updateEquipmentLighting();
-    this.turb = Math.min(1, 0.15 + this.equipment.flows.reduce((a, f) => a + f.flowRate / 1800, 0));
-    this.stepWater(dt);
+    let flow = 0;
+    for (const f of this.equipment.flows) flow += f.flowRate;
+    this.turb = Math.min(1, 0.15 + flow / 1800);
+    this.water.turb = this.turb; this.water.swell = this.waves_;
+    this.water.step(dt, this.equipment.flows);
+    this.updateProbe(dt);
+    this.sortOverlay(dt);
+    this.stepShadows();
+    const now = Date.now(), ctx = this.driverCtx;
+    ctx.simScale = simScale; ctx.nowMs = now; ctx.canBurrow = this.sandTop > 0;
     for (const o of this.occupants) {
       const d = o.driver;
+      const S = o.ind.length_mm / 1000;
       if (!d.busy) {
         const r = o.ind.rng.next();
-        const S = o.ind.length_mm / 1000;
-        if (r < 0.55) d.setIntent({ id: Date.now(), kind: 'rest', urgency: 0, seconds: 6 + o.ind.rng.next() * 20 });
+        if (r < 0.55) d.setIntent({ id: now, kind: 'rest', urgency: 0, seconds: 6 + o.ind.rng.next() * 20 });
         else if (r < 0.9) {
-          const tx = (o.ind.rng.next() - 0.5) * (TANK_W - 4 * S), tz = (o.ind.rng.next() - 0.5) * (TANK_D - 3 * S);
-          d.setIntent({ id: Date.now(), kind: 'wander', urgency: 0.3, seconds: 8, target: new Vector3(tx, 0, tz) });
-        } else d.setIntent({ id: Date.now(), kind: 'special', urgency: 0, seconds: 3, param: 'yawn' });
+          const tx = (o.ind.rng.next() - 0.5) * (this.dimensions.width - 4 * S), tz = (o.ind.rng.next() - 0.5) * (this.dimensions.depth - 3 * S);
+          d.setIntent({ id: now, kind: 'wander', urgency: 0.3, seconds: 8, target: new Vector3(tx, 0, tz) });
+        } else d.setIntent({ id: now, kind: 'special', urgency: 0, seconds: 3, param: 'yawn' });
       }
-      const S = o.ind.length_mm / 1000;
-      const hx = TANK_W / 2 - 0.01 - S * 0.55, hz = TANK_D / 2 - 0.01 - S * 0.55;
-      d.update(dt, { floor: this.floor, player: new Vector3(0, 1, 2), simScale, nowMs: Date.now(), bounds: { minX: -hx, maxX: hx, minZ: -hz, maxZ: hz }, canBurrow: this.sandTop > 0 });
+      const hx = Math.max(0.015, this.dimensions.width / 2 - 0.01 - S * 0.55), hz = Math.max(0.015, this.dimensions.depth / 2 - 0.01 - S * 0.55);
+      const b = this.bounds;
+      b.minX = -hx; b.maxX = hx; b.minZ = -hz; b.maxZ = hz;
+      (ctx.player as Vector3).set(0, 1, 2);
+      d.update(dt, ctx);
       if (o.hero) o.hero.update(this.camera, d.openings ?? { mouth: 0, gill: 0 });
       o.ind.pos.x = Math.max(-hx, Math.min(hx, o.ind.pos.x));
       o.ind.pos.z = Math.max(-hz, Math.min(hz, o.ind.pos.z));
       o.root.position.x = Math.max(-hx, Math.min(hx, o.root.position.x));
       o.root.position.z = Math.max(-hz, Math.min(hz, o.root.position.z));
     }
+    const hx = this.dimensions.width / 2 - 0.01, hz = this.dimensions.depth / 2 - 0.01;
+    this.contacts.step(dt * simScale, this.occupants, { floor: this.floor, bounds: { minX: -hx, maxX: hx, minZ: -hz, maxZ: hz } });
   }
 
   dispose(): void {
     this.equipment.dispose();
     this.deactivate();
     this.clearOccupants();
-    this.gpu?.dispose();
-    this.flatWater.dispose();
-    this.surfRT?.dispose();
-    this.causRT?.dispose();
+    this.water.dispose();
+    this.passes.dispose();
+    this.substrate.dispose();
+    this.motes.dispose();
+    this.probe.dispose();
+    this.glassEdgeMat.dispose();
   }
 }
 

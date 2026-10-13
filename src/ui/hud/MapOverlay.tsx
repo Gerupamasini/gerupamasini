@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import type { App } from '../../app/App';
 import { t, ui } from '../store';
 import { makeBaseImage, WaterLayer, SUB_COLORS } from './mapImages';
+import { reedMapColour } from '../../world/ReedBed';
 import { CardHead } from '../common/Icons';
 
 const PX = 720;
@@ -87,6 +88,9 @@ export function MapOverlay({ app }: { app: App }) {
     [SUB_COLORS[0], t('map.legend.sand')], [SUB_COLORS[1], t('map.legend.muddy')], [SUB_COLORS[2], t('map.legend.mud')],
     ['rgb(40,120,150)', t('map.legend.water')], ['rgb(70,150,165)', t('map.legend.pool')],
   ];
+  // the levee and its reeds, where the flat has them
+  if (app.world?.riprap) legend.push([SUB_COLORS[5], t('map.legend.rock')]);
+  if (app.world?.reeds) legend.push([`rgb(${reedMapColour(app.world.season).map((c) => c | 0).join(',')})`, t('map.legend.reeds')]);
   return (
     <div class="map-overlay" onClick={(e) => { if (e.target === e.currentTarget) app.toggleMap(); }}>
       <div class="map-card glass">

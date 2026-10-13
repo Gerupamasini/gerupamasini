@@ -5,12 +5,13 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Rng, hashInts } from '../core/Rng';
 import { oysterEnv } from '../creatures/oyster/material';
 import type { Terrain } from './Terrain';
+import { LeveeLine, type LeveeDef, type LeveeSample } from './LeveeLine';
 
 /**
  * 捨て石・護岸: the hard ground oysters need on a sandy, muddy flat. Quarried stones (割石) laid along the inner toe
- * of both levees where they run down into the water, heaped over the levees' drowned tips, and a few old rubble
- * mounds out on the low flat. Stones are a handful of shared shapes drawn instanced, in chunks along the shore so
- * each chunk can be culled and given its level of detail.
+ * of the levee where it runs down into the water, heaped over its drowned tips, and an apron of boulders along its
+ * whole foot (the levee's line comes from the map: see LeveeLine). Stones are a handful of shared shapes drawn
+ * instanced, in chunks along the shore so each chunk can be culled and given its level of detail.
  *
  * The stones are also what the oyster placement reads: every stone's upward-facing faces in the oyster zone (about
  * mean sea level down to low water) are offered as attachment sites, with the face's normal.
@@ -255,7 +256,10 @@ export class Riprap {
   private readonly top = new Map<number, number>();
   private readonly cell = 0.25;
 
-  constructor(private readonly terrain: Terrain, seed: number) {
+  private readonly levee: LeveeLine;
+
+  constructor(private readonly terrain: Terrain, seed: number, levee: LeveeDef) {
+    this.levee = new LeveeLine(levee);
     for (let i = 0; i < PROTOS; i++) this.protos.push({ hi: makeRockGeometry(seed * 13 + i, 1, 3), lo: makeRockGeometry(seed * 13 + i, 1, 1), shape: new RockShape(seed * 13 + i) });
     for (let i = 0; i < ROUND_PROTOS; i++) this.protos.push({ hi: makeRockGeometry(seed * 29 + i + 101, 1, 3, true), lo: makeRockGeometry(seed * 29 + i + 101, 1, 1, true), shape: new RockShape(seed * 29 + i + 101, true) });
     const rng = new Rng(hashInts(seed, 0x7a9));
@@ -265,7 +269,7 @@ export class Riprap {
     this.rasterTops();
   }
 
-  /** where the stones go: along both levees' inner toes and over their drowned tips (nothing out on the open flat) */
+  /** where the stones go: along the levee's inner toe and over its drowned tips (nothing out on the open flat) */
   private layRevetment(rng: Rng): void {
     const t = this.terrain;
     const add = (x: number, z: number, size: number, sink: number, tilt = 0.25) => {
@@ -281,25 +285,26 @@ export class Riprap {
       const m = new Matrix4().compose(pos, q, s);
       this.stones.push({ proto: rng.int(0, PROTOS - 1), m, inv: m.clone().invert(), pos, r: size * 0.55, chunk: -1 });
     };
-    // the levees: find, along z, where the inner face crosses the oyster zone; a band of stones up the slope
-    for (const side of [-1, 1]) {
-      for (let z = -12; z < 128; z += rng.range(0.55, 0.85)) {
-        // walk from the flat outward to where the face rises
-        let xFoot = side * 128;
-        for (let ax = 124; ax < 146; ax += 0.25) {
-          const h0 = t.heightAt(side * ax, z), h1 = t.heightAt(side * (ax + 1), z);
-          if (h1 - h0 > 0.12) { xFoot = side * ax; break; }
-        }
-        // two or three courses up the face, the lowest half in the mud
-        const courses = rng.int(3, 5);
-        for (let c = 0; c < courses; c++) {
-          const x = xFoot + side * (c * 0.7 - 0.6 + rng.range(-0.2, 0.2));
-          add(x, z + rng.range(-0.2, 0.2), rng.range(0.5, 0.95) * (c === 0 ? 1.1 : 0.9), c === 0 ? 0.25 : 0.12);
-        }
+    // the levee's inner face where its foot stands in the oyster zone: two to four courses of stone up the slope
+    const lv = this.levee;
+    for (let s = 2; s < lv.length - 2; s += rng.range(0.55, 0.85)) {
+      const p = lv.at(s);
+      const foot = this.footAt(p);
+      if (!foot || foot.h > 0.5) continue;
+      const courses = rng.int(3, 5);
+      for (let c = 0; c < courses; c++) {
+        const d = foot.d - (c * 0.7 - 0.6 + rng.range(-0.2, 0.2));
+        const j = rng.range(-0.2, 0.2);
+        add(p.x + p.nx * d + p.tx * j, p.z + p.nz * d + p.tz * j, rng.range(0.5, 0.95) * (c === 0 ? 1.1 : 0.9), c === 0 ? 0.25 : 0.12);
       }
-      // the drowned tip of the levee: a heap
-      for (let i = 0; i < 70; i++) {
-        const z = rng.range(118, 152), x = side * rng.range(136, 152);
+    }
+    // the drowned tips of the levee: a heap each
+    const R = lv.reach;
+    for (const tipS of [0, lv.length]) {
+      for (let i = 0; i < 80; i++) {
+        const p = lv.at(tipS === 0 ? rng.range(0, 34) : lv.length - rng.range(0, 34));
+        const d = rng.range(-R, R) * 0.8;
+        const x = p.x + p.nx * d, z = p.z + p.nz * d;
         if (t.heightAt(x, z) < -1.9) continue;
         add(x, z, rng.range(0.5, 1.0), 0.2, 0.5);
       }
@@ -307,7 +312,23 @@ export class Riprap {
   }
 
   /**
-   * ゴロタ場: an apron of water-worn boulders along both levees' toes, the whole length they stand, thick at the
+   * The foot of the levee's inner face across from a point of its centre line: walking in toward the crest from just
+   * past the face's reach (so the edge of the sand berm in front of it is not taken for the levee), where the ground
+   * starts to rise. Its distance out from the centre line and the ground's height there.
+   */
+  private footAt(p: LeveeSample): { d: number; h: number } | null {
+    const t = this.terrain;
+    const R = this.levee.reach;
+    for (let d = R + 1.5; d > this.levee.def.crest_half_m; d -= 0.25) {
+      const x0 = p.x + p.nx * d, z0 = p.z + p.nz * d, x1 = p.x + p.nx * (d - 1), z1 = p.z + p.nz * (d - 1);
+      if (!t.inside(x0, z0, 1) || !t.inside(x1, z1, 1)) return null;
+      if (t.heightAt(x1, z1) - t.heightAt(x0, z0) > 0.12) return { d, h: t.heightAt(x0, z0) };
+    }
+    return null;
+  }
+
+  /**
+   * ゴロタ場: an apron of water-worn boulders along the levee's inner toe, the whole length they stand, thick at the
    * foot and thinning out a few metres onto the flat; a few more lie up the lowest part of the face.
    */
   private layApron(rng: Rng): void {
@@ -324,22 +345,21 @@ export class Riprap {
       const m = new Matrix4().compose(pos, q, sc);
       this.stones.push({ proto: PROTOS + rng.int(0, ROUND_PROTOS - 1), m, inv: m.clone().invert(), pos, r: size * 0.55, chunk: -1 });
     };
-    for (const side of [-1, 1]) {
-      for (let z = -142; z < 118; z += rng.range(0.24, 0.4)) {
-        // the foot of the face: where the ground starts rising toward the crest
-        let xFoot = NaN;
-        for (let ax = 124; ax < 147; ax += 0.25) {
-          if (t.heightAt(side * (ax + 1), z) - t.heightAt(side * ax, z) > 0.12) { xFoot = side * ax; break; }
-        }
-        if (Number.isNaN(xFoot)) continue;
-        // out onto the flat: dense at the foot, sparse 6 m out (an exponential fall-off)
-        const u = -Math.log(1 - rng.next() * 0.985) * 2.5;
-        if (u > 8) continue;
-        const x = xFoot - side * (0.3 + u);
-        const big = u < 1.2 && rng.chance(0.35);
-        add(x + rng.range(-0.15, 0.15), z, (big ? rng.range(0.55, 0.8) : rng.range(0.28, 0.5)) * (1 - 0.35 * Math.min(1, u / 8)), 0.32);
-        // and some up the lowest part of the face
-        if (rng.chance(0.35)) add(xFoot + side * rng.range(0.2, 1.4), z + rng.range(-0.2, 0.2), rng.range(0.3, 0.55), 0.3);
+    const lv = this.levee;
+    for (let s = 1; s < lv.length - 1; s += rng.range(0.24, 0.4)) {
+      const p = lv.at(s);
+      const foot = this.footAt(p);
+      if (!foot) continue;
+      // out onto the flat: dense at the foot, sparse 6 m out (an exponential fall-off)
+      const u = -Math.log(1 - rng.next() * 0.985) * 2.5;
+      if (u > 8) continue;
+      const d = foot.d + 0.3 + u, j = rng.range(-0.15, 0.15);
+      const big = u < 1.2 && rng.chance(0.35);
+      add(p.x + p.nx * d + p.tx * j, p.z + p.nz * d + p.tz * j, (big ? rng.range(0.55, 0.8) : rng.range(0.28, 0.5)) * (1 - 0.35 * Math.min(1, u / 8)), 0.32);
+      // and some up the lowest part of the face
+      if (rng.chance(0.35)) {
+        const d2 = foot.d - rng.range(0.2, 1.4), j2 = rng.range(-0.2, 0.2);
+        add(p.x + p.nx * d2 + p.tx * j2, p.z + p.nz * d2 + p.tz * j2, rng.range(0.3, 0.55), 0.3);
       }
     }
   }
@@ -353,22 +373,22 @@ export class Riprap {
     const t = this.terrain, rng = new Rng(hashInts(seed, 0x1ee));
     const out: ReefTerrainSite[] = [];
     const rock = t.palette.indexOf('rock');
-    for (const side of [-1, 1]) {
-      for (let z = -60; z < 150; z += spacing) {
-        for (let ax = 130; ax < 152; ax += spacing) {
-          const x = side * ax;
-          if (!t.inside(x, z, 1)) continue;
-          const h = t.heightAt(x, z);
-          if (h > top || h < bottom) continue;
-          if (t.substrateIndexAt(x, z) !== rock) continue;
-          const n = t.normalAt(x, z, new Vector3());
-          if (n.y > 0.97) continue;                          // the crest: dry, walked on
-          // patchy, like the stones: thick runs and bare stretches
-          const patch = vnoise3(x / 6, 0.5, z / 6, 0x0b5) * 0.7 + vnoise3(x / 2, 1.5, z / 2, 0x0b6) * 0.3;
-          if (patch < 0.45) continue;
-          if (rng.next() < 0.35) continue;
-          out.push({ p: new Vector3(x + rng.range(-0.08, 0.08), h, z + rng.range(-0.08, 0.08)), n, room: 0.32 });
-        }
+    const lv = this.levee, R = lv.reach + 1;
+    for (let s = 0; s < lv.length; s += spacing) {
+      const p = lv.at(s);
+      for (let d = -R; d < R; d += spacing) {
+        const x = p.x + p.nx * d, z = p.z + p.nz * d;
+        if (!t.inside(x, z, 1)) continue;
+        const h = t.heightAt(x, z);
+        if (h > top || h < bottom) continue;
+        if (t.substrateIndexAt(x, z) !== rock) continue;
+        const n = t.normalAt(x, z, new Vector3());
+        if (n.y > 0.97) continue;                          // the crest: dry, walked on
+        // patchy, like the stones: thick runs and bare stretches
+        const patch = vnoise3(x / 6, 0.5, z / 6, 0x0b5) * 0.7 + vnoise3(x / 2, 1.5, z / 2, 0x0b6) * 0.3;
+        if (patch < 0.45) continue;
+        if (rng.next() < 0.35) continue;
+        out.push({ p: new Vector3(x + rng.range(-0.08, 0.08), h, z + rng.range(-0.08, 0.08)), n, room: 0.32 });
       }
     }
     for (const site of out) site.p.y = t.heightAt(site.p.x, site.p.z) + 0.005;

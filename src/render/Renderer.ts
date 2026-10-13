@@ -1,4 +1,4 @@
-import { CustomToneMapping, PCFSoftShadowMap, SRGBColorSpace, Vector2, WebGLRenderer } from 'three';
+import { CustomToneMapping, PCFShadowMap, SRGBColorSpace, Vector2, WebGLRenderer } from 'three';
 import { QUALITY_PRESETS, savedQualityHint, type Quality } from '../core/Settings';
 import { DynamicResolution, type DynResConfig } from './DynamicResolution';
 import { GpuTimer } from './GpuTimer';
@@ -52,7 +52,7 @@ export class GameRenderer {
     installToneMap();
     this.gl.toneMapping = CustomToneMapping;
     this.gl.toneMappingExposure = 0.5;
-    this.gl.shadowMap.type = PCFSoftShadowMap;
+    this.gl.shadowMap.type = PCFShadowMap;
     this.caps = { webgl2: this.gl.capabilities.isWebGL2, floatRT: this.gl.extensions.has('EXT_color_buffer_float') };
     let name = '';
     try {

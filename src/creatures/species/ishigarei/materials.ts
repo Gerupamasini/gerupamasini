@@ -1,5 +1,6 @@
 import { Color, DataTexture, DoubleSide, FrontSide, HalfFloatType, LinearFilter, MeshPhysicalMaterial, RedFormat, Vector3, Vector4, type IUniform, type WebGLProgramParametersWithUniforms } from 'three';
 import { AMH_UNIFORMS, ENV_INJECT, HELPERS, SUN_INJECT } from '../amimehagi/materials';
+import { BED_SAND_GLSL } from '../../../render/tank/Substrate';
 import { EYES, FINS, OPERC, S_END, dorsalEdge, ventralEdge, thickBot, thickTop } from './anatomy.js';
 
 /**
@@ -42,20 +43,22 @@ function glslFn(name: string, fn: (x: number) => number, x0: number, x1: number,
 export class GroundPatch {
   static readonly N = 48;
   readonly texture: DataTexture;
-  readonly uniforms: { uGround: IUniform<DataTexture>; uGroundRect: IUniform<Vector4>; uGroundSink: IUniform<number> };
+  readonly uniforms: { uGround: IUniform<DataTexture>; uGroundRect: IUniform<Vector4>; uGroundSink: IUniform<number>; uGroundFlat: IUniform<number> };
   private cx = Number.NaN;
   private cz = Number.NaN;
+  private cref = 0;
   constructor() {
     const N = GroundPatch.N;
     this.texture = new DataTexture(new Uint16Array(N * N), N, N, RedFormat, HalfFloatType);
     this.texture.minFilter = this.texture.magFilter = LinearFilter;
     this.texture.needsUpdate = true;
-    this.uniforms = { uGround: { value: this.texture }, uGroundRect: { value: new Vector4(0, 0, 1, -1e3) }, uGroundSink: { value: 0 } };
+    this.uniforms = { uGround: { value: this.texture }, uGroundRect: { value: new Vector4(0, 0, 1, -1e3) }, uGroundSink: { value: 0 }, uGroundFlat: { value: 0 } };
   }
 
-  /** resample when the fish has moved away from the patch's centre (size: side of the square, m) */
+  /** resample when the fish has moved away from the patch's centre or the ground under it has changed (a tank's
+   *  substrate taken out or put in); size: side of the square, m */
   update(x: number, z: number, size: number, heightAt: (x: number, z: number) => number, force = false): void {
-    if (!force && Math.hypot(x - this.cx, z - this.cz) < size * 0.1) return;
+    if (!force && Math.hypot(x - this.cx, z - this.cz) < size * 0.1 && Math.abs(heightAt(this.cx, this.cz) - this.cref) < 0.0005) return;
     const N = GroundPatch.N, data = this.texture.image.data as Uint16Array;
     const x0 = x - size * 0.5, z0 = z - size * 0.5, ref = heightAt(x, z);
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
@@ -64,7 +67,7 @@ export class GroundPatch {
     this.texture.needsUpdate = true;
     const t = size / (N - 1);
     this.uniforms.uGroundRect.value.set(x0 - t * 0.5, z0 - t * 0.5, 1 / (size + t), ref);
-    this.cx = x; this.cz = z;
+    this.cx = x; this.cz = z; this.cref = ref;
   }
 
   /** no ground (a preview, a viewer's studio): nothing is clamped */
@@ -86,6 +89,7 @@ const GROUND_GLSL = /* glsl */ `
 uniform sampler2D uGround;
 uniform vec4 uGroundRect;   // x0, z0, 1 / size, reference height (w < −100: no ground)
 uniform float uGroundSink;  // burial: the limit goes down into the sediment
+uniform float uGroundFlat;  // burial: the fish lies in the sediment, its thickness above the ground mostly gone
 float ishGroundAt(vec2 xz) {
   vec2 t = (xz - uGroundRect.xy) * uGroundRect.z;
   if (uGroundRect.w < -100.0 || any(lessThan(t, vec2(0.0))) || any(greaterThan(t, vec2(1.0)))) return -1e3;
@@ -97,11 +101,18 @@ float ishGroundClamp(vec3 wp, float lim) {
   float gap = wp.y - g;
   return gap < lim ? g + lim * exp((gap - lim) / lim) : wp.y;
 }
+// buried, what stood above the ground is pressed into the sediment, all but a low mound; keep: what stays up
+// (the eyes on their turrets)
+float ishGroundBury(vec3 wp, float y, float lim, float keep) {
+  float g = ishGroundAt(wp.xz) - uGroundSink;
+  if (g < -100.0) return y;
+  return y - max(y - g - lim, 0.0) * 0.7 * uGroundFlat * (1.0 - keep);
+}
 `;
 
 const PROJECT_ON_GROUND = /* glsl */ `
 vec4 ishW = modelMatrix * vec4(transformed, 1.0);
-ishW.y = ishGroundClamp(ishW.xyz, ISH_LIM);
+ishW.y = ishGroundBury(ishW.xyz, ishGroundClamp(ishW.xyz, ISH_LIM), ISH_LIM, ishKeep);
 vWPos = ishW.xyz;
 vec4 mvPosition = viewMatrix * ishW;
 gl_Position = projectionMatrix * mvPosition;
@@ -116,6 +127,8 @@ uniform float uBreath;
 varying vec4 vFish;
 varying vec4 vMask;
 varying vec3 vWPos;
+const vec3 ihEyeV0 = vec3(${f(EYES[0].s)}, ${f(EYES[0].x)}, ${f(EYES[0].r)});
+const vec3 ihEyeV1 = vec3(${f(EYES[1].s)}, ${f(EYES[1].x)}, ${f(EYES[1].r)});
 ${GROUND_GLSL}
 `;
 
@@ -161,18 +174,41 @@ const vec3 ihEye0 = vec3(${f(EYES[0].s)}, ${f(EYES[0].x)}, ${f(EYES[0].r)});
 const vec3 ihEye1 = vec3(${f(EYES[1].s)}, ${f(EYES[1].x)}, ${f(EYES[1].r)});
 `;
 
+/** the sediment over the fish (after PATTERN; needs uCover): the tank's bed grain for grain where there is one */
+const SAND_GLSL = /* glsl */ `
+uniform float uBury;
+uniform vec3 uCover;       // colour of the sediment over it (the ground's, as drawn)
+uniform float uBedOn;      // 1: the ground is a bed drawn by BED_SAND_GLSL (the home tank)
+uniform vec3 uBedOrigin;   // world position of that bed's frame
+uniform float uBedSilt;    // the silt in it where the fish lies
+${BED_SAND_GLSL}
+// the sediment at world position wp (dF: how much of the fine detail the pixel resolves), and its roughness
+vec3 ihSand(vec3 wp, float dF, out float rough) {
+  if (uBedOn > 0.5) {
+    float glint; vec3 glintW;
+    rough = mix(0.88, 0.62, uMud);
+    return sbBedColor(wp.xz - uBedOrigin.xz, uBedSilt, glint, glintW);
+  }
+  rough = 0.8;
+  vec2 mm = wp.xz * 1000.0;
+  vec3 g = ihVoro(mm / 0.35);
+  vec3 sand = uCover * (0.82 + 0.3 * ihN(mm * 0.05) + 0.12 * (g.z - 0.5));
+  sand = mix(sand, sand * 1.35 + 0.04, step(0.88, g.z) * (1.0 - smoothstep(0.25, 0.35, g.x)) * dF);
+  return mix(sand, sand * 0.45, step(0.965, g.z) * (1.0 - smoothstep(0.25, 0.35, g.x)) * dF);
+}
+`;
+
 const SKIN_FRAG_PARS = /* glsl */ `
 varying vec4 vFish;
 varying vec4 vMask;
 uniform vec3 uTint;        // the individual's colour
 uniform vec3 uGroundTint;  // the substrate it lies on (background matching of the ground tissue)
 uniform float uMelanin;    // melanophores: expanded (dark, > 1) … contracted (pale, < 1)
-uniform float uBury;
-uniform vec3 uCover;       // colour of the sediment over it
 uniform float uMouthOpen;
 uniform float uBreath;
 uniform float uSpots;      // how strongly the white spots show (individual)
 ${PATTERN}
+${SAND_GLSL}
 `;
 
 /** colour, relief, roughness, film and translucency of the skin at vFish (mm on the animal) */
@@ -298,13 +334,12 @@ float ihRough = 0.45, ihCoat = 0.25, ihThin = 0.0, ihHgt = 0.0, ihCover = 0.0;
     // grains of the sediment in world millimetres (they do not move with the fish's skin)
     vec2 mm = vWPos.xz * 1000.0;
     vec3 g = ihVoro(mm / 0.35);
-    vec3 sand = uCover * (0.82 + 0.3 * ihN(mm * 0.05) + 0.12 * (g.z - 0.5));
-    sand = mix(sand, sand * 1.35 + 0.04, step(0.88, g.z) * (1.0 - smoothstep(0.25, 0.35, g.x)) * dF);
-    sand = mix(sand, sand * 0.45, step(0.965, g.z) * (1.0 - smoothstep(0.25, 0.35, g.x)) * dF);
+    float bedRough;
+    vec3 sand = ihSand(vWPos, dF, bedRough);
     float dust = smoothstep(pri - 0.45, pri - 0.05, uBury) * step(0.62, g.z) * (1.0 - smoothstep(0.22, 0.32, g.x));
     float k = max(ihCover, dust * 0.85);
     alb = mix(alb, sand, k);
-    ihRough = mix(ihRough, 0.8, k);
+    ihRough = mix(ihRough, bedRough, k);
     ihCoat *= 1.0 - k;
     ihHgt *= 1.0 - k;
   }
@@ -354,6 +389,13 @@ export interface IshSkinUniforms {
   uBreath: IUniform<number>;
   uSpots: IUniform<number>;
   uRelief: IUniform<number>;
+  /** the tank's bed under the fish (setBed): its sand shader's uniforms */
+  uBedOn: IUniform<number>;
+  uBedOrigin: IUniform<Vector3>;
+  uBedSilt: IUniform<number>;
+  uSandA: IUniform<Color>; uSandB: IUniform<Color>; uSandC: IUniform<Color>; uSandD: IUniform<Color>;
+  uSandMean: IUniform<Color>; uSiltCol: IUniform<Color>;
+  uGrainScale: IUniform<number>; uMud: IUniform<number>; uBedTop: IUniform<number>; uGlintAmt: IUniform<number>;
 }
 
 function skinMaterial(u: IshSkinUniforms, ground: GroundPatch['uniforms'], low: boolean): MeshPhysicalMaterial {
@@ -365,7 +407,15 @@ function skinMaterial(u: IshSkinUniforms, ground: GroundPatch['uniforms'], low: 
     Object.assign(shader.uniforms, AMH_UNIFORMS, u, ground);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${SKIN_VERT_PARS}`)
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFish = aFish; vMask = aMask;\ntransformed += objectNormal * (aMask.x * uBreath * 0.00026);')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vFish = aFish; vMask = aMask;
+transformed += objectNormal * (aMask.x * uBreath * 0.00026);
+// the eyes' turrets stand out of the sand over a buried fish
+float ishKeep = 0.0;
+for (int i = 0; i < 2; i++) {
+  vec3 E = i == 0 ? ihEyeV0 : ihEyeV1;
+  ishKeep = max(ishKeep, 1.0 - smoothstep(E.z * 1.3, E.z * 2.4, length(aFish.xy - E.xy)));
+}`)
       .replace('#include <project_vertex>', PROJECT_ON_GROUND);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${SKIN_FRAG_PARS}\nuniform float uRelief;`)
@@ -375,18 +425,20 @@ function skinMaterial(u: IshSkinUniforms, ground: GroundPatch['uniforms'], low: 
       .replace('#include <normal_fragment_maps>', SKIN_NORMAL)
       .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\n  material.clearcoat = ihCoat;\n#endif')
       .replace('#include <lights_fragment_begin>', SUN_INJECT)
-      .replace('#include <lights_fragment_maps>', `${ENV_INJECT}
+      .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+  vec3 ihIrr0 = iblIrradiance, ihRad0 = radiance;   // the scene's own ambient light: what the ground gets
+${ENV_INJECT.replace('#include <lights_fragment_maps>', '')}
   // a flatfish lies on the bed and takes the bed's light: the water's light field counts for less on its upper
-  // side, and on the sand over it hardly more than on the sand around it
-  iblIrradiance *= mix(0.4, 0.12, ihCover);
-  radiance *= mix(0.6, 0.25, ihCover);
+  // side, and the sand over it is lit as the sand around it is (the ground's ambient light only)
+  iblIrradiance = mix(iblIrradiance * 0.4, ihIrr0, ihCover);
+  radiance = mix(radiance * 0.6, ihRad0, ihCover);
 #ifdef USE_CLEARCOAT
   // the mucus film too: at grazing angles it would otherwise mirror the bright surface like a silver fish
   clearcoatRadiance *= mix(0.4, 0.2, ihCover);
 #endif`)
       .replace('#include <emissivemap_fragment>', SKIN_THIN);
   };
-  m.customProgramCacheKey = () => (low ? 'ishigarei-skin-low-v2' : 'ishigarei-skin-v2');
+  m.customProgramCacheKey = () => (low ? 'ishigarei-skin-low-v4' : 'ishigarei-skin-v4');
   return m;
 }
 
@@ -400,7 +452,7 @@ ${GROUND_GLSL}
 
 /** fins from their atlas coordinates: band (v) dorsal | anal | caudal | pectoral + pelvic, u along the base, v up the ray */
 const FIN_SURFACE = /* glsl */ `
-float ihFinThin = 1.0;
+float ihFinThin = 1.0, ihFinCover = 0.0, ihFinRough = 0.8;
 {
   float band = floor(vFinUv.y * 4.0);
   float v = fract(vFinUv.y * 4.0);
@@ -447,7 +499,12 @@ float ihFinThin = 1.0;
   // the base is fleshy where it joins the body
   alpha = mix(alpha, 0.85, 1.0 - smoothstep(0.0, 0.07, v));
   alpha *= smoothstep(0.0, 0.03, tipEnd - v);
-  // buried, the fins are under the sand with the body
+  // buried, the fins are under the sand first (the body's margins go next, the head last)
+  ihFinCover = smoothstep(0.1, 0.32, uBury * 1.12 + 0.12 * (ihN(vWPos.xz * 400.0) - 0.5) + 0.06 * (ihN(vWPos.xz * 2000.0) - 0.5));
+  if (ihFinCover > 0.0) {
+    col = mix(col, ihSand(vWPos, fine, ihFinRough), ihFinCover);
+    alpha = mix(alpha, smoothstep(0.0, 0.03, tipEnd - v), ihFinCover);
+  }
   diffuseColor = vec4(col, clamp(alpha, 0.0, 1.0));
 }
 `;
@@ -461,24 +518,30 @@ function finMaterial(u: IshSkinUniforms, ground: GroundPatch['uniforms']): MeshP
     Object.assign(shader.uniforms, AMH_UNIFORMS, u, ground);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${FIN_VERT_PARS}`)
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFinUv = uv;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFinUv = uv;\nfloat ishKeep = 0.0;')
       .replace('#include <project_vertex>', PROJECT_ON_GROUND);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec2 vFinUv;\nuniform vec3 uTint;\nuniform float uMelanin;\n${PATTERN}`)
+      .replace('#include <common>', `#include <common>\nvarying vec2 vFinUv;\nuniform vec3 uTint;\nuniform float uMelanin;\n${PATTERN}\n${SAND_GLSL}`)
       .replace('void main() {', `${HELPERS}\nvoid main() {`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${FIN_SURFACE}`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, ihFinRough, ihFinCover);')
       .replace('#include <lights_fragment_begin>', SUN_INJECT)
-      .replace('#include <lights_fragment_maps>', ENV_INJECT)
+      .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+  vec3 ihIrr0 = iblIrradiance, ihRad0 = radiance;
+${ENV_INJECT.replace('#include <lights_fragment_maps>', '')}
+  // sand over the fin is lit as the ground round it
+  iblIrradiance = mix(iblIrradiance, ihIrr0, ihFinCover);
+  radiance = mix(radiance, ihRad0, ihFinCover);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 {
   // thin living membrane: it scatters the light it is bathed in from both sides
   vec3 nW = inverseTransformDirection(normal, viewMatrix);
   vec3 vW = inverseTransformDirection(-normalize(vViewPosition), viewMatrix);
   float back = pow(clamp(dot(vW, amSunDir()), 0.0, 1.0), 4.0);
-  totalEmissiveRadiance += diffuseColor.rgb * ((amUnderwater(nW, 1.0) + amUnderwater(-nW, 1.0)) * 0.2 + amSunCol() * amSunThrough() * back * 0.1);
+  totalEmissiveRadiance += diffuseColor.rgb * ((amUnderwater(nW, 1.0) + amUnderwater(-nW, 1.0)) * 0.2 + amSunCol() * amSunThrough() * back * 0.1) * (1.0 - ihFinCover);
 }`);
   };
-  m.customProgramCacheKey = () => 'ishigarei-fin-v1';
+  m.customProgramCacheKey = () => 'ishigarei-fin-v3';
   return m;
 }
 
@@ -576,6 +639,10 @@ export class IshigareiLook {
       uTint: { value: new Color(...spec.tint) }, uGroundTint: { value: new Color(0.37, 0.37, 0.355) },
       uMelanin: { value: spec.melanin }, uBury: { value: 0 }, uCover: { value: new Color(0.37, 0.37, 0.355) },
       uMouthOpen: { value: 0 }, uBreath: { value: 0 }, uSpots: { value: spec.spots }, uRelief: { value: 1 },
+      uBedOn: { value: 0 }, uBedOrigin: { value: new Vector3() }, uBedSilt: { value: 0 },
+      uSandA: { value: new Color() }, uSandB: { value: new Color() }, uSandC: { value: new Color() }, uSandD: { value: new Color() },
+      uSandMean: { value: new Color() }, uSiltCol: { value: new Color() },
+      uGrainScale: { value: 1 }, uMud: { value: 0 }, uBedTop: { value: 0 }, uGlintAmt: { value: 0 },
     };
     this.skin = skinMaterial(this.uniforms, this.ground.uniforms, false);
     this.skinLow = skinMaterial(this.uniforms, this.ground.uniforms, true);
@@ -590,16 +657,38 @@ export class IshigareiLook {
     this.uniforms.uGroundTint.value.setRGB(r, g, b);
   }
 
+  /** a bed drawn by the tank's sand shader under the fish (null: none): the sand over it is drawn as that bed */
+  setBed(bed: { uniforms: Record<string, IUniform>; origin: Vector3; siltAt(x: number, z: number): number } | null | undefined, x: number, z: number): void {
+    const u = this.uniforms as unknown as Record<string, IUniform>;
+    u.uBedOn.value = bed ? 1 : 0;
+    if (!bed) return;
+    for (const k of BED_KEYS) {
+      const src = bed.uniforms[k]?.value as Color | number | undefined;
+      if (src === undefined) continue;
+      if (typeof src === 'number') u[k].value = src; else (u[k].value as Color).copy(src);
+    }
+    (u.uBedOrigin.value as Vector3).copy(bed.origin);
+    u.uBedSilt.value = bed.siltAt(x, z);
+  }
+
   dispose(): void {
     this.skin.dispose(); this.skinLow.dispose(); this.fins.dispose(); this.eyes.dispose();
     this.ground.dispose();
   }
 }
 
+const BED_KEYS = ['uSandA', 'uSandB', 'uSandC', 'uSandD', 'uSandMean', 'uSiltCol', 'uGrainScale', 'uMud', 'uBedTop', 'uGlintAmt'];
+
 /** the flat's sediments as the terrain draws them (Terrain.ts SUBSTRATE_COLORS) */
 export const SUBSTRATE_TINT: Record<string, [number, number, number]> = {
   sand: [0.37, 0.37, 0.355], muddy_sand: [0.29, 0.285, 0.27], mud: [0.19, 0.185, 0.17],
   gravel: [0.33, 0.305, 0.27], channel: [0.15, 0.145, 0.135], rock: [0.3, 0.295, 0.28],
 };
+
+/** a substrate's colour as the terrain draws it under the water (darker, the grey taking the sky's blue: Terrain.colorAt) */
+export function wetSubstrateTint(substrate: string, out: Color): Color {
+  const c = SUBSTRATE_TINT[substrate] ?? SUBSTRATE_TINT.sand;
+  return out.setRGB(c[0] * 0.76 * 0.85, c[1] * 0.76 * 0.925, c[2] * 0.76 * 1.06);
+}
 
 export const ISH_UNIFORMS = AMH_UNIFORMS;

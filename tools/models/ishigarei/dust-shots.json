@@ -1,0 +1,6 @@
+[
+  { "name": "ishigarei_burrow", "set": { "scene": "flat", "count": 1, "depth": 0.2 }, "call": { "fn": "intent", "args": ["burrow", 0, { "seconds": 30 }] }, "advance": 1.0, "follow": { "i": 0, "offset": [0.1, 0.07, 0.12] } },
+  { "name": "ishigarei_buried", "advance": 3, "follow": { "i": 0, "offset": [0.1, 0.07, 0.12] } },
+  { "name": "ishigarei_escape", "call": { "fn": "startle" }, "advance": 0.15, "follow": { "i": 0, "offset": [0.16, 0.1, 0.18] } },
+  { "name": "ishigarei_escape_after", "advance": 0.45, "follow": { "i": 0, "offset": [0.25, 0.14, 0.28] } }
+]

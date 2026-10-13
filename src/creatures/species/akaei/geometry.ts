@@ -1,5 +1,5 @@
 import { BufferGeometry, Float32BufferAttribute, Matrix4, Quaternion, SphereGeometry, Uint16BufferAttribute, Vector3 } from 'three';
-import { MORPH, dorsalHeight, halfWidth, tailFins, tailSection, tailZ, ventralDepth } from './morphology';
+import { MORPH, dorsalHeight, eyeCentre, eyeFrame, halfWidth, tailFins, tailSection, tailZ, ventralDepth } from './morphology';
 
 /**
  * Geometry of the アカエイ, built once per LOD and shared by every individual (the individual's size is the root's
@@ -180,7 +180,7 @@ function buildDisc(spec: LodSpec): BufferGeometry {
   const M = MORPH, NZ = spec.rows, NU = spec.across;
   // across: crowded toward the margin (where the wave is largest) and, on the detailed tiers, over the eye–spiracle
   // complex too, whose lips and rims are narrower than the rest of the disc needs
-  const across = spread(NU, (u) => 1 + 2.2 * u * u * u + (spec.details ? 2.4 * Math.exp(-(((u - 0.3) / 0.12) ** 2)) : 0));
+  const across = spread(NU, (u) => 1 + 2.2 * u * u * u + (spec.details ? 2.4 * Math.exp(-(((u - 0.26) / 0.12) ** 2)) : 0));
   // u from -1 (the animal's right, -X) over the back to +1 and back under the belly
   const loopU: { u: number; side: number }[] = [];
   for (let k = NU; k >= 1; k--) loopU.push({ u: -across[k], side: 1 });
@@ -350,32 +350,55 @@ function buildSting(spec: LodSpec): BufferGeometry {
 }
 
 /**
- * An eye: the cornea's dark dome, a little almond-shaped (longer along the body) and lower than it is wide, sunk in its
- * socket so about half shows, bulging up and out through the raised lip [PHOTO 005, 006, 011, 027]. uv.y runs from the
- * apex (1) down the dome.
+ * An eye: the cornea's dark dome (material 0), a little almond-shaped (longer along the body), looking out sideways from
+ * the outer face of its orbit, and the lids (material 1, skin): the rest of the eyeball is skin, rising at lidOpen° from
+ * the gaze into a rim round the cornea, and running on under the orbit's skin [PHOTO 005, 006, 011, 027]. The cornea's
+ * uv.y runs from the apex (1) down the dome.
  */
 function buildEye(spec: LodSpec, sideX: number): BufferGeometry {
-  const E = MORPH.eye;
-  const seg = spec.eyeSeg;
-  // nearly a whole ball: its open lower edge stays deep under the skin of the socket
-  const sph = new SphereGeometry(E.r, seg, Math.max(5, Math.round(seg * 0.75)), 0, Math.PI * 2, 0, Math.PI * 0.9);
-  // shape in the eye's own frame (y = its axis): flattened along the axis, drawn out along the body
-  sph.applyMatrix4(new Matrix4().makeScale(1, E.flat, E.long));
-  const gaze = new Vector3(E.gaze[0] * sideX, E.gaze[1], E.gaze[2]).normalize();
-  // turn the axis to the gaze, keeping the long axis along the body
-  const q = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), gaze);
-  const x = E.x * sideX, z = E.z;
-  const c = new Vector3(x, dorsalHeight(x, z) - E.r * E.sunk, z);
-  sph.applyMatrix4(new Matrix4().compose(c, q, new Vector3(1, 1, 1)));
+  const E = MORPH.eye, F = eyeFrame();
+  const [cx, cy, cz] = eyeCentre(sideX);
   const b = new Builder();
-  const p = sph.getAttribute('position'), uv = sph.getAttribute('uv');
-  for (let i = 0; i < p.count; i++) b.disc(p.getX(i), p.getY(i), p.getZ(i), 1);
-  const idx = sph.getIndex()!;
-  for (let i = 0; i < idx.count; i += 3) b.tri(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2));
-  const g = b.build(false);
-  g.setAttribute('normal', sph.getAttribute('normal'));
-  g.setAttribute('uv', uv);
-  sph.dispose();
+  b.flip = sideX < 0;
+  const NA = spec.eyeSeg, back = Math.PI * 0.9;
+  const nC = Math.max(3, Math.round(NA * 0.3)), nS = Math.max(3, Math.round(NA * 0.35));
+  // the lids' rim round the gaze: lower on the top side (phi runs round the gaze from the frame's x axis)
+  const upX = F.x[1], upZ = F.z[1], upN = Math.hypot(upX, upZ) || 1;
+  const open = (ph: number): number => ((E.lidOpen + E.lidUp * ((Math.cos(ph) * upX + Math.sin(ph) * upZ) / upN)) * Math.PI) / 180;
+  /** a point of the eyeball at (theta from the gaze, phi round it), its radius scaled by k */
+  const at = (th: number, ph: number, k: number): number => {
+    const l = [Math.sin(th) * Math.cos(ph) * E.r * k, Math.cos(th) * E.r * E.flat * k, Math.sin(th) * Math.sin(ph) * E.r * E.long * k];
+    const x = cx + (l[0] * F.x[0] + l[1] * F.g[0] + l[2] * F.z[0]) * sideX;
+    return b.disc(x, cy + l[0] * F.x[1] + l[1] * F.g[1] + l[2] * F.z[1], cz + l[0] * F.x[2] + l[1] * F.g[2] + l[2] * F.z[2], 1);
+  };
+  const uv: number[] = [];
+  /** a ring at a fraction f of the way to the rim (cornea) or dt past it (lids), radius × k */
+  const ring = (f: number, dt: number, k: number, cornea: boolean): number[] => {
+    const out: number[] = [];
+    for (let j = 0; j <= NA; j++) {
+      const ph = (j / NA) * Math.PI * 2, th = open(ph) * f + dt;
+      out.push(at(th, ph, k));
+      uv.push(j / NA, cornea ? 1 - th / back : 0);
+    }
+    return out;
+  };
+  const band = (r0: number[], r1: number[]): void => { for (let j = 0; j < NA; j++) b.quad(r0[j], r0[j + 1], r1[j + 1], r1[j]); };
+  // the cornea: a fan round its apex, then rings out to the lids
+  b.group(0);
+  const apex = at(0, 0, 1);
+  uv.push(0.5, 1);
+  let prev = ring(1 / nC, 0, 1, true);
+  for (let j = 0; j < NA; j++) b.tri(apex, prev[j + 1], prev[j]);
+  for (let i = 2; i <= nC; i++) { const r = ring(i / nC, 0, 1, true); band(prev, r); prev = r; }
+  // the lids: from the cornea's edge up over a thin rounded rim, then back over the eyeball under the orbit's skin
+  b.group(1);
+  const T = E.lidT, rest = back - (E.lidOpen * Math.PI) / 180 - 0.14;
+  const lid: [number, number][] = [[0, 1], [0.02, 1 + T * 0.55], [0.06, 1 + T * 0.85], [0.14, 1 + T]];
+  for (let i = 1; i <= nS; i++) lid.push([0.14 + (rest * i) / nS, 1 + T]);
+  prev = ring(1, 0, 1, false);
+  for (let i = 1; i < lid.length; i++) { const r = ring(1, lid[i][0], lid[i][1], false); band(prev, r); prev = r; }
+  const g = b.build();
+  g.setAttribute('uv', new Float32BufferAttribute(uv, 2));
   return g;
 }
 

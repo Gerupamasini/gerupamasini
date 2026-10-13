@@ -32,7 +32,7 @@ export class HirugiKit {
     this.groundTexture = new DataTexture(heights, n, n, RedFormat, FloatType);
     this.groundTexture.minFilter = this.groundTexture.magFilter = LinearFilter;
     this.groundTexture.wrapS = this.groundTexture.wrapT = ClampToEdgeWrapping; this.groundTexture.needsUpdate = true;
-    this.uniforms = { uHgTime: { value: 0 }, uHgWater: { value: -10 }, uHgWet: { value: -10 }, uHgWind: { value: 1 }, uHgGround: { value: this.groundTexture }, uHgLeafAtlas: { value: this.leafAtlas }, uHgGrid: { value: new Vector2(size, n) } };
+    this.uniforms = { uHgTime: { value: 0 }, uHgWater: { value: -10 }, uHgWet: { value: -10 }, uHgWind: { value: 1 }, uHgGround: { value: this.groundTexture }, uHgLeafAtlas: { value: this.leafAtlas }, uHgGrid: { value: new Vector2(size, n) }, uHgLeafTint: { value: new Vector3(1, 1, 1) } };
     for (const part of PARTS) { this.materials[part] = treeMaterial(this.uniforms, part); this.depth[part] = treeDepth(this.uniforms, part); }
   }
   skeleton(base: HirugiBase, sapling: SaplingSize | null = null): TreeSkeleton {
