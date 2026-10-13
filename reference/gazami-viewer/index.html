@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ガザミ 3D</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; background: #111; color: #dde8e8; font: 13px/1.45 system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .panel { position: fixed; top: 12px; left: 12px; background: rgba(12, 22, 24, 0.78); border: 1px solid rgba(160, 205, 210, 0.18); border-radius: 10px; padding: 10px 12px; max-width: 400px; }
+  body.capture .panel { display: none; }
+  .panel button { background: rgba(255,255,255,0.06); color: inherit; border: 1px solid rgba(160,205,210,0.2); border-radius: 6px; padding: 4px 8px; margin: 2px; cursor: pointer; font: inherit; }
+  #info { color: #8fa6a8; font-size: 11.5px; margin-top: 6px; white-space: pre-line; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div class="panel">
+  <div><b>干潟図鑑 ガザミ</b></div>
+  <div>
+    <button data-scene="front">正面</button><button data-scene="top">背面</button><button data-scene="side">側面</button><button data-scene="oblique">斜め</button><button data-scene="under">腹面</button><button data-scene="macro">接写</button><button data-scene="tank">水槽</button>
+    <button data-scene="flat">砂底の浅場</button>
+  </div>
+  <div>
+    <button data-lod="0">LOD0</button><button data-lod="1">LOD1</button><button data-lod="2">LOD2</button>
+    <button data-clay="1">クレイ</button><button data-clay="0">PBR</button><button data-sex="0">オス</button><button data-sex="1">メス</button>
+  </div>
+  <div>
+    <button data-mode="IDLE">IDLE</button><button data-mode="WALK">WALK</button><button data-mode="FORAGE">FORAGE</button><button data-mode="BURROW">BURROW</button>
+    <button data-mode="DEFEND">DEFEND</button><button data-mode="ESCAPE">ESCAPE</button><button data-mode="SWIM">SWIM</button>
+  </div>
+  <div id="info"></div>
+</div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
